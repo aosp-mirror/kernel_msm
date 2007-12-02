@@ -283,4 +283,11 @@ config MSM_CPU_FREQ_SCREEN_ON
 
 endif # MSM_CPU_FREQ_SCREEN
 
+config MSM_HW3D
+	tristate "MSM Hardware 3D Register Driver"
+	default y
+	help
+	  Provides access to registers needed by the userspace OpenGL|ES
+	  library.
+
 endif
