@@ -290,4 +290,10 @@ config MSM_HW3D
 	  Provides access to registers needed by the userspace OpenGL|ES
 	  library.
 
+config MSM_ADSP
+	tristate "MSM ADSP driver"
+	default y
+	help
+	  Provides access to registers needed by the userspace aDSP library.
+
 endif
