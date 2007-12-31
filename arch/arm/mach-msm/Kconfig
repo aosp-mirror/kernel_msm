@@ -135,5 +135,11 @@ config MSM_ONCRPCROUTER
 	  Support for the MSM ONCRPC router for communication between
 	  the ARM9 and ARM11
 
+config MSM_RPCSERVERS
+	depends on MSM_ONCRPCROUTER
+	default y
+	bool "Kernel side RPC server bundle"
+	help
+	  none
 
 endif
