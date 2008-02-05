@@ -18,7 +18,12 @@
 #include <linux/platform_device.h>
 #include <linux/gpio_event.h>
 
-#define SCAN_FUNCTION_KEYS 0
+#undef MODULE_PARAM_PREFIX
+#define MODULE_PARAM_PREFIX "board_halibut."
+static int halibut_ffa;
+module_param_named(ffa, halibut_ffa, int, S_IRUGO | S_IWUSR | S_IWGRP);
+
+#define SCAN_FUNCTION_KEYS 0 /* don't turn this on without updating the ffa support */
 
 static unsigned int halibut_row_gpios[] = {
 	31, 32, 33, 34, 35, 41
@@ -28,6 +33,21 @@ static unsigned int halibut_row_gpios[] = {
 };
 
 static unsigned int halibut_col_gpios[] = { 36, 37, 38, 39, 40 };
+
+/* FFA:
+ 36: KEYSENSE_N(0)
+ 37: KEYSENSE_N(1)
+ 38: KEYSENSE_N(2)
+ 39: KEYSENSE_N(3)
+ 40: KEYSENSE_N(4)
+
+ 31: KYPD_17
+ 32: KYPD_15
+ 33: KYPD_13
+ 34: KYPD_11
+ 35: KYPD_9
+ 41: KYPD_MEMO
+*/
 
 #define KEYMAP_INDEX(row, col) ((row)*ARRAY_SIZE(halibut_col_gpios) + (col))
 
@@ -77,6 +97,44 @@ static const unsigned short halibut_keymap[ARRAY_SIZE(halibut_col_gpios) * ARRAY
 #endif
 };
 
+static const unsigned short halibut_keymap_ffa[ARRAY_SIZE(halibut_col_gpios) * ARRAY_SIZE(halibut_row_gpios)] = {
+	/*[KEYMAP_INDEX(0, 0)] = ,*/
+	/*[KEYMAP_INDEX(0, 1)] = ,*/
+	[KEYMAP_INDEX(0, 2)] = KEY_1,
+	[KEYMAP_INDEX(0, 3)] = KEY_SEND,
+	[KEYMAP_INDEX(0, 4)] = KEY_LEFT,
+
+	[KEYMAP_INDEX(1, 0)] = KEY_3,
+	[KEYMAP_INDEX(1, 1)] = KEY_RIGHT,
+	[KEYMAP_INDEX(1, 2)] = KEY_VOLUMEUP,
+	/*[KEYMAP_INDEX(1, 3)] = ,*/
+	[KEYMAP_INDEX(1, 4)] = KEY_6,
+
+	[KEYMAP_INDEX(2, 0)] = KEY_HOME,      /* A */
+	[KEYMAP_INDEX(2, 1)] = KEY_BACK,      /* B */
+	[KEYMAP_INDEX(2, 2)] = KEY_0,
+	[KEYMAP_INDEX(2, 3)] = 228,           /* KEY_SHARP */
+	[KEYMAP_INDEX(2, 4)] = KEY_9,
+
+	[KEYMAP_INDEX(3, 0)] = KEY_UP,
+	[KEYMAP_INDEX(3, 1)] = 232, /* KEY_CENTER */ /* i */
+	[KEYMAP_INDEX(3, 2)] = KEY_4,
+	/*[KEYMAP_INDEX(3, 3)] = ,*/
+	[KEYMAP_INDEX(3, 4)] = KEY_2,
+
+	[KEYMAP_INDEX(4, 0)] = KEY_VOLUMEDOWN,
+	[KEYMAP_INDEX(4, 1)] = KEY_SOUND,
+	[KEYMAP_INDEX(4, 2)] = KEY_DOWN,
+	[KEYMAP_INDEX(4, 3)] = KEY_8,
+	[KEYMAP_INDEX(4, 4)] = KEY_5,
+
+	/*[KEYMAP_INDEX(5, 0)] = ,*/
+	[KEYMAP_INDEX(5, 1)] = 227,           /* KEY_STAR */
+	[KEYMAP_INDEX(5, 2)] = 230, /*SOFT2*/ /* 2 */
+	[KEYMAP_INDEX(5, 3)] = KEY_MENU,      /* 1 */
+	[KEYMAP_INDEX(5, 4)] = KEY_7,
+};
+
 static struct gpio_event_matrix_info halibut_matrix_info = {
 	.info.func	= gpio_event_matrix_func,
 	.keymap		= halibut_keymap,
@@ -111,6 +169,8 @@ static int __init halibut_init_keypad(void)
 {
 	if (!machine_is_halibut())
 		return 0;
+	if (halibut_ffa)
+		halibut_matrix_info.keymap = halibut_keymap_ffa;
 	return platform_device_register(&halibut_keypad_device);
 }
 
