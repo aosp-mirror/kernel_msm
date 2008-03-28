@@ -46,4 +46,10 @@ void __init msm_init_irq(void);
 void __init msm_clock_init(struct clk *clock_tbl, unsigned num_clocks);
 void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *);
 
+#if defined(CONFIG_USB_FUNCTION_MSM_HSUSB)
+void msm_hsusb_set_vbus_state(int online);
+#else
+static inline void msm_hsusb_set_vbus_state(int online) {}
+#endif
+
 #endif
