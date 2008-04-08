@@ -22,6 +22,7 @@
 #include <linux/delay.h>
 
 #include <mach/hardware.h>
+#include <mach/irqs.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
@@ -58,7 +59,9 @@ static struct platform_device smc91x_device = {
 };
 
 static struct platform_device *devices[] __initdata = {
+#if !defined(CONFIG_MSM_SERIAL_DEBUGGER)
 	&msm_device_uart3,
+#endif
 	&msm_device_smd,
 	&msm_device_nand,
 	&msm_device_hsusb,
@@ -81,8 +84,15 @@ static struct msm_acpu_clock_platform_data halibut_clock_data = {
 	.wait_for_irq_khz = 128000000,
 };
 
+void msm_serial_debug_init(unsigned int base, int irq,
+			   struct device *clk_device, int signal_irq);
+
 static void __init halibut_init(void)
 {
+#if defined(CONFIG_MSM_SERIAL_DEBUGGER)
+	msm_serial_debug_init(MSM_UART3_PHYS, INT_UART3,
+			      &msm_device_uart3.dev, 1);
+#endif
 	msm_acpu_clock_init(&halibut_clock_data);
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 }
