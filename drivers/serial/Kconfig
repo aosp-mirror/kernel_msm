@@ -1351,6 +1351,14 @@ config SERIAL_MSM_CONSOLE
 	depends on SERIAL_MSM=y
 	select SERIAL_CORE_CONSOLE
 
+config SERIAL_MSM_CLOCK_CONTROL
+	bool "Allow tty clients to make clock requests to msm uarts."
+	depends on SERIAL_MSM=y
+	default y
+	help
+	 Provides an interface for tty clients to request the msm uart clock
+	 to be turned on or off for power savings.
+
 config SERIAL_NETX
 	tristate "NetX serial port support"
 	depends on ARM && ARCH_NETX
