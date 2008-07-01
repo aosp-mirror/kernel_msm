@@ -1359,6 +1359,14 @@ config SERIAL_MSM_CLOCK_CONTROL
 	 Provides an interface for tty clients to request the msm uart clock
 	 to be turned on or off for power savings.
 
+config SERIAL_MSM_RX_WAKEUP
+	bool "Wakeup the msm uart clock on GPIO activity."
+	depends on SERIAL_MSM_CLOCK_CONTROL
+	default n
+	help
+	 Requires SERIAL_MSM_CLOCK_CONTROL. Wake up the uart while the uart
+	 clock is off, using a wakeup GPIO.
+
 config SERIAL_NETX
 	tristate "NetX serial port support"
 	depends on ARM && ARCH_NETX
