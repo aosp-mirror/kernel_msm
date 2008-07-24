@@ -73,8 +73,17 @@ static void __init halibut_init_irq(void)
 	msm_init_irq();
 }
 
+static struct msm_acpu_clock_platform_data halibut_clock_data = {
+	.acpu_switch_time_us = 50,
+	.max_speed_delta_khz = 256000,
+	.vdd_switch_time_us = 62,
+	.power_collapse_khz = 19200000,
+	.wait_for_irq_khz = 128000000,
+};
+
 static void __init halibut_init(void)
 {
+	msm_acpu_clock_init(&halibut_clock_data);
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 }
 
