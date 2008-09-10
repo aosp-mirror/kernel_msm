@@ -1,5 +1,5 @@
 obj-y += proc_comm.o
-obj-y += io.o idle.o timer.o dma.o
+obj-y += io.o idle.o timer.o dma.o memory.o
 obj-y += vreg.o
 obj-y += acpuclock-arm11.o
 obj-y += clock.o clock-pcom.o

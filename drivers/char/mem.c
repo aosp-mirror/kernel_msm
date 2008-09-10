@@ -329,7 +329,7 @@ static int mmap_mem(struct file *file, struct vm_area_struct *vma)
 	vma->vm_ops = &mmap_mem_ops;
 
 	/* Remap-pfn-range will mark the range VM_IO and VM_RESERVED */
-	if (remap_pfn_range(vma,
+	if (io_remap_pfn_range(vma,
 			    vma->vm_start,
 			    vma->vm_pgoff,
 			    size,
