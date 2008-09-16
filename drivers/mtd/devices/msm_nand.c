@@ -395,7 +395,8 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 	unsigned page_count;
 	unsigned pages_read = 0;
 	unsigned start_sector = 0;
-	uint32_t ecc_errors;
+	uint32_t sector_corrected;
+	uint32_t page_corrected;
 	uint32_t total_corrected = 0;
 	uint32_t total_uncorrected = 0;
 	unsigned long uncorrected_noalloc = 0;
@@ -651,7 +652,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 		 * was a protection violation (0x100), we lose
 		 */
 		pageerr = 0;
-		ecc_errors = 0;
+		page_corrected = 0;
 		for (n = start_sector; n < 4; n++) {
 			if (dma_buffer->data.result[n].buffer_status & 0x8) {
 				total_uncorrected++;
@@ -664,14 +665,16 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 				pageerr = -EIO;
 				break;
 			}
-			ecc_errors +=
+			sector_corrected =
 				dma_buffer->data.result[n].buffer_status & 0x7;
+			page_corrected += sector_corrected;
+			if (sector_corrected > 1)
+				pageerr = -EUCLEAN;
 		}
-		if (!pageerr && ecc_errors) {
-			total_corrected += ecc_errors;
+		if ((!pageerr && page_corrected) || pageerr == -EUCLEAN) {
+			total_corrected += page_corrected;
 			/* not thread safe */
-			mtd->ecc_stats.corrected += ecc_errors;
-			pageerr = -EUCLEAN;
+			mtd->ecc_stats.corrected += page_corrected;
 		}
 		if (pageerr && (pageerr != -EUCLEAN || err == 0))
 			err = pageerr;
