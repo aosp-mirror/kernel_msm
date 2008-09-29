@@ -19,25 +19,25 @@
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <linux/list.h>
-#include <linux/io.h>
 
-#include <mach/msm_iomap.h>
-
-struct smem_heap_info {
+struct smem_heap_info
+{
 	unsigned initialized;
 	unsigned free_offset;
 	unsigned heap_remaining;
 	unsigned reserved;
 };
 
-struct smem_heap_entry {
+struct smem_heap_entry
+{
 	unsigned allocated;
 	unsigned offset;
 	unsigned size;
 	unsigned reserved;
 };
 
-struct smem_proc_comm {
+struct smem_proc_comm
+{
 	unsigned command;
 	unsigned status;
 	unsigned data1;
@@ -54,7 +54,8 @@ struct smem_proc_comm {
 #define VERSION_APPS      8
 #define VERSION_MODEM     9
 
-struct smem_shared {
+struct smem_shared
+{
 	struct smem_proc_comm proc_comm[4];
 	unsigned version[32];
 	struct smem_heap_info heap_info;
@@ -64,8 +65,9 @@ struct smem_shared {
 #define SMSM_V1_SIZE		(sizeof(unsigned) * 8)
 #define SMSM_V2_SIZE		(sizeof(unsigned) * 4)
 
-#ifdef CONFIG_MSM_SMD_PKG3
-struct smsm_interrupt_info {
+#ifndef CONFIG_ARCH_MSM_SCORPION
+struct smsm_interrupt_info
+{
 	uint32_t interrupt_mask;
 	uint32_t pending_interrupts;
 	uint32_t wakeup_reason;
@@ -126,7 +128,7 @@ struct msm_dem_slave_data {
 #define SMSM_WKUP_REASON_ALARM	0x00000010
 #define SMSM_WKUP_REASON_RESET	0x00000020
 
-#ifdef CONFIG_ARCH_MSM7X00A
+#ifndef CONFIG_ARCH_MSM_SCORPION
 enum smsm_state_item {
 	SMSM_STATE_APPS = 1,
 	SMSM_STATE_MODEM = 3,
@@ -154,7 +156,8 @@ void smsm_print_sleep_info(void);
 
 #define SMEM_NUM_SMD_CHANNELS        64
 
-typedef enum {
+typedef enum
+{
 	/* fixed items */
 	SMEM_PROC_COMM = 0,
 	SMEM_HEAP_INFO,
@@ -229,7 +232,7 @@ typedef enum {
 	SMEM_SMEM_LOG_POWER_WRAP,
 	SMEM_SMEM_LOG_POWER_EVENTS,
 	SMEM_ERR_CRASH_LOG,
-	SMEM_ERR_F3_TRACE_LOG,
+	SMEM_ERR_F3_TRACE_LOG,	
 	SMEM_NUM_ITEMS,
 } smem_mem_type;
 
@@ -268,7 +271,6 @@ struct smd_half_channel {
 	unsigned head;
 } __attribute__(( aligned(4), packed ));
 
-/* Only used on SMD package v3 on msm7201a */
 struct smd_shared_v1 {
 	struct smd_half_channel ch0;
 	unsigned char data0[SMD_BUF_SIZE];
@@ -276,11 +278,10 @@ struct smd_shared_v1 {
 	unsigned char data1[SMD_BUF_SIZE];
 };
 
-/* Used on SMD package v4 */
 struct smd_shared_v2 {
 	struct smd_half_channel ch0;
 	struct smd_half_channel ch1;
-};
+};	
 
 struct smd_channel {
 	volatile struct smd_half_channel *send;
@@ -332,72 +333,5 @@ extern spinlock_t smem_lock;
 void *smem_find(unsigned id, unsigned size);
 void *smem_item(unsigned id, unsigned *size);
 uint32_t raw_smsm_get_state(enum smsm_state_item item);
-
-extern void msm_init_last_radio_log(struct module *);
-
-#ifdef CONFIG_MSM_SMD_PKG3
-/*
- * This allocator assumes an SMD Package v3 which only exists on
- * MSM7x00 SoC's.
- */
-static inline int _smd_alloc_channel(struct smd_channel *ch)
-{
-	struct smd_shared_v1 *shared1;
-
-	shared1 = smem_alloc(ID_SMD_CHANNELS + ch->n, sizeof(*shared1));
-	if (!shared1) {
-		pr_err("smd_alloc_channel() cid %d does not exist\n", ch->n);
-		return -1;
-	}
-	ch->send = &shared1->ch0;
-	ch->recv = &shared1->ch1;
-	ch->send_data = shared1->data0;
-	ch->recv_data = shared1->data1;
-	ch->fifo_size = SMD_BUF_SIZE;
-	return 0;
-}
-#else
-/*
- * This allocator assumes an SMD Package v4, the most common
- * and the default.
- */
-static inline int _smd_alloc_channel(struct smd_channel *ch)
-{
-	struct smd_shared_v2 *shared2;
-	void *buffer;
-	unsigned buffer_sz;
-
-	shared2 = smem_alloc(SMEM_SMD_BASE_ID + ch->n, sizeof(*shared2));
-	buffer = smem_item(SMEM_SMD_FIFO_BASE_ID + ch->n, &buffer_sz);
-
-	if (!buffer)
-		return -1;
-
-	/* buffer must be a power-of-two size */
-	if (buffer_sz & (buffer_sz - 1))
-		return -1;
-
-	buffer_sz /= 2;
-	ch->send = &shared2->ch0;
-	ch->recv = &shared2->ch1;
-	ch->send_data = buffer;
-	ch->recv_data = buffer + buffer_sz;
-	ch->fifo_size = buffer_sz;
-	return 0;
-}
-#endif /* CONFIG_MSM_SMD_PKG3 */
-
-#if defined(CONFIG_ARCH_MSM7X30)
-static inline void msm_a2m_int(uint32_t irq)
-{
-	writel(1 << irq, MSM_GCC_BASE + 0x8);
-}
-#else
-static inline void msm_a2m_int(uint32_t irq)
-{
-	writel(1, MSM_CSR_BASE + 0x400 + (irq * 4));
-}
-#endif /* CONFIG_ARCH_MSM7X30 */
-
 
 #endif

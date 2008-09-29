@@ -26,8 +26,10 @@
 #include <linux/slab.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
+#include <linux/io.h>
 
 #include <mach/msm_smd.h>
+#include <mach/msm_iomap.h>
 #include <mach/system.h>
 
 #include "smd_private.h"
@@ -62,7 +64,20 @@ static struct shared_info smd_info = {
 module_param_named(debug_mask, msm_smd_debug_mask,
 		   int, S_IRUGO | S_IWUSR | S_IWGRP);
 
+void *smem_item(unsigned id, unsigned *size);
+static void smd_diag(void);
+
 static unsigned last_heap_free = 0xffffffff;
+
+static inline void msm_a2m_int(uint32_t irq)
+{
+#if defined(CONFIG_ARCH_MSM7X30)
+	writel(1 << irq, MSM_GCC_BASE + 0x8);
+#else
+	writel(1, MSM_CSR_BASE + 0x400 + (irq * 4));
+#endif
+}
+
 
 static inline void notify_other_smsm(void)
 {
@@ -108,6 +123,8 @@ static void handle_modem_crash(void)
 		;
 }
 
+extern int (*msm_check_for_modem_crash)(void);
+
 uint32_t raw_smsm_get_state(enum smsm_state_item item)
 {
 	return readl(smd_info.state + item * 4);
@@ -143,6 +160,44 @@ LIST_HEAD(smd_ch_list_dsp);
 
 static unsigned char smd_ch_allocated[64];
 static struct work_struct probe_work;
+
+static int smd_alloc_channel(const char *name, uint32_t cid, uint32_t type);
+
+static void smd_channel_probe_worker(struct work_struct *work)
+{
+	struct smd_alloc_elm *shared;
+	unsigned ctype;
+	unsigned type;
+	unsigned n;
+
+	shared = smem_find(ID_CH_ALLOC_TBL, sizeof(*shared) * 64);
+	if (!shared) {
+		pr_err("smd: cannot find allocation table\n");
+		return;
+	}
+	for (n = 0; n < 64; n++) {
+		if (smd_ch_allocated[n])
+			continue;
+		if (!shared[n].ref_count)
+			continue;
+		if (!shared[n].name[0])
+			continue;
+		ctype = shared[n].ctype;
+		type = ctype & SMD_TYPE_MASK;
+
+		/* DAL channels are stream but neither the modem,
+		 * nor the DSP correctly indicate this.  Fixup manually.
+		 */
+		if (!memcmp(shared[n].name, "DAL", 3))
+			ctype = (ctype & (~SMD_KIND_MASK)) | SMD_KIND_STREAM;
+
+		type = shared[n].ctype & SMD_TYPE_MASK;
+		if ((type == SMD_TYPE_APPS_MODEM) ||
+		    (type == SMD_TYPE_APPS_DSP))
+			if (!smd_alloc_channel(shared[n].name, shared[n].cid, ctype))
+				smd_ch_allocated[n] = 1;
+	}
+}
 
 /* how many bytes are available for reading */
 static int smd_stream_read_avail(struct smd_channel *ch)
@@ -378,13 +433,11 @@ static irqreturn_t smd_modem_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-#if defined(CONFIG_QDSP6)
 static irqreturn_t smd_dsp_irq_handler(int irq, void *data)
 {
 	handle_smd_irq(&smd_ch_list_dsp, notify_dsp_smd);
 	return IRQ_HANDLED;
 }
-#endif
 
 static void smd_fake_irq_handler(unsigned long arg)
 {
@@ -554,6 +607,48 @@ static int smd_packet_read(smd_channel_t *ch, void *data, int len)
 	return r;
 }
 
+static int smd_alloc_v2(struct smd_channel *ch)
+{
+	struct smd_shared_v2 *shared2;
+	void *buffer;
+	unsigned buffer_sz;
+
+	shared2 = smem_alloc(SMEM_SMD_BASE_ID + ch->n, sizeof(*shared2));
+	buffer = smem_item(SMEM_SMD_FIFO_BASE_ID + ch->n, &buffer_sz);
+
+	if (!buffer)
+		return -1;
+
+	/* buffer must be a power-of-two size */
+	if (buffer_sz & (buffer_sz - 1))
+		return -1;
+
+	buffer_sz /= 2;
+	ch->send = &shared2->ch0;
+	ch->recv = &shared2->ch1;
+	ch->send_data = buffer;
+	ch->recv_data = buffer + buffer_sz;
+	ch->fifo_size = buffer_sz;
+	return 0;
+}
+
+static int smd_alloc_v1(struct smd_channel *ch)
+{
+	struct smd_shared_v1 *shared1;
+	shared1 = smem_alloc(ID_SMD_CHANNELS + ch->n, sizeof(*shared1));
+	if (!shared1) {
+		pr_err("smd_alloc_channel() cid %d does not exist\n", ch->n);
+		return -1;
+	}
+	ch->send = &shared1->ch0;
+	ch->recv = &shared1->ch1;
+	ch->send_data = shared1->data0;
+	ch->recv_data = shared1->data1;
+	ch->fifo_size = SMD_BUF_SIZE;
+	return 0;
+}
+
+
 static int smd_alloc_channel(const char *name, uint32_t cid, uint32_t type)
 {
 	struct smd_channel *ch;
@@ -565,7 +660,7 @@ static int smd_alloc_channel(const char *name, uint32_t cid, uint32_t type)
 	}
 	ch->n = cid;
 
-	if (_smd_alloc_channel(ch)) {
+	if (smd_alloc_v2(ch) && smd_alloc_v1(ch)) {
 		kfree(ch);
 		return -1;
 	}
@@ -610,42 +705,6 @@ static int smd_alloc_channel(const char *name, uint32_t cid, uint32_t type)
 
 	platform_device_register(&ch->pdev);
 	return 0;
-}
-
-static void smd_channel_probe_worker(struct work_struct *work)
-{
-	struct smd_alloc_elm *shared;
-	unsigned ctype;
-	unsigned type;
-	unsigned n;
-
-	shared = smem_find(ID_CH_ALLOC_TBL, sizeof(*shared) * 64);
-	if (!shared) {
-		pr_err("smd: cannot find allocation table\n");
-		return;
-	}
-	for (n = 0; n < 64; n++) {
-		if (smd_ch_allocated[n])
-			continue;
-		if (!shared[n].ref_count)
-			continue;
-		if (!shared[n].name[0])
-			continue;
-		ctype = shared[n].ctype;
-		type = ctype & SMD_TYPE_MASK;
-
-		/* DAL channels are stream but neither the modem,
-		 * nor the DSP correctly indicate this.  Fixup manually.
-		 */
-		if (!memcmp(shared[n].name, "DAL", 3))
-			ctype = (ctype & (~SMD_KIND_MASK)) | SMD_KIND_STREAM;
-
-		type = shared[n].ctype & SMD_TYPE_MASK;
-		if ((type == SMD_TYPE_APPS_MODEM) ||
-		    (type == SMD_TYPE_APPS_DSP))
-			if (!smd_alloc_channel(shared[n].name, shared[n].cid, ctype))
-				smd_ch_allocated[n] = 1;
-	}
 }
 
 static void do_nothing_notify(void *priv, unsigned flags)
@@ -845,9 +904,9 @@ static irqreturn_t smsm_irq_handler(int irq, void *data)
 
 	if (msm_smd_debug_mask & MSM_SMSM_DEBUG)
 		pr_info("<SM %08x %08x>\n", apps, modm);
-	if (modm & SMSM_RESET)
+	if (modm & SMSM_RESET) {
 		handle_modem_crash();
-
+	}
 	do_smd_probe();
 
 	spin_unlock_irqrestore(&smem_lock, flags);
@@ -857,9 +916,9 @@ static irqreturn_t smsm_irq_handler(int irq, void *data)
 int smsm_change_state(enum smsm_state_item item,
 		      uint32_t clear_mask, uint32_t set_mask)
 {
-	unsigned long addr = smd_info.state + item * 4;
 	unsigned long flags;
 	unsigned state;
+	unsigned addr = smd_info.state + item * 4;
 
 	if (!smd_info.ready)
 		return -EIO;
@@ -997,16 +1056,11 @@ int smd_core_init(void)
 	return 0;
 }
 
+extern void msm_init_last_radio_log(struct module *);
+
 static int msm_smd_probe(struct platform_device *pdev)
 {
 	pr_info("smd_init()\n");
-
-	/*
-	 * If we haven't waited for the ARM9 to boot up till now,
-	 * then we need to wait here. Otherwise this should just
-	 * return immediately.
-	 */
-	proc_comm_boot_wait();
 
 	INIT_WORK(&probe_work, smd_channel_probe_worker);
 

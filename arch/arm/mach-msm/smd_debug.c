@@ -227,7 +227,7 @@ static int smd_debugfs_init(void)
 
 	dent = debugfs_create_dir("smd", 0);
 	if (IS_ERR(dent))
-		return 1;
+		return PTR_ERR(dent);
 
 	debug_create("ch", 0444, dent, debug_read_ch);
 	debug_create("stat", 0444, dent, debug_read_stat);
@@ -269,9 +269,10 @@ void smsm_print_sleep_info(void)
 {
 	unsigned long flags;
 	uint32_t *ptr;
+#ifndef CONFIG_ARCH_MSM_SCORPION
 	struct tramp_gpio_smem *gpio;
 	struct smsm_interrupt_info *int_info;
-
+#endif
 
 	spin_lock_irqsave(&smem_lock, flags);
 
