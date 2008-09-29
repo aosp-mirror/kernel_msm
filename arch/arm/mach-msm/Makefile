@@ -28,6 +28,7 @@ obj-$(CONFIG_PM) += pm.o
 obj-$(CONFIG_MSM_CPU_FREQ_SCREEN) += cpufreq.o
 
 obj-$(CONFIG_MACH_TROUT) += board-trout.o devices-msm7x00.o
+obj-$(CONFIG_MACH_TROUT) += board-trout-gpio.o
 obj-$(CONFIG_MACH_HALIBUT) += board-halibut.o devices-msm7x00.o
 obj-$(CONFIG_MACH_HALIBUT) += board-halibut-keypad.o
 obj-$(CONFIG_ARCH_MSM7X30) += board-msm7x30.o devices-msm7x30.o
