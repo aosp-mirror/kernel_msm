@@ -240,12 +240,20 @@ static struct i2c_board_info i2c_devices[] = {
 		.irq = TROUT_GPIO_TO_INT(TROUT_GPIO_TP_ATT_N)
 	},
 	{
+		I2C_BOARD_INFO("elan-touch", 0x10),
+		.irq = TROUT_GPIO_TO_INT(TROUT_GPIO_TP_ATT_N),
+	},
+	{
 		I2C_BOARD_INFO("akm8976", 0x1C),
 		.platform_data = &compass_platform_data,
 		.irq = TROUT_GPIO_TO_INT(TROUT_GPIO_COMPASS_IRQ),
 	},
 	{
 		I2C_BOARD_INFO("pca963x", 0x62),
+	},
+	{
+		I2C_BOARD_INFO("mt9t013", 0x6C >> 1),
+		/* .irq = TROUT_GPIO_TO_INT(TROUT_GPIO_CAM_BTN_STEP1_N), */
 	},
 };
 
@@ -470,6 +478,19 @@ static struct platform_device trout_ram_console_device = {
 	.resource       = trout_ram_console_resource,
 };
 
+static struct msm_camera_device_platform_data msm_camera_device = {
+	.sensor_reset	= 108,
+	.sensor_pwd	= 85,
+	.vcm_pwd	= TROUT_GPIO_VCM_PWDN,
+};
+
+static struct platform_device trout_camera = {
+	.name		= "camera",
+	.dev		= { 
+		.platform_data = &msm_camera_device,
+	},
+};
+
 static struct platform_device *devices[] __initdata = {
 	&msm_device_smd,
 	&msm_device_nand,
@@ -492,6 +513,7 @@ static struct platform_device *devices[] __initdata = {
 	&android_pmem_gpu1_device,
 	&android_pmem_camera_device,
 	&trout_ram_console_device,
+	&trout_camera,
 };
 
 extern struct sys_timer msm_timer;
@@ -561,6 +583,43 @@ static uint32_t gpio_table[] = {
 	PCOM_GPIO_CFG(46, 1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_4MA), /* TX */
 };
 
+
+static uint32_t camera_off_gpio_table[] = {
+	/* CAMERA */
+	PCOM_GPIO_CFG(2, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* DAT2 */
+	PCOM_GPIO_CFG(3, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* DAT3 */
+	PCOM_GPIO_CFG(4, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* DAT4 */
+	PCOM_GPIO_CFG(5, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* DAT5 */
+	PCOM_GPIO_CFG(6, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* DAT6 */
+	PCOM_GPIO_CFG(7, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* DAT7 */
+	PCOM_GPIO_CFG(8, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* DAT8 */
+	PCOM_GPIO_CFG(9, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* DAT9 */
+	PCOM_GPIO_CFG(10, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* DAT10 */
+	PCOM_GPIO_CFG(11, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* DAT11 */
+	PCOM_GPIO_CFG(12, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* PCLK */
+	PCOM_GPIO_CFG(13, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* HSYNC_IN */
+	PCOM_GPIO_CFG(14, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* VSYNC_IN */
+	PCOM_GPIO_CFG(15, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* MCLK */
+};
+
+static uint32_t camera_on_gpio_table[] = {
+	/* CAMERA */
+	PCOM_GPIO_CFG(2, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT2 */
+	PCOM_GPIO_CFG(3, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT3 */
+	PCOM_GPIO_CFG(4, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT4 */
+	PCOM_GPIO_CFG(5, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT5 */
+	PCOM_GPIO_CFG(6, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT6 */
+	PCOM_GPIO_CFG(7, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT7 */
+	PCOM_GPIO_CFG(8, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT8 */
+	PCOM_GPIO_CFG(9, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT9 */
+	PCOM_GPIO_CFG(10, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT10 */
+	PCOM_GPIO_CFG(11, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT11 */
+	PCOM_GPIO_CFG(12, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_16MA), /* PCLK */
+	PCOM_GPIO_CFG(13, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* HSYNC_IN */
+	PCOM_GPIO_CFG(14, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* VSYNC_IN */
+	PCOM_GPIO_CFG(15, 1, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_16MA), /* MCLK */
+};
+
 static void config_gpio_table(uint32_t *table, int len)
 {
 	int n;
@@ -571,9 +630,22 @@ static void config_gpio_table(uint32_t *table, int len)
 	}
 }
 
+void config_camera_on_gpios(void)
+{
+	config_gpio_table(camera_on_gpio_table,
+		ARRAY_SIZE(camera_on_gpio_table));
+}
+
+void config_camera_off_gpios(void)
+{
+	config_gpio_table(camera_off_gpio_table,
+		ARRAY_SIZE(camera_off_gpio_table));
+}
+
 static void __init config_gpios(void)
 {
 	config_gpio_table(gpio_table, ARRAY_SIZE(gpio_table));
+	config_camera_off_gpios();
 }
 
 void msm_serial_debug_init(unsigned int base, int irq,

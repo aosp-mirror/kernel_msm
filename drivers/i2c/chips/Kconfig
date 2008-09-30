@@ -12,4 +12,11 @@ config SENSORS_AKM8976
 	help
 	 AKM8976 Compass Driver implemented by HTC.
 
+config SENSORS_MT9T013
+	tristate "MT9T013 Camera Driver"
+	depends on I2C
+	default y
+	help
+	 MT9T013 Camera Driver implemented by HTC.
+
 endmenu
