@@ -137,6 +137,11 @@ config TROUT_BATTCHG
 	default y
 	bool "Trout battery / charger driver"
 
+config TROUT_PWRSINK
+	depends on MSM_SMD
+	default y
+	bool "Trout Power Sink Driver"
+
 choice
 	prompt "Default Timer"
 	default MSM7X00A_USE_GP_TIMER

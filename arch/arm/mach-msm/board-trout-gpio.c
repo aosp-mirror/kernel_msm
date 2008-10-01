@@ -23,6 +23,8 @@
 #include <asm/gpio.h>
 #include <asm/mach-types.h>
 
+#include <mach/trout_pwrsink.h>
+
 #include "board-trout.h"
 #include "gpio_chip.h"
 
@@ -52,6 +54,18 @@ static int trout_gpio_read(struct gpio_chip *chip, unsigned n)
 	return !!(readb(TROUT_CPLD_BASE + reg) & b);
 }
 
+static void update_pwrsink(unsigned gpio, unsigned on)
+{
+	switch(gpio) {
+	case TROUT_GPIO_UI_LED_EN:
+		trout_pwrsink_set(PWRSINK_LED_BUTTON, on ? 100 : 0);
+		break;
+	case TROUT_GPIO_QTKEY_LED_EN:
+		trout_pwrsink_set(PWRSINK_LED_KEYBOARD, on ? 100 : 0);
+		break;
+	}
+}
+
 int trout_gpio_write(struct gpio_chip *chip, unsigned n, unsigned on)
 {
 	uint8_t b = 1U << (n & 7);
@@ -65,6 +79,7 @@ int trout_gpio_write(struct gpio_chip *chip, unsigned n, unsigned on)
 	}
 
 	local_irq_save(flags);
+	update_pwrsink(n, on);
 	if(on)
 		reg_val = trout_cpld_shadow[reg >> 1] |= b;
 	else

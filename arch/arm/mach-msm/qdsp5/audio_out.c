@@ -38,6 +38,8 @@
 #include <mach/qdsp5/qdsp5audppcmdi.h>
 #include <mach/qdsp5/qdsp5audppmsg.h>
 
+#include <mach/trout_pwrsink.h>
+
 #include "evlog.h"
 
 #define LOG_AUDIO_EVENTS 1
@@ -258,6 +260,7 @@ static int audio_enable(struct audio *audio)
 	}
 
 	audio->enabled = 1;
+	trout_pwrsink_set(PWRSINK_AUDIO, 100);
 	return 0;
 }
 
@@ -686,6 +689,7 @@ static int audio_release(struct inode *inode, struct file *file)
 	audio_flush(audio);
 	audio->opened = 0;
 	mutex_unlock(&audio->lock);
+	trout_pwrsink_set(PWRSINK_AUDIO, 0);
 	return 0;
 }
 

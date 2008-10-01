@@ -63,6 +63,8 @@
 #include <mach/msm_hsusb.h>
 #endif
 
+#include <mach/trout_pwrsink.h>
+
 #include "proc_comm.h"
 #include "devices.h"
 
@@ -493,6 +495,67 @@ static struct platform_device trout_camera = {
 	},
 };
 
+static struct pwr_sink trout_pwrsink_table[] = {
+	{
+		.id	= PWRSINK_AUDIO,
+		.ua_max	= 90000,
+	},
+	{
+		.id	= PWRSINK_BACKLIGHT,
+		.ua_max	= 128000,
+	},
+	{
+		.id	= PWRSINK_LED_BUTTON,
+		.ua_max	= 17000,
+	},
+	{
+		.id	= PWRSINK_LED_KEYBOARD,
+		.ua_max	= 22000,
+	},
+	{
+		.id	= PWRSINK_GP_CLK,
+		.ua_max	= 30000,
+	},
+	{
+		.id	= PWRSINK_BLUETOOTH,
+		.ua_max	= 15000,
+	},	
+	{
+		.id	= PWRSINK_CAMERA,
+		.ua_max	= 0,
+	},
+	{
+		.id	= PWRSINK_SDCARD,
+		.ua_max	= 0,
+	},	
+	{
+		.id	= PWRSINK_VIDEO,
+		.ua_max	= 0,
+	},
+	{
+		.id	= PWRSINK_WIFI,
+		.ua_max = 200000,
+	},
+	{
+		.id	= PWRSINK_SYSTEM_LOAD,
+		.ua_max	= 63000,
+		.percent_util = 100,
+	},
+};
+
+static struct pwr_sink_platform_data trout_pwrsink_data = {
+	.num_sinks	= ARRAY_SIZE(trout_pwrsink_table),
+	.sinks		= trout_pwrsink_table,
+};
+
+static struct platform_device trout_pwr_sink = {
+	.name = "trout_pwrsink",
+	.id = -1,
+	.dev	= { 
+		.platform_data = &trout_pwrsink_data,
+	},
+};
+
 static struct platform_device *devices[] __initdata = {
 	&msm_device_smd,
 	&msm_device_nand,
@@ -516,6 +579,9 @@ static struct platform_device *devices[] __initdata = {
 	&android_pmem_camera_device,
 	&trout_ram_console_device,
 	&trout_camera,
+#if defined(CONFIG_TROUT_PWRSINK)
+	&trout_pwr_sink,
+#endif
 };
 
 extern struct sys_timer msm_timer;
@@ -544,9 +610,11 @@ static void bluetooth_set_power(int on)
 		gpio_set_value(TROUT_GPIO_BT_32K_EN, 1);
 		udelay(10);
 		gpio_configure(101, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_HIGH);
+		trout_pwrsink_set(PWRSINK_BLUETOOTH, 100);
 	} else {
 		gpio_configure(101, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
 		gpio_set_value(TROUT_GPIO_BT_32K_EN, 0);
+		trout_pwrsink_set(PWRSINK_BLUETOOTH, 0);
 	}
 }
 
