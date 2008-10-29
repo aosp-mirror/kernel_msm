@@ -264,4 +264,23 @@ config MSM_RPCSERVERS
 	help
 	  none
 
+menuconfig MSM_CPU_FREQ_SCREEN
+	depends on HAS_EARLYSUSPEND
+	default n
+	bool "Enable simple cpu frequency scaling"
+	help
+	  Simple cpufreq scaling based on screen ON/OFF.
+
+if MSM_CPU_FREQ_SCREEN
+
+config MSM_CPU_FREQ_SCREEN_OFF
+	int "Screen off cpu frequency"
+	default 245760
+
+config MSM_CPU_FREQ_SCREEN_ON
+	int "Screen on cpu frequency"
+	default 384000
+
+endif # MSM_CPU_FREQ_SCREEN
+
 endif
