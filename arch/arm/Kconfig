@@ -584,6 +584,7 @@ config ARCH_PXA
 
 config ARCH_MSM
 	bool "Qualcomm MSM"
+	select ARCH_HAS_CPUFREQ
 	select HAVE_CLK
 	select GENERIC_GPIO
 	select GENERIC_CLOCKEVENTS
