@@ -69,6 +69,8 @@
 void msm_init_irq(void);
 void msm_init_gpio(void);
 
+extern int trout_init_mmc(unsigned int);
+
 struct trout_axis_info {
 	struct gpio_event_axis_info info;
 	uint16_t in_state;
@@ -661,6 +663,8 @@ static struct msm_acpu_clock_platform_data trout_clock_data = {
 
 static void __init trout_init(void)
 {
+	int rc;
+
 	printk("trout_init() revision=%d\n", system_rev);
 
 	/*
@@ -707,6 +711,10 @@ static void __init trout_init(void)
 	}
 
 	msm_device_hsusb.dev.platform_data = &msm_hsusb_pdata;
+
+	rc = trout_init_mmc(system_rev);
+	if (rc)
+		printk(KERN_CRIT "%s: MMC init failure (%d)\n", __func__, rc);
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 	i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));
