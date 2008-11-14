@@ -1,6 +1,8 @@
 /* linux/include/asm-arm/arch-msm/dma.h
  *
  * Copyright (C) 2007 Google, Inc.
+ * Copyright (c) 2008 QUALCOMM Incorporated.
+ * Copyright (c) 2008 QUALCOMM USA, INC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -34,6 +36,7 @@ struct msm_dmov_cmd {
 
 void msm_dmov_enqueue_cmd(unsigned id, struct msm_dmov_cmd *cmd);
 void msm_dmov_stop_cmd(unsigned id, struct msm_dmov_cmd *cmd, int graceful);
+void msm_dmov_flush(unsigned int id);
 int msm_dmov_exec_cmd(unsigned id, unsigned int cmdptr);
 
 
@@ -69,6 +72,7 @@ int msm_dmov_exec_cmd(unsigned id, unsigned int cmdptr);
 #define DMOV_FLUSH3(ch)       DMOV_SD_AARM(0x140, ch)
 #define DMOV_FLUSH4(ch)       DMOV_SD_AARM(0x180, ch)
 #define DMOV_FLUSH5(ch)       DMOV_SD_AARM(0x1C0, ch)
+#define DMOV_FLUSH_TYPE       (1 << 31)
 
 #define DMOV_STATUS(ch)       DMOV_SD_AARM(0x200, ch)
 #define DMOV_STATUS_RSLT_COUNT(n)    (((n) >> 29))
