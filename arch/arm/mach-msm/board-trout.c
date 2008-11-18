@@ -786,7 +786,6 @@ static void __init trout_fixup(struct machine_desc *desc, struct tag *tags,
 
 static void __init trout_map_io(void)
 {
-	printk("trout_init_map_io()\n");
 	msm_map_common_io();
 	iotable_init(trout_io_desc, ARRAY_SIZE(trout_io_desc));
 	msm_clock_init(msm_clocks_7x01a, msm_num_clocks_7x01a);
@@ -794,11 +793,10 @@ static void __init trout_map_io(void)
 
 MACHINE_START(TROUT, "trout")
 /* Maintainer: Brian Swetland <swetland@google.com> */
-
-/* this is broken... can we just opt out of specifying something here? */
-	.phys_io        = 0x80000000,
-	.io_pg_offst    = ((0x80000000) >> 18) & 0xfffc,
-
+#ifdef CONFIG_MSM_DEBUG_UART
+	.phys_io        = MSM_DEBUG_UART_PHYS,
+	.io_pg_offst    = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,
+#endif
 	.boot_params    = 0x10000100,
 	.fixup          = trout_fixup,
 	.map_io         = trout_map_io,
