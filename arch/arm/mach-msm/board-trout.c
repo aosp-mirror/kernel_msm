@@ -569,6 +569,10 @@ static struct platform_device *devices[] __initdata = {
 #if !defined(CONFIG_MSM_SERIAL_DEBUGGER) && !defined(CONFIG_TROUT_H2W)
 	&msm_device_uart3,
 #endif
+#ifdef CONFIG_SERIAL_MSM_HS
+	&msm_device_uart_dm1,
+	&msm_device_uart_dm2,
+#endif
 #ifdef CONFIG_USB_FUNCTION
 	&msm_device_hsusb,
 	&usb_mass_storage_device,
@@ -625,10 +629,17 @@ static void trout_reset(void)
 
 static uint32_t gpio_table[] = {
 	/* BLUETOOTH */
+#ifdef CONFIG_SERIAL_MSM_HS
+	PCOM_GPIO_CFG(43, 2, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_4MA), /* RTS */
+	PCOM_GPIO_CFG(44, 2, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_4MA), /* CTS */
+	PCOM_GPIO_CFG(45, 2, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_4MA), /* RX */
+	PCOM_GPIO_CFG(46, 3, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_4MA), /* TX */
+#else
 	PCOM_GPIO_CFG(43, 1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_4MA), /* RTS */
 	PCOM_GPIO_CFG(44, 1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_4MA), /* CTS */
 	PCOM_GPIO_CFG(45, 1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_4MA), /* RX */
 	PCOM_GPIO_CFG(46, 1, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_4MA), /* TX */
+#endif
 };
 
 
