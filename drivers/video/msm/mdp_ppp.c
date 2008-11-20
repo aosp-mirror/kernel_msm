@@ -16,6 +16,7 @@
 #include <linux/file.h>
 #include <linux/delay.h>
 #include <linux/msm_mdp.h>
+#include <linux/android_pmem.h>
 #include <mach/msm_fb.h>
 
 #include "mdp_hw.h"
@@ -575,10 +576,28 @@ static int valid_src_dst(unsigned long src_start, unsigned long src_len,
 	return 1;
 }
 
-
 static void flush_imgs(struct mdp_blit_req *req, struct mdp_regs *regs,
 		       struct file *src_file, struct file *dst_file)
 {
+#ifdef CONFIG_ANDROID_PMEM
+	uint32_t src0_len, src1_len, dst0_len, dst1_len;
+
+	/* flush src images to memory before dma to mdp */
+	get_len(&req->src, &req->src_rect, regs->src_bpp, &src0_len,
+		&src1_len);
+	flush_pmem_file(src_file, req->src.offset, src0_len);
+	if (IS_PSEUDOPLNR(req->src.format))
+		flush_pmem_file(src_file, req->src.offset + src0_len,
+				src1_len);
+
+	/* flush dst images */
+	get_len(&req->dst, &req->dst_rect, regs->dst_bpp, &dst0_len,
+		&dst1_len);
+	flush_pmem_file(dst_file, req->dst.offset, dst0_len);
+	if (IS_PSEUDOPLNR(req->dst.format))
+		flush_pmem_file(dst_file, req->dst.offset + dst0_len,
+				dst1_len);
+#endif
 }
 
 static void get_chroma_addr(struct mdp_img *img, struct mdp_rect *rect,
