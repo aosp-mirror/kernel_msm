@@ -20,6 +20,7 @@
 #include <linux/interrupt.h>
 #include <linux/i2c.h>
 #include <linux/irq.h>
+#include <linux/keyreset.h>
 #include <linux/leds.h>
 #include <linux/switch.h>
 #include <../../../drivers/staging/android/timed_gpio.h>
@@ -182,6 +183,26 @@ static struct platform_device trout_nav_device = {
 	.dev		= {
 		.platform_data	= &trout_nav_data,
 	},
+};
+
+static int trout_reset_keys_up[] = {
+	BTN_MOUSE,
+	0
+};
+
+static struct keyreset_platform_data trout_reset_keys_pdata = {
+	.keys_up = trout_reset_keys_up,
+	.keys_down = {
+		KEY_SEND,
+		KEY_MENU,
+		KEY_END,
+		0
+	},
+};
+
+struct platform_device trout_reset_keys_device = {
+	.name = KEYRESET_NAME,
+	.dev.platform_data = &trout_reset_keys_pdata,
 };
 
 static int trout_ts_power(int on)
@@ -578,6 +599,7 @@ static struct platform_device *devices[] __initdata = {
 	&usb_mass_storage_device,
 #endif
 	&trout_nav_device,
+	&trout_reset_keys_device,
 	&android_leds,
 	&sd_door_switch,
 	&android_timed_gpios,
