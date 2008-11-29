@@ -28,6 +28,9 @@
 #include <linux/akm8976.h>
 #include <linux/sysdev.h>
 #include <linux/android_pmem.h>
+#ifdef CONFIG_USB_ANDROID
+#include <linux/usb/android.h>
+#endif
 
 #include <linux/delay.h>
 
@@ -434,6 +437,26 @@ static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 	.phy_init_seq	= trout_phy_init_seq,
 };
 
+#ifdef CONFIG_USB_ANDROID
+static struct android_usb_platform_data android_usb_pdata = {
+	.vendor_id	= 0x0bb4,
+	.product_id	= 0x0c01,
+	.adb_product_id	= 0x0c02,
+	.version	= 0x0100,
+	.product_name	= "Android Phone",
+	.manufacturer_name = "HTC",
+	.nluns = 1,
+};
+
+static struct platform_device android_usb_device = {
+	.name	= "android_usb",
+	.id		= -1,
+	.dev		= {
+		.platform_data = &android_usb_pdata,
+	},
+};
+#endif
+
 static struct resource trout_ram_console_resource[] = {
 	{
 		.start	= MSM_RAM_CONSOLE_BASE,
@@ -540,6 +563,9 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_uart_dm1,
 #endif
 	&msm_device_hsusb,
+#ifdef CONFIG_USB_ANDROID
+	&android_usb_device,
+#endif
 	&trout_nav_device,
 	&trout_reset_keys_device,
 	&android_leds,
@@ -572,6 +598,9 @@ module_param_named(disable_uart3, opt_disable_uart3, uint, 0);
 
 static int __init trout_serialno_setup(char *str)
 {
+#ifdef CONFIG_USB_ANDROID
+	android_usb_pdata.serial_number = str;
+#endif
 	return 1;
 }
 
