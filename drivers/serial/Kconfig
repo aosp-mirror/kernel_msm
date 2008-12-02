@@ -1375,20 +1375,6 @@ config SERIAL_MSM_HS
 	help
 	  Select this module to enable MSM high speed UART driver.
 
-config SERIAL_MSM_HS_UART1
-	bool "Enable High Speed UART1"
-	depends on SERIAL_MSM_HS
-	default y
-	help
-	  This option enables the UART 1 High Speed port in MSM UART driver.
-
-config SERIAL_MSM_HS_UART2
-	bool "Enable High Speed UART2"
-	depends on SERIAL_MSM_HS
-	default n
-	help
-	  This option enables the UART 2 High Speed port in MSM UART driver.
-
 config SERIAL_NETX
 	tristate "NetX serial port support"
 	depends on ARM && ARCH_NETX
