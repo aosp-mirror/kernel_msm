@@ -28,8 +28,20 @@
 #include "board-trout.h"
 #include "gpio_chip.h"
 
+#undef MODULE_PARAM_PREFIX
+#define MODULE_PARAM_PREFIX "board_trout."
+
+static uint cpld_usb_h2w_sw;
+module_param_named(usb_h2w_sw, cpld_usb_h2w_sw, uint, 0);
+
 static uint8_t trout_cpld_shadow[4] = {
+#if defined(CONFIG_MSM_DEBUG_UART1)
+	/* H2W pins <-> UART1 */
         [0] = 0x40, // for serial debug, low current
+#else
+	/* H2W pins <-> UART3, Bluetooth <-> UART1 */
+        [0] = 0x80, // for serial debug, low current
+#endif
         [1] = 0x04, // I2C_PULL
         [3] = 0x04, // mmdi 32k en
 };
@@ -66,9 +78,19 @@ static void update_pwrsink(unsigned gpio, unsigned on)
 	}
 }
 
-int trout_gpio_write(struct gpio_chip *chip, unsigned n, unsigned on)
+static uint8_t trout_gpio_write_shadow(unsigned n, unsigned on)
 {
 	uint8_t b = 1U << (n & 7);
+	int reg = (n & 0x78) >> 2; // assumes base is 128
+
+	if(on)
+		return trout_cpld_shadow[reg >> 1] |= b;
+	else
+		return trout_cpld_shadow[reg >> 1] &= ~b;
+}
+
+static int trout_gpio_write(struct gpio_chip *chip, unsigned n, unsigned on)
+{
 	int reg = (n & 0x78) >> 2; // assumes base is 128
 	unsigned long flags;
 	uint8_t reg_val;
@@ -80,10 +102,7 @@ int trout_gpio_write(struct gpio_chip *chip, unsigned n, unsigned on)
 
 	local_irq_save(flags);
 	update_pwrsink(n, on);
-	if(on)
-		reg_val = trout_cpld_shadow[reg >> 1] |= b;
-	else
-		reg_val = trout_cpld_shadow[reg >> 1] &= ~b;
+	reg_val = trout_gpio_write_shadow(n, on);
 	writeb(reg_val, TROUT_CPLD_BASE + reg);
 	local_irq_restore(flags);
 	return 0;
@@ -257,6 +276,10 @@ static int __init trout_init_gpio(void)
 
 	if (!machine_is_trout())
 		return 0;
+
+	/* adjust GPIOs based on bootloader request */
+	pr_info("trout_init_gpio: cpld_usb_hw2_sw = %d\n", cpld_usb_h2w_sw);
+	trout_gpio_write_shadow(TROUT_GPIO_USB_H2W_SW, cpld_usb_h2w_sw);
 
 	for(i = 0; i < ARRAY_SIZE(trout_cpld_shadow); i++)
 		writeb(trout_cpld_shadow[i], TROUT_CPLD_BASE + i * 2);

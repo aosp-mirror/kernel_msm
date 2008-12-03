@@ -624,14 +624,8 @@ static void __init trout_init_irq(void)
 	msm_init_irq();
 }
 
-static uint cpld_iset;
-static uint cpld_charger_en;
-static uint cpld_usb_h2w_sw;
 static uint opt_disable_uart3;
 
-module_param_named(iset, cpld_iset, uint, 0);
-module_param_named(charger_en, cpld_charger_en, uint, 0);
-module_param_named(usb_h2w_sw, cpld_usb_h2w_sw, uint, 0);
 module_param_named(disable_uart3, opt_disable_uart3, uint, 0);
 
 static int __init trout_serialno_setup(char *str)
@@ -755,10 +749,6 @@ static void __init trout_init(void)
 
 	msm_acpu_clock_init(&trout_clock_data);
 
-	/* adjust GPIOs based on bootloader request */
-	printk("trout_init: cpld_usb_hw2_sw = %d\n", cpld_usb_h2w_sw);
-	gpio_set_value(TROUT_GPIO_USB_H2W_SW, cpld_usb_h2w_sw);
-
 #if defined(CONFIG_MSM_SERIAL_DEBUGGER)
 	if (!opt_disable_uart3)
 		msm_serial_debug_init(MSM_UART3_PHYS, INT_UART3,
@@ -766,16 +756,6 @@ static void __init trout_init(void)
 #endif
 
 	/* gpio_configure(108, IRQF_TRIGGER_LOW); */
-
-#if defined(CONFIG_LL_DEBUG_UART1)
-	/* H2W pins <-> UART1 */
-	gpio_set_value(TROUT_GPIO_H2W_SEL0, 1);
-	gpio_set_value(TROUT_GPIO_H2W_SEL1, 0);
-#else
-	/* H2W pins <-> UART3, Bluetooth <-> UART1 */
-	gpio_set_value(TROUT_GPIO_H2W_SEL0, 0);
-	gpio_set_value(TROUT_GPIO_H2W_SEL1, 1);
-#endif
 
 	/* put the AF VCM in powerdown mode to avoid noise */
 	gpio_set_value(TROUT_GPIO_VCM_PWDN, 1);
