@@ -52,25 +52,21 @@ static int msm_cpufreq_target(struct cpufreq_policy *policy,
 				unsigned int target_freq,
 				unsigned int relation)
 {
-	unsigned int freq;
-	switch(relation) {
-		/* Lowest value at or above target frequency. */
-		case CPUFREQ_RELATION_L:
-		/* Highest value at or below target frequency. */
-		case CPUFREQ_RELATION_H:
-			if (target_freq < CONFIG_MSM_CPU_FREQ_ONDEMAND_MAX)
-				freq = CONFIG_MSM_CPU_FREQ_ONDEMAND_MIN;
-			else
-				freq = CONFIG_MSM_CPU_FREQ_ONDEMAND_MAX;
-			break;
-		default:
-			return -EINVAL;
+	int index;
+	struct cpufreq_frequency_table *table =
+		cpufreq_frequency_get_table(smp_processor_id());
+
+	if (cpufreq_frequency_table_target(policy, table, target_freq, relation,
+			&index)) {
+		pr_err("cpufreq: invalid target_freq: %d\n", target_freq);
+		return -EINVAL;
 	}
+
 #ifdef CONFIG_CPU_FREQ_DEBUG
 	printk("msm_cpufreq_target %d r %d (%d-%d) selected %d\n", target_freq,
-		relation, policy->min, policy->max, freq);
+		relation, policy->min, policy->max, table[index].frequency);
 #endif
-	acpuclk_set_rate(freq * 1000, 0);
+	acpuclk_set_rate(table[index].frequency * 1000, 0);
 	return 0;
 }
 
@@ -83,11 +79,17 @@ return 0;
 
 static int __init msm_cpufreq_init(struct cpufreq_policy *policy)
 {
+	struct cpufreq_frequency_table *table =
+		cpufreq_frequency_get_table(smp_processor_id());
+
 	policy->cur = acpuclk_get_rate();
+	if (cpufreq_frequency_table_cpuinfo(policy, table)) {
+		policy->cpuinfo.min_freq = CONFIG_MSM_CPU_FREQ_ONDEMAND_MIN;
+		policy->cpuinfo.max_freq = CONFIG_MSM_CPU_FREQ_ONDEMAND_MAX;
+	}
 	policy->min = CONFIG_MSM_CPU_FREQ_ONDEMAND_MIN;
 	policy->max = CONFIG_MSM_CPU_FREQ_ONDEMAND_MAX;
-	policy->cpuinfo.min_freq = CONFIG_MSM_CPU_FREQ_ONDEMAND_MIN;
-	policy->cpuinfo.max_freq = CONFIG_MSM_CPU_FREQ_ONDEMAND_MAX;
+
 	policy->cpuinfo.transition_latency =
 		acpuclk_get_switch_time() * NSEC_PER_USEC;
 	return 0;
