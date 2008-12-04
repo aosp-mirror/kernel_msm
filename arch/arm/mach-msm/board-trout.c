@@ -592,7 +592,6 @@ static struct platform_device *devices[] __initdata = {
 #endif
 #ifdef CONFIG_SERIAL_MSM_HS
 	&msm_device_uart_dm1,
-	&msm_device_uart_dm2,
 #endif
 #ifdef CONFIG_USB_FUNCTION
 	&msm_device_hsusb,
