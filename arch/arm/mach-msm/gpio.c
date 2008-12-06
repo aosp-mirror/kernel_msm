@@ -168,7 +168,11 @@ struct msm_gpio_chip msm_gpio_chips[] = {
 		},
 		.chip = {
 			.start = 95,
+#if defined(CONFIG_ARCH_QSD8X50)
+			.end = 103,
+#else
 			.end = 106,
+#endif
 			.configure = msm_gpio_configure,
 			.get_irq_num = msm_gpio_get_irq_num,
 			.read = msm_gpio_read,
@@ -189,7 +193,11 @@ struct msm_gpio_chip msm_gpio_chips[] = {
 			.oe =          GPIO_OE_5,
 		},
 		.chip = {
+#if defined(CONFIG_ARCH_QSD8X50)
+			.start = 104,
+#else
 			.start = 107,
+#endif
 			.end = 121,
 			.configure = msm_gpio_configure,
 			.get_irq_num = msm_gpio_get_irq_num,
@@ -198,7 +206,53 @@ struct msm_gpio_chip msm_gpio_chips[] = {
 			.read_detect_status = msm_gpio_read_detect_status,
 			.clear_detect_status = msm_gpio_clear_detect_status
 		}
-	}
+	},
+#if defined(CONFIG_ARCH_QSD8X50)
+	{
+		.regs = {
+			.out =         GPIO_OUT_6,
+			.in =          GPIO_IN_6,
+			.int_status =  GPIO_INT_STATUS_6,
+			.int_clear =   GPIO_INT_CLEAR_6,
+			.int_en =      GPIO_INT_EN_6,
+			.int_edge =    GPIO_INT_EDGE_6,
+			.int_pos =     GPIO_INT_POS_6,
+			.oe =          GPIO_OE_6,
+		},
+		.chip = {
+			.start = 122,
+			.end = 152,
+			.configure = msm_gpio_configure,
+			.get_irq_num = msm_gpio_get_irq_num,
+			.read = msm_gpio_read,
+			.write = msm_gpio_write,
+			.read_detect_status = msm_gpio_read_detect_status,
+			.clear_detect_status = msm_gpio_clear_detect_status
+		}
+	},
+	{
+		.regs = {
+			.out =         GPIO_OUT_7,
+			.in =          GPIO_IN_7,
+			.int_status =  GPIO_INT_STATUS_7,
+			.int_clear =   GPIO_INT_CLEAR_7,
+			.int_en =      GPIO_INT_EN_7,
+			.int_edge =    GPIO_INT_EDGE_7,
+			.int_pos =     GPIO_INT_POS_7,
+			.oe =          GPIO_OE_7,
+		},
+		.chip = {
+			.start = 153,
+			.end = 164,
+			.configure = msm_gpio_configure,
+			.get_irq_num = msm_gpio_get_irq_num,
+			.read = msm_gpio_read,
+			.write = msm_gpio_write,
+			.read_detect_status = msm_gpio_read_detect_status,
+			.clear_detect_status = msm_gpio_clear_detect_status
+		}
+	},
+#endif
 };
 
 static void msm_gpio_update_both_edge_detect(struct msm_gpio_chip *msm_chip)
