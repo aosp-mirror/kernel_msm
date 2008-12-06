@@ -454,16 +454,16 @@ static struct irq_chip msm_gpio_irq_chip = {
 	.set_type  = msm_gpio_irq_set_type,
 };
 
-#define NUM_GPIO_INT_REGISTERS 6
+#define NUM_GPIO_SMEM_BANKS 6
 #define GPIO_SMEM_NUM_GROUPS 2
 #define GPIO_SMEM_MAX_PC_INTERRUPTS 8
 struct tramp_gpio_smem
 {
 	uint16_t num_fired[GPIO_SMEM_NUM_GROUPS];
 	uint16_t fired[GPIO_SMEM_NUM_GROUPS][GPIO_SMEM_MAX_PC_INTERRUPTS];
-	uint32_t enabled[NUM_GPIO_INT_REGISTERS];
-	uint32_t detection[NUM_GPIO_INT_REGISTERS];
-	uint32_t polarity[NUM_GPIO_INT_REGISTERS];
+	uint32_t enabled[NUM_GPIO_SMEM_BANKS];
+	uint32_t detection[NUM_GPIO_SMEM_BANKS];
+	uint32_t polarity[NUM_GPIO_SMEM_BANKS];
 };
 
 static void msm_gpio_sleep_int(unsigned long arg)
@@ -471,7 +471,7 @@ static void msm_gpio_sleep_int(unsigned long arg)
 	int i, j;
 	struct tramp_gpio_smem *smem_gpio;
 
-	BUILD_BUG_ON(ARRAY_SIZE(msm_gpio_chips) != ARRAY_SIZE(smem_gpio->enabled));
+	BUILD_BUG_ON(NR_GPIO_IRQS > NUM_GPIO_SMEM_BANKS * 32);
 
 	smem_gpio = smem_alloc(SMEM_GPIO_INT, sizeof(*smem_gpio)); 
 	if (smem_gpio == NULL)
@@ -494,8 +494,6 @@ void msm_gpio_enter_sleep(int from_idle)
 {
 	int i;
 	struct tramp_gpio_smem *smem_gpio;
-
-	BUILD_BUG_ON(ARRAY_SIZE(msm_gpio_chips) != ARRAY_SIZE(smem_gpio->enabled));
 
 	smem_gpio = smem_alloc(SMEM_GPIO_INT, sizeof(*smem_gpio)); 
 
@@ -545,8 +543,6 @@ void msm_gpio_exit_sleep(void)
 {
 	int i;
 	struct tramp_gpio_smem *smem_gpio;
-
-	BUILD_BUG_ON(ARRAY_SIZE(msm_gpio_chips) != ARRAY_SIZE(smem_gpio->enabled));
 
 	smem_gpio = smem_alloc(SMEM_GPIO_INT, sizeof(*smem_gpio)); 
 
