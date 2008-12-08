@@ -80,14 +80,14 @@ static int verify_vdec_pkt_cmd(struct msm_adsp_module *module,
 	unsigned long subframe_pkt_addr;
 	unsigned long subframe_pkt_size;
 	viddec_cmd_frame_header_packet *frame_header_pkt;
-	int i;
+	int i, num_addr, skip;
 	unsigned short *frame_buffer_high, *frame_buffer_low;
 	unsigned long frame_buffer_size;
 	unsigned short frame_buffer_size_high, frame_buffer_size_low;
 
 	DLOG("cmd_size %d cmd_id %d cmd_data %x\n", cmd_size, cmd_id, cmd_data);
 	if (cmd_id != VIDDEC_CMD_SUBFRAME_PKT) {
-		printk(KERN_INFO "adsp_video:unknown video packet %u\n",
+		printk(KERN_INFO "adsp_video: unknown video packet %u\n",
 			cmd_id);
 		return 0;
 	}
@@ -108,8 +108,18 @@ static int verify_vdec_pkt_cmd(struct msm_adsp_module *module,
 	/* deref those ptrs and check if they are a frame header packet */
 	frame_header_pkt = (viddec_cmd_frame_header_packet *)subframe_pkt_addr;
 	
-	if (frame_header_pkt->packet_id != (unsigned short)0xB201)
+	switch (frame_header_pkt->packet_id) {
+	case 0xB201: /* h.264 */
+		num_addr = skip = 8;
+		break;
+	case 0x4D01: /* mpeg-4 and h.263 */
+		num_addr = 3;
+		skip = 0;
+		break;
+	default:
 		return 0;
+	}
+
 	frame_buffer_high = &frame_header_pkt->frame_buffer_0_high;
 	frame_buffer_low = &frame_header_pkt->frame_buffer_0_low;
 	frame_buffer_size = (frame_header_pkt->x_dimension *
@@ -117,7 +127,7 @@ static int verify_vdec_pkt_cmd(struct msm_adsp_module *module,
 	ptr_to_high_low_short((void *)frame_buffer_size,
 			      &frame_buffer_size_high,
 			      &frame_buffer_size_low);
-	for (i = 0; i < 8; i++) {
+	for (i = 0; i < num_addr; i++) {
 		if (pmem_fixup_high_low(frame_buffer_high, frame_buffer_low,
 					frame_buffer_size_high,
 					frame_buffer_size_low,
@@ -127,8 +137,10 @@ static int verify_vdec_pkt_cmd(struct msm_adsp_module *module,
 		frame_buffer_high += 2;
 		frame_buffer_low += 2;
 	}
-	if (pmem_fixup_high_low(&frame_header_pkt->output_frame_buffer_high,
-				&frame_header_pkt->output_frame_buffer_low,
+	/* Patch the output buffer. */
+	frame_buffer_high += 2*skip;
+	frame_buffer_low += 2*skip;
+	if (pmem_fixup_high_low(frame_buffer_high, frame_buffer_low,
 				frame_buffer_size_high,
 				frame_buffer_size_low, module, NULL, NULL))
 		return -1;
