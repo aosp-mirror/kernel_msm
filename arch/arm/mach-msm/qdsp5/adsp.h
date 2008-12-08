@@ -41,6 +41,10 @@ int adsp_lpm_verify_cmd(struct msm_adsp_module *module,
 int adsp_video_verify_cmd(struct msm_adsp_module *module,
 			  unsigned int queue_id, void *cmd_data,
 			  size_t cmd_size);
+int adsp_videoenc_verify_cmd(struct msm_adsp_module *module,
+			  unsigned int queue_id, void *cmd_data,
+			  size_t cmd_size);
+
 
 struct adsp_event;
 
@@ -48,7 +52,7 @@ int adsp_vfe_patch_event(struct msm_adsp_module *module,
 			struct adsp_event *event);
 
 int adsp_jpeg_patch_event(struct msm_adsp_module *module,
-                        struct adsp_event *event);
+			struct adsp_event *event);
 
 
 struct adsp_module_info {
@@ -59,21 +63,21 @@ struct adsp_module_info {
 	unsigned long clk_rate;
 	int (*verify_cmd) (struct msm_adsp_module*, unsigned int, void *,
 			   size_t);
-	int (*patch_event) (struct msm_adsp_module*, struct adsp_event *); 
+	int (*patch_event) (struct msm_adsp_module*, struct adsp_event *);
 };
 
 #define ADSP_EVENT_MAX_SIZE 496
 
 struct adsp_event {
-        struct list_head list;
-        uint32_t size; /* always in bytes */
-        uint16_t msg_id;
-        uint16_t type; /* 0 for msgs (from aDSP), 1 for events (from ARM9) */
-        int is16; /* always 0 (msg is 32-bit) when the event type is 1(ARM9) */
-        union {
-                uint16_t msg16[ADSP_EVENT_MAX_SIZE / 2];
-                uint32_t msg32[ADSP_EVENT_MAX_SIZE / 4];
-        } data;
+	struct list_head list;
+	uint32_t size; /* always in bytes */
+	uint16_t msg_id;
+	uint16_t type; /* 0 for msgs (from aDSP), 1 for events (from ARM9) */
+	int is16; /* always 0 (msg is 32-bit) when the event type is 1(ARM9) */
+	union {
+		uint16_t msg16[ADSP_EVENT_MAX_SIZE / 2];
+		uint32_t msg32[ADSP_EVENT_MAX_SIZE / 4];
+	} data;
 };
 
 struct adsp_info {
@@ -196,12 +200,13 @@ struct msm_adsp_module {
 	struct hlist_head pmem_regions;
 	int (*verify_cmd) (struct msm_adsp_module*, unsigned int, void *,
 			   size_t);
-	int (*patch_event) (struct msm_adsp_module*, struct adsp_event *); 
+	int (*patch_event) (struct msm_adsp_module*, struct adsp_event *);
 };
 
 extern void msm_adsp_publish_cdevs(struct msm_adsp_module *, unsigned);
 extern int adsp_init_info(struct adsp_info *info);
-extern struct msm_adsp_module *find_adsp_module_by_id(struct adsp_info *info, uint32_t id);
+extern struct msm_adsp_module *find_adsp_module_by_id(struct adsp_info *info,
+						      uint32_t id);
 
 
 /* Command Queue Indexes */
