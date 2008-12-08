@@ -82,7 +82,7 @@ static struct adsp_device *inode_to_device(struct inode *inode);
 	typeof(r1) __r1 = r1;					\
 	typeof(r2) __r2 = r2;					\
 	typeof(__r2->vaddr) __v = __r2->vaddr;			\
-	typeof(__v) __e = __v + __r2->len;			\
+	typeof(__v) __e = __v + __r2->len - 1;			\
 	int res = (IN_RANGE(__r1, __v) || IN_RANGE(__r1, __e));	\
 	res;							\
 })
@@ -133,7 +133,8 @@ static int adsp_pmem_add(struct msm_adsp_module *module,
 		goto end;
 	}
 
-	if ((rc = adsp_pmem_check(module, info->vaddr, len)) < 0) {
+	rc = adsp_pmem_check(module, info->vaddr, len);
+	if (rc < 0) {
 		put_pmem_file(file);
 		kfree(region);
 		goto end;
@@ -152,7 +153,7 @@ end:
 }
 
 static int adsp_pmem_lookup_vaddr(struct msm_adsp_module *module, void **addr,
-		     unsigned long len, struct adsp_pmem_region** region)
+		     unsigned long len, struct adsp_pmem_region **region)
 {
 	struct hlist_node *node;
 	void *vaddr = *addr;
@@ -172,19 +173,24 @@ static int adsp_pmem_lookup_vaddr(struct msm_adsp_module *module, void **addr,
 			 */
 
 			match_count++;
-			if (!*region) *region = region_elt;
+			if (!*region)
+				*region = region_elt;
 		}
 	}
 
 	if (match_count > 1) {
-		printk(KERN_ERR "adsp: module %s: multiple hits for vaddr %p, len %ld\n",
-			module->name, vaddr, len); 
-		hlist_for_each_entry(region_elt, node, &module->pmem_regions, list) {
+		printk(KERN_ERR "adsp: module %s: "
+			"multiple hits for vaddr %p, len %ld\n",
+			module->name, vaddr, len);
+		hlist_for_each_entry(region_elt, node,
+				&module->pmem_regions, list) {
 			if (vaddr >= region_elt->vaddr &&
 			    vaddr < region_elt->vaddr + region_elt->len &&
 			    vaddr + len <= region_elt->vaddr + region_elt->len)
-				printk(KERN_ERR "\t%p, %ld --> %p\n", region_elt->vaddr,
-					region_elt->len, (void *)region_elt->paddr);
+				printk(KERN_ERR "\t%p, %ld --> %p\n",
+					region_elt->vaddr,
+					region_elt->len,
+					(void *)region_elt->paddr);
 		}
 	}
 
@@ -295,7 +301,7 @@ static int adsp_events_pending(struct adsp_device *adev)
 }
 
 static int adsp_pmem_lookup_paddr(struct msm_adsp_module *module, void **addr,
-		     struct adsp_pmem_region** region)
+		     struct adsp_pmem_region **region)
 {
 	struct hlist_node *node;
 	unsigned long paddr = (unsigned long)(*addr);
@@ -332,10 +338,10 @@ int adsp_pmem_paddr_fixup(struct msm_adsp_module *module, void **addr)
 static int adsp_patch_event(struct msm_adsp_module *module,
 				struct adsp_event *event)
 {
-        /* call the per-module msg verifier */
-        if (module->patch_event)
-                return module->patch_event(module, event); 
-        return 0;
+	/* call the per-module msg verifier */
+	if (module->patch_event)
+		return module->patch_event(module, event);
+	return 0;
 }
 
 static long adsp_get_event(struct adsp_device *adev, void __user *arg)
