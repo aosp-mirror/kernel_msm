@@ -603,7 +603,7 @@ static void msm_hs_dmov_rx_callback(struct msm_dmov_cmd *cmd_ptr,
 
 	spin_lock_irqsave(&uport->lock, flags);
 
-	tty = uport->info->port.tty;  //npell info->tty ??
+	tty = uport->info->port.tty;
 
 	msm_hs_write(uport, UARTDM_CR_ADDR, STALE_EVENT_DISABLE);
 
@@ -761,9 +761,6 @@ static irqreturn_t msm_hs_isr(int irq, void *dev)
 
 	isr_status = msm_hs_read(uport, UARTDM_MISR_ADDR);
 
-	/* Mask UART interrupts */
-	disable_irq(uport->irq);
-
 	/* Stale rx interrupt */
 	if (isr_status & UARTDM_ISR_RXSTALE_BMSK) {
 		msm_hs_write(uport, UARTDM_CR_ADDR, STALE_EVENT_DISABLE);
@@ -794,7 +791,6 @@ static irqreturn_t msm_hs_isr(int irq, void *dev)
 	if (isr_status & UARTDM_ISR_DELTA_CTS_BMSK)
 		msm_hs_handle_delta_cts(uport);
 
-	enable_irq(uport->irq);
 	spin_unlock_irqrestore(&uport->lock, flags);
 
 	return IRQ_HANDLED;
@@ -985,6 +981,9 @@ static int __init msm_hs_probe(struct platform_device *pdev)
 
 	uport->irq = platform_get_irq(pdev, 0);
 	if (unlikely(uport->irq < 0))
+		return -ENXIO;
+
+	if (unlikely(set_irq_wake(uport->irq, 1)))
 		return -ENXIO;
 
 	resource = platform_get_resource_byname(pdev, IORESOURCE_DMA,
