@@ -423,6 +423,7 @@ static void msm_gpio_sleep_int(unsigned long arg)
 	if (smem_gpio == NULL)
 		return;
 
+	local_irq_disable();
 	for(i = 0; i < GPIO_SMEM_NUM_GROUPS; i++) {
 		int count = smem_gpio->num_fired[i];
 		for(j = 0; j < count; j++) {
@@ -430,6 +431,7 @@ static void msm_gpio_sleep_int(unsigned long arg)
 			generic_handle_irq(MSM_GPIO_TO_INT(smem_gpio->fired[i][j]));
 		}
 	}
+	local_irq_enable();
 }
 
 static DECLARE_TASKLET(msm_gpio_sleep_int_tasklet, msm_gpio_sleep_int, 0);
