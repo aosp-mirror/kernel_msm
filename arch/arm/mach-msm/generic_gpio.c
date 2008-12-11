@@ -54,7 +54,7 @@ int register_gpio_chip(struct gpio_chip *new_gpio_chip)
 		struct gpio_chip **new_gpio_chip_array;
 		unsigned long new_gpio_chip_array_size = chip_array_end_index + 1;
 
-		new_gpio_chip_array = kmalloc(new_gpio_chip_array_size * sizeof(new_gpio_chip_array[0]), GFP_KERNEL);
+		new_gpio_chip_array = kmalloc(new_gpio_chip_array_size * sizeof(new_gpio_chip_array[0]), GFP_ATOMIC);
 		if (new_gpio_chip_array == NULL) {
 			printk(KERN_ERR "register_gpio_chip: failed to allocate array\n");
 			err = -ENOMEM;
