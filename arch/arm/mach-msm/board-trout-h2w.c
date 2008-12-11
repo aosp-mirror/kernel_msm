@@ -367,7 +367,6 @@ device_initcall(h2w_debug_init);
 static int trout_h2w_probe(struct platform_device *pdev)
 {
 	int ret;
-	unsigned long irq_flags;
 
 	printk(KERN_INFO "H2W: Registering H2W (headset) driver\n");
 	hi = kzalloc(sizeof(struct h2w_info), GFP_KERNEL);
@@ -431,13 +430,13 @@ static int trout_h2w_probe(struct platform_device *pdev)
 	hrtimer_init(&hi->btn_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	hi->btn_timer.function = button_event_timer_func;
 
-	local_irq_save(irq_flags);
-
 	ret = request_irq(hi->irq, detect_irq_handler,
 			  IRQF_TRIGGER_LOW, "h2w_detect", NULL);
 	if (ret < 0)
 		goto err_request_detect_irq;
 
+	/* Disable button until plugged in */
+	set_irq_flags(hi->irq_btn, IRQF_VALID | IRQF_NOAUTOEN);
 	ret = request_irq(hi->irq_btn, button_irq_handler,
 			  IRQF_TRIGGER_LOW, "h2w_button", NULL);
 	if (ret < 0)
@@ -449,10 +448,6 @@ static int trout_h2w_probe(struct platform_device *pdev)
 	ret = set_irq_wake(hi->irq_btn, 1);
 	if (ret < 0)
 		goto err_request_input_dev;
-
-	/* Disable button until plugged in */
-	disable_irq(hi->irq_btn);
-	local_irq_restore(irq_flags);
 
 	hi->input = input_allocate_device();
 	if (!hi->input) {
@@ -477,7 +472,6 @@ err_request_input_dev:
 err_request_h2w_headset_button_irq:
 	free_irq(hi->irq, 0);
 err_request_detect_irq:
-	local_irq_restore(irq_flags);
 err_get_button_irq_num_failed:
 err_get_h2w_detect_irq_num_failed:
 err_set_button_gpio:
