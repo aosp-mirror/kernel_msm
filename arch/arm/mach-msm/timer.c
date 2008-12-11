@@ -51,8 +51,6 @@ module_param_named(debug_mask, msm_timer_debug_mask, int, S_IRUGO | S_IWUSR | S_
 #define GPT_HZ 32768
 #define DGT_HZ 19200000 /* 19.2 MHz or 600 KHz after shift */
 
-static int msm_timer_ready;
-
 enum {
 	MSM_CLOCK_FLAGS_UNSTABLE_COUNT = 1U << 0,
 	MSM_CLOCK_FLAGS_ODD_MATCH_WRITE = 1U << 1,
@@ -351,10 +349,42 @@ void msm_timer_exit_idle(int low_power)
 
 unsigned long long sched_clock(void)
 {
-	if (msm_timer_ready)
-		return ktime_to_ns(ktime_get());
-	else
-		return 0;
+	static cycle_t saved_ticks;
+	static int saved_ticks_valid;
+	static unsigned long long base;
+	static unsigned long long last_result;
+
+	unsigned long irq_flags;
+	static cycle_t last_ticks;
+	cycle_t ticks;
+	static unsigned long long result;
+	struct clocksource *cs;
+	struct msm_clock *clock = msm_active_clock;
+
+	local_irq_save(irq_flags);
+	if (clock) {
+		cs = &clock->clocksource;
+
+		last_ticks = saved_ticks;
+		saved_ticks = ticks = cs->read(cs);
+		if (!saved_ticks_valid) {
+			saved_ticks_valid = 1;
+			last_ticks = ticks;
+			base -= clocksource_cyc2ns(ticks, cs->mult, cs->shift);
+		}
+		if (ticks < last_ticks) {
+			base += clocksource_cyc2ns(cs->mask,
+						   cs->mult, cs->shift);
+			base += clocksource_cyc2ns(1, cs->mult, cs->shift);
+		}
+		last_result = result =
+			clocksource_cyc2ns(ticks, cs->mult, cs->shift) + base;
+	} else {
+		base = result = last_result;
+		saved_ticks_valid = 0;
+	}
+	local_irq_restore(irq_flags);
+	return result; 
 }
 
 #ifdef CONFIG_MSM7X00A_USE_GP_TIMER
@@ -463,7 +493,6 @@ static void __init msm_timer_init(void)
 			       "failed for %s\n", cs->name);
 
 		clockevents_register_device(ce);
-		msm_timer_ready = 1;
 	}
 }
 
