@@ -19,8 +19,8 @@
  * along with this program; if not, you can find it at http://www.fsf.org
  */
 
-#ifndef MSM_UART_HS_HWREG_H
-#define MSM_UART_HS_HWREG_H
+#ifndef MSM_SERIAL_HS_HWREG_H
+#define MSM_SERIAL_HS_HWREG_H
 
 #define UARTDM_MR1_ADDR 0x0
 #define UARTDM_MR2_ADDR 0x4
@@ -73,17 +73,16 @@
 #define UARTDM_RXFS_ADDR 0x50
 
 /* Register field Mask Mapping */
-#define UARTDM_SR_TXEMT_BMSK 0x8
+#define UARTDM_SR_PAR_FRAME_BMSK	BIT(5)
+#define UARTDM_SR_OVERRUN_BMSK		BIT(4)
+#define UARTDM_SR_TXEMT_BMSK		BIT(3)
+#define UARTDM_SR_TXRDY_BMSK		BIT(2)
+#define UARTDM_SR_RXRDY_BMSK		BIT(0)
 
-#define UARTDM_SR_TXRDY_BMSK 0x4
-#define UARTDM_SR_RXRDY_BMSK 0x1
-#define UARTDM_SR_OVERRUN_BMSK 0x10
-#define UARTDM_SR_PAR_FRAME_BMSK 0x20
-
-#define UARTDM_CR_TX_DISABLE_BMSK 0x8
-#define UARTDM_CR_RX_DISABLE_BMSK 0x2
-#define UARTDM_CR_TX_EN_BMSK 0x4
-#define UARTDM_CR_RX_EN_BMSK 0x1
+#define UARTDM_CR_TX_DISABLE_BMSK	BIT(3)
+#define UARTDM_CR_RX_DISABLE_BMSK	BIT(1)
+#define UARTDM_CR_TX_EN_BMSK		BIT(2)
+#define UARTDM_CR_RX_EN_BMSK		BIT(0)
 
 /* UARTDM_CR channel_comman bit value (register field is bits 8:4) */
 #define RESET_RX		0x10
@@ -134,13 +133,17 @@
 #define UARTDM_IPR_STALE_LSB_BMSK 0x1f
 
 /* These can be used for both ISR and IMR register */
-#define UARTDM_ISR_CURRENT_CTS_BMSK 0x40
-#define UARTDM_ISR_DELTA_CTS_BMSK 0x20
-#define UARTDM_ISR_TX_READY_BMSK 0x80
-#define UARTDM_ISR_RXSTALE_BMSK 0x8
+#define UARTDM_ISR_TX_READY_BMSK	BIT(7)
+#define UARTDM_ISR_CURRENT_CTS_BMSK	BIT(6)
+#define UARTDM_ISR_DELTA_CTS_BMSK	BIT(5)
+#define UARTDM_ISR_RXLEV_BMSK		BIT(4)
+#define UARTDM_ISR_RXSTALE_BMSK		BIT(3)
+#define UARTDM_ISR_RXBREAK_BMSK		BIT(2)
+#define UARTDM_ISR_RXHUNT_BMSK		BIT(1)
+#define UARTDM_ISR_TXLEV_BMSK		BIT(0)
 
 /* Field definitions for UART_DM_DMEN*/
 #define UARTDM_TX_DM_EN_BMSK 0x1
 #define UARTDM_RX_DM_EN_BMSK 0x2
 
-#endif /* MSM_UART_HWREG_H */
+#endif /* MSM_SERIAL_HS_HWREG_H */
