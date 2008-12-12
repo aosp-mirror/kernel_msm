@@ -61,7 +61,7 @@
 
 #include <mach/board.h>
 #include <mach/msm_hsusb.h>
-
+#include <mach/msm_serial_hs.h>
 #include <mach/trout_pwrsink.h>
 
 #include "proc_comm.h"
@@ -702,6 +702,14 @@ static struct msm_acpu_clock_platform_data trout_clock_data = {
 	.wait_for_irq_khz = 128000000,
 };
 
+#ifdef CONFIG_SERIAL_MSM_HS
+static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
+	.wakeup_irq = MSM_GPIO_TO_INT(45),
+	.inject_rx_on_wakeup = 1,
+	.rx_to_inject = 0x32,
+};
+#endif
+
 static void __init trout_init(void)
 {
 	int rc;
@@ -735,6 +743,10 @@ static void __init trout_init(void)
 	}
 
 	msm_device_hsusb.dev.platform_data = &msm_hsusb_pdata;
+
+#ifdef CONFIG_SERIAL_MSM_HS
+	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
+#endif
 
 	rc = trout_init_mmc(system_rev);
 	if (rc)
