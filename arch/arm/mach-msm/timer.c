@@ -73,6 +73,8 @@ struct msm_clock {
 	uint32_t                    alarm_vtime;
 	uint32_t                    smem_offset;
 	uint32_t                    smem_in_sync;
+	cycle_t                     stopped_tick;
+	int                         stopped;
 };
 enum {
 	MSM_CLOCK_GPT,
@@ -113,12 +115,17 @@ static uint32_t msm_read_timer_count(struct msm_clock *clock)
 static cycle_t msm_gpt_read(struct clocksource *cs)
 {
 	struct msm_clock *clock = &msm_clocks[MSM_CLOCK_GPT];
-	return msm_read_timer_count(clock) + clock->offset;
+	if (clock->stopped)
+		return clock->stopped_tick;
+	else
+		return msm_read_timer_count(clock) + clock->offset;
 }
 
 static cycle_t msm_dgt_read(struct clocksource *cs)
 {
 	struct msm_clock *clock = &msm_clocks[MSM_CLOCK_DGT];
+	if (clock->stopped)
+		return clock->stopped_tick;
 	return (msm_read_timer_count(clock) + clock->offset) >> MSM_DGT_SHIFT;
 }
 
@@ -167,12 +174,18 @@ static void msm_timer_set_mode(enum clock_event_mode mode,
 			      struct clock_event_device *evt)
 {
 	struct msm_clock *clock;
+	unsigned long irq_flags;
+
 	clock = container_of(evt, struct msm_clock, clockevent);
+	local_irq_save(irq_flags);
+
 	switch (mode) {
 	case CLOCK_EVT_MODE_RESUME:
 	case CLOCK_EVT_MODE_PERIODIC:
 		break;
 	case CLOCK_EVT_MODE_ONESHOT:
+		clock->stopped = 0;
+		clock->offset = -msm_read_timer_count(clock) + clock->stopped_tick;
 		msm_active_clock = clock;
 		writel(TIMER_ENABLE_EN, clock->regbase + TIMER_ENABLE);
 		break;
@@ -180,9 +193,13 @@ static void msm_timer_set_mode(enum clock_event_mode mode,
 	case CLOCK_EVT_MODE_SHUTDOWN:
 		msm_active_clock = NULL;
 		clock->smem_in_sync = 0;
+		clock->stopped = 1;
+		clock->stopped_tick = (msm_read_timer_count(clock) +
+					clock->offset) >> clock->shift;
 		writel(0, clock->regbase + TIMER_ENABLE);
 		break;
 	}
+	local_irq_restore(irq_flags);
 }
 
 static inline int check_timeout(struct msm_clock *clock, uint32_t timeout)
@@ -298,6 +315,8 @@ int64_t msm_timer_enter_idle(void)
 	msm_timer_sync_smem_clock(0);
 
 	count = msm_read_timer_count(clock);
+	if (clock->stopped++ == 0)
+		clock->stopped_tick = (count + clock->offset) >> clock->shift;
 	alarm = readl(clock->regbase + TIMER_MATCH_VAL);
 	delta = alarm - count;
 	if (delta <= -(int32_t)((clock->freq << clock->shift) >> 10)) {
@@ -317,14 +336,17 @@ void msm_timer_exit_idle(int low_power)
 	struct msm_clock *clock = msm_active_clock;
 	uint32_t smem_clock;
 
-	if (!low_power || clock != &msm_clocks[MSM_CLOCK_GPT])
+	if (clock != &msm_clocks[MSM_CLOCK_GPT])
 		return;
 
-	if (!(readl(clock->regbase + TIMER_ENABLE) & TIMER_ENABLE_EN)) {
-		writel(TIMER_ENABLE_EN, clock->regbase + TIMER_ENABLE);
-		smem_clock = msm_timer_sync_smem_clock(1);
+	if (low_power) {
+		if (!(readl(clock->regbase + TIMER_ENABLE) & TIMER_ENABLE_EN)) {
+			writel(TIMER_ENABLE_EN, clock->regbase + TIMER_ENABLE);
+			smem_clock = msm_timer_sync_smem_clock(1);
+		}
+		msm_timer_reactivate_alarm(clock);
 	}
-	msm_timer_reactivate_alarm(clock);
+	clock->stopped--;
 }
 
 unsigned long long sched_clock(void)
