@@ -44,6 +44,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/dmapool.h>
 #include <linux/wait.h>
+#include <linux/wakelock.h>
 
 #include <asm/atomic.h>
 #include <asm/irq.h>
@@ -94,6 +95,7 @@ struct msm_hs_rx {
 	dma_addr_t rbuffer;
 	unsigned char *buffer;
 	struct dma_pool *pool;
+	struct wake_lock wake_lock;
 };
 
 /* optional low power wakeup, typically on a GPIO RX irq */
@@ -191,6 +193,8 @@ static int __devexit msm_hs_remove(struct platform_device *pdev)
 			 DMA_TO_DEVICE);
 	dma_unmap_single(dev, msm_uport->tx.mapped_cmd_ptr, sizeof(dmov_box),
 			 DMA_TO_DEVICE);
+
+	wake_lock_destroy(&msm_uport->rx.wake_lock);
 
 	uart_remove_one_port(&msm_hs_driver, &msm_uport->uport);
 	clk_put(msm_uport->clk);
@@ -457,6 +461,7 @@ static void msm_hs_set_termios(struct uart_port *uport,
 	msm_hs_write(uport, UARTDM_CR_ADDR, RESET_TX);
 
 	if (msm_uport->rx.flush == FLUSH_NONE) {
+		wake_lock(&msm_uport->rx.wake_lock);
 		msm_uport->rx.flush = FLUSH_TERMIOS;
 		msm_dmov_flush(msm_uport->dma_rx_channel);
 	}
@@ -516,8 +521,10 @@ static void msm_hs_stop_rx_locked(struct uart_port *uport)
 
 	/* Disable the receiver */
 	msm_hs_write(uport, UARTDM_CR_ADDR, UARTDM_CR_RX_DISABLE_BMSK);
-	if (msm_uport->rx.flush == FLUSH_NONE)
+	if (msm_uport->rx.flush == FLUSH_NONE) {
+		wake_lock(&msm_uport->rx.wake_lock);
 		msm_dmov_flush(msm_uport->dma_rx_channel);
+	}
 	if (msm_uport->rx.flush != FLUSH_SHUTDOWN)
 		msm_uport->rx.flush = FLUSH_STOP;
 
@@ -588,6 +595,8 @@ static void msm_hs_start_rx_locked(struct uart_port *uport)
 	msm_hs_write(uport, UARTDM_CR_ADDR, RESET_STALE_INT);
 	msm_hs_write(uport, UARTDM_DMRX_ADDR, UARTDM_RX_BUF_SIZE);
 	msm_hs_write(uport, UARTDM_CR_ADDR, STALE_EVENT_ENABLE);
+	msm_uport->imr_reg |= UARTDM_ISR_RXLEV_BMSK;
+	msm_hs_write(uport, UARTDM_IMR_ADDR, msm_uport->imr_reg);
 }
 
 /* Enable the transmitter Interrupt */
@@ -692,11 +701,8 @@ static void msm_hs_dmov_rx_callback(struct msm_dmov_cmd *cmd_ptr,
 		msm_hs_start_rx_locked(uport);
 	if (flush == FLUSH_STOP)
 		msm_uport->rx.flush = FLUSH_SHUTDOWN;
-	if (flush >= FLUSH_DATA_INVALID) {
-		clk_disable(msm_uport->clk);
-		spin_unlock_irqrestore(&uport->lock, flags);
-		return;
-	}
+	if (flush >= FLUSH_DATA_INVALID)
+		goto out;
 
 	rx_count = msm_hs_read(uport, UARTDM_RX_TOTAL_SNAP_ADDR);
 
@@ -708,14 +714,16 @@ static void msm_hs_dmov_rx_callback(struct msm_dmov_cmd *cmd_ptr,
 
 	msm_hs_start_rx_locked(uport);
 
-	/*
-	 * Drop the lock here since tty_flip_buffer_push() might end
-	 * up calling uart_start(), which takes the lock.
-	 */
+out:
 	clk_disable(msm_uport->clk);
+	/* release wakelock in 500ms, not immediately, because higher layers
+	 * don't always take wakelocks when they should */
+	wake_lock_timeout(&msm_uport->rx.wake_lock, HZ / 2);
+	/* tty_flip_buffer_push() might call msm_hs_start(), so unlock */
 	spin_unlock_irqrestore(&uport->lock, flags);
 
-	tty_flip_buffer_push(tty);
+	if (flush < FLUSH_DATA_INVALID)
+		tty_flip_buffer_push(tty);
 }
 
 /*
@@ -901,6 +909,12 @@ static irqreturn_t msm_hs_isr(int irq, void *dev)
 
 	isr_status = msm_hs_read(uport, UARTDM_MISR_ADDR);
 
+	/* Uart RX starting */
+	if (isr_status & UARTDM_ISR_RXLEV_BMSK) {
+		wake_lock(&rx->wake_lock);  /* hold wakelock while rx dma */
+		msm_uport->imr_reg &= ~UARTDM_ISR_RXLEV_BMSK;
+		msm_hs_write(uport, UARTDM_IMR_ADDR, msm_uport->imr_reg);
+	}
 	/* Stale rx interrupt */
 	if (isr_status & UARTDM_ISR_RXSTALE_BMSK) {
 		msm_hs_write(uport, UARTDM_CR_ADDR, STALE_EVENT_DISABLE);
@@ -1141,8 +1155,8 @@ static int msm_hs_startup(struct uart_port *uport)
 
 	spin_lock_irqsave(&uport->lock, flags);
 
+	msm_hs_write(uport, UARTDM_RFWR_ADDR, 0);
 	msm_hs_start_rx_locked(uport);
-	msm_hs_write(uport, UARTDM_IMR_ADDR, msm_uport->imr_reg);
 
 	spin_unlock_irqrestore(&uport->lock, flags);
 
@@ -1172,6 +1186,7 @@ static int uartdm_init_port(struct uart_port *uport)
 	tx->xfer.cmdptr = DMOV_CMD_ADDR(tx->mapped_cmd_ptr_ptr);
 
 	init_waitqueue_head(&rx->wait);
+	wake_lock_init(&rx->wake_lock, WAKE_LOCK_SUSPEND, "msm_serial_hs_rx");
 
 	rx->pool = dma_pool_create("rx_buffer_pool", uport->dev,
 				   UARTDM_RX_BUF_SIZE, 16, 0);
