@@ -679,15 +679,6 @@ static int audio_in_open(struct inode *inode, struct file *file)
 		goto done;
 	}
 
-	if (!audio->data) {
-		audio->data = dma_alloc_coherent(NULL, DMASZ,
-				&audio->phys, GFP_KERNEL);
-		if (!audio->data) {
-			rc = -ENOMEM;
-			goto done;
-		}
-	}
-
 	/* Settings will be re-config at AUDIO_SET_CONFIG,
 	 * but at least we need to have initial config
 	 */
@@ -740,6 +731,14 @@ struct miscdevice audio_in_misc = {
 
 static int __init audio_in_init(void)
 {
+	the_audio_in.data = dma_alloc_coherent(NULL, DMASZ,
+					       &the_audio_in.phys, GFP_KERNEL);
+	if (!the_audio_in.data) {
+		printk(KERN_ERR "%s: Unable to allocate DMA buffer\n",
+		       __func__);
+		return -ENOMEM;
+	}
+
 	mutex_init(&the_audio_in.lock);
 	mutex_init(&the_audio_in.read_lock);
 	spin_lock_init(&the_audio_in.dsp_lock);
