@@ -63,6 +63,9 @@
 #include <mach/msm_hsusb.h>
 #include <mach/msm_serial_hs.h>
 #include <mach/trout_pwrsink.h>
+#ifdef CONFIG_WIFI_CONTROL_FUNC
+#include <linux/wifi_tiwlan.h>
+#endif
 
 #include "proc_comm.h"
 #include "devices.h"
@@ -71,6 +74,12 @@ void msm_init_irq(void);
 void msm_init_gpio(void);
 
 extern int trout_init_mmc(unsigned int);
+#ifdef CONFIG_WIFI_CONTROL_FUNC
+#ifdef CONFIG_WIFI_MEM_PREALLOC
+extern int trout_init_wifi_mem(void);
+#endif
+extern struct wifi_platform_data trout_wifi_control;
+#endif
 
 struct trout_axis_info {
 	struct gpio_event_axis_info info;
@@ -551,6 +560,18 @@ static struct platform_device trout_rfkill = {
 	.id = -1,
 };
 
+#ifdef CONFIG_WIFI_CONTROL_FUNC
+static struct platform_device trout_wifi = {
+	.name		= "msm_wifi",
+	.id		= 1,
+	.num_resources	= 0,
+	.resource	= NULL,
+	.dev		= {
+		.platform_data = &trout_wifi_control,
+	},
+};
+#endif
+
 static struct platform_device *devices[] __initdata = {
 	&msm_device_smd,
 	&msm_device_nand,
@@ -579,6 +600,9 @@ static struct platform_device *devices[] __initdata = {
 	&trout_ram_console_device,
 	&trout_camera,
 	&trout_rfkill,
+#ifdef CONFIG_WIFI_CONTROL_FUNC
+	&trout_wifi,
+#endif
 #if defined(CONFIG_TROUT_PWRSINK)
 	&trout_pwr_sink,
 #endif
@@ -751,6 +775,12 @@ static void __init trout_init(void)
 	rc = trout_init_mmc(system_rev);
 	if (rc)
 		printk(KERN_CRIT "%s: MMC init failure (%d)\n", __func__, rc);
+
+#ifdef CONFIG_WIFI_MEM_PREALLOC
+	rc = trout_init_wifi_mem();
+	if (rc)
+		printk(KERN_CRIT "%s: WiFi Memory init failure (%d)\n", __func__, rc);
+#endif
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 	i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));

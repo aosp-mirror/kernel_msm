@@ -236,14 +236,7 @@ static unsigned int trout_wifi_status(struct device *dev)
 	return trout_wifi_cd;
 }
 
-static struct mmc_platform_data trout_wifi_data = {
-	.ocr_mask		= MMC_VDD_28_29,
-	.status			= trout_wifi_status,
-	.register_status_notify	= trout_wifi_status_register,
-	.embedded_sdio		= &trout_wifi_emb_data,
-};
-
-void trout_wifi_set_carddetect(int val)
+int trout_wifi_set_carddetect(int val)
 {
 	printk("%s: %d\n", __func__, val);
 	trout_wifi_cd = val;
@@ -251,8 +244,11 @@ void trout_wifi_set_carddetect(int val)
 		wifi_status_cb(val, wifi_status_cb_devid);
 	} else
 		printk(KERN_WARNING "%s: Nobody to notify\n", __func__);
+	return 0;
 }
+#ifndef CONFIG_WIFI_CONTROL_FUNC
 EXPORT_SYMBOL(trout_wifi_set_carddetect);
+#endif
 
 static int trout_wifi_power_state;
 
@@ -284,17 +280,29 @@ int trout_wifi_power(int on)
 	trout_wifi_power_state = on;
 	return 0;
 }
+#ifndef CONFIG_WIFI_CONTROL_FUNC
 EXPORT_SYMBOL(trout_wifi_power);
+#endif
 
 static int trout_wifi_reset_state;
-void trout_wifi_reset(int on)
+int trout_wifi_reset(int on)
 {
 	printk("%s: %d\n", __func__, on);
 	gpio_set_value( TROUT_GPIO_WIFI_PA_RESETX, !on );
 	trout_wifi_reset_state = on;
 	mdelay(50);
+	return 0;
 }
+#ifndef CONFIG_WIFI_CONTROL_FUNC
 EXPORT_SYMBOL(trout_wifi_reset);
+#endif
+
+static struct mmc_platform_data trout_wifi_data = {
+	.ocr_mask		= MMC_VDD_28_29,
+	.status			= trout_wifi_status,
+	.register_status_notify	= trout_wifi_status_register,
+	.embedded_sdio		= &trout_wifi_emb_data,
+};
 
 int __init trout_init_mmc(unsigned int sys_rev)
 {
