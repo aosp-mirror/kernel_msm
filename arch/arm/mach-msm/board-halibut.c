@@ -60,10 +60,33 @@ static struct platform_device smc91x_device = {
 };
 
 static struct i2c_board_info i2c_devices[] = {
-	{		
+	{
 		I2C_BOARD_INFO("mt9t013", 0x78>>1),
 		/* .irq = TROUT_GPIO_TO_INT(TROUT_GPIO_CAM_BTN_STEP1_N), */
-	},	
+	},
+};
+
+#define SND(desc, num) { .name = #desc, .id = num }
+static struct snd_endpoint snd_endpoints_list[] = {
+	SND(HANDSET, 0),
+	SND(HEADSET, 2),
+	SND(SPEAKER, 6),
+	SND(BT, 12),
+	SND(CURRENT, 25),
+};
+#undef SND
+
+static struct msm_snd_endpoints halibut_snd_endpoints = {
+	.endpoints = snd_endpoints_list,
+	.num = sizeof(snd_endpoints_list) / sizeof(struct snd_endpoint)
+};
+
+static struct platform_device halibut_snd = {
+	.name = "msm_snd",
+	.id = -1,
+	.dev    = {
+		.platform_data = &halibut_snd_endpoints
+	},
 };
 
 static struct platform_device *devices[] __initdata = {
@@ -75,6 +98,7 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_hsusb,
 	&msm_device_i2c,
 	&smc91x_device,
+	&halibut_snd,
 };
 
 extern struct sys_timer msm_timer;
@@ -93,7 +117,7 @@ static struct msm_acpu_clock_platform_data halibut_clock_data = {
 };
 
 void msm_serial_debug_init(unsigned int base, int irq,
-			   struct device *clk_device, int signal_irq);
+				struct device *clk_device, int signal_irq);
 
 static void __init halibut_init(void)
 {
@@ -109,7 +133,7 @@ static void __init halibut_init(void)
 static void __init halibut_fixup(struct machine_desc *desc, struct tag *tags,
 				 char **cmdline, struct meminfo *mi)
 {
-	mi->nr_banks=1;
+	mi->nr_banks = 1;
 	mi->bank[0].start = PHYS_OFFSET;
 	mi->bank[0].node = PHYS_TO_NID(PHYS_OFFSET);
 	mi->bank[0].size = (101*1024*1024);
