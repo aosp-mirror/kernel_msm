@@ -54,6 +54,7 @@
 
 #include <asm/mach/mmc.h>
 #include <linux/mmc/sdio_ids.h>
+#include <linux/msm_audio.h>
 
 #include "board-trout.h"
 
@@ -572,6 +573,66 @@ static struct platform_device trout_wifi = {
 };
 #endif
 
+#define SND(desc,num) { .name = #desc, .id = num }
+static struct snd_endpoint snd_endpoints_list[] = {
+	SND(HANDSET, 0),
+	SND(SPEAKER, 1),
+	SND(HEADSET, 2),
+	SND(BT, 3),
+	SND(HEADSET_AND_SPEAKER, 10),
+        SND(CURRENT, 256),
+
+	/* Bluetooth accessories. */
+
+	SND(BH_S100, 12),
+	SND(BH_M100, 13),
+	SND(Motorola_H500, 14),
+	SND(Nokia_HS_36W, 15),
+	SND(PLT_510vD, 16),
+	SND(M2500_Plantronics, 17),
+	SND(Nokia_HDW_3, 18),
+	SND(HBH_608, 19),
+	SND(HBH_DS970, 20),
+	SND(iTech_BlueBAND, 21),
+	SND(Nokia_BH_800, 22),
+	SND(Motorola_H700, 23),
+	SND(HTC_BH_M200, 24),
+	SND(Jabra_JX10, 25),
+	SND(Plantronics_320, 26),
+	SND(Plantronics_640, 27),
+	SND(Jabra_BT500, 28),
+	SND(Motorola_HT820, 29),
+	SND(HBH_IV840, 30),
+	SND(Plantronics_6XX, 31),
+	SND(Plantronics_3XX, 32),
+	SND(HBH_PV710, 33),
+	SND(Motorola_H670, 34),
+	SND(HBM_300, 35),
+	SND(Nokia_BH_208, 36),
+	SND(Samsung_WEP410, 37),
+	SND(Jabra_BT8010, 38),
+	SND(Motorola_S9, 39),
+	SND(Jabra_BT620s, 40),
+	SND(Nokia_BH_902, 41),
+	SND(HBH_DS220, 42),
+	SND(HBH_DS980, 43),
+	SND(BT_EC_OFF, 44),
+};
+#undef SND
+
+static struct msm_snd_endpoints trout_snd_endpoints = {
+        .endpoints = snd_endpoints_list,
+        .num = ARRAY_SIZE(snd_endpoints_list),
+};
+
+static struct platform_device trout_snd = {
+	.name = "msm_snd",
+	.id = -1,
+	.dev	= {
+		.platform_data = &trout_snd_endpoints,
+	},
+};
+
 static struct platform_device *devices[] __initdata = {
 	&msm_device_smd,
 	&msm_device_nand,
@@ -606,6 +667,7 @@ static struct platform_device *devices[] __initdata = {
 #if defined(CONFIG_TROUT_PWRSINK)
 	&trout_pwr_sink,
 #endif
+	&trout_snd,
 };
 
 extern struct sys_timer msm_timer;
