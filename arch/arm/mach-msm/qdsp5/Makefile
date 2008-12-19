@@ -10,4 +10,5 @@ obj-y += adsp_jpeg_verify_cmd.o adsp_jpeg_patch_event.o
 obj-y += adsp_vfe_verify_cmd.o adsp_vfe_patch_event.o 
 obj-y += adsp_lpm_verify_cmd.o 
 obj-y += audio_out.o audio_in.o audio_mp3.o audmgr.o audpp.o
+obj-y += snd.o
 

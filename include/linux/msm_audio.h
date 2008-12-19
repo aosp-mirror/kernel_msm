@@ -20,6 +20,8 @@
 #include <linux/ioctl.h>
 #include <asm/sizes.h>
 
+/* PCM Audio */
+
 #define AUDIO_IOCTL_MAGIC 'a'
 
 #define AUDIO_START        _IOW(AUDIO_IOCTL_MAGIC, 0, unsigned)
@@ -49,4 +51,47 @@ struct msm_audio_stats {
 	uint32_t unused[2];
 };
 
-#endif
+/* Audio routing */
+
+#define SND_IOCTL_MAGIC 's'
+
+#define SND_MUTE_UNMUTED 0
+#define SND_MUTE_MUTED   1
+
+struct msm_snd_device_config {
+	uint32_t device;
+	uint32_t ear_mute;
+	uint32_t mic_mute;
+};
+
+#define SND_SET_DEVICE _IOW(SND_IOCTL_MAGIC, 2, struct msm_device_config *)
+
+#define SND_METHOD_VOICE 0
+
+struct msm_snd_volume_config {
+	uint32_t device;
+	uint32_t method;
+	uint32_t volume;
+};
+
+#define SND_SET_VOLUME _IOW(SND_IOCTL_MAGIC, 3, struct msm_snd_volume_config *)
+
+/* Returns the number of SND endpoints supported. */
+
+#define SND_GET_NUM_ENDPOINTS _IOR(SND_IOCTL_MAGIC, 4, unsigned *)
+
+struct msm_snd_endpoint {
+	int id; /* input and output */
+	char name[64]; /* output only */
+};
+
+/* Takes an index between 0 and one less than the number returned by
+ * SND_GET_NUM_ENDPOINTS, and returns the SND index and name of a
+ * SND endpoint.  On input, the .id field contains the number of the
+ * endpoint, and on exit it contains the SND index, while .name contains
+ * the description of the endpoint.
+ */
+
+#define SND_GET_ENDPOINT _IOWR(SND_IOCTL_MAGIC, 5, struct msm_snd_endpoint *)
+
+#endif /* __LINUX_MSM_AUDIO_H */
