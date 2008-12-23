@@ -419,6 +419,13 @@ int acpuclk_set_rate(unsigned long rate, int for_power_collapse)
 			pr_err("Setting AXI min rate failed!\n");
 	}
 
+	/* Change the AXI bus frequency if we can. */
+	if (strt_s->axiclk_khz != tgt_s->axiclk_khz) {
+		rc = clk_set_rate(ebi1_clk, tgt_s->axiclk_khz * 1000);
+		if (rc < 0)
+			pr_err("Setting AXI min rate failed!\n");
+	}
+
 	/* Drop VDD level if we can. */
 	if (tgt_s->vdd < strt_s->vdd) {
 		if (acpuclk_set_vdd_level(tgt_s->vdd) < 0)
