@@ -53,6 +53,7 @@ static int msm_cpufreq_target(struct cpufreq_policy *policy,
 				unsigned int relation)
 {
 	int index;
+	struct cpufreq_freqs freqs;
 	struct cpufreq_frequency_table *table =
 		cpufreq_frequency_get_table(smp_processor_id());
 
@@ -66,7 +67,12 @@ static int msm_cpufreq_target(struct cpufreq_policy *policy,
 	printk("msm_cpufreq_target %d r %d (%d-%d) selected %d\n", target_freq,
 		relation, policy->min, policy->max, table[index].frequency);
 #endif
+	freqs.old = policy->cur;
+	freqs.new = table[index].frequency;
+	freqs.cpu = smp_processor_id();
+	cpufreq_notify_transition(&freqs, CPUFREQ_PRECHANGE);
 	acpuclk_set_rate(table[index].frequency * 1000, 0);
+	cpufreq_notify_transition(&freqs, CPUFREQ_POSTCHANGE);
 	return 0;
 }
 
@@ -74,7 +80,7 @@ static int msm_cpufreq_verify(struct cpufreq_policy *policy)
 {
 	cpufreq_verify_within_limits(policy, policy->cpuinfo.min_freq,
 			policy->cpuinfo.max_freq);
-return 0;
+	return 0;
 }
 
 static int __init msm_cpufreq_init(struct cpufreq_policy *policy)
@@ -96,7 +102,7 @@ static int __init msm_cpufreq_init(struct cpufreq_policy *policy)
 }
 
 static struct cpufreq_driver msm_cpufreq_driver = {
-	/* lps calculstaions are handled here. */
+	/* lps calculations are handled here. */
 	.flags		= CPUFREQ_STICKY | CPUFREQ_CONST_LOOPS,
 	.init		= msm_cpufreq_init,
 	.verify		= msm_cpufreq_verify,
