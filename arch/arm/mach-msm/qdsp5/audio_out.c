@@ -616,14 +616,16 @@ static ssize_t audio_write(struct file *file, const char __user *buf,
 	size_t xfer;
 	int old_prio = current->rt_priority;
 	int old_policy = current->policy;
-	int cap_nice = cap_raised(current->cap_effective, CAP_SYS_NICE);
+	int cap_nice = cap_raised(current_cap(), CAP_SYS_NICE);
 	int rc = 0;
 
 	LOG(EV_WRITE, count | (audio->running << 28) | (audio->stopped << 24));
 
 	/* just for this write, set us real-time */
 	if (!task_has_rt_policy(current)) {
-		cap_raise(current->cap_effective, CAP_SYS_NICE);
+		struct cred *new = prepare_creds();
+		cap_raise(new->cap_effective, CAP_SYS_NICE);
+		commit_creds(new);
 		sched_setscheduler(current, SCHED_RR, &s);
 	}
 
@@ -669,8 +671,12 @@ static ssize_t audio_write(struct file *file, const char __user *buf,
 	if (!rt_policy(old_policy)) {
 		struct sched_param v = { .sched_priority = old_prio };
 		sched_setscheduler(current, old_policy, &v);
-		if (likely(!cap_nice))
-			cap_lower(current->cap_effective, CAP_SYS_NICE);
+		if (likely(!cap_nice)) {
+			struct cred *new = prepare_creds();
+			cap_lower(new->cap_effective, CAP_SYS_NICE);
+			commit_creds(new);
+			sched_setscheduler(current, SCHED_RR, &s);
+		}
 	}
 
 	LOG(EV_RETURN,(buf > start) ? (buf - start) : rc);
