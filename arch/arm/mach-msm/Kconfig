@@ -86,6 +86,13 @@ config MACH_MSM7X30_SURF
 	help
 	  Support for the Qualcomm MSM7x30 SURF eval board.
 
+config MACH_SWORDFISH
+	depends on ARCH_QSD8X50
+	default y
+	bool "Swordfish Board (QCT SURF8250)"
+	help
+	  Support for the Qualcomm SURF8250 eval board.
+
 config MACH_QSD8X50_SURF
 	depends on ARCH_QSD8X50
 	bool "QSD8x50 SURF"
@@ -129,7 +136,7 @@ config MSM_SMD_PKG3
 	bool
 
 config MACH_SAPPHIRE
-	depends on ARCH_MSM
+	depends on ARCH_MSM7X00A
 	default y
 	bool "Sapphire"
 
