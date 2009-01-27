@@ -56,8 +56,6 @@ void msm_sirc_exit_sleep(void);
  * Secondary interrupt controller interrupts
  */
 
-#define FIRST_SIRC_IRQ (NR_MSM_IRQS + NR_GPIO_IRQS)
-
 #define INT_UART1                     (FIRST_SIRC_IRQ + 0)
 #define INT_UART2                     (FIRST_SIRC_IRQ + 1)
 #define INT_UART3                     (FIRST_SIRC_IRQ + 2)

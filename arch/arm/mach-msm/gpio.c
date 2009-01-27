@@ -347,28 +347,28 @@ static int msm_gpio_get_irq_num(struct gpio_chip *chip, unsigned int gpio, unsig
 
 static void msm_gpio_irq_ack(unsigned int irq)
 {
-	gpio_clear_detect_status(irq - NR_MSM_IRQS);
+	gpio_clear_detect_status(irq - FIRST_GPIO_IRQ);
 }
 
 static void msm_gpio_irq_mask(unsigned int irq)
 {
-	gpio_configure(irq - NR_MSM_IRQS, MSM_GPIOF_DISABLE_INTERRUPT);
+	gpio_configure(irq - FIRST_GPIO_IRQ, MSM_GPIOF_DISABLE_INTERRUPT);
 }
 
 static void msm_gpio_irq_unmask(unsigned int irq)
 {
-	gpio_configure(irq - NR_MSM_IRQS, MSM_GPIOF_ENABLE_INTERRUPT);
+	gpio_configure(irq - FIRST_GPIO_IRQ, MSM_GPIOF_ENABLE_INTERRUPT);
 }
 
 static int msm_gpio_irq_set_wake(unsigned int irq, unsigned int on)
 {
-	return gpio_configure(irq - NR_MSM_IRQS, on ? MSM_GPIOF_ENABLE_WAKE : MSM_GPIOF_DISABLE_WAKE);
+	return gpio_configure(irq - FIRST_GPIO_IRQ, on ? MSM_GPIOF_ENABLE_WAKE : MSM_GPIOF_DISABLE_WAKE);
 }
 
 
 static int msm_gpio_irq_set_type(unsigned int irq, unsigned int flow_type)
 {
-	return gpio_configure(irq - NR_MSM_IRQS, flow_type);
+	return gpio_configure(irq - FIRST_GPIO_IRQ, flow_type);
 }
 
 static void msm_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
@@ -383,9 +383,9 @@ static void msm_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
 		while (v) {
 			m = v & -v;
 			j = fls(m) - 1;
-			/* printk("msm_gpio_irq_handler %08x %08x bit %d gpio %d irq %d\n", v, m, j, msm_chip->chip.start + j, NR_MSM_IRQS + msm_chip->chip.start + j); */
+			/* printk("msm_gpio_irq_handler %08x %08x bit %d gpio %d irq %d\n", v, m, j, msm_chip->chip.start + j, FIRST_GPIO_IRQ + msm_chip->chip.start + j); */
 			v &= ~m;
-			generic_handle_irq(NR_MSM_IRQS + msm_chip->chip.start + j);
+			generic_handle_irq(FIRST_GPIO_IRQ + msm_chip->chip.start + j);
 		}
 	}
 	desc->chip->ack(irq);
@@ -512,7 +512,7 @@ static int __init msm_init_gpio(void)
 {
 	int i;
 
-	for (i = NR_MSM_IRQS; i < NR_MSM_IRQS + NR_GPIO_IRQS; i++) {
+	for (i = FIRST_GPIO_IRQ; i < FIRST_GPIO_IRQ + NR_GPIO_IRQS; i++) {
 		set_irq_chip(i, &msm_gpio_irq_chip);
 		set_irq_handler(i, handle_edge_irq);
 		set_irq_flags(i, IRQF_VALID);

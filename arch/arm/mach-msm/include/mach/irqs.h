@@ -19,6 +19,10 @@
 
 #define MSM_IRQ_BIT(irq)     (1 << ((irq) & 31))
 
+#define FIRST_SIRC_IRQ (NR_MSM_IRQS)
+#define FIRST_GPIO_IRQ (NR_MSM_IRQS + NR_SIRC_IRQS)
+#define FIRST_BOARD_IRQ (NR_MSM_IRQS + NR_SIRC_IRQS + NR_GPIO_IRQS)
+
 #if defined(CONFIG_ARCH_MSM7X30)
 #include "irqs-7x30.h"
 #elif defined(CONFIG_ARCH_QSD8X50)
@@ -30,8 +34,8 @@
 #error "Unknown architecture specification"
 #endif
 
-#define NR_IRQS (NR_MSM_IRQS + NR_GPIO_IRQS + NR_BOARD_IRQS)
-#define MSM_GPIO_TO_INT(n) (NR_MSM_IRQS + (n))
+#define NR_IRQS (NR_MSM_IRQS + NR_SIRC_IRQS + NR_GPIO_IRQS + NR_BOARD_IRQS)
+#define MSM_GPIO_TO_INT(n) (FIRST_GPIO_IRQ + (n))
 #define MSM_INT_TO_REG(base, irq) (base + irq / 32)
 
 #endif
