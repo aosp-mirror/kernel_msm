@@ -57,9 +57,16 @@ module_param_named(debug_mask, msm_irq_debug_mask, int, S_IRUGO | S_IWUSR | S_IW
 #define VIC_INT_POLARITY0   VIC_REG(0x0050)  /* 1: NEG, 0: POS */
 #define VIC_INT_POLARITY1   VIC_REG(0x0054)  /* 1: NEG, 0: POS */
 #define VIC_NO_PEND_VAL     VIC_REG(0x0060)
+
+#if defined(CONFIG_ARCH_MSM_SCORPION)
+#define VIC_NO_PEND_VAL_FIQ VIC_REG(0x0064)
+#define VIC_INT_MASTEREN    VIC_REG(0x0068)  /* 1: IRQ, 2: FIQ     */
+#define VIC_CONFIG          VIC_REG(0x006C)  /* 1: USE SC VIC */
+#else
 #define VIC_INT_MASTEREN    VIC_REG(0x0064)  /* 1: IRQ, 2: FIQ     */
-#define VIC_PROTECTION      VIC_REG(0x006C)  /* 1: ENABLE          */
 #define VIC_CONFIG          VIC_REG(0x0068)  /* 1: USE ARM1136 VIC */
+#define VIC_PROTECTION      VIC_REG(0x006C)  /* 1: ENABLE          */
+#endif
 #define VIC_IRQ_STATUS0     VIC_REG(0x0080)
 #define VIC_IRQ_STATUS1     VIC_REG(0x0084)
 #define VIC_FIQ_STATUS0     VIC_REG(0x0090)
@@ -73,9 +80,22 @@ module_param_named(debug_mask, msm_irq_debug_mask, int, S_IRUGO | S_IWUSR | S_IW
 #define VIC_IRQ_VEC_RD      VIC_REG(0x00D0)  /* pending int # */
 #define VIC_IRQ_VEC_PEND_RD VIC_REG(0x00D4)  /* pending vector addr */
 #define VIC_IRQ_VEC_WR      VIC_REG(0x00D8)
+
+#if defined(CONFIG_ARCH_MSM_SCORPION)
+#define VIC_FIQ_VEC_RD      VIC_REG(0x00DC)
+#define VIC_FIQ_VEC_PEND_RD VIC_REG(0x00E0)
+#define VIC_FIQ_VEC_WR      VIC_REG(0x00E4)
+#define VIC_IRQ_IN_SERVICE  VIC_REG(0x00E8)
+#define VIC_IRQ_IN_STACK    VIC_REG(0x00EC)
+#define VIC_FIQ_IN_SERVICE  VIC_REG(0x00F0)
+#define VIC_FIQ_IN_STACK    VIC_REG(0x00F4)
+#define VIC_TEST_BUS_SEL    VIC_REG(0x00F8)
+#define VIC_IRQ_CTRL_CONFIG VIC_REG(0x00FC)
+#else
 #define VIC_IRQ_IN_SERVICE  VIC_REG(0x00E0)
 #define VIC_IRQ_IN_STACK    VIC_REG(0x00E4)
 #define VIC_TEST_BUS_SEL    VIC_REG(0x00E8)
+#endif
 
 #define VIC_VECTPRIORITY(n) VIC_REG(0x0200+((n) * 4))
 #define VIC_VECTADDR(n)     VIC_REG(0x0400+((n) * 4))
@@ -90,7 +110,7 @@ static struct {
 static uint32_t msm_irq_idle_disable[2];
 
 #define SMSM_FAKE_IRQ (0xff)
-static uint8_t msm_irq_to_smsm[NR_MSM_IRQS] = {
+static uint8_t msm_irq_to_smsm[NR_MSM_IRQS + NR_SIRC_IRQS] = {
 	[INT_MDDI_EXT] = 1,
 	[INT_MDDI_PRI] = 2,
 	[INT_MDDI_CLIENT] = 3,
