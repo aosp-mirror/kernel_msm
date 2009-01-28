@@ -139,6 +139,7 @@ void __init msm_map_msm7x30_io(void)
 void __iomem *
 __msm_ioremap(unsigned long phys_addr, size_t size, unsigned int mtype)
 {
+#ifdef CONFIG_ARCH_MSM_ARM11
 	if (mtype == MT_DEVICE) {
 		/* The peripherals in the 88000000 - D0000000 range
 		 * are only accessable by type MT_DEVICE_NONSHARED.
@@ -147,7 +148,7 @@ __msm_ioremap(unsigned long phys_addr, size_t size, unsigned int mtype)
 		if ((phys_addr >= 0x88000000) && (phys_addr < 0xD0000000))
 			mtype = MT_DEVICE_NONSHARED;
 	}
-
+#endif
 	return __arm_ioremap_caller(phys_addr, size, mtype,
 		__builtin_return_address(0));
 }
