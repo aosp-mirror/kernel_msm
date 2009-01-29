@@ -466,6 +466,13 @@ void __init msm_init_irq(void)
 		set_irq_handler(n, handle_level_irq);
 		set_irq_flags(n, IRQF_VALID);
 	}
+
+#if defined(CONFIG_ARCH_QSD8X50)
+	{
+		void msm_init_sirc(void);
+		msm_init_sirc();
+	}
+#endif
 }
 
 #if defined(CONFIG_MSM_FIQ_SUPPORT)
