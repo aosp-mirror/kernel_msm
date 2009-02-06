@@ -180,6 +180,7 @@ struct usb_info {
 static const struct usb_ep_ops msm72k_ep_ops;
 
 
+static int msm72k_set_halt(struct usb_ep *_ep, int value);
 static void flush_endpoint(struct msm_endpoint *ept);
 
 #if 0
@@ -540,10 +541,13 @@ static void handle_setup(struct usb_info *ui)
 				unsigned num = ctl.wIndex & 0x0f;
 
 				if (num != 0) {
+					struct msm_endpoint *ept;
+
 					if (ctl.wIndex & 0x80)
 						num += 16;
+					ept = &ui->ep0out + num;
 
-					usb_ept_enable(ui->ept + num, 1);
+					msm72k_set_halt(&ept->ep, 0);
 				}
 				goto ack;
 			}
