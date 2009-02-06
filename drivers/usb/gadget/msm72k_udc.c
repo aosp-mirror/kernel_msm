@@ -1279,7 +1279,34 @@ static int msm72k_dequeue(struct usb_ep *_ep, struct usb_request *_req)
 static int
 msm72k_set_halt(struct usb_ep *_ep, int value)
 {
-	return -EOPNOTSUPP;
+	struct msm_endpoint *ept = to_msm_endpoint(_ep);
+	struct usb_info *ui = ept->ui;
+	unsigned int in = ept->flags & EPT_FLAG_IN;
+	unsigned int n;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ui->lock, flags);
+	n = readl(USB_ENDPTCTRL(ept->num));
+
+	if (in) {
+		if (value)
+			n |= CTRL_TXS;
+		else {
+			n &= ~CTRL_TXS;
+			n |= CTRL_TXR;
+		}
+	} else {
+		if (value)
+			n |= CTRL_RXS;
+		else {
+			n &= ~CTRL_RXS;
+			n |= CTRL_RXR;
+		}
+	}
+	writel(n, USB_ENDPTCTRL(ept->num));
+	spin_unlock_irqrestore(&ui->lock, flags);
+
+	return 0;
 }
 
 static int
