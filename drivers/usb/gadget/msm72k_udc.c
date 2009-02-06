@@ -183,6 +183,18 @@ static const struct usb_ep_ops msm72k_ep_ops;
 static int msm72k_set_halt(struct usb_ep *_ep, int value);
 static void flush_endpoint(struct msm_endpoint *ept);
 
+static int usb_ep_get_stall(struct msm_endpoint *ept)
+{
+	unsigned int n;
+	struct usb_info *ui = ept->ui;
+
+	n = readl(USB_ENDPTCTRL(ept->num));
+	if (ept->flags & EPT_FLAG_IN)
+		return (CTRL_TXS & n) ? 1 : 0;
+	else
+		return (CTRL_RXS & n) ? 1 : 0;
+}
+
 #if 0
 static unsigned ulpi_read(struct usb_info *ui, unsigned reg)
 {
@@ -528,13 +540,47 @@ static void handle_setup(struct usb_info *ui)
 	       ctl.bRequestType, ctl.bRequest, ctl.wValue,
 	       ctl.wIndex, ctl.wLength);
 
-	if (ctl.bRequestType == (USB_DIR_IN | USB_TYPE_STANDARD)) {
+	if ((ctl.bRequestType & (USB_DIR_IN | USB_TYPE_MASK)) ==
+					(USB_DIR_IN | USB_TYPE_STANDARD)) {
 		if (ctl.bRequest == USB_REQ_GET_STATUS) {
-			if (ctl.wLength == 2) {
-				memset(req->buf, 0, 2);
-				ep0_setup_send(ui, 2);
-				return;
+			if (ctl.wLength != 2)
+				goto stall;
+			switch (ctl.bRequestType & USB_RECIP_MASK) {
+			case USB_RECIP_ENDPOINT:
+			{
+				struct msm_endpoint *ept;
+				unsigned num =
+					ctl.wIndex & USB_ENDPOINT_NUMBER_MASK;
+				u16 temp = 0;
+
+				if (num == 0) {
+					memset(req->buf, 0, 2);
+					break;
+				}
+				if (ctl.wIndex & USB_ENDPOINT_DIR_MASK)
+					num += 16;
+				ept = &ui->ep0out + num;
+				temp = usb_ep_get_stall(ept);
+				temp = temp << USB_ENDPOINT_HALT;
+				memcpy(req->buf, &temp, 2);
+				break;
 			}
+			case USB_RECIP_DEVICE:
+			{
+				u16 temp = 0;
+
+				temp = 1 << USB_DEVICE_SELF_POWERED;
+				memcpy(req->buf, &temp, 2);
+				break;
+			}
+			case USB_RECIP_INTERFACE:
+				memset(req->buf, 0, 2);
+				break;
+			default:
+				goto stall;
+			}
+			ep0_setup_send(ui, 2);
+			return;
 		}
 	}
 	if (ctl.bRequestType ==
@@ -579,6 +625,7 @@ static void handle_setup(struct usb_info *ui)
 			return;
 	}
 
+stall:
 	/* stall ep0 on error */
 	ep0_setup_stall(ui);
 	return;
