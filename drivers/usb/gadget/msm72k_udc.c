@@ -327,7 +327,8 @@ static void do_free_req(struct usb_info *ui, struct msm_request *req)
 }
 
 
-static void usb_ept_enable(struct msm_endpoint *ept, int yes)
+static void usb_ept_enable(struct msm_endpoint *ept, int yes,
+		unsigned char ep_type)
 {
 	struct usb_info *ui = ept->ui;
 	int in = ept->flags & EPT_FLAG_IN;
@@ -336,16 +337,18 @@ static void usb_ept_enable(struct msm_endpoint *ept, int yes)
 	n = readl(USB_ENDPTCTRL(ept->num));
 
 	if (in) {
-		n = (n & (~CTRL_TXT_MASK)) | CTRL_TXT_BULK;
-		if (yes)
+		if (yes) {
+			n = (n & (~CTRL_TXT_MASK)) |
+				(ep_type << CTRL_TXT_EP_TYPE_SHIFT);
 			n |= CTRL_TXE | CTRL_TXR;
-		else
+		} else
 			n &= (~CTRL_TXE);
 	} else {
-		n = (n & (~CTRL_RXT_MASK)) | CTRL_RXT_BULK;
-		if (yes)
+		if (yes) {
+			n = (n & (~CTRL_RXT_MASK)) |
+				(ep_type << CTRL_RXT_EP_TYPE_SHIFT);
 			n |= CTRL_RXE | CTRL_RXR;
-		else
+		} else
 			n &= ~(CTRL_RXE);
 	}
 	writel(n, USB_ENDPTCTRL(ept->num));
@@ -1173,9 +1176,11 @@ static int
 msm72k_enable(struct usb_ep *_ep, const struct usb_endpoint_descriptor *desc)
 {
 	struct msm_endpoint *ept = to_msm_endpoint(_ep);
+	unsigned char ep_type =
+			desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK;
 
 	_ep->maxpacket = le16_to_cpu(desc->wMaxPacketSize);
-	usb_ept_enable(ept, 1);
+	usb_ept_enable(ept, 1, ep_type);
 	return 0;
 }
 
@@ -1183,7 +1188,7 @@ static int msm72k_disable(struct usb_ep *_ep)
 {
 	struct msm_endpoint *ept = to_msm_endpoint(_ep);
 
-	usb_ept_enable(ept, 0);
+	usb_ept_enable(ept, 0, 0);
 	return 0;
 }
 

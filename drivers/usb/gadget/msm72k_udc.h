@@ -164,12 +164,14 @@ struct ept_queue_item {
 #define CTRL_TXT_ISOCH        (1 << 18)
 #define CTRL_TXT_BULK         (2 << 18)
 #define CTRL_TXT_INT          (3 << 18)
+#define CTRL_TXT_EP_TYPE_SHIFT 18
 
 #define CTRL_RXT_MASK         (3 << 2)
 #define CTRL_RXT_CTRL         (0 << 2)
 #define CTRL_RXT_ISOCH        (1 << 2)
 #define CTRL_RXT_BULK         (2 << 2)
 #define CTRL_RXT_INT          (3 << 2)
+#define CTRL_RXT_EP_TYPE_SHIFT 2
 
 #define ULPI_WAKEUP           (1 << 31)
 #define ULPI_RUN              (1 << 30)
