@@ -173,6 +173,8 @@ struct usb_info {
 
 	struct clk *clk;
 	struct clk *pclk;
+
+	unsigned int ep0_dir;
 };
 
 static const struct usb_ep_ops msm72k_ep_ops;
@@ -467,7 +469,10 @@ static void ep0_queue_ack_complete(struct usb_ep *ep, struct usb_request *req)
 		struct usb_info *ui = ept->ui;
 		req->length = 0;
 		req->complete = ep0_complete;
-		usb_ept_queue_xfer(&ui->ep0out, req);
+		if (ui->ep0_dir == USB_DIR_IN)
+			usb_ept_queue_xfer(&ui->ep0out, req);
+		else
+			usb_ept_queue_xfer(&ui->ep0in, req);
 	} else
 		ep0_complete(ep, req);
 }
@@ -505,6 +510,11 @@ static void handle_setup(struct usb_info *ui)
 
 	memcpy(&ctl, ui->ep0out.head->setup_data, sizeof(ctl));
 	writel(EPT_RX(0), USB_ENDPTSETUPSTAT);
+
+	if (ctl.bRequestType & USB_DIR_IN)
+		ui->ep0_dir = USB_DIR_IN;
+	else
+		ui->ep0_dir = USB_DIR_OUT;
 
 	/* any pending ep0 transactions must be canceled */
 	flush_endpoint(&ui->ep0out);
@@ -1208,12 +1218,17 @@ msm72k_queue(struct usb_ep *_ep, struct usb_request *req, gfp_t gfp_flags)
 
 	if (ep == &ui->ep0in) {
 		struct msm_request *r = to_msm_request(req);
+		if (!req->length)
+			goto ep_queue_done;
 		r->gadget_complete = req->complete;
 		/* ep0_queue_ack_complete queue a receive for ACK before
 		** calling req->complete
 		*/
 		req->complete = ep0_queue_ack_complete;
+		if (ui->ep0_dir == USB_DIR_OUT)
+			ep = &ui->ep0out;
 	}
+ep_queue_done:
 	return usb_ept_queue_xfer(ep, req);
 }
 
