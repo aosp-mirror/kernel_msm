@@ -187,6 +187,9 @@ struct ept_queue_item {
 #define PORTSC_PSPD_LS        (1 << 26)
 #define PORTSC_PSPD_HS        (2 << 26)
 #define PORTSC_PSPD_MASK      (3 << 26)
+/* suspend and remote wakeup */
+#define PORTSC_FPR             (1 << 6)
+#define PORTSC_SUSP            (1 << 7)
 
 /* test mode support */
 #define J_TEST			(0x0100)

@@ -38,6 +38,7 @@
 
 #include <mach/board.h>
 #include <mach/msm_hsusb.h>
+#include <linux/device.h>
 
 static const char driver_name[] = "msm72k_udc";
 
@@ -176,6 +177,8 @@ struct usb_info {
 
 	unsigned int ep0_dir;
 	u16 test_mode;
+
+	u8 remote_wakeup;
 };
 
 static const struct usb_ep_ops msm72k_ep_ops;
@@ -607,6 +610,8 @@ static void handle_setup(struct usb_info *ui)
 				u16 temp = 0;
 
 				temp = 1 << USB_DEVICE_SELF_POWERED;
+				temp |= (ui->remote_wakeup <<
+						USB_DEVICE_REMOTE_WAKEUP);
 				memcpy(req->buf, &temp, 2);
 				break;
 			}
@@ -664,7 +669,14 @@ static void handle_setup(struct usb_info *ui)
 					goto ack;
 				}
 				goto stall;
+			case USB_DEVICE_REMOTE_WAKEUP:
+				ui->remote_wakeup = 1;
+				goto ack;
 			}
+		} else if ((ctl.bRequest == USB_REQ_CLEAR_FEATURE) &&
+				(ctl.wValue == USB_DEVICE_REMOTE_WAKEUP)) {
+			ui->remote_wakeup = 0;
+			goto ack;
 		}
 	}
 
@@ -1474,10 +1486,36 @@ static int msm72k_pullup(struct usb_gadget *_gadget, int is_active)
 	return 0;
 }
 
+static int msm72k_wakeup(struct usb_gadget *_gadget)
+{
+	struct usb_info *ui = container_of(_gadget, struct usb_info, gadget);
+	unsigned long flags;
+
+	if (!ui->remote_wakeup) {
+		pr_err("%s: remote wakeup not supported\n", __func__);
+		return -ENOTSUPP;
+	}
+
+	if (!ui->online) {
+		pr_err("%s: device is not configured\n", __func__);
+		return -ENODEV;
+	}
+
+	spin_lock_irqsave(&ui->lock, flags);
+	if ((readl(USB_PORTSC) & PORTSC_SUSP) == PORTSC_SUSP) {
+		pr_info("%s: enabling force resume\n", __func__);
+		writel(readl(USB_PORTSC) | PORTSC_FPR, USB_PORTSC);
+	}
+	spin_unlock_irqrestore(&ui->lock, flags);
+
+	return 0;
+}
+
 static const struct usb_gadget_ops msm72k_ops = {
 	.get_frame	= msm72k_get_frame,
 	.vbus_session	= msm72k_udc_vbus_session,
 	.pullup		= msm72k_pullup,
+	.wakeup		= msm72k_wakeup,
 };
 
 static int msm72k_probe(struct platform_device *pdev)
