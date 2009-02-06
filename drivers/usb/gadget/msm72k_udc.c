@@ -175,6 +175,7 @@ struct usb_info {
 	struct clk *pclk;
 
 	unsigned int ep0_dir;
+	u16 test_mode;
 };
 
 static const struct usb_ep_ops msm72k_ep_ops;
@@ -493,11 +494,47 @@ static void ep0_queue_ack_complete(struct usb_ep *ep, struct usb_request *req)
 		ep0_complete(ep, req);
 }
 
+static void ep0_setup_ack_complete(struct usb_ep *ep, struct usb_request *req)
+{
+	struct msm_endpoint *ept = to_msm_endpoint(ep);
+	struct usb_info *ui = ept->ui;
+	unsigned int temp;
+
+	if (!ui->test_mode)
+		return;
+
+	switch (ui->test_mode) {
+	case J_TEST:
+		pr_info("usb electrical test mode: (J)\n");
+		temp = readl(USB_PORTSC) & (~PORTSC_PTC);
+		writel(temp | PORTSC_PTC_J_STATE, USB_PORTSC);
+		break;
+
+	case K_TEST:
+		pr_info("usb electrical test mode: (K)\n");
+		temp = readl(USB_PORTSC) & (~PORTSC_PTC);
+		writel(temp | PORTSC_PTC_K_STATE, USB_PORTSC);
+		break;
+
+	case SE0_NAK_TEST:
+		pr_info("usb electrical test mode: (SE0-NAK)\n");
+		temp = readl(USB_PORTSC) & (~PORTSC_PTC);
+		writel(temp | PORTSC_PTC_SE0_NAK, USB_PORTSC);
+		break;
+
+	case TST_PKT_TEST:
+		pr_info("usb electrical test mode: (TEST_PKT)\n");
+		temp = readl(USB_PORTSC) & (~PORTSC_PTC);
+		writel(temp | PORTSC_PTC_TST_PKT, USB_PORTSC);
+		break;
+	}
+}
+
 static void ep0_setup_ack(struct usb_info *ui)
 {
 	struct usb_request *req = ui->setup_req;
 	req->length = 0;
-	req->complete = 0;
+	req->complete = ep0_setup_ack_complete;
 	usb_ept_queue_xfer(&ui->ep0in, req);
 }
 
@@ -615,6 +652,19 @@ static void handle_setup(struct usb_info *ui)
 			*/
 			writel((ctl.wValue << 25) | (1 << 24), USB_DEVICEADDR);
 			goto ack;
+		} else if (ctl.bRequest == USB_REQ_SET_FEATURE) {
+			switch (ctl.wValue) {
+			case USB_DEVICE_TEST_MODE:
+				switch (ctl.wIndex) {
+				case J_TEST:
+				case K_TEST:
+				case SE0_NAK_TEST:
+				case TST_PKT_TEST:
+					ui->test_mode = ctl.wIndex;
+					goto ack;
+				}
+				goto stall;
+			}
 		}
 	}
 

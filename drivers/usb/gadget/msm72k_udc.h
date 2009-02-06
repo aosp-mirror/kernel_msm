@@ -188,4 +188,14 @@ struct ept_queue_item {
 #define PORTSC_PSPD_HS        (2 << 26)
 #define PORTSC_PSPD_MASK      (3 << 26)
 
+/* test mode support */
+#define J_TEST			(0x0100)
+#define K_TEST			(0x0200)
+#define SE0_NAK_TEST		(0x0300)
+#define TST_PKT_TEST		(0x0400)
+#define PORTSC_PTC		(0xf << 16)
+#define PORTSC_PTC_J_STATE	(0x01 << 16)
+#define PORTSC_PTC_K_STATE	(0x02 << 16)
+#define PORTSC_PTC_SE0_NAK	(0x03 << 16)
+#define PORTSC_PTC_TST_PKT	(0x04 << 16)
 #endif /* __LINUX_USB_GADGET_MSM72K_UDC_H__ */
