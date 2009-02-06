@@ -539,7 +539,8 @@ static void handle_setup(struct usb_info *ui)
 	}
 	if (ctl.bRequestType ==
 		    (USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_ENDPOINT)) {
-		if (ctl.bRequest == USB_REQ_CLEAR_FEATURE) {
+		if ((ctl.bRequest == USB_REQ_CLEAR_FEATURE) ||
+				(ctl.bRequest == USB_REQ_SET_FEATURE)) {
 			if ((ctl.wValue == 0) && (ctl.wLength == 0)) {
 				unsigned num = ctl.wIndex & 0x0f;
 
@@ -550,7 +551,10 @@ static void handle_setup(struct usb_info *ui)
 						num += 16;
 					ept = &ui->ep0out + num;
 
-					msm72k_set_halt(&ept->ep, 0);
+					if (ctl.bRequest == USB_REQ_SET_FEATURE)
+						msm72k_set_halt(&ept->ep, 1);
+					else
+						msm72k_set_halt(&ept->ep, 0);
 				}
 				goto ack;
 			}
