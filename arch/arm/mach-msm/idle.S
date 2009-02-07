@@ -27,6 +27,13 @@ ENTRY(msm_pm_collapse)
 	mrc     p15, 0, r3, c3, c0, 0 /* dacr */
 	mrc     p15, 0, ip, c13, c0, 1 /* context ID */
 	stmia   r0!, {r1-r3, ip}
+#if defined(CONFIG_OPROFILE)
+	mrc     p15, 0, r1, c15, c12, 0 /* pmnc */
+	mrc     p15, 0, r2, c15, c12, 1 /* ccnt */
+	mrc     p15, 0, r3, c15, c12, 2 /* pmn0 */
+	mrc     p15, 0, ip, c15, c12, 3 /* pmn1 */
+	stmia   r0!, {r1-r3, ip}
+#endif
 	/* fall though */
 ENTRY(msm_arch_idle)
 #if defined(CONFIG_MSM_FIQ_SUPPORT)
@@ -63,6 +70,13 @@ ENTRY(msm_pm_collapse_exit)
 	adr     r3, msm_pm_collapse_exit
 	add     r1, r1, r3
 	sub     r1, r1, r2
+#if defined(CONFIG_OPROFILE)
+	ldmdb   r1!, {r2-r5}
+	mcr     p15, 0, r3, c15, c12, 1 /* ccnt */
+	mcr     p15, 0, r4, c15, c12, 2 /* pmn0 */
+	mcr     p15, 0, r5, c15, c12, 3 /* pmn1 */
+	mcr     p15, 0, r2, c15, c12, 0 /* pmnc */
+#endif
 	ldmdb   r1!, {r2-r5}
 	mcr     p15, 0, r4, c3, c0, 0 /* dacr */
 	mcr     p15, 0, r3, c2, c0, 0 /* ttb */
@@ -84,6 +98,9 @@ ENTRY(msm_pm_collapse_exit)
 
 saved_state:
 	.space  4 * 11 /* r4-14 */
-	.space  4 * 4  /* cp15 */
+	.space  4 * 4  /* cp15 - MMU control, ttb, dacr, context ID */
+#if defined(CONFIG_OPROFILE)
+	.space  4 * 4  /* more cp15 - pmnc, ccnt, pmn0, pmn1 */
+#endif
 saved_state_end:
 
