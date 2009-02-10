@@ -1518,6 +1518,17 @@ static const struct usb_gadget_ops msm72k_ops = {
 	.wakeup		= msm72k_wakeup,
 };
 
+static ssize_t usb_remote_wakeup(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct usb_info *ui = the_usb_info;
+
+	msm72k_wakeup(&ui->gadget);
+
+	return count;
+}
+static DEVICE_ATTR(wakeup, S_IWUSR, 0, usb_remote_wakeup);
+
 static int msm72k_probe(struct platform_device *pdev)
 {
 	struct resource *res;
@@ -1636,6 +1647,11 @@ int usb_gadget_register_driver(struct usb_gadget_driver *driver)
 		goto fail;
 	}
 
+	/* create sysfs node for remote wakeup */
+	retval = device_create_file(&ui->gadget.dev, &dev_attr_wakeup);
+	if (retval != 0)
+		INFO("failed to create sysfs entry: (wakeup) error: (%d)\n",
+					retval);
 	INFO("msm72k_udc: registered gadget driver '%s'\n",
 			driver->driver.name);
 	usb_start(ui);
@@ -1658,6 +1674,7 @@ int usb_gadget_unregister_driver(struct usb_gadget_driver *driver)
 	if (!driver || driver != dev->driver || !driver->unbind)
 		return -EINVAL;
 
+	device_remove_file(&dev->gadget.dev, &dev_attr_wakeup);
 	driver->unbind(&dev->gadget);
 	dev->gadget.dev.driver = NULL;
 	dev->driver = NULL;
