@@ -61,7 +61,7 @@ static void process_audmgr_callback(struct audmgr *am,
 	case RPC_AUDMGR_STATUS_READY:
 		if (len < sizeof(uint32_t) * 4)
 			break;
-		am->handle = args->u.handle;
+		am->handle = be32_to_cpu(args->u.handle);
 		pr_info("audmgr: rpc READY handle=0x%08x\n", am->handle);
 		break;
 	case RPC_AUDMGR_STATUS_CODEC_CONFIG: {
@@ -242,10 +242,7 @@ int audmgr_enable(struct audmgr *am, struct audmgr_config *cfg)
 
 	if (am->state == STATE_ENABLED)
 		return 0;
-	if (am->state == STATE_ENABLING)
-		goto wait_for_it;
 
-try_again:
 	if (am->state == STATE_DISABLING)
 		pr_err("audmgr: state is DISABLING in enable?\n");
 	am->state = STATE_ENABLING;
@@ -266,18 +263,14 @@ try_again:
 	if (rc < 0)
 		return rc;
 
-wait_for_it:
 	rc = wait_event_timeout(am->wait, am->state != STATE_ENABLING, 15 * HZ);
 	if (rc == 0) {
-		pr_err("audmgr: ARM9 did not reply to RPC\n");
+		pr_err("audmgr_enable: ARM9 did not reply to RPC am->state = %d\n", am->state);
 		BUG();
 	}
 	if (am->state == STATE_ENABLED)
 		return 0;
-	if (am->state == STATE_DISABLED) {
-		pr_err("audmgr: DISABLED WHILE ENABLING. retrying...\n");
-		goto try_again;
-	}
+
 	pr_err("audmgr: unexpected state %d while enabling?!\n", am->state);
 	return -ENODEV;
 }
@@ -289,12 +282,10 @@ int audmgr_disable(struct audmgr *am)
 
 	if (am->state == STATE_DISABLED)
 		return 0;
-	if (am->state == STATE_DISABLING)
-		return 0;
 
 	msm_rpc_setup_req(&msg.hdr, AUDMGR_PROG, AUDMGR_VERS,
 			  AUDMGR_DISABLE_CLIENT);
-	msg.handle = am->handle;
+	msg.handle = cpu_to_be32(am->handle);
 
 	am->state = STATE_DISABLING;
 
@@ -302,5 +293,15 @@ int audmgr_disable(struct audmgr *am)
 	if (rc < 0)
 		return rc;
 
-	return 0;
+	rc = wait_event_timeout(am->wait, am->state != STATE_DISABLING, 15 * HZ);
+	if (rc == 0) {
+		pr_err("audmgr_disable: ARM9 did not reply to RPC am->state = %d\n", am->state);
+		BUG();
+	}
+
+	if (am->state == STATE_DISABLED)
+		return 0;
+
+	pr_err("audmgr: unexpected state %d while disabling?!\n", am->state);
+	return -ENODEV;
 }
