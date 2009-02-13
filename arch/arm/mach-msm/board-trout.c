@@ -227,6 +227,7 @@ static int trout_ts_power(int on)
 	}
 	else {
 		gpio_set_value(tp_ls_gpio, 0);
+		udelay(50);
 		gpio_set_value(TROUT_GPIO_TP_EN, 0);
 		gpio_set_value(TROUT_GPIO_TP_I2C_PULL, 0);
 	}
@@ -808,6 +809,9 @@ static void __init trout_init(void)
 	config_gpios();
 
 	msm_hw_reset_hook = trout_reset;
+
+	gpio_direction_output(system_rev < 5 ?
+			TROUT_4_TP_LS_EN : TROUT_5_TP_LS_EN, 0);
 
 	msm_acpu_clock_init(&trout_clock_data);
 
