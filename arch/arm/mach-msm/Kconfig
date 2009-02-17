@@ -137,10 +137,10 @@ config TROUT_BATTCHG
 	default y
 	bool "Trout battery / charger driver"
 
-config TROUT_PWRSINK
+config HTC_PWRSINK
 	depends on MSM_SMD
 	default y
-	bool "Trout Power Sink Driver"
+	bool "HTC Power Sink Driver"
 
 choice
 	prompt "Default Timer"
