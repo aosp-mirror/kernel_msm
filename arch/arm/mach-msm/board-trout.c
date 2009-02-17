@@ -63,7 +63,7 @@
 #include <mach/board.h>
 #include <mach/msm_hsusb.h>
 #include <mach/msm_serial_hs.h>
-#include <mach/trout_pwrsink.h>
+#include <mach/htc_pwrsink.h>
 #ifdef CONFIG_HTC_HEADSET
 #include <mach/htc_headset.h>
 #endif
@@ -591,12 +591,16 @@ static struct pwr_sink trout_pwrsink_table[] = {
 static struct pwr_sink_platform_data trout_pwrsink_data = {
 	.num_sinks	= ARRAY_SIZE(trout_pwrsink_table),
 	.sinks		= trout_pwrsink_table,
+	.suspend_late	= NULL,
+	.resume_early	= NULL,
+	.suspend_early	= NULL,
+	.resume_late	= NULL,
 };
 
 static struct platform_device trout_pwr_sink = {
-	.name = "trout_pwrsink",
+	.name = "htc_pwrsink",
 	.id = -1,
-	.dev	= { 
+	.dev	= {
 		.platform_data = &trout_pwrsink_data,
 	},
 };
@@ -712,7 +716,7 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_HTC_HEADSET
 	&trout_h2w,
 #endif
-#if defined(CONFIG_TROUT_PWRSINK)
+#ifdef CONFIG_HTC_PWRSINK
 	&trout_pwr_sink,
 #endif
 	&trout_snd,

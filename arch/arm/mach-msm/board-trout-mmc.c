@@ -15,7 +15,7 @@
 #include <asm/io.h>
 
 #include <mach/vreg.h>
-#include <mach/trout_pwrsink.h>
+#include <mach/htc_pwrsink.h>
 
 #include <asm/mach/mmc.h>
 
@@ -264,11 +264,11 @@ int trout_wifi_power(int on)
 		rc = vreg_enable(vreg_wifi_osc);
 		if (rc)
 			return rc;
-		trout_pwrsink_set(PWRSINK_WIFI, 70);
+		htc_pwrsink_set(PWRSINK_WIFI, 70);
 	} else {
 		config_gpio_table(wifi_off_gpio_table,
 				  ARRAY_SIZE(wifi_off_gpio_table));
-		trout_pwrsink_set(PWRSINK_WIFI, 0);
+		htc_pwrsink_set(PWRSINK_WIFI, 0);
 	}
 	gpio_set_value( TROUT_GPIO_MAC_32K_EN, on);
 	mdelay(100);

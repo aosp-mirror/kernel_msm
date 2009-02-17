@@ -23,7 +23,7 @@
 #include <asm/gpio.h>
 #include <asm/mach-types.h>
 
-#include <mach/trout_pwrsink.h>
+#include <mach/htc_pwrsink.h>
 
 #include "board-trout.h"
 #include "gpio_chip.h"
@@ -70,10 +70,10 @@ static void update_pwrsink(unsigned gpio, unsigned on)
 {
 	switch(gpio) {
 	case TROUT_GPIO_UI_LED_EN:
-		trout_pwrsink_set(PWRSINK_LED_BUTTON, on ? 100 : 0);
+		htc_pwrsink_set(PWRSINK_LED_BUTTON, on ? 100 : 0);
 		break;
 	case TROUT_GPIO_QTKEY_LED_EN:
-		trout_pwrsink_set(PWRSINK_LED_KEYBOARD, on ? 100 : 0);
+		htc_pwrsink_set(PWRSINK_LED_KEYBOARD, on ? 100 : 0);
 		break;
 	}
 }
