@@ -124,7 +124,7 @@ endchoice
 config MSM_SMD_PKG3
 	bool
 
-config TROUT_H2W
+config HTC_HEADSET
 	tristate "HTC 2 Wire detection driver"
 	default n
 	help

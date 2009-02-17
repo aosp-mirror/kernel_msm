@@ -64,6 +64,9 @@
 #include <mach/msm_hsusb.h>
 #include <mach/msm_serial_hs.h>
 #include <mach/trout_pwrsink.h>
+#ifdef CONFIG_HTC_HEADSET
+#include <mach/htc_headset.h>
+#endif
 #ifdef CONFIG_WIFI_CONTROL_FUNC
 #include <linux/wifi_tiwlan.h>
 #endif
@@ -432,6 +435,47 @@ static struct platform_device sd_door_switch = {
 	},
 };
 
+#ifdef CONFIG_HTC_HEADSET
+static void h2w_config_cpld(int route)
+{
+	switch (route) {
+	case H2W_UART3:
+		gpio_set_value(TROUT_GPIO_H2W_SEL0, 0);
+		gpio_set_value(TROUT_GPIO_H2W_SEL1, 1);
+		break;
+	case H2W_GPIO:
+		gpio_set_value(TROUT_GPIO_H2W_SEL0, 0);
+		gpio_set_value(TROUT_GPIO_H2W_SEL1, 0);
+		break;
+	}
+}
+
+static void h2w_init_cpld(void)
+{
+	h2w_config_cpld(H2W_UART3);
+	gpio_set_value(TROUT_GPIO_H2W_CLK_DIR, 0);
+	gpio_set_value(TROUT_GPIO_H2W_DAT_DIR, 0);
+}
+
+static struct h2w_platform_data trout_h2w_data = {
+	.cable_in1		= TROUT_GPIO_CABLE_IN1,
+	.cable_in2		= TROUT_GPIO_CABLE_IN2,
+	.h2w_clk		= TROUT_GPIO_H2W_CLK_GPI,
+	.h2w_data		= TROUT_GPIO_H2W_DAT_GPI,
+	.debug_uart 		= H2W_UART3,
+	.config_cpld 		= h2w_config_cpld,
+	.init_cpld 		= h2w_init_cpld,
+};
+
+static struct platform_device trout_h2w = {
+	.name		= "h2w",
+	.id		= -1,
+	.dev		= {
+		.platform_data	= &trout_h2w_data,
+	},
+};
+#endif
+
 /* adjust eye diagram, disable vbusvalid interrupts */
 static int trout_phy_init_seq[] = { 0x40, 0x31, 0x1D, 0x0D, 0x1D, 0x10, -1 };
 
@@ -664,6 +708,9 @@ static struct platform_device *devices[] __initdata = {
 	&trout_rfkill,
 #ifdef CONFIG_WIFI_CONTROL_FUNC
 	&trout_wifi,
+#endif
+#ifdef CONFIG_HTC_HEADSET
+	&trout_h2w,
 #endif
 #if defined(CONFIG_TROUT_PWRSINK)
 	&trout_pwr_sink,
