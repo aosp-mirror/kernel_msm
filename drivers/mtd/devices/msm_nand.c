@@ -14,7 +14,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/module.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
 #include <linux/platform_device.h>
@@ -22,6 +21,8 @@
 #include <linux/slab.h>
 #include <linux/dma-mapping.h>
 #include <linux/io.h>
+#include <linux/moduleparam.h>
+#include <linux/stat.h>
 
 #include <asm/dma.h>
 #include <asm/mach/flash.h>
@@ -606,8 +607,10 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 		}
 		if (pageerr) {
 			for (n = start_sector; n < 4; n++) {
-				if (dma_buffer->data.result[n].buffer_status & 0x8) {
-					mtd->ecc_stats.failed++; /* not thread safe */
+				if (dma_buffer->data.result[n].buffer_status &
+								0x8) {
+					/* not thread safe */
+					mtd->ecc_stats.failed++;
 					pageerr = -EBADMSG;
 					break;
 				}
@@ -619,7 +622,8 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 					result[n].buffer_status & 0x7;
 				if (ecc_errors) {
 					total_ecc_errors += ecc_errors;
-					mtd->ecc_stats.corrected += ecc_errors; /* not thread safe */
+					/* not thread safe */
+					mtd->ecc_stats.corrected += ecc_errors;
 					if (ecc_errors > 1)
 						pageerr = -EUCLEAN;
 				}
@@ -1160,12 +1164,22 @@ int msm_nand_scan(struct mtd_info *mtd, int maxchips)
 	chip->saved_ecc_buf_cfg = n;
 #endif
 
-	if ((flash_id & 0xffff) == 0xaaec) /* 2Gbit Samsung chip */
-		mtd->size = 256 << 20; /* * num_chips */
-	else if (flash_id == 0x5580baad) /* 2Gbit Hynix chip */
-		mtd->size = 256 << 20; /* * num_chips */
-	else if (flash_id == 0x5510baad) /* 2Gbit Hynix chip */
-		mtd->size = 256 << 20; /* * num_chips */
+	if ((flash_id & 0xffff) == 0xaaec) 	/* 2Gbit Samsung chip */
+		mtd->size = 256 << 20;		/* * num_chips */
+	else if (flash_id == 0x5580baad) 	/* 2Gbit Hynix chip */
+		mtd->size = 256 << 20; 		/* * num_chips */
+	else if (flash_id == 0x5510baad) 	/* 2Gbit Hynix chip */
+		mtd->size = 256 << 20; 		/* * num_chips */
+
+	if ((flash_id & 0xffff) == 0xacec) 	/* 4G/1Gbit Samsung chip */
+		mtd->size = 512 << 20; 		/* * num_chips */
+	else if (flash_id == 0x5510bcad) 	/* 4Gbit Hynix chip */
+		mtd->size = 512 << 20;		/* * num_chips */
+	else if ((flash_id & 0xffff) == 0xbcec)	/* 4Gbit Samsung chip */
+		mtd->size = 512 << 20;		/* * num_chips */
+	else if (flash_id == 0x5590bc2c)	/* 4Gbit Micron chip */
+		mtd->size = 512 << 20;		/* * num_chips */
+
 	pr_info("flash_id: %x size %llx\n", flash_id, mtd->size);
 
 	mtd->writesize = 2048;
