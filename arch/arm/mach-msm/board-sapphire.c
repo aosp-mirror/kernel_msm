@@ -368,7 +368,6 @@ static struct platform_device android_CPLD_leds = {
 };
 #endif
 
-#if 0
 static struct gpio_led android_led_list[] = {
 	{
 		.name = "button-backlight",
@@ -388,7 +387,6 @@ static struct platform_device android_leds = {
 		.platform_data	= &android_leds_data,
 	},
 };
-#endif
 
 #ifdef CONFIG_HTC_HEADSET
 /* RTS/CTS to GPO/GPI. */
@@ -797,6 +795,7 @@ static struct platform_device *devices[] __initdata = {
 #endif
 	&sapphire_nav_device,
 	&sapphire_reset_keys_device,
+	&android_leds,
 #ifdef CONFIG_LEDS_CPLD
 	&android_CPLD_leds,
 #endif
