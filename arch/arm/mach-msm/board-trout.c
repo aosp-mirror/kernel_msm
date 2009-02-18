@@ -527,10 +527,14 @@ static struct platform_device trout_ram_console_device = {
 	.resource       = trout_ram_console_resource,
 };
 
+static void config_camera_on_gpios(void);
+static void config_camera_off_gpios(void);
 static struct msm_camera_device_platform_data msm_camera_device = {
 	.sensor_reset	= 108,
 	.sensor_pwd	= 85,
 	.vcm_pwd	= TROUT_GPIO_VCM_PWDN,
+	.config_gpio_on = config_camera_on_gpios,
+	.config_gpio_off = config_camera_off_gpios,
 };
 
 static struct platform_device trout_camera = {
@@ -811,13 +815,13 @@ static void config_gpio_table(uint32_t *table, int len)
 	}
 }
 
-void config_camera_on_gpios(void)
+static void config_camera_on_gpios(void)
 {
 	config_gpio_table(camera_on_gpio_table,
 		ARRAY_SIZE(camera_on_gpio_table));
 }
 
-void config_camera_off_gpios(void)
+static void config_camera_off_gpios(void)
 {
 	config_gpio_table(camera_off_gpio_table,
 		ARRAY_SIZE(camera_off_gpio_table));

@@ -16,34 +16,32 @@
 #include <linux/i2c.h>
 #include <linux/slab.h>
 #include <linux/irq.h>
-#include <asm/gpio.h>
 #include <linux/miscdevice.h>
-#include <asm/uaccess.h>
 #include <linux/delay.h>
 #include <linux/input.h>
 #include <linux/workqueue.h>
 #include <linux/freezer.h>
-#include <mach/msm_iomap.h>
 #include <linux/netlink.h>
-#include <mach/msm_rpcrouter.h>
-#include <mach/vreg.h>
+#include <linux/skbuff.h>
+#include <linux/clk.h>
+#include <linux/wakelock.h>
+#include <net/sock.h>
+#include <asm/gpio.h>
+#include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/mach-types.h>
-#include <linux/skbuff.h>
-#include <net/sock.h>
-#include <linux/clk.h>
+#include <mach/msm_iomap.h>
+#include <mach/msm_rpcrouter.h>
+#include <mach/vreg.h>
 #include <mach/board.h>
 #include <linux/mt9t013.h> /* define ioctls */
-#include <linux/wakelock.h>
+
 
 #define ALLOW_USPACE_RW		0
 
 static const uint32_t fps_divider = 1;
 
 #define AF_I2C_ID	0x18  /* actuator's slave address */
-
-extern void config_camera_on_gpios(void);
-extern void config_camera_off_gpios(void);
 
 static struct i2c_client *pclient;
 
@@ -62,46 +60,54 @@ static int pclk_set;
 
 static const struct mt9t013_reg_pat mt9t013_reg_pattern = { .reg = {
 	{ /* preview 2x2 binning 20fps, pclk MHz, MCLK 24MHz */
-		10, //vt_pix_clk_div        REG=0x0300  // update get_snapshot_fps if this change
-		1,  //vt_sys_clk_div        REG=0x0302  // update get_snapshot_fps if this change
-		3,//2,  //pre_pll_clk_div   REG=0x0304  // update get_snapshot_fps if this change
-		80,//40, //pll_multiplier   REG=0x0306   60 for 30fps preview, 40 for 20fps preview
-		10, //op_pix_clk_div        REG=0x0308
-		1,  //op_sys_clk_div        REG=0x030A
-		16, //scale_m       REG=0x0404
-		0x0111,     //row_speed     REG=0x3016
-		8,  //x_addr_start  REG=0x3004
-		2053,       //x_addr_end    REG=0x3008
-		8,  //y_addr_start  REG=0x3002
-		1541,       //y_addr_end    REG=0x3006
-		0x046C,     //read_mode     REG=0x3040
-		1024,       //x_output_size REG=0x034C
-		768,        //y_output_size REG=0x034E
-		3540,//2616,        //line_length_pck       REG=0x300C
-		861,//916, //frame_length_lines     REG=0x300A
-		16,   //coarse_integration_time     REG=0x3012
-		1461        //fine_integration_time REG=0x3014
+		10,	/*vt_pix_clk_div        REG=0x0300*/
+			/*update get_snapshot_fps if this change*/
+		1,	/*vt_sys_clk_div        REG=0x0302*/
+			/*update get_snapshot_fps if this change*/
+		3,	/*2,  pre_pll_clk_div   REG=0x0304*/
+			/*update get_snapshot_fps if this change*/
+		80,	/*40, pll_multiplier   REG=0x0306*/
+			/*60 for 30fps preview, 40 for 20fps preview*/
+		10,	/*op_pix_clk_div        REG=0x0308*/
+		1,	/*op_sys_clk_div        REG=0x030A*/
+		16,	/*scale_m       REG=0x0404*/
+		0x0111,	/*row_speed     REG=0x3016*/
+		8,	/*x_addr_start  REG=0x3004*/
+		2053,	/*x_addr_end    REG=0x3008*/
+		8,	/*y_addr_start  REG=0x3002*/
+		1541,	/*y_addr_end    REG=0x3006*/
+		0x046C,	/*read_mode     REG=0x3040*/
+		1024,	/*x_output_size REG=0x034C*/
+		768,	/*y_output_size REG=0x034E*/
+		3540,	/*2616,        line_length_pck       REG=0x300C*/
+		861,	/*916, frame_length_lines     REG=0x300A*/
+		16,	/*coarse_integration_time     REG=0x3012*/
+		1461	/*fine_integration_time REG=0x3014*/
 	},
 	{ /* snapshot */
-		10, //vt_pix_clk_div        REG=0x0300  // update get_snapshot_fps if this change
-		1,  //vt_sys_clk_div        REG=0x0302  // update get_snapshot_fps if this change
-		3,//2,  //pre_pll_clk_div   REG=0x0304  // update get_snapshot_fps if this change
-		80,//40, //pll_multiplier   REG=0x0306 50 for 15fps snapshot, 40 for 10fps snapshot
-		10, //op_pix_clk_div        REG=0x0308
-		1,  //op_sys_clk_div        REG=0x030A
-		16, //scale_m       REG=0x0404
-		0x0111,     //row_speed     REG=0x3016
-		8, //0,     //x_addr_start  REG=0x3004
-		2073, //2061,       //x_addr_end    REG=0x3008
-		8, //2,     //y_addr_start  REG=0x3002
-		1551, //1545,       //y_addr_end    REG=0x3006
-		0x0024,     //read_mode     REG=0x3040
-		2066,       //x_output_size REG=0x034C
-		1544,       //y_output_size REG=0x034E
-		4800,//2952,        //line_length_pck       REG=0x300C
-		1629,       //frame_length_lines    REG=0x300A
-		16, //coarse_integration_time       REG=0x3012
-		733 //fine_integration_time REG=0x3014
+		10,	/*vt_pix_clk_div        REG=0x0300*/
+			/*update get_snapshot_fps if this change*/
+		1,	/*vt_sys_clk_div        REG=0x0302*/
+			/*update get_snapshot_fps if this change*/
+		3,	/*2,  pre_pll_clk_div   REG=0x0304*/
+			/*update get_snapshot_fps if this change*/
+		80,	/*40, pll_multiplier   REG=0x0306*/
+			/*50 for 15fps snapshot, 40 for 10fps snapshot*/
+		10,	/*op_pix_clk_div        REG=0x0308*/
+		1,	/*op_sys_clk_div        REG=0x030A*/
+		16,	/*scale_m       REG=0x0404*/
+		0x0111,	/*row_speed     REG=0x3016*/
+		8,	/*0,     x_addr_start  REG=0x3004*/
+		2063,	/*2061,       x_addr_end    REG=0x3008*/
+		8,	/*2,     y_addr_start  REG=0x3002*/
+		1551,	/*1545,       y_addr_end    REG=0x3006*/
+		0x0024,	/*read_mode     REG=0x3040*/
+		2063,	/*output_size REG=0x034C*/
+		1544,	/*y_output_size REG=0x034E*/
+		4800,	/*2952,        line_length_pck       REG=0x300C*/
+		1629,	/*frame_length_lines    REG=0x300A*/
+		16,	/*coarse_integration_time       REG=0x3012*/
+		733	/*fine_integration_time REG=0x3014*/
 	}
 }};
 
@@ -480,7 +486,7 @@ static void mt9t013_sensor_init(void)
 	mdelay(2);
 	
 	/* enable gpio */
-	config_camera_on_gpios();
+	cam->config_gpio_on();
 	/* delay 2 ms */
 	mdelay(2);
 
@@ -519,7 +525,7 @@ static void mt9t013_sensor_suspend(void)
 	msm_camio_clk_disable(CAMIO_MDC_CLK);
 	CLK_DISABLE_AND_PUT(vfe_clk); /* this matches clk_select(1) */
 	/* disable gpios */
-	config_camera_off_gpios();
+	cam->config_gpio_off();
 	printk(KERN_INFO "mt9t013: camera sensor suspend sequence done\n");
 }
 
@@ -531,7 +537,7 @@ static int mt9t013_open(struct inode *ip, struct file *fp)
 	if (!opened) {
 		printk(KERN_INFO "mt9t013: prevent collapse on idle\n");
 		prevent_suspend();
-		config_camera_on_gpios();
+		cam->config_gpio_on();
 		opened = 1;
 		rc = 0;
 	}
@@ -551,7 +557,7 @@ static int mt9t013_release(struct inode *ip, struct file *fp)
 		CLK_DISABLE_AND_PUT(vfe_clk);
 		mt9t013_lens_power(0);
 		mt9t013_i2c_power_down();
-		config_camera_off_gpios();
+		cam->config_gpio_off();
 		printk(KERN_INFO "mt9t013: allow collapse on idle\n");
 		allow_suspend();
 		rc = pclk_set = opened = 0;
@@ -630,8 +636,8 @@ static long mt9t013_ioctl(struct file *filp, unsigned int cmd, unsigned long arg
 			addr = *((unsigned short *)rwbuf);
 			data = *((unsigned short *)(rwbuf+2));
 			rc = mt9t013_i2c_write(addr, data);
-		}
-		else printk("mt9t013: write: err %d\n", rc);
+		} else
+			printk(KERN_ERR "mt9t013: write: err %d\n", rc);
 		break;
 
 	case MT9T013_I2C_IOCTL_R:
@@ -640,18 +646,20 @@ static long mt9t013_ioctl(struct file *filp, unsigned int cmd, unsigned long arg
 			rc = mt9t013_i2c_read(addr, (unsigned short *)(rwbuf+2));
 			if (!rc) {
 				if (copy_to_user(argp, rwbuf, 4)) {
-					printk("mt9t013: read: err writeback -EFAULT\n");
+					printk(KERN_ERR "mt9t013: read: err " \
+							"writeback -EFAULT\n");
 					rc = -EFAULT;
 				}
 			}
-		}
-		else printk("mt9t013: read: err %d\n", rc);
+		} else
+			printk(KERN_ERR "mt9t013: read: err %d\n", rc);
 		break;
 
 	case MT9T013_I2C_IOCTL_AF_W:
 		if (/* CHECK() && */ COPY_FROM_USER(3))
 			rc = mt9t013_i2c_lens_write(*rwbuf, *(rwbuf + 1), *(rwbuf + 2));
-		else printk("mt9t013: af write: err %d\n", rc);
+		else
+			printk(KERN_ERR "mt9t013: af write: err %d\n", rc);
 		break;
 #endif /* ALLOW_USPACE_RW */
 
@@ -726,7 +734,7 @@ static long mt9t013_ioctl(struct file *filp, unsigned int cmd, unsigned long arg
 		printk(KERN_INFO "mt9t013: clk select %ld\n", arg);
 		rc = clk_select(!!arg);
 		break;
-
+  
 	case MT9T013_I2C_IOCTL_CLK_FREQ_PROG:
 		printk(KERN_INFO "mt9t013: clk rate select %ld\n", arg);
 		rc = msm_camio_clk_rate_set(arg);
@@ -1007,7 +1015,18 @@ static int mt9t013_i2c_sensor_setting(unsigned long arg)
 		I2C_WRITE(REG_X_ADDR_END, mt9t013_reg_pattern.reg[rt].x_addr_end);
 		I2C_WRITE(REG_Y_ADDR_START, mt9t013_reg_pattern.reg[rt].y_addr_start);
 		I2C_WRITE(REG_Y_ADDR_END, mt9t013_reg_pattern.reg[rt].y_addr_end);
-		I2C_WRITE(REG_READ_MODE, mt9t013_reg_pattern.reg[rt].read_mode);
+
+		if (machine_is_sapphire()) {
+			if (rt == 0) {
+				I2C_WRITE(REG_READ_MODE, 0x046F);
+			} else {
+				I2C_WRITE(REG_READ_MODE, 0x0027);
+			}
+		} else {
+			I2C_WRITE(REG_READ_MODE,
+				mt9t013_reg_pattern.reg[rt].read_mode);
+		}
+
 		I2C_WRITE(REG_SCALE_M, mt9t013_reg_pattern.reg[rt].scale_m);
 		I2C_WRITE(REG_X_OUTPUT_SIZE, mt9t013_reg_pattern.reg[rt].x_output_size);
 		I2C_WRITE(REG_Y_OUTPUT_SIZE, mt9t013_reg_pattern.reg[rt].y_output_size);
@@ -1033,12 +1052,28 @@ static int mt9t013_i2c_sensor_setting(unsigned long arg)
 		I2C_WRITE(0x3096, 0x4949);
 
 		/* set preview or snapshot mode */
-		I2C_WRITE(REG_ROW_SPEED, mt9t013_reg_pattern.reg[rt].row_speed);
-		I2C_WRITE(REG_X_ADDR_START, mt9t013_reg_pattern.reg[rt].x_addr_start);
-		I2C_WRITE(REG_X_ADDR_END, mt9t013_reg_pattern.reg[rt].x_addr_end);
-		I2C_WRITE(REG_Y_ADDR_START, mt9t013_reg_pattern.reg[rt].y_addr_start);
-		I2C_WRITE(REG_Y_ADDR_END, mt9t013_reg_pattern.reg[rt].y_addr_end);
-		I2C_WRITE(REG_READ_MODE, mt9t013_reg_pattern.reg[rt].read_mode);
+		I2C_WRITE(REG_ROW_SPEED,
+			mt9t013_reg_pattern.reg[rt].row_speed);
+		I2C_WRITE(REG_X_ADDR_START,
+			mt9t013_reg_pattern.reg[rt].x_addr_start);
+		I2C_WRITE(REG_X_ADDR_END,
+			mt9t013_reg_pattern.reg[rt].x_addr_end);
+		I2C_WRITE(REG_Y_ADDR_START,
+			mt9t013_reg_pattern.reg[rt].y_addr_start);
+		I2C_WRITE(REG_Y_ADDR_END,
+			mt9t013_reg_pattern.reg[rt].y_addr_end);
+
+		if (machine_is_sapphire()) {
+			if (rt == 0) {
+				I2C_WRITE(REG_READ_MODE, 0x046F);
+			} else {
+				I2C_WRITE(REG_READ_MODE, 0x0027);
+			}
+		} else {
+			I2C_WRITE(REG_READ_MODE,
+				mt9t013_reg_pattern.reg[rt].read_mode);
+		}
+
 		I2C_WRITE(REG_SCALE_M, mt9t013_reg_pattern.reg[rt].scale_m);
 		I2C_WRITE(REG_X_OUTPUT_SIZE, mt9t013_reg_pattern.reg[rt].x_output_size);
 		I2C_WRITE(REG_Y_OUTPUT_SIZE, mt9t013_reg_pattern.reg[rt].y_output_size);
@@ -1070,10 +1105,10 @@ static int mt9t013_i2c_exposure_gain(uint16_t line, uint16_t gain)
 
 	gain |= 0x200; /* set digital gain */
 
-	I2C_WRITE(REG_GROUPED_PARAMETER_HOLD, GROUPED_PARAMETER_HOLD);
+	/*I2C_WRITE(REG_GROUPED_PARAMETER_HOLD, GROUPED_PARAMETER_HOLD);*/
 	I2C_WRITE(REG_GLOBAL_GAIN, gain);
 	I2C_WRITE(REG_COARSE_INTEGRATION_TIME, line);
-	I2C_WRITE(REG_GROUPED_PARAMETER_HOLD, GROUPED_PARAMETER_UPDATE);
+	/*I2C_WRITE(REG_GROUPED_PARAMETER_HOLD, GROUPED_PARAMETER_UPDATE);*/
 	return 0;
 }
 
@@ -1130,7 +1165,7 @@ static int mt9t013_init_client(struct i2c_client *client)
 	/* Initialize the MT9T013 Chip */
 	init_waitqueue_head(&g_data_ready_wait_queue);
 	return 0;
-}
+}   
 
 static struct file_operations mt9t013_fops = {
         .owner 	= THIS_MODULE,
@@ -1145,6 +1180,50 @@ static struct miscdevice mt9t013_device = {
         .fops 	= &mt9t013_fops,
 };
 
+static const char *MT9T013Vendor = "micron";
+static const char *MT9T013NAME = "mt9t013";
+static const char *MT9T013Size = "3M";
+
+
+
+static ssize_t sensor_vendor_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+
+	sprintf(buf, "%s %s %s\n", MT9T013Vendor, MT9T013NAME, MT9T013Size);
+	ret = strlen(buf) + 1;
+
+	return ret;
+}
+
+static DEVICE_ATTR(sensor, 0444, sensor_vendor_show, NULL);
+
+
+static struct kobject *android_mt9t013 = NULL;
+
+static int mt9t013_sysfs_init(void)
+{
+	int ret ;
+	printk(KERN_INFO "mt9t013:kobject creat and add\n");
+	android_mt9t013 = kobject_create_and_add("android_camera", NULL);
+	if (android_mt9t013 == NULL) {
+		printk(KERN_INFO "mt9t013_sysfs_init: subsystem_register " \
+		"failed\n");
+		ret = -ENOMEM;
+		return ret ;
+	}
+	printk(KERN_INFO "mt9t013:sysfs_create_file\n");
+	ret = sysfs_create_file(android_mt9t013, &dev_attr_sensor.attr);
+	if (ret) {
+		printk(KERN_INFO "mt9t013_sysfs_init: sysfs_create_file " \
+		"failed\n");
+		kobject_del(android_mt9t013);
+	}
+	return 0 ;
+}
+
+
 
 static int mt9t013_probe(
 	struct i2c_client *client, const struct i2c_device_id *id)
@@ -1152,9 +1231,10 @@ static int mt9t013_probe(
 	struct mt9t013_data *mt;
 	int err = 0;
 	printk(KERN_INFO "mt9t013: probe\n");
+
 	if(!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
 		goto exit_check_functionality_failed;		
-	
+
 	if(!(mt = kzalloc( sizeof(struct mt9t013_data), GFP_KERNEL))) {
 		err = -ENOMEM;
 		goto exit_alloc_data_failed;
@@ -1173,6 +1253,7 @@ static int mt9t013_probe(
 		goto exit_misc_device_register_failed;
 	}
 	init_suspend();
+	mt9t013_sysfs_init();
 	return 0;
 	
 exit_misc_device_register_failed:
@@ -1208,18 +1289,17 @@ static struct i2c_driver mt9t013_driver = {
 	},
 };
 
-
 static int mt9t013_plat_probe(struct platform_device *pdev __attribute__((unused)))
 {
-	int rc = -EFAULT;
-	
-	if(pdev->dev.platform_data)
-	{
-		printk(KERN_INFO "pdev->dev.platform_data is not NULL\n");
-		cam=pdev->dev.platform_data;
-		rc = i2c_add_driver(&mt9t013_driver);
-	}
-	return rc;
+       int rc = -EFAULT;
+
+       if(pdev->dev.platform_data)
+       {
+               printk(KERN_INFO "pdev->dev.platform_data is not NULL\n");
+               cam = pdev->dev.platform_data;
+               rc = i2c_add_driver(&mt9t013_driver);
+       }
+       return rc;
 }
 
 static struct platform_driver mt9t013_plat_driver = {
@@ -1232,18 +1312,11 @@ static struct platform_driver mt9t013_plat_driver = {
 
 static int __init mt9t013_init(void)
 {
-	return platform_driver_register(&mt9t013_plat_driver);
-}
-
-static void __exit mt9t013_exit(void)
-{
-	i2c_del_driver(&mt9t013_driver);
+       return platform_driver_register(&mt9t013_plat_driver);
 }
 
 module_init(mt9t013_init);
-module_exit(mt9t013_exit);
 
 MODULE_AUTHOR("Kidd Chen");
 MODULE_DESCRIPTION("MT9T013 Driver");
 MODULE_LICENSE("GPL");
-

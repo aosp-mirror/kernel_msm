@@ -30,22 +30,7 @@ struct msm_acpu_clock_platform_data
 	unsigned long wait_for_irq_khz;
 };
 
-struct msm_camera_sensor_info {
-	int sensor_reset;
-	int sensor_pwd;
-	int vcm_pwd;
-	const char *sensor_name;
-};
-
-
-struct msm_camera_platform_data{
-	void (*camera_gpio_on) (void);
-	void (*camera_gpio_off)(void);
-	uint8_t snum;
-	struct msm_camera_sensor_info *sinfo;
-};
-
-struct msm_camera_device_platform_data{
+struct msm_camera_device_platform_data {
 	int sensor_reset;
 	int sensor_pwd;
 	int vcm_pwd;
