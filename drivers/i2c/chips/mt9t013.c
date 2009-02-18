@@ -552,12 +552,19 @@ static int mt9t013_release(struct inode *ip, struct file *fp)
 	down(&sem);
 	if (opened) {
 		printk(KERN_INFO "mt9t013: release clocks\n");
+
+
+		/* mt9t013_i2c_power_down() should be called before closing MCLK */
+		/* otherwise I2C_WRITE will always fail                          */
+		mt9t013_i2c_power_down();
+
 		CLK_DISABLE_AND_PUT(mdc_clk);
 		CLK_DISABLE_AND_PUT(vfe_mdc_clk);
 		CLK_DISABLE_AND_PUT(vfe_clk);
 		mt9t013_lens_power(0);
-		mt9t013_i2c_power_down();
+
 		cam->config_gpio_off();
+
 		printk(KERN_INFO "mt9t013: allow collapse on idle\n");
 		allow_suspend();
 		rc = pclk_set = opened = 0;
@@ -1146,12 +1153,28 @@ static int mt9t013_i2c_power_up(void)
 
 static int mt9t013_i2c_power_down(void)
 {
+	int i = 0, try_more = 100;
+
 	printk(KERN_INFO "mt9t013: power down\n");
 	if (!powered) {
 		printk(KERN_INFO "mt9t013: already powered down\n");
 		return 0;
 	}
-	I2C_WRITE(MT9T013_REG_RESET_REGISTER, MT9T013_RESET_REGISTER_PWOFF);
+
+	/* I2C_WRITE(MT9T013_REG_RESET_REGISTER, MT9T013_RESET_REGISTER_PWOFF); */
+	/* Modified by Horng for more tries while I2C write fail                */
+	/* -------------------------------------------------------------------- */
+	while(mt9t013_i2c_write(MT9T013_REG_RESET_REGISTER, MT9T013_RESET_REGISTER_PWOFF) < 0)
+	{
+		if (i >= try_more)
+			return -EIO;
+		else {
+			i++;
+			printk(KERN_INFO "mt9p012: in mt9p012_i2c_power_down() call mt9p012_i2c_write() failed !!!  (try %d times)\n", i);
+			mdelay(i+5);
+		}
+	}
+	/* -------------------------------------------------------------------- */
 	mdelay(5);
 	powered = pclk_set = 0;
 	return 0;
