@@ -49,7 +49,7 @@ static int sapphire_backlight_brightness =
 static uint8_t sapphire_backlight_last_level = 33;
 static DEFINE_MUTEX(sapphire_backlight_lock);
 
-/* Divid dimming level into 12 sections, and restrict maximum level to 27 */
+/* Divide dimming level into 12 sections, and restrict maximum level to 27 */
 #define DIMMING_STEPS       12
 static unsigned dimming_levels[NUM_OF_SAPPHIRE_PANELS][DIMMING_STEPS] = {
 	{0, 1, 2, 3, 6, 9, 11, 13, 16, 19, 22, 25},         /* Sharp */
@@ -60,16 +60,16 @@ static unsigned pwrsink_percents[] = {0, 6, 8, 15, 26, 34, 46, 54, 65, 77, 87,
 
 static void sapphire_set_backlight_level(uint8_t level)
 {
-	unsigned dimming_factor = 255/DIMMING_STEPS + 1 ;
-	unsigned percent = ((int)level * 100) / 255;
+	unsigned dimming_factor = 255/DIMMING_STEPS + 1;
+	int index = (level + dimming_factor - 1) / dimming_factor;
+	unsigned percent;
 	unsigned long flags;
 	int i = 0;
 
 	printk(KERN_INFO "level=%d, new level=dimming_levels[%d]=%d\n",
-		level, level/dimming_factor,
-		dimming_levels[g_panel_id][level/dimming_factor]);
-	percent = pwrsink_percents[level/dimming_factor];
-	level = dimming_levels[g_panel_id][level/dimming_factor];
+		level, index, dimming_levels[g_panel_id][index]);
+		percent = pwrsink_percents[index];
+		level = dimming_levels[g_panel_id][index];
 
 	if (sapphire_backlight_last_level == level)
 		return;
