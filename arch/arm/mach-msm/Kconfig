@@ -124,6 +124,11 @@ endchoice
 config MSM_SMD_PKG3
 	bool
 
+config MACH_SAPPHIRE
+	depends on ARCH_MSM
+	default y
+	bool "Sapphire"
+
 config HTC_HEADSET
 	tristate "HTC 2 Wire detection driver"
 	default n
