@@ -1179,6 +1179,8 @@ int msm_nand_scan(struct mtd_info *mtd, int maxchips)
 		mtd->size = 512 << 20;		/* * num_chips */
 	else if (flash_id == 0x5590bc2c)	/* 4Gbit Micron chip */
 		mtd->size = 512 << 20;		/* * num_chips */
+	else if (flash_id == 0x5580ba2c)	/* 2Gbit Micron chip */
+		mtd->size = 256 << 20;
 
 	pr_info("flash_id: %x size %llx\n", flash_id, mtd->size);
 
