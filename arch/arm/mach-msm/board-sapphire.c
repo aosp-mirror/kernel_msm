@@ -28,12 +28,6 @@
 #include <mach/htc_headset.h>
 #include <linux/sysdev.h>
 #include <linux/android_pmem.h>
-#ifdef CONFIG_USB_FUNCTION
-#include <linux/usb/mass_storage_function.h>
-#endif
-#ifdef CONFIG_USB_ANDROID
-#include <linux/usb/android.h>
-#endif
 
 #include <linux/delay.h>
 
@@ -64,7 +58,6 @@
 
 #include <mach/board.h>
 #include <mach/board_htc.h>
-#include <mach/msm_hsusb.h>
 #include <mach/msm_serial_hs.h>
 #include <mach/htc_pwrsink.h>
 
@@ -610,7 +603,6 @@ static struct platform_device sapphire_h2w = {
 };
 #endif
 
-#ifdef CONFIG_USB_FUNCTION
 static void sapphire_phy_reset(void)
 {
 	gpio_set_value(SAPPHIRE_GPIO_USB_PHY_RST_N, 0);
@@ -618,7 +610,6 @@ static void sapphire_phy_reset(void)
 	gpio_set_value(SAPPHIRE_GPIO_USB_PHY_RST_N, 1);
 	mdelay(10);
 }
-#endif
 
 static struct pwr_sink sapphire_pwrsink_table[] = {
 	{
