@@ -291,78 +291,6 @@ static struct i2c_board_info i2c_devices[] = {
 	},
 };
 
-static struct android_pmem_platform_data android_pmem_pdata = {
-	.name = "pmem",
-	.start = MSM_PMEM_MDP_BASE,
-	.size = MSM_PMEM_MDP_SIZE,
-	.no_allocator = 1,
-	.cached = 1,
-};
-
-static struct android_pmem_platform_data android_pmem_adsp_pdata = {
-	.name = "pmem_adsp",
-	.start = MSM_PMEM_ADSP_BASE,
-	.size = MSM_PMEM_ADSP_SIZE,
-	.no_allocator = 0,
-	.cached = 0,
-};
-
-static struct android_pmem_platform_data android_pmem_camera_pdata = {
-	.name = "pmem_camera",
-	.start = MSM_PMEM_CAMERA_BASE,
-	.size = MSM_PMEM_CAMERA_SIZE,
-	.no_allocator = 0,
-	.cached = 0,
-};
-
-static struct android_pmem_platform_data android_pmem_gpu0_pdata = {
-	.name = "pmem_gpu0",
-	.start = MSM_PMEM_GPU0_BASE,
-	.size = MSM_PMEM_GPU0_SIZE,
-	.no_allocator = 1,
-	.cached = 0,
-	.buffered = 1,
-};
-
-static struct android_pmem_platform_data android_pmem_gpu1_pdata = {
-	.name = "pmem_gpu1",
-	.start = MSM_PMEM_GPU1_BASE,
-	.size = MSM_PMEM_GPU1_SIZE,
-	.no_allocator = 1,
-	.cached = 0,
-	.buffered = 1,
-};
-
-static struct platform_device android_pmem_device = {
-	.name = "android_pmem",
-	.id = 0,
-	.dev = { .platform_data = &android_pmem_pdata },
-};
-
-static struct platform_device android_pmem_adsp_device = {
-	.name = "android_pmem",
-	.id = 1,
-	.dev = { .platform_data = &android_pmem_adsp_pdata },
-};
-
-static struct platform_device android_pmem_gpu0_device = {
-	.name = "android_pmem",
-	.id = 2,
-	.dev = { .platform_data = &android_pmem_gpu0_pdata },
-};
-
-static struct platform_device android_pmem_gpu1_device = {
-	.name = "android_pmem",
-	.id = 3,
-	.dev = { .platform_data = &android_pmem_gpu1_pdata },
-};
-
-static struct platform_device android_pmem_camera_device = {
-	.name = "android_pmem",
-	.id = 4,
-	.dev = { .platform_data = &android_pmem_camera_pdata },
-};
-
 static struct timed_gpio timed_gpios[] = {
 	{ 
 		.name = "vibrator",
@@ -481,21 +409,6 @@ static void trout_phy_reset(void)
 	mdelay(10);
 }
 
-static struct resource trout_ram_console_resource[] = {
-	{
-		.start	= MSM_RAM_CONSOLE_BASE,
-		.end	= MSM_RAM_CONSOLE_BASE + MSM_RAM_CONSOLE_SIZE - 1,
-		.flags	= IORESOURCE_MEM,
-	}
-};
-
-static struct platform_device trout_ram_console_device = {
-	.name = "ram_console",
-	.id = -1,
-	.num_resources  = ARRAY_SIZE(trout_ram_console_resource),
-	.resource       = trout_ram_console_resource,
-};
-
 static void config_camera_on_gpios(void);
 static void config_camera_off_gpios(void);
 static struct msm_camera_device_platform_data msm_camera_device = {
@@ -581,6 +494,21 @@ static struct platform_device trout_pwr_sink = {
 static struct platform_device trout_rfkill = {
 	.name = "trout_rfkill",
 	.id = -1,
+};
+
+static struct msm_pmem_setting pmem_setting = {
+	.pmem_start = MSM_PMEM_MDP_BASE,
+	.pmem_size = MSM_PMEM_MDP_SIZE,
+	.pmem_adsp_start = MSM_PMEM_ADSP_BASE,
+	.pmem_adsp_size = MSM_PMEM_ADSP_SIZE,
+	.pmem_gpu0_start = MSM_PMEM_GPU0_BASE,
+	.pmem_gpu0_size = MSM_PMEM_GPU0_SIZE,
+	.pmem_gpu1_start = MSM_PMEM_GPU1_BASE,
+	.pmem_gpu1_size = MSM_PMEM_GPU1_SIZE,
+	.pmem_camera_start = MSM_PMEM_CAMERA_BASE,
+	.pmem_camera_size = MSM_PMEM_CAMERA_SIZE,
+	.ram_console_start = MSM_RAM_CONSOLE_BASE,
+	.ram_console_size = MSM_RAM_CONSOLE_SIZE,
 };
 
 #ifdef CONFIG_WIFI_CONTROL_FUNC
@@ -671,12 +599,6 @@ static struct platform_device *devices[] __initdata = {
 	&android_leds,
 	&sd_door_switch,
 	&android_timed_gpios,
-	&android_pmem_device,
-	&android_pmem_adsp_device,
-	&android_pmem_gpu0_device,
-	&android_pmem_gpu1_device,
-	&android_pmem_camera_device,
-	&trout_ram_console_device,
 	&trout_camera,
 	&trout_rfkill,
 #ifdef CONFIG_WIFI_CONTROL_FUNC
@@ -846,6 +768,8 @@ static void __init trout_init(void)
 	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
 #endif
 	msm_add_usb_devices(trout_phy_reset);
+
+	msm_add_mem_devices(&pmem_setting);
 
 	rc = trout_init_mmc(system_rev);
 	if (rc)
