@@ -233,10 +233,11 @@ static int sapphire_ts_power(int on)
 		/* touchscreen must be powered before we enable i2c pullup */
 		msleep(2);
 		/* enable touch panel level shift */
-		gpio_set_value(gpio_tp_ls_en, 1);
+		gpio_direction_output(gpio_tp_ls_en, 1);
 		msleep(2);
 	} else {
-		gpio_set_value(gpio_tp_ls_en, 0);
+		gpio_direction_output(gpio_tp_ls_en, 0);
+		udelay(50);
 		sapphire_gpio_write(NULL, SAPPHIRE_GPIO_TP_EN, 0);
 	}
 
