@@ -67,6 +67,39 @@ struct set_acoustic_rep {
 static uint32_t htc_acoustic_vir_addr;
 static struct msm_rpc_endpoint *endpoint;
 static struct mutex api_lock;
+static struct mutex rpc_connect_mutex;
+
+static int is_rpc_connect(void)
+{
+	mutex_lock(&rpc_connect_mutex);
+	if (endpoint == NULL) {
+		endpoint = msm_rpc_connect(HTCRPOG, HTCVERS, 0);
+		if (IS_ERR(endpoint)) {
+			pr_err("%s: init rpc failed! rc = %ld\n",
+				__func__, PTR_ERR(endpoint));
+			mutex_unlock(&rpc_connect_mutex);
+			return 0;
+		}
+	}
+	mutex_unlock(&rpc_connect_mutex);
+	return 1;
+}
+
+int turn_mic_bias_on(int on)
+{
+	struct mic_bias_req {
+		struct rpc_request_hdr hdr;
+		uint32_t on;
+	} req;
+
+	if (!is_rpc_connect())
+		return -1;
+
+	req.on = cpu_to_be32(on);
+	return msm_rpc_call(endpoint, ONCRPC_SET_MIC_BIAS_PROC,
+			    &req, sizeof(req), 5 * HZ);
+}
+EXPORT_SYMBOL(turn_mic_bias_on);
 
 static int acoustic_mmap(struct file *file, struct vm_area_struct *vma)
 {
@@ -124,15 +157,8 @@ static int acoustic_open(struct inode *inode, struct file *file)
 	mutex_lock(&api_lock);
 
 	if (!htc_acoustic_vir_addr) {
-		if (endpoint == NULL) {
-			endpoint = msm_rpc_connect(HTCRPOG, HTCVERS, 0);
-			if (IS_ERR(endpoint)) {
-				E("init rpc failed! rc = %ld\n",
-					PTR_ERR(endpoint));
-				endpoint = NULL;
-				goto done;
-			}
-		}
+		if (!is_rpc_connect())
+			goto done;
 
 		req_smem.size = cpu_to_be32(HTC_ACOUSTIC_TABLE_SIZE);
 		rc = msm_rpc_call_reply(endpoint,
@@ -223,6 +249,7 @@ static struct miscdevice acoustic_misc = {
 static int __init acoustic_init(void)
 {
 	mutex_init(&api_lock);
+	mutex_init(&rpc_connect_mutex);
 	return misc_register(&acoustic_misc);
 }
 
