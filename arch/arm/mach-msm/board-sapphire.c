@@ -582,6 +582,7 @@ static struct h2w_platform_data sapphire_h2w_data = {
 	.cable_in2		= SAPPHIRE_GPIO_CABLE_IN2,
 	.h2w_clk		= SAPPHIRE_GPIO_H2W_CLK,
 	.h2w_data		= SAPPHIRE_GPIO_H2W_DATA,
+	.headset_mic_35mm	= SAPPHIRE_GPIO_AUD_HSMIC_DET_N,
 	.debug_uart 		= H2W_UART3,
 	.config_cpld 		= h2w_config_cpld,
 	.init_cpld 		= h2w_init_cpld,
@@ -993,7 +994,6 @@ static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
 static void __init sapphire_init(void)
 {
 	int rc;
-	int i;
 	printk("sapphire_init() revision=%d\n", system_rev);
 
 	/*
