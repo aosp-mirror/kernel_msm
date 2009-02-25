@@ -66,6 +66,8 @@ static void sapphire_set_backlight_level(uint8_t level)
 	unsigned long flags;
 	int i = 0;
 
+	if (index >= DIMMING_STEPS)
+		index = DIMMING_STEPS - 1;
 	printk(KERN_INFO "level=%d, new level=dimming_levels[%d]=%d\n",
 		level, index, dimming_levels[g_panel_id][index]);
 		percent = pwrsink_percents[index];
