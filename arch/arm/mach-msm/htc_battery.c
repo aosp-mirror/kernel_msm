@@ -25,6 +25,8 @@
 #include <asm/gpio.h>
 #include <mach/msm_rpcrouter.h>
 #include <mach/board.h>
+#include <asm/mach-types.h>
+#include <mach/board_htc.h>
 
 static struct wake_lock vbus_wake_lock;
 
@@ -52,6 +54,11 @@ static struct wake_lock vbus_wake_lock;
 
 /* Enable this will shut down if no battery */
 #define ENABLE_BATTERY_DETECTION	0
+/* Sapphire pin changes:
+ *  USB_ID (GPIO 90) is renamed to AC_IN (GPIO 30)
+ *  CHARGER_EN (CPLD MISC2 bit[0]) is move to PMIC (MPP_14).
+ *  ISET (CPLD MISC2 bit[1]) is move to PMIC (MPP_13). */
+#define GPIO_SAPPHIRE_USB_ID	30
 
 #define GPIO_BATTERY_DETECTION		21
 #define GPIO_BATTERY_CHARGER_EN		128
@@ -73,6 +80,8 @@ typedef enum {
 	CHARGER_USB,
 	CHARGER_AC
 } charger_type_t;
+
+const char *charger_tags[] = {"none", "USB", "AC"};
 
 struct battery_info_reply {
 	u32 batt_id;		/* Battery ID from ADC */
@@ -162,6 +171,12 @@ static struct power_supply htc_power_supplies[] = {
 	},
 };
 
+static void usb_status_notifier_func(int online);
+static int g_usb_online;
+static struct t_usb_status_notifier usb_status_notifier = {
+	.name = "htc_battery",
+	.func = usb_status_notifier_func,
+};
 
 /* -------------------------------------------------------------------------- */
 
@@ -196,6 +211,9 @@ device_initcall(batt_debug_init);
 
 static int init_batt_gpio(void)
 {
+	if (!machine_is_trout())
+		return 0;
+
 	if (gpio_request(GPIO_BATTERY_DETECTION, "batt_detect") < 0)
 		goto gpio_failed;
 	if (gpio_request(GPIO_BATTERY_CHARGER_EN, "charger_en") < 0)
@@ -218,6 +236,10 @@ gpio_failed:
 static int battery_charging_ctrl(batt_ctl_t ctl)
 {
 	int result = 0;
+
+	/* The charing operations are move to A9 in Sapphire. */
+	if (!machine_is_trout())
+		return result;
 
 	switch (ctl) {
 	case DISABLE:
@@ -281,35 +303,35 @@ int htc_battery_status_update(u32 curr_level)
 int htc_cable_status_update(int status)
 {
 	int rc = 0;
-	unsigned source;
+	unsigned last_source;
 
 	if (!htc_battery_initial)
 		return 0;
 	
-	mutex_lock(&htc_batt_info.lock);
-	switch(status) {
-	case CHARGER_BATTERY:
-		BATT("cable NOT PRESENT\n");
-		htc_batt_info.rep.charging_source = CHARGER_BATTERY;
-		break;
-	case CHARGER_USB:
-		BATT("cable USB\n");
-		htc_batt_info.rep.charging_source = CHARGER_USB;
-		break;
-	case CHARGER_AC:
-		BATT("cable AC\n");
-		htc_batt_info.rep.charging_source = CHARGER_AC;
-		break;
-	default:
-		printk(KERN_ERR "%s: Not supported cable status received!\n",
-				__FUNCTION__);
-		rc = -EINVAL;
+	if (status < CHARGER_BATTERY || status > CHARGER_AC) {
+		BATT("%s: Not supported cable status received!\n", __func__);
+		return -EINVAL;
 	}
-	source = htc_batt_info.rep.charging_source;
-	mutex_unlock(&htc_batt_info.lock);
+	mutex_lock(&htc_batt_info.lock);
+	/* A9 reports USB charging when helf AC cable in and China AC charger. */
+	/* Work arround: notify userspace AC charging first,
+	and notify USB charging again when receiving usb connected notificaiton from usb driver. */
+	last_source = htc_batt_info.rep.charging_source;
+	if (status == CHARGER_USB && g_usb_online == 0)
+		htc_batt_info.rep.charging_source = CHARGER_AC;
+	else {
+		htc_batt_info.rep.charging_source  = status;
+		/* usb driver will not notify usb offline. */
+		if (status == CHARGER_BATTERY && g_usb_online == 1)
+			g_usb_online = 0;
+	}
 
-	msm_hsusb_set_vbus_state(source == CHARGER_USB);
-	if (source == CHARGER_USB) {
+	/* TODO: Don't call usb driver again with the same cable status. */
+	msm_hsusb_set_vbus_state(status == CHARGER_USB);
+
+	if (htc_batt_info.rep.charging_source != last_source) {
+		if (htc_batt_info.rep.charging_source == CHARGER_USB ||
+			htc_batt_info.rep.charging_source == CHARGER_AC) {
 		wake_lock(&vbus_wake_lock);
 	} else {
 		/* give userspace some time to see the uevent and update
@@ -317,13 +339,38 @@ int htc_cable_status_update(int status)
 		 */
 		wake_lock_timeout(&vbus_wake_lock, HZ / 2);
 	}
-
-	/* if the power source changes, all power supplies may change state */
+		if (htc_batt_info.rep.charging_source == CHARGER_BATTERY || last_source == CHARGER_BATTERY)
 	power_supply_changed(&htc_power_supplies[CHARGER_BATTERY]);
+		if (htc_batt_info.rep.charging_source == CHARGER_USB || last_source == CHARGER_USB)
 	power_supply_changed(&htc_power_supplies[CHARGER_USB]);
+		if (htc_batt_info.rep.charging_source == CHARGER_AC || last_source == CHARGER_AC)
 	power_supply_changed(&htc_power_supplies[CHARGER_AC]);
+	}
+	mutex_unlock(&htc_batt_info.lock);
 
 	return rc;
+}
+
+/* A9 reports USB charging when helf AC cable in and China AC charger. */
+/* Work arround: notify userspace AC charging first,
+and notify USB charging again when receiving usb connected notificaiton from usb driver. */
+static void usb_status_notifier_func(int online)
+{
+	mutex_lock(&htc_batt_info.lock);
+
+	BATT("%s: online=%d, g_usb_online=%d\n", __func__, online, g_usb_online);
+
+	if (g_usb_online != online) {
+		g_usb_online = online;
+		if (online && htc_batt_info.rep.charging_source == CHARGER_AC) {
+			mutex_unlock(&htc_batt_info.lock);
+			htc_cable_status_update(CHARGER_USB);
+			mutex_lock(&htc_batt_info.lock);
+		} else if (online) {
+			BATT("warning: usb connected but charging source=%d\n", htc_batt_info.rep.charging_source);
+		}
+	}
+	mutex_unlock(&htc_batt_info.lock);
 }
 
 static int htc_get_batt_info(struct battery_info_reply *buffer)
@@ -353,7 +400,8 @@ static int htc_get_batt_info(struct battery_info_reply *buffer)
 	buffer->batt_temp 		= be32_to_cpu(rep.info.batt_temp);
 	buffer->batt_current 		= be32_to_cpu(rep.info.batt_current);
 	buffer->level 			= be32_to_cpu(rep.info.level);
-	buffer->charging_source 	= be32_to_cpu(rep.info.charging_source);
+	/* Move the rules of charging_source to cable_status_update. */
+	/* buffer->charging_source 	= be32_to_cpu(rep.info.charging_source); */
 	buffer->charging_enabled 	= be32_to_cpu(rep.info.charging_enabled);
 	buffer->full_bat 		= be32_to_cpu(rep.info.full_bat);
 	mutex_unlock(&htc_batt_info.lock);
@@ -637,8 +685,11 @@ static int htc_battery_probe(struct platform_device *pdev)
 
 	/* init structure data member */
 	htc_batt_info.update_time 	= jiffies;
-	htc_batt_info.present 		= gpio_get_value(GPIO_BATTERY_DETECTION);
-	
+	/* A9 will shutdown the phone if battery is pluged out, so this value is always 1.
+	htc_batt_info.present 		= gpio_get_value(GPIO_TROUT_MBAT_IN);
+	*/
+	htc_batt_info.present 		= 1;
+
 	/* init rpc */
 	endpoint = msm_rpc_connect(APP_BATT_PROG, APP_BATT_VER, 0);
 	if (IS_ERR(endpoint)) {
@@ -663,21 +714,27 @@ static int htc_battery_probe(struct platform_device *pdev)
 	htc_battery_initial = 1;
 
 	mutex_lock(&htc_batt_info.rpc_lock);
+	htc_batt_info.rep.charging_source = CHARGER_BATTERY;
 	if (htc_get_batt_info(&htc_batt_info.rep) < 0)
 		printk(KERN_ERR "%s: get info failed\n", __FUNCTION__);
 
-	htc_cable_status_update(htc_batt_info.rep.charging_source);
+#if 0
+	/* A9 will send cable status RPC first, remove this code. */
 	battery_charging_ctrl(htc_batt_info.rep.charging_enabled ?
 			      ENABLE_SLOW_CHG : DISABLE);
+#endif
 
 	if (htc_rpc_set_delta(1) < 0)
 		printk(KERN_ERR "%s: set delta failed\n", __FUNCTION__);
 	htc_batt_info.update_time = jiffies;
 	mutex_unlock(&htc_batt_info.rpc_lock);
 
+#if 0
+	/* A11 shouldn't control charger here, let A9 do it. */
 	if (htc_batt_info.rep.charging_enabled == 0)
 		battery_charging_ctrl(DISABLE);
-	
+#endif
+
 	return 0;
 }
 
@@ -758,6 +815,7 @@ static int __init htc_battery_init(void)
 	wake_lock_init(&vbus_wake_lock, WAKE_LOCK_SUSPEND, "vbus_present");
 	mutex_init(&htc_batt_info.lock);
 	mutex_init(&htc_batt_info.rpc_lock);
+	usb_register_notifier(&usb_status_notifier);
 	msm_rpc_create_server(&battery_server);
 	platform_driver_register(&htc_battery_driver);
 	return 0;
