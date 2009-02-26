@@ -409,30 +409,6 @@ static int htc_get_batt_info(struct battery_info_reply *buffer)
 	return 0;
 }
 
-#if 0
-static int htc_get_cable_status(void)
-{
-	
-	struct rpc_request_hdr req;
-	
-	struct htc_get_cable_status_rep {
-		struct rpc_reply_hdr hdr;
-		int status;
-	} rep;
-
-	int rc;
-
-	rc = msm_rpc_call_reply(endpoint, HTC_PROCEDURE_GET_CABLE_STATUS,
-				&req, sizeof(req),
-				&rep, sizeof(rep),
-				5 * HZ);
-	if (rc < 0) 
-		return rc;
-
-	return be32_to_cpu(rep.status);
-}
-#endif
-
 /* -------------------------------------------------------------------------- */
 static int htc_power_get_property(struct power_supply *psy, 
 				    enum power_supply_property psp,
@@ -718,22 +694,10 @@ static int htc_battery_probe(struct platform_device *pdev)
 	if (htc_get_batt_info(&htc_batt_info.rep) < 0)
 		printk(KERN_ERR "%s: get info failed\n", __FUNCTION__);
 
-#if 0
-	/* A9 will send cable status RPC first, remove this code. */
-	battery_charging_ctrl(htc_batt_info.rep.charging_enabled ?
-			      ENABLE_SLOW_CHG : DISABLE);
-#endif
-
 	if (htc_rpc_set_delta(1) < 0)
 		printk(KERN_ERR "%s: set delta failed\n", __FUNCTION__);
 	htc_batt_info.update_time = jiffies;
 	mutex_unlock(&htc_batt_info.rpc_lock);
-
-#if 0
-	/* A11 shouldn't control charger here, let A9 do it. */
-	if (htc_batt_info.rep.charging_enabled == 0)
-		battery_charging_ctrl(DISABLE);
-#endif
 
 	return 0;
 }
