@@ -26,6 +26,8 @@
 
 #include <mach/msm_rpcrouter.h>
 
+#define RTC_DEBUG 0
+
 extern void msm_pm_set_max_sleep_time(int64_t sleep_time_ns);
 
 #define APP_TIMEREMOTE_PDEV_NAME "rs30000048:0da5b528"
@@ -69,7 +71,7 @@ msmrtc_timeremote_set_time(struct device *dev, struct rtc_time *tm)
 	if (tm->tm_year < 1970)
 		return -EINVAL;
 
-#if 0
+#if RTC_DEBUG
 	printk(KERN_DEBUG "%s: %.2u/%.2u/%.4u %.2u:%.2u:%.2u (%.2u)\n",
 	       __func__, tm->tm_mon, tm->tm_mday, tm->tm_year,
 	       tm->tm_hour, tm->tm_min, tm->tm_sec, tm->tm_wday);
@@ -130,7 +132,7 @@ msmrtc_timeremote_read_time(struct device *dev, struct rtc_time *tm)
 	tm->tm_sec = be32_to_cpu(rep.time.second);
 	tm->tm_wday = be32_to_cpu(rep.time.day_of_week);
 
-#if 0
+#if RTC_DEBUG
 	printk(KERN_DEBUG "%s: %.2u/%.2u/%.4u %.2u:%.2u:%.2u (%.2u)\n",
 	       __func__, tm->tm_mon, tm->tm_mday, tm->tm_year,
 	       tm->tm_hour, tm->tm_min, tm->tm_sec, tm->tm_wday);
@@ -178,9 +180,10 @@ static struct rtc_class_ops msm_rtc_ops = {
 static void
 msmrtc_alarmtimer_expired(unsigned long _data)
 {
+#if RTC_DEBUG
 	printk(KERN_DEBUG "%s: Generating alarm event (src %lu)\n",
 	       rtc->name, _data);
-
+#endif
 	rtc_update_irq(rtc, 1, RTC_IRQF | RTC_AF);
 	rtcalarm_time = 0;
 }
