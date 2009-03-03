@@ -33,6 +33,15 @@ static unsigned int sapphire_row_gpios[] = { 42, 41 };
 #define KEYMAP_INDEX(col, row) ((col)*ARRAY_SIZE(sapphire_row_gpios) + (row))
 
 /*scan matrix key*/
+/* HOME(up) MENU (up) Back Search */
+static const unsigned short sapphire_keymap2[ARRAY_SIZE(sapphire_col_gpios) * ARRAY_SIZE(sapphire_row_gpios)] = {
+	[KEYMAP_INDEX(0, 0)] = KEY_COMPOSE,
+	[KEYMAP_INDEX(0, 1)] = KEY_BACK,
+
+	[KEYMAP_INDEX(1, 0)] = KEY_MENU,
+	[KEYMAP_INDEX(1, 1)] = KEY_SEND,
+};
+
 /* HOME(up) + MENU (down)*/
 static const unsigned short sapphire_keymap1[ARRAY_SIZE(sapphire_col_gpios) *
 					ARRAY_SIZE(sapphire_row_gpios)] = {
@@ -55,7 +64,7 @@ static const unsigned short sapphire_keymap0[ARRAY_SIZE(sapphire_col_gpios) *
 
 static struct gpio_event_matrix_info sapphire_keypad_matrix_info = {
 	.info.func = gpio_event_matrix_func,
-	.keymap = sapphire_keymap1,
+	.keymap = sapphire_keymap2,
 	.output_gpios = sapphire_col_gpios,
 	.input_gpios = sapphire_row_gpios,
 	.noutputs = ARRAY_SIZE(sapphire_col_gpios),
@@ -112,7 +121,8 @@ static int __init sapphire_init_keypad(void)
 		sapphire_keypad_matrix_info.keymap = sapphire_keymap0;
 		break;
 	default:
-		sapphire_keypad_matrix_info.keymap = sapphire_keymap1;
+		if(system_rev != 0x80)
+			sapphire_keypad_matrix_info.keymap = sapphire_keymap1;
 		break;
 	}
 	return platform_device_register(&sapphire_keypad_device);

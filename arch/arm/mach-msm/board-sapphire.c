@@ -171,13 +171,18 @@ static struct gpio_event_direct_entry sapphire_nav_buttons[] = {
 	{ SAPPHIRE_GPIO_SEARCH_ACT_N, KEY_COMPOSE }, /* CPLD Key Search */
 };
 
+static struct gpio_event_direct_entry sapphire_nav_buttons2[] = {
+	{ SAPPHIRE_GPIO_NAVI_ACT_N, 		BTN_MOUSE },
+	{ SAPPHIRE_GPIO_SEARCH_ACT_N,      	KEY_HOME },	// CPLD Key Home
+};
+
 static struct gpio_event_input_info sapphire_nav_button_info = {
 	.info.func = gpio_event_input_func,
 	.flags = GPIOEDF_PRINT_KEYS | GPIOEDF_PRINT_KEY_DEBOUNCE,
 	.poll_time.tv.nsec = 40 * NSEC_PER_MSEC,
 	.type = EV_KEY,
-	.keymap = sapphire_nav_buttons,
-	.keymap_size = ARRAY_SIZE(sapphire_nav_buttons)
+	.keymap = sapphire_nav_buttons2,
+	.keymap_size = ARRAY_SIZE(sapphire_nav_buttons2)
 };
 
 static struct gpio_event_info *sapphire_nav_info[] = {
@@ -994,7 +999,7 @@ static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
 static void __init sapphire_init(void)
 {
 	int rc;
-	printk("sapphire_init() revision=%d\n", system_rev);
+	printk("sapphire_init() revision = 0x%X\n", system_rev);
 
 	/*
 	 * Setup common MSM GPIOS
@@ -1049,6 +1054,9 @@ static void __init sapphire_init(void)
 	}
 #endif
 	msm_init_pmic_vibrator();
+
+	if(system_rev != 0x80)
+		sapphire_nav_button_info.keymap = sapphire_nav_buttons;
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 	i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));
