@@ -262,8 +262,8 @@ int sapphire_wifi_set_carddetect(int val)
 EXPORT_SYMBOL(sapphire_wifi_set_carddetect);
 #endif
 
-static int sapphire_wifi_power_state;
-static int sapphire_bt_power_state;
+int sapphire_wifi_power_state=0;
+int sapphire_bt_power_state=0;
 
 int sapphire_wifi_power(int on)
 {
@@ -287,8 +287,15 @@ int sapphire_wifi_power(int on)
 	mdelay(100);
 	gpio_set_value(SAPPHIRE_GPIO_WIFI_EN, on);
 	mdelay(100);
-	if (!on)
+	if (!on) {
+		if(!sapphire_bt_power_state)
+		{
 		vreg_disable(vreg_wifi_osc);
+			printk("WiFi disable vreg_wifi_osc.\n");
+		}
+		else
+			printk("WiFi shouldn't disable vreg_wifi_osc. BT is using it!!\n");
+	}
 	sapphire_wifi_power_state = on;
 	return 0;
 }
