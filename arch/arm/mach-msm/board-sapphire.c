@@ -168,12 +168,6 @@ static struct sapphire_axis_info sapphire_y_axis = {
 
 static struct gpio_event_direct_entry sapphire_nav_buttons[] = {
 	{ SAPPHIRE_GPIO_NAVI_ACT_N, BTN_MOUSE },
-	{ SAPPHIRE_GPIO_SEARCH_ACT_N, KEY_COMPOSE }, /* CPLD Key Search */
-};
-
-static struct gpio_event_direct_entry sapphire_nav_buttons2[] = {
-	{ SAPPHIRE_GPIO_NAVI_ACT_N, 		BTN_MOUSE },
-	{ SAPPHIRE_GPIO_SEARCH_ACT_N,      	KEY_HOME },	// CPLD Key Home
 };
 
 static struct gpio_event_input_info sapphire_nav_button_info = {
@@ -181,8 +175,8 @@ static struct gpio_event_input_info sapphire_nav_button_info = {
 	.flags = GPIOEDF_PRINT_KEYS | GPIOEDF_PRINT_KEY_DEBOUNCE,
 	.poll_time.tv.nsec = 40 * NSEC_PER_MSEC,
 	.type = EV_KEY,
-	.keymap = sapphire_nav_buttons2,
-	.keymap_size = ARRAY_SIZE(sapphire_nav_buttons2)
+	.keymap = sapphire_nav_buttons,
+	.keymap_size = ARRAY_SIZE(sapphire_nav_buttons)
 };
 
 static struct gpio_event_info *sapphire_nav_info[] = {
@@ -203,6 +197,43 @@ static struct platform_device sapphire_nav_device = {
 	.id = 2,
 	.dev		= {
 		.platform_data	= &sapphire_nav_data,
+	},
+};
+
+/* a new search button to be a wake-up source */
+static struct gpio_event_direct_entry sapphire_search_button_v1[] = {
+	{ SAPPHIRE_GPIO_SEARCH_ACT_N,      	KEY_COMPOSE },	/* CPLD Key Search*/
+};
+
+static struct gpio_event_direct_entry sapphire_search_button_v2[] = {
+	{ SAPPHIRE_GPIO_SEARCH_ACT_N,      	KEY_HOME },	// CPLD Key Home
+};
+
+static struct gpio_event_input_info sapphire_search_button_info = {
+	.info.func = gpio_event_input_func,
+	//.flags = GPIOEDF_PRINT_KEYS | GPIOEDF_PRINT_KEY_DEBOUNCE,
+	.flags = 0,
+	.poll_time.tv.nsec = 40 * NSEC_PER_MSEC,
+	.type = EV_KEY,
+	.keymap = sapphire_search_button_v2,
+	.keymap_size = ARRAY_SIZE(sapphire_search_button_v2)
+};
+
+static struct gpio_event_info *sapphire_search_info[] = {
+	&sapphire_search_button_info.info
+};
+
+static struct gpio_event_platform_data sapphire_search_button_data = {
+	.name = "sapphire-nav-button",
+	.info = sapphire_search_info,
+	.info_count = ARRAY_SIZE(sapphire_search_info),
+};
+
+static struct platform_device sapphire_search_button_device = {
+	.name = GPIO_EVENT_DEV_NAME,
+	.id = 1,
+	.dev		= {
+		.platform_data	= &sapphire_search_button_data,
 	},
 };
 
@@ -800,6 +831,7 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_uart_dm1,
 #endif
 	&sapphire_nav_device,
+	&sapphire_search_button_device,
 	&sapphire_reset_keys_device,
 	&android_leds,
 #ifdef CONFIG_LEDS_CPLD
@@ -1056,7 +1088,7 @@ static void __init sapphire_init(void)
 	msm_init_pmic_vibrator();
 
 	if(system_rev != 0x80)
-		sapphire_nav_button_info.keymap = sapphire_nav_buttons;
+		sapphire_search_button_info.keymap = sapphire_search_button_v1;
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 	i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));
