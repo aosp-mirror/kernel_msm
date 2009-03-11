@@ -40,7 +40,10 @@ enum sapphire_panel_type {
 };
 static int g_panel_id = -1 ;
 
-#define SAPPHIRE_DEFAULT_BACKLIGHT_BRIGHTNESS 132
+#define SAPPHIRE_DEFAULT_BACKLIGHT_BRIGHTNESS	132
+#define GOOGLE_DEFAULT_BACKLIGHT_BRIGHTNESS 	102
+#define SDBB 					SAPPHIRE_DEFAULT_BACKLIGHT_BRIGHTNESS
+#define GDBB 					GOOGLE_DEFAULT_BACKLIGHT_BRIGHTNESS
 
 static int sapphire_backlight_off;
 static int sapphire_backlight_brightness =
@@ -61,17 +64,22 @@ static unsigned pwrsink_percents[] = {0, 6, 8, 15, 26, 34, 46, 54, 65, 77, 87,
 static void sapphire_set_backlight_level(uint8_t level)
 {
 	unsigned dimming_factor = 255/DIMMING_STEPS + 1;
-	int index = (level + dimming_factor - 1) / dimming_factor;
+	int index, new_level ;
 	unsigned percent;
 	unsigned long flags;
 	int i = 0;
 
-	if (index >= DIMMING_STEPS)
-		index = DIMMING_STEPS - 1;
-	printk(KERN_INFO "level=%d, new level=dimming_levels[%d]=%d\n",
-		level, index, dimming_levels[g_panel_id][index]);
-		percent = pwrsink_percents[index];
-		level = dimming_levels[g_panel_id][index];
+	/* Non-linear transform for the difference between two 
+         * kind of default backlight settings. 
+	 */
+	new_level = level<=GDBB ? 
+		level*SDBB/GDBB : (SDBB + (level-GDBB)*(255-SDBB) / (255-GDBB)) ;
+	index = new_level/dimming_factor ;
+
+	printk(KERN_INFO "level=%d, new level=%d, dimming_levels[%d]=%d\n",
+		level, new_level, index, dimming_levels[g_panel_id][index]);
+	percent = pwrsink_percents[index];
+	level = dimming_levels[g_panel_id][index];
 
 	if (sapphire_backlight_last_level == level)
 		return;
