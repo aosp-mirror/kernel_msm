@@ -33,7 +33,18 @@ static struct wake_lock vbus_wake_lock;
 #define TRACE_BATT 0
 
 #if TRACE_BATT
-#define BATT(x...) printk(KERN_INFO "[BATT] " x)
+#include <linux/rtc.h>
+
+#define BATT(x...) do { \
+struct timespec ts; \
+struct rtc_time tm; \
+getnstimeofday(&ts); \
+rtc_time_to_tm(ts.tv_sec, &tm); \
+printk(KERN_INFO "[BATT] " x); \
+printk(" at %lld (%d-%02d-%02d %02d:%02d:%02d.%09lu UTC)\n", \
+ktime_to_ns(ktime_get()), tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, \
+tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec); \
+} while (0)
 #else
 #define BATT(x...) do {} while (0)
 #endif
@@ -243,17 +254,17 @@ static int battery_charging_ctrl(batt_ctl_t ctl)
 
 	switch (ctl) {
 	case DISABLE:
-		BATT("charger OFF\n");
+		BATT("charger OFF");
 		/* 0 for enable; 1 disable */
 		result = gpio_direction_output(GPIO_BATTERY_CHARGER_EN, 1);
 		break;
 	case ENABLE_SLOW_CHG:
-		BATT("charger ON (SLOW)\n");
+		BATT("charger ON (SLOW)");
 		result = gpio_direction_output(GPIO_BATTERY_CHARGER_CURRENT, 0);
 		result = gpio_direction_output(GPIO_BATTERY_CHARGER_EN, 0);
 		break;
 	case ENABLE_FAST_CHG:
-		BATT("charger ON (FAST)\n");
+		BATT("charger ON (FAST)");
 		result = gpio_direction_output(GPIO_BATTERY_CHARGER_CURRENT, 1);
 		result = gpio_direction_output(GPIO_BATTERY_CHARGER_EN, 0);
 		break;
@@ -309,7 +320,7 @@ int htc_cable_status_update(int status)
 		return 0;
 	
 	if (status < CHARGER_BATTERY || status > CHARGER_AC) {
-		BATT("%s: Not supported cable status received!\n", __func__);
+		BATT("%s: Not supported cable status received!", __func__);
 		return -EINVAL;
 	}
 	mutex_lock(&htc_batt_info.lock);
@@ -358,7 +369,7 @@ static void usb_status_notifier_func(int online)
 {
 	mutex_lock(&htc_batt_info.lock);
 
-	BATT("%s: online=%d, g_usb_online=%d\n", __func__, online, g_usb_online);
+	BATT("%s: online=%d, g_usb_online=%d", __func__, online, g_usb_online);
 
 	if (g_usb_online != online) {
 		g_usb_online = online;
@@ -367,7 +378,7 @@ static void usb_status_notifier_func(int online)
 			htc_cable_status_update(CHARGER_USB);
 			mutex_lock(&htc_batt_info.lock);
 		} else if (online) {
-			BATT("warning: usb connected but charging source=%d\n", htc_batt_info.rep.charging_source);
+			BATT("warning: usb connected but charging source=%d", htc_batt_info.rep.charging_source);
 		}
 	}
 	mutex_unlock(&htc_batt_info.lock);
@@ -741,7 +752,7 @@ static int handle_battery_call(struct msm_rpc_server *server,
 		struct rpc_batt_mtoa_set_charging_args *args;
 		args = (struct rpc_batt_mtoa_set_charging_args *)(req + 1);
 		args->enable = be32_to_cpu(args->enable);
-		BATT("set_charging: enable=%d\n",args->enable);
+		BATT("set_charging: enable=%d",args->enable);
 		htc_battery_set_charging(args->enable);
 		return 0;
 	}
@@ -749,7 +760,7 @@ static int handle_battery_call(struct msm_rpc_server *server,
 		struct rpc_batt_mtoa_cable_status_update_args *args;
 		args = (struct rpc_batt_mtoa_cable_status_update_args *)(req + 1);
 		args->status = be32_to_cpu(args->status);
-		BATT("cable_status_update: status=%d\n",args->status);
+		BATT("cable_status_update: status=%d",args->status);
 		htc_cable_status_update(args->status);
 		return 0;
 	}
@@ -757,7 +768,7 @@ static int handle_battery_call(struct msm_rpc_server *server,
 		struct rpc_dem_battery_update_args *args;
 		args = (struct rpc_dem_battery_update_args *)(req + 1);
 		args->level = be32_to_cpu(args->level);
-		BATT("dem_battery_update: level=%d\n",args->level);
+		BATT("dem_battery_update: level=%d",args->level);
 		htc_battery_status_update(args->level);
 		return 0;
 	}
