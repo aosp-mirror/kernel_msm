@@ -226,7 +226,8 @@ static DECLARE_WAIT_QUEUE_HEAD(g_data_ready_wait_queue);
 
 static int mt9t013_i2c_sensor_init(struct mt9t013_init *init);
 static int mt9t013_i2c_sensor_setting(unsigned long arg);
-static int mt9t013_i2c_exposure_gain(uint16_t line, uint16_t gain);
+static int mt9t013_i2c_exposure_gain(uint32_t mode, uint16_t line,
+					uint16_t gain);
 static int mt9t013_i2c_move_focus(uint16_t position);
 static int mt9t013_i2c_set_default_focus(uint8_t step);
 static int mt9t013_i2c_power_up(void);
@@ -765,7 +766,7 @@ static long mt9t013_ioctl(struct file *filp, unsigned int cmd, unsigned long arg
 			rc = -EFAULT;
 			break;
 		}
-		rc = mt9t013_i2c_exposure_gain(exp.line, exp.gain); 
+		rc = mt9t013_i2c_exposure_gain(exp.mode, exp.line, exp.gain); 
 	}
 		break;
 
@@ -1104,7 +1105,8 @@ static int mt9t013_i2c_sensor_setting(unsigned long arg)
 	return 0;
 }
 
-static int mt9t013_i2c_exposure_gain(uint16_t line, uint16_t gain)
+static int mt9t013_i2c_exposure_gain(uint32_t mode, uint16_t line,
+					uint16_t gain)
 {
 	static const uint16_t max_legal_gain  = 0x01FF;
 	
@@ -1116,6 +1118,10 @@ static int mt9t013_i2c_exposure_gain(uint16_t line, uint16_t gain)
 	I2C_WRITE(REG_GLOBAL_GAIN, gain);
 	I2C_WRITE(REG_COARSE_INTEGRATION_TIME, line);
 	/*I2C_WRITE(REG_GROUPED_PARAMETER_HOLD, GROUPED_PARAMETER_UPDATE);*/
+	if (mode == 1) {
+		/* RESET REGISTER RESTART */
+		I2C_WRITE(MT9T013_REG_RESET_REGISTER, 0x10cc|0x0002);
+	}
 	return 0;
 }
 

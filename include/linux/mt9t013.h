@@ -114,6 +114,7 @@ struct mt9t013_reg_pat {
 struct mt9t013_exposure_gain {
 	uint16_t gain;
 	uint16_t line;
+	uint32_t mode;
 };
 
 #define MT9T013_I2C_IOCTL_EXPOSURE_GAIN \
