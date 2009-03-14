@@ -942,6 +942,8 @@ static void usb_suspend_phy(struct usb_info *ui)
 static void usb_reset(struct usb_info *ui)
 {
 	unsigned long flags;
+	unsigned otgsc;
+
 	INFO("msm72k_udc: reset controller\n");
 
 	spin_lock_irqsave(&ui->lock, flags);
@@ -953,6 +955,8 @@ static void usb_reset(struct usb_info *ui)
 	writel(0xffffffff, USB_ENDPTFLUSH);
 	msleep(2);
 #endif
+
+	otgsc = readl(USB_OTGSC);
 
 	/* RESET */
 	writel(2, USB_USBCMD);
@@ -989,6 +993,7 @@ static void usb_reset(struct usb_info *ui)
 	}
 
 	/* enable interrupts */
+	writel(otgsc, USB_OTGSC);
 	writel(STS_URI | STS_SLI | STS_UI | STS_PCI, USB_USBINTR);
 
 	/* go to RUN mode (D+ pullup enable) */
