@@ -184,6 +184,7 @@ struct usb_info {
 static const struct usb_ep_ops msm72k_ep_ops;
 
 
+static int msm72k_pullup(struct usb_gadget *_gadget, int is_active);
 static int msm72k_set_halt(struct usb_ep *_ep, int value);
 static void flush_endpoint(struct msm_endpoint *ept);
 
@@ -997,7 +998,7 @@ static void usb_reset(struct usb_info *ui)
 	writel(STS_URI | STS_SLI | STS_UI | STS_PCI, USB_USBINTR);
 
 	/* go to RUN mode (D+ pullup enable) */
-	writel(0x00080001, USB_USBCMD);
+	msm72k_pullup(&ui->gadget, 1);
 
 	spin_lock_irqsave(&ui->lock, flags);
 	ui->running = 1;
