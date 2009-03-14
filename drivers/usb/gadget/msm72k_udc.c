@@ -936,8 +936,6 @@ static void usb_suspend_phy(struct usb_info *ui)
 	ulpi_write(ui, (1 << 1) | (1 << 3), 0x12);
 	/* disable interface protect circuit to drop current consumption */
 	ulpi_write(ui, (1 << 7), 0x08);
-	/* clear the SuspendM bit -> suspend the PHY */
-	ulpi_write(ui, 1 << 6, 0x06);
 }
 
 static void usb_reset(struct usb_info *ui)
