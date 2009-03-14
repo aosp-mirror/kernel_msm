@@ -1483,9 +1483,10 @@ static int msm72k_pullup(struct usb_gadget *_gadget, int is_active)
 {
 	struct usb_info *ui = container_of(_gadget, struct usb_info, gadget);
 
-	if (is_active)
-		writel(0x00080001, USB_USBCMD);
-	else
+	if (is_active) {
+		if (vbus && ui->driver)
+			writel(0x00080001, USB_USBCMD);
+	} else
 		writel(0x00080000, USB_USBCMD);
 
 	return 0;
