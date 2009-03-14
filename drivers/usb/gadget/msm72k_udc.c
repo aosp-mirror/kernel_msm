@@ -39,12 +39,12 @@
 #include <mach/board.h>
 #include <mach/msm_hsusb.h>
 #include <linux/device.h>
+#include <mach/msm_hsusb_hw.h>
 
 static const char driver_name[] = "msm72k_udc";
 
 /* #define DEBUG */
 /* #define VERBOSE */
-#include "msm72k_udc.h"
 
 #define MSM_USB_BASE ((unsigned) ui->addr)
 
