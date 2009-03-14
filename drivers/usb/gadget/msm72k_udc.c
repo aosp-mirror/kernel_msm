@@ -1088,6 +1088,7 @@ static void usb_do_work(struct work_struct *w)
 				spin_lock_irqsave(&ui->lock, iflags);
 				ui->running = 0;
 				ui->online = 0;
+				msm72k_pullup(&ui->gadget, 0);
 				spin_unlock_irqrestore(&ui->lock, iflags);
 
 				/* terminate any transactions, etc */
