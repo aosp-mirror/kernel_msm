@@ -695,13 +695,35 @@ static struct pwr_sink sapphire_pwrsink_table[] = {
 	},
 };
 
+static int sapphire_pwrsink_resume_early(struct platform_device *pdev)
+{
+	htc_pwrsink_set(PWRSINK_SYSTEM_LOAD, 7);
+        return 0;
+}
+								
+static void sapphire_pwrsink_resume_late(struct early_suspend *h)
+{
+        htc_pwrsink_set(PWRSINK_SYSTEM_LOAD, 38);
+}
+
+static void sapphire_pwrsink_suspend_early(struct early_suspend *h)
+{
+        htc_pwrsink_set(PWRSINK_SYSTEM_LOAD, 7);
+}
+	
+static int sapphire_pwrsink_suspend_late(struct platform_device *pdev, pm_message_t state)
+{
+        htc_pwrsink_set(PWRSINK_SYSTEM_LOAD, 1);
+        return 0;
+}
+																		
 static struct pwr_sink_platform_data sapphire_pwrsink_data = {
 	.num_sinks	= ARRAY_SIZE(sapphire_pwrsink_table),
 	.sinks		= sapphire_pwrsink_table,
-	.suspend_late	= NULL,
-	.resume_early	= NULL,
-	.suspend_early	= NULL,
-	.resume_late	= NULL,
+	.suspend_late	= sapphire_pwrsink_suspend_late,
+	.resume_early	= sapphire_pwrsink_resume_early,
+	.suspend_early	= sapphire_pwrsink_suspend_early,
+	.resume_late	= sapphire_pwrsink_resume_late,
 };
 
 static struct platform_device sapphire_pwr_sink = {

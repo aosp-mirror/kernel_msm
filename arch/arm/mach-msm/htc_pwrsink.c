@@ -199,7 +199,7 @@ EXPORT_SYMBOL(htc_pwrsink_audio_path_set);
 
 void htc_pwrsink_suspend_early(struct early_suspend *h)
 {
-	htc_pwrsink_set(PWRSINK_SYSTEM_LOAD, 70);
+	htc_pwrsink_set(PWRSINK_SYSTEM_LOAD, 7);
 }
 
 int htc_pwrsink_suspend_late(struct platform_device *pdev, pm_message_t state)
@@ -209,7 +209,7 @@ int htc_pwrsink_suspend_late(struct platform_device *pdev, pm_message_t state)
 	if (pdata && pdata->suspend_late)
 		pdata->suspend_late(pdev, state);
 	else
-		htc_pwrsink_set(PWRSINK_SYSTEM_LOAD, 13);
+		htc_pwrsink_set(PWRSINK_SYSTEM_LOAD, 1);
 	return 0;
 }
 
@@ -220,13 +220,13 @@ int htc_pwrsink_resume_early(struct platform_device *pdev)
 	if (pdata && pdata->resume_early)
 		pdata->resume_early(pdev);
 	else
-		htc_pwrsink_set(PWRSINK_SYSTEM_LOAD, 70);
+		htc_pwrsink_set(PWRSINK_SYSTEM_LOAD, 7);
 	return 0;
 }
 
 void htc_pwrsink_resume_late(struct early_suspend *h)
 {
-	htc_pwrsink_set(PWRSINK_SYSTEM_LOAD, 100);
+	htc_pwrsink_set(PWRSINK_SYSTEM_LOAD, 38);
 }
 
 struct early_suspend htc_pwrsink_early_suspend = {
