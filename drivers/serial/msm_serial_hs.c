@@ -60,7 +60,7 @@ enum flush_reason {
 	FLUSH_NONE,
 	FLUSH_DATA_READY,
 	FLUSH_DATA_INVALID,  /* values after this indicate invalid data */
-	FLUSH_TERMIOS = FLUSH_DATA_INVALID,
+	FLUSH_IGNORE = FLUSH_DATA_INVALID,
 	FLUSH_STOP,
 	FLUSH_SHUTDOWN,
 };
@@ -462,7 +462,7 @@ static void msm_hs_set_termios(struct uart_port *uport,
 
 	if (msm_uport->rx.flush == FLUSH_NONE) {
 		wake_lock(&msm_uport->rx.wake_lock);
-		msm_uport->rx.flush = FLUSH_TERMIOS;
+		msm_uport->rx.flush = FLUSH_IGNORE;
 		msm_dmov_flush(msm_uport->dma_rx_channel);
 	}
 
@@ -520,7 +520,6 @@ static void msm_hs_stop_rx_locked(struct uart_port *uport)
 	clk_enable(msm_uport->clk);
 
 	/* Disable the receiver */
-	msm_hs_write(uport, UARTDM_CR_ADDR, UARTDM_CR_RX_DISABLE_BMSK);
 	if (msm_uport->rx.flush == FLUSH_NONE) {
 		wake_lock(&msm_uport->rx.wake_lock);
 		msm_dmov_flush(msm_uport->dma_rx_channel);
@@ -697,7 +696,7 @@ static void msm_hs_dmov_rx_callback(struct msm_dmov_cmd *cmd_ptr,
 		msm_hs_write(uport, UARTDM_CR_ADDR, RESET_ERROR_STATUS);
 
 	flush = msm_uport->rx.flush;
-	if (flush == FLUSH_TERMIOS)
+	if (flush == FLUSH_IGNORE)
 		msm_hs_start_rx_locked(uport);
 	if (flush == FLUSH_STOP)
 		msm_uport->rx.flush = FLUSH_SHUTDOWN;
@@ -866,6 +865,12 @@ static int msm_hs_check_clock_off_locked(struct uart_port *uport)
 	if (!(sr_status & UARTDM_SR_TXEMT_BMSK))
 		return 0;  /* retry */
 
+	if (msm_uport->rx.flush != FLUSH_SHUTDOWN) {
+		if (msm_uport->rx.flush == FLUSH_NONE)
+			msm_hs_stop_rx_locked(uport);
+		return 0;  /* come back later to really clock off */
+	}
+
 	/* we really want to clock off */
 	clk_disable(msm_uport->clk);
 	msm_uport->clk_state = MSM_HS_CLK_OFF;
@@ -988,8 +993,13 @@ static void msm_hs_request_clock_on_locked(struct uart_port *uport) {
 	case MSM_HS_CLK_OFF:
 		clk_enable(msm_uport->clk);
 		disable_irq(msm_uport->wakeup.irq);
+		/* fall-through */
 	case MSM_HS_CLK_REQUEST_OFF:
 		hrtimer_try_to_cancel(&msm_uport->clk_off_timer);
+		if (msm_uport->rx.flush == FLUSH_SHUTDOWN)
+			msm_hs_start_rx_locked(uport);
+		if (msm_uport->rx.flush == FLUSH_STOP)
+			msm_uport->rx.flush = FLUSH_IGNORE;
 		msm_uport->clk_state = MSM_HS_CLK_ON;
 		break;
 	case MSM_HS_CLK_ON: break;
