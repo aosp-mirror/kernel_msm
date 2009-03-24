@@ -22,6 +22,7 @@
 #include <linux/list.h>
 #include <linux/cdev.h>
 #include <linux/platform_device.h>
+#include <linux/wakelock.h>
 
 #include <mach/msm_smd.h>
 #include <mach/msm_rpcrouter.h>
@@ -141,6 +142,7 @@ struct msm_rpc_endpoint {
 	/* complete packets waiting to be read */
 	struct list_head read_q;
 	spinlock_t read_q_lock;
+	struct wake_lock read_q_wake_lock;
 	wait_queue_head_t wait_q;
 	unsigned flags;
 
