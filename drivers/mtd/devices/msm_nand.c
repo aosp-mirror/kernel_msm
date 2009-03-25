@@ -38,6 +38,9 @@
 
 #define SUPPORT_WRONG_ECC_CONFIG 1
 
+#define NAND_CFG0_RAW 0xA80420C0
+#define NAND_CFG1_RAW 0x5045D
+
 #define VERBOSE 0
 
 struct msm_nand_chip {
@@ -360,13 +363,23 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 		       __func__, from);
 		return -EINVAL;
 	}
-	if (ops->datbuf != NULL && (ops->len % mtd->writesize) != 0) {
-		/* when ops->datbuf is NULL, ops->len may refer to ooblen */
-		pr_err("%s: unsupported ops->len, %d\n",
-		       __func__, ops->len);
-		return -EINVAL;
+	if (ops->mode != MTD_OOB_RAW) {
+		if (ops->datbuf != NULL && (ops->len % mtd->writesize) != 0) {
+			/* when ops->datbuf is NULL, ops->len can be ooblen */
+			pr_err("%s: unsupported ops->len, %d\n",
+			       __func__, ops->len);
+			return -EINVAL;
+		}
+	} else {
+		if (ops->datbuf != NULL &&
+			(ops->len % (mtd->writesize + mtd->oobsize)) != 0) {
+			pr_err("%s: unsupported ops->len,"
+				" %d for MTD_OOB_RAW\n", __func__, ops->len);
+			return -EINVAL;
+		}
 	}
-	if (ops->ooblen != 0 && ops->ooboffs != 0) {
+
+	if (ops->mode != MTD_OOB_RAW && ops->ooblen != 0 && ops->ooboffs != 0) {
 		pr_err("%s: unsupported ops->ooboffs, %d\n",
 		       __func__, ops->ooboffs);
 		return -EINVAL;
@@ -378,8 +391,10 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 	if (ops->oobbuf && !ops->datbuf)
 		page_count = ops->ooblen / ((ops->mode == MTD_OOB_AUTO) ?
 			mtd->oobavail : mtd->oobsize);
-	else
+	else if (ops->mode != MTD_OOB_RAW)
 		page_count = ops->len / mtd->writesize;
+	else
+		page_count = ops->len / (mtd->writesize + mtd->oobsize);
 
 #if 0 /* yaffs reads more oob data than it needs */
 	if (ops->ooblen >= sectoroobsize * 4) {
@@ -430,17 +445,24 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 		cmd = dma_buffer->cmd;
 
 		/* CMD / ADDR0 / ADDR1 / CHIPSEL program values */
-		dma_buffer->data.cmd = NAND_CMD_PAGE_READ_ECC;
+		if (ops->mode != MTD_OOB_RAW) {
+			dma_buffer->data.cmd = NAND_CMD_PAGE_READ_ECC;
+			dma_buffer->data.cfg0 =
+			(chip->CFG0 & ~(7U << 6)) | ((3U - start_sector) << 6);
+			dma_buffer->data.cfg1 = chip->CFG1;
+		} else {
+			dma_buffer->data.cmd = NAND_CMD_PAGE_READ;
+			dma_buffer->data.cfg0 = NAND_CFG0_RAW;
+			dma_buffer->data.cfg1 = NAND_CFG1_RAW |
+						(chip->CFG1 & CFG1_WIDE_FLASH);
+		}
+
 		dma_buffer->data.addr0 = (page << 16) | oob_col;
 		/* qc example is (page >> 16) && 0xff !? */
 		dma_buffer->data.addr1 = (page >> 16) & 0xff;
 		/* flash0 + undoc bit */
 		dma_buffer->data.chipsel = 0 | 4;
 
-
-		dma_buffer->data.cfg0 =
-			(chip->CFG0 & ~(7U << 6)) | ((3U - start_sector) << 6);
-		dma_buffer->data.cfg1 = chip->CFG1;
 
 		/* GO bit for the EXEC register */
 		dma_buffer->data.exec = 1;
@@ -511,7 +533,11 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			 * (only valid if status says success)
 			 */
 			if (ops->datbuf) {
-				sectordatasize = (n < 3) ? 516 : 500;
+				if (ops->mode != MTD_OOB_RAW)
+					sectordatasize = (n < 3) ? 516 : 500;
+				else
+					sectordatasize = 528;
+
 				cmd->cmd = 0;
 				cmd->src = NAND_FLASH_BUFFER;
 				cmd->dst = data_dma_addr_curr;
@@ -581,7 +607,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			}
 		}
 		if (rawerr) {
-			if (ops->datbuf) {
+			if (ops->datbuf && ops->mode != MTD_OOB_RAW) {
 				uint8_t *datbuf =
 					ops->datbuf + pages_read * 2048;
 				for (n = 0; n < 2048; n++) {
@@ -666,7 +692,11 @@ err_dma_map_oobbuf_failed:
 				 ops->len, DMA_FROM_DEVICE);
 	}
 
-	ops->retlen = mtd->writesize * pages_read;
+	if (ops->mode != MTD_OOB_RAW)
+		ops->retlen = mtd->writesize * pages_read;
+	else
+		ops->retlen = (mtd->writesize +  mtd->oobsize) *
+							pages_read;
 	ops->oobretlen = ops->ooblen - oob_len;
 	if (err)
 		pr_err("msm_nand_read_oob %llx %x %x failed %d, corrected %d\n",
@@ -734,19 +764,29 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 		pr_err("%s: unsupported to, 0x%llx\n", __func__, to);
 		return -EINVAL;
 	}
-	if (ops->ooblen != 0 && ops->mode != MTD_OOB_AUTO) {
-		pr_err("%s: unsupported ops->mode, %d\n",
-		       __func__, ops->mode);
-		return -EINVAL;
+
+	if (ops->mode != MTD_OOB_RAW) {
+		if (ops->ooblen != 0 && ops->mode != MTD_OOB_AUTO) {
+			pr_err("%s: unsupported ops->mode,%d\n",
+					 __func__, ops->mode);
+			return -EINVAL;
+		}
+		if ((ops->len % mtd->writesize) != 0) {
+			pr_err("%s: unsupported ops->len, %d\n",
+					__func__, ops->len);
+			return -EINVAL;
+		}
+	} else {
+		if ((ops->len % (mtd->writesize + mtd->oobsize)) != 0) {
+			pr_err("%s: unsupported ops->len, "
+				"%d for MTD_OOB_RAW mode\n",
+				 __func__, ops->len);
+			return -EINVAL;
+		}
 	}
 
 	if (ops->datbuf == NULL) {
 		pr_err("%s: unsupported ops->datbuf == NULL\n", __func__);
-		return -EINVAL;
-	}
-	if ((ops->len % mtd->writesize) != 0) {
-		pr_err("%s: unsupported ops->len, %d\n",
-		       __func__, ops->len);
 		return -EINVAL;
 	}
 #if 0 /* yaffs writes more oob data than it needs */
@@ -756,7 +796,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 		return -EINVAL;
 	}
 #endif
-	if (ops->ooblen != 0 && ops->ooboffs != 0) {
+	if (ops->mode != MTD_OOB_RAW && ops->ooblen != 0 && ops->ooboffs != 0) {
 		pr_err("%s: unsupported ops->ooboffs, %d\n",
 		       __func__, ops->ooboffs);
 		return -EINVAL;
@@ -783,8 +823,10 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 			goto err_dma_map_oobbuf_failed;
 		}
 	}
-
-	page_count = ops->len / mtd->writesize;
+	if (ops->mode != MTD_OOB_RAW)
+		page_count = ops->len / mtd->writesize;
+	else
+		page_count = ops->len / (mtd->writesize + mtd->oobsize);
 
 	wait_event(chip->wait_queue, (dma_buffer =
 			msm_nand_get_dma_buffer(chip, sizeof(*dma_buffer))));
@@ -792,14 +834,21 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 	while (page_count-- > 0) {
 		cmd = dma_buffer->cmd;
 
-			/* CMD / ADDR0 / ADDR1 / CHIPSEL program values */
+		/* CMD / ADDR0 / ADDR1 / CHIPSEL program values */
+		if (ops->mode != MTD_OOB_RAW) {
+			dma_buffer->data.cfg0 = chip->CFG0;
+			dma_buffer->data.cfg1 = chip->CFG1;
+		} else {
+			dma_buffer->data.cfg0 = NAND_CFG0_RAW;
+			dma_buffer->data.cfg1 = NAND_CFG1_RAW |
+						(chip->CFG1 & CFG1_WIDE_FLASH);
+		}
+
 		dma_buffer->data.cmd = NAND_CMD_PRG_PAGE;
 		dma_buffer->data.addr0 = page << 16;
 		dma_buffer->data.addr1 = (page >> 16) & 0xff;
 		dma_buffer->data.chipsel = 0 | 4; /* flash0 + undoc bit */
 
-		dma_buffer->data.cfg0 = chip->CFG0;
-		dma_buffer->data.cfg1 = chip->CFG1;
 
 			/* GO bit for the EXEC register */
 		dma_buffer->data.exec = 1;
@@ -845,7 +894,11 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 			}
 
 				/* write data block */
-			sectordatawritesize = (n < 3) ? 516 : 500;
+			if (ops->mode != MTD_OOB_RAW)
+				sectordatawritesize = (n < 3) ? 516 : 500;
+			else
+				sectordatawritesize = 528;
+
 			cmd->cmd = 0;
 			cmd->src = data_dma_addr_curr;
 			data_dma_addr_curr += sectordatawritesize;
@@ -949,7 +1002,11 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 		pages_written++;
 		page++;
 	}
-	ops->retlen = mtd->writesize * pages_written;
+	if (ops->mode != MTD_OOB_RAW)
+		ops->retlen = mtd->writesize * pages_written;
+	else
+		ops->retlen = (mtd->writesize + mtd->oobsize) * pages_written;
+
 	ops->oobretlen = ops->ooblen - oob_len;
 
 	msm_nand_release_dma_buffer(chip, dma_buffer, sizeof(*dma_buffer));
@@ -1185,7 +1242,7 @@ int msm_nand_scan(struct mtd_info *mtd, int maxchips)
 	pr_info("flash_id: %x size %llx\n", flash_id, mtd->size);
 
 	mtd->writesize = 2048;
-	mtd->oobsize = msm_nand_oob_64.eccbytes + msm_nand_oob_64.oobavail;
+	mtd->oobsize = 64;
 	mtd->oobavail = msm_nand_oob_64.oobavail;
 	mtd->erasesize = mtd->writesize << 6; /* TODO: check */
 	mtd->ecclayout = &msm_nand_oob_64;
