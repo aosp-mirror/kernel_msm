@@ -1131,29 +1131,161 @@ msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 static int
 msm_nand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 {
+	struct msm_nand_chip *chip = mtd->priv;
+	int ret;
+	struct {
+		dmov_s cmd[5];
+		unsigned cmdptr;
+		struct {
+			uint32_t cmd;
+			uint32_t addr0;
+			uint32_t addr1;
+			uint32_t chipsel;
+			uint32_t cfg0;
+			uint32_t cfg1;
+			uint32_t exec;
+			uint32_t ecccfg;
+			struct {
+				uint32_t flash_status;
+				uint32_t buffer_status;
+			} result;
+		} data;
+	} *dma_buffer;
+	dmov_s *cmd;
+	uint8_t *buf;
+	unsigned page = ofs / 2048;
+
 	/* Check for invalid offset */
 	if (ofs > mtd->size)
 		return -EINVAL;
+	if (ofs & (mtd->erasesize - 1)) {
+		pr_err("%s: unsupported block address, 0x%x\n",
+			 __func__, (uint32_t)ofs);
+		return -EINVAL;
+	}
 
-	return 0;
+	wait_event(chip->wait_queue,
+		(dma_buffer = msm_nand_get_dma_buffer(chip ,
+					 sizeof(*dma_buffer) + 4)));
+	buf = (uint8_t *)dma_buffer + sizeof(*dma_buffer);
+
+	/* Read 4 bytes starting from the bad block marker location
+	 * in the last code word of the page
+	 */
+
+	cmd = dma_buffer->cmd;
+
+	dma_buffer->data.cmd = NAND_CMD_PAGE_READ;
+	dma_buffer->data.cfg0 = NAND_CFG0_RAW & ~(7U << 6);
+	dma_buffer->data.cfg1 = NAND_CFG1_RAW | (chip->CFG1 & CFG1_WIDE_FLASH);
+
+	if (chip->CFG1 & CFG1_WIDE_FLASH)
+		dma_buffer->data.addr0 = (page << 16) | (0x630 >> 1);
+	else
+		dma_buffer->data.addr0 = (page << 16) | 0x630;
+
+	dma_buffer->data.addr1 = (page >> 16) & 0xff;
+	dma_buffer->data.chipsel = 0 | 4;
+
+	dma_buffer->data.exec = 1;
+
+	dma_buffer->data.result.flash_status = 0xeeeeeeee;
+	dma_buffer->data.result.buffer_status = 0xeeeeeeee;
+
+	cmd->cmd = DST_CRCI_NAND_CMD;
+	cmd->src = msm_virt_to_dma(chip, &dma_buffer->data.cmd);
+	cmd->dst = NAND_FLASH_CMD;
+	cmd->len = 16;
+	cmd++;
+
+	cmd->cmd = 0;
+	cmd->src = msm_virt_to_dma(chip, &dma_buffer->data.cfg0);
+	cmd->dst = NAND_DEV0_CFG0;
+	cmd->len = 8;
+	cmd++;
+
+	cmd->cmd = 0;
+	cmd->src = msm_virt_to_dma(chip, &dma_buffer->data.exec);
+	cmd->dst = NAND_EXEC_CMD;
+	cmd->len = 4;
+	cmd++;
+
+	cmd->cmd = SRC_CRCI_NAND_DATA;
+	cmd->src = NAND_FLASH_STATUS;
+	cmd->dst = msm_virt_to_dma(chip, &dma_buffer->data.result);
+	cmd->len = 8;
+	cmd++;
+
+	cmd->cmd = 0;
+	cmd->src = NAND_FLASH_BUFFER + 464;
+	cmd->dst = msm_virt_to_dma(chip, buf);
+	cmd->len = 4;
+	cmd++;
+
+	BUILD_BUG_ON(5 != ARRAY_SIZE(dma_buffer->cmd));
+	BUG_ON(cmd - dma_buffer->cmd > ARRAY_SIZE(dma_buffer->cmd));
+	dma_buffer->cmd[0].cmd |= CMD_OCB;
+	cmd[-1].cmd |= CMD_OCU | CMD_LC;
+
+	dma_buffer->cmdptr = (msm_virt_to_dma(chip,
+				dma_buffer->cmd) >> 3) | CMD_PTR_LP;
+
+	msm_dmov_exec_cmd(chip->dma_channel, DMOV_CMD_PTR_LIST |
+		DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
+
+	ret = 0;
+	if (dma_buffer->data.result.flash_status & 0x110)
+		ret = -EIO;
+
+	if (!ret) {
+		/* Check for bad block marker byte */
+		if (chip->CFG1 & CFG1_WIDE_FLASH) {
+			if (buf[0] != 0xFF || buf[1] != 0xFF)
+				ret = 1;
+		} else {
+			if (buf[0] != 0xFF)
+				ret = 1;
+		}
+	}
+
+	msm_nand_release_dma_buffer(chip, dma_buffer, sizeof(*dma_buffer) + 4);
+	return ret;
 }
 
 
 static int
 msm_nand_block_markbad(struct mtd_info *mtd, loff_t ofs)
 {
-	/* struct msm_nand_chip *this = mtd->priv; */
+	struct mtd_oob_ops ops;
 	int ret;
+	uint8_t *buf;
 
-	ret = msm_nand_block_isbad(mtd, ofs);
-	if (ret) {
-		/* If it was bad already, return success and do nothing */
-		if (ret > 0)
-			return 0;
-		return ret;
+	/* Check for invalid offset */
+	if (ofs > mtd->size)
+		return -EINVAL;
+	if (ofs & (mtd->erasesize - 1)) {
+		pr_err("%s: unsupported block address, 0x%x\n",
+				 __func__, (uint32_t)ofs);
+		return -EINVAL;
 	}
 
-	return -EIO;
+	/*
+	Write all 0s to the first page
+	This will set the BB marker to 0
+	*/
+
+	/* Use the already existing zero page */
+	buf =  page_address(ZERO_PAGE());
+
+	ops.mode = MTD_OOB_RAW;
+	ops.len = mtd->writesize + mtd->oobsize;
+	ops.retlen = 0;
+	ops.ooblen = 0;
+	ops.datbuf = buf;
+	ops.oobbuf = NULL;
+	ret =  msm_nand_write_oob(mtd, ofs, &ops);
+
+	return ret;
 }
 
 /**
