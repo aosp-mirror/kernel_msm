@@ -1086,6 +1086,9 @@ static void __init sapphire_init(void)
 		sapphire_gpio_write(NULL, SAPPHIRE_GPIO_VCM_PWDN, 1);
 	mdelay(100);
 
+	printk(KERN_DEBUG "sapphire_is_5M_camera=%d\n",
+	       sapphire_is_5M_camera());
+	printk(KERN_DEBUG "is_12pin_camera=%d\n", is_12pin_camera());
 #ifdef CONFIG_SERIAL_MSM_HS
 	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
 #endif
@@ -1128,22 +1131,16 @@ static struct map_desc sapphire_io_desc[] __initdata = {
 
 unsigned int sapphire_get_hwid(void)
 {
-	printk(KERN_DEBUG "sapphire_get_hwid=0x%x\r\n", hwid);
-
 	return hwid;
 }
 
 unsigned int sapphire_get_skuid(void)
 {
-	printk(KERN_DEBUG "sapphire_get_skuid=0x%x\r\n", skuid);
-
 	return skuid;
 }
 
 unsigned sapphire_engineerid(void)
 {
-	printk(KERN_DEBUG "sapphire_engineerid=0x%x\r\n", engineerid);
-
 	return engineerid;
 }
 
@@ -1154,7 +1151,6 @@ int sapphire_is_5M_camera(void)
 		ret = 1;
 	else if (sapphire_get_skuid() == 0x20100 && !(sapphire_engineerid() & 0x02))
 		ret = 1;
-	printk(KERN_DEBUG "sapphire_is_5M_camera=%d\n", ret);
 	return ret;
 }
 
@@ -1167,13 +1163,12 @@ unsigned int is_12pin_camera(void)
 		ret = 1;
 	else
 		ret = 0;
-	printk(KERN_DEBUG "is_12pin_camera=%d\r\n", ret);
 	return ret;
 }
 
 int sapphire_get_smi_size(void)
 {
-	printk(KERN_DEBUG "get_smi_size=%d\r\n", smi_sz);
+	printk(KERN_DEBUG "get_smi_size=%d\n", smi_sz);
 	return smi_sz;
 }
 

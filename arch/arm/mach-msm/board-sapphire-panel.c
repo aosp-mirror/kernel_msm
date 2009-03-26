@@ -33,6 +33,8 @@
 #include "proc_comm.h"
 #include "devices.h"
 
+#define DEBUG_SAPPHIRE_PANEL 0
+
 enum sapphire_panel_type {
 	SAPPHIRE_PANEL_SHARP = 0,
 	SAPPHIRE_PANEL_TOPPOLY,
@@ -76,8 +78,10 @@ static void sapphire_set_backlight_level(uint8_t level)
 		level*SDBB/GDBB : (SDBB + (level-GDBB)*(255-SDBB) / (255-GDBB)) ;
 	index = new_level/dimming_factor ;
 
+#if DEBUG_SAPPHIRE_PANEL
 	printk(KERN_INFO "level=%d, new level=%d, dimming_levels[%d]=%d\n",
 		level, new_level, index, dimming_levels[g_panel_id][index]);
+#endif
 	percent = pwrsink_percents[index];
 	level = dimming_levels[g_panel_id][index];
 
@@ -402,7 +406,9 @@ static void sapphire_mddi_power_client(struct msm_mddi_client_data *client_data,
 				    int on)
 {
 	unsigned id, on_off;
+#if DEBUG_SAPPHIRE_PANEL
 	printk(KERN_INFO "sapphire_mddi_client_power:%d\r\n", on);
+#endif
 	if (on) {
 		on_off = 0;
 		id = PM_VREG_PDOWN_MDDI_ID;
