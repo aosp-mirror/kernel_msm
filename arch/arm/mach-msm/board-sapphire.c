@@ -927,6 +927,9 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_MT9T013
 	&msm_camera_sensor_mt9t013,
 #endif
+#ifdef CONFIG_MT9P012
+	&msm_camera_sensor_mt9p012,
+#endif
 	&sapphire_rfkill,
 #ifdef CONFIG_WIFI_CONTROL_FUNC
 	&sapphire_wifi,
