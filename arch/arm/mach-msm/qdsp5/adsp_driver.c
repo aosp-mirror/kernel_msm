@@ -27,11 +27,6 @@
 #include <linux/msm_adsp.h>
 #include <linux/android_pmem.h>
 
-struct adsp_pmem_info {
-	int fd;
-	void *vaddr;
-};
-
 struct adsp_pmem_region {
 	struct hlist_node list;
 	void *vaddr;

@@ -60,6 +60,11 @@ struct adsp_event_t {
 #define ADSP_IOCTL_DISABLE_EVENT_RSP \
 	_IOR(ADSP_IOCTL_MAGIC, 10, unsigned)
 
+struct adsp_pmem_info {
+        int fd;
+        void *vaddr;
+};
+
 #define ADSP_IOCTL_REGISTER_PMEM \
 	_IOW(ADSP_IOCTL_MAGIC, 13, unsigned)
 
