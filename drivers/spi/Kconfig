@@ -243,6 +243,11 @@ config SPI_PXA2XX
 	  The driver can be configured to use any SSP port and additional
 	  documentation can be found a Documentation/spi/pxa2xx.
 
+config SPI_QSD
+	tristate "Qualcomm MSM SPI support"
+	default n
+	depends on ARCH_MSM_SCORPION
+
 config SPI_S3C24XX
 	tristate "Samsung S3C24XX series SPI"
 	depends on ARCH_S3C2410 && EXPERIMENTAL
