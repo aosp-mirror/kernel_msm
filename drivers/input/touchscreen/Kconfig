@@ -99,6 +99,17 @@ config TOUCHSCREEN_BITSY
 	  To compile this driver as a module, choose M here: the
 	  module will be called h3600_ts_input.
 
+config TOUCHSCREEN_CYPRESS_TMG
+	tristate "Support for Cypress TMC i2c touchscreen"
+	depends on I2C
+	help
+	  Say Y here to enable support for cy8ctmg touchcreens.
+
+	  If unsure, say N
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called h3600_ts_input.
+
 config TOUCHSCREEN_DA9034
 	tristate "Touchscreen support for Dialog Semiconductor DA9034"
 	depends on PMIC_DA903X
