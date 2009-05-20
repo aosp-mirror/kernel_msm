@@ -423,7 +423,8 @@ void msm_irq_exit_sleep3(void)
 		       "state %x\n", int_info->aArm_en_mask,
 		       int_info->aArm_interrupts_pending,
 		       int_info->aArm_wakeup_reason, readl(VIC_IRQ_STATUS0),
-		       readl(VIC_IRQ_STATUS1), smsm_get_state());
+		       readl(VIC_IRQ_STATUS1),
+		       smsm_get_state(SMSM_STATE_MODEM));
 }
 
 static struct irq_chip msm_irq_chip = {
