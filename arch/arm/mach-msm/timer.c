@@ -28,7 +28,9 @@
 #include "smd_private.h"
 
 enum {
-	MSM_TIMER_DEBUG_SYNC = 1U << 0,
+	MSM_TIMER_DEBUG_SYNC_STATE = 1U << 0,
+	MSM_TIMER_DEBUG_SYNC_UPDATE = 1U << 1,
+	MSM_TIMER_DEBUG_SYNC = 1U << 2,
 };
 static int msm_timer_debug_mask;
 module_param_named(debug_mask, msm_timer_debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
@@ -205,6 +207,8 @@ static inline int check_timeout(struct msm_clock *clock, uint32_t timeout)
 	return (int32_t)(msm_read_timer_count(clock) - timeout) <= 0;
 }
 
+#ifndef CONFIG_ARCH_MSM_SCORPION
+
 static uint32_t msm_timer_sync_smem_clock(int exit_sleep)
 {
 	struct msm_clock *clock = &msm_clocks[MSM_CLOCK_GPT];
@@ -255,8 +259,9 @@ static uint32_t msm_timer_sync_smem_clock(int exit_sleep)
 		state = smsm_get_state(SMSM_STATE_MODEM);
 		if (state != last_state) {
 			last_state = state;
-			printk(KERN_INFO "get_smem_clock: state %x clock %u\n",
-			       state, smem_clock_val);
+			if (msm_timer_debug_mask & MSM_TIMER_DEBUG_SYNC_STATE)
+				pr_info("get_smem_clock: state %x clock %u\n",
+					state, smem_clock_val);
 		}
 	} while (smem_clock_val == 0 && check_timeout(clock, timeout));
 	if (smem_clock_val) {
@@ -267,11 +272,16 @@ static uint32_t msm_timer_sync_smem_clock(int exit_sleep)
 			else
 				clock->smem_offset = new_offset - clock->offset;
 			clock->smem_in_sync = 1;
-			if (msm_timer_debug_mask & MSM_TIMER_DEBUG_SYNC)
+			if (msm_timer_debug_mask & MSM_TIMER_DEBUG_SYNC_UPDATE)
 				printk(KERN_INFO "get_smem_clock: state %x "
 				       "clock %u new offset %u+%u\n",
 				       state, smem_clock_val,
 				       clock->offset, clock->smem_offset);
+		} else if (msm_timer_debug_mask & MSM_TIMER_DEBUG_SYNC) {
+			printk(KERN_INFO "get_smem_clock: state %x "
+			       "clock %u offset %u+%u\n",
+			       state, smem_clock_val,
+			       clock->offset, clock->smem_offset);
 		}
 	} else {
 		printk(KERN_INFO "get_smem_clock: timeout state %x clock %u "
@@ -289,6 +299,130 @@ static uint32_t msm_timer_sync_smem_clock(int exit_sleep)
 		       msm_read_timer_count(clock) - entry_time);
 	return smem_clock_val;
 }
+
+#else
+
+/* Time Master State Bits */
+#define DEM_TIME_MASTER_TIME_PENDING_APPS	BIT(0)
+
+/* Time Slave State Bits */
+#define DEM_TIME_SLAVE_TIME_REQUEST         0x0400
+#define DEM_TIME_SLAVE_TIME_POLL            0x0800
+#define DEM_TIME_SLAVE_TIME_INIT            0x1000
+
+static uint32_t msm_timer_sync_smem_clock(int exit_sleep)
+{
+	struct msm_clock *clock = &msm_clocks[MSM_CLOCK_GPT];
+	uint32_t *smem_clock;
+	uint32_t smem_clock_val;
+	uint32_t bad_clock = 0;
+	uint32_t timeout;
+	uint32_t entry_time;
+	uint32_t timeout_delta;
+	uint32_t last_state;
+	uint32_t state;
+	uint32_t new_offset;
+
+	smem_clock = smem_alloc(SMEM_SMEM_SLOW_CLOCK_VALUE,
+				sizeof(uint32_t));
+
+	if (smem_clock == NULL) {
+		printk(KERN_ERR "no smem clock\n");
+		return 0;
+	}
+
+	if (!exit_sleep && clock->smem_in_sync)
+		return 0;
+
+	timeout_delta = (clock->freq >> (7 - clock->shift)); /* 7.8ms */
+
+	entry_time = msm_read_timer_count(clock);
+	last_state = state = smsm_get_state(SMSM_STATE_TIME_MASTER_DEM);
+	timeout = entry_time + timeout_delta;
+	while ((smsm_get_state(SMSM_STATE_TIME_MASTER_DEM)
+		& DEM_TIME_MASTER_TIME_PENDING_APPS)
+		&& check_timeout(clock, timeout))
+		;
+	if ((smsm_get_state(SMSM_STATE_TIME_MASTER_DEM) &
+				DEM_TIME_MASTER_TIME_PENDING_APPS)) {
+		printk(KERN_INFO "get_smem_clock: invalid start state %x "
+		       "clock %u in %d ticks\n",
+		       state, *smem_clock,
+		       msm_read_timer_count(clock) - entry_time);
+		bad_clock = *smem_clock;
+	}
+	entry_time = msm_read_timer_count(clock);
+	timeout = entry_time + timeout_delta;
+	smsm_change_state(SMSM_STATE_APPS_DEM,
+			DEM_TIME_SLAVE_TIME_INIT, DEM_TIME_SLAVE_TIME_REQUEST);
+	while (!(smsm_get_state(SMSM_STATE_TIME_MASTER_DEM)
+		& DEM_TIME_MASTER_TIME_PENDING_APPS)
+		&& check_timeout(clock, timeout))
+		;
+	if (!(smsm_get_state(SMSM_STATE_TIME_MASTER_DEM) &
+					DEM_TIME_MASTER_TIME_PENDING_APPS)) {
+		printk(KERN_INFO "get_smem_clock: invalid start state %x "
+		       "clock %u in %d ticks\n",
+		       state, *smem_clock,
+		       msm_read_timer_count(clock) - entry_time);
+		bad_clock = *smem_clock;
+	}
+	smsm_change_state(SMSM_STATE_APPS_DEM,
+		DEM_TIME_SLAVE_TIME_REQUEST, DEM_TIME_SLAVE_TIME_POLL);
+	do {
+		smem_clock_val = *smem_clock;
+		state = smsm_get_state(SMSM_STATE_TIME_MASTER_DEM);
+		if (state != last_state) {
+			last_state = state;
+			if (msm_timer_debug_mask & MSM_TIMER_DEBUG_SYNC_STATE)
+				pr_info("get_smem_clock: state %x clock %u\n",
+					state, smem_clock_val);
+		}
+	} while ((!smem_clock_val || smem_clock_val == bad_clock)
+		 && check_timeout(clock, timeout));
+	if (smem_clock_val && smem_clock_val != bad_clock) {
+		new_offset = smem_clock_val - msm_read_timer_count(clock);
+		if (clock->offset + clock->smem_offset != new_offset) {
+			if (exit_sleep)
+				clock->offset = new_offset - clock->smem_offset;
+			else
+				clock->smem_offset = new_offset - clock->offset;
+			clock->smem_in_sync = 1;
+			if (msm_timer_debug_mask & MSM_TIMER_DEBUG_SYNC_UPDATE)
+				printk(KERN_INFO "get_smem_clock: state %x "
+				       "clock %u new offset %u+%u\n",
+				       state, smem_clock_val,
+				       clock->offset, clock->smem_offset);
+		} else if (msm_timer_debug_mask & MSM_TIMER_DEBUG_SYNC) {
+			printk(KERN_INFO "get_smem_clock: state %x "
+			       "clock %u offset %u+%u\n",
+			       state, smem_clock_val,
+			       clock->offset, clock->smem_offset);
+		}
+	} else {
+		printk(KERN_INFO "get_smem_clock: timeout state %x clock %u "
+		       "in %d ticks\n", state, *smem_clock,
+		       msm_read_timer_count(clock) - entry_time);
+	}
+	smsm_change_state(SMSM_STATE_APPS_DEM,
+		DEM_TIME_SLAVE_TIME_POLL, DEM_TIME_SLAVE_TIME_INIT);
+#if 1 /* debug */
+	entry_time = msm_read_timer_count(clock);
+	timeout = entry_time + timeout_delta;
+	while ((smsm_get_state(SMSM_STATE_TIME_MASTER_DEM)
+		& DEM_TIME_MASTER_TIME_PENDING_APPS)
+		&& check_timeout(clock, timeout))
+		;
+	if (smsm_get_state(SMSM_STATE_TIME_MASTER_DEM) &
+					DEM_TIME_MASTER_TIME_PENDING_APPS)
+		printk(KERN_INFO "get_smem_clock: exit timeout state %x "
+		       "clock %u in %d ticks\n", state, *smem_clock,
+		       msm_read_timer_count(clock) - entry_time);
+#endif
+	return smem_clock_val;
+}
+
+#endif
 
 static void msm_timer_reactivate_alarm(struct msm_clock *clock)
 {
