@@ -41,4 +41,7 @@ struct rpcrouter_ioctl_server_args {
 #define RPC_ROUTER_IOCTL_UNREGISTER_SERVER \
 	_IOWR(RPC_ROUTER_IOCTL_MAGIC, 3, unsigned int)
 
+#define RPC_ROUTER_IOCTL_GET_MINOR_VERSION \
+	_IOW(RPC_ROUTER_IOCTL_MAGIC, 4, unsigned int)
+
 #endif

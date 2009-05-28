@@ -1,7 +1,7 @@
 /** include/asm-arm/arch-msm/msm_rpcrouter.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007 QUALCOMM Incorporated
+ * Copyright (c) 2007-2009 QUALCOMM Incorporated
  * Author: San Mehat <san@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -21,6 +21,35 @@
 #include <linux/types.h>
 #include <linux/list.h>
 #include <linux/platform_device.h>
+
+#if CONFIG_MSM_AMSS_VERSION >= 6350
+/* RPC API version structure
+ * Version bit 31 : 1->hashkey versioning,
+ *                  0->major-minor (backward compatible) versioning
+ * hashkey versioning:
+ *   Version bits 31-0 hashkey
+ * major-minor (backward compatible) versioning
+ *   Version bits 30-28 reserved (no match)
+ *   Version bits 27-16 major (must match)
+ *   Version bits 15-0  minor (greater or equal)
+ */
+#define RPC_VERSION_MODE_MASK  0x80000000
+#define RPC_VERSION_MAJOR_MASK 0x0fff0000
+#define RPC_VERSION_MAJOR_OFFSET 16
+#define RPC_VERSION_MINOR_MASK 0x0000ffff
+
+#define MSM_RPC_VERS(major, minor)					\
+	((uint32_t)((((major) << RPC_VERSION_MAJOR_OFFSET) &		\
+		RPC_VERSION_MAJOR_MASK) |				\
+	((minor) & RPC_VERSION_MINOR_MASK)))
+#define MSM_RPC_GET_MAJOR(vers) (((vers) & RPC_VERSION_MAJOR_MASK) >>	\
+					RPC_VERSION_MAJOR_OFFSET)
+#define MSM_RPC_GET_MINOR(vers) ((vers) & RPC_VERSION_MINOR_MASK)
+#else
+#define MSM_RPC_VERS(major, minor) (major)
+#define MSM_RPC_GET_MAJOR(vers) (vers)
+#define MSM_RPC_GET_MINOR(vers) 0
+#endif
 
 struct msm_rpc_endpoint;
 
@@ -99,7 +128,12 @@ struct rpc_reply_hdr
 
 /* use IS_ERR() to check for failure */
 struct msm_rpc_endpoint *msm_rpc_open(void);
+/* Connect with the specified server version */
 struct msm_rpc_endpoint *msm_rpc_connect(uint32_t prog, uint32_t vers, unsigned flags);
+uint32_t msm_rpc_get_vers(struct msm_rpc_endpoint *ept);
+/* check if server version can handle client requested version */
+int msm_rpc_is_compatible_version(uint32_t server_version,
+				  uint32_t client_version);
 
 int msm_rpc_close(struct msm_rpc_endpoint *ept);
 int msm_rpc_write(struct msm_rpc_endpoint *ept,

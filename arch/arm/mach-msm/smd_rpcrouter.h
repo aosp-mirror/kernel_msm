@@ -1,7 +1,7 @@
 /** arch/arm/mach-msm/smd_rpcrouter.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007 QUALCOMM Incorporated
+ * Copyright (c) 2007-2008 QUALCOMM Incorporated.
  * Author: San Mehat <san@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -26,8 +26,6 @@
 
 #include <mach/msm_smd.h>
 #include <mach/msm_rpcrouter.h>
-
-#include <linux/msm_rpcrouter.h>
 
 /* definitions for the R2R wire protcol */
 
@@ -102,9 +100,13 @@ struct rr_packet {
 #define PACMARK_MID(n)  (((n) >> 16) & 0xFF)
 #define PACMARK_LEN(n)  ((n) & 0xFFFF)
 
-static inline uint32_t PACMARK(uint32_t len, uint32_t mid, uint32_t last)
+static inline uint32_t PACMARK(uint32_t len, uint32_t mid, uint32_t first,
+			       uint32_t last)
 {
-	return (len & 0xFFFF) | ((mid & 0xFF) << 16) | ((!!last) << 31);
+	return (len & 0xFFFF) |
+	  ((mid & 0xFF) << 16) |
+	  ((!!first) << 30) |
+	  ((!!last) << 31);
 }
 
 struct rr_server {
@@ -167,6 +169,7 @@ struct msm_rpc_endpoint {
 	uint32_t reply_pid;
 	uint32_t reply_cid;
 	uint32_t reply_xid; /* be32 */
+	uint32_t next_pm;   /* Pacmark sequence */
 
 	/* device node if this endpoint is accessed via userspace */
 	dev_t dev;

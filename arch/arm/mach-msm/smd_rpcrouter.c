@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/smd_rpcrouter.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007 QUALCOMM Incorporated
+ * Copyright (c) 2007-2009 QUALCOMM Incorporated.
  * Author: San Mehat <san@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -15,7 +15,6 @@
  *
  */
 
-/* TODO: fragmentation for large writes */
 /* TODO: handle cases where smd_write() will tempfail due to full fifo */
 /* TODO: thread priority? schedule a work to bump it? */
 /* TODO: maybe make server_list_lock a mutex */
@@ -39,6 +38,9 @@
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
 #include <linux/platform_device.h>
+#include <linux/uaccess.h>
+
+#include <asm/byteorder.h>
 
 #include <mach/msm_smd.h>
 #include "smd_rpcrouter.h"
@@ -46,6 +48,7 @@
 #define TRACE_R2R_MSG 0
 #define TRACE_R2R_RAW 0
 #define TRACE_RPC_MSG 0
+#define TRACE_NOTIFY_MSG 0
 
 #define MSM_RPCROUTER_DEBUG 0
 #define MSM_RPCROUTER_DEBUG_PKT 0
@@ -70,6 +73,12 @@
 #define IO(x...) printk("[RPC] "x)
 #else
 #define IO(x...) do {} while (0)
+#endif
+
+#if TRACE_NOTIFY_MSG
+#define NTFY(x...) printk(KERN_ERR "[NOTIFY] "x)
+#else
+#define NTFY(x...) do {} while (0)
 #endif
 
 static LIST_HEAD(local_endpoints);
@@ -206,8 +215,7 @@ static void rpcrouter_destroy_server(struct rr_server *server)
 	kfree(server);
 }
 
-static struct rr_server *rpcrouter_lookup_server(uint32_t prog,
-							uint32_t ver)
+static struct rr_server *rpcrouter_lookup_server(uint32_t prog, uint32_t ver)
 {
 	struct rr_server *server;
 	unsigned long flags;
@@ -239,7 +247,6 @@ static struct rr_server *rpcrouter_lookup_server_by_dev(dev_t dev)
 	spin_unlock_irqrestore(&server_list_lock, flags);
 	return NULL;
 }
-
 
 struct msm_rpc_endpoint *msm_rpcrouter_create_local_endpoint(dev_t dev)
 {
@@ -273,9 +280,12 @@ struct msm_rpc_endpoint *msm_rpcrouter_create_local_endpoint(dev_t dev)
 		ept->dst_cid = srv->cid;
 		ept->dst_prog = cpu_to_be32(srv->prog);
 		ept->dst_vers = cpu_to_be32(srv->vers);
+
+		D("Creating local ept %p @ %08x:%08x\n", ept, srv->prog, srv->vers);
 	} else {
 		/* mark not connected */
 		ept->dst_pid = 0xffffffff;
+		D("Creating a master local ept %p\n", ept);
 	}
 
 	init_waitqueue_head(&ept->wait_q);
@@ -399,7 +409,7 @@ static int process_control_msg(union rr_control_msg *msg, int len)
 			ctl.srv.prog = server->prog;
 			ctl.srv.vers = server->vers;
 
-			RR("x NEW_SERVER id=%d:%08x prog=%08x:%d\n",
+			RR("x NEW_SERVER id=%d:%08x prog=%08x:%08x\n",
 			   server->pid, server->cid,
 			   server->prog, server->vers);
 
@@ -426,7 +436,7 @@ static int process_control_msg(union rr_control_msg *msg, int len)
 		break;
 
 	case RPCROUTER_CTRL_CMD_NEW_SERVER:
-		RR("o NEW_SERVER id=%d:%08x prog=%08x:%d\n",
+		RR("o NEW_SERVER id=%d:%08x prog=%08x:%08x\n",
 		   msg->srv.pid, msg->srv.cid, msg->srv.prog, msg->srv.vers);
 
 		server = rpcrouter_lookup_server(msg->srv.prog, msg->srv.vers);
@@ -633,11 +643,11 @@ static void do_read_data(struct work_struct *work)
 		kfree(frag);
 		goto done;
 	}
-	
+
 	/* See if there is already a partial packet that matches our mid
 	 * and if so, append this fragment to that packet.
 	 */
-	mid = PACMARK_MID(pm);    
+	mid = PACMARK_MID(pm);
 	list_for_each_entry(pkt, &ept->incomplete, list) {
 		if (pkt->mid == mid) {
 			pkt->last->next = frag;
@@ -650,7 +660,6 @@ static void do_read_data(struct work_struct *work)
 			goto done;
 		}
 	}
-
 	/* This mid is new -- create a packet for it, and put it on
 	 * the incomplete list if this fragment is not a last fragment,
 	 * otherwise put it on the read queue.
@@ -673,13 +682,14 @@ packet_complete:
 	wake_up(&ept->wait_q);
 	spin_unlock_irqrestore(&ept->read_q_lock, flags);
 done:
+
 	if (hdr.confirm_rx) {
 		union rr_control_msg msg;
 
 		msg.cmd = RPCROUTER_CTRL_CMD_RESUME_TX;
 		msg.cli.pid = hdr.dst_pid;
 		msg.cli.cid = hdr.dst_cid;
-	
+
 		RR("x RESUME_TX id=%d:%08x\n", msg.cli.pid, msg.cli.cid);
 		rpcrouter_send_control_msg(&msg);
 	}
@@ -719,6 +729,7 @@ int msm_rpc_close(struct msm_rpc_endpoint *ept)
 {
 	return msm_rpcrouter_destroy_local_endpoint(ept);
 }
+EXPORT_SYMBOL(msm_rpc_close);
 
 int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 {
@@ -753,8 +764,15 @@ int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 			printk(KERN_ERR "rr_write: not connected\n");
 			return -ENOTCONN;
 		}
+
+#if CONFIG_MSM_AMSS_VERSION >= 6350
 		if ((ept->dst_prog != rq->prog) ||
-		    (ept->dst_vers != rq->vers)) {
+			!msm_rpc_is_compatible_version(
+					be32_to_cpu(ept->dst_vers),
+					be32_to_cpu(rq->vers))) {
+#else
+		if (ept->dst_prog != rq->prog || ept->dst_vers != rq->vers) {
+#endif
 			printk(KERN_ERR
 			       "rr_write: cannot write to %08x:%d "
 			       "(bound to %08x:%d)\n",
@@ -765,9 +783,11 @@ int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 		}
 		hdr.dst_pid = ept->dst_pid;
 		hdr.dst_cid = ept->dst_cid;
-		IO("CALL to %08x:%d @ %d:%08x (%d bytes)\n",
+		IO("CALL on ept %p to %08x:%08x @ %d:%08x (%d bytes) (xid %x proc %x)\n",
+		   ept,
 		   be32_to_cpu(rq->prog), be32_to_cpu(rq->vers),
-		   ept->dst_pid, ept->dst_cid, count);
+		   ept->dst_pid, ept->dst_cid, count,
+		   be32_to_cpu(rq->xid), be32_to_cpu(rq->procedure));
 	} else {
 		/* RPC REPLY */
 		/* TODO: locking */
@@ -788,7 +808,8 @@ int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 		/* consume this reply */
 		ept->reply_pid = 0xffffffff;
 
-		IO("REPLY to xid=%d @ %d:%08x (%d bytes)\n",
+		IO("REPLY on ept %p to xid=%d @ %d:%08x (%d bytes)\n",
+		   ept,
 		   be32_to_cpu(rq->xid), hdr.dst_pid, hdr.dst_cid, count);
 	}
 
@@ -835,7 +856,7 @@ int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 	/* bump pacmark while interrupts disabled to avoid race
 	 * probably should be atomic op instead
 	 */
-	pacmark = PACMARK(count, ++next_pacmarkid, 1);
+	pacmark = PACMARK(count, ++next_pacmarkid, 0, 1);
 
 	spin_unlock_irqrestore(&r_ept->quota_lock, flags);
 
@@ -857,6 +878,7 @@ int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 
 	return count;
 }
+EXPORT_SYMBOL(msm_rpc_write);
 
 /*
  * NOTE: It is the responsibility of the caller to kfree buffer
@@ -905,6 +927,7 @@ int msm_rpc_call(struct msm_rpc_endpoint *ept, uint32_t proc,
 				  _request, request_size,
 				  NULL, 0, timeout);
 }
+EXPORT_SYMBOL(msm_rpc_call);
 
 int msm_rpc_call_reply(struct msm_rpc_endpoint *ept, uint32_t proc,
 		       void *_request, int request_size,
@@ -921,6 +944,9 @@ int msm_rpc_call_reply(struct msm_rpc_endpoint *ept, uint32_t proc,
 	if (ept->dst_pid == 0xffffffff)
 		return -ENOTCONN;
 
+	/* We can't use msm_rpc_setup_req() here, because dst_prog and
+	 * dst_vers here are already in BE.
+	 */
 	memset(req, 0, sizeof(*req));
 	req->xid = cpu_to_be32(atomic_add_return(1, &next_xid));
 	req->rpc_vers = cpu_to_be32(2);
@@ -947,7 +973,7 @@ int msm_rpc_call_reply(struct msm_rpc_endpoint *ept, uint32_t proc,
 		}
 		/* If an earlier call timed out, we could get the (no
 		 * longer wanted) reply for it.  Ignore replies that
-		 * we don't expect
+		 * we don't expect.
 		 */
 		if (reply->xid != req->xid) {
 			kfree(reply);
@@ -975,6 +1001,7 @@ int msm_rpc_call_reply(struct msm_rpc_endpoint *ept, uint32_t proc,
 	kfree(reply);
 	return rc;
 }
+EXPORT_SYMBOL(msm_rpc_call_reply);
 
 
 static inline int ept_packet_available(struct msm_rpc_endpoint *ept)
@@ -1044,6 +1071,10 @@ int __msm_rpc_read(struct msm_rpc_endpoint *ept,
 	*frag_ret = pkt->first;
 	rq = (void*) pkt->first->data;
 	if ((rc >= (sizeof(uint32_t) * 3)) && (rq->type == 0)) {
+		IO("READ on ept %p is a CALL on %08x:%08x proc %d xid %d\n",
+			ept, be32_to_cpu(rq->prog), be32_to_cpu(rq->vers),
+			be32_to_cpu(rq->procedure),
+			be32_to_cpu(rq->xid));
 		/* RPC CALL */
 		if (ept->reply_pid != 0xffffffff) {
 			printk(KERN_WARNING
@@ -1054,17 +1085,74 @@ int __msm_rpc_read(struct msm_rpc_endpoint *ept,
 		ept->reply_cid = pkt->hdr.src_cid;
 		ept->reply_xid = rq->xid;
 	}
+#if TRACE_RPC_MSG
+	else if ((rc >= (sizeof(uint32_t) * 3)) && (rq->type == 1))
+		IO("READ on ept %p is a REPLY\n", ept);
+	else IO("READ on ept %p (%d bytes)\n", ept, rc);
+#endif
 
 	kfree(pkt);
-
-	IO("READ on ept %p (%d bytes)\n", ept, rc);
 	return rc;
 }
+
+#if CONFIG_MSM_AMSS_VERSION >= 6350
+int msm_rpc_is_compatible_version(uint32_t server_version,
+				  uint32_t client_version)
+{
+	if ((server_version & RPC_VERSION_MODE_MASK) !=
+	    (client_version & RPC_VERSION_MODE_MASK))
+		return 0;
+
+	if (server_version & RPC_VERSION_MODE_MASK)
+		return server_version == client_version;
+
+	return ((server_version & RPC_VERSION_MAJOR_MASK) ==
+		(client_version & RPC_VERSION_MAJOR_MASK)) &&
+		((server_version & RPC_VERSION_MINOR_MASK) >=
+		(client_version & RPC_VERSION_MINOR_MASK));
+}
+EXPORT_SYMBOL(msm_rpc_is_compatible_version);
+
+static int msm_rpc_get_compatible_server(uint32_t prog,
+					uint32_t ver,
+					uint32_t *found_vers)
+{
+	struct rr_server *server;
+	unsigned long     flags;
+	if (found_vers == NULL)
+		return 0;
+
+	spin_lock_irqsave(&server_list_lock, flags);
+	list_for_each_entry(server, &server_list, list) {
+		if ((server->prog == prog) &&
+		    msm_rpc_is_compatible_version(server->vers, ver)) {
+			*found_vers = server->vers;
+			spin_unlock_irqrestore(&server_list_lock, flags);
+			return 0;
+		}
+	}
+	spin_unlock_irqrestore(&server_list_lock, flags);
+	return -1;
+}
+#endif
 
 struct msm_rpc_endpoint *msm_rpc_connect(uint32_t prog, uint32_t vers, unsigned flags)
 {
 	struct msm_rpc_endpoint *ept;
 	struct rr_server *server;
+
+#if CONFIG_MSM_AMSS_VERSION >= 6350
+	if (!(vers & RPC_VERSION_MODE_MASK)) {
+		uint32_t found_vers;
+		if (msm_rpc_get_compatible_server(prog, vers, &found_vers) < 0)
+			return ERR_PTR(-EHOSTUNREACH);
+		if (found_vers != vers) {
+			D("RPC using new version %08x:{%08x --> %08x}\n",
+			 	prog, vers, found_vers);
+			vers = found_vers;
+		}
+	}
+#endif
 
 	server = rpcrouter_lookup_server(prog, vers);
 	if (!server)
@@ -1073,7 +1161,7 @@ struct msm_rpc_endpoint *msm_rpc_connect(uint32_t prog, uint32_t vers, unsigned 
 	ept = msm_rpc_open();
 	if (IS_ERR(ept))
 		return ept;
-	
+
 	ept->flags = flags;
 	ept->dst_pid = server->pid;
 	ept->dst_cid = server->cid;
@@ -1082,6 +1170,13 @@ struct msm_rpc_endpoint *msm_rpc_connect(uint32_t prog, uint32_t vers, unsigned 
 
 	return ept;
 }
+EXPORT_SYMBOL(msm_rpc_connect);
+
+uint32_t msm_rpc_get_vers(struct msm_rpc_endpoint *ept)
+{
+	return be32_to_cpu(ept->dst_vers);
+}
+EXPORT_SYMBOL(msm_rpc_get_vers);
 
 /* TODO: permission check? */
 int msm_rpc_register_server(struct msm_rpc_endpoint *ept,
@@ -1102,7 +1197,7 @@ int msm_rpc_register_server(struct msm_rpc_endpoint *ept,
 	msg.srv.prog = prog;
 	msg.srv.vers = vers;
 
-	RR("x NEW_SERVER id=%d:%08x prog=%08x:%d\n",
+	RR("x NEW_SERVER id=%d:%08x prog=%08x:%08x\n",
 	   ept->pid, ept->cid, prog, vers);
 
 	rc = rpcrouter_send_control_msg(&msg);
@@ -1154,9 +1249,9 @@ static int msm_rpcrouter_probe(struct platform_device *pdev)
 	queue_work(rpcrouter_workqueue, &work_read_data);
 	return 0;
 
-fail_remove_devices:
+ fail_remove_devices:
 	msm_rpcrouter_exit_devices();
-fail_destroy_workqueue:
+ fail_destroy_workqueue:
 	destroy_workqueue(rpcrouter_workqueue);
 	return rc;
 }
@@ -1164,8 +1259,8 @@ fail_destroy_workqueue:
 static struct platform_driver msm_smd_channel2_driver = {
 	.probe		= msm_rpcrouter_probe,
 	.driver		= {
-		.name	= "SMD_RPCCALL",
-		.owner	= THIS_MODULE,
+			.name	= "SMD_RPCCALL",
+			.owner	= THIS_MODULE,
 	},
 };
 
