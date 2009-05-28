@@ -6,7 +6,7 @@
     A U D I O   P R E   P R O C E S S I N G  M E S S A G E S
 
 GENERAL DESCRIPTION
-  This file contains defintions of format blocks of messages 
+  This file contains defintions of format blocks of messages
   that are rcvd by AUDPREPROC Task
 
 REFERENCES
@@ -20,7 +20,7 @@ Copyright(c) 1992 - 2008 by QUALCOMM, Incorporated.
 This software is licensed under the terms of the GNU General Public
 License version 2, as published by the Free Software Foundation, and
 may be copied, distributed, and modified under those terms.
- 
+
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the

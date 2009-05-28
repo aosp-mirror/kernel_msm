@@ -6,7 +6,7 @@
     A U D I O   R E C O R D  M E S S A G E S
 
 GENERAL DESCRIPTION
-  This file contains defintions of format blocks of messages 
+  This file contains defintions of format blocks of messages
   that are sent by AUDREC Task
 
 REFERENCES
@@ -20,7 +20,7 @@ Copyright(c) 1992 - 2008 by QUALCOMM, Incorporated.
 This software is licensed under the terms of the GNU General Public
 License version 2, as published by the Free Software Foundation, and
 may be copied, distributed, and modified under those terms.
- 
+
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -34,7 +34,7 @@ GNU General Public License for more details.
 
 This section contains comments describing changes made to this file.
 Notice that changes are listed in reverse chronological order.
-   
+
  $Header: //source/qcom/qct/multimedia2/Audio/drivers/QDSP5Driver/QDSP5Interface/main/latest/qdsp5audrecmsg.h#3 $
 
 ============================================================================*/
@@ -86,7 +86,7 @@ typedef struct {
 #define	AUDREC_MSG_AREC_PARAM_TYPE_1	0x0001
 
 typedef struct {
-	 unsigned short	type;
+	unsigned short	type;
 } __attribute__((packed))audrec_msg_cmd_arec_param_cfg_done_msg;
 
 
@@ -102,7 +102,7 @@ typedef struct {
 #define AUDREC_MSG_FATAL_ERR_TYPE_1	0x0001
 
 typedef struct {
-	 unsigned short	type;
+	unsigned short	type;
 } __attribute__((packed))audrec_msg_fatal_err_msg;
 
 /*
@@ -117,7 +117,7 @@ typedef struct {
 #define AUDREC_MSG_PACKET_READY_TYPE_1	0x0001
 
 typedef struct {
-	 unsigned short	type;
+	unsigned short	type;
 	unsigned short	pkt_counter_msw;
 	unsigned short	pkt_counter_lsw;
 	unsigned short	pkt_read_cnt_msw;

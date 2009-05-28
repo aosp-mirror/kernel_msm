@@ -31,8 +31,8 @@
 #define STATE_DISABLED  1
 #define STATE_ENABLING  2
 #define STATE_ENABLED   3
-#define STATE_DISABLING 4 
-#define STATE_KILLED    5
+#define STATE_DISABLING 4
+#define STATE_ERROR	5
 
 static void rpc_ack(struct msm_rpc_endpoint *ept, uint32_t xid)
 {
@@ -57,7 +57,7 @@ static void process_audmgr_callback(struct audmgr *am,
 	if (be32_to_cpu(args->set_to_one) != 1)
 		return;
 
-	switch (be32_to_cpu(args->status)){
+	switch (be32_to_cpu(args->status)) {
 	case RPC_AUDMGR_STATUS_READY:
 		if (len < sizeof(uint32_t) * 4)
 			break;
@@ -93,6 +93,8 @@ static void process_audmgr_callback(struct audmgr *am,
 		break;
 	case RPC_AUDMGR_STATUS_ERROR:
 		pr_err("audmgr: ERROR?\n");
+		am->state = STATE_ERROR;
+		wake_up(&am->wait);
 		break;
 	default:
 		break;
@@ -113,11 +115,10 @@ static void process_rpc_request(uint32_t proc, uint32_t xid,
 		printk("\n");
 	}
 
-	if (proc == AUDMGR_CB_FUNC_PTR) {
+	if (proc == AUDMGR_CB_FUNC_PTR)
 		process_audmgr_callback(am, data, len);
-	} else {
+	else
 		pr_err("audmgr: unknown rpc proc %d\n", proc);
-	}
 	rpc_ack(am->ept, xid);
 }
 
@@ -155,7 +156,7 @@ static int audmgr_rpc_thread(void *data)
 
 		type = be32_to_cpu(hdr->type);
 		if (type == RPC_TYPE_REPLY) {
-			struct rpc_reply_hdr *rep = (void*) hdr;
+			struct rpc_reply_hdr *rep = (void *) hdr;
 			uint32_t status;
 			if (len < RPC_REPLY_HDR_SZ)
 				continue;
@@ -175,9 +176,9 @@ static int audmgr_rpc_thread(void *data)
 
 		process_rpc_request(be32_to_cpu(hdr->procedure),
 				    be32_to_cpu(hdr->xid),
-				    (void*) (hdr + 1),
+				    (void *) (hdr + 1),
 				    len - sizeof(*hdr),
-				    data);		
+				    data);
 	}
 	pr_info("audmgr_rpc_thread() exit\n");
 	if (hdr) {
@@ -206,8 +207,10 @@ int audmgr_open(struct audmgr *am)
 	if (am->state != STATE_CLOSED)
 		return 0;
 
-	am->ept = msm_rpc_connect(AUDMGR_PROG, AUDMGR_VERS,
-				  MSM_RPC_UNINTERRUPTIBLE);
+	am->ept = msm_rpc_connect(AUDMGR_PROG,
+				AUDMGR_VERS,
+				MSM_RPC_UNINTERRUPTIBLE);
+
 	init_waitqueue_head(&am->wait);
 
 	if (IS_ERR(am->ept)) {
@@ -229,11 +232,13 @@ int audmgr_open(struct audmgr *am)
 	am->state = STATE_DISABLED;
 	return 0;
 }
+EXPORT_SYMBOL(audmgr_open);
 
 int audmgr_close(struct audmgr *am)
 {
 	return -EBUSY;
 }
+EXPORT_SYMBOL(audmgr_close);
 
 int audmgr_enable(struct audmgr *am, struct audmgr_config *cfg)
 {
@@ -256,7 +261,7 @@ int audmgr_enable(struct audmgr *am, struct audmgr_config *cfg)
 	msg.args.cb_func = cpu_to_be32(0x11111111);
 	msg.args.client_data = cpu_to_be32(0x11223344);
 
-	msm_rpc_setup_req(&msg.hdr, AUDMGR_PROG, AUDMGR_VERS,
+	msm_rpc_setup_req(&msg.hdr, AUDMGR_PROG, msm_rpc_get_vers(am->ept),
 			  AUDMGR_ENABLE_CLIENT);
 
 	rc = msm_rpc_write(am->ept, &msg, sizeof(msg));
@@ -274,6 +279,7 @@ int audmgr_enable(struct audmgr *am, struct audmgr_config *cfg)
 	pr_err("audmgr: unexpected state %d while enabling?!\n", am->state);
 	return -ENODEV;
 }
+EXPORT_SYMBOL(audmgr_enable);
 
 int audmgr_disable(struct audmgr *am)
 {
@@ -283,7 +289,7 @@ int audmgr_disable(struct audmgr *am)
 	if (am->state == STATE_DISABLED)
 		return 0;
 
-	msm_rpc_setup_req(&msg.hdr, AUDMGR_PROG, AUDMGR_VERS,
+	msm_rpc_setup_req(&msg.hdr, AUDMGR_PROG, msm_rpc_get_vers(am->ept),
 			  AUDMGR_DISABLE_CLIENT);
 	msg.handle = cpu_to_be32(am->handle);
 
@@ -305,3 +311,4 @@ int audmgr_disable(struct audmgr *am)
 	pr_err("audmgr: unexpected state %d while disabling?!\n", am->state);
 	return -ENODEV;
 }
+EXPORT_SYMBOL(audmgr_disable);

@@ -21,17 +21,22 @@
 /* dog_keepalive server definitions */
 
 #define DOG_KEEPALIVE_PROG 0x30000015
-#define RPC_DOG_KEEPALIVE_NULL 0
-
 #if CONFIG_MSM_AMSS_VERSION==6210
 #define DOG_KEEPALIVE_VERS 0
 #define RPC_DOG_KEEPALIVE_BEACON 1
 #elif (CONFIG_MSM_AMSS_VERSION==6220) || (CONFIG_MSM_AMSS_VERSION==6225)
 #define DOG_KEEPALIVE_VERS 0x731fa727
 #define RPC_DOG_KEEPALIVE_BEACON 2
+#elif CONFIG_MSM_AMSS_VERSION==6350
+#define DOG_KEEPALIVE_VERS 0x00010000
+#define RPC_DOG_KEEPALIVE_BEACON 2
 #else
 #error "Unsupported AMSS version"
 #endif
+#define RPC_DOG_KEEPALIVE_NULL 0
+
+
+/* TODO: Remove server registration with _VERS when modem is upated with _COMP*/
 
 static int handle_rpc_call(struct msm_rpc_server *server,
 			   struct rpc_request_hdr *req, unsigned len)
@@ -55,6 +60,7 @@ static struct msm_rpc_server rpc_server = {
 
 static int __init rpc_server_init(void)
 {
+	/* Dual server registration to support backwards compatibility vers */
 	return msm_rpc_create_server(&rpc_server);
 }
 

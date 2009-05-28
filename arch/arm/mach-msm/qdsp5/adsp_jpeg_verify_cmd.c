@@ -29,7 +29,7 @@ static inline void get_sizes(jpeg_cmd_enc_cfg *cmd, uint32_t *luma_size,
 	fmt = cmd->process_cfg & JPEG_CMD_ENC_PROCESS_CFG_IP_DATA_FORMAT_M;
 	luma_width = (cmd->ip_size_cfg & JPEG_CMD_IP_SIZE_CFG_LUMA_WIDTH_M)
 		      >> 16;
-	luma_height = cmd->ip_size_cfg & JPEG_CMD_FRAG_SIZE_LUMA_HEIGHT_M;
+	luma_height = cmd->frag_cfg & JPEG_CMD_FRAG_SIZE_LUMA_HEIGHT_M;
 	*luma_size = luma_width * luma_height;
 	if (fmt == JPEG_CMD_ENC_PROCESS_CFG_IP_DATA_FORMAT_H2V2)
 		*chroma_size = *luma_size/2;
@@ -52,6 +52,7 @@ static inline int verify_jpeg_cmd_enc_cfg(struct msm_adsp_module *module,
 
 	get_sizes(cmd, &luma_size, &chroma_size);
 	num_frags = (cmd->process_cfg >> 10) & 0xf;
+	num_frags = ((num_frags == 1) ? num_frags : num_frags * 2);
 	for (i = 0; i < num_frags; i += 2) {
 		if (adsp_pmem_fixup(module, (void **)(&cmd->frag_cfg_part[i]), luma_size) ||
 		    adsp_pmem_fixup(module, (void **)(&cmd->frag_cfg_part[i+1]), chroma_size))

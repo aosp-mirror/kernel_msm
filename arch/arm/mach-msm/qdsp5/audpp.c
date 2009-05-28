@@ -64,12 +64,13 @@ module_init(_dsp_log_init);
 static DEFINE_MUTEX(audpp_lock);
 
 #define CH_COUNT 5
+#define AUDPP_CLNT_MAX_COUNT 6
+#define AUDPP_AVSYNC_INFO_SIZE 7
 
-struct audpp_state 
-{
+struct audpp_state {
 	struct msm_adsp_module *mod;
-	audpp_event_func func[6];
-	void *private[6];
+	audpp_event_func func[AUDPP_CLNT_MAX_COUNT];
+	void *private[AUDPP_CLNT_MAX_COUNT];
 	struct mutex *lock;
 	unsigned open_count;
 	unsigned enabled;
@@ -78,30 +79,33 @@ struct audpp_state
 	unsigned avsync_mask;
 
 	/* flags, 48 bits sample/bytes counter per channel */
-	uint16_t avsync[CH_COUNT * 6 + 1];
+	uint16_t avsync[CH_COUNT * AUDPP_CLNT_MAX_COUNT + 1];
 };
 
 struct audpp_state the_audpp_state = {
 	.lock = &audpp_lock,
 };
 
-int audpp_send_queue1(void *cmd, unsigned len) 
+int audpp_send_queue1(void *cmd, unsigned len)
 {
 	return msm_adsp_write(the_audpp_state.mod,
 			      QDSP_uPAudPPCmd1Queue, cmd, len);
 }
+EXPORT_SYMBOL(audpp_send_queue1);
 
-int audpp_send_queue2(void *cmd, unsigned len) 
+int audpp_send_queue2(void *cmd, unsigned len)
 {
 	return msm_adsp_write(the_audpp_state.mod,
 			      QDSP_uPAudPPCmd2Queue, cmd, len);
 }
+EXPORT_SYMBOL(audpp_send_queue2);
 
-int audpp_send_queue3(void *cmd, unsigned len) 
+int audpp_send_queue3(void *cmd, unsigned len)
 {
 	return msm_adsp_write(the_audpp_state.mod,
 			      QDSP_uPAudPPCmd3Queue, cmd, len);
 }
+EXPORT_SYMBOL(audpp_send_queue3);
 
 static int audpp_dsp_config(int enable)
 {
@@ -113,14 +117,21 @@ static int audpp_dsp_config(int enable)
 	return audpp_send_queue1(&cmd, sizeof(cmd));
 }
 
-
-static void audpp_broadcast(struct audpp_state *audpp, unsigned id, uint16_t *msg)
+static void audpp_broadcast(struct audpp_state *audpp, unsigned id,
+			    uint16_t *msg)
 {
 	unsigned n;
-	for (n = 0; n < 6; n++) {
+	for (n = 0; n < AUDPP_CLNT_MAX_COUNT; n++) {
 		if (audpp->func[n])
-			audpp->func[n](audpp->private[n], id, msg);
+			audpp->func[n] (audpp->private[n], id, msg);
 	}
+}
+
+static void audpp_notify_clnt(struct audpp_state *audpp, unsigned clnt_id,
+			      unsigned id, uint16_t *msg)
+{
+	if (clnt_id < AUDPP_CLNT_MAX_COUNT && audpp->func[clnt_id])
+		audpp->func[clnt_id] (audpp->private[clnt_id], id, msg);
 }
 
 static void audpp_dsp_event(void *data, unsigned id, size_t len,
@@ -147,19 +158,20 @@ static void audpp_dsp_event(void *data, unsigned id, size_t len,
 	LOG(EV_DATA, (msg[1] << 16) | msg[2]);
 
 	switch (id) {
-	case AUDPP_MSG_STATUS_MSG: {
-		unsigned cid = msg[0];
-		pr_info("audpp: status %d %d %d\n", cid, msg[1], msg[2]);
-		if ((cid < 5) && audpp->func[cid])
-			audpp->func[cid](audpp->private[cid], id, msg);
-		break;
-	}
+	case AUDPP_MSG_STATUS_MSG:{
+			unsigned cid = msg[0];
+			pr_info("audpp: status %d %d %d\n", cid, msg[1],
+				msg[2]);
+			if ((cid < 5) && audpp->func[cid])
+				audpp->func[cid] (audpp->private[cid], id, msg);
+			break;
+		}
 	case AUDPP_MSG_HOST_PCM_INTF_MSG:
 		if (audpp->func[5])
-			audpp->func[5](audpp->private[5], id, msg);
+			audpp->func[5] (audpp->private[5], id, msg);
 		break;
 	case AUDPP_MSG_PCMDMAMISSED:
-		pr_err("audpp: DMA missed\n");
+		pr_err("audpp: DMA missed obj=%x\n", msg[0]);
 		break;
 	case AUDPP_MSG_CFG_MSG:
 		if (msg[0] == AUDPP_MSG_ENA_ENA) {
@@ -174,6 +186,14 @@ static void audpp_dsp_event(void *data, unsigned id, size_t len,
 			pr_err("audpp: invalid config msg %d\n", msg[0]);
 		}
 		break;
+	case AUDPP_MSG_ROUTING_ACK:
+		audpp_broadcast(audpp, id, msg);
+		break;
+	case AUDPP_MSG_FLUSH_ACK:
+		audpp_notify_clnt(audpp, msg[0], id, msg);
+		break;
+	default:
+	  pr_info("audpp: unhandled msg id %x\n", id);
 	}
 }
 
@@ -186,7 +206,7 @@ static void audpp_fake_event(struct audpp_state *audpp, int id,
 {
 	uint16_t msg[1];
 	msg[0] = arg;
-	audpp->func[id](audpp->private[id], event, msg);
+	audpp->func[id] (audpp->private[id], event, msg);
 }
 
 int audpp_enable(int id, audpp_event_func func, void *private)
@@ -227,17 +247,17 @@ int audpp_enable(int id, audpp_event_func func, void *private)
 		unsigned long flags;
 		local_irq_save(flags);
 		if (audpp->enabled)
-			audpp_fake_event(audpp, id, 
-					 AUDPP_MSG_CFG_MSG,
-					 AUDPP_MSG_ENA_ENA);
+			audpp_fake_event(audpp, id,
+					 AUDPP_MSG_CFG_MSG, AUDPP_MSG_ENA_ENA);
 		local_irq_restore(flags);
 	}
 			
 	res = 0;
-out:	
+out:
 	mutex_unlock(audpp->lock);
 	return res;
 }
+EXPORT_SYMBOL(audpp_enable);
 
 void audpp_disable(int id, void *private)
 {
@@ -271,10 +291,10 @@ void audpp_disable(int id, void *private)
 		msm_adsp_put(audpp->mod);
 		audpp->mod = NULL;
 	}
-out:	
+out:
 	mutex_unlock(audpp->lock);
 }
-
+EXPORT_SYMBOL(audpp_disable);
 
 #define BAD_ID(id) ((id < 0) || (id >= CH_COUNT))
 
@@ -300,6 +320,7 @@ void audpp_avsync(int id, unsigned rate)
 	cmd.interrupt_interval_msw = rate >> 16;
 	audpp_send_queue1(&cmd, sizeof(cmd));
 }
+EXPORT_SYMBOL(audpp_avsync);
 
 unsigned audpp_avsync_sample_count(int id)
 {
@@ -312,16 +333,17 @@ unsigned audpp_avsync_sample_count(int id)
 		return 0;
 	
 	mask = 1 << id;
-	id = id * 6 + 2;
+	id = id * AUDPP_AVSYNC_INFO_SIZE + 2;
 	local_irq_save(flags);
 	if (avsync[0] & mask)
-		val = (avsync[id] << 16) | avsync[id];
+		val = (avsync[id] << 16) | avsync[id + 1];
 	else
 		val = 0;
 	local_irq_restore(flags);
 
 	return val;
 }
+EXPORT_SYMBOL(audpp_avsync_sample_count);
 
 unsigned audpp_avsync_byte_count(int id)
 {
@@ -334,16 +356,17 @@ unsigned audpp_avsync_byte_count(int id)
 		return 0;
 
 	mask = 1 << id;
-	id = id * 6 + 5;
+	id = id * AUDPP_AVSYNC_INFO_SIZE + 5;
 	local_irq_save(flags);
 	if (avsync[0] & mask)
-		val = (avsync[id] << 16) | avsync[id];
+		val = (avsync[id] << 16) | avsync[id + 1];
 	else
 		val = 0;
 	local_irq_restore(flags);
 
 	return val;
 }
+EXPORT_SYMBOL(audpp_avsync_byte_count);
 
 #define AUDPP_CMD_CFG_OBJ_UPDATE 0x8000
 #define AUDPP_CMD_VOLUME_PAN 0
@@ -365,3 +388,42 @@ int audpp_set_volume_and_pan(unsigned id, unsigned volume, int pan)
 
 	return audpp_send_queue3(cmd, sizeof(cmd));
 }
+EXPORT_SYMBOL(audpp_set_volume_and_pan);
+
+int audpp_pause(unsigned id, int pause)
+{
+	/* pause 1 = pause 0 = resume */
+	u16 pause_cmd[AUDPP_CMD_DEC_CTRL_LEN / sizeof(unsigned short)];
+
+	if (id >= CH_COUNT)
+		return -EINVAL;
+
+	memset(pause_cmd, 0, sizeof(pause_cmd));
+
+	pause_cmd[0] = AUDPP_CMD_DEC_CTRL;
+	if (pause == 1)
+		pause_cmd[1 + id] = AUDPP_CMD_UPDATE_V | AUDPP_CMD_PAUSE_V;
+	else if (pause == 0)
+		pause_cmd[1 + id] = AUDPP_CMD_UPDATE_V | AUDPP_CMD_RESUME_V;
+	else
+		return -EINVAL;
+
+	return audpp_send_queue1(pause_cmd, sizeof(pause_cmd));
+}
+EXPORT_SYMBOL(audpp_pause);
+
+int audpp_flush(unsigned id)
+{
+	u16 flush_cmd[AUDPP_CMD_DEC_CTRL_LEN / sizeof(unsigned short)];
+
+	if (id >= CH_COUNT)
+		return -EINVAL;
+
+	memset(flush_cmd, 0, sizeof(flush_cmd));
+
+	flush_cmd[0] = AUDPP_CMD_DEC_CTRL;
+	flush_cmd[1 + id] = AUDPP_CMD_UPDATE_V | AUDPP_CMD_FLUSH_V;
+
+	return audpp_send_queue1(flush_cmd, sizeof(flush_cmd));
+}
+EXPORT_SYMBOL(audpp_flush);

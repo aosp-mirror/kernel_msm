@@ -44,6 +44,7 @@ config MSM_AMSS_VERSION
 	default 6210 if MSM_AMSS_VERSION_6210
 	default 6220 if MSM_AMSS_VERSION_6220
 	default 6225 if MSM_AMSS_VERSION_6225
+	default 6350 if MSM_AMSS_VERSION_6350
 
 choice
 	prompt "AMSS modem firmware version"
@@ -58,6 +59,9 @@ choice
 
 	config MSM_AMSS_VERSION_6225
 		bool "6.2.20 + New ADSP"
+
+	config MSM_AMSS_VERSION_6350
+		bool "6.3.50"
 endchoice
 
 menu "Qualcomm MSM Board Type"

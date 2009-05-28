@@ -37,12 +37,15 @@ struct snd_ctxt {
 
 static struct snd_ctxt the_snd;
 
-#define RPC_SND_PROG	0x30000002
-#define RPC_SND_CB_PROG	0x31000002
+#define RPC_SND_PROG    0x30000002
+#define RPC_SND_CB_PROG 0x31000002
 #if CONFIG_MSM_AMSS_VERSION == 6210
-#define RPC_SND_VERS                    0x94756085 /* 2490720389 */
-#elif (CONFIG_MSM_AMSS_VERSION == 6220) || (CONFIG_MSM_AMSS_VERSION == 6225)
-#define RPC_SND_VERS                    0xaa2b1a44 /* 2854951492 */
+#define RPC_SND_VERS	0x94756085 /* 2490720389 */
+#elif (CONFIG_MSM_AMSS_VERSION == 6220) || \
+      (CONFIG_MSM_AMSS_VERSION == 6225)
+#define RPC_SND_VERS	0xaa2b1a44 /* 2854951492 */
+#elif CONFIG_MSM_AMSS_VERSION == 6350
+#define RPC_SND_VERS 	MSM_RPC_VERS(1,0)
 #endif
 
 #define SND_SET_DEVICE_PROC 2
@@ -219,7 +222,7 @@ static int snd_open(struct inode *inode, struct file *file)
 	if (snd->opened == 0) {
 		if (snd->ept == NULL) {
 			snd->ept = msm_rpc_connect(RPC_SND_PROG, RPC_SND_VERS,
-						MSM_RPC_UNINTERRUPTIBLE);
+					MSM_RPC_UNINTERRUPTIBLE);
 			if (IS_ERR(snd->ept)) {
 				rc = PTR_ERR(snd->ept);
 				snd->ept = NULL;

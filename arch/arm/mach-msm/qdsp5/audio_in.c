@@ -257,13 +257,13 @@ static void audpre_dsp_event(void *data, unsigned id, size_t len,
 		break;
 	case AUDPREPROC_MSG_ERROR_MSG_ID:
 		pr_info("audpre: err_index %d\n", msg[0]);
+		break;
 	default:
 		pr_err("audpre: unknown event %d\n", id);
 	}
 }
 
-struct audio_frame 
-{
+struct audio_frame {
 	uint16_t count_low;
 	uint16_t count_high;
 	uint16_t bytes;
@@ -333,7 +333,7 @@ static void audrec_dsp_event(void *data, unsigned id, size_t len,
 		pr_err("audrec: ERROR %x\n", msg[0]);
 		break;
 	case AUDREC_MSG_PACKET_READY_MSG:
-		//REC_DBG("type %x, count %d", msg[0], (msg[1] | (msg[2] << 16)));
+/* REC_DBG("type %x, count %d", msg[0], (msg[1] | (msg[2] << 16))); */
 		audio_in_get_dsp_frames(audio);
 		break;
 	default:
@@ -350,12 +350,13 @@ struct msm_adsp_ops audrec_adsp_ops = {
 };
 
 
-#define audio_send_queue_pre(audio,cmd,len) \
+#define audio_send_queue_pre(audio, cmd, len) \
 	msm_adsp_write(audio->audpre, QDSP_uPAudPreProcCmdQueue, cmd, len)
-#define audio_send_queue_recbs(audio,cmd,len) \
+#define audio_send_queue_recbs(audio, cmd, len) \
 	msm_adsp_write(audio->audrec, QDSP_uPAudRecBitStreamQueue, cmd, len)
-#define audio_send_queue_rec(audio,cmd,len) \
-	msm_adsp_write(audio->audrec, QDSP_uPAudRecCmdQueue, cmd, len)
+#define audio_send_queue_rec(audio, cmd, len) \
+	msm_adsp_write(audio->audrec, \
+	QDSP_uPAudRecCmdQueue, cmd, len)
 
 static int audio_dsp_set_agc(struct audio_in *audio)
 {
@@ -367,13 +368,13 @@ static int audio_dsp_set_agc(struct audio_in *audio)
 	if (audio->agc_enable) {
 		/* cmd.tx_agc_param_mask = 0xFE00 from sample code */
 		cmd.tx_agc_param_mask =
-			(1 << AUDPREPROC_CMD_TX_AGC_PARAM_MASK_COMP_SLOPE) |
-			(1 << AUDPREPROC_CMD_TX_AGC_PARAM_MASK_COMP_TH) |
-			(1 << AUDPREPROC_CMD_TX_AGC_PARAM_MASK_EXP_SLOPE) |
-			(1 << AUDPREPROC_CMD_TX_AGC_PARAM_MASK_EXP_TH) |
-			(1 << AUDPREPROC_CMD_TX_AGC_PARAM_MASK_COMP_AIG_FLAG) |
-			(1 << AUDPREPROC_CMD_TX_AGC_PARAM_MASK_COMP_STATIC_GAIN) |
-			(1 << AUDPREPROC_CMD_TX_AGC_PARAM_MASK_TX_AGC_ENA_FLAG);
+		(1 << AUDPREPROC_CMD_TX_AGC_PARAM_MASK_COMP_SLOPE) |
+		(1 << AUDPREPROC_CMD_TX_AGC_PARAM_MASK_COMP_TH) |
+		(1 << AUDPREPROC_CMD_TX_AGC_PARAM_MASK_EXP_SLOPE) |
+		(1 << AUDPREPROC_CMD_TX_AGC_PARAM_MASK_EXP_TH) |
+		(1 << AUDPREPROC_CMD_TX_AGC_PARAM_MASK_COMP_AIG_FLAG) |
+		(1 << AUDPREPROC_CMD_TX_AGC_PARAM_MASK_COMP_STATIC_GAIN) |
+		(1 << AUDPREPROC_CMD_TX_AGC_PARAM_MASK_TX_AGC_ENA_FLAG);
 		cmd.tx_agc_enable_flag =
 			AUDPREPROC_CMD_TX_AGC_ENA_FLAG_ENA;
 		memcpy(&cmd.static_gain, &audio->agc.agc_params[0],
@@ -531,12 +532,14 @@ static int audio_in_encoder_config(struct audio_in *audio)
 	/* prepare buffer pointers:
 	 * Mono: 1024 samples + 4 halfword header
 	 * Stereo: 2048 samples + 4 halfword header
+	 * AAC
+	 * Mono/Stere: 768 + 4 halfword header
 	 */
 	for (n = 0; n < FRAME_NUM; n++) {
 		audio->in[n].data = data + 4;
 		if (audio->type == AUDREC_CMD_TYPE_0_INDEX_WAV)
 			data += (4 + (audio->channel_mode ? 2048 : 1024));
-		else
+		else if (audio->type == AUDREC_CMD_TYPE_0_INDEX_AAC)
 			data += (4 + 768);
 	}
 
@@ -549,7 +552,8 @@ static int audio_dsp_read_buffer(struct audio_in *audio, uint32_t read_cnt)
 
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.cmd_id = AUDREC_CMD_PACKET_EXT_PTR;
-	cmd.type = AUDREC_CMD_TYPE_0; /* Both WAV and AAC use AUDREC_CMD_TYPE_0 */
+	/* Both WAV and AAC use AUDREC_CMD_TYPE_0 */
+	cmd.type = AUDREC_CMD_TYPE_0;
 	cmd.curr_rec_count_msw = read_cnt >> 16;
 	cmd.curr_rec_count_lsw = read_cnt;
 
@@ -599,7 +603,8 @@ static void audio_flush(struct audio_in *audio)
 	}
 }
 
-static long audio_in_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+static long audio_in_ioctl(struct file *file,
+				unsigned int cmd, unsigned long arg)
 {
 	struct audio_in *audio = file->private_data;
 	int rc;
@@ -607,7 +612,7 @@ static long audio_in_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 	if (cmd == AUDIO_GET_STATS) {
 		struct msm_audio_stats stats;
 		stats.byte_count = atomic_read(&audio->in_bytes);
-		if (copy_to_user((void*) arg, &stats, sizeof(stats)))
+		if (copy_to_user((void *) arg, &stats, sizeof(stats)))
 			return -EFAULT;
 		return 0;
 	}
@@ -635,7 +640,7 @@ static long audio_in_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 		}
 	case AUDIO_SET_CONFIG: {
 		struct msm_audio_config cfg;
-		if (copy_from_user(&cfg, (void*) arg, sizeof(cfg))) {
+		if (copy_from_user(&cfg, (void *) arg, sizeof(cfg))) {
 			rc = -EFAULT;
 			break;
 		}
@@ -657,10 +662,12 @@ static long audio_in_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 			break;
 		}
 		audio->samp_rate = convert_samp_rate(cfg.sample_rate);
-		audio->samp_rate_index = convert_dsp_samp_index(cfg.sample_rate);
+		audio->samp_rate_index =
+		  convert_dsp_samp_index(cfg.sample_rate);
 		audio->channel_mode = cfg.channel_count;
 		audio->buffer_size =
-				audio->channel_mode ? STEREO_DATA_SIZE : MONO_DATA_SIZE;
+				audio->channel_mode ? STEREO_DATA_SIZE
+							: MONO_DATA_SIZE;
 		audio->type = cfg.type;
 		rc = 0;
 		break;
@@ -670,25 +677,21 @@ static long audio_in_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 		cfg.buffer_size = audio->buffer_size;
 		cfg.buffer_count = FRAME_NUM;
 		cfg.sample_rate = convert_samp_index(audio->samp_rate);
-		if (audio->channel_mode == AUDREC_CMD_STEREO_MODE_MONO) {
+		if (audio->channel_mode == AUDREC_CMD_STEREO_MODE_MONO)
 			cfg.channel_count = 1;
-		} else {
+		else
 			cfg.channel_count = 2;
-		}
-
-		if (audio->type == AUDREC_CMD_TYPE_0_INDEX_WAV) {
+		if (audio->type == AUDREC_CMD_TYPE_0_INDEX_WAV)
 			cfg.type = 0;
-		} else {
+		else
 			cfg.type = 1;
-		}
 		cfg.unused[0] = 0;
 		cfg.unused[1] = 0;
 		cfg.unused[2] = 0;
-		if (copy_to_user((void*) arg, &cfg, sizeof(cfg))) {
+		if (copy_to_user((void *) arg, &cfg, sizeof(cfg)))
 			rc = -EFAULT;
-		} else {
+		else
 			rc = 0;
-		}
 		break;
 	}
 	default:
@@ -698,7 +701,9 @@ static long audio_in_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 	return rc;
 }
 
-static ssize_t audio_in_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
+static ssize_t audio_in_read(struct file *file,
+				char __user *buf,
+				size_t count, loff_t *pos)
 {
 	struct audio_in *audio = file->private_data;
 	unsigned long flags;
@@ -730,7 +735,7 @@ static ssize_t audio_in_read(struct file *file, char __user *buf, size_t count, 
 			}
 			spin_lock_irqsave(&audio->dsp_lock, flags);
 			if (index != audio->in_tail) {
-				/* overrun -- data is invalid and we need to retry */
+			/* overrun -- data is invalid and we need to retry */
 				spin_unlock_irqrestore(&audio->dsp_lock, flags);
 				continue;
 			}
@@ -746,6 +751,8 @@ static ssize_t audio_in_read(struct file *file, char __user *buf, size_t count, 
 			pr_err("audio_in: short read\n");
 			break;
 		}
+		if (audio->type == AUDREC_CMD_TYPE_0_INDEX_AAC)
+			break; /* AAC only read one frame */
 	}
 	mutex_unlock(&audio->read_lock);
 
@@ -756,9 +763,8 @@ static ssize_t audio_in_read(struct file *file, char __user *buf, size_t count, 
 }
 
 static ssize_t audio_in_write(struct file *file,
-			const char __user *buf,
-			size_t count,
-			loff_t *pos)
+				const char __user *buf,
+				size_t count, loff_t *pos)
 {
 	return -EINVAL;
 }
@@ -809,7 +815,7 @@ static int audio_in_open(struct inode *inode, struct file *file)
 	if (rc)
 		goto done;
 	rc = msm_adsp_get("AUDRECTASK", &audio->audrec,
-			&audrec_adsp_ops, audio);
+			   &audrec_adsp_ops, audio);
 	if (rc)
 		goto done;
 

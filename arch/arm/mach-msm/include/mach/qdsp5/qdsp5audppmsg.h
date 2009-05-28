@@ -6,20 +6,20 @@
        Q D S P 5  A U D I O   P O S T   P R O C E S S I N G   M S G
 
 GENERAL DESCRIPTION
-  Messages sent by AUDPPTASK to ARM 
+  Messages sent by AUDPPTASK to ARM
 
 REFERENCES
   None
 
 EXTERNALIZED FUNCTIONS
-  None  
-  
+  None
+
 Copyright(c) 1992 - 2009 by QUALCOMM, Incorporated.
 
 This software is licensed under the terms of the GNU General Public
 License version 2, as published by the Free Software Foundation, and
 may be copied, distributed, and modified under those terms.
- 
+
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -32,7 +32,7 @@ GNU General Public License for more details.
 
 This section contains comments describing changes made to this file.
 Notice that changes are listed in reverse chronological order.
-  
+
  $Header: //source/qcom/qct/multimedia2/Audio/drivers/QDSP5Driver/QDSP5Interface/main/latest/qdsp5audppmsg.h#4 $
 
 ===========================================================================*/
@@ -41,7 +41,7 @@ Notice that changes are listed in reverse chronological order.
  * AUDPPTASK uses audPPuPRlist to send messages to the ARM
  * Location : MEMA
  * Buffer Size : 45
- * No of Buffers in a queue : 5 for gaming audio and 1 for other images 
+ * No of Buffers in a queue : 5 for gaming audio and 1 for other images
  */
 
 /*
@@ -253,19 +253,19 @@ typedef struct {
 	sizeof(audpp_msg_pcmdmamissed);
 
 typedef struct{
-  /*
-  ** Bit 0	0 = PCM DMA not missed for object 0
-  **        1 = PCM DMA missed for object0
-  ** Bit 1	0 = PCM DMA not missed for object 1
-  **        1 = PCM DMA missed for object1
-  ** Bit 2	0 = PCM DMA not missed for object 2
-  **        1 = PCM DMA missed for object2
-  ** Bit 3	0 = PCM DMA not missed for object 3
-  **        1 = PCM DMA missed for object3
-  ** Bit 4	0 = PCM DMA not missed for object 4
-  **        1 = PCM DMA missed for object4
-  */
-  unsigned short pcmdmamissed;
+	/*
+	** Bit 0	0 = PCM DMA not missed for object 0
+	**        1 = PCM DMA missed for object0
+	** Bit 1	0 = PCM DMA not missed for object 1
+	**        1 = PCM DMA missed for object1
+	** Bit 2	0 = PCM DMA not missed for object 2
+	**        1 = PCM DMA missed for object2
+	** Bit 3	0 = PCM DMA not missed for object 3
+	**        1 = PCM DMA missed for object3
+	** Bit 4	0 = PCM DMA not missed for object 4
+	**        1 = PCM DMA missed for object4
+	*/
+	unsigned short pcmdmamissed;
 } __attribute__((packed)) audpp_msg_pcmdmamissed;
 
 /*
@@ -280,10 +280,10 @@ typedef struct{
 #define AUDPP_MSG_ENA_DIS	0x0000
 
 typedef struct{
-  /*   Enabled  - 0xffff 
-   **  Disabled - 0
-   */
-  unsigned short enabled;
+	/*   Enabled  - 0xffff 
+	**  Disabled - 0
+	*/
+	unsigned short enabled;
 } __attribute__((packed)) audpp_msg_cfg_msg;
 
 /*
@@ -304,5 +304,15 @@ typedef struct {
 	unsigned short	hpcm_obj_volume;
 } __attribute__((packed)) audpp_msg_qreverb_volume;
 
+#define AUDPP_MSG_ROUTING_ACK 0x0009
+#define AUDPP_MSG_ROUTING_ACK_LEN \
+  sizeof(struct audpp_msg_routing_ack)
+
+struct audpp_msg_routing_ack {
+	unsigned short dec_id;
+	unsigned short routing_mode;
+} __attribute__((packed));
+
+#define AUDPP_MSG_FLUSH_ACK 0x000A
 
 #endif /* QDSP5AUDPPMSG_H */

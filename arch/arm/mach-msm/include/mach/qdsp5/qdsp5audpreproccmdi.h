@@ -6,7 +6,7 @@
     A U D I O   P R E   P R O C E S S I N G  I N T E R N A L  C O M M A N D S
 
 GENERAL DESCRIPTION
-  This file contains defintions of format blocks of commands 
+  This file contains defintions of format blocks of commands
   that are accepted by AUDPREPROC Task
 
 REFERENCES
@@ -20,7 +20,7 @@ Copyright(c) 1992 - 2008 by QUALCOMM, Incorporated.
 This software is licensed under the terms of the GNU General Public
 License version 2, as published by the Free Software Foundation, and
 may be copied, distributed, and modified under those terms.
- 
+
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -34,7 +34,7 @@ GNU General Public License for more details.
 This section contains comments describing changes made to this file.
 Notice that changes are listed in reverse chronological order.
    
-$Header: //source/qcom/qct/multimedia2/Audio/drivers/QDSP5Driver/QDSP5Interface/main/latest/qdsp5audpreproccmdi.h#2 $ 
+$Header: //source/qcom/qct/multimedia2/Audio/drivers/QDSP5Driver/QDSP5Interface/main/latest/qdsp5audpreproccmdi.h#2 $
   
 ===========================================================================*/
 

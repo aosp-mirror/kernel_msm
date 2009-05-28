@@ -39,6 +39,14 @@
 #define AUDIO_SET_AGC        _IOW(AUDIO_IOCTL_MAGIC, 12, unsigned)
 #define AUDIO_SET_NS         _IOW(AUDIO_IOCTL_MAGIC, 13, unsigned)
 #define AUDIO_SET_TX_IIR     _IOW(AUDIO_IOCTL_MAGIC, 14, unsigned)
+#define AUDIO_PAUSE	     _IOW(AUDIO_IOCTL_MAGIC, 15, unsigned)
+#define AUDIO_GET_PCM_CONFIG _IOR(AUDIO_IOCTL_MAGIC, 30, unsigned)
+#define AUDIO_SET_PCM_CONFIG _IOW(AUDIO_IOCTL_MAGIC, 31, unsigned)
+#define AUDIO_SWITCH_DEVICE  _IOW(AUDIO_IOCTL_MAGIC, 32, unsigned)
+
+#define	AUDIO_MAX_COMMON_IOCTL_NUM	100
+
+#define	AUDIO_MAX_COMMON_IOCTL_NUM	100
 
 struct msm_audio_config {
 	uint32_t buffer_size;
@@ -98,4 +106,10 @@ struct msm_snd_endpoint {
 
 #define SND_GET_ENDPOINT _IOWR(SND_IOCTL_MAGIC, 5, struct msm_snd_endpoint *)
 
-#endif /* __LINUX_MSM_AUDIO_H */
+struct msm_audio_pcm_config {
+	uint32_t pcm_feedback;	/* 0 - disable > 0 - enable */
+	uint32_t buffer_count;	/* Number of buffers to allocate */
+	uint32_t buffer_size;	/* Size of buffer for capturing of
+				   PCM samples */
+};
+#endif

@@ -14,12 +14,8 @@
  *
  */
 
-#ifndef _ARCH_ARM_MACH_MSM_AUDMGR_H
-#define _ARCH_ARM_MACH_MSM_AUDMGR_H
-
-#if CONFIG_MSM_AMSS_VERSION==6350
-#include "audmgr_new.h"
-#else
+#ifndef _ARCH_ARM_MACH_MSM_AUDMGR_NEW_H
+#define _ARCH_ARM_MACH_MSM_AUDMGR_NEW_H
 
 enum rpc_aud_def_sample_rate_type {
 	RPC_AUD_DEF_SAMPLE_RATE_NONE,
@@ -66,12 +62,20 @@ enum rpc_aud_def_codec_type {
 	RPC_AUD_DEF_CODEC_VOC_EFR,
 	RPC_AUD_DEF_CODEC_VOC_FR,
 	RPC_AUD_DEF_CODEC_VOC_HR,
-	RPC_AUD_DEF_CODEC_VOC,
+	RPC_AUD_DEF_CODEC_VOC_CDMA,
+	RPC_AUD_DEF_CODEC_VOC_CDMA_WB,
+	RPC_AUD_DEF_CODEC_VOC_UMTS,
+	RPC_AUD_DEF_CODEC_VOC_UMTS_WB,
 	RPC_AUD_DEF_CODEC_SBC,
 	RPC_AUD_DEF_CODEC_VOC_PCM,
 	RPC_AUD_DEF_CODEC_AMR_WB,
 	RPC_AUD_DEF_CODEC_AMR_WB_PLUS,
+	RPC_AUD_DEF_CODEC_AAC_BSAC,
 	RPC_AUD_DEF_CODEC_MAX,
+	RPC_AUD_DEF_CODEC_AMR_NB,
+	RPC_AUD_DEF_CODEC_13K,
+	RPC_AUD_DEF_CODEC_EVRC,
+	RPC_AUD_DEF_CODEC_MAX_002,
 };
 
 enum rpc_snd_method_type {
@@ -142,24 +146,23 @@ struct rpc_audmgr_enable_client_args {
 #define AUDMGR_GET_TX_SAMPLE_RATE		9
 #define AUDMGR_SET_DEVICE_MODE			10
 
-#if CONFIG_MSM_AMSS_VERSION < 6220
-#define AUDMGR_PROG_VERS "rs30000013:46255756"
 #define AUDMGR_PROG 0x30000013
-#define AUDMGR_VERS 0x46255756
-#else
-#define AUDMGR_PROG_VERS "rs30000013:e94e8f0c"
-#define AUDMGR_PROG 0x30000013
-#define AUDMGR_VERS 0xe94e8f0c
-#endif
+#define AUDMGR_VERS MSM_RPC_VERS(1,0)
 
 struct rpc_audmgr_cb_func_ptr {
 	uint32_t cb_id;
-	uint32_t set_to_one;
-	uint32_t status;
+	uint32_t status; /* Audmgr status */
+	uint32_t set_to_one;  /* Pointer status (1 = valid, 0  = invalid) */
+	uint32_t disc;
+	/* disc = AUDMGR_STATUS_READY => data=handle
+	   disc = AUDMGR_STATUS_CODEC_CONFIG => data = handle
+	   disc = AUDMGR_STATUS_DISABLED => data =status_disabled
+	   disc = AUDMGR_STATUS_VOLUME_CHANGE => data = volume-change */
 	union {
 		uint32_t handle;
 		uint32_t volume;
-		
+		uint32_t status_disabled;
+		uint32_t volume_change;
 	} u;
 };
 
@@ -167,13 +170,8 @@ struct rpc_audmgr_cb_func_ptr {
 #define AUDMGR_OPR_LSTNR_CB_FUNC_PTR		2
 #define AUDMGR_CODEC_LSTR_FUNC_PTR		3
 
-#if CONFIG_MSM_AMSS_VERSION < 6220
 #define AUDMGR_CB_PROG 0x31000013
-#define AUDMGR_CB_VERS 0x5fa922a9
-#else
-#define AUDMGR_CB_PROG 0x31000013
-#define AUDMGR_CB_VERS 0x21570ba7
-#endif
+#define AUDMGR_CB_VERS 0xf8e3e2d9
 
 struct audmgr {
 	wait_queue_head_t wait;
@@ -205,11 +203,11 @@ int audpp_send_queue1(void *cmd, unsigned len);
 int audpp_send_queue2(void *cmd, unsigned len);
 int audpp_send_queue3(void *cmd, unsigned len);
 
-int audpp_pause(unsigned id, int pause);
 int audpp_set_volume_and_pan(unsigned id, unsigned volume, int pan);
+int audpp_pause(unsigned id, int pause);
+int audpp_flush(unsigned id);
 void audpp_avsync(int id, unsigned rate);
 unsigned audpp_avsync_sample_count(int id);
 unsigned audpp_avsync_byte_count(int id);
 
-#endif
 #endif

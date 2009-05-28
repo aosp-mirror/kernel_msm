@@ -393,9 +393,18 @@ static long adsp_get_event(struct adsp_device *adev, void __user *arg)
 		rc = -ETOOSMALL;
 		goto end;
 	}
-	if (copy_to_user((void *)(evt.data), data->data.msg16, data->size)) {
-		rc = -EFAULT;
-		goto end;
+	if (data->msg_id != EVENT_MSG_ID) {
+		if (copy_to_user((void *)(evt.data), data->data.msg16,
+					data->size)) {
+			rc = -EFAULT;
+			goto end;
+	}
+	} else {
+		if (copy_to_user((void *)(evt.data), data->data.msg32,
+					data->size)) {
+			rc = -EFAULT;
+			goto end;
+		}
 	}
 
 	evt.type = data->type; /* 0 --> from aDSP, 1 --> from ARM9 */
@@ -432,6 +441,15 @@ static long adsp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	case ADSP_IOCTL_GET_EVENT:
 		return adsp_get_event(adev, (void __user *) arg);
+
+	case ADSP_IOCTL_SET_CLKRATE: {
+#if CONFIG_MSM_AMSS_VERSION==6350
+		unsigned long clk_rate;
+		if (copy_from_user(&clk_rate, (void *) arg, sizeof(clk_rate)))
+			return -EFAULT;
+		return adsp_set_clkrate(adev->module, clk_rate);
+#endif
+	}
 
 	case ADSP_IOCTL_REGISTER_PMEM: {
 		struct adsp_pmem_info info;
@@ -495,12 +513,20 @@ static void adsp_event(void *driver_data, unsigned id, size_t len,
 		return;
 	}
 
-	event->type = 0;
-	event->is16 = 0;
-	event->msg_id = id;
-	event->size = len;
+	if (id != EVENT_MSG_ID) {
+		event->type = 0;
+		event->is16 = 0;
+		event->msg_id = id;
+		event->size = len;
 
-	getevent(event->data.msg16, len);
+		getevent(event->data.msg16, len);
+	} else {
+		event->type = 1;
+		event->is16 = 1;
+		event->msg_id = id;
+		event->size = len;
+		getevent(event->data.msg32, len);
+	}
 
 	spin_lock_irqsave(&adev->event_queue_lock, flags);
 	list_add_tail(&event->list, &adev->event_queue);

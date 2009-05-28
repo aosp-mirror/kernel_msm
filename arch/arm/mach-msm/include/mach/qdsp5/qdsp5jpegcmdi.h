@@ -6,7 +6,7 @@
     J P E G  I N T E R N A L  C O M M A N D S
 
 GENERAL DESCRIPTION
-  This file contains defintions of format blocks of commands 
+  This file contains defintions of format blocks of commands
   that are accepted by JPEG Task
 
 REFERENCES
@@ -20,7 +20,7 @@ Copyright(c) 1992 - 2008 by QUALCOMM, Incorporated.
 This software is licensed under the terms of the GNU General Public
 License version 2, as published by the Free Software Foundation, and
 may be copied, distributed, and modified under those terms.
- 
+
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -33,10 +33,9 @@ GNU General Public License for more details.
 
 This section contains comments describing changes made to this file.
 Notice that changes are listed in reverse chronological order.
-   
- 
-$Header: //source/qcom/qct/multimedia2/AdspSvc/7XXX/qdsp5cmd/video/qdsp5jpegcmdi.h#2 $ $DateTime: 2008/07/30 10:50:23 $ $Author: pavanr $                     
-Revision History:                                            
+
+$Header: //source/qcom/qct/multimedia2/AdspSvc/7XXX/qdsp5cmd/video/qdsp5jpegcmdi.h#2 $ $DateTime: 2008/07/30 10:50:23 $ $Author: pavanr $
+Revision History:
 when       who     what, where, why
 --------   ---     ----------------------------------------------------------
 06/09/08   sv      initial version

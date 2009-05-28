@@ -38,6 +38,7 @@ int msm_adsp_get(const char *name, struct msm_adsp_module **module,
 void msm_adsp_put(struct msm_adsp_module *module);
 int msm_adsp_enable(struct msm_adsp_module *module);
 int msm_adsp_disable(struct msm_adsp_module *module);
+int adsp_set_clkrate(struct msm_adsp_module *module, unsigned long clk_rate);
 
 /* Write is safe to call from interrupt context.
  */

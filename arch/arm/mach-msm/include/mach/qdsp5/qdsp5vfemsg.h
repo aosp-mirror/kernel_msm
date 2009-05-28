@@ -6,7 +6,7 @@
     V F E   I N T E R N A L   M E S S A G E S
 
 GENERAL DESCRIPTION
-  This file contains defintions of format blocks of commands 
+  This file contains defintions of format blocks of commands
   that are sent by VFE Task
 
 REFERENCES
@@ -20,7 +20,7 @@ Copyright(c) 1992 - 2008 by QUALCOMM, Incorporated.
 This software is licensed under the terms of the GNU General Public
 License version 2, as published by the Free Software Foundation, and
 may be copied, distributed, and modified under those terms.
- 
+
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -33,10 +33,10 @@ GNU General Public License for more details.
 
 This section contains comments describing changes made to this file.
 Notice that changes are listed in reverse chronological order.
-   
-$Header: //source/qcom/qct/multimedia2/AdspSvc/7XXX/qdsp5cmd/video/qdsp5vfemsg.h#2 $ $DateTime: 2008/07/30 10:50:23 $ $Author: pavanr $                     
-Revision History:                                              
-  
+
+$Header: //source/qcom/qct/multimedia2/AdspSvc/7XXX/qdsp5cmd/video/qdsp5vfemsg.h#2 $ $DateTime: 2008/07/30 10:50:23 $ $Author: pavanr $
+Revision History:
+
 when       who     what, where, why
 --------   ---     ----------------------------------------------------------
 06/12/08   sv      initial version
@@ -101,7 +101,7 @@ typedef struct {
 
 
 /*
- * Message to notify ARM that illegal cmd was received and 
+ * Message to notify ARM that illegal cmd was received and
  * system is in the IDLE state
  */
 
@@ -128,7 +128,7 @@ typedef struct {
 	unsigned int	black_level_odd_col;
 	unsigned int	defect_pixels_detected;
 	unsigned int	asf_max_edge;
-} __attribute__((packed)) vfe_msg_op1; 
+} __attribute__((packed)) vfe_msg_op1;
 
 
 /*
@@ -145,7 +145,7 @@ typedef struct {
 	unsigned int	black_level_odd_col;
 	unsigned int	defect_pixels_detected;
 	unsigned int	asf_max_edge;
-} __attribute__((packed)) vfe_msg_op2; 
+} __attribute__((packed)) vfe_msg_op2;
 
 
 /*
