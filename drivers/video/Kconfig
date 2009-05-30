@@ -2196,18 +2196,6 @@ config FB_PRE_INIT_FB
 	  Select this option if display contents should be inherited as set by
 	  the bootloader.
 
-config FB_MSM
-	tristate "MSM Framebuffer support"
-	depends on FB && ARCH_MSM
-	select FB_CFB_FILLRECT
-	select FB_CFB_COPYAREA
-	select FB_CFB_IMAGEBLIT
-
-config FB_MSM_LCDC
-	bool "Support for integrated LCD controller in qsd8x50"
-	depends on FB_MSM && MSM_MDP31
-	default y
-
 config FB_MX3
 	tristate "MX3 Framebuffer support"
 	depends on FB && MX3_IPU
@@ -2233,6 +2221,8 @@ config FB_BROADSHEET
 	  controller. The release name for this device was Epson S1D13521
 	  and could also have been called by other names when coupled with
 	  a bridge adapter.
+
+source "drivers/video/msm/Kconfig"
 
 source "drivers/video/omap/Kconfig"
 source "drivers/video/omap2/Kconfig"
