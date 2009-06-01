@@ -35,6 +35,7 @@
 #include <mach/board.h>
 #include <mach/msm_iomap.h>
 #include <mach/msm_hsusb.h>
+#include <mach/camera.h>
 
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
@@ -73,11 +74,29 @@ static struct platform_device smc91x_device = {
 };
 
 static struct i2c_board_info i2c_devices[] = {
+#ifdef CONFIG_MT9D112
 	{
-		I2C_BOARD_INFO("mt9t013", 0x78>>1),
+		I2C_BOARD_INFO("mt9d112", 0x78 >> 1),
 	},
+#endif
+#ifdef CONFIG_S5K3E2FX
+	{
+		I2C_BOARD_INFO("s5k3e2fx", 0x20 >> 1),
+	},
+#endif
+#ifdef CONFIG_MT9P012
+	{
+		I2C_BOARD_INFO("mt9p012", 0x6C >> 1),
+	},
+#endif
+#if defined(CONFIG_MT9T013) || defined(CONFIG_SENSORS_MT9T013)
+	{
+		I2C_BOARD_INFO("mt9t013", 0x6C), // 0x78>>1
+	},
+#endif
 };
 
+#ifdef CONFIG_MSM_CAMERA
 static uint32_t camera_off_gpio_table[] = {
 	/* parallel CAMERA interfaces */
 	PCOM_GPIO_CFG(0,  0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT0 */
@@ -140,20 +159,83 @@ static void config_camera_off_gpios(void)
 		ARRAY_SIZE(camera_off_gpio_table));
 }
 
-static struct msm_camera_device_platform_data msm_camera_device = {
-	.sensor_reset   = 89,
-	.sensor_pwd     = 85,
-	.vcm_pwd        = 0,
-	.config_gpio_on = config_camera_on_gpios,
-	.config_gpio_off = config_camera_off_gpios,
+static struct msm_camera_device_platform_data msm_camera_device_data = {
+	.camera_gpio_on  = config_camera_on_gpios,
+	.camera_gpio_off = config_camera_off_gpios,
+	.ioext.mdcphy = MSM_MDC_PHYS,
+	.ioext.mdcsz  = MSM_MDC_SIZE,
+	.ioext.appphy = MSM_CLK_CTL_PHYS,
+	.ioext.appsz  = MSM_CLK_CTL_SIZE,
 };
 
-static struct platform_device halibut_camera = {
-	.name           = "camera",
-	.dev            = {
-		.platform_data = &msm_camera_device,
+#ifdef CONFIG_MT9D112
+static struct msm_camera_sensor_info msm_camera_sensor_mt9d112_data = {
+	.sensor_name	= "mt9d112",
+	.sensor_reset	= 89,
+	.sensor_pwd	= 85,
+	.vcm_pwd	= 0,
+	.pdata		= &msm_camera_device_data
+};
+
+static struct platform_device msm_camera_sensor_mt9d112 = {
+	.name	   = "msm_camera_mt9d112",
+	.dev	    = {
+		.platform_data = &msm_camera_sensor_mt9d112_data,
 	},
 };
+#endif
+
+#ifdef CONFIG_S5K3E2FX
+static struct msm_camera_sensor_info msm_camera_sensor_s5k3e2fx_data = {
+	.sensor_name	= "s5k3e2fx",
+	.sensor_reset	= 89,
+	.sensor_pwd	= 85,
+	.vcm_pwd	= 0,
+	.pdata		= &msm_camera_device_data
+};
+
+static struct platform_device msm_camera_sensor_s5k3e2fx = {
+	.name	   = "msm_camera_s5k3e2fx",
+	.dev	    = {
+		.platform_data = &msm_camera_sensor_s5k3e2fx_data,
+	},
+};
+#endif
+
+#ifdef CONFIG_MT9P012
+static struct msm_camera_sensor_info msm_camera_sensor_mt9p012_data = {
+	.sensor_name	= "mt9p012",
+	.sensor_reset	= 89,
+	.sensor_pwd	= 85,
+	.vcm_pwd	= 88,
+	.pdata		= &msm_camera_device_data
+};
+
+static struct platform_device msm_camera_sensor_mt9p012 = {
+	.name	   = "msm_camera_mt9p012",
+	.dev	    = {
+		.platform_data = &msm_camera_sensor_mt9p012_data,
+	},
+};
+#endif
+
+#ifdef CONFIG_MT9T013
+static struct msm_camera_sensor_info msm_camera_sensor_mt9t013_data = {
+	.sensor_name	= "mt9t013",
+	.sensor_reset	= 89,
+	.sensor_pwd	= 85,
+	.vcm_pwd	= 0,
+	.pdata		= &msm_camera_device_data
+};
+
+static struct platform_device msm_camera_sensor_mt9t013 = {
+	.name	   = "msm_camera_mt9t013",
+	.dev	    = {
+		.platform_data = &msm_camera_sensor_mt9t013_data,
+	},
+};
+#endif
+#endif /*CONFIG_MSM_CAMERA*/
 
 #define SND(desc, num) { .name = #desc, .id = num }
 static struct snd_endpoint snd_endpoints_list[] = {
@@ -183,6 +265,14 @@ static struct android_pmem_platform_data android_pmem_pdata = {
 	.start = MSM_PMEM_MDP_BASE,
 	.size = MSM_PMEM_MDP_SIZE,
 	.no_allocator = 0,
+	.cached = 1,
+};
+
+static struct android_pmem_platform_data android_pmem_camera_pdata = {
+	.name = "pmem_camera",
+	.start = MSM_PMEM_CAMERA_BASE,
+	.size = MSM_PMEM_CAMERA_SIZE,
+	.no_allocator = 1,
 	.cached = 1,
 };
 
@@ -234,6 +324,11 @@ static struct platform_device android_pmem_gpu1_device = {
 	.dev = { .platform_data = &android_pmem_gpu1_pdata },
 };
 
+static struct platform_device android_pmem_camera_device = {
+	.name = "android_pmem",
+	.id = 4,
+	.dev = { .platform_data = &android_pmem_camera_pdata },
+};
 
 #ifdef CONFIG_USB_FUNCTION
 static char *halibut_usb_functions[] = {
@@ -337,11 +432,23 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_i2c,
 	&smc91x_device,
 	&halibut_snd,
-	&halibut_camera,
+#ifdef CONFIG_MT9T013
+	&msm_camera_sensor_mt9t013,
+#endif
+#ifdef CONFIG_MT9D112
+	&msm_camera_sensor_mt9d112,
+#endif
+#ifdef CONFIG_S5K3E2FX
+	&msm_camera_sensor_s5k3e2fx,
+#endif
+#ifdef CONFIG_MT9P012
+	&msm_camera_sensor_mt9p012,
+#endif
 	&android_pmem_device,
 	&android_pmem_adsp_device,
 	&android_pmem_gpu0_device,
 	&android_pmem_gpu1_device,
+	&android_pmem_camera_device,
 	&fish_battery_device,
 };
 
@@ -371,6 +478,10 @@ static void __init halibut_init(void)
 #endif
 	msm_device_hsusb.dev.platform_data = &msm_hsusb_pdata;
 	msm_acpu_clock_init(&halibut_clock_data);
+#ifdef CONFIG_MSM_CAMERA
+	config_camera_off_gpios(); /* might not be necessary */
+#endif
+	i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 	i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));
 	msm_hsusb_set_vbus_state(1);

@@ -94,7 +94,7 @@ uint16_t trout_axis_map(struct gpio_event_axis_info *info, uint16_t in)
 {
 	struct trout_axis_info *ai = container_of(info, struct trout_axis_info, info);
 	uint16_t out = ai->out_state;
-	
+
 	if (nav_just_on) {
 		if (jiffies == nav_on_jiffies || jiffies == nav_on_jiffies + 1)
 			goto ignore;
@@ -188,8 +188,8 @@ static struct gpio_event_platform_data trout_nav_data = {
 static struct platform_device trout_nav_device = {
 	.name = GPIO_EVENT_DEV_NAME,
 	.id = 2,
-	.dev		= {
-		.platform_data	= &trout_nav_data,
+	.dev = {
+		.platform_data = &trout_nav_data,
 	},
 };
 
@@ -285,14 +285,20 @@ static struct i2c_board_info i2c_devices[] = {
 	{
 		I2C_BOARD_INFO("pca963x", 0x62),
 	},
+#if defined(CONFIG_MSM_CAMERA) && defined(CONFIG_MT9T013)
+	{
+		I2C_BOARD_INFO("mt9t013", 0x6C),
+	},
+#endif
+#ifdef CONFIG_SENSORS_MT9T013
 	{
 		I2C_BOARD_INFO("mt9t013", 0x6C >> 1),
-		/* .irq = TROUT_GPIO_TO_INT(TROUT_GPIO_CAM_BTN_STEP1_N), */
 	},
+#endif
 };
 
 static struct timed_gpio timed_gpios[] = {
-	{ 
+	{
 		.name = "vibrator",
 		.gpio = TROUT_GPIO_HAPTIC_PWM,
 		.max_timeout = 15000,
@@ -313,20 +319,20 @@ static struct platform_device android_timed_gpios = {
 	.name		= "timed-gpio",
 	.id		= -1,
 	.dev		= {
-		.platform_data	= &timed_gpio_data,
+		.platform_data = &timed_gpio_data,
 	},
 };
 
 static struct gpio_led android_led_list[] = {
-	{ 
+	{
 		.name = "spotlight",
 		.gpio = TROUT_GPIO_SPOTLIGHT_EN,
 	},
-	{ 
+	{
 		.name = "keyboard-backlight",
 		.gpio = TROUT_GPIO_QTKEY_LED_EN,
 	},
-	{ 
+	{
 		.name = "button-backlight",
 		.gpio = TROUT_GPIO_UI_LED_EN,
 	},
@@ -341,7 +347,7 @@ static struct platform_device android_leds = {
 	.name		= "leds-gpio",
 	.id		= -1,
 	.dev		= {
-		.platform_data	= &android_leds_data,
+		.platform_data = &android_leds_data,
 	},
 };
 
@@ -356,7 +362,7 @@ static struct platform_device sd_door_switch = {
 	.name		= "switch-gpio",
 	.id		= -1,
 	.dev		= {
-		.platform_data	= &sd_door_switch_data,
+		.platform_data = &sd_door_switch_data,
 	},
 };
 
@@ -411,7 +417,37 @@ static void trout_phy_reset(void)
 
 static void config_camera_on_gpios(void);
 static void config_camera_off_gpios(void);
-static struct msm_camera_device_platform_data msm_camera_device = {
+
+#ifdef CONFIG_MSM_CAMERA
+static struct msm_camera_device_platform_data msm_camera_device_data = {
+	.camera_gpio_on  = config_camera_on_gpios,
+	.camera_gpio_off = config_camera_off_gpios,
+	.ioext.mdcphy = MSM_MDC_PHYS,
+	.ioext.mdcsz  = MSM_MDC_SIZE,
+	.ioext.appphy = MSM_CLK_CTL_PHYS,
+	.ioext.appsz  = MSM_CLK_CTL_SIZE,
+};
+
+#ifdef CONFIG_MT9T013
+static struct msm_camera_sensor_info msm_camera_sensor_mt9t013_data = {
+	.sensor_name    = "mt9t013",
+	.sensor_reset   = 108,
+	.sensor_pwd     = 85,
+	.vcm_pwd        = TROUT_GPIO_VCM_PWDN,
+	.pdata          = &msm_camera_device_data
+};
+
+static struct platform_device msm_camera_sensor_mt9t013 = {
+	.name           = "msm_camera_mt9t013",
+	.dev            = {
+		.platform_data = &msm_camera_sensor_mt9t013_data,
+	},
+};
+#endif
+#endif
+
+#ifdef CONFIG_SENSORS_MT9T013
+static struct msm_camera_legacy_device_platform_data msm_camera_device_mt9t013 = {
 	.sensor_reset	= 108,
 	.sensor_pwd	= 85,
 	.vcm_pwd	= TROUT_GPIO_VCM_PWDN,
@@ -420,11 +456,12 @@ static struct msm_camera_device_platform_data msm_camera_device = {
 };
 
 static struct platform_device trout_camera = {
-	.name		= "camera",
-	.dev		= { 
-		.platform_data = &msm_camera_device,
+	.name           = "camera",
+	.dev            = {
+		.platform_data = &msm_camera_device_mt9t013,
 	},
 };
+#endif
 
 static struct pwr_sink trout_pwrsink_table[] = {
 	{
@@ -571,8 +608,8 @@ static struct snd_endpoint snd_endpoints_list[] = {
 #undef SND
 
 static struct msm_snd_endpoints trout_snd_endpoints = {
-        .endpoints = snd_endpoints_list,
-        .num = ARRAY_SIZE(snd_endpoints_list),
+	.endpoints = snd_endpoints_list,
+	.num = ARRAY_SIZE(snd_endpoints_list),
 };
 
 static struct platform_device trout_snd = {
@@ -599,7 +636,12 @@ static struct platform_device *devices[] __initdata = {
 	&android_leds,
 	&sd_door_switch,
 	&android_timed_gpios,
+#ifdef CONFIG_MT9T013
+	&msm_camera_sensor_mt9t013,
+#endif
+#ifdef CONFIG_SENSORS_MT9T013
 	&trout_camera,
+#endif
 	&trout_rfkill,
 #ifdef CONFIG_WIFI_CONTROL_FUNC
 	&trout_wifi,
@@ -798,7 +840,7 @@ static struct map_desc trout_io_desc[] __initdata = {
 };
 
 static void __init trout_fixup(struct machine_desc *desc, struct tag *tags,
-                               char **cmdline, struct meminfo *mi)
+				char **cmdline, struct meminfo *mi)
 {
 	mi->nr_banks=1;
 	mi->bank[0].start = PHYS_OFFSET;
