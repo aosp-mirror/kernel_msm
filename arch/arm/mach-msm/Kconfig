@@ -390,6 +390,14 @@ config MSM_ADSP
 	help
 	  Provides access to registers needed by the userspace aDSP library.
 
+config MSM_ADSP_REPORT_EVENTS
+	bool "Report modem events from the DSP"
+	default y
+	depends on MSM_ADSP
+	help
+	  Normally, only messages from the aDSP are reported to userspace.
+	  With this option, we report events from the aDSP as well.
+
 config WIFI_CONTROL_FUNC
 	bool "Enable WiFi control function abstraction"
 	help

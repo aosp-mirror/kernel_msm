@@ -530,6 +530,7 @@ fail:
 }
 EXPORT_SYMBOL(msm_adsp_write);
 
+#ifdef CONFIG_MSM_ADSP_REPORT_EVENTS
 static void *event_addr;
 static void read_event(void *buf, size_t len)
 {
@@ -544,6 +545,7 @@ static void read_event(void *buf, size_t len)
 	dptr[1] = be32_to_cpu(pkt_ptr->module);
 	dptr[2] = be32_to_cpu(pkt_ptr->image);
 }
+#endif
 
 static void handle_adsp_rtos_mtoa_app(struct rpc_request_hdr *req)
 {
@@ -667,9 +669,11 @@ static void handle_adsp_rtos_mtoa_app(struct rpc_request_hdr *req)
 	rpc_send_accepted_void_reply(rpc_cb_server_client, req->xid,
 				     RPC_ACCEPTSTAT_SUCCESS);
 	mutex_unlock(&module->lock);
+#ifdef CONFIG_MSM_ADSP_REPORT_EVENTS
 	event_addr = (uint32_t *)req;
 	module->ops->event(module->driver_data, EVENT_MSG_ID,
 				EVENT_LEN, read_event);
+#endif
 }
 
 static int handle_adsp_rtos_mtoa(struct rpc_request_hdr *req)

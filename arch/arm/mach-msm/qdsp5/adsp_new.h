@@ -72,7 +72,7 @@ struct adsp_event {
 	struct list_head list;
 	uint32_t size; /* always in bytes */
 	uint16_t msg_id;
-	uint16_t type; /* 0 for msgs (from aDSP), 1 for events (from ARM9) */
+	uint16_t type; /* 0 for msgs (from aDSP), -1 for events (from ARM9) */
 	int is16; /* always 0 (msg is 32-bit) when the event type is 1(ARM9) */
 	union {
 		uint16_t msg16[ADSP_EVENT_MAX_SIZE / 2];

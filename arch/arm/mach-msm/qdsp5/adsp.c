@@ -427,6 +427,19 @@ fail:
 	return ret_status;
 }
 
+#ifdef CONFIG_MSM_ADSP_REPORT_EVENTS
+static void *modem_event_addr;
+static void read_modem_event(void *buf, size_t len)
+{
+	uint32_t *dptr = buf;
+	struct rpc_adsp_rtos_modem_to_app_args_t *sptr =
+		modem_event_addr;
+	dptr[0] = be32_to_cpu(sptr->event);
+	dptr[1] = be32_to_cpu(sptr->module);
+	dptr[2] = be32_to_cpu(sptr->image);
+}
+#endif
+
 static void handle_adsp_rtos_mtoa_app(struct rpc_request_hdr *req)
 {
 	struct rpc_adsp_rtos_modem_to_app_args_t *args =
@@ -482,6 +495,13 @@ static void handle_adsp_rtos_mtoa_app(struct rpc_request_hdr *req)
 				     RPC_ACCEPTSTAT_SUCCESS);
 done:
 	mutex_unlock(&module->lock);
+#ifdef CONFIG_MSM_ADSP_REPORT_EVENTS
+	modem_event_addr = (uint32_t *)req;
+	module->ops->event(module->driver_data,
+				EVENT_MSG_ID,
+				EVENT_LEN,
+				read_modem_event);
+#endif
 }
 
 static int handle_adsp_rtos_mtoa(struct rpc_request_hdr *req)
