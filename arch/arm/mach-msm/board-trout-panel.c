@@ -572,7 +572,7 @@ struct msm_mddi_toshiba_client_data toshiba_client_data = {
 	},
 };
 
-struct msm_mddi_platform_data mddi_pdata = {
+static struct msm_mddi_platform_data mddi_pdata = {
 	.clk_rate = 122880000,
 	.power_client = trout_mddi_power_client,
 	.fb_resource = resources_msm_fb,

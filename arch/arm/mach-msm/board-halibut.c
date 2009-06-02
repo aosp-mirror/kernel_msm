@@ -20,9 +20,11 @@
 #include <linux/input.h>
 #include <linux/io.h>
 #include <linux/delay.h>
+#include <linux/bootmem.h>
 
 #include <mach/hardware.h>
 #include <mach/irqs.h>
+#include <mach/gpio.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
@@ -32,12 +34,23 @@
 #include <mach/irqs.h>
 #include <mach/board.h>
 #include <mach/msm_iomap.h>
+#include <mach/msm_hsusb.h>
 
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 #include <linux/i2c.h>
+#include <linux/android_pmem.h>
+
+#ifdef CONFIG_USB_FUNCTION
+#include <linux/usb/mass_storage_function.h>
+#endif
+#ifdef CONFIG_USB_ANDROID
+#include <linux/usb/android.h>
+#endif
 
 #include "devices.h"
+#include "board-halibut.h"
+#include "proc_comm.h"
 
 static struct resource smc91x_resources[] = {
 	[0] = {
@@ -62,7 +75,83 @@ static struct platform_device smc91x_device = {
 static struct i2c_board_info i2c_devices[] = {
 	{
 		I2C_BOARD_INFO("mt9t013", 0x78>>1),
-		/* .irq = TROUT_GPIO_TO_INT(TROUT_GPIO_CAM_BTN_STEP1_N), */
+	},
+};
+
+static uint32_t camera_off_gpio_table[] = {
+	/* parallel CAMERA interfaces */
+	PCOM_GPIO_CFG(0,  0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT0 */
+	PCOM_GPIO_CFG(1,  0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT1 */
+	PCOM_GPIO_CFG(2,  0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT2 */
+	PCOM_GPIO_CFG(3,  0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT3 */
+	PCOM_GPIO_CFG(4,  0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT4 */
+	PCOM_GPIO_CFG(5,  0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT5 */
+	PCOM_GPIO_CFG(6,  0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT6 */
+	PCOM_GPIO_CFG(7,  0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT7 */
+	PCOM_GPIO_CFG(8,  0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT8 */
+	PCOM_GPIO_CFG(9,  0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT9 */
+	PCOM_GPIO_CFG(10, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT10 */
+	PCOM_GPIO_CFG(11, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT11 */
+	PCOM_GPIO_CFG(12, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* PCLK */
+	PCOM_GPIO_CFG(13, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* HSYNC_IN */
+	PCOM_GPIO_CFG(14, 0, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* VSYNC_IN */
+	PCOM_GPIO_CFG(15, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA), /* MCLK */
+};
+
+static uint32_t camera_on_gpio_table[] = {
+	/* parallel CAMERA interfaces */
+	PCOM_GPIO_CFG(0,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT0 */
+	PCOM_GPIO_CFG(1,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT1 */
+	PCOM_GPIO_CFG(2,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT2 */
+	PCOM_GPIO_CFG(3,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT3 */
+	PCOM_GPIO_CFG(4,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT4 */
+	PCOM_GPIO_CFG(5,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT5 */
+	PCOM_GPIO_CFG(6,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT6 */
+	PCOM_GPIO_CFG(7,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT7 */
+	PCOM_GPIO_CFG(8,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT8 */
+	PCOM_GPIO_CFG(9,  1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT9 */
+	PCOM_GPIO_CFG(10, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT10 */
+	PCOM_GPIO_CFG(11, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* DAT11 */
+	PCOM_GPIO_CFG(12, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_16MA), /* PCLK */
+	PCOM_GPIO_CFG(13, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* HSYNC_IN */
+	PCOM_GPIO_CFG(14, 1, GPIO_INPUT, GPIO_PULL_DOWN, GPIO_2MA), /* VSYNC_IN */
+	PCOM_GPIO_CFG(15, 1, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_16MA), /* MCLK */
+};
+
+static void config_gpio_table(uint32_t *table, int len)
+{
+	int n;
+	unsigned id;
+	for (n = 0; n < len; n++) {
+		id = table[n];
+		msm_proc_comm(PCOM_RPC_GPIO_TLMM_CONFIG_EX, &id, 0);
+	}
+}
+
+static void config_camera_on_gpios(void)
+{
+	config_gpio_table(camera_on_gpio_table,
+		ARRAY_SIZE(camera_on_gpio_table));
+}
+
+static void config_camera_off_gpios(void)
+{
+	config_gpio_table(camera_off_gpio_table,
+		ARRAY_SIZE(camera_off_gpio_table));
+}
+
+static struct msm_camera_device_platform_data msm_camera_device = {
+	.sensor_reset   = 89,
+	.sensor_pwd     = 85,
+	.vcm_pwd        = 0,
+	.config_gpio_on = config_camera_on_gpios,
+	.config_gpio_off = config_camera_off_gpios,
+};
+
+static struct platform_device halibut_camera = {
+	.name           = "camera",
+	.dev            = {
+		.platform_data = &msm_camera_device,
 	},
 };
 
@@ -89,6 +178,149 @@ static struct platform_device halibut_snd = {
 	},
 };
 
+static struct android_pmem_platform_data android_pmem_pdata = {
+	.name = "pmem",
+	.start = MSM_PMEM_MDP_BASE,
+	.size = MSM_PMEM_MDP_SIZE,
+	.no_allocator = 0,
+	.cached = 1,
+};
+
+static struct android_pmem_platform_data android_pmem_adsp_pdata = {
+	.name = "pmem_adsp",
+	.start = MSM_PMEM_ADSP_BASE,
+	.size = MSM_PMEM_ADSP_SIZE,
+	.no_allocator = 0,
+	.cached = 0,
+};
+
+static struct android_pmem_platform_data android_pmem_gpu0_pdata = {
+	.name = "pmem_gpu0",
+	.start = MSM_PMEM_GPU0_BASE,
+	.size = MSM_PMEM_GPU0_SIZE,
+	.no_allocator = 1,
+	.cached = 0,
+};
+
+static struct android_pmem_platform_data android_pmem_gpu1_pdata = {
+	.name = "pmem_gpu1",
+	.start = MSM_PMEM_GPU1_BASE,
+	.size = MSM_PMEM_GPU1_SIZE,
+	.no_allocator = 1,
+	.cached = 0,
+};
+
+static struct platform_device android_pmem_device = {
+	.name = "android_pmem",
+	.id = 0,
+	.dev = { .platform_data = &android_pmem_pdata },
+};
+
+static struct platform_device android_pmem_adsp_device = {
+	.name = "android_pmem",
+	.id = 1,
+	.dev = { .platform_data = &android_pmem_adsp_pdata },
+};
+
+static struct platform_device android_pmem_gpu0_device = {
+	.name = "android_pmem",
+	.id = 2,
+	.dev = { .platform_data = &android_pmem_gpu0_pdata },
+};
+
+static struct platform_device android_pmem_gpu1_device = {
+	.name = "android_pmem",
+	.id = 3,
+	.dev = { .platform_data = &android_pmem_gpu1_pdata },
+};
+
+
+#ifdef CONFIG_USB_FUNCTION
+static char *halibut_usb_functions[] = {
+#if defined(CONFIG_USB_FUNCTION_MASS_STORAGE) || \
+		defined(CONFIG_USB_FUNCTION_UMS)
+	"usb_mass_storage",
+#endif
+#ifdef CONFIG_USB_FUNCTION_ADB
+	"adb",
+#endif
+};
+
+static struct msm_hsusb_product halibut_usb_products[] = {
+{
+.product_id     = 0x0c01,
+.functions      = 0x00000001, /* "usb_mass_storage" only */
+},
+{
+.product_id     = 0x0c02,
+.functions      = 0x00000003, /* "usb_mass_storage" and "adb" */
+},
+};
+#endif
+
+static int halibut_phy_init_seq[] = { 0x1D, 0x0D, 0x1D, 0x10, -1 };
+
+static struct msm_hsusb_platform_data msm_hsusb_pdata = {
+	.phy_init_seq = halibut_phy_init_seq,
+#ifdef CONFIG_USB_FUNCTION
+	.vendor_id = 0x18d1,
+	.product_id = 0x0c02,
+	.version = 0x0100,
+	.product_name = "Halibut",
+	.serial_number = "42",
+	.manufacturer_name = "Qualcomm",
+
+	.functions = halibut_usb_functions,
+	.num_functions = ARRAY_SIZE(halibut_usb_functions),
+	.products  = halibut_usb_products,
+	.num_products = ARRAY_SIZE(halibut_usb_products),
+#endif
+};
+
+#ifdef CONFIG_USB_FUNCTION_MASS_STORAGE
+static struct usb_mass_storage_platform_data mass_storage_pdata = {
+	.nluns = 1,
+	.buf_size = 16384,
+	.vendor = "Qualcomm",
+	.product = "Halibut",
+	.release = 0x0100,
+};
+
+static struct platform_device usb_mass_storage_device = {
+	.name = "usb_mass_storage",
+	.id = -1,
+	.dev = {
+		.platform_data = &mass_storage_pdata,
+	},
+};
+#endif
+
+#ifdef CONFIG_USB_ANDROID
+static struct android_usb_platform_data android_usb_pdata = {
+	.vendor_id = 0x18d1,
+	.product_id = 0x0c01,
+	.adb_product_id = 0x0c02,
+	.version = 0x0100,
+	.serial_number = "42",
+	.product_name = "Halibutdroid",
+	.manufacturer_name = "Qualcomm",
+	.nluns = 1,
+};
+
+static struct platform_device android_usb_device = {
+	.name = "android_usb",
+	.id = -1,
+	.dev = {
+		.platform_data = &android_usb_pdata,
+	},
+};
+#endif
+
+
+static struct platform_device fish_battery_device = {
+	.name = "fish_battery",
+};
+
 static struct platform_device *devices[] __initdata = {
 #if !defined(CONFIG_MSM_SERIAL_DEBUGGER)
 	&msm_device_uart3,
@@ -96,9 +328,21 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_smd,
 	&msm_device_nand,
 	&msm_device_hsusb,
+#ifdef CONFIG_USB_FUNCTION_MASS_STORAGE
+	&usb_mass_storage_device,
+#endif
+#ifdef CONFIG_USB_ANDROID
+	&android_usb_device,
+#endif
 	&msm_device_i2c,
 	&smc91x_device,
 	&halibut_snd,
+	&halibut_camera,
+	&android_pmem_device,
+	&android_pmem_adsp_device,
+	&android_pmem_gpu0_device,
+	&android_pmem_gpu1_device,
+	&fish_battery_device,
 };
 
 extern struct sys_timer msm_timer;
@@ -116,7 +360,7 @@ static struct msm_acpu_clock_platform_data halibut_clock_data = {
 	.wait_for_irq_khz = 128000000,
 };
 
-void msm_serial_debug_init(unsigned int base, int irq,
+extern void msm_serial_debug_init(unsigned int base, int irq,
 				struct device *clk_device, int signal_irq);
 
 static void __init halibut_init(void)
@@ -125,9 +369,11 @@ static void __init halibut_init(void)
 	msm_serial_debug_init(MSM_UART3_PHYS, INT_UART3,
 			      &msm_device_uart3.dev, 1);
 #endif
+	msm_device_hsusb.dev.platform_data = &msm_hsusb_pdata;
 	msm_acpu_clock_init(&halibut_clock_data);
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 	i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));
+	msm_hsusb_set_vbus_state(1);
 }
 
 static void __init halibut_fixup(struct machine_desc *desc, struct tag *tags,
@@ -147,7 +393,7 @@ static void __init halibut_map_io(void)
 
 MACHINE_START(HALIBUT, "Halibut Board (QCT SURF7200A)")
 #ifdef CONFIG_MSM_DEBUG_UART
-	.phys_io        = MSM_DEBUG_UART_PHYS,
+	.phys_io	= MSM_DEBUG_UART_PHYS,
 	.io_pg_offst    = ((MSM_DEBUG_UART_BASE) >> 18) & 0xfffc,
 #endif
 	.boot_params	= 0x10000100,
