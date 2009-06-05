@@ -377,7 +377,7 @@ static int rpc_send_accepted_void_reply(struct msm_rpc_endpoint *client,
 	return rc;
 }
 
-int msm_adsp_write(struct msm_adsp_module *module, unsigned dsp_queue_addr,
+int __msm_adsp_write(struct msm_adsp_module *module, unsigned dsp_queue_addr,
 		   void *cmd_buf, size_t cmd_size)
 {
 	uint32_t ctrl_word;
@@ -465,8 +465,7 @@ int msm_adsp_write(struct msm_adsp_module *module, unsigned dsp_queue_addr,
 
 	if ((ctrl_word & ADSP_RTOS_WRITE_CTRL_WORD_STATUS_M) !=
 			 ADSP_RTOS_WRITE_CTRL_WORD_NO_ERR_V) {
-		ret_status = -EIO;
-		pr_err("adsp: failed to write queue %x, retry\n", dsp_q_addr);
+		ret_status = -EAGAIN;
 		goto fail;
 	}
 
@@ -529,6 +528,21 @@ fail:
 	return ret_status;
 }
 EXPORT_SYMBOL(msm_adsp_write);
+
+int msm_adsp_write(struct msm_adsp_module *module, unsigned dsp_queue_addr,
+		   void *cmd_buf, size_t cmd_size)
+{
+	int rc, retries = 0;
+	do {
+		rc = __msm_adsp_write(module, dsp_queue_addr, cmd_buf, cmd_size);
+		if (rc == -EAGAIN)
+			udelay(10);
+	} while(rc == -EAGAIN && retries++ < 100);
+	if (retries > 50)
+		pr_warning("adsp: %s command took %d attempts: rc %d\n",
+				module->name, retries, rc);
+	return rc;
+}
 
 #ifdef CONFIG_MSM_ADSP_REPORT_EVENTS
 static void *event_addr;
