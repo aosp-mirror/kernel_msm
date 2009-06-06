@@ -18,10 +18,6 @@
 #ifndef _ARCH_ARM_MACH_MSM_ADSP_H
 #define _ARCH_ARM_MACH_MSM_ADSP_H
 
-#if CONFIG_MSM_AMSS_VERSION>=6350
-#include "adsp_new.h"
-#else
-
 #include <linux/types.h>
 #include <linux/msm_adsp.h>
 #include <mach/msm_rpcrouter.h>
@@ -71,8 +67,8 @@ struct adsp_module_info {
 };
 
 #define ADSP_EVENT_MAX_SIZE 496
-#define EVENT_LEN       12
-#define EVENT_MSG_ID ((uint16_t)~0)
+#define EVENT_LEN	12
+#define EVENT_MSG_ID	((uint16_t)~0)
 
 struct adsp_event {
 	struct list_head list;
@@ -114,6 +110,14 @@ struct adsp_info {
 	/* stats */
 	uint32_t events_received;
 	uint32_t event_backlog_max;
+
+#if CONFIG_MSM_AMSS_VERSION >= 6350
+	/* rpc_client for init_info */
+	struct msm_rpc_endpoint *init_info_rpc_client;
+	struct adsp_rtos_mp_mtoa_init_info_type *init_info_ptr;
+	wait_queue_head_t init_info_wait;
+	unsigned init_info_state;
+#endif
 };
 
 #define RPC_ADSP_RTOS_ATOM_PROG 0x3000000a
@@ -123,12 +127,18 @@ struct adsp_info {
 #define RPC_ADSP_RTOS_APP_TO_MODEM_PROC 2
 #define RPC_ADSP_RTOS_MODEM_TO_APP_PROC 2
 
-#if CONFIG_MSM_AMSS_VERSION == 6210
-#define RPC_ADSP_RTOS_ATOM_VERS 0x20f17fd3
-#define RPC_ADSP_RTOS_MTOA_VERS 0x75babbd6
+#if CONFIG_MSM_AMSS_VERSION >= 6350
+#define RPC_ADSP_RTOS_ATOM_VERS MSM_RPC_VERS(1,0)
+#define RPC_ADSP_RTOS_MTOA_VERS MSM_RPC_VERS(2,1) /* must be actual vers */
+#define MSM_ADSP_DRIVER_NAME "rs3000000a:00010000"
 #elif (CONFIG_MSM_AMSS_VERSION == 6220) || (CONFIG_MSM_AMSS_VERSION == 6225)
-#define RPC_ADSP_RTOS_ATOM_VERS 0x71d1094b
-#define RPC_ADSP_RTOS_MTOA_VERS 0xee3a9966
+#define RPC_ADSP_RTOS_ATOM_VERS MSM_RPC_VERS(0x71d1094b, 0)
+#define RPC_ADSP_RTOS_MTOA_VERS MSM_RPC_VERS(0xee3a9966, 0)
+#define MSM_ADSP_DRIVER_NAME "rs3000000a:71d1094b"
+#elif CONFIG_MSM_AMSS_VERSION == 6210
+#define RPC_ADSP_RTOS_ATOM_VERS MSM_RPC_VERS(0x20f17fd3, 0)
+#define RPC_ADSP_RTOS_MTOA_VERS MSM_RPC_VERS(0x75babbd6, 0)
+#define MSM_ADSP_DRIVER_NAME "rs3000000a:20f17fd3"
 #else
 #error "Unknown AMSS version"
 #endif
@@ -149,6 +159,10 @@ enum {
 	RPC_ADSP_RTOS_CMD_DISABLE_EVENT_RSP,
 	RPC_ADSP_RTOS_CMD_REMOTE_EVENT,
 	RPC_ADSP_RTOS_CMD_SET_STATE,
+#if CONFIG_MSM_AMSS_VERSION >= 6350
+	RPC_ADSP_RTOS_CMD_REMOTE_INIT_INFO_EVENT,
+	RPC_ADSP_RTOS_CMD_GET_INIT_INFO,
+#endif
 };
 
 enum rpc_adsp_rtos_mod_status_type {
@@ -157,6 +171,10 @@ enum rpc_adsp_rtos_mod_status_type {
 	RPC_ADSP_RTOS_SERVICE_RESET,
 	RPC_ADSP_RTOS_CMD_FAIL,
 	RPC_ADSP_RTOS_CMD_SUCCESS,
+#if CONFIG_MSM_AMSS_VERSION >= 6350
+	RPC_ADSP_RTOS_INIT_INFO,
+	RPC_ADSP_RTOS_DISABLE_FAIL,
+#endif
 };
 
 struct rpc_adsp_rtos_app_to_modem_args_t {
@@ -167,6 +185,68 @@ struct rpc_adsp_rtos_app_to_modem_args_t {
 	uint32_t module; /* e.g., QDSP_MODULE_AUDPPTASK */
 };
 
+#if CONFIG_MSM_AMSS_VERSION >= 6350
+enum qdsp_image_type {
+	QDSP_IMAGE_COMBO,
+	QDSP_IMAGE_GAUDIO,
+	QDSP_IMAGE_QTV_LP,
+	QDSP_IMAGE_MAX,
+	/* DO NOT USE: Force this enum to be a 32bit type to improve speed */
+	QDSP_IMAGE_32BIT_DUMMY = 0x10000
+};
+
+struct adsp_rtos_mp_mtoa_header_type {
+	enum rpc_adsp_rtos_mod_status_type  event;
+	enum rpc_adsp_rtos_proc_type        proc_id;
+};
+
+/* ADSP RTOS MP Communications - Modem to APP's  Event Info*/
+struct adsp_rtos_mp_mtoa_type {
+	uint32_t	module;
+	uint32_t	image;
+	uint32_t	apps_okts;
+};
+
+/* ADSP RTOS MP Communications - Modem to APP's Init Info  */
+#define IMG_MAX         8
+#define ENTRIES_MAX     64
+
+struct queue_to_offset_type {
+	uint32_t	queue;
+	uint32_t	offset;
+};
+
+struct adsp_rtos_mp_mtoa_init_info_type {
+	uint32_t	image_count;
+	uint32_t	num_queue_offsets;
+	struct queue_to_offset_type	queue_offsets_tbl[IMG_MAX][ENTRIES_MAX];
+	uint32_t	num_task_module_entries;
+	uint32_t	task_to_module_tbl[IMG_MAX][ENTRIES_MAX];
+
+	uint32_t	module_table_size;
+	uint32_t	module_entries[ENTRIES_MAX];
+	/*
+	 * queue_offsets[] is to store only queue_offsets
+	 */
+	uint32_t	queue_offsets[IMG_MAX][ENTRIES_MAX];
+};
+
+struct adsp_rtos_mp_mtoa_s_type {
+	struct adsp_rtos_mp_mtoa_header_type mp_mtoa_header;
+
+	uint32_t desc_field;
+	union {
+		struct adsp_rtos_mp_mtoa_init_info_type mp_mtoa_init_packet;
+		struct adsp_rtos_mp_mtoa_type mp_mtoa_packet;
+	} adsp_rtos_mp_mtoa_data;
+};
+
+struct rpc_adsp_rtos_modem_to_app_args_t {
+	struct rpc_request_hdr hdr;
+	uint32_t gotit; /* if 1, the next elements are present */
+	struct adsp_rtos_mp_mtoa_s_type mtoa_pkt;
+};
+#else
 struct rpc_adsp_rtos_modem_to_app_args_t {
 	struct rpc_request_hdr hdr;
 	uint32_t gotit; /* if 1, the next elements are present */
@@ -175,11 +255,15 @@ struct rpc_adsp_rtos_modem_to_app_args_t {
 	uint32_t module; /* e.g., QDSP_MODULE_AUDPPTASK */
 	uint32_t image; /* RPC_QDSP_IMAGE_GAUDIO */
 };
+#endif /* CONFIG_MSM_AMSS_VERSION >= 6350 */
 
 #define ADSP_STATE_DISABLED   0
 #define ADSP_STATE_ENABLING   1
 #define ADSP_STATE_ENABLED    2
 #define ADSP_STATE_DISABLING  3
+#if CONFIG_MSM_AMSS_VERSION >= 6350
+#define ADSP_STATE_INIT_INFO  4
+#endif
 
 struct msm_adsp_module {
 	struct mutex lock;
@@ -211,11 +295,13 @@ struct msm_adsp_module {
 
 extern void msm_adsp_publish_cdevs(struct msm_adsp_module *, unsigned);
 extern int adsp_init_info(struct adsp_info *info);
-extern struct msm_adsp_module *find_adsp_module_by_id(struct adsp_info *info,
-						      uint32_t id);
 
 /* Value to indicate that a queue is not defined for a particular image */
+#if CONFIG_MSM_AMSS_VERSION >= 6350
+#define QDSP_RTOS_NO_QUEUE  0xfffffffe
+#else
 #define QDSP_RTOS_NO_QUEUE  0xffffffff
+#endif
 
 /*
  * Constants used to communicate with the ADSP RTOS
@@ -280,5 +366,4 @@ extern struct msm_adsp_module *find_adsp_module_by_id(struct adsp_info *info,
 /* Base address of DSP and DSP hardware registers */
 #define QDSP_RAMC_OFFSET  0x400000
 
-#endif /* CONFIG_MSM_AMSS_VERSION>=6350 */
-#endif
+#endif /* _ARCH_ARM_MACH_MSM_ADSP_H */
