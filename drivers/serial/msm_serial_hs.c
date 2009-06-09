@@ -1,6 +1,6 @@
 /* drivers/serial/msm_serial_hs.c
  *
- * MSM 7k High speed uart driver
+ * MSM 7k/8k High speed uart driver
  *
  * Copyright (c) 2007-2008 QUALCOMM Incorporated.
  * Copyright (c) 2008 QUALCOMM USA, INC.
