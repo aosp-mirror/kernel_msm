@@ -151,6 +151,14 @@ config HTC_PWRSINK
 	default y
 	bool "HTC Power Sink Driver"
 
+config CACHE_FLUSH_RANGE_LIMIT
+	hex "Cache flush range limit"
+	default 0x40000
+	help
+	  When flushing a cache range larger then this (hex) limit, flush the
+	  entire cache instead. Flushing a large range can be slower than
+	  flushing, then refilling, the entire cache.
+
 choice
 	prompt "Default Timer"
 	default MSM7X00A_USE_GP_TIMER
