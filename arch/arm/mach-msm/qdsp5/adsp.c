@@ -1043,6 +1043,7 @@ static int msm_adsp_probe(struct platform_device *pdev)
 {
 	unsigned count;
 	int rc, i;
+	int max_module_id;
 
 	pr_info("adsp: probe\n");
 
@@ -1062,9 +1063,15 @@ static int msm_adsp_probe(struct platform_device *pdev)
 	adsp_info.write_ctrl += (uint32_t) MSM_AD5_BASE;
 	count = adsp_info.module_count;
 
+#if CONFIG_MSM_AMSS_VERSION >= 6350
+	max_module_id = count;
+#else
+	max_module_id = adsp_info.max_module_id + 1;
+#endif
+
 	adsp_modules = kzalloc(
-		(sizeof(struct msm_adsp_module) + sizeof(void *)) *
-		count, GFP_KERNEL);
+		sizeof(struct msm_adsp_module) * count +
+		sizeof(void *) * max_module_id, GFP_KERNEL);
 	if (!adsp_modules)
 		return -ENOMEM;
 
