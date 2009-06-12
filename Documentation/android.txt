@@ -124,8 +124,9 @@ SERIAL_CORE_CONSOLE
 Board code names
 ----------------
 
-board-halibut is a qualcomm reference design.  board-sapphire is HTC
-Magic.  board-trout is HTC Dream/G1/ADP1.
+board-halibut - Qualcomm SURF 7201A
+board-sapphire - HTC Magic
+board-trout - HTC Dream / T-Mobile G1 / Android ADP1
 
 Booting your kernel
 -------------------
