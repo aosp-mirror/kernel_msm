@@ -182,12 +182,7 @@ static struct power_supply htc_power_supplies[] = {
 	},
 };
 
-static void usb_status_notifier_func(int online);
 static int g_usb_online;
-static struct t_usb_status_notifier usb_status_notifier = {
-	.name = "htc_battery",
-	.func = usb_status_notifier_func,
-};
 
 /* -------------------------------------------------------------------------- */
 
@@ -364,8 +359,8 @@ int htc_cable_status_update(int status)
 
 /* A9 reports USB charging when helf AC cable in and China AC charger. */
 /* Work arround: notify userspace AC charging first,
-and notify USB charging again when receiving usb connected notificaiton from usb driver. */
-static void usb_status_notifier_func(int online)
+and notify USB charging again when receiving usb connected notification from usb driver. */
+void notify_usb_connected(int online)
 {
 	mutex_lock(&htc_batt_info.lock);
 
@@ -790,7 +785,6 @@ static int __init htc_battery_init(void)
 	wake_lock_init(&vbus_wake_lock, WAKE_LOCK_SUSPEND, "vbus_present");
 	mutex_init(&htc_batt_info.lock);
 	mutex_init(&htc_batt_info.rpc_lock);
-	usb_register_notifier(&usb_status_notifier);
 	msm_rpc_create_server(&battery_server);
 	platform_driver_register(&htc_battery_driver);
 	return 0;

@@ -88,6 +88,7 @@ static int hsusb_phy_init_seq[] = { 0x40, 0x31, 0x1D, 0x0D, 0x1D, 0x10, -1 };
 struct msm_hsusb_platform_data msm_hsusb_pdata = {
 	.phy_reset = internal_phy_reset,
 	.phy_init_seq = hsusb_phy_init_seq,
+	.usb_connected = notify_usb_connected,
 };
 
 #ifdef CONFIG_USB_ANDROID

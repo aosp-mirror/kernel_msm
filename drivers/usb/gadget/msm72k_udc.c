@@ -162,6 +162,9 @@ struct usb_info {
 	int *phy_init_seq;
 	void (*phy_reset)(void);
 
+	/* for notification when USB is connected or disconnected */
+	void (*usb_connected)(int);
+
 	struct work_struct work;
 	unsigned phy_status;
 	unsigned phy_fail_count;
@@ -1090,6 +1093,9 @@ static void usb_do_work(struct work_struct *w)
 				msm72k_pullup(&ui->gadget, 0);
 				spin_unlock_irqrestore(&ui->lock, iflags);
 
+				if (ui->usb_connected)
+					ui->usb_connected(0);
+
 				/* terminate any transactions, etc */
 				flush_all_endpoints(ui);
 
@@ -1125,6 +1131,9 @@ static void usb_do_work(struct work_struct *w)
 				clk_enable(ui->clk);
 				clk_enable(ui->pclk);
 				usb_reset(ui);
+
+				if (ui->usb_connected)
+					ui->usb_connected(1);
 
 				ui->state = USB_STATE_ONLINE;
 				usb_do_work_check_vbus(ui);
@@ -1553,6 +1562,7 @@ static int msm72k_probe(struct platform_device *pdev)
 		struct msm_hsusb_platform_data *pdata = pdev->dev.platform_data;
 		ui->phy_reset = pdata->phy_reset;
 		ui->phy_init_seq = pdata->phy_init_seq;
+		ui->usb_connected = pdata->usb_connected;
 	}
 
 	irq = platform_get_irq(pdev, 0);

@@ -55,23 +55,13 @@ struct mmc_platform_data;
 int __init msm_add_sdcc_devices(unsigned int controller, struct mmc_platform_data *plat);
 int __init msm_add_serial_devices(unsigned uart);
 
-#if defined(CONFIG_USB_FUNCTION_MSM_HSUSB)
-/* START: add USB connected notify function */
-struct t_usb_status_notifier{
-	struct list_head notifier_link;
-	const char *name;
-	void (*func)(int online);
-};
-	int usb_register_notifier(struct t_usb_status_notifier *);
-	static LIST_HEAD(g_lh_usb_notifier_list);
-/* END: add USB connected notify function */
-#endif
-
 int __init board_mfg_mode(void);
 int __init parse_tag_smi(const struct tag *tags);
 int __init parse_tag_hwid(const struct tag * tags);
 int __init parse_tag_skuid(const struct tag * tags);
 int parse_tag_engineerid(const struct tag * tags);
+
+void notify_usb_connected(int online);
 
 char *board_serialno(void);
 
