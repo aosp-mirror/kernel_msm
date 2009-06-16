@@ -69,6 +69,47 @@ module_param_named(idle_spin_time, msm_pm_idle_spin_time, int, S_IRUGO | S_IWUSR
 #define A11S_STANDBY_CTL (MSM_CSR_BASE + 0x108)
 #define A11RAMBACKBIAS (MSM_CSR_BASE + 0x508)
 
+
+#define DEM_MASTER_BITS_PER_CPU             5
+
+/* Power Master State Bits - Per CPU */
+#define DEM_MASTER_SMSM_RUN \
+        (0x01UL << (DEM_MASTER_BITS_PER_CPU * SMSM_STATE_APPS))
+#define DEM_MASTER_SMSM_RSA \
+        (0x02UL << (DEM_MASTER_BITS_PER_CPU * SMSM_STATE_APPS))
+#define DEM_MASTER_SMSM_PWRC_EARLY_EXIT \
+        (0x04UL << (DEM_MASTER_BITS_PER_CPU * SMSM_STATE_APPS))
+#define DEM_MASTER_SMSM_SLEEP_EXIT \
+        (0x08UL << (DEM_MASTER_BITS_PER_CPU * SMSM_STATE_APPS))
+#define DEM_MASTER_SMSM_READY \
+        (0x10UL << (DEM_MASTER_BITS_PER_CPU * SMSM_STATE_APPS))
+
+/* Power Slave State Bits */
+#define DEM_SLAVE_SMSM_RUN                  (0x0001)
+#define DEM_SLAVE_SMSM_PWRC                 (0x0002)
+#define DEM_SLAVE_SMSM_PWRC_DELAY           (0x0004)
+#define DEM_SLAVE_SMSM_PWRC_EARLY_EXIT      (0x0008)
+#define DEM_SLAVE_SMSM_WFPI                 (0x0010)
+#define DEM_SLAVE_SMSM_SLEEP                (0x0020)
+#define DEM_SLAVE_SMSM_SLEEP_EXIT           (0x0040)
+#define DEM_SLAVE_SMSM_MSGS_REDUCED         (0x0080)
+#define DEM_SLAVE_SMSM_RESET                (0x0100)
+#define DEM_SLAVE_SMSM_PWRC_SUSPEND         (0x0200)
+
+#ifndef CONFIG_ARCH_MSM_SCORPION
+#define PM_SMSM_WRITE_STATE	SMSM_STATE_APPS
+#define PM_SMSM_READ_STATE	SMSM_STATE_MODEM
+
+#define PM_SMSM_WRITE_RUN	SMSM_RUN
+#define PM_SMSM_READ_RUN	SMSM_RUN
+#else
+#define PM_SMSM_WRITE_STATE	SMSM_STATE_APPS_DEM
+#define PM_SMSM_READ_STATE	SMSM_STATE_POWER_MASTER_DEM
+
+#define PM_SMSM_WRITE_RUN	DEM_SLAVE_SMSM_RUN
+#define PM_SMSM_READ_RUN	DEM_MASTER_SMSM_RUN
+#endif
+
 int msm_pm_collapse(void);
 int msm_arch_idle(void);
 void msm_pm_collapse_exit(void);
@@ -139,7 +180,7 @@ msm_pm_wait_state(uint32_t wait_state_all_set, uint32_t wait_state_all_clear,
 	uint32_t state;
 
 	for (i = 0; i < 100000; i++) {
-		state = smsm_get_state(SMSM_STATE_MODEM);
+		state = smsm_get_state(PM_SMSM_READ_STATE);
 		if (((state & wait_state_all_set) == wait_state_all_set) &&
 		    ((~state & wait_state_all_clear) == wait_state_all_clear) &&
 		    (wait_state_any_set == 0 || (state & wait_state_any_set) ||
@@ -179,6 +220,7 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 		printk(KERN_INFO "msm_sleep(): mode %d delay %u idle %d\n",
 		       sleep_mode, sleep_delay, from_idle);
 
+#ifndef CONFIG_ARCH_MSM_SCORPION
 	switch (sleep_mode) {
 	case MSM_PM_SLEEP_MODE_POWER_COLLAPSE:
 		enter_state = SMSM_PWRC;
@@ -201,6 +243,30 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 		enter_state = 0;
 		exit_state = 0;
 	}
+#else
+	switch (sleep_mode) {
+	case MSM_PM_SLEEP_MODE_POWER_COLLAPSE:
+		enter_state = DEM_SLAVE_SMSM_PWRC;
+		enter_wait_set = DEM_MASTER_SMSM_RSA;
+		exit_state = DEM_SLAVE_SMSM_WFPI;
+		exit_wait_set = DEM_MASTER_SMSM_RUN;
+		break;
+	case MSM_PM_SLEEP_MODE_POWER_COLLAPSE_SUSPEND:
+		enter_state = DEM_SLAVE_SMSM_PWRC_SUSPEND;
+		enter_wait_set = DEM_MASTER_SMSM_RSA;
+		exit_state = DEM_SLAVE_SMSM_WFPI;
+		exit_wait_set = DEM_MASTER_SMSM_RUN;
+		break;
+	case MSM_PM_SLEEP_MODE_APPS_SLEEP:
+		enter_state = DEM_SLAVE_SMSM_SLEEP;
+		exit_state = 0;
+		exit_wait_set = DEM_MASTER_SMSM_SLEEP_EXIT;
+		break;
+	default:
+		enter_state = 0;
+		exit_state = 0;
+	}
+#endif
 
 	clk_enter_sleep(from_idle);
 	msm_irq_enter_sleep1(!!enter_state, from_idle);
@@ -209,8 +275,13 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 	if (enter_state) {
 		if (sleep_delay == 0 && sleep_mode >= MSM_PM_SLEEP_MODE_APPS_SLEEP)
 			sleep_delay = 192000*5; /* APPS_SLEEP does not allow infinite timeout */
-		smsm_set_sleep_duration(sleep_delay);
-		ret = smsm_change_state(SMSM_STATE_APPS, SMSM_RUN, enter_state);
+		ret = smsm_set_sleep_duration(sleep_delay);
+		if (ret) {
+			printk(KERN_ERR "msm_sleep(): smsm_set_sleep_duration %x failed\n", enter_state);
+			enter_state = 0;
+			exit_state = 0;
+		}
+		ret = smsm_change_state(PM_SMSM_WRITE_STATE, PM_SMSM_WRITE_RUN, enter_state);
 		if (ret) {
 			printk(KERN_ERR "msm_sleep(): smsm_change_state %x failed\n", enter_state);
 			enter_state = 0;
@@ -218,7 +289,7 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 		}
 		ret = msm_pm_wait_state(enter_wait_set, enter_wait_clear, 0, 0);
 		if (ret) {
-			printk(KERN_INFO "msm_sleep(): msm_pm_wait_state failed, %x\n", smsm_get_state(SMSM_STATE_MODEM));
+			printk(KERN_INFO "msm_sleep(): msm_pm_wait_state failed, %x\n", smsm_get_state(PM_SMSM_READ_STATE));
 			goto enter_failed;
 		}
 	}
@@ -230,13 +301,15 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 		writel(1, A11S_PWRDOWN);
 
 		writel(0, A11S_STANDBY_CTL);
+#ifndef CONFIG_ARCH_MSM_SCORPION
 		writel(0, A11RAMBACKBIAS);
+#endif
 
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_STATE)
 			printk(KERN_INFO "msm_sleep(): enter "
 			       "A11S_CLK_SLEEP_EN %x, A11S_PWRDOWN %x, "
 			       "smsm_get_state %x\n", readl(A11S_CLK_SLEEP_EN),
-			       readl(A11S_PWRDOWN), smsm_get_state(SMSM_STATE_MODEM));
+			       readl(A11S_PWRDOWN), smsm_get_state(PM_SMSM_READ_STATE));
 	}
 
 	if (sleep_mode <= MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT) {
@@ -263,6 +336,7 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 		msm_pm_reset_vector[1] = saved_vector[1];
 		if (collapsed) {
 			cpu_init();
+			__asm__("cpsie   a");
 			msm_fiq_exit_sleep();
 			local_fiq_enable();
 			rv = 0;
@@ -289,32 +363,32 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 		printk(KERN_INFO "msm_sleep(): exit A11S_CLK_SLEEP_EN %x, "
 		       "A11S_PWRDOWN %x, smsm_get_state %x\n",
 		       readl(A11S_CLK_SLEEP_EN), readl(A11S_PWRDOWN),
-		       smsm_get_state(SMSM_STATE_MODEM));
+		       smsm_get_state(PM_SMSM_READ_STATE));
 ramp_down_failed:
 	msm_irq_exit_sleep1();
 enter_failed:
 	if (enter_state) {
 		writel(0x00, A11S_CLK_SLEEP_EN);
 		writel(0, A11S_PWRDOWN);
-		smsm_change_state(SMSM_STATE_APPS, enter_state, exit_state);
+		smsm_change_state(PM_SMSM_WRITE_STATE, enter_state, exit_state);
 		msm_pm_wait_state(exit_wait_set, exit_wait_clear, 0, 0);
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_STATE)
 			printk(KERN_INFO "msm_sleep(): sleep exit "
 			       "A11S_CLK_SLEEP_EN %x, A11S_PWRDOWN %x, "
 			       "smsm_get_state %x\n", readl(A11S_CLK_SLEEP_EN),
-			       readl(A11S_PWRDOWN), smsm_get_state(SMSM_STATE_MODEM));
+			       readl(A11S_PWRDOWN), smsm_get_state(PM_SMSM_READ_STATE));
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_SMSM_STATE)
 			smsm_print_sleep_info();
 	}
 	msm_irq_exit_sleep2();
 	if (enter_state) {
-		smsm_change_state(SMSM_STATE_APPS, exit_state, SMSM_RUN);
-		msm_pm_wait_state(SMSM_RUN, 0, 0, 0);
+		smsm_change_state(PM_SMSM_WRITE_STATE, exit_state, PM_SMSM_WRITE_RUN);
+		msm_pm_wait_state(PM_SMSM_READ_RUN, 0, 0, 0);
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_STATE)
 			printk(KERN_INFO "msm_sleep(): sleep exit "
 			       "A11S_CLK_SLEEP_EN %x, A11S_PWRDOWN %x, "
 			       "smsm_get_state %x\n", readl(A11S_CLK_SLEEP_EN),
-			       readl(A11S_PWRDOWN), smsm_get_state(SMSM_STATE_MODEM));
+			       readl(A11S_PWRDOWN), smsm_get_state(PM_SMSM_READ_STATE));
 	}
 	msm_irq_exit_sleep3();
 	msm_gpio_exit_sleep();
