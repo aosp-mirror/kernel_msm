@@ -471,6 +471,7 @@ static void __init msm_timer_init(void)
 		writel(0, clock->regbase + TIMER_ENABLE);
 		writel(0, clock->regbase + TIMER_CLEAR);
 		writel(~0, clock->regbase + TIMER_MATCH_VAL);
+		while (msm_read_timer_count(clock)) ; /* wait for clock to clear */
 
 		ce->mult = div_sc(clock->freq, NSEC_PER_SEC, ce->shift);
 		/* allow at least 10 seconds to notice that the timer wrapped */
