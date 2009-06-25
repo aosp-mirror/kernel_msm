@@ -42,6 +42,7 @@ struct sirc_regs_t {
 struct sirc_cascade_regs {
 	void    *int_status;
 	unsigned int    cascade_irq;
+	unsigned int    cascade_fiq;
 };
 
 void msm_init_sirc(void);
