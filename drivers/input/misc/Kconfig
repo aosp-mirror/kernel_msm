@@ -406,4 +406,10 @@ config INPUT_PCAP
 	  To compile this driver as a module, choose M here: the
 	  module will be called pcap_keys.
 
+config INPUT_CAPELLA_CM3602
+	tristate "Capella CM3602 proximity and light sensor"
+	help
+	  Say Y here to enable the Capella CM3602 Short Distance Proximity
+	  Sensor with Ambient Light Sensor.
+
 endif
