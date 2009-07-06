@@ -385,6 +385,14 @@ config MSM_CPU_FREQ_ONDEMAND_MIN
 
 endif # MSM_CPU_FREQ_ONDEMAND
 
+config MSM_HW3D
+	tristate "MSM Hardware 3D Register Driver"
+	depends on EARLYSUSPEND
+	default y
+	help
+	  Provides access to registers needed by the userspace OpenGL|ES
+	  library.
+
 config MSM_ADSP
 	tristate "MSM ADSP driver"
 	default y

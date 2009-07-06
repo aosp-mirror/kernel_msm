@@ -141,20 +141,6 @@ static struct android_pmem_platform_data pmem_camera_pdata = {
 	.cached = 0,
 };
 
-static struct android_pmem_platform_data pmem_gpu0_pdata = {
-	.name = "pmem_gpu0",
-	.no_allocator = 1,
-	.cached = 0,
-	.buffered = 1,
-};
-
-static struct android_pmem_platform_data pmem_gpu1_pdata = {
-	.name = "pmem_gpu1",
-	.no_allocator = 1,
-	.cached = 0,
-	.buffered = 1,
-};
-
 static struct platform_device pmem_device = {
 	.name = "android_pmem",
 	.id = 0,
@@ -167,21 +153,9 @@ static struct platform_device pmem_adsp_device = {
 	.dev = { .platform_data = &pmem_adsp_pdata },
 };
 
-static struct platform_device pmem_gpu0_device = {
-	.name = "android_pmem",
-	.id = 2,
-	.dev = { .platform_data = &pmem_gpu0_pdata },
-};
-
-static struct platform_device pmem_gpu1_device = {
-	.name = "android_pmem",
-	.id = 3,
-	.dev = { .platform_data = &pmem_gpu1_pdata },
-};
-
 static struct platform_device pmem_camera_device = {
 	.name = "android_pmem",
-	.id = 4,
+	.id = 2,
 	.dev = { .platform_data = &pmem_camera_pdata },
 };
 
@@ -198,6 +172,36 @@ static struct platform_device ram_console_device = {
 	.resource       = ram_console_resource,
 };
 
+static struct resource resources_hw3d[] = {
+	{
+		.start	= 0xA0000000,
+		.end	= 0xA00fffff,
+		.flags	= IORESOURCE_MEM,
+		.name	= "regs",
+	},
+	{
+		.flags	= IORESOURCE_MEM,
+		.name	= "smi",
+	},
+	{
+		.flags	= IORESOURCE_MEM,
+		.name	= "ebi",
+	},
+	{
+		.start	= INT_GRAPHICS,
+		.end	= INT_GRAPHICS,
+		.flags	= IORESOURCE_IRQ,
+		.name	= "gfx",
+	},
+};
+
+static struct platform_device hw3d_device = {
+	.name		= "msm_hw3d",
+	.id		= 0,
+	.num_resources	= ARRAY_SIZE(resources_hw3d),
+	.resource	= resources_hw3d,
+};
+
 void __init msm_add_mem_devices(struct msm_pmem_setting *setting)
 {
 	if (setting->pmem_size) {
@@ -212,16 +216,19 @@ void __init msm_add_mem_devices(struct msm_pmem_setting *setting)
 		platform_device_register(&pmem_adsp_device);
 	}
 
-	if (setting->pmem_gpu0_size) {
-		pmem_gpu0_pdata.start = setting->pmem_gpu0_start;
-		pmem_gpu0_pdata.size = setting->pmem_gpu0_size;
-		platform_device_register(&pmem_gpu0_device);
-	}
+	if (setting->pmem_gpu0_size && setting->pmem_gpu1_size) {
+		struct resource *res;
 
-	if (setting->pmem_gpu1_size) {
-		pmem_gpu1_pdata.start = setting->pmem_gpu1_start;
-		pmem_gpu1_pdata.size = setting->pmem_gpu1_size;
-		platform_device_register(&pmem_gpu1_device);
+		res = platform_get_resource_byname(&hw3d_device, IORESOURCE_MEM,
+						   "smi");
+		res->start = setting->pmem_gpu0_start;
+		res->end = res->start + setting->pmem_gpu0_size - 1;
+
+		res = platform_get_resource_byname(&hw3d_device, IORESOURCE_MEM,
+						   "ebi");
+		res->start = setting->pmem_gpu1_start;
+		res->end = res->start + setting->pmem_gpu1_size - 1;
+		platform_device_register(&hw3d_device);
 	}
 
 	if (setting->pmem_camera_size) {
