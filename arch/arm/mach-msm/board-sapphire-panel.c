@@ -433,7 +433,8 @@ static void sapphire_mddi_power_client(struct msm_mddi_client_data *client_data,
 		msleep(10);
 	} else {
 		gpio_set_value(SAPPHIRE_GPIO_MDDI_32K_EN, 0);
-
+		gpio_set_value(MDDI_RST_N, 0);
+		msleep(10);
 		vreg_disable(vreg_lcm_2v85);
 		on_off = 1;
 		id = PM_VREG_PDOWN_AUX_ID;
@@ -592,7 +593,7 @@ static const struct mddi_table sharp2_init_table[] = {
 	{ 0x0350, 0x70 },
 	{ 0x0351, 0x00 },
 	{ 0x0360, 0x30 },
-	{ 0x0361, 0xC0 },
+	{ 0x0361, 0xC1 },
 	{ 0x0362, 0x00 },
 	{ 0x0370, 0x00 },
 	{ 0x0371, 0xEF },
