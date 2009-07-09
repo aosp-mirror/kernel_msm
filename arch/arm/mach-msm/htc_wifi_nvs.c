@@ -20,18 +20,23 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
+#include <linux/proc_fs.h>
 
 #include <asm/setup.h>
 
 /* configuration tags specific to msm */
 #define ATAG_MSM_WIFI	0x57494649 /* MSM WiFi */
 
-#define MAX_NVS_SIZE	0x800U
-static unsigned char wifi_nvs_ram[MAX_NVS_SIZE];
+#define NVS_MAX_SIZE	0x800U
+#define NVS_LEN_OFFSET	0x0C
+#define NVS_DATA_OFFSET	0x40
+
+static unsigned char wifi_nvs_ram[NVS_MAX_SIZE];
+static struct proc_dir_entry *wifi_calibration;
 
 unsigned char *get_wifi_nvs_ram( void )
 {
-	return( wifi_nvs_ram );
+	return wifi_nvs_ram;
 }
 EXPORT_SYMBOL(get_wifi_nvs_ram);
 
@@ -39,18 +44,56 @@ static int __init parse_tag_msm_wifi(const struct tag *tag)
 {
 	unsigned char *dptr = (unsigned char *)(&tag->u);
 	unsigned size;
-	
-	size = min((tag->hdr.size - 2) * sizeof(__u32), MAX_NVS_SIZE);
-#ifdef ATAG_MSM_WIFI_DEBUG	
+#ifdef ATAG_MSM_WIFI_DEBUG
 	unsigned i;
-	
+#endif
+
+	size = min((tag->hdr.size - 2) * sizeof(__u32), NVS_MAX_SIZE);
+#ifdef ATAG_MSM_WIFI_DEBUG
 	printk("WiFi Data size = %d , 0x%x\n", tag->hdr.size, tag->hdr.tag);
 	for(i=0;( i < size );i++) {
 		printk("%02x ", *dptr++);
 	}
 #endif	
-	memcpy( (void *)wifi_nvs_ram, (void *)dptr, size );
+	memcpy(wifi_nvs_ram, dptr, size);
 	return 0;
 }
 
 __tagtable(ATAG_MSM_WIFI, parse_tag_msm_wifi);
+
+static unsigned wifi_get_nvs_size( void )
+{
+	unsigned char *ptr;
+	unsigned len;
+
+	ptr = get_wifi_nvs_ram();
+	/* Size in format LE assumed */
+	memcpy(&len, ptr + NVS_LEN_OFFSET, sizeof(len));
+	len = min(len, (NVS_MAX_SIZE - NVS_DATA_OFFSET));
+	return len;
+}
+
+static int wifi_calibration_read_proc(char *page, char **start, off_t off,
+					int count, int *eof, void *data)
+{
+	unsigned char *ptr;
+	unsigned len;
+
+	ptr = get_wifi_nvs_ram();
+	len = min(wifi_get_nvs_size(), (unsigned)count);
+	memcpy(page, ptr + NVS_DATA_OFFSET, len);
+	return len;
+}
+
+static int __init wifi_nvs_init(void)
+{
+	wifi_calibration = create_proc_entry("calibration", 0444, NULL);
+	if (wifi_calibration != NULL) {
+		wifi_calibration->size = wifi_get_nvs_size();
+		wifi_calibration->read_proc = wifi_calibration_read_proc;
+		wifi_calibration->write_proc = NULL;
+	}
+	return 0;
+}
+
+device_initcall(wifi_nvs_init);
