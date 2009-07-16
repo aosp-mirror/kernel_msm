@@ -517,7 +517,6 @@ static long audevrc_ioctl(struct file *file, unsigned int cmd,
 			config.unused[0] = 0;
 			config.unused[1] = 0;
 			config.unused[2] = 0;
-			config.unused[3] = 0;
 			if (copy_to_user((void *)arg, &config, sizeof(config)))
 				rc = -EFAULT;
 			else
