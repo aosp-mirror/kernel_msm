@@ -1,6 +1,7 @@
 obj-y += proc_comm.o
 obj-y += io.o timer.o dma.o memory.o
 obj-y += vreg.o
+obj-y += pmic.o
 obj-$(CONFIG_ARCH_MSM_ARM11) += acpuclock-arm11.o idle.o
 obj-$(CONFIG_ARCH_MSM_SCORPION) += acpuclock-scorpion.o idle-v7.o
 obj-$(CONFIG_ARCH_MSM_SCORPION) += arch-init-scorpion.o
