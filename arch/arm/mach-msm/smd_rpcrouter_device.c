@@ -247,7 +247,7 @@ int msm_rpcrouter_create_server_cdev(struct rr_server *server)
 		return -ENOBUFS;
 	}
 
-#if CONFIG_MSM_AMSS_VERSION >= 6350
+#if CONFIG_MSM_AMSS_VERSION >= 6350 || defined(CONFIG_ARCH_QSD8X50)
 	/* Servers with bit 31 set are remote msm servers with hashkey version.
 	 * Servers with bit 31 not set are remote msm servers with
 	 * backwards compatible version type in which case the minor number
@@ -297,7 +297,7 @@ int msm_rpcrouter_create_server_pdev(struct rr_server *server)
 {
 	sprintf(server->pdev_name, "rs%.8x:%.8x",
 		server->prog,
-#if CONFIG_MSM_AMSS_VERSION >= 6350
+#if CONFIG_MSM_AMSS_VERSION >= 6350 || defined(CONFIG_ARCH_QSD8X50)
 		(server->vers & RPC_VERSION_MODE_MASK) ? server->vers :
 		(server->vers & RPC_VERSION_MAJOR_MASK));
 #else

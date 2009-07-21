@@ -60,7 +60,7 @@ static struct msm_rpc_server *rpc_server_find(uint32_t prog, uint32_t vers)
 	mutex_lock(&rpc_server_list_lock);
 	list_for_each_entry(server, &rpc_server_list, list) {
 		if ((server->prog == prog) &&
-#if CONFIG_MSM_AMSS_VERSION >= 6350
+#if CONFIG_MSM_AMSS_VERSION >= 6350 || defined(CONFIG_ARCH_QSD8X50)
 		    msm_rpc_is_compatible_version(server->vers, vers)) {
 #else
 		    server->vers == vers) {
