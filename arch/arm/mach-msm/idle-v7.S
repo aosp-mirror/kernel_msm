@@ -81,6 +81,7 @@ ENTRY(msm_pm_collapse_exit)
 	str     r1, [r0, #0x00C]
 #endif
 
+#if 0
         //; REMOVE FOLLOWING THREE INSTRUCTIONS WHEN POWER COLLAPSE IS ENA
         //;Make sure the DBGOSLSR[LOCK] bit is cleared to allow access to the debug registers
         //; Writing anything but the "secret code" to the DBGOSLAR clears the DBGOSLSR[LOCK] bit
@@ -93,46 +94,14 @@ ENTRY(msm_pm_collapse_exit)
         //; execute a CP14 instruction.
         MRC    p14, 0, r3, c1, c5, 4       //; RCP14_DBGPRSR r3
         ISB
+#endif
 
 #if 0 /* allow jtag reconnect */
 1:
 	b	1b
 #endif
 
-        //; Write L2VR3F1 to make L2 array work properly at 998 on Raptor2
-        LDR    r1, =0x00212102 //; the l2 timing watch out on P2
-        MCR    p15, 3, r1, c15, c15, 1 //; WCP15_L2VR3F1
-        DSB
-        ISB
-
-        //; write the value for Icache to run at 998 on Raptor2
-        LDR    r1, =0x3800E000
-        MCR    p15, 0, r1, c15, c15, 0 //; WCP15_PVR0F0
-        ISB
-
-        //; DCIALL to invalidate L2 cache bank (needs to be run 4 times, once per bank)
-        //; This must be done early in code (prior to enabling the caches)
-        MOV    r1, #0x2
-        MCR    p15, 0, r1, c9, c0, 6   //; DCIALL bank D ([15:14] == 2'b00)
-        ORR    r1, r1, #0x00004000
-        MCR    p15, 0, r1, c9, c0, 6   //; DCIALL bank C ([15:14] == 2'b01)
-        ADD    r1, r1, #0x00004000
-        MCR    p15, 0, r1, c9, c0, 6   //; DCIALL bank B ([15:14] == 2'b10)
-        ADD    r1, r1, #0x00004000
-        MCR    p15, 0, r1, c9, c0, 6   //; DCIALL bank A ([15:14] == 2'b11)
-
-        //; DCIALL to invalidate entire D-Cache
-        MCR    p15, 0, r0, c9, c0, 6    //; DCIALL  r0
-
-        //; Initialize the BPCR - setup Global History Mask (GHRM) to all 1's
-        //; and have all address bits (AM) participate.
-        //; Different settings can be used to improve performance
-        MOVW   r1, #0x01FF
-        MOVT   r1, #0x01FF
-        MCR    p15, 7, r1, c15, c0, 2   //; WCP15_BPCR
-
-	dsb
-	isb
+	bl	__cpu_early_init
 
 	ldr     r1, =saved_state_end
 	ldr     r2, =msm_pm_collapse_exit

@@ -3,6 +3,7 @@ obj-y += io.o timer.o dma.o memory.o
 obj-y += vreg.o
 obj-$(CONFIG_ARCH_MSM_ARM11) += acpuclock-arm11.o idle.o
 obj-$(CONFIG_ARCH_MSM_SCORPION) += acpuclock-scorpion.o idle-v7.o
+obj-$(CONFIG_ARCH_MSM_SCORPION) += arch-init-scorpion.o
 obj-y += clock.o clock-pcom.o
 obj-y += gpio.o generic_gpio.o
 obj-y += nand_partitions.o
