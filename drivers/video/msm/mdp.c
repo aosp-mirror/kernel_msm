@@ -22,7 +22,9 @@
 #include <linux/wait.h>
 #include <linux/clk.h>
 #include <linux/file.h>
+#include <linux/android_pmem.h>
 #include <linux/major.h>
+#include <linux/msm_hw3d.h>
 #include <linux/slab.h>
 
 #include <mach/msm_iomap.h>
@@ -260,6 +262,18 @@ int get_img(struct mdp_img *img, struct fb_info *info,
 	struct file *file;
 	unsigned long vstart;
 
+	if (!get_pmem_file(img->memory_id, start, &vstart, len, filep))
+		return 0;
+
+	ret = get_msm_hw3d_file(img->memory_id, HW3D_REGION_ID(img->offset),
+				HW3D_OFFSET_IN_REGION(img->offset), start, len,
+				filep);
+	if (!ret) {
+		/* need to chop off the region id from the user offset */
+		img->offset = HW3D_OFFSET_IN_REGION(img->offset);
+		return 0;
+	}
+
 	file = fget_light(img->memory_id, &put_needed);
 	if (file == NULL)
 		return -1;
@@ -267,6 +281,7 @@ int get_img(struct mdp_img *img, struct fb_info *info,
 	if (MAJOR(file->f_dentry->d_inode->i_rdev) == FB_MAJOR) {
 		*start = info->fix.smem_start;
 		*len = info->fix.smem_len;
+		ret = 0;
 	} else
 		ret = -1;
 	fput_light(file, put_needed);
@@ -276,6 +291,18 @@ int get_img(struct mdp_img *img, struct fb_info *info,
 
 void put_img(struct file *src_file, struct file *dst_file)
 {
+	if (src_file) {
+		if (is_pmem_file(src_file))
+			put_pmem_file(src_file);
+		else if (is_msm_hw3d_file(src_file))
+			put_msm_hw3d_file(src_file);
+	}
+	if (dst_file) {
+		if (is_pmem_file(dst_file))
+			put_pmem_file(dst_file);
+		else if (is_msm_hw3d_file(dst_file))
+			put_msm_hw3d_file(dst_file);
+	}
 }
 
 int mdp_blit(struct mdp_device *mdp_dev, struct fb_info *fb,
