@@ -163,6 +163,13 @@ config TROUT_BATTCHG
 	default y
 	bool "Trout battery / charger driver"
 
+config HTC_PWRSPLY
+	depends on MSM_ONCRPCROUTER && POWER_SUPPLY && !TROUT_BATTCHG
+	default y
+	bool "HTC Power supply driver"
+	help
+	  Used by HTC devices with a dedicated battery gauge"
+
 config HTC_PWRSINK
 	depends on MSM_SMD
 	default y
