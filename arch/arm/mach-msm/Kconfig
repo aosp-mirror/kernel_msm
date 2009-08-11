@@ -18,6 +18,7 @@ config ARCH_MSM7X30
 	select MSM_VIC
 	select CPU_V7
 	select MSM_REMOTE_SPINLOCK_DEKKERS
+	select VERIFY_PERMISSION_FAULT
 
 config ARCH_QSD8X50
 	bool "QSD8X50"
@@ -26,6 +27,7 @@ config ARCH_QSD8X50
 	select MSM_VIC
 	select CPU_V7
 	select MSM_REMOTE_SPINLOCK_LDREX
+	select VERIFY_PERMISSION_FAULT
 endchoice
 
 config MSM_SOC_REV_A
