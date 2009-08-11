@@ -610,6 +610,11 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			if (ops->datbuf && ops->mode != MTD_OOB_RAW) {
 				uint8_t *datbuf =
 					ops->datbuf + pages_read * 2048;
+
+				dma_sync_single_for_cpu(chip->dev,
+					data_dma_addr_curr-mtd->writesize,
+					mtd->writesize, DMA_BIDIRECTIONAL);
+
 				for (n = 0; n < 2048; n++) {
 					/* empty blocks read 0x54 at
 					 * these offsets
@@ -621,6 +626,11 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 						break;
 					}
 				}
+
+				dma_sync_single_for_device(chip->dev,
+					data_dma_addr_curr-mtd->writesize,
+					mtd->writesize, DMA_BIDIRECTIONAL);
+
 			}
 			if (ops->oobbuf) {
 				for (n = 0; n < ops->ooblen; n++) {
