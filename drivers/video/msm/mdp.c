@@ -289,19 +289,13 @@ int get_img(struct mdp_img *img, struct fb_info *info,
 	return ret;
 }
 
-void put_img(struct file *src_file, struct file *dst_file)
+static void put_img(struct file *file)
 {
-	if (src_file) {
-		if (is_pmem_file(src_file))
-			put_pmem_file(src_file);
-		else if (is_msm_hw3d_file(src_file))
-			put_msm_hw3d_file(src_file);
-	}
-	if (dst_file) {
-		if (is_pmem_file(dst_file))
-			put_pmem_file(dst_file);
-		else if (is_msm_hw3d_file(dst_file))
-			put_msm_hw3d_file(dst_file);
+	if (file) {
+		if (is_pmem_file(file))
+			put_pmem_file(file);
+		else if (is_msm_hw3d_file(file))
+			put_msm_hw3d_file(file);
 	}
 }
 
@@ -334,6 +328,7 @@ int mdp_blit(struct mdp_device *mdp_dev, struct fb_info *fb,
 	if (unlikely(get_img(&req->dst, fb, &dst_start, &dst_len, &dst_file))) {
 		printk(KERN_ERR "mpd_ppp: could not retrieve dst image from "
 				"memory\n");
+		put_img(src_file);
 		return -EINVAL;
 	}
 	mutex_lock(&mdp_mutex);
@@ -378,13 +373,15 @@ int mdp_blit(struct mdp_device *mdp_dev, struct fb_info *fb,
 	if (ret)
 		goto err_wait_failed;
 end:
-	put_img(src_file, dst_file);
+	put_img(src_file);
+	put_img(dst_file);
 	mutex_unlock(&mdp_mutex);
 	return 0;
 err_bad_blit:
 	disable_mdp_irq(mdp, DL0_ROI_DONE);
 err_wait_failed:
-	put_img(src_file, dst_file);
+	put_img(src_file);
+	put_img(dst_file);
 	mutex_unlock(&mdp_mutex);
 	return ret;
 }
