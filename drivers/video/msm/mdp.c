@@ -254,9 +254,9 @@ void mdp_dma(struct mdp_device *mdp_dev, uint32_t addr, uint32_t stride,
 	}
 }
 
-int get_img(struct mdp_img *img, struct fb_info *info,
-	    unsigned long *start, unsigned long *len,
-	    struct file **filep)
+static int get_img(struct mdp_img *img, struct fb_info *info,
+		   unsigned long *start, unsigned long *len,
+		   struct file** filep)
 {
 	int put_needed, ret = 0;
 	struct file *file;
@@ -264,15 +264,9 @@ int get_img(struct mdp_img *img, struct fb_info *info,
 
 	if (!get_pmem_file(img->memory_id, start, &vstart, len, filep))
 		return 0;
-
-	ret = get_msm_hw3d_file(img->memory_id, HW3D_REGION_ID(img->offset),
-				HW3D_OFFSET_IN_REGION(img->offset), start, len,
-				filep);
-	if (!ret) {
-		/* need to chop off the region id from the user offset */
-		img->offset = HW3D_OFFSET_IN_REGION(img->offset);
+	else if (!get_msm_hw3d_file(img->memory_id, &img->offset, start, len,
+				    filep))
 		return 0;
-	}
 
 	file = fget_light(img->memory_id, &put_needed);
 	if (file == NULL)

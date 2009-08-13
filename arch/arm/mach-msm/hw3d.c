@@ -296,20 +296,22 @@ void put_msm_hw3d_file(struct file *file)
 	fput(file);
 }
 
-int get_msm_hw3d_file(int fd, int region, uint32_t offs, unsigned long *pbase,
+int get_msm_hw3d_file(int fd, uint32_t *offs, unsigned long *pbase,
 		      unsigned long *len, struct file **filp)
 {
 	struct hw3d_info *info = hw3d_info;
 	struct file *file;
 	struct hw3d_data *data;
+	uint32_t offset = HW3D_OFFSET_IN_REGION(*offs);
+	int region = HW3D_REGION_ID(*offs);
 	int ret = 0;
 
 	if (unlikely(region >= HW3D_NUM_REGIONS)) {
 		VDBG("hw3d: invalid region %d requested\n", region);
 		return -EINVAL;
-	} else if (unlikely(offs >= info->regions[region].size)) {
+	} else if (unlikely(offset >= info->regions[region].size)) {
 		VDBG("hw3d: offset %08x outside of the requested region %d\n",
-		     offs, region);
+		     offset, region);
 		return -EINVAL;
 	}
 
@@ -338,6 +340,7 @@ int get_msm_hw3d_file(int fd, int region, uint32_t offs, unsigned long *pbase,
 		goto err;
 	}
 
+	*offs = offset;
 	*pbase = info->regions[region].pbase;
 	*filp = file;
 	*len = data->vmas[region]->vm_end - data->vmas[region]->vm_start;
