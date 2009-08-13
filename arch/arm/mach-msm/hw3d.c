@@ -237,7 +237,6 @@ static void locked_hw3d_client_done(struct hw3d_info *info, int had_timer)
 		clk_disable(info->imem_clk);
 	}
 	info->revoking = 0;
-	info->client_file = NULL;
 
 	/* double check that the irqs are disabled */
 	locked_hw3d_irq_disable(info);
@@ -478,7 +477,9 @@ static int hw3d_release(struct inode *inode, struct file *file)
 		pr_debug("hw3d: had file\n");
 		pending = del_timer(&info->revoke_timer);
 		locked_hw3d_client_done(info, pending);
-	}
+		info->client_file = NULL;
+	} else
+		pr_warning("hw3d: release without client_file.\n");
 	spin_unlock_irqrestore(&info->lock, flags);
 
 done:
@@ -625,7 +626,7 @@ static void hw3d_early_suspend(struct early_suspend *h)
 	spin_lock_irqsave(&info->lock, flags);
 	info->suspending = 1;
 	if (info->client_file) {
-		pr_debug("hw3d: Requesting revoke for suspend\n");
+		pr_info("hw3d: Requesting revoke for suspend\n");
 		locked_hw3d_revoke(info);
 	}
 	spin_unlock_irqrestore(&info->lock, flags);
@@ -638,7 +639,8 @@ static void hw3d_late_resume(struct early_suspend *h)
 	info = container_of(h, struct hw3d_info, early_suspend);
 
 	spin_lock_irqsave(&info->lock, flags);
-	pr_info("%s: resuming\n", __func__);
+	if (info->suspending)
+		pr_info("%s: resuming\n", __func__);
 	info->suspending = 0;
 	spin_unlock_irqrestore(&info->lock, flags);
 }
@@ -649,7 +651,8 @@ static int hw3d_resume(struct platform_device *pdev)
 	unsigned long flags;
 
 	spin_lock_irqsave(&info->lock, flags);
-	pr_info("%s: resuming\n", __func__);
+	if (info->suspending)
+		pr_info("%s: resuming\n", __func__);
 	info->suspending = 0;
 	spin_unlock_irqrestore(&info->lock, flags);
 	return 0;
