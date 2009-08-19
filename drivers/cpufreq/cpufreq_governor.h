@@ -152,6 +152,7 @@ struct od_ops {
 	unsigned int (*powersave_bias_target)(struct cpufreq_policy *policy,
 			unsigned int freq_next, unsigned int relation);
 	void (*freq_increase)(struct cpufreq_policy *p, unsigned int freq);
+	struct input_handler *input_handler;
 };
 
 struct cs_ops {
