@@ -209,7 +209,7 @@ int audmgr_open(struct audmgr *am)
 
 	am->ept = msm_rpc_connect(AUDMGR_PROG,
 				AUDMGR_VERS,
-				MSM_RPC_UNINTERRUPTIBLE);
+				MSM_RPC_UNINTERRUPTIBLE | MSM_RPC_ENABLE_RECEIVE);
 
 	init_waitqueue_head(&am->wait);
 

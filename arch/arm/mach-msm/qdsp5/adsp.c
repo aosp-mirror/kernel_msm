@@ -195,7 +195,7 @@ static int adsp_rpc_init(struct msm_adsp_module *adsp_module)
 	adsp_module->rpc_client = msm_rpc_connect(
 			RPC_ADSP_RTOS_ATOM_PROG,
 			RPC_ADSP_RTOS_ATOM_VERS,
-			MSM_RPC_UNINTERRUPTIBLE);
+			MSM_RPC_UNINTERRUPTIBLE | MSM_RPC_ENABLE_RECEIVE);
 
 	if (IS_ERR(adsp_module->rpc_client)) {
 		int rc = PTR_ERR(adsp_module->rpc_client);
@@ -220,7 +220,7 @@ static void  msm_get_init_info(void)
 	adsp_info.init_info_rpc_client = msm_rpc_connect(
 			RPC_ADSP_RTOS_ATOM_PROG,
 			RPC_ADSP_RTOS_ATOM_VERS,
-			MSM_RPC_UNINTERRUPTIBLE);
+			MSM_RPC_UNINTERRUPTIBLE | MSM_RPC_ENABLE_RECEIVE);
 	if (IS_ERR(adsp_info.init_info_rpc_client)) {
 		rc = PTR_ERR(adsp_info.init_info_rpc_client);
 		adsp_info.init_info_rpc_client = 0;

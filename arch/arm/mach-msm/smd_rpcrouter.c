@@ -280,6 +280,7 @@ struct msm_rpc_endpoint *msm_rpcrouter_create_local_endpoint(dev_t dev)
 		ept->dst_cid = srv->cid;
 		ept->dst_prog = cpu_to_be32(srv->prog);
 		ept->dst_vers = cpu_to_be32(srv->vers);
+		ept->flags |= MSM_RPC_ENABLE_RECEIVE;
 
 		D("Creating local ept %p @ %08x:%08x\n", ept, srv->prog, srv->vers);
 	} else {
@@ -677,9 +678,15 @@ static void do_read_data(struct work_struct *work)
 
 packet_complete:
 	spin_lock_irqsave(&ept->read_q_lock, flags);
-	wake_lock(&ept->read_q_wake_lock);
-	list_add_tail(&pkt->list, &ept->read_q);
-	wake_up(&ept->wait_q);
+	if (ept->flags & MSM_RPC_ENABLE_RECEIVE) {
+		wake_lock(&ept->read_q_wake_lock);
+		list_add_tail(&pkt->list, &ept->read_q);
+		wake_up(&ept->wait_q);
+	} else {
+		pr_warning("smd_rpcrouter: Unexpected incoming data on %08x:%08x\n",
+				be32_to_cpu(ept->dst_prog),
+				be32_to_cpu(ept->dst_vers));
+	}
 	spin_unlock_irqrestore(&ept->read_q_lock, flags);
 done:
 
@@ -954,14 +961,17 @@ int msm_rpc_call_reply(struct msm_rpc_endpoint *ept, uint32_t proc,
 	req->vers = ept->dst_vers;
 	req->procedure = cpu_to_be32(proc);
 
+	/* Allow replys to be added to the queue */
+	ept->flags |= MSM_RPC_ENABLE_RECEIVE;
+
 	rc = msm_rpc_write(ept, req, request_size);
 	if (rc < 0)
-		return rc;
+		goto error;
 
 	for (;;) {
 		rc = msm_rpc_read(ept, (void*) &reply, -1, timeout);
 		if (rc < 0)
-			return rc;
+			goto error;
 		if (rc < (3 * sizeof(uint32_t))) {
 			rc = -EIO;
 			break;
@@ -999,6 +1009,10 @@ int msm_rpc_call_reply(struct msm_rpc_endpoint *ept, uint32_t proc,
 		break;
 	}
 	kfree(reply);
+error:
+	ept->flags &= ~MSM_RPC_ENABLE_RECEIVE;
+	wake_unlock(&ept->read_q_wake_lock);
+
 	return rc;
 }
 EXPORT_SYMBOL(msm_rpc_call_reply);
@@ -1204,6 +1218,7 @@ int msm_rpc_register_server(struct msm_rpc_endpoint *ept,
 	if (rc < 0)
 		return rc;
 
+	ept->flags |= MSM_RPC_ENABLE_RECEIVE;
 	return 0;
 }
 
@@ -1216,6 +1231,9 @@ int msm_rpc_unregister_server(struct msm_rpc_endpoint *ept,
 
 	if (!server)
 		return -ENOENT;
+
+	ept->flags &= ~MSM_RPC_ENABLE_RECEIVE;
+	wake_unlock(&ept->read_q_wake_lock);
 	rpcrouter_destroy_server(server);
 	return 0;
 }
