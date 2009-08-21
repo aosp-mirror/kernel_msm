@@ -70,7 +70,7 @@ module_param_named(idle_spin_time, msm_pm_idle_spin_time, int, S_IRUGO | S_IWUSR
 #define A11RAMBACKBIAS (MSM_CSR_BASE + 0x508)
 
 
-#define DEM_MASTER_BITS_PER_CPU             5
+#define DEM_MASTER_BITS_PER_CPU             6
 
 /* Power Master State Bits - Per CPU */
 #define DEM_MASTER_SMSM_RUN \
@@ -83,6 +83,8 @@ module_param_named(idle_spin_time, msm_pm_idle_spin_time, int, S_IRUGO | S_IWUSR
         (0x08UL << (DEM_MASTER_BITS_PER_CPU * SMSM_STATE_APPS))
 #define DEM_MASTER_SMSM_READY \
         (0x10UL << (DEM_MASTER_BITS_PER_CPU * SMSM_STATE_APPS))
+#define DEM_MASTER_SMSM_SLEEP \
+        (0x20UL << (DEM_MASTER_BITS_PER_CPU * SMSM_STATE_APPS))
 
 /* Power Slave State Bits */
 #define DEM_SLAVE_SMSM_RUN                  (0x0001)
@@ -173,23 +175,21 @@ static void msm_pm_add_stat(enum msm_pm_time_stats_id id, int64_t t)
 #endif
 
 static int
-msm_pm_wait_state(uint32_t wait_state_all_set, uint32_t wait_state_all_clear,
-                  uint32_t wait_state_any_set, uint32_t wait_state_any_clear)
+msm_pm_wait_state(uint32_t wait_all_set, uint32_t wait_all_clear,
+                  uint32_t wait_any_set, uint32_t wait_any_clear)
 {
 	int i;
 	uint32_t state;
 
 	for (i = 0; i < 100000; i++) {
 		state = smsm_get_state(PM_SMSM_READ_STATE);
-		if (((state & wait_state_all_set) == wait_state_all_set) &&
-		    ((~state & wait_state_all_clear) == wait_state_all_clear) &&
-		    (wait_state_any_set == 0 || (state & wait_state_any_set) ||
-		     wait_state_any_clear == 0 || (state & wait_state_any_clear)))
+		if (((wait_all_set || wait_all_clear) && 
+		     !(~state & wait_all_set) && !(state & wait_all_clear)) ||
+		    (state & wait_any_set) || (~state & wait_any_clear))
 			return 0;
 	}
-	printk(KERN_ERR "msm_pm_wait_state(%x, %x, %x, %x) failed %x\n",
-	       wait_state_all_set, wait_state_all_clear,
-	       wait_state_any_set, wait_state_any_clear, state);
+	pr_err("msm_pm_wait_state(%x, %x, %x, %x) failed %x\n",	wait_all_set,
+		wait_all_clear, wait_any_set, wait_any_clear, state);
 	return -ETIMEDOUT;
 }
 
@@ -211,7 +211,7 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 	uint32_t enter_wait_clear = 0;
 	uint32_t exit_state;
 	uint32_t exit_wait_clear = 0;
-	uint32_t exit_wait_set = 0;
+	uint32_t exit_wait_any_set = 0;
 	unsigned long pm_saved_acpu_clk_rate = 0;
 	int ret;
 	int rv = -EINTR;
@@ -237,7 +237,7 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 	case MSM_PM_SLEEP_MODE_APPS_SLEEP:
 		enter_state = SMSM_SLEEP;
 		exit_state = SMSM_SLEEPEXIT;
-		exit_wait_set = SMSM_SLEEPEXIT;
+		exit_wait_any_set = SMSM_SLEEPEXIT;
 		break;
 	default:
 		enter_state = 0;
@@ -249,18 +249,21 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 		enter_state = DEM_SLAVE_SMSM_PWRC;
 		enter_wait_set = DEM_MASTER_SMSM_RSA;
 		exit_state = DEM_SLAVE_SMSM_WFPI;
-		exit_wait_set = DEM_MASTER_SMSM_RUN;
+		exit_wait_any_set =
+			DEM_MASTER_SMSM_RUN | DEM_MASTER_SMSM_PWRC_EARLY_EXIT;
 		break;
 	case MSM_PM_SLEEP_MODE_POWER_COLLAPSE_SUSPEND:
 		enter_state = DEM_SLAVE_SMSM_PWRC_SUSPEND;
 		enter_wait_set = DEM_MASTER_SMSM_RSA;
 		exit_state = DEM_SLAVE_SMSM_WFPI;
-		exit_wait_set = DEM_MASTER_SMSM_RUN;
+		exit_wait_any_set =
+			DEM_MASTER_SMSM_RUN | DEM_MASTER_SMSM_PWRC_EARLY_EXIT;
 		break;
 	case MSM_PM_SLEEP_MODE_APPS_SLEEP:
 		enter_state = DEM_SLAVE_SMSM_SLEEP;
-		exit_state = 0;
-		exit_wait_set = DEM_MASTER_SMSM_SLEEP_EXIT;
+		enter_wait_set = DEM_MASTER_SMSM_SLEEP;
+		exit_state = DEM_SLAVE_SMSM_SLEEP_EXIT;
+		exit_wait_any_set = DEM_MASTER_SMSM_SLEEP_EXIT;
 		break;
 	default:
 		enter_state = 0;
@@ -371,7 +374,7 @@ enter_failed:
 		writel(0x00, A11S_CLK_SLEEP_EN);
 		writel(0, A11S_PWRDOWN);
 		smsm_change_state(PM_SMSM_WRITE_STATE, enter_state, exit_state);
-		msm_pm_wait_state(exit_wait_set, exit_wait_clear, 0, 0);
+		msm_pm_wait_state(0, exit_wait_clear, exit_wait_any_set, 0);
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_STATE)
 			printk(KERN_INFO "msm_sleep(): sleep exit "
 			       "A11S_CLK_SLEEP_EN %x, A11S_PWRDOWN %x, "
