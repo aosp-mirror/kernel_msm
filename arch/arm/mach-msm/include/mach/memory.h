@@ -31,5 +31,9 @@
 
 #define CONSISTENT_DMA_SIZE (4*SZ_1M)
 
+#ifdef CONFIG_ARCH_MSM_SCORPION
+#define arch_has_speculative_dfetch()  1
+#endif
+
 #endif
 
