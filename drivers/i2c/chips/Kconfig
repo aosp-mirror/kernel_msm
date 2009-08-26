@@ -6,6 +6,12 @@
 
 menu "Miscellaneous I2C Chip support"
 
+config SENSORS_AKM8973
+	tristate "AKM8973 Compass Driver"
+	depends on I2C
+	help
+	 AKM8973 Compass Driver implemented by HTC.
+
 config SENSORS_AKM8976
 	tristate "AKM8976 Compass Driver"
 	depends on I2C

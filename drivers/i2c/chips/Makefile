@@ -10,6 +10,7 @@
 # * I/O expander drivers go to drivers/gpio
 #
 
+obj-$(CONFIG_SENSORS_AKM8973)	+= akm8973.o
 obj-$(CONFIG_SENSORS_AKM8976)	+= akm8976.o
 obj-$(CONFIG_SENSORS_MT9T013)	+= mt9t013.o
 obj-$(CONFIG_VP_A1026)		+= a1026.o
