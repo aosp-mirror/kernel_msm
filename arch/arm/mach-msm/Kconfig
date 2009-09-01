@@ -417,4 +417,27 @@ config WIFI_MEM_PREALLOC
 	bool "Preallocate memory for WiFi buffers"
 	help
 	  Preallocates memory buffers for WiFi driver
+
+config VIRTUAL_KPANIC_PARTITION
+	bool "Create virtual kpanic partition"
+	default n
+	help
+	  Creates a virtual mtd partition named 'kpanic', stealing space from
+	  the specified mtd partition label.
+	  *** DO NOT USE IF YOU ARE USING OTA/RECOVERY ***
+
+config VIRTUAL_KPANIC_PSIZE
+	depends on VIRTUAL_KPANIC_PARTITION
+	int "Default kpanic partition size"
+	default 1048576
+	help
+	  Sets the size of the virtual kpanic paritition to create.
+
+config VIRTUAL_KPANIC_SRC
+	depends on VIRTUAL_KPANIC_PARTITION
+	string "Partition to steal from"
+	default "cache"
+	help
+	  Sets the partition to steal from to make the virtual one.
+	
 endif
