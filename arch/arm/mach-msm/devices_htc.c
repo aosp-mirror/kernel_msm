@@ -25,8 +25,13 @@
 #include <mach/board.h>
 #include <mach/board_htc.h>
 #include <mach/msm_hsusb.h>
+
+#ifdef CONFIG_USB_FUNCTION
 #include <linux/usb/mass_storage_function.h>
+#endif
+#ifdef CONFIG_USB_ANDROID
 #include <linux/usb/android.h>
+#endif
 
 #include <asm/mach/flash.h>
 #include <asm/setup.h>
