@@ -46,9 +46,16 @@ struct hw3d_region {
 	unsigned long		len;
 };
 
+#ifdef CONFIG_MSM_HW3D
 int get_msm_hw3d_file(int fd, uint32_t *offs, unsigned long *pbase,
 		      unsigned long *len, struct file **filp);
 void put_msm_hw3d_file(struct file *file);
 bool is_msm_hw3d_file(struct file *file);
+#else
+int get_msm_hw3d_file(int fd, uint32_t *offs, unsigned long *pbase,
+		      unsigned long *len, struct file **filp) { return -1; }
+void put_msm_hw3d_file(struct file *file) {}
+bool is_msm_hw3d_file(struct file *file) { return false; }
+#endif
 
 #endif /* _MSM_HW3D_H_ */
