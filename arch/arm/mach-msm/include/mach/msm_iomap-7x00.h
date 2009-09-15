@@ -43,11 +43,11 @@
 #define IOMEM(x)	((void __force __iomem *)(x))
 #endif
 
-#define MSM_VIC_BASE          IOMEM(0xE0000000)
+#define MSM_VIC_BASE          IOMEM(0xF8000000)
 #define MSM_VIC_PHYS          0xC0000000
 #define MSM_VIC_SIZE          SZ_4K
 
-#define MSM_CSR_BASE          IOMEM(0xE0001000)
+#define MSM_CSR_BASE          IOMEM(0xF8001000)
 #define MSM_CSR_PHYS          0xC0100000
 #define MSM_CSR_SIZE          SZ_4K
 
@@ -55,23 +55,23 @@
 #define MSM_GPT_BASE          MSM_CSR_BASE
 #define MSM_GPT_SIZE          SZ_4K
 
-#define MSM_DMOV_BASE         IOMEM(0xE0002000)
+#define MSM_DMOV_BASE         IOMEM(0xF8002000)
 #define MSM_DMOV_PHYS         0xA9700000
 #define MSM_DMOV_SIZE         SZ_4K
 
-#define MSM_GPIO1_BASE        IOMEM(0xE0003000)
+#define MSM_GPIO1_BASE        IOMEM(0xF8003000)
 #define MSM_GPIO1_PHYS        0xA9200000
 #define MSM_GPIO1_SIZE        SZ_4K
 
-#define MSM_GPIO2_BASE        IOMEM(0xE0004000)
+#define MSM_GPIO2_BASE        IOMEM(0xF8004000)
 #define MSM_GPIO2_PHYS        0xA9300000
 #define MSM_GPIO2_SIZE        SZ_4K
 
-#define MSM_CLK_CTL_BASE      IOMEM(0xE0005000)
+#define MSM_CLK_CTL_BASE      IOMEM(0xF8005000)
 #define MSM_CLK_CTL_PHYS      0xA8600000
 #define MSM_CLK_CTL_SIZE      SZ_4K
 
-#define MSM_SHARED_RAM_BASE   IOMEM(0xE0100000)
+#define MSM_SHARED_RAM_BASE   IOMEM(0xF8100000)
 #define MSM_SHARED_RAM_PHYS   0x01F00000
 #define MSM_SHARED_RAM_SIZE   SZ_1M
 
@@ -85,7 +85,7 @@
 #define MSM_UART3_SIZE        SZ_4K
 
 #ifdef CONFIG_MSM_DEBUG_UART
-#define MSM_DEBUG_UART_BASE   0xE1000000
+#define MSM_DEBUG_UART_BASE   0xF9000000
 #if CONFIG_MSM_DEBUG_UART == 1
 #define MSM_DEBUG_UART_PHYS   MSM_UART1_PHYS
 #elif CONFIG_MSM_DEBUG_UART == 2
@@ -123,9 +123,11 @@
 #define MSM_MDP_PHYS          0xAA200000
 #define MSM_MDP_SIZE          0x000F0000
 
+#define MSM_MDC_BASE	      IOMEM(0xF8200000)
 #define MSM_MDC_PHYS	      0xAA500000
 #define MSM_MDC_SIZE	      SZ_1M
 
+#define MSM_AD5_BASE          IOMEM(0xF8300000)
 #define MSM_AD5_PHYS          0xAC000000
 #define MSM_AD5_SIZE          (SZ_1M*13)
 
