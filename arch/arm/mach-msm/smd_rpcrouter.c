@@ -90,6 +90,7 @@ static smd_channel_t *smd_channel;
 static int initialized;
 static wait_queue_head_t newserver_wait;
 static wait_queue_head_t smd_wait;
+static int smd_wait_count; /* odd while waiting */
 
 static DEFINE_SPINLOCK(local_endpoints_lock);
 static DEFINE_SPINLOCK(remote_endpoints_lock);
@@ -582,7 +583,10 @@ static int rr_read(void *data, int len)
 		spin_unlock_irqrestore(&smd_lock, flags);
 
 //		printk("rr_read: waiting (%d)\n", len);
+		smd_wait_count++;
+		wake_up(&smd_wait);
 		wait_event(smd_wait, smd_read_avail(smd_channel) >= len);
+		smd_wait_count++;
 	}
 	return 0;
 }
@@ -1274,12 +1278,25 @@ static int msm_rpcrouter_probe(struct platform_device *pdev)
 	return rc;
 }
 
+static int msm_rpcrouter_suspend(struct platform_device *pdev,
+					pm_message_t state)
+{
+	/* Wait until the worker thread has waited at least once so that it
+	 * gets a chance to release its wakelock.
+	 */
+	int wait_count = smd_wait_count;
+	if (!(smd_wait_count & 1))
+		wait_event(smd_wait, smd_wait_count != wait_count);
+	return 0;
+}
+
 static struct platform_driver msm_smd_channel2_driver = {
 	.probe		= msm_rpcrouter_probe,
 	.driver		= {
 			.name	= "SMD_RPCCALL",
 			.owner	= THIS_MODULE,
 	},
+	.suspend	= msm_rpcrouter_suspend,
 };
 
 static int __init rpcrouter_init(void)
