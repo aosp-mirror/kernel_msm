@@ -126,7 +126,7 @@ static uint8_t msm_irq_to_smsm[NR_MSM_IRQS + NR_SIRC_IRQS] = {
 	[INT_MDDI_CLIENT] = 3,
 	[INT_USB_OTG] = 4,
 
-	[INT_PWB_I2C] = 5,
+	/* [INT_PWB_I2C] = 5 -- not usable */
 	[INT_SDC1_0] = 6,
 	[INT_SDC1_1] = 7,
 	[INT_SDC2_0] = 8,
