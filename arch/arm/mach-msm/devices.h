@@ -35,6 +35,8 @@ extern struct platform_device msm_device_hsusb;
 extern struct platform_device msm_device_i2c;
 extern struct platform_device msm_device_i2c2;
 
+extern struct platform_device msm_device_qup_i2c;
+
 extern struct platform_device msm_device_smd;
 
 extern struct platform_device msm_device_nand;
