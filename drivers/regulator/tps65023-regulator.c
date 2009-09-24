@@ -128,9 +128,35 @@ struct tps_pmic {
 	struct mutex io_lock;
 };
 
+static int tps_65023_read_3bytes(struct tps_pmic *tps, u8 reg)
+{
+	int rv;
+	u8 txbuf[1];
+	u8 rxbuf[3];
+	struct i2c_msg msgs[] = {
+		{
+			.addr = tps->client->addr,
+			.flags = 0,
+			.len = sizeof(txbuf),
+			.buf = txbuf,
+		},
+		{
+			.addr = tps->client->addr,
+			.flags = I2C_M_RD,
+			.len = sizeof(rxbuf),
+			.buf = rxbuf,
+		},
+	};
+	txbuf[0] = reg;
+	rv = i2c_transfer(tps->client->adapter, msgs, 2);
+	if (rv < 0)
+		return rv;
+	return rxbuf[0];
+}
+
 static inline int tps_65023_read(struct tps_pmic *tps, u8 reg)
 {
-	return i2c_smbus_read_byte_data(tps->client, reg);
+	return tps_65023_read_3bytes(tps, reg);
 }
 
 static inline int tps_65023_write(struct tps_pmic *tps, u8 reg, u8 val)
