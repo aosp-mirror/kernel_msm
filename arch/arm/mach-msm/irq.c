@@ -356,6 +356,7 @@ void msm_irq_exit_sleep1(void)
 	int i;
 
 	msm_irq_ack(INT_A9_M2A_6);
+	msm_irq_ack(INT_PWB_I2C);
 	for (i = 0; i < 2; i++) {
 		writel(msm_irq_shadow_reg[i].int_type, VIC_INT_TYPE0 + i * 4);
 		writel(msm_irq_shadow_reg[i].int_polarity, VIC_INT_POLARITY0 + i * 4);
