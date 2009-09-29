@@ -62,6 +62,9 @@
 #define TPS65023_REG_CTRL_LDO2_EN	BIT(2)
 #define TPS65023_REG_CTRL_LDO1_EN	BIT(1)
 
+/* CON_CTRL2 bitfields */
+#define TPS65023_CON_CTRL2_GO		BIT(7)
+
 /* LDO_CTRL bitfields */
 #define TPS65023_LDO_CTRL_LDOx_SHIFT(ldo_id)	((ldo_id)*4)
 #define TPS65023_LDO_CTRL_LDOx_MASK(ldo_id)	(0xF0 >> ((ldo_id)*4))
@@ -352,6 +355,7 @@ static int tps65023_dcdc_set_voltage(struct regulator_dev *dev,
 	struct tps_pmic *tps = rdev_get_drvdata(dev);
 	int dcdc = rdev_get_id(dev);
 	int vsel;
+	int rv;
 
 	if (dcdc != TPS65023_DCDC_1)
 		return -EINVAL;
@@ -375,8 +379,12 @@ static int tps65023_dcdc_set_voltage(struct regulator_dev *dev,
 	/* write to the register in case we found a match */
 	if (vsel == tps->info[dcdc]->table_len)
 		return -EINVAL;
-	else
-		return tps_65023_reg_write(tps, TPS65023_REG_DEF_CORE, vsel);
+
+	rv = tps_65023_reg_write(tps, TPS65023_REG_DEF_CORE, vsel);
+	if (!rv)
+		rv = tps_65023_reg_write(tps, TPS65023_REG_CON_CTRL2,
+						TPS65023_CON_CTRL2_GO);
+	return rv;
 }
 
 static int tps65023_ldo_get_voltage(struct regulator_dev *dev)
