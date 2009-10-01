@@ -39,6 +39,9 @@ struct h2w_platform_data {
 #define BIT_TTY			(1 << 2)
 #define BIT_FM_HEADSET 		(1 << 3)
 #define BIT_FM_SPEAKER		(1 << 4)
+#define BIT_TTY_VCO             (1 << 5)
+#define BIT_TTY_HCO             (1 << 6)
+#define BIT_35MM_HEADSET        (1 << 7)
 
 enum {
 	H2W_NO_DEVICE	= 0,
