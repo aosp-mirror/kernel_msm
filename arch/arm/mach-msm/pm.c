@@ -193,6 +193,12 @@ msm_pm_wait_state(uint32_t wait_all_set, uint32_t wait_all_clear,
 	return -ETIMEDOUT;
 }
 
+#ifdef CONFIG_MSM_FIQ_SUPPORT
+void msm_fiq_exit_sleep(void);
+#else
+static inline void msm_fiq_exit_sleep(void) { }
+#endif
+
 static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 {
 	uint32_t saved_vector[2];
@@ -202,7 +208,6 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 	void msm_irq_exit_sleep1(void);
 	void msm_irq_exit_sleep2(void);
 	void msm_irq_exit_sleep3(void);
-	void msm_fiq_exit_sleep(void);
 	void msm_gpio_enter_sleep(int from_idle);
 	void msm_gpio_exit_sleep(void);
 	void smd_sleep_exit(void);
