@@ -452,6 +452,20 @@ do_bad(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	return 1;
 }
 
+static int
+do_imprecise_ext(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
+{
+#ifdef CONFIG_ARCH_MSM_SCORPION
+	unsigned int adfsr;
+
+	asm("mrc p15, 0, %0, c5, c1, 0\n" /* read adfsr for fault status */
+            : "=r" (adfsr));
+
+	printk("%s: ADFSR = 0x%.8x\n", __func__, adfsr);
+#endif
+	return 1;
+}
+
 static struct fsr_info {
 	int	(*fn)(unsigned long addr, unsigned int fsr, struct pt_regs *regs);
 	int	sig;
@@ -494,7 +508,7 @@ static struct fsr_info {
 	{ do_bad,		SIGBUS,  0,		"unknown 19"			   },
 	{ do_bad,		SIGBUS,  0,		"lock abort"			   }, /* xscale */
 	{ do_bad,		SIGBUS,  0,		"unknown 21"			   },
-	{ do_bad,		SIGBUS,  BUS_OBJERR,	"imprecise external abort"	   }, /* xscale */
+	{ do_imprecise_ext,	SIGBUS,  BUS_OBJERR,	"imprecise external abort"	   }, /* xscale */
 	{ do_bad,		SIGBUS,  0,		"unknown 23"			   },
 	{ do_bad,		SIGBUS,  0,		"dcache parity error"		   }, /* xscale */
 	{ do_bad,		SIGBUS,  0,		"unknown 25"			   },
