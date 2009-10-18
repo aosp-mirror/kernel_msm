@@ -36,24 +36,12 @@
 #define ACOUSTIC_UPDATE_ADIE \
 	_IOW(ACOUSTIC_IOCTL_MAGIC, 24, unsigned int)
 
-#define ACOUSTIC_REINIT_ACDB \
-	_IOW(ACOUSTIC_IOCTL_MAGIC, 25, unsigned int)
-
 #define HTCACOUSTICPROG 0x30100003
 #define HTCACOUSTICVERS 0
 #define ONCRPC_ALLOC_ACOUSTIC_MEM_PROC		(1)
 #define ONCRPC_UPDATE_ADIE_PROC			(2)
 #define ONCRPC_ENABLE_AUX_PGA_LOOPBACK_PROC	(3)
 #define ONCRPC_FORCE_HEADSET_SPEAKER_PROC	(4)
-#define ONCRPC_ENABLE_LINE_IN_TX_PATH_PROC	(5)
-#define ONCRPC_ENABLE_AUDIO_LOOPBACK_TRIGGER_PROC (6)
-#define ONCRPC_DUMP_ADIE_REG_PROC		(7)
-#define ONCRPC_REINIT_ACDB			(8)
-
-#define HTCACOUSTICCBPROG 0x30100004
-#define HTCACOUSTICCBVERS 0
-#define RPC_HTC_ACOUSTICCB_NULL			(0)
-#define RPC_HTC_ACOUSTICCB_SET_UPLINK_MUTE_PROC	(1)
 
 #define HTC_ACOUSTIC_TABLE_SIZE        (0x20000)
 
@@ -283,31 +271,6 @@ static long acoustic_ioctl(struct file *file, unsigned int cmd,
 		D("ioctl: ONCRPC_UPDATE_ADIE_PROC success.\n");
 		break;
 	}
-	case ACOUSTIC_REINIT_ACDB: {
-		struct rpc_request_hdr acdb_req;
-		struct update_acdb_rep {
-			struct rpc_reply_hdr hdr;
-			int ret;
-		} acdb_rep;
-
-		D("ioctl: ACOUSTIC_REINIT_ACDB called %d.\n", current->pid);
-
-		rc = msm_rpc_call_reply(endpoint,
-					ONCRPC_REINIT_ACDB, &acdb_req,
-					sizeof(acdb_req), &acdb_rep,
-					sizeof(acdb_rep), 5 * HZ);
-
-		reply_value = be32_to_cpu(acdb_rep.ret);
-		if (reply_value != 0 || rc < 0) {
-			E("ioctl failed: ONCRPC_REINIT_ACDB "\
-				"error %d.\n", rc);
-			if (rc >= 0)
-				rc = -EIO;
-			break;
-		}
-		D("ioctl: ONCRPC_REINIT_ACDB success.\n");
-		break;
-	}
 	default:
 		E("ioctl: invalid command\n");
 		rc = -EINVAL;
@@ -319,34 +282,6 @@ static long acoustic_ioctl(struct file *file, unsigned int cmd,
 
 struct rpc_set_uplink_mute_args {
 	int mute;
-};
-
-static int handle_htc_acoustic_call(struct msm_rpc_server *server,
-			       struct rpc_request_hdr *req, unsigned len)
-{
-	switch (req->procedure) {
-	case RPC_HTC_ACOUSTICCB_NULL:
-		return 0;
-
-	case RPC_HTC_ACOUSTICCB_SET_UPLINK_MUTE_PROC: {
-		struct rpc_set_uplink_mute_args *args;
-		args = (struct rpc_set_uplink_mute_args *)(req + 1);
-		args->mute = be32_to_cpu(args->mute);
-		D("[M2A_RPC] set uplink mute: %d\n", args->mute);
-		q6audio_set_tx_mute(args->mute);
-		return 0;
-	}
-	default:
-		E("%s: program 0x%08x:%d: unknown procedure %d\n",
-		       __func__, req->prog, req->vers, req->procedure);
-		return -ENODEV;
-	}
-}
-
-static struct msm_rpc_server htc_acoustic_server = {
-	.prog = HTCACOUSTICCBPROG,
-	.vers = HTCACOUSTICCBVERS,
-	.rpc_call = handle_htc_acoustic_call,
 };
 
 static struct file_operations acoustic_fops = {
@@ -367,7 +302,6 @@ static int __init acoustic_init(void)
 {
 	mutex_init(&api_lock);
 	mutex_init(&rpc_connect_lock);
-	msm_rpc_create_server(&htc_acoustic_server);
 	return misc_register(&acoustic_misc);
 }
 
