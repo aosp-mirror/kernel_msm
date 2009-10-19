@@ -343,6 +343,7 @@ int msm_irq_enter_sleep2(bool arm9_wake, int from_idle)
 
 	if (arm9_wake) {
 		msm_irq_set_type(INT_A9_M2A_6, IRQF_TRIGGER_RISING);
+		msm_irq_ack(INT_A9_M2A_6);
 		writel(1U << INT_A9_M2A_6, VIC_INT_ENSET0);
 	} else {
 		writel(msm_irq_shadow_reg[0].int_en[1], VIC_INT_ENSET0);
