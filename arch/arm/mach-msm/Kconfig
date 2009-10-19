@@ -150,6 +150,13 @@ config MACH_SAPPHIRE
 	default y
 	bool "Sapphire"
 
+config MACH_MAHIMAHI
+	depends on ARCH_QSD8X50
+	default y
+	bool "Mahi-Mahi"
+	help
+	  Select this to support the Mahi-Mahi device
+
 config HTC_HEADSET
 	tristate "HTC 2 Wire detection driver"
 	default n
