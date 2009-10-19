@@ -29,7 +29,11 @@
 #define PM_LIBVERS	  MSM_RPC_VERS(1,1)
 #endif
 
+#ifdef CONFIG_ARCH_QSD8X50
+#define HTC_PROCEDURE_SET_VIB_ON_OFF	22
+#else
 #define HTC_PROCEDURE_SET_VIB_ON_OFF	21
+#endif
 #define PMIC_VIBRATOR_LEVEL	(3000)
 
 static struct work_struct vibrator_work;
