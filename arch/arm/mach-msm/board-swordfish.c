@@ -45,6 +45,7 @@
 
 #include "board-swordfish.h"
 #include "devices.h"
+#include "proc_comm.h"
 
 extern int swordfish_init_mmc(void);
 
@@ -90,10 +91,57 @@ static struct msm_hsusb_product swordfish_usb_products[] = {
 };
 #endif
 
-static int swordfish_phy_init_seq[] = { 0x1D, 0x0D, 0x1D, 0x10, -1 };
+static int swordfish_phy_init_seq[] = {
+	0x0C, 0x31,
+	0x1D, 0x0D,
+	0x1D, 0x10,
+	-1
+};
+
+static void swordfish_usb_phy_reset(void)
+{
+	u32 id;
+	int ret;
+
+	id = PCOM_CLKRGM_APPS_RESET_USB_PHY;
+	ret = msm_proc_comm(PCOM_CLK_REGIME_SEC_RESET_ASSERT, &id, NULL);
+	if (ret) {
+		pr_err("%s: Cannot assert (%d)\n", __func__, ret);
+		return;
+	}
+
+	msleep(1);
+
+	id = PCOM_CLKRGM_APPS_RESET_USB_PHY;
+	ret = msm_proc_comm(PCOM_CLK_REGIME_SEC_RESET_DEASSERT, &id, NULL);
+	if (ret) {
+		pr_err("%s: Cannot assert (%d)\n", __func__, ret);
+		return;
+	}
+}
+
+static void swordfish_usb_hw_reset(bool enable)
+{
+	u32 id;
+	int ret;
+	u32 func;
+
+	id = PCOM_CLKRGM_APPS_RESET_USBH;
+	if (enable)
+		func = PCOM_CLK_REGIME_SEC_RESET_ASSERT;
+	else
+		func = PCOM_CLK_REGIME_SEC_RESET_DEASSERT;
+	ret = msm_proc_comm(func, &id, NULL);
+	if (ret)
+		pr_err("%s: Cannot set reset to %d (%d)\n", __func__, enable,
+		       ret);
+}
+
 
 static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 	.phy_init_seq		= swordfish_phy_init_seq,
+	.phy_reset		= swordfish_usb_phy_reset,
+	.hw_reset		= swordfish_usb_hw_reset,
 #ifdef CONFIG_USB_FUNCTION
 	.vendor_id		= 0x18d1,
 	.product_id		= 0x0d02,
