@@ -25,6 +25,8 @@
 #include <linux/debugfs.h>
 #include <linux/ctype.h>
 #include <linux/pm_qos_params.h>
+#include <linux/device.h>
+#include <linux/seq_file.h>
 #include <mach/clk.h>
 
 #include "clock.h"
@@ -287,6 +289,67 @@ static int clock_debug_local_get(void *data, u64 *val)
 	return 0;
 }
 
+static void *clk_info_seq_start(struct seq_file *seq, loff_t *ppos)
+{
+	struct hlist_node *pos;
+	int i = *ppos;
+	mutex_lock(&clocks_mutex);
+	hlist_for_each(pos, &clocks)
+		if (i-- == 0)
+			return hlist_entry(pos, struct clk, list);
+	return NULL;
+}
+
+static void *clk_info_seq_next(struct seq_file *seq, void *v, loff_t *pos)
+{
+	struct clk *clk = v;
+	++*pos;
+	return hlist_entry(clk->list.next, struct clk, list);
+}
+
+static void clk_info_seq_stop(struct seq_file *seq, void *v)
+{
+	mutex_unlock(&clocks_mutex);
+}
+
+static int clk_info_seq_show(struct seq_file *seq, void *v)
+{
+	struct clk *clk = v;
+
+	seq_printf(seq, "Clock %s\n", clk->name);
+	seq_printf(seq, "  Id          %d\n", clk->id);
+	seq_printf(seq, "  Count       %d\n", clk->count);
+	seq_printf(seq, "  Flags       %x\n", clk->flags);
+	seq_printf(seq, "  Dev         %p %s\n",
+			clk->dev, clk->dev ? dev_name(clk->dev) : "");
+
+	seq_printf(seq, "  Enabled     %d\n", clk->ops->is_enabled(clk->id));
+	seq_printf(seq, "  Rate        %ld\n", clk_get_rate(clk));
+
+	seq_printf(seq, "\n");
+	return 0;
+}
+
+static struct seq_operations clk_info_seqops = {
+	.start = clk_info_seq_start,
+	.next = clk_info_seq_next,
+	.stop = clk_info_seq_stop,
+	.show = clk_info_seq_show,
+};
+
+static int clk_info_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &clk_info_seqops);
+}
+
+static const struct file_operations clk_info_fops = {
+	.owner = THIS_MODULE,
+	.open = clk_info_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
 DEFINE_SIMPLE_ATTRIBUTE(clock_rate_fops, clock_debug_rate_get,
 			clock_debug_rate_set, "%llu\n");
 DEFINE_SIMPLE_ATTRIBUTE(clock_enable_fops, clock_debug_enable_get,
@@ -312,6 +375,8 @@ static int __init clock_debug_init(void)
 	dent_local = debugfs_create_dir("clk_local", NULL);
 	if (IS_ERR(dent_local))
 		return PTR_ERR(dent_local);
+
+	debugfs_create_file("clk_info", 0x444, 0, NULL, &clk_info_fops);
 
 	mutex_lock(&clocks_mutex);
 	hlist_for_each_entry(clock, pos, &clocks, list) {
