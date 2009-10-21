@@ -298,7 +298,7 @@ static int __init clock_debug_init(void)
 {
 	struct dentry *dent_rate, *dent_enable, *dent_local;
 	struct clk *clock;
-	unsigned n = 0;
+	struct hlist_node *pos;
 	char temp[50], *ptr;
 
 	dent_rate = debugfs_create_dir("clk_rate", 0);
@@ -313,7 +313,8 @@ static int __init clock_debug_init(void)
 	if (IS_ERR(dent_local))
 		return PTR_ERR(dent_local);
 
-	while ((clock = msm_clock_get_nth(n++)) != 0) {
+	mutex_lock(&clocks_mutex);
+	hlist_for_each_entry(clock, pos, &clocks, list) {
 		strncpy(temp, clock->dbg_name, ARRAY_SIZE(temp)-1);
 		for (ptr = temp; *ptr; ptr++)
 			*ptr = tolower(*ptr);
@@ -324,10 +325,11 @@ static int __init clock_debug_init(void)
 		debugfs_create_file(temp, S_IRUGO, dent_local,
 				    clock, &clock_local_fops);
 	}
+	mutex_unlock(&clocks_mutex);
 	return 0;
 }
 
-device_initcall(clock_debug_init);
+late_initcall(clock_debug_init);
 #endif
 
 /* The bootloader and/or AMSS may have left various clocks enabled.
