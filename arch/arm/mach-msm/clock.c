@@ -170,47 +170,48 @@ unsigned long clk_get_rate(struct clk *clk)
 }
 EXPORT_SYMBOL(clk_get_rate);
 
-static unsigned long clk_find_min_rate(struct clk *clk)
+static unsigned long clk_find_min_rate_locked(struct clk *clk)
 {
 	unsigned long rate = 0;
-	unsigned long flags;
 	struct clk_handle *clkh;
 	struct hlist_node *pos;
 
-	spin_lock_irqsave(&clocks_lock, flags);
 	hlist_for_each_entry(clkh, pos, &clk->handles, clk.list)
 		if (clkh->rate > rate)
 			rate = clkh->rate;
-	spin_unlock_irqrestore(&clocks_lock, flags);
 	return rate;
 }
 
 int clk_set_rate(struct clk *clk, unsigned long rate)
 {
 	int ret;
+	unsigned long flags;
+
+	spin_lock_irqsave(&clocks_lock, flags);
 	if (clk->flags & CLKFLAG_HANDLE) {
 		struct clk_handle *clkh;
 		clkh = container_of(clk, struct clk_handle, clk);
 		clkh->rate = rate;
 		clk = clkh->source;
-		rate = clk_find_min_rate(clk);
+		rate = clk_find_min_rate_locked(clk);
 	}
 
 	if (clk->flags & CLKFLAG_MAX) {
 		ret = clk->ops->set_max_rate(clk->id, rate);
 		if (ret)
-			return ret;
+			goto err;
 	}
 	if (clk->flags & CLKFLAG_MIN) {
 		ret = clk->ops->set_min_rate(clk->id, rate);
 		if (ret)
-			return ret;
+			goto err;
 	}
 
-	if (clk->flags & CLKFLAG_MAX || clk->flags & CLKFLAG_MIN)
-		return ret;
-
-	return clk->ops->set_rate(clk->id, rate);
+	if (!(clk->flags & (CLKFLAG_MAX | CLKFLAG_MIN)))
+		ret = clk->ops->set_rate(clk->id, rate);
+err:
+	spin_unlock_irqrestore(&clocks_lock, flags);
+	return ret;
 }
 EXPORT_SYMBOL(clk_set_rate);
 
