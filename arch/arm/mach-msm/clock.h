@@ -56,7 +56,7 @@ struct clk {
 	const char *name;
 	struct clk_ops *ops;
 	const char *dbg_name;
-	struct list_head list;
+	struct hlist_node list;
 	struct device *dev;
 };
 
