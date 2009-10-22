@@ -75,8 +75,8 @@ struct thread_info {
 	.flags		= 0,						\
 	.preempt_count	= INIT_PREEMPT_COUNT,				\
 	.addr_limit	= KERNEL_DS,					\
-	.cpu_domain	= domain_val(DOMAIN_USER, DOMAIN_MANAGER) |	\
-			  domain_val(DOMAIN_KERNEL, DOMAIN_MANAGER) |	\
+	.cpu_domain	= domain_val(DOMAIN_USER, DOMAIN_CLIENT) |	\
+			  domain_val(DOMAIN_KERNEL, DOMAIN_CLIENT) |	\
 			  domain_val(DOMAIN_IO, DOMAIN_CLIENT),		\
 	.restart_block	= {						\
 		.fn	= do_no_restart_syscall,			\
