@@ -84,7 +84,9 @@ static const u8 ds2482_chan_rd[8] =
 static int ds2482_probe(struct i2c_client *client,
 			const struct i2c_device_id *id);
 static int ds2482_remove(struct i2c_client *client);
-
+static int ds2482_suspend(struct i2c_client *client,
+			  pm_message_t mesg);
+static int ds2482_resume(struct i2c_client *client);
 
 /**
  * Driver data (common to all clients)
@@ -101,6 +103,8 @@ static struct i2c_driver ds2482_driver = {
 	},
 	.probe		= ds2482_probe,
 	.remove		= ds2482_remove,
+	.suspend	= ds2482_suspend,
+	.resume		= ds2482_resume,
 	.id_table	= ds2482_id,
 };
 
@@ -407,6 +411,31 @@ static u8 ds2482_w1_reset_bus(void *data)
 	return retval;
 }
 
+
+static int ds2482_suspend(struct i2c_client *client,
+			  pm_message_t mesg)
+{
+	void (*set_slp_n)(int n) =
+		client->dev.platform_data;
+
+	if (set_slp_n)
+		set_slp_n(0);
+
+	return 0;
+}
+
+static int ds2482_resume(struct i2c_client *client)
+{
+	void (*set_slp_n)(int n) =
+		client->dev.platform_data;
+
+	if (set_slp_n) {
+		set_slp_n(1);
+		udelay(100);
+	}
+
+	return 0;
+}
 
 static int ds2482_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
