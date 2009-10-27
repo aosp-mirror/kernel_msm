@@ -23,8 +23,19 @@
  * along with this program; if not, you can find it at http://www.fsf.org
  */
 
-/* This driver has optional support for low power wakeup on a rx gpio. This is
- * useful for peripherals that send unsolicited RX such as Bluetooth.
+/*
+ * MSM 7k/8k High speed uart driver
+ *
+ * Has optional support for uart power management independent of linux
+ * suspend/resume:
+ *
+ * RX wakeup.
+ * UART wakeup can be triggered by RX activity (using a wakeup GPIO on the
+ * UART RX pin). This should only be used if there is not a wakeup
+ * GPIO on the UART CTS, and the first RX byte is known (for example, with the
+ * Bluetooth Texas Instruments HCILL protocol), since the first RX byte will
+ * always be lost. RTS will be asserted even while the UART is off in this mode
+ * of operation. See msm_serial_hs_platform_data.rx_wakeup_irq.
  */
 
 #include <linux/module.h>
@@ -98,8 +109,8 @@ struct msm_hs_rx {
 	struct wake_lock wake_lock;
 };
 
-/* optional low power wakeup, typically on a GPIO RX irq */
-struct msm_hs_wakeup {
+/* optional RX GPIO IRQ low power wakeup */
+struct msm_hs_rx_wakeup {
 	int irq;  /* < 0 indicates low power wakeup disabled */
 	unsigned char ignore;  /* bool */
 
@@ -124,7 +135,7 @@ struct msm_hs_port {
 	ktime_t clk_off_delay;
 	enum msm_hs_clk_states_e clk_state;
 
-	struct msm_hs_wakeup wakeup;
+	struct msm_hs_rx_wakeup rx_wakeup;
 };
 
 #define MSM_UARTDM_BURST_SIZE 16   /* DM burst size (in bytes) */
@@ -141,9 +152,9 @@ static struct uart_ops msm_hs_ops;
 #define UARTDM_TO_MSM(uart_port) \
 	container_of((uart_port), struct msm_hs_port, uport)
 
-static inline unsigned int use_low_power_wakeup(struct msm_hs_port *msm_uport)
+static inline unsigned int use_low_power_rx_wakeup(struct msm_hs_port *msm_uport)
 {
-	return (msm_uport->wakeup.irq >= 0);
+	return (msm_uport->rx_wakeup.irq >= 0);
 }
 
 static inline unsigned int msm_hs_read(struct uart_port *uport,
@@ -239,7 +250,7 @@ static void msm_hs_pm(struct uart_port *uport, unsigned int state,
 		      unsigned int oldstate)
 {
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
-	if (use_low_power_wakeup(msm_uport))
+	if (use_low_power_rx_wakeup(msm_uport))
 	    return;
 
 	switch (state) {
@@ -874,9 +885,9 @@ static int msm_hs_check_clock_off_locked(struct uart_port *uport)
 	/* we really want to clock off */
 	clk_disable(msm_uport->clk);
 	msm_uport->clk_state = MSM_HS_CLK_OFF;
-	if (use_low_power_wakeup(msm_uport)) {
-		msm_uport->wakeup.ignore = 1;
-		enable_irq(msm_uport->wakeup.irq);
+	if (use_low_power_rx_wakeup(msm_uport)) {
+		msm_uport->rx_wakeup.ignore = 1;
+		enable_irq(msm_uport->rx_wakeup.irq);
 	}
 	return 1;
 }
@@ -992,7 +1003,7 @@ static void msm_hs_request_clock_on_locked(struct uart_port *uport) {
 	switch (msm_uport->clk_state) {
 	case MSM_HS_CLK_OFF:
 		clk_enable(msm_uport->clk);
-		disable_irq(msm_uport->wakeup.irq);
+		disable_irq(msm_uport->rx_wakeup.irq);
 		/* fall-through */
 	case MSM_HS_CLK_REQUEST_OFF:
 		hrtimer_try_to_cancel(&msm_uport->clk_off_timer);
@@ -1014,7 +1025,7 @@ void msm_hs_request_clock_on(struct uart_port *uport) {
 	spin_unlock_irqrestore(&uport->lock, flags);
 }
 
-static irqreturn_t msm_hs_wakeup_isr(int irq, void *dev)
+static irqreturn_t msm_hs_rx_wakeup_isr(int irq, void *dev)
 {
 	unsigned int wakeup = 0;
 	unsigned long flags;
@@ -1026,8 +1037,8 @@ static irqreturn_t msm_hs_wakeup_isr(int irq, void *dev)
 	if (msm_uport->clk_state == MSM_HS_CLK_OFF) {
 		/* ignore the first irq - it is a pending irq that occured
 		 * before enable_irq() */
-		if (msm_uport->wakeup.ignore)
-			msm_uport->wakeup.ignore = 0;
+		if (msm_uport->rx_wakeup.ignore)
+			msm_uport->rx_wakeup.ignore = 0;
 		else
 			wakeup = 1;
 	}
@@ -1036,17 +1047,17 @@ static irqreturn_t msm_hs_wakeup_isr(int irq, void *dev)
 		/* the uart was clocked off during an rx, wake up and
 		 * optionally inject char into tty rx */
 		msm_hs_request_clock_on_locked(uport);
-		if (msm_uport->wakeup.inject_rx) {
+		if (msm_uport->rx_wakeup.inject_rx) {
 			tty = uport->info->port.tty;
 			tty_insert_flip_char(tty,
-					     msm_uport->wakeup.rx_to_inject,
+					     msm_uport->rx_wakeup.rx_to_inject,
 					     TTY_NORMAL);
 		}
 	}
 
 	spin_unlock_irqrestore(&uport->lock, flags);
 
-	if (wakeup && msm_uport->wakeup.inject_rx)
+	if (wakeup && msm_uport->rx_wakeup.inject_rx)
 		tty_flip_buffer_push(tty);
 	return IRQ_HANDLED;
 }
@@ -1154,13 +1165,14 @@ static int msm_hs_startup(struct uart_port *uport)
 			  "msm_hs_uart", msm_uport);
 	if (unlikely(ret))
 		return ret;
-	if (use_low_power_wakeup(msm_uport)) {
-		ret = request_irq(msm_uport->wakeup.irq, msm_hs_wakeup_isr,
+	if (use_low_power_rx_wakeup(msm_uport)) {
+		ret = request_irq(msm_uport->rx_wakeup.irq,
+				  msm_hs_rx_wakeup_isr,
 				  IRQF_TRIGGER_FALLING,
-				  "msm_hs_wakeup", msm_uport);
+				  "msm_hs_rx_wakeup", msm_uport);
 		if (unlikely(ret))
 			return ret;
-		disable_irq(msm_uport->wakeup.irq);
+		disable_irq(msm_uport->rx_wakeup.irq);
 	}
 
 	spin_lock_irqsave(&uport->lock, flags);
@@ -1263,16 +1275,16 @@ static int __init msm_hs_probe(struct platform_device *pdev)
 		return -ENXIO;
 
 	if (pdata == NULL)
-		msm_uport->wakeup.irq = -1;
+		msm_uport->rx_wakeup.irq = -1;
 	else {
-		msm_uport->wakeup.irq = pdata->wakeup_irq;
-		msm_uport->wakeup.ignore = 1;
-		msm_uport->wakeup.inject_rx = pdata->inject_rx_on_wakeup;
-		msm_uport->wakeup.rx_to_inject = pdata->rx_to_inject;
+		msm_uport->rx_wakeup.irq = pdata->rx_wakeup_irq;
+		msm_uport->rx_wakeup.ignore = 1;
+		msm_uport->rx_wakeup.inject_rx = pdata->inject_rx_on_wakeup;
+		msm_uport->rx_wakeup.rx_to_inject = pdata->rx_to_inject;
 
-		if (unlikely(msm_uport->wakeup.irq < 0))
+		if (unlikely(msm_uport->rx_wakeup.irq < 0))
 			return -ENXIO;
-		if (unlikely(set_irq_wake(msm_uport->wakeup.irq, 1)))
+		if (unlikely(set_irq_wake(msm_uport->rx_wakeup.irq, 1)))
 			return -ENXIO;
 	}
 
@@ -1364,8 +1376,8 @@ static void msm_hs_shutdown(struct uart_port *uport)
 
 	/* Free the interrupt */
 	free_irq(uport->irq, msm_uport);
-	if (use_low_power_wakeup(msm_uport))
-		free_irq(msm_uport->wakeup.irq, msm_uport);
+	if (use_low_power_rx_wakeup(msm_uport))
+		free_irq(msm_uport->rx_wakeup.irq, msm_uport);
 
 	msm_uport->imr_reg = 0;
 	msm_hs_write(uport, UARTDM_IMR_ADDR, msm_uport->imr_reg);

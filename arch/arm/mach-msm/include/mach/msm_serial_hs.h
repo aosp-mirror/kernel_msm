@@ -16,9 +16,9 @@
 #define __ASM_ARCH_MSM_SERIAL_HS_H
 
 /* Optional platform device data for msm_serial_hs driver.
- * Used to configure low power wakeup */
+ * Used to configure low power rx wakeup */
 struct msm_serial_hs_platform_data {
-	int wakeup_irq;  /* wakeup irq */
+	int rx_wakeup_irq;  /* wakeup irq */
 	/* bool: inject char into rx tty on wakeup */
 	unsigned char inject_rx_on_wakeup;
 	char rx_to_inject;
