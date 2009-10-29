@@ -1114,7 +1114,7 @@ static struct msm_acpu_clock_platform_data sapphire_clock_data = {
 
 #ifdef CONFIG_SERIAL_MSM_HS
 static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
-	.wakeup_irq = MSM_GPIO_TO_INT(45),
+	.rx_wakeup_irq = MSM_GPIO_TO_INT(45),
 	.inject_rx_on_wakeup = 1,
 	.rx_to_inject = 0x32,
 };
