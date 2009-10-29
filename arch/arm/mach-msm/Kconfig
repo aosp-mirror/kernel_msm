@@ -339,26 +339,12 @@ config MSM_RPCSERVERS
 	help
 	  none
 
-config MSM_CPU_FREQ
+config MSM_CPU_FREQ_SCREEN
 	bool
-	default y if MSM_CPU_FREQ_ONDEMAND || MSM_CPU_FREQ_SCREEN
-
-choice
-	prompt "Cpufreq mode"
-	default MSM_CPU_FREQ_ONDEMAND
-	default MSM_CPU_FREQ_SCREEN
-
-	config MSM_CPU_FREQ_ONDEMAND
-		depends on CPU_FREQ_DEFAULT_GOV_ONDEMAND
-		bool "Enable ONDEMAND cpufreq govoner for"
-
-	config MSM_CPU_FREQ_SCREEN
-		depends on HAS_EARLYSUSPEND
-		bool "Enable simple cpu frequency scaling"
-		help
-		  Simple cpufreq scaling based on screen ON/OFF.
-
-endchoice
+	default n
+	depends on HAS_EARLYSUSPEND
+	help
+	  Simple cpufreq scaling based on screen ON/OFF.
 
 if MSM_CPU_FREQ_SCREEN
 
@@ -371,19 +357,6 @@ config MSM_CPU_FREQ_SCREEN_ON
 	default 384000
 
 endif # MSM_CPU_FREQ_SCREEN
-
-
-if MSM_CPU_FREQ_ONDEMAND
-
-config MSM_CPU_FREQ_ONDEMAND_MAX
-	int "Max"
-	default 384000
-
-config MSM_CPU_FREQ_ONDEMAND_MIN
-	int "Min"
-	default 245760
-
-endif # MSM_CPU_FREQ_ONDEMAND
 
 config MSM_HW3D
 	tristate "MSM Hardware 3D Register Driver"
