@@ -610,6 +610,10 @@ static void msm_hs_start_rx_locked(struct uart_port *uport)
 	msm_hs_write(uport, UARTDM_CR_ADDR, STALE_EVENT_ENABLE);
 	msm_uport->imr_reg |= UARTDM_ISR_RXLEV_BMSK;
 	msm_hs_write(uport, UARTDM_IMR_ADDR, msm_uport->imr_reg);
+
+	/* might have finished RX and be ready to clock off */
+	hrtimer_start(&msm_uport->clk_off_timer, msm_uport->clk_off_delay,
+			HRTIMER_MODE_REL);
 }
 
 /* Enable the transmitter Interrupt */
@@ -874,10 +878,11 @@ static int msm_hs_check_clock_off_locked(struct uart_port *uport)
 	struct circ_buf *tx_buf = &uport->info->xmit;
 
 	/* Cancel if tx tty buffer is not empty, dma is in flight,
-	 * or tx fifo is not empty */
+	 * or tx fifo is not empty, or rx fifo is not empty */
 	if (msm_uport->clk_state != MSM_HS_CLK_REQUEST_OFF ||
 	    !uart_circ_empty(tx_buf) || msm_uport->tx.dma_in_flight ||
-	    msm_uport->imr_reg & UARTDM_ISR_TXLEV_BMSK) {
+	    (msm_uport->imr_reg & UARTDM_ISR_TXLEV_BMSK) ||
+            !(msm_uport->imr_reg & UARTDM_ISR_RXLEV_BMSK))  {
 		return -1;
 	}
 
