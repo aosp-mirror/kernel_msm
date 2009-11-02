@@ -68,7 +68,6 @@ struct pwr_sink_platform_data {
 #ifndef CONFIG_HTC_PWRSINK
 static inline int htc_pwrsink_set(pwrsink_id_type id, unsigned percent)
 {
-	printk(KERN_DEBUG "%s:STUB!\n", __func__);
 	return 0;
 }
 static inline int htc_pwrsink_audio_set(pwrsink_audio_id_type id,
