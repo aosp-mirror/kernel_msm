@@ -692,11 +692,13 @@ void sdio_f0_writeb(struct sdio_func *func, unsigned char b, unsigned int addr,
 
 	BUG_ON(!func);
 
+#if 0
 	if ((addr < 0xF0 || addr > 0xFF) && (!mmc_card_lenient_fn0(func->card))) {
 		if (err_ret)
 			*err_ret = -EINVAL;
 		return;
 	}
+#endif
 
 	ret = mmc_io_rw_direct(func->card, 1, 0, addr, b, NULL);
 	if (err_ret)
