@@ -24,6 +24,7 @@
 #include <linux/proc_fs.h>
 #include <linux/suspend.h>
 #include <linux/reboot.h>
+#include <linux/earlysuspend.h>
 #include <mach/msm_iomap.h>
 #include <mach/system.h>
 #include <asm/io.h>
@@ -121,6 +122,9 @@ void msm_timer_exit_idle(int low_power);
 int msm_irq_idle_sleep_allowed(void);
 int msm_irq_pending(void);
 
+static int axi_rate;
+static int sleep_axi_rate;
+static struct clk *axi_clk;
 static uint32_t *msm_pm_reset_vector;
 
 static uint32_t msm_pm_max_sleep_time;
@@ -331,6 +335,10 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 			       "\n", pm_saved_acpu_clk_rate);
 		if (pm_saved_acpu_clk_rate == 0)
 			goto ramp_down_failed;
+
+		/* Drop AXI request when the screen is on */
+		if (axi_rate)
+			clk_set_rate(axi_clk, sleep_axi_rate);
 	}
 	if (sleep_mode < MSM_PM_SLEEP_MODE_APPS_SLEEP) {
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_SMSM_STATE)
@@ -370,6 +378,10 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 		if (acpuclk_set_rate(pm_saved_acpu_clk_rate, 1) < 0)
 			printk(KERN_ERR "msm_sleep(): clk_set_rate %ld "
 			       "failed\n", pm_saved_acpu_clk_rate);
+
+		/* Restore axi rate if needed */
+		if (axi_rate)
+			clk_set_rate(axi_clk, axi_rate);
 	}
 	if (msm_pm_debug_mask & MSM_PM_DEBUG_STATE)
 		printk(KERN_INFO "msm_sleep(): exit A11S_CLK_SLEEP_EN %x, "
@@ -640,11 +652,49 @@ void msm_pm_set_max_sleep_time(int64_t max_sleep_time_ns)
 }
 EXPORT_SYMBOL(msm_pm_set_max_sleep_time);
 
+#ifdef CONFIG_EARLYSUSPEND
+/* axi 128 screen on, 61mhz screen off */
+static void axi_early_suspend(struct early_suspend *handler) {
+	axi_rate = 0;
+	clk_set_rate(axi_clk, axi_rate);
+}
+
+static void axi_late_resume(struct early_suspend *handler) {
+	axi_rate = 128000000;
+	sleep_axi_rate = 120000000;
+	clk_set_rate(axi_clk, axi_rate);
+}
+
+static struct early_suspend axi_screen_suspend = {
+	.suspend = axi_early_suspend,
+	.resume = axi_late_resume,
+};
+#endif
+
+static void __init msm_pm_axi_init(void)
+{
+#ifdef CONFIG_EARLYSUSPEND
+	axi_clk = clk_get(NULL, "ebi1_clk");
+	if (IS_ERR(axi_clk)) {
+		int result = PTR_ERR(axi_clk);
+		pr_err("clk_get(ebi1_clk) returned %d\n", result);
+		return;
+	}
+	axi_rate = 128000000;
+	sleep_axi_rate = 120000000;
+	clk_set_rate(axi_clk, axi_rate);
+	register_early_suspend(&axi_screen_suspend);
+#else
+	axi_rate = 0;
+#endif
+}
+
 static int __init msm_pm_init(void)
 {
 	pm_power_off = msm_pm_power_off;
 	arm_pm_restart = msm_pm_restart;
 	msm_pm_max_sleep_time = 0;
+	msm_pm_axi_init();
 
 	register_reboot_notifier(&msm_reboot_notifier);
 
