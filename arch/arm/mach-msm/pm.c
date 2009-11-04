@@ -305,7 +305,11 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 		goto enter_failed;
 
 	if (enter_state) {
+#ifdef CONFIG_ARCH_MSM_SCORPION
+		writel(0x1b, A11S_CLK_SLEEP_EN);
+#else
 		writel(0x1f, A11S_CLK_SLEEP_EN);
+#endif
 		writel(1, A11S_PWRDOWN);
 
 		writel(0, A11S_STANDBY_CTL);
