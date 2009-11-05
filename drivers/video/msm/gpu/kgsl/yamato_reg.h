@@ -335,6 +335,7 @@ union reg_cp_rb_cntl {
 #define REG_RBBM_PATCH_RELEASE           0x0001
 #define REG_RBBM_PERIPHID1               0x03F9
 #define REG_RBBM_PERIPHID2               0x03FA
+#define REG_RBBM_DEBUG                   0x039B
 #define REG_RBBM_PM_OVERRIDE1            0x039C
 #define REG_RBBM_PM_OVERRIDE2            0x039D
 #define REG_RBBM_READ_ERROR              0x03B3
