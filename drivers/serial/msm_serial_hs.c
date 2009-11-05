@@ -138,6 +138,8 @@ struct msm_hs_port {
 	struct msm_hs_rx_wakeup rx_wakeup;
 	/* optional callback to exit low power mode */
 	void (*exit_lpm_cb)(struct uart_port *);
+
+	struct wake_lock dma_wake_lock;  /* held while any DMA active */
 };
 
 #define MSM_UARTDM_BURST_SIZE 16   /* DM burst size (in bytes) */
@@ -208,6 +210,7 @@ static int __devexit msm_hs_remove(struct platform_device *pdev)
 			 DMA_TO_DEVICE);
 
 	wake_lock_destroy(&msm_uport->rx.wake_lock);
+	wake_lock_destroy(&msm_uport->dma_wake_lock);
 
 	uart_remove_one_port(&msm_hs_driver, &msm_uport->uport);
 	clk_put(msm_uport->clk);
@@ -230,6 +233,7 @@ static int msm_hs_init_clk_locked(struct uart_port *uport)
 	int ret;
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 
+	wake_lock(&msm_uport->dma_wake_lock);
 	ret = clk_enable(msm_uport->clk);
 	if (ret) {
 		printk(KERN_ERR "Error could not turn on UART clk\n");
@@ -902,6 +906,7 @@ static int msm_hs_check_clock_off_locked(struct uart_port *uport)
 		set_rfr_locked(uport, 0);
 	clk_disable(msm_uport->clk);
 	msm_uport->clk_state = MSM_HS_CLK_OFF;
+	wake_unlock(&msm_uport->dma_wake_lock);
 	if (use_low_power_rx_wakeup(msm_uport)) {
 		msm_uport->rx_wakeup.ignore = 1;
 		enable_irq(msm_uport->rx_wakeup.irq);
@@ -1026,6 +1031,7 @@ void msm_hs_request_clock_on_locked(struct uart_port *uport) {
 
 	switch (msm_uport->clk_state) {
 	case MSM_HS_CLK_OFF:
+		wake_lock(&msm_uport->dma_wake_lock);
 		clk_enable(msm_uport->clk);
 		disable_irq(msm_uport->rx_wakeup.irq);
 		if (!use_low_power_rx_wakeup(msm_uport))
@@ -1237,6 +1243,8 @@ static int uartdm_init_port(struct uart_port *uport)
 
 	init_waitqueue_head(&rx->wait);
 	wake_lock_init(&rx->wake_lock, WAKE_LOCK_SUSPEND, "msm_serial_hs_rx");
+	wake_lock_init(&msm_uport->dma_wake_lock, WAKE_LOCK_SUSPEND,
+			"msm_serial_hs_dma");
 
 	rx->pool = dma_pool_create("rx_buffer_pool", uport->dev,
 				   UARTDM_RX_BUF_SIZE, 16, 0);
@@ -1418,8 +1426,10 @@ static void msm_hs_shutdown(struct uart_port *uport)
 	wait_event(msm_uport->rx.wait, msm_uport->rx.flush == FLUSH_SHUTDOWN);
 
 	clk_disable(msm_uport->clk);  /* to balance local clk_enable() */
-	if (msm_uport->clk_state != MSM_HS_CLK_OFF)
+	if (msm_uport->clk_state != MSM_HS_CLK_OFF) {
+		wake_unlock(&msm_uport->dma_wake_lock);
 		clk_disable(msm_uport->clk);  /* to balance clk_state */
+	}
 	msm_uport->clk_state = MSM_HS_CLK_PORT_OFF;
 
 	dma_unmap_single(uport->dev, msm_uport->tx.dma_base,
