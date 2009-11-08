@@ -848,7 +848,7 @@ int __init kgsl_yamato_config(struct kgsl_devconfig *devconfig,
 	/*TODO: these should probably be configurable from platform device
 	 * stuff */
 	devconfig->va_base = 0x66000000;
-	devconfig->va_range = SZ_32M;
+	devconfig->va_range = SZ_128M;
 
 	/* turn off memory protection unit by setting acceptable physical
 	 * address range to include all pages. Apparrently MPU causing
