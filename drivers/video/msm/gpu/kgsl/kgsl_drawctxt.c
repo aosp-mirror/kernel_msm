@@ -1448,6 +1448,7 @@ kgsl_drawctxt_create(struct kgsl_device *device,
 	drawctxt = &device->drawctxt[index];
 	drawctxt->pagetable = pagetable;
 	drawctxt->flags = CTXT_FLAGS_IN_USE;
+	drawctxt->bin_base_offset = 0;
 
 	device->drawctxt_count++;
 
@@ -1639,12 +1640,27 @@ int kgsl_drawctxt_bind_gmem_shadow(struct kgsl_device *device,
 	return 0;
 }
 
+/* set bin base offset */
+int kgsl_drawctxt_set_bin_base_offset(struct kgsl_device *device,
+					unsigned int drawctxt_id,
+					unsigned int offset)
+{
+	struct kgsl_drawctxt *drawctxt;
+
+	drawctxt = &device->drawctxt[drawctxt_id];
+
+	drawctxt->bin_base_offset = offset;
+
+	return 0;
+}
+
 /* switch drawing contexts */
 void
 kgsl_drawctxt_switch(struct kgsl_device *device, struct kgsl_drawctxt *drawctxt,
 			unsigned int flags)
 {
 	struct kgsl_drawctxt *active_ctxt = device->drawctxt_active;
+	unsigned int cmds[2];
 
 	/* already current? */
 	if (active_ctxt == drawctxt)
@@ -1761,6 +1777,11 @@ kgsl_drawctxt_switch(struct kgsl_device *device, struct kgsl_drawctxt *drawctxt,
 			KGSL_CTXT_DBG("restore shader");
 		kgsl_ringbuffer_issuecmds(device, 0,
 					  drawctxt->shader_restore, 3);
+
+		cmds[0] = pm4_type3_packet(PM4_SET_BIN_BASE_OFFSET, 1);
+		cmds[1] = drawctxt->bin_base_offset;
+		kgsl_ringbuffer_issuecmds(device, 0, cmds, 2);
+
 	}
 	KGSL_CTXT_INFO("return\n");
 }

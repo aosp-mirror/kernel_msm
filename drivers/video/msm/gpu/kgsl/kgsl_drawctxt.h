@@ -84,7 +84,7 @@ struct kgsl_drawctxt {
 	unsigned int        shader_fixup[3];
 	unsigned int        shader_restore[3];
 	unsigned int		chicken_restore[3];
-
+	unsigned int 	    bin_base_offset;
 	/* Information of the GMEM shadow that is created in context create */
 	struct gmem_shadow_t context_gmem_shadow;
 	/* User defined GMEM shadow buffers */
@@ -112,5 +112,9 @@ int kgsl_drawctxt_bind_gmem_shadow(struct kgsl_device *device,
 			unsigned int shadow_y,
 			const struct kgsl_buffer_desc
 			*shadow_buffer, unsigned int buffer_id);
+
+int kgsl_drawctxt_set_bin_base_offset(struct kgsl_device *device,
+					unsigned int drawctxt_id,
+					unsigned int offset);
 
 #endif  /* __GSL_DRAWCTXT_H */

@@ -860,6 +860,7 @@ static long kgsl_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 {
 	int result = 0;
 	struct kgsl_file_private *private = filep->private_data;
+	struct kgsl_drawctxt_set_bin_base_offset binbase;
 
 	BUG_ON(private == NULL);
 
@@ -930,6 +931,25 @@ static long kgsl_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	case IOCTL_KGSL_SHAREDMEM_FROM_PMEM:
 		result = kgsl_ioctl_sharedmem_from_pmem(private,
 							(void __user *)arg);
+		break;
+
+	case IOCTL_KGSL_DRAWCTXT_SET_BIN_BASE_OFFSET:
+		if (copy_from_user(&binbase, (void __user *)arg,
+				   sizeof(binbase))) {
+			result = -EFAULT;
+			break;
+		}
+
+		if (private->ctxt_id_mask & (1 << binbase.drawctxt_id)) {
+			result = kgsl_drawctxt_set_bin_base_offset(
+					&kgsl_driver.yamato_device,
+					binbase.drawctxt_id,
+					binbase.offset);
+		} else {
+			result = -EINVAL;
+			KGSL_DRV_ERR("invalid drawctxt drawctxt_id %d\n",
+				     binbase.drawctxt_id);
+		}
 		break;
 
 	default:
