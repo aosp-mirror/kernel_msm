@@ -99,10 +99,10 @@
 #define PM4_DRAW_INDX_2		0x36
 
 /* initiate fetch of index buffer and binIDs and draw */
-#define PM4_DRAW_INDX_BIN	0x37
+#define PM4_DRAW_INDX_BIN	0x34
 
 /* initiate fetch of bin IDs and draw using supplied indices */
-#define PM4_DRAW_INDX_2_BIN	0x38
+#define PM4_DRAW_INDX_2_BIN	0x35
 
 
 /* begin/end initiator for viz query extent processing */
