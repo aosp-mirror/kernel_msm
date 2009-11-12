@@ -169,8 +169,6 @@ done:
 
 static void kgsl_ringbuffer_submit(struct kgsl_ringbuffer *rb)
 {
-	unsigned int value;
-
 	BUG_ON(rb->wptr == 0);
 
 	GSL_RB_UPDATE_WPTR_POLLING(rb);
@@ -185,11 +183,6 @@ static void kgsl_ringbuffer_submit(struct kgsl_ringbuffer *rb)
 	mb();
 
 	kgsl_yamato_regwrite(rb->device, REG_CP_RB_WPTR, rb->wptr);
-
-	/* force wptr register to be updated */
-	do {
-		kgsl_yamato_regread(rb->device, REG_CP_RB_WPTR, &value);
-	} while (value != rb->wptr);
 
 	rb->flags |= KGSL_FLAGS_ACTIVE;
 }
