@@ -40,7 +40,7 @@ static int power_get_property(struct power_supply *psy,
 	if (psy->type == POWER_SUPPLY_TYPE_MAINS) {
 		val->intval = (vbus_present && (usb_status == 2));
 	} else {
-		val->intval = (vbus_present && (usb_status == 1));
+		val->intval = vbus_present;
 	}
 	return 0;
 }
