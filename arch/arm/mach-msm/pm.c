@@ -537,7 +537,11 @@ static struct platform_suspend_ops msm_pm_ops = {
 	.valid		= suspend_valid_only_mem,
 };
 
+#if defined(CONFIG_ARCH_MSM7X00A)
 static uint32_t restart_reason = 0x776655AA;
+#else
+static uint32_t restart_reason = 0;
+#endif
 
 static void msm_pm_power_off(void)
 {
@@ -572,6 +576,8 @@ static int msm_reboot_call(struct notifier_block *this, unsigned long code, void
 		} else if (!strncmp(cmd, "oem-", 4)) {
 			unsigned code = simple_strtoul(cmd + 4, 0, 16) & 0xff;
 			restart_reason = 0x6f656d00 | code;
+		} else if (!strcmp(cmd, "force-hard")) {
+			restart_reason = 0x776655AA;
 		} else {
 			restart_reason = 0x77665501;
 		}
