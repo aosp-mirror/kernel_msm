@@ -710,9 +710,11 @@ static void handle_adsp_rtos_mtoa_app(struct rpc_request_hdr *req)
 				     RPC_ACCEPTSTAT_SUCCESS);
 	mutex_unlock(&module->lock);
 #ifdef CONFIG_MSM_ADSP_REPORT_EVENTS
-	modem_event_addr = (uint32_t *)req;
-	module->ops->event(module->driver_data, EVENT_MSG_ID,
-				EVENT_LEN, read_modem_event);
+	if (module->ops != NULL && module->ops->event != NULL) {
+		modem_event_addr = (uint32_t *)req;
+		module->ops->event(module->driver_data, EVENT_MSG_ID,
+					EVENT_LEN, read_modem_event);
+	}
 #endif
 }
 
