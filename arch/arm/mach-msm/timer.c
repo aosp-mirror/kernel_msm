@@ -88,6 +88,8 @@ enum {
 };
 static struct msm_clock msm_clocks[];
 static struct msm_clock *msm_active_clock;
+static DEFINE_SPINLOCK(msm_fast_timer_lock);
+static int msm_fast_timer_enabled;
 
 static irqreturn_t msm_timer_interrupt(int irq, void *dev_id)
 {
@@ -448,7 +450,7 @@ int64_t msm_timer_enter_idle(void)
 	uint32_t count;
 	int32_t delta;
 
-	if (clock != &msm_clocks[MSM_CLOCK_GPT])
+	if (clock != &msm_clocks[MSM_CLOCK_GPT] || msm_fast_timer_enabled)
 		return 0;
 
 	msm_timer_sync_smem_clock(0);
@@ -599,6 +601,65 @@ static struct msm_clock msm_clocks[] = {
 		.write_delay = 2,
 	}
 };
+
+/**
+ * msm_enable_fast_timer - Enable fast timer
+ *
+ * Prevents low power idle, but the caller must call msm_disable_fast_timer
+ * before suspend completes.
+ * Reference counted.
+ */
+void msm_enable_fast_timer(void)
+{
+	u32 max;
+	unsigned long irq_flags;
+	struct msm_clock *clock = &msm_clocks[MSM_CLOCK_DGT];
+
+	spin_lock_irqsave(&msm_fast_timer_lock, irq_flags);
+	if (msm_fast_timer_enabled++)
+		goto done;
+	if (msm_active_clock == &msm_clocks[MSM_CLOCK_DGT]) {
+		pr_warning("msm_enable_fast_timer: timer already in use, "
+			"returned time will jump when hardware timer wraps\n");
+		goto done;
+	}
+	max = (clock->clockevent.mult >> (clock->clockevent.shift - 32)) - 1;
+	writel(max, clock->regbase + TIMER_MATCH_VAL);
+	writel(TIMER_ENABLE_EN | TIMER_ENABLE_CLR_ON_MATCH_EN,
+		clock->regbase + TIMER_ENABLE);
+done:
+	spin_unlock_irqrestore(&msm_fast_timer_lock, irq_flags);
+}
+
+/**
+ * msm_enable_fast_timer - Disable fast timer
+ */
+void msm_disable_fast_timer(void)
+{
+	unsigned long irq_flags;
+	struct msm_clock *clock = &msm_clocks[MSM_CLOCK_DGT];
+
+	spin_lock_irqsave(&msm_fast_timer_lock, irq_flags);
+	if (!WARN(!msm_fast_timer_enabled, "msm_disable_fast_timer undeflow")
+	    && !--msm_fast_timer_enabled
+	    && msm_active_clock != &msm_clocks[MSM_CLOCK_DGT])
+		writel(0, clock->regbase + TIMER_ENABLE);
+	spin_unlock_irqrestore(&msm_fast_timer_lock, irq_flags);
+}
+
+/**
+ * msm_enable_fast_timer - Read fast timer
+ *
+ * Returns 32bit nanosecond time value.
+ */
+u32 msm_read_fast_timer(void)
+{
+	cycle_t ticks;
+	struct msm_clock *clock = &msm_clocks[MSM_CLOCK_DGT];
+	ticks = msm_read_timer_count(clock) >> MSM_DGT_SHIFT;
+	return clocksource_cyc2ns(ticks, clock->clocksource.mult,
+					clock->clocksource.shift);
+}
 
 static void __init msm_timer_init(void)
 {
