@@ -73,6 +73,13 @@ static unsigned wifi_get_nvs_size( void )
 	return len;
 }
 
+int wifi_calibration_size_set(void)
+{
+	if (wifi_calibration != NULL)
+		wifi_calibration->size = wifi_get_nvs_size();
+	return 0;
+}
+
 static int wifi_calibration_read_proc(char *page, char **start, off_t off,
 					int count, int *eof, void *data)
 {
