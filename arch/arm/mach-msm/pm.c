@@ -409,10 +409,22 @@ enter_failed:
 	return rv;
 }
 
+static int msm_pm_idle_spin(void)
+{
+	int spin;
+	spin = msm_pm_idle_spin_time >> 10;
+	while (spin-- > 0) {
+		if (msm_irq_pending()) {
+			return -1;
+		}
+		udelay(1);
+	}
+	return 0;
+}
+
 void arch_idle(void)
 {
 	int ret;
-	int spin;
 	int64_t sleep_time;
 	int low_power = 0;
 #ifdef CONFIG_MSM_IDLE_STATS
@@ -438,37 +450,48 @@ void arch_idle(void)
 	if (msm_pm_debug_mask & MSM_PM_DEBUG_IDLE)
 		printk(KERN_INFO "arch_idle: sleep time %llu, allow_sleep %d\n",
 		       sleep_time, allow_sleep);
-	spin = msm_pm_idle_spin_time >> 10;
-	while (spin-- > 0) {
-		if (msm_irq_pending()) {
+	if (sleep_time < msm_pm_idle_sleep_min_time || !allow_sleep) {
+		unsigned long saved_rate;
+		if (acpuclk_get_wfi_rate() && msm_pm_idle_spin() < 0) {
 #ifdef CONFIG_MSM_IDLE_STATS
 			exit_stat = MSM_PM_STAT_IDLE_SPIN;
 #endif
 			goto abort_idle;
 		}
-		udelay(1);
-	}
-	if (sleep_time < msm_pm_idle_sleep_min_time || !allow_sleep) {
-		unsigned long saved_rate;
 		saved_rate = acpuclk_wait_for_irq();
-		if (msm_pm_debug_mask & MSM_PM_DEBUG_CLOCK)
+
+
+		if (saved_rate && msm_pm_debug_mask & MSM_PM_DEBUG_CLOCK)
 			printk(KERN_DEBUG "arch_idle: clk %ld -> swfi\n",
 				saved_rate);
-		if (saved_rate)
-			msm_arch_idle();
-		else
+
+		/*
+		 * If there is a wfi speed specified and we failed to ramp, do not
+		 * go into wfi.
+		 */
+		if (acpuclk_get_wfi_rate() && !saved_rate)
 			while (!msm_irq_pending())
 				udelay(1);
+		else
+			msm_arch_idle();
+
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_CLOCK)
 			printk(KERN_DEBUG "msm_sleep: clk swfi -> %ld\n",
 				saved_rate);
-		if (saved_rate && acpuclk_set_rate(saved_rate, 1) < 0)
+		if (acpuclk_set_rate(saved_rate, 1) < 0)
 			printk(KERN_ERR "msm_sleep(): clk_set_rate %ld "
 			       "failed\n", saved_rate);
 #ifdef CONFIG_MSM_IDLE_STATS
 		exit_stat = MSM_PM_STAT_IDLE_WFI;
 #endif
-  	} else {
+	} else {
+		if (msm_pm_idle_spin() < 0) {
+#ifdef CONFIG_MSM_IDLE_STATS
+			exit_stat = MSM_PM_STAT_IDLE_SPIN;
+#endif
+			goto abort_idle;
+		}
+
 		low_power = 1;
 		do_div(sleep_time, NSEC_PER_SEC / 32768);
 		if (sleep_time > 0x6DDD000) {
