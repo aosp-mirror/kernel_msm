@@ -106,5 +106,8 @@ int msm_clock_get_name(uint32_t id, char *name, uint32_t size);
 int ebi1_clk_set_min_rate(enum clkvote_client client, unsigned long rate);
 unsigned long clk_get_max_axi_khz(void);
 
+void clk_enter_sleep(int from_idle);
+void clk_exit_sleep(void);
+
 #endif
 
