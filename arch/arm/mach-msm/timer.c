@@ -92,7 +92,8 @@ static struct msm_clock *msm_active_clock;
 static irqreturn_t msm_timer_interrupt(int irq, void *dev_id)
 {
 	struct clock_event_device *evt = dev_id;
-	evt->event_handler(evt);
+	if (evt->event_handler)
+		evt->event_handler(evt);
 	return IRQ_HANDLED;
 }
 
