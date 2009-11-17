@@ -149,6 +149,9 @@ unsigned int uint2float(unsigned int uintval)
 	unsigned int frac = 0;
 	unsigned int u = uintval;
 
+	/* Handle zero separately */
+	if (uintval == 0)
+		return 0;
 	/* Find log2 of u */
 	if (u >= 0x10000) {
 		exp += 16;
