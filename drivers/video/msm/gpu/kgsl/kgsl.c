@@ -166,13 +166,11 @@ static void kgsl_hw_put_locked(bool start_timer)
 
 static void kgsl_do_standby_timer(unsigned long data)
 {
-	if (kgsl_yamato_is_idle(&kgsl_driver.yamato_device)) {
+	if (kgsl_yamato_is_idle(&kgsl_driver.yamato_device))
 		kgsl_hw_disable();
-	} else {
-		pr_warning("%s: not idle, rescheduling\n", __func__);
+	else
 		mod_timer(&kgsl_driver.standby_timer,
 			  jiffies + msecs_to_jiffies(10));
-	}
 }
 
 /* file operations */
