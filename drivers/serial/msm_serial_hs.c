@@ -79,8 +79,17 @@ enum flush_reason {
 enum msm_hs_clk_states_e {
 	MSM_HS_CLK_PORT_OFF,     /* port not in use */
 	MSM_HS_CLK_OFF,          /* clock disabled */
-	MSM_HS_CLK_REQUEST_OFF,  /* disable after TX flushed */
-	MSM_HS_CLK_ON,           /* clock disabled */
+	MSM_HS_CLK_REQUEST_OFF,  /* disable after TX and RX flushed */
+	MSM_HS_CLK_ON,           /* clock enabled */
+};
+
+/* Track the forced RXSTALE flush during clock off sequence.
+ * These states are only valid during MSM_HS_CLK_REQUEST_OFF */
+enum msm_hs_clk_req_off_state_e {
+	CLK_REQ_OFF_START,
+	CLK_REQ_OFF_RXSTALE_ISSUED,
+	CLK_REQ_OFF_FLUSH_ISSUED,
+	CLK_REQ_OFF_RXSTALE_FLUSHED,
 };
 
 struct msm_hs_tx {
@@ -134,6 +143,7 @@ struct msm_hs_port {
 	struct hrtimer clk_off_timer;  /* to poll TXEMT before clock off */
 	ktime_t clk_off_delay;
 	enum msm_hs_clk_states_e clk_state;
+	enum msm_hs_clk_req_off_state_e clk_req_off_state;
 
 	struct msm_hs_rx_wakeup rx_wakeup;
 	/* optional callback to exit low power mode */
@@ -534,8 +544,14 @@ static void msm_hs_stop_tx_locked(struct uart_port *uport)
 static void msm_hs_stop_rx_locked(struct uart_port *uport)
 {
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
+	unsigned int data;
 
 	clk_enable(msm_uport->clk);
+
+	/* disable dlink */
+	data = msm_hs_read(uport, UARTDM_DMEN_ADDR);
+	data &= ~UARTDM_RX_DM_EN_BMSK;
+	msm_hs_write(uport, UARTDM_DMEN_ADDR, data);
 
 	/* Disable the receiver */
 	if (msm_uport->rx.flush == FLUSH_NONE) {
@@ -606,14 +622,14 @@ static void msm_hs_start_rx_locked(struct uart_port *uport)
 {
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 
-	msm_uport->rx.flush = FLUSH_NONE;
-	msm_dmov_enqueue_cmd(msm_uport->dma_rx_channel, &msm_uport->rx.xfer);
-
 	msm_hs_write(uport, UARTDM_CR_ADDR, RESET_STALE_INT);
 	msm_hs_write(uport, UARTDM_DMRX_ADDR, UARTDM_RX_BUF_SIZE);
 	msm_hs_write(uport, UARTDM_CR_ADDR, STALE_EVENT_ENABLE);
 	msm_uport->imr_reg |= UARTDM_ISR_RXLEV_BMSK;
 	msm_hs_write(uport, UARTDM_IMR_ADDR, msm_uport->imr_reg);
+
+	msm_uport->rx.flush = FLUSH_NONE;
+	msm_dmov_enqueue_cmd(msm_uport->dma_rx_channel, &msm_uport->rx.xfer);
 
 	/* might have finished RX and be ready to clock off */
 	hrtimer_start(&msm_uport->clk_off_timer, msm_uport->clk_off_delay,
@@ -719,6 +735,9 @@ static void msm_hs_dmov_rx_callback(struct msm_dmov_cmd *cmd_ptr,
 
 	if (error_f)
 		msm_hs_write(uport, UARTDM_CR_ADDR, RESET_ERROR_STATUS);
+
+	if (msm_uport->clk_req_off_state == CLK_REQ_OFF_FLUSH_ISSUED)
+		msm_uport->clk_req_off_state = CLK_REQ_OFF_RXSTALE_FLUSHED;
 
 	flush = msm_uport->rx.flush;
 	if (flush == FLUSH_IGNORE)
@@ -895,6 +914,19 @@ static int msm_hs_check_clock_off_locked(struct uart_port *uport)
 	if (!(sr_status & UARTDM_SR_TXEMT_BMSK))
 		return 0;  /* retry */
 
+	/* Make sure forced RXSTALE flush complete */
+	switch (msm_uport->clk_req_off_state) {
+	case CLK_REQ_OFF_START:
+		msm_uport->clk_req_off_state = CLK_REQ_OFF_RXSTALE_ISSUED;
+		msm_hs_write(uport, UARTDM_CR_ADDR, FORCE_STALE_EVENT);
+		return 0;  /* RXSTALE flush not complete - retry */
+	case CLK_REQ_OFF_RXSTALE_ISSUED:
+	case CLK_REQ_OFF_FLUSH_ISSUED:
+		return 0;  /* RXSTALE flush not complete - retry */
+	case CLK_REQ_OFF_RXSTALE_FLUSHED:
+		break;  /* continue */
+	}
+
 	if (msm_uport->rx.flush != FLUSH_SHUTDOWN) {
 		if (msm_uport->rx.flush == FLUSH_NONE)
 			msm_hs_stop_rx_locked(uport);
@@ -902,8 +934,6 @@ static int msm_hs_check_clock_off_locked(struct uart_port *uport)
 	}
 
 	/* we really want to clock off */
-	if (!use_low_power_rx_wakeup(msm_uport))
-		set_rfr_locked(uport, 0);
 	clk_disable(msm_uport->clk);
 	msm_uport->clk_state = MSM_HS_CLK_OFF;
 	wake_unlock(&msm_uport->dma_wake_lock);
@@ -958,6 +988,9 @@ static irqreturn_t msm_hs_isr(int irq, void *dev)
 		msm_hs_write(uport, UARTDM_CR_ADDR, STALE_EVENT_DISABLE);
 		msm_hs_write(uport, UARTDM_CR_ADDR, RESET_STALE_INT);
 
+		if (msm_uport->clk_req_off_state == CLK_REQ_OFF_RXSTALE_ISSUED)
+			msm_uport->clk_req_off_state =
+					CLK_REQ_OFF_FLUSH_ISSUED;
 		if (rx->flush == FLUSH_NONE) {
 			rx->flush = FLUSH_DATA_READY;
 			msm_dmov_flush(msm_uport->dma_rx_channel);
@@ -1010,6 +1043,9 @@ void msm_hs_request_clock_off_locked(struct uart_port *uport) {
 
 	if (msm_uport->clk_state == MSM_HS_CLK_ON) {
 		msm_uport->clk_state = MSM_HS_CLK_REQUEST_OFF;
+		msm_uport->clk_req_off_state = CLK_REQ_OFF_START;
+		if (!use_low_power_rx_wakeup(msm_uport))
+			set_rfr_locked(uport, 0);
 		msm_uport->imr_reg |= UARTDM_ISR_TXLEV_BMSK;
 		msm_hs_write(uport, UARTDM_IMR_ADDR, msm_uport->imr_reg);
 	}
@@ -1028,19 +1064,27 @@ EXPORT_SYMBOL(msm_hs_request_clock_off);
 
 void msm_hs_request_clock_on_locked(struct uart_port *uport) {
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
+	unsigned int data;
 
 	switch (msm_uport->clk_state) {
 	case MSM_HS_CLK_OFF:
 		wake_lock(&msm_uport->dma_wake_lock);
 		clk_enable(msm_uport->clk);
 		disable_irq(msm_uport->rx_wakeup.irq);
-		if (!use_low_power_rx_wakeup(msm_uport))
-			set_rfr_locked(uport, 1);
 		/* fall-through */
 	case MSM_HS_CLK_REQUEST_OFF:
+		if (msm_uport->rx.flush == FLUSH_STOP ||
+				msm_uport->rx.flush == FLUSH_SHUTDOWN) {
+			msm_hs_write(uport, UARTDM_CR_ADDR, RESET_RX);
+			data = msm_hs_read(uport, UARTDM_DMEN_ADDR);
+			data |= UARTDM_RX_DM_EN_BMSK;
+			msm_hs_write(uport, UARTDM_DMEN_ADDR, data);
+		}
 		hrtimer_try_to_cancel(&msm_uport->clk_off_timer);
 		if (msm_uport->rx.flush == FLUSH_SHUTDOWN)
 			msm_hs_start_rx_locked(uport);
+		if (!use_low_power_rx_wakeup(msm_uport))
+			set_rfr_locked(uport, 1);
 		if (msm_uport->rx.flush == FLUSH_STOP)
 			msm_uport->rx.flush = FLUSH_IGNORE;
 		msm_uport->clk_state = MSM_HS_CLK_ON;
