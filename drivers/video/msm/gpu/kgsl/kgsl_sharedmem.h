@@ -24,6 +24,7 @@
 
 #define KGSL_PAGESIZE           0x1000
 #define KGSL_PAGESIZE_SHIFT     12
+#define KGSL_PAGEMASK           (~(KGSL_PAGESIZE - 1))
 
 struct kgsl_pagetable;
 

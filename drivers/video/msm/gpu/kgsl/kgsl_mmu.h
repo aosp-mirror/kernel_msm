@@ -76,6 +76,7 @@ struct kgsl_mmu {
 	unsigned int     va_range;
 	struct kgsl_memdesc    dummyspace;
 	/* current page table object being used by device mmu */
+	struct kgsl_pagetable  *defaultpagetable;
 	struct kgsl_pagetable  *hwpagetable;
 };
 
@@ -103,7 +104,8 @@ int kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 		 unsigned int address,
 		 int range,
 		 unsigned int protflags,
-		 unsigned int *gpuaddr);
+		 unsigned int *gpuaddr,
+		 unsigned int flags);
 
 int kgsl_mmu_unmap(struct kgsl_pagetable *pagetable,
 					unsigned int gpuaddr, int range);
@@ -114,10 +116,15 @@ static inline int kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 			       unsigned int address,
 			       int range,
 			       unsigned int protflags,
-			       unsigned int *gpuaddr) { return -1; }
+			       unsigned int *gpuaddr,
+			       unsigned int flags)
+{
+	*gpuaddr = address;
+	return 0;
+}
 
 static inline int kgsl_mmu_unmap(struct kgsl_pagetable *pagetable,
-				 unsigned int gpuaddr, int range) { return -1; }
+				 unsigned int gpuaddr, int range) { return 0; }
 
 static inline pte_t *kgsl_get_pte_from_vaddr(unsigned int vaddr) {return NULL;}
 #endif

@@ -521,11 +521,22 @@ int kgsl_ringbuffer_init(struct kgsl_device *device)
 	}
 
 	/* allocate memory for polling and timestamps */
-	flags = (KGSL_MEMFLAGS_ALIGN32 | KGSL_MEMFLAGS_CONPHYS);
+	/* This really can be at 4 byte alignment boundry but for using MMU
+	 * we need to make it at page boundary */
+	flags = (KGSL_MEMFLAGS_ALIGNPAGE | KGSL_MEMFLAGS_CONPHYS);
 
 	status = kgsl_sharedmem_alloc(flags, sizeof(struct kgsl_rbmemptrs),
 					&rb->memptrs_desc);
 
+	if (status != 0) {
+		kgsl_ringbuffer_close(rb);
+		KGSL_CMD_VDBG("return %d\n", status);
+		return status;
+	}
+
+	/* last allocation of init process is made here so map all
+	 * allocations to MMU */
+	status = kgsl_yamato_setup_pt(device, device->mmu.defaultpagetable);
 	if (status != 0) {
 		kgsl_ringbuffer_close(rb);
 		KGSL_CMD_VDBG("return %d\n", status);
@@ -555,6 +566,9 @@ int kgsl_ringbuffer_close(struct kgsl_ringbuffer *rb)
 	kgsl_cmdstream_memqueue_drain(rb->device);
 
 	kgsl_ringbuffer_stop(rb);
+
+	/* this must happen before first sharedmem_free */
+	kgsl_yamato_cleanup_pt(rb->device, rb->device->mmu.defaultpagetable);
 
 	if (rb->buffer_desc.hostptr)
 		kgsl_sharedmem_free(&rb->buffer_desc);

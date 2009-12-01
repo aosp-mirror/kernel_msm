@@ -207,7 +207,6 @@ kgsl_sharedmem_alloc(uint32_t flags, int size,
 	memdesc->physaddr = alignedbaseaddr;
 	memdesc->hostptr = kgsl_memarena_gethostptr(shmem, memdesc->physaddr);
 	memdesc->size = size;
-	memdesc->gpuaddr = memdesc->physaddr;
 
 	KGSL_MEM_VDBG("ashift %d m->ashift %d blksize %d base %x abase %x\n",
 			alignshift, KGSL_PAGESIZE_SHIFT, blksize, baseaddr,

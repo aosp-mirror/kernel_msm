@@ -249,6 +249,8 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 
 	if (private->pagetable != NULL) {
 #ifdef PER_PROCESS_PAGE_TABLE
+		kgsl_yamato_cleanup_pt(&kgsl_driver.yamato_device,
+					private->pagetable);
 		kgsl_mmu_destroypagetableobject(private->pagetable);
 #endif
 		private->pagetable = NULL;
@@ -310,6 +312,12 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
 		kgsl_mmu_createpagetableobject(&kgsl_driver.yamato_device.mmu);
 	if (private->pagetable == NULL) {
 		result = -ENOMEM;
+		goto done;
+	}
+	result = kgsl_yamato_setup_pt(device, private->pagetable);
+	if (result) {
+		kgsl_mmu_destroypagetableobject(private->pagetable);
+		private->pagetable == NULL;
 		goto done;
 	}
 #else
@@ -593,14 +601,16 @@ done:
 
 void kgsl_remove_mem_entry(struct kgsl_mem_entry *entry)
 {
+	kgsl_mmu_unmap(entry->memdesc.pagetable,
+		       entry->memdesc.gpuaddr & KGSL_PAGEMASK,
+		       entry->memdesc.size);
 	if (KGSL_MEMFLAGS_VMALLOC_MEM & entry->memdesc.priv) {
 		vfree((void *)entry->memdesc.physaddr);
 		entry->priv->vmalloc_size -= entry->memdesc.size;
-		kgsl_mmu_unmap(entry->memdesc.pagetable,
-			       entry->memdesc.gpuaddr, entry->memdesc.size);
 	} else {
 		KGSL_DRV_DBG("unlocked pmem fd %p\n", entry->pmem_file);
-		put_pmem_file(entry->pmem_file);
+		if (entry->pmem_file)
+			put_pmem_file(entry->pmem_file);
 	}
 	list_del(&entry->list);
 
@@ -715,7 +725,7 @@ static int kgsl_ioctl_sharedmem_from_vmalloc(struct kgsl_file_private *private,
 	result =
 	    kgsl_mmu_map(private->pagetable, (unsigned long)vmalloc_area, len,
 			 GSL_PT_PAGE_RV | GSL_PT_PAGE_WV,
-			 &entry->memdesc.gpuaddr);
+			 &entry->memdesc.gpuaddr, KGSL_MEMFLAGS_ALIGN4K);
 
 	if (result != 0)
 		goto error_free_vmalloc;
@@ -778,6 +788,7 @@ static int kgsl_ioctl_sharedmem_from_pmem(struct kgsl_file_private *private,
 		result = -EINVAL;
 		goto error;
 	}
+
 	KGSL_MEM_INFO("pmem file %p start 0x%lx vstart 0x%lx len 0x%lx\n",
 			pmem_file, start, vstart, len);
 	KGSL_DRV_DBG("locked pmem file %p\n", pmem_file);
@@ -791,21 +802,38 @@ static int kgsl_ioctl_sharedmem_from_pmem(struct kgsl_file_private *private,
 	entry->pmem_file = pmem_file;
 
 	entry->memdesc.pagetable = private->pagetable;
-	entry->memdesc.size = len;
+
+	/* Any MMU mapped memory must have a length in multiple of PAGESIZE */
+	entry->memdesc.size = ALIGN(param.len, PAGE_SIZE);
+
 	/*we shouldn't need to write here from kernel mode */
 	entry->memdesc.hostptr = NULL;
 
-	entry->memdesc.physaddr = start;
-	entry->memdesc.gpuaddr = start;
+	/* ensure that MMU mappings are at page boundary */
+	entry->memdesc.physaddr = start + (param.offset & KGSL_PAGEMASK);
+	result = kgsl_mmu_map(private->pagetable, entry->memdesc.physaddr,
+			entry->memdesc.size, GSL_PT_PAGE_RV | GSL_PT_PAGE_WV,
+			&entry->memdesc.gpuaddr,
+			KGSL_MEMFLAGS_ALIGN4K | KGSL_MEMFLAGS_CONPHYS);
+	if (result)
+		goto error_free_entry;
 
+	/* If the offset is not at 4K boundary then add the correct offset
+	 * value to gpuaddr */
+	entry->memdesc.gpuaddr += (param.offset & ~KGSL_PAGEMASK);
 	param.gpuaddr = entry->memdesc.gpuaddr;
 
 	if (copy_to_user(arg, &param, sizeof(param))) {
 		result = -EFAULT;
-		goto error_free_entry;
+		goto error_unmap_entry;
 	}
 	list_add(&entry->list, &private->mem_list);
-	return 0;
+	return result;
+
+error_unmap_entry:
+	kgsl_mmu_unmap(entry->memdesc.pagetable,
+		       entry->memdesc.gpuaddr & KGSL_PAGEMASK,
+		       entry->memdesc.size);
 error_free_entry:
 	kfree(entry);
 

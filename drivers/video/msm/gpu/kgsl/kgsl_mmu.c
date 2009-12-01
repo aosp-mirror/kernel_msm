@@ -231,6 +231,7 @@ struct kgsl_pagetable *kgsl_mmu_createpagetableobject(struct kgsl_mmu *mmu)
 		kgsl_sharedmem_set(&pagetable->base, 0, 0,
 				   pagetable->base.size);
 	}
+	pagetable->base.gpuaddr = pagetable->base.physaddr;
 
 	KGSL_MEM_VDBG("return %p\n", pagetable);
 
@@ -373,20 +374,18 @@ int kgsl_mmu_init(struct kgsl_device *device)
 				     REG_MH_MMU_TRAN_ERROR,
 				     mmu->dummyspace.gpuaddr);
 
-#ifndef PER_PROCESS_PAGE_TABLE
-		mmu->hwpagetable = kgsl_mmu_createpagetableobject(mmu);
-		if (!mmu->hwpagetable) {
+		mmu->defaultpagetable = kgsl_mmu_createpagetableobject(mmu);
+		if (!mmu->defaultpagetable) {
 			KGSL_MEM_ERR("Failed to create global page table\n");
 			kgsl_mmu_close(device);
 			return -ENOMEM;
 		}
+		mmu->hwpagetable = mmu->defaultpagetable;
 		status = kgsl_yamato_setpagetable(device);
 		if (status) {
 			kgsl_mmu_close(device);
 			return status;
 		}
-#endif
-		kgsl_yamato_tlbinvalidate(device);
 
 		mmu->flags |= KGSL_FLAGS_STARTED;
 	}
@@ -433,12 +432,15 @@ int kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 				unsigned int address,
 				int range,
 				unsigned int protflags,
-				unsigned int *gpuaddr)
+				unsigned int *gpuaddr,
+				unsigned int flags)
 {
 	int numpages;
 	unsigned int pte, superpte, ptefirst, ptelast, physaddr;
-	int flushtlb;
+	int flushtlb, alloc_size;
 	struct kgsl_mmu *mmu = NULL;
+	int phys_contiguous = flags & KGSL_MEMFLAGS_CONPHYS;
+	unsigned int align = flags & KGSL_MEMFLAGS_ALIGN_MASK;
 
 	KGSL_MEM_VDBG("enter (pt=%p, physaddr=%08x, range=%08d, gpuaddr=%p)\n",
 		      pagetable, address, range, gpuaddr);
@@ -450,24 +452,47 @@ int kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 	BUG_ON(protflags == 0);
 	BUG_ON(range <= 0);
 
-	*gpuaddr = gen_pool_alloc(pagetable->pool, range);
+	/* Only support 4K and 8K alignment for now */
+	if (align != KGSL_MEMFLAGS_ALIGN8K && align != KGSL_MEMFLAGS_ALIGN4K) {
+		KGSL_MEM_ERR("Cannot map memory according to "
+			     "requested flags: %08x\n", flags);
+		return -EINVAL;
+	}
+
+	/* Make sure address being mapped is at 4K boundary */
+	if (!IS_ALIGNED(address, KGSL_PAGESIZE) || range & ~KGSL_PAGEMASK) {
+		KGSL_MEM_ERR("Cannot map address not aligned "
+			     "at page boundary: address: %08x, range: %08x\n",
+			     address, range);
+		return -EINVAL;
+	}
+	alloc_size = range;
+	if (align == KGSL_MEMFLAGS_ALIGN8K)
+		alloc_size += KGSL_PAGESIZE;
+
+	*gpuaddr = gen_pool_alloc(pagetable->pool, alloc_size);
 	if (*gpuaddr == 0) {
 		KGSL_MEM_ERR("gen_pool_alloc failed\n");
 		return -ENOMEM;
 	}
 
-
+	if (align == KGSL_MEMFLAGS_ALIGN8K) {
+		if (*gpuaddr & ((1 << 13) - 1)) {
+			/* Not 8k aligned, align it */
+			gen_pool_free(pagetable->pool, *gpuaddr, KGSL_PAGESIZE);
+			*gpuaddr = *gpuaddr + KGSL_PAGESIZE;
+		} else
+			gen_pool_free(pagetable->pool, *gpuaddr + range,
+				      KGSL_PAGESIZE);
+	}
 
 	numpages = (range >> KGSL_PAGESIZE_SHIFT);
-	if (range & (KGSL_PAGESIZE - 1))
-		numpages++;
 
 	ptefirst = kgsl_pt_entry_get(pagetable, *gpuaddr);
 	ptelast = ptefirst + numpages;
 
 	pte = ptefirst;
 	flushtlb = 0;
-
 
 	superpte = ptefirst & (GSL_PT_SUPER_PTE - 1);
 	for (pte = superpte; pte < ptefirst; pte++) {
@@ -488,8 +513,12 @@ int kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 		if (kgsl_pt_map_isdirty(pagetable, pte))
 			flushtlb = 1;
 		/* mark pte as in use */
-		physaddr = vmalloc_to_pfn((void *)address);
-		physaddr <<= PAGE_SHIFT;
+		if (phys_contiguous)
+			physaddr = address;
+		else {
+			physaddr = vmalloc_to_pfn((void *)address);
+			physaddr <<= PAGE_SHIFT;
+		}
 
 		if (physaddr)
 			kgsl_pt_map_set(pagetable, pte, physaddr | protflags);
@@ -596,9 +625,9 @@ int kgsl_mmu_close(struct kgsl_device *device)
 		mmu->flags &= ~KGSL_FLAGS_INITIALIZED;
 		mmu->flags &= ~KGSL_FLAGS_INITIALIZED0;
 #ifndef PER_PROCESS_PAGE_TABLE
-		kgsl_mmu_destroypagetableobject(mmu->hwpagetable);
+		kgsl_mmu_destroypagetableobject(mmu->defaultpagetable);
 #endif
-		mmu->hwpagetable = NULL;
+		mmu->defaultpagetable = NULL;
 	}
 
 	KGSL_MEM_VDBG("return %d\n", 0);

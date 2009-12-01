@@ -1328,6 +1328,12 @@ create_gpustate_shadow(struct kgsl_device *device,
 	 */
 	if (kgsl_sharedmem_alloc(flags, CONTEXT_SIZE, &drawctxt->gpustate) != 0)
 		return -ENOMEM;
+	if (kgsl_mmu_map(drawctxt->pagetable, drawctxt->gpustate.physaddr,
+			 drawctxt->gpustate.size,
+			 GSL_PT_PAGE_RV | GSL_PT_PAGE_WV,
+			 &drawctxt->gpustate.gpuaddr,
+			 KGSL_MEMFLAGS_CONPHYS | KGSL_MEMFLAGS_ALIGN8K))
+		return -EINVAL;
 
 	drawctxt->flags |= CTXT_FLAGS_STATE_SHADOW;
 
@@ -1364,6 +1370,13 @@ create_gmem_shadow(struct kgsl_device *device, struct kgsl_drawctxt *drawctxt,
 				 &drawctxt->context_gmem_shadow.gmemshadow) !=
 	    0)
 		return -ENOMEM;
+	if (kgsl_mmu_map(drawctxt->pagetable,
+			 drawctxt->context_gmem_shadow.gmemshadow.physaddr,
+			 drawctxt->context_gmem_shadow.gmemshadow.size,
+			 GSL_PT_PAGE_RV | GSL_PT_PAGE_WV,
+			 &drawctxt->context_gmem_shadow.gmemshadow.gpuaddr,
+			 KGSL_MEMFLAGS_CONPHYS | KGSL_MEMFLAGS_ALIGN8K))
+		return -EINVAL;
 
 	/* we've allocated the shadow, when swapped out, GMEM must be saved. */
 	drawctxt->flags |= CTXT_FLAGS_GMEM_SHADOW | CTXT_FLAGS_GMEM_SAVE;
@@ -1512,14 +1525,21 @@ int kgsl_drawctxt_destroy(struct kgsl_device *device, unsigned int drawctxt_id)
 
 		/* destroy state shadow, if allocated */
 		if (drawctxt->gpustate.gpuaddr != 0) {
+			kgsl_mmu_unmap(drawctxt->pagetable,
+				       drawctxt->gpustate.gpuaddr,
+				       drawctxt->gpustate.size);
 			drawctxt->gpustate.gpuaddr = 0;
 		}
 		if (drawctxt->gpustate.physaddr != 0)
 			kgsl_sharedmem_free(&drawctxt->gpustate);
 
 		/* destroy gmem shadow, if allocated */
-		if (drawctxt->context_gmem_shadow.gmemshadow.gpuaddr != 0)
-		drawctxt->context_gmem_shadow.gmemshadow.gpuaddr = 0;
+		if (drawctxt->context_gmem_shadow.gmemshadow.gpuaddr != 0) {
+			kgsl_mmu_unmap(drawctxt->pagetable,
+				drawctxt->context_gmem_shadow.gmemshadow.gpuaddr,
+				drawctxt->context_gmem_shadow.gmemshadow.size);
+			drawctxt->context_gmem_shadow.gmemshadow.gpuaddr = 0;
+		}
 
 		if (drawctxt->context_gmem_shadow.gmemshadow.physaddr != 0)
 			kgsl_sharedmem_free(&drawctxt->context_gmem_shadow.

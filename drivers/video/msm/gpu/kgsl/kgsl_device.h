@@ -125,6 +125,10 @@ int __init kgsl_yamato_config(struct kgsl_devconfig *,
 
 void kgsl_register_dump(struct kgsl_device *device);
 
+int kgsl_yamato_setup_pt(struct kgsl_device *device,
+			 struct kgsl_pagetable *pagetable);
+int kgsl_yamato_cleanup_pt(struct kgsl_device *device,
+			   struct kgsl_pagetable *pagetable);
 #ifdef CONFIG_MSM_KGSL_MMU
 int kgsl_yamato_setpagetable(struct kgsl_device *device);
 int kgsl_yamato_tlbinvalidate(struct kgsl_device *device);
