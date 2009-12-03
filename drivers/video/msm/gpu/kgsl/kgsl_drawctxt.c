@@ -27,7 +27,7 @@
 #include "kgsl_log.h"
 #include "kgsl_pm4types.h"
 
-/* #define DISABLE_SHADOW_WRITES */
+#define DISABLE_SHADOW_WRITES
 /*
 *
 *  Memory Map for Register, Constant & Instruction Shadow, and Command Buffers
