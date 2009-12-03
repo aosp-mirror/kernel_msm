@@ -710,6 +710,10 @@ static int kgsl_ioctl_sharedmem_from_vmalloc(struct kgsl_file_private *private,
 		goto error_free_entry;
 	}
 	if (!kgsl_cache_enable) {
+		/* If we are going to map non-cached, make sure to flush the
+		 * cache to ensure that previously cached data does not
+		 * overwrite this memory */
+		dmac_flush_range(vmalloc_area, vmalloc_area + len);
 		KGSL_MEM_INFO("Caching for memory allocation turned off\n");
 		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 	} else {
