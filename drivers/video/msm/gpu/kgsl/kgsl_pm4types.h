@@ -151,6 +151,7 @@
  * the 3D_DRAW_INDX_BIN packet */
 #define PM4_SET_BIN_BASE_OFFSET     0x4B
 
+#define PM4_SET_PROTECTED_MODE  0x5f /* sets the register protection mode */
 
 /* packet header building macros */
 #define pm4_type0_packet(regindx, cnt) \

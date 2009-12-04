@@ -130,12 +130,9 @@ int kgsl_yamato_setup_pt(struct kgsl_device *device,
 int kgsl_yamato_cleanup_pt(struct kgsl_device *device,
 			   struct kgsl_pagetable *pagetable);
 #ifdef CONFIG_MSM_KGSL_MMU
-int kgsl_yamato_setpagetable(struct kgsl_device *device);
-int kgsl_yamato_tlbinvalidate(struct kgsl_device *device);
+int kgsl_yamato_setstate(struct kgsl_device *device, uint32_t flags);
 #else
-static inline int kgsl_yamato_tlbinvalidate(struct kgsl_device *device)
-{ return 0; }
-static inline int kgsl_yamato_setpagetable(struct kgsl_device *device)
+int kgsl_yamato_setstate(struct kgsl_device *device, uint32_t flags)
 { return 0; }
 #endif
 

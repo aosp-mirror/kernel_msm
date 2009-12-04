@@ -1764,7 +1764,7 @@ kgsl_drawctxt_switch(struct kgsl_device *device, struct kgsl_drawctxt *drawctxt,
 
 		KGSL_CTXT_INFO("drawctxt flags %08x\n", drawctxt->flags);
 		KGSL_CTXT_DBG("restore pagetable");
-		kgsl_mmu_setpagetable(device, drawctxt->pagetable);
+		kgsl_mmu_setstate(device, drawctxt->pagetable);
 
 		/* restore gmem.
 		 *  (note: changes shader. shader must not already be restored.)
@@ -1813,6 +1813,7 @@ kgsl_drawctxt_switch(struct kgsl_device *device, struct kgsl_drawctxt *drawctxt,
 		cmds[1] = drawctxt->bin_base_offset;
 		kgsl_ringbuffer_issuecmds(device, 0, cmds, 2);
 
-	}
+	} else
+		kgsl_mmu_setstate(device, device->mmu.defaultpagetable);
 	KGSL_CTXT_INFO("return\n");
 }

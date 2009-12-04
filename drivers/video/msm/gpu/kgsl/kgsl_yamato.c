@@ -242,6 +242,9 @@ int kgsl_yamato_cleanup_pt(struct kgsl_device *device,
 	kgsl_mmu_unmap(pagetable, device->memstore.gpuaddr,
 		       device->memstore.size);
 
+	kgsl_mmu_unmap(pagetable, device->mmu.dummyspace.gpuaddr,
+			device->mmu.dummyspace.size);
+
 	return 0;
 }
 
@@ -254,6 +257,7 @@ int kgsl_yamato_setup_pt(struct kgsl_device *device,
 	BUG_ON(device->ringbuffer.buffer_desc.physaddr == 0);
 	BUG_ON(device->ringbuffer.memptrs_desc.physaddr == 0);
 	BUG_ON(device->memstore.physaddr == 0);
+	BUG_ON(device->mmu.dummyspace.physaddr == 0);
 
 	result = kgsl_mmu_map(pagetable,
 			      device->ringbuffer.buffer_desc.physaddr,
@@ -291,7 +295,24 @@ int kgsl_yamato_setup_pt(struct kgsl_device *device,
 		device->memstore.gpuaddr = gpuaddr;
 	BUG_ON(device->memstore.gpuaddr != gpuaddr);
 
+	result = kgsl_mmu_map(pagetable,
+			device->mmu.dummyspace.physaddr,
+			device->mmu.dummyspace.size,
+			GSL_PT_PAGE_RV | GSL_PT_PAGE_WV, &gpuaddr,
+			KGSL_MEMFLAGS_CONPHYS | KGSL_MEMFLAGS_ALIGN4K);
+
+	if (result)
+		goto unmap_memstore_desc;
+
+	if (device->mmu.dummyspace.gpuaddr == 0)
+		device->mmu.dummyspace.gpuaddr = gpuaddr;
+	BUG_ON(device->mmu.dummyspace.gpuaddr != gpuaddr);
+
 	return result;
+
+unmap_memstore_desc:
+	kgsl_mmu_unmap(pagetable, device->memstore.gpuaddr,
+			device->memstore.size);
 
 unmap_memptrs_desc:
 	kgsl_mmu_unmap(pagetable, device->ringbuffer.memptrs_desc.gpuaddr,
@@ -305,101 +326,92 @@ error:
 }
 
 #ifdef CONFIG_MSM_KGSL_MMU
-int kgsl_yamato_tlbinvalidate(struct kgsl_device *device)
+int kgsl_yamato_setstate(struct kgsl_device *device, uint32_t flags)
 {
-#ifdef PER_PROCESS_PAGE_TABLE
-	unsigned int link[2];
-#endif
+	unsigned int link[32];
+	unsigned int *cmds = &link[0];
+	int sizedwords = 0;
 	unsigned int mh_mmu_invalidate = 0x00000003; /*invalidate all and tc */
 
 	KGSL_MEM_DBG("device %p ctxt %p pt %p\n",
 			device,
 			device->drawctxt_active,
 			device->mmu.hwpagetable);
-#ifdef PER_PROCESS_PAGE_TABLE
-	/* if there is an active draw context, invalidate via command stream,
-	* otherwise invalidate via direct register writes
-	*/
-	if (device->drawctxt_active) {
-		link[0] = pm4_type0_packet(REG_MH_MMU_INVALIDATE, 1);
-		link[1] = mh_mmu_invalidate;
-
-		KGSL_MEM_DBG("cmds\n");
-		kgsl_ringbuffer_issuecmds(device, 1,
-					  &link[0], 2);
-	} else {
-#endif
-		KGSL_MEM_DBG("regs\n");
-
-		kgsl_yamato_regwrite(device, REG_MH_MMU_INVALIDATE,
-			     mh_mmu_invalidate);
-#ifdef PER_PROCESS_PAGE_TABLE
-	}
-#endif
-	return 0;
-}
-#endif
-
-#ifdef CONFIG_MSM_KGSL_MMU
-int kgsl_yamato_setpagetable(struct kgsl_device *device)
-{
-	unsigned int link[27];
-	unsigned int mh_mmu_invalidate = 0x00000003; /*invalidate all and tc */
-
-	KGSL_MEM_DBG("device %p ctxt %p pt %p\n",
-			device,
-			device->drawctxt_active,
-			device->mmu.hwpagetable);
-	/* if there is an active draw context, set via command stream,
+	/* if possible, set via command stream,
 	* otherwise set via direct register writes
 	*/
 	if (device->drawctxt_active) {
 		KGSL_MEM_DBG("cmds\n");
-		/* wait for graphics pipe to be idle */
-		link[0] = pm4_type3_packet(PM4_WAIT_FOR_IDLE, 1);
-		link[1] = 0x00000000;
+		if (flags & KGSL_MMUFLAGS_PTUPDATE) {
+			/* wait for graphics pipe to be idle */
+			*cmds++ = pm4_type3_packet(PM4_WAIT_FOR_IDLE, 1);
+			*cmds++ = 0x00000000;
 
-		/* set page table base */
-		link[2] = pm4_type0_packet(REG_MH_MMU_PT_BASE, 1);
-		link[3] = device->mmu.hwpagetable->base.gpuaddr;
+			/* set page table base */
+			*cmds++ = pm4_type0_packet(REG_MH_MMU_PT_BASE, 1);
+			*cmds++ = device->mmu.hwpagetable->base.gpuaddr;
+			sizedwords += 4;
+		}
 
-		link[4]  = pm4_type3_packet(PM4_SET_CONSTANT, 2);
-		link[5]  = (0x4 << 16) | (REG_PA_SU_SC_MODE_CNTL - 0x2000);
-		link[6]  = 0;          /* disable faceness generation */
-		link[7]  = pm4_type3_packet(PM4_SET_BIN_BASE_OFFSET, 1);
-		link[8]  = device->mmu.dummyspace.gpuaddr;
-		link[9]  = pm4_type3_packet(PM4_DRAW_INDX_BIN, 6);
-		link[10] = 0;          /* viz query info */
-		link[11] = 0x0003C004; /* draw indicator */
-		link[12] = 0;          /* bin base */
-		link[13] = 3;          /* bin size */
-		link[14] = device->mmu.dummyspace.gpuaddr; /* dma base */
-		link[15] = 6;          /* dma size */
-		link[16] = pm4_type3_packet(PM4_DRAW_INDX_BIN, 6);
-		link[17] = 0;          /* viz query info */
-		link[18] = 0x0003C004; /* draw indicator */
-		link[19] = 0;          /* bin base */
-		link[20] = 3;          /* bin size */
-		link[21] = device->mmu.dummyspace.gpuaddr; /* dma base */
-		link[22] = 6;          /* dma size */
-		link[23] = pm4_type0_packet(REG_MH_MMU_INVALIDATE, 1);
-		link[24] = mh_mmu_invalidate;
-		link[25] = pm4_type3_packet(PM4_WAIT_FOR_IDLE, 1);
-		link[26] = 0x00000000;
+		if (flags & KGSL_MMUFLAGS_TLBFLUSH) {
+			*cmds++ = pm4_type0_packet(REG_MH_MMU_INVALIDATE, 1);
+			*cmds++ = mh_mmu_invalidate;
+			sizedwords += 2;
+		}
 
-		kgsl_ringbuffer_issuecmds(device, 1,
-					  &link[0], 27);
+		if (flags & KGSL_MMUFLAGS_PTUPDATE) {
+			/* HW workaround: to resolve MMU page fault interrupts
+			* caused by the VGT.It prevents the CP PFP from filling
+			* the VGT DMA request fifo too early,thereby ensuring
+			* that the VGT will not fetch vertex/bin data until
+			* after the page table base register has been updated.
+			*
+			* Two null DRAW_INDX_BIN packets are inserted right
+			* after the page table base update, followed by a
+			* wait for idle. The null packets will fill up the
+			* VGT DMA request fifo and prevent any further
+			* vertex/bin updates from occurring until the wait
+			* has finished. */
+			*cmds++ = pm4_type3_packet(PM4_SET_CONSTANT, 2);
+			*cmds++ = (0x4 << 16) |
+				(REG_PA_SU_SC_MODE_CNTL - 0x2000);
+			*cmds++ = 0;          /* disable faceness generation */
+			*cmds++ = pm4_type3_packet(PM4_SET_BIN_BASE_OFFSET, 1);
+			*cmds++ = device->mmu.dummyspace.gpuaddr;
+			*cmds++ = pm4_type3_packet(PM4_DRAW_INDX_BIN, 6);
+			*cmds++ = 0;          /* viz query info */
+			*cmds++ = 0x0003C004; /* draw indicator */
+			*cmds++ = 0;          /* bin base */
+			*cmds++ = 3;          /* bin size */
+			*cmds++ = device->mmu.dummyspace.gpuaddr; /* dma base */
+			*cmds++ = 6;          /* dma size */
+			*cmds++ = pm4_type3_packet(PM4_DRAW_INDX_BIN, 6);
+			*cmds++ = 0;          /* viz query info */
+			*cmds++ = 0x0003C004; /* draw indicator */
+			*cmds++ = 0;          /* bin base */
+			*cmds++ = 3;          /* bin size */
+			/* dma base */
+			*cmds++ = device->mmu.dummyspace.gpuaddr;
+			*cmds++ = 6;          /* dma size */
+			*cmds++ = pm4_type3_packet(PM4_WAIT_FOR_IDLE, 1);
+			*cmds++ = 0x00000000;
+			sizedwords += 21;
+		}
+
+		kgsl_ringbuffer_issuecmds(device, 1, &link[0], sizedwords);
 	} else {
 		KGSL_MEM_DBG("regs\n");
 
-		kgsl_yamato_regwrite(device, REG_MH_MMU_PT_BASE,
+		if (flags & KGSL_MMUFLAGS_PTUPDATE) {
+			kgsl_yamato_idle(device, KGSL_TIMEOUT_DEFAULT);
+			kgsl_yamato_regwrite(device, REG_MH_MMU_PT_BASE,
 				     device->mmu.hwpagetable->base.gpuaddr);
-		kgsl_yamato_regwrite(device, REG_MH_MMU_VA_RANGE,
-				     (device->mmu.hwpagetable->
-				      va_base | (device->mmu.hwpagetable->
-						 va_range >> 16)));
-		kgsl_yamato_regwrite(device, REG_MH_MMU_INVALIDATE,
-				     mh_mmu_invalidate);
+		}
+
+		if (flags & KGSL_MMUFLAGS_TLBFLUSH) {
+			kgsl_yamato_regwrite(device, REG_MH_MMU_INVALIDATE,
+					     mh_mmu_invalidate);
+		}
 	}
 
 	return 0;
@@ -535,7 +547,6 @@ int kgsl_yamato_init(struct kgsl_device *device, struct kgsl_devconfig *config)
 	kgsl_sharedmem_set(&device->memstore, 0, 0, device->memstore.size);
 
 	kgsl_yamato_regwrite(device, REG_RBBM_DEBUG, 0x00080000);
-
 	pr_info("msm_kgsl: initilized dev=%d mmu=%s\n", device->id,
 		kgsl_mmu_isenabled(&device->mmu) ? "on" : "off");
 

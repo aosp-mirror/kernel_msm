@@ -251,11 +251,9 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 		kgsl_remove_mem_entry(entry);
 
 	if (private->pagetable != NULL) {
-#ifdef PER_PROCESS_PAGE_TABLE
 		kgsl_yamato_cleanup_pt(&kgsl_driver.yamato_device,
 					private->pagetable);
 		kgsl_mmu_destroypagetableobject(private->pagetable);
-#endif
 		private->pagetable = NULL;
 	}
 
@@ -310,22 +308,19 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
 	kgsl_hw_get_locked();
 
 	/*NOTE: this must happen after first_open */
-#ifdef PER_PROCESS_PAGE_TABLE
 	private->pagetable =
 		kgsl_mmu_createpagetableobject(&kgsl_driver.yamato_device.mmu);
 	if (private->pagetable == NULL) {
 		result = -ENOMEM;
 		goto done;
 	}
-	result = kgsl_yamato_setup_pt(device, private->pagetable);
+	result = kgsl_yamato_setup_pt(&kgsl_driver.yamato_device,
+					private->pagetable);
 	if (result) {
 		kgsl_mmu_destroypagetableobject(private->pagetable);
-		private->pagetable == NULL;
+		private->pagetable = NULL;
 		goto done;
 	}
-#else
-	private->pagetable = kgsl_driver.yamato_device.mmu.hwpagetable;
-#endif
 	private->vmalloc_size = 0;
 done:
 	kgsl_hw_put_locked(true);

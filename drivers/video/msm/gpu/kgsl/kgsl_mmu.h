@@ -27,6 +27,9 @@
 #define GSL_PT_PAGE_WV		0x00000001
 #define GSL_PT_PAGE_RV		0x00000002
 #define GSL_PT_PAGE_DIRTY	0x00000004
+/* MMU Flags */
+#define KGSL_MMUFLAGS_TLBFLUSH         0x10000000
+#define KGSL_MMUFLAGS_PTUPDATE         0x20000000
 
 extern unsigned int kgsl_cache_enable;
 
@@ -96,8 +99,8 @@ struct kgsl_pagetable *kgsl_mmu_createpagetableobject(struct kgsl_mmu *mmu);
 
 int kgsl_mmu_destroypagetableobject(struct kgsl_pagetable *pagetable);
 
-int kgsl_mmu_setpagetable(struct kgsl_device *device,
-				struct kgsl_pagetable *pagetable);
+int kgsl_mmu_setstate(struct kgsl_device *device,
+			struct kgsl_pagetable *pagetable);
 
 #ifdef CONFIG_MSM_KGSL_MMU
 int kgsl_mmu_map(struct kgsl_pagetable *pagetable,
