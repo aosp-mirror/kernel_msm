@@ -18,6 +18,7 @@
 #include <linux/miscdevice.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/fb.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/interrupt.h>
@@ -47,6 +48,8 @@ struct kgsl_file_private {
 	struct kgsl_pagetable	*pagetable;
 	unsigned long		vmalloc_size;
 };
+
+static void kgsl_put_phys_file(struct file *file);
 
 #ifdef CONFIG_MSM_KGSL_MMU
 static long flush_l1_cache_range(unsigned long addr, int size)
@@ -607,11 +610,8 @@ void kgsl_remove_mem_entry(struct kgsl_mem_entry *entry)
 	if (KGSL_MEMFLAGS_VMALLOC_MEM & entry->memdesc.priv) {
 		vfree((void *)entry->memdesc.physaddr);
 		entry->priv->vmalloc_size -= entry->memdesc.size;
-	} else {
-		KGSL_DRV_DBG("unlocked pmem fd %p\n", entry->pmem_file);
-		if (entry->pmem_file)
-			put_pmem_file(entry->pmem_file);
-	}
+	} else
+		kgsl_put_phys_file(entry->pmem_file);
 	list_del(&entry->list);
 
 	if (entry->free_list.prev)
@@ -774,13 +774,51 @@ static inline int kgsl_ioctl_sharedmem_from_vmalloc(
 }
 #endif
 
+static int kgsl_get_phys_file(int fd, unsigned long *start, unsigned long *len,
+			      struct file **filep)
+{
+	struct file *fbfile;
+	int put_needed;
+	unsigned long vstart = 0;
+	int ret = 0;
+	dev_t rdev;
+	struct fb_info *info;
+
+	*filep = NULL;
+	if (!get_pmem_file(fd, start, &vstart, len, filep))
+		return 0;
+
+	fbfile = fget_light(fd, &put_needed);
+	if (fbfile == NULL)
+		return -1;
+
+	rdev = fbfile->f_dentry->d_inode->i_rdev;
+	info = MAJOR(rdev) == FB_MAJOR ? registered_fb[MINOR(rdev)] : NULL;
+	if (info) {
+		*start = info->fix.smem_start;
+		*len = info->fix.smem_len;
+		ret = 0;
+	} else
+		ret = -1;
+	fput_light(fbfile, put_needed);
+
+	return ret;
+}
+
+static void kgsl_put_phys_file(struct file *file)
+{
+	KGSL_DRV_DBG("put phys file %p\n", file);
+	if (file)
+		put_pmem_file(file);
+}
+
 static int kgsl_ioctl_sharedmem_from_pmem(struct kgsl_file_private *private,
 						void __user *arg)
 {
 	int result = 0;
 	struct kgsl_sharedmem_from_pmem param;
 	struct kgsl_mem_entry *entry = NULL;
-	unsigned long start = 0, vstart = 0, len = 0;
+	unsigned long start = 0, len = 0;
 	struct file *pmem_file = NULL;
 
 	if (copy_from_user(&param, arg, sizeof(param))) {
@@ -788,14 +826,19 @@ static int kgsl_ioctl_sharedmem_from_pmem(struct kgsl_file_private *private,
 		goto error;
 	}
 
-	if (get_pmem_file(param.pmem_fd, &start, &vstart, &len, &pmem_file)) {
+	if (kgsl_get_phys_file(param.pmem_fd, &start, &len, &pmem_file)) {
 		result = -EINVAL;
 		goto error;
+	} else if (param.offset + param.len >= len) {
+		KGSL_DRV_ERR("%s: region too large 0x%x + 0x%x >= 0x%lx\n",
+			     __func__, param.offset, param.len, len);
+		result = -EINVAL;
+		goto error_put_pmem;
 	}
 
-	KGSL_MEM_INFO("pmem file %p start 0x%lx vstart 0x%lx len 0x%lx\n",
-			pmem_file, start, vstart, len);
-	KGSL_DRV_DBG("locked pmem file %p\n", pmem_file);
+	KGSL_MEM_INFO("get phys file %p start 0x%lx len 0x%lx\n",
+		      pmem_file, start, len);
+	KGSL_DRV_DBG("locked phys file %p\n", pmem_file);
 
 	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
 	if (entry == NULL) {
@@ -842,8 +885,7 @@ error_free_entry:
 	kfree(entry);
 
 error_put_pmem:
-	KGSL_DRV_DBG("unlocked pmem file %p\n", pmem_file);
-	put_pmem_file(pmem_file);
+	kgsl_put_phys_file(pmem_file);
 
 error:
 	return result;
