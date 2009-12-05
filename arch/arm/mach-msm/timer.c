@@ -315,7 +315,7 @@ int64_t msm_timer_enter_idle(void)
 	count = msm_read_timer_count(clock);
 	if (clock->stopped++ == 0)
 		clock->stopped_tick = (count + clock->offset) >> clock->shift;
-	alarm = readl(clock->regbase + TIMER_MATCH_VAL);
+	alarm = clock->alarm_vtime - clock->offset;
 	delta = alarm - count;
 	if (delta <= -(int32_t)((clock->freq << clock->shift) >> 10)) {
 		/* timer should have triggered 1ms ago */
