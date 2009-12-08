@@ -740,7 +740,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 {
 	struct msm_nand_chip *chip = mtd->priv;
 	struct {
-		dmov_s cmd[4 * 5 + 3];
+		dmov_s cmd[4 * 6 + 3];
 		unsigned cmdptr;
 		struct {
 			uint32_t cmd;
@@ -755,6 +755,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 			uint32_t ecccfg_restore;
 #endif
 			uint32_t flash_status[4];
+			uint32_t zeroes;
 		} data;
 	} *dma_buffer;
 	dmov_s *cmd;
@@ -858,6 +859,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 		dma_buffer->data.addr0 = page << 16;
 		dma_buffer->data.addr1 = (page >> 16) & 0xff;
 		dma_buffer->data.chipsel = 0 | 4; /* flash0 + undoc bit */
+		dma_buffer->data.zeroes = 0;
 
 
 			/* GO bit for the EXEC register */
@@ -959,6 +961,15 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 					     &dma_buffer->data.flash_status[n]);
 			cmd->len = 4;
 			cmd++;
+
+			/* clear the status register in case the OP_ERR is set
+			 * due to the write, to work around a h/w bug */
+			cmd->cmd = 0;
+			cmd->src = msm_virt_to_dma(chip,
+						   &dma_buffer->data.zeroes);
+			cmd->dst = NAND_FLASH_STATUS;
+			cmd->len = 4;
+			cmd++;
 		}
 #if SUPPORT_WRONG_ECC_CONFIG
 		if (chip->saved_ecc_buf_cfg != chip->ecc_buf_cfg) {
@@ -974,7 +985,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 #endif
 		dma_buffer->cmd[0].cmd |= CMD_OCB;
 		cmd[-1].cmd |= CMD_OCU | CMD_LC;
-		BUILD_BUG_ON(4 * 5 + 3 != ARRAY_SIZE(dma_buffer->cmd));
+		BUILD_BUG_ON(4 * 6 + 3 != ARRAY_SIZE(dma_buffer->cmd));
 		BUG_ON(cmd - dma_buffer->cmd > ARRAY_SIZE(dma_buffer->cmd));
 		dma_buffer->cmdptr =
 			(msm_virt_to_dma(chip, dma_buffer->cmd) >> 3) |
@@ -991,6 +1002,9 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 		err = 0;
 		for (n = 0; n < 4; n++) {
 			if (dma_buffer->data.flash_status[n] & 0x110) {
+				if (dma_buffer->data.flash_status[n] & 0x10)
+					pr_err("msm_nand: critical write error,"
+					       " 0x%x(%d)\n", page, n);
 				err = -EIO;
 				break;
 			}
@@ -1056,9 +1070,9 @@ msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 	int err;
 	struct msm_nand_chip *chip = mtd->priv;
 	struct {
-		dmov_s cmd[4];
+		dmov_s cmd[5];
 		unsigned cmdptr;
-		unsigned data[8];
+		unsigned data[9];
 	} *dma_buffer;
 	unsigned page = instr->addr / 2048;
 
@@ -1085,7 +1099,8 @@ msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 	dma_buffer->data[5] = 0xeeeeeeee;
 	dma_buffer->data[6] = chip->CFG0 & (~(7 << 6));  /* CW_PER_PAGE = 0 */
 	dma_buffer->data[7] = chip->CFG1;
-	BUILD_BUG_ON(7 != ARRAY_SIZE(dma_buffer->data) - 1);
+	dma_buffer->data[8] = 0;
+	BUILD_BUG_ON(8 != ARRAY_SIZE(dma_buffer->data) - 1);
 
 	dma_buffer->cmd[0].cmd = DST_CRCI_NAND_CMD | CMD_OCB;
 	dma_buffer->cmd[0].src = msm_virt_to_dma(chip, &dma_buffer->data[0]);
@@ -1102,12 +1117,19 @@ msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 	dma_buffer->cmd[2].dst = NAND_EXEC_CMD;
 	dma_buffer->cmd[2].len = 4;
 
-	dma_buffer->cmd[3].cmd = SRC_CRCI_NAND_DATA | CMD_OCU | CMD_LC;;
+	dma_buffer->cmd[3].cmd = SRC_CRCI_NAND_DATA;
 	dma_buffer->cmd[3].src = NAND_FLASH_STATUS;
 	dma_buffer->cmd[3].dst = msm_virt_to_dma(chip, &dma_buffer->data[5]);
 	dma_buffer->cmd[3].len = 4;
 
-	BUILD_BUG_ON(3 != ARRAY_SIZE(dma_buffer->cmd) - 1);
+	/* clear the status register in case the OP_ERR is set
+	 * due to the write, to work around a h/w bug */
+	dma_buffer->cmd[4].cmd = CMD_OCU | CMD_LC;
+	dma_buffer->cmd[4].src = msm_virt_to_dma(chip, &dma_buffer->data[8]);
+	dma_buffer->cmd[4].dst = NAND_FLASH_STATUS;
+	dma_buffer->cmd[4].len = 4;
+
+	BUILD_BUG_ON(4 != ARRAY_SIZE(dma_buffer->cmd) - 1);
 
 	dma_buffer->cmdptr =
 		(msm_virt_to_dma(chip, dma_buffer->cmd) >> 3) | CMD_PTR_LP;
@@ -1120,9 +1142,12 @@ msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 	 * erase success bit was not set.
 	 */
 
-	if (dma_buffer->data[5] & 0x110 || !(dma_buffer->data[5] & 0x80))
+	if (dma_buffer->data[5] & 0x110 || !(dma_buffer->data[5] & 0x80)) {
+		if (dma_buffer->data[5] & 0x10)
+			pr_warning("msm_nand: critical erase error, 0x%llx\n",
+				   instr->addr);
 		err = -EIO;
-	else
+	} else
 		err = 0;
 
 	msm_nand_release_dma_buffer(chip, dma_buffer, sizeof(*dma_buffer));
