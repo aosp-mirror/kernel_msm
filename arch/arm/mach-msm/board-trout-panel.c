@@ -356,7 +356,7 @@ static struct mddi_table mddi_tpo_deinit_table[] = {
 #define GPIOSEL_VWAKEINT (1U << 0)
 #define INTMASK_VWAKEOUT (1U << 0)
 
-static void trout_process_mddi_table(struct msm_mddi_client_data *cdata,
+static void trout_process_mddi_table(struct msm_mddi_client_data *client_data,
 				     struct mddi_table *table, size_t count)
 {
 	int i;
@@ -369,14 +369,14 @@ static void trout_process_mddi_table(struct msm_mddi_client_data *cdata,
 		else if (reg == 1)
 			msleep(value);
 		else
-			cdata->remote_write(cdata, value, reg);
+			client_data->remote_write(client_data, value, reg);
 	}
 }
 
 static struct vreg *vreg_mddi_1v5;
 static struct vreg *vreg_lcm_2v85;
 
-static void trout_mddi_power_client(struct msm_mddi_client_data *cdata,
+static void trout_mddi_power_client(struct msm_mddi_client_data *client_data,
 				    int on)
 {
     unsigned id, on_off;
@@ -412,15 +412,17 @@ static void trout_mddi_power_client(struct msm_mddi_client_data *cdata,
 	}
 }
 
-static int trout_mddi_toshiba_client_init(struct msm_mddi_client_data *cdata)
+static int trout_mddi_toshiba_client_init(
+	struct msm_mddi_bridge_platform_data *bridge_data,
+	struct msm_mddi_client_data *client_data)
 {
 	int panel_id;
 
-	cdata->auto_hibernate(cdata, 0);
-	trout_process_mddi_table(cdata, mddi_toshiba_init_table,
+	client_data->auto_hibernate(client_data, 0);
+	trout_process_mddi_table(client_data, mddi_toshiba_init_table,
 				 ARRAY_SIZE(mddi_toshiba_init_table));
-	cdata->auto_hibernate(cdata, 1);
-	panel_id = (cdata->remote_read(cdata, GPIODATA) >> 4) & 3;
+	client_data->auto_hibernate(client_data, 1);
+	panel_id = (client_data->remote_read(client_data, GPIODATA) >> 4) & 3;
 	if (panel_id > 1) {
 		printk("unknown panel id at mddi_enable\n");
 		return -1;
@@ -428,34 +430,35 @@ static int trout_mddi_toshiba_client_init(struct msm_mddi_client_data *cdata)
 	return 0;
 }
 
-static int trout_mddi_toshiba_client_uninit(struct msm_mddi_client_data *cdata)
+static int trout_mddi_toshiba_client_uninit(
+	struct msm_mddi_bridge_platform_data *bridge_data,
+	struct msm_mddi_client_data *client_data)
 {
 	return 0;
 }
 
-static int trout_mddi_panel_unblank(struct msm_panel_data *panel_data)
+static int trout_mddi_panel_unblank(
+	struct msm_mddi_bridge_platform_data *bridge_data,
+	struct msm_mddi_client_data *client_data)
 {
-	struct msm_mddi_panel_info *panel = container_of(panel_data,
-		struct msm_mddi_panel_info, panel_data);
-	struct msm_mddi_client_data *mddi_client = panel->client_data;
 
 	int panel_id, ret = 0;
 	
 	trout_set_backlight_level(0);
-	mddi_client->auto_hibernate(mddi_client, 0);
-	trout_process_mddi_table(mddi_client, mddi_toshiba_panel_init_table,
+	client_data->auto_hibernate(client_data, 0);
+	trout_process_mddi_table(client_data, mddi_toshiba_panel_init_table,
 		ARRAY_SIZE(mddi_toshiba_panel_init_table));
-	panel_id = (mddi_client->remote_read(mddi_client, GPIODATA) >> 4) & 3;
+	panel_id = (client_data->remote_read(client_data, GPIODATA) >> 4) & 3;
 	switch(panel_id) {
 	 case 0:
 		printk("init sharp panel\n");
-		trout_process_mddi_table(mddi_client,
+		trout_process_mddi_table(client_data,
 					 mddi_sharp_init_table,
 					 ARRAY_SIZE(mddi_sharp_init_table));
 		break;
 	case 1:
 		printk("init tpo panel\n");
-		trout_process_mddi_table(mddi_client,
+		trout_process_mddi_table(client_data,
 					 mddi_tpo_init_table,
 					 ARRAY_SIZE(mddi_tpo_init_table));
 		break;
@@ -467,35 +470,31 @@ static int trout_mddi_panel_unblank(struct msm_panel_data *panel_data)
 	trout_set_backlight_level(trout_backlight_brightness);
 	trout_backlight_off = 0;
 	mutex_unlock(&trout_backlight_lock);
-	mddi_client->auto_hibernate(mddi_client, 1);
-	// reenable vsync
-	mddi_client->remote_write(mddi_client, GPIOSEL_VWAKEINT,
-				  GPIOSEL);
-	mddi_client->remote_write(mddi_client, INTMASK_VWAKEOUT,
-				  INTMASK);
+	client_data->auto_hibernate(client_data, 1);
+	client_data->remote_write(client_data, GPIOSEL_VWAKEINT, GPIOSEL);
+	client_data->remote_write(client_data, INTMASK_VWAKEOUT, INTMASK);
 	return ret;
 
 }
 
-static int trout_mddi_panel_blank(struct msm_panel_data *panel_data)
+static int trout_mddi_panel_blank(
+	struct msm_mddi_bridge_platform_data *bridge_data,
+	struct msm_mddi_client_data *client_data)
 {
-	struct msm_mddi_panel_info *panel = container_of(panel_data,
-		struct msm_mddi_panel_info, panel_data);
-	struct msm_mddi_client_data *mddi_client = panel->client_data;
 	int panel_id, ret = 0;
 
-	panel_id = (mddi_client->remote_read(mddi_client, GPIODATA) >> 4) & 3;
-	mddi_client->auto_hibernate(mddi_client, 0);
+	panel_id = (client_data->remote_read(client_data, GPIODATA) >> 4) & 3;
+	client_data->auto_hibernate(client_data, 0);
 	switch(panel_id) {
 	case 0:
 		printk("deinit sharp panel\n");
-		trout_process_mddi_table(mddi_client,
+		trout_process_mddi_table(client_data,
 					 mddi_sharp_deinit_table,
 					 ARRAY_SIZE(mddi_sharp_deinit_table));
 		break;
 	case 1:
 		printk("deinit tpo panel\n");
-		trout_process_mddi_table(mddi_client,
+		trout_process_mddi_table(client_data,
 					 mddi_tpo_deinit_table,
 					 ARRAY_SIZE(mddi_tpo_deinit_table));
 		break;
@@ -503,14 +502,13 @@ static int trout_mddi_panel_blank(struct msm_panel_data *panel_data)
 		printk("unknown panel_id: %d\n", panel_id);
 		ret = -1;
 	};
-	mddi_client->auto_hibernate(mddi_client,1);
+	client_data->auto_hibernate(client_data, 1);
 	mutex_lock(&trout_backlight_lock);
 	trout_set_backlight_level(0);
 	trout_backlight_off = 1;
 	mutex_unlock(&trout_backlight_lock);
-	mddi_client->remote_write(mddi_client, 0, SYSCLKENA);
-	mddi_client->remote_write(mddi_client, 1, DPSUS);
-
+	client_data->remote_write(client_data, 0, SYSCLKENA);
+	client_data->remote_write(client_data, 1, DPSUS);
 	return ret;
 }
 
@@ -558,7 +556,7 @@ static struct resource resources_msm_fb[] = {
 	},
 };
 
-struct msm_mddi_toshiba_client_data toshiba_client_data = {
+struct msm_mddi_bridge_platform_data toshiba_client_data = {
 	.init = trout_mddi_toshiba_client_init,
 	.uninit = trout_mddi_toshiba_client_uninit,
 	.blank = trout_mddi_panel_blank,
@@ -581,8 +579,10 @@ static struct msm_mddi_platform_data mddi_pdata = {
 		{
 			.product_id = (0xd263 << 16 | 0),
 			.name = "mddi_c_d263_0000",
+			//.name = "mddi_c_dummy",
 			.id = 0,
 			.client_data = &toshiba_client_data,
+			//.client_data = &toshiba_client_data.fb_data,
 			.clk_rate = 0,
 		},
 	},
