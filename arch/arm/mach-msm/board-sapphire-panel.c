@@ -42,6 +42,7 @@ enum sapphire_panel_type {
 	NUM_OF_SAPPHIRE_PANELS,
 };
 static int g_panel_id = -1 ;
+static int g_panel_inited = 0 ;
 
 #define SAPPHIRE_DEFAULT_BACKLIGHT_BRIGHTNESS	132
 #define GOOGLE_DEFAULT_BACKLIGHT_BRIGHTNESS 	102
@@ -385,7 +386,8 @@ static struct mddi_table mddi_tpo_deinit_table[] = {
 
 static void sapphire_process_mddi_table(
 				     struct msm_mddi_client_data *client_data,
-				     struct mddi_table *table, size_t count)
+				     const struct mddi_table *table,
+				     size_t count)
 {
 	int i;
 	for (i = 0; i < count; i++) {
@@ -429,8 +431,6 @@ static void sapphire_mddi_power_client(struct msm_mddi_client_data *client_data,
 		msm_proc_comm(PCOM_VREG_PULLDOWN, &on_off, &id);
 		vreg_enable(vreg_lcm_2v85);
 		msleep(3);
-		gpio_set_value(MDDI_RST_N, 1);
-		msleep(10);
 	} else {
 		gpio_set_value(SAPPHIRE_GPIO_MDDI_32K_EN, 0);
 		gpio_set_value(MDDI_RST_N, 0);
@@ -457,6 +457,12 @@ static int sapphire_mddi_toshiba_client_init(
 			struct msm_mddi_client_data *client_data)
 {
 	int panel_id;
+
+	/* Set the MDDI_RST_N accroding to MDDI client repectively(
+	 * been set in sapphire_mddi_power_client() originally)
+	 */
+	gpio_set_value(MDDI_RST_N, 1);
+	msleep(10);
 
 	client_data->auto_hibernate(client_data, 0);
 	sapphire_process_mddi_table(client_data, mddi_toshiba_init_table,
@@ -1166,17 +1172,49 @@ static struct msm_mddi_bridge_platform_data toshiba_client_data = {
 	},
 };
 
+#define NT35399_MFR_NAME	0x0bda
+#define NT35399_PRODUCT_CODE 	0x8a47
+
+static void nt35399_fixup(uint16_t * mfr_name, uint16_t * product_code)
+{
+	printk(KERN_DEBUG "%s: enter.\n", __func__);
+	*mfr_name = NT35399_MFR_NAME ;
+	*product_code= NT35399_PRODUCT_CODE ;
+}
+
+static struct msm_mddi_bridge_platform_data nt35399_client_data = {
+
+	.init = nt35399_client_init,
+	.uninit = nt35399_client_uninit,
+	.blank = nt35399_panel_blank,
+	.unblank = nt35399_panel_unblank,
+	.fb_data = {
+		.xres = 320,
+		.yres = 480,
+		.output_format = 0,
+	},
+};
+
 static struct msm_mddi_platform_data mddi_pdata = {
 	.clk_rate = 122880000,
 	.power_client = sapphire_mddi_power_client,
+	.fixup = nt35399_fixup,
 	.fb_resource = resources_msm_fb,
-	.num_clients = 1,
+	.num_clients = 2,
 	.client_platform_data = {
 		{
 			.product_id = (0xd263 << 16 | 0),
 			.name = "mddi_c_d263_0000",
 			.id = 0,
 			.client_data = &toshiba_client_data,
+			.clk_rate = 0,
+		},
+		{
+			.product_id =
+				(NT35399_MFR_NAME << 16 | NT35399_PRODUCT_CODE),
+			.name = "mddi_c_0bda_8a47" ,
+			.id = 0,
+			.client_data = &nt35399_client_data,
 			.clk_rate = 0,
 		},
 	},
