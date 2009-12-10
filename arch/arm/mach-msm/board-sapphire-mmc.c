@@ -37,8 +37,8 @@
 
 #define DEBUG_SDSLOT_VDD 0
 
-extern int msm_add_sdcc(unsigned int controller,
-			struct mmc_platform_data *plat);
+extern int msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat,
+			unsigned int stat_irq, unsigned long stat_irq_flags);
 
 /* ---- COMMON ---- */
 static void config_gpio_table(uint32_t *table, int len)
@@ -176,7 +176,6 @@ static unsigned int sapphire_sdslot_status(struct device *dev)
 
 static struct mmc_platform_data sapphire_sdslot_data = {
 	.ocr_mask	= SAPPHIRE_MMC_VDD,
-	.status_irq	= SAPPHIRE_GPIO_TO_INT(SAPPHIRE_GPIO_SDMC_CD_N),
 	.status		= sapphire_sdslot_status,
 	.translate_vdd	= sapphire_sdslot_switchvdd,
 };
@@ -365,10 +364,11 @@ int __init sapphire_init_mmc(unsigned int sys_rev)
 
 	set_irq_wake(SAPPHIRE_GPIO_TO_INT(SAPPHIRE_GPIO_SDMC_CD_N), 1);
 
-	msm_add_sdcc(1, &sapphire_wifi_data);
+	msm_add_sdcc(1, &sapphire_wifi_data, 0, 0);
 
 	if (!opt_disable_sdcard)
-		msm_add_sdcc(2, &sapphire_sdslot_data);
+		msm_add_sdcc(2, &sapphire_sdslot_data,
+			     SAPPHIRE_GPIO_TO_INT(SAPPHIRE_GPIO_SDMC_CD_N), 0);
 	else
 		printk(KERN_INFO "sapphire: SD-Card interface disabled\n");
 	return 0;
