@@ -27,7 +27,8 @@
 
 #define DEBUG_SDSLOT_VDD 1
 
-extern int msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat);
+extern int msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat,
+			unsigned int stat_irq, unsigned long stat_irq_flags);
 
 /* ---- COMMON ---- */
 static void config_gpio_table(uint32_t *table, int len)
@@ -165,7 +166,6 @@ static unsigned int trout_sdslot_status(struct device *dev)
 
 static struct mmc_platform_data trout_sdslot_data = {
 	.ocr_mask	= TROUT_MMC_VDD,
-	.status_irq	= TROUT_GPIO_TO_INT(TROUT_GPIO_SDMC_CD_N),
 	.status		= trout_sdslot_status,
 	.translate_vdd	= trout_sdslot_switchvdd,
 };
@@ -319,10 +319,11 @@ int __init trout_init_mmc(unsigned int sys_rev)
 
 	set_irq_wake(TROUT_GPIO_TO_INT(TROUT_GPIO_SDMC_CD_N), 1);
 
-	msm_add_sdcc(1, &trout_wifi_data);
+	msm_add_sdcc(1, &trout_wifi_data, 0, 0);
 
 	if (!opt_disable_sdcard)
-		msm_add_sdcc(2, &trout_sdslot_data);
+		msm_add_sdcc(2, &trout_sdslot_data,
+			     TROUT_GPIO_TO_INT(TROUT_GPIO_SDMC_CD_N), 0);
 	else
 		printk(KERN_INFO "trout: SD-Card interface disabled\n");
 	return 0;
