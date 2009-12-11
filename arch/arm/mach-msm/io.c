@@ -109,6 +109,10 @@ void __init msm_map_qsd8x50_io(void)
 		      "orr %0, %0, #0x10\n\t"
 		      "mcr p15, 0, %0, c15, c15, 2"
 		      : "=&r" (unused));
+	/* clear out EFSR and ADFSR on boot */
+	asm volatile ("mcr p15, 7, %0, c15, c0, 1\n\t"
+		      "mcr p15, 0, %0, c5, c1, 0"
+		      : : "r" (0));
 	iotable_init(qsd8x50_io_desc, ARRAY_SIZE(qsd8x50_io_desc));
 }
 #endif /* CONFIG_ARCH_QSD8X50 */
@@ -142,6 +146,10 @@ static struct map_desc msm7x30_io_desc[] __initdata = {
 
 void __init msm_map_msm7x30_io(void)
 {
+	/* clear out EFSR and ADFSR on boot */
+	asm volatile ("mcr p15, 7, %0, c15, c0, 1\n\t"
+		      "mcr p15, 0, %0, c5, c1, 0"
+		      : : "r" (0));
 	iotable_init(msm7x30_io_desc, ARRAY_SIZE(msm7x30_io_desc));
 }
 #endif /* CONFIG_ARCH_MSM7X30 */

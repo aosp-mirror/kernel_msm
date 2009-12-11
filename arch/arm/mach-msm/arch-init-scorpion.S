@@ -200,6 +200,10 @@ __cpu_early_init:
         //; Setup DCLKCR to allow normal D-Cache line fills
         MCR    p15, 1, r0, c9, c0, 7    //; WCP15_DCLKCR r0
 
+        //; Initialize the ADFSR and EFSR registers.
+        MCR    p15, 0, r0,  c5, c1, 0   //; ADFSR
+        MCR    p15, 7, r0, c15, c0, 1   //; EFSR
+
         //; Setup the TLBLKCR
         //; Victim = 6'b000000; Floor = 6'b000000;
         //; IASIDCFG = 2'b00 (State-Machine); IALLCFG = 2'b01 (Flash); BNA = 1'b0;
