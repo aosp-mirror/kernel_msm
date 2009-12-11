@@ -572,9 +572,9 @@ static void msm_hs_submit_tx_locked(struct uart_port *uport)
 	dma_addr_t src_addr;
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 	struct msm_hs_tx *tx = &msm_uport->tx;
-	struct circ_buf *tx_buf = &msm_uport->uport.info->xmit;
+	struct circ_buf *tx_buf = &msm_uport->uport.state->xmit;
 
-	if (uart_circ_empty(tx_buf) || uport->info->port.tty->stopped) {
+	if (uart_circ_empty(tx_buf) || uport->state->port.tty->stopped) {
 		msm_hs_stop_tx_locked(uport);
 		return;
 	}
@@ -708,7 +708,7 @@ static void msm_hs_dmov_rx_callback(struct msm_dmov_cmd *cmd_ptr,
 	spin_lock_irqsave(&uport->lock, flags);
 	clk_enable(msm_uport->clk);
 
-	tty = uport->info->port.tty;
+	tty = uport->state->port.tty;
 
 	msm_hs_write(uport, UARTDM_CR_ADDR, STALE_EVENT_DISABLE);
 
@@ -886,7 +886,7 @@ static void msm_hs_handle_delta_cts(struct uart_port *uport)
 	spin_unlock_irqrestore(&uport->lock, flags);
 
 	/* clear the IOCTL TIOCMIWAIT if called */
-	wake_up_interruptible(&uport->info->delta_msr_wait);
+	wake_up_interruptible(&uport->state->port.delta_msr_wait);
 }
 
 /* check if the TX path is flushed, and if so clock off
@@ -898,7 +898,7 @@ static int msm_hs_check_clock_off_locked(struct uart_port *uport)
 {
 	unsigned long sr_status;
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
-	struct circ_buf *tx_buf = &uport->info->xmit;
+	struct circ_buf *tx_buf = &uport->state->xmit;
 
 	/* Cancel if tx tty buffer is not empty, dma is in flight,
 	 * or tx fifo is not empty, or rx fifo is not empty */
@@ -969,7 +969,7 @@ static irqreturn_t msm_hs_isr(int irq, void *dev)
 	unsigned long isr_status;
 	struct msm_hs_port *msm_uport = (struct msm_hs_port *)dev;
 	struct uart_port *uport = &msm_uport->uport;
-	struct circ_buf *tx_buf = &uport->info->xmit;
+	struct circ_buf *tx_buf = &uport->state->xmit;
 	struct msm_hs_tx *tx = &msm_uport->tx;
 	struct msm_hs_rx *rx = &msm_uport->rx;
 
@@ -1070,7 +1070,7 @@ void msm_hs_request_clock_on_locked(struct uart_port *uport) {
 	case MSM_HS_CLK_OFF:
 		wake_lock(&msm_uport->dma_wake_lock);
 		clk_enable(msm_uport->clk);
-		disable_irq(msm_uport->rx_wakeup.irq);
+		disable_irq_nosync(msm_uport->rx_wakeup.irq);
 		/* fall-through */
 	case MSM_HS_CLK_REQUEST_OFF:
 		if (msm_uport->rx.flush == FLUSH_STOP ||
@@ -1126,7 +1126,7 @@ static irqreturn_t msm_hs_rx_wakeup_isr(int irq, void *dev)
 		 * optionally inject char into tty rx */
 		msm_hs_request_clock_on_locked(uport);
 		if (msm_uport->rx_wakeup.inject_rx) {
-			tty = uport->info->port.tty;
+			tty = uport->state->port.tty;
 			tty_insert_flip_char(tty,
 					     msm_uport->rx_wakeup.rx_to_inject,
 					     TTY_NORMAL);
@@ -1153,7 +1153,7 @@ static int msm_hs_startup(struct uart_port *uport)
 	unsigned long flags;
 	unsigned int data;
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
-	struct circ_buf *tx_buf = &uport->info->xmit;
+	struct circ_buf *tx_buf = &uport->state->xmit;
 	struct msm_hs_tx *tx = &msm_uport->tx;
 	struct msm_hs_rx *rx = &msm_uport->rx;
 
