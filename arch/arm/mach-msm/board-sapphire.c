@@ -58,6 +58,7 @@
 
 #include <mach/board.h>
 #include <mach/board_htc.h>
+#include <mach/msm_serial_debugger.h>
 #include <mach/msm_serial_hs.h>
 #include <mach/htc_pwrsink.h>
 
@@ -1101,9 +1102,6 @@ static void __init config_gpios(void)
 	config_sapphire_camera_off_gpios();
 }
 
-void msm_serial_debug_init(unsigned int base, int irq,
-			   struct device *clk_device, int signal_irq);
-
 static struct msm_acpu_clock_platform_data sapphire_clock_data = {
 	.acpu_switch_time_us = 20,
 	.max_speed_delta_khz = 256000,
@@ -1141,7 +1139,8 @@ static void __init sapphire_init(void)
 #if defined(CONFIG_MSM_SERIAL_DEBUGGER)
 	if (!opt_disable_uart3)
 		msm_serial_debug_init(MSM_UART3_PHYS, INT_UART3,
-				      &msm_device_uart3.dev, 1);
+				      &msm_device_uart3.dev, 1,
+				      MSM_GPIO_TO_INT(86));
 #endif
 
 	/* gpio_configure(108, IRQF_TRIGGER_LOW); */

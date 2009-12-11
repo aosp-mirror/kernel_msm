@@ -59,6 +59,7 @@
 
 #include <mach/board.h>
 #include <mach/board_htc.h>
+#include <mach/msm_serial_debugger.h>
 #include <mach/msm_serial_hs.h>
 #include <mach/htc_pwrsink.h>
 #ifdef CONFIG_HTC_HEADSET
@@ -751,9 +752,6 @@ static void __init config_gpios(void)
 	config_gpio_table(gpio_table, ARRAY_SIZE(gpio_table));
 	config_camera_off_gpios();
 }
-
-void msm_serial_debug_init(unsigned int base, int irq,
-			   struct device *clk_device, int signal_irq);
 
 static struct msm_acpu_clock_platform_data trout_clock_data = {
 	.acpu_switch_time_us = 20,
