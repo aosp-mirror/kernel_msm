@@ -30,7 +30,7 @@
 #include <linux/usb/mass_storage_function.h>
 #endif
 #ifdef CONFIG_USB_ANDROID
-#include <linux/usb/android.h>
+#include <linux/usb/android_composite.h>
 #endif
 
 #include <asm/mach/flash.h>
@@ -97,14 +97,49 @@ struct msm_hsusb_platform_data msm_hsusb_pdata = {
 };
 
 #ifdef CONFIG_USB_ANDROID
+static struct usb_mass_storage_platform_data mass_storage_pdata = {
+	.nluns = 1,
+	.vendor = "HTC     ",
+	.product = "Android Phone   ",
+	.release = 0x0100,
+};
+#endif
+
+static struct platform_device usb_mass_storage_device = {
+	.name = "usb_mass_storage",
+	.id = -1,
+	.dev = {
+		.platform_data = &mass_storage_pdata,
+		},
+};
+
+#ifdef CONFIG_USB_ANDROID
+static char *usb_functions[] = { "usb_mass_storage" };
+static char *usb_functions_adb[] = { "usb_mass_storage", "adb" };
+
+static struct android_usb_product usb_products[] = {
+	{
+		.product_id	= 0x0c01,
+		.num_functions	= ARRAY_SIZE(usb_functions),
+		.functions	= usb_functions,
+	},
+	{
+		.product_id	= 0x0c02,
+		.num_functions	= ARRAY_SIZE(usb_functions_adb),
+		.functions	= usb_functions_adb,
+	},
+};
+
 static struct android_usb_platform_data android_usb_pdata = {
 	.vendor_id	= 0x0bb4,
 	.product_id	= 0x0c01,
-	.adb_product_id	= 0x0c02,
 	.version	= 0x0100,
 	.product_name	= "Android Phone",
 	.manufacturer_name = "HTC",
-	.nluns = 1,
+	.num_products = ARRAY_SIZE(usb_products),
+	.products = usb_products,
+	.num_functions = ARRAY_SIZE(usb_functions_adb),
+	.functions = usb_functions_adb,
 };
 
 static struct platform_device android_usb_device = {
@@ -123,6 +158,7 @@ void __init msm_add_usb_devices(void (*phy_reset) (void))
 		msm_hsusb_pdata.phy_reset = phy_reset;
 	msm_device_hsusb.dev.platform_data = &msm_hsusb_pdata;
 	platform_device_register(&msm_device_hsusb);
+	platform_device_register(&usb_mass_storage_device);
 #ifdef CONFIG_USB_ANDROID
 	platform_device_register(&android_usb_device);
 #endif
