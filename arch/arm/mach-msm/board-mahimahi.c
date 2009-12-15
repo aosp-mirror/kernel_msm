@@ -647,11 +647,23 @@ static uint32_t flashlight_gpio_table[] = {
 						GPIO_NO_PULL, GPIO_2MA),
 };
 
+static uint32_t flashlight_gpio_table_rev_CX[] = {
+	PCOM_GPIO_CFG(MAHIMAHI_CDMA_GPIO_FLASHLIGHT_TORCH, 0, GPIO_OUTPUT,
+						GPIO_NO_PULL, GPIO_2MA),
+	PCOM_GPIO_CFG(MAHIMAHI_GPIO_FLASHLIGHT_FLASH, 0, GPIO_OUTPUT,
+						GPIO_NO_PULL, GPIO_2MA),
+};
+
 
 static int config_mahimahi_flashlight_gpios(void)
 {
-	config_gpio_table(flashlight_gpio_table,
-		ARRAY_SIZE(flashlight_gpio_table));
+	if (is_cdma_version(system_rev)) {
+		config_gpio_table(flashlight_gpio_table_rev_CX,
+			ARRAY_SIZE(flashlight_gpio_table_rev_CX));
+	} else {
+		config_gpio_table(flashlight_gpio_table,
+			ARRAY_SIZE(flashlight_gpio_table));
+	}
 	return 0;
 }
 
@@ -826,6 +838,25 @@ static uint32_t bt_gpio_table[] = {
 		      GPIO_PULL_DOWN, GPIO_4MA),
 };
 
+static uint32_t bt_gpio_table_rev_CX[] = {
+	PCOM_GPIO_CFG(MAHIMAHI_GPIO_BT_UART1_RTS, 2, GPIO_OUTPUT,
+		      GPIO_PULL_UP, GPIO_8MA),
+	PCOM_GPIO_CFG(MAHIMAHI_GPIO_BT_UART1_CTS, 2, GPIO_INPUT,
+		      GPIO_PULL_UP, GPIO_8MA),
+	PCOM_GPIO_CFG(MAHIMAHI_GPIO_BT_UART1_RX, 2, GPIO_INPUT,
+		      GPIO_PULL_UP, GPIO_8MA),
+	PCOM_GPIO_CFG(MAHIMAHI_GPIO_BT_UART1_TX, 2, GPIO_OUTPUT,
+		      GPIO_PULL_UP, GPIO_8MA),
+	PCOM_GPIO_CFG(MAHIMAHI_GPIO_BT_RESET_N, 0, GPIO_OUTPUT,
+		      GPIO_PULL_DOWN, GPIO_4MA),
+	PCOM_GPIO_CFG(MAHIMAHI_GPIO_BT_SHUTDOWN_N, 0, GPIO_OUTPUT,
+		      GPIO_PULL_DOWN, GPIO_4MA),
+	PCOM_GPIO_CFG(MAHIMAHI_CDMA_GPIO_BT_WAKE, 0, GPIO_OUTPUT,
+		      GPIO_PULL_DOWN, GPIO_4MA),
+	PCOM_GPIO_CFG(MAHIMAHI_GPIO_BT_HOST_WAKE, 0, GPIO_INPUT,
+		      GPIO_PULL_DOWN, GPIO_4MA),
+};
+
 static uint32_t misc_gpio_table[] = {
 	PCOM_GPIO_CFG(MAHIMAHI_GPIO_LCD_RST_N, 0, GPIO_OUTPUT,
 		      GPIO_NO_PULL, GPIO_2MA),
@@ -958,7 +989,14 @@ static void __init mahimahi_init(void)
 
 	config_gpio_table(misc_gpio_table, ARRAY_SIZE(misc_gpio_table));
 
-	config_gpio_table(bt_gpio_table, ARRAY_SIZE(bt_gpio_table));
+	if (is_cdma_version(system_rev)) {
+		bcm_bt_lpm_pdata.gpio_wake = MAHIMAHI_CDMA_GPIO_BT_WAKE;
+		mahimahi_flashlight_data.torch = MAHIMAHI_CDMA_GPIO_FLASHLIGHT_TORCH;
+		config_gpio_table(bt_gpio_table_rev_CX, ARRAY_SIZE(bt_gpio_table_rev_CX));
+	} else {
+		config_gpio_table(bt_gpio_table, ARRAY_SIZE(bt_gpio_table));
+	}
+
 	gpio_request(MAHIMAHI_GPIO_TP_LS_EN, "tp_ls_en");
 	gpio_direction_output(MAHIMAHI_GPIO_TP_LS_EN, 0);
 	gpio_request(MAHIMAHI_GPIO_TP_EN, "tp_en");
