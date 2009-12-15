@@ -55,6 +55,7 @@
 #include "proc_comm.h"
 #include "board-mahimahi-flashlight.h"
 #include "board-mahimahi-tpa2018d1.h"
+#include "board-mahimahi-smb329.h"
 
 static uint debug_uart;
 
@@ -513,6 +514,9 @@ static struct i2c_board_info rev_CX_i2c_devices[] = {
 		I2C_BOARD_INFO("tpa2018d1", 0x58),
 		.platform_data = &tpa2018_data,
 	},
+	{
+		I2C_BOARD_INFO("smb329", 0x6E >> 1),
+	},
 };
 
 static void config_gpio_table(uint32_t *table, int len);
@@ -708,7 +712,14 @@ struct platform_device bcm_bt_lpm_device = {
 
 static int ds2784_charge(int on, int fast)
 {
-	gpio_direction_output(MAHIMAHI_GPIO_BATTERY_CHARGER_CURRENT, !!fast);
+	if (is_cdma_version(system_rev)) {
+		if (!on)
+			smb329_set_charger_ctrl(SMB329_DISABLE_CHG);
+		else
+			smb329_set_charger_ctrl(fast ? SMB329_ENABLE_FAST_CHG : SMB329_ENABLE_SLOW_CHG);
+	}
+	else
+		gpio_direction_output(MAHIMAHI_GPIO_BATTERY_CHARGER_CURRENT, !!fast);
 	gpio_direction_output(MAHIMAHI_GPIO_BATTERY_CHARGER_EN, !on);
 	return 0;
 }
@@ -722,27 +733,29 @@ static int w1_ds2784_add_slave(struct w1_slave *sl)
 
 	int rc;
 
+	p = kzalloc(sizeof(struct dd), GFP_KERNEL);
+	if (!p) {
+		pr_err("%s: out of memory\n", __func__);
+		return -ENOMEM;
+	}
+
 	rc = gpio_request(MAHIMAHI_GPIO_BATTERY_CHARGER_EN, "charger_en");
 	if (rc < 0) {
 		pr_err("%s: gpio_request(%d) failed: %d\n", __func__,
 			MAHIMAHI_GPIO_BATTERY_CHARGER_EN, rc);
+		kfree(p);
 		return rc;
 	}
 
-	rc = gpio_request(MAHIMAHI_GPIO_BATTERY_CHARGER_CURRENT, "charger_current");
-	if (rc < 0) {
-		pr_err("%s: gpio_request(%d) failed: %d\n", __func__,
-			MAHIMAHI_GPIO_BATTERY_CHARGER_CURRENT, rc);
-		gpio_free(MAHIMAHI_GPIO_BATTERY_CHARGER_EN);
-		return rc;
-	}
-
-	p = kzalloc(sizeof(struct dd), GFP_KERNEL);
-	if (!p) {
-		pr_err("%s: out of memory\n", __func__);
-		gpio_free(MAHIMAHI_GPIO_BATTERY_CHARGER_EN);
-		gpio_free(MAHIMAHI_GPIO_BATTERY_CHARGER_CURRENT);
-		return -ENOMEM;
+	if (!is_cdma_version(system_rev)) {
+		rc = gpio_request(MAHIMAHI_GPIO_BATTERY_CHARGER_CURRENT, "charger_current");
+		if (rc < 0) {
+			pr_err("%s: gpio_request(%d) failed: %d\n", __func__,
+				MAHIMAHI_GPIO_BATTERY_CHARGER_CURRENT, rc);
+			gpio_free(MAHIMAHI_GPIO_BATTERY_CHARGER_EN);
+			kfree(p);
+			return rc;
+		}
 	}
 
 	p->pdev.name = "ds2784-battery";
