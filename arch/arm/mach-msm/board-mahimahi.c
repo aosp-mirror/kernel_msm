@@ -930,7 +930,7 @@ static struct msm_acpu_clock_platform_data mahimahi_clock_data = {
 static ssize_t mahimahi_virtual_keys_show(struct kobject *kobj,
 			       struct kobj_attribute *attr, char *buf)
 {
-	if (system_rev > 2) {
+	if (system_rev > 2 && system_rev != 0xC0) {
 		/* center: x: back: 55, menu: 172, home: 298, search 412, y: 835 */
 		return sprintf(buf,
 			__stringify(EV_KEY) ":" __stringify(KEY_BACK)  ":55:835:90:55"
