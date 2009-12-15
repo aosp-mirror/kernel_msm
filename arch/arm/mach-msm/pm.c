@@ -191,6 +191,7 @@ msm_pm_wait_state(uint32_t wait_all_set, uint32_t wait_all_clear,
 		     !(~state & wait_all_set) && !(state & wait_all_clear)) ||
 		    (state & wait_any_set) || (~state & wait_any_clear))
 			return 0;
+		udelay(1);
 	}
 	pr_err("msm_pm_wait_state(%x, %x, %x, %x) failed %x\n",	wait_all_set,
 		wait_all_clear, wait_any_set, wait_any_clear, state);
@@ -224,6 +225,7 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 	unsigned long pm_saved_acpu_clk_rate = 0;
 	int ret;
 	int rv = -EINTR;
+	bool invalid_inital_state = false;
 
 	if (msm_pm_debug_mask & MSM_PM_DEBUG_SUSPEND)
 		printk(KERN_INFO "msm_sleep(): mode %d delay %u idle %d\n",
@@ -285,6 +287,13 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 	msm_gpio_enter_sleep(from_idle);
 
 	if (enter_state) {
+		/* Make sure last sleep request did not end with a timeout */
+		ret = msm_pm_wait_state(PM_SMSM_READ_RUN, 0, 0, 0);
+		if (ret) {
+			printk(KERN_ERR "msm_sleep(): invalid inital state\n");
+			invalid_inital_state = true;
+		}
+
 		if (sleep_delay == 0 && sleep_mode >= MSM_PM_SLEEP_MODE_APPS_SLEEP)
 			sleep_delay = 192000*5; /* APPS_SLEEP does not allow infinite timeout */
 		ret = smsm_set_sleep_duration(sleep_delay);
@@ -300,7 +309,7 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 			exit_state = 0;
 		}
 		ret = msm_pm_wait_state(enter_wait_set, enter_wait_clear, 0, 0);
-		if (ret) {
+		if (ret || invalid_inital_state) {
 			printk(KERN_INFO "msm_sleep(): msm_pm_wait_state failed, %x\n", smsm_get_state(PM_SMSM_READ_STATE));
 			goto enter_failed;
 		}
