@@ -541,7 +541,7 @@ static void h2w_config_cpld(int route)
 
 static void h2w_init_cpld(void)
 {
-	h2w_config_cpld(H2W_GPIO);
+	h2w_config_cpld(H2W_UART3);
 }
 
 static void set_h2w_dat(int n)
