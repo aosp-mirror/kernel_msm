@@ -28,21 +28,6 @@ int gpio_to_irq(unsigned gpio);
 
 #include <asm-generic/gpio.h>
 
-/* extended gpio api */
-
-#define GPIOF_IRQF_MASK         0x0000ffff /* use to specify edge detection without */
-#define GPIOF_IRQF_TRIGGER_NONE 0x00010000 /* IRQF_TRIGGER_NONE is 0 which also means "as already configured" */
-#define GPIOF_INPUT             0x00020000
-#define GPIOF_DRIVE_OUTPUT      0x00040000
-#define GPIOF_OUTPUT_LOW        0x00080000
-#define GPIOF_OUTPUT_HIGH       0x00100000
-
-#define GPIOIRQF_SHARED         0x00000001 /* the irq line is shared with other inputs */
-
-extern int gpio_configure(unsigned int gpio, unsigned long flags);
-extern int gpio_read_detect_status(unsigned int gpio);
-extern int gpio_clear_detect_status(unsigned int gpio);
-
 /**
  * struct msm_gpio - GPIO pin description
  * @gpio_cfg - configuration bitmap, as per gpio_tlmm_config()
