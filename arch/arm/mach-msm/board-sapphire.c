@@ -544,13 +544,17 @@ static void h2w_init_cpld(void)
 	h2w_config_cpld(H2W_UART3);
 }
 
+static int h2w_dat_value;
 static void set_h2w_dat(int n)
 {
+	h2w_dat_value = n;
 	gpio_set_value(SAPPHIRE_GPIO_H2W_DATA, n);
 }
 
+static int h2w_clk_value;
 static void set_h2w_clk(int n)
 {
+	h2w_clk_value = n;
 	gpio_set_value(SAPPHIRE_GPIO_H2W_CLK, n);
 }
 
@@ -559,7 +563,7 @@ static void set_h2w_dat_dir(int n)
 	if (n == 0) /* input */
 		gpio_direction_input(SAPPHIRE_GPIO_H2W_DATA);
 	else
-		gpio_configure(SAPPHIRE_GPIO_H2W_DATA, GPIOF_DRIVE_OUTPUT);
+		gpio_direction_output(SAPPHIRE_GPIO_H2W_DATA, h2w_dat_value);
 
 	gpio_set_value(SAPPHIRE_GPIO_H2W_DAT_DIR, n);
 
@@ -570,7 +574,7 @@ static void set_h2w_clk_dir(int n)
 	if (n == 0) /* input */
 		gpio_direction_input(SAPPHIRE_GPIO_H2W_CLK);
 	else
-		gpio_configure(SAPPHIRE_GPIO_H2W_CLK, GPIOF_DRIVE_OUTPUT);
+		gpio_direction_output(SAPPHIRE_GPIO_H2W_CLK, h2w_clk_value);
 
 	gpio_set_value(SAPPHIRE_GPIO_H2W_CLK_DIR, n);
 }
