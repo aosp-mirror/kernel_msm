@@ -40,7 +40,7 @@
 #endif
 
 #ifdef CONFIG_USB_ANDROID
-#include <linux/usb/android.h>
+#include <linux/usb/android_composite.h>
 #endif
 
 #include "board-swordfish.h"
@@ -165,6 +165,16 @@ static struct usb_mass_storage_platform_data mass_storage_pdata = {
 	.product	= "Swordfish",
 	.release	= 0x0100,
 };
+#endif
+
+#ifdef CONFIG_USB_ANDROID
+static struct usb_mass_storage_platform_data mass_storage_pdata = {
+	.nluns		= 1,
+	.vendor		= "Qualcomm",
+	.product	= "Swordfish",
+	.release	= 0x0100,
+};
+#endif
 
 static struct platform_device usb_mass_storage_device = {
 	.name	= "usb_mass_storage",
@@ -173,7 +183,6 @@ static struct platform_device usb_mass_storage_device = {
 		.platform_data = &mass_storage_pdata,
 	},
 };
-#endif
 
 static struct resource msm_kgsl_resources[] = {
         {
@@ -267,15 +276,33 @@ static struct platform_device android_pmem_gpu1_device = {
 };
 
 #ifdef CONFIG_USB_ANDROID
+static char *usb_functions[] = { "usb_mass_storage" };
+static char *usb_functions_adb[] = { "usb_mass_storage", "adb" };
+
+static struct android_usb_product usb_products[] = {
+	{
+		.product_id	= 0x0c01,
+		.num_functions	= ARRAY_SIZE(usb_functions),
+		.functions	= usb_functions,
+	},
+	{
+		.product_id	= 0x0c02,
+		.num_functions	= ARRAY_SIZE(usb_functions_adb),
+		.functions	= usb_functions_adb,
+	},
+};
+
 static struct android_usb_platform_data android_usb_pdata = {
 	.vendor_id		= 0x18d1,
 	.product_id		= 0x0d01,
-	.adb_product_id		= 0x0d02,
 	.version		= 0x0100,
 	.serial_number		= "42",
 	.product_name		= "Swordfishdroid",
 	.manufacturer_name	= "Qualcomm",
-	.nluns			= 1,
+	.num_products = ARRAY_SIZE(usb_products),
+	.products = usb_products,
+	.num_functions = ARRAY_SIZE(usb_functions_adb),
+	.functions = usb_functions_adb,
 };
 
 static struct platform_device android_usb_device = {
@@ -309,9 +336,7 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_smd,
 	&msm_device_nand,
 	&msm_device_hsusb,
-#ifdef CONFIG_USB_FUNCTION_MASS_STORAGE
 	&usb_mass_storage_device,
-#endif
 #ifdef CONFIG_USB_ANDROID
 	&android_usb_device,
 #endif
