@@ -67,7 +67,6 @@ static int capella_cm3602_enable(struct capella_cm3602_data *data)
 		return 0;
 	}
 	data->pdata->power(1);
-	rc = gpio_direction_output(data->pdata->p_en, 0);
 	data->enabled = !rc;
 	if (!rc)
 		capella_cm3602_report(data);
@@ -82,9 +81,6 @@ static int capella_cm3602_disable(struct capella_cm3602_data *data)
 		D("%s: already disabled\n", __func__);
 		return 0;
 	}
-	rc = gpio_direction_output(data->pdata->p_en, 1);
-	if (rc < 0)
-		return rc;
 	data->pdata->power(0);
 	data->enabled = 0;
 	return rc;
@@ -105,18 +101,11 @@ static int capella_cm3602_setup(struct capella_cm3602_data *ip)
 		goto done;
 	}
 
-	rc = gpio_request(pdata->p_en, "gpio_proximity_en");
-	if (rc < 0) {
-		pr_err("%s: gpio %d request failed (%d)\n",
-			__func__, pdata->p_en, rc);
-		goto fail_free_p_out;
-	}
-
 	rc = gpio_direction_input(pdata->p_out);
 	if (rc < 0) {
 		pr_err("%s: failed to set gpio %d as input (%d)\n",
 			__func__, pdata->p_out, rc);
-		goto fail_free_p_en;
+		goto fail_free_p_out;
 	}
 
 	rc = request_irq(irq,
@@ -128,7 +117,7 @@ static int capella_cm3602_setup(struct capella_cm3602_data *ip)
 		pr_err("%s: request_irq(%d) failed for gpio %d (%d)\n",
 			__func__, irq,
 			pdata->p_out, rc);
-		goto fail_free_p_en;
+		goto fail_free_p_out;
 	}
 
 	rc = set_irq_wake(irq, 1);
@@ -143,8 +132,6 @@ static int capella_cm3602_setup(struct capella_cm3602_data *ip)
 
 fail_free_irq:
 	free_irq(irq, 0);
-fail_free_p_en:
-	gpio_free(pdata->p_en);
 fail_free_p_out:
 	gpio_free(pdata->p_out);
 done:
@@ -261,6 +248,7 @@ static int capella_cm3602_probe(struct platform_device *pdev)
 	misc_deregister(&capella_cm3602_misc);
 err_unregister_input_device:
 	input_unregister_device(input_dev);
+	goto done;
 err_free_input_device:
 	input_free_device(input_dev);
 done:
