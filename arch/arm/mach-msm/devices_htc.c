@@ -114,8 +114,41 @@ static struct platform_device usb_mass_storage_device = {
 };
 
 #ifdef CONFIG_USB_ANDROID
-static char *usb_functions[] = { "usb_mass_storage" };
-static char *usb_functions_adb[] = { "usb_mass_storage", "adb" };
+
+static char *usb_functions[] = {
+	"usb_mass_storage",
+#ifdef CONFIG_USB_ANDROID_RNDIS
+	"rndis",
+#endif
+#ifdef CONFIG_USB_ANDROID_ACM
+	"acm",
+#endif
+};
+
+static char *usb_functions_adb[] = {
+	"usb_mass_storage",
+	"adb",
+#ifdef CONFIG_USB_ANDROID_RNDIS
+	"rndis",
+#endif
+#ifdef CONFIG_USB_ANDROID_ACM
+	"acm",
+#endif
+};
+
+static char *usb_functions_all[] = {
+	"usb_mass_storage",
+	"adb",
+#ifdef CONFIG_USB_ANDROID_ACM
+	"acm",
+#endif
+#ifdef CONFIG_USB_ANDROID_RNDIS
+	"rndis",
+#endif
+#ifdef CONFIG_USB_ANDROID_DIAG
+	"diag",
+#endif
+};
 
 static struct android_usb_product usb_products[] = {
 	{
@@ -138,8 +171,8 @@ static struct android_usb_platform_data android_usb_pdata = {
 	.manufacturer_name = "HTC",
 	.num_products = ARRAY_SIZE(usb_products),
 	.products = usb_products,
-	.num_functions = ARRAY_SIZE(usb_functions_adb),
-	.functions = usb_functions_adb,
+	.num_functions = ARRAY_SIZE(usb_functions_all),
+	.functions = usb_functions_all,
 };
 
 static struct platform_device android_usb_device = {
