@@ -120,6 +120,8 @@
 
 #define MAHIMAHI_GPIO_DOCK		106
 
+/* speaker amplifier enable pin for mahimahi CDMA version */
+#define MAHIMAHI_CDMA_GPIO_AUD_SPK_AMP_EN	104
 
 #define is_cdma_version(rev) (((rev) & 0xF0) == 0xC0)
 

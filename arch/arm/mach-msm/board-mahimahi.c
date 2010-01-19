@@ -52,6 +52,7 @@
 #include "devices.h"
 #include "proc_comm.h"
 #include "board-mahimahi-flashlight.h"
+#include "board-mahimahi-tpa2018d1.h"
 
 static uint debug_uart;
 
@@ -452,6 +453,10 @@ static void ds2482_set_slp_n(unsigned n)
 	gpio_direction_output(MAHIMAHI_GPIO_DS2482_SLP_N, n);
 }
 
+static struct tpa2018d1_platform_data tpa2018_data = {
+	.gpio_tpa2018_spk_en = MAHIMAHI_CDMA_GPIO_AUD_SPK_AMP_EN,
+};
+
 static struct i2c_board_info base_i2c_devices[] = {
 	{
 		I2C_BOARD_INFO("ds2482", 0x30 >> 1),
@@ -498,6 +503,13 @@ static struct i2c_board_info rev1_i2c_devices[] = {
 		I2C_BOARD_INFO(AKM8973_I2C_NAME, 0x1C),
 		.platform_data = &compass_platform_data,
 		.irq = MSM_GPIO_TO_INT(MAHIMAHI_GPIO_COMPASS_INT_N),
+	},
+};
+
+static struct i2c_board_info rev_CX_i2c_devices[] = {
+	{
+		I2C_BOARD_INFO("tpa2018d1", 0x58),
+		.platform_data = &tpa2018_data,
 	},
 };
 
@@ -902,6 +914,12 @@ static void __init mahimahi_init(void)
 		/* Only board after XB with Audience A1026 */
 		i2c_register_board_info(0, rev1_i2c_devices,
 			ARRAY_SIZE(rev1_i2c_devices));
+	}
+
+	if (is_cdma_version(system_rev)) {
+		/* Only CDMA version with TI TPA2018D1 Speaker Amp. */
+		i2c_register_board_info(0, rev_CX_i2c_devices,
+			ARRAY_SIZE(rev_CX_i2c_devices));
 	}
 
 	ret = mahimahi_init_mmc(system_rev, debug_uart);
