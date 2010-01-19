@@ -120,4 +120,7 @@
 
 #define MAHIMAHI_GPIO_DOCK		106
 
+
+#define is_cdma_version(rev) (((rev) & 0xF0) == 0xC0)
+
 #endif /* __ARCH_ARM_MACH_MSM_BOARD_MAHIMAHI_H */
