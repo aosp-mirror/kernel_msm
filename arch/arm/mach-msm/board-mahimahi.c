@@ -32,7 +32,9 @@
 #include <linux/capella_cm3602.h>
 #include <linux/akm8973.h>
 #include <linux/regulator/machine.h>
+#include <linux/ds2784_battery.h>
 #include <../../../drivers/staging/android/timed_gpio.h>
+#include <../../../drivers/w1/w1.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -704,6 +706,70 @@ struct platform_device bcm_bt_lpm_device = {
 	},
 };
 
+static int ds2784_charge(int on, int fast)
+{
+	gpio_direction_output(MAHIMAHI_GPIO_BATTERY_CHARGER_CURRENT, !!fast);
+	gpio_direction_output(MAHIMAHI_GPIO_BATTERY_CHARGER_EN, !on);
+	return 0;
+}
+
+static int w1_ds2784_add_slave(struct w1_slave *sl)
+{
+	struct dd {
+		struct platform_device pdev;
+		struct ds2784_platform_data pdata;
+	} *p;
+
+	int rc;
+
+	rc = gpio_request(MAHIMAHI_GPIO_BATTERY_CHARGER_EN, "charger_en");
+	if (rc < 0) {
+		pr_err("%s: gpio_request(%d) failed: %d\n", __func__,
+			MAHIMAHI_GPIO_BATTERY_CHARGER_EN, rc);
+		return rc;
+	}
+
+	rc = gpio_request(MAHIMAHI_GPIO_BATTERY_CHARGER_CURRENT, "charger_current");
+	if (rc < 0) {
+		pr_err("%s: gpio_request(%d) failed: %d\n", __func__,
+			MAHIMAHI_GPIO_BATTERY_CHARGER_CURRENT, rc);
+		gpio_free(MAHIMAHI_GPIO_BATTERY_CHARGER_EN);
+		return rc;
+	}
+
+	p = kzalloc(sizeof(struct dd), GFP_KERNEL);
+	if (!p) {
+		pr_err("%s: out of memory\n", __func__);
+		gpio_free(MAHIMAHI_GPIO_BATTERY_CHARGER_EN);
+		gpio_free(MAHIMAHI_GPIO_BATTERY_CHARGER_CURRENT);
+		return -ENOMEM;
+	}
+
+	p->pdev.name = "ds2784-battery";
+	p->pdev.id = -1;
+	p->pdev.dev.platform_data = &p->pdata;
+	p->pdata.charge = ds2784_charge;
+	p->pdata.w1_slave = sl;
+
+	platform_device_register(&p->pdev);
+
+	return 0;
+}
+
+static struct w1_family_ops w1_ds2784_fops = {
+	.add_slave = w1_ds2784_add_slave,
+};
+
+static struct w1_family w1_ds2784_family = {
+	.fid = W1_FAMILY_DS2784,
+	.fops = &w1_ds2784_fops,
+};
+
+static int __init ds2784_battery_init(void)
+{
+	return w1_register_family(&w1_ds2784_family);
+}
+
 static struct platform_device *devices[] __initdata = {
 #if !defined(CONFIG_MSM_SERIAL_DEBUGGER)
 	&msm_device_uart1,
@@ -940,6 +1006,8 @@ static void __init mahimahi_init(void)
 		platform_device_register(&mahimahi_timed_gpios);
 	else
 		msm_init_pmic_vibrator();
+
+	ds2784_battery_init();
 }
 
 static void __init mahimahi_fixup(struct machine_desc *desc, struct tag *tags,
