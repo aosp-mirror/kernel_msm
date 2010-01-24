@@ -34,14 +34,7 @@
 #include <mach/msm_iomap.h>
 #include <mach/msm_hsusb.h>
 #include <mach/msm_ts.h>
-
-#ifdef CONFIG_USB_FUNCTION_MASS_STORAGE
-#include <linux/usb/mass_storage_function.h>
-#endif
-
-#ifdef CONFIG_USB_ANDROID
 #include <linux/usb/android_composite.h>
-#endif
 
 #include "board-swordfish.h"
 #include "devices.h"
@@ -68,28 +61,6 @@ static struct platform_device smc91x_device = {
 	.num_resources	= ARRAY_SIZE(smc91x_resources),
 	.resource	= smc91x_resources,
 };
-
-#ifdef CONFIG_USB_FUNCTION
-static char *swordfish_usb_functions[] = {
-#if defined(CONFIG_USB_FUNCTION_MASS_STORAGE)
-	"usb_mass_storage",
-#endif
-#ifdef CONFIG_USB_FUNCTION_ADB
-	"adb",
-#endif
-};
-
-static struct msm_hsusb_product swordfish_usb_products[] = {
-	{
-		.product_id     = 0x0d01,
-		.functions      = 0x00000001, /* "usb_mass_storage" only */
-	},
-	{
-		.product_id     = 0x0d02,
-		.functions      = 0x00000003, /* "usb_mass_storage" and "adb" */
-	},
-};
-#endif
 
 static int swordfish_phy_init_seq[] = {
 	0x0C, 0x31,
@@ -142,39 +113,14 @@ static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 	.phy_init_seq		= swordfish_phy_init_seq,
 	.phy_reset		= swordfish_usb_phy_reset,
 	.hw_reset		= swordfish_usb_hw_reset,
-#ifdef CONFIG_USB_FUNCTION
-	.vendor_id		= 0x18d1,
-	.product_id		= 0x0d02,
-	.version		= 0x0100,
-	.product_name		= "Swordfish",
-	.serial_number		= "42",
-	.manufacturer_name	= "Qualcomm",
-
-	.functions		= swordfish_usb_functions,
-	.num_functions		= ARRAY_SIZE(swordfish_usb_functions),
-	.products		= swordfish_usb_products,
-	.num_products		= ARRAY_SIZE(swordfish_usb_products),
-#endif
 };
 
-#ifdef CONFIG_USB_FUNCTION_MASS_STORAGE
-static struct usb_mass_storage_platform_data mass_storage_pdata = {
-	.nluns		= 1,
-	.buf_size	= 16384,
-	.vendor		= "Qualcomm",
-	.product	= "Swordfish",
-	.release	= 0x0100,
-};
-#endif
-
-#ifdef CONFIG_USB_ANDROID
 static struct usb_mass_storage_platform_data mass_storage_pdata = {
 	.nluns		= 1,
 	.vendor		= "Qualcomm",
 	.product	= "Swordfish",
 	.release	= 0x0100,
 };
-#endif
 
 static struct platform_device usb_mass_storage_device = {
 	.name	= "usb_mass_storage",
@@ -275,7 +221,6 @@ static struct platform_device android_pmem_gpu1_device = {
         },
 };
 
-#ifdef CONFIG_USB_ANDROID
 static char *usb_functions[] = { "usb_mass_storage" };
 static char *usb_functions_adb[] = { "usb_mass_storage", "adb" };
 
@@ -312,7 +257,6 @@ static struct platform_device android_usb_device = {
 		.platform_data = &android_usb_pdata,
 	},
 };
-#endif
 
 static struct platform_device fish_battery_device = {
 	.name = "fish_battery",
@@ -337,9 +281,7 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_nand,
 	&msm_device_hsusb,
 	&usb_mass_storage_device,
-#ifdef CONFIG_USB_ANDROID
 	&android_usb_device,
-#endif
 	&fish_battery_device,
 	&smc91x_device,
 	&msm_device_touchscreen,

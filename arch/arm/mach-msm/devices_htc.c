@@ -25,13 +25,7 @@
 #include <mach/board.h>
 #include <mach/board_htc.h>
 #include <mach/msm_hsusb.h>
-
-#ifdef CONFIG_USB_FUNCTION
-#include <linux/usb/mass_storage_function.h>
-#endif
-#ifdef CONFIG_USB_ANDROID
 #include <linux/usb/android_composite.h>
-#endif
 
 #include <asm/mach/flash.h>
 #include <asm/setup.h>
@@ -96,14 +90,12 @@ struct msm_hsusb_platform_data msm_hsusb_pdata = {
 	.usb_connected = notify_usb_connected,
 };
 
-#ifdef CONFIG_USB_ANDROID
 static struct usb_mass_storage_platform_data mass_storage_pdata = {
 	.nluns = 1,
 	.vendor = "HTC     ",
 	.product = "Android Phone   ",
 	.release = 0x0100,
 };
-#endif
 
 static struct platform_device usb_mass_storage_device = {
 	.name = "usb_mass_storage",
@@ -112,8 +104,6 @@ static struct platform_device usb_mass_storage_device = {
 		.platform_data = &mass_storage_pdata,
 		},
 };
-
-#ifdef CONFIG_USB_ANDROID
 
 static char *usb_functions[] = {
 	"usb_mass_storage",
@@ -182,7 +172,6 @@ static struct platform_device android_usb_device = {
 		.platform_data = &android_usb_pdata,
 	},
 };
-#endif
 
 void __init msm_add_usb_devices(void (*phy_reset) (void))
 {
@@ -192,9 +181,7 @@ void __init msm_add_usb_devices(void (*phy_reset) (void))
 	msm_device_hsusb.dev.platform_data = &msm_hsusb_pdata;
 	platform_device_register(&msm_device_hsusb);
 	platform_device_register(&usb_mass_storage_device);
-#ifdef CONFIG_USB_ANDROID
 	platform_device_register(&android_usb_device);
-#endif
 }
 
 static struct android_pmem_platform_data pmem_pdata = {
@@ -467,9 +454,7 @@ static int __init board_serialno_setup(char *serialno)
 		str = df_serialno;
 	else
 		str = serialno;
-#ifdef CONFIG_USB_ANDROID
 	android_usb_pdata.serial_number = str;
-#endif
 	return 1;
 }
 

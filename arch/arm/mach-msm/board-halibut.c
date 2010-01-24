@@ -41,13 +41,7 @@
 #include <linux/mtd/partitions.h>
 #include <linux/i2c.h>
 #include <linux/android_pmem.h>
-
-#ifdef CONFIG_USB_FUNCTION
-#include <linux/usb/mass_storage_function.h>
-#endif
-#ifdef CONFIG_USB_ANDROID
 #include <linux/usb/android_composite.h>
-#endif
 
 #include "devices.h"
 #include "board-halibut.h"
@@ -330,66 +324,18 @@ static struct platform_device android_pmem_camera_device = {
 	.dev = { .platform_data = &android_pmem_camera_pdata },
 };
 
-#ifdef CONFIG_USB_FUNCTION
-static char *halibut_usb_functions[] = {
-#if defined(CONFIG_USB_FUNCTION_MASS_STORAGE) || \
-		defined(CONFIG_USB_FUNCTION_UMS)
-	"usb_mass_storage",
-#endif
-#ifdef CONFIG_USB_FUNCTION_ADB
-	"adb",
-#endif
-};
-
-static struct msm_hsusb_product halibut_usb_products[] = {
-{
-.product_id     = 0x0c01,
-.functions      = 0x00000001, /* "usb_mass_storage" only */
-},
-{
-.product_id     = 0x0c02,
-.functions      = 0x00000003, /* "usb_mass_storage" and "adb" */
-},
-};
-#endif
-
 static int halibut_phy_init_seq[] = { 0x1D, 0x0D, 0x1D, 0x10, -1 };
 
 static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 	.phy_init_seq = halibut_phy_init_seq,
-#ifdef CONFIG_USB_FUNCTION
-	.vendor_id = 0x18d1,
-	.product_id = 0x0c02,
-	.version = 0x0100,
-	.product_name = "Halibut",
-	.serial_number = "42",
-	.manufacturer_name = "Qualcomm",
-
-	.functions = halibut_usb_functions,
-	.num_functions = ARRAY_SIZE(halibut_usb_functions),
-	.products  = halibut_usb_products,
-	.num_products = ARRAY_SIZE(halibut_usb_products),
-#endif
 };
 
-#ifdef CONFIG_USB_FUNCTION_MASS_STORAGE
-static struct usb_mass_storage_platform_data mass_storage_pdata = {
-	.nluns = 1,
-	.buf_size = 16384,
-	.vendor = "Qualcomm",
-	.product = "Halibut",
-	.release = 0x0100,
-};
-#endif
-
-#ifdef CONFIG_USB_ANDROID
 static struct usb_mass_storage_platform_data mass_storage_pdata = {
 	.nluns = 1,
 	.vendor = "Qualcomm",
 	.product = "Halibut",
 	.release = 0x0100,
 };
-#endif
 
 static struct platform_device usb_mass_storage_device = {
 	.name = "usb_mass_storage",
@@ -399,7 +345,6 @@ static struct platform_device usb_mass_storage_device = {
 	},
 };
 
-#ifdef CONFIG_USB_ANDROID
 static char *usb_functions[] = { "usb_mass_storage" };
 static char *usb_functions_adb[] = { "usb_mass_storage", "adb" };
 
@@ -436,8 +381,6 @@ static struct platform_device android_usb_device = {
 		.platform_data = &android_usb_pdata,
 	},
 };
-#endif
-
 
 static struct platform_device fish_battery_device = {
 	.name = "fish_battery",
@@ -451,9 +394,7 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_nand,
 	&msm_device_hsusb,
 	&usb_mass_storage_device,
-#ifdef CONFIG_USB_ANDROID
 	&android_usb_device,
-#endif
 	&msm_device_i2c,
 	&smc91x_device,
 	&halibut_snd,
