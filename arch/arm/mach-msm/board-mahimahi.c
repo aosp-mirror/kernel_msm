@@ -164,12 +164,20 @@ static char *usb_functions_all[] = {
 
 static struct android_usb_product usb_products[] = {
 	{
+#ifdef CONFIG_USB_ANDROID_ACM
+		.product_id	= 0x4e21,
+#else
 		.product_id	= 0x4e11,
+#endif
 		.num_functions	= ARRAY_SIZE(usb_functions),
 		.functions	= usb_functions,
 	},
 	{
+#ifdef CONFIG_USB_ANDROID_ACM
+		.product_id	= 0x4e22,
+#else
 		.product_id	= 0x4e12,
+#endif
 		.num_functions	= ARRAY_SIZE(usb_functions_adb),
 		.functions	= usb_functions_adb,
 	},
