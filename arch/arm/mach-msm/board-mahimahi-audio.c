@@ -75,7 +75,31 @@ void mahimahi_speaker_enable(int en)
 
 void mahimahi_receiver_enable(int en)
 {
-	/* Do nothing for mahimahi. */
+	if (is_cdma_version(system_rev) &&
+		((system_rev == 0xC1) || (system_rev == 0xC2))) {
+		struct spkr_config_mode scm;
+		memset(&scm, 0, sizeof(scm));
+
+		D("%s %d\n", __func__, en);
+		if (en) {
+			scm.is_right_chan_en = 1;
+			scm.is_left_chan_en = 0;
+			scm.is_stereo_en = 0;
+			scm.is_hpf_en = 1;
+			pmic_spkr_en_mute(RIGHT_SPKR, 0);
+			pmic_set_spkr_configuration(&scm);
+			pmic_spkr_en(RIGHT_SPKR, 1);
+
+			/* unmute */
+			pmic_spkr_en_mute(RIGHT_SPKR, 1);
+		} else {
+			pmic_spkr_en_mute(RIGHT_SPKR, 0);
+
+			pmic_spkr_en(RIGHT_SPKR, 0);
+
+			pmic_set_spkr_configuration(&scm);
+		}
+	}
 }
 
 static void config_gpio_table(uint32_t *table, int len)
