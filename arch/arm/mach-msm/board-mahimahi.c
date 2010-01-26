@@ -1010,6 +1010,8 @@ static void __init mahimahi_init(void)
 	gpio_request(MAHIMAHI_GPIO_COMPASS_INT_N, "compass_int");
 	gpio_direction_input(MAHIMAHI_GPIO_COMPASS_INT_N);
 
+	gpio_request(MAHIMAHI_GPIO_DS2482_SLP_N, "ds2482_slp_n");
+
 	/* set the gpu power rail to manual mode so clk en/dis will not
 	 * turn off gpu power, and hang it on resume */
 	mahimahi_kgsl_power_rail_mode(0);
