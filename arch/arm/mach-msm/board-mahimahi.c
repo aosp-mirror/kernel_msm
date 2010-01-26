@@ -1037,6 +1037,13 @@ static void __init mahimahi_init(void)
 		/* Only CDMA version with TI TPA2018D1 Speaker Amp. */
 		i2c_register_board_info(0, rev_CX_i2c_devices,
 			ARRAY_SIZE(rev_CX_i2c_devices));
+		if ((system_rev & 0x0F) == 0x00) {
+			a1026_data.gpio_a1026_clk = MAHIMAHI_CDMA_XA_AUD_A1026_CLK;
+		} else if ((system_rev & 0x0F) >= 0x01) {
+			a1026_data.gpio_a1026_wakeup = MAHIMAHI_CDMA_XB_AUD_A1026_WAKEUP;
+			a1026_data.gpio_a1026_reset = MAHIMAHI_CDMA_XB_AUD_A1026_RESET;
+			a1026_data.gpio_a1026_clk = MAHIMAHI_CDMA_XB_AUD_A1026_CLK;
+		}
 	}
 
 	ret = mahimahi_init_mmc(system_rev, debug_uart);
