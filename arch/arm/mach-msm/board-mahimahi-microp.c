@@ -546,9 +546,10 @@ static int microp_enable_key_event(void)
 
 	client = private_microp_client;
 
-	/* turn on  key interrupt */
-	gpio_set_value(MAHIMAHI_GPIO_35MM_KEY_INT_SHUTDOWN, 1);
+	if (!is_cdma_version(system_rev))
+		gpio_set_value(MAHIMAHI_GPIO_35MM_KEY_INT_SHUTDOWN, 1);
 
+	/* turn on  key interrupt */
 	/* enable microp interrupt to detect changes */
 	ret = microp_interrupt_enable(client, IRQ_REMOTEKEY);
 	if (ret < 0) {
@@ -567,7 +568,8 @@ static int microp_disable_key_event(void)
 	client = private_microp_client;
 
 	/* shutdown key interrupt */
-	gpio_set_value(MAHIMAHI_GPIO_35MM_KEY_INT_SHUTDOWN, 0);
+	if (!is_cdma_version(system_rev))
+		gpio_set_value(MAHIMAHI_GPIO_35MM_KEY_INT_SHUTDOWN, 0);
 
 	/* disable microp interrupt to detect changes */
 	ret = microp_interrupt_disable(client, IRQ_REMOTEKEY);

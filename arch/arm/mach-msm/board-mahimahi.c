@@ -873,6 +873,8 @@ static uint32_t key_int_shutdown_gpio_table[] = {
 
 static void mahimahi_headset_init(void)
 {
+	if (is_cdma_version(system_rev))
+		return;
 	config_gpio_table(key_int_shutdown_gpio_table,
 			ARRAY_SIZE(key_int_shutdown_gpio_table));
 	gpio_set_value(MAHIMAHI_GPIO_35MM_KEY_INT_SHUTDOWN, 0);
