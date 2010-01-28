@@ -379,10 +379,19 @@ struct cy8c_i2c_platform_data mahimahi_cy8c_ts_data = {
 
 static struct synaptics_i2c_rmi_platform_data mahimahi_synaptics_ts_data[] = {
 	{
+		.version = 0x105,
 		.power = mahimahi_ts_power,
 		.flags = SYNAPTICS_FLIP_Y,
-		.inactive_left = -25 * 0x10000 / 480,
-		.inactive_right = -20 * 0x10000 / 480,
+		.inactive_left = -15 * 0x10000 / 480,
+		.inactive_right = -15 * 0x10000 / 480,
+		.inactive_top = -15 * 0x10000 / 800,
+		.inactive_bottom = -50 * 0x10000 / 800,
+		.sensitivity_adjust = 9,
+	},
+	{
+		.flags = SYNAPTICS_FLIP_Y,
+		.inactive_left = -15 * 0x10000 / 480,
+		.inactive_right = -15 * 0x10000 / 480,
 		.inactive_top = -15 * 0x10000 / 800,
 		.inactive_bottom = -40 * 0x10000 / 800,
 		.sensitivity_adjust = 12,
