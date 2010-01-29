@@ -668,7 +668,7 @@ void __init iotable_init(struct map_desc *io_desc, int nr)
 		create_mapping(io_desc + i);
 }
 
-static unsigned long __initdata vmalloc_reserve = SZ_128M;
+static unsigned long __initdata vmalloc_reserve = CONFIG_VMALLOC_RESERVE;
 
 /*
  * vmalloc=size forces the vmalloc area to be exactly 'size'
