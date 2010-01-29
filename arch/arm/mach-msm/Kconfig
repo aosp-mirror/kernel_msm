@@ -161,6 +161,13 @@ config MACH_QSD8X50_FFA
 	help
 	  Select this to support the 8x50 ffa device
 
+config MACH_SURF7X30
+	depends on ARCH_MSM7X30
+	default y
+	bool "QCT SURF7x30 Board"
+	help
+	  Select this to support the Qualcomm SURF7X30 development board
+
 config HTC_HEADSET
 	tristate "HTC 2 Wire detection driver"
 	default n

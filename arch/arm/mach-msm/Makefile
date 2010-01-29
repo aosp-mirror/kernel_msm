@@ -56,6 +56,7 @@ obj-$(CONFIG_MACH_SWORDFISH) += board-swordfish.o
 obj-$(CONFIG_MACH_SWORDFISH) += board-swordfish-keypad.o fish_battery.o
 obj-$(CONFIG_MACH_SWORDFISH) += board-swordfish-panel.o
 obj-$(CONFIG_MACH_SWORDFISH) += board-swordfish-mmc.o
+obj-$(CONFIG_MACH_SURF7X30) += board-surf7x30.o
 obj-$(CONFIG_ARCH_MSM7X30) += board-msm7x30.o devices-msm7x30.o
 obj-$(CONFIG_ARCH_QSD8X50) += board-qsd8x50.o devices-qsd8x50.o
 
