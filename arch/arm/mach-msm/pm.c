@@ -67,10 +67,16 @@ module_param_named(idle_sleep_min_time, msm_pm_idle_sleep_min_time, int, S_IRUGO
 static int msm_pm_idle_spin_time = CONFIG_MSM7X00A_IDLE_SPIN_TIME;
 module_param_named(idle_spin_time, msm_pm_idle_spin_time, int, S_IRUGO | S_IWUSR | S_IWGRP);
 
+#if defined(CONFIG_ARCH_MSM7X30)
+#define A11S_CLK_SLEEP_EN (MSM_GCC_BASE + 0x020)
+#define A11S_PWRDOWN      (MSM_ACC_BASE + 0x01c)
+#define A11S_SECOP        (MSM_TCSR_BASE + 0x038)
+#else
 #define A11S_CLK_SLEEP_EN (MSM_CSR_BASE + 0x11c)
 #define A11S_PWRDOWN (MSM_CSR_BASE + 0x440)
 #define A11S_STANDBY_CTL (MSM_CSR_BASE + 0x108)
 #define A11RAMBACKBIAS (MSM_CSR_BASE + 0x508)
+#endif
 
 
 #define DEM_MASTER_BITS_PER_CPU             6
@@ -201,6 +207,39 @@ msm_pm_wait_state(uint32_t wait_all_set, uint32_t wait_all_clear,
 	return -ETIMEDOUT;
 }
 
+static void
+msm_pm_enter_prep_hw(void)
+{
+#if defined(CONFIG_ARCH_MSM7X30)
+	writel(1, A11S_PWRDOWN);
+	writel(4, A11S_SECOP);
+#else
+#if defined(CONFIG_ARCH_QSD8X50)
+	writel(0x1b, A11S_CLK_SLEEP_EN);
+#else
+	writel(0x1f, A11S_CLK_SLEEP_EN);
+#endif
+	writel(1, A11S_PWRDOWN);
+	writel(0, A11S_STANDBY_CTL);
+
+#if defined(CONFIG_ARCH_MSM_ARM11)
+	writel(0, A11RAMBACKBIAS);
+#endif
+#endif
+}
+
+static void
+msm_pm_exit_restore_hw(void)
+{
+#if defined(CONFIG_ARCH_MSM7X30)
+	writel(0, A11S_SECOP);
+	writel(0, A11S_PWRDOWN);
+#else
+	writel(0x00, A11S_CLK_SLEEP_EN);
+	writel(0, A11S_PWRDOWN);
+#endif
+}
+
 #ifdef CONFIG_MSM_FIQ_SUPPORT
 void msm_fiq_exit_sleep(void);
 #else
@@ -325,17 +364,7 @@ static int msm_sleep(int sleep_mode, uint32_t sleep_delay, int from_idle)
 		goto enter_failed;
 
 	if (enter_state) {
-#ifdef CONFIG_ARCH_MSM_SCORPION
-		writel(0x1b, A11S_CLK_SLEEP_EN);
-#else
-		writel(0x1f, A11S_CLK_SLEEP_EN);
-#endif
-		writel(1, A11S_PWRDOWN);
-
-		writel(0, A11S_STANDBY_CTL);
-#ifndef CONFIG_ARCH_MSM_SCORPION
-		writel(0, A11RAMBACKBIAS);
-#endif
+		msm_pm_enter_prep_hw();
 
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_STATE)
 			printk(KERN_INFO "msm_sleep(): enter "
@@ -408,8 +437,8 @@ ramp_down_failed:
 	msm_irq_exit_sleep1();
 enter_failed:
 	if (enter_state) {
-		writel(0x00, A11S_CLK_SLEEP_EN);
-		writel(0, A11S_PWRDOWN);
+		msm_pm_exit_restore_hw();
+
 		smsm_change_state(PM_SMSM_WRITE_STATE, enter_state, exit_state);
 		msm_pm_wait_state(0, exit_wait_clear, exit_wait_any_set, 0);
 		if (msm_pm_debug_mask & MSM_PM_DEBUG_STATE)
