@@ -33,6 +33,33 @@
 static struct mutex mic_lock;
 static struct mutex bt_sco_lock;
 
+static struct q6_hw_info q6_audio_hw[Q6_HW_COUNT] = {
+	[Q6_HW_HANDSET] = {
+		.min_gain = -2000,
+		.max_gain = 0,
+	},
+	[Q6_HW_HEADSET] = {
+		.min_gain = -2000,
+		.max_gain = 0,
+	},
+	[Q6_HW_SPEAKER] = {
+		.min_gain = -1500,
+		.max_gain = 0,
+	},
+	[Q6_HW_TTY] = {
+		.min_gain = -2000,
+		.max_gain = 0,
+	},
+	[Q6_HW_BT_SCO] = {
+		.min_gain = -2000,
+		.max_gain = 0,
+	},
+	[Q6_HW_BT_A2DP] = {
+		.min_gain = -2000,
+		.max_gain = 0,
+	},
+};
+
 void mahimahi_headset_enable(int en)
 {
 	D("%s %d\n", __func__, en);
@@ -207,6 +234,28 @@ void mahimahi_analog_init(void)
 	mutex_unlock(&bt_sco_lock);
 }
 
+int mahimahi_get_rx_vol(uint8_t hw, int level)
+{
+	int vol;
+
+	if (level > 100)
+		level = 100;
+	else if (level < 0)
+		level = 0;
+
+	if (is_cdma_version(system_rev) && hw == Q6_HW_HANDSET) {
+		int handset_volume[6] = { -1600, -1300, -1000, -600, -300, 0 };
+		vol = handset_volume[5 * level / 100];
+	} else {
+		struct q6_hw_info *info;
+		info = &q6_audio_hw[hw];
+		vol = info->min_gain + ((info->max_gain - info->min_gain) * level) / 100;
+	}
+
+	D("%s %d\n", __func__, vol);
+	return vol;
+}
+
 static struct qsd_acoustic_ops acoustic = {
 	.enable_mic_bias = mahimahi_mic_enable,
 };
@@ -219,6 +268,7 @@ static struct q6audio_analog_ops ops = {
 	.bt_sco_enable = mahimahi_bt_sco_enable,
 	.int_mic_enable = mahimahi_mic_enable,
 	.ext_mic_enable = mahimahi_mic_enable,
+	.get_rx_vol = mahimahi_get_rx_vol,
 };
 
 void __init mahimahi_audio_init(void)
