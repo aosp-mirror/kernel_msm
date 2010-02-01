@@ -277,4 +277,7 @@ void __init mahimahi_audio_init(void)
 	mutex_init(&bt_sco_lock);
 	q6audio_register_analog_ops(&ops);
 	acoustic_register_ops(&acoustic);
+	if (is_cdma_version(system_rev) &&
+		((system_rev == 0xC1) || (system_rev == 0xC2)))
+		q6audio_set_acdb_file("default_PMIC.acdb");
 }
