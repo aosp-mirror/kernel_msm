@@ -49,6 +49,7 @@
 #include <mach/system.h>
 #include <mach/msm_serial_hs.h>
 #include <mach/bcm_bt_lpm.h>
+#include <mach/msm_smd.h>
 
 #include "board-mahimahi.h"
 #include "devices.h"
@@ -975,12 +976,22 @@ static void mahimahi_reset(void)
 
 int mahimahi_init_mmc(int sysrev, unsigned debug_uart);
 
+static const struct smd_tty_channel_desc smd_cdma_default_channels[] = {
+	{ .id = 0, .name = "SMD_DS" },
+	{ .id = 19, .name = "SMD_DATA3" },
+	{ .id = 27, .name = "SMD_GPSNMEA" }
+};
+
 static void __init mahimahi_init(void)
 {
 	int ret;
 	struct kobject *properties_kobj;
 
 	printk("mahimahi_init() revision=%d\n", system_rev);
+
+	if (is_cdma_version(system_rev))
+		smd_set_channel_list(smd_cdma_default_channels,
+					ARRAY_SIZE(smd_cdma_default_channels));
 
 	msm_hw_reset_hook = mahimahi_reset;
 
