@@ -106,4 +106,11 @@ typedef enum {
 	SMD_NUM_PORTS,
 } smd_port_id_type;
 
+struct smd_tty_channel_desc {
+	int id;
+	const char *name;
+};
+
+int smd_set_channel_list(const struct smd_tty_channel_desc *, int len);
+
 #endif

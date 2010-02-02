@@ -40,6 +40,21 @@ struct smd_tty_info {
 
 static struct smd_tty_info smd_tty[MAX_SMD_TTYS];
 
+static const struct smd_tty_channel_desc smd_default_tty_channels[] = {
+	{ .id = 0, .name = "SMD_DS" },
+	{ .id = 27, .name = "SMD_GPSNMEA" },
+};
+
+static const struct smd_tty_channel_desc *smd_tty_channels =
+		smd_default_tty_channels;
+static int smd_tty_channels_len = ARRAY_SIZE(smd_default_tty_channels);
+
+int smd_set_channel_list(const struct smd_tty_channel_desc *channels, int len)
+{
+	smd_tty_channels = channels;
+	smd_tty_channels_len = len;
+	return 0;
+}
 
 static void smd_tty_notify(void *priv, unsigned event)
 {
@@ -82,15 +97,17 @@ static int smd_tty_open(struct tty_struct *tty, struct file *f)
 	int res = 0;
 	int n = tty->index;
 	struct smd_tty_info *info;
-	const char *name;
+	const char *name = NULL;
+	int i;
 
-	if (n == 0) {
-		name = "SMD_DS";
-	} else if (n == 27) {
-		name = "SMD_GPSNMEA";
-	} else {
-		return -ENODEV;
+	for (i = 0; i < smd_tty_channels_len; i++) {
+		if (smd_tty_channels[i].id == n) {
+			name = smd_tty_channels[i].name;
+			break;
+		}
 	}
+	if (!name)
+		return -ENODEV;
 
 	info = smd_tty + n;
 
@@ -178,7 +195,7 @@ static struct tty_driver *smd_tty_driver;
 
 static int __init smd_tty_init(void)
 {
-	int ret;
+	int ret, i;
 
 	smd_tty_driver = alloc_tty_driver(MAX_SMD_TTYS);
 	if (smd_tty_driver == 0)
@@ -203,9 +220,8 @@ static int __init smd_tty_init(void)
 	ret = tty_register_driver(smd_tty_driver);
 	if (ret) return ret;
 
-	/* this should be dynamic */
-	tty_register_device(smd_tty_driver, 0, 0);
-	tty_register_device(smd_tty_driver, 27, 0);
+	for (i = 0; i < smd_tty_channels_len; i++)
+		tty_register_device(smd_tty_driver, smd_tty_channels[i].id, 0);
 
 	return 0;
 }
