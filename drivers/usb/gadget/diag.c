@@ -82,6 +82,8 @@ struct diag_context
 	unsigned char hdlc_buf[HDLC_MAX];
 	unsigned hdlc_count;
 	unsigned hdlc_escape;
+
+	int function_enable;
 };
 
 static struct usb_interface_descriptor diag_interface_desc = {
@@ -371,6 +373,7 @@ static int diag_set_enabled(const char *val, struct kernel_param *kp)
 	int enabled = simple_strtol(val, NULL, 0);
 	if (_context.cdev)
 		android_enable_function(&_context.function, enabled);
+	_context.function_enable = !!enabled;
 	return 0;
 }
 
@@ -401,8 +404,7 @@ int diag_bind_config(struct usb_configuration *c)
 	ctxt->function.set_alt = diag_function_set_alt;
 	ctxt->function.disable = diag_function_disable;
 
-	/* start disabled */
-	ctxt->function.hidden = 1;
+	ctxt->function.hidden = !_context.function_enable;
 
 	return usb_add_function(c, &ctxt->function);
 }
