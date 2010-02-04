@@ -984,7 +984,7 @@ static void usb_prepare(struct usb_info *ui)
 
 static void usb_suspend_phy(struct usb_info *ui)
 {
-#if defined(CONFIG_ARCH_QSD8X50)
+#if defined(CONFIG_ARCH_QSD8X50) || defined(CONFIG_ARCH_MSM7X30)
 	/* clear VBusValid and SessionEnd rising interrupts */
 	ulpi_write(ui, (1 << 1) | (1 << 3), 0x0f);
 	/* clear VBusValid and SessionEnd falling interrupts */
