@@ -1464,7 +1464,10 @@ msm72k_enable(struct usb_ep *_ep, const struct usb_endpoint_descriptor *desc)
 	unsigned char ep_type =
 			desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK;
 
-	_ep->maxpacket = le16_to_cpu(desc->wMaxPacketSize);
+	if (ep_type == USB_ENDPOINT_XFER_BULK)
+		_ep->maxpacket = le16_to_cpu(desc->wMaxPacketSize);
+	else
+		_ep->maxpacket = le16_to_cpu(64);
 	config_ept(ept);
 	usb_ept_enable(ept, 1, ep_type);
 	return 0;
