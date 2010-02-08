@@ -489,8 +489,8 @@ static void hpin_debounce_do_work(struct work_struct *work)
 	if (insert != cdata->headset_is_in) {
 		cdata->headset_is_in = insert;
 		pr_debug("headset %s\n", insert ? "inserted" : "removed");
-		htc_35mm_jack_plug_event(cdata->headset_is_in);
-		cdata->is_hpin_pin_stable = 1;
+		htc_35mm_jack_plug_event(cdata->headset_is_in,
+					 &cdata->is_hpin_pin_stable);
 	}
 }
 
@@ -517,26 +517,43 @@ static int microp_enable_headset_plug_event(void)
 	if(cdata->headset_is_in != stat) {
 		cdata->headset_is_in = stat;
 		pr_debug("Headset state changed\n");
-		htc_35mm_jack_plug_event(stat);
+		htc_35mm_jack_plug_event(stat, &cdata->is_hpin_pin_stable);
 	}
 
 	return 1;
 }
 
-static int microp_headset_has_mic(void)
+static int microp_headset_detect_mic(void)
 {
 	uint16_t data;
-	int ret = 0;
 
 	microp_read_adc(MICROP_REMOTE_KEY_ADC_CHAN, &data);
 	if (data >= 200)
-		ret = 1;
+		return 1;
 	else
-		ret = 0;
+		return 0;
+}
 
-	pr_debug("%s: microp_mic_status =0x%d\n", __func__, ret);
+static int microp_headset_has_mic(void)
+{
+	int mic1 = -1;
+	int mic2 = -1;
+	int count = 0;
 
-	return ret;
+	mic2 = microp_headset_detect_mic();
+
+	/* debounce the detection wait until 2 consecutive read are equal */
+	while ((mic1 != mic2) && (count < 10)) {
+		mic1 = mic2;
+		msleep(600);
+		mic2 = microp_headset_detect_mic();
+		count++;
+	}
+
+	pr_info("%s: microphone (%d) %s\n", __func__, count,
+		mic1 ? "present" : "not present");
+
+	return mic1;
 }
 
 static int microp_enable_key_event(void)
@@ -1724,7 +1741,7 @@ static void microp_i2c_intr_work_func(struct work_struct *work)
 	if (intr_status & IRQ_REMOTEKEY) {
 		if ((get_remote_keycode(&keycode) == 0) &&
 			(cdata->is_hpin_pin_stable)) {
-			htc_35mm_key_event(keycode);
+			htc_35mm_key_event(keycode, &cdata->is_hpin_pin_stable);
 		}
 	}
 
