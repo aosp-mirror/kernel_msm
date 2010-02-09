@@ -76,6 +76,12 @@ config BATTERY_DS2782
 	  Say Y here to enable support for the DS2782/DS2786 standalone battery
 	  gas-gauge.
 
+config BATTERY_DS2784
+	tristate "DS2784 battery driver "
+	select W1
+	help
+	  Say Y here to enable support for batteries with ds2784 chip.
+
 config BATTERY_PMU
 	tristate "Apple PMU battery"
 	depends on PPC32 && ADB_PMU
