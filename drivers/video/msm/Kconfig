@@ -10,3 +10,22 @@ config FB_MSM_LCDC
 	bool "Support for integrated LCD controller in qsd8x50"
 	depends on FB_MSM && MSM_MDP31
 	default y
+
+config GPU_MSM_KGSL
+	tristate "MSM 3D Graphics driver for QSD8x50 and MSM7x27"
+	default n
+	depends on FB_MSM && ARCH_QSD8X50
+	select GENERIC_ALLOCATOR
+	select CONFIG_FW_LOADER
+	help
+	  3D graphics driver for QSD8x50 and MSM7x27. Required to
+	  use hardware accelerated OpenGL ES 2.0 and 1.1 on these
+	  chips.
+
+config MSM_KGSL_MMU
+	bool "Turn on MMU for graphics driver "
+	depends on GPU_MSM_KGSL && MMU
+	default n
+	help
+	  If enabled, the GPU driver will allocate memory from vmalloc
+	  and enable the use of GPU MMU, instead of using pmem.
