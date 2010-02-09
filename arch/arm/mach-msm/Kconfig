@@ -384,6 +384,7 @@ config MSM_HW3D
 	  library.
 
 config MSM_ADSP
+	depends on ARCH_MSM7X00A
 	tristate "MSM ADSP driver"
 	default y
 	help
@@ -396,6 +397,13 @@ config MSM_ADSP_REPORT_EVENTS
 	help
 	  Normally, only messages from the aDSP are reported to userspace.
 	  With this option, we report events from the aDSP as well.
+
+config MSM_QDSP6
+	tristate "QDSP6 support"
+	depends on ARCH_QSD8X50
+	default y
+	help
+	  Enable support for qdsp6. This provides audio and video functionality.
 
 config WIFI_CONTROL_FUNC
 	bool "Enable WiFi control function abstraction"
