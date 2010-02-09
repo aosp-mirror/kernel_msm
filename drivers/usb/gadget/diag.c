@@ -66,14 +66,22 @@ static void TRACE(const char *tag, const void *_data, int len, int decode)
 
 #define HDLC_MAX 4096
 
+#define TX_REQ_BUF_SZ 8192
+#define RX_REQ_BUF_SZ 8192
+
+/* number of tx/rx requests to allocate */
+#define TX_REQ_NUM 4
+#define RX_REQ_NUM 4
+
 struct diag_context
 {
 	struct usb_function function;
 	struct usb_composite_dev *cdev;
 	struct usb_ep *out;
 	struct usb_ep *in;
-	struct usb_request *req_out;
-	struct usb_request *req_in;
+	struct list_head tx_req_idle;
+	struct list_head rx_req_idle;
+	spinlock_t req_lock;
 	smd_channel_t *ch;
 	int in_busy;
 	int online;
@@ -151,10 +159,49 @@ static void smd_try_to_send(struct diag_context *ctxt);
 
 static void diag_queue_out(struct diag_context *ctxt);
 
+/* add a request to the tail of a list */
+static void req_put(struct diag_context *ctxt, struct list_head *head,
+		struct usb_request *req)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&ctxt->req_lock, flags);
+	list_add_tail(&req->list, head);
+	spin_unlock_irqrestore(&ctxt->req_lock, flags);
+}
+
+/* remove a request from the head of a list */
+static struct usb_request *req_get(struct diag_context *ctxt,
+		struct list_head *head)
+{
+	struct usb_request *req = 0;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ctxt->req_lock, flags);
+	if (!list_empty(head)) {
+		req = list_first_entry(head, struct usb_request, list);
+		list_del(&req->list);
+	}
+	spin_unlock_irqrestore(&ctxt->req_lock, flags);
+
+	return req;
+}
+
+static void reqs_free(struct diag_context *ctxt, struct usb_ep *ep,
+			struct list_head *head)
+{
+	struct usb_request *req;
+	while ((req = req_get(ctxt, head))) {
+		kfree(req->buf);
+		usb_ep_free_request(ep, req);
+	}
+}
+
 static void diag_in_complete(struct usb_ep *ept, struct usb_request *req)
 {
 	struct diag_context *ctxt = req->context;
 	ctxt->in_busy = 0;
+	req_put(ctxt, &ctxt->tx_req_idle, req);
 	smd_try_to_send(ctxt);
 }
 
@@ -208,18 +255,31 @@ static void diag_out_complete(struct usb_ep *ept, struct usb_request *req)
 		diag_process_hdlc(ctxt, req->buf, req->actual);
 #endif
 	}
+
+	req_put(ctxt, &ctxt->rx_req_idle, req);
 	diag_queue_out(ctxt);
 }
 
 static void diag_queue_out(struct diag_context *ctxt)
 {
-	struct usb_request *req = ctxt->req_out;
+	struct usb_request *req;
+	int rc;
+
+	req = req_get(ctxt, &ctxt->rx_req_idle);
+	if (!req) {
+		pr_err("%s: rx req queue - out of buffer\n", __func__);
+		return;
+	}
 
 	req->complete = diag_out_complete;
 	req->context = ctxt;
-	req->length = 8192;
+	req->length = RX_REQ_BUF_SZ;
 
-	usb_ep_queue(ctxt->out, req, GFP_ATOMIC);
+	rc = usb_ep_queue(ctxt->out, req, GFP_ATOMIC);
+	if (rc < 0) {
+		pr_err("%s: usb_ep_queue failed: %d\n", __func__, rc);
+		req_put(ctxt, &ctxt->rx_req_idle, req);
+	}
 }
 
 static void smd_try_to_send(struct diag_context *ctxt)
@@ -228,11 +288,17 @@ again:
 	if (ctxt->ch && (!ctxt->in_busy)) {
 		int r = smd_read_avail(ctxt->ch);
 
-		if (r > 8192) {
+		if (r > TX_REQ_BUF_SZ) {
 			return;
 		}
 		if (r > 0) {
-			struct usb_request *req = ctxt->req_in;
+			struct usb_request *req;
+			req = req_get(ctxt, &ctxt->tx_req_idle);
+			if (!req) {
+				pr_err("%s: tx req queue is out of buffers\n",
+					__func__);
+				return;
+			}
 			smd_read(ctxt->ch, req->buf, r);
 
 			if (!ctxt->online) {
@@ -245,7 +311,12 @@ again:
 
 			TRACE("A9>", req->buf, r, 1);
 			ctxt->in_busy = 1;
-			usb_ep_queue(ctxt->in, req, GFP_ATOMIC);
+			r = usb_ep_queue(ctxt->in, req, GFP_ATOMIC);
+			if (r < 0) {
+				pr_err("%s: usb_ep_queue failed: %d\n",
+					__func__, r);
+				req_put(ctxt, &ctxt->tx_req_idle, req);
+			}
 		}
 	}
 }
@@ -262,6 +333,8 @@ static int __init create_bulk_endpoints(struct diag_context *ctxt,
 {
 	struct usb_composite_dev *cdev = ctxt->cdev;
 	struct usb_ep *ep;
+	struct usb_request *req;
+	int n;
 
 	ep = usb_ep_autoconfig(cdev->gadget, in_desc);
 	if (!ep) {
@@ -276,14 +349,47 @@ static int __init create_bulk_endpoints(struct diag_context *ctxt,
 	}
 	ctxt->out = ep;
 
-	ctxt->req_out = usb_ep_alloc_request(ctxt->out, GFP_KERNEL);
-	ctxt->req_in = usb_ep_alloc_request(ctxt->in, GFP_KERNEL);
-	ctxt->req_out->buf = kmalloc(8192, GFP_KERNEL);
-	ctxt->req_in->buf = kmalloc(8192, GFP_KERNEL);
-	ctxt->req_out->complete = diag_out_complete;
-	ctxt->req_in->complete = diag_in_complete;
+	for (n = 0; n < RX_REQ_NUM; n++) {
+		req = usb_ep_alloc_request(ctxt->out, GFP_KERNEL);
+		if (!req) {
+			DBG(cdev, "%s: usb_ep_alloc_request out of memory\n",
+				__func__);
+			goto rx_fail;
+		}
+		req->buf = kmalloc(RX_REQ_BUF_SZ, GFP_KERNEL);
+		if (!req->buf) {
+			DBG(cdev, "%s: kmalloc out of memory\n", __func__);
+			goto rx_fail;
+		}
+		req->context = ctxt;
+		req->complete = diag_out_complete;
+		req_put(ctxt, &ctxt->rx_req_idle, req);
+	}
+
+	for (n = 0; n < TX_REQ_NUM; n++) {
+		req = usb_ep_alloc_request(ctxt->in, GFP_KERNEL);
+		if (!req) {
+			DBG(cdev, "%s: usb_ep_alloc_request out of memory\n",
+				__func__);
+			goto tx_fail;
+		}
+		req->buf = kmalloc(TX_REQ_BUF_SZ, GFP_KERNEL);
+		if (!req->buf) {
+			DBG(cdev, "%s: kmalloc out of memory\n", __func__);
+			goto tx_fail;
+		}
+		req->context = ctxt;
+		req->complete = diag_in_complete;
+		req_put(ctxt, &ctxt->tx_req_idle, req);
+	}
 
 	return 0;
+
+tx_fail:
+	reqs_free(ctxt, ctxt->in, &ctxt->tx_req_idle);
+rx_fail:
+	reqs_free(ctxt, ctxt->out, &ctxt->rx_req_idle);
+	return -ENOMEM;
 }
 
 static int
@@ -323,11 +429,8 @@ static void
 diag_function_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct diag_context	*ctxt = func_to_dev(f);
-
-	kfree(ctxt->req_out->buf);
-	kfree(ctxt->req_in->buf);
-	usb_ep_free_request(ctxt->out, ctxt->req_out);
-	usb_ep_free_request(ctxt->in, ctxt->req_in);
+	reqs_free(ctxt, ctxt->out, &ctxt->rx_req_idle);
+	reqs_free(ctxt, ctxt->in, &ctxt->tx_req_idle);
 }
 
 static int diag_function_set_alt(struct usb_function *f,
@@ -416,7 +519,13 @@ static struct android_usb_function diag_function = {
 
 static int __init init(void)
 {
+	struct diag_context *ctxt = &_context;
+
 	printk(KERN_INFO "diag init\n");
+	spin_lock_init(&ctxt->req_lock);
+	INIT_LIST_HEAD(&ctxt->rx_req_idle);
+	INIT_LIST_HEAD(&ctxt->tx_req_idle);
+
 	android_register_function(&diag_function);
 	return 0;
 }
