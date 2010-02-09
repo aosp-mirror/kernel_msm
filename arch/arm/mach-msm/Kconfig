@@ -39,6 +39,16 @@ config  ARCH_MSM_SCORPION
 config  MSM_VIC
 	bool
 
+config MSM_MDP22
+	bool
+	depends on ARCH_MSM7X00A
+	default y
+
+config MSM_MDP31
+	bool
+	depends on ARCH_QSD8X50
+	default y
+
 config MSM_AMSS_VERSION
 	int
 	default 6210 if MSM_AMSS_VERSION_6210
