@@ -16,15 +16,19 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/sched.h>
+#include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/ptrace.h>
 #include <linux/timer.h>
 #include <linux/irq.h>
 #include <linux/io.h>
 
+#include <asm/cacheflush.h>
+
 #include <mach/hardware.h>
 
 #include <mach/msm_iomap.h>
+#include <mach/fiq.h>
 
 #include "smd_private.h"
 
@@ -81,6 +85,7 @@ static struct {
 	uint32_t int_en[2];
 	uint32_t int_type;
 	uint32_t int_polarity;
+	uint32_t int_select;
 } msm_irq_shadow_reg[2];
 static uint32_t msm_irq_idle_disable[2];
 
@@ -322,8 +327,9 @@ void msm_irq_exit_sleep1(void)
 		writel(msm_irq_shadow_reg[i].int_type, VIC_INT_TYPE0 + i * 4);
 		writel(msm_irq_shadow_reg[i].int_polarity, VIC_INT_POLARITY0 + i * 4);
 		writel(msm_irq_shadow_reg[i].int_en[0], VIC_INT_EN0 + i * 4);
+		writel(msm_irq_shadow_reg[i].int_select, VIC_INT_SELECT0 + i * 4);
 	}
-	writel(1, VIC_INT_MASTEREN);
+	writel(3, VIC_INT_MASTEREN);
 	int_info = smem_alloc(SMEM_SMSM_INT_INFO, sizeof(*int_info));
 	if (int_info == NULL) {
 		printk(KERN_ERR "msm_irq_exit_sleep <SM NO INT_INFO>\n");
@@ -433,7 +439,7 @@ void __init msm_init_irq(void)
 	writel(0, VIC_CONFIG);
 
 	/* enable interrupt controller */
-	writel(1, VIC_INT_MASTEREN);
+	writel(3, VIC_INT_MASTEREN);
 
 	for (n = 0; n < NR_MSM_IRQS; n++) {
 		set_irq_chip(n, &msm_irq_chip);
@@ -441,3 +447,99 @@ void __init msm_init_irq(void)
 		set_irq_flags(n, IRQF_VALID);
 	}
 }
+
+#if defined(CONFIG_MSM_FIQ_SUPPORT)
+void msm_trigger_irq(int irq)
+{
+	void __iomem *reg = VIC_SOFTINT0 + ((irq & 32) ? 4 : 0);
+	uint32_t mask = 1UL << (irq & 31);
+	writel(mask, reg);
+}
+
+void msm_fiq_enable(int irq)
+{
+	unsigned long flags;
+	local_irq_save(flags);
+	msm_irq_unmask(irq);
+	local_irq_restore(flags);
+}
+
+void msm_fiq_disable(int irq)
+{
+	unsigned long flags;
+	local_irq_save(flags);
+	msm_irq_mask(irq);
+	local_irq_restore(flags);
+}
+
+void msm_fiq_select(int irq)
+{
+	void __iomem *reg = VIC_INT_SELECT0 + ((irq & 32) ? 4 : 0);
+	unsigned index = (irq >> 5) & 1;
+	uint32_t mask = 1UL << (irq & 31);
+	unsigned long flags;
+
+	local_irq_save(flags);
+	msm_irq_shadow_reg[index].int_select |= mask;
+	writel(msm_irq_shadow_reg[index].int_select, reg);
+	local_irq_restore(flags);
+}
+
+void msm_fiq_unselect(int irq)
+{
+	void __iomem *reg = VIC_INT_SELECT0 + ((irq & 32) ? 4 : 0);
+	unsigned index = (irq >> 5) & 1;
+	uint32_t mask = 1UL << (irq & 31);
+	unsigned long flags;
+
+	local_irq_save(flags);
+	msm_irq_shadow_reg[index].int_select &= (!mask);
+	writel(msm_irq_shadow_reg[index].int_select, reg);
+	local_irq_restore(flags);
+}
+/* set_fiq_handler originally from arch/arm/kernel/fiq.c */
+static void set_fiq_handler(void *start, unsigned int length)
+{
+	memcpy((void *)0xffff001c, start, length);
+	flush_icache_range(0xffff001c, 0xffff001c + length);
+	if (!vectors_high())
+		flush_icache_range(0x1c, 0x1c + length);
+}
+
+extern unsigned char fiq_glue, fiq_glue_end;
+
+static void (*fiq_func)(void *data, void *regs, void *svc_sp);
+static void *fiq_data;
+static void *fiq_stack;
+
+void fiq_glue_setup(void *func, void *data, void *sp);
+
+int msm_fiq_set_handler(void (*func)(void *data, void *regs, void *svc_sp),
+			void *data)
+{
+	unsigned long flags;
+	int ret = -ENOMEM;
+
+	if (!fiq_stack)
+		fiq_stack = kzalloc(THREAD_SIZE, GFP_KERNEL);
+	if (!fiq_stack)
+		return -ENOMEM;
+
+	local_irq_save(flags);
+	if (fiq_func == 0) {
+		fiq_func = func;
+		fiq_data = data;
+		fiq_glue_setup(func, data, fiq_stack + THREAD_START_SP);
+		set_fiq_handler(&fiq_glue, (&fiq_glue_end - &fiq_glue));
+		ret = 0;
+	}
+	local_irq_restore(flags);
+	return ret;
+}
+
+void msm_fiq_exit_sleep(void)
+{
+	if (fiq_stack)
+		fiq_glue_setup(fiq_func, fiq_data, fiq_stack + THREAD_START_SP);
+}
+#endif

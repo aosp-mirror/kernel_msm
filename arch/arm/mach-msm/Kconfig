@@ -246,6 +246,10 @@ config MSM_IDLE_STATS_BUCKET_COUNT
 
 endif # MSM_IDLE_STATS
 
+config MSM_FIQ_SUPPORT
+	default y
+	bool "Enable installation of an FIQ handler."
+
 config MSM_SMD
 	bool
 
