@@ -250,6 +250,42 @@ config MSM_FIQ_SUPPORT
 	default y
 	bool "Enable installation of an FIQ handler."
 
+config MSM_SERIAL_DEBUGGER
+	select MSM_FIQ_SUPPORT
+	select KERNEL_DEBUGGER_CORE
+	default n
+	bool "FIQ Mode Serial Debugger"
+	help
+	  The FIQ serial debugger can accept commands even when the
+	  kernel is unresponsive due to being stuck with interrupts
+	  disabled.  Depends on the kernel debugger core in drivers/misc.
+
+config MSM_SERIAL_DEBUGGER_NO_SLEEP
+	depends on MSM_SERIAL_DEBUGGER
+	default n
+	bool "Keep serial debugger active"
+	help
+	  Enables the serial debugger at boot. Passing
+	  msm_serial_debugger.no_sleep on the kernel commandline will
+	  override this config option.
+
+config MSM_SERIAL_DEBUGGER_WAKEUP_IRQ_ALWAYS_ON
+	depends on MSM_SERIAL_DEBUGGER
+	default n
+	bool "Don't disable wakeup IRQ when debugger is active"
+	help
+	  Don't disable the wakeup irq when enabling the uart clock. This will
+	  cause extra interrupts, but it makes the serial debugger usable with
+	  radio builds that ignore the uart clock request in power collapse.
+
+config MSM_SERIAL_DEBUGGER_CONSOLE
+	depends on MSM_SERIAL_DEBUGGER
+	default n
+	bool "Console on FIQ Serial Debugger port"
+	help
+	  Enables a console so that printk messages are displayed on
+	  the debugger serial port as the occur.
+
 config MSM_SMD
 	bool
 
