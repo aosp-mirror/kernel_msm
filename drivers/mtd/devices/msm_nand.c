@@ -15,6 +15,7 @@
 
 #include <linux/kernel.h>
 #include <linux/mtd/mtd.h>
+#include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>
@@ -185,11 +186,8 @@ uint32_t flash_read_id(struct msm_nand_chip *chip)
 		chip->dma_channel, DMOV_CMD_PTR_LIST |
 		DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
 
-	pr_info("status: %x\n", dma_buffer->data[3]);
-	pr_info("nandid: %x maker %02x device %02x\n",
-		dma_buffer->data[4], dma_buffer->data[4] & 0xff,
-		(dma_buffer->data[4] >> 8) & 0xff);
 	rv = dma_buffer->data[4];
+	pr_info("msn_nand: nandid %x status %x\n", rv, dma_buffer->data[3]);
 	msm_nand_release_dma_buffer(chip, dma_buffer, sizeof(*dma_buffer));
 	return rv;
 }
@@ -229,22 +227,10 @@ int flash_read_config(struct msm_nand_chip *chip)
 
 	chip->CFG0 = dma_buffer->cfg0;
 	chip->CFG1 = dma_buffer->cfg1;
-	pr_info("read CFG0 = %x, CFG1 = %x\n", chip->CFG0, chip->CFG1);
-	chip->CFG0 = (3 <<  6)  /* 4 codeword per page for 2k nand */
-		|  (516 <<  9)  /* 516 user data bytes */
-		|   (10 << 19)  /* 10 parity bytes */
-		|    (5 << 27)  /* 5 address cycles */
-		|    (1 << 30)  /* Read status before data */
-		|    (1 << 31)  /* Send read cmd */
-		/* 0 spare bytes for 16 bit nand or 1 spare bytes for 8 bit */
-		| ((chip->CFG1 & CFG1_WIDE_FLASH) ? (0 << 23) : (1 << 23));
-	chip->CFG1 = (0 <<  0)  /* Enable ecc */
-		|    (7 <<  2)  /* 8 recovery cycles */
-		|    (0 <<  5)  /* Allow CS deassertion */
-		|  (465 <<  6)  /* Bad block marker location */
-		|    (0 << 16)  /* Bad block in user data area */
-		|    (2 << 17)  /* 6 cycle tWB/tRB */
-		| (chip->CFG1 & CFG1_WIDE_FLASH); /* preserve wide flag */
+	pr_info("msm_nand: read CFG0 = %x CFG1 = %x\n", chip->CFG0, chip->CFG1);
+	pr_info("msm_nand: CFG0 cw/page=%d ud_sz=%d ecc_sz=%d spare_sz=%d\n",
+		(chip->CFG0 >> 6) & 7, (chip->CFG0 >> 9) & 0x3ff,
+		(chip->CFG0 >> 19) & 15, (chip->CFG0 >> 23) & 15);
 
 	msm_nand_release_dma_buffer(chip, dma_buffer, sizeof(*dma_buffer));
 
@@ -1357,6 +1343,7 @@ static void msm_nand_resume(struct mtd_info *mtd)
 {
 }
 
+
 /**
  * msm_nand_scan - [msm_nand Interface] Scan for the msm_nand device
  * @param mtd		MTD device structure
@@ -1372,64 +1359,103 @@ int msm_nand_scan(struct mtd_info *mtd, int maxchips)
 	unsigned n;
 	struct msm_nand_chip *chip = mtd->priv;
 	uint32_t flash_id;
-
+	uint32_t manid;
+	uint32_t devid;
+	uint32_t devcfg;
+	uint32_t busw16;
+	struct nand_flash_dev *flashdev = NULL;
+	struct nand_manufacturers *flashman = NULL;
 
 	if (flash_read_config(chip)) {
 		pr_err("ERRROR: could not save CFG0 & CFG1 state\n");
 		return -ENODEV;
 	}
-	pr_info("CFG0 = %x, CFG1 = %x\n", chip->CFG0, chip->CFG1);
-	pr_info("CFG0: cw/page=%d ud_sz=%d ecc_sz=%d spare_sz=%d "
+	pr_info("msm_nand: NAND_READ_ID = %x\n",
+		flash_rd_reg(chip, MSM_NAND_READ_ID));
+	flash_wr_reg(chip, MSM_NAND_READ_ID, 0x12345678);
+
+	flash_id = flash_read_id(chip);
+	manid = flash_id & 0xff;
+	devid = (flash_id >> 8) & 0xff;
+	devcfg = (flash_id >> 24) & 0xff;
+
+	for (n = 0;  !flashman && nand_manuf_ids[n].id; ++n)
+		if (nand_manuf_ids[n].id == manid)
+			flashman = &nand_manuf_ids[n];
+	for (n = 0; !flashdev && nand_flash_ids[n].id; ++n)
+		if (nand_flash_ids[n].id == devid)
+			flashdev = &nand_flash_ids[n];
+	if (!flashdev || !flashman) {
+		pr_err("ERROR: unknown nand device manuf=%x devid=%x\n",
+		       manid, devid);
+		return -ENOENT;
+	}
+
+	if (!flashdev->pagesize) {
+		mtd->erasesize = (64 * 1024) << ((devcfg >> 4) & 0x3);
+		mtd->writesize = 1024 << (devcfg & 0x3);
+		mtd->oobsize = (8 << ((devcfg >> 2) & 1)) *
+			(mtd->writesize / 512);
+		busw16 = devcfg & (1 << 6) ? CFG1_WIDE_FLASH : 0;
+	} else {
+		mtd->writesize = flashdev->pagesize;
+		mtd->erasesize = flashdev->erasesize;
+		mtd->oobsize = flashdev->pagesize / 32;
+		busw16 = flashdev->options & NAND_BUSWIDTH_16 ?
+			CFG1_WIDE_FLASH : 0;
+	}
+	mtd->size = flashdev->chipsize << 20;
+	pr_info("msm_nand: manuf %s (0x%x) device 0x%x blocksz %x pagesz %x "
+		"size %llx\n", flashman->name, flashman->id, flashdev->id,
+		mtd->erasesize, mtd->writesize, mtd->size);
+
+	if (mtd->writesize != 2048) {
+		pr_err("%s: Unsupported page size (%d)\n", __func__,
+		       mtd->writesize);
+		return -EINVAL;
+	}
+
+	if (mtd->oobsize == 64) {
+		mtd->ecclayout = &msm_nand_oob_64;
+	} else {
+		pr_err("%s: Unsupported oob size (%d)\n", __func__,
+		       mtd->oobsize);
+		return -EINVAL;
+	}
+	mtd->oobavail = mtd->ecclayout->oobavail;
+
+	chip->CFG0 = (3 <<  6)  /* 4 codeword per page for 2k nand */
+		|  (516 <<  9)  /* 516 user data bytes */
+		|   (10 << 19)  /* 10 parity bytes */
+		|    (5 << 27)  /* 5 address cycles */
+		|    (1 << 30)  /* Read status before data */
+		|    (1 << 31)  /* Send read cmd */
+		/* 0 spare bytes for 16 bit nand or 1 spare bytes for 8 bit */
+		| ((busw16 & CFG1_WIDE_FLASH) ? (0 << 23) : (1 << 23));
+	chip->CFG1 = (0 <<  0)  /* Enable ecc */
+		|    (7 <<  2)  /* 8 recovery cycles */
+		|    (0 <<  5)  /* Allow CS deassertion */
+		|  (465 <<  6)  /* Bad block marker location */
+		|    (0 << 16)  /* Bad block in user data area */
+		|    (2 << 17)  /* 6 cycle tWB/tRB */
+		| (busw16 & CFG1_WIDE_FLASH); /* preserve wide flag */
+
+	pr_info("msm_nand: save CFG0 = %x CFG1 = %x\n", chip->CFG0, chip->CFG1);
+	pr_info("msm_nand: CFG0: cw/page=%d ud_sz=%d ecc_sz=%d spare_sz=%d "
 		"num_addr_cycles=%d\n", (chip->CFG0 >> 6) & 7,
 		(chip->CFG0 >> 9) & 0x3ff, (chip->CFG0 >> 19) & 15,
 		(chip->CFG0 >> 23) & 15, (chip->CFG0 >> 27) & 7);
 
-	pr_info("NAND_READ_ID = %x\n", flash_rd_reg(chip, NAND_READ_ID));
-	flash_wr_reg(chip, NAND_READ_ID, 0x12345678);
-
-	flash_id = flash_read_id(chip);
-
-	n = flash_rd_reg(chip, NAND_DEV0_CFG0);
-	pr_info("CFG0: cw/page=%d ud_sz=%d ecc_sz=%d spare_sz=%d\n",
-		(n >> 6) & 7, (n >> 9) & 0x3ff, (n >> 19) & 15,
-		(n >> 23) & 15);
-
 	n = flash_rd_reg(chip, MSM_NAND_DEV_CMD1);
-	pr_info("DEV_CMD1: %x\n", n);
+	pr_info("msm_nand: DEV_CMD1: %x\n", n);
 
 	n = flash_rd_reg(chip, MSM_NAND_EBI2_ECC_BUF_CFG);
-	pr_info(KERN_INFO "NAND_EBI2_ECC_BUF_CFG: %x\n", n);
+	pr_info("msm_nand: NAND_EBI2_ECC_BUF_CFG: %x\n", n);
 
 #if SUPPORT_WRONG_ECC_CONFIG
 	chip->ecc_buf_cfg = 0x203;
 	chip->saved_ecc_buf_cfg = n;
 #endif
-
-	if ((flash_id & 0xffff) == 0xaaec) 	/* 2Gbit Samsung chip */
-		mtd->size = 256 << 20;		/* * num_chips */
-	else if (flash_id == 0x5580baad) 	/* 2Gbit Hynix chip */
-		mtd->size = 256 << 20; 		/* * num_chips */
-	else if (flash_id == 0x5510baad) 	/* 2Gbit Hynix chip */
-		mtd->size = 256 << 20; 		/* * num_chips */
-
-	if ((flash_id & 0xffff) == 0xacec) 	/* 4G/1Gbit Samsung chip */
-		mtd->size = 512 << 20; 		/* * num_chips */
-	else if (flash_id == 0x5510bcad) 	/* 4Gbit Hynix chip */
-		mtd->size = 512 << 20;		/* * num_chips */
-	else if ((flash_id & 0xffff) == 0xbcec)	/* 4Gbit Samsung chip */
-		mtd->size = 512 << 20;		/* * num_chips */
-	else if (flash_id == 0x5590bc2c)	/* 4Gbit Micron chip */
-		mtd->size = 512 << 20;		/* * num_chips */
-	else if (flash_id == 0x5580ba2c)	/* 2Gbit Micron chip */
-		mtd->size = 256 << 20;
-
-	pr_info("flash_id: %x size %llx\n", flash_id, mtd->size);
-
-	mtd->writesize = 2048;
-	mtd->oobsize = 64;
-	mtd->oobavail = msm_nand_oob_64.oobavail;
-	mtd->erasesize = mtd->writesize << 6; /* TODO: check */
-	mtd->ecclayout = &msm_nand_oob_64;
 
 	/* Fill in remaining MTD driver data */
 	mtd->type = MTD_NANDFLASH;
@@ -1519,7 +1545,7 @@ static int __devinit msm_nand_probe(struct platform_device *pdev)
 		goto out_free_info;
 	}
 
-	pr_info("allocated dma buffer at %p, dma_addr %x\n",
+	pr_info("msm_nand: allocated dma buffer at %p, dma_addr %x\n",
 		info->msm_nand.dma_buffer, info->msm_nand.dma_addr);
 
 	info->mtd.name = dev_name(&pdev->dev);
