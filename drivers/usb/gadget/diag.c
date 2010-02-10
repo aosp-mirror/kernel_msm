@@ -19,12 +19,18 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
+#include <linux/miscdevice.h>
+#include <linux/fs.h>
+#include <asm/uaccess.h>
+#include <linux/sched.h>
+#include <linux/mutex.h>
 
 #include <mach/msm_smd.h>
 
 #include <linux/usb/android_composite.h>
 
 #define NO_HDLC 1
+#define ROUTE_TO_USERSPACE 1
 
 #if 1
 #define TRACE(tag,data,len,decode) do {} while(0)
@@ -82,6 +88,16 @@ struct diag_context
 	struct list_head tx_req_idle;
 	struct list_head rx_req_idle;
 	spinlock_t req_lock;
+#if ROUTE_TO_USERSPACE
+	struct mutex user_lock;
+	struct list_head rx_req_user;
+	wait_queue_head_t read_wq;
+	wait_queue_head_t write_wq;
+	char *user_read_buf;
+	uint32_t user_read_len;
+	char *user_readp;
+	bool opened;
+#endif
 	smd_channel_t *ch;
 	int in_busy;
 	int online;
@@ -200,11 +216,194 @@ static void reqs_free(struct diag_context *ctxt, struct usb_ep *ep,
 	}
 }
 
+#if ROUTE_TO_USERSPACE
+static ssize_t diag_read(struct file *fp, char __user *buf,
+			size_t count, loff_t *pos)
+{
+	struct diag_context *ctxt = &_context;
+	struct usb_request *req = 0;
+	int ret = 0;
+
+	mutex_lock(&ctxt->user_lock);
+
+	if (ctxt->user_read_len && ctxt->user_readp) {
+		if (count > ctxt->user_read_len)
+			count = ctxt->user_read_len;
+		if (copy_to_user(buf, ctxt->user_readp, count))
+			ret = -EFAULT;
+		else {
+			ctxt->user_readp += count;
+			ctxt->user_read_len -= count;
+			ret = count;
+		}
+		goto end;
+	}
+
+	ret = wait_event_interruptible(ctxt->read_wq,
+		(req = req_get(ctxt, &ctxt->rx_req_user)) || !ctxt->online);
+	if (ret < 0) {
+		pr_err("%s: wait_event_interruptible error %d\n",
+			__func__, ret);
+		goto end;
+	}
+	if (!ctxt->online) {
+		pr_err("%s: offline\n", __func__);
+		ret = -EIO;
+		goto end;
+	}
+	if (req) {
+		if (req->actual == 0) {
+			pr_info("%s: no data\n", __func__);
+			goto end;
+		}
+		if (count > req->actual)
+			count = req->actual;
+		if (copy_to_user(buf, req->buf, count)) {
+			ret = -EFAULT;
+			goto end;
+		}
+		req->actual -= count;
+		if (req->actual) {
+			memcpy(ctxt->user_read_buf, req->buf + count, req->actual);
+			ctxt->user_read_len = req->actual;
+			ctxt->user_readp = ctxt->user_read_buf;
+		}
+		ret = count;
+	}
+
+end:
+	if (req)
+		req_put(ctxt, &ctxt->rx_req_idle, req);
+
+	mutex_unlock(&ctxt->user_lock);
+	return ret;
+}
+
+static ssize_t diag_write(struct file *fp, const char __user *buf,
+			size_t count, loff_t *pos)
+{
+	struct diag_context *ctxt = &_context;
+	struct usb_request *req = 0;
+	int ret = 0;
+
+	mutex_lock(&ctxt->user_lock);
+
+	ret = wait_event_interruptible(ctxt->write_wq,
+		((req = req_get(ctxt, &ctxt->tx_req_idle)) || !ctxt->online));
+	if (ret < 0) {
+		pr_err("%s: wait_event_interruptible error %d\n",
+			__func__, ret);
+		goto end;
+	}
+
+	if (!ctxt->online) {
+		pr_err("%s: offline\n", __func__);
+		ret = -EIO;
+		goto end;
+	}
+
+	if (count > TX_REQ_BUF_SZ)
+		count = TX_REQ_BUF_SZ;
+
+	if (req) {
+		if (copy_from_user(req->buf, buf, count)) {
+			ret = -EFAULT;
+			goto end;
+		}
+
+		req->length = count;
+		ret = usb_ep_queue(ctxt->in, req, GFP_ATOMIC);
+		if (ret < 0) {
+			pr_err("%s: usb_ep_queue error %d\n", __func__, ret);
+			goto end;
+		}
+
+		ret = req->length;
+	}
+
+end:
+	if (req)
+		req_put(ctxt, &ctxt->tx_req_idle, req);
+
+	mutex_unlock(&ctxt->user_lock);
+	return ret;
+}
+
+static int diag_open(struct inode *ip, struct file *fp)
+{
+	struct diag_context *ctxt = &_context;
+	int rc = 0;
+
+	mutex_lock(&ctxt->user_lock);
+	if (ctxt->opened) {
+		pr_err("%s: already opened\n", __func__);
+		rc = -EBUSY;
+		goto done;
+	}
+	ctxt->user_read_len = 0;
+	ctxt->user_readp = 0;
+	if (!ctxt->user_read_buf) {
+		ctxt->user_read_buf = kmalloc(RX_REQ_BUF_SZ, GFP_KERNEL);
+		if (!ctxt->user_read_buf) {
+			rc = -ENOMEM;
+			goto done;
+		}
+	}
+	ctxt->opened = true;
+
+done:
+	mutex_unlock(&ctxt->user_lock);
+	return rc;
+}
+
+static int diag_release(struct inode *ip, struct file *fp)
+{
+	struct diag_context *ctxt = &_context;
+
+	mutex_lock(&ctxt->user_lock);
+	ctxt->opened = false;
+	ctxt->user_read_len = 0;
+	ctxt->user_readp = 0;
+	if (ctxt->user_read_buf) {
+		kfree(ctxt->user_read_buf);
+		ctxt->user_read_buf = 0;
+	}
+	mutex_unlock(&ctxt->user_lock);
+
+	return 0;
+}
+
+static struct file_operations diag_fops = {
+	.owner =   THIS_MODULE,
+	.read =    diag_read,
+	.write =   diag_write,
+	.open =    diag_open,
+	.release = diag_release,
+};
+
+static struct miscdevice diag_device_fops = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "diag",
+	.fops = &diag_fops,
+};
+#endif
+
 static void diag_in_complete(struct usb_ep *ept, struct usb_request *req)
 {
 	struct diag_context *ctxt = req->context;
+#if ROUTE_TO_USERSPACE
+	char c;
+#endif
+
 	ctxt->in_busy = 0;
 	req_put(ctxt, &ctxt->tx_req_idle, req);
+
+#if ROUTE_TO_USERSPACE
+	c = *((char *)req->buf + req->actual - 1);
+	if (c == 0x7e)
+		wake_up(&ctxt->write_wq);
+#endif
+
 	smd_try_to_send(ctxt);
 }
 
@@ -245,11 +444,37 @@ static void diag_process_hdlc(struct diag_context *ctxt, void *_data, unsigned l
 	ctxt->hdlc_escape = escape;
 }
 
+#if ROUTE_TO_USERSPACE
+static int if_route_to_userspace(struct diag_context *ctxt, unsigned int cmd_id)
+{
+	if (!ctxt->opened || cmd_id == 0)
+		return 0;
+
+	/* command ids 0xfb..0xff are not used by msm diag; we steal these ids
+	 * for communication between userspace tool and host test tool.
+	 */
+	if (cmd_id >= 0xfb && cmd_id <= 0xff)
+		return 1;
+
+	return 0;
+}
+#endif
+
 static void diag_out_complete(struct usb_ep *ept, struct usb_request *req)
 {
 	struct diag_context *ctxt = req->context;
 
 	if (req->status == 0) {
+#if ROUTE_TO_USERSPACE
+		unsigned int cmd_id = *((unsigned char *)req->buf);
+		if (if_route_to_userspace(ctxt, cmd_id)) {
+			req_put(ctxt, &ctxt->rx_req_user, req);
+			wake_up(&ctxt->read_wq);
+			diag_queue_out(ctxt);
+			return;
+		}
+#endif
+
 #if NO_HDLC
 		TRACE("PC>", req->buf, req->actual, 0);
 		if (ctxt->ch)
@@ -429,6 +654,10 @@ diag_function_bind(struct usb_configuration *c, struct usb_function *f)
 			diag_fullspeed_out_desc.bEndpointAddress;
 	}
 
+#if ROUTE_TO_USERSPACE
+	misc_register(&diag_device_fops);
+#endif
+
 	return 0;
 }
 
@@ -439,6 +668,10 @@ diag_function_unbind(struct usb_configuration *c, struct usb_function *f)
 	reqs_free(ctxt, ctxt->out, &ctxt->rx_req_idle);
 	reqs_free(ctxt, ctxt->in, &ctxt->tx_req_idle);
 
+#if ROUTE_TO_USERSPACE
+	misc_deregister(&diag_device_fops);
+#endif
+
 	ctxt->tx_count = ctxt->rx_count = 0;
 }
 
@@ -447,6 +680,9 @@ static int diag_function_set_alt(struct usb_function *f,
 {
 	struct diag_context	*ctxt = func_to_dev(f);
 	struct usb_composite_dev *cdev = f->config->cdev;
+#if ROUTE_TO_USERSPACE
+	struct usb_request *req;
+#endif
 	int ret;
 
 	ret = usb_ep_enable(ctxt->in,
@@ -465,8 +701,17 @@ static int diag_function_set_alt(struct usb_function *f,
 	}
 	ctxt->online = 1;
 
+#if ROUTE_TO_USERSPACE
+	/* recycle unhandled rx reqs to user if any */
+	while ((req = req_get(ctxt, &ctxt->rx_req_user)))
+		req_put(ctxt, &ctxt->rx_req_idle, req);
+#endif
+
 	diag_queue_out(ctxt);
 	smd_try_to_send(ctxt);
+#if ROUTE_TO_USERSPACE
+	wake_up(&ctxt->read_wq);
+#endif
 
 	return 0;
 }
@@ -544,6 +789,12 @@ static int __init init(void)
 	spin_lock_init(&ctxt->req_lock);
 	INIT_LIST_HEAD(&ctxt->rx_req_idle);
 	INIT_LIST_HEAD(&ctxt->tx_req_idle);
+#if ROUTE_TO_USERSPACE
+	mutex_init(&ctxt->user_lock);
+	INIT_LIST_HEAD(&ctxt->rx_req_user);
+	init_waitqueue_head(&ctxt->read_wq);
+	init_waitqueue_head(&ctxt->write_wq);
+#endif
 
 	android_register_function(&diag_function);
 	return 0;
