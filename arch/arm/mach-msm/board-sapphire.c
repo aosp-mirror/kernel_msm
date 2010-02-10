@@ -857,7 +857,8 @@ static struct msm_camera_sensor_info msm_camera_sensor_mt9t013_data = {
 	.sensor_reset   = 108,
 	.sensor_pwd     = 85,
 	.vcm_pwd        = SAPPHIRE_GPIO_VCM_PWDN,
-	.pdata          = &msm_camera_device_data
+	.pdata          = &msm_camera_device_data,
+	.flash_type     = MSM_CAMERA_FLASH_NONE
 };
 
 static struct platform_device msm_camera_sensor_mt9t013 = {
@@ -874,7 +875,8 @@ static struct msm_camera_sensor_info msm_camera_sensor_mt9p012_data = {
 	.sensor_reset	= 108,
 	.sensor_pwd	= 85,
 	.vcm_pwd        = SAPPHIRE_GPIO_VCM_PWDN,
-	.pdata		= &msm_camera_device_data
+	.pdata		= &msm_camera_device_data,
+	.flash_type     = MSM_CAMERA_FLASH_NONE
 };
 
 static struct platform_device msm_camera_sensor_mt9p012 = {
