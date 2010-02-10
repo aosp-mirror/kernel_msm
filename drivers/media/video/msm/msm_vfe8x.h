@@ -1,6 +1,21 @@
-/*
- * Copyright (C) 2008-2009 QUALCOMM Incorporated.
+/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
+ *
  */
+
 #ifndef __MSM_VFE8X_H__
 #define __MSM_VFE8X_H__
 
@@ -8,15 +23,15 @@
 #define FALSE 0
 #define boolean uint8_t
 
-enum  VFE_STATE {
+enum VFE_STATE {
 	VFE_STATE_IDLE,
 	VFE_STATE_ACTIVE
 };
 
 enum vfe_cmd_id {
 	/*
-	*Important! Command_ID are arranged in order.
-	*Don't change!*/
+	 *Important! Command_ID are arranged in order.
+	 *Don't change!*/
 	VFE_CMD_ID_START,
 	VFE_CMD_ID_RESET,
 
@@ -82,7 +97,7 @@ enum vfe_cmd_id {
 	VFE_CMD_ID_STATS_WB_EXP_UPDATE,
 
 	/* control of start, stop, update, etc... */
-  VFE_CMD_ID_STOP,
+	VFE_CMD_ID_STOP,
 	VFE_CMD_ID_GET_HW_VERSION,
 
 	/* stats */
@@ -93,6 +108,9 @@ enum vfe_cmd_id {
 	VFE_CMD_ID_STATS_WB_EXP_STOP,
 
 	VFE_CMD_ID_ASYNC_TIMER_SETTING,
+
+	/* epoch1 */
+	VFE_CMD_ID_EPOCH1_CONFIG,
 
 	/* max id  */
 	VFE_CMD_ID_MAX
@@ -163,14 +181,14 @@ struct vfe_cmds_camif_subsample {
 };
 
 struct vfe_cmds_camif_epoch {
-	uint8_t  enable;
+	uint8_t enable;
 	uint16_t lineindex;
 };
 
 struct vfe_cmds_camif_cfg {
-	enum VFE_CAMIF_SYNC_EDGE  vSyncEdge;
-	enum VFE_CAMIF_SYNC_EDGE  hSyncEdge;
-	enum VFE_CAMIF_SYNC_MODE  syncMode;
+	enum VFE_CAMIF_SYNC_EDGE vSyncEdge;
+	enum VFE_CAMIF_SYNC_EDGE hSyncEdge;
+	enum VFE_CAMIF_SYNC_MODE syncMode;
 	uint8_t vfeSubSampleEnable;
 	uint8_t busSubSampleEnable;
 	uint8_t irqSubSampleEnable;
@@ -181,11 +199,11 @@ struct vfe_cmds_camif_cfg {
 struct vfe_cmd_camif_config {
 	struct vfe_cmds_camif_cfg camifConfig;
 	struct vfe_cmds_camif_efs EFS;
-	struct vfe_cmds_camif_frame     frame;
-	struct vfe_cmds_camif_window    window;
+	struct vfe_cmds_camif_frame frame;
+	struct vfe_cmds_camif_window window;
 	struct vfe_cmds_camif_subsample subsample;
-	struct vfe_cmds_camif_epoch     epoch1;
-	struct vfe_cmds_camif_epoch     epoch2;
+	struct vfe_cmds_camif_epoch epoch1;
+	struct vfe_cmds_camif_epoch epoch2;
 };
 
 enum VFE_AXI_OUTPUT_MODE {
@@ -221,7 +239,7 @@ struct vfe_cmds_axi_out_per_component {
 	uint16_t outRowCount;
 	uint16_t outRowIncrement;
 	uint32_t outFragments[VFE_AXI_OUTPUT_CFG_FRAME_COUNT]
-		[VFE_MAX_NUM_FRAGMENTS_PER_FRAME];
+	    [VFE_MAX_NUM_FRAGMENTS_PER_FRAME];
 };
 
 struct vfe_cmds_axi_per_output_path {
@@ -231,9 +249,9 @@ struct vfe_cmds_axi_per_output_path {
 };
 
 enum VFE_AXI_BURST_LENGTH {
-	VFE_AXI_BURST_LENGTH_IS_2  = 2,
-	VFE_AXI_BURST_LENGTH_IS_4  = 4,
-	VFE_AXI_BURST_LENGTH_IS_8  = 8,
+	VFE_AXI_BURST_LENGTH_IS_2 = 2,
+	VFE_AXI_BURST_LENGTH_IS_4 = 4,
+	VFE_AXI_BURST_LENGTH_IS_8 = 8,
 	VFE_AXI_BURST_LENGTH_IS_16 = 16
 };
 
@@ -259,17 +277,17 @@ struct vfe_cmds_main_scaler_stripe_init {
 };
 
 struct vfe_cmds_scaler_one_dimension {
-	uint8_t  enable;
+	uint8_t enable;
 	uint16_t inputSize;
 	uint16_t outputSize;
 	uint32_t phaseMultiplicationFactor;
-	uint8_t  interpolationResolution;
+	uint8_t interpolationResolution;
 };
 
 struct vfe_cmd_main_scaler_config {
 	uint8_t enable;
-	struct vfe_cmds_scaler_one_dimension    hconfig;
-	struct vfe_cmds_scaler_one_dimension    vconfig;
+	struct vfe_cmds_scaler_one_dimension hconfig;
+	struct vfe_cmds_scaler_one_dimension vconfig;
 	struct vfe_cmds_main_scaler_stripe_init MNInitH;
 	struct vfe_cmds_main_scaler_stripe_init MNInitV;
 };
@@ -354,7 +372,7 @@ enum VFE_YUV_INPUT_COSITING_MODE {
 struct vfe_cmd_start {
 	enum VFE_START_INPUT_SOURCE inputSource;
 	enum VFE_START_OPERATION_MODE operationMode;
-	uint8_t     snapshotCount;
+	uint8_t snapshotCount;
 	enum VFE_START_PIXEL_PATTERN pixel;
 	enum VFE_YUV_INPUT_COSITING_MODE yuvInputCositingMode;
 };
@@ -369,33 +387,33 @@ struct vfe_cmd_output_ack {
 struct vfe_cmd_stats_setting {
 	uint16_t frameHDimension;
 	uint16_t frameVDimension;
-	uint8_t  afBusPrioritySelection;
-	uint8_t  afBusPriority;
-	uint8_t  awbBusPrioritySelection;
-	uint8_t  awbBusPriority;
-	uint8_t  histBusPrioritySelection;
-	uint8_t  histBusPriority;
+	uint8_t afBusPrioritySelection;
+	uint8_t afBusPriority;
+	uint8_t awbBusPrioritySelection;
+	uint8_t awbBusPriority;
+	uint8_t histBusPrioritySelection;
+	uint8_t histBusPriority;
 	uint32_t afBuffer[VFE_STATS_BUFFER_COUNT];
 	uint32_t awbBuffer[VFE_STATS_BUFFER_COUNT];
 	uint32_t histBuffer[VFE_STATS_BUFFER_COUNT];
 };
 
 struct vfe_cmd_stats_af_start {
-	uint8_t  enable;
-	uint8_t  windowMode;
+	uint8_t enable;
+	uint8_t windowMode;
 	uint16_t windowHOffset;
 	uint16_t windowVOffset;
 	uint16_t windowWidth;
 	uint16_t windowHeight;
-	uint8_t  gridForMultiWindows[16];
-	uint8_t     metricSelection;
-	int16_t  metricMax;
-	int8_t   highPassCoef[7];
-	int8_t   bufferHeader;
+	uint8_t gridForMultiWindows[16];
+	uint8_t metricSelection;
+	int16_t metricMax;
+	int8_t highPassCoef[7];
+	int8_t bufferHeader;
 };
 
 struct vfe_cmd_stats_af_update {
-	uint8_t  windowMode;
+	uint8_t windowMode;
 	uint16_t windowHOffset;
 	uint16_t windowVOffset;
 	uint16_t windowWidth;
@@ -403,22 +421,22 @@ struct vfe_cmd_stats_af_update {
 };
 
 struct vfe_cmd_stats_wb_exp_start {
-	uint8_t   enable;
-	uint8_t   wbExpRegions;
-	uint8_t   wbExpSubRegion;
-	uint8_t   awbYMin;
-	uint8_t   awbYMax;
-	int8_t    awbMCFG[4];
-	int16_t   awbCCFG[4];
-	int8_t    axwHeader;
+	uint8_t enable;
+	uint8_t wbExpRegions;
+	uint8_t wbExpSubRegion;
+	uint8_t awbYMin;
+	uint8_t awbYMax;
+	int8_t awbMCFG[4];
+	int16_t awbCCFG[4];
+	int8_t axwHeader;
 };
 
 struct vfe_cmd_stats_wb_exp_update {
 	uint8_t wbExpRegions;
 	uint8_t wbExpSubRegion;
-	int8_t  awbYMin;
-	int8_t  awbYMax;
-	int8_t  awbMCFG[4];
+	int8_t awbYMin;
+	int8_t awbYMax;
+	int8_t awbMCFG[4];
 	int16_t awbCCFG[4];
 };
 
@@ -427,11 +445,11 @@ struct vfe_cmd_stats_af_ack {
 };
 
 struct vfe_cmd_stats_wb_exp_ack {
-	uint32_t  nextWbExpOutputBufferAddr;
+	uint32_t nextWbExpOutputBufferAddr;
 };
 
 struct vfe_cmd_black_level_config {
-	uint8_t  enable;
+	uint8_t enable;
 	uint16_t evenEvenAdjustment;
 	uint16_t evenOddAdjustment;
 	uint16_t oddEvenAdjustment;
@@ -444,12 +462,12 @@ struct vfe_cmd_black_level_config {
 #define  VFE_ROLL_OFF_DELTA_TABLE_SIZE 208
 
 struct vfe_cmd_roll_off_config {
-	uint8_t  enable;
+	uint8_t enable;
 	uint16_t gridWidth;
 	uint16_t gridHeight;
-	uint16_t  yDelta;
-	uint8_t  gridXIndex;
-	uint8_t  gridYIndex;
+	uint16_t yDelta;
+	uint8_t gridXIndex;
+	uint8_t gridYIndex;
 	uint16_t gridPixelXIndex;
 	uint16_t gridPixelYIndex;
 	uint16_t yDeltaAccum;
@@ -457,10 +475,10 @@ struct vfe_cmd_roll_off_config {
 	uint16_t initTableGr[VFE_ROLL_OFF_INIT_TABLE_SIZE];
 	uint16_t initTableB[VFE_ROLL_OFF_INIT_TABLE_SIZE];
 	uint16_t initTableGb[VFE_ROLL_OFF_INIT_TABLE_SIZE];
-	int16_t  deltaTableR[VFE_ROLL_OFF_DELTA_TABLE_SIZE];
-	int16_t  deltaTableGr[VFE_ROLL_OFF_DELTA_TABLE_SIZE];
-	int16_t  deltaTableB[VFE_ROLL_OFF_DELTA_TABLE_SIZE];
-	int16_t  deltaTableGb[VFE_ROLL_OFF_DELTA_TABLE_SIZE];
+	int16_t deltaTableR[VFE_ROLL_OFF_DELTA_TABLE_SIZE];
+	int16_t deltaTableGr[VFE_ROLL_OFF_DELTA_TABLE_SIZE];
+	int16_t deltaTableB[VFE_ROLL_OFF_DELTA_TABLE_SIZE];
+	int16_t deltaTableGb[VFE_ROLL_OFF_DELTA_TABLE_SIZE];
 };
 
 struct vfe_cmd_demux_channel_gain_config {
@@ -471,27 +489,27 @@ struct vfe_cmd_demux_channel_gain_config {
 };
 
 struct vfe_cmds_demosaic_abf {
-	uint8_t   enable;
-	uint8_t   forceOn;
-	uint8_t   shift;
-	uint16_t  lpThreshold;
-	uint16_t  max;
-	uint16_t  min;
-	uint8_t   ratio;
+	uint8_t enable;
+	uint8_t forceOn;
+	uint8_t shift;
+	uint16_t lpThreshold;
+	uint16_t max;
+	uint16_t min;
+	uint8_t ratio;
 };
 
 struct vfe_cmds_demosaic_bpc {
-	uint8_t   enable;
-	uint16_t  fmaxThreshold;
-	uint16_t  fminThreshold;
-	uint16_t  redDiffThreshold;
-	uint16_t  blueDiffThreshold;
-	uint16_t  greenDiffThreshold;
+	uint8_t enable;
+	uint16_t fmaxThreshold;
+	uint16_t fminThreshold;
+	uint16_t redDiffThreshold;
+	uint16_t blueDiffThreshold;
+	uint16_t greenDiffThreshold;
 };
 
 struct vfe_cmd_demosaic_config {
-	uint8_t   enable;
-	uint8_t   slopeShift;
+	uint8_t enable;
+	uint8_t slopeShift;
 	struct vfe_cmds_demosaic_abf abfConfig;
 	struct vfe_cmds_demosaic_bpc bpcConfig;
 };
@@ -505,7 +523,7 @@ struct vfe_cmd_demosaic_abf_update {
 };
 
 struct vfe_cmd_white_balance_config {
-	uint8_t  enable;
+	uint8_t enable;
 	uint16_t ch2Gain;
 	uint16_t ch1Gain;
 	uint16_t ch0Gain;
@@ -519,20 +537,20 @@ enum VFE_COLOR_CORRECTION_COEF_QFACTOR {
 };
 
 struct vfe_cmd_color_correction_config {
-	uint8_t     enable;
+	uint8_t enable;
 	enum VFE_COLOR_CORRECTION_COEF_QFACTOR coefQFactor;
-	int16_t  C0;
-	int16_t  C1;
-	int16_t  C2;
-	int16_t  C3;
-	int16_t  C4;
-	int16_t  C5;
-	int16_t  C6;
-	int16_t  C7;
-	int16_t  C8;
-	int16_t  K0;
-	int16_t  K1;
-	int16_t  K2;
+	int16_t C0;
+	int16_t C1;
+	int16_t C2;
+	int16_t C3;
+	int16_t C4;
+	int16_t C5;
+	int16_t C6;
+	int16_t C7;
+	int16_t C8;
+	int16_t K0;
+	int16_t K1;
+	int16_t K2;
 };
 
 #define VFE_LA_TABLE_LENGTH 256
@@ -559,7 +577,7 @@ struct vfe_cmd_rgb_gamma_config {
 };
 
 struct vfe_cmd_chroma_enhan_config {
-	uint8_t  enable;
+	uint8_t enable;
 	int16_t am;
 	int16_t ap;
 	int16_t bm;
@@ -602,7 +620,7 @@ struct vfe_cmd_asf_config {
 	int8_t sharpThreshE5;
 	int8_t filter1Coefficients[9];
 	int8_t filter2Coefficients[9];
-	uint8_t  cropEnable;
+	uint8_t cropEnable;
 	uint16_t cropFirstPixel;
 	uint16_t cropLastPixel;
 	uint16_t cropFirstLine;
@@ -619,12 +637,12 @@ struct vfe_cmd_asf_update {
 	uint8_t sharpK1;
 	uint8_t sharpK2;
 	uint8_t sharpThreshE1;
-	int8_t  sharpThreshE2;
-	int8_t  sharpThreshE3;
-	int8_t  sharpThreshE4;
-	int8_t  sharpThreshE5;
-	int8_t  filter1Coefficients[9];
-	int8_t  filter2Coefficients[9];
+	int8_t sharpThreshE2;
+	int8_t sharpThreshE3;
+	int8_t sharpThreshE4;
+	int8_t sharpThreshE5;
+	int8_t filter1Coefficients[9];
+	int8_t filter2Coefficients[9];
 	uint8_t cropEnable;
 };
 
@@ -636,8 +654,8 @@ enum VFE_TEST_GEN_SYNC_EDGE {
 struct vfe_cmd_test_gen_start {
 	uint8_t pixelDataSelect;
 	uint8_t systematicDataSelect;
-	enum VFE_TEST_GEN_SYNC_EDGE  hsyncEdge;
-	enum VFE_TEST_GEN_SYNC_EDGE  vsyncEdge;
+	enum VFE_TEST_GEN_SYNC_EDGE hsyncEdge;
+	enum VFE_TEST_GEN_SYNC_EDGE vsyncEdge;
 	uint16_t numFrame;
 	enum VFE_RAW_PIXEL_DATA_SIZE pixelDataSize;
 	uint16_t imageWidth;
@@ -647,15 +665,15 @@ struct vfe_cmd_test_gen_start {
 	uint16_t startOfLineOffset;
 	uint16_t endOfLineNOffset;
 	uint16_t hbi;
-	uint8_t  vblEnable;
+	uint8_t vblEnable;
 	uint16_t vbl;
-	uint8_t  startOfFrameDummyLine;
-	uint8_t  endOfFrameDummyLine;
-	uint8_t  unicolorBarEnable;
-	uint8_t  colorBarsSplitEnable;
-	uint8_t  unicolorBarSelect;
-	enum VFE_START_PIXEL_PATTERN  colorBarsPixelPattern;
-	uint8_t  colorBarsRotatePeriod;
+	uint8_t startOfFrameDummyLine;
+	uint8_t endOfFrameDummyLine;
+	uint8_t unicolorBarEnable;
+	uint8_t colorBarsSplitEnable;
+	uint8_t unicolorBarSelect;
+	enum VFE_START_PIXEL_PATTERN colorBarsPixelPattern;
+	uint8_t colorBarsRotatePeriod;
 	uint16_t testGenRandomSeed;
 };
 
@@ -671,9 +689,9 @@ struct vfe_cmd_camif_frame_update {
 };
 
 struct vfe_cmd_sync_timer_setting {
-	uint8_t  whichSyncTimer;
-	uint8_t  operation;
-	uint8_t  polarity;
+	uint8_t whichSyncTimer;
+	uint8_t operation;
+	uint8_t polarity;
 	uint16_t repeatCount;
 	uint16_t hsyncCount;
 	uint32_t pclkCount;
@@ -681,18 +699,18 @@ struct vfe_cmd_sync_timer_setting {
 };
 
 struct vfe_cmd_async_timer_setting {
-	uint8_t  whichAsyncTimer;
-	uint8_t  operation;
-	uint8_t  polarity;
+	uint8_t whichAsyncTimer;
+	uint8_t operation;
+	uint8_t polarity;
 	uint16_t repeatCount;
 	uint16_t inactiveCount;
 	uint32_t activeCount;
 };
 
-struct  vfe_frame_skip_counts {
-	uint32_t  totalFrameCount;
-	uint32_t  output1Count;
-	uint32_t  output2Count;
+struct vfe_frame_skip_counts {
+	uint32_t totalFrameCount;
+	uint32_t output1Count;
+	uint32_t output2Count;
 };
 
 enum VFE_AXI_RD_UNPACK_HBI_SEL {
@@ -707,39 +725,39 @@ enum VFE_AXI_RD_UNPACK_HBI_SEL {
 };
 
 struct vfe_cmd_axi_input_config {
-	uint32_t  fragAddr[4];
-	uint8_t   totalFragmentCount;
-	uint16_t  ySize;
-	uint16_t  xOffset;
-	uint16_t  xSize;
-	uint16_t  rowIncrement;
-	uint16_t  numOfRows;
+	uint32_t fragAddr[4];
+	uint8_t totalFragmentCount;
+	uint16_t ySize;
+	uint16_t xOffset;
+	uint16_t xSize;
+	uint16_t rowIncrement;
+	uint16_t numOfRows;
 	enum VFE_AXI_BURST_LENGTH burstLength;
-	uint8_t   unpackPhase;
+	uint8_t unpackPhase;
 	enum VFE_AXI_RD_UNPACK_HBI_SEL unpackHbi;
-	enum VFE_RAW_PIXEL_DATA_SIZE   pixelSize;
-	uint8_t   padRepeatCountLeft;
-	uint8_t   padRepeatCountRight;
-	uint8_t   padRepeatCountTop;
-	uint8_t   padRepeatCountBottom;
-	uint8_t   padLeftComponentSelectCycle0;
-	uint8_t   padLeftComponentSelectCycle1;
-	uint8_t   padLeftComponentSelectCycle2;
-	uint8_t   padLeftComponentSelectCycle3;
-	uint8_t   padLeftStopCycle0;
-	uint8_t   padLeftStopCycle1;
-	uint8_t   padLeftStopCycle2;
-	uint8_t   padLeftStopCycle3;
-	uint8_t   padRightComponentSelectCycle0;
-	uint8_t   padRightComponentSelectCycle1;
-	uint8_t   padRightComponentSelectCycle2;
-	uint8_t   padRightComponentSelectCycle3;
-	uint8_t   padRightStopCycle0;
-	uint8_t   padRightStopCycle1;
-	uint8_t   padRightStopCycle2;
-	uint8_t   padRightStopCycle3;
-	uint8_t   padTopLineCount;
-	uint8_t   padBottomLineCount;
+	enum VFE_RAW_PIXEL_DATA_SIZE pixelSize;
+	uint8_t padRepeatCountLeft;
+	uint8_t padRepeatCountRight;
+	uint8_t padRepeatCountTop;
+	uint8_t padRepeatCountBottom;
+	uint8_t padLeftComponentSelectCycle0;
+	uint8_t padLeftComponentSelectCycle1;
+	uint8_t padLeftComponentSelectCycle2;
+	uint8_t padLeftComponentSelectCycle3;
+	uint8_t padLeftStopCycle0;
+	uint8_t padLeftStopCycle1;
+	uint8_t padLeftStopCycle2;
+	uint8_t padLeftStopCycle3;
+	uint8_t padRightComponentSelectCycle0;
+	uint8_t padRightComponentSelectCycle1;
+	uint8_t padRightComponentSelectCycle2;
+	uint8_t padRightComponentSelectCycle3;
+	uint8_t padRightStopCycle0;
+	uint8_t padRightStopCycle1;
+	uint8_t padRightStopCycle2;
+	uint8_t padRightStopCycle3;
+	uint8_t padTopLineCount;
+	uint8_t padBottomLineCount;
 };
 
 struct vfe_interrupt_status {
@@ -813,8 +831,8 @@ enum VFE_MESSAGE_ID {
 };
 
 struct vfe_msg_stats_autofocus {
-	uint32_t    afBuffer;
-	uint32_t    frameCounter;
+	uint32_t afBuffer;
+	uint32_t frameCounter;
 };
 
 struct vfe_msg_stats_wb_exp {
@@ -828,12 +846,12 @@ struct vfe_frame_bpc_info {
 };
 
 struct vfe_frame_asf_info {
-	uint32_t  asfMaxEdge;
-	uint32_t  asfHbiCount;
+	uint32_t asfMaxEdge;
+	uint32_t asfHbiCount;
 };
 
 struct vfe_msg_camif_status {
-	uint8_t  camifState;
+	uint8_t camifState;
 	uint32_t pixelCount;
 	uint32_t lineCount;
 };
@@ -851,45 +869,45 @@ struct vfe_bus_performance_monitor {
 };
 
 struct vfe_irq_thread_msg {
-	uint32_t  vfeIrqStatus;
-	uint32_t  camifStatus;
-	uint32_t  demosaicStatus;
-	uint32_t  asfMaxEdge;
+	uint32_t vfeIrqStatus;
+	uint32_t camifStatus;
+	uint32_t demosaicStatus;
+	uint32_t asfMaxEdge;
 	struct vfe_bus_performance_monitor pmInfo;
 };
 
 struct vfe_msg_output {
-	uint32_t  yBuffer;
-	uint32_t  cbcrBuffer;
+	uint32_t yBuffer;
+	uint32_t cbcrBuffer;
 	struct vfe_frame_bpc_info bpcInfo;
 	struct vfe_frame_asf_info asfInfo;
-	uint32_t  frameCounter;
+	uint32_t frameCounter;
 	struct vfe_bus_pm_per_path pmData;
 };
 
 struct vfe_message {
 	enum VFE_MESSAGE_ID _d;
 	union {
-		struct vfe_msg_output              msgOutput1;
-		struct vfe_msg_output              msgOutput2;
-		struct vfe_msg_stats_autofocus     msgStatsAf;
-		struct vfe_msg_stats_wb_exp        msgStatsWbExp;
-		struct vfe_msg_camif_status        msgCamifError;
+		struct vfe_msg_output msgOutput1;
+		struct vfe_msg_output msgOutput2;
+		struct vfe_msg_stats_autofocus msgStatsAf;
+		struct vfe_msg_stats_wb_exp msgStatsWbExp;
+		struct vfe_msg_camif_status msgCamifError;
 		struct vfe_bus_performance_monitor msgBusOverflow;
-   } _u;
+	} _u;
 };
 
 /* New one for 8k */
 struct msm_vfe_command_8k {
-	int32_t  id;
+	int id;
 	uint16_t length;
-	void     *value;
+	void *value;
 };
 
 struct vfe_frame_extra {
 	struct vfe_frame_bpc_info bpcInfo;
 	struct vfe_frame_asf_info asfInfo;
-	uint32_t  frameCounter;
+	uint32_t frameCounter;
 	struct vfe_bus_pm_per_path pmData;
 };
 #endif /* __MSM_VFE8X_H__ */

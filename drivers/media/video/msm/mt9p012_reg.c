@@ -1,5 +1,19 @@
-/*
- * Copyright (C) 2009 QUALCOMM Incorporated.
+/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
+ *
  */
 
 #include "mt9p012.h"
@@ -7,126 +21,123 @@
 
 /*Micron settings from Applications for lower power consumption.*/
 struct reg_struct mt9p012_reg_pat[2] = {
-	{ /* Preview */
-		/* vt_pix_clk_div          REG=0x0300 */
-		6,  /* 5 */
+	{			/* Preview */
+	 /* vt_pix_clk_div          REG=0x0300 */
+	 6,			/* 5 */
 
-		/* vt_sys_clk_div          REG=0x0302 */
-		1,
+	 /* vt_sys_clk_div          REG=0x0302 */
+	 1,
 
-		/* pre_pll_clk_div         REG=0x0304 */
-		2,
+	 /* pre_pll_clk_div         REG=0x0304 */
+	 2,
 
-		/* pll_multiplier          REG=0x0306 */
-		60,
+	 /* pll_multiplier          REG=0x0306 */
+	 60,
 
-		/* op_pix_clk_div          REG=0x0308 */
-		8,  /* 10 */
+	 /* op_pix_clk_div          REG=0x0308 */
+	 8,			/* 10 */
 
-		/* op_sys_clk_div          REG=0x030A */
-		1,
+	 /* op_sys_clk_div          REG=0x030A */
+	 1,
 
-		/* scale_m                 REG=0x0404 */
-		16,
+	 /* scale_m                 REG=0x0404 */
+	 16,
 
-		/* row_speed               REG=0x3016 */
-		0x0111,
+	 /* row_speed               REG=0x3016 */
+	 0x0111,
 
-		/* x_addr_start            REG=0x3004 */
-		8,
+	 /* x_addr_start            REG=0x3004 */
+	 8,
 
-		/* x_addr_end              REG=0x3008 */
-		2597,
+	 /* x_addr_end              REG=0x3008 */
+	 2597,
 
-		/* y_addr_start            REG=0x3002 */
-		8,
+	 /* y_addr_start            REG=0x3002 */
+	 8,
 
-		/* y_addr_end              REG=0x3006 */
-		1949,
+	 /* y_addr_end              REG=0x3006 */
+	 1949,
 
-		/* read_mode               REG=0x3040
-		 * Preview 2x2 skipping */
-		0x00C3,
+	 /* read_mode               REG=0x3040
+	  * Preview 2x2 skipping */
+	 0x00C3,
 
-		/* x_output_size           REG=0x034C */
-		1296,
+	 /* x_output_size           REG=0x034C */
+	 1296,
 
-		/* y_output_size           REG=0x034E */
-		972,
+	 /* y_output_size           REG=0x034E */
+	 972,
 
-		/* line_length_pck         REG=0x300C */
-		3784,
+	 /* line_length_pck         REG=0x300C */
+	 3784,
 
-		/* frame_length_lines      REG=0x300A */
-		1057,
+	 /* frame_length_lines      REG=0x300A */
+	 1057,
 
-		/* coarse_integration_time REG=0x3012 */
-		16,
+	 /* coarse_integration_time REG=0x3012 */
+	 16,
 
-		/* fine_integration_time   REG=0x3014 */
-		1764
-	},
-	{ /*Snapshot*/
-		/* vt_pix_clk_div          REG=0x0300 */
-		6,
+	 /* fine_integration_time   REG=0x3014 */
+	 1764},
+	{			/*Snapshot */
+	 /* vt_pix_clk_div          REG=0x0300 */
+	 6,
 
-		/* vt_sys_clk_div          REG=0x0302 */
-		1,
+	 /* vt_sys_clk_div          REG=0x0302 */
+	 1,
 
-		/* pre_pll_clk_div         REG=0x0304 */
-		2,
+	 /* pre_pll_clk_div         REG=0x0304 */
+	 2,
 
-		/* pll_multiplier          REG=0x0306
-		 * 60 for 10fps snapshot */
-		60,
+	 /* pll_multiplier          REG=0x0306
+	  * 60 for 10fps snapshot */
+	 60,
 
-		/* op_pix_clk_div          REG=0x0308 */
-		8,
+	 /* op_pix_clk_div          REG=0x0308 */
+	 8,
 
-		/* op_sys_clk_div          REG=0x030A */
-		1,
+	 /* op_sys_clk_div          REG=0x030A */
+	 1,
 
-		/* scale_m                 REG=0x0404 */
-		16,
+	 /* scale_m                 REG=0x0404 */
+	 16,
 
-		/* row_speed               REG=0x3016 */
-		0x0111,
+	 /* row_speed               REG=0x3016 */
+	 0x0111,
 
-		/* x_addr_start            REG=0x3004 */
-		8,
+	 /* x_addr_start            REG=0x3004 */
+	 8,
 
-		/* x_addr_end              REG=0x3008 */
-		2615,
+	 /* x_addr_end              REG=0x3008 */
+	 2615,
 
-		/* y_addr_start            REG=0x3002 */
-		8,
+	 /* y_addr_start            REG=0x3002 */
+	 8,
 
-		/* y_addr_end              REG=0x3006 */
-		1967,
+	 /* y_addr_end              REG=0x3006 */
+	 1967,
 
-		/* read_mode               REG=0x3040 */
-		0x0041,
+	 /* read_mode               REG=0x3040 */
+	 0x0041,
 
-		/* x_output_size           REG=0x034C */
-		2608,
+	 /* x_output_size           REG=0x034C */
+	 2608,
 
-		/* y_output_size           REG=0x034E */
-		1960,
+	 /* y_output_size           REG=0x034E */
+	 1960,
 
-		/* line_length_pck         REG=0x300C */
-		3911,
+	 /* line_length_pck         REG=0x300C */
+	 3911,
 
-		/* frame_length_lines      REG=0x300A //10 fps snapshot */
-		2045,
+	 /* frame_length_lines      REG=0x300A //10 fps snapshot */
+	 2045,
 
-		/* coarse_integration_time REG=0x3012 */
-		16,
+	 /* coarse_integration_time REG=0x3012 */
+	 16,
 
-		/* fine_integration_time   REG=0x3014 */
-		882
-	}
+	 /* fine_integration_time   REG=0x3014 */
+	 882}
 };
-
 
 struct mt9p012_i2c_reg_conf mt9p012_test_tbl[] = {
 	{0x3044, 0x0544 & 0xFBFF},
@@ -138,7 +149,6 @@ struct mt9p012_i2c_reg_conf mt9p012_test_tbl[] = {
 	{0x301E, 0x0000},
 	{0x3780, 0x0000},
 };
-
 
 struct mt9p012_i2c_reg_conf mt9p012_lc_tbl[] = {
 	/* [Lens shading 85 Percent TL84] */
@@ -558,7 +568,6 @@ struct mt9p012_i2c_reg_conf mt9p012_rolloff_tbl[] = {
 	{0x3780, 0x8000},
 };
 
-
 struct mt9p012_reg mt9p012_regs = {
 	.reg_pat = &mt9p012_reg_pat[0],
 	.reg_pat_size = ARRAY_SIZE(mt9p012_reg_pat),
@@ -569,5 +578,3 @@ struct mt9p012_reg mt9p012_regs = {
 	.rftbl = &mt9p012_rolloff_tbl[0],
 	.rftbl_size = ARRAY_SIZE(mt9p012_rolloff_tbl)
 };
-
-

@@ -1,5 +1,19 @@
-/*
- * Copyright (c) 2008-2009 QUALCOMM Incorporated
+/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
+ *
  */
 
 #include <linux/delay.h>
@@ -41,7 +55,7 @@ static struct msm_camera_io_ext camio_ext;
 static struct resource *appio, *mdcio;
 void __iomem *appbase, *mdcbase;
 
-extern int clk_set_flags(struct clk *clk, unsigned long flags);
+int clk_set_flags(struct clk *clk, unsigned long flags);
 
 int msm_camio_clk_enable(enum msm_camio_clk_type clktype)
 {
@@ -121,28 +135,26 @@ int msm_camio_enable(struct platform_device *pdev)
 	camio_ext = camdev->ioext;
 
 	appio = request_mem_region(camio_ext.appphy,
-		camio_ext.appsz, pdev->name);
+				   camio_ext.appsz, pdev->name);
 	if (!appio) {
 		rc = -EBUSY;
 		goto enable_fail;
 	}
 
-	appbase = ioremap(camio_ext.appphy,
-		camio_ext.appsz);
+	appbase = ioremap(camio_ext.appphy, camio_ext.appsz);
 	if (!appbase) {
 		rc = -ENOMEM;
 		goto apps_no_mem;
 	}
 
 	mdcio = request_mem_region(camio_ext.mdcphy,
-		camio_ext.mdcsz, pdev->name);
+				   camio_ext.mdcsz, pdev->name);
 	if (!mdcio) {
 		rc = -EBUSY;
 		goto mdc_busy;
 	}
 
-	mdcbase = ioremap(camio_ext.mdcphy,
-		camio_ext.mdcsz);
+	mdcbase = ioremap(camio_ext.mdcphy, camio_ext.mdcsz);
 	if (!mdcbase) {
 		rc = -ENOMEM;
 		goto mdc_no_mem;
@@ -192,13 +204,10 @@ void msm_camio_camif_pad_reg_reset(void)
 
 	reg = (readl(mdcbase)) & CAMIF_CFG_RMSK;
 
-	mask = CAM_SEL_BMSK |
-		CAM_PCLK_SRC_SEL_BMSK |
-		CAM_PCLK_INVERT_BMSK;
+	mask = CAM_SEL_BMSK | CAM_PCLK_SRC_SEL_BMSK | CAM_PCLK_INVERT_BMSK;
 
 	value = 1 << CAM_SEL_SHFT |
-		3 << CAM_PCLK_SRC_SEL_SHFT |
-		0 << CAM_PCLK_INVERT_SHFT;
+	    3 << CAM_PCLK_SRC_SEL_SHFT | 0 << CAM_PCLK_INVERT_SHFT;
 
 	writel((reg & (~mask)) | (value & mask), mdcbase);
 	mdelay(10);
@@ -231,6 +240,17 @@ void msm_camio_vfe_blk_reset(void)
 	val = readl(appbase + 0x00000210);
 	val &= ~0x1;
 	writel(val, appbase + 0x00000210);
+	mdelay(10);
+
+	/* do axi reset */
+	val = readl(appbase + 0x00000208);
+	val |= 0x1;
+	writel(val, appbase + 0x00000208);
+	mdelay(10);
+
+	val = readl(appbase + 0x00000208);
+	val &= ~0x1;
+	writel(val, appbase + 0x00000208);
 	mdelay(10);
 }
 
