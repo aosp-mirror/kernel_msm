@@ -38,8 +38,8 @@
 
 #define SUPPORT_WRONG_ECC_CONFIG 1
 
-#define NAND_CFG0_RAW 0xA80420C0
-#define NAND_CFG1_RAW 0x5045D
+#define MSM_NAND_CFG0_RAW 0xA80420C0
+#define MSM_NAND_CFG1_RAW 0x5045D
 
 #define VERBOSE 0
 
@@ -146,7 +146,7 @@ uint32_t flash_read_id(struct msm_nand_chip *chip)
 			    chip, sizeof(*dma_buffer))));
 
 	dma_buffer->data[0] = 0 | 4;
-	dma_buffer->data[1] = NAND_CMD_FETCH_ID;
+	dma_buffer->data[1] = MSM_NAND_CMD_FETCH_ID;
 	dma_buffer->data[2] = 1;
 	dma_buffer->data[3] = 0xeeeeeeee;
 	dma_buffer->data[4] = 0xeeeeeeee;
@@ -154,26 +154,26 @@ uint32_t flash_read_id(struct msm_nand_chip *chip)
 
 	dma_buffer->cmd[0].cmd = 0 | CMD_OCB;
 	dma_buffer->cmd[0].src = msm_virt_to_dma(chip, &dma_buffer->data[0]);
-	dma_buffer->cmd[0].dst = NAND_FLASH_CHIP_SELECT;
+	dma_buffer->cmd[0].dst = MSM_NAND_FLASH_CHIP_SELECT;
 	dma_buffer->cmd[0].len = 4;
 
 	dma_buffer->cmd[1].cmd = DST_CRCI_NAND_CMD;
 	dma_buffer->cmd[1].src = msm_virt_to_dma(chip, &dma_buffer->data[1]);
-	dma_buffer->cmd[1].dst = NAND_FLASH_CMD;
+	dma_buffer->cmd[1].dst = MSM_NAND_FLASH_CMD;
 	dma_buffer->cmd[1].len = 4;
 
 	dma_buffer->cmd[2].cmd = 0;
 	dma_buffer->cmd[2].src = msm_virt_to_dma(chip, &dma_buffer->data[2]);
-	dma_buffer->cmd[2].dst = NAND_EXEC_CMD;
+	dma_buffer->cmd[2].dst = MSM_NAND_EXEC_CMD;
 	dma_buffer->cmd[2].len = 4;
 
 	dma_buffer->cmd[3].cmd = SRC_CRCI_NAND_DATA;
-	dma_buffer->cmd[3].src = NAND_FLASH_STATUS;
+	dma_buffer->cmd[3].src = MSM_NAND_FLASH_STATUS;
 	dma_buffer->cmd[3].dst = msm_virt_to_dma(chip, &dma_buffer->data[3]);
 	dma_buffer->cmd[3].len = 4;
 
 	dma_buffer->cmd[4].cmd = CMD_OCU | CMD_LC;
-	dma_buffer->cmd[4].src = NAND_READ_ID;
+	dma_buffer->cmd[4].src = MSM_NAND_READ_ID;
 	dma_buffer->cmd[4].dst = msm_virt_to_dma(chip, &dma_buffer->data[4]);
 	dma_buffer->cmd[4].len = 4;
 	BUILD_BUG_ON(4 != ARRAY_SIZE(dma_buffer->cmd) - 1);
@@ -210,12 +210,12 @@ int flash_read_config(struct msm_nand_chip *chip)
 	dma_buffer->cfg1 = 0;
 
 	dma_buffer->cmd[0].cmd = CMD_OCB;
-	dma_buffer->cmd[0].src = NAND_DEV0_CFG0;
+	dma_buffer->cmd[0].src = MSM_NAND_DEV0_CFG0;
 	dma_buffer->cmd[0].dst = msm_virt_to_dma(chip, &dma_buffer->cfg0);
 	dma_buffer->cmd[0].len = 4;
 
 	dma_buffer->cmd[1].cmd = CMD_OCU | CMD_LC;
-	dma_buffer->cmd[1].src = NAND_DEV0_CFG1;
+	dma_buffer->cmd[1].src = MSM_NAND_DEV0_CFG1;
 	dma_buffer->cmd[1].dst = msm_virt_to_dma(chip, &dma_buffer->cfg1);
 	dma_buffer->cmd[1].len = 4;
 	BUILD_BUG_ON(1 != ARRAY_SIZE(dma_buffer->cmd) - 1);
@@ -462,14 +462,14 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 
 		/* CMD / ADDR0 / ADDR1 / CHIPSEL program values */
 		if (ops->mode != MTD_OOB_RAW) {
-			dma_buffer->data.cmd = NAND_CMD_PAGE_READ_ECC;
+			dma_buffer->data.cmd = MSM_NAND_CMD_PAGE_READ_ECC;
 			dma_buffer->data.cfg0 =
 			(chip->CFG0 & ~(7U << 6)) | ((3U - start_sector) << 6);
 			dma_buffer->data.cfg1 = chip->CFG1;
 		} else {
-			dma_buffer->data.cmd = NAND_CMD_PAGE_READ;
-			dma_buffer->data.cfg0 = NAND_CFG0_RAW;
-			dma_buffer->data.cfg1 = NAND_CFG1_RAW |
+			dma_buffer->data.cmd = MSM_NAND_CMD_PAGE_READ;
+			dma_buffer->data.cfg0 = MSM_NAND_CFG0_RAW;
+			dma_buffer->data.cfg1 = MSM_NAND_CFG1_RAW |
 						(chip->CFG1 & CFG1_WIDE_FLASH);
 		}
 
@@ -497,7 +497,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			 */
 			cmd->cmd = DST_CRCI_NAND_CMD;
 			cmd->src = msm_virt_to_dma(chip, &dma_buffer->data.cmd);
-			cmd->dst = NAND_FLASH_CMD;
+			cmd->dst = MSM_NAND_FLASH_CMD;
 			if (n == start_sector)
 				cmd->len = 16;
 			else
@@ -508,7 +508,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 				cmd->cmd = 0;
 				cmd->src = msm_virt_to_dma(chip,
 							&dma_buffer->data.cfg0);
-				cmd->dst = NAND_DEV0_CFG0;
+				cmd->dst = MSM_NAND_DEV0_CFG0;
 				cmd->len = 8;
 				cmd++;
 #if SUPPORT_WRONG_ECC_CONFIG
@@ -519,7 +519,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 					cmd->cmd = 0;
 					cmd->src = msm_virt_to_dma(chip,
 						      &dma_buffer->data.ecccfg);
-					cmd->dst = NAND_EBI2_ECC_BUF_CFG;
+					cmd->dst = MSM_NAND_EBI2_ECC_BUF_CFG;
 					cmd->len = 4;
 					cmd++;
 				}
@@ -530,7 +530,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			cmd->cmd = 0;
 			cmd->src =
 				msm_virt_to_dma(chip, &dma_buffer->data.exec);
-			cmd->dst = NAND_EXEC_CMD;
+			cmd->dst = MSM_NAND_EXEC_CMD;
 			cmd->len = 4;
 			cmd++;
 
@@ -538,10 +538,10 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			 * read the status register
 			 */
 			cmd->cmd = SRC_CRCI_NAND_DATA;
-			cmd->src = NAND_FLASH_STATUS;
+			cmd->src = MSM_NAND_FLASH_STATUS;
 			cmd->dst = msm_virt_to_dma(chip,
 						   &dma_buffer->data.result[n]);
-			/* NAND_FLASH_STATUS + NAND_BUFFER_STATUS */
+			/* MSM_NAND_FLASH_STATUS + MSM_NAND_BUFFER_STATUS */
 			cmd->len = 8;
 			cmd++;
 
@@ -555,7 +555,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 					sectordatasize = 528;
 
 				cmd->cmd = 0;
-				cmd->src = NAND_FLASH_BUFFER;
+				cmd->src = MSM_NAND_FLASH_BUFFER;
 				cmd->dst = data_dma_addr_curr;
 				data_dma_addr_curr += sectordatasize;
 				cmd->len = sectordatasize;
@@ -566,12 +566,12 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			    (n == 3 || ops->mode != MTD_OOB_AUTO)) {
 				cmd->cmd = 0;
 				if (n == 3) {
-					cmd->src = NAND_FLASH_BUFFER + 500;
+					cmd->src = MSM_NAND_FLASH_BUFFER + 500;
 					sectoroobsize = 16;
 					if (ops->mode != MTD_OOB_AUTO)
 						sectoroobsize += 10;
 				} else {
-					cmd->src = NAND_FLASH_BUFFER + 516;
+					cmd->src = MSM_NAND_FLASH_BUFFER + 516;
 					sectoroobsize = 10;
 				}
 
@@ -593,7 +593,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			cmd->cmd = 0;
 			cmd->src = msm_virt_to_dma(chip,
 					      &dma_buffer->data.ecccfg_restore);
-			cmd->dst = NAND_EBI2_ECC_BUF_CFG;
+			cmd->dst = MSM_NAND_EBI2_ECC_BUF_CFG;
 			cmd->len = 4;
 			cmd++;
 		}
@@ -866,12 +866,12 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 			dma_buffer->data.cfg0 = chip->CFG0;
 			dma_buffer->data.cfg1 = chip->CFG1;
 		} else {
-			dma_buffer->data.cfg0 = NAND_CFG0_RAW;
-			dma_buffer->data.cfg1 = NAND_CFG1_RAW |
+			dma_buffer->data.cfg0 = MSM_NAND_CFG0_RAW;
+			dma_buffer->data.cfg1 = MSM_NAND_CFG1_RAW |
 						(chip->CFG1 & CFG1_WIDE_FLASH);
 		}
 
-		dma_buffer->data.cmd = NAND_CMD_PRG_PAGE;
+		dma_buffer->data.cmd = MSM_NAND_CMD_PRG_PAGE;
 		dma_buffer->data.addr0 = page << 16;
 		dma_buffer->data.addr1 = (page >> 16) & 0xff;
 		dma_buffer->data.chipsel = 0 | 4; /* flash0 + undoc bit */
@@ -892,7 +892,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 			cmd->cmd = DST_CRCI_NAND_CMD;
 			cmd->src =
 				msm_virt_to_dma(chip, &dma_buffer->data.cmd);
-			cmd->dst = NAND_FLASH_CMD;
+			cmd->dst = MSM_NAND_FLASH_CMD;
 			if (n == 0)
 				cmd->len = 16;
 			else
@@ -903,7 +903,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 				cmd->cmd = 0;
 				cmd->src = msm_virt_to_dma(chip,
 							&dma_buffer->data.cfg0);
-				cmd->dst = NAND_DEV0_CFG0;
+				cmd->dst = MSM_NAND_DEV0_CFG0;
 				cmd->len = 8;
 				cmd++;
 #if SUPPORT_WRONG_ECC_CONFIG
@@ -914,7 +914,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 					cmd->cmd = 0;
 					cmd->src = msm_virt_to_dma(chip,
 						      &dma_buffer->data.ecccfg);
-					cmd->dst = NAND_EBI2_ECC_BUF_CFG;
+					cmd->dst = MSM_NAND_EBI2_ECC_BUF_CFG;
 					cmd->len = 4;
 					cmd++;
 				}
@@ -930,7 +930,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 			cmd->cmd = 0;
 			cmd->src = data_dma_addr_curr;
 			data_dma_addr_curr += sectordatawritesize;
-			cmd->dst = NAND_FLASH_BUFFER;
+			cmd->dst = MSM_NAND_FLASH_BUFFER;
 			cmd->len = sectordatawritesize;
 			cmd++;
 
@@ -938,7 +938,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 				if (n == 3) {
 					cmd->cmd = 0;
 					cmd->src = oob_dma_addr_curr;
-					cmd->dst = NAND_FLASH_BUFFER + 500;
+					cmd->dst = MSM_NAND_FLASH_BUFFER + 500;
 					if (16 < oob_len)
 						cmd->len = 16;
 					else
@@ -964,7 +964,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 			cmd->cmd = 0;
 			cmd->src =
 				msm_virt_to_dma(chip, &dma_buffer->data.exec);
-			cmd->dst = NAND_EXEC_CMD;
+			cmd->dst = MSM_NAND_EXEC_CMD;
 			cmd->len = 4;
 			cmd++;
 
@@ -972,7 +972,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 			 * read the status register
 			 */
 			cmd->cmd = SRC_CRCI_NAND_DATA;
-			cmd->src = NAND_FLASH_STATUS;
+			cmd->src = MSM_NAND_FLASH_STATUS;
 			cmd->dst = msm_virt_to_dma(chip,
 					     &dma_buffer->data.flash_status[n]);
 			cmd->len = 4;
@@ -983,7 +983,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 			cmd->cmd = 0;
 			cmd->src = msm_virt_to_dma(chip,
 						   &dma_buffer->data.zeroes);
-			cmd->dst = NAND_FLASH_STATUS;
+			cmd->dst = MSM_NAND_FLASH_STATUS;
 			cmd->len = 4;
 			cmd++;
 		}
@@ -994,7 +994,7 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 			cmd->cmd = 0;
 			cmd->src = msm_virt_to_dma(chip,
 					      &dma_buffer->data.ecccfg_restore);
-			cmd->dst = NAND_EBI2_ECC_BUF_CFG;
+			cmd->dst = MSM_NAND_EBI2_ECC_BUF_CFG;
 			cmd->len = 4;
 			cmd++;
 		}
@@ -1108,7 +1108,7 @@ msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 		   (dma_buffer = msm_nand_get_dma_buffer(
 			    chip, sizeof(*dma_buffer))));
 
-	dma_buffer->data[0] = NAND_CMD_BLOCK_ERASE;
+	dma_buffer->data[0] = MSM_NAND_CMD_BLOCK_ERASE;
 	dma_buffer->data[1] = page;
 	dma_buffer->data[2] = 0;
 	dma_buffer->data[3] = 0 | 4;
@@ -1121,21 +1121,21 @@ msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 
 	dma_buffer->cmd[0].cmd = DST_CRCI_NAND_CMD | CMD_OCB;
 	dma_buffer->cmd[0].src = msm_virt_to_dma(chip, &dma_buffer->data[0]);
-	dma_buffer->cmd[0].dst = NAND_FLASH_CMD;
+	dma_buffer->cmd[0].dst = MSM_NAND_FLASH_CMD;
 	dma_buffer->cmd[0].len = 16;
 
 	dma_buffer->cmd[1].cmd = 0;
 	dma_buffer->cmd[1].src = msm_virt_to_dma(chip, &dma_buffer->data[6]);
-	dma_buffer->cmd[1].dst = NAND_DEV0_CFG0;
+	dma_buffer->cmd[1].dst = MSM_NAND_DEV0_CFG0;
 	dma_buffer->cmd[1].len = 8;
 
 	dma_buffer->cmd[2].cmd = 0;
 	dma_buffer->cmd[2].src = msm_virt_to_dma(chip, &dma_buffer->data[4]);
-	dma_buffer->cmd[2].dst = NAND_EXEC_CMD;
+	dma_buffer->cmd[2].dst = MSM_NAND_EXEC_CMD;
 	dma_buffer->cmd[2].len = 4;
 
 	dma_buffer->cmd[3].cmd = SRC_CRCI_NAND_DATA;
-	dma_buffer->cmd[3].src = NAND_FLASH_STATUS;
+	dma_buffer->cmd[3].src = MSM_NAND_FLASH_STATUS;
 	dma_buffer->cmd[3].dst = msm_virt_to_dma(chip, &dma_buffer->data[5]);
 	dma_buffer->cmd[3].len = 4;
 
@@ -1143,7 +1143,7 @@ msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 	 * due to the write, to work around a h/w bug */
 	dma_buffer->cmd[4].cmd = CMD_OCU | CMD_LC;
 	dma_buffer->cmd[4].src = msm_virt_to_dma(chip, &dma_buffer->data[8]);
-	dma_buffer->cmd[4].dst = NAND_FLASH_STATUS;
+	dma_buffer->cmd[4].dst = MSM_NAND_FLASH_STATUS;
 	dma_buffer->cmd[4].len = 4;
 
 	BUILD_BUG_ON(4 != ARRAY_SIZE(dma_buffer->cmd) - 1);
@@ -1227,9 +1227,9 @@ msm_nand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 
 	cmd = dma_buffer->cmd;
 
-	dma_buffer->data.cmd = NAND_CMD_PAGE_READ;
-	dma_buffer->data.cfg0 = NAND_CFG0_RAW & ~(7U << 6);
-	dma_buffer->data.cfg1 = NAND_CFG1_RAW | (chip->CFG1 & CFG1_WIDE_FLASH);
+	dma_buffer->data.cmd = MSM_NAND_CMD_PAGE_READ;
+	dma_buffer->data.cfg0 = MSM_NAND_CFG0_RAW & ~(7U << 6);
+	dma_buffer->data.cfg1 = MSM_NAND_CFG1_RAW | (chip->CFG1 & CFG1_WIDE_FLASH);
 
 	if (chip->CFG1 & CFG1_WIDE_FLASH)
 		dma_buffer->data.addr0 = (page << 16) | (0x630 >> 1);
@@ -1246,30 +1246,30 @@ msm_nand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 
 	cmd->cmd = DST_CRCI_NAND_CMD;
 	cmd->src = msm_virt_to_dma(chip, &dma_buffer->data.cmd);
-	cmd->dst = NAND_FLASH_CMD;
+	cmd->dst = MSM_NAND_FLASH_CMD;
 	cmd->len = 16;
 	cmd++;
 
 	cmd->cmd = 0;
 	cmd->src = msm_virt_to_dma(chip, &dma_buffer->data.cfg0);
-	cmd->dst = NAND_DEV0_CFG0;
+	cmd->dst = MSM_NAND_DEV0_CFG0;
 	cmd->len = 8;
 	cmd++;
 
 	cmd->cmd = 0;
 	cmd->src = msm_virt_to_dma(chip, &dma_buffer->data.exec);
-	cmd->dst = NAND_EXEC_CMD;
+	cmd->dst = MSM_NAND_EXEC_CMD;
 	cmd->len = 4;
 	cmd++;
 
 	cmd->cmd = SRC_CRCI_NAND_DATA;
-	cmd->src = NAND_FLASH_STATUS;
+	cmd->src = MSM_NAND_FLASH_STATUS;
 	cmd->dst = msm_virt_to_dma(chip, &dma_buffer->data.result);
 	cmd->len = 8;
 	cmd++;
 
 	cmd->cmd = 0;
-	cmd->src = NAND_FLASH_BUFFER + 464;
+	cmd->src = MSM_NAND_FLASH_BUFFER + 464;
 	cmd->dst = msm_virt_to_dma(chip, buf);
 	cmd->len = 4;
 	cmd++;
@@ -1394,10 +1394,10 @@ int msm_nand_scan(struct mtd_info *mtd, int maxchips)
 		(n >> 6) & 7, (n >> 9) & 0x3ff, (n >> 19) & 15,
 		(n >> 23) & 15);
 
-	n = flash_rd_reg(chip, NAND_DEV_CMD1);
+	n = flash_rd_reg(chip, MSM_NAND_DEV_CMD1);
 	pr_info("DEV_CMD1: %x\n", n);
 
-	n = flash_rd_reg(chip, NAND_EBI2_ECC_BUF_CFG);
+	n = flash_rd_reg(chip, MSM_NAND_EBI2_ECC_BUF_CFG);
 	pr_info(KERN_INFO "NAND_EBI2_ECC_BUF_CFG: %x\n", n);
 
 #if SUPPORT_WRONG_ECC_CONFIG
