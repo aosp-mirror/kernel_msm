@@ -124,25 +124,24 @@ static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 	.usb_connected		= notify_usb_connected,
 };
 
-static char *usb_functions[] = {
+static char *usb_functions_ums[] = {
 	"usb_mass_storage",
-#ifdef CONFIG_USB_ANDROID_RNDIS
-	"rndis",
-#endif
-#ifdef CONFIG_USB_ANDROID_ACM
-	"acm",
-#endif
 };
 
-static char *usb_functions_adb[] = {
+static char *usb_functions_ums_adb[] = {
 	"usb_mass_storage",
 	"adb",
-#ifdef CONFIG_USB_ANDROID_RNDIS
+};
+
+static char *usb_functions_rndis_ums[] = {
 	"rndis",
-#endif
-#ifdef CONFIG_USB_ANDROID_ACM
-	"acm",
-#endif
+	"usb_mass_storage",
+};
+
+static char *usb_functions_rndis_ums_adb[] = {
+	"rndis",
+	"usb_mass_storage",
+	"adb",
 };
 
 #ifdef CONFIG_USB_ANDROID_DIAG
@@ -154,13 +153,13 @@ static char *usb_functions_adb_diag[] = {
 #endif
 
 static char *usb_functions_all[] = {
+#ifdef CONFIG_USB_ANDROID_RNDIS
+	"rndis",
+#endif
 	"usb_mass_storage",
 	"adb",
 #ifdef CONFIG_USB_ANDROID_ACM
 	"acm",
-#endif
-#ifdef CONFIG_USB_ANDROID_RNDIS
-	"rndis",
 #endif
 #ifdef CONFIG_USB_ANDROID_DIAG
 	"diag",
@@ -169,22 +168,24 @@ static char *usb_functions_all[] = {
 
 static struct android_usb_product usb_products[] = {
 	{
-#ifdef CONFIG_USB_ANDROID_ACM
-		.product_id	= 0x4e21,
-#else
 		.product_id	= 0x4e11,
-#endif
-		.num_functions	= ARRAY_SIZE(usb_functions),
-		.functions	= usb_functions,
+		.num_functions	= ARRAY_SIZE(usb_functions_ums),
+		.functions	= usb_functions_ums,
 	},
 	{
-#ifdef CONFIG_USB_ANDROID_ACM
-		.product_id	= 0x4e22,
-#else
 		.product_id	= 0x4e12,
-#endif
-		.num_functions	= ARRAY_SIZE(usb_functions_adb),
-		.functions	= usb_functions_adb,
+		.num_functions	= ARRAY_SIZE(usb_functions_ums_adb),
+		.functions	= usb_functions_ums_adb,
+	},
+	{
+		.product_id	= 0x4e13,
+		.num_functions	= ARRAY_SIZE(usb_functions_rndis_ums),
+		.functions	= usb_functions_rndis_ums,
+	},
+	{
+		.product_id	= 0x4e14,
+		.num_functions	= ARRAY_SIZE(usb_functions_rndis_ums_adb),
+		.functions	= usb_functions_rndis_ums_adb,
 	},
 #ifdef CONFIG_USB_ANDROID_DIAG
 	{
