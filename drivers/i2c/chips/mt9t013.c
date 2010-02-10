@@ -173,7 +173,7 @@ static inline void allow_suspend(void)
 
 DECLARE_MUTEX(sem);
 
-static struct msm_camera_device_platform_data  *cam;
+static struct msm_camera_legacy_device_platform_data  *cam;
 
 #define out_dword(addr, val) \
 	(*((volatile unsigned long  *)(addr)) = ((unsigned long)(val)))
@@ -436,7 +436,7 @@ static int msm_camio_clk_rate_set(int rate)
 
 static int clk_select(int internal)
 {
-	int rc = -EIO; 
+	int rc = -EIO;
 	printk(KERN_INFO "mt9t013: clk select %d\n", internal);
 	CLK_GET(vfe_clk);
 	if (vfe_clk != NULL) {
@@ -451,9 +451,9 @@ static void mt9t013_sensor_init(void)
 {
 	int ret;
 	printk(KERN_INFO "mt9t013: init\n");
-	if (!pclient) 
+	if (!pclient)
 		return;
-	
+
 	/*pull hi reset*/
 	printk(KERN_INFO "mt9t013: mt9t013_register_init\n");
 	ret = gpio_request(cam->sensor_reset, "mt9t013");
@@ -485,7 +485,7 @@ static void mt9t013_sensor_init(void)
 	if(ret < 0)
 		printk(KERN_ERR "camio clk rate select error\n");
 	mdelay(2);
-	
+
 	/* enable gpio */
 	cam->config_gpio_on();
 	/* delay 2 ms */
