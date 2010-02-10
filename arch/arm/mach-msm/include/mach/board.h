@@ -43,7 +43,6 @@ struct msm_camera_device_platform_data {
 	struct msm_camera_io_ext ioext;
 };
 
-#ifdef CONFIG_SENSORS_MT9T013
 struct msm_camera_legacy_device_platform_data {
 	int sensor_reset;
 	int sensor_pwd;
@@ -51,10 +50,6 @@ struct msm_camera_legacy_device_platform_data {
 	void (*config_gpio_on) (void);
 	void (*config_gpio_off)(void);
 };
-#endif
-
-#define MSM_CAMERA_FLASH_NONE 0
-#define MSM_CAMERA_FLASH_LED  1
 
 struct msm_camera_sensor_info {
 	const char *sensor_name;
@@ -62,8 +57,12 @@ struct msm_camera_sensor_info {
 	int sensor_pwd;
 	int vcm_pwd;
 	int mclk;
-	int flash_type;
+	int num_flash_levels;
+	int (*camera_flash)(int level);
+	int need_suspend;
 	struct msm_camera_device_platform_data *pdata;
+	struct resource *resource;
+	uint8_t num_resources;
 };
 
 struct snd_endpoint {
