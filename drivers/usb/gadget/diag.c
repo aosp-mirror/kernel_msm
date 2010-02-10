@@ -91,6 +91,9 @@ struct diag_context
 	unsigned hdlc_count;
 	unsigned hdlc_escape;
 
+	u64 tx_count; /* to smd */
+	u64 rx_count; /* from smd */
+
 	int function_enable;
 };
 
@@ -254,6 +257,7 @@ static void diag_out_complete(struct usb_ep *ept, struct usb_request *req)
 #else
 		diag_process_hdlc(ctxt, req->buf, req->actual);
 #endif
+		ctxt->tx_count += req->actual;
 	}
 
 	req_put(ctxt, &ctxt->rx_req_idle, req);
@@ -300,6 +304,7 @@ again:
 				return;
 			}
 			smd_read(ctxt->ch, req->buf, r);
+			ctxt->rx_count += r;
 
 			if (!ctxt->online) {
 //				printk("$$$ discard %d\n", r);
@@ -348,6 +353,8 @@ static int __init create_bulk_endpoints(struct diag_context *ctxt,
 		return -ENODEV;
 	}
 	ctxt->out = ep;
+
+	ctxt->tx_count = ctxt->rx_count = 0;
 
 	for (n = 0; n < RX_REQ_NUM; n++) {
 		req = usb_ep_alloc_request(ctxt->out, GFP_KERNEL);
@@ -431,6 +438,8 @@ diag_function_unbind(struct usb_configuration *c, struct usb_function *f)
 	struct diag_context	*ctxt = func_to_dev(f);
 	reqs_free(ctxt, ctxt->out, &ctxt->rx_req_idle);
 	reqs_free(ctxt, ctxt->in, &ctxt->tx_req_idle);
+
+	ctxt->tx_count = ctxt->rx_count = 0;
 }
 
 static int diag_function_set_alt(struct usb_function *f,
@@ -480,12 +489,22 @@ static int diag_set_enabled(const char *val, struct kernel_param *kp)
 	return 0;
 }
 
+static int diag_get_tx_rx_count(char *buffer, struct kernel_param *kp)
+{
+	struct diag_context *ctxt = &_context;
+
+	return sprintf(buffer, "tx: %llu bytes, rx: %llu bytes",
+	ctxt->tx_count, ctxt->rx_count);
+}
+module_param_call(tx_rx_count, NULL, diag_get_tx_rx_count, NULL, 0444);
+
 static int diag_get_enabled(char *buffer, struct kernel_param *kp)
 {
 	buffer[0] = '0' + !_context.function.hidden;
 	return 1;
 }
 module_param_call(enabled, diag_set_enabled, diag_get_enabled, NULL, 0664);
+
 
 int diag_bind_config(struct usb_configuration *c)
 {
