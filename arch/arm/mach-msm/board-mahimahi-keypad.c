@@ -51,6 +51,19 @@ static const unsigned short mahimahi_keymap[KEYMAP_SIZE] = {
 	[KEYMAP_INDEX(1, 1)] = MATRIX_KEY(1, BTN_MOUSE),
 };
 
+static const unsigned short mahimahi_cdma_keymap[KEYMAP_SIZE] = {
+	[KEYMAP_INDEX(0, 0)] = KEY_VOLUMEUP,
+	[KEYMAP_INDEX(0, 1)] = KEY_VOLUMEDOWN,
+	[KEYMAP_INDEX(1, 1)] = MATRIX_KEY(1, BTN_MOUSE),
+
+	/* Key (2, 2) is not a physical key on mahimahi. The purpose of
+	 * registering the unused matrix key as a dummy <end> key is to make
+	 * userland able to send/receive the key event for some requested tests
+	 * in lab. of some CDMA carriers (e.g. Verizon).
+	 */
+	[KEYMAP_INDEX(2, 2)] = KEY_END,
+};
+
 static struct gpio_event_matrix_info mahimahi_keypad_matrix_info = {
 	.info.func = gpio_event_matrix_func,
 	.keymap = mahimahi_keymap,
@@ -225,6 +238,7 @@ static int __init mahimahi_init_keypad_jogball(void)
 		return ret;
 
 	if (is_cdma_version(system_rev)) {
+		mahimahi_keypad_matrix_info.keymap = mahimahi_cdma_keymap;
 		/* In the CDMA version, jogball power is supplied by a gpio. */
 		ret = gpio_request(MAHIMAHI_CDMA_JOG_2V6_EN, "jog_en");
 		if (ret < 0) {
