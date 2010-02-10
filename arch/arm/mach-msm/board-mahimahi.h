@@ -143,6 +143,7 @@
 #define MAHIMAHI_CDMA_GPIO_FLASHLIGHT_TORCH	26
 
 #define MAHIMAHI_CDMA_SD_2V85_EN		100
+#define MAHIMAHI_CDMA_JOG_2V6_EN		150
 
 #define is_cdma_version(rev) (((rev) & 0xF0) == 0xC0)
 

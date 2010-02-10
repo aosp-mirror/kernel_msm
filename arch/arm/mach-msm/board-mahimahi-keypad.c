@@ -16,6 +16,7 @@
  */
 
 #include <linux/gpio_event.h>
+#include <linux/gpio.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
 #include <linux/keyreset.h>
@@ -110,6 +111,19 @@ static int jogball_power(const struct gpio_event_platform_data *pdata, bool on)
 		jog_on_jiffies = jiffies;
 	} else {
 		vreg_disable(jog_vreg);
+	}
+
+	return 0;
+}
+
+static int jogball_power_cdma(const struct gpio_event_platform_data *pdata, bool on)
+{
+	if (on) {
+		gpio_set_value(MAHIMAHI_CDMA_JOG_2V6_EN, 1);
+		jog_just_on = 1;
+		jog_on_jiffies = jiffies;
+	} else {
+		gpio_set_value(MAHIMAHI_CDMA_JOG_2V6_EN, 0);
 	}
 
 	return 0;
@@ -210,9 +224,21 @@ static int __init mahimahi_init_keypad_jogball(void)
 	if (ret != 0)
 		return ret;
 
-	jog_vreg = vreg_get(&mahimahi_input_device.dev, "gp2");
-	if (jog_vreg == NULL)
-		return -ENOENT;
+	if (is_cdma_version(system_rev)) {
+		/* In the CDMA version, jogball power is supplied by a gpio. */
+		ret = gpio_request(MAHIMAHI_CDMA_JOG_2V6_EN, "jog_en");
+		if (ret < 0) {
+			pr_err("%s: gpio_request(%d) failed: %d\n", __func__,
+				MAHIMAHI_CDMA_JOG_2V6_EN, ret);
+			return ret;
+		}
+		mahimahi_input_data.power = jogball_power_cdma;
+	} else {
+		/* in UMTS version, jogball power is supplied by pmic */
+		jog_vreg = vreg_get(&mahimahi_input_device.dev, "gp2");
+		if (jog_vreg == NULL)
+			return -ENOENT;
+	}
 
 	ret = platform_device_register(&mahimahi_input_device);
 	if (ret != 0)
