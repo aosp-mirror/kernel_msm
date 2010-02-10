@@ -90,6 +90,7 @@ struct diag_context
 	spinlock_t req_lock;
 #if ROUTE_TO_USERSPACE
 	struct mutex user_lock;
+#define ID_TABLE_SZ 10 /* keep this small */
 	struct list_head rx_req_user;
 	wait_queue_head_t read_wq;
 	wait_queue_head_t write_wq;
@@ -97,6 +98,9 @@ struct diag_context
 	uint32_t user_read_len;
 	char *user_readp;
 	bool opened;
+
+	/* list of registered command ids to be routed to userspace */
+	unsigned char id_table[ID_TABLE_SZ];
 #endif
 	smd_channel_t *ch;
 	int in_busy;
@@ -217,6 +221,31 @@ static void reqs_free(struct diag_context *ctxt, struct usb_ep *ep,
 }
 
 #if ROUTE_TO_USERSPACE
+#define USB_DIAG_IOC_MAGIC 0xFF
+#define USB_DIAG_FUNC_IOC_REGISTER_SET _IOW(USB_DIAG_IOC_MAGIC, 3, char *)
+
+static long diag_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	struct diag_context *ctxt = &_context;
+	void __user *argp = (void __user *)arg;
+	unsigned long flags;
+	unsigned char temp_id_table[ID_TABLE_SZ];
+
+	if (cmd != USB_DIAG_FUNC_IOC_REGISTER_SET) {
+		pr_err("%s: invalid cmd %d\n", __func__, _IOC_NR(cmd));
+		return -EINVAL;
+	}
+
+	if (copy_from_user(temp_id_table, (unsigned char *)argp, ID_TABLE_SZ))
+		return -EFAULT;
+
+	spin_lock_irqsave(&ctxt->req_lock, flags);
+	memcpy(ctxt->id_table, temp_id_table, ID_TABLE_SZ);
+	spin_unlock_irqrestore(&ctxt->req_lock, flags);
+
+	return 0;
+}
+
 static ssize_t diag_read(struct file *fp, char __user *buf,
 			size_t count, loff_t *pos)
 {
@@ -379,6 +408,7 @@ static struct file_operations diag_fops = {
 	.write =   diag_write,
 	.open =    diag_open,
 	.release = diag_release,
+	.unlocked_ioctl = diag_ioctl,
 };
 
 static struct miscdevice diag_device_fops = {
@@ -447,6 +477,9 @@ static void diag_process_hdlc(struct diag_context *ctxt, void *_data, unsigned l
 #if ROUTE_TO_USERSPACE
 static int if_route_to_userspace(struct diag_context *ctxt, unsigned int cmd_id)
 {
+	unsigned long flags;
+	int i;
+
 	if (!ctxt->opened || cmd_id == 0)
 		return 0;
 
@@ -455,6 +488,17 @@ static int if_route_to_userspace(struct diag_context *ctxt, unsigned int cmd_id)
 	 */
 	if (cmd_id >= 0xfb && cmd_id <= 0xff)
 		return 1;
+
+	spin_lock_irqsave(&ctxt->req_lock, flags);
+	for (i = 0; i < ARRAY_SIZE(ctxt->id_table); i++)
+		if (ctxt->id_table[i] == cmd_id) {
+			/* if the command id equals to any of registered ids,
+			 * route to userspace to handle.
+			 */
+			spin_unlock_irqrestore(&ctxt->req_lock, flags);
+			return 1;
+		}
+	spin_unlock_irqrestore(&ctxt->req_lock, flags);
 
 	return 0;
 }
