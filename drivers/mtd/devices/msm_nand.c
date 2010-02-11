@@ -1574,9 +1574,13 @@ static int __devinit msm_nand_probe(struct platform_device *pdev)
 	err = parse_mtd_partitions(&info->mtd, part_probes, &info->parts, 0);
 	if (err > 0)
 		add_mtd_partitions(&info->mtd, info->parts, err);
-	else if (err <= 0 && pdata && pdata->parts)
+	else if (err <= 0 && pdata && pdata->parts) {
+		for (i = 0; i < pdata->nr_parts; ++i) {
+			pdata->parts[i].offset *= info->mtd.erasesize;
+			pdata->parts[i].size *= info->mtd.erasesize;
+		}
 		add_mtd_partitions(&info->mtd, pdata->parts, pdata->nr_parts);
-	else
+	} else
 #endif
 		err = add_mtd_device(&info->mtd);
 
