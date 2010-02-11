@@ -18,7 +18,7 @@
 
 #include <mach/msm_iomap.h>
 
-#define MSM_NAND_REG(off) (MSM_NAND_BASE + (off))
+#define MSM_NAND_REG(off)            (MSM_NAND_PHYS + (off))
 
 #define MSM_NAND_FLASH_CMD            MSM_NAND_REG(0x0000)
 #define MSM_NAND_ADDR0                MSM_NAND_REG(0x0004)

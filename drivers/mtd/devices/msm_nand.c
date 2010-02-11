@@ -30,7 +30,6 @@
 
 #include <mach/dma.h>
 
-#define MSM_NAND_BASE 0xA0A00000
 #include "msm_nand.h"
 
 #define MSM_NAND_DMA_BUFFER_SIZE SZ_4K
