@@ -75,8 +75,8 @@ static int __init parse_tag_msm_partition(const struct tag *tag)
 			have_kpanic = 1;
 
 		ptn->name = name;
-		ptn->offset = entry->offset * 64 * 2048;
-		ptn->size = entry->size * 64 * 2048;
+		ptn->offset = entry->offset;
+		ptn->size = entry->size;
 
 		name += 16;
 		entry++;
