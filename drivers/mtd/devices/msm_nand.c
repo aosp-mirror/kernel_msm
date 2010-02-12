@@ -432,10 +432,11 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 	if (ops->oobbuf && !ops->datbuf && ops->mode == MTD_OOB_AUTO)
 		start_sector = 3;
 
-	if (ops->oobbuf && !ops->datbuf)
-		page_count = ops->ooblen / ((ops->mode == MTD_OOB_AUTO) ?
-			mtd->oobavail : mtd->oobsize);
-	else if (ops->mode != MTD_OOB_RAW)
+	if (ops->oobbuf && !ops->datbuf) {
+		unsigned tmpoobsz = (ops->mode == MTD_OOB_AUTO) ?
+			mtd->oobavail : mtd->oobsize;
+		page_count = DIV_ROUND_UP(ops->ooblen, tmpoobsz);
+	} else if (ops->mode != MTD_OOB_RAW)
 		page_count = ops->len / mtd->writesize;
 	else
 		page_count = ops->len / (mtd->writesize + mtd->oobsize);
