@@ -105,51 +105,57 @@ static struct platform_device usb_mass_storage_device = {
 		},
 };
 
-static char *usb_functions[] = {
+static char *usb_functions_ums[] = {
 	"usb_mass_storage",
-#ifdef CONFIG_USB_ANDROID_RNDIS
-	"rndis",
-#endif
-#ifdef CONFIG_USB_ANDROID_ACM
-	"acm",
-#endif
 };
 
-static char *usb_functions_adb[] = {
+static char *usb_functions_ums_adb[] = {
 	"usb_mass_storage",
 	"adb",
-#ifdef CONFIG_USB_ANDROID_RNDIS
+};
+
+static char *usb_functions_rndis_ums[] = {
 	"rndis",
-#endif
-#ifdef CONFIG_USB_ANDROID_ACM
-	"acm",
-#endif
+	"usb_mass_storage",
+};
+
+static char *usb_functions_rndis_ums_adb[] = {
+	"rndis",
+	"usb_mass_storage",
+	"adb",
 };
 
 static char *usb_functions_all[] = {
+#ifdef CONFIG_USB_ANDROID_RNDIS
+	"rndis",
+#endif
 	"usb_mass_storage",
 	"adb",
 #ifdef CONFIG_USB_ANDROID_ACM
 	"acm",
-#endif
-#ifdef CONFIG_USB_ANDROID_RNDIS
-	"rndis",
-#endif
-#ifdef CONFIG_USB_ANDROID_DIAG
-	"diag",
 #endif
 };
 
 static struct android_usb_product usb_products[] = {
 	{
 		.product_id	= 0x0c01,
-		.num_functions	= ARRAY_SIZE(usb_functions),
-		.functions	= usb_functions,
+		.num_functions	= ARRAY_SIZE(usb_functions_ums),
+		.functions	= usb_functions_ums,
 	},
 	{
 		.product_id	= 0x0c02,
-		.num_functions	= ARRAY_SIZE(usb_functions_adb),
-		.functions	= usb_functions_adb,
+		.num_functions	= ARRAY_SIZE(usb_functions_ums_adb),
+		.functions	= usb_functions_ums_adb,
+	},
+	{
+		.product_id	= 0xfffe,	/* FIXME need a real PID here */
+		.num_functions	= ARRAY_SIZE(usb_functions_rndis_ums),
+		.functions	= usb_functions_rndis_ums,
+	},
+	{
+		.product_id	= 0xffff,	/* FIXME need a real PID here */
+		.num_functions	= ARRAY_SIZE(usb_functions_rndis_ums_adb),
+		.functions	= usb_functions_rndis_ums_adb,
 	},
 };
 
