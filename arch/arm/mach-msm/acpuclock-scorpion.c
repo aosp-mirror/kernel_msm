@@ -104,6 +104,8 @@ struct clkctl_acpu_speed *acpu_stby = &acpu_freq_tbl[2];
 #define IS_ACPU_STANDBY(x)	(((x)->clk_cfg == acpu_stby->clk_cfg) && \
 				 ((x)->clk_sel == acpu_stby->clk_sel))
 
+struct clkctl_acpu_speed *acpu_mpll = &acpu_freq_tbl[2];
+
 #ifdef CONFIG_CPU_FREQ_TABLE
 static struct cpufreq_frequency_table freq_table[ARRAY_SIZE(acpu_freq_tbl)];
 
@@ -122,7 +124,7 @@ static void __init acpuclk_init_cpufreq_table(void)
 
 		vdd = acpu_freq_tbl[i].vdd;
 		/* Allow mpll and the first scpll speeds */
-		if (acpu_freq_tbl[i].acpu_khz == 245000 ||
+		if (acpu_freq_tbl[i].acpu_khz == acpu_mpll->acpu_khz ||
 				acpu_freq_tbl[i].acpu_khz == 384000) {
 			freq_table[i].frequency = acpu_freq_tbl[i].acpu_khz;
 			continue;
@@ -483,6 +485,9 @@ void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)
 	drv_state.vdd_switch_time_us = clkdata->vdd_switch_time_us;
 	drv_state.power_collapse_khz = clkdata->power_collapse_khz;
 	drv_state.wait_for_irq_khz = clkdata->wait_for_irq_khz;
+
+	if (clkdata->mpll_khz)
+		acpu_mpll->acpu_khz = clkdata->mpll_khz;
 
 	acpuclk_init();
 	acpuclk_init_cpufreq_table();

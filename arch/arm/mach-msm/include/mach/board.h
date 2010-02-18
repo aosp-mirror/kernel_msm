@@ -26,6 +26,7 @@ struct msm_acpu_clock_platform_data
 	uint32_t acpu_switch_time_us;
 	uint32_t max_speed_delta_khz;
 	uint32_t vdd_switch_time_us;
+	unsigned long mpll_khz;
 	unsigned long power_collapse_khz;
 	unsigned long wait_for_irq_khz;
 };
