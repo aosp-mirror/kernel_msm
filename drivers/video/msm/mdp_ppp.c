@@ -587,12 +587,6 @@ int mdp_ppp_blit(const struct mdp_info *mdp, struct mdp_blit_req *req,
 	regs.dst_ystride = req->dst.width * regs.dst_bpp;
 	set_dst_region(&req->dst_rect, &regs);
 
-	/* for simplicity, always write the chroma stride */
-	regs.src_ystride &= 0x3fff;
-	regs.src_ystride |= regs.src_ystride << 16;
-	regs.dst_ystride &= 0x3fff;
-	regs.dst_ystride |= regs.dst_ystride << 16;
-
 	if (!valid_src_dst(src_start, src_len, dst_start, dst_len, req,
 			   &regs)) {
 		printk(KERN_ERR "mdp_ppp: final src or dst location is "
@@ -626,6 +620,14 @@ int mdp_ppp_blit(const struct mdp_info *mdp, struct mdp_blit_req *req,
 
 	if (mdp_ppp_cfg_edge_cond(req, &regs))
 		return -EINVAL;
+
+	/* for simplicity, always write the chroma stride */
+	regs.src_ystride &= 0x3fff;
+	regs.src_ystride |= regs.src_ystride << 16;
+	regs.dst_ystride &= 0x3fff;
+	regs.dst_ystride |= regs.dst_ystride << 16;
+	regs.bg_ystride &= 0x3fff;
+	regs.bg_ystride |= regs.bg_ystride << 16;
 
 #if PPP_DUMP_BLITS
 	pr_info("%s: sending blit\n", __func__);
