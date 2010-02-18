@@ -929,6 +929,16 @@ static struct msm_acpu_clock_platform_data mahimahi_clock_data = {
 	.vdd_switch_time_us	= 62,
 	.power_collapse_khz	= 245000,
 	.wait_for_irq_khz	= 245000,
+	.mpll_khz		= 245000
+};
+
+static struct msm_acpu_clock_platform_data mahimahi_cdma_clock_data = {
+	.acpu_switch_time_us	= 20,
+	.max_speed_delta_khz	= 256000,
+	.vdd_switch_time_us	= 62,
+	.power_collapse_khz	= 235930,
+	.wait_for_irq_khz	= 235930,
+	.mpll_khz		= 235930
 };
 
 static ssize_t mahimahi_virtual_keys_show(struct kobject *kobj,
@@ -996,7 +1006,10 @@ static void __init mahimahi_init(void)
 
 	msm_hw_reset_hook = mahimahi_reset;
 
-	msm_acpu_clock_init(&mahimahi_clock_data);
+	if (is_cdma_version(system_rev))
+		msm_acpu_clock_init(&mahimahi_cdma_clock_data);
+	else
+		msm_acpu_clock_init(&mahimahi_clock_data);
 
 	msm_serial_debug_init(MSM_UART1_PHYS, INT_UART1,
 			      &msm_device_uart1.dev, 1, MSM_GPIO_TO_INT(139));
