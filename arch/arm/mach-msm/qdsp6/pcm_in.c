@@ -160,7 +160,7 @@ static ssize_t q6_in_read(struct file *file, char __user *buf,
 			if (!wait_event_timeout(ac->wait, (ab->used == 0), 5*HZ)) {
 				audio_client_dump(ac);
 				pr_err("pcm_read: timeout. dsp dead?\n");
-				BUG();
+				q6audio_dsp_not_responding();
 			}
 
 		xfer = count;

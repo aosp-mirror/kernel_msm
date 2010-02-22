@@ -177,7 +177,7 @@ static ssize_t pcm_write(struct file *file, const char __user *buf,
 			if (!wait_event_timeout(ac->wait, (ab->used == 0), 5*HZ)) {
 				audio_client_dump(ac);
 				pr_err("pcm_write: timeout. dsp dead?\n");
-				BUG();
+				q6audio_dsp_not_responding();
 			}
 
 		xfer = count;

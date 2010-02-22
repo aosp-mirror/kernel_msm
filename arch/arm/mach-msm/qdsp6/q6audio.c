@@ -348,7 +348,7 @@ static int audio_ioctl(struct audio_client *ac, void *ptr, uint32_t len)
 	if (!wait_event_timeout(ac->wait, (ac->cb_status != -EBUSY), 5*HZ)) {
 		dal_trace_dump(ac->client);
 		pr_err("audio_ioctl: timeout. dsp dead?\n");
-		BUG();
+		q6audio_dsp_not_responding();
 	}
 	return ac->cb_status;
 }
@@ -1448,7 +1448,7 @@ struct audio_client *q6audio_open_pcm(uint32_t bufsz, uint32_t rate,
 		if (rc == 0)
 			break;
 		if (retry == 0)
-			BUG();
+			q6audio_dsp_not_responding();
 		pr_err("q6audio: open pcm error %d, retrying\n", rc);
 		msleep(1);
 	}
@@ -1473,7 +1473,7 @@ struct audio_client *q6audio_open_pcm(uint32_t bufsz, uint32_t rate,
 		if (rc == 0)
 			break;
 		if (retry == 0)
-			BUG();
+			q6audio_dsp_not_responding();
 		pr_err("q6audio: stream start error %d, retrying\n", rc);
 	}
 
