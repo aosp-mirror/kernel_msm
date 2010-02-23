@@ -154,20 +154,31 @@ static int debug_read_version(char *buf, int max)
 	return sprintf(buf, "%d.%d\n", version >> 16, version & 0xffff);
 }
 
+struct smem_msm_id {
+	uint32_t	format;
+	uint32_t	msm_id;
+	uint32_t	msm_ver;
+	char		build_id[32];
+};
+
 static int debug_read_build_id(char *buf, int max)
 {
 	unsigned size;
 	void *data;
+	struct smem_msm_id *msm_id;
 
-	data = smem_item(SMEM_HW_SW_BUILD_ID, &size);
-	if (!data)
+	msm_id = smem_item(SMEM_HW_SW_BUILD_ID, &size);
+	if (!msm_id || (size < sizeof(struct smem_msm_id)))
 		return 0;
 
 	if (size >= max)
 		size = max;
-	memcpy(buf, data, size);
 
-	return size;
+	return scnprintf(buf, size, "fmt=%d id=%d vers=%d.%d build_id='%s'\n",
+			 msm_id->format,msm_id->msm_id,
+			 (msm_id->msm_ver >> 16) & 0xffff,
+			 msm_id->msm_ver & 0xffff,
+			 msm_id->build_id);
 }
 
 static int debug_read_alloc_tbl(char *buf, int max)
