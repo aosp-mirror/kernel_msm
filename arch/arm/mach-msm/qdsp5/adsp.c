@@ -552,11 +552,17 @@ int msm_adsp_write(struct msm_adsp_module *module, unsigned dsp_queue_addr,
 #ifdef CONFIG_MSM_ADSP_REPORT_EVENTS
 static void *modem_event_addr;
 #if CONFIG_MSM_AMSS_VERSION >= 6350
-static void read_modem_event(void *buf, size_t len)
+static void read_modem_event(void *buf, size_t size)
 {
 	uint32_t *dptr = buf;
 	struct rpc_adsp_rtos_modem_to_app_args_t *sptr;
 	struct adsp_rtos_mp_mtoa_type *pkt_ptr;
+	size_t len = size / 4;
+
+	if (len < 3) {
+		pr_err("%s: invalid length %d\n", __func__, len);
+		return;
+	}
 
 	sptr = modem_event_addr;
 	pkt_ptr = &sptr->mtoa_pkt.adsp_rtos_mp_mtoa_data.mp_mtoa_packet;
@@ -566,11 +572,16 @@ static void read_modem_event(void *buf, size_t len)
 	dptr[2] = be32_to_cpu(pkt_ptr->image);
 }
 #else
-static void read_modem_event(void *buf, size_t len)
+static void read_modem_event(void *buf, size_t size)
 {
 	uint32_t *dptr = buf;
 	struct rpc_adsp_rtos_modem_to_app_args_t *sptr =
 		modem_event_addr;
+	size_t len = size / 4;
+	if (len < 3) {
+		pr_err("%s: invalid length %d\n", __func__, len);
+		return;
+	}
 	dptr[0] = be32_to_cpu(sptr->event);
 	dptr[1] = be32_to_cpu(sptr->module);
 	dptr[2] = be32_to_cpu(sptr->image);
@@ -782,27 +793,33 @@ bad_rpc:
 	do_exit(0);
 }
 
-static size_t read_event_size;
+static size_t read_event_len;
 static void *read_event_addr;
 
-static void read_event_16(void *buf, size_t len)
+static void read_event_16(void *buf, size_t size)
 {
 	uint16_t *dst = buf;
 	uint16_t *src = read_event_addr;
-	len /= 2;
-	if (len > read_event_size)
-		len = read_event_size;
+	size_t len = size / 2;
+	if (len > read_event_len)
+		len = read_event_len;
+	else if (len < read_event_len)
+		pr_warning("%s: event bufer length too small (%d < %d)\n",
+			__func__, len, read_event_len);
 	while (len--)
 		*dst++ = *src++;
 }
 
-static void read_event_32(void *buf, size_t len)
+static void read_event_32(void *buf, size_t size)
 {
 	uint32_t *dst = buf;
 	uint32_t *src = read_event_addr;
-	len /= 2;
-	if (len > read_event_size)
-		len = read_event_size;
+	size_t len = size / 4;
+	if (len > read_event_len)
+		len = read_event_len;
+	else if (len < read_event_len)
+		pr_warning("%s: event bufer length too small (%d < %d)\n",
+			__func__, len, read_event_len);
 	while (len--)
 		*dst++ = *src++;
 }
@@ -821,18 +838,18 @@ static int adsp_rtos_read_ctrl_word_cmd_tast_to_h_v(
 		uint32_t tmp = *dsp_addr32++;
 		rtos_task_id = (tmp & ADSP_RTOS_READ_CTRL_WORD_TASK_ID_M) >> 8;
 		msg_id = (tmp & ADSP_RTOS_READ_CTRL_WORD_MSG_ID_M);
-		read_event_size = tmp >> 16;
+		read_event_len = tmp >> 16;
 		read_event_addr = dsp_addr32;
-		msg_length = read_event_size * sizeof(uint32_t);
+		msg_length = read_event_len * sizeof(uint32_t);
 		func = read_event_32;
 	} else {
 		uint16_t *dsp_addr16 = dsp_addr;
 		uint16_t tmp = *dsp_addr16++;
 		rtos_task_id = (tmp & ADSP_RTOS_READ_CTRL_WORD_TASK_ID_M) >> 8;
 		msg_id = tmp & ADSP_RTOS_READ_CTRL_WORD_MSG_ID_M;
-		read_event_size = *dsp_addr16++;
+		read_event_len = *dsp_addr16++;
 		read_event_addr = dsp_addr16;
-		msg_length = read_event_size * sizeof(uint16_t);
+		msg_length = read_event_len * sizeof(uint16_t);
 		func = read_event_16;
 	}
 
