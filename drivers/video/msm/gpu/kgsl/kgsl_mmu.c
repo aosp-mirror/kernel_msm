@@ -207,14 +207,14 @@ struct kgsl_pagetable *kgsl_mmu_createpagetableobject(struct kgsl_mmu *mmu)
 	pagetable->pool = gen_pool_create(KGSL_PAGESIZE_SHIFT, -1);
 	if (pagetable->pool == NULL) {
 		KGSL_MEM_ERR("Unable to allocate virtualaddr pool.\n");
-		return NULL;
+		goto err_gen_pool_create;
 	}
 
 	if (gen_pool_add(pagetable->pool, pagetable->va_base,
 				pagetable->va_range, -1)) {
 		KGSL_MEM_ERR("gen_pool_create failed for pagetable %p\n",
 				pagetable);
-		goto done;
+		goto err_gen_pool_add;
 	}
 
 	/* allocate page table memory */
@@ -224,19 +224,26 @@ struct kgsl_pagetable *kgsl_mmu_createpagetableobject(struct kgsl_mmu *mmu)
 				      pagetable->max_entries * GSL_PTE_SIZE,
 				      &pagetable->base);
 
-	if (status == 0) {
-		/* reset page table entries
-		 * -- all pte's are marked as not dirty initially
-		 */
-		kgsl_sharedmem_set(&pagetable->base, 0, 0,
-				   pagetable->base.size);
+	if (status) {
+		KGSL_MEM_ERR("cannot alloc page tables\n");
+		goto err_kgsl_sharedmem_alloc;
 	}
+
+	/* reset page table entries
+	 * -- all pte's are marked as not dirty initially
+	 */
+	kgsl_sharedmem_set(&pagetable->base, 0, 0, pagetable->base.size);
 	pagetable->base.gpuaddr = pagetable->base.physaddr;
 
 	KGSL_MEM_VDBG("return %p\n", pagetable);
 
 	return pagetable;
-done:
+
+err_kgsl_sharedmem_alloc:
+err_gen_pool_add:
+	gen_pool_destroy(pagetable->pool);
+err_gen_pool_create:
+	kfree(pagetable);
 	return NULL;
 }
 
