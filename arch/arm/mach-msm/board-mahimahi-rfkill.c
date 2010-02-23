@@ -63,7 +63,7 @@ static int mahimahi_rfkill_probe(struct platform_device *pdev)
 		goto err_rfkill_alloc;
 	}
 
-	rfkill_set_states(bt_rfk, default_state, default_state);
+	rfkill_set_states(bt_rfk, default_state, false);
 
 	/* userspace cannot take exclusive control */
 
