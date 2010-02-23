@@ -62,7 +62,7 @@ static int sapphire_rfkill_probe(struct platform_device *pdev)
 
 	/* userspace cannot take exclusive control */
 
-	rfkill_set_states(bt_rfk, default_state, default_state);
+	rfkill_set_states(bt_rfk, default_state, false);
 
 	rc = rfkill_register(bt_rfk);
 
