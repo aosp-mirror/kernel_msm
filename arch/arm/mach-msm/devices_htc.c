@@ -114,14 +114,12 @@ static char *usb_functions_ums_adb[] = {
 	"adb",
 };
 
-static char *usb_functions_rndis_ums[] = {
+static char *usb_functions_rndis[] = {
 	"rndis",
-	"usb_mass_storage",
 };
 
-static char *usb_functions_rndis_ums_adb[] = {
+static char *usb_functions_rndis_adb[] = {
 	"rndis",
-	"usb_mass_storage",
 	"adb",
 };
 
@@ -148,14 +146,14 @@ static struct android_usb_product usb_products[] = {
 		.functions	= usb_functions_ums_adb,
 	},
 	{
-		.product_id	= 0xfffe,	/* FIXME need a real PID here */
-		.num_functions	= ARRAY_SIZE(usb_functions_rndis_ums),
-		.functions	= usb_functions_rndis_ums,
+		.product_id	= 0x0ffe,
+		.num_functions	= ARRAY_SIZE(usb_functions_rndis),
+		.functions	= usb_functions_rndis,
 	},
 	{
-		.product_id	= 0xffff,	/* FIXME need a real PID here */
-		.num_functions	= ARRAY_SIZE(usb_functions_rndis_ums_adb),
-		.functions	= usb_functions_rndis_ums_adb,
+		.product_id	= 0x0ffc,
+		.num_functions	= ARRAY_SIZE(usb_functions_rndis_adb),
+		.functions	= usb_functions_rndis_adb,
 	},
 };
 
