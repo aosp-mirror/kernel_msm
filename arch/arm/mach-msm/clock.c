@@ -262,6 +262,37 @@ void clk_exit_sleep(void)
 {
 }
 
+int clks_print_running(void)
+{
+	struct clk *clk;
+	int clk_on_count = 0;
+	struct hlist_node *pos;
+	char buf[100];
+	char *pbuf = buf;
+	int size = sizeof(buf);
+	int wr;
+	unsigned long flags;
+
+	spin_lock_irqsave(&clocks_lock, flags);
+
+	hlist_for_each_entry(clk, pos, &clocks, list) {
+		if (clk->count) {
+			clk_on_count++;
+			wr = snprintf(pbuf, size, " %s", clk->name);
+			if (wr >= size)
+				break;
+			pbuf += wr;
+			size -= wr;
+		}
+	}
+	if (clk_on_count)
+		pr_info("clocks on:%s\n", buf);
+
+	spin_unlock_irqrestore(&clocks_lock, flags);
+	return !clk_on_count;
+}
+EXPORT_SYMBOL(clks_print_running);
+
 /* EBI1 is the only shared clock that several clients want to vote on as of
  * this commit. If this changes in the future, then it might be better to
  * make clk_min_rate handle the voting or make ebi1_clk_set_min_rate more
