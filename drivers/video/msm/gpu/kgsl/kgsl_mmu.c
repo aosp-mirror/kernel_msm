@@ -378,6 +378,8 @@ int kgsl_mmu_init(struct kgsl_device *device)
 			return status;
 		}
 
+		kgsl_sharedmem_set(&mmu->dummyspace, 0, 0,
+				   mmu->dummyspace.size);
 		kgsl_yamato_regwrite(device,
 				     REG_MH_MMU_TRAN_ERROR,
 				     mmu->dummyspace.physaddr);
