@@ -46,6 +46,21 @@ config MSM_MDP31
 	depends on ARCH_QSD8X50
 	default y
 
+config MSM_REMOTE_SPINLOCK_DEKKERS
+	bool
+
+config MSM_REMOTE_SPINLOCK_SWP
+	bool
+
+config MSM_REMOTE_SPINLOCK_LDREX
+	bool
+
+config MSM_REMOTE_SPINLOCK
+	bool
+	depends on MSM_REMOTE_SPINLOCK_LDREX || MSM_REMOTE_SPINLOCK_SWP || \
+		MSM_REMOTE_SPINLOCK_DEKKERS
+	default y
+
 config MSM_AMSS_VERSION
 	int
 	default 6210 if MSM_AMSS_VERSION_6210
