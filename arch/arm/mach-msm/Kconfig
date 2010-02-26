@@ -451,6 +451,14 @@ config MSM_QDSP6
 	help
 	  Enable support for qdsp6. This provides audio and video functionality.
 
+config MSM_SSBI
+	tristate "SSBI support"
+	depends on ARCH_MSM7X30
+	default n
+	help
+	  Enable support for SSBI bus. This is required for communicatinig with
+	  Qualcomm PMICs and Audio codecs.
+
 config WIFI_CONTROL_FUNC
 	bool "Enable WiFi control function abstraction"
 	help
