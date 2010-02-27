@@ -692,9 +692,11 @@ static void handle_setup(struct usb_info *ui)
 		}
 	}
 	if (ctl.bRequestType == (USB_DIR_OUT | USB_TYPE_STANDARD)) {
-		if (ctl.bRequest == USB_REQ_SET_CONFIGURATION)
+		if (ctl.bRequest == USB_REQ_SET_CONFIGURATION) {
 			ui->online = !!ctl.wValue;
-		else if (ctl.bRequest == USB_REQ_SET_ADDRESS) {
+			if (ui->online && ui->usb_connected)
+				ui->usb_connected(1);
+		} else if (ctl.bRequest == USB_REQ_SET_ADDRESS) {
 			/* write address delayed (will take effect
 			** after the next IN txn)
 			*/
