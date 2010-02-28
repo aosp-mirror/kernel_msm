@@ -19,6 +19,7 @@
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
+#include <linux/mfd/pm8058.h>
 #include <linux/platform_device.h>
 #include <linux/usb/android_composite.h>
 
@@ -28,13 +29,20 @@
 #include <asm/setup.h>
 
 #include <mach/board.h>
+#include <mach/gpio.h>
 #include <mach/hardware.h>
 #include <mach/irqs.h>
 #include <mach/msm_hsusb.h>
 #include <mach/msm_iomap.h>
+#include <mach/msm_ssbi.h>
 
 #include "devices.h"
 #include "proc_comm.h"
+
+#define SURF7X30_PM8058_GPIO_BASE	FIRST_BOARD_GPIO
+#define SURF7X30_PM8058_IRQ_BASE	FIRST_BOARD_IRQ
+
+#define SURF7X30_GPIO_PMIC_INT_N	27
 
 static struct resource smc91x_resources[] = {
 	[0] = {
@@ -261,6 +269,47 @@ static void __init surf7x30_map_io(void)
 	msm_map_msm7x30_io();
 	msm_clock_init(msm_clocks_7x30, msm_num_clocks_7x30);
 }
+
+static int surf7x30_pmic_init(void)
+{
+	int ret;
+	u32 id;
+
+	pr_info("%s()\n", __func__);
+	id = PCOM_GPIO_CFG(SURF7X30_GPIO_PMIC_INT_N, 1, GPIO_INPUT,
+			   GPIO_NO_PULL, GPIO_2MA);
+	ret = msm_proc_comm(PCOM_RPC_GPIO_TLMM_CONFIG_EX, &id, 0);
+	if (ret)
+		pr_err("%s: gpio %d cfg failed\n", __func__,
+		       SURF7X30_GPIO_PMIC_INT_N);
+	return ret;
+}
+
+static struct pm8058_platform_data surf7x30_pm8058_pdata = {
+	.irq_base	= SURF7X30_PM8058_IRQ_BASE,
+	.gpio_base	= SURF7X30_PM8058_GPIO_BASE,
+	.init		= surf7x30_pmic_init,
+};
+
+static struct msm_ssbi_platform_data surf7x30_ssbi_pmic_pdata = {
+	.slave		= {
+		.name		= "pm8058-core",
+		.irq		= MSM_GPIO_TO_INT(SURF7X30_GPIO_PMIC_INT_N),
+		.platform_data	= &surf7x30_pm8058_pdata,
+	},
+	.rspinlock_name	= "D:PMIC_SSBI",
+};
+
+static int __init surf7x30_ssbi_pmic_init(void)
+{
+	int ret;
+	ret = gpiochip_reserve(surf7x30_pm8058_pdata.gpio_base,
+			       PM8058_NUM_GPIOS);
+	WARN(ret, "can't reserve pm8058 gpios. badness will ensue...\n");
+	msm_device_ssbi_pmic.dev.platform_data = &surf7x30_ssbi_pmic_pdata;
+	return platform_device_register(&msm_device_ssbi_pmic);
+}
+postcore_initcall(surf7x30_ssbi_pmic_init);
 
 MACHINE_START(MSM7X30_SURF, "QCT SURF7X30 Development Board")
 #ifdef CONFIG_MSM_DEBUG_UART
