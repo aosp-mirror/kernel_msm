@@ -685,7 +685,7 @@ static void vdec_dcdone_handler(struct vdec_data *vd, void *frame,
 	unsigned long flags;
 	int found = 0;
 
-	if (frame_size != sizeof(struct vdec_frame_info)) {
+	if (frame_size < sizeof(struct vdec_frame_info)) {
 		pr_warning("%s: msg size mismatch %d != %d\n", __func__,
 			   frame_size, sizeof(struct vdec_frame_info));
 		return;
