@@ -262,6 +262,25 @@ kgsl_sharedmem_read(const struct kgsl_memdesc *memdesc, void *dst,
 }
 
 int
+kgsl_sharedmem_write(const struct kgsl_memdesc *memdesc,
+			unsigned int offsetbytes,
+			void *value, unsigned int sizebytes)
+{
+	if (memdesc == NULL || memdesc->hostptr == NULL) {
+		KGSL_MEM_ERR("bad ptr memdesc %p hostptr %p\n", memdesc,
+				(memdesc ? memdesc->hostptr : NULL));
+		return -EINVAL;
+	}
+	if (offsetbytes + sizebytes > memdesc->size) {
+		KGSL_MEM_ERR("bad range: offset %d size %d memdesc %d\n",
+				offsetbytes, sizebytes, memdesc->size);
+		return -ERANGE;
+	}
+	memcpy(memdesc->hostptr + offsetbytes, value, sizebytes);
+	return 0;
+}
+
+int
 kgsl_sharedmem_set(const struct kgsl_memdesc *memdesc, unsigned int offsetbytes,
 			unsigned int value, unsigned int sizebytes)
 {

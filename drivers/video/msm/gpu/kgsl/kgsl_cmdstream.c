@@ -51,12 +51,6 @@ kgsl_cmdstream_readtimestamp(struct kgsl_device *device,
 	return timestamp;
 }
 
-static bool timestamp_cmp(unsigned int new, unsigned int old)
-{
-	int ts_diff = new - old;
-	return (ts_diff >= 0) || (ts_diff < -20000);
-}
-
 int kgsl_cmdstream_check_timestamp(struct kgsl_device *device,
 				   unsigned int timestamp)
 {

@@ -96,6 +96,10 @@ void kgsl_sharedmem_free(struct kgsl_memdesc *memdesc);
 int kgsl_sharedmem_read(const struct kgsl_memdesc *memdesc, void *dst,
 			unsigned int offsetbytes, unsigned int sizebytes);
 
+int kgsl_sharedmem_write(const struct kgsl_memdesc *memdesc,
+			unsigned int offsetbytes, void *value,
+			unsigned int sizebytes);
+
 int kgsl_sharedmem_set(const struct kgsl_memdesc *memdesc,
 			unsigned int offsetbytes, unsigned int value,
 			unsigned int sizebytes);

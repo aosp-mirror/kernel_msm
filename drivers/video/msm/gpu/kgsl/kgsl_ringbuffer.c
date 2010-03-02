@@ -74,9 +74,21 @@ void kgsl_cp_intrcallback(struct kgsl_device *device)
 
 	kgsl_yamato_regread(device, REG_CP_INT_STATUS, &status);
 
-	if (status & CP_INT_CNTL__IB1_INT_MASK) {
-		/*this is the only used soft interrupt */
-		KGSL_CMD_WARN("ringbuffer ib1 interrupt\n");
+	if (status & CP_INT_CNTL__RB_INT_MASK) {
+		/* signal intr completion event */
+		int init_reftimestamp = 0x7fffffff;
+		int enableflag = 0;
+		kgsl_sharedmem_write(&rb->device->memstore,
+			KGSL_DEVICE_MEMSTORE_OFFSET(ts_cmp_enable),
+			&enableflag, 4);
+		kgsl_sharedmem_write(&rb->device->memstore,
+			KGSL_DEVICE_MEMSTORE_OFFSET(ref_wait_ts),
+			&init_reftimestamp, 4);
+		KGSL_CMD_WARN("ringbuffer rb interrupt\n");
+	}
+
+	if (status & (CP_INT_CNTL__IB1_INT_MASK | CP_INT_CNTL__RB_INT_MASK)) {
+		KGSL_CMD_WARN("ringbuffer ib1/rb interrupt\n");
 		wake_up_interruptible_all(&device->ib1_wq);
 	}
 	if (status & CP_INT_CNTL__T0_PACKET_IN_IB_MASK) {
@@ -106,9 +118,6 @@ void kgsl_cp_intrcallback(struct kgsl_device *device)
 	}
 	if (status & CP_INT_CNTL__SW_INT_MASK)
 		KGSL_CMD_DBG("ringbuffer software interrupt\n");
-
-	if (status & CP_INT_CNTL__RB_INT_MASK)
-		KGSL_CMD_DBG("ringbuffer rb interrupt\n");
 
 	if (status & CP_INT_CNTL__IB2_INT_MASK)
 		KGSL_CMD_DBG("ringbuffer ib2 interrupt\n");
@@ -586,22 +595,22 @@ int kgsl_ringbuffer_close(struct kgsl_ringbuffer *rb)
 
 static uint32_t
 kgsl_ringbuffer_addcmds(struct kgsl_ringbuffer *rb,
-				int pmodeoff, unsigned int *cmds,
+				int flags, unsigned int *cmds,
 				int sizedwords)
 {
-	unsigned int pmodesizedwords;
 	unsigned int *ringcmds;
 	unsigned int timestamp;
+	unsigned int total_sizedwords = sizedwords + 6;
 
 	/* reserve space to temporarily turn off protected mode
 	*  error checking if needed
 	*/
-	pmodesizedwords = pmodeoff ? 4 : 0;
+	total_sizedwords += flags & KGSL_CMD_FLAGS_PMODE ? 4 : 0;
+	total_sizedwords += !(flags & KGSL_CMD_FLAGS_NO_TS_CMP) ? 9 : 0;
 
-	ringcmds = kgsl_ringbuffer_allocspace(rb,
-					pmodesizedwords + sizedwords + 6);
+	ringcmds = kgsl_ringbuffer_allocspace(rb, total_sizedwords);
 
-	if (pmodeoff) {
+	if (flags & KGSL_CMD_FLAGS_PMODE) {
 		/* disable protected mode error checking */
 		*ringcmds++ = pm4_type3_packet(PM4_SET_PROTECTED_MODE, 1);
 		*ringcmds++ = 0;
@@ -611,7 +620,7 @@ kgsl_ringbuffer_addcmds(struct kgsl_ringbuffer *rb,
 
 	ringcmds += sizedwords;
 
-	if (pmodeoff) {
+	if (flags & KGSL_CMD_FLAGS_PMODE) {
 		/* re-enable protected mode error checking */
 		*ringcmds++ = pm4_type3_packet(PM4_SET_PROTECTED_MODE, 1);
 		*ringcmds++ = 1;
@@ -630,6 +639,23 @@ kgsl_ringbuffer_addcmds(struct kgsl_ringbuffer *rb,
 		      KGSL_DEVICE_MEMSTORE_OFFSET(eoptimestamp));
 	*ringcmds++ = rb->timestamp;
 
+	if (!(flags & KGSL_CMD_FLAGS_NO_TS_CMP)) {
+		/*  Add idle packet so avoid RBBM errors */
+		*ringcmds++ = pm4_type3_packet(PM4_WAIT_FOR_IDLE, 1);
+		*ringcmds++ = 0x00000000;
+		/* Conditional execution based on memory values */
+		*ringcmds++ = pm4_type3_packet(PM4_COND_EXEC, 4);
+		*ringcmds++ = (rb->device->memstore.gpuaddr +
+			KGSL_DEVICE_MEMSTORE_OFFSET(ts_cmp_enable)) >> 2;
+		*ringcmds++ = (rb->device->memstore.gpuaddr +
+			KGSL_DEVICE_MEMSTORE_OFFSET(ref_wait_ts)) >> 2;
+		*ringcmds++ = rb->timestamp;
+		/* # of conditional command DWORDs */
+		*ringcmds++ = 2;
+		*ringcmds++ = pm4_type3_packet(PM4_INTERRUPT, 1);
+		*ringcmds++ = CP_INT_CNTL__RB_INT_MASK;
+	}
+
 	kgsl_ringbuffer_submit(rb);
 
 	GSL_RB_STATS(rb->stats.words_total += sizedwords);
@@ -643,17 +669,17 @@ kgsl_ringbuffer_addcmds(struct kgsl_ringbuffer *rb,
 
 uint32_t
 kgsl_ringbuffer_issuecmds(struct kgsl_device *device,
-						int pmodeoff,
+						int flags,
 						unsigned int *cmds,
 						int sizedwords)
 {
 	unsigned int timestamp;
 	struct kgsl_ringbuffer *rb = &device->ringbuffer;
 
-	KGSL_CMD_VDBG("enter (device->id=%d, pmodeoff=%d, cmds=%p, "
-		"sizedwords=%d)\n", device->id, pmodeoff, cmds, sizedwords);
+	KGSL_CMD_VDBG("enter (device->id=%d, flags=%d, cmds=%p, "
+		"sizedwords=%d)\n", device->id, flags, cmds, sizedwords);
 
-	timestamp = kgsl_ringbuffer_addcmds(rb, pmodeoff, cmds, sizedwords);
+	timestamp = kgsl_ringbuffer_addcmds(rb, flags, cmds, sizedwords);
 
 	KGSL_CMD_VDBG("return %d\n)", timestamp);
 	return timestamp;
