@@ -90,7 +90,7 @@ struct lcm_tbl {
 	uint8_t		val;
 };
 
-static struct lcm_tbl samsung_oled_init_table[] = {
+static struct lcm_tbl samsung_oled_rgb565_init_table[] = {
 	{ 0x31, 0x08 },
 	{ 0x32, 0x14 },
 	{ 0x30, 0x2 },
@@ -108,6 +108,28 @@ static struct lcm_tbl samsung_oled_init_table[] = {
 	{ 0x23, 0x0 },
 	{ 0x26, 0xA0 },
 };
+
+static struct lcm_tbl samsung_oled_rgb666_init_table[] = {
+	{ 0x31, 0x08 },
+	{ 0x32, 0x14 },
+	{ 0x30, 0x2  },
+	{ 0x27, 0x1  },
+	{ 0x12, 0x8  },
+	{ 0x13, 0x8  },
+	{ 0x15, 0x0  },
+	{ 0x16, 0x01 },
+	{ 0x39, 0x24 },
+	{ 0x17, 0x22 },
+	{ 0x18, 0x33 },
+	{ 0x19, 0x3  },
+	{ 0x1A, 0x1  },
+	{ 0x22, 0xA4 },
+	{ 0x23, 0x0  },
+	{ 0x26, 0xA0 },
+};
+
+static struct lcm_tbl *init_tablep = samsung_oled_rgb565_init_table;
+static size_t init_table_sz = ARRAY_SIZE(samsung_oled_rgb565_init_table);
 
 #define OLED_GAMMA_TABLE_SIZE		(7 * 3)
 static struct lcm_tbl samsung_oled_gamma_table[][OLED_GAMMA_TABLE_SIZE] = {
@@ -455,9 +477,9 @@ static int samsung_oled_panel_unblank(struct msm_lcdc_panel_ops *ops)
 
 	clk_enable(spi_clk);
 
-	for (i = 0; i < ARRAY_SIZE(samsung_oled_init_table); i++)
-		lcm_writeb(samsung_oled_init_table[i].reg,
-			   samsung_oled_init_table[i].val);
+	for (i = 0; i < init_table_sz; i++)
+		lcm_writeb(init_tablep[i].reg, init_tablep[i].val);
+
 	lcm_writew(0xef, 0xd0e8);
 	lcm_writeb(0x1d, 0xa0);
 	table_sel_idx = 0;
@@ -517,7 +539,7 @@ static struct msm_fb_data mahimahi_lcdc_fb_data = {
 		.yres		= 800,
 		.width		= 48,
 		.height		= 80,
-		.output_format	= 0,
+		.output_format	= MSM_MDP_OUT_IF_FMT_RGB565,
 };
 
 static struct msm_lcdc_platform_data mahimahi_lcdc_platform_data = {
@@ -608,6 +630,13 @@ int __init mahimahi_init_panel(void)
 
 	if (!machine_is_mahimahi())
 		return 0;
+
+	if (system_rev > 0xC0) {
+		/* CDMA version (except for EVT1) supports RGB666 */
+		init_tablep = samsung_oled_rgb666_init_table;
+		init_table_sz = ARRAY_SIZE(samsung_oled_rgb666_init_table);
+		mahimahi_lcdc_fb_data.output_format = MSM_MDP_OUT_IF_FMT_RGB666;
+	}
 
 	ret = platform_device_register(&msm_device_mdp);
 	if (ret != 0)
