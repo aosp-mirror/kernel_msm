@@ -104,6 +104,10 @@ struct diag_context
 #endif
 	smd_channel_t *ch;
 	int in_busy;
+#ifdef CONFIG_ARCH_QSD8X50
+	smd_channel_t *ch_dsp;
+	int in_busy_dsp;
+#endif
 	int online;
 
 	/* assembly buffer for USB->A9 HDLC frames */
@@ -179,6 +183,9 @@ static inline struct diag_context *func_to_dev(struct usb_function *f)
 }
 
 static void smd_try_to_send(struct diag_context *ctxt);
+#ifdef CONFIG_ARCH_QSD8X50
+static void dsp_try_to_send(struct diag_context *ctxt);
+#endif
 
 static void diag_queue_out(struct diag_context *ctxt);
 
@@ -437,6 +444,18 @@ static void diag_in_complete(struct usb_ep *ept, struct usb_request *req)
 	smd_try_to_send(ctxt);
 }
 
+#ifdef CONFIG_ARCH_QSD8X50
+static void diag_dsp_in_complete(struct usb_ep *ept, struct usb_request *req)
+{
+	struct diag_context *ctxt = req->context;
+
+	ctxt->in_busy_dsp = 0;
+	req_put(ctxt, &ctxt->tx_req_idle, req);
+	dsp_try_to_send(ctxt);
+	wake_up(&ctxt->write_wq);
+}
+#endif
+
 static void diag_process_hdlc(struct diag_context *ctxt, void *_data, unsigned len)
 {
 	unsigned char *data = _data;
@@ -601,6 +620,53 @@ static void smd_diag_notify(void *priv, unsigned event)
 	smd_try_to_send(ctxt);
 }
 
+#ifdef CONFIG_ARCH_QSD8X50
+static void dsp_try_to_send(struct diag_context *ctxt)
+{
+again:
+	if (ctxt->ch_dsp && (!ctxt->in_busy_dsp)) {
+		int r = smd_read_avail(ctxt->ch_dsp);
+
+		if (r > TX_REQ_BUF_SZ) {
+			return;
+		}
+		if (r > 0) {
+			struct usb_request *req;
+			req = req_get(ctxt, &ctxt->tx_req_idle);
+			if (!req) {
+				pr_err("%s: tx req queue is out of buffers\n",
+					__func__);
+				return;
+			}
+			smd_read(ctxt->ch_dsp, req->buf, r);
+
+			if (!ctxt->online) {
+//				printk("$$$ discard %d\n", r);
+				goto again;
+			}
+			req->complete = diag_dsp_in_complete;
+			req->context = ctxt;
+			req->length = r;
+
+			TRACE("Q6>", req->buf, r, 1);
+			ctxt->in_busy_dsp = 1;
+			r = usb_ep_queue(ctxt->in, req, GFP_ATOMIC);
+			if (r < 0) {
+				pr_err("%s: usb_ep_queue failed: %d\n",
+					__func__, r);
+				req_put(ctxt, &ctxt->tx_req_idle, req);
+			}
+		}
+	}
+}
+
+static void dsp_diag_notify(void *priv, unsigned event)
+{
+	struct diag_context *ctxt = priv;
+	dsp_try_to_send(ctxt);
+}
+#endif
+
 static int __init create_bulk_endpoints(struct diag_context *ctxt,
 				struct usb_endpoint_descriptor *in_desc,
 				struct usb_endpoint_descriptor *out_desc)
@@ -753,6 +819,10 @@ static int diag_function_set_alt(struct usb_function *f,
 
 	diag_queue_out(ctxt);
 	smd_try_to_send(ctxt);
+#ifdef CONFIG_ARCH_QSD8X50
+	dsp_try_to_send(ctxt);
+#endif
+
 #if ROUTE_TO_USERSPACE
 	wake_up(&ctxt->read_wq);
 #endif
@@ -805,6 +875,14 @@ int diag_bind_config(struct usb_configuration *c)
 	ret = smd_open("SMD_DIAG", &ctxt->ch, ctxt, smd_diag_notify);
 	if (ret)
 		return ret;
+
+#ifdef CONFIG_ARCH_QSD8X50
+	ret = smd_open("DSP_DIAG", &ctxt->ch_dsp, ctxt, dsp_diag_notify);
+	if (ret) {
+		pr_err("%s: smd_open failed (DSP_DIAG)\n", __func__);
+		return ret;
+	}
+#endif
 
 	ctxt->cdev = c->cdev;
 	ctxt->function.name = "diag";
