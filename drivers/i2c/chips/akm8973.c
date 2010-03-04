@@ -27,7 +27,6 @@
 #include <linux/workqueue.h>
 #include <linux/freezer.h>
 #include <linux/akm8973.h>
-#include<linux/earlysuspend.h>
 
 #define DEBUG 0
 #define MAX_FAILURE_COUNT 3
@@ -37,7 +36,6 @@ static struct i2c_client *this_client;
 struct akm8973_data {
 	struct input_dev *input_dev;
 	struct work_struct work;
-	struct early_suspend early_suspend_akm;
 };
 
 /* Addresses to scan -- protected by sense_data_mutex */
@@ -555,7 +553,7 @@ static irqreturn_t akm8973_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static void akm8973_early_suspend(struct early_suspend *handler)
+static void akm8973_suspend(struct device *device)
 {
 	atomic_set(&suspend_flag, 1);
 	atomic_set(&reserve_open_flag, atomic_read(&open_flag));
@@ -564,7 +562,7 @@ static void akm8973_early_suspend(struct early_suspend *handler)
 	disable_irq(this_client->irq);
 }
 
-static void akm8973_early_resume(struct early_suspend *handler)
+static void akm8973_resume(struct device *device)
 {
 	enable_irq(this_client->irq);
 	atomic_set(&suspend_flag, 0);
@@ -712,10 +710,6 @@ int akm8973_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	atomic_set(&t_flag, 1);
 	atomic_set(&mv_flag, 1);
 
-	akm->early_suspend_akm.suspend = akm8973_early_suspend;
-	akm->early_suspend_akm.resume = akm8973_early_resume;
-	register_early_suspend(&akm->early_suspend_akm);
-
 	return 0;
 
 exit_misc_device_register_failed:
@@ -746,12 +740,18 @@ static const struct i2c_device_id akm8973_id[] = {
 	{ }
 };
 
+static struct dev_pm_ops akm8973_pm_ops = {
+	.suspend_noirq = akm8973_suspend,
+	.resume_noirq = akm8973_resume,
+};
+
 static struct i2c_driver akm8973_driver = {
 	.probe 	= akm8973_probe,
 	.remove 	= akm8973_remove,
 	.id_table	= akm8973_id,
 	.driver = {
 		   .name = AKM8973_I2C_NAME,
+		   .pm = &akm8973_pm_ops,
 		   },
 };
 
