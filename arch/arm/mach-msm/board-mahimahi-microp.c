@@ -216,7 +216,7 @@ static uint16_t lsensor_adc_table[10] = {
 };
 
 static uint16_t remote_key_adc_table[6] = {
-	0, 31, 43, 98, 129, 192
+	0, 33, 43, 110, 129, 220
 };
 
 static uint32_t golden_adc = 0xC0;
@@ -632,9 +632,9 @@ static ssize_t microp_i2c_remotekey_adc_show(struct device *dev,
 
 	microp_read_adc(MICROP_REMOTE_KEY_ADC_CHAN, &value);
 
-	for (i = 0; i < 3; i += 2) {
-		if ((value > remote_key_adc_table[i]) &&
-		    (value < remote_key_adc_table[i])) {
+	for (i = 0; i < 3; i++) {
+		if ((value >= remote_key_adc_table[2 * i]) &&
+		    (value <= remote_key_adc_table[2 * i + 1])) {
 			button = i + 1;
 		}
 
