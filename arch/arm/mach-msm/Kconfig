@@ -18,6 +18,7 @@ config ARCH_MSM7X30
 	select CPU_V7
 	select MSM_REMOTE_SPINLOCK_DEKKERS
 	select VERIFY_PERMISSION_FAULT
+	select MSM_DAL
 
 config ARCH_QSD8X50
 	bool "QSD8X50"
@@ -25,6 +26,7 @@ config ARCH_QSD8X50
 	select MSM_SMD
 	select CPU_V7
 	select MSM_REMOTE_SPINLOCK_LDREX
+	select MSM_DAL
 	select VERIFY_PERMISSION_FAULT
 endchoice
 
@@ -391,6 +393,14 @@ config MSM_SERIAL_DEBUGGER_CONSOLE
 
 config MSM_SMD
 	bool
+
+config MSM_DAL
+	default n 
+	bool "MSM Driver Access Layer (DAL RPC)"
+	help
+	  Support for the DAL RPC interface used to communicate with
+	  the baseband processor or DSP in newer Qualcomm MSM/QSD
+	  chips.
 
 config MSM_ONCRPCROUTER
 	depends on MSM_SMD

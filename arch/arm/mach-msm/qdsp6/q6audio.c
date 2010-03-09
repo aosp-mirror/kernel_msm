@@ -26,7 +26,7 @@
 #include <linux/firmware.h>
 #include <linux/miscdevice.h>
 
-#include "dal.h"
+#include "../dal.h"
 #include "dal_audio.h"
 #include "dal_audio_format.h"
 #include "dal_acdb.h"

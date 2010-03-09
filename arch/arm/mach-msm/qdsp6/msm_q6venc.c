@@ -35,7 +35,8 @@
 #include <linux/msm_q6venc.h>
 #include <linux/wakelock.h>
 
-#include "dal.h"
+//#include <asm/cacheflush.h>
+#include "../dal.h"
 
 #define DALDEVICEID_VENC_DEVICE		0x0200002D
 #define DALDEVICEID_VENC_PORTNAME	"DSP_DAL_AQ_VID"

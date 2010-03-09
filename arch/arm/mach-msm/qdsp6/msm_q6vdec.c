@@ -49,7 +49,7 @@
 #include <linux/android_pmem.h>
 #include <linux/msm_q6vdec.h>
 
-#include "dal.h"
+#include "../dal.h"
 
 #define DALDEVICEID_VDEC_DEVICE		0x02000026
 #define DALDEVICEID_VDEC_PORTNAME	"DSP_DAL_AQ_VID"

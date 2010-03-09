@@ -29,7 +29,7 @@
 #ifndef _MACH_MSM_QDSP6_ADIE_
 #define _MACH_MSM_QDSP6_ADIE_
 
-#include "dal.h"
+#include "../dal.h"
 
 #define ADIE_DAL_DEVICE		0x02000029
 #define ADIE_DAL_PORT		"SMD_DAL_AM_AUD"

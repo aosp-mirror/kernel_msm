@@ -366,7 +366,9 @@ int dal_call_raw(struct dal_client *client,
 		dal_trace_dump(client);
 		pr_err("dal: call timed out. dsp is probably dead.\n");
 		dal_trace_print(hdr, data, data_len, 0);
+#if defined(CONFIG_MSM_QDSP6)
 		q6audio_dsp_not_responding();
+#endif
 	}
 
 	return client->status;
