@@ -209,6 +209,22 @@ static struct platform_device usb_mass_storage_device = {
 	},
 };
 
+#ifdef CONFIG_USB_ANDROID_RNDIS
+static struct usb_ether_platform_data rndis_pdata = {
+	/* ethaddr is filled by board_serialno_setup */
+	.vendorID	= 0x18d1,
+	.vendorDescr	= "Google, Inc.",
+};
+
+static struct platform_device rndis_device = {
+	.name	= "rndis",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &rndis_pdata,
+	},
+};
+#endif
+
 static struct android_usb_platform_data android_usb_pdata = {
 	.vendor_id	= 0x18d1,
 	.product_id	= 0x4e11,
@@ -816,6 +832,9 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_nand,
 	&msm_device_hsusb,
 	&usb_mass_storage_device,
+#ifdef CONFIG_USB_ANDROID_RNDIS
+	&rndis_device,
+#endif
 	&android_usb_device,
 	&android_pmem_mdp_device,
 	&android_pmem_adsp_device,
@@ -915,6 +934,20 @@ __tagtable(ATAG_BDADDR, parse_tag_bdaddr);
 
 static int __init board_serialno_setup(char *serialno)
 {
+#ifdef CONFIG_USB_ANDROID_RNDIS
+	int i;
+	char *src = serialno;
+
+	/* create a fake MAC address from our serial number.
+	 * first byte is 0x02 to signify locally administered.
+	 */
+	rndis_pdata.ethaddr[0] = 0x02;
+	for (i = 0; *src; i++) {
+		/* XOR the USB serial across the remaining bytes */
+		rndis_pdata.ethaddr[i % (ETH_ALEN - 1) + 1] ^= *src++;
+	}
+#endif
+
 	android_usb_pdata.serial_number = serialno;
 	return 1;
 }
