@@ -105,6 +105,22 @@ static struct platform_device usb_mass_storage_device = {
 		},
 };
 
+#ifdef CONFIG_USB_ANDROID_RNDIS
+static struct usb_ether_platform_data rndis_pdata = {
+	/* ethaddr is filled by board_serialno_setup */
+	.vendorID	= 0x0bb4,
+	.vendorDescr	= "HTC",
+};
+
+static struct platform_device rndis_device = {
+	.name	= "rndis",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &rndis_pdata,
+	},
+};
+#endif
+
 static char *usb_functions_ums[] = {
 	"usb_mass_storage",
 };
@@ -184,6 +200,9 @@ void __init msm_add_usb_devices(void (*phy_reset) (void))
 		msm_hsusb_pdata.phy_reset = phy_reset;
 	msm_device_hsusb.dev.platform_data = &msm_hsusb_pdata;
 	platform_device_register(&msm_device_hsusb);
+#ifdef CONFIG_USB_ANDROID_RNDIS
+	platform_device_register(&rndis_device);
+#endif
 	platform_device_register(&usb_mass_storage_device);
 	platform_device_register(&android_usb_device);
 }
@@ -451,6 +470,10 @@ int board_mfg_mode(void)
 
 static int __init board_serialno_setup(char *serialno)
 {
+#ifdef CONFIG_USB_ANDROID_RNDIS
+	int i;
+	char *src;
+#endif
 	char *str;
 
 	/* use default serial number when mode is factory2 */
@@ -458,6 +481,18 @@ static int __init board_serialno_setup(char *serialno)
 		str = df_serialno;
 	else
 		str = serialno;
+
+#ifdef CONFIG_USB_ANDROID_RNDIS
+	/* create a fake MAC address from our serial number.
+	 * first byte is 0x02 to signify locally administered.
+	 */
+	rndis_pdata.ethaddr[0] = 0x02;
+	src = str;
+	for (i = 0; *src; i++) {
+		/* XOR the USB serial across the remaining bytes */
+		rndis_pdata.ethaddr[i % (ETH_ALEN - 1) + 1] ^= *src++;
+	}
+#endif
 	android_usb_pdata.serial_number = str;
 	return 1;
 }
