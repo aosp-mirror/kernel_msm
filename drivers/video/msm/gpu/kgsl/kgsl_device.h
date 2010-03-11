@@ -132,7 +132,7 @@ int kgsl_yamato_cleanup_pt(struct kgsl_device *device,
 #ifdef CONFIG_MSM_KGSL_MMU
 int kgsl_yamato_setstate(struct kgsl_device *device, uint32_t flags);
 #else
-int kgsl_yamato_setstate(struct kgsl_device *device, uint32_t flags)
+static inline int kgsl_yamato_setstate(struct kgsl_device *device, uint32_t flags)
 { return 0; }
 #endif
 
