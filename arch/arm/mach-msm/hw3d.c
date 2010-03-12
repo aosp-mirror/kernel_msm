@@ -26,7 +26,7 @@
 #include <linux/fs.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-#include <linux/miscdevice.h>
+#include <linux/cdev.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/msm_hw3d.h>
@@ -55,9 +55,14 @@ struct mem_region {
 	void __iomem		*vbase;
 };
 
+/* Device minor numbers for master and client */
+#define MINOR_MASTER 0
+#define MINOR_CLIENT 1
+
 struct hw3d_info {
-	struct miscdevice	master_dev;
-	struct miscdevice	client_dev;
+	dev_t devno;
+	struct cdev	master_cdev;
+	struct cdev	client_cdev;
 
 	struct clk		*grp_clk;
 	struct clk		*imem_clk;
@@ -122,13 +127,13 @@ static struct vm_operations_struct hw3d_vm_ops = {
 static bool is_master(struct hw3d_info *info, struct file *file)
 {
 	int fmin = MINOR(file->f_dentry->d_inode->i_rdev);
-	return fmin == info->master_dev.minor;
+	return fmin == MINOR(info->master_cdev.dev);
 }
 
 static bool is_client(struct hw3d_info *info, struct file *file)
 {
 	int fmin = MINOR(file->f_dentry->d_inode->i_rdev);
-	return fmin == info->client_dev.minor;
+	return fmin == MINOR(info->client_cdev.dev);
 }
 
 inline static void locked_hw3d_irq_disable(struct hw3d_info *info)
@@ -282,7 +287,7 @@ static void locked_hw3d_revoke(struct hw3d_info *info)
 bool is_msm_hw3d_file(struct file *file)
 {
 	struct hw3d_info *info = hw3d_info;
-	if (MAJOR(file->f_dentry->d_inode->i_rdev) == MISC_MAJOR &&
+	if (MAJOR(file->f_dentry->d_inode->i_rdev) == MAJOR(info->devno) &&
 	    (is_master(info, file) || is_client(info, file)))
 		return 1;
 	return 0;
@@ -661,6 +666,11 @@ static int hw3d_resume(struct platform_device *pdev)
 static int __init hw3d_probe(struct platform_device *pdev)
 {
 	struct hw3d_info *info;
+#define DEV_MASTER MKDEV(MAJOR(info->devno), MINOR_MASTER)
+#define DEV_CLIENT MKDEV(MAJOR(info->devno), MINOR_CLIENT)
+	struct class *hw3d_class;
+	struct device *master_dev;
+	struct device *client_dev;
 	struct resource *res[HW3D_NUM_REGIONS];
 	int i;
 	int irq;
@@ -722,25 +732,37 @@ static int __init hw3d_probe(struct platform_device *pdev)
 		}
 	}
 
+	hw3d_class = class_create(THIS_MODULE, "msm_hw3d");
+	if (IS_ERR(hw3d_class))
+		goto err_fail_create_class;
+
+	ret = alloc_chrdev_region(&info->devno, 0, 2, "msm_hw3d");
+	if (ret < 0)
+		goto err_fail_alloc_region;
+
 	/* register the master/client devices */
-	info->master_dev.name = "msm_hw3dm";
-	info->master_dev.minor = MISC_DYNAMIC_MINOR;
-	info->master_dev.fops = &hw3d_fops;
-	info->master_dev.parent = &pdev->dev;
-	ret = misc_register(&info->master_dev);
-	if (ret) {
+	master_dev = device_create(hw3d_class, &pdev->dev,
+			DEV_MASTER, "%s", "msm_hw3dm");
+	if (IS_ERR(master_dev))
+		goto err_dev_master;
+	cdev_init(&info->master_cdev, &hw3d_fops);
+	info->master_cdev.owner = THIS_MODULE;
+	ret = cdev_add(&info->master_cdev, DEV_MASTER, 1);
+	if (ret < 0) {
 		pr_err("%s: Cannot register master device node\n", __func__);
-		goto err_misc_reg_master;
+		goto err_reg_master;
 	}
 
-	info->client_dev.name = "msm_hw3dc";
-	info->client_dev.minor = MISC_DYNAMIC_MINOR;
-	info->client_dev.fops = &hw3d_fops;
-	info->client_dev.parent = &pdev->dev;
-	ret = misc_register(&info->client_dev);
-	if (ret) {
+	client_dev = device_create(hw3d_class, &pdev->dev,
+			DEV_CLIENT, "%s", "msm_hw3dc");
+	if (IS_ERR(client_dev))
+		goto err_dev_client;
+	cdev_init(&info->client_cdev, &hw3d_fops);
+	info->client_cdev.owner = THIS_MODULE;
+	ret = cdev_add(&info->client_cdev, DEV_CLIENT, 1);
+	if (ret < 0) {
 		pr_err("%s: Cannot register client device node\n", __func__);
-		goto err_misc_reg_client;
+		goto err_reg_client;
 	}
 
 	info->early_suspend.suspend = hw3d_early_suspend;
@@ -763,10 +785,18 @@ static int __init hw3d_probe(struct platform_device *pdev)
 
 err_req_irq:
 	unregister_early_suspend(&info->early_suspend);
-	misc_deregister(&info->client_dev);
-err_misc_reg_client:
-	misc_deregister(&info->master_dev);
-err_misc_reg_master:
+	cdev_del(&info->client_cdev);
+err_reg_client:
+	device_destroy(hw3d_class, DEV_CLIENT);
+err_dev_client:
+	cdev_del(&info->master_cdev);
+err_reg_master:
+	device_destroy(hw3d_class, DEV_MASTER);
+err_dev_master:
+	unregister_chrdev_region(info->devno, 2);
+err_fail_alloc_region:
+	class_unregister(hw3d_class);
+err_fail_create_class:
 err_remap_region:
 	for (i = 0; i < HW3D_NUM_REGIONS; ++i)
 		if (info->regions[i].vbase != 0)
