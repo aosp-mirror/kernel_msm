@@ -133,7 +133,7 @@ static uint16_t g_usModuleVersion;	/*0: rev.4, 1: rev.5 */
 #define REG_301B_RESERVED             0x301B
 #define REG_30BD_RESERVED             0x30BD
 #define REG_30C2_RESERVED             0x30C2
-#define REG_3051_RESERVED             0x3051
+#define REG_3151_RESERVED             0x3151
 #define REG_3029_RESERVED             0x3029
 #define REG_30BF_RESERVED             0x30BF
 #define REG_3022_RESERVED             0x3022
@@ -244,7 +244,7 @@ struct s5k3e2fx_i2c_reg_conf Init_setting[2][NUM_INIT_REG] = {
 	 {REG_30BD_RESERVED, 0x06},
 	 {REG_30C2_RESERVED, 0x0b},
 	 {REG_SHADE_CLK_ENABLE, 0x81},
-	 {REG_3051_RESERVED, 0xe6},
+	 {REG_3151_RESERVED, 0xe6},
 	 {REG_3029_RESERVED, 0x02},
 	 {REG_30BF_RESERVED, 0x00},
 	 {REG_3022_RESERVED, 0x87},
@@ -358,7 +358,7 @@ struct s5k3e2fx_i2c_reg_conf Init_setting[2][NUM_INIT_REG] = {
 	 {REG_30BD_RESERVED, 0x06},
 	 {REG_30C2_RESERVED, 0x0b},
 	 {REG_SHADE_CLK_ENABLE, 0x81},
-	 {REG_3051_RESERVED, 0xe6},
+	 {REG_3151_RESERVED, 0xe6},
 	 {REG_3029_RESERVED, 0x02},
 	 {REG_30BF_RESERVED, 0x00},
 	 {REG_3022_RESERVED, 0x87},
@@ -1949,6 +1949,7 @@ static struct i2c_driver s5k3e2fx_i2c_driver = {
 	},
 };
 
+#if 0
 static int s5k3e2fx_test(enum msm_s_test_mode mo)
 {
 	int rc = 0;
@@ -1961,7 +1962,7 @@ static int s5k3e2fx_test(enum msm_s_test_mode mo)
 
 	return rc;
 }
-
+#endif
 static int s5k3e2fx_setting(enum msm_s_reg_update rupdate,
 				enum msm_s_setting rt)
 {
@@ -1972,8 +1973,6 @@ static int s5k3e2fx_setting(enum msm_s_reg_update rupdate,
 	case S_UPDATE_PERIODIC:{
 			if (rt == S_RES_PREVIEW || rt == S_RES_CAPTURE) {
 				struct s5k3e2fx_i2c_reg_conf tbl_1[] = {
-					{S5K3E2FX_REG_MODE_SELECT,
-					 S5K3E2FX_MODE_SELECT_SW_STANDBY},
 					{REG_X_OUTPUT_SIZE_MSB,
 					 s5k3e2fx_reg_pat[rt].
 					 x_output_size_msb},
@@ -2097,6 +2096,13 @@ static int s5k3e2fx_setting(enum msm_s_reg_update rupdate,
 					 }
 				};
 
+				rc = s5k3e2fx_i2c_write_b
+					(s5k3e2fx_client->addr,
+					S5K3E2FX_REG_MODE_SELECT,
+					S5K3E2FX_MODE_SELECT_SW_STANDBY);
+				if (rc < 0)
+					return rc;
+
 				CDBG("Binning_enable = 0x %2x"
 				     "[s5k3e2fx.c s5k3e2fx_setting]\r\n",
 				     s5k3e2fx_reg_pat[rt].binning_enable);
@@ -2146,27 +2152,17 @@ static int s5k3e2fx_setting(enum msm_s_reg_update rupdate,
 						return rc;
 				}
 
-				/* Fixes CAMIF errors */
-				if (rt == S_RES_CAPTURE)
-					msleep(25);
-
-				rc = s5k3e2fx_i2c_write_b
-				    (s5k3e2fx_client->addr,
-				     S5K3E2FX_REG_MODE_SELECT,
-				     S5K3E2FX_MODE_SELECT_STREAM);
-				if (rc < 0)
-					return rc;
-
-				mdelay(5);
-
-				rc = s5k3e2fx_test(s5k3e2fx_ctrl->
-						   set_test);
-				if (rc < 0)
-					return rc;
+                                if (rt == S_RES_PREVIEW) {
+					rc = s5k3e2fx_i2c_write_b
+						(s5k3e2fx_client->addr,
+						S5K3E2FX_REG_MODE_SELECT,
+						S5K3E2FX_MODE_SELECT_STREAM);
+					if (rc < 0)
+						return rc;
 				}
-		}
+			}
 		break; /* UPDATE_PERIODIC */
-
+		}
 	case S_REG_INIT:{
 			if (rt == S_RES_PREVIEW || rt == S_RES_CAPTURE) {
 				struct s5k3e2fx_i2c_reg_conf tbl_3[] = {
@@ -2412,6 +2408,9 @@ static int s5k3e2fx_probe_init_lens_correction(
 
 	s5k3e2fx_i2c_write_table(&lc_setting[g_usModuleVersion][0], NUM_LC_REG);
 
++        /* Solve EVT5 greenish in lowlight, prevent corrupted frame*/
++       s5k3e2fx_i2c_write_b(s5k3e2fx_client->addr, 0x105,0x1);
+
 	/*20090811  separates the EVT4/EVT5 sensor init and LC setting end */
 	s5k3e2fx_i2c_write_b(s5k3e2fx_client->addr,
 			     S5K3E2FX_REG_MODE_SELECT,
@@ -2523,7 +2522,8 @@ static int s5k3e2fx_write_exp_gain(uint16_t gain, uint32_t line)
 
 	struct s5k3e2fx_i2c_reg_conf tbl[2];
 
-	CDBG("Line:%d s5k3e2fx_write_exp_gain \n", __LINE__);
+	CDBG("Line:%d s5k3e2fx_write_exp_gain gain %d line %d\n",
+		__LINE__, gain, line);
 
 	if (s5k3e2fx_ctrl->sensormode == SENSOR_PREVIEW_MODE) {
 
@@ -2557,12 +2557,15 @@ static int s5k3e2fx_write_exp_gain(uint16_t gain, uint32_t line)
 		ll_ratio = 0x400;
 
 /* AEC_FLASHING */
-	rc = s5k3e2fx_i2c_write_b(s5k3e2fx_client->addr,
-				  REG_GROUPED_PARAMETER_HOLD,
-				  GROUPED_PARAMETER_HOLD);
-	if (rc < 0) {
-		pr_err("s5k3e2fx_i2c_write_b failed on line %d\n", __LINE__);
-		return rc;
+	if (s5k3e2fx_ctrl->sensormode == SENSOR_PREVIEW_MODE) {
+		rc = s5k3e2fx_i2c_write_b(s5k3e2fx_client->addr,
+					  REG_GROUPED_PARAMETER_HOLD,
+					  GROUPED_PARAMETER_HOLD);
+		if (rc < 0) {
+			pr_err("s5k3e2fx_i2c_write_b failed on line %d\n",
+				__LINE__);
+			return rc;
+		}
 	}
 
 	/* update gain registers */
@@ -2575,7 +2578,7 @@ static int s5k3e2fx_write_exp_gain(uint16_t gain, uint32_t line)
 	rc = s5k3e2fx_i2c_write_table(&tbl[0], ARRAY_SIZE(tbl));
 	if (rc < 0)
 		goto write_gain_done;
-#if 0 /* AEC_FLASHING */
+#if 1 /* Solve EVT5 greenish in lowlight*/
 	ll_pck = ll_pck * ll_ratio;
 	ll_pck_msb = ((ll_pck / 0x400) & 0xFF00) >> 8;
 	ll_pck_lsb = (ll_pck / 0x400) & 0x00FF;
@@ -2587,16 +2590,7 @@ static int s5k3e2fx_write_exp_gain(uint16_t gain, uint32_t line)
 	rc = s5k3e2fx_i2c_write_table(&tbl[0], ARRAY_SIZE(tbl));
 	if (rc < 0)
 		goto write_gain_done;
-
-	line = line / ll_ratio;
-	intg_t_msb = (line & 0xFF00) >> 8;
-	intg_t_lsb = (line & 0x00FF);
-	tbl[0].waddr = REG_COARSE_INTEGRATION_TIME;
-	tbl[0].bdata = intg_t_msb;
-	tbl[1].waddr = REG_COARSE_INTEGRATION_TIME_LSB;
-	tbl[1].bdata = intg_t_lsb;
-	rc = s5k3e2fx_i2c_write_table(&tbl[0], ARRAY_SIZE(tbl));
-#endif /* AEC_FLASHING */
+#else
 	if (line / 0x400 + offset > fl_lines)
 		ll_pck = line / 0x400 + offset;
 	else
@@ -2612,6 +2606,7 @@ static int s5k3e2fx_write_exp_gain(uint16_t gain, uint32_t line)
 	rc = s5k3e2fx_i2c_write_table(&tbl[0], ARRAY_SIZE(tbl));
 	if (rc < 0)
 		goto write_gain_done;
+#endif
 
 	line = line / 0x400;
 	intg_t_msb = (line & 0xFF00) >> 8;
@@ -2622,13 +2617,17 @@ static int s5k3e2fx_write_exp_gain(uint16_t gain, uint32_t line)
 	tbl[1].bdata = intg_t_lsb;
 	rc = s5k3e2fx_i2c_write_table(&tbl[0], ARRAY_SIZE(tbl));
 
-	rc = s5k3e2fx_i2c_write_b(s5k3e2fx_client->addr,
-				  REG_GROUPED_PARAMETER_HOLD,
-				  GROUPED_PARAMETER_UPDATE);
-	if (rc < 0) {
-		pr_err("s5k3e2fx_i2c_write_b failed on line %d\n", __LINE__);
-		return rc;
+	if (s5k3e2fx_ctrl->sensormode == SENSOR_PREVIEW_MODE) {
+		rc = s5k3e2fx_i2c_write_b(s5k3e2fx_client->addr,
+					  REG_GROUPED_PARAMETER_HOLD,
+					  GROUPED_PARAMETER_UPDATE);
+		if (rc < 0) {
+			pr_err("s5k3e2fx_i2c_write_b failed on line %d\n",
+				__LINE__);
+			return rc;
+		}
 	}
+
 write_gain_done:
 	return rc;
 }
@@ -2640,6 +2639,14 @@ static int s5k3e2fx_set_pict_exp_gain(uint16_t gain, uint32_t line)
 	CDBG("Line:%d s5k3e2fx_set_pict_exp_gain \n", __LINE__);
 
 	rc = s5k3e2fx_write_exp_gain(gain, line);
+	if (rc < 0)
+		return rc;
+
+/* Solve EVT5 greenish lowlight*/
+	rc = s5k3e2fx_i2c_write_b
+		    (s5k3e2fx_client->addr,
+		     S5K3E2FX_REG_MODE_SELECT,
+		     S5K3E2FX_MODE_SELECT_STREAM);
 
 	return rc;
 }
@@ -2650,9 +2657,13 @@ static int s5k3e2fx_video_config(int mode, int res)
 
 	switch (res) {
 	case S_QTR_SIZE:
+		pr_info("start sensor S_RES_PREVIEW config: %d\n", __LINE__);
 		rc = s5k3e2fx_setting(S_UPDATE_PERIODIC, S_RES_PREVIEW);
 		if (rc < 0)
 			return rc;
+		/* only apply my_reg for returning preview*/
+		rc = s5k3e2fx_write_exp_gain(s5k3e2fx_ctrl->my_reg_gain,
+				     s5k3e2fx_ctrl->my_reg_line_count);
 		break;
 
 	case S_FULL_SIZE:
@@ -2668,9 +2679,6 @@ static int s5k3e2fx_video_config(int mode, int res)
 	s5k3e2fx_ctrl->prev_res = res;
 	s5k3e2fx_ctrl->curr_res = res;
 	s5k3e2fx_ctrl->sensormode = mode;
-
-	rc = s5k3e2fx_write_exp_gain(s5k3e2fx_ctrl->my_reg_gain,
-				     s5k3e2fx_ctrl->my_reg_line_count);
 
 	return rc;
 }
