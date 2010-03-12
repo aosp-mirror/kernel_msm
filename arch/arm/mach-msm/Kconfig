@@ -159,6 +159,13 @@ config MACH_MAHIMAHI
 	help
 	  Select this to support the Mahi-Mahi device
 
+config MACH_QSD8X50_FFA
+	depends on ARCH_QSD8X50
+	default y
+	bool "8x50-ffa"
+	help
+	  Select this to support the 8x50 ffa device
+
 config HTC_HEADSET
 	tristate "HTC 2 Wire detection driver"
 	default n
