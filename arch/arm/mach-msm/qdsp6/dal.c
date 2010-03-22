@@ -161,7 +161,7 @@ void dal_trace_dump(struct dal_client *c)
 
 	for (n = c->tr_tail; n != c->tr_head; n = (n + 1) & TRACE_LOG_MASK) {
 		dt = c->tr_log + n;
-		len = dt->hdr.length;
+		len = dt->hdr.length - sizeof(dt->hdr);
 		if (len > TRACE_DATA_MAX)
 			len = TRACE_DATA_MAX;
 		dal_trace_print(&dt->hdr, dt->data, len, dt->timestamp);
