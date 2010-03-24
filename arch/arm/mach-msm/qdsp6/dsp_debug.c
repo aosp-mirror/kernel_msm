@@ -22,6 +22,7 @@
 #include <linux/sched.h>
 #include <linux/wait.h>
 #include <linux/delay.h>
+#include <asm/atomic.h>
 
 #include "../proc_comm.h"
 
@@ -29,14 +30,24 @@ static wait_queue_head_t dsp_wait;
 static int dsp_has_crashed;
 static int dsp_wait_count;
 
+static atomic_t dsp_crash_count = ATOMIC_INIT(0);
+
 void q6audio_dsp_not_responding(void)
 {
+
+	if (atomic_add_return(1, &dsp_crash_count) != 1) {
+		pr_err("q6audio_dsp_not_responding() - parking additional crasher...\n");
+		for (;;)
+			msleep(1000);
+	}
 	if (dsp_wait_count) {
 		dsp_has_crashed = 1;
 		wake_up(&dsp_wait);
 
 		while (dsp_has_crashed != 2)
 			wait_event(dsp_wait, dsp_has_crashed == 2);
+	} else {
+		pr_err("q6audio_dsp_not_responding() - no waiter?\n");
 	}
 	BUG();
 }
@@ -65,9 +76,10 @@ static ssize_t dsp_write(struct file *file, const char __user *buf,
 			int res;
 			dsp_wait_count++;
 			res = wait_event_interruptible(dsp_wait, dsp_has_crashed);
-			dsp_wait_count--;
-			if (res < 0)
+			if (res < 0) {
+				dsp_wait_count--;
 				return res;
+			}
 		}
 #if defined(CONFIG_MACH_MAHIMAHI)
 		/* assert DSP NMI */
