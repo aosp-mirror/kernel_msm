@@ -18,6 +18,9 @@
 
 #include <linux/interrupt.h>
 #include <asm-generic/gpio.h>
+#include <mach/irqs.h>
+
+#define FIRST_BOARD_GPIO	NR_GPIO_IRQS
 
 static inline int gpio_get_value(unsigned gpio)
 {
