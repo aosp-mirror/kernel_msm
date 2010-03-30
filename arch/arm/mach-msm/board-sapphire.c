@@ -258,13 +258,10 @@ struct platform_device sapphire_reset_keys_device = {
 	.dev.platform_data = &sapphire_reset_keys_pdata,
 };
 
+static int gpio_tp_ls_en = SAPPHIRE_TP_LS_EN;
+
 static int sapphire_ts_power(int on)
 {
-	int gpio_tp_ls_en = SAPPHIRE_TP_LS_EN;
-
-	if (is_12pin_camera())
-		gpio_tp_ls_en = SAPPHIRE20_TP_LS_EN;
-
 	if (on) {
 		sapphire_gpio_write(NULL, SAPPHIRE_GPIO_TP_EN, 1);
 		/* touchscreen must be powered before we enable i2c pullup */
@@ -1187,6 +1184,10 @@ static void __init sapphire_init(void)
 
 	if(system_rev != 0x80)
 		sapphire_search_button_info.keymap = sapphire_search_button_v1;
+
+	if (is_12pin_camera())
+		gpio_tp_ls_en = SAPPHIRE20_TP_LS_EN;
+	gpio_request(gpio_tp_ls_en, "tp_ls_en");
 
 	i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));
 	platform_add_devices(devices, ARRAY_SIZE(devices));
