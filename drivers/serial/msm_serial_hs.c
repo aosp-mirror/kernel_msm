@@ -56,6 +56,7 @@
 #include <linux/dmapool.h>
 #include <linux/wait.h>
 #include <linux/wakelock.h>
+#include <linux/workqueue.h>
 
 #include <asm/atomic.h>
 #include <asm/irq.h>
@@ -116,6 +117,7 @@ struct msm_hs_rx {
 	unsigned char *buffer;
 	struct dma_pool *pool;
 	struct wake_lock wake_lock;
+	struct work_struct tty_work;
 };
 
 /* optional RX GPIO IRQ low power wakeup */
@@ -162,6 +164,7 @@ static struct msm_hs_port q_uart_port[UARTDM_NR];
 static struct platform_driver msm_serial_hs_platform_driver;
 static struct uart_driver msm_hs_driver;
 static struct uart_ops msm_hs_ops;
+static struct workqueue_struct *msm_hs_workqueue;
 
 #define UARTDM_TO_MSM(uart_port) \
 	container_of((uart_port), struct msm_hs_port, uport)
@@ -762,11 +765,19 @@ out:
 	/* release wakelock in 500ms, not immediately, because higher layers
 	 * don't always take wakelocks when they should */
 	wake_lock_timeout(&msm_uport->rx.wake_lock, HZ / 2);
-	/* tty_flip_buffer_push() might call msm_hs_start(), so unlock */
 	spin_unlock_irqrestore(&uport->lock, flags);
 
 	if (flush < FLUSH_DATA_INVALID)
-		tty_flip_buffer_push(tty);
+		queue_work(msm_hs_workqueue, &msm_uport->rx.tty_work);
+}
+
+static void msm_hs_tty_flip_buffer_work(struct work_struct *work)
+{
+	struct msm_hs_port *msm_uport =
+			container_of(work, struct msm_hs_port, rx.tty_work);
+	struct tty_struct *tty = msm_uport->uport.state->port.tty;
+
+	tty_flip_buffer_push(tty);
 }
 
 /*
@@ -1130,13 +1141,12 @@ static irqreturn_t msm_hs_rx_wakeup_isr(int irq, void *dev)
 			tty_insert_flip_char(tty,
 					     msm_uport->rx_wakeup.rx_to_inject,
 					     TTY_NORMAL);
+			queue_work(msm_hs_workqueue, &msm_uport->rx.tty_work);
 		}
 	}
 
 	spin_unlock_irqrestore(&uport->lock, flags);
 
-	if (wakeup && msm_uport->rx_wakeup.inject_rx)
-		tty_flip_buffer_push(tty);
 	return IRQ_HANDLED;
 }
 
@@ -1163,6 +1173,10 @@ static int msm_hs_startup(struct uart_port *uport)
 
 	tx->dma_base = dma_map_single(uport->dev, tx_buf->buf, UART_XMIT_SIZE,
 				      DMA_TO_DEVICE);
+
+	/* do not let tty layer execute RX in global workqueue, use a
+	 * dedicated workqueue managed by this driver */
+	uport->state->port.tty->low_latency = 1;
 
 	/* turn on uart clk */
 	ret = msm_hs_init_clk_locked(uport);
@@ -1320,6 +1334,8 @@ static int uartdm_init_port(struct uart_port *uport)
 					    sizeof(u32 *), DMA_TO_DEVICE);
 	rx->xfer.cmdptr = DMOV_CMD_ADDR(rx->cmdptr_dmaaddr);
 
+	INIT_WORK(&rx->tty_work, msm_hs_tty_flip_buffer_work);
+
 	return 0;
 }
 
@@ -1425,6 +1441,8 @@ static int __init msm_serial_hs_init(void)
 	for (i = 0; i < UARTDM_NR; i++)
 		q_uart_port[i].uport.type = PORT_UNKNOWN;
 
+	msm_hs_workqueue = create_singlethread_workqueue("msm_serial_hs");
+
 	ret = uart_register_driver(&msm_hs_driver);
 	if (unlikely(ret)) {
 		printk(KERN_ERR "%s failed to load\n", __FUNCTION__);
@@ -1482,6 +1500,9 @@ static void msm_hs_shutdown(struct uart_port *uport)
 			 UART_XMIT_SIZE, DMA_TO_DEVICE);
 
 	spin_unlock_irqrestore(&uport->lock, flags);
+
+	if (cancel_work_sync(&msm_uport->rx.tty_work))
+		msm_hs_tty_flip_buffer_work(&msm_uport->rx.tty_work);
 }
 
 static void __exit msm_serial_hs_exit(void)
@@ -1489,6 +1510,7 @@ static void __exit msm_serial_hs_exit(void)
 	printk(KERN_INFO "msm_serial_hs module removed\n");
 	platform_driver_unregister(&msm_serial_hs_platform_driver);
 	uart_unregister_driver(&msm_hs_driver);
+	destroy_workqueue(msm_hs_workqueue);
 }
 
 static struct platform_driver msm_serial_hs_platform_driver = {
