@@ -59,8 +59,6 @@ static int failure_count = 0;
 
 static short akmd_delay = 0;
 
-static atomic_t suspend_flag = ATOMIC_INIT(0);
-
 static struct akm8973_platform_data *pdata;
 
 static int AKI2C_RxData(char *rxData, int length)
@@ -223,7 +221,8 @@ static int AKECS_TransRBuff(char *rbuf, int size)
 	wait_event_interruptible_timeout(data_ready_wq,
 					 atomic_read(&data_ready), 1000);
 	if (!atomic_read(&data_ready)) {
-		if (!atomic_read(&suspend_flag)) {
+		/* Ignore data errors if there are no open handles */
+		if (atomic_read(&open_count) > 0) {
 			printk(KERN_ERR
 				"AKM8973 AKECS_TransRBUFF: Data not ready\n");
 			failure_count++;
@@ -315,6 +314,7 @@ static int akm_aot_open(struct inode *inode, struct file *file)
 	if (atomic_cmpxchg(&open_count, 0, 1) == 0) {
 		if (atomic_cmpxchg(&open_flag, 0, 1) == 0) {
 			atomic_set(&reserve_open_flag, 1);
+			enable_irq(this_client->irq);
 			wake_up(&open_wq);
 			ret = 0;
 		}
@@ -328,6 +328,7 @@ static int akm_aot_release(struct inode *inode, struct file *file)
 	atomic_set(&open_flag, 0);
 	atomic_set(&open_count, 0);
 	wake_up(&open_wq);
+	disable_irq(this_client->irq);
 	return 0;
 }
 
@@ -553,23 +554,6 @@ static irqreturn_t akm8973_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static void akm8973_suspend(struct device *device)
-{
-	atomic_set(&suspend_flag, 1);
-	atomic_set(&reserve_open_flag, atomic_read(&open_flag));
-	atomic_set(&open_flag, 0);
-	wake_up(&open_wq);
-	disable_irq(this_client->irq);
-}
-
-static void akm8973_resume(struct device *device)
-{
-	enable_irq(this_client->irq);
-	atomic_set(&suspend_flag, 0);
-	atomic_set(&open_flag, atomic_read(&reserve_open_flag));
-	wake_up(&open_wq);
-}
-
 static struct file_operations akmd_fops = {
 	.owner = THIS_MODULE,
 	.open = akmd_open,
@@ -632,6 +616,7 @@ int akm8973_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 	err = request_irq(client->irq, akm8973_interrupt, IRQF_TRIGGER_HIGH,
 			  "akm8973", akm);
+	disable_irq(this_client->irq);
 
 	if (err < 0) {
 		printk(KERN_ERR"AKM8973 akm8973_probe: request irq failed\n");
@@ -740,18 +725,12 @@ static const struct i2c_device_id akm8973_id[] = {
 	{ }
 };
 
-static struct dev_pm_ops akm8973_pm_ops = {
-	.suspend_noirq = akm8973_suspend,
-	.resume_noirq = akm8973_resume,
-};
-
 static struct i2c_driver akm8973_driver = {
 	.probe 	= akm8973_probe,
 	.remove 	= akm8973_remove,
 	.id_table	= akm8973_id,
 	.driver = {
 		   .name = AKM8973_I2C_NAME,
-		   .pm = &akm8973_pm_ops,
 		   },
 };
 
