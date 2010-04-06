@@ -17,6 +17,7 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/init.h>
+#include <linux/input.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/mfd/pm8058.h>
@@ -40,6 +41,7 @@
 #include "proc_comm.h"
 
 #define SURF7X30_PM8058_GPIO_BASE	FIRST_BOARD_GPIO
+#define SURF7X30_PM8058_GPIO(x)		(SURF7X30_PM8058_GPIO_BASE + (x))
 #define SURF7X30_PM8058_IRQ_BASE	FIRST_BOARD_IRQ
 
 #define SURF7X30_GPIO_PMIC_INT_N	27
@@ -222,9 +224,78 @@ static struct platform_device android_usb_device = {
 	},
 };
 
+static struct pm8058_pin_config surf7x30_kpd_input_gpio_cfg = {
+	.vin_src	= PM8058_GPIO_VIN_SRC_VREG_S3,
+	.dir		= PM8058_GPIO_INPUT,
+	.pull_up	= PM8058_GPIO_PULL_UP_31P5,
+	.strength	= PM8058_GPIO_STRENGTH_OFF,
+	.func		= PM8058_GPIO_FUNC_NORMAL,
+	.flags		= PM8058_GPIO_INV_IRQ_POL
+};
+
+static struct pm8058_pin_config surf7x30_kpd_output_gpio_cfg = {
+	.vin_src	= PM8058_GPIO_VIN_SRC_VREG_S3,
+	.dir		= PM8058_GPIO_OUTPUT,
+	.pull_up	= PM8058_GPIO_PULL_NONE,
+	.strength	= PM8058_GPIO_STRENGTH_LOW,
+	.func		= PM8058_GPIO_FUNC_1,
+	.flags		= (PM8058_GPIO_OPEN_DRAIN |
+			   PM8058_GPIO_INV_IRQ_POL),
+};
+
+static unsigned int surf7x30_pmic_col_gpios[] = {
+	SURF7X30_PM8058_GPIO(0), SURF7X30_PM8058_GPIO(1),
+	SURF7X30_PM8058_GPIO(2), SURF7X30_PM8058_GPIO(3),
+	SURF7X30_PM8058_GPIO(4), SURF7X30_PM8058_GPIO(5),
+	SURF7X30_PM8058_GPIO(6), SURF7X30_PM8058_GPIO(7),
+};
+static unsigned int surf7x30_pmic_row_gpios[] = {
+	SURF7X30_PM8058_GPIO(8), SURF7X30_PM8058_GPIO(9),
+	SURF7X30_PM8058_GPIO(10), SURF7X30_PM8058_GPIO(11),
+	SURF7X30_PM8058_GPIO(12), SURF7X30_PM8058_GPIO(13),
+	SURF7X30_PM8058_GPIO(14), SURF7X30_PM8058_GPIO(15),
+	SURF7X30_PM8058_GPIO(16), SURF7X30_PM8058_GPIO(17),
+	SURF7X30_PM8058_GPIO(18), SURF7X30_PM8058_GPIO(19),
+};
+
+#define KEYMAP_NUM_ROWS		ARRAY_SIZE(surf7x30_pmic_row_gpios)
+#define KEYMAP_NUM_COLS		ARRAY_SIZE(surf7x30_pmic_col_gpios)
+#define KEYMAP_INDEX(row, col)	(((row) * KEYMAP_NUM_COLS) + (col))
+#define KEYMAP_SIZE		(KEYMAP_NUM_ROWS * KEYMAP_NUM_COLS)
+
+static int surf7x30_pmic_keypad_init(struct device *dev)
+{
+	int i;
+
+	for (i = 0; i < KEYMAP_NUM_COLS; ++i)
+		pm8058_gpio_mux_cfg(dev, surf7x30_pmic_col_gpios[i],
+				    &surf7x30_kpd_input_gpio_cfg);
+	for (i = 0; i < KEYMAP_NUM_ROWS; ++i)
+		pm8058_gpio_mux_cfg(dev, surf7x30_pmic_row_gpios[i],
+				    &surf7x30_kpd_output_gpio_cfg);
+	return 0;
+}
+
+static const unsigned short surf7x30_pmic_keymap[KEYMAP_SIZE] = {
+	[KEYMAP_INDEX(0, 6)] = KEY_BACK,
+};
+
+static struct pm8058_keypad_platform_data surf7x30_pmic_keypad_pdata = {
+	.name			= "surf7x30-keypad",
+	.num_drv		= KEYMAP_NUM_ROWS,
+	.num_sns		= KEYMAP_NUM_COLS,
+	.scan_delay_shift	= 5,
+	.drv_hold_clks		= 4,
+	.debounce_ms		= 10,
+	.keymap			= surf7x30_pmic_keymap,
+	.init			= surf7x30_pmic_keypad_init,
+};
+
 static struct pm8058_platform_data surf7x30_pm8058_pdata = {
 	.irq_base	= SURF7X30_PM8058_IRQ_BASE,
 	.gpio_base	= SURF7X30_PM8058_GPIO_BASE,
+
+	.keypad_pdata	= &surf7x30_pmic_keypad_pdata,
 };
 
 static struct msm_ssbi_platform_data surf7x30_ssbi_pmic_pdata = {
