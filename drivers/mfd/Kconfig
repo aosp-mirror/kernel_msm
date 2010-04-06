@@ -482,6 +482,14 @@ config MFD_JANZ_CMODIO
 	  host many different types of MODULbus daughterboards, including
 	  CAN and GPIO controllers.
 
+config PM8058
+	bool "Qualcomm PM8058 Power Management IC"
+	depends on MSM_SSBI && ARCH_MSM7X30
+	default y if MSM_SSBI && ARCH_MSM7X30
+	help
+	  Say yes here if your board is equipped with the Qualcomm
+	  PM8058 PMIC.
+
 endif # MFD_SUPPORT
 
 menu "Multimedia Capabilities Port drivers"
