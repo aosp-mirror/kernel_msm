@@ -2095,11 +2095,11 @@ static int s5k3e2fx_setting(enum msm_s_reg_update rupdate,
 					 {0x3063, 0x16},
 					 }
 				};
-
-				rc = s5k3e2fx_i2c_write_b
-					(s5k3e2fx_client->addr,
-					S5K3E2FX_REG_MODE_SELECT,
-					S5K3E2FX_MODE_SELECT_SW_STANDBY);
+/* solve greenish: hold for both */
+				rc = s5k3e2fx_i2c_write_b(
+					s5k3e2fx_client->addr,
+					REG_GROUPED_PARAMETER_HOLD,
+					GROUPED_PARAMETER_HOLD);
 				if (rc < 0)
 					return rc;
 
@@ -2152,14 +2152,23 @@ static int s5k3e2fx_setting(enum msm_s_reg_update rupdate,
 						return rc;
 				}
 
-                                if (rt == S_RES_PREVIEW) {
-					rc = s5k3e2fx_i2c_write_b
-						(s5k3e2fx_client->addr,
-						S5K3E2FX_REG_MODE_SELECT,
-						S5K3E2FX_MODE_SELECT_STREAM);
+				/* solve greenish: only release for preview */
+				if (s5k3e2fx_ctrl->sensormode == SENSOR_PREVIEW_MODE)
+				{
+					rc = s5k3e2fx_i2c_write_b(
+						s5k3e2fx_client->addr,
+						REG_GROUPED_PARAMETER_HOLD,
+						GROUPED_PARAMETER_UPDATE);
 					if (rc < 0)
 						return rc;
 				}
+
+				rc = s5k3e2fx_i2c_write_b
+					(s5k3e2fx_client->addr,
+					S5K3E2FX_REG_MODE_SELECT,
+					S5K3E2FX_MODE_SELECT_STREAM);
+				if (rc < 0)
+					return rc;
 			}
 		break; /* UPDATE_PERIODIC */
 		}
@@ -2556,7 +2565,7 @@ static int s5k3e2fx_write_exp_gain(uint16_t gain, uint32_t line)
 	else
 		ll_ratio = 0x400;
 
-/* AEC_FLASHING */
+/* solve greenish: only release for preview */
 	if (s5k3e2fx_ctrl->sensormode == SENSOR_PREVIEW_MODE) {
 		rc = s5k3e2fx_i2c_write_b(s5k3e2fx_client->addr,
 					  REG_GROUPED_PARAMETER_HOLD,
@@ -2617,7 +2626,7 @@ static int s5k3e2fx_write_exp_gain(uint16_t gain, uint32_t line)
 	tbl[1].bdata = intg_t_lsb;
 	rc = s5k3e2fx_i2c_write_table(&tbl[0], ARRAY_SIZE(tbl));
 
-	if (s5k3e2fx_ctrl->sensormode == SENSOR_PREVIEW_MODE) {
+/* solve greenish: release for both */
 		rc = s5k3e2fx_i2c_write_b(s5k3e2fx_client->addr,
 					  REG_GROUPED_PARAMETER_HOLD,
 					  GROUPED_PARAMETER_UPDATE);
@@ -2626,7 +2635,6 @@ static int s5k3e2fx_write_exp_gain(uint16_t gain, uint32_t line)
 				__LINE__);
 			return rc;
 		}
-	}
 
 write_gain_done:
 	return rc;
@@ -2634,21 +2642,10 @@ write_gain_done:
 
 static int s5k3e2fx_set_pict_exp_gain(uint16_t gain, uint32_t line)
 {
-	int rc = 0;
+	pr_info("s5k3e2fx_set_pict_exp_gain gain %d line %d\n",
+		gain, line);
 
-	CDBG("Line:%d s5k3e2fx_set_pict_exp_gain \n", __LINE__);
-
-	rc = s5k3e2fx_write_exp_gain(gain, line);
-	if (rc < 0)
-		return rc;
-
-/* Solve EVT5 greenish lowlight*/
-	rc = s5k3e2fx_i2c_write_b
-		    (s5k3e2fx_client->addr,
-		     S5K3E2FX_REG_MODE_SELECT,
-		     S5K3E2FX_MODE_SELECT_STREAM);
-
-	return rc;
+	return s5k3e2fx_write_exp_gain(gain, line);
 }
 
 static int s5k3e2fx_video_config(int mode, int res)
