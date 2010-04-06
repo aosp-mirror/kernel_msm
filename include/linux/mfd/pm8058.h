@@ -33,8 +33,8 @@
 #define PM8058_FIRST_KEYPAD_IRQ		(PM8058_FIRST_MPP_IRQ + \
 					 PM8058_NUM_MPP_IRQS)
 
-#define PM8058_KEYPAD_STUCK_IRQ		(PM8058_FIRST_KEYPAD_IRQ + 0)
-#define PM8058_KEYPAD_IRQ		(PM8058_FIRST_KEYPAD_IRQ + 1)
+#define PM8058_KEYPAD_IRQ		(PM8058_FIRST_KEYPAD_IRQ + 0)
+#define PM8058_KEYPAD_STUCK_IRQ		(PM8058_FIRST_KEYPAD_IRQ + 1)
 
 #define PM8058_GPIO_TO_IRQ(base,gpio)	(PM8058_FIRST_GPIO_IRQ + \
 					 (base) + (gpio))
@@ -48,10 +48,31 @@
 #define PM8058_GPIO(base,gpio)		((base) + (gpio) + PM8058_FIRST_GPIO)
 /*#define PM8058_MPP(base,mpp)		((base) + (mpp) + PM8058_FIRST_MPP)*/
 
+struct pm8058_keypad_platform_data {
+	const char		*name;
+	int			num_drv;
+	int			num_sns;
+	/* delay in ms = 1 << scan_delay_shift, 0-7 */
+	int			scan_delay_shift;
+	/* # of 32kHz clock cycles, 1-4 */
+	int			drv_hold_clks;
+	/* in increments of 5ms, max 20ms */
+	int			debounce_ms;
+
+	/* size must be num_drv * num_sns
+	 * index is (drv * num_sns + sns) */
+	const unsigned short	*keymap;
+
+	int			(*init)(struct device *dev);
+};
+
 struct pm8058_platform_data {
 	unsigned int				irq_base;
 	unsigned int				gpio_base;
 	int					(*init)(struct device *dev);
+
+	/* child devices */
+	struct pm8058_keypad_platform_data	*keypad_pdata;
 };
 
 #define PM8058_GPIO_VIN_SRC_VPH_PWR	0x0 /* VDD_L6_L7 */
@@ -88,7 +109,7 @@ struct pm8058_platform_data {
 #define PM8058_GPIO_OPEN_DRAIN		0x10
 #define PM8058_GPIO_HIGH_Z		0x20
 #define PM8058_GPIO_INV_IRQ_POL		0x40
-#define PM8058_GPIO_CONFIGURED		0x80
+#define PM8058_GPIO_CONFIGURED		0x80 /* FOR INTERNAL USE ONLY */
 
 struct pm8058_pin_config {
 	u8		vin_src;

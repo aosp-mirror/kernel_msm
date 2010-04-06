@@ -665,6 +665,51 @@ static int pm8058_irq_init(struct pm8058 *pmic, unsigned int irq_base)
 	return 0;
 }
 
+static int add_keypad_device(struct pm8058 *pmic, void *pdata)
+{
+	struct platform_device *pdev;
+	struct resource irq_res[2];
+	int ret;
+
+	pdev = platform_device_alloc("pm8058-keypad", -1);
+	if (!pdev) {
+		pr_err("%s: cannot allocate pdev for keypad\n", __func__);
+		return -ENOMEM;
+	}
+
+	pdev->dev.parent = pmic->dev;
+	pdev->dev.platform_data = pdata;
+
+	memset(&irq_res, 0, sizeof(irq_res));
+	irq_res[0].start = pmic->irq_base + PM8058_KEYPAD_IRQ;
+	irq_res[0].end = irq_res[0].start;
+	irq_res[0].flags = IORESOURCE_IRQ;
+	irq_res[0].name = "kp_sense";
+	irq_res[1].start = pmic->irq_base + PM8058_KEYPAD_STUCK_IRQ;
+	irq_res[1].end = irq_res[1].start;
+	irq_res[1].flags = IORESOURCE_IRQ;
+	irq_res[1].name = "kp_stuck";
+	ret = platform_device_add_resources(pdev, irq_res, ARRAY_SIZE(irq_res));
+	if (ret) {
+		pr_err("%s: can't add irq resources for keypad'\n", __func__);
+		goto err;
+	}
+
+	ret = platform_device_add(pdev);
+	if (ret) {
+		pr_err("%s: cannot add child keypad platform device for\n",
+		       __func__);
+		goto err;
+	}
+
+	return 0;
+
+err:
+	if (pdev)
+		platform_device_put(pdev);
+	return ret;
+}
+
 static int pm8058_probe(struct platform_device *pdev)
 {
 	struct pm8058_platform_data *pdata = pdev->dev.platform_data;
@@ -733,8 +778,17 @@ static int pm8058_probe(struct platform_device *pdev)
 		}
 	}
 
+	if (pdata->keypad_pdata) {
+		ret = add_keypad_device(pmic, pdata->keypad_pdata);
+		if (ret) {
+			pr_err("%s: can't add child keypad device\n", __func__);
+			goto err_add_kp_dev;
+		}
+	}
+
 	return 0;
 
+err_add_kp_dev:
 err_pdata_init:
 	free_irq(devirq, pmic);
 err_request_irq:
