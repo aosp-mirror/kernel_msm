@@ -21,10 +21,11 @@
 #include <linux/uaccess.h>
 #include <linux/fs.h>
 #include <linux/android_pmem.h>
-#include <mach/msm_adsp.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/wait.h>
+#include <linux/clk.h>
+#include <mach/msm_adsp.h>
 #include "msm_vfe7x.h"
 
 #define QDSP_CMDQUEUE QDSP_vfeCommandQueue
@@ -53,6 +54,9 @@ static void *vfe_syncdata;
 static uint8_t vfestopped;
 
 static struct stop_event stopevent;
+
+static struct clk *ebi1_clk;
+static const char *const ebi1_clk_name = "ebi1_clk";
 
 static void vfe_7x_convert(struct msm_vfe_phy_info *pinfo,
 			   enum vfe_resp_msg type,
@@ -246,6 +250,12 @@ static void vfe_7x_release(struct platform_device *pdev)
 
 	msm_camio_disable(pdev);
 
+	if (ebi1_clk) {
+		clk_set_rate(ebi1_clk, 0);
+		clk_put(ebi1_clk);
+		ebi1_clk = 0;
+	}
+
 	kfree(extdata);
 	extdata = 0;
 }
@@ -263,6 +273,19 @@ static int vfe_7x_init(struct msm_vfe_callback *presp,
 		resp = presp;
 	else
 		return -EIO;
+
+	ebi1_clk = clk_get(NULL, ebi1_clk_name);
+	if (!ebi1_clk) {
+		pr_err("%s: could not get %s\n", __func__, ebi1_clk_name);
+		return -EIO;
+	}
+
+	rc = clk_set_rate(ebi1_clk, 128000000);
+	if (rc < 0) {
+		pr_err("%s: clk_set_rate(%s) failed: %d\n", __func__,
+			ebi1_clk_name, rc);
+		return rc;
+	}
 
 	/* Bring up all the required GPIOs and Clocks */
 	rc = msm_camio_enable(dev);
