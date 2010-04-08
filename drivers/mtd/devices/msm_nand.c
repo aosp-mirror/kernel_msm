@@ -316,6 +316,44 @@ msm_nand_dma_map(struct device *dev, void *addr, size_t size,
 	return dma_map_page(dev, page, offset, size, dir);
 }
 
+static int msm_nand_check_empty(struct mtd_info *mtd, struct mtd_oob_ops *ops,
+				unsigned long *uncorrected)
+{
+	unsigned int p, n, end;
+	uint8_t *datbuf = ops->datbuf;
+	uint8_t *oobbuf = ops->oobbuf;
+	size_t oobsize;
+	int page_count;
+
+	if (ops->mode == MTD_OOB_RAW)
+		return false;
+
+	page_count = ops->retlen / mtd->writesize;
+	oobsize = (ops->mode == MTD_OOB_AUTO) ? mtd->oobavail : mtd->oobsize;
+
+	for_each_set_bit(p, uncorrected, page_count) {
+		if (datbuf) {
+			datbuf = ops->datbuf + p * mtd->writesize;
+			for (n = 0; n < mtd->writesize; n++) {
+				/* empty blocks read 0x54 at these offsets */
+				if (datbuf[n] != ((n % 516 == 3) ? 0x54 : 0xff))
+					return false;
+			}
+		}
+		if (oobbuf) {
+			n = p * oobsize;
+			end = min(n + oobsize, ops->oobretlen);
+			for(; n < end; n++)
+				if (oobbuf[n] != 0xff)
+					return false;
+		}
+		if (ops->datbuf)
+			for (n = 3; n < mtd->writesize; n+= 516)
+				datbuf[n] = 0xff;
+	}
+	return true;
+}
+
 static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			     struct mtd_oob_ops *ops)
 {
@@ -348,7 +386,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 	uint32_t oob_len = ops->ooblen;
 	uint32_t sectordatasize;
 	uint32_t sectoroobsize;
-	int err, pageerr, rawerr;
+	int err, pageerr;
 	dma_addr_t data_dma_addr = 0;
 	dma_addr_t oob_dma_addr = 0;
 	dma_addr_t data_dma_addr_curr = 0;
@@ -358,7 +396,10 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 	unsigned pages_read = 0;
 	unsigned start_sector = 0;
 	uint32_t ecc_errors;
-	uint32_t total_ecc_errors = 0;
+	uint32_t total_corrected = 0;
+	uint32_t total_uncorrected = 0;
+	unsigned long uncorrected_noalloc = 0;
+	unsigned long *uncorrected = &uncorrected_noalloc;
 
 	if (from & (mtd->writesize - 1)) {
 		pr_err("%s: unsupported from, 0x%llx\n",
@@ -431,6 +472,14 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			       "for %p\n", ops->oobbuf);
 			err = -EIO;
 			goto err_dma_map_oobbuf_failed;
+		}
+	}
+	if (BITS_TO_LONGS(page_count) > 1) {
+		uncorrected = kzalloc(BITS_TO_LONGS(page_count) * sizeof(long),
+				      GFP_NOIO);
+		if (!uncorrected) {
+			err = -ENOMEM;
+			goto err_alloc_uncorrected_failed;
 		}
 	}
 
@@ -601,91 +650,42 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 		/* if any of the writes failed (0x10), or there
 		 * was a protection violation (0x100), we lose
 		 */
-		pageerr = rawerr = 0;
+		pageerr = 0;
+		ecc_errors = 0;
 		for (n = start_sector; n < 4; n++) {
-			if (dma_buffer->data.result[n].flash_status & 0x110) {
-				rawerr = -EIO;
+			if (dma_buffer->data.result[n].buffer_status & 0x8) {
+				total_uncorrected++;
+				uncorrected[BIT_WORD(pages_read)] |=
+							BIT_MASK(pages_read);
+				pageerr = -EBADMSG;
 				break;
 			}
+			if (dma_buffer->data.result[n].flash_status & 0x110) {
+				pageerr = -EIO;
+				break;
+			}
+			ecc_errors +=
+				dma_buffer->data.result[n].buffer_status & 0x7;
 		}
-		if (rawerr) {
-			if (ops->datbuf && ops->mode != MTD_OOB_RAW) {
-				uint8_t *datbuf =
-					ops->datbuf + pages_read * 2048;
-
-				dma_sync_single_for_cpu(chip->dev,
-					data_dma_addr_curr-mtd->writesize,
-					mtd->writesize, DMA_BIDIRECTIONAL);
-
-				for (n = 0; n < 2048; n++) {
-					/* empty blocks read 0x54 at
-					 * these offsets
-					 */
-					if (n % 516 == 3 && datbuf[n] == 0x54)
-						datbuf[n] = 0xff;
-					if (datbuf[n] != 0xff) {
-						pageerr = rawerr;
-						break;
-					}
-				}
-
-				dma_sync_single_for_device(chip->dev,
-					data_dma_addr_curr-mtd->writesize,
-					mtd->writesize, DMA_BIDIRECTIONAL);
-
-			}
-			if (ops->oobbuf) {
-				for (n = 0; n < ops->ooblen; n++) {
-					if (ops->oobbuf[n] != 0xff) {
-						pageerr = rawerr;
-						break;
-					}
-				}
-			}
-		}
-		if (pageerr) {
-			for (n = start_sector; n < 4; n++) {
-				if (dma_buffer->data.result[n].buffer_status &
-								0x8) {
-					/* not thread safe */
-					mtd->ecc_stats.failed++;
-					pageerr = -EBADMSG;
-					break;
-				}
-			}
-		}
-		if (!rawerr) { /* check for corretable errors */
-			for (n = start_sector; n < 4; n++) {
-				ecc_errors = dma_buffer->data.
-					result[n].buffer_status & 0x7;
-				if (ecc_errors) {
-					total_ecc_errors += ecc_errors;
-					/* not thread safe */
-					mtd->ecc_stats.corrected += ecc_errors;
-					if (ecc_errors > 1)
-						pageerr = -EUCLEAN;
-				}
-			}
+		if (!pageerr && ecc_errors) {
+			total_corrected += ecc_errors;
+			/* not thread safe */
+			mtd->ecc_stats.corrected += ecc_errors;
+			pageerr = -EUCLEAN;
 		}
 		if (pageerr && (pageerr != -EUCLEAN || err == 0))
 			err = pageerr;
 
 #if VERBOSE
-		if (rawerr && !pageerr) {
-			pr_err("msm_nand_read_oob %llx %x %x empty page\n",
-			       (loff_t)page * mtd->writesize, ops->len,
-			       ops->ooblen);
-		} else {
-			pr_info("status: %x %x %x %x %x %x %x %x\n",
-				dma_buffer->data.result[0].flash_status,
-				dma_buffer->data.result[0].buffer_status,
-				dma_buffer->data.result[1].flash_status,
-				dma_buffer->data.result[1].buffer_status,
-				dma_buffer->data.result[2].flash_status,
-				dma_buffer->data.result[2].buffer_status,
-				dma_buffer->data.result[3].flash_status,
-				dma_buffer->data.result[3].buffer_status);
-		}
+		pr_info("status: %x %x %x %x %x %x %x %x\n",
+			dma_buffer->data.result[0].flash_status,
+			dma_buffer->data.result[0].buffer_status,
+			dma_buffer->data.result[1].flash_status,
+			dma_buffer->data.result[1].buffer_status,
+			dma_buffer->data.result[2].flash_status,
+			dma_buffer->data.result[2].buffer_status,
+			dma_buffer->data.result[3].flash_status,
+			dma_buffer->data.result[3].buffer_status);
 #endif
 		if (err && err != -EUCLEAN && err != -EBADMSG)
 			break;
@@ -694,6 +694,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 	}
 	msm_nand_release_dma_buffer(chip, dma_buffer, sizeof(*dma_buffer));
 
+err_alloc_uncorrected_failed:
 	if (ops->oobbuf) {
 		dma_unmap_page(chip->dev, oob_dma_addr,
 			       ops->ooblen, DMA_FROM_DEVICE);
@@ -710,10 +711,18 @@ err_dma_map_oobbuf_failed:
 		ops->retlen = (mtd->writesize +  mtd->oobsize) *
 							pages_read;
 	ops->oobretlen = ops->ooblen - oob_len;
+
+	if (err == -EBADMSG && msm_nand_check_empty(mtd, ops, uncorrected))
+		err = 0;
+	else if (total_uncorrected)
+		mtd->ecc_stats.failed += total_uncorrected; /* not threadsafe */
+	if (uncorrected != &uncorrected_noalloc)
+		kfree(uncorrected);
+
 	if (err)
 		pr_err("msm_nand_read_oob %llx %x %x failed %d, corrected %d\n",
 		       from, ops->datbuf ? ops->len : 0, ops->ooblen, err,
-		       total_ecc_errors);
+		       total_corrected);
 	return err;
 }
 
