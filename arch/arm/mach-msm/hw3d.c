@@ -273,7 +273,7 @@ static void do_force_revoke(struct hw3d_info *info)
 	spin_unlock_irqrestore(&info->lock, flags);
 }
 
-#define REVOKE_TIMEOUT		(HZ / 2)
+#define REVOKE_TIMEOUT		(2 * HZ)
 static void locked_hw3d_revoke(struct hw3d_info *info)
 {
 	/* force us to wait to suspend until the revoke is done. If the
