@@ -383,14 +383,26 @@ int mdp_ppp_blit_split_height(struct mdp_info *mdp, const struct mdp_blit_req *r
 	}
 
 	/* blit first region */
-	splitreq.src_rect.h = s_h_0;
-	splitreq.src_rect.y = s_y_0;
-	splitreq.dst_rect.h = d_h_0;
-	splitreq.dst_rect.y = d_y_0;
-	splitreq.src_rect.x = s_x_0;
-	splitreq.src_rect.w = s_w_0;
-	splitreq.dst_rect.x = d_x_0;
-	splitreq.dst_rect.w = d_w_0;
+	if (((splitreq.flags & MDP_ROT_MASK) == MDP_ROT_90) ||
+		((splitreq.flags & MDP_ROT_MASK) == 0x0)) {
+		splitreq.src_rect.h = s_h_0;
+		splitreq.src_rect.y = s_y_0;
+		splitreq.dst_rect.h = d_h_0;
+		splitreq.dst_rect.y = d_y_0;
+		splitreq.src_rect.x = s_x_0;
+		splitreq.src_rect.w = s_w_0;
+		splitreq.dst_rect.x = d_x_0;
+		splitreq.dst_rect.w = d_w_0;
+	} else {
+		splitreq.src_rect.h = s_h_0;
+		splitreq.src_rect.y = s_y_0;
+		splitreq.dst_rect.h = d_h_1;
+		splitreq.dst_rect.y = d_y_1;
+		splitreq.src_rect.x = s_x_0;
+		splitreq.src_rect.w = s_w_0;
+		splitreq.dst_rect.x = d_x_1;
+		splitreq.dst_rect.w = d_w_1;
+	}
 	ret = mdp_blit_and_wait(mdp, &splitreq,
 		src_file, src_start, src_len,
 		dst_file, dst_start, dst_len);
@@ -398,14 +410,26 @@ int mdp_ppp_blit_split_height(struct mdp_info *mdp, const struct mdp_blit_req *r
 		return ret;
 
 	/* blit second region */
-	splitreq.src_rect.h = s_h_1;
-	splitreq.src_rect.y = s_y_1;
-	splitreq.dst_rect.h = d_h_1;
-	splitreq.dst_rect.y = d_y_1;
-	splitreq.src_rect.x = s_x_1;
-	splitreq.src_rect.w = s_w_1;
-	splitreq.dst_rect.x = d_x_1;
-	splitreq.dst_rect.w = d_w_1;
+	if (((splitreq.flags & MDP_ROT_MASK) == MDP_ROT_90) ||
+		((splitreq.flags & MDP_ROT_MASK) == 0x0)) {
+		splitreq.src_rect.h = s_h_1;
+		splitreq.src_rect.y = s_y_1;
+		splitreq.dst_rect.h = d_h_1;
+		splitreq.dst_rect.y = d_y_1;
+		splitreq.src_rect.x = s_x_1;
+		splitreq.src_rect.w = s_w_1;
+		splitreq.dst_rect.x = d_x_1;
+		splitreq.dst_rect.w = d_w_1;
+	} else {
+		splitreq.src_rect.h = s_h_1;
+		splitreq.src_rect.y = s_y_1;
+		splitreq.dst_rect.h = d_h_0;
+		splitreq.dst_rect.y = d_y_0;
+		splitreq.src_rect.x = s_x_1;
+		splitreq.src_rect.w = s_w_1;
+		splitreq.dst_rect.x = d_x_0;
+		splitreq.dst_rect.w = d_w_0;
+	}
 	ret = mdp_blit_and_wait(mdp, &splitreq,
 		src_file, src_start, src_len,
 		dst_file, dst_start, dst_len);
@@ -469,14 +493,26 @@ int mdp_ppp_blit_split_width(struct mdp_info *mdp, const struct mdp_blit_req *re
 	}
 
 	/* blit first region */
-	splitreq.src_rect.h = s_h_0;
-	splitreq.src_rect.y = s_y_0;
-	splitreq.dst_rect.h = d_h_0;
-	splitreq.dst_rect.y = d_y_0;
-	splitreq.src_rect.x = s_x_0;
-	splitreq.src_rect.w = s_w_0;
-	splitreq.dst_rect.x = d_x_0;
-	splitreq.dst_rect.w = d_w_0;
+	if (((splitreq.flags & MDP_ROT_MASK) == MDP_ROT_270) ||
+		((splitreq.flags & MDP_ROT_MASK) == 0x0)) {
+		splitreq.src_rect.h = s_h_0;
+		splitreq.src_rect.y = s_y_0;
+		splitreq.dst_rect.h = d_h_0;
+		splitreq.dst_rect.y = d_y_0;
+		splitreq.src_rect.x = s_x_0;
+		splitreq.src_rect.w = s_w_0;
+		splitreq.dst_rect.x = d_x_0;
+		splitreq.dst_rect.w = d_w_0;
+	} else {
+		splitreq.src_rect.h = s_h_0;
+		splitreq.src_rect.y = s_y_0;
+		splitreq.dst_rect.h = d_h_1;
+		splitreq.dst_rect.y = d_y_1;
+		splitreq.src_rect.x = s_x_0;
+		splitreq.src_rect.w = s_w_0;
+		splitreq.dst_rect.x = d_x_1;
+		splitreq.dst_rect.w = d_w_1;
+	}
 
 	if (unlikely((splitreq.dst_rect.h != 1) &&
 		((splitreq.dst_rect.h % 32 == 3) ||
@@ -490,15 +526,29 @@ int mdp_ppp_blit_split_width(struct mdp_info *mdp, const struct mdp_blit_req *re
 			dst_file, dst_start, dst_len);
 	if (ret)
 		return ret;
+
 	/* blit second region */
-	splitreq.src_rect.h = s_h_1;
-	splitreq.src_rect.y = s_y_1;
-	splitreq.dst_rect.h = d_h_1;
-	splitreq.dst_rect.y = d_y_1;
-	splitreq.src_rect.x = s_x_1;
-	splitreq.src_rect.w = s_w_1;
-	splitreq.dst_rect.x = d_x_1;
-	splitreq.dst_rect.w = d_w_1;
+	if (((splitreq.flags & MDP_ROT_MASK) == MDP_ROT_270) ||
+		((splitreq.flags & MDP_ROT_MASK) == 0x0)) {
+		splitreq.src_rect.h = s_h_1;
+		splitreq.src_rect.y = s_y_1;
+		splitreq.dst_rect.h = d_h_1;
+		splitreq.dst_rect.y = d_y_1;
+		splitreq.src_rect.x = s_x_1;
+		splitreq.src_rect.w = s_w_1;
+		splitreq.dst_rect.x = d_x_1;
+		splitreq.dst_rect.w = d_w_1;
+	} else {
+		splitreq.src_rect.h = s_h_1;
+		splitreq.src_rect.y = s_y_1;
+		splitreq.dst_rect.h = d_h_0;
+		splitreq.dst_rect.y = d_y_0;
+		splitreq.src_rect.x = s_x_1;
+		splitreq.src_rect.w = s_w_1;
+		splitreq.dst_rect.x = d_x_0;
+		splitreq.dst_rect.w = d_w_0;
+	}
+
 	if (unlikely((splitreq.dst_rect.h != 1) &&
 		((splitreq.dst_rect.h % 32 == 3) ||
 		(splitreq.dst_rect.h % 32) == 1)))

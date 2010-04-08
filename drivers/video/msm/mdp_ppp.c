@@ -52,6 +52,21 @@ static uint32_t dst_img_cfg[] = {
 	PPP_ARRAY1(CFG, DST)
 };
 
+static const uint32_t bytes_per_pixel[] = {
+	[MDP_RGB_565] = 2,
+	[MDP_XRGB_8888] = 4,
+	[MDP_Y_CBCR_H2V2] = 1,
+	[MDP_ARGB_8888] = 4,
+	[MDP_RGB_888] = 3,
+	[MDP_Y_CRCB_H2V2] = 1,
+	[MDP_YCRYCB_H2V1] = 2,
+	[MDP_Y_CRCB_H2V1] = 1,
+	[MDP_Y_CBCR_H2V1] = 1,
+	[MDP_RGBA_8888] = 4,
+	[MDP_BGRA_8888] = 4,
+	[MDP_RGBX_8888] = 4,
+};
+
 static uint32_t dst_op_chroma[] = {
 	PPP_ARRAY1(CHROMA_SAMP, DST)
 };
@@ -553,7 +568,7 @@ int mdp_ppp_blit(const struct mdp_info *mdp, struct mdp_blit_req *req,
 	regs.dst_pack = pack_pattern[req->dst.format];
 
 	/* set src, bpp, start pixel and ystride */
-	regs.src_bpp = msm_bytes_per_pixel[req->src.format];
+	regs.src_bpp = mdp_get_bytes_per_pixel(req->src.format);
 	luma_base = src_start + req->src.offset;
 	regs.src0 = luma_base +
 		get_luma_offset(&req->src, &req->src_rect, regs.src_bpp);
@@ -563,7 +578,7 @@ int mdp_ppp_blit(const struct mdp_info *mdp, struct mdp_blit_req *req,
 	set_src_region(&req->src, &req->src_rect, &regs);
 
 	/* set dst, bpp, start pixel and ystride */
-	regs.dst_bpp = msm_bytes_per_pixel[req->dst.format];
+	regs.dst_bpp = mdp_get_bytes_per_pixel(req->dst.format);
 	luma_base = dst_start + req->dst.offset;
 	regs.dst0 = luma_base +
 		get_luma_offset(&req->dst, &req->dst_rect, regs.dst_bpp);
@@ -621,6 +636,12 @@ int mdp_ppp_blit(const struct mdp_info *mdp, struct mdp_blit_req *req,
 	return 0;
 }
 
+int mdp_get_bytes_per_pixel(int format)
+{
+	if (format < 0 || format >= MDP_IMGTYPE_LIMIT)
+		return -1;
+	return bytes_per_pixel[format];
+}
 
 #define mdp_dump_register(mdp, reg) \
 	printk(# reg ": %08x\n", mdp_readl((mdp), (reg)))

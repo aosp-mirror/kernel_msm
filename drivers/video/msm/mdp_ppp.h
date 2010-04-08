@@ -87,6 +87,7 @@ static inline int mdp_ppp_cfg_edge_cond(struct mdp_blit_req *req,
 }
 #endif
 
+int mdp_get_bytes_per_pixel(int format);
 int mdp_blit_and_wait(struct mdp_info *mdp, struct mdp_blit_req *req,
 	struct file *src_file, unsigned long src_start, unsigned long src_len,
 	struct file *dst_file, unsigned long dst_start, unsigned long dst_len);

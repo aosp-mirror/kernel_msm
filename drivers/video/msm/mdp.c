@@ -428,7 +428,8 @@ int mdp_set_output_format(struct mdp_device *mdp_dev, int bpp)
 
 static void dump_req(struct mdp_blit_req *req,
 	unsigned long src_start, unsigned long src_len,
-	unsigned long dst_start, unsigned long dst_len) {
+	unsigned long dst_start, unsigned long dst_len)
+{
 	pr_err("flags: 0x%x\n", 	req->flags);
 	pr_err("src_start:  0x%08lx\n", src_start);
 	pr_err("src_len:    0x%08lx\n", src_len);
@@ -469,11 +470,10 @@ int mdp_blit_and_wait(struct mdp_info *mdp, struct mdp_blit_req *req,
 	ret = mdp_ppp_wait(mdp);
 	if (unlikely(ret)) {
 		printk(KERN_ERR "%s: failed!\n", __func__);
-		if (mdp->req)
-			pr_err("original request:\n");
-			dump_req(mdp->req, src_start, src_len, dst_start, dst_len);
-		pr_err("dead request:\n");
+		pr_err("original request:\n");
 		dump_req(mdp->req, src_start, src_len, dst_start, dst_len);
+		pr_err("dead request:\n");
+		dump_req(req, src_start, src_len, dst_start, dst_len);
 		BUG();
 		return ret;
 	}
@@ -566,7 +566,7 @@ int mdp_blit(struct mdp_device *mdp_dev, struct fb_info *fb,
 	}
 #else
 	/* Workarounds for MDP 3.1 hardware bugs */
-	if (unlikely((msm_bytes_per_pixel[req->dst.format] == 4) &&
+	if (unlikely((mdp_get_bytes_per_pixel(req->dst.format) == 4) &&
 		(req->dst_rect.w != 1) &&
 		(((req->dst_rect.w % 8) == 6) ||
 		((req->dst_rect.w % 32) == 3) ||
@@ -581,6 +581,7 @@ int mdp_blit(struct mdp_device *mdp_dev, struct fb_info *fb,
 		ret = mdp_ppp_blit_split_height(mdp, req,
 			src_file, src_start, src_len,
 			dst_file, dst_start, dst_len);
+		goto end;
 	}
 #endif
 	ret = mdp_blit_and_wait(mdp, req,
