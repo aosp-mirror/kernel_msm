@@ -9,7 +9,7 @@
 #include <asm/gpio.h>
 #include <asm/io.h>
 #include <linux/skbuff.h>
-#include <linux/wifi_tiwlan.h>
+#include <linux/wlan_plat.h>
 
 #include "board-mahimahi.h"
 
