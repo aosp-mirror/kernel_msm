@@ -36,6 +36,21 @@ enum {
 	MDP_IMGTYPE_LIMIT	/* Non valid image type after this enum */
 };
 
+static const uint32_t msm_bytes_per_pixel[] = {
+	[MDP_RGB_565] = 2,
+	[MDP_XRGB_8888] = 4,
+	[MDP_Y_CBCR_H2V2] = 1,
+	[MDP_ARGB_8888] = 4,
+	[MDP_RGB_888] = 3,
+	[MDP_Y_CRCB_H2V2] = 1,
+	[MDP_YCRYCB_H2V1] = 2,
+	[MDP_Y_CRCB_H2V1] = 1,
+	[MDP_Y_CBCR_H2V1] = 1,
+	[MDP_RGBA_8888] = 4,
+	[MDP_BGRA_8888] = 4,
+	[MDP_RGBX_8888] = 4,
+ };
+
 enum {
 	PMEM_IMG,
 	FB_IMG,

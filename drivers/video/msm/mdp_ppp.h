@@ -72,11 +72,23 @@ int mdp_ppp_load_blur(const struct mdp_info *mdp);
 #ifndef CONFIG_MSM_MDP31
 int mdp_ppp_cfg_edge_cond(struct mdp_blit_req *req, struct ppp_regs *regs);
 #else
+
+int mdp_ppp_blit_split_width(struct mdp_info *mdp, const struct mdp_blit_req *req,
+	struct file *src_file, unsigned long src_start, unsigned long src_len,
+	struct file *dst_file, unsigned long dst_start, unsigned long dst_len);
+int mdp_ppp_blit_split_height(struct mdp_info *mdp, const struct mdp_blit_req *req,
+	struct file *src_file, unsigned long src_start, unsigned long src_len,
+	struct file *dst_file, unsigned long dst_start, unsigned long dst_len);
+
 static inline int mdp_ppp_cfg_edge_cond(struct mdp_blit_req *req,
 				 struct ppp_regs *regs)
 {
 	return 0;
 }
 #endif
+
+int mdp_blit_and_wait(struct mdp_info *mdp, struct mdp_blit_req *req,
+	struct file *src_file, unsigned long src_start, unsigned long src_len,
+	struct file *dst_file, unsigned long dst_start, unsigned long dst_len);
 
 #endif /* _VIDEO_MSM_MDP_PPP_H_ */

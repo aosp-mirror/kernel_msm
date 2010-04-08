@@ -426,9 +426,36 @@ int mdp_set_output_format(struct mdp_device *mdp_dev, int bpp)
 	return 0;
 }
 
+static void dump_req(struct mdp_blit_req *req,
+	unsigned long src_start, unsigned long src_len,
+	unsigned long dst_start, unsigned long dst_len) {
+	pr_err("flags: 0x%x\n", 	req->flags);
+	pr_err("src_start:  0x%08lx\n", src_start);
+	pr_err("src_len:    0x%08lx\n", src_len);
+	pr_err("src.offset: 0x%x\n",    req->src.offset);
+	pr_err("src.format: 0x%x\n",    req->src.format);
+	pr_err("src.width:  %d\n",      req->src.width);
+	pr_err("src.height: %d\n",      req->src.height);
+	pr_err("src_rect.x: %d\n",      req->src_rect.x);
+	pr_err("src_rect.y: %d\n",      req->src_rect.y);
+	pr_err("src_rect.w: %d\n",      req->src_rect.w);
+	pr_err("src_rect.h: %d\n",      req->src_rect.h);
+
+	pr_err("dst_start:  0x%08lx\n", dst_start);
+	pr_err("dst_len:    0x%08lx\n", dst_len);
+	pr_err("dst.offset: 0x%x\n",    req->dst.offset);
+	pr_err("dst.format: 0x%x\n",    req->dst.format);
+	pr_err("dst.width:  %d\n",      req->dst.width);
+	pr_err("dst.height: %d\n",      req->dst.height);
+	pr_err("dst_rect.x: %d\n",      req->dst_rect.x);
+	pr_err("dst_rect.y: %d\n",      req->dst_rect.y);
+	pr_err("dst_rect.w: %d\n",      req->dst_rect.w);
+	pr_err("dst_rect.h: %d\n",      req->dst_rect.h);
+}
+
 int mdp_blit_and_wait(struct mdp_info *mdp, struct mdp_blit_req *req,
-		struct file *src_file, unsigned long src_start, unsigned long src_len,
-		struct file *dst_file, unsigned long dst_start, unsigned long dst_len)
+	struct file *src_file, unsigned long src_start, unsigned long src_len,
+	struct file *dst_file, unsigned long dst_start, unsigned long dst_len)
 {
 	int ret;
 	enable_mdp_irq(mdp, DL0_ROI_DONE);
@@ -442,30 +469,11 @@ int mdp_blit_and_wait(struct mdp_info *mdp, struct mdp_blit_req *req,
 	ret = mdp_ppp_wait(mdp);
 	if (unlikely(ret)) {
 		printk(KERN_ERR "%s: failed!\n", __func__);
-
-		printk(KERN_ERR "flags: 0x%x\n", req->flags);
-		printk(KERN_ERR "src_start:  0x%08lx\n", src_start);
-		printk(KERN_ERR "src_len:    0x%08lx\n", src_len);
-		printk(KERN_ERR "src.offset: 0x%x\n",    req->src.offset);
-		printk(KERN_ERR "src.format: 0x%x\n",    req->src.format);
-		printk(KERN_ERR "src.width:  %d\n",      req->src.width);
-		printk(KERN_ERR "src.height: %d\n",      req->src.height);
-		printk(KERN_ERR "src_rect.x: %d\n",      req->src_rect.x);
-		printk(KERN_ERR "src_rect.y: %d\n",      req->src_rect.y);
-		printk(KERN_ERR "src_rect.w: %d\n",      req->src_rect.w);
-		printk(KERN_ERR "src_rect.h: %d\n",      req->src_rect.h);
-
-		printk(KERN_ERR "dst_start:  0x%08lx\n", dst_start);
-		printk(KERN_ERR "dst_len:    0x%08lx\n", dst_len);
-		printk(KERN_ERR "dst.offset: 0x%x\n",    req->dst.offset);
-		printk(KERN_ERR "dst.format: 0x%x\n",    req->dst.format);
-		printk(KERN_ERR "dst.width:  %d\n",      req->dst.width);
-		printk(KERN_ERR "dst.height: %d\n",      req->dst.height);
-		printk(KERN_ERR "dst_rect.x: %d\n",      req->dst_rect.x);
-		printk(KERN_ERR "dst_rect.y: %d\n",      req->dst_rect.y);
-		printk(KERN_ERR "dst_rect.w: %d\n",      req->dst_rect.w);
-		printk(KERN_ERR "dst_rect.h: %d\n",      req->dst_rect.h);
-
+		if (mdp->req)
+			pr_err("original request:\n");
+			dump_req(mdp->req, src_start, src_len, dst_start, dst_len);
+		pr_err("dead request:\n");
+		dump_req(mdp->req, src_start, src_len, dst_start, dst_len);
 		BUG();
 		return ret;
 	}
@@ -479,6 +487,28 @@ int mdp_blit(struct mdp_device *mdp_dev, struct fb_info *fb,
 	unsigned long src_start = 0, src_len = 0, dst_start = 0, dst_len = 0;
 	struct mdp_info *mdp = container_of(mdp_dev, struct mdp_info, mdp_dev);
 	struct file *src_file = 0, *dst_file = 0;
+
+#ifdef CONFIG_MSM_MDP31
+	if (req->flags & MDP_ROT_90) {
+		if (unlikely(((req->dst_rect.h == 1) &&
+			((req->src_rect.w != 1) ||
+			(req->dst_rect.w != req->src_rect.h))) ||
+			((req->dst_rect.w == 1) && ((req->src_rect.h != 1) ||
+			(req->dst_rect.h != req->src_rect.w))))) {
+			pr_err("mpd_ppp: error scaling when size is 1!\n");
+			return -EINVAL;
+		}
+	} else {
+		if (unlikely(((req->dst_rect.w == 1) &&
+			((req->src_rect.w != 1) ||
+			(req->dst_rect.h != req->src_rect.h))) ||
+			((req->dst_rect.h == 1) && ((req->src_rect.h != 1) ||
+			(req->dst_rect.h != req->src_rect.h))))) {
+			pr_err("mpd_ppp: error scaling when size is 1!\n");
+			return -EINVAL;
+		}
+	}
+#endif
 
 	/* WORKAROUND FOR HARDWARE BUG IN BG TILE FETCH */
 	if (unlikely(req->src_rect.h == 0 ||
@@ -508,6 +538,7 @@ int mdp_blit(struct mdp_device *mdp_dev, struct fb_info *fb,
 
 	/* transp_masking unimplemented */
 	req->transp_mask = MDP_TRANSP_NOP;
+	mdp->req = req;
 #ifndef CONFIG_MSM_MDP31
 	if (unlikely((req->transp_mask != MDP_TRANSP_NOP ||
 		      req->alpha != MDP_ALPHA_NOP ||
@@ -532,6 +563,24 @@ int mdp_blit(struct mdp_device *mdp_dev, struct fb_info *fb,
 			goto end;
 		req->src_rect.w = remainder*req->src_rect.w / req->dst_rect.h;
 		req->dst_rect.h = remainder;
+	}
+#else
+	/* Workarounds for MDP 3.1 hardware bugs */
+	if (unlikely((msm_bytes_per_pixel[req->dst.format] == 4) &&
+		(req->dst_rect.w != 1) &&
+		(((req->dst_rect.w % 8) == 6) ||
+		((req->dst_rect.w % 32) == 3) ||
+		((req->dst_rect.w % 32) == 1)))) {
+		ret = mdp_ppp_blit_split_width(mdp, req,
+			src_file, src_start, src_len,
+			dst_file, dst_start, dst_len);
+		goto end;
+	} else if (unlikely((req->dst_rect.w != 1) && (req->dst_rect.h != 1) &&
+		((req->dst_rect.h % 32) == 3 ||
+		(req->dst_rect.h % 32) == 1))) {
+		ret = mdp_ppp_blit_split_height(mdp, req,
+			src_file, src_start, src_len,
+			dst_file, dst_start, dst_len);
 	}
 #endif
 	ret = mdp_blit_and_wait(mdp, req,

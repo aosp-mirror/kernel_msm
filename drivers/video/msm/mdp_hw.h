@@ -52,6 +52,7 @@ struct mdp_info {
 	int format;
 	int pack_pattern;
 	bool dma_config_dirty;
+	struct mdp_blit_req *req;
 };
 
 extern int mdp_out_if_register(struct mdp_device *mdp_dev, int interface,
