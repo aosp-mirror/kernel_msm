@@ -398,6 +398,12 @@ int kgsl_yamato_setstate(struct kgsl_device *device, uint32_t flags)
 			sizedwords += 21;
 		}
 
+		if (flags & (KGSL_MMUFLAGS_PTUPDATE | KGSL_MMUFLAGS_TLBFLUSH)) {
+			*cmds++ = pm4_type3_packet(PM4_INVALIDATE_STATE, 1);
+			*cmds++ = 0x7fff; /* invalidate all base pointers */
+			sizedwords += 2;
+		}
+
 		kgsl_ringbuffer_issuecmds(device, KGSL_CMD_FLAGS_PMODE,
 					  &link[0], sizedwords);
 	} else {
