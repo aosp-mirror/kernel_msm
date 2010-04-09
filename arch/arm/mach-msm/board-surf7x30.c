@@ -16,6 +16,7 @@
 
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/gpio_event.h>
 #include <linux/init.h>
 #include <linux/input.h>
 #include <linux/io.h>
@@ -45,6 +46,8 @@
 #define SURF7X30_PM8058_IRQ_BASE	FIRST_BOARD_IRQ
 
 #define SURF7X30_GPIO_PMIC_INT_N	27
+
+#define SURF7X30_USE_PMIC_KEYPAD	1
 
 static struct resource smc91x_resources[] = {
 	[0] = {
@@ -224,6 +227,7 @@ static struct platform_device android_usb_device = {
 	},
 };
 
+#if SURF7X30_USE_PMIC_KEYPAD
 static struct pm8058_pin_config surf7x30_kpd_input_gpio_cfg = {
 	.vin_src	= PM8058_GPIO_VIN_SRC_VREG_S3,
 	.dir		= PM8058_GPIO_INPUT,
@@ -242,6 +246,28 @@ static struct pm8058_pin_config surf7x30_kpd_output_gpio_cfg = {
 	.flags		= (PM8058_GPIO_OPEN_DRAIN |
 			   PM8058_GPIO_INV_IRQ_POL),
 };
+
+#else
+
+static struct pm8058_pin_config surf7x30_kpd_input_gpio_cfg = {
+	.vin_src	= PM8058_GPIO_VIN_SRC_VREG_S3,
+	.dir		= PM8058_GPIO_INPUT,
+	.pull_up	= PM8058_GPIO_PULL_UP_31P5,
+	.strength	= PM8058_GPIO_STRENGTH_OFF,
+	.func		= PM8058_GPIO_FUNC_NORMAL,
+	.flags		= PM8058_GPIO_INV_IRQ_POL
+};
+
+static struct pm8058_pin_config surf7x30_kpd_output_gpio_cfg = {
+	.vin_src	= PM8058_GPIO_VIN_SRC_VREG_S3,
+	.dir		= PM8058_GPIO_OUTPUT,
+	.pull_up	= PM8058_GPIO_PULL_NONE,
+	.strength	= PM8058_GPIO_STRENGTH_LOW,
+	.func		= PM8058_GPIO_FUNC_NORMAL,
+	.flags		= (PM8058_GPIO_OPEN_DRAIN |
+			   PM8058_GPIO_INV_IRQ_POL),
+};
+#endif
 
 static unsigned int surf7x30_pmic_col_gpios[] = {
 	SURF7X30_PM8058_GPIO(0), SURF7X30_PM8058_GPIO(1),
@@ -263,7 +289,7 @@ static unsigned int surf7x30_pmic_row_gpios[] = {
 #define KEYMAP_INDEX(row, col)	(((row) * KEYMAP_NUM_COLS) + (col))
 #define KEYMAP_SIZE		(KEYMAP_NUM_ROWS * KEYMAP_NUM_COLS)
 
-static int surf7x30_pmic_keypad_init(struct device *dev)
+static int mux_keypad_gpios(struct device *dev)
 {
 	int i;
 
@@ -274,6 +300,13 @@ static int surf7x30_pmic_keypad_init(struct device *dev)
 		pm8058_gpio_mux_cfg(dev, surf7x30_pmic_row_gpios[i],
 				    &surf7x30_kpd_output_gpio_cfg);
 	return 0;
+}
+
+/* if we are using the pmic matrix h/w, we need to do the muxing inside the
+ * keypad probe function once the keypad has been setup. */
+static int surf7x30_pmic_keypad_init(struct device *dev)
+{
+	return mux_keypad_gpios(dev->parent);
 }
 
 static const unsigned short surf7x30_pmic_keymap[KEYMAP_SIZE] = {
@@ -291,11 +324,57 @@ static struct pm8058_keypad_platform_data surf7x30_pmic_keypad_pdata = {
 	.init			= surf7x30_pmic_keypad_init,
 };
 
+static struct gpio_event_matrix_info surf7x30_keypad_matrix_info = {
+	.info.func = gpio_event_matrix_func,
+	.keymap = surf7x30_pmic_keymap,
+	.output_gpios = surf7x30_pmic_row_gpios,
+	.input_gpios = surf7x30_pmic_col_gpios,
+	.noutputs = KEYMAP_NUM_ROWS,
+	.ninputs = KEYMAP_NUM_COLS,
+	.settle_time.tv.nsec = 40 * NSEC_PER_USEC,
+	.poll_time.tv.nsec = 20 * NSEC_PER_MSEC,
+	.flags = GPIOKPF_LEVEL_TRIGGERED_IRQ | GPIOKPF_REMOVE_PHANTOM_KEYS |GPIOKPF_PRINT_UNMAPPED_KEYS /*| GPIOKPF_PRINT_MAPPED_KEYS*/
+};
+
+static struct gpio_event_info *surf7x30_keypad_info[] = {
+	&surf7x30_keypad_matrix_info.info,
+};
+
+static struct gpio_event_platform_data surf7x30_keypad_data = {
+	.name = "surf7x30-keypad",
+	.info = surf7x30_keypad_info,
+	.info_count = ARRAY_SIZE(surf7x30_keypad_info)
+};
+
+static struct platform_device surf7x30_keypad_device = {
+	.name = GPIO_EVENT_DEV_NAME,
+	.id = 0,
+	.dev	= {
+		.platform_data  = &surf7x30_keypad_data,
+	},
+};
+
+static int surf7x30_pmic_init(struct device *dev)
+{
+	int ret = 0;
+
+#if !SURF7X30_USE_PMIC_KEYPAD
+	/* if we are not using the keypad matrix h/w, but are using the
+	 * gpio_matrix, do the pimuxing here, which is called from pmic's
+	 * probe */
+	ret = mux_keypad_gpios(dev);
+#endif
+	return ret;
+}
+
 static struct pm8058_platform_data surf7x30_pm8058_pdata = {
 	.irq_base	= SURF7X30_PM8058_IRQ_BASE,
 	.gpio_base	= SURF7X30_PM8058_GPIO_BASE,
+	.init		= surf7x30_pmic_init,
 
+#if SURF7X30_USE_PMIC_KEYPAD
 	.keypad_pdata	= &surf7x30_pmic_keypad_pdata,
+#endif
 };
 
 static struct msm_ssbi_platform_data surf7x30_ssbi_pmic_pdata = {
@@ -342,6 +421,9 @@ static struct platform_device *devices[] __initdata = {
 	&usb_mass_storage_device,
 	&android_usb_device,
 	&smc91x_device,
+#if !SURF7X30_USE_PMIC_KEYPAD
+	&surf7x30_keypad_device,
+#endif
 };
 
 static void __init surf7x30_init(void)
