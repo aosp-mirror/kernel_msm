@@ -456,7 +456,6 @@ static void msm_spi_setup_dm_transfer(struct msm_spi *dd)
 
 static void msm_spi_enqueue_dm_commands(struct msm_spi *dd)
 {
-	dma_coherent_pre_ops();
 	if (dd->write_buf)
 		msm_dmov_enqueue_cmd(dd->tx_dma_chan, &dd->tx_hdr);
 	if (dd->read_buf)
@@ -641,7 +640,6 @@ static void msm_spi_unmap_dma_buffers(struct msm_spi *dd)
 	/* If we padded the transfer, we copy it from the padding buf */
 	if (dd->unaligned_len && dd->read_buf) {
 		u32 offset = dd->cur_transfer->len - dd->unaligned_len;
-		dma_coherent_post_ops();
 		memcpy(dd->read_buf + offset, dd->rx_padding,
 		       dd->unaligned_len);
 	}
@@ -857,6 +855,8 @@ static void msm_spi_workq(struct work_struct *work)
 					    &dd->cur_msg->transfers,
 					    transfer_list) {
 				msm_spi_process_transfer(dd);
+				if (dd->cur_msg->status == -EINPROGRESS)
+					dd->cur_msg->status = 0;
 			}
 		}
 		if (dd->cur_msg->complete)
@@ -1309,14 +1309,13 @@ static int __init msm_spi_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, master);
 	dd = spi_master_get_devdata(master);
 
-	dd->irq_in  = platform_get_irq_byname(pdev, "spi_irq_in");
-	dd->irq_out = platform_get_irq_byname(pdev, "spi_irq_out");
-	dd->irq_err = platform_get_irq_byname(pdev, "spi_irq_err");
+	dd->irq_in  = platform_get_irq_byname(pdev, "irq_in");
+	dd->irq_out = platform_get_irq_byname(pdev, "irq_out");
+	dd->irq_err = platform_get_irq_byname(pdev, "irq_err");
 	if ((dd->irq_in < 0) || (dd->irq_out < 0) || (dd->irq_err < 0))
 		goto err_probe_res;
 
-	resource  = platform_get_resource_byname(pdev,
-						 IORESOURCE_MEM, "spi_base");
+	resource  = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!resource) {
 		rc = -ENXIO;
 		goto err_probe_res;
@@ -1359,7 +1358,7 @@ static int __init msm_spi_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&dd->queue);
 	INIT_WORK(&dd->work_data, msm_spi_workq);
 	dd->workqueue = create_singlethread_workqueue(
-		master->dev.parent->bus_id);
+		dev_name(master->dev.parent));
 	if (!dd->workqueue)
 		goto err_probe_workq;
 
@@ -1585,7 +1584,7 @@ static int __devexit msm_spi_remove(struct platform_device *pdev)
 static struct platform_driver msm_spi_driver = {
 	.probe          = msm_spi_probe,
 	.driver		= {
-		.name	= "spi_qsd",
+		.name	= "msm_spi",
 		.owner	= THIS_MODULE,
 	},
 	.suspend        = msm_spi_suspend,
