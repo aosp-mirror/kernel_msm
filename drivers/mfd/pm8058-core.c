@@ -144,6 +144,8 @@ struct pm8058 {
 	u8				gpio_flags[PM8058_NUM_GPIOS];
 };
 
+static struct pm8058 *the_pm8058;
+
 static int read_irq_block_reg(struct pm8058 *pmic, u8 blk, u16 reg, u8 *val);
 
 int pm8058_readb(struct device *dev, u16 addr, u8 *val)
@@ -223,6 +225,14 @@ int pm8058_gpio_mux_cfg(struct device *dev, unsigned int gpio,
 	return ret;
 }
 EXPORT_SYMBOL(pm8058_gpio_mux_cfg);
+
+int pm8058_gpio_mux(unsigned int gpio, struct pm8058_pin_config *cfg)
+{
+	if (!the_pm8058)
+		return -ENODEV;
+	return pm8058_gpio_mux_cfg(the_pm8058->dev, gpio, cfg);
+}
+EXPORT_SYMBOL(pm8058_gpio_mux);
 
 /* gpio funcs */
 static int read_gpio_bank(struct pm8058 *pmic, unsigned gpio, u8 bank, u8 *val)
@@ -770,6 +780,8 @@ static int pm8058_probe(struct platform_device *pdev)
 		goto err_request_irq;
 	}
 
+	the_pm8058 = pmic;
+
 	if (pdata->init) {
 		ret = pdata->init(pmic->dev);
 		if (ret) {
@@ -790,6 +802,7 @@ static int pm8058_probe(struct platform_device *pdev)
 
 err_add_kp_dev:
 err_pdata_init:
+	the_pm8058 = NULL;
 	free_irq(devirq, pmic);
 err_request_irq:
 	WARN_ON(gpiochip_remove(&pmic->gpio_chip));
