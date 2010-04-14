@@ -176,7 +176,7 @@ config MACH_QSD8X50_FFA
 	help
 	  Select this to support the 8x50 ffa device
 
-config MACH_SURF7X30
+config MACH_MSM7X30_SURF
 	depends on ARCH_MSM7X30
 	default y
 	bool "QCT SURF7x30 Board"
