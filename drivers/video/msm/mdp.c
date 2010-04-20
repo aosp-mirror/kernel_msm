@@ -24,7 +24,6 @@
 #include <linux/file.h>
 #include <linux/android_pmem.h>
 #include <linux/major.h>
-#include <linux/msm_hw3d.h>
 #include <linux/slab.h>
 
 #include <mach/msm_iomap.h>
@@ -38,10 +37,8 @@ struct class *mdp_class;
 
 #define MDP_CMD_DEBUG_ACCESS_BASE (0x10000)
 
-static DECLARE_WAIT_QUEUE_HEAD(mdp_ppp_waitqueue);
 static unsigned int mdp_irq_mask;
 struct clk *mdp_clk_to_disable_later = 0;
-DEFINE_MUTEX(mdp_mutex);
 
 static int locked_enable_mdp_irq(struct mdp_info *mdp, uint32_t mask)
 {
@@ -146,8 +143,7 @@ static irqreturn_t mdp_isr(int irq, void *data)
 		}
 	}
 
-	if (status & DL0_ROI_DONE)
-		wake_up(&mdp_ppp_waitqueue);
+	mdp_ppp_handle_isr(mdp, status);
 
 	if (status)
 		locked_disable_mdp_irq(mdp, status);
@@ -167,25 +163,31 @@ static uint32_t mdp_check_mask(struct mdp_info *mdp, uint32_t mask)
 	return ret;
 }
 
-static int mdp_wait(struct mdp_info *mdp, uint32_t mask, wait_queue_head_t *wq)
+int mdp_wait(struct mdp_info *mdp, uint32_t mask, wait_queue_head_t *wq)
 {
 	int ret = 0;
 	unsigned long irq_flags;
 
 //	pr_info("%s: WAITING for 0x%x\n", __func__, mask);
-	wait_event_timeout(*wq, !mdp_check_mask(mdp, mask), HZ);
+	wait_event_timeout(*wq, !mdp_check_mask(mdp, mask),
+			   msecs_to_jiffies(1000));
 
 	spin_lock_irqsave(&mdp->lock, irq_flags);
 	if (mdp_irq_mask & mask) {
 		pr_warning("%s: timeout waiting for mdp to complete 0x%x\n",
 			   __func__, mask);
-		printk("GLBL_CLK_ENA: %08X\n", readl(MSM_CLK_CTL_BASE + 0x0000));
-		printk("GLBL_CLK_STATE: %08X\n", readl(MSM_CLK_CTL_BASE + 0x0004));
-		printk("GLBL_SLEEP_EN: %08X\n", readl(MSM_CLK_CTL_BASE + 0x001C));
-		printk("GLBL_CLK_ENA_2: %08X\n", readl(MSM_CLK_CTL_BASE + 0x0220));
-		printk("GLBL_CLK_STATE_2: %08X\n", readl(MSM_CLK_CTL_BASE + 0x0224));
-		printk("GLBL_CLK_SLEEP_EN_2: %08X\n", readl(MSM_CLK_CTL_BASE + 0x023C));
-		mdp_ppp_dump_debug(mdp);
+		pr_info("GLBL_CLK_ENA: %08X\n",
+			readl(MSM_CLK_CTL_BASE + 0x0000));
+		pr_info("GLBL_CLK_STATE: %08X\n",
+			readl(MSM_CLK_CTL_BASE + 0x0004));
+		pr_info("GLBL_SLEEP_EN: %08X\n",
+			readl(MSM_CLK_CTL_BASE + 0x001C));
+		pr_info("GLBL_CLK_ENA_2: %08X\n",
+			readl(MSM_CLK_CTL_BASE + 0x0220));
+		pr_info("GLBL_CLK_STATE_2: %08X\n",
+			readl(MSM_CLK_CTL_BASE + 0x0224));
+		pr_info("GLBL_CLK_SLEEP_EN_2: %08X\n",
+			readl(MSM_CLK_CTL_BASE + 0x023C));
 		locked_disable_mdp_irq(mdp, mask);
 		ret = -ETIMEDOUT;
 	} else {
@@ -196,7 +198,7 @@ static int mdp_wait(struct mdp_info *mdp, uint32_t mask, wait_queue_head_t *wq)
 	return ret;
 }
 
-void mdp_dma_wait(struct mdp_device *mdp_dev, int interface)
+static void mdp_dma_wait(struct mdp_device *mdp_dev, int interface)
 {
 #define MDP_MAX_TIMEOUTS 20
 	static int timeout_count;
@@ -227,11 +229,6 @@ void mdp_dma_wait(struct mdp_device *mdp_dev, int interface)
 		       MDP_MAX_TIMEOUTS);
 		BUG();
 	}
-}
-
-static int mdp_ppp_wait(struct mdp_info *mdp)
-{
-	return mdp_wait(mdp, DL0_ROI_DONE, &mdp_ppp_waitqueue);
 }
 
 static void mdp_dma_to_mddi(void *priv, uint32_t addr, uint32_t stride,
@@ -293,7 +290,7 @@ static void mdp_dma_to_mddi(void *priv, uint32_t addr, uint32_t stride,
 #endif
 }
 
-void mdp_dma(struct mdp_device *mdp_dev, uint32_t addr, uint32_t stride,
+static void mdp_dma(struct mdp_device *mdp_dev, uint32_t addr, uint32_t stride,
 	     uint32_t width, uint32_t height, uint32_t x, uint32_t y,
 	     struct msmfb_callback *callback, int interface)
 {
@@ -318,45 +315,6 @@ void mdp_dma(struct mdp_device *mdp_dev, uint32_t addr, uint32_t stride,
 	out_if->dma_start(out_if->priv, addr, stride, width, height, x, y);
 done:
 	spin_unlock_irqrestore(&mdp->lock, flags);
-}
-
-static int get_img(struct mdp_img *img, struct fb_info *info,
-		   unsigned long *start, unsigned long *len,
-		   struct file** filep)
-{
-	int put_needed, ret = 0;
-	struct file *file;
-	unsigned long vstart;
-
-	if (!get_pmem_file(img->memory_id, start, &vstart, len, filep))
-		return 0;
-	else if (!get_msm_hw3d_file(img->memory_id, &img->offset, start, len,
-				    filep))
-		return 0;
-
-	file = fget_light(img->memory_id, &put_needed);
-	if (file == NULL)
-		return -1;
-
-	if (MAJOR(file->f_dentry->d_inode->i_rdev) == FB_MAJOR) {
-		*start = info->fix.smem_start;
-		*len = info->fix.smem_len;
-		ret = 0;
-	} else
-		ret = -1;
-	fput_light(file, put_needed);
-
-	return ret;
-}
-
-static void put_img(struct file *file)
-{
-	if (file) {
-		if (is_pmem_file(file))
-			put_pmem_file(file);
-		else if (is_msm_hw3d_file(file))
-			put_msm_hw3d_file(file);
-	}
 }
 
 void mdp_configure_dma(struct mdp_device *mdp_dev)
@@ -389,7 +347,7 @@ int mdp_check_output_format(struct mdp_device *mdp_dev, int bpp)
 	return 0;
 }
 
-int mdp_set_output_format(struct mdp_device *mdp_dev, int bpp)
+static int mdp_set_output_format(struct mdp_device *mdp_dev, int bpp)
 {
 	struct mdp_info *mdp = container_of(mdp_dev, struct mdp_info, mdp_dev);
 	uint32_t format, pack_pattern;
@@ -426,172 +384,11 @@ int mdp_set_output_format(struct mdp_device *mdp_dev, int bpp)
 	return 0;
 }
 
-static void dump_req(struct mdp_blit_req *req,
-	unsigned long src_start, unsigned long src_len,
-	unsigned long dst_start, unsigned long dst_len)
-{
-	pr_err("flags: 0x%x\n", 	req->flags);
-	pr_err("src_start:  0x%08lx\n", src_start);
-	pr_err("src_len:    0x%08lx\n", src_len);
-	pr_err("src.offset: 0x%x\n",    req->src.offset);
-	pr_err("src.format: 0x%x\n",    req->src.format);
-	pr_err("src.width:  %d\n",      req->src.width);
-	pr_err("src.height: %d\n",      req->src.height);
-	pr_err("src_rect.x: %d\n",      req->src_rect.x);
-	pr_err("src_rect.y: %d\n",      req->src_rect.y);
-	pr_err("src_rect.w: %d\n",      req->src_rect.w);
-	pr_err("src_rect.h: %d\n",      req->src_rect.h);
-
-	pr_err("dst_start:  0x%08lx\n", dst_start);
-	pr_err("dst_len:    0x%08lx\n", dst_len);
-	pr_err("dst.offset: 0x%x\n",    req->dst.offset);
-	pr_err("dst.format: 0x%x\n",    req->dst.format);
-	pr_err("dst.width:  %d\n",      req->dst.width);
-	pr_err("dst.height: %d\n",      req->dst.height);
-	pr_err("dst_rect.x: %d\n",      req->dst_rect.x);
-	pr_err("dst_rect.y: %d\n",      req->dst_rect.y);
-	pr_err("dst_rect.w: %d\n",      req->dst_rect.w);
-	pr_err("dst_rect.h: %d\n",      req->dst_rect.h);
-}
-
-int mdp_blit_and_wait(struct mdp_info *mdp, struct mdp_blit_req *req,
-	struct file *src_file, unsigned long src_start, unsigned long src_len,
-	struct file *dst_file, unsigned long dst_start, unsigned long dst_len)
-{
-	int ret;
-	enable_mdp_irq(mdp, DL0_ROI_DONE);
-	ret = mdp_ppp_blit(mdp, req,
-			src_file, src_start, src_len,
-			dst_file, dst_start, dst_len);
-	if (unlikely(ret)) {
-		disable_mdp_irq(mdp, DL0_ROI_DONE);
-		return ret;
-	}
-	ret = mdp_ppp_wait(mdp);
-	if (unlikely(ret)) {
-		printk(KERN_ERR "%s: failed!\n", __func__);
-		pr_err("original request:\n");
-		dump_req(mdp->req, src_start, src_len, dst_start, dst_len);
-		pr_err("dead request:\n");
-		dump_req(req, src_start, src_len, dst_start, dst_len);
-		BUG();
-		return ret;
-	}
-	return 0;
-}
-
 int mdp_blit(struct mdp_device *mdp_dev, struct fb_info *fb,
 	     struct mdp_blit_req *req)
 {
-	int ret;
-	unsigned long src_start = 0, src_len = 0, dst_start = 0, dst_len = 0;
 	struct mdp_info *mdp = container_of(mdp_dev, struct mdp_info, mdp_dev);
-	struct file *src_file = 0, *dst_file = 0;
-
-#ifdef CONFIG_MSM_MDP31
-	if (req->flags & MDP_ROT_90) {
-		if (unlikely(((req->dst_rect.h == 1) &&
-			((req->src_rect.w != 1) ||
-			(req->dst_rect.w != req->src_rect.h))) ||
-			((req->dst_rect.w == 1) && ((req->src_rect.h != 1) ||
-			(req->dst_rect.h != req->src_rect.w))))) {
-			pr_err("mpd_ppp: error scaling when size is 1!\n");
-			return -EINVAL;
-		}
-	} else {
-		if (unlikely(((req->dst_rect.w == 1) &&
-			((req->src_rect.w != 1) ||
-			(req->dst_rect.h != req->src_rect.h))) ||
-			((req->dst_rect.h == 1) && ((req->src_rect.h != 1) ||
-			(req->dst_rect.h != req->src_rect.h))))) {
-			pr_err("mpd_ppp: error scaling when size is 1!\n");
-			return -EINVAL;
-		}
-	}
-#endif
-
-	/* WORKAROUND FOR HARDWARE BUG IN BG TILE FETCH */
-	if (unlikely(req->src_rect.h == 0 ||
-		     req->src_rect.w == 0)) {
-		printk(KERN_ERR "mdp_ppp: src img of zero size!\n");
-		return -EINVAL;
-	}
-	if (unlikely(req->dst_rect.h == 0 ||
-		     req->dst_rect.w == 0))
-		return -EINVAL;
-
-	/* do this first so that if this fails, the caller can always
-	 * safely call put_img */
-	if (unlikely(get_img(&req->src, fb, &src_start, &src_len, &src_file))) {
-		printk(KERN_ERR "mdp_ppp: could not retrieve src image from "
-				"memory\n");
-		return -EINVAL;
-	}
-
-	if (unlikely(get_img(&req->dst, fb, &dst_start, &dst_len, &dst_file))) {
-		printk(KERN_ERR "mdp_ppp: could not retrieve dst image from "
-				"memory\n");
-		put_img(src_file);
-		return -EINVAL;
-	}
-	mutex_lock(&mdp_mutex);
-
-	/* transp_masking unimplemented */
-	req->transp_mask = MDP_TRANSP_NOP;
-	mdp->req = req;
-#ifndef CONFIG_MSM_MDP31
-	if (unlikely((req->transp_mask != MDP_TRANSP_NOP ||
-		      req->alpha != MDP_ALPHA_NOP ||
-		      HAS_ALPHA(req->src.format)) &&
-		     (req->flags & MDP_ROT_90 &&
-		      req->dst_rect.w <= 16 && req->dst_rect.h >= 16))) {
-		int i;
-		unsigned int tiles = req->dst_rect.h / 16;
-		unsigned int remainder = req->dst_rect.h % 16;
-		req->src_rect.w = 16*req->src_rect.w / req->dst_rect.h;
-		req->dst_rect.h = 16;
-		for (i = 0; i < tiles; i++) {
-			ret = mdp_blit_and_wait(mdp, req,
-						src_file, src_start, src_len,
-						dst_file, dst_start, dst_len);
-			if (ret)
-				goto end;
-			req->dst_rect.y += 16;
-			req->src_rect.x += req->src_rect.w;
-		}
-		if (!remainder)
-			goto end;
-		req->src_rect.w = remainder*req->src_rect.w / req->dst_rect.h;
-		req->dst_rect.h = remainder;
-	}
-#else
-	/* Workarounds for MDP 3.1 hardware bugs */
-	if (unlikely((mdp_get_bytes_per_pixel(req->dst.format) == 4) &&
-		(req->dst_rect.w != 1) &&
-		(((req->dst_rect.w % 8) == 6) ||
-		((req->dst_rect.w % 32) == 3) ||
-		((req->dst_rect.w % 32) == 1)))) {
-		ret = mdp_ppp_blit_split_width(mdp, req,
-			src_file, src_start, src_len,
-			dst_file, dst_start, dst_len);
-		goto end;
-	} else if (unlikely((req->dst_rect.w != 1) && (req->dst_rect.h != 1) &&
-		((req->dst_rect.h % 32) == 3 ||
-		(req->dst_rect.h % 32) == 1))) {
-		ret = mdp_ppp_blit_split_height(mdp, req,
-			src_file, src_start, src_len,
-			dst_file, dst_start, dst_len);
-		goto end;
-	}
-#endif
-	ret = mdp_blit_and_wait(mdp, req,
-				src_file, src_start, src_len,
-				dst_file, dst_start, dst_len);
-end:
-	put_img(src_file);
-	put_img(dst_file);
-	mutex_unlock(&mdp_mutex);
-	return ret;
+	return mdp_ppp_blit(mdp, fb, req);
 }
 
 void mdp_set_grp_disp(struct mdp_device *mdp_dev, unsigned disp_id)
@@ -791,6 +588,9 @@ int mdp_probe(struct platform_device *pdev)
 	mdp->mdp_dev.set_output_format = mdp_set_output_format;
 	mdp->mdp_dev.check_output_format = mdp_check_output_format;
 	mdp->mdp_dev.configure_dma = mdp_configure_dma;
+
+	mdp->enable_irq = enable_mdp_irq;
+	mdp->disable_irq = disable_mdp_irq;
 
 	ret = mdp_out_if_register(&mdp->mdp_dev, MSM_MDDI_PMDH_INTERFACE, mdp,
 				  MDP_DMA_P_DONE, mdp_dma_to_mddi);

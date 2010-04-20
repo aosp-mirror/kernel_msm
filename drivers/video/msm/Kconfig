@@ -6,6 +6,11 @@ config FB_MSM
 	select FB_CFB_IMAGEBLIT
 	default y
 
+config FB_MSM_MDP_PPP
+	bool
+	depends on FB_MSM && (MSM_MDP31 || MSM_MDP22)
+	default y
+
 config FB_MSM_LCDC
 	bool "Support for integrated LCD controller in qsd8x50"
 	depends on FB_MSM && MSM_MDP31

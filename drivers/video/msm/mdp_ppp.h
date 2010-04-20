@@ -62,34 +62,42 @@ struct ppp_regs {
 struct mdp_info;
 struct mdp_rect;
 struct mdp_blit_req;
+struct fb_info;
+
+#ifdef CONFIG_FB_MSM_MDP_PPP
 
 void mdp_ppp_init_scale(const struct mdp_info *mdp);
 int mdp_ppp_cfg_scale(const struct mdp_info *mdp, struct ppp_regs *regs,
 		      struct mdp_rect *src_rect, struct mdp_rect *dst_rect,
 		      uint32_t src_format, uint32_t dst_format);
 int mdp_ppp_load_blur(const struct mdp_info *mdp);
+int mdp_ppp_blit(struct mdp_info *mdp, struct fb_info *fb,
+		 struct mdp_blit_req *req);
+void mdp_ppp_handle_isr(struct mdp_info *mdp, uint32_t mask);
+
+int mdp_blit_and_wait(struct mdp_info *mdp, struct mdp_blit_req *req,
+	struct file *src_file, unsigned long src_start, unsigned long src_len,
+	struct file *dst_file, unsigned long dst_start, unsigned long dst_len);
 
 #ifndef CONFIG_MSM_MDP31
 int mdp_ppp_cfg_edge_cond(struct mdp_blit_req *req, struct ppp_regs *regs);
 #else
-
 int mdp_ppp_blit_split_width(struct mdp_info *mdp, const struct mdp_blit_req *req,
 	struct file *src_file, unsigned long src_start, unsigned long src_len,
 	struct file *dst_file, unsigned long dst_start, unsigned long dst_len);
 int mdp_ppp_blit_split_height(struct mdp_info *mdp, const struct mdp_blit_req *req,
 	struct file *src_file, unsigned long src_start, unsigned long src_len,
 	struct file *dst_file, unsigned long dst_start, unsigned long dst_len);
-
 static inline int mdp_ppp_cfg_edge_cond(struct mdp_blit_req *req,
-				 struct ppp_regs *regs)
-{
-	return 0;
-}
-#endif
+					struct ppp_regs *regs) { return 0; }
+#endif /* CONFIG_MSM_MDP31 */
 
-int mdp_get_bytes_per_pixel(int format);
-int mdp_blit_and_wait(struct mdp_info *mdp, struct mdp_blit_req *req,
-	struct file *src_file, unsigned long src_start, unsigned long src_len,
-	struct file *dst_file, unsigned long dst_start, unsigned long dst_len);
+#else /* !CONFIG_FB_MSM_MDP_PPP */
+
+static inline int mdp_ppp_blit(struct mdp_info *mdp, struct fb_info *fb,
+			       struct mdp_blit_req *req) { return -EINVAL; }
+static inline void mdp_ppp_handle_isr(struct mdp_info *mdp, uint32_t mask) {}
+#endif /* CONFIG_FB_MSM_MDP_PPP */
+
 
 #endif /* _VIDEO_MSM_MDP_PPP_H_ */

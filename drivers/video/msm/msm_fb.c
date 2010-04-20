@@ -574,13 +574,13 @@ static int msmfb_ioctl(struct fb_info *p, unsigned int cmd, unsigned long arg)
 		t1 = ktime_get();
 #endif
 		ret = msmfb_blit(p, argp);
-		if (ret)
-			return ret;
 #if PRINT_BLIT_TIME
 		t2 = ktime_get();
 		DLOG(BLIT_TIME, "total %lld\n",
 		       ktime_to_ns(t2) - ktime_to_ns(t1));
 #endif
+		if (ret)
+			return ret;
 		break;
 	default:
 			printk(KERN_INFO "msmfb unknown ioctl: %d\n", cmd);

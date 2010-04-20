@@ -53,6 +53,9 @@ struct mdp_info {
 	int pack_pattern;
 	bool dma_config_dirty;
 	struct mdp_blit_req *req;
+
+	int (*enable_irq)(struct mdp_info *mdp, uint32_t mask);
+	int (*disable_irq)(struct mdp_info *mdp, uint32_t mask);
 };
 
 extern int mdp_out_if_register(struct mdp_device *mdp_dev, int interface,
@@ -64,12 +67,8 @@ extern int mdp_out_if_req_irq(struct mdp_device *mdp_dev, int interface,
 
 struct mdp_blit_req;
 struct mdp_device;
-int mdp_ppp_blit(const struct mdp_info *mdp, struct mdp_blit_req *req,
-		 struct file *src_file, unsigned long src_start,
-		 unsigned long src_len, struct file *dst_file,
-		 unsigned long dst_start, unsigned long dst_len);
 
-void mdp_ppp_dump_debug(const struct mdp_info *mdp);
+int mdp_wait(struct mdp_info *mdp, uint32_t mask, wait_queue_head_t *wq);
 
 #define mdp_writel(mdp, value, offset) writel(value, mdp->base + offset)
 #define mdp_readl(mdp, offset) readl(mdp->base + offset)
