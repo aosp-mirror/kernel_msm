@@ -6,9 +6,14 @@ config FB_MSM
 	select FB_CFB_IMAGEBLIT
 	default y
 
-config FB_MSM_MDP_PPP
+config FB_MSM_LEGACY_MDP
 	bool
 	depends on FB_MSM && (MSM_MDP31 || MSM_MDP22)
+	default y
+
+config FB_MSM_MDP_PPP
+	bool
+	depends on FB_MSM_LEGACY_MDP
 	default y
 
 config FB_MSM_LCDC

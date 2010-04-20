@@ -68,6 +68,8 @@ extern int mdp_out_if_req_irq(struct mdp_device *mdp_dev, int interface,
 struct mdp_blit_req;
 struct mdp_device;
 
+int mdp_hw_init(struct mdp_info *mdp);
+
 int mdp_wait(struct mdp_info *mdp, uint32_t mask, wait_queue_head_t *wq);
 
 #define mdp_writel(mdp, value, offset) writel(value, mdp->base + offset)

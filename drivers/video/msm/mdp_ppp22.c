@@ -1016,7 +1016,7 @@ static int scale_params(uint32_t dim_in, uint32_t dim_out, uint32_t origin,
 	return 0;
 }
 
-int mdp_ppp_cfg_scale(const struct mdp_info *mdp, struct ppp_regs *regs,
+int mdp_ppp_cfg_scale(struct mdp_info *mdp, struct ppp_regs *regs,
 		      struct mdp_rect *src_rect, struct mdp_rect *dst_rect,
 		      uint32_t src_format, uint32_t dst_format)
 {
@@ -1070,7 +1070,7 @@ int mdp_ppp_cfg_scale(const struct mdp_info *mdp, struct ppp_regs *regs,
 }
 
 
-int mdp_ppp_load_blur(const struct mdp_info *mdp)
+int mdp_ppp_load_blur(struct mdp_info *mdp)
 {
 	if (!(downscale_x_table == MDP_DOWNSCALE_BLUR &&
               downscale_y_table == MDP_DOWNSCALE_BLUR)) {
@@ -1082,10 +1082,64 @@ int mdp_ppp_load_blur(const struct mdp_info *mdp)
 	return 0;
 }
 
-void mdp_ppp_init_scale(const struct mdp_info *mdp)
+void mdp_ppp_init_scale(struct mdp_info *mdp)
 {
 	downscale_x_table = MDP_DOWNSCALE_MAX;
 	downscale_y_table = MDP_DOWNSCALE_MAX;
 
 	load_table(mdp, mdp_upscale_table, ARRAY_SIZE(mdp_upscale_table));
+}
+
+int mdp_ppp_validate_blit(struct mdp_info *mdp, struct mdp_blit_req *req)
+{
+	/* WORKAROUND FOR HARDWARE BUG IN BG TILE FETCH */
+	if (unlikely(req->src_rect.h == 0 ||
+		     req->src_rect.w == 0)) {
+		pr_info("mdp_ppp: src img of zero size!\n");
+		return -EINVAL;
+	}
+	if (unlikely(req->dst_rect.h == 0 ||
+		     req->dst_rect.w == 0))
+		return -EINVAL;
+
+	return 0;
+}
+
+int mdp_ppp_do_blit(struct mdp_info *mdp, struct mdp_blit_req *req,
+		   struct file *src_file, unsigned long src_start,
+		   unsigned long src_len, struct file *dst_file,
+		   unsigned long dst_start, unsigned long dst_len)
+{
+	int ret;
+
+	if (unlikely((req->transp_mask != MDP_TRANSP_NOP ||
+		      req->alpha != MDP_ALPHA_NOP ||
+		      HAS_ALPHA(req->src.format)) &&
+		     (req->flags & MDP_ROT_90 &&
+		      req->dst_rect.w <= 16 && req->dst_rect.h >= 16))) {
+		int i;
+		unsigned int tiles = req->dst_rect.h / 16;
+		unsigned int remainder = req->dst_rect.h % 16;
+		req->src_rect.w = 16*req->src_rect.w / req->dst_rect.h;
+		req->dst_rect.h = 16;
+		for (i = 0; i < tiles; i++) {
+			ret = mdp_ppp_blit_and_wait(mdp, req,
+						src_file, src_start, src_len,
+						dst_file, dst_start, dst_len);
+			if (ret)
+				goto end;
+			req->dst_rect.y += 16;
+			req->src_rect.x += req->src_rect.w;
+		}
+		if (!remainder)
+			goto end;
+		req->src_rect.w = remainder*req->src_rect.w / req->dst_rect.h;
+		req->dst_rect.h = remainder;
+	}
+
+	ret = mdp_ppp_blit_and_wait(mdp, req,
+				src_file, src_start, src_len,
+				dst_file, dst_start, dst_len);
+end:
+	return ret;
 }

@@ -311,7 +311,7 @@ static void blit_blend(struct mdp_blit_req *req, struct ppp_regs *regs)
 	set_blend_region(&req->dst, &req->dst_rect, regs);
 }
 
-static int blit_scale(const struct mdp_info *mdp, struct mdp_blit_req *req,
+static int blit_scale(struct mdp_info *mdp, struct mdp_blit_req *req,
 		      struct ppp_regs *regs)
 {
 	struct mdp_rect dst_rect;
@@ -332,7 +332,7 @@ static int blit_scale(const struct mdp_info *mdp, struct mdp_blit_req *req,
 	}
 
 	if (mdp_ppp_cfg_scale(mdp, regs, &req->src_rect, &dst_rect,
-			      req->src.format, req->dst.format)) {
+				req->src.format, req->dst.format)) {
 		DLOG("crap, bad scale\n");
 		return -1;
 	}
@@ -341,7 +341,7 @@ static int blit_scale(const struct mdp_info *mdp, struct mdp_blit_req *req,
 	return 0;
 }
 
-static void blit_blur(const struct mdp_info *mdp, struct mdp_blit_req *req,
+static void blit_blur(struct mdp_info *mdp, struct mdp_blit_req *req,
 		      struct ppp_regs *regs)
 {
 	int ret;
@@ -441,7 +441,7 @@ static uint32_t get_chroma_base(struct mdp_img *img, uint32_t base,
 	return addr;
 }
 
-static int mdp_get_bytes_per_pixel(int format)
+int mdp_get_bytes_per_pixel(int format)
 {
 	if (format < 0 || format >= MDP_IMGTYPE_LIMIT)
 		return -1;
@@ -538,7 +538,7 @@ static void mdp_dump_blit(struct mdp_blit_req *req)
 }
 #endif
 
-static int process_blit(const struct mdp_info *mdp, struct mdp_blit_req *req,
+static int process_blit(struct mdp_info *mdp, struct mdp_blit_req *req,
 		 struct file *src_file, unsigned long src_start, unsigned long src_len,
 		 struct file *dst_file, unsigned long dst_start, unsigned long dst_len)
 {
@@ -744,7 +744,7 @@ static void dump_req(struct mdp_blit_req *req,
 	pr_err("dst_rect.h: %d\n",      req->dst_rect.h);
 }
 
-int mdp_blit_and_wait(struct mdp_info *mdp, struct mdp_blit_req *req,
+int mdp_ppp_blit_and_wait(struct mdp_info *mdp, struct mdp_blit_req *req,
 		struct file *src_file, unsigned long src_start, unsigned long src_len,
 		struct file *dst_file, unsigned long dst_start, unsigned long dst_len)
 {
@@ -776,37 +776,9 @@ int mdp_ppp_blit(struct mdp_info *mdp, struct fb_info *fb,
 	unsigned long src_start = 0, src_len = 0, dst_start = 0, dst_len = 0;
 	struct file *src_file = 0, *dst_file = 0;
 
-#ifdef CONFIG_MSM_MDP31
-	if (req->flags & MDP_ROT_90) {
-		if (unlikely(((req->dst_rect.h == 1) &&
-			((req->src_rect.w != 1) ||
-			(req->dst_rect.w != req->src_rect.h))) ||
-			((req->dst_rect.w == 1) && ((req->src_rect.h != 1) ||
-			(req->dst_rect.h != req->src_rect.w))))) {
-			pr_err("mpd_ppp: error scaling when size is 1!\n");
-			return -EINVAL;
-		}
-	} else {
-		if (unlikely(((req->dst_rect.w == 1) &&
-			((req->src_rect.w != 1) ||
-			(req->dst_rect.h != req->src_rect.h))) ||
-			((req->dst_rect.h == 1) && ((req->src_rect.h != 1) ||
-			(req->dst_rect.h != req->src_rect.h))))) {
-			pr_err("mpd_ppp: error scaling when size is 1!\n");
-			return -EINVAL;
-		}
-	}
-#endif
-
-	/* WORKAROUND FOR HARDWARE BUG IN BG TILE FETCH */
-	if (unlikely(req->src_rect.h == 0 ||
-		     req->src_rect.w == 0)) {
-		printk(KERN_ERR "mdp_ppp: src img of zero size!\n");
-		return -EINVAL;
-	}
-	if (unlikely(req->dst_rect.h == 0 ||
-		     req->dst_rect.w == 0))
-		return -EINVAL;
+	ret = mdp_ppp_validate_blit(mdp, req);
+	if (ret)
+		return ret;
 
 	/* do this first so that if this fails, the caller can always
 	 * safely call put_img */
@@ -827,55 +799,10 @@ int mdp_ppp_blit(struct mdp_info *mdp, struct fb_info *fb,
 	/* transp_masking unimplemented */
 	req->transp_mask = MDP_TRANSP_NOP;
 	mdp->req = req;
-#ifndef CONFIG_MSM_MDP31
-	if (unlikely((req->transp_mask != MDP_TRANSP_NOP ||
-		      req->alpha != MDP_ALPHA_NOP ||
-		      HAS_ALPHA(req->src.format)) &&
-		     (req->flags & MDP_ROT_90 &&
-		      req->dst_rect.w <= 16 && req->dst_rect.h >= 16))) {
-		int i;
-		unsigned int tiles = req->dst_rect.h / 16;
-		unsigned int remainder = req->dst_rect.h % 16;
-		req->src_rect.w = 16*req->src_rect.w / req->dst_rect.h;
-		req->dst_rect.h = 16;
-		for (i = 0; i < tiles; i++) {
-			ret = mdp_blit_and_wait(mdp, req,
-						src_file, src_start, src_len,
-						dst_file, dst_start, dst_len);
-			if (ret)
-				goto end;
-			req->dst_rect.y += 16;
-			req->src_rect.x += req->src_rect.w;
-		}
-		if (!remainder)
-			goto end;
-		req->src_rect.w = remainder*req->src_rect.w / req->dst_rect.h;
-		req->dst_rect.h = remainder;
-	}
-#else
-	/* Workarounds for MDP 3.1 hardware bugs */
-	if (unlikely((mdp_get_bytes_per_pixel(req->dst.format) == 4) &&
-		(req->dst_rect.w != 1) &&
-		(((req->dst_rect.w % 8) == 6) ||
-		((req->dst_rect.w % 32) == 3) ||
-		((req->dst_rect.w % 32) == 1)))) {
-		ret = mdp_ppp_blit_split_width(mdp, req,
-			src_file, src_start, src_len,
-			dst_file, dst_start, dst_len);
-		goto end;
-	} else if (unlikely((req->dst_rect.w != 1) && (req->dst_rect.h != 1) &&
-		((req->dst_rect.h % 32) == 3 ||
-		(req->dst_rect.h % 32) == 1))) {
-		ret = mdp_ppp_blit_split_height(mdp, req,
-			src_file, src_start, src_len,
-			dst_file, dst_start, dst_len);
-		goto end;
-	}
-#endif
-	ret = mdp_blit_and_wait(mdp, req,
-				src_file, src_start, src_len,
-				dst_file, dst_start, dst_len);
-end:
+
+	ret = mdp_ppp_do_blit(mdp, req, src_file, src_start, src_len,
+			      dst_file, dst_start, dst_len);
+
 	put_img(src_file);
 	put_img(dst_file);
 	mutex_unlock(&mdp_mutex);
@@ -887,3 +814,5 @@ void mdp_ppp_handle_isr(struct mdp_info *mdp, uint32_t mask)
 	if (mask & DL0_ROI_DONE)
 		wake_up(&mdp_ppp_waitqueue);
 }
+
+
