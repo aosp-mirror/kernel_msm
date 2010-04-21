@@ -34,6 +34,7 @@
 #include <mach/camera.h>
 
 #include <asm/cacheflush.h>
+#define dmac_inv_range(a,b) WARN(1, "need cache invalidate\n")
 
 #define MSM_MAX_CAMERA_SENSORS 5
 
