@@ -93,7 +93,12 @@ struct q6audio_analog_ops {
 	int (*get_rx_vol)(uint8_t hw, int level);
 };
 
+#ifdef CONFIG_MSM_QDSP6
 void q6audio_register_analog_ops(struct q6audio_analog_ops *ops);
 void q6audio_set_acdb_file(char* filename);
+#else
+static inline void q6audio_register_analog_ops(struct q6audio_analog_ops *ops) {}
+static inline void q6audio_set_acdb_file(char* filename) {}
+#endif
 
 #endif
