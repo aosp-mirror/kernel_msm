@@ -28,6 +28,7 @@
 #include <linux/delay.h>
 #include <linux/gpio.h>
 #include <linux/switch.h>
+#include <linux/wakelock.h>
 
 #include "board-mahimahi.h"
 
