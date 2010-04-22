@@ -584,6 +584,11 @@ static int hw3d_mmap(struct file *file, struct vm_area_struct *vma)
 		pr_err("%s: Trying to mmap unknown region %d\n", __func__,
 		       region);
 		return -EINVAL;
+	} else if (vma_size > info->regions[region].size) {
+		pr_err("%s: VMA size %ld exceeds region %d size %ld\n",
+			__func__, vma_size, region,
+			info->regions[region].size);
+		return -EINVAL;
 	} else if (REGION_PAGE_OFFS(vma->vm_pgoff) != 0 ||
 		   (vma_size & ~PAGE_MASK)) {
 		pr_err("%s: Can't remap part of the region %d\n", __func__,
@@ -624,6 +629,13 @@ static int hw3d_mmap(struct file *file, struct vm_area_struct *vma)
 		ret = -EAGAIN;
 		goto done;
 	}
+
+	/* Prevent a malicious client from stealing another client's data
+	 * by forcing a revoke on it and then mmapping the GPU buffers.
+	 */
+	if (region != HW3D_REGS)
+		memset(info->regions[region].vbase, 0,
+		       info->regions[region].size);
 
 	vma->vm_ops = &hw3d_vm_ops;
 
