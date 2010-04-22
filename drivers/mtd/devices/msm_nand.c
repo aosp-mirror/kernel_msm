@@ -62,6 +62,15 @@ struct msm_nand_chip {
 
 #define CFG1_WIDE_FLASH (1U << 1)
 
+#ifdef CONFIG_ARCH_MSM7X30
+#define BUF_STAT_UNCORRECTABLE (1U << 8)
+#define BUF_STAT_NUM_ERRS_MASK (0xf)
+#else
+#define BUF_STAT_UNCORRECTABLE (1U << 3)
+#define BUF_STAT_NUM_ERRS_MASK (0x7)
+#endif
+
+
 /* TODO: move datamover code out */
 
 #define SRC_CRCI_NAND_CMD  CMD_SRC_CRCI(DMOV_NAND_CRCI_CMD)
@@ -668,7 +677,9 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 		pageerr = 0;
 		page_corrected = 0;
 		for (n = start_sector; n <= chip->last_sector; n++) {
-			if (dma_buffer->data.result[n].buffer_status & 0x8) {
+			uint32_t buf_stat =
+				dma_buffer->data.result[n].buffer_status;
+			if (buf_stat & BUF_STAT_UNCORRECTABLE) {
 				total_uncorrected++;
 				uncorrected[BIT_WORD(pages_read)] |=
 							BIT_MASK(pages_read);
@@ -679,8 +690,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 				pageerr = -EIO;
 				break;
 			}
-			sector_corrected =
-				dma_buffer->data.result[n].buffer_status & 0x7;
+			sector_corrected =buf_stat & BUF_STAT_NUM_ERRS_MASK;
 			page_corrected += sector_corrected;
 			if (sector_corrected > 1)
 				pageerr = -EUCLEAN;
