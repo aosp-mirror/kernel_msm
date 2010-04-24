@@ -232,6 +232,9 @@ static int vfe_7x_stop(void)
 
 static void vfe_7x_release(struct platform_device *pdev)
 {
+	struct msm_sensor_ctrl *sctrl =
+		&((struct msm_sync *)vfe_syncdata)->sctrl;
+
 	mutex_lock(&vfe_lock);
 	vfe_syncdata = NULL;
 	mutex_unlock(&vfe_lock);
@@ -244,6 +247,9 @@ static void vfe_7x_release(struct platform_device *pdev)
 
 	msm_adsp_disable(qcam_mod);
 	msm_adsp_disable(vfe_mod);
+
+	if (sctrl)
+		sctrl->s_release();
 
 	msm_adsp_put(qcam_mod);
 	msm_adsp_put(vfe_mod);

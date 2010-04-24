@@ -1858,8 +1858,6 @@ static int __msm_release(struct msm_sync *sync)
 		sync->opencnt--;
 
 	if (!sync->opencnt) {
-		/*sensor release*/
-		sync->sctrl.s_release();
 		/* need to clean up system resource */
 		if (sync->vfefn.vfe_release)
 			sync->vfefn.vfe_release(sync->pdev);

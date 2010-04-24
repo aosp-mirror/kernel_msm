@@ -70,11 +70,18 @@ static int vfe_init(struct msm_vfe_callback *presp, struct platform_device *dev)
 
 static void vfe_release(struct platform_device *dev)
 {
+	struct msm_sensor_ctrl *sctrl =
+		&((struct msm_sync *)vfe_syncdata)->sctrl;
+
 	if (ebi1_clk) {
 		clk_set_rate(ebi1_clk, 0);
 		clk_put(ebi1_clk);
 		ebi1_clk = 0;
 	}
+
+	if (sctrl)
+		sctrl->s_release();
+
 	msm_camio_disable(dev);
 	vfe_cmd_release(dev);
 	vfe_syncdata = NULL;
