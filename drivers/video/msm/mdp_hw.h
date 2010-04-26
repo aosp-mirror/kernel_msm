@@ -49,14 +49,16 @@ struct mdp_info {
 	struct clk *clk;
 	struct clk *ebi1_clk;
 	struct mdp_out_interface out_if[MSM_MDP_NUM_INTERFACES];
-	int format;
-	int pack_pattern;
-	bool dma_config_dirty;
+	int dma_format;
+	int dma_pack_pattern;
+	bool dma_format_dirty;
 	struct mdp_blit_req *req;
 
 	int (*enable_irq)(struct mdp_info *mdp, uint32_t mask);
 	int (*disable_irq)(struct mdp_info *mdp, uint32_t mask);
 };
+
+void mdp_configure_dma_format(struct mdp_device *mdp_dev);
 
 extern int mdp_out_if_register(struct mdp_device *mdp_dev, int interface,
 			       void *private_data, uint32_t dma_mask,

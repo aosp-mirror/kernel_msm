@@ -245,7 +245,7 @@ static void mdp_dma_to_mddi(void *priv, uint32_t addr, uint32_t stride,
 		DMA_OUT_SEL_AHB |
 		DMA_IBUF_NONCONTIGUOUS;
 
-	dma2_cfg |= mdp->format;
+	dma2_cfg |= mdp->dma_format;
 
 	dma2_cfg |= DMA_OUT_SEL_MDDI;
 
@@ -317,19 +317,19 @@ done:
 	spin_unlock_irqrestore(&mdp->lock, flags);
 }
 
-void mdp_configure_dma(struct mdp_device *mdp_dev)
+void mdp_configure_dma_format(struct mdp_device *mdp_dev)
 {
 	struct mdp_info *mdp = container_of(mdp_dev, struct mdp_info, mdp_dev);
 	uint32_t dma_cfg;
 
-	if (!mdp->dma_config_dirty)
+	if (!mdp->dma_format_dirty)
 		return;
 	dma_cfg = mdp_readl(mdp, MDP_DMA_P_CONFIG);
 	dma_cfg &= ~DMA_IBUF_FORMAT_MASK;
 	dma_cfg &= ~DMA_PACK_PATTERN_MASK;
-	dma_cfg |= (mdp->format | mdp->pack_pattern);
+	dma_cfg |= (mdp->dma_format | mdp->dma_pack_pattern);
 	mdp_writel(mdp, dma_cfg, MDP_DMA_P_CONFIG);
-	mdp->dma_config_dirty = false;
+	mdp->dma_format_dirty = false;
 
 	return;
 }
@@ -375,10 +375,11 @@ static int mdp_set_output_format(struct mdp_device *mdp_dev, int bpp)
 	default:
 		return -EINVAL;
 	}
-	if (format != mdp->format || pack_pattern != mdp->pack_pattern) {
-		mdp->format = format;
-		mdp->pack_pattern = pack_pattern;
-		mdp->dma_config_dirty = true;
+	if (format != mdp->dma_format ||
+	    pack_pattern != mdp->dma_pack_pattern) {
+		mdp->dma_format = format;
+		mdp->dma_pack_pattern = pack_pattern;
+		mdp->dma_format_dirty = true;
 	}
 
 	return 0;
@@ -520,7 +521,6 @@ int mdp_probe(struct platform_device *pdev)
 	mdp->mdp_dev.set_grp_disp = mdp_set_grp_disp;
 	mdp->mdp_dev.set_output_format = mdp_set_output_format;
 	mdp->mdp_dev.check_output_format = mdp_check_output_format;
-	mdp->mdp_dev.configure_dma = mdp_configure_dma;
 
 	mdp->enable_irq = enable_mdp_irq;
 	mdp->disable_irq = disable_mdp_irq;
