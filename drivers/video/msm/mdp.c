@@ -241,11 +241,11 @@ static void mdp_dma_to_mddi(void *priv, uint32_t addr, uint32_t stride,
 
 	dma2_cfg = DMA_PACK_TIGHT |
 		DMA_PACK_ALIGN_LSB |
-		DMA_PACK_PATTERN_RGB |
 		DMA_OUT_SEL_AHB |
 		DMA_IBUF_NONCONTIGUOUS;
 
 	dma2_cfg |= mdp->dma_format;
+	dma2_cfg |= mdp->dma_pack_pattern;
 
 	dma2_cfg |= DMA_OUT_SEL_MDDI;
 
