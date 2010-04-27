@@ -46,6 +46,11 @@ config MSM_MDP31
 	depends on ARCH_QSD8X50
 	default y
 
+config MSM_MDP40
+	bool
+	depends on ARCH_MSM7X30
+	default y
+
 config MSM_REMOTE_SPINLOCK_DEKKERS
 	bool
 
