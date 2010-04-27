@@ -289,6 +289,7 @@ static void mdp_dma_to_mddi(void *priv, uint32_t addr, uint32_t stride,
 	mdp_writel(mdp, (MDDI_VDO_PACKET_DESC << 16) | MDDI_VDO_PACKET_PRIM,
 		   MDP_MDDI_PARAM);
 
+	mdp_writel(mdp, 0x1, MDP_MDDI_DATA_XFR);
 	mdp_writel(mdp, dma2_cfg, MDP_DMA_P_CONFIG);
 	mdp_writel(mdp, 0, MDP_DMA_P_START);
 #endif

@@ -10,6 +10,8 @@ endif
 #
 obj-y += mdp.o
 
+obj-$(CONFIG_MSM_MDP40) += mdp_hw40.o
+
 obj-$(CONFIG_FB_MSM_LEGACY_MDP) += mdp_hw_legacy.o
 
 obj-$(CONFIG_FB_MSM_MDP_PPP) += mdp_ppp.o

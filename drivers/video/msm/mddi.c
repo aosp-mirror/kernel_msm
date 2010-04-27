@@ -402,7 +402,10 @@ static uint16_t mddi_init_registers(struct mddi_info *mddi)
 	mddi_writel(MDDI_HOST_TA2_LEN, TA2_LEN);
 	mddi_writel(0x0096, DRIVE_HI);
 	/* 0x32 normal, 0x50 for Toshiba display */
+
+	/* XXX: should we use 0x32? */
 	mddi_writel(0x0050, DRIVE_LO);
+
 	mddi_writel(0x003C, DISP_WAKE); /* wakeup counter */
 	mddi_writel(MDDI_HOST_REV_RATE_DIV, REV_RATE_DIV);
 
@@ -420,9 +423,15 @@ static uint16_t mddi_init_registers(struct mddi_info *mddi)
 		udelay(5);
 	}
 
+	/* XXX: NEED SUPPORT FOR 1.2 */
+
 	/* Recommendation from PAD hw team */
 	mddi_writel(0xa850f, PAD_CTL);
 
+#if defined(CONFIG_MSM_MDP31) || defined(CONFIG_MSM_MDP40)
+	mddi_writel(0x00320000, PAD_IO_CTL);
+	mddi_writel(0x00220020, PAD_CAL);
+#endif
 
 	/* Need an even number for counts */
 	mddi_writel(0x60006, DRIVER_START_CNT);
@@ -843,6 +852,8 @@ static int mddi_probe(struct platform_device *pdev)
 		goto error_mddi_version;
 	}
 
+	printk(KERN_INFO "mddi: host core version: 0x%02x\n", mddi->version);
+
 	/* read the capabilities off the client */
 	if (!mddi_get_client_caps(mddi)) {
 		printk(KERN_INFO "mddi: no client found\n");
@@ -854,6 +865,9 @@ static int mddi_probe(struct platform_device *pdev)
 		return 0;
 	}
 	mddi_set_auto_hibernate(&mddi->client_data, 1);
+
+	pr_info("%s: got mfr %04x product %04x\n", __func__,
+		mddi->caps.Mfr_Name, mddi->caps.Product_Code);
 
 	if (mddi->caps.Mfr_Name == 0 && mddi->caps.Product_Code == 0)
 		pdata->fixup(&mddi->caps.Mfr_Name, &mddi->caps.Product_Code);
