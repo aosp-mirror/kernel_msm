@@ -36,6 +36,8 @@
 #define DEBUG_SAPPHIRE_PANEL 0
 #define userid 0xD10
 
+#define VSYNC_GPIO 97
+
 enum sapphire_panel_type {
 	SAPPHIRE_PANEL_SHARP = 0,
 	SAPPHIRE_PANEL_TOPPOLY,
@@ -1199,6 +1201,7 @@ static struct msm_mddi_platform_data mddi_pdata = {
 	.clk_rate = 122880000,
 	.power_client = sapphire_mddi_power_client,
 	.fixup = nt35399_fixup,
+	.vsync_irq = MSM_GPIO_TO_INT(VSYNC_GPIO),
 	.fb_resource = resources_msm_fb,
 	.num_clients = 2,
 	.client_platform_data = {
@@ -1212,7 +1215,7 @@ static struct msm_mddi_platform_data mddi_pdata = {
 		{
 			.product_id =
 				(NT35399_MFR_NAME << 16 | NT35399_PRODUCT_CODE),
-			.name = "mddi_c_0bda_8a47" ,
+			.name = "mddi_c_simple" ,
 			.id = 0,
 			.client_data = &nt35399_client_data,
 			.clk_rate = 0,
@@ -1249,6 +1252,12 @@ int __init sapphire_init_panel(void)
 		resources_msm_fb[0].end = SMI32_MSM_FB_BASE + SMI32_MSM_FB_SIZE - 1;
 	}
 
+	rc = gpio_request(VSYNC_GPIO, "vsync");
+	if (rc)
+		return rc;
+	rc = gpio_direction_input(VSYNC_GPIO);
+	if (rc)
+		return rc;
 	rc = platform_device_register(&msm_device_mdp);
 	if (rc)
 		return rc;
