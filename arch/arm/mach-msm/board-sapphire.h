@@ -106,7 +106,7 @@
 ** Sapphire Altera CPLD can keep the registers value and
 ** doesn't need a shadow to backup.
 **/
-#define SAPPHIRE_CPLD_BASE   0xE8100000	/* VA */
+#define SAPPHIRE_CPLD_BASE   0xFA000000	/* VA */
 #define SAPPHIRE_CPLD_START  0x98000000	/* PA */
 #define SAPPHIRE_CPLD_SIZE   SZ_4K
 
