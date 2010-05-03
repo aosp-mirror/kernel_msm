@@ -15,6 +15,7 @@
  *
  */
 
+#include <linux/clk.h>
 #include <linux/io.h>
 
 #include "mdp_hw.h"
@@ -23,6 +24,11 @@ int mdp_hw_init(struct mdp_info *mdp)
 {
 	mdp_writel(mdp, 0, MDP_INTR_ENABLE);
 	mdp_writel(mdp, 0, MDP_DMA_P_HIST_INTR_ENABLE);
+
+	/* XXX: why set this? QCT says it should be > mdp_pclk,
+	 * but they never set the clkrate of pclk */
+	clk_set_rate(mdp->clk, 122880000); /* 122.88 Mhz */
+	pr_info("%s: mdp_clk=%lu\n", __func__, clk_get_rate(mdp->clk));
 
 	/* TODO: Configure the VG/RGB pipes fetch data */
 
