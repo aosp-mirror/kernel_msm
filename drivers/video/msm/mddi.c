@@ -67,6 +67,7 @@ struct mddi_info {
 	char __iomem *base;
 	int irq;
 	struct clk *clk;
+	struct clk *pclk;
 	struct msm_mddi_client_data client_data;
 
 	/* buffer for rev encap packets */
@@ -451,6 +452,8 @@ static void mddi_suspend(struct msm_mddi_client_data *cdata)
 	mddi_writel(MDDI_CMD_RESET, CMD);
 	mddi_wait_interrupt(mddi, MDDI_INT_NO_CMD_PKTS_PEND);
 	/* turn off the clock */
+	if (mddi->pclk)
+		clk_disable(mddi->pclk);
 	clk_disable(mddi->clk);
 	wake_unlock(&mddi->idle_lock);
 }
@@ -466,6 +469,8 @@ static void mddi_resume(struct msm_mddi_client_data *cdata)
 		mddi->power_client(&mddi->client_data, 1);
 	/* turn on the clock */
 	clk_enable(mddi->clk);
+	if (mddi->pclk)
+		clk_enable(mddi->pclk);
 	/* set up the local registers */
 	mddi->rev_data_curr = 0;
 	mddi_init_registers(mddi);
@@ -720,15 +725,25 @@ static int __init mddi_clk_setup(struct platform_device *pdev,
 		printk(KERN_INFO "mddi: failed to get clock\n");
 		return PTR_ERR(mddi->clk);
 	}
-	ret =  clk_enable(mddi->clk);
-	if (ret)
-		goto fail;
+	mddi->pclk = clk_get(&pdev->dev, "mddi_pclk");
+	if (IS_ERR(mddi->pclk))
+		mddi->pclk = NULL;
+
+	clk_enable(mddi->clk);
+	if (mddi->pclk)
+		clk_enable(mddi->pclk);
+
 	ret = clk_set_rate(mddi->clk, clk_rate);
 	if (ret)
 		goto fail;
 	return 0;
 
 fail:
+	if (mddi->pclk) {
+		clk_disable(mddi->pclk);
+		clk_put(mddi->pclk);
+	}
+	clk_disable(mddi->clk);
 	clk_put(mddi->clk);
 	return ret;
 }

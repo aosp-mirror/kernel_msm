@@ -38,7 +38,7 @@ struct class *mdp_class;
 #define MDP_CMD_DEBUG_ACCESS_BASE (0x10000)
 
 static unsigned int mdp_irq_mask;
-struct clk *mdp_clk_to_disable_later = 0;
+static struct mdp_info *the_mdp;
 
 static int locked_enable_mdp_irq(struct mdp_info *mdp, uint32_t mask)
 {
@@ -54,6 +54,8 @@ static int locked_enable_mdp_irq(struct mdp_info *mdp, uint32_t mask)
 	if (!mdp_irq_mask) {
 		clk_set_rate(mdp->ebi1_clk, 128000000);
 		clk_enable(mdp->clk);
+		if (mdp->pclk)
+			clk_enable(mdp->pclk);
 		enable_irq(mdp->irq);
 	}
 
@@ -94,6 +96,8 @@ static int locked_disable_mdp_irq(struct mdp_info *mdp, uint32_t mask)
 	/* if no one is waiting on the interrupt, disable it */
 	if (!mdp_irq_mask) {
 		disable_irq_nosync(mdp->irq);
+		if (mdp->pclk)
+			clk_disable(mdp->pclk);
 		if (mdp->clk)
 			clk_disable(mdp->clk);
 		clk_set_rate(mdp->ebi1_clk, 0);
@@ -537,6 +541,10 @@ int mdp_probe(struct platform_device *pdev)
 		goto error_get_mdp_clk;
 	}
 
+	mdp->pclk = clk_get(&pdev->dev, "mdp_pclk");
+	if (IS_ERR(mdp->pclk))
+		mdp->pclk = NULL;
+
 	mdp->ebi1_clk = clk_get(NULL, "ebi1_clk");
 	if (IS_ERR(mdp->ebi1_clk)) {
 		pr_err("mdp: failed to get ebi1 clk\n");
@@ -551,7 +559,8 @@ int mdp_probe(struct platform_device *pdev)
 	disable_irq(mdp->irq);
 
 	clk_enable(mdp->clk);
-	mdp_clk_to_disable_later = mdp->clk;
+	if (mdp->pclk)
+		clk_enable(mdp->pclk);
 	mdp_hw_init(mdp);
 
 	/* register mdp device */
@@ -567,15 +576,22 @@ int mdp_probe(struct platform_device *pdev)
 	if (ret)
 		goto error_device_register;
 
+	the_mdp = mdp;
+
 	pr_info("%s: initialized\n", __func__);
 
 	return 0;
 
 error_device_register:
+	if (mdp->pclk)
+		clk_disable(mdp->pclk);
+	clk_disable(mdp->clk);
 	free_irq(mdp->irq, mdp);
 error_request_irq:
 	clk_put(mdp->ebi1_clk);
 error_get_ebi1_clk:
+	if (mdp->pclk)
+		clk_put(mdp->pclk);
 	clk_put(mdp->clk);
 error_get_mdp_clk:
 error_mddi_pmdh_register:
@@ -593,8 +609,12 @@ static struct platform_driver msm_mdp_driver = {
 
 static int __init mdp_lateinit(void)
 {
-	if (mdp_clk_to_disable_later)
-		clk_disable(mdp_clk_to_disable_later);
+	struct mdp_info *mdp = the_mdp;
+	if (the_mdp) {
+		if (mdp->pclk)
+			clk_disable(mdp->pclk);
+		clk_disable(mdp->clk);
+	}
 	return 0;
 }
 
