@@ -37,6 +37,8 @@ module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 
 #define REG_HWREV		0x0002  /* PMIC4 revision */
 
+#define REG_IRQ_PERM		0x01a6
+#define REG_IRQ_PERM_BLK_SEL	0x01ac
 #define REG_IRQ_ROOT		0x01bb
 #define REG_IRQ_M_STATUS1	0x01bc
 #define REG_IRQ_M_STATUS2	0x01bd
@@ -409,6 +411,35 @@ done:
 	return ret;
 }
 
+static int cfg_irq_blk_bit_perm(struct pm8058 *pmic, u8 blk, u8 mask)
+{
+	int ret;
+	unsigned long flags;
+	u8 tmp;
+
+	spin_lock_irqsave(&pmic->lock, flags);
+	ret = pm8058_writeb(pmic->dev, REG_IRQ_PERM_BLK_SEL, blk);
+	if (ret) {
+		pr_err("%s: error setting block select (%d)\n", __func__, ret);
+		goto done;
+	}
+
+	ret = pm8058_readb(pmic->dev, REG_IRQ_PERM, &tmp);
+	if (ret) {
+		pr_err("%s: error getting (%d)\n", __func__, ret);
+		goto done;
+	}
+
+	ret = pm8058_writeb(pmic->dev, REG_IRQ_PERM, tmp | mask);
+	if (ret)
+		pr_err("%s: error writing %d 0x%x 0x%x (0x%x)\n", __func__,
+		       ret, blk, REG_IRQ_PERM, mask);
+
+done:
+	spin_unlock_irqrestore(&pmic->lock, flags);
+	return ret;
+}
+
 static int _write_irq_blk_bit_cfg(struct pm8058 *pmic, u8 blk, u8 bit, u8 cfg)
 {
 	int ret;
@@ -665,11 +696,21 @@ static int pm8058_irq_init(struct pm8058 *pmic, unsigned int irq_base)
 
 			BUG_ON(pmic->irqs[irq].blk >= NUM_BLOCKS);
 
+			/* XXX: slightly inefficient since we can end up
+			 * doing it 8 times per block per bank, but it's
+			 * the easiet. Optimize if gets too slow. */
+
+			/* ensure we set the permissions for the irqs in
+			 * this bank */
+			cfg_irq_blk_bit_perm(pmic, pmic->irqs[irq].blk,
+					     1 << pmic->irqs[irq].blk_bit);
+
 			set_irq_chip(irq_base + irq, &pm8058_irq_chip);
 			set_irq_chip_data(irq_base + irq, pmic);
 			set_irq_handler(irq_base + irq, handle_edge_irq);
 			set_irq_flags(irq_base + irq, IRQF_VALID);
 		}
+
 	}
 
 	return 0;
