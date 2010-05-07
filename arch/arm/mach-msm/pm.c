@@ -776,7 +776,7 @@ static int __init msm_pm_init(void)
 
 	register_reboot_notifier(&msm_reboot_notifier);
 
-	msm_pm_reset_vector = ioremap(0, PAGE_SIZE);
+	msm_pm_reset_vector = ioremap(RESET_VECTOR, PAGE_SIZE);
 	if (msm_pm_reset_vector == NULL) {
 		printk(KERN_ERR "msm_pm_init: failed to map reset vector\n");
 		return -ENODEV;
