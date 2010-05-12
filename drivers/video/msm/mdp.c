@@ -235,66 +235,6 @@ static void mdp_dma_wait(struct mdp_device *mdp_dev, int interface)
 	}
 }
 
-static void mdp_dma_to_mddi(void *priv, uint32_t addr, uint32_t stride,
-			    uint32_t width, uint32_t height, uint32_t x,
-			    uint32_t y)
-{
-	struct mdp_info *mdp = priv;
-	uint32_t dma2_cfg;
-	uint16_t ld_param = 0; /* 0=PRIM, 1=SECD, 2=EXT */
-
-	dma2_cfg = DMA_PACK_TIGHT |
-		DMA_PACK_ALIGN_LSB |
-		DMA_OUT_SEL_AHB |
-		DMA_IBUF_NONCONTIGUOUS;
-
-	dma2_cfg |= mdp->dma_format;
-	dma2_cfg |= mdp->dma_pack_pattern;
-
-	dma2_cfg |= DMA_OUT_SEL_MDDI;
-
-	dma2_cfg |= DMA_MDDI_DMAOUT_LCD_SEL_PRIMARY;
-
-	dma2_cfg |= DMA_DITHER_EN;
-
-	/* 666 18BPP */
-	dma2_cfg |= DMA_DSTC0G_6BITS | DMA_DSTC1B_6BITS | DMA_DSTC2R_6BITS;
-
-#ifdef CONFIG_MSM_MDP22
-	/* setup size, address, and stride */
-	mdp_writel(mdp, (height << 16) | (width),
-		   MDP_CMD_DEBUG_ACCESS_BASE + 0x0184);
-	mdp_writel(mdp, addr, MDP_CMD_DEBUG_ACCESS_BASE + 0x0188);
-	mdp_writel(mdp, stride, MDP_CMD_DEBUG_ACCESS_BASE + 0x018C);
-
-	/* set y & x offset and MDDI transaction parameters */
-	mdp_writel(mdp, (y << 16) | (x), MDP_CMD_DEBUG_ACCESS_BASE + 0x0194);
-	mdp_writel(mdp, ld_param, MDP_CMD_DEBUG_ACCESS_BASE + 0x01a0);
-	mdp_writel(mdp, (MDDI_VDO_PACKET_DESC << 16) | MDDI_VDO_PACKET_PRIM,
-		   MDP_CMD_DEBUG_ACCESS_BASE + 0x01a4);
-
-	mdp_writel(mdp, dma2_cfg, MDP_CMD_DEBUG_ACCESS_BASE + 0x0180);
-
-	/* start DMA2 */
-	mdp_writel(mdp, 0, MDP_CMD_DEBUG_ACCESS_BASE + 0x0044);
-#else
-	/* setup size, address, and stride */
-	mdp_writel(mdp, (height << 16) | (width), MDP_DMA_P_SIZE);
-	mdp_writel(mdp, addr, MDP_DMA_P_IBUF_ADDR);
-	mdp_writel(mdp, stride, MDP_DMA_P_IBUF_Y_STRIDE);
-
-	/* set y & x offset and MDDI transaction parameters */
-	mdp_writel(mdp, (y << 16) | (x), MDP_DMA_P_OUT_XY);
-	mdp_writel(mdp, ld_param, MDP_MDDI_PARAM_WR_SEL);
-	mdp_writel(mdp, (MDDI_VDO_PACKET_DESC << 16) | MDDI_VDO_PACKET_PRIM,
-		   MDP_MDDI_PARAM);
-
-	mdp_writel(mdp, 0x1, MDP_MDDI_DATA_XFR);
-	mdp_writel(mdp, dma2_cfg, MDP_DMA_P_CONFIG);
-	mdp_writel(mdp, 0, MDP_DMA_P_START);
-#endif
-}
-
 static void mdp_dma(struct mdp_device *mdp_dev, uint32_t addr, uint32_t stride,
 	     uint32_t width, uint32_t height, uint32_t x, uint32_t y,
 	     struct msmfb_callback *callback, int interface)
@@ -530,11 +470,6 @@ int mdp_probe(struct platform_device *pdev)
 	mdp->enable_irq = enable_mdp_irq;
 	mdp->disable_irq = disable_mdp_irq;
 
-	ret = mdp_out_if_register(&mdp->mdp_dev, MSM_MDDI_PMDH_INTERFACE, mdp,
-				  MDP_DMA_P_DONE, mdp_dma_to_mddi);
-	if (ret)
-		goto error_mddi_pmdh_register;
-
 	mdp->clk = clk_get(&pdev->dev, "mdp_clk");
 	if (IS_ERR(mdp->clk)) {
 		printk(KERN_INFO "mdp: failed to get mdp clk");
@@ -595,7 +530,6 @@ error_get_ebi1_clk:
 		clk_put(mdp->pclk);
 	clk_put(mdp->clk);
 error_get_mdp_clk:
-error_mddi_pmdh_register:
 	iounmap(mdp->base);
 error_ioremap:
 error_get_irq:
