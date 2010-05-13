@@ -118,12 +118,16 @@ static void kgsl_clk_enable(void)
 {
 	clk_set_rate(kgsl_driver.ebi1_clk, 128000000);
 	clk_enable(kgsl_driver.imem_clk);
+	if (kgsl_driver.grp_pclk)
+		clk_enable(kgsl_driver.grp_pclk);
 	clk_enable(kgsl_driver.grp_clk);
 }
 
 static void kgsl_clk_disable(void)
 {
 	clk_disable(kgsl_driver.grp_clk);
+	if (kgsl_driver.grp_pclk)
+		clk_disable(kgsl_driver.grp_pclk);
 	clk_disable(kgsl_driver.imem_clk);
 	clk_set_rate(kgsl_driver.ebi1_clk, 0);
 }
@@ -1151,6 +1155,13 @@ static int __devinit kgsl_platform_probe(struct platform_device *pdev)
 		goto done;
 	}
 	kgsl_driver.grp_clk = clk;
+
+	clk = clk_get(&pdev->dev, "grp_pclk");
+	if (IS_ERR(clk)) {
+		KGSL_DRV_ERR("no grp_pclk, continuing\n");
+		clk = NULL;
+	}
+	kgsl_driver.grp_pclk = clk;
 
 	clk = clk_get(&pdev->dev, "imem_clk");
 	if (IS_ERR(clk)) {

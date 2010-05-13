@@ -45,6 +45,7 @@ struct kgsl_driver {
 	int have_irq;
 
 	struct clk *grp_clk;
+	struct clk *grp_pclk;
 	struct clk *imem_clk;
 	struct clk *ebi1_clk;
 
