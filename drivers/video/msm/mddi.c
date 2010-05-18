@@ -68,6 +68,7 @@ struct mddi_info {
 	int irq;
 	struct clk *clk;
 	struct clk *pclk;
+	unsigned long clk_rate;
 	struct msm_mddi_client_data client_data;
 
 	/* buffer for rev encap packets */
@@ -95,6 +96,9 @@ struct mddi_info {
 	struct wake_lock link_active_idle_lock;
 
 	void (*power_client)(struct msm_mddi_client_data *, int);
+
+	/* used to save/restore pad config during suspend */
+	uint32_t pad_ctrl;
 
 	/* client device published to bind us to the
 	 * appropriate mddi_client driver
@@ -460,6 +464,11 @@ static void mddi_suspend(struct msm_mddi_client_data *cdata)
 	/* turn off the link */
 	mddi_writel(MDDI_CMD_RESET, CMD);
 	mddi_wait_interrupt(mddi, MDDI_INT_NO_CMD_PKTS_PEND);
+	/* save pad ctrl and power down the drivers */
+	mddi->pad_ctrl = mddi_readl(PAD_CTL);
+	mddi_writel(0, PAD_CTL);
+	/* release rate request to not hold any high speed plls */
+	clk_set_rate(mddi->clk, 0);
 	/* turn off the clock */
 	if (mddi->pclk)
 		clk_disable(mddi->pclk);
@@ -475,6 +484,8 @@ static void mddi_resume(struct msm_mddi_client_data *cdata)
 	clk_enable(mddi->clk);
 	if (mddi->pclk)
 		clk_enable(mddi->pclk);
+	clk_set_rate(mddi->clk, mddi->clk_rate);
+	mddi_writel(mddi->pad_ctrl, PAD_CTL);
 	mddi_set_auto_hibernate(&mddi->client_data, 0);
 	/* turn on the client */
 	if (mddi->power_client)
@@ -741,7 +752,8 @@ static int __init mddi_clk_setup(struct platform_device *pdev,
 	if (mddi->pclk)
 		clk_enable(mddi->pclk);
 
-	ret = clk_set_rate(mddi->clk, clk_rate);
+	mddi->clk_rate = clk_rate;
+	ret = clk_set_rate(mddi->clk, mddi->clk_rate);
 	if (ret)
 		goto fail;
 	return 0;
