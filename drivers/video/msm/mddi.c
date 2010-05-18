@@ -472,14 +472,13 @@ static void mddi_resume(struct msm_mddi_client_data *cdata)
 	struct mddi_info *mddi = container_of(cdata, struct mddi_info,
 					      client_data);
 	wake_lock(&mddi->idle_lock);
+	clk_enable(mddi->clk);
+	if (mddi->pclk)
+		clk_enable(mddi->pclk);
 	mddi_set_auto_hibernate(&mddi->client_data, 0);
 	/* turn on the client */
 	if (mddi->power_client)
 		mddi->power_client(&mddi->client_data, 1);
-	/* turn on the clock */
-	clk_enable(mddi->clk);
-	if (mddi->pclk)
-		clk_enable(mddi->pclk);
 	/* set up the local registers */
 	mddi->rev_data_curr = 0;
 	mddi_init_registers(mddi);
