@@ -64,6 +64,7 @@ module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 #define MPP_IRQ_OFFSET		(16 * 8)
 #define GPIO_IRQ_OFFSET		(24 * 8)
 #define KEYPAD_IRQ_OFFSET	(9 * 8 + 2)
+#define CHARGER_IRQ_OFFSET	(1 * 8 + 7)
 
 /* this defines banks of irq space. We want to provide a compact irq space
  * to the kernel, but there several ranges of irqs in an otherwise sparse
@@ -72,6 +73,7 @@ module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
  * bank 0 - GPIO IRQs start=(24 * 8) cnt=40 (gpios 0-39)
  * bank 1 - MPP IRQs start=(16 * 8) cnt=12 (mpps 0-11)
  * bank 2 - keypad irqs start=(9*8 + 1) cnt=2
+ * bank 3 - charger irqs start=(1*8 + 7) cnt=1
  *
  */
 struct pm8058_irq_bank {
@@ -96,6 +98,11 @@ static struct pm8058_irq_bank pm8058_irq_banks[] = {
 		.cnt	= PM8058_NUM_KEYPAD_IRQS,
 		.offset	= KEYPAD_IRQ_OFFSET,
 	},
+	{
+		.start	= PM8058_FIRST_CHARGER_IRQ,
+		.cnt	= PM8058_NUM_CHARGER_IRQS,
+		.offset	= CHARGER_IRQ_OFFSET,
+	},
 };
 #define NUM_IRQ_BANKS		ARRAY_SIZE(pm8058_irq_banks)
 
@@ -107,6 +114,12 @@ struct pm8058_irq_group {
 };
 
 static const struct pm8058_irq_group pm8058_irq_groups[] = {
+	{
+		.stat_reg	= REG_IRQ_M_STATUS1,
+		.valid_mask	= 0x2,
+		.root_mask	= 0x2,
+		.block_offset	= 0,
+	},
 	{
 		.stat_reg	= REG_IRQ_M_STATUS2,
 		.valid_mask	= 0x2,
