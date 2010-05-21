@@ -601,25 +601,28 @@ static int pm8058_irq_set_type(unsigned int _irq, unsigned int flow_type)
 	struct pm8058_irq_info *irq_info = &pmic->irqs[irq];
 	unsigned long flags;
 	int ret;
+	u8 cfg;
 
-	spin_lock_irqsave(&pmic->lock, flags);
-	irq_info->cfg = IRQ_CFG_MASK_RE | IRQ_CFG_MASK_FE;
-
+	cfg = IRQ_CFG_MASK_RE | IRQ_CFG_MASK_FE;
 	if (flow_type & (IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING)) {
 		if (flow_type & IRQF_TRIGGER_RISING)
-			irq_info->cfg &= ~IRQ_CFG_MASK_RE;
+			cfg &= ~IRQ_CFG_MASK_RE;
 		if (flow_type & IRQF_TRIGGER_FALLING)
-			irq_info->cfg &= ~IRQ_CFG_MASK_FE;
+			cfg &= ~IRQ_CFG_MASK_FE;
+		__set_irq_handler_unlocked(_irq, handle_edge_irq);
 	} else {
-		irq_info->cfg |= IRQ_CFG_LVL_SEL;
+		cfg |= IRQ_CFG_LVL_SEL;
 		if (flow_type & IRQF_TRIGGER_HIGH)
-			irq_info->cfg &= ~IRQ_CFG_MASK_RE;
+			cfg &= ~IRQ_CFG_MASK_RE;
 		else
-			irq_info->cfg &= ~IRQ_CFG_MASK_FE;
+			cfg &= ~IRQ_CFG_MASK_FE;
+		__set_irq_handler_unlocked(_irq, handle_level_irq);
 	}
 
 	/* in case the irq was masked when the type was set, we don't want
 	 * to unmask it */
+	spin_lock_irqsave(&pmic->lock, flags);
+	irq_info->cfg = cfg;
 	irq_info->cfg_val = irq_info->cfg | irq_info->mask;
 	ret = write_irq_config_locked(pmic, irq,
 				      irq_info->cfg_val | IRQ_CFG_CLR);
