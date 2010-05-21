@@ -472,7 +472,6 @@ static int do_irq_master(struct pm8058 *pmic, int group)
 	int j;
 	int ret;
 	u8 val;
-	unsigned long flags;
 	unsigned long stat;
 
 	ret = pm8058_readb(pmic->dev, pm8058_irq_groups[group].stat_reg, &val);
@@ -503,10 +502,7 @@ static int do_irq_master(struct pm8058 *pmic, int group)
 				pr_warning("Unexpected pmirq %d\n", irq);
 				continue;
 			}
-
-			local_irq_save(flags);
 			generic_handle_irq(pmic->pmirqs[irq] + pmic->irq_base);
-			local_irq_restore(flags);
 		}
 	}
 
@@ -514,17 +510,18 @@ done:
 	return ret;
 }
 
-static irqreturn_t pm8058_irq_handler(int irq, void *dev)
+static void pm8058_irq_handler(unsigned int irq, struct irq_desc *desc)
 {
-	struct pm8058 *pmic = dev;
+	struct pm8058 *pmic = get_irq_data(irq);
 	int ret;
 	int i;
 	u8 root;
 
+	desc->chip->ack(irq);
 	ret = pm8058_readb(pmic->dev, REG_IRQ_ROOT, &root);
 	if (ret) {
 		pr_err("%s: Can't read root status\n", __func__);
-		goto done;
+		return;
 	}
 
 	if (debug_mask & DEBUG_IRQS)
@@ -533,9 +530,6 @@ static irqreturn_t pm8058_irq_handler(int irq, void *dev)
 		if (root & pm8058_irq_groups[i].root_mask)
 			do_irq_master(pmic, i);
 	}
-
-done:
-	return IRQ_HANDLED;
 }
 
 static void pm8058_irq_ack(unsigned int _irq)
@@ -817,12 +811,10 @@ static int pm8058_probe(struct platform_device *pdev)
 		goto err_gpiochip_add;
 	}
 
-	ret = request_irq(devirq, pm8058_irq_handler, IRQF_TRIGGER_LOW,
-			  "pm8058-irq", pmic);
-	if (ret) {
-		pr_err("%s: can't request device irq\n", __func__);
-		goto err_request_irq;
-	}
+	set_irq_type(devirq, IRQ_TYPE_LEVEL_LOW);
+	set_irq_data(devirq, pmic);
+	set_irq_chained_handler(devirq, pm8058_irq_handler);
+	set_irq_wake(devirq, 1);
 
 	the_pm8058 = pmic;
 
@@ -847,8 +839,8 @@ static int pm8058_probe(struct platform_device *pdev)
 err_add_kp_dev:
 err_pdata_init:
 	the_pm8058 = NULL;
-	free_irq(devirq, pmic);
-err_request_irq:
+	set_irq_wake(devirq, 0);
+	set_irq_chained_handler(devirq, NULL);
 	WARN_ON(gpiochip_remove(&pmic->gpio_chip));
 err_gpiochip_add:
 err_irq_init:
