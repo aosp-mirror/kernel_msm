@@ -158,12 +158,15 @@ struct pm8058 {
 	struct gpio_chip		gpio_chip;
 	u8				gpio_flags[PM8058_NUM_GPIOS];
 
+	struct pm8058_platform_data	*pdata;
+
 	struct platform_device		*kp_pdev;
 };
 
 static struct pm8058 *the_pm8058;
 
 static int read_irq_block_reg(struct pm8058 *pmic, u8 blk, u16 reg, u8 *val);
+static int get_curr_irq_stat(struct pm8058 *pmic, unsigned int irq);
 
 int pm8058_readb(struct device *dev, u16 addr, u8 *val)
 {
@@ -369,21 +372,9 @@ static void pm8058_gpio_set(struct gpio_chip *chip, unsigned gpio, int val)
 static int pm8058_gpio_get(struct gpio_chip *chip, unsigned gpio)
 {
 	struct pm8058 *pmic = container_of(chip, struct pm8058, gpio_chip);
-	int ret;
-	u8 val;
 
 	/* XXX: assumes gpio maps 1:1 to irq @ 0 */
-	ret = read_irq_block_reg(pmic, pmic->irqs[gpio].blk, REG_IRQ_RT_STATUS,
-				 &val);
-	if (ret) {
-		pr_err("%s: can't read block status\n", __func__);
-		goto done;
-	}
-
-	ret = !!(val & (1 << pmic->irqs[gpio].blk_bit));
-
-done:
-	return ret;
+	return get_curr_irq_stat(pmic, gpio);
 }
 
 static int pm8058_gpio_to_irq(struct gpio_chip *chip, unsigned gpio)
@@ -423,6 +414,24 @@ static int read_irq_block_reg(struct pm8058 *pmic, u8 blk, u16 reg, u8 *val)
 
 done:
 	spin_unlock_irqrestore(&pmic->lock, flags);
+	return ret;
+}
+
+static int get_curr_irq_stat(struct pm8058 *pmic, unsigned int irq)
+{
+	int ret;
+	u8 val;
+
+	ret = read_irq_block_reg(pmic, pmic->irqs[irq].blk, REG_IRQ_RT_STATUS,
+				 &val);
+	if (ret) {
+		pr_err("%s: can't read irq %d status\n", __func__, irq);
+		goto done;
+	}
+
+	ret = !!(val & (1 << pmic->irqs[irq].blk_bit));
+
+done:
 	return ret;
 }
 
@@ -792,6 +801,27 @@ static int add_keypad_device(struct pm8058 *pmic, void *pdata)
 	return 0;
 }
 
+/* vbus detection helper */
+static void check_vbus(struct pm8058 *pmic)
+{
+	int ret;
+
+	ret = get_curr_irq_stat(pmic, PM8058_CHGVAL_IRQ);
+	if (ret >= 0)
+		pmic->pdata->vbus_present(ret);
+	else
+		pr_err("%s: can't read status!! ignoring event?!\n", __func__);
+	/* XXX: maybe add some retries? */
+}
+
+static irqreturn_t pm8058_vbus_irq_handler(int irq, void *dev)
+{
+	struct pm8058 *pmic = dev;
+
+	check_vbus(pmic);
+	return IRQ_HANDLED;
+}
+
 static int pm8058_probe(struct platform_device *pdev)
 {
 	struct pm8058_platform_data *pdata = pdev->dev.platform_data;
@@ -827,6 +857,7 @@ static int pm8058_probe(struct platform_device *pdev)
 	pmic->irq_base = pdata->irq_base;
 	pmic->devirq = devirq;
 	spin_lock_init(&pmic->lock);
+	pmic->pdata = pdata;
 	platform_set_drvdata(pdev, pmic);
 
 	ret = pm8058_irq_init(pmic, pmic->irq_base);
@@ -868,8 +899,25 @@ static int pm8058_probe(struct platform_device *pdev)
 		}
 	}
 
+	if (pdata->vbus_present) {
+		int vbus_irq = pmic->irq_base + PM8058_CHGVAL_IRQ;
+		ret = request_threaded_irq(vbus_irq, NULL,
+				pm8058_vbus_irq_handler,
+				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
+				"pm8058-vbus", pmic);
+		if (ret) {
+			pr_err("%s: can't request vbus irq\n", __func__);
+			goto err_req_vbus_irq;
+		}
+		set_irq_wake(vbus_irq, 1);
+		/* run once to handle the case where vbus is already present */
+		check_vbus(pmic);
+	}
 	return 0;
 
+err_req_vbus_irq:
+	if (pmic->kp_pdev)
+		platform_device_put(pmic->kp_pdev);
 err_add_kp_dev:
 err_pdata_init:
 	the_pm8058 = NULL;
