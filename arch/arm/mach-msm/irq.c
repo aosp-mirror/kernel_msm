@@ -284,13 +284,32 @@ int msm_irq_pending(void)
 	return 0;
 }
 
+static void print_vic_irq_stat(void)
+{
+	int i;
+
+	for (i = 0; i < VIC_NUM_BANKS; i++)
+		printk(" %x", readl(VIC_IRQ_STATUS(i)));
+	printk("\n");
+}
+
+static void print_irq_array(uint32_t *arr, int cnt)
+{
+	int i;
+
+	for (i = 0; i < cnt; i++)
+		printk(" %x", arr[i]);
+	printk("\n");
+}
+
 int msm_irq_idle_sleep_allowed(void)
 {
 	int i;
 
-	if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP_REQUEST)
-		printk(KERN_INFO "msm_irq_idle_sleep_allowed: disable %x %x\n",
-		msm_irq_idle_disable[0], msm_irq_idle_disable[1]);
+	if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP_REQUEST) {
+		printk(KERN_INFO "%s: disable", __func__);
+		print_irq_array(msm_irq_idle_disable, VIC_NUM_BANKS);
+	}
 
 	for (i = 0; i < VIC_NUM_BANKS; ++i)
 		if (msm_irq_idle_disable[i])
@@ -322,9 +341,11 @@ int msm_irq_enter_sleep2(bool arm9_wake, int from_idle)
 	/* edge triggered interrupt may get lost if this mode is used */
 	WARN_ON_ONCE(!arm9_wake && !from_idle);
 
-	if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP)
-		printk(KERN_INFO "msm_irq_enter_sleep change irq, pend %x %x\n",
-		       readl(VIC_IRQ_STATUS(0)), readl(VIC_IRQ_STATUS(1)));
+	if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP) {
+		printk(KERN_INFO "%s: change irq, pend", __func__);
+		print_vic_irq_stat();
+	}
+
 	pending[0] = readl(VIC_IRQ_STATUS(0));
 	pending[0] &= msm_irq_shadow_reg[0].int_en[!from_idle];
 	/* Clear INT_A9_M2A_5 since requesting sleep triggers it */
@@ -338,9 +359,10 @@ int msm_irq_enter_sleep2(bool arm9_wake, int from_idle)
 	}
 
 	if (any) {
-		if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP_ABORT)
-			printk(KERN_INFO "msm_irq_enter_sleep2 abort %x %x\n",
-			      pending[0], pending[1]);
+		if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP_ABORT) {
+			printk(KERN_INFO "%s abort", __func__);
+			print_irq_array(pending, VIC_NUM_BANKS);
+		}
 		return -EAGAIN;
 	}
 
@@ -386,12 +408,13 @@ void msm_irq_exit_sleep1(void)
 		printk(KERN_ERR "msm_irq_exit_sleep <SM NO INT_INFO>\n");
 		return;
 	}
-	if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP)
-		printk(KERN_INFO "msm_irq_exit_sleep1 %x %x %x now %x %x\n",
-		       smsm_int_info->interrupt_mask,
-		       smsm_int_info->pending_interrupts,
-		       smsm_int_info->wakeup_reason,
-		       readl(VIC_IRQ_STATUS(0)), readl(VIC_IRQ_STATUS(1)));
+	if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP) {
+		printk(KERN_INFO "%s %x %x %x now", __func__,
+			smsm_int_info->interrupt_mask,
+			smsm_int_info->pending_interrupts,
+			smsm_int_info->wakeup_reason);
+		print_vic_irq_stat();
+	}
 }
 
 void msm_irq_exit_sleep2(void)
@@ -403,12 +426,13 @@ void msm_irq_exit_sleep2(void)
 		printk(KERN_ERR "msm_irq_exit_sleep <SM NO INT_INFO>\n");
 		return;
 	}
-	if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP)
-		printk(KERN_INFO "msm_irq_exit_sleep2 %x %x %x now %x %x\n",
+	if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP) {
+		printk(KERN_INFO "%s %x %x %x now", __func__,
 		       smsm_int_info->interrupt_mask,
 		       smsm_int_info->pending_interrupts,
-		       smsm_int_info->wakeup_reason,
-		       readl(VIC_IRQ_STATUS(0)), readl(VIC_IRQ_STATUS(1)));
+		       smsm_int_info->wakeup_reason);
+		print_vic_irq_stat();
+	}
 	pending = smsm_int_info->pending_interrupts;
 	for (i = 0; pending && i < ARRAY_SIZE(msm_irq_to_smsm); i++) {
 		unsigned reg_offset = VIC_IRQ_STATUS(__bank(i)) - VIC_IRQ_STATUS(0);
@@ -421,10 +445,11 @@ void msm_irq_exit_sleep2(void)
 		if (!(pending & smsm_mask))
 			continue;
 		pending &= ~smsm_mask;
-		if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP_INT)
-			printk(KERN_INFO "msm_irq_exit_sleep2: irq %d "
-			       "still pending %x now %x %x\n", i, pending,
-			       readl(VIC_IRQ_STATUS(0)), readl(VIC_IRQ_STATUS(1)));
+		if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP_INT) {
+			printk(KERN_INFO "%s: irq %d still pending %x now",
+			       __func__, i, pending);
+			print_vic_irq_stat();
+		}
 #if 0 /* debug intetrrupt trigger */
 		if (readl(VIC_IRQ_STATUS(0) + reg_offset) & reg_mask)
 			writel(reg_mask, VIC_INT_CLEAR(0) + reg_offset);
@@ -432,10 +457,11 @@ void msm_irq_exit_sleep2(void)
 		if (readl(VIC_IRQ_STATUS(0) + reg_offset) & reg_mask)
 			continue;
 		writel(reg_mask, VIC_SOFTINT(0) + reg_offset);
-		if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP_INT_TRIGGER)
-			printk(KERN_INFO "msm_irq_exit_sleep2: irq %d need "
-			       "trigger, now %x %x\n", i,
-			       readl(VIC_IRQ_STATUS(0)), readl(VIC_IRQ_STATUS(1)));
+		if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP_INT_TRIGGER) {
+			printk(KERN_INFO "%s: irq %d need trigger, now",
+			       __func__, i);
+			print_vic_irq_stat();
+		}
 	}
 }
 
@@ -445,13 +471,14 @@ void msm_irq_exit_sleep3(void)
 		printk(KERN_ERR "msm_irq_exit_sleep <SM NO INT_INFO>\n");
 		return;
 	}
-	if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP)
-		printk(KERN_INFO "msm_irq_exit_sleep3 %x %x %x now %x %x "
-		       "state %x\n", smsm_int_info->interrupt_mask,
+	if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP) {
+		printk(KERN_INFO "%s %x %x %x state %x now", __func__,
+		       smsm_int_info->interrupt_mask,
 		       smsm_int_info->pending_interrupts,
-		       smsm_int_info->wakeup_reason, readl(VIC_IRQ_STATUS(0)),
-		       readl(VIC_IRQ_STATUS(1)),
+		       smsm_int_info->wakeup_reason,
 		       smsm_get_state(SMSM_STATE_MODEM));
+		print_vic_irq_stat();
+	}
 }
 
 static struct irq_chip msm_irq_chip = {
