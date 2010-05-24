@@ -346,15 +346,12 @@ int msm_irq_enter_sleep2(bool arm9_wake, int from_idle)
 		print_vic_irq_stat();
 	}
 
-	pending[0] = readl(VIC_IRQ_STATUS(0));
-	pending[0] &= msm_irq_shadow_reg[0].int_en[!from_idle];
-	/* Clear INT_A9_M2A_5 since requesting sleep triggers it */
-	pending[0] &= ~(1U << INT_A9_M2A_5);
-	any = pending[0];
-
-	for (i = 1; i < VIC_NUM_BANKS; ++i) {
+	for (i = 0; i < VIC_NUM_BANKS; ++i) {
 		pending[i] = readl(VIC_IRQ_STATUS(i));
 		pending[i] &= msm_irq_shadow_reg[i].int_en[!from_idle];
+		/* Clear INT_A9_M2A_5 since requesting sleep triggers it */
+		if (i == (INT_A9_M2A_5 / 32))
+			pending[i] &= ~(1U << (INT_A9_M2A_5 % 32));
 		any |= pending[i];
 	}
 
@@ -386,8 +383,10 @@ int msm_irq_enter_sleep2(bool arm9_wake, int from_idle)
 		writel(1U << INT_A9_M2A_6, VIC_INT_ENSET(0));
 	} else {
 		for (i = 0; i < VIC_NUM_BANKS; ++i)
-			writel(msm_irq_shadow_reg[i].int_en[1], VIC_INT_ENSET(i));
+			writel(msm_irq_shadow_reg[i].int_en[1],
+			       VIC_INT_ENSET(i));
 	}
+
 	return 0;
 }
 
@@ -435,7 +434,7 @@ void msm_irq_exit_sleep2(void)
 	}
 	pending = smsm_int_info->pending_interrupts;
 	for (i = 0; pending && i < ARRAY_SIZE(msm_irq_to_smsm); i++) {
-		unsigned reg_offset = VIC_IRQ_STATUS(__bank(i)) - VIC_IRQ_STATUS(0);
+		unsigned bank = __bank(i);
 		uint32_t reg_mask = 1UL << (i & 31);
 		int smsm_irq = msm_irq_to_smsm[i];
 		uint32_t smsm_mask;
@@ -451,12 +450,12 @@ void msm_irq_exit_sleep2(void)
 			print_vic_irq_stat();
 		}
 #if 0 /* debug intetrrupt trigger */
-		if (readl(VIC_IRQ_STATUS(0) + reg_offset) & reg_mask)
-			writel(reg_mask, VIC_INT_CLEAR(0) + reg_offset);
+		if (readl(VIC_IRQ_STATUS(bank)) & reg_mask)
+			writel(reg_mask, VIC_INT_CLEAR(bank));
 #endif
-		if (readl(VIC_IRQ_STATUS(0) + reg_offset) & reg_mask)
+		if (readl(VIC_IRQ_STATUS(bank)) & reg_mask)
 			continue;
-		writel(reg_mask, VIC_SOFTINT(0) + reg_offset);
+		writel(reg_mask, VIC_SOFTINT(bank));
 		if (msm_irq_debug_mask & IRQ_DEBUG_SLEEP_INT_TRIGGER) {
 			printk(KERN_INFO "%s: irq %d need trigger, now",
 			       __func__, i);
