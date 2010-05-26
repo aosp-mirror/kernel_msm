@@ -1,0 +1,35 @@
+#
+# VIDEO CORE
+#
+menuconfig MSM_720P_CORE
+        bool "720P Core Video Driver"
+	depends on ARCH_MSM7X30
+        default n
+        ---help---
+        Say Y here to see options for video device drivers.
+	If you say N, all options in this submenu will be skipped and disabled.
+
+if MSM_720P_CORE
+
+config MSM_VIDEO_CORE_REG
+	tristate "MSM Video core registration"
+	depends on MSM_720P_CORE
+	default n
+	help
+	  This option enables support for Video core.
+
+config MSM_VIDEO_CORE_VENC
+	tristate "Video encoder"
+	depends on MSM_VIDEO_CORE_REG
+	default n
+	help
+	  This option enables support for Video encoder.
+
+config MSM_VIDEO_CORE_VDEC
+	tristate "Video decoder"
+	depends on MSM_VIDEO_CORE_REG
+	default n
+	help
+	  This option enables support for Video decoder.
+
+endif # MSM_720P_CORE
