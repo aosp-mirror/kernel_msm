@@ -45,7 +45,7 @@
 #define DEBUG   0
 
 #define USE_RES_TRACKER
-#define AXI_CLK_SCALING
+//#define AXI_CLK_SCALING
 
 #undef CORE_TIMING_INFO
 

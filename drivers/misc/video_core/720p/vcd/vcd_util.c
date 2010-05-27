@@ -78,19 +78,11 @@ u32 vcd_critical_section_leave(u32 *cs)
 
 int vcd_pmem_alloc(u32 size, u8 **kernel_vaddr, u8 **phy_addr)
 {
-	*phy_addr =
-	    (u8 *) pmem_kalloc(size, PMEM_MEMTYPE_EBI1 | PMEM_ALIGNMENT_4K);
+	*kernel_vaddr = dma_alloc_coherent(NULL, size, (dma_addr_t *)phy_addr, GFP_KERNEL);
+//	*phy_addr =
+//	    (u8 *) pmem_kalloc(size, PMEM_MEMTYPE_EBI1 | PMEM_ALIGNMENT_4K);
 
-	if (!IS_ERR((void *)*phy_addr)) {
-
-		*kernel_vaddr = ioremap((unsigned long)*phy_addr, size);
-
-		if (!*kernel_vaddr) {
-			pr_err("%s: could not ioremap in kernel pmem buffers\n",
-			       __func__);
-			pmem_kfree((s32) *phy_addr);
-			return -ENOMEM;
-		}
+	if (!IS_ERR((void *)*kernel_vaddr)) {
 		pr_debug("write buf: phy addr 0x%08x kernel addr 0x%08x\n",
 			 (u32) *phy_addr, (u32) *kernel_vaddr);
 		return 0;
@@ -102,10 +94,10 @@ int vcd_pmem_alloc(u32 size, u8 **kernel_vaddr, u8 **phy_addr)
 
 }
 
-int vcd_pmem_free(u8 *kernel_vaddr, u8 *phy_addr)
+int vcd_pmem_free(u32 size, u8 *kernel_vaddr, u8 *phy_addr)
 {
-	iounmap((void *)kernel_vaddr);
-	pmem_kfree((s32) phy_addr);
+	dma_free_coherent(NULL, size, (void *)kernel_vaddr, (dma_addr_t)phy_addr);
+//	pmem_kfree((s32) phy_addr);
 
 	return 0;
 }

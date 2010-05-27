@@ -86,7 +86,8 @@ void ddl_pmem_free(struct ddl_buf_addr_type buff_addr)
 void ddl_pmem_alloc(struct ddl_buf_addr_type *buff_addr, u32 size, u32 align)
 {
 	u32 n_guard_bytes, n_align_mask;
-	s32 n_physical_addr;
+	dma_addr_t n_physical_addr;
+	void *virtual_addr;
 	u32 n_align_offset;
 
 	if (align == DDL_LINEAR_BUFFER_ALIGN_BYTES) {
@@ -100,29 +101,23 @@ void ddl_pmem_alloc(struct ddl_buf_addr_type *buff_addr, u32 size, u32 align)
 		n_align_mask = DDL_TILE_BUF_ALIGN_MASK;
 	}
 
-	n_physical_addr = pmem_kalloc((size + n_guard_bytes),
-				      PMEM_MEMTYPE_EBI1 | PMEM_ALIGNMENT_4K);
-	buff_addr->p_physical_base_addr = (u32 *)n_physical_addr;
+	//	n_physical_addr = pmem_kalloc((size + n_guard_bytes),
+	//				      PMEM_MEMTYPE_EBI1 | PMEM_ALIGNMENT_4K);
+	virtual_addr = dma_alloc_coherent(NULL, size + n_guard_bytes,
+		&n_physical_addr, GFP_KERNEL);
 
-	if (IS_ERR((void *)n_physical_addr)) {
+	if (IS_ERR(virtual_addr)) {
 		pr_err("%s(): could not allocte in kernel pmem buffers\n",
 		       __func__);
 		return;
 	}
 
-	buff_addr->p_virtual_base_addr =
-	    (u32 *) ioremap((unsigned long)n_physical_addr,
-			    size + n_guard_bytes);
+	buff_addr->p_physical_base_addr = (u32 *) n_physical_addr;
+	buff_addr->p_virtual_base_addr = virtual_addr;
 	memset(buff_addr->p_virtual_base_addr, 0 , size + n_guard_bytes);
-	if (!buff_addr->p_virtual_base_addr) {
-
-		pr_err("%s: could not ioremap in kernel pmem buffers\n",
-		       __func__);
-		pmem_kfree(n_physical_addr);
-		return;
-	}
 
 	buff_addr->n_buffer_size = size;
+	buff_addr->n_buffer_size_guard = size + n_guard_bytes;
 
 	buff_addr->p_align_physical_addr =
 	    (u32 *) ((n_physical_addr + n_guard_bytes) & n_align_mask);
@@ -136,7 +131,7 @@ void ddl_pmem_alloc(struct ddl_buf_addr_type *buff_addr, u32 size, u32 align)
 
 	pr_debug("%s(): phy addr 0x%08x kernel addr 0x%08x\n", __func__,
 		 (u32) buff_addr->p_align_physical_addr,
-		 (u32) buff_addr->p_align_physical_addr);
+		 (u32) buff_addr->p_align_virtual_addr);
 
 	return;
 }
@@ -147,14 +142,10 @@ void ddl_pmem_free(struct ddl_buf_addr_type buff_addr)
 			__func__, buff_addr.p_physical_base_addr,
 			buff_addr.p_virtual_base_addr);
 
-	if (buff_addr.p_virtual_base_addr)
-		iounmap((void *)buff_addr.p_virtual_base_addr);
-
-	if ((buff_addr.p_physical_base_addr) &&
-		pmem_kfree((s32) buff_addr.p_physical_base_addr)) {
-		ERR("\n %s(): Error in Freeing ddl_pmem_free "
-		"Physical Address %p", __func__,
-		buff_addr.p_physical_base_addr);
+	if (buff_addr.p_virtual_base_addr) {
+		dma_free_coherent(NULL, buff_addr.n_buffer_size_guard,
+			buff_addr.p_virtual_base_addr,
+			(dma_addr_t) buff_addr.p_physical_base_addr);
 	}
 
 	buff_addr.n_buffer_size = 0;

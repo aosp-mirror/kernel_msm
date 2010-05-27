@@ -33,7 +33,6 @@
 #include <linux/clk.h>
 #include <linux/firmware.h>
 #include <linux/delay.h>
-#include <mach/internal_power_rail.h>
 #include <mach/clk.h>
 
 #include "vcd_api.h"
@@ -158,6 +157,7 @@ static int __init vid_c_720p_probe(struct platform_device *pdev)
 		ERR("%s: create workque failed \n", __func__);
 		return -ENOMEM;
 	}
+
 	return 0;
 }
 
@@ -300,16 +300,7 @@ u32 vid_c_enable_pwr_rail(void)
 	mutex_lock(&vid_c_device_p->lock);
 
 	if (!vid_c_device_p->rail_enabled) {
-		rc = internal_pwr_rail_mode(PWR_RAIL_MFC_CLK,
-			PWR_RAIL_CTL_MANUAL);
-		if (rc) {
-			ERR("%s(): internal_pwr_rail_mode failed %d \n",
-				__func__, rc);
-			mutex_unlock(&vid_c_device_p->lock);
-			return FALSE;
-		}
-		DBG("%s(): internal_pwr_rail_mode Success %d \n",
-			__func__, rc);
+		//TODO: internal_pwr_rail_mode(MFC_CLK_ID, MANUAL)
 
 		vid_c_device_p->pclk = clk_get(vid_c_device_p->device,
 			"mfc_pclk");
@@ -344,13 +335,7 @@ u32 vid_c_enable_pwr_rail(void)
 			return FALSE;
 		}
 
-		rc = internal_pwr_rail_ctl(PWR_RAIL_MFC_CLK, 1);
-		if (rc) {
-			ERR("\n internal_pwr_rail_ctl failed %d\n", rc);
-			mutex_unlock(&vid_c_device_p->lock);
-			return FALSE;
-		}
-		DBG("%s(): internal_pwr_rail_ctl Success %d \n", __func__, rc);
+		//TODO: internal_pwr_rail_ctl(MFC_CLK_ID, 1)
 		msleep(20);
 
 		rc = clk_reset(vid_c_device_p->pclk, CLK_RESET_DEASSERT);
@@ -392,12 +377,7 @@ u32 vid_c_disable_pwr_rail(void)
 	}
 	msleep(20);
 
-	rc = internal_pwr_rail_ctl(PWR_RAIL_MFC_CLK, 0);
-	if (rc) {
-		ERR("\n clk_reset failed %d\n", rc);
-		mutex_unlock(&vid_c_device_p->lock);
-		return FALSE;
-	}
+	//TODO: internal_pwr_rail_ctl(MFC_CLK_ID, 0)
 
 	clk_put(vid_c_device_p->hclk_div2);
 	clk_put(vid_c_device_p->hclk);

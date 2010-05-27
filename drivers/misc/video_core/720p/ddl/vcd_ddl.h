@@ -88,6 +88,7 @@ struct ddl_buf_addr_type {
 	u32 *p_align_physical_addr;
 	u32 *p_align_virtual_addr;
 	u32 n_buffer_size;
+	u32 n_buffer_size_guard;
 };
 
 enum ddl_cmd_state_type {

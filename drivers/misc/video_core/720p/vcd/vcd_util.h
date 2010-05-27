@@ -76,7 +76,7 @@
 	#define VCD_PMEM_get_physical(p_mem)     virt_to_phys(p_mem)
 #else
 	int vcd_pmem_alloc(u32 size, u8 **kernel_vaddr, u8 **phy_addr);
-	int vcd_pmem_free(u8 *kernel_vaddr, u8 *phy_addr);
+	int vcd_pmem_free(u32 size, u8 *kernel_vaddr, u8 *phy_addr);
 #endif
 
 u32 vcd_critical_section_create(u32 **p_cs);

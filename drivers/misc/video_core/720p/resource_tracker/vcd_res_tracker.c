@@ -21,7 +21,9 @@
 #include "video_core_init.h"
 
 #include <linux/pm_qos_params.h>
+#ifdef AXI_CLK_SCALING
 #include <mach/msm_reqs.h>
+#endif
 
 #define MSM_AXI_QOS_NAME "msm_vidc_reg"
 

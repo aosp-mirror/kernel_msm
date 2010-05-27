@@ -551,7 +551,8 @@ u32 vcd_free_one_buffer_internal(
 			p_buf_entry->p_virtual, p_buf_entry->b_allocated);
 
 	if (p_buf_entry->b_allocated) {
-		vcd_pmem_free(p_buf_entry->p_alloc, p_buf_entry->p_physical);
+		vcd_pmem_free(p_buf_entry->n_size, p_buf_entry->p_alloc,
+			p_buf_entry->p_physical);
 
 		p_buf_pool->n_allocated--;
 
@@ -577,7 +578,8 @@ u32 vcd_free_buffers_internal(
 		for (i = 1; i <= p_buf_pool->n_count; i++) {
 			if (p_buf_pool->a_entries[i].b_valid &&
 				p_buf_pool->a_entries[i].b_allocated) {
-				vcd_pmem_free(p_buf_pool->a_entries[i].p_alloc,
+				vcd_pmem_free(p_buf_pool->a_entries[i].n_size,
+					p_buf_pool->a_entries[i].p_alloc,
 						  p_buf_pool->a_entries[i].
 						  p_physical);
 			}
@@ -990,7 +992,8 @@ void vcd_destroy_client_context(struct vcd_clnt_ctxt_type_t *p_cctxt)
 	}
 
 	if (p_cctxt->seq_hdr.p_sequence_header) {
-		vcd_pmem_free(p_cctxt->seq_hdr.p_sequence_header,
+		vcd_pmem_free(p_cctxt->seq_hdr.n_sequence_header_len,
+				  p_cctxt->seq_hdr.p_sequence_header,
 				  p_cctxt->p_seq_hdr_phy_addr);
 		p_cctxt->seq_hdr.p_sequence_header = NULL;
 	}
@@ -2881,7 +2884,8 @@ u32 vcd_store_seq_hdr(
 	if (p_cctxt->seq_hdr.p_sequence_header) {
 		VCD_MSG_HIGH("Old seq hdr detected");
 
-		vcd_pmem_free(p_cctxt->seq_hdr.p_sequence_header,
+		vcd_pmem_free(p_cctxt->seq_hdr.n_sequence_header_len,
+				  p_cctxt->seq_hdr.p_sequence_header,
 				  p_cctxt->p_seq_hdr_phy_addr);
 		p_cctxt->seq_hdr.p_sequence_header = NULL;
 	}
