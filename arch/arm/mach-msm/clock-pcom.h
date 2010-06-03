@@ -72,7 +72,7 @@
 #define P_USB_HS_P_CLK	37  /* High speed USB pbus clock */
 #define P_USB_OTG_CLK	38  /* Full speed USB clock */
 #define P_VDC_CLK	39  /* Video controller clock */
-#if CONFIG_MSM_AMSS_VERSION >= 6350 || defined(CONFIG_ARCH_QSD8X50)
+#if !defined(CONFIG_MSM_LEGACY_7X00A_AMSS)
 #define P_VFE_MDC_CLK	40  /* VFE MDDI client clock */
 #define P_VFE_CLK	41  /* Camera / Video Front End clock */
 #else/* For radio code base others */
