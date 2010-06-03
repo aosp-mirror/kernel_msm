@@ -68,6 +68,9 @@ config MSM_REMOTE_SPINLOCK
 		MSM_REMOTE_SPINLOCK_DEKKERS
 	default y
 
+config MSM_LEGACY_7X00A_AMSS
+	bool
+
 config MSM_AMSS_VERSION
 	int
 	default 6210 if MSM_AMSS_VERSION_6210
@@ -78,16 +81,20 @@ config MSM_AMSS_VERSION
 choice
 	prompt "AMSS modem firmware version"
 
+	depends on ARCH_MSM7X00A
 	default MSM_AMSS_VERSION_6225
 
 	config MSM_AMSS_VERSION_6210
 		bool "6.2.10"
+		select MSM_LEGACY_7X00A_AMSS
 
 	config MSM_AMSS_VERSION_6220
 		bool "6.2.20"
+		select MSM_LEGACY_7X00A_AMSS
 
 	config MSM_AMSS_VERSION_6225
 		bool "6.2.20 + New ADSP"
+		select MSM_LEGACY_7X00A_AMSS
 
 	config MSM_AMSS_VERSION_6350
 		bool "6.3.50"
