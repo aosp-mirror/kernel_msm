@@ -411,7 +411,7 @@ config MSM_ONCRPCROUTER
 	  the ARM9 and ARM11
 
 config MSM_RPCSERVERS
-	depends on MSM_ONCRPCROUTER
+	depends on MSM_ONCRPCROUTER && ARCH_MSM7X00A
 	default y
 	bool "Kernel side RPC server bundle"
 	help
