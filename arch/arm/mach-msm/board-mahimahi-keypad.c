@@ -88,6 +88,7 @@ static struct gpio_event_direct_entry mahimahi_keypad_key_map[] = {
 static struct gpio_event_input_info mahimahi_keypad_key_info = {
 	.info.func = gpio_event_input_func,
 	.info.no_suspend = true,
+	.debounce_time.tv.nsec = 5 * NSEC_PER_MSEC,
 	.flags = 0,
 	.type = EV_KEY,
 	.keymap = mahimahi_keypad_key_map,
