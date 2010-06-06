@@ -17,6 +17,7 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/gpio_event.h>
+#include <linux/i2c.h>
 #include <linux/init.h>
 #include <linux/input.h>
 #include <linux/io.h>
@@ -406,6 +407,14 @@ static int __init surf7x30_ssbi_pmic_init(void)
 	return platform_device_register(&msm_device_ssbi_pmic);
 }
 
+
+static struct i2c_board_info surf_i2c_devices[] = {
+	/* marimba master is implied at 0x0c */
+	{
+		I2C_BOARD_INFO("marimba-codec",	0x77),
+	},
+};
+
 extern struct sys_timer msm_timer;
 
 void msm_serial_debug_init(unsigned int base, int irq,
@@ -421,6 +430,7 @@ static struct platform_device *devices[] __initdata = {
 	&usb_mass_storage_device,
 	&android_usb_device,
 	&smc91x_device,
+	&msm_device_i2c2,
 #if !SURF7X30_USE_PMIC_KEYPAD
 	&surf7x30_keypad_device,
 #endif
@@ -439,6 +449,9 @@ static void __init surf7x30_init(void)
 
 	msm_device_hsusb.dev.platform_data = &msm_hsusb_pdata;
 	platform_add_devices(devices, ARRAY_SIZE(devices));
+
+	i2c_register_board_info(1, surf_i2c_devices,
+				ARRAY_SIZE(surf_i2c_devices));
 	msm_hsusb_set_vbus_state(1);
 	msm_hsusb_set_vbus_state(0);
 	msm_hsusb_set_vbus_state(1);
