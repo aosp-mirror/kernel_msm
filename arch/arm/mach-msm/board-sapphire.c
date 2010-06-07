@@ -1264,13 +1264,13 @@ static void __init sapphire_fixup(struct machine_desc *desc, struct tag *tags,
 	if (smi_sz == 32) {
 		mi->bank[0].size = (84*1024*1024);
 	} else if (smi_sz == 64) {
-		mi->bank[0].size = (101*1024*1024);
+		mi->bank[0].size = (104*1024*1024);
 	} else {
 		printk(KERN_ERR "can not get smi size\n");
 
 		/*Give a default value when not get smi size*/
 		smi_sz = 64;
-		mi->bank[0].size = (101*1024*1024);
+		mi->bank[0].size = (104*1024*1024);
 		printk(KERN_ERR "use default  :  smisize=%d\n", smi_sz);
 	}
 }
