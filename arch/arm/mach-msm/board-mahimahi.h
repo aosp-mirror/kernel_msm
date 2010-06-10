@@ -126,6 +126,7 @@
 
 #define MAHIMAHI_GPIO_LED_3V3_EN	85
 #define MAHIMAHI_GPIO_LCD_RST_N		29
+#define MAHIMAHI_GPIO_LCD_ID0		147
 
 /* 3.5mm remote control key interrupt shutdown signal */
 #define MAHIMAHI_GPIO_35MM_KEY_INT_SHUTDOWN	19
@@ -144,7 +145,31 @@
 
 #define MAHIMAHI_CDMA_SD_2V85_EN		100
 #define MAHIMAHI_CDMA_JOG_2V6_EN		150
-
+/* display relative */
+#define MAHIMAHI_LCD_SPI_CLK            (17)
+#define MAHIMAHI_LCD_SPI_DO             (18)
+#define MAHIMAHI_LCD_SPI_CSz            (20)
+#define MAHIMAHI_LCD_RSTz               (29)
+#define MAHIMAHI_LCD_R1                 (114)
+#define MAHIMAHI_LCD_R2                 (115)
+#define MAHIMAHI_LCD_R3                 (116)
+#define MAHIMAHI_LCD_R4                 (117)
+#define MAHIMAHI_LCD_R5                 (118)
+#define MAHIMAHI_LCD_G0                 (121)
+#define MAHIMAHI_LCD_G1                 (122)
+#define MAHIMAHI_LCD_G2                 (123)
+#define MAHIMAHI_LCD_G3                 (124)
+#define MAHIMAHI_LCD_G4                 (125)
+#define MAHIMAHI_LCD_G5                 (126)
+#define MAHIMAHI_LCD_B1                 (130)
+#define MAHIMAHI_LCD_B2                 (131)
+#define MAHIMAHI_LCD_B3                 (132)
+#define MAHIMAHI_LCD_B4                 (133)
+#define MAHIMAHI_LCD_B5                 (134)
+#define MAHIMAHI_LCD_PCLK               (135)
+#define MAHIMAHI_LCD_VSYNC              (136)
+#define MAHIMAHI_LCD_HSYNC              (137)
+#define MAHIMAHI_LCD_DE                 (138)
 #define is_cdma_version(rev) (((rev) & 0xF0) == 0xC0)
 
 #endif /* __ARCH_ARM_MACH_MSM_BOARD_MAHIMAHI_H */
