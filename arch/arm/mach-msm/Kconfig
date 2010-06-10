@@ -466,6 +466,13 @@ config MSM_QDSP6
 	help
 	  Enable support for qdsp6. This provides audio and video functionality.
 
+config MSM_QDSP5V2
+	tristate "QDSP5V2 support"
+	depends on ARCH_MSM7X30
+	default y
+	help
+	  Enable support for qdsp5v2, which provides audio processing on 7x30.
+
 config MSM_SSBI
 	tristate "SSBI support"
 	depends on ARCH_MSM7X30
