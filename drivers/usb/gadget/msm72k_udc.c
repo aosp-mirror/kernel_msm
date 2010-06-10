@@ -252,7 +252,7 @@ static void ulpi_init(struct usb_info *ui)
 		return;
 
 	while (seq[0] >= 0) {
-		INFO("ulpi: write 0x%02x to 0x%02x\n", seq[0], seq[1]);
+//		INFO("ulpi: write 0x%02x to 0x%02x\n", seq[0], seq[1]);
 		ulpi_write(ui, seq[0], seq[1]);
 		seq += 2;
 	}
@@ -295,10 +295,12 @@ static void config_ept(struct msm_endpoint *ept)
 	ept->head->config = cfg;
 	ept->head->next = TERMINATE;
 
+#if 0
 	if (ept->ep.maxpacket)
 		INFO("ept #%d %s max:%d head:%p bit:%d\n",
 		    ept->num, (ept->flags & EPT_FLAG_IN) ? "in" : "out",
 		    ept->ep.maxpacket, ept->head, ept->bit);
+#endif
 }
 
 static void configure_endpoints(struct usb_info *ui)
