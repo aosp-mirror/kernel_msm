@@ -38,9 +38,9 @@
 #define VID_ENC_MAX_ENCODER_CLIENTS 16
 #define VID_ENC_MAX_NUM_OF_BUFF 100
 
-enum venc_buffer_dir{
-  VEN_BUFFER_TYPE_INPUT,
-  VEN_BUFFER_TYPE_OUTPUT
+enum venc_buffer_dir {
+	VEN_BUFFER_TYPE_INPUT,
+	VEN_BUFFER_TYPE_OUTPUT
 };
 
 struct vid_enc_msg {
@@ -66,91 +66,95 @@ struct vid_enc_dev {
 };
 
 u32 vid_enc_set_get_base_cfg(struct video_client_ctx *client_ctx,
-		struct venc_basecfg *base_config, u32 set_flag);
+	struct venc_basecfg *base_config, u32 set_flag);
 
 u32 vid_enc_set_get_inputformat(struct video_client_ctx *client_ctx,
-		u32 *input_format, u32 set_flag);
+	u32 *input_format, u32 set_flag);
 
 u32 vid_enc_set_get_codec(struct video_client_ctx *client_ctx, u32 *codec_type,
-		u32 set_flag);
+	u32 set_flag);
 
 u32 vid_enc_set_get_framesize(struct video_client_ctx *client_ctx,
-		u32 *height, u32 *width, u32 set_flag);
+	u32 *height, u32 *width, u32 set_flag);
 
 u32 vid_enc_set_get_bitrate(struct video_client_ctx *client_ctx,
-		struct venc_targetbitrate *venc_bitrate, u32 set_flag);
+	struct venc_targetbitrate *venc_bitrate, u32 set_flag);
 
 u32 vid_enc_set_get_framerate(struct video_client_ctx *client_ctx,
-		struct venc_framerate *frame_rate, u32 set_flag);
+	struct venc_framerate *frame_rate, u32 set_flag);
 
 u32 vid_enc_set_get_live_mode(struct video_client_ctx *client_ctx,
-		struct venc_switch *encoder_switch, u32 set_flag);
+	struct venc_switch *encoder_switch, u32 set_flag);
 
 u32 vid_enc_set_get_short_header(struct video_client_ctx *client_ctx,
-		struct venc_switch *encoder_switch, u32 set_flag);
+	struct venc_switch *encoder_switch, u32 set_flag);
 
 u32 vid_enc_set_get_profile(struct video_client_ctx *client_ctx,
-		struct venc_profile *profile, u32 set_flag);
+	struct venc_profile *profile, u32 set_flag);
 
 u32 vid_enc_set_get_profile_level(struct video_client_ctx *client_ctx,
-		struct ven_profilelevel *profile_level, u32 set_flag);
+	struct ven_profilelevel *profile_level, u32 set_flag);
 
 u32 vid_enc_set_get_session_qp(struct video_client_ctx *client_ctx,
-		struct venc_sessionqp *session_qp, u32 set_flag);
+	struct venc_sessionqp *session_qp, u32 set_flag);
 
 u32 vid_enc_set_get_intraperiod(struct video_client_ctx *client_ctx,
-		struct venc_intraperiod *intraperiod, u32 set_flag);
+	struct venc_intraperiod *intraperiod, u32 set_flag);
 
 u32 vid_enc_request_iframe(struct video_client_ctx *client_ctx);
 
 u32 vid_enc_get_sequence_header(struct video_client_ctx *client_ctx,
-		struct venc_seqheader *seq_header);
+	struct venc_seqheader *seq_header);
 
 u32 vid_enc_set_get_entropy_cfg(struct video_client_ctx *client_ctx,
-		struct venc_entropycfg *entropy_cfg, u32 set_flag);
+	struct venc_entropycfg *entropy_cfg, u32 set_flag);
 
 u32 vid_enc_set_get_dbcfg(struct video_client_ctx *client_ctx,
-		struct venc_dbcfg *dbcfg, u32 set_flag);
+	struct venc_dbcfg *dbcfg, u32 set_flag);
 
 u32 vid_enc_set_get_intrarefresh(struct video_client_ctx *client_ctx,
-		struct venc_intrarefresh *intrarefresh,	u32 set_flag);
+	struct venc_intrarefresh *intrarefresh,	u32 set_flag);
 
 u32 vid_enc_set_get_multiclicecfg(struct video_client_ctx *client_ctx,
-		struct venc_multiclicecfg *multiclicecfg, u32 set_flag);
+	struct venc_multiclicecfg *multiclicecfg, u32 set_flag);
 
 u32 vid_enc_set_get_ratectrlcfg(struct video_client_ctx *client_ctx,
-		struct venc_ratectrlcfg *ratectrlcfg, u32 set_flag);
+	struct venc_ratectrlcfg *ratectrlcfg, u32 set_flag);
 
 u32 vid_enc_set_get_voptimingcfg(struct video_client_ctx *client_ctx,
-		struct  venc_voptimingcfg *voptimingcfg, u32 set_flag);
+	struct  venc_voptimingcfg *voptimingcfg, u32 set_flag);
 
 u32 vid_enc_set_get_headerextension(struct video_client_ctx *client_ctx,
-		struct venc_headerextension *headerextension, u32 set_flag);
+	struct venc_headerextension *headerextension, u32 set_flag);
 
 u32 vid_enc_set_get_qprange(struct video_client_ctx *client_ctx,
-		struct venc_qprange *qprange, u32 set_flag);
+	struct venc_qprange *qprange, u32 set_flag);
 
-u32 vid_enc_start_stop(struct video_client_ctx *client_ctx, u32 start);
+u32 vid_enc_start(struct video_client_ctx *client_ctx);
 
-u32 vid_enc_pause_resume(struct video_client_ctx *client_ctx, u32 pause);
+u32 vid_enc_stop(struct video_client_ctx *client_ctx);
+
+u32 vid_enc_pause(struct video_client_ctx *client_ctx);
+
+u32 vid_enc_resume(struct video_client_ctx *client_ctx);
 
 u32 vid_enc_flush(struct video_client_ctx *client_ctx,
-		struct venc_bufferflush *bufferflush);
+	struct venc_bufferflush *bufferflush);
 
 u32 vid_enc_get_buffer_req(struct video_client_ctx *client_ctx,
-		struct venc_allocatorproperty *venc_buf_req, u32 input_dir);
+	struct venc_allocatorproperty *venc_buf_req, u32 input_dir);
 
 u32 vid_enc_set_buffer_req(struct video_client_ctx *client_ctx,
-		struct venc_allocatorproperty *venc_buf_req, u32 input_dir);
+	struct venc_allocatorproperty *venc_buf_req, u32 input_dir);
 
 u32 vid_enc_set_buffer(struct video_client_ctx *client_ctx,
-		struct venc_bufferpayload *buffer_info,
-		enum venc_buffer_dir buffer_type);
+	struct venc_bufferpayload *buffer_info,
+	enum venc_buffer_dir buffer_type);
 
 u32 vid_enc_encode_frame(struct video_client_ctx *client_ctx,
-		struct venc_buffer *input_frame_info);
+	struct venc_buffer *input_frame_info);
 
 u32 vid_enc_fill_output_buffer(struct video_client_ctx *client_ctx,
-		struct venc_buffer *output_frame_info);
+	struct venc_buffer *output_frame_info);
 
 #endif

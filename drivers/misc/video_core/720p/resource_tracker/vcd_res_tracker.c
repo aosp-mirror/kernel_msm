@@ -52,232 +52,224 @@ static unsigned int axi_clk_freq_table_dec[2] = {
 	MSM_AXI_FLOW_VIDEO_PLAYBACK_720P
 };
 #endif
-static u32 res_trk_convert_freq_to_perf_lvl(u64 n_freq)
+static u32 res_trk_convert_freq_to_perf_lvl(u64 freq)
 {
-	u64 n_perf_lvl;
-	u64 n_temp;
+	u64 perf_lvl;
+	u64 temp;
 
-	VCDRES_MSG_MED("\n %s():: n_freq = %u\n", __func__, (u32)n_freq);
+	pr_debug("\n %s():: freq = %u\n", __func__, (u32)freq);
 
-	if (!n_freq)
+	if (!freq)
 		return 0;
 
-	n_temp = n_freq * 1000;
-	do_div(n_temp, VCD_RESTRK_HZ_PER_1000_PERFLVL);
-	n_perf_lvl = (u32)n_temp;
-	VCDRES_MSG_MED("\n %s(): n_perf_lvl = %u\n", __func__,
-		(u32)n_perf_lvl);
+	temp = freq * 1000;
+	do_div(temp, VCD_RESTRK_HZ_PER_1000_PERFLVL);
+	perf_lvl = (u32)temp;
+	pr_debug("\n %s(): perf_lvl = %u\n", __func__, (u32)perf_lvl);
 
-	return (u32)n_perf_lvl;
+	return (u32)perf_lvl;
 }
 
-static u32 res_trk_convert_perf_lvl_to_freq(u64 n_perf_lvl)
+static u32 res_trk_convert_perf_lvl_to_freq(u64 perf_lvl)
 {
-	u64 n_freq, n_temp;
+	u64 freq, temp;
 
-	VCDRES_MSG_MED("\n %s():: n_perf_lvl = %u\n", __func__,
-		(u32)n_perf_lvl);
-	n_temp = (n_perf_lvl * VCD_RESTRK_HZ_PER_1000_PERFLVL) + 999;
-	do_div(n_temp, 1000);
-	n_freq = (u32)n_temp;
-	VCDRES_MSG_MED("\n %s(): n_freq = %u\n", __func__, (u32)n_freq);
+	pr_debug("\n %s():: perf_lvl = %u\n", __func__,
+		(u32)perf_lvl);
+	temp = (perf_lvl * VCD_RESTRK_HZ_PER_1000_PERFLVL) + 999;
+	do_div(temp, 1000);
+	freq = (u32)temp;
+	pr_debug("\n %s(): freq = %u\n", __func__, (u32)freq);
 
-	return (u32)n_freq;
+	return (u32)freq;
 }
 
 u32 res_trk_power_up(void)
 {
-	VCDRES_MSG_LOW("clk_regime_rail_enable");
-	VCDRES_MSG_LOW("clk_regime_sel_rail_control");
+	pr_debug("clk_regime_rail_enable\n");
+	pr_debug("clk_regime_sel_rail_control\n");
 #ifdef AXI_CLK_SCALING
 {
 	int rc;
-	VCDRES_MSG_MED("\n res_trk_power_up():: "
+	pr_debug("\n res_trk_power_up():: "
 		"Calling AXI add requirement\n");
 	rc = pm_qos_add_requirement(PM_QOS_SYSTEM_BUS_FREQ,
 		MSM_AXI_QOS_NAME, PM_QOS_DEFAULT_VALUE);
 	if (rc < 0)	{
-		VCDRES_MSG_ERROR("Request AXI bus QOS fails. rc = %d\n",
-			rc);
-		return FALSE;
+		pr_err("Request AXI bus QOS fails. rc = %d\n", rc);
+		return false;
 	}
 }
 #endif
 
 #ifdef USE_RES_TRACKER
-	VCDRES_MSG_MED("\n res_trk_power_up():: Calling "
+	pr_debug("\n res_trk_power_up():: Calling "
 		"vid_c_enable_pwr_rail()\n");
 	return vid_c_enable_pwr_rail();
 #endif
-	return TRUE;
+	return true;
 }
 
 u32 res_trk_power_down(void)
 {
-	VCDRES_MSG_LOW("clk_regime_rail_disable");
+	pr_debug("clk_regime_rail_disable\n");
 #ifdef AXI_CLK_SCALING
-	VCDRES_MSG_MED("\n res_trk_power_down()::"
+	pr_debug("\n res_trk_power_down()::"
 		"Calling AXI remove requirement\n");
 	pm_qos_remove_requirement(PM_QOS_SYSTEM_BUS_FREQ,
 		MSM_AXI_QOS_NAME);
 #endif
 
 #ifdef USE_RES_TRACKER
-	VCDRES_MSG_MED("\n res_trk_power_down():: Calling "
+	pr_debug("\n res_trk_power_down():: Calling "
 		"vid_c_disable_pwr_rail()\n");
 	return vid_c_disable_pwr_rail();
 #endif
-	return TRUE;
+	return true;
 }
 
 u32 res_trk_enable_clocks(void)
 {
-	VCDRES_MSG_LOW("clk_regime_msm_enable");
+	pr_debug("clk_regime_msm_enable\n");
 #ifdef USE_RES_TRACKER
-	VCDRES_MSG_MED("\n res_trk_enable_clocks():: Calling "
+	pr_debug("\n res_trk_enable_clocks():: Calling "
 		"vid_c_enable_clk()\n");
 	return vid_c_enable_clk();
 #endif
-	return TRUE;
+	return true;
 }
 
 u32 res_trk_disable_clocks(void)
 {
-	VCDRES_MSG_LOW("clk_regime_msm_disable");
+	pr_debug("clk_regime_msm_disable\n");
 
 #ifdef USE_RES_TRACKER
-	VCDRES_MSG_MED("\n res_trk_disable_clocks():: Calling "
+	pr_debug("\n res_trk_disable_clocks():: Calling "
 		"vid_c_disable_clk()\n");
 	return vid_c_disable_clk();
 #endif
-	return TRUE;
+	return true;
 }
 
 u32 res_trk_get_max_perf_level(u32 *pn_max_perf_lvl)
 {
 	if (!pn_max_perf_lvl) {
-		VCDRES_MSG_ERROR("%s(): pn_max_perf_lvl is NULL\n",
-			__func__);
-		return FALSE;
+		pr_err("%s(): pn_max_perf_lvl is NULL\n", __func__);
+		return false;
 	}
 
 	*pn_max_perf_lvl = VCD_RESTRK_MAX_PERF_LEVEL;
-	return TRUE;
+	return true;
 }
 
-u32 res_trk_set_perf_level(u32 n_req_perf_lvl, u32 *pn_set_perf_lvl,
-	struct vcd_clnt_ctxt_type_t *p_cctxt)
+u32 res_trk_set_perf_level(u32 req_perf_lvl, u32 *pn_set_perf_lvl,
+	struct vcd_clnt_ctxt *cctxt)
 {
 	u32 axi_freq = 0, mfc_freq = 0, calc_mfc_freq = 0;
-	int rc = -1;
 
 	if (!pn_set_perf_lvl) {
-		VCDRES_MSG_ERROR("%s(): pn_perf_lvl is NULL\n",
-			__func__);
-		return FALSE;
+		pr_err("%s(): pn_perf_lvl is NULL\n", __func__);
+		return false;
 	}
 
-	VCDRES_MSG_LOW("%s(), n_req_perf_lvl = %d", __func__, n_req_perf_lvl);
-	if (p_cctxt) {
+	pr_debug("%s(), req_perf_lvl = %d\n", __func__, req_perf_lvl);
+	if (cctxt) {
 		calc_mfc_freq = res_trk_convert_perf_lvl_to_freq(
-			(u64)n_req_perf_lvl);
+			(u64)req_perf_lvl);
 
 		if (calc_mfc_freq < VCD_RESTRK_MIN_FREQ_POINT)
 			calc_mfc_freq = VCD_RESTRK_MIN_FREQ_POINT;
 		else if (calc_mfc_freq > VCD_RESTRK_MAX_FREQ_POINT)
 			calc_mfc_freq = VCD_RESTRK_MAX_FREQ_POINT;
 
-		if (!p_cctxt->b_decoding) {
-			if (n_req_perf_lvl >= VGA_PERF_LEVEL) {
+		if (!cctxt->decoding) {
+			if (req_perf_lvl >= VGA_PERF_LEVEL) {
 				mfc_freq = mfc_clk_freq_table[2];
 				axi_freq = axi_clk_freq_table_enc[1];
 			} else {
 				mfc_freq = mfc_clk_freq_table[0];
 				axi_freq = axi_clk_freq_table_enc[0];
 			}
-			VCDRES_MSG_HIGH("\n ENCODER: axi_freq = %u"
+			pr_debug("\n ENCODER: axi_freq = %u"
 				", mfc_freq = %u, calc_mfc_freq = %u,"
-				" n_req_perf_lvl = %u", axi_freq,
+				" req_perf_lvl = %u", axi_freq,
 				mfc_freq, calc_mfc_freq,
-				n_req_perf_lvl);
+				req_perf_lvl);
 		} else {
-			if (n_req_perf_lvl <= QVGA_PERF_LEVEL) {
+			if (req_perf_lvl <= QVGA_PERF_LEVEL) {
 				mfc_freq = mfc_clk_freq_table[0];
 				axi_freq = axi_clk_freq_table_dec[0];
 			} else {
 				axi_freq = axi_clk_freq_table_dec[0];
-				if (n_req_perf_lvl <= VGA_PERF_LEVEL)
+				if (req_perf_lvl <= VGA_PERF_LEVEL)
 					mfc_freq = mfc_clk_freq_table[0];
-				else if (n_req_perf_lvl <= WVGA_PERF_LEVEL)
+				else if (req_perf_lvl <= WVGA_PERF_LEVEL)
 					mfc_freq = mfc_clk_freq_table[1];
 				else {
 					mfc_freq = mfc_clk_freq_table[2];
 					axi_freq = axi_clk_freq_table_dec[1];
 				}
 			}
-			VCDRES_MSG_HIGH("\n DECODER: axi_freq = %u"
+			pr_debug("\n DECODER: axi_freq = %u"
 				", mfc_freq = %u, calc_mfc_freq = %u,"
-				" n_req_perf_lvl = %u", axi_freq,
+				" req_perf_lvl = %u", axi_freq,
 				mfc_freq, calc_mfc_freq,
-				n_req_perf_lvl);
+				req_perf_lvl);
 		}
 	} else {
-		VCDRES_MSG_HIGH("%s() WARNING:: p_cctxt is NULL", __func__);
-		return TRUE;
+		pr_debug("%s() WARNING:: cctxt is NULL\n", __func__);
+		return true;
 	}
 
 #ifdef AXI_CLK_SCALING
-    if (n_req_perf_lvl != VCD_RESTRK_MIN_PERF_LEVEL) {
-		VCDRES_MSG_HIGH("\n %s(): Setting AXI freq to %u",
+	if (req_perf_lvl != VCD_RESTRK_MIN_PERF_LEVEL) {
+		int rc = -1;
+		pr_debug("\n %s(): Setting AXI freq to %u",
 			__func__, axi_freq);
 		rc = pm_qos_update_requirement(PM_QOS_SYSTEM_BUS_FREQ,
 			MSM_AXI_QOS_NAME, axi_freq);
 
-		if (rc < 0)	{
-			VCDRES_MSG_ERROR("\n Update AXI bus QOS fails,"
-				"rc = %d\n", rc);
-			return FALSE;
+		if (rc < 0) {
+			pr_err("\n Update AXI bus QOS fails,rc = %d\n", rc);
+			return false;
 		}
 	}
 #endif
 
 #ifdef USE_RES_TRACKER
-    if (n_req_perf_lvl != VCD_RESTRK_MIN_PERF_LEVEL) {
-		VCDRES_MSG_HIGH("\n %s(): Setting MFC freq to %u",
+	if (req_perf_lvl != VCD_RESTRK_MIN_PERF_LEVEL) {
+		pr_debug("\n %s(): Setting MFC freq to %u",
 			__func__, mfc_freq);
 		if (!vid_c_sel_clk_rate(mfc_freq)) {
-			VCDRES_MSG_ERROR("%s(): vid_c_sel_clk_rate FAILED\n",
-				__func__);
+			pr_err("%s(): vid_c_sel_clk_rate FAILED\n", __func__);
 			*pn_set_perf_lvl = 0;
-			return FALSE;
+			return false;
 		}
 	}
 #endif
 
 	*pn_set_perf_lvl =
 	    res_trk_convert_freq_to_perf_lvl((u64) mfc_freq);
-	return TRUE;
+	return true;
 }
 
 u32 res_trk_get_curr_perf_level(u32 *pn_perf_lvl)
 {
-	unsigned long n_freq;
+	unsigned long freq;
 
 	if (!pn_perf_lvl) {
-		VCDRES_MSG_ERROR("%s(): pn_perf_lvl is NULL\n",
-			__func__);
-		return FALSE;
+		pr_err("%s(): pn_perf_lvl is NULL\n", __func__);
+		return false;
 	}
-	VCDRES_MSG_LOW("clk_regime_msm_get_clk_freq_hz");
-	if (!vid_c_get_clk_rate(&n_freq)) {
-		VCDRES_MSG_ERROR("%s(): vid_c_get_clk_rate FAILED\n",
-			__func__);
+	pr_debug("clk_regime_msm_get_clk_freq_hz\n");
+	if (!vid_c_get_clk_rate(&freq)) {
+		pr_err("%s(): vid_c_get_clk_rate FAILED\n", __func__);
 		*pn_perf_lvl = 0;
-		return FALSE;
+		return false;
 	}
 
-	*pn_perf_lvl = res_trk_convert_freq_to_perf_lvl((u64) n_freq);
-	VCDRES_MSG_MED("%s(): n_freq = %lu, *pn_perf_lvl = %u", n_freq,
-		*pn_perf_lvl);
-	return TRUE;
+	*pn_perf_lvl = res_trk_convert_freq_to_perf_lvl((u64) freq);
+	pr_debug("%s(): freq = %lu, *pn_perf_lvl = %u\n", __func__,
+		freq, *pn_perf_lvl);
+	return true;
 }

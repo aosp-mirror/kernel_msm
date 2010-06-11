@@ -40,9 +40,9 @@ enum buffer_dir {
 };
 
 struct buf_addr_table {
-	unsigned long user_vaddr;
-	unsigned long kernel_vaddr;
-	unsigned long phy_addr;
+	void __user *user_addr;
+	void *kern_addr;
+	phys_addr_t phys_addr;
 	int pmem_fd;
 	struct file *file;
 };
@@ -74,25 +74,22 @@ u32 vid_c_enable_pwr_rail(void);
 u32 vid_c_disable_pwr_rail(void);
 
 #else
-
 u32 vid_c_enable_clk(unsigned long hclk_rate);
 u32 vid_c_disable_clk(void);
-
 #endif
 
 int vid_c_load_firmware(void);
 void vid_c_release_firmware(void);
 u32 vid_c_lookup_addr_table(struct video_client_ctx *client_ctx,
-enum buffer_dir buffer_type, u32 search_with_user_vaddr,
-unsigned long *user_vaddr, unsigned long *kernel_vaddr,
-unsigned long *phy_addr, int *pmem_fd, struct file **file,
-s32 *buffer_index);
+	enum buffer_dir buffer_type, u32 search_with_user_vaddr,
+	void __user **user_addr, void **kernel_addr, phys_addr_t *phys_addr,
+	int *pmem_fd, struct file **file, s32 *buffer_index);
 
 u32 vid_c_timer_create(void (*pf_timer_handler)(void *),
-	void *p_user_data, void **pp_timer_handle);
-void  vid_c_timer_release(void *p_timer_handle);
-void  vid_c_timer_start(void *p_timer_handle, u32 n_time_out);
-void  vid_c_timer_stop(void *p_timer_handle);
+	void *user_data, void **pp_timer_handle);
+void  vid_c_timer_release(void *timer_handle);
+void  vid_c_timer_start(void *timer_handle, u32 time_out);
+void  vid_c_timer_stop(void *timer_handle);
 
 
 #endif

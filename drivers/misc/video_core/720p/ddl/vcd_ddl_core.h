@@ -48,7 +48,7 @@
 #define VCD_MAX_NO_CLIENT  4
 #define VCD_FRAME_COMMAND_DEPTH 1
 #define VCD_GENERAL_COMMAND_DEPTH 1
-#define VCD_COMMAND_EXCLUSIVE TRUE
+#define VCD_COMMAND_EXCLUSIVE true
 
 #define DDL_HW_TIMEOUT_IN_MS  1000
 
@@ -78,42 +78,28 @@
 #define DDL_MAX_H264_QP   51
 #define DDL_MAX_MPEG4_QP  31
 
+//TODO clean this dirty thing
 #define DDL_PADDING_HACK(addr) \
- (addr) = (u32)((((u32)(addr) + DDL_STREAMBUF_ALIGN_GUARD_BYTES) & \
-			 ~(DDL_STREAMBUF_ALIGN_GUARD_BYTES)) + DDL_BUFEND_PAD)
+	(addr) = (u32)((((u32)(addr) + DDL_STREAMBUF_ALIGN_GUARD_BYTES) & \
+	~(DDL_STREAMBUF_ALIGN_GUARD_BYTES)) + DDL_BUFEND_PAD)
 
 #define DDL_FRAMESIZE_DIV_FACTOR   0xF
-#define DDL_ALLOW_DEC_FRAMESIZE(n_width, n_height)             \
-(\
-   (\
-      (n_width <= DDL_MAX_FRAME_WIDTH)  &&                 \
-      (n_height <= DDL_MAX_FRAME_HEIGHT)                   \
-   ) &&                                                     \
-   (\
-      (n_width >= 32 && n_height >= 16) ||                  \
-      (n_width >= 16 && n_height >= 32)                     \
-   )\
-)
+#define DDL_ALLOW_DEC_FRAMESIZE(w, h) (\
+	(w) <= DDL_MAX_FRAME_WIDTH && \
+	(h) <= DDL_MAX_FRAME_HEIGHT && \
+	(((w) >= 32 && (h) >= 16) || ((w) >= 16 && (h) >= 32)))
 
-#define DDL_ALLOW_ENC_FRAMESIZE(n_width, n_height)             \
-(\
-   (\
-      (n_width <= DDL_MAX_FRAME_WIDTH)  &&                 \
-      (n_height <= DDL_MAX_FRAME_HEIGHT)                   \
-   ) &&                                                     \
-   (\
-      (n_width >= 32 && n_height >= 32)                      \
-   ) &&                                                     \
-   (\
-      !(n_width & DDL_FRAMESIZE_DIV_FACTOR) &&              \
-      !(n_height & DDL_FRAMESIZE_DIV_FACTOR)                \
-   )                                                        \
-)
+#define DDL_ALLOW_ENC_FRAMESIZE(w, h) (\
+	(w) <= DDL_MAX_FRAME_WIDTH && \
+	(h) <= DDL_MAX_FRAME_HEIGHT && \
+	(w) >= 32 && (h) >= 32 && \
+	!((w) & DDL_FRAMESIZE_DIV_FACTOR) && \
+	!((h) & DDL_FRAMESIZE_DIV_FACTOR))
 
 #define DDL_TILE_ALIGN_WIDTH     128
 #define DDL_TILE_ALIGN_HEIGHT    32
 #define DDL_TILE_MULTIPLY_FACTOR 8192
 #define DDL_TILE_ALIGN(val, grid) \
-   (((val) + (grid) - 1) / (grid) * (grid))
+	(((val) + (grid) - 1) / (grid) * (grid))
 
 #endif

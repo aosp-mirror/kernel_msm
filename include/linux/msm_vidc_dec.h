@@ -106,8 +106,8 @@
 #define VDEC_IOCTL_MAGIC 'v'
 
 struct vdec_ioctl_msg {
-	void *inputparam;
-	void *outputparam;
+	void __user *in;
+	void __user *out;
 };
 
 /* CMD params: InputParam:enum vdec_codec
@@ -226,11 +226,11 @@ struct vdec_allocatorproperty {
 };
 
 struct vdec_bufferpayload {
-	uint8_t *bufferaddr;
-	uint32_t buffer_len;
+	void __user *addr;
+	size_t sz;
 	int pmem_fd;
-	uint32_t offset;
-	uint32_t mmaped_size;
+	size_t offset;
+	size_t mmaped_sz;
 };
 
 struct vdec_setbuffer_cmd {
@@ -458,7 +458,7 @@ enum vdec_interlaced_format {
 	VDEC_InterlaceInterleaveFrameBottomFieldFirst = 0x4
 };
 
-enum vdec_output_fromat {
+enum vdec_output_format {
 	VDEC_YUV_FORMAT_NV12 = 0x1,
 	VDEC_YUV_FORMAT_TILE_4x2 = 0x2
 };
@@ -471,10 +471,10 @@ struct vdec_picsize {
 };
 
 struct vdec_seqheader {
-	uint8_t *ptr_seqheader;
-	uint32_t seq_header_len;
+	void *addr;
+	size_t sz;
 	int pmem_fd;
-	uint32_t pmem_offset;
+	size_t pmem_offset;
 };
 
 struct vdec_mberror {
@@ -483,26 +483,26 @@ struct vdec_mberror {
 };
 
 struct vdec_input_frameinfo {
-	uint8_t *bufferaddr;
-	uint32_t offset;
-	uint32_t datalen;
+	void __user *user_addr;
+	size_t offset;
+	size_t data_len;
 	uint32_t flags;
 	int64_t timestamp;
 	void *client_data;
 	int pmem_fd;
-	uint32_t pmem_offset;
+	size_t pmem_offset;
 };
 
 struct vdec_framesize {
-	uint32_t   n_left;
-	uint32_t   n_top;
-	uint32_t   n_right;
-	uint32_t   n_bottom;
+	uint32_t   left;
+	uint32_t   top;
+	uint32_t   right;
+	uint32_t   bottom;
 };
 
 struct vdec_output_frameinfo {
-	uint8_t *phy_addr;
-	uint8_t *bufferaddr;
+	phys_addr_t phys_addr;
+	void __user *user_addr;
 	uint32_t offset;
 	uint32_t len;
 	uint32_t flags;

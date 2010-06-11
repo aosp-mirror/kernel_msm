@@ -28,40 +28,25 @@
  */
 #ifndef _VCD_DDL_FIRMWARE_H_
 #define _VCD_DDL_FIRMWARE_H_
+
+#include <linux/device.h>
+
 #include "vcd_property.h"
 
-#define VCD_FW_BIG_ENDIAN     0x0
-#define VCD_FW_LITTLE_ENDIAN  0x1
-
-struct vcd_fw_details_type {
-	enum vcd_codec_type e_codec;
-	u32 *p_fw_buffer_addr;
-	u32 n_fw_size;
+struct vcd_firmware {
+	const char *filename;
+	bool change_endian;
+	phys_addr_t phys_addr;
+	void *virt_addr;
+	size_t sz;      /* real size of firmware (unknown until load time) */
+	size_t max_sz;  /* size for allocation at init time */
 };
 
-#define VCD_FW_PROP_BASE         0x0
-
-#define VCD_FW_ENDIAN       (VCD_FW_PROP_BASE + 0x1)
-#define VCD_FW_BOOTCODE     (VCD_FW_PROP_BASE + 0x2)
-#define VCD_FW_DECODE     (VCD_FW_PROP_BASE + 0x3)
-#define VCD_FW_ENCODE     (VCD_FW_PROP_BASE + 0x4)
-
-extern unsigned char *vid_c_command_control_fw;
-extern u32 vid_c_command_control_fw_size;
-extern unsigned char *vid_c_mpg4_dec_fw;
-extern u32 vid_c_mpg4_dec_fw_size;
-extern unsigned char *vid_c_h263_dec_fw;
-extern u32 vid_c_h263_dec_fw_size;
-extern unsigned char *vid_c_h264_dec_fw;
-extern u32 vid_c_h264_dec_fw_size;
-extern unsigned char *vid_c_mpg4_enc_fw;
-extern u32 vid_c_mpg4_enc_fw_size;
-extern unsigned char *vid_c_h264_enc_fw;
-extern u32 vid_c_h264_enc_fw_size;
-
-u32 vcd_fw_init(void);
-u32 vcd_get_fw_property(u32 prop_id, void *prop_details);
-u32 vcd_fw_transact(u32 b_add, u32 b_decoding, enum vcd_codec_type e_codec);
-void vcd_fw_release(void);
+int vcd_fw_init(struct device *dev);
+void vcd_fw_exit(void);
+int vcd_fw_prepare_all(void);
+struct vcd_firmware *vcd_fw_get_boot_fw(void);
+struct vcd_firmware *vcd_fw_get_fw(bool is_decode, enum vcd_codec codec);
+bool vcd_fw_is_codec_supported(bool is_decode, enum vcd_codec codec);
 
 #endif

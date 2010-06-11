@@ -39,13 +39,9 @@
 #include <linux/dma-mapping.h>
 #include <linux/android_pmem.h>
 
-#define TRUE 	1
-#define FALSE	0
-
-#define DEBUG   0
+#define DEBUG 1
 
 #define USE_RES_TRACKER
-//#define AXI_CLK_SCALING
 
 #undef CORE_TIMING_INFO
 

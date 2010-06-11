@@ -184,9 +184,9 @@
 /* Base value for encoder configuration ioctls*/
 #define VEN_IOCTLBASE_ENC	0x850
 
-struct venc_ioctl_msg{
-	void	*inputparam;
-	void	*outputparam;
+struct venc_ioctl_msg {
+	void __user *in;
+	void __user *out;
 };
 
 /*NON ENCODER CONFIGURATION IOCTLs*/
@@ -449,77 +449,77 @@ struct venc_ioctl_msg{
 #define VEN_IOCTL_GET_QP_RANGE \
 	_IOR(VEN_IOCTLBASE_ENC, 45, struct venc_ioctl_msg)
 
-struct venc_switch{
-	unsigned char	status;
+struct venc_switch {
+	unsigned char status;
 };
 
-struct venc_allocatorproperty{
-	unsigned long	 mincount;
-	unsigned long	 maxcount;
-	unsigned long	 actualcount;
-	unsigned long	 datasize;
-	unsigned long	 suffixsize;
-	unsigned long	 alignment;
-	unsigned long	 bufpoolid;
+struct venc_allocatorproperty {
+	u32 mincount;
+	u32 maxcount;
+	u32 actualcount;
+	u32 datasize;
+	u32 suffixsize;
+	u32 alignment;
+	u32 bufpoolid;
 };
 
-struct venc_bufferpayload{
-	unsigned char *pbuffer;
-	unsigned long	nsize;
-	int	fd;
-	unsigned int	offset;
-	unsigned int	maped_size;
-	unsigned long	filled_len;
+struct venc_bufferpayload {
+	void __user *buffer;
+	size_t sz;
+	int fd;
+	size_t offset;
+	unsigned int maped_size;
+	unsigned long filled_len;
 };
 
-struct venc_buffer{
- unsigned char *ptrbuffer;
- unsigned long	size;
- unsigned long	len;
- unsigned long	offset;
- long long	timestamp;
- unsigned long	flags;
- void	*clientdata;
+struct venc_buffer {
+	void __user *addr;
+	size_t sz;
+	size_t len;
+	size_t offset;
+	long long timestamp;
+	u32 flags;
+	void *clientdata;
 };
 
-struct venc_basecfg{
-	unsigned long	input_width;
-	unsigned long	input_height;
-	unsigned long	dvs_width;
-	unsigned long	dvs_height;
-	unsigned long	codectype;
-	unsigned long	fps_num;
-	unsigned long	fps_den;
-	unsigned long	targetbitrate;
-	unsigned long	inputformat;
+struct venc_basecfg {
+	u32 input_width;
+	u32 input_height;
+	u32 dvs_width;
+	u32 dvs_height;
+	u32 codectype;
+	u32 fps_num;
+	u32 fps_den;
+	u32 targetbitrate;
+	u32 inputformat;
 };
 
-struct venc_profile{
+struct venc_profile {
 	unsigned long	profile;
 };
-struct ven_profilelevel{
+struct ven_profilelevel {
 	unsigned long	level;
 };
 
-struct venc_sessionqp{
+struct venc_sessionqp {
 	unsigned long	iframeqp;
 	unsigned long	pframqp;
 };
 
-struct venc_qprange{
-	unsigned long	maxqp;
-	unsigned long	minqp;
+struct venc_qprange {
+	u32 maxqp;
+	u32 minqp;
 };
-struct venc_intraperiod{
+struct venc_intraperiod {
 	unsigned long	num_pframes;
 };
-struct venc_seqheader{
-	unsigned char *hdrbufptr;
-	unsigned long	bufsize;
-	unsigned long	hdrlen;
+struct venc_seqheader {
+	void *buf;
+	size_t buf_sz;
+	size_t hdr_len;
 };
 
-struct venc_capability{
+struct venc_capability {
 	unsigned long	codec_types;
 	unsigned long	maxframe_width;
 	unsigned long	maxframe_height;
@@ -529,64 +529,64 @@ struct venc_capability{
 	unsigned char	dvs;
 };
 
-struct venc_entropycfg{
+struct venc_entropycfg {
 	unsigned longentropysel;
 	unsigned long	cabacmodel;
 };
 
-struct venc_dbcfg{
-	unsigned long	db_mode;
-	unsigned long	slicealpha_offset;
-	unsigned long	slicebeta_offset;
+struct venc_dbcfg {
+	u32 db_mode;
+	u32 slicealpha_offset;
+	u32 slicebeta_offset;
 };
 
-struct venc_intrarefresh{
+struct venc_intrarefresh {
 	unsigned long	irmode;
 	unsigned long	mbcount;
 };
 
-struct venc_multiclicecfg{
+struct venc_multiclicecfg {
 	unsigned long	mslice_mode;
 	unsigned long	mslice_size;
 };
 
-struct venc_bufferflush{
+struct venc_bufferflush {
 	unsigned long	flush_mode;
 };
 
-struct venc_ratectrlcfg{
+struct venc_ratectrlcfg {
 	unsigned long	rcmode;
 };
 
-struct	venc_voptimingcfg{
-	unsigned long	voptime_resolution;
+struct	venc_voptimingcfg {
+	u32 voptime_resolution;
 };
-struct venc_framerate{
-	unsigned long	fps_denominator;
-	unsigned long	fps_numerator;
+struct venc_framerate {
+	u32 fps_denominator;
+	u32 fps_numerator;
 };
 
+//TODO remove these stupid structs
 struct venc_targetbitrate{
-	unsigned long	target_bitrate;
+	u32 target_bitrate;
 };
 
-
-struct venc_rotation{
-	unsigned long	rotation;
+struct venc_rotation {
+	u32 rotation;
 };
 
-struct venc_timeout{
-	 unsigned long	millisec;
+struct venc_timeout {
+	u32 millisec;
 };
 
-struct venc_headerextension{
-	 unsigned long	header_extension;
+struct venc_headerextension {
+	unsigned long header_extension;
 };
 
-struct venc_msg{
-	unsigned long	statuscode;
-	unsigned long	msgcode;
-	struct venc_buffer	buf;
-	unsigned long	msgdata_size;
+struct venc_msg {
+	unsigned long statuscode;
+	unsigned long msgcode;
+	struct venc_buffer buf;
+	size_t msgdata_size;
 };
 #endif /* _MSM_VIDC_ENC_H_ */

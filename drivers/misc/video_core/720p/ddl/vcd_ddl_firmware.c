@@ -16,338 +16,197 @@
  *
  */
 
+#include <linux/firmware.h>
+
 #include "video_core_type.h"
-
 #include "vcd_ddl_firmware.h"
-#include "vcd_ddl_utils.h"
 
-#define VCDFW_TOTALNUM_IMAGE  7
-#define VCDFW_MAX_NO_IMAGE    2
-
-struct vcd_firmware_type {
-	u32 a_active_fw_img[VCDFW_TOTALNUM_IMAGE];
-	struct ddl_buf_addr_type boot_code;
-
-	struct ddl_buf_addr_type enc_mpeg4;
-	struct ddl_buf_addr_type encH264;
-
-	struct ddl_buf_addr_type dec_mpeg4;
-	struct ddl_buf_addr_type decH264;
-	struct ddl_buf_addr_type decH263;
-	struct ddl_buf_addr_type dec_mpeg2;
-	struct ddl_buf_addr_type dec_vc1;
+struct vcd_firmware_table {
+	bool prepared;
+	struct device *dev;
+	struct vcd_firmware fw[6];
 };
 
-static struct vcd_firmware_type vcd_firmware;
+//TODO max_sz is kinda sucky, a better way?
+static struct vcd_firmware_table vcd_fw_table = {
+	.prepared = false,
+	.fw[0] = {
+		.filename = "vidc_720p_command_control.fw",
+		.change_endian = false,
+		.max_sz = 12288,
+	},
+	.fw[1] = {
+		.filename = "vidc_720p_mp4_dec_mc.fw",
+		.change_endian = true,
+		.max_sz = 32768,
+	},
+	.fw[2] = {
+		.filename = "vidc_720p_h263_dec_mc.fw",
+		.change_endian = true,
+		.max_sz = 24576,
+	},
+	.fw[3] = {
+		.filename = "vidc_720p_h264_dec_mc.fw",
+		.change_endian = true,
+		.max_sz = 45056,
+	},
+	.fw[4] = {
+		.filename = "vidc_720p_mp4_enc_mc.fw",
+		.change_endian = true,
+		.max_sz = 32768,
+	},
+	.fw[5] = {
+		.filename = "vidc_720p_h264_enc_mc.fw",
+		.change_endian = true,
+		.max_sz = 36864,
+	},
 
+};
 
-static void vcd_fw_change_endian(unsigned char *fw, u32 n_fw_size)
+static void vcd_fw_change_endian(struct vcd_firmware *vcd_fw)
 {
-	u32 i = 0;
-	unsigned char temp;
-	for (i = 0; i < n_fw_size; i = i + 4) {
-		temp = fw[i];
+	size_t i;
+	u8 tmp;
+	u8 *fw = vcd_fw->virt_addr;
+	for (i = 0; i < vcd_fw->sz; i += 4) {
+		tmp = fw[i];
 		fw[i] = fw[i + 3];
-		fw[i + 3] = temp;
+		fw[i + 3] = tmp;
 
-		temp = fw[i + 1];
+		tmp = fw[i + 1];
 		fw[i + 1] = fw[i + 2];
-		fw[i + 2] = temp;
+		fw[i + 2] = tmp;
 	}
-	return;
 }
 
-static u32 vcd_fw_prepare(struct ddl_buf_addr_type *fw_details,
-			 const unsigned char fw_array[],
-			 const unsigned int fw_array_size, u32 change_endian)
+static int vcd_fw_prepare(struct vcd_firmware *vcd_fw)
 {
-	u32 *buffer;
+	int rc;
+	const struct firmware *fw;
 
-	ddl_pmem_alloc(fw_details, fw_array_size,
-		       DDL_LINEAR_BUFFER_ALIGN_BYTES);
-	if (!fw_details->p_virtual_base_addr)
-		return FALSE;
+	rc = request_firmware(&fw, vcd_fw->filename, vcd_fw_table.dev);
+	if (rc) {
+		pr_err("request_firmware(%s) failed %d\n", vcd_fw->filename,
+			rc);
+		return rc;
+	}
 
-	fw_details->n_buffer_size = fw_array_size / 4;
+	if (fw->size > vcd_fw->max_sz) {
+		pr_err("firmware %s is larger than allocated size (%u > %u)\n",
+			vcd_fw->filename, fw->size, vcd_fw->max_sz);
+		rc = -ENOMEM;
+		goto out;
+	}
+	vcd_fw->sz = fw->size;
+	memcpy(vcd_fw->virt_addr, fw->data, fw->size);
 
-	buffer = fw_details->p_align_virtual_addr;
+	if (vcd_fw->change_endian)
+		vcd_fw_change_endian(vcd_fw);
 
-	memcpy(buffer, fw_array, fw_array_size);
-	if (change_endian)
-		vcd_fw_change_endian((unsigned char *)buffer, fw_array_size);
-	return TRUE;
+	pr_info("prepared firmware %s\n", vcd_fw->filename);
+
+out:
+	release_firmware(fw);
+	return rc;
 }
 
-u32 vcd_fw_init(void)
+int vcd_fw_prepare_all()
 {
-	u32 b_status = FALSE;
+	int i;
+	int rc = 0;
 
-	b_status = vcd_fw_prepare(&vcd_firmware.boot_code,
-				vid_c_command_control_fw,
-				vid_c_command_control_fw_size, FALSE);
+	if (vcd_fw_table.prepared)
+		goto out;
 
-	if (b_status) {
-		b_status = vcd_fw_prepare(&vcd_firmware.dec_mpeg4,
-					vid_c_mpg4_dec_fw,
-					vid_c_mpg4_dec_fw_size, TRUE);
+	for (i = 0; i < ARRAY_SIZE(vcd_fw_table.fw); i++) {
+		rc = vcd_fw_prepare(&vcd_fw_table.fw[i]);
+		if (rc)
+			goto out;
 	}
+	vcd_fw_table.prepared = true;
 
-	if (b_status) {
-		b_status = vcd_fw_prepare(&vcd_firmware.decH264,
-					vid_c_h264_dec_fw,
-					vid_c_h264_dec_fw_size, TRUE);
-	}
-
-	if (b_status) {
-		b_status = vcd_fw_prepare(&vcd_firmware.decH263,
-					vid_c_h263_dec_fw,
-					vid_c_h263_dec_fw_size, TRUE);
-	}
-
-	if (b_status) {
-		b_status = vcd_fw_prepare(&vcd_firmware.enc_mpeg4,
-					vid_c_mpg4_enc_fw,
-					vid_c_mpg4_enc_fw_size, TRUE);
-	}
-
-	if (b_status) {
-		b_status = vcd_fw_prepare(&vcd_firmware.encH264,
-					vid_c_h264_enc_fw,
-					vid_c_h264_enc_fw_size, TRUE);
-	}
-
-	return b_status;
+out:
+	return rc;
 }
 
-
-static u32 get_dec_fw_image(struct vcd_fw_details_type *p_fw_details)
-{
-	u32 b_return = TRUE;
-	switch (p_fw_details->e_codec) {
-	case VCD_CODEC_DIVX_4:
-	case VCD_CODEC_DIVX_5:
-	case VCD_CODEC_DIVX_6:
-	case VCD_CODEC_XVID:
-	case VCD_CODEC_MPEG4:
-		{
-			p_fw_details->p_fw_buffer_addr =
-			    vcd_firmware.dec_mpeg4.p_align_physical_addr;
-			p_fw_details->n_fw_size =
-			    vcd_firmware.dec_mpeg4.n_buffer_size;
-			break;
-		}
-	case VCD_CODEC_H264:
-		{
-			p_fw_details->p_fw_buffer_addr =
-			    vcd_firmware.decH264.p_align_physical_addr;
-			p_fw_details->n_fw_size =
-			    vcd_firmware.decH264.n_buffer_size;
-			break;
-		}
-	case VCD_CODEC_VC1:
-	case VCD_CODEC_VC1_RCV:
-		{
-			p_fw_details->p_fw_buffer_addr =
-			    vcd_firmware.dec_vc1.p_align_physical_addr;
-			p_fw_details->n_fw_size =
-			    vcd_firmware.dec_vc1.n_buffer_size;
-			break;
-		}
-	case VCD_CODEC_MPEG2:
-		{
-			p_fw_details->p_fw_buffer_addr =
-			    vcd_firmware.dec_mpeg2.p_align_physical_addr;
-			p_fw_details->n_fw_size =
-			    vcd_firmware.dec_mpeg2.n_buffer_size;
-			break;
-		}
-	case VCD_CODEC_H263:
-		{
-			p_fw_details->p_fw_buffer_addr =
-			    vcd_firmware.decH263.p_align_physical_addr;
-			p_fw_details->n_fw_size =
-			    vcd_firmware.decH263.n_buffer_size;
-			break;
-		}
-	default:
-		{
-			b_return = FALSE;
-			break;
+int vcd_fw_init(struct device *dev) {
+	int i;
+	vcd_fw_table.dev = dev;
+	for (i = 0; i < ARRAY_SIZE(vcd_fw_table.fw); i++) {
+		struct vcd_firmware *fw = &vcd_fw_table.fw[i];
+		fw->virt_addr = dma_alloc_coherent(NULL, fw->max_sz,
+			&fw->phys_addr, GFP_KERNEL);
+		if (!fw->virt_addr) {
+			pr_err("failed to allocate %d for %s\n", fw->max_sz,
+				fw->filename);
+			vcd_fw_exit();
+			return -ENOMEM;
 		}
 	}
-	return b_return;
+	return 0;
 }
 
-static u32 get_enc_fw_image(struct vcd_fw_details_type *p_fw_details)
-{
-	u32 b_return = TRUE;
-	switch (p_fw_details->e_codec) {
-	case VCD_CODEC_H263:
-	case VCD_CODEC_MPEG4:
-		{
-			p_fw_details->p_fw_buffer_addr =
-			    vcd_firmware.enc_mpeg4.p_align_physical_addr;
-			p_fw_details->n_fw_size =
-			    vcd_firmware.enc_mpeg4.n_buffer_size;
-			break;
-		}
-	case VCD_CODEC_H264:
-		{
-			p_fw_details->p_fw_buffer_addr =
-			    vcd_firmware.encH264.p_align_physical_addr;
-			p_fw_details->n_fw_size =
-			    vcd_firmware.encH264.n_buffer_size;
-			break;
-		}
-	default:
-		{
-			b_return = FALSE;
-			break;
-		}
+void vcd_fw_exit(void) {
+	int i;
+	vcd_fw_table.prepared = false;
+	for (i = 0; i < ARRAY_SIZE(vcd_fw_table.fw); i++) {
+		struct vcd_firmware *fw = &vcd_fw_table.fw[i];
+		if (!fw->virt_addr)
+			continue;
+		dma_free_coherent(NULL, fw->max_sz, fw->virt_addr,
+			fw->phys_addr);
 	}
-	return b_return;
 }
 
-u32 vcd_get_fw_property(u32 prop_id, void *prop_details)
+struct vcd_firmware *vcd_fw_get_boot_fw(void)
 {
-	u32 b_return = TRUE;
-	struct vcd_fw_details_type *p_fw_details;
-	switch (prop_id) {
-	case VCD_FW_ENDIAN:
-		{
-			*(u32 *) prop_details = VCD_FW_BIG_ENDIAN;
-			break;
-		}
-	case VCD_FW_BOOTCODE:
-		{
-			p_fw_details =
-			    (struct vcd_fw_details_type *)prop_details;
-			p_fw_details->p_fw_buffer_addr =
-			    vcd_firmware.boot_code.p_align_physical_addr;
-			p_fw_details->n_fw_size =
-			    vcd_firmware.boot_code.n_buffer_size;
-			break;
-		}
-	case VCD_FW_DECODE:
-		{
-			p_fw_details =
-			    (struct vcd_fw_details_type *)prop_details;
-			b_return = get_dec_fw_image(p_fw_details);
-			break;
-		}
-	case VCD_FW_ENCODE:
-		{
-			p_fw_details =
-			    (struct vcd_fw_details_type *)prop_details;
-			b_return = get_enc_fw_image(p_fw_details);
-			break;
-		}
-	default:
-		{
-			b_return = FALSE;
-			break;
-		}
-	}
-	return b_return;
+	if (!vcd_fw_table.prepared)
+		return NULL;
+	return &vcd_fw_table.fw[0];
 }
 
-u32 vcd_fw_transact(u32 b_add, u32 b_decoding, enum vcd_codec_type e_codec)
+struct vcd_firmware *vcd_fw_get_fw(bool is_decode, enum vcd_codec codec)
 {
-	u32 b_return = TRUE;
-	u32 n_index = 0, n_active_fw = 0, n_loop_count;
+	if (!vcd_fw_table.prepared)
+		return NULL;
 
-	if (b_decoding) {
-		switch (e_codec) {
+	if (is_decode) {
+		switch (codec) {
 		case VCD_CODEC_DIVX_4:
 		case VCD_CODEC_DIVX_5:
 		case VCD_CODEC_DIVX_6:
 		case VCD_CODEC_XVID:
 		case VCD_CODEC_MPEG4:
-			{
-				n_index = 0;
-				break;
-			}
+			return &vcd_fw_table.fw[1];
 		case VCD_CODEC_H264:
-			{
-				n_index = 1;
-				break;
-			}
-		case VCD_CODEC_H263:
-			{
-				n_index = 2;
-				break;
-			}
-		case VCD_CODEC_MPEG2:
-			{
-				n_index = 3;
-				break;
-			}
+			return &vcd_fw_table.fw[3];
 		case VCD_CODEC_VC1:
 		case VCD_CODEC_VC1_RCV:
-			{
-				n_index = 4;
-				break;
-			}
+			/* vidc_720p_vc1_dec_mc.fw - untested */
+			break;
+		case VCD_CODEC_MPEG2:
+			/* vidc_720p_mp2_dec_mc.fw - untested */
+			break;
+		case VCD_CODEC_H263:
+			return &vcd_fw_table.fw[2];
 		default:
-			{
-				b_return = FALSE;
-				break;
-			}
+			break;
 		}
 	} else {
-		switch (e_codec) {
+		switch (codec) {
 		case VCD_CODEC_H263:
 		case VCD_CODEC_MPEG4:
-			{
-				n_index = 5;
-				break;
-			}
+			return &vcd_fw_table.fw[4];
 		case VCD_CODEC_H264:
-			{
-				n_index = 6;
-				break;
-			}
+			return &vcd_fw_table.fw[5];
 		default:
-			{
-				b_return = FALSE;
-				break;
-			}
+			break;
 		}
 	}
-
-	if (!b_return)
-		return b_return;
-
-	if (!b_add &&
-	    vcd_firmware.a_active_fw_img[n_index]
-	    ) {
-		--vcd_firmware.a_active_fw_img[n_index];
-		return b_return;
-	}
-
-	for (n_loop_count = 0; n_loop_count < VCDFW_TOTALNUM_IMAGE;
-	     ++n_loop_count) {
-		if (vcd_firmware.a_active_fw_img[n_loop_count])
-			++n_active_fw;
-	}
-
-	if (n_active_fw < VCDFW_MAX_NO_IMAGE ||
-	    vcd_firmware.a_active_fw_img[n_index] > 0) {
-		++vcd_firmware.a_active_fw_img[n_index];
-	} else {
-		b_return = FALSE;
-	}
-	return b_return;
+	return NULL;
 }
 
-void vcd_fw_release(void)
+bool vcd_fw_is_codec_supported(bool is_decode, enum vcd_codec codec)
 {
-	ddl_pmem_free(vcd_firmware.boot_code);
-	ddl_pmem_free(vcd_firmware.enc_mpeg4);
-	ddl_pmem_free(vcd_firmware.encH264);
-	ddl_pmem_free(vcd_firmware.dec_mpeg4);
-	ddl_pmem_free(vcd_firmware.decH264);
-	ddl_pmem_free(vcd_firmware.decH263);
-	ddl_pmem_free(vcd_firmware.dec_mpeg2);
-	ddl_pmem_free(vcd_firmware.dec_vc1);
+	return vcd_fw_get_fw(is_decode, codec) != NULL;
 }

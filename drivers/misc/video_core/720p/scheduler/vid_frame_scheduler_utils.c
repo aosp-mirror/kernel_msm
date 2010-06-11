@@ -33,17 +33,17 @@ SCHED_INLINE void SCHED_ASSERT(int val)
 
 /**
  * SCHED_MIN () - This function will find minimum of two values
- * @n_x: value 1
- * @n_y: value 2
+ * @x: value 1
+ * @y: value 2
  * DEPENDENCIES: None
  * Returns none
  */
-SCHED_INLINE int SCHED_MIN(int n_x, int n_y)
+SCHED_INLINE int SCHED_MIN(int x, int y)
 {
-	if (n_x < n_y)
-		return n_x;
+	if (x < y)
+		return x;
 	else
-		return n_y;
+		return y;
 
 }				/* end of SCHED_MIN */
 
@@ -61,14 +61,14 @@ SCHED_INLINE void *SCHED_MALLOC(int size)
 
 /**
  * SCHED_FREE () - This function is a wrapper to underlying memory free
- * @p_ptr: memory to be freed
+ * @ptr: memory to be freed
  * function
  * DEPENDENCIES: None
  * Returns none
  */
-SCHED_INLINE void SCHED_FREE(void *p_ptr)
+SCHED_INLINE void SCHED_FREE(void *ptr)
 {
-	kfree(p_ptr);
+	kfree(ptr);
 }				/* end of SCHED_FREE */
 
 /**
@@ -92,7 +92,7 @@ SCHED_INLINE void *SCHED_MEMSET(void *ptr, int val, int size)
  * DEPENDENCIES: None
  * Returns SCHED_S_OK on success
  */
-SCHED_INLINE enum sched_status_type SCHED_GET_CURRENT_TIME(u32 *pn_time)
+SCHED_INLINE enum sched_status SCHED_GET_CURRENT_TIME(u32 *pn_time)
 {
 	struct timeval tv;
 	do_gettimeofday(&tv);
@@ -103,12 +103,12 @@ SCHED_INLINE enum sched_status_type SCHED_GET_CURRENT_TIME(u32 *pn_time)
 
 /**
  * SCHED_CRITSEC_CREATE () - This function is a wrapper to creating a critical
- * @p_cs: ptr to a critical section type
+ * @cs: ptr to a critical section type
  * section
  * DEPENDENCIES: None
  * Returns SCHED_S_OK on success
  */
-SCHED_INLINE enum sched_status_type SCHED_CRITSEC_CREATE(u32 **p_cs)
+SCHED_INLINE enum sched_status SCHED_CRITSEC_CREATE(u32 **cs)
 {
 	return SCHED_S_OK;
 
@@ -121,7 +121,7 @@ SCHED_INLINE enum sched_status_type SCHED_CRITSEC_CREATE(u32 **p_cs)
  * DEPENDENCIES: None
  * Returns SCHED_S_OK on success
  */
-SCHED_INLINE enum sched_status_type SCHED_CRITSEC_RELEASE(u32 *cs)
+SCHED_INLINE enum sched_status SCHED_CRITSEC_RELEASE(u32 *cs)
 {
 	return SCHED_S_OK;
 
@@ -134,7 +134,7 @@ SCHED_INLINE enum sched_status_type SCHED_CRITSEC_RELEASE(u32 *cs)
  * DEPENDENCIES: None
  * Returns SCHED_S_OK on success
  */
-SCHED_INLINE enum sched_status_type SCHED_CRITSEC_ENTER(u32 *cs)
+SCHED_INLINE enum sched_status SCHED_CRITSEC_ENTER(u32 *cs)
 {
 	return SCHED_S_OK;
 
@@ -147,7 +147,7 @@ SCHED_INLINE enum sched_status_type SCHED_CRITSEC_ENTER(u32 *cs)
  * DEPENDENCIES: None
  * Returns SCHED_S_OK on success
  */
-SCHED_INLINE enum sched_status_type SCHED_CRITSEC_LEAVE(u32 *cs)
+SCHED_INLINE enum sched_status SCHED_CRITSEC_LEAVE(u32 *cs)
 {
 	return SCHED_S_OK;
 

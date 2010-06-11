@@ -21,1798 +21,1288 @@
 #include "vcd_ddl_utils.h"
 #include "vcd_ddl_metadata.h"
 
-static u32 ddl_set_dec_property(struct ddl_client_context_type *pddl,
-				struct vcd_property_hdr_type *p_property_hdr,
-				void *p_property_value);
-static u32 ddl_set_enc_property(struct ddl_client_context_type *pddl,
-				struct vcd_property_hdr_type *p_property_hdr,
-				void *p_property_value);
-static u32 ddl_get_dec_property(struct ddl_client_context_type *pddl,
-				struct vcd_property_hdr_type *p_property_hdr,
-				void *p_property_value);
-static u32 ddl_get_enc_property(struct ddl_client_context_type *pddl,
-				struct vcd_property_hdr_type *p_property_hdr,
-				void *p_property_value);
-static u32 ddl_set_enc_dynamic_property(struct ddl_encoder_data_type *p_encoder,
-					struct vcd_property_hdr_type
-					*p_property_hdr,
-					void *p_property_value);
-static void ddl_set_default_enc_property(struct ddl_client_context_type *p_ddl);
-static void ddl_set_default_enc_profile(struct ddl_encoder_data_type
-					*p_encoder);
-static void ddl_set_default_enc_level(struct ddl_encoder_data_type *p_encoder);
-static void ddl_set_default_enc_vop_timing(struct ddl_encoder_data_type
-					   *p_encoder);
-static void ddl_set_default_enc_intra_period(struct ddl_encoder_data_type
-					     *p_encoder);
-static void ddl_set_default_enc_rc_params(struct ddl_encoder_data_type
-					  *p_encoder);
-static u32 ddl_valid_buffer_requirement(struct vcd_buffer_requirement_type
-					*original_buf_req,
-					struct vcd_buffer_requirement_type
-					*req_buf_req);
-static u32 ddl_decoder_min_num_dpb(struct ddl_decoder_data_type *p_decoder);
-static u32 ddl_set_dec_buffers
-    (struct ddl_decoder_data_type *p_decoder,
-     struct ddl_property_dec_pic_buffers_type *p_dpb);
+static u32 ddl_set_dec_property(struct ddl_client_context *pddl,
+	struct vcd_property_hdr *hdr, void *value);
+static u32 ddl_set_enc_property(struct ddl_client_context *pddl,
+	struct vcd_property_hdr *hdr, void *value);
+static u32 ddl_get_dec_property(struct ddl_client_context *pddl,
+	struct vcd_property_hdr *hdr, void *value);
+static u32 ddl_get_enc_property(struct ddl_client_context *pddl,
+	struct vcd_property_hdr *hdr, void *value);
+static u32 ddl_set_enc_dynamic_property(struct ddl_encoder_data *enc,
+	struct vcd_property_hdr *hdr, void *value);
+static void ddl_set_default_enc_property(struct ddl_client_context *ddl);
+static void ddl_set_default_enc_profile(struct ddl_encoder_data *enc);
+static void ddl_set_default_enc_level(struct ddl_encoder_data *enc);
+static void ddl_set_default_enc_vop_timing(struct ddl_encoder_data *enc);
+static void ddl_set_default_enc_intra_period(struct ddl_encoder_data *enc);
+static void ddl_set_default_enc_rc_params(struct ddl_encoder_data *enc);
+static u32 ddl_valid_buffer_requirement(struct vcd_buffer_requirement
+	*orig, struct vcd_buffer_requirement *req);
+static u32 ddl_decoder_min_num_dpb(struct ddl_decoder_data *dec);
+static u32 ddl_set_dec_buffers(struct ddl_decoder_data *dec,
+	struct ddl_property_dec_pic_buffers *dpb);
 
-u32 ddl_set_property(u32 *ddl_handle,
-     struct vcd_property_hdr_type *p_property_hdr, void *p_property_value)
+u32 ddl_set_property(u32 *ddl_handle, struct vcd_property_hdr *hdr,
+	void *value)
 {
 	u32 vcd_status;
-	struct ddl_context_type *p_ddl_context;
-	struct ddl_client_context_type *p_ddl =
-	    (struct ddl_client_context_type *)ddl_handle;
+	struct ddl_context *ddl_context;
+	struct ddl_client_context *ddl = (struct ddl_client_context *)
+		ddl_handle;
 
-	if (!p_property_hdr || !p_property_value) {
-		VIDC_LOGERR_STRING("ddl_set_prop:Bad_argument");
+	if (!hdr || !value) {
+		pr_err("ddl_set_prop:Bad_argument\n");
 		return VCD_ERR_ILLEGAL_PARM;
 	}
-	p_ddl_context = ddl_get_context();
+	ddl_context = ddl_get_context();
 
-	if (!DDL_IS_INITIALIZED(p_ddl_context)) {
-		VIDC_LOGERR_STRING("ddl_set_prop:Not_inited");
+	if (!DDL_IS_INITIALIZED(ddl_context)) {
+		pr_err("ddl_set_prop:Not_inited\n");
 		return VCD_ERR_ILLEGAL_OP;
 	}
 
-	if (!p_ddl) {
-		VIDC_LOGERR_STRING("ddl_set_prop:Bad_handle");
+	if (!ddl) {
+		pr_err("ddl_set_prop:Bad_handle\n");
 		return VCD_ERR_BAD_HANDLE;
 	}
-	if (p_ddl->b_decoding) {
-		vcd_status =
-		    ddl_set_dec_property(p_ddl, p_property_hdr,
-					 p_property_value);
-	} else {
-		vcd_status =
-		    ddl_set_enc_property(p_ddl, p_property_hdr,
-					 p_property_value);
-	}
+	if (ddl->decoding)
+		vcd_status = ddl_set_dec_property(ddl, hdr, value);
+	else
+		vcd_status = ddl_set_enc_property(ddl, hdr, value);
 	if (vcd_status)
-		VIDC_LOGERR_STRING("ddl_set_prop:FAILED");
+		pr_err("ddl_set_prop:FAILED\n");
 
 	return vcd_status;
 }
 
-u32 ddl_get_property(u32 *ddl_handle,
-     struct vcd_property_hdr_type *p_property_hdr, void *p_property_value)
+u32 ddl_get_property(u32 *ddl_handle, struct vcd_property_hdr *hdr, void *value)
 {
-
 	u32 vcd_status = VCD_ERR_ILLEGAL_PARM;
-	struct ddl_context_type *p_ddl_context;
-	struct ddl_client_context_type *p_ddl =
-	    (struct ddl_client_context_type *)ddl_handle;
+	struct ddl_context *ddl_context;
+	struct ddl_client_context *ddl = (struct ddl_client_context *)
+		ddl_handle;
 
-	if (!p_property_hdr || !p_property_value)
+	if (!hdr || !value)
 		return VCD_ERR_ILLEGAL_PARM;
 
-	if (p_property_hdr->prop_id == DDL_I_CAPABILITY) {
-		if (sizeof(struct ddl_property_capability_type) ==
-		    p_property_hdr->n_size) {
-			struct ddl_property_capability_type *p_ddl_capability =
-			    (struct ddl_property_capability_type *)
-			    p_property_value;
-			p_ddl_capability->n_max_num_client = VCD_MAX_NO_CLIENT;
-			p_ddl_capability->b_exclusive =
-				VCD_COMMAND_EXCLUSIVE;
-			p_ddl_capability->n_frame_command_depth =
-				VCD_FRAME_COMMAND_DEPTH;
-			p_ddl_capability->n_general_command_depth =
-				VCD_GENERAL_COMMAND_DEPTH;
-			p_ddl_capability->n_ddl_time_out_in_ms =
-				DDL_HW_TIMEOUT_IN_MS;
+	if (hdr->id == DDL_I_CAPABILITY) {
+		struct ddl_property_capability *cap;
+		if (sizeof(*cap) == hdr->sz) {
+			cap = value;
+			cap->max_num_client = VCD_MAX_NO_CLIENT;
+			cap->exclusive = VCD_COMMAND_EXCLUSIVE;
+			cap->frame_command_depth = VCD_FRAME_COMMAND_DEPTH;
+			cap->general_command_depth = VCD_GENERAL_COMMAND_DEPTH;
+			cap->ddl_time_out_in_ms = DDL_HW_TIMEOUT_IN_MS;
 			vcd_status = VCD_S_SUCCESS;
 		}
 		return vcd_status;
 	}
-	p_ddl_context = ddl_get_context();
-	if (!DDL_IS_INITIALIZED(p_ddl_context))
+	ddl_context = ddl_get_context();
+	if (!DDL_IS_INITIALIZED(ddl_context))
 		return VCD_ERR_ILLEGAL_OP;
 
-	if (!p_ddl)
+	if (!ddl)
 		return VCD_ERR_BAD_HANDLE;
 
-	if (p_ddl->b_decoding) {
-		vcd_status =
-		    ddl_get_dec_property(p_ddl, p_property_hdr,
-					 p_property_value);
-	} else {
-		vcd_status =
-		    ddl_get_enc_property(p_ddl, p_property_hdr,
-					 p_property_value);
-	}
+	if (ddl->decoding)
+		vcd_status = ddl_get_dec_property(ddl, hdr, value);
+	else
+		vcd_status = ddl_get_enc_property(ddl, hdr, value);
 	if (vcd_status)
-		VIDC_LOGERR_STRING("ddl_get_prop:FAILED");
+		pr_err("ddl_get_prop:FAILED\n");
 
 	return vcd_status;
 }
 
-u32 ddl_decoder_ready_to_start(struct ddl_client_context_type *p_ddl,
-     struct vcd_sequence_hdr_type *p_header)
+u32 ddl_decoder_ready_to_start(struct ddl_client_context *ddl,
+	struct vcd_phys_sequence_hdr *seq_hdr)
 {
-	struct ddl_decoder_data_type *p_decoder = &(p_ddl->codec_data.decoder);
-	if (!p_decoder->codec_type.e_codec) {
-		VIDC_LOGERR_STRING("ddl_dec_start_check:Codec_not_set");
-		return FALSE;
+	struct ddl_decoder_data *dec = &ddl->codec_data.decoder;
+	if (!dec->codec_type.codec) {
+		pr_err("ddl_dec_start_check:Codec_not_set\n");
+		return false;
 	}
-	if ((!p_header) &&
-	    (!p_decoder->client_frame_size.n_height ||
-	     !p_decoder->client_frame_size.n_width)
-	    ) {
-		VIDC_LOGERR_STRING
-		    ("ddl_dec_start_check:Client_height_width_default");
-		return FALSE;
+	if (!seq_hdr && (!dec->client_frame_size.height ||
+			!dec->client_frame_size.width)) {
+		pr_err("ddl_dec_start_check:"
+			"Client_height_width_default\n");
+		return false;
 	}
-	return TRUE;
+	return true;
 }
 
-u32 ddl_encoder_ready_to_start(struct ddl_client_context_type *p_ddl)
+u32 ddl_encoder_ready_to_start(struct ddl_client_context *ddl)
 {
-	struct ddl_encoder_data_type *p_encoder = &(p_ddl->codec_data.encoder);
+	struct ddl_encoder_data *enc = &ddl->codec_data.encoder;
 
-	if (!p_encoder->codec_type.e_codec ||
-	    !p_encoder->frame_size.n_height ||
-	    !p_encoder->frame_size.n_width ||
-	    !p_encoder->frame_rate.n_fps_denominator ||
-	    !p_encoder->frame_rate.n_fps_numerator ||
-	    !p_encoder->target_bit_rate.n_target_bitrate) {
-		return FALSE;
+	if (!enc->codec_type.codec || !enc->frame_size.height ||
+			!enc->frame_size.width ||
+			!enc->frame_rate.fps_denominator ||
+			!enc->frame_rate.fps_numerator ||
+			!enc->target_bit_rate.target_bitrate) {
+		return false;
 	}
-	return TRUE;
+	return true;
 }
 
-static u32 ddl_set_dec_property
-    (struct ddl_client_context_type *p_ddl,
-     struct vcd_property_hdr_type *p_property_hdr, void *p_property_value) {
+static u32 ddl_set_dec_property(struct ddl_client_context *ddl,
+		struct vcd_property_hdr *hdr, void *value) {
 	u32 vcd_status = VCD_ERR_ILLEGAL_PARM;
-	struct ddl_decoder_data_type *p_decoder = &(p_ddl->codec_data.decoder);
-	switch (p_property_hdr->prop_id) {
+	struct ddl_decoder_data *dec = &ddl->codec_data.decoder;
+	switch (hdr->id) {
 	case DDL_I_DPB_RELEASE:
-		{
-			if (sizeof(struct ddl_frame_data_type_tag) ==
-			    p_property_hdr->n_size
-			    && p_decoder->dp_buf.n_no_of_dec_pic_buf) {
-				vcd_status =
-				    ddl_decoder_dpb_transact(p_decoder,
-					     (struct ddl_frame_data_type_tag *)
-					     p_property_value,
-					     DDL_DPB_OP_MARK_FREE);
-			}
-			break;
+		if (sizeof(struct ddl_frame_data_tag) == hdr->sz &&
+				dec->dp_buf.no_of_dec_pic_buf) {
+			vcd_status = ddl_decoder_dpb_transact(dec, value,
+				DDL_DPB_OP_MARK_FREE);
 		}
+		break;
 	case DDL_I_DPB:
-		{
-			struct ddl_property_dec_pic_buffers_type *p_dpb =
-			    (struct ddl_property_dec_pic_buffers_type *)
-			    p_property_value;
-
-			if (sizeof(struct ddl_property_dec_pic_buffers_type) ==
-			    p_property_hdr->n_size &&
-			    (DDLCLIENT_STATE_IS
-			     (p_ddl, DDL_CLIENT_WAIT_FOR_INITCODEC)
-			     || DDLCLIENT_STATE_IS(p_ddl,
-						   DDL_CLIENT_WAIT_FOR_DPB)
-			    ) &&
-			    p_dpb->n_no_of_dec_pic_buf >=
-			    p_decoder->client_output_buf_req.n_actual_count) {
-				vcd_status =
-				    ddl_set_dec_buffers(p_decoder, p_dpb);
-			}
-			break;
+	{
+		struct ddl_property_dec_pic_buffers *dpb = value;
+		if (sizeof(*dpb) == hdr->sz &&
+				(DDLCLIENT_STATE_IS(ddl,
+				DDL_CLIENT_WAIT_FOR_INITCODEC) ||
+				DDLCLIENT_STATE_IS(ddl,
+				DDL_CLIENT_WAIT_FOR_DPB)) &&
+				dpb->no_of_dec_pic_buf >=
+				dec->client_output_buf_req.actual_count) {
+			vcd_status = ddl_set_dec_buffers(dec, dpb);
 		}
+		break;
+	}
 	case DDL_I_REQ_OUTPUT_FLUSH:
-		{
-			if (sizeof(u32) == p_property_hdr->n_size) {
-				p_decoder->n_dynamic_prop_change |=
-				    DDL_DEC_REQ_OUTPUT_FLUSH;
-				p_decoder->dpb_mask.n_client_mask = 0;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(u32) == hdr->sz) {
+			dec->dynamic_prop_change |= DDL_DEC_REQ_OUTPUT_FLUSH;
+			dec->dpb_mask.client_mask = 0;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case DDL_I_INPUT_BUF_REQ:
-		{
-			struct vcd_buffer_requirement_type *p_buffer_req =
-			    (struct vcd_buffer_requirement_type *)
-			    p_property_value;
-			if (sizeof(struct vcd_buffer_requirement_type) ==
-			    p_property_hdr->n_size &&
-			    (ddl_valid_buffer_requirement(
-						&p_decoder->min_input_buf_req,
-						p_buffer_req))) {
-				p_decoder->client_input_buf_req = *p_buffer_req;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_buffer_requirement *buf_req = value;
+		if (sizeof(*buf_req) == hdr->sz &&
+				ddl_valid_buffer_requirement(
+				&dec->min_input_buf_req, buf_req)) {
+			dec->client_input_buf_req = *buf_req;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case DDL_I_OUTPUT_BUF_REQ:
-		{
-			struct vcd_buffer_requirement_type *p_buffer_req =
-			    (struct vcd_buffer_requirement_type *)
-			    p_property_value;
-			if (sizeof(struct vcd_buffer_requirement_type) ==
-			    p_property_hdr->n_size &&
-			    (ddl_valid_buffer_requirement(
-						&p_decoder->min_output_buf_req,
-						p_buffer_req))) {
-				p_decoder->client_output_buf_req =
-				    *p_buffer_req;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_buffer_requirement *buf_req = value;
+		if (sizeof(*buf_req) == hdr->sz &&
+				ddl_valid_buffer_requirement(
+				&dec->min_output_buf_req, buf_req)) {
+			dec->client_output_buf_req = *buf_req;
+			vcd_status = VCD_S_SUCCESS;
 		}
-
+		break;
+	}
 	case VCD_I_CODEC:
-		{
-			struct vcd_property_codec_type *p_codec =
-			    (struct vcd_property_codec_type *)p_property_value;
-			if (sizeof(struct vcd_property_codec_type) ==
-			    p_property_hdr->n_size
-			    && DDLCLIENT_STATE_IS(p_ddl, DDL_CLIENT_OPEN)
-			    ) {
-				u32 b_return;
-				vcd_fw_transact(FALSE, TRUE,
-					p_decoder->codec_type.e_codec);
-				b_return = vcd_fw_transact(TRUE, TRUE,
-					p_codec->e_codec);
-				if (b_return) {
-					p_decoder->codec_type = *p_codec;
-					ddl_set_default_dec_property(p_ddl);
-					vcd_status = VCD_S_SUCCESS;
-				} else {
-					b_return = vcd_fw_transact(TRUE, TRUE,
-						p_decoder->codec_type.e_codec);
-					vcd_status = VCD_ERR_NOT_SUPPORTED;
-				}
+	{
+		struct vcd_property_codec *codec = value;
+		if (sizeof(*codec) == hdr->sz &&
+				DDLCLIENT_STATE_IS(ddl,	DDL_CLIENT_OPEN)) {
+			if (!vcd_fw_is_codec_supported(true, codec->codec)) {
+				vcd_status = VCD_ERR_NOT_SUPPORTED;
+				break;
 			}
-			break;
+			dec->codec_type = *codec;
+			ddl_set_default_dec_property(ddl);
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case VCD_I_POST_FILTER:
-		{
-			if (sizeof(struct vcd_property_post_filter_type) ==
-			    p_property_hdr->n_size
-			    && DDLCLIENT_STATE_IS(p_ddl, DDL_CLIENT_OPEN) &&
-			    (p_decoder->codec_type.e_codec == VCD_CODEC_MPEG4 ||
-			     p_decoder->codec_type.e_codec == VCD_CODEC_MPEG2)
-			    ) {
-				p_decoder->post_filter =
-				    *(struct vcd_property_post_filter_type *)
-				    p_property_value;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_post_filter) == hdr->sz &&
+				DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_OPEN) &&
+				(dec->codec_type.codec == VCD_CODEC_MPEG4 ||
+				dec->codec_type.codec == VCD_CODEC_MPEG2)) {
+			dec->post_filter = *(struct vcd_property_post_filter *)
+				value;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_FRAME_SIZE:
-		{
-			struct vcd_property_frame_size_type *p_frame_size =
-			    (struct vcd_property_frame_size_type *)
-			    p_property_value;
-
-			if ((sizeof(struct vcd_property_frame_size_type) ==
-					p_property_hdr->n_size) &&
-				(DDLCLIENT_STATE_IS(p_ddl, DDL_CLIENT_OPEN))) {
-				if (p_decoder->client_frame_size.n_height !=
-				    p_frame_size->n_height
-				    || p_decoder->client_frame_size.n_width !=
-				    p_frame_size->n_width) {
-					p_decoder->client_frame_size =
-					    *p_frame_size;
-					ddl_calculate_stride(
-					&p_decoder->client_frame_size,
-					!p_decoder->n_progressive_only);
-					ddl_set_default_decoder_buffer_req
-					    (p_decoder, TRUE);
-				}
-				vcd_status = VCD_S_SUCCESS;
+	{
+		struct vcd_property_frame_size *frame_size = value;
+		if ((sizeof(*frame_size) == hdr->sz) &&
+				DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_OPEN)) {
+			if (dec->client_frame_size.height != frame_size->height
+					|| dec->client_frame_size.width !=
+					frame_size->width) {
+				dec->client_frame_size = *frame_size;
+				ddl_calculate_stride(&dec->client_frame_size,
+					!dec->progressive_only);
+				ddl_set_default_decoder_buffer_req(dec, true);
 			}
-			break;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case VCD_I_BUFFER_FORMAT:
-		{
-			struct vcd_property_buffer_format_type *p_tile =
-			    (struct vcd_property_buffer_format_type *)
-			    p_property_value;
-			if (sizeof(struct vcd_property_buffer_format_type) ==
-			    p_property_hdr->n_size &&
-			    DDLCLIENT_STATE_IS(p_ddl, DDL_CLIENT_OPEN) &&
-			    (p_tile->e_buffer_format == VCD_BUFFER_FORMAT_NV12
-			     || p_tile->e_buffer_format ==
-			     VCD_BUFFER_FORMAT_TILE_4x2)
-			    ) {
-				if (p_tile->e_buffer_format !=
-				    p_decoder->buf_format.e_buffer_format) {
-					p_decoder->buf_format = *p_tile;
-					ddl_set_default_decoder_buffer_req
-					    (p_decoder, TRUE);
-				}
-				vcd_status = VCD_S_SUCCESS;
+	{
+		struct vcd_property_buffer_format *tile = value;
+		if (sizeof(*tile) == hdr->sz &&
+				DDLCLIENT_STATE_IS(ddl,	DDL_CLIENT_OPEN) &&
+				(tile->buffer_format ==	VCD_BUFFER_FORMAT_NV12
+				|| tile->buffer_format ==
+				VCD_BUFFER_FORMAT_TILE_4x2)) {
+			if (tile->buffer_format !=
+					dec->buf_format.buffer_format) {
+				dec->buf_format = *tile;
+				ddl_set_default_decoder_buffer_req(dec,	true);
 			}
-			break;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case VCD_I_METADATA_ENABLE:
 	case VCD_I_METADATA_HEADER:
-		{
-			vcd_status = ddl_set_metadata_params(p_ddl,
-							     p_property_hdr,
-							     p_property_value);
-			break;
-		}
+		vcd_status = ddl_set_metadata_params(ddl, hdr, value);
+		break;
 	default:
-		{
-			vcd_status = VCD_ERR_ILLEGAL_OP;
-			break;
-		}
+		vcd_status = VCD_ERR_ILLEGAL_OP;
+		break;
 	}
 	return vcd_status;
 }
 
-static u32 ddl_set_enc_property(struct ddl_client_context_type *p_ddl,
-	struct vcd_property_hdr_type *p_property_hdr, void *p_property_value)
+static u32 ddl_set_enc_property(struct ddl_client_context *ddl,
+	struct vcd_property_hdr *hdr, void *value)
 {
 	u32 vcd_status = VCD_ERR_ILLEGAL_PARM;
-	struct ddl_encoder_data_type *p_encoder = &(p_ddl->codec_data.encoder);
+	struct ddl_encoder_data *enc = &ddl->codec_data.encoder;
 
-	if (DDLCLIENT_STATE_IS(p_ddl, DDL_CLIENT_WAIT_FOR_FRAME)) {
-		vcd_status = ddl_set_enc_dynamic_property(p_encoder,
-			p_property_hdr, p_property_value);
+	if (DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_WAIT_FOR_FRAME)) {
+		vcd_status = ddl_set_enc_dynamic_property(enc, hdr, value);
 		return vcd_status;
 	}
 
-	if (!DDLCLIENT_STATE_IS(p_ddl, DDL_CLIENT_OPEN)) {
-		VIDC_LOGERR_STRING
-			("ddl_set_enc_property:Fails_as_not_in_open_state");
+	if (!DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_OPEN)) {
+		pr_err("ddl_set_enc_property:"
+				"Fails_as_not_in_open_state\n");
 		return VCD_ERR_ILLEGAL_OP;
 	}
 
-	switch (p_property_hdr->prop_id) {
+	switch (hdr->id) {
 	case VCD_I_TARGET_BITRATE:
-		{
-			struct vcd_property_target_bitrate_type *p_bitrate =
-				(struct vcd_property_target_bitrate_type *)
-				p_property_value;
-			if (sizeof(struct vcd_property_target_bitrate_type) ==
-				p_property_hdr->n_size &&
-				p_bitrate->n_target_bitrate) {
-				p_encoder->target_bit_rate = *p_bitrate;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_property_target_bitrate *bitrate = value;
+		if (sizeof(*bitrate) == hdr->sz &&
+				bitrate->target_bitrate) {
+			enc->target_bit_rate = *bitrate;
+			vcd_status = VCD_S_SUCCESS;
 		}
-
+		break;
+	}
 	case VCD_I_FRAME_RATE:
-		{
-			struct vcd_property_frame_rate_type *p_framerate =
-				(struct vcd_property_frame_rate_type *)
-				p_property_value;
-			if (sizeof(struct vcd_property_frame_rate_type)
-				== p_property_hdr->n_size &&
-				p_framerate->n_fps_denominator &&
-				p_framerate->n_fps_numerator) {
-				p_encoder->frame_rate = *p_framerate;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_property_frame_rate *framerate = value;
+		if (sizeof(*framerate) == hdr->sz &&
+				framerate->fps_denominator &&
+				framerate->fps_numerator) {
+			enc->frame_rate = *framerate;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case VCD_I_FRAME_SIZE:
-		{
-			struct vcd_property_frame_size_type *p_framesize =
-				(struct vcd_property_frame_size_type *)
-				p_property_value;
-
-			if ((sizeof(struct vcd_property_frame_size_type)
-				== p_property_hdr->n_size) &&
-				(DDL_ALLOW_ENC_FRAMESIZE(p_framesize->n_width,
-				p_framesize->n_height))
-				) {
-				p_encoder->frame_size = *p_framesize;
-				ddl_calculate_stride(&p_encoder->frame_size,
-					FALSE);
-				ddl_set_default_encoder_buffer_req(p_encoder);
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_property_frame_size *framesize = value;
+		if (sizeof(*framesize) == hdr->sz &&
+				DDL_ALLOW_ENC_FRAMESIZE(framesize->width,
+				framesize->height)) {
+			enc->frame_size = *framesize;
+			ddl_calculate_stride(&enc->frame_size, false);
+			ddl_set_default_encoder_buffer_req(enc);
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case VCD_I_CODEC:
-		{
-			struct vcd_property_codec_type *p_codec =
-				(struct vcd_property_codec_type *)
-				p_property_value;
-			if (sizeof(struct vcd_property_codec_type) ==
-				p_property_hdr->n_size) {
-				u32 b_return;
-
-				vcd_fw_transact(FALSE, FALSE,
-					p_encoder->codec_type.e_codec);
-
-				b_return = vcd_fw_transact(TRUE, FALSE,
-					p_codec->e_codec);
-				if (b_return) {
-					p_encoder->codec_type = *p_codec;
-					ddl_set_default_enc_property(p_ddl);
-					vcd_status = VCD_S_SUCCESS;
-				} else {
-					b_return = vcd_fw_transact(TRUE, FALSE,
-						p_encoder->codec_type.e_codec);
-					vcd_status = VCD_ERR_NOT_SUPPORTED;
-				}
+	{
+		struct vcd_property_codec *codec = value;
+		if (sizeof(*codec) == hdr->sz) {
+			if (!vcd_fw_is_codec_supported(false, codec->codec)) {
+				vcd_status = VCD_ERR_NOT_SUPPORTED;
+				break;
 			}
-			break;
+			enc->codec_type = *codec;
+			ddl_set_default_enc_property(ddl);
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case VCD_I_REQ_IFRAME:
-		{
+		vcd_status = VCD_S_SUCCESS;
+		break;
+	case VCD_I_INTRA_PERIOD:
+	{
+		struct vcd_property_i_period *iperiod = value;
+		if (sizeof(*iperiod) == hdr->sz && !iperiod->bframes) {
+			enc->period = *iperiod;
+			vcd_status = VCD_S_SUCCESS;
+		}
+		break;
+	}
+	case VCD_I_PROFILE:
+	{
+		struct vcd_property_profile *profile = value;
+		if (sizeof(*profile) == hdr->sz &&
+				((enc->codec_type.codec == VCD_CODEC_MPEG4 &&
+				(profile->profile == VCD_PROFILE_MPEG4_SP ||
+				profile->profile == VCD_PROFILE_MPEG4_ASP)) ||
+				((enc->codec_type.codec == VCD_CODEC_H264 &&
+				profile->profile >= VCD_PROFILE_H264_BASELINE &&
+				profile->profile <= VCD_PROFILE_H264_HIGH)) ||
+				(enc->codec_type.codec == VCD_CODEC_H263 &&
+				profile->profile == VCD_PROFILE_H263_BASELINE))
+				) {
+			enc->profile = *profile;
+			vcd_status = VCD_S_SUCCESS;
+		}
+		break;
+	}
+	case VCD_I_LEVEL:
+	{
+		struct vcd_property_level *level = value;
+		if (sizeof(*level) == hdr->sz &&
+				((enc->codec_type.codec == VCD_CODEC_MPEG4 &&
+				level->level >= VCD_LEVEL_MPEG4_0 &&
+				level->level <= VCD_LEVEL_MPEG4_6) ||
+				(enc->codec_type.codec == VCD_CODEC_H264 &&
+				level->level >= VCD_LEVEL_H264_1 &&
+				level->level <= VCD_LEVEL_H264_3p1) ||
+				(enc->codec_type.codec == VCD_CODEC_H263 &&
+				level->level >= VCD_LEVEL_H263_10 &&
+				level->level <= VCD_LEVEL_H263_70))) {
+			enc->level = *level;
+			vcd_status = VCD_S_SUCCESS;
+		}
+		break;
+	}
+	case VCD_I_MULTI_SLICE:
+	{
+		struct vcd_property_multi_slice *multislice = value;
+		switch (multislice->m_slice_sel) {
+		case VCD_MSLICE_OFF:
 			vcd_status = VCD_S_SUCCESS;
 			break;
-		}
-	case VCD_I_INTRA_PERIOD:
-		{
-			struct vcd_property_i_period_type *p_iperiod =
-				(struct vcd_property_i_period_type *)
-				p_property_value;
-			if ((sizeof(struct vcd_property_i_period_type) ==
-				p_property_hdr->n_size) &&
-				(!p_iperiod->n_b_frames)) {
-				p_encoder->i_period = *p_iperiod;
+		case VCD_MSLICE_BY_GOB:
+			if (enc->codec_type.codec == VCD_CODEC_H263)
+				vcd_status = VCD_S_SUCCESS;
+			 break;
+		case VCD_MSLICE_BY_MB_COUNT:
+			if (multislice->m_slice_size >= 1 &&
+					(multislice->m_slice_size <=
+					(enc->frame_size.height
+					* enc->frame_size.width	/ 16 / 16))) {
 				vcd_status = VCD_S_SUCCESS;
 			}
 			break;
-		}
-	case VCD_I_PROFILE:
-		{
-			struct vcd_property_profile_type *p_profile =
-				(struct vcd_property_profile_type *)
-				p_property_value;
-			if (
-				(sizeof(struct vcd_property_profile_type) ==
-				p_property_hdr->n_size) &&
-				(
-				 (
-				  (p_encoder->codec_type.
-					e_codec == VCD_CODEC_MPEG4) &&
-				  (
-				   p_profile->e_profile == VCD_PROFILE_MPEG4_SP
-				   || p_profile->e_profile ==
-				   VCD_PROFILE_MPEG4_ASP
-				   )
-				  ) ||
-				 (
-				  (
-				  (p_encoder->codec_type.
-				   e_codec == VCD_CODEC_H264) &&
-				   (p_profile->e_profile >=
-					VCD_PROFILE_H264_BASELINE)
-				   && (p_profile->e_profile <=
-					VCD_PROFILE_H264_HIGH)
-				   )
-				  ) ||
-				 (
-				  (p_encoder->codec_type.
-				   e_codec == VCD_CODEC_H263) &&
-				  (p_profile->e_profile ==
-				   VCD_PROFILE_H263_BASELINE)
-				  )
-				 )
-				) {
-				p_encoder->profile = *p_profile;
+		case VCD_MSLICE_BY_BYTE_COUNT:
+			if (multislice->m_slice_size <
+					DDL_MINIMUM_BYTE_PER_SLICE) {
 				vcd_status = VCD_S_SUCCESS;
+				break;
 			}
+		default:
 			break;
 		}
-	case VCD_I_LEVEL:
-		{
-			struct vcd_property_level_type *p_level =
-				(struct vcd_property_level_type *)
-				p_property_value;
-			if (
-				(sizeof(struct vcd_property_level_type) ==
-				 p_property_hdr->n_size
-				) &&
-				(
-				(
-				(p_encoder->codec_type.
-				 e_codec == VCD_CODEC_MPEG4) &&
-				(p_level->e_level >= VCD_LEVEL_MPEG4_0) &&
-				(p_level->e_level <= VCD_LEVEL_MPEG4_6)
-				) ||
-				(
-				(p_encoder->codec_type.
-				 e_codec == VCD_CODEC_H264) &&
-				(p_level->e_level >= VCD_LEVEL_H264_1) &&
-				(p_level->e_level <= VCD_LEVEL_H264_3p1)
-				) ||
-				(
-				(p_encoder->codec_type.
-				 e_codec == VCD_CODEC_H263) &&
-				(p_level->e_level >= VCD_LEVEL_H263_10) &&
-				(p_level->e_level <= VCD_LEVEL_H263_70)
-				)
-				)
-				) {
-				p_encoder->level = *p_level;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
-		}
-	case VCD_I_MULTI_SLICE:
-		{
-			struct vcd_property_multi_slice_type *p_multislice =
-				(struct vcd_property_multi_slice_type *)
-				p_property_value;
-			switch (p_multislice->e_m_slice_sel) {
-			case VCD_MSLICE_OFF:
-				{
-					vcd_status = VCD_S_SUCCESS;
-					break;
-				}
-			case VCD_MSLICE_BY_GOB:
-				{
-					if (p_encoder->codec_type.e_codec ==
-						VCD_CODEC_H263)
-						vcd_status = VCD_S_SUCCESS;
-					 break;
-				}
-			case VCD_MSLICE_BY_MB_COUNT:
-				{
-					if (p_multislice->n_m_slice_size
-						>= 1 && (p_multislice->
-						n_m_slice_size <=
-						(p_encoder->frame_size.n_height
-						* p_encoder->frame_size.n_width
-						/ 16 / 16))
-						) {
-						vcd_status = VCD_S_SUCCESS;
-					}
-					break;
-				  }
-			case VCD_MSLICE_BY_BYTE_COUNT:
-				{
-					if (p_multislice->n_m_slice_size <
-						DDL_MINIMUM_BYTE_PER_SLICE) {
-						vcd_status = VCD_S_SUCCESS;
-						break;
-					}
-				}
-			default:
-				{
-					break;
-				}
-			}
-			if (sizeof(struct vcd_property_multi_slice_type) ==
-				p_property_hdr->n_size &&
+		if (sizeof(struct vcd_property_multi_slice) == hdr->sz &&
 				!vcd_status) {
-				p_encoder->multi_slice = *p_multislice;
-			}
-			break;
+			enc->multi_slice = *multislice;
 		}
+		break;
+	}
 	case VCD_I_RATE_CONTROL:
-		{
-			struct vcd_property_rate_control_type
-				*p_ratecontrol_type =
-				(struct vcd_property_rate_control_type *)
-				p_property_value;
-			if (sizeof(struct vcd_property_rate_control_type) ==
-				p_property_hdr->n_size &&
-				p_ratecontrol_type->
-				e_rate_control >= VCD_RATE_CONTROL_OFF &&
-				p_ratecontrol_type->
-				e_rate_control <= VCD_RATE_CONTROL_CBR_CFR
-				) {
-				p_encoder->rc_type = *p_ratecontrol_type;
-				ddl_set_default_enc_rc_params(p_encoder);
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_property_rate_control *ratecontrol_type = value;
+		if (sizeof(*ratecontrol_type) == hdr->sz &&
+				ratecontrol_type->rate_control >=
+				VCD_RATE_CONTROL_OFF &&
+				ratecontrol_type->rate_control <=
+				VCD_RATE_CONTROL_CBR_CFR) {
+			enc->rc_type = *ratecontrol_type;
+			ddl_set_default_enc_rc_params(enc);
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case VCD_I_SHORT_HEADER:
-		{
-
-		if (sizeof(struct vcd_property_short_header_type) ==
-			p_property_hdr->n_size &&
-			p_encoder->codec_type.e_codec == VCD_CODEC_MPEG4) {
-			p_encoder->short_header =
-				*(struct vcd_property_short_header_type *)
-				p_property_value;
+		if (sizeof(struct vcd_property_short_header) ==	hdr->sz &&
+				enc->codec_type.codec == VCD_CODEC_MPEG4) {
+			enc->short_header =
+				*(struct vcd_property_short_header *)value;
 			vcd_status = VCD_S_SUCCESS;
 		}
-
-			break;
-		}
+		break;
 	case VCD_I_VOP_TIMING:
-		{
-			struct vcd_property_vop_timing_type *p_voptime =
-				(struct vcd_property_vop_timing_type *)
-				p_property_value;
-			if (
-				(sizeof(struct vcd_property_vop_timing_type) ==
-					  p_property_hdr->n_size
-				) &&
-				(p_encoder->frame_rate.n_fps_numerator <=
-					p_voptime->n_vop_time_resolution)
-				) {
-				p_encoder->vop_timing = *p_voptime;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_property_vop_timing *voptime = value;
+		if (sizeof(*voptime) == hdr->sz && enc->frame_rate.fps_numerator
+				<= voptime->vop_time_resolution) {
+			enc->vop_timing = *voptime;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case VCD_I_HEADER_EXTENSION:
-		{
-			if (sizeof(u32) == p_property_hdr->n_size &&
-				p_encoder->codec_type.e_codec == VCD_CODEC_MPEG4
-				) {
-				p_encoder->n_hdr_ext_control = *(u32 *)
-					p_property_value;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(u32) == hdr->sz && enc->codec_type.codec ==
+				VCD_CODEC_MPEG4) {
+			enc->hdr_ext_control = *(u32 *)value;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_ENTROPY_CTRL:
-		{
-			struct vcd_property_entropy_control_type
-				*p_entropy_control =
-				(struct vcd_property_entropy_control_type *)
-				p_property_value;
-			if (sizeof(struct vcd_property_entropy_control_type) ==
-				p_property_hdr->n_size &&
-				p_encoder->codec_type.e_codec == VCD_CODEC_H264
-				&& p_entropy_control->
-				e_entropy_sel >= VCD_ENTROPY_SEL_CAVLC &&
-				p_entropy_control->e_entropy_sel <=
-				VCD_ENTROPY_SEL_CABAC) {
-				p_encoder->entropy_control = *p_entropy_control;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_property_entropy_control *entropy = value;
+		if (sizeof(*entropy) == hdr->sz &&
+				enc->codec_type.codec == VCD_CODEC_H264 &&
+				entropy->entropy_sel >= VCD_ENTROPY_SEL_CAVLC &&
+				entropy->entropy_sel <= VCD_ENTROPY_SEL_CABAC) {
+			enc->entropy_control = *entropy;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case VCD_I_DEBLOCKING:
-		{
-			struct vcd_property_db_config_type *p_dbconfig =
-				(struct vcd_property_db_config_type *)
-				p_property_value;
-			if (sizeof(struct vcd_property_db_config_type) ==
-				p_property_hdr->n_size &&
-				p_encoder->codec_type.e_codec == VCD_CODEC_H264
-				&& p_dbconfig->e_db_config >=
-				VCD_DB_ALL_BLOCKING_BOUNDARY
-				&& p_dbconfig->e_db_config <=
-				VCD_DB_SKIP_SLICE_BOUNDARY
-				) {
-				p_encoder->db_control = *p_dbconfig;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_property_db_config *db = value;
+		if (sizeof(*db) == hdr->sz &&
+				enc->codec_type.codec == VCD_CODEC_H264	&&
+				db->db_config >= VCD_DB_ALL_BLOCKING_BOUNDARY &&
+				db->db_config <= VCD_DB_SKIP_SLICE_BOUNDARY) {
+			enc->db_control = *db;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case VCD_I_QP_RANGE:
-		{
-			struct vcd_property_qp_range_type *p_qp =
-				(struct vcd_property_qp_range_type *)
-				p_property_value;
-			if ((sizeof(struct vcd_property_qp_range_type) ==
-				p_property_hdr->n_size) &&
-				(p_qp->n_min_qp <= p_qp->n_max_qp) &&
-				(
-				(p_encoder->codec_type.e_codec == VCD_CODEC_H264
-				&& p_qp->n_max_qp <= DDL_MAX_H264_QP) ||
-				(p_qp->n_max_qp <= DDL_MAX_MPEG4_QP)
-				)
-				) {
-				p_encoder->qp_range = *p_qp;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_property_qp_range *qp = value;
+		if (sizeof(*qp) == hdr->sz && qp->min_qp <= qp->max_qp &&
+				((enc->codec_type.codec == VCD_CODEC_H264 &&
+				qp->max_qp <= DDL_MAX_H264_QP) ||
+				qp->max_qp <= DDL_MAX_MPEG4_QP)) {
+			enc->qp_range = *qp;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case VCD_I_SESSION_QP:
-		{
-			struct vcd_property_session_qp_type *p_qp =
-				(struct vcd_property_session_qp_type *)
-				p_property_value;
-
-		if ((sizeof(struct vcd_property_session_qp_type) ==
-			p_property_hdr->n_size) &&
-			(p_qp->n_i_frame_qp >= p_encoder->qp_range.n_min_qp) &&
-			(p_qp->n_i_frame_qp <= p_encoder->qp_range.n_max_qp) &&
-			(p_qp->n_p_frame_qp >= p_encoder->qp_range.n_min_qp) &&
-			(p_qp->n_p_frame_qp <= p_encoder->qp_range.n_max_qp)
-			) {
-			p_encoder->session_qp = *p_qp;
+	{
+		struct vcd_property_session_qp *qp = value;
+		if ((sizeof(*qp) == hdr->sz) &&
+				qp->iframe_qp >= enc->qp_range.min_qp &&
+				qp->iframe_qp <= enc->qp_range.max_qp &&
+				qp->frame_qp >= enc->qp_range.min_qp &&
+				qp->frame_qp <= enc->qp_range.max_qp) {
+			enc->session_qp = *qp;
 			vcd_status = VCD_S_SUCCESS;
 		}
-
-			break;
-		}
+		break;
+	}
 	case VCD_I_RC_LEVEL_CONFIG:
-		{
-			struct vcd_property_rc_level_type *p_rc_level =
-				(struct vcd_property_rc_level_type *)
-				p_property_value;
-			if (sizeof(struct vcd_property_rc_level_type) ==
-				p_property_hdr->n_size &&
-				(
-				p_encoder->rc_type.
-				e_rate_control >= VCD_RATE_CONTROL_VBR_VFR ||
-				p_encoder->rc_type.
-				e_rate_control <= VCD_RATE_CONTROL_CBR_VFR
-				) &&
-				(!p_rc_level->b_mb_level_rc ||
-				p_encoder->codec_type.e_codec == VCD_CODEC_H264
-				)
-				) {
-				p_encoder->rc_level = *p_rc_level;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
-		}
-	case VCD_I_FRAME_LEVEL_RC:
-		{
-
-		struct vcd_property_frame_level_rc_params_type
-			*p_frame_levelrc =
-			(struct vcd_property_frame_level_rc_params_type *)
-			p_property_value;
-
-			if ((sizeof(struct
-				vcd_property_frame_level_rc_params_type)
-				== p_property_hdr->n_size) &&
-				(p_frame_levelrc->n_reaction_coeff) &&
-				(p_encoder->rc_level.b_frame_level_rc)
-				) {
-				p_encoder->frame_level_rc = *p_frame_levelrc;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
-		}
-	case VCD_I_ADAPTIVE_RC:
-		{
-
-		if ((sizeof(struct
-			vcd_property_adaptive_rc_params_type)
-			== p_property_hdr->n_size) &&
-			(p_encoder->codec_type.
-			e_codec == VCD_CODEC_H264) &&
-			(p_encoder->rc_level.b_mb_level_rc)) {
-
-			p_encoder->adaptive_rc =
-				*(struct vcd_property_adaptive_rc_params_type *)
-				p_property_value;
-
+	{
+		struct vcd_property_rc_level *rc_level = value;
+		if (sizeof(*rc_level) == hdr->sz &&
+				(enc->rc_type.rate_control >=
+				VCD_RATE_CONTROL_VBR_VFR ||
+				enc->rc_type.rate_control <=
+				VCD_RATE_CONTROL_CBR_VFR) &&
+				(!rc_level->mb_level_rc ||
+				enc->codec_type.codec == VCD_CODEC_H264)) {
+			enc->rc_level = *rc_level;
 			vcd_status = VCD_S_SUCCESS;
 		}
-
-			break;
+		break;
+	}
+	case VCD_I_FRAME_LEVEL_RC:
+	{
+		struct vcd_property_frame_level_rc_params *rc = value;
+		if (sizeof(*rc) == hdr->sz && rc->reaction_coeff &&
+				enc->rc_level.frame_level_rc) {
+			enc->frame_level_rc = *rc;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
+	case VCD_I_ADAPTIVE_RC:
+	{
+		struct vcd_property_adaptive_rc_params *rc = value;
+		if (sizeof(*rc) == hdr->sz && enc->codec_type.codec ==
+				VCD_CODEC_H264 && enc->rc_level.mb_level_rc) {
+			enc->adaptive_rc = *rc;
+			vcd_status = VCD_S_SUCCESS;
+		}
+		break;
+	}
 	case VCD_I_INTRA_REFRESH:
-		{
-
-		struct vcd_property_intra_refresh_mb_number_type
-			*p_intra_refresh_mbnum =
-			(struct	vcd_property_intra_refresh_mb_number_type *)
-			p_property_value;
-
-			u32 n_frame_mbnum =
-				(p_encoder->frame_size.n_width / 16) *
-				(p_encoder->frame_size.n_height / 16);
-			if (sizeof(struct
-				vcd_property_intra_refresh_mb_number_type)
-				== p_property_hdr->n_size &&
-				p_intra_refresh_mbnum->n_cir_mb_number <=
-				n_frame_mbnum) {
-				p_encoder->intra_refresh =
-					*p_intra_refresh_mbnum;
-				vcd_status = VCD_S_SUCCESS;
-			}
-
-			break;
+	{
+		struct vcd_property_intra_refresh_mb_number *mbnum = value;
+		u32 frame_mbnum = (enc->frame_size.width / 16) *
+			(enc->frame_size.height / 16);
+		if (sizeof(*mbnum) == hdr->sz && mbnum->cir_mb_number <=
+				frame_mbnum) {
+			enc->intra_refresh = *mbnum;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case VCD_I_BUFFER_FORMAT:
-		{
-			struct vcd_property_buffer_format_type *p_tile =
-				(struct vcd_property_buffer_format_type *)
-				p_property_value;
-			if (sizeof(struct vcd_property_buffer_format_type) ==
-				p_property_hdr->n_size &&
-				p_tile->e_buffer_format ==
+	{
+		struct vcd_property_buffer_format *tile = value;
+		if (sizeof(*tile) == hdr->sz && tile->buffer_format ==
 				VCD_BUFFER_FORMAT_NV12) {
-				p_encoder->buf_format = *p_tile;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+			enc->buf_format = *tile;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case DDL_I_INPUT_BUF_REQ:
-		{
-			struct vcd_buffer_requirement_type *p_buffer_req =
-				(struct vcd_buffer_requirement_type *)
-				p_property_value;
-			if (sizeof(struct vcd_buffer_requirement_type) ==
-				p_property_hdr->n_size &&
-				(ddl_valid_buffer_requirement(
-				&p_encoder->input_buf_req, p_buffer_req))
-				) {
-				p_encoder->client_input_buf_req = *p_buffer_req;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_buffer_requirement *buf_req = value;
+		if (sizeof(*buf_req) == hdr->sz && ddl_valid_buffer_requirement(
+				&enc->input_buf_req, buf_req)) {
+			enc->client_input_buf_req = *buf_req;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case DDL_I_OUTPUT_BUF_REQ:
-		{
-			struct vcd_buffer_requirement_type *p_buffer_req =
-				(struct vcd_buffer_requirement_type *)
-				p_property_value;
-			if (sizeof(struct vcd_buffer_requirement_type) ==
-				p_property_hdr->n_size &&
-				(ddl_valid_buffer_requirement(
-				&p_encoder->output_buf_req, p_buffer_req))
-				) {
-				p_encoder->client_output_buf_req =
-					*p_buffer_req;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_buffer_requirement *buf_req = value;
+		if (sizeof(*buf_req) == hdr->sz && ddl_valid_buffer_requirement(
+				&enc->output_buf_req, buf_req)) {
+			enc->client_output_buf_req = *buf_req;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case VCD_I_METADATA_ENABLE:
 	case VCD_I_METADATA_HEADER:
-		{
-			vcd_status = ddl_set_metadata_params(
-				p_ddl, p_property_hdr, p_property_value);
-			break;
-		}
+		vcd_status = ddl_set_metadata_params(ddl, hdr, value);
+		break;
 	default:
-		{
-			vcd_status = VCD_ERR_ILLEGAL_OP;
-			break;
-		}
+		vcd_status = VCD_ERR_ILLEGAL_OP;
+		break;
 	}
 	return vcd_status;
 }
 
-static u32 ddl_get_dec_property
-    (struct ddl_client_context_type *p_ddl,
-     struct vcd_property_hdr_type *p_property_hdr, void *p_property_value) {
+static u32 ddl_get_dec_property(struct ddl_client_context *ddl,
+		struct vcd_property_hdr *hdr, void *value)
+{
 	u32 vcd_status = VCD_ERR_ILLEGAL_PARM;
-	struct ddl_decoder_data_type *p_decoder = &p_ddl->codec_data.decoder;
+	struct ddl_decoder_data *dec = &ddl->codec_data.decoder;
 
-	switch (p_property_hdr->prop_id) {
+	switch (hdr->id) {
 	case VCD_I_FRAME_SIZE:
-		{
-			if (sizeof(struct vcd_property_frame_size_type) ==
-			    p_property_hdr->n_size) {
-				if (p_decoder->client_frame_size.n_width) {
-					*(struct vcd_property_frame_size_type *)
-					    p_property_value =
-					    p_decoder->client_frame_size;
-					vcd_status = VCD_S_SUCCESS;
-				} else {
-					vcd_status = VCD_ERR_ILLEGAL_OP;
-				}
+		if (sizeof(struct vcd_property_frame_size) == hdr->sz) {
+			if (dec->client_frame_size.width) {
+				struct vcd_property_frame_size *size = value;
+				*size = dec->client_frame_size;
+				vcd_status = VCD_S_SUCCESS;
+			} else {
+				vcd_status = VCD_ERR_ILLEGAL_OP;
 			}
-			break;
 		}
+		break;
 	case VCD_I_PROFILE:
-		{
-			if (sizeof(struct vcd_property_profile_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_profile_type *)
-				    p_property_value = p_decoder->profile;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_profile) == hdr->sz) {
+			*(struct vcd_property_profile *)value = dec->profile;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_LEVEL:
-		{
-			if (sizeof(struct vcd_property_level_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_level_type *)
-				    p_property_value = p_decoder->level;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_level) == hdr->sz) {
+			*(struct vcd_property_level *)value = dec->level;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_PROGRESSIVE_ONLY:
-		{
-			if (sizeof(u32) == p_property_hdr->n_size) {
-				*(u32 *) p_property_value =
-				    p_decoder->n_progressive_only;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(u32) == hdr->sz) {
+			*(u32 *)value = dec->progressive_only;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case DDL_I_INPUT_BUF_REQ:
-		{
-			if (sizeof(struct vcd_buffer_requirement_type) ==
-			    p_property_hdr->n_size) {
-				if (p_decoder->
-						client_input_buf_req.n_size) {
-					*(struct vcd_buffer_requirement_type *)
-					    p_property_value =
-					    p_decoder->client_input_buf_req;
-					vcd_status = VCD_S_SUCCESS;
-				} else {
-					vcd_status = VCD_ERR_ILLEGAL_OP;
-				}
-			}
-			break;
-		}
-	case DDL_I_OUTPUT_BUF_REQ:
-		{
-			if (sizeof(struct vcd_buffer_requirement_type) ==
-			    p_property_hdr->n_size) {
-				if (p_decoder->client_output_buf_req.n_size) {
-					*(struct vcd_buffer_requirement_type *)
-					    p_property_value =
-					    p_decoder->client_output_buf_req;
-					vcd_status = VCD_S_SUCCESS;
-				} else {
-					vcd_status = VCD_ERR_ILLEGAL_OP;
-				}
-			}
-			break;
-		}
-	case VCD_I_CODEC:
-		{
-			if (sizeof(struct vcd_property_codec_type) ==
-			    p_property_hdr->n_size) {
-				if (p_decoder->codec_type.e_codec) {
-					*(struct vcd_property_codec_type *)
-					    p_property_value =
-					    p_decoder->codec_type;
-					vcd_status = VCD_S_SUCCESS;
-				} else {
-					vcd_status = VCD_ERR_ILLEGAL_OP;
-				}
-			}
-			break;
-		}
-	case VCD_I_BUFFER_FORMAT:
-		{
-			if (sizeof(struct vcd_property_buffer_format_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_buffer_format_type *)
-				    p_property_value = p_decoder->buf_format;
+		if (sizeof(struct vcd_buffer_requirement) == hdr->sz) {
+			if (dec->client_input_buf_req.size) {
+				*(struct vcd_buffer_requirement *)value =
+					dec->client_input_buf_req;
 				vcd_status = VCD_S_SUCCESS;
+			} else {
+				vcd_status = VCD_ERR_ILLEGAL_OP;
 			}
-			break;
 		}
+		break;
+	case DDL_I_OUTPUT_BUF_REQ:
+		if (sizeof(struct vcd_buffer_requirement) == hdr->sz) {
+			if (dec->client_output_buf_req.size) {
+				*(struct vcd_buffer_requirement *)value =
+					dec->client_output_buf_req;
+				vcd_status = VCD_S_SUCCESS;
+			} else {
+				vcd_status = VCD_ERR_ILLEGAL_OP;
+			}
+		}
+		break;
+	case VCD_I_CODEC:
+		if (sizeof(struct vcd_property_codec) == hdr->sz) {
+			if (dec->codec_type.codec) {
+				*(struct vcd_property_codec *)value =
+					dec->codec_type;
+				vcd_status = VCD_S_SUCCESS;
+			} else {
+				vcd_status = VCD_ERR_ILLEGAL_OP;
+			}
+		}
+		break;
+	case VCD_I_BUFFER_FORMAT:
+		if (sizeof(struct vcd_property_buffer_format) == hdr->sz) {
+			*(struct vcd_property_buffer_format *)value =
+				dec->buf_format;
+			vcd_status = VCD_S_SUCCESS;
+		}
+		break;
 	case VCD_I_POST_FILTER:
-		{
-			if (sizeof(struct vcd_property_post_filter_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_post_filter_type *)
-				    p_property_value = p_decoder->post_filter;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_post_filter) == hdr->sz) {
+			*(struct vcd_property_post_filter *)value =
+				dec->post_filter;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case DDL_I_SEQHDR_ALIGN_BYTES:
-		{
-			if (sizeof(u32) == p_property_hdr->n_size) {
-				*(u32 *) p_property_value =
-				    DDL_LINEAR_BUFFER_ALIGN_BYTES;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(u32) == hdr->sz) {
+			*(u32 *)value = DDL_LINEAR_BUFFER_ALIGN_BYTES;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case DDL_I_FRAME_PROC_UNITS:
-		{
-			if (sizeof(u32) == p_property_hdr->n_size &&
-			    p_decoder->client_frame_size.n_width &&
-			    p_decoder->client_frame_size.n_height) {
-				*(u32 *) p_property_value =
-				    ((p_decoder->client_frame_size.
-				      n_width >> 4) *
-				     (p_decoder->client_frame_size.
-				      n_height >> 4)
-				    );
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(u32) == hdr->sz && dec->client_frame_size.width &&
+				dec->client_frame_size.height) {
+			*(u32 *)value = ((dec->client_frame_size.width >> 4) *
+				(dec->client_frame_size.height >> 4));
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case DDL_I_DPB_RETRIEVE:
-		{
-			if (sizeof(struct ddl_frame_data_type_tag) ==
-			    p_property_hdr->n_size) {
-				vcd_status =
-				    ddl_decoder_dpb_transact(p_decoder,
-					 (struct ddl_frame_data_type_tag *)
-					     p_property_value,
-					     DDL_DPB_OP_RETRIEVE);
-			}
-			break;
+		if (sizeof(struct ddl_frame_data_tag) == hdr->sz) {
+			vcd_status = ddl_decoder_dpb_transact(dec,
+				(struct ddl_frame_data_tag *)value,
+				DDL_DPB_OP_RETRIEVE);
 		}
+		break;
 	case VCD_I_METADATA_ENABLE:
 	case VCD_I_METADATA_HEADER:
-		{
-			vcd_status = ddl_get_metadata_params(
-						   p_ddl,
-						   p_property_hdr,
-						   p_property_value);
-			break;
-		}
+		vcd_status = ddl_get_metadata_params(ddl, hdr, value);
+		break;
 	default:
-		{
-			vcd_status = VCD_ERR_ILLEGAL_OP;
-			break;
-		}
+		vcd_status = VCD_ERR_ILLEGAL_OP;
+		break;
 	}
 	return vcd_status;
 }
 
-static u32 ddl_get_enc_property
-    (struct ddl_client_context_type *p_ddl,
-     struct vcd_property_hdr_type *p_property_hdr, void *p_property_value) {
+static u32 ddl_get_enc_property(struct ddl_client_context *ddl,
+		struct vcd_property_hdr *hdr, void *value)
+{
 	u32 vcd_status = VCD_ERR_ILLEGAL_PARM;
-	struct ddl_encoder_data_type *p_encoder = &p_ddl->codec_data.encoder;
+	struct ddl_encoder_data *enc = &ddl->codec_data.encoder;
 
-	struct vcd_property_entropy_control_type *entropy_control;
-	struct vcd_property_intra_refresh_mb_number_type *intra_refresh;
+	struct vcd_property_entropy_control *entropy_control;
+	struct vcd_property_intra_refresh_mb_number *intra_refresh;
 
-	switch (p_property_hdr->prop_id) {
+	switch (hdr->id) {
 	case VCD_I_CODEC:
-		{
-			if (sizeof(struct vcd_property_codec_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_codec_type *)
-					p_property_value =
-					p_encoder->codec_type;
-		    vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_codec) == hdr->sz) {
+			*(struct vcd_property_codec *)value = enc->codec_type;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_FRAME_SIZE:
-		{
-			if (sizeof(struct vcd_property_frame_size_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_frame_size_type *)
-					p_property_value =
-					p_encoder->frame_size;
-
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_frame_size) == hdr->sz) {
+			*(struct vcd_property_frame_size *)value =
+				enc->frame_size;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_FRAME_RATE:
-		{
-			if (sizeof(struct vcd_property_frame_rate_type) ==
-				p_property_hdr->n_size) {
-
-				*(struct vcd_property_frame_rate_type *)
-					p_property_value =
-					p_encoder->frame_rate;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_frame_rate) == hdr->sz) {
+			*(struct vcd_property_frame_rate *)value =
+				enc->frame_rate;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_TARGET_BITRATE:
-		{
-
-			if (sizeof(struct vcd_property_target_bitrate_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_target_bitrate_type *)
-					p_property_value =
-					p_encoder->target_bit_rate;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_target_bitrate) == hdr->sz) {
+			*(struct vcd_property_target_bitrate *)value =
+				enc->target_bit_rate;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_RATE_CONTROL:
-		{
-			if (sizeof(struct vcd_property_rate_control_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_rate_control_type *)
-				    p_property_value = p_encoder->rc_type;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_rate_control) == hdr->sz) {
+			*(struct vcd_property_rate_control *)value =
+				enc->rc_type;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_PROFILE:
-		{
-			if (sizeof(struct vcd_property_profile_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_profile_type *)
-				    p_property_value = p_encoder->profile;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_profile) == hdr->sz) {
+			*(struct vcd_property_profile *)value = enc->profile;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_LEVEL:
-		{
-			if (sizeof(struct vcd_property_level_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_level_type *)
-				    p_property_value = p_encoder->level;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_level) == hdr->sz) {
+			*(struct vcd_property_level *)value = enc->level;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_MULTI_SLICE:
-		{
-			if (sizeof(struct vcd_property_multi_slice_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_multi_slice_type *)
-				    p_property_value = p_encoder->multi_slice;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_multi_slice) == hdr->sz) {
+			*(struct vcd_property_multi_slice *)value =
+				enc->multi_slice;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_SEQ_HEADER:
-		{
-			struct vcd_sequence_hdr_type *p_seq_hdr =
-			    (struct vcd_sequence_hdr_type *)p_property_value;
-			if (p_encoder->seq_header.n_buffer_size &&
-			    sizeof(struct vcd_sequence_hdr_type) ==
-			    p_property_hdr->n_size
-			    && p_encoder->seq_header.n_buffer_size <=
-			    p_seq_hdr->n_sequence_header_len) {
-				DDL_MEMCPY(p_seq_hdr->p_sequence_header,
-					   p_encoder->seq_header.
-					   p_align_virtual_addr,
-					   p_encoder->seq_header.n_buffer_size);
-				p_seq_hdr->n_sequence_header_len =
-				    p_encoder->seq_header.n_buffer_size;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_sequence_hdr *seq_hdr = value;
+		if (enc->seq_header.size && sizeof(struct vcd_sequence_hdr) ==
+				hdr->sz && enc->seq_header.size <=
+				seq_hdr->sz) {
+			memcpy(seq_hdr->addr, enc->seq_header.virt_addr,
+				enc->seq_header.size);
+			seq_hdr->sz = enc->seq_header.size;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case DDL_I_SEQHDR_PRESENT:
-		{
-			if (sizeof(u32) == p_property_hdr->n_size) {
-				if ((p_encoder->codec_type.
-					e_codec == VCD_CODEC_MPEG4 &&
-					!p_encoder->short_header.b_short_header)
-					|| p_encoder->codec_type.e_codec ==
-					VCD_CODEC_H264) {
-					*(u32 *)p_property_value = 0x1;
-				} else {
-					*(u32 *)p_property_value = 0x0;
-				}
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(u32) == hdr->sz) {
+			if ((enc->codec_type.codec == VCD_CODEC_MPEG4 &&
+					!enc->short_header.short_header) ||
+					enc->codec_type.codec ==
+					VCD_CODEC_H264)
+				*(u32 *)value = 0x1;
+			else
+				*(u32 *)value = 0x0;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_VOP_TIMING:
-		{
-			if (sizeof(struct vcd_property_vop_timing_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_vop_timing_type *)
-				    p_property_value = p_encoder->vop_timing;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_vop_timing) == hdr->sz) {
+			*(struct vcd_property_vop_timing *)value =
+				enc->vop_timing;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_SHORT_HEADER:
-		{
-			if (sizeof(struct vcd_property_short_header_type) ==
-			    p_property_hdr->n_size) {
-				if (p_encoder->codec_type.e_codec ==
-					VCD_CODEC_MPEG4) {
-					*(struct vcd_property_short_header_type
-					  *)p_property_value =
-						p_encoder->short_header;
-					vcd_status = VCD_S_SUCCESS;
-				} else {
-					vcd_status = VCD_ERR_ILLEGAL_OP;
-				}
+		if (sizeof(struct vcd_property_short_header) == hdr->sz) {
+			if (enc->codec_type.codec == VCD_CODEC_MPEG4) {
+				*(struct vcd_property_short_header *)value =
+					enc->short_header;
+				vcd_status = VCD_S_SUCCESS;
+			} else {
+				vcd_status = VCD_ERR_ILLEGAL_OP;
 			}
-			break;
 		}
+		break;
 	case VCD_I_ENTROPY_CTRL:
-		{
-			entropy_control = p_property_value;
-			if (sizeof(struct vcd_property_entropy_control_type) ==
-			    p_property_hdr->n_size) {
-				if (p_encoder->codec_type.e_codec ==
-					VCD_CODEC_H264) {
-					*entropy_control =
-				     p_encoder->entropy_control;
-					vcd_status = VCD_S_SUCCESS;
-				} else {
-					vcd_status = VCD_ERR_ILLEGAL_OP;
-				}
+		entropy_control = value;
+		if (sizeof(struct vcd_property_entropy_control) == hdr->sz) {
+			if (enc->codec_type.codec == VCD_CODEC_H264) {
+				*entropy_control = enc->entropy_control;
+				vcd_status = VCD_S_SUCCESS;
+			} else {
+				vcd_status = VCD_ERR_ILLEGAL_OP;
 			}
-			break;
 		}
+		break;
 	case VCD_I_DEBLOCKING:
-		{
-			if (sizeof(struct vcd_property_db_config_type) ==
-			    p_property_hdr->n_size) {
-				if (p_encoder->codec_type.e_codec ==
-					VCD_CODEC_H264) {
-					*(struct vcd_property_db_config_type *)
-					    p_property_value =
-					    p_encoder->db_control;
-					vcd_status = VCD_S_SUCCESS;
-				} else {
-					vcd_status = VCD_ERR_ILLEGAL_OP;
-				}
+		if (sizeof(struct vcd_property_db_config) == hdr->sz) {
+			if (enc->codec_type.codec == VCD_CODEC_H264) {
+				*(struct vcd_property_db_config *)value =
+					enc->db_control;
+				vcd_status = VCD_S_SUCCESS;
+			} else {
+				vcd_status = VCD_ERR_ILLEGAL_OP;
 			}
-			break;
 		}
+		break;
 	case VCD_I_INTRA_PERIOD:
-		{
-			if (sizeof(struct vcd_property_i_period_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_i_period_type *)
-				    p_property_value = p_encoder->i_period;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_i_period) == hdr->sz) {
+			*(struct vcd_property_i_period *)value = enc->period;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_QP_RANGE:
-		{
-			if (sizeof(struct vcd_property_qp_range_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_qp_range_type *)
-				    p_property_value = p_encoder->qp_range;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_qp_range) == hdr->sz) {
+			*(struct vcd_property_qp_range *)value = enc->qp_range;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_SESSION_QP:
-		{
-			if (sizeof(struct vcd_property_session_qp_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_session_qp_type *)
-				    p_property_value = p_encoder->session_qp;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_session_qp) == hdr->sz) {
+			*(struct vcd_property_session_qp *)value =
+				enc->session_qp;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_RC_LEVEL_CONFIG:
-		{
-			if (sizeof(struct vcd_property_rc_level_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_rc_level_type *)
-				    p_property_value = p_encoder->rc_level;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_rc_level) == hdr->sz) {
+			*(struct vcd_property_rc_level *)value = enc->rc_level;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_FRAME_LEVEL_RC:
-		{
-			if (sizeof
-			    (struct vcd_property_frame_level_rc_params_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_frame_level_rc_params_type
-				 *)p_property_value =
-				 p_encoder->frame_level_rc;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_frame_level_rc_params) ==
+				hdr->sz) {
+			*(struct vcd_property_frame_level_rc_params *)value =
+				enc->frame_level_rc;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_ADAPTIVE_RC:
-		{
-			if (sizeof(struct vcd_property_adaptive_rc_params_type)
-			    == p_property_hdr->n_size) {
-				*(struct vcd_property_adaptive_rc_params_type *)
-				    p_property_value = p_encoder->adaptive_rc;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_adaptive_rc_params) ==
+				hdr->sz) {
+			*(struct vcd_property_adaptive_rc_params *)value =
+				enc->adaptive_rc;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_INTRA_REFRESH:
-		{
-			intra_refresh = p_property_value;
-			if (sizeof
-			    (struct vcd_property_intra_refresh_mb_number_type)
-			    == p_property_hdr->n_size) {
-				*intra_refresh = p_encoder->intra_refresh;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		intra_refresh = value;
+		if (sizeof(struct vcd_property_intra_refresh_mb_number) ==
+				hdr->sz) {
+			*intra_refresh = enc->intra_refresh;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case DDL_I_INPUT_BUF_REQ:
-		{
-			if (sizeof(struct vcd_buffer_requirement_type) ==
-			    p_property_hdr->n_size) {
-				if (p_encoder->output_buf_req.n_size) {
-					*(struct vcd_buffer_requirement_type *)
-					    p_property_value =
-					    p_encoder->client_input_buf_req;
-					vcd_status = VCD_S_SUCCESS;
-				} else {
-					vcd_status = VCD_ERR_ILLEGAL_OP;
-				}
+		if (sizeof(struct vcd_buffer_requirement) == hdr->sz) {
+			if (enc->output_buf_req.size) {
+				*(struct vcd_buffer_requirement *)value =
+					enc->client_input_buf_req;
+				vcd_status = VCD_S_SUCCESS;
+			} else {
+				vcd_status = VCD_ERR_ILLEGAL_OP;
 			}
-			break;
 		}
+		break;
 	case DDL_I_OUTPUT_BUF_REQ:
-		{
-			if (sizeof(struct vcd_buffer_requirement_type) ==
-			    p_property_hdr->n_size) {
-				if (p_encoder->output_buf_req.n_size) {
-					*(struct vcd_buffer_requirement_type *)
-					    p_property_value =
-					    p_encoder->client_output_buf_req;
-					vcd_status = VCD_S_SUCCESS;
-				} else {
-					vcd_status = VCD_ERR_ILLEGAL_OP;
-				}
+		if (sizeof(struct vcd_buffer_requirement) == hdr->sz) {
+			if (enc->output_buf_req.size) {
+				*(struct vcd_buffer_requirement *)value =
+					enc->client_output_buf_req;
+				vcd_status = VCD_S_SUCCESS;
+			} else {
+				vcd_status = VCD_ERR_ILLEGAL_OP;
 			}
-			break;
 		}
+		break;
 	case VCD_I_BUFFER_FORMAT:
-		{
-			if (sizeof(struct vcd_property_buffer_format_type) ==
-			    p_property_hdr->n_size) {
-				*(struct vcd_property_buffer_format_type *)
-				    p_property_value = p_encoder->buf_format;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_buffer_format) == hdr->sz) {
+			*(struct vcd_property_buffer_format *)value =
+				enc->buf_format;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case DDL_I_FRAME_PROC_UNITS:
-		{
-			if (sizeof(u32) == p_property_hdr->n_size &&
-			    p_encoder->frame_size.n_width &&
-			    p_encoder->frame_size.n_height) {
-				*(u32 *) p_property_value =
-				    ((p_encoder->frame_size.n_width >> 4) *
-				     (p_encoder->frame_size.n_height >> 4)
-				    );
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(u32) == hdr->sz && enc->frame_size.width &&
+				enc->frame_size.height) {
+			*(u32 *)value = ((enc->frame_size.width >> 4) *
+				(enc->frame_size.height >> 4));
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_HEADER_EXTENSION:
-		{
-			if (sizeof(u32) == p_property_hdr->n_size &&
-			    p_encoder->codec_type.e_codec == VCD_CODEC_MPEG4) {
-				*(u32 *) p_property_value =
-				    p_encoder->n_hdr_ext_control;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(u32) == hdr->sz && enc->codec_type.codec ==
+				VCD_CODEC_MPEG4) {
+			*(u32 *)value = enc->hdr_ext_control;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_METADATA_ENABLE:
 	case VCD_I_METADATA_HEADER:
-		{
-			vcd_status = ddl_get_metadata_params(
-						   p_ddl,
-						   p_property_hdr,
-						   p_property_value);
-			break;
-		}
+		vcd_status = ddl_get_metadata_params(ddl, hdr, value);
+		break;
 	default:
-		{
-			vcd_status = VCD_ERR_ILLEGAL_OP;
-			break;
-		}
+		vcd_status = VCD_ERR_ILLEGAL_OP;
+		break;
 	}
 	return vcd_status;
 }
 
-static u32 ddl_set_enc_dynamic_property
-    (struct ddl_encoder_data_type *p_encoder,
-     struct vcd_property_hdr_type *p_property_hdr, void *p_property_value) {
+static u32 ddl_set_enc_dynamic_property(struct ddl_encoder_data *enc,
+		struct vcd_property_hdr *hdr, void *value)
+{
 	u32 vcd_status = VCD_ERR_ILLEGAL_PARM;
-	switch (p_property_hdr->prop_id) {
+	switch (hdr->id) {
 	case VCD_I_REQ_IFRAME:
-		{
-			if (sizeof(struct vcd_property_req_i_frame_type) ==
-			    p_property_hdr->n_size) {
-				p_encoder->n_dynamic_prop_change |=
-				    DDL_ENC_REQ_IFRAME;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_req_i_frame) == hdr->sz) {
+			enc->dynamic_prop_change |= DDL_ENC_REQ_IFRAME;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_TARGET_BITRATE:
-		{
-			if (sizeof(struct vcd_property_target_bitrate_type) ==
-			    p_property_hdr->n_size) {
-				p_encoder->target_bit_rate =
-				    *(struct vcd_property_target_bitrate_type *)
-				    p_property_value;
-				p_encoder->n_dynamic_prop_change |=
-				    DDL_ENC_CHANGE_BITRATE;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+		if (sizeof(struct vcd_property_target_bitrate) == hdr->sz) {
+			enc->target_bit_rate =
+				*(struct vcd_property_target_bitrate *)value;
+			enc->dynamic_prop_change |= DDL_ENC_CHANGE_BITRATE;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
 	case VCD_I_INTRA_PERIOD:
-		{
-			struct vcd_property_i_period_type *p_iperiod =
-				(struct vcd_property_i_period_type *)
-				p_property_value;
-			if (sizeof(struct vcd_property_i_period_type) ==
-				p_property_hdr->n_size &&
-				!p_iperiod->n_b_frames) {
-				p_encoder->i_period = *p_iperiod;
-				p_encoder->n_dynamic_prop_change |=
-					DDL_ENC_CHANGE_IPERIOD;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_property_i_period *iperiod = value;
+		if (sizeof(struct vcd_property_i_period) == hdr->sz &&
+				!iperiod->bframes) {
+			enc->period = *iperiod;
+			enc->dynamic_prop_change |= DDL_ENC_CHANGE_IPERIOD;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	case VCD_I_FRAME_RATE:
-		{
-			struct vcd_property_frame_rate_type *p_frame_rate =
-			    (struct vcd_property_frame_rate_type *)
-			    p_property_value;
-			if (sizeof(struct vcd_property_frame_rate_type)
-			    == p_property_hdr->n_size &&
-			    p_frame_rate->n_fps_denominator &&
-			    p_frame_rate->n_fps_numerator &&
-			    p_frame_rate->n_fps_denominator <=
-			    p_frame_rate->n_fps_numerator) {
-				p_encoder->frame_rate = *p_frame_rate;
-				p_encoder->n_dynamic_prop_change |=
-				    DDL_ENC_CHANGE_FRAMERATE;
-				vcd_status = VCD_S_SUCCESS;
-			}
-			break;
+	{
+		struct vcd_property_frame_rate *frame_rate = value;
+		if (sizeof(struct vcd_property_frame_rate) == hdr->sz &&
+				frame_rate->fps_denominator &&
+				frame_rate->fps_numerator &&
+				frame_rate->fps_denominator <=
+				frame_rate->fps_numerator) {
+			enc->frame_rate = *frame_rate;
+			enc->dynamic_prop_change |= DDL_ENC_CHANGE_FRAMERATE;
+			vcd_status = VCD_S_SUCCESS;
 		}
+		break;
+	}
 	default:
-		{
-			vcd_status = VCD_ERR_ILLEGAL_OP;
-			break;
-		}
+		vcd_status = VCD_ERR_ILLEGAL_OP;
+		break;
 	}
 	return vcd_status;
 }
 
-void ddl_set_default_dec_property(struct ddl_client_context_type *p_ddl)
+void ddl_set_default_dec_property(struct ddl_client_context *ddl)
 {
-	struct ddl_decoder_data_type *p_decoder = &(p_ddl->codec_data.decoder);
+	struct ddl_decoder_data *dec = &(ddl->codec_data.decoder);
 
-	if (p_decoder->codec_type.e_codec == VCD_CODEC_MPEG4 ||
-	    p_decoder->codec_type.e_codec == VCD_CODEC_MPEG2) {
-		p_decoder->post_filter.b_post_filter = TRUE;
+	if (dec->codec_type.codec == VCD_CODEC_MPEG4 ||
+			dec->codec_type.codec == VCD_CODEC_MPEG2) {
+		dec->post_filter.post_filter = true;
 	} else {
-		p_decoder->post_filter.b_post_filter = FALSE;
+		dec->post_filter.post_filter = false;
 	}
-	p_decoder->buf_format.e_buffer_format = VCD_BUFFER_FORMAT_NV12;
-	p_decoder->client_frame_size.n_height = 144;
-	p_decoder->client_frame_size.n_width = 176;
-	p_decoder->client_frame_size.n_stride = 176;
-	p_decoder->client_frame_size.n_scan_lines = 144;
-	p_decoder->n_progressive_only = 1;
-	ddl_set_default_metadata_flag(p_ddl);
+	dec->buf_format.buffer_format = VCD_BUFFER_FORMAT_NV12;
+	dec->client_frame_size.height = 144;
+	dec->client_frame_size.width = 176;
+	dec->client_frame_size.stride = 176;
+	dec->client_frame_size.scan_lines = 144;
+	dec->progressive_only = 1;
+	ddl_set_default_metadata_flag(ddl);
 
-	ddl_set_default_decoder_buffer_req(p_decoder, TRUE);
-
+	ddl_set_default_decoder_buffer_req(dec, true);
 }
 
-static void ddl_set_default_enc_property(struct ddl_client_context_type *p_ddl)
+static void ddl_set_default_enc_property(struct ddl_client_context *ddl)
 {
-	struct ddl_encoder_data_type *p_encoder = &(p_ddl->codec_data.encoder);
+	struct ddl_encoder_data *enc = &(ddl->codec_data.encoder);
 
-	ddl_set_default_enc_profile(p_encoder);
-	ddl_set_default_enc_level(p_encoder);
+	ddl_set_default_enc_profile(enc);
+	ddl_set_default_enc_level(enc);
 
-	p_encoder->rc_type.e_rate_control = VCD_RATE_CONTROL_VBR_VFR;
-	ddl_set_default_enc_rc_params(p_encoder);
+	enc->rc_type.rate_control = VCD_RATE_CONTROL_VBR_VFR;
+	ddl_set_default_enc_rc_params(enc);
 
-	ddl_set_default_enc_intra_period(p_encoder);
+	ddl_set_default_enc_intra_period(enc);
 
-	p_encoder->intra_refresh.n_cir_mb_number = 0;
-	ddl_set_default_enc_vop_timing(p_encoder);
+	enc->intra_refresh.cir_mb_number = 0;
+	ddl_set_default_enc_vop_timing(enc);
 
-	p_encoder->multi_slice.n_m_slice_size = VCD_MSLICE_OFF;
-	p_encoder->short_header.b_short_header = FALSE;
+	enc->multi_slice.m_slice_size = VCD_MSLICE_OFF;
+	enc->short_header.short_header = false;
 
-	p_encoder->entropy_control.e_entropy_sel = VCD_ENTROPY_SEL_CAVLC;
-	p_encoder->entropy_control.e_cabac_model = VCD_CABAC_MODEL_NUMBER_0;
-	p_encoder->db_control.e_db_config = VCD_DB_ALL_BLOCKING_BOUNDARY;
-	p_encoder->db_control.n_slice_alpha_offset = 0;
-	p_encoder->db_control.n_slice_beta_offset = 0;
+	enc->entropy_control.entropy_sel = VCD_ENTROPY_SEL_CAVLC;
+	enc->entropy_control.cabac_model = VCD_CABAC_MODEL_NUMBER_0;
+	enc->db_control.db_config = VCD_DB_ALL_BLOCKING_BOUNDARY;
+	enc->db_control.slice_alpha_offset = 0;
+	enc->db_control.slice_beta_offset = 0;
 
-	p_encoder->re_con_buf_format.e_buffer_format =
-		VCD_BUFFER_FORMAT_TILE_4x2;
+	enc->re_con_buf_format.buffer_format = VCD_BUFFER_FORMAT_TILE_4x2;
 
-	p_encoder->buf_format.e_buffer_format = VCD_BUFFER_FORMAT_NV12;
+	enc->buf_format.buffer_format = VCD_BUFFER_FORMAT_NV12;
 
-	p_encoder->n_hdr_ext_control = 0;
+	enc->hdr_ext_control = 0;
 
-	ddl_set_default_metadata_flag(p_ddl);
+	ddl_set_default_metadata_flag(ddl);
 
-	ddl_set_default_encoder_buffer_req(p_encoder);
+	ddl_set_default_encoder_buffer_req(enc);
 }
 
-static void ddl_set_default_enc_profile(struct ddl_encoder_data_type *p_encoder)
+static void ddl_set_default_enc_profile(struct ddl_encoder_data *enc)
 {
-	enum vcd_codec_type e_codec = p_encoder->codec_type.e_codec;
-	if (e_codec == VCD_CODEC_MPEG4)
-		p_encoder->profile.e_profile = VCD_PROFILE_MPEG4_SP;
-	else if (e_codec == VCD_CODEC_H264)
-		p_encoder->profile.e_profile = VCD_PROFILE_H264_BASELINE;
+	enum vcd_codec codec = enc->codec_type.codec;
+	if (codec == VCD_CODEC_MPEG4)
+		enc->profile.profile = VCD_PROFILE_MPEG4_SP;
+	else if (codec == VCD_CODEC_H264)
+		enc->profile.profile = VCD_PROFILE_H264_BASELINE;
 	else
-		p_encoder->profile.e_profile = VCD_PROFILE_H263_BASELINE;
+		enc->profile.profile = VCD_PROFILE_H263_BASELINE;
 }
 
-static void ddl_set_default_enc_level(struct ddl_encoder_data_type *p_encoder)
+static void ddl_set_default_enc_level(struct ddl_encoder_data *enc)
 {
-	enum vcd_codec_type e_codec = p_encoder->codec_type.e_codec;
-	if (e_codec == VCD_CODEC_MPEG4)
-		p_encoder->level.e_level = VCD_LEVEL_MPEG4_1;
-	else if (e_codec == VCD_CODEC_H264)
-		p_encoder->level.e_level = VCD_LEVEL_H264_1;
+	enum vcd_codec codec = enc->codec_type.codec;
+	if (codec == VCD_CODEC_MPEG4)
+		enc->level.level = VCD_LEVEL_MPEG4_1;
+	else if (codec == VCD_CODEC_H264)
+		enc->level.level = VCD_LEVEL_H264_1;
 	else
-		p_encoder->level.e_level = VCD_LEVEL_H263_10;
+		enc->level.level = VCD_LEVEL_H263_10;
 }
 
-static void ddl_set_default_enc_vop_timing
-    (struct ddl_encoder_data_type *p_encoder)
+static void ddl_set_default_enc_vop_timing(struct ddl_encoder_data *enc)
 {
-	p_encoder->vop_timing.n_vop_time_resolution =
-	    (2 * p_encoder->frame_rate.n_fps_numerator) /
-	    p_encoder->frame_rate.n_fps_denominator;
+	enc->vop_timing.vop_time_resolution = (2 *
+		enc->frame_rate.fps_numerator) /
+		enc->frame_rate.fps_denominator;
 }
 
-static void ddl_set_default_enc_intra_period(
-		struct ddl_encoder_data_type *p_encoder)
+static void ddl_set_default_enc_intra_period(struct ddl_encoder_data *enc)
 {
-	switch (p_encoder->rc_type.e_rate_control) {
+	switch (enc->rc_type.rate_control) {
 	default:
 	case VCD_RATE_CONTROL_VBR_VFR:
 	case VCD_RATE_CONTROL_VBR_CFR:
 	case VCD_RATE_CONTROL_CBR_VFR:
 	case VCD_RATE_CONTROL_OFF:
-		{
-			p_encoder->i_period.n_p_frames =
-			    ((p_encoder->frame_rate.n_fps_numerator << 1) /
-			     p_encoder->frame_rate.n_fps_denominator) - 1;
-			break;
-		}
+		enc->period.frames = ((enc->frame_rate.fps_numerator << 1) /
+			enc->frame_rate.fps_denominator) - 1;
+		break;
 	case VCD_RATE_CONTROL_CBR_CFR:
-		{
-			p_encoder->i_period.n_p_frames =
-			    ((p_encoder->frame_rate.n_fps_numerator >> 1) /
-			     p_encoder->frame_rate.n_fps_denominator) - 1;
-			break;
-		}
+		enc->period.frames = ((enc->frame_rate.fps_numerator >> 1) /
+			enc->frame_rate.fps_denominator) - 1;
+		break;
 	}
-	p_encoder->i_period.n_b_frames = 0;
+	enc->period.bframes = 0;
 }
 
-static void ddl_set_default_enc_rc_params(
-		struct ddl_encoder_data_type *p_encoder)
+static void ddl_set_default_enc_rc_params(struct ddl_encoder_data *enc)
 {
-	enum vcd_codec_type e_codec = p_encoder->codec_type.e_codec;
+	enum vcd_codec codec = enc->codec_type.codec;
 
-	p_encoder->rc_level.b_frame_level_rc = TRUE;
-	p_encoder->qp_range.n_min_qp = 0x1;
+	enc->rc_level.frame_level_rc = true;
+	enc->qp_range.min_qp = 0x1;
 
-	if (e_codec == VCD_CODEC_H264) {
-		p_encoder->qp_range.n_max_qp = 0x33;
-		p_encoder->session_qp.n_i_frame_qp = 0x19;
-		p_encoder->session_qp.n_p_frame_qp = 0x19;
+	if (codec == VCD_CODEC_H264) {
+		enc->qp_range.max_qp = 0x33;
+		enc->session_qp.iframe_qp = 0x19;
+		enc->session_qp.frame_qp = 0x19;
 
-		p_encoder->rc_level.b_mb_level_rc = TRUE;
-		p_encoder->adaptive_rc.b_activity_region_flag = TRUE;
-		p_encoder->adaptive_rc.b_dark_region_as_flag = TRUE;
-		p_encoder->adaptive_rc.b_smooth_region_as_flag = TRUE;
-		p_encoder->adaptive_rc.b_static_region_as_flag = TRUE;
+		enc->rc_level.mb_level_rc = true;
+		enc->adaptive_rc.activity_region_flag = true;
+		enc->adaptive_rc.dark_region_as_flag = true;
+		enc->adaptive_rc.smooth_region_as_flag = true;
+		enc->adaptive_rc.static_region_as_flag = true;
 	} else {
-		p_encoder->qp_range.n_max_qp = 0x1f;
-		p_encoder->session_qp.n_i_frame_qp = 0x14;
-		p_encoder->session_qp.n_p_frame_qp = 0x14;
-		p_encoder->rc_level.b_mb_level_rc = FALSE;
+		enc->qp_range.max_qp = 0x1f;
+		enc->session_qp.iframe_qp = 0x14;
+		enc->session_qp.frame_qp = 0x14;
+		enc->rc_level.mb_level_rc = false;
 	}
 
-	switch (p_encoder->rc_type.e_rate_control) {
+	switch (enc->rc_type.rate_control) {
 	default:
 	case VCD_RATE_CONTROL_VBR_VFR:
-		{
-			p_encoder->n_r_cframe_skip = 1;
-			p_encoder->frame_level_rc.n_reaction_coeff = 0x1f4;
-			break;
-		}
+		enc->r_cframe_skip = 1;
+		enc->frame_level_rc.reaction_coeff = 0x1f4;
+		break;
 	case VCD_RATE_CONTROL_VBR_CFR:
-		{
-			p_encoder->n_r_cframe_skip = 0;
-			p_encoder->frame_level_rc.n_reaction_coeff = 0x1f4;
-			break;
-		}
+		enc->r_cframe_skip = 0;
+		enc->frame_level_rc.reaction_coeff = 0x1f4;
+		break;
 	case VCD_RATE_CONTROL_CBR_VFR:
-		{
-			p_encoder->n_r_cframe_skip = 1;
-			if (e_codec != VCD_CODEC_H264) {
-				p_encoder->session_qp.n_i_frame_qp = 0xf;
-				p_encoder->session_qp.n_p_frame_qp = 0xf;
-			}
+		enc->r_cframe_skip = 1;
+		if (codec != VCD_CODEC_H264) {
+			enc->session_qp.iframe_qp = 0xf;
+			enc->session_qp.frame_qp = 0xf;
+		}
 
-			p_encoder->frame_level_rc.n_reaction_coeff = 0x6;
-			break;
-		}
+		enc->frame_level_rc.reaction_coeff = 0x6;
+		break;
 	case VCD_RATE_CONTROL_CBR_CFR:
-		{
-			p_encoder->n_r_cframe_skip = 0;
-			p_encoder->frame_level_rc.n_reaction_coeff = 0x6;
-			break;
-		}
+		enc->r_cframe_skip = 0;
+		enc->frame_level_rc.reaction_coeff = 0x6;
+		break;
 	case VCD_RATE_CONTROL_OFF:
-		{
-			p_encoder->n_r_cframe_skip = 0;
-			p_encoder->rc_level.b_frame_level_rc = FALSE;
-			p_encoder->rc_level.b_mb_level_rc = FALSE;
-			break;
-		}
+		enc->r_cframe_skip = 0;
+		enc->rc_level.frame_level_rc = false;
+		enc->rc_level.mb_level_rc = false;
+		break;
 	}
 }
 
-void ddl_set_default_encoder_buffer_req(struct ddl_encoder_data_type *p_encoder)
+void ddl_set_default_encoder_buffer_req(struct ddl_encoder_data *enc)
 {
-	u32 n_y_cb_cr_size;
+	u32 y_cb_cr_size;
 
-	n_y_cb_cr_size = ddl_get_yuv_buffer_size(&p_encoder->frame_size,
-		&p_encoder->buf_format, FALSE);
+	y_cb_cr_size = ddl_get_yuv_buffer_size(&enc->frame_size,
+		&enc->buf_format, false);
 
-	memset(&p_encoder->input_buf_req, 0,
-	       sizeof(struct vcd_buffer_requirement_type));
+	memset(&enc->input_buf_req, 0, sizeof(struct vcd_buffer_requirement));
 
-	p_encoder->input_buf_req.n_min_count = 1;
-	p_encoder->input_buf_req.n_actual_count =
-	    p_encoder->input_buf_req.n_min_count;
-	p_encoder->input_buf_req.n_max_count = DDL_MAX_BUFFER_COUNT;
-	p_encoder->input_buf_req.n_size = n_y_cb_cr_size;
-	p_encoder->input_buf_req.n_align = DDL_LINEAR_BUFFER_ALIGN_BYTES;
+	enc->input_buf_req.min_count = 1;
+	enc->input_buf_req.actual_count = enc->input_buf_req.min_count;
+	enc->input_buf_req.max_count = DDL_MAX_BUFFER_COUNT;
+	enc->input_buf_req.size = y_cb_cr_size;
+	enc->input_buf_req.align = DDL_LINEAR_BUFFER_ALIGN_BYTES;
 
-	p_encoder->client_input_buf_req = p_encoder->input_buf_req;
+	enc->client_input_buf_req = enc->input_buf_req;
 
-	memset(&p_encoder->output_buf_req, 0,
-	       sizeof(struct vcd_buffer_requirement_type));
+	memset(&enc->output_buf_req, 0, sizeof(struct vcd_buffer_requirement));
 
-	p_encoder->output_buf_req.n_min_count = 2;
-	p_encoder->output_buf_req.n_actual_count =
-	    p_encoder->output_buf_req.n_min_count;
-	p_encoder->output_buf_req.n_max_count = DDL_MAX_BUFFER_COUNT;
-	p_encoder->output_buf_req.n_align = DDL_LINEAR_BUFFER_ALIGN_BYTES;
-	p_encoder->output_buf_req.n_size = n_y_cb_cr_size;
-	ddl_set_default_encoder_metadata_buffer_size(p_encoder);
-	p_encoder->client_output_buf_req = p_encoder->output_buf_req;
+	enc->output_buf_req.min_count = 2;
+	enc->output_buf_req.actual_count = enc->output_buf_req.min_count;
+	enc->output_buf_req.max_count = DDL_MAX_BUFFER_COUNT;
+	enc->output_buf_req.align = DDL_LINEAR_BUFFER_ALIGN_BYTES;
+	enc->output_buf_req.size = y_cb_cr_size;
+	ddl_set_default_encoder_metadata_buffer_size(enc);
+	enc->client_output_buf_req = enc->output_buf_req;
 }
 
-void ddl_set_default_decoder_buffer_req(struct ddl_decoder_data_type *p_decoder,
-		u32 b_estimate)
+void ddl_set_default_decoder_buffer_req(struct ddl_decoder_data *dec,
+	u32 estimate)
 {
-	u32 n_y_cb_cr_size, n_min_dpb;
-	struct vcd_property_frame_size_type  *p_frame_size;
-	struct vcd_buffer_requirement_type *p_output_buf_req, *p_input_buf_req;
+	size_t y_cb_cr_size;
+	u32 min_dpb;
+	struct vcd_property_frame_size *frame_size;
+	struct vcd_buffer_requirement *output_buf_req, *input_buf_req;
 
-	if (!p_decoder->codec_type.e_codec)
+	if (!dec->codec_type.codec)
 		return;
 
-	if (b_estimate) {
-		p_frame_size = &p_decoder->client_frame_size;
-		p_output_buf_req = &p_decoder->client_output_buf_req;
-		p_input_buf_req = &p_decoder->client_input_buf_req;
-		n_min_dpb = ddl_decoder_min_num_dpb(p_decoder);
-		 n_y_cb_cr_size = ddl_get_yuv_buffer_size(p_frame_size,
-			&p_decoder->buf_format,
-			(!p_decoder->n_progressive_only));
+	if (estimate) {
+		frame_size = &dec->client_frame_size;
+		output_buf_req = &dec->client_output_buf_req;
+		input_buf_req = &dec->client_input_buf_req;
+		min_dpb = ddl_decoder_min_num_dpb(dec);
+		y_cb_cr_size = ddl_get_yuv_buffer_size(frame_size,
+			&dec->buf_format, !dec->progressive_only);
 	} else {
-		p_frame_size = &p_decoder->frame_size;
-		p_output_buf_req = &p_decoder->actual_output_buf_req;
-		p_input_buf_req = &p_decoder->actual_input_buf_req;
-		n_y_cb_cr_size = p_decoder->n_y_cb_cr_size;
-		n_min_dpb = p_decoder->n_min_dpb_num;
+		frame_size = &dec->frame_size;
+		output_buf_req = &dec->actual_output_buf_req;
+		input_buf_req = &dec->actual_input_buf_req;
+		y_cb_cr_size = dec->y_cb_cr_size;
+		min_dpb = dec->min_dpb_num;
 	}
 
-	memset(p_output_buf_req, 0, sizeof(struct vcd_buffer_requirement_type));
+	memset(output_buf_req, 0, sizeof(struct vcd_buffer_requirement));
 
-	p_output_buf_req->n_min_count = n_min_dpb;
-	p_output_buf_req->n_actual_count = p_output_buf_req->n_min_count;
-	p_output_buf_req->n_max_count = DDL_MAX_BUFFER_COUNT;
-	p_output_buf_req->n_size = n_y_cb_cr_size;
-	if (p_decoder->buf_format.e_buffer_format != VCD_BUFFER_FORMAT_NV12)
-		p_output_buf_req->n_align = DDL_TILE_BUFFER_ALIGN_BYTES;
+	output_buf_req->min_count = min_dpb;
+	output_buf_req->actual_count = output_buf_req->min_count;
+	output_buf_req->max_count = DDL_MAX_BUFFER_COUNT;
+	output_buf_req->size = y_cb_cr_size;
+	if (dec->buf_format.buffer_format != VCD_BUFFER_FORMAT_NV12)
+		output_buf_req->align = DDL_TILE_BUFFER_ALIGN_BYTES;
 	else
-		p_output_buf_req->n_align = DDL_LINEAR_BUFFER_ALIGN_BYTES;
+		output_buf_req->align = DDL_LINEAR_BUFFER_ALIGN_BYTES;
 
-	ddl_set_default_decoder_metadata_buffer_size(p_decoder,
-		p_frame_size, p_output_buf_req);
+	ddl_set_default_decoder_metadata_buffer_size(dec, frame_size,
+		output_buf_req);
 
-	p_decoder->min_output_buf_req = *p_output_buf_req;
+	dec->min_output_buf_req = *output_buf_req;
 
-	memset(p_input_buf_req, 0, sizeof(struct vcd_buffer_requirement_type));
+	memset(input_buf_req, 0, sizeof(struct vcd_buffer_requirement));
 
-	p_input_buf_req->n_min_count = 1;
-	p_input_buf_req->n_actual_count = p_input_buf_req->n_min_count;
-	p_input_buf_req->n_max_count = DDL_MAX_BUFFER_COUNT;
-	p_input_buf_req->n_size = n_y_cb_cr_size;
+	input_buf_req->min_count = 1;
+	input_buf_req->actual_count = input_buf_req->min_count;
+	input_buf_req->max_count = DDL_MAX_BUFFER_COUNT;
+	input_buf_req->size = y_cb_cr_size;
 
-	if (p_input_buf_req->n_size >= ((1280*720*3) >> 1))
-		p_input_buf_req->n_size = (p_input_buf_req->n_size >> 1);
+	if (input_buf_req->size >= (1280 * 720 * 3) >> 1)
+		input_buf_req->size >>= 1;
 
-	p_input_buf_req->n_align = DDL_LINEAR_BUFFER_ALIGN_BYTES;
+	input_buf_req->align = DDL_LINEAR_BUFFER_ALIGN_BYTES;
 
-	p_decoder->min_input_buf_req = *p_input_buf_req;
-
+	dec->min_input_buf_req = *input_buf_req;
 }
 
-u32 ddl_get_yuv_buffer_size(struct vcd_property_frame_size_type *p_frame_size,
-     struct vcd_property_buffer_format_type *p_buf_format, u32 inter_lace)
+size_t ddl_get_yuv_buffer_size(struct vcd_property_frame_size *frame_size,
+	struct vcd_property_buffer_format *buf_format, u32 interlace)
 {
-	u32 n_width = p_frame_size->n_stride;
-	u32 n_height = p_frame_size->n_scan_lines;
-	u32 n_total_memory_size;
+	u32 width = frame_size->stride;
+	u32 height = frame_size->scan_lines;
+	size_t sz;
 
-	if (p_buf_format->e_buffer_format != VCD_BUFFER_FORMAT_NV12) {
-		u32 n_component_mem_size;
-		u32 n_width_round_up;
-		u32 n_height_round_up;
-		u32 n_height_chroma = (n_height >> 1);
+	if (buf_format->buffer_format != VCD_BUFFER_FORMAT_NV12) {
+		size_t component_sz;
+		u32 width_round_up;
+		u32 height_round_up;
+		u32 height_chroma = (height >> 1);
 
-		n_width_round_up =
-		    DDL_TILE_ALIGN(n_width, DDL_TILE_ALIGN_WIDTH);
-		n_height_round_up =
-		    DDL_TILE_ALIGN(n_height, DDL_TILE_ALIGN_HEIGHT);
+		width_round_up = DDL_TILE_ALIGN(width, DDL_TILE_ALIGN_WIDTH);
+		height_round_up = DDL_TILE_ALIGN(height, DDL_TILE_ALIGN_HEIGHT);
 
-		n_component_mem_size = n_width_round_up * n_height_round_up;
-		n_component_mem_size = DDL_TILE_ALIGN(n_component_mem_size,
-						      DDL_TILE_MULTIPLY_FACTOR);
+		component_sz = width_round_up * height_round_up;
+		component_sz = DDL_TILE_ALIGN(component_sz,
+			DDL_TILE_MULTIPLY_FACTOR);
 
-		n_total_memory_size = ((n_component_mem_size +
-					 DDL_TILE_BUF_ALIGN_GUARD_BYTES) &
-					DDL_TILE_BUF_ALIGN_MASK);
+		sz = (component_sz + DDL_TILE_BUF_ALIGN_GUARD_BYTES) &
+			DDL_TILE_BUF_ALIGN_MASK;
 
-		n_height_round_up =
-		    DDL_TILE_ALIGN(n_height_chroma, DDL_TILE_ALIGN_HEIGHT);
-		n_component_mem_size = n_width_round_up * n_height_round_up;
-		n_component_mem_size = DDL_TILE_ALIGN(n_component_mem_size,
-						      DDL_TILE_MULTIPLY_FACTOR);
-		n_total_memory_size += n_component_mem_size;
+		height_round_up = DDL_TILE_ALIGN(height_chroma,
+			DDL_TILE_ALIGN_HEIGHT);
+		component_sz = width_round_up * height_round_up;
+		component_sz = DDL_TILE_ALIGN(component_sz,
+			DDL_TILE_MULTIPLY_FACTOR);
+		sz += component_sz;
 	} else {
-		n_total_memory_size = n_height * n_width;
-		n_total_memory_size += (n_total_memory_size >> 1);
+		sz = height * width;
+		sz += sz >> 1;
 	}
-	return n_total_memory_size;
+	return sz;
 }
 
-void ddl_calculate_stride(struct vcd_property_frame_size_type *p_frame_size,
-						 u32 b_interlace)
+void ddl_calculate_stride(struct vcd_property_frame_size *frame_size,
+	u32 interlace)
 {
-	p_frame_size->n_stride = ((p_frame_size->n_width + 15) >> 4) << 4;
+	frame_size->stride = ((frame_size->width + 15) >> 4) << 4;
 
-	if (b_interlace) {
-		p_frame_size->n_scan_lines =
-			((p_frame_size->n_height + 31) >> 5) << 5;
+	if (interlace)
+		frame_size->scan_lines = ((frame_size->height + 31) >> 5) << 5;
+	else
+		frame_size->scan_lines = ((frame_size->height + 15) >> 4) << 4;
+}
+
+static u32 ddl_valid_buffer_requirement(struct vcd_buffer_requirement
+	*orig, struct vcd_buffer_requirement *req)
+{
+	u32 status = false;
+	if (orig->max_count >= req->actual_count &&
+			orig->actual_count <= req->actual_count &&
+			orig->align <= req->align && orig->size <= req->size) {
+		status = true;
 	} else {
-		p_frame_size->n_scan_lines =
-			((p_frame_size->n_height + 15) >> 4) << 4;
+		pr_err("ddl_valid_buf_req:Failed\n");
 	}
-
+	return status;
 }
 
-static u32 ddl_valid_buffer_requirement
-	(struct vcd_buffer_requirement_type *original_buf_req,
-	struct vcd_buffer_requirement_type *req_buf_req)
+static u32 ddl_decoder_min_num_dpb(struct ddl_decoder_data *dec)
 {
-	u32 b_status = FALSE;
-	if (
-		   original_buf_req->n_max_count >= req_buf_req->n_actual_count
-		   && original_buf_req->n_actual_count <=
-		   req_buf_req->n_actual_count &&
-		   original_buf_req->n_align <= req_buf_req->n_align &&
-		   original_buf_req->n_size <= req_buf_req->n_size) {
-		b_status = TRUE;
-	} else {
-		VIDC_LOGERR_STRING("ddl_valid_buf_req:Failed");
-	}
-	return b_status;
-}
-
-static u32 ddl_decoder_min_num_dpb(struct ddl_decoder_data_type *p_decoder)
-{
-	u32 n_min_dpb = 0;
-	switch (p_decoder->codec_type.e_codec) {
+	u32 min_dpb = 0;
+	switch (dec->codec_type.codec) {
 	default:
 	case VCD_CODEC_MPEG4:
 	case VCD_CODEC_MPEG2:
@@ -1820,106 +1310,86 @@ static u32 ddl_decoder_min_num_dpb(struct ddl_decoder_data_type *p_decoder)
 	case VCD_CODEC_DIVX_5:
 	case VCD_CODEC_DIVX_6:
 	case VCD_CODEC_XVID:
-		{
-			n_min_dpb = 3;
-			break;
-		}
+		min_dpb = 3;
+		break;
 	case VCD_CODEC_H263:
-		{
-			n_min_dpb = 2;
-			break;
-		}
+		min_dpb = 2;
+		break;
 	case VCD_CODEC_VC1:
 	case VCD_CODEC_VC1_RCV:
-		{
-			n_min_dpb = 4;
-			break;
-		}
+		min_dpb = 4;
+		break;
 	case VCD_CODEC_H264:
-		{
-			u32 n_yuv_size =
-			    ((p_decoder->client_frame_size.n_height *
-			      p_decoder->client_frame_size.n_width * 3) >> 1);
-			n_min_dpb = 6912000 / n_yuv_size;
-			if (n_min_dpb > 16)
-				n_min_dpb = 16;
+	{
+		u32 yuv_size = (dec->client_frame_size.height *
+			dec->client_frame_size.width * 3) >> 1;
+		min_dpb = 6912000 / yuv_size;
+		if (min_dpb > 16)
+			min_dpb = 16;
 
-			n_min_dpb += 2;
-			break;
-		}
+		min_dpb += 2;
+		break;
 	}
-	return n_min_dpb;
+	}
+	return min_dpb;
 }
 
-static u32 ddl_set_dec_buffers
-    (struct ddl_decoder_data_type *p_decoder,
-     struct ddl_property_dec_pic_buffers_type *p_dpb) {
+static u32 ddl_set_dec_buffers(struct ddl_decoder_data *dec,
+	struct ddl_property_dec_pic_buffers *dpb)
+{
 	u32 vcd_status = VCD_S_SUCCESS;
-	u32 n_loopc;
-	for (n_loopc = 0; !vcd_status &&
-	     n_loopc < p_dpb->n_no_of_dec_pic_buf; ++n_loopc) {
-		if ((!DDL_ADDR_IS_ALIGNED
-		     (p_dpb->a_dec_pic_buffers[n_loopc].vcd_frm.p_physical,
-		      p_decoder->client_output_buf_req.n_align)
-		    )
-		    || (p_dpb->a_dec_pic_buffers[n_loopc].vcd_frm.n_alloc_len <
-			p_decoder->client_output_buf_req.n_size)
-		    ) {
+	u32 i;
+	for (i = 0; !vcd_status && i < dpb->no_of_dec_pic_buf; ++i) {
+		if (!IS_ALIGNED(dpb->dec_pic_buffers[i].vcd_frm.phys_addr,
+				dec->client_output_buf_req.align) ||
+				dpb->dec_pic_buffers[i].vcd_frm.alloc_len <
+				dec->client_output_buf_req.size) {
 			vcd_status = VCD_ERR_ILLEGAL_PARM;
+			pr_err("ddl_set_prop:"
+				"Dpb_align_fail_or_alloc_size_small\n");
+			return vcd_status;
 		}
 	}
-	if (vcd_status) {
-		VIDC_LOGERR_STRING
-		    ("ddl_set_prop:Dpb_align_fail_or_alloc_size_small");
-		return vcd_status;
-	}
-	if (p_decoder->dp_buf.n_no_of_dec_pic_buf) {
-		DDL_FREE(p_decoder->dp_buf.a_dec_pic_buffers);
-		p_decoder->dp_buf.n_no_of_dec_pic_buf = 0;
-	}
-	p_decoder->dp_buf.a_dec_pic_buffers =
-	    DDL_MALLOC(p_dpb->n_no_of_dec_pic_buf *
-		       sizeof(struct ddl_frame_data_type_tag));
 
-	if (!p_decoder->dp_buf.a_dec_pic_buffers) {
-		VIDC_LOGERR_STRING
-		    ("ddl_dec_set_prop:Dpb_container_alloc_failed");
+	if (dec->dp_buf.no_of_dec_pic_buf) {
+		kfree(dec->dp_buf.dec_pic_buffers);
+		dec->dp_buf.dec_pic_buffers = NULL;
+		dec->dp_buf.no_of_dec_pic_buf = 0;
+	}
+	dec->dp_buf.dec_pic_buffers = kmalloc(dpb->no_of_dec_pic_buf *
+		sizeof(struct ddl_frame_data_tag), GFP_KERNEL);
+
+	if (!dec->dp_buf.dec_pic_buffers) {
+		pr_err("ddl_dec_set_prop:"
+			"Dpb_container_alloc_failed\n");
 		return VCD_ERR_ALLOC_FAIL;
 	}
-	p_decoder->dp_buf.n_no_of_dec_pic_buf = p_dpb->n_no_of_dec_pic_buf;
-	for (n_loopc = 0; n_loopc < p_dpb->n_no_of_dec_pic_buf; ++n_loopc) {
-		p_decoder->dp_buf.a_dec_pic_buffers[n_loopc] =
-		    p_dpb->a_dec_pic_buffers[n_loopc];
-	}
-	p_decoder->dpb_mask.n_client_mask = 0;
-	p_decoder->dpb_mask.n_hw_mask = 0;
-	p_decoder->n_dynamic_prop_change = 0;
+	dec->dp_buf.no_of_dec_pic_buf = dpb->no_of_dec_pic_buf;
+	for (i = 0; i < dpb->no_of_dec_pic_buf; ++i)
+		dec->dp_buf.dec_pic_buffers[i] = dpb->dec_pic_buffers[i];
+
+	dec->dpb_mask.client_mask = 0;
+	dec->dpb_mask.hw_mask = 0;
+	dec->dynamic_prop_change = 0;
 	return VCD_S_SUCCESS;
 }
 
-void ddl_set_initial_default_values(struct ddl_client_context_type *p_ddl)
+void ddl_set_initial_default_values(struct ddl_client_context *ddl)
 {
-	if (p_ddl->b_decoding) {
-		p_ddl->codec_data.decoder.codec_type.e_codec = VCD_CODEC_MPEG4;
-		vcd_fw_transact(TRUE, TRUE,
-			p_ddl->codec_data.decoder.codec_type.e_codec);
-		ddl_set_default_dec_property(p_ddl);
+	if (ddl->decoding) {
+		ddl->codec_data.decoder.codec_type.codec = VCD_CODEC_MPEG4;
+		ddl_set_default_dec_property(ddl);
 	} else {
-		struct ddl_encoder_data_type *p_encoder =
-		    &(p_ddl->codec_data.encoder);
-		p_encoder->codec_type.e_codec = VCD_CODEC_MPEG4;
-		vcd_fw_transact(TRUE, FALSE,
-			p_encoder->codec_type.e_codec);
+		struct ddl_encoder_data *enc = &(ddl->codec_data.encoder);
+		enc->codec_type.codec = VCD_CODEC_MPEG4;
 
-		p_encoder->target_bit_rate.n_target_bitrate = 64000;
-		p_encoder->frame_size.n_width = 176;
-		p_encoder->frame_size.n_height = 144;
-		p_encoder->frame_size.n_stride = 176;
-		p_encoder->frame_size.n_scan_lines = 144;
-		p_encoder->frame_rate.n_fps_numerator = 30;
-		p_encoder->frame_rate.n_fps_denominator = 1;
-		ddl_set_default_enc_property(p_ddl);
+		enc->target_bit_rate.target_bitrate = 64000;
+		enc->frame_size.width = 176;
+		enc->frame_size.height = 144;
+		enc->frame_size.stride = 176;
+		enc->frame_size.scan_lines = 144;
+		enc->frame_rate.fps_numerator = 30;
+		enc->frame_rate.fps_denominator = 1;
+		ddl_set_default_enc_property(ddl);
 	}
-
-	return;
 }

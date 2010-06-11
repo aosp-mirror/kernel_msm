@@ -17,273 +17,202 @@
  */
 
 #include "video_core_type.h"
-
 #include "vcd_ddl_utils.h"
 
-DDL_INLINE struct ddl_context_type *ddl_get_context(void)
+struct ddl_context *ddl_get_context(void)
 {
-	static struct ddl_context_type ddl_context;
+	static struct ddl_context ddl_context;
 	return &ddl_context;
 }
 
-DDL_INLINE void ddl_move_client_state(struct ddl_client_context_type *p_ddl,
-				      enum ddl_client_state_type e_client_state)
+void ddl_move_client_state(struct ddl_client_context *ddl,
+	enum ddl_client_state client_state)
 {
-	p_ddl->e_client_state = e_client_state;
+	ddl->client_state = client_state;
 }
 
-DDL_INLINE void ddl_move_command_state(struct ddl_context_type *p_ddl_context,
-				       enum ddl_cmd_state_type e_command_state)
+void ddl_move_command_state(struct ddl_context *ddl_context,
+	enum ddl_cmd_state command_state)
 {
-	p_ddl_context->e_cmd_state = e_command_state;
+	ddl_context->cmd_state = command_state;
 }
 
-u32 ddl_client_transact(u32 operation,
-			struct ddl_client_context_type **pddl_client)
+u32 ddl_client_transact(u32 operation, struct ddl_client_context **pddl_client)
 {
 	u32 ret_status = VCD_ERR_FAIL;
-	u32 n_counter;
-	struct ddl_context_type *p_ddl_context;
+	u32 i;
+	struct ddl_context *ddl_context;
 
-	p_ddl_context = ddl_get_context();
+	ddl_context = ddl_get_context();
 	switch (operation) {
 	case DDL_FREE_CLIENT:
-		{
-			if (pddl_client && *pddl_client) {
-				u32 n_channel_id;
-				n_channel_id = (*pddl_client)->n_channel_id;
-				if (n_channel_id < VCD_MAX_NO_CLIENT) {
-					p_ddl_context->
-					    a_ddl_clients[n_channel_id] = NULL;
-				} else {
-					VIDC_LOG_STRING("CHID_CORRUPTION");
-				}
-				DDL_FREE(*pddl_client);
-				ret_status = VCD_S_SUCCESS;
-			}
-			break;
-		}
-	case DDL_GET_CLIENT:
-		{
-			ret_status = VCD_ERR_MAX_CLIENT;
-			for (n_counter = 0; n_counter < VCD_MAX_NO_CLIENT &&
-			     ret_status == VCD_ERR_MAX_CLIENT; ++n_counter) {
-				if (!p_ddl_context->a_ddl_clients[n_counter]) {
-					*pddl_client =
-					    (struct ddl_client_context_type *)
-					    DDL_MALLOC(sizeof
-					       (struct ddl_client_context_type)
-					       );
-					if (!*pddl_client) {
-						ret_status = VCD_ERR_ALLOC_FAIL;
-					} else {
-						DDL_MEMSET(*pddl_client, 0,
-						   sizeof(struct
-						   ddl_client_context_type));
-						p_ddl_context->
-						    a_ddl_clients[n_counter] =
-						    *pddl_client;
-						(*pddl_client)->n_channel_id =
-						    n_counter;
-						(*pddl_client)->p_ddl_context =
-						    p_ddl_context;
-						ret_status = VCD_S_SUCCESS;
-					}
-				}
-			}
-			break;
-		}
-	case DDL_INIT_CLIENTS:
-		{
-			for (n_counter = 0; n_counter < VCD_MAX_NO_CLIENT;
-			     ++n_counter) {
-				p_ddl_context->a_ddl_clients[n_counter] = NULL;
-			}
+		if (pddl_client && *pddl_client) {
+			u32 channel_id;
+			channel_id = (*pddl_client)->channel_id;
+			if (channel_id < VCD_MAX_NO_CLIENT)
+				ddl_context->ddl_clients[channel_id] = NULL;
+			else
+				pr_warn("CHID_CORRUPTION\n");
+			kfree(*pddl_client);
+			*pddl_client = NULL;
 			ret_status = VCD_S_SUCCESS;
-			break;
 		}
-	case DDL_ACTIVE_CLIENT:
-		{
-			for (n_counter = 0; n_counter < VCD_MAX_NO_CLIENT;
-			     ++n_counter) {
-				if (p_ddl_context->a_ddl_clients[n_counter]) {
-					ret_status = VCD_S_SUCCESS;
+		break;
+	case DDL_GET_CLIENT:
+		ret_status = VCD_ERR_MAX_CLIENT;
+		for (i = 0; i < VCD_MAX_NO_CLIENT && ret_status ==
+				VCD_ERR_MAX_CLIENT; ++i) {
+			if (!ddl_context->ddl_clients[i]) {
+				*pddl_client = (struct ddl_client_context *)
+					kzalloc((sizeof(
+					struct ddl_client_context)),
+					GFP_KERNEL);
+				if (!*pddl_client) {
+					ret_status = VCD_ERR_ALLOC_FAIL;
 					break;
 				}
+				ddl_context->ddl_clients[i] = *pddl_client;
+				(*pddl_client)->channel_id = i;
+				(*pddl_client)->ddl_context = ddl_context;
+				ret_status = VCD_S_SUCCESS;
 			}
-			break;
 		}
+		break;
+	case DDL_INIT_CLIENTS:
+		for (i = 0; i < VCD_MAX_NO_CLIENT; ++i)
+			ddl_context->ddl_clients[i] = NULL;
+		ret_status = VCD_S_SUCCESS;
+		break;
+	case DDL_ACTIVE_CLIENT:
+		for (i = 0; i < VCD_MAX_NO_CLIENT; ++i) {
+			if (ddl_context->ddl_clients[i]) {
+				ret_status = VCD_S_SUCCESS;
+				break;
+			}
+		}
+		break;
 	default:
-		{
-			ret_status = VCD_ERR_ILLEGAL_PARM;
-			break;
-		}
+		ret_status = VCD_ERR_ILLEGAL_PARM;
+		break;
 	}
 	return ret_status;
 }
 
-u32 ddl_decoder_dpb_transact(struct ddl_decoder_data_type *p_decoder,
-			     struct ddl_frame_data_type_tag *p_in_out_frame,
-			     u32 n_operation)
+u32 ddl_decoder_dpb_transact(struct ddl_decoder_data *dec,
+	struct ddl_frame_data_tag *in_out_frame, u32 operation)
 {
 	u32 vcd_status = VCD_S_SUCCESS;
-	u32 n_loopc;
-	struct ddl_frame_data_type_tag *p_found_frame = NULL;
-	struct ddl_mask_type *p_dpb_mask = &p_decoder->dpb_mask;
+	u32 i;
+	struct ddl_frame_data_tag *found_frame = NULL;
+	struct ddl_mask *dpb_mask = &dec->dpb_mask;
 
-	switch (n_operation) {
+	switch (operation) {
 	case DDL_DPB_OP_MARK_BUSY:
 	case DDL_DPB_OP_MARK_FREE:
-		{
-			for (n_loopc = 0; !p_found_frame &&
-			     n_loopc < p_decoder->dp_buf.n_no_of_dec_pic_buf;
-			     ++n_loopc) {
-				if (p_in_out_frame->vcd_frm.p_physical ==
-				    p_decoder->dp_buf.
-				    a_dec_pic_buffers[n_loopc].vcd_frm.
-				    p_physical) {
-					p_found_frame =
-					    &(p_decoder->dp_buf.
-					      a_dec_pic_buffers[n_loopc]);
-					break;
-				}
+		for (i = 0; i < dec->dp_buf.no_of_dec_pic_buf; ++i) {
+			if (in_out_frame->vcd_frm.phys_addr == dec->dp_buf.
+					dec_pic_buffers[i].vcd_frm.phys_addr) {
+				found_frame = &dec->dp_buf.dec_pic_buffers[i];
+				break;
 			}
+		}
 
-			if (p_found_frame) {
-				if (n_operation == DDL_DPB_OP_MARK_BUSY) {
-					p_dpb_mask->n_hw_mask &=
-					    (~(0x1 << n_loopc));
-					*p_in_out_frame = *p_found_frame;
-				} else if (n_operation ==
-					DDL_DPB_OP_MARK_FREE) {
-					p_dpb_mask->n_client_mask |=
-					    (0x1 << n_loopc);
-					*p_found_frame = *p_in_out_frame;
-				}
-			} else {
-				p_in_out_frame->vcd_frm.p_physical = NULL;
-				vcd_status = VCD_ERR_BAD_POINTER;
-				VIDC_LOG_STRING("BUF_NOT_FOUND");
-			}
+		if (!found_frame) {
+			in_out_frame->vcd_frm.phys_addr = 0;
+			vcd_status = VCD_ERR_BAD_POINTER;
+			pr_debug("BUF_NOT_FOUND\n");
 			break;
 		}
+		if (operation == DDL_DPB_OP_MARK_BUSY) {
+			dpb_mask->hw_mask &= ~(0x1 << i);
+			*in_out_frame = *found_frame;
+		} else if (operation == DDL_DPB_OP_MARK_FREE) {
+			dpb_mask->client_mask |= 0x1 << i;
+			*found_frame = *in_out_frame;
+		}
+
+		break;
 	case DDL_DPB_OP_SET_MASK:
-		{
-			p_dpb_mask->n_hw_mask |= p_dpb_mask->n_client_mask;
-			p_dpb_mask->n_client_mask = 0;
-			vidc_720p_decode_set_dpb_release_buffer_mask
-			    (p_dpb_mask->n_hw_mask);
-			break;
-		}
+		dpb_mask->hw_mask |= dpb_mask->client_mask;
+		dpb_mask->client_mask = 0;
+		vidc_720p_decode_set_dpb_release_buffer_mask(dpb_mask->hw_mask);
+		break;
 	case DDL_DPB_OP_INIT:
-		{
-			u32 n_dpb_size;
-			n_dpb_size = (!p_decoder->n_meta_data_offset) ?
-			    p_decoder->dp_buf.a_dec_pic_buffers[0].vcd_frm.
-			    n_alloc_len : p_decoder->n_meta_data_offset;
-			vidc_720p_decode_set_dpb_details(p_decoder->dp_buf.
-						  n_no_of_dec_pic_buf,
-						  n_dpb_size,
-						  p_decoder->ref_buffer.
-						  p_align_physical_addr);
-			for (n_loopc = 0;
-			     n_loopc < p_decoder->dp_buf.n_no_of_dec_pic_buf;
-			     ++n_loopc) {
-				vidc_720p_decode_set_dpb_buffers(n_loopc,
-							  (u32 *)
-							  p_decoder->
-							  dp_buf.
-							  a_dec_pic_buffers
-							  [n_loopc].
-							  vcd_frm.
-							  p_physical);
-				VIDC_LOG1("DEC_DPB_BUFn_SIZE",
-					   p_decoder->dp_buf.
-					   a_dec_pic_buffers[n_loopc].vcd_frm.
-					   n_alloc_len);
-			}
-			break;
+	{
+		size_t dpb_size = !dec->meta_data_offset ?
+			dec->dp_buf.dec_pic_buffers[0].vcd_frm.alloc_len :
+			dec->meta_data_offset;
+		vidc_720p_decode_set_dpb_details(dec->dp_buf.no_of_dec_pic_buf,
+			dpb_size, dec->ref_buffer.phys_addr);
+		for (i = 0; i < dec->dp_buf.no_of_dec_pic_buf; ++i) {
+			vidc_720p_decode_set_dpb_buffers(i, dec->dp_buf.
+				dec_pic_buffers[i].vcd_frm.phys_addr);
+			pr_debug("DEC_DPB_BUFn_SIZE %u\n", dec->dp_buf.
+				dec_pic_buffers[i].vcd_frm.alloc_len);
 		}
+		break;
+	}
 	case DDL_DPB_OP_RETRIEVE:
-		{
-			u32 n_position;
-			if (p_dpb_mask->n_client_mask) {
-				n_position = 0x1;
-				for (n_loopc = 0;
-				     n_loopc <
-				     p_decoder->dp_buf.n_no_of_dec_pic_buf
-				     && !p_found_frame; ++n_loopc) {
-					if (p_dpb_mask->
-					    n_client_mask & n_position) {
-						p_found_frame =
-						    &p_decoder->dp_buf.
-						    a_dec_pic_buffers[n_loopc];
-						p_dpb_mask->n_client_mask &=
-						    ~(n_position);
-					}
-					n_position <<= 1;
-				}
-			} else if (p_dpb_mask->n_hw_mask) {
-				n_position = 0x1;
-				for (n_loopc = 0;
-				     n_loopc <
-				     p_decoder->dp_buf.n_no_of_dec_pic_buf
-				     && !p_found_frame; ++n_loopc) {
-					if (p_dpb_mask->n_hw_mask
-							& n_position) {
-						p_found_frame =
-						    &p_decoder->dp_buf.
-						    a_dec_pic_buffers[n_loopc];
-						p_dpb_mask->n_hw_mask &=
-						    ~(n_position);
-					}
-					n_position <<= 1;
-				}
-			}
-			if (p_found_frame)
-				*p_in_out_frame = *p_found_frame;
-			else
-				p_in_out_frame->vcd_frm.p_physical = NULL;
+	{
+		u32 position;
+		u32 *mask;
+		if (dpb_mask->client_mask) {
+			mask = &dpb_mask->client_mask;
+		} else if (dpb_mask->hw_mask) {
+			mask = &dpb_mask->hw_mask;
+		} else {
+			in_out_frame->vcd_frm.phys_addr = 0;
 			break;
 		}
+		position = 0x1;
+		for (i = 0; i < dec->dp_buf.no_of_dec_pic_buf; ++i) {
+			if (*mask & position) {
+				found_frame = &dec->dp_buf.dec_pic_buffers[i];
+				*mask &= ~position;
+				*in_out_frame = *found_frame;
+				break;
+			}
+			position <<= 1;
+		}
+		if (!found_frame)
+			in_out_frame->vcd_frm.phys_addr = 0;
+		break;
+	}
 	}
 	return vcd_status;
 }
 
-void ddl_release_context_buffers(struct ddl_context_type *p_ddl_context)
+void ddl_release_context_buffers(struct ddl_context *ddl_context)
 {
-	ddl_pmem_free(p_ddl_context->context_buf_addr);
-	ddl_pmem_free(p_ddl_context->db_line_buffer);
-	ddl_pmem_free(p_ddl_context->data_partition_tempbuf);
-	ddl_pmem_free(p_ddl_context->metadata_shared_input);
-	ddl_pmem_free(p_ddl_context->dbg_core_dump);
-
-	vcd_fw_release();
+	ddl_dma_free(&ddl_context->context_buf_addr);
+	ddl_dma_free(&ddl_context->db_line_buffer);
+	ddl_dma_free(&ddl_context->data_partition_tempbuf);
+	ddl_dma_free(&ddl_context->metadata_shared_input);
+	ddl_dma_free(&ddl_context->dbg_core_dump);
 }
 
-void ddl_release_client_internal_buffers(struct ddl_client_context_type *p_ddl)
+void ddl_release_client_internal_buffers(struct ddl_client_context *ddl)
 {
-	if (p_ddl->b_decoding) {
-		struct ddl_decoder_data_type *p_decoder =
-		    &(p_ddl->codec_data.decoder);
-		ddl_pmem_free(p_decoder->h264Vsp_temp_buffer);
-		ddl_pmem_free(p_decoder->dpb_comv_buffer);
-		ddl_pmem_free(p_decoder->ref_buffer);
-		DDL_FREE(p_decoder->dp_buf.a_dec_pic_buffers);
-		ddl_decode_dynamic_property(p_ddl, FALSE);
-		p_decoder->decode_config.n_sequence_header_len = 0;
-		p_decoder->decode_config.p_sequence_header = NULL;
-		p_decoder->dpb_mask.n_client_mask = 0;
-		p_decoder->dpb_mask.n_hw_mask = 0;
-		p_decoder->dp_buf.n_no_of_dec_pic_buf = 0;
-		p_decoder->n_dynamic_prop_change = 0;
+	if (ddl->decoding) {
+		struct ddl_decoder_data *dec = &(ddl->codec_data.decoder);
+		ddl_dma_free(&dec->h264Vsp_temp_buffer);
+		ddl_dma_free(&dec->dpb_comv_buffer);
+		ddl_dma_free(&dec->ref_buffer);
+		kfree(dec->dp_buf.dec_pic_buffers);
+		dec->dp_buf.dec_pic_buffers = NULL;
+		ddl_decode_dynamic_property(ddl, false);
+		dec->decode_config.sz = 0;
+		dec->decode_config.addr = 0;
+		dec->dpb_mask.client_mask = 0;
+		dec->dpb_mask.hw_mask = 0;
+		dec->dp_buf.no_of_dec_pic_buf = 0;
+		dec->dynamic_prop_change = 0;
 
 	} else {
-		struct ddl_encoder_data_type *p_encoder =
-		    &(p_ddl->codec_data.encoder);
-		ddl_pmem_free(p_encoder->enc_dpb_addr);
-		ddl_pmem_free(p_encoder->seq_header);
-		ddl_encode_dynamic_property(p_ddl, FALSE);
-		p_encoder->n_dynamic_prop_change = 0;
+		struct ddl_encoder_data *encoder = &(ddl->codec_data.encoder);
+		ddl_dma_free(&encoder->enc_dpb_addr);
+		ddl_dma_free(&encoder->seq_header);
+		ddl_encode_dynamic_property(ddl, false);
+		encoder->dynamic_prop_change = 0;
 	}
 }

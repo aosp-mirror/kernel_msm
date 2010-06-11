@@ -28,9 +28,7 @@ video_corereg-objs :=	ddl/vcd_ddl_firmware.o \
 			vcd/vcd_client_sm.o \
 			vcd/vcd_device_sm.o \
 			vcd/vcd_sub.o \
-			vcd/vcd_util.o \
 			ddl/vcd_ddl_errors.o
-
 
 obj-$(CONFIG_MSM_VIDEO_CORE_VDEC) += video_decoder.o
 

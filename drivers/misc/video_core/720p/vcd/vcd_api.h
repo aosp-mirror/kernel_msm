@@ -43,14 +43,14 @@
 
 #define VCD_FRAMETAG_INVALID  0xffffffff
 
-struct vcd_handle_container_type {
+struct vcd_handle_container {
 	void *handle;
 };
-struct vcd_flush_cmd_type {
-	u32 n_mode;
+struct vcd_flush_cmd {
+	u32 mode;
 };
 
-enum vcd_frame_type {
+enum vcd_frame {
 	VCD_FRAME_YUV = 1,
 	VCD_FRAME_I,
 	VCD_FRAME_P,
@@ -58,30 +58,34 @@ enum vcd_frame_type {
 	VCD_FRAME_32BIT = 0x7fffffff
 };
 
-enum vcd_power_state_type {
+enum vcd_power_state {
 	VCD_PWR_STATE_ON = 1,
 	VCD_PWR_STATE_SLEEP,
 };
 
-struct vcd_frame_data_type {
-	u8 *p_virtual;
-	u8 *p_physical;
-	u32 n_alloc_len;
-	u32 n_data_len;
-	u32 n_offset;
+struct vcd_frame_data {
+	void *virt_addr;
+	phys_addr_t phys_addr;
+	size_t alloc_len;
+	size_t data_len;
+	size_t offset;
 	s64 time_stamp;
-	u32 n_flags;
-	u32 n_frm_clnt_data;
-	struct vcd_property_dec_output_buffer_type dec_op_prop;
-	u32 b_interlaced;
-	enum vcd_frame_type e_frame_type;
-	u32 n_ip_frm_tag;
+	u32 flags;
+	void *client_data;
+	struct vcd_property_dec_output_buffer dec_op_prop;
+	u32 interlaced;
+	enum vcd_frame frame_type;
+	u32 ip_frm_tag;
 };
 
-struct vcd_sequence_hdr_type {
-	u8 *p_sequence_header;
-	u32 n_sequence_header_len;
+struct vcd_phys_sequence_hdr {
+	phys_addr_t addr;
+	size_t sz;
+};
 
+struct vcd_sequence_hdr {
+	void *addr;
+	size_t sz;
 };
 
 enum vcd_buffer_type {
@@ -91,60 +95,58 @@ enum vcd_buffer_type {
 	VCD_BUFFER_32BIT = 0x7FFFFFFF
 };
 
-struct vcd_buffer_requirement_type {
-	u32 n_min_count;
-	u32 n_actual_count;
-	u32 n_max_count;
-	u32 n_size;
-	u32 n_align;
-	u32 n_buf_pool_id;
+struct vcd_buffer_requirement {
+	u32 min_count;
+	u32 actual_count;
+	u32 max_count;
+	size_t size;
+	u32 align;
+	u32 buf_pool_id;
 };
 
-struct vcd_init_config_type {
-	void *p_device_name;
-	void *(*pf_map_dev_base_addr) (void *p_device_name);
+struct vcd_init_config {
+	void *device_name;
+	void *(*pf_map_dev_base_addr) (void *device_name);
 	void (*pf_un_map_dev_base_addr) (void);
 	void (*pf_interrupt_clr) (void);
-	void (*pf_register_isr) (void *p_device_name);
+	void (*pf_register_isr) (void *device_name);
 	void (*pf_deregister_isr) (void);
 	u32  (*pf_timer_create) (void (*pf_timer_handler)(void *),
-		void *p_user_data, void **pp_timer_handle);
-	void (*pf_timer_release) (void *p_timer_handle);
-	void (*pf_timer_start) (void *p_timer_handle, u32 n_time_out);
-	void (*pf_timer_stop) (void *p_timer_handle);
+		void *user_data, void **pp_timer_handle);
+	void (*pf_timer_release) (void *timer_handle);
+	void (*pf_timer_start) (void *timer_handle, u32 time_out);
+	void (*pf_timer_stop) (void *timer_handle);
 };
 
-u32 vcd_init(struct vcd_init_config_type *p_config, s32 *p_driver_handle);
+u32 vcd_init(struct vcd_init_config *config, s32 *driver_handle);
 u32 vcd_term(s32 driver_handle);
-u32 vcd_open(s32 driver_handle, u32 b_decoding,
-	void (*callback) (u32 event, u32 status, void *p_info, u32 n_size,
-	void *handle, void *const p_client_data), void *p_client_data);
+u32 vcd_open(s32 driver_handle, u32 decoding,
+	void (*callback) (u32 event, u32 status, void *info, u32 size,
+	void *handle, void *const client_data), void *client_data);
 u32 vcd_close(void *handle);
 u32 vcd_encode_start(void *handle);
-u32 vcd_encode_frame(void *handle, struct vcd_frame_data_type *p_input_frame);
-u32 vcd_decode_start(void *handle, struct vcd_sequence_hdr_type *p_seq_hdr);
-u32 vcd_decode_frame(void *handle, struct vcd_frame_data_type *p_input_frame);
+u32 vcd_encode_frame(void *handle, struct vcd_frame_data *input_frame);
+u32 vcd_decode_start(void *handle, struct vcd_sequence_hdr *seq_hdr);
+u32 vcd_decode_frame(void *handle, struct vcd_frame_data *input_frame);
 u32 vcd_pause(void *handle);
 u32 vcd_resume(void *handle);
-u32 vcd_flush(void *handle, u32 n_mode);
+u32 vcd_flush(void *handle, u32 mode);
 u32 vcd_stop(void *handle);
-u32 vcd_set_property(void *handle, struct vcd_property_hdr_type *p_prop_hdr,
-					void *p_prop_val);
-u32 vcd_get_property(void *handle, struct vcd_property_hdr_type *p_prop_hdr,
-					 void *p_prop_val);
-u32 vcd_set_buffer_requirements(void *handle, enum vcd_buffer_type e_buffer,
-		struct vcd_buffer_requirement_type *p_buffer_req);
-u32 vcd_get_buffer_requirements(void *handle, enum vcd_buffer_type e_buffer,
-		struct vcd_buffer_requirement_type *p_buffer_req);
-u32 vcd_set_buffer(void *handle, enum vcd_buffer_type e_buffer,
-		u8 *p_buffer, u32 n_buf_size);
-u32 vcd_allocate_buffer(void *handle, enum vcd_buffer_type e_buffer,
-		u32 n_buf_size, u8 **pp_vir_buf_addr, u8 **pp_phy_buf_addr);
-
-u32 vcd_free_buffer(void *handle, enum vcd_buffer_type e_buffer, u8 *p_buffer);
-u32 vcd_fill_output_buffer(void *handle, struct vcd_frame_data_type *p_buffer);
-u32 vcd_set_device_power(s32 driver_handle,
-		enum vcd_power_state_type e_pwr_state);
+u32 vcd_set_property(void *handle, struct vcd_property_hdr *prop_hdr,
+	void *prop_val);
+u32 vcd_get_property(void *handle, struct vcd_property_hdr *prop_hdr,
+	void *prop_val);
+u32 vcd_set_buffer_requirements(void *handle, enum vcd_buffer_type buffer_type,
+	struct vcd_buffer_requirement *buffer_req);
+u32 vcd_get_buffer_requirements(void *handle, enum vcd_buffer_type buffer_type,
+	struct vcd_buffer_requirement *buffer_req);
+u32 vcd_set_buffer(void *handle, enum vcd_buffer_type buffer_type,
+	void *buffer, size_t buf_size);
+u32 vcd_allocate_buffer(void *handle, enum vcd_buffer_type buffer_type,
+	size_t sz, void **virt_addr, phys_addr_t *phys_addr);
+u32 vcd_free_buffer(void *handle, enum vcd_buffer_type buffer_type, void *buf);
+u32 vcd_fill_output_buffer(void *handle, struct vcd_frame_data *buffer);
+u32 vcd_set_device_power(s32 driver_handle, enum vcd_power_state pwr_state);
 void vcd_read_and_clear_interrupt(void);
 void vcd_response_handler(void);
 

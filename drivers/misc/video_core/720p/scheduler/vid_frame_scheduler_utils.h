@@ -31,6 +31,7 @@
 
 #include "vid_frame_scheduler_api.h"
 
+//TODO lots of low hanging fruit in here
 #define SCHED_INLINE
 
 #if DEBUG
@@ -59,13 +60,13 @@ SCHED_INLINE void SCHED_ASSERT(int val);
 
 SCHED_INLINE int SCHED_MIN(int x, int y);
 
-SCHED_INLINE enum sched_status_type SCHED_CRITSEC_CREATE(u32 **p_cs);
+SCHED_INLINE enum sched_status SCHED_CRITSEC_CREATE(u32 **cs);
 
-SCHED_INLINE enum sched_status_type SCHED_CRITSEC_RELEASE(u32 *cs);
+SCHED_INLINE enum sched_status SCHED_CRITSEC_RELEASE(u32 *cs);
 
-SCHED_INLINE enum sched_status_type SCHED_CRITSEC_ENTER(u32 *cs);
+SCHED_INLINE enum sched_status SCHED_CRITSEC_ENTER(u32 *cs);
 
-SCHED_INLINE enum sched_status_type SCHED_CRITSEC_LEAVE(u32 *cs);
+SCHED_INLINE enum sched_status SCHED_CRITSEC_LEAVE(u32 *cs);
 
 SCHED_INLINE void *SCHED_MALLOC(int size);
 
@@ -73,6 +74,6 @@ SCHED_INLINE void SCHED_FREE(void *ptr);
 
 SCHED_INLINE void *SCHED_MEMSET(void *ptr, int val, int size);
 
-SCHED_INLINE enum sched_status_type SCHED_GET_CURRENT_TIME(u32 *pn_time);
+SCHED_INLINE enum sched_status SCHED_GET_CURRENT_TIME(u32 *pn_time);
 
 #endif
