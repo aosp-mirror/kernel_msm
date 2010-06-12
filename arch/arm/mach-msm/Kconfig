@@ -15,7 +15,6 @@ config ARCH_MSM7X30
 	bool "MSM7x30"
 	select ARCH_MSM_SCORPION
 	select MSM_SMD
-	select MSM_VIC
 	select CPU_V7
 	select MSM_REMOTE_SPINLOCK_DEKKERS
 	select VERIFY_PERMISSION_FAULT
@@ -24,7 +23,6 @@ config ARCH_QSD8X50
 	bool "QSD8X50"
 	select ARCH_MSM_SCORPION
 	select MSM_SMD
-	select MSM_VIC
 	select CPU_V7
 	select MSM_REMOTE_SPINLOCK_LDREX
 	select VERIFY_PERMISSION_FAULT
@@ -36,9 +34,6 @@ config MSM_SOC_REV_A
 config  ARCH_MSM_ARM11
 	bool
 config  ARCH_MSM_SCORPION
-	bool
-
-config  MSM_VIC
 	bool
 
 config MSM_MDP22
