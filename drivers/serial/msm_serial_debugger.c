@@ -36,6 +36,7 @@
 #include <mach/system.h>
 #include <mach/fiq.h>
 
+#define BUILD_SERIAL_DEBUGGER
 #include "msm_serial.h"
 
 #include <linux/uaccess.h>

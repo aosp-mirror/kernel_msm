@@ -114,6 +114,7 @@
 #define UART_MISR	0x0010
 #define UART_ISR	0x0014
 
+#ifndef BUILD_SERIAL_DEBUGGER
 #define UART_TO_MSM(uart_port)	((struct msm_port *) uart_port)
 
 static inline
@@ -168,6 +169,7 @@ void msm_serial_set_mnd_regs_from_uartclk(struct uart_port *port)
 #define msm_serial_set_mnd_regs msm_serial_set_mnd_regs_tcxoby4
 #else
 #define msm_serial_set_mnd_regs msm_serial_set_mnd_regs_from_uartclk
+#endif
 #endif
 
 #endif	/* __DRIVERS_SERIAL_MSM_SERIAL_H */
