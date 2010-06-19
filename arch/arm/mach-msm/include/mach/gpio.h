@@ -92,33 +92,33 @@ void msm_gpios_disable(const struct msm_gpio *table, int size);
 
 /* GPIO TLMM: Direction */
 enum {
-	GPIO_INPUT,
-	GPIO_OUTPUT,
+	GPIO_CFG_INPUT,
+	GPIO_CFG_OUTPUT,
 };
 
 /* GPIO TLMM: Pullup/Pulldown */
 enum {
-	GPIO_NO_PULL,
-	GPIO_PULL_DOWN,
-	GPIO_KEEPER,
-	GPIO_PULL_UP,
+	GPIO_CFG_NO_PULL,
+	GPIO_CFG_PULL_DOWN,
+	GPIO_CFG_KEEPER,
+	GPIO_CFG_PULL_UP,
 };
 
 /* GPIO TLMM: Drive Strength */
 enum {
-	GPIO_2MA,
-	GPIO_4MA,
-	GPIO_6MA,
-	GPIO_8MA,
-	GPIO_10MA,
-	GPIO_12MA,
-	GPIO_14MA,
-	GPIO_16MA,
+	GPIO_CFG_2MA,
+	GPIO_CFG_4MA,
+	GPIO_CFG_6MA,
+	GPIO_CFG_8MA,
+	GPIO_CFG_10MA,
+	GPIO_CFG_12MA,
+	GPIO_CFG_14MA,
+	GPIO_CFG_16MA,
 };
 
 enum {
-	GPIO_ENABLE,
-	GPIO_DISABLE,
+	GPIO_CFG_ENABLE,
+	GPIO_CFG_DISABLE,
 };
 
 #define GPIO_CFG(gpio, func, dir, pull, drvstr) \

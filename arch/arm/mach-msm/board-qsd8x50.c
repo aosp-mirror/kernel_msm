@@ -36,8 +36,8 @@
 extern struct sys_timer msm_timer;
 
 static struct msm_gpio uart3_config_data[] = {
-	{ GPIO_CFG(86, 1, GPIO_INPUT,   GPIO_PULL_DOWN, GPIO_2MA), "UART2_Rx"},
-	{ GPIO_CFG(87, 1, GPIO_OUTPUT,  GPIO_PULL_DOWN, GPIO_2MA), "UART2_Tx"},
+	{ GPIO_CFG(86, 1, GPIO_CFG_INPUT,   GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), "UART2_Rx"},
+	{ GPIO_CFG(87, 1, GPIO_CFG_OUTPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), "UART2_Tx"},
 };
 
 static struct platform_device *devices[] __initdata = {
