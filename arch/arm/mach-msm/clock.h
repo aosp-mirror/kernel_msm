@@ -32,6 +32,7 @@
 #define CLKFLAG_AUTO_OFF		0x00000200
 #define CLKFLAG_MIN			0x00000400
 #define CLKFLAG_MAX			0x00000800
+#define CLKFLAG_SHARED			0x00001000
 
 struct clk_ops {
 	int (*enable)(unsigned id);

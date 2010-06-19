@@ -51,9 +51,12 @@
 #define MSM_CSR_PHYS          0xC0100000
 #define MSM_CSR_SIZE          SZ_4K
 
-#define MSM_GPT_PHYS          MSM_CSR_PHYS
-#define MSM_GPT_BASE          MSM_CSR_BASE
-#define MSM_GPT_SIZE          SZ_4K
+#define MSM_TMR_PHYS          MSM_CSR_PHYS
+#define MSM_TMR_BASE          MSM_CSR_BASE
+#define MSM_TMR_SIZE          SZ_4K
+
+#define MSM_GPT_BASE          MSM_TMR_BASE
+#define MSM_DGT_BASE          (MSM_TMR_BASE + 0x10)
 
 #define MSM_DMOV_BASE         IOMEM(0xF8002000)
 #define MSM_DMOV_PHYS         0xA9700000
@@ -108,6 +111,9 @@
 #define MSM_SDC4_PHYS         0xA0700000
 #define MSM_SDC4_SIZE         SZ_4K
 
+#define MSM_NAND_PHYS         0xA0A00000
+#define MSM_NAND_SIZE         SZ_4K
+
 #define MSM_I2C_PHYS          0xA9900000
 #define MSM_I2C_SIZE          SZ_4K
 
@@ -131,6 +137,17 @@
 #define MSM_AD5_PHYS          0xAC000000
 #define MSM_AD5_SIZE          (SZ_1M*13)
 
+#define MSM_VFE_PHYS          0xA0F00000
+#define MSM_VFE_SIZE          SZ_1M
+
+#define MSM_UART1DM_PHYS      0xA0200000
+#define MSM_UART2DM_PHYS      0xA0300000
+
+#define MSM_SSBI_PHYS         0xA8100000
+#define MSM_SSBI_SIZE         SZ_4K
+
+#define MSM_TSSC_PHYS         0xAA300000
+#define MSM_TSSC_SIZE         SZ_4K
 
 #if defined(CONFIG_ARCH_MSM7X30)
 #define MSM_GCC_BASE          IOMEM(0xF8009000)

@@ -119,4 +119,61 @@
 #define MSM_AD5_PHYS          0xA7000000
 #define MSM_AD5_SIZE          (SZ_1M*13)
 
+#define MSM_VFE_PHYS          0xA0F00000
+#define MSM_VFE_SIZE          SZ_1M
+
+#define MSM_I2C_SIZE          SZ_4K
+#define MSM_I2C_PHYS          0xACD00000
+
+#define MSM_I2C_2_PHYS	      0xACF00000
+#define MSM_I2C_2_SIZE	      SZ_4K
+
+#define MSM_QUP_PHYS          0xA8301000
+#define MSM_QUP_SIZE          SZ_4K
+
+#define MSM_GSBI_QUP_I2C_PHYS 0xA8300000
+#define MSM_GSBI_QUP_I2C_SIZE 4
+
+#define MSM_HSUSB_PHYS        0xA3600000
+#define MSM_HSUSB_SIZE        SZ_1K
+
+#define MSM_PMDH_PHYS         0xAD600000
+#define MSM_PMDH_SIZE         SZ_4K
+
+#define MSM_EMDH_PHYS         0xAD700000
+#define MSM_EMDH_SIZE         SZ_4K
+
+#define MSM_MDP_PHYS          0xA3F00000
+#define MSM_MDP_SIZE          0x000F0000
+
+#define MSM_UART1DM_PHYS      0xA0200000
+#define MSM_UART2DM_PHYS      0xA0300000
+
+#define MSM_TSSC_PHYS         0xAA300000
+#define MSM_TSSC_SIZE         SZ_4K
+
+#define MSM_SDC1_PHYS         0xA0400000
+#define MSM_SDC1_SIZE         SZ_4K
+
+#define MSM_SDC2_PHYS         0xA0500000
+#define MSM_SDC2_SIZE         SZ_4K
+
+#define MSM_SDC3_PHYS         0xA3000000
+#define MSM_SDC3_SIZE         SZ_4K
+
+#define MSM_SDC4_PHYS         0xA3100000
+#define MSM_SDC4_SIZE         SZ_4K
+
+#define MSM_NAND_PHYS         0xA0200000
+#define MSM_NAND_SIZE         SZ_4K
+
+#define MSM_PMIC_SSBI_PHYS    0xAD900000
+#define MSM_PMIC_SSBI_SIZE    SZ_4K
+
+#define MSM_GPU_REG_PHYS      0xA3500000
+#define MSM_GPU_REG_SIZE      SZ_128K
+
+#define MSM_SPI_PHYS          0xA8000000
+#define MSM_SPI_SIZE          SZ_4K
+
 #endif

@@ -100,6 +100,19 @@ int msm_dmov_exec_cmd(unsigned id, unsigned int cmdptr);
 
 #define DMOV_USB_CHAN         11
 
+#define DMOV_HSUART1_TX_CHAN   4
+#define DMOV_HSUART1_TX_CRCI   8
+
+#define DMOV_HSUART1_RX_CHAN   9
+#define DMOV_HSUART1_RX_CRCI   9
+
+#define DMOV_HSUART2_TX_CHAN   4
+#define DMOV_HSUART2_TX_CRCI   14
+
+#define DMOV_HSUART2_RX_CHAN   11
+#define DMOV_HSUART2_RX_CRCI   15
+
+
 /* no client rate control ifc (eg, ram) */
 #define DMOV_NONE_CRCI        0
 
