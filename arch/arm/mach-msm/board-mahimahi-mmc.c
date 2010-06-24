@@ -238,6 +238,7 @@ static unsigned int mahimahi_wifi_status(struct device *dev)
 
 static struct mmc_platform_data mahimahi_wifi_data = {
 	.ocr_mask		= MMC_VDD_28_29,
+	.built_in		= 1,
 	.status			= mahimahi_wifi_status,
 	.register_status_notify	= mahimahi_wifi_status_register,
 	.embedded_sdio		= &mahimahi_wifi_emb_data,
