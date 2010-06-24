@@ -989,7 +989,7 @@ msmsdcc_check_status(unsigned long data)
 	if (status ^ host->oldstat) {
 		pr_info("%s: Slot status change detected (%d -> %d)\n",
 			mmc_hostname(host->mmc), host->oldstat, status);
-		if (status)
+		if (status && !host->plat->built_in)
 			mmc_detect_change(host->mmc, (5 * HZ) / 2);
 		else
 			mmc_detect_change(host->mmc, 0);
