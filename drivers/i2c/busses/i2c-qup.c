@@ -735,15 +735,8 @@ qup_i2c_probe(struct platform_device *pdev)
 		goto err_clk_get_failed;
 	}
 
-	if (pdata->pclk != NULL) {
-		pclk = clk_get(&pdev->dev, pdata->pclk);
-		if (IS_ERR(pclk)) {
-			dev_err(&pdev->dev, "Could not get pclock\n");
-			ret = PTR_ERR(pclk);
-			clk_put(clk);
-			goto err_clk_get_failed;
-		}
-	} else
+	pclk = clk_get(&pdev->dev, "qup_pclk");
+	if (IS_ERR(clk))
 		pclk = NULL;
 
 	if (!(pdata->msm_i2c_config_gpio)) {

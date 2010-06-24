@@ -10,7 +10,6 @@ struct msm_qup_i2c_platform_data {
         int pri_dat;
         int aux_clk;
         int aux_dat;
-        const char *pclk;
         void (*msm_i2c_config_gpio)(int iface, int config_type);
 };
 
