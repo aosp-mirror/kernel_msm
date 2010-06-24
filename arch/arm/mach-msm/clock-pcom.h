@@ -94,7 +94,7 @@
 #define P_USB_HS2_CORE_CLK	54  /* High speed USB 2 core clock */
 #define P_USB_HS3_CORE_CLK	55  /* High speed USB 3 core clock */
 #define P_CAM_M_CLK		56
-#define P_CAMIF_PAD_P_CLK	57
+#define P_QUP_I2C_P_CLK		57
 #define P_GRP_2D_CLK		58
 #define P_GRP_2D_P_CLK		59
 #define P_I2S_CLK		60

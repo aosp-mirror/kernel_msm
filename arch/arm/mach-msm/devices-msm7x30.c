@@ -640,7 +640,6 @@ struct clk msm_clocks_7x30[] = {
 	CLK_PCOM("adm_clk",	ADM_CLK,	NULL, 0),
 	CLK_PCOM("adsp_clk",	ADSP_CLK,	NULL, 0),
 	CLK_PCOM("cam_m_clk",	CAM_M_CLK,	NULL, 0),
-	CLK_PCOM("camif_pad_pclk",	CAMIF_PAD_P_CLK,	NULL, OFF),
 	CLK_PCOM("ebi1_clk",	EBI1_CLK,	NULL, CLK_MIN),
 	CLK_PCOM("ecodec_clk",	ECODEC_CLK,	NULL, 0),
 	CLK_PCOM("emdh_clk",	EMDH_CLK,	&msm_device_mddi1.dev, OFF | CLK_MINMAX),
@@ -717,6 +716,7 @@ struct clk msm_clocks_7x30[] = {
 	CLK_PCOM("vfe_pclk",	VFE_P_CLK,	NULL, OFF),
 	CLK_PCOM("vpe_clk",	VPE_CLK,	NULL, 0),
 	CLK_PCOM("qup_clk",	QUP_I2C_CLK,	&msm_device_qup_i2c.dev, OFF),
+	CLK_PCOM("qup_pclk",	QUP_I2C_P_CLK,	&msm_device_qup_i2c.dev, OFF),
 
 	/* 7x30 v2 hardware only. */
 	CLK_PCOM("csi_clk",	CSI0_CLK,	NULL, 0),
