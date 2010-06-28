@@ -870,7 +870,7 @@ module_param_call(tx_rx_count, NULL, diag_get_tx_rx_count, NULL, 0444);
 
 static int diag_get_enabled(char *buffer, struct kernel_param *kp)
 {
-	buffer[0] = '0' + !_context.function.hidden;
+	buffer[0] = '0' + !_context.function.disabled;
 	return 1;
 }
 module_param_call(enabled, diag_set_enabled, diag_get_enabled, NULL, 0664);
@@ -904,7 +904,7 @@ int diag_bind_config(struct usb_configuration *c)
 	ctxt->function.set_alt = diag_function_set_alt;
 	ctxt->function.disable = diag_function_disable;
 
-	ctxt->function.hidden = !_context.function_enable;
+	ctxt->function.disabled = !_context.function_enable;
 
 	return usb_add_function(c, &ctxt->function);
 }
