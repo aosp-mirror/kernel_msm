@@ -146,6 +146,7 @@ int pm8058_read_buf(struct device *dev, u16 addr, u8 *buf, int cnt);
 int pm8058_gpio_mux_cfg(struct device *dev, unsigned int gpio,
 			struct pm8058_pin_config *cfg);
 int pm8058_gpio_mux(unsigned int gpio, struct pm8058_pin_config *cfg);
+int pm8058_irq_get_status(struct device *dev, unsigned int irq);
 #else
 static inline int pm8058_readb(struct device *dev, u16 addr, u8 *val)
 { return 0; }
@@ -159,6 +160,8 @@ static inline int pm8058_gpio_mux_cfg(struct device *dev, unsigned int gpio,
 			struct pm8058_pin_config *cfg) { return 0; }
 static inline int pm8058_gpio_mux(unsigned int gpio,
 			struct pm8058_pin_config *cfg) { return 0; }
+static inline int pm8058_irq_get_status(struct device *dev, unsigned int irq)
+{ return 0; }
 #endif
 
 #endif

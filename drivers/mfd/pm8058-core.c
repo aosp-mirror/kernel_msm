@@ -435,6 +435,16 @@ done:
 	return ret;
 }
 
+int pm8058_irq_get_status(struct device *dev, unsigned int irq)
+{
+	struct pm8058 *pmic = dev_get_drvdata(dev);
+
+	if (irq >= PM8058_NUM_IRQS)
+		return -EINVAL;
+	return get_curr_irq_stat(pmic, irq);
+}
+EXPORT_SYMBOL(pm8058_irq_get_status);
+
 static int cfg_irq_blk_bit_perm(struct pm8058 *pmic, u8 blk, u8 mask)
 {
 	int ret;
