@@ -161,6 +161,7 @@ struct pm8058 {
 	struct pm8058_platform_data	*pdata;
 
 	struct platform_device		*kp_pdev;
+	struct platform_device		*charger_pdev;
 };
 
 static struct pm8058 *the_pm8058;
@@ -811,6 +812,33 @@ static int add_keypad_device(struct pm8058 *pmic, void *pdata)
 	return 0;
 }
 
+static int add_charger_device(struct pm8058 *pmic, void *pdata)
+{
+	struct platform_device *pdev;
+	struct resource irq_res[] = {
+		{
+			.start	= pmic->irq_base + PM8058_CHGVAL_IRQ,
+			.end	= pmic->irq_base + PM8058_CHGVAL_IRQ,
+			.flags	= IORESOURCE_IRQ,
+			.name	= "chgval_irq",
+		},
+		{
+			.start	= pmic->irq_base + PM8058_FASTCHG_IRQ,
+			.end	= pmic->irq_base + PM8058_FASTCHG_IRQ,
+			.flags	= IORESOURCE_IRQ,
+			.name	= "fastchg_irq",
+		}
+	};
+
+	pdev = add_child_device(pmic, "pm8058-charger", pdata, irq_res,
+				ARRAY_SIZE(irq_res));
+	if (IS_ERR(pdev))
+		return PTR_ERR(pdev);
+
+	pmic->charger_pdev = pdev;
+	return 0;
+}
+
 static int pm8058_probe(struct platform_device *pdev)
 {
 	struct pm8058_platform_data *pdata = pdev->dev.platform_data;
@@ -888,8 +916,19 @@ static int pm8058_probe(struct platform_device *pdev)
 		}
 	}
 
+	if (pdata->charger_pdata) {
+		ret = add_charger_device(pmic, pdata->charger_pdata);
+		if (ret) {
+			pr_err("%s: can't add child charger dev\n", __func__);
+			goto err_add_charger_dev;
+		}
+	}
+
 	return 0;
 
+err_add_charger_dev:
+	if (pmic->kp_pdev)
+		platform_device_put(pmic->kp_pdev);
 err_add_kp_dev:
 err_pdata_init:
 	the_pm8058 = NULL;
