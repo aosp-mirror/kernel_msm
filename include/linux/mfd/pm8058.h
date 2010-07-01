@@ -81,9 +81,6 @@ struct pm8058_platform_data {
 	unsigned int				gpio_base;
 	int					(*init)(struct device *dev);
 
-	/* function to call on vbus detect */
-	void					(*vbus_present)(bool present);
-
 	/* child devices */
 	struct pm8058_keypad_platform_data	*keypad_pdata;
 };

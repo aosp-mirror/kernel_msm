@@ -811,27 +811,6 @@ static int add_keypad_device(struct pm8058 *pmic, void *pdata)
 	return 0;
 }
 
-/* vbus detection helper */
-static void check_vbus(struct pm8058 *pmic)
-{
-	int ret;
-
-	ret = get_curr_irq_stat(pmic, PM8058_CHGVAL_IRQ);
-	if (ret >= 0)
-		pmic->pdata->vbus_present(ret);
-	else
-		pr_err("%s: can't read status!! ignoring event?!\n", __func__);
-	/* XXX: maybe add some retries? */
-}
-
-static irqreturn_t pm8058_vbus_irq_handler(int irq, void *dev)
-{
-	struct pm8058 *pmic = dev;
-
-	check_vbus(pmic);
-	return IRQ_HANDLED;
-}
-
 static int pm8058_probe(struct platform_device *pdev)
 {
 	struct pm8058_platform_data *pdata = pdev->dev.platform_data;
@@ -909,25 +888,8 @@ static int pm8058_probe(struct platform_device *pdev)
 		}
 	}
 
-	if (pdata->vbus_present) {
-		int vbus_irq = pmic->irq_base + PM8058_CHGVAL_IRQ;
-		ret = request_threaded_irq(vbus_irq, NULL,
-				pm8058_vbus_irq_handler,
-				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
-				"pm8058-vbus", pmic);
-		if (ret) {
-			pr_err("%s: can't request vbus irq\n", __func__);
-			goto err_req_vbus_irq;
-		}
-		set_irq_wake(vbus_irq, 1);
-		/* run once to handle the case where vbus is already present */
-		check_vbus(pmic);
-	}
 	return 0;
 
-err_req_vbus_irq:
-	if (pmic->kp_pdev)
-		platform_device_put(pmic->kp_pdev);
 err_add_kp_dev:
 err_pdata_init:
 	the_pm8058 = NULL;
