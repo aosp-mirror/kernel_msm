@@ -73,7 +73,7 @@ module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
  * bank 0 - GPIO IRQs start=(24 * 8) cnt=40 (gpios 0-39)
  * bank 1 - MPP IRQs start=(16 * 8) cnt=12 (mpps 0-11)
  * bank 2 - keypad irqs start=(9*8 + 1) cnt=2
- * bank 3 - charger irqs start=(1*8 + 7) cnt=1
+ * bank 3 - charger irqs start=(1*8 + 7) cnt=7 (ends at 2*8 + 5)
  *
  */
 struct pm8058_irq_bank {
@@ -116,7 +116,7 @@ struct pm8058_irq_group {
 static const struct pm8058_irq_group pm8058_irq_groups[] = {
 	{
 		.stat_reg	= REG_IRQ_M_STATUS1,
-		.valid_mask	= 0x2,
+		.valid_mask	= 0x6,
 		.root_mask	= 0x2,
 		.block_offset	= 0,
 	},
