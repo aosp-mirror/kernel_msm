@@ -148,4 +148,10 @@ config CHARGER_PCF50633
 	help
 	 Say Y to include support for NXP PCF50633 Main Battery Charger.
 
+config CHARGER_PM8058
+	bool "Qualcomm PM8058 pmic charger driver"
+	depends on PM8058
+	help
+	  Say Y to include support for the pm8058 charge controller
+
 endif # POWER_SUPPLY

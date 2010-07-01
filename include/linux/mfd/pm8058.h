@@ -76,6 +76,16 @@ struct pm8058_keypad_platform_data {
 	int			(*init)(struct device *dev);
 };
 
+struct pm8058_charger_platform_data {
+	/* function to call on vbus detect */
+	void			(*vbus_present)(bool present);
+
+	int			(*charge)(u32 max_current, bool is_ac);
+
+	char			**supplied_to;
+	int			num_supplicants;
+};
+
 struct pm8058_platform_data {
 	unsigned int				irq_base;
 	unsigned int				gpio_base;
@@ -83,6 +93,7 @@ struct pm8058_platform_data {
 
 	/* child devices */
 	struct pm8058_keypad_platform_data	*keypad_pdata;
+	struct pm8058_charger_platform_data	*charger_pdata;
 };
 
 #define PM8058_GPIO_VIN_SRC_VPH_PWR	0x0 /* VDD_L6_L7 */
@@ -164,6 +175,12 @@ static inline int pm8058_gpio_mux(unsigned int gpio,
 			struct pm8058_pin_config *cfg) { return 0; }
 static inline int pm8058_irq_get_status(struct device *dev, unsigned int irq)
 { return 0; }
+#endif
+
+#ifdef CONFIG_CHARGER_PM8058
+void pm8058_notify_charger_connected(int status);
+#else
+static inline void pm8058_notify_charger_connected(int status) {}
 #endif
 
 #endif
