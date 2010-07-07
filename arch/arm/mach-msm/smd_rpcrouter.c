@@ -102,7 +102,7 @@ static struct wake_lock rpcrouter_wake_lock;
 static int rpcrouter_need_len;
 
 static atomic_t next_xid = ATOMIC_INIT(1);
-static uint8_t next_pacmarkid;
+static atomic_t next_mid = ATOMIC_INIT(0);
 
 static void do_read_data(struct work_struct *work);
 static void do_create_pdevs(struct work_struct *work);
@@ -742,19 +742,69 @@ int msm_rpc_close(struct msm_rpc_endpoint *ept)
 }
 EXPORT_SYMBOL(msm_rpc_close);
 
+static int msm_rpc_write_pkt(struct msm_rpc_endpoint *ept,
+			     struct rr_remote_endpoint *r_ept,
+			     struct rr_header *hdr,
+			     uint32_t pacmark,
+			     void *buffer, int count)
+{
+	DEFINE_WAIT(__wait);
+	unsigned long flags;
+	int needed;
+
+	for (;;) {
+		prepare_to_wait(&r_ept->quota_wait, &__wait,
+				TASK_INTERRUPTIBLE);
+		spin_lock_irqsave(&r_ept->quota_lock, flags);
+		if (r_ept->tx_quota_cntr < RPCROUTER_DEFAULT_RX_QUOTA)
+			break;
+		if (signal_pending(current) &&
+		    (!(ept->flags & MSM_RPC_UNINTERRUPTIBLE)))
+			break;
+		spin_unlock_irqrestore(&r_ept->quota_lock, flags);
+		schedule();
+	}
+	finish_wait(&r_ept->quota_wait, &__wait);
+
+	if (signal_pending(current) &&
+	    (!(ept->flags & MSM_RPC_UNINTERRUPTIBLE))) {
+		spin_unlock_irqrestore(&r_ept->quota_lock, flags);
+		return -ERESTARTSYS;
+	}
+	r_ept->tx_quota_cntr++;
+	if (r_ept->tx_quota_cntr == RPCROUTER_DEFAULT_RX_QUOTA)
+		hdr->confirm_rx = 1;
+
+	spin_unlock_irqrestore(&r_ept->quota_lock, flags);
+
+	spin_lock_irqsave(&smd_lock, flags);
+
+	needed = sizeof(*hdr) + hdr->size;
+	while (smd_write_avail(smd_channel) < needed) {
+		spin_unlock_irqrestore(&smd_lock, flags);
+		msleep(250);
+		spin_lock_irqsave(&smd_lock, flags);
+	}
+
+	/* TODO: deal with full fifo */
+	smd_write(smd_channel, hdr, sizeof(*hdr));
+	smd_write(smd_channel, &pacmark, sizeof(pacmark));
+	smd_write(smd_channel, buffer, count);
+
+	spin_unlock_irqrestore(&smd_lock, flags);
+
+	return 0;
+}
+
 int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 {
 	struct rr_header hdr;
 	uint32_t pacmark;
+	uint32_t mid;
 	struct rpc_request_hdr *rq = buffer;
 	struct rr_remote_endpoint *r_ept;
-	unsigned long flags;
-	int needed;
-	DEFINE_WAIT(__wait);
-
-	/* TODO: fragmentation for large outbound packets */
-	if (count > (RPCROUTER_MSGSIZE_MAX - sizeof(uint32_t)) || !count)
-		return -EINVAL;
+	int ret;
+	int total;
 
 	/* snoop the RPC packet and enforce permissions */
 
@@ -838,56 +888,36 @@ int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 	hdr.version = RPCROUTER_VERSION;
 	hdr.src_pid = ept->pid;
 	hdr.src_cid = ept->cid;
-	hdr.confirm_rx = 0;
-	hdr.size = count + sizeof(uint32_t);
 
-	for (;;) {
-		prepare_to_wait(&r_ept->quota_wait, &__wait,
-				TASK_INTERRUPTIBLE);
-		spin_lock_irqsave(&r_ept->quota_lock, flags);
-		if (r_ept->tx_quota_cntr < RPCROUTER_DEFAULT_RX_QUOTA)
-			break;
-		if (signal_pending(current) && 
-		    (!(ept->flags & MSM_RPC_UNINTERRUPTIBLE)))
-			break;
-		spin_unlock_irqrestore(&r_ept->quota_lock, flags);
-		schedule();
-	}
-	finish_wait(&r_ept->quota_wait, &__wait);
+	total = count;
 
-	if (signal_pending(current) &&
-	    (!(ept->flags & MSM_RPC_UNINTERRUPTIBLE))) {
-		spin_unlock_irqrestore(&r_ept->quota_lock, flags);
-		return -ERESTARTSYS;
-	}
-	r_ept->tx_quota_cntr++;
-	if (r_ept->tx_quota_cntr == RPCROUTER_DEFAULT_RX_QUOTA)
-		hdr.confirm_rx = 1;
+	mid = atomic_add_return(1, &next_mid) & 0xFF;
 
-	/* bump pacmark while interrupts disabled to avoid race
-	 * probably should be atomic op instead
-	 */
-	pacmark = PACMARK(count, ++next_pacmarkid, 0, 1);
+	while (count > 0) {
+		unsigned xfer;
 
-	spin_unlock_irqrestore(&r_ept->quota_lock, flags);
+		if (count > RPCROUTER_DATASIZE_MAX)
+			xfer = RPCROUTER_DATASIZE_MAX;
+		else
+			xfer = count;
 
-	spin_lock_irqsave(&smd_lock, flags);
+		hdr.confirm_rx = 0;
+		hdr.size = xfer + sizeof(uint32_t);
 
-	needed = sizeof(hdr) + hdr.size;
-	while (smd_write_avail(smd_channel) < needed) {
-		spin_unlock_irqrestore(&smd_lock, flags);
-		msleep(250);
-		spin_lock_irqsave(&smd_lock, flags);
+		/* total == count -> must be first packet 
+		 * xfer == count -> must be last packet
+		 */
+		pacmark = PACMARK(xfer, mid, (total == count), (xfer == count));
+
+		ret = msm_rpc_write_pkt(ept, r_ept, &hdr, pacmark, buffer, xfer);
+		if (ret < 0)
+			return ret;
+
+		buffer += xfer;
+		count -= xfer;
 	}
 
-	/* TODO: deal with full fifo */
-	smd_write(smd_channel, &hdr, sizeof(hdr));
-	smd_write(smd_channel, &pacmark, sizeof(pacmark));
-	smd_write(smd_channel, buffer, count);
-
-	spin_unlock_irqrestore(&smd_lock, flags);
-
-	return count;
+	return total;
 }
 EXPORT_SYMBOL(msm_rpc_write);
 
