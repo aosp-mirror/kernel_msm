@@ -253,6 +253,7 @@ struct msm_rpc_endpoint *msm_rpcrouter_create_local_endpoint(dev_t dev)
 {
 	struct msm_rpc_endpoint *ept;
 	unsigned long flags;
+	int i;
 
 	ept = kmalloc(sizeof(struct msm_rpc_endpoint), GFP_KERNEL);
 	if (!ept)
@@ -260,7 +261,9 @@ struct msm_rpc_endpoint *msm_rpcrouter_create_local_endpoint(dev_t dev)
 	memset(ept, 0, sizeof(struct msm_rpc_endpoint));
 
 	/* mark no reply outstanding */
-	ept->reply_pid = 0xffffffff;
+	ept->next_rroute = 0;
+	for (i = 0; i < MAX_REPLY_ROUTE; i++)
+		ept->rroute[i].pid = 0xffffffff;
 
 	ept->cid = (uint32_t) ept;
 	ept->pid = RPCROUTER_PID_LOCAL;
@@ -852,23 +855,21 @@ int msm_rpc_write(struct msm_rpc_endpoint *ept, void *buffer, int count)
 	} else {
 		/* RPC REPLY */
 		/* TODO: locking */
-		if (ept->reply_pid == 0xffffffff) {
-			printk(KERN_ERR
-			       "rr_write: rejecting unexpected reply\n");
-			return -EINVAL;
-		}
-		if (ept->reply_xid != rq->xid) {
-			printk(KERN_ERR
-			       "rr_write: rejecting packet w/ bad xid\n");
-			return -EINVAL;
-		}
+		for (ret = 0; ret < MAX_REPLY_ROUTE; ret++)
+			if (ept->rroute[ret].xid == rq->xid) {
+				if (ept->rroute[ret].pid == 0xffffffff)
+					continue;
+				hdr.dst_pid = ept->rroute[ret].pid;
+				hdr.dst_cid = ept->rroute[ret].cid;
+				/* consume this reply */
+				ept->rroute[ret].pid = 0xffffffff;
+				goto found_rroute;
+			}
 
-		hdr.dst_pid = ept->reply_pid;
-		hdr.dst_cid = ept->reply_cid;
+		printk(KERN_ERR "rr_write: rejecting packet w/ bad xid\n");
+		return -EINVAL;
 
-		/* consume this reply */
-		ept->reply_pid = 0xffffffff;
-
+found_rroute:
 		IO("REPLY on ept %p to xid=%d @ %d:%08x (%d bytes)\n",
 		   ept,
 		   be32_to_cpu(rq->xid), hdr.dst_pid, hdr.dst_cid, count);
@@ -1124,14 +1125,15 @@ int __msm_rpc_read(struct msm_rpc_endpoint *ept,
 			be32_to_cpu(rq->procedure),
 			be32_to_cpu(rq->xid));
 		/* RPC CALL */
-		if (ept->reply_pid != 0xffffffff) {
+		if (ept->rroute[ept->next_rroute].pid != 0xffffffff) {
 			printk(KERN_WARNING
 			       "rr_read: lost previous reply xid...\n");
 		}
 		/* TODO: locking? */
-		ept->reply_pid = pkt->hdr.src_pid;
-		ept->reply_cid = pkt->hdr.src_cid;
-		ept->reply_xid = rq->xid;
+		ept->rroute[ept->next_rroute].pid = pkt->hdr.src_pid;
+		ept->rroute[ept->next_rroute].cid = pkt->hdr.src_cid;
+		ept->rroute[ept->next_rroute].xid = rq->xid;
+		ept->next_rroute = (ept->next_rroute + 1) & (MAX_REPLY_ROUTE - 1);
 	}
 #if TRACE_RPC_MSG
 	else if ((rc >= (sizeof(uint32_t) * 3)) && (rq->type == 1))
