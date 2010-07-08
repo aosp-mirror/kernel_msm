@@ -30,6 +30,7 @@
 #include <linux/uaccess.h>
 #include <linux/android_pmem.h>
 #include <linux/poll.h>
+#include <linux/time.h>
 #include <media/msm_camera.h>
 #include <mach/camera.h>
 
@@ -37,6 +38,7 @@
 #define dmac_inv_range(a,b) WARN(1, "need cache invalidate\n")
 
 #define MSM_MAX_CAMERA_SENSORS 5
+#define CAMERA_STOP_SNAPSHOT 42
 
 #define ERR_USER_COPY(to) pr_err("%s(%d): copy %s user\n", \
 				__func__, __LINE__, ((to) ? "to" : "from"))
@@ -366,6 +368,8 @@ static int __msm_pmem_table_del(struct msm_sync *sync,
 	switch (pinfo->type) {
 	case MSM_PMEM_OUTPUT1:
 	case MSM_PMEM_OUTPUT2:
+	case MSM_PMEM_VIDEO:
+	case MSM_PMEM_PREVIEW:
 	case MSM_PMEM_THUMBNAIL:
 	case MSM_PMEM_MAINIMG:
 	case MSM_PMEM_RAW_MAINIMG:
@@ -452,10 +456,12 @@ static int __msm_get_frame(struct msm_sync *sync,
 		goto err;
 	}
 
+	frame->ts = qcmd->ts;
 	frame->buffer = (unsigned long)region->info.vaddr;
 	frame->y_off = region->info.y_off;
 	frame->cbcr_off = region->info.cbcr_off;
 	frame->fd = region->info.fd;
+	frame->path = vdata->phy.output_id;
 
 	CDBG("%s: y %x, cbcr %x, qcmd %x, virt_addr %x\n",
 		__func__,
@@ -642,7 +648,8 @@ static int msm_control(struct msm_control_device *ctrl_pmsm,
 
 	uptr = udata.value;
 	udata.value = data;
-
+	if (udata.type == CAMERA_STOP_SNAPSHOT)
+		sync->get_pic_abort = 1;
 	qcmd.on_heap = 0;
 	qcmd.type = MSM_CAM_Q_CTRL;
 	qcmd.command = &udata;
@@ -871,9 +878,11 @@ static int msm_get_stats(struct msm_sync *sync, void __user *arg)
 			se.stats_event.len,
 			se.stats_event.msg_id);
 
-		if ((data->type == VFE_MSG_STATS_AF) ||
-				(data->type == VFE_MSG_STATS_WE)) {
-
+		if (data->type == VFE_MSG_STATS_AF ||
+		    data->type ==  VFE_MSG_STATS_WE ||
+			(data->type >=  VFE_MSG_STATS_AEC &&
+			 data->type <= VFE_MSG_STATS_SKIN)) {
+			/* the check above includes all stats type. */
 			stats.buffer =
 			msm_pmem_stats_ptov_lookup(sync,
 					data->phy.sbuf_phy,
@@ -904,10 +913,12 @@ static int msm_get_stats(struct msm_sync *sync, void __user *arg)
 		} else {
 			if ((sync->pp_mask & PP_PREV) &&
 				(data->type == VFE_MSG_OUTPUT1 ||
-				 data->type == VFE_MSG_OUTPUT2))
+				 data->type == VFE_MSG_OUTPUT2 ||
+				 data->type == VFE_MSG_OUTPUT_P))
 					rc = msm_divert_frame(sync, data, &se);
 			else if ((sync->pp_mask & (PP_SNAP|PP_RAW_SNAP)) &&
-				  data->type == VFE_MSG_SNAPSHOT)
+				  (data->type == VFE_MSG_SNAPSHOT ||
+				   data->type == VFE_MSG_OUTPUT_S))
 					rc = msm_divert_snapshot(sync,
 								data, &se);
 		}
@@ -1045,11 +1056,11 @@ static int msm_config_vfe(struct msm_sync *sync, void __user *arg)
 		axi_data.bufnum1 =
 			msm_pmem_region_lookup(&sync->pmem_stats,
 					MSM_PMEM_AEC_AWB, &region[0],
-					NUM_WB_EXP_STAT_OUTPUT_BUFFERS);
+					NUM_STAT_OUTPUT_BUFFERS);
 		axi_data.bufnum2 =
 			msm_pmem_region_lookup(&sync->pmem_stats,
 					MSM_PMEM_AF, &region[axi_data.bufnum1],
-					NUM_AF_STAT_OUTPUT_BUFFERS);
+					NUM_STAT_OUTPUT_BUFFERS);
 		if (!axi_data.bufnum1 || !axi_data.bufnum2) {
 			pr_err("%s: pmem region lookup error\n", __func__);
 			return -EINVAL;
@@ -1060,7 +1071,7 @@ static int msm_config_vfe(struct msm_sync *sync, void __user *arg)
 		axi_data.bufnum1 =
 			msm_pmem_region_lookup(&sync->pmem_stats,
 					MSM_PMEM_AF, &region[0],
-					NUM_AF_STAT_OUTPUT_BUFFERS);
+					NUM_STAT_OUTPUT_BUFFERS);
 		if (!axi_data.bufnum1) {
 			pr_err("%s %d: pmem region lookup error\n",
 				__func__, __LINE__);
@@ -1072,7 +1083,7 @@ static int msm_config_vfe(struct msm_sync *sync, void __user *arg)
 		axi_data.bufnum1 =
 			msm_pmem_region_lookup(&sync->pmem_stats,
 					MSM_PMEM_AEC_AWB, &region[0],
-					NUM_WB_EXP_STAT_OUTPUT_BUFFERS);
+					NUM_STAT_OUTPUT_BUFFERS);
 		if (!axi_data.bufnum1) {
 			pr_err("%s %d: pmem region lookup error\n",
 				__func__, __LINE__);
@@ -1080,6 +1091,71 @@ static int msm_config_vfe(struct msm_sync *sync, void __user *arg)
 		}
 		axi_data.region = &region[0];
 		return sync->vfefn.vfe_config(&cfgcmd, &axi_data);
+	case CMD_STATS_AEC_ENABLE:
+		axi_data.bufnum1 =
+			msm_pmem_region_lookup(&sync->pmem_stats,
+			MSM_PMEM_AEC, &region[0],
+			NUM_STAT_OUTPUT_BUFFERS);
+		if (!axi_data.bufnum1) {
+			pr_err("%s %d: pmem region lookup error\n",
+				__func__, __LINE__);
+			return -EINVAL;
+		}
+		axi_data.region = &region[0];
+		return sync->vfefn.vfe_config(&cfgcmd, &axi_data);
+	case CMD_STATS_AWB_ENABLE:
+		axi_data.bufnum1 =
+			msm_pmem_region_lookup(&sync->pmem_stats,
+			MSM_PMEM_AWB, &region[0],
+			NUM_STAT_OUTPUT_BUFFERS);
+		if (!axi_data.bufnum1) {
+			pr_err("%s %d: pmem region lookup error\n",
+				__func__, __LINE__);
+			return -EINVAL;
+		}
+		axi_data.region = &region[0];
+		return sync->vfefn.vfe_config(&cfgcmd, &axi_data);
+
+
+	case CMD_STATS_IHIST_ENABLE:
+		axi_data.bufnum1 =
+			msm_pmem_region_lookup(&sync->pmem_stats,
+			MSM_PMEM_IHIST, &region[0],
+			NUM_STAT_OUTPUT_BUFFERS);
+		if (!axi_data.bufnum1) {
+			pr_err("%s %d: pmem region lookup error\n",
+				__func__, __LINE__);
+			return -EINVAL;
+		}
+		axi_data.region = &region[0];
+		return sync->vfefn.vfe_config(&cfgcmd, &axi_data);
+
+	case CMD_STATS_RS_ENABLE:
+		axi_data.bufnum1 =
+			msm_pmem_region_lookup(&sync->pmem_stats,
+			MSM_PMEM_RS, &region[0],
+			NUM_STAT_OUTPUT_BUFFERS);
+		if (!axi_data.bufnum1) {
+			pr_err("%s %d: pmem region lookup error\n",
+				__func__, __LINE__);
+			return -EINVAL;
+		}
+		axi_data.region = &region[0];
+		return sync->vfefn.vfe_config(&cfgcmd, &axi_data);
+
+	case CMD_STATS_CS_ENABLE:
+		axi_data.bufnum1 =
+			msm_pmem_region_lookup(&sync->pmem_stats,
+			MSM_PMEM_CS, &region[0],
+			NUM_STAT_OUTPUT_BUFFERS);
+		if (!axi_data.bufnum1) {
+			pr_err("%s %d: pmem region lookup error\n",
+				__func__, __LINE__);
+			return -EINVAL;
+		}
+		axi_data.region = &region[0];
+		return sync->vfefn.vfe_config(&cfgcmd, &axi_data);
+
 	case CMD_GENERAL:
 	case CMD_STATS_DISABLE:
 		return sync->vfefn.vfe_config(&cfgcmd, NULL);
@@ -1128,6 +1204,43 @@ static int msm_frame_axi_cfg(struct msm_sync *sync,
 		}
 		break;
 
+	case CMD_AXI_CFG_PREVIEW:
+		pmem_type = MSM_PMEM_PREVIEW;
+		axi_data.bufnum2 =
+			msm_pmem_region_lookup(&sync->pmem_frames, pmem_type,
+				&region[0], 8);
+		if (!axi_data.bufnum2) {
+			pr_err("%s %d: pmem region lookup error (empty %d)\n",
+				__func__, __LINE__,
+				hlist_empty(&sync->pmem_frames));
+			return -EINVAL;
+		}
+		break;
+
+	case CMD_AXI_CFG_VIDEO:
+		pmem_type = MSM_PMEM_PREVIEW;
+		axi_data.bufnum1 =
+			msm_pmem_region_lookup(&sync->pmem_frames, pmem_type,
+				&region[0], 8);
+		if (!axi_data.bufnum1) {
+			pr_err("%s %d: pmem region lookup error\n",
+				__func__, __LINE__);
+			return -EINVAL;
+		}
+
+		pmem_type = MSM_PMEM_VIDEO;
+		axi_data.bufnum2 =
+			msm_pmem_region_lookup(&sync->pmem_frames, pmem_type,
+				&region[axi_data.bufnum1],
+				(8-(axi_data.bufnum1)));
+		if (!axi_data.bufnum2) {
+			pr_err("%s %d: pmem region lookup error\n",
+				__func__, __LINE__);
+			return -EINVAL;
+		}
+		break;
+
+	case CMD_AXI_CFG_SNAP:
 	case CMD_AXI_CFG_SNAP_O1_AND_O2:
 		pmem_type = MSM_PMEM_THUMBNAIL;
 		axi_data.bufnum1 =
@@ -1142,7 +1255,8 @@ static int msm_frame_axi_cfg(struct msm_sync *sync,
 		pmem_type = MSM_PMEM_MAINIMG;
 		axi_data.bufnum2 =
 			msm_pmem_region_lookup(&sync->pmem_frames, pmem_type,
-				&region[axi_data.bufnum1], 8);
+				&region[axi_data.bufnum1],
+				(8-(axi_data.bufnum1)));
 		if (!axi_data.bufnum2) {
 			pr_err("%s %d: pmem region lookup error\n",
 				__func__, __LINE__);
@@ -1264,6 +1378,8 @@ static int __msm_register_pmem(struct msm_sync *sync,
 	switch (pinfo->type) {
 	case MSM_PMEM_OUTPUT1:
 	case MSM_PMEM_OUTPUT2:
+	case MSM_PMEM_VIDEO:
+	case MSM_PMEM_PREVIEW:
 	case MSM_PMEM_THUMBNAIL:
 	case MSM_PMEM_MAINIMG:
 	case MSM_PMEM_RAW_MAINIMG:
@@ -1272,6 +1388,13 @@ static int __msm_register_pmem(struct msm_sync *sync,
 
 	case MSM_PMEM_AEC_AWB:
 	case MSM_PMEM_AF:
+	case MSM_PMEM_AEC:
+	case MSM_PMEM_AWB:
+	case MSM_PMEM_RS:
+	case MSM_PMEM_CS:
+	case MSM_PMEM_IHIST:
+	case MSM_PMEM_SKIN:
+
 		rc = msm_pmem_table_add(&sync->pmem_stats, pinfo);
 		break;
 
@@ -1326,7 +1449,7 @@ static int msm_stats_axi_cfg(struct msm_sync *sync,
 	if (cfgcmd->cmd_type != CMD_GENERAL) {
 		axi_data.bufnum1 =
 			msm_pmem_region_lookup(&sync->pmem_stats, pmem_type,
-				&region[0], NUM_WB_EXP_STAT_OUTPUT_BUFFERS);
+				&region[0], NUM_STAT_OUTPUT_BUFFERS);
 		if (!axi_data.bufnum1) {
 			pr_err("%s %d: pmem region lookup error\n",
 				__func__, __LINE__);
@@ -1364,6 +1487,17 @@ static int msm_put_stats_buffer(struct msm_sync *sync, void __user *arg)
 			cfgcmd.cmd_type = CMD_STATS_BUF_RELEASE;
 		else if (buf.type == STAT_AF)
 			cfgcmd.cmd_type = CMD_STATS_AF_BUF_RELEASE;
+		else if (buf.type == STAT_AEC)
+			cfgcmd.cmd_type = CMD_STATS_AEC_BUF_RELEASE;
+		else if (buf.type == STAT_AWB)
+			cfgcmd.cmd_type = CMD_STATS_AWB_BUF_RELEASE;
+		else if (buf.type == STAT_IHIST)
+			cfgcmd.cmd_type = CMD_STATS_IHIST_BUF_RELEASE;
+		else if (buf.type == STAT_RS)
+			cfgcmd.cmd_type = CMD_STATS_RS_BUF_RELEASE;
+		else if (buf.type == STAT_CS)
+			cfgcmd.cmd_type = CMD_STATS_CS_BUF_RELEASE;
+
 		else {
 			pr_err("%s: invalid buf type %d\n",
 				__func__,
@@ -1403,6 +1537,9 @@ static int msm_axi_config(struct msm_sync *sync, void __user *arg)
 	case CMD_AXI_CFG_OUT1:
 	case CMD_AXI_CFG_OUT2:
 	case CMD_AXI_CFG_SNAP_O1_AND_O2:
+	case CMD_AXI_CFG_VIDEO:
+	case CMD_AXI_CFG_PREVIEW:
+	case CMD_AXI_CFG_SNAP:
 	case CMD_RAW_PICT_AXI_CFG:
 		return msm_frame_axi_cfg(sync, &cfgcmd);
 
@@ -1431,8 +1568,14 @@ static int __msm_get_pic(struct msm_sync *sync, struct msm_ctrl_cmd *ctrl)
 
 	rc = wait_event_interruptible_timeout(
 			sync->pict_q.wait,
-			!list_empty_careful(&sync->pict_q.list),
+			!list_empty_careful(
+				&sync->pict_q.list) || sync->get_pic_abort,
 			msecs_to_jiffies(tm));
+
+	if (sync->get_pic_abort == 1) {
+		sync->get_pic_abort = 0;
+		return -ENODATA;
+	}
 	if (list_empty_careful(&sync->pict_q.list)) {
 		if (rc == 0)
 			return -ETIMEDOUT;
@@ -1879,9 +2022,6 @@ static int __msm_release(struct msm_sync *sync)
 			put_pmem_file(region->file);
 			kfree(region);
 		}
-
-		msm_queue_drain(&sync->event_q, list_config);
-		msm_queue_drain(&sync->frame_q, list_frame);
 		msm_queue_drain(&sync->pict_q, list_pict);
 
 		wake_unlock(&sync->wake_lock);
@@ -1900,8 +2040,10 @@ static int msm_release_config(struct inode *node, struct file *filep)
 	struct msm_device *pmsm = filep->private_data;
 	CDBG("%s: %s\n", __func__, filep->f_path.dentry->d_name.name);
 	rc = __msm_release(pmsm->sync);
-	if (!rc)
+	if (!rc) {
+		msm_queue_drain(&pmsm->sync->event_q, list_config);
 		atomic_set(&pmsm->opened, 0);
+	}
 	return rc;
 }
 
@@ -1925,8 +2067,10 @@ static int msm_release_frame(struct inode *node, struct file *filep)
 	struct msm_device *pmsm = filep->private_data;
 	CDBG("%s: %s\n", __func__, filep->f_path.dentry->d_name.name);
 	rc = __msm_release(pmsm->sync);
-	if (!rc)
+	if (!rc) {
+		msm_queue_drain(&pmsm->sync->frame_q, list_frame);
 		atomic_set(&pmsm->opened, 0);
+	}
 	return rc;
 }
 
@@ -2024,6 +2168,8 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 	qcmd->type = qtype;
 	qcmd->command = vdata;
 
+	ktime_get_ts(&(qcmd->ts));
+
 	if (qtype != MSM_CAM_Q_VFE_MSG)
 		goto for_config;
 
@@ -2031,6 +2177,7 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 	switch (vdata->type) {
 	case VFE_MSG_OUTPUT1:
 	case VFE_MSG_OUTPUT2:
+	case VFE_MSG_OUTPUT_P:
 		if (sync->pp_mask & PP_PREV) {
 			CDBG("%s: PP_PREV in progress: phy_y %x phy_cbcr %x\n",
 				__func__,
@@ -2053,6 +2200,13 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 		msm_enqueue(&sync->frame_q, &qcmd->list_frame);
 		return;
 
+	case VFE_MSG_OUTPUT_V:
+		CDBG("%s: msm_enqueue video frame_q\n", __func__);
+		if (qcmd->on_heap)
+			qcmd->on_heap++;
+		msm_enqueue(&sync->frame_q, &qcmd->list_frame);
+		break;
+
 	case VFE_MSG_SNAPSHOT:
 		if (sync->pp_mask & (PP_SNAP | PP_RAW_SNAP)) {
 			CDBG("%s: PP_SNAP in progress: pp_mask %x\n",
@@ -2068,6 +2222,37 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 		if (qcmd->on_heap)
 			qcmd->on_heap++;
 		msm_enqueue(&sync->pict_q, &qcmd->list_pict);
+		break;
+
+	case VFE_MSG_STATS_AWB:
+		CDBG("%s: qtype %d, AWB stats, enqueue event_q.\n",
+		     __func__, vdata->type);
+		break;
+
+	case VFE_MSG_STATS_AEC:
+		CDBG("%s: qtype %d, AEC stats, enqueue event_q.\n",
+		     __func__, vdata->type);
+		break;
+
+	case VFE_MSG_STATS_IHIST:
+		CDBG("%s: qtype %d, ihist stats, enqueue event_q.\n",
+		     __func__, vdata->type);
+		break;
+
+	case VFE_MSG_STATS_RS:
+		CDBG("%s: qtype %d, rs stats, enqueue event_q.\n",
+		     __func__, vdata->type);
+		break;
+
+	case VFE_MSG_STATS_CS:
+		CDBG("%s: qtype %d, cs stats, enqueue event_q.\n",
+		     __func__, vdata->type);
+		break;
+
+
+	case VFE_MSG_GENERAL:
+		CDBG("%s: qtype %d, general msg, enqueue event_q.\n",
+		    __func__, vdata->type);
 		break;
 
 	default:
@@ -2108,6 +2293,7 @@ static int __msm_open(struct msm_sync *sync, const char *const apps_id)
 
 		msm_camvfe_fn_init(&sync->vfefn, sync);
 		if (sync->vfefn.vfe_init) {
+			sync->get_pic_abort = 0;
 			rc = sync->vfefn.vfe_init(&msm_vfe_s,
 				sync->pdev);
 			if (rc < 0) {
