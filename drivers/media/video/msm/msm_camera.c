@@ -1643,8 +1643,12 @@ static int msm_get_pic(struct msm_sync *sync, void __user *arg)
 	if (msm_pmem_region_lookup(&sync->pmem_frames,
 				MSM_PMEM_MAINIMG,
 				&pic_pmem_region, 1) == 0) {
-		pr_err("%s pmem region lookup error\n", __func__);
-		return -EIO;
+		if(msm_pmem_region_lookup(&sync->pmem_frames,
+					MSM_PMEM_RAW_MAINIMG,
+					&pic_pmem_region, 1) == 0) {
+			pr_err("%s pmem region lookup error\n", __func__);
+			return -EIO;
+		}
 	}
 
 	cline_mask = cache_line_size() - 1;
