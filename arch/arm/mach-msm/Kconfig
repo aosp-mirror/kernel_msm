@@ -105,6 +105,7 @@ menu "Qualcomm MSM Board Type"
 config MACH_HALIBUT
 	depends on ARCH_MSM
 	depends on ARCH_MSM7X00A
+	default n
 	bool "Halibut Board (QCT SURF7201A)"
 	help
 	  Support for the Qualcomm SURF7201A eval board.
@@ -112,6 +113,7 @@ config MACH_HALIBUT
 config MACH_TROUT
 	depends on ARCH_MSM
 	depends on ARCH_MSM7X00A
+	default n
 	bool "HTC Dream (aka trout)"
 	help
 	  Support for the HTC Dream, T-Mobile G1, Android ADP1 devices.
@@ -172,7 +174,7 @@ config MSM_SMD_PKG3
 	bool
 
 config MACH_SAPPHIRE
-	depends on ARCH_MSM7X00A
+	depends on ARCH_MSM7X00A && !MACH_TROUT && !MACH_HALIBUT
 	default y
 	bool "Sapphire"
 
@@ -212,7 +214,7 @@ config HTC_35MM_JACK
 	 Provides support for 3.5mm headset jack devices, like wired headsets.
 
 config TROUT_BATTCHG
-	depends on MACH_TROUT && POWER_SUPPLY
+	depends on (MACH_TROUT || MACH_SAPPHIRE) && POWER_SUPPLY
 	default y
 	bool "Trout battery / charger driver"
 
