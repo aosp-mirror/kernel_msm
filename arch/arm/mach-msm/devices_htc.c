@@ -221,7 +221,7 @@ static struct android_pmem_platform_data pmem_adsp_pdata = {
 
 static struct android_pmem_platform_data pmem_camera_pdata = {
 	.name = "pmem_camera",
-	.no_allocator = 0,
+	.no_allocator = 1,
 	.cached = 0,
 };
 
