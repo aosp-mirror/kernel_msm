@@ -118,7 +118,6 @@ struct msm_queue_cmd {
 	enum msm_queue type;
 	void *command;
 	int on_heap;
-	struct timespec ts;
 };
 
 struct msm_device_queue {

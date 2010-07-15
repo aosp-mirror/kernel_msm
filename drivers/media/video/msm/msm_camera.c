@@ -456,7 +456,6 @@ static int __msm_get_frame(struct msm_sync *sync,
 		goto err;
 	}
 
-	frame->ts = qcmd->ts;
 	frame->buffer = (unsigned long)region->info.vaddr;
 	frame->y_off = region->info.y_off;
 	frame->cbcr_off = region->info.cbcr_off;
@@ -2171,8 +2170,6 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 	qcmd = ((struct msm_queue_cmd *)vdata) - 1;
 	qcmd->type = qtype;
 	qcmd->command = vdata;
-
-	ktime_get_ts(&(qcmd->ts));
 
 	if (qtype != MSM_CAM_Q_VFE_MSG)
 		goto for_config;

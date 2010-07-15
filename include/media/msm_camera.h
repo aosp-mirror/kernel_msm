@@ -307,7 +307,6 @@ struct msm_frame {
 
 	void *cropinfo;
 	int croplen;
-	struct timespec ts;
 };
 
 #define STAT_AEAW	0
