@@ -52,7 +52,7 @@ static int msm_cpufreq_target(struct cpufreq_policy *policy,
 	int index;
 	struct cpufreq_freqs freqs;
 	struct cpufreq_frequency_table *table =
-		cpufreq_frequency_get_table(smp_processor_id());
+		cpufreq_frequency_get_table(policy->cpu);
 
 	if (cpufreq_frequency_table_target(policy, table, target_freq, relation,
 			&index)) {
@@ -69,7 +69,7 @@ static int msm_cpufreq_target(struct cpufreq_policy *policy,
 #endif
 	freqs.old = policy->cur;
 	freqs.new = table[index].frequency;
-	freqs.cpu = smp_processor_id();
+	freqs.cpu = policy->cpu;
 	cpufreq_notify_transition(&freqs, CPUFREQ_PRECHANGE);
 	acpuclk_set_rate(table[index].frequency * 1000, 0);
 	cpufreq_notify_transition(&freqs, CPUFREQ_POSTCHANGE);
@@ -86,7 +86,7 @@ static int msm_cpufreq_verify(struct cpufreq_policy *policy)
 static int msm_cpufreq_init(struct cpufreq_policy *policy)
 {
 	struct cpufreq_frequency_table *table =
-		cpufreq_frequency_get_table(smp_processor_id());
+		cpufreq_frequency_get_table(policy->cpu);
 
 	BUG_ON(cpufreq_frequency_table_cpuinfo(policy, table));
 	policy->cur = acpuclk_get_rate();
