@@ -1239,6 +1239,29 @@ static int msm_frame_axi_cfg(struct msm_sync *sync,
 		}
 		break;
 
+	case CMD_AXI_CFG_O1_AND_O2:
+		pmem_type = MSM_PMEM_OUTPUT1;
+		axi_data.bufnum1 =
+			msm_pmem_region_lookup(&sync->pmem_frames, pmem_type,
+				&region[0], 8);
+		if (!axi_data.bufnum1) {
+			pr_err("%s %d: pmem region lookup error\n",
+				__func__, __LINE__);
+			return -EINVAL;
+		}
+
+		pmem_type = MSM_PMEM_OUTPUT2;
+		axi_data.bufnum2 =
+			msm_pmem_region_lookup(&sync->pmem_frames, pmem_type,
+				&region[axi_data.bufnum1],
+				(8-(axi_data.bufnum1)));
+		if (!axi_data.bufnum2) {
+			pr_err("%s %d: pmem region lookup error\n",
+				__func__, __LINE__);
+			return -EINVAL;
+		}
+		break;
+
 	case CMD_AXI_CFG_SNAP:
 	case CMD_AXI_CFG_SNAP_O1_AND_O2:
 		pmem_type = MSM_PMEM_THUMBNAIL;
@@ -1347,8 +1370,9 @@ static int __msm_put_frame_buf(struct msm_sync *sync,
 		if (sync->vfefn.vfe_config)
 			rc = sync->vfefn.vfe_config(&cfgcmd, &pphy);
 	} else {
-		pr_err("%s: msm_pmem_frame_vtop_lookup failed\n",
-			__func__);
+		pr_err("%s: msm_pmem_frame_vtop_lookup failed. "
+			"buffer=0x%lx, y_off=%d, cbcr_off=%d, fd=%d\n",
+			__func__, pb->buffer, pb->y_off, pb->cbcr_off, pb->fd);
 		rc = -EINVAL;
 	}
 
@@ -1535,6 +1559,7 @@ static int msm_axi_config(struct msm_sync *sync, void __user *arg)
 	switch (cfgcmd.cmd_type) {
 	case CMD_AXI_CFG_OUT1:
 	case CMD_AXI_CFG_OUT2:
+	case CMD_AXI_CFG_O1_AND_O2:
 	case CMD_AXI_CFG_SNAP_O1_AND_O2:
 	case CMD_AXI_CFG_VIDEO:
 	case CMD_AXI_CFG_PREVIEW:

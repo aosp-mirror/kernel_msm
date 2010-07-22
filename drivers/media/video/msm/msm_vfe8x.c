@@ -622,8 +622,6 @@ static int vfe_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 			b = (struct msm_frame *)(cmd->value);
 			p = *(unsigned long *)data;
 
-			b->path = MSM_FRAME_ENC;
-
 			fack.ybufaddr[0] = (uint32_t) (p + b->y_off);
 
 			fack.chromabufaddr[0] = (uint32_t) (p + b->cbcr_off);
@@ -634,6 +632,8 @@ static int vfe_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 			if (b->path == MSM_FRAME_ENC ||
 			    b->path == MSM_FRAME_PREV_2)
 				vfe_output2_ack(&fack);
+
+
 		}
 		break;
 
@@ -693,7 +693,8 @@ static int vfe_config(struct msm_vfe_cfg_cmd *cmd, void *data)
 		}
 		break;
 
-	case CMD_AXI_CFG_SNAP_O1_AND_O2:{
+	case CMD_AXI_CFG_O1_AND_O2:
+	case CMD_AXI_CFG_SNAP_O1_AND_O2: {
 
 			BUG_ON(!axid);
 
