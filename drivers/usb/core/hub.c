@@ -1704,6 +1704,7 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 #ifdef	CONFIG_USB_OTG_BLACKLIST_HUB
 	if (hdev->parent) {
 		dev_warn(&intf->dev, "ignoring external hub\n");
+		otg_send_event(OTG_EVENT_HUB_NOT_SUPPORTED);
 		return -ENODEV;
 	}
 #endif
@@ -2218,6 +2219,8 @@ static int usb_enumerate_device_otg(struct usb_device *udev)
 out:
 
 	if (!is_targeted(udev)) {
+
+		otg_send_event(OTG_EVENT_DEV_NOT_SUPPORTED);
 
 		/* Maybe it can talk to us, though we can't talk to it.
 		 * (Includes HNP test device.)
