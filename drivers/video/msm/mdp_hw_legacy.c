@@ -21,6 +21,7 @@
 
 #define MDP_CMD_DEBUG_ACCESS_BASE (0x10000)
 
+#ifdef CONFIG_FB_MSM_MDDI
 static void mdp_dma_to_mddi(void *priv, uint32_t addr, uint32_t stride,
 			    uint32_t width, uint32_t height, uint32_t x,
 			    uint32_t y)
@@ -80,16 +81,18 @@ static void mdp_dma_to_mddi(void *priv, uint32_t addr, uint32_t stride,
 	mdp_writel(mdp, 0, MDP_DMA_P_START);
 #endif
 }
-
+#endif
 
 int mdp_hw_init(struct mdp_info *mdp)
 {
 	int n;
 
+#ifdef CONFIG_FB_MSM_MDDI
 	n = mdp_out_if_register(&mdp->mdp_dev, MSM_MDDI_PMDH_INTERFACE, mdp,
 				  MDP_DMA_P_DONE, mdp_dma_to_mddi);
 	if (n)
 		return n;
+#endif
 
 	mdp_writel(mdp, 0, MDP_INTR_ENABLE);
 

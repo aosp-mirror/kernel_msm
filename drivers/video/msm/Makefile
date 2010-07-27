@@ -20,12 +20,12 @@ obj-$(CONFIG_MSM_MDP31) += mdp_ppp31.o
 
 # MDDI interface
 #
-obj-y += mddi.o
+obj-$(CONFIG_FB_MSM_MDDI) += mddi.o
 
 # MDDI client/panel drivers
 #
-obj-y += mddi_client_simple.o
-obj-y += mddi_client_toshiba.o
+obj-$(CONFIG_FB_MSM_MDDI) += mddi_client_simple.o
+obj-$(CONFIG_FB_MSM_MDDI) += mddi_client_toshiba.o
 
 # MDP LCD controller driver
 obj-$(CONFIG_FB_MSM_LCDC) += mdp_lcdc.o
