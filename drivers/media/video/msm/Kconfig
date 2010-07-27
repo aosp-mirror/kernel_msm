@@ -1,3 +1,27 @@
+comment "Qualcomm MSM Camera And Video"
+
+menuconfig MSM_CAMERA
+	bool "Qualcomm MSM camera and video capture support"
+	depends on ARCH_MSM
+	help
+	  Say Y here to enable selecting the video adapters for
+	  Qualcomm msm camera and video encoding
+
+config MSM_CAMERA_V4L2
+	bool "Video For Linux interface to MSM camera"
+	depends on MSM_CAMERA && VIDEO_V4L2 && EXPERIMENTAL
+	default y
+	help
+	  Say Y here to enable the V4L2 interface for the MSM camera.
+	  Not everything works through this interface and it has not
+	  been thoroughly tested.
+
+config MSM_CAMERA_DEBUG
+	bool "Qualcomm MSM camera debugging with printk"
+	depends on MSM_CAMERA
+	help
+	  Enable printk() debug for msm camera
+
 comment "Camera Sensor Selection"
 config MT9T013
 	bool "Sensor mt9t013 (BAYER 3M)"
