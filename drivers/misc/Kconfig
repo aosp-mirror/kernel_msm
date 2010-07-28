@@ -335,6 +335,12 @@ config SENSORS_AKM8976
 	help
 	  AKM8976 Compass Driver implemented by HTC.
 
+config VP_A1026
+	tristate "A1026 Voice Processor Driver"
+	depends on I2C
+	help
+	  A1026 Voice Processor Driver implemented by HTC.
+
 config EP93XX_PWM
 	tristate "EP93xx PWM support"
 	depends on ARCH_EP93XX
