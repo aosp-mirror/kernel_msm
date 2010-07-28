@@ -43,6 +43,11 @@ static uint16_t g_usModuleVersion;	/*0: rev.4, 1: rev.5 */
 #define GROUPED_PARAMETER_HOLD        0x01
 #define GROUPED_PARAMETER_UPDATE      0x00
 
+/* Greenish in low light */
+#define REG_MASK_CORRUPTED_FRAMES     0x0105
+#define MASK                          0x01
+#define NO_MASK                       0x00
+
 /* PLL Registers */
 #define REG_PRE_PLL_CLK_DIV           0x0305
 #define REG_PLL_MULTIPLIER_MSB        0x0306
@@ -2095,6 +2100,27 @@ static int s5k3e2fx_setting(enum msm_s_reg_update rupdate,
 					 {0x3063, 0x16},
 					 }
 				};
+
+				/* Most registers are directly applied at next frame after
+				   writing except shutter and analog gain. Shutter and gain are
+				   applied at 2nd or 1st frame later depending on register
+				   writing time. When the camera is switched from preview to
+				   snapshot, the first frame may have wrong shutter/gain and
+				   should be discarded. The register REG_MASK_CORRUPTED_FRAMES
+				   can discard the frame that has wrong shutter/gain. But in
+				   preview mode, the frames should not be dropped. Otherwise
+				   the preview will not be smooth. */
+				if (rt == S_RES_PREVIEW) {
+					/* Frames will be not discarded after exposure and gain are
+					   written. */
+					s5k3e2fx_i2c_write_b(s5k3e2fx_client->addr,
+						REG_MASK_CORRUPTED_FRAMES, NO_MASK);
+				} else {
+					/* Solve greenish in lowlight. Prevent corrupted frame */
+					s5k3e2fx_i2c_write_b(s5k3e2fx_client->addr,
+						REG_MASK_CORRUPTED_FRAMES, MASK);
+				}
+
 /* solve greenish: hold for both */
 				rc = s5k3e2fx_i2c_write_b(
 					s5k3e2fx_client->addr,
@@ -2416,9 +2442,6 @@ static int s5k3e2fx_probe_init_lens_correction(
 	/* 090911 Add for Samsung VCM calibration current End */
 
 	s5k3e2fx_i2c_write_table(&lc_setting[g_usModuleVersion][0], NUM_LC_REG);
-
-+        /* Solve EVT5 greenish in lowlight, prevent corrupted frame*/
-+       s5k3e2fx_i2c_write_b(s5k3e2fx_client->addr, 0x105,0x1);
 
 	/*20090811  separates the EVT4/EVT5 sensor init and LC setting end */
 	s5k3e2fx_i2c_write_b(s5k3e2fx_client->addr,
