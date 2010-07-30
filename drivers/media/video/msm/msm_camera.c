@@ -244,6 +244,10 @@ static int msm_pmem_table_add(struct hlist_head *ptype,
 	region->file = file;
 	memcpy(&region->info, info, sizeof(region->info));
 
+	if (info->vfe_can_write) {
+		dmac_map_area((void*)region->kvaddr, region->len, DMA_FROM_DEVICE);
+	}
+
 	hlist_add_head(&(region->list), ptype);
 
 	return 0;
@@ -289,6 +293,8 @@ static int msm_pmem_frame_ptov_lookup(struct msm_sync *sync,
 						region->info.cbcr_off) &&
 				region->info.vfe_can_write) {
 			*pmem_region = region;
+			dmac_unmap_area((void*)region->kvaddr, region->len,
+					DMA_FROM_DEVICE);
 			region->info.vfe_can_write = !take_from_vfe;
 			return 0;
 		}
@@ -308,6 +314,8 @@ static unsigned long msm_pmem_stats_ptov_lookup(struct msm_sync *sync,
 			/* offset since we could pass vaddr inside a
 			 * registered pmem buffer */
 			*fd = region->info.fd;
+			dmac_unmap_area((void*)region->kvaddr, region->len,
+					DMA_FROM_DEVICE);
 			region->info.vfe_can_write = 0;
 			return (unsigned long)(region->info.vaddr);
 		}
@@ -330,6 +338,7 @@ static unsigned long msm_pmem_frame_vtop_lookup(struct msm_sync *sync,
 				(region->info.cbcr_off == cbcroff) &&
 				(region->info.fd == fd) &&
 				(region->info.vfe_can_write == 0)) {
+			dmac_map_area((void*)region->kvaddr, region->len, DMA_FROM_DEVICE);
 			region->info.vfe_can_write = 1;
 			return region->paddr;
 		}
@@ -350,6 +359,7 @@ static unsigned long msm_pmem_stats_vtop_lookup(
 		if (((unsigned long)(region->info.vaddr) == buffer) &&
 				(region->info.fd == fd) &&
 				region->info.vfe_can_write == 0) {
+			dmac_map_area((void*)region->kvaddr, region->len, DMA_FROM_DEVICE);
 			region->info.vfe_can_write = 1;
 			return region->paddr;
 		}
@@ -381,6 +391,10 @@ static int __msm_pmem_table_del(struct msm_sync *sync,
 					pinfo->fd == region->info.fd) {
 				hlist_del(node);
 				put_pmem_file(region->file);
+				if (region->info.vfe_can_write) {
+					dmac_unmap_area((void*)region->kvaddr, region->len,
+							DMA_FROM_DEVICE);
+				}
 				kfree(region);
 			}
 		}
@@ -396,6 +410,10 @@ static int __msm_pmem_table_del(struct msm_sync *sync,
 					pinfo->fd == region->info.fd) {
 				hlist_del(node);
 				put_pmem_file(region->file);
+				if (region->info.vfe_can_write) {
+					dmac_unmap_area((void*)region->kvaddr, region->len,
+							DMA_FROM_DEVICE);
+				}
 				kfree(region);
 			}
 		}
@@ -1634,7 +1652,8 @@ static int __msm_get_pic(struct msm_sync *sync, struct msm_ctrl_cmd *ctrl)
 static int msm_get_pic(struct msm_sync *sync, void __user *arg)
 {
 	struct msm_ctrl_cmd ctrlcmd;
-	struct msm_pmem_region pic_pmem_region;
+	struct msm_pmem_region *pic_pmem_region = NULL, *region;
+	struct hlist_node *node, *n;
 	int rc;
 	unsigned long end;
 	int cline_mask;
@@ -1666,28 +1685,31 @@ static int msm_get_pic(struct msm_sync *sync, void __user *arg)
 		}
 	}
 
-	if (msm_pmem_region_lookup(&sync->pmem_frames,
-				MSM_PMEM_MAINIMG,
-				&pic_pmem_region, 1) == 0) {
-		if(msm_pmem_region_lookup(&sync->pmem_frames,
-					MSM_PMEM_RAW_MAINIMG,
-					&pic_pmem_region, 1) == 0) {
-			pr_err("%s pmem region lookup error\n", __func__);
-			return -EIO;
+	hlist_for_each_entry_safe(region, node, n, &sync->pmem_frames, list) {
+		if (region->info.vfe_can_write &&
+				(region->info.type == MSM_PMEM_MAINIMG ||
+				region->info.type == MSM_PMEM_RAW_MAINIMG)) {
+			pic_pmem_region = region;
+			break;
 		}
 	}
 
+	if (!pic_pmem_region) {
+		pr_err("%s pmem region lookup error\n", __func__);
+		return -EIO;
+	}
 	cline_mask = cache_line_size() - 1;
-	end = pic_pmem_region.kvaddr + pic_pmem_region.len;
+	end = pic_pmem_region->kvaddr + pic_pmem_region->len;
 	end = (end + cline_mask) & ~cline_mask;
 
 	pr_info("%s: flushing cache for [%08lx, %08lx)\n",
 		__func__,
-		pic_pmem_region.kvaddr, end);
+		pic_pmem_region->kvaddr, end);
 
 	/* HACK: Invalidate buffer */
-	dmac_map_area((void*)pic_pmem_region.kvaddr, pic_pmem_region.len,
+	dmac_unmap_area((void*)pic_pmem_region->kvaddr, pic_pmem_region->len,
 			DMA_FROM_DEVICE);
+	pic_pmem_region->info.vfe_can_write = 0;
 
 	CDBG("%s: copy snapshot frame to user\n", __func__);
 	if (copy_to_user((void *)arg,
