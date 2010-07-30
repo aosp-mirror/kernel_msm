@@ -25,6 +25,7 @@
 #include <linux/slab.h>
 #include <mach/board.h>
 
+#include <linux/dma-mapping.h>
 #include <linux/fs.h>
 #include <linux/list.h>
 #include <linux/uaccess.h>
@@ -35,7 +36,6 @@
 #include <mach/camera.h>
 
 #include <asm/cacheflush.h>
-#define dmac_inv_range(a,b) WARN(1, "need cache invalidate\n")
 
 #define MSM_MAX_CAMERA_SENSORS 5
 #define CAMERA_STOP_SNAPSHOT 42
@@ -1685,8 +1685,9 @@ static int msm_get_pic(struct msm_sync *sync, void __user *arg)
 		__func__,
 		pic_pmem_region.kvaddr, end);
 
-	dmac_inv_range((const void *)pic_pmem_region.kvaddr,
-			(const void *)end);
+	/* HACK: Invalidate buffer */
+	dmac_map_area((void*)pic_pmem_region.kvaddr, pic_pmem_region.len,
+			DMA_FROM_DEVICE);
 
 	CDBG("%s: copy snapshot frame to user\n", __func__);
 	if (copy_to_user((void *)arg,
