@@ -19,8 +19,10 @@
 #include <linux/list.h>
 #include <linux/gpio.h>
 
-#define GPIOF_IRQF_MASK         0x0000ffff /* use to specify edge detection without */
-#define GPIOF_IRQF_TRIGGER_NONE 0x00010000 /* IRQF_TRIGGER_NONE is 0 which also means "as already configured" */
+/* use to specify edge detection without */
+#define GPIOF_IRQF_MASK         0x0000ffff
+/* IRQF_TRIGGER_NONE is 0 which also means "as already configured" */
+#define GPIOF_IRQF_TRIGGER_NONE 0x00010000
 #define GPIOF_INPUT             0x00020000
 #define GPIOF_DRIVE_OUTPUT      0x00040000
 #define GPIOF_OUTPUT_LOW        0x00080000
@@ -34,8 +36,10 @@ struct old_gpio_chip {
 	unsigned int start;
 	unsigned int end;
 
-	int (*configure)(struct gpio_chip *chip, unsigned int gpio, unsigned long flags);
-	int (*get_irq_num)(struct gpio_chip *chip, unsigned int gpio, unsigned int *irqp, unsigned long *irqnumflagsp);
+	int (*configure)(struct gpio_chip *chip, unsigned int gpio,
+			 unsigned long flags);
+	int (*get_irq_num)(struct gpio_chip *chip, unsigned int gpio,
+			   unsigned int *irqp, unsigned long *irqnumflagsp);
 	int (*read)(struct gpio_chip *chip, unsigned int gpio);
 	int (*write)(struct gpio_chip *chip, unsigned int gpio, unsigned on);
 	int (*read_detect_status)(struct gpio_chip *chip, unsigned int gpio);

@@ -18,7 +18,7 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
-#include <asm/gpio.h>
+#include <linux/gpio.h>
 #include "gpio_chip.h"
 
 #undef gpio_chip
@@ -60,7 +60,8 @@ gpio_chip_direction_output(struct gpio_chip *chip, unsigned offset, int value)
 	spin_lock_irqsave(&old_chip->lock, irq_flags);
 	if (old_chip->write)
 		old_chip->write(old_chip, chip->base + offset, value);
-	ret = old_chip->configure(old_chip, chip->base + offset, GPIOF_DRIVE_OUTPUT);
+	ret = old_chip->configure(old_chip, chip->base + offset,
+				  GPIOF_DRIVE_OUTPUT);
 	spin_unlock_irqrestore(&old_chip->lock, irq_flags);
 	return ret;
 }
@@ -87,7 +88,8 @@ static int gpio_chip_to_irq(struct gpio_chip *chip, unsigned offset)
 	old_chip = container_of(chip, struct old_gpio_chip, gpio_chip);
 	spin_lock_irqsave(&old_chip->lock, irq_flags);
 	if (old_chip->get_irq_num)
-		ret = old_chip->get_irq_num(old_chip, chip->base + offset, &irq, NULL);
+		ret = old_chip->get_irq_num(old_chip, chip->base + offset,
+					    &irq, NULL);
 	spin_unlock_irqrestore(&old_chip->lock, irq_flags);
 	if (ret)
 		return ret;
@@ -103,7 +105,8 @@ int register_gpio_chip(struct old_gpio_chip *new_gpio_chip)
 	new_gpio_chip->gpio_chip.set = gpio_chip_set;
 	new_gpio_chip->gpio_chip.to_irq = gpio_chip_to_irq;
 	new_gpio_chip->gpio_chip.base = new_gpio_chip->start;
-	new_gpio_chip->gpio_chip.ngpio = new_gpio_chip->end - new_gpio_chip->start + 1;
+	new_gpio_chip->gpio_chip.ngpio =
+		new_gpio_chip->end - new_gpio_chip->start + 1;
 
 	return gpiochip_add(&new_gpio_chip->gpio_chip);
 }
