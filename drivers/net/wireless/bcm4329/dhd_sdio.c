@@ -126,9 +126,9 @@
  * for HT availability, it could take a couple hundred ms more, so
  * max out at a half second (500000us).
  */
-#if (PMU_MAX_TRANSITION_DLY <= 500000)
+#if (PMU_MAX_TRANSITION_DLY < 1000000)
 #undef PMU_MAX_TRANSITION_DLY
-#define PMU_MAX_TRANSITION_DLY 500000
+#define PMU_MAX_TRANSITION_DLY 1000000
 #endif
 
 /* Value for ChipClockCSR during initial setup */
@@ -4694,8 +4694,6 @@ dhd_bus_watchdog(dhd_pub_t *dhdp)
 			bus->idlecount = 0;
 			if (bus->activity) {
 				bus->activity = FALSE;
-				dhd_os_wd_timer(bus->dhd,dhd_watchdog_ms);
-			} else {
 				dhdsdio_clkctl(bus, CLK_NONE, FALSE);
 			}
 		}
