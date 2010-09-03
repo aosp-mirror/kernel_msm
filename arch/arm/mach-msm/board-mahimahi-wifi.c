@@ -137,6 +137,7 @@ static int __init mahimahi_wifi_init(void)
 
 	printk("%s: start\n", __func__);
 	mahimahi_wifi_update_nvs("sd_oobonly=1\r\n", 0);
+	mahimahi_wifi_update_nvs("btc_params70=0x32\r\n", 1);
 	mahimahi_init_wifi_mem();
 	ret = platform_device_register(&mahimahi_wifi_device);
         return ret;
