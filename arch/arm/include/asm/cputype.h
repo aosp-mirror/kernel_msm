@@ -66,6 +66,7 @@ extern unsigned int processor_id;
 
 #define ARM_CPU_IMP_ARM			0x41
 #define ARM_CPU_IMP_INTEL		0x69
+#define ARM_CPU_IMP_QUALCOMM		0x51
 
 #define ARM_CPU_PART_ARM1136		0xB360
 #define ARM_CPU_PART_ARM1156		0xB560
