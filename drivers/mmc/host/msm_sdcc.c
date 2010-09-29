@@ -1327,6 +1327,9 @@ msmsdcc_suspend(struct platform_device *dev, pm_message_t state)
 		if (host->stat_irq)
 			disable_irq(host->stat_irq);
 
+		if (host->plat->built_in)
+			mmc->pm_flags |= MMC_PM_KEEP_POWER;
+
 		if (mmc->card && mmc->card->type != MMC_TYPE_SDIO)
 			rc = mmc_suspend_host(mmc);
 		if (!rc)
