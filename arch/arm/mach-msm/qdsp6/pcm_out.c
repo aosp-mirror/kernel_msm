@@ -56,6 +56,12 @@ static long pcm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case AUDIO_SET_VOLUME: {
 		int vol;
+		if (!pcm->ac) {
+			pr_err("%s: cannot set volume before AUDIO_START!\n",
+				__func__);
+			rc = -EINVAL;
+			break;
+		}
 		if (copy_from_user(&vol, (void*) arg, sizeof(vol))) {
 			rc = -EFAULT;
 			break;
