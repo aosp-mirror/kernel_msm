@@ -83,7 +83,7 @@ static int __init parse_tag_msm_partition(const struct tag *tag)
 		ptn++;
 	}
 
-#if CONFIG_VIRTUAL_KPANIC_PARTITION
+#ifdef CONFIG_VIRTUAL_KPANIC_PARTITION
 	if (!have_kpanic) {
 		int i;
 		uint64_t kpanic_off = 0;
@@ -117,8 +117,8 @@ static int __init parse_tag_msm_partition(const struct tag *tag)
 
 		count++;
 	}
-#endif /* CONFIG_VIRTUAL_KPANIC_SRC */
 out:
+#endif /* CONFIG_VIRTUAL_KPANIC_SRC */
 	msm_nand_data.nr_parts = count;
 	msm_nand_data.parts = msm_nand_partitions;
 
