@@ -1215,6 +1215,10 @@ msmsdcc_probe(struct platform_device *pdev)
 	msmsdcc_writel(host, MCI_IRQENABLE, MMCIMASK0);
 	host->saved_irq0mask = MCI_IRQENABLE;
 
+	mmc->pm_caps = MMC_PM_KEEP_POWER | MMC_PM_IGNORE_PM_NOTIFY;
+	if (plat->built_in)
+		mmc->pm_flags = MMC_PM_KEEP_POWER | MMC_PM_IGNORE_PM_NOTIFY;
+
 	/*
 	 * Setup card detect change
 	 */
