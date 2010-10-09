@@ -712,7 +712,7 @@ static int kgsl_ioctl_sharedmem_from_vmalloc(struct kgsl_file_private *private,
 		 * overwrite this memory */
 		dmac_flush_range(vmalloc_area, vmalloc_area + len);
 		KGSL_MEM_INFO("Caching for memory allocation turned off\n");
-		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 	} else {
 		KGSL_MEM_INFO("Caching for memory allocation turned on\n");
 	}
