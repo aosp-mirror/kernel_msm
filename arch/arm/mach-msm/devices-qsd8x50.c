@@ -13,6 +13,7 @@
  *
  */
 
+#include <linux/gpio.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
@@ -200,9 +201,21 @@ struct platform_device msm_device_i2c = {
 
 #define GPIO_I2C_CLK 95
 #define GPIO_I2C_DAT 96
+static int gpio_i2c_clk = -1;
+static int gpio_i2c_dat = -1;
 void msm_set_i2c_mux(bool gpio, int *gpio_clk, int *gpio_dat)
 {
 	unsigned id;
+
+	if (gpio_i2c_clk < 0) {
+		gpio_request(GPIO_I2C_CLK, "i2c-clk");
+		gpio_i2c_clk = GPIO_I2C_CLK;
+	}
+	if (gpio_i2c_dat < 0) {
+		gpio_request(GPIO_I2C_DAT, "i2c-dat");
+		gpio_i2c_dat = GPIO_I2C_DAT;
+	}
+
 	if (gpio) {
 		id = PCOM_GPIO_CFG(GPIO_I2C_CLK, 0, GPIO_OUTPUT,
 				   GPIO_NO_PULL, GPIO_2MA);
