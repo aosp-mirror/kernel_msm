@@ -256,7 +256,7 @@ msm_i2c_poll_notbusy(struct msm_i2c_dev *dev, int warn)
 		if (retries++ > 100)
 			msleep(10);
 	}
-	dev_err(dev->dev, "Error waiting for notbusy\n");
+	dev_err(dev->dev, "Error waiting for notbusy (%d)\n", warn);
 	return -ETIMEDOUT;
 }
 
@@ -332,6 +332,9 @@ msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	long timeout;
 	unsigned long flags;
 
+	if (WARN_ON(!num))
+		return -EINVAL;
+
 	/*
 	 * If there is an i2c_xfer after driver has been suspended,
 	 * grab wakelock to abort suspend.
@@ -394,7 +397,8 @@ msm_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	}
 
 	if (ret < 0) {
-		dev_err(dev->dev, "Error during data xfer (%d)\n", ret);
+		dev_err(dev->dev, "Error during data xfer %x (%d)\n",
+			msgs[0].addr, ret);
 		msm_i2c_recover_bus_busy(dev);
 	}
 err:
