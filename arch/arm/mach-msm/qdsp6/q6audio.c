@@ -1253,7 +1253,6 @@ done:
 int q6audio_set_tx_mute(int mute)
 {
 	uint32_t adev;
-	int rc;
 
 	if (q6audio_init())
 		return 0;
@@ -1266,8 +1265,8 @@ int q6audio_set_tx_mute(int mute)
 	}
 
 	adev = audio_tx_device_id;
-	rc = audio_tx_mute(ac_control, adev, mute);
-	if (!rc) tx_mute_status = mute;
+	audio_tx_mute(ac_control, adev, mute);
+	tx_mute_status = mute;
 	mutex_unlock(&audio_path_lock);
 	return 0;
 }
