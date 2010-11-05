@@ -305,7 +305,7 @@ int cpufreq_governor_dbs(struct dbs_data *dbs_data,
 		*sampling_rate = max(dbs_data->min_sampling_rate, latency *
 				LATENCY_MULTIPLIER);
 unlock:
-		if (dbs_data->governor != GOV_CONSERVATIVE)
+		if (dbs_data->governor != GOV_CONSERVATIVE && !cpu)
 			rc = input_register_handler(od_ops->input_handler);
 		mutex_unlock(&dbs_data->mutex);
 
@@ -333,7 +333,7 @@ unlock:
 				cpufreq_unregister_notifier(cs_ops->notifier_block,
 						CPUFREQ_TRANSITION_NOTIFIER);
 		}
-		if (dbs_data->governor != GOV_CONSERVATIVE)
+		if (dbs_data->governor != GOV_CONSERVATIVE && !cpu)
 			input_unregister_handler(od_ops->input_handler);
 		mutex_unlock(&dbs_data->mutex);
 
