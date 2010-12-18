@@ -111,6 +111,7 @@ static void do_create_rpcrouter_pdev(struct work_struct *work);
 static DECLARE_WORK(work_read_data, do_read_data);
 static DECLARE_WORK(work_create_pdevs, do_create_pdevs);
 static DECLARE_WORK(work_create_rpcrouter_pdev, do_create_rpcrouter_pdev);
+static atomic_t rpcrouter_pdev_created = ATOMIC_INIT(0);
 
 #define RR_STATE_IDLE    0
 #define RR_STATE_HEADER  1
@@ -517,7 +518,8 @@ static int process_control_msg(union rr_control_msg *msg, int len)
 
 static void do_create_rpcrouter_pdev(struct work_struct *work)
 {
-	platform_device_register(&rpcrouter_pdev);
+	if (atomic_cmpxchg(&rpcrouter_pdev_created, 0, 1) == 0)
+		platform_device_register(&rpcrouter_pdev);
 }
 
 static void do_create_pdevs(struct work_struct *work)
