@@ -404,6 +404,19 @@ void android_enable_function(struct usb_function *f, int enable)
 			}
 		}
 #endif
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+		if (!strcmp(f->name, "accessory") && enable) {
+			struct usb_function		*func;
+
+		    /* disable everything else (and keep adb for now) */
+			list_for_each_entry(func, &android_config_driver.functions, list) {
+				if (strcmp(func->name, "accessory")
+					&& strcmp(func->name, "adb")) {
+					usb_function_set_enabled(func, 0);
+				}
+			}
+        }
+#endif
 
 		device_desc.idVendor = __constant_cpu_to_le16(get_vendor_id(dev));
 		device_desc.idProduct = __constant_cpu_to_le16(get_product_id(dev));
