@@ -177,6 +177,9 @@ static int hw_ep_enable(struct ci13xxx *ci, int num, int dir, int type)
 		data |= ENDPTCTRL_RXE;
 	}
 	hw_write(ci, OP_ENDPTCTRL + num, mask, data);
+
+	/* make sure endpoint is enabled before returning */
+	mb();
 	return 0;
 }
 
@@ -918,6 +921,8 @@ __acquires(ci->lock)
 		do {
 			hw_test_and_set_setup_guard(ci);
 			memcpy(&req, &mEp->qh.ptr->setup, sizeof(req));
+			/* Ensure buffer is read before acknowledging to h/w */
+			mb();
 		} while (!hw_test_and_clear_setup_guard(ci));
 
 		type = req.bRequestType;
@@ -1112,6 +1117,9 @@ static int ep_enable(struct usb_ep *ep,
 	mEp->qh.ptr->cap |=
 		(mEp->ep.maxpacket << ffs_nr(QH_MAX_PKT)) & QH_MAX_PKT;
 	mEp->qh.ptr->td.next |= TD_TERMINATE;   /* needed? */
+
+	/* complete all the updates to ept->head before enabling endpoint */
+	mb();
 
 	/*
 	 * Enable endpoints in the HW other than ep0 as ep0
