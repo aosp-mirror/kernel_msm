@@ -47,6 +47,8 @@ static DEFINE_PER_CPU(struct od_cpu_dbs_info_s, od_cpu_dbs_info);
 static struct cpufreq_governor cpufreq_gov_ondemand;
 #endif
 
+static struct workqueue_struct *input_wq;
+
 static struct od_dbs_tuners od_tuners = {
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
 	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
@@ -503,7 +505,7 @@ static DECLARE_WORK(dbs_refresh_work, dbs_refresh_callback);
 static void dbs_input_event(struct input_handle *handle, unsigned int type,
 		unsigned int code, int value)
 {
-	schedule_work_on(0, &dbs_refresh_work);
+	queue_work_on(0, input_wq, &dbs_refresh_work);
 }
 
 static int dbs_input_connect(struct input_handler *handler,
@@ -616,12 +618,19 @@ static int __init cpufreq_gov_dbs_init(void)
 			jiffies_to_usecs(10);
 	}
 
+	input_wq = create_workqueue("iewq");
+	if (!input_wq) {
+		printk(KERN_ERR "Failed to create iewq workqueue\n");
+		return -EFAULT;
+	}
+
 	return cpufreq_register_governor(&cpufreq_gov_ondemand);
 }
 
 static void __exit cpufreq_gov_dbs_exit(void)
 {
 	cpufreq_unregister_governor(&cpufreq_gov_ondemand);
+	destroy_workqueue(input_wq);
 }
 
 MODULE_AUTHOR("Venkatesh Pallipadi <venkatesh.pallipadi@intel.com>");
