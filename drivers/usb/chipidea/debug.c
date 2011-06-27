@@ -723,6 +723,17 @@ static ssize_t show_requests(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR(requests, S_IRUSR, show_requests, NULL);
 
+static ssize_t usb_remote_wakeup(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct ci13xxx *ci = container_of(dev, struct ci13xxx, gadget.dev);
+
+	ci13xxx_wakeup(&ci->gadget);
+
+	return count;
+}
+static DEVICE_ATTR(wakeup, S_IWUSR, 0, usb_remote_wakeup);
+
 /**
  * dbg_create_files: initializes the attribute interface
  * @dev: device
@@ -759,8 +770,13 @@ int dbg_create_files(struct device *dev)
 	retval = device_create_file(dev, &dev_attr_requests);
 	if (retval)
 		goto rm_registers;
+	retval = device_create_file(dev, &dev_attr_wakeup);
+	if (retval)
+		goto rm_requests;
 	return 0;
 
+ rm_requests:
+	device_remove_file(dev, &dev_attr_requests);
  rm_registers:
 	device_remove_file(dev, &dev_attr_registers);
  rm_qheads:
@@ -789,6 +805,7 @@ int dbg_remove_files(struct device *dev)
 {
 	if (dev == NULL)
 		return -EINVAL;
+	device_remove_file(dev, &dev_attr_wakeup);
 	device_remove_file(dev, &dev_attr_requests);
 	device_remove_file(dev, &dev_attr_registers);
 	device_remove_file(dev, &dev_attr_qheads);
