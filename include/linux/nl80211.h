@@ -491,6 +491,14 @@
  *	more background information, see
  *	http://wireless.kernel.org/en/users/Documentation/WoWLAN.
  *
+ * @NL80211_CMD_SET_REKEY_OFFLOAD: This command is used give the driver
+ *	the necessary information for supporting GTK rekey offload. This
+ *	feature is typically used during WoWLAN. The configuration data
+ *	is contained in %NL80211_ATTR_REKEY_DATA (which is nested and
+ *	contains the data in sub-attributes). After rekeying happened,
+ *	this command may also be sent by the driver as an MLME event to
+ *	inform userspace of the new replay counter.
+ *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
  */
@@ -612,6 +620,8 @@ enum nl80211_commands {
 	NL80211_CMD_STOP_SCHED_SCAN,
 	NL80211_CMD_SCHED_SCAN_RESULTS,
 	NL80211_CMD_SCHED_SCAN_STOPPED,
+
+	NL80211_CMD_SET_REKEY_OFFLOAD,
 
 	/* add new commands above here */
 
@@ -2493,6 +2503,30 @@ enum nl80211_hidden_ssid {
 	NL80211_HIDDEN_SSID_NOT_IN_USE,
 	NL80211_HIDDEN_SSID_ZERO_LEN,
 	NL80211_HIDDEN_SSID_ZERO_CONTENTS
+};
+
+#define NL80211_KCK_LEN			16
+#define NL80211_KEK_LEN			16
+#define NL80211_REPLAY_CTR_LEN		8
+
+/**
+ * enum nl80211_rekey_data - attributes for GTK rekey offload
+ * @__NL80211_REKEY_DATA_INVALID: invalid number for nested attributes
+ * @NL80211_REKEY_DATA_KEK: key encryption key (binary)
+ * @NL80211_REKEY_DATA_KCK: key confirmation key (binary)
+ * @NL80211_REKEY_DATA_REPLAY_CTR: replay counter (binary)
+ * @NUM_NL80211_REKEY_DATA: number of rekey attributes (internal)
+ * @MAX_NL80211_REKEY_DATA: highest rekey attribute (internal)
+ */
+enum nl80211_rekey_data {
+	__NL80211_REKEY_DATA_INVALID,
+	NL80211_REKEY_DATA_KEK,
+	NL80211_REKEY_DATA_KCK,
+	NL80211_REKEY_DATA_REPLAY_CTR,
+
+	/* keep last */
+	NUM_NL80211_REKEY_DATA,
+	MAX_NL80211_REKEY_DATA = NUM_NL80211_REKEY_DATA - 1
 };
 
 #endif /* __LINUX_NL80211_H */
