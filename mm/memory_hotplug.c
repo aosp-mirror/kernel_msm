@@ -1167,9 +1167,9 @@ int __ref physical_remove_memory(u64 start, u64 size)
 	BUG_ON(!res);
 
 	ret = arch_physical_remove_memory(start, size);
-	if (ret) {
+	if (!ret) {
 		kfree(res);
-		return ret;
+		return 0;
 	}
 
 	res->name = "System RAM";
@@ -1178,8 +1178,11 @@ int __ref physical_remove_memory(u64 start, u64 size)
 	res->flags = IORESOURCE_MEM | IORESOURCE_BUSY;
 
 	res_old = locate_resource(&iomem_resource, res);
-	if (res_old)
-		release_memory_resource(res_old);
+	if (res_old) {
+		release_resource(res_old);
+		if (PageSlab(virt_to_head_page(res_old)))
+			kfree(res_old);
+	}
 	kfree(res);
 
 	return ret;
@@ -1930,6 +1933,7 @@ repeat:
 
 	return 0;
 }
+
 #else
 int offline_pages(unsigned long start_pfn, unsigned long nr_pages)
 {
