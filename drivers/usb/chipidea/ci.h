@@ -57,6 +57,7 @@ struct ci13xxx_ep {
 	struct ci13xxx				*ci;
 	spinlock_t				*lock;
 	struct dma_pool				*td_pool;
+	unsigned long dTD_update_fail_count;
 };
 
 enum ci_role {
@@ -164,6 +165,7 @@ struct ci13xxx {
 	int				vbus_active;
 	/* FIXME: some day, we'll not use global phy */
 	bool				global_phy;
+	unsigned long dTD_update_fail_count;
 	struct usb_phy			*transceiver;
 	struct usb_hcd			*hcd;
 };
