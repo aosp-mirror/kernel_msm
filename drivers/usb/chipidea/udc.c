@@ -690,6 +690,11 @@ __acquires(ci->lock)
 	dbg_event(0xFF, "BUS RST", 0);
 
 	spin_unlock(&ci->lock);
+
+	/*stop charging upon reset */
+	if (ci->transceiver)
+		usb_phy_set_power(ci->transceiver, 0);
+
 	retval = _gadget_stop_activity(&ci->gadget);
 	if (retval)
 		goto done;
