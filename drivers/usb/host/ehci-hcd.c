@@ -1322,11 +1322,6 @@ MODULE_LICENSE ("GPL");
 #define PLATFORM_DRIVER		spear_ehci_hcd_driver
 #endif
 
-#ifdef CONFIG_USB_EHCI_MSM
-#include "ehci-msm.c"
-#define PLATFORM_DRIVER		ehci_msm_driver
-#endif
-
 #ifdef CONFIG_TILE_USB
 #include "ehci-tilegx.c"
 #define	PLATFORM_DRIVER		ehci_hcd_tilegx_driver
@@ -1368,6 +1363,7 @@ MODULE_LICENSE ("GPL");
 	!IS_ENABLED(CONFIG_USB_EHCI_MXC) && \
 	!IS_ENABLED(CONFIG_USB_MSM_HSIC) && \
 	!IS_ENABLED(CONFIG_USB_EHCI_MSM_72K) && \
+	!IS_ENABLED(CONFIG_USB_EHCI_MSM) && \
 	!defined(PLATFORM_DRIVER) && \
 	!defined(PS3_SYSTEM_BUS_DRIVER) && \
 	!defined(OF_PLATFORM_DRIVER) && \

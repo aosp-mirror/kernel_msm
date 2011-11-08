@@ -22,13 +22,22 @@
  * along with this program; if not, you can find it at http://www.fsf.org
  */
 
+#include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/pm_runtime.h>
 
+#include <linux/usb.h>
+#include <linux/usb/hcd.h>
 #include <linux/usb/otg.h>
 #include <linux/usb/msm_hsusb_hw.h>
+
+#include "ehci.h"
+
+#define DRIVER_DESC "Qualcomm On-Chip EHCI Host Controller"
+static const char hcd_name[] = "ehci-msm";
 
 #define MSM_USB_BASE (hcd->regs)
 
@@ -56,51 +65,11 @@ static int ehci_msm_reset(struct usb_hcd *hcd)
 	return 0;
 }
 
-static struct hc_driver msm_hc_driver = {
-	.description		= hcd_name,
-	.product_desc		= "Qualcomm On-Chip EHCI Host Controller",
-	.hcd_priv_size		= sizeof(struct ehci_hcd),
-
-	/*
-	 * generic hardware linkage
-	 */
-	.irq			= ehci_irq,
-	.flags			= HCD_USB2 | HCD_MEMORY,
-
-	.reset			= ehci_msm_reset,
-	.start			= ehci_run,
-
-	.stop			= ehci_stop,
-	.shutdown		= ehci_shutdown,
-
-	/*
-	 * managing i/o requests and associated device resources
-	 */
-	.urb_enqueue		= ehci_urb_enqueue,
-	.urb_dequeue		= ehci_urb_dequeue,
-	.endpoint_disable	= ehci_endpoint_disable,
-	.endpoint_reset		= ehci_endpoint_reset,
-	.clear_tt_buffer_complete = ehci_clear_tt_buffer_complete,
-
-	/*
-	 * scheduling support
-	 */
-	.get_frame_number	= ehci_get_frame,
-
-	/*
-	 * root hub support
-	 */
-	.hub_status_data	= ehci_hub_status_data,
-	.hub_control		= ehci_hub_control,
-	.relinquish_port	= ehci_relinquish_port,
-	.port_handed_over	= ehci_port_handed_over,
-
-	/*
-	 * PM support
-	 */
-	.bus_suspend		= ehci_bus_suspend,
-	.bus_resume		= ehci_bus_resume,
+static const struct ehci_driver_overrides ehci_msm_overrides __initdata = {
+	.reset = ehci_msm_reset,
 };
+
+static struct hc_driver __read_mostly ehci_msm_hc_driver;
 
 static int ehci_msm_probe(struct platform_device *pdev)
 {
@@ -110,7 +79,8 @@ static int ehci_msm_probe(struct platform_device *pdev)
 
 	dev_dbg(&pdev->dev, "ehci_msm proble\n");
 
-	hcd = usb_create_hcd(&msm_hc_driver, &pdev->dev, dev_name(&pdev->dev));
+	hcd = usb_create_hcd(&ehci_msm_hc_driver, &pdev->dev,
+			     dev_name(&pdev->dev));
 	if (!hcd) {
 		dev_err(&pdev->dev, "Unable to create HCD\n");
 		return  -ENOMEM;
@@ -226,3 +196,21 @@ static struct platform_driver ehci_msm_driver = {
 		   .pm = &ehci_msm_dev_pm_ops,
 	},
 };
+
+static int __init ehci_msm_init(void)
+{
+	if (usb_disabled())
+		return -ENODEV;
+
+	pr_info("%s: " DRIVER_DESC "\n", hcd_name);
+
+	ehci_init_driver(&ehci_msm_hc_driver, &ehci_msm_overrides);
+	return platform_driver_register(&ehci_msm_driver);
+}
+module_init(ehci_msm_init);
+
+static void __exit ehci_msm_cleanup(void)
+{
+	platform_driver_unregister(&ehci_msm_driver);
+}
+module_exit(ehci_msm_cleanup);
