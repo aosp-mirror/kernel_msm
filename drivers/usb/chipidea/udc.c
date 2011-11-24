@@ -1673,6 +1673,7 @@ static int ci13xxx_start(struct usb_gadget *gadget,
 	struct ci13xxx *ci = container_of(gadget, struct ci13xxx, gadget);
 	unsigned long flags;
 	int retval = -ENOMEM;
+	bool put = false;
 
 	if (driver->disconnect == NULL)
 		return -EINVAL;
@@ -1687,10 +1688,11 @@ static int ci13xxx_start(struct usb_gadget *gadget,
 	retval = usb_ep_enable(&ci->ep0in->ep);
 	if (retval)
 		return retval;
+
+	pm_runtime_get_sync(&ci->gadget.dev);
 	spin_lock_irqsave(&ci->lock, flags);
 
 	ci->driver = driver;
-	pm_runtime_get_sync(&ci->gadget.dev);
 	if (ci->platdata->flags & CI13XXX_PULLUP_ON_VBUS) {
 		if (ci->vbus_active) {
 			if (ci->platdata->flags & CI13XXX_REGS_SHARED) {
@@ -1698,17 +1700,17 @@ static int ci13xxx_start(struct usb_gadget *gadget,
 				hw_enable_vbus_intr(ci);
 			}
 		} else {
-			pm_runtime_put_sync(&ci->gadget.dev);
+			put = true;
 			goto done;
 		}
 	}
 
 	retval = hw_device_state(ci, ci->ep0out->qh.dma);
-	if (retval)
-		pm_runtime_put_sync(&ci->gadget.dev);
 
  done:
 	spin_unlock_irqrestore(&ci->lock, flags);
+	if (retval || put)
+		pm_runtime_put_sync(&ci->gadget.dev);
 	return retval;
 }
 
