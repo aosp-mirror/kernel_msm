@@ -98,10 +98,11 @@ static int should_io_be_busy(void)
 static unsigned int powersave_bias_target(struct cpufreq_policy *policy,
 		unsigned int freq_next, unsigned int relation)
 {
-	unsigned int freq_req, freq_reduc, freq_avg;
+	unsigned int freq_req, freq_avg;
 	unsigned int freq_hi, freq_lo;
 	unsigned int index = 0;
 	unsigned int jiffies_total, jiffies_hi, jiffies_lo;
+	int freq_reduc;
 	struct od_cpu_dbs_info_s *dbs_info = &per_cpu(od_cpu_dbs_info,
 						   policy->cpu);
 
@@ -429,18 +430,76 @@ static ssize_t store_ignore_nice_load(struct kobject *a, struct attribute *b,
 static ssize_t store_powersave_bias(struct kobject *a, struct attribute *b,
 				    const char *buf, size_t count)
 {
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
+	int input  = 0;
+	int bypass = 0;
+	int ret, cpu, reenable_timer;
+	struct od_cpu_dbs_info_s *dbs_info;
+
+	ret = sscanf(buf, "%d", &input);
 
 	if (ret != 1)
 		return -EINVAL;
 
-	if (input > 1000)
-		input = 1000;
+	if (input >= POWERSAVE_BIAS_MAXLEVEL) {
+		input  = POWERSAVE_BIAS_MAXLEVEL;
+		bypass = 1;
+	} else if (input <= POWERSAVE_BIAS_MINLEVEL) {
+		input  = POWERSAVE_BIAS_MINLEVEL;
+		bypass = 1;
+	}
+
+	if (input == od_tuners.powersave_bias) {
+		/* no change */
+		return count;
+	}
+
+	reenable_timer = ((od_tuners.powersave_bias ==
+				POWERSAVE_BIAS_MAXLEVEL) ||
+				(od_tuners.powersave_bias ==
+				POWERSAVE_BIAS_MINLEVEL));
 
 	od_tuners.powersave_bias = input;
-	ondemand_powersave_bias_init();
+	if (!bypass) {
+		if (reenable_timer) {
+			/* reinstate dbs timer */
+			for_each_online_cpu(cpu) {
+				if (lock_policy_rwsem_write(cpu) < 0)
+					continue;
+
+				dbs_info = &per_cpu(od_cpu_dbs_info, cpu);
+				if (dbs_info->cdbs.cur_policy) {
+					/* restart dbs timer */
+					dbs_timer_init(&od_dbs_data, cpu,
+						od_tuners.sampling_rate);
+				}
+				unlock_policy_rwsem_write(cpu);
+			}
+		}
+		ondemand_powersave_bias_init();
+	} else {
+		/* running at maximum or minimum frequencies; cancel
+		   dbs timer as periodic load sampling is not necessary */
+		for_each_online_cpu(cpu) {
+			if (lock_policy_rwsem_write(cpu) < 0)
+				continue;
+
+			dbs_info = &per_cpu(od_cpu_dbs_info, cpu);
+			if (dbs_info->cdbs.cur_policy) {
+				/* cpu using ondemand, cancel dbs timer */
+				mutex_lock(&dbs_info->cdbs.timer_mutex);
+				dbs_timer_exit(&od_dbs_data, cpu);
+
+				ondemand_powersave_bias_setspeed(
+					dbs_info->cdbs.cur_policy,
+					NULL,
+					input);
+
+				mutex_unlock(&dbs_info->cdbs.timer_mutex);
+			}
+			unlock_policy_rwsem_write(cpu);
+		}
+	}
+
 	return count;
 }
 
@@ -449,7 +508,12 @@ show_one(od, io_is_busy, io_is_busy);
 show_one(od, up_threshold, up_threshold);
 show_one(od, sampling_down_factor, sampling_down_factor);
 show_one(od, ignore_nice_load, ignore_nice);
-show_one(od, powersave_bias, powersave_bias);
+
+static ssize_t show_powersave_bias
+(struct kobject *kobj, struct attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", od_tuners.powersave_bias);
+}
 
 define_one_global_rw(sampling_rate);
 define_one_global_rw(io_is_busy);
@@ -511,6 +575,12 @@ static void dbs_input_event(struct input_handle *handle, unsigned int type,
 		unsigned int code, int value)
 {
 	int i;
+
+	if ((od_tuners.powersave_bias == POWERSAVE_BIAS_MAXLEVEL) ||
+		(od_tuners.powersave_bias == POWERSAVE_BIAS_MINLEVEL)) {
+		/* nothing to do */
+		return;
+	}
 
 	for_each_online_cpu(i) {
 		queue_work_on(i, input_wq, &per_cpu(dbs_refresh_work, i));

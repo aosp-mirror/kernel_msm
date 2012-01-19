@@ -37,6 +37,9 @@
 #define MIN_LATENCY_MULTIPLIER			(100)
 #define TRANSITION_LATENCY_LIMIT		(10 * 1000 * 1000)
 
+#define POWERSAVE_BIAS_MAXLEVEL			(1000)
+#define POWERSAVE_BIAS_MINLEVEL			(-1000)
+
 /* Ondemand Sampling types */
 enum {OD_NORMAL_SAMPLE, OD_SUB_SAMPLE};
 
@@ -110,7 +113,7 @@ struct od_dbs_tuners {
 	unsigned int sampling_down_factor;
 	unsigned int up_threshold;
 	unsigned int adj_up_threshold;
-	unsigned int powersave_bias;
+	int powersave_bias;
 	unsigned int io_is_busy;
 };
 
@@ -174,6 +177,12 @@ u64 get_cpu_idle_time(unsigned int cpu, u64 *wall);
 void dbs_check_cpu(struct dbs_data *dbs_data, int cpu);
 bool need_load_eval(struct cpu_dbs_common_info *cdbs,
 		unsigned int sampling_rate);
+void dbs_timer_init(struct dbs_data *dbs_data, int cpu,
+				  unsigned int sampling_rate);
+void dbs_timer_exit(struct dbs_data *dbs_data, int cpu);
+int ondemand_powersave_bias_setspeed(struct cpufreq_policy *policy,
+				     struct cpufreq_policy *altpolicy,
+				     int level);
 int cpufreq_governor_dbs(struct dbs_data *dbs_data,
 		struct cpufreq_policy *policy, unsigned int event);
 #endif /* _CPUFREQ_GOVERNOR_H */

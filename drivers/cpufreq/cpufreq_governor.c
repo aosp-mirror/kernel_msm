@@ -170,7 +170,7 @@ void dbs_check_cpu(struct dbs_data *dbs_data, int cpu)
 }
 EXPORT_SYMBOL_GPL(dbs_check_cpu);
 
-static inline void dbs_timer_init(struct dbs_data *dbs_data, int cpu,
+void dbs_timer_init(struct dbs_data *dbs_data, int cpu,
 				  unsigned int sampling_rate)
 {
 	int delay = delay_for_sampling_rate(sampling_rate);
@@ -179,7 +179,7 @@ static inline void dbs_timer_init(struct dbs_data *dbs_data, int cpu,
 	schedule_delayed_work_on(cpu, &cdbs->work, delay);
 }
 
-static inline void dbs_timer_exit(struct dbs_data *dbs_data, int cpu)
+void dbs_timer_exit(struct dbs_data *dbs_data, int cpu)
 {
 	struct cpu_dbs_common_info *cdbs = dbs_data->get_cpu_cdbs(cpu);
 
@@ -204,6 +204,27 @@ bool need_load_eval(struct cpu_dbs_common_info *cdbs,
 	return true;
 }
 EXPORT_SYMBOL_GPL(need_load_eval);
+
+int ondemand_powersave_bias_setspeed(struct cpufreq_policy *policy,
+				     struct cpufreq_policy *altpolicy,
+				     int level)
+{
+	if (level == POWERSAVE_BIAS_MAXLEVEL) {
+		/* maximum powersave; set to lowest frequency */
+		__cpufreq_driver_target(policy,
+			(altpolicy) ? altpolicy->min : policy->min,
+			CPUFREQ_RELATION_L);
+		return 1;
+	} else if (level == POWERSAVE_BIAS_MINLEVEL) {
+		/* minimum powersave; set to highest frequency */
+		__cpufreq_driver_target(policy,
+			(altpolicy) ? altpolicy->max : policy->max,
+			CPUFREQ_RELATION_H);
+		return 1;
+	}
+	return 0;
+}
+
 
 int cpufreq_governor_dbs(struct dbs_data *dbs_data,
 		struct cpufreq_policy *policy, unsigned int event)
@@ -312,8 +333,10 @@ unlock:
 		/* Initiate timer time stamp */
 		cpu_cdbs->time_stamp = ktime_get();
 
-		for_each_cpu(j, policy->cpus)
-			dbs_timer_init(dbs_data, j, *sampling_rate);
+		if (!ondemand_powersave_bias_setspeed(cpu_cdbs->cur_policy,
+					NULL, od_tuners->powersave_bias))
+			for_each_cpu(j, policy->cpus)
+				dbs_timer_init(dbs_data, j, *sampling_rate);
 		break;
 
 	case CPUFREQ_GOV_STOP:
@@ -352,6 +375,9 @@ unlock:
 		else if (policy->min > cpu_cdbs->cur_policy->cur)
 			__cpufreq_driver_target(cpu_cdbs->cur_policy,
 					policy->min, CPUFREQ_RELATION_L);
+		else if (od_tuners->powersave_bias != 0)
+			ondemand_powersave_bias_setspeed(cpu_cdbs->cur_policy,
+					policy, od_tuners->powersave_bias);
 		dbs_check_cpu(dbs_data, cpu);
 		mutex_unlock(&cpu_cdbs->timer_mutex);
 		break;
