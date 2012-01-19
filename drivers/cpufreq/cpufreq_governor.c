@@ -333,6 +333,11 @@ unlock:
 				cpufreq_unregister_notifier(cs_ops->notifier_block,
 						CPUFREQ_TRANSITION_NOTIFIER);
 		}
+		/*
+		 * If device is being removed, policy is no longer
+		 * valid.
+		 */
+		dbs_data->get_cpu_cdbs(cpu)->cur_policy = NULL;
 		if (dbs_data->governor != GOV_CONSERVATIVE && !cpu)
 			input_unregister_handler(od_ops->input_handler);
 		mutex_unlock(&dbs_data->mutex);
