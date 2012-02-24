@@ -1,7 +1,7 @@
 /*
  * Qualcomm Serial USB driver
  *
- *	Copyright (c) 2008 QUALCOMM Incorporated.
+ *	Copyright (c) 2008, 2012 QUALCOMM Incorporated.
  *	Copyright (c) 2009 Greg Kroah-Hartman <gregkh@suse.de>
  *	Copyright (c) 2009 Novell Inc.
  *
@@ -119,6 +119,7 @@ static const struct usb_device_id id_table[] = {
 	{USB_DEVICE(0x12D1, 0x14F0)},	/* Sony Gobi 3000 QDL */
 	{USB_DEVICE(0x12D1, 0x14F1)},	/* Sony Gobi 3000 Composite */
 	{USB_DEVICE(0x05c6, 0x9048)},	/* MDM9x15 device */
+	{USB_DEVICE(0x05c6, 0x904C)},	/* MDM9x15 device */
 
 	/* non Gobi Qualcomm serial devices */
 	{USB_DEVICE_INTERFACE_NUMBER(0x0f3d, 0x68a2, 0)},	/* Sierra Wireless MC7700 Device Management */
