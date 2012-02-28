@@ -11,6 +11,7 @@ DHDCFLAGS = -Wall -Wstrict-prototypes -Dlinux -DBCMDRIVER                     \
 	-DNEW_COMPAT_WIRELESS -DWIFI_ACT_FRAME -DARP_OFFLOAD_SUPPORT          \
 	-DKEEP_ALIVE -DCSCAN -DPKT_FILTER_SUPPORT     \
 	-DEMBEDDED_PLATFORM -DENABLE_INSMOD_NO_FW_LOAD         \
+	-DDHD_USE_EARLYSUSPEND \
 	-Idrivers/net/wireless/bcmdhd -Idrivers/net/wireless/bcmdhd/include
 
 
