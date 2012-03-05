@@ -127,6 +127,7 @@ static int ehci_msm_probe(struct platform_device *pdev)
 		goto put_hcd;
 	}
 
+	hcd_to_ehci(hcd)->transceiver = phy;
 	device_init_wakeup(&pdev->dev, 1);
 	pm_runtime_enable(&pdev->dev);
 
@@ -146,6 +147,7 @@ static int ehci_msm_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 	pm_runtime_set_suspended(&pdev->dev);
 
+	hcd_to_ehci(hcd)->transceiver = NULL;
 	otg_set_host(phy->otg, NULL);
 
 	usb_put_hcd(hcd);
