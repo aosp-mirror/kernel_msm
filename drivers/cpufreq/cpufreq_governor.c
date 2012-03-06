@@ -69,7 +69,11 @@ void dbs_check_cpu(struct dbs_data *dbs_data, int cpu)
 	struct od_dbs_tuners *od_tuners = dbs_data->tuners;
 	struct cs_dbs_tuners *cs_tuners = dbs_data->tuners;
 	struct cpufreq_policy *policy;
+	/* Extrapolated load of this CPU */
+	unsigned int load_at_max_freq = 0;
 	unsigned int max_load = 0;
+	/* Current load across this CPU */
+	unsigned int cur_load = 0;
 	unsigned int ignore_nice;
 	unsigned int j;
 
@@ -143,19 +147,23 @@ void dbs_check_cpu(struct dbs_data *dbs_data, int cpu)
 		if (unlikely(!wall_time || wall_time < idle_time))
 			continue;
 
-		load = 100 * (wall_time - idle_time) / wall_time;
+		cur_load = 100 * (wall_time - idle_time) / wall_time;
 
 		if (dbs_data->governor == GOV_ONDEMAND) {
 			int freq_avg = __cpufreq_driver_getavg(policy, j);
 			if (freq_avg <= 0)
 				freq_avg = policy->cur;
 
-			load *= freq_avg;
+			cur_load *= freq_avg;
 		}
 
 		if (load > max_load)
 			max_load = load;
 	}
+	/* calculate the scaled load across CPU */
+	load_at_max_freq = (cur_load * policy->cur)/policy->cpuinfo.max_freq;
+
+	cpufreq_notify_utilization(policy, load_at_max_freq);
 
 	dbs_data->gov_check_cpu(cpu, max_load);
 }
