@@ -1287,6 +1287,14 @@ static int adreno_waittimestamp(struct kgsl_device *device,
 		}
 		/*this wait timed out*/
 	}
+
+	/* Check if timestamp has retired here because we may have hit
+	 * recovery which can take some time and cause waiting threads
+	 * to timeout
+	 */
+	if (kgsl_check_timestamp(device, timestamp))
+		goto done;
+
 	status = -ETIMEDOUT;
 	KGSL_DRV_ERR(device,
 		     "Device hang detected while waiting for timestamp: %x,"
