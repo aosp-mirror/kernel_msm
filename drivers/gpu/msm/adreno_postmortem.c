@@ -539,7 +539,8 @@ static int adreno_dump(struct kgsl_device *device)
 		" %08X\n", r1, r2, pt_base);
 	cur_pt_base = pt_base;
 
-	KGSL_LOG_DUMP(device, "PAGETABLE SIZE: %08X ", KGSL_PAGETABLE_SIZE);
+	KGSL_LOG_DUMP(device, "PAGETABLE SIZE: %08X ",
+		kgsl_mmu_get_ptsize());
 
 	kgsl_regread(device, MH_MMU_TRAN_ERROR, &r1);
 	KGSL_LOG_DUMP(device, "        TRAN_ERROR = %08X\n", r1);
