@@ -28,6 +28,7 @@ obj-$(CONFIG_ARCH_MSM7X25) += acpuclock-7201.o
 obj-$(CONFIG_ARCH_MSM7X27) += acpuclock-7201.o
 obj-$(CONFIG_ARCH_MSM_SCORPION) += pmu.o
 obj-$(CONFIG_ARCH_MSM_KRAIT) += msm-krait-l2-accessors.o pmu.o
+obj-$(CONFIG_ARCH_MSM_KRAIT) += krait-scm.o
 obj-$(CONFIG_ARCH_MSM7X27A) += pmu.o
 
 ifndef CONFIG_MSM_SMP
