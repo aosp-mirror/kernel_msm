@@ -170,4 +170,6 @@ source "drivers/ipack/Kconfig"
 
 source "drivers/gud/Kconfig"
 
+source "drivers/cs/Kconfig"
+
 endmenu
