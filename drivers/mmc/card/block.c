@@ -940,10 +940,10 @@ static int mmc_blk_issue_secdiscard_rq(struct mmc_queue *mq,
 {
 	struct mmc_blk_data *md = mq->data;
 	struct mmc_card *card = md->queue.card;
-	unsigned int from, nr, arg, trim_arg, erase_arg;
+	unsigned int from, nr, arg;
 	int err = 0, type = MMC_BLK_SECDISCARD;
 
-	if (!(mmc_can_secure_erase_trim(card) || mmc_can_sanitize(card))) {
+	if (!(mmc_can_secure_erase_trim(card))) {
 		err = -EOPNOTSUPP;
 		goto out;
 	}
@@ -951,23 +951,10 @@ static int mmc_blk_issue_secdiscard_rq(struct mmc_queue *mq,
 	from = blk_rq_pos(req);
 	nr = blk_rq_sectors(req);
 
-	/* The sanitize operation is supported at v4.5 only */
-	if (mmc_can_sanitize(card)) {
-		erase_arg = MMC_ERASE_ARG;
-		trim_arg = MMC_TRIM_ARG;
-	} else {
-		erase_arg = MMC_SECURE_ERASE_ARG;
-		trim_arg = MMC_SECURE_TRIM1_ARG;
-	}
-
-	if (mmc_erase_group_aligned(card, from, nr))
-		arg = erase_arg;
-	else if (mmc_can_trim(card))
-		arg = trim_arg;
-	else {
-		err = -EINVAL;
-		goto out;
-	}
+	if (mmc_can_trim(card) && !mmc_erase_group_aligned(card, from, nr))
+		arg = MMC_SECURE_TRIM1_ARG;
+	else
+		arg = MMC_SECURE_ERASE_ARG;
 retry:
 	if (card->quirks & MMC_QUIRK_INAND_CMD38) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
@@ -1008,6 +995,44 @@ out_retry:
 		goto retry;
 	if (!err)
 		mmc_blk_reset_success(md, type);
+out:
+	blk_end_request(req, err, blk_rq_bytes(req));
+
+	return err ? 0 : 1;
+}
+
+static int mmc_blk_issue_sanitize_rq(struct mmc_queue *mq,
+				      struct request *req)
+{
+	struct mmc_blk_data *md = mq->data;
+	struct mmc_card *card = md->queue.card;
+	int err = 0;
+
+	BUG_ON(!card);
+	BUG_ON(!card->host);
+
+	if (!(mmc_can_sanitize(card) &&
+	     (card->host->caps2 & MMC_CAP2_SANITIZE))) {
+			pr_warning("%s: %s - SANITIZE is not supported\n",
+				   mmc_hostname(card->host), __func__);
+			err = -EOPNOTSUPP;
+			goto out;
+	}
+
+	pr_debug("%s: %s - SANITIZE IN PROGRESS...\n",
+		mmc_hostname(card->host), __func__);
+
+	err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
+					 EXT_CSD_SANITIZE_START, 1, 0);
+
+	if (err)
+		pr_err("%s: %s - mmc_switch() with "
+		       "EXT_CSD_SANITIZE_START failed. err=%d\n",
+		       mmc_hostname(card->host), __func__, err);
+
+	pr_debug("%s: %s - SANITIZE COMPLETED\n", mmc_hostname(card->host),
+					     __func__);
+
 out:
 	blk_end_request(req, err, blk_rq_bytes(req));
 
@@ -1909,8 +1934,13 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 		goto out;
 	}
 
-	mq->flags &= ~MMC_QUEUE_NEW_REQUEST;
-	if (req && req->cmd_flags & REQ_DISCARD) {
+	if (req && req->cmd_flags & REQ_SANITIZE) {
+		/* complete ongoing async transfer before issuing sanitize */
+		if (card->host && card->host->areq)
+			mmc_blk_issue_rw_rq(mq, NULL);
+		ret = mmc_blk_issue_sanitize_rq(mq, req);
+	} else if (req && req->cmd_flags & REQ_DISCARD) {
+		mq->flags &= ~MMC_QUEUE_NEW_REQUEST;
 		/* complete ongoing async transfer before issuing discard */
 		if (card->host->areq)
 			mmc_blk_issue_rw_rq(mq, NULL);
