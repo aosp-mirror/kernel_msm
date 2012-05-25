@@ -1583,6 +1583,7 @@ static int ion_debug_heap_show(struct seq_file *s, void *unused)
 	struct ion_device *dev = heap->dev;
 	struct rb_node *n;
 
+	mutex_lock(&dev->lock);
 	seq_printf(s, "%16.s %16.s %16.s\n", "client", "pid", "size");
 
 	for (n = rb_first(&dev->clients); n; n = rb_next(n)) {
@@ -1604,6 +1605,7 @@ static int ion_debug_heap_show(struct seq_file *s, void *unused)
 	}
 	if (heap->ops->print_debug)
 		heap->ops->print_debug(heap, s);
+	mutex_unlock(&dev->lock);
 	return 0;
 }
 
