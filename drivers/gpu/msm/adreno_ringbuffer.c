@@ -889,8 +889,7 @@ adreno_ringbuffer_issueibcmds(struct kgsl_device_private *dev_priv,
 }
 
 int adreno_ringbuffer_extract(struct adreno_ringbuffer *rb,
-				unsigned int *temp_rb_buffer,
-				int *rb_size)
+				struct adreno_recovery_data *rec_data)
 {
 	struct kgsl_device *device = rb->device;
 	unsigned int rb_rptr;
@@ -901,11 +900,25 @@ int adreno_ringbuffer_extract(struct adreno_ringbuffer *rb,
 	unsigned int val2;
 	unsigned int val3;
 	unsigned int copy_rb_contents = 0;
-	unsigned int cur_context;
-	unsigned int j;
+	struct kgsl_context *context;
+	unsigned int context_id;
+	unsigned int *temp_rb_buffer = rec_data->rb_buffer;
 
 	GSL_RB_GET_READPTR(rb, &rb->rptr);
 
+	/* current_context is the context that is presently active in the
+	 * GPU, i.e the context in which the hang is caused */
+	kgsl_sharedmem_readl(&device->memstore, &context_id,
+		KGSL_DEVICE_MEMSTORE_OFFSET(current_context));
+
+	KGSL_DRV_ERR(device, "Last context id: %d\n", context_id);
+	context = idr_find(&device->context_idr, context_id);
+	if (context == NULL) {
+		KGSL_DRV_ERR(device,
+			"GPU recovery from hang not possible because last"
+			" context id is invalid.\n");
+		return -EINVAL;
+	}
 	retired_timestamp = device->ftbl->readtimestamp(device,
 		KGSL_TIMESTAMP_RETIRED);
 	KGSL_DRV_ERR(device, "GPU successfully executed till ts: %x\n",
@@ -987,10 +1000,6 @@ int adreno_ringbuffer_extract(struct adreno_ringbuffer *rb,
 		return -EINVAL;
 	}
 
-	/* current_context is the context that is presently active in the
-	 * GPU, i.e the context in which the hang is caused */
-	kgsl_sharedmem_readl(&device->memstore, &cur_context,
-		KGSL_DEVICE_MEMSTORE_OFFSET(current_context));
 	while ((rb_rptr / sizeof(unsigned int)) != rb->wptr) {
 		kgsl_sharedmem_readl(&rb->buffer_desc, &value, rb_rptr);
 		rb_rptr = adreno_ringbuffer_inc_wrapped(rb_rptr,
@@ -1017,7 +1026,7 @@ int adreno_ringbuffer_extract(struct adreno_ringbuffer *rb,
 			 * and leave.
 			 */
 
-			if ((copy_rb_contents == 0) && (value == cur_context)) {
+			if ((copy_rb_contents == 0) && (value == context_id)) {
 				KGSL_DRV_ERR(device, "GPU recovery could not "
 					"find the previous context\n");
 				return -EINVAL;
@@ -1033,7 +1042,7 @@ int adreno_ringbuffer_extract(struct adreno_ringbuffer *rb,
 			/* if context switches to a context that did not cause
 			 * hang then start saving the rb contents as those
 			 * commands can be executed */
-			if (value != cur_context) {
+			if (value != context_id) {
 				copy_rb_contents = 1;
 				temp_rb_buffer[temp_idx++] = cp_nop_packet(1);
 				temp_rb_buffer[temp_idx++] =
@@ -1052,20 +1061,7 @@ int adreno_ringbuffer_extract(struct adreno_ringbuffer *rb,
 			temp_rb_buffer[temp_idx++] = value;
 	}
 
-	*rb_size = temp_idx;
-	KGSL_DRV_ERR(device, "Extracted rb contents, size: %x\n", *rb_size);
-	for (temp_idx = 0; temp_idx < *rb_size;) {
-		char str[80];
-		int idx = 0;
-		if ((temp_idx + 8) <= *rb_size)
-			j = 8;
-		else
-			j = *rb_size - temp_idx;
-		for (; j != 0; j--)
-			idx += scnprintf(str + idx, 80 - idx,
-				"%8.8X ", temp_rb_buffer[temp_idx++]);
-		printk(KERN_ALERT "%s", str);
-	}
+	rec_data->rb_size = temp_idx;
 	return 0;
 }
 
