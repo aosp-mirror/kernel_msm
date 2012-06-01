@@ -46,6 +46,8 @@
 #define ADRENO_ISTORE_WORDS 3
 #define ADRENO_ISTORE_START 0x5000
 
+#define ADRENO_NUM_CTX_SWITCH_ALLOWED_BEFORE_DRAW	50
+
 enum adreno_gpurev {
 	ADRENO_REV_UNKNOWN = 0,
 	ADRENO_REV_A200 = 200,
@@ -78,9 +80,12 @@ struct adreno_device {
 };
 
 struct adreno_gpudev {
+	/* keeps track of when we need to execute the draw workaround code */
+	int ctx_switches_since_last_draw;
 	int (*ctxt_create)(struct adreno_device *, struct adreno_context *);
 	void (*ctxt_save)(struct adreno_device *, struct adreno_context *);
 	void (*ctxt_restore)(struct adreno_device *, struct adreno_context *);
+	void (*ctxt_draw_workaround)(struct adreno_device *);
 	irqreturn_t (*irq_handler)(struct adreno_device *);
 	void (*irq_control)(struct adreno_device *, int);
 	void * (*snapshot)(struct adreno_device *, void *, int *, int);
