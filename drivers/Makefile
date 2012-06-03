@@ -155,4 +155,4 @@ obj-$(CONFIG_NTB)		+= ntb/
 #MobiCore
 obj-$(CONFIG_MOBICORE_SUPPORT)  += gud/
 
-obj-$(CONFIG_MSM_QDSS)		+= cs/
+obj-$(CONFIG_MSM_QDSS)		+= coresight/
