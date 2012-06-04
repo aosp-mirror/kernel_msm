@@ -158,7 +158,7 @@ static inline unsigned int adreno_ringbuffer_inc_wrapped(unsigned int val,
 
 /* Decrement a value by 4 bytes with wrap-around based on size */
 static inline unsigned int adreno_ringbuffer_dec_wrapped(unsigned int val,
-                                                        unsigned int size)
+							unsigned int size)
 {
 	return (val + size - sizeof(unsigned int)) % size;
 }
