@@ -40,6 +40,12 @@
 #define CTXT_FLAGS_GPU_HANG		0x00008000
 /* Specifies there is no need to save GMEM */
 #define CTXT_FLAGS_NOGMEMALLOC          0x00010000
+/* Trash state for context */
+#define CTXT_FLAGS_TRASHSTATE		0x00020000
+/* per context timestamps enabled */
+#define CTXT_FLAGS_PER_CONTEXT_TS	0x00040000
+/* Context has caused a GPU hang and recovered properly */
+#define CTXT_FLAGS_GPU_HANG_RECOVERED	0x00008000
 
 struct kgsl_device;
 struct adreno_device;
