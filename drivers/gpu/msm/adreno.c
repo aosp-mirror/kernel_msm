@@ -720,6 +720,9 @@ adreno_recover_hang(struct kgsl_device *device,
 	/* wait for idle */
 	ret = adreno_idle(device, KGSL_TIMEOUT_DEFAULT);
 done:
+	kgsl_sharedmem_writel(&device->memstore,
+			KGSL_DEVICE_MEMSTORE_OFFSET(eoptimestamp),
+			rb->timestamp);
 	adreno_mark_context_status(device, ret);
 	return ret;
 }
