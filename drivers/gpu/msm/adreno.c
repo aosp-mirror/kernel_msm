@@ -644,10 +644,6 @@ adreno_recover_hang(struct kgsl_device *device,
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_ringbuffer *rb = &adreno_dev->ringbuffer;
 	unsigned int timestamp;
-	unsigned int reftimestamp;
-	unsigned int enable_ts;
-	unsigned int soptimestamp;
-	unsigned int eoptimestamp;
 	struct kgsl_context *context;
 	struct adreno_context *adreno_context;
 	int next = 0;
@@ -673,14 +669,6 @@ adreno_recover_hang(struct kgsl_device *device,
 	timestamp = rb->timestamp;
 	KGSL_DRV_ERR(device, "Last issued global timestamp: %x\n", timestamp);
 
-	kgsl_sharedmem_readl(&device->memstore, &reftimestamp,
-				KGSL_DEVICE_MEMSTORE_OFFSET(ref_wait_ts));
-	kgsl_sharedmem_readl(&device->memstore, &enable_ts,
-				KGSL_DEVICE_MEMSTORE_OFFSET(ts_cmp_enable));
-	kgsl_sharedmem_readl(&device->memstore, &soptimestamp,
-				KGSL_DEVICE_MEMSTORE_OFFSET(soptimestamp));
-	kgsl_sharedmem_readl(&device->memstore, &eoptimestamp,
-				KGSL_DEVICE_MEMSTORE_OFFSET(eoptimestamp));
 	/* Make sure memory is synchronized before restarting the GPU */
 	mb();
 	KGSL_CTXT_ERR(device,
@@ -695,22 +683,7 @@ adreno_recover_hang(struct kgsl_device *device,
 	if (ret)
 		goto done;
 	KGSL_DRV_ERR(device, "Device has been restarted after hang\n");
-	/* Restore timestamp states */
-	kgsl_sharedmem_writel(&device->memstore,
-			KGSL_DEVICE_MEMSTORE_OFFSET(soptimestamp),
-				soptimestamp);
-	kgsl_sharedmem_writel(&device->memstore,
-			KGSL_DEVICE_MEMSTORE_OFFSET(eoptimestamp),
-				eoptimestamp);
 
-	if (rec_data->rb_size) {
-		kgsl_sharedmem_writel(&device->memstore,
-			KGSL_DEVICE_MEMSTORE_OFFSET(ref_wait_ts), reftimestamp);
-		kgsl_sharedmem_writel(&device->memstore,
-			KGSL_DEVICE_MEMSTORE_OFFSET(ts_cmp_enable), enable_ts);
-	}
-	/* Make sure all writes are posted before the GPU reads them */
-	wmb();
 	/* Mark the invalid context so no more commands are accepted from
 	 * that context */
 
