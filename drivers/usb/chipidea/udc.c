@@ -770,8 +770,11 @@ __acquires(mEp->lock)
 	struct ci13xxx_ep *mEp;
 
 	mEp = (ci->ep0_dir == TX) ? ci->ep0out : ci->ep0in;
-	ci->status->context = ci;
-	ci->status->complete = isr_setup_status_complete;
+	if (ci->status) {
+		ci->status->context = ci;
+		ci->status->complete = isr_setup_status_complete;
+	} else
+		return -EINVAL;
 
 	spin_unlock(mEp->lock);
 	retval = usb_ep_queue(&mEp->ep, ci->status, GFP_ATOMIC);
