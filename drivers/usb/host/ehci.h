@@ -203,6 +203,7 @@ struct ehci_hcd {			/* one per controller */
 	unsigned		has_synopsys_hc_bug:1; /* Synopsys HC */
 	unsigned		frame_index_bug:1; /* MosChip (AKA NetMos) */
 	unsigned		susp_sof_bug:1; /*Chip Idea HC*/
+	unsigned		reset_sof_bug:1; /*Chip Idea HC*/
 
 	/* required for usb32 quirk */
 	#define OHCI_CTRL_HCFS          (3 << 6)
@@ -795,6 +796,7 @@ static inline u32 hc32_to_cpup (const struct ehci_hcd *ehci, const __hc32 *x)
 /* Declarations of things exported for use by ehci platform drivers */
 
 struct ehci_driver_overrides {
+	int	flags;
 	size_t		extra_priv_size;
 	int		(*reset)(struct usb_hcd *hcd);
 	irqreturn_t	(*irq) (struct usb_hcd *hcd);
@@ -805,6 +807,8 @@ struct ehci_driver_overrides {
 	int	(*start) (struct usb_hcd *hcd);
 	void	(*log_urb_complete)(struct urb *urb, char * event,
 			unsigned extra);
+	void	(*enable_ulpi_control)(struct usb_hcd *hcd, u32 linestate);
+	void	(*disable_ulpi_control)(struct usb_hcd *hcd);
 };
 
 extern void	ehci_init_driver(struct hc_driver *drv,
