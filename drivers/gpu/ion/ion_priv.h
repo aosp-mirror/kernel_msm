@@ -168,6 +168,7 @@ struct ion_heap_ops {
  *			allocating.  These are specified by platform data and
  *			MUST be unique
  * @name:		used for debugging
+ * @priv:		private heap data
  *
  * Represents a pool of memory from which buffers can be made.  In some
  * systems the only heap is regular system memory allocated via vmalloc.
@@ -182,6 +183,7 @@ struct ion_heap {
 	unsigned long flags;
 	unsigned int id;
 	const char *name;
+	void *priv;
 };
 
 /**
