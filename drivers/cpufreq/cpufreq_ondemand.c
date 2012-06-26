@@ -676,9 +676,11 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		load_freq = cur_load * freq_avg;
 		if (load_freq > max_load_freq)
 			max_load_freq = load_freq;
+
+		/* calculate the scaled load across CPU */
+		load_at_max_freq += (cur_load * policy->cur) /
+					policy->cpuinfo.max_freq;
 	}
-	/* calculate the scaled load across CPU */
-	load_at_max_freq = (cur_load * policy->cur)/policy->cpuinfo.max_freq;
 
 	cpufreq_notify_utilization(policy, load_at_max_freq);
 
