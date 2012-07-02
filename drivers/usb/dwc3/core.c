@@ -503,9 +503,9 @@ static int dwc3_probe(struct platform_device *pdev)
 
 	dwc->needs_fifo_resize = of_property_read_bool(node, "tx-fifo-resize");
 
+	pm_runtime_no_callbacks(dev);
+	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
-	pm_runtime_get_sync(dev);
-	pm_runtime_forbid(dev);
 
 	dwc3_cache_hwparams(dwc);
 
@@ -576,8 +576,6 @@ static int dwc3_probe(struct platform_device *pdev)
 		goto err2;
 	}
 
-	pm_runtime_allow(dev);
-
 	return 0;
 
 err2:
@@ -614,7 +612,6 @@ static int dwc3_remove(struct platform_device *pdev)
 	usb_phy_set_suspend(dwc->usb2_phy, 1);
 	usb_phy_set_suspend(dwc->usb3_phy, 1);
 
-	pm_runtime_put(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 
 	dwc3_debugfs_exit(dwc);
