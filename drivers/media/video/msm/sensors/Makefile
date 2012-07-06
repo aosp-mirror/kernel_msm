@@ -1,0 +1,14 @@
+GCC_VERSION      := $(shell $(CONFIG_SHELL) $(PWD)/scripts/gcc-version.sh $(CROSS_COMPILE)gcc)
+EXTRA_CFLAGS += -Idrivers/media/video/msm
+EXTRA_CFLAGS += -Idrivers/media/video/msm/io
+EXTRA_CFLAGS += -Idrivers/media/video/msm/csi
+obj-$(CONFIG_MSM_CAMERA_SENSOR) += msm_sensor.o
+obj-$(CONFIG_IMX074) += imx074_v4l2.o
+obj-$(CONFIG_S5K3L1YX) += s5k3l1yx.o
+obj-$(CONFIG_OV2720) += ov2720.o
+obj-$(CONFIG_SEMC_CAM_MAIN_V4L2) += semc_sensor_main_v4l2.o
+obj-$(CONFIG_SEMC_CAM_SUB_V4L2) += semc_sensor_sub_v4l2.o
+obj-$(CONFIG_MT9M114) += mt9m114_v4l2.o
+obj-$(CONFIG_S5K4E1) += s5k4e1_v4l2.o
+obj-$(CONFIG_MT9E013) += mt9e013_v4l2.o
+obj-$(CONFIG_WEBCAM_OV9726) += ov9726_v4l2.o
