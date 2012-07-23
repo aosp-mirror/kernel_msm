@@ -298,6 +298,9 @@ static void hci_conn_enter_sniff_mode(struct hci_conn *conn)
 	if (test_bit(HCI_RAW, &hdev->flags))
 		return;
 
+	if (conn->type == LE_LINK)
+		return;
+
 	if (!lmp_sniff_capable(hdev) || !lmp_sniff_capable(conn))
 		return;
 
@@ -805,6 +808,9 @@ void hci_conn_enter_active_mode(struct hci_conn *conn, __u8 force_active)
 	BT_DBG("hcon %p mode %d", conn, conn->mode);
 
 	if (test_bit(HCI_RAW, &hdev->flags))
+		return;
+
+	if (conn->type == LE_LINK)
 		return;
 
 	if (conn->mode != HCI_CM_SNIFF)
