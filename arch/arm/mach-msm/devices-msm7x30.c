@@ -26,7 +26,7 @@
 #include <mach/dma.h>
 #include <mach/board.h>
 #include <asm/clkdev.h>
-
+#include <linux/ion.h>
 #include "devices.h"
 #include "gpio_hw.h"
 #include "footswitch.h"
@@ -790,9 +790,10 @@ static struct resource msm_vidc_720p_resources[] = {
 };
 
 struct msm_vidc_platform_data vidc_platform_data = {
-	.memtype = MEMTYPE_EBI0,
-	.enable_ion = 0,
-	.disable_dmx = 0
+	.memtype = ION_CAMERA_HEAP_ID,
+	.enable_ion = 1,
+	.disable_dmx = 0,
+	.cont_mode_dpb_count = 8
 };
 
 struct platform_device msm_device_vidc_720p = {
