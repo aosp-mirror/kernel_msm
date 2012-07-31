@@ -21,6 +21,7 @@
 #include "kgsl_mmu.h"
 #include "kgsl_device.h"
 #include "kgsl_sharedmem.h"
+#include "a2xx_reg.h"
 
 static ssize_t
 sysfs_show_ptpool_entries(struct kobject *kobj,
@@ -421,11 +422,42 @@ static void kgsl_gpummu_pagefault(struct kgsl_device *device)
 	kgsl_regread(device, MH_MMU_PAGE_FAULT, &reg);
 	kgsl_regread(device, MH_MMU_PT_BASE, &ptbase);
 
-	KGSL_MEM_CRIT(device,
-			"mmu page fault: page=0x%lx pt=%d op=%s axi=%d\n",
+	if (KGSL_DEVICE_3D0 == device->id) {
+		unsigned int ib1;
+		unsigned int ib1_sz;
+		unsigned int ib2;
+		unsigned int ib2_sz;
+		unsigned int rptr;
+		kgsl_regread(device, REG_CP_IB1_BASE, &ib1);
+		kgsl_regread(device, REG_CP_IB1_BUFSZ, &ib1_sz);
+		kgsl_regread(device, REG_CP_IB2_BASE, &ib2);
+		kgsl_regread(device, REG_CP_IB2_BUFSZ, &ib2_sz);
+		kgsl_regread(device, REG_CP_RB_RPTR, &rptr);
+
+		/* queue a work which will print the IB that caused the
+		 * pagefault, if we are in recovery then no need to q
+		 * work as the recovery routine will mess with the ringbuffer
+		 * contents and then the information will become stale
+		 * anyways */
+		if (!device->page_fault_ptbase &&
+			KGSL_STATE_DUMP_AND_RECOVER != device->state) {
+			device->page_fault_ptbase = ptbase;
+			device->page_fault_ib1 = ib1;
+			device->page_fault_rptr = rptr;
+
+			queue_work(device->work_queue,
+				&device->print_fault_ib);
+		}
+
+		KGSL_MEM_CRIT(device,
+			"mmu page fault: page=0x%lx pt=%d op=%s axi=%d "
+			"ptbase=0x%x IB1=0x%x IB1_SZ=0x%x "
+			"IB2=0x%x IB2_SZ=0x%x\n",
 			reg & ~(PAGE_SIZE - 1),
 			kgsl_mmu_get_ptname_from_ptbase(ptbase),
-			reg & 0x02 ? "WRITE" : "READ", (reg >> 4) & 0xF);
+			reg & 0x02 ? "WRITE" : "READ", (reg >> 4) & 0xF,
+			ptbase, ib1, ib1_sz, ib2, ib2_sz);
+	}
 }
 
 static void *kgsl_gpummu_create_pagetable(void)

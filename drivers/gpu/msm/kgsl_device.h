@@ -189,6 +189,12 @@ struct kgsl_device {
 	struct work_struct ts_expired_ws;
 	struct list_head events;
 	s64 on_time;
+
+	/* page fault debugging parameters */
+	struct work_struct print_fault_ib;
+	unsigned int page_fault_ptbase;
+	unsigned int page_fault_ib1;
+	unsigned int page_fault_rptr;
 };
 
 struct kgsl_context {

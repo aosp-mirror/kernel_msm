@@ -463,6 +463,8 @@ adreno_probe(struct platform_device *pdev)
 	kgsl_pwrscale_init(device);
 	kgsl_pwrscale_attach_policy(device, ADRENO_DEFAULT_PWRSCALE_POLICY);
 
+	INIT_WORK(&device->print_fault_ib, adreno_print_fault_ib_work);
+
 	device->flags &= ~KGSL_FLAGS_SOFT_RESET;
 	return 0;
 

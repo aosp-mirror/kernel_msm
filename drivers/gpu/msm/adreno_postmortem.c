@@ -156,7 +156,7 @@ static void adreno_dump_regs(struct kgsl_device *device,
 	}
 }
 
-static void dump_ib(struct kgsl_device *device, char* buffId, uint32_t pt_base,
+void dump_ib(struct kgsl_device *device, char *buffId, uint32_t pt_base,
 	uint32_t base_offset, uint32_t ib_base, uint32_t ib_size, bool dump)
 {
 	uint8_t *base_addr = adreno_convertaddr(device, pt_base,
@@ -172,15 +172,7 @@ static void dump_ib(struct kgsl_device *device, char* buffId, uint32_t pt_base,
 			base_addr ? "" : " [Invalid]");
 }
 
-#define IB_LIST_SIZE	64
-struct ib_list {
-	int count;
-	uint32_t bases[IB_LIST_SIZE];
-	uint32_t sizes[IB_LIST_SIZE];
-	uint32_t offsets[IB_LIST_SIZE];
-};
-
-static void dump_ib1(struct kgsl_device *device, uint32_t pt_base,
+void dump_ib1(struct kgsl_device *device, uint32_t pt_base,
 			uint32_t base_offset,
 			uint32_t ib1_base, uint32_t ib1_size,
 			struct ib_list *ib_list, bool dump)
