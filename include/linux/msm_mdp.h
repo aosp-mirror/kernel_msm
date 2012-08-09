@@ -70,7 +70,7 @@
 #define MSMFB_MDP_PP _IOWR(MSMFB_IOCTL_MAGIC, 156, struct msmfb_mdp_pp)
 
 #define MSMFB_OVERLAY_VSYNC_CTRL  _IOW(MSMFB_IOCTL_MAGIC, 160, unsigned int)
-
+#define MSMFB_VSYNC_CTRL  _IOW(MSMFB_IOCTL_MAGIC, 161, unsigned int)
 
 #define FB_TYPE_3D_PANEL 0x10101010
 #define MDP_IMGTYPE2_START 0x10000
