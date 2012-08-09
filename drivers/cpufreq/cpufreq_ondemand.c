@@ -58,7 +58,7 @@ u64 freq_boosted_time;
 #define MIN_SAMPLING_RATE_RATIO			(2)
 
 static unsigned int min_sampling_rate;
-
+#define DEFAULT_SAMPLING_RATE			(50000)
 #define LATENCY_MULTIPLIER			(1000)
 #define MIN_LATENCY_MULTIPLIER			(100)
 #define TRANSITION_LATENCY_LIMIT		(10 * 1000 * 1000)
@@ -95,6 +95,7 @@ struct cpu_dbs_info_s {
 	unsigned int freq_lo_jiffies;
 	unsigned int freq_hi_jiffies;
 	unsigned int rate_mult;
+	unsigned int load_at_prev_sample;
 	int cpu;
 	unsigned int sample_type:1;
 	/*
@@ -582,6 +583,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 {
 	/* Extrapolated load of this CPU */
 	unsigned int load_at_max_freq = 0;
+	unsigned int avg_load_at_max_freq = 0;
 	unsigned int max_load_freq;
 	/* Current load across this CPU */
 	unsigned int cur_load = 0;
@@ -680,9 +682,17 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		/* calculate the scaled load across CPU */
 		load_at_max_freq += (cur_load * policy->cur) /
 					policy->cpuinfo.max_freq;
+
+		avg_load_at_max_freq += ((load_at_max_freq +
+				j_dbs_info->load_at_prev_sample) / 2);
+
+		j_dbs_info->load_at_prev_sample = load_at_max_freq;
 	}
 
-	cpufreq_notify_utilization(policy, load_at_max_freq);
+	if (min_sampling_rate < DEFAULT_SAMPLING_RATE)
+		cpufreq_notify_utilization(policy, avg_load_at_max_freq);
+	else
+		cpufreq_notify_utilization(policy, load_at_max_freq);
 
 	/* Check for frequency increase */
 	if (max_load_freq > dbs_tuners_ins.up_threshold * policy->cur) {
