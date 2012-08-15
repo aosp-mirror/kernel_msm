@@ -140,9 +140,6 @@ void mdp4_dtv_pipe_queue(int cndx, struct mdp4_overlay_pipe *pipe)
 		return;
 	}
 
-	/* start timing generator & mmu if they are not started yet */
-	mdp4_overlay_dtv_start();
-
 	vctrl = &vsync_ctrl_db[cndx];
 
 	if (atomic_read(&vctrl->suspend) > 0)
@@ -214,6 +211,9 @@ int mdp4_dtv_pipe_commit(void)
 		}
 	}
 	mdp4_mixer_stage_commit(mixer);
+
+	 /* start timing generator & mmu if they are not started yet */
+	mdp4_overlay_dtv_start();
 
 	pipe = vctrl->base_pipe;
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
