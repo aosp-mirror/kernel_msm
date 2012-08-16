@@ -367,11 +367,11 @@ void dbg_setup(u8 addr, const struct usb_ctrlrequest *req)
 }
 
 /**
- * dbg_prime_fail: prints a PRIME FAIL event
+ * dbg_usb_op_fail: prints USB Operation FAIL event
  * @addr: endpoint address
  * @mEp:  endpoint structure
  */
-static void dbg_prime_fail(u8 addr, const char *name,
+void dbg_usb_op_fail(u8 addr, const char *name,
 				const struct ci13xxx_ep *mEp)
 {
 	char msg[DBG_DATA_MSG];
@@ -380,8 +380,9 @@ static void dbg_prime_fail(u8 addr, const char *name,
 
 	if (mEp != NULL) {
 		scnprintf(msg, sizeof(msg),
-			  "PRIME fail EP%d%s QH:%08X",
-			  mEp->num, mEp->dir ? "IN" : "OUT", mEp->qh.ptr->cap);
+			"%s Fail EP%d%s QH:%08X",
+			name, mEp->num,
+			mEp->dir ? "IN" : "OUT", mEp->qh.ptr->cap);
 		dbg_print(addr, name, 0, msg);
 		scnprintf(msg, sizeof(msg),
 				"cap:%08X %08X %08X\n",

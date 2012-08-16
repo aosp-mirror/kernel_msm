@@ -14,6 +14,8 @@
 #define __DRIVERS_USB_CHIPIDEA_DEBUG_H
 
 #ifdef CONFIG_USB_CHIPIDEA_DEBUG
+void dbg_usb_op_fail(u8 addr, const char *name,
+				const struct ci13xxx_ep *mep);
 void dbg_interrupt(u32 intmask);
 void dbg_done(u8 addr, const u32 token, int status);
 void dbg_event(u8 addr, const char *name, int status);
