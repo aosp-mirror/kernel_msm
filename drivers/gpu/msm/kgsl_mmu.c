@@ -297,7 +297,8 @@ kgsl_mmu_get_ptname_from_ptbase(unsigned int pt_base)
 EXPORT_SYMBOL(kgsl_mmu_get_ptname_from_ptbase);
 
 void kgsl_mmu_setstate(struct kgsl_device *device,
-			struct kgsl_pagetable *pagetable)
+			struct kgsl_pagetable *pagetable,
+			unsigned int context_id)
 {
 	struct kgsl_mmu *mmu = &device->mmu;
 
@@ -305,7 +306,7 @@ void kgsl_mmu_setstate(struct kgsl_device *device,
 		return;
 	else
 		mmu->mmu_ops->mmu_setstate(device,
-					pagetable);
+					pagetable, context_id);
 }
 EXPORT_SYMBOL(kgsl_mmu_setstate);
 
@@ -477,13 +478,14 @@ void kgsl_mmu_putpagetable(struct kgsl_pagetable *pagetable)
 }
 EXPORT_SYMBOL(kgsl_mmu_putpagetable);
 
-void kgsl_setstate(struct kgsl_device *device, uint32_t flags)
+void kgsl_setstate(struct kgsl_device *device, unsigned int context_id,
+			uint32_t flags)
 {
 	struct kgsl_mmu *mmu = &device->mmu;
 	if (KGSL_MMU_TYPE_NONE == kgsl_mmu_type)
 		return;
 	else if (device->ftbl->setstate)
-		device->ftbl->setstate(device, flags);
+		device->ftbl->setstate(device, context_id, flags);
 	else if (mmu->mmu_ops->mmu_device_setstate)
 		mmu->mmu_ops->mmu_device_setstate(device, flags);
 }

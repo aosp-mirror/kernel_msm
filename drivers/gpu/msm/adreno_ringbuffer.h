@@ -122,6 +122,7 @@ void adreno_ringbuffer_stop(struct adreno_ringbuffer *rb);
 void adreno_ringbuffer_close(struct adreno_ringbuffer *rb);
 
 void adreno_ringbuffer_issuecmds(struct kgsl_device *device,
+					struct adreno_context *drawctxt,
 					unsigned int flags,
 					unsigned int *cmdaddr,
 					int sizedwords);

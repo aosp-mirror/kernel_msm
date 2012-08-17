@@ -266,6 +266,7 @@ error:
 }
 
 static void adreno_setstate(struct kgsl_device *device,
+					unsigned int context_id,
 					uint32_t flags)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
@@ -273,6 +274,8 @@ static void adreno_setstate(struct kgsl_device *device,
 	unsigned int *cmds = &link[0];
 	int sizedwords = 0;
 	unsigned int mh_mmu_invalidate = 0x00000003; /*invalidate all and tc */
+	struct kgsl_context *context;
+	struct adreno_context *adreno_ctx = NULL;
 
 	/*
 	 * If possible, then set the state via the command stream to avoid
@@ -281,6 +284,9 @@ static void adreno_setstate(struct kgsl_device *device,
 	 * easier to filter out the mmu accesses from the dump
 	 */
 	if (!kgsl_cff_dump_enable && adreno_dev->drawctxt_active) {
+		context = idr_find(&device->context_idr, context_id);
+		adreno_ctx = context->devctxt;
+
 		if (flags & KGSL_MMUFLAGS_PTUPDATE) {
 			/* wait for graphics pipe to be idle */
 			*cmds++ = cp_type3_packet(CP_WAIT_FOR_IDLE, 1);
@@ -353,7 +359,8 @@ static void adreno_setstate(struct kgsl_device *device,
 			sizedwords += 2;
 		}
 
-		adreno_ringbuffer_issuecmds(device, KGSL_CMD_FLAGS_PMODE,
+		adreno_ringbuffer_issuecmds(device, adreno_ctx,
+					KGSL_CMD_FLAGS_PMODE,
 					&link[0], sizedwords);
 	} else {
 		kgsl_mmu_device_setstate(device, flags);
@@ -737,8 +744,7 @@ done:
 	return ret;
 }
 
-static int
-adreno_dump_and_recover(struct kgsl_device *device)
+int adreno_dump_and_recover(struct kgsl_device *device)
 {
 	int result = -ETIMEDOUT;
 
@@ -778,6 +784,7 @@ adreno_dump_and_recover(struct kgsl_device *device)
 done:
 	return result;
 }
+EXPORT_SYMBOL(adreno_dump_and_recover);
 
 static int adreno_getproperty(struct kgsl_device *device,
 				enum kgsl_property_type type,
@@ -1104,6 +1111,8 @@ static int kgsl_check_interrupt_timestamp(struct kgsl_device *device,
 	int status;
 	unsigned int ref_ts, enableflag;
 
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+
 	status = kgsl_check_timestamp(device, timestamp);
 	if (!status) {
 		mutex_lock(&device->mutex);
@@ -1136,8 +1145,15 @@ static int kgsl_check_interrupt_timestamp(struct kgsl_device *device,
 			* get an interrupt */
 			cmds[0] = cp_type3_packet(CP_NOP, 1);
 			cmds[1] = 0;
-			adreno_ringbuffer_issuecmds(device, KGSL_CMD_FLAGS_NONE,
-				&cmds[0], 2);
+
+			if (adreno_dev->drawctxt_active)
+				adreno_ringbuffer_issuecmds(device,
+					adreno_dev->drawctxt_active,
+					KGSL_CMD_FLAGS_NONE, &cmds[0], 2);
+			else
+				/* We would never call this function if there
+				 * was no active contexts running */
+				BUG();
 		}
 		mutex_unlock(&device->mutex);
 	}

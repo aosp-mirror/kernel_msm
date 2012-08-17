@@ -443,12 +443,13 @@ z180_cmdstream_issueibcmds(struct kgsl_device_private *dev_priv,
 	    (ctrl & KGSL_CONTEXT_CTX_SWITCH)) {
 		KGSL_CMD_INFO(device, "context switch %d -> %d\n",
 			context->id, z180_dev->ringbuffer.prevctx);
-		kgsl_mmu_setstate(device, pagetable);
+		kgsl_mmu_setstate(device, pagetable,
+				0);
 		cnt = PACKETSIZE_STATESTREAM;
 		ofs = 0;
 	}
-	kgsl_setstate(device, kgsl_mmu_pt_get_flags(device->mmu.hwpagetable,
-						    device->id));
+	kgsl_setstate(device, 0, kgsl_mmu_pt_get_flags(device->mmu.hwpagetable,
+			device->id));
 
 	result = wait_event_interruptible_timeout(device->wait_queue,
 				  room_in_rb(z180_dev),
@@ -863,7 +864,8 @@ z180_drawctxt_destroy(struct kgsl_device *device,
 	if (z180_dev->ringbuffer.prevctx == context->id) {
 		z180_dev->ringbuffer.prevctx = Z180_INVALID_CONTEXT;
 		device->mmu.hwpagetable = device->mmu.defaultpagetable;
-		kgsl_setstate(device, KGSL_MMUFLAGS_PTUPDATE);
+		kgsl_setstate(device, 0,
+				KGSL_MMUFLAGS_PTUPDATE);
 	}
 }
 

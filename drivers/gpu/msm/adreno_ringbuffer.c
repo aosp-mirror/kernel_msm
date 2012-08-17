@@ -71,6 +71,9 @@ adreno_ringbuffer_waitspace(struct adreno_ringbuffer *rb, unsigned int numcmds,
 	unsigned int freecmds;
 	unsigned int *cmds;
 	uint cmds_gpu;
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(rb->device);
+	unsigned long wait_timeout = msecs_to_jiffies(adreno_dev->wait_timeout);
+	unsigned long wait_time;
 
 	/* if wptr ahead, fill the remaining with NOPs */
 	if (wptr_ahead) {
@@ -97,13 +100,27 @@ adreno_ringbuffer_waitspace(struct adreno_ringbuffer *rb, unsigned int numcmds,
 		rb->wptr = 0;
 	}
 
+	wait_time = jiffies + wait_timeout;
 	/* wait for space in ringbuffer */
-	do {
+	while (1) {
 		GSL_RB_GET_READPTR(rb, &rb->rptr);
 
 		freecmds = rb->rptr - rb->wptr;
 
-	} while ((freecmds != 0) && (freecmds <= numcmds));
+		if (freecmds == 0 || freecmds > numcmds)
+			break;
+
+		if (time_after(jiffies, wait_time)) {
+			KGSL_DRV_ERR(rb->device,
+			"Timed out while waiting for freespace in ringbuffer "
+			"rptr: 0x%x, wptr: 0x%x\n", rb->rptr, rb->wptr);
+			if (!adreno_dump_and_recover(rb->device))
+				wait_time = jiffies + wait_timeout;
+			else
+				/* GPU is hung and we cannot recover */
+				BUG();
+		}
+	}
 }
 
 static unsigned int find_faulting_ib1_size(struct adreno_ringbuffer *rb,
@@ -491,6 +508,7 @@ void adreno_ringbuffer_close(struct adreno_ringbuffer *rb)
 
 static uint32_t
 adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
+				struct adreno_context *context,
 				unsigned int flags, unsigned int *cmds,
 				int sizedwords)
 {
@@ -508,6 +526,15 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 	total_sizedwords += !(flags & KGSL_CMD_FLAGS_NOT_KERNEL_CMD) ? 2 : 0;
 
 	ringcmds = adreno_ringbuffer_allocspace(rb, total_sizedwords);
+	/* GPU may hang during space allocation, if thats the case the current
+	 * context may have hung the GPU */
+	if (context->flags & CTXT_FLAGS_GPU_HANG) {
+		KGSL_CTXT_WARN(rb->device,
+		"Context %p caused a gpu hang. Will not accept commands for context %d\n",
+		context, context->id);
+		return rb->timestamp;
+	}
+
 	rcmd_gpu = rb->buffer_desc.gpuaddr
 		+ sizeof(uint)*(rb->wptr-total_sizedwords);
 
@@ -571,6 +598,7 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 
 void
 adreno_ringbuffer_issuecmds(struct kgsl_device *device,
+						struct adreno_context *drawctxt,
 						unsigned int flags,
 						unsigned int *cmds,
 						int sizedwords)
@@ -580,7 +608,8 @@ adreno_ringbuffer_issuecmds(struct kgsl_device *device,
 
 	if (device->state & KGSL_STATE_HUNG)
 		return;
-	adreno_ringbuffer_addcmds(rb, flags, cmds, sizedwords);
+
+	adreno_ringbuffer_addcmds(rb, drawctxt, flags, cmds, sizedwords);
 }
 
 static bool _parse_ibs(struct kgsl_device_private *dev_priv, uint gpuaddr,
@@ -832,13 +861,14 @@ adreno_ringbuffer_issueibcmds(struct kgsl_device_private *dev_priv,
 		*cmds++ = ibdesc[i].sizedwords;
 	}
 
-	kgsl_setstate(device,
+	kgsl_setstate(device, context->id,
 		      kgsl_mmu_pt_get_flags(device->mmu.hwpagetable,
-					device->id));
+			device->id));
 
 	adreno_drawctxt_switch(adreno_dev, drawctxt, flags);
 
 	*timestamp = adreno_ringbuffer_addcmds(&adreno_dev->ringbuffer,
+					drawctxt,
 					KGSL_CMD_FLAGS_NOT_KERNEL_CMD,
 					&link[0], (cmds - link));
 
