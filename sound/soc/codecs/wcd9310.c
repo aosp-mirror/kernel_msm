@@ -5896,14 +5896,14 @@ static ssize_t codec_debug_write(struct file *filp,
 
 	lbuf[cnt] = '\0';
 	buf = (char *)lbuf;
-	TABLA_ACQUIRE_LOCK(tabla->codec_resource_lock);
+	TABLA_ACQUIRE_LOCK(tabla->cdc_resource_lock);
 	tabla->no_mic_headset_override =
 	    (*strsep(&buf, " ") == '0') ? false : true;
 	if (tabla->no_mic_headset_override && tabla->mbhc_polling_active) {
 		tabla_codec_pause_hs_polling(tabla->codec);
 		tabla_codec_start_hs_polling(tabla->codec);
 	}
-	TABLA_RELEASE_LOCK(tabla->codec_resource_lock);
+	TABLA_RELEASE_LOCK(tabla->cdc_resource_lock);
 	return cnt;
 }
 
