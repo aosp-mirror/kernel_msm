@@ -6,6 +6,8 @@ else ifdef CONFIG_MACH_SEMC_NOZOMI_DCM
 obj-y += board-semc_fuji-audio.o
 else ifdef CONFIG_MACH_SEMC_HIKARI
 obj-y += board-semc_fuji-audio.o
+else ifdef CONFIG_MACH_SEMC_HIKARI_ROW
+obj-y += board-semc_fuji-audio.o
 else ifdef CONFIG_MACH_SEMC_HAYATE
 obj-y += board-semc_fuji-audio.o
 else

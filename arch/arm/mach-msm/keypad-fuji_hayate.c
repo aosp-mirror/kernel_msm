@@ -87,6 +87,7 @@ static struct gpio_event_input_info gpio_key_gpio_info = {
 	.keymap = gpio_key_gpio_map,
 	.keymap_size = ARRAY_SIZE(gpio_key_gpio_map),
 	.debounce_time.tv64 = 10 * NSEC_PER_MSEC,
+	.info.no_suspend = true,
 };
 
 static struct gpio_event_direct_entry gpio_sw_gpio_map[] = {
@@ -100,6 +101,7 @@ static struct gpio_event_input_info gpio_sw_gpio_info = {
 	.keymap = gpio_sw_gpio_map,
 	.keymap_size = ARRAY_SIZE(gpio_sw_gpio_map),
 	.debounce_time.tv64 = 100 * NSEC_PER_MSEC,
+	.info.no_suspend = true,
 };
 
 static struct gpio_event_info *gpio_key_info[] = {

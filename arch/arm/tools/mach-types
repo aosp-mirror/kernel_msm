@@ -1140,4 +1140,5 @@ semc_fuji		MACH_SEMC_FUJI		SEMC_FUJI		3017
 semc_nozomi	        MACH_SEMC_NOZOMI	SEMC_NOZOMI	        3017
 semc_nozomi_DCM         MACH_SEMC_NOZOMI        SEMC_NOZOMI_DCM         3017
 semc_hikari	        MACH_SEMC_HIKARI	SEMC_HIKARI	        3017
+semc_hikari_row         MACH_SEMC_HIKARI        SEMC_HIKARI_ROW         3017
 semc_hayate		MACH_SEMC_HAYATE	SEMC_HAYATE		3017

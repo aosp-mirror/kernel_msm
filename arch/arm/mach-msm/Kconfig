@@ -618,6 +618,13 @@ config MACH_SEMC_HIKARI
 	help
 	  Support for the Sony Ericsson Hikari.
 
+config MACH_SEMC_HIKARI_ROW
+        depends on ARCH_MSM8X60
+        default n
+        bool "SEMC Hikari_row"
+        help
+          Support for the Sony Ericsson Hikari_row.
+
 config MACH_SEMC_HAYATE
 	depends on ARCH_MSM8X60
 	default n

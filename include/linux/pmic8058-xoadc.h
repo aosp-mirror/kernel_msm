@@ -1,4 +1,5 @@
 /* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
+ * Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -42,6 +43,7 @@ struct xoadc_conv_state {
 #define CHANNEL_INTERNAL_2	0Xe
 #define CHANNEL_MUXOFF		0xf
 
+#define XOADC_MPP_2             0x1
 #define XOADC_MPP_3		0x2
 #define XOADC_MPP_4             0X3
 #define XOADC_MPP_5             0x4

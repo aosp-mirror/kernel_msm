@@ -512,7 +512,6 @@ static void simple_remote_report_accessory_type(
 		 "= %d\n", jack->current_accessory_state,
 		 jack->new_accessory_state);
 
-
 	if (jack->current_accessory_state != jack->new_accessory_state) {
 		if (DEVICE_HEADSET == jack->current_accessory_state) {
 			jack->interface->enable_mic_bias(0);
@@ -602,8 +601,8 @@ static void simple_remote_close(struct input_dev *dev)
 
 	if (1 == jack->client_counter) {
 		dev_dbg(jack->dev, "Stopping button interrupt handling.");
-		jack->interface->unregister_hssd_button_interrupt(jack);
-		jack->interface->enable_mic_bias(0);
+		jack->new_accessory_state = NO_DEVICE;
+		simple_remote_report_accessory_type(jack);
 		jack->interface->unregister_plug_detect_interrupt(jack);
 	}
 
@@ -723,7 +722,7 @@ void simple_remote_plug_detect_tmr_func(unsigned long func_data)
 	struct simple_remote_driver *jack =
 		(struct simple_remote_driver *)func_data;
 
-	dev_vdbg(jack->dev, "called\n");
+	dev_vdbg(jack->dev, "%s - called\n", __func__);
 
 	schedule_work(&jack->plug_det_work);
 }
@@ -763,7 +762,7 @@ static void simple_remote_btn_det_work(struct work_struct *work)
 	atomic_set(&jack->detection_in_progress, 1);
 
 	jack->interface->read_hs_adc(&adc_value);
-	dev_dbg(jack->dev, "%s - ADC VAlue = %u\n", __func__, adc_value);
+	dev_dbg(jack->dev, "%s - ADC Value = %u\n", __func__, adc_value);
 
 	button = simple_remote_attrs_parse_button_value(jack, adc_value);
 
@@ -954,9 +953,8 @@ static int simple_remote_remove(struct platform_device *pdev)
 	struct simple_remote_driver *jack = platform_get_drvdata(pdev);
 
 	if (switch_get_state(&jack->swdev)) {
-		jack->interface->unregister_hssd_button_interrupt(jack);
-		jack->interface->enable_mic_bias(0);
-		switch_set_state(&jack->swdev, NO_DEVICE);
+		jack->new_accessory_state = NO_DEVICE;
+		simple_remote_report_accessory_type(jack);
 	}
 	jack->interface->unregister_plug_detect_interrupt(jack);
 	remove_sysfs_interfaces(&pdev->dev);

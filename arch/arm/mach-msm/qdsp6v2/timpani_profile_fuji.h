@@ -24,6 +24,8 @@
 #include "timpani_profile_fuji_nozomi.h"
 #elif defined(CONFIG_MACH_SEMC_HIKARI)
 #include "timpani_profile_fuji_hikari.h"
+#elif defined(CONFIG_MACH_SEMC_HIKARI_ROW)
+#include "timpani_profile_fuji_hikari.h"
 #elif defined(CONFIG_MACH_SEMC_HAYATE)
 #include "timpani_profile_fuji_hayate.h"
 #endif

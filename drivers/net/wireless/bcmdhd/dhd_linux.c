@@ -50,7 +50,6 @@
 #include <linux/ethtool.h>
 #include <linux/fcntl.h>
 #include <linux/fs.h>
-#include <linux/suspend.h>
 
 #include <asm/uaccess.h>
 #include <asm/unaligned.h>
@@ -70,7 +69,6 @@
 #endif
 #ifdef WL_CFG80211
 #include <wl_cfg80211.h>
-#include <wl_android.h>
 #endif
 
 #include <proto/802.11_bta.h>
@@ -166,11 +164,9 @@ extern wl_iw_extra_params_t  g_wl_iw_params;
 
 #if defined(CONFIG_HAS_EARLYSUSPEND)
 #include <linux/earlysuspend.h>
-//extern int dhdcdc_set_ioctl(dhd_pub_t *dhd, int ifidx, uint cmd, void *buf, uint len);
+extern int dhdcdc_set_ioctl(dhd_pub_t *dhd, int ifidx, uint cmd, void *buf, uint len);
 extern int dhd_get_dtim_skip(dhd_pub_t *dhd);
 #endif /* defined(CONFIG_HAS_EARLYSUSPEND) */
-
-extern int dhdcdc_set_ioctl(dhd_pub_t *, int, uint, void *, uint);
 
 #ifdef PKT_FILTER_SUPPORT
 extern void dhd_pktfilter_offload_set(dhd_pub_t * dhd, char *arg);
@@ -284,7 +280,6 @@ typedef struct dhd_info {
 	wait_queue_head_t ctrl_wait;
 	atomic_t pend_8021x_cnt;
 	dhd_attach_states_t dhd_state;
-	struct notifier_block pm_notifier;
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend early_suspend;
@@ -493,7 +488,37 @@ static int dhd_toe_set(dhd_info_t *dhd, int idx, uint32 toe_ol);
 
 static int dhd_wl_host_event(dhd_info_t *dhd, int *ifidx, void *pktdata,
                              wl_event_msg_t *event_ptr, void **data_ptr);
-static void dhd_watchdog(ulong data);
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && defined(CONFIG_PM_SLEEP)
+static int dhd_sleep_pm_callback(struct notifier_block *nfb, unsigned long action, void *ignored)
+{
+	int ret = NOTIFY_DONE;
+
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 39))
+	switch (action)	{
+		case PM_HIBERNATION_PREPARE:
+		case PM_SUSPEND_PREPARE:
+			dhd_mmc_suspend = TRUE;
+		ret = NOTIFY_OK;
+		break;
+		case PM_POST_HIBERNATION:
+		case PM_POST_SUSPEND:
+			dhd_mmc_suspend = FALSE;
+		ret = NOTIFY_OK;
+		break;
+	}
+	smp_mb();
+#endif
+	return ret;
+}
+
+static struct notifier_block dhd_sleep_pm_notifier = {
+	.notifier_call = dhd_sleep_pm_callback,
+	.priority = 0
+};
+extern int register_pm_notifier(struct notifier_block *nb);
+extern int unregister_pm_notifier(struct notifier_block *nb);
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && defined(CONFIG_PM_SLEEP) */
 
 static void dhd_set_packet_filter(int value, dhd_pub_t *dhd)
 {
@@ -513,12 +538,10 @@ static void dhd_set_packet_filter(int value, dhd_pub_t *dhd)
 #endif
 }
 
-#if defined(CONFIG_HAS_EARLYSUSPEND) || \
-	((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && \
-	defined(CONFIG_PM_SLEEP))
+#if defined(CONFIG_HAS_EARLYSUSPEND)
 static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 {
-	int power_mode = PM_MAX;
+	int power_mode = PM_FAST;
 	/* wl_pkt_filter_enable_t	enable_parm; */
 	char iovbuf[32];
 	int bcn_li_dtim = 3;
@@ -591,70 +614,24 @@ static void dhd_suspend_resume_helper(struct dhd_info *dhd, int val)
 	DHD_OS_WAKE_UNLOCK(dhdp);
 }
 
-static int dhd_sleep_pm_callback(struct notifier_block *nfb,
-				unsigned long action, void *ignored)
-{
-	struct dhd_info *dhd = container_of(nfb, struct dhd_info, pm_notifier);
-	int ret = NOTIFY_DONE;
-
-	pr_debug("%s: action %ld\n", __func__, action);
-
-	switch (action) {
-	case PM_HIBERNATION_PREPARE:
-	case PM_SUSPEND_PREPARE:
-		if (dhd) {
-			dhd_suspend_resume_helper(dhd, 1);
-			del_timer_sync(&dhd->timer);
-			dhd->wd_timer_valid = FALSE;
-			dhd_watchdog((unsigned long)dhd);
-		}
-		dhd_mmc_suspend = TRUE;
-		smp_mb();
-		ret = NOTIFY_OK;
-		break;
-	case PM_POST_HIBERNATION:
-	case PM_POST_SUSPEND:
-		dhd_mmc_suspend = FALSE;
-		smp_mb();
-		if (dhd) {
-			dhd_suspend_resume_helper(dhd, 0);
-			dhd->wd_timer_valid = TRUE;
-			mod_timer(&dhd->timer,
-				jiffies + dhd_watchdog_ms * HZ / 1000);
-		}
-		ret = NOTIFY_OK;
-		break;
-	}
-	return ret;
-}
-
-static struct notifier_block dhd_sleep_pm_notifier = {
-	.notifier_call = dhd_sleep_pm_callback,
-	.priority = 0
-};
-#endif /* defined (CONFIG_HAS_EARLYSUSPEND) || \
-	((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && \
-	defined(CONFIG_PM_SLEEP)) */
-
-#if defined(CONFIG_HAS_EARLYSUSPEND)
 static void dhd_early_suspend(struct early_suspend *h)
 {
-	//struct dhd_info *dhd = container_of(h, struct dhd_info, early_suspend);
+	struct dhd_info *dhd = container_of(h, struct dhd_info, early_suspend);
 
 	DHD_TRACE(("%s: enter\n", __FUNCTION__));
 
-	//if (dhd)
-	//	dhd_suspend_resume_helper(dhd, 1);
+	if (dhd)
+		dhd_suspend_resume_helper(dhd, 1);
 }
 
 static void dhd_late_resume(struct early_suspend *h)
 {
-	//struct dhd_info *dhd = container_of(h, struct dhd_info, early_suspend);
+	struct dhd_info *dhd = container_of(h, struct dhd_info, early_suspend);
 
 	DHD_TRACE(("%s: enter\n", __FUNCTION__));
 
-	//if (dhd)
-	//	dhd_suspend_resume_helper(dhd, 0);
+	if (dhd)
+		dhd_suspend_resume_helper(dhd, 0);
 }
 #endif /* defined(CONFIG_HAS_EARLYSUSPEND) */
 
@@ -2819,8 +2796,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	memcpy(netdev_priv(net), &dhd, sizeof(dhd));
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && defined(CONFIG_PM_SLEEP)
-	dhd->pm_notifier = dhd_sleep_pm_notifier;
-	register_pm_notifier(&dhd->pm_notifier);
+	register_pm_notifier(&dhd_sleep_pm_notifier);
 #endif /*  (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && defined(CONFIG_PM_SLEEP) */
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -3778,7 +3754,7 @@ void dhd_detach(dhd_pub_t *dhdp)
 
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && defined(CONFIG_PM_SLEEP)
-		unregister_pm_notifier(&dhd->pm_notifier);
+		unregister_pm_notifier(&dhd_sleep_pm_notifier);
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && defined(CONFIG_PM_SLEEP) */
 	/* && defined(CONFIG_PM_SLEEP) */
 

@@ -5092,6 +5092,8 @@ msmsdcc_runtime_resume(struct device *dev)
 	return 0;
 }
 
+#define MSM_EXT_MMC_IDLE_TIMEOUT (MSM_MMC_IDLE_TIMEOUT * 10)
+
 static int msmsdcc_runtime_idle(struct device *dev)
 {
 	struct mmc_host *mmc = dev_get_drvdata(dev);
@@ -5101,7 +5103,10 @@ static int msmsdcc_runtime_idle(struct device *dev)
 		return 0;
 
 	/* Idle timeout is not configurable for now */
-	pm_schedule_suspend(dev, MSM_MMC_IDLE_TIMEOUT);
+	if (mmc->caps & MMC_CAP_NONREMOVABLE)
+		pm_schedule_suspend(dev, MSM_MMC_IDLE_TIMEOUT);
+	else
+		pm_schedule_suspend(dev, MSM_EXT_MMC_IDLE_TIMEOUT);
 
 	return -EAGAIN;
 }

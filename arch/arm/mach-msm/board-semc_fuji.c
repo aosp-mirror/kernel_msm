@@ -3666,6 +3666,11 @@ static void pmic8058_xoadc_mpp_config(void)
 							AOUT_CTRL_DISABLE),
 		PM8901_MPP_INIT(XOADC_MPP_4, D_OUTPUT, PM8901_MPP_DIG_LEVEL_S4,
 							DOUT_CTRL_LOW),
+		PM8901_MPP_INIT(XOADC_MPP_2, D_INPUT,
+				PM8901_MPP_DIG_LEVEL_MSMIO, DIN_TO_INT),
+		PM8901_MPP_INIT(XOADC_MPP_3, D_INPUT,
+				PM8901_MPP_DIG_LEVEL_MSMIO, DIN_TO_INT),
+
 	};
 
 	for (i = 0; i < ARRAY_SIZE(xoadc_mpps); i++) {
@@ -4338,7 +4343,7 @@ static void __init msm8x60_calculate_reserve_sizes(void)
 
 static int msm8x60_paddr_to_memtype(unsigned int paddr)
 {
-	if (paddr >= 0x40000000 && paddr < 0x60000000)
+	if (paddr >= 0x40000000 && paddr < 0x80000000)
 		return MEMTYPE_EBI1;
 	if (paddr >= 0x38000000 && paddr < 0x40000000)
 		return MEMTYPE_SMI;
@@ -4532,7 +4537,7 @@ static int pm8058_gpios_init(void)
 			{
 				.direction	= PM_GPIO_DIR_OUT,
 				.pull		= PM_GPIO_PULL_NO,
-#if defined(CONFIG_MACH_SEMC_NOZOMI)
+#if defined(CONFIG_MACH_SEMC_NOZOMI) || defined(CONFIG_MACH_SEMC_HIKARI_ROW)
 				.output_buffer  = PM_GPIO_OUT_BUF_OPEN_DRAIN,
 				.vin_sel	= PM8058_GPIO_VIN_VPH,
 #else
