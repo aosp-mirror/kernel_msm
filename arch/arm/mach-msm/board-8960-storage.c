@@ -17,12 +17,12 @@
 #include <linux/bootmem.h>
 #include <asm/mach-types.h>
 #include <asm/mach/mmc.h>
-#include <mach/msm_bus_board.h>
 #include <mach/board.h>
 #include <mach/gpio.h>
 #include <mach/gpiomux.h>
 #include "devices.h"
 #include "board-8960.h"
+#include "board-storage-common-a.h"
 
 /* MSM8960 has 5 SDCC controllers */
 enum sdcc_controllers {
@@ -228,6 +228,7 @@ static struct mmc_platform_data msm8960_sdc1_data = {
 	.nonremovable	= 1,
 	.vreg_data	= &mmc_slot_vreg_data[SDCC1],
 	.pin_data	= &mmc_slot_pin_data[SDCC1],
+	.msm_bus_voting_data = &sps_to_ddr_bus_voting_data,
 };
 #endif
 
@@ -252,8 +253,8 @@ static struct mmc_platform_data msm8960_sdc3_data = {
 	.xpc_cap	= 1,
 	.uhs_caps	= (MMC_CAP_UHS_SDR12 | MMC_CAP_UHS_SDR25 |
 			MMC_CAP_UHS_SDR50 | MMC_CAP_UHS_DDR50 |
-			MMC_CAP_UHS_SDR104 | MMC_CAP_MAX_CURRENT_600 |
-			MMC_CAP_1_8V_DDR),
+			MMC_CAP_UHS_SDR104 | MMC_CAP_MAX_CURRENT_600),
+	.msm_bus_voting_data = &sps_to_ddr_bus_voting_data,
 };
 #endif
 

@@ -21,6 +21,9 @@
 #include <mach/gpiomux.h>
 #include "devices.h"
 
+#include "board-9615.h"
+#include "board-storage-common-a.h"
+
 #if (defined(CONFIG_MMC_MSM_SDC1_SUPPORT) \
 		|| defined(CONFIG_MMC_MSM_SDC2_SUPPORT))
 
@@ -181,7 +184,8 @@ static struct mmc_platform_data sdc1_data = {
 #endif
 	.xpc_cap	= 1,
 	.uhs_caps	= (MMC_CAP_UHS_SDR12 | MMC_CAP_UHS_SDR25 |
-			   MMC_CAP_MAX_CURRENT_400)
+			   MMC_CAP_MAX_CURRENT_400),
+	.msm_bus_voting_data = &sps_to_ddr_bus_voting_data,
 };
 static struct mmc_platform_data *msm9615_sdc1_pdata = &sdc1_data;
 #else
@@ -203,6 +207,7 @@ static struct mmc_platform_data sdc2_data = {
 #ifdef CONFIG_MMC_MSM_SDIO_SUPPORT
 	.sdiowakeup_irq = MSM_GPIO_TO_INT(GPIO_SDC2_DAT1_WAKEUP),
 #endif
+	.msm_bus_voting_data = &sps_to_ddr_bus_voting_data,
 };
 static struct mmc_platform_data *msm9615_sdc2_pdata = &sdc2_data;
 #else
