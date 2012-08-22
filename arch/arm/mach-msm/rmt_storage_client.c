@@ -1586,7 +1586,7 @@ static void rmt_storage_client_shutdown(struct platform_device *pdev)
 
 	dev = container_of(pdev, struct rpcsvr_platform_device, base);
 	srv = rmt_storage_get_srv(dev->prog);
-	if (dev->prog ==  MDM_RMT_STORAGE_APIPROG) {
+	if (!machine_is_semc_aoba()||dev->prog ==  MDM_RMT_STORAGE_APIPROG) {
 		if (!!srv) {
 			rc = rmt_storage_force_sync(srv->rpc_client);
 			if (rc) {

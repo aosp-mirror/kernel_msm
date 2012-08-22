@@ -95,6 +95,7 @@
 #include <linux/bma250_ng_common.h>
 #include <linux/delay.h>
 #include <linux/mutex.h>
+#include <linux/reboot.h>
 
 #define BMA250_NAME                      "bma250"
 #define BMA250_VENDORID                  0x0001
@@ -832,6 +833,8 @@ static void bma250_work_f(struct work_struct *work)
 
 	if (dd->power) {
 		rc = bma250_report_data(dd);
+		if (rc)
+			return;
 		schedule_delayed_work(&dd->work_data, dd->delay_jiffies);
 	}
 	return ;
@@ -857,6 +860,22 @@ static void bma250_release(struct input_dev *dev)
 
 	bma250_power_down(dd);
 }
+
+static int bma250_cancel_work
+	(struct notifier_block *this, unsigned long code, void *_cmd)
+{
+	struct driver_data *dd;
+
+	list_for_each_entry(dd, &dd_list, next_dd)
+		cancel_delayed_work_sync(&dd->work_data);
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block bma250_poweroff_notifier = {
+	.notifier_call = bma250_cancel_work,
+	.priority = 1,
+};
 
 static int __devinit bma250_probe(struct i2c_client *ic_dev,
 		const struct i2c_device_id *id)
@@ -943,8 +962,14 @@ static int __devinit bma250_probe(struct i2c_client *ic_dev,
 	if (rc)
 		goto probe_err_sysfs;
 
+	rc = register_reboot_notifier(&bma250_poweroff_notifier);
+	if (rc)
+		goto probe_err_notifier;
+
 	return rc;
 
+probe_err_notifier:
+	remove_sysfs_interfaces(&dd->ip_dev->dev);
 probe_err_sysfs:
 	input_unregister_device(dd->ip_dev);
 probe_err_reg:

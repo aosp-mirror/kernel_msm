@@ -5,3 +5,4 @@ Configuration files can be found in arch/arm/configs.
     Xperia acro HD SO-03D => fuji_hikari_defconfig
     Xperia acro S => fuji_hikari_row_defconfig
     Xperia acro HD IS12S => fuji_hayate_defconfig
+    Xperia ion LT28h => fuji_csfb_aoba_defconfig

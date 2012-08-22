@@ -47,6 +47,7 @@
 
 static void (*power_on_charm)(void);
 static void (*power_down_charm)(void);
+static void (*power_down_charm_direct)(void);
 
 static int charm_debug_on;
 static int charm_status_irq;
@@ -197,6 +198,10 @@ static long charm_modem_ioctl(struct file *filp, unsigned int cmd,
 			put_user(boot_type, (unsigned long __user *) arg);
 		INIT_COMPLETION(charm_needs_reload);
 		break;
+	case POWROFF_CHARM:
+		CHARM_DBG("%s: bootup failed,reset modem directly\n", __func__);
+		power_down_charm_direct();
+		break;
 	default:
 		pr_err("%s: invalid ioctl cmd = %d\n", __func__, _IOC_NR(cmd));
 		ret = -EINVAL;
@@ -336,6 +341,7 @@ static int __init charm_modem_probe(struct platform_device *pdev)
 
 	power_on_charm = d->charm_modem_on;
 	power_down_charm = d->charm_modem_off;
+	power_down_charm_direct = d->charm_modem_off_direct;
 
 	charm_queue = create_singlethread_workqueue("charm_queue");
 	if (!charm_queue) {

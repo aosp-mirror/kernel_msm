@@ -31,6 +31,7 @@
 #include <linux/input.h>
 #include <linux/workqueue.h>
 #include <linux/freezer.h>
+#include <linux/reboot.h>
 #include <linux/akm8972.h>
 
 #define AKM8972_BASE_NUM 10
@@ -63,8 +64,8 @@ struct akm8972_data {
 	/* A buffer to save FUSE ROM value */
 	unsigned char	fuse[FUSEROM_SIZE];
 	struct akm8972_platform_data *pdata;
+	struct notifier_block pnotifier;
 };
-
 
 static int aki2c_rxdata(struct i2c_client *i2c, unsigned char *rxdata,
 						int length)
@@ -470,7 +471,7 @@ static ssize_t attr_interval_store(struct device *dev,
 
 	atomic_set(&akm->interval, interval);
 
-	if (0 <= interval)
+	if ((0 <= interval) && (akm->input->users))
 		schedule_delayed_work(
 			&akm->work,
 			msecs_to_jiffies(interval));
@@ -774,6 +775,20 @@ static void akm8972_close(struct input_dev *dev)
 	akm8972_device_power_off(akm);
 }
 
+static int akm8972_cancel_work
+	(struct notifier_block *this, unsigned long code, void *_cmd)
+{
+	struct akm8972_data *akm =
+		container_of(this, struct akm8972_data, pnotifier);
+	cancel_delayed_work_sync(&akm->work);
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block akm8972_poweroff_notifier = {
+	.notifier_call = akm8972_cancel_work,
+	.priority = 1,
+};
+
 int akm8972_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct akm8972_data *akm;
@@ -877,11 +892,18 @@ int akm8972_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		goto err_create_sysfs_interfaces;
 	}
 
+	akm->pnotifier = akm8972_poweroff_notifier;
+	err = register_reboot_notifier(&akm->pnotifier);
+	if (err)
+		goto err_register_reboot_notifier;
+
 	i2c_set_clientdata(client, akm);
 
 	dev_info(&client->dev, "successfully probed.");
 	return 0;
 
+err_register_reboot_notifier:
+	remove_sysfs_interfaces(akm);
 err_create_sysfs_interfaces:
 	free_irq(client->irq, akm);
 err_request_th_irq:

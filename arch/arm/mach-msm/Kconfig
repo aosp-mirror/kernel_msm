@@ -632,6 +632,13 @@ config MACH_SEMC_HAYATE
 	help
 	  Support for the Sony Ericsson Hayate.
 
+config MACH_SEMC_AOBA
+	depends on ARCH_MSM8X60
+	default n
+	bool "SEMC Aoba"
+	help
+	  Support for the Sony Ericsson Aoba.
+
 config MACH_MSM8960_SIM
 	depends on ARCH_MSM8960
 	bool "MSM8960 Simulator"

@@ -3075,6 +3075,28 @@ static void shared_vreg_switch(int enable)
 			pr_err("%s: vreg_enable failed\n", __func__);
 			goto exit_free_reg_10;
 		}
+
+#if defined(CONFIG_MACH_SEMC_AOBA)
+		mdelay(10);
+		rc = regulator_disable(vreg_l10);
+		if (rc) {
+			pr_err("%s: bugfixed vreg_disable failed\n", __func__);
+			return;
+		}
+		mdelay(10);
+		rc = regulator_set_voltage(vreg_l10, VREG10_VDDIO_VOLTAGE,
+						VREG10_VDDIO_VOLTAGE);
+		if (rc) {
+			pr_err("%s: regulator_set_voltage failed\n", __func__);
+			goto exit_free_reg_10;
+		}
+		rc = regulator_enable(vreg_l10);
+		if (rc) {
+			pr_err("%s: vreg_enable failed\n", __func__);
+			goto exit_free_reg_10;
+		}
+#endif
+
 		mdelay(10); /* Device Spec */
 		rc = regulator_set_voltage(vreg_l8, VREG8_VDDIO_VOLTAGE,
 					VREG8_VDDIO_VOLTAGE);
@@ -3983,6 +4005,12 @@ static struct platform_device *fuji_devices[] __initdata = {
 #endif
 #ifdef CONFIG_USB_GADGET_MSM_72K
 	&msm_device_gadget_peripheral,
+#endif
+#if defined(CONFIG_MACH_SEMC_AOBA)
+	&msm_charm_modem,
+#ifdef CONFIG_MSM_SDIO_AL
+	&msm_device_sdio_al,
+#endif
 #endif
 #ifdef CONFIG_USB_G_ANDROID
 	&android_usb_device,
@@ -5581,6 +5609,10 @@ static void __init msm8x60_init_buses(void)
 	msm_gsbi8_qup_i2c_device.dev.platform_data = &msm_gsbi8_qup_i2c_pdata;
 	msm_gsbi9_qup_i2c_device.dev.platform_data = &msm_gsbi9_qup_i2c_pdata;
 	msm_gsbi12_qup_i2c_device.dev.platform_data = &msm_gsbi12_qup_i2c_pdata;
+#ifdef CONFIG_MSM_GSBI9_UART
+	if (machine_is_semc_aoba())
+		msm_gsbi9_qup_i2c_pdata.use_gsbi_shared_mode = 1;
+#endif
 #endif
 #if defined(CONFIG_SPI_QUP) || defined(CONFIG_SPI_QUP_MODULE)
 	msm_gsbi1_qup_spi_device.dev.platform_data = &msm_gsbi1_qup_spi_pdata;
@@ -5612,6 +5644,14 @@ static void __init msm8x60_init_buses(void)
 #ifdef CONFIG_SERIAL_MSM_HS
 	msm_uart_dm1_pdata.wakeup_irq = gpio_to_irq(54); /* GSBI6(2) */
 	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
+#endif
+#ifdef CONFIG_MSM_GSBI9_UART
+	if (machine_is_semc_aoba()) {
+		msm_device_uart_gsbi9 = msm_add_gsbi9_uart();
+		if (IS_ERR(msm_device_uart_gsbi9))
+			pr_err("%s(): Failed to create uart gsbi9 device\n",
+				__func__);
+	}
 #endif
 #ifdef CONFIG_MSM_GSBI5_UART
 	msm_device_uart_gsbi5.dev.platform_data = &msm_uart_gsbi5_pdata;

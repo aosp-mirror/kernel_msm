@@ -260,6 +260,7 @@ obj-$(CONFIG_MACH_SEMC_NOZOMI_DCM) += board-semc_fuji.o gpiomux-fuji_nozomi.o le
 obj-$(CONFIG_MACH_SEMC_HIKARI) += board-semc_fuji.o gpiomux-fuji_hikari.o leds-fuji_hikari.o charger-fuji_hikari.o keypad-fuji_hikari.o vreg-fuji_hikari.o board-semc_fuji-rfkill.o felica-fuji_common.o gyro-semc_common.o gyro-semc_fuji_hikari.o
 obj-$(CONFIG_MACH_SEMC_HIKARI_ROW) += board-semc_fuji.o gpiomux-fuji_hikari_row.o leds-fuji_hikari.o charger-fuji_hikari.o keypad-fuji_hikari.o vreg-fuji_hikari_row.o board-semc_fuji-rfkill.o nfc-fuji.o gyro-semc_common.o gyro-semc_fuji_hikari.o
 obj-$(CONFIG_MACH_SEMC_HAYATE) += board-semc_fuji.o gpiomux-fuji_hayate.o leds-fuji_hayate.o charger-fuji_hayate.o keypad-fuji_hayate.o vreg-fuji_hayate.o board-semc_fuji-rfkill.o felica-fuji_common.o gyro-semc_common.o gyro-semc_fuji_hayate.o
+obj-$(CONFIG_MACH_SEMC_AOBA) += board-semc_fuji.o gpiomux-fuji_csfb_aoba.o leds-fuji_csfb_aoba.o charger-fuji_csfb_aoba.o keypad-fuji_csfb_aoba.o vreg-fuji_csfb_aoba.o mdm.o board-semc_fuji-rfkill.o nfc-fuji.o gyro-semc_common.o gyro-semc_fuji_csfb_aoba.o
 
 obj-$(CONFIG_MACH_SEMC_HIKARI) += irda-fuji_common.o
 obj-$(CONFIG_MACH_SEMC_HAYATE) += irda-fuji_common.o
@@ -270,6 +271,7 @@ obj-$(CONFIG_MACH_SEMC_NOZOMI_DCM) += touch-fuji_nozomi.o
 obj-$(CONFIG_MACH_SEMC_HIKARI) += touch-fuji_hikari.o
 obj-$(CONFIG_MACH_SEMC_HIKARI_ROW) += touch-fuji_hikari.o
 obj-$(CONFIG_MACH_SEMC_HAYATE) += touch-fuji_hayate.o
+obj-$(CONFIG_MACH_SEMC_AOBA) += touch-fuji_csfb_aoba.o
 endif
 obj-$(CONFIG_MACH_SEMC_HIKARI) += oneseg-fuji_common.o
 obj-$(CONFIG_MACH_SEMC_HAYATE) += oneseg-fuji_common.o

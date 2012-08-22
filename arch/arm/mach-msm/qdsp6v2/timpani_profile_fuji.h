@@ -28,6 +28,8 @@
 #include "timpani_profile_fuji_hikari.h"
 #elif defined(CONFIG_MACH_SEMC_HAYATE)
 #include "timpani_profile_fuji_hayate.h"
+#elif defined(CONFIG_MACH_SEMC_AOBA)
+#include "timpani_profile_fuji_aoba.h"
 #endif
 
 /***************************************************************************\

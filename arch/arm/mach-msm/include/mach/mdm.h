@@ -17,6 +17,7 @@
 struct charm_platform_data {
 	void (*charm_modem_on)(void);
 	void (*charm_modem_off)(void);
+	void (*charm_modem_off_direct)(void);
 };
 
 #define AP2MDM_STATUS   136
