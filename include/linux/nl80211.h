@@ -2574,21 +2574,6 @@ enum nl80211_plink_state {
 	MAX_NL80211_PLINK_STATES = NUM_NL80211_PLINK_STATES - 1
 };
 
-/**
- * enum nl80211_hidden_ssid - values for %NL80211_ATTR_HIDDEN_SSID
- * @NL80211_HIDDEN_SSID_NOT_IN_USE: do not hide SSID (i.e., broadcast it in
- *	Beacon frames)
- * @NL80211_HIDDEN_SSID_ZERO_LEN: hide SSID by using zero-length SSID element
- *	in Beacon frames
- * @NL80211_HIDDEN_SSID_ZERO_CONTENTS: hide SSID by using correct length of SSID
- *	element in Beacon frames but zero out each byte in the SSID
- */
-enum nl80211_hidden_ssid {
-	NL80211_HIDDEN_SSID_NOT_IN_USE,
-	NL80211_HIDDEN_SSID_ZERO_LEN,
-	NL80211_HIDDEN_SSID_ZERO_CONTENTS
-};
-
 #define NL80211_KCK_LEN			16
 #define NL80211_KEK_LEN			16
 #define NL80211_REPLAY_CTR_LEN		8
