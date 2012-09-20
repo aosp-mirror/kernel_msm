@@ -1256,9 +1256,10 @@ static int ep_enable(struct usb_ep *ep,
 
 	if (mEp->type == USB_ENDPOINT_XFER_CONTROL)
 		mEp->qh.ptr->cap |=  QH_IOS;
-	else if (mEp->type == USB_ENDPOINT_XFER_ISOC)
+	else if (mEp->type == USB_ENDPOINT_XFER_ISOC) {
 		mEp->qh.ptr->cap &= ~QH_MULT;
-	else
+		mEp->qh.ptr->cap |= BIT(30);
+	} else
 		mEp->qh.ptr->cap &= ~QH_ZLT;
 
 	mEp->qh.ptr->cap |=
