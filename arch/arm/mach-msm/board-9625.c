@@ -114,5 +114,4 @@ DT_MACHINE_START(MSM_DT, "Qualcomm MSM (Flattened Device Tree)")
 	.init_machine = msm9625_init,
 	.timer = &msm_dt_timer,
 	.dt_compat = msm9625_dt_match,
-	.nr_irqs = -1,
 MACHINE_END
