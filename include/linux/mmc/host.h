@@ -282,6 +282,8 @@ struct mmc_host {
 #define MMC_CAP2_PACKED_CMD	(MMC_CAP2_PACKED_RD | \
 				 MMC_CAP2_PACKED_WR)
 #define MMC_CAP2_SANITIZE	(1 << 14)	/* Support Sanitize */
+#define MMC_CAP2_INIT_BKOPS	    (1 << 17)	/* Need to set BKOPS_EN */
+
 	mmc_pm_flag_t		pm_caps;	/* supported pm features */
 
 	int			clk_requests;	/* internal reference counter */
