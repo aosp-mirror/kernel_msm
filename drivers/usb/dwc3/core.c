@@ -259,6 +259,18 @@ static void dwc3_event_buffers_cleanup(struct dwc3 *dwc)
 	}
 }
 
+/* XHCI reset, resets other CORE registers as well, re-init those */
+void dwc3_post_host_reset_core_init(struct dwc3 *dwc)
+{
+	/*
+	 * XHCI reset clears EVENT buffer register as well, re-init
+	 * EVENT buffers and also do device specific re-initialization
+	 */
+	dwc3_event_buffers_setup(dwc);
+
+	dwc3_gadget_restart(dwc);
+}
+
 static void dwc3_cache_hwparams(struct dwc3 *dwc)
 {
 	struct dwc3_hwparams	*parms = &dwc->hwparams;
@@ -546,6 +558,13 @@ static int dwc3_probe(struct platform_device *pdev)
 		ret = dwc3_otg_init(dwc);
 		if (ret) {
 			dev_err(dev, "failed to initialize otg\n");
+			goto err1;
+		}
+
+		ret = dwc3_host_init(dwc);
+		if (ret) {
+			dev_err(dev, "failed to initialize host\n");
+			dwc3_otg_exit(dwc);
 			goto err1;
 		}
 

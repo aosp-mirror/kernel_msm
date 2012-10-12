@@ -938,4 +938,7 @@ static inline void dwc3_gadget_exit(struct dwc3 *dwc)
 { }
 #endif
 
+void dwc3_gadget_restart(struct dwc3 *dwc);
+void dwc3_post_host_reset_core_init(struct dwc3 *dwc);
+
 #endif /* __DRIVERS_USB_DWC3_CORE_H */
