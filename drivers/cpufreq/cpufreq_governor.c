@@ -91,6 +91,8 @@ void dbs_check_cpu(struct dbs_data *dbs_data, int cpu)
 		u64 cur_wall_time, cur_idle_time, cur_iowait_time;
 		unsigned int idle_time, wall_time, iowait_time;
 		unsigned int load;
+		struct od_cpu_dbs_info_s *od_j_dbs_info =
+			dbs_data->get_cpu_dbs_info_s(cpu);
 
 		j_cdbs = dbs_data->get_cpu_cdbs(j);
 
@@ -123,9 +125,6 @@ void dbs_check_cpu(struct dbs_data *dbs_data, int cpu)
 		}
 
 		if (dbs_data->governor == GOV_ONDEMAND) {
-			struct od_cpu_dbs_info_s *od_j_dbs_info =
-				dbs_data->get_cpu_dbs_info_s(cpu);
-
 			cur_iowait_time = get_cpu_iowait_time_us(j,
 					&cur_wall_time);
 			if (cur_iowait_time == -1ULL)
@@ -149,7 +148,9 @@ void dbs_check_cpu(struct dbs_data *dbs_data, int cpu)
 			continue;
 
 		cur_load = 100 * (wall_time - idle_time) / wall_time;
-
+		od_j_dbs_info->max_load  = max(cur_load,
+					       od_j_dbs_info->prev_load);
+		od_j_dbs_info->prev_load = cur_load;
 		if (dbs_data->governor == GOV_ONDEMAND) {
 			int freq_avg = __cpufreq_driver_getavg(policy, j);
 			if (freq_avg <= 0)
@@ -325,6 +326,11 @@ int cpufreq_governor_dbs(struct dbs_data *dbs_data,
 				MIN_LATENCY_MULTIPLIER * latency);
 		*sampling_rate = max(dbs_data->min_sampling_rate, latency *
 				LATENCY_MULTIPLIER);
+		if (od_tuners->optimal_freq == 0)
+			od_tuners->optimal_freq = policy->min;
+
+		if (od_tuners->sync_freq == 0)
+			od_tuners->sync_freq = policy->min;
 unlock:
 		if (dbs_data->governor != GOV_CONSERVATIVE && !cpu)
 			rc = input_register_handler(od_ops->input_handler);

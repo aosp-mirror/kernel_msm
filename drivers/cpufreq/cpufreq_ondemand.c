@@ -58,8 +58,11 @@ struct dbs_work_struct {
 static DEFINE_PER_CPU(struct dbs_work_struct, dbs_refresh_work);
 
 static struct od_dbs_tuners od_tuners = {
+	.up_threshold_multi_core = DEF_FREQUENCY_UP_THRESHOLD,
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
 	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
+	.down_differential_multi_core = MICRO_FREQUENCY_DOWN_DIFFERENTIAL,
+	.up_threshold_any_cpu_load = DEF_FREQUENCY_UP_THRESHOLD,
 	.adj_up_threshold = DEF_FREQUENCY_UP_THRESHOLD -
 			    DEF_FREQUENCY_DOWN_DIFFERENTIAL,
 	.ignore_nice = 0,
@@ -184,6 +187,34 @@ static void od_check_cpu(int cpu, unsigned int load_freq)
 {
 	struct od_cpu_dbs_info_s *dbs_info = &per_cpu(od_cpu_dbs_info, cpu);
 	struct cpufreq_policy *policy = dbs_info->cdbs.cur_policy;
+	unsigned int max_load_other_cpu = 0;
+	int j;
+
+	for_each_online_cpu(j) {
+		struct od_cpu_dbs_info_s *od_j_dbs_info;
+		od_j_dbs_info = &per_cpu(od_cpu_dbs_info, j);
+
+		if (j == policy->cpu)
+			continue;
+
+		if (max_load_other_cpu < od_j_dbs_info->max_load)
+			max_load_other_cpu = od_j_dbs_info->max_load;
+		/*
+		 * The other cpu could be running at higher frequency
+		 * but may not have completed it's sampling_down_factor.
+		 * For that case consider other cpu is loaded so that
+		 * frequency imbalance does not occur.
+		 */
+
+		if ((od_j_dbs_info->cdbs.cur_policy != NULL)
+			&& (od_j_dbs_info->cdbs.cur_policy->cur ==
+					od_j_dbs_info->cdbs.cur_policy->max)) {
+
+			if (policy->cur >= od_tuners.optimal_freq)
+				max_load_other_cpu =
+				od_tuners.up_threshold_any_cpu_load;
+		}
+	}
 
 	dbs_info->freq_lo = 0;
 
@@ -195,6 +226,25 @@ static void od_check_cpu(int cpu, unsigned int load_freq)
 				od_tuners.sampling_down_factor;
 		dbs_freq_increase(policy, policy->max);
 		return;
+	}
+
+	if (num_online_cpus() > 1) {
+
+		if (max_load_other_cpu > od_tuners.up_threshold_any_cpu_load) {
+			if (policy->cur < od_tuners.sync_freq)
+				dbs_freq_increase(policy,
+						od_tuners.sync_freq);
+			return;
+		}
+
+		if (load_freq >
+				od_tuners.up_threshold_multi_core *
+								policy->cur) {
+			if (policy->cur < od_tuners.optimal_freq)
+				dbs_freq_increase(policy,
+						od_tuners.optimal_freq);
+			return;
+		}
 	}
 
 	/* Check for frequency decrease */
@@ -217,6 +267,19 @@ static void od_check_cpu(int cpu, unsigned int load_freq)
 		if (freq_next < policy->min)
 			freq_next = policy->min;
 
+		if (num_online_cpus() > 1) {
+			if (max_load_other_cpu >
+			(od_tuners.up_threshold_multi_core -
+			od_tuners.adj_up_threshold - od_tuners.up_threshold) &&
+			freq_next < od_tuners.sync_freq)
+				freq_next = od_tuners.sync_freq;
+
+			if (load_freq > (od_tuners.up_threshold_multi_core -
+				  od_tuners.down_differential_multi_core) *
+				  policy->cur)
+				freq_next = od_tuners.optimal_freq;
+
+		}
 		if (!od_tuners.powersave_bias) {
 			__cpufreq_driver_target(policy, freq_next,
 					CPUFREQ_RELATION_L);
@@ -348,6 +411,19 @@ static ssize_t store_sampling_rate(struct kobject *a, struct attribute *b,
 	return count;
 }
 
+static ssize_t store_sync_freq(struct kobject *a, struct attribute *b,
+				   const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+
+	ret = sscanf(buf, "%u", &input);
+	if (ret != 1)
+		return -EINVAL;
+	od_tuners.sync_freq = input;
+	return count;
+}
+
 static ssize_t store_io_is_busy(struct kobject *a, struct attribute *b,
 				   const char *buf, size_t count)
 {
@@ -358,6 +434,19 @@ static ssize_t store_io_is_busy(struct kobject *a, struct attribute *b,
 	if (ret != 1)
 		return -EINVAL;
 	od_tuners.io_is_busy = !!input;
+	return count;
+}
+
+static ssize_t store_optimal_freq(struct kobject *a, struct attribute *b,
+				   const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+
+	ret = sscanf(buf, "%u", &input);
+	if (ret != 1)
+		return -EINVAL;
+	od_tuners.optimal_freq = input;
 	return count;
 }
 
@@ -377,6 +466,36 @@ static ssize_t store_up_threshold(struct kobject *a, struct attribute *b,
 	od_tuners.adj_up_threshold -= od_tuners.up_threshold;
 
 	od_tuners.up_threshold = input;
+	return count;
+}
+
+static ssize_t store_up_threshold_multi_core(struct kobject *a,
+			struct attribute *b, const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	if (ret != 1 || input > MAX_FREQUENCY_UP_THRESHOLD ||
+			input < MIN_FREQUENCY_UP_THRESHOLD) {
+		return -EINVAL;
+	}
+	od_tuners.up_threshold_multi_core = input;
+	return count;
+}
+
+static ssize_t store_up_threshold_any_cpu_load(struct kobject *a,
+			struct attribute *b, const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	if (ret != 1 || input > MAX_FREQUENCY_UP_THRESHOLD ||
+			input < MIN_FREQUENCY_UP_THRESHOLD) {
+		return -EINVAL;
+	}
+	od_tuners.up_threshold_any_cpu_load = input;
 	return count;
 }
 
@@ -543,8 +662,12 @@ skip_this_cpu_bypass:
 show_one(od, sampling_rate, sampling_rate);
 show_one(od, io_is_busy, io_is_busy);
 show_one(od, up_threshold, up_threshold);
+show_one(od, up_threshold_multi_core, up_threshold_multi_core);
 show_one(od, sampling_down_factor, sampling_down_factor);
 show_one(od, ignore_nice_load, ignore_nice);
+show_one(od, optimal_freq, optimal_freq);
+show_one(od, up_threshold_any_cpu_load, up_threshold_any_cpu_load);
+show_one(od, sync_freq, sync_freq);
 
 static ssize_t show_powersave_bias
 (struct kobject *kobj, struct attribute *attr, char *buf)
@@ -559,6 +682,10 @@ define_one_global_rw(sampling_down_factor);
 define_one_global_rw(ignore_nice_load);
 define_one_global_rw(powersave_bias);
 define_one_global_ro(sampling_rate_min);
+define_one_global_rw(up_threshold_multi_core);
+define_one_global_rw(optimal_freq);
+define_one_global_rw(up_threshold_any_cpu_load);
+define_one_global_rw(sync_freq);
 
 static struct attribute *dbs_attributes[] = {
 	&sampling_rate_min.attr,
@@ -568,6 +695,10 @@ static struct attribute *dbs_attributes[] = {
 	&ignore_nice_load.attr,
 	&powersave_bias.attr,
 	&io_is_busy.attr,
+	&up_threshold_multi_core.attr,
+	&optimal_freq.attr,
+	&up_threshold_any_cpu_load.attr,
+	&sync_freq.attr,
 	NULL
 };
 
