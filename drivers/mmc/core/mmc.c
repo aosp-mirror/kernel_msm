@@ -1406,7 +1406,8 @@ static int mmc_suspend(struct mmc_host *host)
 	BUG_ON(!host);
 	BUG_ON(!host->card);
 
-	mmc_claim_host(host);
+	if (!mmc_try_claim_host(host))
+		return -EBUSY;
 
 	err = mmc_cache_ctrl(host, 0);
 	if (err)
