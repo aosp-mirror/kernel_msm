@@ -353,7 +353,6 @@ unlock:
 			dbs_timer_exit(dbs_data, j);
 
 		mutex_lock(&dbs_data->mutex);
-		mutex_destroy(&cpu_cdbs->timer_mutex);
 
 		if (policy->governor->initialized == 1) {
 			sysfs_remove_group(cpufreq_global_kobject,
