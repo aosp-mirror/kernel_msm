@@ -65,7 +65,7 @@ static int lm3559_onoff_state = LM3559_POWER_OFF;
 static struct lm3559_flash_platform_data *lm3559_led_flash_pdata = NULL;
 static struct i2c_client *lm3559_i2c_client = NULL;
 
-int lm3559_write_reg(struct i2c_client *client, unsigned char addr, unsigned char data)
+static int lm3559_write_reg(struct i2c_client *client, unsigned char addr, unsigned char data)
 {
 	int err = 0;
 
@@ -91,7 +91,7 @@ int lm3559_write_reg(struct i2c_client *client, unsigned char addr, unsigned cha
 
 }
 
-int lm3559_read_reg(struct i2c_client *client, unsigned char addr, unsigned char *data)
+static int lm3559_read_reg(struct i2c_client *client, unsigned char addr, unsigned char *data)
 {
 	int err = 0;
 	unsigned char buf[1] ={0};
@@ -117,10 +117,12 @@ int lm3559_read_reg(struct i2c_client *client, unsigned char addr, unsigned char
 
 }
 
-void lm3559_led_shutdown(void)
+#if 0
+static void lm3559_led_shutdown(void)
 {
 	lm3559_write_reg(lm3559_i2c_client, LM3559_REG_ENABLE, 0x18);
 }
+#endif
 
 /*	Torch Current
 	 000 : 28.125 mA		100 : 140.625 mA
@@ -128,7 +130,7 @@ void lm3559_led_shutdown(void)
 	 010 : 84.375 mA 		110 : 196.875 mA
 	 011 : 112.5mA  		111 : 225 mA
 */
-void lm3559_enable_torch_mode(enum led_status state)
+static void lm3559_enable_torch_mode(enum led_status state)
 {
 	pr_info("%s: state = %d\n", __func__, state);
 
@@ -153,7 +155,7 @@ void lm3559_enable_torch_mode(enum led_status state)
 	 0110 : 393.75 mA		1110 : 843.75 mA
 	 0111 : 450 mA			1111 : 900 mA
 */
-void lm3559_enable_flash_mode(enum led_status state)
+static void lm3559_enable_flash_mode(enum led_status state)
 {
 	unsigned char data = 0;
 
@@ -180,7 +182,7 @@ void lm3559_enable_flash_mode(enum led_status state)
 	lm3559_write_reg(lm3559_i2c_client, LM3559_REG_ENABLE, 0x1B);
 }
 
-void lm3559_config_gpio_on(void)
+static void lm3559_config_gpio_on(void)
 {
 	pr_debug("%s: Start\n", __func__);
 
@@ -190,7 +192,7 @@ void lm3559_config_gpio_on(void)
 	gpio_direction_output(lm3559_led_flash_pdata->gpio_en, 0);
 }
 
-void lm3559_config_gpio_off(void)
+static void lm3559_config_gpio_off(void)
 {
 	pr_debug("%s: Start\n", __func__);
 
@@ -198,14 +200,14 @@ void lm3559_config_gpio_off(void)
 	gpio_free(lm3559_led_flash_pdata->gpio_en);
 }
 
-void lm3559_led_enable(void)
+static void lm3559_led_enable(void)
 {
 	pr_debug("%s: Start\n", __func__);
 	gpio_set_value_cansleep(lm3559_led_flash_pdata->gpio_en, 1);
 	lm3559_onoff_state = LM3559_POWER_ON;
 }
 
-void lm3559_led_disable(void)
+static void lm3559_led_disable(void)
 {
 	pr_debug("%s: Start\n", __func__);
 	gpio_set_value_cansleep(lm3559_led_flash_pdata->gpio_en, 0);
