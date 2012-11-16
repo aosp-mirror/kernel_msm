@@ -96,7 +96,7 @@ static void vsync_irq_disable(int intr, int term)
 	pr_debug("%s: IRQ-dis done, term=%x\n", __func__, term);
 }
 
-static void mdp4_overlay_dsi_video_start(void)
+void mdp4_overlay_dsi_video_start(void)
 {
 	if (!dsi_video_enabled) {
 		/* enable DSI block */
@@ -685,7 +685,6 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
 	mdp_histogram_ctrl_all(TRUE);
-	mdp4_overlay_dsi_video_start();
 
 	return ret;
 }
