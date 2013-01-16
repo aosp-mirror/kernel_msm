@@ -77,12 +77,12 @@ dtb-$(CONFIG_ARCH_KIRKWOOD) += kirkwood-dns320.dtb \
 dtb-$(CONFIG_ARCH_MARCO) += marco-evb.dtb
 dtb-$(CONFIG_ARCH_MSM) += msm8660-surf.dtb \
 	msm8960-cdp.dtb \
-	msm8974-cdp.dtb \
-	msm8974-fluid.dtb \
-	msm8974-liquid.dtb \
-	msm8974-mtp.dtb \
-	msm8974-rumi.dtb \
-	msm8974-sim.dtb \
+	msm8974-v1-cdp.dtb \
+	msm8974-v1-fluid.dtb \
+	msm8974-v1-liquid.dtb \
+	msm8974-v1-mtp.dtb \
+	msm8974-v1-rumi.dtb \
+	msm8974-v1-sim.dtb \
 	msm9625-cdp.dtb \
 	msm9625-mtp.dtb \
 	msm9625-rumi.dtb \
