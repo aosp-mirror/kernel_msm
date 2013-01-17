@@ -48,7 +48,6 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_MAX98090 if I2C
 	select SND_SOC_MAX98095 if I2C
 	select SND_SOC_MAX9850 if I2C
-	select SND_SOC_MAX9768 if I2C
 	select SND_SOC_MAX9877 if I2C
 	select SND_SOC_MC13783 if MFD_MC13XXX
 	select SND_SOC_ML26124 if I2C
@@ -77,7 +76,6 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_WM0010 if SPI_MASTER
 	select SND_SOC_WM1250_EV1 if I2C
 	select SND_SOC_WM2000 if I2C
-	select SND_SOC_WM2200 if I2C
 	select SND_SOC_WM5100 if I2C
 	select SND_SOC_WM5102 if MFD_WM5102
 	select SND_SOC_WM5110 if MFD_WM5110
@@ -123,6 +121,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_WM9705 if SND_SOC_AC97_BUS
 	select SND_SOC_WM9712 if SND_SOC_AC97_BUS
 	select SND_SOC_WM9713 if SND_SOC_AC97_BUS
+	select SND_SOC_TIMPANI if MARIMBA_CORE
         help
           Normally ASoC codec drivers are only built if a machine driver which
           uses them is also built since they are only usable with a machine
@@ -349,6 +348,15 @@ config SND_SOC_UDA134X
 config SND_SOC_UDA1380
         tristate
 
+config SND_SOC_WCD9304
+	tristate
+
+config SND_SOC_WCD9310
+	tristate
+
+config SND_SOC_CS8427
+	tristate
+
 config SND_SOC_WL1273
 	tristate
 
@@ -503,9 +511,6 @@ config SND_SOC_WM9713
 config SND_SOC_LM4857
 	tristate
 
-config SND_SOC_MAX9768
-	tristate
-
 config SND_SOC_MAX9877
 	tristate
 
@@ -516,4 +521,7 @@ config SND_SOC_ML26124
 	tristate
 
 config SND_SOC_TPA6130A2
+	tristate
+
+config SND_SOC_MSM_STUB
 	tristate
