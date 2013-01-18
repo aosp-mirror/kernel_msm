@@ -1913,9 +1913,11 @@ void mdp4_mixer_blend_setup(int mixer)
 		alpha_drop = 0;	/* per stage */
 		/* alpha channel is lost on VG pipe when using QSEED or M/N */
 		if (s_pipe->pipe_type == OVERLAY_TYPE_VIDEO &&
+			s_pipe->alpha_enable &&
 			((s_pipe->op_mode & MDP4_OP_SCALEY_EN) ||
 			(s_pipe->op_mode & MDP4_OP_SCALEX_EN)) &&
-			!(s_pipe->op_mode & MDP4_OP_SCALEY_PIXEL_RPT))
+			!(s_pipe->op_mode & (MDP4_OP_SCALEX_PIXEL_RPT |
+						MDP4_OP_SCALEY_PIXEL_RPT)))
 			alpha_drop = 1;
 
 		d_pipe = mdp4_background_layer(mixer, s_pipe);
@@ -1951,7 +1953,8 @@ void mdp4_mixer_blend_setup(int mixer)
 				blend->op = MDP4_BLEND_BG_ALPHA_FG_CONST;
 		} else if (d_alpha) {
 			ptype = mdp4_overlay_format2type(s_pipe->src_format);
-			if (ptype == OVERLAY_TYPE_VIDEO) {
+			if (ptype == OVERLAY_TYPE_VIDEO &&
+				(!(s_pipe->flags & MDP_BACKEND_COMPOSITION))) {
 				blend->op = (MDP4_BLEND_FG_ALPHA_BG_PIXEL |
 					MDP4_BLEND_FG_INV_ALPHA);
 				if (!(s_pipe->flags & MDP_BLEND_FG_PREMULT))
