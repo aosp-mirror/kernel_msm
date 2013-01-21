@@ -1248,6 +1248,8 @@ void ehci_init_driver(struct hc_driver *drv,
 			drv->bus_suspend = over->bus_suspend;
 		if (over->bus_resume)
 			drv->bus_resume = over->bus_resume;
+		if (over->start)
+			drv->start = over->start;
 		if (over->log_urb_complete)
 			drv->log_urb_complete = over->log_urb_complete;
 	}
@@ -1365,6 +1367,7 @@ MODULE_LICENSE ("GPL");
 	!IS_ENABLED(CONFIG_USB_CHIPIDEA_HOST) && \
 	!IS_ENABLED(CONFIG_USB_EHCI_MXC) && \
 	!IS_ENABLED(CONFIG_USB_MSM_HSIC) && \
+	!IS_ENABLED(CONFIG_USB_EHCI_MSM_72K) && \
 	!defined(PLATFORM_DRIVER) && \
 	!defined(PS3_SYSTEM_BUS_DRIVER) && \
 	!defined(OF_PLATFORM_DRIVER) && \
