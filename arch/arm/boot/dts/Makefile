@@ -87,9 +87,9 @@ dtb-$(CONFIG_ARCH_MSM) += msm8660-surf.dtb \
 	msm8974-v2-fluid.dtb \
 	msm8974-v2-liquid.dtb \
 	msm8974-v2-mtp.dtb \
-	msm9625-cdp.dtb \
-	msm9625-mtp.dtb \
-	msm9625-rumi.dtb \
+	msm9625-v1-cdp.dtb \
+	msm9625-v1-mtp.dtb \
+	msm9625-v1-rumi.dtb \
 	msm8226-sim.dtb \
 	msm8610-rumi.dtb \
 	msm8610-sim.dtb
