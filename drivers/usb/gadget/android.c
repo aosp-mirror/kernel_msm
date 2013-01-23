@@ -441,36 +441,25 @@ static void functionfs_release_dev_callback(struct ffs_data *ffs_data)
 {
 }
 
-#define MAX_ACM_INSTANCES 4
-struct acm_function_config {
-	int instances;
-	unsigned char port_num[MAX_ACM_INSTANCES];
-};
+/*-------------------------------------------------------------------------*/
+/* Supported functions initialization */
 
-static int
-acm_function_init(struct android_usb_function *f,
-		struct usb_composite_dev *cdev)
+/* ACM */
+static char acm_transports[32];	/*enabled ACM ports - "tty[,sdio]"*/
+static ssize_t acm_transports_store(
+		struct device *device, struct device_attribute *attr,
+		const char *buff, size_t size)
 {
-	int i;
-	int ret;
-	struct acm_function_config *config;
+	strlcpy(acm_transports, buff, sizeof(acm_transports));
 
-	config = kzalloc(sizeof(struct acm_function_config), GFP_KERNEL);
-	if (!config)
-		return -ENOMEM;
-	f->config = config;
-
-	for (i = 0; i < MAX_ACM_INSTANCES; i++) {
-		ret = gserial_alloc_line(&config->port_num[i]);
-		if (ret)
-			goto err_alloc_line;
-	}
-	return 0;
-err_alloc_line:
-	while (i-- > 0)
-		gserial_free_line(config->port_num[i]);
-	return ret;
+	return size;
 }
+
+static DEVICE_ATTR(acm_transports, S_IWUSR, NULL, acm_transports_store);
+static struct device_attribute *acm_function_attributes[] = {
+		&dev_attr_acm_transports,
+		NULL
+};
 
 static void acm_function_cleanup(struct android_usb_function *f)
 {
@@ -479,61 +468,57 @@ static void acm_function_cleanup(struct android_usb_function *f)
 
 	for (i = 0; i < MAX_ACM_INSTANCES; i++)
 		gserial_free_line(config->port_num[i]);
-	kfree(f->config);
-	f->config = NULL;
 }
 
 static int
 acm_function_bind_config(struct android_usb_function *f,
 		struct usb_configuration *c)
 {
-	int i;
-	int ret = 0;
-	struct acm_function_config *config = f->config;
+	char *name;
+	char buf[32], *b;
+	int err = -1, i;
+	static int acm_initialized, ports;
 
-	for (i = 0; i < config->instances; i++) {
-		ret = acm_bind_config(c, i);
-		if (ret) {
-			pr_err("Could not bind acm%u config\n", i);
-			break;
+	if (acm_initialized)
+		goto bind_config;
+
+	acm_initialized = 1;
+	strlcpy(buf, acm_transports, sizeof(buf));
+	b = strim(buf);
+
+	while (b) {
+		name = strsep(&b, ",");
+
+		if (name) {
+			err = acm_init_port(ports, name);
+			if (err) {
+				pr_err("acm: Cannot open port '%s'", name);
+				goto out;
+			}
+			ports++;
+		}
+	}
+	err = acm_port_setup(c);
+	if (err) {
+		pr_err("acm: Cannot setup transports");
+		goto out;
+	}
+
+bind_config:
+	for (i = 0; i < ports; i++) {
+		err = acm_bind_config(c, i);
+		if (err) {
+			pr_err("acm: bind_config failed for port %d", i);
+			goto out;
 		}
 	}
 
-	return ret;
+out:
+	return err;
 }
-
-static ssize_t acm_instances_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct android_usb_function *f = dev_get_drvdata(dev);
-	struct acm_function_config *config = f->config;
-	return sprintf(buf, "%d\n", config->instances);
-}
-
-static ssize_t acm_instances_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
-{
-	struct android_usb_function *f = dev_get_drvdata(dev);
-	struct acm_function_config *config = f->config;
-	int value;
-
-	sscanf(buf, "%d", &value);
-	if (value > MAX_ACM_INSTANCES)
-		value = MAX_ACM_INSTANCES;
-	config->instances = value;
-	return size;
-}
-
-static DEVICE_ATTR(instances, S_IRUGO | S_IWUSR, acm_instances_show,
-						 acm_instances_store);
-static struct device_attribute *acm_function_attributes[] = {
-	&dev_attr_instances,
-	NULL
-};
 
 static struct android_usb_function acm_function = {
 	.name		= "acm",
-	.init		= acm_function_init,
 	.cleanup	= acm_function_cleanup,
 	.bind_config	= acm_function_bind_config,
 	.attributes	= acm_function_attributes,
