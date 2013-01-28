@@ -1794,6 +1794,19 @@ static int dvbdmx_set_tsp_format(
 	mutex_lock(&dvbdemux->mutex);
 
 	dvbdemux->tsp_format = tsp_format;
+	switch (tsp_format) {
+	case DMX_TSP_FORMAT_188:
+		dvbdemux->ts_packet_size = 188;
+		break;
+	case DMX_TSP_FORMAT_192_TAIL:
+	case DMX_TSP_FORMAT_192_HEAD:
+		dvbdemux->ts_packet_size = 192;
+		break;
+	case DMX_TSP_FORMAT_204:
+		dvbdemux->ts_packet_size = 204;
+		break;
+	}
+
 	mutex_unlock(&dvbdemux->mutex);
 	return 0;
 }
@@ -1868,6 +1881,7 @@ int dvb_dmx_init(struct dvb_demux *dvbdemux)
 	dvbdemux->tsbufp = 0;
 
 	dvbdemux->tsp_format = DMX_TSP_FORMAT_188;
+	dvbdemux->ts_packet_size = 188;
 
 	if (!dvbdemux->check_crc32)
 		dvbdemux->check_crc32 = dvb_dmx_crc32;
@@ -1897,6 +1911,7 @@ int dvb_dmx_init(struct dvb_demux *dvbdemux)
 	dmx->get_pes_pids = dvbdmx_get_pes_pids;
 
 	dmx->set_tsp_format = dvbdmx_set_tsp_format;
+	dmx->set_secure_mode = NULL;
 
 	mutex_init(&dvbdemux->mutex);
 	spin_lock_init(&dvbdemux->lock);
