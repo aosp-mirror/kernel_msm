@@ -172,6 +172,7 @@ struct ci13xxx {
 	unsigned long dTD_update_fail_count;
 	struct usb_phy			*transceiver;
 	struct usb_hcd			*hcd;
+	bool                      skip_flush; /* skip flushing remaining EP
 };
 
 static inline struct ci_role_driver *ci_role(struct ci13xxx *ci)
