@@ -285,8 +285,8 @@ struct mmc_host {
 				 MMC_CAP2_PACKED_WR)
 #define MMC_CAP2_SANITIZE	(1 << 14)	/* Support Sanitize */
 #define MMC_CAP2_PACKED_WR_CONTROL (1 << 15) /* Allow write packing control */
-#define MMC_CAP2_INIT_BKOPS	    (1 << 17)	/* Need to set BKOPS_EN */
-#define MMC_CAP2_CLK_SCALE	(1 << 18)	/* Allow dynamic clk scaling */
+#define MMC_CAP2_INIT_BKOPS	    (1 << 16)	/* Need to set BKOPS_EN */
+#define MMC_CAP2_CLK_SCALE	(1 << 17)	/* Allow dynamic clk scaling */
 	mmc_pm_flag_t		pm_caps;	/* supported pm features */
 
 	int			clk_requests;	/* internal reference counter */
