@@ -1255,6 +1255,10 @@
 			qcom,irq-no-suspend;
 		};
 	};
+
+	qcom,bcl {
+		compatible = "qcom,bcl";
+	};
 };
 
 &gdsc_venus {
