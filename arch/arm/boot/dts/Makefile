@@ -95,6 +95,9 @@ dtb-$(CONFIG_ARCH_MSM) += msm8660-surf.dtb \
 	msm9625-v2-1-mtp.dtb \
 	msm9625-v2-1-cdp.dtb \
 	msm8226-sim.dtb \
+	msm8226-cdp.dtb \
+	msm8226-mtp.dtb \
+	msm8226-qrd.dtb \
 	msm8610-rumi.dtb \
 	msm8610-sim.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += armada-370-db.dtb \
