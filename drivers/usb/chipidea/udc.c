@@ -496,7 +496,7 @@ static int _hardware_enqueue(struct ci13xxx_ep *mEp, struct ci13xxx_req *mReq)
 			diff = ktime_sub(ktime_get(), start);
 			/* poll for max. 100ms */
 			if (ktime_to_ms(diff) > ATDTW_SET_DELAY) {
-				if (hw_cread(CAP_USBCMD, USBCMD_ATDTW))
+				if (hw_read(ci, OP_USBCMD, USBCMD_ATDTW))
 					break;
 				printk_ratelimited(KERN_ERR
 				"%s:queue failed ep#%d %s\n",
