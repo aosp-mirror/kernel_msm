@@ -94,7 +94,7 @@ static int hw_device_state(struct ci13xxx *ci, u32 dma)
 {
 	if (dma) {
 		if (streaming ||
-		    !(ci->plat_data->flags & CI13XXX_DISABLE_STREAMING))
+		    !(ci->platdata->flags & CI13XXX_DISABLE_STREAMING))
 			hw_write(ci, OP_USBMODE, USBMODE_CI_SDIS, 0);
 		else
 			hw_write(ci, OP_USBMODE, USBMODE_CI_SDIS,
