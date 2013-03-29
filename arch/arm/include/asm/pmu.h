@@ -115,7 +115,7 @@ int armpmu_event_set_period(struct perf_event *event);
 
 int armpmu_map_event(struct perf_event *event,
 		     const unsigned (*event_map)[PERF_COUNT_HW_MAX],
-		     const unsigned (*cache_map)[PERF_COUNT_HW_CACHE_MAX]
+		     unsigned (*cache_map)[PERF_COUNT_HW_CACHE_MAX]
 						[PERF_COUNT_HW_CACHE_OP_MAX]
 						[PERF_COUNT_HW_CACHE_RESULT_MAX],
 		     u32 raw_event_mask);

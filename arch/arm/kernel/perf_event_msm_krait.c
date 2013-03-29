@@ -180,7 +180,7 @@ static unsigned armv7_krait_perf_cache_map[PERF_COUNT_HW_CACHE_MAX]
 
 static int krait_8960_map_event(struct perf_event *event)
 {
-	return map_cpu_event(event, &armv7_krait_perf_map,
+	return armpmu_map_event(event, &armv7_krait_perf_map,
 			&armv7_krait_perf_cache_map, 0xfffff);
 }
 
@@ -395,12 +395,14 @@ static void krait_clearpmu(u32 grp, u32 val, u32 evt_code)
 		krait_functions[grp].post();
 }
 
-static void krait_pmu_disable_event(struct hw_perf_event *hwc, int idx)
+static void krait_pmu_disable_event(struct perf_event *event)
 {
 	unsigned long flags;
 	u32 val = 0;
 	u32 gr;
-	unsigned long event;
+	unsigned long ev_num;
+	struct hw_perf_event *hwc = &event->hw;
+	int idx = hwc->idx;
 	struct krait_evt evtinfo;
 	struct pmu_hw_events *events = cpu_pmu->get_hw_events();
 
@@ -420,8 +422,8 @@ static void krait_pmu_disable_event(struct hw_perf_event *hwc, int idx)
 		val &= KRAIT_EVENT_MASK;
 
 		if (val > 0x40) {
-			event = get_krait_evtinfo(val, &evtinfo);
-			if (event == -EINVAL)
+			ev_num = get_krait_evtinfo(val, &evtinfo);
+			if (ev_num == -EINVAL)
 				goto krait_dis_out;
 			val = evtinfo.group_setval;
 			gr = evtinfo.groupcode;
@@ -435,12 +437,14 @@ krait_dis_out:
 	raw_spin_unlock_irqrestore(&events->pmu_lock, flags);
 }
 
-static void krait_pmu_enable_event(struct hw_perf_event *hwc, int idx, int cpu)
+static void krait_pmu_enable_event(struct perf_event *event)
 {
 	unsigned long flags;
 	u32 val = 0;
 	u32 gr;
-	unsigned long event;
+	unsigned long ev_num;
+	struct hw_perf_event *hwc = &event->hw;
+	int idx = hwc->idx;
 	struct krait_evt evtinfo;
 	unsigned long long prev_count = local64_read(&hwc->prev_count);
 	struct pmu_hw_events *events = cpu_pmu->get_hw_events();
@@ -465,19 +469,19 @@ static void krait_pmu_enable_event(struct hw_perf_event *hwc, int idx, int cpu)
 		if (val < 0x40) {
 			armv7_pmnc_write_evtsel(idx, hwc->config_base);
 		} else {
-			event = get_krait_evtinfo(val, &evtinfo);
+			ev_num = get_krait_evtinfo(val, &evtinfo);
 
-			if (event == -EINVAL)
+			if (ev_num == -EINVAL)
 				goto krait_out;
 
 			/* Restore Mode-exclusion bits */
-			event |= (hwc->config_base & KRAIT_MODE_EXCL_MASK);
+			ev_num |= (hwc->config_base & KRAIT_MODE_EXCL_MASK);
 
 			/*
 			 * Set event (if destined for PMNx counters)
 			 * We don't need to set the event if it's a cycle count
 			 */
-			armv7_pmnc_write_evtsel(idx, event);
+			armv7_pmnc_write_evtsel(idx, ev_num);
 			val = 0x0;
 			asm volatile("mcr p15, 0, %0, c9, c15, 0" : :
 				"r" (val));
@@ -491,7 +495,7 @@ static void krait_pmu_enable_event(struct hw_perf_event *hwc, int idx, int cpu)
 	armv7_pmnc_enable_intens(idx);
 
 	/* Restore prev val */
-	armv7pmu_write_counter(idx, prev_count & COUNT_MASK);
+	armv7pmu_write_counter(event, prev_count & COUNT_MASK);
 
 	/* Enable counter */
 	armv7_pmnc_enable_counter(idx);
@@ -518,53 +522,6 @@ static void krait_pmu_reset(void *info)
 
 	/* Reset all ctrs to 0 */
 	armv7_pmnc_write(ARMV7_PMNC_P | ARMV7_PMNC_C);
-}
-
-static void enable_irq_callback(void *info)
-{
-        int irq = *(unsigned int *)info;
-
-        enable_percpu_irq(irq, IRQ_TYPE_EDGE_RISING);
-}
-
-static void disable_irq_callback(void *info)
-{
-        int irq = *(unsigned int *)info;
-
-        disable_percpu_irq(irq);
-}
-
-static int
-msm_request_irq(int irq, irq_handler_t *handle_irq)
-{
-        int err = 0;
-        int cpu;
-
-	err = request_percpu_irq(irq, *handle_irq, "l1-armpmu",
-			&cpu_hw_events);
-
-        if (!err) {
-                for_each_cpu(cpu, cpu_online_mask) {
-                        smp_call_function_single(cpu,
-                                        enable_irq_callback, &irq, 1);
-                }
-        }
-
-        return err;
-}
-
-static void
-msm_free_irq(int irq)
-{
-        int cpu;
-
-        if (irq >= 0) {
-                for_each_cpu(cpu, cpu_online_mask) {
-                        smp_call_function_single(cpu,
-                                        disable_irq_callback, &irq, 1);
-                }
-                free_percpu_irq(irq, &cpu_hw_events);
-        }
 }
 
 /*
@@ -621,8 +578,6 @@ static int msm_clear_ev_constraint(struct perf_event *event)
 
 static struct arm_pmu krait_pmu = {
 	.handle_irq		= armv7pmu_handle_irq,
-	.request_pmu_irq	= msm_request_irq,
-	.free_pmu_irq		= msm_free_irq,
 	.enable			= krait_pmu_enable_event,
 	.disable		= krait_pmu_disable_event,
 	.read_counter		= armv7pmu_read_counter,

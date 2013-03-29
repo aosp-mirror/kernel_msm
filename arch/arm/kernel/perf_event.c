@@ -470,13 +470,13 @@ static void armpmu_enable(struct pmu *pmu)
 	int idx;
 
 	if (*hw_events->from_idle) {
-		for (idx = 0; idx <= cpu_pmu->num_events; ++idx) {
+		for (idx = 0; idx <= armpmu->num_events; ++idx) {
 			struct perf_event *event = hw_events->events[idx];
 
 			if (!event)
 				continue;
 
-			armpmu->enable(&event->hw, idx, event->cpu);
+			armpmu->enable(event);
 		}
 
 		/* Reset bit so we don't needlessly re-enable counters.*/
@@ -528,14 +528,14 @@ static void armpmu_init(struct arm_pmu *armpmu)
 	mutex_init(&armpmu->reserve_mutex);
 
 	armpmu->pmu = (struct pmu) {
-		.pmu_enable = armpmu_enable;
-		.pmu_disable = armpmu_disable;
-		.event_init = armpmu_event_init;
-		.add = armpmu_add;
-		.del = armpmu_del;
-		.start = armpmu_start;
-		.stop = armpmu_stop;
-		.read = armpmu_read;
+		.pmu_enable = armpmu_enable,
+		.pmu_disable = armpmu_disable,
+		.event_init = armpmu_event_init,
+		.add = armpmu_add,
+		.del = armpmu_del,
+		.start = armpmu_start,
+		.stop = armpmu_stop,
+		.read = armpmu_read,
 	};
 }
 

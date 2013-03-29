@@ -34,7 +34,7 @@
 /* Set at runtime when we know what CPU type we are. */
 static struct arm_pmu *cpu_pmu;
 
-static DEFINE_PER_CPU(u32, from_idle);
+static DEFINE_PER_CPU(u32 *, from_idle);
 static DEFINE_PER_CPU(struct perf_event * [ARMPMU_MAX_HWEVENTS], hw_events);
 static DEFINE_PER_CPU(unsigned long [BITS_TO_LONGS(ARMPMU_MAX_HWEVENTS)], used_mask);
 static DEFINE_PER_CPU(struct pmu_hw_events, cpu_hw_events);
@@ -67,8 +67,8 @@ EXPORT_SYMBOL_GPL(perf_num_counters);
 #include "perf_event_xscale.c"
 #include "perf_event_v6.c"
 #include "perf_event_v7.c"
-#include "perf_event_msm_krait.c"
-#include "perf_event_msm.c"
+//#include "perf_event_msm_krait.c"
+//#include "perf_event_msm.c"
 
 static struct pmu_hw_events *cpu_pmu_get_cpu_events(void)
 {
@@ -196,7 +196,7 @@ static void armpmu_update_counters(void)
 		if (!event)
 			continue;
 
-		armpmu_read(event);
+		cpu_pmu->pmu.read(event);
 	}
 }
 
@@ -237,7 +237,7 @@ static int perf_cpu_pm_notifier(struct notifier_block *self, unsigned long cmd,
 			 * Flip this bit so armpmu_enable knows it needs
 			 * to re-enable active counters.
 			 */
-			__get_cpu_var(from_idle) = 1;
+			*__get_cpu_var(from_idle) = 1;
 			cpu_pmu->reset(NULL);
 			perf_pmu_enable(&cpu_pmu->pmu);
 		}
@@ -319,25 +319,6 @@ static int probe_current_pmu(struct arm_pmu *pmu)
 			break;
 		case ARM_CPU_XSCALE_ARCH_V2:
 			ret = xscale2pmu_init(pmu);
-			break;
-		}
-	/* Qualcomm CPUs */
-	} else if (implementor == ARM_CPU_IMP_QUALCOMM) {
-		switch (part_number) {
-		case 0x00F0:    /* 8x50 & 7x30*/
-			cpu_pmu = armv7_scorpion_pmu_init();
-			break;
-		case 0x02D0:    /* 8x60 */
-//			fabricmon_pmu_init();
-			cpu_pmu = armv7_scorpionmp_pmu_init();
-			scorpionmp_l2_pmu_init();
-			break;
-		case 0x0490:    /* 8960 sim */
-		case 0x04D0:    /* 8960 */
-		case 0x06F0:    /* 8064 */
-//			fabricmon_pmu_init();
-			cpu_pmu = armv7_krait_pmu_init();
-			krait_l2_pmu_init();
 			break;
 		}
 	}
