@@ -32,14 +32,10 @@
 #define L2CC_PL310_CTRL_ID	1
 #define L2CC_PL310_ON		1
 
-static void __init msm_dt_timer_init(void)
+void __init msm_dt_timer_init(void)
 {
 	arch_timer_of_register();
 }
-
-struct sys_timer msm_dt_timer = {
-	.init = msm_dt_timer_init
-};
 
 static struct of_device_id irq_match[] __initdata  = {
 	{ .compatible = "qcom,msm-qgic2", .data = gic_of_init, },
