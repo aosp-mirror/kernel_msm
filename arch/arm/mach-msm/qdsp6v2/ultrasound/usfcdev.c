@@ -305,9 +305,9 @@ static void usfcdev_clean_dev(uint16_t event_type_ind)
 	input_sync(dev);
 
 	/* Send commands to free all slots */
-	for (i = 0; i < dev->mtsize; i++) {
+	for (i = 0; i < dev->mt->num_slots; i++) {
 		s_usfcdev_events[event_type_ind].interleaved = false;
-		if (input_mt_get_value(&(dev->mt[i]), ABS_MT_TRACKING_ID) < 0) {
+		if (input_mt_get_value(&dev->mt->slots[i], ABS_MT_TRACKING_ID) < 0) {
 			pr_debug("%s: skipping slot %d",
 				__func__, i);
 			continue;
@@ -318,7 +318,7 @@ static void usfcdev_clean_dev(uint16_t event_type_ind)
 
 		if (s_usfcdev_events[event_type_ind].interleaved) {
 			pr_debug("%s: interleaved(%d): slot(%d)",
-				__func__, i, dev->slot);
+				__func__, i, dev->mt->slot);
 			if (retries++ < MAX_RETRIES) {
 				--i;
 				continue;
