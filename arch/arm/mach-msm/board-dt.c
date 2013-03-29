@@ -16,11 +16,11 @@
 #include <linux/of_irq.h>
 #include <linux/of_fdt.h>
 #include <linux/mfd/wcd9xxx/core.h>
+#include <linux/irqchip.h>
 #include <asm/arch_timer.h>
 #include <asm/mach/time.h>
 #include <asm/mach/map.h>
 #include <asm/hardware/cache-l2x0.h>
-#include <asm/hardware/gic.h>
 #include <mach/mpm.h>
 #include <mach/qpnp-int.h>
 #include <mach/msm_iomap.h>
@@ -36,6 +36,8 @@ void __init msm_dt_timer_init(void)
 {
 	arch_timer_of_register();
 }
+
+extern int gic_of_init(struct device_node *node, struct device_node *parent);
 
 static struct of_device_id irq_match[] __initdata  = {
 	{ .compatible = "qcom,msm-qgic2", .data = gic_of_init, },
