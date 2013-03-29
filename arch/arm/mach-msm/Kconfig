@@ -285,6 +285,7 @@ config ARCH_MSM8974
 	select MSM_ULTRASOUND_B
 	select MSM_LPM_TEST
 	select MSM_RPM_LOG
+	select HAVE_ARM_ARCH_TIMER
 
 config ARCH_MSMZINC
 	bool "MSMZINC"
