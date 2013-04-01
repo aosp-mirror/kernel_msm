@@ -1276,10 +1276,10 @@ static int mmc_blk_issue_secdiscard_rq(struct mmc_queue *mq,
 {
 	struct mmc_blk_data *md = mq->data;
 	struct mmc_card *card = md->queue.card;
-	unsigned int from, nr, arg;
+	unsigned int from, nr, arg, trim_arg, erase_arg;
 	int err = 0, type = MMC_BLK_SECDISCARD;
 
-	if (!(mmc_can_secure_erase_trim(card))) {
+	if (!(mmc_can_secure_erase_trim(card) || mmc_can_sanitize(card))) {
 		err = -EOPNOTSUPP;
 		goto out;
 	}
@@ -1287,10 +1287,23 @@ static int mmc_blk_issue_secdiscard_rq(struct mmc_queue *mq,
 	from = blk_rq_pos(req);
 	nr = blk_rq_sectors(req);
 
-	if (mmc_can_trim(card) && !mmc_erase_group_aligned(card, from, nr))
-		arg = MMC_SECURE_TRIM1_ARG;
-	else
-		arg = MMC_SECURE_ERASE_ARG;
+	/* The sanitize operation is supported at v4.5 only */
+	if (mmc_can_sanitize(card)) {
+		erase_arg = MMC_ERASE_ARG;
+		trim_arg = MMC_TRIM_ARG;
+	} else {
+		erase_arg = MMC_SECURE_ERASE_ARG;
+		trim_arg = MMC_SECURE_TRIM1_ARG;
+	}
+
+	if (mmc_erase_group_aligned(card, from, nr))
+		arg = erase_arg;
+	else if (mmc_can_trim(card))
+		arg = trim_arg;
+	else {
+		err = -EINVAL;
+		goto out;
+	}
 retry:
 	if (card->quirks & MMC_QUIRK_INAND_CMD38) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
@@ -2397,8 +2410,8 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 
 	mmc_blk_write_packing_control(mq, req);
 
+	mq->flags &= ~MMC_QUEUE_NEW_REQUEST;
 	if (req && req->cmd_flags & REQ_DISCARD) {
-		mq->flags &= ~MMC_QUEUE_NEW_REQUEST;
 		/* complete ongoing async transfer before issuing discard */
 		if (card->host->areq)
 			mmc_blk_issue_rw_rq(mq, NULL);
