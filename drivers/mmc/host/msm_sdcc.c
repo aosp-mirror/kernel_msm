@@ -5712,7 +5712,7 @@ static struct mmc_platform_data *msmsdcc_populate_pdata(struct device *dev)
 	int i, ret;
 	struct mmc_platform_data *pdata;
 	struct device_node *np = dev->of_node;
-	u32 bus_width = 0, current_limit = 0;
+	u32 bus_width = 0;
 	u32 *clk_table = NULL, *sup_voltages = NULL;
 	int clk_table_len, sup_volt_len, len;
 
@@ -5804,18 +5804,6 @@ static struct mmc_platform_data *msmsdcc_populate_pdata(struct device *dev)
 						| MMC_CAP_UHS_DDR50;
 	}
 
-	of_property_read_u32(np, "qcom,current-limit", &current_limit);
-	if (current_limit == 800)
-		pdata->uhs_caps |= MMC_CAP_MAX_CURRENT_800;
-	else if (current_limit == 600)
-		pdata->uhs_caps |= MMC_CAP_MAX_CURRENT_600;
-	else if (current_limit == 400)
-		pdata->uhs_caps |= MMC_CAP_MAX_CURRENT_400;
-	else if (current_limit == 200)
-		pdata->uhs_caps |= MMC_CAP_MAX_CURRENT_200;
-
-	if (of_get_property(np, "qcom,xpc", NULL))
-		pdata->xpc_cap = true;
 	if (of_get_property(np, "qcom,nonremovable", NULL))
 		pdata->nonremovable = true;
 	if (of_get_property(np, "qcom,disable-cmd23", NULL))
