@@ -72,7 +72,7 @@ static unsigned int nr_ports;
 static struct port_info {
 	enum transport_type	transport;
 	unsigned		port_num;
-	unsigned		client_port_num;
+	unsigned char		client_port_num;
 } gserial_ports[GSERIAL_NO_PORTS];
 
 static inline bool is_transport_sdio(enum transport_type t)
@@ -310,8 +310,15 @@ static int gport_setup(struct usb_configuration *c)
 			__func__, no_tty_ports, no_sdio_ports, no_smd_ports,
 			no_hsic_sports, no_hsuart_sports, nr_ports);
 
-	if (no_tty_ports)
-		ret = gserial_setup(c->cdev->gadget, no_tty_ports);
+	if (no_tty_ports) {
+		for (i = 0; i < no_tty_ports; i++) {
+			ret = gserial_alloc_line(
+					&gserial_ports[i].client_port_num);
+			if (ret)
+				return ret;
+		}
+	}
+
 	if (no_sdio_ports)
 		ret = gsdio_setup(c->cdev->gadget, no_sdio_ports);
 	if (no_smd_ports)
@@ -971,7 +978,6 @@ static int gserial_init_port(int port_num, const char *name)
 
 	switch (transport) {
 	case USB_GADGET_XPORT_TTY:
-		gserial_ports[port_num].client_port_num = no_tty_ports;
 		no_tty_ports++;
 		break;
 	case USB_GADGET_XPORT_SDIO:
