@@ -4405,8 +4405,8 @@ static const struct mmc_host_ops msmsdcc_ops = {
 	.start_signal_voltage_switch = msmsdcc_switch_io_voltage,
 	.execute_tuning = msmsdcc_execute_tuning,
 	.hw_reset = msmsdcc_hw_reset,
-	.stop_request = msmsdcc_stop_request,
-	.get_xfer_remain = msmsdcc_get_xfer_remain,
+	//.stop_request = msmsdcc_stop_request,
+	//.get_xfer_remain = msmsdcc_get_xfer_remain,
 };
 
 static void msmsdcc_enable_status_gpio(struct msmsdcc_host *host)
