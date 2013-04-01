@@ -909,7 +909,7 @@ int dwc3_otg_init(struct dwc3 *dwc)
 	dotg->otg.phy->set_power = dwc3_otg_set_power;
 	dotg->otg.phy->set_suspend = dwc3_otg_set_suspend;
 
-	ret = usb_set_transceiver(dotg->otg.phy);
+	ret = usb_add_phy(dotg->otg.phy, USB_PHY_TYPE_USB2);
 	if (ret) {
 		dev_err(dotg->otg.phy->dev,
 			"%s: failed to set transceiver, already exists\n",
@@ -936,7 +936,7 @@ int dwc3_otg_init(struct dwc3 *dwc)
 
 err3:
 	cancel_work_sync(&dotg->sm_work);
-	usb_set_transceiver(NULL);
+	usb_add_phy(NULL, USB_PHY_TYPE_USB2);
 err2:
 	kfree(dotg->otg.phy);
 err1:
@@ -961,7 +961,7 @@ void dwc3_otg_exit(struct dwc3 *dwc)
 		if (dotg->charger)
 			dotg->charger->start_detection(dotg->charger, false);
 		cancel_work_sync(&dotg->sm_work);
-		usb_set_transceiver(NULL);
+		usb_add_phy(NULL, USB_PHY_TYPE_USB2);
 		pm_runtime_put(dwc->dev);
 		free_irq(dotg->irq, dotg);
 		kfree(dotg->otg.phy);

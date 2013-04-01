@@ -2562,7 +2562,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Failed to vote for bus scaling\n");
 	}
 
-	msm->otg_xceiv = usb_get_transceiver();
+	msm->otg_xceiv = usb_get_phy(USB_PHY_TYPE_USB2);
 	if (msm->otg_xceiv) {
 		msm->charger.start_detection = dwc3_start_chg_det;
 		ret = dwc3_set_charger(msm->otg_xceiv->otg, &msm->charger);
@@ -2591,7 +2591,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	return 0;
 
 put_xcvr:
-	usb_put_transceiver(msm->otg_xceiv);
+	usb_put_phy(msm->otg_xceiv);
 	platform_device_del(dwc3);
 put_psupply:
 	power_supply_unregister(&msm->usb_psy);
@@ -2643,7 +2643,7 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 		debugfs_remove_recursive(dwc3_debugfs_root);
 	if (msm->otg_xceiv) {
 		dwc3_start_chg_det(&msm->charger, false);
-		usb_put_transceiver(msm->otg_xceiv);
+		usb_put_phy(msm->otg_xceiv);
 	}
 
 	pm_runtime_disable(msm->dev);
