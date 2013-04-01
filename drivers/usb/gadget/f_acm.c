@@ -86,7 +86,7 @@ static unsigned int nr_acm_ports;
 static struct acm_port_info {
 	enum transport_type	transport;
 	unsigned		port_num;
-	unsigned		client_port_num;
+	unsigned char		client_port_num;
 } gacm_ports[GSERIAL_NO_PORTS];
 
 static inline struct f_acm *func_to_acm(struct usb_function *f)
@@ -101,14 +101,20 @@ static inline struct f_acm *port_to_acm(struct gserial *p)
 
 static int acm_port_setup(struct usb_configuration *c)
 {
-	int ret = 0;
+	int ret = 0, i;
 
 	pr_debug("%s: no_acm_tty_ports:%u no_acm_sdio_ports: %u nr_acm_ports:%u\n",
 			__func__, no_acm_tty_ports, no_acm_sdio_ports,
 				nr_acm_ports);
 
-	if (no_acm_tty_ports)
-		ret = gserial_setup(c->cdev->gadget, no_acm_tty_ports);
+	if (no_acm_tty_ports) {
+		for (i = 0; i < no_acm_tty_ports; i++) {
+			ret = gserial_alloc_line(
+					&gacm_ports[i].client_port_num);
+			if (ret)
+				return ret;
+		}
+	}
 	if (no_acm_sdio_ports)
 		ret = gsdio_setup(c->cdev->gadget, no_acm_sdio_ports);
 	if (no_acm_smd_ports)
@@ -968,7 +974,6 @@ static int acm_init_port(int port_num, const char *name)
 
 	switch (transport) {
 	case USB_GADGET_XPORT_TTY:
-		gacm_ports[port_num].client_port_num = no_acm_tty_ports;
 		no_acm_tty_ports++;
 		break;
 	case USB_GADGET_XPORT_SDIO:
