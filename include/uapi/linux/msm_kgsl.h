@@ -534,14 +534,6 @@ struct kgsl_timestamp_event {
 #define IOCTL_KGSL_TIMESTAMP_EVENT_OLD \
 	_IOW(KGSL_IOC_TYPE, 0x31, struct kgsl_timestamp_event)
 
-/* A genlock timestamp event releases an existing lock on timestamp expire */
-
-#define KGSL_TIMESTAMP_EVENT_GENLOCK 1
-
-struct kgsl_timestamp_event_genlock {
-	int handle; /* Handle of the genlock lock to release */
-};
-
 /* A fence timestamp event releases an existing lock on timestamp expire */
 
 #define KGSL_TIMESTAMP_EVENT_FENCE 2

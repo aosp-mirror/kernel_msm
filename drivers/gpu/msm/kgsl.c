@@ -21,7 +21,6 @@
 
 #include <linux/vmalloc.h>
 #include <linux/pm_runtime.h>
-#include <linux/genlock.h>
 #include <linux/rbtree.h>
 #include <linux/ashmem.h>
 #include <linux/major.h>
@@ -2162,93 +2161,6 @@ static long kgsl_ioctl_cff_user_event(struct kgsl_device_private *dev_priv,
 	return result;
 }
 
-#ifdef CONFIG_GENLOCK
-struct kgsl_genlock_event_priv {
-	struct genlock_handle *handle;
-	struct genlock *lock;
-};
-
-/**
- * kgsl_genlock_event_cb - Event callback for a genlock timestamp event
- * @device - The KGSL device that expired the timestamp
- * @priv - private data for the event
- * @context_id - the context id that goes with the timestamp
- * @timestamp - the timestamp that triggered the event
- *
- * Release a genlock lock following the expiration of a timestamp
- */
-
-static void kgsl_genlock_event_cb(struct kgsl_device *device,
-	void *priv, u32 context_id, u32 timestamp)
-{
-	struct kgsl_genlock_event_priv *ev = priv;
-	int ret;
-
-	ret = genlock_lock(ev->handle, GENLOCK_UNLOCK, 0, 0);
-	if (ret)
-		KGSL_CORE_ERR("Error while unlocking genlock: %d\n", ret);
-
-	genlock_put_handle(ev->handle);
-
-	kfree(ev);
-}
-
-/**
- * kgsl_add_genlock-event - Create a new genlock event
- * @device - KGSL device to create the event on
- * @timestamp - Timestamp to trigger the event
- * @data - User space buffer containing struct kgsl_genlock_event_priv
- * @len - length of the userspace buffer
- * @owner - driver instance that owns this event
- * @returns 0 on success or error code on error
- *
- * Attack to a genlock handle and register an event to release the
- * genlock lock when the timestamp expires
- */
-
-static int kgsl_add_genlock_event(struct kgsl_device *device,
-	u32 context_id, u32 timestamp, void __user *data, int len,
-	struct kgsl_device_private *owner)
-{
-	struct kgsl_genlock_event_priv *event;
-	struct kgsl_timestamp_event_genlock priv;
-	int ret;
-
-	if (len !=  sizeof(priv))
-		return -EINVAL;
-
-	if (copy_from_user(&priv, data, sizeof(priv)))
-		return -EFAULT;
-
-	event = kzalloc(sizeof(*event), GFP_KERNEL);
-
-	if (event == NULL)
-		return -ENOMEM;
-
-	event->handle = genlock_get_handle_fd(priv.handle);
-
-	if (IS_ERR(event->handle)) {
-		int ret = PTR_ERR(event->handle);
-		kfree(event);
-		return ret;
-	}
-
-	ret = kgsl_add_event(device, context_id, timestamp,
-			kgsl_genlock_event_cb, event, owner);
-	if (ret)
-		kfree(event);
-
-	return ret;
-}
-#else
-static long kgsl_add_genlock_event(struct kgsl_device *device,
-	u32 context_id, u32 timestamp, void __user *data, int len,
-	struct kgsl_device_private *owner)
-{
-	return -EINVAL;
-}
-#endif
-
 /**
  * kgsl_ioctl_timestamp_event - Register a new timestamp event from userspace
  * @dev_priv - pointer to the private device structure
@@ -2264,11 +2176,6 @@ static long kgsl_ioctl_timestamp_event(struct kgsl_device_private *dev_priv,
 	int ret;
 
 	switch (param->type) {
-	case KGSL_TIMESTAMP_EVENT_GENLOCK:
-		ret = kgsl_add_genlock_event(dev_priv->device,
-			param->context_id, param->timestamp, param->priv,
-			param->len, dev_priv);
-		break;
 	case KGSL_TIMESTAMP_EVENT_FENCE:
 		ret = kgsl_add_fence_event(dev_priv->device,
 			param->context_id, param->timestamp, param->priv,
