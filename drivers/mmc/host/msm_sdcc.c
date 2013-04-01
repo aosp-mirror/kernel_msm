@@ -6084,14 +6084,6 @@ msmsdcc_probe(struct platform_device *pdev)
 
 	mmc->caps |= plat->uhs_caps;
 	mmc->caps2 |= plat->uhs_caps2;
-	/*
-	 * XPC controls the maximum current in the default speed mode of SDXC
-	 * card. XPC=0 means 100mA (max.) but speed class is not supported.
-	 * XPC=1 means 150mA (max.) and speed class is supported.
-	 */
-	if (plat->xpc_cap)
-		mmc->caps |= (MMC_CAP_SET_XPC_330 | MMC_CAP_SET_XPC_300 |
-				MMC_CAP_SET_XPC_180);
 
 	mmc->caps2 |= MMC_CAP2_PACKED_WR;
 	mmc->caps2 |= MMC_CAP2_PACKED_WR_CONTROL;
