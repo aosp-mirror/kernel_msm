@@ -24,6 +24,8 @@ struct  usb_qdss_bam_connect_info {
 
 static struct usb_qdss_bam_connect_info bam_info;
 
+#define gadget_is_dwc3(gadget) (gadget)
+
 int send_sps_req(struct usb_ep *data_ep)
 {
 	struct usb_request *req = NULL;
