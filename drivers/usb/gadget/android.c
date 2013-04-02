@@ -521,7 +521,7 @@ static struct android_usb_function ffs_function = {
 
 static int functionfs_ready_callback(struct ffs_data *ffs)
 {
-	struct android_dev *dev = adb_function.android_dev;
+	struct android_dev *dev = _android_dev;
 	struct functionfs_config *config = ffs_function.config;
 	int ret = 0;
 
@@ -544,7 +544,7 @@ static int functionfs_ready_callback(struct ffs_data *ffs)
 
 static void functionfs_closed_callback(struct ffs_data *ffs)
 {
-	struct android_dev *dev = adb_function.android_dev;
+	struct android_dev *dev = _android_dev;
 	struct functionfs_config *config = ffs_function.config;
 
 
@@ -591,11 +591,7 @@ static struct device_attribute *acm_function_attributes[] = {
 
 static void acm_function_cleanup(struct android_usb_function *f)
 {
-	int i;
-	struct acm_function_config *config = f->config;
-
-	for (i = 0; i < MAX_ACM_INSTANCES; i++)
-		gserial_free_line(config->port_num[i]);
+	acm_port_cleanup();
 }
 
 static int
@@ -1106,7 +1102,7 @@ static struct device_attribute *serial_function_attributes[] =
 
 static void serial_function_cleanup(struct android_usb_function *f)
 {
-	gserial_cleanup();
+	gport_cleanup();
 }
 
 static int serial_function_bind_config(struct android_usb_function *f,
@@ -2161,7 +2157,7 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 			if (is_ffs) {
 				if (ffs_enabled)
 					continue;
-				err = android_enable_function(dev, "ffs");
+				err = android_enable_function(dev, conf, "ffs");
 				if (err)
 					pr_err("android_usb: Cannot enable ffs (%d)",
 									err);
@@ -2169,13 +2165,11 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 					ffs_enabled = 1;
 				continue;
 			}
-			err = android_enable_function(dev, name);
+			err = android_enable_function(dev, conf, name);
 			if (err)
 				pr_err("android_usb: Cannot enable '%s' (%d)",
 							name, err);
-			}
 		}
-
 	}
 
 	/* Free uneeded configurations if exists */
@@ -2477,6 +2471,8 @@ static int android_usb_unbind(struct usb_composite_dev *cdev)
 
 /* HACK: android needs to override setup for accessory to work */
 static int (*composite_setup_func)(struct usb_gadget *gadget, const struct usb_ctrlrequest *c);
+static void (*composite_suspend_func)(struct usb_gadget *gadget);
+static void (*composite_resume_func)(struct usb_gadget *gadget);
 
 static int
 android_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
@@ -2563,7 +2559,7 @@ static void android_suspend(struct usb_gadget *gadget)
 	schedule_work(&dev->work);
 	spin_unlock_irqrestore(&cdev->lock, flags);
 
-	composite_suspend(gadget);
+	composite_suspend_func(gadget);
 }
 
 static void android_resume(struct usb_gadget *gadget)
@@ -2577,7 +2573,7 @@ static void android_resume(struct usb_gadget *gadget)
 	schedule_work(&dev->work);
 	spin_unlock_irqrestore(&cdev->lock, flags);
 
-	composite_resume(gadget);
+	composite_resume_func(gadget);
 }
 
 static int android_create_device(struct android_dev *dev, u8 usb_core_id)
@@ -2753,11 +2749,6 @@ static int android_probe(struct platform_device *pdev)
 	list_add_tail(&android_dev->list_item, &android_dev_list);
 	android_dev_count++;
 
-	if (pdata)
-		composite_driver.usb_core_id = pdata->usb_core_id;
-	else
-		composite_driver.usb_core_id = 0; /*To backward compatibility*/
-
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (res) {
 		diag_dload = devm_ioremap(&pdev->dev, res->start,
@@ -2771,13 +2762,13 @@ static int android_probe(struct platform_device *pdev)
 		dev_dbg(&pdev->dev, "failed to get mem resource\n");
 	}
 
-	ret = android_create_device(android_dev, composite_driver.usb_core_id);
+	ret = android_create_device(android_dev, pdata->usb_core_id);
 	if (ret) {
 		pr_err("%s(): android_create_device failed\n", __func__);
 		goto err_dev;
 	}
 
-	ret = usb_composite_probe(&android_usb_driver, android_bind);
+	ret = usb_composite_probe(&android_usb_driver);
 	if (ret) {
 		pr_err("%s(): Failed to register android "
 				 "composite driver\n", __func__);
@@ -2881,7 +2872,9 @@ static int __init init(void)
 	/* HACK: exchange composite's setup with ours */
 	composite_setup_func = android_usb_driver.gadget_driver.setup;
 	android_usb_driver.gadget_driver.setup = android_setup;
+	composite_suspend_func = android_usb_driver.gadget_driver.suspend;
 	android_usb_driver.gadget_driver.suspend = android_suspend;
+	composite_resume_func = android_usb_driver.gadget_driver.resume;
 	android_usb_driver.gadget_driver.resume = android_resume;
 
 	return ret;
