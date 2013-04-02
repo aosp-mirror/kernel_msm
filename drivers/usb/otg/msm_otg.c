@@ -2549,7 +2549,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			pr_info("A-device did not respond to SRP\n");
 			clear_bit(B_BUS_REQ, &motg->inputs);
 			clear_bit(B_SRP_FAIL, &motg->tmouts);
-			otg_send_event(OTG_EVENT_NO_RESP_FOR_SRP);
+			otg_send_event(otg, OTG_EVENT_NO_RESP_FOR_SRP);
 			ulpi_write(otg->phy, 0x0, 0x98);
 			otg->phy->state = OTG_STATE_B_IDLE;
 			motg->b_last_se0_sess = jiffies;
@@ -2656,7 +2656,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			clear_bit(B_ASE0_BRST, &motg->tmouts);
 			clear_bit(A_BUS_SUSPEND, &motg->inputs);
 			clear_bit(B_BUS_REQ, &motg->inputs);
-			otg_send_event(OTG_EVENT_HNP_FAILED);
+			otg_send_event(otg, OTG_EVENT_HNP_FAILED);
 			otg->phy->state = OTG_STATE_B_IDLE;
 			work = 1;
 		} else if (test_bit(ID_C, &motg->inputs)) {
@@ -2768,7 +2768,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 					"a_wait_bcon_tmout\n");
 			if (test_bit(A_WAIT_BCON, &motg->tmouts)) {
 				pr_info("Device No Response\n");
-				otg_send_event(OTG_EVENT_DEV_CONN_TMOUT);
+				otg_send_event(otg, OTG_EVENT_DEV_CONN_TMOUT);
 			}
 			msm_otg_del_timer(motg);
 			clear_bit(A_BUS_REQ, &motg->inputs);
@@ -4178,7 +4178,7 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	return 0;
 
 remove_phy:
-	usb_set_transceiver(NULL);
+	usb_remove_phy(NULL);
 free_async_irq:
 	if (motg->async_irq)
 		free_irq(motg->async_irq, motg);
