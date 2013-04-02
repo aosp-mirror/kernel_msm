@@ -29,7 +29,6 @@
 #include <linux/dma-mapping.h>
 #include <sound/core.h>
 #include <sound/control.h>
-#include <sound/snd_compress_params.h>
 #include <sound/compress_offload.h>
 #include <sound/info.h>
 #include <sound/pcm.h>
