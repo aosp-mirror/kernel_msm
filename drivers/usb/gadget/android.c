@@ -465,6 +465,8 @@ static int ffs_function_bind_config(struct android_usb_function *f,
 	return functionfs_bind_config(c->cdev, c, config->data);
 }
 
+static struct android_dev *_android_dev;
+
 static ssize_t
 ffs_aliases_show(struct device *pdev, struct device_attribute *attr, char *buf)
 {
@@ -2736,6 +2738,7 @@ static int android_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto err_alloc;
 	}
+	_android_dev = android_dev;
 
 	android_dev->name = pdev->name;
 	android_dev->disable_depth = 1;
