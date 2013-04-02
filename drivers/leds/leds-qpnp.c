@@ -1162,10 +1162,8 @@ static int qpnp_rgb_init(struct qpnp_led_data *led)
 					"Exceed LUT limit\n");
 				return -EINVAL;
 			}
-			rc = pwm_lut_config(led->rgb_cfg->pwm_dev,
-				PM_PWM_PERIOD_MIN, /* ignored by hardware */
-				led->rgb_cfg->duty_cycles->duty_pcts,
-				led->rgb_cfg->lut_params);
+			rc = -1; /* pwm_lut_config(led->rgb_cfg->pwm_dev,
+				PM_PWM_PERIOD_MIN, *//* ignored by hardware */
 			if (rc < 0) {
 				dev_err(&led->spmi_dev->dev, "Failed to " \
 					"configure pwm LUT\n");
