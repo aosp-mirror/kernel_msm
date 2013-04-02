@@ -810,8 +810,8 @@ static int ehset_single_step_set_feature(struct usb_hcd *hcd, int port)
 	struct usb_device_descriptor *buf;
 	DECLARE_COMPLETION_ONSTACK(done);
 
-	/*Obtain udev of the rhub's child port */
-	udev = hcd->self.root_hub->children[port];
+	/* Obtain udev of the rhub's child port */
+	udev = usb_hub_find_child(hcd->self.root_hub, port);
 	if (!udev) {
 		ehci_err(ehci, "No device attached to the RootHub\n");
 		return -ENODEV;
