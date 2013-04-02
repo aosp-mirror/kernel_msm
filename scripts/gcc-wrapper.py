@@ -44,6 +44,9 @@ allowed_warnings = set([
     "mmu.c:602",
     "return_address.c:62",
     "extents.c:2091",
+    "kprobes.c:1476",
+    "rcutree.c:1474",
+    "af_unix.c:893",
  ])
 
 # Capture the name of the object file, can find it.
