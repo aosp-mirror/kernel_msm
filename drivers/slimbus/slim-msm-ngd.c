@@ -939,10 +939,9 @@ static int ngd_slim_probe(struct platform_device *pdev)
 	struct resource		*bam_mem;
 	struct resource		*slim_mem;
 	struct resource		*irq, *bam_irq;
-	enum apr_subsys_state q6_state;
+	enum apr_subsys_state q6_state = APR_SUBSYS_DOWN;
 	bool			rxreg_access = false;
 
-	q6_state = apr_get_q6_state();
 	if (q6_state == APR_SUBSYS_DOWN) {
 		dev_dbg(&pdev->dev, "defering %s, adsp_state %d\n", __func__,
 			q6_state);
