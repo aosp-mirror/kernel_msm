@@ -123,6 +123,14 @@ static int acm_port_setup(struct usb_configuration *c)
 	return ret;
 }
 
+static void acm_port_cleanup(void)
+{
+	int i;
+
+	for (i = 0; i < no_acm_tty_ports; i++)
+		gserial_free_line(gacm_ports[i].client_port_num);
+}
+
 static int acm_port_connect(struct f_acm *acm)
 {
 	unsigned port_num;
