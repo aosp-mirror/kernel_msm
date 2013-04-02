@@ -358,6 +358,14 @@ static int gport_setup(struct usb_configuration *c)
 	return ret;
 }
 
+static void gport_cleanup(void)
+{
+	int i;
+
+	for (i = 0; i < no_tty_ports; i++)
+		gserial_free_line(gserial_ports[i].client_port_num);
+}
+
 static int gport_connect(struct f_gser *gser)
 {
 	unsigned	port_num;
