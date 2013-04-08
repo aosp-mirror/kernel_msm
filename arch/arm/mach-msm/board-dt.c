@@ -35,6 +35,7 @@
 void __init msm_dt_timer_init(void)
 {
 	arch_timer_of_register();
+	arch_timer_sched_clock_init();
 }
 
 extern int gic_of_init(struct device_node *node, struct device_node *parent);
