@@ -5965,7 +5965,7 @@ int alloc_contig_range(unsigned long start, unsigned long end,
 	if (ret)
 		return ret;
 
-	zone->cma_alloc = 1;
+	cc.zone->cma_alloc = 1;
 
 	ret = __alloc_contig_migrate_range(&cc, start, end);
 	if (ret)
@@ -6026,7 +6026,7 @@ int alloc_contig_range(unsigned long start, unsigned long end,
 done:
 	undo_isolate_page_range(pfn_max_align_down(start),
 				pfn_max_align_up(end), migratetype);
-	zone->cma_alloc = 0;
+	cc.zone->cma_alloc = 0;
 	return ret;
 }
 
