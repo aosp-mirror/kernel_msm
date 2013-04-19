@@ -758,6 +758,9 @@ static ssize_t ffs_epfile_io(struct file *file,
 	char *data = NULL;
 	ssize_t ret;
 	int halt;
+	int buffer_len = !read ? len : round_up(len, 512);
+
+	pr_debug("%s: len %d, buffer_len %d, read %d\n", __func__, len, buffer_len, read);
 
 	goto first_try;
 	do {
@@ -795,7 +798,7 @@ first_try:
 
 		/* Allocate & copy */
 		if (!halt && !data) {
-			data = kzalloc(len, GFP_KERNEL);
+			data = kzalloc(buffer_len, GFP_KERNEL);
 			if (unlikely(!data))
 				return -ENOMEM;
 
@@ -838,7 +841,7 @@ first_try:
 		req->context  = &done;
 		req->complete = ffs_epfile_io_complete;
 		req->buf      = data;
-		req->length   = len;
+		req->length   = buffer_len;
 
 		ret = usb_ep_queue(ep->ep, req, GFP_ATOMIC);
 
@@ -851,9 +854,12 @@ first_try:
 			usb_ep_dequeue(ep->ep, req);
 		} else {
 			ret = ep->status;
-			if (read && ret > 0 &&
-			    unlikely(copy_to_user(buf, data, ret)))
-				ret = -EFAULT;
+			if (read && ret > 0) {
+				if (ret > len)
+					ret = -EOVERFLOW;
+				else if (unlikely(copy_to_user(buf, data, ret)))
+					ret = -EFAULT;
+			}
 		}
 	}
 
