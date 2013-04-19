@@ -2141,7 +2141,10 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 
 		curr_conf = curr_conf->next;
 		while (conf_str) {
-			name = strsep(&b, ",");
+			name = strsep(&conf_str, ",");
+			if (!name)
+				break;
+
 			is_ffs = 0;
 			strlcpy(aliases, dev->ffs_aliases, sizeof(aliases));
 			a = aliases;
