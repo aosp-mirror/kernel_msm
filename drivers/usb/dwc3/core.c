@@ -99,8 +99,8 @@ static void dwc3_core_soft_reset(struct dwc3 *dwc)
 	reg |= DWC3_GUSB2PHYCFG_PHYSOFTRST;
 	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(0), reg);
 
-	usb_phy_init(dwc->usb2_phy);
-	usb_phy_init(dwc->usb3_phy);
+	//usb_phy_init(dwc->usb2_phy);
+	//usb_phy_init(dwc->usb3_phy);
 	mdelay(100);
 
 	/* Clear USB3 PHY reset */
@@ -395,8 +395,8 @@ static void dwc3_core_exit(struct dwc3 *dwc)
 {
 	dwc3_event_buffers_cleanup(dwc);
 
-	usb_phy_shutdown(dwc->usb2_phy);
-	usb_phy_shutdown(dwc->usb3_phy);
+	//usb_phy_shutdown(dwc->usb2_phy);
+	//usb_phy_shutdown(dwc->usb3_phy);
 }
 
 /* XHCI reset, resets other CORE registers as well, re-init those */
@@ -422,6 +422,7 @@ static int dwc3_probe(struct platform_device *pdev)
 
 	u8			mode;
 
+	dev_info(&pdev->dev, "%s: enter\n", __func__);
 	mem = devm_kzalloc(dev, sizeof(*dwc) + DWC3_ALIGN_MASK, GFP_KERNEL);
 	if (!mem) {
 		dev_err(dev, "not enough memory\n");
@@ -469,6 +470,7 @@ static int dwc3_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+#if 0
 	if (node) {
 		dwc->usb2_phy = devm_usb_get_phy_by_phandle(dev, "usb-phy", 0);
 		dwc->usb3_phy = devm_usb_get_phy_by_phandle(dev, "usb-phy", 1);
@@ -489,6 +491,7 @@ static int dwc3_probe(struct platform_device *pdev)
 
 	usb_phy_set_suspend(dwc->usb2_phy, 0);
 	usb_phy_set_suspend(dwc->usb3_phy, 0);
+#endif
 
 	spin_lock_init(&dwc->lock);
 	platform_set_drvdata(pdev, dwc);
@@ -532,6 +535,7 @@ static int dwc3_probe(struct platform_device *pdev)
 	}
 
 	mode = DWC3_MODE(dwc->hwparams.hwparams0);
+	dev_info(&pdev->dev, "%s: mode %d\n", __func__, mode);
 
 	switch (mode) {
 	case DWC3_MODE_DEVICE:
@@ -585,6 +589,7 @@ static int dwc3_probe(struct platform_device *pdev)
 		goto err2;
 	}
 
+	dev_info(&pdev->dev, "%s: done\n", __func__);
 	return 0;
 
 err2:
@@ -611,6 +616,7 @@ err1:
 err0:
 	dwc3_free_event_buffers(dwc);
 
+	dev_info(&pdev->dev, "%s: failed\n", __func__);
 	return ret;
 }
 
@@ -618,8 +624,8 @@ static int dwc3_remove(struct platform_device *pdev)
 {
 	struct dwc3	*dwc = platform_get_drvdata(pdev);
 
-	usb_phy_set_suspend(dwc->usb2_phy, 1);
-	usb_phy_set_suspend(dwc->usb3_phy, 1);
+	//usb_phy_set_suspend(dwc->usb2_phy, 1);
+	//usb_phy_set_suspend(dwc->usb3_phy, 1);
 
 	pm_runtime_disable(&pdev->dev);
 
