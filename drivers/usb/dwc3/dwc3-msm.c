@@ -2499,7 +2499,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	dwc3_msm_qscratch_reg_init(msm);
 
 	pm_runtime_set_active(msm->dev);
-	pm_runtime_enable(msm->dev);
+	//pm_runtime_enable(msm->dev);
 
 	if (of_property_read_u32(node, "qcom,dwc-usb3-msm-dbm-eps",
 				 &msm->dbm_num_eps)) {
@@ -2646,7 +2646,7 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 		usb_put_phy(msm->otg_xceiv);
 	}
 
-	pm_runtime_disable(msm->dev);
+	//pm_runtime_disable(msm->dev);
 	platform_device_unregister(msm->dwc3);
 	wake_lock_destroy(&msm->wlock);
 
@@ -2702,9 +2702,9 @@ static int dwc3_msm_pm_resume(struct device *dev)
 
 		ret = dwc3_msm_resume(mdwc);
 		/* Update runtime PM status */
-		pm_runtime_disable(dev);
+		//pm_runtime_disable(dev);
 		pm_runtime_set_active(dev);
-		pm_runtime_enable(dev);
+		//pm_runtime_enable(dev);
 
 		/* Let OTG know about resume event and update pm_count */
 		if (mdwc->otg_xceiv) {
