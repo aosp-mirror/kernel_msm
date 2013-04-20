@@ -1785,6 +1785,7 @@ store_sdhci_max_bus_bw(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 
+#ifdef USE_MISSING_CODE
 static void sdhci_msm_check_power_status(struct sdhci_host *host)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
@@ -1805,6 +1806,7 @@ static void sdhci_msm_check_power_status(struct sdhci_host *host)
 		mmc_hostname(host->mmc), __func__, ret,
 		readb_relaxed(msm_host->core_mem + CORE_PWRCTL_CTL));
 }
+#endif
 
 static void sdhci_msm_toggle_cdr(struct sdhci_host *host, bool enable)
 {
@@ -2005,7 +2007,9 @@ static int sdhci_msm_set_uhs_signaling(struct sdhci_host *host,
 
 static struct sdhci_ops sdhci_msm_ops = {
 	.set_uhs_signaling = sdhci_msm_set_uhs_signaling,
+#ifdef USE_MISSING_CODE
 	.check_power_status = sdhci_msm_check_power_status,
+#endif
 	.execute_tuning = sdhci_msm_execute_tuning,
 	.toggle_cdr = sdhci_msm_toggle_cdr,
 	.get_max_segments = sdhci_msm_max_segs,
