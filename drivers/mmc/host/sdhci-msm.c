@@ -1933,7 +1933,7 @@ static void sdhci_msm_set_clock(struct sdhci_host *host, unsigned int clock)
 	u32 sup_clock, ddr_clock;
 
 	if (!clock) {
-		sdhci_msm_prepare_clocks(host, false);
+		//sdhci_msm_prepare_clocks(host, false);
 		host->clock = clock;
 		return;
 	}
@@ -2277,8 +2277,8 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	if (ret)
 		pr_err("%s: %s: pm_runtime_set_active failed: err: %d\n",
 		       mmc_hostname(host->mmc), __func__, ret);
-	else
-		pm_runtime_enable(&pdev->dev);
+	//else
+	//	pm_runtime_enable(&pdev->dev);
 
 	/* Successful initialization */
 	goto out;
