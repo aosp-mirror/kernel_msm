@@ -1568,15 +1568,18 @@ static void sdhci_do_set_ios(struct sdhci_host *host, struct mmc_ios *ios)
 		(ios->power_mode == MMC_POWER_UP))
 		sdhci_enable_preset_value(host, false);
 
-	if (ios->clock)
+	if (ios->clock) {
+		spin_unlock_irqrestore(&host->lock, flags);
 		sdhci_set_clock(host, ios->clock);
+		spin_lock_irqsave(&host->lock, flags);
+	}
 
-	spin_lock_irqsave(&host->lock, flags);
+	//spin_lock_irqsave(&host->lock, flags);
 	if (!host->clock) {
 		spin_unlock_irqrestore(&host->lock, flags);
 		return;
 	}
-	spin_unlock_irqrestore(&host->lock, flags);
+	//spin_unlock_irqrestore(&host->lock, flags);
 
 	if (ios->power_mode & (MMC_POWER_UP | MMC_POWER_ON))
 		vdd_bit = sdhci_set_power(host, ios->vdd);
