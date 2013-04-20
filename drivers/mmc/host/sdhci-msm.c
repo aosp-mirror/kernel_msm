@@ -34,7 +34,7 @@
 #include <linux/mmc/mmc.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
-#include <linux/mmc/cd-gpio.h>
+#include <linux/mmc/slot-gpio.h>
 #include <linux/dma-mapping.h>
 #include <mach/gpio.h>
 #include <mach/msm_bus.h>
@@ -2234,7 +2234,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 				  sdhci_msm_bus_work);
 
 	if (gpio_is_valid(msm_host->pdata->status_gpio)) {
-		ret = mmc_cd_gpio_request(msm_host->mmc,
+		ret = mmc_gpio_request_cd(msm_host->mmc,
 				msm_host->pdata->status_gpio);
 		if (ret) {
 			dev_err(&pdev->dev, "%s: Failed to request card detection IRQ %d\n",
@@ -2281,7 +2281,7 @@ remove_host:
 	sdhci_remove_host(host, dead);
 free_cd_gpio:
 	if (gpio_is_valid(msm_host->pdata->status_gpio))
-		mmc_cd_gpio_free(msm_host->mmc);
+		mmc_gpio_free_cd(msm_host->mmc);
 bus_unregister:
 	sdhci_msm_bus_unregister(msm_host);
 vreg_deinit:
@@ -2318,7 +2318,7 @@ static int sdhci_msm_remove(struct platform_device *pdev)
 	sdhci_pltfm_free(pdev);
 
 	if (gpio_is_valid(msm_host->pdata->status_gpio))
-		mmc_cd_gpio_free(msm_host->mmc);
+		mmc_gpio_free_cd(msm_host->mmc);
 
 	sdhci_msm_vreg_init(&pdev->dev, msm_host->pdata, false);
 
@@ -2366,7 +2366,7 @@ static int sdhci_msm_suspend(struct device *dev)
 	int ret = 0;
 
 	if (gpio_is_valid(msm_host->pdata->status_gpio))
-		mmc_cd_gpio_free(msm_host->mmc);
+		mmc_gpio_free_cd(msm_host->mmc);
 
 	if (pm_runtime_suspended(dev)) {
 		pr_debug("%s: %s: already runtime suspended\n",
@@ -2387,7 +2387,7 @@ static int sdhci_msm_resume(struct device *dev)
 	int ret = 0;
 
 	if (gpio_is_valid(msm_host->pdata->status_gpio)) {
-		ret = mmc_cd_gpio_request(msm_host->mmc,
+		ret = mmc_gpio_request_cd(msm_host->mmc,
 				msm_host->pdata->status_gpio);
 		if (ret)
 			pr_err("%s: %s: Failed to request card detection IRQ %d\n",
