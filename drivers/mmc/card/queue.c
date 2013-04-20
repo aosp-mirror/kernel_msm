@@ -26,13 +26,6 @@
 #define MMC_REQ_SPECIAL_MASK	(REQ_DISCARD | REQ_FLUSH)
 
 /*
- * Based on benchmark tests the default num of requests to trigger the write
- * packing was determined, to keep the read latency as low as possible and
- * manage to keep the high write throughput.
- */
-#define DEFAULT_NUM_REQS_TO_START_PACK 17
-
-/*
  * Prepare a MMC request. This just filters out odd stuff.
  */
 static int mmc_prep_request(struct request_queue *q, struct request *req)
@@ -59,7 +52,6 @@ static int mmc_queue_thread(void *d)
 {
 	struct mmc_queue *mq = d;
 	struct request_queue *q = mq->queue;
-	struct mmc_card *card = mq->card;
 
 	current->flags |= PF_MEMALLOC;
 
@@ -104,7 +96,6 @@ static int mmc_queue_thread(void *d)
 				set_current_state(TASK_RUNNING);
 				break;
 			}
-			mmc_start_delayed_bkops(card);
 			up(&mq->thread_sem);
 			schedule();
 			down(&mq->thread_sem);
@@ -218,9 +209,6 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 	mq->mqrq_cur = mqrq_cur;
 	mq->mqrq_prev = mqrq_prev;
 	mq->queue->queuedata = mq;
-	mq->num_wr_reqs_to_start_packing =
-		min_t(int, (int)card->ext_csd.max_packed_writes,
-		     DEFAULT_NUM_REQS_TO_START_PACK);
 
 	blk_queue_prep_rq(mq->queue, mmc_prep_request);
 	queue_flag_set_unlocked(QUEUE_FLAG_NONROT, mq->queue);
@@ -425,11 +413,10 @@ void mmc_packed_clean(struct mmc_queue *mq)
  * complete any outstanding requests.  This ensures that we
  * won't suspend while a request is being processed.
  */
-int mmc_queue_suspend(struct mmc_queue *mq)
+void mmc_queue_suspend(struct mmc_queue *mq)
 {
 	struct request_queue *q = mq->queue;
 	unsigned long flags;
-	int rc = 0;
 
 	if (!(mq->flags & MMC_QUEUE_SUSPENDED)) {
 		mq->flags |= MMC_QUEUE_SUSPENDED;
@@ -438,20 +425,8 @@ int mmc_queue_suspend(struct mmc_queue *mq)
 		blk_stop_queue(q);
 		spin_unlock_irqrestore(q->queue_lock, flags);
 
-		rc = down_trylock(&mq->thread_sem);
-		if (rc) {
-			/*
-			 * Failed to take the lock so better to abort the
-			 * suspend because mmcqd thread is processing requests.
-			 */
-			mq->flags &= ~MMC_QUEUE_SUSPENDED;
-			spin_lock_irqsave(q->queue_lock, flags);
-			blk_start_queue(q);
-			spin_unlock_irqrestore(q->queue_lock, flags);
-			rc = -EBUSY;
-		}
+		down(&mq->thread_sem);
 	}
-	return rc;
 }
 
 /**

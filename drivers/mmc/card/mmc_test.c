@@ -2695,7 +2695,6 @@ static void mmc_test_run(struct mmc_test_card *test, int testcase)
 	pr_info("%s: Starting tests of card %s...\n",
 		mmc_hostname(test->card->host), mmc_card_id(test->card));
 
-	mmc_rpm_hold(test->card->host, &test->card->dev);
 	mmc_claim_host(test->card->host);
 
 	for (i = 0;i < ARRAY_SIZE(mmc_test_cases);i++) {
@@ -2779,7 +2778,6 @@ static void mmc_test_run(struct mmc_test_card *test, int testcase)
 	}
 
 	mmc_release_host(test->card->host);
-	mmc_rpm_release(test->card->host, &test->card->dev);
 
 	pr_info("%s: Tests completed.\n",
 		mmc_hostname(test->card->host));
@@ -2892,8 +2890,7 @@ static ssize_t mtf_test_write(struct file *file, const char __user *buf,
 	}
 
 #ifdef CONFIG_HIGHMEM
-	if (test->highmem)
-		__free_pages(test->highmem, BUFFER_ORDER);
+	__free_pages(test->highmem, BUFFER_ORDER);
 #endif
 	kfree(test->buffer);
 	kfree(test);
