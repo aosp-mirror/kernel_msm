@@ -87,7 +87,7 @@ int mmc_gpio_get_cd(struct mmc_host *host)
 	if (!ctx || !gpio_is_valid(ctx->cd_gpio))
 		return -ENOSYS;
 
-	return !gpio_get_value_cansleep(ctx->cd_gpio) ^
+	return !gpio_get_value(ctx->cd_gpio) ^
 		!!(host->caps2 & MMC_CAP2_CD_ACTIVE_HIGH);
 }
 EXPORT_SYMBOL(mmc_gpio_get_cd);
