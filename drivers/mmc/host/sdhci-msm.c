@@ -2198,6 +2198,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	msm_host->mmc->caps |= msm_host->pdata->caps;
 
 	vdd_max_current = sdhci_msm_get_vreg_vdd_max_current(msm_host);
+#ifdef USE_MISSING_CODE
 	if (vdd_max_current >= 800)
 		msm_host->mmc->caps |= MMC_CAP_MAX_CURRENT_800;
 	else if (vdd_max_current >= 600)
@@ -2211,7 +2212,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		msm_host->mmc->caps |= MMC_CAP_SET_XPC_180 |
 					MMC_CAP_SET_XPC_300|
 					MMC_CAP_SET_XPC_330;
-
+#endif
 	msm_host->mmc->caps |= MMC_CAP_HW_RESET;
 	msm_host->mmc->caps2 |= msm_host->pdata->caps2;
 	msm_host->mmc->caps2 |= MMC_CAP2_CORE_RUNTIME_PM;
@@ -2219,7 +2220,9 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	msm_host->mmc->caps2 |= MMC_CAP2_PACKED_WR_CONTROL;
 	msm_host->mmc->caps2 |= (MMC_CAP2_BOOTPART_NOACC |
 				MMC_CAP2_DETECT_ON_ERR);
+#ifdef USE_MISSING_CODE
 	msm_host->mmc->caps2 |= MMC_CAP2_SANITIZE;
+#endif
 	msm_host->mmc->caps2 |= MMC_CAP2_CACHE_CTRL;
 	msm_host->mmc->caps2 |= MMC_CAP2_POWEROFF_NOTIFY;
 	msm_host->mmc->caps2 |= MMC_CAP2_CLK_SCALE;
