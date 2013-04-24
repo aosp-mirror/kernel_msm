@@ -1311,7 +1311,7 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 			map.virtual = CONFIG_ARM_USER_ACCESSIBLE_TIMER_BASE;
 			map.length = PAGE_SIZE;
 			map.type = MT_DEVICE_USER_ACCESSIBLE;
-			create_mapping(&map);
+			create_mapping(&map, false);
 		}
 	}
 
@@ -1460,28 +1460,28 @@ static void __init map_lowmem(void)
 			map.length = SECTION_SIZE;
 			map.type = MT_MEMORY;
 
-			create_mapping(&map);
+			create_mapping(&map, false);
 
 			map.pfn = __phys_to_pfn(start + SECTION_SIZE);
 			map.virtual = __phys_to_virt(start + SECTION_SIZE);
 			map.length = (unsigned long)RX_AREA_END - map.virtual;
 			map.type = MT_MEMORY_RX;
 
-			create_mapping(&map);
+			create_mapping(&map, false);
 
 			map.pfn = __phys_to_pfn(__pa(__start_rodata));
 			map.virtual = (unsigned long)__start_rodata;
 			map.length = __init_begin - __start_rodata;
 			map.type = MT_MEMORY_R;
 
-			create_mapping(&map);
+			create_mapping(&map, false);
 
 			map.pfn = __phys_to_pfn(__pa(__init_begin));
 			map.virtual = (unsigned long)__init_begin;
 			map.length = __init_data - __init_begin;
 			map.type = MT_MEMORY;
 
-			create_mapping(&map);
+			create_mapping(&map, false);
 
 			map.pfn = __phys_to_pfn(__pa(__init_data));
 			map.virtual = (unsigned long)__init_data;
