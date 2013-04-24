@@ -18,11 +18,9 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/file.h>
-#include <linux/freezer.h>
 #include <linux/fs.h>
 #include <linux/anon_inodes.h>
 #include <linux/ion.h>
-#include <linux/kthread.h>
 #include <linux/list.h>
 #include <linux/memblock.h>
 #include <linux/miscdevice.h>
@@ -30,7 +28,6 @@
 #include <linux/mm.h>
 #include <linux/mm_types.h>
 #include <linux/rbtree.h>
-#include <linux/rtmutex.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/seq_file.h>
@@ -222,16 +219,9 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 	kref_init(&buffer->ref);
 
 	ret = heap->ops->allocate(heap, buffer, len, align, flags);
-
 	if (ret) {
-		if (!(heap->flags & ION_HEAP_FLAG_DEFER_FREE))
-			goto err2;
-
-		ion_heap_drain_freelist(heap);
-		ret = heap->ops->allocate(heap, buffer, len, align,
-					  flags);
-		if (ret)
-			goto err2;
+		kfree(buffer);
+		return ERR_PTR(ret);
 	}
 
 	buffer->dev = dev;
@@ -324,8 +314,11 @@ static void ion_delayed_unsecure(struct ion_buffer *buffer)
 		buffer->heap->ops->unsecure_buffer(buffer, 1);
 }
 
-static void _ion_buffer_destroy(struct ion_buffer *buffer)
+static void ion_buffer_destroy(struct kref *kref)
 {
+	struct ion_buffer *buffer = container_of(kref, struct ion_buffer, ref);
+	struct ion_device *dev = buffer->dev;
+
 	if (WARN_ON(buffer->kmap_cnt > 0))
 		buffer->heap->ops->unmap_kernel(buffer->heap, buffer);
 	buffer->heap->ops->unmap_dma(buffer->heap, buffer);
@@ -339,26 +332,6 @@ static void _ion_buffer_destroy(struct ion_buffer *buffer)
 	if (buffer->flags & ION_FLAG_CACHED)
 		kfree(buffer->dirty);
 	kfree(buffer);
-}
-
-static void ion_buffer_destroy(struct kref *kref)
-{
-	struct ion_buffer *buffer = container_of(kref, struct ion_buffer, ref);
-	struct ion_heap *heap = buffer->heap;
-	struct ion_device *dev = buffer->dev;
-
-	mutex_lock(&dev->buffer_lock);
-	rb_erase(&buffer->node, &dev->buffers);
-	mutex_unlock(&dev->buffer_lock);
-
-	if (heap->flags & ION_HEAP_FLAG_DEFER_FREE) {
-		rt_mutex_lock(&heap->lock);
-		list_add(&buffer->list, &heap->free_list);
-		rt_mutex_unlock(&heap->lock);
-		wake_up(&heap->waitqueue);
-		return;
-	}
-	_ion_buffer_destroy(buffer);
 }
 
 static void ion_buffer_get(struct ion_buffer *buffer)
@@ -1984,60 +1957,6 @@ static const struct file_operations debug_heap_fops = {
 	.release = single_release,
 };
 
-static size_t ion_heap_free_list_is_empty(struct ion_heap *heap)
-{
-	bool is_empty;
-
-	rt_mutex_lock(&heap->lock);
-	is_empty = list_empty(&heap->free_list);
-	rt_mutex_unlock(&heap->lock);
-
-	return is_empty;
-}
-
-static int ion_heap_deferred_free(void *data)
-{
-	struct ion_heap *heap = data;
-
-	while (true) {
-		struct ion_buffer *buffer;
-
-		wait_event_freezable(heap->waitqueue,
-				     !ion_heap_free_list_is_empty(heap));
-
-		rt_mutex_lock(&heap->lock);
-		if (list_empty(&heap->free_list)) {
-			rt_mutex_unlock(&heap->lock);
-			continue;
-		}
-		buffer = list_first_entry(&heap->free_list, struct ion_buffer,
-					  list);
-		list_del(&buffer->list);
-		rt_mutex_unlock(&heap->lock);
-		_ion_buffer_destroy(buffer);
-	}
-
-	return 0;
-}
-
-static bool ion_heap_drain_freelist(struct ion_heap *heap)
-{
-	struct ion_buffer *buffer, *tmp;
-
-	if (ion_heap_free_list_is_empty(heap))
-		return false;
-	rt_mutex_lock(&heap->lock);
-	list_for_each_entry_safe(buffer, tmp, &heap->free_list, list) {
-		list_del(&buffer->list);
-		_ion_buffer_destroy(buffer);
-	}
-	BUG_ON(!list_empty(&heap->free_list));
-	rt_mutex_unlock(&heap->lock);
-
-
-	return true;
-}
-
 void ion_device_add_heap(struct ion_device *dev, struct ion_heap *heap)
 {
 	struct rb_node **p = &dev->heaps.rb_node;
@@ -2048,18 +1967,6 @@ void ion_device_add_heap(struct ion_device *dev, struct ion_heap *heap)
 	    !heap->ops->unmap_dma)
 		pr_err("%s: can not add heap with invalid ops struct.\n",
 		       __func__);
-
-	if (heap->flags & ION_HEAP_FLAG_DEFER_FREE) {
-		INIT_LIST_HEAD(&heap->free_list);
-		rt_mutex_init(&heap->lock);
-		init_waitqueue_head(&heap->waitqueue);
-		heap->task = kthread_run(ion_heap_deferred_free, heap,
-					 "%s", heap->name);
-		sched_setscheduler(heap->task, SCHED_IDLE, &param);
-		if (IS_ERR(heap->task))
-			pr_err("%s: creating thread for deferred free failed\n",
-			       __func__);
-	}
 
 	heap->dev = dev;
 	mutex_lock(&dev->lock);
