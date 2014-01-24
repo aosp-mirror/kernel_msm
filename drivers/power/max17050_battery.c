@@ -813,8 +813,6 @@ static int max17050_probe(struct i2c_client *client,
 	int ret = 0;
 	bool new_custom_param = false;
 
-	pr_info("%s: start\n", __func__);
-
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_WORD_DATA))
 		return -EIO;
 
