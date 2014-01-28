@@ -38,9 +38,14 @@
 #define STATUS_BR_BIT		(1 << 15)
 
 /* Interrupt config/status bits */
-#define CONFIG_ALRT_BIT_ENBL	(1 << 2)
+#define CFG_ALRT_BIT_ENBL	(1 << 2)
+#define CFG_EXT_TEMP_BIT	(1 << 8)
 #define STATUS_INTR_SOCMIN_BIT	(1 << 10)
 #define STATUS_INTR_SOCMAX_BIT	(1 << 14)
+
+/* External battery power supply poll times */
+#define EXT_BATT_FAST_PERIOD	100
+#define EXT_BATT_SLOW_PERIOD	10000
 
 /* Modelgauge M3 save/restore values */
 struct max17050_learned_params {
@@ -60,9 +65,11 @@ struct max17050_learned_params {
 struct max17050_chip {
 	struct i2c_client *client;
 	struct power_supply battery;
+	struct power_supply *ext_battery;
 	bool power_supply_registered;
 	struct max17050_platform_data *pdata;
 	struct work_struct work;
+	struct delayed_work ext_batt_work;
 	struct mutex mutex;
 	struct timespec next_update_time;
 	bool suspended;
@@ -251,8 +258,9 @@ static void max17050_init_chip(struct max17050_chip *chip)
 	max17050_write_verify_reg(client, MAX17050_VFSOC0, vfsoc);
 	max17050_write_reg(client, MAX17050_VFSOC0_LOCK, 0);
 
-	/* Write temperature (20 deg C) */
-	max17050_write_verify_reg(client, MAX17050_TEMP, chip->pdata->temperature);
+	/* Write temperature */
+	max17050_write_verify_reg(client, MAX17050_TEMP,
+						chip->pdata->temperature);
 
 	/* Load new capacity params */
 	remcap = (vfsoc * chip->pdata->vf_fullcap) / 25600;
@@ -582,12 +590,16 @@ static int max17050_get_property(struct power_supply *psy,
 		val->intval = max17050_scale_clamp_soc(chip);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		/* cast to s16 */
-		s16_value = (s16)chip->temp;
-		/* sign extend to s32 */
-		val->intval = (s32)s16_value;
-		/* units are 1/256, and temperature is reported in C * 10 */
-		val->intval = (val->intval * 10) / 256;
+		if (chip->use_ext_temp && chip->ext_battery) {
+			val->intval = chip->ext_temp;
+		} else {
+			/* cast to s16 */
+			s16_value = (s16)chip->temp;
+			/* sign extend to s32 */
+			val->intval = (s32)s16_value;
+			/* units are 1/256, and temp is reported in C * 10 */
+			val->intval = (val->intval * 10) / 256;
+		}
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		/* cast to s16 */
@@ -660,7 +672,7 @@ static void max17050_complete_init(struct max17050_chip *chip)
 		/* Enable capacity interrupts */
 		val = max17050_read_reg(client, MAX17050_CONFIG);
 		max17050_write_reg(client, MAX17050_CONFIG,
-						val | CONFIG_ALRT_BIT_ENBL);
+						val | CFG_ALRT_BIT_ENBL);
 	}
 
 	if (chip->use_ext_temp && chip->pdata->ext_batt_psy)
@@ -825,6 +837,11 @@ static int max17050_probe(struct i2c_client *client,
 	if (!chip->pdata->enable_current_sense)
 		chip->battery.num_properties -= 1;
 
+	chip->use_ext_temp = !!(chip->pdata->config & CFG_EXT_TEMP_BIT);
+	if (chip->use_ext_temp && chip->pdata->ext_batt_psy)
+		INIT_DELAYED_WORK(&chip->ext_batt_work,
+						max17050_update_ext_temp);
+
 	if (client->irq) {
 		ret = request_threaded_irq(client->irq, NULL,
 					max17050_interrupt,
@@ -888,6 +905,10 @@ static int max17050_pm_prepare(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct max17050_chip *chip = i2c_get_clientdata(client);
 
+	/* Cancel any pending work, if necessary */
+	if (chip->use_ext_temp && chip->pdata->ext_batt_psy)
+		cancel_delayed_work_sync(&chip->ext_batt_work);
+
 	chip->suspended = true;
 	if (chip->client->irq) {
 		disable_irq(chip->client->irq);
@@ -906,6 +927,10 @@ static void max17050_pm_complete(struct device *dev)
 		disable_irq_wake(chip->client->irq);
 		enable_irq(chip->client->irq);
 	}
+
+	/* Schedule a temperature update, if needed */
+	if (chip->use_ext_temp && chip->pdata->ext_batt_psy)
+		schedule_delayed_work(&chip->ext_batt_work, 0);
 }
 
 static const struct dev_pm_ops max17050_pm_ops = {
