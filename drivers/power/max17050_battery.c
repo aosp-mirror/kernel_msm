@@ -174,7 +174,6 @@ static void max17050_init_chip(struct max17050_chip *chip)
 	u16 vfsoc;
 	u16 remcap;
 	u16 repcap;
-	u16 fullcap0;
 	u8 i;
 
 	/* Wait 500ms after power up */
@@ -188,7 +187,7 @@ static void max17050_init_chip(struct max17050_chip *chip)
 	max17050_write_reg(client, MAX17050_MISCCFG, chip->pdata->misccfg);
 	max17050_write_reg(client, MAX17050_FULLSOCTHR, chip->pdata->fullsocthr);
 
-	/* Lock model using magic lock numbers from Maxim */
+	/* Unlock model using magic lock numbers from Maxim */
 	max17050_write_reg(client, MAX17050_MODEL_LOCK1, 0x59);
 	max17050_write_reg(client, MAX17050_MODEL_LOCK2, 0xc4);
 
@@ -196,7 +195,7 @@ static void max17050_init_chip(struct max17050_chip *chip)
 	max17050_write_verify_block(client, MAX17050_MODEL_TABLE,
 						chip->pdata->model, MODEL_SIZE);
 
-	/* Unlock the model */
+	/* Lock the model */
 	max17050_write_reg(client, MAX17050_MODEL_LOCK1, 0);
 	max17050_write_reg(client, MAX17050_MODEL_LOCK2, 0);
 
@@ -250,8 +249,7 @@ static void max17050_init_chip(struct max17050_chip *chip)
 	max17050_write_verify_reg(client, MAX17050_TEMP, chip->pdata->temperature);
 
 	/* Load new capacity params */
-	fullcap0 = max17050_read_reg(client, MAX17050_FULLCAP0);
-	remcap = (vfsoc * fullcap0) / 25600;
+	remcap = (vfsoc * chip->pdata->vf_fullcap) / 25600;
 	max17050_write_verify_reg(client, MAX17050_REMCAP, remcap);
 	repcap = remcap;
 	max17050_write_verify_reg(client, MAX17050_REPCAP, repcap);
