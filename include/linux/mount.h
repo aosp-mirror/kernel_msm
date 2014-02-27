@@ -46,7 +46,11 @@ struct mnt_namespace;
 				 | MNT_NOATIME | MNT_NODIRATIME | MNT_RELATIME \
 				 | MNT_READONLY)
 
+
 #define MNT_ATIME_MASK (MNT_NOATIME | MNT_NODIRATIME | MNT_RELATIME )
+
+#define MNT_INTERNAL_FLAGS (MNT_SHARED | MNT_WRITE_HOLD | MNT_INTERNAL | \
+			    MNT_MARKED)
 
 #define MNT_INTERNAL	0x4000
 
@@ -55,6 +59,7 @@ struct mnt_namespace;
 #define MNT_LOCK_NOSUID		0x100000
 #define MNT_LOCK_NODEV		0x200000
 #define MNT_LOCK_READONLY	0x400000
+#define MNT_MARKED		0x4000000
 
 struct vfsmount {
 	struct dentry *mnt_root;	/* root of the mounted tree */
