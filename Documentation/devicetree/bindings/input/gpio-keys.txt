@@ -6,6 +6,7 @@ Required properties:
 Optional properties:
 	- autorepeat: Boolean, Enable auto repeat feature of Linux input
 	  subsystem.
+	- use-syscore	: use syscore functionality for driver.
 
 Each button (key) is represented as a sub-node of "gpio-keys":
 Subnode properties:
@@ -36,6 +37,7 @@ Example nodes:
 			#address-cells = <1>;
 			#size-cells = <0>;
 			autorepeat;
+			use-syscore;
 			button@21 {
 				label = "GPIO Key UP";
 				linux,code = <103>;
