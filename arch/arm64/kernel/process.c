@@ -156,9 +156,13 @@ void machine_power_off(void)
  */
 void machine_restart(char *cmd)
 {
+	extern char *saved_command_line;
+
 	/* Disable interrupts first */
 	local_irq_disable();
 	smp_send_stop();
+
+	pr_emerg("Kernel command line: %s\n", saved_command_line);
 
 	/* Now call the architecture specific reboot code. */
 	if (arm_pm_restart)
