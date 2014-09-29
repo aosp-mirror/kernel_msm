@@ -29,6 +29,10 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/qpnp/power-on.h>
+#include <linux/timer.h>
+
+#include "../../staging/android/timed_output.h"
+#include <linux/i2c.h>
 
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
@@ -154,6 +158,11 @@
 
 #define QPNP_POFF_REASON_UVLO			13
 
+#define QPNP_LONGKEY_WARN_TIME_MAX		5000 /* 5 sec */
+#define QPNP_VIBE_TIME				2000 /* 2 sec */
+#define QPNP_VIBE_INIT_DELAY			msecs_to_jiffies(2000)
+#define QPNP_VIBE_INIT_RETRY			5
+
 enum qpnp_pon_version {
 	QPNP_PON_GEN1_V1,
 	QPNP_PON_GEN1_V2,
@@ -218,6 +227,13 @@ struct qpnp_pon {
 	u8			warm_reset_reason2;
 	bool			is_spon;
 	bool			store_hard_reset_reason;
+	struct			delayed_work timed_init_work;
+	struct			work_struct timed_out_work;
+	struct			timed_output_dev *timed_dev;
+	struct			hrtimer timed_timer;
+	int			longkey_warn_time;
+	bool			timed_inited;
+	int			vibe_timeout;
 };
 
 static struct qpnp_pon *sys_reset_dev;
@@ -780,6 +796,108 @@ qpnp_get_cfg(struct qpnp_pon *pon, u32 pon_type)
 	return NULL;
 }
 
+static void qpnp_pon_enable_vibrator(struct qpnp_pon *pon, int timeout)
+{
+	pon->vibe_timeout = timeout;
+	schedule_work(&pon->timed_out_work);
+}
+
+static void timed_out_work_func(struct work_struct *work)
+{
+	struct qpnp_pon *pon = container_of(work, struct qpnp_pon,
+			timed_out_work);
+	struct timed_output_dev *dev = pon->timed_dev;
+	int saved_timeout = pon->vibe_timeout;
+
+	if (!dev)
+		return;
+
+	if (dev->enable)
+		dev->enable(dev, pon->vibe_timeout);
+
+	/* Rearm because enable_vibrator is invoked during runing worker */
+	if (saved_timeout != pon->vibe_timeout)
+		qpnp_pon_enable_vibrator(pon, pon->vibe_timeout);
+}
+
+static enum hrtimer_restart qpnp_pon_vibe_timer_func(struct hrtimer *timer)
+{
+	struct qpnp_pon *pon =
+		container_of(timer, struct qpnp_pon, timed_timer);
+
+	qpnp_pon_enable_vibrator(pon, QPNP_VIBE_TIME);
+
+	return HRTIMER_NORESTART;
+}
+
+static void timed_init_work_func(struct work_struct *work)
+{
+	struct qpnp_pon *pon =
+		container_of(work, struct qpnp_pon, timed_init_work.work);
+	struct spmi_device *spmi;
+	struct device_node *dev_node;
+	struct device_node *node;
+	struct i2c_client *vib_client;
+	void *vib_data;
+	int rc;
+	static int retry = 0;
+
+	if (!pon) {
+		pr_warn("%s: no device\n", __func__);
+		return;
+	}
+
+	spmi = pon->spmi;
+	dev_node = spmi->dev.of_node;
+
+	node = of_parse_phandle(dev_node, "qcom,external-vibrator", 0);
+	if (!node) {
+		dev_warn(&spmi->dev,
+			"Can't find qcom,external-vibrator phandle\n");
+		return;
+	}
+
+	vib_client = of_find_i2c_device_by_node(node);
+	if (!vib_client) {
+		dev_warn(&spmi->dev,
+			"Can't find the device by node\n");
+		return;
+	}
+
+	vib_data = i2c_get_clientdata(vib_client);
+	if (!vib_data) {
+		dev_warn(&spmi->dev,
+			"Can't find the vibrator data\n");
+
+		/* re-arm the work */
+		if (retry < QPNP_VIBE_INIT_RETRY) {
+			retry++;
+			dev_warn(&spmi->dev,
+				"Re-armed timed init work\n");
+			schedule_delayed_work(&pon->timed_init_work,
+					QPNP_VIBE_INIT_DELAY);
+		}
+		put_device(&vib_client->dev);
+		return;
+	}
+
+	rc = of_property_read_u32(dev_node, "qcom,longkey-warn-time",
+					&pon->longkey_warn_time);
+	if (rc && rc != -EINVAL) {
+		dev_warn(&spmi->dev,
+			"Unable to read 'qcom,longkey-warn-time'\n");
+		pon->longkey_warn_time = QPNP_LONGKEY_WARN_TIME_MAX;
+	}
+
+	pon->timed_dev = vib_data;
+
+	hrtimer_init(&pon->timed_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	pon->timed_timer.function = qpnp_pon_vibe_timer_func;
+
+	pon->timed_inited = true;
+	put_device(&vib_client->dev);
+}
+
 static int
 qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 {
@@ -837,6 +955,20 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 	input_sync(pon->pon_input);
 
 	cfg->old_state = !!key_status;
+
+	if (pon->timed_inited) {
+		if (key_status) {
+			hrtimer_start(&pon->timed_timer,
+				ns_to_ktime((u64)pon->longkey_warn_time *
+					     NSEC_PER_MSEC),
+				HRTIMER_MODE_REL);
+		} else {
+			if (hrtimer_active(&pon->timed_timer))
+				hrtimer_try_to_cancel(&pon->timed_timer);
+
+			qpnp_pon_enable_vibrator(pon, 0);
+		}
+	}
 
 	return 0;
 }
@@ -2205,6 +2337,8 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 	dev_set_drvdata(&spmi->dev, pon);
 
 	INIT_DELAYED_WORK(&pon->bark_work, bark_work_func);
+	INIT_DELAYED_WORK(&pon->timed_init_work, timed_init_work_func);
+	INIT_WORK(&pon->timed_out_work, timed_out_work_func);
 
 	/* register the PON configurations */
 	rc = qpnp_pon_config_init(pon);
@@ -2301,6 +2435,8 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 					"qcom,store-hard-reset-reason");
 
 	qpnp_pon_debugfs_init(spmi);
+
+	schedule_delayed_work(&pon->timed_init_work, 0);
 	return 0;
 }
 
@@ -2311,6 +2447,8 @@ static int qpnp_pon_remove(struct spmi_device *spmi)
 
 	device_remove_file(&spmi->dev, &dev_attr_debounce_us);
 
+	cancel_work_sync(&pon->timed_out_work);
+	cancel_delayed_work_sync(&pon->timed_init_work);
 	cancel_delayed_work_sync(&pon->bark_work);
 
 	if (pon->pon_input)
