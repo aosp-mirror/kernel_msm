@@ -829,7 +829,7 @@ static void handle_critical_trips(struct thermal_zone_device *tz,
 	/* If we have not crossed the trip_temp, we do not care. */
 	if (trip_type != THERMAL_TRIP_CRITICAL_LOW &&
 	    trip_type != THERMAL_TRIP_CONFIGURABLE_LOW) {
-		if (tz->temperature < trip_temp)
+		if (trip_temp <= 0 || tz->temperature < trip_temp)
 			return;
 	} else
 		if (tz->temperature >= trip_temp)
