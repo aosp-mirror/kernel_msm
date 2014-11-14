@@ -5188,7 +5188,7 @@ set_table_entry(struct ctl_table *entry,
 static struct ctl_table *
 sd_alloc_ctl_energy_table(struct sched_group_energy *sge)
 {
-	struct ctl_table *table = sd_alloc_ctl_entry(6);
+	struct ctl_table *table = sd_alloc_ctl_entry(5);
 
 	if (table == NULL)
 		return NULL;
@@ -5198,11 +5198,9 @@ sd_alloc_ctl_energy_table(struct sched_group_energy *sge)
 	set_table_entry(&table[1], "idle_states", &sge->idle_states[0].power,
 			sge->nr_idle_states*sizeof(struct idle_state), 0644,
 			proc_doulongvec_minmax, false);
-	set_table_entry(&table[2], "nr_idle_states_below", &sge->nr_idle_states_below,
+	set_table_entry(&table[2], "nr_cap_states", &sge->nr_cap_states,
 			sizeof(int), 0644, proc_dointvec_minmax, false);
-	set_table_entry(&table[3], "nr_cap_states", &sge->nr_cap_states,
-			sizeof(int), 0644, proc_dointvec_minmax, false);
-	set_table_entry(&table[4], "cap_states", &sge->cap_states[0].cap,
+	set_table_entry(&table[3], "cap_states", &sge->cap_states[0].cap,
 			sge->nr_cap_states*sizeof(struct capacity_state), 0644,
 			proc_doulongvec_minmax, false);
 
@@ -5219,7 +5217,7 @@ sd_alloc_ctl_group_table(struct sched_group *sg)
 
 	table->procname = kstrdup("energy", GFP_KERNEL);
 	table->mode = 0555;
-	table->child = sd_alloc_ctl_energy_table(sg->sge);
+	table->child = sd_alloc_ctl_energy_table((struct sched_group_energy *)sg->sge);
 
 	return table;
 }
