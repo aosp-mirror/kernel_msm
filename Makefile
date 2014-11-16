@@ -370,8 +370,8 @@ KBUILD_CPPFLAGS := -D__KERNEL__
 
 KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
-		   -Werror-implicit-function-declaration \
-		   -Wno-format-security \
+		   -Werror-implicit-function-declaration -Wno-sizeof-pointer-memaccess \
+		   -Wno-format-security -Wno-maybe-uninitialized -Wno-uninitialized \
 		   -fno-delete-null-pointer-checks -Wno-array-bounds
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
