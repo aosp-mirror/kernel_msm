@@ -57,6 +57,9 @@
 #define IS_CAL_DATA_PRESENT     0
 #define WAIT_FOR_CBC_IND     2
 
+static char *wcnss_ready = NULL;
+module_param(wcnss_ready, charp, S_IRUGO | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
 /* module params */
 #define WCNSS_CONFIG_UNSPECIFIED (-1)
 #define UINT32_MAX (0xFFFFFFFFU)
@@ -3399,6 +3402,11 @@ static int wcnss_notif_cb(struct notifier_block *this, unsigned long code,
 			wcnss_wlan_power(&pdev->dev, pwlanconfig,
 					WCNSS_WLAN_SWITCH_OFF, NULL);
 			pr_info("[wcnss]: Cancel APPS vote for Iris & WCNSS.\n");
+
+			/*--------------------------------------------------*/
+			sprintf((char *)(wcnss_ready), "1");
+			printk("[wcnss]: wcnss_ready=1.\n");
+			/*--------------------------------------------------*/
 		}
 	} else if ((code == SUBSYS_BEFORE_SHUTDOWN && data && data->crashed) ||
 			code == SUBSYS_SOC_RESET) {
@@ -3535,6 +3543,16 @@ static int __init wcnss_wlan_init(void)
 	platform_driver_register(&wcnss_wlan_ctrl_driver);
 	platform_driver_register(&wcnss_ctrl_driver);
 	register_pm_notifier(&wcnss_pm_notifier);
+
+	/*--------------------------------------------------*/
+	wcnss_ready = (char *) kmalloc(32, GFP_KERNEL);
+	if( wcnss_ready == NULL ) {
+		printk("[wcnss]: wcnss_ready, malloc(32) fail.\n");
+	}
+	else {
+		memset( wcnss_ready, 0, 32 );
+	}
+	/*--------------------------------------------------*/
 
 	pr_info("[wcnss]: wcnss_wlan_init -.\n");
 	return 0;
