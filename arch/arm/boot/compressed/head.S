@@ -10,6 +10,11 @@
  */
 #include <linux/linkage.h>
 
+#ifdef CONFIG_KEXEC_HARDBOOT
+  #include <asm/kexec.h>
+  #include <asm/memory.h>
+#endif
+
 /*
  * Debugging stuff
  *
@@ -134,6 +139,97 @@ start:
  THUMB(		.thumb			)
 1:		mov	r7, r1			@ save architecture ID
 		mov	r8, r2			@ save atags pointer
+
+#ifdef CONFIG_KEXEC_HARDBOOT
+		/* Check hardboot page for a kexec kernel. */
+		ldr	r3, =KEXEC_HB_PAGE_ADDR
+		ldr	r0, [r3]
+		ldr	r1, =KEXEC_HB_PAGE_MAGIC
+		teq	r0, r1
+		bne	not_booting_other
+
+		/* Clear hardboot page magic to avoid boot loop. */
+		mov	r0, #0
+		str	r0, [r3]
+
+/* Copy the kernel tagged list (atags):
+ *
+ * The kernel requires atags to be located in a direct-mapped region,
+ * usually below the kernel in the first 16 kB of RAM.  If they're above
+ * (the start of) the kernel, they need to be copied to a suitable
+ * location, e.g., the machine-defined params_phys.
+ *
+ * The assumption is that the tags will only be "out of place" if the
+ * decompressor code is also, so copying is implemented only in the "won't
+ * overwrite" case (which should be fixed).  Still need to make sure that
+ * the copied tags don't overwrite either the kernel or decompressor code
+ * (or rather, the remainder of it since everything up to here has already
+ * been executed).
+ *
+ * Vojtech Bocek <vbocek@gmail.com>: I've moved atags copying from guest
+ * kernel to the host and rewrote it from C to assembler in order to remove
+ * the need for guest kernel to be patched. I don't know assembler very well,
+ * so it doesn't look very good and I have no idea if I didn't accidentally
+ * break something, causing problems down the road. It's worked every time
+ * and I didn't notice any problems so far though.
+ *
+ * r4: zreladdr (kernel start)
+ * r8: kexec_boot_atags
+ * r2: boot_atags */
+		ldr	r8, [r3, #12]			@ kexec_boot_atags (r2: boot_atags)
+		ldr	r4, =zreladdr			@ zreladdr
+
+		/* No need to copy atags if they're already below kernel */
+		cmp	r8, r4
+		blo	no_atags_cpy
+
+		/* r0: min(zreladdr, pc) */
+		mov	r0, pc
+		cmp	r4, r0
+		movlo	r0, r4
+
+		/* Compute max space for atags, if max <= 0 don't copy. */
+		subs	r5, r0, r2			@ max = min(zreladdr, pc) - dest
+		bls	no_atags_cpy
+
+		/* Copy atags to params_phys. */
+		/* r8 src, r2 dest, r5 max */
+
+		ldr	r0, [r8]				@ first tag size
+		cmp	r0, #0
+		moveq	r4, #8
+		beq	catags_empty
+		mov	r4, r8
+
+catags_foreach:
+		lsl	r0, r0, #2				@ Multiply by 4
+		ldr	r0, [r4, r0]!			@ Load next tag size to r0 and address to r4
+		cmp	r0, #0
+		bne	catags_foreach
+
+		rsb	r4, r8, r4				@ r4 -= r8 (get only size)
+		add	r4, r4, #8				@ add size of the last tag
+catags_empty:
+		cmp	r5, r4					@ if(max <= size)
+		bcc	no_atags_cpy
+
+		mov	r5, #0					@ iterator
+catags_cpy:
+		ldr	r0, [r8, r5]
+		str	r0, [r2, r5]
+		add	r5, r5, #4
+		cmp	r5, r4
+		blo	catags_cpy
+
+no_atags_cpy:
+		/* Load boot arguments and jump to kexec kernel. */
+		ldr	r1, [r3, #8]			@ kexec_mach_type
+		ldr	pc, [r3, #4]			@ kexec_start_address
+
+		.ltorg
+
+not_booting_other:
+#endif
 
 #ifndef __ARM_ARCH_2__
 		/*
