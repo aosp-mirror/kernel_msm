@@ -696,11 +696,11 @@ static inline void __update_task_entity_utilization(struct sched_entity *se);
 /* Give new task start runnable values to heavy its load in infant time */
 void init_task_runnable_average(struct task_struct *p)
 {
-	u32 start_load = sysctl_sched_latency >> 10;
+	u32 slice;
 
-	p->se.avg.decay_count = 0;
-	p->se.avg.runnable_avg_sum = p->se.avg.running_avg_sum = start_load;
-	p->se.avg.avg_period = start_load;
+	slice = sched_slice(task_cfs_rq(p), &p->se) >> 10;
+	p->se.avg.runnable_avg_sum = p->se.avg.running_avg_sum = slice;
+	p->se.avg.avg_period = slice;
 	__update_task_entity_contrib(&p->se);
 	__update_task_entity_utilization(&p->se);
 }
