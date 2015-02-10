@@ -1599,14 +1599,17 @@ DEFINE_SIMPLE_ATTRIBUTE(ufsdbg_err_state,
 
 void ufsdbg_add_debugfs(struct ufs_hba *hba)
 {
+	char root_name[sizeof("ufshcd00")];
+
 	if (!hba) {
 		pr_err("%s: NULL hba, exiting", __func__);
 		return;
 	}
 
-	hba->debugfs_files.debugfs_root = debugfs_create_dir(dev_name(hba->dev),
-							     NULL);
+	snprintf(root_name, ARRAY_SIZE(root_name), "%s%d", UFSHCD,
+		hba->host->host_no);
 
+	hba->debugfs_files.debugfs_root = debugfs_create_dir(root_name, NULL);
 	if (IS_ERR(hba->debugfs_files.debugfs_root))
 		/* Don't complain -- debugfs just isn't enabled */
 		goto err_no_root;
