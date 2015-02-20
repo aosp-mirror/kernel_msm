@@ -1297,7 +1297,7 @@ static struct irq_chip msm_dirconn_irq_chip = {
 					| IRQCHIP_SET_TYPE_MASKED,
 };
 
-static void msm_gpio_irq_handler(struct irq_desc *desc)
+static bool msm_gpio_irq_handler(struct irq_desc *desc)
 {
 	struct gpio_chip *gc = irq_desc_get_handler_data(desc);
 	const struct msm_pingroup *g;
@@ -1308,6 +1308,7 @@ static void msm_gpio_irq_handler(struct irq_desc *desc)
 	int handled = 0;
 	u32 val;
 	int i;
+	bool ret;
 
 	chained_irq_enter(chip, desc);
 
@@ -1326,21 +1327,25 @@ static void msm_gpio_irq_handler(struct irq_desc *desc)
 		}
 	}
 
+	ret = (handled != 0);
 	/* No interrupts were flagged */
 	if (handled == 0)
-		handle_bad_irq(desc);
+		ret = handle_bad_irq(desc);
 
 	chained_irq_exit(chip, desc);
+	return ret;
 }
 
-static void msm_gpio_dirconn_handler(struct irq_desc *desc)
+static bool msm_gpio_dirconn_handler(struct irq_desc *desc)
 {
+	int res;
 	struct irq_data *irqd = irq_desc_get_handler_data(desc);
 	struct irq_chip *chip = irq_desc_get_chip(desc);
 
 	chained_irq_enter(chip, desc);
-	generic_handle_irq(irqd->irq);
+	res = generic_handle_irq(irqd->irq);
 	chained_irq_exit(chip, desc);
+	return res == 1;
 }
 
 static void msm_gpio_setup_dir_connects(struct msm_pinctrl *pctrl)
