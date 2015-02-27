@@ -171,7 +171,6 @@ int kgsl_add_fence_event(struct kgsl_device *device,
 		ret = priv.fence_fd;
 		goto unlock;
 	}
-	sync_fence_install(fence, priv.fence_fd);
 
 	/* Unlock the mutex before copying to user */
 	mutex_unlock(&device->mutex);
@@ -180,6 +179,7 @@ int kgsl_add_fence_event(struct kgsl_device *device,
 		ret = -EFAULT;
 		goto out;
 	}
+	sync_fence_install(fence, priv.fence_fd);
 
 	/*
 	 * Hold the context ref-count for the event - it will get released in
@@ -535,6 +535,9 @@ out:
 	if (ret) {
 		if (fence)
 			sync_fence_put(fence);
+		if (fd >= 0)
+			put_unused_fd(fd);
+
 	}
 	kgsl_syncsource_put(syncsource);
 	return ret;
