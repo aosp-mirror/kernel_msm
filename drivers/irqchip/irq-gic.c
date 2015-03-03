@@ -256,6 +256,36 @@ void gic_show_pending_irq(void)
 		}
 	}
 }
+//ASUS_BSP+++ "for wlan wakeup trace"
+extern int g_wcnss_wlanrx_irq;
+static int wcnss_irq_flag_rx = 0;
+static int wcnss_irq_flag_wdi = 0;
+
+int wcnss_irq_flag_function_rx(void)
+{
+    if( wcnss_irq_flag_rx == 1 ) {
+        wcnss_irq_flag_rx = 0;
+        return 1;
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(wcnss_irq_flag_function_rx);
+
+
+int wcnss_irq_flag_function_wdi(void){
+    if( wcnss_irq_flag_wdi == 1 ){
+        wcnss_irq_flag_wdi = 0;
+        wcnss_irq_flag_rx = 0;
+        return 1;
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(wcnss_irq_flag_function_wdi);
+
+
+//ASUS_BSP--- "for wlan wakeup trace"
 
 static void gic_show_resume_irq(struct gic_chip_data *gic)
 {
@@ -288,6 +318,13 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 
 		pr_warning("%s: %d triggered %s\n", __func__,
 					i + gic->irq_offset, name);
+
+		//ASUS_BSP+++ "for wlan wakeup trace"
+		if( (i + gic->irq_offset) == g_wcnss_wlanrx_irq ){
+		    wcnss_irq_flag_rx = 1;
+		    wcnss_irq_flag_wdi = 1;
+		}
+		//ASUS_BSP--- "for wlan wakeup trace"
 	}
 }
 
