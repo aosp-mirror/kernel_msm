@@ -57,6 +57,10 @@
 #define IS_CAL_DATA_PRESENT     0
 #define WAIT_FOR_CBC_IND     2
 
+//ASUS_BSP+++ "for wlan wakeup trace"
+int g_wcnss_wlanrx_irq = 0;
+//ASUS_BSP--- "for wlan wakeup trace"
+
 static char *wcnss_ready = NULL;
 module_param(wcnss_ready, charp, S_IRUGO | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
@@ -2880,6 +2884,13 @@ wcnss_trigger_config(struct platform_device *pdev)
 		ret = -ENOENT;
 		goto fail_res;
 	}
+
+	//ASUS_BSP+++ "for wlan wakeup trace"
+	pr_info("[wcnss]: %s=%d.\n", (penv->tx_irq_res->name), (int)(penv->tx_irq_res->start));
+	pr_info("[wcnss]: %s=%d.\n", (penv->rx_irq_res->name), (int)(penv->rx_irq_res->start));
+	g_wcnss_wlanrx_irq = (int)(penv->rx_irq_res->start);
+	//ASUS_BSP--- "for wlan wakeup trace"
+
 	INIT_WORK(&penv->wcnssctrl_rx_work, wcnssctrl_rx_handler);
 	INIT_WORK(&penv->wcnssctrl_version_work, wcnss_send_version_req);
 	INIT_WORK(&penv->wcnss_pm_config_work, wcnss_send_pm_config);
