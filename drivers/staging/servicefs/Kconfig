@@ -1,0 +1,8 @@
+
+config SERVICE_FS
+	bool "ServiceFS Filesystem"
+	default Y
+
+config SERVICEFS_USE_POISON
+	bool "Poison memory used by ServiceFS on release."
+	default N
