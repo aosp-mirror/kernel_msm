@@ -187,6 +187,7 @@ static int qusb_phy_enable_power(struct qusb_phy *qphy, bool on,
 						bool toggle_vdd)
 {
 	int ret = 0;
+	static bool L24_keep = false; /*++ 2016/01/18, USB Team, PCN00001 ++*/
 
 	dev_dbg(qphy->phy.dev, "%s turn %s regulators. power_enabled:%d\n",
 			__func__, on ? "on" : "off", qphy->power_enabled);
@@ -247,12 +248,16 @@ static int qusb_phy_enable_power(struct qusb_phy *qphy, bool on,
 				"Unable to set voltage for vdda33:%d\n", ret);
 		goto put_vdda33_lpm;
 	}
-
-	ret = regulator_enable(qphy->vdda33);
-	if (ret) {
-		dev_err(qphy->phy.dev, "Unable to enable vdda33:%d\n", ret);
-		goto unset_vdd33;
+/*++ 2016/01/18, USB Team, PCN00001 ++*/
+	if (!L24_keep) {
+		ret = regulator_enable(qphy->vdda33);
+		if (ret) {
+			dev_err(qphy->phy.dev, "Unable to enable vdda33:%d\n", ret);
+			goto unset_vdd33;
+		}
+		L24_keep = true;
 	}
+/*-- 2016/01/18, USB Team, PCN00001 --*/
 
 	if (toggle_vdd)
 		qphy->power_enabled = true;
@@ -261,15 +266,23 @@ static int qusb_phy_enable_power(struct qusb_phy *qphy, bool on,
 	return ret;
 
 disable_vdda33:
+/*++ 2016/01/18, USB Team, PCN00001 ++*/
+/*
 	ret = regulator_disable(qphy->vdda33);
 	if (ret)
 		dev_err(qphy->phy.dev, "Unable to disable vdda33:%d\n", ret);
+*/
+/*-- 2016/01/18, USB Team, PCN00001 --*/
 
 unset_vdd33:
+/*++ 2016/01/18, USB Team, PCN00001 ++*/
+/*
 	ret = regulator_set_voltage(qphy->vdda33, 0, QUSB2PHY_3P3_VOL_MAX);
 	if (ret)
 		dev_err(qphy->phy.dev,
 			"Unable to set (0) voltage for vdda33:%d\n", ret);
+*/
+/*-- 2016/01/18, USB Team, PCN00001 --*/
 
 put_vdda33_lpm:
 	ret = regulator_set_optimum_mode(qphy->vdda33, 0);
