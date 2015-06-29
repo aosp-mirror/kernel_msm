@@ -1286,6 +1286,12 @@ static ssize_t fuse_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	if (err)
 		goto out;
 
+	if (ff && ff->rw_lower_file) {
+		written = fuse_shortcircuit_aio_write(iocb, iov, nr_segs,
+						      iocb->ki_pos);
+		goto out;
+	}
+
 	if (file->f_flags & O_DIRECT) {
 		written = generic_file_direct_write(iocb, iov, &nr_segs,
 						    pos, &iocb->ki_pos,
