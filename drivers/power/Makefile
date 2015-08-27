@@ -85,3 +85,4 @@ obj-$(CONFIG_ARCH_MSM)		+= qcom/
 obj-$(CONFIG_BATTERY_TEMP_MONITOR)     += battery-tm.o
 obj-$(CONFIG_IDTP9017_WIRELESS_CHARGER) += idtp9017_wireless_charger.o
 obj-$(CONFIG_CHARGER_DOCK)	+= charger-dock.o
+obj-$(CONFIG_REAR_TEMP_MONITOR) += rear-tm.o

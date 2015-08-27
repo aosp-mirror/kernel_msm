@@ -643,6 +643,14 @@ config CHARGER_DOCK
 	help
 	  Say Y to enable charger dock detector.
 
+config REAR_TEMP_MONITOR
+	bool "Rear Temperature Monitoring driver"
+	depends on THERMAL_QPNP_ADC_TM
+	default n
+	help
+	  Say Y to enable rear temperature monitor for preventing
+	  low-temperature burn.
+
 source "drivers/power/reset/Kconfig"
 
 endif # POWER_SUPPLY
