@@ -3276,6 +3276,15 @@ static int select_best_cpu(struct task_struct *p, int target, int reason,
 		.rtg			= NULL,
 	};
 
+	if (sync) {
+		cpumask_t search_cpus;
+		int cpu = smp_processor_id();
+		cpumask_and(&search_cpus, tsk_cpus_allowed(p), cpu_online_mask);
+		if (cpumask_test_cpu(cpu, &search_cpus)) {
+			return cpu;
+		}
+	}
+
 	bitmap_copy(env.candidate_list, all_cluster_ids, NR_CPUS);
 	bitmap_zero(env.backup_list, NR_CPUS);
 
