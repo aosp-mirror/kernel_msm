@@ -653,4 +653,6 @@ static inline void acct_update_power(struct task_struct *p, cputime_t cputime)
 
 #endif
 
+struct sched_domain;
+unsigned long cpufreq_scale_freq_capacity(struct sched_domain *sd, int cpu);
 #endif /* _LINUX_CPUFREQ_H */
