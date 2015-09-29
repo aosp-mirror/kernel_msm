@@ -899,8 +899,11 @@ static int mt_input_configured(struct hid_device *hdev, struct hid_input *hi)
 	struct hid_field *field = hi->report->field[0];
 	int ret = 0;
 
-	if (hi->report->id == td->mt_report_id)
+	if (hi->report->id == td->mt_report_id) {
 		ret = mt_touch_input_configured(hdev, hi);
+		if (ret)
+			return ret;
+	}
 
 	/*
 	 * some egalax touchscreens have "application == HID_DG_TOUCHSCREEN"
