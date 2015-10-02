@@ -38,6 +38,7 @@ struct rear_tm_data {
 	int thermalstate;
 	struct switch_dev sdev;
 	int enabled;
+	int compensated_temp;
 };
 
 struct tm_ctrl_data {
@@ -299,11 +300,13 @@ static int rear_tm_get_level(struct rear_tm_data *rear_tm,
 	int i = max_size;
 	if (state == ADC_TM_WARM_STATE) {
 		while((rear_tm->adc_param.high_temp !=
-				rear_tm->warm_cfg[i].thresh) && (i > 0))
+				(rear_tm->warm_cfg[i].thresh +
+				 rear_tm->compensated_temp)) && (i > 0))
 			i--;
 	} else {
 		while((rear_tm->adc_param.low_temp !=
-				rear_tm->warm_cfg[i].thresh_clr) && (i > 0))
+				(rear_tm->warm_cfg[i].thresh_clr +
+				 rear_tm->compensated_temp)) && (i > 0))
 			i--;
 	}
 	return i;
@@ -338,7 +341,7 @@ static void rear_tm_notification(enum qpnp_tm_state state, void *ctx)
 
 	pr_info("state: %s, temp: %d\n",
 			state == ADC_TM_WARM_STATE ? "warm" : "cool",
-			cur_temp);
+			cur_temp - rear_tm->compensated_temp);
 
 	i = rear_tm_get_level(rear_tm, state);
 	if (state == ADC_TM_WARM_STATE) {
@@ -348,8 +351,10 @@ static void rear_tm_notification(enum qpnp_tm_state state, void *ctx)
 		next = max(i-1, 0);
 		rear_tm_action(rear_tm, REAR_NORMAL); // clear state
 	}
-	rear_tm->adc_param.high_temp = rear_tm->warm_cfg[next].thresh;
-	rear_tm->adc_param.low_temp = rear_tm->warm_cfg[next].thresh_clr;
+	rear_tm->adc_param.high_temp = rear_tm->warm_cfg[next].thresh +
+		rear_tm->compensated_temp;
+	rear_tm->adc_param.low_temp = rear_tm->warm_cfg[next].thresh_clr +
+		rear_tm->compensated_temp;
 
 	if (state == ADC_TM_WARM_STATE) {
 		rear_tm->adc_param.state_request = ADC_TM_HIGH_LOW_THR_ENABLE;
@@ -362,8 +367,10 @@ static void rear_tm_notification(enum qpnp_tm_state state, void *ctx)
 	}
 
 	pr_info("next low temp = %d next high temp = %d\n",
-					rear_tm->adc_param.low_temp,
-					rear_tm->adc_param.high_temp);
+					(rear_tm->adc_param.low_temp -
+					 rear_tm->compensated_temp),
+					(rear_tm->adc_param.high_temp -
+					 rear_tm->compensated_temp));
 
 	ret = qpnp_adc_tm_channel_measure(rear_tm->adc_tm_dev,
 						&rear_tm->adc_param);
@@ -377,8 +384,10 @@ static int rear_tm_notification_init(struct rear_tm_data *rear_tm)
 {
 	int ret;
 
-	rear_tm->adc_param.low_temp = rear_tm->warm_cfg[0].thresh_clr;
-	rear_tm->adc_param.high_temp = rear_tm->warm_cfg[0].thresh;
+	rear_tm->adc_param.low_temp = rear_tm->warm_cfg[0].thresh_clr +
+		rear_tm->compensated_temp;
+	rear_tm->adc_param.high_temp = rear_tm->warm_cfg[0].thresh +
+		rear_tm->compensated_temp;
 	rear_tm->adc_param.state_request = ADC_TM_LOW_THR_ENABLE;
 	rear_tm->adc_param.timer_interval = ADC_MEAS1_INTERVAL_1S;
 	rear_tm->adc_param.btm_ctx = rear_tm;
@@ -438,6 +447,12 @@ static int rear_tm_parse_dt(struct device_node *np,
 
 	rear_tm->warm_cfg_size /= sizeof(struct tm_ctrl_data);
 
+	ret = of_property_read_u32(np, "tm,compensated-temp",
+			&rear_tm->compensated_temp);
+	if (ret) {
+		pr_err("failed to get tm,compensated-temp\n");
+		goto out;
+	}
 out:
 	return ret;
 }
@@ -485,7 +500,7 @@ static int rear_tm_probe(struct spmi_device *spmi)
 	rear_tm->sdev.name = "thermalstate";
 	ret = switch_dev_register(&rear_tm->sdev);
 	if (ret < 0) {
-		pr_err("%s: failed to register switch device\n", __func__);
+		pr_err("failed to register switch device\n");
 		goto err_switch_dev_register;
 	}
 
