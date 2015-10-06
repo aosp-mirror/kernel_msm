@@ -608,7 +608,7 @@ void __init paging_init(void)
 	 */
 	cpu_set_reserved_ttbr0();
 	set_kernel_text_ro();
-	flush_tlb_all();
+	local_flush_tlb_all();
 	cpu_set_default_tcr_t0sz();
 }
 
