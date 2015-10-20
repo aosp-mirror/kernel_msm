@@ -25,6 +25,7 @@
 #include <linux/bitops.h>
 #include <linux/leds.h>
 #include <linux/debugfs.h>
+#include <linux/proc_fs.h>
 
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
@@ -395,6 +396,14 @@ struct qpnp_lbc_chip {
 	struct power_supply		parallel_psy;
 	struct delayed_work		parallel_work;
 };
+
+struct qpnp_lbc_chip *g_lbc_chip;
+
+// BSP Steve2: charging limit +++
+#if defined(ASUS_FACTORY_BUILD)
+bool eng_charging_limit;
+#endif
+// BSP Steve2: charging limit ---
 
 static void qpnp_lbc_enable_irq(struct qpnp_lbc_chip *chip,
 					struct qpnp_lbc_irq *irq)
@@ -1563,6 +1572,92 @@ static int qpnp_batt_property_is_writeable(struct power_supply *psy,
 	return 0;
 }
 
+// BSP Steve2: charging limit +++
+#if defined(ASUS_FACTORY_BUILD)
+static struct workqueue_struct *chrgr_work_queue;
+static struct delayed_work charginglimit_dete_work;
+
+void update_charginglimit_work(int time)
+{
+	cancel_delayed_work(&charginglimit_dete_work);
+	queue_delayed_work(chrgr_work_queue,
+		&charginglimit_dete_work,
+		time * HZ);
+}
+
+void asus_battery_charging_limit(struct work_struct *dat)
+{
+	int recharging_soc = 50;
+	int discharging_soc = 60;
+	int percentage;
+	int rc = 0;
+
+	if (get_prop_capacity(g_lbc_chip) < 0) {
+		pr_err(" %s: * fail to get battery capacity *\n", __func__);
+	} else{
+		if (eng_charging_limit) {
+			/*BSP Steve2: enable charging when soc < recharging soc*/
+			percentage = get_prop_capacity(g_lbc_chip);
+			if (percentage < recharging_soc) {
+				pr_debug("soc: %d < recharging soc: %d , enable charging\n", percentage, recharging_soc);
+				rc = qpnp_lbc_charger_enable(g_lbc_chip, SOC, 1);
+				if (rc) {
+					pr_err("Failed to enable charging rc=%d\n", rc);
+				} else {
+					mutex_lock(&g_lbc_chip->chg_enable_lock);
+					g_lbc_chip->chg_done = false;
+					pr_debug("resuming charging by bms\n");
+					mutex_unlock(&g_lbc_chip->chg_enable_lock);
+				}
+			/*BSP Steve2: disable charging when soc >= discharging soc*/
+			} else if (percentage >= discharging_soc) {
+				pr_debug("soc: %d >= discharging soc: %d , disable charging\n", percentage, discharging_soc);
+				rc = qpnp_lbc_charger_enable(g_lbc_chip, SOC, 0);
+				if (rc) {
+					pr_err("Failed to disable charging rc=%d\n", rc);
+				} else {
+					mutex_lock(&g_lbc_chip->chg_enable_lock);
+					g_lbc_chip->chg_done = false;
+					pr_debug("status = DISCHARGING chg_done = %d\n", g_lbc_chip->chg_done);
+					mutex_unlock(&g_lbc_chip->chg_enable_lock);
+				}
+			} else{
+				pr_debug("soc: %d, between %d and %d\n", percentage, recharging_soc, discharging_soc);
+			}
+		} else{
+			rc = qpnp_lbc_charger_enable(g_lbc_chip, SOC, 1);
+			if (rc) {
+				pr_err("Failed to enable charging rc=%d\n", rc);
+			} else {
+				mutex_lock(&g_lbc_chip->chg_enable_lock);
+				g_lbc_chip->chg_done = false;
+				pr_debug("resuming charging by bms\n");
+				mutex_unlock(&g_lbc_chip->chg_enable_lock);
+				pr_debug("charging limit disable, enable charging!\n");
+			}
+		}
+	}
+	power_supply_changed(&g_lbc_chip->batt_psy);
+
+	update_charginglimit_work(180);
+}
+
+static int asus_battery_charging_limit_routine(void)
+{
+	pr_debug(" %s\n", __func__);
+
+	INIT_DELAYED_WORK(&charginglimit_dete_work,
+		asus_battery_charging_limit);
+	chrgr_work_queue =	create_singlethread_workqueue("charginglimit_wq");
+	if (!chrgr_work_queue) {
+		pr_err(" fail to create charginglimit_wq\n");
+		return -ENOMEM;
+	}
+	return 0;
+}
+#endif
+// BSP Steve2: charging limit ---
+
 /*
  * End of charge happens only when BMS reports the battery status as full. For
  * charging to end the s/w must put the usb path in suspend. Note that there
@@ -1670,7 +1765,6 @@ static int qpnp_batt_power_set_property(struct power_supply *psy,
 	default:
 		return -EINVAL;
 	}
-
 	power_supply_changed(&chip->batt_psy);
 	return rc;
 }
@@ -3095,6 +3189,72 @@ static int qpnp_lbc_parse_resources(struct qpnp_lbc_chip *chip)
 	return rc;
 }
 
+//BSP Steve2 proc charger_limit_enable Interface +++
+#if defined(ASUS_FACTORY_BUILD)
+static int charger_limit_enable_proc_read(struct seq_file *buf, void *v)
+{
+	if (eng_charging_limit) {
+		seq_printf(buf, "charging limit enable\n");
+	} else{
+		seq_printf(buf, "charging limit disable\n");
+	}
+	return 0;
+}
+
+static ssize_t charger_limit_enable_proc_write(struct file *filp, const char __user *buff,
+		size_t len, loff_t *data)
+{
+	char messages[256];
+
+	if (len > 256) {
+		len = 256;
+	}
+
+	if (copy_from_user(messages, buff, len)) {
+		return -EFAULT;
+	}
+
+	if (buff[0] == '1') {
+		eng_charging_limit = true;
+		/* turn on charging limit in eng mode */
+		pr_info("[BAT][CHG][Proc]charger_limit_enable:%d\n", 1);
+	} else if (buff[0] == '0') {
+		eng_charging_limit = false;
+		/* turn off charging limit in eng mode */
+		pr_info("[BAT][CHG][Proc]charger_limit_enable:%d\n", 0);
+	}
+
+	update_charginglimit_work(0);
+
+	return len;
+}
+
+static int charger_limit_enable_proc_open(struct inode *inode, struct  file *file)
+{
+    return single_open(file, charger_limit_enable_proc_read, NULL);
+}
+
+static const struct file_operations charger_limit_enable_fops = {
+	.owner = THIS_MODULE,
+	.open =  charger_limit_enable_proc_open,
+	.write = charger_limit_enable_proc_write,
+	.read = seq_read,
+};
+
+static void create_charger_limit_enable_proc_file(void)
+{
+	struct proc_dir_entry *charger_limit_enable_proc_file = proc_create("driver/charger_limit_enable", 0666, NULL, &charger_limit_enable_fops);
+
+	if (charger_limit_enable_proc_file) {
+		pr_info("[BAT][CHG][Proc]charger_limit_enable create ok!\n");
+	} else{
+		pr_info("[BAT][CHG][Proc]charger_limit_enable create failed!\n");
+	}
+	return;
+}
+//BSP Steve2 proc charger_limit_enable Interface ---
+#endif
+
 static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 {
 	int rc = 0;
@@ -3334,6 +3494,13 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 			pr_err("Couldn't create lbc_config debug file\n");
 	}
 
+#if defined(ASUS_FACTORY_BUILD)
+	rc = asus_battery_charging_limit_routine();
+
+	eng_charging_limit = true;
+	create_charger_limit_enable_proc_file();
+#endif
+
 	pr_info("Probe chg_dis=%d bpd=%d usb=%d batt_pres=%d batt_volt=%d soc=%d\n",
 			chip->cfg_charging_disabled,
 			chip->cfg_bpd_detection,
@@ -3341,6 +3508,8 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 			get_prop_batt_present(chip),
 			get_prop_battery_voltage_now(chip),
 			get_prop_capacity(chip));
+
+	g_lbc_chip = chip;
 
 	return 0;
 
