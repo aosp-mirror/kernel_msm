@@ -1574,13 +1574,12 @@ static int qpnp_batt_property_is_writeable(struct power_supply *psy,
 
 // BSP Steve2: charging limit +++
 #if defined(ASUS_FACTORY_BUILD)
-static struct workqueue_struct *chrgr_work_queue;
+static struct workqueue_struct *charger_work_queue;
 static struct delayed_work charginglimit_dete_work;
 
 void update_charginglimit_work(int time)
 {
-	cancel_delayed_work(&charginglimit_dete_work);
-	queue_delayed_work(chrgr_work_queue,
+	queue_delayed_work(charger_work_queue,
 		&charginglimit_dete_work,
 		time * HZ);
 }
@@ -1642,14 +1641,14 @@ void asus_battery_charging_limit(struct work_struct *dat)
 	update_charginglimit_work(180);
 }
 
-static int asus_battery_charging_limit_routine(void)
+static int asus_battery_charging_limit_wq(void)
 {
 	pr_debug(" %s\n", __func__);
 
 	INIT_DELAYED_WORK(&charginglimit_dete_work,
 		asus_battery_charging_limit);
-	chrgr_work_queue =	create_singlethread_workqueue("charginglimit_wq");
-	if (!chrgr_work_queue) {
+	charger_work_queue =	create_singlethread_workqueue("charginglimit_wq");
+	if (!charger_work_queue) {
 		pr_err(" fail to create charginglimit_wq\n");
 		return -ENOMEM;
 	}
@@ -3217,14 +3216,14 @@ static ssize_t charger_limit_enable_proc_write(struct file *filp, const char __u
 	if (buff[0] == '1') {
 		eng_charging_limit = true;
 		/* turn on charging limit in eng mode */
+		update_charginglimit_work(0);
 		pr_info("[BAT][CHG][Proc]charger_limit_enable:%d\n", 1);
 	} else if (buff[0] == '0') {
 		eng_charging_limit = false;
 		/* turn off charging limit in eng mode */
+		cancel_delayed_work(&charginglimit_dete_work);
 		pr_info("[BAT][CHG][Proc]charger_limit_enable:%d\n", 0);
 	}
-
-	update_charginglimit_work(0);
 
 	return len;
 }
@@ -3495,7 +3494,7 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 	}
 
 #if defined(ASUS_FACTORY_BUILD)
-	rc = asus_battery_charging_limit_routine();
+	rc = asus_battery_charging_limit_wq();
 
 	eng_charging_limit = true;
 	create_charger_limit_enable_proc_file();
