@@ -136,7 +136,7 @@
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-		qcom,mdss-dsi-reset-sequence = <1 50>;
+		qcom,mdss-dsi-reset-sequence = <1 20>;
 		qcom,mdss-brightness-default-level = <208>;
 		qcom,cont-splash-enabled;
 		qcom,ulps-enabled;
@@ -173,11 +173,55 @@
 		>;
 	};
 };
-&mdss_dsi0 {
-	qcom,dsi-pref-prim-pan = <&dsi_lgd_lg4262_cmd>;
-	vdda-supply = <&pm8916_l2>;
-	vdd-supply = <&pm8916_l11>;
-	vddio-supply = <&pm8916_l6>;
 
+&pmx_mdss {
+		qcom,num-grp-pins = <2>;
+		qcom,pins = <&gp 25>, <&gp 38>;
 };
 
+&pmx_mdss_te {
+		qcom,num-grp-pins = <1>;
+		qcom,pins = <&gp 24>;
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_lgd_lg4262_cmd>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+
+	qcom,platform-te-gpio = <&msm_gpio 24 0>;
+	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
+	qcom,platform-enable-gpio = <&msm_gpio 38 0>;
+	vdda-supply = <&pm8916_l2>;
+	vdd-supply = <&pm8916_l11>;
+	vddio-supply = <&pm8916_l15>;
+
+	qcom,panel-supply-entries {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "vdd";
+			qcom,supply-pre-on-sleep = <0>;
+			qcom,supply-post-on-sleep = <10>;
+			qcom,supply-pre-off-sleep = <0>;
+			qcom,supply-post-off-sleep = <200>;
+		};
+
+		qcom,panel-supply-entry@1 {
+			reg = <1>;
+			qcom,supply-name = "vddio";
+			qcom,supply-pre-on-sleep = <0>;
+			qcom,supply-post-on-sleep = <0>;
+			qcom,supply-pre-off-sleep = <20>;
+			qcom,supply-post-off-sleep = <0>;
+		};
+
+	};
+};
+
+&mdss_dsi0_pll {
+	vddio-supply = <&pm8916_l6>;
+};
