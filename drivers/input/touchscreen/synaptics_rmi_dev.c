@@ -507,7 +507,7 @@ static int rmidev_init_device(struct synaptics_rmi4_data *rmi4_data)
 	}
 
 	rmidev->fn_ptr =  kzalloc(sizeof(*(rmidev->fn_ptr)), GFP_KERNEL);
-	if (!rmidev->fn_ptr) {
+	if (!rmidev) {
 		retval = -ENOMEM;
 		goto err_fn_ptr;
 	}

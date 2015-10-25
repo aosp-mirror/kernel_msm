@@ -26,6 +26,7 @@
 #include <linux/input.h>
 #include <linux/firmware.h>
 #include <linux/string.h>
+#include <linux/ctype.h>
 #include <linux/input/synaptics_dsx.h>
 #include "synaptics_i2c_rmi4.h"
 
@@ -270,6 +271,7 @@ struct synaptics_rmi4_fwu_handle {
 	const unsigned char *firmware_data;
 	const unsigned char *config_data;
 	const unsigned char *lockdown_data;
+	unsigned char img_config_data[4];
 	unsigned short block_size;
 	unsigned short fw_block_count;
 	unsigned short config_block_count;
@@ -296,6 +298,45 @@ struct synaptics_rmi4_fwu_handle {
 static struct synaptics_rmi4_fwu_handle *fwu;
 
 DECLARE_COMPLETION(fwu_remove_complete);
+
+static bool synaptics_rmi4_isalnum(const char *s, size_t sz)
+{
+	int i;
+
+	if (!s)
+		return false;
+
+	/* check if alnum */
+	for (i = 0; i < sz; i++)
+		if (!isalnum(s[i]))
+			return false;
+
+	return true;
+}
+
+/* if alnum, toupper and then copy. otherwise, just copy */
+static void synaptics_rmi4_toupper(char *d, const char *s, size_t sz)
+{
+	int i;
+	bool alnum = false;
+
+	if (!d || !s)
+		return;
+
+	/* check if alnum */
+	alnum = synaptics_rmi4_isalnum(s, sz);
+
+	/* don't need copy if !alnum && s == d */
+	if (!alnum && s == d)
+		return;
+
+	for (i = 0; i < sz; i++) {
+		if (alnum)
+			d[i] = toupper(s[i]);
+		else
+			d[i] = s[i];
+	}
+}
 
 static unsigned int extract_uint(const unsigned char *ptr)
 {
@@ -350,8 +391,11 @@ static void parse_header(void)
 	memcpy(img->product_info, data->product_info,
 		sizeof(data->product_info));
 
-	img->is_contain_build_info =
-		(data->options_firmware_id == (1 << OPTION_BUILD_INFO));
+	if (fwu->rmi4_data->check_build)
+		img->is_contain_build_info =
+			(data->options_firmware_id == (1 << OPTION_BUILD_INFO));
+	else
+		img->is_contain_build_info = 0;
 
 	if (img->is_contain_build_info) {
 		img->package_id = (data->pkg_id_msb << 8) |
@@ -706,19 +750,29 @@ static enum flash_area fwu_go_nogo(void)
 	unsigned char config_id[4];
 	unsigned char pkg_id[4];
 	char *strptr;
-	char *imagePR;
+	char *imagePR = kzalloc(sizeof(MAX_FIRMWARE_ID_LEN), GFP_KERNEL);
 	enum flash_area flash_area = NONE;
 	struct i2c_client *i2c_client = fwu->rmi4_data->i2c_client;
 	struct f01_device_status f01_device_status;
 	struct image_content *img = &fwu->image_content;
-
-	imagePR = kzalloc(sizeof(MAX_FIRMWARE_ID_LEN), GFP_KERNEL);
-	if (!imagePR) {
-		flash_area = NONE;
-		return flash_area;
-	}
+	int config_flag = 0;
 
 	if (fwu->force_update) {
+		flash_area = UI_FIRMWARE;
+		goto exit;
+	}
+
+	retval = fwu_read_f01_device_status(&f01_device_status);
+	if (retval < 0) {
+		flash_area = NONE;
+		goto exit;
+	}
+
+	/* Force update firmware when device is in bootloader mode */
+	if (f01_device_status.flash_prog) {
+		dev_info(&i2c_client->dev,
+				"%s: In flash prog mode\n",
+				__func__);
 		flash_area = UI_FIRMWARE;
 		goto exit;
 	}
@@ -763,21 +817,6 @@ static enum flash_area fwu_go_nogo(void)
 		goto exit;
 	}
 
-	retval = fwu_read_f01_device_status(&f01_device_status);
-	if (retval < 0) {
-		flash_area = NONE;
-		goto exit;
-	}
-
-	/* Force update firmware when device is in bootloader mode */
-	if (f01_device_status.flash_prog) {
-		dev_info(&i2c_client->dev,
-			"%s: In flash prog mode\n",
-			__func__);
-		flash_area = UI_FIRMWARE;
-		goto exit;
-	}
-
 	/* device firmware id */
 	retval = fwu->fn_ptr->read(fwu->rmi4_data,
 				fwu->f01_fd.query_base_addr + 18,
@@ -810,8 +849,10 @@ static enum flash_area fwu_go_nogo(void)
 				sizeof(fwu->image_name));
 		if (!strptr) {
 			dev_err(&i2c_client->dev,
-			"No valid PR number found in image file name...\n");
-			goto exit;
+				"No valid PR number (PRxxxxxxx)" \
+				"found in image file name...\n");
+			config_flag = 1;
+			goto check_config_id;
 		}
 
 		strptr += 2;
@@ -833,16 +874,18 @@ static enum flash_area fwu_go_nogo(void)
 			"Device firmware id %d, .img firmware id %d\n",
 			deviceFirmwareID,
 			(unsigned int)imageFirmwareID);
-	if (imageFirmwareID > deviceFirmwareID) {
-		flash_area = UI_FIRMWARE;
-		goto exit;
-	} else if (imageFirmwareID < deviceFirmwareID) {
-		flash_area = NONE;
-		dev_info(&i2c_client->dev,
-			"%s: Img fw is older than device fw. Skip fw update.\n",
-			__func__);
-		goto exit;
+
+	/*
+	 * New firmware's FirmwareID isn't always increased
+	 * from the current firmware's, so just mark firmware update flag
+	 * if FirmwareIDs are different.
+	 * Firmware update will be decided by checking "config_id".
+	 */
+	if (imageFirmwareID != deviceFirmwareID) {
+		config_flag = 1;
 	}
+
+check_config_id:
 
 	/* device config id */
 	retval = fwu->fn_ptr->read(fwu->rmi4_data,
@@ -856,27 +899,35 @@ static enum flash_area fwu_go_nogo(void)
 		flash_area = NONE;
 		goto exit;
 	}
+	synaptics_rmi4_toupper(config_id, config_id, 4);
 	deviceConfigID =  extract_uint_be(config_id);
 
-	dev_dbg(&i2c_client->dev,
+	dev_info(&i2c_client->dev,
 		"Device config ID 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
 		config_id[0], config_id[1], config_id[2], config_id[3]);
 
 	/* .img config id */
-	dev_dbg(&i2c_client->dev,
+	dev_info(&i2c_client->dev,
 			".img config ID 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
 			fwu->config_data[0],
 			fwu->config_data[1],
 			fwu->config_data[2],
 			fwu->config_data[3]);
-	imageConfigID =  extract_uint_be(fwu->config_data);
+
+	/* copy to keep debug information */
+	synaptics_rmi4_toupper(fwu->img_config_data, fwu->config_data, 4);
+
+	imageConfigID =  extract_uint_be(fwu->img_config_data);
 
 	dev_dbg(&i2c_client->dev,
 		"%s: Device config ID %d, .img config ID %d\n",
 		__func__, deviceConfigID, imageConfigID);
 
 	if (imageConfigID > deviceConfigID) {
-		flash_area = CONFIG_AREA;
+		if (config_flag)
+			flash_area = UI_FIRMWARE;
+		else
+			flash_area = CONFIG_AREA;
 		goto exit;
 	}
 exit:
@@ -1402,10 +1453,6 @@ static int fwu_do_read_config(void)
 
 	kfree(fwu->read_config_buf);
 	fwu->read_config_buf = kzalloc(fwu->config_size, GFP_KERNEL);
-	if (!fwu->read_config_buf) {
-		retval = -ENOMEM;
-		goto exit;
-	}
 
 	block_offset[1] |= (fwu->config_area << 5);
 
@@ -1620,6 +1667,9 @@ static int fwu_start_reflash(void)
 	/* reset device */
 	fwu_reset_device();
 
+	/* rescan pdt */
+	fwu_scan_pdt();
+
 	/* check device status */
 	retval = fwu_read_f01_device_status(&f01_device_status);
 	if (retval < 0)
@@ -1666,10 +1716,16 @@ int synaptics_fw_updater(void)
 
 	fwu->config_area = UI_CONFIG_AREA;
 
+	if (fwu->fn_ptr->enable)
+		fwu->fn_ptr->enable(fwu->rmi4_data, false);
+
 	retval = fwu_start_reflash();
 	fwu->rmi4_data->fw_updating = false;
 
 	synaptics_rmi4_update_debug_info();
+
+	if (fwu->fn_ptr->enable)
+		fwu->fn_ptr->enable(fwu->rmi4_data, true);
 
 	return retval;
 }
@@ -1855,6 +1911,20 @@ exit:
 	return retval;
 }
 
+static ssize_t fwu_sysfs_check_fw_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int input = 0;
+
+	if (sscanf(buf, "%u", &input) != 1)
+		return -EINVAL;
+
+	if (input)
+		queue_delayed_work(fwu->fwu_workqueue, &fwu->fwu_work, 0);
+
+	return count;
+}
+
 static ssize_t fwu_sysfs_write_config_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -1996,14 +2066,28 @@ static ssize_t fwu_sysfs_config_id_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	unsigned char config_id[4];
+	char *fmt = NULL;
+
 	/* device config id */
+	if (fwu->rmi4_data->suspended == true)
+		return snprintf(buf, PAGE_SIZE, "Device is in suspend\n");
+
 	fwu->fn_ptr->read(fwu->rmi4_data,
 				fwu->f34_fd.ctrl_base_addr,
 				config_id,
 				sizeof(config_id));
 
-	return snprintf(buf, PAGE_SIZE, "%d.%d.%d.%d\n",
-		config_id[0], config_id[1], config_id[2], config_id[3]);
+	if (synaptics_rmi4_isalnum(config_id, 4)) {
+		synaptics_rmi4_toupper(config_id, config_id, 4);
+		fmt = "DEVICE: %c%c%c%c IMG: %c%c%c%c\n";
+	} else {
+		fmt = "DEVICE: %02x%02x%02x%02x IMG: %02x%02x%02x%02x\n";
+	}
+
+	return snprintf(buf, PAGE_SIZE, fmt,
+		config_id[0], config_id[1], config_id[2], config_id[3],
+		fwu->img_config_data[0], fwu->img_config_data[1],
+		fwu->img_config_data[2], fwu->img_config_data[3]);
 }
 
 static ssize_t fwu_sysfs_package_id_show(struct device *dev,
@@ -2011,6 +2095,10 @@ static ssize_t fwu_sysfs_package_id_show(struct device *dev,
 {
 	unsigned char pkg_id[4];
 	/* read device package id */
+
+	if (fwu->rmi4_data->suspended == true)
+		return snprintf(buf, PAGE_SIZE, "Device is in suspend\n");
+
 	fwu->fn_ptr->read(fwu->rmi4_data,
 				fwu->f01_fd.query_base_addr + 17,
 				pkg_id,
@@ -2073,6 +2161,9 @@ static struct device_attribute attrs[] = {
 	__ATTR(update_fw, S_IWUSR | S_IWGRP,
 			NULL,
 			fwu_sysfs_do_reflash_store),
+	__ATTR(check_fw, S_IWUSR | S_IWGRP,
+			NULL,
+			fwu_sysfs_check_fw_store),
 	__ATTR(writeconfig, S_IWUSR | S_IWGRP,
 			NULL,
 			fwu_sysfs_write_config_store),
@@ -2117,7 +2208,17 @@ static struct device_attribute attrs[] = {
 
 static void synaptics_rmi4_fwu_work(struct work_struct *work)
 {
+	struct synaptics_rmi4_fwu_handle *fwu =
+		container_of(to_delayed_work(work),
+			struct synaptics_rmi4_fwu_handle, fwu_work);
+
+	if (fwu->fn_ptr->enable)
+		fwu->fn_ptr->enable(fwu->rmi4_data, false);
+
 	fwu_start_reflash();
+
+	if (fwu->fn_ptr->enable)
+		fwu->fn_ptr->enable(fwu->rmi4_data, true);
 }
 
 static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
@@ -2230,9 +2331,6 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 #ifdef INSIDE_FIRMWARE_UPDATE
 	fwu->fwu_workqueue = create_singlethread_workqueue("fwu_workqueue");
 	INIT_DELAYED_WORK(&fwu->fwu_work, synaptics_rmi4_fwu_work);
-	queue_delayed_work(fwu->fwu_workqueue,
-			&fwu->fwu_work,
-			msecs_to_jiffies(1000));
 #endif
 
 	return 0;

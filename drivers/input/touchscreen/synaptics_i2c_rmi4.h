@@ -35,10 +35,10 @@
 #include <linux/earlysuspend.h>
 #endif
 #include <linux/debugfs.h>
+#include <linux/time.h>
 #if defined(CONFIG_SECURE_TOUCH)
 #include <linux/completion.h>
 #include <linux/atomic.h>
-#include <linux/clk.h>
 #endif
 
 #define PDT_PROPS (0x00EF)
@@ -76,10 +76,6 @@
 #define MASK_1BIT 0x01
 
 #define NAME_BUFFER_SIZE 256
-
-#define PINCTRL_STATE_ACTIVE	"pmx_ts_active"
-#define PINCTRL_STATE_SUSPEND	"pmx_ts_suspend"
-#define PINCTRL_STATE_RELEASE	"pmx_ts_release"
 
 /*
  * struct synaptics_rmi4_fn_desc - function descriptor fields in PDT
@@ -208,11 +204,13 @@ struct synaptics_rmi4_device_info {
  * @flip_x: set to TRUE if desired to flip direction on x-axis
  * @flip_y: set to TRUE if desired to flip direction on y-axis
  * @fw_updating: firmware is updating flag
+ * @check_build: check the build information for firmware
  * @sensor_sleep: flag to indicate sleep state of sensor
  * @wait: wait queue for touch data polling in interrupt thread
  * @i2c_read: pointer to i2c read function
  * @i2c_write: pointer to i2c write function
  * @irq_enable: pointer to irq enable function
+ * @idle_mode: idle mode
  */
 struct synaptics_rmi4_data {
 	struct i2c_client *i2c_client;
@@ -224,6 +222,8 @@ struct synaptics_rmi4_data {
 	struct mutex rmi4_io_ctrl_mutex;
 	struct delayed_work det_work;
 	struct workqueue_struct *det_workqueue;
+	struct work_struct recovery_work;
+	struct delayed_work init_work;
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend early_suspend;
 #endif
@@ -243,6 +243,7 @@ struct synaptics_rmi4_data {
 	unsigned short f01_cmd_base_addr;
 	unsigned short f01_ctrl_base_addr;
 	unsigned short f01_data_base_addr;
+	unsigned char finger_state[MAX_NUMBER_OF_FINGERS];
 	int irq;
 	int sensor_max_x;
 	int sensor_max_y;
@@ -250,6 +251,8 @@ struct synaptics_rmi4_data {
 	int disp_maxy;
 	int disp_minx;
 	int disp_miny;
+	bool palm_detected;
+	struct timespec palm_debounce;
 	bool irq_enabled;
 	bool touch_stopped;
 	bool fingers_on_2d;
@@ -261,6 +264,7 @@ struct synaptics_rmi4_data {
 	wait_queue_head_t wait;
 	bool stay_awake;
 	bool staying_awake;
+	bool check_build;
 	int (*i2c_read)(struct synaptics_rmi4_data *pdata, unsigned short addr,
 			unsigned char *data, unsigned short length);
 	int (*i2c_write)(struct synaptics_rmi4_data *pdata, unsigned short addr,
@@ -275,18 +279,15 @@ struct synaptics_rmi4_data {
 #endif
 #endif
 	struct pinctrl *ts_pinctrl;
-	struct pinctrl_state *pinctrl_state_active;
-	struct pinctrl_state *pinctrl_state_suspend;
-	struct pinctrl_state *pinctrl_state_release;
+	struct pinctrl_state *gpio_state_active;
+	struct pinctrl_state *gpio_state_suspend;
 #if defined(CONFIG_SECURE_TOUCH)
 	atomic_t st_enabled;
 	atomic_t st_pending_irqs;
-	bool st_initialized;
 	struct completion st_powerdown;
 	struct completion st_irq_processed;
-	struct clk *core_clk;
-	struct clk *iface_clk;
 #endif
+	int idle_mode;
 };
 
 enum exp_fn {
@@ -295,6 +296,12 @@ enum exp_fn {
 	RMI_F54,
 	RMI_FW_UPDATER,
 	RMI_LAST,
+};
+
+enum {
+	FS_NO = 0,
+	FS_DOWN,
+	FS_UP,
 };
 
 struct synaptics_rmi4_exp_fn_ptr {
