@@ -30,6 +30,10 @@
 #include <soc/qcom/memory_dump.h>
 #include <soc/qcom/watchdog.h>
 
+#ifdef CONFIG_LGE_HANDLE_PANIC
+#include <soc/qcom/lge/lge_handle_panic.h>
+#endif
+
 #define MODULE_NAME "msm_watchdog"
 #define WDT0_ACCSCSSNBARK_INT 0
 #define TCSR_WDT_CFG	0x30
@@ -78,6 +82,9 @@ struct msm_watchdog_data {
 	struct task_struct *watchdog_task;
 	struct timer_list pet_timer;
 	struct completion pet_complete;
+#ifdef CONFIG_LGE_HANDLE_PANIC
+	unsigned long long alive_time[NR_CPUS];
+#endif
 };
 
 /*
@@ -104,12 +111,36 @@ module_param(WDT_HZ, long, 0);
 static int ipi_opt_en;
 module_param(ipi_opt_en, int, 0);
 
+#ifdef CONFIG_LGE_HANDLE_PANIC
+static void __iomem *msm_timer0_base;
+
+void __iomem *wdt_timer_get_timer0_base(void)
+{
+	return msm_timer0_base;
+}
+
+static void wdt_timer_set_timer0_base(void __iomem * iomem)
+{
+	msm_timer0_base = iomem;
+}
+#endif
+
 static void dump_cpu_alive_mask(struct msm_watchdog_data *wdog_dd)
 {
+#ifdef CONFIG_LGE_HANDLE_PANIC
+	int cpu;
+#endif
 	static char alive_mask_buf[MASK_SIZE];
 	cpulist_scnprintf(alive_mask_buf, MASK_SIZE,
 						&wdog_dd->alive_mask);
 	printk(KERN_INFO "cpu alive mask from last pet %s\n", alive_mask_buf);
+
+#ifdef CONFIG_LGE_HANDLE_PANIC
+	for_each_cpu(cpu, cpu_present_mask) {
+		printk(KERN_INFO "cpu%d alive time = %llu\n",
+				cpu, wdog_dd->alive_time[cpu]);
+	}
+#endif
 }
 
 static int msm_watchdog_suspend(struct device *dev)
@@ -285,6 +316,9 @@ static void keep_alive_response(void *info)
 	struct msm_watchdog_data *wdog_dd = (struct msm_watchdog_data *)info;
 	cpumask_set_cpu(cpu, &wdog_dd->alive_mask);
 	smp_mb();
+#ifdef CONFIG_LGE_HANDLE_PANIC
+	wdog_dd->alive_time[cpu] = sched_clock();
+#endif
 }
 
 /*
@@ -388,6 +422,12 @@ void msm_trigger_wdog_bite(void)
 	if (!wdog_data)
 		return;
 	pr_info("Causing a watchdog bite!");
+
+#ifdef CONFIG_LGE_HANDLE_PANIC
+	if (lge_get_restart_reason() == (LGE_RB_MAGIC | LGE_ERR_TZ))
+		lge_set_restart_reason(LGE_RB_MAGIC | LGE_ERR_TZ | LGE_ERR_TZ_NON_SEC_WDT);
+#endif
+
 	__raw_writel(1, wdog_data->base + WDT0_BITE_TIME);
 	mb();
 	__raw_writel(1, wdog_data->base + WDT0_RST);
@@ -399,6 +439,9 @@ void msm_trigger_wdog_bite(void)
 		__raw_readl(wdog_data->base + WDT0_EN),
 		__raw_readl(wdog_data->base + WDT0_BARK_TIME),
 		__raw_readl(wdog_data->base + WDT0_BITE_TIME));
+#ifdef CONFIG_LGE_HANDLE_PANIC
+	while(1);
+#endif
 }
 
 static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
@@ -416,6 +459,11 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 		wdog_dd->last_pet, nanosec_rem / 1000);
 	if (wdog_dd->do_ipi_ping)
 		dump_cpu_alive_mask(wdog_dd);
+
+#ifdef CONFIG_LGE_HANDLE_PANIC
+	lge_set_restart_reason(LGE_RB_MAGIC | LGE_ERR_TZ | LGE_ERR_TZ_WDT_BARK);
+#endif
+
 	msm_trigger_wdog_bite();
 	panic("Failed to cause a watchdog bite! - Falling back to kernel panic!");
 	return IRQ_HANDLED;
@@ -707,6 +755,9 @@ static int msm_watchdog_probe(struct platform_device *pdev)
 		goto err;
 	}
 	init_watchdog_data(wdog_dd);
+#ifdef CONFIG_LGE_HANDLE_PANIC
+	wdt_timer_set_timer0_base(wdog_dd->base);
+#endif
 	return 0;
 err:
 	kzfree(wdog_dd);

@@ -50,6 +50,10 @@
 #include <linux/uaccess.h>
 #include <linux/uio_driver.h>
 
+#ifdef CONFIG_LGE_HANDLE_PANIC
+#include <soc/qcom/lge/lge_handle_panic.h>
+#endif
+
 #define CREATE_TRACE_POINTS
 #define TRACE_MSM_THERMAL
 #include <trace/trace_thermal.h>
@@ -2699,7 +2703,7 @@ static void vdd_mx_notify(struct therm_threshold *trig_thresh)
 					trig_thresh->threshold);
 }
 
-static void msm_thermal_bite(int zone_id, long temp)
+void msm_thermal_bite(int zone_id, long temp)
 {
 	struct scm_desc desc;
 	int tsens_id = 0;
@@ -2713,6 +2717,11 @@ static void msm_thermal_bite(int zone_id, long temp)
 		pr_err("Tsens:%d reached temperature:%ld. System reset\n",
 			tsens_id, temp);
 	}
+
+#ifdef CONFIG_LGE_HANDLE_PANIC
+	lge_set_restart_reason(LGE_RB_MAGIC | LGE_ERR_TZ | LGE_ERR_TZ_THERM_SEC_BITE);
+#endif
+
 	if (!is_scm_armv8()) {
 		scm_call_atomic1(SCM_SVC_BOOT, THERM_SECURE_BITE_CMD, 0);
 	} else {
