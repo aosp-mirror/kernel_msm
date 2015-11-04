@@ -98,6 +98,7 @@ enum dsi_panel_bl_ctrl {
 	BL_PWM,
 	BL_WLED,
 	BL_DCS_CMD,
+	BL_DCS_L_CMD,
 	UNKNOWN_CTRL,
 };
 
@@ -436,6 +437,8 @@ struct mdss_dsi_ctrl_pdata {
 	int pwm_enabled;
 	int clk_lane_cnt;
 	bool dmap_iommu_map;
+	bool bklt_off;
+	bool panel_bias_vreg;
 	bool dsi_irq_line;
 	bool dcs_cmd_insert;
 	atomic_t te_irq_ready;

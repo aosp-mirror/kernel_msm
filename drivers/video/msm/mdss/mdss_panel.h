@@ -544,8 +544,11 @@ struct mdss_panel_info {
 	u32 wait_cycle;
 	u32 pdest;
 	u32 brightness_max;
+	u32 brightness_default;
 	u32 bl_max;
 	u32 bl_min;
+	u32 blmap_size;
+	u8  *blmap;
 	u32 fb_num;
 	u64 clk_rate;
 	u32 clk_min;
@@ -557,6 +560,7 @@ struct mdss_panel_info {
 	u32 rst_seq[MDSS_DSI_RST_SEQ_LEN];
 	u32 rst_seq_len;
 	u32 vic; /* video identification code */
+	int bklt_ctrl;	/* backlight ctrl */
 	struct mdss_rect roi;
 	int pwm_pmic_gpio;
 	int pwm_lpg_chan;

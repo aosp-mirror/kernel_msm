@@ -190,14 +190,34 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 }
 
 static char led_pwm1[2] = {0x51, 0x0};	/* DTYPE_DCS_WRITE1 */
-static struct dsi_cmd_desc backlight_cmd = {
+static struct dsi_cmd_desc backlight_cmd1 = {
 	{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(led_pwm1)},
 	led_pwm1
+};
+
+static char led_pwm2[3] = {0x51, 0x0, 0x0}; /* DTYPE_DCS_LWRITE */
+static struct dsi_cmd_desc backlight_cmd2 = {
+	{DTYPE_DCS_LWRITE, 1, 0, 0, 1, sizeof(led_pwm2)},
+	led_pwm2
+};
+
+static char display_off[1] = {0x28}; /* DTYPE_DCS_WRITE */
+static struct dsi_cmd_desc backlight_off_cmd = {
+	{DTYPE_DCS_WRITE, 1, 0, 0, 0, sizeof(display_off)},
+	display_off
+};
+
+static char display_on[1] = {0x29}; /* DTYPE_DCS_WRITE */
+static struct dsi_cmd_desc backlight_on_cmd = {
+	{DTYPE_DCS_WRITE, 1, 0, 0, 0, sizeof(display_on)},
+	display_on
 };
 
 static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 {
 	struct dcs_cmd_req cmdreq;
+	struct dsi_cmd_desc cmds[2];
+	unsigned char new_level = level;
 	struct mdss_panel_info *pinfo;
 
 	pinfo = &(ctrl->panel_data.panel_info);
@@ -207,17 +227,55 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	}
 
 	pr_debug("%s: level=%d\n", __func__, level);
-
-	led_pwm1[1] = (unsigned char)level;
+	if (pinfo->blmap && pinfo->blmap_size) {
+		if (level >= pinfo->blmap_size)
+			level = pinfo->blmap_size - 1;
+		new_level = pinfo->blmap[level];
+		pr_debug("%s: adjusted level=%d\n", __func__, (int)new_level);
+	}
 
 	memset(&cmdreq, 0, sizeof(cmdreq));
-	cmdreq.cmds = &backlight_cmd;
-	cmdreq.cmds_cnt = 1;
-	cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
-	cmdreq.rlen = 0;
-	cmdreq.cb = NULL;
 
-	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+	if (new_level) {
+		/* backlight on */
+		if (ctrl->bklt_off) {
+			ctrl->bklt_off = false;
+			memcpy(&cmds[cmdreq.cmds_cnt], &backlight_on_cmd,
+					sizeof(struct dsi_cmd_desc));
+			cmdreq.cmds_cnt++;
+		}
+
+		/* set backlight level */
+		if (ctrl->bklt_ctrl == BL_DCS_L_CMD) {
+			led_pwm2[1] = new_level;
+			memcpy(&cmds[cmdreq.cmds_cnt], &backlight_cmd2,
+				sizeof(struct dsi_cmd_desc));
+			cmdreq.cmds_cnt++;
+		} else {
+			led_pwm1[1] = new_level;
+			memcpy(&cmds[cmdreq.cmds_cnt], &backlight_cmd1,
+				sizeof(struct dsi_cmd_desc));
+			cmdreq.cmds_cnt++;
+		}
+	} else {
+		/* backlight off */
+		if (!ctrl->bklt_off) {
+			memcpy(&cmds[cmdreq.cmds_cnt], &backlight_off_cmd,
+				sizeof(struct dsi_cmd_desc));
+			cmdreq.cmds_cnt++;
+			ctrl->bklt_off = true;
+		}
+	}
+
+	if (cmdreq.cmds_cnt) {
+		cmdreq.cmds = cmds;
+		cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
+		cmdreq.rlen = 0;
+		cmdreq.cb = NULL;
+
+		mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+	}
+
 }
 
 static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
@@ -628,6 +686,7 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 		mdss_dsi_panel_bklt_pwm(ctrl_pdata, bl_level);
 		break;
 	case BL_DCS_CMD:
+	case BL_DCS_L_CMD:
 		if (!mdss_dsi_sync_wait_enable(ctrl_pdata)) {
 			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
 			break;
@@ -1889,6 +1948,8 @@ int mdss_panel_parse_bl_settings(struct device_node *np,
 				pr_debug("%s: Configured PWM bklt ctrl\n",
 								 __func__);
 			}
+		} else if (!strncmp(data, "bl_ctrl_dcs_l", 13)) {
+			ctrl_pdata->bklt_ctrl = BL_DCS_L_CMD;
 		} else if (!strcmp(data, "bl_ctrl_dcs")) {
 			ctrl_pdata->bklt_ctrl = BL_DCS_CMD;
 			pr_debug("%s: Configured DCS_CMD bklt ctrl\n",
@@ -2233,11 +2294,38 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	rc = of_property_read_u32(np, "qcom,mdss-brightness-max-level", &tmp);
 	pinfo->brightness_max = (!rc ? tmp : MDSS_MAX_BL_BRIGHTNESS);
+	rc = of_property_read_u32(np, "qcom,mdss-brightness-default-level",
+			&tmp);
+	pinfo->brightness_default = (!rc ? tmp : MDSS_MAX_BL_BRIGHTNESS);
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-min-level", &tmp);
 	pinfo->bl_min = (!rc ? tmp : 0);
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-max-level", &tmp);
 	pinfo->bl_max = (!rc ? tmp : 255);
 	ctrl_pdata->bklt_max = pinfo->bl_max;
+	/*
+	 * Use a backlight map if there is a specific map from device tree
+	 */
+	data = of_get_property(np, "qcom,blmap", &tmp);
+	if (data) {
+		pinfo->blmap_size = tmp;
+
+		pinfo->blmap = kzalloc(pinfo->blmap_size, GFP_KERNEL);
+		if (!pinfo->blmap) {
+			pr_err("%s:%d, Error, no mem for blmap\n",
+					__func__, __LINE__);
+			return -ENOMEM;
+		}
+
+		rc = of_property_read_u8_array(np, "qcom,blmap",
+				pinfo->blmap, pinfo->blmap_size);
+		if (rc) {
+			pr_err("%s:%d, Error, blmap\n",
+					__func__, __LINE__);
+			return -EINVAL;
+		}
+		pr_info("%s: blmap @%08x (size %d)\n", __func__,
+				(int)pinfo->blmap, pinfo->blmap_size);
+	}
 
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-interleave-mode", &tmp);
 	pinfo->mipi.interleave_mode = (!rc ? tmp : 0);
