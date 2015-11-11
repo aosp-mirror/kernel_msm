@@ -823,6 +823,7 @@ struct sony_sc {
 	struct led_classdev *leds[MAX_LEDS];
 	unsigned long quirks;
 	struct work_struct state_worker;
+	void (*send_output_report)(struct sony_sc *);
 	struct power_supply battery;
 	int device_id;
 	__u8 *output_report_dmabuf;
@@ -1540,7 +1541,7 @@ error_leds:
 	return ret;
 }
 
-static void sixaxis_state_worker(struct work_struct *work)
+static void sixaxis_send_output_report(struct sony_sc *sc)
 {
 	static const union sixaxis_output_report_01 default_report = {
 		.buf = {
@@ -1554,7 +1555,6 @@ static void sixaxis_state_worker(struct work_struct *work)
 			0x00, 0x00, 0x00, 0x00, 0x00
 		}
 	};
-	struct sony_sc *sc = container_of(work, struct sony_sc, state_worker);
 	struct sixaxis_output_report *report =
 		(struct sixaxis_output_report *)sc->output_report_dmabuf;
 	int n;
@@ -1597,9 +1597,8 @@ static void sixaxis_state_worker(struct work_struct *work)
 			HID_OUTPUT_REPORT, HID_REQ_SET_REPORT);
 }
 
-static void dualshock4_state_worker(struct work_struct *work)
+static void dualshock4_send_output_report(struct sony_sc *sc)
 {
-	struct sony_sc *sc = container_of(work, struct sony_sc, state_worker);
 	struct hid_device *hdev = sc->hdev;
 	__u8 *buf = sc->output_report_dmabuf;
 	int offset;
@@ -1642,6 +1641,12 @@ static void dualshock4_state_worker(struct work_struct *work)
 	else
 		hid_hw_raw_request(hdev, 0x11, buf, DS4_REPORT_0x11_SIZE,
 				HID_OUTPUT_REPORT, HID_REQ_SET_REPORT);
+}
+
+static void sony_state_worker(struct work_struct *work)
+{
+	struct sony_sc *sc = container_of(work, struct sony_sc, state_worker);
+	sc->send_output_report(sc);
 }
 
 static int sony_allocate_output_report(struct sony_sc *sc)
@@ -1960,11 +1965,13 @@ static void sony_release_device_id(struct sony_sc *sc)
 	}
 }
 
-static inline void sony_init_work(struct sony_sc *sc,
-					void (*worker)(struct work_struct *))
+static inline void sony_init_output_report(struct sony_sc *sc,
+				void(*send_output_report)(struct sony_sc*))
 {
+	sc->send_output_report = send_output_report;
+
 	if (!sc->worker_initialized)
-		INIT_WORK(&sc->state_worker, worker);
+		INIT_WORK(&sc->state_worker, sony_state_worker);
 
 	sc->worker_initialized = 1;
 }
@@ -2037,15 +2044,16 @@ static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		hdev->quirks |= HID_QUIRK_NO_OUTPUT_REPORTS_ON_INTR_EP;
 		hdev->quirks |= HID_QUIRK_SKIP_OUTPUT_REPORT_ID;
 		ret = sixaxis_set_operational_usb(hdev);
-		sony_init_work(sc, sixaxis_state_worker);
+		sony_init_output_report(sc, sixaxis_send_output_report);
 	} else if (sc->quirks & SIXAXIS_CONTROLLER_BT) {
+		sony_init_output_report(sc, sixaxis_send_output_report);
 		/*
 		 * The Sixaxis wants output reports sent on the ctrl endpoint
 		 * when connected via Bluetooth.
 		 */
 		hdev->quirks |= HID_QUIRK_NO_OUTPUT_REPORTS_ON_INTR_EP;
 		ret = sixaxis_set_operational_bt(hdev);
-		sony_init_work(sc, sixaxis_state_worker);
+		sony_init_output_report(sc, sixaxis_send_output_report);
 	} else if (sc->quirks & DUALSHOCK4_CONTROLLER) {
 		if (sc->quirks & DUALSHOCK4_CONTROLLER_BT) {
 			/*
@@ -2060,7 +2068,7 @@ static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			}
 		}
 
-		sony_init_work(sc, dualshock4_state_worker);
+		sony_init_output_report(sc, dualshock4_send_output_report);
 	} else {
 		ret = 0;
 	}
