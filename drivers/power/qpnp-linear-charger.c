@@ -25,6 +25,7 @@
 #include <linux/bitops.h>
 #include <linux/leds.h>
 #include <linux/debugfs.h>
+#include <linux/wakelock.h>
 
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
@@ -82,6 +83,7 @@
 #define VIN_MIN_LOOP_DISABLE_BIT		BIT(0)
 #define OVERRIDE_0				0x2
 #define OVERRIDE_NONE				0x0
+#define VBAT_DET_LOW_IRQ			BIT(0)
 
 /* BATTIF peripheral register offset */
 #define BAT_IF_PRES_STATUS_REG			0x08
@@ -128,6 +130,9 @@
 #define VDD_TRIM_SUPPORTED			BIT(0)
 
 #define QPNP_CHARGER_DEV_NAME	"qcom,qpnp-linear-charger"
+
+#define EOC_CHECK_PERIOD_MS	10000
+#define CONSECUTIVE_COUNT 3
 
 /* usb_interrupts */
 
@@ -353,6 +358,7 @@ struct qpnp_lbc_chip {
 	unsigned int			therm_lvl_sel;
 	unsigned int			*thermal_mitigation;
 	unsigned int			cfg_safe_current;
+	unsigned int			cfg_iterm_current;
 	unsigned int			cfg_tchg_mins;
 	unsigned int			chg_failed_count;
 	unsigned int			supported_feature_flag;
@@ -368,6 +374,7 @@ struct qpnp_lbc_chip {
 	int				delta_vddmax_uv;
 	int				init_trim_uv;
 	struct delayed_work		collapsible_detection_work;
+	struct delayed_work		eoc_work;
 
 	/* parallel-chg params */
 	int				parallel_charging_enabled;
@@ -390,6 +397,7 @@ struct qpnp_lbc_chip {
 	struct qpnp_adc_tm_chip		*adc_tm_dev;
 	struct led_classdev		led_cdev;
 	struct dentry			*debug_root;
+	struct wake_lock		chg_wake_lock;
 
 	/* parallel-chg params */
 	struct power_supply		parallel_psy;
@@ -1368,6 +1376,155 @@ static int get_prop_batt_temp(struct qpnp_lbc_chip *chip)
 	return (int)results.physical;
 }
 
+static int get_prop_current_avg(struct qpnp_lbc_chip *chip)
+{
+	union power_supply_propval ret = {0,};
+
+	if (chip->bms_psy) {
+		chip->bms_psy->get_property(chip->bms_psy,
+			  POWER_SUPPLY_PROP_CURRENT_AVG, &ret);
+		return ret.intval;
+	} else {
+		pr_debug("No BMS supply registered return 0\n");
+	}
+
+	return 0;
+}
+
+static int report_eoc(struct qpnp_lbc_chip *chip)
+{
+	int rc = -EINVAL;
+	union power_supply_propval ret = {0,};
+
+	rc = chip->batt_psy.get_property(&chip->batt_psy,
+			POWER_SUPPLY_PROP_STATUS, &ret);
+	if (rc) {
+		pr_err("Unable to get battery 'STATUS' rc=%d\n", rc);
+	} else if (ret.intval != POWER_SUPPLY_STATUS_FULL) {
+		pr_debug("Report EOC to charger\n");
+		ret.intval = POWER_SUPPLY_STATUS_FULL;
+		rc = chip->batt_psy.set_property(&chip->batt_psy,
+				POWER_SUPPLY_PROP_STATUS, &ret);
+		if (rc) {
+			pr_err("Unable to set 'STATUS' rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	return rc;
+}
+
+#define CONSECUTIVE_COUNT 3
+static void qpnp_linear_eoc_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct qpnp_lbc_chip *chip = container_of(dwork, struct qpnp_lbc_chip, eoc_work);
+	static int current_avg;
+	static int vbat_low_count;
+	static int count;
+	u8 buck_sts = 0, chg_sts = 0;
+	int vbat_mv;
+	int rc;
+	bool vbat_lower_than_vbatdet;
+
+	if (!wake_lock_active(&chip->chg_wake_lock))
+		wake_lock(&chip->chg_wake_lock);
+
+	rc = qpnp_lbc_read(chip, chip->chgr_base + INT_RT_STS_REG,
+				&chg_sts, 1);
+	if (rc) {
+		pr_err("failed to read chg_sts rc=%d\n", rc);
+		return;
+	}
+
+	rc = qpnp_lbc_read(chip, chip->chgr_base + CHG_STATUS_REG,
+				&buck_sts, 1);
+	if (rc) {
+		pr_err("failed to read buck_sts rc=%d\n", rc);
+		return;
+	}
+	pr_debug("chgr: 0x%x, buck: 0x%x\n", chg_sts, buck_sts);
+
+	if (!qpnp_lbc_is_usb_chg_plugged_in(chip)) {
+		pr_debug("no chg connected, stopping\n");
+		goto stop_eoc;
+	}
+
+	if (chg_sts & FAST_CHG_ON_IRQ) {
+		current_avg = get_prop_current_avg(chip) / 1000;
+		vbat_mv = get_prop_battery_voltage_now(chip) / 1000;
+
+		pr_debug("ibat_ma = %d vbat_mv = %d\n", current_avg, vbat_mv);
+
+		/* Todo : remove vbatdet condition
+		   chg_sts always returns vbat_det_low to 0x0
+		   because vbatdet comparator was always overrided */
+		vbat_lower_than_vbatdet = (chg_sts & VBAT_DET_LOW_IRQ);
+		if (vbat_lower_than_vbatdet){
+			pr_debug("eoc worerk is early wake up\n");
+			vbat_low_count++;
+			if (vbat_low_count >= CONSECUTIVE_COUNT) {
+				pr_debug("woke up too early stopping\n");
+				qpnp_lbc_enable_irq(chip,
+					&chip->irqs[CHG_VBAT_DET_LO]);
+				goto stop_eoc;
+			}
+			else {
+				goto check_again_later;
+			}
+		}
+		else {
+			vbat_low_count = 0;
+		}
+		if (!(buck_sts & CHG_VDD_LOOP_BIT)) {
+			pr_debug("Not in CV\n");
+			count = 0;
+		}
+		else {
+			qpnp_lbc_adjust_vddmax(chip, vbat_mv);
+
+			if ((current_avg * -1) > chip->cfg_iterm_current) {
+				pr_debug("Not in EoC, Battery current too high\n");
+				count = 0;
+			}
+			else if (current_avg > 0) {
+				pr_debug("System demand increased\n");
+				count = 0;
+			}
+			else if (count >= CONSECUTIVE_COUNT) {
+				rc = report_eoc(chip);
+				if (!rc) {
+					pr_info("End of Charging\n");
+					pr_debug("Battery FULL\n");
+					goto stop_eoc;
+				}
+				else {
+					pr_debug("Unable to report eoc rc = %d\n", rc);
+				}
+			}
+			else {
+				count++;
+				pr_debug("EOC count = %d\n", count);
+			}
+		}
+	}
+	else {
+		pr_debug("not charging\n");
+		goto stop_eoc;
+	}
+
+check_again_later:
+	schedule_delayed_work(&chip->eoc_work,
+		msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+	return;
+
+stop_eoc:
+	vbat_low_count = 0;
+	count = 0;
+	if (wake_lock_active(&chip->chg_wake_lock))
+		wake_unlock(&chip->chg_wake_lock);
+}
+
 static void qpnp_lbc_set_appropriate_current(struct qpnp_lbc_chip *chip)
 {
 	unsigned int chg_current = chip->usb_psy_ma;
@@ -2264,6 +2421,7 @@ static int qpnp_charger_read_dt_props(struct qpnp_lbc_chip *chip)
 	OF_PROP_READ(chip, cfg_safe_voltage_mv, "vddsafe-mv", rc, 0);
 	OF_PROP_READ(chip, cfg_min_voltage_mv, "vinmin-mv", rc, 0);
 	OF_PROP_READ(chip, cfg_safe_current, "ibatsafe-ma", rc, 0);
+	OF_PROP_READ(chip, cfg_iterm_current, "iterm-ma", rc, 0);
 	if (rc)
 		pr_err("Error reading required property rc=%d\n", rc);
 
@@ -2397,10 +2555,11 @@ static int qpnp_charger_read_dt_props(struct qpnp_lbc_chip *chip)
 			chip->cfg_cool_bat_decidegc,
 			chip->cfg_hot_batt_p,
 			chip->cfg_cold_batt_p);
-	pr_debug("tchg-mins=%d, vbatweak-uv=%d, resume-soc=%d\n",
+	pr_debug("tchg-mins=%d, vbatweak-uv=%d, resume-soc=%d, iterm-ma=%d\n",
 			chip->cfg_tchg_mins,
 			chip->cfg_batt_weak_voltage_uv,
-			chip->cfg_soc_resume_limit);
+			chip->cfg_soc_resume_limit,
+			chip->cfg_iterm_current);
 	pr_debug("bpd-detection=%d, ibatmax-warm-ma=%d, ibatmax-cool-ma=%d, warm-bat-mv=%d, cool-bat-mv=%d\n",
 			chip->cfg_bpd_detection,
 			chip->cfg_warm_bat_chg_ma,
@@ -2503,6 +2662,10 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 			 * irrespective of battery SOC above resume_soc.
 			 */
 			qpnp_lbc_charger_enable(chip, SOC, 1);
+			schedule_delayed_work(&chip->eoc_work,
+					msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+			if (!wake_lock_active(&chip->chg_wake_lock))
+				wake_lock(&chip->chg_wake_lock);
 		}
 
 		pr_debug("Updating usb_psy PRESENT property\n");
@@ -2628,6 +2791,12 @@ static irqreturn_t qpnp_lbc_fastchg_irq_handler(int irq, void *_chip)
 			 * Start alarm timer to periodically calculate
 			 * and update VDD_MAX trim value.
 			 */
+			schedule_delayed_work(&chip->eoc_work,
+				msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+
+			if (!wake_lock_active(&chip->chg_wake_lock))
+				wake_lock(&chip->chg_wake_lock);
+
 			if (chip->supported_feature_flag &
 						VDD_TRIM_SUPPORTED) {
 				kt = ns_to_ktime(TRIM_PERIOD_NS);
@@ -2662,15 +2831,28 @@ static irqreturn_t qpnp_lbc_vbatdet_lo_irq_handler(int irq, void *_chip)
 {
 	struct qpnp_lbc_chip *chip = _chip;
 	int rc;
+	u8 chg_sts;
 
 	pr_debug("vbatdet-lo triggered\n");
 
+	rc = qpnp_lbc_read(chip, chip->chgr_base + INT_RT_STS_REG,
+				&chg_sts, 1);
+	if (rc) {
+		pr_err("failed to read chg_sts rc=%d\n", rc);
+	}
 	/*
 	 * Disable vbatdet irq to prevent interrupt storm when VBAT is
 	 * close to VBAT_DET.
 	 */
 	qpnp_lbc_disable_irq(chip, &chip->irqs[CHG_VBAT_DET_LO]);
 
+	if (!chip->cfg_charging_disabled && (chg_sts & FAST_CHG_ON_IRQ)) {
+		schedule_delayed_work(&chip->eoc_work,
+			msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+
+		if (!wake_lock_active(&chip->chg_wake_lock))
+			wake_lock(&chip->chg_wake_lock);
+	}
 	/*
 	 * Override VBAT_DET comparator to 0 to fix comparator toggling
 	 * near VBAT_DET threshold.
@@ -3186,10 +3368,13 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 	spin_lock_init(&chip->hw_access_lock);
 	spin_lock_init(&chip->ibat_change_lock);
 	spin_lock_init(&chip->irq_lock);
+	wake_lock_init(&chip->chg_wake_lock,
+			WAKE_LOCK_SUSPEND, "qpnp_lbc_chg");
 	INIT_WORK(&chip->vddtrim_work, qpnp_lbc_vddtrim_work_fn);
 	alarm_init(&chip->vddtrim_alarm, ALARM_REALTIME, vddtrim_callback);
 	INIT_DELAYED_WORK(&chip->collapsible_detection_work,
 			qpnp_lbc_collapsible_detection_work);
+	INIT_DELAYED_WORK(&chip->eoc_work, qpnp_linear_eoc_work);
 
 	/* Get all device-tree properties */
 	rc = qpnp_charger_read_dt_props(chip);
@@ -3348,6 +3533,7 @@ unregister_batt:
 	if (chip->bat_if_base)
 		power_supply_unregister(&chip->batt_psy);
 fail_chg_enable:
+	wake_lock_destroy(&chip->chg_wake_lock);
 	dev_set_drvdata(&spmi->dev, NULL);
 	return rc;
 }
@@ -3375,7 +3561,9 @@ static int qpnp_lbc_remove(struct spmi_device *spmi)
 		alarm_cancel(&chip->vddtrim_alarm);
 		cancel_work_sync(&chip->vddtrim_work);
 	}
+	wake_lock_destroy(&chip->chg_wake_lock);
 	cancel_delayed_work_sync(&chip->collapsible_detection_work);
+	cancel_delayed_work_sync(&chip->eoc_work);
 	debugfs_remove_recursive(chip->debug_root);
 	if (chip->bat_if_base)
 		power_supply_unregister(&chip->batt_psy);

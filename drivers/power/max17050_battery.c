@@ -78,6 +78,7 @@ struct max17050_chip {
 	u16 repsoc;
 	u16 temp;
 	u16 current_now;
+	u16 avg_current;
 	u16 tte;
 
 	struct max17050_learned_params learned;
@@ -497,7 +498,9 @@ static void max17050_update(struct max17050_chip *chip)
 	chip->repsoc = max17050_read_reg(client, MAX17050_REPSOC);
 	chip->tte = max17050_read_reg(client, MAX17050_TTE);
 	chip->current_now = max17050_read_reg(client, MAX17050_CURRENT);
-	chip->temp = max17050_read_reg(client, MAX17050_TEMP);
+	chip->avg_current = max17050_read_reg(client, MAX17050_AVGCURRENT);
+	if (!chip->use_ext_temp || !chip->ext_battery)
+		chip->temp = max17050_read_reg(client, MAX17050_TEMP);
 	chip->vcell = max17050_read_reg(client, MAX17050_VCELL);
 	chip->learned.cycles = max17050_read_reg(client, MAX17050_CYCLES);
 
@@ -539,6 +542,7 @@ static enum power_supply_property max17050_battery_props[] = {
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CURRENT_AVG,
 };
 
 static int max17050_get_property(struct power_supply *psy,
@@ -591,6 +595,12 @@ static int max17050_get_property(struct power_supply *psy,
 		/* sign extend to s32 */
 		val->intval = (s32)s16_value;
 		val->intval *= 1562500 / chip->pdata->r_sns;
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_AVG:
+		s16_value = (s16)chip->avg_current;
+		val->intval = (s32)s16_value;
+		val->intval *= 1562500 / chip->pdata->r_sns;
+		val->intval *= -1;
 		break;
 	default:
 		return -EINVAL;
