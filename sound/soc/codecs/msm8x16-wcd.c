@@ -45,6 +45,10 @@
 #include "msm8916-wcd-irq.h"
 #include "msm8x16_wcd_registers.h"
 
+/* ASUS_BSP Ken_Cheng +++ */
+#include <linux/proc_fs.h>
+/* ASUS_BSP Ken_Cheng --- */
+
 #define MSM8X16_WCD_RATES (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |\
 			SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000)
 #define MSM8X16_WCD_FORMATS (SNDRV_PCM_FMTBIT_S16_LE |\
@@ -5436,6 +5440,134 @@ static void msm8x16_wcd_configure_cap(struct snd_soc_codec *codec,
 	}
 }
 
+/* ASUS_BSP Ken_Cheng +++ */
+#ifdef CONFIG_PROC_FS
+#define AUDIO_DEBUG_PROC_FILE "driver/audio_debug"
+#define CODEC_STATUS_PROC_FILE "driver/codec_status"
+
+static struct proc_dir_entry *audio_debug_proc_file;
+static struct proc_dir_entry *codec_status_proc_file;
+static mm_segment_t oldfs;
+
+static void initKernelEnv(void)
+{
+	oldfs = get_fs();
+	set_fs(KERNEL_DS);
+}
+
+static void deinitKernelEnv(void)
+{
+	set_fs(oldfs);
+}
+
+static ssize_t audio_debug_proc_write(struct file *filp, const char __user *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+	printk("[Audio][Debug] audio_debug_proc_write\n");
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	initKernelEnv();
+
+	if (strncmp(messages, "read", strlen("read")) == 0) {
+		unsigned int reg, value;
+		sscanf(messages + 5, "%x", &reg);
+		value = snd_soc_read(registered_codec, reg);
+		printk("[Audio][codec] read register reg[0x%x]=[0x%x]\n", reg, value);
+	} else if (strncmp(messages, "write", strlen("write")) == 0) {
+		unsigned int reg, value;
+		sscanf(messages + 6, "%x %x", &reg, &value);
+		snd_soc_write(registered_codec, reg, value);
+		value = snd_soc_read(registered_codec, reg);
+		printk("[Audio][codec] write register reg[0x%x]=[0x%x]\n", reg, value);
+	} else if (strncmp(messages, "update", strlen("update")) == 0) {
+		unsigned int reg, mask, value;
+		sscanf(messages + 7, "%x %x %x", &reg, &mask, &value);
+		snd_soc_update_bits(registered_codec, reg, mask, value);
+		value = snd_soc_read(registered_codec, reg);
+		printk("[Audio][codec] update register reg[0x%x]=[0x%x]\n", reg, value);
+	} else {
+		printk("[Audio][Debug] %s\n", messages);
+	}
+
+	deinitKernelEnv();
+	return len;
+}
+
+static ssize_t codec_status_proc_read(struct file *filp, char __user *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	int val;
+
+	if (*off)
+		return 0;
+
+	memset(messages, 0, sizeof(messages));
+	if (len > 256)
+		len = 256;
+
+	val = snd_soc_read(registered_codec, MSM8X16_WCD_A_DIGITAL_REVISION1);
+
+	if (val < 0)
+		sprintf(messages, "0\n");
+	else
+		sprintf(messages, "1\n");
+
+	if (copy_to_user(buff, messages, len))
+		return -EFAULT;
+
+	(*off)++;
+	return len;
+}
+
+static struct file_operations audio_debug_proc_ops = {
+	.write = audio_debug_proc_write,
+};
+
+static struct file_operations codec_status_proc_ops = {
+	.read = codec_status_proc_read,
+};
+
+static void create_audio_debug_proc_file(void)
+{
+	printk("[Audio][Debug] create_audio_debug_proc_file\n");
+	audio_debug_proc_file = proc_create(AUDIO_DEBUG_PROC_FILE, 0666, NULL, &audio_debug_proc_ops);
+
+	if (audio_debug_proc_file == NULL)
+		printk("[Audio][Debug] create_audio_debug_proc_file failed\n");
+}
+
+static void create_codec_status_proc_file(void)
+{
+	printk("[Audio][Debug] create_codec_status_proc_file\n");
+	codec_status_proc_file = proc_create(CODEC_STATUS_PROC_FILE, 0666, NULL, &codec_status_proc_ops);
+
+	if (codec_status_proc_file == NULL)
+		printk("[Audio][Debug] create_codec_status_proc_file failed\n");
+}
+
+static void remove_audio_debug_proc_file(void)
+{
+	extern struct proc_dir_entry proc_root;
+	printk("[Audio][Debug] remove_audio_debug_proc_file\n");
+	remove_proc_entry(AUDIO_DEBUG_PROC_FILE, &proc_root);
+}
+
+static void remove_codec_status_proc_file(void)
+{
+	extern struct proc_dir_entry proc_root;
+	printk("[Audio][Debug] remove_codec_status_proc_file\n");
+	remove_proc_entry(CODEC_STATUS_PROC_FILE, &proc_root);
+}
+#endif /* #ifdef CONFIG_PROC_FS */
+/* ASUS_BSP Ken_Cheng --- */
+
+
+
 static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
 {
 	struct msm8x16_wcd_priv *msm8x16_wcd_priv;
@@ -5577,6 +5709,14 @@ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
 		registered_codec = NULL;
 		return -ENOMEM;
 	}
+
+/* ASUS_BSP Ken_Cheng +++ */
+#ifdef CONFIG_PROC_FS
+	create_audio_debug_proc_file();
+	create_codec_status_proc_file();
+#endif
+/* ASUS_BSP Ken_Cheng --- */
+
 	return 0;
 }
 
@@ -5593,6 +5733,13 @@ static int msm8x16_wcd_codec_remove(struct snd_soc_codec *codec)
 	iounmap(msm8x16_wcd->dig_base);
 	kfree(msm8x16_wcd_priv->fw_data);
 	kfree(msm8x16_wcd_priv);
+
+/* ASUS_BSP Ken_Cheng +++ */
+#ifdef CONFIG_PROC_FS
+	remove_audio_debug_proc_file();
+	remove_codec_status_proc_file();
+#endif
+/* ASUS_BSP Ken_Cheng --- */
 
 	return 0;
 }
