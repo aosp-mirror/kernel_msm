@@ -837,7 +837,7 @@ static int rawv6_sendmsg(struct kiocb *iocb, struct sock *sk,
 	if (!opt) {
 		opt = txopt_get(np);
 		opt_to_free = opt;
-		}
+	}
 	if (flowlabel)
 		opt = fl6_merge_options(&opt_space, flowlabel, opt);
 	opt = ipv6_fixup_options(&opt_space, opt);
@@ -905,7 +905,7 @@ done:
 out:
 	fl6_sock_release(flowlabel);
 	txopt_put(opt_to_free);
-	return err<0?err:len;
+	return err < 0 ? err : len;
 do_confirm:
 	dst_confirm(dst);
 	if (!(msg->msg_flags & MSG_PROBE) || len)
