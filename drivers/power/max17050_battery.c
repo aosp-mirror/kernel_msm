@@ -625,6 +625,9 @@ static irqreturn_t max17050_interrupt(int id, void *dev)
 		max17050_write_reg(client, MAX17050_STATUS, val &
 			~(STATUS_INTR_SOCMIN_BIT | STATUS_INTR_SOCMAX_BIT));
 
+		/* Reset capacity thresholds */
+		max17050_set_soc_thresholds(chip, 1);
+
 		power_supply_changed(&chip->battery);
 	}
 
@@ -651,11 +654,8 @@ static void max17050_complete_init(struct max17050_chip *chip)
 		chip->power_supply_registered = true;
 
 	if (client->irq) {
-		/*
-		 * Set capacity thresholds to 1 and 99%, which will cause
-		 * interrupts to be generated at <1% and >99%.
-		 */
-		max17050_write_reg(client, MAX17050_SALRT_TH, 0x6301);
+		/* Set capacity thresholds to +/- 1% of current capacity */
+		max17050_set_soc_thresholds(chip, 1);
 
 		/* Enable capacity interrupts */
 		val = max17050_read_reg(client, MAX17050_CONFIG);
