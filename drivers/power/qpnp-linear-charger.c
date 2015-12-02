@@ -375,6 +375,8 @@ struct qpnp_lbc_chip {
 	int				init_trim_uv;
 	struct delayed_work		collapsible_detection_work;
 	struct delayed_work		eoc_work;
+	unsigned int			ext_set_vddmax_mv;
+	unsigned int			ext_set_ibat_ma;
 
 	/* parallel-chg params */
 	int				parallel_charging_enabled;
@@ -941,6 +943,9 @@ static int qpnp_lbc_set_appropriate_vddmax(struct qpnp_lbc_chip *chip)
 		rc = qpnp_lbc_vddmax_set(chip, chip->cfg_cool_bat_mv);
 	else if (chip->bat_is_warm)
 		rc = qpnp_lbc_vddmax_set(chip, chip->cfg_warm_bat_mv);
+	else if (chip->ext_set_vddmax_mv){
+		rc = qpnp_lbc_vddmax_set(chip, chip->ext_set_vddmax_mv);
+	}
 	else
 		rc = qpnp_lbc_vddmax_set(chip, chip->cfg_max_voltage_mv);
 	if (rc)
@@ -1536,6 +1541,9 @@ static void qpnp_lbc_set_appropriate_current(struct qpnp_lbc_chip *chip)
 	if (chip->therm_lvl_sel != 0 && chip->thermal_mitigation)
 		chg_current = min(chg_current,
 			chip->thermal_mitigation[chip->therm_lvl_sel]);
+	if (chip->ext_set_ibat_ma){
+		chg_current = min(chg_current, chip->ext_set_ibat_ma);
+	}
 
 	pr_debug("setting charger current %d mA\n", chg_current);
 	qpnp_lbc_ibatmax_set(chip, chg_current);
@@ -1823,6 +1831,14 @@ static int qpnp_batt_power_set_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
 		qpnp_lbc_system_temp_level_set(chip, val->intval);
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		chip->ext_set_vddmax_mv = val->intval / 1000;
+		qpnp_lbc_set_appropriate_vddmax(chip);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		chip->ext_set_ibat_ma = val->intval / 1000;
+		qpnp_lbc_set_appropriate_current(chip);
 		break;
 	default:
 		return -EINVAL;
