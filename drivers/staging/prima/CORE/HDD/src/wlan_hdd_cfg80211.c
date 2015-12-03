@@ -10443,11 +10443,13 @@ static eHalStatus hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
 
     /* Get the Scan Req */
     req = pAdapter->request;
+    pAdapter->request = NULL;
 
-    if (!req)
+    if (!req || req->wiphy == NULL)
     {
         hddLog(VOS_TRACE_LEVEL_ERROR, "request is became NULL");
         pScanInfo->mScanPending = VOS_FALSE;
+        complete(&pScanInfo->abortscan_event_var);
         goto allow_suspend;
     }
 
@@ -10485,7 +10487,10 @@ static eHalStatus hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
          aborted = true;
     }
 
-    cfg80211_scan_done(req, aborted);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
+    if (!pHddCtx->isUnloadInProgress)
+#endif
+        cfg80211_scan_done(req, aborted);
 
     complete(&pScanInfo->abortscan_event_var);
 
