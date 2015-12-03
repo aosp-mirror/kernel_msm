@@ -2370,6 +2370,9 @@ static const char *chg_to_string(enum usb_chg_type chg_type)
 	}
 }
 
+/* charger detection done - pull down USB_ID pin */
+void qpnp_lbc_usbid_pull_control(int enable);
+
 #define MSM_CHG_DCD_TIMEOUT		(750 * HZ/1000) /* 750 msec */
 #define MSM_CHG_DCD_POLL_TIME		(50 * HZ/1000) /* 50 msec */
 #define MSM_CHG_PRIMARY_DET_TIME	(50 * HZ/1000) /* TVDPSRC_ON */
@@ -2475,6 +2478,8 @@ static void msm_chg_detect_work(struct work_struct *w)
 		pm_runtime_put_autosuspend(phy->dev);
 
 		queue_work(motg->otg_wq, &motg->sm_work);
+
+		qpnp_lbc_usbid_pull_control(0);
 		return;
 	default:
 		return;

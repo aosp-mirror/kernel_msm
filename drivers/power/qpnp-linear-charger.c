@@ -25,6 +25,7 @@
 #include <linux/bitops.h>
 #include <linux/leds.h>
 #include <linux/debugfs.h>
+#include <linux/of_gpio.h>
 #include <linux/wakelock.h>
 
 #define CREATE_MASK(NUM_BITS, POS) \
@@ -253,6 +254,8 @@ struct vddtrim_map vddtrim_map[] = {
 	{-16800,	0x06},
 	{-25440,	0x07},
 };
+
+static int usbid_pullup_gpio;
 
 /*
  * struct qpnp_lbc_chip - device information
@@ -2337,7 +2340,8 @@ static int show_lbc_config(struct seq_file *m, void *data)
 			"cfg_warm_bat_decidegc\t=\t%d\n"
 			"cfg_cool_bat_decidegc\t=\t%d\n"
 			"cfg_soc_resume_limit\t=\t%d\n"
-			"cfg_float_charge\t=\t%d\n",
+			"cfg_float_charge\t=\t%d\n"
+			"usb_id pullup gpio\t=\t%d\n",
 			chip->cfg_charging_disabled,
 			chip->cfg_btc_disabled,
 			chip->cfg_use_fake_battery,
@@ -2364,7 +2368,8 @@ static int show_lbc_config(struct seq_file *m, void *data)
 			chip->cfg_warm_bat_decidegc,
 			chip->cfg_cool_bat_decidegc,
 			chip->cfg_soc_resume_limit,
-			chip->cfg_float_charge);
+			chip->cfg_float_charge,
+			usbid_pullup_gpio);
 
 	return 0;
 }
@@ -2533,6 +2538,14 @@ static int qpnp_charger_read_dt_props(struct qpnp_lbc_chip *chip)
 		}
 	}
 
+	/* Some HW needs to control usb_id pull up for usb_id's ADC. */
+	usbid_pullup_gpio = of_get_named_gpio_flags(chip->spmi->dev.of_node,
+			"usbid-pullup-gpio", 0, NULL);
+	if (usbid_pullup_gpio >= 0)
+		pr_info("ENABLE usbid-pullup-gpio GPIOnum(%d)\n", usbid_pullup_gpio);
+	else
+		pr_info("DISABLE usbid-pullup-gpio\n");
+
 	pr_debug("vddmax-mv=%d, vddsafe-mv=%d, vinmin-mv=%d, ibatsafe-ma=$=%d\n",
 			chip->cfg_max_voltage_mv,
 			chip->cfg_safe_voltage_mv,
@@ -2603,6 +2616,27 @@ static irqreturn_t qpnp_lbc_chg_gone_irq_handler(int irq, void *_chip)
 	return IRQ_HANDLED;
 }
 
+void qpnp_lbc_usbid_pull_control(int enable)
+{
+	int gpio = usbid_pullup_gpio;
+	static int state = 0;
+
+	if (gpio < 0)
+		return;
+
+	if (state != enable) {
+		state = enable;
+		if(enable) {
+			gpio_direction_output(gpio, 1);
+			pr_info("pull up usb_id\n");
+		} else {
+			gpio_direction_output(gpio, 0);
+			pr_info("pull down usb_id\n");
+		}
+	}
+}
+EXPORT_SYMBOL(qpnp_lbc_usbid_pull_control);
+
 static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 {
 	struct qpnp_lbc_chip *chip = _chip;
@@ -2611,6 +2645,8 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 
 	usb_present = qpnp_lbc_is_usb_chg_plugged_in(chip);
 	pr_debug("usbin-valid triggered: %d\n", usb_present);
+
+	qpnp_lbc_usbid_pull_control(usb_present);
 
 	if (chip->usb_present ^ usb_present) {
 		chip->usb_present = usb_present;
@@ -3483,6 +3519,12 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 		goto unregister_batt;
 	}
 
+	if (usbid_pullup_gpio >= 0) {
+		rc = gpio_request(usbid_pullup_gpio, "usbid_pull");
+		if (rc)
+			pr_err("failed to request usbid_pull rc(%d)\n", rc);
+	}
+
 	if (chip->cfg_charging_disabled && !get_prop_batt_present(chip))
 		pr_info("Battery absent and charging disabled !!!\n");
 
@@ -3544,6 +3586,9 @@ static int qpnp_lbc_probe(struct spmi_device *spmi)
 static int qpnp_lbc_remove(struct spmi_device *spmi)
 {
 	struct qpnp_lbc_chip *chip = dev_get_drvdata(&spmi->dev);
+
+	if (usbid_pullup_gpio >= 0)
+		gpio_free(usbid_pullup_gpio);
 
 	if (chip->supported_feature_flag & VDD_TRIM_SUPPORTED) {
 		alarm_cancel(&chip->vddtrim_alarm);
