@@ -2139,6 +2139,14 @@ void vos_ssr_unprotect(const char *caller_func)
  */
 bool vos_is_wd_thread(int threadId)
 {
+   /* Make sure that Vos Watchdog context has been initialized */
+   if (gpVosWatchdogContext == NULL)
+   {
+      VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
+          "%s: gpVosWatchdogContext == NULL", __func__);
+      return false;
+   }
+
    return ((gpVosWatchdogContext->WdThread) &&
        (threadId == gpVosWatchdogContext->WdThread->pid));
 }
