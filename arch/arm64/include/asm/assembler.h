@@ -320,8 +320,8 @@ lr	.req	x30		// link register
  * Return the current thread_info.
  */
 	.macro	get_thread_info, rd
-	mov	\rd, sp
-	and	\rd, \rd, #~(THREAD_SIZE - 1)	// top of stack
+	mrs	\rd, sp_el0
+	nop
 	.endm
 
 /*
