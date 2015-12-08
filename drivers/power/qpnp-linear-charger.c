@@ -1425,12 +1425,10 @@ static void qpnp_linear_eoc_work(struct work_struct *work)
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct qpnp_lbc_chip *chip = container_of(dwork, struct qpnp_lbc_chip, eoc_work);
 	static int current_avg;
-	static int vbat_low_count;
 	static int count;
 	u8 buck_sts = 0, chg_sts = 0;
 	int vbat_mv;
 	int rc;
-	bool vbat_lower_than_vbatdet;
 
 	if (!wake_lock_active(&chip->chg_wake_lock))
 		wake_lock(&chip->chg_wake_lock);
@@ -1461,70 +1459,42 @@ static void qpnp_linear_eoc_work(struct work_struct *work)
 
 		pr_debug("ibat_ma = %d vbat_mv = %d\n", current_avg, vbat_mv);
 
-		/* Todo : remove vbatdet condition
-		   chg_sts always returns vbat_det_low to 0x0
-		   because vbatdet comparator was always overrided */
-		vbat_lower_than_vbatdet = (chg_sts & VBAT_DET_LOW_IRQ);
-		if (vbat_lower_than_vbatdet){
-			pr_debug("eoc worerk is early wake up\n");
-			vbat_low_count++;
-			if (vbat_low_count >= CONSECUTIVE_COUNT) {
-				pr_debug("woke up too early stopping\n");
-				qpnp_lbc_enable_irq(chip,
-					&chip->irqs[CHG_VBAT_DET_LO]);
-				goto stop_eoc;
-			}
-			else {
-				goto check_again_later;
-			}
-		}
-		else {
-			vbat_low_count = 0;
-		}
 		if (!(buck_sts & CHG_VDD_LOOP_BIT)) {
 			pr_debug("Not in CV\n");
 			count = 0;
-		}
-		else {
+		} else {
 			qpnp_lbc_adjust_vddmax(chip, vbat_mv);
 
 			if ((current_avg * -1) > chip->cfg_iterm_current) {
 				pr_debug("Not in EoC, Battery current too high\n");
 				count = 0;
-			}
-			else if (current_avg > 0) {
+			} else if (current_avg > 0) {
 				pr_debug("System demand increased\n");
 				count = 0;
-			}
-			else if (count >= CONSECUTIVE_COUNT) {
+			} else if (count >= CONSECUTIVE_COUNT) {
 				rc = report_eoc(chip);
 				if (!rc) {
 					pr_info("End of Charging\n");
 					pr_debug("Battery FULL\n");
 					goto stop_eoc;
-				}
-				else {
+				} else {
 					pr_debug("Unable to report eoc rc = %d\n", rc);
 				}
-			}
-			else {
+			} else {
 				count++;
 				pr_debug("EOC count = %d\n", count);
 			}
 		}
-	}
-	else {
+	} else {
 		pr_debug("not charging\n");
 		goto stop_eoc;
 	}
 
-check_again_later:
 	schedule_delayed_work(&chip->eoc_work,
 		msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
 	return;
 
 stop_eoc:
-	vbat_low_count = 0;
 	count = 0;
 	if (wake_lock_active(&chip->chg_wake_lock))
 		wake_unlock(&chip->chg_wake_lock);
@@ -2362,6 +2332,7 @@ static int show_lbc_config(struct seq_file *m, void *data)
 			"cfg_thermal_levels\t=\t%d\n"
 			"cfg_safe_current\t=\t%d\n"
 			"cfg_tchg_mins\t=\t%d\n"
+			"cfg_iterm_current\t=\t%d\n"
 			"cfg_bpd_detection\t=\t%d\n"
 			"cfg_warm_bat_decidegc\t=\t%d\n"
 			"cfg_cool_bat_decidegc\t=\t%d\n"
@@ -2388,6 +2359,7 @@ static int show_lbc_config(struct seq_file *m, void *data)
 			chip->cfg_thermal_levels,
 			chip->cfg_safe_current,
 			chip->cfg_tchg_mins,
+			chip->cfg_iterm_current,
 			chip->cfg_bpd_detection,
 			chip->cfg_warm_bat_decidegc,
 			chip->cfg_cool_bat_decidegc,
