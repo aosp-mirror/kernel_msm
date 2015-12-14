@@ -1325,11 +1325,14 @@ static int sched_wake_up_idle_show(struct seq_file *m, void *v)
 	if (!p)
 		return -ESRCH;
 
+#ifdef TJK_HMP
 	seq_printf(m, "%d\n", sched_get_wake_up_idle(p));
 
 	put_task_struct(p);
-
 	return 0;
+#else
+	return -EINVAL;
+#endif
 }
 
 static ssize_t
@@ -1357,9 +1360,13 @@ sched_wake_up_idle_write(struct file *file, const char __user *buf,
 	if (!p)
 		return -ESRCH;
 
+#ifdef TJK_HMP
 	err = sched_set_wake_up_idle(p, wake_up_idle);
 
 	put_task_struct(p);
+#else
+	err = -EINVAL;
+#endif
 
 out:
 	return err < 0 ? err : count;

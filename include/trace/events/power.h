@@ -469,6 +469,12 @@ DEFINE_EVENT(cpu_modes, cpu_mode_detect,
 		mode, cpu_cnt)
 );
 
+DEFINE_EVENT(cpu, cpu_capacity,
+
+	TP_PROTO(unsigned int capacity, unsigned int cpu_id),
+	TP_ARGS(capacity, cpu_id)
+);
+
 DECLARE_EVENT_CLASS(timer_status,
 	TP_PROTO(unsigned int cpu, unsigned int single_enter_cycles,
 		unsigned int single_enter_cycle_cnt,
