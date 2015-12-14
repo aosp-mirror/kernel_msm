@@ -2884,7 +2884,7 @@ static inline int find_new_hmp_ilb(int call_cpu, int type)
 
 static inline int power_cost(u64 task_load, int cpu)
 {
-	return SCHED_POWER_SCALE;
+	return SCHED_CAPACITY_SCALE;
 }
 
 static inline int
@@ -5263,7 +5263,7 @@ find_idlest_group(struct sched_domain *sd, struct task_struct *p,
 		}
 
 		/* Adjust by relative CPU power of the group */
-		avg_load = (avg_load * SCHED_POWER_SCALE) / group->sgp->power;
+		avg_load = (avg_load * SCHED_CAPACITY_SCALE) / group->sgp->power;
 
 		if (local_group) {
 			this_load = avg_load;
@@ -6412,7 +6412,7 @@ static inline int get_sd_load_idx(struct sched_domain *sd,
 
 static unsigned long default_scale_freq_power(struct sched_domain *sd, int cpu)
 {
-	return SCHED_POWER_SCALE;
+	return SCHED_CAPACITY_SCALE;
 }
 
 unsigned long __weak arch_scale_freq_power(struct sched_domain *sd, int cpu)
@@ -6456,10 +6456,10 @@ static unsigned long scale_rt_power(int cpu)
 		available = total - avg;
 	}
 
-	if (unlikely((s64)total < SCHED_POWER_SCALE))
-		total = SCHED_POWER_SCALE;
+	if (unlikely((s64)total < SCHED_CAPACITY_SCALE))
+		total = SCHED_CAPACITY_SCALE;
 
-	total >>= SCHED_POWER_SHIFT;
+	total >>= SCHED_CAPACITY_SHIFT;
 
 	return div_u64(available, total);
 }
@@ -6467,7 +6467,7 @@ static unsigned long scale_rt_power(int cpu)
 static void update_cpu_power(struct sched_domain *sd, int cpu)
 {
 	unsigned long weight = sd->span_weight;
-	unsigned long power = SCHED_POWER_SCALE;
+	unsigned long power = SCHED_CAPACITY_SCALE;
 	struct sched_group *sdg = sd->groups;
 
 	if ((sd->flags & SD_SHARE_CPUPOWER) && weight > 1) {
@@ -6476,7 +6476,7 @@ static void update_cpu_power(struct sched_domain *sd, int cpu)
 		else
 			power *= default_scale_smt_power(sd, cpu);
 
-		power >>= SCHED_POWER_SHIFT;
+		power >>= SCHED_CAPACITY_SHIFT;
 	}
 
 	sdg->sgp->power_orig = power;
@@ -6486,10 +6486,10 @@ static void update_cpu_power(struct sched_domain *sd, int cpu)
 	else
 		power *= default_scale_freq_power(sd, cpu);
 
-	power >>= SCHED_POWER_SHIFT;
+	power >>= SCHED_CAPACITY_SHIFT;
 
 	power *= scale_rt_power(cpu);
-	power >>= SCHED_POWER_SHIFT;
+	power >>= SCHED_CAPACITY_SHIFT;
 
 	if (!power)
 		power = 1;
@@ -6551,7 +6551,7 @@ static inline int
 fix_small_capacity(struct sched_domain *sd, struct sched_group *group)
 {
 	/*
-	 * Only siblings can have significantly less than SCHED_POWER_SCALE
+	 * Only siblings can have significantly less than SCHED_CAPACITY_SCALE
 	 */
 	if (!(sd->flags & SD_SHARE_CPUPOWER))
 		return 0;
@@ -6655,7 +6655,7 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 	}
 
 	/* Adjust by relative CPU power of the group */
-	sgs->avg_load = (sgs->group_load*SCHED_POWER_SCALE) / group->sgp->power;
+	sgs->avg_load = (sgs->group_load*SCHED_CAPACITY_SCALE) / group->sgp->power;
 
 	/*
 	 * Consider the group unbalanced when the imbalance is larger
@@ -6674,7 +6674,7 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 		sgs->group_imb = 1;
 
 	sgs->group_capacity = DIV_ROUND_CLOSEST(group->sgp->power,
-						SCHED_POWER_SCALE);
+						SCHED_CAPACITY_SCALE);
 	if (!sgs->group_capacity)
 		sgs->group_capacity = fix_small_capacity(env->sd, group);
 	sgs->group_weight = group->group_weight;
@@ -6908,7 +6908,7 @@ static int check_asym_packing(struct lb_env *env, struct sd_lb_stats *sds)
 		return 0;
 
 	env->imbalance = DIV_ROUND_CLOSEST(
-		sds->max_load * sds->busiest->sgp->power, SCHED_POWER_SCALE);
+		sds->max_load * sds->busiest->sgp->power, SCHED_CAPACITY_SCALE);
 
 	return 1;
 }
@@ -6938,7 +6938,7 @@ void fix_small_imbalance(struct lb_env *env, struct sd_lb_stats *sds)
 	}
 
 	scaled_busy_load_per_task = sds->busiest_load_per_task
-					 * SCHED_POWER_SCALE;
+					 * SCHED_CAPACITY_SCALE;
 	scaled_busy_load_per_task /= sds->busiest->sgp->power;
 
 	if (sds->max_load - sds->this_load + scaled_busy_load_per_task >=
@@ -6957,10 +6957,10 @@ void fix_small_imbalance(struct lb_env *env, struct sd_lb_stats *sds)
 			min(sds->busiest_load_per_task, sds->max_load);
 	pwr_now += sds->this->sgp->power *
 			min(sds->this_load_per_task, sds->this_load);
-	pwr_now /= SCHED_POWER_SCALE;
+	pwr_now /= SCHED_CAPACITY_SCALE;
 
 	/* Amount of load we'd subtract */
-	tmp = (sds->busiest_load_per_task * SCHED_POWER_SCALE) /
+	tmp = (sds->busiest_load_per_task * SCHED_CAPACITY_SCALE) /
 		sds->busiest->sgp->power;
 	if (sds->max_load > tmp)
 		pwr_move += sds->busiest->sgp->power *
@@ -6968,15 +6968,15 @@ void fix_small_imbalance(struct lb_env *env, struct sd_lb_stats *sds)
 
 	/* Amount of load we'd add */
 	if (sds->max_load * sds->busiest->sgp->power <
-		sds->busiest_load_per_task * SCHED_POWER_SCALE)
+		sds->busiest_load_per_task * SCHED_CAPACITY_SCALE)
 		tmp = (sds->max_load * sds->busiest->sgp->power) /
 			sds->this->sgp->power;
 	else
-		tmp = (sds->busiest_load_per_task * SCHED_POWER_SCALE) /
+		tmp = (sds->busiest_load_per_task * SCHED_CAPACITY_SCALE) /
 			sds->this->sgp->power;
 	pwr_move += sds->this->sgp->power *
 			min(sds->this_load_per_task, sds->this_load + tmp);
-	pwr_move /= SCHED_POWER_SCALE;
+	pwr_move /= SCHED_CAPACITY_SCALE;
 
 	/* Move if we gain throughput */
 	if (pwr_move > pwr_now)
@@ -7016,7 +7016,7 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 		load_above_capacity = (sds->busiest_nr_running -
 						sds->busiest_group_capacity);
 
-		load_above_capacity *= (SCHED_LOAD_SCALE * SCHED_POWER_SCALE);
+		load_above_capacity *= (SCHED_LOAD_SCALE * SCHED_CAPACITY_SCALE);
 
 		load_above_capacity /= sds->busiest->sgp->power;
 	}
@@ -7036,7 +7036,7 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 	/* How much load to actually move to equalise the imbalance */
 	env->imbalance = min(max_pull * sds->busiest->sgp->power,
 		(sds->avg_load - sds->this_load) * sds->this->sgp->power)
-			/ SCHED_POWER_SCALE;
+			/ SCHED_CAPACITY_SCALE;
 
 	/*
 	 * if *imbalance is less than the average load per runnable task
@@ -7104,7 +7104,7 @@ find_busiest_group(struct lb_env *env, int *balance)
 	if (bail_inter_cluster_balance(env, &sds))
 		goto out_balanced;
 
-	sds.avg_load = (SCHED_POWER_SCALE * sds.total_load) / sds.total_pwr;
+	sds.avg_load = (SCHED_CAPACITY_SCALE * sds.total_load) / sds.total_pwr;
 
 	/*
 	 * If the busiest group is imbalanced the below checks don't
@@ -7230,7 +7230,7 @@ static struct rq *find_busiest_queue(struct lb_env *env,
 	for_each_cpu(i, sched_group_cpus(group)) {
 		unsigned long power = power_of(i);
 		unsigned long capacity = DIV_ROUND_CLOSEST(power,
-							SCHED_POWER_SCALE);
+							SCHED_CAPACITY_SCALE);
 		unsigned long wl;
 
 		if (!capacity)
@@ -7255,7 +7255,7 @@ static struct rq *find_busiest_queue(struct lb_env *env,
 		 * the load can be moved away from the cpu that is potentially
 		 * running at a lower capacity.
 		 */
-		wl = (wl * SCHED_POWER_SCALE) / power;
+		wl = (wl * SCHED_CAPACITY_SCALE) / power;
 
 		if (wl > max_load) {
 			max_load = wl;

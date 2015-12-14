@@ -835,8 +835,8 @@ enum cpu_idle_type {
 /*
  * Increase resolution of cpu_power calculations
  */
-#define SCHED_POWER_SHIFT	10
-#define SCHED_POWER_SCALE	(1L << SCHED_POWER_SHIFT)
+#define SCHED_CAPACITY_SHIFT	10
+#define SCHED_CAPACITY_SCALE	(1L << SCHED_CAPACITY_SHIFT)
 
 /*
  * sched-domains (multiprocessor balancing) declarations:
@@ -866,6 +866,24 @@ struct sched_domain_attr {
 }
 
 extern int sched_domain_level_max;
+
+struct capacity_state {
+	unsigned long cap;	/* compute capacity */
+	unsigned long power;	/* power consumption at this compute capacity */
+};
+
+struct idle_state {
+	unsigned long power;	 /* power consumption in this idle state */
+};
+
+struct sched_group_energy {
+	atomic_t ref;
+	unsigned int nr_idle_states;	/* number of idle states */
+	struct idle_state *idle_states;	/* ptr to idle state array */
+	unsigned int nr_idle_states_below; /* number idle states in lower groups */
+	unsigned int nr_cap_states;	/* number of capacity states */
+	struct capacity_state *cap_states; /* ptr to capacity state array */
+};
 
 struct sched_group;
 

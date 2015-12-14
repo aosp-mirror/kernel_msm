@@ -7390,7 +7390,7 @@ static int sched_domain_debug_one(struct sched_domain *sd, int cpu, int level,
 		cpulist_scnprintf(str, sizeof(str), sched_group_cpus(group));
 
 		printk(KERN_CONT " %s", str);
-		if (group->sgp->power != SCHED_POWER_SCALE) {
+		if (group->sgp->power != SCHED_CAPACITY_SCALE) {
 			printk(KERN_CONT " (cpu_power = %d)",
 				group->sgp->power);
 		}
@@ -7857,7 +7857,7 @@ build_overlap_sched_groups(struct sched_domain *sd, int cpu)
 		 * domains and no possible iteration will get us here, we won't
 		 * die on a /0 trap.
 		 */
-		sg->sgp->power = SCHED_POWER_SCALE * cpumask_weight(sg_span);
+		sg->sgp->power = SCHED_CAPACITY_SCALE * cpumask_weight(sg_span);
 
 		/*
 		 * Make sure the first group of this domain contains the
@@ -9039,7 +9039,7 @@ void __init sched_init(void)
 #ifdef CONFIG_SMP
 		rq->sd = NULL;
 		rq->rd = NULL;
-		rq->cpu_power = SCHED_POWER_SCALE;
+		rq->cpu_power = SCHED_CAPACITY_SCALE;
 		rq->post_schedule = 0;
 		rq->active_balance = 0;
 		rq->next_balance = jiffies;
@@ -10237,3 +10237,4 @@ void dump_cpu_task(int cpu)
 	pr_info("Task dump for CPU %d:\n", cpu);
 	sched_show_task(cpu_curr(cpu));
 }
+

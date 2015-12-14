@@ -28,6 +28,7 @@ extern unsigned int total_cpus;
 
 int smp_call_function_single(int cpuid, smp_call_func_t func, void *info,
 			     int wait);
+int smp_call_function_single_async(int cpuid, struct call_single_data *csd);
 
 #ifdef CONFIG_SMP
 
