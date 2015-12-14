@@ -867,6 +867,24 @@ config RESOURCE_COUNTERS
 	  This option enables controller independent resource accounting
 	  infrastructure that works with cgroups.
 
+config CGROUP_SCHEDTUNE
+	bool "Task boosting cgroup subsystem for EAS (EXPERIMENTAL)"
+	depends on SCHED_TUNE
+	help
+	  This option provides the "schedtune" controller which improve the
+	  flexibility of the task boosting mechanism by introducing the support
+	  to define "per task" boost values.
+
+	  This new controller:
+	  1. allows only a two layers hierarchy, where the root defines the
+	     system-wide boost value and its direct childs define each one a
+	     different "class of tasks" to be boosted with a different value
+	  2. supports up to 16 different task classes, each one which could be
+	     configured with a different boost value
+
+	  Only if you are testing a kernel with energy-aware scheduler
+	  support, you might want to say Y here.
+
 config MEMCG
 	bool "Memory Resource Controller for Control Groups"
 	depends on RESOURCE_COUNTERS
@@ -1142,6 +1160,33 @@ config SCHED_AUTOGROUP
 	  of workloads isolates aggressive CPU burners (like build jobs) from
 	  desktop applications.  Task group autogeneration is currently based
 	  upon task session.
+
+config SCHED_TUNE
+	bool "Tasks boosting for energy-aware scheduler (EXPERIMENTAL)"
+	help
+	  This option enable the system-wide support for task boosting.
+	  When this support is enabled a new sysctl interface is exposed to
+	  userspace via:
+	     /proc/sys/kernel/sched_cfs_boost
+	  which allows to set a system-wide boost value in range [0..100].
+
+	  The currently boosting strategy is implemented in such a way that:
+	  - a 0% boost value requires to operate in "standard" EAS mode by
+	    scheduling all tasks at the minimum capacities required by their
+	    workload demand
+	  - a 100% boost value requires to push at maximum the task
+	    performances, "regardless" of the incurred energy consumption
+
+	  A boost value in between these two boundaries is used to bias the
+	  power/performance trade-off, the higher the boost value the more the
+	  EAS scheduler is biased toward performance boosting instead of energy
+	  efficiency.
+
+	  Since this support exposes a single system-wide knob, the specified
+	  boost value is applied to all (CFS) tasks in the system.
+
+	  Only if you are testing a kernel with energy-aware scheduler support,
+	  you might want to say Y here.
 
 config MM_OWNER
 	bool
