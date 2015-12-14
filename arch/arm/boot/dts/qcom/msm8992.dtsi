@@ -80,6 +80,7 @@
 			qcom,acc = <&acc0>;
 			qcom,ldo = <&ldo0>;
 			next-level-cache = <&L2_0>;
+			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			// The currents(uA) correspond to the frequencies in the
 			// frequency table.
 			current = < 18250 //384000 kHZ
@@ -115,6 +116,7 @@
 			qcom,acc = <&acc1>;
 			qcom,ldo = <&ldo1>;
 			next-level-cache = <&L2_0>;
+			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			// The currents(uA) correspond to the frequencies in the
 			// frequency table.
 			current = < 7665 //384000 kHZ
@@ -144,6 +146,7 @@
 			qcom,acc = <&acc2>;
 			qcom,ldo = <&ldo2>;
 			next-level-cache = <&L2_0>;
+			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			// The currents(uA) correspond to the frequencies in the
 			// frequency table.
 			current = < 7848 //384000 kHZ
@@ -173,6 +176,7 @@
 			qcom,acc = <&acc3>;
 			qcom,ldo = <&ldo3>;
 			next-level-cache = <&L2_0>;
+			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			// The currents(uA) correspond to the frequencies in the
 			// frequency table.
 			current = < 8760 //384000 kHZ
@@ -202,6 +206,7 @@
 			qcom,acc = <&acc4>;
 			qcom,ldo = <&ldo4>;
 			next-level-cache = <&L2_1>;
+			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
 			// The currents(uA) correspond to the frequencies in the
 			// frequency table.
 			current = < 67740 //384000 kHZ
@@ -241,6 +246,7 @@
 			qcom,acc = <&acc5>;
 			qcom,ldo = <&ldo5>;
 			next-level-cache = <&L2_1>;
+			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
 			// The currents(uA) correspond to the frequencies in the
 			// frequency table.
 			current = < 49450 //384000 kHZ
@@ -263,6 +269,71 @@
 			L1_D_101: l1-dcache {
 				compatible = "arm,arch-cache";
 				qcom,dump-size = <0x9040>;
+			};
+		};
+
+		energy-costs {
+			CPU_COST_0: core-cost0 {
+				busy-cost-data = <
+					184    48
+					266    66
+					378   115
+					419   137
+					450   156
+					532   217
+					573   251
+					593   273
+				>;
+				idle-cost-data = <
+			  		0
+				>;
+			};
+			CPU_COST_1: core-cost1 {
+				busy-cost-data = <
+					256   155
+					358   174
+					512   289
+					614   428
+					716   602
+					829   835
+					921  1098
+		       			1024  1382
+				>;
+				idle-cost-data = <
+			  		0
+				>;
+			};
+			CLUSTER_COST_0: cluster-cost0 {
+				busy-cost-data = <
+					184    74
+					266   104
+					378   151
+					419   168
+					450   181
+					532   220
+					573   238
+					593   250
+				>;
+				idle-cost-data = <
+			 		110
+			 		105
+				>;
+			};
+			CLUSTER_COST_1: cluster-cost1 {
+				busy-cost-data = <
+					256    90
+					358   127
+					512   174
+					614   201
+					716   222
+					829   240
+					921   252
+		       			1024   259
+				>;
+				idle-cost-data = <
+					267
+					231
+				>;
 			};
 		};
 	};
