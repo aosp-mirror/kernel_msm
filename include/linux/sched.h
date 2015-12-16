@@ -2210,12 +2210,14 @@ static inline void tsk_restore_flags(struct task_struct *task,
 }
 
 #ifdef CONFIG_SMP
+struct cpuidle_state;
 extern void do_set_cpus_allowed(struct task_struct *p,
 			       const struct cpumask *new_mask);
 
 extern int set_cpus_allowed_ptr(struct task_struct *p,
 				const struct cpumask *new_mask);
 extern void sched_set_cpu_cstate(int cpu, int cstate,
+			 struct cpuidle_state *cpuidle,
 			 int wakeup_energy, int wakeup_latency);
 extern void sched_set_cluster_dstate(const cpumask_t *cluster_cpus, int dstate,
 				int wakeup_energy, int wakeup_latency);
@@ -2232,7 +2234,8 @@ static inline int set_cpus_allowed_ptr(struct task_struct *p,
 	return 0;
 }
 static inline void
-sched_set_cpu_cstate(int cpu, int cstate, int wakeup_energy, int wakeup_latency)
+sched_set_cpu_cstate(int cpu, int cstate, struct cpuidle *cpuidle,
+		     int wakeup_energy, int wakeup_latency)
 {
 }
 

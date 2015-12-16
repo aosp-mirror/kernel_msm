@@ -8830,18 +8830,18 @@ EXPORT_SYMBOL_GPL(__wake_up_sync);	/* For internal use only */
  * @wakeup_latency = latency to wakeup from cstate
  *
  */
+
 void
-sched_set_cpu_cstate(int cpu, int cstate, int wakeup_energy, int wakeup_latency)
+sched_set_cpu_cstate(int cpu, int cstate, struct cpuidle_state *cpuidle,
+		     int wakeup_energy, int wakeup_latency)
 {
 	// TJK: Need to integrate QC cpuidle with EAS (doesn't use standard
 	// cpuidle framework)
-#if 0
 	struct rq *rq = cpu_rq(cpu);
 
-	rq->cstate = cstate; /* C1, C2 etc */
-	rq->wakeup_energy = wakeup_energy;
-	rq->wakeup_latency = wakeup_latency;
-#else
+	idle_set_state_idx(rq, cstate);
+	idle_set_state(rq, cpuidle);
+
 	if ((cstate == 0 && wakeup_energy == 0 && wakeup_latency == 0) ||
 	    (cstate == 1 && cpu < 4 && wakeup_energy == 5800 && wakeup_latency == 50) ||
 	    (cstate == 1 && cpu >= 4 && wakeup_energy == 24120 && wakeup_latency == 60) ||
@@ -8851,6 +8851,5 @@ sched_set_cpu_cstate(int cpu, int cstate, int wakeup_energy, int wakeup_latency)
 	} else {
 		pr_info("TJK: CPU%d ->cstate=%d  nrg=%d latency=%d\n", cpu, cstate, wakeup_energy, wakeup_latency);
 	}
-#endif
 }
 
