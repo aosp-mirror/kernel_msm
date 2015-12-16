@@ -70,6 +70,7 @@ void user_enter(void)
 	local_irq_restore(flags);
 }
 
+#ifdef TJK_HMP
 #ifdef CONFIG_PREEMPT
 /**
  * preempt_schedule_context - preempt_schedule called by tracing
@@ -110,6 +111,7 @@ void __sched notrace preempt_schedule_context(void)
 }
 EXPORT_SYMBOL_GPL(preempt_schedule_context);
 #endif /* CONFIG_PREEMPT */
+#endif
 
 /**
  * user_exit - Inform the context tracking that the CPU is

@@ -33,7 +33,11 @@ struct cpuacct {
 	struct kernel_cpustat __percpu *cpustat;
 };
 
-/* return cpu accounting group corresponding to this container */
+static inline struct cpuacct *css_ca(struct cgroup_subsys_state *css)
+{
+	return css ? container_of(css, struct cpuacct, css) : NULL;
+}
+
 static inline struct cpuacct *cgroup_ca(struct cgroup *cgrp)
 {
 	return container_of(cgroup_subsys_state(cgrp, cpuacct_subsys_id),
@@ -43,8 +47,7 @@ static inline struct cpuacct *cgroup_ca(struct cgroup *cgrp)
 /* return cpu accounting group to which this task belongs */
 static inline struct cpuacct *task_ca(struct task_struct *tsk)
 {
-	return container_of(task_subsys_state(tsk, cpuacct_subsys_id),
-			    struct cpuacct, css);
+	return container_of(task_subsys_state(tsk, cpuacct_subsys_id), struct cpuacct, css);
 }
 
 static inline struct cpuacct *__parent_ca(struct cpuacct *ca)
@@ -172,8 +175,7 @@ out:
 	return err;
 }
 
-static int cpuacct_percpu_seq_read(struct cgroup *cgroup, struct cftype *cft,
-				   struct seq_file *m)
+static int cpuacct_percpu_seq_show(struct cgroup *cgroup, struct cftype *cft, struct seq_file *m)
 {
 	struct cpuacct *ca = cgroup_ca(cgroup);
 	u64 percpu;
@@ -229,7 +231,7 @@ static struct cftype files[] = {
 	},
 	{
 		.name = "usage_percpu",
-		.read_seq_string = cpuacct_percpu_seq_read,
+		.read_seq_string = cpuacct_percpu_seq_show,
 	},
 	{
 		.name = "stat",
@@ -281,16 +283,16 @@ void cpuacct_account_field(struct task_struct *p, int index, u64 val)
 	while (ca != &root_cpuacct) {
 		kcpustat = this_cpu_ptr(ca->cpustat);
 		kcpustat->cpustat[index] += val;
-		ca = __parent_ca(ca);
+		ca = parent_ca(ca);
 	}
 	rcu_read_unlock();
 }
 
 struct cgroup_subsys cpuacct_subsys = {
-	.name		= "cpuacct",
+	.name           = "cpuacct",
 	.css_alloc	= cpuacct_css_alloc,
 	.css_free	= cpuacct_css_free,
-	.subsys_id	= cpuacct_subsys_id,
+	.subsys_id      = cpuacct_subsys_id,
 	.base_cftypes	= files,
 	.early_init	= 1,
 };

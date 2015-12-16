@@ -31,6 +31,12 @@ SUBSYS(cpuacct)
 
 /* */
 
+#if IS_SUBSYS_ENABLED(CONFIG_CGROUP_SCHEDTUNE)
+SUBSYS(schedtune)
+#endif
+
+/* */
+
 #if IS_SUBSYS_ENABLED(CONFIG_MEMCG)
 SUBSYS(mem_cgroup)
 #endif

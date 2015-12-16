@@ -2,10 +2,10 @@
 #define _SCHED_SYSCTL_H
 
 #ifdef CONFIG_DETECT_HUNG_TASK
+extern int	     sysctl_hung_task_check_count;
 extern unsigned int  sysctl_hung_task_panic;
-extern unsigned long sysctl_hung_task_check_count;
 extern unsigned long sysctl_hung_task_timeout_secs;
-extern unsigned long sysctl_hung_task_warnings;
+extern int sysctl_hung_task_warnings;
 extern int proc_dohung_task_timeout_secs(struct ctl_table *table, int write,
 					 void __user *buffer,
 					 size_t *lenp, loff_t *ppos);
@@ -25,6 +25,10 @@ enum { sysctl_hung_task_timeout_secs = 0 };
  * Because the kernel adds some informative sections to a image of program at
  * generating coredump, we need some margin. The number of extra sections is
  * 1-3 now and depends on arch. We use "5" as safe margin, here.
+ *
+ * ELF extended numbering allows more than 65535 sections, so 16-bit bound is
+ * not a hard limit any more. Although some userspace tools can be surprised by
+ * that.
  */
 #define MAPCOUNT_ELF_CORE_MARGIN	(5)
 #define DEFAULT_MAX_MAP_COUNT	(USHRT_MAX - MAPCOUNT_ELF_CORE_MARGIN)
@@ -44,7 +48,6 @@ extern unsigned int sysctl_sched_cpu_high_irqload;
 extern unsigned int sysctl_sched_freq_account_wait_time;
 extern unsigned int sysctl_sched_migration_fixup;
 extern unsigned int sysctl_sched_heavy_task_pct;
-extern unsigned int sysctl_sched_min_runtime;
 extern unsigned int sysctl_sched_enable_power_aware;
 
 #if defined(CONFIG_SCHED_FREQ_INPUT) || defined(CONFIG_SCHED_HMP)
@@ -59,12 +62,24 @@ extern int sysctl_sched_freq_dec_notify;
 #ifdef CONFIG_SCHED_HMP
 extern unsigned int sysctl_sched_spill_nr_run;
 extern unsigned int sysctl_sched_spill_load_pct;
-extern unsigned int sysctl_sched_small_task_pct;
 extern unsigned int sysctl_sched_upmigrate_pct;
 extern unsigned int sysctl_sched_downmigrate_pct;
 extern int sysctl_sched_upmigrate_min_nice;
 extern unsigned int sysctl_sched_powerband_limit_pct;
 extern unsigned int sysctl_sched_boost;
+extern unsigned int sysctl_power_aware_timer_migration;
+extern unsigned int sysctl_early_detection_duration;
+
+#ifdef CONFIG_SCHED_QHMP
+extern unsigned int sysctl_sched_min_runtime;
+extern unsigned int sysctl_sched_small_task_pct;
+#else
+extern unsigned int sysctl_sched_lowspill_freq;
+extern unsigned int sysctl_sched_pack_freq;
+#if defined(CONFIG_SCHED_FREQ_INPUT)
+extern unsigned int sysctl_sched_new_task_windows;
+#endif
+#endif
 
 #else /* CONFIG_SCHED_HMP */
 
@@ -83,9 +98,7 @@ extern enum sched_tunable_scaling sysctl_sched_tunable_scaling;
 extern unsigned int sysctl_numa_balancing_scan_delay;
 extern unsigned int sysctl_numa_balancing_scan_period_min;
 extern unsigned int sysctl_numa_balancing_scan_period_max;
-extern unsigned int sysctl_numa_balancing_scan_period_reset;
 extern unsigned int sysctl_numa_balancing_scan_size;
-extern unsigned int sysctl_numa_balancing_settle_count;
 
 #ifdef CONFIG_SCHED_DEBUG
 extern unsigned int sysctl_sched_migration_cost;
@@ -140,6 +153,15 @@ extern unsigned int sysctl_sched_cfs_bandwidth_slice;
 extern unsigned int sysctl_sched_autogroup_enabled;
 #endif
 
+#ifdef CONFIG_SCHEDSTATS
+extern unsigned int sysctl_sched_latency_panic_threshold;
+extern unsigned int sysctl_sched_latency_warn_threshold;
+
+extern int sched_max_latency_sysctl(struct ctl_table *table, int write,
+				    void __user *buffer, size_t *lenp,
+				    loff_t *ppos);
+#endif
+
 extern int sched_rr_timeslice;
 
 extern int sched_rr_handler(struct ctl_table *table, int write,
@@ -149,5 +171,9 @@ extern int sched_rr_handler(struct ctl_table *table, int write,
 extern int sched_rt_handler(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp,
 		loff_t *ppos);
+
+extern int sysctl_numa_balancing(struct ctl_table *table, int write,
+				 void __user *buffer, size_t *lenp,
+				 loff_t *ppos);
 
 #endif /* _SCHED_SYSCTL_H */
