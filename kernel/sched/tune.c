@@ -596,11 +596,12 @@ schedtune_css_alloc(struct cgroup *cgrp)
 	}
 
 	/* Allows only single level hierachies */
+#if 0
 	if (cgrp->parent != (void *)&root_schedtune.css) {
 		pr_err("Nested SchedTune boosting groups not allowed\n");
 		return ERR_PTR(-ENOMEM);
 	}
-
+#endif
 	/* Allows only a limited number of boosting groups */
 	for (idx = 1; idx < BOOSTGROUPS_COUNT; ++idx)
 		if (allocated_group[idx] == NULL)
