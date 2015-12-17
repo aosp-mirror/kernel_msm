@@ -137,13 +137,12 @@ __schedtune_accept_deltas(int nrg_delta, int cap_delta,
 		 */
 		energy_payoff  = cap_delta * threshold_gains[perf_boost_idx].nrg_gain;
 		energy_payoff -= nrg_delta * threshold_gains[perf_boost_idx].cap_gain;
-#if 0
-		// TJK: fix tracing
+
 		trace_sched_tune_filter(
 				threshold_gains[perf_boost_idx].nrg_gain,
 				threshold_gains[perf_boost_idx].cap_gain,
 				energy_payoff, 8);
-#endif
+
 		return energy_payoff;
 	}
 
@@ -158,13 +157,11 @@ __schedtune_accept_deltas(int nrg_delta, int cap_delta,
 		energy_payoff  = nrg_delta * threshold_gains[perf_constrain_idx].cap_gain;
 		energy_payoff -= cap_delta * threshold_gains[perf_constrain_idx].nrg_gain;
 
-#if 0
-		// TJK: fix tracing
 		trace_sched_tune_filter(
 				threshold_gains[perf_constrain_idx].nrg_gain,
 				threshold_gains[perf_constrain_idx].cap_gain,
 				energy_payoff, 6);
-#endif
+
 		return energy_payoff;
 	}
 
@@ -241,13 +238,13 @@ schedtune_accept_deltas(int nrg_delta, int cap_delta, struct task_struct *task) 
 
 	/* Optimal (O) region */
 	if (nrg_delta < 0 && cap_delta > 0) {
-		// TJK: fix tracing: trace_sched_tune_filter(0, 0, 1, 0);
+		trace_sched_tune_filter(0, 0, 1, 0);
 		return INT_MAX;
 	}
 
 	/* Suboptimal (S) region */
 	if (nrg_delta > 0 && cap_delta < 0) {
-		// TJK: fix tracing trace_sched_tune_filter(0, 0, -1, 5);
+		trace_sched_tune_filter(0, 0, -1, 5);
 		return -INT_MAX;
 	}
 
@@ -358,18 +355,18 @@ schedtune_boostgroup_update(int idx, int boost)
 		/* Check if this update increase current max */
 		if (boost > cur_boost_max && bg->group[idx].tasks) {
 			bg->boost_max = boost;
-			// TJK: fix tracing: trace_sched_tune_boostgroup_update(cpu, 1, bg->boost_max);
+			trace_sched_tune_boostgroup_update(cpu, 1, bg->boost_max);
 			continue;
 		}
 
 		/* Check if this update has decreased current max */
 		if (cur_boost_max == old_boost && old_boost > boost) {
 			schedtune_cpu_update(cpu);
-			// TJK: fix tracing: trace_sched_tune_boostgroup_update(cpu, -1, bg->boost_max);
+			trace_sched_tune_boostgroup_update(cpu, -1, bg->boost_max);
 			continue;
 		}
 
-		//TJK: fix tracing: trace_sched_tune_boostgroup_update(cpu, 0, bg->boost_max);
+		trace_sched_tune_boostgroup_update(cpu, 0, bg->boost_max);
 	}
 
 	return 0;
@@ -410,12 +407,8 @@ schedtune_tasks_update(struct task_struct *p, int cpu, int idx, int task_count)
 	if (tasks == 1 || tasks == 0)
 		schedtune_cpu_update(cpu);
 
-#if 0
-	// TJK: fix tracing
 	trace_sched_tune_tasks_update(p, cpu, tasks, idx,
 			bg->group[idx].boost, bg->boost_max);
-#endif
-
 }
 
 /*
@@ -527,14 +520,11 @@ boost_write(struct cgroup *cgrp, struct cftype *cft,
 
 	/* Update CPU boost */
 	schedtune_boostgroup_update(st->idx, st->boost);
-#if 0
-	// TJK: fix tracing
 	trace_sched_tune_config(st->boost,
 			threshold_gains[st->perf_boost_idx].nrg_gain,
 			threshold_gains[st->perf_boost_idx].cap_gain,
 			threshold_gains[st->perf_constrain_idx].nrg_gain,
 			threshold_gains[st->perf_constrain_idx].cap_gain);
-#endif
 out:
 	return err;
 }

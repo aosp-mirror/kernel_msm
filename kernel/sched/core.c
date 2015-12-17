@@ -628,11 +628,8 @@ void resched_curr(struct rq *rq)
 
 	if (set_nr_and_not_polling(curr))
 		smp_send_reschedule(cpu);
-	// TJK fix tracing
-#if 0
 	else
 		trace_sched_wake_idle_without_ipi(cpu);
-#endif
 }
 
 void resched_cpu(int cpu)
@@ -694,11 +691,8 @@ static void wake_up_idle_cpu(int cpu)
 
 	if (set_nr_and_not_polling(rq->idle))
 		smp_send_reschedule(cpu);
-#if 0
-	// TJK fix tracing
 	else
 		trace_sched_wake_idle_without_ipi(cpu);
-#endif
 }
 
 static bool wake_up_full_nohz_cpu(int cpu)
@@ -1085,7 +1079,6 @@ void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
 #endif
 #endif
 
-	// TJK: convert to new trace args
 	trace_sched_migrate_task(p, new_cpu, 0);
 
 	if (task_cpu(p) != new_cpu) {
@@ -1655,11 +1648,8 @@ static void ttwu_queue_remote(struct task_struct *p, int cpu)
 	if (llist_add(&p->wake_entry, &cpu_rq(cpu)->wake_list)) {
 		if (!set_nr_if_polling(rq->idle))
 			smp_send_reschedule(cpu);
-#if 0
-		// TJK: fix tracing
 		else
 			trace_sched_wake_idle_without_ipi(cpu);
-#endif
 	}
 }
 
@@ -1674,7 +1664,7 @@ void wake_up_if_idle(int cpu)
 		goto out;
 
 	if (set_nr_if_polling(rq->idle)) {
-		// TJK: trace_sched_wake_idle_without_ipi(cpu);
+		trace_sched_wake_idle_without_ipi(cpu);
 	} else {
 		raw_spin_lock_irqsave(&rq->lock, flags);
 		if (is_idle_task(rq->curr))
@@ -2704,37 +2694,6 @@ void preempt_count_add(int val)
 	}
 }
 EXPORT_SYMBOL(preempt_count_add);
-#if 0
-// TJK
-NOKPROBE_SYMBOL(preempt_count_add);
-
-void preempt_count_sub(int val)
-{
-#ifdef CONFIG_DEBUG_PREEMPT
-	/*
-	 * Underflow?
-	 */
-	if (DEBUG_LOCKS_WARN_ON(val > preempt_count()))
-		return;
-	/*
-	 * Is the spinlock portion underflowing?
-	 */
-	if (DEBUG_LOCKS_WARN_ON((val < PREEMPT_MASK) &&
-			!(preempt_count() & PREEMPT_MASK)))
-		return;
-#endif
-
-	if (preempt_count() == val)
-		trace_preempt_on(CALLER_ADDR0, get_parent_ip(CALLER_ADDR1));
-#if defined(CONFIG_PREEMPT_MONITOR) && defined(CONFIG_MTPROF)
-	if (unlikely(__raw_get_cpu_var(mtsched_mon_enabled) & 0x1))
-		MT_trace_preempt_on();
-#endif
-	__preempt_count_sub(val);
-}
-EXPORT_SYMBOL(preempt_count_sub);
-NOKPROBE_SYMBOL(preempt_count_sub);
-#endif
 
 #endif
 
