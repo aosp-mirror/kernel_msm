@@ -5279,89 +5279,114 @@ next:
 			sg = sg->next;
 		} while (sg != sd->groups);
 	}
+
 done:
 	return target;
 }
 
 static int energy_aware_wake_cpu(struct task_struct *p, int target)
 {
+	int prev_cpu = task_cpu(p);
 	struct sched_domain *sd;
-	struct sched_group *sg, *sg_target;
-	int target_max_cap = INT_MAX;
-	int target_cpu = task_cpu(p);
-	int i;
+	struct sched_group *sg;
+	int i = prev_cpu;
+	int best_busy = -1;
+	int best_idle = -1;
+	int best_idle_cstate = -1;
+	int best_busy_load = INT_MAX;
+	int better_busy = -1;
+	int better_idle = -1;
+	int better_idle_cstate = -1;
+	int better_busy_load = INT_MAX;
 
-	sd = rcu_dereference(per_cpu(sd_ea, task_cpu(p)));
-
-	if (!sd)
+	if (idle_cpu(target))
 		return target;
 
-	sg = sd->groups;
-	sg_target = sg;
+	/*
+	 * If the prevous cpu is cache affine and idle, don't be stupid.
+	 */
+	if (i != target && cpus_share_cache(i, target) && idle_cpu(i))
+		return i;
 
 	/*
-	 * Find group with sufficient capacity. We only get here if no cpu is
-	 * overutilized. We may end up overutilizing a cpu by adding the task,
-	 * but that should not be any worse than select_idle_sibling().
-	 * load_balance() should sort it out later as we get above the tipping
-	 * point.
+	 * Otherwise, iterate the domains and find an elegible idle cpu.
 	 */
-	do {
-		/* Assuming all cpus are the same in group */
-		int max_cap_cpu = group_first_cpu(sg);
+	sd = rcu_dereference(per_cpu(sd_llc, target));
+	for_each_lower_domain(sd) {
+		sg = sd->groups;
+		do {
+			if (!cpumask_intersects(sched_group_cpus(sg),
+						tsk_cpus_allowed(p)))
+				goto next;
 
-		/*
-		 * Assume smaller max capacity means more energy-efficient.
-		 * Ideally we should query the energy model for the right
-		 * answer but it easily ends up in an exhaustive search.
-		 */
-		if (capacity_of(max_cap_cpu) < target_max_cap &&
-		    task_fits_capacity(p, max_cap_cpu)) {
-			sg_target = sg;
-			target_max_cap = capacity_of(max_cap_cpu);
-		}
-	} while (sg = sg->next, sg != sd->groups);
+			for_each_cpu(i, sched_group_cpus(sg)) {
+				struct rq *rq = cpu_rq(i);
+				int idx = idle_get_state_idx(rq);
+				unsigned long usage = get_cpu_usage(i);
+				unsigned long new_usage = usage + boosted_task_utilization(p);
+				if (new_usage < capacity_curr_of(i)) {
+					/* Task fits here -- use it if not idle*/
+					if (!idx) goto done;
+				}
 
-	/* Find cpu with sufficient capacity */
-	for_each_cpu_and(i, tsk_cpus_allowed(p), sched_group_cpus(sg_target)) {
-		/*
-		 * p's blocked utilization is still accounted for on prev_cpu
-		 * so prev_cpu will receive a negative bias due the double
-		 * accouting. However, the blocked utilization may be zero.
-		 */
-		int new_usage = get_cpu_usage(i) + boosted_task_utilization(p);
-
-		if (new_usage >	capacity_orig_of(i))
-			continue;
-
-		if (new_usage <	capacity_curr_of(i)) {
-			target_cpu = i;
-			if (cpu_rq(i)->nr_running)
-				break;
-		}
-
-		/* cpu has capacity at higher OPP, keep it as fallback */
-		if (target_cpu == task_cpu(p))
-			target_cpu = i;
+				if (new_usage <= capacity_orig_of(i)) {
+					/* Task fits -- best case idle/busy */
+					if (idx && (best_idle < 0 ||
+					    	idx < best_idle_cstate)) {
+						best_idle = i;
+						best_idle_cstate = idx;
+					} else if (best_busy < 0 ||
+					   	best_busy_load > usage) {
+						/* Task fits, but requires higher OPP */
+						best_busy = i;
+						best_busy_load = usage;
+					}
+				} else {
+					/* Task doesn't fit, but keep track of
+					 * better idle/busy.
+					 */
+					if (idx && (better_idle < 0 ||
+					    	idx < better_idle_cstate)) {
+						better_idle = i;
+						better_idle_cstate = idx;
+					} else if (better_busy < 0 ||
+					   	better_busy_load > usage) {
+						better_busy = i;
+						better_busy_load = usage;
+					}
+				}
+			}
+next:
+			sg = sg->next;
+		} while (sg != sd->groups);
 	}
-
-	if (target_cpu != task_cpu(p)) {
+	if (best_idle >= 0)
+		target = best_idle;
+	else if (best_busy >= 0)
+		target = best_busy;
+	else if (better_idle >= 0)
+		target = better_idle;
+	else if (better_busy >= 0)
+		target = better_busy;
+	/* else use passed-in target */
+done:
+	if (target != prev_cpu) {
 		struct energy_env eenv = {
 			.usage_delta	= task_utilization(p),
 			.src_cpu	= task_cpu(p),
-			.dst_cpu	= target_cpu,
+			.dst_cpu	= target,
 			.task		= p,
 		};
 
 		/* Not enough spare capacity on previous cpu */
-		if (cpu_overutilized(task_cpu(p)))
-			return target_cpu;
+		if (cpu_overutilized(prev_cpu))
+			return target;
 
 		if (energy_diff(&eenv) >= 0)
-			return task_cpu(p);
+			return prev_cpu;
 	}
 
-	return target_cpu;
+	return target;
 }
 
 /*
@@ -5419,7 +5444,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 		prev_cpu = cpu;
 
 	if (sd_flag & SD_BALANCE_WAKE && want_sibling) {
-		if (energy_aware() && !cpu_rq(cpu)->rd->overutilized)
+		if (energy_aware())
 			new_cpu = energy_aware_wake_cpu(p, prev_cpu);
 		else
 			new_cpu = select_idle_sibling(p, prev_cpu);
