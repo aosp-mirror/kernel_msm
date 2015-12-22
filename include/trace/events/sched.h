@@ -1117,6 +1117,47 @@ TRACE_EVENT(sched_boost_task,
 		  __entry->margin)
 );
 
+TRACE_EVENT(sched_task_fits,
+
+	TP_PROTO(struct task_struct *tsk, int cpu, int orig_usage, int usage, unsigned long task_util, unsigned long capacity, unsigned long margin),
+
+	TP_ARGS(tsk, cpu, orig_usage, usage, task_util, capacity, margin),
+
+	TP_STRUCT__entry(
+		__array( char,	comm,	TASK_COMM_LEN		)
+		__field( pid_t,		pid			)
+		__field( int,	cpu		)
+		__field( int,	orig_usage		)
+		__field( int,	usage		)
+		__field( unsigned long,	task_util		)
+		__field( unsigned long,	capacity		)
+		__field( unsigned long,	margin			)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, tsk->comm, TASK_COMM_LEN);
+		__entry->pid		= tsk->pid;
+		__entry->cpu	= cpu;
+		__entry->orig_usage	= orig_usage;
+		__entry->usage	= usage;
+		__entry->capacity	= capacity;
+		__entry->task_util	= task_util;
+		__entry->margin		= margin;
+	),
+
+	TP_printk("comm=%s pid=%d cpu=%d origu=%d tasku=%ld u=%d boost=%d capacity=%lu margin=%lu result=%d",
+		  __entry->comm, __entry->pid,
+		  __entry->cpu,
+		  __entry->orig_usage,
+		  __entry->task_util,
+		  __entry->usage,
+		  __entry->usage-__entry->orig_usage,
+		  __entry->capacity,
+		  __entry->margin,
+		  (__entry->capacity * 1024) > (__entry->usage * __entry->margin)
+		  )
+);
+
 /*
  * Tracepoint for accounting CPU  boosted utilization
  */

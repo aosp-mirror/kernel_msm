@@ -221,14 +221,16 @@ void cpufreq_sched_reset_cap(int cpu)
 
 static inline void set_sched_energy_freq(void)
 {
-	if (!sched_energy_freq())
-		static_key_slow_inc(&__sched_energy_freq);
+	// TJK: must always bump the key so we can handle
+	// 1 cluster going online/offline
+	static_key_slow_inc(&__sched_energy_freq);
 }
 
 static inline void clear_sched_energy_freq(void)
 {
-	if (sched_energy_freq())
-		static_key_slow_dec(&__sched_energy_freq);
+	// TJK: must always bump the key so we can handle
+	// 1 cluster going online/offline
+	static_key_slow_dec(&__sched_energy_freq);
 }
 
 static int cpufreq_sched_policy_start(struct cpufreq_policy *policy)

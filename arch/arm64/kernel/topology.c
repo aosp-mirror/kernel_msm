@@ -281,8 +281,9 @@ unsigned long arch_scale_freq_capacity(struct sched_domain *sd, int cpu)
 {
 	unsigned long curr = atomic_long_read(&per_cpu(cpu_freq_capacity, cpu));
 
-	if (!curr)
-	return SCHED_CAPACITY_SCALE;
+	if (!curr) {
+		return SCHED_CAPACITY_SCALE;
+	}
 
 	return curr;
 }
@@ -513,10 +514,35 @@ static void __init reset_cpu_topology(void)
 static void __init reset_cpu_capacity(void)
 {
 	unsigned int cpu;
-
 	for_each_possible_cpu(cpu)
 		set_capacity_scale(cpu, SCHED_CAPACITY_SCALE);
 }
+
+static inline const struct sched_group_energy *cpu_cluster_energy(int cpu)
+{
+	struct sched_group_energy *sge = sge_array[cpu][SD_LEVEL1];
+
+	if (!sge) {
+		pr_warn("Invalid sched_group_energy for Cluster%d\n", cpu);
+		return NULL;
+	}
+
+	return sge;
+}
+
+static inline int cpu_corepower_flags(void)
+{
+	return SD_SHARE_PKG_RESOURCES  | SD_SHARE_POWERDOMAIN | \
+	       SD_SHARE_CAP_STATES;
+}
+
+static struct sched_domain_topology_level arm64_topology[] = {
+#ifdef CONFIG_SCHED_MC
+	{ cpu_coregroup_mask, cpu_corepower_flags, cpu_core_energy, SD_INIT_NAME(MC) },
+#endif
+	{ cpu_cpu_mask, 0, cpu_cluster_energy, SD_INIT_NAME(DIE) },
+	{ NULL, },
+};
 
 void __init init_cpu_topology(void)
 {
@@ -528,6 +554,8 @@ void __init init_cpu_topology(void)
 	 */
 	if (parse_dt_topology())
 		reset_cpu_topology();
+	else
+		set_sched_topology(arm64_topology);
 
 	reset_cpu_capacity();
 	parse_dt_cpu_capacity();

@@ -1274,6 +1274,7 @@ static inline int idle_get_state_idx(struct rq *rq)
 }
 #endif
 
+#if 0
 #ifndef arch_scale_cpu_capacity
 static __always_inline
 unsigned long arch_scale_cpu_capacity(struct sched_domain *sd, int cpu)
@@ -1283,6 +1284,7 @@ unsigned long arch_scale_cpu_capacity(struct sched_domain *sd, int cpu)
 
 	return SCHED_CAPACITY_SCALE;
 }
+#endif
 #endif
 
 unsigned long capacity_orig_of(int cpu);
