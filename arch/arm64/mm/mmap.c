@@ -49,10 +49,16 @@ static int mmap_is_legacy(void)
 
 unsigned long arch_mmap_rnd(void)
 {
-	unsigned long rnd;
+	unsigned long rnd = 0;
 
-	rnd = (unsigned long)get_random_int() & STACK_RND_MASK;
-
+	if (current->flags & PF_RANDOMIZE) {
+#ifdef CONFIG_COMPAT
+		if (test_thread_flag(TIF_32BIT))
+			rnd = (unsigned long)get_random_int() & ((1 << mmap_rnd_compat_bits) - 1);
+		else
+#endif
+			rnd = (unsigned long)get_random_int() & ((1 << mmap_rnd_bits) - 1);
+	}
 	return rnd << PAGE_SHIFT;
 }
 
