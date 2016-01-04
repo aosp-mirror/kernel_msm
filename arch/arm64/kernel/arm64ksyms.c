@@ -27,6 +27,7 @@
 #include <linux/uaccess.h>
 #include <linux/io.h>
 #include <linux/kprobes.h>
+#include <linux/arm-smccc.h>
 
 #include <asm/cacheflush.h>
 #include <asm/checksum.h>
@@ -75,3 +76,7 @@ NOKPROBE_SYMBOL(_mcount);
 EXPORT_SYMBOL(__dma_inv_range);
 EXPORT_SYMBOL(__dma_clean_range);
 EXPORT_SYMBOL(__dma_flush_range);
+
+	/* arm-smccc */
+EXPORT_SYMBOL(arm_smccc_smc);
+EXPORT_SYMBOL(arm_smccc_hvc);
