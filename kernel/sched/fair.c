@@ -5284,12 +5284,84 @@ done:
 	return target;
 }
 
-static int energy_aware_wake_cpu(struct task_struct *p, int target)
+int tk_is_idle = 0;
+int tk_no_stupid = 0;
+int tk_best_busy = 0;
+int tk_best_idle = 0;
+int tk_better_busy =0;
+int tk_better_idle = 0;
+int tk_bb_check = 0;
+int tk_bb_wins = 0;
+int tk_bb_loses = 0;
+int tk_ediff_override = 0;
+int tk_target = 0;
+int tk_ea_wake = 0;
+int	tk_diff = 0;
+int	tk_over = 0;
+int	tk_use_over = 0;
+int	tk_sync = 0;
+int	tk_usage = 0;
+int	tk_fits = 0;
+
+void tk_clear(void) {
+	tk_is_idle = 0;
+	tk_no_stupid = 0;
+	tk_best_busy = 0;
+	tk_best_idle = 0;
+	tk_better_busy =0;
+	tk_better_idle = 0;
+	tk_bb_check = 0;
+	tk_bb_wins = 0;
+	tk_bb_loses = 0;
+	tk_ediff_override = 0;
+	tk_target = 0;
+	tk_ea_wake = 0;
+	tk_diff = 0;
+	tk_over = 0;
+	tk_use_over = 0;
+	tk_sync = 0;
+	tk_usage = 0;
+	tk_fits = 0;
+}
+
+#define TKPCNT(_c, _t) \
+	if (_t != 0) { \
+		int _pct = (100*(_c)) / (_t); \
+		pr_info("TJK: " #_c "=%d / %d  (%d%%)\n", _c, _t, _pct); \
+	} else { \
+		pr_info("TJK: " #_c "=%d / %d\n", _c, _t); \
+	}
+	
+
+void tk_print(void) {
+	TKPCNT(tk_is_idle, tk_ea_wake);
+	TKPCNT(tk_no_stupid, tk_ea_wake);
+	TKPCNT(tk_use_over, tk_ea_wake);
+	TKPCNT(tk_best_busy, tk_ea_wake);
+	TKPCNT(tk_best_idle, tk_ea_wake);
+	TKPCNT(tk_better_busy, tk_ea_wake);
+	TKPCNT(tk_better_idle, tk_ea_wake);
+	TKPCNT(tk_bb_check, tk_ea_wake);
+	TKPCNT(tk_bb_wins, tk_bb_check);
+	TKPCNT(tk_bb_loses, tk_bb_check);
+	TKPCNT(tk_ediff_override, tk_ea_wake);
+	TKPCNT(tk_target, tk_ea_wake);
+	TKPCNT(tk_diff, tk_ea_wake);
+	TKPCNT(tk_sync, tk_ea_wake);
+	TKPCNT(tk_usage, tk_ea_wake);
+	TKPCNT(tk_fits, tk_ea_wake);
+	TKPCNT(tk_over, tk_ea_wake);
+	tk_clear();
+	tk_clear();
+}
+
+
+static int energy_aware_wake_cpu(struct task_struct *p, int target, bool sync)
 {
-	int prev_cpu = task_cpu(p);
+	int default_cpu = task_cpu(p);
 	struct sched_domain *sd;
 	struct sched_group *sg;
-	int i = prev_cpu;
+	int i = default_cpu;
 	int best_busy = -1;
 	int best_idle = -1;
 	int best_idle_cstate = -1;
@@ -5298,20 +5370,23 @@ static int energy_aware_wake_cpu(struct task_struct *p, int target)
 	int better_idle = -1;
 	int better_idle_cstate = -1;
 	int better_busy_load = INT_MAX;
+	int best_idle_capacity = INT_MAX;
+	int best_busy_capacity = INT_MAX;
+	bool force_over = false;
+	tk_ea_wake++;
 
-	if (idle_cpu(target))
-		return target;
-
-	/*
-	 * If the prevous cpu is cache affine and idle, don't be stupid.
-	 */
-	if (i != target && cpus_share_cache(i, target) && idle_cpu(i))
-		return i;
+	if (sync) {
+		tk_sync++; // 12%
+		goto done;
+	}
 
 	/*
 	 * Otherwise, iterate the domains and find an elegible idle cpu.
 	 */
 	sd = rcu_dereference(per_cpu(sd_llc, target));
+	if (!sd)
+		return target;
+
 	for_each_lower_domain(sd) {
 		sg = sd->groups;
 		do {
@@ -5320,26 +5395,34 @@ static int energy_aware_wake_cpu(struct task_struct *p, int target)
 				goto next;
 
 			for_each_cpu(i, sched_group_cpus(sg)) {
+
 				struct rq *rq = cpu_rq(i);
 				int idx = idle_get_state_idx(rq);
 				unsigned long usage = get_cpu_usage(i);
 				unsigned long new_usage = usage + boosted_task_utilization(p);
-				if (new_usage < capacity_curr_of(i)) {
-					/* Task fits here -- use it if not idle*/
-					if (!idx) goto done;
+				unsigned long capacity_orig = capacity_orig_of(i);
+				unsigned long capacity_curr = capacity_curr_of(i);
+
+				if (new_usage <= capacity_curr) {
+					if (i == target) {
+						tk_usage++; // 76%
+						goto done;
+					}
 				}
 
-				if (new_usage <= capacity_orig_of(i)) {
+				if (new_usage <= capacity_orig) {
 					/* Task fits -- best case idle/busy */
 					if (idx && (best_idle < 0 ||
-					    	idx < best_idle_cstate)) {
+					    	(idx < best_idle_cstate && capacity_orig <= best_idle_capacity))) {
 						best_idle = i;
 						best_idle_cstate = idx;
+						best_idle_capacity = capacity_orig;
 					} else if (best_busy < 0 ||
-					   	best_busy_load > usage) {
+					   	(best_busy_load > usage && capacity_orig <= best_busy_capacity)) {
 						/* Task fits, but requires higher OPP */
 						best_busy = i;
 						best_busy_load = usage;
+						best_busy_capacity = capacity_orig;
 					}
 				} else {
 					/* Task doesn't fit, but keep track of
@@ -5360,32 +5443,68 @@ next:
 			sg = sg->next;
 		} while (sg != sd->groups);
 	}
-	if (best_idle >= 0)
+
+	if (best_idle >= 0) {
+		/* Let energy calculation decide
+		 * between best_busy and best_idle
+		 */
+		tk_use_over++; // 2%
+		force_over = true;
 		target = best_idle;
-	else if (best_busy >= 0)
-		target = best_busy;
-	else if (better_idle >= 0)
-		target = better_idle;
-	else if (better_busy >= 0)
-		target = better_busy;
+		if (best_busy >= 0)
+			default_cpu = best_busy; // 2%
+		else {
+			tk_best_idle++; // 0%
+			return best_idle;
+		}
+	} else if (best_busy >= 0) {
+		tk_best_busy++; // 1%
+		return best_busy;
+	}
+	else if (better_idle >= 0) {
+		tk_better_idle++; // 6%
+		return better_idle;
+	}
+	else if (better_busy >= 0) {
+		tk_better_busy++; // 0%
+		return better_busy;
+	}
 	/* else use passed-in target */
 done:
-	if (target != prev_cpu) {
+	if (target != default_cpu) {
 		struct energy_env eenv = {
 			.usage_delta	= task_utilization(p),
-			.src_cpu	= task_cpu(p),
+			.src_cpu	= default_cpu,
 			.dst_cpu	= target,
 			.task		= p,
 		};
+		tk_diff++;
 
 		/* Not enough spare capacity on previous cpu */
-		if (cpu_overutilized(prev_cpu))
+		if (cpu_overutilized(default_cpu)) {
+			tk_over++; // 0%
 			return target;
+		}
 
-		if (energy_diff(&eenv) >= 0)
-			return prev_cpu;
+		if (default_cpu != task_cpu(p)) {
+			tk_bb_check++; // 1%
+			if (energy_diff(&eenv) >= 0) {
+				tk_bb_wins++;
+				return default_cpu;
+			}
+			else {
+				tk_bb_loses++;	
+				return target;
+			}
+		}
+
+		if (force_over && energy_diff(&eenv) >= 0) {
+			tk_ediff_override++; // 0%
+			return default_cpu;
+		}
 	}
 
+	tk_target++; // 88%
 	return target;
 }
 
@@ -5445,7 +5564,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 
 	if (sd_flag & SD_BALANCE_WAKE && want_sibling) {
 		if (energy_aware())
-			new_cpu = energy_aware_wake_cpu(p, prev_cpu);
+			new_cpu = energy_aware_wake_cpu(p, prev_cpu, sync);
 		else
 			new_cpu = select_idle_sibling(p, prev_cpu);
 		goto unlock;

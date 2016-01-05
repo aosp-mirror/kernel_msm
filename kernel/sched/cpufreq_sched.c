@@ -369,6 +369,8 @@ static int cpufreq_sched_setup(struct cpufreq_policy *policy, unsigned int event
 /* Tunables */
 static ssize_t show_throttle_ns(struct gov_data *gd, char *buf)
 {
+	extern void tk_print(void);
+	tk_print();
 	return sprintf(buf, "%u\n", gd->throttle_nsec);
 }
 
