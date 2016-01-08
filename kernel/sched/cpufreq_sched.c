@@ -58,6 +58,7 @@ struct gov_data {
 	struct task_struct *task;
 	struct irq_work irq_work;
 	unsigned int requested_freq;
+	int max;
 };
 
 static void cpufreq_sched_try_driver_target(struct cpufreq_policy *policy,
@@ -194,16 +195,21 @@ static void update_fdomain_capacity_request(int cpu)
 	}
 
 	/* Convert the new maximum capacity request into a cpu frequency */
-	freq_new = capacity * policy->max >> SCHED_CAPACITY_SHIFT;
+	freq_new = capacity * gd->max >> SCHED_CAPACITY_SHIFT;
 	if (cpufreq_frequency_table_target(policy, policy->freq_table,
 					   freq_new, CPUFREQ_RELATION_L,
 					   &index_new))
 		goto out;
 	freq_new = policy->freq_table[index_new].frequency;
 
+	if (freq_new > policy->max)
+		freq_new = policy->max;
+
+	if (freq_new < policy->min)
+		freq_new = policy->min;
+
 	trace_cpufreq_sched_request_opp(cpu, capacity, freq_new,
 					gd->requested_freq);
-
 	if (freq_new == gd->requested_freq)
 		goto out;
 
@@ -278,6 +284,8 @@ static int cpufreq_sched_policy_init(struct cpufreq_policy *policy)
 		  __func__, gd->up_throttle_nsec);
 
 	policy->governor_data = gd;
+	gd->max = policy->max;
+
 	if (cpufreq_driver_is_slow()) {
 		cpufreq_driver_slow = true;
 		gd->task = kthread_create(cpufreq_sched_thread, policy,
@@ -330,6 +338,32 @@ static int cpufreq_sched_start(struct cpufreq_policy *policy)
 	return 0;
 }
 
+static void cpufreq_sched_limits(struct cpufreq_policy *policy)
+{
+	struct gov_data *gd;
+
+	pr_debug("limit event for cpu %u: %u - %u kHz, currently %u kHz\n",
+		policy->cpu, policy->min, policy->max,
+		policy->cur);
+
+	if (!down_write_trylock(&policy->rwsem))
+		return;
+	/*
+	 * Need to keep track of highest max frequency for
+	 * capacity calculations
+	 */
+	gd = policy->governor_data;
+	if (gd->max < policy->max)
+		gd->max = policy->max;
+
+	if (policy->max < policy->cur)
+		__cpufreq_driver_target(policy, policy->max, CPUFREQ_RELATION_H);
+	else if (policy->min > policy->cur)
+		__cpufreq_driver_target(policy, policy->min, CPUFREQ_RELATION_L);
+
+	up_write(&policy->rwsem);
+}
+
 static int cpufreq_sched_stop(struct cpufreq_policy *policy)
 {
 	int cpu;
@@ -353,6 +387,7 @@ static int cpufreq_sched_setup(struct cpufreq_policy *policy,
 	case CPUFREQ_GOV_STOP:
 		return cpufreq_sched_stop(policy);
 	case CPUFREQ_GOV_LIMITS:
+		cpufreq_sched_limits(policy);
 		break;
 	}
 	return 0;
