@@ -1181,23 +1181,6 @@ void limSendP2PActionFrame(tpAniSirGlobal pMac, tpSirMsgQ pMsg)
         /* All psession checks are already done at start */
         limSetProtectedBit(pMac, psessionEntry, pMacHdr->da, pMacHdr);
 
-        /*
-         * If wep bit is not set in MAC header of robust management action frame
-         * then we are trying to send RMF via non PMF connection.
-         * Drop the packet instead of sending malform packet.
-         */
-        if (0 ==  pMacHdr->fc.wep)
-        {
-            limLog(pMac, LOGE,
-                FL("Drop action frame with category[%d] due to non-PMF conn"),
-                pActionHdr->category);
-            limSendSmeRsp(pMac, eWNI_SME_ACTION_FRAME_SEND_CNF,
-                    eHAL_STATUS_FAILURE, pMbMsg->sessionId, 0);
-            palPktFree( pMac->hHdd, HAL_TXRX_FRM_802_11_MGMT,
-                    ( void* ) pFrame, ( void* ) pPacket );
-            return;
-        }
-
     }
 #endif
 
