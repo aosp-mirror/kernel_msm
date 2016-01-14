@@ -1450,7 +1450,7 @@
 			};
 		};
 
-		tert_mi2s {
+		/*tert_mi2s {
 			tert_mi2s_sleep: tert_mi2s_sleep {
 				mux {
 					pins = "gpio75", "gpio76";
@@ -1459,8 +1459,8 @@
 
 				config {
 					pins = "gpio75", "gpio76";
-					drive-strength = <2>;   /* 2 mA */
-					bias-pull-down;         /* PULL DOWN */
+					drive-strength = <2>;
+					bias-pull-down;
 				};
 			};
 			tert_mi2s_active: tert_mi2s_active {
@@ -1471,8 +1471,8 @@
 
 				config {
 					pins = "gpio75", "gpio76";
-					drive-strength = <8>;   /* 8 mA */
-					bias-disable;           /* NO PULL */
+					drive-strength = <8>;
+					bias-disable;
 					output-high;
 				};
 			};
@@ -1487,8 +1487,8 @@
 
 				config {
 					pins = "gpio77";
-					drive-strength = <2>;   /* 2 mA */
-					bias-pull-down;         /* PULL DOWN */
+					drive-strength = <2>;
+					bias-pull-down;
 				};
 			};
 			tert_mi2s_sd0_active: tert_mi2s_sd0_active {
@@ -1499,11 +1499,11 @@
 
 				config {
 					pins = "gpio77";
-					drive-strength = <8>;   /* 8 mA */
-					bias-disable;           /* NO PULL */
+					drive-strength = <8>;
+					bias-disable;
 				};
 			};
-		};
+		};*/
 
 		quat_mi2s {
 			quat_mi2s_sleep: quat_mi2s_sleep {
@@ -1560,7 +1560,7 @@
 			};
 		};
 
-		tert_tdm {
+		/*tert_tdm {
 			tert_tdm_sleep: tert_tdm_sleep {
 				mux {
 					pins = "gpio75", "gpio76";
@@ -1569,8 +1569,8 @@
 
 				config {
 					pins = "gpio75", "gpio76";
-					drive-strength = <2>;   /* 2 mA */
-					bias-pull-down;         /* PULL DOWN */
+					drive-strength = <2>;
+					bias-pull-down;
 				};
 			};
 			tert_tdm_active: tert_tdm_active {
@@ -1581,8 +1581,8 @@
 
 				config {
 					pins = "gpio75", "gpio76";
-					drive-strength = <8>;   /* 8 mA */
-					bias-disable;           /* NO PULL */
+					drive-strength = <8>;
+					bias-disable;
 					output-high;
 				};
 			};
@@ -1597,8 +1597,8 @@
 
 				config {
 					pins = "gpio77";
-					drive-strength = <2>;   /* 2 mA */
-					bias-pull-down;         /* PULL DOWN */
+					drive-strength = <2>;
+					bias-pull-down;
 				};
 			};
 			tert_tdm_din_active: tert_tdm_din_active {
@@ -1609,11 +1609,11 @@
 
 				config {
 					pins = "gpio77";
-					drive-strength = <8>;   /* 8 mA */
-					bias-disable;           /* NO PULL */
+					drive-strength = <8>;
+					bias-disable;
 				};
 			};
-		};
+		};*/
 
 		tert_tdm_dout {
 			tert_tdm_dout_sleep: tert_tdm_dout_sleep {
@@ -1624,8 +1624,8 @@
 
 				config {
 					pins = "gpio78";
-					drive-strength = <2>;   /* 2 mA */
-					bias-pull-down;         /* PULL DOWN */
+					drive-strength = <2>;
+					bias-pull-down;
 				};
 			};
 			tert_tdm_dout_active: tert_tdm_dout_active {
@@ -1636,8 +1636,8 @@
 
 				config {
 					pins = "gpio78";
-					drive-strength = <8>;   /* 8 mA */
-					bias-disable;           /* NO PULL */
+					drive-strength = <8>;
+					bias-disable;
 				};
 			};
 		};

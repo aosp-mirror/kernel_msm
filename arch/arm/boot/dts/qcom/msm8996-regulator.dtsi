@@ -1443,7 +1443,7 @@
 		regulator-name = "rome_vreg";
 		startup-delay-us = <4000>;
 		enable-active-high;
-		gpio = <&pm8994_gpios 9 0>;
+		gpio = <&tlmm 75 0>;
 	};
 };
 
