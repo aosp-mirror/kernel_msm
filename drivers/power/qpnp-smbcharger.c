@@ -412,7 +412,7 @@ enum aicl_short_deglitch_voters {
 	HVDCP_SHORT_DEGLITCH_VOTER,
 	NUM_HW_SHORT_DEGLITCH_VOTERS,
 };
-static int smbchg_debug_mask;
+static int smbchg_debug_mask = 0x26;
 module_param_named(
 	debug_mask, smbchg_debug_mask, int, S_IRUSR | S_IWUSR
 );
@@ -7186,6 +7186,8 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 					"qcom,soft-vfloat-comp-disabled");
 	chip->chg_enabled = !(of_property_read_bool(node,
 						"qcom,charging-disabled"));
+	pr_smb(PR_STATUS, "chg_enabled:%d\n", chip->chg_enabled);
+
 	chip->charge_unknown_battery = of_property_read_bool(node,
 						"qcom,charge-unknown-battery");
 	chip->chg_inhibit_en = of_property_read_bool(node,
