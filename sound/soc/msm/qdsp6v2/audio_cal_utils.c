@@ -101,6 +101,9 @@ size_t get_cal_info_size(int32_t cal_type)
 	case AFE_SIDETONE_CAL_TYPE:
 		size = sizeof(struct audio_cal_info_sidetone);
 		break;
+	case AFE_SIDETONE_IIR_CAL_TYPE:
+		size = sizeof(struct audio_cal_info_sidetone_iir);
+		break;
 	case LSM_CUST_TOPOLOGY_CAL_TYPE:
 		size = 0;
 		break;
@@ -230,6 +233,9 @@ size_t get_user_cal_type_size(int32_t cal_type)
 		break;
 	case AFE_SIDETONE_CAL_TYPE:
 		size = sizeof(struct audio_cal_type_sidetone);
+		break;
+	case AFE_SIDETONE_IIR_CAL_TYPE:
+		size = sizeof(struct audio_cal_type_sidetone_iir);
 		break;
 	case LSM_CUST_TOPOLOGY_CAL_TYPE:
 		size = sizeof(struct audio_cal_type_basic);
@@ -878,8 +884,7 @@ int cal_utils_set_cal(size_t data_size, void *data,
 		goto done;
 	}
 
-	if ((data_size > get_user_cal_type_size(
-		cal_type->info.reg.cal_type)) || (data_size < 0)) {
+	if (data_size > get_user_cal_type_size(cal_type->info.reg.cal_type)) { //HTC_AUD klockwork ID: 502
 		pr_err("%s: cal_type %d, data_size of %zd is invalid, expecting %zd!\n",
 			__func__, cal_type->info.reg.cal_type, data_size,
 			get_user_cal_type_size(cal_type->info.reg.cal_type));

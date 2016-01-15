@@ -685,6 +685,10 @@ static int msm_audio_smmu_init_legacy(struct device *dev)
 	u32 read_val[2];
 
 	cb = devm_kzalloc(dev, sizeof(struct context_bank_info), GFP_KERNEL);
+	//HTC_AUD_START klockwork ID: 5760
+	if (cb == NULL)
+		return -EINVAL;
+	//HTC_AUD_END
 	ctx_node = of_parse_phandle(dev->of_node, "iommus", 0);
 	if (!ctx_node) {
 		dev_err(dev, "%s Could not find any iommus for audio\n",

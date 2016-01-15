@@ -171,7 +171,7 @@ void snd_usb_proc_pcm_format_add(struct snd_usb_stream *stream)
 	char name[32];
 	struct snd_card *card = stream->chip->card;
 
-	sprintf(name, "stream%d", stream->pcm_index);
+	snprintf(name, sizeof(name), "stream%d", stream->pcm_index);//HTC_AUD klocwork
 	if (!snd_card_proc_new(card, name, &entry))
 		snd_info_set_text_ops(entry, stream, proc_pcm_format_read);
 }

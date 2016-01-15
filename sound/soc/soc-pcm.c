@@ -52,7 +52,7 @@ static const struct snd_pcm_hardware no_host_hardware = {
 	 */
 	.buffer_bytes_max	= PAGE_SIZE * 4,
 };
-
+char former_device[100] = {0}; //HTC_AUDIO
 /**
  * snd_soc_runtime_activate() - Increment active count for PCM runtime components
  * @rtd: ASoC PCM runtime that is activated
@@ -2361,8 +2361,13 @@ static int dpcm_fe_dai_prepare(struct snd_pcm_substream *substream)
 
 	/* there is no point preparing this FE if there are no BEs */
 	if (list_empty(&fe->dpcm[stream].be_clients)) {
-		dev_err(fe->dev, "ASoC: no backend DAIs enabled for %s\n",
-				fe->dai_link->name);
+//HTC_AUD_START
+		if(strcmp(fe->dai_link->name, former_device) != 0) { //print log only if not former device
+			dev_err(fe->dev, "ASoC: no backend DAIs enabled for %s\n",
+					fe->dai_link->name);
+			strncpy(former_device, fe->dai_link->name, sizeof(former_device) - 1);
+		}
+//HTC_AUD_END
 		ret = -EINVAL;
 		goto out;
 	}

@@ -481,5 +481,12 @@ struct snd_codec {
 	union snd_codec_options options;
 	__u32 reserved[3];
 } __attribute__((packed, aligned(4)));
-
+//HTC_AUD_START
+struct dsp_effect_param {
+       uint32_t effect_type; /* 0 for POPP, 1 for COPP */
+       uint32_t module_id;
+       uint32_t param_id;
+       uint32_t payload_size;
+};
+//HTC_AUD_END
 #endif

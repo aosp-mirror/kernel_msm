@@ -1128,7 +1128,7 @@ int slim_bulk_msg_write(struct slim_device *sb, u8 mt, u8 mc,
 			struct slim_val_inf msgs[], int n,
 			int (*comp_cb)(void *ctx, int err), void *ctx)
 {
-	int i, ret;
+	int i, ret = 0; //HTC_AUD klockwork ID: 8071
 
 	if (!sb || !sb->ctrl || !msgs)
 		return -EINVAL;

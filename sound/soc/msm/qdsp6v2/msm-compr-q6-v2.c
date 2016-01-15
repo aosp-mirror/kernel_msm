@@ -36,6 +36,9 @@
 #include "msm-compr-q6-v2.h"
 #include "msm-pcm-routing-v2.h"
 #include <sound/tlv.h>
+//HTC_AUD_START
+#include <sound/htc_acoustic_alsa.h>
+//HTC_AUD_END
 
 #define COMPRE_CAPTURE_NUM_PERIODS	16
 /* Allocate the worst case frame size for compressed audio */
@@ -395,6 +398,14 @@ static int msm_compr_playback_prepare(struct snd_pcm_substream *substream)
 	params = &soc_prtd->dpcm[substream->stream].hw_params;
 	if (runtime->format == SNDRV_PCM_FORMAT_S24_LE)
 		bits_per_sample = 24;
+
+//HTC_AUD_START
+	if (htc_acoustic_query_feature(HTC_AUD_24BIT) && compr->codec != FORMAT_FLAC) {
+		pr_info("%s: enable 24 bit Audio in POPP\n",
+			__func__);
+		bits_per_sample = 24;
+	}
+//HTC_AUD_END
 
 	ret = q6asm_open_write_v2(prtd->audio_client,
 			compr->codec, bits_per_sample);
@@ -940,6 +951,11 @@ static int msm_compr_hw_params(struct snd_pcm_substream *substream,
 	if (ret < 0) {
 		pr_err("Audio Start: Buffer Allocation failed rc = %d\n",
 						ret);
+//HTC_AUD_START
+#ifdef CONFIG_HTC_AUDIO_DEBUG
+		BUG();
+#endif
+//HTC_AUD_END
 		return -ENOMEM;
 	}
 	buf = prtd->audio_client->port[dir].buf;

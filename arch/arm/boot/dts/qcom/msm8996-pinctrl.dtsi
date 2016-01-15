@@ -300,6 +300,16 @@
 			};
 		};
 
+//HTC_AUD_START
+		headset_gpios: headset_gpios {
+			config {
+				pins = "gpio63", "gpio91";
+				drive-strength = <2>;
+				bias-disable;	// NO PULL
+			};
+		};
+//HTC_AUD_END
+
 		mdss_te_active: mdss_te_active {
 			mux {
 				pins = "gpio10";
@@ -1339,6 +1349,20 @@
 					bias-pull-down;         /* PULL DOWN */
 				};
 			};
+//HTC_AUD_START
+			pri_aux_ftm: pri_aux_ftm {
+				mux {
+					pins = "gpio65", "gpio66", "gpio67";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio65", "gpio66", "gpio67";
+					drive-strength = <2>;   /* 2 mA */
+					bias-disable;           /* NO PULL */
+				};
+			};
+//HTC_AUD_END
 			pri_aux_pcm_active: pri_aux_pcm_active {
 				mux {
 					pins = "gpio65", "gpio66";
@@ -1394,6 +1418,20 @@
 					bias-pull-down;         /* PULL DOWN */
 				};
 			};
+//HTC_AUD_START
+			pri_aux_dout_ftm: pri_aux_dout_ftm {
+				mux {
+					pins = "gpio68";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio68";
+					drive-strength = <2>;   /* 2 mA */
+					bias-disable;           /* NO PULL */
+				};
+			};
+//HTC_AUD_END
 			pri_aux_pcm_dout_active: pri_aux_pcm_dout_active {
 				mux {
 					pins = "gpio68";
@@ -1450,7 +1488,7 @@
 			};
 		};
 
-		/*tert_mi2s {
+		tert_mi2s {
 			tert_mi2s_sleep: tert_mi2s_sleep {
 				mux {
 					pins = "gpio75", "gpio76";
@@ -1503,29 +1541,159 @@
 					bias-disable;
 				};
 			};
-		};*/
+		};
+
+		prim_mi2s {
+			pri_mi2s_sleep: pri_mi2s_sleep {
+				prim_mi2s {
+					pins = "gpio65", "gpio66";
+					function = "pri_mi2s";
+					drive-strength = <2>;   /* 2 mA */
+					bias-pull-down;         /* PULL DOWN */
+				};
+			};
+			pri_mi2s_active: pri_mi2s_active {
+				prim_mi2s {
+					pins = "gpio65", "gpio66";
+					function = "pri_mi2s";
+					drive-strength = <8>;   /* 8 mA */
+					bias-disable;           /* NO PULL */
+					output-high;
+				};
+			};
+		};
+
+		prim_mi2s_sd0 {
+			pri_mi2s_sd0_sleep: pri_mi2s_sd0_sleep {
+				prim_mi2s_sd0 {
+					pins = "gpio67";
+					function = "pri_mi2s";
+					drive-strength = <2>;   /* 2 mA */
+					bias-pull-down;         /* PULL DOWN */
+				};
+			};
+			pri_mi2s_sd0_active: pri_mi2s_sd0_active {
+				prim_mi2s_sd0 {
+					pins = "gpio67";
+					function = "pri_mi2s";
+					drive-strength = <8>;   /* 8 mA */
+					bias-disable;           /* NO PULL */
+				};
+			};
+		};
+
+		prim_mi2s_sd1 {
+			pri_mi2s_sd1_sleep: pri_mi2s_sd1_sleep {
+				prim_mi2s_sd1 {
+					pins = "gpio68";
+					function = "pri_mi2s";
+					drive-strength = <2>;   /* 2 mA */
+					bias-pull-down;         /* PULL DOWN */
+				};
+			};
+			pri_mi2s_sd1_active: pri_mi2s_sd1_active {
+				prim_mi2s_sd1 {
+					pins = "gpio68";
+					function = "pri_mi2s";
+					drive-strength = <8>;   /* 8 mA */
+					bias-disable;           /* NO PULL */
+				};
+			};
+		};
+
+		sec_mi2s {
+			sec_mi2s_sleep: sec_mi2s_sleep {
+				sec_mi2s {
+					pins = "gpio80", "gpio81";
+					function = "sec_mi2s";
+					drive-strength = <2>;   /* 2 mA */
+					bias-pull-down;         /* PULL DOWN */
+				};
+			};
+			sec_mi2s_active: sec_mi2s_active {
+				sec_mi2s {
+					pins = "gpio80", "gpio81";
+					function = "sec_mi2s";
+					drive-strength = <8>;   /* 8 mA */
+					bias-pull-down;         /* PULL DOWN */ /* HTC_AUD */
+				};
+			};
+		};
+
+//HTC_AUD_START
+		sec_mi2s_mclk {
+			sec_mi2s_mclk_sleep: sec_mi2s_mclk_sleep {
+				sec_mi2s {
+					pins = "gpio79";
+					function = "sec_mi2s";
+					drive-strength = <2>;   /* 2 mA */
+					bias-pull-down;         /* PULL DOWN */
+				};
+			};
+			sec_mi2s_mclk_active: sec_mi2s_mclk_active {
+				sec_mi2s {
+					pins = "gpio79";
+					function = "sec_mi2s";
+					drive-strength = <8>;   /* 8 mA */
+					bias-disable;           /* NO PULL */
+					output-high;
+				};
+			};
+		};
+//HTC_AUD_END
+		sec_mi2s_sd0 {
+			sec_mi2s_sd0_sleep: sec_mi2s_sd0_sleep {
+				sec_mi2s_sd0 {
+					pins = "gpio82";
+					function = "sec_mi2s";
+					drive-strength = <2>;   /* 2 mA */
+					bias-pull-down;         /* PULL DOWN */
+				};
+			};
+			sec_mi2s_sd0_active: sec_mi2s_sd0_active {
+				sec_mi2s_sd0 {
+					pins = "gpio82";
+					function = "sec_mi2s";
+					drive-strength = <8>;   /* 8 mA */
+					bias-pull-down;         /* PULL DOWN */ /* HTC_AUD */
+				};
+			};
+		};
+
+//HTC_AUD_START
+		sec_mi2s_sd1 {
+			sec_mi2s_sd1_sleep: sec_mi2s_sd1_sleep {
+				sec_mi2s_sd1 {
+					pins = "gpio83";
+					function = "sec_mi2s";
+					drive-strength = <2>;   /* 2 mA */
+					bias-pull-down;         /* PULL DOWN */
+				};
+			};
+			sec_mi2s_sd1_active: sec_mi2s_sd1_active {
+				sec_mi2s_sd1 {
+					pins = "gpio83";
+					function = "sec_mi2s";
+					drive-strength = <8>;   /* 8 mA */
+					bias-disable;           /* NO PULL */
+				};
+			};
+		};
+//HTC_AUD_END
 
 		quat_mi2s {
 			quat_mi2s_sleep: quat_mi2s_sleep {
-				mux {
+				quat_mi2s {
 					pins = "gpio58", "gpio59";
 					function = "qua_mi2s";
-				};
-
-				config {
-					pins = "gpio58", "gpio59";
 					drive-strength = <2>;   /* 2 mA */
 					bias-pull-down;         /* PULL DOWN */
 				};
 			};
 			quat_mi2s_active: quat_mi2s_active {
-				mux {
+				quat_mi2s {
 					pins = "gpio58", "gpio59";
 					function = "qua_mi2s";
-				};
-
-				config {
-					pins = "gpio58", "gpio59";
 					drive-strength = <8>;   /* 8 mA */
 					bias-disable;           /* NO PULL */
 					output-high;
@@ -1535,30 +1703,81 @@
 
 		quat_mi2s_sd0 {
 			quat_mi2s_sd0_sleep: quat_mi2s_sd0_sleep {
-				mux {
+				quat_mi2s_sd0 {
 					pins = "gpio60";
 					function = "qua_mi2s";
-				};
-
-				config {
-					pins = "gpio60";
 					drive-strength = <2>;   /* 2 mA */
 					bias-pull-down;         /* PULL DOWN */
 				};
 			};
 			quat_mi2s_sd0_active: quat_mi2s_sd0_active {
-				mux {
+				quat_mi2s_sd0 {
 					pins = "gpio60";
 					function = "qua_mi2s";
-				};
-
-				config {
-					pins = "gpio60";
 					drive-strength = <8>;   /* 8 mA */
 					bias-disable;           /* NO PULL */
 				};
 			};
 		};
+
+		quat_mi2s_sd1 {
+			quat_mi2s_sd1_sleep: quat_mi2s_sd1_sleep {
+				quat_mi2s_sd1 {
+					pins = "gpio61";
+					function = "qua_mi2s";
+					drive-strength = <2>;   /* 2 mA */
+					bias-pull-down;         /* PULL DOWN */
+				};
+			};
+			quat_mi2s_sd1_active: quat_mi2s_sd1_active {
+				quat_mi2s_sd1 {
+					pins = "gpio61";
+					function = "qua_mi2s";
+					drive-strength = <8>;   /* 8 mA */
+					bias-disable;           /* NO PULL */
+				};
+			};
+		};
+
+//HTC_AUD_START
+		quat_mi2s_sd2 {
+			quat_mi2s_sd2_sleep: quat_mi2s_sd2_sleep {
+				quat_mi2s_sd2 {
+					pins = "gpio62";
+					function = "qua_mi2s";
+					drive-strength = <2>;   /* 2 mA */
+					bias-pull-down;         /* PULL DOWN */
+				};
+			};
+			quat_mi2s_sd2_active: quat_mi2s_sd2_active {
+				quat_mi2s_sd2 {
+					pins = "gpio62";
+					function = "qua_mi2s";
+					drive-strength = <8>;   /* 8 mA */
+					bias-disable;           /* NO PULL */
+				};
+			};
+		};
+
+		quat_mi2s_sd3 {
+			quat_mi2s_sd3_sleep: quat_mi2s_sd3_sleep {
+				quat_mi2s_sd3 {
+					pins = "gpio63";
+					function = "qua_mi2s";
+					drive-strength = <2>;   /* 2 mA */
+					bias-pull-down;         /* PULL DOWN */
+				};
+			};
+			quat_mi2s_sd3_active: quat_mi2s_sd3_active {
+				quat_mi2s_sd3 {
+					pins = "gpio63";
+					function = "qua_mi2s";
+					drive-strength = <8>;   /* 8 mA */
+					bias-disable;           /* NO PULL */
+				};
+			};
+		};
+//HTC_AUD_END
 
 		/*tert_tdm {
 			tert_tdm_sleep: tert_tdm_sleep {

@@ -33,6 +33,7 @@ bool msm_audio_effects_is_effmodule_supp_in_top(int effect_module,
 		case ASM_STREAM_POSTPROC_TOPO_ID_SA_PLUS:
 		case ASM_STREAM_POSTPROC_TOPO_ID_HPX_PLUS:
 		case ASM_STREAM_POSTPROC_TOPO_ID_HPX_MASTER:
+		case HTC_POPP_TOPOLOGY: //HTC_AUD
 			return true;
 		default:
 			return false;

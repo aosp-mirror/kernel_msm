@@ -44,6 +44,17 @@
 #include "wcd9xxx-resmgr-v2.h"
 #include "wcd_cpe_core.h"
 #include "wcdcal-hwdep.h"
+//HTC_AUD_START
+#ifdef CONFIG_HTC_HEADSET_MGR
+#include <sound/htc_acoustic_alsa.h>
+#endif
+#undef pr_debug
+#undef pr_info
+#undef pr_err
+#define pr_debug(fmt, ...) pr_aud_debug(fmt, ##__VA_ARGS__)
+#define pr_info(fmt, ...) pr_aud_info(fmt, ##__VA_ARGS__)
+#define pr_err(fmt, ...) pr_aud_err(fmt, ##__VA_ARGS__)
+//HYC_AUD_END
 
 #define TASHA_RX_PORT_START_NUMBER  16
 
@@ -552,6 +563,8 @@ struct wcd_swr_ctrl_platform_data {
 			  int action);
 };
 
+//HTC_AUD_START
+#ifdef CONFIG_USE_CODEC_MBHC
 static struct wcd_mbhc_register
 	wcd_mbhc_registers[WCD_MBHC_REG_FUNC_MAX] = {
 	WCD_MBHC_REGISTER("WCD_MBHC_L_DET_EN",
@@ -633,6 +646,8 @@ static struct wcd_mbhc_register
 	WCD_MBHC_REGISTER("WCD_MBHC_MUX_CTL",
 			  WCD9335_MBHC_CTL_2, 0x70, 4, 0),
 };
+#endif
+//HTC_AUD_END
 
 static const struct wcd_mbhc_intr intr_ids = {
 	.mbhc_sw_intr =  WCD9335_IRQ_MBHC_SW_DET,
@@ -1367,9 +1382,9 @@ static int tasha_micbias_control(struct snd_soc_codec *codec,
 		break;
 	};
 
-	dev_dbg(codec->dev, "%s: micb_num:%d, micb_ref: %d, pullup_ref: %d\n",
+	dev_info(codec->dev, "%s: micb_num:%d, micb_ref: %d, pullup_ref: %d\n",
 		__func__, micb_num, tasha->micb_ref[micb_index],
-		tasha->pullup_ref[micb_index]);
+		tasha->pullup_ref[micb_index]); //HTC_AUD
 
 	mutex_unlock(&tasha->micb_lock);
 
@@ -1380,6 +1395,8 @@ static int tasha_mbhc_request_micbias(struct snd_soc_codec *codec,
 				      int micb_num, int req)
 {
 	int ret;
+
+	pr_info("%s: req %d\n", __func__, req); //HTC_AUD
 
 	/*
 	 * If micbias is requested, make sure that there
@@ -1859,6 +1876,9 @@ zdet_complete:
 					WCD9335_ANA_MBHC_ELECT, 0x80, 0x80);
 	if (tasha->zdet_gpio_cb && is_change)
 		tasha->zdet_gpio_cb(codec, false);
+
+	pr_info("%s: impedance on HPH_L = %d(ohms) HPH_R = %d(ohms)\n",
+				__func__, *zl, *zr); //HTC_AUD
 }
 
 static void tasha_mbhc_gnd_det_ctrl(struct snd_soc_codec *codec, bool enable)
@@ -3729,7 +3749,7 @@ static int tasha_codec_enable_lineout_pa(struct snd_soc_dapm_widget *w,
 					 int event)
 {
 	struct snd_soc_codec *codec = w->codec;
-	u16 lineout_vol_reg, lineout_mix_vol_reg;
+	u16 lineout_vol_reg = 0, lineout_mix_vol_reg = 0; //HTC_AUD klockwork
 	int ret = 0;
 
 	dev_dbg(codec->dev, "%s %s %d\n", __func__, w->name, event);
@@ -3928,7 +3948,10 @@ static void tasha_codec_hph_hifi_config(struct snd_soc_codec *codec,
 		snd_soc_update_bits(codec, WCD9335_HPH_CNP_WG_CTL, 0x07, 0x03);
 		snd_soc_update_bits(codec, WCD9335_HPH_PA_CTL2, 0x08, 0x08);
 		snd_soc_update_bits(codec, WCD9335_HPH_PA_CTL1, 0x0E, 0x0C);
-		tasha_codec_hph_mode_gain_opt(codec, 0x11);
+		snd_soc_update_bits(codec, WCD9335_HPH_L_EN, 0x1F, 0x11);
+		snd_soc_update_bits(codec, WCD9335_HPH_R_EN, 0x1F, 0x11);
+		snd_soc_update_bits(codec, WCD9335_HPH_L_EN, 0x20, 0x20);
+		snd_soc_update_bits(codec, WCD9335_HPH_R_EN, 0x20, 0x20);
 	}
 
 	if (SND_SOC_DAPM_EVENT_OFF(event)) {
@@ -4208,8 +4231,8 @@ static int tasha_codec_spk_boost_event(struct snd_soc_dapm_widget *w,
 				int event)
 {
 	struct snd_soc_codec *codec = w->codec;
-	u16 boost_path_ctl, boost_path_cfg1;
-	u16 reg, reg_mix;
+	u16 boost_path_ctl = 0, boost_path_cfg1 = 0; //HTC_AUD klockwork
+	u16 reg = 0, reg_mix = 0; //HTC_AUD klockwork
 
 	dev_dbg(codec->dev, "%s %s %d\n", __func__, w->name, event);
 
@@ -4244,7 +4267,7 @@ static int tasha_codec_spk_boost_event(struct snd_soc_dapm_widget *w,
 
 static u16 tasha_interp_get_primary_reg(u16 reg, u16 *ind)
 {
-	u16 prim_int_reg;
+	u16 prim_int_reg = 0; //HTC_AUD klockwork
 
 	switch (reg) {
 	case WCD9335_CDC_RX0_RX_PATH_CTL:
@@ -4376,10 +4399,12 @@ static int tasha_codec_enable_spline_src(struct snd_soc_codec *codec,
 					 int src_num,
 					 int event)
 {
-	u16 rx_path_cfg_reg;
-	u16 rx_path_ctl_reg;
-	u16 src_clk_reg;
-	int *src_users, count, spl_src;
+//HTC_AUD_START klockwork
+	u16 rx_path_cfg_reg = 0;
+	u16 rx_path_ctl_reg = 0;
+	u16 src_clk_reg = 0;
+	int *src_users, count = 0, spl_src = 0;
+//HTC_AUD_END
 	struct tasha_priv *tasha;
 
 	tasha = snd_soc_codec_get_drvdata(codec);
@@ -5434,7 +5459,7 @@ static int tasha_codec_force_enable_micbias(struct snd_soc_dapm_widget *w,
 					    struct snd_kcontrol *kcontrol,
 					    int event)
 {
-	int ret;
+	int ret = 0; //HTC_AUD klockwork
 	struct snd_soc_codec *codec = w->codec;
 	struct tasha_priv *tasha = snd_soc_codec_get_drvdata(codec);
 
@@ -6871,7 +6896,7 @@ static int tasha_amic_pwr_lvl_get(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	u16 amic_reg;
+	u16 amic_reg = 0; //HTC_AUD klockwork
 
 	if (!strcmp(kcontrol->id.name, "AMIC_1_2 PWR MODE"))
 		amic_reg = WCD9335_ANA_AMIC1;
@@ -6891,8 +6916,8 @@ static int tasha_amic_pwr_lvl_put(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	u32 mode_val;
-	u16 amic_reg;
+	u32 mode_val = 0; //HTC_AUD klockwork
+	u16 amic_reg = 0; //HTC_AUD klockwork
 
 	mode_val = ucontrol->value.enumerated.item[0];
 
@@ -7444,7 +7469,7 @@ static int tasha_codec_vbat_enable_event(struct snd_soc_dapm_widget *w,
 	int ret = 0;
 	struct snd_soc_codec *codec = w->codec;
 	struct tasha_priv *tasha = snd_soc_codec_get_drvdata(codec);
-	u16 vbat_path_ctl, vbat_cfg, vbat_path_cfg;
+	u16 vbat_path_ctl = 0, vbat_cfg, vbat_path_cfg = 0; //HTC_AUD klockwork
 
 	vbat_path_ctl = WCD9335_CDC_VBAT_VBAT_PATH_CTL;
 	vbat_cfg = WCD9335_CDC_VBAT_VBAT_CFG;
@@ -7785,8 +7810,8 @@ static int tasha_int_dem_inp_mux_put(struct snd_kcontrol *kcontrol,
 	struct snd_soc_dapm_widget *widget = wlist->widgets[0];
 	struct snd_soc_codec *codec = widget->codec;
 	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
-	unsigned int val;
-	unsigned short look_ahead_dly_reg;
+	unsigned int val = 0; //HTC_AUD klockwork
+	unsigned short look_ahead_dly_reg = 0; //HTC_AUD klockwork
 
 	val = ucontrol->value.enumerated.item[0];
 	if (val >= e->items)
@@ -7885,7 +7910,7 @@ static int tasha_config_compander(struct snd_soc_codec *codec, int interp_n,
 
 static int tasha_codec_config_mad(struct snd_soc_codec *codec)
 {
-	int ret, idx;
+	int ret = 0, idx; //HTC_AUD klockwork
 	const struct firmware *fw;
 	struct firmware_cal *hwdep_cal = NULL;
 	struct wcd_mad_audio_cal *mad_cal = NULL;
@@ -11000,7 +11025,7 @@ static ssize_t tasha_codec_version_read(struct snd_info_entry *entry,
 	struct tasha_priv *tasha;
 	struct wcd9xxx *wcd9xxx;
 	char buffer[TASHA_VERSION_ENTRY_SIZE];
-	int len;
+	int len = 0; //HTC_AUD klockwork
 
 	tasha = (struct tasha_priv *) entry->private_data;
 	if (!tasha) {
@@ -12151,7 +12176,7 @@ static int tasha_post_reset_cb(struct wcd9xxx *wcd9xxx)
 
 	tasha->codec = codec;
 	for (i = 0; i < COMPANDER_MAX; i++)
-		tasha->comp_enabled[i] = 0;
+		tasha->comp_enabled[i] = -1; //HTC_AUD
 
 	dev_dbg(codec->dev, "%s: MCLK Rate = %x\n",
 		__func__, control->mclk_rate);
@@ -12176,6 +12201,10 @@ static int tasha_post_reset_cb(struct wcd9xxx *wcd9xxx)
 	if (IS_ERR_VALUE(ret))
 		dev_err(codec->dev, "%s: invalid pdata\n", __func__);
 
+	wcd_resmgr_post_ssr_v2(tasha->resmgr);
+
+//HTC_AUD_START
+#ifdef CONFIG_USE_CODEC_MBHC
 	/* MBHC Init */
 	wcd_mbhc_deinit(&tasha->mbhc);
 	tasha->mbhc_started = false;
@@ -12188,6 +12217,8 @@ static int tasha_post_reset_cb(struct wcd9xxx *wcd9xxx)
 			__func__);
 	else
 		tasha_mbhc_hs_detect(codec, tasha->mbhc.mbhc_cfg);
+#endif
+//HTC_AUD_END
 
 	tasha_cleanup_irqs(tasha);
 	ret = tasha_setup_irqs(tasha);
@@ -12240,7 +12271,7 @@ static int tasha_codec_probe(struct snd_soc_codec *codec)
 
 	tasha->codec = codec;
 	for (i = 0; i < COMPANDER_MAX; i++)
-		tasha->comp_enabled[i] = 0;
+		tasha->comp_enabled[i] = -1; //HTC_AUD
 
 	tasha->spkr_gain_offset = RX_GAIN_OFFSET_0_DB;
 	tasha->intf_type = wcd9xxx_get_intf_type();
@@ -12263,6 +12294,8 @@ static int tasha_codec_probe(struct snd_soc_codec *codec)
 		goto err;
 	}
 
+//HTC_AUD_START
+#ifdef CONFIG_USE_CODEC_MBHC
 	tasha->fw_data = devm_kzalloc(codec->dev,
 				      sizeof(*(tasha->fw_data)), GFP_KERNEL);
 	if (!tasha->fw_data) {
@@ -12299,6 +12332,8 @@ static int tasha_codec_probe(struct snd_soc_codec *codec)
 		pr_err("%s: mbhc initialization failed\n", __func__);
 		goto err_hwdep;
 	}
+#endif
+//HTC_AUD_END
 
 	ptr = devm_kzalloc(codec->dev, (sizeof(tasha_rx_chs) +
 			   sizeof(tasha_tx_chs)), GFP_KERNEL);

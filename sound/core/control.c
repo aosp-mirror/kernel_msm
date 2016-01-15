@@ -52,6 +52,13 @@ static int snd_ctl_open(struct inode *inode, struct file *file)
 	struct snd_ctl_file *ctl;
 	int err;
 
+//HTC_AUD_START
+#ifdef CONFIG_HTC_AUDIO_DEBUG
+	pr_info("[AUD] %s: trigger dump stack for debug\n", __func__);
+	dump_stack();
+#endif
+//HTC_AUD_END
+
 	err = nonseekable_open(inode, file);
 	if (err < 0)
 		return err;
@@ -120,6 +127,13 @@ static int snd_ctl_release(struct inode *inode, struct file *file)
 	struct snd_ctl_file *ctl;
 	struct snd_kcontrol *control;
 	unsigned int idx;
+
+//HTC_AUD_START
+#ifdef CONFIG_HTC_AUDIO_DEBUG
+	pr_info("[AUD] %s: trigger dump stack for debug\n", __func__);
+	dump_stack();
+#endif
+//HTC_AUD_END
 
 	ctl = file->private_data;
 	file->private_data = NULL;
@@ -847,6 +861,10 @@ static int snd_ctl_elem_read(struct snd_card *card,
 	down_read(&card->controls_rwsem);
 	kctl = snd_ctl_find_id(card, &control->id);
 	if (kctl == NULL) {
+#ifdef CONFIG_HTC_AUDIO_DEBUG
+		if (snd_BUG_ON(&control->id))
+			pr_aud_err("%s: kctl not find: %d\n", __func__, control->id.numid); //HTC_AUDIO
+#endif
 		result = -ENOENT;
 	} else {
 		index_offset = snd_ctl_get_ioff(kctl, &control->id);
@@ -895,6 +913,10 @@ static int snd_ctl_elem_write(struct snd_card *card, struct snd_ctl_file *file,
 	down_read(&card->controls_rwsem);
 	kctl = snd_ctl_find_id(card, &control->id);
 	if (kctl == NULL) {
+#ifdef CONFIG_HTC_AUDIO_DEBUG
+		if (snd_BUG_ON(&control->id))
+			pr_aud_err("%s: kctl not find: %d\n", __func__, control->id.numid); //HTC_AUDIO
+#endif
 		result = -ENOENT;
 	} else {
 		index_offset = snd_ctl_get_ioff(kctl, &control->id);
@@ -903,7 +925,19 @@ static int snd_ctl_elem_write(struct snd_card *card, struct snd_ctl_file *file,
 		    kctl->put == NULL ||
 		    (file && vd->owner && vd->owner != file)) {
 			result = -EPERM;
+#ifdef CONFIG_HTC_AUDIO_DEBUG
+			pr_aud_err("%s: kctl invalid: %d\n", __func__, control->id.numid); //HTC_AUDIO
+#endif
 		} else {
+#ifdef CONFIG_HTC_AUDIO_DEBUG
+//HTC_AUD_START
+			pr_aud_info("%s: control %i:%s value:%ld \n",
+					__func__,
+					kctl->id.numid,
+					kctl->id.name,
+					control->value.integer.value[0]);
+//HTC_AUD_END
+#endif
 			snd_ctl_build_ioff(&control->id, kctl, index_offset);
 			result = kctl->put(kctl, control);
 		}

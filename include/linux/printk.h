@@ -257,6 +257,30 @@ extern asmlinkage void dump_stack(void) __cold;
 	no_printk(KERN_DEBUG pr_fmt(fmt), ##__VA_ARGS__)
 #endif
 
+//HTC_AUD_START
+#define pr_aud_fmt(fmt) "[AUD] " KBUILD_MODNAME ": " fmt
+#define pr_aud_fmt1(fmt) "[AUD]" fmt
+#define pr_aud_err(fmt, ...) \
+			printk(KERN_ERR pr_aud_fmt(fmt), ##__VA_ARGS__)
+#define pr_aud_err1(fmt, ...) \
+			printk(KERN_ERR pr_aud_fmt1(fmt), ##__VA_ARGS__)
+#define pr_aud_info(fmt, ...) \
+			printk(KERN_INFO pr_aud_fmt(fmt), ##__VA_ARGS__)
+#define pr_aud_info1(fmt, ...) \
+			printk(KERN_INFO pr_aud_fmt1(fmt), ##__VA_ARGS__)
+
+#if defined(CONFIG_DYNAMIC_DEBUG)
+#define pr_aud_debug(fmt, ...) \
+	dynamic_pr_debug(pr_aud_fmt(fmt), ##__VA_ARGS__)
+#elif defined(DEBUG)
+#define pr_aud_debug(fmt, ...) \
+	printk(KERN_DEBUG pr_aud_fmt(fmt), ##__VA_ARGS__)
+#else
+#define pr_aud_debug(fmt, ...) \
+	no_printk(KERN_DEBUG pr_aud_fmt(fmt), ##__VA_ARGS__)
+#endif
+//HTC_AUD_END
+
 #include <linux/dynamic_debug.h>
 
 /* If you are writing a driver, please use dev_dbg instead */

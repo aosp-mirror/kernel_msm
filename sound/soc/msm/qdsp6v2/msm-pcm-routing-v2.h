@@ -28,6 +28,10 @@
 #define LPASS_BE_AUXPCM_TX "AUX_PCM_TX"
 #define LPASS_BE_SEC_AUXPCM_RX "SEC_AUX_PCM_RX"
 #define LPASS_BE_SEC_AUXPCM_TX "SEC_AUX_PCM_TX"
+#define LPASS_BE_TERT_AUXPCM_RX "TERT_AUX_PCM_RX"
+#define LPASS_BE_TERT_AUXPCM_TX "TERT_AUX_PCM_TX"
+#define LPASS_BE_QUAT_AUXPCM_RX "QUAT_AUX_PCM_RX"
+#define LPASS_BE_QUAT_AUXPCM_TX "QUAT_AUX_PCM_TX"
 #define LPASS_BE_VOICE_PLAYBACK_TX "VOICE_PLAYBACK_TX"
 #define LPASS_BE_VOICE2_PLAYBACK_TX "VOICE2_PLAYBACK_TX"
 #define LPASS_BE_INCALL_RECORD_RX "INCALL_RECORD_RX"
@@ -37,6 +41,7 @@
 
 #define LPASS_BE_MI2S_RX "MI2S_RX"
 #define LPASS_BE_MI2S_TX "MI2S_TX"
+#define LPASS_BE_QUAT_MI2S "QUAT_MI2S" //HTC_AUD
 #define LPASS_BE_QUAT_MI2S_RX "QUAT_MI2S_RX"
 #define LPASS_BE_QUAT_MI2S_TX "QUAT_MI2S_TX"
 #define LPASS_BE_SEC_MI2S_RX "SEC_MI2S_RX"
@@ -222,6 +227,10 @@ enum {
 	MSM_BACKEND_DAI_AUDIO_I2S_RX,
 	MSM_BACKEND_DAI_SEC_AUXPCM_RX,
 	MSM_BACKEND_DAI_SEC_AUXPCM_TX,
+	MSM_BACKEND_DAI_TERT_AUXPCM_RX,
+	MSM_BACKEND_DAI_TERT_AUXPCM_TX,
+	MSM_BACKEND_DAI_QUAT_AUXPCM_RX,
+	MSM_BACKEND_DAI_QUAT_AUXPCM_TX,
 	MSM_BACKEND_DAI_SLIMBUS_6_RX,
 	MSM_BACKEND_DAI_SLIMBUS_6_TX,
 	MSM_BACKEND_DAI_SPDIF_RX,
@@ -359,6 +368,23 @@ struct msm_pcm_stream_app_type_cfg {
 	int sample_rate;
 };
 
+//HTC_AUD_START
+struct htc_adm_effect_s {
+	u16 used;
+	u16 port_id;
+	uint32_t copp_id;
+	uint32_t payload_size;
+	void *payload;
+};
+
+enum HTC_ADM_EFFECT_ID {
+	HTC_ADM_EFFECT_ADAPTIVEAUDIO_DATA1 = 0,
+	HTC_ADM_EFFECT_ADAPTIVEAUDIO_DATA2,
+	HTC_ADM_EFFECT_ONEDOTONE,
+	HTC_ADM_EFFECT_MAX,
+};
+//HTC_AUD_END
+
 /* dai_id: front-end ID,
  * dspst_id:  DSP audio stream ID
  * stream_type: playback or capture
@@ -389,4 +415,10 @@ void msm_pcm_routing_release_lock(void);
 
 void msm_pcm_routing_reg_stream_app_type_cfg(int fedai_id, int app_type,
 					int acdb_dev_id, int sample_rate);
+//HTC_AUD_START
+int htc_adm_effect_control(enum HTC_ADM_EFFECT_ID effect_id, u16 port_id, uint32_t copp_id,
+					uint32_t payload_size, void *payload);
+ushort get_adm_custom_effect_status(void);
+//HTC_AUD_END
+
 #endif /*_MSM_PCM_H*/

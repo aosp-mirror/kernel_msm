@@ -1442,7 +1442,7 @@ static int snd_microii_spdif_default_get(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
 	struct usb_mixer_interface *mixer = snd_kcontrol_chip(kcontrol);
-	int err;
+	int err = -ENXIO;//HTC_AUD klocwork
 	struct usb_interface *iface;
 	struct usb_host_interface *alts;
 	unsigned int ep;
@@ -1455,6 +1455,10 @@ static int snd_microii_spdif_default_get(struct snd_kcontrol *kcontrol,
 
 	/* use known values for that card: interface#1 altsetting#1 */
 	iface = usb_ifnum_to_if(mixer->chip->dev, 1);
+	//HTC_AUD_START klockwork ID: 5411
+	if (iface == NULL)
+		goto end;
+	//HTC_AUD_END
 	alts = &iface->altsetting[1];
 	ep = get_endpoint(alts, 0)->bEndpointAddress;
 

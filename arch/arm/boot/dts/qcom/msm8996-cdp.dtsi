@@ -12,7 +12,7 @@
 
 #include "msm8996-pinctrl.dtsi"
 #include "msm8996-camera-sensor-cdp.dtsi"
-#include "msm8996-wsa881x.dtsi"
+/*#include "msm8996-wsa881x.dtsi"*/ /* HTC_AUD */
 
 / {
 	bluetooth: bt_qca6174 {
@@ -579,12 +579,14 @@
 		qcom,hdmi-audio-rx;
 		asoc-codec = <&stub_codec>, <&hdmi_audio>;
 		asoc-codec-names = "msm-stub-codec.1", "msm-hdmi-audio-codec-rx";
-		qcom,us-euro-gpios = <&pm8994_mpps 2 0>;
+//HTC_AUD_START
+		/*qcom,us-euro-gpios = <&pm8994_mpps 2 0>;
 		qcom,wsa-max-devs = <2>;
 		qcom,wsa-devs = <&wsa881x_211>, <&wsa881x_212>,
 				<&wsa881x_213>, <&wsa881x_214>;
 		qcom,wsa-aux-dev-prefix = "SpkrLeft", "SpkrRight",
-					  "SpkrLeft", "SpkrRight";
+					  "SpkrLeft", "SpkrRight";*/
+//HTC_AUD_END
 	};
 };
 
@@ -598,16 +600,18 @@
 		status = "okay";
 	};
 
-	mpp@a300 { /* MPP 4 */
-		/* HDMI_5v_vreg regulator enable */
-		qcom,mode = <1>;		/* Digital output */
-		qcom,output-type = <0>;		/* CMOS logic */
-		qcom,vin-sel = <2>;		/* S4 1.8V */
-		qcom,src-sel = <0>;		/* Constant */
-		qcom,master-en = <1>;		/* Enable GPIO */
-		qcom,invert = <0>;
-		status = "okay";
-	};
+//HTC_AUD_START
+//	mpp@a300 { /* MPP 4 */
+//		/* HDMI_5v_vreg regulator enable */
+//		qcom,mode = <1>;		/* Digital output */
+//		qcom,output-type = <0>;		/* CMOS logic */
+//		qcom,vin-sel = <2>;		/* S4 1.8V */
+//		qcom,src-sel = <0>;		/* Constant */
+//		qcom,master-en = <1>;		/* Enable GPIO */
+//		qcom,invert = <0>;
+//		status = "okay";
+//	};
+//HTC_AUD_END
 
 	mpp@a400 { /* MPP 5 */
 		qcom,mode = <1>;		/* Digital output */

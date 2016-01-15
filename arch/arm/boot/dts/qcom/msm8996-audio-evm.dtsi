@@ -1,0 +1,111 @@
+/* 8996EVM Audio Config */
+
+// ================
+//  HEADSET DRIVER
+// ================
+
+// msm-pm8994.dtsi has these settings, we replace this at here
+&pm8994_mpps {
+	mpp@a300 {
+		reg = <0xa300 0x100>;
+		qcom,pin-num = <4>;
+		qcom,mode = <4>;	//QPNP_PIN_MODE_AIN
+		qcom,src-sel = <0>;	//QPNP_PIN_SEL_FUNC_CONSTANT
+		qcom,ain-route = <3>;	//QPNP_PIN_AIN_AMUX_CH
+		qcom,master-en = <1>;	//ENABLE FEATURE
+		qcom,invert = <1>;
+		status = "ok";
+	};
+};
+
+&pmi8994_gpios {
+	gpio@c300 {
+		reg = <0xc300 0x100>;
+		qcom,pin-num = <4>;
+		status = "ok";
+	};
+};
+
+&pm8994_vadc {
+	chan@13 {
+		label = "hs_remote_sensor_mpp4";
+		reg = <0x13>;
+		qcom,decimation = <0>;			//512 sampling rate
+		qcom,pre-div-channel-scaling = <0>;	//1:1 scaling
+		qcom,calibration-type = "absolute";	//Use 625mV & 1.25V reference voltage
+		qcom,scale-function = <0>;		//convert raw adc code to voltage
+		qcom,hw-settle-time = <2>;		//200us
+		qcom,fast-avg-setup = <0>;		//with only 1 average measurement
+	};
+};
+
+&soc {
+	headset_mgr {
+		compatible   = "htc_headset,mgr";
+		pinctrl-names = "headset_gpios";
+		pinctrl-0 = <&headset_gpios>;
+//		mgr,tx_gpio  = <&msm_gpio 0 0>;
+//		mgr,rx_gpio  = <&msm_gpio 96 0>;
+//		mgr,oe_gpio  = <&msm_gpio 0 0>;
+		mgr,bias_gpio  = <&pmi8994_gpios 4 0>;
+		mgr,wire_alt = <2>;
+		mgr,hs_typenum	 = <2>;
+		mgr,hs_type	 = <2 1>;
+		mgr,adc_max	 = <1541 254>;
+		mgr,adc_min	 = <255 0>;
+	};
+
+	headset_pmic {
+		compatible = "htc_headset,pmic";
+		interrupt-parent = <&tlmm>;
+		hs_pmic,key_gpio	= <&tlmm 91 0x00>;
+		hs_pmic,driver_flag	= <4>;
+		hs_pmic,hpin_gpio	= <&tlmm 63 0x00>;
+		hs_pmic,hpin_irq	= <0>;
+		hs_pmic,key_irq 	= <0>;
+		hs_pmic,key_enable_gpio = <0>;
+		hs_pmic,adc_mic 	= <0>;
+		hs_pmic,adc_remote	= <0 56 57 146 147 339>;
+		hs_pmic,adc_channel	= <19>; //MPP4
+		hs_pmic,adc_mpp 	= <0>;
+		hs_pmic,adc_amux	= <0>;
+		hs_pmic,hs_controller	= <0>;
+		hs_pmic,hs_switch	= <0>;
+		qcom,headset-vadc	= <&pm8994_vadc>;
+	};
+
+//	headset_onewire {
+//		compatible = "htc_headset,1wire";
+//		hs_1wire,tx_level_shift_en = <&msm_gpio 0 0x00>;
+//		hs_1wire,one_wire_remote = <0x7E 0x7F 0x7D 0x7F 0x7B 0x7F>;
+//		hs_1wire,onewire_tty_dev = "ttyHSL1";
+//	};
+	sound-9335 {
+		qcom,audio-routing =
+			"AIF4 VI", "MCLK",
+			"RX_BIAS", "MCLK",
+//HTC_AUD_START
+			"AMIC1", "MIC BIAS1",
+			"MIC BIAS1", "Handset Mic",
+			"AMIC2", "Headset Mic",
+			"AMIC2", "MCLK",
+			"AMIC3", "MIC BIAS3",
+			"MIC BIAS3", "Handset Mic",
+			"AMIC4", "MIC BIAS4",
+			"MIC BIAS4", "Handset Mic";
+//HTC_AUD_END
+		qcom,msm-mbhc-hphl-swh = <1>; /* HTC_AUD: 1 for NO, 0 for NC */
+		qcom,msm-mbhc-gnd-swh = <1>; /* HTC_AUD: 1 for NO, 0 for NC */
+		qcom,audio-1v8-hph-en-gpio = <&pm8994_gpios 4 0>;
+		qcom,rt5503-reset-gpio = <&tlmm 52 0>;
+		qcom,tfa9888-reset-gpio = <&pm8994_gpios 10 0>;
+	};
+
+	qcom,msm-dai-mi2s {
+		dai_sec_mi2s: qcom,msm-dai-q6-mi2s-sec {
+			qcom,msm-mi2s-rx-lines = <2>; /* SD1 (1 << 1) */
+			qcom,msm-mi2s-tx-lines = <1>; /* SD0 (1 << 0) */
+		};
+	};
+};
+

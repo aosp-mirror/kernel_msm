@@ -756,6 +756,11 @@ static int msm_afe_hw_params(struct snd_pcm_substream *substream,
 
 	if (rc < 0) {
 		pr_err("Audio Start: Buffer Allocation failed rc = %d\n", rc);
+//HTC_AUD_START
+#ifdef CONFIG_HTC_AUDIO_DEBUG
+		BUG();
+#endif
+//HTC_AUD_END
 		mutex_unlock(&prtd->lock);
 		return -ENOMEM;
 	}

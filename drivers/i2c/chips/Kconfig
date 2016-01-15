@@ -1,0 +1,21 @@
+#
+# Miscellaneous I2C chip drivers configuration
+#
+# *** DEPRECATED! Do not add new entries! See Makefile ***
+#
+
+menu "Miscellaneous I2C Chip support"
+source drivers/i2c/chips/stmvl53l0/Kconfig
+
+config AMP_TFA9888
+	tristate "NXP TFA9888 Speaker AMP Driver"
+	depends on I2C=y
+	help
+		NXP TFA9888 Speaker AMP Driver implemented by HTC.
+config SENSORS_NFC_PN548
+	tristate "PN548 NFC sensor support"
+	depends on I2C=y
+	help
+	  PN548 NFC Driver implemented.
+
+endmenu

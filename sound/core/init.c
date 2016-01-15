@@ -321,6 +321,7 @@ int snd_card_new(struct device *parent, int idx, const char *xid,
 	snd_device_free_all(card);
       __error:
 	put_device(&card->card_dev);
+	kfree(card); //HTC_AUD klockwork ID: 4127
   	return err;
 }
 EXPORT_SYMBOL(snd_card_new);

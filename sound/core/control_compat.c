@@ -41,6 +41,10 @@ static int snd_ctl_elem_list_compat(struct snd_card *card,
 
 	data = compat_alloc_user_space(sizeof(*data));
 
+	//HTC_AUD_START klockwork ID: 1390
+	if (data == NULL)
+		return -EFAULT;
+	//HTC_AUD_END
 	/* offset, space, used, count */
 	if (copy_in_user(data, data32, 4 * sizeof(u32)))
 		return -EFAULT;
@@ -294,13 +298,23 @@ static int snd_ctl_elem_read_user_compat(struct snd_card *card,
 	if (data == NULL)
 		return -ENOMEM;
 
-	if ((err = copy_ctl_value_from_user(card, data, data32, &type, &count)) < 0)
+	if ((err = copy_ctl_value_from_user(card, data, data32, &type, &count)) < 0) {
+#ifdef CONFIG_HTC_AUDIO_DEBUG
+		pr_aud_err("%s: copy from user fail\n", __func__);//HTC_AUDIO
+#endif
 		goto error;
+	}
 
 	snd_power_lock(card);
 	err = snd_power_wait(card, SNDRV_CTL_POWER_D0);
 	if (err >= 0)
 		err = snd_ctl_elem_read(card, data);
+#ifdef CONFIG_HTC_AUDIO_DEBUG
+//HTC_AUD_START
+	else
+		pr_aud_err("%s: snd_power_wait fail\n", __func__);
+//HTC_AUD_END
+#endif
 	snd_power_unlock(card);
 	if (err >= 0)
 		err = copy_ctl_value_to_user(data32, data, type, count);
@@ -316,20 +330,40 @@ static int snd_ctl_elem_write_user_compat(struct snd_ctl_file *file,
 	struct snd_card *card = file->card;
 	int err, type, count;
 
+#ifdef CONFIG_HTC_AUDIO_DEBUG
+	pr_aud_info("%s: Enter \n", __func__);//HTC_AUDIO
+#endif
+
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (data == NULL)
 		return -ENOMEM;
 
-	if ((err = copy_ctl_value_from_user(card, data, data32, &type, &count)) < 0)
+	if ((err = copy_ctl_value_from_user(card, data, data32, &type, &count)) < 0) {
+#ifdef CONFIG_HTC_AUDIO_DEBUG
+		pr_aud_err("%s: copy from user fail\n", __func__);//HTC_AUDIO
+#endif
 		goto error;
+	}
 
 	snd_power_lock(card);
 	err = snd_power_wait(card, SNDRV_CTL_POWER_D0);
 	if (err >= 0)
 		err = snd_ctl_elem_write(card, file, data);
+#ifdef CONFIG_HTC_AUDIO_DEBUG
+//HTC_AUD_START
+	else
+		pr_aud_err("%s: snd_power_wait fail\n", __func__);
+//HTC_AUD_END
+#endif
 	snd_power_unlock(card);
 	if (err >= 0)
 		err = copy_ctl_value_to_user(data32, data, type, count);
+#ifdef CONFIG_HTC_AUDIO_DEBUG
+//HTC_AUD_START
+	else
+		pr_aud_err("%s: snd_clt_elem_write fail\n", __func__);
+//HTC_AUD_END
+#endif
  error:
 	kfree(data);
 	return err;

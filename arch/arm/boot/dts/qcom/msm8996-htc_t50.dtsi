@@ -16,6 +16,7 @@
 #include "dsi-panel-t50-hx8396c2.dtsi"
 #include "dsi-panel-t50.dtsi"
 #include "msm8996-touch-t50.dtsi"
+#include "msm8996-audio-pme.dtsi" //HTC_AUD
 #include "msm8996-key-t50.dtsi"
 
 / {

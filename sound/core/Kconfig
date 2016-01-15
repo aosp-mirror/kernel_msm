@@ -228,4 +228,10 @@ config SND_DMA_SGBUF
 	def_bool y
 	depends on X86
 
+config HTC_AUDIO_DEBUG
+	bool "Trigger Ramdump if enable"
+	default n
+	help
+	  Say Y to enable HTC Audio DEBUG
+
 source "sound/core/seq/Kconfig"

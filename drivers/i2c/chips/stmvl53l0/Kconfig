@@ -1,0 +1,15 @@
+#
+# Miscellaneous I2C sensor drivers configuration
+#
+# *** DEPRECATED! Do not add new entries! See Makefile ***
+#
+
+menu "Miscellaneous I2C Chip support"
+
+config LASER_STMVL53L0_SUPPORT
+       tristate "ST VL53L0 Laser Sensor"
+       depends on I2C
+       help
+         This driver provides support for VL53L0 Laser Sensor.
+
+endmenu
