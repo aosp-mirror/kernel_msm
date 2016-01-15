@@ -220,12 +220,12 @@
 
 		blsp1_uart3_active: blsp1_uart3_active {
 			mux {
-				pins = "gpio45", "gpio46", "gpio47", "gpio48";
+				pins = "gpio45", "gpio46";
 				function = "blsp_uart3";
 			};
 
 			config {
-				pins = "gpio45", "gpio46", "gpio47", "gpio48";
+				pins = "gpio45", "gpio46";
 				drive-strength = <2>;
 				bias-disable;
 			};
@@ -233,12 +233,12 @@
 
 		blsp1_uart3_sleep: blsp1_uart3_sleep {
 			mux {
-				pins = "gpio45", "gpio46", "gpio47", "gpio48";
+				pins = "gpio45", "gpio46";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio45", "gpio46", "gpio47", "gpio48";
+				pins = "gpio45", "gpio46";
 				drive-strength = <2>;
 				bias-disable;
 			};

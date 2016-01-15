@@ -1,0 +1,1064 @@
+&soc {
+	touch_fw_update {
+		compatible = "htc,touch_fwu";
+	};
+};
+
+&tlmm {
+	pmx_ts {
+		ts_intr_active:ts_intr_active {
+			mux {
+				pins = "gpio125";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio125";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+		ts_intr_suspend:ts_intr_suspend {
+			mux {
+				pins = "gpio125";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio125";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		ts_rst_active:ts_rst_active {
+			mux {
+				pins = "gpio89";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio89";
+				drive-strength = <2>;
+				bias-disable; /* No PULL */
+				output-high;
+			};
+		};
+		ts_rst_suspend:ts_rst_suspend {
+			mux {
+				pins = "gpio89";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio89";
+				drive-strength = <2>;
+				bias-disable;
+				output-high;
+			};
+		};
+	};
+
+	i2c_3 {
+		i2c_3_active: i2c_3_active {
+			mux {
+				pins = "gpio47", "gpio48";
+				function = "blsp_i2c3";
+			};
+
+			config {
+				pins = "gpio47", "gpio48";
+				drive-strength = <8>;
+				bias-disable;
+			};
+		};
+
+		i2c_3_sleep: i2c_3_sleep {
+			mux {
+				pins = "gpio47", "gpio48";
+				function = "blsp_i2c3";
+			};
+
+			config {
+				pins = "gpio47", "gpio48";
+				drive-strength = <8>;
+				bias-disable;
+			};
+		};
+	};
+};
+
+&pm8994_l18 {
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1900000>;
+	qcom,init-voltage = <1800000>;
+	status = "okay";
+	regulator-boot-on;
+	regulator-always-on;
+};
+
+&pm8994_l22 {
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+	qcom,init-voltage = <3300000>;
+	status = "okay";
+	regulator-boot-on;
+	regulator-always-on;
+};
+
+/ {
+	aliases {
+		i2c3 = &i2c_3;
+	};
+};
+
+&soc {
+	i2c_3: i2c@7577000 { /* BLSP1 QUP3 */
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x7577000  0x1000>;
+		reg-names = "qup_phys_addr";
+		interrupt-names = "qup_irq";
+		interrupts = <0 97 0>;
+		dmas = <&dma_blsp1 16 64 0x20000020 0x20>,
+			<&dma_blsp1 17 32 0x20000020 0x20>;
+		dma-names = "tx", "rx";
+		qcom,master-id = <86>;
+		qcom,clk-freq-out = <400000>;
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+			 <&clock_gcc clk_gcc_blsp1_qup3_i2c_apps_clk>;
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_3_active>;
+		pinctrl-1 = <&i2c_3_sleep>;
+	};
+};
+
+&i2c_3 {
+	synaptics_dsx@20 {
+		compatible = "synaptics,dsx";
+		reg = <0x20>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <125 0>;
+		synaptics,irq-gpio = <&tlmm 125 0x00>;
+		synaptics,irq-flags = <0x2008>;
+		synaptics,reset-gpio = <&tlmm 89 0x00>;
+		synaptics,reset-on-state = <0>;
+		synaptics,reset-active-ms = <1>;
+		synaptics,reset-delay-ms = <20>;
+		synaptics,switch-gpio = <&tlmm 84 0x00>;
+		synaptics,update-feature = <3>;
+		synaptics,support-glove = <1>;
+		synaptics,support-cover = <1>;
+		synaptics,hall-block-time = <1000>;
+		synaptics,display-coords = <0 1440 0 2560>;
+		synaptics,tw-pin-mask = <0x3>;
+		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
+		pinctrl-0 = <&ts_rst_active &ts_intr_active>;
+		pinctrl-1 = <&ts_rst_suspend &ts_intr_suspend>;
+
+		config_7 { /* LGIT + Sharp */
+			pr_number     = <2093014>;
+			uncover_setting = [12 52 19 05 0F];
+			cover_setting = [0C 17 0C 25 0A];
+			glove_setting = [0C 17 0C 25 0A];
+			sensor_id = <0x1>;
+			disp_panel = "sharp";
+			config = [
+				50 4D 45 00 54 54 00 02
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 4F 03 14 05 51 0E 70
+				08 00 0F 7D 3D 79 3D 00
+				00 00 00 11 1E 1E 05 C2
+				04 F8 00 2D 19 01 15 02
+				F0 D2 F0 D2 6D 0D 05 46
+				00 00 0F 12 8C 0F 0A 78
+				00 01 01 07 04 04 32 28
+				08 C8 26 26 80 80 00 00
+				FF C0 53 5B 80 52 19 01
+				40 40 32 50 00 00 00 00
+				4C 04 6C 07 3C 32 00 00
+				00 00 4C 04 6C 07 1E 05
+				1E 04 0A 04 0A 00 0A 04
+				04 00 0A 78 02 00 7D 00
+				02 00 C8 00 00 00 96 00
+				00 00 00 01 05 0A 00 00
+				00 78 00 96 00 32 00 00
+				00 00 00 00 00 00 00 0D
+				00 00 14 03 0C 0F 0A 00
+				4B 00 00 FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF 00 01 00 00
+				32 00 14 00 14 00 64 00
+				64 00 10 00 10 00 7D 00
+				7D 00 40 66 58 1B 28 00
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				01 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 FF
+				00 FF 14 55 09 0E 3C 0A
+				0F 64 64 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF 00 00 BA
+				00 80 04 1B 00 00 FF 2C
+				01 FF FF CC 03 E8 03 00
+				C0 80 04 10 0A 18 00 79
+				08 08 00 01 2C 01 06 00
+				06 06 07 07 00 2C 01 01
+				04 03 36 00 19 00 00 00
+				02 00 01 28 84 35 00 19
+				00 01 00 02 00 01 29 04
+				34 00 18 00 02 00 02 00
+				01 2A 83 33 00 17 00 03
+				00 02 00 01 2B 83 32 00
+				17 00 04 00 02 00 01 2C
+				03 31 00 17 00 05 00 02
+				00 01 2D 83 30 00 16 00
+				06 00 05 00 02 26 03 2F
+				00 16 00 07 00 05 00 02
+				27 05 05 05 05 05 05 05
+				05 05 05 05 05 05 05 05
+				05 05 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 1B 00 06 00 A6
+				00 14 64 00 01 1B 02 06
+				32 32 50 00 50 00 50 50
+				1E 03 0C 0C 14 28 04 00
+				00 00 00 00 00 00 00 00
+				00 18 00 80 07 01 07 07
+				1D 1D 00 00 07 07 01 07
+				07 1D 1D 00 00 07 04 04
+				50 00 07 03 00 36 22 00
+				05 0B 00 22 02 00 00 04
+				0C 00 00 00 0C 00 00 00
+				01 3C 0C 11 11 00 0C 66
+				66 AA 00 00 00 FF FF FF
+				FF FF FF FF FF 51 51 51
+				51 CD 0D 04 83 10 10 10
+				10 61 24 64 01 1C 19 1E
+				1F 17 16 1A 18 15 14 13
+				11 12 04 05 03 06 FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF 30
+				2E 2F 28 27 2D 29 2A 2C
+				2B 26 23 24 25 22 39 35
+				36 3A 3B 3E 3F 31 3C 38
+				3D 37 00 32 01 FF FF FF
+				FF 00 10 00 10 00 10 00
+				10 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 00 10 00
+				10 00 10 00 10 00 00 1D
+				FF FF FF FF FF FF FF 00
+				00 0F 00 44 44
+			];
+		};
+
+		config_6 { /* LGIT + Tianma*/
+			pr_number     = <2093014>;
+			uncover_setting = [12 52 19 05 0F];
+			cover_setting = [0C 17 0C 25 0A];
+			glove_setting = [0C 17 0C 25 0A];
+			sensor_id = <0x1>;
+			disp_panel = "tia";
+			config = [
+				50 4D 45 00 4C 47 00 05
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 4F 03 14 05 51 0E 70
+				08 00 0F 7D 3D 79 3D 00
+				00 00 00 11 1E 1E 05 C2
+				04 F8 00 2D 19 01 15 02
+				F0 D2 F0 D2 6D 0D 05 46
+				00 00 0F 12 8C 0F 0A 78
+				00 01 01 07 04 04 32 28
+				08 C8 26 26 80 80 00 00
+				FF C0 53 5B 80 52 19 01
+				40 40 32 50 00 00 00 00
+				4C 04 6C 07 3C 32 00 00
+				00 00 4C 04 6C 07 1E 05
+				1E 04 0A 04 0A 00 0A 04
+				04 00 0A 78 02 00 7D 00
+				02 00 C8 00 00 00 96 00
+				00 00 00 01 05 0A 00 00
+				00 78 00 96 00 32 00 00
+				00 00 00 00 00 00 00 0D
+				00 00 14 03 0C 0F 0A 00
+				4B 00 00 FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF 00 01 00 00
+				32 00 14 00 14 00 64 00
+				64 00 10 00 10 00 7D 00
+				7D 00 40 66 58 1B 28 00
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				01 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 FF
+				00 FF 14 55 09 0E 3C 0A
+				0F 64 64 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF 00 00 BA
+				00 80 04 1B 00 00 FF 2C
+				01 FF FF CC 03 E8 03 00
+				C0 80 04 10 0A 18 00 79
+				08 08 00 01 2C 01 06 00
+				06 06 07 07 00 2C 01 01
+				04 03 36 00 19 00 00 00
+				02 00 01 28 04 35 00 19
+				00 01 00 02 00 01 29 04
+				34 00 18 00 02 00 02 00
+				01 2A 83 33 00 17 00 03
+				00 02 00 01 2B 03 32 00
+				17 00 04 00 02 00 01 2C
+				83 31 00 17 00 05 00 02
+				00 01 2D 83 30 00 16 00
+				06 00 05 00 02 26 83 2F
+				00 16 00 07 00 05 00 02
+				27 05 05 05 05 05 05 05
+				05 05 05 05 05 05 05 05
+				05 05 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 1B 00 06 00 A6
+				00 14 64 00 01 1B 02 06
+				32 32 50 00 50 00 50 50
+				1E 03 0C 0C 14 28 04 00
+				00 00 00 00 00 00 00 00
+				00 18 00 80 07 01 07 07
+				1D 1D 00 00 07 07 01 07
+				07 1D 1D 00 00 07 04 04
+				50 00 07 03 00 36 22 00
+				05 0B 00 22 02 00 00 04
+				0C 00 00 00 0C 00 00 00
+				01 28 0C 11 11 00 0C 66
+				66 AA 00 00 00 FF FF FF
+				FF FF FF FF FF 51 51 51
+				51 CD 0D 04 83 10 10 10
+				10 61 24 64 01 1C 19 1E
+				1F 17 16 1A 18 15 14 13
+				11 12 04 05 03 06 FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF 30
+				2E 2F 28 27 2D 29 2A 2C
+				2B 26 23 24 25 22 39 35
+				36 3A 3B 3E 3F 31 3C 38
+				3D 37 00 32 01 FF FF FF
+				FF 00 10 00 10 00 10 00
+				10 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 00 10 00
+				10 00 10 00 10 00 00 1D
+				FF FF FF FF FF FF FF 00
+				00 0F 00 44 44
+			];
+		};
+
+		config_5 { /* YFO R2 + Sharp */
+			pr_number     = <2093014>;
+			uncover_setting = [12 5A 19 05 0F];
+			cover_setting = [0C 17 0C 25 0A];
+			glove_setting = [0C 17 0C 25 0A];
+			sensor_id = <0x2>;
+			config = [
+				50 4D 45 00 59 46 4F 00
+				08 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 4F 03 14 05 51 0E 70
+				08 00 0F 7D 3D 79 3D 00
+				00 00 00 11 1E 1E 05 6B
+				08 60 01 2D 17 02 14 02
+				F0 D2 F0 D2 6D 0D 05 46
+				00 00 0F 12 8C 0F 0A 78
+				00 01 01 07 04 04 32 28
+				08 C8 26 26 80 80 00 00
+				FF C0 53 5B 80 5A 19 01
+				40 40 32 50 00 00 00 00
+				4C 04 6C 07 3C 32 00 00
+				00 00 4C 04 6C 07 1E 05
+				1E 04 0A 04 0A 00 0A 04
+				04 00 0A 78 02 00 7D 00
+				02 00 C8 00 00 00 96 00
+				00 00 00 01 05 0A 00 00
+				00 78 00 96 00 32 00 00
+				00 00 00 00 00 00 00 0D
+				00 00 14 03 0C 0F 0A 00
+				4B 00 00 FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF 00 01 00 00
+				32 00 14 00 14 00 64 00
+				64 00 10 00 10 00 7D 00
+				7D 00 40 66 58 1B 28 00
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				01 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 FF
+				00 FF 14 55 09 0E 3C 0A
+				0F 64 64 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF 00 00 B7
+				00 80 04 1B 00 00 FF 2C
+				01 FF FF CC 03 E8 03 00
+				C0 80 04 10 0A 18 00 79
+				08 08 00 01 2C 01 06 00
+				03 03 07 07 03 2C 01 01
+				04 83 36 00 19 00 00 00
+				02 00 01 28 04 35 00 19
+				00 01 00 02 00 01 29 04
+				34 00 18 00 02 00 02 00
+				01 2A 03 33 00 17 00 03
+				00 02 00 01 2B 03 32 00
+				17 00 04 00 02 00 01 2C
+				83 31 00 17 00 05 00 02
+				00 01 2D 83 30 00 16 00
+				06 00 05 00 02 26 83 2F
+				00 16 00 07 00 05 00 02
+				27 06 06 06 06 06 06 06
+				06 06 06 06 05 05 05 05
+				06 05 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 1B 00 06 00 A6
+				00 14 64 00 01 1B 02 06
+				46 46 50 00 50 00 64 64
+				1E 03 0C 0C 14 28 04 00
+				00 00 00 00 00 00 00 00
+				00 18 00 80 07 01 07 07
+				1D 1D 00 00 07 07 01 07
+				07 1D 1D 00 00 07 04 04
+				4A 00 07 03 00 36 22 00
+				05 0B 00 22 02 00 00 04
+				0C 00 00 00 0C 00 00 00
+				01 3C 0C 11 11 00 0C 66
+				66 AA 00 00 00 FF FF FF
+				FF FF FF FF FF 51 51 51
+				51 CD 0D 04 83 10 10 10
+				10 61 24 64 01 1C 19 1E
+				1F 17 16 1A 18 15 14 13
+				11 12 04 05 03 06 FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF 30
+				2E 2F 28 27 2D 29 2A 2C
+				2B 26 23 24 25 22 39 35
+				3C 3A 3B 3E 3F 31 36 38
+				3D 37 00 32 01 FF FF FF
+				FF 00 10 00 10 00 10 00
+				10 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 00 10 00
+				10 00 10 00 10 00 00 1D
+				FF FF FF FF FF FF FF 00
+				00 0F 00 44 44
+			];
+		};
+
+		config_4 { /* LGIT + Tianma */
+			pr_number     = <2051324>;
+			sensor_id = <0x1>;
+			config = [
+				50 4D 45 00 4C 47 00 02
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 4F 03 1E 05 51 0E 70
+				08 00 0F 7D 3D 79 3D 00
+				00 00 00 11 1E 1E 05 C2
+				04 F8 00 2D 19 01 15 02
+				F0 D2 F0 D2 25 0D 05 8C
+				00 00 0F 12 80 0F 0A 78
+				00 01 01 07 04 04 0A C0
+				19 64 26 26 80 80 00 00
+				C8 C0 53 5B 80 52 19 01
+				40 40 32 50 00 00 00 00
+				4C 04 6C 07 3C 32 00 00
+				00 00 4C 04 6C 07 1E 05
+				1E 04 0A 04 0A 00 0A 04
+				04 00 0A 78 02 00 7D 00
+				02 00 C8 00 00 00 96 00
+				00 00 00 01 05 0A 00 00
+				00 78 00 96 00 32 00 00
+				00 00 00 00 00 00 00 0D
+				00 00 14 03 0C 0F 0A 00
+				4B 00 00 FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF 00 01 00 00
+				32 00 14 00 14 00 64 00
+				64 00 10 00 10 00 7D 00
+				7D 00 40 66 58 1B 28 00
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				01 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 FF
+				00 FF 14 55 09 0E 3C 0A
+				0F 64 64 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF 00 00 BA
+				00 80 04 1B 00 00 FF 2C
+				01 FF FF CC 03 E8 03 00
+				C0 80 04 10 0A 18 00 79
+				08 08 00 01 2C 01 06 00
+				06 06 07 07 00 2C 01 01
+				04 83 36 00 19 00 00 00
+				02 00 01 28 84 35 00 19
+				00 01 00 02 00 01 29 84
+				34 00 18 00 02 00 02 00
+				01 2A 83 33 00 17 00 03
+				00 02 00 01 2B 83 32 00
+				17 00 04 00 02 00 01 2C
+				83 31 00 17 00 05 00 02
+				00 01 2D 83 30 00 16 00
+				06 00 05 00 02 26 03 2F
+				00 16 00 07 00 05 00 02
+				27 05 05 05 05 05 05 05
+				05 05 05 05 05 05 05 05
+				05 05 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 1B 00 06 00 A6
+				00 14 64 00 01 1B 02 00
+				08 32 A0 00 A0 00 50 50
+				1E 03 0C 0C 14 28 04 00
+				00 00 00 00 00 00 00 00
+				00 18 00 80 07 01 07 07
+				1D 1D 00 00 07 07 01 07
+				07 1D 1D 00 00 07 04 04
+				50 00 07 03 00 36 22 00
+				05 0B 00 22 02 00 00 04
+				0C 00 00 00 0C 00 00 00
+				01 28 0C 11 11 00 0C 66
+				66 AA 00 00 00 FF FF FF
+				FF FF FF FF FF 51 51 51
+				51 CD 0D 04 83 10 10 10
+				10 61 24 64 01 1C 19 1E
+				1F 17 16 1A 18 15 14 13
+				11 12 04 05 03 06 FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF 30
+				2E 2F 28 27 2D 29 2A 2C
+				2B 26 23 24 25 22 39 35
+				36 3A 3B 3E 3F 31 3C 38
+				3D 37 00 32 01 FF FF FF
+				FF 00 10 00 10 00 10 00
+				10 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 00 10 00
+				10 00 10 00 10 00 00 1D
+				FF FF FF FF FF FF FF 00
+				00 0F 00 00 00
+			];
+		};
+
+		config_3 { /* YFO R2 + Sharp */
+			pr_number     = <2051324>;
+			sensor_id = <0x2>;
+			config = [
+				50 4D 45 00 59 46 4F 00
+				04 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 4F 03 1E 05 51 0E 70
+				08 00 0F 7D 3D 79 3D 00
+				00 00 00 11 1E 1E 05 6B
+				08 60 01 2D 17 02 14 02
+				F0 D2 F0 D2 25 0D 05 8C
+				00 00 0F 12 80 0F 0A 78
+				00 01 01 07 04 04 0A C0
+				19 64 26 26 80 80 00 00
+				C8 C0 53 5B 80 5A 19 01
+				40 40 32 50 00 00 00 00
+				4C 04 6C 07 3C 32 00 00
+				00 00 4C 04 6C 07 1E 05
+				1E 04 0A 04 0A 00 0A 04
+				04 00 0A 78 02 00 7D 00
+				02 00 C8 00 00 00 96 00
+				00 00 00 01 05 0A 00 00
+				00 78 00 96 00 32 00 00
+				00 00 00 00 00 00 00 0D
+				00 00 14 03 0C 0F 0A 00
+				4B 00 00 FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF 00 01 00 00
+				32 00 14 00 14 00 64 00
+				64 00 10 00 10 00 7D 00
+				7D 00 40 66 58 1B 28 00
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				01 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 FF
+				00 FF 14 55 09 0E 3C 0A
+				0F 64 64 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF 00 00 B7
+				00 80 04 1B 00 00 FF 2C
+				01 FF FF CC 03 E8 03 00
+				C0 80 04 10 0A 18 00 79
+				08 08 00 01 2C 01 06 00
+				03 03 07 07 03 2C 01 01
+				04 03 36 00 19 00 00 00
+				02 00 01 28 04 35 00 19
+				00 01 00 02 00 01 29 84
+				34 00 18 00 02 00 02 00
+				01 2A 83 33 00 17 00 03
+				00 02 00 01 2B 83 32 00
+				17 00 04 00 02 00 01 2C
+				83 31 00 17 00 05 00 02
+				00 01 2D 03 30 00 16 00
+				06 00 05 00 02 26 03 2F
+				00 16 00 07 00 05 00 02
+				27 06 06 06 06 06 06 06
+				06 06 06 06 05 05 05 05
+				06 05 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 1B 00 06 00 A6
+				00 14 64 00 01 1B 02 00
+				08 32 A0 00 A0 00 50 50
+				1E 03 0C 0C 14 28 04 00
+				00 00 00 00 00 00 00 00
+				00 18 00 80 07 01 07 07
+				1D 1D 00 00 07 07 01 07
+				07 1D 1D 00 00 07 04 04
+				50 00 07 03 00 36 22 00
+				05 0B 00 22 02 00 00 04
+				0C 00 00 00 0C 00 00 00
+				01 3C 0C 11 11 00 0C 66
+				66 00 00 00 00 FF FF FF
+				FF FF FF FF FF 51 51 51
+				51 CD 0D 04 83 10 10 10
+				10 61 24 64 01 1C 19 1E
+				1F 17 16 1A 18 15 14 13
+				11 12 04 05 03 06 FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF 30
+				2E 2F 28 27 2D 29 2A 2C
+				2B 26 23 24 25 22 39 35
+				3C 3A 3B 3E 3F 31 36 38
+				3D 37 00 32 01 FF FF FF
+				FF 00 10 00 10 00 10 00
+				10 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 00 10 00
+				10 00 10 00 10 00 00 1D
+				FF FF FF FF FF FF FF 00
+				00 0F 00 00 00
+			];
+		};
+
+		config_2 { /* YFO R1 */
+			pr_number     = <2051324>;
+			uncover_setting = [0F 5B 19 15 0C];
+			cover_setting = [0C 17 0C 25 0A];
+			glove_setting = [0C 17 0C 25 0A];
+			sensor_id = <0x0>;
+			config = [
+				4F 32 00 06 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 7F 03 1E 05 51 0E 70
+				08 00 0F 00 40 00 40 00
+				00 00 00 11 1E 1E 05 59
+				08 E3 01 2D 16 01 17 01
+				F0 D2 F0 D2 25 0D 05 8C
+				00 00 0C 0F 80 0F 0A 78
+				00 01 01 07 04 04 0A C0
+				19 64 26 26 80 80 00 00
+				C8 C0 53 5B 80 5B 19 01
+				40 40 32 50 00 00 00 00
+				4C 04 6C 07 3C 32 00 00
+				00 00 4C 04 6C 07 1E 05
+				1E 04 0A 04 0A 00 0A 04
+				04 00 0A 78 02 00 7D 00
+				02 00 C8 00 00 00 96 00
+				00 00 00 01 15 0A 00 00
+				00 78 00 96 00 32 00 00
+				00 00 00 00 00 00 00 0D
+				00 00 14 03 0C 0F 0A 00
+				4B 00 00 FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF 00 01 00 00
+				32 00 14 00 14 00 64 00
+				64 00 10 00 10 00 7D 00
+				7D 00 40 66 58 1B 28 00
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				01 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 FF
+				00 FF 14 55 09 0E 3C 0A
+				0F 64 64 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF 00 00 C8
+				00 80 04 1B 00 00 FF 2C
+				01 FF FF CC 03 E8 03 00
+				C0 80 04 10 0A 18 00 79
+				08 08 00 01 2C 01 06 00
+				03 03 07 07 03 2C 01 01
+				04 03 29 00 12 00 00 00
+				03 00 01 25 03 28 00 12
+				00 02 00 03 00 01 27 82
+				26 00 11 00 04 00 03 00
+				01 28 82 25 00 11 00 06
+				00 07 00 02 24 02 24 00
+				10 00 08 00 07 00 02 25
+				82 23 00 10 00 0A 00 07
+				00 02 26 02 22 00 0F 00
+				0B 00 07 00 02 27 02 21
+				00 0F 00 11 00 04 00 01
+				25 04 05 04 05 05 04 04
+				04 04 04 05 04 04 04 04
+				04 04 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 2B 00 06 00 A6
+				00 14 64 00 01 1B 02 06
+				32 32 50 00 50 00 50 50
+				1E 03 0C 0C 14 28 04 00
+				00 00 00 00 00 00 00 00
+				00 11 00 00 07 01 07 07
+				1D 1D 00 00 07 07 01 07
+				07 1D 1D 00 00 07 04 04
+				50 00 07 03 00 29 22 00
+				05 0B 00 22 02 00 00 00
+				0C 00 00 00 0C 00 00 00
+				01 23 0C 00 00 00 0C 00
+				00 AA 00 00 00 FF FF FF
+				FF FF FF FF FF 51 51 51
+				51 CD 0D 04 83 10 10 10
+				10 61 24 64 01 1C 19 1E
+				1F 17 16 1A 18 15 10 11
+				0B 0F 13 0E 12 0D FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF 30
+				2E 2F 28 27 2D 29 2A 2C
+				2B 26 23 24 25 22 39 35
+				36 3A 3B 3C 3F 31 3E 38
+				3D 37 00 32 01 FF FF FF
+				FF 00 10 00 10 00 10 00
+				10 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 00 10 00
+				10 00 10 00 10 00 00 FF
+				FF FF FF 1D FF FF FF 00
+				00 0F 00 00 00
+			];
+		};
+
+		config_1 { /* For semi */
+			pr_number     = <2051324>;
+			sensor_id = <0x3>;
+			config = [
+				48 49 41 55 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 01
+				00 3F 03 1E 05 51 0E 4C
+				04 6C 07 00 40 00 40 00
+				00 00 00 11 1E 1E 05 EB
+				01 9D 00 2D 30 FE 29 FF
+				65 D6 66 D7 4C 0D 03 78
+				00 00 0A 0B 80 0F 0A 20
+				00 01 01 07 04 04 0A C0
+				19 64 26 26 80 80 00 00
+				C8 C0 53 5B 80 40 12 01
+				40 40 32 50 00 00 00 00
+				4C 04 6C 07 3C 32 00 00
+				00 00 4C 04 6C 07 1E 05
+				1E 04 0A 04 0A 00 0A 04
+				04 00 0A 78 02 00 7D 00
+				02 00 C8 00 00 00 96 00
+				00 00 00 00 15 0A 00 00
+				00 78 00 96 00 32 00 00
+				00 00 00 00 00 00 00 0D
+				00 00 14 03 0C 0F 0A 00
+				4B 00 00 FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF 00 01 00 00
+				32 00 14 00 14 00 64 00
+				64 00 10 00 10 00 7D 00
+				7D 00 40 66 58 1B 28 00
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				01 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 FF
+				00 FF 14 55 09 0E 3C 0A
+				0F 64 64 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF 00 01 DD
+				00 80 04 1B 00 00 FF FF
+				FF FF FF FF FF FF FF 00
+				C0 80 04 10 0A 18 00 79
+				00 FF FF 01 FF FF FF FF
+				03 03 05 05 05 FF FF 01
+				04 03 2E 00 15 00 00 00
+				05 00 02 28 83 2D 00 14
+				00 01 00 05 00 02 29 03
+				2C 00 14 00 02 00 05 00
+				02 29 83 2B 00 13 00 04
+				00 03 00 01 24 83 29 00
+				13 00 06 00 03 00 01 25
+				03 28 00 12 00 08 00 03
+				00 01 27 82 26 00 11 00
+				0A 00 03 00 01 28 82 25
+				00 11 00 0C 00 03 00 01
+				29 05 05 05 05 05 05 05
+				05 05 05 05 05 05 05 05
+				05 05 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 24 00 06 00 A6
+				00 14 64 00 01 1B 01 00
+				08 08 A0 00 A0 00 50 50
+				1E 03 0C 0C 14 28 04 00
+				00 00 00 00 00 00 00 00
+				00 14 0A 80 07 01 07 07
+				1D 1D 00 00 07 07 01 07
+				07 1D 1D 00 00 07 04 04
+				50 00 07 03 00 2E 22 00
+				05 0B 00 22 02 00 00 04
+				0C 00 00 00 0C 00 00 00
+				01 13 0C 00 00 00 0C 11
+				11 AA 00 00 00 FF FF FF
+				FF FF FF FF FF 51 51 51
+				51 CD 0D 04 83 10 10 10
+				10 61 24 64 01 08 09 0A
+				0B 0C 0D 0E 0F 10 11 12
+				13 14 15 16 17 18 FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF 22
+				23 24 25 26 27 28 29 2A
+				2B 2C 2D 2E 2F 30 31 32
+				33 34 35 36 37 38 39 3A
+				3B 3C 3D 3E 3F FF FF FF
+				FF 00 10 00 10 00 10 00
+				10 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 00 10 00
+				10 00 10 00 10 00 00 FF
+				FF FF FF FF FF FF FF 00
+				00 0F 00 00 00
+			];
+		};
+
+		config_0 { /* For semi */
+			pr_number     = <1920398>;
+			sensor_id = <0x3>;
+			config = [
+				48 49 41 55 30 30 30 30
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 3F 03 1E 05 51 0E 4C
+				04 6C 07 00 40 00 40 00
+				00 00 00 11 1E 1E 05 EB
+				01 9D 00 2D 30 FE 29 FF
+				65 D6 66 D7 4C 0D 03 78
+				00 00 0A 0B 80 0F 0A 20
+				00 01 01 64 26 26 80 80
+				00 00 C8 03 C8 00 0D 14
+				00 FF 0F 01 28 C0 C0 53
+				5B 80 40 12 01 40 40 32
+				50 00 00 00 00 4C 04 6C
+				07 3C 32 00 00 00 00 4C
+				04 6C 07 1E 05 1E 04 0A
+				04 0A 00 0A 04 04 00 0A
+				78 02 00 7D 00 02 00 C8
+				00 00 00 96 00 00 00 00
+				00 15 0A 00 00 00 78 00
+				96 00 32 00 00 00 00 00
+				00 00 00 00 0D 00 00 14
+				03 0C 0F 0A 00 4B 00 00
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF 00 01 00 00 32 00 14
+				00 14 00 64 00 64 00 10
+				00 10 00 7D 00 7D 00 40
+				66 58 1B 28 00 FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF 01 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 FF 00 FF 14
+				55 09 0E 3C 0A 0F 64 64
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF 00 01 DD 00 80 04
+				1B 00 00 FF FF FF FF FF
+				FF FF FF FF 00 C0 80 04
+				10 0A 18 00 79 00 FF FF
+				01 FF FF FF FF 03 03 05
+				05 05 FF FF 01 04 03 2E
+				00 15 00 00 00 05 00 02
+				28 83 2D 00 14 00 01 00
+				05 00 02 29 03 2C 00 14
+				00 02 00 05 00 02 29 83
+				2B 00 13 00 04 00 03 00
+				01 24 83 29 00 13 00 06
+				00 03 00 01 25 03 28 00
+				12 00 08 00 03 00 01 27
+				82 26 00 11 00 0A 00 03
+				00 01 28 82 25 00 11 00
+				0C 00 03 00 01 29 05 05
+				05 05 05 05 05 05 05 05
+				05 05 05 05 05 05 05 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				24 00 06 00 A6 00 14 64
+				00 01 1B 00 00 08 08 A0
+				00 A0 00 50 50 1E 03 0C
+				0C 14 28 04 00 00 00 00
+				00 00 00 00 00 00 14 0A
+				80 07 01 07 07 1D 1D 00
+				00 07 07 01 07 07 1D 1D
+				00 00 07 04 04 50 00 07
+				03 00 2E 22 00 05 0B 00
+				22 02 00 00 04 0C 00 00
+				00 0C 00 00 00 01 13 0C
+				00 00 00 0C 11 11 00 00
+				00 00 FF FF FF FF FF FF
+				FF FF 51 51 51 51 CD 0D
+				04 83 10 10 10 10 61 24
+				64 01 08 09 0A 0B 0C 0D
+				0E 0F 10 11 12 13 14 15
+				16 17 18 FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF 22 23 24 25
+				26 27 28 29 2A 2B 2C 2D
+				2E 2F 30 31 32 33 34 35
+				36 37 38 39 3A 3B 3C 3D
+				3E 3F FF FF FF FF 00 10
+				00 10 00 10 00 10 00 10
+				00 10 00 10 00 10 00 00
+				FF FF FF FF FF FF FF FF
+				00 00 0F
+			];
+		};
+	};
+};
