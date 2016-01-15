@@ -1,0 +1,70 @@
+&soc
+{
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+		pinctrl-0 = <&gpio_key_active>;
+		pinctrl-1 = <&gpio_key_suspend>;
+
+		power_key {
+			label = "power_key";
+			gpios = <&tlmm 40 0x1>;
+			linux,input-type = <1>;
+			linux,code = <116>;
+			gpio-key,wakeup;
+			debounce-interval = <20>;
+		};
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&tlmm 126 0x1>;
+			linux,input-type = <1>;
+			linux,code = <115>;
+			debounce-interval = <20>;
+		};
+
+		vol_down {
+			label = "volume_down";
+			gpios = <&tlmm 121 0x1>;
+			linux,input-type = <1>;
+			linux,code = <114>;
+			debounce-interval = <20>;
+		};
+	};
+
+	keyled {
+		compatible	= "keyled";
+		key_down_delay	= <3000>;
+		keys_down	= <116 114 0>;
+	};
+};
+&tlmm {
+
+	gpio_key {
+		gpio_key_active: gpio_key_active {
+			mux {
+				pins = "gpio40", "gpio121", "gpio126";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio40", "gpio121", "gpio126";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+		gpio_key_suspend: gpio_key_suspend {
+			mux {
+				pins = "gpio40", "gpio121", "gpio126";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio40", "gpio121", "gpio126";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+	};
+};
+
+
