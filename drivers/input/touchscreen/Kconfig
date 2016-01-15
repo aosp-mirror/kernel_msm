@@ -12,6 +12,7 @@ menuconfig INPUT_TOUCHSCREEN
 if INPUT_TOUCHSCREEN
 
 source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
+source "drivers/input/touchscreen/synaptics_dsx_htc/Kconfig"
 
 config OF_TOUCHSCREEN
 	def_tristate INPUT
@@ -1014,6 +1015,14 @@ config SECURE_TOUCH
 	  Say Y here to enable Secure Touch in supported drivers.
 
 	  If unsure, say N.
+
+config TOUCHSCREEN_TOUCH_FW_UPDATE
+        tristate "Touchscreen firmware update"
+        default y
+        help
+          Say Y here to support touch firmware update
+
+          If unsure, say N.
 
 config TOUCHSCREEN_IT7260_I2C
 	tristate "IT7260 Touchscreen Driver"
