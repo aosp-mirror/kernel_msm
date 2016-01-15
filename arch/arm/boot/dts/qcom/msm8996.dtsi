@@ -1365,7 +1365,7 @@
 	};
 
 	pcie1: qcom,pcie@00608000 {
-		compatible = "qcom,pci-msm";
+		compatible = "qcom,pci-msmXX";
 		cell-index = <1>;
 
 		reg = <0x00608000 0x2000>,
@@ -1515,7 +1515,7 @@
 	};
 
 	pcie2: qcom,pcie@00610000 {
-		compatible = "qcom,pci-msm";
+		compatible = "qcom,pci-msmXX";
 		cell-index = <2>;
 
 		reg = <0x00610000 0x2000>,
