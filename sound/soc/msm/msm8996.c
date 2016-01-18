@@ -142,7 +142,8 @@ static const char *const auxpcm_rate_text[] = {"8000", "16000"};
 static const struct soc_enum msm8996_auxpcm_enum[] = {
 		SOC_ENUM_SINGLE_EXT(2, auxpcm_rate_text),
 };
-
+//HTC_AUD_START
+#if 0
 static struct afe_clk_set mi2s_tx_clk = {
 	AFE_API_VERSION_I2S_CONFIG,
 	Q6AFE_LPASS_CLK_ID_TER_MI2S_IBIT,
@@ -151,7 +152,8 @@ static struct afe_clk_set mi2s_tx_clk = {
 	Q6AFE_LPASS_CLK_ROOT_DEFAULT,
 	0,
 };
-
+#endif
+//HTC_AUD_END
 static int pri_mi2s_sample_rate = SAMPLING_RATE_48KHZ;
 static int sec_mi2s_sample_rate = SAMPLING_RATE_48KHZ;
 static int tert_mi2s_sample_rate = SAMPLING_RATE_48KHZ;
@@ -1817,7 +1819,8 @@ static int msm8996_hdmi_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 
 	return 0;
 }
-
+//HTC_AUD_START
+#if 0
 static int msm_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 				     struct snd_pcm_hw_params *params)
 {
@@ -1831,6 +1834,7 @@ static int msm_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	channels->min = channels->max = msm_tert_mi2s_tx_ch;
 	return 0;
 }
+
 
 static int legacy_msm8996_mi2s_snd_startup(struct snd_pcm_substream *substream)
 {
@@ -1868,8 +1872,9 @@ static void legacy_msm8996_mi2s_snd_shutdown(struct snd_pcm_substream *substream
 	if (ret < 0)
 		pr_err("%s: afe lpass clock failed, err:%d\n", __func__, ret);
 }
+#endif
 
-//HTC_AUD_START :FTM BT test
+//FTM BT test
 static int msm_htc_ftm_put(struct snd_kcontrol *kcontrol,
 				    struct snd_ctl_elem_value *ucontrol)
 {
@@ -1948,13 +1953,14 @@ static int msm_htc_tfa_source_put(struct snd_kcontrol *kcontrol,
 {
 	return 0;
 }
-//HTC_AUD_END
 
+#if 0
 static struct snd_soc_ops legacy_msm8996_mi2s_be_ops = {
 	.startup = legacy_msm8996_mi2s_snd_startup,
 	.shutdown = legacy_msm8996_mi2s_snd_shutdown,
 };
-
+#endif
+//HTC_AUD_END
 static int msm_slim_5_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 					    struct snd_pcm_hw_params *params)
 {
@@ -2153,13 +2159,15 @@ static int msm8996_sec_mi2s_snd_startup(struct snd_pcm_substream *substream)
 	return msm8996_mi2s_snd_startup(substream, AFE_PORT_ID_SECONDARY_MI2S_RX,
 					&msm_sec_mi2s_data);
 }
-
+//HTC_AUD_START
+#if 0
 static int msm8996_tert_mi2s_snd_startup(struct snd_pcm_substream *substream)
 {
 	return msm8996_mi2s_snd_startup(substream, AFE_PORT_ID_TERTIARY_MI2S_RX,
 					&msm_tert_mi2s_data);
 }
-
+#endif
+//HTC_AUD_END
 static int msm8996_quat_mi2s_snd_startup(struct snd_pcm_substream *substream)
 {
 	return msm8996_mi2s_snd_startup(substream, AFE_PORT_ID_QUATERNARY_MI2S_RX,
@@ -2214,13 +2222,15 @@ static void msm8996_sec_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 	msm8996_mi2s_snd_shutdown(substream, AFE_PORT_ID_SECONDARY_MI2S_RX,
 					&msm_sec_mi2s_data);
 }
-
+//HTC_AUD_START
+#if 0
 static void msm8996_tert_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 {
 	msm8996_mi2s_snd_shutdown(substream, AFE_PORT_ID_TERTIARY_MI2S_RX,
 					&msm_tert_mi2s_data);
 }
-
+#endif
+//HTC_AUD_END
 static void msm8996_quat_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 {
 	msm8996_mi2s_snd_shutdown(substream, AFE_PORT_ID_QUATERNARY_MI2S_RX,
@@ -2235,10 +2245,14 @@ static struct snd_soc_ops msm8996_sec_mi2s_be_ops = {
 	.startup = msm8996_sec_mi2s_snd_startup,
 	.shutdown = msm8996_sec_mi2s_snd_shutdown,
 };
+//HTC_AUD_START
+#if 0
 static struct snd_soc_ops msm8996_tert_mi2s_be_ops = {
 	.startup = msm8996_tert_mi2s_snd_startup,
 	.shutdown = msm8996_tert_mi2s_snd_shutdown,
 };
+#endif
+//HTC_AUD_END
 static struct snd_soc_ops msm8996_quat_mi2s_be_ops = {
 	.startup = msm8996_quat_mi2s_snd_startup,
 	.shutdown = msm8996_quat_mi2s_snd_shutdown,
@@ -2344,7 +2358,8 @@ static int msm_sec_mi2s_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 
 	return 0;
 }
-
+//HTC_ADU_START
+#if 0
 static int msm_tert_mi2s_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 					    struct snd_pcm_hw_params *params)
 {
@@ -2367,8 +2382,6 @@ static int msm_tert_mi2s_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	return 0;
 }
 
-//HTC_AUD_START
-#if 0
 static int msm_tert_mi2s_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 					    struct snd_pcm_hw_params *params)
 {
@@ -4537,6 +4550,8 @@ static struct snd_soc_dai_link msm8996_common_be_dai_links[] = {
 		.be_hw_params_fixup = msm_be_hw_params_fixup,
 		.ignore_suspend = 1,
 	},
+//HTC_AUD_START
+#if 0
 	{
 		.name = LPASS_BE_TERT_MI2S_TX,
 		.stream_name = "Tertiary MI2S Capture",
@@ -4555,6 +4570,8 @@ static struct snd_soc_dai_link msm8996_common_be_dai_links[] = {
 		.ops = &legacy_msm8996_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},
+#endif
+//HTC_AUD_END
 	{
 		.name = LPASS_BE_PRI_MI2S_RX,
 		.stream_name = "Primary MI2S Playback",
@@ -4630,6 +4647,8 @@ static struct snd_soc_dai_link msm8996_common_be_dai_links[] = {
 		.ops = &msm8996_sec_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},
+//HTC_AUD_START
+#if 0
 	{
 		.name = LPASS_BE_TERT_MI2S_RX,
 		.stream_name = "Tertiary MI2S Playback",
@@ -4648,6 +4667,8 @@ static struct snd_soc_dai_link msm8996_common_be_dai_links[] = {
 		.ops = &msm8996_tert_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},
+#endif
+//HTC_AUD_END
 	{
 		.name = LPASS_BE_QUAT_MI2S_RX,
 		.stream_name = "Quaternary MI2S Playback",

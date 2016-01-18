@@ -2880,7 +2880,7 @@
 				"msm-compr-dsp";
 		asoc-cpu = <&dai_pri_auxpcm>, <&dai_sec_auxpcm>, <&dai_hdmi>, /*<&dai_mi2s>,*/
 				<&dai_pri_mi2s>, <&dai_sec_mi2s>,
-				<&dai_tert_mi2s>, <&dai_quat_mi2s>,
+				/*<&dai_tert_mi2s>, */<&dai_quat_mi2s>,	//HTC_AUD
 				<&sb_0_rx>, <&sb_0_tx>, <&sb_1_rx>, <&sb_1_tx>,
 				<&sb_2_rx>, <&sb_2_tx>, <&sb_3_rx>, <&sb_3_tx>,
 				<&sb_4_rx>, <&sb_4_tx>, <&sb_5_tx>, <&afe_pcm_rx>,
@@ -2890,7 +2890,7 @@
 				<&sb_5_rx>;
 		asoc-cpu-names = "msm-dai-q6-auxpcm.1", "msm-dai-q6-auxpcm.2",
 				"msm-dai-q6-hdmi.8", "msm-dai-q6-mi2s.0",
-				"msm-dai-q6-mi2s.1", "msm-dai-q6-mi2s.2",
+				"msm-dai-q6-mi2s.1", /*"msm-dai-q6-mi2s.2",*/	//HTC_AUD
 				"msm-dai-q6-mi2s.3",
 				"msm-dai-q6-dev.16384", "msm-dai-q6-dev.16385",
 				"msm-dai-q6-dev.16386", "msm-dai-q6-dev.16387",
@@ -3379,8 +3379,8 @@
 			qcom,msm-cpudai-tdm-data-align = <0>;
 		};
 	};
-
-	qcom,msm-dai-mi2s {
+//HTC_AUD_START
+	/*qcom,msm-dai-mi2s {
 		compatible = "qcom,msm-dai-mi2s";
 		dai_tert_mi2s: qcom,msm-dai-q6-mi2s-tert {
 			compatible = "qcom,msm-dai-q6-mi2s";
@@ -3391,8 +3391,8 @@
 			pinctrl-0 = <&tert_mi2s_active &tert_mi2s_sd0_active>;
 			pinctrl-1 = <&tert_mi2s_sleep &tert_mi2s_sd0_sleep>;
 		};
-	};
-
+	};*/
+//HTC_AUD_END
 	qcom,msm-dai-mi2s {
 		compatible = "qcom,msm-dai-mi2s";
 		dai_pri_mi2s: qcom,msm-dai-q6-mi2s-prim {
@@ -3401,7 +3401,7 @@
 			qcom,msm-mi2s-rx-lines = <1>; /* SD0 (1 << 0) */
 			qcom,msm-mi2s-tx-lines = <2>; /* SD1 (1 << 1) */
 			qcom,msm-mi2s-slave = <0>;
-			pinctrl-names = "default", "idle";
+			pinctrl-names = "default", "sleep"; //HTC_AUD
 			/*pinctrl-0 = <&pri_mi2s_active &pri_mi2s_mclk_active &pri_mi2s_sd0_active &pri_mi2s_sd1_active>;
 			pinctrl-1 = <&pri_mi2s_sleep &pri_mi2s_mclk_sleep &pri_mi2s_sd0_sleep &pri_mi2s_sd1_sleep>;*/
 		};
@@ -3412,13 +3412,13 @@
 		dai_sec_mi2s: qcom,msm-dai-q6-mi2s-sec {
 			compatible = "qcom,msm-dai-q6-mi2s";
 			qcom,msm-dai-q6-mi2s-dev-id = <1>;
-			qcom,msm-mi2s-rx-lines = <1>; /* SD0 (1 << 0) | SD1 (1 << 1) */
-			qcom,msm-mi2s-tx-lines = <2>; /* None */
+			qcom,msm-mi2s-rx-lines = <2>; /* SD1 (1 << 1) */
+			qcom,msm-mi2s-tx-lines = <1>; /* SD0 (1 << 0) */
 			qcom,msm-mi2s-slave = <0>;
 			qcom,msm-mi2s-ext-mclk = <0>;
-			pinctrl-names = "default", "idle";
-			pinctrl-0 = <&sec_mi2s_active &sec_mi2s_mclk_active &sec_mi2s_sd0_active &sec_mi2s_sd1_active>;
-			pinctrl-1 = <&sec_mi2s_sleep &sec_mi2s_mclk_sleep &sec_mi2s_sd0_sleep &sec_mi2s_sd1_sleep>;
+			pinctrl-names = "default", "sleep"; //HTC_AUD
+			pinctrl-0 = <&sec_mi2s_active &sec_mi2s_sd0_active>; /* HTC_AUD */
+			pinctrl-1 = <&sec_mi2s_sleep &sec_mi2s_sd0_sleep>; /* HTC_AUD */
 		};
 	};
 
@@ -3427,14 +3427,16 @@
 		dai_quat_mi2s: qcom,msm-dai-q6-mi2s-quat {
 			compatible = "qcom,msm-dai-q6-mi2s";
 			qcom,msm-dai-q6-mi2s-dev-id = <3>;
-			qcom,msm-mi2s-rx-lines = <2>; /* SD0 (1 << 0) | SD1 (1 << 1) | SD2 (1 << 2) */
-			qcom,msm-mi2s-tx-lines = <1>; /* SD2 (1 << 3) */
+//HTC_AUD_START
+			qcom,msm-mi2s-rx-lines = <2>; /* SD1 (1 << 1) */
+			qcom,msm-mi2s-tx-lines = <1>; /* SD0 (0 << 0) */
+//HTC_AUD_END
 			qcom,msm-mi2s-slave = <0>;
-			pinctrl-names = "default", "sleep";
+			pinctrl-names = "default", "sleep"; //HTC_AUD
 			/*pinctrl-0 = <&quat_mi2s_active &quat_mi2s_mclk_active &quat_mi2s_sd0_active &quat_mi2s_sd1_active &quat_mi2s_sd2_active &quat_mi2s_sd3_active>;
 			pinctrl-1 = <&quat_mi2s_sleep &quat_mi2s_mclk_sleep &quat_mi2s_sd0_sleep &quat_mi2s_sd1_sleep &quat_mi2s_sd2_sleep &quat_mi2s_sd3_sleep>;*/
-			pinctrl-0 = <&quat_mi2s_active &quat_mi2s_sd0_active &quat_mi2s_sd1_active>;
-			pinctrl-1 = <&quat_mi2s_sleep &quat_mi2s_sd0_sleep &quat_mi2s_sd1_sleep>;
+			pinctrl-0 = <&quat_mi2s_active &quat_mi2s_sd0_active &quat_mi2s_sd1_active>; /* HTC_AUD */
+			pinctrl-1 = <&quat_mi2s_sleep &quat_mi2s_sd0_sleep &quat_mi2s_sd1_sleep>; /* HTC_AUD */
 		};
 	};
 
