@@ -6,3 +6,8 @@ config HTC_REBOOT_BLOCK
 	default n
 	help
 	  Say Y here if you want the HTC Reboot Block features
+
+config HTC_DEBUG_RESTART_TIMER
+	bool "add a timer in restart notifier chain"
+	default y
+	depends on HTC_DEBUG
