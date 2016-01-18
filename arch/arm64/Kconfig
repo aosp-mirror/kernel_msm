@@ -914,6 +914,8 @@ source "fs/Kconfig"
 
 source "arch/arm64/kvm/Kconfig"
 
+source "arch/arm64/Kconfig.htc"
+
 source "arch/arm64/Kconfig.debug"
 
 source "security/Kconfig"

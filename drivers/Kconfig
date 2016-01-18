@@ -194,6 +194,8 @@ source "drivers/thunderbolt/Kconfig"
 
 source "drivers/sensors/Kconfig"
 
+source "drivers/htc_debug/stability/Kconfig"
+
 source "drivers/firmware/Kconfig"
 
 source "drivers/bif/Kconfig"

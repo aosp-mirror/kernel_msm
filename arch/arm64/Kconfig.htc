@@ -1,0 +1,7 @@
+comment "HTC Debugging Features"
+menuconfig HTC_DEBUG
+	bool "HTC Debugging Feature Switch"
+	default n
+	help
+	  Enable collection of debug features.
+	  This feature is enabled in defconfig.

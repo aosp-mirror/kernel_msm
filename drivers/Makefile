@@ -173,3 +173,6 @@ obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 
 # <t-base drivers
 obj-$(CONFIG_MOBICORE_DRIVER)	+= gud/
+
+# HTC debug
+obj-$(CONFIG_HTC_DEBUG)                += htc_debug/

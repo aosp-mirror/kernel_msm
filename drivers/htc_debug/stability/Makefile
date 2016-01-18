@@ -1,0 +1,2 @@
+ifdef CONFIG_HTC_DEBUG
+endif
