@@ -1740,43 +1740,43 @@
 		};
 
 //HTC_AUD_START
-		quat_mi2s_sd2 {
-			quat_mi2s_sd2_sleep: quat_mi2s_sd2_sleep {
-				quat_mi2s_sd2 {
-					pins = "gpio62";
-					function = "qua_mi2s";
-					drive-strength = <2>;   /* 2 mA */
-					bias-pull-down;         /* PULL DOWN */
-				};
-			};
-			quat_mi2s_sd2_active: quat_mi2s_sd2_active {
-				quat_mi2s_sd2 {
-					pins = "gpio62";
-					function = "qua_mi2s";
-					drive-strength = <8>;   /* 8 mA */
-					bias-disable;           /* NO PULL */
-				};
-			};
-		};
-
-		quat_mi2s_sd3 {
-			quat_mi2s_sd3_sleep: quat_mi2s_sd3_sleep {
-				quat_mi2s_sd3 {
-					pins = "gpio63";
-					function = "qua_mi2s";
-					drive-strength = <2>;   /* 2 mA */
-					bias-pull-down;         /* PULL DOWN */
-				};
-			};
-			quat_mi2s_sd3_active: quat_mi2s_sd3_active {
-				quat_mi2s_sd3 {
-					pins = "gpio63";
-					function = "qua_mi2s";
-					drive-strength = <8>;   /* 8 mA */
-					bias-disable;           /* NO PULL */
-				};
-			};
-		};
+//		quat_mi2s_sd2 {
+//			quat_mi2s_sd2_sleep: quat_mi2s_sd2_sleep {
+//				quat_mi2s_sd2 {
+//					pins = "gpio62";
+//					function = "qua_mi2s";
+//					drive-strength = <2>;   /* 2 mA */
+//					bias-pull-down;         /* PULL DOWN */
+//				};
+//			};
+//			quat_mi2s_sd2_active: quat_mi2s_sd2_active {
+//				quat_mi2s_sd2 {
+//					pins = "gpio62";
+//					function = "qua_mi2s";
+//					drive-strength = <8>;   /* 8 mA */
+//					bias-disable;           /* NO PULL */
+//				};
+//			};
+//		};
+//
+//		quat_mi2s_sd3 {
+//			quat_mi2s_sd3_sleep: quat_mi2s_sd3_sleep {
+//				quat_mi2s_sd3 {
+//					pins = "gpio63";
+//					function = "qua_mi2s";
+//					drive-strength = <2>;   /* 2 mA */
+//					bias-pull-down;         /* PULL DOWN */
+//				};
+//			};
+//			quat_mi2s_sd3_active: quat_mi2s_sd3_active {
+//				quat_mi2s_sd3 {
+//					pins = "gpio63";
+//					function = "qua_mi2s";
+//					drive-strength = <8>;   /* 8 mA */
+//					bias-disable;           /* NO PULL */
+//				};
+//			};
+//		};
 //HTC_AUD_END
 
 		/*tert_tdm {
