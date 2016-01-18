@@ -1,3 +1,8 @@
 #
 # HTC_DEBUG stability Kconfig
 #
+config HTC_REBOOT_BLOCK
+	bool "Store reboot reason / msg ...etc. in IMEM or storage"
+	default n
+	help
+	  Say Y here if you want the HTC Reboot Block features

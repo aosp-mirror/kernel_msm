@@ -241,6 +241,37 @@ static void halt_spmi_pmic_arbiter(void)
 	}
 }
 
+static enum pon_power_off_type htc_restart_cmd_to_type(const char* cmd)
+{
+        int i;
+
+        struct {
+                const char* cmd;
+                enum pon_power_off_type type;
+        } cmd_type[] = {
+                {"power-key-force-hard", PON_POWER_OFF_WARM_RESET},
+                {"force-dog-bark", PON_POWER_OFF_WARM_RESET},
+                        /* OEM RIL fatal: oem-95, 96, 98, 99 */
+                {"oem-93", PON_POWER_OFF_WARM_RESET},
+                {"oem-94", PON_POWER_OFF_WARM_RESET},
+                {"oem-95", PON_POWER_OFF_WARM_RESET},
+                {"oem-96", PON_POWER_OFF_WARM_RESET},
+                {"oem-97", PON_POWER_OFF_WARM_RESET},
+                {"oem-98", PON_POWER_OFF_WARM_RESET},
+                {"oem-99", PON_POWER_OFF_WARM_RESET},
+        };
+
+        if (in_panic)
+                return PON_POWER_OFF_WARM_RESET;
+
+        cmd = cmd ? : "";
+        for (i = 0; i < ARRAY_SIZE(cmd_type); i++)
+                if (!strncmp(cmd, cmd_type[i].cmd, strlen(cmd_type[i].cmd)))
+                        return cmd_type[i].type;
+
+        return PON_POWER_OFF_HARD_RESET; /* default reset type */
+ }
+
 static void msm_restart_prepare(const char *cmd)
 {
 	bool need_warm_reset = false;
@@ -253,7 +284,8 @@ static void msm_restart_prepare(const char *cmd)
 	 */
 
 	set_dload_mode(download_mode &&
-			(in_panic || restart_mode == RESTART_DLOAD));
+			(in_panic || restart_mode == RESTART_DLOAD ||
+				htc_restart_cmd_to_type(cmd) == PON_POWER_OFF_WARM_RESET));
 #endif
 
 	pr_notice("%s: restart by command: [%s]\r\n", __func__, (cmd) ? cmd : "");
@@ -264,7 +296,7 @@ static void msm_restart_prepare(const char *cmd)
 			need_warm_reset = true;
 	} else {
 		need_warm_reset = (get_dload_mode() ||
-				(cmd != NULL && cmd[0] != '\0'));
+				(htc_restart_cmd_to_type(cmd) == PON_POWER_OFF_WARM_RESET));
 	}
 
 	/* Hard reset the PMIC unless memory contents must be maintained. */
