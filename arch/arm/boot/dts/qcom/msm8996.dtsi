@@ -1776,6 +1776,12 @@
 			compatible = "qcom,msm-imem-pil";
 			reg = <0x94c 200>;
 		};
+
+		restart_info@a94 {
+			compatible = "htc,msm-imem-restart_info";
+			reg = <0xa94 100>;
+			info_size = <100>;
+		};
 	};
 
 	jtag_fuse: jtagfuse@7602c {
