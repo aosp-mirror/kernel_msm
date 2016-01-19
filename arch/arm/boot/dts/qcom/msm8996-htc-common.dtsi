@@ -1,3 +1,30 @@
 /*
  * msm8996-htc-common: common configs of HTC msm8996 projects
  */
+
+&dfps_data_mem {
+	/* qct original reg = <0 0x83400000 0 0x1000>; */
+	reg = <0 0xc0000000 0 0x1000>;
+};
+
+&cont_splash_mem {
+	/* qct original reg = <0 0x83401000 0 0x23ff000>; */
+	reg = <0 0xc0001000 0 0x31ff000>;
+};
+
+/ {
+
+        reserved-memory {
+		htc_reserve_region: htc_reserve_region@0 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x83600000 0 0x00A00000>;
+		};
+
+		ramoops_mem: ramoops_region@0 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x83500000 0 0x00100000>;
+		};
+	};
+};
