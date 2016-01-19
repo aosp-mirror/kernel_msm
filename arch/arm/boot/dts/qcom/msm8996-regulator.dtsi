@@ -153,9 +153,9 @@
 	rpm-regulator-ldoa6 {
 		status = "okay";
 		pm8994_l6: regulator-l6 {
-			regulator-min-microvolt = <1200000>;
-			regulator-max-microvolt = <1200000>;
-			qcom,init-voltage = <1200000>;
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			qcom,init-voltage = <1800000>;
 			status = "okay";
 		};
 	};
