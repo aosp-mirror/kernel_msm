@@ -40,4 +40,11 @@ config TSL2x7x
 	 tmd2672, tsl2772, tmd2772 devices.
 	 Provides iio_events and direct access via sysfs.
 
+config CM3391
+    tristate "Capella RGB sensor"
+    depends on I2C
+    help
+     Provides driver for the Capella's CM3391 device.
+     This driver supports the iio interface to get the RGB, W, UV, IR intensity.
+
 endmenu
