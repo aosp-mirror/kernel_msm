@@ -639,6 +639,7 @@
 			qcom,headroom-sense-ch1-enabled;
 			qcom,power-detect-enabled;
 			qcom,pmic-revid = <&pmi8994_revid>;
+			qcom,gpio-flash-strobe = <&tlmm 22 0x00>;
 
 			pmi8994_flash0: qcom,flash_0 {
 				label = "flash";
@@ -680,6 +681,16 @@
 				qcom,id = <1>;
 				qcom,current = <120>;
 				qcom,max-current = <200>;
+			};
+
+			pmi8994_flashlight: qcom,flashlight {
+				label = "dual_leds";
+				qcom,led-name = "flashlight";
+				qcom,default-led-trigger =
+						"torch0_trigger";
+				qcom,id = <3>;
+				qcom,current = <120>;
+				qcom,max-current = <750>;
 			};
 
 			pmi8994_switch: qcom,switch {
