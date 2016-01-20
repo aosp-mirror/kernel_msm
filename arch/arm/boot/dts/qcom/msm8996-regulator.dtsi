@@ -157,6 +157,7 @@
 			regulator-max-microvolt = <1800000>;
 			qcom,init-voltage = <1800000>;
 			status = "okay";
+			regulator-always-on;
 		};
 	};
 
@@ -279,10 +280,11 @@
 	rpm-regulator-ldoa19 {
 		status = "okay";
 		pm8994_l19: regulator-l19 {
-			regulator-min-microvolt = <3000000>;
-			regulator-max-microvolt = <3000000>;
-			qcom,init-voltage = <3000000>;
+			regulator-min-microvolt = <2850000>;
+			regulator-max-microvolt = <2850000>;
+			qcom,init-voltage = <2850000>;
 			status = "okay";
+			regulator-always-on;
 		};
 	};
 
@@ -438,6 +440,7 @@
 		status = "okay";
 		pm8994_lvs2: regulator-lvs2 {
 			status = "okay";
+			regulator-always-on;
 		};
 	};
 
