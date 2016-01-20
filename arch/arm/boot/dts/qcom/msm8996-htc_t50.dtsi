@@ -75,3 +75,14 @@
                 };
 	};
 };
+
+&pmi8994_haptics {
+	status = "okay";
+	qcom,wave-play-rate-us = <4255>;
+	qcom,actuator-type = "lra";
+	qcom,wave-shape = "sine";
+	qcom,vmax-mv = <2828>;
+	qcom,lra-high-z = "opt1";
+	qcom,lra-auto-res-mode = "qwd";
+	qcom,lra-res-cal-period = <4>;
+};
