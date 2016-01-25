@@ -47,21 +47,6 @@ DEFINE_PER_CPU(struct tick_sched, tick_cpu_sched);
  */
 static ktime_t last_jiffies_update;
 
-u64 jiffy_to_ktime_ns(u64 *now, u64 *jiffy_ktime_ns)
-{
-	u64 cur_jiffies;
-	unsigned long seq;
-
-	do {
-		seq = read_seqbegin(&jiffies_lock);
-		*now = ktime_get_ns();
-		*jiffy_ktime_ns = ktime_to_ns(last_jiffies_update);
-		cur_jiffies = get_jiffies_64();
-	} while (read_seqretry(&jiffies_lock, seq));
-
-	return cur_jiffies;
-}
-
 struct tick_sched *tick_get_tick_sched(int cpu)
 {
 	return &per_cpu(tick_cpu_sched, cpu);

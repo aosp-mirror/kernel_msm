@@ -357,8 +357,7 @@ static int report_latency(struct trace_array *tr, cycle_t delta)
 }
 
 static void
-probe_wakeup_migrate_task(void *ignore, struct task_struct *task, int cpu,
-							unsigned int load)
+probe_wakeup_migrate_task(void *ignore, struct task_struct *task, int cpu)
 {
 	if (task != wakeup_task)
 		return;

@@ -998,10 +998,8 @@ static void update_cpu_freq(int cpu)
 			&& (cpus[cpu].limited_max_freq
 				>= get_core_max_freq(cpu))) {
 			cpumask_xor(&throttling_mask, &mask, &throttling_mask);
-			set_cpu_throttled(&mask, false);
 		} else if (!cpumask_intersects(&mask, &throttling_mask)) {
 			cpumask_or(&throttling_mask, &mask, &throttling_mask);
-			set_cpu_throttled(&mask, true);
 		}
 		trace_thermal_pre_frequency_mit(cpu,
 			cpus[cpu].limited_max_freq,

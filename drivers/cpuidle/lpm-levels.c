@@ -687,8 +687,6 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 	/* Notify cluster enter event after successfully config completion */
 	cluster_notify(cluster, level, true);
 
-	sched_set_cluster_dstate(&cluster->child_cpus, idx, 0, 0);
-
 	cluster->last_level = idx;
 	return 0;
 
@@ -825,8 +823,6 @@ static void cluster_unprepare(struct lpm_cluster *cluster,
 		BUG_ON(ret);
 
 	}
-	sched_set_cluster_dstate(&cluster->child_cpus, 0, 0, 0);
-
 	cluster_notify(cluster, &cluster->levels[last_level], false);
 	cluster_unprepare(cluster->parent, &cluster->child_cpus,
 			last_level, from_idle, end_time);
@@ -1176,8 +1172,6 @@ static int lpm_cpuidle_enter(struct cpuidle_device *dev,
 	level = &cluster->cpu->levels[idx];
 #endif
 	pwr_params = &cluster->cpu->levels[idx].pwr;
-	sched_set_cpu_cstate(smp_processor_id(), idx + 1,
-		pwr_params->energy_overhead, pwr_params->latency_us);
 
 	cpu_prepare(cluster, idx, true);
 	cluster_prepare(cluster, cpumask, idx, true, ktime_to_ns(ktime_get()));
@@ -1217,6 +1211,7 @@ exit:
 	cpu_unprepare(cluster, idx, true);
 
 	sched_set_cpu_cstate(smp_processor_id(), 0, 0, 0);
+
 	trace_cpu_idle_exit(idx, success);
 	end_time = ktime_to_ns(ktime_get()) - start_time;
 	dev->last_residency = do_div(end_time, 1000);
