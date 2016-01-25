@@ -49,7 +49,7 @@ u64 idmap_t0sz = TCR_T0SZ(VA_BITS);
  * Empty_zero_page is a special page that is used for zero-initialized data
  * and COW.
  */
-struct page *empty_zero_page;
+unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)] __page_aligned_bss;
 EXPORT_SYMBOL(empty_zero_page);
 
 static bool __init dma_overlap(phys_addr_t start, phys_addr_t end);
@@ -588,19 +588,12 @@ void fixup_init(void)
  */
 void __init paging_init(void)
 {
-	void *zero_page;
-
 	map_mem();
 	dma_contiguous_remap();
 	remap_pages();
 	fixup_executable();
 
-	/* allocate the zero page. */
-	zero_page = early_alloc(PAGE_SIZE);
-
 	bootmem_init();
-
-	empty_zero_page = virt_to_page(zero_page);
 
 	/*
 	 * TTBR0 is only used for the identity mapping at this stage. Make it
