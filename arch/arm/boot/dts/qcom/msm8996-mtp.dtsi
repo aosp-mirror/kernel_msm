@@ -12,7 +12,7 @@
 
 #include "msm8996-pinctrl.dtsi"
 #include "msm8996-camera-sensor-mtp.dtsi"
-/*#include "msm8996-wsa881x.dtsi"*/ /* HTC_AUD */
+#include "msm8996-wsa881x.dtsi"
 
 / {
 	bluetooth: bt_qca6174 {
@@ -516,18 +516,16 @@
 		status = "okay";
 	};
 
-//HTC_AUD_START
-//	mpp@a300 { /* MPP 4 */
-//		/* HDMI_5v_vreg regulator enable */
-//		qcom,mode = <1>;		/* Digital output */
-//		qcom,output-type = <0>;		/* CMOS logic */
-//		qcom,vin-sel = <2>;		/* S4 1.8V */
-//		qcom,src-sel = <0>;		/* Constant */
-//		qcom,master-en = <1>;		/* Enable GPIO */
-//		qcom,invert = <0>;
-//		status = "okay";
-//	};
-//HTC_AUD_END
+	mpp@a300 { /* MPP 4 */
+		/* HDMI_5v_vreg regulator enable */
+		qcom,mode = <1>;		/* Digital output */
+		qcom,output-type = <0>;		/* CMOS logic */
+		qcom,vin-sel = <2>;		/* S4 1.8V */
+		qcom,src-sel = <0>;		/* Constant */
+		qcom,master-en = <1>;		/* Enable GPIO */
+		qcom,invert = <0>;
+		status = "okay";
+	};
 };
 
 &pmi8994_gpios {
@@ -712,13 +710,11 @@
 		qcom,hph-en1-gpio = <&pmi8994_gpios 10 0>;
 		qcom,hph-en0-gpio = <&pm8994_gpios 13 0>;
 		qcom,us-euro-gpios = <&pm8994_mpps 2 0>;
-//HTC_AUD_START
-		/*qcom,wsa-max-devs = <2>;
+		qcom,wsa-max-devs = <2>;
 		qcom,wsa-devs = <&wsa881x_211>, <&wsa881x_212>,
 				<&wsa881x_213>, <&wsa881x_214>;
 		qcom,wsa-aux-dev-prefix = "SpkrLeft", "SpkrRight",
-					  "SpkrLeft", "SpkrRight";*/
-//HTC_AUD_END
+					  "SpkrLeft", "SpkrRight";
 	};
 };
 

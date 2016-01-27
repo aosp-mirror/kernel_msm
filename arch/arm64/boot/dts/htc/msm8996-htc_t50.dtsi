@@ -11,17 +11,15 @@
  */
 
 
-#include "msm8996-cdp.dtsi"
 #include "msm8996-htc-common.dtsi"
 #include "dsi-panel-t50-hx8396c2.dtsi"
 #include "dsi-panel-t50.dtsi"
 #include "msm8996-touch-t50.dtsi"
-#include "msm8996-audio-pme.dtsi" //HTC_AUD
 #include "msm8996-key-t50.dtsi"
 
 / {
 	model = "HTC Corporation. MSM8996 v3 + PMI8996 T50";
-	compatible = "qcom,msm8996-cdp", "qcom,msm8996", "qcom,cdp";
+	compatible = "qcom,msm8996-mtp", "qcom,msm8996", "qcom,mtp";
 };
 
 &mdss_dsi0 {

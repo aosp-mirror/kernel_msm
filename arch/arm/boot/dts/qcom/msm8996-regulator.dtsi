@@ -153,11 +153,10 @@
 	rpm-regulator-ldoa6 {
 		status = "okay";
 		pm8994_l6: regulator-l6 {
-			regulator-min-microvolt = <1800000>;
-			regulator-max-microvolt = <1800000>;
-			qcom,init-voltage = <1800000>;
+			regulator-min-microvolt = <1200000>;
+			regulator-max-microvolt = <1200000>;
+			qcom,init-voltage = <1200000>;
 			status = "okay";
-			regulator-always-on;
 		};
 	};
 
@@ -275,16 +274,29 @@
 			qcom,init-voltage = <2700000>;
 			status = "okay";
 		};
+
+		pm8994_l18_pin_ctrl: regulator-l18 {
+			compatible = "qcom,rpm-smd-regulator";
+			regulator-name = "pm8994_l18_pin_ctrl";
+			qcom,set = <3>;
+			regulator-min-microvolt = <2700000>;
+			regulator-max-microvolt = <2900000>;
+			qcom,init-voltage = <2700000>;
+			/*
+			 * LDO 18 output is enabled when PM8994 GPIO 11 (HW_EN2)
+			 * is driven high.
+			 */
+			qcom,enable-with-pin-ctrl = <0 4>;
+		};
 	};
 
 	rpm-regulator-ldoa19 {
 		status = "okay";
 		pm8994_l19: regulator-l19 {
-			regulator-min-microvolt = <2850000>;
-			regulator-max-microvolt = <2850000>;
-			qcom,init-voltage = <2850000>;
+			regulator-min-microvolt = <3000000>;
+			regulator-max-microvolt = <3000000>;
+			qcom,init-voltage = <3000000>;
 			status = "okay";
-			regulator-always-on;
 		};
 	};
 
@@ -400,12 +412,10 @@
 	rpm-regulator-ldoa29 {
 		status = "okay";
 		pm8994_l29: regulator-l29 {
-			regulator-min-microvolt = <3300000>;//HTC_AUD
-			regulator-max-microvolt = <3300000>;//HTC_AUD
-			qcom,init-voltage = <3300000>;//HTC_AUD
+			regulator-min-microvolt = <2800000>;
+			regulator-max-microvolt = <2800000>;
+			qcom,init-voltage = <2800000>;
 			status = "okay";
-			regulator-boot-on;//HTC_AUD
-			regulator-always-on;//HTC_AUD
 		};
 	};
 
@@ -440,7 +450,6 @@
 		status = "okay";
 		pm8994_lvs2: regulator-lvs2 {
 			status = "okay";
-			regulator-always-on;
 		};
 	};
 
@@ -1434,7 +1443,7 @@
 		regulator-name = "rome_vreg";
 		startup-delay-us = <4000>;
 		enable-active-high;
-		gpio = <&tlmm 75 0>;
+		gpio = <&pm8994_gpios 9 0>;
 	};
 };
 

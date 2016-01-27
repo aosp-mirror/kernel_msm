@@ -79,12 +79,6 @@ dtb-$(CONFIG_ARCH_MSM8996) += msm8996-v2-pmi8994-cdp.dtb \
 dtb-$(CONFIG_ARCH_MSMCOBALT) += msmcobalt-sim.dtb \
 	msmcobalt-rumi.dtb
 
-# HTC msm8996 device dtbs
-dtb-$(CONFIG_ARCH_MSM8996) += \
-	msm8996-v3-htc_t50-xc.dtb \
-	msm8996-v3-htc_t50-xb.dtb \
-	msm8996-v3-htc_t50-xa.dtb \
-
 dtb-$(CONFIG_ARCH_MDM9640) += mdm9640-sim.dtb \
 	mdm9640-rumi.dtb \
 	mdm9640-emmc-cdp.dtb \

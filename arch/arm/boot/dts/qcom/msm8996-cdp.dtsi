@@ -12,7 +12,7 @@
 
 #include "msm8996-pinctrl.dtsi"
 #include "msm8996-camera-sensor-cdp.dtsi"
-/*#include "msm8996-wsa881x.dtsi"*/ /* HTC_AUD */
+#include "msm8996-wsa881x.dtsi"
 
 / {
 	bluetooth: bt_qca6174 {
@@ -109,6 +109,7 @@
 };
 
 &pmi8994_charger {
+	qcom,charging-disabled;
 };
 
 &pm8994_vadc {
@@ -574,19 +575,79 @@
 };
 
 &soc {
+	i2c@75ba000 {
+		synaptics@20 {
+			compatible = "synaptics,dsx";
+			reg = <0x20>;
+			interrupt-parent = <&tlmm>;
+			interrupts = <125 0x2008>;
+			vdd-supply = <&pm8994_l14>;
+			avdd-supply = <&pm8994_l22>;
+			pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
+			pinctrl-0 = <&ts_active>;
+			pinctrl-1 = <&ts_suspend>;
+			synaptics,display-coords = <0 0 1599 2559>;
+			synaptics,panel-coords = <0 0 1599 2703>;
+			synaptics,reset-gpio = <&tlmm 89 0x00>;
+			synaptics,irq-gpio = <&tlmm 125 0x2008>;
+			synaptics,disable-gpios;
+			synaptics,fw-name = "PR1702898-s3528t_00350002.img";
+		};
+	};
+
+	gen-vkeys {
+		compatible = "qcom,gen-vkeys";
+		label = "synaptics_dsx";
+		qcom,disp-maxx = <1599>;
+		qcom,disp-maxy = <2559>;
+		qcom,panel-maxx = <1599>;
+		qcom,panel-maxy = <2703>;
+		qcom,key-codes = <158 139 102 217>;
+	};
+
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&pm8994_gpios 2 0x1>;
+			linux,input-type = <1>;
+			linux,code = <115>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+
+		cam_snapshot {
+			label = "cam_snapshot";
+			gpios = <&pm8994_gpios 4 0x1>;
+			linux,input-type = <1>;
+			linux,code = <766>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+
+		cam_focus {
+			label = "cam_focus";
+			gpios = <&pm8994_gpios 5 0x1>;
+			linux,input-type = <1>;
+			linux,code = <528>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+	};
+
 	sound-9335 {
 		qcom,model = "msm8996-tasha-cdp-snd-card";
 		qcom,hdmi-audio-rx;
 		asoc-codec = <&stub_codec>, <&hdmi_audio>;
 		asoc-codec-names = "msm-stub-codec.1", "msm-hdmi-audio-codec-rx";
-//HTC_AUD_START
-		/*qcom,us-euro-gpios = <&pm8994_mpps 2 0>;
+		qcom,us-euro-gpios = <&pm8994_mpps 2 0>;
 		qcom,wsa-max-devs = <2>;
 		qcom,wsa-devs = <&wsa881x_211>, <&wsa881x_212>,
 				<&wsa881x_213>, <&wsa881x_214>;
 		qcom,wsa-aux-dev-prefix = "SpkrLeft", "SpkrRight",
-					  "SpkrLeft", "SpkrRight";*/
-//HTC_AUD_END
+					  "SpkrLeft", "SpkrRight";
 	};
 };
 
@@ -600,18 +661,16 @@
 		status = "okay";
 	};
 
-//HTC_AUD_START
-//	mpp@a300 { /* MPP 4 */
-//		/* HDMI_5v_vreg regulator enable */
-//		qcom,mode = <1>;		/* Digital output */
-//		qcom,output-type = <0>;		/* CMOS logic */
-//		qcom,vin-sel = <2>;		/* S4 1.8V */
-//		qcom,src-sel = <0>;		/* Constant */
-//		qcom,master-en = <1>;		/* Enable GPIO */
-//		qcom,invert = <0>;
-//		status = "okay";
-//	};
-//HTC_AUD_END
+	mpp@a300 { /* MPP 4 */
+		/* HDMI_5v_vreg regulator enable */
+		qcom,mode = <1>;		/* Digital output */
+		qcom,output-type = <0>;		/* CMOS logic */
+		qcom,vin-sel = <2>;		/* S4 1.8V */
+		qcom,src-sel = <0>;		/* Constant */
+		qcom,master-en = <1>;		/* Enable GPIO */
+		qcom,invert = <0>;
+		status = "okay";
+	};
 
 	mpp@a400 { /* MPP 5 */
 		qcom,mode = <1>;		/* Digital output */
