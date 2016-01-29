@@ -28,3 +28,13 @@
 		};
 	};
 };
+
+&soc {
+	qcom,msm-imem@66bf000 {
+		restart_info@a94 {
+			compatible = "htc,msm-imem-restart_info";
+			reg = <0xa94 100>;
+			info_size = <100>;
+		};
+	};
+};
