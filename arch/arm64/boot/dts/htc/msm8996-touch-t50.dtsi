@@ -88,22 +88,24 @@
 	};
 };
 
-&pm8994_l18 {
-	regulator-min-microvolt = <1800000>;
-	regulator-max-microvolt = <1900000>;
-	qcom,init-voltage = <1800000>;
-	status = "okay";
-	regulator-boot-on;
-	regulator-always-on;
+&blsp1_uart3_active {
+	mux {
+		pins = "gpio45", "gpio46";
+	};
+
+	config {
+		pins = "gpio45", "gpio46";
+	};
 };
 
-&pm8994_l22 {
-	regulator-min-microvolt = <3300000>;
-	regulator-max-microvolt = <3300000>;
-	qcom,init-voltage = <3300000>;
-	status = "okay";
-	regulator-boot-on;
-	regulator-always-on;
+&blsp1_uart3_sleep {
+	mux {
+		pins = "gpio45", "gpio46";
+	};
+
+	config {
+		pins = "gpio45", "gpio46";
+	};
 };
 
 / {
@@ -134,6 +136,10 @@
 		pinctrl-0 = <&i2c_3_active>;
 		pinctrl-1 = <&i2c_3_sleep>;
 	};
+};
+
+&i2c_12 {
+	/delete-node/ synaptics@20;
 };
 
 &i2c_3 {
