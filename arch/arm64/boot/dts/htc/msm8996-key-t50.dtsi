@@ -1,5 +1,6 @@
-&soc
-{
+&soc {
+	/delete-node/ gen-vkeys;
+
 	gpio_keys {
 		compatible = "gpio-keys";
 		input-name = "gpio-keys";
@@ -22,6 +23,8 @@
 			linux,input-type = <1>;
 			linux,code = <115>;
 			debounce-interval = <20>;
+
+			/delete-property/ gpio-key,wakeup;
 		};
 
 		vol_down {
@@ -31,6 +34,9 @@
 			linux,code = <114>;
 			debounce-interval = <20>;
 		};
+
+		/delete-node/ cam_snapshot;
+		/delete-node/ cam_focus;
 	};
 
 	keyled {
@@ -39,8 +45,8 @@
 		keys_down	= <116 114 0>;
 	};
 };
-&tlmm {
 
+&tlmm {
 	gpio_key {
 		gpio_key_active: gpio_key_active {
 			mux {
