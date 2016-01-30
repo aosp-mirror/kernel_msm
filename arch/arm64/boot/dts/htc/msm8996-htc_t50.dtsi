@@ -84,3 +84,11 @@
 	qcom,lra-auto-res-mode = "qwd";
 	qcom,lra-res-cal-period = <4>;
 };
+
+&pcie1{
+	compatible = "qcom,pci-msm-na";
+};
+
+&pcie2{
+	compatible = "qcom,pci-msm-na";
+};
