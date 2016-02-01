@@ -1,0 +1,385 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/*
+ * msm8996-audio-t50: audio path setting
+ */
+
+&pmi8994_gpios {
+	//TFA9888_INT
+	gpio@c200 {
+		reg = <0xc200 0x100>;
+		qcom,pin-num = <3>;
+		qcom,mode = <0>;
+		qcom,pull = <5>;
+		status = "okay";
+	};
+
+	//TFA9888_ID_SEL
+	gpio@c400 {
+		qcom,mode = <0>;		/* Digital input */
+		qcom,vin-sel = <2>;		/* 1.8 */
+		qcom,src-sel = <0>;		/* GPIO */
+		qcom,master-en = <1>;	/* Enable GPIO */
+		qcom,pull = <0>;
+		status = "okay";
+	};
+};
+
+
+/delete-node/ &tert_mi2s_sleep;
+/delete-node/ &tert_mi2s_active;
+/delete-node/ &tert_mi2s_sd0_sleep;
+/delete-node/ &tert_mi2s_sd0_active;
+/delete-node/ &tert_tdm_sleep;
+/delete-node/ &tert_tdm_active;
+/delete-node/ &tert_tdm_din_sleep;
+/delete-node/ &tert_tdm_din_active;
+/delete-node/ &quat_mi2s_sleep;
+/delete-node/ &quat_mi2s_active;
+/delete-node/ &quat_mi2s_sd0_sleep;
+/delete-node/ &quat_mi2s_sd0_active;
+/delete-node/ &dai_mi2s;
+/delete-node/ &dai_mi2s_quat;
+
+&soc {
+	tlmm: pinctrl@01010000 {
+		pri_aux_pcm {
+			pri_aux_ftm: pri_aux_ftm {
+				mux {
+					pins = "gpio65", "gpio66", "gpio67";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio65", "gpio66", "gpio67";
+					drive-strength = <2>;   /* 2 mA */
+					bias-disable;           /* NO PULL */
+				};
+			};
+		};
+
+		pri_aux_pcm_dout {
+			pri_aux_dout_ftm: pri_aux_dout_ftm {
+				mux {
+					pins = "gpio68";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio68";
+					drive-strength = <2>;	/* 2 mA */
+					bias-disable;			/* NO PULL */
+				};
+			};
+		};
+
+		prim_mi2s {
+			pri_mi2s_sleep: pri_mi2s_sleep {
+				prim_mi2s {
+					pins = "gpio65", "gpio66";
+					function = "pri_mi2s";
+					drive-strength = <2>;	/* 2 mA */
+					bias-pull-down; 		/* PULL DOWN */
+				};
+			};
+			pri_mi2s_active: pri_mi2s_active {
+				prim_mi2s {
+					pins = "gpio65", "gpio66";
+					function = "pri_mi2s";
+					drive-strength = <8>;	/* 8 mA */
+					bias-disable;			/* NO PULL */
+					output-high;
+				};
+			};
+		};
+
+		prim_mi2s_sd0 {
+			pri_mi2s_sd0_sleep: pri_mi2s_sd0_sleep {
+				prim_mi2s_sd0 {
+					pins = "gpio67";
+					function = "pri_mi2s";
+					drive-strength = <2>;	/* 2 mA */
+					bias-pull-down; 		/* PULL DOWN */
+				};
+			};
+			pri_mi2s_sd0_active: pri_mi2s_sd0_active {
+				prim_mi2s_sd0 {
+					pins = "gpio67";
+					function = "pri_mi2s";
+					drive-strength = <8>;	/* 8 mA */
+					bias-disable;			/* NO PULL */
+				};
+			};
+		};
+
+		prim_mi2s_sd1 {
+			pri_mi2s_sd1_sleep: pri_mi2s_sd1_sleep {
+				prim_mi2s_sd1 {
+					pins = "gpio68";
+					function = "pri_mi2s";
+					drive-strength = <2>;	/* 2 mA */
+					bias-pull-down; 		/* PULL DOWN */
+				};
+			};
+			pri_mi2s_sd1_active: pri_mi2s_sd1_active {
+				prim_mi2s_sd1 {
+					pins = "gpio68";
+					function = "pri_mi2s";
+					drive-strength = <8>;	/* 8 mA */
+					bias-disable;			/* NO PULL */
+				};
+			};
+		};
+
+		sec_mi2s {
+			sec_mi2s_sleep: sec_mi2s_sleep {
+				sec_mi2s {
+					pins = "gpio80", "gpio81";
+					function = "sec_mi2s";
+					drive-strength = <2>;	/* 2 mA */
+					bias-pull-down; 		/* PULL DOWN */
+				};
+			};
+			sec_mi2s_active: sec_mi2s_active {
+				sec_mi2s {
+					pins = "gpio80", "gpio81";
+					function = "sec_mi2s";
+					drive-strength = <8>;	/* 8 mA */
+					bias-pull-down; 		/* PULL DOWN */
+				};
+			};
+		};
+
+		sec_mi2s_sd0 {
+			sec_mi2s_sd0_sleep: sec_mi2s_sd0_sleep {
+				sec_mi2s_sd0 {
+					pins = "gpio82";
+					function = "sec_mi2s";
+					drive-strength = <2>;	/* 2 mA */
+					bias-pull-down; 		/* PULL DOWN */
+				};
+			};
+			sec_mi2s_sd0_active: sec_mi2s_sd0_active {
+				sec_mi2s_sd0 {
+					pins = "gpio82";
+					function = "sec_mi2s";
+					drive-strength = <8>;	/* 8 mA */
+					bias-pull-down; 		/* PULL DOWN */
+				};
+			};
+		};
+
+		quat_mi2s {
+			quat_mi2s_sleep: quat_mi2s_sleep {
+				quat_mi2s {
+					pins = "gpio58", "gpio59";
+					function = "qua_mi2s";
+					drive-strength = <2>;   /* 2 mA */
+					bias-pull-down;         /* PULL DOWN */
+				};
+			};
+			quat_mi2s_active: quat_mi2s_active {
+				quat_mi2s {
+					pins = "gpio58", "gpio59";
+					function = "qua_mi2s";
+					drive-strength = <8>;   /* 8 mA */
+					bias-disable;           /* NO PULL */
+					output-high;
+				};
+			};
+		};
+
+		quat_mi2s_sd0 {
+			quat_mi2s_sd0_sleep: quat_mi2s_sd0_sleep {
+				quat_mi2s_sd0 {
+					pins = "gpio60";
+					function = "qua_mi2s";
+					drive-strength = <2>;   /* 2 mA */
+					bias-pull-down;         /* PULL DOWN */
+				};
+			};
+			quat_mi2s_sd0_active: quat_mi2s_sd0_active {
+				quat_mi2s_sd0 {
+					pins = "gpio60";
+					function = "qua_mi2s";
+					drive-strength = <8>;   /* 8 mA */
+					bias-disable;           /* NO PULL */
+				};
+			};
+		};
+
+		quat_mi2s_sd1 {
+			quat_mi2s_sd1_sleep: quat_mi2s_sd1_sleep {
+				quat_mi2s_sd1 {
+					pins = "gpio61";
+					function = "qua_mi2s";
+					drive-strength = <2>;   /* 2 mA */
+					bias-pull-down;         /* PULL DOWN */
+				};
+			};
+			quat_mi2s_sd1_active: quat_mi2s_sd1_active {
+				quat_mi2s_sd1 {
+					pins = "gpio61";
+					function = "qua_mi2s";
+					drive-strength = <8>;   /* 8 mA */
+					bias-disable;           /* NO PULL */
+				};
+			};
+		};
+	};
+
+	slim_msm: slim@91c0000 {
+		tasha_codec {
+			qcom,cdc-micbias1-mv = <2200>;
+			qcom,cdc-micbias3-mv = <2200>;
+			qcom,cdc-micbias4-mv = <2200>;
+			/delete-node/ swr_master; /*Don't enable WSA*/
+		};
+	};
+
+	sound-9335 {
+		qcom,model = "msm8996-tasha-t50-snd-card";
+		compatible = "qcom,msm8996-asoc-snd-tasha";
+
+		qcom,audio-routing =
+			"AIF4 VI", "MCLK",
+			"RX_BIAS", "MCLK",
+			"AMIC1", "MIC BIAS1",
+			"MIC BIAS1", "Handset Mic",
+			"AMIC2", "MIC BIAS2",
+			"MIC BIAS2", "Headset Mic",
+			"AMIC3", "MIC BIAS3",
+			"MIC BIAS3", "Handset Mic",
+			"AMIC4", "MIC BIAS4",
+			"MIC BIAS4", "Handset Mic";
+
+		qcom,msm-mbhc-hphl-swh = <1>;	//1:NO, 0:NC
+		qcom,msm-mbhc-gnd-swh = <1>;	//1:NO, 0:NC
+		qcom,audio-1v8-hph-en-gpio = <&pm8994_mpps 6 0>;
+		qcom,tfa9888-reset-gpio = <&pm8994_gpios 4 0>;
+		qcom,right-speaker-id-gpio = <&pmi8994_gpios 5 0>;
+
+		ftm-btpcm-clock = <&tlmm 65 0>;
+		ftm-btpcm-sync	= <&tlmm 66 0>;
+		ftm-btpcm-dout	= <&tlmm 67 0>;
+		ftm-btpcm-din	= <&tlmm 68 0>;
+		htc-tfa9888 = <1>;
+		mbhc-swap-detect = <0>;
+
+		asoc-cpu = <&dai_pri_auxpcm>, <&dai_sec_auxpcm>, <&dai_hdmi>, /*<&dai_mi2s>,*/
+				<&dai_pri_mi2s>, <&dai_sec_mi2s>,
+				/*<&dai_tert_mi2s>,*/ <&dai_quat_mi2s>,
+				<&sb_0_rx>, <&sb_0_tx>, <&sb_1_rx>, <&sb_1_tx>,
+				<&sb_2_rx>, <&sb_2_tx>, <&sb_3_rx>, <&sb_3_tx>,
+				<&sb_4_rx>, <&sb_4_tx>, <&sb_5_tx>, <&afe_pcm_rx>,
+				<&afe_pcm_tx>, <&afe_proxy_rx>, <&afe_proxy_tx>,
+				<&incall_record_rx>, <&incall_record_tx>,
+				<&incall_music_rx>, <&incall_music2_rx>,
+				<&sb_5_rx>;
+
+		asoc-cpu-names = "msm-dai-q6-auxpcm.1", "msm-dai-q6-auxpcm.2",
+				"msm-dai-q6-hdmi.8", "msm-dai-q6-mi2s.0",
+				"msm-dai-q6-mi2s.1", /*"msm-dai-q6-mi2s.2",*/
+				"msm-dai-q6-mi2s.3",
+				"msm-dai-q6-dev.16384", "msm-dai-q6-dev.16385",
+				"msm-dai-q6-dev.16386", "msm-dai-q6-dev.16387",
+				"msm-dai-q6-dev.16388", "msm-dai-q6-dev.16389",
+				"msm-dai-q6-dev.16390", "msm-dai-q6-dev.16391",
+				"msm-dai-q6-dev.16392", "msm-dai-q6-dev.16393",
+				"msm-dai-q6-dev.16395", "msm-dai-q6-dev.224",
+				"msm-dai-q6-dev.225", "msm-dai-q6-dev.241",
+				"msm-dai-q6-dev.240", "msm-dai-q6-dev.32771",
+				"msm-dai-q6-dev.32772", "msm-dai-q6-dev.32773",
+				"msm-dai-q6-dev.32770", "msm-dai-q6-dev.16394";
+
+		/delete-property/ qcom,hph-en1-gpio;
+		/delete-property/ qcom,hph-en0-gpio;
+		/delete-property/ qcom,us-euro-gpios;
+		/delete-property/ qcom,wsa-max-devs;
+		/delete-property/ qcom,wsa-devs;
+		/delete-property/ qcom,wsa-aux-dev-prefix;
+	};
+
+	i2c@75b5000{
+		nxp_tfa9888_amp@34 {
+			compatible = "nxp,tfa9888-amp";
+			reg = <0x34>;
+		};
+	};
+
+	pcm1: qcom,msm-pcm-ull-post-processing {
+		/delete-property/ qcom,latency-level;
+	};
+
+	dai_pri_auxpcm: qcom,msm-pri-auxpcm {
+		pinctrl-names = "default", "sleep", "ftm";
+		pinctrl-2 = <&pri_aux_ftm &pri_aux_dout_ftm>;
+	};
+
+	qcom,msm-dai-mi2s {
+		compatible = "qcom,msm-dai-mi2s";
+
+		//unused, for sound card driver only
+		dai_pri_mi2s: qcom,msm-dai-q6-mi2s-prim {
+			compatible = "qcom,msm-dai-q6-mi2s";
+			qcom,msm-dai-q6-mi2s-dev-id = <0>;
+			qcom,msm-mi2s-rx-lines = <1>; //SD0 (1 << 0)
+			qcom,msm-mi2s-tx-lines = <2>; //SD1 (1 << 1)
+			qcom,msm-mi2s-slave = <0>;
+//			pinctrl-names = "default", "sleep";
+//			pinctrl-0 = <&pri_mi2s_active &pri_mi2s_mclk_active &pri_mi2s_sd0_active &pri_mi2s_sd1_active>;
+//			pinctrl-1 = <&pri_mi2s_sleep &pri_mi2s_mclk_sleep &pri_mi2s_sd0_sleep &pri_mi2s_sd1_sleep>;
+		};
+
+		//unused, for sound card driver only
+		dai_sec_mi2s: qcom,msm-dai-q6-mi2s-sec {
+			compatible = "qcom,msm-dai-q6-mi2s";
+			qcom,msm-dai-q6-mi2s-dev-id = <1>;
+			qcom,msm-mi2s-rx-lines = <1>; //SD0 (1 << 0)
+			qcom,msm-mi2s-tx-lines = <2>; //SD1 (1 << 1)
+			qcom,msm-mi2s-slave = <0>;
+			qcom,msm-mi2s-ext-mclk = <0>;
+//			pinctrl-names = "default", "sleep";
+//			pinctrl-0 = <&sec_mi2s_active &sec_mi2s_sd0_active>;
+//			pinctrl-1 = <&sec_mi2s_sleep &sec_mi2s_sd0_sleep>;
+		};
+
+		//TFA9888
+		dai_quat_mi2s: qcom,msm-dai-q6-mi2s-quat {
+			compatible = "qcom,msm-dai-q6-mi2s";
+			qcom,msm-dai-q6-mi2s-dev-id = <3>;
+			qcom,msm-mi2s-rx-lines = <2>; // SD1 (1 << 1)
+			qcom,msm-mi2s-tx-lines = <1>; // SD0 (0 << 0)
+			qcom,msm-mi2s-slave = <0>;
+			pinctrl-names = "default", "sleep";
+			pinctrl-0 = <&quat_mi2s_active &quat_mi2s_sd0_active &quat_mi2s_sd1_active>;
+			pinctrl-1 = <&quat_mi2s_sleep &quat_mi2s_sd0_sleep &quat_mi2s_sd1_sleep>;
+		};
+	};
+};
+
+
+&rpm_bus {
+	rpm-regulator-ldoa29 {
+		status = "okay";
+		pm8994_l29: regulator-l29 {
+			regulator-min-microvolt = <3300000>;
+			regulator-max-microvolt = <3300000>;
+			regulator-boot-on;
+			regulator-always-on;
+			qcom,init-voltage = <3300000>;
+			status = "okay";
+		};
+	};
+};
+
