@@ -97,3 +97,9 @@ config BUS_AUTO_SUSPEND
 	  during system pm.
 	  This config flag controls the feature per target based. The feature
 	  requires CNSS driver support.
+
+config HTC_WLAN_NV
+	bool "Read MAC and countryID from mfg partition"
+	default n
+	help
+	  Say Y here if you want the HTC WLAN NV features
