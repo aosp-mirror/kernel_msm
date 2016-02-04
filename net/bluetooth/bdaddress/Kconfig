@@ -1,0 +1,7 @@
+config BT_BDA
+	tristate "Load Bluetooth Device Address"
+	depends on BT
+	default n
+	help
+	  Extract Bluetooth bd_address information from ATAG set up
+	  by the bootloader.
