@@ -2,7 +2,7 @@
  * Core MDSS framebuffer driver.
  *
  * Copyright (C) 2007 Google Incorporated
- * Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2016, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -711,8 +711,21 @@ static ssize_t mdss_fb_change_dfps_mode(struct device *dev,
 		return len;
 	}
 
+	if (mfd->idle_time != 0) {
+		pr_err("ERROR: Idle time is not disabled.\n");
+		return len;
+	}
+
+	if (pinfo->current_fps != pinfo->default_fps) {
+		pr_err("ERROR: panel not configured to default fps\n");
+		return len;
+	}
+
 	pinfo->dynamic_fps = true;
 	pinfo->dfps_update = dfps_mode;
+
+	if (pdata->next)
+		pdata->next->panel_info.dfps_update = dfps_mode;
 
 	return len;
 }
@@ -1658,6 +1671,7 @@ static int mdss_fb_blank_blank(struct msm_fb_data_type *mfd,
 			mdss_fb_stop_disp_thread(mfd);
 		mutex_lock(&mfd->bl_lock);
 		current_bl = mfd->bl_level;
+		mfd->allow_bl_update = true;
 		mdss_fb_set_backlight(mfd, 0);
 		mfd->allow_bl_update = false;
 		mfd->unset_bl_level = current_bl;
@@ -3141,7 +3155,7 @@ int mdss_fb_atomic_commit(struct fb_info *info,
 				MSMFB_ATOMIC_COMMIT, 1);
 			ret = mfd->mdp.atomic_validate(mfd, file, commit_v1);
 			if (!ret)
-				mfd->validate_pending = true;
+				mfd->atomic_commit_pending = true;
 		}
 		goto end;
 	} else {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -398,7 +398,6 @@ static struct rcg_clk gfx3d_clk_src = {
 	.c = {
 		.dbg_name = "gfx3d_clk_src",
 		.ops = &clk_ops_rcg,
-		.vdd_class = &vdd_gfx,
 		CLK_INIT(gfx3d_clk_src.c),
 	},
 };
@@ -826,7 +825,7 @@ static struct clk_freq_tbl ftbl_blsp_uart_apps_clk_src[] = {
 	F(  56000000,           gpll0,    1,    7,   100),
 	F(  58982400,           gpll0,    1, 1152, 15625),
 	F(  60000000,           gpll0,    1,    3,    40),
-	F(  64000000,           gpll0, 12.5,    1,     1),
+	F(  64000000,           gpll0,    1,    2,    25),
 	F_END
 };
 
@@ -1030,8 +1029,8 @@ static struct clk_freq_tbl ftbl_csi0p_clk_src[] = {
 	F(  66670000, gpll0_main_div2_mm,    6,    0,     0),
 	F( 133330000,              gpll0,    6,    0,     0),
 	F( 200000000,              gpll0,    4,    0,     0),
-	F( 310000000,              gpll2,    3,    0,     0),
 	F( 266670000,              gpll0,    3,    0,     0),
+	F( 310000000,              gpll2,    3,    0,     0),
 	F_END
 };
 
@@ -1054,8 +1053,8 @@ static struct clk_freq_tbl ftbl_csi1p_clk_src[] = {
 	F(  66670000, gpll0_main_div2_mm,    6,    0,     0),
 	F( 133330000,              gpll0,    6,    0,     0),
 	F( 200000000,              gpll0,    4,    0,     0),
-	F( 310000000,              gpll2,    3,    0,     0),
 	F( 266670000,              gpll0,    3,    0,     0),
+	F( 310000000,              gpll2,    3,    0,     0),
 	F_END
 };
 
@@ -1078,8 +1077,8 @@ static struct clk_freq_tbl ftbl_csi2p_clk_src[] = {
 	F(  66670000, gpll0_main_div2_mm,    6,    0,     0),
 	F( 133330000,              gpll0,    6,    0,     0),
 	F( 200000000,              gpll0,    4,    0,     0),
-	F( 310000000,              gpll2,    3,    0,     0),
 	F( 266670000,              gpll0,    3,    0,     0),
+	F( 310000000,              gpll2,    3,    0,     0),
 	F_END
 };
 
@@ -1387,13 +1386,13 @@ static struct clk_freq_tbl ftbl_byte0_clk_src[] = {
 	{
 		.div_src_val = BVAL(10, 8, dsi0_phypll_mm_src_val)
 					| BVAL(4, 0, 0),
-		.src_clk = &ext_pclk0_clk_src.c,
+		.src_clk = &ext_byte0_clk_src.c,
 		.freq_hz = 0,
 	},
 	{
 		.div_src_val = BVAL(10, 8, dsi1_phypll_mm_src_val)
 					| BVAL(4, 0, 0),
-		.src_clk = &ext_pclk1_clk_src.c,
+		.src_clk = &ext_byte1_clk_src.c,
 		.freq_hz = 0,
 	},
 	F_END
@@ -1407,7 +1406,7 @@ static struct rcg_clk byte0_clk_src = {
 	.base = &virt_bases[MDSS_BASE],
 	.c = {
 		.dbg_name = "byte0_clk_src",
-		.ops = &clk_ops_pixel_multiparent,
+		.ops = &clk_ops_byte_multiparent,
 		.flags = CLKFLAG_NO_RATE_CACHE,
 		VDD_DIG_FMAX_MAP3(LOW_SVS, 131250000, SVS, 210000000, NOM,
 				262500000),
@@ -1425,13 +1424,13 @@ static struct clk_freq_tbl ftbl_byte1_clk_src[] = {
 	{
 		.div_src_val = BVAL(10, 8, dsi1_phypll_clk_mm_src_val)
 					| BVAL(4, 0, 0),
-		.src_clk = &ext_pclk1_clk_src.c,
+		.src_clk = &ext_byte1_clk_src.c,
 		.freq_hz = 0,
 	},
 	{
 		.div_src_val = BVAL(10, 8, dsi0_phypll_clk_mm_src_val)
 					| BVAL(4, 0, 0),
-		.src_clk = &ext_pclk0_clk_src.c,
+		.src_clk = &ext_byte0_clk_src.c,
 		.freq_hz = 0,
 	},
 	F_END
@@ -1445,7 +1444,7 @@ static struct rcg_clk byte1_clk_src = {
 	.base = &virt_bases[MDSS_BASE],
 	.c = {
 		.dbg_name = "byte1_clk_src",
-		.ops = &clk_ops_pixel_multiparent,
+		.ops = &clk_ops_byte_multiparent,
 		.flags = CLKFLAG_NO_RATE_CACHE,
 		VDD_DIG_FMAX_MAP3(LOW_SVS, 131250000, SVS, 210000000, NOM,
 				262500000),
@@ -1990,7 +1989,7 @@ static struct branch_clk gcc_camss_cpp_axi_clk = {
 
 static struct branch_clk gcc_camss_cpp_clk = {
 	.cbcr_reg = CAMSS_CPP_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
 		.dbg_name = "gcc_camss_cpp_clk",
@@ -2266,7 +2265,7 @@ static struct branch_clk gcc_camss_gp1_clk = {
 
 static struct branch_clk gcc_camss_ispif_ahb_clk = {
 	.cbcr_reg = CAMSS_ISPIF_AHB_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
 		.dbg_name = "gcc_camss_ispif_ahb_clk",
@@ -2278,7 +2277,7 @@ static struct branch_clk gcc_camss_ispif_ahb_clk = {
 
 static struct branch_clk gcc_camss_jpeg0_clk = {
 	.cbcr_reg = CAMSS_JPEG0_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
 		.dbg_name = "gcc_camss_jpeg0_clk",
@@ -2622,7 +2621,7 @@ static struct branch_clk gcc_mdss_esc1_clk = {
 
 static struct branch_clk gcc_mdss_mdp_clk = {
 	.cbcr_reg = MDSS_MDP_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
 		.dbg_name = "gcc_mdss_mdp_clk",
@@ -2637,7 +2636,7 @@ static DEFINE_CLK_VOTER(mdss_rotator_vote_clk, &gcc_mdss_mdp_clk.c, 0);
 
 static struct branch_clk gcc_mdss_pclk0_clk = {
 	.cbcr_reg = MDSS_PCLK0_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_bases[MDSS_BASE],
 	.c = {
 		.dbg_name = "gcc_mdss_pclk0_clk",
@@ -2650,7 +2649,7 @@ static struct branch_clk gcc_mdss_pclk0_clk = {
 
 static struct branch_clk gcc_mdss_pclk1_clk = {
 	.cbcr_reg = MDSS_PCLK1_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_bases[MDSS_BASE],
 	.c = {
 		.dbg_name = "gcc_mdss_pclk1_clk",
@@ -2736,6 +2735,7 @@ static struct branch_clk gcc_oxili_gfx3d_clk = {
 	.c = {
 		.dbg_name = "gcc_oxili_gfx3d_clk",
 		.parent = &gfx3d_clk_src.c,
+		.vdd_class = &vdd_gfx,
 		.ops = &clk_ops_branch,
 		CLK_INIT(gcc_oxili_gfx3d_clk.c),
 	},
@@ -2909,6 +2909,7 @@ static struct branch_clk gcc_usb3_aux_clk = {
 static struct branch_clk gcc_usb_phy_cfg_ahb_clk = {
 	.cbcr_reg = USB_PHY_CFG_AHB_CBCR,
 	.has_sibling = 1,
+	.no_halt_check_on_disable = true,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
 		.dbg_name = "gcc_usb_phy_cfg_ahb_clk",
@@ -3998,7 +3999,7 @@ static int msm_gcc_gfx_probe(struct platform_device *pdev)
 		return PTR_ERR(vdd_gfx.regulator[0]);
 	}
 
-	ret = of_get_fmax_vdd_class(pdev, &gfx3d_clk_src.c,
+	ret = of_get_fmax_vdd_class(pdev, &gcc_oxili_gfx3d_clk.c,
 					"qcom,gfxfreq-corner");
 	if (ret) {
 		dev_err(&pdev->dev, "Unable to get gfx freq-corner mapping info\n");

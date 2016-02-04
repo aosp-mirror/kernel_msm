@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -303,11 +303,24 @@ static int msm_vidc_load_imem_ab_table(struct msm_vidc_platform_resources *res)
 	return 0;
 }
 
-/*
- * this is a generic implementation to load single or
- * multiple array table (array elements should be of u32)
+/**
+ * msm_vidc_load_u32_table() - load dtsi table entries
+ * @pdev: A pointer to the platform device.
+ * @of_node:      A pointer to the device node.
+ * @table_name:   A pointer to the dtsi table entry name.
+ * @struct_size:  The size of the structure which is nothing but
+ *                a single entry in the dtsi table.
+ * @table:        A pointer to the table pointer which needs to be
+ *                filled by the dtsi table entries.
+ * @num_elements: Number of elements pointer which needs to be filled
+ *                with the number of elements in the table.
+ *
+ * This is a generic implementation to load single or multiple array
+ * table from dtsi. The array elements should be of size equal to u32.
+ *
+ * Return:        Return '0' for success else appropriate error value.
  */
-static int msm_vidc_load_u32_table(struct platform_device *pdev,
+int msm_vidc_load_u32_table(struct platform_device *pdev,
 		struct device_node *of_node, char *table_name, int struct_size,
 		u32 **table, u32 *num_elements)
 {
@@ -1177,6 +1190,8 @@ int msm_vidc_smmu_fault_handler(struct iommu_domain *domain,
 	struct buffer_info *temp;
 	struct internal_buf *buf;
 	int i = 0;
+	bool is_decode = false;
+	enum vidc_ports port;
 
 	if (!domain || !core) {
 		dprintk(VIDC_ERR, "%s - invalid param %p %p\n",
@@ -1191,6 +1206,15 @@ int msm_vidc_smmu_fault_handler(struct iommu_domain *domain,
 
 	mutex_lock(&core->lock);
 	list_for_each_entry(inst, &core->instances, list) {
+		is_decode = inst->session_type == MSM_VIDC_DECODER;
+		port = is_decode ? OUTPUT_PORT : CAPTURE_PORT;
+		dprintk(VIDC_ERR,
+			"%s session, Codec type: %s HxW: %d x %d fps: %d bitrate: %d bit-depth: %s\n",
+			is_decode ? "Decode" : "Encode", inst->fmts[port]->name,
+			inst->prop.height[port], inst->prop.width[port],
+			inst->prop.fps, inst->prop.bitrate,
+			!inst->bit_depth ? "8" : "10");
+
 		dprintk(VIDC_ERR,
 			"---Buffer details for inst: %p of type: %d---\n",
 			inst, inst->session_type);

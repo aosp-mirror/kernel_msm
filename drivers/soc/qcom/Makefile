@@ -73,6 +73,7 @@ obj-$(CONFIG_MSM_CORE_CTL_HELPER) += core_ctl_helper.o
 obj-$(CONFIG_MSM_SCM_ERRATA) += scm-errata.o
 obj-$(CONFIG_MSM_PFE_WA) += pfe-wa.o
 obj-$(CONFIG_MSM_PERFORMANCE) += msm_performance.o
+obj-$(CONFIG_ARCH_MSM8996) += msm_cpu_voltage.o
 
 ifdef CONFIG_MSM_SUBSYSTEM_RESTART
 	obj-y += subsystem_notif.o
@@ -92,3 +93,4 @@ obj-$(CONFIG_MSM_QBT1000) += qbt1000.o
 obj-$(CONFIG_MSM_SCM_XPU) += scm-xpu.o
 obj-$(CONFIG_MSM_KERNEL_PROTECT) += kernel_protect.o
 obj-$(CONFIG_MSM_RTB) += msm_rtb-hotplug.o
+obj-$(CONFIG_MSM_REMOTEQDSS) += remoteqdss.o

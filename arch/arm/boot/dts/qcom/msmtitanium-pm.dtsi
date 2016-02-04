@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -9,6 +9,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+
+#include <dt-bindings/msm/pm.h>
 
 &soc {
 	qcom,spm@b1d2000 {
@@ -22,6 +24,7 @@
 		qcom,saw2-cfg = <0x14>;
 		qcom,saw2-spm-dly= <0x3C102800>;
 		qcom,saw2-spm-ctl = <0xe>;
+		qcom,saw2-avs-ctl = <0x10>;
 		qcom,cpu-vctl-list = <&CPU0 &CPU1 &CPU2 &CPU3
 					&CPU4 &CPU5 &CPU6 &CPU7>;
 		qcom,vctl-timeout-us = <50>;
@@ -58,7 +61,7 @@
 
 			qcom,pm-cluster-level@1{
 				reg = <1>;
-				label = "system-retention";
+				label = "system-wfi";
 				qcom,psci-mode = <1>;
 				qcom,latency-us = <820>;
 				qcom,ss-power = <560>;
@@ -78,6 +81,7 @@
 				qcom,min-child-idx = <3>;
 				qcom,notify-rpm;
 				qcom,is-reset;
+				qcom,reset-level = <LPM_RESET_LVL_PC>;
 			};
 
 			qcom,pm-cluster@0{
@@ -110,6 +114,8 @@
 					qcom,energy-overhead = <530000>;
 					qcom,time-overhead = <850>;
 					qcom,min-child-idx = <1>;
+					qcom,reset-level =
+						<LPM_RESET_LVL_RET>;
 				};
 
 				qcom,pm-cluster-level@2{
@@ -121,6 +127,8 @@
 					qcom,energy-overhead = <650000>;
 					qcom,time-overhead = <1000>;
 					qcom,min-child-idx = <1>;
+					qcom,reset-level =
+						<LPM_RESET_LVL_GDHS>;
 				};
 
 				qcom,pm-cluster-level@3{
@@ -133,6 +141,8 @@
 					qcom,time-overhead = <1540>;
 					qcom,min-child-idx = <1>;
 					qcom,is-reset;
+					qcom,reset-level =
+						<LPM_RESET_LVL_PC>;
 				};
 
 				qcom,pm-cpu {
@@ -161,6 +171,8 @@
 						qcom,time-overhead = <680>;
 						qcom,use-broadcast-timer;
 						qcom,is-reset;
+						qcom,reset-level =
+							<LPM_RESET_LVL_PC>;
 					};
 				};
 			};
@@ -178,7 +190,7 @@
 
 				qcom,pm-cluster-level@0{
 					reg = <0>;
-					label = "perf-l2-active";
+					label = "perf-l2-wfi";
 					qcom,psci-mode = <1>;
 					qcom,latency-us = <320>;
 					qcom,ss-power = <655>;
@@ -190,10 +202,13 @@
 					reg = <1>;
 					label = "perf-l2-retention";
 					qcom,psci-mode = <3>;
+					qcom,latency-us = <400>;
 					qcom,ss-power = <595>;
 					qcom,energy-overhead = <550000>;
 					qcom,time-overhead = <700>;
 					qcom,min-child-idx = <1>;
+					qcom,reset-level =
+						<LPM_RESET_LVL_RET>;
 				};
 
 				qcom,pm-cluster-level@2{
@@ -205,6 +220,8 @@
 					qcom,energy-overhead = <650000>;
 					qcom,time-overhead = <900>;
 					qcom,min-child-idx = <1>;
+					qcom,reset-level =
+						<LPM_RESET_LVL_GDHS>;
 				};
 
 				qcom,pm-cluster-level@3{
@@ -217,6 +234,8 @@
 					qcom,time-overhead = <1260>;
 					qcom,min-child-idx = <1>;
 					qcom,is-reset;
+					qcom,reset-level =
+						<LPM_RESET_LVL_PC>;
 				};
 
 				qcom,pm-cpu {
@@ -245,13 +264,15 @@
 						qcom,time-overhead = <550>;
 						qcom,use-broadcast-timer;
 						qcom,is-reset;
+						qcom,reset-level =
+							<LPM_RESET_LVL_PC>;
 					};
 				};
 			};
 		};
 	};
 
-	qcom,mpm@601d0 {
+	qcom,mpm@601d4 {
 		compatible = "qcom,mpm-v2";
 		reg = <0x601d4 0x1000>, /* MSM_RPM_MPM_BASE 4K */
 		    <0xb011008 0x4>;
@@ -263,12 +284,14 @@
 		qcom,gic-parent = <&intc>;
 		qcom,num-mpm-irqs = <96>;
 		qcom,gic-map = <2 216>, /* tsens_upper_lower_int */
-			<50 172>, /* usb1_hs_async_wakeup_irq */
+			<58 168>,   /* qusb2phy_dmse_hv -> hs_phy_irq*/
+			<37 252>,   /* qmp_usb3_lfps_rxterm_irq -> ss_phy_irq */
 			<53 104>, /* mdss_irq */
-			<62 222>, /* ee0_krait_hlos_spmi_periph_irq */
+			<88 222>, /* ee0_krait_hlos_spmi_periph_irq */
 			<0xff 18>,  /* APC_qgicQTmrSecPhysIrptReq */
 			<0xff 19>,  /* APC_qgicQTmrNonSecPhysIrptReq */
 			<0xff 20>,  /* qgicQTmrVirtIrptReq */
+			<0xff 23>,  /* apss_hm */
 			<0xff 35>,  /* WDT_barkInt */
 			<0xff 39>,  /* arch_mem_timer */
 			<0xff 40>,  /* qtmr_phy_irq[0] */
@@ -280,6 +303,8 @@
 			<0xff 60>,  /* mss_to_apps_irq(3) */
 			<0xff 61>,  /* mss_a2_bam_irq */
 			<0xff 65>,  /* o_gc_sys_irq[0] */
+			<0xff 69>,  /* vbif_irpt */
+			<0xff 73>,  /* app_tcu_gbl_flt_irpt_ns */
 			<0xff 74>,  /* smmu_bus_intr[2] */
 			<0xff 75>,  /* smmu_bus_intr[3] */
 			<0xff 78>,  /* smmu_bus_intr[5] */
@@ -294,8 +319,14 @@
 			<0xff 108>, /* smmu_bus_intr[36] */
 			<0xff 109>, /* smmu_bus_intr[37] */
 			<0xff 112>, /* smmu_bus_intr[38] */
+			<0xff 114>, /* qdsd_intr_out */
+			<0xff 126>, /* app_tcu_cxt_irpt_vec[11] */
 			<0xff 131>, /* qup_irq */
+			<0xff 136>, /* app_tcu_cxt_irpt_vec[15] */
+			<0xff 137>, /* app_tcu_cxt_irpt_vec[16] */
+			<0xff 138>, /* app_tcu_cxt_irpt_vec[17] */
 			<0xff 140>, /* uart_dm_intr */
+			<0xff 141>, /* app_tcu_cxt_irpt_vec[18] */
 			<0xff 142>, /* smmu_bus_intr[47] */
 			<0xff 143>, /* smmu_bus_intr[48] */
 			<0xff 144>, /* smmu_bus_intr[49] */
@@ -310,8 +341,10 @@
 			<0xff 153>, /* smmu_bus_intr[58] */
 			<0xff 155>, /* sdc1_irq(0) */
 			<0xff 157>, /* sdc2_irq(0) */
-			<0xff 166>, /* usb_hs_irq */
+			<0xff 166>, /* usb30_power_event_irq */
+			<0xff 167>, /* usb30_bam_irq[0] */
 			<0xff 170>, /* sdc1_pwr_cmd_irq */
+			<0xff 172>, /* usb30_ctrl_irq[0] */
 			<0xff 173>, /* o_wcss_apss_smd_hi */
 			<0xff 174>, /* o_wcss_apss_smd_med */
 			<0xff 175>, /* o_wcss_apss_smd_low */
@@ -339,10 +372,13 @@
 			<0xff 205>, /* rpm_ipc(25) */
 			<0xff 206>, /* rpm_ipc(26) */
 			<0xff 207>, /* rpm_ipc(27) */
+			<0xff 215>, /* o_bimc_intr[0] */
 			<0xff 239>, /* crypto_bam_irq[1]*/
 			<0xff 240>, /* summary_irq_kpss */
 			<0xff 253>, /* sdc2_pwr_cmd_irq */
+			<0xff 257>, /* osmmu_Cirpt[0] */
 			<0xff 260>, /* ipa_irq[0] */
+			<0xff 262>, /* ipa_bam_irq[0] */
 			<0xff 263>, /* ipa_bam_irq[2] */
 			<0xff 269>, /* rpm_wdog_expired_irq */
 			<0xff 270>, /* blsp1_bam_irq[0] */
@@ -350,10 +386,20 @@
 			<0xff 274>, /* smmu_bus_intr[19] */
 			<0xff 275>, /* rpm_ipc(30) */
 			<0xff 276>, /* rpm_ipc(31) */
+			<0xff 285>, /* app_tcu_cxt_irpt_vec[0] */
+			<0xff 286>, /* app_tcu_cxt_irpt_vec[1] */
+			<0xff 287>, /* app_tcu_cxt_irpt_vec[2] */
+			<0xff 305>, /* L2_EXTERRIRQ_C0 */
+			<0xff 306>, /* L2_EXTERRIRQ_C1 */
+			<0xff 307>, /* L2_INTERRIRQ_C0 */
+			<0xff 308>, /* L2_INTERRIRQ_C1 */
+			<0xff 314>, /* CCISAW_svicInt */
 			<0xff 321>, /* q6ss_irq_out(4) */
 			<0xff 322>, /* q6ss_irq_out(5) */
 			<0xff 323>, /* q6ss_irq_out(6) */
-			<0xff 325>; /* q6ss_wdog_exp_irq */
+			<0xff 325>, /* q6ss_wdog_exp_irq */
+			<0xff 344>, /* sdcc_ice_nonsec_level_irq */
+			<0xff 346>; /* tsens_critical_int */
 
 		qcom,gpio-parent = <&tlmm>;
 		qcom,gpio-map = <3  38 >,

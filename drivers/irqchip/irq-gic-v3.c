@@ -122,12 +122,16 @@ static u64 __maybe_unused gic_read_iar(void)
 	u64 irqstat;
 
 	asm volatile("mrs_s %0, " __stringify(ICC_IAR1_EL1) : "=r" (irqstat));
+	/* As per the architecture specification */
+	mb();
 	return irqstat;
 }
 
 static void __maybe_unused gic_write_pmr(u64 val)
 {
 	asm volatile("msr_s " __stringify(ICC_PMR_EL1) ", %0" : : "r" (val));
+	/* As per the architecture specification */
+	mb();
 }
 
 static void __maybe_unused gic_write_ctlr(u64 val)
@@ -144,17 +148,9 @@ static void __maybe_unused gic_write_grpen1(u64 val)
 
 static void __maybe_unused gic_write_sgi1r(u64 val)
 {
-#ifdef CONFIG_MSM_GIC_SGI_NEEDS_BARRIER
-	static DEFINE_RAW_SPINLOCK(sgi_lock);
-	unsigned long flags;
-	raw_spin_lock_irqsave(&sgi_lock, flags);
-#endif
-
 	asm volatile("msr_s " __stringify(ICC_SGI1R_EL1) ", %0" : : "r" (val));
-#ifdef CONFIG_MSM_GIC_SGI_NEEDS_BARRIER
-	dsb(nsh);
-	raw_spin_unlock_irqrestore(&sgi_lock, flags);
-#endif
+	/* As per the architecture specification */
+	mb();
 }
 
 static void gic_enable_sre(void)
@@ -178,6 +174,7 @@ static void gic_enable_sre(void)
 		pr_err("GIC: unable to set SRE (disabled at EL2), panic ahead\n");
 }
 
+#ifdef CONFIG_ARM_GIC_V3_NO_ACCESS_CONTROL
 static void gic_enable_redist(bool enable)
 {
 	void __iomem *rbase;
@@ -211,6 +208,9 @@ static void gic_enable_redist(bool enable)
 		pr_err_ratelimited("redistributor failed to %s...\n",
 				   enable ? "wakeup" : "sleep");
 }
+#else
+static void gic_enable_redist(bool enable) { }
+#endif
 
 /*
  * Routines to disable, enable, EOI and route interrupts
@@ -355,10 +355,44 @@ static int gic_suspend(void)
 	return 0;
 }
 
+static void gic_show_resume_irq(struct gic_chip_data *gic)
+{
+	unsigned int i;
+	u32 enabled;
+	u32 pending[32];
+	void __iomem *base = gic_data_dist_base(gic);
+
+	if (!msm_show_resume_irq_mask)
+		return;
+
+	for (i = 0; i * 32 < gic->irq_nr; i++) {
+		enabled = readl_relaxed(base + GICD_ICENABLER + i * 4);
+		pending[i] = readl_relaxed(base + GICD_ISPENDR + i * 4);
+		pending[i] &= enabled;
+	}
+
+	for (i = find_first_bit((unsigned long *)pending, gic->irq_nr);
+	     i < gic->irq_nr;
+	     i = find_next_bit((unsigned long *)pending, gic->irq_nr, i+1)) {
+		unsigned int irq = irq_find_mapping(gic->domain, i);
+		struct irq_desc *desc = irq_to_desc(irq);
+		const char *name = "null";
+
+		if (desc == NULL)
+			name = "stray irq";
+		else if (desc->action && desc->action->name)
+			name = desc->action->name;
+
+		pr_warn("%s: %d triggered %s\n", __func__, irq, name);
+	}
+}
+
 static void gic_resume_one(struct gic_chip_data *gic)
 {
 	unsigned int i;
 	void __iomem *base = gic_data_dist_base(gic);
+
+	gic_show_resume_irq(gic);
 
 	for (i = 0; i * 32 < gic->irq_nr; i++) {
 		/* disable all of them */

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1202,7 +1202,15 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.default_value = V4L2_CID_MPEG_VIDC_VIDEO_VPE_CSC_DISABLE,
 		.step = 1,
 	},
-
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_LOWLATENCY_MODE,
+		.name = "Low Latency Mode",
+		.type = V4L2_CTRL_TYPE_BOOLEAN,
+		.minimum = V4L2_CID_MPEG_VIDC_VIDEO_LOWLATENCY_DISABLE,
+		.maximum = V4L2_CID_MPEG_VIDC_VIDEO_LOWLATENCY_ENABLE,
+		.default_value = V4L2_CID_MPEG_VIDC_VIDEO_LOWLATENCY_DISABLE,
+		.step = 1,
+	},
 };
 
 #define NUM_CTRLS ARRAY_SIZE(msm_venc_ctrls)
@@ -1329,7 +1337,7 @@ static int msm_venc_queue_setup(struct vb2_queue *q,
 				unsigned int *num_planes, unsigned int sizes[],
 				void *alloc_ctxs[])
 {
-	int i, rc = 0;
+	int i, temp, rc = 0;
 	struct msm_vidc_inst *inst;
 	struct hal_buffer_count_actual new_buf_count;
 	enum hal_property property_id;
@@ -1447,6 +1455,15 @@ static int msm_venc_queue_setup(struct vb2_queue *q,
 		*num_buffers = inst->buff_req.buffer[0].buffer_count_actual =
 			max(*num_buffers, inst->buff_req.buffer[0].
 				buffer_count_min);
+
+		temp = *num_buffers;
+
+		*num_buffers = clamp_val(*num_buffers,
+				MIN_NUM_OUTPUT_BUFFERS,
+				VB2_MAX_FRAME);
+		dprintk(VIDC_INFO,
+			"Changing buffer count on OUTPUT_MPLANE from %d to %d for best effort encoding\n",
+			temp, *num_buffers);
 
 		property_id = HAL_PARAM_BUFFER_COUNT_ACTUAL;
 		new_buf_count.buffer_type = HAL_BUFFER_INPUT;
@@ -3046,6 +3063,17 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 				dprintk(VIDC_ERR, "fail to set csc: %d\n", rc);
 		}
 		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_LOWLATENCY_MODE:
+	{
+		property_id = HAL_PARAM_VENC_LOW_LATENCY;
+		if (ctrl->val ==
+			V4L2_CID_MPEG_VIDC_VIDEO_LOWLATENCY_ENABLE)
+			enable.enable = 1;
+		else
+			enable.enable = 0;
+		pdata = &enable;
+		break;
+	}
 	default:
 		dprintk(VIDC_ERR, "Unsupported index: %x\n", ctrl->id);
 		rc = -ENOTSUPP;
@@ -3306,7 +3334,7 @@ int msm_venc_inst_init(struct msm_vidc_inst *inst)
 	inst->capability.secure_output2_threshold.max = 0;
 	inst->buffer_mode_set[OUTPUT_PORT] = HAL_BUFFER_MODE_STATIC;
 	inst->buffer_mode_set[CAPTURE_PORT] = HAL_BUFFER_MODE_STATIC;
-	inst->prop.fps = 30;
+	inst->prop.fps = DEFAULT_FPS;
 	inst->capability.pixelprocess_capabilities = 0;
 	return rc;
 }

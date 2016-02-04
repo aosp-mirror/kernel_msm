@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -273,7 +273,7 @@ struct msm_fb_data_type {
 	u32 idle_state;
 	struct delayed_work idle_notify_work;
 
-	bool validate_pending;
+	bool atomic_commit_pending;
 
 	int op_enable;
 	u32 fb_imgType;
@@ -304,6 +304,7 @@ struct msm_fb_data_type {
 	bool allow_bl_update;
 	u32 bl_level_scaled;
 	struct mutex bl_lock;
+	bool ipc_resume;
 
 	struct platform_device *pdev;
 

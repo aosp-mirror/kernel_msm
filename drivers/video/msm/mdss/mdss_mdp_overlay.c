@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1311,7 +1311,6 @@ int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 {
 	int rc;
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
-	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	struct mdss_mdp_ctl *ctl = mdp5_data->ctl;
 
 	if (mdss_mdp_ctl_is_power_on(ctl)) {
@@ -1356,16 +1355,14 @@ int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 	 * This is not needed when continuous splash screen is enabled since
 	 * we would have called in to TZ to restore security configs from LK.
 	 */
-	if (!mdata->mdss_util->iommu_attached()) {
-		if (!mfd->panel_info->cont_splash_enabled) {
-			rc = mdss_iommu_ctrl(1);
-			if (IS_ERR_VALUE(rc)) {
-				pr_err("iommu attach failed rc=%d\n", rc);
-				goto end;
-			}
-			mdss_hw_init(mdss_res);
-			mdss_iommu_ctrl(0);
+	if (!mfd->panel_info->cont_splash_enabled) {
+		rc = mdss_iommu_ctrl(1);
+		if (IS_ERR_VALUE(rc)) {
+			pr_err("iommu attach failed rc=%d\n", rc);
+			goto end;
 		}
+		mdss_hw_init(mdss_res);
+		mdss_iommu_ctrl(0);
 	}
 
 	/* Restore any previously configured PP features by resetting the dirty
@@ -1967,6 +1964,10 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 		list_move(&pipe->list, &mdp5_data->pipes_destroy);
 	}
 
+	/* call this function before any registers programming */
+	if (ctl->ops.pre_programming)
+		ctl->ops.pre_programming(ctl);
+
 	ATRACE_BEGIN("sspp_programming");
 	ret = __overlay_queue_pipes(mfd);
 	ATRACE_END("sspp_programming");
@@ -1990,11 +1991,11 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 	}
 
 	/*
-	 * release the validate flag; we are releasing this flag
+	 * release the commit pending flag; we are releasing this flag
 	 * after the commit, since now the transaction status
 	 * in the cmd mode controllers is busy.
 	 */
-	mfd->validate_pending = false;
+	mfd->atomic_commit_pending = false;
 
 	if (!mdp5_data->kickoff_released)
 		mdss_mdp_ctl_notify(ctl, MDP_NOTIFY_FRAME_CTX_DONE);
@@ -2065,7 +2066,6 @@ int mdss_mdp_overlay_release(struct msm_fb_data_type *mfd, int ndx)
 	struct mdss_mdp_pipe *pipe, *tmp;
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 	u32 unset_ndx = 0;
-	int destroy_pipe;
 
 	mutex_lock(&mdp5_data->list_lock);
 	list_for_each_entry_safe(pipe, tmp, &mdp5_data->pipes_used, list) {
@@ -2079,22 +2079,9 @@ int mdss_mdp_overlay_release(struct msm_fb_data_type *mfd, int ndx)
 			unset_ndx |= pipe->ndx;
 
 			pipe->file = NULL;
-			destroy_pipe = pipe->play_cnt == 0;
-			if (!destroy_pipe)
-				list_move(&pipe->list,
-						&mdp5_data->pipes_cleanup);
-			else
-				list_del_init(&pipe->list);
+			list_move(&pipe->list, &mdp5_data->pipes_cleanup);
 
 			mdss_mdp_pipe_unmap(pipe);
-			if (destroy_pipe) {
-				mdss_mdp_mixer_pipe_unstage(pipe,
-					pipe->mixer_left);
-				mdss_mdp_mixer_pipe_unstage(pipe,
-					pipe->mixer_right);
-				pipe->mixer_stage = MDSS_MDP_STAGE_UNUSED;
-				__overlay_pipe_cleanup(mfd, pipe);
-			}
 
 			if (unset_ndx == ndx)
 				break;
@@ -2733,7 +2720,7 @@ static void cache_initial_timings(struct mdss_panel_data *pdata)
 	}
 }
 
-static void mdss_mdp_dfps_update_params(struct mdss_panel_data *pdata,
+static void dfps_update_panel_params(struct mdss_panel_data *pdata,
 	u32 new_fps)
 {
 	/* Keep initial values before any dfps update */
@@ -2769,6 +2756,45 @@ static void mdss_mdp_dfps_update_params(struct mdss_panel_data *pdata,
 	}
 }
 
+int mdss_mdp_dfps_update_params(struct msm_fb_data_type *mfd,
+	struct mdss_panel_data *pdata, int dfps)
+{
+	struct fb_var_screeninfo *var = &mfd->fbi->var;
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
+
+	mutex_lock(&mdp5_data->dfps_lock);
+
+	pr_debug("new_fps:%d\n", dfps);
+
+	if (dfps < pdata->panel_info.min_fps) {
+		pr_err("Unsupported FPS. min_fps = %d\n",
+				pdata->panel_info.min_fps);
+		mutex_unlock(&mdp5_data->dfps_lock);
+		return -EINVAL;
+	} else if (dfps > pdata->panel_info.max_fps) {
+		pr_warn("Unsupported FPS. Configuring to max_fps = %d\n",
+				pdata->panel_info.max_fps);
+		dfps = pdata->panel_info.max_fps;
+	}
+
+	dfps_update_panel_params(pdata, dfps);
+	if (pdata->next)
+		dfps_update_panel_params(pdata->next, dfps);
+
+	/*
+	 * Update the panel info in the upstream
+	 * data, so any further call to get the screen
+	 * info has the updated timings.
+	 */
+	mdss_panelinfo_to_fb_var(&pdata->panel_info, var);
+
+	MDSS_XLOG(dfps);
+	mutex_unlock(&mdp5_data->dfps_lock);
+
+	return 0;
+}
+
+
 static ssize_t dynamic_fps_sysfs_wta_dfps(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -2777,7 +2803,6 @@ static ssize_t dynamic_fps_sysfs_wta_dfps(struct device *dev,
 	struct fb_info *fbi = dev_get_drvdata(dev);
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
-	struct fb_var_screeninfo *var = &mfd->fbi->var;
 
 	rc = kstrtoint(buf, 10, &dfps);
 	if (rc) {
@@ -2808,33 +2833,12 @@ static ssize_t dynamic_fps_sysfs_wta_dfps(struct device *dev,
 		return count;
 	}
 
-	mutex_lock(&mdp5_data->dfps_lock);
-	if (dfps < pdata->panel_info.min_fps) {
-		pr_err("Unsupported FPS. min_fps = %d\n",
-				pdata->panel_info.min_fps);
-		mutex_unlock(&mdp5_data->dfps_lock);
-		return -EINVAL;
-	} else if (dfps > pdata->panel_info.max_fps) {
-		pr_warn("Unsupported FPS. Configuring to max_fps = %d\n",
-				pdata->panel_info.max_fps);
-		dfps = pdata->panel_info.max_fps;
+	rc = mdss_mdp_dfps_update_params(mfd, pdata, dfps);
+	if (rc) {
+		pr_err("failed to set dfps params\n");
+		return rc;
 	}
 
-	pr_debug("new_fps:%d\n", dfps);
-
-	mdss_mdp_dfps_update_params(pdata, dfps);
-	if (pdata->next)
-		mdss_mdp_dfps_update_params(pdata->next, dfps);
-
-	/*
-	 * Update the panel info in the upstream
-	 * data, so any further call to get the screen
-	 * info has the updated timings.
-	 */
-	mdss_panelinfo_to_fb_var(&pdata->panel_info, var);
-
-	MDSS_XLOG(dfps);
-	mutex_unlock(&mdp5_data->dfps_lock);
 	return count;
 } /* dynamic_fps_sysfs_wta_dfps */
 
@@ -3041,22 +3045,9 @@ static ssize_t mdss_mdp_cmd_autorefresh_show(struct device *dev,
 		ret = -EINVAL;
 	} else {
 		ret = snprintf(buf, PAGE_SIZE, "%d\n",
-				ctl->autorefresh_frame_cnt);
+			mdss_mdp_ctl_cmd_get_autorefresh(ctl));
 	}
 	return ret;
-}
-
-static inline int mdss_validate_autorefresh_param(struct mdss_mdp_ctl *ctl,
-	int frame_cnt)
-{
-	int rc = 0;
-
-	if (frame_cnt < 0 || frame_cnt >= BIT(16)) {
-		rc = -EINVAL;
-		pr_err("frame cnt %d is out of range (16 bits).\n", frame_cnt);
-	}
-
-	return rc;
 }
 
 static ssize_t mdss_mdp_cmd_autorefresh_store(struct device *dev,
@@ -3090,27 +3081,26 @@ static ssize_t mdss_mdp_cmd_autorefresh_store(struct device *dev,
 	if (rc) {
 		pr_err("kstrtoint failed. rc=%d\n", rc);
 		return rc;
-	} else if (frame_cnt != ctl->autorefresh_frame_cnt) {
-		rc = mdss_validate_autorefresh_param(ctl, frame_cnt);
-		if (rc)
-			return rc;
-
-		if (frame_cnt) {
-			/* enable autorefresh */
-			mfd->mdp_sync_pt_data.threshold = 2;
-			mfd->mdp_sync_pt_data.retire_threshold = 0;
-		} else {
-			/* disable autorefresh */
-			mfd->mdp_sync_pt_data.threshold = 1;
-			mfd->mdp_sync_pt_data.retire_threshold = 1;
-		}
-
-		rc = mdss_mdp_ctl_cmd_autorefresh_enable(ctl, frame_cnt);
-		if (rc)
-			return rc;
 	}
-	pr_debug("Setting video autorefresh=%d cnt=%d\n",
-		ctl->cmd_autorefresh_en, frame_cnt);
+
+	rc = mdss_mdp_ctl_cmd_set_autorefresh(ctl, frame_cnt);
+	if (rc) {
+		pr_err("cmd_set_autorefresh failed, rc=%d, frame_cnt=%d\n",
+			rc, frame_cnt);
+		return rc;
+	}
+
+	if (frame_cnt) {
+		/* enable/reconfig autorefresh */
+		mfd->mdp_sync_pt_data.threshold = 2;
+		mfd->mdp_sync_pt_data.retire_threshold = 0;
+	} else {
+		/* disable autorefresh */
+		mfd->mdp_sync_pt_data.threshold = 1;
+		mfd->mdp_sync_pt_data.retire_threshold = 1;
+	}
+
+	pr_debug("setting cmd autorefresh to cnt=%d\n", frame_cnt);
 
 	return len;
 }

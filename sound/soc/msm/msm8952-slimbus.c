@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -256,23 +256,21 @@ static void *def_codec_mbhc_cal(void)
 	return codec_cal;
 }
 
-static struct afe_clk_cfg mi2s_rx_clk = {
+static struct afe_clk_set mi2s_tx_clk = {
 	AFE_API_VERSION_I2S_CONFIG,
+	Q6AFE_LPASS_CLK_ID_TER_MI2S_IBIT,
 	Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ,
-	Q6AFE_LPASS_OSR_CLK_12_P288_MHZ,
-	Q6AFE_LPASS_CLK_SRC_INTERNAL,
+	Q6AFE_LPASS_CLK_ATTRIBUTE_COUPLE_NO,
 	Q6AFE_LPASS_CLK_ROOT_DEFAULT,
-	Q6AFE_LPASS_MODE_BOTH_VALID,
 	0,
 };
 
-static struct afe_clk_cfg mi2s_tx_clk = {
+static struct afe_clk_set mi2s_rx_clk = {
 	AFE_API_VERSION_I2S_CONFIG,
+	Q6AFE_LPASS_CLK_ID_PRI_MI2S_IBIT,
 	Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ,
-	Q6AFE_LPASS_OSR_CLK_12_P288_MHZ,
-	Q6AFE_LPASS_CLK_SRC_INTERNAL,
+	Q6AFE_LPASS_CLK_ATTRIBUTE_COUPLE_NO,
 	Q6AFE_LPASS_CLK_ROOT_DEFAULT,
-	Q6AFE_LPASS_MODE_BOTH_VALID,
 	0,
 };
 
@@ -551,6 +549,10 @@ static int slim0_rx_sample_rate_get(struct snd_kcontrol *kcontrol,
 	int sample_rate_val = 0;
 
 	switch (slim0_rx_sample_rate) {
+	case SAMPLING_RATE_44P1KHZ:
+		sample_rate_val = 3;
+		break;
+
 	case SAMPLING_RATE_192KHZ:
 		sample_rate_val = 2;
 		break;
@@ -579,6 +581,9 @@ static int slim0_rx_sample_rate_put(struct snd_kcontrol *kcontrol,
 			ucontrol->value.integer.value[0]);
 
 	switch (ucontrol->value.integer.value[0]) {
+	case 3:
+		slim0_rx_sample_rate = SAMPLING_RATE_44P1KHZ;
+		break;
 	case 2:
 		slim0_rx_sample_rate = SAMPLING_RATE_192KHZ;
 		break;
@@ -872,7 +877,7 @@ static const char *const slim0_tx_ch_text[] = {"One", "Two", "Three", "Four",
 static const char *const vi_feed_ch_text[] = {"One", "Two"};
 static char const *rx_bit_format_text[] = {"S16_LE", "S24_LE"};
 static char const *slim0_rx_sample_rate_text[] = {"KHZ_48", "KHZ_96",
-					"KHZ_192"};
+	"KHZ_192", "KHZ_44P1"};
 static const char *const slim5_rx_ch_text[] = {"One", "Two"};
 static char const *slim5_rx_sample_rate_text[] = {"KHZ_48", "KHZ_96",
 	"KHZ_192", "KHZ_44P1"};
@@ -883,7 +888,7 @@ static const struct soc_enum msm_snd_enum[] = {
 	SOC_ENUM_SINGLE_EXT(2, slim0_rx_ch_text),
 	SOC_ENUM_SINGLE_EXT(8, slim0_tx_ch_text),
 	SOC_ENUM_SINGLE_EXT(2, rx_bit_format_text),
-	SOC_ENUM_SINGLE_EXT(3, slim0_rx_sample_rate_text),
+	SOC_ENUM_SINGLE_EXT(4, slim0_rx_sample_rate_text),
 	SOC_ENUM_SINGLE_EXT(2, vi_feed_ch_text),
 	SOC_ENUM_SINGLE_EXT(4, slim5_rx_sample_rate_text),
 	SOC_ENUM_SINGLE_EXT(2, slim5_rx_bit_format_text),
@@ -1453,18 +1458,25 @@ static int quat_mi2s_clk_ctl(struct snd_pcm_substream *substream, bool enable)
 
 	if (enable) {
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+			mi2s_rx_clk.enable = enable;
+			mi2s_rx_clk.clk_id =
+				Q6AFE_LPASS_CLK_ID_QUAD_MI2S_IBIT;
 			if (mi2s_rx_bit_format == SNDRV_PCM_FORMAT_S24_LE)
-				mi2s_rx_clk.clk_val1 =
+				mi2s_rx_clk.clk_freq_in_hz =
 					Q6AFE_LPASS_IBIT_CLK_3_P072_MHZ;
 			else
-				mi2s_rx_clk.clk_val1 =
+				mi2s_rx_clk.clk_freq_in_hz =
 					Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
-			ret = afe_set_lpass_clock(
+			ret = afe_set_lpass_clock_v2(
 					AFE_PORT_ID_QUATERNARY_MI2S_RX,
 					&mi2s_rx_clk);
 		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
-			mi2s_tx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
-			ret = afe_set_lpass_clock(
+			mi2s_tx_clk.enable = enable;
+			mi2s_tx_clk.clk_id =
+				Q6AFE_LPASS_CLK_ID_QUAD_MI2S_IBIT;
+			mi2s_tx_clk.clk_freq_in_hz =
+					Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
+			ret = afe_set_lpass_clock_v2(
 					AFE_PORT_ID_QUATERNARY_MI2S_TX,
 					&mi2s_tx_clk);
 		} else {
@@ -1476,15 +1488,19 @@ static int quat_mi2s_clk_ctl(struct snd_pcm_substream *substream, bool enable)
 					__func__, ret);
 	} else {
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-			mi2s_rx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_DISABLE;
-			ret = afe_set_lpass_clock(
-				AFE_PORT_ID_QUATERNARY_MI2S_RX,
-				&mi2s_rx_clk);
+			mi2s_rx_clk.enable = enable;
+			mi2s_rx_clk.clk_id =
+				Q6AFE_LPASS_CLK_ID_QUAD_MI2S_IBIT;
+			ret = afe_set_lpass_clock_v2(
+					AFE_PORT_ID_QUATERNARY_MI2S_RX,
+					&mi2s_rx_clk);
 		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
-			mi2s_tx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_DISABLE;
-			ret = afe_set_lpass_clock(
-				AFE_PORT_ID_QUATERNARY_MI2S_TX,
-				&mi2s_tx_clk);
+			mi2s_tx_clk.enable = enable;
+			mi2s_tx_clk.clk_id =
+				Q6AFE_LPASS_CLK_ID_QUAD_MI2S_IBIT;
+			ret = afe_set_lpass_clock_v2(
+					AFE_PORT_ID_QUATERNARY_MI2S_TX,
+					&mi2s_tx_clk);
 		} else
 			pr_err("%s:Not valid substream %d\n", __func__,
 					substream->stream);
@@ -1502,18 +1518,25 @@ static int quin_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 
 	if (enable) {
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+			mi2s_rx_clk.enable = enable;
+			mi2s_rx_clk.clk_id =
+				Q6AFE_LPASS_CLK_ID_QUI_MI2S_IBIT;
 			if (mi2s_rx_bit_format == SNDRV_PCM_FORMAT_S24_LE)
-				mi2s_rx_clk.clk_val1 =
+				mi2s_rx_clk.clk_freq_in_hz =
 					Q6AFE_LPASS_IBIT_CLK_3_P072_MHZ;
 			else
-				mi2s_rx_clk.clk_val1 =
+				mi2s_rx_clk.clk_freq_in_hz =
 					Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
-			ret = afe_set_lpass_clock(
+			ret = afe_set_lpass_clock_v2(
 					AFE_PORT_ID_QUINARY_MI2S_RX,
 					&mi2s_rx_clk);
 		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
-			mi2s_tx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
-			ret = afe_set_lpass_clock(
+			mi2s_tx_clk.enable = enable;
+			mi2s_tx_clk.clk_id =
+				Q6AFE_LPASS_CLK_ID_QUI_MI2S_IBIT;
+			mi2s_tx_clk.clk_freq_in_hz =
+				Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
+			ret = afe_set_lpass_clock_v2(
 					AFE_PORT_ID_QUINARY_MI2S_TX,
 					&mi2s_tx_clk);
 		} else {
@@ -1522,16 +1545,19 @@ static int quin_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 
 		if (ret < 0)
 			pr_err("%s:afe_set_lpass_clock failed\n", __func__);
-
 	} else {
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-			mi2s_rx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_DISABLE;
-			ret = afe_set_lpass_clock(
+			mi2s_rx_clk.enable = enable;
+			mi2s_rx_clk.clk_id =
+				Q6AFE_LPASS_CLK_ID_QUI_MI2S_IBIT;
+			ret = afe_set_lpass_clock_v2(
 					AFE_PORT_ID_QUINARY_MI2S_RX,
 					&mi2s_rx_clk);
 		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
-			mi2s_tx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_DISABLE;
-			ret = afe_set_lpass_clock(
+			mi2s_tx_clk.enable = enable;
+			mi2s_tx_clk.clk_id =
+				Q6AFE_LPASS_CLK_ID_QUI_MI2S_IBIT;
+			ret = afe_set_lpass_clock_v2(
 					AFE_PORT_ID_QUINARY_MI2S_TX,
 					&mi2s_tx_clk);
 		} else
@@ -2472,7 +2498,18 @@ static struct platform_driver msm8952_asoc_machine_driver = {
 	.probe = msm8952_asoc_machine_probe,
 	.remove = msm8952_asoc_machine_remove,
 };
-module_platform_driver(msm8952_asoc_machine_driver);
+
+static int __init msm8952_slim_machine_init(void)
+{
+	return platform_driver_register(&msm8952_asoc_machine_driver);
+}
+late_initcall(msm8952_slim_machine_init);
+
+static void __exit msm8952_slim_machine_exit(void)
+{
+	return platform_driver_unregister(&msm8952_asoc_machine_driver);
+}
+module_exit(msm8952_slim_machine_exit);
 
 MODULE_DESCRIPTION("ALSA SoC msm");
 MODULE_LICENSE("GPL v2");

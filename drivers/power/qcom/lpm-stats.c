@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,10 +24,17 @@
 #include <linux/suspend.h>
 #include <soc/qcom/spm.h>
 #include <soc/qcom/pm.h>
+#include <soc/qcom/lpm-stats.h>
 
 #define MAX_STR_LEN 256
+#define MAX_TIME_LEN 20
 const char *lpm_stats_reset = "reset";
 const char *lpm_stats_suspend = "suspend";
+
+struct lpm_sleep_time {
+	struct kobj_attribute ts_attr;
+	unsigned int cpu;
+};
 
 struct level_stats {
 	const char *name;
@@ -42,27 +49,21 @@ struct level_stats {
 	uint64_t enter_time;
 };
 
-struct lifo_stats {
-	uint32_t last_in;
-	uint32_t first_out;
-};
-
-struct lpm_stats {
-	char name[MAX_STR_LEN];
-	struct level_stats *time_stats;
-	uint32_t num_levels;
-	struct lifo_stats lifo;
-	struct lpm_stats *parent;
-	struct list_head sibling;
-	struct list_head child;
-	struct cpumask mask;
-	struct dentry *directory;
-	bool is_cpu;
-};
-
 static struct level_stats suspend_time_stats;
 
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct lpm_stats, cpu_stats);
+
+static uint64_t get_total_sleep_time(unsigned int cpu_id)
+{
+	struct lpm_stats *stats = &per_cpu(cpu_stats, cpu_id);
+	int i;
+	uint64_t ret = 0;
+
+	for (i = 0; i < stats->num_levels; i++)
+		ret += stats->time_stats[i].total_time;
+
+	return ret;
+}
 
 static void update_level_stats(struct level_stats *stats, uint64_t t,
 				bool success)
@@ -425,13 +426,9 @@ static inline void update_exit_stats(struct lpm_stats *stats, uint32_t index,
 	uint64_t exit_time = 0;
 
 	/* Update time stats only when exit is preceded by enter */
-	if (stats->time_stats[index].enter_time) {
-		exit_time = sched_clock() -
-				stats->time_stats[index].enter_time;
-		update_level_stats(&stats->time_stats[index], exit_time,
+	exit_time = stats->sleep_time;
+	update_level_stats(&stats->time_stats[index], exit_time,
 					success);
-		stats->time_stats[index].enter_time = 0;
-	}
 }
 
 static int config_level(const char *name, const char **levels,
@@ -499,6 +496,94 @@ static int config_level(const char *name, const char **levels,
 	return 0;
 }
 
+static ssize_t total_sleep_time_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	struct lpm_sleep_time *cpu_sleep_time = container_of(attr,
+			struct lpm_sleep_time, ts_attr);
+	unsigned int cpu = cpu_sleep_time->cpu;
+	uint64_t total_time = get_total_sleep_time(cpu);
+
+	return snprintf(buf, MAX_TIME_LEN, "%llu.%09u\n", total_time,
+			do_div(total_time, NSEC_PER_SEC));
+}
+
+static struct kobject *local_module_kobject(void)
+{
+	struct kobject *kobj;
+
+	kobj = kset_find_obj(module_kset, KBUILD_MODNAME);
+
+	if (!kobj) {
+		int err;
+		struct module_kobject *mk;
+
+		mk = kzalloc(sizeof(*mk), GFP_KERNEL);
+		if (!mk)
+			return ERR_PTR(-ENOMEM);
+
+		mk->mod = THIS_MODULE;
+		mk->kobj.kset = module_kset;
+
+		err = kobject_init_and_add(&mk->kobj, &module_ktype, NULL,
+				"%s", KBUILD_MODNAME);
+
+		if (err) {
+			kobject_put(&mk->kobj);
+			kfree(mk);
+			pr_err("%s: cannot create kobject for %s\n",
+					__func__, KBUILD_MODNAME);
+			return ERR_PTR(err);
+		}
+
+		kobject_get(&mk->kobj);
+		kobj = &mk->kobj;
+	}
+
+	return kobj;
+}
+
+static int create_sysfs_node(unsigned int cpu, struct lpm_stats *stats)
+{
+	struct kobject *cpu_kobj = NULL;
+	struct lpm_sleep_time *ts = NULL;
+	struct kobject *stats_kobj;
+	char cpu_name[] = "cpuXX";
+	int ret = -ENOMEM;
+
+	stats_kobj = local_module_kobject();
+
+	if (IS_ERR_OR_NULL(stats_kobj))
+		return PTR_ERR(stats_kobj);
+
+	snprintf(cpu_name, sizeof(cpu_name), "cpu%u", cpu);
+	cpu_kobj = kobject_create_and_add(cpu_name, stats_kobj);
+	if (!cpu_kobj)
+		return -ENOMEM;
+
+	ts = kzalloc(sizeof(*ts), GFP_KERNEL);
+	if (!ts)
+		goto failed;
+
+	sysfs_attr_init(&ts->ts_attr.attr);
+	ts->ts_attr.attr.name = "total_sleep_time_secs";
+	ts->ts_attr.attr.mode = 0444;
+	ts->ts_attr.show = total_sleep_time_show;
+	ts->ts_attr.store = NULL;
+	ts->cpu = cpu;
+
+	ret = sysfs_create_file(cpu_kobj, &ts->ts_attr.attr);
+	if (ret)
+		goto failed;
+
+	return 0;
+
+failed:
+	kfree(ts);
+	kobject_put(cpu_kobj);
+	return ret;
+}
+
 static struct lpm_stats *config_cpu_level(const char *name,
 	const char **levels, int num_levels, struct lpm_stats *parent,
 	struct cpumask *mask)
@@ -525,6 +610,13 @@ static struct lpm_stats *config_cpu_level(const char *name,
 		if (ret) {
 			pr_err("%s: Unable to create %s stats\n",
 				__func__, cpu_name);
+			return ERR_PTR(ret);
+		}
+
+		ret = create_sysfs_node(cpu, stats);
+
+		if (ret) {
+			pr_err("Could not create the sysfs node\n");
 			return ERR_PTR(ret);
 		}
 	}
@@ -679,8 +771,6 @@ void lpm_stats_cluster_enter(struct lpm_stats *stats, uint32_t index)
 	if (IS_ERR_OR_NULL(stats))
 		return;
 
-	stats->time_stats[index].enter_time = sched_clock();
-
 	update_last_in_stats(stats);
 }
 EXPORT_SYMBOL(lpm_stats_cluster_enter);
@@ -717,14 +807,15 @@ EXPORT_SYMBOL(lpm_stats_cluster_exit);
  * Function to communicate the low power mode level that the cpu is
  * prepared to enter.
  */
-void lpm_stats_cpu_enter(uint32_t index)
+void lpm_stats_cpu_enter(uint32_t index, uint64_t time)
 {
 	struct lpm_stats *stats = &__get_cpu_var(cpu_stats);
+
+	stats->sleep_time = time;
 
 	if (!stats->time_stats)
 		return;
 
-	stats->time_stats[index].enter_time = sched_clock();
 }
 EXPORT_SYMBOL(lpm_stats_cpu_enter);
 
@@ -736,12 +827,14 @@ EXPORT_SYMBOL(lpm_stats_cpu_enter);
  *
  * Function to communicate the low power mode level that the cpu exited.
  */
-void lpm_stats_cpu_exit(uint32_t index, bool success)
+void lpm_stats_cpu_exit(uint32_t index, uint64_t time, bool success)
 {
 	struct lpm_stats *stats = &__get_cpu_var(cpu_stats);
 
 	if (!stats->time_stats)
 		return;
+
+	stats->sleep_time = time - stats->sleep_time;
 
 	update_exit_stats(stats, index, success);
 }

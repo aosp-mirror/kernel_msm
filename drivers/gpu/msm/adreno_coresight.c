@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -61,7 +61,7 @@ ssize_t adreno_coresight_show_register(struct device *dev,
 	}
 	mutex_unlock(&device->mutex);
 
-	return snprintf(buf, PAGE_SIZE, "0x%X", val);
+	return snprintf(buf, PAGE_SIZE, "0x%X\n", val);
 }
 
 ssize_t adreno_coresight_store_register(struct device *dev,
@@ -164,7 +164,7 @@ static void adreno_coresight_disable(struct coresight_device *csdev)
 static int _adreno_coresight_get_and_clear(struct adreno_device *adreno_dev)
 {
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	struct kgsl_device *device = &adreno_dev->dev;
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct adreno_coresight *coresight = gpudev->coresight;
 	int i;
 
@@ -189,7 +189,7 @@ static int _adreno_coresight_get_and_clear(struct adreno_device *adreno_dev)
 static int _adreno_coresight_set(struct adreno_device *adreno_dev)
 {
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	struct kgsl_device *device = &adreno_dev->dev;
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct adreno_coresight *coresight = gpudev->coresight;
 	int i;
 
@@ -243,10 +243,12 @@ static int adreno_coresight_enable(struct coresight_device *csdev)
 			coresight->registers[i].value =
 				coresight->registers[i].initial;
 
-		ret = kgsl_active_count_get(device);
-		if (!ret) {
-			ret = _adreno_coresight_set(adreno_dev);
-			kgsl_active_count_put(device);
+		if (kgsl_state_is_awake(device)) {
+			ret = kgsl_active_count_get(device);
+			if (!ret) {
+				ret = _adreno_coresight_set(adreno_dev);
+				kgsl_active_count_put(device);
+			}
 		}
 	}
 
@@ -299,13 +301,13 @@ int adreno_coresight_init(struct adreno_device *adreno_dev)
 {
 	int ret = 0;
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	struct kgsl_device *device = &adreno_dev->dev;
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct coresight_desc desc;
 
 	if (gpudev->coresight == NULL)
 		return -ENODEV;
 
-	if (adreno_dev->csdev != NULL)
+	if (!IS_ERR_OR_NULL(adreno_dev->csdev))
 		return 0;
 
 	memset(&desc, 0, sizeof(desc));

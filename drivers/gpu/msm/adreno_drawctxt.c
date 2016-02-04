@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -64,8 +64,22 @@ void adreno_drawctxt_dump(struct kgsl_device *device,
 	 * We may have cmdbatch timer running, which also uses same
 	 * lock, take a lock with software interrupt disabled (bh)
 	 * to avoid spin lock recursion.
+	 *
+	 * Use Spin trylock because dispatcher can acquire drawctxt->lock
+	 * if context is pending and the fence it is waiting on just got
+	 * signalled. Dispatcher acquires drawctxt->lock and tries to
+	 * delete the cmdbatch timer using del_timer_sync().
+	 * del_timer_sync() waits till timer and its pending handlers
+	 * are deleted. But if the timer expires at the same time,
+	 * timer handler could be waiting on drawctxt->lock leading to a
+	 * deadlock. To prevent this use spin_trylock_bh.
 	 */
-	spin_lock_bh(&drawctxt->lock);
+	if (!spin_trylock_bh(&drawctxt->lock)) {
+		dev_err(device->dev, "  context[%d]: could not get lock\n",
+			context->id);
+		return;
+	}
+
 	dev_err(device->dev,
 		"  context[%d]: queue=%d, submit=%d, start=%d, retire=%d\n",
 		context->id, queue, drawctxt->submitted_timestamp,
@@ -129,7 +143,7 @@ int adreno_drawctxt_wait(struct adreno_device *adreno_dev,
 		struct kgsl_context *context,
 		uint32_t timestamp, unsigned int timeout)
 {
-	struct kgsl_device *device = &adreno_dev->dev;
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct adreno_context *drawctxt = ADRENO_CONTEXT(context);
 	int ret;
 	long ret_temp;
@@ -193,7 +207,7 @@ static int adreno_drawctxt_wait_rb(struct adreno_device *adreno_dev,
 		struct kgsl_context *context,
 		uint32_t timestamp, unsigned int timeout)
 {
-	struct kgsl_device *device = &adreno_dev->dev;
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct adreno_context *drawctxt = ADRENO_CONTEXT(context);
 	int ret = 0;
 
@@ -472,7 +486,7 @@ void adreno_drawctxt_detach(struct kgsl_context *context)
 		 * the next command in GFT SKIP CMD, print the context
 		 * detached status here.
 		 */
-		adreno_fault_skipcmd_detached(device, drawctxt, list[i]);
+		adreno_fault_skipcmd_detached(adreno_dev, drawctxt, list[i]);
 		kgsl_cmdbatch_destroy(list[i]);
 	}
 
@@ -545,7 +559,7 @@ int adreno_drawctxt_switch(struct adreno_device *adreno_dev,
 				struct adreno_context *drawctxt,
 				unsigned int flags)
 {
-	struct kgsl_device *device = &adreno_dev->dev;
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct kgsl_pagetable *new_pt;
 	int ret = 0;
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1089,11 +1089,6 @@ static void gsi_free_trbs(struct usb_ep *ep)
 		dep->trb_pool = NULL;
 		dep->trb_pool_dma = 0;
 		dep->trb_dma_pool = NULL;
-		/*
-		 * Reset the ep_type to NORMAL, for next compostion
-		 * switch which may be non-gsi.
-		 */
-		dep->endpoint.ep_type = EP_TYPE_NORMAL;
 	}
 }
 /*
@@ -1113,9 +1108,6 @@ static void gsi_configure_ep(struct usb_ep *ep, struct usb_gsi_request *request)
 	u32			reg;
 
 	memset(&params, 0x00, sizeof(params));
-
-	/* Set the ep_type as GSI */
-	dep->endpoint.ep_type = EP_TYPE_GSI;
 
 	/* Configure GSI EP */
 	params.param0 = DWC3_DEPCFG_EP_TYPE(usb_endpoint_type(desc))
@@ -1483,25 +1475,6 @@ static void dwc3_restart_usb_work(struct work_struct *w)
 	dwc->err_evt_seen = false;
 	flush_delayed_work(&mdwc->sm_work);
 }
-
-/**
- * Reset USB peripheral connection
- * Inform OTG for Vbus LOW followed by Vbus HIGH notification.
- * This performs full hardware reset and re-initialization which
- * might be required by some DBM client driver during uninit/cleanup.
- */
-void msm_dwc3_restart_usb_session(struct usb_gadget *gadget)
-{
-	struct dwc3 *dwc = container_of(gadget, struct dwc3, gadget);
-	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
-
-	if (!mdwc)
-		return;
-
-	dev_dbg(mdwc->dev, "%s\n", __func__);
-	schedule_work(&mdwc->restart_usb_work);
-}
-EXPORT_SYMBOL(msm_dwc3_restart_usb_session);
 
 /*
  * Check whether the DWC3 requires resetting the ep
@@ -2040,16 +2013,6 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 		clk_prepare_enable(mdwc->sleep_clk);
 	}
 
-	/* Resume SS PHY */
-	if (mdwc->lpm_flags & MDWC3_SS_PHY_SUSPEND) {
-		usb_phy_set_suspend(mdwc->ss_phy, 0);
-		mdwc->ss_phy->flags &= ~DEVICE_IN_SS_MODE;
-		mdwc->lpm_flags &= ~MDWC3_SS_PHY_SUSPEND;
-	}
-
-	/* Resume HS PHY */
-	usb_phy_set_suspend(mdwc->hs_phy, 0);
-
 	/*
 	 * Enable clocks
 	 * Turned ON iface_clk before core_clk due to FSM depedency.
@@ -2060,6 +2023,16 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	clk_prepare_enable(mdwc->utmi_clk);
 	if (mdwc->bus_aggr_clk)
 		clk_prepare_enable(mdwc->bus_aggr_clk);
+
+	/* Resume SS PHY */
+	if (mdwc->lpm_flags & MDWC3_SS_PHY_SUSPEND) {
+		usb_phy_set_suspend(mdwc->ss_phy, 0);
+		mdwc->ss_phy->flags &= ~DEVICE_IN_SS_MODE;
+		mdwc->lpm_flags &= ~MDWC3_SS_PHY_SUSPEND;
+	}
+
+	/* Resume HS PHY */
+	usb_phy_set_suspend(mdwc->hs_phy, 0);
 
 	/* Recover from controller power collapse */
 	if (mdwc->lpm_flags & MDWC3_POWER_COLLAPSE) {
@@ -2404,6 +2377,7 @@ static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 			dwc3_msm_gadget_vbus_draw(mdwc,
 						mdwc->bc1p2_current_max);
 		}
+		break;
 	case POWER_SUPPLY_PROP_TYPE:
 		psy->type = val->intval;
 
@@ -2803,8 +2777,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	}
 
 	if (of_get_property(pdev->dev.of_node, "qcom,usb-dbm", NULL)) {
-		mdwc->dbm = usb_get_dbm_by_phandle(&pdev->dev, "qcom,usb-dbm",
-						   0);
+		mdwc->dbm = usb_get_dbm_by_phandle(&pdev->dev, "qcom,usb-dbm");
 		if (IS_ERR(mdwc->dbm)) {
 			dev_err(&pdev->dev, "unable to get dbm device\n");
 			ret = -EPROBE_DEFER;
@@ -2931,7 +2904,6 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		goto put_dwc3;
 	}
 
-	dwc->vbus_active = of_property_read_bool(node, "qcom,vbus-present");
 	mdwc->irq_to_affin = platform_get_irq(mdwc->dwc3, 0);
 	mdwc->dwc3_cpu_notifier.notifier_call = dwc3_cpu_notifier_cb;
 
@@ -2952,16 +2924,13 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		local_irq_save(flags);
 		mdwc->id_state = !!irq_read_line(mdwc->pmic_id_irq);
 		if (mdwc->id_state == DWC3_ID_GROUND)
-			schedule_work(&mdwc->resume_work.work);
+			dwc3_ext_event_notify(mdwc);
 		local_irq_restore(flags);
 		enable_irq_wake(mdwc->pmic_id_irq);
 	}
 
 	if (!dwc->is_drd && host_mode) {
 		dev_dbg(&pdev->dev, "DWC3 in host only mode\n");
-		mdwc->in_host_mode = true;
-		mdwc->hs_phy->flags |= PHY_HOST_MODE;
-		mdwc->ss_phy->flags |= PHY_HOST_MODE;
 		mdwc->id_state = DWC3_ID_GROUND;
 		dwc3_ext_event_notify(mdwc);
 	}
@@ -3092,11 +3061,15 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 		pm_runtime_get_sync(mdwc->dev);
 		dbg_event(0xFF, "StrtHost gync",
 			atomic_read(&mdwc->dev->power.usage_count));
+		mdwc->hs_phy->flags |= PHY_HOST_MODE;
+		mdwc->ss_phy->flags |= PHY_HOST_MODE;
 		usb_phy_notify_connect(mdwc->hs_phy, USB_SPEED_HIGH);
 		if (!IS_ERR(mdwc->vbus_reg))
 			ret = regulator_enable(mdwc->vbus_reg);
 		if (ret) {
 			dev_err(mdwc->dev, "unable to enable vbus_reg\n");
+			mdwc->hs_phy->flags &= ~PHY_HOST_MODE;
+			mdwc->ss_phy->flags &= ~PHY_HOST_MODE;
 			pm_runtime_put_sync(mdwc->dev);
 			dbg_event(0xFF, "vregerr psync",
 				atomic_read(&mdwc->dev->power.usage_count));
@@ -3120,6 +3093,8 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 				__func__, ret);
 			if (!IS_ERR(mdwc->vbus_reg))
 				regulator_disable(mdwc->vbus_reg);
+			mdwc->hs_phy->flags &= ~PHY_HOST_MODE;
+			mdwc->ss_phy->flags &= ~PHY_HOST_MODE;
 			pm_runtime_put_sync(mdwc->dev);
 			dbg_event(0xFF, "pdeverr psync",
 				atomic_read(&mdwc->dev->power.usage_count));
@@ -3156,6 +3131,8 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 		dbg_event(0xFF, "StopHost gsync",
 			atomic_read(&mdwc->dev->power.usage_count));
 		usb_phy_notify_disconnect(mdwc->hs_phy, USB_SPEED_HIGH);
+		mdwc->hs_phy->flags &= ~PHY_HOST_MODE;
+		mdwc->ss_phy->flags &= ~PHY_HOST_MODE;
 		platform_device_del(dwc->xhci);
 
 		/*

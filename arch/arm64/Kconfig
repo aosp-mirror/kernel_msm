@@ -529,16 +529,14 @@ config CPU_BIG_ENDIAN
        help
          Say Y if you plan on running a kernel in big-endian mode.
 
-config ARM64_STLR_NEEDS_BARRIER
-	bool "Store-Release operations require explicit barriers"
-	def_bool ARCH_MSM8996
+config ARM64_SEV_IN_LOCK_UNLOCK
+	bool "Add explicit SEV in the spinlock unlock code path"
 	help
-	  Some early samples of MSMTHULIUM SoCs require that an explicit barrier
-	  be executed prior to any Store-Release operation (STLR) to comform to
-	  ARM memory ordering requirements. If you are building the kernel to
-	  work on one of these early designs, select 'Y' here.
-
-	  For production kernels, you should say 'N' here.
+	  In certain unexplained cases, the stlr alone might not wakeup
+	  the processor waiting in WFE on a spinlock.
+	  Add an explicity dsb and SEV in write_unlock, read_unlock
+	  and spin_unlock to ensure that the core waiting on the lock
+	  wakes up from WFE.
 
 config SMP
 	bool "Symmetric Multi-Processing"

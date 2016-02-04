@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -473,6 +473,7 @@ static int msm_comm_vote_bus(struct msm_vidc_core *core)
 
 	list_for_each_entry(inst, &core->instances, list) {
 		int codec = 0, yuv = 0;
+		struct v4l2_control ctrl;
 
 		codec = inst->session_type == MSM_VIDC_DECODER ?
 			inst->fmts[OUTPUT_PORT]->fourcc :
@@ -484,9 +485,19 @@ static int msm_comm_vote_bus(struct msm_vidc_core *core)
 
 		vote_data[i].domain = get_hal_domain(inst->session_type);
 		vote_data[i].codec = get_hal_codec(codec);
-		vote_data[i].width = inst->prop.width[CAPTURE_PORT];
-		vote_data[i].height = inst->prop.height[CAPTURE_PORT];
-		vote_data[i].fps = inst->prop.fps;
+		vote_data[i].width =  max(inst->prop.width[CAPTURE_PORT],
+			inst->prop.width[OUTPUT_PORT]);
+		vote_data[i].height = max(inst->prop.height[CAPTURE_PORT],
+			inst->prop.height[OUTPUT_PORT]);
+
+		ctrl.id = V4L2_CID_MPEG_VIDC_VIDEO_OPERATING_RATE;
+		rc = msm_comm_g_ctrl(inst, &ctrl);
+		if (!rc && ctrl.value)
+			vote_data[i].fps = (ctrl.value >> 16) ?
+				ctrl.value >> 16 : 1;
+		else
+			vote_data[i].fps = inst->prop.fps;
+
 		if (msm_comm_turbo_session(inst))
 			vote_data[i].power_mode = VIDC_POWER_TURBO;
 		else if (is_low_power_session(inst))
@@ -1441,7 +1452,8 @@ static void handle_session_flush(enum hal_command_response cmd, void *data)
 			}
 		}
 	}
-
+	atomic_dec(&inst->in_flush);
+	dprintk(VIDC_DBG, "Notify flush complete to client\n");
 	msm_vidc_queue_v4l2_event(inst, V4L2_EVENT_MSM_VIDC_FLUSH_DONE);
 	put_inst(inst);
 }
@@ -2639,7 +2651,7 @@ static int msm_vidc_load_resources(int flipped_state,
 {
 	int rc = 0;
 	struct hfi_device *hdev;
-	int num_mbs_per_sec = 0;
+	int num_mbs_per_sec = 0, max_load_adj = 0;
 	struct msm_vidc_core *core;
 	enum load_calc_quirks quirks = LOAD_CALC_IGNORE_TURBO_LOAD |
 		LOAD_CALC_IGNORE_THUMBNAIL_LOAD |
@@ -2667,9 +2679,12 @@ static int msm_vidc_load_resources(int flipped_state,
 		msm_comm_get_load(core, MSM_VIDC_DECODER, quirks) +
 		msm_comm_get_load(core, MSM_VIDC_ENCODER, quirks);
 
-	if (num_mbs_per_sec > core->resources.max_load) {
+	max_load_adj = core->resources.max_load +
+		inst->capability.mbs_per_frame.max;
+
+	if (num_mbs_per_sec > max_load_adj) {
 		dprintk(VIDC_ERR, "HW is overloaded, needed: %d max: %d\n",
-			num_mbs_per_sec, core->resources.max_load);
+			num_mbs_per_sec, max_load_adj);
 		msm_vidc_print_running_insts(core);
 		inst->state = MSM_VIDC_CORE_INVALID;
 		msm_comm_kill_session(inst);
@@ -4419,6 +4434,8 @@ int msm_comm_flush(struct msm_vidc_inst *inst, u32 flags)
 			"FLUSH BUG: Pending q not empty! It should be empty\n");
 		}
 		mutex_unlock(&inst->pendingq.lock);
+		atomic_inc(&inst->in_flush);
+		dprintk(VIDC_DBG, "Send flush Output to firmware\n");
 		rc = call_hfi_op(hdev, session_flush, inst->session,
 				HAL_FLUSH_OUTPUT);
 	} else {
@@ -4455,6 +4472,8 @@ int msm_comm_flush(struct msm_vidc_inst *inst, u32 flags)
 		/*Do not send flush in case of session_error */
 		if (!(inst->state == MSM_VIDC_CORE_INVALID &&
 			  core->state != VIDC_CORE_INVALID))
+			atomic_inc(&inst->in_flush);
+			dprintk(VIDC_DBG, "Send flush all to firmware\n");
 			rc = call_hfi_op(hdev, session_flush, inst->session,
 				HAL_FLUSH_ALL);
 	}
@@ -4585,21 +4604,23 @@ int msm_vidc_trigger_ssr(struct msm_vidc_core *core,
 
 static int msm_vidc_load_supported(struct msm_vidc_inst *inst)
 {
-	int num_mbs_per_sec = 0;
+	int num_mbs_per_sec = 0, max_load_adj = 0;
 	enum load_calc_quirks quirks = LOAD_CALC_IGNORE_TURBO_LOAD |
 		LOAD_CALC_IGNORE_THUMBNAIL_LOAD |
 		LOAD_CALC_IGNORE_NON_REALTIME_LOAD;
 
 	if (inst->state == MSM_VIDC_OPEN_DONE) {
+		max_load_adj = inst->core->resources.max_load +
+			inst->capability.mbs_per_frame.max;
 		num_mbs_per_sec = msm_comm_get_load(inst->core,
 					MSM_VIDC_DECODER, quirks);
 		num_mbs_per_sec += msm_comm_get_load(inst->core,
 					MSM_VIDC_ENCODER, quirks);
-		if (num_mbs_per_sec > inst->core->resources.max_load) {
+		if (num_mbs_per_sec > max_load_adj) {
 			dprintk(VIDC_ERR,
 				"H/W is overloaded. needed: %d max: %d\n",
 				num_mbs_per_sec,
-				inst->core->resources.max_load);
+				max_load_adj);
 			msm_vidc_print_running_insts(inst->core);
 			return -EBUSY;
 		}

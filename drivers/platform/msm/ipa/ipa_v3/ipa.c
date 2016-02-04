@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2736,7 +2736,7 @@ static void ipa3_teardown_apps_pipes(void)
 }
 
 #ifdef CONFIG_COMPAT
-long compat_ipa_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+long compat_ipa3_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int retval = 0;
 	struct ipa3_ioc_nat_alloc_mem32 nat_mem32;
@@ -2881,7 +2881,7 @@ static const struct file_operations ipa3_drv_fops = {
 	.write = ipa3_write,
 	.unlocked_ioctl = ipa3_ioctl,
 #ifdef CONFIG_COMPAT
-	.compat_ioctl = compat_ipa_ioctl,
+	.compat_ioctl = compat_ipa3_ioctl,
 #endif
 };
 
@@ -4907,7 +4907,6 @@ static void ipa_gsi_notify_cb(struct gsi_per_notify *notify)
 		break;
 	case GSI_PER_EVT_GENERAL_BREAK_POINT:
 		IPAERR("Got GSI_PER_EVT_GENERAL_BREAK_POINT\n");
-		BUG();
 		break;
 	case GSI_PER_EVT_GENERAL_BUS_ERROR:
 		IPAERR("Got GSI_PER_EVT_GENERAL_BUS_ERROR\n");
