@@ -1,0 +1,135 @@
+&i2c_6 {
+	status = "disabled";
+};
+
+&blsp1_uart6 {
+	status = "disabled";
+};
+
+/ {
+	aliases {
+		spi6 = &spi_6;
+	};
+};
+
+&tlmm {
+	spi_6 {
+		spi_6_active: spi_6_active {
+			mux {
+				pins = "gpio25", "gpio26", "gpio27", "gpio28";
+				function = "blsp_spi6";
+			};
+
+			config {
+				pins = "gpio25", "gpio26", "gpio27", "gpio28";
+				drive-strength = <6>;
+				bias-disable;
+			};
+		};
+
+		spi_6_sleep: spi_6_sleep {
+			mux {
+				pins = "gpio25", "gpio26", "gpio27", "gpio28";
+				function = "blsp_spi6";
+			};
+
+			config {
+				pins = "gpio25", "gpio26", "gpio27", "gpio28";
+				drive-strength = <6>;
+				bias-disable;
+			};
+		};
+	};
+
+	sensorhub_ctrl {
+	/* NRST, BOOT0, AP2SH, SH2AP */
+		sensorhub_ctrl_active: sensorhub_ctrl_active {
+			mux {
+				pins = "gpio38", "gpio130", "gpio24", "gpio123";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio38", "gpio130", "gpio24", "gpio123";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		sensorhub_ctrl_sleep: sensorhub_ctrl_sleep {
+			mux {
+				pins = "gpio38", "gpio130", "gpio24", "gpio123";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio38", "gpio130", "gpio24", "gpio123";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+	};
+};
+
+&soc {
+	spi_6: spi@757a000 { /* BLSP1 QUP6 */
+		compatible = "qcom,spi-qup-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "spi_physical", "spi_bam_physical";
+		reg = <0x0757a000 0x600>,
+		      <0x07544000 0x2b000>;
+		interrupt-names = "spi_irq", "spi_bam_irq";
+		interrupts = <0 100 0>, <0 238 0>;
+		spi-max-frequency = <19200000>;
+
+		qcom,infinite-mode = <0>;
+		qcom,use-bam;
+		qcom,ver-reg-exists;
+		qcom,bam-consumer-pipe-index = <22>;
+		qcom,bam-producer-pipe-index = <23>;
+		qcom,master-id = <86>;
+		qcom,use-pinctrl;
+		pinctrl-names = "spi_default", "spi_sleep";
+		pinctrl-0 = <&spi_6_active>;
+		pinctrl-1 = <&spi_6_sleep>;
+
+		clock-names = "iface_clk", "core_clk";
+
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+		         <&clock_gcc clk_gcc_blsp1_qup6_spi_apps_clk>;
+	};
+};
+
+&spi_6 {
+	sensorhub@0 {
+		compatible = "contexthub,spich";
+		reg = <0>;
+		spi-max-frequency = <50000000>;
+		spi-cpol;
+		spi-cpha;
+
+		contexthub,ap2sh = <&tlmm 24 0x00>;
+		contexthub,sh2ap = <&tlmm 123 0x00>;
+		contexthub,nrst = <&tlmm 38 0x00>;
+		contexthub,boot0 = <&tlmm 130 0x00>;
+
+		pinctrl-names = "active", "sleep";
+		pinctrl-0 = <&sensorhub_ctrl_active>;
+		pinctrl-1 = <&sensorhub_ctrl_sleep>;
+	};
+};
+
+&pm8994_l19 {
+	regulator-min-microvolt = <2850000>;
+	regulator-max-microvolt = <2850000>;
+	regulator-always-on;
+	qcom,init-voltage = <2850000>;
+	status = "okay";
+};
+
+&pm8994_lvs2 {
+	qcom,init-enable = <1>;
+	regulator-always-on;
+	status = "okay";
+};
