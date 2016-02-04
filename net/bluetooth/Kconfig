@@ -104,4 +104,6 @@ config BT_DEBUGFS
 	  Provide extensive information about internal Bluetooth states
 	  in debugfs.
 
+source "net/bluetooth/bdaddress/Kconfig"
+
 source "drivers/bluetooth/Kconfig"
