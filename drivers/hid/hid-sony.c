@@ -732,7 +732,7 @@ static const unsigned int buzz_keymap[] = {
 	/*
 	 * The controller has 4 remote buzzers, each with one LED and 5
 	 * buttons.
-	 * 
+	 *
 	 * We use the mapping chosen by the controller, which is:
 	 *
 	 * Key          Offset
@@ -746,15 +746,15 @@ static const unsigned int buzz_keymap[] = {
 	 * So, for example, the orange button on the third buzzer is mapped to
 	 * BTN_TRIGGER_HAPPY14
 	 */
-	[ 1] = BTN_TRIGGER_HAPPY1,
-	[ 2] = BTN_TRIGGER_HAPPY2,
-	[ 3] = BTN_TRIGGER_HAPPY3,
-	[ 4] = BTN_TRIGGER_HAPPY4,
-	[ 5] = BTN_TRIGGER_HAPPY5,
-	[ 6] = BTN_TRIGGER_HAPPY6,
-	[ 7] = BTN_TRIGGER_HAPPY7,
-	[ 8] = BTN_TRIGGER_HAPPY8,
-	[ 9] = BTN_TRIGGER_HAPPY9,
+	 [1] = BTN_TRIGGER_HAPPY1,
+	 [2] = BTN_TRIGGER_HAPPY2,
+	 [3] = BTN_TRIGGER_HAPPY3,
+	 [4] = BTN_TRIGGER_HAPPY4,
+	 [5] = BTN_TRIGGER_HAPPY5,
+	 [6] = BTN_TRIGGER_HAPPY6,
+	 [7] = BTN_TRIGGER_HAPPY7,
+	 [8] = BTN_TRIGGER_HAPPY8,
+	 [9] = BTN_TRIGGER_HAPPY9,
 	[10] = BTN_TRIGGER_HAPPY10,
 	[11] = BTN_TRIGGER_HAPPY11,
 	[12] = BTN_TRIGGER_HAPPY12,
@@ -1975,7 +1975,7 @@ static void sony_release_device_id(struct sony_sc *sc)
 }
 
 static inline void sony_init_output_report(struct sony_sc *sc,
-				void(*send_output_report)(struct sony_sc*))
+				void (*send_output_report)(struct sony_sc *))
 {
 	sc->send_output_report = send_output_report;
 
@@ -2160,7 +2160,7 @@ static int sony_suspend(struct hid_device *hdev, pm_message_t message)
 	/*
 	 * On suspend save the current LED state,
 	 * stop running force-feedback and blank the LEDS.
-         */
+	 */
 	if (SONY_LED_SUPPORT || SONY_FF_SUPPORT) {
 		struct sony_sc *sc = hid_get_drvdata(hdev);
 
