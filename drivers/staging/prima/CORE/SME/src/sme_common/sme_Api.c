@@ -2075,6 +2075,7 @@ eHalStatus sme_SetEseBeaconRequest(tHalHandle hHal, const tANI_U8 sessionId,
    }
 
    sme_RrmProcessBeaconReportReqInd(pMac, pSmeBcnReportReq);
+   vos_mem_free(pSmeBcnReportReq);
    return status;
 }
 
@@ -12289,6 +12290,7 @@ eHalStatus sme_LLStatsSetReq(tHalHandle hHal,
         {
             VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: "
                     "Not able to post SIR_HAL_LL_STATS_SET message to HAL", __func__);
+            vos_mem_free(plinkLayerSetReq);
             status = eHAL_STATUS_FAILURE;
         }
         sme_ReleaseGlobalLock( &pMac->sme );
@@ -12297,6 +12299,8 @@ eHalStatus sme_LLStatsSetReq(tHalHandle hHal,
     {
         VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: "
                 "sme_AcquireGlobalLock error", __func__);
+        vos_mem_free(plinkLayerSetReq);
+        status = eHAL_STATUS_FAILURE;
     }
     return status;
 }
@@ -12342,6 +12346,7 @@ eHalStatus sme_LLStatsGetReq(tHalHandle hHal,
         {
             VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: "
                     "Not able to post SIR_HAL_LL_STATS_GET message to HAL", __func__);
+            vos_mem_free(pGetStatsReq);
             status = eHAL_STATUS_FAILURE;
         }
         sme_ReleaseGlobalLock( &pMac->sme );
@@ -12350,6 +12355,8 @@ eHalStatus sme_LLStatsGetReq(tHalHandle hHal,
     {
         VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: "
                 "sme_AcquireGlobalLock error", __func__);
+        vos_mem_free(pGetStatsReq);
+        status = eHAL_STATUS_FAILURE;
     }
     return status;
 }
@@ -12399,6 +12406,7 @@ eHalStatus sme_LLStatsClearReq(tHalHandle hHal,
         {
             VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: "
                     "Not able to post SIR_HAL_LL_STATS_CLEAR message to HAL", __func__);
+            vos_mem_free(pClearStatsReq);
             status = eHAL_STATUS_FAILURE;
         }
         sme_ReleaseGlobalLock( &pMac->sme );
@@ -12407,6 +12415,8 @@ eHalStatus sme_LLStatsClearReq(tHalHandle hHal,
     {
         VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: "
                 "sme_AcquireGlobalLock error", __func__);
+        vos_mem_free(pClearStatsReq);
+        status = eHAL_STATUS_FAILURE;
     }
 
     return status;
@@ -12744,10 +12754,22 @@ eHalStatus sme_EXTScanGetCapabilities (tHalHandle hHal,
         MTRACE(vos_trace(VOS_MODULE_ID_SME,
                  TRACE_CODE_SME_TX_WDA_MSG, NO_SESSION, vosMessage.type));
         vosStatus = vos_mq_post_message(VOS_MQ_ID_WDA, &vosMessage);
-        if (!VOS_IS_STATUS_SUCCESS(vosStatus))
+        if (!VOS_IS_STATUS_SUCCESS(vosStatus)) {
+           VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: "
+                    "failed to post WDA_EXTSCAN_GET_CAPABILITIES_REQ ",
+                    __func__);
+           vos_mem_free(pGetEXTScanCapabilitiesReq);
            status = eHAL_STATUS_FAILURE;
+        }
 
         sme_ReleaseGlobalLock(&pMac->sme);
+    }
+    else
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: "
+                "sme_AcquireGlobalLock error", __func__);
+        vos_mem_free(pGetEXTScanCapabilitiesReq);
+        status = eHAL_STATUS_FAILURE;
     }
     return(status);
 }
@@ -12790,10 +12812,20 @@ eHalStatus sme_EXTScanStart (tHalHandle hHal,
         MTRACE(vos_trace(VOS_MODULE_ID_SME,
                  TRACE_CODE_SME_TX_WDA_MSG, NO_SESSION, vosMessage.type));
         vosStatus = vos_mq_post_message(VOS_MQ_ID_WDA, &vosMessage);
-        if (!VOS_IS_STATUS_SUCCESS(vosStatus))
+        if (!VOS_IS_STATUS_SUCCESS(vosStatus)) {
+           VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+                    "%s: failed to post WDA_EXTSCAN_START_REQ", __func__);
+           vos_mem_free(pextScanStartReq);
            status = eHAL_STATUS_FAILURE;
-
+        }
         sme_ReleaseGlobalLock(&pMac->sme);
+    }
+    else
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: "
+                "sme_AcquireGlobalLock error", __func__);
+        vos_mem_free(pextScanStartReq);
+        status = eHAL_STATUS_FAILURE;
     }
     return(status);
 }
@@ -12837,9 +12869,19 @@ eHalStatus sme_EXTScanStop(tHalHandle hHal, tSirEXTScanStopReqParams *pStopReq)
         vosStatus = vos_mq_post_message(VOS_MQ_ID_WDA, &vosMessage);
         if (!VOS_IS_STATUS_SUCCESS(vosStatus))
         {
+           VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+                    "%s: failed to post WDA_EXTSCAN_STOP_REQ", __func__);
+           vos_mem_free(pEXTScanStopReq);
            status = eHAL_STATUS_FAILURE;
         }
         sme_ReleaseGlobalLock(&pMac->sme);
+    }
+    else
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: "
+                "sme_AcquireGlobalLock error", __func__);
+        vos_mem_free(pEXTScanStopReq);
+        status = eHAL_STATUS_FAILURE;
     }
     return(status);
 }
@@ -12882,10 +12924,20 @@ eHalStatus sme_SetBssHotlist (tHalHandle hHal,
         MTRACE(vos_trace(VOS_MODULE_ID_SME,
                  TRACE_CODE_SME_TX_WDA_MSG, NO_SESSION, vosMessage.type));
         vosStatus = vos_mq_post_message(VOS_MQ_ID_WDA, &vosMessage);
-        if (!VOS_IS_STATUS_SUCCESS(vosStatus))
+        if (!VOS_IS_STATUS_SUCCESS(vosStatus)) {
+           VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+                    "%s: failed to post WDA_EXTSCAN_STOP_REQ", __func__);
+           vos_mem_free(pEXTScanSetBssidHotlistReq);
            status = eHAL_STATUS_FAILURE;
-
+        }
         sme_ReleaseGlobalLock(&pMac->sme);
+    }
+    else
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: "
+                "sme_AcquireGlobalLock error", __func__);
+        vos_mem_free(pEXTScanSetBssidHotlistReq);
+        status = eHAL_STATUS_FAILURE;
     }
 
     return(status);
@@ -12929,10 +12981,21 @@ eHalStatus sme_ResetBssHotlist (tHalHandle hHal,
         MTRACE(vos_trace(VOS_MODULE_ID_SME,
                  TRACE_CODE_SME_TX_WDA_MSG, NO_SESSION, vosMessage.type));
         vosStatus = vos_mq_post_message(VOS_MQ_ID_WDA, &vosMessage);
-        if (!VOS_IS_STATUS_SUCCESS(vosStatus))
+        if (!VOS_IS_STATUS_SUCCESS(vosStatus)) {
+           VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+                    "%s: failed to post WDA_EXTSCAN_RESET_BSSID_HOTLIST_REQ",
+                     __func__);
+           vos_mem_free(pEXTScanHotlistResetReq);
            status = eHAL_STATUS_FAILURE;
-
+        }
         sme_ReleaseGlobalLock(&pMac->sme);
+    }
+    else
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: "
+                "sme_AcquireGlobalLock error", __func__);
+        vos_mem_free(pEXTScanHotlistResetReq);
+        status = eHAL_STATUS_FAILURE;
     }
     return(status);
 }
@@ -13069,10 +13132,21 @@ eHalStatus sme_getCachedResults (tHalHandle hHal,
         MTRACE(vos_trace(VOS_MODULE_ID_SME,
                  TRACE_CODE_SME_TX_WDA_MSG, NO_SESSION, vosMessage.type));
         vosStatus = vos_mq_post_message(VOS_MQ_ID_WDA, &vosMessage);
-        if (!VOS_IS_STATUS_SUCCESS(vosStatus))
+        if (!VOS_IS_STATUS_SUCCESS(vosStatus)) {
+           VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+                "%s: failed tp post WDA_EXTSCAN_GET_CACHED_RESULTS_REQ",
+                __func__);
+           vos_mem_free(pEXTScanCachedResultsReq);
            status = eHAL_STATUS_FAILURE;
-
+        }
         sme_ReleaseGlobalLock(&pMac->sme);
+    }
+    else
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+            FL("Failed to acquire SME Global Lock"));
+        vos_mem_free(pEXTScanCachedResultsReq);
+        status = eHAL_STATUS_FAILURE;
     }
     return(status);
 }
@@ -13174,10 +13248,20 @@ eHalStatus sme_Encryptmsgsend (tHalHandle hHal,
         MTRACE(vos_trace(VOS_MODULE_ID_SME,
                  TRACE_CODE_SME_TX_WDA_MSG, NO_SESSION, vosMessage.type));
         vosStatus = vos_mq_post_message(VOS_MQ_ID_WDA, &vosMessage);
-        if (!VOS_IS_STATUS_SUCCESS(vosStatus))
+        if (!VOS_IS_STATUS_SUCCESS(vosStatus)) {
+           VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+            "%s: failed to post SIR_HAL_ENCRYPT_MSG_REQ", __func__);
+           vos_mem_free(pEncryptMsg);
            status = eHAL_STATUS_FAILURE;
-
+        }
         sme_ReleaseGlobalLock(&pMac->sme);
+    }
+    else
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: "
+                "sme_AcquireGlobalLock error", __func__);
+        vos_mem_free(pEncryptMsg);
+        status = eHAL_STATUS_FAILURE;
     }
     return(status);
 }
