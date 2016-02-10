@@ -37,6 +37,13 @@
 #define KOFF_TIMEOUT msecs_to_jiffies(84)
 #define WAIT_DMA_TIMEOUT msecs_to_jiffies(84)
 
+/*
+ * MDP_DEINTERLACE & MDP_SHARPENING Flags are not valid for MDP3
+ * so using them together for MDP_SMART_BLIT.
+ */
+#define MDP_SMART_BLIT                 0xC0000000
+
+
 enum  {
 	MDP3_CLK_AHB,
 	MDP3_CLK_AXI,
