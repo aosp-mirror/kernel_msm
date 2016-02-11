@@ -23,6 +23,7 @@
 #include <linux/dma-buf.h>
 #include <linux/pm_runtime.h>
 
+#include "mdss_dsi_clk.h"
 #include "mdp3_ctrl.h"
 #include "mdp3.h"
 #include "mdp3_ppp.h"
@@ -905,6 +906,7 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 	struct mdss_panel_data *panel;
 
 	pr_debug("mdp3_ctrl_off\n");
+	return 0;
 	mdp3_session = (struct mdp3_session_data *)mfd->mdp.private1;
 	if (!mdp3_session || !mdp3_session->panel || !mdp3_session->dma ||
 		!mdp3_session->intf) {
