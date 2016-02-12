@@ -85,6 +85,9 @@
 #ifdef CONFIG_PARAVIRT
 #include <asm/paravirt.h>
 #endif
+#ifdef CONFIG_MSM_APP_SETTINGS
+#include <asm/app_api.h>
+#endif
 
 #include "sched.h"
 #include "../workqueue_internal.h"
