@@ -106,3 +106,9 @@
 &pcie2{
 	compatible = "qcom,pci-msm-na";
 };
+
+&soc {
+	qcom,cnss {
+		/delete-property/ wlan-ant-switch-supply;
+	};
+};
