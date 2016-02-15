@@ -642,10 +642,10 @@ int mdp3_calc_ppp_res(struct msm_fb_data_type *mfd,
 		ppp_res.next_ab = honest_ppp_ab;
 		ppp_res.next_ib = honest_ppp_ab;
 		ppp_stat->bw_update = true;
-		pr_debug("solid fill ab = %llx, total ab = %llx (%d fps)\
-			 Solid_fill_vote %d\n",
-			 (ppp_res.solid_fill_byte * fps), honest_ppp_ab, fps,
-			mdp3_res->solid_fill_vote_en);
+		pr_debug("solid fill ab = %llx, total ab = %llx ",
+			(ppp_res.solid_fill_byte * fps), honest_ppp_ab);
+		pr_debug("(%d fps) Solid_fill_vote %d\n",
+			fps, mdp3_res->solid_fill_vote_en);
 		ATRACE_INT("mdp3_ppp_bus_quota", honest_ppp_ab);
 	}
 	ppp_res.clk_rate = mdp3_clk_calc(mfd, lreq, fps);

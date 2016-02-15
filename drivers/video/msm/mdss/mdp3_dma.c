@@ -665,8 +665,8 @@ retry_dma_done:
 				vsync_status = (1 << MDP3_INTR_DMA_P_DONE) &
 					MDP3_REG_READ(MDP3_REG_INTR_STATUS);
 				if (!vsync_status) {
-					pr_err("%s cmd time out retry count =\
-						 %d\n", __func__, retry_count);
+					pr_err("%s: cmd timeout retry cnt %d\n",
+						__func__, retry_count);
 					goto retry_dma_done;
 				}
 				rc = -1;

@@ -23,7 +23,6 @@
 #include <linux/dma-buf.h>
 #include <linux/pm_runtime.h>
 
-#include "mdss_dsi_clk.h"
 #include "mdp3_ctrl.h"
 #include "mdp3.h"
 #include "mdp3_ppp.h"
@@ -754,9 +753,8 @@ static int mdp3_ctrl_on(struct msm_fb_data_type *mfd)
 		mdp3_session->in_splash_screen);
 	/* make sure DSI host is initialized properly */
 	if (panel) {
-		pr_err("%s : dsi host init, power state = %d power_on_lp %d \
-			Splash %d\n", __func__, mfd->panel_power_state,
-			mdss_fb_is_power_on_lp(mfd),
+		pr_debug("%s : dsi host init, power state = %d Splash %d\n",
+			__func__, mfd->panel_power_state,
 			mdp3_session->in_splash_screen);
 		if (mdss_fb_is_power_on_lp(mfd) ||
 			mdp3_session->in_splash_screen) {
@@ -809,10 +807,8 @@ static int mdp3_ctrl_on(struct msm_fb_data_type *mfd)
 		goto on_error;
 	}
 	mdp3_qos_remapper_setup(panel);
-	pr_err("%s %d\n", __func__, __LINE__);
 
 	rc = mdp3_ctrl_res_req_clk(mfd, 1);
-	pr_err("%s %d\n", __func__, __LINE__);
 	if (rc) {
 		pr_err("fail to request mdp clk resource\n");
 		goto on_error;
@@ -825,8 +821,8 @@ static int mdp3_ctrl_on(struct msm_fb_data_type *mfd)
 		if (panel->panel_info.type == MIPI_CMD_PANEL) {
 			struct dsi_panel_clk_ctrl clk_ctrl;
 
-			clk_ctrl.state = MDSS_DSI_CLK_OFF;
-			clk_ctrl.client = DSI_CLK_REQ_DSI_CLIENT;
+			clk_ctrl.state = MDSS_DSI_CLK_ON;
+			clk_ctrl.client = DSI_CLK_REQ_MDP_CLIENT;
 			rc |= panel->event_handler(panel,
 					MDSS_EVENT_PANEL_CLK_CTRL,
 					(void *)&clk_ctrl);
@@ -885,7 +881,6 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 	struct mdss_panel_data *panel;
 
 	pr_debug("mdp3_ctrl_off\n");
-	return 0;
 	mdp3_session = (struct mdp3_session_data *)mfd->mdp.private1;
 	if (!mdp3_session || !mdp3_session->panel || !mdp3_session->dma ||
 		!mdp3_session->intf) {
@@ -904,7 +899,7 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 	panel = mdp3_session->panel;
 	mutex_lock(&mdp3_session->lock);
 
-	pr_err("Requested power state = %d\n", mfd->panel_power_state);
+	pr_debug("Requested power state = %d\n", mfd->panel_power_state);
 	if (mdss_fb_is_power_on_lp(mfd)) {
 		/*
 		* Transition to low power
@@ -913,13 +908,13 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 		*/
 		intf_stopped = false;
 	} else {
-	    /* Transition to display off */
-	if (!mdp3_session->status) {
-		pr_debug("fb%d is off already", mfd->index);
-		goto off_error;
-	}
-	if (panel && panel->set_backlight)
-		panel->set_backlight(panel, 0);
+		/* Transition to display off */
+		if (!mdp3_session->status) {
+			pr_debug("fb%d is off already", mfd->index);
+			goto off_error;
+		}
+		if (panel && panel->set_backlight)
+			panel->set_backlight(panel, 0);
 	}
 
 	/*
@@ -946,7 +941,7 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 		rc = mdp3_session->dma->stop(mdp3_session->dma,
 					mdp3_session->intf);
 		if (rc)
-			pr_err("fail to stop the MDP3 dma\n");
+			pr_debug("fail to stop the MDP3 dma\n");
 		/* Wait to ensure TG to turn off */
 		msleep(20);
 		mfd->panel_info->cont_splash_enabled = 0;
@@ -963,6 +958,7 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 			(void *) (long int)mfd->panel_power_state);
 	if (rc)
 		pr_err("EVENT_PANEL_OFF error (%d)\n", rc);
+
 	if (intf_stopped) {
 		if (mdp3_session->clk_on) {
 			pr_debug("mdp3_ctrl_off stop clock\n");
@@ -971,8 +967,8 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 				struct dsi_panel_clk_ctrl clk_ctrl;
 
 				clk_ctrl.state = MDSS_DSI_CLK_OFF;
-				clk_ctrl.client = DSI_CLK_REQ_DSI_CLIENT;
-				rc = panel->event_handler(panel,
+				clk_ctrl.client = DSI_CLK_REQ_MDP_CLIENT;
+				rc |= panel->event_handler(panel,
 					MDSS_EVENT_PANEL_CLK_CTRL,
 					(void *)&clk_ctrl);
 			}
@@ -1005,8 +1001,8 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 			(mfd->panel_info->type != MIPI_CMD_PANEL)) {
 			rc = pm_runtime_put(&mdp3_res->pdev->dev);
 			if (rc)
-				pr_err("unable to suspend w/pm_runtime_put\
-					 (%d)\n", rc);
+				pr_err("%s: pm_runtime_put failed (rc %d)\n",
+					__func__, rc);
 		}
 		mdp3_bufq_deinit(&mdp3_session->bufq_out);
 		if (mdp3_session->overlay.id != MSMFB_NEW_REQUEST) {
@@ -1181,10 +1177,9 @@ static int mdp3_overlay_queue_buffer(struct msm_fb_data_type *mfd,
 	}
 
 	if (data.len < dma->source_config.stride * dma->source_config.height) {
-		pr_err("buf length = 0x%lx is smaller than required by\
-			 dma configuration = %d, %d\n", data.len,
-			dma->source_config.stride ,
-			dma->source_config.height);
+		pr_err("buf size(0x%lx) is smaller than dma config(0x%x)\n",
+			data.len, (dma->source_config.stride *
+			dma->source_config.height));
 		mdp3_put_img(&data, MDP3_CLIENT_DMA_P);
 		return -EINVAL;
 	}

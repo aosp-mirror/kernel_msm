@@ -1007,6 +1007,7 @@ int mdp3_dynamic_clock_gating_ctrl(int enable)
 	int rc = 0;
 	int cgc_cfg = 0;
 	/*Disable dynamic auto clock gating*/
+	pr_warn("%s Status %s\n", __func__, (enable ? "ON":"OFF"));
 	rc = mdp3_clk_enable(1, 0);
 	if (rc) {
 		pr_err("fail to turn on MDP core clks\n");
@@ -1605,7 +1606,6 @@ static int mdp3_iommu_map_iommu(struct mdp3_iommu_meta *meta,
 	unsigned int domain_num = (mdp3_res->domains +
 			MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
 	unsigned int partition_num = 0;
-	size_t map_ret;
 
 	size = meta->size;
 	table = meta->table;
@@ -1643,24 +1643,13 @@ static int mdp3_iommu_map_iommu(struct mdp3_iommu_meta *meta,
 	}
 
 	/* Mapping actual buffer */
-	/*ret = iommu_map_range(domain, meta->iova_addr + padding,
+	ret = iommu_map_range(domain, meta->iova_addr + padding,
 			table->sgl, size, prot);
 	if (ret) {
 		pr_err("%s: could not map %pa in domain %p\n",
 			__func__, &meta->iova_addr, domain);
 			unmap_size = padding;
 		goto out2;
-	}*/
-	map_ret = iommu_map_sg(domain, meta->iova_addr + padding,
-				table->sgl,
-				table->nents, prot);
-	if (map_ret != size) {
-		pr_err("%s: could not map 0x%x in domain %p\n",
-			__func__, meta->iova_addr, domain);
-		ret = -EINVAL;
-		goto out2;
-	} else {
-		ret = 0;
 	}
 
 	/* Adding padding to end of buffer */
@@ -1780,13 +1769,13 @@ int mdp3_self_map_iommu(struct ion_client *client, struct ion_handle *handle,
 		}
 	} else {
 		if (iommu_meta->flags != iommu_flags) {
-			pr_err("%s: handle %p is already mapped with diff\
-				 flag\n", __func__, handle);
+			pr_err("%s: hndl %p already mapped with diff flag\n",
+				__func__, handle);
 			ret = -EINVAL;
 			goto out_unlock;
 		} else if (iommu_meta->mapped_size != iova_length) {
-			pr_err("%s: handle %p is already mapped with diff\
-				 len\n", __func__, handle);
+			pr_err("%s: hndl %p already mapped with diff len\n",
+				__func__, handle);
 			ret = -EINVAL;
 			goto out_unlock;
 		} else {
@@ -1811,10 +1800,11 @@ out:
 int mdp3_put_img(struct mdp3_img_data *data, int client)
 {
 	struct ion_client *iclient = mdp3_res->ion_client;
-	int dom = 0;
+	int dom = (mdp3_res->domains + MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
+	int dir = DMA_BIDIRECTIONAL;
 
 	if (data->flags & MDP_MEMORY_ID_TYPE_FB) {
-		pr_err("mdp3_put_img fb mem buf=0x%pa\n", &data->addr);
+		pr_info("mdp3_put_img fb mem buf=0x%pa\n", &data->addr);
 		fdput(data->srcp_f);
 		memset(&data->srcp_f, 0, sizeof(struct fd));
 	} else if (!IS_ERR_OR_NULL(data->srcp_dma_buf)) {
@@ -1823,25 +1813,21 @@ int mdp3_put_img(struct mdp3_img_data *data, int client)
 		if (!iclient) {
 			pr_err("invalid ion client\n");
 			return -ENOMEM;
-		} else {
-			if (data->mapped) {
-				dom = (mdp3_res->domains +
-					MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
-				mdss_smmu_unmap_dma_buf(data->srcp_table,
-						dom, DMA_BIDIRECTIONAL,
-						data->srcp_dma_buf);
-				data->mapped = false;
-			}
-			if (!data->skip_detach) {
-				dma_buf_unmap_attachment(data->srcp_attachment,
-					data->srcp_table,
-					mdss_smmu_dma_data_direction(
-						DMA_BIDIRECTIONAL));
-				dma_buf_detach(data->srcp_dma_buf,
-						data->srcp_attachment);
-				dma_buf_put(data->srcp_dma_buf);
-				data->srcp_dma_buf = NULL;
-			}
+		}
+		if (data->mapped) {
+			mdss_smmu_unmap_dma_buf(data->srcp_table,
+						dom, dir,
+					data->srcp_dma_buf);
+			data->mapped = false;
+		}
+		if (!data->skip_detach) {
+			dma_buf_unmap_attachment(data->srcp_attachment,
+				data->srcp_table,
+			mdss_smmu_dma_data_direction(dir));
+			dma_buf_detach(data->srcp_dma_buf,
+					data->srcp_attachment);
+			dma_buf_put(data->srcp_dma_buf);
+			data->srcp_dma_buf = NULL;
 		}
 	} else {
 		return -EINVAL;
@@ -1855,7 +1841,7 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data, int client)
 	int ret = -EINVAL;
 	int fb_num;
 	struct ion_client *iclient = mdp3_res->ion_client;
-	int dom = 0;
+	int dom = (mdp3_res->domains + MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
 
 	data->flags = img->flags;
 
@@ -1892,9 +1878,6 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data, int client)
 				return ret;
 			}
 
-			dom = (mdp3_res->domains +
-				MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
-
 			data->srcp_attachment =
 			mdss_smmu_dma_buf_attach(data->srcp_dma_buf,
 					&mdp3_res->pdev->dev, dom);
@@ -1905,26 +1888,21 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data, int client)
 
 			data->srcp_table =
 				dma_buf_map_attachment(data->srcp_attachment,
-					mdss_smmu_dma_data_direction(
-						DMA_BIDIRECTIONAL));
+			mdss_smmu_dma_data_direction(DMA_BIDIRECTIONAL));
 			if (IS_ERR(data->srcp_table)) {
 				ret = PTR_ERR(data->srcp_table);
 				goto err_detach;
 			}
-			data->dir = DMA_BIDIRECTIONAL;
-			data->domain = dom;
 
 			ret = mdss_smmu_map_dma_buf(data->srcp_dma_buf,
 					data->srcp_table, dom,
-					&data->addr, &data->len,
-					DMA_BIDIRECTIONAL);
-			pr_debug("DMA get_img - map_dma_buf, dom = %d\n",
-					dom);
+				&data->addr, &data->len, DMA_BIDIRECTIONAL);
 
 			if (IS_ERR_VALUE(ret)) {
 				pr_err("smmu map dma buf failed: (%d)\n", ret);
 				goto err_unmap;
 			}
+
 		data->mapped = true;
 	}
 done:
@@ -1937,8 +1915,6 @@ done:
 			&data->addr, data->len);
 
 	} else {
-		pr_err("ret = %d Img offset = %d, len = 0x%lx\n",
-			ret, img->offset, data->len);
 		mdp3_put_img(data, client);
 		return -EINVAL;
 	}
@@ -1965,17 +1941,16 @@ int mdp3_iommu_enable(int client)
 	mutex_lock(&mdp3_res->iommu_lock);
 
 	if (mdp3_res->iommu_ref_cnt == 0) {
-		pr_err("IOMMU enable\n");
-			rc = mdss_smmu_attach(mdss_res);
-			if (rc) {
-				rc = mdss_smmu_detach(mdss_res);
-		}
+		rc = mdss_smmu_attach(mdss_res);
+		if (rc)
+			rc = mdss_smmu_detach(mdss_res);
 	}
 
 	if (!rc)
 		mdp3_res->iommu_ref_cnt++;
 	mutex_unlock(&mdp3_res->iommu_lock);
-	pr_err("client :%d ref_cnt: %d\n",
+
+	pr_debug("client :%d total_ref_cnt: %d\n",
 			client, mdp3_res->iommu_ref_cnt);
 	return rc;
 }
@@ -1988,12 +1963,10 @@ int mdp3_iommu_disable(int client)
 	if (mdp3_res->iommu_ref_cnt) {
 		mdp3_res->iommu_ref_cnt--;
 
-		pr_err("client :%d ref_cnt: %d\n",
+		pr_debug("client :%d total_ref_cnt: %d\n",
 				client, mdp3_res->iommu_ref_cnt);
-
-		if (mdp3_res->iommu_ref_cnt == 0) {
+		if (mdp3_res->iommu_ref_cnt == 0)
 			rc = mdss_smmu_detach(mdss_res);
-		}
 	} else {
 		pr_err("iommu ref count unbalanced for client %d\n", client);
 	}
@@ -2006,27 +1979,14 @@ int mdp3_iommu_ctrl(int enable)
 {
 	int rc;
 
-	if (mdp3_res->allow_iommu_update == false) {
-		pr_err("iommu_ctrl - iommu update false\n");
+	if (mdp3_res->allow_iommu_update == false)
 		return 0;
-	}
 
 	if (enable)
 		rc = mdp3_iommu_enable(MDP3_CLIENT_DSI);
 	else
 		rc = mdp3_iommu_disable(MDP3_CLIENT_DSI);
 	return rc;
-}
-
-int mdp3_iommu_is_attached()
-{
-	struct mdp3_iommu_ctx_map *context_map;
-
-	if (!mdp3_res->iommu_contexts)
-		return 0;
-
-	context_map = mdp3_res->iommu_contexts + MDP3_IOMMU_CTX_MDP_0;
-	return context_map->attached;
 }
 
 static int mdp3_init(struct msm_fb_data_type *mfd)
@@ -2149,18 +2109,25 @@ static int mdp3_alloc(struct msm_fb_data_type *mfd)
 	mdp3_parse_dt_splash(mfd);
 
 	size = mfd->fbi->fix.smem_len;
+
 	dom = mdp3_res->domains[MDP3_IOMMU_DOMAIN_UNSECURE].domain_idx;
-	ret = mdss_smmu_dma_alloc_coherent(&mdp3_res->pdev->dev, size, &phys,
-			&mfd->iova, &virt, GFP_KERNEL, dom);
-	if (unlikely(!virt)) {
-		pr_err("unable to map in splash memory\n");
+
+	ret = mdss_smmu_dma_alloc_coherent(&mdp3_res->pdev->dev, size,
+		&phys, &mfd->iova, &virt, GFP_KERNEL, dom);
+	if (ret) {
+		pr_err("unable to alloc fbmem size=%zx\n", size);
 		return -ENOMEM;
 	}
 
-	if (ret) {
-		pr_err("fail to map to IOMMU %d\n", ret);
-		return ret;
+	if (MDSS_LPAE_CHECK(phys)) {
+		pr_warn("fb mem phys %pa > 4GB is not supported.\n", &phys);
+		mdss_smmu_dma_free_coherent(&mdp3_res->pdev->dev, size, &virt,
+				phys, mfd->iova, dom);
+		return -ERANGE;
 	}
+
+	pr_debug("alloc 0x%zxB @ (%pa phys) (0x%p virt) (%pa iova) for fb%d\n",
+		 size, &phys, virt, &mfd->iova, mfd->index);
 
 	mfd->fbi->fix.smem_start = phys;
 	mfd->fbi->screen_base = virt;
@@ -2356,7 +2323,6 @@ static int mdp3_panel_register_done(struct mdss_panel_data *pdata)
 	 * continue splash screen. This would have happened in
 	 * res_update in continuous_splash_on without this flag.
 	 */
-	pr_err("Const splash =%d\n", pdata->panel_info.cont_splash_enabled);
 	if (pdata->panel_info.cont_splash_enabled == false)
 		mdp3_res->allow_iommu_update = true;
 
@@ -2382,7 +2348,6 @@ int mdp3_splash_done(struct mdss_panel_info *panel_info)
 		pr_err("continuous splash is on and splash done called\n");
 		return -EINVAL;
 	}
-	pr_err("Splash done\n");
 	mdp3_res->allow_iommu_update = true;
 	return 0;
 }
@@ -2460,8 +2425,7 @@ static void mdp3_dma_underrun_intr_handler(int type, void *arg)
 	mdp3_res->underrun_cnt++;
 	pr_err_ratelimited("display underrun detected count=%d\n",
 			mdp3_res->underrun_cnt);
-	ATRACE_INT("mdp3_dma_underrun_intr_handler",
-			mdp3_res->underrun_cnt);
+	ATRACE_INT("mdp3_dma_underrun_intr_handler", mdp3_res->underrun_cnt);
 
 	if (dma->ccs_config.ccs_enable && !dma->ccs_config.ccs_dirty) {
 		dma->ccs_config.ccs_dirty = true;
@@ -2498,15 +2462,14 @@ static ssize_t mdp3_store_smart_blit(struct device *dev,
 	if (rc) {
 		pr_err("kstrtoint failed. rc=%d\n", rc);
 		return rc;
-	} else {
-		mdp3_res->smart_blit_en = data;
-		pr_debug("mdp3 smart blit RGB %s YUV %s\n",
-			(mdp3_res->smart_blit_en & SMART_BLIT_RGB_EN) ?
-			"ENABLED" : "DISABLED",
-			(mdp3_res->smart_blit_en & SMART_BLIT_YUV_EN) ?
-			"ENABLED" : "DISABLED");
-		return len;
 	}
+	mdp3_res->smart_blit_en = data;
+	pr_debug("mdp3 smart blit RGB %s YUV %s\n",
+		(mdp3_res->smart_blit_en & SMART_BLIT_RGB_EN) ?
+		"ENABLED" : "DISABLED",
+		(mdp3_res->smart_blit_en & SMART_BLIT_YUV_EN) ?
+		"ENABLED" : "DISABLED");
+	return len;
 }
 
 static ssize_t mdp3_show_smart_blit(struct device *dev,
@@ -2744,7 +2707,7 @@ static int mdp3_probe(struct platform_device *pdev)
 		.data = NULL,
 	};
 
-	pr_err("%s -- START\n", __func__);
+	pr_debug("%s: START\n", __func__);
 	if (!pdev->dev.of_node) {
 		pr_err("MDP driver only supports device tree probe\n");
 		return -ENOTSUPP;
@@ -2848,7 +2811,7 @@ static int mdp3_probe(struct platform_device *pdev)
 		pr_err("mdss smmu init failed\n");
 
 	mdp3_res->mdss_util->mdp_probe_done = true;
-	pr_err("%s -- END\n", __func__);
+	pr_debug("%s: END\n", __func__);
 
 probe_done:
 	if (IS_ERR_VALUE(rc))
