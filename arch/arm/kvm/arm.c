@@ -1079,7 +1079,8 @@ static int init_hyp_mode(void)
 		goto out_free_mappings;
 	}
 
-	err = create_hyp_mappings(__start_rodata, __end_rodata);
+	err = create_hyp_mappings(kvm_ksym_ref(__start_rodata),
+				  kvm_ksym_ref(__end_rodata));
 	if (err) {
 		kvm_err("Cannot map rodata section\n");
 		goto out_free_mappings;
