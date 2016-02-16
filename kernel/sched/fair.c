@@ -5157,7 +5157,7 @@ boosted_cpu_util(int cpu)
 static inline unsigned long
 boosted_task_util(struct task_struct *task)
 {
-	unsigned long util = task_util(task, UTIL_AVG);
+	unsigned long util = task_util(task, UTIL_EST);
 	unsigned long margin = schedtune_task_margin(task);
 
 	trace_sched_boost_task(task, util, margin);
@@ -5488,7 +5488,7 @@ static int energy_aware_wake_cpu(struct task_struct *p, int target, int sync)
 
 	if (target_cpu != task_cpu(p)) {
 		struct energy_env eenv = {
-			.util_delta	= task_util(p, UTIL_AVG),
+			.util_delta	= task_util(p, UTIL_EST),
 			.src_cpu	= task_cpu(p),
 			.dst_cpu	= target_cpu,
 			.task		= p,
