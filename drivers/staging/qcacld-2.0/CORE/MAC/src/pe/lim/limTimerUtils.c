@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -582,11 +582,24 @@ limCreateTimers(tpAniSirGlobal pMac)
                FL("could not retrieve mac preauth value"));
     }
     pMac->lim.gLimPreAuthTimerTable.numEntry = cfgValue;
-    pMac->lim.gLimPreAuthTimerTable.pTable = vos_mem_malloc(cfgValue*sizeof(tLimPreAuthNode));
-    if(pMac->lim.gLimPreAuthTimerTable.pTable == NULL)
-    {
+    pMac->lim.gLimPreAuthTimerTable.pTable =
+        vos_mem_malloc(cfgValue*sizeof(tLimPreAuthNode*));
+    if(pMac->lim.gLimPreAuthTimerTable.pTable == NULL) {
+        pMac->lim.gLimPreAuthTimerTable.numEntry = 0;
         limLog(pMac, LOGP, FL("AllocateMemory failed!"));
         goto err_timer;
+    }
+    vos_mem_zero(pMac->lim.gLimPreAuthTimerTable.pTable,
+                 cfgValue * sizeof(tLimPreAuthNode*));
+
+    for (i = 0; i < cfgValue; i++) {
+        pMac->lim.gLimPreAuthTimerTable.pTable[i] =
+            vos_mem_malloc(sizeof(tLimPreAuthNode));
+        if (pMac->lim.gLimPreAuthTimerTable.pTable[i] == NULL) {
+            pMac->lim.gLimPreAuthTimerTable.numEntry = 0;
+            limLog(pMac, LOGP, FL("AllocateMemory failed!"));
+            goto err_timer;
+        }
     }
 
     limInitPreAuthTimerTable(pMac, &pMac->lim.gLimPreAuthTimerTable);
@@ -764,6 +777,8 @@ limCreateTimers(tpAniSirGlobal pMac)
 
         if(NULL != pMac->lim.gLimPreAuthTimerTable.pTable)
         {
+            for (i = 0; i < pMac->lim.gLimPreAuthTimerTable.numEntry; i++)
+                vos_mem_free(pMac->lim.gLimPreAuthTimerTable.pTable[i]);
             vos_mem_free(pMac->lim.gLimPreAuthTimerTable.pTable);
             pMac->lim.gLimPreAuthTimerTable.pTable = NULL;
         }
@@ -1020,8 +1035,6 @@ limDeactivateAndChangeTimer(tpAniSirGlobal pMac, tANI_U32 timerId)
 {
     tANI_U32    val=0, val1=0;
     tpPESession  session_entry;
-
-    MTRACE(macTrace(pMac, TRACE_CODE_TIMER_DEACTIVATE, NO_SESSION, timerId));
 
     switch (timerId)
     {
@@ -1703,7 +1716,6 @@ limHeartBeatDeactivateAndChangeTimer(tpAniSirGlobal pMac, tpPESession psessionEn
       return;
    }
 
-   MTRACE(macTrace(pMac, TRACE_CODE_TIMER_DEACTIVATE, psessionEntry->peSessionId, eLIM_HEART_BEAT_TIMER));
 #ifdef WLAN_ACTIVEMODE_OFFLOAD_FEATURE
    if(IS_ACTIVEMODE_OFFLOAD_FEATURE_ENABLE)
       return;
@@ -1770,7 +1782,6 @@ limReactivateHeartBeatTimer(tpAniSirGlobal pMac, tpPESession psessionEntry)
 #endif
 
     limHeartBeatDeactivateAndChangeTimer(pMac, psessionEntry);
-    MTRACE(macTrace(pMac, TRACE_CODE_TIMER_ACTIVATE, psessionEntry->peSessionId, eLIM_HEART_BEAT_TIMER));
 
     /* Only start the heartbeat-timer if the timeout value is non-zero */
     if(pMac->lim.limTimers.gLimHeartBeatTimer.initScheduleTimeInMsecs > 0)
@@ -1912,7 +1923,6 @@ void
 limDeactivateAndChangePerStaIdTimer(tpAniSirGlobal pMac, tANI_U32 timerId, tANI_U16 staId)
 {
     tANI_U32    val;
-    MTRACE(macTrace(pMac, TRACE_CODE_TIMER_DEACTIVATE, NO_SESSION, timerId));
 
     switch (timerId)
     {
@@ -2023,7 +2033,6 @@ limDeactivateAndChangePerStaIdTimer(tpAniSirGlobal pMac, tANI_U32 timerId, tANI_
 
 void limActivateCnfTimer(tpAniSirGlobal pMac, tANI_U16 staId, tpPESession psessionEntry)
 {
-    MTRACE(macTrace(pMac, TRACE_CODE_TIMER_ACTIVATE, psessionEntry->peSessionId, eLIM_CNF_WAIT_TIMER));
     pMac->lim.limTimers.gpLimCnfWaitTimer[staId].sessionId = psessionEntry->peSessionId;
     if (tx_timer_activate(&pMac->lim.limTimers.gpLimCnfWaitTimer[staId])
                 != TX_SUCCESS)
@@ -2055,7 +2064,6 @@ void limActivateCnfTimer(tpAniSirGlobal pMac, tANI_U16 staId, tpPESession psessi
 
 void limActivateAuthRspTimer(tpAniSirGlobal pMac, tLimPreAuthNode *pAuthNode)
 {
-    MTRACE(macTrace(pMac, TRACE_CODE_TIMER_ACTIVATE, NO_SESSION, eLIM_AUTH_RESP_TIMER));
     if (tx_timer_activate(&pAuthNode->timer) != TX_SUCCESS)
     {
         /// Could not activate auth rsp timer.

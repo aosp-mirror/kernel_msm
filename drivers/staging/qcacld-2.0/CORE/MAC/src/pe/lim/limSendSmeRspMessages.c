@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -54,6 +54,7 @@
 #include "limSendSmeRspMessages.h"
 #include "limIbssPeerMgmt.h"
 #include "limSessionUtils.h"
+#include "regdomain_common.h"
 
 #include "sirApi.h"
 
@@ -469,41 +470,53 @@ limSendSmeJoinReassocRsp(tpAniSirGlobal pMac, tANI_U16 msgType,
                               pSirSmeJoinRsp->beaconLength);
                 vos_mem_free( psessionEntry->beacon);
                 psessionEntry->beacon = NULL;
+                psessionEntry->bcnLen = 0;
 #ifdef WLAN_FEATURE_VOWIFI_11R_DEBUG
-                PELOG1(limLog(pMac, LOG1, FL("Beacon=%d"), psessionEntry->bcnLen);)
+                PELOG1(limLog(pMac, LOG1, FL("Beacon=%d"),
+                              pSirSmeJoinRsp->beaconLength);)
 #endif
             }
 
             if(psessionEntry->assocReq != NULL)
             {
                 pSirSmeJoinRsp->assocReqLength = psessionEntry->assocReqLen;
-                vos_mem_copy( pSirSmeJoinRsp->frames + psessionEntry->bcnLen,
-                              psessionEntry->assocReq, pSirSmeJoinRsp->assocReqLength);
+                vos_mem_copy(pSirSmeJoinRsp->frames +
+                             pSirSmeJoinRsp->beaconLength,
+                             psessionEntry->assocReq,
+                             pSirSmeJoinRsp->assocReqLength);
                 vos_mem_free( psessionEntry->assocReq);
                 psessionEntry->assocReq = NULL;
+                psessionEntry->assocReqLen = 0;
 #ifdef WLAN_FEATURE_VOWIFI_11R_DEBUG
-                PELOG1(limLog(pMac, LOG1, FL("AssocReq=%d"), psessionEntry->assocReqLen);)
+                PELOG1(limLog(pMac, LOG1, FL("AssocReq=%d"),
+                              pSirSmeJoinRsp->assocReqLength);)
 #endif
             }
             if(psessionEntry->assocRsp != NULL)
             {
                 pSirSmeJoinRsp->assocRspLength = psessionEntry->assocRspLen;
-                vos_mem_copy( pSirSmeJoinRsp->frames + psessionEntry->bcnLen +
-                                               psessionEntry->assocReqLen,
-                              psessionEntry->assocRsp,
-                              pSirSmeJoinRsp->assocRspLength);
+                vos_mem_copy(pSirSmeJoinRsp->frames +
+                             pSirSmeJoinRsp->beaconLength +
+                             pSirSmeJoinRsp->assocReqLength,
+                             psessionEntry->assocRsp,
+                             pSirSmeJoinRsp->assocRspLength);
                 vos_mem_free( psessionEntry->assocRsp);
                 psessionEntry->assocRsp = NULL;
+                psessionEntry->assocRspLen = 0;
             }
 #ifdef WLAN_FEATURE_VOWIFI_11R
             if(psessionEntry->ricData != NULL)
             {
                 pSirSmeJoinRsp->parsedRicRspLen = psessionEntry->RICDataLen;
-                vos_mem_copy( pSirSmeJoinRsp->frames + psessionEntry->bcnLen +
-                                 psessionEntry->assocReqLen + psessionEntry->assocRspLen,
-                              psessionEntry->ricData, pSirSmeJoinRsp->parsedRicRspLen);
+                vos_mem_copy(pSirSmeJoinRsp->frames +
+                             pSirSmeJoinRsp->beaconLength +
+                             pSirSmeJoinRsp->assocReqLength +
+                             pSirSmeJoinRsp->assocRspLength,
+                             psessionEntry->ricData,
+                             pSirSmeJoinRsp->parsedRicRspLen);
                 vos_mem_free(psessionEntry->ricData);
                 psessionEntry->ricData = NULL;
+                psessionEntry->RICDataLen = 0;
                 PELOG1(limLog(pMac, LOG1, FL("RicLength=%d"), pSirSmeJoinRsp->parsedRicRspLen);)
             }
 #endif
@@ -511,18 +524,24 @@ limSendSmeJoinReassocRsp(tpAniSirGlobal pMac, tANI_U16 msgType,
             if(psessionEntry->tspecIes != NULL)
             {
                 pSirSmeJoinRsp->tspecIeLen = psessionEntry->tspecLen;
-                vos_mem_copy( pSirSmeJoinRsp->frames + psessionEntry->bcnLen +
-                                psessionEntry->assocReqLen + psessionEntry->assocRspLen +
-                                  psessionEntry->RICDataLen,
-                              psessionEntry->tspecIes, pSirSmeJoinRsp->tspecIeLen);
+                vos_mem_copy(pSirSmeJoinRsp->frames +
+                             pSirSmeJoinRsp->beaconLength +
+                             pSirSmeJoinRsp->assocReqLength +
+                             pSirSmeJoinRsp->assocRspLength +
+                             pSirSmeJoinRsp->parsedRicRspLen,
+                             psessionEntry->tspecIes,
+                             pSirSmeJoinRsp->tspecIeLen);
                 vos_mem_free(psessionEntry->tspecIes);
                 psessionEntry->tspecIes = NULL;
-                PELOG1(limLog(pMac, LOG1, FL("ESE-TspecLen=%d"), psessionEntry->tspecLen);)
+                psessionEntry->tspecLen = 0;
+                PELOG1(limLog(pMac, LOG1, FL("ESE-TspecLen=%d"),
+                              pSirSmeJoinRsp->tspecIeLen);)
             }
 #endif
             pSirSmeJoinRsp->aid = psessionEntry->limAID;
 #ifdef WLAN_FEATURE_VOWIFI_11R_DEBUG
-            PELOG1(limLog(pMac, LOG1, FL("AssocRsp=%d"), psessionEntry->assocRspLen);)
+            PELOG1(limLog(pMac, LOG1, FL("AssocRsp=%d"),
+                          pSirSmeJoinRsp->assocRspLength);)
 #endif
             if (WNI_CFG_VHT_CHANNEL_WIDTH_80MHZ ==
                             psessionEntry->apChanWidth) {
@@ -567,18 +586,21 @@ limSendSmeJoinReassocRsp(tpAniSirGlobal pMac, tANI_U16 msgType,
             {
                 vos_mem_free(psessionEntry->beacon);
                 psessionEntry->beacon = NULL;
+                psessionEntry->bcnLen = 0;
             }
 
             if(psessionEntry->assocReq != NULL)
             {
                 vos_mem_free( psessionEntry->assocReq);
                 psessionEntry->assocReq = NULL;
+                psessionEntry->assocReqLen = 0;
             }
 
             if(psessionEntry->assocRsp != NULL)
             {
                 vos_mem_free( psessionEntry->assocRsp);
                 psessionEntry->assocRsp = NULL;
+                psessionEntry->assocRspLen = 0;
             }
 
 #ifdef WLAN_FEATURE_VOWIFI_11R
@@ -586,6 +608,7 @@ limSendSmeJoinReassocRsp(tpAniSirGlobal pMac, tANI_U16 msgType,
             {
                 vos_mem_free( psessionEntry->ricData);
                 psessionEntry->ricData = NULL;
+                psessionEntry->RICDataLen = 0;
             }
 #endif
 
@@ -594,9 +617,16 @@ limSendSmeJoinReassocRsp(tpAniSirGlobal pMac, tANI_U16 msgType,
             {
                 vos_mem_free(psessionEntry->tspecIes);
                 psessionEntry->tspecIes = NULL;
+                psessionEntry->tspecLen = 0;
             }
 #endif
         }
+        /* Send supported NSS 1x1 to SME */
+        pSirSmeJoinRsp->supported_nss_1x1 =
+                psessionEntry->supported_nss_1x1;
+        PELOG1(limLog(pMac, LOG1,
+                      FL("SME Join Rsp is supported NSS 1X1: %d"),
+                      pSirSmeJoinRsp->supported_nss_1x1);)
     }
 
 
@@ -860,8 +890,6 @@ limSendSmeScanRsp(tpAniSirGlobal pMac, tANI_U16 length,
     tANI_U16              i, bssCount;
     tANI_U8               *pbBuf;
     tSirBssDescription    *pDesc;
-    tANI_U8 *pssidstr;
-    tSirMacSSid *pssid;
 
     if (resultCode != eSIR_SME_SUCCESS)
     {
@@ -883,33 +911,13 @@ limSendSmeScanRsp(tpAniSirGlobal pMac, tANI_U16 length,
 
         return;
     }
-
     for (i = 0; i < LIM_MAX_NUM_OF_SCAN_RESULTS; i++)
     {
         //when ptemp is not NULL it is a left over
         ptemp = pMac->lim.gLimCachedScanHashTable[i];
-        pSirSmeScanRsp->sessionId   = smesessionId;
-        pSirSmeScanRsp->transcationId = smetranscationId;
-
         while(ptemp)
         {
             pbBuf = ((tANI_U8 *)pSirSmeScanRsp) + msgLen;
-
-            if (pMac->lim.offload_scan_filter_p2p_result)
-            {
-                pssid =
-                (tSirMacSSid *)((tANI_U8 *)&ptemp->bssDescription.ieFields + 1);
-                pssidstr = pssid->ssId;
-                if (vos_mem_compare(pssidstr, P2P_WILDCARD_SSID,
-                    P2P_WILDCARD_SSID_LEN))
-                {
-                    limLog(pMac, LOG1,
-                    FL("Skipping p2p entries for eWNI_SME_SCAN_RSP"));
-                    ptemp = ptemp->next;
-                    continue;
-                }
-            }
-
             if(0 == bssCount)
             {
                 msgLen = sizeof(tSirSmeScanRsp) -
@@ -1409,7 +1417,7 @@ void limSendSmeOemDataRsp(tpAniSirGlobal pMac, tANI_U32* pMsgBuf, tSirResultCode
     pSirSmeOemDataRsp->length = msgLength;
     pSirSmeOemDataRsp->messageType = eWNI_SME_OEM_DATA_RSP;
 #endif
-
+    pSirSmeOemDataRsp->target_rsp = pMlmOemDataRsp->target_rsp;
     vos_mem_copy(pSirSmeOemDataRsp->oemDataRsp, pMlmOemDataRsp->oemDataRsp, OEM_DATA_RSP_SIZE);
 
     //Now free the memory from MLM Rsp Message
@@ -2851,6 +2859,7 @@ void limHandleCSAoffloadMsg(tpAniSirGlobal pMac,tpSirMsgQ MsgQ)
    tpDphHashNode pStaDs = NULL ;
    tANI_U8 sessionId;
    tANI_U16 aid = 0 ;
+   int chan_space;
 
    if (!csa_params) {
       limLog(pMac, LOGE, FL("limMsgQ body ptr is NULL"));
@@ -2908,6 +2917,35 @@ void limHandleCSAoffloadMsg(tpAniSirGlobal pMac,tpSirMsgQ MsgQ)
                                                      psessionEntry,
                                                      csa_params->channel,
                                                      csa_params->new_ch_width);
+          }
+          else if ( csa_params->ies_present_flag & lim_xcsa_ie_present )
+          {
+              chan_space = regdm_get_chanwidth_from_opclass(
+                                           pMac->scan.countryCodeCurrent,
+                                           csa_params->channel,
+                                           csa_params->new_op_class);
+              if (chan_space == 80) {
+                  psessionEntry->gLimWiderBWChannelSwitch.newChanWidth =
+                                          WNI_CFG_VHT_CHANNEL_WIDTH_80MHZ;
+              }
+              else {
+                  psessionEntry->gLimWiderBWChannelSwitch.newChanWidth =
+                                          WNI_CFG_VHT_CHANNEL_WIDTH_20_40MHZ;
+              }
+
+              psessionEntry->gLimChannelSwitch.state =
+                                     eLIM_CHANNEL_SWITCH_PRIMARY_AND_SECONDARY;
+
+              psessionEntry->gLimChannelSwitch.secondarySubBand =
+                      limSelectCBMode(pStaDs,
+                          psessionEntry,
+                          csa_params->channel,
+                          psessionEntry->gLimWiderBWChannelSwitch.newChanWidth);
+              limLog(pMac, LOG1, FL("xcsa frame opclass %d , chanbw %d secondary subband %d "),
+                          csa_params->new_op_class,
+                          psessionEntry->gLimWiderBWChannelSwitch.newChanWidth,
+                          psessionEntry->gLimChannelSwitch.secondarySubBand);
+
           }
 
       } else

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -258,6 +258,8 @@ void limRemainOnChnRsp(tpAniSirGlobal pMac, eHalStatus status, tANI_U32 *data);
 
   --------------------------------------------------------------------------*/
 void limProcessAbortScanInd(tpAniSirGlobal pMac, tANI_U8 sessionId);
+
+void lim_smps_force_mode_ind(tpAniSirGlobal mac_ctx, tpSirMsgQ msg);
 
 /************************************************************/
 #endif /* __LIM_API_H */

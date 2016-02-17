@@ -336,7 +336,7 @@ struct htt_pdev_t {
         int rx_reset;
         u_int8_t htt_rx_restore;
 #endif
-        struct htt_rx_hash_bucket * hash_table;
+        struct htt_rx_hash_bucket **hash_table;
         u_int32_t listnode_offset;
     } rx_ring;
     int rx_desc_size_hl;
@@ -358,6 +358,7 @@ struct htt_pdev_t {
         void *pdev, A_STATUS status, adf_nbuf_t msdu, u_int16_t msdu_id);
 
     HTT_TX_MUTEX_TYPE htt_tx_mutex;
+    HTT_TX_MUTEX_TYPE credit_mutex;
 
     struct {
         int htc_err_cnt;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -126,7 +126,6 @@ limSetChannel(tpAniSirGlobal pMac, tANI_U8 channel, tANI_U8 secChannelOffset, tP
 void
 limProcessMlmReqMessages(tpAniSirGlobal pMac, tpSirMsgQ Msg)
 {
-    MTRACE(macTraceMsgRx(pMac, NO_SESSION, Msg->type));
     switch (Msg->type)
     {
         case LIM_MLM_START_REQ:             limProcessMlmStartReq(pMac, Msg->bodyptr);   break;
@@ -471,9 +470,6 @@ void limContinuePostChannelScan(tpAniSirGlobal pMac)
             /// Activate minChannelTimer
             limDeactivateAndChangeTimer(pMac, eLIM_MIN_CHANNEL_TIMER);
 
-
-            MTRACE(macTrace(pMac, TRACE_CODE_TIMER_ACTIVATE, NO_SESSION, eLIM_MIN_CHANNEL_TIMER));
-
             if (tx_timer_activate(&pMac->lim.limTimers.gLimMinChannelTimer) != TX_SUCCESS)
             {
                 limLog(pMac, LOGP, FL("could not start min channel timer"));
@@ -491,7 +487,6 @@ void limContinuePostChannelScan(tpAniSirGlobal pMac)
 #endif
               //No Need to start Min channel timer. Start Max Channel timer.
               limDeactivateAndChangeTimer(pMac, eLIM_MAX_CHANNEL_TIMER);
-              MTRACE(macTrace(pMac, TRACE_CODE_TIMER_ACTIVATE, pMac->lim.limTimers.gLimMaxChannelTimer.sessionId, eLIM_MAX_CHANNEL_TIMER));
               if (tx_timer_activate(&pMac->lim.limTimers.gLimMaxChannelTimer)
                     == TX_TIMER_ERROR)
               {
@@ -514,7 +509,6 @@ void limContinuePostChannelScan(tpAniSirGlobal pMac)
              return;
         }
         periodicScanTimer->sessionId = channelNum;
-        MTRACE(macTrace(pMac, TRACE_CODE_TIMER_ACTIVATE, periodicScanTimer->sessionId, eLIM_PERIODIC_PROBE_REQ_TIMER));
     }
     else
     {
@@ -522,7 +516,6 @@ void limContinuePostChannelScan(tpAniSirGlobal pMac)
         PELOG2(limLog(pMac, LOG2, FL("START PASSIVE Scan chan %d"), channelNum);)
 
         /// Passive Scanning. Activate maxChannelTimer
-        MTRACE(macTrace(pMac, TRACE_CODE_TIMER_DEACTIVATE, NO_SESSION, eLIM_MAX_CHANNEL_TIMER));
         if (tx_timer_deactivate(&pMac->lim.limTimers.gLimMaxChannelTimer)
                                       != TX_SUCCESS)
         {
@@ -1352,32 +1345,37 @@ void limSendHalOemDataReq(tpAniSirGlobal pMac)
     tpStartOemDataReq pStartOemDataReq = NULL;
     tSirRetStatus rc = eSIR_SUCCESS;
     tpLimMlmOemDataRsp pMlmOemDataRsp;
-    tANI_U32 reqLen = 0;
     if(NULL == pMac->lim.gpLimMlmOemDataReq)
     {
         PELOGE(limLog(pMac, LOGE,  FL("Null pointer"));)
         goto error;
     }
 
-    reqLen = sizeof(tStartOemDataReq);
-
-    pStartOemDataReq = vos_mem_malloc(reqLen);
+    pStartOemDataReq = vos_mem_malloc(sizeof(*pStartOemDataReq));
     if ( NULL == pStartOemDataReq )
     {
         PELOGE(limLog(pMac, LOGE,  FL("OEM_DATA: Could not allocate memory for pStartOemDataReq"));)
         goto error;
     }
 
-    vos_mem_set((tANI_U8*)(pStartOemDataReq), reqLen, 0);
+    pStartOemDataReq->data =
+        vos_mem_malloc(pMac->lim.gpLimMlmOemDataReq->data_len);
+    if (!pStartOemDataReq->data) {
+        limLog(pMac, LOGE, FL("memory allocation failed"));
+        vos_mem_free(pStartOemDataReq);
+        goto error;
+    }
 
     //Now copy over the information to the OEM DATA REQ to HAL
     vos_mem_copy(pStartOemDataReq->selfMacAddr,
                  pMac->lim.gpLimMlmOemDataReq->selfMacAddr,
                  sizeof(tSirMacAddr));
 
-    vos_mem_copy(pStartOemDataReq->oemDataReq,
-                 pMac->lim.gpLimMlmOemDataReq->oemDataReq,
-                 OEM_DATA_REQ_SIZE);
+    pStartOemDataReq->data_len =
+                 pMac->lim.gpLimMlmOemDataReq->data_len;
+    vos_mem_copy(pStartOemDataReq->data,
+                 pMac->lim.gpLimMlmOemDataReq->data,
+                 pMac->lim.gpLimMlmOemDataReq->data_len);
 
     //Create the message to be passed to HAL
     msg.type = WDA_START_OEM_DATA_REQ;
@@ -1394,8 +1392,9 @@ void limSendHalOemDataReq(tpAniSirGlobal pMac)
     }
 
     SET_LIM_PROCESS_DEFD_MESGS(pMac, true);
+    vos_mem_free(pStartOemDataReq->data);
     vos_mem_free(pStartOemDataReq);
-    PELOGE(limLog(pMac, LOGE,  FL("OEM_DATA: posting WDA_START_OEM_DATA_REQ to HAL failed"));)
+    PELOGE(limLog(pMac, LOGE,  FL("OEM_DATA: posting WDA_pStartOemDataReq to HAL failed"));)
 
 error:
     pMac->lim.gLimMlmState = pMac->lim.gLimPrevMlmState;
@@ -1408,8 +1407,14 @@ error:
         return;
     }
 
+    pMlmOemDataRsp->target_rsp = false;
+
     if(NULL != pMac->lim.gpLimMlmOemDataReq)
     {
+        if (NULL != pMac->lim.gpLimMlmOemDataReq->data) {
+            vos_mem_free(pMac->lim.gpLimMlmOemDataReq->data);
+            pMac->lim.gpLimMlmOemDataReq->data = NULL;
+        }
         vos_mem_free(pMac->lim.gpLimMlmOemDataReq);
         pMac->lim.gpLimMlmOemDataReq = NULL;
     }
@@ -1989,6 +1994,7 @@ limProcessMlmScanReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
 static void limProcessMlmOemDataReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
 {
     tLimMlmOemDataRsp*     pMlmOemDataRsp;
+    tLimMlmOemDataReq *data_req = (tLimMlmOemDataReq *)pMsgBuf;
 
     if (((pMac->lim.gLimMlmState == eLIM_MLM_IDLE_STATE) ||
          (pMac->lim.gLimMlmState == eLIM_MLM_JOINED_STATE) ||
@@ -2003,12 +2009,16 @@ static void limProcessMlmOemDataReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
          * second OEM data request
          */
         if (pMac->lim.gpLimMlmOemDataReq) {
+            if (pMac->lim.gpLimMlmOemDataReq->data) {
+                vos_mem_free(pMac->lim.gpLimMlmOemDataReq->data);
+                pMac->lim.gpLimMlmOemDataReq->data = NULL;
+            }
             vos_mem_free(pMac->lim.gpLimMlmOemDataReq);
             pMac->lim.gpLimMlmOemDataReq = NULL;
         }
 
-        pMac->lim.gpLimMlmOemDataReq = (tLimMlmOemDataReq*)pMsgBuf;
-
+        pMac->lim.gpLimMlmOemDataReq = data_req;
+        pMac->lim.gpLimMlmOemDataReq->data = data_req->data;
         pMac->lim.gLimPrevMlmState = pMac->lim.gLimMlmState;
 
         PELOG2(limLog(pMac, LOG2,
@@ -2033,6 +2043,7 @@ static void limProcessMlmOemDataReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         pMlmOemDataRsp = vos_mem_malloc(sizeof(tLimMlmOemDataRsp));
         if ( pMlmOemDataRsp != NULL)
         {
+            pMlmOemDataRsp->target_rsp = false;
             limPostSmeMessage(pMac, LIM_MLM_OEM_DATA_CNF, (tANI_U32*)pMlmOemDataRsp);
             vos_mem_free(pMlmOemDataRsp);
         }
@@ -3952,7 +3963,6 @@ limProcessPeriodicProbeReqTimer(tpAniSirGlobal pMac)
         } while (i < pLimMlmScanReq->numSsid);
 
         /* Activate timer again */
-        MTRACE(macTrace(pMac, TRACE_CODE_TIMER_ACTIVATE, pPeriodicProbeReqTimer->sessionId, eLIM_PERIODIC_PROBE_REQ_TIMER));
         if (tx_timer_activate(pPeriodicProbeReqTimer) != TX_SUCCESS)
         {
              limLog(pMac, LOGP, FL("could not start periodic probe"
@@ -4220,6 +4230,8 @@ limProcessAuthFailureTimeout(tpAniSirGlobal pMac)
     "limMlmstate %X limSmeState %X"), psessionEntry->peSessionId,
     psessionEntry->limMlmState, psessionEntry->limSmeState);
 #ifdef FEATURE_WLAN_DIAG_SUPPORT_LIM //FEATURE_WLAN_DIAG_SUPPORT_LIM
+    limDiagEventReport(pMac, WLAN_PE_DIAG_AUTH_TIMEOUT, psessionEntry,
+                                               0, AUTH_FAILURE_TIMEOUT);
     WLAN_VOS_DIAG_LOG_ALLOC(pRssiLog,
                             vos_log_rssi_pkt_type, LOG_WLAN_RSSI_UPDATE_C);
     if (pRssiLog)
@@ -4300,6 +4312,11 @@ limProcessAuthRspTimeout(tpAniSirGlobal pMac, tANI_U32 authIndex)
         return;
     }
 
+#ifdef FEATURE_WLAN_DIAG_SUPPORT_LIM
+    limDiagEventReport(pMac, WLAN_PE_DIAG_AUTH_TIMEOUT, psessionEntry,
+                                               0, AUTH_RESPONSE_TIMEOUT);
+#endif
+
     if (LIM_IS_AP_ROLE(psessionEntry) || LIM_IS_IBSS_ROLE(psessionEntry)) {
         if (pAuthNode->mlmState != eLIM_MLM_WT_AUTH_FRAME3_STATE)
         {
@@ -4378,6 +4395,7 @@ limProcessAssocFailureTimeout(tpAniSirGlobal pMac, tANI_U32 MsgType)
         return;
     }
 #ifdef FEATURE_WLAN_DIAG_SUPPORT_LIM //FEATURE_WLAN_DIAG_SUPPORT_LIM
+    limDiagEventReport(pMac, WLAN_PE_DIAG_ASSOC_TIMEOUT, psessionEntry, 0, 0);
     WLAN_VOS_DIAG_LOG_ALLOC(pRssiLog,
                             vos_log_rssi_pkt_type, LOG_WLAN_RSSI_UPDATE_C);
     if (pRssiLog)

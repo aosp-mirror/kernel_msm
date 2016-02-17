@@ -2381,6 +2381,7 @@ v_U8_t sapSelectChannel(tHalHandle halHandle, ptSapContext pSapCtx,  tScanResult
 #ifdef FEATURE_WLAN_CH_AVOID
     v_U8_t i;
     v_U8_t firstSafeChannelInRange = SAP_CHANNEL_NOT_SELECTED;
+    v_U32_t dfs_master_cap_enabled;
 #endif
 #ifdef SOFTAP_CHANNEL_RANGE
     v_U32_t startChannelNum;
@@ -2389,6 +2390,7 @@ v_U8_t sapSelectChannel(tHalHandle halHandle, ptSapContext pSapCtx,  tScanResult
     v_U32_t tmpChNum;
     v_U8_t  count;
 #endif
+
     VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH, "In %s, Running SAP Ch Select", __func__);
 
 #ifdef FEATURE_WLAN_CH_AVOID
@@ -2418,6 +2420,11 @@ v_U8_t sapSelectChannel(tHalHandle halHandle, ptSapContext pSapCtx,  tScanResult
         return startChannelNum;
 #else /* FEATURE_WLAN_CH_AVOID defined */
 
+        ccmCfgGetInt(halHandle, WNI_CFG_DFS_MASTER_ENABLED,
+                &dfs_master_cap_enabled);
+
+        VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH,
+                  "%s: dfs_master %x", __func__, dfs_master_cap_enabled);
         // any safe channels in the configured range?
         for (i = 0; i < NUM_20MHZ_RF_CHANNELS; i++)
         {
@@ -2429,6 +2436,15 @@ v_U8_t sapSelectChannel(tHalHandle halHandle, ptSapContext pSapCtx,  tScanResult
                 if ((NV_CHANNEL_DISABLE == enable_type) ||
                     (NV_CHANNEL_INVALID == enable_type))
                     continue;
+
+                if ((!dfs_master_cap_enabled) &&
+                        (NV_CHANNEL_DFS == enable_type))
+                {
+                    VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH,
+                            "%s: DFS master mode disabled. Skip DFS channel %d",
+                            __func__, safeChannels[i].channelNumber);
+                    continue;
+                }
 
                 if (safeChannels[i].isSafe == VOS_TRUE)
                 {

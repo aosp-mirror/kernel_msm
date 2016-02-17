@@ -38,14 +38,20 @@
 
 #include <ol_txrx_api.h> /* ol_txrx_pdev_handle */
 
-
+#ifdef CONFIG_HL_SUPPORT
+static inline u_int16_t *
+ol_tx_msdu_id_storage(adf_nbuf_t msdu)
+{
+    return NBUF_CB_ID(msdu);
+}
+#else
 static inline u_int16_t *
 ol_tx_msdu_id_storage(adf_nbuf_t msdu)
 {
     adf_os_assert(adf_nbuf_headroom(msdu) >= (sizeof(u_int16_t) * 2 - 1));
     return (u_int16_t *) (((adf_os_size_t) (adf_nbuf_head(msdu) + 1)) & ~0x1);
 }
-
+#endif
 
 /**
  * @brief Tx MSDU download completion for a LL system

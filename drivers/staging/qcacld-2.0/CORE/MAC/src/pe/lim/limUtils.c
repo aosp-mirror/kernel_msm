@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -553,26 +553,14 @@ char *limResultCodeStr(tSirResultCodes resultCode)
 }
 
 /**
- * limInitMlm()
+ * limInitMlm() - This function is called by limProcessSmeMessages()
+ * to initialize MLM state machine on STA
  *
- *FUNCTION:
- * This function is called by limProcessSmeMessages() to
- * initialize MLM state machine on STA
+ * @pMac:   Pointer to Global MAC structure
  *
- *PARAMS:
- *
- *LOGIC:
- *
- *ASSUMPTIONS:
- * NA
- *
- *NOTE:
- * NA
- *
- * @param  pMac      Pointer to Global MAC structure
- * @return None
+ * @Return: Status of operation
  */
-void
+tSirRetStatus
 limInitMlm(tpAniSirGlobal pMac)
 {
     tANI_U32 retVal;
@@ -600,14 +588,13 @@ limInitMlm(tpAniSirGlobal pMac)
 
     // Create timers used by LIM
     retVal = limCreateTimers(pMac);
-    if(retVal == TX_SUCCESS)
-    {
-        pMac->lim.gLimTimersCreated = 1;
-    }
-    else
-    {
+    if(retVal != TX_SUCCESS) {
         limLog(pMac, LOGP, FL(" limCreateTimers Failed to create lim timers "));
+        return eSIR_FAILURE;
     }
+
+    pMac->lim.gLimTimersCreated = 1;
+    return eSIR_SUCCESS;
 } /*** end limInitMlm() ***/
 
 
@@ -638,7 +625,7 @@ void
 limCleanupMlm(tpAniSirGlobal pMac)
 {
     tANI_U32   n;
-    tLimPreAuthNode *pAuthNode;
+    tLimPreAuthNode **pAuthNode;
 #ifdef WLAN_FEATURE_11W
     tANI_U32  bss_entry, sta_entry;
     tpDphHashNode pStaDs = NULL;
@@ -726,11 +713,11 @@ limCleanupMlm(tpAniSirGlobal pMac)
         //Deactivate any Authentication response timers
         limDeletePreAuthList(pMac);
 
-        for (n = 0; n < pMac->lim.gLimPreAuthTimerTable.numEntry; n++,pAuthNode++)
+        for (n = 0; n < pMac->lim.gLimPreAuthTimerTable.numEntry; n++)
         {
             // Delete any Authentication response
             // timers, which might have been started.
-            tx_timer_delete(&pAuthNode->timer);
+            tx_timer_delete(&pAuthNode[n]->timer);
         }
 
         // Deactivate and delete Hash Miss throttle timer
@@ -2123,19 +2110,6 @@ void limProcessChannelSwitchTimeout(tpAniSirGlobal pMac)
     channel = psessionEntry->gLimChannelSwitch.primaryChannel;
 
     /*
-     * If Lim allows Switch channel on same channel on which preauth
-     * is going on then LIM will not post resume link(WDA_FINISH_SCAN)
-     * during preauth rsp handling hence firmware may crash on ENTER/
-     * EXIT BMPS request.
-     */
-    if(psessionEntry->ftPEContext.pFTPreAuthReq)
-    {
-        limLog(pMac, LOGE,
-           FL("Avoid Switch Channel req during pre auth"));
-        return;
-    }
-
-    /*
      *  This potentially can create issues if the function tries to set
      * channel while device is in power-save, hence putting an extra check
      * to verify if the device is in power-save or not
@@ -2151,6 +2125,33 @@ void limProcessChannelSwitchTimeout(tpAniSirGlobal pMac)
 
     /* Channel-switch timeout has occurred. reset the state */
     psessionEntry->gLimSpecMgmt.dot11hChanSwState = eLIM_11H_CHANSW_END;
+
+    /*
+     * If Lim allows Switch channel on same channel on which preauth
+     * is going on then LIM will not post resume link(WDA_FINISH_SCAN)
+     * during preauth rsp handling hence firmware may crash on ENTER/
+     * EXIT BMPS request.
+     */
+    if(psessionEntry->ftPEContext.pFTPreAuthReq)
+    {
+        limLog(pMac, LOGE,
+           FL("Avoid Switch Channel req during pre auth"));
+        return;
+    }
+    /* If link is already suspended mean some off
+     * channel operation or scan is in progress, Allowing
+     * Change channel here will lead to either Init Scan
+     * sent twice or missing Finish scan when change
+     * channel is completed, this may lead
+     * to driver in invalid state and crash.
+     */
+    if (limIsLinkSuspended(pMac))
+    {
+       limLog(pMac, LOGE, FL("Link is already suspended for "
+               "some other reason. Return here for sessionId:%d"),
+               pMac->lim.limTimers.gLimChannelSwitchTimer.sessionId);
+       return;
+    }
 
     /* Check if the AP is switching to a channel that we support.
      * Else, just don't bother to switch. Indicate HDD to look for a

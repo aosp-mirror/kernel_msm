@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1294,6 +1294,18 @@ limSendAssocRspMgmtFrame(tpAniSirGlobal pMac,
         {
             limLog(pMac, LOG1, FL("Populate HT IEs in Assoc Response"));
             PopulateDot11fHTCaps( pMac, psessionEntry, &frm.HTCaps );
+            /*
+             * Check the STA capability and update the HTCaps accordingly
+             */
+            frm.HTCaps.supportedChannelWidthSet =
+                    (pSta->htSupportedChannelWidthSet <
+                       psessionEntry->htSupportedChannelWidthSet) ?
+                         pSta->htSupportedChannelWidthSet :
+                         psessionEntry->htSupportedChannelWidthSet ;
+
+            if (!frm.HTCaps.supportedChannelWidthSet)
+                frm.HTCaps.shortGI40MHz = 0;
+
             PopulateDot11fHTInfo( pMac, &frm.HTInfo, psessionEntry );
         }
         limLog(pMac, LOG1, FL("SupportedChnlWidth: %d, mimoPS: %d, GF: %d, shortGI20:%d, shortGI40: %d, dsssCck: %d, AMPDU Param: %x"),
@@ -2052,14 +2064,16 @@ limSendAssocReqMgmtFrame(tpAniSirGlobal   pMac,
         {
             struct s_ext_cap *p_ext_cap = (struct s_ext_cap *)
                                           extractedExtCap.bytes;
-            if (p_ext_cap->interworkingService)
+            if (p_ext_cap->interworkingService ||
+                            p_ext_cap->bssTransition)
                 p_ext_cap->qosMap = 1;
             else {
                 /* No need to merge the EXT Cap from Supplicant
-                 * if interworkingService is not set, as currently
-                 * driver is only interested in interworkingService
-                 * capability from supplicant. if in
-                 * future any other EXT Cap info is required from
+                 * if interworkingService or bsstransition is not set,
+                 * as currently driver is only interested in
+                 * interworkingService and bsstransition capability from
+                 * supplicant.
+                 * if in future any other EXT Cap info is required from
                  * supplicant it needs to be handled here.
                  */
                  extractedExtCapFlag = eANI_BOOLEAN_FALSE;
@@ -2131,7 +2145,8 @@ limSendAssocReqMgmtFrame(tpAniSirGlobal   pMac,
             &pFrm->ExtSuppRates, psessionEntry );
 
 #if defined WLAN_FEATURE_VOWIFI
-    if (pMac->rrm.rrmPEContext.rrmEnable)
+    if (pMac->rrm.rrmPEContext.rrmEnable &&
+            SIR_MAC_GET_RRM(psessionEntry->limCurrentBssCaps))
         PopulateDot11fRRMIe(pMac, &pFrm->RRMEnabledCap, psessionEntry);
 #endif
     // The join request *should* contain zero or one of the WPA and RSN
@@ -2376,7 +2391,8 @@ limSendAssocReqMgmtFrame(tpAniSirGlobal   pMac,
         txFlag |= HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME;
     }
 
-    if(psessionEntry->pePersona == VOS_P2P_CLIENT_MODE)
+    if(psessionEntry->pePersona == VOS_P2P_CLIENT_MODE ||
+       psessionEntry->pePersona == VOS_STA_MODE)
     {
         txFlag |= HAL_USE_PEER_STA_REQUESTED_MASK;
     }
@@ -2531,7 +2547,8 @@ limSendReassocReqWithFTIEsMgmtFrame(tpAniSirGlobal     pMac,
             &frm.ExtSuppRates, psessionEntry );
 
 #if defined WLAN_FEATURE_VOWIFI
-    if (pMac->rrm.rrmPEContext.rrmEnable)
+    if (pMac->rrm.rrmPEContext.rrmEnable &&
+            SIR_MAC_GET_RRM(psessionEntry->limCurrentBssCaps))
         PopulateDot11fRRMIe(pMac, &frm.RRMEnabledCap, psessionEntry);
 #endif
 
@@ -3035,7 +3052,8 @@ limSendReassocReqMgmtFrame(tpAniSirGlobal     pMac,
                                 &frm.ExtSuppRates, psessionEntry );
 
 #if defined WLAN_FEATURE_VOWIFI
-    if (pMac->rrm.rrmPEContext.rrmEnable)
+    if (pMac->rrm.rrmPEContext.rrmEnable &&
+            SIR_MAC_GET_RRM(psessionEntry->limCurrentBssCaps))
         PopulateDot11fRRMIe(pMac, &frm.RRMEnabledCap, psessionEntry);
 #endif
     // The join request *should* contain zero or one of the WPA and RSN
@@ -3215,7 +3233,8 @@ limSendReassocReqMgmtFrame(tpAniSirGlobal     pMac,
         txFlag |= HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME;
     }
 
-    if(psessionEntry->pePersona == VOS_P2P_CLIENT_MODE)
+    if(psessionEntry->pePersona == VOS_P2P_CLIENT_MODE ||
+       psessionEntry->pePersona == VOS_STA_MODE)
     {
         txFlag |= HAL_USE_PEER_STA_REQUESTED_MASK;
     }
@@ -3582,7 +3601,8 @@ limSendAuthMgmtFrame(tpAniSirGlobal pMac,
         txFlag |= HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME;
     }
 
-    if(psessionEntry->pePersona == VOS_P2P_CLIENT_MODE)
+    if(psessionEntry->pePersona == VOS_P2P_CLIENT_MODE ||
+       psessionEntry->pePersona == VOS_STA_MODE)
     {
         txFlag |= HAL_USE_PEER_STA_REQUESTED_MASK;
     }
@@ -3771,30 +3791,12 @@ eHalStatus limSendDisassocCnf(tpAniSirGlobal pMac)
 
 #ifdef WLAN_FEATURE_VOWIFI_11R
         if  (LIM_IS_STA_ROLE(psessionEntry) &&
-                (
-#ifdef FEATURE_WLAN_ESE
-                (psessionEntry->isESEconnection ) ||
-#endif
-#ifdef FEATURE_WLAN_LFR
-                (psessionEntry->isFastRoamIniFeatureEnabled ) ||
-#endif
-                (psessionEntry->is11Rconnection )) &&
                 (pMlmDisassocReq->reasonCode !=
                  eSIR_MAC_DISASSOC_DUE_TO_FTHANDOFF_REASON))
         {
             PELOGE(limLog(pMac, LOG1,
-                   FL("FT Preauth Session (%p,%d) Clean up"),
-                   psessionEntry, psessionEntry->peSessionId););
+                   FL("FT Preauth Session (%p,%d) Clean up"
 
-#if defined WLAN_FEATURE_VOWIFI_11R
-        /* Delete FT session if there exists one */
-        limFTCleanupPreAuthInfo(pMac, psessionEntry);
-#endif
-        }
-        else
-        {
-            PELOGE(limLog(pMac, LOGE,
-                   FL("No FT Preauth Session Clean up in role %d"
 #ifdef FEATURE_WLAN_ESE
                    " isESE %d"
 #endif
@@ -3802,7 +3804,7 @@ eHalStatus limSendDisassocCnf(tpAniSirGlobal pMac)
                    " isLFR %d"
 #endif
                    " is11r %d reason %d"),
-                   GET_LIM_SYSTEM_ROLE(psessionEntry),
+                   psessionEntry, psessionEntry->peSessionId,
 #ifdef FEATURE_WLAN_ESE
                    psessionEntry->isESEconnection,
 #endif
@@ -3811,6 +3813,8 @@ eHalStatus limSendDisassocCnf(tpAniSirGlobal pMac)
 #endif
                    psessionEntry->is11Rconnection,
                    pMlmDisassocReq->reasonCode););
+            /* Delete FT session if there exists one */
+            limFTCleanupPreAuthInfo(pMac, psessionEntry);
         }
 #endif
         /// Free up buffer allocated for mlmDisassocReq
@@ -3994,11 +3998,7 @@ limSendDisassocMgmtFrame(tpAniSirGlobal pMac,
         txFlag |= HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME;
     }
 
-    if((psessionEntry->pePersona == VOS_P2P_CLIENT_MODE) ||
-       (psessionEntry->pePersona == VOS_P2P_GO_MODE))
-    {
-        txFlag |= HAL_USE_PEER_STA_REQUESTED_MASK;
-    }
+    txFlag |= HAL_USE_PEER_STA_REQUESTED_MASK;
 
     if (waitForAck)
     {
@@ -4199,11 +4199,7 @@ limSendDeauthMgmtFrame(tpAniSirGlobal pMac,
         txFlag |= HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME;
     }
 
-    if((psessionEntry->pePersona == VOS_P2P_CLIENT_MODE) ||
-       (psessionEntry->pePersona == VOS_P2P_GO_MODE))
-    {
-        txFlag |= HAL_USE_PEER_STA_REQUESTED_MASK;
-    }
+    txFlag |= HAL_USE_PEER_STA_REQUESTED_MASK;
 
 #ifdef FEATURE_WLAN_TDLS
     pStaDs = dphLookupHashEntry(pMac, peer, &aid, &psessionEntry->dph.dphHashTable);

@@ -285,6 +285,9 @@ static void csrSetDefaultScanTiming( tpAniSirGlobal pMac, tSirScanType scanType,
         pScanRequest->minChnTimeBtc = pMac->roam.configParam.nActiveMinChnTimeBtc;
 
         pScanRequest->restTime = pMac->roam.configParam.nRestTimeConc;
+        pScanRequest->min_rest_time = pMac->roam.configParam.min_rest_time_conc;
+        pScanRequest->idle_time = pMac->roam.configParam.idle_time_conc;
+
 
         //Return so that fields set above will not be overwritten.
         return;
@@ -311,8 +314,10 @@ static void csrSetDefaultScanTiming( tpAniSirGlobal pMac, tSirScanType scanType,
         pScanRequest->minChnTimeBtc = pMac->roam.configParam.nActiveMinChnTimeBtc;
 
 #ifdef WLAN_AP_STA_CONCURRENCY
-    //No rest time if no sessions are connected.
+    /* No rest time/Idle time if no sessions are connected. */
     pScanRequest->restTime = 0;
+    pScanRequest->min_rest_time = 0;
+    pScanRequest->idle_time = 0;
 #endif
 }
 
@@ -684,10 +689,14 @@ eHalStatus csrScanRequest(tpAniSirGlobal pMac, tANI_U16 sessionId,
 #ifdef WLAN_AP_STA_CONCURRENCY
                 if(pScanRequest->restTime == 0)
                 {
-                    //Need to set restTime only if at least one session is connected
+                    /* Need to set restTime/min_Ret_time/idle_time only
+                     * if at least one session is connected
+                     */
                     if(csrIsAnySessionConnected(pMac))
                     {
                         pScanRequest->restTime = pMac->roam.configParam.nRestTimeConc;
+                        pScanRequest->min_rest_time = pMac->roam.configParam.min_rest_time_conc;
+                        pScanRequest->idle_time = pMac->roam.configParam.idle_time_conc;
                         if(pScanRequest->scanType == eSIR_ACTIVE_SCAN)
                         {
                             pScanRequest->maxChnTime = pMac->roam.configParam.nActiveMaxChnTimeConc;
@@ -5849,8 +5858,13 @@ eHalStatus csrSendMBScanReq( tpAniSirGlobal pMac, tANI_U16 sessionId,
             pMsg->maxChannelTimeBtc = pMac->roam.configParam.nActiveMaxChnTimeBtc;
             //hidden SSID option
             pMsg->hiddenSsid = pScanReqParam->hiddenSsid;
-            //rest time
+            /* maximum rest time */
             pMsg->restTime = pScanReq->restTime;
+            /* Minimum rest time */
+            pMsg->min_rest_time = pScanReq->min_rest_time;
+            /* Idle time */
+            pMsg->idle_time = pScanReq->idle_time;
+
             pMsg->returnAfterFirstMatch = pScanReqParam->bReturnAfter1stMatch;
             // All the scan results caching will be done by Roaming
             // We do not want LIM to do any caching of scan results,
@@ -7404,6 +7418,7 @@ eHalStatus csrScanGetBKIDCandidateList(tpAniSirGlobal pMac, tANI_U32 sessionId,
                     }
                     csrScanResultPurge(pMac, hBSSList);
                 }//Have scan result
+                csrFreeScanFilter(pMac, pScanFilter);
             }
             vos_mem_free(pScanFilter);
         }

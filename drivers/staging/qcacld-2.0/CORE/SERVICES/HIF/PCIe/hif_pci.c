@@ -55,9 +55,7 @@
 #include "hif_pci.h"
 #include "vos_trace.h"
 #include "vos_api.h"
-#if  defined(CONFIG_CNSS)
-#include <net/cnss.h>
-#endif
+#include "vos_cnss.h"
 #include <vos_getBin.h>
 #include "epping_main.h"
 #ifdef CONFIG_PCI_MSM
@@ -2860,8 +2858,8 @@ HIFTargetSleepStateAdjust(A_target_id_t targid,
                             VOS_BUG(0);
                     sc->recovery = true;
                     vos_set_logp_in_progress(VOS_MODULE_ID_VOSS, TRUE);
-#ifdef CONFIG_CNSS
-                    cnss_wlan_pci_link_down();
+#ifdef CONFIG_CNSS_PCI
+                    vos_wlan_pci_link_down();
 #endif
                     return -EACCES;
                 }
@@ -3595,3 +3593,17 @@ void hif_pm_ssr_runtime_allow_suspend(struct hif_pci_softc *sc, void *context)
 	__hif_pm_runtime_allow_suspend(sc, context);
 }
 #endif
+
+/**
+ * hif_is_80211_fw_wow_required() - API to check if target suspend is needed
+ *
+ * API determines if fw can be suspended and returns true/false to the caller.
+ * Caller will call WMA WoW API's to suspend.
+ * This API returns true only for SDIO bus types, for others it's a false.
+ *
+ * Return: bool
+ */
+bool hif_is_80211_fw_wow_required(void)
+{
+	return false;
+}

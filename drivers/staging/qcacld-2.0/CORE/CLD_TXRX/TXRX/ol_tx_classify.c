@@ -300,15 +300,10 @@ ol_tx_tid(
         tx_msdu_info->htt.info.l2_hdr_type = htt_pkt_type_ethernet;
 
         ol_tx_set_ether_type(datap, tx_msdu_info);
-        if (A_STATUS_OK == adf_nbuf_is_dhcp_pkt(tx_nbuf)) {
-            /* DHCP frame to go with voice priority */
-            tid = TX_DHCP_TID;
-        } else {
-            tid =
-                tx_msdu_info->htt.info.ext_tid == ADF_NBUF_TX_EXT_TID_INVALID ?
-                ol_tx_tid_by_ether_type(datap, tx_msdu_info) :
-                tx_msdu_info->htt.info.ext_tid;
-        }
+        tid =
+            tx_msdu_info->htt.info.ext_tid == ADF_NBUF_TX_EXT_TID_INVALID ?
+            ol_tx_tid_by_ether_type(datap, tx_msdu_info) :
+            tx_msdu_info->htt.info.ext_tid;
     } else if (pdev->frame_format == wlan_frm_fmt_native_wifi) {
         struct llc_snap_hdr_t *llc;
 
@@ -374,8 +369,9 @@ ol_tx_classify(
                     vdev->mac_addr.raw[2], vdev->mac_addr.raw[3],
                     vdev->mac_addr.raw[4], vdev->mac_addr.raw[5]);
                 return NULL; /* error */
-            } else if (A_STATUS_OK ==
-                            adf_nbuf_is_dhcp_pkt(tx_nbuf)) {
+            } else if ((peer->security[OL_TXRX_PEER_SECURITY_MULTICAST].sec_type
+                              != htt_sec_type_wapi) &&
+                              (A_STATUS_OK == adf_nbuf_is_dhcp_pkt(tx_nbuf))) {
                 /* DHCP frame to go with voice priority */
                 txq = &peer->txqs[TX_DHCP_TID];
                 tx_msdu_info->htt.info.ext_tid = TX_DHCP_TID;
@@ -499,7 +495,13 @@ ol_tx_classify(
         TX_SCHED_DEBUG_PRINT("Peer found\n");
         if (!peer->qos_capable) {
             tid = OL_TX_NON_QOS_TID;
+        } else if ((peer->security[OL_TXRX_PEER_SECURITY_UNICAST].sec_type
+                          != htt_sec_type_wapi) &&
+                          (A_STATUS_OK == adf_nbuf_is_dhcp_pkt(tx_nbuf))) {
+            /* DHCP frame to go with voice priority */
+            tid = TX_DHCP_TID;
         }
+
         /* Only allow encryption when in authenticated state */
         if (ol_txrx_peer_state_auth != peer->state) {
             tx_msdu_info->htt.action.do_encrypt = 0;
@@ -547,7 +549,7 @@ ol_tx_classify(
     if (IEEE80211_IS_MULTICAST(dest_addr) && vdev->opmode != wlan_op_mode_sta &&
         tx_msdu_info->peer != NULL) {
 
-        TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+        TXRX_PRINT(TXRX_PRINT_LEVEL_INFO1,
                       "%s: remove the peer reference %p\n", __func__, peer);
         /* remove the peer reference added above */
         ol_txrx_peer_unref_delete(tx_msdu_info->peer);
@@ -576,6 +578,7 @@ ol_tx_classify_mgmt(
     struct ol_txrx_peer_t *peer = NULL;
     struct ol_tx_frms_queue_t *txq = NULL;
     A_UINT8 *dest_addr;
+    union ol_txrx_align_mac_addr_t local_mac_addr_aligned, *mac_addr;
 
     TX_SCHED_DEBUG_PRINT("Enter %s\n", __func__);
     dest_addr = ol_tx_dest_addr_find(pdev, tx_nbuf);
@@ -609,6 +612,23 @@ ol_tx_classify_mgmt(
              * MAC address.
              */
             peer = ol_txrx_assoc_peer_find(vdev);
+            /*
+             * Some special case(preauth for example) needs to send
+             * unicast mgmt frame to unassociated AP. In such case,
+             * we need to check if dest addr match the associated
+             * peer addr. If not, we set peer as NULL to queue this
+             * frame to vdev queue.
+             */
+            if (peer) {
+                adf_os_mem_copy(
+                    &local_mac_addr_aligned.raw[0],
+                    dest_addr, OL_TXRX_MAC_ADDR_LEN);
+                mac_addr = &local_mac_addr_aligned;
+                if (ol_txrx_peer_find_mac_addr_cmp(mac_addr, &peer->mac_addr) != 0) {
+                    adf_os_atomic_dec(&peer->ref_cnt);
+                    peer = NULL;
+                }
+            }
         } else {
             /* find the peer and increment its reference count */
             peer = ol_txrx_peer_find_hash_find(pdev, dest_addr, 0, 1);

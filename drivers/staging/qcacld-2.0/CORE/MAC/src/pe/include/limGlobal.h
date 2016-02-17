@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -323,11 +323,13 @@ struct tLimScanResultNode
 typedef struct sLimMlmOemDataReq
 {
     tSirMacAddr           selfMacAddr;
-    tANI_U8               oemDataReq[OEM_DATA_REQ_SIZE];
+    uint8_t               data_len;
+    uint8_t               *data;
 } tLimMlmOemDataReq, *tpLimMlmOemDataReq;
 
 typedef struct sLimMlmOemDataRsp
 {
+   bool                   target_rsp;
    tANI_U8                oemDataRsp[OEM_DATA_RSP_SIZE];
 } tLimMlmOemDataRsp, *tpLimMlmOemDataRsp;
 #endif
@@ -354,7 +356,7 @@ typedef struct tLimPreAuthNode
 typedef struct tLimPreAuthTable
 {
     tANI_U32        numEntry;
-    tpLimPreAuthNode pTable;
+    tLimPreAuthNode **pTable;
 }tLimPreAuthTable, *tpLimPreAuthTable;
 
 /// Per STA context structure definition

@@ -128,7 +128,7 @@ static eHalStatus sendCfg(tpAniSirGlobal pMac, tHddHandle hHdd, tCfgReq *req, tA
     }
     else
     {
-        smsLog( pMac, LOGW, FL("failed to allocate memory(len=%d)"), msgLen );
+        smsLog( pMac, LOGE, FL("failed to allocate memory(len=%d)"), msgLen );
         status = eHAL_STATUS_FAILURE;
     }
 
@@ -260,6 +260,8 @@ static eHalStatus cfgSetSub(tpAniSirGlobal pMac, tHddHandle hHdd, tANI_U32 cfgId
         if (pMac->ccm.state == eCCM_STOPPED)
         {
             status = eHAL_STATUS_FAILURE ;
+            smsLog(pMac, LOGE,
+                          FL("cfgSetSub failure. ccm.state=eCCM_STOPPED"));
             break ;
         }
 
@@ -267,6 +269,7 @@ static eHalStatus cfgSetSub(tpAniSirGlobal pMac, tHddHandle hHdd, tANI_U32 cfgId
         if (req == NULL)
         {
             status = eHAL_STATUS_FAILED_ALLOC ;
+            smsLog(pMac, LOGE, FL("cfgSetSub failure. req=NULL"));
             break ;
         }
 
@@ -416,6 +419,9 @@ void ccmCfgCnfMsgHandler(tHalHandle hHal, void *m)
 
     result  = pal_be32_to_cpu(msg->data[0]);
     cfgId   = pal_be32_to_cpu(msg->data[1]);
+
+    smsLog(pMac, LOG1, FL("started=%d, cfgId=%d, in_progress=%d"),
+        pMac->ccm.replay.started, cfgId, pMac->ccm.replay.in_progress);
 
     if (pMac->ccm.replay.started && cfgId == CFG_UPDATE_MAGIC_DWORD)
     {

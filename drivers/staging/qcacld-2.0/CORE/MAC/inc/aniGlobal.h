@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -276,7 +276,7 @@ enum wifi_driver_log_level {
  * @RING_ID_WAKELOCK:         Power events ring id
  * @RING_ID_CONNECTIVITY:     Connectivity event ring id
  * @RING_ID_PER_PACKET_STATS: Per packet statistic ring id
- * @RIND_ID_DRIVER_DEBUG:     Driver debug messages ring id
+ * @RING_ID_DRIVER_DEBUG:     Driver debug messages ring id
  * @RING_ID_FIRMWARE_DEBUG:   Firmware debug messages ring id
  *
  * This enum has the ring id values of logging rings
@@ -285,9 +285,16 @@ enum wifi_logging_ring_id {
 	RING_ID_WAKELOCK,
 	RING_ID_CONNECTIVITY,
 	RING_ID_PER_PACKET_STATS,
-	RIND_ID_DRIVER_DEBUG,
+	RING_ID_DRIVER_DEBUG,
 	RING_ID_FIRMWARE_DEBUG,
 };
+
+/* vendor element ID */
+#define IE_EID_VENDOR        (221) /* 0xDD */
+#define IE_LEN_SIZE          (1)
+#define IE_EID_SIZE          (1)
+/* Minimum size of vendor IE = 3 bytes of oui_data + 1 byte of data */
+#define IE_VENDOR_OUI_SIZE   (4)
 
 // -------------------------------------------------------------------
 // Change channel generic scheme
@@ -998,8 +1005,6 @@ tLimMlmOemDataRsp       *gpLimMlmOemDataRsp;
     tANI_U8 fOffloadScanPending; /*Flag to track offload scan */
     tANI_U8 fOffloadScanP2PSearch; /*Flag to track the p2p search */
     tANI_U8 fOffloadScanP2PListen; /*Flag to track the p2p listen */
-    /*Filter out P2P result if not P2P scan/listen */
-    tANI_U8 offload_scan_filter_p2p_result;
     tANI_U8 probeCounter;
     tANI_U8 maxProbe;
     uint8_t retry_packet_cnt;
@@ -1251,9 +1256,11 @@ typedef struct sAniSirGlobal
     bool per_band_chainmask_supp;
     struct vdev_type_nss vdev_type_nss_2g;
     struct vdev_type_nss vdev_type_nss_5g;
+    uint8_t user_configured_nss;
     t_auth_ack_status auth_ack_status;
     bool first_scan_done;
     int8_t first_scan_bucket_threshold;
+    sir_mgmt_frame_ind_callback mgmt_frame_ind_cb;
 } tAniSirGlobal;
 
 typedef enum

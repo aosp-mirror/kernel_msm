@@ -639,6 +639,40 @@ u_int16_t get_regdmn_5g(u_int32_t reg_dmn)
 }
 
 /*
+ *  Get channel width from a given operating class
+ */
+u_int16_t regdm_get_chanwidth_from_opclass(u_int8_t *country, u_int8_t channel,
+       u_int8_t opclass)
+{
+	regdm_op_class_map_t *class = NULL;
+	u_int16_t i;
+
+	if (0 == adf_os_mem_cmp(country,"US", 2)) {
+		class = us_op_class;
+	} else if (0 == adf_os_mem_cmp(country,"EU", 2)) {
+		class = euro_op_class;
+	} else if (0 == adf_os_mem_cmp(country,"JP", 2)) {
+		class = japan_op_class;
+	} else {
+		class = global_op_class;
+	}
+
+	while (class->op_class) {
+		if (opclass == class->op_class) {
+			for (i = 0;
+			        (i < MAX_CHANNELS_PER_OPERATING_CLASS &&
+			         class->channels[i]);
+			         i++) {
+				if (channel == class->channels[i])
+					return class->ch_spacing;
+			}
+		}
+		class++;
+	}
+	return 0;
+}
+
+/*
  * Get operating class for a given channel
  */
 u_int16_t regdm_get_opclass_from_channel(u_int8_t *country, u_int8_t channel,

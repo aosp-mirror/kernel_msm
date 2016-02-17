@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -291,6 +291,7 @@ static void __limInitVars(tpAniSirGlobal pMac)
     /* Init SAP deffered Q Head */
     lim_init_sap_deferred_msg_queue(pMac);
 #endif
+    pMac->lim.gpLimMlmOemDataReq = NULL;
 }
 
 static void __limInitAssocVars(tpAniSirGlobal pMac)
@@ -600,7 +601,10 @@ tSirRetStatus limStart(tpAniSirGlobal pMac)
       pMac->lim.gLimReturnAfterFirstMatch = 0;
 
       // Initialize MLM state machine
-      limInitMlm(pMac);
+      if (eSIR_SUCCESS != limInitMlm(pMac)) {
+          limLog(pMac, LOGE, FL("Init MLM failed."));
+          return eSIR_FAILURE;
+      }
 
       // By default return unique scan results
       pMac->lim.gLimReturnUniqueResults = true;
@@ -719,6 +723,7 @@ limCleanup(tpAniSirGlobal pMac)
 {
 //Before destroying the list making sure all the nodes have been deleted.
 //Which should be the normal case, but a memory leak has been reported.
+    uint8_t i;
 
     tpLimMgmtFrameRegistration pLimMgmtRegistration = NULL;
 
@@ -739,6 +744,8 @@ limCleanup(tpAniSirGlobal pMac)
     // free up preAuth table
     if (pMac->lim.gLimPreAuthTimerTable.pTable != NULL)
     {
+        for (i = 0; i < pMac->lim.gLimPreAuthTimerTable.numEntry; i++)
+            vos_mem_free(pMac->lim.gLimPreAuthTimerTable.pTable[i]);
         vos_mem_free(pMac->lim.gLimPreAuthTimerTable.pTable);
         pMac->lim.gLimPreAuthTimerTable.pTable = NULL;
         pMac->lim.gLimPreAuthTimerTable.numEntry = 0;
@@ -1041,6 +1048,10 @@ tSirRetStatus peClose(tpAniSirGlobal pMac)
     pMac->lim.limTimers.gpLimCnfWaitTimer = NULL;
 
     if (pMac->lim.gpLimMlmOemDataReq) {
+        if (pMac->lim.gpLimMlmOemDataReq->data) {
+            vos_mem_free(pMac->lim.gpLimMlmOemDataReq->data);
+            pMac->lim.gpLimMlmOemDataReq->data = NULL;
+        }
         vos_mem_free(pMac->lim.gpLimMlmOemDataReq);
         pMac->lim.gpLimMlmOemDataReq = NULL;
     }
@@ -1347,12 +1358,6 @@ VOS_STATUS peHandleMgmtFrame( v_PVOID_t pvosGCtx, v_PVOID_t vosBuff)
                WDA_GET_RX_MPDU_LEN(pRxPacketInfo),
                WDA_GET_RX_MPDU_HEADER_LEN(pRxPacketInfo),
                WDA_GET_RX_PAYLOAD_LEN(pRxPacketInfo));
-
-        MTRACE(macTrace(pMac, TRACE_CODE_RX_MGMT,
-                        WDA_GET_RX_PAYLOAD_LEN(pRxPacketInfo),
-                        LIM_TRACE_MAKE_RXMGMT(mHdr->fc.subType,
-                        (tANI_U16) (((tANI_U16)(mHdr->seqControl.seqNumHi << 4))
-                        | mHdr->seqControl.seqNumLo)));)
 
 #ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
        if (WDA_GET_ROAMCANDIDATEIND(pRxPacketInfo))
@@ -2026,6 +2031,49 @@ void limHandleMissedBeaconInd(tpAniSirGlobal pMac, tpSirMsgQ pMsg)
             pMac->pmm.gPmmState);
     }
     return;
+}
+
+/**
+ * lim_smps_force_mode_ind() - Process smps force mode event
+ * @mac_ctx: Global MAC pointer
+ * @data: message containing the parameters of the event
+ *
+ * Process the smps force mode event and post message to SME to
+ * invoke the HDD callback
+ *
+ * Return: None
+ */
+void lim_smps_force_mode_ind(tpAniSirGlobal mac_ctx, tpSirMsgQ data)
+{
+	tSirMsgQ msg;
+	tpPESession psession_entry;
+	struct sir_smps_force_mode_event *smps_ind, *param;
+
+	smps_ind = data->bodyptr;
+	psession_entry = pe_find_session_by_sme_session_id(mac_ctx,
+						smps_ind->vdev_id);
+	if (psession_entry == NULL) {
+		limLog(mac_ctx, LOGE,
+		       FL("session does not exist for given BSSIdx: %d"),
+		       smps_ind->vdev_id);
+		return;
+	}
+
+	param = vos_mem_malloc(sizeof(*param));
+	if (NULL == param) {
+		limLog(mac_ctx, LOGE, FL("Failed to allocate memory"));
+		return;
+	}
+	*param = *smps_ind;
+
+	msg.type = eWNI_SME_SMPS_FORCE_MODE_IND;
+	msg.bodyptr = param;
+	msg.bodyval = 0;
+	limLog(mac_ctx, LOGE,
+	       FL("send eWNI_SME_SMPS_FORCE_MODE_IND to SME"));
+
+	limSysProcessMmhMsgApi(mac_ctx, &msg, ePROT);
+	return;
 }
 
 void

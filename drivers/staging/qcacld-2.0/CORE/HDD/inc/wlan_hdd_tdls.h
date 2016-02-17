@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -118,6 +118,11 @@ typedef enum {
     eTDLS_SUPPORT_EXTERNAL_CONTROL
 } eTDLSSupportMode;
 
+enum tdls_spatial_streams {
+    TDLS_NSS_1x1_MODE = 0,
+    TDLS_NSS_2x2_MODE = 0xff,
+};
+
 typedef enum eTDLSCapType{
     eTDLS_CAP_NOT_SUPPORTED = -1,
     eTDLS_CAP_UNKNOWN = 0,
@@ -200,7 +205,6 @@ typedef struct {
     tANI_U32        discovery_sent_cnt;
     tANI_S8         ap_rssi;
     struct _hddTdlsPeer_t  *curr_candidate;
-    struct work_struct implicit_setup;
     v_U32_t            magic;
 } tdlsCtx_t;
 
@@ -230,6 +234,7 @@ typedef struct _hddTdlsPeer_t {
     tANI_U8       op_class_for_pref_off_chan;
     tANI_U8       pref_off_chan_num;
     tANI_U8       op_class_for_pref_off_chan_is_set;
+    uint8_t     spatial_streams;
     /* EXT TDLS */
     tTDLSLinkReason reason;
     cfg80211_exttdls_callback state_change_notification;
@@ -361,10 +366,7 @@ void wlan_hdd_tdls_indicate_teardown(hdd_adapter_t *pAdapter,
                                      hddTdlsPeer_t *curr_peer,
                                      tANI_U16 reason);
 
-#ifdef CONFIG_TDLS_IMPLICIT
-void wlan_hdd_tdls_pre_setup_init_work(tdlsCtx_t *pHddTdlsCtx,
-                                       hddTdlsPeer_t *curr_candidate);
-#endif
+void wlan_hdd_tdls_implicit_send_discovery_request(tdlsCtx_t *pHddTdlsCtx);
 
 int wlan_hdd_tdls_set_extctrl_param(hdd_adapter_t *pAdapter,
                                     const uint8_t  *mac,
@@ -410,6 +412,10 @@ int hdd_set_tdls_offchannelmode(hdd_adapter_t *pAdapter, int offchanmode);
 void wlan_hdd_update_tdls_info(hdd_adapter_t *adapter, bool tdls_prohibited,
                                bool tdls_chan_swit_prohibited);
 int hdd_set_tdls_scan_type(hdd_context_t *hdd_ctx, int val);
+int wlan_hdd_tdls_antenna_switch(hdd_context_t *hdd_ctx,
+					hdd_adapter_t *adapter,
+					uint32_t mode);
+
 
 #else
 static inline void hdd_tdls_notify_mode_change(hdd_adapter_t *pAdapter,
@@ -422,6 +428,16 @@ wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_context_t *pHddCtx)
 }
 static inline void wlan_hdd_tdls_exit(hdd_adapter_t *pAdapter)
 {
+}
+static inline void
+wlan_hdd_tdls_implicit_send_discovery_request(void *pHddTdlsCtx)
+{
+}
+static inline int wlan_hdd_tdls_antenna_switch(hdd_context_t *hdd_ctx,
+						      hdd_adapter_t *adapter,
+						      uint32_t mode)
+{
+	return 0;
 }
 #endif
 

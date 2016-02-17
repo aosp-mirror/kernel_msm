@@ -980,6 +980,10 @@ enum {
 
 typedef A_STATUS (*ol_tx_filter_func)(struct ol_txrx_msdu_info_t *tx_msdu_info);
 
+#define OL_TXRX_PEER_SECURITY_MULTICAST  0
+#define OL_TXRX_PEER_SECURITY_UNICAST    1
+#define OL_TXRX_PEER_SECURITY_MAX        2
+
 struct ol_txrx_peer_t {
 	struct ol_txrx_vdev_t *vdev;
 
@@ -1024,8 +1028,8 @@ struct ol_txrx_peer_t {
 
 	struct {
 		enum htt_sec_type sec_type;
-		u_int32_t michael_key[2]; /* relevant for TKIP */
-	} security[2]; /* 0 -> multicast, 1 -> unicast */
+		u_int32_t michael_key[OL_TXRX_PEER_SECURITY_MAX]; /* relevant for TKIP */
+	} security[OL_TXRX_PEER_SECURITY_MAX]; /* 0 -> multicast, 1 -> unicast */
 
 	/*
 	 * rx proc function: this either is a copy of pdev's rx_opt_proc for

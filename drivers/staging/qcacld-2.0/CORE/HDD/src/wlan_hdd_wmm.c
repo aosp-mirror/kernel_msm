@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -63,6 +63,7 @@
 #include <wlan_hdd_hostapd.h>
 #include <wlan_hdd_softap_tx_rx.h>
 #include <vos_sched.h>
+#include <linux/ipv6.h>
 #include "sme_Api.h"
 
 // change logging behavior based upon debug flag
@@ -1669,6 +1670,7 @@ hdd_wmm_classify_pkt(hdd_adapter_t* pAdapter, struct sk_buff *skb,
    union generic_ethhdr *pHdr;
    struct iphdr *pIpHdr;
    unsigned char tos;
+   struct ipv6hdr *ipv6hdr;
    unsigned char dscp;
    sme_QosWmmUpType userPri;
    WLANTL_ACEnumType acType;
@@ -1702,7 +1704,14 @@ hdd_wmm_classify_pkt(hdd_adapter_t* pAdapter, struct sk_buff *skb,
                    "%s: Ethernet II IP Packet, tos is %d",
                    __func__, tos);
 #endif // HDD_WMM_DEBUG
-
+      } else if (pHdr->eth_II.h_proto  == htons(ETH_P_IPV6)) {
+         ipv6hdr = ipv6_hdr(skb);
+         tos = ntohs(*(const __be16 *)ipv6hdr) >> 4;
+#ifdef HDD_WMM_DEBUG
+         VOS_TRACE(CDF_MODULE_ID_HDD, WMM_TRACE_LEVEL_INFO_LOW,
+                   "%s: Ethernet II IPv6 Packet, tos is %d",
+                   __func__, tos);
+#endif /* HDD_WMM_DEBUG */
       }
       else if ((ntohs(pHdr->eth_II.h_proto) < WLAN_MIN_PROTO) &&
                (pHdr->eth_8023.h_snap.dsap == WLAN_SNAP_DSAP) &&
@@ -2057,15 +2066,8 @@ VOS_STATUS hdd_wmm_acquire_access( hdd_adapter_t* pAdapter,
    pQosContext->magic = HDD_WMM_CTX_MAGIC;
    pQosContext->is_inactivity_timer_running = false;
 
-#ifdef CONFIG_CNSS
-   cnss_init_work(&pQosContext->wmmAcSetupImplicitQos,
+   vos_init_work(&pQosContext->wmmAcSetupImplicitQos,
              hdd_wmm_do_implicit_qos);
-#else
-#ifdef WLAN_OPEN_SOURCE
-   INIT_WORK(&pQosContext->wmmAcSetupImplicitQos,
-             hdd_wmm_do_implicit_qos);
-#endif
-#endif
 
    VOS_TRACE(VOS_MODULE_ID_HDD, WMM_TRACE_LEVEL_INFO,
              "%s: Scheduling work for AC %d, context %p",
@@ -2658,6 +2660,7 @@ hdd_wlan_wmm_status_e hdd_wmm_delts( hdd_adapter_t* pAdapter,
       // this flow is the only one on that AC, so go ahead and update
       // our TSPEC state for the AC
       pAdapter->hddWmmStatus.wmmAcStatus[acType].wmmAcTspecValid = VOS_FALSE;
+      pAdapter->hddWmmStatus.wmmAcStatus[acType].wmmAcAccessAllowed = VOS_FALSE;
 
       // need to tell TL to stop trigger timer, etc
       hdd_wmm_disable_tl_uapsd(pQosContext);

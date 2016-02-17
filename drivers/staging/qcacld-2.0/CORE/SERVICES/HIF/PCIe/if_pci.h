@@ -165,8 +165,6 @@ int hif_pci_check_soc_status(struct hif_pci_softc *sc);
 void dump_CE_debug_register(struct hif_pci_softc *sc);
 
 /*These functions are exposed to HDD*/
-int hif_register_driver(void);
-void hif_unregister_driver(void);
 int hif_init_adf_ctx(void *ol_sc);
 void hif_init_pdev_txrx_handle(void *ol_sc, void *txrx_handle);
 void hif_disable_isr(void *ol_sc);

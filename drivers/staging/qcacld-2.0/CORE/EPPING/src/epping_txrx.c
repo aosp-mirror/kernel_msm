@@ -53,9 +53,7 @@
 #include <wlan_hdd_wext.h>
 #include <linux/wireless.h>
 #include <net/cfg80211.h>
-#if defined(MSM_PLATFORM) && defined(HIF_PCI)
-#include <net/cnss.h>
-#endif /* MSM_PLATFORM */
+#include "vos_cnss.h"
 #include <linux/rtnetlink.h>
 #include <linux/semaphore.h>
 #include <linux/ctype.h>
@@ -246,9 +244,7 @@ static void epping_stop_adapter(epping_adapter_t *pAdapter)
       netif_tx_disable(pAdapter->dev);
       netif_carrier_off(pAdapter->dev);
       pAdapter->started = false;
-#if defined(MSM_PLATFORM) && defined(HIF_PCI) && defined(CONFIG_CNSS)
-      cnss_request_bus_bandwidth(CNSS_BUS_WIDTH_LOW);
-#endif
+      vos_request_bus_bandwidth(CNSS_BUS_WIDTH_LOW);
    }
 }
 
@@ -260,9 +256,7 @@ static int epping_start_adapter(epping_adapter_t *pAdapter)
       return -1;
    }
    if (!pAdapter->started) {
-#if defined(MSM_PLATFORM) && defined(HIF_PCI) && defined(CONFIG_CNSS)
-      cnss_request_bus_bandwidth(CNSS_BUS_WIDTH_HIGH);
-#endif
+      vos_request_bus_bandwidth(CNSS_BUS_WIDTH_HIGH);
       netif_carrier_on(pAdapter->dev);
       EPPING_LOG(LOG1, FL("Enabling queues"));
       netif_tx_start_all_queues(pAdapter->dev);

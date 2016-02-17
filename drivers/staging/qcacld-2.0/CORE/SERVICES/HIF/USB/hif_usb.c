@@ -1047,3 +1047,17 @@ void HIFSetBundleMode(HIF_DEVICE *hif_device, bool enabled, int rx_bundle_cnt)
 			 enabled ? "enabled" : "disabled",
 			 rx_bundle_cnt));
 }
+
+/**
+ * hif_is_80211_fw_wow_required() - API to check if target suspend is needed
+ *
+ * API determines if fw can be suspended and returns true/false to the caller.
+ * Caller will call WMA WoW API's to suspend.
+ * This API returns true only for SDIO bus types, for others it's a false.
+ *
+ * Return: bool
+ */
+bool hif_is_80211_fw_wow_required(void)
+{
+	return false;
+}

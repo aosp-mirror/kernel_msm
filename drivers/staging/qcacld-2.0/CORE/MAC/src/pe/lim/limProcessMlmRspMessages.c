@@ -744,14 +744,14 @@ limProcessMlmAuthCnf(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
             cfgAuthType = pMac->lim.gLimPreAuthType;
 
         if ((cfgAuthType == eSIR_AUTO_SWITCH) &&
-                (((tLimMlmAuthCnf *) pMsgBuf)->authType == eSIR_OPEN_SYSTEM)
+                (((tLimMlmAuthCnf *) pMsgBuf)->authType == eSIR_SHARED_KEY)
                 && (eSIR_MAC_AUTH_ALGO_NOT_SUPPORTED_STATUS == ((tLimMlmAuthCnf *) pMsgBuf)->protStatusCode))
         {
             /**
-             * When Open authentication fails with reason code "13" and
-             * authType set to 'auto switch', Try with Shared Authentication
+             * When Shared authentication fails with reason code "13" and
+             * authType set to 'auto switch', Try with Open Authentication
              */
-            authMode = eSIR_SHARED_KEY;
+            authMode = eSIR_OPEN_SYSTEM;
             // Trigger MAC based Authentication
             pMlmAuthReq = vos_mem_malloc(sizeof(tLimMlmAuthReq));
             if ( NULL == pMlmAuthReq )
@@ -1866,12 +1866,18 @@ limHandleSmeJoinResult(tpAniSirGlobal pMac, tSirResultCodes resultCode, tANI_U16
             pStaDs->mlmStaContext.protStatusCode = protStatusCode;
             //Done: 7-27-2009. JIM_FIX_ME: at the end of limCleanupRxPath, make sure PE is sending eWNI_SME_JOIN_RSP to SME
             limCleanupRxPath(pMac, pStaDs, psessionEntry);
+            /* Cleanup if add bss failed */
+            if(psessionEntry->add_bss_failed) {
+              dphDeleteHashEntry(pMac, pStaDs->staAddr, pStaDs->assocId,
+                                   &psessionEntry->dph.dphHashTable);
+              goto error;
+            }
             vos_mem_free(psessionEntry->pLimJoinReq);
             psessionEntry->pLimJoinReq = NULL;
             return;
         }
     }
-
+error:
     vos_mem_free(psessionEntry->pLimJoinReq);
     psessionEntry->pLimJoinReq = NULL;
     //Delete teh session if JOIN failure occurred.
@@ -1937,11 +1943,17 @@ limHandleSmeReaasocResult(tpAniSirGlobal pMac, tSirResultCodes resultCode, tANI_
             pStaDs->mlmStaContext.cleanupTrigger = eLIM_JOIN_FAILURE;
             pStaDs->mlmStaContext.resultCode = resultCode;
             pStaDs->mlmStaContext.protStatusCode = protStatusCode;
+            /* Cleanup if add bss failed */
+            if(psessionEntry->add_bss_failed) {
+              dphDeleteHashEntry(pMac, pStaDs->staAddr, pStaDs->assocId,
+                                   &psessionEntry->dph.dphHashTable);
+              goto error;
+            }
             limCleanupRxPath(pMac, pStaDs, psessionEntry);
             return;
         }
     }
-
+error:
     //Delete teh session if REASSOC failure occurred.
     if(resultCode != eSIR_SME_SUCCESS)
     {
@@ -2027,6 +2039,7 @@ void limProcessStaMlmAddStaRsp( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ ,tpPESess
             mlmAssocCnf.resultCode =
                 (tSirResultCodes) eSIR_SME_JOIN_DEAUTH_FROM_AP_DURING_ADD_STA;
             psessionEntry->staId = pAddStaParams->staIdx;
+            mlmAssocCnf.protStatusCode = eSIR_MAC_UNSPEC_FAILURE_STATUS;
             goto end;
 	}
     }
@@ -2115,6 +2128,7 @@ void limProcessStaMlmAddStaRsp( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ ,tpPESess
           mlmAssocCnf.resultCode = (tSirResultCodes)eSIR_SME_FT_REASSOC_FAILURE;
         else
           mlmAssocCnf.resultCode = (tSirResultCodes)eSIR_SME_REFUSED;
+        mlmAssocCnf.protStatusCode = eSIR_MAC_UNSPEC_FAILURE_STATUS;
     }
 end:
     if( 0 != limMsgQ->bodyptr )
@@ -2851,7 +2865,7 @@ limProcessStaMlmAddBssRspPreAssoc( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ, tpPES
                        FL("could not retrieve AuthType"));
             }
             if (cfgAuthType == eSIR_AUTO_SWITCH)
-                authMode = eSIR_OPEN_SYSTEM; // Try Open Authentication first
+                authMode = eSIR_SHARED_KEY; // Try Shared Authentication first
             else
                 authMode = cfgAuthType;
 
@@ -3268,12 +3282,14 @@ limProcessStaMlmAddBssRsp( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ,tpPESession ps
     } else {
         limLog(pMac, LOGP, FL("SessionId:%d ADD_BSS failed!"),
                psessionEntry->peSessionId);
+        mlmAssocCnf.protStatusCode = eSIR_MAC_UNSPEC_FAILURE_STATUS;
         /* Return Assoc confirm to SME with failure */
         // Return Assoc confirm to SME with failure
         if(eLIM_MLM_WT_ADD_BSS_RSP_FT_REASSOC_STATE == psessionEntry->limMlmState)
             mlmAssocCnf.resultCode = (tSirResultCodes) eSIR_SME_FT_REASSOC_FAILURE;
         else
             mlmAssocCnf.resultCode = (tSirResultCodes) eSIR_SME_REFUSED;
+        psessionEntry->add_bss_failed = true;
     }
 
     if(mlmAssocCnf.resultCode != eSIR_SME_SUCCESS)
@@ -4696,6 +4712,7 @@ limHandleDelBssInReAssocContext(tpAniSirGlobal pMac, tpDphHashNode pStaDs,tpPESe
                 limPrintMacAddr(pMac, psessionEntry->limReAssocbssId, LOGE);
                 mlmReassocCnf.resultCode = eSIR_SME_RESOURCES_UNAVAILABLE;
                 mlmReassocCnf.protStatusCode = eSIR_SME_SUCCESS;
+                vos_mem_free(pBeaconStruct);
                 goto Error;
             }
             /** While Processing the ReAssoc Response Frame the ReAssocRsp Frame
@@ -5040,19 +5057,6 @@ void limProcessRxScanEvent(tpAniSirGlobal pMac, void *buf)
             break;
         case SCAN_EVENT_START_FAILED:
         case SCAN_EVENT_COMPLETED:
-            limLog(pMac, LOG1, FL("pMac->fScanOffload %d, pMac->lim.fOffloadScanPending %d, pMac->lim.fOffloadScanP2PSearch %d, pMac->lim.fOffloadScanP2PListen %d"),
-                   pMac->fScanOffload, pMac->lim.fOffloadScanPending,
-                   pMac->lim.fOffloadScanP2PSearch,
-                   pMac->lim.fOffloadScanP2PListen);
-
-            if ((SCAN_EVENT_COMPLETED == pScanEvent->event) &&
-                 !(pMac->fScanOffload && pMac->lim.fOffloadScanPending &&
-                  (pMac->lim.fOffloadScanP2PSearch ||
-                   pMac->lim.fOffloadScanP2PListen)))
-            {
-                pMac->lim.offload_scan_filter_p2p_result = 1;
-            }
-
             pMac->lim.fOffloadScanPending = 0;
             pMac->lim.fOffloadScanP2PSearch = 0;
             pMac->lim.fOffloadScanP2PListen = 0;
@@ -5079,7 +5083,6 @@ void limProcessRxScanEvent(tpAniSirGlobal pMac, void *buf)
             {
                 limSendScanOffloadComplete(pMac, pScanEvent);
             }
-            pMac->lim.offload_scan_filter_p2p_result = 0;
             break;
         case SCAN_EVENT_FOREIGN_CHANNEL:
             if (P2P_SCAN_TYPE_LISTEN == pScanEvent->p2pScanType)

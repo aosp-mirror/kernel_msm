@@ -481,8 +481,8 @@ static const REG_DMN_PAIR_MAPPING ahCmnRegDomainPairs[] = {
 static const COUNTRY_CODE_TO_ENUM_RD ahCmnAllCountries[] = {
     {CTRY_DEBUG,       NO_ENUMRD,     "DB", "DEBUG",          YES, YES, YES, YES, YES, YES, YES, YES, 7000 },
     {CTRY_DEFAULT,     DEF_REGDMN,    "NA", "NO_COUNTRY_SET", YES, YES, YES, YES, YES, YES, YES, YES, 7000 },
-    {CTRY_ALBANIA,     NULL1_WORLD,   "AL", "ALBANIA",        YES,  NO, YES, YES, YES,  NO,  NO, NO, 7000 },
-    {CTRY_ALGERIA,     NULL1_WORLD,   "DZ", "ALGERIA",        YES,  NO, YES, YES, YES,  NO,  NO, NO, 7000 },
+    {CTRY_ALBANIA,     ETSI1_WORLD,   "AL", "ALBANIA",        YES,  NO, YES, YES, YES,  NO,  NO, NO, 7000 },
+    {CTRY_ALGERIA,     APL13_WORLD,   "DZ", "ALGERIA",        YES,  NO, YES, YES, YES,  NO,  NO, NO, 7000 },
     {CTRY_ARGENTINA,   FCC3_WORLD,    "AR", "ARGENTINA",      YES,  NO,  NO, YES, YES, YES, YES, YES, 7000 },
     {CTRY_ARMENIA,     ETSI4_WORLD,   "AM", "ARMENIA",        YES,  NO, YES, YES, YES, YES,  NO, NO, 7000 },
     {CTRY_ARUBA,       ETSI1_WORLD,   "AW", "ARUBA",          YES,  NO, YES, YES, YES, YES, YES, YES, 7000 },
@@ -492,7 +492,7 @@ static const COUNTRY_CODE_TO_ENUM_RD ahCmnAllCountries[] = {
     {CTRY_AZERBAIJAN,  ETSI4_WORLD,   "AZ", "AZERBAIJAN",     YES, YES, YES, YES, YES, YES, YES, YES, 7000 },
     {CTRY_BAHAMAS,     FCC3_WORLD,    "BS", "BAHAMAS",        YES, YES, YES, YES, YES, YES, YES, YES, 7000 },
     {CTRY_BAHRAIN,     APL6_WORLD,    "BH", "BAHRAIN",        YES,  NO, YES, YES, YES, YES,  NO, NO, 7000 },
-    {CTRY_BANGLADESH,  NULL1_WORLD,   "BD", "BANGLADESH",     YES,  NO, YES, YES, YES,  NO,  NO, NO, 7000 },
+    {CTRY_BANGLADESH,  APL1_WORLD,    "BD", "BANGLADESH",     YES,  NO, YES, YES, YES,  NO,  NO, NO, 7000 },
     {CTRY_BARBADOS,    FCC2_WORLD,    "BB", "BARBADOS",       YES,  NO, YES, YES, YES, YES, YES, YES, 7000 },
     {CTRY_BELARUS,     ETSI1_WORLD,   "BY", "BELARUS",        YES,  NO, YES, YES, YES, YES, YES, YES, 7000 },
     {CTRY_BELGIUM,     ETSI1_WORLD,   "BE", "BELGIUM",        YES,  NO, YES, YES, YES, YES, YES, YES, 7000 },
@@ -671,7 +671,7 @@ static const COUNTRY_CODE_TO_ENUM_RD ahCmnAllCountries[] = {
     {CTRY_VENEZUELA,   FCC1_WORLD,    "VE", "VENEZUELA",      YES,  NO, YES, YES, YES, YES, YES, YES, 7000 },
     {CTRY_VIET_NAM,    ETSI3_WORLD,   "VN", "VIET NAM",       YES,  NO, YES, YES, YES, YES, YES, YES, 7000 },
     {CTRY_YEMEN,       NULL1_WORLD,   "YE", "YEMEN",          YES,  NO, YES, YES, YES,  NO,  NO, NO, 7000 },
-    {CTRY_ZIMBABWE,    NULL1_WORLD,   "ZW", "ZIMBABWE",       YES,  NO, YES, YES, YES,  NO,  NO, NO, 7000 }
+    {CTRY_ZIMBABWE,    ETSI1_WORLD,   "ZW", "ZIMBABWE",       YES,  NO, YES, YES, YES,  NO,  NO, NO, 7000 }
 };
 
 
@@ -1859,6 +1859,8 @@ typedef struct _regdm_supp_op_classes {
 
 u_int16_t regdm_get_opclass_from_channel(u_int8_t *country, u_int8_t channel,
 	u_int8_t offset);
+u_int16_t regdm_get_chanwidth_from_opclass(u_int8_t *country, u_int8_t channel,
+	u_int8_t opclass);
 u_int16_t regdm_set_curr_opclasses(u_int8_t num_classes, u_int8_t *class);
 u_int16_t regdm_get_curr_opclasses(u_int8_t *num_classes, u_int8_t *class);
 

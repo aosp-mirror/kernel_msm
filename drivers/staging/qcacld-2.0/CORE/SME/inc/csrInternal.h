@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -308,7 +308,12 @@ typedef struct tagScanProfile
 {
     tANI_U32 minChnTime;
     tANI_U32 maxChnTime;
+    /* In units of milliseconds, ignored when not connected */
     tANI_U32 restTime;  //This is ignored if not associated
+    /* In units of milliseconds, ignored when not connected */
+    tANI_U32 min_rest_time;
+    /* In units of milliseconds, ignored when not connected */
+    tANI_U32 idle_time;
     tANI_U32 numOfChannels;
     tANI_U8 *pChannelList;
     tSirScanType scanType;  //active or passive
@@ -599,7 +604,13 @@ typedef struct tagCsrConfig
     tANI_U32  nPassiveMaxChnTimeConc;    //in units of milliseconds
     tANI_U32  nActiveMinChnTimeConc;     //in units of milliseconds
     tANI_U32  nActiveMaxChnTimeConc;     //in units of milliseconds
-    tANI_U32  nRestTimeConc;             //in units of milliseconds
+    /* In units of milliseconds */
+    tANI_U32  nRestTimeConc;
+    /* In units of milliseconds */
+    tANI_U32  min_rest_time_conc;
+    /* In units of milliseconds */
+    tANI_U32  idle_time_conc;
+
     tANI_U8   nNumStaChanCombinedConc;   //number of channels combined for
                                          //Sta in each split scan operation
     tANI_U8   nNumP2PChanCombinedConc;   //number of channels combined for
@@ -1028,6 +1039,7 @@ typedef struct tagCsrRoamSession
                                */
     tCsrRoamStoredProfile stored_roam_profile;
     bool ch_switch_in_progress;
+    bool supported_nss_1x1;
 } tCsrRoamSession;
 
 typedef struct tagCsrRoamStruct

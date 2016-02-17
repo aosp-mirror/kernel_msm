@@ -93,8 +93,6 @@ static inline void athdiag_procfs_remove(void) { return; }
 #endif
 
 /*These functions are exposed to HDD*/
-int hif_register_driver(void);
-void hif_unregister_driver(void);
 int hif_init_adf_ctx(void *ol_sc);
 void hif_init_pdev_txrx_handle(void *ol_sc, void *txrx_handle);
 void hif_disable_isr(void *ol_sc);

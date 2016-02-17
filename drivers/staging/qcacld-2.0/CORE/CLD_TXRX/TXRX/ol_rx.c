@@ -43,6 +43,7 @@
 #include <ol_rx_reorder.h>     /* ol_rx_reorder_store, etc. */
 #include <ol_rx_reorder_timeout.h> /* OL_RX_REORDER_TIMEOUT_UPDATE */
 #include <ol_rx_defrag.h>      /* ol_rx_defrag_waitlist_flush */
+#include <ol_rx_fwd.h>             /* ol_rx_fwd_check, etc. */
 #include <ol_txrx_internal.h>
 #include <wdi_event.h>
 #ifdef QCA_SUPPORT_SW_TXRX_ENCAP
@@ -60,9 +61,7 @@
 #include <wma.h>
 
 #ifdef HTT_RX_RESTORE
-#if  defined(CONFIG_CNSS)
-#include <net/cnss.h>
-#endif
+#include "vos_cnss.h"
 #endif
 
 #ifdef OSIF_NEED_RX_PEER_ID
@@ -79,7 +78,7 @@ static void ol_rx_restore_handler(struct work_struct *htt_rx)
 {
     VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
         "Enter: %s", __func__);
-    cnss_device_self_recovery();
+    vos_device_self_recovery();
     VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
         "Exit: %s", __func__);
 }
@@ -717,24 +716,27 @@ ol_rx_offload_deliver_ind_handler(
     htt_pdev_handle htt_pdev = pdev->htt_pdev;
 
     while (msdu_cnt) {
-        htt_rx_offload_msdu_pop(
+        if (!htt_rx_offload_msdu_pop(
             htt_pdev, msg, &vdev_id, &peer_id,
-            &tid, &fw_desc, &head_buf, &tail_buf);
-
-        peer = ol_txrx_peer_find_by_id(pdev, peer_id);
-        if (peer && peer->vdev) {
-            vdev = peer->vdev;
-	    OL_RX_OSIF_DELIVER(vdev, peer, head_buf);
-        } else {
-            buf = head_buf;
-            while (1) {
-                adf_nbuf_t next;
-                next = adf_nbuf_next(buf);
-                htt_rx_desc_frame_free(htt_pdev, buf);
-                if (buf == tail_buf) {
-                    break;
+            &tid, &fw_desc, &head_buf, &tail_buf)) {
+            peer = ol_txrx_peer_find_by_id(pdev, peer_id);
+            if (peer && peer->vdev) {
+                vdev = peer->vdev;
+                if (pdev->cfg.is_high_latency)
+                    ol_rx_fwd_check(vdev, peer, tid, head_buf);
+                else
+                    OL_RX_OSIF_DELIVER(vdev, peer, head_buf);
+            } else {
+                buf = head_buf;
+                while (1) {
+                    adf_nbuf_t next;
+                    next = adf_nbuf_next(buf);
+                    htt_rx_desc_frame_free(htt_pdev, buf);
+                    if (buf == tail_buf) {
+                        break;
+                    }
+                    buf = next;
                 }
-                buf = next;
             }
         }
         msdu_cnt--;

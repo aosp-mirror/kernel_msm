@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -587,6 +587,24 @@ enum
 #define CFG_REST_TIME_CONC_MAX                      ( 10000 )
 #define CFG_REST_TIME_CONC_DEFAULT                  ( 100 )
 
+/* Mininum time spent on home channel before moving to a new channel to scan */
+#define CFG_MIN_REST_TIME_NAME                      "gMinRestTimeConc"
+#define CFG_MIN_REST_TIME_MIN                       ( 0 )
+#define CFG_MIN_REST_TIME_MAX                       ( 50 )
+#define CFG_MIN_REST_TIME_DEFAULT                   ( 50 )
+
+/* Data inactivity time in msec on bss channel that will be used
+ * by scan engine in firmware.
+ * for example if this value is 25ms then firmware will check for
+ * data inactivity every 25ms till gRestTimeConc is reached.
+ * If inactive then scan engine will move from home channel to
+ * scan the next frequency.
+ */
+#define CFG_IDLE_TIME_NAME                          "gIdleTimeConc"
+#define CFG_IDLE_TIME_MIN                           ( 0 )
+#define CFG_IDLE_TIME_MAX                           ( 25 )
+#define CFG_IDLE_TIME_DEFAULT                       ( 25 )
+
 #define CFG_NUM_STA_CHAN_COMBINED_CONC_NAME             "gNumStaChanCombinedConc"
 #define CFG_NUM_STA_CHAN_COMBINED_CONC_MIN              ( 1 )
 #define CFG_NUM_STA_CHAN_COMBINED_CONC_MAX              ( 255 )
@@ -1076,8 +1094,13 @@ enum
 #define CFG_ROAM_RESCAN_RSSI_DIFF_MAX                   (100)
 #define CFG_ROAM_RESCAN_RSSI_DIFF_DEFAULT               (5)
 
+/*
+ * This parameter is the continuous packets dropping threshold that will trigger
+ * kickout peer event from fw.
+ * MIN value will disable the kickout feature.
+ */
 #define CFG_DROPPED_PKT_DISCONNECT_TH_NAME      "gDroppedPktDisconnectTh"
-#define CFG_DROPPED_PKT_DISCONNECT_TH_MIN       (48)
+#define CFG_DROPPED_PKT_DISCONNECT_TH_MIN       (0)
 #define CFG_DROPPED_PKT_DISCONNECT_TH_MAX       (1024)
 #define CFG_DROPPED_PKT_DISCONNECT_TH_DEFAULT   (512)
 
@@ -1510,11 +1533,48 @@ typedef enum
 #define CFG_ENABLE_FW_MODULE_LOG_LEVEL    "gFwDebugModuleLoglevel"
 #define CFG_ENABLE_FW_MODULE_LOG_DEFAULT  ""
 
+/* gEnableRTSProfiles for configuring different RTS profiles
+ * to firmware.
+ * Following are the valid values for the rtsprofile:
+ * RTSCTS_DISABLED                           0
+ * RTSCTS_ENABLED_4_SECOND_RATESERIES        17
+ * CTS2SELF_ENABLED_4_SECOND_RATESERIES      18
+ * RTSCTS_ENABLED_4_SWRETRIES                33
+ * CTS2SELF_ENABLED_4_SWRETRIES              34
+ */
+#define CFG_ENABLE_FW_RTS_PROFILE              "gEnableRTSProfiles"
+#define CFG_ENABLE_FW_RTS_PROFILE_MIN          (0)
+#define CFG_ENABLE_FW_RTS_PROFILE_MAX          (34)
+#define CFG_ENABLE_FW_RTS_PROFILE_DEFAULT      (33)
+
 #ifdef FEATURE_GREEN_AP
-#define CFG_ENABLE_GREEN_AP_FEATURE         "gEnableGreenAp"
-#define CFG_ENABLE_GREEN_AP_FEATURE_MIN     ( 0 )
-#define CFG_ENABLE_GREEN_AP_FEATURE_MAX     ( 1 )
-#define CFG_ENABLE_GREEN_AP_FEATURE_DEFAULT ( 1 )
+#define CFG_ENABLE_GREEN_AP_FEATURE                "gEnableGreenAp"
+#define CFG_ENABLE_GREEN_AP_FEATURE_MIN            (0)
+#define CFG_ENABLE_GREEN_AP_FEATURE_MAX            (1)
+#define CFG_ENABLE_GREEN_AP_FEATURE_DEFAULT        (1)
+
+/* Enhanced Green AP (EGAP) flags/params */
+#define CFG_ENABLE_EGAP_ENABLE_FEATURE             "gEnableEGAP"
+#define CFG_ENABLE_EGAP_ENABLE_FEATURE_MIN         (0)
+#define CFG_ENABLE_EGAP_ENABLE_FEATURE_MAX         (1)
+#define CFG_ENABLE_EGAP_ENABLE_FEATURE_DEFAULT     (0)
+
+#define CFG_ENABLE_EGAP_INACT_TIME_FEATURE         "gEGAPInactTime"
+#define CFG_ENABLE_EGAP_INACT_TIME_FEATURE_MIN     (0)
+#define CFG_ENABLE_EGAP_INACT_TIME_FEATURE_MAX     (5000)
+#define CFG_ENABLE_EGAP_INACT_TIME_FEATURE_DEFAULT (1000)
+
+#define CFG_ENABLE_EGAP_WAIT_TIME_FEATURE          "gEGAPWaitTime"
+#define CFG_ENABLE_EGAP_WAIT_TIME_FEATURE_MIN      (0)
+#define CFG_ENABLE_EGAP_WAIT_TIME_FEATURE_MAX      (5000)
+#define CFG_ENABLE_EGAP_WAIT_TIME_FEATURE_DEFAULT  (100)
+
+#define CFG_ENABLE_EGAP_FLAGS_FEATURE              "gEGAPFeatures"
+#define CFG_ENABLE_EGAP_FLAGS_FEATURE_MIN          (0)
+#define CFG_ENABLE_EGAP_FLAGS_FEATURE_MAX          (15)
+#define CFG_ENABLE_EGAP_FLAGS_FEATURE_DEFAULT      (7)
+/* end Enhanced Green AP flags/params */
+
 #endif
 
 /*
@@ -3160,8 +3220,11 @@ enum dot11p_mode {
 #define CFG_SAP_P2P_11AC_OVERRIDE_NAME             "gAP11ACOverride"
 #define CFG_SAP_P2P_11AC_OVERRIDE_MIN              (0)
 #define CFG_SAP_P2P_11AC_OVERRIDE_MAX              (1)
+#ifdef MDM_SAP_11AC_NO_OVERRIDE
+#define CFG_SAP_P2P_11AC_OVERRIDE_DEFAULT          (0)
+#else
 #define CFG_SAP_P2P_11AC_OVERRIDE_DEFAULT          (1)
-
+#endif
 #define CFG_ENABLE_NON_DFS_CHAN_ON_RADAR           "gPreferNonDfsChanOnRadar"
 #define CFG_ENABLE_NON_DFS_CHAN_ON_RADAR_MIN       (0)
 #define CFG_ENABLE_NON_DFS_CHAN_ON_RADAR_MAX       (1)
@@ -3205,8 +3268,9 @@ enum dot11p_mode {
 /* GPIO pin to toogle when capture tsf */
 #define CFG_SET_TSF_GPIO_PIN_NAME                  "gtsf_gpio_pin"
 #define CFG_SET_TSF_GPIO_PIN_MIN                   (0)
-#define CFG_SET_TSF_GPIO_PIN_MAX                   (255)
-#define CFG_SET_TSF_GPIO_PIN_DEFAULT               (34)
+#define CFG_SET_TSF_GPIO_PIN_MAX                   (254)
+#define TSF_GPIO_PIN_INVALID                       (255)
+#define CFG_SET_TSF_GPIO_PIN_DEFAULT               (TSF_GPIO_PIN_INVALID)
 
 #define CFG_MULTICAST_HOST_FW_MSGS          "gMulticastHostFwMsgs"
 #define CFG_MULTICAST_HOST_FW_MSGS_MIN      (0)
@@ -3257,6 +3321,16 @@ enum dot11p_mode {
 #define CFG_FINE_TIME_MEAS_CAPABILITY_DEFAULT      (0x000D)
 
 #ifdef FEATURE_WLAN_EXTSCAN
+/*
+ * This ini is added to control the enabling of extscan feature outside of code
+ * To enable , gExtScanEnable=1 need to be declared in ini file.
+ * Otherwise, Extscan feature will remain disabled.
+ */
+#define CFG_EXTSCAN_ALLOWED_NAME                   "gExtScanEnable"
+#define CFG_EXTSCAN_ALLOWED_MIN                    (0)
+#define CFG_EXTSCAN_ALLOWED_MAX                    (1)
+#define CFG_EXTSCAN_ALLOWED_DEF                    (0)
+
 #define CFG_EXTSCAN_PASSIVE_MAX_CHANNEL_TIME_NAME      "gExtScanPassiveMaxChannelTime"
 #define CFG_EXTSCAN_PASSIVE_MAX_CHANNEL_TIME_MIN       (0)
 #define CFG_EXTSCAN_PASSIVE_MAX_CHANNEL_TIME_MAX       (500)
@@ -3277,6 +3351,17 @@ enum dot11p_mode {
 #define CFG_EXTSCAN_ACTIVE_MIN_CHANNEL_TIME_MAX        (110)
 #define CFG_EXTSCAN_ACTIVE_MIN_CHANNEL_TIME_DEFAULT    (20)
 #endif
+
+/* When gEnable_go_cts2self_for_sta is
+ * enabled  then if a legacy client connects to P2P GO,
+ * Host will send a WMI VDEV command to FW to stop using NOA for P2P GO
+ * and start using CTS2SELF.
+ */
+#define CFG_ENABLE_GO_CTS2SELF_FOR_STA   "gEnable_go_cts2self_for_sta"
+#define CFG_ENABLE_GO_CTS2SELF_FOR_STA_DEFAULT  (0)
+#define CFG_ENABLE_GO_CTS2SELF_FOR_STA_MIN      (0)
+#define CFG_ENABLE_GO_CTS2SELF_FOR_STA_MAX      (1)
+
 
 /* client failure connection count*/
 #define CFG_CONNECT_FAIL_COUNT_NAME              "gconnect_fail_count"
@@ -3351,6 +3436,100 @@ enum dot11p_mode {
 #define CFG_FIRST_SCAN_BUCKET_THRESHOLD_MIN       (-50)
 #define CFG_FIRST_SCAN_BUCKET_THRESHOLD_MAX       (-30)
 #define CFG_FIRST_SCAN_BUCKET_THRESHOLD_DEFAULT   (-30)
+
+
+#ifdef WLAN_FEATURE_WOW_PULSE
+/*
+ * Enable/Disable  WOW PULSE feature
+ * Set the wakeup pulse which FW use to wake up HOST
+ * Default : Disable
+ */
+#define CFG_WOW_PULSE_SUPPORT_NAME     "gwow_pulse_support"
+#define CFG_WOW_PULSE_SUPPORT_MIN      (0)
+#define CFG_WOW_PULSE_SUPPORT_MAX      (1)
+#define CFG_WOW_PULSE_SUPPORT_DEFAULT  (CFG_WOW_PULSE_SUPPORT_MIN)
+
+/*
+ * GPIO PIN for Pulse
+ * Which PIN to send the Pulse
+ */
+#define CFG_WOW_PULSE_PIN_NAME         "gwow_pulse_pin"
+#define CFG_WOW_PULSE_PIN_MIN          (CFG_SET_TSF_GPIO_PIN_MIN)
+#define CFG_WOW_PULSE_PIN_MAX          (CFG_SET_TSF_GPIO_PIN_MAX)
+#define CFG_WOW_PULSE_PIN_DEFAULT      (35)
+
+/*
+ * Pulse interval low
+ * The interval of low level in the pulse
+ * The value which defined by customer should between 160 and 480
+ */
+#define CFG_WOW_PULSE_INTERVAL_LOW_NAME     "gwow_pulse_interval_low"
+#define CFG_WOW_PULSE_INTERVAL_LOW_MIN      (160)
+#define CFG_WOW_PULSE_INTERVAL_LOW_MAX      (480)
+#define CFG_WOW_PULSE_INTERVAL_LOW_DEFAULT  (180)
+
+/*
+ * Pulse interval high
+ * The interval of high level in the pulse
+ * The value which defined by customer should between 20 and 40
+ */
+#define CFG_WOW_PULSE_INTERVAL_HIGH_NAME    "gwow_pulse_interval_high"
+#define CFG_WOW_PULSE_INTERVAL_HIGH_MIN     (20)
+#define CFG_WOW_PULSE_INTERVAL_HIGH_MAX     (40)
+#define CFG_WOW_PULSE_INTERVAL_HIGH_DEFAULT (20)
+#endif
+
+/*
+ * Support to start sap in indoor channel
+ * Customer can config this item to enable/disable sap in indoor channel
+ * Default: Disable
+ */
+#define CFG_INDOOR_CHANNEL_SUPPORT_NAME     "gindoor_channel_support"
+#define CFG_INDOOR_CHANNEL_SUPPORT_MIN      (0)
+#define CFG_INDOOR_CHANNEL_SUPPORT_MAX      (1)
+#define CFG_INDOOR_CHANNEL_SUPPORT_DEFAULT  (0)
+
+/*
+ * sap tx leakage threshold
+ * customer can set this value from 100 to 1000 which means
+ * sap tx leakage threshold is -10db to -100db
+ */
+#define CFG_SAP_TX_LEAKAGE_THRESHOLD_NAME    "gsap_tx_leakage_threshold"
+#define CFG_SAP_TX_LEAKAGE_THRESHOLD_MIN     (100)
+#define CFG_SAP_TX_LEAKAGE_THRESHOLD_MAX     (1000)
+#define CFG_SAP_TX_LEAKAGE_THRESHOLD_DEFAULT (310)
+
+/*
+ * Dense traffic threshold
+ * traffic threshold required for dense roam scan
+ * not used currently
+ */
+#define CFG_ROAM_DENSE_TRAFFIC_THRESHOLD         "gtraffic_threshold"
+#define CFG_ROAM_DENSE_TRAFFIC_THRESHOLD_MIN     (0)
+#define CFG_ROAM_DENSE_TRAFFIC_THRESHOLD_MAX     (100)
+#define CFG_ROAM_DENSE_TRAFFIC_THRESHOLD_DEFAULT (0)
+
+/*
+ * Dense Roam RSSI Threshold diff
+ * offset value from normal RSSI threshold to dense RSSI threshold
+ * Fw will optimize roaming based on new RSSI threshold once it detects
+ * dense enviournment.
+ */
+#define CFG_ROAM_DENSE_RSSI_THRE_OFFSET         "groam_dense_rssi_thresh_offset"
+#define CFG_ROAM_DENSE_RSSI_THRE_OFFSET_MIN     (0)
+#define CFG_ROAM_DENSE_RSSI_THRE_OFFSET_MAX     (20)
+#define CFG_ROAM_DENSE_RSSI_THRE_OFFSET_DEFAULT (0)
+
+/*
+ * Dense Roam Min APs
+ * minimum number of AP required for roam dense
+ * FW will consider enviournment as dense once it detects #APs
+ * operating is more than CFG_ROAM_DENSE_MIN_APS.
+ */
+#define CFG_ROAM_DENSE_MIN_APS         "groam_dense_min_aps"
+#define CFG_ROAM_DENSE_MIN_APS_MIN     (1)
+#define CFG_ROAM_DENSE_MIN_APS_MAX     (5)
+#define CFG_ROAM_DENSE_MIN_APS_DEFAULT (1)
 
 /*---------------------------------------------------------------------------
   Type declarations
@@ -3486,6 +3665,11 @@ typedef struct
    v_U32_t        nActiveMinChnTimeConc;     //in units of milliseconds
    v_U32_t        nActiveMaxChnTimeConc;     //in units of milliseconds
    v_U32_t        nRestTimeConc;             //in units of milliseconds
+   /* In units of milliseconds */
+   uint32_t       min_rest_time_conc;
+   /* In units of milliseconds */
+   uint32_t       idle_time_conc;
+
    v_U8_t         nNumStaChanCombinedConc;   //number of channels combined for
                                              //STA in each split scan operation
    v_U8_t         nNumP2PChanCombinedConc;   //number of channels combined for
@@ -3892,6 +4076,9 @@ typedef struct
    v_U32_t     enableFwLogLevel;
    v_U8_t      enableFwModuleLogLevel[FW_MODULE_LOG_LEVEL_STRING_LENGTH];
 
+   /* RTS profile parameter */
+   uint32_t    rts_profile;
+
 #ifdef WLAN_FEATURE_11W
    v_U32_t                     pmfSaQueryMaxRetries;
    v_U32_t                     pmfSaQueryRetryInterval;
@@ -3904,6 +4091,10 @@ typedef struct
 
 #ifdef FEATURE_GREEN_AP
    v_BOOL_t                    enableGreenAP;
+   bool                        enable_egap;
+   uint32_t                    egap_feature_flag;
+   uint32_t                    egap_inact_time;
+   uint32_t                    egap_wait_time;
 #endif
 
    bool                        crash_inject_enabled;
@@ -4009,7 +4200,9 @@ typedef struct
    uint8_t                     sap_p2p_11ac_override;
    uint8_t                     prefer_non_dfs_on_radar;
    uint8_t                     inform_bss_rssi_raw;
+#ifdef WLAN_FEATURE_TSF
    uint32_t                    tsf_gpio_pin;
+#endif
    uint8_t                     multicast_host_fw_msgs;
    uint32_t                    fine_time_meas_cap;
 #ifdef FEATURE_SECURE_FIRMWARE
@@ -4023,6 +4216,7 @@ typedef struct
    uint16_t                    self_gen_frm_pwr;
 
 #ifdef FEATURE_WLAN_EXTSCAN
+   bool                        extscan_enabled;
    uint32_t                    extscan_passive_max_chn_time;
    uint32_t                    extscan_passive_min_chn_time;
    uint32_t                    extscan_active_max_chn_time;
@@ -4037,7 +4231,19 @@ typedef struct
 #endif
    uint16_t                    max_mgmt_tx_fail_count;
    int8_t                      first_scan_bucket_threshold;
+#ifdef WLAN_FEATURE_WOW_PULSE
+   bool                        wow_pulse_support;
+   uint8_t                     wow_pulse_pin;
+   uint16_t                    wow_pulse_interval_high;
+   uint16_t                    wow_pulse_interval_low;
+#endif
+   bool                        enable_go_cts2self_for_sta;
    uint8_t                     ht_mpdu_density;
+   bool                        indoor_channel_support;
+   uint16_t                    sap_tx_leakage_threshold;
+   uint32_t                    roam_dense_traffic_thresh;
+   uint32_t                    roam_dense_rssi_thresh_offset;
+   uint32_t                    roam_dense_min_aps;
 } hdd_config_t;
 
 #ifdef WLAN_FEATURE_MBSSID

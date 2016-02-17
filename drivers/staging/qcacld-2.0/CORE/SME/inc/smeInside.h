@@ -176,6 +176,19 @@ typedef struct s_tdls_cmd
 } tTdlsCmd;
 #endif  /* FEATURE_WLAN_TDLS */
 
+/**
+ * struct s_ani_set_tx_max_pwr - Req params to set max tx power
+ * @bssid: bssid to set the power cap for
+ * @self_mac_addr:self mac address
+ * @power: power to set in dB
+ */
+struct s_ani_set_tx_max_pwr
+{
+    tSirMacAddr   bssid;
+    tSirMacAddr   self_sta_mac_addr;
+    tPowerdBm     power;
+};
+
 typedef struct tagSmeCmd
 {
     tListElem Link;
@@ -200,6 +213,7 @@ typedef struct tagSmeCmd
 #ifdef FEATURE_WLAN_TDLS
         tTdlsCmd  tdlsCmd;
 #endif
+        struct s_ani_set_tx_max_pwr set_tx_max_pwr;
     }u;
 }tSmeCmd;
 

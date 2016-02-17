@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -51,9 +51,7 @@
 #include "vos_api.h"
 #include "hif.h"
 #include "i_vos_diag_core_event.h"
-#ifdef CONFIG_CNSS
-#include <net/cnss.h>
-#endif
+#include "vos_cnss.h"
 #include "vos_api.h"
 #include "aniGlobal.h"
 
@@ -505,11 +503,7 @@ VOS_STATUS vos_spin_lock_destroy(vos_spin_lock_t *pLock)
   --------------------------------------------------------------------------*/
 VOS_STATUS vos_wake_lock_init(vos_wake_lock_t *pLock, const char *name)
 {
-#if defined CONFIG_CNSS
-    cnss_pm_wake_lock_init(&pLock->lock, name);
-#elif defined(WLAN_OPEN_SOURCE) && defined(CONFIG_HAS_WAKELOCK)
-    wake_lock_init(&pLock->lock, WAKE_LOCK_SUSPEND, name);
-#endif
+    vos_pm_wake_lock_init(&pLock->lock, name);
 
     return VOS_STATUS_SUCCESS;
 }
@@ -523,16 +517,13 @@ VOS_STATUS vos_wake_lock_init(vos_wake_lock_t *pLock, const char *name)
  * Return: Pointer to the name if it is valid or a default string
  *
  */
+
 static const char* vos_wake_lock_name(vos_wake_lock_t *pLock)
 {
-#if defined CONFIG_CNSS
 	if (pLock->lock.name)
 		return pLock->lock.name;
-#elif defined(WLAN_OPEN_SOURCE) && defined(CONFIG_HAS_WAKELOCK)
-	if (pLock->lock.ws.name)
-		return pLock->lock.ws.name;
-#endif
-	return "UNNAMED_WAKELOCK";
+	else
+		return "UNNAMED_WAKELOCK";
 }
 
 /*--------------------------------------------------------------------------
@@ -551,11 +542,8 @@ VOS_STATUS vos_wake_lock_acquire(vos_wake_lock_t *pLock,
                        WIFI_POWER_EVENT_DEFAULT_WAKELOCK_TIMEOUT,
                        WIFI_POWER_EVENT_WAKELOCK_TAKEN);
 
-#if defined CONFIG_CNSS
-    cnss_pm_wake_lock(&pLock->lock);
-#elif defined(WLAN_OPEN_SOURCE) && defined(CONFIG_HAS_WAKELOCK)
-    wake_lock(&pLock->lock);
-#endif
+    vos_pm_wake_lock(&pLock->lock);
+
     return VOS_STATUS_SUCCESS;
 }
 
@@ -581,11 +569,8 @@ VOS_STATUS vos_wake_lock_timeout_acquire(vos_wake_lock_t *pLock, v_U32_t msec,
                            WIFI_POWER_EVENT_WAKELOCK_TAKEN);
     }
 
-#if defined CONFIG_CNSS
-    cnss_pm_wake_lock_timeout(&pLock->lock, msec);
-#elif defined(WLAN_OPEN_SOURCE) && defined(CONFIG_HAS_WAKELOCK)
-    wake_lock_timeout(&pLock->lock, msecs_to_jiffies(msec));
-#endif
+    vos_pm_wake_lock_timeout(&pLock->lock, msec);
+
     return VOS_STATUS_SUCCESS;
 }
 
@@ -603,11 +588,7 @@ VOS_STATUS vos_wake_lock_release(vos_wake_lock_t *pLock, uint32_t reason)
     vos_log_wlock_diag(reason, vos_wake_lock_name(pLock),
                        WIFI_POWER_EVENT_DEFAULT_WAKELOCK_TIMEOUT,
                        WIFI_POWER_EVENT_WAKELOCK_RELEASED);
-#if defined CONFIG_CNSS
-    cnss_pm_wake_lock_release(&pLock->lock);
-#elif defined(WLAN_OPEN_SOURCE) && defined(CONFIG_HAS_WAKELOCK)
-    wake_unlock(&pLock->lock);
-#endif
+    vos_pm_wake_lock_release(&pLock->lock);
 
     return VOS_STATUS_SUCCESS;
 }
@@ -623,11 +604,8 @@ VOS_STATUS vos_wake_lock_release(vos_wake_lock_t *pLock, uint32_t reason)
   ------------------------------------------------------------------------*/
 VOS_STATUS vos_wake_lock_destroy(vos_wake_lock_t *pLock)
 {
-#if defined CONFIG_CNSS
-    cnss_pm_wake_lock_destroy(&pLock->lock);
-#elif defined(WLAN_OPEN_SOURCE) && defined(CONFIG_HAS_WAKELOCK)
-    wake_lock_destroy(&pLock->lock);
-#endif
+    vos_pm_wake_lock_destroy(&pLock->lock);
+
     return VOS_STATUS_SUCCESS;
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -53,10 +53,10 @@
  * ------------------------------------------------------------------------*/
 #include "vos_memory.h"
 #include "vos_trace.h"
+#include "vos_api.h"
+#include "vos_diag_core_event.h"
 
-#ifdef CONFIG_CNSS
-#include <net/cnss.h>
-#endif
+#include "vos_cnss.h"
 
 #ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
 #include <net/cnss_prealloc.h>
@@ -64,6 +64,7 @@
 
 #ifdef MEMORY_DEBUG
 #include "wlan_hdd_dp_utils.h"
+#include <linux/stacktrace.h>
 
 hdd_list_t vosMemList;
 
@@ -103,6 +104,8 @@ static struct s_vos_mem_usage_struct g_usage_mem_buf[MAX_USAGE_TRACE_BUF_NUM];
 /*---------------------------------------------------------------------------
  * Preprocessor Definitions and Constants
  * ------------------------------------------------------------------------*/
+
+#define VOS_GET_MEMORY_TIME_THRESHOLD 3000
 
 /*---------------------------------------------------------------------------
  * Type Declarations
@@ -394,12 +397,14 @@ v_VOID_t *vos_mem_malloc_debug(v_SIZE_t size, const char *fileName,
    v_SIZE_t new_size;
    int flags = GFP_KERNEL;
    unsigned long IrqFlags;
+   unsigned long  time_before_kmalloc;
 
 
    if (size > (1024*1024)|| size == 0)
    {
        VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
                "%s: called with invalid arg %u !!!", __func__, size);
+       vos_log_low_resource_failure(WIFI_EVENT_MEMORY_FAILURE);
        return NULL;
    }
 
@@ -421,8 +426,18 @@ v_VOID_t *vos_mem_malloc_debug(v_SIZE_t size, const char *fileName,
 #endif
 
    new_size = size + sizeof(struct s_vos_mem_struct) + 8;
-
+   time_before_kmalloc = vos_timer_get_system_time();
    memStruct = (struct s_vos_mem_struct*)kmalloc(new_size, flags);
+   /* If time taken by kmalloc is greater than
+    * VOS_GET_MEMORY_TIME_THRESHOLD msec
+    */
+   if (vos_timer_get_system_time() - time_before_kmalloc >=
+                                    VOS_GET_MEMORY_TIME_THRESHOLD)
+      VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+           "%s: kmalloc took %lu msec for size %d called from %pS at line %d",
+           __func__,
+           vos_timer_get_system_time() - time_before_kmalloc,
+           size, (void *)_RET_IP_, lineNum);
 
    if(memStruct != NULL)
    {
@@ -449,6 +464,10 @@ v_VOID_t *vos_mem_malloc_debug(v_SIZE_t size, const char *fileName,
 
       memPtr = (v_VOID_t*)(memStruct + 1);
    }
+
+   if (!memPtr)
+       vos_log_low_resource_failure(WIFI_EVENT_MEMORY_FAILURE);
+
    return memPtr;
 }
 
@@ -505,10 +524,14 @@ v_VOID_t * vos_mem_malloc( v_SIZE_t size )
 #ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
     v_VOID_t* pmem;
 #endif
+   v_VOID_t* memPtr = NULL;
+   unsigned long  time_before_kmalloc;
+
    if (size > (1024*1024) || size == 0)
    {
        VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
             "%s: called with invalid arg %u !!", __func__, size);
+       vos_log_low_resource_failure(WIFI_EVENT_MEMORY_FAILURE);
        return NULL;
    }
    if (in_interrupt() || irqs_disabled() || in_atomic())
@@ -525,7 +548,22 @@ v_VOID_t * vos_mem_malloc( v_SIZE_t size )
        }
    }
 #endif
-   return kmalloc(size, flags);
+   time_before_kmalloc = vos_timer_get_system_time();
+   memPtr = kmalloc(size, flags);
+   /* If time taken by kmalloc is greater than
+    * VOS_GET_MEMORY_TIME_THRESHOLD msec
+    */
+   if (vos_timer_get_system_time() - time_before_kmalloc >=
+                                    VOS_GET_MEMORY_TIME_THRESHOLD)
+       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+           "%s: kmalloc took %lu msec for size %d from %pS",
+           __func__,
+           vos_timer_get_system_time() - time_before_kmalloc,
+           size, (void *)_RET_IP_);
+   if (!memPtr)
+       vos_log_low_resource_failure(WIFI_EVENT_MEMORY_FAILURE);
+
+   return memPtr;
 }
 
 v_VOID_t vos_mem_free( v_VOID_t *ptr )

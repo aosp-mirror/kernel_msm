@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -345,6 +345,22 @@ tSapChanMatrixInfo ht80_chan[] =
     ,{144, SAP_TX_LEAKAGE_MIN}
 #endif
 }},
+
+#ifdef FEATURE_WLAN_CH144
+ {144,
+   {{36, 695},            {40, 695 },
+    {44, 684},            {48, 684 },
+    {52, 664},            {56, 664 },
+    {60, 658},            {64, 658 },
+    {100, 601},{104, 601 },
+    {108, 545},{112, 545 },
+    {116, SAP_TX_LEAKAGE_AUTO_MIN}, {120, SAP_TX_LEAKAGE_AUTO_MIN},
+    {124, SAP_TX_LEAKAGE_AUTO_MIN}, {128, SAP_TX_LEAKAGE_AUTO_MIN},
+    {132, 262},{136, 262},
+    {140, SAP_TX_LEAKAGE_MIN},
+    {144, SAP_TX_LEAKAGE_MIN}
+}},
+#endif
 };
 
 /* channel tx leakage table - ht40 */
@@ -589,8 +605,23 @@ tSapChanMatrixInfo ht40_chan[] =
     ,{144, SAP_TX_LEAKAGE_MIN}
 #endif
 }},
-};
 
+#ifdef FEATURE_WLAN_CH144
+ {144,
+   {{36, 695},            {40, 695 },
+    {44, 684},            {48, 684 },
+    {52, 664},            {56, 664 },
+    {60, 658},            {64, 658 },
+    {100, 601},{104, 601 },
+    {108, 545},{112, 545 },
+    {116, SAP_TX_LEAKAGE_AUTO_MIN}, {120, SAP_TX_LEAKAGE_AUTO_MIN},
+    {124, SAP_TX_LEAKAGE_AUTO_MIN}, {128, SAP_TX_LEAKAGE_AUTO_MIN},
+    {132, 262},{136, 262},
+    {140, SAP_TX_LEAKAGE_MIN},
+    {144, SAP_TX_LEAKAGE_MIN}
+}},
+#endif
+};
 
 /* channel tx leakage table - ht20 */
 tSapChanMatrixInfo ht20_chan[] =
@@ -834,6 +865,22 @@ tSapChanMatrixInfo ht20_chan[] =
     ,{144, SAP_TX_LEAKAGE_MIN}
 #endif
 }},
+
+#ifdef FEATURE_WLAN_CH144
+ {144,
+   {{36, 679},            {40, 673},
+    {44, 667},            {48, 656},
+    {52, 634},            {56, 663},
+    {60, 662},            {64, 660},
+    {100, SAP_TX_LEAKAGE_MAX},{104, SAP_TX_LEAKAGE_MAX},
+    {108, SAP_TX_LEAKAGE_MAX},{112, 590},
+    {116, 573},           {120, 553},
+    {124, 533},{128, 513},
+    {132, 490},{136, SAP_TX_LEAKAGE_MIN},
+    {140, SAP_TX_LEAKAGE_MIN},
+    {144, SAP_TX_LEAKAGE_MIN}
+}},
+#endif
 };
 #endif //end of WLAN_ENABLE_CHNL_MATRIX_RESTRICTION
 
@@ -1050,7 +1097,16 @@ sapMarkChannelsLeakingIntoNOL(ptSapContext sapContext,
     v_U32_t         j = 0;
     v_U32_t         k = 0;
     v_U8_t          dfs_nol_channel;
+    tHalHandle      hal = VOS_GET_HAL_CB(sapContext->pvosGCtx);
+    tpAniSirGlobal  mac;
 
+    if (NULL == hal) {
+        VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+            "%s: Invalid hal pointer", __func__);
+        return VOS_STATUS_E_FAULT;
+    }
+
+    mac = PMAC_STRUCT(hal);
 
     /* traverse target_chan_matrix and */
     for (i = 0; i < NUM_5GHZ_CHANNELS ; i++) {
@@ -1091,7 +1147,8 @@ sapMarkChannelsLeakingIntoNOL(ptSapContext sapContext,
                     k++;
                 } else {
                     /* check leakage from candidate channel to NOL channel */
-                    if (target_chan_matrix[k].leak_lvl <= SAP_TX_LEAKAGE_THRES)
+                    if (target_chan_matrix[k].leak_lvl <=
+                         mac->sap.SapDfsInfo.tx_leakage_threshold)
                     {
                         /*
                          * this means that candidate channel will have bad
@@ -1104,7 +1161,6 @@ sapMarkChannelsLeakingIntoNOL(ptSapContext sapContext,
                                   dfs_nol_channel,
                                   pTempChannelList[j]);
                         pTempChannelList[j] = 0;
-                        break;
                     }
                     j++;
                     k++;
@@ -2084,6 +2140,10 @@ sapGotoChannelSel
     tHalHandle hHal;
     tANI_U8   con_ch;
 
+#if defined(FEATURE_WLAN_CH_AVOID) || defined(SOFTAP_CHANNEL_RANGE)
+    v_U8_t i;
+#endif
+
     hHal = (tHalHandle)vos_get_context( VOS_MODULE_ID_SME, sapContext->pvosGCtx);
     if (NULL == hHal)
     {
@@ -2264,10 +2324,31 @@ sapGotoChannelSel
 #ifdef SOFTAP_CHANNEL_RANGE
                     if(sapContext->channelList != NULL)
                     {
-                        sapContext->channel = sapContext->channelList[0];
-                        vos_mem_free(sapContext->channelList);
-                        sapContext->channelList = NULL;
+                        for ( i = 0 ; i < sapContext->numofChannel ; i++)
+                            if (NV_CHANNEL_ENABLE ==
+		                vos_nv_getChannelEnabledState(sapContext->channelList[i]))
+                            {
+                                sapContext->channel = sapContext->channelList[i];
+                            }
+
+                            vos_mem_free(sapContext->channelList);
+                            sapContext->channelList = NULL;
                     }
+#ifdef FEATURE_WLAN_CH_AVOID
+                    else
+                    {
+                        for( i = 0; i < NUM_20MHZ_RF_CHANNELS; i++ )
+                        {
+                            if((NV_CHANNEL_ENABLE ==
+                                vos_nv_getChannelEnabledState(safeChannels[i].channelNumber))
+                                    && (VOS_TRUE == safeChannels[i].isSafe))
+                            {
+                                sapContext->channel = safeChannels[i].channelNumber;
+                                break;
+                            }
+                        }
+                    }
+#endif
 #endif
                     if (VOS_TRUE == sapDoAcsPreStartBss)
                     {
@@ -2875,22 +2956,6 @@ sapSignalHDDevent
             vos_mem_copy( &sapApAppEvent.sapevt.sapPBCProbeReqEvent.WPSPBCProbeReq,
                           pCsrRoamInfo->u.pWPSPBCProbeReq,
                           sizeof(tSirWPSPBCProbeReq));
-            break;
-
-       case eSAP_INDICATE_MGMT_FRAME:
-            VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH,
-                       FL("SAP event callback event = %s"),
-                          "eSAP_INDICATE_MGMT_FRAME");
-            sapApAppEvent.sapHddEventCode = eSAP_INDICATE_MGMT_FRAME;
-            sapApAppEvent.sapevt.sapManagementFrameInfo.nFrameLength
-                                           = pCsrRoamInfo->nFrameLength;
-            sapApAppEvent.sapevt.sapManagementFrameInfo.pbFrames
-                                           = pCsrRoamInfo->pbFrames;
-            sapApAppEvent.sapevt.sapManagementFrameInfo.frameType
-                                           = pCsrRoamInfo->frameType;
-            sapApAppEvent.sapevt.sapManagementFrameInfo.rxChan
-                                           = pCsrRoamInfo->rxChan;
-
             break;
        case eSAP_REMAIN_CHAN_READY:
             VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH,
@@ -3887,6 +3952,17 @@ sapFsm
                VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
                          "In %s, Sending DFS eWNI_SME_CHANNEL_CHANGE_REQ",
                          __func__);
+            }
+            else if (msg == eWNI_SME_CHANNEL_CHANGE_RSP)
+            {
+                VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_MED,
+                          "In %s, in state %s, event msg %d result %d",
+                          __func__, "eSAP_DISCONNECTING ", msg, sapEvent->u2);
+
+                if (sapEvent->u2 == eCSR_ROAM_RESULT_CHANNEL_CHANGE_FAILURE)
+                {
+                    vosStatus = sapGotoDisconnecting(sapContext);
+                }
             }
             else
             {

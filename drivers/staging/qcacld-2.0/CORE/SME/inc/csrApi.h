@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -299,7 +299,13 @@ typedef struct tagCsrScanRequest
     tANI_U32 maxChnTime;    //in units of milliseconds
     tANI_U32 minChnTimeBtc;    //in units of milliseconds
     tANI_U32 maxChnTimeBtc;    //in units of milliseconds
-    tANI_U32 restTime;      //in units of milliseconds  //ignored when not connected
+    /* In units of milliseconds, ignored when not connected */
+    uint32_t restTime;
+    /* In units of milliseconds, ignored when not connected */
+    uint32_t min_rest_time;
+    /* In units of milliseconds, ignored when not connected */
+    uint32_t idle_time;
+
     tANI_U32 uIEFieldLen;
     tANI_U8 *pIEField;
     eCsrRequestType requestType;    //11d scan or full scan
@@ -317,7 +323,12 @@ typedef struct tagCsrBGScanRequest
     tANI_U32 maxChnTime;    //in units of milliseconds
     tANI_U32 minChnTimeBtc;    //in units of milliseconds
     tANI_U32 maxChnTimeBtc;    //in units of milliseconds
-    tANI_U32 restTime;      //in units of milliseconds  //ignored when not connected
+    /* In units of milliseconds, ignored when not connected */
+    uint32_t restTime;
+    /* In units of milliseconds, ignored when not connected */
+    uint32_t min_rest_time;
+    /* In units of milliseconds, ignored when not connected */
+    uint32_t idle_time;
     tANI_U32 throughputImpact;      //specify whether BG scan cares about impacting throughput  //ignored when not connected
     tCsrBssid bssid;    //how to use it?? Apple
 }tCsrBGScanRequest, *tpCsrBGScanRequest;
@@ -488,7 +499,6 @@ typedef enum
     eCSR_ROAM_FT_RESPONSE,
 #endif
     eCSR_ROAM_FT_START,
-    eCSR_ROAM_INDICATE_MGMT_FRAME,
     eCSR_ROAM_REMAIN_CHAN_READY,
     eCSR_ROAM_SEND_ACTION_CNF,
     //this mean error happens before association_start or roaming_start is called.
@@ -513,6 +523,8 @@ typedef enum
 #ifdef WLAN_FEATURE_11W
     eCSR_ROAM_UNPROT_MGMT_FRAME_IND,
 #endif
+
+    eCSR_ROAM_IBSS_PEER_INFO_COMPLETE,
 
 #if defined(FEATURE_WLAN_ESE) && defined(FEATURE_WLAN_ESE_UPLOAD)
     eCSR_ROAM_TSM_IE_IND,
@@ -619,6 +631,9 @@ typedef enum
     eCSR_ROAM_RESULT_TDLS_SHOULD_TEARDOWN,
     eCSR_ROAM_RESULT_TDLS_SHOULD_PEER_DISCONNECTED,
 #endif
+
+    eCSR_ROAM_RESULT_IBSS_PEER_INFO_SUCCESS,
+    eCSR_ROAM_RESULT_IBSS_PEER_INFO_FAILED,
 
     eCSR_ROAM_RESULT_DFS_RADAR_FOUND_IND,
     eCSR_ROAM_RESULT_CHANNEL_CHANGE_SUCCESS,
@@ -1166,6 +1181,10 @@ typedef struct tagCsrConfigParam
     tANI_U8   nNumP2PChanCombinedConc;   //number of channels combined for
                                          //P2P in each split scan operation
 #endif
+    /*In units of milliseconds*/
+    uint32_t       min_rest_time_conc;
+    /*In units of milliseconds*/
+    uint32_t       idle_time_conc;
 
     tANI_BOOLEAN IsIdleScanEnabled;
     //in dBm, the maximum TX power

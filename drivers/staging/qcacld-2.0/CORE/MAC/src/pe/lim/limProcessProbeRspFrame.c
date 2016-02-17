@@ -235,6 +235,7 @@ limProcessProbeRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession 
             {
                 vos_mem_free(psessionEntry->beacon);
                 psessionEntry->beacon = NULL;
+                psessionEntry->bcnLen = 0;
             }
             psessionEntry->bcnLen = WDA_GET_RX_PAYLOAD_LEN(pRxPacketInfo);
 

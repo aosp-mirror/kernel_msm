@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -621,7 +621,6 @@ void limSendSmeMgmtFrameInd(
                     tANI_U32 rxChannel, tpPESession psessionEntry,
                     tANI_S8 rxRssi)
 {
-    tSirMsgQ              mmhMsg;
     tpSirSmeMgmtFrameInd pSirSmeMgmtFrame = NULL;
     tANI_U16              length;
 
@@ -636,8 +635,7 @@ void limSendSmeMgmtFrameInd(
     }
     vos_mem_set((void*)pSirSmeMgmtFrame, length, 0);
 
-    pSirSmeMgmtFrame->mesgType = eWNI_SME_MGMT_FRM_IND;
-    pSirSmeMgmtFrame->mesgLen = length;
+    pSirSmeMgmtFrame->frame_len = frameLen;
     pSirSmeMgmtFrame->sessionId = sessionId;
     pSirSmeMgmtFrame->frameType = frameType;
     pSirSmeMgmtFrame->rxRssi = rxRssi;
@@ -710,11 +708,13 @@ send_frame:
     vos_mem_zero(pSirSmeMgmtFrame->frameBuf,frameLen);
     vos_mem_copy(pSirSmeMgmtFrame->frameBuf,frame,frameLen);
 
-    mmhMsg.type = eWNI_SME_MGMT_FRM_IND;
-    mmhMsg.bodyptr = pSirSmeMgmtFrame;
-    mmhMsg.bodyval = 0;
+    if (pMac->mgmt_frame_ind_cb)
+       pMac->mgmt_frame_ind_cb(pSirSmeMgmtFrame);
+    else
+       limLog(pMac, LOGW,
+             FL("Management indication callback not registered!!"));
+    vos_mem_free(pSirSmeMgmtFrame);
 
-    limSysProcessMmhMsgApi(pMac, &mmhMsg, ePROT);
     return;
 } /*** end limSendSmeListenRsp() ***/
 

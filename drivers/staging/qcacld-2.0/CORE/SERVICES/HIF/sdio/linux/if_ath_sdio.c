@@ -40,6 +40,9 @@
 #include <linux/mmc/sdio_ids.h>
 #include <linux/mmc/sdio.h>
 #include <linux/mmc/sd.h>
+#include "vos_cnss.h"
+#include "wlan_hdd_main.h"
+#include "wlan_nlink_common.h"
 #include "bmi_msg.h" /* TARGET_TYPE_ */
 #include "if_ath_sdio.h"
 #include "vos_api.h"
@@ -72,6 +75,54 @@ extern void __hdd_wlan_exit(void);
 
 struct ath_hif_sdio_softc *sc = NULL;
 
+#ifdef CONFIG_CNSS_SDIO
+static void hif_crash_indication(void)
+{
+	if (vos_is_crash_indication_pending()) {
+		vos_set_crash_indication_pending(false);
+		wlan_hdd_send_svc_nlink_msg(WLAN_SVC_FW_CRASHED_IND, NULL, 0);
+	}
+}
+
+static inline void *hif_get_virt_ramdump_mem(unsigned long *size)
+{
+	return cnss_get_virt_ramdump_mem(size);
+}
+
+static inline void hif_release_ramdump_mem(unsigned long *address)
+{
+}
+#else
+static void hif_crash_indication(void)
+{
+}
+#ifndef TARGET_DUMP_FOR_NON_QC_PLATFORM
+static inline void *hif_get_virt_ramdump_mem(unsigned long *size)
+{
+	void *addr;
+	addr = ioremap(RAMDUMP_ADDR, RAMDUMP_SIZE);
+	if (addr)
+		*size = RAMDUMP_SIZE;
+	return addr;
+}
+
+static inline void hif_release_ramdump_mem(unsigned long *address)
+{
+	if (address)
+		iounmap(address);
+}
+#else
+static inline void *hif_get_virt_ramdump_mem(unsigned long *size)
+{
+	*size = 0;
+	return NULL;
+}
+
+static inline void hif_release_ramdump_mem(unsigned long *address)
+{
+}
+#endif
+#endif
 static A_STATUS
 ath_hif_sdio_probe(void *context, void *hif_handle)
 {
@@ -159,14 +210,17 @@ ath_hif_sdio_probe(void *context, void *hif_handle)
 
     ol_sc->hif_hdl = hif_handle;
 
-#ifndef TARGET_DUMP_FOR_NON_QC_PLATFORM
-    ol_sc->ramdump_base = ioremap(RAMDUMP_ADDR, RAMDUMP_SIZE);
-    ol_sc->ramdump_size = RAMDUMP_SIZE;
-    if (ol_sc->ramdump_base == NULL) {
-        ol_sc->ramdump_base = 0;
-        ol_sc->ramdump_size = 0;
+    /* Get RAM dump memory address and size */
+    ol_sc->ramdump_base = hif_get_virt_ramdump_mem(&ol_sc->ramdump_size);
+    if (ol_sc->ramdump_base == NULL || !ol_sc->ramdump_size) {
+        VOS_TRACE(VOS_MODULE_ID_HIF, VOS_TRACE_LEVEL_ERROR,
+            "%s: Failed to get RAM dump memory address or size!\n",
+            __func__);
+    } else {
+        VOS_TRACE(VOS_MODULE_ID_HIF, VOS_TRACE_LEVEL_INFO,
+            "%s: ramdump base 0x%p size %d\n",
+            __func__, ol_sc->ramdump_base, (int)ol_sc->ramdump_size);
     }
-#endif
     init_waitqueue_head(&ol_sc->sc_osdev->event_queue);
 
     if (athdiag_procfs_init(sc) != 0) {
@@ -183,6 +237,7 @@ ath_hif_sdio_probe(void *context, void *hif_handle)
         goto err_attach2;
     }else{
         VOS_TRACE(VOS_MODULE_ID_HIF, VOS_TRACE_LEVEL_INFO," hdd_wlan_startup success!");
+        hif_crash_indication();
     }
 
     return 0;
@@ -228,11 +283,8 @@ ath_hif_sdio_remove(void *context, void *hif_handle)
 
     athdiag_procfs_remove();
 
-#ifndef TARGET_DUMP_FOR_NON_QC_PLATFORM
-    if (sc && sc->ol_sc && sc->ol_sc->ramdump_base){
-        iounmap(sc->ol_sc->ramdump_base);
-    }
-#endif
+    if (sc && sc->ol_sc && sc->ol_sc->ramdump_base)
+        hif_release_ramdump_mem(sc->ol_sc->ramdump_base);
 
 #ifndef REMOVE_PKT_LOG
     if (vos_get_conparam() != VOS_FTM_MODE &&
@@ -262,15 +314,15 @@ ath_hif_sdio_remove(void *context, void *hif_handle)
 static A_STATUS
 ath_hif_sdio_suspend(void *context)
 {
-    printk(KERN_INFO "ol_ath_sdio_suspend TODO\n");
-    return 0;
+	pr_debug("%s TODO\n", __func__);
+	return 0;
 }
 
 static A_STATUS
 ath_hif_sdio_resume(void *context)
 {
-    printk(KERN_INFO "ol_ath_sdio_resume ODO\n");
-    return 0;
+	pr_debug("%s TODO\n", __func__);
+	return 0;
 }
 
 static A_STATUS

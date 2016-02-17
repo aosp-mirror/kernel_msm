@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -139,6 +139,18 @@ defMsgDecision(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
         (limMsg->type != WDA_START_OEM_DATA_RSP) &&
 #endif
         (limMsg->type != WDA_ADD_TS_RSP) &&
+        /*
+         * LIM won't process any defer queue commands if gLimAddtsSent is set to
+         * TRUE. gLimAddtsSent will be set TRUE to while sending ADDTS REQ. Say,
+         * when deferring is enabled, if SIR_LIM_ADDTS_RSP_TIMEOUT is posted
+         * (because of not receiving ADDTS RSP) then this command will be added
+         * to defer queue and as gLimAddtsSent is set TRUE LIM will never
+         * process any commands from defer queue, including
+         * SIR_LIM_ADDTS_RSP_TIMEOUT. Hence allowing SIR_LIM_ADDTS_RSP_TIMEOUT
+         * command to be processed with deferring enabled, so that this will be
+         * processed immediately and sets gLimAddtsSent to FALSE.
+         */
+        (limMsg->type != SIR_LIM_ADDTS_RSP_TIMEOUT) &&
         /* Allow processing of RX frames while awaiting reception of
            ADD TS response over the air. This logic particularly handles the
            case when host sends ADD BA request to FW after ADD TS request
@@ -1191,7 +1203,16 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
     pMac->lim.numTot++;
 #endif
 
-    MTRACE(macTraceMsgRx(pMac, NO_SESSION, LIM_TRACE_MAKE_RXMSG(limMsg->type, LIM_MSG_PROCESSED));)
+   /* Omitting below message types as these are too frequent and when crash
+    * happens we loose critical trace logs if these are also logged
+    */
+   if (limMsg->type != SIR_LIM_MAX_CHANNEL_TIMEOUT &&
+       limMsg->type != SIR_LIM_MIN_CHANNEL_TIMEOUT &&
+       limMsg->type != SIR_LIM_PERIODIC_PROBE_REQ_TIMEOUT &&
+       limMsg->type != SIR_CFG_PARAM_UPDATE_IND &&
+       limMsg->type != SIR_BB_XPORT_MGMT_MSG)
+          MTRACE(macTraceMsgRx(pMac, NO_SESSION,
+                 LIM_TRACE_MAKE_RXMSG(limMsg->type, LIM_MSG_PROCESSED));)
 
     switch (limMsg->type)
     {
@@ -1422,6 +1443,7 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
 #endif /* FEATURE_WLAN_ESE && FEATURE_WLAN_ESE_UPLOAD */
         case eWNI_SME_EXT_CHANGE_CHANNEL:
         case eWNI_SME_ROAM_RESTART_REQ:
+        case eWNI_SME_REGISTER_MGMT_FRAME_CB:
             // These messages are from HDD
             limProcessNormalHddMsg(pMac, limMsg, false);   //no need to response to hdd
             break;
@@ -1619,6 +1641,11 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
             else
                 limHandleMissedBeaconInd(pMac, limMsg);
 
+            vos_mem_free(limMsg->bodyptr);
+            limMsg->bodyptr = NULL;
+            break;
+        case WDA_SMPS_FORCE_MODE_IND:
+            lim_smps_force_mode_ind(pMac, limMsg);
             vos_mem_free(limMsg->bodyptr);
             limMsg->bodyptr = NULL;
             break;

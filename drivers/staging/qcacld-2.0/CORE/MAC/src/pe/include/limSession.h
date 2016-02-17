@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -495,6 +495,9 @@ typedef struct sPESession           // Added to Support BT-AMP
     tANI_U8 countryInfoPresent;
     uint8_t vdev_nss;
     bool roaming_in_progress;
+    bool add_bss_failed;
+    /* Supported NSS is intersection of self and peer NSS */
+    bool supported_nss_1x1;
 } tPESession, *tpPESession;
 
 /*-------------------------------------------------------------------------

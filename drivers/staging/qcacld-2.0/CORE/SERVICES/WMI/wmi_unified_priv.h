@@ -38,7 +38,7 @@
 #include "adf_os_atomic.h"
 
 #define WMI_UNIFIED_MAX_EVENT 0x100
-#define WMI_MAX_CMDS  1024
+#define WMI_MAX_CMDS  128
 
 typedef adf_nbuf_t wmi_buf_t;
 

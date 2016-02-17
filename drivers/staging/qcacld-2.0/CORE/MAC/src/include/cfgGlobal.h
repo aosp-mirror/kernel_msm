@@ -90,7 +90,6 @@ typedef struct sAniSirCfg
     tANI_U8    *gSBuffer;
 
     // Message parameter list buffer (enough for largest possible response)
-    tANI_U32   *gParamList;
 } tAniSirCfg,  *tpAniSirCfg;
 
 #endif

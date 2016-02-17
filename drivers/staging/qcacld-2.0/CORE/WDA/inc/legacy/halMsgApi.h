@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -749,11 +749,13 @@ typedef struct
 {
     tSirMacAddr          selfMacAddr;
     eHalStatus           status;
-    tANI_U8              oemDataReq[OEM_DATA_REQ_SIZE];
+    uint8_t              data_len;
+    uint8_t              *data;
 } tStartOemDataReq, *tpStartOemDataReq;
 
 typedef struct
 {
+    bool                target_rsp;
     tANI_U8             oemDataRsp[OEM_DATA_RSP_SIZE];
 } tStartOemDataRsp, *tpStartOemDataRsp;
 #endif
@@ -1042,6 +1044,7 @@ typedef struct CSAOffloadParams {
    tANI_U8 switchmode;
    tANI_U8 sec_chan_offset;
    tANI_U8 new_ch_width;       /* New channel width */
+   tANI_U8 new_op_class;       /* New operating class */
    tANI_U8 new_ch_freq_seg1;   /* Channel Center frequency 1 */
    tANI_U8 new_ch_freq_seg2;   /* Channel Center frequency 2 */
    tANI_U32 ies_present_flag;   /* WMI_CSA_EVENT_IES_PRESENT_FLAG */

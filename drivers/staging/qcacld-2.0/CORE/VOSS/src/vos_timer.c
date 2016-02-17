@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013, 2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2015-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -186,49 +186,24 @@ static void vos_linux_timer_callback (unsigned long data)
                  __func__);
        return;
    }
-   // If timer has expired then call vos_client specific callback
-   if ( vos_sched_is_tx_thread( threadId ) )
-   {
+   if (vos_is_wd_thread(threadId)) {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
-          "TIMER callback: running on TX thread");
-
-      //Serialize to the Tx thread
-      sysBuildMessageHeader( SYS_MSG_ID_TX_TIMER, &msg );
-      msg.callback = callback;
-      msg.bodyptr  = userData;
-      msg.bodyval  = 0;
-
-      if(vos_tx_mq_serialize( VOS_MQ_ID_SYS, &msg ) == VOS_STATUS_SUCCESS)
-         return;
+                "TIMER callback: running on wd thread");
+      callback(NULL);
+      return;
    }
-   else if ( vos_sched_is_rx_thread( threadId ) )
-   {
-      VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
-          "TIMER callback: running on RX thread");
 
-      //Serialize to the Rx thread
-      sysBuildMessageHeader( SYS_MSG_ID_RX_TIMER, &msg );
-      msg.callback = callback;
-      msg.bodyptr  = userData;
-      msg.bodyval  = 0;
+   VOS_TRACE( VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
+       "TIMER callback: running on MC thread");
 
-      if(vos_rx_mq_serialize( VOS_MQ_ID_SYS, &msg ) == VOS_STATUS_SUCCESS)
-         return;
-   }
-   else
-   {
-      VOS_TRACE( VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
-          "TIMER callback: running on MC thread");
+   /* Serialize to MC thread */
+   sysBuildMessageHeader( SYS_MSG_ID_MC_TIMER, &msg );
+   msg.callback = callback;
+   msg.bodyptr  = userData;
+   msg.bodyval  = 0;
 
-      // Serialize to the MC thread
-      sysBuildMessageHeader( SYS_MSG_ID_MC_TIMER, &msg );
-      msg.callback = callback;
-      msg.bodyptr  = userData;
-      msg.bodyval  = 0;
-
-      if(vos_mq_post_message( VOS_MQ_ID_SYS, &msg ) == VOS_STATUS_SUCCESS)
-        return;
-   }
+   if(vos_mq_post_message( VOS_MQ_ID_SYS, &msg ) == VOS_STATUS_SUCCESS)
+     return;
 
    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
              "%s: Could not enqueue timer to any queue", __func__);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -952,6 +952,21 @@ REG_TABLE_ENTRY g_registry_table[] =
                  CFG_REST_TIME_CONC_DEFAULT,
                  CFG_REST_TIME_CONC_MIN,
                  CFG_REST_TIME_CONC_MAX ),
+
+   REG_VARIABLE( CFG_MIN_REST_TIME_NAME, WLAN_PARAM_Integer,
+                 hdd_config_t, min_rest_time_conc,
+                 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                 CFG_MIN_REST_TIME_DEFAULT,
+                 CFG_MIN_REST_TIME_MIN,
+                 CFG_MIN_REST_TIME_MAX ),
+
+   REG_VARIABLE( CFG_IDLE_TIME_NAME , WLAN_PARAM_Integer,
+                 hdd_config_t, idle_time_conc,
+                 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                 CFG_IDLE_TIME_DEFAULT,
+                 CFG_IDLE_TIME_MIN,
+                 CFG_IDLE_TIME_MAX ),
+
 
    REG_VARIABLE( CFG_NUM_STA_CHAN_COMBINED_CONC_NAME, WLAN_PARAM_Integer,
                  hdd_config_t, nNumStaChanCombinedConc,
@@ -3515,6 +3530,13 @@ REG_TABLE_ENTRY g_registry_table[] =
                 CFG_ENABLE_FW_DEBUG_LOG_LEVEL_MIN,
                 CFG_ENABLE_FW_DEBUG_LOG_LEVEL_MAX ),
 
+   REG_VARIABLE( CFG_ENABLE_FW_RTS_PROFILE, WLAN_PARAM_Integer,
+                hdd_config_t, rts_profile,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_ENABLE_FW_RTS_PROFILE_DEFAULT,
+                CFG_ENABLE_FW_RTS_PROFILE_MIN,
+                CFG_ENABLE_FW_RTS_PROFILE_MAX ),
+
    REG_VARIABLE_STRING( CFG_ENABLE_FW_MODULE_LOG_LEVEL, WLAN_PARAM_String,
                 hdd_config_t, enableFwModuleLogLevel,
                 VAR_FLAGS_OPTIONAL,
@@ -3545,12 +3567,40 @@ REG_TABLE_ENTRY g_registry_table[] =
                 CFG_MAX_CONCURRENT_CONNECTIONS_MAX ),
 
 #ifdef FEATURE_GREEN_AP
-   REG_VARIABLE( CFG_ENABLE_GREEN_AP_FEATURE, WLAN_PARAM_Integer,
-                 hdd_config_t, enableGreenAP,
-                 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
-                 CFG_ENABLE_GREEN_AP_FEATURE_DEFAULT,
-                 CFG_ENABLE_GREEN_AP_FEATURE_MIN,
-                 CFG_ENABLE_GREEN_AP_FEATURE_MAX ),
+   REG_VARIABLE(CFG_ENABLE_GREEN_AP_FEATURE, WLAN_PARAM_Integer,
+                hdd_config_t, enableGreenAP,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_ENABLE_GREEN_AP_FEATURE_DEFAULT,
+                CFG_ENABLE_GREEN_AP_FEATURE_MIN,
+                CFG_ENABLE_GREEN_AP_FEATURE_MAX),
+
+   REG_VARIABLE(CFG_ENABLE_EGAP_ENABLE_FEATURE, WLAN_PARAM_Integer,
+                hdd_config_t, enable_egap,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_ENABLE_EGAP_ENABLE_FEATURE_DEFAULT,
+                CFG_ENABLE_EGAP_ENABLE_FEATURE_MIN,
+                CFG_ENABLE_EGAP_ENABLE_FEATURE_MAX),
+
+   REG_VARIABLE(CFG_ENABLE_EGAP_INACT_TIME_FEATURE, WLAN_PARAM_Integer,
+                hdd_config_t, egap_inact_time,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_ENABLE_EGAP_INACT_TIME_FEATURE_DEFAULT,
+                CFG_ENABLE_EGAP_INACT_TIME_FEATURE_MIN,
+                CFG_ENABLE_EGAP_INACT_TIME_FEATURE_MAX),
+
+   REG_VARIABLE(CFG_ENABLE_EGAP_WAIT_TIME_FEATURE, WLAN_PARAM_Integer,
+                hdd_config_t, egap_wait_time,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_ENABLE_EGAP_WAIT_TIME_FEATURE_DEFAULT,
+                CFG_ENABLE_EGAP_WAIT_TIME_FEATURE_MIN,
+                CFG_ENABLE_EGAP_WAIT_TIME_FEATURE_MAX),
+
+   REG_VARIABLE(CFG_ENABLE_EGAP_FLAGS_FEATURE, WLAN_PARAM_Integer,
+                hdd_config_t, egap_feature_flag,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_ENABLE_EGAP_FLAGS_FEATURE_DEFAULT,
+                CFG_ENABLE_EGAP_FLAGS_FEATURE_MIN,
+                CFG_ENABLE_EGAP_FLAGS_FEATURE_MAX),
 #endif
 
    REG_VARIABLE(CFG_ENABLE_CRASH_INJECT, WLAN_PARAM_Integer,
@@ -4099,6 +4149,13 @@ REG_TABLE_ENTRY g_registry_table[] =
                 CFG_SELF_GEN_FRM_PWR_MAX),
 
 #ifdef FEATURE_WLAN_EXTSCAN
+   REG_VARIABLE(CFG_EXTSCAN_ALLOWED_NAME, WLAN_PARAM_Integer,
+                 hdd_config_t, extscan_enabled,
+                 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                 CFG_EXTSCAN_ALLOWED_DEF,
+                 CFG_EXTSCAN_ALLOWED_MIN,
+                 CFG_EXTSCAN_ALLOWED_MAX ),
+
    REG_VARIABLE(CFG_EXTSCAN_PASSIVE_MAX_CHANNEL_TIME_NAME, WLAN_PARAM_Integer,
                  hdd_config_t, extscan_passive_max_chn_time,
                  VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
@@ -4158,6 +4215,36 @@ REG_TABLE_ENTRY g_registry_table[] =
 
 #endif
 
+#ifdef WLAN_FEATURE_WOW_PULSE
+   REG_VARIABLE(CFG_WOW_PULSE_SUPPORT_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, wow_pulse_support,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_WOW_PULSE_SUPPORT_DEFAULT,
+                CFG_WOW_PULSE_SUPPORT_MIN,
+                CFG_WOW_PULSE_SUPPORT_MAX),
+
+   REG_VARIABLE(CFG_WOW_PULSE_PIN_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, wow_pulse_pin,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_WOW_PULSE_PIN_DEFAULT,
+                CFG_WOW_PULSE_PIN_MIN,
+                CFG_WOW_PULSE_PIN_MAX),
+
+   REG_VARIABLE(CFG_WOW_PULSE_INTERVAL_LOW_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, wow_pulse_interval_low,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_WOW_PULSE_INTERVAL_LOW_DEFAULT,
+                CFG_WOW_PULSE_INTERVAL_LOW_MIN,
+                CFG_WOW_PULSE_INTERVAL_LOW_MAX),
+
+   REG_VARIABLE(CFG_WOW_PULSE_INTERVAL_HIGH_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, wow_pulse_interval_high,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_WOW_PULSE_INTERVAL_HIGH_DEFAULT,
+                CFG_WOW_PULSE_INTERVAL_HIGH_MIN,
+                CFG_WOW_PULSE_INTERVAL_HIGH_MAX),
+#endif
+
 
    REG_VARIABLE(CFG_DBG_MAX_MGMT_TX_FAILURE_COUNT_NAME, WLAN_PARAM_Integer,
                 hdd_config_t, max_mgmt_tx_fail_count,
@@ -4172,6 +4259,51 @@ REG_TABLE_ENTRY g_registry_table[] =
                 CFG_FIRST_SCAN_BUCKET_THRESHOLD_DEFAULT,
                 CFG_FIRST_SCAN_BUCKET_THRESHOLD_MIN,
                 CFG_FIRST_SCAN_BUCKET_THRESHOLD_MAX),
+
+   REG_VARIABLE(CFG_ENABLE_GO_CTS2SELF_FOR_STA,
+                WLAN_PARAM_Integer,
+                hdd_config_t, enable_go_cts2self_for_sta,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_ENABLE_GO_CTS2SELF_FOR_STA_DEFAULT,
+                CFG_ENABLE_GO_CTS2SELF_FOR_STA_MIN,
+                CFG_ENABLE_GO_CTS2SELF_FOR_STA_MAX),
+
+   REG_VARIABLE(CFG_INDOOR_CHANNEL_SUPPORT_NAME,
+                WLAN_PARAM_Integer,
+                hdd_config_t, indoor_channel_support,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_INDOOR_CHANNEL_SUPPORT_DEFAULT,
+                CFG_INDOOR_CHANNEL_SUPPORT_MIN,
+                CFG_INDOOR_CHANNEL_SUPPORT_MAX),
+
+   REG_VARIABLE(CFG_SAP_TX_LEAKAGE_THRESHOLD_NAME,
+                WLAN_PARAM_Integer,
+                hdd_config_t, sap_tx_leakage_threshold,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_SAP_TX_LEAKAGE_THRESHOLD_DEFAULT,
+                CFG_SAP_TX_LEAKAGE_THRESHOLD_MIN,
+                CFG_SAP_TX_LEAKAGE_THRESHOLD_MAX),
+
+   REG_VARIABLE(CFG_ROAM_DENSE_TRAFFIC_THRESHOLD, WLAN_PARAM_Integer,
+                hdd_config_t, roam_dense_traffic_thresh,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_ROAM_DENSE_TRAFFIC_THRESHOLD_DEFAULT,
+                CFG_ROAM_DENSE_TRAFFIC_THRESHOLD_MIN,
+                CFG_ROAM_DENSE_TRAFFIC_THRESHOLD_MAX),
+
+   REG_VARIABLE(CFG_ROAM_DENSE_RSSI_THRE_OFFSET, WLAN_PARAM_Integer,
+                hdd_config_t, roam_dense_rssi_thresh_offset,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_ROAM_DENSE_RSSI_THRE_OFFSET_DEFAULT,
+                CFG_ROAM_DENSE_RSSI_THRE_OFFSET_MIN,
+                CFG_ROAM_DENSE_RSSI_THRE_OFFSET_MAX),
+
+   REG_VARIABLE(CFG_ROAM_DENSE_MIN_APS, WLAN_PARAM_Integer,
+                hdd_config_t, roam_dense_min_aps,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_ROAM_DENSE_MIN_APS_DEFAULT,
+                CFG_ROAM_DENSE_MIN_APS_MIN,
+                CFG_ROAM_DENSE_MIN_APS_MAX),
 };
 
 #ifdef WLAN_FEATURE_MBSSID
@@ -4702,6 +4834,18 @@ void print_hdd_cfg(hdd_context_t *pHddCtx)
   VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO_HIGH,
           "Name = [gEnableGreenAp] Value = [%u] ",
           pHddCtx->cfg_ini->enableGreenAP);
+  VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO_HIGH,
+          "Name = [gEenableEGAP] Value = [%u] ",
+          pHddCtx->cfg_ini->enable_egap);
+  VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO_HIGH,
+          "Name = [gEGAPInactTime] Value = [%u] ",
+          pHddCtx->cfg_ini->egap_inact_time);
+  VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO_HIGH,
+          "Name = [gEGAPWaitTime] Value = [%u] ",
+          pHddCtx->cfg_ini->egap_wait_time);
+  VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO_HIGH,
+          "Name = [gEGAPFeatures] Value = [%u] ",
+          pHddCtx->cfg_ini->egap_feature_flag);
 #endif
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
   VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO_HIGH,
@@ -4850,8 +4994,21 @@ void print_hdd_cfg(hdd_context_t *pHddCtx)
   hddLog(LOG2, "Name = [%s] Value = [%d]",
                  CFG_FIRST_SCAN_BUCKET_THRESHOLD_NAME,
                  pHddCtx->cfg_ini->first_scan_bucket_threshold);
+
+  hddLog(LOG2, "Name = [gEnable_go_cts2self_for_sta] Value = [%u]",
+                   pHddCtx->cfg_ini->enable_go_cts2self_for_sta);
   hddLog(LOG2, "Name = [ght_mpdu_density] Value = [%u]",
                    pHddCtx->cfg_ini->ht_mpdu_density);
+  hddLog(LOG2, "Name = [gMinRestTimeConc] Value = [%u]",
+                   pHddCtx->cfg_ini->min_rest_time_conc);
+  hddLog(LOG2, "Name = [gIdleTimeConc] Value = [%u]",
+                   pHddCtx->cfg_ini->idle_time_conc);
+  hddLog(LOG2, "Name = [groam_dense_rssi_thresh] Value = [%u]",
+                   pHddCtx->cfg_ini->roam_dense_traffic_thresh);
+  hddLog(LOG2, "Name = [groam_dense_rssi_thresh_offset] Value = [%u]",
+                   pHddCtx->cfg_ini->roam_dense_rssi_thresh_offset);
+  hddLog(LOG2, "Name = [groam_dense_min_aps] Value = [%u]",
+                   pHddCtx->cfg_ini->roam_dense_min_aps);
 
 }
 
@@ -6502,6 +6659,9 @@ VOS_STATUS hdd_set_sme_config( hdd_context_t *pHddCtx )
    smeConfig->csrConfig.nPassiveMaxChnTimeConc   = pConfig->nPassiveMaxChnTimeConc;
    smeConfig->csrConfig.nPassiveMinChnTimeConc   = pConfig->nPassiveMinChnTimeConc;
    smeConfig->csrConfig.nRestTimeConc            = pConfig->nRestTimeConc;
+   smeConfig->csrConfig.min_rest_time_conc       = pConfig->min_rest_time_conc;
+   smeConfig->csrConfig.idle_time_conc           = pConfig->idle_time_conc;
+
    smeConfig->csrConfig.nNumStaChanCombinedConc  = pConfig->nNumStaChanCombinedConc;
    smeConfig->csrConfig.nNumP2PChanCombinedConc  = pConfig->nNumP2PChanCombinedConc;
 

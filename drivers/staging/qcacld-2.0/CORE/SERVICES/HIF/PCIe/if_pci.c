@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -49,9 +49,7 @@
 #include "adf_os_atomic.h"
 #include "wlan_hdd_power.h"
 #include "wlan_hdd_main.h"
-#ifdef CONFIG_CNSS
-#include <net/cnss.h>
-#endif
+#include "vos_cnss.h"
 #include "epping_main.h"
 
 #ifndef REMOVE_PKT_LOG
@@ -134,8 +132,14 @@ static struct pci_device_id hif_pci_id_table[] = {
 /* HIF IRQ History */
 typedef enum {
 	HIF_IRQ,
+	HIF_IRQ_END,
 	HIF_TASKLET,
+	HIF_TASKLET_END,
 	HIF_CRASH,
+	HIF_SUSPEND_START,
+	HIF_SUSPEND_AFTER_WOW,
+	HIF_SUSPEND_END,
+	HIF_RESUME,
 } hif_irq_type;
 
 #ifdef CONFIG_SLUB_DEBUG_ON
@@ -144,6 +148,9 @@ typedef struct {
 	A_UINT64 time;
 	A_UINT32 irq_summary;
 	A_UINT32 fw_indicator;
+	A_UINT32 irq_enable;
+	A_UINT32 irq_cause;
+	A_UINT32 irq_clear;
 } hif_irq_history;
 
 #define HIF_IRQ_HISTORY_MAX 1024
@@ -158,15 +165,31 @@ void hif_irq_record(hif_irq_type type, struct hif_pci_softc *sc)
 	if (HIF_IRQ_HISTORY_MAX <= g_hif_irq_history_idx)
 		g_hif_irq_history_idx = 0;
 
-	hif_irq_history_buffer[g_hif_irq_history_idx].type = type;
-	hif_irq_history_buffer[g_hif_irq_history_idx].time = adf_get_boottime();
+	if (HIFTargetSleepStateAdjust(hif_state->targid, FALSE, TRUE) < 0) {
+		adf_os_mem_zero(&hif_irq_history_buffer[g_hif_irq_history_idx],
+				sizeof(hif_irq_history));
+		goto out;
+	}
 
-	HIFTargetSleepStateAdjust(hif_state->targid, FALSE, TRUE);
 	hif_irq_history_buffer[g_hif_irq_history_idx].irq_summary =
 			CE_INTERRUPT_SUMMARY(targid);
 	hif_irq_history_buffer[g_hif_irq_history_idx].fw_indicator =
 			A_TARGET_READ(targid, hif_state->fw_indicator_address);
+	hif_irq_history_buffer[g_hif_irq_history_idx].irq_enable =
+			A_PCI_READ32(sc->mem + SOC_CORE_BASE_ADDRESS +
+				PCIE_INTR_ENABLE_ADDRESS);
+	hif_irq_history_buffer[g_hif_irq_history_idx].irq_cause =
+			A_PCI_READ32(sc->mem + SOC_CORE_BASE_ADDRESS +
+				PCIE_INTR_CAUSE_ADDRESS);
+	hif_irq_history_buffer[g_hif_irq_history_idx].irq_cause =
+			A_PCI_READ32(sc->mem + SOC_CORE_BASE_ADDRESS +
+				PCIE_INTR_CLR_ADDRESS);
+
 	HIFTargetSleepStateAdjust(hif_state->targid, TRUE, FALSE);
+
+out:
+	hif_irq_history_buffer[g_hif_irq_history_idx].type = type;
+	hif_irq_history_buffer[g_hif_irq_history_idx].time = adf_get_boottime();
 
 	g_hif_irq_history_idx++;
 }
@@ -239,6 +262,7 @@ hif_pci_interrupt_handler(int irq, void *arg)
     tasklet_schedule(&sc->intr_tq);
 
     if (sc->hif_init_done == TRUE) {
+        hif_irq_record(HIF_IRQ_END, sc);
         adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
     }
     return IRQ_HANDLED;
@@ -816,8 +840,10 @@ irq_handled:
         }
     }
 
-    if (hif_init_done == TRUE)
+    if (hif_init_done == TRUE) {
+        hif_irq_record(HIF_TASKLET_END, sc);
         adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
+    }
 
     adf_os_atomic_set(&sc->ce_suspend, 1);
 }
@@ -1175,7 +1201,7 @@ static int __hif_pci_runtime_suspend(struct pci_dev *pdev)
 		goto suspend_fail;
 	}
 
-	ret = cnss_auto_suspend();
+	ret = vos_auto_suspend();
 
 	if (ret) {
 		ret = -EAGAIN;
@@ -1234,7 +1260,7 @@ static int __hif_pci_runtime_resume(struct pci_dev *pdev)
 		goto out;
 	}
 #endif
-	ret = cnss_auto_resume();
+	ret = vos_auto_resume();
 
 	if (ret) {
 		pr_err("%s: Failed to resume PCIe link: %d\n", __func__, ret);
@@ -1259,7 +1285,8 @@ static int __hif_pci_runtime_resume(struct pci_dev *pdev)
 	return 0;
 out:
 	/* In Resume we should never fail */
-	ASSERT(0);
+	hif_pci_runtime_pm_warn(sc, "Runtime Resume Failed");
+	VOS_BUG(0);
 	return ret;
 }
 
@@ -1329,8 +1356,8 @@ static void hif_pci_pm_runtime_init(struct hif_pci_softc *sc)
 	pr_info("%s: Enabling RUNTIME PM, Delay: %d ms\n", __func__,
 			ol_sc->runtime_pm_delay);
 
-	cnss_init_work(&sc->pm_work, hif_pci_pm_work);
-	cnss_runtime_init(sc->dev, ol_sc->runtime_pm_delay);
+	vos_init_work(&sc->pm_work, hif_pci_pm_work);
+	vos_runtime_init(sc->dev, ol_sc->runtime_pm_delay);
 	adf_os_atomic_set(&sc->pm_state, HIF_PM_RUNTIME_STATE_ON);
 	hif_pci_pm_debugfs(sc, true);
 }
@@ -1348,12 +1375,12 @@ static void hif_pci_pm_runtime_exit(struct hif_pci_softc *sc)
 
 	hif_pm_runtime_resume(sc->dev);
 
-	cnss_runtime_exit(sc->dev);
+	vos_runtime_exit(sc->dev);
 	adf_os_atomic_set(&sc->pm_state, HIF_PM_RUNTIME_STATE_NONE);
 
 	hif_pci_pm_debugfs(sc, false);
 	del_timer_sync(&sc->runtime_timer);
-	cnss_flush_work(&sc->pm_work);
+	vos_flush_work(&sc->pm_work);
 }
 
 /**
@@ -1687,15 +1714,13 @@ again:
 #endif
     ol_sc->max_no_of_peers = 1;
 
-#ifdef CONFIG_CNSS
     /* Get RAM dump memory address and size */
-    ol_sc->ramdump_base = cnss_get_virt_ramdump_mem(&ol_sc->ramdump_size);
+    ol_sc->ramdump_base = vos_get_virt_ramdump_mem(&ol_sc->ramdump_size);
 
     if (ol_sc->ramdump_base == NULL || !ol_sc->ramdump_size) {
         pr_info("%s: Failed to get RAM dump memory address or size!\n",
                 __func__);
     }
-#endif
 
     adf_os_atomic_init(&sc->tasklet_from_intr);
     adf_os_atomic_init(&sc->wow_done);
@@ -1770,7 +1795,7 @@ err_region:
  * power up WLAN host driver when SSR happens. Most of this
  * function is duplicated from hif_pci_probe().
  */
-#if  defined(CONFIG_CNSS)
+#ifdef HIF_PCI
 int hif_pci_reinit(struct pci_dev *pdev, const struct pci_device_id *id)
 {
     void __iomem *mem;
@@ -2021,15 +2046,13 @@ again:
 #endif
     ol_sc->max_no_of_peers = 1;
 
-#ifdef CONFIG_CNSS
     /* Get RAM dump memory address and size */
-    ol_sc->ramdump_base = cnss_get_virt_ramdump_mem(&ol_sc->ramdump_size);
+    ol_sc->ramdump_base = vos_get_virt_ramdump_mem(&ol_sc->ramdump_size);
 
     if (ol_sc->ramdump_base == NULL || !ol_sc->ramdump_size) {
         pr_info("%s: Failed to get RAM dump memory address or size!\n",
                 __func__);
     }
-#endif
 
     adf_os_atomic_init(&sc->tasklet_from_intr);
     adf_os_atomic_init(&sc->wow_done);
@@ -2409,7 +2432,7 @@ hif_pci_remove(struct pci_dev *pdev)
  * shutdown WLAN host driver when SSR happens. Most of this
  * function is duplicated from hif_pci_remove().
  */
-#if  defined(CONFIG_CNSS)
+#ifdef HIF_PCI
 void hif_pci_shutdown(struct pci_dev *pdev)
 {
     void __iomem *mem;
@@ -2429,6 +2452,7 @@ void hif_pci_shutdown(struct pci_dev *pdev)
     }
     /* this is for cases, where shutdown invoked from CNSS */
     vos_set_logp_in_progress(VOS_MODULE_ID_HIF, TRUE);
+    vos_set_shutdown_in_progress(VOS_MODULE_ID_HIF, TRUE);
 
     if (!vos_is_ssr_ready(__func__))
         pr_info("Host driver is not ready for SSR, attempting anyway\n");
@@ -2465,6 +2489,7 @@ void hif_pci_shutdown(struct pci_dev *pdev)
     pci_release_region(pdev, BAR_NUM);
     pci_clear_master(pdev);
     pci_disable_device(pdev);
+    vos_set_shutdown_in_progress(VOS_MODULE_ID_HIF, FALSE);
 
     printk("%s: WLAN host driver shutting down completed!\n", __func__);
 }
@@ -2494,8 +2519,10 @@ void hif_pci_crash_shutdown(struct pci_dev *pdev)
     }
 
     if (vos_is_load_unload_in_progress(VOS_MODULE_ID_HIF, NULL)) {
-        pr_info("%s: Load/unload is in progress, ignore!\n", __func__);
-        return;
+        if (!vos_is_load_in_progress(VOS_MODULE_ID_VOSS, NULL)) {
+            pr_info("%s: Load/unload is in progress, ignore!\n", __func__);
+            return;
+        }
     }
 
     adf_os_spin_lock_irqsave(&hif_state->suspend_lock);
@@ -2544,6 +2571,8 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
     v_VOID_t * temp_module;
     u32 tmp;
     int ret = -EBUSY;
+
+    hif_irq_record(HIF_SUSPEND_START, sc);
 
     if (vos_is_logp_in_progress(VOS_MODULE_ID_HIF, NULL))
         return ret;
@@ -2604,6 +2633,8 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
         msleep(10);
     }
 
+    hif_irq_record(HIF_SUSPEND_AFTER_WOW, sc);
+
 #ifdef FEATURE_WLAN_D0WOW
     if (wma_get_client_count(temp_module)) {
         if (enable_irq_wake(pdev->irq)) {
@@ -2635,6 +2666,8 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
          VOS_ASSERT(0);
     }
 
+    hif_irq_record(HIF_SUSPEND_END, sc);
+
     if (HIFTargetSleepStateAdjust(targid, TRUE, FALSE) < 0) {
         adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
         goto out;
@@ -2647,9 +2680,9 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
 
     adf_os_spin_unlock_irqrestore( &hif_state->suspend_lock);
 
-#ifdef CONFIG_CNSS
+#ifdef CONFIG_CNSS_PCI
     /* Keep PCIe bus driver's shadow memory intact */
-    cnss_pcie_shadow_control(pdev, FALSE);
+    vos_pcie_shadow_control(pdev, FALSE);
 #endif
 
     if (runtime_pm)
@@ -2736,6 +2769,9 @@ __hif_pci_resume(struct pci_dev *pdev, bool runtime_pm)
         A_MDELAY(1);
         retry++;
     }
+
+    hif_irq_record(HIF_RESUME, sc);
+
     if (HIFTargetSleepStateAdjust(targid, TRUE, FALSE) < 0)
         goto out;
 
@@ -2771,9 +2807,9 @@ __hif_pci_resume(struct pci_dev *pdev, bool runtime_pm)
     pci_set_master(pdev);
 
 skip:
-#ifdef CONFIG_CNSS
+#ifdef HIF_PCI
     /* Keep PCIe bus driver's shadow memory intact */
-    cnss_pcie_shadow_control(pdev, TRUE);
+    vos_pcie_shadow_control(pdev, TRUE);
 #endif
 
 #ifdef DISABLE_L1SS_STATES

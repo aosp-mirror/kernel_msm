@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -734,6 +734,16 @@ PopulateDot11fHTCaps(tpAniSirGlobal           pMac,
             pDot11f->supportedMCSSet[1] = 0;
     }
 
+    /* If STA and mimo power save is enabled include ht smps */
+    if (psessionEntry && (!pMac->lteCoexAntShare) &&
+        LIM_IS_STA_ROLE(psessionEntry) &&
+        (psessionEntry->enableHtSmps) &&
+        (!psessionEntry->supported_nss_1x1)) {
+        limLog(pMac, LOG1, FL("Add SM power save IE :%d"),
+               psessionEntry->htSmpsvalue);
+        pDot11f->mimoPowerSave = psessionEntry->htSmpsvalue;
+    }
+
     CFG_GET_INT( nSirStatus, pMac, WNI_CFG_EXT_HT_CAP_INFO, nCfgValue );
 
     uHTCapabilityInfo.nCfgValue16 = nCfgValue & 0xFFFF;
@@ -1173,18 +1183,18 @@ PopulateDot11fExtCap(tpAniSirGlobal   pMac,
        return eSIR_FAILURE;
     }
 
-    if (val)   // If set to true then set RTTv3
+    if (val)
     {
         if (!psessionEntry || LIM_IS_STA_ROLE(psessionEntry)) {
             p_ext_cap->fine_time_meas_initiator =
-              (pMac->fine_time_meas_cap & FINE_TIME_MEAS_STA_INITIATOR) ? 1 : 0;
+              (pMac->fine_time_meas_cap & WMI_FW_STA_RTT_INITR) ? 1 : 0;
             p_ext_cap->fine_time_meas_responder =
-              (pMac->fine_time_meas_cap & FINE_TIME_MEAS_STA_RESPONDER) ? 1 : 0;
+              (pMac->fine_time_meas_cap & WMI_FW_STA_RTT_RESPR) ? 1 : 0;
         } else if (LIM_IS_AP_ROLE(psessionEntry)) {
             p_ext_cap->fine_time_meas_initiator =
-              (pMac->fine_time_meas_cap & FINE_TIME_MEAS_SAP_INITIATOR) ? 1 : 0;
+              (pMac->fine_time_meas_cap & WMI_FW_AP_RTT_INITR) ? 1 : 0;
             p_ext_cap->fine_time_meas_responder =
-              (pMac->fine_time_meas_cap & FINE_TIME_MEAS_SAP_RESPONDER) ? 1 : 0;
+              (pMac->fine_time_meas_cap & WMI_FW_AP_RTT_RESPR) ? 1 : 0;
         }
     }
 

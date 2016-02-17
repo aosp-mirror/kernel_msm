@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -58,6 +58,10 @@
 #define CSR_ACTIVE_MIN_CHANNEL_TIME_CONC    20
 
 #define CSR_REST_TIME_CONC                  100
+
+#define CSR_MIN_REST_TIME_CONC                  50
+
+#define CSR_IDLE_TIME_CONC                      25
 
 #define CSR_NUM_STA_CHAN_COMBINED_CONC      3
 #define CSR_NUM_P2P_CHAN_COMBINED_CONC      1
@@ -1063,6 +1067,8 @@ void csrClearVotesForCountryInfo(tpAniSirGlobal pMac);
 #endif
 eHalStatus csr_send_ext_change_channel(tpAniSirGlobal mac_ctx,
 				uint32_t channel, uint8_t session_id);
+
+boolean is_disconnect_pending(tpAniSirGlobal pmac, uint8_t sessionid);
 
 #ifdef QCA_HT_2040_COEX
 eHalStatus csrSetHT2040Mode(tpAniSirGlobal pMac, tANI_U32 sessionId,

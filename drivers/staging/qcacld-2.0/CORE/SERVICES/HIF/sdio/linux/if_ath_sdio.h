@@ -49,6 +49,9 @@
 #ifdef TARGET_DUMP_FOR_9X15_PLATFORM
 #define RAMDUMP_ADDR     0x46E00000
 #define RAMDUMP_SIZE     0x100000
+#elif defined(CONFIG_ARCH_MDM9607)
+#define RAMDUMP_ADDR     0x87A00000
+#define RAMDUMP_SIZE     0x200000
 #else
 #define RAMDUMP_ADDR     0x8F000000
 #define RAMDUMP_SIZE     0x700000
@@ -91,8 +94,6 @@ int ath_sdio_suspend(void *context);
 int ath_sdio_resume(void *context);
 
 /*These functions are exposed to HDD*/
-int hif_register_driver(void);
-void hif_unregister_driver(void);
 int hif_init_adf_ctx(void *ol_sc);
 void hif_deinit_adf_ctx(void *ol_sc);
 void hif_disable_isr(void *ol_sc);

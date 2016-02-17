@@ -408,6 +408,10 @@ ol_txrx_pdev_attach(
             ol_cfg_target_tx_credit(pdev->ctrl_pdev), &pdev->target_tx_credit);
     }
 
+    if (ol_cfg_is_high_latency(ctrl_pdev)) {
+        ol_tx_target_credit_init(pdev, desc_pool_size);
+    }
+
     pdev->htt_pdev = htt_attach(
         pdev, ctrl_pdev, htc_pdev, osdev, desc_pool_size);
     if (!pdev->htt_pdev) {
