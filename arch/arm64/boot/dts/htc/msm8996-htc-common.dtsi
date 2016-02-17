@@ -37,4 +37,18 @@
 			info_size = <100>;
 		};
 	};
+
+	ramoops {
+		compatible = "ramoops";
+		status = "ok";
+
+		android,ramoops-buffer-start = <0x83500000>;
+		android,ramoops-buffer-size = <0x00100000>;
+		android,ramoops-console-size = <0x00080000>;
+		android,ramoops-pmsg-size = <0x00040000>;
+		android,ramoops-record-size = <0x00008000>;
+		android,ramoops-ftrace-size = <0x00020000>;
+		android,ramoops-dump-oops = <0x1>;
+		linux,contiguous-region = <&ramoops_mem>;
+	};
 };
