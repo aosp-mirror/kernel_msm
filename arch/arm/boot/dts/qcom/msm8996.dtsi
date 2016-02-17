@@ -58,6 +58,7 @@
 			qcom,limits-info = <&mitigation_profile0>;
 			enable-method = "psci";
 			qcom,ea = <&ea0>;
+			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			next-level-cache = <&L2_0>;
 			L2_0: l2-cache {
 			      compatible = "arm,arch-cache";
@@ -80,6 +81,7 @@
 			qcom,limits-info = <&mitigation_profile1>;
 			enable-method = "psci";
 			qcom,ea = <&ea1>;
+			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			next-level-cache = <&L2_0>;
 			L1_D_1: l1-dcache {
 				compatible = "arm,arch-cache";
@@ -97,6 +99,7 @@
 			qcom,limits-info = <&mitigation_profile2>;
 			enable-method = "psci";
 			qcom,ea = <&ea2>;
+			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
 			next-level-cache = <&L2_1>;
 			L2_1: l2-cache {
 			      compatible = "arm,arch-cache";
@@ -119,6 +122,7 @@
 			enable-method = "psci";
 			qcom,limits-info = <&mitigation_profile3>;
 			qcom,ea = <&ea3>;
+			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
 			next-level-cache = <&L2_1>;
 			L1_D_101: l1-dcache {
 				compatible = "arm,arch-cache";
@@ -150,6 +154,82 @@
 				};
 			};
 		};
+		energy-costs {
+			CPU_COST_0: core-cost0 {
+				busy-cost-data = <
+					153 105
+					204 146
+					226 162
+					268 200
+					334 250
+					363 300
+					409 350
+					457 450
+					494 475
+					537 600
+					551 620
+					596 700
+					636 835
+					691 1035
+					723 1140
+					772 1260
+				>;
+				idle-cost-data = <
+			  		0
+				>;
+			};
+			CPU_COST_1: core-cost1 {
+				busy-cost-data = <
+					183 108
+					205 130
+					236 156
+					256 180
+					309 220
+					368 260
+					401 300
+					441 340
+					459 370
+					508 440
+					531 490
+					584 555
+					613 610
+					643 680
+					682 775
+					713 860
+					737 950
+					792 1110
+					837 1350
+					856 1400
+					902 1700
+					932 1900
+					963 2100
+					993 2300
+					1024 2500
+				>;
+				idle-cost-data = <
+					0
+				>;
+			};
+			CLUSTER_COST_0: cluster-cost0 {
+				busy-cost-data = <
+					0   0
+				>;
+				idle-cost-data = <
+					0
+					0
+				>;
+			};
+			CLUSTER_COST_1: cluster-cost1 {
+				busy-cost-data = <
+					0   0
+				>;
+				idle-cost-data = <
+					0
+					0
+				>;
+			};
+		};
+
 	};
 
 	soc: soc { };
