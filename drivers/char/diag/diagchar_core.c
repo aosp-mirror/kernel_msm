@@ -1250,12 +1250,18 @@ long diagchar_compat_ioctl(struct file *filp,
 		result = diag_ioctl_dci_reg(ioarg);
 		break;
 	case DIAG_IOCTL_DCI_DEINIT:
+		mutex_lock(&driver->dci_mutex);
 		if (copy_from_user((void *)&client_id, (void __user *)ioarg,
-			sizeof(int)))
+			sizeof(int))) {
+			mutex_unlock(&driver->dci_mutex);
 			return -EFAULT;
+		}
 		dci_client = diag_dci_get_client_entry(client_id);
-		if (!dci_client)
+		if (!dci_client) {
+			mutex_unlock(&driver->dci_mutex);
 			return DIAG_DCI_NOT_SUPPORTED;
+		}
+		mutex_unlock(&driver->dci_mutex);
 		result = diag_dci_deinit_client(dci_client);
 		break;
 	case DIAG_IOCTL_DCI_SUPPORT:
@@ -1347,12 +1353,18 @@ long diagchar_ioctl(struct file *filp,
 		result = diag_ioctl_dci_reg(ioarg);
 		break;
 	case DIAG_IOCTL_DCI_DEINIT:
+		mutex_lock(&driver->dci_mutex);
 		if (copy_from_user((void *)&client_id, (void __user *)ioarg,
-			sizeof(int)))
+			sizeof(int))) {
+			mutex_unlock(&driver->dci_mutex);
 			return -EFAULT;
+		}
 		dci_client = diag_dci_get_client_entry(client_id);
-		if (!dci_client)
+		if (!dci_client) {
+			mutex_unlock(&driver->dci_mutex);
 			return DIAG_DCI_NOT_SUPPORTED;
+		}
+		mutex_unlock(&driver->dci_mutex);
 		result = diag_dci_deinit_client(dci_client);
 		break;
 	case DIAG_IOCTL_DCI_SUPPORT:
