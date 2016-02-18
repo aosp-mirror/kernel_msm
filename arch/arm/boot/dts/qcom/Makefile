@@ -1,3 +1,5 @@
+ifeq ($(CONFIG_OF),y)
+
 dtb-$(CONFIG_ARCH_MSM8996) += msm8996-v2-pmi8994-cdp.dtb \
 	msm8996-v2-pmi8994-mtp.dtb \
 	msm8996-v2-pmi8994-pmk8001-cdp.dtb \
@@ -172,16 +174,20 @@ dtb-$(CONFIG_ARCH_MSM8909) += msm8909-pm8916-mtp.dtb \
 	msm8909w-pm8916-mtp-ext-chg-fg.dtb
 
 
-ifeq ($(CONFIG_ARM64),y)
-always          := $(dtb-y)
-subdir-y        := $(dts-dirs)
+DTB_NAMES := $(subst $\",,$(CONFIG_BUILD_ARM_APPENDED_DTB_IMAGE_NAMES))
+ifneq ($(DTB_NAMES),)
+DTB_LIST := $(addsuffix .dtb,$(DTB_NAMES))
 else
+DTB_LIST := $(dtb-y)
+endif
+
 targets += dtbs
-targets += $(addprefix ../, $(dtb-y))
+targets += $(addprefix ../, $(DTB_LIST))
+endif
 
 $(obj)/../%.dtb: $(src)/%.dts FORCE
-        $(call if_changed_dep,dtc)
+	$(call if_changed_dep,dtc)
 
-dtbs: $(addprefix $(obj)/,$(dtb-y))
-endif
+dtbs: $(addprefix $(obj)/../,$(DTB_LIST))
+
 clean-files := *.dtb
