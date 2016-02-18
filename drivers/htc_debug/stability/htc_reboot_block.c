@@ -25,6 +25,7 @@
 #include <soc/qcom/htc_restart_handler.h>
 
 static char pname[128];
+static char bootdev[128];
 static uint64_t poffset;
 const struct device *dev;
 
@@ -51,7 +52,7 @@ static int reboot_block_command(int reason, const char* msg)
 	strlcpy(&block.msg[0], msg, strlen(msg));
 
 	snprintf(filename, sizeof(filename),
-			"/dev/block/bootdevice/by-name/%s", pname);
+			"/dev/block/%s/by-name/%s", bootdev, pname);
 
 	filp = filp_open(filename, O_RDWR | O_SYNC, 0);
 	if (IS_ERR(filp)) {
@@ -160,6 +161,9 @@ static int reboot_block_probe(struct platform_device *pdev)
 		dev_err(dev, "can't read fdt prop `poffset', error = %d\n", ret);
 		return ret;
 	}
+
+	ret = of_property_read_string(node, "bootdev", &tmp_str);
+	snprintf(bootdev, sizeof(bootdev), "%s", ret ? "bootdevice" : tmp_str);
 
 	ret = register_reboot_notifier(&reboot_block_command_nb);
 	if (ret) {
