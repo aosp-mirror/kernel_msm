@@ -40,6 +40,7 @@ extern unsigned int sysctl_sched_min_granularity;
 extern unsigned int sysctl_sched_wakeup_granularity;
 extern unsigned int sysctl_sched_child_runs_first;
 extern unsigned int sysctl_sched_is_big_little;
+extern unsigned int sysctl_sched_sync_hint_enable;
 
 enum sched_tunable_scaling {
 	SCHED_TUNABLESCALING_NONE,
