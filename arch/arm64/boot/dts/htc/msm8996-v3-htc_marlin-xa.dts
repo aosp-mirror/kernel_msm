@@ -1,0 +1,25 @@
+/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+
+/dts-v1/;
+
+#include "../qcom/msm8996-v3.dtsi"
+#include "../qcom/msm-pmi8996.dtsi"
+#include "../qcom/msm8996-mtp.dtsi"
+#include "msm8996-htc_marlin.dtsi"
+
+/ {
+	model = "HTC Corporation. MSM8996 v3 + PMI8996 Marlin XA";
+	qcom,msm-id = <422 0x30001>, <423 0x30001>;
+	qcom,board-id = <0 0>;
+};

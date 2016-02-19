@@ -1,0 +1,70 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+
+#include "msm8996-htc-common.dtsi"
+#include "msm8996-htc-regulator.dtsi"
+#include "msm8996-htc-sensors.dtsi"
+#include "dsi-panel-t50-hx8396c2.dtsi"
+#include "dsi-panel-t50.dtsi"
+
+&mdss_dsi0 {
+        vddio-supply = <&pm8994_lvs1>;
+
+        qcom,platform-te-gpio = <&tlmm 10 0>;
+        qcom,platform-reset-gpio = <&tlmm 39 0>;
+        /delete-property/ qcom,platform-bklight-en-gpio;
+};
+
+&mdss_dsi1 {
+        vddio-supply = <&pm8994_lvs1>;
+
+        qcom,platform-te-gpio = <&tlmm 10 0>;
+        qcom,platform-reset-gpio = <&tlmm 39 0>;
+        /delete-property/ qcom,platform-bklight-en-gpio;
+};
+
+&mdss_dsi_active {
+        mux {
+                pins = "gpio39";
+                function = "gpio";
+        };
+
+        pmx_mdss {
+                pins = "gpio39";
+                drive-strength = <2>; /* 2 mA */
+                output-high;
+        };
+};
+
+&mdss_dsi_suspend {
+        mux {
+                pins = "gpio39";
+                function = "gpio";
+        };
+
+        config {
+                pins = "gpio39";
+                drive-strength = <2>; /* 2 mA */
+                output-low;
+        };
+};
+
+&spmi_bus {
+        qcom,pmi8994@3 {
+                qcom,leds@d800 {
+                        qcom,fs-curr-ua = <20000>;      /* HTC: 2ch, 20mA */
+                        qcom,led-strings-list = [00 01];
+                        qcom,en-cabc;
+                };
+	};
+};
