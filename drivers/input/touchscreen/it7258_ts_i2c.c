@@ -134,7 +134,7 @@
 #define PINCTRL_STATE_ACTIVE	"pmx_ts_active"
 #define PINCTRL_STATE_SUSPEND	"pmx_ts_suspend"
 #define PINCTRL_STATE_RELEASE	"pmx_ts_release"
-#define IT_I2C_WAIT		1000
+#define IT_I2C_WAIT		100
 
 struct FingerData {
 	uint8_t xLo;
@@ -445,10 +445,13 @@ static void IT7260_get_chip_versions(struct device *dev)
 	u8 ver_fw[VERSION_LENGTH], ver_cfg[VERSION_LENGTH];
 	bool ret = true;
 
-	ret = IT7260_i2cWrite(BUF_COMMAND, cmd_read_fw_ver,
+	IT7260_waitDeviceReady(true, false);
+	ret = IT7260_i2cWriteNoReadyCheck(BUF_COMMAND, cmd_read_fw_ver,
 					sizeof(cmd_read_fw_ver));
 	if (ret) {
-		ret = IT7260_i2cRead(BUF_RESPONSE, ver_fw, VERSION_LENGTH);
+		IT7260_waitDeviceReady(true, false);
+		ret = IT7260_i2cReadNoReadyCheck(BUF_RESPONSE, ver_fw,
+					VERSION_LENGTH);
 		if (ret)
 			memcpy(gl_ts->fw_ver, ver_fw + (5 * sizeof(u8)),
 					VER_BUFFER_SIZE * sizeof(u8));
@@ -456,10 +459,13 @@ static void IT7260_get_chip_versions(struct device *dev)
 	if (!ret)
 		dev_err(dev, "failed to read fw version from chip\n");
 
-	ret = IT7260_i2cWrite(BUF_COMMAND, cmd_read_cfg_ver,
+	IT7260_waitDeviceReady(true, false);
+	ret = IT7260_i2cWriteNoReadyCheck(BUF_COMMAND, cmd_read_cfg_ver,
 					sizeof(cmd_read_cfg_ver));
 	if (ret) {
-		ret = IT7260_i2cRead(BUF_RESPONSE, ver_cfg, VERSION_LENGTH)
+		IT7260_waitDeviceReady(true, false);
+		ret = IT7260_i2cReadNoReadyCheck(BUF_RESPONSE, ver_cfg,
+					VERSION_LENGTH)
 					&& ret;
 		if (ret)
 			memcpy(gl_ts->cfg_ver, ver_cfg + (1 * sizeof(u8)),
@@ -1127,7 +1133,7 @@ static int IT7260_chipIdentify(void)
 							'2', '6', '0'};
 	uint8_t chip_id[10] = {0,};
 
-	IT7260_waitDeviceReady(false, false);
+	IT7260_waitDeviceReady(false, true);
 
 	if (!IT7260_i2cWriteNoReadyCheck(BUF_COMMAND, cmd_ident,
 							sizeof(cmd_ident))) {
@@ -1135,7 +1141,7 @@ static int IT7260_chipIdentify(void)
 		return -ENODEV;
 	}
 
-	IT7260_waitDeviceReady(false, false);
+	IT7260_waitDeviceReady(false, true);
 
 	if (!IT7260_i2cReadNoReadyCheck(BUF_RESPONSE, chip_id,
 							sizeof(chip_id))) {
