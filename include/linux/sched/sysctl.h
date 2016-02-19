@@ -86,6 +86,8 @@ extern unsigned int sysctl_sched_new_task_windows;
 #define sysctl_sched_enable_hmp_task_placement 0
 
 #endif /* CONFIG_SCHED_HMP */
+extern unsigned int sysctl_sched_is_big_little;
+extern unsigned int sysctl_sched_sync_hint_enable;
 
 enum sched_tunable_scaling {
 	SCHED_TUNABLESCALING_NONE,

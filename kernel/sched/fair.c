@@ -56,6 +56,9 @@ unsigned int __read_mostly sysctl_sched_wake_to_idle = 0;
 unsigned int sysctl_sched_latency = 6000000ULL;
 unsigned int normalized_sysctl_sched_latency = 6000000ULL;
 
+unsigned int sysctl_sched_is_big_little = 0;
+unsigned int sysctl_sched_sync_hint_enable = 1;
+
 /*
  * The initial- and re-scaling of tunables is configurable
  * (default SCHED_TUNABLESCALING_LOG = *(1+ilog(ncpus))
@@ -5486,7 +5489,7 @@ static int energy_aware_wake_cpu(struct task_struct *p, int target, int sync)
 	int target_cpu = -1;
 	int i;
 
-	if (sync) {
+	if (sysctl_sched_sync_hint_enable && sync) {
 		int cpu = smp_processor_id();
 		cpumask_t search_cpus;
 		cpumask_and(&search_cpus, tsk_cpus_allowed(p), cpu_online_mask);
