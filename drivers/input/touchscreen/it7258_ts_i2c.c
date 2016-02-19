@@ -99,8 +99,9 @@
 #define FW_WRITE_CHUNK_SIZE		128
 #define FW_WRITE_RETRY_COUNT		4
 #define CHIP_FLASH_SIZE			0x8000
-#define DEVICE_READY_MAX_WAIT		500
-#define DEVICE_READY_WAIT_10		10
+#define DEVICE_READY_COUNT_MAX		500
+#define DEVICE_READY_COUNT_25		25
+#define IT_I2C_WAIT_50MS		50
 
 /* result of reading with BUF_QUERY bits */
 #define CMD_STATUS_BITS			0x07
@@ -108,10 +109,7 @@
 #define CMD_STATUS_BUSY			0x01
 #define CMD_STATUS_ERROR		0x02
 #define PT_INFO_BITS			0xF8
-#define BT_INFO_NONE			0x00
 #define PT_INFO_YES			0x80
-/* no new data but finder(s) still down */
-#define BT_INFO_NONE_BUT_DOWN		0x08
 
 #define PD_FLAGS_DATA_TYPE_BITS		0xF0
 /* other types (like chip-detected gestures) exist but we do not care */
@@ -134,7 +132,6 @@
 #define PINCTRL_STATE_ACTIVE	"pmx_ts_active"
 #define PINCTRL_STATE_SUSPEND	"pmx_ts_suspend"
 #define PINCTRL_STATE_RELEASE	"pmx_ts_release"
-#define IT_I2C_WAIT		1000
 
 struct FingerData {
 	uint8_t xLo;
@@ -278,26 +275,32 @@ static bool IT7260_i2cWriteNoReadyCheck(uint8_t buf_index,
 }
 
 /*
- * Device is apparently always ready for i2c but not for actual
- * register reads/writes. This function ascertains it is ready
- * for that too. the results of this call often were ignored.
+ * Device is apparently always ready for I2C communication but not for
+ * actual register reads/writes. This function checks if it is ready
+ * for that too. The results of this call often were ignored.
+ * If forever is set to TRUE, then check the device's status until it
+ * becomes ready with 500 retries at max. Otherwise retry 25 times only.
+ * If slowly is set to TRUE, then add sleep of 50 ms in each retry,
+ * otherwise don't sleep.
  */
 static bool IT7260_waitDeviceReady(bool forever, bool slowly)
 {
 	uint8_t query;
-	uint32_t count = DEVICE_READY_WAIT_10;
+	uint32_t count = DEVICE_READY_COUNT_25;
 
 	if (gl_ts->fw_cfg_uploading || forever)
-		count = DEVICE_READY_MAX_WAIT;
+		count = DEVICE_READY_COUNT_MAX;
 
 	do {
 		if (!IT7260_i2cReadNoReadyCheck(BUF_QUERY, &query,
 						sizeof(query)))
 			query = CMD_STATUS_BUSY;
 
+		if ((query & CMD_STATUS_BITS) == CMD_STATUS_DONE)
+			break;
 		if (slowly)
-			msleep(IT_I2C_WAIT);
-	} while ((query & CMD_STATUS_BUSY) && --count);
+			msleep(IT_I2C_WAIT_50MS);
+	} while (((query & CMD_STATUS_BITS) == CMD_STATUS_BUSY) && --count);
 
 	return !query;
 }
@@ -448,7 +451,13 @@ static void IT7260_get_chip_versions(struct device *dev)
 	ret = IT7260_i2cWrite(BUF_COMMAND, cmd_read_fw_ver,
 					sizeof(cmd_read_fw_ver));
 	if (ret) {
-		ret = IT7260_i2cRead(BUF_RESPONSE, ver_fw, VERSION_LENGTH);
+		/*
+		 * Sometimes, the controller may not respond immediately after
+		 * writing the command, so wait for device to get ready.
+		 */
+		IT7260_waitDeviceReady(true, false);
+		ret = IT7260_i2cReadNoReadyCheck(BUF_RESPONSE, ver_fw,
+					VERSION_LENGTH);
 		if (ret)
 			memcpy(gl_ts->fw_ver, ver_fw + (5 * sizeof(u8)),
 					VER_BUFFER_SIZE * sizeof(u8));
@@ -459,8 +468,13 @@ static void IT7260_get_chip_versions(struct device *dev)
 	ret = IT7260_i2cWrite(BUF_COMMAND, cmd_read_cfg_ver,
 					sizeof(cmd_read_cfg_ver));
 	if (ret) {
-		ret = IT7260_i2cRead(BUF_RESPONSE, ver_cfg, VERSION_LENGTH)
-					&& ret;
+		/*
+		 * Sometimes, the controller may not respond immediately after
+		 * writing the command, so wait for device to get ready.
+		 */
+		IT7260_waitDeviceReady(true, false);
+		ret = IT7260_i2cReadNoReadyCheck(BUF_RESPONSE, ver_cfg,
+					VERSION_LENGTH);
 		if (ret)
 			memcpy(gl_ts->cfg_ver, ver_cfg + (1 * sizeof(u8)),
 					VER_BUFFER_SIZE * sizeof(u8));
@@ -1127,7 +1141,13 @@ static int IT7260_chipIdentify(void)
 							'2', '6', '0'};
 	uint8_t chip_id[10] = {0,};
 
-	IT7260_waitDeviceReady(false, false);
+	/*
+	 * Sometimes, the controller may not respond immediately after
+	 * writing the command, so wait for device to get ready.
+	 * FALSE means to retry 25 times at max to write the command.
+	 * TRUE means to add 50 ms delay in each retry.
+	 */
+	IT7260_waitDeviceReady(false, true);
 
 	if (!IT7260_i2cWriteNoReadyCheck(BUF_COMMAND, cmd_ident,
 							sizeof(cmd_ident))) {
@@ -1135,7 +1155,13 @@ static int IT7260_chipIdentify(void)
 		return -ENODEV;
 	}
 
-	IT7260_waitDeviceReady(false, false);
+	/*
+	 * Sometimes, the controller may not respond immediately after
+	 * writing the command, so wait for device to get ready.
+	 * TRUE means to retry 500 times at max to read the chip id.
+	 * FALSE means to avoid unnecessary delays in each retry.
+	 */
+	IT7260_waitDeviceReady(true, false);
 
 	if (!IT7260_i2cReadNoReadyCheck(BUF_RESPONSE, chip_id,
 							sizeof(chip_id))) {
