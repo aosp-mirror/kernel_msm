@@ -162,7 +162,8 @@ static int quat_mi2s_sample_rate = SAMPLING_RATE_48KHZ;
 static int pri_mi2s_bit_format = SNDRV_PCM_FORMAT_S16_LE;
 static int sec_mi2s_bit_format = SNDRV_PCM_FORMAT_S24_LE; //HTC_AUD
 static int tert_mi2s_bit_format = SNDRV_PCM_FORMAT_S16_LE;
-static int quat_mi2s_bit_format = SNDRV_PCM_FORMAT_S24_LE;//HTC_AUD
+/* static int quat_mi2s_bit_format = SNDRV_PCM_FORMAT_S24_LE;//HTC_AUD */
+static int quat_mi2s_bit_format = SNDRV_PCM_FORMAT_S16_LE;/* HTC_AUD */
 
 static int msm_pri_mi2s_tx_ch = 2;
 static int msm_pri_mi2s_rx_ch = 2;
@@ -214,9 +215,15 @@ static struct acoustic_ops acoustic = {
 };
 /*HW component end*/
 
+enum {
+	MI2S_AMP_PATH_SPEAKER = 0,
+	MI2S_AMP_PATH_HANDSET,
+};
+
 static struct mutex htc_adaptivesound_enable_mutex;
 int htc_adaptivesound_enable = 0;
 int htc_onedotone_enable = 0;
+static int htc_mi2s_amp_path = AMP_SPEAKER;
 //HTC_AUD_END
 
 /* Maintain struct aligned with the one from msm-dai-q6-v2.h */
@@ -567,7 +574,7 @@ static void msm8996_ext_control(struct snd_soc_codec *codec)
 }
 
 static int msm8996_get_spk(struct snd_kcontrol *kcontrol,
-			      struct snd_ctl_elem_value *ucontrol)
+				struct snd_ctl_elem_value *ucontrol)
 {
 	pr_debug("%s: msm8996_spk_control = %d\n",
 			 __func__, msm8996_spk_control);
@@ -576,7 +583,7 @@ static int msm8996_get_spk(struct snd_kcontrol *kcontrol,
 }
 
 static int msm8996_set_spk(struct snd_kcontrol *kcontrol,
-			      struct snd_ctl_elem_value *ucontrol)
+				struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 
@@ -3066,6 +3073,100 @@ static const struct snd_kcontrol_new htc_onedotone_params_control[] = {
     SOC_SINGLE_EXT("OneDotOne Enable", SND_SOC_NOPM,
     0, 1, 0, msm_onedotone_get, msm_onedotone_enable_put),
 };
+
+static int mi2s_amp_path_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case MI2S_AMP_PATH_SPEAKER:
+		htc_mi2s_amp_path = AMP_SPEAKER;
+		break;
+	case MI2S_AMP_PATH_HANDSET:
+		htc_mi2s_amp_path = AMP_RECEIVER;
+		break;
+	default:
+		htc_mi2s_amp_path = AMP_SPEAKER;
+		break;
+	}
+	pr_info("%s: set mode %d\n", __func__, htc_mi2s_amp_path);
+	return 0;
+}
+
+static int mi2s_amp_path_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	if (htc_mi2s_amp_path == AMP_RECEIVER)
+		ucontrol->value.integer.value[0] = MI2S_AMP_PATH_HANDSET;
+	else
+		ucontrol->value.integer.value[0] = MI2S_AMP_PATH_SPEAKER;
+
+	return 0;
+}
+
+static const char *const mi2s_amp_path_ctrl_text[] = {"Speaker", "Handset"};
+
+static const struct soc_enum mi2s_amp_path_ctrl_enum[] = {
+		SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(mi2s_amp_path_ctrl_text),
+					mi2s_amp_path_ctrl_text),
+};
+
+static const struct snd_kcontrol_new mi2s_amp_path_controls[] = {
+	SOC_ENUM_EXT("MI2S_AMP_PATH", mi2s_amp_path_ctrl_enum[0],
+			mi2s_amp_path_get, mi2s_amp_path_put),
+};
+
+static int htc_mi2s_amp_event(struct snd_soc_dapm_widget *w,
+			     struct snd_kcontrol *k, int event)
+{
+	pr_info("%s() %s\n", __func__, w->name);
+
+	if (SND_SOC_DAPM_EVENT_ON(event)) {
+		pr_info("%s:mi2s amp on mode %d\n",
+			__func__, htc_mi2s_amp_path);
+		htc_acoustic_spk_amp_ctrl(true, htc_mi2s_amp_path);
+	} else {
+		pr_info("%s:mi2s amp off mode %d\n",
+			__func__, htc_mi2s_amp_path);
+		htc_acoustic_spk_amp_ctrl(false, htc_mi2s_amp_path);
+	}
+
+	return 0;
+
+}
+
+static const struct snd_soc_dapm_widget htc_quat_mi2s_widget[] = {
+
+	SND_SOC_DAPM_AIF_IN_E("HTC VIRTUAL MI2S", "htc-virtual-mi2s-if", 0,
+				SND_SOC_NOPM,
+				0, 0, htc_mi2s_amp_event,
+				SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
+
+	SND_SOC_DAPM_SPK("HTC_MI2S_OUT", NULL),
+};
+
+static const struct snd_soc_dapm_route htc_quat_mi2s_virtual_route[] = {
+	/* MI2S AMP Connections */
+	{"HTC_MI2S_OUT", NULL, "HTC VIRTUAL MI2S"},
+};
+
+static int msm_htc_quat_mi2s_init(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_soc_codec *codec = rtd->codec;
+	struct snd_soc_dapm_context *dapm = &codec->dapm;
+
+	pr_info("%s: ++\n", __func__);
+	snd_soc_add_codec_controls(codec, mi2s_amp_path_controls,
+					 ARRAY_SIZE(mi2s_amp_path_controls));
+
+	snd_soc_dapm_new_controls(dapm, htc_quat_mi2s_widget,
+				  ARRAY_SIZE(htc_quat_mi2s_widget));
+
+	snd_soc_dapm_add_routes(dapm, htc_quat_mi2s_virtual_route,
+		ARRAY_SIZE(htc_quat_mi2s_virtual_route));
+	pr_info("%s: --\n", __func__);
+
+	return 0;
+}
 //HTC_AUD_END
 
 static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
@@ -4674,16 +4775,17 @@ static struct snd_soc_dai_link msm8996_common_be_dai_links[] = {
 		.stream_name = "Quaternary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
 		.platform_name = "msm-pcm-routing",
-//HTC_AUD_START
-/*		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-rx",*/
-		.codec_name = "snd-soc-dummy",
+/* HTC_AUD_START */
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm_htc_mi2s_codec",
+/*		.codec_name = "snd-soc-dummy",
 		.codec_dai_name = "snd-soc-dummy-dai",
-//HTC_AUD_END
+   HTC_AUD_END */
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
 		.be_hw_params_fixup = msm_quat_mi2s_rx_be_hw_params_fixup,
+		.init = &msm_htc_quat_mi2s_init, /* htc audio */
 		.ops = &msm8996_quat_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},

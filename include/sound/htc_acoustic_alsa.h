@@ -38,9 +38,20 @@ struct hs_notify_t {
 };
 #endif
 
+enum AMP_TYPE {
+	AMP_N = 0,
+	AMP_RECEIVER,
+	AMP_SPEAKER,
+	AMP_MAX,
+};
+
 enum HTC_FEATURE {
 	HTC_Q6_EFFECT = 0,
 	HTC_AUD_24BIT,
+};
+
+struct amp_register_s {
+	int (*aud_amp_f)(bool, int);
 };
 
 struct avcs_crash_params {
@@ -62,7 +73,8 @@ void htc_acoustic_register_ops(struct acoustic_ops *ops);
 void register_htc_ftm_dev(struct device *);
 void set_pinctrl_ftm_mode(int enable);
 void htc_acoustic_register_spk_version(void (*spk_func)(unsigned char*));
-
+void htc_acoustic_register_spk_amp(int (*aud_spk_amp_f)(bool, int));
+int htc_acoustic_spk_amp_ctrl(int on, enum AMP_TYPE type);
 #ifdef CONFIG_HTC_HEADSET_MGR
 void htc_acoustic_register_hs_notify(enum HS_NOTIFY_TYPE type, struct hs_notify_t *notify);
 #endif

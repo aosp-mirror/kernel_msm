@@ -55,8 +55,36 @@ static struct hs_notify_t hs_plug_nt[HS_N_MAX] = {{0, NULL, NULL}};
 static DEFINE_MUTEX(hs_nt_lock);
 #endif
 
+static DEFINE_MUTEX(spk_amp_lock);
+static struct amp_register_s spk_amp = {NULL};
+
 void htc_acoustic_register_spk_version(void (*spk_func)(unsigned char*)) {
 	htc_spk_version = spk_func;
+}
+
+void htc_acoustic_register_spk_amp(int (*aud_spk_amp_f)(bool, int))
+{
+	mutex_lock(&spk_amp_lock);
+
+	spk_amp.aud_amp_f = aud_spk_amp_f;
+
+	mutex_unlock(&spk_amp_lock);
+}
+
+int htc_acoustic_spk_amp_ctrl(int on, enum AMP_TYPE type)
+{
+	int ret = 0;
+
+	mutex_lock(&spk_amp_lock);
+
+	if (type < AMP_MAX) {
+		if (spk_amp.aud_amp_f)
+			ret = spk_amp.aud_amp_f(on, type);
+	}
+
+	mutex_unlock(&spk_amp_lock);
+
+	return ret;
 }
 
 void register_htc_ftm_dev(struct device* dev)
