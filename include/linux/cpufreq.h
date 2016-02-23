@@ -141,6 +141,7 @@ u64 get_cpu_idle_time(unsigned int cpu, u64 *wall, int io_busy);
 int cpufreq_get_policy(struct cpufreq_policy *policy, unsigned int cpu);
 int cpufreq_update_policy(unsigned int cpu);
 bool have_governor_per_policy(void);
+bool cpufreq_driver_is_slow(void);
 struct kobject *get_governor_parent_kobj(struct cpufreq_policy *policy);
 #else
 static inline unsigned int cpufreq_get(unsigned int cpu)
@@ -252,6 +253,23 @@ struct cpufreq_driver {
  * can handle them specially.
  */
 #define CPUFREQ_ASYNC_NOTIFICATION  (1 << 4)
+
+/*
+ * Set by drivers which want cpufreq core to check if CPU is running at a
+ * frequency present in freq-table exposed by the driver. For these drivers if
+ * CPU is found running at an out of table freq, we will try to set it to a freq
+ * from the table. And if that fails, we will stop further boot process by
+ * issuing a BUG_ON().
+ */
+#define CPUFREQ_NEED_INITIAL_FREQ_CHECK	(1 << 5)
+
+/*
+ * Indicates that it is safe to call cpufreq_driver_target from
+ * non-interruptable context in scheduler hot paths.  Drivers must
+ * opt-in to this flag, as the safe default is that they might sleep
+ * or be too slow for hot path use.
+ */
+#define CPUFREQ_DRIVER_FAST		(1 << 6)
 
 int cpufreq_register_driver(struct cpufreq_driver *driver_data);
 int cpufreq_unregister_driver(struct cpufreq_driver *driver_data);
