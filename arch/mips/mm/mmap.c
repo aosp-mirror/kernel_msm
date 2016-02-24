@@ -174,7 +174,7 @@ void arch_pick_mmap_layout(struct mm_struct *mm)
 
 static inline unsigned long brk_rnd(void)
 {
-	unsigned long rnd = get_random_int();
+	unsigned long rnd = get_random_long();
 
 	rnd = rnd << PAGE_SHIFT;
 	/* 8MB for 32bit, 256MB for 64bit */
