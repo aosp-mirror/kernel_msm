@@ -74,9 +74,9 @@ unsigned long arch_mmap_rnd(void)
 	 * 28 bits of randomness in 64bit mmaps, 40 address space bits
 	 */
 	if (mmap_is_ia32())
-		rnd = (unsigned long)get_random_int() % (1<<8);
+		rnd = get_random_long() % (1UL<<8);
 	else
-		rnd = (unsigned long)get_random_int() % (1<<28);
+		rnd = get_random_long() % (1UL<<28);
 
 	return rnd << PAGE_SHIFT;
 }
