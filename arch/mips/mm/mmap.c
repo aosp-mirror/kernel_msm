@@ -146,13 +146,12 @@ unsigned long arch_mmap_rnd(void)
 {
 	unsigned long rnd;
 
-	rnd = (unsigned long)get_random_int();
+	rnd = get_random_long();
 	rnd <<= PAGE_SHIFT;
 	if (TASK_IS_32BIT_ADDR)
 		rnd &= 0xfffffful;
 	else
 		rnd &= 0xffffffful;
-
 	return rnd;
 }
 
@@ -174,7 +173,7 @@ void arch_pick_mmap_layout(struct mm_struct *mm)
 
 static inline unsigned long brk_rnd(void)
 {
-	unsigned long rnd = get_random_int();
+	unsigned long rnd = get_random_long();
 
 	rnd = rnd << PAGE_SHIFT;
 	/* 8MB for 32bit, 256MB for 64bit */

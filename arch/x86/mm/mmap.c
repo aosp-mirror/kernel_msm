@@ -67,17 +67,17 @@ static int mmap_is_legacy(void)
 
 unsigned long arch_mmap_rnd(void)
 {
-	unsigned long rnd;
+	unsigned long rnd = 0;
 
 	if (current->flags & PF_RANDOMIZE) {
 		if (mmap_is_ia32())
 #ifdef CONFIG_COMPAT
-			rnd = (unsigned long)get_random_int() & ((1 << mmap_rnd_compat_bits) - 1);
+			rnd = get_random_long() & ((1UL << mmap_rnd_compat_bits) - 1);
 #else
-			rnd = (unsigned long)get_random_int() & ((1 << mmap_rnd_bits) - 1);
+			rnd = get_random_long() & ((1UL << mmap_rnd_bits) - 1);
 #endif
 		else
-			rnd = (unsigned long)get_random_int() & ((1 << mmap_rnd_bits) - 1);
+			rnd = get_random_long() & ((1UL << mmap_rnd_bits) - 1);
 	}
 	return rnd << PAGE_SHIFT;
 }
