@@ -19,7 +19,8 @@
 
 #include "sched.h"
 
-#define THROTTLE_NSEC		50000000 /* 50ms default */
+#define THROTTLE_DOWN_NSEC	20000000 /* 20ms default */
+#define THROTTLE_UP_NSEC	500000 /* 500us default */
 
 struct static_key __read_mostly __sched_freq = STATIC_KEY_INIT_FALSE;
 static bool __read_mostly cpufreq_driver_slow;
@@ -33,8 +34,10 @@ DEFINE_PER_CPU(struct sched_capacity_reqs, cpu_sched_capacity_reqs);
 
 /**
  * gov_data - per-policy data internal to the governor
- * @throttle: next throttling period expiry. Derived from throttle_nsec
- * @throttle_nsec: throttle period length in nanoseconds
+ * @up_throttle: next throttling period expiry if increasing OPP
+ * @down_throttle: next throttling period expiry if decreasing OPP
+ * @up_throttle_nsec: throttle period length in nanoseconds if increasing OPP
+ * @down_throttle_nsec: throttle period length in nanoseconds if decreasing OPP
  * @task: worker thread for dvfs transition that may block/sleep
  * @irq_work: callback used to wake up worker thread
  * @requested_freq: last frequency requested by the sched governor
@@ -48,8 +51,10 @@ DEFINE_PER_CPU(struct sched_capacity_reqs, cpu_sched_capacity_reqs);
  * call down_write(policy->rwsem).
  */
 struct gov_data {
-	ktime_t throttle;
-	unsigned int throttle_nsec;
+	ktime_t up_throttle;
+	ktime_t down_throttle;
+	unsigned int up_throttle_nsec;
+	unsigned int down_throttle_nsec;
 	struct task_struct *task;
 	struct irq_work irq_work;
 	unsigned int requested_freq;
@@ -66,25 +71,29 @@ static void cpufreq_sched_try_driver_target(struct cpufreq_policy *policy,
 
 	__cpufreq_driver_target(policy, freq, CPUFREQ_RELATION_L);
 
-	gd->throttle = ktime_add_ns(ktime_get(), gd->throttle_nsec);
+	gd->up_throttle = ktime_add_ns(ktime_get(), gd->up_throttle_nsec);
+	gd->down_throttle = ktime_add_ns(ktime_get(), gd->down_throttle_nsec);
 	up_write(&policy->rwsem);
 }
 
-static bool finish_last_request(struct gov_data *gd)
+static bool finish_last_request(struct gov_data *gd, unsigned int cur_freq)
 {
 	ktime_t now = ktime_get();
 
-	if (ktime_after(now, gd->throttle))
+	ktime_t throttle = gd->requested_freq < cur_freq ?
+		gd->down_throttle : gd->up_throttle;
+
+	if (ktime_after(now, throttle))
 		return false;
 
 	while (1) {
-		int usec_left = ktime_to_ns(ktime_sub(gd->throttle, now));
+		int usec_left = ktime_to_ns(ktime_sub(throttle, now));
 
 		usec_left /= NSEC_PER_USEC;
 		trace_cpufreq_sched_throttled(usec_left);
 		usleep_range(usec_left, usec_left + 100);
 		now = ktime_get();
-		if (ktime_after(now, gd->throttle))
+		if (ktime_after(now, throttle))
 			return true;
 	}
 }
@@ -130,7 +139,7 @@ static int cpufreq_sched_thread(void *data)
 			 * if the frequency thread sleeps while waiting to be
 			 * unthrottled, start over to check for a newer request
 			 */
-			if (finish_last_request(gd))
+			if (finish_last_request(gd, policy->cur))
 				continue;
 			last_request = new_request;
 			cpufreq_sched_try_driver_target(policy, new_request);
@@ -261,11 +270,12 @@ static int cpufreq_sched_policy_init(struct cpufreq_policy *policy)
 	if (!gd)
 		return -ENOMEM;
 
-	gd->throttle_nsec = policy->cpuinfo.transition_latency ?
+	gd->up_throttle_nsec = policy->cpuinfo.transition_latency ?
 			    policy->cpuinfo.transition_latency :
-			    THROTTLE_NSEC;
+			    THROTTLE_UP_NSEC;
+	gd->down_throttle_nsec = THROTTLE_DOWN_NSEC;
 	pr_debug("%s: throttle threshold = %u [ns]\n",
-		  __func__, gd->throttle_nsec);
+		  __func__, gd->up_throttle_nsec);
 
 	policy->governor_data = gd;
 	if (cpufreq_driver_is_slow()) {
