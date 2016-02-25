@@ -68,3 +68,11 @@
                 };
 	};
 };
+
+&pcie1{
+	compatible = "qcom,pci-msm-na";
+};
+
+&pcie2{
+	compatible = "qcom,pci-msm-na";
+};
