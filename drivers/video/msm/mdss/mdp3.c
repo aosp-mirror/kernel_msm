@@ -2103,6 +2103,7 @@ error:
 	return rc;
 }
 
+#if 0
 static int mdp3_alloc(struct msm_fb_data_type *mfd)
 {
 	int ret;
@@ -2143,7 +2144,7 @@ static int mdp3_alloc(struct msm_fb_data_type *mfd)
 
 	return 0;
 }
-
+#endif
 void mdp3_free(struct msm_fb_data_type *mfd)
 {
 	size_t size = 0;
@@ -2707,7 +2708,7 @@ static int mdp3_probe(struct platform_device *pdev)
 	.fb_mem_get_iommu_domain = mdp3_fb_mem_get_iommu_domain,
 	.panel_register_done = mdp3_panel_register_done,
 	.fb_stride = mdp3_fb_stride,
-	.fb_mem_alloc_fnc = mdp3_alloc,
+	//.fb_mem_alloc_fnc = mdp3_alloc,
 	.check_dsi_status = mdp3_check_dsi_ctrl_status,
 	};
 
