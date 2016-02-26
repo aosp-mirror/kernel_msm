@@ -317,7 +317,7 @@
 		};
 	};
 
-	pcm1: qcom,msm-pcm-ull-post-processing {
+	qcom,msm-pcm-ull-post-processing {
 		/delete-property/ qcom,latency-level;
 	};
 

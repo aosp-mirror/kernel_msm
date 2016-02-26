@@ -651,7 +651,7 @@
 
 		qcom,cdc-reset-gpio = <&tlmm 68 0>;
 
-		pinctrl-names = "default", "sleep";
+		pinctrl-names = "default", "idle";
 		pinctrl-0 = <&cdc_reset_active>;
 		pinctrl-1 = <&cdc_reset_sleep>;
 
@@ -664,6 +664,8 @@
 			"cdc-vdd-tx-h",
 			"cdc-vdd-rx-h",
 			"cdc-vdd-px";
+
+		qcom,cdc-on-demand-supplies = "cdc-vdd-mic-bias";
 
 		qcom,cdc-micbias1-mv = <1800>;
 		qcom,cdc-micbias2-mv = <1800>;

@@ -33,8 +33,6 @@
 #define DEVICE_3D_NAME "kgsl-3d"
 #define DEVICE_3D0_NAME "kgsl-3d0"
 
-#define ADRENO_PRIORITY_MAX_RB_LEVELS	4
-
 /* ADRENO_DEVICE - Given a kgsl_device return the adreno device struct */
 #define ADRENO_DEVICE(device) \
 		container_of(device, struct adreno_device, dev)
@@ -339,7 +337,7 @@ struct adreno_device {
 	struct kgsl_memdesc pm4;
 	size_t gpmu_cmds_size;
 	unsigned int *gpmu_cmds;
-	struct adreno_ringbuffer ringbuffers[ADRENO_PRIORITY_MAX_RB_LEVELS];
+	struct adreno_ringbuffer ringbuffers[KGSL_PRIORITY_MAX_RB_LEVELS];
 	int num_ringbuffers;
 	struct adreno_ringbuffer *cur_rb;
 	struct adreno_ringbuffer *next_rb;
@@ -855,29 +853,11 @@ void adreno_coresight_remove(struct adreno_device *adreno_dev);
 
 bool adreno_hw_isidle(struct adreno_device *adreno_dev);
 
-int adreno_iommu_set_pt_ctx(struct adreno_ringbuffer *rb,
-			struct kgsl_pagetable *new_pt,
-			struct adreno_context *drawctxt);
-
-int adreno_iommu_init(struct adreno_device *adreno_dev);
-
-void adreno_iommu_set_pt_generate_rb_cmds(struct adreno_ringbuffer *rb,
-					struct kgsl_pagetable *pt);
-
 void adreno_fault_detect_start(struct adreno_device *adreno_dev);
 void adreno_fault_detect_stop(struct adreno_device *adreno_dev);
 
 void adreno_hang_int_callback(struct adreno_device *adreno_dev, int bit);
 void adreno_cp_callback(struct adreno_device *adreno_dev, int bit);
-
-unsigned int adreno_iommu_set_pt_ib(struct adreno_ringbuffer *rb,
-					unsigned int *cmds,
-					struct kgsl_pagetable *pt);
-
-unsigned int adreno_iommu_set_pt_generate_cmds(
-				struct adreno_ringbuffer *rb,
-				unsigned int *cmds,
-				struct kgsl_pagetable *pt);
 
 int adreno_sysfs_init(struct adreno_device *adreno_dev);
 void adreno_sysfs_close(struct adreno_device *adreno_dev);
@@ -1406,9 +1386,6 @@ void adreno_readreg64(struct adreno_device *adreno_dev,
 
 void adreno_writereg64(struct adreno_device *adreno_dev,
 		enum adreno_regs lo, enum adreno_regs hi, uint64_t val);
-
-unsigned int adreno_iommu_set_apriv(struct adreno_device *adreno_dev,
-				unsigned int *cmds, int set);
 
 static inline bool adreno_soft_fault_detect(struct adreno_device *adreno_dev)
 {

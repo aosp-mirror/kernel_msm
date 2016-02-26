@@ -58,9 +58,11 @@ static int mmc_prep_request(struct request_queue *q, struct request *req)
 static struct request *mmc_peek_request(struct mmc_queue *mq)
 {
 	struct request_queue *q = mq->queue;
+	mq->cmdq_req_peeked = NULL;
 
 	spin_lock_irq(q->queue_lock);
-	mq->cmdq_req_peeked = blk_peek_request(q);
+	if (!blk_queue_stopped(q))
+		mq->cmdq_req_peeked = blk_peek_request(q);
 	spin_unlock_irq(q->queue_lock);
 
 	return mq->cmdq_req_peeked;
@@ -288,6 +290,9 @@ void mmc_cmdq_setup_queue(struct mmc_queue *mq, struct mmc_card *card)
 {
 	u64 limit = BLK_BOUNCE_HIGH;
 	struct mmc_host *host = card->host;
+
+	if (mmc_dev(host)->dma_mask && *mmc_dev(host)->dma_mask)
+		limit = *mmc_dev(host)->dma_mask;
 
 	queue_flag_set_unlocked(QUEUE_FLAG_NONROT, mq->queue);
 	if (mmc_can_erase(card))

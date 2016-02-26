@@ -1110,7 +1110,8 @@ static inline int mdss_mdp_is_cdm_supported(struct mdss_data_type *mdata,
 	 */
 	return support && ((intf_type == MDSS_INTF_HDMI) ||
 			   ((intf_type == MDSS_MDP_NO_INTF) &&
-			    (mixer_type == MDSS_MDP_MIXER_TYPE_INTF)));
+			    ((mixer_type == MDSS_MDP_MIXER_TYPE_INTF) ||
+			     (mixer_type == MDSS_MDP_MIXER_TYPE_WRITEBACK))));
 }
 
 static inline u32 mdss_mdp_get_cursor_frame_size(struct mdss_data_type *mdata)
@@ -1206,6 +1207,8 @@ int mdss_mdp_layer_atomic_validate_wfd(struct msm_fb_data_type *mfd,
 	struct file *file, struct mdp_layer_commit_v1 *ov_commit);
 int mdss_mdp_layer_pre_commit_wfd(struct msm_fb_data_type *mfd,
 	struct file *file, struct mdp_layer_commit_v1 *ov_commit);
+bool mdss_mdp_wfd_is_config_same(struct msm_fb_data_type *mfd,
+	struct mdp_output_layer *layer);
 
 int mdss_mdp_async_position_update(struct msm_fb_data_type *mfd,
 		struct mdp_position_update *update_pos);
@@ -1494,7 +1497,7 @@ struct mdss_mdp_ctl *mdss_mdp_ctl_alloc(struct mdss_data_type *mdata,
 					       u32 off);
 int mdss_mdp_ctl_free(struct mdss_mdp_ctl *ctl);
 
-struct mdss_mdp_mixer *mdss_mdp_mixer_assign(u32 id, bool wb);
+struct mdss_mdp_mixer *mdss_mdp_mixer_assign(u32 id, bool wb, bool rot);
 struct mdss_mdp_mixer *mdss_mdp_mixer_alloc(
 		struct mdss_mdp_ctl *ctl, u32 type, int mux, int rotator);
 int mdss_mdp_mixer_free(struct mdss_mdp_mixer *mixer);

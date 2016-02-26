@@ -157,7 +157,6 @@ struct hdmi_tx_ctrl {
 
 	struct hdmi_util_ds_data ds_data;
 	struct completion hpd_int_done;
-	struct completion hpd_off_done;
 	struct work_struct hpd_int_work;
 	struct delayed_work hdcp_cb_work;
 
@@ -174,6 +173,7 @@ struct hdmi_tx_ctrl {
 	bool hdcp14_sw_keys;
 	bool auth_state;
 	bool custom_edid;
+	bool sim_mode;
 	u32 enc_lvl;
 
 	u8 spd_vendor_name[9];

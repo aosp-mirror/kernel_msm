@@ -239,17 +239,17 @@ int lpm_get_latency(struct latency_level *level, uint32_t *latency)
 	struct lpm_cluster *cluster;
 	uint32_t val;
 
+	if (!lpm_root_node) {
+		pr_err("%s: lpm_probe not completed\n", __func__);
+		return -EAGAIN;
+	}
+
 	if ((level->affinity_level < 0)
 		|| (level->affinity_level > lpm_root_node->aff_level)
 		|| (level->reset_level < LPM_RESET_LVL_RET)
 		|| (level->reset_level > LPM_RESET_LVL_PC)
 		|| !latency)
 		return -EINVAL;
-
-	if (!lpm_root_node) {
-		pr_err("%s: lpm_probe not completed\n", __func__);
-		return -EAGAIN;
-	}
 
 	cluster = cluster_aff_match(lpm_root_node, level->affinity_level);
 	if (!cluster) {
@@ -1006,10 +1006,8 @@ static int lpm_cpuidle_select(struct cpuidle_driver *drv,
 
 	idx = cpu_power_select(dev, cluster->cpu);
 
-	if (idx < 0) {
-		local_irq_enable();
+	if (idx < 0)
 		return -EPERM;
-	}
 
 	trace_cpu_idle_rcuidle(idx, dev->cpu);
 	return idx;

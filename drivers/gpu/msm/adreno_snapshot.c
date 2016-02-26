@@ -234,10 +234,9 @@ static inline void parse_ib(struct kgsl_device *device,
 static inline bool iommu_is_setstate_addr(struct kgsl_device *device,
 		uint64_t gpuaddr, uint64_t size)
 {
-	struct kgsl_iommu *iommu = device->mmu.priv;
+	struct kgsl_iommu *iommu = KGSL_IOMMU_PRIV(device);
 
-	if (kgsl_mmu_get_mmutype() != KGSL_MMU_TYPE_IOMMU ||
-		iommu == NULL)
+	if (kgsl_mmu_get_mmutype(device) != KGSL_MMU_TYPE_IOMMU)
 		return false;
 
 	return kgsl_gpuaddr_in_memdesc(&iommu->setstate, gpuaddr,
@@ -323,7 +322,10 @@ static void snapshot_rb_ibs(struct kgsl_device *device,
 		index--;
 
 		if (index < 0) {
-			index = KGSL_RB_DWORDS - 3;
+			if (ADRENO_LEGACY_PM4(adreno_dev))
+				index = KGSL_RB_DWORDS - 3;
+			else
+				index = KGSL_RB_DWORDS - 4;
 
 			/* We wrapped without finding what we wanted */
 			if (index < rb->wptr) {
@@ -332,9 +334,19 @@ static void snapshot_rb_ibs(struct kgsl_device *device,
 			}
 		}
 
-		if (adreno_cmd_is_ib(adreno_dev, rbptr[index]) &&
-			rbptr[index + 1] == ibbase)
-			break;
+		if (adreno_cmd_is_ib(adreno_dev, rbptr[index])) {
+			if (ADRENO_LEGACY_PM4(adreno_dev)) {
+				if (rbptr[index + 1] == ibbase)
+					break;
+			} else {
+				uint64_t ibaddr;
+
+				ibaddr = rbptr[index + 2];
+				ibaddr = ibaddr << 32 | rbptr[index + 1];
+				if (ibaddr == ibbase)
+					break;
+			}
+		}
 	} while (index != rb->wptr);
 
 	/*
@@ -794,11 +806,7 @@ static void adreno_snapshot_iommu(struct kgsl_device *device,
 		struct kgsl_snapshot *snapshot)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-	struct kgsl_mmu *mmu = &device->mmu;
-	struct kgsl_iommu *iommu = mmu->priv;
-
-	if (iommu == NULL)
-		return;
+	struct kgsl_iommu *iommu = KGSL_IOMMU_PRIV(device);
 
 	kgsl_snapshot_add_section(device, KGSL_SNAPSHOT_SECTION_GPU_OBJECT_V2,
 		snapshot, snapshot_global, &iommu->setstate);
@@ -876,7 +884,7 @@ void adreno_snapshot(struct kgsl_device *device, struct kgsl_snapshot *snapshot,
 			snapshot, snapshot_global,
 			&adreno_dev->pwron_fixup);
 
-	if (kgsl_mmu_get_mmutype() == KGSL_MMU_TYPE_IOMMU)
+	if (kgsl_mmu_get_mmutype(device) == KGSL_MMU_TYPE_IOMMU)
 		adreno_snapshot_iommu(device, snapshot);
 
 	if (ADRENO_FEATURE(adreno_dev, ADRENO_PREEMPTION)) {

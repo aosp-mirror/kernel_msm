@@ -706,7 +706,7 @@ static struct mdss_rot_hw_resource *mdss_rotator_hw_alloc(
 		goto error;
 	}
 	hw->ctl->wb = hw->wb;
-	hw->mixer = mdss_mdp_mixer_assign(hw->wb->num, true);
+	hw->mixer = mdss_mdp_mixer_assign(hw->wb->num, true, true);
 
 	if (IS_ERR_OR_NULL(hw->mixer)) {
 		pr_err("unable to allocate wb mixer\n");
@@ -1123,6 +1123,7 @@ static void mdss_rotator_release_from_work_distribution(
 				entry->perf->work_distribution);
 			devm_kfree(&mgr->pdev->dev, entry->perf);
 			mdss_rotator_update_perf(mgr);
+			mdss_rotator_clk_ctrl(mgr, false);
 			entry->perf = NULL;
 		}
 	}

@@ -40,6 +40,8 @@
 #include <linux/semaphore.h>
 #include <linux/uaccess.h>
 #include <linux/clk/msm-clk.h>
+#include <linux/irqdomain.h>
+#include <linux/irq.h>
 
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
@@ -75,6 +77,7 @@ struct msm_mdp_interface mdp5 = {
 	.fb_mem_get_iommu_domain = mdss_fb_mem_get_iommu_domain,
 	.fb_stride = mdss_mdp_fb_stride,
 	.check_dsi_status = mdss_check_dsi_ctrl_status,
+	.get_format_params = mdss_mdp_get_format_params,
 };
 
 #define DEFAULT_TOTAL_RGB_PIPES 3
@@ -105,6 +108,13 @@ struct mdss_hw mdss_mdp_hw = {
 	.hw_ndx = MDSS_HW_MDP,
 	.ptr = NULL,
 	.irq_handler = mdss_mdp_isr,
+};
+
+/* define for h/w block with external driver */
+struct mdss_hw mdss_misc_hw = {
+	.hw_ndx = MDSS_HW_MISC,
+	.ptr = NULL,
+	.irq_handler = NULL,
 };
 
 #define MDP_REG_BUS_VECTOR_ENTRY(ab_val, ib_val)	\
@@ -173,6 +183,62 @@ u32 mdss_mdp_fb_stride(u32 fb_index, u32 xres, int bpp)
 		return xres * bpp;
 }
 
+static void mdss_irq_mask(struct irq_data *data)
+{
+	struct mdss_data_type *mdata = irq_data_get_irq_chip_data(data);
+	unsigned long irq_flags;
+
+	if (!mdata)
+		return;
+
+	pr_debug("irq_domain_mask %lu\n", data->hwirq);
+
+	if (data->hwirq < 32) {
+		spin_lock_irqsave(&mdp_lock, irq_flags);
+		mdata->mdss_util->disable_irq(&mdss_misc_hw);
+		spin_unlock_irqrestore(&mdp_lock, irq_flags);
+	}
+}
+
+static void mdss_irq_unmask(struct irq_data *data)
+{
+	struct mdss_data_type *mdata = irq_data_get_irq_chip_data(data);
+	unsigned long irq_flags;
+
+	if (!mdata)
+		return;
+
+	pr_debug("irq_domain_unmask %lu\n", data->hwirq);
+
+	if (data->hwirq < 32) {
+		spin_lock_irqsave(&mdp_lock, irq_flags);
+		mdata->mdss_util->enable_irq(&mdss_misc_hw);
+		spin_unlock_irqrestore(&mdp_lock, irq_flags);
+	}
+}
+
+static struct irq_chip mdss_irq_chip = {
+	.name		= "mdss",
+	.irq_mask	= mdss_irq_mask,
+	.irq_unmask	= mdss_irq_unmask,
+};
+
+static int mdss_irq_domain_map(struct irq_domain *d,
+		unsigned int virq, irq_hw_number_t hw)
+{
+	struct mdss_data_type *mdata = d->host_data;
+	/* check here if virq is a valid interrupt line */
+	irq_set_chip_and_handler(virq, &mdss_irq_chip, handle_level_irq);
+	irq_set_chip_data(virq, mdata);
+	set_irq_flags(virq, IRQF_VALID);
+	return 0;
+}
+
+static struct irq_domain_ops mdss_irq_domain_ops = {
+	.map = mdss_irq_domain_map,
+	.xlate = irq_domain_xlate_onecell,
+};
+
 static irqreturn_t mdss_irq_handler(int irq, void *ptr)
 {
 	struct mdss_data_type *mdata = ptr;
@@ -191,19 +257,37 @@ static irqreturn_t mdss_irq_handler(int irq, void *ptr)
 		spin_lock(&mdp_lock);
 		mdata->mdss_util->irq_dispatch(MDSS_HW_MDP, irq, ptr);
 		spin_unlock(&mdp_lock);
+		intr &= ~MDSS_INTR_MDP;
 	}
 
-	if (intr & MDSS_INTR_DSI0)
+	if (intr & MDSS_INTR_DSI0) {
 		mdata->mdss_util->irq_dispatch(MDSS_HW_DSI0, irq, ptr);
+		intr &= ~MDSS_INTR_DSI0;
+	}
 
-	if (intr & MDSS_INTR_DSI1)
+	if (intr & MDSS_INTR_DSI1) {
 		mdata->mdss_util->irq_dispatch(MDSS_HW_DSI1, irq, ptr);
+		intr &= ~MDSS_INTR_DSI1;
+	}
 
-	if (intr & MDSS_INTR_EDP)
+	if (intr & MDSS_INTR_EDP) {
 		mdata->mdss_util->irq_dispatch(MDSS_HW_EDP, irq, ptr);
+		intr &= ~MDSS_INTR_EDP;
+	}
 
-	if (intr & MDSS_INTR_HDMI)
+	if (intr & MDSS_INTR_HDMI) {
 		mdata->mdss_util->irq_dispatch(MDSS_HW_HDMI, irq, ptr);
+		intr &= ~MDSS_INTR_HDMI;
+	}
+
+	/* route misc. interrupts to external drivers */
+	while (intr) {
+		irq_hw_number_t hwirq = fls(intr) - 1;
+
+		generic_handle_irq(irq_find_mapping(
+				mdata->irq_domain, hwirq));
+		intr &= ~(1 << hwirq);
+	}
 
 	mdss_mdp_hw.irq_info->irq_buzy = false;
 
@@ -1335,17 +1419,12 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 		set_bit(MDSS_QOS_OTLIM, mdata->mdss_qos_map);
 		break;
 	case MDSS_MDP_HW_REV_114:
-	case MDSS_MDP_HW_REV_115:
 	case MDSS_MDP_HW_REV_116:
 		mdata->max_target_zorder = 4; /* excluding base layer */
 		mdata->max_cursor_size = 128;
 		mdata->min_prefill_lines = 14;
-		mdata->has_ubwc =
-			(mdata->mdp_rev == MDSS_MDP_HW_REV_115) ?
-			false : true;
-		mdata->pixel_ram_size =
-			(mdata->mdp_rev == MDSS_MDP_HW_REV_115) ?
-			(16 * 1024) : (40 * 1024);
+		mdata->has_ubwc = true;
+		mdata->pixel_ram_size = 40 * 1024;
 		mdata->apply_post_scale_bytes = false;
 		mdata->hflip_buffer_reused = false;
 		set_bit(MDSS_QOS_OVERHEAD_FACTOR, mdata->mdss_qos_map);
@@ -1353,6 +1432,24 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 		set_bit(MDSS_QOS_PER_PIPE_LUT, mdata->mdss_qos_map);
 		set_bit(MDSS_QOS_SIMPLIFIED_PREFILL, mdata->mdss_qos_map);
 		set_bit(MDSS_CAPS_YUV_CONFIG, mdata->mdss_caps_map);
+		mdss_mdp_init_default_prefill_factors(mdata);
+		set_bit(MDSS_QOS_OTLIM, mdata->mdss_qos_map);
+		mdss_set_quirk(mdata, MDSS_QUIRK_DMA_BI_DIR);
+		mdss_set_quirk(mdata, MDSS_QUIRK_MIN_BUS_VOTE);
+		break;
+	case MDSS_MDP_HW_REV_115:
+		mdata->max_target_zorder = 4; /* excluding base layer */
+		mdata->max_cursor_size = 128;
+		mdata->min_prefill_lines = 14;
+		mdata->has_ubwc = false;
+		mdata->pixel_ram_size = 16 * 1024;
+		mdata->apply_post_scale_bytes = false;
+		mdata->hflip_buffer_reused = false;
+		set_bit(MDSS_QOS_CDP, mdata->mdss_qos_map);
+		set_bit(MDSS_QOS_PER_PIPE_LUT, mdata->mdss_qos_map);
+		set_bit(MDSS_QOS_SIMPLIFIED_PREFILL, mdata->mdss_qos_map);
+		set_bit(MDSS_CAPS_YUV_CONFIG, mdata->mdss_caps_map);
+		set_bit(MDSS_CAPS_MIXER_1_FOR_WB, mdata->mdss_caps_map);
 		mdss_mdp_init_default_prefill_factors(mdata);
 		set_bit(MDSS_QOS_OTLIM, mdata->mdss_qos_map);
 		mdss_set_quirk(mdata, MDSS_QUIRK_DMA_BI_DIR);
@@ -1944,6 +2041,20 @@ static int mdss_mdp_probe(struct platform_device *pdev)
 	}
 	mdss_mdp_hw.irq_info->irq = res->start;
 	mdss_mdp_hw.ptr = mdata;
+
+	/* export misc. interrupts to external driver */
+	mdata->irq_domain = irq_domain_add_linear(pdev->dev.of_node, 32,
+			&mdss_irq_domain_ops, mdata);
+	if (!mdata->irq_domain) {
+		pr_err("unable to add linear domain\n");
+		rc = -ENOMEM;
+		goto probe_done;
+	}
+
+	mdss_misc_hw.irq_info = mdss_intr_line();
+	rc = mdss_res->mdss_util->register_irq(&mdss_misc_hw);
+	if (rc)
+		pr_err("mdss_register_irq failed.\n");
 
 	/*populate hw iomem base info from device tree*/
 	rc = mdss_mdp_parse_dt(pdev);
