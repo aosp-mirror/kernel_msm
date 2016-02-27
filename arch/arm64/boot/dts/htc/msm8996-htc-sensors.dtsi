@@ -11,7 +11,7 @@
  */
 
 /*
- * msm8996-htc-nanohub: nanohub config
+ * msm8996-htc-sensors: sensor hub config
  */
 
 &i2c_6 {
@@ -58,15 +58,28 @@
 	};
 
 	sensorhub_ctrl {
-	/* NRST, BOOT0, AP2SH, SH2AP, SH2APNW */
+	/* NRST, BOOT0, AP2SH, SH2AP */
 		sensorhub_ctrl_active: sensorhub_ctrl_active {
 			mux {
-				pins = "gpio38", "gpio130", "gpio24", "gpio123", "gpio117";
+				pins = "gpio38", "gpio130", "gpio24", "gpio123";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio38", "gpio130", "gpio24", "gpio123", "gpio117";
+				pins = "gpio38", "gpio130", "gpio24", "gpio123";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		sensorhub_ctrl_sleep: sensorhub_ctrl_sleep {
+			mux {
+				pins = "gpio38", "gpio130", "gpio24", "gpio123";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio38", "gpio130", "gpio24", "gpio123";
 				drive-strength = <2>;
 				bias-disable;
 			};
@@ -106,38 +119,20 @@
 
 &spi_6 {
 	sensorhub@0 {
-		compatible = "nanohub";
+		compatible = "contexthub,spich";
 		reg = <0>;
 		spi-max-frequency = <50000000>;
 		spi-cpol;
 		spi-cpha;
 
-		interrupt-parent = <&tlmm>;
-		interrupts = <123 0x2>;
-		sensorhub,nreset-gpio = <&tlmm 38 0x00>;
-		sensorhub,boot0-gpio = <&tlmm 130 0x00>;
-		sensorhub,wakeup-gpio = <&tlmm 24 0x00>;
-		sensorhub,irq1-gpio = <&tlmm 123 0x00>;
-		sensorhub,irq2-gpio = <&tlmm 117 0x00>;
-		sensorhub,spi-cs-gpio = <&tlmm 27 0x00>;
-		sensorhub,bl-addr = <0x08000000>;
-		sensorhub,kernel-addr = <0x0800C000>;
-		sensorhub,shared-addr = <0x08040000>;
-		sensorhub,flash-banks = <0 0x08000000 0x04000>,
-			<3 0x0800C000 0x04000>,
-			<4 0x08010000 0x10000>,
-			<5 0x08020000 0x20000>;
-		sensorhub,num-flash-banks = <4>;
-		sensorhub,shared-flash-banks = <6 0x08040000 0x20000>,
-			<7 0x08060000 0x20000>,
-			<8 0x08080000 0x20000>,
-			<9 0x080A0000 0x20000>,
-			<10 0x080C0000 0x20000>,
-			<11 0x080E0000 0x20000>;
-		sensorhub,num-shared-flash-banks = <6>;
+		contexthub,ap2sh = <&tlmm 24 0x00>;
+		contexthub,sh2ap = <&tlmm 123 0x00>;
+		contexthub,nrst = <&tlmm 38 0x00>;
+		contexthub,boot0 = <&tlmm 130 0x00>;
 
-		pinctrl-names = "default";
+		pinctrl-names = "active", "sleep";
 		pinctrl-0 = <&sensorhub_ctrl_active>;
+		pinctrl-1 = <&sensorhub_ctrl_sleep>;
 	};
 };
 
