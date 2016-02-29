@@ -1891,6 +1891,22 @@ static irqreturn_t wcd_mbhc_mech_plug_detect_irq(int irq, void *data)
 	struct wcd_mbhc *mbhc = data;
 
 	pr_info("%s: enter\n", __func__); //HTC_AUD
+
+/* HTC_AUD_START */
+	if (mbhc->mbhc_cfg->puart_handle) {
+		struct uart_cable_pin_t *p_handler = mbhc->mbhc_cfg->puart_handle;
+		if (p_handler->uart_disable_mbhc_en && p_handler->uart_struct_initd) {
+			if (p_handler->uart_cable_ins || \
+				gpio_get_value(p_handler->uart_notify_gpio)) {
+				if (mbhc->mbhc_cb->mbhc_disable)
+					mbhc->mbhc_cb->mbhc_disable(mbhc->codec);
+				pr_info("uart inserted, by pass\n");
+				return IRQ_HANDLED;
+			}
+		}
+	}
+/* HTC_AUD_END */
+
 	if (unlikely((mbhc->mbhc_cb->lock_sleep(mbhc, true)) == false)) {
 		pr_warn("%s: failed to hold suspend\n", __func__);
 		r = IRQ_NONE;
@@ -2416,6 +2432,23 @@ static int wcd_mbhc_initialise(struct wcd_mbhc *mbhc)
 
 	init_completion(&mbhc->btn_press_compl);
 
+/* HTC_AUD_START */
+	if (mbhc->mbhc_cfg->puart_handle) {
+		struct uart_cable_pin_t *p_handler = mbhc->mbhc_cfg->puart_handle;
+
+		if (p_handler->uart_disable_mbhc_en && \
+			p_handler->uart_struct_initd) {
+
+			if (p_handler->uart_cable_ins || \
+				gpio_get_value(p_handler->uart_notify_gpio)) {
+				if (mbhc->mbhc_cb->mbhc_disable)
+					mbhc->mbhc_cb->mbhc_disable(codec);
+				pr_info("%s: uart insert, disable mbhc\n", __func__);
+			}
+		}
+	}
+/* HTC_AUD_END */
+
 	WCD_MBHC_RSC_UNLOCK(mbhc);
 	pr_debug("%s: leave\n", __func__);
 	return ret;
@@ -2571,7 +2604,18 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc,
 	pr_debug("%s: enter\n", __func__);
 	/* update the mbhc config */
 	mbhc->mbhc_cfg = mbhc_cfg;
-
+/* HTC_AUD_START */
+	if (mbhc_cfg->puart_handle) {
+		struct uart_cable_pin_t *p_handler = mbhc_cfg->puart_handle;
+		if (p_handler->uart_disable_mbhc_en && p_handler->uart_struct_initd) {
+			if (p_handler->uart_cable_ins || \
+				gpio_get_value(p_handler->uart_notify_gpio)) {
+				pr_info("skip mbhc start due to uart\n");
+				return 0;
+			}
+		}
+	}
+/* HTC_AUD_END */
 	/* Set btn key code */
 	if ((!mbhc->is_btn_already_regd) && wcd_mbhc_set_keycode(mbhc))
 		pr_err("Set btn key code error!!!\n");

@@ -1999,6 +1999,7 @@ static const struct wcd_mbhc_cb mbhc_cb = {
 	.compute_impedance = tasha_wcd_mbhc_calc_impedance,
 	.mbhc_gnd_det_ctrl = tasha_mbhc_gnd_det_ctrl,
 	.hph_pull_down_ctrl = tasha_mbhc_hph_pull_down_ctrl,
+	.mbhc_disable = tasha_mbhc_disable, /* HTC_AUD */
 };
 
 static int tasha_get_anc_slot(struct snd_kcontrol *kcontrol,
@@ -13157,6 +13158,20 @@ ret:
 	pr_debug("%s: codec is %d\n", __func__, codec_ver);
 }
 EXPORT_SYMBOL(tasha_get_codec_ver);
+
+/* HTC_AUD_START */
+void tasha_mbhc_disable(struct snd_soc_codec *codec)
+{
+	tasha_mbhc_mbhc_bias_control(codec, false);
+	snd_soc_update_bits(codec, WCD9335_ANA_MBHC_MECH,
+			    0x80, 0x00);
+
+	snd_soc_update_bits(codec, WCD9335_ANA_MICB2,
+			    0xc0, 0x00);
+
+}
+EXPORT_SYMBOL(tasha_mbhc_disable);
+/* HTC_AUD_END */
 
 static int tasha_probe(struct platform_device *pdev)
 {

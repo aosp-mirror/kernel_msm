@@ -427,6 +427,9 @@ static struct wcd_mbhc_config wcd_mbhc_cfg = {
 	.mbhc_micbias = MIC_BIAS_2,
 	.anc_micbias = MIC_BIAS_2,
 	.enable_anc_mic_detect = false,
+/* HTC_AUD_START */
+	.puart_handle = NULL,
+/* HTC_AUD_END */
 };
 #endif
 
@@ -3514,6 +3517,21 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 				__func__, err);
 			goto out;
 		}
+
+/* HTC_AUD_START */
+		if (wcd_mbhc_cfg.puart_handle) {
+			struct uart_cable_pin_t *p_handler = wcd_mbhc_cfg.puart_handle;
+			p_handler->codec = codec;
+			if (p_handler->uart_disable_mbhc_en && \
+				p_handler->uart_struct_initd) {
+				if (p_handler->uart_cable_ins || \
+					gpio_get_value(p_handler->uart_notify_gpio)) {
+					pr_info("%s:disable mbhc\n", __func__);
+					tasha_mbhc_disable(codec);
+				}
+			}
+		}
+/* HTC_AUD_END */
 	} else {
 		pr_err("%s: mbhc_cfg calibration is NULL\n", __func__);
 		err = -ENOMEM;
@@ -5616,6 +5634,90 @@ static void htc_card_det(struct work_struct *work)
 	BUG();
 #endif
 }
+
+static int uart_pin_init(struct pinctrl *pinctrl)
+{
+	struct pinctrl_state *set_state;
+	int retval;
+
+	set_state = pinctrl_lookup_state(pinctrl, "uart_notify_gpio");
+	if (IS_ERR(set_state)) {
+		pr_err("cannot get pinctrl state\n");
+		return PTR_ERR(set_state);
+	}
+
+	retval = pinctrl_select_state(pinctrl, set_state);
+	if (retval) {
+		pr_err("cannot set pinctrl gpio state\n");
+		return retval;
+	}
+	pr_info("uart_gpios_init done\n");
+	return 0;
+}
+
+static int uart_debug_request_irq(unsigned int gpio, unsigned int *irq,
+			       irq_handler_t handler, unsigned long flags,
+			       const char *name, unsigned int wake, void *private_data)
+{
+	int ret = 0;
+
+	ret = gpio_request(gpio, name);
+	if (ret < 0)
+		return ret;
+
+	ret = gpio_direction_input(gpio);
+	if (ret < 0) {
+		gpio_free(gpio);
+		return ret;
+	}
+
+	if (!(*irq)) {
+		ret = gpio_to_irq(gpio);
+		if (ret < 0) {
+			gpio_free(gpio);
+			return ret;
+		}
+		pr_info("gpio_to_irq ret = %d\n", ret);
+		*irq = (unsigned int) ret;
+	}
+
+	ret = request_threaded_irq(*irq, NULL, handler, flags, name, private_data);
+	if (ret < 0) {
+		gpio_free(gpio);
+		return ret;
+	}
+
+	ret = irq_set_irq_wake(*irq, wake);
+	if (ret < 0) {
+		free_irq(*irq, 0);
+		gpio_free(gpio);
+		return ret;
+	}
+
+	return 1;
+}
+
+static irqreturn_t uart_insert_irq_handler(int irq, void *data)
+{
+	struct uart_cable_pin_t *p_handler = (struct uart_cable_pin_t *)data;
+
+	pr_info("%s\n", __func__);
+	if (p_handler) {
+		if (p_handler->uart_disable_mbhc_en && \
+			p_handler->uart_struct_initd) {
+			p_handler->uart_cable_ins = true;
+			disable_irq_nosync(irq);
+			if (p_handler->codec) {
+				tasha_mbhc_hs_detect_exit(p_handler->codec);
+				tasha_mbhc_disable(p_handler->codec);
+				pr_info("%s: disable mbhc\n", __func__);
+			}
+
+		}
+	}
+
+	return IRQ_HANDLED;
+}
 //HTC_AUD_END
 
 static int msm8996_asoc_machine_probe(struct platform_device *pdev)
@@ -5627,6 +5729,7 @@ static int msm8996_asoc_machine_probe(struct platform_device *pdev)
 	const struct of_device_id *match;
 	int ret;
 	int tfa9888_dev = 0; //HTC_AUD
+	struct pinctrl *uart_notify_pinctrl = NULL; /* HTC_AUD */
 
 //HTC_AUD_START
 	if((apr_get_q6_state() == APR_SUBSYS_LOADED) && card_reg == -1) {
@@ -5647,6 +5750,67 @@ static int msm8996_asoc_machine_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Can't allocate msm8996_asoc_mach_data\n");
 		return -ENOMEM;
 	}
+
+/* HTC_AUD_START */
+	uart_notify_pinctrl = devm_pinctrl_get(&pdev->dev);
+	if (IS_ERR(uart_notify_pinctrl)) {
+		pr_info("Target does not have pinctrl\n");
+	}
+
+	if (uart_notify_pinctrl) {
+		ret = uart_pin_init(uart_notify_pinctrl);
+		if (ret) {
+			pr_info("uart gpios init fail\n");
+		}
+	}
+
+	if (wcd_mbhc_cfg.puart_handle == NULL) {
+		wcd_mbhc_cfg.puart_handle = kzalloc(sizeof(struct uart_cable_pin_t), GFP_KERNEL);
+
+		if (wcd_mbhc_cfg.puart_handle == NULL) {
+			dev_err(&pdev->dev, "Can't allocate uart work\n");
+			return -ENOMEM;
+		}
+	}
+
+	wcd_mbhc_cfg.puart_handle->uart_disable_mbhc_en =
+			of_property_read_bool(pdev->dev.of_node, "aud,uart-disable-mbhc");
+
+	if (wcd_mbhc_cfg.puart_handle->uart_disable_mbhc_en) {
+
+		if (!wcd_mbhc_cfg.puart_handle->uart_struct_initd) {
+			struct uart_cable_pin_t *p_handler = wcd_mbhc_cfg.puart_handle;
+
+			p_handler->uart_notify_gpio = of_get_named_gpio(pdev->dev.of_node, "uart-notify-gpio", 0);
+
+			if (gpio_is_valid(p_handler->uart_notify_gpio)) {
+
+				p_handler->uart_irq_trigger_type = IRQF_TRIGGER_HIGH | IRQF_ONESHOT;
+				pr_info("%s:low trigfger\n", __func__);
+				ret = uart_debug_request_irq(p_handler->uart_notify_gpio, \
+						&p_handler->uart_notify_irq, uart_insert_irq_handler, \
+						p_handler->uart_irq_trigger_type, \
+						"UART_INSERT_NOTIFY", 1, p_handler);
+				if (ret < 0) {
+					pr_err("Failed to request uart notify IRQ (0x%X)\n", ret);
+					return -EINVAL;
+				}
+				disable_irq(p_handler->uart_notify_irq);
+
+				pr_info("init enable irq gpio = %s\n", \
+					gpio_get_value(p_handler->uart_notify_gpio)?"high":"low");
+
+				wcd_mbhc_cfg.puart_handle->uart_struct_initd = true;
+				enable_irq(p_handler->uart_notify_irq);
+			} else {
+				pr_err("invalid uart notigy gpio\n");
+				return -EINVAL;
+			}
+		}
+	} else {
+		pr_info("aud,uart-disable-mbhc is not set\n");
+	}
+/* HTC_AUD_END */
 
 	card = populate_snd_card_dailinks(&pdev->dev);
 	if (!card) {

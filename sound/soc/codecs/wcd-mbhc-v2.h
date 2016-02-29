@@ -242,6 +242,18 @@ struct wcd_mbhc_moisture_cfg {
 	enum mbhc_hs_pullup_iref m_iref_ctl;
 };
 
+/* HTC_AUD_START */
+struct uart_cable_pin_t {
+	unsigned int uart_notify_gpio;
+	unsigned int uart_notify_irq;
+	unsigned int uart_irq_trigger_type;
+	bool uart_disable_mbhc_en;
+	bool uart_cable_ins;
+	bool uart_struct_initd;
+	struct snd_soc_codec *codec;
+};
+/* HTC_AUD_END */
+
 struct wcd_mbhc_config {
 	bool read_fw_bin;
 	void *calibration;
@@ -256,6 +268,7 @@ struct wcd_mbhc_config {
 	int mbhc_micbias;
 	int anc_micbias;
 	bool enable_anc_mic_detect;
+	struct uart_cable_pin_t *puart_handle; /* HTC_AUD */
 };
 
 struct wcd_mbhc_intr {
@@ -363,6 +376,7 @@ struct wcd_mbhc_cb {
 	int (*mbhc_micb_ctrl_thr_mic)(struct snd_soc_codec *, int, bool);
 	void (*mbhc_gnd_det_ctrl)(struct snd_soc_codec *, bool);
 	void (*hph_pull_down_ctrl)(struct snd_soc_codec *, bool);
+	void (*mbhc_disable)(struct snd_soc_codec *); /* HTC_AUD */
 };
 
 struct wcd_mbhc {
