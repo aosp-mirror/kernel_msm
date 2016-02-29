@@ -24,3 +24,22 @@
 	qcom,msm-id = <419 0x30001>;
 	qcom,board-id = <1 0>;
 };
+
+&soc {
+	tlmm: pinctrl@01010000 {
+		uart_notify_gpio: uart_notify_gpio {
+			config {
+				pins = "gpio118";
+				drive-strength = <2>;
+				bias-disable;   // NO PULL
+			};
+		};
+	};
+
+	sound-9335 {
+		uart-notify-gpio = <&tlmm 118 0>;
+		aud,uart-disable-mbhc;
+
+	};
+
+};

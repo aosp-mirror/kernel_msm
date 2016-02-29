@@ -236,6 +236,15 @@
 				};
 			};
 		};
+
+		uart_notify_gpio: uart_notify_gpio {
+			config {
+				pins = "gpio73";
+				drive-strength = <2>;
+				bias-disable;   // NO PULL
+			};
+		};
+
 	};
 
 	slim_msm: slim@91c0000 {
@@ -250,6 +259,9 @@
 	sound-9335 {
 		qcom,model = "msm8996-tasha-t50-snd-card";
 		compatible = "qcom,msm8996-asoc-snd-tasha";
+
+		pinctrl-names = "uart_notify_gpio";
+		pinctrl-0 = <&uart_notify_gpio>;
 
 		qcom,audio-routing =
 			"AIF4 VI", "MCLK",

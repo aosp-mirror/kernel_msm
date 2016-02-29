@@ -25,3 +25,12 @@
 	qcom,msm-id = <419 0x30001>;
 	qcom,board-id = <2 0>;
 };
+
+&soc {
+	sound-9335 {
+		uart-notify-gpio = <&tlmm 73 0>;
+		aud,uart-disable-mbhc;
+
+	};
+
+};
