@@ -1074,16 +1074,6 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 		pr_debug("%s: stream_id %d bits_per_sample %d\n",
 				__func__, ac->stream_id, bits_per_sample);
 
-//HTC_AUD_START
-		if(prtd->sample_rate > 48000) {
-			pr_info("%s: HD audio, set popp to HTC_POPP_HD_TOPOLOGY\n",__func__);
-			ac->topology = HTC_POPP_HD_TOPOLOGY;
-		} else {
-			pr_info("%s: non-HD audio, set popp to HTC_POPP_TOPOLOGY\n",__func__);
-			ac->topology = HTC_POPP_TOPOLOGY;
-		}
-//HTC_AUD_END
-
 		ret = q6asm_stream_open_write_v2(ac,
 				prtd->codec, bits_per_sample,
 				ac->stream_id,
