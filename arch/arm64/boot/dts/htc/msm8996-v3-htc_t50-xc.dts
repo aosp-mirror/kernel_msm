@@ -18,6 +18,7 @@
 #include "../qcom/msm8996-mtp.dtsi"
 #include "msm8996-htc_t50.dtsi"
 #include "msm8996-btwifi-t50-evm.dtsi"
+#include "msm8996-htc-nanohub.dtsi"
 
 / {
 	model = "HTC Corporation. MSM8996 v3 + PMI8996 T50 XC";

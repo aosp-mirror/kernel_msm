@@ -13,7 +13,6 @@
 
 #include "msm8996-htc-common.dtsi"
 #include "msm8996-htc-regulator.dtsi"
-#include "msm8996-htc-nanohub.dtsi"
 #include "dsi-panel-t50-hx8396c2.dtsi"
 #include "dsi-panel-t50.dtsi"
 #include "msm8996-touch-t50.dtsi"
