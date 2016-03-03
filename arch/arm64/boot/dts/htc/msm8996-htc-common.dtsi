@@ -16,9 +16,25 @@
 
         reserved-memory {
 		htc_reserve_region: htc_reserve_region@0 {
-			compatible = "removed-dma-pool";
-			no-map;
-			reg = <0 0x83600000 0 0x00A00000>;
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+
+			htc_reserve1_mem: htc_reserve1_region@0 {
+				compatible = "removed-dma-pool";
+				no-map;
+				reg = <0 0x83600000 0 0x00100000>;
+			};
+			msm_rtb_mem: msm_rtb_region@0 {
+				compatible = "removed-dma-pool";
+				no-map;
+				reg = <0 0x83700000 0 0x00100000>;
+			};
+			htc_reserve2_mem: htc_reserve2_region@0 {
+				compatible = "removed-dma-pool";
+				no-map;
+				reg = <0 0x83800000 0 0x00800000>;
+			};
 		};
 
 		ramoops_mem: ramoops_region@0 {
@@ -50,6 +66,11 @@
 		android,ramoops-ftrace-size = <0x00020000>;
 		android,ramoops-dump-oops = <0x1>;
 		linux,contiguous-region = <&ramoops_mem>;
+	};
+
+	qcom,msm-rtb {
+		linux,contiguous-region = <&msm_rtb_mem>;
+		memory-region = <&msm_rtb_mem>;
 	};
 };
 
