@@ -4973,6 +4973,7 @@ static struct snd_soc_dai_link msm8996_common_be_dai_links[] = {
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
 		.be_hw_params_fixup = msm_quat_mi2s_rx_be_hw_params_fixup,
 		.init = &msm_htc_quat_mi2s_init, /* htc audio */
+		.ignore_pmdown_time = 1, /* htc audio */
 		.ops = &msm8996_quat_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},

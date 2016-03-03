@@ -219,7 +219,7 @@ static void set_rcv_on(bool enable)
 		set_tfa_bit(0, 0x00, 0x54, 0x00); /* set bit 2-4-6 as 0 */
 		set_tfa_bit(0, 0x00, 0x03, 0x01); /* set bit 0-1 as 0 */
 		set_tfa_bit(0, 0x10, 0x00, 0x02); /* set bit 12 as 0 */
-		set_tfa_bit(0, 0x00, 0x40, 0x05); /* set bit 6 as 0 */
+		set_tfa_bit(0, 0x00, 0x42, 0x05); /* set bit 1, 6 as 0 */
 
 		/* enable STGAIN = 425, default = 351 */
 		set_tfa_value(0x03, 0x52, 0x0D);
@@ -239,7 +239,7 @@ static void set_rcv_on(bool enable)
 		set_tfa_bit(1, 0x00, 0x44, 0x00); /* set bit 2-6 as 1 */
 		set_tfa_bit(1, 0x00, 0x03, 0x01); /* set bit 0-1 as 1 */
 		set_tfa_bit(1, 0x10, 0x00, 0x02); /* set bit 12 as 1 */
-		set_tfa_bit(1, 0x00, 0x40, 0x05); /* set bit 6 as 1 */
+		set_tfa_bit(1, 0x00, 0x42, 0x05); /* set bit 1, 6 as 1 */
 
 		/* enable STGAIN = 425, default = 351 */
 		set_tfa_value(0x02, 0xBE, 0x0D);
