@@ -283,7 +283,7 @@ static int msm_rtb_probe(struct platform_device *pdev)
 	/* Round this down to a power of 2 */
 	msm_rtb.nentries = __rounddown_pow_of_two(msm_rtb.nentries);
 
-	memset(msm_rtb.rtb, 0, msm_rtb.size);
+	memset_io(msm_rtb.rtb, 0, msm_rtb.size);
 
 
 #if defined(CONFIG_MSM_RTB_SEPARATE_CPUS)
