@@ -17,6 +17,7 @@
 #include "msm8996-touch-m1.dtsi"
 #include "msm8996-key-t50.dtsi"
 #include "msm8996-htc-fingerprint.dtsi"
+#include "msm8996-htc-led.dtsi"
 #include "dsi-panel-s1m1-ea8064tg.dtsi"
 #include "dsi-panel-s1m1-s6e3ha3.dtsi"
 #include "dsi-panel-t50.dtsi"
