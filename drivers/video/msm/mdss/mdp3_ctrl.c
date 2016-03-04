@@ -1175,11 +1175,12 @@ static int mdp3_overlay_queue_buffer(struct msm_fb_data_type *mfd,
 		pr_err("fail to get overlay buffer\n");
 		return rc;
 	}
-
 	if (data.len < dma->source_config.stride * dma->source_config.height) {
+#if 0 /* temporary block */
 		pr_err("buf size(0x%lx) is smaller than dma config(0x%x)\n",
 			data.len, (dma->source_config.stride *
 			dma->source_config.height));
+#endif
 		mdp3_put_img(&data, MDP3_CLIENT_DMA_P);
 		return -EINVAL;
 	}
@@ -2518,8 +2519,10 @@ static int mdp3_ctrl_ioctl_handler(struct msm_fb_data_type *mfd,
 		rc = copy_from_user(&ov_data, argp, sizeof(ov_data));
 		if (!rc)
 			rc = mdp3_overlay_play(mfd, &ov_data);
+#if 0 /* temporary block */
 		if (rc)
 			pr_err("OVERLAY_PLAY failed (%d)\n", rc);
+#endif
 		break;
 	case MSMFB_OVERLAY_PREPARE:
 		rc = mdp3_overlay_prepare(mfd, argp);
