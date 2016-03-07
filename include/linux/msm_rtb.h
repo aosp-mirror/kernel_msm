@@ -28,6 +28,10 @@ enum logk_event_type {
 	LOGK_L2CPREAD = 7,
 	LOGK_L2CPWRITE = 8,
 	LOGK_IRQ = 9,
+	/* HTC DEFINE: START FROM 20 */
+	LOGK_DIE = 20,
+	LOGK_INITCALL = 21,
+	LOGK_SOFTIRQ = 22,
 };
 
 #define LOGTYPE_NOPC 0x80

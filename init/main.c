@@ -78,6 +78,7 @@
 #include <linux/context_tracking.h>
 #include <linux/random.h>
 #include <linux/list.h>
+#include <linux/msm_rtb.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -786,10 +787,12 @@ int __init_or_module do_one_initcall(initcall_t fn)
 	if (initcall_blacklisted(fn))
 		return -EPERM;
 
+	uncached_logk_pc(LOGK_INITCALL, (void*) fn, (void*) 0);
 	if (initcall_debug)
 		ret = do_one_initcall_debug(fn);
 	else
 		ret = fn();
+	uncached_logk_pc(LOGK_INITCALL, (void*) fn, (void*)-1);
 
 	msgbuf[0] = 0;
 

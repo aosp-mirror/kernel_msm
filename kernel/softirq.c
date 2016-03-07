@@ -26,6 +26,7 @@
 #include <linux/smpboot.h>
 #include <linux/tick.h>
 #include <linux/irq.h>
+#include <linux/msm_rtb.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/irq.h>
@@ -266,7 +267,9 @@ restart:
 		kstat_incr_softirqs_this_cpu(vec_nr);
 
 		trace_softirq_entry(vec_nr);
+		uncached_logk_pc(LOGK_SOFTIRQ, (void*) h->action, (void*) 0);
 		h->action(h);
+		uncached_logk_pc(LOGK_SOFTIRQ, (void*) h->action, (void*)-1);
 		trace_softirq_exit(vec_nr);
 		if (unlikely(prev_count != preempt_count())) {
 			pr_err("huh, entered softirq %u %s %p with preempt_count %08x, exited with %08x?\n",

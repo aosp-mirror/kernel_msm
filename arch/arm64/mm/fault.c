@@ -29,6 +29,7 @@
 #include <linux/sched.h>
 #include <linux/highmem.h>
 #include <linux/perf_event.h>
+#include <linux/msm_rtb.h>
 
 #include <asm/cpufeature.h>
 #include <asm/exception.h>
@@ -96,6 +97,9 @@ static void __do_kernel_fault(struct mm_struct *mm, unsigned long addr,
 	if (fixup_exception(regs))
 		return;
 
+	uncached_logk(LOGK_DIE, (void *)regs->pc);
+	uncached_logk(LOGK_DIE, (void *)regs->regs[30]);
+	uncached_logk(LOGK_DIE, (void *)addr);
 	/*
 	 * No handler, we'll have to terminate things with extreme prejudice.
 	 */
