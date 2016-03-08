@@ -17,6 +17,9 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/of_address.h>
+#include <linux/kdebug.h>
+#include <linux/notifier.h>
+#include <linux/kallsyms.h>
 
 #include <soc/qcom/restart.h>
 
@@ -71,13 +74,42 @@ static inline void set_restart_reason(unsigned int reason)
 	mb();
 }
 
+static struct die_args *tombstone = NULL;
+
+int die_notify(struct notifier_block *self,
+				       unsigned long val, void *data)
+{
+	static struct die_args args;
+	memcpy(&args, data, sizeof(args));
+	tombstone = &args;
+	pr_debug("saving oops: %p\n", (void*) tombstone);
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block die_nb = {
+	.notifier_call = die_notify,
+};
+
 static int panic_restart_action(struct notifier_block *this, unsigned long event, void *ptr)
 {
 	char kernel_panic_msg[MAX_SZ_DIAG_ERR_MSG] = "Kernel Panic";
-	/* ptr is a buffer declared in panic function. It's never be NULL.
-	   Reserve one space for trailing zero.
-	*/
-	if (ptr)
+
+	if (tombstone) { /* tamper the panic message for Oops */
+		char pc_symn[KSYM_NAME_LEN] = "<unknown>";
+		char lr_symn[KSYM_NAME_LEN] = "<unknown>";
+
+#if defined(CONFIG_ARM)
+		sprint_symbol(pc_symn, tombstone->regs->ARM_pc);
+		sprint_symbol(lr_symn, tombstone->regs->ARM_lr);
+#elif defined(CONFIG_ARM64)
+		sprint_symbol(pc_symn, tombstone->regs->pc);
+		sprint_symbol(lr_symn, tombstone->regs->regs[30]);
+#endif
+
+		snprintf(kernel_panic_msg, rst_msg_size - 1,
+				"KP: %s PC:%s LR:%s",
+				current->comm, pc_symn, lr_symn);
+	} else
 		snprintf(kernel_panic_msg, rst_msg_size - 1, "KP: %s", (char *)ptr);
 	set_restart_to_ramdump(kernel_panic_msg);
 
@@ -180,6 +212,7 @@ int htc_restart_handler_init(void)
 	set_restart_reason(RESTART_REASON_RAMDUMP);
 	set_restart_msg("Unknown");
 
+	register_die_notifier(&die_nb);
 	atomic_notifier_chain_register(&panic_notifier_list, &panic_blk);
 
 	return ret;
