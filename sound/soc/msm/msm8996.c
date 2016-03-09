@@ -5756,9 +5756,7 @@ static int msm8996_asoc_machine_probe(struct platform_device *pdev)
 	uart_notify_pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR(uart_notify_pinctrl)) {
 		pr_info("Target does not have pinctrl\n");
-	}
-
-	if (uart_notify_pinctrl) {
+	} else {
 		ret = uart_pin_init(uart_notify_pinctrl);
 		if (ret) {
 			pr_info("uart gpios init fail\n");
