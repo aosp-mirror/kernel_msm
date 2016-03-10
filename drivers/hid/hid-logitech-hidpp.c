@@ -659,6 +659,7 @@ static int hidpp_input_configured(struct hid_device *hdev,
 
 	if (hidpp->quirks & HIDPP_QUIRK_CLASS_WTP)
 		wtp_input_configured(hdev, hidinput);
+
 	return 0;
 }
 

@@ -1597,7 +1597,9 @@ static int clock_cpu_probe(struct platform_device *pdev)
 
 	vmin_en = of_property_read_bool(pdev->dev.of_node,
 						"qcom,enable-vmin");
-	if (pboost_freq > 0)
+
+	if ((of_property_read_bool(pdev->dev.of_node, "qcom,enable-boost"))
+		       && (pboost_freq > 0))
 		pboost_en = true;
 
 	rc = cpu_parse_devicetree(pdev);
@@ -1737,8 +1739,10 @@ static int clock_cpu_probe(struct platform_device *pdev)
 			cpumask_set_cpu(cpu, &a53_perf_clk.cpumask);
 	}
 
-	a53_pwr_clk.hw_low_power_ctrl = true;
-	a53_perf_clk.hw_low_power_ctrl = true;
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,enable-qos")) {
+		a53_pwr_clk.hw_low_power_ctrl = true;
+		a53_perf_clk.hw_low_power_ctrl = true;
+	}
 
 	debugfs_init(pdev);
 

@@ -55,9 +55,9 @@ enum mdss_iommu_domain_type {
 
 enum mdss_bus_vote_type {
 	VOTE_INDEX_DISABLE,
-	VOTE_INDEX_19_MHZ,
-	VOTE_INDEX_40_MHZ,
-	VOTE_INDEX_80_MHZ,
+	VOTE_INDEX_LOW,
+	VOTE_INDEX_MID,
+	VOTE_INDEX_HIGH,
 	VOTE_INDEX_MAX,
 };
 
@@ -334,6 +334,7 @@ struct mdss_data_type {
 	u32 curr_bw_uc_idx;
 	u32 ao_bw_uc_idx; /* active only idx */
 	struct msm_bus_scale_pdata *bus_scale_table;
+	struct msm_bus_scale_pdata *reg_bus_scale_table;
 	u32 max_bw_low;
 	u32 max_bw_high;
 	u32 max_bw_per_pipe;
@@ -463,7 +464,9 @@ extern struct mdss_data_type *mdss_res;
 struct irq_info {
 	u32 irq;
 	u32 irq_mask;
+	u32 irq_wake_mask;
 	u32 irq_ena;
+	u32 irq_wake_ena;
 	u32 irq_buzy;
 };
 
@@ -487,6 +490,8 @@ struct mdss_util_intf {
 	int (*register_irq)(struct mdss_hw *hw);
 	void (*enable_irq)(struct mdss_hw *hw);
 	void (*disable_irq)(struct mdss_hw *hw);
+	void (*enable_wake_irq)(struct mdss_hw *hw);
+	void (*disable_wake_irq)(struct mdss_hw *hw);
 	void (*disable_irq_nosync)(struct mdss_hw *hw);
 	int (*irq_dispatch)(u32 hw_ndx, int irq, void *ptr);
 	int (*get_iommu_domain)(u32 type);
@@ -498,6 +503,7 @@ struct mdss_util_intf {
 	int (*bus_scale_set_quota)(int client, u64 ab_quota, u64 ib_quota);
 	int (*panel_intf_status)(u32 disp_num, u32 intf_type);
 	struct mdss_panel_cfg* (*panel_intf_type)(int intf_val);
+	int (*dyn_clk_gating_ctrl)(int enable);
 };
 
 struct mdss_util_intf *mdss_get_util_intf(void);
