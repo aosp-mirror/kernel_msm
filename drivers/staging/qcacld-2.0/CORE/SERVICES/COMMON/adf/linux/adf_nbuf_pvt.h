@@ -89,6 +89,7 @@ struct cvg_nbuf_cb {
     struct {
         uint8_t packet_state;
         uint8_t packet_track;
+        uint8_t dp_trace;
     } trace;
 
     /*
@@ -216,6 +217,11 @@ struct cvg_nbuf_cb {
 #define NBUF_UPDATE_TX_PKT_COUNT(skb, PACKET_STATE) \
     adf_nbuf_set_state(skb, PACKET_STATE)
 
+#define ADF_NBUF_SET_DP_TRACE(skb, enable) \
+    (((struct cvg_nbuf_cb *)((skb)->cb))->trace.dp_trace \
+                                     = enable)
+#define ADF_NBUF_GET_DP_TRACE(skb) \
+    (((struct cvg_nbuf_cb *)((skb)->cb))->trace.dp_trace)
 
 #define __adf_nbuf_get_num_frags(skb)              \
     /* assume the OS provides a single fragment */ \

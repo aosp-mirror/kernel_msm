@@ -92,6 +92,7 @@ extern int process_wma_set_command(int sessid, int paramid,
 #include "wlan_hdd_trace.h"
 #include "vos_types.h"
 #include "vos_trace.h"
+#include "adf_trace.h"
 #include "wlan_hdd_cfg.h"
 #include <wlan_hdd_wowl.h>
 #include "wlan_hdd_tsf.h"
@@ -118,6 +119,8 @@ extern int process_wma_set_command(int sessid, int paramid,
 
 /* EID byte + length byte + four byte WiFi OUI */
 #define DOT11F_EID_HEADER_LEN (6)
+
+#define DUMP_DP_TRACE       0
 
 /*---------------------------------------------------------------------------
  *   Function definitions
@@ -2580,6 +2583,14 @@ static int __iw_softap_set_two_ints_getnone(struct net_device *dev,
                                            value[1], value[2], GEN_CMD);
         break;
 #endif
+    case QCSAP_IOCTL_DUMP_DP_TRACE_LEVEL:
+        hddLog(LOG1, "WE_DUMP_DP_TRACE: %d %d",
+            value[1], value[2]);
+        if (value[1] == DUMP_DP_TRACE)
+            adf_dp_trace_dump_all(value[2]);
+        else
+            hddLog(LOGE, "unexpected value for dump_dp_trace");
+        break;
     default:
         hddLog(LOGE, "%s: Invalid IOCTL command %d", __func__, sub_cmd);
         break;
@@ -6342,6 +6353,12 @@ static const struct iw_priv_args hostapd_private_args[] = {
        0,
        "setsapchannels" },
 
+   /* handlers for sub-ioctl */
+   {  WE_SET_DP_TRACE,
+      IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 3,
+      0,
+      "set_dp_trace" },
+
    /* handlers for main ioctl */
    {   QCSAP_IOCTL_PRIV_SET_VAR_INT_GET_NONE,
        IW_PRIV_TYPE_INT | MAX_VAR_ARGS,
@@ -6459,6 +6476,11 @@ static const struct iw_priv_args hostapd_private_args[] = {
     {   QCASAP_SET_RADAR_DBG,
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
         0,  "setRadarDbg" },
+
+    /* dump dp trace - descriptor or dp trace records */
+    {   QCSAP_IOCTL_DUMP_DP_TRACE_LEVEL,
+        IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 2,
+        0, "dump_dp_trace" },
 };
 
 static const iw_handler hostapd_private[] = {

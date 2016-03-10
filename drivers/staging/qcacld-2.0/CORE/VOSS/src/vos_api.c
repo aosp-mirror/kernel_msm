@@ -73,6 +73,7 @@
 
 #include "sapApi.h"
 #include "vos_trace.h"
+#include "adf_trace.h"
 
 
 
@@ -177,6 +178,7 @@ VOS_STATUS vos_preOpen ( v_CONTEXT_t *pVosContext )
    #endif
    vos_register_debugcb_init();
 
+   adf_dp_trace_init();
    return VOS_STATUS_SUCCESS;
 
 } /* vos_preOpen()*/
