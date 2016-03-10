@@ -371,6 +371,7 @@ HIFSend_head(HIF_DEVICE *hif_device,
         return A_ERROR;
     }
 
+    NBUF_UPDATE_TX_PKT_COUNT(nbuf, NBUF_TX_PKT_HIF);
     status = CE_sendlist_send(ce_hdl, nbuf, &sendlist, transfer_id);
     A_ASSERT(status == A_OK);
 

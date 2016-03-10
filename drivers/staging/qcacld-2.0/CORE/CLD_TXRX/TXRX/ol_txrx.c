@@ -2706,6 +2706,9 @@ void ol_txrx_display_stats(struct ol_txrx_pdev_t *pdev, uint16_t value)
         case WLAN_TXRX_STATS:
             ol_txrx_stats_display(pdev);
             break;
+        case WLAN_TXRX_DESC_STATS:
+            adf_nbuf_tx_desc_count_display();
+            break;
 #ifdef CONFIG_HL_SUPPORT
         case WLAN_SCHEDULER_STATS:
             ol_tx_sched_cur_state_display(pdev);
@@ -2740,6 +2743,9 @@ void ol_txrx_clear_stats(struct ol_txrx_pdev_t *pdev, uint16_t value)
     {
         case WLAN_TXRX_STATS:
             ol_txrx_stats_clear(pdev);
+            break;
+        case WLAN_TXRX_DESC_STATS:
+            adf_nbuf_tx_desc_count_clear();
             break;
 #ifdef CONFIG_HL_SUPPORT
         case WLAN_SCHEDULER_STATS:

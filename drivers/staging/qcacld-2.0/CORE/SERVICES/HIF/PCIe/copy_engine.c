@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014,2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -422,6 +422,8 @@ CE_sendlist_send(struct CE_handle *copyeng,
                                 (CE_addr_t)item->data, item->u.nbytes,
                                 transfer_id, item->flags);
         A_ASSERT(status == A_OK);
+        NBUF_UPDATE_TX_PKT_COUNT((adf_nbuf_t)per_transfer_context,
+                              NBUF_TX_PKT_CE);
     } else {
         /*
          * Probably not worth the additional complexity to support

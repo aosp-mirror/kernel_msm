@@ -175,6 +175,8 @@ ol_tx_vdev_ll_pause_queue_send_base(struct ol_txrx_vdev_t *vdev)
                 vdev->ll_pause.txq.tail = NULL;
             }
             adf_nbuf_set_next(tx_msdu, NULL);
+            NBUF_UPDATE_TX_PKT_COUNT(tx_msdu,
+                        NBUF_TX_PKT_TXRX_DEQUEUE);
             tx_msdu = ol_tx_ll(vdev, tx_msdu);
             /*
              * It is unexpected that ol_tx_ll would reject the frame,
@@ -215,6 +217,7 @@ ol_tx_vdev_pause_queue_append(
             vdev->ll_pause.txq.depth < vdev->ll_pause.max_q_depth)
     {
         adf_nbuf_t next = adf_nbuf_next(msdu_list);
+        NBUF_UPDATE_TX_PKT_COUNT(msdu_list, NBUF_TX_PKT_TXRX_ENQUEUE);
 
         vdev->ll_pause.txq.depth++;
         if (!vdev->ll_pause.txq.head) {
@@ -1176,7 +1179,7 @@ ol_txrx_mgmt_send(
     tx_desc->pkt_type = type + OL_TXRX_MGMT_TYPE_BASE;
 
     if (pdev->cfg.is_high_latency) {
-	struct ol_tx_frms_queue_t *txq;
+        struct ol_tx_frms_queue_t *txq;
         /*
          * 1.  Look up the peer and queue the frame in the peer's mgmt queue.
          * 2.  Invoke the download scheduler.
@@ -1202,21 +1205,22 @@ ol_txrx_mgmt_send(
         htt_tx_desc_mpdu_header(tx_desc->htt_tx_desc, 0);
         htt_tx_desc_init(
             pdev->htt_pdev, tx_desc->htt_tx_desc,
-	    tx_desc->htt_tx_desc_paddr,
+            tx_desc->htt_tx_desc_paddr,
             ol_tx_desc_id(pdev, tx_desc),
             tx_mgmt_frm,
             &tx_msdu_info.htt, NULL, 0);
         htt_tx_desc_display(tx_desc->htt_tx_desc);
         htt_tx_desc_set_chanfreq(tx_desc->htt_tx_desc, chanfreq);
 
-	ol_tx_enqueue(vdev->pdev, txq, tx_desc, &tx_msdu_info);
-	if (tx_msdu_info.peer) {
-	     /* remove the peer reference added above */
-	     ol_txrx_peer_unref_delete(tx_msdu_info.peer);
-	}
+        ol_tx_enqueue(vdev->pdev, txq, tx_desc, &tx_msdu_info);
+        if (tx_msdu_info.peer) {
+            /* remove the peer reference added above */
+            ol_txrx_peer_unref_delete(tx_msdu_info.peer);
+        }
         ol_tx_sched(vdev->pdev);
     } else {
-	htt_tx_desc_set_chanfreq(tx_desc->htt_tx_desc, chanfreq);
+        htt_tx_desc_set_chanfreq(tx_desc->htt_tx_desc, chanfreq);
+        NBUF_SET_PACKET_TRACK(tx_desc->netbuf, NBUF_TX_PKT_MGMT_TRACK);
         ol_tx_send_nonstd(pdev, tx_desc, tx_mgmt_frm, htt_pkt_type_mgmt);
     }
 

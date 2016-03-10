@@ -379,6 +379,10 @@ int __hdd_softap_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
            list_tail->next = skb;
            list_tail = list_tail->next;
        }
+       vos_mem_zero(skb->cb, sizeof(skb->cb));
+       NBUF_SET_PACKET_TRACK(skb, NBUF_TX_PKT_DATA_TRACK);
+       NBUF_UPDATE_TX_PKT_COUNT(skb, NBUF_TX_PKT_HDD);
+
        skb = skb_next;
        continue;
 

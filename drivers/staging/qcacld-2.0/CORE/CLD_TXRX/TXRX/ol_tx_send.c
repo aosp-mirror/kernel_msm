@@ -218,6 +218,7 @@ ol_tx_send(
 
     msdu_credit_consumed = ol_tx_send_base(pdev, tx_desc, msdu);
     id = ol_tx_desc_id(pdev, tx_desc);
+    NBUF_UPDATE_TX_PKT_COUNT(msdu, NBUF_TX_PKT_TXRX);
     failed = htt_tx_send_std(pdev->htt_pdev, msdu, id);
     if (adf_os_unlikely(failed)) {
         OL_TX_TARGET_CREDIT_INCR_INT(pdev, msdu_credit_consumed);
@@ -263,6 +264,7 @@ ol_tx_send_nonstd(
 
     msdu_credit_consumed = ol_tx_send_base(pdev, tx_desc, msdu);
     id = ol_tx_desc_id(pdev, tx_desc);
+    NBUF_UPDATE_TX_PKT_COUNT(msdu, NBUF_TX_PKT_TXRX);
     failed = htt_tx_send_nonstd(
         pdev->htt_pdev, msdu, id, pkt_type);
     if (failed) {
@@ -569,6 +571,7 @@ ol_tx_completion_handler(
                 pdev, tx_desc, tx_descs, netbuf,
                 lcl_freelist, tx_desc_last, status);
         }
+        NBUF_UPDATE_TX_PKT_COUNT(netbuf, NBUF_TX_PKT_FREE);
 #ifdef QCA_SUPPORT_TXDESC_SANITY_CHECKS
         tx_desc->pkt_type = 0xff;
 #ifdef QCA_COMPUTE_TX_DELAY
@@ -747,6 +750,7 @@ ol_tx_single_completion_handler(
     tx_desc->status = status;
     netbuf = tx_desc->netbuf;
 
+    NBUF_UPDATE_TX_PKT_COUNT(netbuf, NBUF_TX_PKT_FREE);
     /* Do one shot statistics */
     TXRX_STATS_UPDATE_TX_STATS(pdev, status, 1, adf_nbuf_len(netbuf));
 

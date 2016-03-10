@@ -71,6 +71,7 @@ enum wlan_op_mode {
 #define WLAN_HDD_STATS               0
 #define WLAN_TXRX_STATS              1
 #define WLAN_TXRX_HIST_STATS         2
+#define WLAN_TXRX_DESC_STATS         3
 #ifdef CONFIG_HL_SUPPORT
 #define WLAN_SCHEDULER_STATS        21
 #define WLAN_TX_QUEUE_STATS         22

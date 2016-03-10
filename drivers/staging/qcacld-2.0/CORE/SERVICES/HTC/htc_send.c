@@ -1322,6 +1322,7 @@ A_STATUS HTCSendDataPkt(HTC_HANDLE HTCHandle, adf_nbuf_t       netbuf, int Epid,
 
     pEndpoint->SeqNo++;
 
+    NBUF_UPDATE_TX_PKT_COUNT(netbuf, NBUF_TX_PKT_HTC);
     status = HIFSend_head(target->hif_dev,
             pEndpoint->UL_PipeID,
             pEndpoint->Id,

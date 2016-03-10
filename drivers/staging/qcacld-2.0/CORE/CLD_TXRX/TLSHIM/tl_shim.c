@@ -1203,8 +1203,6 @@ adf_nbuf_t WLANTL_SendSTA_DataFrame(void *vos_ctx, void *vdev,
 
 	skb_list_head = skb;
 	while (skb) {
-		/* Zero out skb's context buffer for the driver to use */
-		adf_os_mem_set(skb->cb, 0, sizeof(skb->cb));
 		adf_nbuf_map_single(adf_ctx, skb, ADF_OS_DMA_TO_DEVICE);
 
 #ifdef QCA_PKT_PROTO_TRACE

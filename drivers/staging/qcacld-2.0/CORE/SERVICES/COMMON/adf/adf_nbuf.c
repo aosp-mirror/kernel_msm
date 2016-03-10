@@ -33,11 +33,121 @@
 #include <adf_os_types.h>
 #include <adf_nbuf.h>
 #include <adf_os_io.h>
+#include <adf_os_lock.h>
 #include <net/ieee80211_radiotap.h>
 
 #ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
 #include <net/cnss_prealloc.h>
 #endif
+
+/* Packet Counter */
+static uint32_t nbuf_tx_mgmt[NBUF_TX_PKT_STATE_MAX];
+static uint32_t nbuf_tx_data[NBUF_TX_PKT_STATE_MAX];
+
+/**
+ * adf_nbuf_tx_desc_count_display() - Displays the packet counter
+ *
+ * Return: none
+ */
+void adf_nbuf_tx_desc_count_display(void)
+{
+	adf_os_print("Current Snapshot of the Driver:\n");
+	adf_os_print("Data Packets:\n");
+	adf_os_print("HDD %d TXRX_Q %d TXRX %d HTT %d",
+		     nbuf_tx_data[NBUF_TX_PKT_HDD] -
+		     (nbuf_tx_data[NBUF_TX_PKT_TXRX] +
+		     nbuf_tx_data[NBUF_TX_PKT_TXRX_ENQUEUE] -
+		     nbuf_tx_data[NBUF_TX_PKT_TXRX_DEQUEUE]),
+		     nbuf_tx_data[NBUF_TX_PKT_TXRX_ENQUEUE] -
+		     nbuf_tx_data[NBUF_TX_PKT_TXRX_DEQUEUE],
+		     (nbuf_tx_data[NBUF_TX_PKT_TXRX] -
+		     nbuf_tx_data[NBUF_TX_PKT_HTT]),
+		     (nbuf_tx_data[NBUF_TX_PKT_HTT]  -
+		     nbuf_tx_data[NBUF_TX_PKT_HTC]));
+	adf_os_print(" HTC %d  HIF %d CE %d TX_COMP %d\n",
+		     (nbuf_tx_data[NBUF_TX_PKT_HTC]  -
+		     nbuf_tx_data[NBUF_TX_PKT_HIF]),
+		     (nbuf_tx_data[NBUF_TX_PKT_HIF]  -
+		     nbuf_tx_data[NBUF_TX_PKT_CE]),
+		     (nbuf_tx_data[NBUF_TX_PKT_CE]   -
+		     nbuf_tx_data[NBUF_TX_PKT_FREE]),
+		     nbuf_tx_data[NBUF_TX_PKT_FREE]);
+	adf_os_print("Mgmt Packets:\n");
+	adf_os_print("TXRX %d HTT %d HTC %d HIF %d CE %d TX_COMP %d\n",
+		     (nbuf_tx_mgmt[NBUF_TX_PKT_TXRX] -
+		     nbuf_tx_mgmt[NBUF_TX_PKT_HTT]),
+		     (nbuf_tx_mgmt[NBUF_TX_PKT_HTT]  -
+		     nbuf_tx_mgmt[NBUF_TX_PKT_HTC]),
+		     (nbuf_tx_mgmt[NBUF_TX_PKT_HTC]  -
+		     nbuf_tx_mgmt[NBUF_TX_PKT_HIF]),
+		     (nbuf_tx_mgmt[NBUF_TX_PKT_HIF]  -
+		     nbuf_tx_mgmt[NBUF_TX_PKT_CE]),
+		     (nbuf_tx_mgmt[NBUF_TX_PKT_CE]   -
+		     nbuf_tx_mgmt[NBUF_TX_PKT_FREE]),
+		     nbuf_tx_mgmt[NBUF_TX_PKT_FREE]);
+}
+
+/**
+ * adf_nbuf_tx_desc_count_update() - Updates the layer packet counter
+ * @packet_type   : packet type either mgmt/data
+ * @current_state : layer at which the packet currently present
+ *
+ * Return: none
+ */
+static inline void adf_nbuf_tx_desc_count_update(uint8_t packet_type,
+							uint8_t current_state)
+{
+	switch (packet_type) {
+	case NBUF_TX_PKT_MGMT_TRACK:
+		nbuf_tx_mgmt[current_state]++;
+		break;
+	case NBUF_TX_PKT_DATA_TRACK:
+		nbuf_tx_data[current_state]++;
+		break;
+	default:
+		break;
+	}
+}
+
+/**
+ * adf_nbuf_tx_desc_count_clear() - Clears packet counter for both data, mgmt
+ *
+ * Return: none
+ */
+void adf_nbuf_tx_desc_count_clear(void)
+{
+	memset(nbuf_tx_mgmt, 0, sizeof(nbuf_tx_mgmt));
+	memset(nbuf_tx_data, 0, sizeof(nbuf_tx_data));
+}
+
+/**
+ * adf_nbuf_set_state() - Updates the packet state
+ * @nbuf:            network buffer
+ * @current_state :  layer at which the packet currently is
+ *
+ * This function updates the packet state to the layer at which the packet
+ * currently is
+ *
+ * Return: none
+ */
+void adf_nbuf_set_state(adf_nbuf_t nbuf, uint8_t current_state)
+{
+	/*
+	 * Only Mgmt, Data Packets are tracked. WMI messages
+	 * such as scan commands are not tracked
+	 */
+	uint8_t packet_type;
+
+	packet_type = NBUF_GET_PACKET_TRACK(nbuf);
+
+	if ((packet_type != NBUF_TX_PKT_DATA_TRACK) &&
+	    (packet_type != NBUF_TX_PKT_MGMT_TRACK)) {
+		return;
+	}
+	NBUF_SET_PACKET_STATE(nbuf, current_state);
+	adf_nbuf_tx_desc_count_update(packet_type,
+				      current_state);
+}
 
 adf_nbuf_trace_update_t  trace_update_cb = NULL;
 

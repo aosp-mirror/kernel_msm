@@ -84,6 +84,14 @@ struct cvg_nbuf_cb {
     } txrx_field;
 
     /*
+     * Store info for data path tracing
+     */
+    struct {
+        uint8_t packet_state;
+        uint8_t packet_track;
+    } trace;
+
+    /*
      * Store the DMA mapping info for the network buffer fragments
      * provided by the OS.
      */
@@ -192,6 +200,22 @@ struct cvg_nbuf_cb {
 #define NBUF_CB_ID(skb) \
     (&((struct cvg_nbuf_cb *)((skb)->cb))->tx_desc_id)
 #endif
+
+#define NBUF_SET_PACKET_STATE(skb, pkt_state) \
+    (((struct cvg_nbuf_cb *)((skb)->cb))->trace.packet_state = \
+                                           pkt_state)
+#define NBUF_GET_PACKET_STATE(skb) \
+    (((struct cvg_nbuf_cb *)((skb)->cb))->trace.packet_state)
+
+#define NBUF_SET_PACKET_TRACK(skb, pkt_track) \
+    (((struct cvg_nbuf_cb *)((skb)->cb))->trace.packet_track = \
+                                           pkt_track)
+#define NBUF_GET_PACKET_TRACK(skb) \
+    (((struct cvg_nbuf_cb *)((skb)->cb))->trace.packet_track)
+
+#define NBUF_UPDATE_TX_PKT_COUNT(skb, PACKET_STATE) \
+    adf_nbuf_set_state(skb, PACKET_STATE)
+
 
 #define __adf_nbuf_get_num_frags(skb)              \
     /* assume the OS provides a single fragment */ \
