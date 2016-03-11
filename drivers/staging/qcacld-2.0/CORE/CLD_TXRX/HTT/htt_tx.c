@@ -49,6 +49,7 @@
 #include <ol_htt_tx_api.h>   /* HTT_TX_DESC_VADDR_OFFSET */
 #include <ol_txrx_htt_api.h> /* ol_tx_msdu_id_storage */
 #include <htt_internal.h>
+#include "adf_trace.h"
 
 #include <vos_utils.h>
 
@@ -472,6 +473,9 @@ htt_tx_send_std(
     }
 
     NBUF_UPDATE_TX_PKT_COUNT(msdu, NBUF_TX_PKT_HTT);
+    DPTRACE(adf_dp_trace(msdu, ADF_DP_TRACE_HTT_PACKET_PTR_RECORD,
+                (uint8_t *)(adf_nbuf_data(msdu)),
+                sizeof(adf_nbuf_data(msdu))));
 
     if (adf_nbuf_queue_len(&pdev->txnbufq) > 0) {
         HTT_TX_NBUF_QUEUE_ADD(pdev, msdu);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2014,2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -29,6 +29,7 @@
 #include <adf_nbuf.h>         /* adf_nbuf_t, etc. */
 #include <adf_os_atomic.h>    /* adf_os_atomic_read, etc. */
 #include <adf_os_util.h>      /* adf_os_unlikely */
+#include "adf_trace.h"
 
 /* APIs for other modules */
 #include <htt.h>              /* HTT_TX_EXT_TID_MGMT */
@@ -218,6 +219,10 @@ ol_tx_vdev_pause_queue_append(
     {
         adf_nbuf_t next = adf_nbuf_next(msdu_list);
         NBUF_UPDATE_TX_PKT_COUNT(msdu_list, NBUF_TX_PKT_TXRX_ENQUEUE);
+        DPTRACE(adf_dp_trace(msdu_list,
+                ADF_DP_TRACE_TXRX_QUEUE_PACKET_PTR_RECORD,
+                (uint8_t *)(adf_nbuf_data(msdu_list)),
+                sizeof(adf_nbuf_data(msdu_list))));
 
         vdev->ll_pause.txq.depth++;
         if (!vdev->ll_pause.txq.head) {

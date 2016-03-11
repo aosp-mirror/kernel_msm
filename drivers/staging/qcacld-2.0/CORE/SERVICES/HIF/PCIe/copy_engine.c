@@ -39,6 +39,7 @@
 #include "regtable.h"
 #include <vos_getBin.h>
 #include "epping_main.h"
+#include "adf_trace.h"
 
 #define CE_POLL_TIMEOUT 10 /* ms */
 
@@ -424,6 +425,10 @@ CE_sendlist_send(struct CE_handle *copyeng,
         A_ASSERT(status == A_OK);
         NBUF_UPDATE_TX_PKT_COUNT((adf_nbuf_t)per_transfer_context,
                               NBUF_TX_PKT_CE);
+        DPTRACE(adf_dp_trace((adf_nbuf_t)per_transfer_context,
+                ADF_DP_TRACE_CE_PACKET_PTR_RECORD,
+               (uint8_t *)(((adf_nbuf_t)per_transfer_context)->data),
+               sizeof(((adf_nbuf_t)per_transfer_context)->data)));
     } else {
         /*
          * Probably not worth the additional complexity to support

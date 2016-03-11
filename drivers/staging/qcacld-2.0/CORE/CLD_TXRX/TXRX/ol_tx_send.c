@@ -30,6 +30,7 @@
 #include <adf_os_time.h>      /* adf_os_ticks, etc. */
 #include <adf_nbuf.h>         /* adf_nbuf_t */
 #include <adf_net_types.h>    /* ADF_NBUF_TX_EXT_TID_INVALID */
+#include "adf_trace.h"
 
 #include <queue.h>            /* TAILQ */
 #ifdef QCA_COMPUTE_TX_DELAY
@@ -219,6 +220,10 @@ ol_tx_send(
     msdu_credit_consumed = ol_tx_send_base(pdev, tx_desc, msdu);
     id = ol_tx_desc_id(pdev, tx_desc);
     NBUF_UPDATE_TX_PKT_COUNT(msdu, NBUF_TX_PKT_TXRX);
+    DPTRACE(adf_dp_trace(msdu, ADF_DP_TRACE_TXRX_PACKET_PTR_RECORD,
+                (uint8_t *)(adf_nbuf_data(msdu)),
+                sizeof(adf_nbuf_data(msdu))));
+
     failed = htt_tx_send_std(pdev->htt_pdev, msdu, id);
     if (adf_os_unlikely(failed)) {
         OL_TX_TARGET_CREDIT_INCR_INT(pdev, msdu_credit_consumed);
