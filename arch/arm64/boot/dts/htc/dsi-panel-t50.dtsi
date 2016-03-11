@@ -1,3 +1,15 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
 &mdss_mdp {
 	dsi_pme_dual_jdi_wqhd_video: qcom,mdss_dsi_pme_jdi_wqhd_dualmipi_video {
 		compatible = "qcom,mdss_dsi_pme_jdi_wqhd_dualmipi_video";
@@ -663,10 +675,36 @@
 			qcom,supply-post-off-sleep = <23>;
 		};
 	};
+	dsi_panel_pwr_supply_ea8064tg: dsi_panel_pwr_supply_ea8064tg {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "vddio";
+			qcom,supply-min-voltage = <1800000>;
+			qcom,supply-max-voltage = <1800000>;
+			qcom,supply-enable-load = <62000>;
+			qcom,supply-disable-load = <80>;
+			qcom,supply-pre-on-sleep = <0>;
+			qcom,supply-post-on-sleep = <1>;
+			qcom,supply-pre-off-sleep = <0>;
+			qcom,supply-post-off-sleep = <1>;
+		};
+		qcom,panel-supply-entry@1 {
+			reg = <1>;
+			qcom,supply-name = "vci";
+			qcom,supply-min-voltage = <3000000>;
+			qcom,supply-max-voltage = <3000000>;
+			qcom,supply-enable-load = <100000>;
+			qcom,supply-disable-load = <100>;
+			qcom,supply-pre-on-sleep = <10>;
+			qcom,supply-post-on-sleep = <1>;
+		};
+	};
 	color_temp_cmds_hx8396c: color_temp_cmds_hx8396c {
-		htc,color-temp0-cmds = [
-			39 01 00 00 00 00 02 BD 03
-			39 01 00 00 00 00 1B C1 01 C0 FE CC 86 FF DA A3 FF E9 C0 FF F8 DA FF FF FF FF FF FF 00 F4 E2 FF 00 00
+			htc,color-temp0-cmds = [
+				39 01 00 00 00 00 02 BD 03
+				39 01 00 00 00 00 1B C1 01 C0 FE CC 86 FF DA A3 FF E9 C0 FF F8 DA FF FF FF FF FF FF 00 F4 E2 FF 00 00
 			39 01 00 00 00 00 02 BD 00
 		];
 		htc,color-temp1-cmds = [

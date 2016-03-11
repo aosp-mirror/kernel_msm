@@ -14,11 +14,12 @@
 #include "msm8996-htc-common.dtsi"
 #include "msm8996-htc-regulator.dtsi"
 #include "msm8996-htc-nanohub-v2.dtsi"
-#include "dsi-panel-t50-hx8396c2.dtsi"
+#include "dsi-panel-s1m1-ea8064tg.dtsi"
 #include "dsi-panel-t50.dtsi"
 
 &mdss_dsi0 {
-        vddio-supply = <&pm8994_lvs1>;
+	vddio-supply = <&pm8994_lvs2>;
+	vci-supply = <&pm8994_l29>;
 
         qcom,platform-te-gpio = <&tlmm 10 0>;
         qcom,platform-reset-gpio = <&tlmm 39 0>;
@@ -26,7 +27,8 @@
 };
 
 &mdss_dsi1 {
-        vddio-supply = <&pm8994_lvs1>;
+	vddio-supply = <&pm8994_lvs2>;
+	vci-supply = <&pm8994_l29>;
 
         qcom,platform-te-gpio = <&tlmm 10 0>;
         qcom,platform-reset-gpio = <&tlmm 39 0>;
@@ -59,12 +61,16 @@
         };
 };
 
-&spmi_bus {
-        qcom,pmi8994@3 {
-                qcom,leds@d800 {
-                        qcom,fs-curr-ua = <20000>;      /* HTC: 2ch, 20mA */
-                        qcom,led-strings-list = [00 01];
-                        qcom,en-cabc;
+&rpm_bus {
+        rpm-regulator-ldoa29 {
+                status = "okay";
+                pm8994_l29: regulator-l29 {
+                        regulator-min-microvolt = <3000000>;
+                        regulator-max-microvolt = <3000000>;
+                        regulator-boot-on;
+                        regulator-always-on;
+                        qcom,init-voltage = <3000000>;
+                        status = "okay";
                 };
 	};
 };
