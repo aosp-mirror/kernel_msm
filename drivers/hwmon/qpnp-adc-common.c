@@ -47,7 +47,7 @@
    and provided to the battery driver in the units desired for
    their framework which is 0.1DegC. True resolution of 0.1DegC
    will result in the below table size to increase by 10 times */
-static const struct qpnp_vadc_map_pt adcmap_btm_threshold[] = {
+static const struct qpnp_vadc_map_pt adcmap_btm_threshold_default[] = {
 	{-300,	1642},
 	{-200,	1544},
 	{-100,	1414},
@@ -132,6 +132,9 @@ static const struct qpnp_vadc_map_pt adcmap_btm_threshold[] = {
 	{780,	208},
 	{790,	203}
 };
+static int adcmap_btm_threshold_size = ARRAY_SIZE(adcmap_btm_threshold_default);
+static const struct qpnp_vadc_map_pt *adcmap_btm_threshold =
+						adcmap_btm_threshold_default;
 
 static const struct qpnp_vadc_map_pt adcmap_qrd_btm_threshold[] = {
 	{-200,	1540},
@@ -886,7 +889,7 @@ int32_t qpnp_adc_scale_batt_therm(struct qpnp_vadc_chip *chip,
 
 	return qpnp_adc_map_temp_voltage(
 			adcmap_btm_threshold,
-			ARRAY_SIZE(adcmap_btm_threshold),
+			adcmap_btm_threshold_size,
 			bat_voltage,
 			&adc_chan_result->physical);
 }
@@ -1376,7 +1379,7 @@ int32_t qpnp_adc_btm_scaler(struct qpnp_vadc_chip *chip,
 				param->low_temp);
 	rc = qpnp_adc_map_voltage_temp(
 		adcmap_btm_threshold,
-		ARRAY_SIZE(adcmap_btm_threshold),
+		adcmap_btm_threshold_size,
 		(param->low_temp),
 		&low_output);
 	if (rc) {
@@ -1391,7 +1394,7 @@ int32_t qpnp_adc_btm_scaler(struct qpnp_vadc_chip *chip,
 
 	rc = qpnp_adc_map_voltage_temp(
 		adcmap_btm_threshold,
-		ARRAY_SIZE(adcmap_btm_threshold),
+		adcmap_btm_threshold_size,
 		(param->high_temp),
 		&high_output);
 	if (rc) {
@@ -1771,6 +1774,61 @@ int qpnp_adc_get_revid_version(struct device *dev)
 }
 EXPORT_SYMBOL(qpnp_adc_get_revid_version);
 
+static int qpnp_adcmap_load(struct spmi_device *spmi,
+		const struct qpnp_vadc_map_pt **adcmap, int *size,
+		char *propname)
+{
+	struct device_node *node = spmi->dev.of_node;
+	struct qpnp_vadc_map_pt *map;
+	const __be32 *dt_ptr;
+	int i;
+
+	/*
+	 * Use a default adcmap if there is no specific adcmap
+	 * from device tree
+	 */
+	dt_ptr = of_get_property(node, propname, size);
+	if (!dt_ptr)
+		return 0;
+
+	/* Each row contains two uint32_t elements */
+	*size /= (2 * sizeof(uint32_t));
+
+	map = devm_kzalloc(&spmi->dev, sizeof(struct qpnp_vadc_map_pt) * *size,
+			GFP_KERNEL);
+	if (!map) {
+		pr_err("Unable to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	for(i = 0; i < *size; i++) {
+		map[i].x = be32_to_cpup(dt_ptr++);
+		map[i].y = be32_to_cpup(dt_ptr++);
+	}
+
+	pr_info("Got '%s' from device tree\n", propname);
+
+	*adcmap = map;
+
+	return 0;
+}
+
+static int qpnp_adcmap_get_devicetree_data(struct spmi_device *spmi)
+{
+	int rc;
+
+	rc = qpnp_adcmap_load(spmi,
+			&adcmap_btm_threshold,
+			&adcmap_btm_threshold_size,
+			"qcom,adcmap_btm_threshold");
+	if (rc) {
+		pr_err("failed to get adcmap_btm_threshold\n");
+		return rc;
+	}
+
+	return 0;
+}
+
 int32_t qpnp_adc_get_devicetree_data(struct spmi_device *spmi,
 			struct qpnp_adc_drv *adc_qpnp)
 {
@@ -1991,3 +2049,45 @@ int32_t qpnp_adc_get_devicetree_data(struct spmi_device *spmi,
 	return 0;
 }
 EXPORT_SYMBOL(qpnp_adc_get_devicetree_data);
+
+static int qpnp_adcmap_probe(struct spmi_device *spmi)
+{
+	if (spmi->dev.of_node) {
+		pr_info("Use adcmap from dt\n");
+		return qpnp_adcmap_get_devicetree_data(spmi);
+	}
+
+	return 0;
+}
+
+static int qpnp_adcmap_remove(struct spmi_device *pdev)
+{
+	return 0;
+}
+
+static const struct of_device_id qpnp_adcmap_match_table[] = {
+	{	.compatible = "qcom,adcmap_table" },
+	{}
+};
+
+static struct spmi_driver qpnp_adcmap_driver = {
+	.driver = {
+		.name = "adcmap_table",
+		.of_match_table = qpnp_adcmap_match_table,
+	},
+	.probe = qpnp_adcmap_probe,
+	.remove = qpnp_adcmap_remove,
+};
+
+static int __init qpnp_adcmap_init(void)
+{
+	return spmi_driver_register(&qpnp_adcmap_driver);
+}
+
+static void __exit qpnp_adcmap_exit(void)
+{
+	spmi_driver_unregister(&qpnp_adcmap_driver);
+}
+
+arch_initcall(qpnp_adcmap_init);
+module_exit(qpnp_adcmap_exit);
