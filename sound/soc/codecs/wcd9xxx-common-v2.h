@@ -228,4 +228,28 @@ enum {
 	MAX_CFG_REGISTERS,
 };
 
+struct wcd9xxx_mixer_control {
+	int min, max, platform_max;
+	int mask;
+	int reg;
+};
+
+int wcd9xxx_info_volsw(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_info *uinfo);
+int wcd9xxx_get_volsw(struct snd_kcontrol *kcontrol,
+		      struct snd_ctl_elem_value *ucontrol);
+int wcd9xxx_put_volsw(struct snd_kcontrol *kcontrol,
+		      struct snd_ctl_elem_value *ucontrol);
+
+#define WCD9XXX_SINGLE_TLV(xname, xreg, xmask, xmin, xmax, tlv_array) \
+{       .iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = xname, \
+	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ | \
+		  SNDRV_CTL_ELEM_ACCESS_READWRITE, \
+	.tlv.p  = (tlv_array),\
+	.info = wcd9xxx_info_volsw, \
+	.get = wcd9xxx_get_volsw,\
+	.put = wcd9xxx_put_volsw, \
+	.private_value = (unsigned long)&(struct wcd9xxx_mixer_control) \
+		{.reg = xreg, .max = xmax, .min = xmin, .mask = xmask} }
+
 #endif

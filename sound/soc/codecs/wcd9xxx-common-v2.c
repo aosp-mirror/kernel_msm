@@ -1265,5 +1265,107 @@ void wcd_clsh_init(struct wcd_clsh_cdc_data *clsh)
 }
 EXPORT_SYMBOL(wcd_clsh_init);
 
+/**
+ * wcd9xxx_info_volsw - wcd9xxx mixer info callback
+ * @kcontrol: mixer control
+ * @uinfo: control element information
+ *
+ * Implementation based on snd_soc_info_volsw().
+ *
+ * Returns 0 for success.
+ */
+int wcd9xxx_info_volsw(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_info *uinfo)
+{
+	struct wcd9xxx_mixer_control *mc =
+		(struct wcd9xxx_mixer_control *)kcontrol->private_value;
+	int platform_max;
+
+	if (!mc->platform_max)
+		mc->platform_max = mc->max;
+	platform_max = mc->platform_max;
+
+	if (platform_max == 1 && !strstr(kcontrol->id.name, " Volume"))
+		uinfo->type = SNDRV_CTL_ELEM_TYPE_BOOLEAN;
+	else
+		uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	if (mc->min < 0 && (uinfo->type == SNDRV_CTL_ELEM_TYPE_INTEGER))
+		uinfo->value.integer.max = platform_max - mc->min;
+	else
+		uinfo->value.integer.max = platform_max;
+	return 0;
+}
+EXPORT_SYMBOL(wcd9xxx_info_volsw);
+
+/**
+ * wcd9xxx_get_volsw - mixer get callback
+ * @kcontrol: mixer control
+ * @ucontrol: control element information
+ *
+ * Returns 0 for success.
+ */
+int wcd9xxx_get_volsw(struct snd_kcontrol *kcontrol,
+		      struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct wcd9xxx_mixer_control *mc =
+	    (struct wcd9xxx_mixer_control *)kcontrol->private_value;
+	unsigned int val;
+	int signed_val;
+	signed char signed_byte;
+	int ret;
+
+	ret = snd_soc_component_read(component, mc->reg, &val);
+	if (ret < 0)
+		return ret;
+
+	signed_byte = val & mc->mask;
+	signed_val = signed_byte - mc->min;
+
+	pr_debug("%s: val: %d (%x), byte: %hhd (%hhx), signed_val: %d (%x)\n",
+		 __func__, val, val, signed_byte, signed_byte,
+		 signed_val, signed_val);
+
+	ucontrol->value.integer.value[0] = signed_val;
+
+	return 0;
+}
+EXPORT_SYMBOL(wcd9xxx_get_volsw);
+
+/**
+ * wcd9xxx_put_volsw - mixer set callback
+ * @kcontrol: mixer control
+ * @uinfo: control element information
+ *
+ * Returns 0 for success.
+ */
+int wcd9xxx_put_volsw(struct snd_kcontrol *kcontrol,
+		      struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct wcd9xxx_mixer_control *mc =
+	    (struct wcd9xxx_mixer_control *)kcontrol->private_value;
+
+	unsigned int reg = mc->reg;
+	int max = mc->max;
+	int min = mc->min;
+	int signed_val;
+	unsigned int val;
+
+	signed_val = ucontrol->value.integer.value[0] + min;
+	signed_val = clamp(signed_val, min, max);
+	val = (unsigned int)signed_val & mc->mask;
+
+	pr_debug("%s: val: %u (%x), signed: %d (%x)\n",
+		 __func__, val, val, signed_val, signed_val);
+
+	return snd_soc_component_update_bits(
+			component, reg, mc->mask, val);
+}
+EXPORT_SYMBOL(wcd9xxx_put_volsw);
+
 MODULE_DESCRIPTION("WCD9XXX Common Driver");
 MODULE_LICENSE("GPL v2");
