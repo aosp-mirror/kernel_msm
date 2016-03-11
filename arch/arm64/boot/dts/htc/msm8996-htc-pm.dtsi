@@ -1,0 +1,38 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/*
+ * msm8996-htc-pm.dtsi: common pm config of HTC msm8996 projects
+ */
+&spmi_bus {
+	qcom,pm8994@0 {
+		qcom,power-on@800 {
+			qcom,pon_1 {
+				qcom,pon-type = <0>;
+				qcom,pull-up = <1>;
+				linux,code = <116>;
+				qcom,support-reset = <1>;
+				qcom,s1-timer = <10256>;
+				qcom,s2-timer = <2000>;
+				qcom,s2-type = <8>;
+			};
+
+			qcom,pon_2 {
+				qcom,support-reset = <0>;
+			};
+
+			qcom,pon_3 {
+				qcom,support-reset = <0>;
+			};
+		};
+	};
+};
