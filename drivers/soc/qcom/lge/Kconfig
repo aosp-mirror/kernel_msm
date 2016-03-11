@@ -1,0 +1,14 @@
+menu "LGE Board Selection"
+
+config MACH_SWORDFISH
+	bool "MSM8909 SWORDFISH"
+	depends on ARCH_MSM8909
+	select MACH_LGE
+	help
+	  Support for the LGE MSM8909 SWORDFISH device.
+
+endmenu
+
+menu "LGE Specific Patches"
+
+endmenu
