@@ -149,8 +149,7 @@ static int msm_rpm_master_copy_stats(
 
 		record.xo_last_entered_at = readq_relaxed(prvdata->reg_base +
 			(master_cnt * pdata->master_offset +
-			offsetof(struct msm_rpm_master_stats,
-			xo_last_entered_at)));
+			offsetof(struct msm_rpm_master_stats, xo_last_entered_at)));
 
 		SNPRINTF(buf, count, "\t%s:0x%llX\n",
 			GET_FIELD(record.xo_last_entered_at),
@@ -158,18 +157,15 @@ static int msm_rpm_master_copy_stats(
 
 		record.xo_last_exited_at = readq_relaxed(prvdata->reg_base +
 			(master_cnt * pdata->master_offset +
-			offsetof(struct msm_rpm_master_stats,
-			xo_last_exited_at)));
+			offsetof(struct msm_rpm_master_stats, xo_last_exited_at)));
 
 		SNPRINTF(buf, count, "\t%s:0x%llX\n",
 			GET_FIELD(record.xo_last_exited_at),
 			record.xo_last_exited_at);
 
-		record.xo_accumulated_duration =
-				readq_relaxed(prvdata->reg_base +
-				(master_cnt * pdata->master_offset +
-				offsetof(struct msm_rpm_master_stats,
-				xo_accumulated_duration)));
+		record.xo_accumulated_duration = readq_relaxed(prvdata->reg_base +
+			(master_cnt * pdata->master_offset +
+			offsetof(struct msm_rpm_master_stats, xo_accumulated_duration)));
 
 		SNPRINTF(buf, count, "\t%s:0x%llX\n",
 			GET_FIELD(record.xo_accumulated_duration),
