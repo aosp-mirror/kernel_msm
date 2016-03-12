@@ -18,6 +18,7 @@
 #include <linux/mdss_io_util.h>
 #include <linux/irqreturn.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/wakelock.h>
 #include <linux/gpio.h>
 
 #include "mdss_panel.h"
@@ -435,6 +436,7 @@ struct mdss_dsi_ctrl_pdata {
 	int bklt_max;
 	int new_fps;
 	int pwm_enabled;
+	int idle;
 	int clk_lane_cnt;
 	bool dmap_iommu_map;
 	bool bklt_off;
@@ -477,6 +479,9 @@ struct mdss_dsi_ctrl_pdata {
 
 	char pps_buf[DSC_PPS_LEN];	/* dsc pps */
 
+	struct dsi_panel_cmds idle_on_cmds;
+	struct dsi_panel_cmds idle_off_cmds;
+
 	struct dcs_cmd_list cmdlist;
 	struct completion dma_comp;
 	struct completion mdp_comp;
@@ -509,6 +514,9 @@ struct mdss_dsi_ctrl_pdata {
 	int cur_max_pkt_size;
 
 	struct dsi_pinctrl_res pin_res;
+
+	struct work_struct idle_on_work;
+	struct wake_lock idle_on_wakelock;
 
 	unsigned long dma_size;
 	dma_addr_t dma_addr;

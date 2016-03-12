@@ -278,6 +278,101 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 
 }
 
+static void idle_on_work(struct work_struct *work)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl =
+		container_of(work, struct mdss_dsi_ctrl_pdata, idle_on_work);
+
+	struct dsi_panel_cmds single_cmd;
+	struct dsi_panel_cmds *idle_cmd;
+	struct mdss_panel_info *pinfo;
+	int i = 0;
+	int cnt;
+	int delay;
+
+	pr_debug("%s ++\n", __func__);
+	idle_cmd = &ctrl->idle_on_cmds;
+	pinfo = &(ctrl->panel_data.panel_info);
+
+	wake_lock(&ctrl->idle_on_wakelock);
+
+	do {
+		single_cmd.cmds = idle_cmd->cmds+i;
+		cnt = 1;
+
+		while ((idle_cmd->cmds+i)->dchdr.last != 1 &&
+			i < idle_cmd->cmd_cnt - 1) {
+			cnt++;
+			i++;
+		}
+
+		single_cmd.cmd_cnt = cnt;
+		delay = (idle_cmd->cmds+i)->dchdr.wait;
+		(idle_cmd->cmds+i)->dchdr.wait = 0;
+
+		if (pinfo->panel_power_state == MDSS_PANEL_POWER_OFF)
+			break;
+
+		mdss_dsi_panel_cmds_send(ctrl, &single_cmd, CMD_REQ_COMMIT);
+
+		if (delay) {
+			usleep_range(delay*1000, delay*1000);
+			(idle_cmd->cmds+i)->dchdr.wait = delay;
+		}
+	} while (++i < idle_cmd->cmd_cnt);
+
+	wake_unlock(&ctrl->idle_on_wakelock);
+	pr_debug("%s --\n", __func__);
+}
+
+static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
+		int enable)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return;
+	}
+
+	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	pr_debug("%s: idle (%d->%d)\n", __func__, ctrl->idle, enable);
+
+	if (ctrl->idle == enable)
+		return;
+
+	ctrl->idle = enable;
+
+	if (enable) {
+		if (ctrl->idle_on_cmds.cmd_cnt)
+			schedule_work(&ctrl->idle_on_work);
+	} else {
+		if (ctrl->idle_off_cmds.cmd_cnt) {
+			cancel_work_sync(&ctrl->idle_on_work);
+			pr_debug("idle off ++\n");
+			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_off_cmds, CMD_REQ_COMMIT);
+			pr_debug("idle off --\n");
+		}
+	}
+}
+
+static int mdss_dsi_panel_get_idle_mode(struct mdss_panel_data *pdata)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return 0;
+	}
+
+	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	return ctrl->idle;
+}
+
 static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	int rc = 0;
@@ -831,6 +926,8 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 	}
 
 end:
+	/* clear idle state */
+	ctrl->idle = 0;
 	pr_debug("%s:-\n", __func__);
 	return 0;
 }
@@ -854,6 +951,9 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 		enable);
 
 	/* Any panel specific low power commands/config */
+
+	/* Control idle mode for panel */
+	mdss_dsi_panel_set_idle_mode(pdata, enable);
 
 	pr_debug("%s:-\n", __func__);
 	return 0;
@@ -2451,6 +2551,15 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	rc = of_property_read_u32(np, "qcom,adjust-timer-wakeup-ms", &tmp);
 	pinfo->adjust_timer_delay_ms = (!rc ? tmp : 0);
 
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_on_cmds,
+		"qcom,mdss-dsi-idle-on-command", "qcom,mdss-dsi-idle-on-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_off_cmds,
+		"qcom,mdss-dsi-idle-off-command", "qcom,mdss-dsi-idle-off-command-state");
+
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-idle-fps", &tmp);
+	pinfo->mipi.frame_rate_idle = (!rc ? tmp : 60);
+
 	pinfo->mipi.force_clk_lane_hs = of_property_read_bool(np,
 		"qcom,mdss-dsi-force-clock-lane-hs");
 
@@ -2513,6 +2622,13 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->off = mdss_dsi_panel_off;
 	ctrl_pdata->low_power_config = mdss_dsi_panel_low_power_config;
 	ctrl_pdata->panel_data.set_backlight = mdss_dsi_panel_bl_ctrl;
+	ctrl_pdata->panel_data.set_idle = mdss_dsi_panel_set_idle_mode;
+	ctrl_pdata->panel_data.get_idle = mdss_dsi_panel_get_idle_mode;
+
+	INIT_WORK(&ctrl_pdata->idle_on_work, idle_on_work);
+	wake_lock_init(&ctrl_pdata->idle_on_wakelock, WAKE_LOCK_SUSPEND,
+							"IDLE_ON_WAKELOCK");
+
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
 
 	return 0;

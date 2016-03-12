@@ -756,6 +756,47 @@ static ssize_t mdss_fb_get_dfps_mode(struct device *dev,
 	return ret;
 }
 
+static void __mdss_fb_set_idle_mode(struct msm_fb_data_type *mfd, int is_idle)
+{
+	struct mdss_panel_data *pdata;
+
+	pdata = dev_get_platdata(&mfd->pdev->dev);
+
+	pr_debug("Idle mode = %d\n", is_idle);
+
+	if (mfd->index == 0) {
+		if (pdata && pdata->set_idle)
+			pdata->set_idle(pdata, is_idle);
+	}
+}
+
+static ssize_t mdss_fb_set_idle_mode(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	struct mdss_panel_data *pdata;
+	int rc = 0;
+	int idle_mode = 0;
+
+	if (mfd->shutdown_pending) {
+		pr_err("Shutdown pending. Aborting operation\n");
+		return -EPERM;
+	}
+
+	pdata = dev_get_platdata(&mfd->pdev->dev);
+
+	rc = kstrtoint(buf, 10, &idle_mode);
+	if (rc) {
+		pr_err("kstrtoint failed. rc=%d\n", rc);
+		return rc;
+	}
+
+	__mdss_fb_set_idle_mode(mfd, idle_mode);
+
+	return count;
+}
+
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -772,6 +813,8 @@ static DEVICE_ATTR(msm_fb_panel_status, S_IRUGO | S_IWUSR,
 	mdss_fb_get_panel_status, mdss_fb_force_panel_dead);
 static DEVICE_ATTR(msm_fb_dfps_mode, S_IRUGO | S_IWUSR,
 	mdss_fb_get_dfps_mode, mdss_fb_change_dfps_mode);
+static DEVICE_ATTR(idle_mode, S_IWUSR, NULL, mdss_fb_set_idle_mode);
+
 static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
 	&dev_attr_msm_fb_split.attr,
@@ -783,6 +826,7 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_thermal_level.attr,
 	&dev_attr_msm_fb_panel_status.attr,
 	&dev_attr_msm_fb_dfps_mode.attr,
+	&dev_attr_idle_mode.attr,
 	NULL,
 };
 
