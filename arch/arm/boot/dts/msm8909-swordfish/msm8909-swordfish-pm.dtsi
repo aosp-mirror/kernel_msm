@@ -89,6 +89,7 @@
 	qcom,vinmin-mv = <4470>;
 	qcom,ibatsafe-ma = <540>;
 	qcom,tchg-mins = <480>;
+	qcom,iterm-ma = <30>;
 	qcom,btc-disabled;
 	qcom,thermal-mitigation = <0>; /* disabled */
 	qcom,cool-bat-decidegc = <0>;  /* disabled */
