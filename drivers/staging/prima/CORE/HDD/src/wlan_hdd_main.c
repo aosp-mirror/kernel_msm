@@ -121,6 +121,9 @@ int wlan_hdd_ftm_start(hdd_context_t *pAdapter);
 #include "wlan_hdd_debugfs.h"
 #include "sapInternal.h"
 
+#define MAC_FIRMWARE "wlan/prima/mac_addrs.bin"
+v_MACADDR_t mac_addrs[VOS_MAX_CONCURRENCY_PERSONA];
+
 #ifdef MODULE
 #define WLAN_MODULE_NAME  module_name(THIS_MODULE)
 #else
@@ -6169,6 +6172,7 @@ static int hdd_set_mac_address(struct net_device *dev, void *addr)
 tANI_U8* wlan_hdd_get_intf_addr(hdd_context_t* pHddCtx)
 {
    int i;
+   const struct firmware *fw_entry;
    for ( i = 0; i < VOS_MAX_CONCURRENCY_PERSONA; i++)
    {
       if( 0 == ((pHddCtx->cfg_ini->intfAddrMask) & (1 << i)) )
@@ -6179,7 +6183,26 @@ tANI_U8* wlan_hdd_get_intf_addr(hdd_context_t* pHddCtx)
       return NULL;
 
    pHddCtx->cfg_ini->intfAddrMask |= (1 << i);
-   return &pHddCtx->cfg_ini->intfMacAddr[i].bytes[0];
+
+   /* read firmware */
+   if (request_firmware (&fw_entry, MAC_FIRMWARE, pHddCtx->parent_dev)!= 0)
+   {
+      printk (KERN_ERR"%s : failed to load firmware (%s)\n",
+              __func__, MAC_FIRMWARE);
+      return NULL;
+   }
+
+   if (fw_entry->size != VOS_MAC_ADDR_SIZE * VOS_MAX_CONCURRENCY_PERSONA) {
+      printk (KERN_ERR"%s : mac file size mismatch\n", __func__);
+      return NULL;
+   }
+
+   memcpy (&mac_addrs[0].bytes[0], fw_entry->data, fw_entry->size);
+
+   release_firmware (fw_entry);
+
+   /* return the address */
+   return &mac_addrs[i].bytes[0];
 }
 
 void wlan_hdd_release_intf_addr(hdd_context_t* pHddCtx, tANI_U8* releaseAddr)
