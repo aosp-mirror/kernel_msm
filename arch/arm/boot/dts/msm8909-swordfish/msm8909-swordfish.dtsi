@@ -12,6 +12,7 @@
 
 #include "../qcom/msm8909.dtsi"
 #include "msm8909-swordfish-pinctrl.dtsi"
+#include "msm8909-swordfish-input.dtsi"
 
 / {
 	aliases {

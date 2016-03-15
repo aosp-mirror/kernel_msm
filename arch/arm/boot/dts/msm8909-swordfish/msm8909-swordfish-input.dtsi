@@ -1,0 +1,46 @@
+/* Copyright (c) 2016, LGE Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	i2c@78b9000 { /* BLSP1 QUP5 */
+		synaptics@20 {
+			compatible = "synaptics,rmi4";
+			reg = <0x20>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <13 0x2008>;
+			vdd-supply = <&pm8916_l10>;
+			vcc_i2c-supply = <&pm8916_l16>;
+			/* pins used by touchscreen */
+			pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
+			pinctrl-0 = <&ts_int_active &ts_reset_active>;
+			pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+			pinctrl-2 = <&ts_release>;
+			synaptics,reset-gpio = <&msm_gpio 12 0x00>;
+			synaptics,irq-gpio = <&msm_gpio 13 0x2008>;
+			synaptics,i2c-pull-up;
+			synaptics,fw-image-name = "synaptics_fw.bin";
+			synaptics,check-build;
+			synaptics,wakeup;
+			synaptics,palm-detect-threshold = <0x1a>;
+			synaptics,palm-detect-keycode = <0x8e>; /* KEY_SLEEP */
+			synaptics,doze-interval-active = <1>; /* 10ms */
+			synaptics,doze-interval-sleep = <9>; /* 90ms */
+			synaptics,recalibration-interval-active = <0xe>;
+			synaptics,recalibration-interval-sleep = <0x1e>;
+			synaptics,doze-burst-size-sleep = <0x28>;
+			synaptics,doze-bw-sleep = <0x3>;
+			synaptics,display-coords = <0 0 479 479>;
+			status = "ok";
+		};
+	};
+
+};
