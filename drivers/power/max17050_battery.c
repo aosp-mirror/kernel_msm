@@ -510,8 +510,7 @@ static void max17050_update(struct max17050_chip *chip)
 	chip->learned.cycles = max17050_read_reg(client, MAX17050_CYCLES);
 
 	/* next update must be at least 1 second later */
-	ktime_get_ts(&chip->next_update_time);
-	monotonic_to_bootbased(&chip->next_update_time);
+	get_monotonic_boottime(&chip->next_update_time);
 	chip->next_update_time.tv_sec++;
 }
 
@@ -562,8 +561,7 @@ static int max17050_get_property(struct power_supply *psy,
 	if (chip->suspended)
 		return -EAGAIN;
 
-	ktime_get_ts(&now);
-	monotonic_to_bootbased(&now);
+	get_monotonic_boottime(&now);
 	if (timespec_compare(&now, &chip->next_update_time) >= 0) {
 		mutex_lock(&chip->mutex);
 		max17050_update(chip);
