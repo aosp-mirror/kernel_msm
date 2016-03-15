@@ -613,6 +613,14 @@ config MSM_BCL_PERIPHERAL_CTL
 	  provides routines to configure and monitor the BCL
 	  PMIC peripheral.
 
+config BATTERY_TEMP_MONITOR
+	bool "Battery Temperature Monitoring driver"
+	depends on THERMAL_QPNP_ADC_TM
+	default n
+	help
+	  Say Y to enable battery temperature control for safety.
+	  It controls charging current depending on battery temperature.
+
 source "drivers/power/reset/Kconfig"
 
 endif # POWER_SUPPLY
