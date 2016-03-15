@@ -2764,8 +2764,8 @@ void limSwitchChannelCback(tpAniSirGlobal pMac, eHalStatus status,
    mmhMsg.bodyptr = pSirSmeSwitchChInd;
    mmhMsg.bodyval = 0;
 
-   MTRACE(macTraceMsgTx(pMac, psessionEntry->peSessionId, mmhMsg.type));
-
+   MTRACE(macTrace(pMac, TRACE_CODE_TX_SME_MSG, psessionEntry->peSessionId,
+                                                            mmhMsg.type));
    SysProcessMmhMsg(pMac, &mmhMsg);
 }
 
@@ -6938,7 +6938,7 @@ void limProcessAddStaSelfRsp(tpAniSirGlobal pMac,tpSirMsgQ limMsgQ)
    mmhMsg.type = eWNI_SME_ADD_STA_SELF_RSP;
    mmhMsg.bodyptr = pRsp;
    mmhMsg.bodyval = 0;
-   MTRACE(macTraceMsgTx(pMac, NO_SESSION, mmhMsg.type));
+   MTRACE(macTrace(pMac, TRACE_CODE_TX_SME_MSG, NO_SESSION, mmhMsg.type));
    limSysProcessMmhMsgApi(pMac, &mmhMsg,  ePROT);
 
 }
@@ -7030,7 +7030,7 @@ void limProcessDelStaSelfRsp(tpAniSirGlobal pMac,tpSirMsgQ limMsgQ)
    mmhMsg.type = eWNI_SME_DEL_STA_SELF_RSP;
    mmhMsg.bodyptr = pRsp;
    mmhMsg.bodyval = 0;
-   MTRACE(macTraceMsgTx(pMac, NO_SESSION, mmhMsg.type));
+   MTRACE(macTrace(pMac, TRACE_CODE_TX_SME_MSG, NO_SESSION, mmhMsg.type));
    limSysProcessMmhMsgApi(pMac, &mmhMsg,  ePROT);
 
 }
@@ -8370,11 +8370,6 @@ void lim_set_stads_rtt_cap(tpDphHashNode sta_ds, struct s_ext_cap *ext_cap)
 	sta_ds->timingMeasCap |= (ext_cap->fine_time_meas_responder)?
 				  RTT_FINE_TIME_MEAS_RESPONDER_CAPABILITY :
 				  RTT_INVALID;
-
-	PELOG1(limLog(pMac, LOG1,
-	       FL("ExtCap present, timingMeas: %d Initiator: %d Responder: %d"),
-	       ext_cap->timingMeas, ext_cap->fine_time_meas_initiator,
-	       ext_cap->fine_time_meas_responder);)
 }
 
 /**
@@ -8675,4 +8670,25 @@ lim_get_80Mhz_center_channel(uint8_t primary_channel)
 		return (149+161)/2;
 
 	return HAL_INVALID_CHANNEL_ID;
+}
+
+/**
+ * lim_is_ext_cap_ie_present - checks if ext ie is present
+ * @ext_cap: extended IEs structure
+ *
+ * Return: true if ext IEs are present else false
+ */
+bool lim_is_ext_cap_ie_present (struct s_ext_cap *ext_cap)
+{
+	int i, size;
+	uint8_t *tmp_buf;
+
+	tmp_buf = (uint8_t *) ext_cap;
+	size = sizeof(*ext_cap);
+
+	for (i = 0; i < size; i++)
+		if (tmp_buf[i])
+			return true;
+
+	return false;
 }

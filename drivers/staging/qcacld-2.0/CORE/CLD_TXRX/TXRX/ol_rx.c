@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -105,6 +105,22 @@ void ol_rx_trigger_restore(htt_pdev_handle htt_pdev, adf_nbuf_t head_msdu,
     }
 }
 #endif
+
+void ol_rx_reset_pn_replay_counters(struct ol_txrx_pdev_t *pdev)
+{
+    adf_os_mem_zero(pdev->pn_replays,
+                    OL_RX_NUM_PN_REPLAY_TYPES * sizeof(uint32_t));
+}
+
+uint32_t ol_rx_get_tkip_replay_counter(struct ol_txrx_pdev_t *pdev)
+{
+    return pdev->pn_replays[OL_RX_TKIP_REPLAYS];
+}
+
+uint32_t ol_rx_get_ccmp_replay_counter(struct ol_txrx_pdev_t *pdev)
+{
+    return pdev->pn_replays[OL_RX_CCMP_REPLAYS];
+}
 
 static void ol_rx_process_inv_peer(
     ol_txrx_pdev_handle pdev,
@@ -1156,6 +1172,8 @@ ol_rx_in_order_indication_handler(
 
     if (pdev) {
         peer = ol_txrx_peer_find_by_id(pdev, peer_id);
+        if (VOS_MONITOR_MODE == vos_get_conparam())
+            peer = pdev->self_peer;
         htt_pdev = pdev->htt_pdev;
     } else {
         TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,

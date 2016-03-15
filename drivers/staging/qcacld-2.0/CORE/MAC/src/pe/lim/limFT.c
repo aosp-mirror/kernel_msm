@@ -1649,7 +1649,7 @@ tANI_BOOLEAN limProcessFTUpdateKey(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf )
         }
 
         pAddBssParams->extSetStaKeyParam.singleTidRc = val;
-        PELOG1(limLog(pMac, LOG1, FL("Key valid %d"),
+        PELOG1(limLog(pMac, LOG1, FL("Key valid %d, keyLength=%d"),
                     pAddBssParams->extSetStaKeyParamValid,
                     pAddBssParams->extSetStaKeyParam.key[0].keyLength);)
 

@@ -538,6 +538,7 @@ typedef enum eSirBssType
     eSIR_BTAMP_STA_MODE,                     //Added for BT-AMP support
     eSIR_BTAMP_AP_MODE,                     //Added for BT-AMP support
     eSIR_AUTO_MODE,
+    eSIR_MONITOR_MODE,
     eSIR_DONOT_USE_BSS_TYPE = SIR_MAX_ENUM_SIZE
 } tSirBssType;
 
@@ -1166,8 +1167,9 @@ typedef struct sSirSmeJoinRsp
     tSirSmeHTProfile    HTProfile;
 #endif
 
-    tANI_U8         frames[ 1 ];
     bool supported_nss_1x1;
+    /* Add new members before 'frames' to avoid memory corruption of 'frames' */
+    tANI_U8         frames[ 1 ];
 } tSirSmeJoinRsp, *tpSirSmeJoinRsp;
 
 /// Definition for Authentication indication from peer
@@ -3296,6 +3298,19 @@ typedef struct sSirUpdateParams
     tANI_U8        ssidHidden;     // Hide SSID
 } tSirUpdateParams, *tpSirUpdateParams;
 
+/**
+ * struct sir_create_session - Used for creating session in monitor mode
+ * @type: SME host message type.
+ * @msg_len: Length of the message.
+ * @bss_id: bss_id for creating the session.
+ */
+struct sir_create_session
+{
+	uint16_t       type;
+	uint16_t       msg_len;
+	tSirMacAddr    bss_id;
+};
+
 //Beacon Interval
 typedef struct sSirChangeBIParams
 {
@@ -3798,10 +3813,6 @@ struct roam_ext_params {
 	int rssi_diff;
 	int good_rssi_roam;
 	bool is_5g_pref_enabled;
-	int dense_rssi_thresh_offset;
-	int dense_min_aps_cnt;
-	int initial_dense_status;
-	int traffic_threshold;
 };
 
 typedef struct sSirRoamOffloadScanReq
@@ -4387,20 +4398,32 @@ typedef struct sSirScanOffloadReq {
       -----------------------------*/
 } tSirScanOffloadReq, *tpSirScanOffloadReq;
 
-typedef enum sSirScanEventType {
-    SCAN_EVENT_STARTED=0x1,          /* Scan command accepted by FW */
-    SCAN_EVENT_COMPLETED=0x2,        /* Scan has been completed by FW */
-    SCAN_EVENT_BSS_CHANNEL=0x4,      /* FW is going to move to HOME channel */
-    SCAN_EVENT_FOREIGN_CHANNEL = 0x8,/* FW is going to move to FORIEGN channel */
-    SCAN_EVENT_DEQUEUED=0x10,       /* scan request got dequeued */
-    SCAN_EVENT_PREEMPTED=0x20,      /* preempted by other high priority scan */
-    SCAN_EVENT_START_FAILED=0x40,   /* scan start failed */
-    SCAN_EVENT_RESTARTED=0x80,      /*scan restarted*/
-    SCAN_EVENT_MAX=0x8000
-} tSirScanEventType;
+/**
+ * lim_scan_event_type - scan event types used in LIM
+ * @LIM_SCAN_EVENT_STARTED - scan command accepted by FW
+ * @LIM_SCAN_EVENT_COMPLETED - scan has been completed by FW
+ * @LIM_SCAN_EVENT_BSS_CHANNEL - FW is going to move to HOME channel
+ * @LIM_SCAN_EVENT_FOREIGN_CHANNEL - FW is going to move to FORIEGN channel
+ * @LIM_SCAN_EVENT_DEQUEUED - scan request got dequeued
+ * @LIM_SCAN_EVENT_PREEMPTED - preempted by other high priority scan
+ * @LIM_SCAN_EVENT_START_FAILED - scan start failed
+ * @LIM_SCAN_EVENT_RESTARTED - scan restarted
+ * @LIM_SCAN_EVENT_MAX - max value for event type
+*/
+enum lim_scan_event_type {
+    LIM_SCAN_EVENT_STARTED=0x1,
+    LIM_SCAN_EVENT_COMPLETED=0x2,
+    LIM_SCAN_EVENT_BSS_CHANNEL=0x4,
+    LIM_SCAN_EVENT_FOREIGN_CHANNEL = 0x8,
+    LIM_SCAN_EVENT_DEQUEUED=0x10,
+    LIM_SCAN_EVENT_PREEMPTED=0x20,
+    LIM_SCAN_EVENT_START_FAILED=0x40,
+    LIM_SCAN_EVENT_RESTARTED=0x80,
+    LIM_SCAN_EVENT_MAX=0x8000
+};
 
 typedef struct sSirScanOffloadEvent{
-    tSirScanEventType event;
+    enum lim_scan_event_type event;
     tSirResultCodes reasonCode;
     tANI_U32 chanFreq;
     tANI_U32 requestor;
@@ -4997,39 +5020,39 @@ typedef enum
     WIFI_BAND_MAX
 } tWifiBand;
 
-/* wifi scan related events */
-typedef enum
+/**
+ * enum wifi_extscan_event_type - extscan event type
+ * @WIFI_EXTSCAN_RESULTS_AVAILABLE: reported when REPORT_EVENTS_EACH_SCAN is set
+ *		and a scan cycle completes. WIFI_SCAN_THRESHOLD_NUM_SCANS or
+ *		WIFI_SCAN_THRESHOLD_PERCENT can be reported instead if the
+ *		reason for the event is available; however, at most one of
+ *		these events should be reported per scan.
+ * @WIFI_EXTSCAN_THRESHOLD_NUM_SCANS: can be reported when
+ *		REPORT_EVENTS_EACH_SCAN is not set and
+ *		report_threshold_num_scans is reached.
+ * @WIFI_EXTSCAN_THRESHOLD_PERCENT: can be reported when REPORT_EVENTS_EACH_SCAN
+ *		is not set and report_threshold_percent is reached.
+ * @WIFI_SCAN_DISABLED: reported when currently executing gscans are disabled
+ *		start_gscan will need to be called again in order to continue
+ *		scanning.
+ * @WIFI_EXTSCAN_BUCKET_STARTED_EVENT: Bucket started event
+ *		This event is consumed in driver only.
+ * @WIFI_EXTSCAN_CYCLE_STARTED_EVENT: Cycle started event.
+ *		This event is consumed in driver only.
+ * @WIFI_EXTSCAN_CYCLE_COMPLETED_EVENT: Cycle complete event. This event
+ *		triggers @WIFI_EXTSCAN_RESULTS_AVAILABLE to the user space.
+ */
+enum wifi_extscan_event_type
 {
-	/*
-	 * reported when REPORT_EVENTS_EACH_SCAN is set and a scan
-	 * completes. WIFI_SCAN_THRESHOLD_NUM_SCANS or
-	 * WIFI_SCAN_THRESHOLD_PERCENT can be reported instead if the
-	 * reason for the event is available; however, at most one of
-	 * these events should be reported per scan.
-	 */
 	WIFI_EXTSCAN_RESULTS_AVAILABLE,
-	/*
-	 * can be reported when REPORT_EVENTS_EACH_SCAN is not set and
-	 * report_threshold_num_scans is reached.
-	 */
 	WIFI_EXTSCAN_THRESHOLD_NUM_SCANS,
-	/*
-	 * can be reported when REPORT_EVENTS_EACH_SCAN is not set and
-	 * report_threshold_percent is reached
-	 */
 	WIFI_EXTSCAN_THRESHOLD_PERCENT,
-	/*
-	 * reported when currently executing gscans are disabled
-	 * start_gscan will need to be called again in order to continue
-	 * scanning
-	 */
 	WIFI_SCAN_DISABLED,
 
-	/* Below events are consumed in driver only */
 	WIFI_EXTSCAN_BUCKET_STARTED_EVENT = 0x10,
 	WIFI_EXTSCAN_CYCLE_STARTED_EVENT,
 	WIFI_EXTSCAN_CYCLE_COMPLETED_EVENT,
-} tWifiScanEventType;
+};
 
 /**
  * enum extscan_configuration_flags - extscan config flags
@@ -6273,8 +6296,8 @@ struct sir_ocb_config_sched {
  * @dcc_ndl_chan_list: array of dcc channel info
  * @dcc_ndl_active_state_list_len: size of the active state array
  * @dcc_ndl_active_state_list: array of active states
- * @adapter: the OCB adapter
- * @dcc_stats_callback: callback for the response event
+ * @def_tx_param: default TX parameters
+ * @def_tx_param_size: size of the default TX parameters
  */
 struct sir_ocb_config {
 	uint8_t session_id;
@@ -6287,6 +6310,8 @@ struct sir_ocb_config {
 	void *dcc_ndl_chan_list;
 	uint32_t dcc_ndl_active_state_list_len;
 	void *dcc_ndl_active_state_list;
+	void *def_tx_param;
+	uint32_t def_tx_param_size;
 };
 
 /* The size of the utc time in bytes. */
@@ -6650,6 +6675,17 @@ struct egap_conf_params {
 };
 
 /**
+ * struct beacon_filter_param - parameters for beacon filtering
+ * @vdev_id: vdev id
+ * @ie_map: bitwise map of IEs that needs to be filtered
+ *
+ */
+struct beacon_filter_param {
+	uint32_t   vdev_id;
+	uint32_t   ie_map[8];
+};
+
+/**
  * struct smps_force_mode_event - smps force mode event param
  * @message_type: Type of message
  * @length: length
@@ -6699,4 +6735,201 @@ struct sir_bpf_get_offload {
 	uint32_t max_bytes_for_bpf_inst;
 	uint32_t remaining_bytes_for_bpf_inst;
 };
+
+/**
+ * struct sir_wake_lock_stats - wake lock stats structure
+ * @wow_ucast_wake_up_count: Unicast wakeup count
+ * @wow_bcast_wake_up_count: Broadcast wakeup count
+ * @wow_ipv4_mcast_wake_up_count: ipv4 multicast wakeup count
+ * @wow_ipv6_mcast_wake_up_count: ipv6 multicast wakeup count
+ * @wow_ipv6_mcast_ra_stats: ipv6 multicast ra stats
+ * @wow_ipv6_mcast_ns_stats: ipv6 multicast ns stats
+ * @wow_ipv6_mcast_na_stats: ipv6 multicast na stats
+ */
+struct sir_wake_lock_stats {
+	uint32_t wow_ucast_wake_up_count;
+	uint32_t wow_bcast_wake_up_count;
+	uint32_t wow_ipv4_mcast_wake_up_count;
+	uint32_t wow_ipv6_mcast_wake_up_count;
+	uint32_t wow_ipv6_mcast_ra_stats;
+	uint32_t wow_ipv6_mcast_ns_stats;
+	uint32_t wow_ipv6_mcast_na_stats;
+};
+
+/**
+ * struct dot11_counters - Mib Group containing attributes that are MAC counters
+ * @tx_frags: successfully transmitted fragments
+ * @group_tx_frames: transmitted group addressed frames
+ * @failed_cnt: MSDUs not transmitted successfully
+ * @rx_frags: fragments successfully received
+ * @group_rx_frames: group addressed frames received
+ * @fcs_error_cnt: FCS errors detected
+ * @tx_frames: frames successfully transmitted
+ *
+ */
+struct dot11_counters {
+	uint32_t tx_frags;
+	uint32_t group_tx_frames;
+	uint32_t failed_cnt;
+	uint32_t rx_frags;
+	uint32_t group_rx_frames;
+	uint32_t fcs_error_cnt;
+	uint32_t tx_frames;
+};
+
+/**
+ * struct dot11_mac_statistics - MIB stats information on the operation of MAC
+ * @retry_cnt: retries done by mac for successful transmition
+ * @frame_dup_cnt: duplicate no of frames
+ * @rts_success_cnt: Number of CTS received (in response to RTS)
+ * @rts_fail_cnt: Number of CTS is not received (in response to RTS)
+ *
+ */
+struct dot11_mac_statistics {
+	uint32_t retry_cnt;
+	uint32_t frame_dup_cnt;
+	uint32_t rts_success_cnt;
+	uint32_t rts_fail_cnt;
+};
+
+/**
+ * dot11_qos_counters - qos mac counters
+ * @qos_tx_frag_cnt: transmitted QoS fragments
+ * @qos_failed_cnt: failed Qos fragments
+ * @qos_retry_cnt: frames transmitted after one or more retransmissions
+ * @qos_frame_dup_cnt: duplicate frames
+ * @qos_rts_success_cnt: Number of CTS received (in response to RTS)
+ * @qos_rts_fail_cnt: Number of CTS is not received (in response to RTS)
+ * @qos_rx_frag_cnt: Number of received MPDU of type Data
+ * @qos_tx_frame_cnt: Number of transmitted MPDU of type Data
+ * @qos_discarded_frame_cnt: Total Discarded MSDUs
+ * @qos_mpdu_rx_cnt: Total received MPDU
+ * @qos_retries_rx_cnt: received MPDU with retry bit equal to 1
+ *
+ */
+struct dot11_qos_counters {
+	uint32_t qos_tx_frag_cnt;
+	uint32_t qos_failed_cnt;
+	uint32_t qos_retry_cnt;
+	uint32_t qos_frame_dup_cnt;
+	uint32_t qos_rts_success_cnt;
+	uint32_t qos_rts_fail_cnt;
+	uint32_t qos_rx_frag_cnt;
+	uint32_t qos_tx_frame_cnt;
+	uint32_t qos_discarded_frame_cnt;
+	uint32_t qos_mpdu_rx_cnt;
+	uint32_t qos_retries_rx_cnt;
+};
+
+/**
+ * dot11_rsna_stats - Mib RSN stats
+ * @cmac_icv_err: MPDUs discarded by the CMAC integrity check algorithm
+ * @tkip_icv_err: TKIP ICV errors encountered
+ * @tkip_replays: TKIP replay errors detected
+ * @ccmp_decrypt_err: MPDUs discarded by the CCMP decryption algorithm
+ * @ccmp_replays: received CCMP MPDUs discarded by the replay mechanism
+ *
+ */
+struct dot11_rsna_stats {
+	uint32_t cmac_icv_err;
+	uint32_t tkip_icv_err;
+	uint32_t tkip_replays;
+	uint32_t ccmp_decrypt_err;
+	uint32_t ccmp_replays;
+};
+
+/**
+ * dot11_counters_group3 - dot11 group3 stats
+ * @tx_ampdu_cnt: transmitted AMPDUs
+ * @tx_mpdus_in_ampdu_cnt: number of MPDUs in the A-MPDU in transmitted AMPDUs
+ * @tx_octets_in_ampdu_cnt: octets in the transmitted A-MPDUs
+ * @ampdu_rx_cnt: received A-MPDU
+ * @mpdu_in_rx_ampdu_cnt: MPDUs received in the A-MPDU
+ * @rx_octets_in_ampdu_cnt: octets in the received A-MPDU
+ *
+ */
+struct dot11_counters_group3 {
+	uint32_t tx_ampdu_cnt;
+	uint32_t tx_mpdus_in_ampdu_cnt;
+	uint64_t tx_octets_in_ampdu_cnt;
+	uint32_t ampdu_rx_cnt;
+	uint32_t mpdu_in_rx_ampdu_cnt;
+	uint64_t rx_octets_in_ampdu_cnt;
+};
+
+/**
+ * mib_stats_metrics - mib stats counters
+ * @mib_counters: dot11Counters group
+ * @mib_mac_statistics: dot11MACStatistics group
+ * @mib_qos_counters: dot11QoSCounters group
+ * @mib_rsna_stats: dot11RSNAStats group
+ * @mib_counters_group3: dot11CountersGroup3 group
+ *
+ */
+struct mib_stats_metrics {
+	struct dot11_counters mib_counters;
+	struct dot11_mac_statistics mib_mac_statistics;
+	struct dot11_qos_counters mib_qos_counters;
+	struct dot11_rsna_stats mib_rsna_stats;
+	struct dot11_counters_group3 mib_counters_group3;
+};
+
+/**
+ * get_mib_stats_req - req for getting mib stats
+ * @msg_type: message id
+ * @msg_len: msg length
+ * @session_id: session id
+ *
+ */
+struct get_mib_stats_req {
+	uint16_t msg_type;
+	uint16_t msg_len;
+	uint8_t  session_id;
+};
+
+/**
+ * sir_txrate_update - update txrate to firmware
+ * @session_id: session identifier
+ * @txrate: tx rate to configure for hardware mode
+ * @bssid: Bssid
+ */
+struct sir_txrate_update {
+	uint8_t session_id;
+	uint16_t txrate;
+	tSirMacAddr bssid;
+};
+
+/**
+ * struct sir_del_all_tdls_peers - delete all tdls peers
+ * @msg_type: type of message
+ * @msg_len: length of message
+ * bssid: bssid of peer device
+ */
+struct sir_del_all_tdls_peers {
+	uint16_t msg_type;
+	uint16_t msg_len;
+	tSirMacAddr bssid;
+};
+
+/**
+ * struct sme_send_disassoc_frm_req - send disassoc request frame
+ * @msg_type: message type
+ * @length: length of message
+ * @session_id: session id
+ * @trans_id: transaction id
+ * @peer_mac: peer mac address
+ * @reason: reason for disassoc
+ * @wait_for_ack: wait for acknowledgment
+ */
+struct sme_send_disassoc_frm_req
+{
+	uint16_t msg_type;
+	uint16_t length;
+	uint8_t session_id;
+	uint16_t trans_id;
+	uint8_t peer_mac[6];
+	uint16_t reason;
+	uint8_t wait_for_ack;
+};
+
 #endif /* __SIR_API_H */

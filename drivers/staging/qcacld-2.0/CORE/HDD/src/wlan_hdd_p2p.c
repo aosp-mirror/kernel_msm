@@ -192,6 +192,7 @@ wlan_hdd_remain_on_channel_callback(tHalHandle hHal, void* pCtx,
     vos_timer_destroy(&pRemainChanCtx->hdd_remain_on_chan_timer);
 
     cfgState->remain_on_chan_ctx = NULL;
+
     /*
      * Resetting the roc in progress early ensures that the subsequent
      * roc requests are immediately processed without being queued
@@ -205,7 +206,6 @@ wlan_hdd_remain_on_channel_callback(tHalHandle hHal, void* pCtx,
      * Basically, the system must not go into suspend while roc is in progress.
      */
     hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_ROC);
-    mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
 
     if( REMAIN_ON_CHANNEL_REQUEST == pRemainChanCtx->rem_on_chan_request)
     {
@@ -229,6 +229,7 @@ wlan_hdd_remain_on_channel_callback(tHalHandle hHal, void* pCtx,
                               GFP_KERNEL);
         pAdapter->lastRocTs = vos_timer_get_system_time();
     }
+    mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
 
     /* Schedule any pending RoC: Any new roc request during this time
      * would have got queued in 'wlan_hdd_request_remain_on_channel'
@@ -245,13 +246,17 @@ wlan_hdd_remain_on_channel_callback(tHalHandle hHal, void* pCtx,
        )
     {
         tANI_U8 sessionId = pAdapter->sessionId;
+        mutex_lock(&cfgState->remain_on_chan_ctx_lock);
         if( REMAIN_ON_CHANNEL_REQUEST == pRemainChanCtx->rem_on_chan_request)
         {
+            mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
             sme_DeregisterMgmtFrame(
                        hHal, sessionId,
                       (SIR_MAC_MGMT_FRAME << 2) | ( SIR_MAC_MGMT_PROBE_REQ << 4),
                        NULL, 0 );
         }
+        else
+           mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
     }
     else if ( ( WLAN_HDD_SOFTAP== pAdapter->device_mode ) ||
               ( WLAN_HDD_P2P_GO == pAdapter->device_mode )
@@ -268,6 +273,7 @@ wlan_hdd_remain_on_channel_callback(tHalHandle hHal, void* pCtx,
 
     }
 
+    mutex_lock(&cfgState->remain_on_chan_ctx_lock);
     if(pRemainChanCtx->action_pkt_buff.frame_ptr != NULL
        && pRemainChanCtx->action_pkt_buff.frame_length != 0 )
     {
@@ -276,6 +282,7 @@ wlan_hdd_remain_on_channel_callback(tHalHandle hHal, void* pCtx,
         pRemainChanCtx->action_pkt_buff.frame_length = 0;
     }
     vos_mem_free( pRemainChanCtx );
+    mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
     complete(&pAdapter->cancel_rem_on_chan_var);
     if (eHAL_STATUS_SUCCESS != status)
         complete(&pAdapter->rem_on_chan_ready_event);
@@ -300,6 +307,12 @@ void wlan_hdd_cancel_existing_remain_on_channel(hdd_adapter_t *pAdapter)
                                               hdd_remain_on_chan_timer);
 
         pRemainChanCtx = cfgState->remain_on_chan_ctx;
+        if (NULL == pRemainChanCtx)
+        {
+            mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
+            hddLog(LOGE, FL("pRemainChanCtx is NULL"));
+            return;
+        }
         if (pRemainChanCtx->hdd_remain_on_chan_cancel_in_progress == TRUE)
         {
             mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
@@ -418,6 +431,12 @@ void wlan_hdd_cleanup_remain_on_channel_ctx(hdd_adapter_t *pAdapter)
 
            mutex_lock(&cfgState->remain_on_chan_ctx_lock);
            roc_ctx = cfgState->remain_on_chan_ctx;
+           if (roc_ctx == NULL)
+           {
+               mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
+               hddLog(LOG1, FL("roc_ctx is NULL!"));
+               return;
+           }
            if (roc_ctx->hdd_remain_on_chan_cancel_in_progress == true) {
                 mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
                 hddLog(LOG1, FL("roc cancel already in progress"));
@@ -1557,7 +1576,9 @@ int __wlan_hdd_mgmt_tx(struct wiphy *wiphy, struct net_device *dev,
                    goto send_frame;
                } else {
 
-                  if(pRemainChanCtx->hdd_remain_on_chan_cancel_in_progress == TRUE)
+                  if( (pRemainChanCtx != NULL) &&
+                      (pRemainChanCtx->hdd_remain_on_chan_cancel_in_progress ==
+                           TRUE))
                   {
                       mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
                       hddLog(VOS_TRACE_LEVEL_INFO,
@@ -1835,90 +1856,6 @@ int wlan_hdd_cfg80211_mgmt_tx_cancel_wait(struct wiphy *wiphy,
 }
 #endif
 
-static void hdd_wlan_tx_complete( hdd_adapter_t* pAdapter,
-                                  hdd_cfg80211_state_t* cfgState,
-                                  tANI_BOOLEAN actionSendSuccess )
-{
-    struct ieee80211_radiotap_header *rthdr;
-    unsigned char *pos;
-    struct sk_buff *skb = cfgState->skb;
-#ifdef WLAN_FEATURE_HOLD_RX_WAKELOCK
-    hdd_context_t *pHddCtx = (hdd_context_t*)(pAdapter->pHddCtx);
-#endif
-
-    /* 2 Byte for TX flags and 1 Byte for Retry count */
-    u32 rtHdrLen = sizeof(*rthdr) + 3;
-
-    u8 *data;
-
-    /* We have to return skb with Data starting with MAC header. We have
-     * copied SKB data starting with MAC header to cfgState->buf. We will pull
-     * entire skb->len from skb and then we will push cfgState->buf to skb
-     * */
-    if( NULL == skb_pull(skb, skb->len) )
-    {
-        hddLog( LOGE, FL("Not Able to Pull %d byte from skb"), skb->len);
-        kfree_skb(cfgState->skb);
-        return;
-    }
-
-    data = skb_push( skb, cfgState->len );
-
-    if (data == NULL)
-    {
-        hddLog( LOGE, FL("Not Able to Push %zu byte to skb"), cfgState->len);
-        kfree_skb( cfgState->skb );
-        return;
-    }
-
-    memcpy( data, cfgState->buf, cfgState->len );
-
-    /* send frame to monitor interfaces now */
-    if( skb_headroom(skb) < rtHdrLen )
-    {
-        hddLog( LOGE, FL("No headroom for rtap header"));
-        kfree_skb(cfgState->skb);
-        return;
-    }
-
-    rthdr = (struct ieee80211_radiotap_header*) skb_push( skb, rtHdrLen );
-
-    memset( rthdr, 0, rtHdrLen );
-    rthdr->it_len = cpu_to_le16( rtHdrLen );
-    rthdr->it_present = cpu_to_le32((1 << IEEE80211_RADIOTAP_TX_FLAGS) |
-                                    (1 << IEEE80211_RADIOTAP_DATA_RETRIES)
-                                   );
-
-    pos = (unsigned char *)( rthdr+1 );
-
-    // Fill TX flags
-    *pos = actionSendSuccess;
-    pos += 2;
-
-    // Fill retry count
-    *pos = 0;
-    pos++;
-
-    skb_set_mac_header( skb, 0 );
-    skb->ip_summed = CHECKSUM_NONE;
-    skb->pkt_type  = PACKET_OTHERHOST;
-    skb->protocol  = htons(ETH_P_802_2);
-    memset( skb->cb, 0, sizeof( skb->cb ) );
-#ifdef WLAN_FEATURE_HOLD_RX_WAKELOCK
-    vos_wake_lock_timeout_acquire(&pHddCtx->rx_wake_lock,
-                                  HDD_WAKE_LOCK_DURATION,
-                                  WIFI_POWER_EVENT_WAKELOCK_HOLD_RX);
-#endif
-    if (in_interrupt())
-        netif_rx( skb );
-    else
-        netif_rx_ni( skb );
-
-    /* Enable Queues which we have disabled earlier */
-    hddLog(LOG1, FL("Enabling queues"));
-    netif_tx_start_all_queues( pAdapter->dev );
-}
-
 void hdd_sendActionCnf( hdd_adapter_t *pAdapter, tANI_BOOLEAN actionSendSuccess )
 {
     hdd_cfg80211_state_t *cfgState = WLAN_HDD_GET_CFG_STATE_PTR( pAdapter );
@@ -1931,17 +1868,13 @@ void hdd_sendActionCnf( hdd_adapter_t *pAdapter, tANI_BOOLEAN actionSendSuccess 
         return;
     }
 
-    /* If skb is NULL it means this packet was received on CFG80211 interface
-     * else it was received on Monitor interface */
-    if( cfgState->skb == NULL )
-    {
-        /*
-         * buf is the same pointer it passed us to send. Since we are sending
-         * it through control path, we use different buffers.
-         * In case of mac80211, they just push it to the skb and pass the same
-         * data while sending tx ack status.
-         * */
-         cfg80211_mgmt_tx_status(
+    /*
+     * buf is the same pointer it passed us to send. Since we are sending
+     * it through control path, we use different buffers.
+     * In case of mac80211, they just push it to the skb and pass the same
+     * data while sending tx ack status.
+     * */
+    cfg80211_mgmt_tx_status(
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0)) || defined(WITH_BACKPORTS)
                 pAdapter->dev->ieee80211_ptr,
 #else
@@ -1949,30 +1882,9 @@ void hdd_sendActionCnf( hdd_adapter_t *pAdapter, tANI_BOOLEAN actionSendSuccess 
 #endif
                 cfgState->action_cookie,
                 cfgState->buf, cfgState->len, actionSendSuccess, GFP_KERNEL );
-         vos_mem_free( cfgState->buf );
-         cfgState->buf = NULL;
-    }
-    else
-    {
-        hdd_adapter_t* pMonAdapter =
-                    hdd_get_adapter( pAdapter->pHddCtx, WLAN_HDD_MONITOR );
-        if( pMonAdapter == NULL )
-        {
-            hddLog( LOGE, "Not able to get Monitor Adapter");
-            cfgState->skb = NULL;
-            vos_mem_free( cfgState->buf );
-            cfgState->buf = NULL;
-            complete(&pAdapter->tx_action_cnf_event);
-            return;
-        }
-        /* Send TX completion feedback over monitor interface. */
-        hdd_wlan_tx_complete( pMonAdapter, cfgState, actionSendSuccess );
-        cfgState->skb = NULL;
-        vos_mem_free( cfgState->buf );
-        cfgState->buf = NULL;
-        /* Look for the next Mgmt packet to TX */
-        hdd_mon_tx_mgmt_pkt(pAdapter);
-    }
+    vos_mem_free(cfgState->buf);
+    cfgState->buf = NULL;
+
     complete(&pAdapter->tx_action_cnf_event);
 }
 
@@ -2432,121 +2344,6 @@ int wlan_hdd_del_virtual_intf(struct wiphy *wiphy, struct net_device *dev)
     return ret;
 }
 
-/*
- * ieee80211_add_rx_radiotap_header - add radiotap header
- */
-static int hdd_wlan_add_rx_radiotap_hdr (
-             struct sk_buff *skb, int rtap_len, int flag )
-{
-    u8 rtap_temp[20] = {0};
-    struct ieee80211_radiotap_header *rthdr;
-    unsigned char *pos;
-    u16 rx_flags = 0;
-
-    rthdr = (struct ieee80211_radiotap_header *)(&rtap_temp[0]);
-
-    /* radiotap header, set always present flags */
-    rthdr->it_present = cpu_to_le32((1 << IEEE80211_RADIOTAP_FLAGS)   |
-                                    (1 << IEEE80211_RADIOTAP_RX_FLAGS));
-    rthdr->it_len = cpu_to_le16(rtap_len);
-
-    pos = (unsigned char *) (rthdr + 1);
-
-    /* the order of the following fields is important */
-
-    /* IEEE80211_RADIOTAP_FLAGS */
-    *pos = 0;
-    pos++;
-
-    /* IEEE80211_RADIOTAP_RX_FLAGS: Length 2 Bytes */
-    /* ensure 2 byte alignment for the 2 byte field as required */
-    if ((pos - (u8 *)rthdr) & 1)
-        pos++;
-    put_unaligned_le16(rx_flags, pos);
-    pos += 2;
-
-    // actually push the data
-    memcpy(skb_push(skb, rtap_len), &rtap_temp[0], rtap_len);
-
-    return 0;
-}
-
-void hdd_sendMgmtFrameOverMonitorIface( hdd_adapter_t *pMonAdapter,
-                                        tANI_U32 nFrameLength,
-                                        tANI_U8* pbFrames,
-                                        tANI_U8 frameType )
-{
-    //Indicate a Frame over Monitor Intf.
-    int rxstat;
-    struct sk_buff *skb = NULL;
-    int needed_headroom = 0;
-    int flag = HDD_RX_FLAG_IV_STRIPPED | HDD_RX_FLAG_DECRYPTED |
-               HDD_RX_FLAG_MMIC_STRIPPED;
-#ifdef WLAN_FEATURE_HOLD_RX_WAKELOCK
-    hdd_context_t* pHddCtx = (hdd_context_t*)(pMonAdapter->pHddCtx);
-#endif
-    hddLog( LOG1, FL("Indicate Frame over Monitor Intf"));
-
-    if (NULL == pbFrames)
-    {
-        hddLog(LOGE, FL("NULL frame pointer"));
-        return;
-    }
-
-    /* room for the radiotap header based on driver features
-     * 1 Byte for RADIO TAP Flag, 1 Byte padding and 2 Byte for
-     * RX flags.
-     * */
-     needed_headroom = sizeof(struct ieee80211_radiotap_header) + 4;
-
-     //alloc skb  here
-     skb = alloc_skb(VPKT_SIZE_BUFFER, GFP_ATOMIC);
-     if (unlikely(NULL == skb))
-     {
-         hddLog( LOGW, FL("Unable to allocate skb"));
-         return;
-     }
-     skb_reserve(skb, VPKT_SIZE_BUFFER);
-     if (unlikely(skb_headroom(skb) < nFrameLength))
-     {
-         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_FATAL,
-                   "HDD [%d]: Insufficient headroom, "
-                   "head[%p], data[%p], req[%d]",
-                   __LINE__, skb->head, skb->data, nFrameLength);
-         kfree_skb(skb);
-         return ;
-     }
-     // actually push the data
-     memcpy(skb_push(skb, nFrameLength), pbFrames, nFrameLength);
-     /* prepend radiotap information */
-     if( 0 != hdd_wlan_add_rx_radiotap_hdr( skb, needed_headroom, flag ) )
-     {
-         hddLog( LOGE, FL("Not Able Add Radio Tap"));
-         //free skb
-         kfree_skb(skb);
-         return ;
-     }
-
-     skb_reset_mac_header( skb );
-     skb->dev = pMonAdapter->dev;
-     skb->protocol = eth_type_trans( skb, skb->dev );
-     skb->ip_summed = CHECKSUM_NONE;
-#ifdef WLAN_FEATURE_HOLD_RX_WAKELOCK
-     vos_wake_lock_timeout_acquire(&pHddCtx->rx_wake_lock,
-                                   HDD_WAKE_LOCK_DURATION,
-                                   WIFI_POWER_EVENT_WAKELOCK_HOLD_RX);
-#endif
-     rxstat = netif_rx_ni(skb);
-     if( NET_RX_SUCCESS == rxstat )
-     {
-         hddLog( LOG1, FL("Success"));
-     }
-     else
-         hddLog( LOGE, FL("Failed %d"), rxstat);
-
-     return ;
-}
-
 void __hdd_indicate_mgmt_frame(hdd_adapter_t *pAdapter,
                             tANI_U32 nFrameLength,
                             tANI_U8* pbFrames,
@@ -2630,21 +2427,6 @@ void __hdd_indicate_mgmt_frame(hdd_adapter_t *pAdapter,
     {
         hddLog( LOGE, FL("pAdapter has invalid magic"));
         return;
-    }
-
-    if ((WLAN_HDD_SOFTAP == pAdapter->device_mode) ||
-        (WLAN_HDD_P2P_GO == pAdapter->device_mode ))
-    {
-        hdd_adapter_t *pMonAdapter =
-            hdd_get_mon_adapter( WLAN_HDD_GET_CTX(pAdapter) );
-
-        if (NULL != pMonAdapter)
-        {
-            hddLog( LOG1, FL("Indicate Frame over Monitor Interface"));
-            hdd_sendMgmtFrameOverMonitorIface( pMonAdapter, nFrameLength,
-                    pbFrames, frameType);
-            return;
-        }
     }
 
     //Channel indicated may be wrong. TODO
@@ -2789,6 +2571,10 @@ void __hdd_indicate_mgmt_frame(hdd_adapter_t *pAdapter,
 
                 wlan_hdd_tdls_set_rssi(pAdapter, mac, rxRssi);
                 wlan_hdd_tdls_recv_discovery_resp(pAdapter, mac);
+                vos_tdls_tx_rx_mgmt_event(SIR_MAC_ACTION_TDLS,
+                   SIR_MAC_ACTION_RX, SIR_MAC_MGMT_ACTION,
+                   pbFrames[WLAN_HDD_PUBLIC_ACTION_FRAME_OFFSET+1],
+                   &pbFrames[WLAN_HDD_80211_FRM_DA_OFFSET+6]);
             }
 #endif
         }
@@ -2805,6 +2591,10 @@ void __hdd_indicate_mgmt_frame(hdd_adapter_t *pAdapter,
                 hddLog(VOS_TRACE_LEVEL_INFO,"[TDLS] %s <--- OTA",
                     tdls_action_frame_type[actionFrmType]);
             }
+            vos_tdls_tx_rx_mgmt_event(SIR_MAC_ACTION_TDLS,
+              SIR_MAC_ACTION_RX, SIR_MAC_MGMT_ACTION,
+              actionFrmType, &pbFrames[WLAN_HDD_80211_FRM_DA_OFFSET+6]);
+
         }
 
         if((pbFrames[WLAN_HDD_PUBLIC_ACTION_FRAME_OFFSET] == WLAN_HDD_QOS_ACTION_FRAME)&&

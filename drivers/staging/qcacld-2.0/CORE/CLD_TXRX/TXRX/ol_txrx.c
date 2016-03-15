@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -417,6 +417,9 @@ ol_txrx_pdev_attach(
     if (!pdev->htt_pdev) {
         goto fail2;
     }
+
+    adf_os_mem_zero(pdev->pn_replays,
+                    OL_RX_NUM_PN_REPLAY_TYPES * sizeof(uint32_t));
 
 #ifdef IPA_UC_OFFLOAD
     /* Attach micro controller data path offload resource */
@@ -1072,6 +1075,10 @@ ol_txrx_vdev_attach(
 
     adf_os_spinlock_init(&vdev->ll_pause.mutex);
     vdev->ll_pause.paused_reason = 0;
+#if defined(CONFIG_HL_SUPPORT)
+    vdev->hl_paused_reason = 0;
+#endif
+
     vdev->ll_pause.txq.head = vdev->ll_pause.txq.tail = NULL;
     vdev->ll_pause.txq.depth = 0;
     adf_os_timer_init(
@@ -1088,6 +1095,17 @@ ol_txrx_vdev_attach(
     /* Default MAX Q depth for every VDEV */
     vdev->ll_pause.max_q_depth =
         ol_tx_cfg_max_tx_queue_depth_ll(vdev->pdev->ctrl_pdev);
+
+    vdev->bundling_reqired = false;
+    adf_os_spinlock_init(&vdev->bundle_queue.mutex);
+    vdev->bundle_queue.txq.head = vdev->ll_pause.txq.tail = NULL;
+    vdev->bundle_queue.txq.depth = 0;
+    adf_os_timer_init(
+            pdev->osdev,
+            &vdev->bundle_queue.timer,
+            ol_tx_hl_vdev_bundle_timer,
+            vdev, ADF_DEFERRABLE_TIMER);
+
     /* add this vdev into the pdev's list */
     TAILQ_INSERT_TAIL(&pdev->vdev_list, vdev, vdev_list_elem);
 
@@ -1114,7 +1132,7 @@ void ol_txrx_osif_vdev_register(ol_txrx_vdev_handle vdev,
     vdev->osif_rx = txrx_ops->rx.std;
 
     if (ol_cfg_is_high_latency(vdev->pdev->ctrl_pdev)) {
-        txrx_ops->tx.std = vdev->tx = ol_tx_hl;
+        txrx_ops->tx.std = vdev->tx = OL_TX_HL;
         txrx_ops->tx.non_std = ol_tx_non_std_hl;
     } else {
         txrx_ops->tx.std = vdev->tx = OL_TX_LL;
@@ -1394,6 +1412,14 @@ ol_txrx_peer_attach(
     #ifdef QCA_SUPPORT_PEER_DATA_RX_RSSI
     peer->rssi_dbm = HTT_RSSI_INVALID;
     #endif
+    if ((VOS_MONITOR_MODE == vos_get_conparam()) && !pdev->self_peer) {
+        pdev->self_peer = peer;
+        /*
+         * No Tx in monitor mode, otherwise results in target assert.
+         * Setting disable_intrabss_fwd to true
+         */
+        ol_vdev_rx_set_intrabss_fwd(vdev, true);
+    }
 
     OL_TXRX_LOCAL_PEER_ID_ALLOC(pdev, peer);
 
@@ -2486,6 +2512,92 @@ a_bool_t ol_txrx_get_ocb_peer(struct ol_txrx_pdev_t *pdev, struct ol_txrx_peer_t
 
 exit:
     return rc;
+}
+
+#define MAX_TID         15
+#define MAX_DATARATE    7
+#define OCB_HEADER_VERSION 1
+
+/**
+ * ol_txrx_set_ocb_def_tx_param() - Set the default OCB TX parameters
+ * @vdev: The OCB vdev that will use these defaults.
+ * @_def_tx_param: The default TX parameters.
+ * @def_tx_param_size: The size of the _def_tx_param buffer.
+ *
+ * Return: true if the default parameters were set correctly, false if there
+ * is an error, for example an invalid parameter. In the case that false is
+ * returned, see the kernel log for the error description.
+ */
+bool ol_txrx_set_ocb_def_tx_param(ol_txrx_vdev_handle vdev,
+	void *_def_tx_param, uint32_t def_tx_param_size)
+{
+	struct ocb_tx_ctrl_hdr_t *def_tx_param =
+		(struct ocb_tx_ctrl_hdr_t *)_def_tx_param;
+
+	if (def_tx_param) {
+		/*
+		 * Default TX parameters are provided.
+		 * Validate the contents and
+		 * save them in the vdev.
+		 */
+		if (def_tx_param_size != sizeof(struct ocb_tx_ctrl_hdr_t)) {
+			VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_ERROR,
+			    "Invalid size of OCB default TX params");
+			return false;
+		}
+
+		if (def_tx_param->version != OCB_HEADER_VERSION) {
+			VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_ERROR,
+				  "Invalid version of OCB default TX params");
+			return false;
+		}
+
+		if (def_tx_param->channel_freq) {
+			int i;
+			for (i = 0; i < vdev->ocb_channel_count; i++) {
+				if (vdev->ocb_channel_info[i].chan_freq ==
+						def_tx_param->channel_freq)
+					break;
+			}
+			if (i == vdev->ocb_channel_count) {
+				VOS_TRACE(VOS_MODULE_ID_TXRX,
+					  VOS_TRACE_LEVEL_ERROR,
+					  "Invalid default channel frequency");
+				return false;
+			}
+		}
+
+		if (def_tx_param->valid_datarate &&
+			    def_tx_param->datarate > MAX_DATARATE) {
+			VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_ERROR,
+				  "Invalid default datarate");
+			return false;
+		}
+
+		if (def_tx_param->valid_tid &&
+			    def_tx_param->ext_tid > MAX_TID) {
+			VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_ERROR,
+				  "Invalid default TID");
+			return false;
+		}
+
+		if (vdev->ocb_def_tx_param == NULL)
+			vdev->ocb_def_tx_param =
+				vos_mem_malloc(sizeof(*vdev->ocb_def_tx_param));
+		vos_mem_copy(vdev->ocb_def_tx_param, def_tx_param,
+			     sizeof(*vdev->ocb_def_tx_param));
+	} else {
+		/*
+		 * Default TX parameters are not provided.
+		 * Delete the old defaults.
+		 */
+		if (vdev->ocb_def_tx_param) {
+			vos_mem_free(vdev->ocb_def_tx_param);
+			vdev->ocb_def_tx_param = NULL;
+		}
+	}
+
+	return true;
 }
 
 #ifdef IPA_UC_OFFLOAD

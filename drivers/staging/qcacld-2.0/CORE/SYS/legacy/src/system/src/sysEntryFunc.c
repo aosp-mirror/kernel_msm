@@ -170,7 +170,7 @@ sysBbtProcessMessageCore(tpAniSirGlobal pMac, tpSirMsgQ pMsg, tANI_U32 type,
 
             dropReason = limIsPktCandidateForDrop(pMac, pBd, subType);
             if (dropReason != eMGMT_DROP_NO_DROP) {
-                PELOG1(limLog(pMac, LOG1,
+                PELOG1(sysLog(pMac, LOG1,
                             FL("Mgmt Frame %d being dropped, reason: %d\n"),
                             subType, dropReason);)
                 MTRACE(macTrace(pMac,   TRACE_CODE_RX_MGMT_DROP, NO_SESSION, dropReason);)

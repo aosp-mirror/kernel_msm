@@ -109,12 +109,12 @@
 
 #include "wlan_hdd_ocb.h"
 #include "wlan_hdd_tsf.h"
+#include "vos_nvitem.h"
 
 #define HDD_FINISH_ULA_TIME_OUT         800
 #define HDD_SET_MCBC_FILTERS_TO_FW      1
 #define HDD_DELETE_MCBC_FILTERS_FROM_FW 0
 
-extern int wlan_hdd_cfg80211_update_band(struct wiphy *wiphy, eCsrBand eBand);
 static int ioctl_debug;
 module_param(ioctl_debug, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
@@ -455,6 +455,7 @@ static const hdd_freq_chan_map_t freq_chan_map[] = { {2412, 1}, {2417, 2},
 #ifdef DEBUG
 #define WE_SET_FW_CRASH_INJECT    2
 #endif
+#define WE_SET_MON_MODE_CHAN 3
 
 #define WLAN_STATS_INVALID            0
 #define WLAN_STATS_RETRY_CNT          1
@@ -5605,12 +5606,34 @@ static int iw_set_mlme(struct net_device *dev, struct iw_request_info *info,
 }
 
 int process_wma_set_command(int sessid, int paramid,
-                                   int sval, int vpdev)
+                            int sval, int vpdev)
 {
     int ret = 0;
     vos_msg_t msg = {0};
 
-    wda_cli_set_cmd_t *iwcmd = (wda_cli_set_cmd_t *)vos_mem_malloc(
+    v_CONTEXT_t vos_context = vos_get_global_context(0, NULL);
+    hdd_context_t *hdd_ctx;
+    wda_cli_set_cmd_t *iwcmd;
+
+    /* Skip session validation in FTM mode and for PDEV commands */
+    if (vpdev == PDEV_CMD || VOS_FTM_MODE == hdd_get_conparam())
+       goto skip_ftm;
+
+    hdd_ctx = vos_get_context(VOS_MODULE_ID_HDD, vos_context);
+    if (!hdd_ctx) {
+       hddLog(LOGE,FL("hdd context is not valid!"));
+       return -EINVAL;
+    }
+
+    if (vpdev != PDEV_CMD &&
+        VOS_STATUS_SUCCESS != sme_is_session_valid(hdd_ctx->hHal,
+                                                     sessid)) {
+       hddLog(LOGE, FL("SME session id is not valid %d"), sessid);
+       return -EINVAL;
+    }
+
+skip_ftm:
+    iwcmd = (wda_cli_set_cmd_t *)vos_mem_malloc(
                                 sizeof(wda_cli_set_cmd_t));
     if (NULL == iwcmd) {
        hddLog(VOS_TRACE_LEVEL_FATAL, "%s: vos_mem_alloc failed", __func__);
@@ -5626,7 +5649,7 @@ int process_wma_set_command(int sessid, int paramid,
     msg.bodyptr = (void *)iwcmd;
     if (VOS_STATUS_SUCCESS != vos_mq_post_message(VOS_MODULE_ID_WDA,
                                                   &msg)) {
-       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR, "%s: "
+       hddLog(VOS_TRACE_LEVEL_ERROR, "%s: "
                  "Not able to post wda_cli_set_cmd message to WDA",
                  __func__);
        vos_mem_free(iwcmd);
@@ -5640,7 +5663,29 @@ int process_wma_set_command_twoargs(int sessid, int paramid,
 {
     int ret = 0;
     vos_msg_t msg = {0};
-    wda_cli_set_cmd_t *iwcmd = vos_mem_malloc(sizeof(*iwcmd));
+    wda_cli_set_cmd_t *iwcmd;
+
+    v_CONTEXT_t vos_context = vos_get_global_context(0, NULL);
+    hdd_context_t *hdd_ctx;
+    /* Skip session validation in FTM mode and for PDEV commands */
+    if (vpdev == PDEV_CMD || VOS_FTM_MODE == hdd_get_conparam())
+       goto skip_ftm;
+
+    hdd_ctx = vos_get_context(VOS_MODULE_ID_HDD, vos_context);
+
+    if (!hdd_ctx) {
+       hddLog(LOGE,FL("hdd context is not valid!"));
+       return -EINVAL;
+    }
+
+    if (VOS_STATUS_SUCCESS  != sme_is_session_valid(hdd_ctx->hHal,
+                                                     sessid)) {
+       hddLog(LOGE, FL("SME session id is not valid %d"), sessid);
+       return -EINVAL;
+    }
+
+skip_ftm:
+    iwcmd = vos_mem_malloc(sizeof(*iwcmd));
 
     if (NULL == iwcmd) {
         hddLog(VOS_TRACE_LEVEL_FATAL, "%s: vos_mem_alloc failed!", __func__);
@@ -7559,6 +7604,12 @@ static int __iw_setnone_getint(struct net_device *dev,
     ret = wlan_hdd_validate_context(hdd_ctx);
     if (0 != ret)
         return ret;
+
+    if (VOS_STATUS_SUCCESS != sme_is_session_valid(hHal,
+                               pAdapter->sessionId)) {
+       hddLog(LOGE, FL("session id is not valid %d"), pAdapter->sessionId);
+       return -EINVAL;
+    }
 
     switch (value[0])
     {
@@ -10964,7 +11015,7 @@ int hdd_setBand(struct net_device *dev, u8 ui_band)
                      FL("Failed to set the band value to %u"), band);
              return -EINVAL;
         }
-        wlan_hdd_cfg80211_update_band(pHddCtx->wiphy, (eCsrBand)band);
+        vos_update_band((eCsrBand)band);
     }
     EXIT();
     return 0;
@@ -11242,6 +11293,46 @@ static int __iw_set_two_ints_getnone(struct net_device *dev,
                                               value[1], value[2], GEN_CMD);
         break;
 #endif
+    case WE_SET_MON_MODE_CHAN:
+        /*
+         * TODO: Remove this private implementation use standard
+         * interface wlan_hdd_cfg80211_ops.set_monitor_channel
+         */
+        if (VOS_MONITOR_MODE == hdd_get_conparam()) {
+            uint16_t vht_channel_width = value[2];
+            hdd_station_ctx_t *sta_ctx =
+                    WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
+            struct hdd_mon_set_ch_info *ch_info = &sta_ctx->ch_info;
+            eHalStatus hal_status;
+
+            tHalHandle hal_hdl = hdd_ctx->hHal;
+            tCsrBssid bssid = {0};
+            tCsrRoamProfile roam_profile;
+
+            hddLog(LOG1, "Set monitor mode Channel %d", value[1]);
+            hdd_select_cbmode(pAdapter, value[1], &vht_channel_width);
+            roam_profile.ChannelInfo.ChannelList = &ch_info->channel;
+            roam_profile.ChannelInfo.numOfChannels = 1;
+            roam_profile.vht_channel_width = ch_info->channel_width;
+            roam_profile.phyMode = ch_info->phy_mode;
+
+            vos_mem_copy(bssid, pAdapter->macAddressCurrent.bytes,
+                         VOS_MAC_ADDR_SIZE);
+
+            hal_status = sme_RoamChannelChangeReq(hal_hdl,
+                                 bssid,
+                                 ch_info->cb_mode, &roam_profile);
+            if (!HAL_STATUS_SUCCESS(hal_status)) {
+                hddLog(LOGE,
+                       "Failed to set sme_RoamChannel for monitor mode");
+                ret = -EINVAL;
+            }
+        } else {
+            hddLog(LOGE, "Not supported, device is not in monitor mode");
+            ret = -EINVAL;
+        }
+        break;
+
     default:
         hddLog(LOGE, "%s: Invalid IOCTL command %d", __func__, sub_cmd);
         break;
@@ -12432,6 +12523,9 @@ static const struct iw_priv_args we_private_args[] = {
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 2,
         0, "crash_inject" },
 #endif
+    {   WE_SET_MON_MODE_CHAN,
+        IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 2,
+        0, "setMonChan" },
 };
 
 

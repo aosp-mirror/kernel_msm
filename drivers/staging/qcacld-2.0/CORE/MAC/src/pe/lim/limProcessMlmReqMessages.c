@@ -891,7 +891,7 @@ limSendHalInitScanReq(tpAniSirGlobal pMac, tLimLimHalScanState nextState, tSirLi
 
     rc = wdaPostCtrlMsg(pMac, &msg);
     if (rc == eSIR_SUCCESS) {
-        PELOG3(limLog(pMac, LOG3, FL("wdaPostCtrlMsg() return eSIR_SUCCESS pMac=%x nextState=%d"),
+        PELOG3(limLog(pMac, LOG3, FL("wdaPostCtrlMsg() return eSIR_SUCCESS pMac=%p nextState=%d"),
                     pMac, pMac->lim.gLimHalScanState);)
             return;
     }
@@ -1334,7 +1334,7 @@ limRestorePreScanState(tpAniSirGlobal pMac)
     }
 
     pMac->lim.gLimSystemInScanLearnMode = 0;
-    PELOG1(limLog(pMac, LOG1, FL("Scan ended, took %d tu"), (tx_time_get() - pMac->lim.scanStartTime));)
+    PELOG1(limLog(pMac, LOG1, FL("Scan ended, took %lu tu"), (tx_time_get() - pMac->lim.scanStartTime));)
 } /*** limRestorePreScanState() ***/
 
 #ifdef FEATURE_OEM_DATA_SUPPORT
@@ -2247,8 +2247,6 @@ limProcessMlmJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
 
         if( isLimSessionOffChannel(pMac, sessionId) )
         {
-            limLog(pMac,LOG1,"SessionId:%d LimSession is on OffChannel",
-                   sessionId);
           //suspend link
           limLog(pMac, LOG1, FL("Suspend link as LimSession on sessionid %d"
           "is off channel"),sessionId);
@@ -2263,10 +2261,6 @@ limProcessMlmJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         }
         else
         {
-          limLog(pMac, LOG1, FL("No need to Suspend link as LimSession on "
-              "sessionid %d is not off channel, calling "
-              "limProcessMlmPostJoinSuspendLink with status as SUCCESS"),
-              sessionId);
           //No need to suspend link.
           limLog(pMac,LOG1,"SessionId:%d Join request on current channel",
                  sessionId);

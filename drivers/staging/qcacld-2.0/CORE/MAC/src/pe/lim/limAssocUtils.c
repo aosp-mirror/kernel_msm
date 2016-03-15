@@ -2013,8 +2013,8 @@ limPopulatePeerRateSet(tpAniSirGlobal pMac,
 
         psessionEntry->supported_nss_1x1 =
             ((pRates->supportedMCSSet[1] != 0) ? false : true);
-        PELOG1(limLog(pMac, LOG1, FL("HT supported nss 1x1 : %d "),
-                      psessionEntry->supported_nss_1x1);)
+        limLog(pMac, LOG1, FL("HT supported nss 1x1 : %d "),
+                      psessionEntry->supported_nss_1x1);
 
     }
 #ifdef WLAN_FEATURE_11AC

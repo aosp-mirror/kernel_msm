@@ -108,12 +108,6 @@ static inline void vos_get_boottime_ts(struct timespec *ts)
 	ktime_get_ts(ts);
 }
 
-static inline int vos_get_ramdump_mem(unsigned long *address,
-				unsigned long *size)
-{
-	return 0;
-}
-
 static inline void *vos_get_virt_ramdump_mem(unsigned long *size)
 {
 	return NULL;
@@ -134,7 +128,10 @@ static inline int vos_set_cpus_allowed_ptr(struct task_struct *task, ulong cpu)
 #endif
 
 static inline void vos_device_self_recovery(void) { return; }
-static inline void vos_request_pm_qos(u32 qos_val) { return; }
+static inline void vos_request_pm_qos_type(int latency_type, u32 qos_val)
+{
+	return;
+}
 static inline void vos_remove_pm_qos(void) { return; }
 static inline int vos_request_bus_bandwidth(int bandwidth) { return 0; }
 static inline int vos_get_platform_cap(void *cap) { return 1; }
@@ -197,7 +194,32 @@ static inline int vos_cache_boarddata(unsigned int offset,
 {
 	return 0;
 }
+
+typedef void (*oob_irq_handler_t) (void *dev_para);
+static inline bool vos_oob_enabled(void)
+{
+	return false;
+}
+
+static inline int vos_register_oob_irq_handler(oob_irq_handler_t handler,
+		void *pm_oob)
+{
+	return -ENOSYS;
+}
+
+static inline int vos_unregister_oob_irq_handler(void *pm_oob)
+{
+	return -ENOSYS;
+}
+
+static inline void vos_dump_stack (struct task_struct *task)
+{
+}
 #else
+static inline void vos_dump_stack (struct task_struct *task)
+{
+	cnss_dump_stack(task);
+}
 static inline void vos_init_work(struct work_struct *work, work_func_t func)
 {
 	cnss_init_work(work, func);
@@ -287,23 +309,15 @@ static inline void vos_get_boottime_ts(struct timespec *ts)
         cnss_get_boottime(ts);
 }
 
-#ifdef CONFIG_CNSS_PCI
-static inline void vos_request_pm_qos(u32 qos_val)
+static inline void vos_request_pm_qos_type(int latency_type, u32 qos_val)
 {
-	cnss_request_pm_qos(qos_val);
+	cnss_request_pm_qos_type(latency_type, qos_val);
 }
-#else
-static inline void vos_request_pm_qos(u32 qos_val) {}
-#endif
 
-#ifdef CONFIG_CNSS_PCI
 static inline void vos_remove_pm_qos(void)
 {
 	cnss_remove_pm_qos();
 }
-#else
-static inline void vos_remove_pm_qos(void) {}
-#endif
 
 static inline int vos_vendor_cmd_reply(struct sk_buff *skb)
 {
@@ -382,11 +396,6 @@ static inline int vos_request_bus_bandwidth(int bandwidth)
 {
 	return cnss_request_bus_bandwidth(bandwidth);
 }
-#else
-static inline int vos_request_bus_bandwidth(int bandwidth)
-{
-	return 0;
-}
 #endif
 
 #ifdef CONFIG_CNSS_PCI
@@ -420,12 +429,6 @@ static inline int vos_wlan_pm_control(bool vote)
 	return 0;
 }
 #endif
-
-static inline int vos_get_ramdump_mem(unsigned long *address,
-				unsigned long *size)
-{
-	return cnss_get_ramdump_mem(address, size);
-}
 
 static inline int vos_get_platform_cap(void *cap)
 {
@@ -500,6 +503,46 @@ static inline int vos_cache_boarddata(unsigned int offset,
 	unsigned int len, unsigned char *buf)
 {
 	return 0;
+}
+#endif
+
+#ifdef CONFIG_CNSS_SDIO
+static inline bool vos_oob_enabled(void)
+{
+	bool enabled = true;
+
+	if (-ENOSYS == cnss_wlan_query_oob_status())
+		enabled = false;
+
+	return enabled;
+}
+
+static inline int vos_register_oob_irq_handler(oob_irq_handler_t handler,
+		void *pm_oob)
+{
+	return cnss_wlan_register_oob_irq_handler(handler, pm_oob);
+}
+
+static inline int vos_unregister_oob_irq_handler(void *pm_oob)
+{
+	return cnss_wlan_unregister_oob_irq_handler(pm_oob);
+}
+#else
+typedef void (*oob_irq_handler_t) (void *dev_para);
+static inline bool vos_oob_enabled(void)
+{
+	return false;
+}
+
+static inline int vos_register_oob_irq_handler(oob_irq_handler_t handler,
+		void *pm_oob)
+{
+	return -ENOSYS;
+}
+
+static inline int vos_unregister_oob_irq_handler(void *pm_oob)
+{
+	return -ENOSYS;
 }
 #endif
 #endif
