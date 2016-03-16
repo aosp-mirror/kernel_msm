@@ -486,7 +486,7 @@ static int magicmouse_input_configured(struct hid_device *hdev,
 		return ret;
 	}
 
-	return 0;
+	return ret;
 }
 
 

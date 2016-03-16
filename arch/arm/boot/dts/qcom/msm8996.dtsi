@@ -171,6 +171,14 @@
 			reg = <0 0x8ea00000 0 0x2b00000>;
 		};
 
+		adsp_mem: adsp_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0 0x00000000 0 0xffffffff>;
+			reusable;
+			alignment = <0 0x100000>;
+			size = <0 0x400000>;
+		};
+
 		qseecom_mem: qseecom_region {
 			compatible = "shared-dma-pool";
 			alloc-ranges = <0 0x00000000 0 0xffffffff>;
@@ -194,8 +202,6 @@
 		};
 
 		dfps_data_mem: dfps_data_mem@83400000 {
-		       compatible = "shared-dma-pool";
-		       no-map;
 		       reg = <0 0x83400000 0 0x1000>;
 		       label = "dfps_data_mem";
 		};
@@ -892,6 +898,14 @@
 			&tsif1_sync_active>;		/* dual-tsif-mode2 */
 	};
 
+	wcd_rst_gpio: wcd_gpio_ctrl {
+		compatible = "qcom,wcd-gpio-ctrl";
+		qcom,cdc-rst-n-gpio = <&tlmm 64 0>;
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&cdc_reset_active>;
+		pinctrl-1 = <&cdc_reset_sleep>;
+	};
+
 	slim_msm: slim@91c0000 {
 		cell-index = <1>;
 		compatible = "qcom,slim-ngd";
@@ -917,10 +931,7 @@
 				      17 18 19 20 21 22 23 24 25 26 27 28 29
 				      30>;
 
-			qcom,cdc-reset-gpio = <&tlmm 64 0>;
-			pinctrl-names = "default", "idle";
-			pinctrl-0 = <&cdc_reset_active>;
-			pinctrl-1 = <&cdc_reset_sleep>;
+			qcom,wcd-rst-gpio-node = <&wcd_rst_gpio>;
 
 			clock-names = "wcd_clk", "wcd_native_clk";
 			clocks = <&clock_audio clk_audio_pmi_clk>,
@@ -3422,6 +3433,11 @@
 
 	qcom,msm-pacman {
 		compatible = "qcom,msm-pacman";
+	};
+
+	qcom,msm-adsprpc-mem {
+		compatible = "qcom,msm-adsprpc-mem-region";
+		memory-region = <&adsp_mem>;
 	};
 
 	qcom,msm_fastrpc {
