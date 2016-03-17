@@ -36,6 +36,7 @@
 #include <linux/usb/gadget.h>
 #include <linux/usb/of.h>
 #include <linux/usb/msm_hsusb.h>
+#include <linux/usb/usb_controller.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pm_wakeup.h>
 #include <linux/power_supply.h>
@@ -213,6 +214,7 @@ struct dwc3_msm {
 	u32			bus_perf_client;
 	struct msm_bus_scale_pdata	*bus_scale_table;
 	struct power_supply	usb_psy;
+	struct usb_controller	uc;
 	unsigned int		online;
 	bool			in_host_mode;
 	unsigned int		voltage_max;
@@ -2515,6 +2517,23 @@ static enum power_supply_property dwc3_msm_pm_power_props_usb[] = {
 	POWER_SUPPLY_PROP_USB_OTG,
 };
 
+static int dwc3_msm_notify_attached_source(struct usb_controller *uc, int value)
+{
+        struct dwc3_msm *mdwc = container_of(uc, struct dwc3_msm,
+                                                                uc);
+        struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+
+        /* Let OTG know about ID detection */
+	mdwc->id_state = value ? DWC3_ID_GROUND : DWC3_ID_FLOAT;
+	pr_info("dwc3 %s: id_state = %d\n", __func__, mdwc->id_state);
+	dbg_event(0xFF, "id_state", mdwc->id_state);
+	if (dwc->is_drd)
+		queue_delayed_work(mdwc->dwc3_wq,
+				&mdwc->resume_work, 0);
+
+	return 0;
+}
+
 static irqreturn_t dwc3_pmic_id_irq(int irq, void *data)
 {
 	struct dwc3_msm *mdwc = data;
@@ -2926,6 +2945,15 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 						__func__);
 			goto err;
 		}
+	}
+
+	mdwc->uc.notify_attached_source = dwc3_msm_notify_attached_source;
+
+	ret = usb_controller_register(&pdev->dev, &mdwc->uc);
+	if (ret < 0) {
+		dev_err(&pdev->dev,
+				"%s:usb_controller_register usb failed\n",
+					__func__);
 	}
 
 	ret = of_platform_populate(node, NULL, NULL, &pdev->dev);

@@ -1,0 +1,184 @@
+/*
+ * fusb302 usb phy driver for type-c and PD
+ *
+ * Copyright (C) 2015, 2016 Fairchild Semiconductor Corporation
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. Seee the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+#ifdef FSC_HAVE_VDM
+
+#include "vdm_callbacks.h"
+#include "vdm_types.h"
+
+#ifdef FSC_HAVE_DP
+#include "DisplayPort/dp.h"
+#include "DisplayPort/interface_dp.h"
+#endif // FSC_HAVE_DP
+
+
+FSC_BOOL svid_enable;
+FSC_BOOL mode_enable;
+FSC_U16 my_svid;
+FSC_U32 my_mode;
+
+FSC_BOOL mode_entered;
+SvidInfo core_svid_info;
+
+#ifdef FSC_HAVE_DP
+int AutoDpModeEntryObjPos;
+#endif // FSC_HAVE_DP
+
+Identity vdmRequestIdentityInfo() {
+    Identity id = {0};
+
+    if (mode_enable == TRUE && svid_enable == TRUE) {
+        id.id_header.modal_op_supported = 1;
+    } else {
+        id.id_header.modal_op_supported = 0;
+    }    
+    id.nack = FALSE;
+    id.id_header.usb_vid = my_svid;
+    return id;
+}
+
+SvidInfo vdmRequestSvidInfo() {
+	SvidInfo svid_info = {0};
+
+    if (svid_enable) {
+		svid_info.nack = FALSE;
+        svid_info.num_svids = 1;
+        svid_info.svids[0] = my_svid;
+    } else {
+        svid_info.nack = TRUE;
+        svid_info.num_svids = 0;
+        svid_info.svids[0] = 0x0000;
+    }
+
+	return svid_info;
+}
+
+ModesInfo vdmRequestModesInfo(FSC_U16 svid) {
+	ModesInfo modes_info = {0};
+
+    if (svid_enable && mode_enable && (svid == my_svid) ) {
+        modes_info.nack = FALSE;
+        modes_info.svid = svid;
+        modes_info.num_modes = 1;
+        modes_info.modes[0] = my_mode;
+    } else {
+        modes_info.nack = TRUE;
+        modes_info.svid = svid;
+        modes_info.num_modes = 0;
+        modes_info.modes[0] = 0;
+    }
+	return modes_info;
+}
+
+FSC_BOOL vdmModeEntryRequest(FSC_U16 svid, FSC_U32 mode_index) {
+    if (svid_enable && mode_enable && (svid == my_svid) && (mode_index == 1)) {
+        mode_entered = TRUE;
+
+#ifdef FSC_HAVE_DP
+        if (my_svid == DP_SID) {
+            DpModeEntered = mode_index;
+        }
+#endif // FSC_HAVE_DP
+        return TRUE;
+    }
+
+	return FALSE;
+}
+
+FSC_BOOL vdmModeExitRequest(FSC_U16 svid, FSC_U32 mode_index) {
+    if (mode_entered && (svid == my_svid) && (mode_index == 1)) {
+        mode_entered = FALSE;
+
+#ifdef FSC_HAVE_DP
+        if (DpModeEntered && (DpModeEntered == mode_index) && (svid == DP_SID)) {
+            DpModeEntered = 0;
+        }
+#endif // FSC_HAVE_DP
+
+        return TRUE;
+    }
+	return FALSE;
+}
+
+FSC_BOOL vdmEnterModeResult(FSC_BOOL success, FSC_U16 svid, FSC_U32 mode_index) {             
+#ifdef FSC_HAVE_DP
+    if (AutoDpModeEntryObjPos > 0) {
+        AutoDpModeEntryObjPos = 0;
+    }
+
+    if (svid == DP_SID) {
+        DpModeEntered = mode_index;
+    }
+#endif // FSC_HAVE_DP
+
+	return TRUE;
+}
+
+void vdmExitModeResult(FSC_BOOL success, FSC_U16 svid, FSC_U32 mode_index) {
+#ifdef FSC_HAVE_DP
+    if (svid == DP_SID && DpModeEntered == mode_index) {
+        DpModeEntered = 0;
+    }
+#endif // FSC_HAVE_DP
+}
+
+void vdmInformIdentity(FSC_BOOL success, SopType sop, Identity id) {
+
+}
+
+void vdmInformSvids(FSC_BOOL success, SopType sop, SvidInfo svid_info) {
+    if (success) {
+        FSC_U32 i;
+        core_svid_info.num_svids = svid_info.num_svids;
+        for (i = 0; (i < svid_info.num_svids) && (i < MAX_NUM_SVIDS); i++) {
+            core_svid_info.svids[i] = svid_info.svids[i]; 
+        }
+    }
+}
+
+void vdmInformModes(FSC_BOOL success, SopType sop, ModesInfo modes_info) {
+#ifdef FSC_HAVE_DP
+    FSC_U32 i;
+
+    if (modes_info.svid == DP_SID && modes_info.nack == FALSE) {
+        for (i = 0; i < modes_info.num_modes; i++) {
+            if (dpEvaluateModeEntry(modes_info.modes[i])) {
+                AutoDpModeEntryObjPos = i+1;
+            }
+        }
+    }
+#endif // FSC_HAVE_DP
+}
+
+void vdmInformAttention(FSC_U16 svid, FSC_U8 mode_index) {
+
+}
+
+void vdmInitDpm() {
+
+    svid_enable = TRUE;
+    mode_enable = TRUE;
+
+    my_svid = 0x0779; // 0x0779 = FC VID
+    my_mode = 0x0001;
+
+    mode_entered = FALSE;
+}
+
+#endif // FSC_HAVE_VDM

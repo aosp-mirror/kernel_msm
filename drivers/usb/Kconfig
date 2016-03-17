@@ -104,6 +104,8 @@ source "drivers/usb/dwc2/Kconfig"
 
 source "drivers/usb/chipidea/Kconfig"
 
+source "drivers/usb/fusb302/Kconfig"
+
 comment "USB port drivers"
 
 if USB
