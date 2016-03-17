@@ -257,7 +257,7 @@
 	};
 
 	sound-9335 {
-		qcom,model = "msm8996-tasha-t50-snd-card";
+		qcom,model = "msm8996-tasha-marlin-snd-card";
 		compatible = "qcom,msm8996-asoc-snd-tasha";
 
 		pinctrl-names = "uart_notify_gpio";
@@ -266,19 +266,18 @@
 		qcom,audio-routing =
 			"AIF4 VI", "MCLK",
 			"RX_BIAS", "MCLK",
-			"AMIC1", "MIC BIAS1",
+			"DMIC0", "MIC BIAS1",
 			"MIC BIAS1", "Handset Mic",
 			"AMIC2", "MIC BIAS2",
 			"MIC BIAS2", "Headset Mic",
-			"AMIC3", "MIC BIAS3",
+			"DMIC2", "MIC BIAS3",
 			"MIC BIAS3", "Handset Mic",
-			"AMIC4", "MIC BIAS4",
-			"MIC BIAS4", "Handset Mic";
+			"DMIC5", "MIC BIAS3",
+			"MIC BIAS3", "Handset Mic";
 
 		qcom,msm-mbhc-hphl-swh = <1>;	//1:NO, 0:NC
 		qcom,msm-mbhc-gnd-swh = <1>;	//1:NO, 0:NC
 		qcom,audio-1v8-hph-en-gpio = <&pm8994_mpps 6 0>;
-		qcom,tfa9888-reset-gpio = <&pm8994_gpios 4 0>;
 
 		ftm-btpcm-clock = <&tlmm 65 0>;
 		ftm-btpcm-sync	= <&tlmm 66 0>;
@@ -321,10 +320,11 @@
 		/delete-property/ qcom,wsa-aux-dev-prefix;
 	};
 
-	i2c@75b5000{
-		nxp_tfa9888_amp@34 {
-			compatible = "nxp,tfa9888-amp";
+	i2c@75b5000 {
+		nxp_tfa98xx@34 {
+			compatible = "nxp,tfa98xx";
 			reg = <0x34>;
+			reset-gpio = <&pm8994_gpios 4 0>;
 		};
 	};
 
@@ -378,3 +378,4 @@
 		};
 	};
 };
+
