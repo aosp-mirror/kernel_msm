@@ -154,7 +154,6 @@
 		synaptics,reset-on-state = <0>;
 		synaptics,reset-active-ms = <1>;
 		synaptics,reset-delay-ms = <20>;
-		synaptics,switch-gpio = <&tlmm 84 0x00>;
 		synaptics,update-feature = <3>;
 		synaptics,support-glove = <1>;
 		synaptics,support-cover = <1>;
