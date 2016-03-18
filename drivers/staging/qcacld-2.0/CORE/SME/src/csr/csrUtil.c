@@ -2226,6 +2226,13 @@ csrIsconcurrentsessionValid(tpAniSirGlobal pMac,tANI_U32 cursessionId,
                      VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO,
                                FL("**P2P-Client session**"));
                      return eHAL_STATUS_SUCCESS;
+             case VOS_NDI_MODE:
+                     if (bss_persona != VOS_STA_MODE) {
+                         VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+                             FL("***NDI mode can co-exist only with STA ***"));
+                         return eHAL_STATUS_FAILURE;
+                     }
+                     break;
              default :
                      VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
                                FL("**Persona not handled = %d**"),
@@ -5549,6 +5556,9 @@ tSirBssType csrTranslateBsstypeToMacType(eCsrRoamBssType csrtype)
         break;
     case eCSR_BSS_TYPE_INFRA_AP:
         ret = eSIR_INFRA_AP_MODE;
+        break;
+    case eCSR_BSS_TYPE_NDI:
+        ret = eSIR_NDI_MODE;
         break;
     case eCSR_BSS_TYPE_ANY:
     default:

@@ -1443,7 +1443,12 @@ static void hdd_SendReAssocEvent(struct net_device *dev,
     sme_RoamGetConnectProfile(hal_handle, pAdapter->sessionId, &roam_profile);
     bss = cfg80211_get_bss(pAdapter->wdev.wiphy, chan, pCsrRoamInfo->bssid,
         &roam_profile.SSID.ssId[0], roam_profile.SSID.length,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)) && !defined(WITH_BACKPORTS) \
+     && !defined(IEEE80211_PRIVACY)
         WLAN_CAPABILITY_ESS, WLAN_CAPABILITY_ESS);
+#else
+        IEEE80211_BSS_TYPE_ESS, IEEE80211_PRIVACY_ANY);
+#endif
 
     if (bss == NULL)
         hddLog(LOGE, FL("Get BSS returned NULL"));
@@ -2120,9 +2125,8 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
                        __func__, MAC_ADDR_ARRAY(pWextState->req_bssId),
                        roamResult, roamStatus);
 
-                hddLog(VOS_TRACE_LEVEL_ERROR,
-                       FL("Invoking packetdump deregistration API"));
-                wlan_deregister_txrx_packetdump();
+            hddLog(LOGE, FL("Invoking packetdump deregistration API"));
+            wlan_deregister_txrx_packetdump();
 
             /* inform association failure event to nl80211 */
             if ( eCSR_ROAM_RESULT_ASSOC_FAIL_CON_CHANNEL == roamResult )
@@ -4106,6 +4110,10 @@ hdd_smeRoamCallback(void *pContext, tCsrRoamInfo *pRoamInfo, tANI_U32 roamId,
             break;
          }
 #endif /* FEATURE_WLAN_ESE && FEATURE_WLAN_ESE_UPLOAD */
+        case eCSR_ROAM_NDP_STATUS_UPDATE:
+            hdd_ndp_event_handler(pAdapter, pRoamInfo, roamId, roamStatus,
+                roamResult );
+            break;
         default:
             break;
     }

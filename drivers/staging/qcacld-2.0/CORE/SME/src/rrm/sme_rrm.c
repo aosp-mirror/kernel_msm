@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -531,6 +531,7 @@ static eHalStatus sme_RrmSendScanResult( tpAniSirGlobal pMac,
 #endif
    }
 
+   smsLog(pMac, LOG1, FL("RRM Measurement Done %d"), measurementDone);
    if (NULL == pResult)
    {
       /*
@@ -612,22 +613,18 @@ static eHalStatus sme_RrmSendScanResult( tpAniSirGlobal pMac,
     * The next level routine does a check for the measurementDone to determine
     * whether to send a report or not.
     */
+   if (counter || measurementDone) {
 #if defined(FEATURE_WLAN_ESE_UPLOAD)
-   if (eRRM_MSG_SOURCE_ESE_UPLOAD == pSmeRrmContext->msgSource)
-   {
-       status = sme_EseSendBeaconReqScanResults(pMac,
-                                                sessionId,
-                                                chanList[0],
-                                                pScanResultsArr,
-                                                measurementDone,
-                                                counter);
-   }
+        if (eRRM_MSG_SOURCE_ESE_UPLOAD == pSmeRrmContext->msgSource)
+            status = sme_EseSendBeaconReqScanResults(pMac, sessionId,
+                                    chanList[0], pScanResultsArr,
+                                    measurementDone, counter);
    else
-#endif /*FEATURE_WLAN_ESE_UPLOAD*/
-       status = sme_RrmSendBeaconReportXmitInd(pMac,
-                                               pScanResultsArr,
-                                               measurementDone,
-                                               counter);
+#endif
+            status = sme_RrmSendBeaconReportXmitInd(pMac,
+                                    pScanResultsArr,
+                                    measurementDone, counter);
+   }
    sme_ScanResultPurge(pMac, pResult);
 
    return status;

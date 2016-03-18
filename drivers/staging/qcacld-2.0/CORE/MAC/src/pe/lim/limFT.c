@@ -1007,8 +1007,18 @@ void limFillFTSession(tpAniSirGlobal pMac,
 
    pftSessionEntry->enableHtSmps = psessionEntry->enableHtSmps;
    pftSessionEntry->smpsMode = psessionEntry->smpsMode;
-   limLog(pMac, LOG1, FL("FT session enable smps: %d mode: %d"),
-          pftSessionEntry->enableHtSmps, pftSessionEntry->smpsMode);
+   /*
+    * By default supported NSS 1x1 is set to true
+    * and later on updated while determining session
+    * supported rates which is the intersection of
+    * self and peer rates
+    */
+   pftSessionEntry->supported_nss_1x1 = true;
+   limLog(pMac, LOG1,
+          FL("FT enable smps: %d mode: %d supported nss 1x1: %d"),
+          pftSessionEntry->enableHtSmps,
+          pftSessionEntry->smpsMode,
+          pftSessionEntry->supported_nss_1x1);
 
    vos_mem_free(pBeaconStruct);
 }
@@ -1265,6 +1275,10 @@ void limHandleFTPreAuthRsp(tpAniSirGlobal pMac, tSirRetStatus status,
       vos_mem_copy(&(pftSessionEntry->htConfig), &(psessionEntry->htConfig),
             sizeof(psessionEntry->htConfig));
       pftSessionEntry->limSmeState = eLIM_SME_WT_REASSOC_STATE;
+      pftSessionEntry->enableHtSmps = psessionEntry->enableHtSmps;
+      pftSessionEntry->smpsMode = psessionEntry->smpsMode;
+      pftSessionEntry->supported_nss_1x1 = psessionEntry->supported_nss_1x1;
+      pftSessionEntry->htSmpsvalue = psessionEntry->htSmpsvalue;
 
       PELOGE(limLog(pMac, LOG1, "%s:created session (%p) with id = %d",
                __func__, pftSessionEntry, pftSessionEntry->peSessionId);)

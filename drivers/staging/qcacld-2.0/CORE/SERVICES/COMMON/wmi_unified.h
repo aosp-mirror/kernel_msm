@@ -335,6 +335,8 @@ typedef enum {
     WMI_PDEV_SET_MAC_CONFIG_CMDID,
     /** Set per band and per pdev antenna chains */
     WMI_PDEV_SET_ANTENNA_MODE_CMDID,
+    /** Periodic channel stats request command */
+    WMI_SET_PERIODIC_CHANNEL_STATS_CONFIG_CMDID,
 
     /* VDEV(virtual device) specific commands */
     /** vdev create */
@@ -834,6 +836,7 @@ typedef enum {
     WMI_MODEM_POWER_STATE_CMDID=WMI_CMD_GRP_START_ID(WMI_GRP_COEX),
     WMI_CHAN_AVOID_UPDATE_CMDID,
     WMI_COEX_CONFIG_CMDID,
+    WMI_CHAN_AVOID_RPT_ALLOW_CMDID,
 
     /**
      *  OBSS scan offload enable/disable commands
@@ -1883,6 +1886,7 @@ typedef struct {
     wmi_abi_version fw_abi_vers;
     wmi_mac_addr mac_addr;
     A_UINT32    status;
+    A_UINT32 num_dscp_table;
 } wmi_ready_event_fixed_param;
 
 typedef struct {
@@ -2217,6 +2221,11 @@ typedef struct {
 
     /** how much space to allocate for NDP NS (neighbor solicitation) specs */
     A_UINT32 num_ns_ext_tuples_cfg;
+    /**
+     * size (in bytes) of the buffer the FW shall allocate to store
+     * packet filtering instructions
+     */
+    A_UINT32 bpf_instruction_size;
 } wmi_resource_config;
 
 #define WMI_RSRC_CFG_FLAG_SET(word32, flag, value) \
@@ -2457,6 +2466,9 @@ typedef struct {
 #define WMI_SCAN_OFFCHAN_DATA_TX    0x4000
 /** allow capture ppdu with phy errrors */
 #define WMI_SCAN_CAPTURE_PHY_ERROR  0x8000
+
+/** always do passive scan on passive channels */
+#define WMI_SCAN_FLAG_STRICT_PASSIVE_ON_PCHN 0x10000
 
 /** WMI_SCAN_CLASS_MASK must be the same value as IEEE80211_SCAN_CLASS_MASK */
 #define WMI_SCAN_CLASS_MASK 0xFF000000
@@ -3764,6 +3776,7 @@ typedef struct {
     A_UINT32 vdev_id;
     /** map indicating DSCP to TID conversion */
     A_UINT32 dscp_to_tid_map[WMI_DSCP_MAP_MAX];
+    A_UINT32 enable_override;
 } wmi_vdev_set_dscp_tid_map_cmd_fixed_param;
 
 /** Fixed rate (rate-code) for broadcast/ multicast data frames */
@@ -6413,6 +6426,10 @@ typedef struct {
     A_UINT32 chan_tx_pwr_tp;
     /** rx frame count (cumulative) */
     A_UINT32   rx_frame_count;
+    /** BSS rx cycle count */
+    A_UINT32 my_bss_rx_cycle_count;
+    /** b-mode data rx time (units are microseconds) */
+    A_UINT32 rx_11b_mode_data_duration;
 } wmi_chan_info_event_fixed_param;
 
 /**
@@ -6481,6 +6498,11 @@ typedef struct _wlan_dcs_im_tgt_stats {
     /** CCK phy error count, MAC_PCU_PHY_ERR_CNT_2_ADDRESS */
     A_UINT32   reg_cck_phyerr_cnt;        /* CCK err count since last reset, read from register */
 
+    /** Channel noise floor (units are dBm) */
+    A_INT32 chan_nf;
+
+    /** BSS rx cycle count */
+    A_UINT32 my_bss_rx_cycle_count;
 } wlan_dcs_im_tgt_stats_t;
 
 /**
@@ -14275,6 +14297,35 @@ typedef struct {
     A_UINT32 config_arg1;
     A_UINT32 config_arg2;
 } WMI_COEX_CONFIG_CMD_fixed_param;
+
+/**
+ * This command is sent from WLAN host driver to firmware to
+ * request firmware to enable/disable channel avoidance report
+ * to host.
+ *
+ */
+enum {
+    WMI_MWSCOEX_CHAN_AVD_RPT_DISALLOW = 0,
+    WMI_MWSCOEX_CHAN_AVD_RPT_ALLOW = 1
+};
+
+typedef struct {
+    A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_WMI_CHAN_AVOID_RPT_ALLOW_CMD_fixed_param */
+    /** Allow/disallow flag - see WMI_MWSCOEX_CHAN_AVD_RPT enum */
+    A_UINT32 rpt_allow;
+} WMI_CHAN_AVOID_RPT_ALLOW_CMD_fixed_param;
+
+/*
+ * Periodic channel stats WMI command structure
+ * WMI_SET_PERIODIC_CHANNEL_STATS_CONFIG_CMDID
+ */
+typedef struct {
+    A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_set_periodic_channel_stats_config_fixed_param */
+    /** 1 = enable, 0 = disable */
+    A_UINT32 enable;
+    /** periodic stats duration (units are milliseconds) */
+    A_UINT32 stats_period;
+} wmi_set_periodic_channel_stats_config_fixed_param;
 
 /* ADD NEW DEFS HERE */
 

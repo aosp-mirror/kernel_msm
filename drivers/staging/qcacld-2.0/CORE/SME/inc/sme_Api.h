@@ -4534,4 +4534,7 @@ void sme_send_disassoc_req_frame(tHalHandle hal, uint8_t session_id,
 
 VOS_STATUS sme_is_session_valid(tHalHandle hal_handle, uint8_t session_id);
 
+eHalStatus sme_enable_disable_chanavoidind_event(tHalHandle hHal,
+							tANI_U8 set_value);
+
 #endif //#if !defined( __SME_API_H )

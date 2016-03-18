@@ -55,6 +55,7 @@
 #include "limIbssPeerMgmt.h"
 #include "limSessionUtils.h"
 #include "regdomain_common.h"
+#include "nan_datapath.h"
 
 #include "sirApi.h"
 
@@ -750,8 +751,7 @@ limSendSmeStartBssRsp(tpAniSirGlobal pMac,
         }
         vos_mem_set((tANI_U8*)pSirSmeRsp, size, 0);
         size = sizeof(tSirSmeStartBssRsp);
-        if (resultCode == eSIR_SME_SUCCESS)
-        {
+        if (resultCode == eSIR_SME_SUCCESS) {
 
                 sirCopyMacAddr(pSirSmeRsp->bssDescription.bssId, psessionEntry->bssId);
 
@@ -767,22 +767,30 @@ limSendSmeStartBssRsp(tpAniSirGlobal pMac,
 
                 pSirSmeRsp->bssDescription.channelId = psessionEntry->currentOperChannel;
 
-                curLen = psessionEntry->schBeaconOffsetBegin - ieOffset;
-                vos_mem_copy( (tANI_U8 *) &pSirSmeRsp->bssDescription.ieFields,
-                           psessionEntry->pSchBeaconFrameBegin + ieOffset,
-                          (tANI_U32)curLen);
+                if (!LIM_IS_NDI_ROLE(psessionEntry)) {
+                      curLen = psessionEntry->schBeaconOffsetBegin - ieOffset;
+                      vos_mem_copy(
+                          (uint8_t *)&pSirSmeRsp->bssDescription.ieFields,
+                          psessionEntry->pSchBeaconFrameBegin + ieOffset,
+                          (uint32_t)curLen);
 
-                vos_mem_copy( ((tANI_U8 *) &pSirSmeRsp->bssDescription.ieFields) + curLen,
-                           psessionEntry->pSchBeaconFrameEnd,
+                      vos_mem_copy(curLen +
+                          ((tANI_U8 *)&pSirSmeRsp->bssDescription.ieFields),
+                          psessionEntry->pSchBeaconFrameEnd,
                           (tANI_U32)psessionEntry->schBeaconOffsetEnd);
-
-
-                //subtracting size of length indicator itself and size of pointer to ieFields
-                pSirSmeRsp->bssDescription.length = sizeof(tSirBssDescription) -
-                                                sizeof(tANI_U16) - sizeof(tANI_U32) +
-                                                ieLen;
-                //This is the size of the message, subtracting the size of the pointer to ieFields
-                size += ieLen - sizeof(tANI_U32);
+                      /*
+                       * subtract size of length indicator itself and size of
+                       * pointer to ieFields.
+                       */
+                      pSirSmeRsp->bssDescription.length =
+                              sizeof(pSirSmeRsp->bssDescription) -
+                              sizeof(tANI_U16) - sizeof(tANI_U32) + ieLen;
+                      /*
+                       * This is the size of the message, subtract the size of
+                       * the pointer to ieFields
+                       */
+                      size += ieLen - sizeof(tANI_U32);
+                }
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
                 if (psessionEntry->cc_switch_mode
                                              != VOS_MCC_TO_SCC_SWITCH_DISABLE) {
@@ -809,10 +817,6 @@ limSendSmeStartBssRsp(tpAniSirGlobal pMac,
                 }
 #endif
         }
-
-
-
-
     }
 
     pSirSmeRsp->messageType     = msgType;
@@ -3015,11 +3019,13 @@ void limHandleDeleteBssRsp(tpAniSirGlobal pMac,tpSirMsgQ MsgQ)
           pDelBss->sessionId);
         return;
     }
-    if (LIM_IS_IBSS_ROLE(psessionEntry)) {
+    if (LIM_IS_IBSS_ROLE(psessionEntry))
         limIbssDelBssRsp(pMac, MsgQ->bodyptr, psessionEntry);
-    } else if(LIM_IS_UNKNOWN_ROLE(psessionEntry)) {
+    else if(LIM_IS_UNKNOWN_ROLE(psessionEntry))
          limProcessSmeDelBssRsp(pMac, MsgQ->bodyval,psessionEntry);
-    } else
+    else if (LIM_IS_NDI_ROLE(psessionEntry))
+         lim_ndi_del_bss_rsp(pMac, MsgQ->bodyptr, psessionEntry);
+    else
          limProcessMlmDelBssRsp(pMac,MsgQ,psessionEntry);
 
 }

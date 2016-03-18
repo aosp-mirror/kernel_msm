@@ -110,6 +110,7 @@
 #include "wlan_hdd_ocb.h"
 #include "wlan_hdd_tsf.h"
 #include "vos_nvitem.h"
+#include "wlan_hdd_nan_datapath.h"
 
 #define HDD_FINISH_ULA_TIME_OUT         800
 #define HDD_SET_MCBC_FILTERS_TO_FW      1
@@ -1501,7 +1502,12 @@ void ccmCfgSetCallback(tHalHandle halHandle, tANI_S32 result)
 void hdd_clearRoamProfileIe( hdd_adapter_t *pAdapter)
 {
    int i = 0;
-   hdd_wext_state_t *pWextState= WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
+   hdd_wext_state_t *pWextState;
+
+   if (WLAN_HDD_NDI == pAdapter->device_mode)
+       pWextState = WLAN_HDD_GET_NDP_WEXT_STATE_PTR(pAdapter);
+   else
+       pWextState= WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
 
    /* clear WPA/RSN/WSC IE information in the profile */
    pWextState->roamProfile.nWPAReqIELength = 0;
@@ -4368,16 +4374,14 @@ static int __iw_set_priv(struct net_device *dev, struct iw_request_info *info,
     else if (strcasecmp(cmd, "scan-active") == 0)
     {
         hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
-        hddLog(VOS_TRACE_LEVEL_ERROR,
-                   FL("making default scan to active"));
+        hddLog(LOG1, FL("making default scan to active"));
         pHddCtx->ioctl_scan_mode = eSIR_ACTIVE_SCAN;
         ret = snprintf(cmd, cmd_len, "OK");
     }
     else if (strcasecmp(cmd, "scan-passive") == 0)
     {
         hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
-        hddLog(VOS_TRACE_LEVEL_ERROR,
-                   FL("making default scan to active"));
+        hddLog(LOG1, FL("making default scan to active"));
         pHddCtx->ioctl_scan_mode = eSIR_PASSIVE_SCAN;
         ret = snprintf(cmd, cmd_len, "OK");
     }
@@ -8446,7 +8450,7 @@ static int __iw_get_char_setnone(struct net_device *dev,
             tChannelListInfo channel_list;
 
             memset(&channel_list, 0, sizeof(channel_list));
-            status = iw_softap_get_channel_list(dev, info, wrqu, (char *)&channel_list);
+            status = iw_get_channel_list(dev, info, wrqu, (char *)&channel_list);
             if (!VOS_IS_STATUS_SUCCESS(status)) {
                 hddLog(LOGE, FL("GetChannelList Failed!!!"));
                 return -EINVAL;
@@ -12718,16 +12722,29 @@ int hdd_validate_mcc_config(hdd_adapter_t *pAdapter, v_UINT_t staId, v_UINT_t ar
 int hdd_set_wext(hdd_adapter_t *pAdapter)
 {
     hdd_wext_state_t *pwextBuf;
-    hdd_station_ctx_t *pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
+    hdd_station_ctx_t *pHddStaCtx;
+    //struct nan_datapath_ctx *nan_ctx;
+    tCsrSSIDInfo *ssid_list;
+    tCsrBssid *bssid;
 
-    pwextBuf = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
+    if (WLAN_HDD_NDI == pAdapter->device_mode) {
+       pwextBuf = WLAN_HDD_GET_NDP_WEXT_STATE_PTR(pAdapter);
+       //nan_ctx = WLAN_HDD_GET_NDP_CTX_PTR(pAdapter);
+       ssid_list = WLAN_HDD_NDP_GET_SSID(pAdapter);
+       bssid = WLAN_HDD_NDP_GET_BSSID(pAdapter);
+    } else {
+       pwextBuf = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
+       pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
+       ssid_list = &pHddStaCtx->conn_info.SSID;
+       bssid = &pHddStaCtx->conn_info.bssId;
+    }
 
-    // Now configure the roaming profile links. To SSID and bssid.
+    /* Now configure the roaming profile links. To SSID and bssid */
     pwextBuf->roamProfile.SSIDs.numOfSSIDs = 0;
-    pwextBuf->roamProfile.SSIDs.SSIDList = &pHddStaCtx->conn_info.SSID;
+    pwextBuf->roamProfile.SSIDs.SSIDList = ssid_list;
 
     pwextBuf->roamProfile.BSSIDs.numOfBSSIDs = 0;
-    pwextBuf->roamProfile.BSSIDs.bssid = &pHddStaCtx->conn_info.bssId;
+    pwextBuf->roamProfile.BSSIDs.bssid = bssid;
 
     /*Set the numOfChannels to zero to scan all the channels*/
     pwextBuf->roamProfile.ChannelInfo.numOfChannels = 0;
@@ -12758,41 +12775,49 @@ int hdd_set_wext(hdd_adapter_t *pAdapter)
 
     }
 
+/**
+ * hdd_register_wext() - register wext context
+ * @dev: net device handle
+ *
+ * Registers wext interface context for a given net device
+ *
+ * Returns: 0 on success, errno on failure
+ */
 int hdd_register_wext(struct net_device *dev)
-    {
+{
     hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
-    hdd_wext_state_t *pwextBuf = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
+    hdd_wext_state_t *pwextBuf;
     VOS_STATUS status;
 
-   ENTER();
+    ENTER();
 
-    // Zero the memory.  This zeros the profile structure.
-   memset(pwextBuf, 0,sizeof(hdd_wext_state_t));
+    if (WLAN_HDD_NDI == pAdapter->device_mode)
+        pwextBuf = WLAN_HDD_GET_NDP_WEXT_STATE_PTR(pAdapter);
+    else
+        pwextBuf = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
 
-    init_completion(&(WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter))->completion_var);
+    /* Zero the memory. This zeros the profile structure */
+    memset(pwextBuf, 0, sizeof(hdd_wext_state_t));
 
+    init_completion(&pwextBuf->completion_var);
 
     status = hdd_set_wext(pAdapter);
-
-    if(!VOS_IS_STATUS_SUCCESS(status)) {
-
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR, ("ERROR: hdd_set_wext failed!!"));
+    if (!VOS_IS_STATUS_SUCCESS(status)) {
+        hddLog(LOGE, FL("ERROR: hdd_set_wext failed!!"));
         return eHAL_STATUS_FAILURE;
     }
 
-    if (!VOS_IS_STATUS_SUCCESS(vos_event_init(&pwextBuf->vosevent)))
-    {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR, ("ERROR: HDD vos event init failed!!"));
+    if (!VOS_IS_STATUS_SUCCESS(vos_event_init(&pwextBuf->vosevent))) {
+        hddLog(LOGE, FL("ERROR: HDD vos event init failed!!"));
         return eHAL_STATUS_FAILURE;
     }
 
-    if (!VOS_IS_STATUS_SUCCESS(vos_event_init(&pwextBuf->scanevent)))
-    {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR, ("ERROR: HDD scan event init failed!!"));
+    if (!VOS_IS_STATUS_SUCCESS(vos_event_init(&pwextBuf->scanevent))) {
+        hddLog(LOGE, ("ERROR: HDD scan event init failed!!"));
         return eHAL_STATUS_FAILURE;
     }
 
-    // Register as a wireless device
+    /* Register as a wireless device */
     dev->wireless_handlers = (struct iw_handler_def *)&we_handler_def;
 
     EXIT();

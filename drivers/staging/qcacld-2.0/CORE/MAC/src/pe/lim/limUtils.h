@@ -667,4 +667,6 @@ void lim_merge_extcap_struct(tDot11fIEExtCap *dst, tDot11fIEExtCap *src);
 uint8_t
 lim_get_80Mhz_center_channel(uint8_t primary_channel);
 bool lim_is_ext_cap_ie_present (struct s_ext_cap *ext_cap);
+bool lim_is_robust_mgmt_action_frame(uint8_t action_catagory);
+
 #endif /* __LIM_UTILS_H */

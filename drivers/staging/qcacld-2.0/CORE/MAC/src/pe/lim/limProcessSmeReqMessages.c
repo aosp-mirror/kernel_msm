@@ -615,26 +615,28 @@ __limHandleSmeStartBssRequest(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
             }
         }
 
-        /* Probe resp add ie */
-        limStartBssUpdateAddIEBuffer(pMac,
-                             &psessionEntry->addIeParams.probeRespData_buff,
-                             &psessionEntry->addIeParams.probeRespDataLen,
-                             pSmeStartBssReq->addIeParams.probeRespData_buff,
-                             pSmeStartBssReq->addIeParams.probeRespDataLen);
+        if (VOS_NDI_MODE != pSmeStartBssReq->bssPersona) {
+            /* Probe resp add ie */
+            limStartBssUpdateAddIEBuffer(pMac,
+                &psessionEntry->addIeParams.probeRespData_buff,
+                &psessionEntry->addIeParams.probeRespDataLen,
+                pSmeStartBssReq->addIeParams.probeRespData_buff,
+                pSmeStartBssReq->addIeParams.probeRespDataLen);
 
-        /* Probe Beacon add ie */
-        limStartBssUpdateAddIEBuffer(pMac,
-                         &psessionEntry->addIeParams.probeRespBCNData_buff,
-                         &psessionEntry->addIeParams.probeRespBCNDataLen,
-                         pSmeStartBssReq->addIeParams.probeRespBCNData_buff,
-                         pSmeStartBssReq->addIeParams.probeRespBCNDataLen);
+            /* Probe Beacon add ie */
+            limStartBssUpdateAddIEBuffer(pMac,
+                &psessionEntry->addIeParams.probeRespBCNData_buff,
+                &psessionEntry->addIeParams.probeRespBCNDataLen,
+                pSmeStartBssReq->addIeParams.probeRespBCNData_buff,
+                pSmeStartBssReq->addIeParams.probeRespBCNDataLen);
 
-        /* Assoc resp IE */
-        limStartBssUpdateAddIEBuffer(pMac,
-                         &psessionEntry->addIeParams.assocRespData_buff,
-                         &psessionEntry->addIeParams.assocRespDataLen,
-                         pSmeStartBssReq->addIeParams.assocRespData_buff,
-                         pSmeStartBssReq->addIeParams.assocRespDataLen);
+            /* Assoc resp IE */
+            limStartBssUpdateAddIEBuffer(pMac,
+                &psessionEntry->addIeParams.assocRespData_buff,
+                &psessionEntry->addIeParams.assocRespDataLen,
+                pSmeStartBssReq->addIeParams.assocRespData_buff,
+                pSmeStartBssReq->addIeParams.assocRespDataLen);
+        }
 
         /* Store the session related parameters in newly created session */
         psessionEntry->pLimStartBssReq = pSmeStartBssReq;
@@ -766,11 +768,11 @@ __limHandleSmeStartBssRequest(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
                  psessionEntry->limSystemRole = eLIM_BT_AMP_STA_ROLE;
                  break;
 
-                 /* There is one more mode called auto mode. which is used no where */
+            case eSIR_NDI_MODE:
+                 psessionEntry->limSystemRole = eLIM_NDI_ROLE;
+                 break;
 
-                 //FORBUILD -TEMPFIX.. HOW TO use AUTO MODE?????
-
-
+            case eSIR_AUTO_MODE:
             default:
                                    //not used anywhere...used in scan function
                  break;
@@ -795,10 +797,15 @@ __limHandleSmeStartBssRequest(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
                      0 );
         }
 
-        /* Channel Bonding is not addressd yet for BT-AMP Support.. sunit will address channel bonding   */
+        /*
+         * Channel Bonding is not addressd yet for BT-AMP Support.
+         * It will be addressed later.
+         * Channel number is ignored in NDI start request. Hence allow the
+         * session configuration for NDI mode even if channelId is 0.
+         */
+        channelNumber = pSmeStartBssReq->channelId;
         if (pSmeStartBssReq->channelId)
         {
-            channelNumber = pSmeStartBssReq->channelId;
 #ifdef QCA_HT_2040_COEX
             if (pSmeStartBssReq->obssEnabled)
                 psessionEntry->htSupportedChannelWidthSet =
@@ -879,9 +886,8 @@ __limHandleSmeStartBssRequest(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
             psessionEntry->htSecondaryChannelOffset = limGetHTCBState(pSmeStartBssReq->cbMode);
 #endif
         }
-        else
-        {
-            PELOGW(limLog(pMac, LOGW, FL("Received invalid eWNI_SME_START_BSS_REQ"));)
+        else if(pSmeStartBssReq->bssType != eSIR_NDI_MODE) {
+            limLog(pMac, LOGW, FL("Received invalid eWNI_SME_START_BSS_REQ"));
             retCode = eSIR_SME_INVALID_PARAMETERS;
             goto free;
         }
@@ -891,27 +897,33 @@ __limHandleSmeStartBssRequest(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
 
         psessionEntry->htCapability = IS_DOT11_MODE_HT(pSmeStartBssReq->dot11mode);
 
-            /* keep the RSN/WPA IE information in PE Session Entry
-             * later will be using this to check when received (Re)Assoc req
-             * */
+        /*
+         * keep the RSN/WPA IE information in PE Session Entry
+         * later will be using this to check when received (Re)Assoc req
+         */
         limSetRSNieWPAiefromSmeStartBSSReqMessage(pMac,&pSmeStartBssReq->rsnIE,psessionEntry);
 
-        if (LIM_IS_AP_ROLE(psessionEntry) || LIM_IS_IBSS_ROLE(psessionEntry)) {
-            psessionEntry->gLimProtectionControl =  pSmeStartBssReq->protEnabled;
-            /*each byte will have the following info
-             *bit7       bit6    bit5   bit4 bit3   bit2  bit1 bit0
-             *reserved reserved RIFS Lsig n-GF ht20 11g 11b*/
+        if (LIM_IS_AP_ROLE(psessionEntry) ||
+            LIM_IS_IBSS_ROLE(psessionEntry) ||
+            LIM_IS_NDI_ROLE(psessionEntry)) {
+            psessionEntry->gLimProtectionControl = pSmeStartBssReq->protEnabled;
+            /*
+             * each byte will have the following info
+             * bit7       bit6    bit5   bit4 bit3   bit2  bit1 bit0
+             * reserved reserved RIFS Lsig n-GF ht20 11g 11b
+             */
             vos_mem_copy( (void *) &psessionEntry->cfgProtection,
                           (void *) &pSmeStartBssReq->ht_capab,
                           sizeof( tANI_U16 ));
-            psessionEntry->pAPWPSPBCSession = NULL; // Initialize WPS PBC session link list
+            /* Initialize WPS PBC session link list */
+            psessionEntry->pAPWPSPBCSession = NULL;
         }
 
-        // Prepare and Issue LIM_MLM_START_REQ to MLM
+        /* Prepare and Issue LIM_MLM_START_REQ to MLM */
         pMlmStartReq = vos_mem_malloc(sizeof(tLimMlmStartReq));
-        if ( NULL == pMlmStartReq )
-        {
-            limLog(pMac, LOGP, FL("call to AllocateMemory failed for mlmStartReq"));
+        if (NULL == pMlmStartReq) {
+            limLog(pMac, LOGP,
+                FL("call to AllocateMemory failed for mlmStartReq"));
             retCode = eSIR_SME_RESOURCES_UNAVAILABLE;
             goto free;
         }
@@ -931,40 +943,44 @@ __limHandleSmeStartBssRequest(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         /* Fill PE session Id from the session Table */
         pMlmStartReq->sessionId = psessionEntry->peSessionId;
 
-        if( (pMlmStartReq->bssType == eSIR_BTAMP_STA_MODE) || (pMlmStartReq->bssType == eSIR_BTAMP_AP_MODE )
-            || (pMlmStartReq->bssType == eSIR_INFRA_AP_MODE)
-        )
-        {
+        if ((pMlmStartReq->bssType == eSIR_BTAMP_STA_MODE) ||
+            (pMlmStartReq->bssType == eSIR_BTAMP_AP_MODE) ||
+            (pMlmStartReq->bssType == eSIR_INFRA_AP_MODE) ||
+            (pMlmStartReq->bssType == eSIR_NDI_MODE)) {
             /* Copy the BSSId from sessionTable to mlmStartReq struct */
             sirCopyMacAddr(pMlmStartReq->bssId,psessionEntry->bssId);
-        }
-
-        else // ibss mode
-        {
+        } else {
+            /* ibss mode */
             pMac->lim.gLimIbssCoalescingHappened = false;
 
-            if((retStatus = wlan_cfgGetInt(pMac, WNI_CFG_IBSS_AUTO_BSSID, &autoGenBssId)) != eSIR_SUCCESS)
-            {
-                limLog(pMac, LOGP, FL("Could not retrieve Auto Gen BSSID, retStatus=%d"), retStatus);
+            retStatus = wlan_cfgGetInt(pMac, WNI_CFG_IBSS_AUTO_BSSID,
+                                &autoGenBssId);
+            if (retStatus != eSIR_SUCCESS) {
+                limLog(pMac, LOGP,
+                        FL("Could not retrieve Auto Gen BSSID, retStatus=%d"),
+                        retStatus);
                 retCode = eSIR_LOGP_EXCEPTION;
                 goto free;
             }
 
-            if(!autoGenBssId)
-            {
-                // We're not auto generating BSSID. Instead, get it from session entry
+            if (!autoGenBssId) {
+                /* BSSID is not auto generated. Get it from session entry */
                 sirCopyMacAddr(pMlmStartReq->bssId,psessionEntry->bssId);
 
-                if(pMlmStartReq->bssId[0] & 0x01)
-                {
-                   PELOGE(limLog(pMac, LOGE, FL("Request to start IBSS with group BSSID\n Autogenerating the BSSID"));)
+                if (pMlmStartReq->bssId[0] & 0x01) {
+                    limLog(pMac, LOGE,
+                       FL("Autogenerating BSSID for IBSS with group BSSID"));
                    autoGenBssId = TRUE;
                 }
             }
 
-            if( autoGenBssId )
-            {   //if BSSID is not any uc id. then use locally generated BSSID.
-                //Autogenerate the BSSID
+            if (autoGenBssId) {
+                /*
+                 * if BSSID is not any uc id
+                 * then use locally generated BSSID.
+                 * Autogenerate the BSSID using a random value.
+                 */
+
                 limGetRandomBssid( pMac, pMlmStartReq->bssId);
                 pMlmStartReq->bssId[0]= 0x02;
 
@@ -1969,10 +1985,19 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         psessionEntry->enableAmpduPs = pSmeJoinReq->enableAmpduPs;
         psessionEntry->enableHtSmps = pSmeJoinReq->enableHtSmps;
         psessionEntry->htSmpsvalue = pSmeJoinReq->htSmps;
+        /*
+         * By default supported NSS 1x1 is set to true
+         * and later on updated while determining session
+         * supported rates which is the intersection of
+         * self and peer rates
+         */
+        psessionEntry->supported_nss_1x1 = true;
 
-        limLog(pMac, LOG1, FL("enableHtSmps: %d htSmps: %d"),
+        limLog(pMac, LOG1,
+               FL("enableHtSmps: %d htSmps: %d supported NSS 1x1: %d"),
                psessionEntry->enableHtSmps,
-               psessionEntry->htSmpsvalue);
+               psessionEntry->htSmpsvalue,
+               psessionEntry->supported_nss_1x1);
 
         /*Store Persona */
         psessionEntry->pePersona = pSmeJoinReq->staPersona;
@@ -2447,9 +2472,10 @@ __limProcessSmeReassocReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
 
     psessionEntry->enableHtSmps = pReassocReq->enableHtSmps;
     psessionEntry->htSmpsvalue = pReassocReq->htSmps;
-    limLog(pMac, LOG1, FL("enableHtSmps: %d htSmps: %d"),
+    limLog(pMac, LOG1, FL("enableHtSmps: %d htSmps: %d supported nss 1x1: %d"),
            psessionEntry->enableHtSmps,
-           psessionEntry->htSmpsvalue);
+           psessionEntry->htSmpsvalue,
+           psessionEntry->supported_nss_1x1);
 
     /**
      * Reassociate request is expected
@@ -3948,33 +3974,40 @@ __limHandleSmeStopBssRequest(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
     psessionEntry->smeSessionId = smesessionId;
     psessionEntry->transactionId = smetransactionId;
 
-    /* BTAMP_STA and STA_IN_IBSS should NOT send Disassoc frame */
+    /* BTAMP_STA, STA_IN_IBSS and NDI should NOT send Disassoc frame */
     if (!LIM_IS_IBSS_ROLE(psessionEntry) &&
-        !LIM_IS_BT_AMP_STA_ROLE(psessionEntry)) {
+        !LIM_IS_BT_AMP_STA_ROLE(psessionEntry) &&
+        !LIM_IS_NDI_ROLE(psessionEntry)) {
         tSirMacAddr   bcAddr = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
         if ((stopBssReq.reasonCode == eSIR_SME_MIC_COUNTER_MEASURES))
             // Send disassoc all stations associated thru TKIP
             __limCounterMeasures(pMac,psessionEntry);
         else
-            limSendDisassocMgmtFrame(pMac, eSIR_MAC_DEAUTH_LEAVING_BSS_REASON, bcAddr, psessionEntry, FALSE);
+            limSendDisassocMgmtFrame(pMac,
+                eSIR_MAC_DEAUTH_LEAVING_BSS_REASON,
+                bcAddr, psessionEntry, FALSE);
     }
 
-    /* Free the buffer allocated in START_BSS_REQ */
-    vos_mem_free(psessionEntry->addIeParams.probeRespData_buff);
-    psessionEntry->addIeParams.probeRespDataLen = 0;
-    psessionEntry->addIeParams.probeRespData_buff = NULL;
+    if (!LIM_IS_NDI_ROLE(psessionEntry)) {
+        /* Free the buffer allocated in START_BSS_REQ */
+        vos_mem_free(psessionEntry->addIeParams.probeRespData_buff);
+        psessionEntry->addIeParams.probeRespDataLen = 0;
+        psessionEntry->addIeParams.probeRespData_buff = NULL;
 
-    vos_mem_free(psessionEntry->addIeParams.assocRespData_buff);
-    psessionEntry->addIeParams.assocRespDataLen = 0;
-    psessionEntry->addIeParams.assocRespData_buff = NULL;
+        vos_mem_free(psessionEntry->addIeParams.assocRespData_buff);
+        psessionEntry->addIeParams.assocRespDataLen = 0;
+        psessionEntry->addIeParams.assocRespData_buff = NULL;
 
-    vos_mem_free(psessionEntry->addIeParams.probeRespBCNData_buff);
-    psessionEntry->addIeParams.probeRespBCNDataLen = 0;
-    psessionEntry->addIeParams.probeRespBCNData_buff = NULL;
+        vos_mem_free(psessionEntry->addIeParams.probeRespBCNData_buff);
+        psessionEntry->addIeParams.probeRespBCNDataLen = 0;
+        psessionEntry->addIeParams.probeRespBCNData_buff = NULL;
 
-    //limDelBss is also called as part of coalescing, when we send DEL BSS followed by Add Bss msg.
-    pMac->lim.gLimIbssCoalescingHappened = false;
-
+        /*
+         * limDelBss is also called as part of coalescing,
+         * when we send DEL BSS followed by Add Bss msg.
+         */
+        pMac->lim.gLimIbssCoalescingHappened = false;
+    }
     for(i = 1 ; i < pMac->lim.gLimAssocStaLimit ; i++)
     {
         pStaDs = dphGetHashEntry(pMac, i, &psessionEntry->dph.dphHashTable);

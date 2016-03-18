@@ -1652,12 +1652,12 @@ limMlmAddBss (
     pAddBssParams->bssType = pMlmStartReq->bssType;
     if ((pMlmStartReq->bssType == eSIR_IBSS_MODE) ||
         (pMlmStartReq->bssType == eSIR_BTAMP_AP_MODE)||
-        (pMlmStartReq->bssType == eSIR_BTAMP_STA_MODE)) {
-        pAddBssParams->operMode                 = BSS_OPERATIONAL_MODE_STA;
-    }
-    else if (pMlmStartReq->bssType == eSIR_INFRA_AP_MODE){
-        pAddBssParams->operMode                 = BSS_OPERATIONAL_MODE_AP;
-    }
+        (pMlmStartReq->bssType == eSIR_BTAMP_STA_MODE))
+        pAddBssParams->operMode = BSS_OPERATIONAL_MODE_STA;
+    else if (pMlmStartReq->bssType == eSIR_INFRA_AP_MODE)
+        pAddBssParams->operMode = BSS_OPERATIONAL_MODE_AP;
+    else if (pMlmStartReq->bssType == eSIR_NDI_MODE)
+        pAddBssParams->operMode = BSS_OPERATIONAL_MODE_NDI;
 
     pAddBssParams->shortSlotTimeSupported = psessionEntry->shortSlotTimeSupported;
 

@@ -1305,11 +1305,11 @@ static const struct nl80211_vendor_cmd_info wlan_hdd_cfg80211_vendor_events[] =
         .subcmd = QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_AP_LOST
     },
 #endif /* FEATURE_WLAN_EXTSCAN */
-	/* OCB events */
-	[QCA_NL80211_VENDOR_SUBCMD_DCC_STATS_EVENT_INDEX] =  {
-		.vendor_id = QCA_NL80211_VENDOR_ID,
-		.subcmd = QCA_NL80211_VENDOR_SUBCMD_DCC_STATS_EVENT
-	},
+    /* OCB events */
+    [QCA_NL80211_VENDOR_SUBCMD_DCC_STATS_EVENT_INDEX] =  {
+        .vendor_id = QCA_NL80211_VENDOR_ID,
+        .subcmd = QCA_NL80211_VENDOR_SUBCMD_DCC_STATS_EVENT
+    },
 #ifdef WLAN_FEATURE_MEMDUMP
     [QCA_NL80211_VENDOR_SUBCMD_WIFI_LOGGER_MEMORY_DUMP_INDEX] = {
         .vendor_id = QCA_NL80211_VENDOR_ID,
@@ -1320,6 +1320,12 @@ static const struct nl80211_vendor_cmd_info wlan_hdd_cfg80211_vendor_events[] =
         .vendor_id = QCA_NL80211_VENDOR_ID,
         .subcmd = QCA_NL80211_VENDOR_SUBCMD_MONITOR_RSSI
     },
+#ifdef WLAN_FEATURE_NAN_DATAPATH
+    [QCA_NL80211_VENDOR_SUBCMD_NDP_INDEX] = {
+        .vendor_id = QCA_NL80211_VENDOR_ID,
+        .subcmd = QCA_NL80211_VENDOR_SUBCMD_NDP
+    },
+#endif /* WLAN_FEATURE_NAN_DATAPATH */
 };
 
 /**
@@ -1708,17 +1714,19 @@ __wlan_hdd_cfg80211_get_concurrency_matrix(struct wiphy *wiphy,
     }
     max_feature_sets = nla_get_u32(
      tb[QCA_WLAN_VENDOR_ATTR_GET_CONCURRENCY_MATRIX_CONFIG_PARAM_SET_SIZE_MAX]);
-    hddLog(LOG1, FL("Max feature set size (%d)"), max_feature_sets);
+    hddLog(LOG1, FL("Max feature set size: %d"), max_feature_sets);
 
     /* Fill feature combination matrix */
     feature_sets = 0;
     feature_set_matrix[feature_sets++] = WIFI_FEATURE_INFRA |
                                          WIFI_FEATURE_P2P;
+    feature_set_matrix[feature_sets++] = WIFI_FEATURE_INFRA |
+                                         WIFI_FEATURE_NAN;
 
     /* Add more feature combinations here */
 
     feature_sets = VOS_MIN(feature_sets, max_feature_sets);
-    hddLog(LOG1, FL("Number of feature sets (%d)"), feature_sets);
+    hddLog(LOG1, FL("Number of feature sets: %d"), feature_sets);
     hddLog(LOG1, "Feature set matrix");
     for (i = 0; i < feature_sets; i++)
         hddLog(LOG1, "[%d] 0x%02X", i, feature_set_matrix[i]);
@@ -8307,6 +8315,7 @@ wlan_hdd_wifi_config_policy[QCA_WLAN_VENDOR_ATTR_CONFIG_MAX
 	[QCA_WLAN_VENDOR_ATTR_CONFIG_STATS_AVG_FACTOR] = {.type = NLA_U16 },
 	[QCA_WLAN_VENDOR_ATTR_CONFIG_GUARD_TIME] = {.type = NLA_U32 },
 	[QCA_WLAN_VENDOR_ATTR_CONFIG_TX_RATE] = {.type = NLA_U16 },
+	[QCA_WLAN_VENDOR_ATTR_CONFIG_CHANNEL_AVOIDANCE_IND] = {.type = NLA_U8 },
 };
 
 /**
@@ -8390,6 +8399,7 @@ static int __wlan_hdd_cfg80211_wifi_configuration_set(struct wiphy *wiphy,
 	int ret_val = 0;
 	u32 modulated_dtim;
 	uint16_t stats_avg_factor, tx_rate;
+	uint8_t set_value;
 	u32 guard_time;
 	u32 ftm_capab;
 	eHalStatus status;
@@ -8468,6 +8478,13 @@ static int __wlan_hdd_cfg80211_wifi_configuration_set(struct wiphy *wiphy,
 
 		if (eHAL_STATUS_SUCCESS != status)
 			ret_val = -EPERM;
+	}
+
+	if (tb[QCA_WLAN_VENDOR_ATTR_CONFIG_CHANNEL_AVOIDANCE_IND]) {
+		set_value = nla_get_u8(
+			tb[QCA_WLAN_VENDOR_ATTR_CONFIG_CHANNEL_AVOIDANCE_IND]);
+		hddLog(LOG1, "set_value: %d", set_value);
+		ret_val = hdd_enable_disable_ca_event(pHddCtx, set_value);
 	}
 	return ret_val;
 }
@@ -8990,7 +9007,8 @@ static int __wlan_hdd_cfg80211_wifi_logger_get_ring_data(struct wiphy *wiphy,
 
 	ret = vos_flush_logs(WLAN_LOG_TYPE_NON_FATAL,
 			     WLAN_LOG_INDICATOR_FRAMEWORK,
-			     WLAN_LOG_REASON_CODE_UNUSED);
+			     WLAN_LOG_REASON_CODE_UNUSED,
+			     true);
 	if (VOS_STATUS_SUCCESS != ret) {
 		hddLog(LOGE, FL("Failed to trigger bug report"));
 		return -EINVAL;
@@ -10907,6 +10925,16 @@ const struct wiphy_vendor_command hdd_wiphy_vendor_commands[] =
 			 WIPHY_VENDOR_CMD_NEED_RUNNING,
 		.doit = wlan_hdd_cfg80211_get_wakelock_stats
 	},
+#ifdef WLAN_FEATURE_NAN_DATAPATH
+	{
+		.info.vendor_id = QCA_NL80211_VENDOR_ID,
+		.info.subcmd = QCA_NL80211_VENDOR_SUBCMD_NDP,
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			WIPHY_VENDOR_CMD_NEED_NETDEV |
+			WIPHY_VENDOR_CMD_NEED_RUNNING,
+		.doit = wlan_hdd_cfg80211_process_ndp_cmd
+	},
+#endif
 };
 
 
@@ -15506,7 +15534,12 @@ struct cfg80211_bss* wlan_hdd_cfg80211_update_bss_list(
     bss = cfg80211_get_bss(wiphy, chan, pBssDesc->bssId,
                            &pRoamInfo->pProfile->SSIDs.SSIDList->SSID.ssId[0],
                            pRoamInfo->pProfile->SSIDs.SSIDList->SSID.length,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)) && !defined(WITH_BACKPORTS) \
+     && !defined(IEEE80211_PRIVACY)
                            WLAN_CAPABILITY_ESS, WLAN_CAPABILITY_ESS);
+#else
+                           IEEE80211_BSS_TYPE_ESS, IEEE80211_PRIVACY_ANY);
+#endif
     if (bss == NULL) {
         hddLog(LOGE, FL("BSS not present"));
     } else {
@@ -20905,6 +20938,7 @@ static int __wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
     /* For explicit trigger of DIS_REQ come out of BMPS for
        successfully receiving DIS_RSP from peer. */
     if ((SIR_MAC_TDLS_SETUP_RSP == action_code) ||
+        (SIR_MAC_TDLS_SETUP_CNF== action_code) ||
         (SIR_MAC_TDLS_DIS_RSP == action_code) ||
         (SIR_MAC_TDLS_DIS_REQ == action_code))
     {
@@ -21000,7 +21034,11 @@ static int __wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
                   "%s: Unloading/Loading in Progress. Ignore!!!", __func__);
             return -EAGAIN;
         }
-
+        if (rc <= 0)
+            vos_flush_logs(WLAN_LOG_TYPE_FATAL,
+                           WLAN_LOG_INDICATOR_HOST_DRIVER,
+                           WLAN_LOG_REASON_HDD_TIME_OUT,
+                           true);
         pAdapter->mgmtTxCompletionStatus = FALSE;
         wlan_hdd_tdls_check_bmps(pAdapter);
         return -EINVAL;
@@ -21334,7 +21372,7 @@ static int __wlan_hdd_cfg80211_tdls_oper(struct wiphy *wiphy,
                                 MAC_ADDR_ARRAY(peer));
                     return -EINVAL;
                 }
-
+                wlan_hdd_tdls_set_cap(pAdapter, peer, eTDLS_CAP_SUPPORTED);
                 vos_mem_set(&tdlsLinkEstablishParams,
                             sizeof(tCsrTdlsLinkEstablishParams), 0);
 
@@ -22395,7 +22433,11 @@ int __wlan_hdd_cfg80211_resume_wlan(struct wiphy *wiphy)
        result = wma_resume_fw();
        if (result) {
           hddLog(LOGE, FL("Failed to resume FW err:%d"), result);
-          VOS_BUG(0);
+          /* Do not panic (VOS_BUG(0)) if FW dump is in progress.
+           * Otherwise, the FW dump will be incomplete.
+           */
+          if (!vos_is_logp_in_progress(VOS_MODULE_ID_HDD, NULL))
+              VOS_BUG(0);
           return -EBUSY;
        }
     }

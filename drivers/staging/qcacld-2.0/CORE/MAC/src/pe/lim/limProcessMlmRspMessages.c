@@ -61,6 +61,7 @@
 #endif
 #include "wlan_qct_wda.h"
 #include "vos_utils.h"
+#include "nan_datapath.h"
 
 #define MAX_SUPPORTED_PEERS_WEP 16
 
@@ -392,17 +393,13 @@ limProcessMlmStartCnf(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         psessionEntry->limSmeState = eLIM_SME_NORMAL_STATE;
         MTRACE(macTrace(pMac, TRACE_CODE_SME_STATE, psessionEntry->peSessionId, psessionEntry->limSmeState));
         if(psessionEntry->bssType == eSIR_BTAMP_STA_MODE)
-        {
              limLog(pMac, LOG1, FL("*** Started BSS in BT_AMP STA SIDE***"));
-        }
         else if(psessionEntry->bssType == eSIR_BTAMP_AP_MODE)
-        {
              limLog(pMac, LOG1, FL("*** Started BSS in BT_AMP AP SIDE***"));
-        }
         else if(psessionEntry->bssType == eSIR_INFRA_AP_MODE)
-        {
              limLog(pMac, LOG1, FL("*** Started BSS in INFRA AP SIDE***"));
-        }
+        else if (psessionEntry->bssType == eSIR_NDI_MODE)
+             limLog(pMac, LOG1, FL("*** Started BSS in NDI mode ***"));
         else
             PELOG1(limLog(pMac, LOG1, FL("*** Started BSS ***"));)
     }
@@ -3377,6 +3374,8 @@ void limProcessMlmAddBssRsp( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ )
     mlmStartCnf.sessionId = psessionEntry->peSessionId;
     if( eSIR_IBSS_MODE == psessionEntry->bssType )
         limProcessIbssMlmAddBssRsp( pMac, limMsgQ, psessionEntry );
+    else if (eSIR_NDI_MODE == psessionEntry->bssType)
+        lim_process_ndi_mlm_add_bss_rsp(pMac, limMsgQ, psessionEntry);
     else
     {
         if( eLIM_SME_WT_START_BSS_STATE == psessionEntry->limSmeState )
@@ -3399,7 +3398,7 @@ void limProcessMlmAddBssRsp( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ )
                 limProcessBtampAddBssRsp(pMac,limMsgQ,psessionEntry);
             }
             else
-            limProcessApMlmAddBssRsp( pMac,limMsgQ);
+                limProcessApMlmAddBssRsp( pMac,limMsgQ);
         }
         else
             /* Called while processing assoc response */

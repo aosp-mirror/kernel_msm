@@ -398,7 +398,7 @@ static inline int vos_request_bus_bandwidth(int bandwidth)
 }
 #endif
 
-#ifdef CONFIG_CNSS_PCI
+#if (defined(CONFIG_CNSS_PCI)) && (defined(CONFIG_CNSS_SECURE_FW))
 static inline int vos_get_sha_hash(const u8 *data, u32 data_len,
 				u8 *hash_idx, u8 *out)
 {
@@ -440,10 +440,17 @@ static inline int vos_get_bmi_setup(void)
 	return cnss_get_bmi_setup();
 }
 
+#ifdef CONFIG_CNSS_SECURE_FW
 static inline void *vos_get_fw_ptr(void)
 {
 	return cnss_get_fw_ptr();
 }
+#else
+static inline void *vos_get_fw_ptr(void)
+{
+	return NULL;
+}
+#endif
 
 static inline int vos_auto_suspend(void)
 {

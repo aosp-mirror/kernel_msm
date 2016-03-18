@@ -4110,42 +4110,47 @@ int hdd_ipa_wlan_evt(hdd_adapter_t *adapter, uint8_t sta_id,
 	/* During IPA UC resource loading/unloading
 	 * new event issued.
 	 * Store event seperatly and handle later */
-	if (hdd_ipa_uc_is_enabled(hdd_ipa) &&
-		((hdd_ipa->resource_loading) ||
-		(hdd_ipa->resource_unloading))) {
-		v_SIZE_t pending_event_count;
-		struct ipa_uc_pending_event *pending_event = NULL;
+	if (hdd_ipa_uc_is_enabled(hdd_ipa)) {
+		if (hdd_ipa->resource_loading) {
+			v_SIZE_t pending_event_count;
+			struct ipa_uc_pending_event *pending_event = NULL;
 
-		HDD_IPA_LOG(VOS_TRACE_LEVEL_ERROR,
-			"%s: IPA resource %s inprogress", __func__,
-				hdd_ipa->resource_loading? "load":"unload");
-
-		vos_list_size(&hdd_ipa->pending_event, &pending_event_count);
-		if (pending_event_count >= MAX_PENDING_EVENT_COUNT) {
-			HDD_IPA_LOG(VOS_TRACE_LEVEL_INFO,
-				"%s: Reached max pending event count", __func__);
-			vos_list_remove_front(&hdd_ipa->pending_event,
-					(vos_list_node_t **)&pending_event);
-		} else {
-			pending_event =
-				(struct ipa_uc_pending_event *)vos_mem_malloc(
-					sizeof(struct ipa_uc_pending_event));
-		}
-
-		if (!pending_event) {
 			HDD_IPA_LOG(VOS_TRACE_LEVEL_ERROR,
+				"%s: IPA resource load inprogress", __func__);
+
+			vos_list_size(&hdd_ipa->pending_event,
+					&pending_event_count);
+			if (pending_event_count >= MAX_PENDING_EVENT_COUNT) {
+				HDD_IPA_LOG(VOS_TRACE_LEVEL_INFO,
+					"%s: Reached max pending event count",
+					__func__);
+				vos_list_remove_front(&hdd_ipa->pending_event,
+					(vos_list_node_t **)&pending_event);
+			} else {
+				pending_event = (struct ipa_uc_pending_event *)
+						vos_mem_malloc(sizeof(
+						struct ipa_uc_pending_event));
+			}
+
+			if (!pending_event) {
+				HDD_IPA_LOG(VOS_TRACE_LEVEL_ERROR,
 					"Pending event memory alloc fail");
-			return -ENOMEM;
+				return -ENOMEM;
+			}
+			pending_event->adapter = adapter;
+			pending_event->sta_id = sta_id;
+			pending_event->type = type;
+			vos_mem_copy(pending_event->mac_addr,
+					mac_addr,
+					VOS_MAC_ADDR_SIZE);
+			vos_list_insert_back(&hdd_ipa->pending_event,
+					&pending_event->node);
+			return 0;
+		} else if (hdd_ipa->resource_unloading) {
+			HDD_IPA_LOG(VOS_TRACE_LEVEL_ERROR,
+				"%s: IPA resource unload inprogress", __func__);
+			return 0;
 		}
-		pending_event->adapter = adapter;
-		pending_event->sta_id = sta_id;
-		pending_event->type = type;
-		vos_mem_copy(pending_event->mac_addr,
-			mac_addr,
-			VOS_MAC_ADDR_SIZE);
-		vos_list_insert_back(&hdd_ipa->pending_event,
-				&pending_event->node);
-		return 0;
 	}
 #endif /* IPA_UC_OFFLOAD */
 
@@ -4271,15 +4276,14 @@ int hdd_ipa_wlan_evt(hdd_adapter_t *adapter, uint8_t sta_id,
 			}
 		}
 
+		vos_lock_release(&hdd_ipa->event_lock);
+
                 if (hdd_ipa_uc_sta_is_enabled(hdd_ipa)) {
 			hdd_ipa_uc_offload_enable_disable(adapter,
 				SIR_STA_RX_DATA_OFFLOAD, 0);
 			vdev_to_iface[adapter->sessionId] = HDD_IPA_MAX_IFACE;
 		}
 #endif
-#ifdef IPA_UC_OFFLOAD
-		vos_lock_release(&hdd_ipa->event_lock);
-#endif /* IPA_UC_OFFLOAD */
 		break;
 
 	case WLAN_AP_DISCONNECT:
@@ -4313,12 +4317,13 @@ int hdd_ipa_wlan_evt(hdd_adapter_t *adapter, uint8_t sta_id,
 			}
 		}
 
+		vos_lock_release(&hdd_ipa->event_lock);
+
 		if (hdd_ipa_uc_is_enabled(hdd_ipa)) {
 			hdd_ipa_uc_offload_enable_disable(adapter,
 				SIR_AP_RX_DATA_OFFLOAD, 0);
 			vdev_to_iface[adapter->sessionId] = HDD_IPA_MAX_IFACE;
 		}
-		vos_lock_release(&hdd_ipa->event_lock);
 #endif /* IPA_UC_OFFLOAD */
 		break;
 

@@ -1207,11 +1207,13 @@ VOS_STATUS vos_nv_getRegDomainFromCountryCode( v_REGDOMAIN_t *pRegDomain,
 
     if (REGDOMAIN_COUNT == temp_reg_domain) {
 
-        /* the country was not found in the driver database */
-        /* so we will return the REGDOMAIN_WORLD to SME/CSR */
-
-        VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                   ("Country does not map to any Regulatory domain"));
+        /*
+         * The country was not found in the driver database
+         * so we will return the REGDOMAIN_WORLD to SME/CSR
+         */
+        VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
+                 ("Country %c%c does not map to any Regulatory domain"),
+                  country_code[0], country_code[1]);
 
         temp_reg_domain = REGDOMAIN_WORLD;
     }

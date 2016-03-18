@@ -96,6 +96,11 @@ ifeq ($(KERNEL_BUILD), 0)
         CONFIG_WLAN_FEATURE_NAN := y
         endif
 
+        ifneq ($(CONFIG_MOBILE_ROUTER), y)
+                #Flag to enable NAN Data path
+                CONFIG_WLAN_FEATURE_NAN_DATAPATH := y
+        endif
+
         #Flag to enable Linux QCMBR feature as default feature
         ifeq ($(CONFIG_ROME_IF),usb)
                 CONFIG_LINUX_QCMBR :=y
@@ -398,6 +403,10 @@ ifeq ($(CONFIG_WLAN_FEATURE_MEMDUMP),y)
 HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_memdump.o
 endif
 
+ifeq ($(CONFIG_WLAN_FEATURE_NAN_DATAPATH),y)
+HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_nan_datapath.o
+endif
+
 ############ EPPING ############
 EPPING_DIR :=	CORE/EPPING
 EPPING_INC_DIR :=	$(EPPING_DIR)/inc
@@ -421,7 +430,8 @@ MAC_INC := 	-I$(WLAN_ROOT)/$(MAC_INC_DIR) \
 		-I$(WLAN_ROOT)/$(MAC_SRC_DIR)/dph \
 		-I$(WLAN_ROOT)/$(MAC_SRC_DIR)/include \
 		-I$(WLAN_ROOT)/$(MAC_SRC_DIR)/pe/include \
-		-I$(WLAN_ROOT)/$(MAC_SRC_DIR)/pe/lim
+		-I$(WLAN_ROOT)/$(MAC_SRC_DIR)/pe/lim \
+		-I$(WLAN_ROOT)/$(MAC_SRC_DIR)/pe/nan
 
 MAC_CFG_OBJS := $(MAC_SRC_DIR)/cfg/cfgApi.o \
 		$(MAC_SRC_DIR)/cfg/cfgDebug.o \
@@ -481,6 +491,10 @@ ifeq ($(CONFIG_QCOM_TDLS),y)
 MAC_LIM_OBJS += $(MAC_SRC_DIR)/pe/lim/limProcessTdls.o
 endif
 
+ifeq ($(CONFIG_WLAN_FEATURE_NAN_DATAPATH),y)
+MAC_NDP_OBJS += $(MAC_SRC_DIR)/pe/nan/nan_datapath.o
+endif
+
 MAC_PMM_OBJS := $(MAC_SRC_DIR)/pe/pmm/pmmAP.o \
 		$(MAC_SRC_DIR)/pe/pmm/pmmApi.o \
 		$(MAC_SRC_DIR)/pe/pmm/pmmDebug.o
@@ -498,7 +512,8 @@ MAC_OBJS := 	$(MAC_CFG_OBJS) \
 		$(MAC_LIM_OBJS) \
 		$(MAC_PMM_OBJS) \
 		$(MAC_SCH_OBJS) \
-		$(MAC_RRM_OBJS)
+		$(MAC_RRM_OBJS) \
+		$(MAC_NDP_OBJS)
 
 ############ SAP ############
 SAP_DIR :=	CORE/SAP
@@ -584,6 +599,10 @@ ifeq ($(CONFIG_WLAN_FEATURE_NAN),y)
 SME_NAN_OBJS = $(SME_SRC_DIR)/nan/nan_Api.o
 endif
 
+ifeq ($(CONFIG_WLAN_FEATURE_NAN_DATAPATH),y)
+SME_NDP_OBJS += $(SME_SRC_DIR)/nan/nan_datapath_api.o
+endif
+
 SME_OBJS :=	$(SME_BTC_OBJS) \
 		$(SME_CCM_OBJS) \
 		$(SME_CMN_OBJS) \
@@ -593,7 +612,8 @@ SME_OBJS :=	$(SME_BTC_OBJS) \
 		$(SME_PMC_OBJS) \
 		$(SME_QOS_OBJS) \
 		$(SME_RRM_OBJS) \
-		$(SME_NAN_OBJS)
+		$(SME_NAN_OBJS) \
+		$(SME_NDP_OBJS)
 
 ############ SVC ############
 SVC_DIR :=	CORE/SVC
@@ -797,11 +817,16 @@ WMA_DIR :=	CORE/SERVICES/WMA
 
 WMA_INC :=	-I$(WLAN_ROOT)/$(WMA_DIR)
 
+ifeq ($(CONFIG_WLAN_FEATURE_NAN_DATAPATH),y)
+WMA_NDP_OBJS += $(WMA_DIR)/wma_nan_datapath.o
+endif
+
 WMA_OBJS :=	$(WMA_DIR)/regdomain.o \
 		$(WMA_DIR)/wlan_nv.o \
 		$(WMA_DIR)/wma.o \
 		$(WMA_DIR)/wma_dfs_interface.o \
-		$(WMA_DIR)/wma_ocb.o
+		$(WMA_DIR)/wma_ocb.o \
+		$(WMA_NDP_OBJS)
 
 
 ############ WDA ############
@@ -1470,6 +1495,9 @@ ifeq ($(CONFIG_WLAN_WOW_PULSE), y)
 CDEFINES += -DWLAN_FEATURE_WOW_PULSE
 endif
 
+ifeq ($(CONFIG_WLAN_FEATURE_NAN_DATAPATH),y)
+CDEFINES += -DWLAN_FEATURE_NAN_DATAPATH
+endif
 
 KBUILD_CPPFLAGS += $(CDEFINES)
 

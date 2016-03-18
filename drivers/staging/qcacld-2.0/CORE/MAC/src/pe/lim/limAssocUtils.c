@@ -1660,7 +1660,8 @@ tSirRetStatus limPopulateVhtMcsSet(tpAniSirGlobal pMac,
                         pMac->roam.configParam.enable2x2, nss,
                         pRates->vhtRxMCSMap, pRates->vhtTxMCSMap);
 
-            if (psessionEntry) {
+            /* Check if VHT caps present to determine session NSS */
+            if ((psessionEntry) && (pPeerVHTCaps->present)) {
                     psessionEntry->supported_nss_1x1 =
                         ((pRates->vhtTxMCSMap & VHT_MCS_1x1) ==
                          VHT_MCS_1x1) ? true : false;
