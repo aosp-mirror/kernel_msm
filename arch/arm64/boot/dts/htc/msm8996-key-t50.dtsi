@@ -38,12 +38,6 @@
 		/delete-node/ cam_snapshot;
 		/delete-node/ cam_focus;
 	};
-
-	keyled {
-		compatible	= "keyled";
-		key_down_delay	= <3000>;
-		keys_down	= <116 114 0>;
-	};
 };
 
 &tlmm {
@@ -71,4 +65,14 @@
 			};
 		};
 	};
+};
+
+&spmi_bus {
+   qcom,pm8994@0 {
+       qcom,power-on@800 {
+           qcom,pon_2 {
+               /delete-property/ linux,code;
+           };
+       };
+   };
 };

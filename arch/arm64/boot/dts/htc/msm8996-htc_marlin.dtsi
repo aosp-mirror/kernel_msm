@@ -15,6 +15,7 @@
 #include "msm8996-htc-regulator.dtsi"
 #include "msm8996-htc-nanohub-v2.dtsi"
 #include "dsi-panel-s1m1-ea8064tg.dtsi"
+#include "msm8996-key-t50.dtsi"
 #include "dsi-panel-t50.dtsi"
 #include "msm8996-audio-marlin.dtsi"
 
