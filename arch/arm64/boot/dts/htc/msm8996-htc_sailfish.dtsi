@@ -12,3 +12,4 @@
 
 
 #include "msm8996-htc_marlin.dtsi"
+#include "msm8996-touch-s1.dtsi"
