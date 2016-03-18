@@ -37,6 +37,15 @@
 	};
 };
 
+&pm8994_l21 {
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+	qcom,init-voltage = <3300000>;
+	status = "okay";
+	regulator-boot-on;
+	regulator-always-on;
+};
+
 &pm8994_l22 {
 	regulator-min-microvolt = <3300000>;
 	regulator-max-microvolt = <3300000>;
