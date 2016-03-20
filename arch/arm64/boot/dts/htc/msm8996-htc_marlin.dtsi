@@ -17,6 +17,7 @@
 #include "dsi-panel-s1m1-ea8064tg.dtsi"
 #include "msm8996-touch-m1.dtsi"
 #include "msm8996-key-t50.dtsi"
+#include "msm8996-htc-fingerprint.dtsi"
 #include "dsi-panel-t50.dtsi"
 #include "msm8996-audio-marlin.dtsi"
 
