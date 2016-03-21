@@ -23,3 +23,7 @@
 	qcom,msm-id = <422 0x30001>, <423 0x30001>;
 	qcom,board-id = <0 0>;
 };
+
+&mdss_fb0 {
+	qcom,mdss-mixer-swap;
+};

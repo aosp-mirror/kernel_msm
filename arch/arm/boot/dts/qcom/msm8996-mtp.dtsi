@@ -14,6 +14,8 @@
 #include "msm8996-camera-sensor-mtp.dtsi"
 #include "msm8996-wsa881x.dtsi"
 
+#include "../../../../arm64/boot/dts/htc/dsi-panel-s1m1-s6e3ha3.dtsi"
+#include "../../../../arm64/boot/dts/htc/dsi-panel-t50.dtsi"
 / {
 	bluetooth: bt_qca6174 {
 		compatible = "qca,qca6174";
@@ -346,7 +348,7 @@
 };
 
 &mdss_dsi0 {
-	qcom,dsi-pref-prim-pan = <&dsi_dual_sharp_video>;
+	qcom,dsi-pref-prim-pan = <&mdss_dsi_samsung_s6e3ha3_wqhd_cmd>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
@@ -356,7 +358,7 @@
 };
 
 &mdss_dsi1 {
-	qcom,dsi-pref-prim-pan = <&dsi_dual_sharp_video>;
+	qcom,dsi-pref-prim-pan = <&mdss_dsi_samsung_s6e3ha3_wqhd_cmd>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
