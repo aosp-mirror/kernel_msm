@@ -94,3 +94,11 @@
                 /delete-property/ wlan-ant-switch-supply;
         };
 };
+
+/{
+        qcom,battery-data {
+                qcom,batt-id-range-pct = <15>;
+                #include "batterydata-m1s1-prototype-id1.dtsi"
+                #include "batterydata-m1s1-prototype-id2.dtsi"
+        };
+};

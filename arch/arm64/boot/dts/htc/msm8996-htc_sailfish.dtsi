@@ -13,3 +13,11 @@
 
 #include "msm8996-htc_marlin.dtsi"
 #include "msm8996-touch-s1.dtsi"
+
+/{
+        qcom,battery-data {
+                qcom,batt-id-range-pct = <15>;
+                #include "batterydata-m1s1-prototype-id1.dtsi"
+                #include "batterydata-m1s1-prototype-id2.dtsi"
+        };
+};
