@@ -36,6 +36,12 @@
 #include "irq-gic-common.h"
 #include "irqchip.h"
 
+#ifdef CONFIG_HTC_POWER_DEBUG
+#define GIC_SPI_START 32
+#define EE0_KRAIT_HLOS_SPMI_PERIPH_IRQ (GIC_SPI_START + 190)
+#define TLMM_MSM_SUMMARY_IRQ (GIC_SPI_START + 208)
+#endif
+
 struct redist_region {
 	void __iomem		*redist_base;
 	phys_addr_t		phys_base;
@@ -382,6 +388,12 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 			name = "stray irq";
 		else if (desc->action && desc->action->name)
 			name = desc->action->name;
+
+#ifdef CONFIG_HTC_POWER_DEBUG
+		if (EE0_KRAIT_HLOS_SPMI_PERIPH_IRQ != irq )
+			if (TLMM_MSM_SUMMARY_IRQ != irq )
+				pr_info("[WAKEUP] Resume caused by gic-%d\n", irq);
+#endif
 
 		pr_warn("%s: %d triggered %s\n", __func__, irq, name);
 	}

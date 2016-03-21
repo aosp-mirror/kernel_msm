@@ -657,6 +657,13 @@ config NR_CPUS
 	# These have to remain sorted largest to smallest
 	default "8"
 
+config HTC_POWER_DEBUG
+	bool "Support htc power debug feature"
+	help
+	 Use this to enable htc power debug feature including pm statistics,
+	 clock/gpio/qpnp pin dump, wakeup source, kernel top and autosuspend
+	 stage footprintconfig HTC_POWER_DEBUG
+
 config HOTPLUG_CPU
 	bool "Support for hot-pluggable CPUs"
 	depends on SMP

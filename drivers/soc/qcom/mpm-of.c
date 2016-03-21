@@ -593,6 +593,23 @@ void msm_mpm_exit_sleep(bool from_idle)
 			struct irq_desc *desc = apps_irq ?
 				irq_to_desc(apps_irq) : NULL;
 
+#ifdef CONFIG_HTC_POWER_DEBUG
+			const char *name = "null";
+			if (desc == NULL)
+				name = "stray irq";
+			else if (desc->action && desc->action->name)
+				name = desc->action->name;
+
+			if(strcmp(desc->irq_data.chip->name,"msmgpio")==0)
+				pr_info("[WAKEUP] Resume caused by msmgpio-%lu\n", desc->irq_data.hwirq);
+
+			pr_info("%s: irq %d tirggered %s-%lu-%s", __func__,
+						apps_irq,
+						irq_desc_get_chip(desc)->name,
+						desc->irq_data.hwirq,
+						name);
+#endif
+
 			if (desc && !irqd_is_level_type(&desc->irq_data)) {
 				irq_set_pending(apps_irq);
 				if (from_idle) {

@@ -639,6 +639,10 @@ static int __qpnpint_handle_irq(struct spmi_controller *spmi_ctrl,
 		else if (desc->action && desc->action->name)
 			name = desc->action->name;
 
+#ifdef CONFIG_HTC_POWER_DEBUG
+		printk("[WAKEUP] Resume caused by pmic-0x%x 0x%x 0x%x\n",spec->slave,spec->per,spec->irq);
+#endif
+
 		pr_warn("%d triggered [0x%01x, 0x%02x,0x%01x] %s\n",
 				irq, spec->slave, spec->per, spec->irq, name);
 	} else {
