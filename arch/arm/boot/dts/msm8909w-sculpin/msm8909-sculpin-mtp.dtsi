@@ -150,7 +150,7 @@
 		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
 		pinctrl-0 = <&gpio_key_active>;
 		pinctrl-1 = <&gpio_key_suspend>;
-
+/*
 		camera_focus {
 			label = "camera_focus";
 			gpios = <&msm_gpio 91 0x1>;
@@ -177,6 +177,7 @@
 			gpio-key,wakeup;
 			debounce-interval = <15>;
 		};
+*/
 	};
 
 	audio_codec_mtp: sound {
