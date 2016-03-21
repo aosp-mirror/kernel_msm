@@ -20,6 +20,7 @@
 #include "msm8996-htc-fingerprint.dtsi"
 #include "dsi-panel-t50.dtsi"
 #include "msm8996-audio-marlin.dtsi"
+#include "msm8996-camera-sensor-m1s1.dtsi"
 
 &mdss_dsi0 {
 	vddio-supply = <&pm8994_lvs2>;
