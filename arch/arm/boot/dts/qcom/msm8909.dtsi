@@ -1720,7 +1720,6 @@
 	clocks = <&clock_gcc clk_gcc_venus0_core0_vcodec0_clk>;
 	status = "okay";
 };
-
 &gdsc_mdss {
 	clock-names = "core_clk", "bus_clk";
 	clocks = <&clock_gcc clk_gcc_mdss_mdp_clk>,
