@@ -201,6 +201,19 @@ config MSM_COMMON_LOG
 	 table can be used by post analysis tools to extract information
 	 from memory when device crashes.
 
+config HTC_RAMDUMP_CODERAM_BACKUP
+	bool "Enable RPM CodeRam backup feature in HTC Ramdump Mechanism"
+	depends on MSM_COMMON_LOG
+	help
+	 RPM CodeRam will be blurred after PBL load XBL SBL1_RPM_ROM section
+	 if using QCT backup design for RPM CodeRam. Enable this CONFIG to backup
+	 RPM CodeRam data with HTC ramdump mechanism.
+
+config HTC_RAMDUMP_CODERAM_BACKUP_ADDR
+	hex "The physical address of RPM CodeRam"
+	default 0
+	depends on HTC_RAMDUMP_CODERAM_BACKUP
+
 config MSM_DDR_HEALTH
 	bool "MSM DDR Health Driver"
 	default n
