@@ -127,9 +127,70 @@
                 bias-disable; /* No PULL */
                 drive-strength = <2>; /* 2 MA */
                 output-low; /*HTC ADD*/
+		};
+	};
+        cam_sensor_mclk1_active: cam_sensor_mclk1_active{
+            /* MCLK1 */
+            mux {
+                /* CLK, DATA */
+                pins = "gpio14";
+                function = "cam_mclk";
+            };
+
+            config {
+                pins = "gpio14";
+                bias-disable; /* No PULL */
+                drive-strength = <8>; /*HTC modify 8 MA */
             };
         };
-    };
+
+        cam_sensor_mclk1_suspend: cam_sensor_mclk1_suspend {
+            /* MCLK1 */
+            mux {
+                /* CLK, DATA */
+                pins = "gpio14";
+                function = "cam_mclk";
+            };
+
+            config {
+                pins = "gpio14";
+                bias-disable; /*HTC modify No PULL */
+                drive-strength = <2>; /*HTC modify 8 MA */
+                output-low; /*HTC ADD*/
+            };
+        };
+
+        cam_sensor_rear2_active: cam_sensor_rear2_active {
+            /* RESET, STANDBY */
+            mux {
+                pins = "gpio23"; /*HTC modify*/
+                function = "gpio";
+            };
+
+            config {
+                pins = "gpio23"; /*HTC modify*/
+                bias-disable; /* No PULL */
+                drive-strength = <2>; /* 2 MA */
+            };
+        };
+
+        cam_sensor_rear2_sus {
+            cam_sensor_rear2_suspend: cam_sensor_rear2_suspend{
+                /* RESET, STANDBY */
+                mux {
+                    pins = "gpio23"; /*HTC modify*/
+                    function = "gpio";
+                };
+
+                config {
+                    pins = "gpio23"; /*HTC modify*/
+                    bias-disable; /* No PULL */
+                    drive-strength = <2>; /* 2 MA */
+                    output-low; /*HTC ADD*/
+                   };
+                };
+            };
+        };
 };
 &cci {
 actuator0: qcom,actuator@0 {
@@ -182,6 +243,46 @@ qcom,camera@0 {
 		status = "ok";
 		clocks = <&clock_mmss clk_mclk0_clk_src>,
 				<&clock_mmss clk_camss_mclk0_clk>;
+		clock-names = "cam_src_clk", "cam_clk";
+	};
+qcom,camera@1 {
+		cell-index = <1>;
+		compatible = "qcom,camera";
+		reg = <0x1>;
+		qcom,csiphy-sd-index = <1>;
+		qcom,csid-sd-index = <1>;
+		qcom,mount-angle = <270>;
+		//qcom,led-flash-src = <&led_flash1>;
+		//qcom,actuator-src = <&actuator1>;
+		qcom,camera-ver = <2>;
+		cam_vdig-supply = <&pm8994_l11>;//212mA
+		cam_ana-suplly = <&pm8994_gpios 14 0>;
+		cam_vio-supply = <&pm8994_l14>;//7mA
+		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana";
+		qcom,cam-vreg-type = <0 2 0>;
+		qcom,cam-vreg-min-voltage = <1200000 1800000 2850000>;
+		qcom,cam-vreg-max-voltage = <1200000 1800000 2850000>;
+		qcom,cam-vreg-op-mode = <0 0 0>;//uA
+		qcom,gpio-no-mux = <0>;
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&cam_sensor_mclk1_active &cam_sensor_rear2_active>;
+		pinctrl-1 = <&cam_sensor_mclk1_suspend &cam_sensor_rear2_suspend>;
+		gpios = <&tlmm 14 0>,
+			<&tlmm 23 0>,
+			<&pm8994_gpios 14 0>;
+		qcom,gpio-reset = <1>;
+		qcom,gpio-vana = <2>;
+		qcom,gpio-req-tbl-num = <0 1 2>;
+		qcom,gpio-req-tbl-flags = <1 0 0>;
+		qcom,gpio-req-tbl-label = "CAMIF_MCLK1",
+					"CAM_RST1",
+					"CAM2_A2V8";
+		qcom,sensor-position = <1>;
+		qcom,sensor-mode = <1>;
+		qcom,cci-master = <1>;
+		status = "ok";
+		clocks = <&clock_mmss clk_mclk1_clk_src>,
+				<&clock_mmss clk_camss_mclk1_clk>;
 		clock-names = "cam_src_clk", "cam_clk";
 	};
 };
