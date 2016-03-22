@@ -183,34 +183,36 @@
 			"RX_BIAS", "MCLK",
 			"SPK_RX_BIAS", "MCLK",
 			"INT_LDO_H", "MCLK",
-			"MIC BIAS External", "Handset Mic",
+			"MIC BIAS External", "Digital Mic1",
 			"MIC BIAS Internal2", "Headset Mic",
-			"MIC BIAS External", "Secondary Mic",
-			"AMIC1", "MIC BIAS External",
+			"MIC BIAS External", "Digital Mic2",
+			"DMIC1", "MIC BIAS External",
 			"AMIC2", "MIC BIAS Internal2",
-			"AMIC3", "MIC BIAS External";
+			"DMIC2", "MIC BIAS External";
 		qcom,msm-gpios =
 			"pri_i2s",
-			"us_eu_gpio";
+			"us_eu_gpio",
+			"dmic_lines";
 		qcom,pinctrl-names =
 			"all_off",
 			"pri_i2s_act",
 			"us_eu_gpio_act",
-			"pri_i2s_us_eu_gpio_act";
+			"pri_i2s_us_eu_gpio_act",
+			"dmic_lines_sus",
+			"dmic_lines_act";
 		pinctrl-names =
 			"all_off",
 			"pri_i2s_act",
 			"us_eu_gpio_act",
-			"pri_i2s_us_eu_gpio_act";
-		pinctrl-0 = <&cdc_pdm_lines_sus &cross_conn_det_sus
-							&vdd_spkdrv_sus>;
-		pinctrl-1 = <&cdc_pdm_lines_act &cross_conn_det_sus
-							&vdd_spkdrv_act>;
-		pinctrl-2 = <&cdc_pdm_lines_sus &cross_conn_det_act
-							&vdd_spkdrv_sus>;
-		pinctrl-3 = <&cdc_pdm_lines_act &cross_conn_det_act
-							&vdd_spkdrv_act>;
-		qcom,cdc-us-euro-gpios = <&msm_gpio 97 0>;
+			"pri_i2s_us_eu_gpio_act",
+			"dmic_lines_sus", 
+			"dmic_lines_act";
+		pinctrl-0 = <&cdc_pdm_lines_sus &cross_conn_det_sus &dmic_clk_sus &dmic_data_sus>;
+		pinctrl-1 = <&cdc_pdm_lines_act &cross_conn_det_sus &dmic_clk_act &dmic_data_act>;
+		pinctrl-2 = <&cdc_pdm_lines_sus &cross_conn_det_act &dmic_clk_act &dmic_data_act>;
+		pinctrl-3 = <&cdc_pdm_lines_act &cross_conn_det_act &dmic_clk_act &dmic_data_act>;
+		pinctrl-4 = <&cdc_pdm_lines_act &cross_conn_det_sus &dmic_clk_sus &dmic_data_sus>;
+		pinctrl-5 = <&cdc_pdm_lines_act &cross_conn_det_sus &dmic_clk_act &dmic_data_act>;
 		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,
 				<&afe>, <&lsm>, <&routing>, <&lpa>,
