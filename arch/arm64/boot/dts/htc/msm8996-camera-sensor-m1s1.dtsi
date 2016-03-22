@@ -132,6 +132,12 @@
 	};
 };
 &cci {
+actuator0: qcom,actuator@0 {
+        cell-index = <0>;
+        reg = <0x0>;
+        compatible = "qcom,actuator";
+        qcom,cci-master = <0>;
+};
 qcom,camera@0 {
 		cell-index = <0>;
 		compatible = "qcom,camera";
@@ -139,6 +145,7 @@ qcom,camera@0 {
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
 		qcom,mount-angle = <90>;
+		qcom,actuator-src = <&actuator0>;
 		qcom,camera-ver = <2>;
 		cam_vdig-supply = <&pm8994_l3>;//212mA
 		cam_vana-supply =<&pm8994_l10>;//91mA
