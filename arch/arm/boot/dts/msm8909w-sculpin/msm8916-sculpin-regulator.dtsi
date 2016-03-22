@@ -375,9 +375,9 @@
 	rpm-regulator-ldoa18 {
 		status = "okay";
 		pm8916_l18: regulator-l18 {
-			regulator-min-microvolt = <2700000>;
-			regulator-max-microvolt = <2700000>;
-			qcom,init-voltage = <2700000>;
+			regulator-min-microvolt = <2850000>;
+			regulator-max-microvolt = <2850000>;
+			qcom,init-voltage = <2850000>;
 			status = "okay";
 		};
 	};
