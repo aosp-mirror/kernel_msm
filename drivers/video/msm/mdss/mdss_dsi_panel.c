@@ -2435,7 +2435,7 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		if (rc) {
 			pr_err("%s:%d, Error, blmap\n",
 					__func__, __LINE__);
-			return -EINVAL;
+			goto error;
 		}
 		pr_info("%s: blmap @%08x (size %d)\n", __func__,
 				(int)pinfo->blmap, pinfo->blmap_size);
@@ -2520,7 +2520,7 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	rc = mdss_panel_parse_display_timings(np, &ctrl_pdata->panel_data);
 	if (rc)
-		return rc;
+		goto error;
 
 	pinfo->mipi.rx_eot_ignore = of_property_read_bool(np,
 		"qcom,mdss-dsi-rx-eot-ignore");
@@ -2599,6 +2599,11 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	return 0;
 
 error:
+	if (pinfo->blmap) {
+		kfree(pinfo->blmap);
+		pinfo->blmap = NULL;
+	}
+
 	return -EINVAL;
 }
 
