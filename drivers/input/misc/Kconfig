@@ -72,6 +72,11 @@ config INPUT_AD714X_SPI
 	  To compile this driver as a module, choose M here: the
 	  module will be called ad714x-spi.
 
+config INPUT_AL3320
+	bool "Enable AL3320 Driver Support"
+	help
+	  Say Y to enable AL3320 light sensor driver.
+
 config INPUT_ARIZONA_HAPTICS
 	tristate "Arizona haptics support"
 	depends on MFD_ARIZONA && SND_SOC
