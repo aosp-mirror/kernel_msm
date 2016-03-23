@@ -166,7 +166,7 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8952-qrd-skum.dtb \
        msm8952-ext-codec-cdp.dtb \
        msm8952-mtp.dtb
 
-dtb-$(CONFIG_ARCH_MSM8909) += msm8909-pm8916-mtp.dtb \
+dtb-$(CONFIG_ARCH_MSM8909_default) += msm8909-pm8916-mtp.dtb \
 	msm8909w-wtp.dtb \
 	apq8009w-wtp.dtb \
 	apq8009w-cdp.dtb \
@@ -174,6 +174,9 @@ dtb-$(CONFIG_ARCH_MSM8909) += msm8909-pm8916-mtp.dtb \
 	msm8909-pm8916-cdp.dtb \
 	msm8909w-cdp.dtb
 
+dtb-$(CONFIG_ARCH_MSM8909) += swift-evb2_apq8009w-wtp.dtb \
+	swift-sr_apq8009w-wtp.dtb \
+	phoenix-sr_msm8909w-wtp.dtb
 
 ifeq ($(CONFIG_ARM64),y)
 always          := $(dtb-y)
