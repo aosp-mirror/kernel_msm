@@ -865,5 +865,7 @@ static inline u32 irq_reg_readl(struct irq_chip_generic *gc,
 	else
 		return readl(gc->reg_base + reg_offset);
 }
-
+#ifdef CONFIG_HTC_POWER_DEBUG
+void htc_show_interrupts(void);
+#endif
 #endif /* _LINUX_IRQ_H */

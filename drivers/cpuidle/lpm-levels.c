@@ -50,6 +50,9 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/trace_msm_low_power.h>
 #include "../../drivers/clk/msm/clock.h"
+#ifdef CONFIG_HTC_POWER_DEBUG
+#include <soc/qcom/htc_util.h>
+#endif
 
 #define SCLK_HZ (32768)
 #define SCM_HANDOFF_LOCK_ID "S:7"
@@ -933,12 +936,24 @@ unlock_and_return:
 asmlinkage int __invoke_psci_fn_smc(u64, u64, u64, u64);
 bool psci_enter_sleep(struct lpm_cluster *cluster, int idx, bool from_idle)
 {
+
+#ifdef CONFIG_HTC_POWER_DEBUG
+int64_t time;
+#endif
 	/*
 	 * idx = 0 is the default LPM state
 	 */
 	if (!idx) {
 		stop_critical_timings();
+#ifdef CONFIG_HTC_POWER_DEBUG
+		time = sched_clock();
 		wfi();
+		time = sched_clock() - time;
+		do_div(time,1000);
+		htc_idle_stat_add(idx, (u32)time);
+#else
+		wfi();
+#endif
 		start_critical_timings();
 		return 1;
 	} else {
@@ -962,10 +977,22 @@ bool psci_enter_sleep(struct lpm_cluster *cluster, int idx, bool from_idle)
 		update_debug_pc_event(CPU_ENTER, state_id,
 						0xdeaffeed, 0xdeaffeed, true);
 		stop_critical_timings();
+#ifdef CONFIG_HTC_POWER_DEBUG
+		time = sched_clock();
 		success = !cpu_suspend(state_id);
+		time = sched_clock() - time;
+#else
+		success = !cpu_suspend(state_id);
+#endif
 		start_critical_timings();
 		update_debug_pc_event(CPU_EXIT, state_id,
 						success, 0xdeaffeed, true);
+#ifdef CONFIG_HTC_POWER_DEBUG
+		if(from_idle) {
+			do_div(time,1000);
+			htc_idle_stat_add(idx, (u32)time);
+		}
+#endif
 		return success;
 	}
 }

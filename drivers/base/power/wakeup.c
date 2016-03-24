@@ -939,6 +939,32 @@ static int print_wakeup_source_stats(struct seq_file *m,
 	return ret;
 }
 
+#ifdef CONFIG_HTC_POWER_DEBUG
+void htc_print_wakeup_source(struct wakeup_source *ws)
+{
+        if (ws->active) {
+                if (ws->timer_expires) {
+                        long timeout = ws->timer_expires - jiffies;
+                        if (timeout > 0)
+                                printk(" '%s', time left %ld ticks; ", ws->name, timeout);
+                } else
+                        printk(" '%s' ", ws->name);
+        }
+}
+
+void htc_print_active_wakeup_sources(void)
+{
+        struct wakeup_source *ws;
+
+        printk("wakeup sources: ");
+        rcu_read_lock();
+        list_for_each_entry_rcu(ws, &wakeup_sources, entry)
+                htc_print_wakeup_source(ws);
+        rcu_read_unlock();
+        printk("\n");
+}
+#endif
+
 /**
  * wakeup_sources_stats_show - Print wakeup sources statistics information.
  * @m: seq_file to print the statistics into.

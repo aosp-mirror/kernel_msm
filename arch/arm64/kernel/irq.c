@@ -28,6 +28,9 @@
 #include <linux/irqchip.h>
 #include <linux/seq_file.h>
 #include <linux/ratelimit.h>
+#ifdef CONFIG_HTC_POWER_DEBUG
+#include <linux/slab.h>
+#endif
 
 unsigned long irq_err_count;
 
@@ -39,6 +42,54 @@ int arch_show_interrupts(struct seq_file *p, int prec)
 	seq_printf(p, "%*s: %10lu\n", prec, "Err", irq_err_count);
 	return 0;
 }
+
+#ifdef CONFIG_HTC_POWER_DEBUG
+unsigned int *previous_irqs;
+static int pre_nr_irqs = 0;
+static void htc_show_interrupt(int i)
+{
+        struct irqaction *action;
+        unsigned long flags;
+        struct irq_desc *desc;
+
+        if (i < nr_irqs) {
+                desc = irq_to_desc(i);
+                if (!desc)
+                        return;
+                raw_spin_lock_irqsave(&desc->lock, flags);
+                action = desc->action;
+                if (!action)
+                        goto unlock;
+                if (!(kstat_irqs_cpu(i, 0)) || previous_irqs[i] == (kstat_irqs_cpu(i, 0)))
+                        goto unlock;
+                printk("%3d:", i);
+                printk("%6u\t", kstat_irqs_cpu(i, 0)-previous_irqs[i]);
+                printk("%s", action->name);
+                for (action = action->next; action; action = action->next)
+                        printk(", %s", action->name);
+                printk("\n");
+                previous_irqs[i] = kstat_irqs_cpu(i, 0);
+unlock:
+                raw_spin_unlock_irqrestore(&desc->lock, flags);
+        } else if (i == nr_irqs) {
+                if (previous_irqs[nr_irqs] == irq_err_count)
+                        return;
+                printk("Err: %lud\n", irq_err_count-previous_irqs[nr_irqs]);
+                previous_irqs[nr_irqs] = irq_err_count;
+        }
+}
+
+void htc_show_interrupts(void)
+{
+	int i = 0;
+	if(pre_nr_irqs != nr_irqs) {
+		pre_nr_irqs = nr_irqs;
+                previous_irqs = (unsigned int *)kcalloc(nr_irqs, sizeof(int),GFP_KERNEL);
+	}
+        for (i = 0; i <= nr_irqs; i++)
+		htc_show_interrupt(i);
+}
+#endif
 
 void (*handle_arch_irq)(struct pt_regs *) = NULL;
 

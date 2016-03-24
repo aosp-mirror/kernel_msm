@@ -776,6 +776,219 @@ int spmi_driver_register(struct spmi_driver *drv)
 }
 EXPORT_SYMBOL_GPL(spmi_driver_register);
 
+#ifdef CONFIG_HTC_POWER_DEBUG
+#define MAX_REG_PER_TRANSACTION	(8)
+
+/* PON Peripheral registers */
+#define PON_REVISION2				0x801
+#define PON_PON_REASON1				0x808
+#define PON_WARM_RESET_REASON1			0x80A
+#define PON_WARM_RESET_REASON2			0x80B
+#define PON_POFF_REASON1			0x80C
+#define PON_POFF_REASON2			0x80D
+#define PON_SOFT_RESET_REASON1			0x80E
+#define PON_SOFT_RESET_REASON2			0x80F
+
+enum {
+        HARD_RESET_TRIGGERED_BIT,
+        SMPL_TRIGGERED_BIT,
+        RTC_TRIGGERED_BIT,
+        DC_CHG_TRIGGERED_BIT,
+        USB_CHG_TRIGGERED_BIT,
+        PON1_TRIGGERED_BIT,
+        CBLPWR_N_TRIGGERED_BIT,
+        KPDPWR_N_TRIGGERED_BIT,
+        PON_BIT_MAX,
+} pon_reason_bit;
+
+enum {
+	SOFT_TRIGGERED_BIT,
+	PS_HOLD_TRIGGERED_BIT,
+	PMIC_WD_TRIGGERED_BIT,
+	GP1_TRIGGERED_BIT,
+	GP2_TRIGGERED_BIT,
+	KPDPWR_AND_RESIN_TRIGGERED_BIT,
+	RESIN_N_TRIGGERED_BIT,
+	KPDPWR_TRIGGERED_BIT,
+	WARM_REASON1_BIT_MAX,
+} warm_soft_reset_poff_reason1_bit;
+
+enum {
+	AFP_TRIGGERED_BIT = 4,
+	WARM_REASON2_BIT_MAX,
+} warm_soft_reset_reason2_bit;
+
+enum {
+	CHARGER_TRIGGERED_BIT = 3,
+	POFF_AFP_TRIGGERED_BIT,
+	UVLO_TRIGGERED_BIT,
+	OTST3_TRIGGERED_BIT,
+	STAGE3_TRIGGERED_BIT,
+	POFF_REASON2_BIT_MAX,
+} poff_reason2_bit;
+
+char *pon_reason[PON_BIT_MAX] = {
+	"Hard Reset",
+	"SMPL",
+	"RTC",
+	"DC Charger",
+	"USB Charger",
+	"Pon1",
+	"CBL_PWR1",
+	"Keypad Power"
+  };
+
+char *warm_reset_reason1[WARM_REASON1_BIT_MAX] = {
+	"Software",
+	"PS Hold",
+	"PMIC Watchdog",
+	"Keypad Reset1",
+	"Keypad Reset2",
+	"Kpdpwr + Resin",
+	"Resin",
+	"Keypad Power"
+  };
+
+char *warm_reset_reason2[WARM_REASON2_BIT_MAX] = {
+	"AFP",
+  };
+
+char *poff_reason2[POFF_REASON2_BIT_MAX] = {
+	"Charger",
+	"AFP",
+	"UVLO",
+	"OTST3",
+	"Stage3"
+  };
+
+void htc_print_reset_reason(int type, uint8_t value)
+{
+	int bit_idx = 0;
+	int start_bit = 0;
+	int end_bit = 0;
+	char **reason_desc = NULL;
+
+	switch (type) {
+	case PON_PON_REASON1:
+		start_bit = HARD_RESET_TRIGGERED_BIT;
+		end_bit = PON_BIT_MAX;
+		reason_desc = pon_reason;
+		break;
+	case PON_WARM_RESET_REASON1:
+	case PON_SOFT_RESET_REASON1:
+	case PON_POFF_REASON1:
+		start_bit = SOFT_TRIGGERED_BIT;
+		end_bit = WARM_REASON1_BIT_MAX;
+		reason_desc = warm_reset_reason1;
+		break;
+	case PON_WARM_RESET_REASON2:
+	case PON_SOFT_RESET_REASON2:
+		start_bit = AFP_TRIGGERED_BIT;
+		end_bit = WARM_REASON2_BIT_MAX;
+		reason_desc = warm_reset_reason2;
+		break;
+	case PON_POFF_REASON2:
+		start_bit = CHARGER_TRIGGERED_BIT;
+		end_bit = POFF_REASON2_BIT_MAX;
+		reason_desc = poff_reason2;
+		break;
+	default:
+		break;
+	}
+	for (bit_idx = start_bit; bit_idx < end_bit; bit_idx++) {
+		if (value & (1 << bit_idx)) {
+			printk(KERN_INFO "\t%s, (0x%x)\n", reason_desc[bit_idx - start_bit], value);
+		}
+	}
+}
+
+int htc_spmi_read_data(struct spmi_controller *ctrl, uint8_t *buf, int offset, int cnt)
+{
+	int ret = 0;
+	int len;
+	uint8_t sid;
+	uint16_t addr;
+
+	while (cnt > 0) {
+		sid = (offset >> 16) & 0xF;
+		addr = offset & 0xFFFF;
+		len = min(cnt, MAX_REG_PER_TRANSACTION);
+
+		ret = spmi_ext_register_readl(ctrl, sid, addr, buf, len);
+		if (ret < 0) {
+			pr_err("SPMI read failed, err = %d\n", ret);
+			goto done;
+		}
+
+		cnt -= len;
+		buf += len;
+		offset += len;
+	}
+
+done:
+	return ret;
+}
+
+uint8_t reason_1 = 0xFF;
+uint8_t warm_reset_reason_1 = 0xFF;
+uint8_t warm_reset_reason_2 = 0xFF;
+uint8_t soft_reset_reason_1 = 0xFF;
+uint8_t soft_reset_reason_2 = 0xFF;
+uint8_t poff_reason_1 = 0xFF;
+uint8_t poff_reason_2 = 0xFF;
+
+void htc_get_pon_boot_reason(struct spmi_controller *ctrl)
+{
+	/* PON_PON_REASON */
+	if (reason_1 == 0xFF)
+		htc_spmi_read_data(ctrl, &reason_1, PON_PON_REASON1, 1);
+
+	/* PON_WARM_RESET_REASON */
+	if (warm_reset_reason_1 == 0xFF)
+		htc_spmi_read_data(ctrl, &warm_reset_reason_1, PON_WARM_RESET_REASON1, 1);
+	if (warm_reset_reason_2 == 0xFF)
+		htc_spmi_read_data(ctrl, &warm_reset_reason_2, PON_WARM_RESET_REASON2, 1);
+
+	/* PON_SOFT_RESET_REASON */
+	if (soft_reset_reason_1 == 0xFF)
+		htc_spmi_read_data(ctrl, &soft_reset_reason_1, PON_SOFT_RESET_REASON1, 1);
+
+	if (soft_reset_reason_2 == 0xFF)
+		htc_spmi_read_data(ctrl, &soft_reset_reason_2, PON_SOFT_RESET_REASON2, 1);
+
+	/* PON_POFF_REASON1 */
+	if (poff_reason_1 == 0xFF)
+		htc_spmi_read_data(ctrl, &poff_reason_1, PON_POFF_REASON1, 1);
+	if (poff_reason_2 == 0xFF)
+		htc_spmi_read_data(ctrl, &poff_reason_2, PON_POFF_REASON2, 1);
+}
+
+void htc_print_pon_boot_reason(void)
+{
+	/* PON_PON_REASON */
+	printk(KERN_INFO "PON_PON_REASON:\n");
+	htc_print_reset_reason(PON_PON_REASON1, reason_1);
+
+	/* PON_WARM_RESET_REASON */
+	printk(KERN_INFO "PON_WARM_RESET_REASON:\n");
+	htc_print_reset_reason(PON_WARM_RESET_REASON1, warm_reset_reason_1);
+	htc_print_reset_reason(PON_WARM_RESET_REASON2, warm_reset_reason_2);
+
+	/* PON_SOFT_RESET_REASON */
+	printk(KERN_INFO "PON_SOFT_RESET_REASON:\n");
+	htc_print_reset_reason(PON_SOFT_RESET_REASON1, soft_reset_reason_1);
+	htc_print_reset_reason(PON_SOFT_RESET_REASON2, soft_reset_reason_2);
+
+	/* PON_POFF_REASON1 */
+	printk(KERN_INFO "PON_POFF_REASON:\n");
+	htc_print_reset_reason(PON_POFF_REASON1, poff_reason_1);
+	htc_print_reset_reason(PON_POFF_REASON2, poff_reason_2);
+}
+
+EXPORT_SYMBOL_GPL(htc_print_pon_boot_reason);
+
+#endif
+
 static int spmi_register_controller(struct spmi_controller *ctrl)
 {
 	int ret = 0;
@@ -797,6 +1010,13 @@ static int spmi_register_controller(struct spmi_controller *ctrl)
 					ctrl->nr, &ctrl->dev);
 
 	spmi_dfs_add_controller(ctrl);
+
+#ifdef CONFIG_HTC_POWER_DEBUG
+	/* Get the boot reason from kernel */
+	htc_get_pon_boot_reason(ctrl);
+	htc_print_pon_boot_reason();
+#endif
+
 	return 0;
 
 exit:
