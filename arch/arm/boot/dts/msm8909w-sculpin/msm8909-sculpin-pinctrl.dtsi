@@ -20,6 +20,29 @@
 		interrupt-controller;
 		#interrupt-cells = <2>;
 
+		gauge_alarm {
+			gauge_alarm_default: default {
+				mux {
+					pins = "gpio28";
+					function = "gauge_alarm_msmgpio";
+				};
+				config {
+					drive-strength = <2>; // 2 MA 
+					bias-pull-up; // PULL UP 
+				};
+			};
+			gauge_alarm_suspend: suspend {
+				mux {
+					pins = "gpio28";
+					function = "gauge_alarm_msmgpio";
+				};
+				config {
+					drive-strength = <2>; // 2 MA 
+					bias-pull-up; // PULL UP
+				};
+			};			
+		};
+
 		uart_console_active: uart_console_active {
 			mux {
 				pins = "gpio20", "gpio21";

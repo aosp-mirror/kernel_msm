@@ -19,6 +19,35 @@
 	 * with VM-BMS.
 	 */
 	i2c@78b8000 {
+		st-fg@70 {
+			compatible = "st,stc3117";
+			reg = <0x70>;
+			st,alarm-irq = <&msm_gpio 28 0x00>;
+			pinctrl-names = "default", "suspend";
+			pinctrl-0 = <&gauge_alarm_default>;
+			pinctrl-1 = <&gauge_alarm_suspend>;
+			st,rbatt-mohm = <818>;
+			st,nom-capacity-mah = <400>;
+			st,rsense-mohm = <10>;
+			st,float-voltage-mv = <4250>;
+			st,alarm-soc = <10>;
+			st,alarm-voltage-mv = <3400>;
+			st,term-current-ma = <40>;
+			st,relax-current-ma = <20>;
+			st,adaptive-capacity-tbl =
+				/bits/ 16 <0x00 0x00 0x00 0x25 0x25 0xC3 0x2D0>;
+			st,ocv-tbl =
+				/bits/ 16 <3300 3568 3674 3685 3703 3732
+					3749 3770 3802 3840 3907 3953
+					3985 4093 4193 4306>;
+			st,soc-tbl = /bits/ 8 <0 3 6 10 15 20
+						25 30 40 50 60 65
+						70 80 90 100>;
+			st,vmtemp-tbl =
+				/bits/ 16 <0x55 0x5a 0x64 0xa0 0x140 0x1b8 0x348>;
+			st,temp-tbl =
+				/bits/ 16 <60 40 25 10 0 (-10) (-20)>;
+		};
 		smb1357_otg_vreg: smb1357-charger@57 {
 			compatible = "qcom,smb1357-charger";
 			reg = <0x57>;
