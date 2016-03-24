@@ -10,41 +10,30 @@
  * GNU General Public License for more details.
  */
 
-#include "dsi-panel-sim-video.dtsi"
-#include "dsi-panel-sim-cmd.dtsi"
-#include "dsi-panel-hx8394d-720p-video.dtsi"
-#include "dsi-panel-sharp-qhd-video.dtsi"
-#include "dsi-panel-truly-wvga-cmd.dtsi"
-#include "dsi-panel-hx8394d-qhd-video.dtsi"
-#include "dsi-panel-hx8379a-fwvga-skua-video.dtsi"
-#include "dsi-panel-ili9806e-fwvga-video.dtsi"
-#include "dsi-panel-hx8379c-fwvga-video.dtsi"
-#include "dsi-panel-hx8394d-480p-video.dtsi"
-#include "dsi-panel-auo-qvga-cmd.dtsi"
-#include "dsi-panel-auo-cx-qvga-cmd.dtsi"
+#include "dsi-panel-x145aln01-280x280-cmd.dtsi"
 
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
 		#address-cells = <1>;
 		#size-cells = <0>;
-
-			qcom,panel-supply-entry@0 {
-			reg = <0>;
-			qcom,supply-name = "vdd";
-			qcom,supply-min-voltage = <2850000>;
-			qcom,supply-max-voltage = <2850000>;
-			qcom,supply-enable-load = <100000>;
-			qcom,supply-disable-load = <100>;
-		};
+		
+		qcom,panel-supply-entry@0 {
+				reg = <0>;
+				qcom,supply-name = "vdd";
+				qcom,supply-min-voltage = <2850000>;
+				qcom,supply-max-voltage = <2850000>;
+				qcom,supply-enable-load = <100000>;
+				qcom,supply-disable-load = <100>;
+			};
 
 		qcom,panel-supply-entry@1 {
-			reg = <1>;
-			qcom,supply-name = "vddio";
-			qcom,supply-min-voltage = <1800000>;
-			qcom,supply-max-voltage = <1800000>;
-			qcom,supply-enable-load = <100000>;
-			qcom,supply-disable-load = <100>;
-		};
+				reg = <1>;
+				qcom,supply-name = "panel";
+				qcom,supply-min-voltage = <1800000>;
+				qcom,supply-max-voltage = <1800000>;
+				qcom,supply-enable-load = <100000>;
+				qcom,supply-disable-load = <100>;
+			};
 	};
 };
 

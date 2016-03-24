@@ -51,8 +51,10 @@
 		#size-cells = <1>;
 		qcom,mdss-fb-map-prim = <&mdss_fb0>;
 		gdsc-supply = <&gdsc_mdss>;
-		vdda-supply = <&pm8909_l2>;
-		vddio-supply = <&pm8909_l6>;
+		vdda-supply = <&pm8916_l6>;
+		vddio-supply = <&pm8916_l2>;
+		vdd-supply = <&pm8916_l17>;
+		panel-supply = <&pm8916_l15>;
 
 		/* Bus Scale Settings */
 		qcom,msm-bus,name = "mdss_dsi";
@@ -96,21 +98,39 @@
 			qcom,ctrl-supply-entry@0 {
 				reg = <0>;
 				qcom,supply-name = "vdda";
-				qcom,supply-min-voltage = <1200000>;
-				qcom,supply-max-voltage = <1200000>;
+				qcom,supply-min-voltage = <1800000>;
+				qcom,supply-max-voltage = <1800000>;
 				qcom,supply-enable-load = <100000>;
 				qcom,supply-disable-load = <100>;
 				qcom,supply-post-on-sleep = <5>;
 			};
+
+			qcom,ctrl-supply-entry@1 {
+				reg = <1>;
+				qcom,supply-name = "vddio";
+				qcom,supply-min-voltage = <1200000>;
+				qcom,supply-max-voltage = <1200000>;
+				qcom,supply-enable-load = <100000>;
+				qcom,supply-disable-load = <100>;
+			};
 		};
 
-		qcom,phy-supply-entries {
+		qcom,panel-supply-entries {
 			#address-cells = <1>;
 			#size-cells = <0>;
 
-			qcom,phy-supply-entry@0 {
+			qcom,panel-supply-entry@0 {
 				reg = <0>;
-				qcom,supply-name = "vddio";
+				qcom,supply-name = "vdd";
+				qcom,supply-min-voltage = <2850000>;
+				qcom,supply-max-voltage = <2850000>;
+				qcom,supply-enable-load = <100000>;
+				qcom,supply-disable-load = <100>;
+			};
+
+			qcom,panel-supply-entry@1 {
+				reg = <1>;
+				qcom,supply-name = "panel";
 				qcom,supply-min-voltage = <1800000>;
 				qcom,supply-max-voltage = <1800000>;
 				qcom,supply-enable-load = <100000>;
@@ -133,8 +153,9 @@
 			interrupts = <0 80 0>;
 
 			qcom,mdss-mdp = <&mdss_mdp>;
-			vdd-supply = <&pm8909_l17>;
-			vddio-supply = <&pm8909_l6>;
+			vddio-supply = <&pm8916_l2>;
+			vdd-supply = <&pm8916_l17>;
+			panel-supply = <&pm8916_l15>;
 
 			clocks = <&clock_gcc_mdss clk_gcc_mdss_byte0_clk>,
 				 <&clock_gcc_mdss clk_gcc_mdss_pclk0_clk>,
