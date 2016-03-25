@@ -1344,7 +1344,6 @@ void wlan_deregister_txrx_packetdump(void)
 	if (gtx_count || grx_count) {
 		ol_deregister_packetdump_callback();
 		pe_deregister_packetdump_callback();
-		htt_deregister_packetdump_callback();
 		send_packetdump_monitor(STOP_MONITOR);
 		csr_packetdump_timer_stop();
 
@@ -1444,9 +1443,9 @@ static void rx_packetdump_cb(adf_nbuf_t netbuf, uint8_t status,
  */
 void wlan_register_txrx_packetdump(void)
 {
-	ol_register_packetdump_callback(tx_packetdump_cb);
+	ol_register_packetdump_callback(tx_packetdump_cb,
+				rx_packetdump_cb);
 	pe_register_packetdump_callback(rx_packetdump_cb);
-	htt_register_packetdump_callback(rx_packetdump_cb);
 	send_packetdump_monitor(START_MONITOR);
 
 	gtx_count = 0;

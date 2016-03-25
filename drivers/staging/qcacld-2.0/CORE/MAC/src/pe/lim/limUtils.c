@@ -8459,7 +8459,7 @@ eHalStatus lim_send_ext_cap_ie(tpAniSirGlobal mac_ctx,
 			DOT11F_EID_EXTCAP, num_bytes);
 	temp = ext_cap_data.bytes;
 	for (i=0; i < num_bytes; i++, temp++)
-		limLog(mac_ctx, LOG1, FL("%d byte is %02x"), i+1, *temp);
+		limLog(mac_ctx, LOG2, FL("%d byte is %02x"), i+1, *temp);
 
 	vdev_ie->data = (uint8_t *)vdev_ie + sizeof(*vdev_ie);
 	vos_mem_copy(vdev_ie->data, ext_cap_data.bytes, num_bytes);

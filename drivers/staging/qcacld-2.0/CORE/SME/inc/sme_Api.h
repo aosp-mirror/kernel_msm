@@ -232,12 +232,15 @@ struct sme_bad_peer_txctl_param{
 
 
 #define SME_MAX_THERMAL_LEVELS (4)
+#define SME_MAX_THROTTLE_LEVELS (4)
+
 
 typedef struct {
     /* Array of thermal levels */
     tSmeThermalLevelInfo smeThermalLevels[SME_MAX_THERMAL_LEVELS];
     u_int8_t smeThermalMgmtEnabled;
     u_int32_t smeThrottlePeriod;
+    u_int8_t sme_throttle_duty_cycle_tbl[SME_MAX_THROTTLE_LEVELS];
 } tSmeThermalParams;
 
 #ifdef WLAN_FEATURE_APFIND

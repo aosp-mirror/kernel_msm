@@ -2262,7 +2262,7 @@ limProcessMlmJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         else
         {
           //No need to suspend link.
-          limLog(pMac,LOG1,"SessionId:%d Join request on current channel",
+          limLog(pMac,LOG2,"SessionId:%d Join request on current channel",
                  sessionId);
           limProcessMlmPostJoinSuspendLink( pMac, eHAL_STATUS_SUCCESS,
                                                     (tANI_U32*) psessionEntry );
@@ -4411,9 +4411,23 @@ limProcessAssocFailureTimeout(tpAniSirGlobal pMac, tANI_U32 MsgType)
     /* notify TL that association is failed so that TL can flush the cached frame  */
     WLANTL_AssocFailed (psessionEntry->staId);
 
-    // Log error
-    PELOG1(limLog(pMac, LOG1,
-       FL("Re/Association Response not received before timeout "));)
+    /* Log error */
+    limLog(pMac, LOG1,
+       FL("Re/Association Response not received before timeout "));
+    /*
+     * Send Deauth to handle the scenareo where association timeout happened
+     * when device has missed the assoc resp sent by peer.
+     * By sending deauth try to clear the session created on peer device.
+     */
+    limLog(pMac, LOGE,
+           FL("Sessionid: %d try sending Send deauth on channel %d to BSSID: "
+           MAC_ADDRESS_STR ), psessionEntry->peSessionId,
+           psessionEntry->currentOperChannel,
+           MAC_ADDR_ARRAY(psessionEntry->bssId));
+
+    limSendDeauthMgmtFrame(pMac, eSIR_MAC_UNSPEC_FAILURE_REASON,
+                 psessionEntry->bssId,
+                 psessionEntry, FALSE);
 
     if ((LIM_IS_AP_ROLE(psessionEntry) ||
          LIM_IS_BT_AMP_AP_ROLE(psessionEntry)) ||

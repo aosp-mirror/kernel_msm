@@ -1947,12 +1947,36 @@ typedef enum
 #define CFG_THERMAL_MIGRATION_ENABLE_MAX       ( 1 )
 #define CFG_THERMAL_MIGRATION_ENABLE_DEFAULT   ( 1 )
 
-
-
 #define CFG_THROTTLE_PERIOD_NAME               "gThrottlePeriod"
 #define CFG_THROTTLE_PERIOD_MIN                ( 10 )
 #define CFG_THROTTLE_PERIOD_MAX                ( 10000 )
 #define CFG_THROTTLE_PERIOD_DEFAULT            ( 4000 )
+
+/*
+ * Configure Throttle Period Different Level Duty Cycle in percentage
+ * When temperature measured is greater than threshold at particular level,
+ * then throtling level will get increased by one level and
+ * will reduce TX duty by the given percentage
+ */
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL0_NAME    "gThrottleDutyCycleLevel0"
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL0_MIN     ( 0 )
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL0_MAX     ( 0 )
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL0_DEFAULT ( 0 )
+
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL1_NAME    "gThrottleDutyCycleLevel1"
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL1_MIN     ( 0 )
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL1_MAX     ( 100 )
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL1_DEFAULT ( 50 )
+
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL2_NAME    "gThrottleDutyCycleLevel2"
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL2_MIN     ( 0 )
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL2_MAX     ( 100 )
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL2_DEFAULT ( 75 )
+
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL3_NAME    "gThrottleDutyCycleLevel3"
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL3_MIN     ( 0 )
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL3_MAX     ( 100 )
+#define CFG_THROTTLE_DUTY_CYCLE_LEVEL3_DEFAULT ( 94 )
 
 #define CFG_THERMAL_TEMP_MIN_LEVEL0_NAME      "gThermalTempMinLevel0"
 #define CFG_THERMAL_TEMP_MIN_LEVEL0_MIN       ( 0 )
@@ -3909,6 +3933,10 @@ struct hdd_config {
    v_BOOL_t                    isP2pDeviceAddrAdministrated;
    v_U8_t                      thermalMitigationEnable;
    v_U32_t                     throttlePeriod;
+   uint32_t                    throttle_dutycycle_level0;
+   uint32_t                    throttle_dutycycle_level1;
+   uint32_t                    throttle_dutycycle_level2;
+   uint32_t                    throttle_dutycycle_level3;
 #if defined(CONFIG_HL_SUPPORT) && defined(QCA_BAD_PEER_TX_FLOW_CL)
    bool                        bad_peer_txctl_enable;
    uint32_t                    bad_peer_txctl_prd;

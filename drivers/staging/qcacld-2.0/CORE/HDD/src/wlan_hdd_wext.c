@@ -8640,10 +8640,7 @@ static int __iw_get_char_setnone(struct net_device *dev,
             pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
             status = wlan_hdd_validate_context(pHddCtx);
             if (0 != status)
-            {
-                hddLog(LOGE, "%s: getSNR: HDD context is not valid", __func__);
                 return status;
-            }
 
             pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 

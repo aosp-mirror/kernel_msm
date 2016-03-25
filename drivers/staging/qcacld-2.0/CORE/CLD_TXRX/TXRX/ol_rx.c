@@ -59,6 +59,7 @@
 #include <ipv6_defs.h>    /* IPv6 header defs */
 #include <ol_vowext_dbg_defs.h>
 #include <wma.h>
+#include "pktlog_ac_fmt.h"
 
 #ifdef HTT_RX_RESTORE
 #include "vos_cnss.h"
@@ -76,9 +77,17 @@
 
 static void ol_rx_restore_handler(struct work_struct *htt_rx)
 {
+    adf_os_device_t adf_ctx;
+    VosContextType *pvoscontext = NULL;
+
     VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
         "Enter: %s", __func__);
-    vos_device_self_recovery();
+
+    pvoscontext = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
+    adf_ctx = vos_get_context(VOS_MODULE_ID_ADF, pvoscontext);
+    if (adf_ctx)
+       vos_device_self_recovery(adf_ctx->dev);
+
     VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
         "Exit: %s", __func__);
 }
@@ -284,6 +293,8 @@ ol_rx_indication_handler(
             ol_rx_reorder_flush(
                 vdev, peer, tid, seq_num_start,
                 seq_num_end, htt_rx_flush_release);
+            ol_rx_reorder_update_history(peer, reorder_flush, tid,
+                 seq_num_start, seq_num_end, 0);
         }
     }
 
@@ -450,6 +461,8 @@ ol_rx_indication_handler(
                     } else {
                         ol_rx_reorder_store(
                             pdev, peer, tid, reorder_idx, head_msdu, tail_msdu);
+                        ol_rx_reorder_update_history(peer, reorder_store, tid,
+                            0, 0, reorder_idx);
                         if (peer->tids_rx_reorder[tid].win_sz_mask == 0) {
                             peer->tids_last_seq[tid] =
                                          htt_rx_mpdu_desc_seq_num(htt_pdev,
@@ -532,6 +545,8 @@ ol_rx_indication_handler(
 
     if ((A_TRUE == rx_ind_release) && peer && vdev) {
         ol_rx_reorder_release(vdev, peer, tid, seq_num_start, seq_num_end);
+        ol_rx_reorder_update_history(peer, reorder_release, tid, seq_num_start,
+                   seq_num_end, 0);
     }
     OL_RX_REORDER_TIMEOUT_UPDATE(peer, tid);
     OL_RX_REORDER_TIMEOUT_MUTEX_UNLOCK(pdev);
@@ -1137,6 +1152,8 @@ ol_rx_peer_cleanup(struct ol_txrx_vdev_t *vdev, struct ol_txrx_peer_t *peer)
 {
     peer->keyinstalled = 0;
     ol_rx_reorder_peer_cleanup(vdev, peer);
+    adf_os_mem_free(peer->reorder_history);
+    peer->reorder_history = NULL;
 }
 
 /*
@@ -1225,6 +1242,51 @@ ol_rx_in_order_indication_handler(
     }
 
     peer->rx_opt_proc(vdev, peer, tid, head_msdu);
+}
+
+/**
+ * ol_rx_pkt_dump_call() - updates status and
+ * calls packetdump callback to log rx packet
+ *
+ * @msdu: rx packet
+ * @peer_id: peer id
+ * @status: status of rx packet
+ *
+ * This function is used to update the status of rx packet
+ * and then calls packetdump callback to log that packet.
+ *
+ * Return: None
+ *
+ */
+void ol_rx_pkt_dump_call(
+	adf_nbuf_t msdu,
+	uint16_t peer_id,
+	uint8_t status)
+{
+	v_CONTEXT_t vos_context;
+	ol_txrx_pdev_handle pdev;
+	struct ol_txrx_peer_t *peer = NULL;
+
+	vos_context = vos_get_global_context(VOS_MODULE_ID_TXRX, NULL);
+	pdev = vos_get_context(VOS_MODULE_ID_TXRX, vos_context);
+
+	if (!pdev) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			"%s: pdev is NULL", __func__);
+		return;
+	}
+
+	if (pdev->ol_rx_packetdump_cb) {
+		peer = ol_txrx_peer_find_by_id(pdev, peer_id);
+		if (!peer) {
+			TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+				"%s: peer with peer id %d is NULL", __func__,
+				peer_id);
+			return;
+		}
+		pdev->ol_rx_packetdump_cb(msdu, status, peer->vdev->vdev_id,
+						RX_DATA_PKT);
+	}
 }
 
 /* the msdu_list passed here must be NULL terminated */

@@ -1057,6 +1057,7 @@ tSirRetStatus peOpen(tpAniSirGlobal pMac, tMacOpenParameters *pMacOpenParam)
                                         pMac->lim.maxStation, 0);
 
     pMac->lim.mgmtFrameSessionId = 0xff;
+    pMac->lim.tdls_frm_session_id = 0xff;
     pMac->lim.deferredMsgCnt = 0;
 
     if (!VOS_IS_STATUS_SUCCESS(vos_lock_init(&pMac->lim.lkPeGlobalLock))) {
@@ -1434,15 +1435,11 @@ VOS_STATUS peHandleMgmtFrame( v_PVOID_t pvosGCtx, v_PVOID_t vosBuff)
 
     mHdr = WDA_GET_RX_MAC_HEADER(pRxPacketInfo);
     if(mHdr->fc.type == SIR_MAC_MGMT_FRAME) {
-        PELOG1(limLog( pMac, LOG1,
-               FL("RxBd=%p mHdr=%p Type: %d Subtype: %d  Sizes:FC%d Mgmt%d"),
-               pRxPacketInfo, mHdr, mHdr->fc.type, mHdr->fc.subType,
-               sizeof(tSirMacFrameCtl), sizeof(tSirMacMgmtHdr));)
-
-        limLog(pMac, LOG1, FL("mpdu_len:%d hdr_len:%d data_len:%d"),
-               WDA_GET_RX_MPDU_LEN(pRxPacketInfo),
-               WDA_GET_RX_MPDU_HEADER_LEN(pRxPacketInfo),
-               WDA_GET_RX_PAYLOAD_LEN(pRxPacketInfo));
+        limLog(pMac, LOG2,
+              FL("Type: %d Subtype: %d from: " MAC_ADDRESS_STR " with Seq no %d"),
+              mHdr->fc.type, mHdr->fc.subType, MAC_ADDR_ARRAY(mHdr->sa),
+              ((mHdr->seqControl.seqNumHi << 4) |
+              (mHdr->seqControl.seqNumLo)));
 
 #ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
        if (WDA_GET_ROAMCANDIDATEIND(pRxPacketInfo))
@@ -1472,8 +1469,6 @@ VOS_STATUS peHandleMgmtFrame( v_PVOID_t pvosGCtx, v_PVOID_t vosBuff)
     {
         vos_pkt_return_packet(pVosPkt);
         pVosPkt = NULL;
-        limLog( pMac, LOGW,
-                FL ( "sysBbtProcessMessageCore failed to process SIR_BB_XPORT_MGMT_MSG" ));
         return VOS_STATUS_E_FAILURE;
     }
 
@@ -1807,9 +1802,10 @@ lim_enc_type_matched(tpAniSirGlobal mac_ctx,
            bcn->capabilityInfo.privacy, bcn->wpaPresent,
            bcn->rsnPresent);
     limLog(mac_ctx, LOG1,
-           FL("session:: Privacy :%d EncyptionType: %d"),
+           FL("session:: Privacy :%d EncyptionType: %d OSEN %d WPS %d"),
            SIR_MAC_GET_PRIVACY(session->limCurrentBssCaps),
-           session->encryptType);
+           session->encryptType, session->osen_association,
+           session->wps_registration);
 
     /* This is handled by sending probe req due to IOT issues so return TRUE */
     if ((bcn->capabilityInfo.privacy) !=
@@ -1842,6 +1838,24 @@ lim_enc_type_matched(tpAniSirGlobal mac_ctx,
                     || (session->encryptType == eSIR_ED_CCMP)
                     || (session->encryptType == eSIR_ED_AES_128_CMAC)))
         return true;
+
+    /* For HS2.0, RSN ie is not present
+     * in beacon. Therefore no need to
+     * check for security type in case
+     * OSEN session.
+     * For WPS registration session no need to
+     * detect security mismatch as it won't match and
+     * driver may end up sending probe request without
+     * WPS IE during WPS registration process.
+     */
+     /*TODO: AP capability mismatch
+     * is not checked here because
+     * no logic for beacon parsing
+     * is avilable for HS2.0
+     */
+    if (session->osen_association ||
+            session->wps_registration)
+        return eSIR_TRUE;
 
     return false;
 }

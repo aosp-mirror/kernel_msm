@@ -109,6 +109,28 @@ void ol_rx_reorder_init(struct ol_rx_reorder_t *rx_reorder, u_int8_t tid)
     rx_reorder->defrag_waitlist_elem.tqe_prev = NULL;
 }
 
+void ol_rx_reorder_update_history(struct ol_txrx_peer_t *peer,
+	uint8_t msg_type, uint8_t tid, uint8_t start_seq,
+	uint8_t end_seq, uint8_t reorder_idx)
+{
+	uint8_t index;
+
+	if (!peer->reorder_history)
+		return;
+
+	index = peer->reorder_history->curr_index++;
+	peer->reorder_history->record[index].msg_type = msg_type;
+	peer->reorder_history->record[index].peer_id = peer->local_id;
+	peer->reorder_history->record[index].tid = tid;
+	peer->reorder_history->record[index].reorder_idx = reorder_idx;
+	peer->reorder_history->record[index].start_seq = start_seq;
+	peer->reorder_history->record[index].end_seq = end_seq;
+
+	if (peer->reorder_history->curr_index >= OL_MAX_RX_REORDER_HISTORY) {
+		peer->reorder_history->curr_index = 0;
+		peer->reorder_history->wrap_around = 1;
+	}
+}
 
 static enum htt_rx_status
 ol_rx_reorder_seq_num_check(

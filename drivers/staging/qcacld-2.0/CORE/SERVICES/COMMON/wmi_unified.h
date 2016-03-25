@@ -383,6 +383,8 @@ typedef enum {
     WMI_VDEV_FILTER_NEIGHBOR_RX_PACKETS_CMDID,
     /** set quiet ie parameters. primarily used in AP mode */
     WMI_VDEV_SET_QUIET_MODE_CMDID,
+    /** To set custom aggregation size for per vdev */
+    WMI_VDEV_SET_CUSTOM_AGGR_SIZE_CMDID,
 
     /* peer specific commands */
 
@@ -2710,6 +2712,16 @@ typedef struct {
      */
     A_UINT32 tsf_delta;
 
+    /* The lower 32 bits of the TSF (rx_tsf_l32) is copied by FW from
+     * TSF timestamp in the RX MAC descriptor provided by HW.
+     */
+    A_UINT32 rx_tsf_l32;
+
+    /* The Upper 32 bits (rx_tsf_u32) is filled by reading the TSF register
+     * after the packet is received.
+     */
+    A_UINT32 rx_tsf_u32;
+
     /* This TLV is followed by array of bytes:
          * // management frame buffer
          *   A_UINT8 bufp[];
@@ -3064,6 +3076,13 @@ typedef struct {
     A_UINT32 next_start; /* offset in TUs */
     A_UINT32 enabled;    /* enable/disable */
 } wmi_vdev_set_quiet_cmd_fixed_param;
+
+typedef struct {
+    A_UINT32 tlv_header;   /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_vdev_set_custom_aggr_size_cmd_fixed_param */
+    A_UINT32 vdev_id;      /* vdev id indicating to which the vdev custom aggregation size will be applied. */
+    A_UINT32 tx_aggr_size; /* Size for tx aggregation (max MPDUs per A-MPDU) for the vdev mentioned in vdev id */
+    A_UINT32 rx_aggr_size; /* Size for rx aggregation (block ack window size limit) for the vdev mentioned in vdev id*/
+} wmi_vdev_set_custom_aggr_size_cmd_fixed_param;
 
 /*
  * Command to enable/disable Green AP Power Save.
@@ -4085,6 +4104,12 @@ typedef struct {
     A_UINT32 cca_busy_time;
 } wmi_channel_stats;
 
+/*
+ * Each step represents 0.5 dB.  The starting value is 0 dBm.
+ * Thus the TPC levels cover 0 dBm to 31.5 dBm inclusive in 0.5 dB steps.
+ */
+#define MAX_TPC_LEVELS 64
+
 /* radio statistics */
 typedef struct {
     A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_radio_link_stats */
@@ -4110,6 +4135,8 @@ typedef struct {
     A_UINT32 on_time_hs20;
     /** number of channels */
     A_UINT32 num_channels;
+    /** tx time (in milliseconds) per TPC level (0.5 dBm) */
+    A_UINT32 tx_time_per_tpc[MAX_TPC_LEVELS];
 } wmi_radio_link_stats;
 
 /** Radio statistics (once started) do not stop or get reset unless wifi_clear_link_stats is invoked */
@@ -4556,7 +4583,14 @@ typedef struct {
 #define WMI_UNIFIED_VDEV_SUBTYPE_P2P_GO     0x3
 #define WMI_UNIFIED_VDEV_SUBTYPE_PROXY_STA  0x4
 #define WMI_UNIFIED_VDEV_SUBTYPE_MESH       0x5
-
+/* new subtype for 11S mesh is required as 11S functionality differs
+ * in many ways from proprietary mesh
+ * 11S uses 6-addr frame format and supports peering between mesh
+ * stations and dynamic best path selection between mesh stations.
+ * While in proprietary mesh, neighboring mesh station MAC is manually
+ * added to AST table for traffic flow between mesh stations
+ */
+#define WMI_UNIFIED_VDEV_SUBTYPE_MESH_11S   0x6
 /** values for vdev_start_request flags */
 /** Indicates that AP VDEV uses hidden ssid. only valid for
  *  AP/GO */
@@ -5047,6 +5081,13 @@ typedef enum {
 
     /* VDEV capabilities */
     WMI_VDEV_PARAM_CAPABILITIES, /* see capabilities defs below */
+    /*
+     * Increment TSF in micro seconds to avoid beacon collision on mesh VAP.
+     * The host must ensure that either no other vdevs share the TSF with
+     * this vdev, or else that it is acceptable to apply this TSF adjustment
+     * to all vdevs sharing the TSF.
+     */
+    WMI_VDEV_PARAM_TSF_INCREMENT,
 } WMI_VDEV_PARAM;
 
 /* vdev capabilities bit mask */
@@ -7515,6 +7556,7 @@ typedef enum event_type_e {
     WOW_NLO_SCAN_COMPLETE_EVENT,
     WOW_NAN_DATA_EVENT,
     WOW_NAN_RTT_EVENT,
+    WOW_TDLS_CONN_TRACKER_EVENT,
 } WOW_WAKE_EVENT_TYPE;
 
 typedef enum wake_reason_e {
@@ -7561,6 +7603,7 @@ typedef enum wake_reason_e {
     WOW_REASON_BPF_ALLOW,
     WOW_REASON_NAN_DATA,
     WOW_REASON_NAN_RTT,
+    WOW_REASON_TDLS_CONN_TRACKER_EVENT,
     WOW_REASON_DEBUG_TEST = 0xFF,
 } WOW_WAKE_REASON_TYPE;
 

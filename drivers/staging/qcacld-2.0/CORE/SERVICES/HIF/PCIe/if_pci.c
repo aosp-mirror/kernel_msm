@@ -1715,7 +1715,8 @@ again:
     ol_sc->max_no_of_peers = 1;
 
     /* Get RAM dump memory address and size */
-    ol_sc->ramdump_base = vos_get_virt_ramdump_mem(&ol_sc->ramdump_size);
+    ol_sc->ramdump_base = vos_get_virt_ramdump_mem(&pdev->dev,
+                                             &ol_sc->ramdump_size);
 
     if (ol_sc->ramdump_base == NULL || !ol_sc->ramdump_size) {
         pr_info("%s: Failed to get RAM dump memory address or size!\n",
@@ -2047,7 +2048,8 @@ again:
     ol_sc->max_no_of_peers = 1;
 
     /* Get RAM dump memory address and size */
-    ol_sc->ramdump_base = vos_get_virt_ramdump_mem(&ol_sc->ramdump_size);
+    ol_sc->ramdump_base = vos_get_virt_ramdump_mem(&pdev->dev,
+                                             &ol_sc->ramdump_size);
 
     if (ol_sc->ramdump_base == NULL || !ol_sc->ramdump_size) {
         pr_info("%s: Failed to get RAM dump memory address or size!\n",

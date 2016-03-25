@@ -418,6 +418,9 @@ ol_txrx_pdev_attach(
         goto fail2;
     }
 
+    htt_register_rx_pkt_dump_callback(pdev->htt_pdev,
+                          ol_rx_pkt_dump_call);
+
     adf_os_mem_zero(pdev->pn_replays,
                     OL_RX_NUM_PN_REPLAY_TYPES * sizeof(uint32_t));
 
@@ -921,6 +924,8 @@ ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev, int force)
         ol_txrx_peer_find_hash_erase(pdev);
     }
 
+    htt_deregister_rx_pkt_dump_callback(pdev->htt_pdev);
+
     /* Stop the communication between HTT and target at first */
     htt_detach_target(pdev->htt_pdev);
 
@@ -1036,6 +1041,7 @@ ol_txrx_vdev_attach(
     vdev->safemode = 0;
     vdev->drop_unenc = 1;
     vdev->num_filters = 0;
+    vdev->fwd_to_tx_packets = 0;
 #if defined(CONFIG_PER_VDEV_TX_DESC_POOL)
     adf_os_atomic_init(&vdev->tx_desc_count);
 #endif
@@ -1422,6 +1428,12 @@ ol_txrx_peer_attach(
     }
 
     OL_TXRX_LOCAL_PEER_ID_ALLOC(pdev, peer);
+    peer->reorder_history = adf_os_mem_alloc(NULL,
+            sizeof(struct ol_rx_reorder_history));
+    if (!peer->reorder_history) {
+        TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+                 "%s: reorder history malloc failed\n", __func__);
+    }
 
     return peer;
 }

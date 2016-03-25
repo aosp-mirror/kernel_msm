@@ -1052,6 +1052,8 @@ typedef struct sSirSmeJoinReq
     tANI_U8             cc_switch_mode;
 #endif
     tVOS_CON_MODE       staPersona;             //Persona
+    bool                osen_association;
+    bool                wps_registration;
     ePhyChanBondState   cbMode;                 // Pass CB mode value in Join.
 
     /*This contains the UAPSD Flag for all 4 AC
@@ -4898,12 +4900,15 @@ typedef enum
     WLAN_WMA_MAX_THERMAL_LEVELS
 } t_thermal_level;
 
+#define WLAN_THROTTLE_DUTY_CYCLE_LEVEL_MAX (4)
+
 typedef struct{
     /* Array of thermal levels */
     t_thermal_level_info thermalLevels[WLAN_WMA_MAX_THERMAL_LEVELS];
     u_int8_t thermalCurrLevel;
     u_int8_t thermalMgmtEnabled;
     u_int32_t throttlePeriod;
+    u_int8_t throttle_duty_cycle_tbl[WLAN_THROTTLE_DUTY_CYCLE_LEVEL_MAX];
 } t_thermal_mgmt, *tp_thermal_mgmt;
 
 typedef struct sSirTxPowerLimit
@@ -5826,6 +5831,7 @@ typedef struct
     tANI_U32          ccaBusyTime;
 } tSirWifiChannelStats, *tpSirWifiChannelStats;
 
+#define MAX_TPC_LEVELS 64
 /* radio statistics */
 typedef struct
 {
@@ -5867,6 +5873,10 @@ typedef struct
     tANI_U32        onTimeHs20;
     /* number of channels */
     tANI_U32        numChannels;
+
+    /** tx time (in milliseconds) per TPC level (0.5 dBm) */
+    uint32_t tx_time_per_tpc[MAX_TPC_LEVELS];
+
     /* channel statistics tSirWifiChannelStats */
     tSirWifiChannelStats channels[0];
 } tSirWifiRadioStat, *tpSirWifiRadioStat;

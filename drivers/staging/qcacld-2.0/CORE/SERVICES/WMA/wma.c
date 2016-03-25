@@ -588,10 +588,6 @@ static inline uint16_t mcs_rate_match(uint16_t match_rate, bool *is_sgi,
 		uint8_t nss, uint16_t nss1_rate, uint16_t nss1_srate,
 				      uint16_t nss2_rate, uint16_t nss2_srate)
 {
-	WMA_LOGD("%s match_rate: %d, %d %d %d %d",
-		__func__, match_rate, nss1_rate, nss1_srate, nss2_rate,
-		nss2_srate);
-
 	if (match_rate == nss1_rate)
 		return nss1_rate;
 	else if (match_rate == nss1_srate) {
@@ -1267,6 +1263,8 @@ static int wma_vdev_start_rsp_ind(tp_wma_handle wma, u_int8_t *buf)
 		return -EINVAL;
 	}
 
+	iface = &wma->interfaces[resp_event->vdev_id];
+
 	if ((resp_event->vdev_id <= wma->max_bssid) &&
 		(adf_os_atomic_read(
 		&wma->interfaces[resp_event->vdev_id].vdev_restart_params.hidden_ssid_restart_in_progress)) &&
@@ -1283,6 +1281,16 @@ static int wma_vdev_start_rsp_ind(tp_wma_handle wma, u_int8_t *buf)
 		adf_os_atomic_set(
 		&wma->interfaces[resp_event->vdev_id].vdev_restart_params.hidden_ssid_restart_in_progress, 0);
 		wma->interfaces[resp_event->vdev_id].vdev_up = TRUE;
+
+		/*
+		 * Unpause TX queue in SAP case while configuring hidden ssid
+		 * enable or disable, else the data path is paused forever
+		 * causing data packets(starting from DHCP offer) to get stuck
+		 */
+		wdi_in_vdev_unpause(iface->handle,
+		                            OL_TXQ_PAUSE_REASON_VDEV_STOP);
+		iface->pause_bitmap &= ~(1 << PAUSE_TYPE_HOST);
+
 	}
 
 	req_msg = wma_find_vdev_req(wma, resp_event->vdev_id,
@@ -1302,7 +1310,6 @@ static int wma_vdev_start_rsp_ind(tp_wma_handle wma, u_int8_t *buf)
 		wma_find_mcc_ap(wma, resp_event->vdev_id, true);
 #endif /* FEATURE_AP_MCC_CH_AVOIDANCE */
 
-	iface = &wma->interfaces[resp_event->vdev_id];
 	if (req_msg->msg_type == WDA_CHNL_SWITCH_REQ) {
 		tpSwitchChannelParams params =
 			(tpSwitchChannelParams) req_msg->user_data;
@@ -2153,6 +2160,17 @@ static int wma_vdev_stop_ind(tp_wma_handle wma, u_int8_t *buf)
 	((wma->interfaces[resp_event->vdev_id].type == WMI_VDEV_TYPE_AP) &&
 	(wma->interfaces[resp_event->vdev_id].sub_type == 0))) {
 		WMA_LOGE("%s: vdev stop event recevied for hidden ssid set using IOCTL ", __func__);
+
+		req_msg = wma_fill_vdev_req(wma, resp_event->vdev_id,
+				WDA_HIDDEN_SSID_VDEV_RESTART,
+				WMA_TARGET_REQ_TYPE_VDEV_START, resp_event,
+				WMA_VDEV_START_REQUEST_TIMEOUT);
+		if (!req_msg) {
+			WMA_LOGE("%s: Failed to fill vdev request, vdev_id %d",
+			__func__, resp_event->vdev_id);
+			return -EINVAL;
+		}
+
 		wma_hidden_ssid_vdev_restart_on_vdev_stop(wma, resp_event->vdev_id);
 	}
 
@@ -3073,7 +3091,6 @@ static int wma_stats_event_handler(void *handle, u_int8_t *cmd_param_info,
 		vos_mem_free(buf);
 		return -1;
 	}
-	WMA_LOGD("WDA_FW_STATS_IND posted");
 	return 0;
 }
 
@@ -3228,8 +3245,6 @@ static void wma_fw_stats_ind(tp_wma_handle wma, u_int8_t *buf)
 	wmi_mib_stats *mib_stats;
 	u_int8_t i, *temp;
 
-	WMA_LOGI("%s: Enter", __func__);
-
 	temp = buf + sizeof(*event);
 
 	WMA_LOGD("%s: num_stats: pdev: %u vdev: %u peer %u mib %u",
@@ -3275,8 +3290,6 @@ static void wma_fw_stats_ind(tp_wma_handle wma, u_int8_t *buf)
 			temp += sizeof(wmi_mib_stats);
 		}
 	}
-
-	WMA_LOGI("%s: Exit", __func__);
 }
 
 #ifdef FEATURE_WLAN_EXTSCAN
@@ -7255,6 +7268,7 @@ VOS_STATUS WDA_open(v_VOID_t *vos_context, v_VOID_t *os_ctx,
 				wma_rssi_breached_event_handler);
 
 	wma_register_debug_callback();
+	wma_ndp_register_all_event_handlers(wma_handle);
 
 	return VOS_STATUS_SUCCESS;
 
@@ -7697,7 +7711,6 @@ static int wmi_unified_peer_create_send(wmi_unified_t wmi,
 		adf_nbuf_free(buf);
 		return -EIO;
 	}
-	WMA_LOGD("%s: peer_addr %pM vdev_id %d", __func__, peer_addr, vdev_id);
 	return 0;
 }
 
@@ -8252,6 +8265,8 @@ static ol_txrx_vdev_handle wma_vdev_attach(tp_wma_handle wma_handle,
 						self_sta_req->sessionId);
 		goto end;
 	}
+
+	wma_handle->interfaces[self_sta_req->sessionId].vdev_active = TRUE;
 	wma_handle->interfaces[self_sta_req->sessionId].handle = txrx_vdev_handle;
 
 	wma_handle->interfaces[self_sta_req->sessionId].ptrn_match_enable =
@@ -9510,13 +9525,8 @@ VOS_STATUS wma_update_channel_list(WMA_HANDLE handle,
 			vos_chan_to_freq(chan_list->chanParam[i].chanId);
 		chan_info->band_center_freq1 = chan_info->mhz;
 		chan_info->band_center_freq2 = 0;
-
-		WMA_LOGD("chan[%d] = %u", i, chan_info->mhz);
 		if (chan_list->chanParam[i].dfsSet) {
 			WMI_SET_CHANNEL_FLAG(chan_info, WMI_CHAN_FLAG_PASSIVE);
-			WMA_LOGI("chan[%d] DFS[%d]\n",
-					chan_list->chanParam[i].chanId,
-					chan_list->chanParam[i].dfsSet);
 		}
 
 		if (chan_list->chanParam[i].half_rate) {
@@ -9546,7 +9556,8 @@ VOS_STATUS wma_update_channel_list(WMA_HANDLE handle,
 
 		WMI_SET_CHANNEL_REG_POWER(chan_info,
 					  chan_list->chanParam[i].pwr);
-		WMA_LOGD("Channel TX power[%d] = %u: %d", i, chan_info->mhz,
+		WMA_LOGD(FL("Channel %u[%d] DFS[%d] TX power = %d "),
+				chan_info->mhz, i, chan_list->chanParam[i].dfsSet,
 				chan_list->chanParam[i].pwr);
 		/*TODO: Set WMI_SET_CHANNEL_MIN_POWER */
 		/*TODO: Set WMI_SET_CHANNEL_ANTENNA_MAX */
@@ -12364,7 +12375,11 @@ error0:
 		iface = &wma->interfaces[tgt_req->vdev_id];
 		iface->vdev_up = FALSE;
 		wma_ocb_set_config_resp(wma, VOS_STATUS_E_TIMEOUT);
+	} else if (tgt_req->msg_type == WDA_HIDDEN_SSID_VDEV_RESTART) {
+		WMA_LOGE("Hidden ssid vdev restart Timed Out; vdev_id: %d, type = %d",
+				tgt_req->vdev_id, tgt_req->type);
 	}
+
 free_tgt_req:
 	vos_timer_destroy(&tgt_req->event_timeout);
 	adf_os_mem_free(tgt_req);
@@ -14023,8 +14038,6 @@ static void wma_process_cli_set_cmd(tp_wma_handle wma,
 	tpAniSirGlobal pMac = (tpAniSirGlobal )vos_get_context(VOS_MODULE_ID_PE,
 				wma->vos_context);
 	struct qpower_params *qparams = &intr[vid].config.qpower_params;
-
-	WMA_LOGD("wmihandle %p", wma->wmi_handle);
 
 	if (NULL == pMac) {
 		WMA_LOGE("%s: Failed to get pMac", __func__);
@@ -20709,6 +20722,23 @@ static int wma_wow_wakeup_host_event(void *handle, u_int8_t *event,
 		}
 		break;
 #endif
+	case WOW_REASON_NAN_DATA:
+		WMA_LOGD(FL("Host woken up for NAN data path event from FW"));
+		if (param_buf->wow_packet_buffer) {
+			wow_buf_pkt_len =
+				*(uint32_t *)param_buf->wow_packet_buffer;
+			WMA_LOGD(FL("wow_packet_buffer dump"));
+			vos_trace_hex_dump(VOS_MODULE_ID_WDA,
+				VOS_TRACE_LEVEL_DEBUG,
+				param_buf->wow_packet_buffer,
+				wow_buf_pkt_len);
+			wma_ndp_wow_event_callback(handle,
+				(u_int8_t *)(param_buf->wow_packet_buffer + 4),
+				wow_buf_pkt_len);
+		} else {
+			WMA_LOGE(FL("wow_packet_buffer is empty"));
+		}
+		break;
 	default:
 		break;
 	}
@@ -20794,15 +20824,27 @@ static const u8 *wma_wow_wakeup_event_str(WOW_WAKE_EVENT_TYPE event)
 		return "WOW_IOAC_SOCK_EVENT";
 	case WOW_NLO_SCAN_COMPLETE_EVENT:
 		return "WOW_NLO_SCAN_COMPLETE_EVENT";
+	case WOW_NAN_DATA_EVENT:
+		return "WOW_NAN_DATA_EVENT";
 	default:
 		return "UNSPECIFIED_EVENT";
 	}
 }
 
-/* Configures wow wakeup events. */
-static void wma_add_wow_wakeup_event(tp_wma_handle wma,
+/**
+ * wma_add_wow_wakeup_event() - Update WOW wakeup event masks
+ * @wma: WMA context
+ * @event: Event number to add
+ * @enable: 1 to enable and 0 to disable the event
+ *
+ * Sets or clears the bits in enable and disable bitmasks for the
+ * given event number.
+ *
+ * Return: none
+ */
+void wma_add_wow_wakeup_event(tp_wma_handle wma,
 					   WOW_WAKE_EVENT_TYPE event,
-					   v_BOOL_t enable)
+					   bool enable)
 {
 	if (enable) {
 		wma->wow_wakeup_enable_mask |= 1 << event;
@@ -20812,7 +20854,7 @@ static void wma_add_wow_wakeup_event(tp_wma_handle wma,
 		wma->wow_wakeup_enable_mask &= ~(1 << event);
 	}
 
-	WMA_LOGD("%s %s event %s\n", __func__,
+	WMA_LOGD(FL("%s event %s"),
 			enable ? "enable" : "disable",
 			wma_wow_wakeup_event_str(event));
 }
@@ -21850,6 +21892,8 @@ static VOS_STATUS wma_feed_wow_config_to_fw(tp_wma_handle wma,
 #ifdef FEATURE_WLAN_EXTSCAN
 	wma_add_wow_wakeup_event(wma, WOW_EXTSCAN_EVENT, extscan_in_progress);
 #endif
+
+	wma_ndp_add_wow_wakeup_event(wma, true);
 
 	/* Enable wow wakeup events in FW */
 	ret = wma_send_wakeup_mask(wma, TRUE);
@@ -24810,6 +24854,15 @@ VOS_STATUS wma_process_init_thermal_info(tp_wma_handle wma,
 
 	WMA_LOGD("TM enable %d period %d", pThermalParams->thermalMgmtEnabled,
 			 pThermalParams->throttlePeriod);
+        WMA_LOGD("Throttle Duty Cycle Level in percentage:\n"
+			 "0 %d\n"
+			 "1 %d\n"
+			 "2 %d\n"
+			 "3 %d",
+			 pThermalParams->throttle_duty_cycle_tbl[0],
+			 pThermalParams->throttle_duty_cycle_tbl[1],
+			 pThermalParams->throttle_duty_cycle_tbl[2],
+			 pThermalParams->throttle_duty_cycle_tbl[3]);
 
 	wma->thermal_mgmt_info.thermalMgmtEnabled =
 		pThermalParams->thermalMgmtEnabled;
@@ -24847,7 +24900,9 @@ VOS_STATUS wma_process_init_thermal_info(tp_wma_handle wma,
 
 	if (wma->thermal_mgmt_info.thermalMgmtEnabled)
 	{
-		ol_tx_throttle_init_period(curr_pdev, pThermalParams->throttlePeriod);
+		ol_tx_throttle_init_period(curr_pdev,
+			pThermalParams->throttlePeriod,
+			&pThermalParams->throttle_duty_cycle_tbl[0]);
 
 		/* Get the temperature thresholds to set in firmware */
 		thermal_params.minTemp = wma->thermal_mgmt_info.
@@ -25526,6 +25581,7 @@ void wma_hidden_ssid_vdev_restart(tp_wma_handle wma_handle,
                         tHalHiddenSsidVdevRestart *pReq)
 {
         struct wma_txrx_node *intr = wma_handle->interfaces;
+        struct wma_target_req *msg;
 
         if ((pReq->sessionId  != intr[pReq->sessionId].vdev_restart_params.vdev_id) ||
 		!((intr[pReq->sessionId].type == WMI_VDEV_TYPE_AP) &&
@@ -25538,6 +25594,16 @@ void wma_hidden_ssid_vdev_restart(tp_wma_handle wma_handle,
         intr[pReq->sessionId].vdev_restart_params.ssidHidden = pReq->ssidHidden;
         adf_os_atomic_set(&intr[pReq->sessionId].vdev_restart_params.hidden_ssid_restart_in_progress,1);
 
+        msg = wma_fill_vdev_req(wma_handle, pReq->sessionId,
+                        WDA_HIDDEN_SSID_VDEV_RESTART,
+                        WMA_TARGET_REQ_TYPE_VDEV_STOP, pReq,
+                        WMA_VDEV_STOP_REQUEST_TIMEOUT);
+        if (!msg) {
+                WMA_LOGE("%s: Failed to fill vdev request for vdev_id %d",
+                                __func__, pReq->sessionId);
+                return;
+        }
+
         /* vdev stop -> vdev restart -> vdev up */
 	WMA_LOGD("%s, vdev_id: %d, pausing tx_ll_queue for VDEV_STOP",
 		 __func__, pReq->sessionId);
@@ -25549,6 +25615,8 @@ void wma_hidden_ssid_vdev_restart(tp_wma_handle wma_handle,
                 WMA_LOGE("%s: %d Failed to send vdev stop",
                          __func__, __LINE__);
                 adf_os_atomic_set(&intr[pReq->sessionId].vdev_restart_params.hidden_ssid_restart_in_progress,0);
+                wma_remove_vdev_req(wma_handle, pReq->sessionId,
+                                    WMA_TARGET_REQ_TYPE_VDEV_STOP);
                 return;
         }
 }
@@ -25678,6 +25746,11 @@ static VOS_STATUS wma_process_ll_stats_getReq
 
 	if (!getReq || !wma) {
 		WMA_LOGE("%s: input pointer is NULL", __func__);
+		return VOS_STATUS_E_FAILURE;
+	}
+
+	if (!wma->interfaces[getReq->staId].vdev_active) {
+		WMA_LOGE("%s: vdev not created yet", __func__);
 		return VOS_STATUS_E_FAILURE;
 	}
 
@@ -28845,7 +28918,6 @@ VOS_STATUS wma_mc_process_msg(v_VOID_t *vos_context, vos_msg_t *msg)
 	ol_txrx_vdev_handle txrx_vdev_handle = NULL;
 	extern tANI_U8* macTraceGetWdaMsgString( tANI_U16 wdaMsg );
 
-	WMA_LOGI("%s: Enter", __func__);
 	if(NULL == msg)	{
 		WMA_LOGE("msg is NULL");
 		VOS_ASSERT(0);
@@ -28853,7 +28925,8 @@ VOS_STATUS wma_mc_process_msg(v_VOID_t *vos_context, vos_msg_t *msg)
 		goto end;
 	}
 
-	WMA_LOGD("msg->type = %x %s", msg->type, macTraceGetWdaMsgString(msg->type));
+	WMA_LOGD(FL(" msg->type = %x %s"),
+		msg->type, macTraceGetWdaMsgString(msg->type));
 
 	wma_handle = (tp_wma_handle) vos_get_context(VOS_MODULE_ID_WDA,
 			vos_context);
@@ -29697,7 +29770,6 @@ VOS_STATUS wma_mc_process_msg(v_VOID_t *vos_context, vos_msg_t *msg)
 			}
 	}
 end:
-	WMA_LOGI("%s: Exit", __func__);
 	return vos_status ;
 }
 
@@ -31719,6 +31791,8 @@ VOS_STATUS wma_close(v_VOID_t *vos_ctx)
 		adf_os_mem_free(wma_handle->pGetRssiReq);
 		wma_handle->pGetRssiReq = NULL;
 	}
+
+	wma_ndp_unregister_all_event_handlers(wma_handle);
 
 	WMA_LOGD("%s: Exit", __func__);
 	return VOS_STATUS_SUCCESS;
@@ -34293,13 +34367,8 @@ static int wma_update_tdls_peer_state(WMA_HANDLE handle,
 		chan_info->band_center_freq1 = chan_info->mhz;
 		chan_info->band_center_freq2 = 0;
 
-		WMA_LOGD("%s: chan[%d] = %u", __func__, i, chan_info->mhz);
-
 		if (peerStateParams->peerCap.peerChan[i].dfsSet) {
 			WMI_SET_CHANNEL_FLAG(chan_info, WMI_CHAN_FLAG_PASSIVE);
-			WMA_LOGI("chan[%d] DFS[%d]\n",
-					peerStateParams->peerCap.peerChan[i].chanId,
-					peerStateParams->peerCap.peerChan[i].dfsSet);
 		}
 
 		if (chan_info->mhz < WMA_2_4_GHZ_MAX_FREQ) {
@@ -34313,7 +34382,9 @@ static int wma_update_tdls_peer_state(WMA_HANDLE handle,
 
 		WMI_SET_CHANNEL_REG_POWER(chan_info,
 			peerStateParams->peerCap.peerChan[i].pwr);
-		WMA_LOGD("Channel TX power[%d] = %u: %d", i, chan_info->mhz,
+		WMA_LOGD(FL("Channel %u[%d] DFS[%d] TX power = %d"),
+			chan_info->mhz, i,
+			peerStateParams->peerCap.peerChan[i].dfsSet,
 			peerStateParams->peerCap.peerChan[i].pwr);
 
 		chan_info++;

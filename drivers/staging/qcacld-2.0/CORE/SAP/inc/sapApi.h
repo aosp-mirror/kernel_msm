@@ -629,7 +629,7 @@ typedef struct sSapDfsInfo
      * channel switch is disabled.
      */
     v_U8_t              disable_dfs_ch_switch;
-    uint16_t tx_leakage_threshold;
+    uint16_t            tx_leakage_threshold;
 } tSapDfsInfo;
 
 typedef struct tagSapCtxList

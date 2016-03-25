@@ -593,10 +593,8 @@ static int __iw_set_dot11p_channel_sched(struct net_device *dev,
 	uint8_t *mac_addr;
 	int i, j;
 
-	if (wlan_hdd_validate_context(WLAN_HDD_GET_CTX(adapter))) {
-		hddLog(LOGE, FL("HDD context is not valid"));
+	if (wlan_hdd_validate_context(WLAN_HDD_GET_CTX(adapter)))
 		return -EINVAL;
-	}
 
 	if (adapter->device_mode != WLAN_HDD_OCB) {
 		hddLog(LOGE, FL("Device not in OCB mode!"));
@@ -918,10 +916,8 @@ static int __wlan_hdd_cfg80211_ocb_set_config(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
-	if (wlan_hdd_validate_context(hdd_ctx)) {
-		hddLog(LOGE, FL("HDD context is not valid"));
+	if (wlan_hdd_validate_context(hdd_ctx))
 		return -EINVAL;
-	}
 
 	if (adapter->device_mode != WLAN_HDD_OCB) {
 		hddLog(LOGE, FL("Device not in OCB mode!"));
@@ -1131,10 +1127,8 @@ static int __wlan_hdd_cfg80211_ocb_set_utc_time(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
-	if (wlan_hdd_validate_context(hdd_ctx)) {
-		hddLog(LOGE, FL("HDD context is not valid"));
+	if (wlan_hdd_validate_context(hdd_ctx))
 		return -EINVAL;
-	}
 
 	if (adapter->device_mode != WLAN_HDD_OCB) {
 		hddLog(LOGE, FL("Device not in OCB mode!"));
@@ -1249,10 +1243,8 @@ __wlan_hdd_cfg80211_ocb_start_timing_advert(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
-	if (wlan_hdd_validate_context(hdd_ctx)) {
-		hddLog(LOGE, FL("HDD context is not valid"));
+	if (wlan_hdd_validate_context(hdd_ctx))
 		return -EINVAL;
-	}
 
 	if (adapter->device_mode != WLAN_HDD_OCB) {
 		hddLog(LOGE, FL("Device not in OCB mode!"));
@@ -1373,10 +1365,8 @@ __wlan_hdd_cfg80211_ocb_stop_timing_advert(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
-	if (wlan_hdd_validate_context(hdd_ctx)) {
-		hddLog(LOGE, FL("HDD context is not valid"));
+	if (wlan_hdd_validate_context(hdd_ctx))
 		return -EINVAL;
-	}
 
 	if (adapter->device_mode != WLAN_HDD_OCB) {
 		hddLog(LOGE, FL("Device not in OCB mode!"));
@@ -1505,10 +1495,8 @@ __wlan_hdd_cfg80211_ocb_get_tsf_timer(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
-	if (wlan_hdd_validate_context(hdd_ctx)) {
-		hddLog(LOGE, FL("HDD context is not valid"));
+	if (wlan_hdd_validate_context(hdd_ctx))
 		return -EINVAL;
-	}
 
 	if (adapter->device_mode != WLAN_HDD_OCB) {
 		hddLog(LOGE, FL("Device not in OCB mode!"));
@@ -1700,10 +1688,8 @@ static int __wlan_hdd_cfg80211_dcc_get_stats(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
-	if (wlan_hdd_validate_context(hdd_ctx)) {
-		hddLog(LOGE, FL("HDD context is not valid"));
+	if (wlan_hdd_validate_context(hdd_ctx))
 		return -EINVAL;
-	}
 
 	if (adapter->device_mode != WLAN_HDD_OCB) {
 		hddLog(LOGE, FL("Device not in OCB mode!"));
@@ -1872,10 +1858,8 @@ static int __wlan_hdd_cfg80211_dcc_clear_stats(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
-	if (wlan_hdd_validate_context(hdd_ctx)) {
-		hddLog(LOGE, FL("HDD context is not valid"));
+	if (wlan_hdd_validate_context(hdd_ctx))
 		return -EINVAL;
-	}
 
 	if (adapter->device_mode != WLAN_HDD_OCB) {
 		hddLog(LOGE, FL("Device not in OCB mode!"));
@@ -1998,10 +1982,8 @@ static int __wlan_hdd_cfg80211_dcc_update_ndl(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
-	if (wlan_hdd_validate_context(hdd_ctx)) {
-		hddLog(LOGE, FL("HDD context is not valid"));
+	if (wlan_hdd_validate_context(hdd_ctx))
 		goto end;
-	}
 
 	if (adapter->device_mode != WLAN_HDD_OCB) {
 		hddLog(LOGE, FL("Device not in OCB mode!"));

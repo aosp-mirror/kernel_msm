@@ -1334,9 +1334,6 @@ static eHalStatus limSendHalStartScanOffloadReq(tpAniSirGlobal pMac,
     pMac->lim.fOffloadScanPending = 1;
     if (pScanReq->p2pSearch)
         pMac->lim.fOffloadScanP2PSearch = 1;
-
-    limLog(pMac, LOG1, FL("Processed Offload Scan Request Successfully"));
-
     return eHAL_STATUS_SUCCESS;
 }
 
@@ -1841,8 +1838,6 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
     limDiagEventReport(pMac, WLAN_PE_DIAG_JOIN_REQ_EVENT, NULL, 0, 0);
 #endif //FEATURE_WLAN_DIAG_SUPPORT
 
-    PELOG1(limLog(pMac, LOG1, FL("Received SME_JOIN_REQ"));)
-
    /**
      * Expect Join request in idle state.
      * Reassociate request is expected in link established state.
@@ -1927,7 +1922,7 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
                 goto end;
             }
             else
-              limLog(pMac,LOG1,FL("SessionId:%d New session created"),
+              limLog(pMac,LOG2,FL("SessionId:%d New session created"),
                      sessionId);
         }
         psessionEntry->max_amsdu_num = pSmeJoinReq->max_amsdu_num;
@@ -1958,6 +1953,9 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         psessionEntry->statypeForBss = STA_ENTRY_PEER;
         psessionEntry->limWmeEnabled = pSmeJoinReq->isWMEenabled;
         psessionEntry->limQosEnabled = pSmeJoinReq->isQosEnabled;
+        psessionEntry->osen_association = pSmeJoinReq->osen_association;
+        psessionEntry->wps_registration = pSmeJoinReq->wps_registration;
+
 
         /* Store vendor specfic IE for CISCO AP */
         ieLen = (pSmeJoinReq->bssDescription.length +
@@ -1993,17 +1991,8 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
          */
         psessionEntry->supported_nss_1x1 = true;
 
-        limLog(pMac, LOG1,
-               FL("enableHtSmps: %d htSmps: %d supported NSS 1x1: %d"),
-               psessionEntry->enableHtSmps,
-               psessionEntry->htSmpsvalue,
-               psessionEntry->supported_nss_1x1);
-
         /*Store Persona */
         psessionEntry->pePersona = pSmeJoinReq->staPersona;
-        VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO,
-                  FL("PE PERSONA=%d cbMode %u"), psessionEntry->pePersona,
-                      pSmeJoinReq->cbMode);
         /* Copy The channel Id to the session Table */
         psessionEntry->currentOperChannel =
                 pSmeJoinReq->bssDescription.channelId;
@@ -2016,12 +2005,17 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         else
             psessionEntry->vdev_nss = vdev_type_nss->sta;
 
-        limLog(pMac, LOG1, FL("persona - %d, nss - %d"),
-                        psessionEntry->pePersona, psessionEntry->vdev_nss);
+        limLog(pMac, LOG1,
+              FL("persona: %d, nss: %d cbMode: %d enableHtSmps: %d htSmps: %d supported NSS 1x1: %d"),
+                        psessionEntry->pePersona,
+                        psessionEntry->vdev_nss,
+                        pSmeJoinReq->cbMode,
+                        psessionEntry->enableHtSmps,
+                        psessionEntry->htSmpsvalue,
+                        psessionEntry->supported_nss_1x1);
+
 #ifdef WLAN_FEATURE_11AC
         psessionEntry->vhtCapability = IS_DOT11_MODE_VHT(psessionEntry->dot11mode);
-        VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO_MED,
-            "***__limProcessSmeJoinReq: vhtCapability=%d****",psessionEntry->vhtCapability);
         if (psessionEntry->vhtCapability )
         {
             if (psessionEntry->pePersona == VOS_STA_MODE)
@@ -2035,36 +2029,34 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
             psessionEntry->txMuBformee = pSmeJoinReq->txMuBformee;
             psessionEntry->enableVhtpAid = pSmeJoinReq->enableVhtpAid;
             psessionEntry->enableVhtGid = pSmeJoinReq->enableVhtGid;
-
-            VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO_MED,
-                "***__limProcessSmeJoinReq: txBFIniFeatureEnabled=%d****",
-                psessionEntry->txBFIniFeatureEnabled);
-
             if( psessionEntry->txBFIniFeatureEnabled )
             {
-                if (cfgSetInt(pMac, WNI_CFG_VHT_SU_BEAMFORMEE_CAP, psessionEntry->txBFIniFeatureEnabled)
+                if (cfgSetInt(pMac, WNI_CFG_VHT_SU_BEAMFORMEE_CAP,
+                                     psessionEntry->txBFIniFeatureEnabled)
                                                              != eSIR_SUCCESS)
                 {
-                    limLog(pMac, LOGP, FL("could not set  "
+                    limLog(pMac, LOGE, FL("could not set  "
                                   "WNI_CFG_VHT_SU_BEAMFORMEE_CAP at CFG"));
                     retCode = eSIR_LOGP_EXCEPTION;
                     goto end;
                 }
-                VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO_MED,
-                    "***__limProcessSmeJoinReq: txBFCsnValue=%d****",
-                    pSmeJoinReq->txBFCsnValue);
-
-                if (cfgSetInt(pMac, WNI_CFG_VHT_CSN_BEAMFORMEE_ANT_SUPPORTED, pSmeJoinReq->txBFCsnValue)
+                if (cfgSetInt(pMac, WNI_CFG_VHT_CSN_BEAMFORMEE_ANT_SUPPORTED,
+                                                       pSmeJoinReq->txBFCsnValue)
                                                              != eSIR_SUCCESS)
                 {
-                    limLog(pMac, LOGP, FL("could not set "
+                    limLog(pMac, LOGE, FL("could not set "
                      "WNI_CFG_VHT_CSN_BEAMFORMEE_ANT_SUPPORTED at CFG"));
                     retCode = eSIR_LOGP_EXCEPTION;
                     goto end;
                 }
             }
         }
-
+        limLog(pMac, LOG1,
+              FL("vhtCapability: %d txBFIniFeatureEnabled: %d txBFCsnValue: %d txMuBformee: %d"),
+                        psessionEntry->vhtCapability,
+                        psessionEntry->txBFIniFeatureEnabled,
+                        pSmeJoinReq->txBFCsnValue,
+                        psessionEntry->txMuBformee);
 #endif
 
         /*Phy mode*/
@@ -2240,21 +2232,12 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
 #else
             psessionEntry->maxTxPower = VOS_MIN( regMax, (localPowerConstraint) );
 #endif
-        VOS_TRACE( VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO,
-                        "Regulatory max = %d, local power constraint = %d,"
-                        " max tx = %d", regMax, localPowerConstraint,
-                        psessionEntry->maxTxPower );
-
         if(!pMac->psOffloadEnabled)
         {
             if (pMac->lim.gLimCurrentBssUapsd)
             {
                 pMac->lim.gUapsdPerAcBitmask =
                           psessionEntry->pLimJoinReq->uapsdPerAcBitmask;
-                limLog( pMac, LOG1,
-                        FL("UAPSD flag for all AC - 0x%2x"),
-                        pMac->lim.gUapsdPerAcBitmask);
-
                 // resetting the dynamic uapsd mask
                 pMac->lim.gUapsdPerAcDeliveryEnableMask = 0;
                 pMac->lim.gUapsdPerAcTriggerEnableMask = 0;
@@ -2266,15 +2249,16 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
             {
                 psessionEntry->gUapsdPerAcBitmask =
                                psessionEntry->pLimJoinReq->uapsdPerAcBitmask;
-                limLog( pMac, LOG1,
-                        FL("UAPSD flag for all AC - 0x%2x"),
-                        psessionEntry->gUapsdPerAcBitmask);
-
                 /* resetting the dynamic uapsd mask  */
                 psessionEntry->gUapsdPerAcDeliveryEnableMask = 0;
                 psessionEntry->gUapsdPerAcTriggerEnableMask = 0;
              }
         }
+        limLog(pMac, LOG1,
+              FL("regMax = %d, localPowerConstraint = %d, max tx = %d, UAPSD flag for all AC - 0x%2x"),
+                        regMax, localPowerConstraint,
+                        psessionEntry->maxTxPower,
+                        psessionEntry->gUapsdPerAcBitmask);
 
         psessionEntry->limRFBand = limGetRFBand(psessionEntry->currentOperChannel);
 
@@ -2300,12 +2284,6 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
             psessionEntry->limSmeState = eLIM_SME_WT_JOIN_STATE;
             MTRACE(macTrace(pMac, TRACE_CODE_SME_STATE, psessionEntry->peSessionId, psessionEntry->limSmeState));
 
-        limLog(pMac, LOG1, FL("SME JoinReq:Sessionid %d SSID len %d SSID : %s "
-        "Channel %d, BSSID "MAC_ADDRESS_STR), pMlmJoinReq->sessionId,
-        psessionEntry->ssId.length,psessionEntry->ssId.ssId,
-        psessionEntry->currentOperChannel,
-        MAC_ADDR_ARRAY(psessionEntry->bssId));
-
         /* Indicate whether spectrum management is enabled*/
         psessionEntry->spectrumMgtEnabled =
            pSmeJoinReq->spectrumMgtIndicator;
@@ -2318,8 +2296,6 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         psessionEntry->isOSENConnection =
            pSmeJoinReq->isOSENConnection;
 
-           PELOG1(limLog(pMac,LOG1,FL("SessionId:%d MLM_JOIN_REQ is posted to MLM SM"),
-                         pMlmJoinReq->sessionId););
         /* Issue LIM_MLM_JOIN_REQ to MLM */
         limPostMlmMessage(pMac, LIM_MLM_JOIN_REQ, (tANI_U32 *) pMlmJoinReq);
         return;
@@ -4934,8 +4910,14 @@ __limProcessSmeHideSSID(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         return;
     }
 
-    /* Update the session entry */
-    psessionEntry->ssidHidden = pUpdateParams->ssidHidden;
+    if (psessionEntry->ssidHidden != pUpdateParams->ssidHidden) {
+            /* Update the session entry */
+            psessionEntry->ssidHidden = pUpdateParams->ssidHidden;
+    } else {
+            PELOG1(limLog(pMac, LOG1,
+                   FL("Same config already present!")));
+            return;
+    }
 
     /* Send vdev restart */
     limSendVdevRestart(pMac, psessionEntry, pUpdateParams->sessionId);

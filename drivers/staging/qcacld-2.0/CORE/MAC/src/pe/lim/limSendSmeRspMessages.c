@@ -970,7 +970,7 @@ limSendSmeScanRsp(tpAniSirGlobal pMac, tANI_U16 length,
             vos_mem_copy( (tANI_U8 *) &pDesc->bssId,
                           (tANI_U8 *) &ptemp->bssDescription.bssId,
                            ptemp->bssDescription.length);
-            limLog(pMac, LOG1, FL("ScanRsp : msgLen %d, bssDescr Len=%d BssID "MAC_ADDRESS_STR),
+            limLog(pMac, LOG2, FL("ScanRsp : msgLen %d, bssDescr Len=%d BssID "MAC_ADDRESS_STR),
                           msgLen, ptemp->bssDescription.length,
                           MAC_ADDR_ARRAY(ptemp->bssDescription.bssId));
 

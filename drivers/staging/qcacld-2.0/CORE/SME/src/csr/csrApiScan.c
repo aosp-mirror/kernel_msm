@@ -111,6 +111,7 @@ eHalStatus csrSetBGScanChannelList( tpAniSirGlobal pMac, tANI_U8 *pAdjustChannel
 void csrReleaseCmdSingle(tpAniSirGlobal pMac, tSmeCmd *pCommand);
 tANI_BOOLEAN csrRoamIsValidChannel( tpAniSirGlobal pMac, tANI_U8 channel );
 void csrPruneChannelListForMode( tpAniSirGlobal pMac, tCsrChannel *pChannelList );
+void csr_purge_old_scan_results(tpAniSirGlobal mac_ctx);
 
 #define CSR_IS_SOCIAL_CHANNEL(channel) (((channel) == 1) || ((channel) == 6) || ((channel) == 11) )
 
@@ -3285,16 +3286,8 @@ static void csrMoveTempScanResultsToMainList(tpAniSirGlobal pMac,
 #endif
           )
         {
-            //Limit reach
-            smsLog(pMac, LOGW, FL("  BSS limit reached"));
-            //Free the resources
-            if( (pBssDescription->Result.pvIes == NULL) && pIesLocal )
-            {
-                vos_mem_free(pIesLocal);
-            }
-            csrFreeScanResultEntry(pMac, pBssDescription);
-            //Continue because there may be duplicated BSS
-            continue;
+            smsLog(pMac, LOG1, FL("########## BSS Limit reached ###########"));
+            csr_purge_old_scan_results(pMac);
         }
         // check for duplicate scan results
         if ( !fDupBss )
@@ -3401,6 +3394,53 @@ end:
     return;
 }
 
+/**
+ * csr_purge_old_scan_results() - This function removes old scan entries
+ * @mac_ctx: pointer to Global MAC structure
+ *
+ * This function removes old scan entries
+ *
+ * Return: None
+ */
+
+void csr_purge_old_scan_results(tpAniSirGlobal mac_ctx)
+{
+	tListElem *pentry, *tmp_entry;
+	tCsrScanResult *presult, *oldest_bss = NULL;
+	tANI_TIMESTAMP oldest_entry = 0;
+	tANI_TIMESTAMP curr_time =
+		(tANI_TIMESTAMP)palGetTickCount(mac_ctx->hHdd);
+
+	csrLLLock(&mac_ctx->scan.scanResultList);
+	pentry = csrLLPeekHead(&mac_ctx->scan.scanResultList, LL_ACCESS_NOLOCK);
+	while(pentry)
+	{
+		tmp_entry = csrLLNext(&mac_ctx->scan.scanResultList, pentry,
+			LL_ACCESS_NOLOCK);
+		presult = GET_BASE_ADDR(pentry, tCsrScanResult, Link);
+		if((curr_time - presult->Result.BssDescriptor.nReceivedTime) >
+		    oldest_entry) {
+			oldest_entry = curr_time -
+				presult->Result.BssDescriptor.nReceivedTime;
+			oldest_bss = presult;
+		}
+		pentry = tmp_entry;
+	}
+	if (oldest_bss) {
+		/* Free the old BSS Entries */
+		if(csrLLRemoveEntry(&mac_ctx->scan.scanResultList,
+		   &oldest_bss->Link, LL_ACCESS_NOLOCK)) {
+			smsLog(mac_ctx, LOG1,
+				FL("Current time delta (%d) of BSSID to be removed" MAC_ADDRESS_STR),
+				(curr_time -
+				oldest_bss->Result.BssDescriptor.nReceivedTime),
+				MAC_ADDR_ARRAY(
+				oldest_bss->Result.BssDescriptor.bssId));
+			csrFreeScanResultEntry(mac_ctx, oldest_bss);
+		}
+	}
+	csrLLUnlock(&mac_ctx->scan.scanResultList);
+}
 
 static tCsrScanResult *
 csrScanSaveBssDescription(tpAniSirGlobal pMac,
@@ -3657,7 +3697,6 @@ void csrApplyChannelPowerCountryInfo( tpAniSirGlobal pMac, tCsrChannel *pChannel
 #ifdef FEATURE_WLAN_SCAN_PNO
         if (updateRiva)
         {
-            VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO, FL("  Sending 11d PNO info to Riva"));
             // Send HAL UpdateScanParams message
             pmcUpdateScanParams(pMac, &(pMac->roam.configParam), &ChannelList, TRUE);
         }
@@ -4887,7 +4926,7 @@ tCsrScanResult *csrScanSaveBssDescriptionToInterimList( tpAniSirGlobal pMac,
     {
         vos_mem_set(pCsrBssDescription, cbAllocated, 0);
         pCsrBssDescription->AgingCount = (tANI_S32)pMac->roam.configParam.agingCount;
-        smsLog(pMac, LOGW,
+        smsLog(pMac, LOG2,
            FL(" Set Aging Count = %d for BSS "MAC_ADDRESS_STR" "),
            pCsrBssDescription->AgingCount,
            MAC_ADDR_ARRAY(pBSSDescription->bssId));
@@ -5700,7 +5739,7 @@ eHalStatus csrScanAgeResults(tpAniSirGlobal pMac, tSmeGetScanChnRsp *pScanChnInf
                 else
                 {
                     pResult->AgingCount--;
-                    smsLog(pMac, LOGW,
+                    smsLog(pMac, LOG2,
                      FL("Decremented AgingCount=%d for BSS "MAC_ADDRESS_STR""),
                      pResult->AgingCount,
                      MAC_ADDR_ARRAY(pResult->Result.BssDescriptor.bssId));
@@ -5911,7 +5950,7 @@ eHalStatus csrSendMBScanReq( tpAniSirGlobal pMac, tANI_U16 sessionId,
 
         for(i = 0; i < pMsg->channelList.numChannels; i++)
         {
-            smsLog(pMac, LOG1, FL("channelNumber[%d]= %d"), i, pMsg->channelList.channelNumber[i]);
+            smsLog(pMac, LOG2, FL("channelNumber[%d]= %d"), i, pMsg->channelList.channelNumber[i]);
         }
 
         if(HAL_STATUS_SUCCESS(status))
@@ -6824,14 +6863,17 @@ static void csrScanResultCfgAgingTimerHandler(void *pv)
 
     csrLLLock(&pMac->scan.scanResultList);
     pEntry = csrLLPeekHead( &pMac->scan.scanResultList, LL_ACCESS_NOLOCK );
+    smsLog(pMac, LOG1, FL(" Ageout time=%d"),ageOutTime);
     while( pEntry )
     {
         tmpEntry = csrLLNext(&pMac->scan.scanResultList, pEntry,
                                       LL_ACCESS_NOLOCK);
         pResult = GET_BASE_ADDR( pEntry, tCsrScanResult, Link );
+
         if((curTime - pResult->Result.BssDescriptor.nReceivedTime) > ageOutTime)
         {
-            smsLog(pMac, LOGW, " age out due to time out");
+            smsLog(pMac, LOG1, FL("age out due to time out for BSSID" MAC_ADDRESS_STR),
+                           MAC_ADDR_ARRAY(pResult->Result.BssDescriptor.bssId));
             csrScanAgeOutBss(pMac, pResult);
         }
         pEntry = tmpEntry;

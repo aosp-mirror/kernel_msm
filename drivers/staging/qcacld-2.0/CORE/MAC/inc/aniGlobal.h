@@ -988,6 +988,7 @@ tLimMlmOemDataRsp       *gpLimMlmOemDataRsp;
     tSirRemainOnChnReq  *gpLimRemainOnChanReq; //hold remain on chan request in this buf
     vos_list_t  gLimMgmtFrameRegistratinQueue;
     tANI_U32    mgmtFrameSessionId;
+    uint32_t tdls_frm_session_id;
     tSirBackgroundScanMode gLimBackgroundScanMode;
 
 #if  defined (WLAN_FEATURE_VOWIFI_11R) || defined (FEATURE_WLAN_ESE) || defined(FEATURE_WLAN_LFR)

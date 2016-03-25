@@ -79,7 +79,10 @@ struct ath_hif_sdio_softc *sc = NULL;
 #ifdef CONFIG_CNSS_SDIO
 static inline void *hif_get_virt_ramdump_mem(unsigned long *size)
 {
-	return cnss_get_virt_ramdump_mem(size);
+	if (!sc)
+		return NULL;
+
+	return vos_get_virt_ramdump_mem(sc->dev, size);
 }
 
 static inline void hif_release_ramdump_mem(unsigned long *address)
@@ -182,6 +185,7 @@ ath_hif_sdio_probe(void *context, void *hif_handle)
 #endif
     }
     func = ((HIF_DEVICE*)hif_handle)->func;
+    sc->dev = &func->dev;
 
     ol_sc = A_MALLOC(sizeof(*ol_sc));
     if (!ol_sc){

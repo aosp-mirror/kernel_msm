@@ -1018,6 +1018,8 @@ out:
 
 static void ramdump_work_handler(struct work_struct *ramdump)
 {
+	struct device *dev = NULL;
+
 #if !defined(HIF_SDIO)
 	int ret;
 #endif
@@ -1031,6 +1033,10 @@ static void ramdump_work_handler(struct work_struct *ramdump)
 		printk("No RAM dump will be collected since ramdump_scn is NULL!\n");
 		goto out_fail;
 	}
+
+	if (ramdump_scn->adf_dev)
+		dev = ramdump_scn->adf_dev->dev;
+
 #if !defined(HIF_SDIO)
 #ifdef DEBUG
 	ret = hif_pci_check_soc_status(ramdump_scn->hif_sc);
@@ -1052,7 +1058,7 @@ static void ramdump_work_handler(struct work_struct *ramdump)
 		printk(KERN_ERR "HifDiagReadiMem FW Dump Area Pointer failed!\n");
 #if !defined(HIF_SDIO)
 		ol_copy_ramdump(ramdump_scn);
-		vos_device_crashed();
+		vos_device_crashed(dev);
 		return;
 #endif
 		goto out_fail;
@@ -1113,7 +1119,7 @@ static void ramdump_work_handler(struct work_struct *ramdump)
 	panic("CNSS Ram dump collected\n");
 #else
 	/* Notify SSR framework the target has crashed. */
-	vos_device_crashed();
+	vos_device_crashed(dev);
 #endif
 	return;
 
@@ -1121,14 +1127,14 @@ out_fail:
 	/* Silent SSR on dump failure */
 #if defined(CNSS_SELF_RECOVERY) || defined(TARGET_DUMP_FOR_NON_QC_PLATFORM)
 #if !defined(HIF_SDIO)
-	vos_device_self_recovery();
+	vos_device_self_recovery(dev);
 #endif
 #else
 
 #if defined(HIF_SDIO) && !defined(CONFIG_CNSS_SDIO)
 	panic("CNSS Ram dump collection failed \n");
 #else
-	vos_device_crashed();
+	vos_device_crashed(dev);
 #endif
 #endif
 
@@ -1154,7 +1160,12 @@ void ol_schedule_ramdump_work(struct ol_softc *scn)
 static void fw_indication_work_handler(struct work_struct *fw_indication)
 {
 #if !defined(HIF_SDIO)
-	vos_device_self_recovery();
+	struct device *dev = NULL;
+
+	if (ramdump_scn && ramdump_scn->adf_dev)
+		dev = ramdump_scn->adf_dev->dev;
+
+	vos_device_self_recovery(dev);
 #endif
 }
 

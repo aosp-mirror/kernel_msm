@@ -355,10 +355,8 @@ cb_notify_set_roam_scan_hi_rssi_scan_params(hdd_context_t *hdd_ctx,
 {
 	int32_t val;
 
-	if (wlan_hdd_validate_context(hdd_ctx)) {
-		hddLog(LOGE, FL("HDD context is invalid"));
+	if (wlan_hdd_validate_context(hdd_ctx))
 		return;
-	}
 
 	switch (notify_id) {
 	case eCSR_HI_RSSI_SCAN_MAXCOUNT_ID:
@@ -2188,6 +2186,34 @@ REG_TABLE_ENTRY g_registry_table[] =
                  CFG_THROTTLE_PERIOD_DEFAULT,
                  CFG_THROTTLE_PERIOD_MIN,
                  CFG_THROTTLE_PERIOD_MAX ),
+
+   REG_VARIABLE( CFG_THROTTLE_DUTY_CYCLE_LEVEL0_NAME, WLAN_PARAM_Integer,
+                 hdd_config_t, throttle_dutycycle_level0,
+                 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                 CFG_THROTTLE_DUTY_CYCLE_LEVEL0_DEFAULT,
+                 CFG_THROTTLE_DUTY_CYCLE_LEVEL0_MIN,
+                 CFG_THROTTLE_DUTY_CYCLE_LEVEL0_MAX ),
+
+   REG_VARIABLE( CFG_THROTTLE_DUTY_CYCLE_LEVEL1_NAME, WLAN_PARAM_Integer,
+                 hdd_config_t, throttle_dutycycle_level1,
+                 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                 CFG_THROTTLE_DUTY_CYCLE_LEVEL1_DEFAULT,
+                 CFG_THROTTLE_DUTY_CYCLE_LEVEL1_MIN,
+                 CFG_THROTTLE_DUTY_CYCLE_LEVEL1_MAX ),
+
+   REG_VARIABLE( CFG_THROTTLE_DUTY_CYCLE_LEVEL2_NAME, WLAN_PARAM_Integer,
+                 hdd_config_t, throttle_dutycycle_level2,
+                 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                 CFG_THROTTLE_DUTY_CYCLE_LEVEL2_DEFAULT,
+                 CFG_THROTTLE_DUTY_CYCLE_LEVEL2_MIN,
+                 CFG_THROTTLE_DUTY_CYCLE_LEVEL2_MAX ),
+
+   REG_VARIABLE( CFG_THROTTLE_DUTY_CYCLE_LEVEL3_NAME, WLAN_PARAM_Integer,
+                 hdd_config_t, throttle_dutycycle_level3,
+                 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                 CFG_THROTTLE_DUTY_CYCLE_LEVEL3_DEFAULT,
+                 CFG_THROTTLE_DUTY_CYCLE_LEVEL3_MIN,
+                 CFG_THROTTLE_DUTY_CYCLE_LEVEL3_MAX ),
 
    REG_VARIABLE( CFG_ENABLE_MODULATED_DTIM_NAME, WLAN_PARAM_Integer,
                  hdd_config_t, enableModulatedDTIM,

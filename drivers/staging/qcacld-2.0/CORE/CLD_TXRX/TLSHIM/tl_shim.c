@@ -42,6 +42,7 @@
 #include "wma_api.h"
 #include "vos_utils.h"
 #include "wdi_out.h"
+#include "ol_rx_fwd.h"
 
 #define TLSHIM_PEER_AUTHORIZE_WAIT 50
 
@@ -2652,4 +2653,17 @@ void WLANTL_clear_datapath_stats(void *vos_ctx, uint16_t bitmap)
 
 	wdi_in_clear_stats(pdev, bitmap);
 	return;
+}
+
+/* tlshim_get_fwd_to_tx_packet_count() - to get the total rx packets that have
+ *   been directly forwarded to tx without coming to upper layers
+ *
+ * @session_id: session id/vdev id
+ *
+ * Returns: forwarded packet count
+ *
+ */
+uint64_t tlshim_get_fwd_to_tx_packet_count(uint8_t session_id)
+{
+	return ol_rx_get_fwd_to_tx_packet_count(session_id);
 }

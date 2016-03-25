@@ -171,10 +171,8 @@ wlan_hdd_remain_on_channel_callback(tHalHandle hHal, void* pCtx,
     hdd_remain_on_chan_ctx_t *pRemainChanCtx;
     hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(pAdapter);
 
-    if (0 != wlan_hdd_validate_context(hdd_ctx)) {
-        hddLog(LOGE, FL("Invalid HDD context"));
+    if (0 != wlan_hdd_validate_context(hdd_ctx))
         return eHAL_STATUS_FAILURE;
-    }
 
     mutex_lock(&cfgState->remain_on_chan_ctx_lock);
     pRemainChanCtx = cfgState->remain_on_chan_ctx;
@@ -813,10 +811,8 @@ void wlan_hdd_roc_request_dequeue(struct work_struct *work)
 	hdd_context_t *hdd_ctx =
 			container_of(work, hdd_context_t, rocReqWork.work);
 
-	hddLog(LOG1, FL("going to dequeue roc"));
-
-        if (0 != (wlan_hdd_validate_context(hdd_ctx)))
-                return;
+	if (0 != (wlan_hdd_validate_context(hdd_ctx)))
+		return;
 
 	/*
 	 * The queued roc requests is dequeued and processed one at a time.
@@ -827,7 +823,6 @@ void wlan_hdd_roc_request_dequeue(struct work_struct *work)
 	spin_lock(&hdd_ctx->hdd_roc_req_q.lock);
 	if (list_empty(&hdd_ctx->hdd_roc_req_q.anchor)) {
 		spin_unlock(&hdd_ctx->hdd_roc_req_q.lock);
-		hddLog(LOG1, FL("list is empty"));
 		return;
 	}
 	status = hdd_list_remove_front(&hdd_ctx->hdd_roc_req_q,
