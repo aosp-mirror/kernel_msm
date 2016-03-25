@@ -20,6 +20,7 @@
 
 #include "core.h"
 #include "mmc_ops.h"
+#include "mmc_config.h"		//ASUS_BSP eMMC porting
 
 #define MMC_OPS_TIMEOUT_MS	(10 * 60 * 1000) /* 10 minute timeout */
 
@@ -701,6 +702,9 @@ int mmc_send_hpi_cmd(struct mmc_card *card, u32 *status)
 		return -EINVAL;
 	}
 
+#if MMC_CONFIG_SETTING_HPI
+	printk("!!!!! mmc_send_hpi_cmd !!!!!");
+#endif
 	opcode = card->ext_csd.hpi_cmd;
 	if (opcode == MMC_STOP_TRANSMISSION)
 		cmd.flags = MMC_RSP_R1B | MMC_CMD_AC;
