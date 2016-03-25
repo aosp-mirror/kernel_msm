@@ -12,9 +12,11 @@
  */
 
 &pm8994_gpios {
-	gpio@c200 {
+	gpio@c200 { /* Rear Camera VSYNC */
 				reg = <0xc200 0x100>;
 				qcom,pin-num = <3>;
+				qcom,mode = <0>;     /* Digital Input */
+				qcom,pull = <5>;     /* No Pull */
 				qcom,vin-sel = <2>;  /* VIN2 */
 				status = "ok";
 			};
