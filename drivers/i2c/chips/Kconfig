@@ -12,10 +12,5 @@ config AMP_TFA9888
 	depends on I2C=y
 	help
 		NXP TFA9888 Speaker AMP Driver implemented by HTC.
-config SENSORS_NFC_PN548
-	tristate "PN548 NFC sensor support"
-	depends on I2C=y
-	help
-	  PN548 NFC Driver implemented.
 
 endmenu

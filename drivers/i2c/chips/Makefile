@@ -12,10 +12,5 @@
 #HTC_AUD
 obj-$(CONFIG_AMP_TFA9888)       += tfa9888.o
 
-#NFC ++
-obj-$(CONFIG_SENSORS_NFC_PN548) += pn548.o
-obj-$(CONFIG_SENSORS_NFC_PN548) += pn548_htc.o
-#NFC --
-
 #Laser Sensor
 obj-$(CONFIG_LASER_STMVL53L0_SUPPORT)   += stmvl53l0/
