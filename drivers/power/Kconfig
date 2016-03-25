@@ -555,6 +555,13 @@ config QPNP_VM_BMS
 	  readings from the battery to calculate the State of
 	  Charge.
 
+config SMB231
+	tristate "smb231 charger"
+	depends on I2C
+	help
+	  Say Y to enable battery charging by SMB231 switching mode based
+	  external charger.
+
 config QPNP_BMS
 	tristate "QPNP Battery Monitoring System driver"
 	depends on SPMI || MSM_SPMI

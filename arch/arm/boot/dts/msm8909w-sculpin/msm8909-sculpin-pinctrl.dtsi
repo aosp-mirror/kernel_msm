@@ -43,6 +43,29 @@
 			};			
 		};
 
+		smb_stat {
+			smb_stat_default: default {
+				mux {
+					pins = "gpio49";
+					function = "smb_stat_msmgpio";
+				};
+				config {
+					drive-strength = <2>; /* 2 MA */
+					bias-disable; /* No PULL */
+				};
+			};
+			smb_stat_suspend: suspend {
+				mux {
+					pins = "gpio49";
+					function = "smb_stat_msmgpio";
+				};
+				config {
+					drive-strength = <2>; /* 2 MA */
+					bias-disable; /* No PULL */
+				};
+			};			
+		};
+
 		uart_console_active: uart_console_active {
 			mux {
 				pins = "gpio20", "gpio21";

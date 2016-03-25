@@ -19,6 +19,14 @@
 	 * with VM-BMS.
 	 */
 	i2c@78b8000 {
+		smb231@12 {
+			compatible = "qcom,smb231-charger";
+			reg = <0x12>;
+			qcom,smb-stat = <&msm_gpio 49 0x00>;
+			pinctrl-names = "default", "suspend";
+			pinctrl-0 = <&smb_stat_default>;
+			pinctrl-1 = <&smb_stat_suspend>;
+		};
 		st-fg@70 {
 			compatible = "st,stc3117";
 			reg = <0x70>;
