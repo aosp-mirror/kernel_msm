@@ -25,6 +25,9 @@
 #include "bus.h"
 #include "mmc_ops.h"
 #include "sd_ops.h"
+#include "mmc_config.h"		//ASUS_BSP eMMC porting
+static int mmc_can_poweroff_notify(const struct mmc_card *card);	//ASUS_BSP Deeo : eMMC porting
+static int mmc_can_sleepawake(struct mmc_host *host);//ASUS_BSP
 
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
@@ -556,6 +559,8 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			ext_csd[EXT_CSD_PWR_CL_DDR_200_360];
 	}
 
+//ASUS_BSP +++ turn off HPI
+#if MMC_CONFIG_SETTING_HPI
 	/* check whether the eMMC card supports HPI */
 	if ((ext_csd[EXT_CSD_HPI_FEATURES] & 0x1) &&
 		!(card->quirks & MMC_QUIRK_BROKEN_HPI)) {
@@ -574,13 +579,16 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 				mmc_hostname(card->host),
 				card->ext_csd.out_of_int_time);
 	}
-
+#endif
+//ASUS_BSP --- turn off HPI
 	if (card->ext_csd.rev >= 5) {
 		/* Adjust production date as per JEDEC JESD84-B451 */
 		if (card->cid.year < 2010)
 			card->cid.year += 16;
 
 		/* check whether the eMMC card supports BKOPS */
+//ASUS_BSP +++ turn off BKOPS
+#if MMC_CONFIG_SETTING_BKOPS
 		if ((ext_csd[EXT_CSD_BKOPS_SUPPORT] & 0x1) &&
 				card->ext_csd.hpi) {
 			card->ext_csd.bkops = 1;
@@ -592,6 +600,8 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 					card->ext_csd.bkops_en);
 
 		}
+#endif
+//ASUS_BSP --- turn off BKOPS
 
 		card->ext_csd.rel_param = ext_csd[EXT_CSD_WR_REL_PARAM];
 		card->ext_csd.rst_n_function = ext_csd[EXT_CSD_RST_N_FUNCTION];
@@ -612,6 +622,8 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		/*
 		 * RPMB regions are defined in multiples of 128K.
 		 */
+//ASUS_BSP +++ turn off RPMB
+#if MMC_CONFIG_SETTING_RPMB
 		card->ext_csd.raw_rpmb_size_mult = ext_csd[EXT_CSD_RPMB_MULT];
 		if (ext_csd[EXT_CSD_RPMB_MULT] && mmc_host_cmd23(card->host)) {
 			mmc_part_add(card, ext_csd[EXT_CSD_RPMB_MULT] << 17,
@@ -619,6 +631,8 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 				"rpmb", 0, false,
 				MMC_BLK_DATA_AREA_RPMB);
 		}
+#endif
+//ASUS_BSP --- turn off RPMB
 	}
 
 	card->ext_csd.raw_erased_mem_count = ext_csd[EXT_CSD_ERASED_MEM_CONT];
@@ -629,19 +643,24 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 	/* eMMC v4.5 or later */
 	if (card->ext_csd.rev >= 6) {
+//ASUS_BSP +++ turn off DISCARD
+#if MMC_CONFIG_SETTING_DISCARD
 		card->ext_csd.feature_support |= MMC_DISCARD_FEATURE;
-
+#endif
+//ASUS_BSP --- turn off DISCARD
 		card->ext_csd.generic_cmd6_time = 10 *
 			ext_csd[EXT_CSD_GENERIC_CMD6_TIME];
 		card->ext_csd.power_off_longtime = 10 *
 			ext_csd[EXT_CSD_POWER_OFF_LONG_TIME];
-
+//ASUS_BSP +++ turn off CACHE
+#if MMC_CONFIG_SETTING_CACHE
 		card->ext_csd.cache_size =
 			ext_csd[EXT_CSD_CACHE_SIZE + 0] << 0 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 1] << 8 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 2] << 16 |
 			ext_csd[EXT_CSD_CACHE_SIZE + 3] << 24;
-
+#endif
+//ASUS_BSP --- turn off CACHE
 		if (ext_csd[EXT_CSD_DATA_SECTOR_SIZE] == 1)
 			card->ext_csd.data_sector_size = 4096;
 		else
@@ -655,11 +674,14 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		} else {
 			card->ext_csd.data_tag_unit_size = 0;
 		}
-
+//ASUS_BSP +++ turn off PACKED CMD
+#if MMC_CONFIG_SETTING_PACKED
 		card->ext_csd.max_packed_writes =
 			ext_csd[EXT_CSD_MAX_PACKED_WRITES];
 		card->ext_csd.max_packed_reads =
 			ext_csd[EXT_CSD_MAX_PACKED_READS];
+#endif
+//ASUS_BSP --- turn off PACKED CMD
 	} else {
 		card->ext_csd.data_sector_size = 512;
 	}
@@ -1843,6 +1865,8 @@ reinit:
 	/*
 	 * Enable power_off_notification byte in the ext_csd register
 	 */
+//ASUS_BSP +++ turn off PON
+#if MMC_CONFIG_SETTING_PON
 	if (card->ext_csd.rev >= 6) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 				 EXT_CSD_POWER_OFF_NOTIFICATION,
@@ -1861,6 +1885,8 @@ reinit:
 		if (!err)
 			card->ext_csd.power_off_notification = EXT_CSD_POWER_ON;
 	}
+#endif
+//ASUS_BSP --- turn off PON
 
 	/*
 	 * Select timing interface
@@ -1908,6 +1934,8 @@ reinit:
 	/*
 	 * Enable HPI feature (if supported)
 	 */
+//ASUS_BSP +++ turn off HPI
+#if MMC_CONFIG_SETTING_HPI
 	if (card->ext_csd.hpi) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 				EXT_CSD_HPI_MGMT, 1,
@@ -1924,12 +1952,15 @@ reinit:
 		} else
 			card->ext_csd.hpi_en = 1;
 	}
-
+#endif
+//ASUS_BSP --- turn off HPI
 	/*
 	 * If cache size is higher than 0, this indicates
 	 * the existence of cache and it can be turned on.
 	 * If HPI is not supported then cache shouldn't be enabled.
 	 */
+//ASUS_BSP +++ turn off CACHE
+#if MMC_CONFIG_SETTING_CACHE
 	if (card->ext_csd.cache_size > 0) {
 		if (card->ext_csd.hpi_en &&
 			(!(card->quirks & MMC_QUIRK_CACHE_DISABLE))) {
@@ -1993,7 +2024,10 @@ reinit:
 			}
 		}
 	}
-
+#endif
+//ASUS_BSP --- turn off CACHE
+//ASUS_BSP +++ turn off PACKED CMD
+#if MMC_CONFIG_SETTING_PACKED
 	/*
 	 * The mandatory minimum values are defined for packed command.
 	 * read: 5, write: 3
@@ -2020,7 +2054,8 @@ reinit:
 		}
 
 	}
-
+#endif
+//ASUS_BSP --- turn off PACKED CMD
 	if (!oldcard) {
 		if ((host->caps2 & MMC_CAP2_PACKED_CMD) &&
 		    (card->ext_csd.max_packed_writes > 0)) {
@@ -2068,6 +2103,30 @@ reinit:
 			oldcard = card;
 			goto reinit;
 		}
+		pr_info("[eMMC_LOG] eMMC CONFIG SETTING INFO START");
+		pr_info("[eMMC_LOG] --C SLEEP CMD     = %d --",MMC_CONFIG_SETTING_SLEEP);
+		pr_info("[eMMC_LOG] --  SLEEP CMD     = %d --",mmc_can_sleepawake(host));
+		pr_info("[eMMC_LOG] --C BKOPS         = %d --",MMC_CONFIG_SETTING_BKOPS);
+		pr_info("[eMMC_LOG] --  BKOPS         = %d --",card->ext_csd.bkops_en);
+		pr_info("[eMMC_LOG] --C HPI           = %d --",MMC_CONFIG_SETTING_HPI);
+		pr_info("[eMMC_LOG] --  HPI           = %d --",card->ext_csd.hpi_en);
+		pr_info("[eMMC_LOG] --C RPMB          = %d --",MMC_CONFIG_SETTING_RPMB);
+		pr_info("[eMMC_LOG] --  RPMB          = %d --",card->ext_csd.raw_rpmb_size_mult);
+		pr_info("[eMMC_LOG] --C ENHANCED AREA = %d --",MMC_CONFIG_SETTING_ENHANCED_AREA);
+		pr_info("[eMMC_LOG] --  ENHANCED AREA = %d --",card->ext_csd.partition_setting_completed);
+		pr_info("[eMMC_LOG] --C DISCARD       = %d --",MMC_CONFIG_SETTING_DISCARD);
+		pr_info("[eMMC_LOG] --  DISCARD       = %d --",mmc_can_discard(card));
+		pr_info("[eMMC_LOG] --C TRIM          = %d --",MMC_CONFIG_SETTING_TRIM);
+		pr_info("[eMMC_LOG] --  TRIM          = %d --",mmc_can_trim(card));
+		pr_info("[eMMC_LOG] --C SANITIZE      = %d --",MMC_CONFIG_SETTING_SANITIZE);
+		pr_info("[eMMC_LOG] --  SANITIZE      = %d --",mmc_can_sanitize(card));
+		pr_info("[eMMC_LOG] --C PON           = %d --",MMC_CONFIG_SETTING_PON);
+		pr_info("[eMMC_LOG] --  PON           = %d --",mmc_can_poweroff_notify(card));
+		pr_info("[eMMC_LOG] --C PACKED CMD    = %d --",MMC_CONFIG_SETTING_PACKED);
+		pr_info("[eMMC_LOG] --  PACKED CMD    = %d --",card->ext_csd.packed_event_en);
+		pr_info("[eMMC_LOG] --C CACHE         = %d --",MMC_CONFIG_SETTING_CACHE);
+		pr_info("[eMMC_LOG] --  CACHE         = %d --",card->ext_csd.cache_ctrl);
+		pr_info("[eMMC_LOG] eMMC CONFIG SETTING INFO END");
 	}
 
 	return 0;
@@ -2083,6 +2142,10 @@ err:
 
 static int mmc_can_sleepawake(struct mmc_host *host)
 {
+//ASUS_BSP +++ turn off sleep
+	if(MMC_CONFIG_SETTING_SLEEP == 0)
+		return 0;
+//ASUS_BSP --- turn off sleep
 	return host && (host->caps2 & MMC_CAP2_SLEEP_AWAKE) && host->card &&
 		(host->card->ext_csd.rev >= 3);
 }
@@ -2169,6 +2232,10 @@ static int mmc_sleepawake(struct mmc_host *host, bool sleep)
 
 static int mmc_can_poweroff_notify(const struct mmc_card *card)
 {
+//ASUS_BSP +++ turn off PON
+	if(MMC_CONFIG_SETTING_PON == 0)
+		return 0;
+//ASUS_BSP --- turn off PON	
 	return card &&
 		mmc_card_mmc(card) &&
 		(card->ext_csd.power_off_notification == EXT_CSD_POWER_ON);
@@ -2177,8 +2244,10 @@ static int mmc_can_poweroff_notify(const struct mmc_card *card)
 static int mmc_poweroff_notify(struct mmc_card *card, unsigned int notify_type)
 {
 	unsigned int timeout = card->ext_csd.generic_cmd6_time;
-	int err;
-
+	int err;	
+#if MMC_CONFIG_SETTING_PON
+	printk("!!!!! mmc_poweroff_notify!!!!!");
+#endif
 	/* Use EXT_CSD_POWER_OFF_SHORT as default notification type. */
 	if (notify_type == EXT_CSD_POWER_OFF_LONG)
 		timeout = card->ext_csd.power_off_longtime;

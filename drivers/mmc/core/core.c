@@ -49,6 +49,7 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 #include "sdio_ops.h"
+#include "mmc_config.h"		//ASUS_BSP eMMC porting
 
 /* If the device is not responding */
 #define MMC_CORE_TIMEOUT_MS	(10 * 60 * 1000) /* 10 minute timeout */
@@ -3352,6 +3353,10 @@ EXPORT_SYMBOL(mmc_can_erase);
 
 int mmc_can_trim(struct mmc_card *card)
 {
+//ASUS_BSP +++ turn off trim
+	if(MMC_CONFIG_SETTING_TRIM == 0)
+		return 0;
+//ASUS_BSP --- turn off trim
 	if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_GB_CL_EN)
 		return 1;
 	return 0;
@@ -3364,6 +3369,10 @@ int mmc_can_discard(struct mmc_card *card)
 	 * As there's no way to detect the discard support bit at v4.5
 	 * use the s/w feature support filed.
 	 */
+//ASUS_BSP +++ turn off discard
+	if(MMC_CONFIG_SETTING_DISCARD == 0)
+		return 0;
+//ASUS_BSP --- turn off discard
 	if (card->ext_csd.feature_support & MMC_DISCARD_FEATURE)
 		return 1;
 	return 0;
@@ -3372,6 +3381,10 @@ EXPORT_SYMBOL(mmc_can_discard);
 
 int mmc_can_sanitize(struct mmc_card *card)
 {
+//ASUS_BSP +++ turn off sanitize
+	if(MMC_CONFIG_SETTING_SANITIZE == 0)
+		return 0;
+//ASUS_BSP --- turn off sanitize
 	if (!mmc_can_trim(card) && !mmc_can_erase(card))
 		return 0;
 	if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_SANITIZE)
@@ -3382,6 +3395,10 @@ EXPORT_SYMBOL(mmc_can_sanitize);
 
 int mmc_can_secure_erase_trim(struct mmc_card *card)
 {
+//ASUS_BSP +++ turn off trim
+	if(MMC_CONFIG_SETTING_TRIM == 0)
+		return 0;
+//ASUS_BSP --- turn off trim
 	if ((card->ext_csd.sec_feature_support & EXT_CSD_SEC_ER_EN) &&
 	    !(card->quirks & MMC_QUIRK_SEC_ERASE_TRIM_BROKEN))
 		return 1;
