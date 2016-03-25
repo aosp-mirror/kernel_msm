@@ -16,9 +16,10 @@ CFLAGS_REMOVE_ftrace.o = -pg
 CFLAGS_REMOVE_early_printk.o = -pg
 endif
 
-KASAN_SANITIZE_head$(BITS).o := n
-KASAN_SANITIZE_dumpstack.o := n
-KASAN_SANITIZE_dumpstack_$(BITS).o := n
+KASAN_SANITIZE_head$(BITS).o				:= n
+KASAN_SANITIZE_dumpstack.o				:= n
+KASAN_SANITIZE_dumpstack_$(BITS).o			:= n
+KASAN_SANITIZE_stacktrace.o				:= n
 
 # If instrumentation of this dir is enabled, boot hangs during first second.
 # Probably could be more selective here, but note that files related to irqs,
