@@ -21,6 +21,7 @@
 #include "msm8996-audio-t50.dtsi"
 #include "msm8996-htc-led.dtsi"
 #include "msm8996-camera-sensor-t50_xc.dtsi"
+#include "msm8996-htc-nfc.dtsi"
 
 / {
 	model = "HTC Corporation. MSM8996 v3 + PMI8996 T50";
