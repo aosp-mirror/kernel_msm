@@ -178,7 +178,7 @@
 		vddio-supply = <&pm8916_l6>;
 
 		qcom,mdss_dsi_ctrl0@1ac8000 {
-			vdd-supply = <&pm8916_l17>;
+			vdd-supply = <&pm8916_l18>;
 			vddio-supply = <&pm8916_l6>;
 		};
 	};

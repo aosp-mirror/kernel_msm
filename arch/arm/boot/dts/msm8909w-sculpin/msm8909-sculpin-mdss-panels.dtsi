@@ -22,6 +22,7 @@
 #include "sculpin-dsi-panel-hx8394d-480p-video.dtsi"
 #include "sculpin-dsi-panel-auo-qvga-cmd.dtsi"
 #include "sculpin-dsi-panel-auo-cx-qvga-cmd.dtsi"
+#include "sculpin-dsi-panel-auo-amoled-cmd.dtsi"
 
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
