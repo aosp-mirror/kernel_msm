@@ -52,3 +52,8 @@
 		linux,contiguous-region = <&ramoops_mem>;
 	};
 };
+
+&wdog {
+	qcom,bark-time = <18000>;
+	qcom,pet-time = <8000>;
+};
