@@ -976,6 +976,19 @@ config TOUCHSCREEN_ZFORCE
 	  To compile this driver as a module, choose M here: the
 	  module will be called zforce_ts.
 
+config TOUCHSCREEN_FT3207
+	tristate "FocalTech touchscreens"
+	depends on I2C
+	help
+	Say Y here if you have a ft3207 touchscreen.
+	Ft3207 controllers are multi touch controllers which can
+	report 5 touches at a time.
+
+	If unsure, say N.
+
+	To compile this driver as a module, choose M here: the
+	module will be called ft3207_ts.
+
 config TOUCHSCREEN_FT5X06_PSENSOR
        tristate "FocalTech proximity feature support"
        depends on TOUCHSCREEN_FT5X06 && SENSORS
