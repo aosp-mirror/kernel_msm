@@ -1,4 +1,8 @@
 dtb-$(CONFIG_ARCH_MSM8996) += \
+	msm8996pro-htc_marlin-xb.dtb \
+	msm8996pro-htc_sailfish-xb.dtb \
+	msm8996-v3-htc_marlin-xb.dtb \
+	msm8996-v3-htc_sailfish-xb.dtb \
 	msm8996pro-htc_marlin-xa.dtb \
 	msm8996pro-htc_sailfish-xa.dtb \
 	msm8996-v3-htc_marlin-xa.dtb \
