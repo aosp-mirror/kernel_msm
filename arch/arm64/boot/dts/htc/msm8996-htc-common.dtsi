@@ -52,6 +52,10 @@
 			reg = <0xa94 100>;
 			info_size = <100>;
 		};
+
+		mem_dump_table@10 {
+			htc,mem-dump-table-phys = <0x836f0000>; /* at the end 0x10000 of Last LK RAM log */
+		};
 	};
 
 	qcom,msm-rtb {
