@@ -1479,5 +1479,19 @@
 				};
 			};
 		};
+
+		al3320_int_pin {
+			al3320_int_default: al3320_int_default {
+				mux {
+					pins = "gpio94";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio94";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+		};
 	};
 };
