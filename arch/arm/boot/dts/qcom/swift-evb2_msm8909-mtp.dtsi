@@ -14,126 +14,6 @@
 #include "swift-evb2_msm8909-pinctrl.dtsi"
 
 &soc {
-	/*
-	 * DT node to add support for SMB135x charger and integrate
-	 * with VM-BMS.
-	 */
-	i2c@78b8000 {
-		smb1357_otg_vreg: smb1357-charger@57 {
-			compatible = "qcom,smb1357-charger";
-			reg = <0x57>;
-			interrupt-parent = <&msm_gpio>;
-			interrupts = <58 8>;
-			pinctrl-names = "default";
-			pinctrl-0 = <&smb_int_default>;
-
-			qcom,bmd-algo-disabled;
-			qcom,float-voltage-mv = <4200>;
-			qcom,charging-timeout = <1536>;
-			qcom,recharge-thresh-mv = <100>;
-			regulator-name = "smb1357_otg_vreg";
-			qcom,soft-vfloat-comp-disabled;
-			qcom,thermal-mitigation = <1500 700 600 0>;
-
-			qcom,bms-psy-name = "bms";
-
-			/*
-			 * Disable SMB1357 based charging termination as BMS
-			 * controls charging.
-			 */
-			qcom,iterm-disabled;
-
-			/*
-			 * Disable charge inhibit feature to start chargin on
-			 * charger insertion independent of battery voltage.
-			 */
-			qcom,inhibit-disabled;
-
-			/* BMS is controlling charging/re-charge */
-			qcom,bms-controlled-charging;
-
-			/*
-			 * To enable charger node:
-			 * set status = "ok" and
-			 * add 'qcom,use-external-charger' to pm8909_chg node
-			 */
-			status = "disabled";
-		};
-	};
-
-	/*
-	 * DT node to add support for SMB358 charger and integrate
-	 * with VM-BMS.
-	 */
-	i2c@78b8000 {
-		smb358_otg_vreg: smb358-charger@57 {
-			compatible = "qcom,smb358-charger";
-			reg = <0x57>;
-			interrupt-parent = <&msm_gpio>;
-			interrupts = <58 8>;
-			pinctrl-names = "default";
-			pinctrl-0 = <&smb_int_default>;
-
-			qcom,float-voltage-mv = <4200>;
-			qcom,recharge-mv = <100>;
-			regulator-name = "smb358_otg_vreg";
-			qcom,thermal-mitigation = <1500 700 600 0>;
-			qcom,fastchg-current-max-ma = <1500>;
-
-			qcom,disable-apsd;
-			qcom,bms-psy-name = "bms";
-			qcom,bms-controlled-charging;
-			qcom,iterm-disabled;
-			qcom,chg-inhibit-disabled;
-			/*
-			 * In some of designs, the battery thermistor
-			 * is only connected to the PMIC THERM pin.
-			 * In this condition, we should define 'qcom,using-pmic-therm'.
-			 */
-			qcom,using-pmic-therm;
-			qcom,hot-bat-decidegc = <550>;
-			qcom,cold-bat-decidegc = <0>;
-			qcom,bat-present-decidegc = <200>;
-			/*
-			 * Below preperties are used for enable JEITA
-			 */
-			qcom,warm-bat-decidegc = <450>;
-			qcom,cool-bat-decidegc = <100>;
-			qcom,warm-bat-ma = <350>;
-			qcom,cool-bat-ma = <350>;
-			qcom,warm-bat-mv = <4100>;
-			qcom,cool-bat-mv = <4100>;
-
-			/*
-			 * To enable charger node:
-			 * set status = "ok" and
-			 * add 'qcom,use-external-charger' to pm8909_chg node
-			 */
-			status = "disabled";
-		};
-	};
-
-	i2c@78b9000 { /* BLSP1 QUP5 */
-		synaptics@20 {
-			compatible = "synaptics,dsx";
-			reg = <0x20>;
-			interrupt-parent = <&msm_gpio>;
-			interrupts = <13 0x2008>;
-			avdd-supply = <&pm8909_l17>;
-			vdd-supply = <&pm8909_l6>;
-			/* pins used by touchscreen */
-			pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
-			pinctrl-0 = <&ts_int_active &ts_reset_active>;
-			pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
-			pinctrl-2 = <&ts_release>;
-			synaptics,irq-gpio = <&msm_gpio 13 0x2008>;
-			synaptics,reset-gpio = <&msm_gpio 12 0x0>;
-			synaptics,disable-gpios;
-			synaptics,display-coords = <0 0 719 1279>;
-			synaptics,panel-coords = <0 0 719 1405>;
-		};
-	};
-
 	gen-vkeys {
 		compatible = "qcom,gen-vkeys";
 		label = "synaptics_dsx";
@@ -264,6 +144,28 @@
 		asoc-codec = <&stub_codec>, <&pm8909_conga_dig>;
 		asoc-codec-names = "msm-stub-codec.1", "cajon_codec";
 	};
+};
+
+&spi_0 {
+	status = "disabled";
+};
+
+&i2c_1 {
+};
+
+&i2c_2 {
+	status = "disabled";
+};
+
+&i2c_3 {
+	status = "disabled";
+};
+
+&i2c_4 {
+	status = "disabled";
+};
+
+&i2c_5 {
 };
 
 &blsp1_uart1 {
