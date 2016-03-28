@@ -595,6 +595,7 @@ static int smb231_charger_probe(struct i2c_client *client, const struct i2c_devi
 	int rc;
 	struct smb231_charger *chip;
 	struct power_supply *usb_psy;
+	u8 reg = 0;
 
 	usb_psy = power_supply_get_by_name("usb");
 	if (!usb_psy) {
@@ -657,7 +658,11 @@ static int smb231_charger_probe(struct i2c_client *client, const struct i2c_devi
 	}
 	
 	//Init i2c status
-	chip->int_smb231_i2c_enable = 0;
+	rc = smb231_read_reg(chip, STATUS_B_REG, &reg);
+	if (rc)
+		chip->int_smb231_i2c_enable = 0; //read fail
+	else
+		chip->int_smb231_i2c_enable = 1;
 
 	return 0;
 }
