@@ -290,6 +290,13 @@ static const char * const qpnp_poff_reason[] = {
 	[39] = "Triggered from S3_RESET_KPDPWR_ANDOR_RESIN (power key and/or reset line)",
 };
 
+//ASUS_BSP YuSiang: "keypad test for factory"
+#ifdef ASUS_FACTORY_BUILD
+ssize_t pwr_test_enable;
+ssize_t pwr_press_count = 0;
+ssize_t pwr_key_code_pressed = 0;
+#endif
+
 /*
  * On the kernel command line specify
  * qpnp-power-on.warm_boot=1 to indicate a warm
@@ -803,9 +810,19 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 		input_sync(pon->pon_input);
 	}
 
+//ASUS_BSP YuSiang: "keypad test for factory"
+#ifdef ASUS_FACTORY_BUILD
+	if(pwr_test_enable==1){
+		pwr_press_count ++;
+	}
+	else{
+		input_report_key(pon->pon_input, cfg->key_code, key_status);
+		input_sync(pon->pon_input);
+	}
+#else
 	input_report_key(pon->pon_input, cfg->key_code, key_status);
 	input_sync(pon->pon_input);
-
+#endif
 	cfg->old_state = !!key_status;
 
 	return 0;
@@ -986,11 +1003,11 @@ static irqreturn_t qpnp_resin_bark_irq(int irq, void *_pon)
 		goto err_exit;
 	}
 
-	/* report the key event */
-	input_report_key(pon->pon_input, cfg->key_code, 1);
-	input_sync(pon->pon_input);
-	/* schedule work to check the bark status for key-release */
-	schedule_delayed_work(&pon->bark_work, QPNP_KEY_STATUS_DELAY);
+		/* report the key event */
+		input_report_key(pon->pon_input, cfg->key_code, 1);
+		input_sync(pon->pon_input);
+		/* schedule work to check the bark status for key-release */
+		schedule_delayed_work(&pon->bark_work, QPNP_KEY_STATUS_DELAY);
 err_exit:
 	return IRQ_HANDLED;
 }
@@ -1927,6 +1944,36 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 	return 0;
 }
 
+//ASUS_BSP YuSiang: "keypad test for factory"
+#ifdef ASUS_FACTORY_BUILD
+static ssize_t qpnp_keys_store_test_pwrkey(struct device *dev, struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	if (*buf == '1')
+		pwr_test_enable = 1;
+	else
+	{
+		pwr_test_enable = 0;
+		pwr_press_count = 0;
+		pwr_key_code_pressed = 0;
+	}
+	return count;
+}
+static ssize_t qpnp_keys_show_test_pwrkey(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+	ret = pwr_press_count;
+
+	if( pwr_press_count != 0 )
+		return (sprintf(buf,"Power key pressed!\n"));
+	else
+		return (sprintf(buf,"KeyPad factory testing!\n"));
+
+}
+static DEVICE_ATTR(test_pwrkey, S_IWUSR | S_IRUGO,
+					qpnp_keys_show_test_pwrkey,qpnp_keys_store_test_pwrkey);
+#endif
+
 static int qpnp_pon_probe(struct spmi_device *spmi)
 {
 	struct qpnp_pon *pon;
@@ -2250,6 +2297,16 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 			rc);
 		return rc;
 	}
+	
+//ASUS_BSP YuSiang: "keypad test for factory"
+#ifdef ASUS_FACTORY_BUILD
+	rc = device_create_file(&spmi->dev, &dev_attr_test_pwrkey);
+	if (rc) {
+		dev_err(&spmi->dev, "sys file creation failed rc: %d\n",
+			rc);
+		return rc;
+	}
+#endif
 
 	if (of_property_read_bool(spmi->dev.of_node,
 					"qcom,secondary-pon-reset")) {
@@ -2280,6 +2337,11 @@ static int qpnp_pon_remove(struct spmi_device *spmi)
 	unsigned long flags;
 
 	device_remove_file(&spmi->dev, &dev_attr_debounce_us);
+
+//ASUS_BSP YuSiang: "keypad test for factory"
+#ifdef ASUS_FACTORY_BUILD
+	device_remove_file(&spmi->dev, &dev_attr_test_pwrkey);
+#endif
 
 	cancel_delayed_work_sync(&pon->bark_work);
 

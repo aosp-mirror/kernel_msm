@@ -59,6 +59,13 @@ static struct syscore_ops gpio_keys_syscore_pm_ops;
 
 static void gpio_keys_syscore_resume(void);
 
+//ASUS_BSP YuSiang: "keypad test for factory"
+#ifdef ASUS_FACTORY_BUILD
+ssize_t test_enable;
+ssize_t press_count = 0;
+ssize_t key_code_pressed = 0;
+#endif
+
 /*
  * SYSFS interface for enabling/disabling keys and switches:
  *
@@ -320,11 +327,48 @@ static DEVICE_ATTR(disabled_switches, S_IWUSR | S_IRUGO,
 		   gpio_keys_show_disabled_switches,
 		   gpio_keys_store_disabled_switches);
 
+//ASUS_BSP YuSiang: "keypad test for factory"
+#ifdef ASUS_FACTORY_BUILD
+static ssize_t gpio_keys_store_test_volkey(struct device *dev, struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+
+	if (*buf == '1')
+		test_enable = 1;
+	else
+	{
+		test_enable = 0;
+		press_count = 0;
+		key_code_pressed = 0;
+	}
+	
+	return count;
+}
+static ssize_t gpio_keys_show_test_volkey(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+	ret = press_count;
+
+	if( (key_code_pressed) == 115 )
+		return (sprintf(buf,"Volume_UP key pressed!\n"));
+	else if ( (key_code_pressed) == 114 )
+		return (sprintf(buf,"Volume_DOWN key press!\n"));
+	else
+		return (sprintf(buf,"KeyPad factory testing!\n"));
+
+}
+static DEVICE_ATTR(test_volkey, S_IWUSR | S_IRUGO,
+					gpio_keys_show_test_volkey,gpio_keys_store_test_volkey);
+#endif
+
 static struct attribute *gpio_keys_attrs[] = {
 	&dev_attr_keys.attr,
 	&dev_attr_switches.attr,
 	&dev_attr_disabled_keys.attr,
 	&dev_attr_disabled_switches.attr,
+#ifdef ASUS_FACTORY_BUILD
+	&dev_attr_test_volkey.attr,       //ASUS_BSP YuSiang: "keypad test for factory"
+#endif
 	NULL,
 };
 
@@ -341,6 +385,22 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 
 	state = (__gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;
 
+//ASUS_BSP YuSiang: "keypad test for factory"
+#ifdef ASUS_FACTORY_BUILD
+	if (test_enable == 1){        
+		press_count ++;
+		key_code_pressed = button->code; 
+	}
+	else{
+		if (type == EV_ABS) {
+			if (state)
+				input_event(input, type, button->code, button->value);
+		} else {
+			input_event(input, type, button->code, !!state);
+		}
+		input_sync(input);
+	}
+#else
 	if (type == EV_ABS) {
 		if (state)
 			input_event(input, type, button->code, button->value);
@@ -348,6 +408,7 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 		input_event(input, type, button->code, !!state);
 	}
 	input_sync(input);
+#endif
 }
 
 static void gpio_keys_gpio_work_func(struct work_struct *work)
