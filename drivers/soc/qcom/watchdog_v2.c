@@ -525,6 +525,10 @@ static void configure_bark_dump(struct msm_watchdog_data *wdog_dd)
 			 */
 		}
 	} else {
+#if defined(CONFIG_HTC_DEBUG_MEM_DUMP_TABLE)
+		/* cpu dump data entry and cpu_buf are already configured and registered in LK, so just return */
+		return;
+#endif
 		cpu_data = kzalloc(sizeof(struct msm_dump_data) *
 				   num_present_cpus(), GFP_KERNEL);
 		if (!cpu_data) {

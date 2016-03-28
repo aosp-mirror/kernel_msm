@@ -5,3 +5,9 @@ menuconfig HTC_DEBUG
 	help
 	  Enable collection of debug features.
 	  This feature is enabled in defconfig.
+
+config HTC_DEBUG_MEM_DUMP_TABLE
+	bool "HTC style memory dump table features"
+	depends on HTC_DEBUG
+	help
+	  Say Y here if you want the HTC style memory dump table features
