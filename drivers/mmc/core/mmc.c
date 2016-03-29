@@ -79,7 +79,6 @@ static char whole_name[256] = {0};
 static char* asus_get_emmc_status(struct mmc_card *card)
 {
 	u32 i;
-	u32 ext_csd_sector_count;
 
 	for (i = 0; i < EMMC_MID_TBL_MAX; i++) {
 		if (card->cid.manfid == emmc_mid_tbl[i].mid) {
