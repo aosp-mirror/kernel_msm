@@ -491,6 +491,123 @@ static void msm_gpio_free(struct gpio_chip *chip, unsigned offset)
 	return pinctrl_free_gpio(gpio);
 }
 
+#ifdef CONFIG_HTC_POWER_DEBUG
+#ifdef CONFIG_GPIO_QPNP_PIN_DEBUG
+struct gpio_chip *gp_chip;
+/* msm_dump_gpios is reference to msm_gpio_dbg_show_one function */
+int msm_dump_gpios(struct seq_file *m, int curr_len, char *gpio_buffer)
+{
+	const struct msm_pingroup *g;
+	struct msm_pinctrl *pctrl = container_of(gp_chip, struct msm_pinctrl, chip);
+	unsigned func;
+	unsigned int i, len;
+	int is_out, drive, pull, io_value, intr_en, intr_target;
+	u32 ctl_reg, io_reg, intr_cfg_reg;
+	char *title_msg = "------------ MSM GPIO -------------";
+	char list_gpio[100];
+
+    if (m) {
+        seq_printf(m, "%s\n", title_msg);
+    } else {
+        pr_info("%s\n", title_msg);
+        curr_len += sprintf(gpio_buffer + curr_len,
+        "%s\n", title_msg);
+    }
+
+    for (i = 0; i < gp_chip->ngpio; i++) {
+        memset(list_gpio, 0 , sizeof(list_gpio));
+        len = 0;
+
+		g = &pctrl->soc->groups[i];
+		ctl_reg = readl(pctrl->regs + g->ctl_reg);
+		io_reg = readl(pctrl->regs + g->io_reg);
+		intr_cfg_reg = readl(pctrl->regs + g->intr_cfg_reg);
+		is_out = !!(ctl_reg & BIT(g->oe_bit));
+		func = (ctl_reg >> g->mux_bit) & 7;
+		drive = (ctl_reg >> g->drv_bit) & 7;
+		pull = (ctl_reg >> g->pull_bit) & 3;
+		intr_en = intr_cfg_reg & 0x1;
+		intr_target = (ctl_reg >> g->intr_target_bit) & 3;
+
+        len += sprintf(list_gpio + len, "GPIO[%3d]: ", i);
+
+        len += sprintf(list_gpio + len, "[FS]0x%x, ", func);
+
+        if (is_out) {
+			io_value = (io_reg >> 1) & 0x1;
+            len += sprintf(list_gpio + len, "[DIR]OUT, [VAL]%s ", io_value ? "HIGH" : " LOW");
+        } else {
+			io_value = io_reg & 0x1;
+            len += sprintf(list_gpio + len, "[DIR] IN, [VAL]%s ", io_value ? "HIGH" : " LOW");
+        }
+
+        switch (pull) {
+	        case 0x0:
+	                len += sprintf(list_gpio + len, "[PULL]NO, ");
+	                break;
+	        case 0x1:
+	                len += sprintf(list_gpio + len, "[PULL]PD, ");
+	                break;
+	        case 0x2:
+	                len += sprintf(list_gpio + len, "[PULL]KP, ");
+	                break;
+	        case 0x3:
+	                len += sprintf(list_gpio + len, "[PULL]PU, ");
+	                break;
+	        default:
+	                break;
+        }
+
+        len += sprintf(list_gpio + len, "[DRV]%2dmA, ", msm_regval_to_drive(drive));
+
+        if (!is_out) {
+            len += sprintf(list_gpio + len, "[INT]%s, ", intr_en ? "YES" : " NO");
+            if (intr_en) {
+                switch (intr_target) {
+	                case 0x0:
+	                        len += sprintf(list_gpio + len, "SPS_PROC, ");
+	                        break;
+	                case 0x1:
+	                        len += sprintf(list_gpio + len, " LPA_DSP, ");
+	                        break;
+	                case 0x2:
+	                        len += sprintf(list_gpio + len, "RPM_PROC, ");
+	                        break;
+	                case 0x3:
+	                        len += sprintf(list_gpio + len, "MSS_PROC, ");
+	                        break;
+	                case 0x4:
+	                        len += sprintf(list_gpio + len, "GSS_PROC, ");
+	                        break;
+	                case 0x5:
+	                        len += sprintf(list_gpio + len, " TZ_PROC, ");
+	                        break;
+	                case 0x6:
+	                        len += sprintf(list_gpio + len, "RESERVED, ");
+	                        break;
+	                case 0x7:
+	                        len += sprintf(list_gpio + len, "    NONE, ");
+	                        break;
+	                default:
+	                        break;
+                }
+            }
+        }
+
+        list_gpio[99] = '\0';
+        if (m) {
+                seq_printf(m, "%s\n", list_gpio);
+        } else {
+                pr_info("%s\n", list_gpio);
+                curr_len += sprintf(gpio_buffer +
+                curr_len, "%s\n", list_gpio);
+        }
+    }
+    return curr_len;
+}
+#endif
+#endif
+
 #ifdef CONFIG_DEBUG_FS
 #include <linux/seq_file.h>
 
@@ -888,6 +1005,12 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 	gpiochip_set_chained_irqchip(chip, &msm_gpio_irq_chip, pctrl->irq,
 				     msm_gpio_irq_handler);
 	of_mpm_init();
+
+#ifdef CONFIG_HTC_POWER_DEBUG
+#ifdef CONFIG_GPIO_QPNP_PIN_DEBUG
+	gp_chip = &pctrl->chip;
+#endif
+#endif
 
 	return 0;
 }

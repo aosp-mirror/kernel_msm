@@ -163,6 +163,11 @@ struct pinctrl_dev *of_pinctrl_get(struct device_node *np)
 extern const char *pinctrl_dev_get_name(struct pinctrl_dev *pctldev);
 extern const char *pinctrl_dev_get_devname(struct pinctrl_dev *pctldev);
 extern void *pinctrl_dev_get_drvdata(struct pinctrl_dev *pctldev);
+#ifdef CONFIG_HTC_POWER_DEBUG
+#ifdef CONFIG_GPIO_QPNP_PIN_DEBUG
+int msm_dump_gpios(struct seq_file *m, int curr_len, char *gpio_buffer);
+#endif
+#endif
 #else
 
 struct pinctrl_dev;

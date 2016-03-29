@@ -52,13 +52,27 @@
 #include "../../drivers/clk/msm/clock.h"
 #ifdef CONFIG_HTC_POWER_DEBUG
 #include <soc/qcom/htc_util.h>
+#include <linux/qpnp/pin.h>
+#include <linux/pinctrl/pinctrl.h>
 #endif
-
 #define SCLK_HZ (32768)
 #define SCM_HANDOFF_LOCK_ID "S:7"
 #define PSCI_POWER_STATE(reset) (reset << 30)
 #define PSCI_AFFINITY_LEVEL(lvl) ((lvl & 0x3) << 24)
 static remote_spinlock_t scm_handoff_lock;
+
+#ifdef CONFIG_HTC_POWER_DEBUG
+enum {
+	MSM_PM_DEBUG_GPIO = BIT(9),
+	MSM_PM_DEBUG_VREG = BIT(13),
+};
+
+static int msm_pm_debug_mask = 0;
+
+module_param_named(
+        debug_mask, msm_pm_debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP
+);
+#endif
 
 enum {
 	MSM_LPM_LVL_DBG_SUSPEND_LIMITS = BIT(0),
@@ -932,13 +946,80 @@ unlock_and_return:
 	return state_id;
 }
 
+#ifdef CONFIG_HTC_POWER_DEBUG
+static char *gpio_sleep_status_info;
+
+int print_gpio_buffer(struct seq_file *m)
+{
+	if (gpio_sleep_status_info)
+		seq_printf(m, gpio_sleep_status_info);
+	else
+		seq_printf(m, "Device haven't suspended yet!\n");
+	return 0;
+}
+EXPORT_SYMBOL(print_gpio_buffer);
+
+int free_gpio_buffer(void)
+{
+	kfree(gpio_sleep_status_info);
+	gpio_sleep_status_info = NULL;
+
+	return 0;
+}
+EXPORT_SYMBOL(free_gpio_buffer);
+
+static char *vreg_sleep_status_info;
+
+int print_vreg_buffer(struct seq_file *m)
+{
+	if (vreg_sleep_status_info)
+		seq_printf(m, vreg_sleep_status_info);
+	else
+		seq_printf(m, "Device haven't suspended yet!\n");
+
+	return 0;
+}
+EXPORT_SYMBOL(print_vreg_buffer);
+
+int free_vreg_buffer(void)
+{
+	kfree(vreg_sleep_status_info);
+	vreg_sleep_status_info = NULL;
+
+	return 0;
+}
+EXPORT_SYMBOL(free_vreg_buffer);
+
+static char *pmic_reg_sleep_status_info;
+
+int print_pmic_reg_buffer(struct seq_file *m)
+{
+	if (pmic_reg_sleep_status_info)
+		seq_printf(m, pmic_reg_sleep_status_info);
+	else
+		seq_printf(m, "Device haven't suspended yet!\n");
+
+	return 0;
+}
+EXPORT_SYMBOL(print_pmic_reg_buffer);
+
+int free_pmic_reg_buffer(void)
+{
+	kfree(pmic_reg_sleep_status_info);
+	pmic_reg_sleep_status_info = NULL;
+
+	return 0;
+}
+EXPORT_SYMBOL(free_pmic_reg_buffer);
+#endif
+
 #if !defined(CONFIG_CPU_V7)
 asmlinkage int __invoke_psci_fn_smc(u64, u64, u64, u64);
 bool psci_enter_sleep(struct lpm_cluster *cluster, int idx, bool from_idle)
 {
-
 #ifdef CONFIG_HTC_POWER_DEBUG
-int64_t time;
+	int curr_len = 0;
+	int64_t time;
 #endif
 	/*
 	 * idx = 0 is the default LPM state
@@ -962,14 +1043,12 @@ int64_t time;
 		int power_state =
 			PSCI_POWER_STATE(cluster->cpu->levels[idx].is_reset);
 		bool success = false;
-
 		if (cluster->cpu->levels[idx].hyp_psci) {
 			stop_critical_timings();
 			__invoke_psci_fn_smc(0xC4000021, 0, 0, 0);
 			start_critical_timings();
 			return 1;
 		}
-
 		affinity_level = PSCI_AFFINITY_LEVEL(affinity_level);
 		state_id |= (power_state | affinity_level
 			| cluster->cpu->levels[idx].psci_id);
@@ -978,6 +1057,42 @@ int64_t time;
 						0xdeaffeed, 0xdeaffeed, true);
 		stop_critical_timings();
 #ifdef CONFIG_HTC_POWER_DEBUG
+		if(!from_idle) {
+#ifdef CONFIG_GPIO_QPNP_PIN_DEBUG
+			if (MSM_PM_DEBUG_GPIO & msm_pm_debug_mask) {
+				if (gpio_sleep_status_info) {
+					memset(gpio_sleep_status_info, 0,
+					sizeof(*gpio_sleep_status_info));
+				} else {
+					gpio_sleep_status_info = kmalloc(25000, GFP_ATOMIC);
+						if (!gpio_sleep_status_info) {
+							pr_err("[PM] kmalloc memory failed in %s\n",
+							 __func__);
+						}
+				}
+				curr_len = msm_dump_gpios(NULL, curr_len,
+								gpio_sleep_status_info);
+				curr_len = qpnp_pin_dump(NULL, curr_len,
+								gpio_sleep_status_info);
+				pr_info("The MSM_PM_DEBUG_GPIO turn on");
+			}
+#endif
+/*			if (MSM_PM_DEBUG_VREG & msm_pm_debug_mask) {
+                                 curr_len = 0;
+                                 if (vreg_sleep_status_info) {
+                                         memset(vreg_sleep_status_info, 0,
+                                                 sizeof(*vreg_sleep_status_info));
+                                 } else {
+                                         vreg_sleep_status_info = kmalloc(25000, GFP_ATOMIC);
+                                         if (!vreg_sleep_status_info) {
+                                                 pr_err("kmalloc memory failed in %s\n",
+                                                         __func__);
+                                         }
+                                 }
+                                 curr_len = htc_vregs_dump(vreg_sleep_status_info, curr_len);*/
+                                 pr_info("The MSM_PM_DEBUG_VREGS turn on");
+                         }
+                }
 		time = sched_clock();
 		success = !cpu_suspend(state_id);
 		time = sched_clock() - time;
@@ -1330,7 +1445,7 @@ static int lpm_suspend_enter(suspend_state_t state)
 	if (!use_psci)
 		msm_cpu_pm_enter_sleep(cluster->cpu->levels[idx].mode, false);
 	else
-		psci_enter_sleep(cluster, idx, true);
+		psci_enter_sleep(cluster, idx, false);
 
 	if (idx > 0)
 		update_debug_pc_event(CPU_EXIT, idx, true, 0xdeaffeed,

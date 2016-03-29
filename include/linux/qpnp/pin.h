@@ -224,3 +224,9 @@ int qpnp_pin_config(int gpio, struct qpnp_pin_cfg *param);
  * For such cases, use of_get_gpio() or friends instead.
  */
 int qpnp_pin_map(const char *name, uint32_t pmic_pin);
+
+#ifdef CONFIG_HTC_POWER_DEBUG
+#ifdef CONFIG_GPIO_QPNP_PIN_DEBUG
+int qpnp_pin_dump(struct seq_file *m, int curr_len, char *gpio_buffer);
+#endif
+#endif
