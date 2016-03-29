@@ -352,7 +352,6 @@
 			regulator-max-microvolt = <1800000>;
 			qcom,init-voltage = <1800000>;
 			status = "okay";
-			regulator-always-on;
 		};
 	};
 
@@ -373,7 +372,6 @@
 			regulator-max-microvolt = <2850000>;
 			qcom,init-voltage = <2850000>;
 			status = "okay";
-			regulator-always-on;
 		};
 	};
 
