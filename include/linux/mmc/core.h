@@ -218,6 +218,10 @@ extern void mmc_cmdq_clk_scaling_start_busy(struct mmc_host *host,
 extern void mmc_cmdq_clk_scaling_stop_busy(struct mmc_host *host,
 	bool lock_needed, bool is_cmdq_dcmd);
 
+//ASUS_BSP +++
+#define EMMC_STATUS
+
+//ASUS_BSP ---
 /**
  *	mmc_claim_host - exclusively claim a host
  *	@host: mmc host to claim
