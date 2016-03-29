@@ -133,6 +133,16 @@ struct mmc_ext_csd {
 	u8			barrier_en;
 
 	u8			fw_version;		/* 254 */
+//ASUS_BSP +++
+	u8          raw_fw_version[8];  /* 254 - 8 bytes */	//ASUS_BSP add for fw version +++
+	u8			raw_device_life_time_A;  /* 268 */	//ASUS_BSP Deeo : Device life time est type A
+	u8			raw_device_life_time_B;  /* 269 */	//ASUS_BSP Deeo : Device life time est type B
+#ifdef EMMC_STATUS
+	u8			pre_device_eol;
+	u8			pre_device_life_time_A;
+	u8			pre_device_life_time_B;
+#endif
+//ASUS_BSP ---
 	unsigned int            feature_support;
 #define MMC_DISCARD_FEATURE	BIT(0)                  /* CMD38 feature */
 };
@@ -421,6 +431,9 @@ struct mmc_card {
 	unsigned int	part_curr;
 
 	struct mmc_wr_pack_stats wr_pack_stats; /* packed commands stats*/
+//ASUS_BSP +++ "add eMMC total size for AMAX"
+	char                mmc_total_size[10];
+//ASUS_BSP --- "add eMMC total size for AMAX"
 	struct notifier_block        reboot_notify;
 	enum mmc_pon_type pon_type;
 	u8 *cached_ext_csd;
