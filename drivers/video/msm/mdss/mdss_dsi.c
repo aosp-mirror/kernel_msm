@@ -265,12 +265,14 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
 		pr_debug("reset disable: pinctrl not enabled\n");
 
+#if 0
 	ret = msm_dss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,
 		ctrl_pdata->panel_power_data.num_vreg, 0);
 	if (ret)
 		pr_err("%s: failed to disable vregs for %s\n",
 			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+#endif
 
 end:
 	return ret;
@@ -3672,6 +3674,29 @@ static int mdss_dsi_ctrl_remove(struct platform_device *pdev)
 
 struct device dsi_dev;
 
+static void mdss_dsi_ctrl_shutdown(struct platform_device *pdev)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = platform_get_drvdata(pdev);
+	int i = 0, ret = 0;
+
+	pr_err("%s: zw3 panel power off\n", __func__);
+
+	if (!ctrl_pdata) {
+		pr_err("%s: no driver data\n", __func__);
+	}
+
+	gpio_set_value((ctrl_pdata->rst_gpio), 0);
+	pr_err("MDSS: delay after reset pull down.\n");
+	mdelay(1000);
+	pr_err("MDSS: delay over.\n");
+
+	for (i = DSI_MAX_PM - 1; i >= 0; i--) {
+		ret = msm_dss_enable_vreg(
+			ctrl_pdata->power_data[i].vreg_config,
+			ctrl_pdata->power_data[i].num_vreg, 0);
+	}
+}
+
 int mdss_dsi_retrieve_ctrl_resources(struct platform_device *pdev, int mode,
 			struct mdss_dsi_ctrl_pdata *ctrl)
 {
@@ -4144,7 +4169,7 @@ static struct platform_driver mdss_dsi_driver = {
 static struct platform_driver mdss_dsi_ctrl_driver = {
 	.probe = mdss_dsi_ctrl_probe,
 	.remove = mdss_dsi_ctrl_remove,
-	.shutdown = NULL,
+	.shutdown = mdss_dsi_ctrl_shutdown,
 	.driver = {
 		.name = "mdss_dsi_ctrl",
 		.of_match_table = mdss_dsi_ctrl_dt_match,
