@@ -5223,7 +5223,7 @@ static inline int find_best_target(struct task_struct *p)
 {
 	int i;
 	int target_cpu = -1;
-	int target_capacity;
+	int target_capacity = 0;
 	int idle_cpu = -1;
 	int backup_cpu = -1;
 
