@@ -29,18 +29,16 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include "../../../fs/proc/internal.h"
+#include <net/cnss.h>
 
 #define NVS_MAX_SIZE	0x800U
 #define NVS_DATA_OFFSET	0x40
 #define WLAN_COUNTRY_OFFSET	0x24
 #define WLAN_COUNTRY_SIZE	0x4
-#define MAC_TEMPLATE	"Intf0MacAddress=112233445566\n"
-#define MAC_END	"END\n"
 #define CALIBRATION_DATA_PATH "/calibration_data"
 #define WIFI_FLASH_DATA "wifi_eeprom"
 
 static unsigned char wifi_nvs_ram[NVS_MAX_SIZE];
-static struct proc_dir_entry *wifi_mac;
 static struct proc_dir_entry *wifi_country;
 
 unsigned char *get_wifi_nvs_ram(void)
@@ -73,60 +71,32 @@ no_data:
 }
 EXPORT_SYMBOL(get_wifi_nvs_ram);
 
-static ssize_t wifi_mac_read_proc
-	(struct file *file, char __user *buf, size_t size, loff_t *ppos)
+static void set_wifi_mac(void)
 {
 	unsigned char *ptr;
-	unsigned int count = size;
-	unsigned long p = *ppos;
 	const char *src;
-	int ret = 0;
-	u8 mac[6] = { 0 };
-	static unsigned int mlen;
-	static int read_mac;
-	/* data format:
-	* Intf0MacAddress=00AA00BB00CC
-	* Intf1MacAddress=00AA00BB00CD
-	* END
-	*/
-	static char mbuf[2*sizeof(MAC_TEMPLATE)+sizeof(MAC_END)];
+	u8 mac[12] = {0};
+	unsigned int i;
 
-	if (!read_mac) {
-		ptr = get_wifi_nvs_ram();
-		src = (const char *)(ptr+NVS_DATA_OFFSET);
-		if (ptr == NULL || sscanf(src, "macaddr=%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
-					&mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]) != 6) {
-			pr_debug("[WLAN] No Default MAC !!!!! Use Random Mac ");
-			get_random_bytes(mac, 6);
-			/*To avoid invalid mac, set mac[0] and mac[1]*/
-			mac[0] = 0x00;
-			mac[1] = 0x88;
-		}
-		mlen += scnprintf(mbuf+mlen, sizeof(MAC_TEMPLATE),
-			"Intf0MacAddress=%02X%02X%02X%02X%02X%02X\n",
-			mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-		mlen += scnprintf(mbuf+mlen, sizeof(MAC_TEMPLATE),
-			"Intf1MacAddress=%02X%02X%02X%02X%02X%02X\n",
-			mac[0]|2, mac[1], mac[2], mac[3], mac[4], mac[5]);
-		mlen += scnprintf(mbuf+mlen, sizeof(MAC_END), "END\n");
-		read_mac = 1;
+	ptr = get_wifi_nvs_ram();
+	src = (const char *)(ptr+NVS_DATA_OFFSET);
+	/*Intf0MacAddress*/
+	if (ptr == NULL || sscanf(src, "macaddr=%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
+				&mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]) != 6) {
+		pr_debug("[WLAN] No Default MAC !!!!! Use Random Mac ");
+		get_random_bytes(mac, 6);
+		/*To avoid invalid mac, set mac[0] and mac[1]*/
+		mac[0] = 0x00;
+		mac[1] = 0x88;
+	}
+	/*Intf1MacAddress*/
+	mac[6] = mac[0]|2;
+	for (i = 1;  i < 6; i++) {
+		mac[i+6] = mac[i];
 	}
 
-	if (p >= mlen)
-		return 0;
-
-	if (count > mlen - p)
-		count = mlen - p;
-
-	if (copy_to_user(buf, (void *)(mbuf+p), count)) {
-		ret =  -EFAULT;
-		pr_debug("wifi_calibration_read_proc: FAIL to copy\n");
-	} else {
-		*ppos += count;
-		ret = count;
-	}
-
-	return ret;
+	if (cnss_pcie_set_wlan_mac_address(mac, sizeof(mac)) != 0)
+		pr_err("[WLAN] set wlan mac address failed");
 }
 
 static ssize_t wifi_country_read_proc
@@ -162,10 +132,6 @@ static ssize_t wifi_country_read_proc
 	return ret;
 }
 
-static const struct file_operations wifi_mac_fops = {
-	.write      = NULL,
-	.read       = wifi_mac_read_proc,
-};
 
 static const struct file_operations wifi_country_fops = {
 	.write      = NULL,
@@ -174,14 +140,7 @@ static const struct file_operations wifi_country_fops = {
 
 static int __init wifi_nvs_init(void)
 {
-	wifi_mac = proc_create_data("wifi_mac", 0444, NULL,
-					&wifi_mac_fops, NULL);
-	if (wifi_mac == NULL)
-		pr_debug("%s: unable to create /proc/wifi_mac entry\n",
-		 __func__);
-	else
-		wifi_mac->size = 2*sizeof(MAC_TEMPLATE)+sizeof(MAC_END);
-
+	set_wifi_mac();
 	wifi_country = proc_create_data("wifi_country", 0444, NULL,
 			&wifi_country_fops, NULL);
 	if (wifi_country == NULL)
