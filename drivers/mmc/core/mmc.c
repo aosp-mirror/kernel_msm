@@ -64,34 +64,15 @@ static const unsigned int tacc_mant[] = {
 	})
 //ASUS_BSP +++ "emmc info for ATD"
 static struct {
-	u32 sec_cnt;
-	char *band_type;
-} emmc_stat_tbl[] = {
-    { 0xe90000, "HYNIX_8G_H9TQ64A8GTMCUR"}
-	/*
-	{ 0xe90000, "HYNIX_8G_MCP" },
-	{ 0x1cce000, "KINGSTON_16G" },
-	{ 0x39f4000, "KINGSTON_32G" },
-	{ 0x1d9c000, "HYNIX_16G_H26M52002CKR" },
-	{ 0x3b84000, "HYNIX_32G_H26M64002BNR" },
-	{ 0x766c000, "HYNIX_64G_H26M78002ANR" },
-	{ 0x1d74000, "HYNIX_16G_H26M54001DQR" },
-	{ 0x3af4000, "HYNIX_32G_H26M68001CFR" },
-	{ 0x1d5c000, "HYNIX_16G_MCP" },
-	{ 0x3a40000, "HYNIX_32G_MCP" },
-	{ 0x7480000, "HYNIX_64G_H26M78002BFR_20nm" },
-	{ 0x1d1f000, "SAMSUNG_16G_MCP" },
-	{ 0x1d5a000, "Micron_16G_MCP" },
-	{ 0x3a3e000, "SDIN8DE4-32G-Q" },
-	{ 0xe68000, "KSI_8G_20nm" },
-	{ 0x1cd0000, "KSI_16G_20nm" },
-	{ 0x39a0000, "KSI_32G_20nm" },
-	{ 0x1de8000, "TOSHIBA_16G" },
-	{ 0x3b70000, "TOSHIBA_32G" },
-	{ 0x3b9c000, "ASINT_32G" }
-	*/
+	u32 mid;
+	char *vendor_name;
+} emmc_mid_tbl[] = {
+     { 0x90, "HYNIX"}
+    ,{ 0x45, "SANDISK"}
+    ,{ 0x15, "SAMSUNG"}
+    ,{ 0x11, "TOSHIBA"}
 };
-#define EMMC_STAT_TBL_MAX	(sizeof(emmc_stat_tbl)/sizeof(emmc_stat_tbl[0]))
+#define EMMC_MID_TBL_MAX	(sizeof(emmc_mid_tbl)/sizeof(emmc_mid_tbl[0]))
 
 static char whole_name[256] = {0};
 
@@ -100,24 +81,30 @@ static char* asus_get_emmc_status(struct mmc_card *card)
 	u32 i;
 	u32 ext_csd_sector_count;
 
-	ext_csd_sector_count = card->ext_csd.raw_sectors[0] << 0 |card->ext_csd.raw_sectors[1] << 8 | card->ext_csd.raw_sectors[2] << 16 |card->ext_csd.raw_sectors[3] << 24;
-
-	for (i = 0; i < EMMC_STAT_TBL_MAX; i++) {
-		if (ext_csd_sector_count == emmc_stat_tbl[i].sec_cnt) {
+	for (i = 0; i < EMMC_MID_TBL_MAX; i++) {
+		if (card->cid.manfid == emmc_mid_tbl[i].mid) {
 
 			memset(whole_name, 0, sizeof(whole_name));
-			if ( ext_csd_sector_count == 0xe90000 && card->cid.manfid == 0x15 )
-				strcpy(whole_name, "SAMSUNG_8G_MCP");
-			else
-				strcpy(whole_name, emmc_stat_tbl[i].band_type);
+			strcpy(whole_name, emmc_mid_tbl[i].vendor_name);
 
-			if (6 == card->ext_csd.rev)
-				strcat(whole_name, "-v4.5");
-			else if (5 == card->ext_csd.rev)
-				strcat(whole_name, "-v4.41");
-			else if (7 == card->ext_csd.rev)
-				strcat(whole_name, "-v5.0");
-
+			switch(card->ext_csd.rev)
+			{
+				case 5:
+					strcat(whole_name, "-v4.41");
+					break;
+				case 6:
+					strcat(whole_name, "-v4.5");
+					break;
+				case 7:
+					strcat(whole_name, "-v5.0");
+					break;
+				case 8:
+					strcat(whole_name, "-v5.1");
+					break;
+				default:
+					strcat(whole_name, "-Unknown");
+					break;
+			}
 			return whole_name;
 		}
 	}
