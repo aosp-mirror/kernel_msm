@@ -73,6 +73,13 @@
 };
 
 &soc {
+	led_flash0: qcom,camera-flash {
+		cell-index = <0>;
+		compatible = "qcom,camera-flash";
+		qcom,flash-source = <&pmi8994_flash0 &pmi8994_flash1>;
+		qcom,torch-source = <&pmi8994_torch0 &pmi8994_torch1>;
+		qcom,switch-source = <&pmi8994_switch>;
+	};
 	tlmm: pinctrl@01010000 {
 	cam_sensor_mclk0_active: cam_sensor_mclk0_active {
 		/* MCLK0 */
@@ -209,6 +216,7 @@ qcom,camera@0 {
 		qcom,csid-sd-index = <0>;
 		qcom,mount-angle = <90>;
 		qcom,actuator-src = <&actuator0>;
+		qcom,led-flash-src = <&led_flash0>;
 		qcom,camera-ver = <2>;
 		cam_vdig-supply = <&pm8994_l3>;//212mA
 		cam_vana-supply =<&pm8994_l10>;//91mA
