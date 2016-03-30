@@ -62,3 +62,12 @@ config FB_MSM_MDSS_XLOG_DEBUG
 	features to: Dump MDSS registers during driver errors, panic
 	driver during fatal errors and enable some display-driver logging
 	into an internal buffer (this avoids logging overhead).
+
+config KEEP_POWER_ON_WHEN_PANEL_OFF
+	bool "Enable Keep Panel Power On When Panel Off"
+	default n
+	---help---
+	For some reason, shutting down panel power when panel off is more
+	time and power consuming because it will take more time and power
+	on panel on sequence. Set this option true if you don't want to
+	turn panel power off when panel off.

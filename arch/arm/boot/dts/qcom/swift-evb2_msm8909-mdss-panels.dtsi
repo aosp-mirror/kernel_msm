@@ -12,30 +12,3 @@
 
 #include "dsi-panel-x145aln01-280x280-cmd.dtsi"
 #include "dsi-panel-h139bln01-400x400-cmd.dtsi"
-
-&soc {
-	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
-		#address-cells = <1>;
-		#size-cells = <0>;
-		
-		qcom,panel-supply-entry@0 {
-				reg = <0>;
-				qcom,supply-name = "vdd";
-				qcom,supply-min-voltage = <2850000>;
-				qcom,supply-max-voltage = <2850000>;
-				qcom,supply-enable-load = <100000>;
-				qcom,supply-disable-load = <100>;
-			};
-
-		qcom,panel-supply-entry@1 {
-				reg = <1>;
-				qcom,supply-name = "panel";
-				qcom,supply-min-voltage = <1800000>;
-				qcom,supply-max-voltage = <1800000>;
-				qcom,supply-enable-load = <100000>;
-				qcom,supply-disable-load = <100>;
-			};
-	};
-};
-
-
