@@ -1,0 +1,101 @@
+/*
+ * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&tlmm {
+	laser_sensor {
+        	laser_pwdn:laser_pwdn {
+                	config {
+                        	pins = "gpio94";
+	                        drive-strength = <2>;
+        	                bias-disable;
+                	};
+	        };
+	        laser_int:laser_int {
+	                config {
+        	                pins = "gpio62";
+                	        drive-strength = <2>;
+                        	bias-disable;
+	                };
+        	};
+	};
+/*
+	i2c_12 {
+		i2c_12_active: i2c_12_active {
+                         mux {
+                                 pins = "gpio87", "gpio88";
+                                 function = "blsp_i2c12";
+                         };
+
+                         config {
+                                 pins = "gpio87", "gpio88";
+                                 drive-strength = <2>;
+                                 bias-disable;
+                         };
+                 };
+
+                 i2c_12_sleep: i2c_12_sleep {
+                         mux {
+                                 pins = "gpio87", "gpio88";
+                                 function = "blsp_i2c12";
+                         };
+
+                         config {
+                                 pins = "gpio87", "gpio88";
+                                 drive-strength = <2>;
+                                 bias-pull-down;
+                         };
+                 };
+         };
+*/
+};
+/*
+&soc {
+        i2c_12: i2c@75ba000 {
+                compatible = "qcom,i2c-msm-v2";
+                #address-cells = <1>;
+                #size-cells = <0>;
+                reg-names = "qup_phys_addr";
+                reg = <0x75ba000 0x1000>;
+                interrupt-names = "qup_irq";
+                interrupts = <0 106 0>;
+                dmas = <&dma_blsp2 22 64 0x20000020 0x20>,
+                        <&dma_blsp2 23 32 0x20000020 0x20>;
+                dma-names = "tx", "rx";
+                qcom,master-id = <84>;
+                qcom,clk-freq-out = <400000>;
+                qcom,clk-freq-in  = <19200000>;
+                clock-names = "iface_clk", "core_clk";
+                clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+                         <&clock_gcc clk_gcc_blsp2_qup6_i2c_apps_clk>;
+                pinctrl-names = "i2c_active", "i2c_sleep";
+                pinctrl-0 = <&i2c_12_active>;
+                pinctrl-1 = <&i2c_12_sleep>;
+        };
+};
+*/
+&soc {
+	i2c@75ba000 {
+		htc_laser@29 {
+			compatible = "htc_laser";
+			reg = <0x29>;
+			pinctrl-names = "laser_gpio_init";
+			pinctrl-0 = <&laser_pwdn &laser_int>;
+			power_2v8-supply = <&pm8994_l19>;
+			interrupt-parent = <&tlmm>;
+			interrupts = <62 0x0>;
+			laser,intr-gpio = <&tlmm 62 0>;
+			laser,pwdn-gpio = <&tlmm 94 0>;
+		};
+	};
+};
+

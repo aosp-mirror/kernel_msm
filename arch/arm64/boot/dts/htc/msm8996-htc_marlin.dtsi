@@ -24,6 +24,7 @@
 #include "dsi-panel-t50.dtsi"
 #include "msm8996-audio-marlin.dtsi"
 #include "msm8996-camera-sensor-m1s1.dtsi"
+#include "msm8996-camera-laser-m1s1.dtsi"
 #include "msm8996-htc-nfc.dtsi"
 
 &mdss_dsi0 {
