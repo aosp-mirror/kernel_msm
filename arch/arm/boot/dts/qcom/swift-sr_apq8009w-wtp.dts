@@ -38,9 +38,3 @@
 &peripheral_mem {
 	reg = <0x0 0x8ac00000 0x0 0x0500000>;
 };
-
-&soc {
-	qcom,msm-ssc-sensors {
-		compatible = "qcom,msm-ssc-sensors";
-	};
-};
