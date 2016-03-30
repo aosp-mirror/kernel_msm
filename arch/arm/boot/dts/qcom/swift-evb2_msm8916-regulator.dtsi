@@ -297,9 +297,9 @@
 	rpm-regulator-ldoa10 {
 		status = "okay";
 		pm8916_l10: regulator-l10 {
-			regulator-min-microvolt = <2700000>;
-			regulator-max-microvolt = <2800000>;
-			qcom,init-voltage = <2700000>;
+			regulator-min-microvolt = <2850000>;
+			regulator-max-microvolt = <2850000>;
+			qcom,init-voltage = <2850000>;
 			status = "okay";
 			regulator-always-on;
 		};
