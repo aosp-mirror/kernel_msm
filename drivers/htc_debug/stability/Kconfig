@@ -34,3 +34,10 @@ config PRINTK_PID
 	help
 	  Print working process id in the dmesg as default, it can be turned
 	  off by writing 0 to module parameter pid.
+
+config HTC_DEBUG_BOOTLOADER_LOG
+	bool "HTC style ram console debug features"
+	default n
+	depends on PSTORE_CONSOLE
+	help
+	  Say Y here if you want the HTC style ram console debug features

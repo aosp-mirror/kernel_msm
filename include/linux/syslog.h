@@ -43,6 +43,10 @@
 #define SYSLOG_ACTION_SIZE_UNREAD    9
 /* Return size of the log buffer */
 #define SYSLOG_ACTION_SIZE_BUFFER   10
+#if defined(CONFIG_HTC_DEBUG_BOOTLOADER_LOG)
+/* Read all messages remaining + LK/LAST LK messages in the ring buffer. */
+#define SYSLOG_ACTION_READ_ALL_APPEND_LK   20
+#endif
 
 #define SYSLOG_FROM_READER           0
 #define SYSLOG_FROM_PROC             1
