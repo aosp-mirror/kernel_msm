@@ -194,6 +194,19 @@
 		it7260,irq-gpio = <&msm_gpio 13 0x2008>;
 		it7260,reset-gpio = <&msm_gpio 12 0x0>;
 	};
+	himax-ts@48 {
+		compatible = "himax,852xes";
+		reg = <0x48>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <13 0x2>;
+		vdd_ana-supply = <&pm8916_l18>;
+		vcc_i2c-supply = <&pm8916_s3>;
+		himax,panel-coords = <0 400 0 400>;
+		himax,display-coords = <0 400 0 400>;
+		himax,irq-gpio = <&msm_gpio 13 0x00>;
+		himax,rst-gpio = <&msm_gpio 12 0x00>;
+		report_type = <1>;
+	};
 };
 
 &blsp1_uart1 {
