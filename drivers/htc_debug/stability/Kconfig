@@ -11,3 +11,10 @@ config HTC_DEBUG_RESTART_TIMER
 	bool "add a timer in restart notifier chain"
 	default y
 	depends on HTC_DEBUG
+
+config HTC_NC_GPIO_PIN_SETTING
+	bool "HTC style nc pin setting features"
+	default n
+	depends on PINCTRL
+	help
+	  Say Y here if you want the HTC style nc pin setting features
