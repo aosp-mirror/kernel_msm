@@ -16,6 +16,7 @@
 #include "../qcom/msm8996pro.dtsi"
 #include "../qcom/msm-pmi8996.dtsi"
 #include "../qcom/msm8996-mtp.dtsi"
+#include "msm8996-nc-pins-htc_marlin.dtsi"
 #include "msm8996-htc_marlin.dtsi"
 
 / {

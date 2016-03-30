@@ -1,0 +1,241 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	htc,htc_nc_pins {
+		compatible = "htc,nc_pin";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&sailfish_nc_pins_in_pd>;
+	};
+};
+
+&tlmm {
+	sailfish_nc_pins_in_pd {
+		sailfish_nc_pins_in_pd: sailfish_nc_pins_in_pd {
+			mux {
+				pins = "gpio2", "gpio3", "gpio8", "gpio15", "gpio63", "gpio69", "gpio75", "gpio76", "gpio77", "gpio79", "gpio90", "gpio91", "gpio135", "gpio143";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio2", "gpio3", "gpio8", "gpio15", "gpio63", "gpio69", "gpio75", "gpio76", "gpio77", "gpio79", "gpio90", "gpio91", "gpio135", "gpio143";
+				drive-strength = <2>;		/* 2 mA */
+				bias-pull-down;			/* PULL DOWN */
+			};
+		};
+	};
+};
+
+&soc {
+	tlmm: pinctrl@01010000 {
+		/* gpio2 */
+		/* gpio3 */
+			/* 0 1 2 3 */
+			spi_0 {
+				spi_0_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				spi_0_sleep {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio8 */
+			/* 8 9 10 11 */
+			spi_10 {
+				spi_10_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				spi_10_sleep {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio15 */
+			cam_sensor_mclk2_active {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+			cam_sensor_mclk2_suspend {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+			setb_3 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio63 */
+			seta_5 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio69 */
+			spkr_i2s_clk_pin {
+				spkr_i2s_clk_sleep: spkr_i2s_clk_sleep {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				spkr_i2s_clk_active: spkr_i2s_clk_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio75 */
+			seta_11 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio76 */
+			seta_12 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio77 */
+			seta_13 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio79 */
+
+		/* gpio90 */
+			seta_18 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+			/* 89 90 91 */
+			tsif0_signals_active {
+				tsif1_clk {
+					/delete-property/ pins;
+				};
+				tsif1_en {
+					/delete-property/ pins;
+				};
+				tsif1_data {
+					/delete-property/ pins;
+				};
+				signals_cfg {
+					/delete-property/ pins;
+				};
+			};
+			/* 24 90 */
+			spi_0_cs {
+				spi_0_cs_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				spi_0_cs_sleep {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio91 */
+			setb_15 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio135 */
+		mdss_disp_bkl_active: mdss_disp_bkl_active {
+			config {
+				/delete-property/ pins;
+			};
+		};
+
+		mdss_disp_bkl_suspend: mdss_disp_bkl_suspend {
+			config {
+				/delete-property/ pins;
+			};
+		};
+
+		/* gpio143 */
+	};
+};
