@@ -1127,6 +1127,7 @@ VOS_STATUS hdd_conf_arp_offload(hdd_adapter_t *pAdapter, int fenable)
            offLoadRequest.enableOrDisable = SIR_OFFLOAD_ENABLE;
 
            hddLog(VOS_TRACE_LEVEL_INFO, "%s: Enabled", __func__);
+           printk("[MBcast_wakeup] hdd_conf_arp_offload: pHddCtx->sus_res_mcastbcast_filter = %d\n", pHddCtx->sus_res_mcastbcast_filter);
 
            if (((HDD_MCASTBCASTFILTER_FILTER_ALL_BROADCAST ==
                 pHddCtx->sus_res_mcastbcast_filter) ||
@@ -1163,6 +1164,7 @@ VOS_STATUS hdd_conf_arp_offload(hdd_adapter_t *pAdapter, int fenable)
                       "feature", __func__);
               return VOS_STATUS_E_FAILURE;
           }
+          printk("[MBcast_wakeup] hdd_conf_arp_offload: sme_SetHostOffload set offload ok\n");
        }
        else
        {
@@ -1186,6 +1188,7 @@ VOS_STATUS hdd_conf_arp_offload(hdd_adapter_t *pAdapter, int fenable)
                              "offload feature", __func__);
             return VOS_STATUS_E_FAILURE;
        }
+       printk("[MBcast_wakeup] hdd_conf_arp_offload: sme_SetHostOffload set offload disable ok\n");
        return VOS_STATUS_SUCCESS;
    }
 }
@@ -1203,6 +1206,7 @@ void hdd_mcbc_filter_modification(hdd_context_t* pHddCtx,
         return;
     }
 
+    printk("[MBcast_wakeup] hdd_mcbc_filter_modification +++:  pHddCtx->configuredMcastBcastFilter = %d\n", pHddCtx->configuredMcastBcastFilter);
     *pMcBcFilter = pHddCtx->configuredMcastBcastFilter;
     if (pHddCtx->cfg_ini->fhostArpOffload)
     {
@@ -1234,6 +1238,7 @@ void hdd_mcbc_filter_modification(hdd_context_t* pHddCtx,
     }
 
     pHddCtx->configuredMcastBcastFilter = *pMcBcFilter;
+    printk("[MBcast_wakeup] hdd_mcbc_filter_modification ---:  pHddCtx->configuredMcastBcastFilter = %d\n", pHddCtx->configuredMcastBcastFilter);
 }
 
 void hdd_conf_mcastbcast_filter(hdd_context_t* pHddCtx, v_BOOL_t setfilter)
@@ -1262,6 +1267,7 @@ void hdd_conf_mcastbcast_filter(hdd_context_t* pHddCtx, v_BOOL_t setfilter)
     }
 
     wlanRxpFilterParam->setMcstBcstFilter = setfilter;
+    printk("[MBcast_wakeup] hdd_conf_mcastbcast_filter:  wlanRxpFilterParam->configuredMcstBcstFilterSetting = %d\n", wlanRxpFilterParam->configuredMcstBcstFilterSetting);
     halStatus = sme_ConfigureRxpFilter(pHddCtx->hHal, wlanRxpFilterParam);
 
     if (setfilter && (eHAL_STATUS_SUCCESS == halStatus))
@@ -1337,6 +1343,7 @@ static void hdd_conf_suspend_ind(hdd_context_t* pHddCtx,
             pHddCtx->configuredMcastBcastFilter;
     }
 
+    printk("[MBcast_wakeup] hdd_conf_suspend_ind:  wlanSuspendParam->configuredMcstBcstFilterSetting = %d\n", wlanSuspendParam->configuredMcstBcstFilterSetting);
     halStatus = sme_ConfigureSuspendInd(pHddCtx->hHal, wlanSuspendParam);
     if(eHAL_STATUS_SUCCESS == halStatus)
     {
@@ -1371,6 +1378,7 @@ static void hdd_conf_resume_ind(hdd_adapter_t *pAdapter)
 
     wlanResumeParam->configuredMcstBcstFilterSetting =
                                pHddCtx->configuredMcastBcastFilter;
+    printk("[MBcast_wakeup] hdd_conf_resume_ind: wlanResumeParam->configuredMcstBcstFilterSetting = %d\n", wlanResumeParam->configuredMcstBcstFilterSetting);
     halStatus = sme_ConfigureResumeReq(pHddCtx->hHal, wlanResumeParam);
     if (eHAL_STATUS_SUCCESS != halStatus)
     {
@@ -1381,11 +1389,20 @@ static void hdd_conf_resume_ind(hdd_adapter_t *pAdapter)
 
     pHddCtx->hdd_mcastbcast_filter_set = FALSE;
 
+//ASUS_BSP+++ "solution for broadcast/multicast wakeup"
+    printk("[MBcast_wakeup] hdd_conf_resume_ind: First check - pHddCtx->sus_res_mcastbcast_filter = %d\n", pHddCtx->sus_res_mcastbcast_filter);
+    printk("[MBcast_wakeup] hdd_conf_resume_ind: First check - pHddCtx->sus_res_mcastbcast_filter_valid = %d\n", pHddCtx->sus_res_mcastbcast_filter_valid);
     if (VOS_TRUE == pHddCtx->sus_res_mcastbcast_filter_valid) {
         pHddCtx->configuredMcastBcastFilter =
             pHddCtx->sus_res_mcastbcast_filter;
         pHddCtx->sus_res_mcastbcast_filter_valid = VOS_FALSE;
     }
+    if(pHddCtx->sus_res_mcastbcast_filter != 3)
+        pHddCtx->sus_res_mcastbcast_filter = 3;
+    pHddCtx->configuredMcastBcastFilter =
+        pHddCtx->sus_res_mcastbcast_filter;
+    printk("in hdd_conf_resume_ind, restoring configuredMcastBcastFilter = %d\n", pHddCtx->configuredMcastBcastFilter);
+//ASUS_BSP--- "solution for broadcast/multicast wakeup"
 
     hddLog(VOS_TRACE_LEVEL_INFO,
            "offload: in hdd_conf_resume_ind, restoring configuredMcastBcastFilter");
@@ -1534,6 +1551,7 @@ static void hdd_PowerStateChangedCB
       spin_unlock(&pHddCtx->filter_lock);
       if (VOS_FALSE == pHddCtx->sus_res_mcastbcast_filter_valid)
       {
+          printk("[MBcast_wakeup] hdd_PowerStateChangedCB:  pHddCtx->configuredMcastBcastFilter = %d\n", pHddCtx->configuredMcastBcastFilter);
           pHddCtx->sus_res_mcastbcast_filter =
               pHddCtx->configuredMcastBcastFilter;
           pHddCtx->sus_res_mcastbcast_filter_valid = VOS_TRUE;
