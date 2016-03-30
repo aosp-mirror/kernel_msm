@@ -18,3 +18,19 @@ config HTC_NC_GPIO_PIN_SETTING
 	depends on PINCTRL
 	help
 	  Say Y here if you want the HTC style nc pin setting features
+
+config PRINTK_CPU_ID
+	depends on PRINTK
+	default y
+	bool "Enable support for Print working core no. in dmesg" if EXPERT
+	help
+	  Print working CPU number in the dmesg as default, it can be turned
+	  off by writing 0 to module parameter cpu.
+
+config PRINTK_PID
+	depends on PRINTK
+	default y
+	bool "Enable support for Print working task id in dmesg" if EXPERT
+	help
+	  Print working process id in the dmesg as default, it can be turned
+	  off by writing 0 to module parameter pid.
