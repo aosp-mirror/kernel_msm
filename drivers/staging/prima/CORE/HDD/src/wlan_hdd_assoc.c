@@ -3302,12 +3302,23 @@ eHalStatus hdd_smeRoamCallback( void *pContext, tCsrRoamInfo *pRoamInfo, tANI_U3
                 if (pHddCtx->hdd_mcastbcast_filter_set == TRUE)
                 {
                     hdd_conf_mcastbcast_filter(pHddCtx, FALSE);
-
+//ASUS_BSP+++ "solution for broadcast/multicast wakeup"
+                    printk("[MBcast_wakeup] hdd_smeRoamCallback: First check - pHddCtx->sus_res_mcastbcast_filter = %d\n", pHddCtx->sus_res_mcastbcast_filter);
+                    printk("[MBcast_wakeup] hdd_smeRoamCallback: First check - pHddCtx->sus_res_mcastbcast_filter_valid = %d\n", pHddCtx->sus_res_mcastbcast_filter_valid);
                     if (VOS_TRUE == pHddCtx->sus_res_mcastbcast_filter_valid) {
                         pHddCtx->configuredMcastBcastFilter =
                             pHddCtx->sus_res_mcastbcast_filter;
                         pHddCtx->sus_res_mcastbcast_filter_valid = VOS_FALSE;
                     }
+
+                    if(pHddCtx->sus_res_mcastbcast_filter != 3)
+                        pHddCtx->sus_res_mcastbcast_filter = 3;
+                    pHddCtx->configuredMcastBcastFilter =
+                        pHddCtx->sus_res_mcastbcast_filter;
+
+                    printk("[MBcast_wakeup] hdd_smeRoamCallback: disassociation happening, restoring configuredMcastBcastFilter = %d\n", pHddCtx->configuredMcastBcastFilter);
+                    printk("[MBcast_wakeup] hdd_smeRoamCallback: already called mcastbcast filter\n");
+//ASUS_BSP--- "solution for broadcast/multicast wakeup"
 
                     hddLog(VOS_TRACE_LEVEL_INFO,
                            "offload: disassociation happening, restoring configuredMcastBcastFilter");
