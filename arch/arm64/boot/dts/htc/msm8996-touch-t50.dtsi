@@ -144,17 +144,16 @@
 
 &i2c_3 {
 	synaptics_dsx@20 {
-		compatible = "synaptics,dsx";
+		compatible = "synaptics,dsx-i2c";
 		reg = <0x20>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <125 0>;
-		synaptics,irq-gpio = <&tlmm 125 0x00>;
-		synaptics,irq-flags = <0x2008>;
+		interrupts = <125 0x2008>;
+		synaptics,irq-gpio = <&tlmm 125 0x2008>;  /* IRQF_ONESHOT | IRQF_TRIGGER_LOW */
 		synaptics,reset-gpio = <&tlmm 89 0x00>;
 		synaptics,reset-on-state = <0>;
 		synaptics,reset-active-ms = <1>;
 		synaptics,reset-delay-ms = <20>;
-		synaptics,update-feature = <3>;
+		synaptics,update-feature = <0>;
 		synaptics,support-glove = <1>;
 		synaptics,support-cover = <1>;
 		synaptics,hall-block-time = <1000>;
