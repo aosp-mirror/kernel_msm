@@ -42,6 +42,8 @@
 #define I2C_DRIVER_NAME "synaptics_dsxv26"
 #define SPI_DRIVER_NAME "synaptics_dsxv26"
 
+#define HTC_FEATURE
+
 /*
  * struct synaptics_dsx_button_map - button map
  * @nbuttons: number of buttons
@@ -75,6 +77,7 @@ struct synaptics_dsx_button_map {
  * @reset_active_ms: reset active time
  * @byte_delay_us: delay time between two bytes of SPI data
  * @block_delay_us: delay time between two SPI transfers
+ * @addr_delay_us: delay time after sending address word
  * @pwr_reg_name: pointer to name of regulator for power control
  * @bus_reg_name: pointer to name of regulator for bus pullup control
  * @cap_button_map: pointer to 0D button map
@@ -90,6 +93,7 @@ struct synaptics_dsx_board_data {
 	int power_on_state;
 	int reset_gpio;
 	int reset_on_state;
+	int switch_gpio;
 	int max_y_for_2d;
 	unsigned long irq_flags;
 	unsigned short i2c_addr;
@@ -102,10 +106,14 @@ struct synaptics_dsx_board_data {
 	unsigned int reset_active_ms;
 	unsigned int byte_delay_us;
 	unsigned int block_delay_us;
+	unsigned int addr_delay_us;
 	const char *pwr_reg_name;
 	const char *bus_reg_name;
 	struct synaptics_dsx_button_map *cap_button_map;
 	struct synaptics_dsx_button_map *vir_button_map;
+#ifdef HTC_FEATURE
+	uint8_t update_feature;
+#endif
 };
 
 #endif
