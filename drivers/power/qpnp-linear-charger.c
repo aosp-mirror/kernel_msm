@@ -3251,8 +3251,67 @@ static void create_charger_limit_enable_proc_file(void)
 	}
 	return;
 }
-//BSP Steve2 proc charger_limit_enable Interface ---
 #endif
+//BSP Steve2 proc charger_limit_enable Interface ---
+
+//BSP Steve2 BMMI Adb Interface chager type+++
+#if defined(ASUS_FACTORY_BUILD)
+#define	charger_type_PROC_FILE	"driver/charge_type"
+static struct proc_dir_entry *charger_type_proc_file;
+static int charger_type_proc_read(struct seq_file *buf, void *v)
+{
+
+	if (get_prop_charge_type(g_lbc_chip)==POWER_SUPPLY_CHARGE_TYPE_FAST) {
+		seq_printf(buf, "AC_Fast\n");
+	} else 	if (get_prop_charge_type(g_lbc_chip)==POWER_SUPPLY_CHARGE_TYPE_NONE) {
+		seq_printf(buf, "USB_Normal\n");
+	}
+	return 0;
+}
+static int charger_type_proc_open(struct inode *inode, struct  file *file)
+{
+    return single_open(file, charger_type_proc_read, NULL);
+}
+
+static ssize_t charger_type_proc_write(struct file *filp, const char __user *buff,
+		size_t len, loff_t *data)
+{
+	int val;
+
+	char messages[256];
+
+	if (len > 256) {
+		len = 256;
+	}
+
+	if (copy_from_user(messages, buff, len)) {
+		return -EFAULT;
+	}
+
+	val = (int)simple_strtol(messages, NULL, 10);
+	printk("[BAT][CHG][PMIC][Proc]Charger type File: %d\n", val);
+
+	return len;
+}
+
+static const struct file_operations charger_type_fops = {
+	.owner = THIS_MODULE,
+	.open = charger_type_proc_open,
+	.write = charger_type_proc_write,
+	.read = seq_read,
+};
+void static create_charger_type_proc_file(void)
+{
+	charger_type_proc_file = proc_create(charger_type_PROC_FILE, 0644, NULL, &charger_type_fops);
+
+	if (charger_type_proc_file) {
+		pr_info("[Proc]%s sucessed!\n", __FUNCTION__);
+	} else{
+		pr_info("[Proc]%s failed!\n", __FUNCTION__);
+	}
+}
+#endif
+//BSP Steve2 BMMI Adb Interface chager type---
 
 static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 {
@@ -3498,6 +3557,8 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 
 	eng_charging_limit = true;
 	create_charger_limit_enable_proc_file();
+
+	create_charger_type_proc_file();
 #endif
 
 	pr_info("Probe chg_dis=%d bpd=%d usb=%d batt_pres=%d batt_volt=%d soc=%d\n",
