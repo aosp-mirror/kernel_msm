@@ -137,6 +137,7 @@ extern int cnss_wlan_pm_control(bool vote);
 extern void cnss_lock_pm_sem(void);
 extern void cnss_release_pm_sem(void);
 
+extern void cnss_request_pm_qos_type(int latency_type, u32 qos_val);
 extern void cnss_request_pm_qos(u32 qos_val);
 extern void cnss_remove_pm_qos(void);
 extern int cnss_get_platform_cap(struct cnss_platform_cap *cap);
@@ -195,6 +196,7 @@ enum {
 	CNSS_RESET_LEVEL_MAX
 };
 extern int cnss_get_restart_level(void);
+extern void cnss_dump_stack(struct task_struct *task);
 
 #ifdef CONFIG_CNSS_SDIO
 struct cnss_sdio_wlan_driver {
