@@ -1,0 +1,40 @@
+/* Copyright (c) 2015, HUAWEI TECHNOLOGIES CO., LTD. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+&audio_codec_mtp {
+	qcom,msm-snd-card-id = <0>;
+	qcom,msm-codec-type = "internal";
+	qcom,msm-ext-pa = "quaternary";
+	qcom,msm-mclk-freq = <12288000>;
+	qcom,msm-gpios = "quat_i2s";
+	qcom,pinctrl-names =
+		"cdc_lines_quat_ext_act",
+		"cdc_lines_quat_ext_sus";
+	pinctrl-names =
+		"cdc_lines_quat_ext_act",
+		"cdc_lines_quat_ext_sus";
+	/delete-property/ pinctrl-2;
+	/delete-property/ pinctrl-3;
+	pinctrl-0 = <&cdc_ext_tlmm_act>;
+	pinctrl-1 = <&cdc_ext_tlmm_sus>;
+	/delete-property/ qcom,cdc-us-euro-gpios;
+};
+&soc{
+	qcom,msm-dai-mi2s {
+		compatible = "qcom,msm-dai-mi2s";
+		qcom,msm-dai-q6-mi2s-quat {
+			compatible = "qcom,msm-dai-q6-mi2s";
+			qcom,msm-dai-q6-mi2s-dev-id = <3>;
+			qcom,msm-mi2s-rx-lines = <1>;
+			qcom,msm-mi2s-tx-lines = <2>;
+		};
+	};
+};
