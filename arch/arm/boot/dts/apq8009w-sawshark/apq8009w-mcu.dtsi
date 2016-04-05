@@ -1,0 +1,67 @@
+/* Copyright (c) 2016,  HUAWEI TECHNOLOGIES CO., LTD.  All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc{
+	spi@78ba000 {
+		spidev: qcom,spidev@0 {
+			compatible = "rohm,dh2228fv";
+			reg = <0>;
+			spi-max-frequency = <50000000>;
+			spi-cpol;
+			spi-cpha;
+			spi-cs-high;
+		};
+	};
+
+	mcu,boot0 {
+		compatible = "mcu,boot0";
+		mcu_boot_0 = <&msm_gpio 85 0>;
+		pinctrl-names = "mcu_boot_0_active","mcu_boot_0_suspend";
+		pinctrl-0 = <&mcu_boot_0_active>;
+		pinctrl-1 = <&mcu_boot_0_suspend>;
+	};
+
+	mcu,boot1 {
+		compatible = "mcu,boot1";
+		mcu_boot_1 = <&msm_gpio 86 0>;
+		pinctrl-names = "mcu_boot_1_active","mcu_boot_1_suspend";
+		pinctrl-0 = <&mcu_boot_1_active>;
+		pinctrl-1 = <&mcu_boot_1_suspend>;
+	};
+
+	mcu,reset {
+		compatible = "mcu,reset";
+		mcu_reset = <&msm_gpio 17 0>;
+		pinctrl-names = "mcu_reset_active","mcu_reset_sleep";
+		pinctrl-0 = <&mcu_reset_active>;
+		pinctrl-1 = <&mcu_reset_sleep>;
+	};
+
+	mcu,wakeupmcu {
+		compatible = "mcu,wakeupmcu";
+		ap_wakeup_mcu = <&msm_gpio 49 0>;
+		pinctrl-names = "ap_wakeup_mcu_active","ap_wakeup_mcu_suspend";
+		pinctrl-0 = <&ap_wakeup_mcu_active>;
+		pinctrl-1 = <&ap_wakeup_mcu_suspend>;
+	};
+
+	mcu,wakeupap {
+		compatible = "mcu,wakeupap";
+		mcu_wakeup_ap = <&msm_gpio 50 0>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <50 0>;
+		interrupt-names = "mcu_host_wake";
+		pinctrl-names = "mcu_wakeup_ap_active","mcu_wakeup_ap_suspend";
+		pinctrl-0 = <&mcu_wakeup_ap_active>;
+		pinctrl-1 = <&mcu_wakeup_ap_suspend>;
+	};
+};
