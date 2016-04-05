@@ -713,4 +713,29 @@
 			};
 		};
 	};
+
+	/*cdc ext i2s*/
+	cdc-ext-tlmm-lines{
+		cdc_ext_tlmm_act:ext_tlmm_on {
+			mux {
+				pins = "gpio0","gpio1","gpio2","gpio3";
+				function = "sec_mi2s";
+			};
+			config {
+				pins = "gpio0","gpio1","gpio2","gpio3";
+				drive-strength = <8>;
+			};
+		};
+		cdc_ext_tlmm_sus:ext_tlmm_off {
+			mux {
+				pins = "gpio0","gpio1","gpio2","gpio3";
+				function = "sec_mi2s";
+			};
+			config {
+				pins = "gpio0","gpio1","gpio2","gpio3";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+	};
 };
