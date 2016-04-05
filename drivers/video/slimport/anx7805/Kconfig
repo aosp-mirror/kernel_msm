@@ -1,0 +1,6 @@
+config SLIMPORT_ANX7805
+	tristate "Analogix Slimport transmitter ANX7805 support"
+	help
+	  Slimport Transmitter is a HD video transmitter chip
+	  over micro-USB connector for smartphone device.
+
