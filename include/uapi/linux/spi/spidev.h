@@ -109,6 +109,14 @@ struct spi_ioc_transfer {
 	 */
 };
 
+typedef enum
+{
+	SPIDEV_WORK_MODE_USER = 0,
+	SPIDEV_WORK_MODE_KERNEL = 1,
+}spidev_work_mode_type;
+
+#define SPIDEV_KERNEL_MODE_LENGTH 256
+
 /* not all platforms use <asm-generic/ioctl.h> or _IOC_TYPECHECK() ... */
 #define SPI_MSGSIZE(N) \
 	((((N)*(sizeof (struct spi_ioc_transfer))) < (1 << _IOC_SIZEBITS)) \
@@ -136,6 +144,7 @@ struct spi_ioc_transfer {
 #define SPI_IOC_RD_MODE32		_IOR(SPI_IOC_MAGIC, 5, __u32)
 #define SPI_IOC_WR_MODE32		_IOW(SPI_IOC_MAGIC, 5, __u32)
 
+#define SPI_IOC_WR_WORK_MODE    _IOW(SPI_IOC_MAGIC, 6, __u32)
 
 
 #endif /* SPIDEV_H */
