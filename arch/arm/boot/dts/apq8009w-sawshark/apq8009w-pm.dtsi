@@ -11,6 +11,14 @@
  */
 #include "HB442528EBC-XWD-4v35-300mah.dtsi"
 &soc {
+    /*ADC for hw version*/
+	qcom,hwversion {
+		compatible = "qcom,hwversion";
+		qcom,hwver0-vadc = <&pm8916_vadc>;/* hwver0 */
+		pcbver1-gpios = <&msm_gpio 82 0>;/* pcbver0*/
+		pcbver2-gpios = <&msm_gpio 83 0>;/* pcbver1*/
+	};
+
     i2c@78b8000 {
 		/*delete the qcom charger*/
 		/delete-node/ smb1357-charger@57;
@@ -92,6 +100,17 @@
 		qcom,hw-settle-time = <0xb>;
 		qcom,fast-avg-setup = <0>;
 	};
+
+	chan@13 {
+		label = "hw_ver0";
+		reg = <0x13>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <0>;
+		qcom,hw-settle-time = <2>;
+		qcom,fast-avg-setup = <2>;
+	};
 };
 &pm8916_adc_tm {
 	/*delete the qcom charger*/
@@ -118,6 +137,14 @@
 		qcom,ain-route = <1>;		/*QPNP_PIN_AIN_AMUX_CH6 */
 		qcom,master-en = <1>;		/* Enable MPP */
 		status = "ok";
+	};
+
+	mpp@a300{/*MPP 4*/
+		/* hwversion-therm */
+		qcom,mode = <4>;		/* Digital input ,QPNP_PIN_MODE_AIN*/
+		qcom,src-sel = <0>;		/* QPNP_PIN_SEL_FUNC_CONSTANT */
+		qcom,ain-route = <3>;		/*QPNP_PIN_AIN_AMUX_CH8 */
+		qcom,master-en = <1>;		/* Enable MPP */
 	};
 };
 &rpm_bus {
