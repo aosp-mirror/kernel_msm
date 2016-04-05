@@ -26,6 +26,8 @@
 #include "apq8009w-sawshark/apq8009w-touch.dtsi"
 #include "apq8009w-sawshark/apq8009w-bt.dtsi"
 #include "apq8009w-sawshark/apq8009w-wifi.dtsi"
+#include "apq8009w-sawshark/apq8009w-mcu.dtsi"
+#include "apq8009w-sawshark/apq8009w-sound.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. APQ8009W-PM8916 MTP";
