@@ -14,17 +14,23 @@
 	qcom,msm-codec-type = "internal";
 	qcom,msm-ext-pa = "quaternary";
 	qcom,msm-mclk-freq = <12288000>;
-	qcom,msm-gpios = "quat_i2s";
+	qcom,msm-gpios =
+		"pri_i2s",
+		"quat_i2s";
 	qcom,pinctrl-names =
+		"pri_i2s_sus",
+		"pri_i2s_act",
 		"cdc_lines_quat_ext_act",
 		"cdc_lines_quat_ext_sus";
 	pinctrl-names =
+		"pri_i2s_sus",
+		"pri_i2s_act",
 		"cdc_lines_quat_ext_act",
 		"cdc_lines_quat_ext_sus";
-	/delete-property/ pinctrl-2;
-	/delete-property/ pinctrl-3;
-	pinctrl-0 = <&cdc_ext_tlmm_act>;
-	pinctrl-1 = <&cdc_ext_tlmm_sus>;
+	pinctrl-0 = <&cdc_pdm_lines_sus>;
+	pinctrl-1 = <&cdc_pdm_lines_act>;
+	pinctrl-2 = <&cdc_ext_tlmm_act>;
+	pinctrl-3 = <&cdc_ext_tlmm_sus>;
 	/delete-property/ qcom,cdc-us-euro-gpios;
 };
 &soc{
