@@ -24,8 +24,8 @@
 		qcom,mdss-dsi-panel-framerate = <60>;
 		qcom,mdss-dsi-virtual-channel-id = <0>;
 		qcom,mdss-dsi-stream = <0>;
-		qcom,mdss-dsi-panel-width = <400>;
-		qcom,mdss-dsi-panel-height = <400>;
+		qcom,mdss-dsi-panel-width = <454>;
+		qcom,mdss-dsi-panel-height = <454>;
 		qcom,mdss-dsi-h-front-porch = <40>;
 		qcom,mdss-dsi-h-back-porch = <40>;
 		qcom,mdss-dsi-h-pulse-width = <20>;
@@ -45,19 +45,20 @@
 		qcom,ulps-enabled;
 		qcom,mdss-dsi-on-command = [15 01 00 00 01 00 02 00 00
 			15 01 00 00 00 00 02 FE 01
-			15 01 00 00 00 00 02 18 66
-			15 01 00 00 00 00 02 FE 07
-			15 01 00 00 00 00 02 07 6D
-			15 01 00 00 00 00 02 FE 00
+			15 01 00 00 00 00 02 11 93
+			15 01 00 00 00 00 02 12 93
+			15 01 00 00 00 00 02 15 80
+			15 01 00 00 00 00 02 16 80
+			39 01 00 00 00 00 05 2A 00 0C 01 D1
+			39 01 00 00 00 00 05 2B 00 00 01 C5
+			39 01 00 00 00 00 05 30 00 00 01 C5
+			39 01 00 00 00 00 05 31 00 0C 01 D1
+			05 01 00 00 00 00 02 12 00
 			15 01 00 00 00 00 02 35 00
-			05 01 00 00 00 00 02 11 00
-			15 01 00 00 00 00 02 36 40
-			32 01 00 00 78 00 02 00 00
+			05 01 00 00 80 00 02 11 00
 			05 01 00 00 00 00 02 29 00];
 		qcom,mdss-dsi-off-command = [05 01 00 00 00 00 02 28 00
 					05 01 00 00 78 00 02 10 00
-					15 01 00 00 FF 00 02 00 00
-					15 01 00 00 00 00 02 4F 01
 					];
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
@@ -92,7 +93,7 @@
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-		qcom,mdss-dsi-reset-sequence = <0 5>, <1 10>;
+		qcom,mdss-dsi-reset-sequence = <0 10>, <1 5>, <0 10>;
 		qcom,mdss-pan-physical-width-dimension = <36>;
 		qcom,mdss-pan-physical-height-dimension = <36>;
 	};
