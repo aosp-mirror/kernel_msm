@@ -89,7 +89,7 @@ USBTypeCCurrent         SinkCurrent;            // Variable to indicate the curr
 FSC_U8           loopCounter = 0;        // Used to count the number of Unattach<->AttachWait loops
 static USBTypeCCurrent  toggleCurrent;          // Current used for toggle state machine
 USBTypeCCurrent  SourceCurrent;                 // Variable to indicate the current capability we are broadcasting
-
+FSC_BOOL                VCONN_enabled = false;  // Flag to indicate whether the VCONN is power up.
 
 #ifdef FM150911A
 static FSC_U8 alternateModes = 1;               // Set to 1 to enable alternate modes
@@ -1139,7 +1139,16 @@ void SetStateUnattached(void)
         SetStateAlternateUnattached();
         return;
     }
-    
+
+    if (VCONN_enabled) {
+        if (!platform_set_vconn_enable(FALSE))
+            pr_err("FUSB [%s]: Error: Unable to power off VCONN!!\n", __func__);
+        else {
+            pr_info("FUSB [%s]: State Unattached, power off the VCONN\n", __func__);
+            VCONN_enabled = FALSE;
+        }
+    }
+
 #ifdef FSC_INTERRUPT_TRIGGERED
     g_Idle = TRUE;                                                              // Idle until I_TOGDONE
     Registers.Mask.byte = 0xFF;
@@ -1406,6 +1415,14 @@ void SetStateAttachedSource(void)
         peekCC2Source();
         Registers.Switches.byte[0] = 0x44;                                      // Configure VCONN on CC2, pull-up on CC1, measure CC1
         Registers.Switches.VCONN_CC2 = 1;
+        if (CC2TermPrevious == CCTypeRa) {
+            if (!platform_set_vconn_enable(TRUE))
+                pr_err("FUSB [%s]: Error: Unable to power on VCONN!\n", __func__);
+            else {
+                pr_info("FUSB [%s]: Ra detected on CC2, power on the VCONN\n", __func__);
+                VCONN_enabled = TRUE;
+            }
+        }
         setDebounceVariablesCC1(CCTypeUndefined);
         platform_notify_cc_orientation(CC1);
     }
@@ -1414,6 +1431,14 @@ void SetStateAttachedSource(void)
         peekCC1Source();
         Registers.Switches.byte[0] = 0x88;                                      // Configure VCONN on CC1, pull-up on CC2, measure CC2
         Registers.Switches.VCONN_CC1 = 1;
+        if (CC1TermPrevious == CCTypeRa) {
+            if (!platform_set_vconn_enable(TRUE))
+                pr_err("FUSB [%s]: Error: Unable to power on VCONN!\n", __func__);
+            else {
+                pr_info("FUSB [%s]: Ra detected on CC1, power on the VCONN\n", __func__);
+                VCONN_enabled = TRUE;
+            }
+        }
         setDebounceVariablesCC2(CCTypeUndefined);
         platform_notify_cc_orientation(CC2);
     }

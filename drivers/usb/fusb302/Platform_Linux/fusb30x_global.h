@@ -55,6 +55,8 @@ struct fusb30x_chip                                 // Contains data required by
 
     struct pinctrl *fusb302_pinctrl;
 
+    struct regulator *boost_5v;
+
     /* GPIO */
     FSC_S32 gpio_VBus5V;                            // VBus 5V GPIO pin
     FSC_BOOL gpio_VBus5V_value;                     // true if active, false otherwise

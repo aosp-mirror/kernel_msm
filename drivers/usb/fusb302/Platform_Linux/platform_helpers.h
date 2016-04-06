@@ -23,6 +23,12 @@
 #define INIT_DELAY_MS   500     // Time to wait before initializing the device, in ms
 #define RETRIES_I2C 3           // Number of retries for I2C reads/writes
 
+enum {
+    DISABLE_VCONN,
+    ENABLE_VCONN_CC1,
+    ENABLE_VCONN_CC2,
+};
+
 /*********************************************************************************************************************/
 /*********************************************************************************************************************/
 /********************************************        GPIO Interface         ******************************************/
@@ -54,6 +60,14 @@ void fusb_GPIO_Set_VBusOther(FSC_BOOL set);
 FSC_BOOL fusb_GPIO_Get_VBus5v(void);
 FSC_BOOL fusb_GPIO_Get_VBusOther(void);
 FSC_BOOL fusb_GPIO_Get_IntN(void);
+
+/*******************************************************************************
+* Function:        fusb_Power_Vconn
+* Input:           true: enable VCONN ; false: disable VCONN
+* Return:          true if VCONN is power on, false otherwise
+* Description:     Sets or clear the value of the VCONN GPIO pin
+********************************************************************************/
+FSC_BOOL fusb_Power_Vconn(FSC_BOOL set);
 
 #ifdef FSC_DEBUG
 /*******************************************************************************

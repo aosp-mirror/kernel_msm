@@ -314,6 +314,7 @@ typedef struct
 {
     regDeviceID_t   DeviceID;
     regSwitches_t   Switches;
+    regSwitches_t   Switches_temp;
     regMeasure_t    Measure;
     regSlice_t      Slice;
     regControl_t    Control;

@@ -31,9 +31,11 @@
 #include <linux/interrupt.h>
 #include <linux/of_irq.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/regulator/consumer.h>
 
 #include "fusb30x_global.h"                                                     // Chip structure access
 #include "../core/core.h"                                                       // Core access
+#include "../core/fusb30X.h"
 #include "platform_helpers.h"
 
 #ifdef FSC_DEBUG
@@ -61,6 +63,10 @@ const char* FUSB_DT_INTERRUPT_INTN =    "fsc_interrupt_int_n";      // Name of t
 static irqreturn_t _fusb_isr_intn(int irq, void *dev_id);
 #endif  // FSC_INTERRUPT_TRIGGERED
 
+extern FSC_BOOL VCONN_enabled;
+extern DeviceReg_t Registers;
+
+
 FSC_S32 fusb_InitializeGPIO(void)
 {
     FSC_S32 ret = 0;
@@ -87,11 +93,17 @@ FSC_S32 fusb_InitializeGPIO(void)
 
     if (chip->fusb302_pinctrl) {
         set_state = pinctrl_lookup_state(chip->fusb302_pinctrl, "default");
-	if (IS_ERR(set_state)) {
+        if (IS_ERR(set_state)) {
             pr_err("cannot get fusb302 pinctrl default state");
             return PTR_ERR(set_state);
         }
+        pinctrl_select_state(chip->fusb302_pinctrl, set_state);
 
+        set_state = pinctrl_lookup_state(chip->fusb302_pinctrl, "vconn_disable");
+        if (IS_ERR(set_state)) {
+            pr_err("cannot get fusb302 pinctrl vconn_disable state");
+            return PTR_ERR(set_state);
+        }
         pinctrl_select_state(chip->fusb302_pinctrl, set_state);
     }
 
@@ -352,6 +364,51 @@ FSC_BOOL fusb_GPIO_Get_IntN(void)
         return (ret != 0);
     }
 }
+
+FSC_BOOL fusb_Power_Vconn(FSC_BOOL set)
+{
+    struct fusb30x_chip *chip = fusb30x_GetChip();
+    struct pinctrl_state *set_state;
+
+    if (!chip)
+    {
+        pr_err("FUSB  %s - Error: Chip structure is NULL!\n", __func__);
+    }
+
+    if (!chip->boost_5v) {
+        chip->boost_5v = devm_regulator_get(&chip->client->dev, "V_USB_boost");
+        if (IS_ERR(chip->boost_5v)) {
+            pr_err("%s: still unable to get boost_5v regulator\n", __func__);
+            return FALSE;
+        }
+    }
+
+    if (set) {
+        if (regulator_enable(chip->boost_5v)) {
+            pr_err("%s: Unable to disable boost_5v regulator\n", __func__);
+            return FALSE;
+        }
+        pr_info("Vconn enabled\n");
+    } else {
+        if (regulator_disable(chip->boost_5v)) {
+            pr_err("%s: Unable to enable boost_5v regulator\n", __func__);
+            return FALSE;
+        }
+        pr_info("Vconn disabled\n");
+    }
+
+    if (chip->fusb302_pinctrl) {
+        set_state = pinctrl_lookup_state(chip->fusb302_pinctrl, set ? "vconn_enable" : "vconn_disable");
+        if (IS_ERR(set_state)) {
+            pr_err("cannot get fusb302 pinctrl vconn_contrl state");
+            return FALSE;
+        }
+        pinctrl_select_state(chip->fusb302_pinctrl, set_state);
+    }
+
+    return TRUE;
+}
+
 
 #ifdef FSC_DEBUG
 void dbg_fusb_GPIO_Set_SM_Toggle(FSC_BOOL set)
@@ -3090,17 +3147,80 @@ static ssize_t _fusb_Sysfs_Reinitialize_fusb302(struct device* dev, struct devic
     return sprintf(buf, "FUSB302 Reinitialized!\n");
 }
 
+static ssize_t _fusb_Sysfs_vconn_en_store(struct device* dev, struct device_attribute* attr, const char* input, size_t size)
+{
+    int vconn_input = 0;
+    sscanf(input, "%d", &vconn_input);
+
+    pr_info("FUSB [%s]: input: %d\n", __func__, vconn_input);
+    switch (vconn_input) {
+        case DISABLE_VCONN: // Disable VCONN
+        {
+            if (VCONN_enabled) {
+                if (!fusb_Power_Vconn(FALSE))
+                    pr_err("FUSB [%s]: Error: Unable to force power off VCONN\n", __func__);
+                else {
+                    Registers.Switches.byte[0] = Registers.Switches_temp.byte[0]; // restore Switch0 register status
+                    Registers.Switches.VCONN_CC1 = 0;
+                    Registers.Switches.VCONN_CC2 = 0;
+                    DeviceWrite(regSwitches0, 1, &Registers.Switches.byte[0]);
+                    VCONN_enabled = FALSE;
+                    pr_info("FUSB [%s]: Force power off the VCONN done, and now Registers.Switches(0x02): 0x%x\n", __func__, Registers.Switches.byte[0]);
+                }
+            } else {
+                pr_info("FUSB [%s]: VCONN is already disabled, so we just break\n", __func__);
+            }
+            break;
+        }
+        case ENABLE_VCONN_CC1:
+        {
+            if (!fusb_Power_Vconn(TRUE))
+                pr_err("FUSB [%s]: Error: Unable to force power on VCONN %d\n", __func__, vconn_input);
+            else {
+                DeviceRead(regSwitches0, 1, &Registers.Switches_temp.byte[0]); // Backup current Switch0 register status
+                Registers.Switches.VCONN_CC1 = 1;
+                Registers.Switches.VCONN_CC2 = 0;
+                DeviceWrite(regSwitches0, 1, &Registers.Switches.byte[0]);
+                VCONN_enabled = TRUE;
+                pr_info("FUSB [%s]: Force power on the VCONN %d done, and now Registers.Switches(0x02): 0x%x\n", __func__, vconn_input, Registers.Switches.byte[0]);
+            }
+            break;
+        }
+        case ENABLE_VCONN_CC2:
+        {
+            if (!fusb_Power_Vconn(TRUE))
+                pr_err("FUSB [%s]: Error: Unable to force power on VCONN %d\n", __func__, vconn_input);
+            else {
+                DeviceRead(regSwitches0, 1, &Registers.Switches_temp.byte[0]); // Backup current Switch0 register status
+                Registers.Switches.VCONN_CC1 = 0;
+                Registers.Switches.VCONN_CC2 = 1;
+                DeviceWrite(regSwitches0, 1, &Registers.Switches.byte[0]);
+                VCONN_enabled = TRUE;
+                pr_info("FUSB [%s]: Force power on the VCONN %d done, and now Registers.Switches(0x02): 0x%x\n", __func__, vconn_input, Registers.Switches.byte[0]);
+            }
+            break;
+        }
+        default:
+            pr_err("FUSB [%s]: Error: Unable to handle the input: %d\n", __func__, vconn_input);
+            break;
+    }
+
+    return size;
+}
+
 // Define our device attributes to export them to sysfs
 static DEVICE_ATTR(fusb30x_hostcomm, S_IRWXU | S_IRWXG | S_IROTH, _fusb_Sysfs_Hostcomm_show, _fusb_Sysfs_Hostcomm_store);
 static DEVICE_ATTR(pd_state_log, S_IRUSR | S_IRGRP | S_IROTH, _fusb_Sysfs_PDStateLog_show, NULL);
 static DEVICE_ATTR(typec_state_log, S_IRUSR | S_IRGRP | S_IROTH, _fusb_Sysfs_TypeCStateLog_show, NULL);
 static DEVICE_ATTR(reinitialize, S_IRUSR | S_IRGRP | S_IROTH, _fusb_Sysfs_Reinitialize_fusb302, NULL);
+static DEVICE_ATTR(vconn_en, S_IWUSR | S_IRUGO, NULL, _fusb_Sysfs_vconn_en_store);
 
 static struct attribute *fusb302_sysfs_attrs[] = {
     &dev_attr_fusb30x_hostcomm.attr,
     &dev_attr_pd_state_log.attr,
     &dev_attr_typec_state_log.attr,
     &dev_attr_reinitialize.attr,
+    &dev_attr_vconn_en.attr,
     NULL
 };
 

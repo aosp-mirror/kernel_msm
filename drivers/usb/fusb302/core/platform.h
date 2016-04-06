@@ -106,6 +106,14 @@ void platform_set_vbus_lvl_enable(VBUS_LVL level, FSC_BOOL blnEnable, FSC_BOOL b
 FSC_BOOL platform_get_vbus_lvl_enable(VBUS_LVL level);
 
 /*******************************************************************************
+ * Function:        platform_set_vconn_enable
+ * Input:           blnEnable - enable or disable VCONN
+ * Return:          Boolean - State of VCONN GPIO
+ * Description:     Provide access to the VCONN control pin(s).
+ ******************************************************************************/
+FSC_BOOL platform_set_vconn_enable(FSC_BOOL blnEnable);
+
+/*******************************************************************************
  * Function:        platform_set_vbus_discharge
  * Input:           Boolean
  * Return:          None

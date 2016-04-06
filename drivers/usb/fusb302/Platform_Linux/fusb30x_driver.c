@@ -47,6 +47,8 @@
 static struct regulator *vdd;
 static struct regulator *switch_vdd;
 
+extern bool VCONN_enabled;
+
 /******************************************************************************
 * Driver functions
 ******************************************************************************/
