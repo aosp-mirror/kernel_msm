@@ -12,25 +12,18 @@
 
 &soc {
 
-	wifi,mmc {
-		compatible = "bcmdhd_wlan,mmc";
+	bcmdhd {
+		compatible = "android,bcmdhd_wlan";
 		sdhci-name = <&sdhc_2>;
-	};
 
-	wifi,regon {
-		compatible = "bcmdhd_wlan,reg_on";
 		wl_reg_on = <&msm_gpio 78 0>;
-		pinctrl-names = "wifi_reg_on_active","wifi_reg_on_suspend";
-		pinctrl-0 = <&wifi_reg_on_active>;
-		pinctrl-1 = <&wifi_reg_on_suspend>;
-	};
-
-	wifi,wakeup {
-		compatible = "bcmdhd_wlan,wake_up";
 		wl_host_wake = <&msm_gpio 28 0>;
-		pinctrl-names = "wifi_wakeup_ap_active","wifi_wakeup_ap_suspend";
-		pinctrl-0 = <&wifi_wakeup_ap_active>;
-		pinctrl-1 = <&wifi_wakeup_ap_suspend>;
+
+		vdd-rf-supply = <&pm8916_l9>;
+
+		pinctrl-names = "active","sleep";
+		pinctrl-0 = <&wifi_reg_on_active &wifi_wakeup_ap_active>;
+		pinctrl-1 = <&wifi_reg_on_suspend &wifi_wakeup_ap_suspend>;
 	};
 };
 
