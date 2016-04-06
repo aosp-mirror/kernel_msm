@@ -11,7 +11,6 @@
  * GNU General Public License for more details.
  */
 
-/*#include <asm/mach-types.h>*/
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
@@ -35,6 +34,7 @@
 #include <linux/fs.h>
 #include <linux/of_gpio.h>
 #include <linux/fcntl.h>
+#include <linux/regulator/consumer.h>
 
 #include <linux/random.h>
 #include <linux/ctype.h>
@@ -56,13 +56,25 @@
 
 #define WLAN_MURATA_FW_PATH "/system/vendor/firmware/fw_murata_bcmdhd.bin"
 #define WLAN_MURATA_NV_PATH "/system/etc/wifi/nv_murata_bcm4343w.txt"
-static int gpio_wl_reg_on = -1;
-static int brcm_wake_irq = -1;
-static struct mmc_host * wlan_mmc =NULL;
 
+struct pinctrl_data {
+	struct pinctrl          *pctrl;
+	struct pinctrl_state    *pins_active;
+	struct pinctrl_state    *pins_sleep;
+};
+
+/* wifi reset gpio */
+static int gpio_wl_reg_on = -1;
+/* wifi wake up ap gpio */
+static int brcm_wake_irq = -1;
+/* for wifi card detect */
+static struct mmc_host * wlan_mmc =NULL;
+/* regulator for wifi rf */
+static struct regulator *reg_rf = NULL;
+/* pinctrl data of android,bcmdhd_wlan */
+static struct pinctrl_data bcmdhd_pinctrl = {0};
 /* vendor id for combo chip */
 static int wifi_vendor_id = 0x00;
-
 /* wifi mac custom */
 char g_wlan_ether_addr[] = {0x00,0x00,0x00,0x00,0x00,0x00};
 
@@ -295,12 +307,22 @@ int dhd_wlan_power(int on)
 	DHD_INFO(("%s Enter: power %s\n", __FUNCTION__, on ? "on" : "off"));
 
 	if (on) {
+		if (reg_rf)
+		{
+			if(regulator_enable(reg_rf))
+			{
+				DHD_ERROR(("%s Enable wlan rf regulator fail\n", __FUNCTION__));
+				return -EIO;
+			}
+		}
+
 		if (gpio_direction_output(gpio_wl_reg_on, 1)) {
 			DHD_ERROR(("%s WL_REG_ON power on fail\n", __FUNCTION__));
 			return -EIO;
 		}
 		if (!gpio_get_value(gpio_wl_reg_on)) {
 			DHD_ERROR(("%s WL_REG_ON pull up fail.\n", __FUNCTION__));
+			return -EIO;
 		} else {
 			DHD_INFO(("%s: WL_REG_ON pull up success\n", __FUNCTION__));
 		}
@@ -309,6 +331,8 @@ int dhd_wlan_power(int on)
 			DHD_ERROR(("%s: WL_REG_ON power off fail\n", __FUNCTION__));
 			return -EIO;
 		}
+
+		regulator_disable(reg_rf);
 	}
 
 	return 0;
@@ -713,72 +737,155 @@ struct wifi_platform_data dhd_wlan_control = {
 };
 EXPORT_SYMBOL(dhd_wlan_control);
 
+int dhd_wlan_pinctrl_init(struct platform_device *pdev)
+{
+	int ret = 0;
+	struct pinctrl *pctrl = NULL;
+	struct pinctrl_state *pins_active = NULL;
+	struct pinctrl_state *pins_sleep = NULL;
+
+	if (NULL == pdev){
+		DHD_ERROR(("pdev is NULL.\n"));
+		return -1;
+	}
+
+	pctrl = devm_pinctrl_get(&pdev->dev);
+	if (IS_ERR(pctrl)) {
+		ret = PTR_ERR(pctrl);
+		DHD_ERROR(("Could not get pinsctrl info, err:%d\n", ret));
+		goto out;
+	}
+
+	pins_active = pinctrl_lookup_state(pctrl, "active");
+	if (IS_ERR(pins_active)) {
+		ret = PTR_ERR(pins_active);
+		DHD_ERROR(("Could not get active pinstates, err:%d\n", ret));
+		goto out;
+	}
+
+	pins_sleep = pinctrl_lookup_state(pctrl, "sleep");
+	if (IS_ERR(pins_sleep)) {
+		ret = PTR_ERR(pins_sleep);
+		DHD_ERROR(( "Could not get sleep pinstates, err:%d\n", ret));
+		goto out;
+	}
+
+	bcmdhd_pinctrl.pctrl = pctrl;
+	bcmdhd_pinctrl.pins_active = pins_active;
+	bcmdhd_pinctrl.pins_sleep = pins_sleep;
+	return ret;
+
+out:
+	bcmdhd_pinctrl.pctrl = NULL;
+	bcmdhd_pinctrl.pins_active = NULL;
+	bcmdhd_pinctrl.pins_sleep = NULL;
+	return ret;
+}
+
+int dhd_wlan_pinctrl_setup(bool enable)
+{
+	int ret = 0;
+
+	if (enable)
+		ret = pinctrl_select_state(bcmdhd_pinctrl.pctrl, bcmdhd_pinctrl.pins_active);
+	else
+		ret = pinctrl_select_state(bcmdhd_pinctrl.pctrl, bcmdhd_pinctrl.pins_sleep);
+	if (ret < 0){
+		DHD_ERROR(( "Could not select pinstates:%s, err:%d\n", enable?"active":"sleep", ret));
+	}
+
+	return ret;
+}
+
 int dhd_wlan_gpio_init(void)
 {
-        int wl_reg_on = -1;
+	int ret = 0;
+	int wl_reg_on = -1;
 	int wl_host_wake = -1;
-        char *wlan_mmc_node = "bcmdhd_wlan,mmc";
-        char *wlan_reg_on_node = "bcmdhd_wlan,reg_on";
-        char *wlan_wake_up_node = "bcmdhd_wlan,wake_up";
-        struct device_node *np = NULL;
-        struct device_node *sdio_node = NULL;
-        struct platform_device *pdev = NULL;
-        struct sdhci_host *host = NULL;
+	char *wlan_node = "android,bcmdhd_wlan";
+	struct device_node *np = NULL;
+	struct device_node *sdio_node = NULL;
+	struct platform_device *bcmdhd_pdev = NULL;
+	struct platform_device *mmc_host_pdev = NULL;
+	struct sdhci_host *host = NULL;
+
+	/* Get bcmdhd node */
+	np = of_find_compatible_node(NULL, NULL, wlan_node);
+	if (!np) {
+		DHD_ERROR(("%s:Failed to get mmc host node\n", __FUNCTION__));
+		return -ENODEV;
+	}
+	bcmdhd_pdev = of_find_device_by_node(np);
+	if(NULL == bcmdhd_pdev)
+	{
+		DHD_ERROR(("Failed to find bcmdhd device by node\n"));
+		return -ENODEV;
+	}
+
+	/* bcmdhd_wlan pinctrl init  */
+	ret = dhd_wlan_pinctrl_init(bcmdhd_pdev);
+	if (ret){
+		DHD_ERROR(("Failed to init pinctrl state\n"));
+		return ret;
+	}
+	ret = dhd_wlan_pinctrl_setup(true);
+	if (ret){
+		DHD_ERROR(("Failed to setup pinctrl state\n"));
+		return ret;
+	}
 
 	/* Get mmc host */
-        np = of_find_compatible_node(NULL, NULL, wlan_mmc_node);
-        if (!np) {
-                DHD_ERROR(("%s:Failed to get mmc host node\n", __FUNCTION__));
-                return -ENODEV;
-        }
+	sdio_node = of_parse_phandle(np, "sdhci-name", 0);
+	if (NULL == sdio_node)
+	{
+		DHD_ERROR(("%s:Failed to get sdhci-name node\n", __FUNCTION__));
+		return -ENODEV;
+	}
+	mmc_host_pdev = of_find_device_by_node(sdio_node);
+	if (mmc_host_pdev == NULL) {
+		DHD_ERROR(("%s:Failed to get platform device\n", __FUNCTION__));
+		return -ENODEV;
+	}
+	host = platform_get_drvdata(mmc_host_pdev);
+	wlan_mmc = host->mmc;
 
-        sdio_node = of_parse_phandle(np, "sdhci-name", 0);
-        pdev = of_find_device_by_node(sdio_node);
-        if (pdev == NULL) {
-                DHD_ERROR(("%s:Failed to get platform device\n", __FUNCTION__));
-                return -ENODEV;
-        }
-        host = platform_get_drvdata(pdev);
-        wlan_mmc = host->mmc;
+	/* Get regulator of rf */
+	reg_rf = regulator_get(&bcmdhd_pdev->dev, "vdd-rf");
+	if(IS_ERR(reg_rf))
+	{
+		DHD_ERROR(("Failed to get vdd-rf regulator\n"));
+		regulator_put(reg_rf);
+		return -ENODEV;
+	}
 
-        /* Get wlan_reg_on */
-        np = of_find_compatible_node(NULL, NULL, wlan_reg_on_node);
-        if (!np) {
-                DHD_ERROR(("%s:Failed to get wlan reg on node\n", __FUNCTION__));
-                return -ENODEV;
-        }
-        wl_reg_on = of_get_named_gpio(np, "wl_reg_on", 0);
-        if (wl_reg_on >= 0) {
-                gpio_wl_reg_on = wl_reg_on;
-        }
+	/* Get wl_reg_on gpio */
+	wl_reg_on = of_get_named_gpio(np, "wl_reg_on", 0);
+	if (wl_reg_on >= 0) {
+		gpio_wl_reg_on = wl_reg_on;
+	}
 
-        /* get host_wake irq */
-        np = of_find_compatible_node(NULL, NULL, wlan_wake_up_node);
-        if (!np) {
-                DHD_ERROR(("%s:Failed to get host wake up node\n", __FUNCTION__));
-                return -ENODEV;
-        }
-        wl_host_wake = of_get_named_gpio(np, "wl_host_wake", 0);
-        if (wl_host_wake >= 0) {
-                gpio_request(wl_host_wake, "WL_HOST_WAKE");
-                gpio_direction_input(wl_host_wake);
-                brcm_wake_irq = gpio_to_irq(wl_host_wake);
-        }
+	/* Get wl_host_wake gpio */
+	wl_host_wake = of_get_named_gpio(np, "wl_host_wake", 0);
+	if (wl_host_wake >= 0) {
+		gpio_request(wl_host_wake, "WL_HOST_WAKE");
+		gpio_direction_input(wl_host_wake);
+		brcm_wake_irq = gpio_to_irq(wl_host_wake);
+	}
 
-        if (gpio_request(gpio_wl_reg_on, "WL_REG_ON"))
-                DHD_ERROR(("%s: Failed to request gpio %d for WL_REG_ON\n",
-                        __FUNCTION__, gpio_wl_reg_on));
-        else
-                DHD_INFO(("%s: gpio_request WL_REG_ON done\n", __FUNCTION__));
+	if (gpio_request(gpio_wl_reg_on, "WL_REG_ON"))
+		DHD_ERROR(("%s: Failed to request gpio %d for WL_REG_ON\n",
+			 __FUNCTION__, gpio_wl_reg_on));
+	else
+		DHD_INFO(("%s: gpio_request WL_REG_ON done\n", __FUNCTION__));
 
-        if (gpio_direction_output(gpio_wl_reg_on, 1))
-                DHD_ERROR(("%s: WL_REG_ON failed to pull up\n", __FUNCTION__));
-        else
-                DHD_INFO(("%s: WL_REG_ON is pulled up\n", __FUNCTION__));
+	if (gpio_direction_output(gpio_wl_reg_on, 1))
+		DHD_ERROR(("%s: WL_REG_ON failed to pull up\n", __FUNCTION__));
+	else
+		DHD_INFO(("%s: WL_REG_ON is pulled up\n", __FUNCTION__));
 
-        if (gpio_get_value(gpio_wl_reg_on))
-                DHD_INFO(("%s: Initial WL_REG_ON: [%d]\n",
-                        __FUNCTION__, gpio_get_value(gpio_wl_reg_on)));
+	if (gpio_get_value(gpio_wl_reg_on))
+		DHD_INFO(("%s: Initial WL_REG_ON: [%d]\n",
+			__FUNCTION__, gpio_get_value(gpio_wl_reg_on)));
 	return 0;
 }
 
@@ -843,5 +950,12 @@ void __exit dhd_wlan_exit(void)
 		kfree(wlan_static_if_flow_lkup);
 #endif
 #endif /* CONFIG_BCMDHD_USE_STATIC_BUF */
+
+	if (NULL != reg_rf) {
+		regulator_put(reg_rf);
+	}
+
+	(void)dhd_wlan_pinctrl_setup(false);
+
 	return;
 }
