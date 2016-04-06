@@ -1,0 +1,549 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	htc,htc_nc_pins {
+		compatible = "htc,nc_pin";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&marlin_nc_pins_in_pd &marlin_nc_pins_out_low>;
+	};
+};
+
+&tlmm {
+	marlin_nc_pins_in_pd {
+		marlin_nc_pins_in_pd: marlin_nc_pins_in_pd {
+			mux {
+				pins = "gpio8", "gpio15", "gpio29", "gpio63", "gpio69", "gpio75", "gpio76", "gpio77", "gpio78", "gpio79",
+					"gpio90", "gpio91", "gpio92", "gpio108", "gpio122", "gpio132", "gpio135", "gpio143";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio8", "gpio15", "gpio29", "gpio63", "gpio69", "gpio75", "gpio76", "gpio77", "gpio78", "gpio79",
+					"gpio90", "gpio91", "gpio92", "gpio108", "gpio122", "gpio132", "gpio135", "gpio143";
+				drive-strength = <2>;		/* 2 mA */
+				bias-pull-down;			/* PULL DOWN */
+			};
+		};
+	};
+
+	marlin_nc_pins_out_low {
+		marlin_nc_pins_out_low: marlin_nc_pins_out_low {
+			mux {
+				pins = "gpio32", "gpio33", "gpio85", "gpio95", "gpio96", "gpio105", "gpio106", "gpio107", "gpio118";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio32", "gpio33", "gpio85", "gpio95", "gpio96", "gpio105", "gpio106", "gpio107", "gpio118";
+				drive-strength = <2>;		/* 2 mA */
+				output-low;			/* OUTPUT LOW */
+			};
+		};
+	};
+};
+
+&soc {
+	tlmm: pinctrl@01010000 {
+		/* gpio8 */
+			/* 8 9 10 11 */
+			spi_10 {
+				spi_10_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				spi_10_sleep {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio15 */
+			cam_sensor_mclk2_active {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+			cam_sensor_mclk2_suspend {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+			setb_3 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio29 */
+			setb_12 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+			/* 29 125 */
+			ts_mux_sbc {
+				ts_active_sbc {
+					mux {
+						/delete-property/ pins;
+					};
+					config_sbc {
+						/delete-property/ pins;
+					};
+				};
+				ts_suspend_sbc {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio32 */
+		/* gpio33 */
+			mdss_hdmi_ddc_active {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+			mdss_hdmi_ddc_suspend {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio63 */
+			seta_5 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio69 */
+			spkr_i2s_clk_pin {
+				spkr_i2s_clk_sleep: spkr_i2s_clk_sleep {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				spkr_i2s_clk_active: spkr_i2s_clk_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio75 */
+			seta_11 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio76 */
+			seta_12 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio77 */
+			seta_13 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio78 */
+			pmx_fm_status {
+				fm_status_int_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				fm_status_int_suspend {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+			tert_tdm_dout {
+				tert_tdm_dout_sleep {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				tert_tdm_dout_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio79 */
+
+		/* gpio85 */
+			seta_14 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+			/* 85 86 87 88 */
+			spi_12 {
+				spi_12_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				spi_12_sleep {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio90 */
+			seta_18 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+			/* 89 90 91 */
+			tsif0_signals_active {
+				tsif1_clk {
+					/delete-property/ pins;
+				};
+				tsif1_en {
+					/delete-property/ pins;
+				};
+				tsif1_data {
+					/delete-property/ pins;
+				};
+				signals_cfg {
+					/delete-property/ pins;
+				};
+			};
+			/* 24 90 */
+			spi_0_cs {
+				spi_0_cs_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				spi_0_cs_sleep {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio91 */
+			setb_15 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio92 */
+			setb_16 {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio95 */
+			sdc2_cd_on {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+			sdc2_cd_off {
+				mux {
+					/delete-property/ pins;
+				};
+				config {
+					/delete-property/ pins;
+				};
+			};
+			/* 93 94 95 */
+			tsif1_signals_active {
+				tsif2_clk {
+					/delete-property/ pins;
+				};
+				tsif2_en {
+					/delete-property/ pins;
+				};
+				tsif2_data {
+					/delete-property/ pins;
+				};
+				signals_cfg {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio96 */
+			tsif1_sync_active {
+				tsif2_sync {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio105 */
+			pmx_adv7533 {
+				adv7533_0_switch_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				adv7533_0_switch_suspend {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio106 */
+			pmx_adv7533 {
+				adv7533_0_int_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				adv7533_0_int_suspend {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+			/* 106 108 112 */
+			mdm2ap {
+				mdm2ap_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				mdm2ap_sleep {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio107 */
+			pmx_adv7533 {
+				adv7533_1_switch_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+
+				adv7533_1_switch_suspend {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+			/* 107 109 111 */
+			ap2mdm {
+				ap2mdm_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				ap2mdm_sleep {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio108 */
+			pmx_adv7533 {
+				adv7533_1_int_active {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				adv7533_1_int_suspend {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio118 */
+			uart_notify_gpio {
+				config {
+					/delete-property/ pins;
+				};
+			};
+
+		/* gpio122 */
+
+		/* gpio132 */
+			pcie1 {
+				pcie1_wake_default {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+				pcie1_wake_sleep {
+					mux {
+						/delete-property/ pins;
+					};
+					config {
+						/delete-property/ pins;
+					};
+				};
+			};
+
+		/* gpio135 */
+		mdss_disp_bkl_active: mdss_disp_bkl_active {
+			config {
+				/delete-property/ pins;
+			};
+		};
+
+		mdss_disp_bkl_suspend: mdss_disp_bkl_suspend {
+			config {
+				/delete-property/ pins;
+			};
+		};
+
+		/* gpio143 */
+	};
+};
