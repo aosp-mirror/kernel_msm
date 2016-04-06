@@ -1,0 +1,331 @@
+&soc {
+	htc,pm8996-pmi8996-vreg {
+		compatible = "htc,vreg-dump";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		subtype_ctl_offset = <0x5>;
+		range_ctl_offset = <0x40>;
+		step_ctl_offset = <0x41>;
+		mode_ctl_offset = <0x45>;
+		en_ctl_offset = <0x46>;
+		pd_ctl_offset = <0x48>;
+		en_bit = <7>;
+		pd_bit = <7>;
+
+		vreg@0 {
+			reg = <0x0>;
+			vreg_name = "pm8996_s1";
+			base_addr = <0x11400>;
+			type = "ft2p5-smps";
+		};
+
+		vreg@1 {
+			reg = <0x1>;
+			vreg_name = "pm8996_s2";
+			base_addr = <0x11700>;
+			type = "ft2p5-smps";
+		};
+
+		vreg@2 {
+			reg = <0x2>;
+			vreg_name = "pm8996_s3";
+			base_addr = <0x11a00>;
+			type = "hf-smps";
+		};
+
+		vreg@3 {
+			reg = <0x3>;
+			vreg_name = "pm8996_s4";
+			base_addr = <0x11d00>;
+			type = "hf-smps";
+		};
+
+		vreg@4 {
+			reg = <0x4>;
+			vreg_name = "pm8996_s5";
+			base_addr = <0x12000>;
+			type = "hf-smps";
+		};
+
+		vreg@5 {
+			reg = <0x5>;
+			vreg_name = "pm8996_s6";
+			base_addr = <0x12300>;
+			type = "ft2p5-smps";
+		};
+
+		vreg@6 {
+			reg = <0x6>;
+			vreg_name = "pm8996_s7";
+			base_addr = <0x12600>;
+			type = "hf-smps";
+		};
+
+		vreg@7 {
+			reg = <0x7>;
+			vreg_name = "pm8996_s8";
+			base_addr = <0x12900>;
+			type = "ft2p5-smps";
+		};
+
+		vreg@8 {
+			reg = <0x8>;
+			vreg_name = "pm8996_s9";
+			base_addr = <0x12c00>;
+			type = "ft2p5-smps";
+		};
+
+		vreg@9 {
+			reg = <0x9>;
+			vreg_name = "pm8996_s10";
+			base_addr = <0x12f00>;
+			type = "ft2p5-smps";
+		};
+
+		vreg@a {
+			reg = <0xa>;
+			vreg_name = "pm8996_s11";
+			base_addr = <0x13200>;
+			type = "ft2p5-smps";
+		};
+
+		vreg@b {
+			reg = <0xb>;
+			vreg_name = "pm8996_s12";
+			base_addr = <0x13500>;
+			type = "ft2p5-smps";
+		};
+
+		vreg@c {
+			reg = <0xc>;
+			vreg_name = "pm8996_l1";
+			base_addr = <0x14000>;
+			type = "nldo";
+		};
+
+		vreg@d {
+			reg = <0xd>;
+			vreg_name = "pm8996_l2";
+			base_addr = <0x14100>;
+			type = "nldo";
+		};
+
+		vreg@e {
+			reg = <0xe>;
+			vreg_name = "pm8996_l3";
+			base_addr = <0x14200>;
+			type = "nldo";
+		};
+
+		vreg@f {
+			reg = <0xf>;
+			vreg_name = "pm8996_l4";
+			base_addr = <0x14300>;
+			type = "nldo";
+		};
+
+		vreg@10 {
+			reg = <0x10>;
+			vreg_name = "pm8996_l5";
+			base_addr = <0x14400>;
+			type = "pldo";
+		};
+
+		vreg@11 {
+			reg = <0x11>;
+			vreg_name = "pm8996_l6";
+			base_addr = <0x14500>;
+			type = "pldo";
+		};
+
+		vreg@12 {
+			reg = <0x12>;
+			vreg_name = "pm8996_l7";
+			base_addr = <0x14600>;
+			type = "pldo";
+		};
+
+		vreg@13 {
+			reg = <0x13>;
+			vreg_name = "pm8996_l8";
+			base_addr = <0x14700>;
+			type = "pldo";
+		};
+
+		vreg@14 {
+			reg = <0x14>;
+			vreg_name = "pm8996_l9";
+			base_addr = <0x14800>;
+			type = "pldo";
+		};
+
+		vreg@15 {
+			reg = <0x15>;
+			vreg_name = "pm8996_l10";
+			base_addr = <0x14900>;
+			type = "pldo";
+		};
+		vreg@16 {
+                        reg = <0x16>;
+                        vreg_name = "pm8996_l11";
+                        base_addr = <0x14a00>;
+                        type = "nldo";
+                };
+		vreg@17 {
+                        reg = <0x17>;
+                        vreg_name = "pm8996_l12";
+                        base_addr = <0x14b00>;
+                        type = "pldo";
+                };
+		vreg@18 {
+                        reg = <0x18>;
+                        vreg_name = "pm8996_l13";
+                        base_addr = <0x14c00>;
+                        type = "pldo";
+                };
+		vreg@19 {
+                        reg = <0x19>;
+                        vreg_name = "pm8996_l14";
+                        base_addr = <0x14d00>;
+                        type = "pldo";
+                };
+		vreg@1a {
+                        reg = <0x1a>;
+                        vreg_name = "pm8996_l15";
+                        base_addr = <0x14e00>;
+                        type = "pldo";
+                };
+		vreg@1b {
+                        reg = <0x1b>;
+                        vreg_name = "pm8996_l16";
+                        base_addr = <0x14f00>;
+                        type = "pldo";
+                };
+		vreg@1c {
+                        reg = <0x1c>;
+                        vreg_name = "pm8996_l17";
+                        base_addr = <0x15000>;
+                        type = "pldo";
+                };
+		vreg@1d {
+                        reg = <0x1d>;
+                        vreg_name = "pm8996_l18";
+                        base_addr = <0x15100>;
+                        type = "pldo";
+                };
+		vreg@1e {
+                        reg = <0x1e>;
+                        vreg_name = "pm8996_l19";
+                        base_addr = <0x15200>;
+                        type = "pldo";
+                };
+		vreg@1f {
+                        reg = <0x1f>;
+                        vreg_name = "pm8996_l20";
+                        base_addr = <0x15300>;
+                        type = "pldo";
+                };
+		vreg@20 {
+                        reg = <0x20>;
+                        vreg_name = "pm8996_l21";
+                        base_addr = <0x15400>;
+                        type = "pldo";
+                };
+		vreg@21 {
+                        reg = <0x21>;
+                        vreg_name = "pm8996_l22";
+                        base_addr = <0x15500>;
+                        type = "pldo";
+                };
+		vreg@22 {
+                        reg = <0x22>;
+                        vreg_name = "pm8996_l23";
+                        base_addr = <0x15600>;
+                        type = "pldo";
+                };
+		vreg@23 {
+                        reg = <0x23>;
+                        vreg_name = "pm8996_l24";
+                        base_addr = <0x15700>;
+                        type = "pldo";
+                };
+		vreg@24 {
+                        reg = <0x24>;
+                        vreg_name = "pm8996_l25";
+                        base_addr = <0x15800>;
+                        type = "pldo";
+                };
+		vreg@25 {
+                        reg = <0x25>;
+                        vreg_name = "pm8996_l26";
+                        base_addr = <0x15900>;
+                        type = "nldo";
+                };
+		vreg@26 {
+                        reg = <0x26>;
+                        vreg_name = "pm8996_l27";
+                        base_addr = <0x15a00>;
+                        type = "nldo";
+                };
+		vreg@27 {
+                        reg = <0x27>;
+                        vreg_name = "pm8996_l28";
+                        base_addr = <0x15b00>;
+                        type = "nldo";
+                };
+		vreg@28 {
+                        reg = <0x28>;
+                        vreg_name = "pm8996_l29";
+                        base_addr = <0x15c00>;
+                        type = "pldo";
+                };
+		vreg@29 {
+                        reg = <0x29>;
+                        vreg_name = "pm8996_l30";
+                        base_addr = <0x15d00>;
+                        type = "pldo";
+                };
+		vreg@2a {
+                        reg = <0x2a>;
+                        vreg_name = "pm8996_l31";
+                        base_addr = <0x15e00>;
+                        type = "nldo";
+                };
+		vreg@2b {
+                        reg = <0x2b>;
+                        vreg_name = "pm8996_l32";
+                        base_addr = <0x15f00>;
+                        type = "pldo";
+                };
+		vreg@2c {
+                        reg = <0x2c>;
+                        vreg_name = "pm8996_lvs1";
+                        base_addr = <0x18000>;
+                        type = "lvs";
+                };
+		vreg@2d {
+                        reg = <0x2d>;
+                        vreg_name = "pm8996_lvs2";
+                        base_addr = <0x18100>;
+                        type = "lvs";
+                };
+		vreg@2e {
+                        reg = <0x2e>;
+                        vreg_name = "pmi8996_s1";
+                        base_addr = <0x31400>;
+                        type = "hf-smps";
+                };
+		vreg@2f {
+                        reg = <0x2f>;
+                        vreg_name = "pmi8996_s2";
+                        base_addr = <0x31700>;
+                        type = "ft2p5-smps";
+                };
+		vreg@30 {
+                        reg = <0x30>;
+                        vreg_name = "pmi8996_s3";
+                        base_addr = <0x31a00>;
+                        type = "ft2p5-smps";
+                };
+	};
+};

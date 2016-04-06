@@ -37,6 +37,11 @@
 #include <linux/ctype.h>
 #include "spmi-dbgfs.h"
 
+#ifdef CONFIG_HTC_POWER_DEBUG
+#include <linux/of_device.h>
+#include <linux/debugfs.h>
+#endif
+
 #define ADDR_LEN	 6	/* 5 byte address + 1 space character */
 #define CHARS_PER_ITEM   3	/* Format is 'XX ' */
 #define ITEMS_PER_LINE	16	/* 16 data items per line */
@@ -627,6 +632,133 @@ struct dentry *spmi_dfs_get_root(void)
 	return dbgfs_data.root;
 }
 
+#ifdef CONFIG_HTC_POWER_DEBUG
+#define VREG_DUMP_DRIVER_NAME   "htc,vreg-dump"
+#define VREG_NAME_VOL_LEN       32
+#define VREG_EN_PD_MODE_LEN     8
+#define VREG_DUMP_LEN           128
+
+struct _vreg {
+        int id;
+        int type;
+        const char *name;
+        u32 base_addr;
+};
+
+struct _qpnp_vregs {
+        struct _vreg *vregs;
+        struct spmi_controller *ctrl;
+        u32 en_ctl_offset;
+        u32 pd_ctl_offset;
+        u32 mode_ctl_offset;
+        u32 subtype_ctl_offset;
+        u32 range_ctl_offset;
+        u32 step_ctl_offset;
+        u32 en_bit;
+        u32 pd_bit;
+        int total_vregs;
+};
+
+enum {
+        VREG_TYPE_NLDO,
+        VREG_TYPE_PLDO,
+        VREG_TYPE_ULT_NLDO,
+        VREG_TYPE_ULT_PLDO,
+        VREG_TYPE_HF_SMPS,
+        VREG_TYPE_FT_SMPS,
+	VREG_TYPE_FT2P5_SMPS,
+	VREG_TYPE_ULT_LO_SMPS,
+        VREG_TYPE_ULT_HO_SMPS,
+        VREG_TYPE_BOOST_SMPS,
+        VREG_TYPE_BOOST_BYP_SMPS,
+	VREG_TYPE_LVS,
+};
+struct qpnp_voltage_range {
+        int             min_uV;
+        int             max_uV;
+        int             step_uV;
+        int             set_point_min_uV;
+        unsigned        n_voltages;
+        u8              range_sel;
+};
+
+#define VREG_IS_LDO(type)       (type == VREG_TYPE_NLDO || type == VREG_TYPE_PLDO)
+#define VREG_IS_ULT_LDO(type)   (type == VREG_TYPE_ULT_NLDO || type == VREG_TYPE_ULT_PLDO)
+#define VREG_IS_SMPS(type)      (type == VREG_TYPE_HF_SMPS || type == VREG_TYPE_FT_SMPS || type == VREG_TYPE_FT2P5_SMPS\
+				|| type == VREG_TYPE_BOOST_SMPS || type == VREG_TYPE_BOOST_BYP_SMPS)
+#define VREG_IS_ULT_SMPS(type)  (type == VREG_TYPE_ULT_LO_SMPS || type == VREG_TYPE_ULT_HO_SMPS)
+
+#define VOLTAGE_RANGE(_range_sel, _min_uV, _set_point_min_uV, _max_uV, \
+                        _step_uV) \
+        { \
+                .min_uV                 = _min_uV, \
+                .set_point_min_uV       = _set_point_min_uV, \
+                .max_uV                 = _max_uV, \
+                .step_uV                = _step_uV, \
+                .range_sel              = _range_sel, \
+        }
+
+#define SET_POINTS(_ranges) \
+{ \
+        .range  = _ranges, \
+        .count  = ARRAY_SIZE(_ranges), \
+};
+
+static struct qpnp_voltage_range pldo_ranges[] = {
+        VOLTAGE_RANGE(2,  750000,  750000, 1537500, 12500),
+        VOLTAGE_RANGE(3, 1500000, 1550000, 3075000, 25000),
+        VOLTAGE_RANGE(4, 1750000, 3100000, 4900000, 50000),
+};
+
+static struct qpnp_voltage_range nldo1_ranges[] = {
+        VOLTAGE_RANGE(2,  750000,  750000, 1537500, 12500),
+};
+
+/*
+static struct qpnp_voltage_range nldo2_ranges[] = {
+        VOLTAGE_RANGE(1,  375000,  375000,  768750,  6250),
+        VOLTAGE_RANGE(2,  750000,  775000, 1537500, 12500),
+};
+*/
+
+static struct qpnp_voltage_range nldo3_ranges[] = {
+        VOLTAGE_RANGE(0,  375000,  375000, 1537500, 12500),
+};
+
+static struct qpnp_voltage_range smps_ranges[] = {
+        VOLTAGE_RANGE(0,  375000,  375000, 1562500, 12500),
+        VOLTAGE_RANGE(1, 1550000, 1575000, 3125000, 25000),
+};
+
+static struct qpnp_voltage_range ftsmps_ranges[] = {
+        VOLTAGE_RANGE(0,       0,  350000, 1275000,  5000),
+        VOLTAGE_RANGE(1,       0, 1280000, 2040000, 10000),
+};
+
+static struct qpnp_voltage_range ftsmps2p5_ranges[] = {
+        VOLTAGE_RANGE(0,   80000,  350000, 1355000,  5000),
+        VOLTAGE_RANGE(1,  160000, 1360000, 2200000,  10000),
+};
+
+static struct qpnp_voltage_range boost_ranges[] = {
+        VOLTAGE_RANGE(0, 4000000, 4000000, 5550000, 50000),
+};
+
+static struct qpnp_voltage_range boost_byp_ranges[] = {
+        VOLTAGE_RANGE(0, 2500000, 2500000, 5650000, 50000),
+};
+
+static struct qpnp_voltage_range ult_nldo_ranges[] = {
+	VOLTAGE_RANGE(0,  375000,  375000, 1537500, 12500),
+};
+
+static struct qpnp_voltage_range ult_pldo_ranges[] = {
+	VOLTAGE_RANGE(0, 1750000, 1750000, 3337500, 12500),
+};
+
+struct _qpnp_vregs qpnp_vregs;
+#endif
+
 /*
  * spmi_dfs_add_controller: adds new spmi controller entry
  * @return zero on success
@@ -686,6 +818,9 @@ int spmi_dfs_add_controller(struct spmi_controller *ctrl)
 	}
 
 	list_add(&ctrl_data->node, &dbgfs_data.ctrl);
+#ifdef CONFIG_HTC_POWER_DEBUG
+	qpnp_vregs.ctrl = ctrl;
+#endif
 	return 0;
 
 err_remove_fs:
@@ -776,6 +911,593 @@ static void __exit spmi_dfs_destroy(void)
 }
 
 module_exit(spmi_dfs_destroy);
+
+#ifdef CONFIG_HTC_POWER_DEBUG
+static int htc_vreg_is_enabled(struct _qpnp_vregs *qpnp_vregs, struct _vreg *vreg)
+{
+        u8 val;
+        int ret = 0, rc = 0;
+
+        ret = spmi_read_data(qpnp_vregs->ctrl, &val, vreg->base_addr + qpnp_vregs->en_ctl_offset, 1);
+        if (ret < 0) {
+                pr_err("%s: SPMI read failed, err = %d\n", __func__, ret);
+                return ret;
+        }
+
+        if (val & (1 << qpnp_vregs->en_bit))
+                rc = 1; /* Enable */
+        else
+                rc = 0; /* Disable */
+
+        return rc;
+}
+
+static int htc_vreg_is_pulldown(struct _qpnp_vregs *qpnp_vregs, struct _vreg *vreg)
+{
+        u8 val;
+        int ret = 0, rc = 0;
+
+        ret = spmi_read_data(qpnp_vregs->ctrl, &val, vreg->base_addr + qpnp_vregs->pd_ctl_offset, 1);
+        if (ret < 0) {
+                pr_err("%s: SPMI read failed, err = %d\n", __func__, ret);
+                return ret;
+        }
+
+        if (val & (1 << qpnp_vregs->pd_bit))
+                rc = 1; /* Pull down */
+        else
+                rc = 0; /* Doesn't pull down */
+
+        return rc;
+}
+
+static int htc_vreg_get_mode(struct _qpnp_vregs *qpnp_vregs, struct _vreg *vreg)
+{
+        u8 val;
+        int ret = 0;
+
+        ret = spmi_read_data(qpnp_vregs->ctrl, &val, vreg->base_addr + qpnp_vregs->mode_ctl_offset, 1);
+        if (ret < 0) {
+                pr_err("%s: SPMI read failed, err = %d\n", __func__, ret);
+                return ret;
+        }
+
+        return val;
+}
+
+static int htc_vreg_ldo_get_voltage(struct _qpnp_vregs *qpnp_vregs, struct _vreg *vreg)
+{
+        int i = 0;
+        u8 range = 0;
+        u8 voltage = 0;
+        u32 step = 0;
+        u32 vmin = 0;
+        int ret = 0;
+
+        /*
+         * Select range, step & vmin based on input voltage & type of LDO
+         * LDO can operate in low, mid, high power mode
+         */
+        ret= spmi_read_data(qpnp_vregs->ctrl, &range, vreg->base_addr + qpnp_vregs->range_ctl_offset, 1);
+        if (ret < 0) {
+                pr_err("SPMI read failed, err = %d\n", ret);
+                return -1;
+        }
+
+        ret= spmi_read_data(qpnp_vregs->ctrl, &voltage, vreg->base_addr + qpnp_vregs->step_ctl_offset, 1);
+        if (ret < 0) {
+                pr_err("SPMI read failed, err = %d\n", ret);
+                return -1;
+        }
+
+        if (vreg->type == VREG_TYPE_PLDO) {
+		for (i = 0; i < ARRAY_SIZE(pldo_ranges); i++) {
+			if (pldo_ranges[i].range_sel == range) {
+				step = pldo_ranges[i].step_uV;
+				vmin = pldo_ranges[i].min_uV;
+				break;
+			}
+		}
+        } else if (vreg->type == VREG_TYPE_NLDO) {
+                if (range == 2) {
+                        step = nldo1_ranges[0].step_uV;
+                        vmin = nldo1_ranges[0].min_uV;
+                } else {
+                        step = nldo3_ranges[0].step_uV;
+                        vmin = nldo3_ranges[0].min_uV;
+                }
+        } else {
+                pr_err("%s: vreg type = %d, range = %d, not support\n", __func__, range, vreg->type);
+                // FIXME: Remove hard code
+                if (range == 0) {
+                        step = 120000;
+                        vmin = 1380000;
+                } else if (range == 1) {
+                        step = 60000;
+                        vmin = 690000;
+                } else {
+                        return 0;
+                }
+        }
+
+        return (step * voltage + vmin);
+}
+
+static int htc_vreg_ult_ldo_get_voltage(struct _qpnp_vregs *qpnp_vregs, struct _vreg *vreg)
+{
+	u8 voltage = 0;
+	u32 step = 0;
+	u32 vmin = 0;
+	int ret = 0;
+
+	ret= spmi_read_data(qpnp_vregs->ctrl, &voltage, vreg->base_addr + qpnp_vregs->step_ctl_offset, 1);
+	if (ret < 0) {
+		pr_err("SPMI read failed, err = %d\n", ret);
+		return -1;
+	}
+
+	if (vreg->type == VREG_TYPE_ULT_PLDO) {
+		step = ult_pldo_ranges[0].step_uV;
+		vmin = ult_pldo_ranges[0].min_uV;
+	} else if (vreg->type == VREG_TYPE_ULT_NLDO) {
+		step = ult_nldo_ranges[0].step_uV;
+		vmin = ult_nldo_ranges[0].min_uV;
+	}
+
+	return (step * voltage + vmin);
+}
+
+static int htc_vreg_smps_get_voltage(struct _qpnp_vregs *qpnp_vregs, struct _vreg *vreg)
+{
+        int i = 0;
+        u8 range = 0;
+        u8 voltage = 0;
+        u32 step = 0;
+        u32 vmin = 0;
+        int ret = 0;
+
+        ret = spmi_read_data(qpnp_vregs->ctrl, &range, vreg->base_addr + qpnp_vregs->range_ctl_offset, 1);
+        if (ret < 0) {
+                pr_err("SPMI read failed, err = %d\n", ret);
+                return -1;
+        }
+
+        ret = spmi_read_data(qpnp_vregs->ctrl, &voltage, vreg->base_addr + qpnp_vregs->step_ctl_offset, 1);
+        if (ret < 0) {
+                pr_err("SPMI read failed, err = %d\n", ret);
+                return -1;
+        }
+
+	if (vreg->type == VREG_TYPE_HF_SMPS) {
+		for (i = 0; i < ARRAY_SIZE(smps_ranges); i++) {
+			if (smps_ranges[i].range_sel == range) {
+				step = smps_ranges[i].step_uV;
+				vmin = smps_ranges[i].min_uV;
+				break;
+			}
+		}
+	} else if (vreg->type == VREG_TYPE_FT_SMPS) {
+		for (i = 0; i < ARRAY_SIZE(ftsmps_ranges); i++) {
+			if (ftsmps_ranges[i].range_sel == range) {
+				step = ftsmps_ranges[i].step_uV;
+				vmin = ftsmps_ranges[i].min_uV;
+				break;
+			}
+		}
+	} else if (vreg->type == VREG_TYPE_FT2P5_SMPS) {
+		for (i = 0; i < ARRAY_SIZE(ftsmps2p5_ranges); i++) {
+			if (ftsmps2p5_ranges[i].range_sel == range) {
+				step = ftsmps2p5_ranges[i].step_uV;
+				vmin = ftsmps2p5_ranges[i].min_uV;
+				break;
+			}
+		}
+	} else if (vreg->type == VREG_TYPE_BOOST_BYP_SMPS) {
+		step = boost_byp_ranges[0].step_uV;
+		vmin = boost_byp_ranges[0].min_uV;
+	} else {
+	    step = boost_ranges[0].step_uV;
+	    vmin = boost_ranges[0].min_uV;
+	}
+
+        return (step * voltage + vmin);
+}
+
+static int htc_vreg_ult_smps_get_voltage(struct _qpnp_vregs *qpnp_vregs, struct _vreg *vreg)
+{
+	u8 subtype = 0;
+	u8 voltage = 0;
+	u32 step = 0;
+	u32 vmin = 0;
+	int ret = 0;
+
+	/* Read subtype control for ULT SMPS */
+	ret = spmi_read_data(qpnp_vregs->ctrl, &subtype, vreg->base_addr + qpnp_vregs->subtype_ctl_offset, 1);
+	if (ret < 0) {
+		pr_err("SPMI read failed, err = %d\n", ret);
+		return -1;
+	}
+
+	ret = spmi_read_data(qpnp_vregs->ctrl, &voltage, vreg->base_addr + qpnp_vregs->step_ctl_offset, 1);
+	if (ret < 0) {
+		pr_err("SPMI read failed, err = %d\n", ret);
+		return -1;
+	}
+
+	/*
+	 * For subtype 0D, 0E and 0F: Vout (mV) = 375 + Vset*12.5 for
+	 * (0000000~1011111, 7 bit); Vout (mV) = 750 + Vset*25 for
+	 * (1100000~1111111, last 5 bit);
+	 * For subtype 10: Vout (mV) = 1550 + Vset*25 for (000000~111111,
+	 * 6bit), the MSB is ignored.
+	*/
+	if (subtype == 0xd || subtype == 0xe || subtype == 0xf) {
+		if (voltage > 0x5f) {
+			vmin = 750000;
+			step = 25000;
+			voltage &= 0x1f;
+		} else {
+			vmin = 375000;
+			step = 12500;
+		}
+	} else if (subtype == 0x10) {
+		vmin = 1550000;
+		step = 25000;
+		voltage &= 0x1f;
+	}
+
+	return (step * voltage + vmin);
+}
+
+static int htc_vreg_get_voltage(struct _qpnp_vregs *qpnp_vregs, struct _vreg *vreg)
+{
+        int ret = 0;
+
+        if (VREG_IS_LDO(vreg->type))
+                ret = htc_vreg_ldo_get_voltage(qpnp_vregs, vreg);
+        else if (VREG_IS_ULT_LDO(vreg->type))
+                ret = htc_vreg_ult_ldo_get_voltage(qpnp_vregs, vreg);
+        else if (VREG_IS_SMPS(vreg->type))
+                ret = htc_vreg_smps_get_voltage(qpnp_vregs, vreg);
+        else if (VREG_IS_ULT_SMPS(vreg->type))
+                ret = htc_vreg_ult_smps_get_voltage(qpnp_vregs, vreg);
+
+        return ret;
+}
+
+static int htc_vreg_is_valid(int vreg_id)
+{
+        int id_check = 0, dump_check = 1, i = 0;
+
+        for (i = 0; i < qpnp_vregs.total_vregs; i++) {
+                if (vreg_id == qpnp_vregs.vregs[i].id) {
+                        id_check = 1;
+                        break;
+                }
+        }
+
+        return (id_check && dump_check);
+}
+
+int htc_vreg_dump(int vreg_id, struct seq_file *m, char *vreg_buffer, int curr_len)
+{
+        struct _vreg *vreg = NULL;
+        int len = 0;
+        int enable = 0;
+        int mode = 0;
+        int pd = 0;
+        int vol = 0;
+        char name_buf[VREG_NAME_VOL_LEN];
+        char en_buf[VREG_EN_PD_MODE_LEN];
+        char pd_buf[VREG_EN_PD_MODE_LEN];
+        char mode_buf[VREG_EN_PD_MODE_LEN];
+        char vol_buf[VREG_NAME_VOL_LEN];
+        char vreg_buf[VREG_DUMP_LEN];
+
+        if (!htc_vreg_is_valid(vreg_id))
+                return curr_len;
+
+	vreg = &qpnp_vregs.vregs[vreg_id];
+
+        /* Get vreg name */
+        memset(name_buf, 0, VREG_NAME_VOL_LEN);
+        len = strlen(vreg->name);
+        if (len >= VREG_NAME_VOL_LEN)
+                len = VREG_NAME_VOL_LEN - 1;
+        memcpy(name_buf, vreg->name, len);
+        name_buf[len] = '\0';
+
+        /* Does vreg enable? */
+        memset(en_buf, 0, VREG_EN_PD_MODE_LEN);
+        enable = htc_vreg_is_enabled(&qpnp_vregs, vreg);
+        if (enable < 0)
+                sprintf(en_buf, "NULL");
+        else if (enable)
+                sprintf(en_buf, "YES ");
+        else
+                sprintf(en_buf, "NO  ");
+
+        /* Get vreg mode*/
+        memset(mode_buf, 0, VREG_EN_PD_MODE_LEN);
+        mode = htc_vreg_get_mode(&qpnp_vregs, vreg);
+        /*
+             *  H: Force NPM/ Force PWM
+             *  A: Auto Mode
+             *  B: Bypass Mode
+             *  W: PMIC Awake (Sleep_B)
+             *  U: Unused
+            */
+        if (vreg->type < 4) {
+                mode_buf[0] = mode & 0x80 ? 'H' : '_';
+                mode_buf[1] = mode & 0x40 ? 'A' : '_';
+                mode_buf[2] = mode & 0x20 ? 'B' : '_';
+                mode_buf[3] = mode & 0x10 ? 'W' : '_';
+        } else if (vreg->type == VREG_TYPE_HF_SMPS) {
+                mode_buf[0] = mode & 0x80 ? 'H' : '_';
+                mode_buf[1] = mode & 0x40 ? 'A' : '_';
+                mode_buf[2] = 'U';
+                mode_buf[3] = mode & 0x10 ? 'W' : '_';
+        } else if (vreg->type == VREG_TYPE_FT_SMPS
+		|| vreg->type == VREG_TYPE_FT2P5_SMPS) {
+                mode_buf[0] = mode & 0x80 ? 'H' : '_';
+                mode_buf[1] = mode & 0x40 ? 'A' : '_';
+                mode_buf[2] = 'U';
+                mode_buf[3] = 'U';
+        } else if (vreg->type == VREG_TYPE_ULT_LO_SMPS) {
+                mode_buf[0] = mode & 0x80 ? 'H' : '_';
+                mode_buf[1] = 'U';
+                mode_buf[2] = 'U';
+                mode_buf[3] = mode & 0x10 ? 'W' : '_';
+	} else if (vreg->type == VREG_TYPE_ULT_HO_SMPS) {
+                mode_buf[0] = mode & 0x80 ? 'H' : '_';
+                mode_buf[1] = 'U';
+                mode_buf[2] = 'U';
+                mode_buf[3] = mode & 0x10 ? 'W' : '_';
+        } else if (vreg->type == VREG_TYPE_LVS) {
+                mode_buf[0] = mode & 0x80 ? 'H' : '_';
+                mode_buf[1] = mode & 0x40 ? 'A' : '_';
+                mode_buf[2] = 'U';
+                mode_buf[3] = mode & 0x10 ? 'W' : '_';
+        } else {
+                mode_buf[0] = 'U';
+                mode_buf[1] = 'U';
+                mode_buf[2] = 'U';
+                mode_buf[3] = 'U';
+        }
+
+        /* Does vreg pull down? */
+        memset(pd_buf, 0, VREG_EN_PD_MODE_LEN);
+        pd = htc_vreg_is_pulldown(&qpnp_vregs, vreg);
+        if (pd < 0)
+                sprintf(pd_buf, "NULL");
+        else if (pd)
+                sprintf(pd_buf, "YES ");
+        else
+                sprintf(pd_buf, "NO  ");
+
+        /* Get vreg voltage */
+        memset(vol_buf, 0, VREG_NAME_VOL_LEN);
+        vol = htc_vreg_get_voltage(&qpnp_vregs, vreg);
+        if (vol < 0)
+                sprintf(vol_buf, "NULL");
+        else
+                sprintf(vol_buf, "%d uV", vol);
+
+        if (m)
+                seq_printf(m, "VREG %s: [Enable]%s, [Mode]%s, [PD]%s, [Vol]%s\n", name_buf, en_buf, mode_buf, pd_buf, vol_buf);
+        else
+                pr_info("VREG %s: [Enable]%s, [Mode]%s, [PD]%s, [Vol]%s\n", name_buf, en_buf, mode_buf, pd_buf, vol_buf);
+
+        if (vreg_buffer) {
+                sprintf(vreg_buf, "VREG %s: [Enable]%s, [Mode]%s, [PD]%s, [Vol]%s\n", name_buf, en_buf, mode_buf, pd_buf, vol_buf);
+                vreg_buf[VREG_DUMP_LEN - 1] = '\0';
+                curr_len += sprintf(vreg_buffer + curr_len, vreg_buf);
+        }
+
+        return curr_len;
+}
+
+int htc_vregs_dump(char *vreg_buffer, int curr_len)
+{
+        int i;
+        char *title_msg = "------------ PMIC VREG -------------\n";
+
+        if (vreg_buffer)
+                curr_len += sprintf(vreg_buffer + curr_len, "%s\n", title_msg);
+
+        pr_info("%s", title_msg);
+        for (i = 0; i < qpnp_vregs.total_vregs; i++)
+                curr_len = htc_vreg_dump(i, NULL, vreg_buffer, curr_len);
+
+        return curr_len;
+}
+
+static int list_vregs_show(struct seq_file *m, void *unused)
+{
+        int i;
+        char *title_msg = "------------ PMIC VREG -------------\n";
+
+        if (m)
+                seq_printf(m, title_msg);
+
+        for (i = 0; i < qpnp_vregs.total_vregs; i++)
+                htc_vreg_dump(i, m, NULL, 0);
+
+        return 0;
+}
+
+static int list_vregs_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, list_vregs_show, inode->i_private);
+}
+
+static const struct file_operations list_vregs_fops = {
+        .open = list_vregs_open,
+        .read = seq_read,
+        .llseek = seq_lseek,
+        .release = single_release,
+};
+
+static int htc_vreg_dump_debugfs_init(void)
+{
+        static struct dentry *debugfs_vregs_base;
+
+        debugfs_vregs_base = debugfs_create_dir("htc_vreg", NULL);
+
+        if (!debugfs_vregs_base)
+                return -ENOMEM;
+
+        if (!debugfs_create_file("list_vregs", S_IRUGO, debugfs_vregs_base,
+                                NULL, &list_vregs_fops))
+                return -ENOMEM;
+
+        return 0;
+}
+
+struct vreg_type_lookup_table {
+	uint32_t type;
+	const char *type_name;
+};
+
+static int htc_vreg_get_type(struct device_node *node,
+			char *key, uint32_t *val)
+{
+	int i;
+	static struct vreg_type_lookup_table vreg_type_lookup[] = {
+		{VREG_TYPE_NLDO, "nldo"},
+		{VREG_TYPE_ULT_NLDO, "ult-nldo"},
+		{VREG_TYPE_PLDO, "pldo"},
+		{VREG_TYPE_ULT_PLDO, "ult-pldo"},
+		{VREG_TYPE_HF_SMPS, "hf-smps"},
+		{VREG_TYPE_FT_SMPS, "ft-smps"},
+		{VREG_TYPE_FT2P5_SMPS, "ft2p5-smps"},
+		{VREG_TYPE_ULT_LO_SMPS, "ult-lo-smps"},
+		{VREG_TYPE_ULT_HO_SMPS, "ult-ho-smps"},
+		{VREG_TYPE_BOOST_SMPS, "boost-smps"},
+		{VREG_TYPE_BOOST_BYP_SMPS, "boost-byp-smps"},
+		{VREG_TYPE_LVS, "lvs"}
+	};
+	const char *type_str;
+	int ret;
+
+	ret = of_property_read_string(node, key, &type_str);
+	if (!ret) {
+		ret = -EINVAL;
+		for (i = 0; i < ARRAY_SIZE(vreg_type_lookup); i++) {
+			if (!strcmp(type_str, vreg_type_lookup[i].type_name)) {
+				*val = vreg_type_lookup[i].type;
+				ret = 0;
+				break;
+			}
+		}
+	}
+	return ret;
+}
+
+static int htc_vreg_dump_probe(struct platform_device *pdev)
+{
+	struct device_node *node = NULL;
+	struct _vreg *vreg = NULL;
+	char *key = NULL;
+	int num_vreg = 0;
+	int idx = 0;
+	int ret;
+
+	for_each_child_of_node(pdev->dev.of_node, node)
+		num_vreg++;
+        qpnp_vregs.total_vregs = num_vreg;
+
+	qpnp_vregs.vregs = kzalloc(num_vreg * sizeof(struct _vreg), GFP_KERNEL);
+	if (!qpnp_vregs.vregs)
+		return -ENOMEM;
+
+	for_each_child_of_node(pdev->dev.of_node, node) {
+		vreg = &qpnp_vregs.vregs[idx];
+		vreg->id = idx++;
+
+		key = "vreg_name";
+		ret = of_property_read_string(node, key, &vreg->name);
+		if (ret)
+			pr_err("%s: Fail to get vreg name\n", __func__);
+
+		key = "base_addr";
+		ret = of_property_read_u32(node, key, &vreg->base_addr);
+		if (ret)
+			pr_err("%s: Fail to get vreg base address\n", __func__);
+
+		key = "type";
+		ret = htc_vreg_get_type(node, key, &vreg->type);
+		if (ret)
+			pr_err("%s: Fail to get vreg type\n", __func__);
+	}
+	node = pdev->dev.of_node;
+        key = "en_ctl_offset";
+        ret = of_property_read_u32(node, key, &qpnp_vregs.en_ctl_offset);
+        if (ret)
+		pr_err("%s: Fail to get enable control offset\n", __func__);
+
+        key = "pd_ctl_offset";
+        ret = of_property_read_u32(node, key, &qpnp_vregs.pd_ctl_offset);
+        if (ret)
+		pr_err("%s: Fail to get pull down control offset\n", __func__);
+
+        key = "mode_ctl_offset";
+        ret = of_property_read_u32(node, key, &qpnp_vregs.mode_ctl_offset);
+        if (ret)
+		pr_err("%s: Fail to get mode control offset\n", __func__);
+
+	key = "subtype_ctl_offset";
+	ret = of_property_read_u32(node, key, &qpnp_vregs.subtype_ctl_offset);
+	if (ret)
+		pr_err("%s: Fail to get subtype control offset\n", __func__);
+
+	key = "range_ctl_offset";
+        ret = of_property_read_u32(node, key, &qpnp_vregs.range_ctl_offset);
+        if (ret)
+		pr_err("%s: Fail to get range control offset\n", __func__);
+
+	key = "step_ctl_offset";
+        ret = of_property_read_u32(node, key, &qpnp_vregs.step_ctl_offset);
+        if (ret)
+		pr_err("%s: Fail to get step control offset\n", __func__);
+
+        key = "en_bit";
+        ret = of_property_read_u32(node, key, &qpnp_vregs.en_bit);
+        if (ret)
+		pr_err("%s: Fail to get enable bit offset\n", __func__);
+
+        key = "pd_bit";
+        ret = of_property_read_u32(node, key, &qpnp_vregs.pd_bit);
+        if (ret)
+		pr_err("%s: Fail to get pull down bit offset\n", __func__);
+
+	htc_vreg_dump_debugfs_init();
+
+	return 0;
+}
+
+static struct of_device_id vreg_match_table[] = {
+	{ .compatible = VREG_DUMP_DRIVER_NAME, },
+	{}
+};
+
+
+static struct platform_driver htc_vreg_dump_driver = {
+	.probe		= htc_vreg_dump_probe,
+	.driver		= {
+		.name	= VREG_DUMP_DRIVER_NAME,
+		.of_match_table = vreg_match_table,
+		.owner = THIS_MODULE,
+	},
+};
+
+int __init htc_vreg_dump_init(void)
+{
+	return platform_driver_register(&htc_vreg_dump_driver);
+}
+
+late_initcall(htc_vreg_dump_init);
+#endif
 
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:spmi_debug_fs");

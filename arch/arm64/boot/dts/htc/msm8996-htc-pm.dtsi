@@ -13,6 +13,8 @@
 /*
  * msm8996-htc-pm.dtsi: common pm config of HTC msm8996 projects
  */
+#include "msm-pm8996-pmi8996-vreg-dump.dtsi"
+
 &spmi_bus {
 	qcom,pm8994@0 {
 		qcom,power-on@800 {

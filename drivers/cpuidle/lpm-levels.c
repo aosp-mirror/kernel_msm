@@ -62,6 +62,8 @@
 static remote_spinlock_t scm_handoff_lock;
 
 #ifdef CONFIG_HTC_POWER_DEBUG
+extern int htc_vregs_dump(char *vreg_buffer, int curr_len);
+
 enum {
 	MSM_PM_DEBUG_GPIO = BIT(9),
 	MSM_PM_DEBUG_VREG = BIT(13),
@@ -1077,7 +1079,7 @@ bool psci_enter_sleep(struct lpm_cluster *cluster, int idx, bool from_idle)
 				pr_info("The MSM_PM_DEBUG_GPIO turn on");
 			}
 #endif
-/*			if (MSM_PM_DEBUG_VREG & msm_pm_debug_mask) {
+			if (MSM_PM_DEBUG_VREG & msm_pm_debug_mask) {
                                  curr_len = 0;
                                  if (vreg_sleep_status_info) {
                                          memset(vreg_sleep_status_info, 0,
@@ -1089,7 +1091,7 @@ bool psci_enter_sleep(struct lpm_cluster *cluster, int idx, bool from_idle)
                                                          __func__);
                                          }
                                  }
-                                 curr_len = htc_vregs_dump(vreg_sleep_status_info, curr_len);*/
+                                 curr_len = htc_vregs_dump(vreg_sleep_status_info, curr_len);
                                  pr_info("The MSM_PM_DEBUG_VREGS turn on");
                          }
                 }
