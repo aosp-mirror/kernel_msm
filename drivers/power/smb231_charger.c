@@ -373,6 +373,11 @@ static int smb231_set_usb_chg_current(struct smb231_charger *chip)
 	if (rc) 
 		return rc;
 
+	//disable AICL
+	rc = smb231_masked_write(chip, HARD_LIMIT_TEMP, BIT(0), 0);
+	if (rc) 
+		return rc;
+
 	//System voltage = VBATT tracking (VBATT + 250mV)
 	rc = smb231_masked_write(chip, OTHER_CHG, (BIT(1) | BIT(0)), BIT(1));
 	if (rc) 
