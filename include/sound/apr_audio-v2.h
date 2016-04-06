@@ -899,10 +899,6 @@ struct adm_cmd_connect_afe_port_v5 {
 #define AFE_PORT_ID_SECONDARY_PCM_TX        0x100D
 #define AFE_PORT_ID_MULTICHAN_HDMI_RX       0x100E
 #define AFE_PORT_ID_SECONDARY_MI2S_RX_SD1	0x1010
-#define AFE_PORT_ID_TERTIARY_PCM_RX          0x1012
-#define AFE_PORT_ID_TERTIARY_PCM_TX          0x1013
-#define AFE_PORT_ID_QUATERNARY_PCM_RX        0x1014
-#define AFE_PORT_ID_QUATERNARY_PCM_TX        0x1015
 #define AFE_PORT_ID_QUINARY_MI2S_RX		0x1016
 #define AFE_PORT_ID_QUINARY_MI2S_TX		0x1017
 /* ID of the senary MI2S Rx port. */
@@ -1159,8 +1155,6 @@ struct afe_mod_enable_param {
  * #AFE_MODULE_SIDETONE_IIR_FILTER module.
  */
 #define AFE_PARAM_ID_SIDETONE_IIR_FILTER_CONFIG	0x00010204
-#define MAX_SIDETONE_IIR_DATA_SIZE 220
-#define MAX_NO_IIR_FILTER_STAGE   10
 
 struct afe_sidetone_iir_filter_config_params {
 	u16                  num_biquad_stages;
@@ -1172,7 +1166,6 @@ struct afe_sidetone_iir_filter_config_params {
 /* Pregain for the compensating filter response.
  * Supported values: Any number in Q13 format
  */
-	uint8_t   iir_config[MAX_SIDETONE_IIR_DATA_SIZE];
 } __packed;
 
 #define AFE_MODULE_LOOPBACK	0x00010205
@@ -1323,64 +1316,6 @@ struct afe_loopback_cfg_v1 {
  */
 
 } __packed;
-
-struct afe_loopback_sidetone_gain {
-	uint16_t                  rx_port_id;
-/* Rx port of the loopback.
-*/
-	uint16_t                  gain;
-/* Loopback gain per path of the port.
- */
-} __packed;
-
-struct loopback_cfg_data {
-	u32		loopback_cfg_minor_version;
-/* Minor version used for tracking the version of the RMC module
- * configuration interface.
- * Supported values: #AFE_API_VERSION_LOOPBACK_CONFIG
- */
-	u16                  dst_port_id;
-	/* Destination Port Id. */
-	u16                  routing_mode;
-/* Specifies data path type from src to dest port.
- * Supported values:
- * #LB_MODE_DEFAULT
- * #LB_MODE_SIDETONE
- * #LB_MODE_EC_REF_VOICE_AUDIO
- * #LB_MODE_EC_REF_VOICE_A
- * #LB_MODE_EC_REF_VOICE
- */
-
-	u16                  enable;
-/* Specifies whether to enable (1) or
- * disable (0) an AFE loopback.
- */
-	u16                  reserved;
-/* Reserved for 32-bit alignment. This field must be set to 0.
- */
-} __packed;
-
-
-
-struct afe_st_loopback_cfg_v1 {
-	struct apr_hdr	hdr;
-	struct afe_port_cmd_set_param_v2  param;
-	struct afe_port_param_data_v2     gain_pdata;
-	struct afe_loopback_sidetone_gain gain_data;
-	struct afe_port_param_data_v2     cfg_pdata;
-	struct loopback_cfg_data          cfg_data;
-} __packed;
-
-struct afe_loopback_iir_cfg_v2 {
-	struct apr_hdr                          hdr;
-	struct afe_port_cmd_set_param_v2        param;
-	struct afe_port_param_data_v2           st_iir_enable_pdata;
-	struct afe_mod_enable_param             st_iir_mode_enable_data;
-	struct afe_port_param_data_v2           st_iir_filter_config_pdata;
-	struct afe_sidetone_iir_filter_config_params 	st_iir_filter_config_data;
-} __packed;
-
-
 
 #define AFE_MODULE_SPEAKER_PROTECTION	0x00010209
 #define AFE_PARAM_ID_SPKR_PROT_CONFIG	0x0001020a
