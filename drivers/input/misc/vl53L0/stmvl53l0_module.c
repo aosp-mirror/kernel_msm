@@ -815,7 +815,8 @@ static irqreturn_t stmvl53l0_interrupt_handler(int vec, void *info)
 {
 
 	struct stmvl53l0_data *data = (struct stmvl53l0_data *)info;
-	vl53l0_dbgmsg("enter\n");
+	if (data->enableDebug)
+		vl53l0_dbgmsg("enter\n");
 	if (data->irq == vec) {
 		data->interrupt_received = 1;
 		schedule_delayed_work(&data->dwork, 0);
@@ -833,8 +834,8 @@ static void stmvl53l0_work_handler(struct work_struct *work)
 //	uint8_t val;
 	uint32_t interruptStatus = 0;
 	VL53L0_Error Status = VL53L0_ERROR_NONE;
-
-	vl53l0_dbgmsg("enter\n");
+	if (data->enableDebug)
+		vl53l0_dbgmsg("enter\n");
 
 	mutex_lock(&data->work_mutex);
 
