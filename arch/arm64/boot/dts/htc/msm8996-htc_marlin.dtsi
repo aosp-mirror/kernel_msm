@@ -150,6 +150,10 @@
         qcom,hvdcp-not-support;
 };
 
+&pmi8994_fg {
+        qcom,thermal-coefficients = [97 85 62 49 5A 35];
+};
+
 /{
         qcom,battery-data {
                 qcom,batt-id-range-pct = <15>;
