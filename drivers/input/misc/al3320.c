@@ -428,7 +428,7 @@ static ssize_t al3320_show_mode(struct device *dev,
 {
 	struct al3320_data *data = al3320_data_g;
 
-#if ASUS_FACTORY_BUILD
+#ifdef ASUS_FACTORY_BUILD
 	return snprintf(buf, 20, "1\n");
 #endif
 
