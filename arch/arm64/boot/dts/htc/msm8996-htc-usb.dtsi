@@ -26,6 +26,25 @@
         status = "okay";
 };
 
+&pm8994_gpios {
+	gpio@c000 {
+		reg = <0xc000 0x100>;
+		qcom,pin-num = <1>;
+		qcom,master-en = <0>;
+		status = "okay";
+	};
+
+	gpio@c900 {
+		reg = <0xc900 0x100>;
+		qcom,pin-num = <10>;
+		qcom,mode = <1>;
+		qcom,pull = <4>;
+		qcom,vin-sel = <0>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+};
+
 &tlmm {
 
 	vconn_ctrl {
