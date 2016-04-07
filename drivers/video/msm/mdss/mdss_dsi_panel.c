@@ -24,8 +24,9 @@
 #include <linux/string.h>
 
 #include "mdss_dsi.h"
+#ifdef TARGET_HW_MDSS_HDMI
 #include "mdss_dba_utils.h"
-
+#endif
 #define DT_CMD_HDR 6
 #define MIN_REFRESH_RATE 48
 #define DEFAULT_MDP_TRANSFER_TIME 14000
@@ -695,9 +696,10 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 
 	if (pinfo->compression_mode == COMPRESSION_DSC)
 		mdss_dsi_panel_dsc_pps_send(ctrl, pinfo);
-
+#ifdef TARGET_HW_MDSS_HDMI
 	if (ctrl->ds_registered)
 		mdss_dba_utils_video_on(pinfo->dba_data, pinfo);
+#endif
 end:
 	pr_debug("%s:-\n", __func__);
 	return ret;
@@ -708,8 +710,9 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 	struct mdss_panel_info *pinfo;
 	struct dsi_panel_cmds *cmds;
+#ifdef TARGET_HW_MDSS_HDMI
 	u32 vsync_period = 0;
-
+#endif
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
 		return -EINVAL;
@@ -730,13 +733,14 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 		mdss_dsi_panel_cmds_send(ctrl, cmds, CMD_REQ_COMMIT);
 	}
 
+#ifdef TARGET_HW_MDSS_HDMI
 	if (pinfo->is_dba_panel && pinfo->is_pluggable) {
 		/* ensure at least 1 frame transfers to down stream device */
 		vsync_period = (MSEC_PER_SEC / pinfo->mipi.frame_rate) + 1;
 		msleep(vsync_period);
 		mdss_dba_utils_hdcp_enable(pinfo->dba_data, true);
 	}
-
+#endif
 end:
 	pr_debug("%s:-\n", __func__);
 	return 0;
@@ -765,12 +769,12 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 
 	if (ctrl->off_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds, CMD_REQ_COMMIT);
-
+#ifdef TARGET_HW_MDSS_HDMI
 	if (ctrl->ds_registered && pinfo->is_pluggable) {
 		mdss_dba_utils_video_off(pinfo->dba_data);
 		mdss_dba_utils_hdcp_enable(pinfo->dba_data, false);
 	}
-
+#endif
 end:
 	pr_debug("%s:-\n", __func__);
 	return 0;
@@ -2177,12 +2181,14 @@ static int mdss_panel_parse_dt(struct device_node *np,
 			struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	u32 tmp;
-	int rc, len = 0;
+	int rc = 0;
 	const char *data;
 	static const char *pdest;
-	const char *bridge_chip_name;
 	struct mdss_panel_info *pinfo = &(ctrl_pdata->panel_data.panel_info);
-
+#ifdef TARGET_HW_MDSS_HDMI
+	int len = 0;
+	const char *bridge_chip_name;
+#endif
 	if (mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data))
 		pinfo->is_split_display = true;
 
@@ -2384,6 +2390,7 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	mdss_dsi_parse_dfps_config(np, ctrl_pdata);
 
+#ifdef TARGET_HW_MDSS_HDMI
 	pinfo->is_dba_panel = of_property_read_bool(np,
 			"qcom,dba-panel");
 
@@ -2399,7 +2406,7 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		strlcpy(ctrl_pdata->bridge_name, bridge_chip_name,
 			MSM_DBA_CHIP_NAME_MAX_LEN);
 	}
-
+#endif
 	return 0;
 
 error:
