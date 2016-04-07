@@ -106,3 +106,11 @@
                 #include "batterydata-m1s1-prototype-id2.dtsi"
         };
 };
+
+&pmi8994_haptics {
+	status = "okay";
+	qcom,wave-play-rate-us = <4878>;
+	qcom,actuator-type = "lra";
+	qcom,wave-shape = "sine";
+	qcom,vmax-mv = <2828>;
+};
