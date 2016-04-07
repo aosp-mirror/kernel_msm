@@ -1,0 +1,145 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&pm8994_l21 {
+	regulator-min-microvolt = <3000000>;
+	regulator-max-microvolt = <3300000>;
+	qcom,init-voltage = <3000000>;
+};
+
+&pm8994_l23 {
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+	qcom,init-voltage = <1800000>;
+};
+
+&usb_otg_switch {
+        status = "okay";
+};
+
+&tlmm {
+	i2c_9 {
+		i2c_9_active: i2c_9_active {
+			mux {
+				pins = "gpio51", "gpio52";
+				function = "blsp_i2c9";
+			};
+
+			config {
+				pins = "gpio51", "gpio52";
+				drive-strength = <8>;
+				bias-disable;
+			};
+		};
+
+		i2c_9_sleep: i2c_9_sleep {
+			mux {
+				pins = "gpio51", "gpio52";
+				function = "blsp_i2c9";
+			};
+
+			config {
+				pins = "gpio51", "gpio52";
+				drive-strength = <8>;
+				bias-disable;
+			};
+		};
+	};
+
+	usb3_switch_sel {
+		usb3_switch_sel_0: usb3_switch_sel_0 {
+			mux {
+				pins = "gpio30";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio30";
+				drive-strength = <2>;
+				output-low;
+			};
+		};
+
+		usb3_switch_sel_1: usb3_switch_sel_1 {
+			mux {
+				pins = "gpio30";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio30";
+				drive-strength = <2>;
+				output-high;
+			};
+		};
+	};
+
+	fusbc_int_default: fusbc_int_default {
+		mux {
+			pins = "gpio124";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio124";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+};
+
+/ {
+	aliases {
+		i2c9 = &i2c_9;
+	};
+};
+
+&soc {
+	i2c_9: i2c@75b7000 {
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		reg = <0x75b7000 0x1000>;
+		interrupt-names = "qup_irq";
+		interrupts = <0 103 0>;
+		dmas = <&dma_blsp2 16 32 0x20000020 0x20>,
+			<&dma_blsp2 17 32 0x20000020 0x20>;
+		dma-names = "tx", "rx";
+		qcom,master-id = <84>;
+		qcom,clk-freq-out = <400000>;
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp2_qup3_i2c_apps_clk>;
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_9_active>;
+		pinctrl-1 = <&i2c_9_sleep>;
+
+		fusb302@22 {
+			compatible = "fairchild,fusb302";
+			reg = <0x22>;
+			vdd-supply = <&pm8994_l21>;
+			switch_vdd-supply = <&pm8994_l23>;
+			status = "okay";
+			interrupt-parent = <&tlmm>;
+			interrupt = <124 0>;
+			fairchild,int_n = <&tlmm 124 0x00>;
+			fairchild,usb_sel = <&tlmm 30 0x00>;
+			pinctrl-names = "default", "usb3_switch_sel_0", "usb3_switch_sel_1";
+			pinctrl-0 = <&fusbc_int_default>;
+			pinctrl-1 = <&usb3_switch_sel_0>;
+			pinctrl-2 = <&usb3_switch_sel_1>;
+		};
+	};
+};
+
