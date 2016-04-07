@@ -114,3 +114,15 @@
 	qcom,wave-shape = "sine";
 	qcom,vmax-mv = <2828>;
 };
+
+&pmi8994_flash0 {
+	qcom,duration = <600>;
+};
+
+&pmi8994_flash1 {
+	qcom,duration = <600>;
+};
+
+&pmi8994_switch {
+	qcom,duration = <600>;
+};
