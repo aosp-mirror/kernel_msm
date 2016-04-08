@@ -15,22 +15,12 @@
  */
 
 &pmi8994_gpios {
-	//TFA9888_INT
+	/* TFA9891_INT */
 	gpio@c200 {
 		reg = <0xc200 0x100>;
 		qcom,pin-num = <3>;
-		qcom,mode = <0>;
-		qcom,pull = <5>;
-		status = "okay";
-	};
-
-	//TFA9888_ID_SEL
-	gpio@c400 {
-		qcom,mode = <0>;		/* Digital input */
-		qcom,vin-sel = <2>;		/* 1.8 */
-		qcom,src-sel = <0>;		/* GPIO */
-		qcom,master-en = <1>;	/* Enable GPIO */
-		qcom,pull = <0>;
+		qcom,mode = <0>;  /* QPNP_PIN_MODE_DIG_IN */
+		qcom,pull = <5>;  /* QPNP_PIN_PULL_NO */
 		status = "okay";
 	};
 };
@@ -367,7 +357,7 @@
 //			pinctrl-1 = <&sec_mi2s_sleep &sec_mi2s_sd0_sleep>;
 		};
 
-		//TFA9888
+		/* MI2S - TFA9891 */
 		dai_quat_mi2s: qcom,msm-dai-q6-mi2s-quat {
 			compatible = "qcom,msm-dai-q6-mi2s";
 			qcom,msm-dai-q6-mi2s-dev-id = <3>;
