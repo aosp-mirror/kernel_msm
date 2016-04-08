@@ -42,19 +42,10 @@ static int bluetooth_set_power(void *data, bool blocked)
 		gpio_direction_output(bt_reg_on_gpio, 0);
 		msleep(30);
 		gpio_direction_output(bt_reg_on_gpio, 1);
-
-		if(regulator_is_enabled(reg_ldo)<=0)
-		{
-			rc = regulator_enable(reg_ldo);
-			printk(KERN_ERR "regulator enabled,rc = %d\n",rc);
-		}
+		rc = regulator_enable(reg_ldo);
 	} else {
 		gpio_direction_output(bt_reg_on_gpio, 0);
-		if (regulator_is_enabled(reg_ldo)>0)
-		{
-			regulator_disable(reg_ldo);
-			printk(KERN_ERR "regulator disable\n");
-		}
+		regulator_disable(reg_ldo);
 	}
 	return 0;
 }
@@ -154,11 +145,8 @@ static int bluetooth_rfkill_remove(struct platform_device *dev)
 	rfkill_unregister(bt_rfk);
 	rfkill_destroy(bt_rfk);
 	gpio_free(bt_reg_on_gpio);
-	if (regulator_is_enabled(reg_ldo)>0)
-	{
-		regulator_disable(reg_ldo);
-		regulator_put(reg_ldo);
-	}
+	regulator_disable(reg_ldo);
+	regulator_put(reg_ldo);
 	return 0;
 }
 
