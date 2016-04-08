@@ -36,12 +36,9 @@
 	/delete-node/ gpio_keys;
 	/delete-node/ serial@78b0000;
 	/delete-node/ blsp1_uart2;
+	/delete-node/ i2c@78b6000;
 };
 &i2c_1 {
-	status = "disabled";
-};
-
-&i2c_2 {
 	status = "disabled";
 };
 
@@ -70,10 +67,8 @@
 	pinctrl-3 = <&cross_conn_det_sus>;
 };
 
-&soc {
-	tlmm_pinmux: pinctrl@1000000 {
-		vdd_spkdrv {
-			status = "disabled";
-		};
+/ {
+	aliases {
+		/delete-property/ i2c2;
 	};
 };
