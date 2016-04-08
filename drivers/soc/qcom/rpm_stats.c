@@ -643,6 +643,41 @@ static int msm_rpmstats_probe(struct platform_device *pdev)
 
 	if (!ret) {
 
+#ifdef CONFIG_HTC_POWER_DEBUG
+                if (pdata->version == 2) {
+                        dent = debugfs_create_file("rpm_stats", S_IRUGO, NULL,
+                                        pdata, &msm_rpmstats_fops);
+
+                        if (!dent) {
+                                pr_err("%s: ERROR debugfs_create_file failed\n",
+                                                __func__);
+                                kfree(pdata);
+                                return -ENOMEM;
+                        }
+
+                        if (!rpm_stats_dev[DEV_V2].init) {
+                                rpm_stats_dev[DEV_V2].reg_base = ioremap_nocache(pdata->phys_addr_base,
+                                                                                pdata->phys_size);
+                                rpm_stats_dev[DEV_V2].init = 1;
+                                rpm_stats_dev[DEV_V2].num_records = DEV_V2_RECORD;
+                        }
+                } else if (pdata->version == 3) {
+                        dent = debugfs_create_file("sleep_stats", S_IRUGO, NULL,
+                                                pdata, &msm_rpmstats_fops);
+                        if (!dent) {
+                                pr_err("%s: ERROR debugfs_create_file failed\n", __func__);
+                                kfree(pdata);
+                                return -ENOMEM;
+                        }
+                        if (!rpm_stats_dev[DEV_V3].init) {
+                                rpm_stats_dev[DEV_V3].reg_base = ioremap_nocache(pdata->phys_addr_base,
+                                                                                pdata->phys_size);
+                                rpm_stats_dev[DEV_V3].init = 1;
+                                rpm_stats_dev[DEV_V3].num_records = DEV_V3_RECORD;
+                        }
+                }
+#else
+
 		dent = debugfs_create_file("rpm_stats", S_IRUGO, NULL,
 				pdata, &msm_rpmstats_fops);
 
@@ -652,7 +687,7 @@ static int msm_rpmstats_probe(struct platform_device *pdev)
 			kfree(pdata);
 			return -ENOMEM;
 		}
-
+#endif
 	} else {
 		kfree(pdata);
 		return -EINVAL;
@@ -672,9 +707,12 @@ static int msm_rpmstats_probe(struct platform_device *pdev)
 		}
 		pdata->heap_phys_addrbase = res->start;
 	}
-
+#ifdef CONFIG_HTC_POWER_DEBUG
+	if (pdata->version == 2)
+		msm_rpmstats_create_sysfs(pdata);
+#else
 	msm_rpmstats_create_sysfs(pdata);
-
+#endif
 	platform_set_drvdata(pdev, dent);
 	return 0;
 }

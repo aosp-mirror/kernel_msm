@@ -36,3 +36,12 @@
 		};
 	};
 };
+
+&soc {
+	qcom,rpm-stats@2a1fa0 {
+	compatible = "qcom,rpm-stats";
+	reg = <0x2a1fa0 0x60>;
+	reg-names = "phys_addr_base";
+	qcom,sleep-stats-version = <3>;
+	};
+};
