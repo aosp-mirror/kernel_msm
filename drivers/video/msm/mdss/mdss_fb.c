@@ -49,6 +49,8 @@
 #include <linux/kthread.h>
 #include <linux/dma-buf.h>
 #include "mdss_fb.h"
+#include "mdss_dsi.h"
+#include "mdss_dsi_cmd.h" 
 #include "mdss_mdp_splash_logo.h"
 #define CREATE_TRACE_POINTS
 #include "mdss_debug.h"
@@ -1782,6 +1784,25 @@ error:
 	return ret;
 }
 
+static void mdss_fb_set_3bit_color_mode(struct msm_fb_data_type *mfd, int enable)
+{
+	//struct fb_info *fbi = dev_get_drvdata(dev);
+	//struct msm_fb_data_type *mfd = fbi->par; 
+	struct mdss_panel_data *pdata;
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+
+	pdata = dev_get_platdata(&mfd->pdev->dev);
+	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
+
+	pr_debug("[Debug]3-bit color mode %s\n", enable ? "enabled" : "disabled");
+	if (mfd->panel_info->type !=  MIPI_CMD_PANEL)
+		pr_debug("[Debug]3-bit color mode only supported for cmd mode panel\n");
+	else
+		mdss_dsi_3bit_mode_enable(ctrl, enable);
+	//return count;
+}
+
+
 static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 			     int op_enable)
 {
@@ -1829,6 +1850,7 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	switch (blank_mode) {
 	case FB_BLANK_UNBLANK:
 		pr_debug("unblank called. cur pwr state=%d\n", cur_power_state);
+		mdss_fb_set_3bit_color_mode(mfd, false); 
 		ret = mdss_fb_blank_unblank(mfd);
 		break;
 	case BLANK_FLAG_ULP:
@@ -1843,8 +1865,7 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		break;
 	case BLANK_FLAG_LP:
 		req_power_state = MDSS_PANEL_POWER_LP1;
-		pr_debug(" power mode requested\n");
-
+		pr_debug(" low power mode requested\n");
 		/*
 		 * If low power mode is requested when panel is already off,
 		 * then first unblank the panel before entering low power mode
@@ -1857,6 +1878,10 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		}
 
 		ret = mdss_fb_blank_blank(mfd, req_power_state);
+
+		pr_debug("[Debug] set to 3-bit mode\n");
+		mdss_fb_set_3bit_color_mode(mfd, true);
+		
 		break;
 	case FB_BLANK_HSYNC_SUSPEND:
 	case FB_BLANK_POWERDOWN:
