@@ -1,0 +1,129 @@
+/* Copyright (c) 2016,  CYPRESS CO., LTD.  All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+&soc {
+    i2c@78b9000 { /* BLSP1 QUP5 */
+		status = "ok";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		qcom,clk-freq-out = <400000>;
+		cyttsp5@1c {
+			compatible = "cy,cyttsp5_i2c_adapter";
+			reg = <0x1c>;
+			pinctrl-names = "int_default","int_sleep";
+			pinctrl-0 = <&ts_int_active>;
+			pinctrl-1 = <&ts_int_suspend>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <13 0x2008>;
+			cy,adapter_id = "cyttsp5_i2c_adapter";
+			vdd-supply = <&pm8916_l5>;
+			vcc_i2c-supply = <&pm8916_l10>;
+
+			cy,core {
+				cy,name = "cyttsp5_core";
+				cy,product_name = "cy_tp";
+				cy,chip_name = "CS445";
+				cy,irq-gpio = <&msm_gpio 13 0x2008>;
+				cy,reset-gpio = <&msm_gpio 12 0x00>;
+				cy,vdd-type = <2>;	/* 0:null, 1:gpio, 2:pmu*/
+				cy,vbus-type = <2>; 	/* 0:null, 1:gpio, 2:pmu*/
+				cy,vdd = "vdd";
+				cy,vbus = "vcc_i2c";
+				cy,fw_upgrade_start_ver = <0>;
+				cy,fw_uptate_logic = <1>; /* 0:update to higt 1:update when different*/
+				cy,input_register_early = <1>;
+				cy,hid_desc_register = <1>;
+				/* CY_CORE_FLAG_WAKE_ON_GESTURE | CY_CORE_FLAG_RESTORE_PARAMETERS */
+				cy,flags = <5>;
+				/* CY_CORE_EWG_NONE */
+				/* Gestures that supported:                           */
+				/* bit0  Double tap                                        */
+				/* bit1  Single finger slide from left to right     */
+				/* bit2  Single finger slide from right to left     */
+				/* bit3  Single finger slide from top to bottom  */
+				/* bit4  Single finger slide from bottom to top  */
+				/* bit5  Double finger slide from top to bottom--disable for holster*/
+				/* bit6  Single finger slide circle                     */
+				/* bit7  Single finger write letter c                  */
+				/* bit8  Single finger write letter e                  */
+				/* bit9  Single finger write letter m                 */
+				/* bit10 Single finger write letter w                 */
+				/* bit11 Palm off screen                                */
+				cy,easy_wakeup_supported_gestures = <0x801>;
+
+				cy,easy_wakeup_gesture = <0x801>;
+				/*Defination of report key value  for different gestures*/
+				cy,easy_wakeup_gesture_keys =
+				<	143 /*143 0.Double tap:KEY_F1*/
+					0 /*60 1.Single finger slide from left to right*/
+					0 /*61 2.Single finger slide from right to left:KEY_F3*/
+					0 /*62 3.Single finger slide from top to bottom*/
+					0 /*63 4.Single finger slide from bottom to top:KEY_F5*/
+					0 /*64 5.Single finger slide circle clockwise*/
+					0 /*65 6.Single finger slide circle counter-clockwise*/
+					0 /*66 7.Single finger write letter c*/
+					0 /*67 8.Single finger write letter e:KEY_F9*/
+					0 /*68 9.Single finger write letter m*/
+					0 /*87 10.Single finger write letter w:KEY_F11*/
+					142 /*11.Palm off screen*/
+				>;
+
+				cy,double_tap_enabled = <1>;
+				/* Double-tap-zone defined by huawei */
+				/* Shielded area is:1cm left,1cm right,1cm up,1cm down */
+				cy,dtz_x0 = <0>;
+				cy,dtz_y0 = <0>;
+				cy,dtz_x1 = <453>;
+				cy,dtz_y1 = <453>;
+				cy,btn_keys-tag = <0>;
+				cy,glove_support = <0>;
+				cy,holster_support = <0>;
+				cy,mmi_test_support = <1>;
+				cy,mt {
+					cy,name = "cyttsp5_mt";
+					cy,inp_dev_name = "cyttsp5_mt";
+					cy,flags = <0>;
+					cy,abs =
+						/* ABS_MT_POSITION_X, CY_ABS_MIN_X, CY_ABS_MAX_X, 0, 0 */
+						<0x35 0 453 0 0
+						/* ABS_MT_POSITION_Y, CY_ABS_MIN_Y, CY_ABS_MAX_Y, 0, 0 */
+						0x36 0 453 0 0
+						/* ABS_MT_PRESSURE, CY_ABS_MIN_P, CY_ABS_MAX_P, 0, 0 */
+						/*0x3a 0 255 0 0*/
+						/* CY_IGNORE_VALUE, CY_ABS_MIN_W, CY_ABS_MAX_W, 0, 0 */
+						0xffff 0 255 0 0
+						/* ABS_MT_TRACKING_ID, CY_ABS_MIN_T, CY_ABS_MAX_T, 0, 0 */
+						0x39 0 15 0 0
+						/* ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0 */
+						0x30 0 15 0 0
+						/* ABS_MT_TOUCH_MINOR, 0, 255, 0, 0 */
+						0x31 0 15 0 0
+						/* ABS_MT_ORIENTATION, -127, 127, 0, 0 */
+						/*0x34 0xffffff81 127 0 0*/
+						//delete lines
+						/* ABS_MT_SLOT , 0, 4, 0, 0 */
+						0x2f 0 4 0 0
+						/* ABS_DISTANCE, 0, 255, 0, 0 */
+						/*0x19 0 255 0 0*/>;
+					cy,x_max = <453>;
+					cy,y_max = <453>;
+					cy,p_max = <255>;
+					cy,slots_max = <4>;
+				};
+
+				cy,btn {
+					cy,name = "cyttsp5_btn";
+					cy,inp_dev_name = "cyttsp5_btn";
+				};
+			};
+		};
+	};
+};
