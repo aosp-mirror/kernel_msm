@@ -39,6 +39,7 @@
 	/delete-node/ pmx_ts_ite_reset_suspend;
 
 	/delete-node/ pmx_mdss;
+	/delete-node/ pmx_i2c_2;
 
 	/*Mars configuration begin*/
 	/*MCU Reset*/
@@ -105,7 +106,7 @@
 		};
 		bt_uart_ctl_suspend:bt_uart_ctl_suspend {
 			mux {
-				pins = "gpio111","gpio111";
+				pins = "gpio111","gpio112";
 				function = "blsp_uart2";
 			};
 			config {
@@ -119,14 +120,20 @@
 	/*TOUCH INT*/
 	pmx_ts_int_suspend {
 		ts_int_suspend {
-			bias-pull-up;
+			config {
+				/delete-property/ bias-pull-down;
+				bias-pull-up;
+			};
 		};
 	};
 
 	/*TOUCH reset*/
 	pmx_ts_reset_suspend {
 		ts_reset_suspend {
-			bias-pull-up;
+			config {
+				/delete-property/ bias-pull-down;
+				bias-pull-up;
+			};
 		};
 	};
 
