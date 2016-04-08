@@ -352,7 +352,15 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 	state = decode_state(buf, n);
 	if (state < PM_SUSPEND_MAX)
+#ifdef CONFIG_HTC_POWER_DEBUG
+        {
+                pr_info("[R] suspend start\n");
+#endif
 		error = pm_suspend(state);
+#ifdef CONFIG_HTC_POWER_DEBUG
+                pr_info("[R] resume end\n");
+        }
+#endif
 	else if (state == PM_SUSPEND_MAX)
 		error = hibernate();
 	else

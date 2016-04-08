@@ -51,6 +51,7 @@
 #include <trace/events/trace_msm_low_power.h>
 #include "../../drivers/clk/msm/clock.h"
 #ifdef CONFIG_HTC_POWER_DEBUG
+#include "../soc/qcom/rpm_stats.h"
 #include <soc/qcom/htc_util.h>
 #include <linux/qpnp/pin.h>
 #include <linux/pinctrl/pinctrl.h>
@@ -1095,9 +1096,17 @@ bool psci_enter_sleep(struct lpm_cluster *cluster, int idx, bool from_idle)
                                  pr_info("The MSM_PM_DEBUG_VREGS turn on");
                          }
                 }
+                if(!from_idle && num_online_cpus() == 1) {
+			msm_rpm_dump_stat();
+                        pr_info("[R] suspend end\n");
+                }
 		time = sched_clock();
 		success = !cpu_suspend(state_id);
 		time = sched_clock() - time;
+                if(!from_idle && num_online_cpus() == 1) {
+                        pr_info("[R] resume start\n");
+                        msm_rpm_dump_stat();
+                }
 #else
 		success = !cpu_suspend(state_id);
 #endif
