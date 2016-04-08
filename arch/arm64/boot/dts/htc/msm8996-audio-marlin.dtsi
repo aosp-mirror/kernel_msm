@@ -266,6 +266,7 @@
 		qcom,audio-routing =
 			"AIF4 VI", "MCLK",
 			"RX_BIAS", "MCLK",
+			"Lineout_1 amp", "LINEOUT1",
 			"DMIC0", "MIC BIAS1",
 			"MIC BIAS1", "Handset Mic",
 			"AMIC2", "MIC BIAS2",
@@ -284,6 +285,7 @@
 		ftm-btpcm-dout	= <&tlmm 67 0>;
 		ftm-btpcm-din	= <&tlmm 68 0>;
 		mbhc-swap-detect = <0>;
+		rcv-amp-gpio-en	= <&tlmm 2 0>;
 
 		asoc-cpu = <&dai_pri_auxpcm>, <&dai_sec_auxpcm>, <&dai_hdmi>, /*<&dai_mi2s>,*/
 				<&dai_pri_mi2s>, <&dai_sec_mi2s>,
