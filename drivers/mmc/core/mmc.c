@@ -2630,7 +2630,10 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
 	err = mmc_flush_cache(host->card);
 	if (err)
 		goto out;
-
+	//ASUS_BSP+++ avoid disable HPI casue host->ios.clock is 0 (workaround?)
+	if (MMC_CONFIG_SETTING_HPI==0)
+	mmc_host_clk_hold(host);
+	//ASUS_BSP---
 	if (mmc_can_sleepawake(host)) {
 		memcpy(&host->cached_ios, &host->ios, sizeof(host->cached_ios));
 		mmc_cache_card_ext_csd(host);
