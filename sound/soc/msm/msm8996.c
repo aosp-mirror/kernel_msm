@@ -202,6 +202,16 @@ static struct aud_btpcm_config {
 };
 /*FTM BT test end*/
 
+static struct rcv_config {
+	int init;
+	struct htc_request_gpio gpio[1];
+} htc_rcv_config = {
+	.init = 0,
+	.gpio = {
+		{ .gpio_name = "rcv-amp-gpio-en",},
+	},
+};
+
 int msm8994_enable_24b_audio(void)
 {
 	return 1;
@@ -760,12 +770,48 @@ err:
 	return ret;
 }
 
+/*HTC_AUD_START*/
+static void htc_rcv_amp_ctl(int enable)
+{
+	int i;
+
+	if (!htc_rcv_config.init)
+		return;
+
+	for (i = 0; i < ARRAY_SIZE(htc_rcv_config.gpio); i++) {
+		gpio_set_value(htc_rcv_config.gpio[i].gpio_no, enable);
+		pr_info("%s: gpio no. %d name \"%s\" value %d\n", __func__,
+				htc_rcv_config.gpio[i].gpio_no,
+				htc_rcv_config.gpio[i].gpio_name,
+				gpio_get_value(htc_rcv_config.gpio[i].gpio_no));
+	}
+}
+
+static int msm_ext_rcv_event(struct snd_soc_dapm_widget *w,
+				 struct snd_kcontrol *k, int event)
+{
+	int ret = 0;
+
+	pr_debug("%s()\n", __func__);
+	if (SND_SOC_DAPM_EVENT_ON(event)) {
+		pr_info("receiver amp on\n");
+		htc_rcv_amp_ctl(1);
+	} else {
+		pr_info("receiver amp off\n");
+		htc_rcv_amp_ctl(0);
+	}
+	return ret;
+}
+/*HTC_AUD_END*/
+
 static const struct snd_soc_dapm_widget msm8996_dapm_widgets[] = {
 
 	SND_SOC_DAPM_SUPPLY("MCLK",  SND_SOC_NOPM, 0, 0,
 	msm8996_mclk_event, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
-	SND_SOC_DAPM_SPK("Lineout_1 amp", NULL),
+/*HTC_AUD_START*/
+	SND_SOC_DAPM_SPK("Lineout_1 amp", msm_ext_rcv_event),
+/*HTC_AUD_END*/
 	SND_SOC_DAPM_SPK("Lineout_3 amp", NULL),
 	SND_SOC_DAPM_SPK("Lineout_2 amp", NULL),
 	SND_SOC_DAPM_SPK("Lineout_4 amp", NULL),
@@ -5601,6 +5647,44 @@ static int msm8994_init_ftm_btpcm(struct platform_device *pdev,
 	return 0;
 }
 
+/*HTC_AUD_START*/
+static int htc_msm8996_parse_gpio(struct platform_device *pdev,
+				struct rcv_config *pconfig)
+{
+	int i = 0;
+	int ret = 0;
+
+	if (!pconfig || !pdev) {
+		pr_err("%s: %d pdev or pconfig is null\n", __func__, i);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(pconfig->gpio); i++) {
+		if (!pconfig->gpio[i].gpio_name) {
+			pr_err("%s: index %d gpio name is null\n", __func__, i);
+			return -EINVAL;
+		}
+
+		pconfig->gpio[i].gpio_no = of_get_named_gpio(pdev->dev.of_node,
+						pconfig->gpio[i].gpio_name, 0);
+
+		if (pconfig->gpio[i].gpio_no < 0) {
+			pr_err("property %s not detected in node\n", pconfig->gpio[i].gpio_name);
+			return -EINVAL;
+		} else {
+			pr_info("%s: gpio %s no %d\n", __func__, pconfig->gpio[i].gpio_name,
+							pconfig->gpio[i].gpio_no);
+			ret = gpio_direction_output(pconfig->gpio[i].gpio_no, 0);
+			if (ret < 0)
+				pr_err("%s: gpio %d on error %d\n", __func__,
+								pconfig->gpio[i].gpio_no, ret);
+		}
+	}
+	pconfig->init = 1;
+	return ret;
+}
+/*HTC_AUD_END*/
+
 static void htc_card_det(struct work_struct *work)
 {
 	pr_err("%s: Trigger BUG due to sound card not register in %d ms \n", __func__, CARD_TIMEOUT);
@@ -5877,6 +5961,11 @@ static int msm8996_asoc_machine_probe(struct platform_device *pdev)
 	ret = msm8994_init_ftm_btpcm(pdev, &htc_aud_btpcm_config);
 	if (ret < 0) {
 		pr_warn("%s: init ftm btpcm failed with %d (Non-issue for non-BRCM BT chip.)", __func__, ret);
+	}
+
+	ret = htc_msm8996_parse_gpio(pdev, &htc_rcv_config);
+	if (ret < 0) {
+		pr_warn("%s: init rcv gpio failed with err %d ", __func__, ret);
 	}
 //HTC_AUD_END
 
