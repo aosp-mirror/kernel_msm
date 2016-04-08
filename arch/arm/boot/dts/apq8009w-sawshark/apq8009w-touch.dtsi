@@ -11,15 +11,5 @@
  * GNU General Public License for more details.
  */
 
-&soc {
-    i2c@78b9000 {
-		synaptics@20 {
-			avdd-supply = <&pm8916_l10>;
-			vdd-supply = <&pm8916_l5>;
-			synaptics,display-coords = <0 0 479 479>;
-			/delete-property/ synaptics,power-down;
-			/delete-property/ synaptics,disable-gpios;
-			synaptics,is_wake;
-		};
-	};
-};
+#include "cyttsp5_i2c.dtsi"
+
