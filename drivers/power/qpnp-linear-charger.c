@@ -3260,11 +3260,15 @@ static void create_charger_limit_enable_proc_file(void)
 static struct proc_dir_entry *charger_type_proc_file;
 static int charger_type_proc_read(struct seq_file *buf, void *v)
 {
+	int type;
+	type = g_lbc_chip->usb_psy->type;
 
-	if (get_prop_charge_type(g_lbc_chip)==POWER_SUPPLY_CHARGE_TYPE_FAST) {
+	if (type == POWER_SUPPLY_TYPE_USB_DCP || type == POWER_SUPPLY_TYPE_USB_CDP) {
 		seq_printf(buf, "AC_Fast\n");
-	} else 	if (get_prop_charge_type(g_lbc_chip)==POWER_SUPPLY_CHARGE_TYPE_NONE) {
+	} else if (type == POWER_SUPPLY_TYPE_USB) {
 		seq_printf(buf, "USB_Normal\n");
+	} else if (type == POWER_SUPPLY_TYPE_UNKNOWN) {
+		seq_printf(buf, "UNKNOWN\n");
 	}
 	return 0;
 }
