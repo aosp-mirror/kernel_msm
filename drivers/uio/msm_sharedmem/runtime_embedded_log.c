@@ -1,0 +1,335 @@
+/* Copyright (c) 2016, HTC Corporation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#define DRIVER_NAME "rtel" // runtime_embedded_log
+#define pr_fmt(fmt) DRIVER_NAME ": %s: " fmt, __func__
+
+#include <linux/uio_driver.h>
+#include <linux/module.h>
+#include <linux/platform_device.h>
+#include <linux/err.h>
+#include <linux/of.h>
+#include <linux/dma-mapping.h>
+#include <linux/dma-contiguous.h>
+#include <linux/cma.h>
+
+#include <soc/qcom/secure_buffer.h>
+
+#include "sharedmem_qmi.h"
+
+#define CLIENT_ID_PROP "qcom,client-id"
+
+#define MPSS_RMTS_CLIENT_ID 1
+
+static void *uio_vaddr;
+static struct device *uio_dev;
+
+static int setup_shared_ram_perms(u32 client_id, phys_addr_t addr, u32 size);
+static int clear_shared_ram_perms(u32 client_id, phys_addr_t addr, u32 size);
+
+static ssize_t rtel_show(struct device *d,
+                          struct device_attribute *attr,
+                          char *buf)
+{
+        struct uio_info *info = dev_get_drvdata(d);
+
+        return snprintf(buf, PAGE_SIZE, "size:0x%x paddr:0x%x vaddr:0x%p\n",
+                        (unsigned int)info->mem[0].size, (unsigned int)info->mem[0].addr, uio_vaddr );
+}
+
+static ssize_t rtel_store(struct device *d,
+                           struct device_attribute *attr,
+                           const char *buf,
+                           size_t count)
+{
+        int ret = 0;
+        u64 rmtfs_addr = 0, rtel_addr = 0;
+        u32 rmtfs_size = 0, rtel_size = 0;
+        struct uio_info *info = dev_get_drvdata(d);
+
+        if ( !info ) {
+          pr_err("can't get correct uio info.\n");
+          return count;
+        }
+
+        get_uio_addr_size_by_name( "rmtfs" , &rmtfs_addr, &rmtfs_size );
+        rtel_addr = info->mem[0].addr;
+        rtel_size = info->mem[0].size;
+
+        if ( !rmtfs_addr || !rmtfs_size || !rtel_addr || !rtel_size ) {
+          pr_err("can't get rmtfs/rtel address or size data.\n");
+          return count;
+        }
+
+        // debug purpose, input userdebug/release to switch memory protect area
+        if ( ( buf[0] == '1' && !uio_vaddr ) || !strncmp( buf, "userdebug", 9 ) ) {
+          uio_vaddr = dma_alloc_writecombine( uio_dev, rtel_size,
+                                              &rtel_addr, GFP_KERNEL);
+
+          if ( uio_vaddr == NULL) {
+            pr_err("Shared mem alloc fail, client=%s, size=%x\n",
+                   info->name, rtel_size );
+            return count;
+          }
+
+          clear_shared_ram_perms( MPSS_RMTS_CLIENT_ID, rmtfs_addr, rmtfs_size);
+          ret = setup_shared_ram_perms( MPSS_RMTS_CLIENT_ID, rtel_addr, rtel_size );
+
+          if ( ret )
+            pr_err("%s setup_shared_ram_perms fail.\n", info->name);
+        }
+        else if ( uio_vaddr && !strncmp( buf, "release", 7 ) ) {
+          clear_shared_ram_perms( MPSS_RMTS_CLIENT_ID, rtel_addr, rtel_size);
+          ret = setup_shared_ram_perms( MPSS_RMTS_CLIENT_ID, rmtfs_addr, rmtfs_size );
+
+          if ( ret )
+            pr_err("%s setup_shared_ram_perms fail!!\n", info->name);
+
+          dma_free_writecombine( uio_dev, rtel_size,
+                                   uio_vaddr , rtel_addr);
+          uio_vaddr = NULL;
+        }
+        else ;
+
+     return count;
+}
+
+static DEVICE_ATTR( rtel, 0664, rtel_show, rtel_store);
+static struct attribute *rtel_attributes[] = {
+  &dev_attr_rtel.attr,
+  NULL
+};
+
+static const struct attribute_group rtel_group = {
+  .name  = "rtel",
+  .attrs = rtel_attributes,
+};
+
+
+static int uio_get_mem_index(struct uio_info *info, struct vm_area_struct *vma)
+{
+	if (vma->vm_pgoff >= MAX_UIO_MAPS)
+		return -EINVAL;
+
+	if (info->mem[vma->vm_pgoff].size == 0)
+		return -EINVAL;
+
+	return (int)vma->vm_pgoff;
+}
+
+static int sharedmem_mmap(struct uio_info *info, struct vm_area_struct *vma)
+{
+	int result;
+	struct uio_mem *mem;
+	int mem_index = uio_get_mem_index(info, vma);
+
+	if (mem_index < 0) {
+		pr_err("mem_index is invalid errno %d\n", mem_index);
+		return mem_index;
+	}
+
+	mem = info->mem + mem_index;
+
+	if (vma->vm_end - vma->vm_start > mem->size) {
+		pr_err("vm_end[%lu] - vm_start[%lu] [%lu] > mem->size[%lu]\n",
+			vma->vm_end, vma->vm_start,
+			(vma->vm_end - vma->vm_start), mem->size);
+		return -EINVAL;
+	}
+	pr_debug("Attempting to setup mmap.\n");
+
+	vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+
+	result = remap_pfn_range(vma,
+				 vma->vm_start,
+				 mem->addr >> PAGE_SHIFT,
+				 vma->vm_end - vma->vm_start,
+				 vma->vm_page_prot);
+	if (result != 0)
+		pr_err("mmap Failed with errno %d\n", result);
+	else
+		pr_debug("mmap success\n");
+
+	return result;
+}
+
+/* Setup the shared ram permissions.
+ * This function currently supports the mpss client only.
+ */
+static int setup_shared_ram_perms(u32 client_id, phys_addr_t addr, u32 size)
+{
+	int ret;
+	u32 source_vmlist[1] = {VMID_HLOS};
+	int dest_vmids[2] = {VMID_HLOS, VMID_MSS_MSA};
+	int dest_perms[2] = {PERM_READ|PERM_WRITE ,
+			     PERM_READ|PERM_WRITE};
+
+	if (client_id != MPSS_RMTS_CLIENT_ID)
+		return -1;
+
+	ret = hyp_assign_phys(addr, size, source_vmlist, 1, dest_vmids,
+				dest_perms, 2);
+	if (ret != 0) {
+		if (ret == -ENOSYS)
+			pr_warn("hyp_assign_phys is not supported!");
+		else
+			pr_err("hyp_assign_phys failed IPA=0x%pa size=%x err=%d\n",
+				&addr, size, ret);
+	}
+        return ret;
+}
+
+static int clear_shared_ram_perms(u32 client_id, phys_addr_t addr, u32 size)
+{
+        int ret;
+        u32 source_vmlist[2] = {VMID_HLOS, VMID_MSS_MSA};
+        int dest_vmids[1] = {VMID_HLOS};
+        int dest_perms[1] = {PERM_READ|PERM_WRITE};
+
+        if (client_id != MPSS_RMTS_CLIENT_ID)
+                return -1;
+
+        ret = hyp_assign_phys(addr, size, source_vmlist, 2, dest_vmids,
+                                dest_perms, 1);
+        if (ret != 0) {
+                if (ret == -ENOSYS)
+                        pr_warn("hyp_assign_phys is not supported!");
+                else
+                        pr_err("hyp_assign_phys failed IPA=0x%pa size=%x err=%d\n",
+                                &addr, size, ret);
+        }
+        return ret;
+}
+
+static int rtel_probe(struct platform_device *pdev)
+{
+	int ret = 0;
+	struct uio_info *info = NULL;
+	struct resource *clnt_res = NULL;
+	u32 client_id = ((u32)~0U);
+	u32 shared_mem_size = 0;
+	phys_addr_t shared_mem_pyhsical = 0;
+	bool is_addr_dynamic = false;
+	struct sharemem_qmi_entry qmi_entry;
+
+        /* Get the addresses from platform-data */
+	if (!pdev->dev.of_node) {
+		pr_err("Node not found\n");
+		ret = -ENODEV;
+		goto out;
+	}
+	clnt_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!clnt_res) {
+		pr_err("resource not found\n");
+		return -ENODEV;
+	}
+
+	ret = of_property_read_u32(pdev->dev.of_node, CLIENT_ID_PROP,
+				   &client_id);
+	if (ret) {
+		client_id = ((u32)~0U);
+		pr_warn("qcom,client-id property not found\n");
+	}
+
+	info = devm_kzalloc(&pdev->dev, sizeof(struct uio_info), GFP_KERNEL);
+	if (!info)
+		return -ENOMEM;
+
+	shared_mem_size = resource_size(clnt_res);
+	shared_mem_pyhsical = clnt_res->start;
+
+	if (shared_mem_size == 0) {
+		pr_err("Shared memory size is zero\n");
+		return -EINVAL;
+	}
+
+	/* Setup device */
+	info->mmap = sharedmem_mmap; /* Custom mmap function. */
+	info->name = clnt_res->name;
+	info->version = "1.0";
+	info->mem[0].addr = shared_mem_pyhsical;
+	info->mem[0].size = shared_mem_size;
+	info->mem[0].memtype = UIO_MEM_PHYS;
+        uio_dev = &pdev->dev;
+        uio_vaddr= NULL;
+
+	ret = uio_register_device(&pdev->dev, info);
+	if (ret) {
+		pr_err("uio register failed ret=%d\n", ret);
+		goto out;
+	}
+
+	dev_set_drvdata(&pdev->dev, info);
+
+        ret = sysfs_create_group(&pdev->dev.kobj, &rtel_group);
+        if (ret) {
+          pr_err("failed to register rtel sysfs\n");
+        }
+
+	qmi_entry.client_id = client_id;
+	qmi_entry.client_name = info->name;
+	qmi_entry.address = info->mem[0].addr;
+	qmi_entry.size = info->mem[0].size;
+	qmi_entry.is_addr_dynamic = is_addr_dynamic;
+
+	sharedmem_qmi_add_entry(&qmi_entry);
+	pr_info("Device created for client '%s'\n", clnt_res->name);
+out:
+	return ret;
+}
+
+static int rtel_remove(struct platform_device *pdev)
+{
+	struct uio_info *info = dev_get_drvdata(&pdev->dev);
+
+	uio_unregister_device(info);
+
+	return 0;
+}
+
+static struct of_device_id rtel_of_match[] = {
+	{.compatible = "htc,rtel-uio",},
+	{},
+};
+MODULE_DEVICE_TABLE(of, rtel_of_match);
+
+static struct platform_driver rtel_driver = {
+	.probe          = rtel_probe,
+	.remove         = rtel_remove,
+	.driver         = {
+		.name   = DRIVER_NAME,
+		.owner	= THIS_MODULE,
+		.of_match_table = rtel_of_match,
+	},
+};
+
+static int __init rtel_init(void)
+{
+        int result;
+
+	result = platform_driver_register(&rtel_driver);
+	if (result != 0) {
+		pr_err("Platform driver rtel_driver registration failed\n");
+		return result;
+	}
+	return 0;
+}
+
+static void __exit rtel_exit(void)
+{
+	platform_driver_unregister(&rtel_driver);
+}
+
+module_init(rtel_init);
+module_exit(rtel_exit);
+
+MODULE_LICENSE("GPL v2");

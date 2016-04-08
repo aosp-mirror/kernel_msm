@@ -30,4 +30,6 @@ void sharedmem_qmi_exit(void);
 
 void sharedmem_qmi_add_entry(struct sharemem_qmi_entry *qmi_entry);
 
+int get_uio_addr_size_by_name( char *name, u64 *address, u32 *size );
+
 #endif /* __SHAREDMEM_QMI_H__ */

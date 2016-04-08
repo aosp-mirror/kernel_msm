@@ -37,6 +37,12 @@
 			};
 		};
 
+                htc_rtel_mem: htc_rtel_region@0 {
+                        compatible = "shared-dma-pool";
+                        reusable;
+                        reg = <0 0x84000000 0 0x1400000>; /* 20 MB */
+                };
+
 		ramoops_mem: ramoops_region@0 {
 			compatible = "removed-dma-pool";
 			no-map;
@@ -62,6 +68,14 @@
 		reg = <0x83700000 0x100000>;
 		reg-names = "msm_rtb_res";
 	};
+
+        qcom,rmtfs_rtel_sharedmem@0 {
+                compatible = "htc,rtel-uio";
+                reg = <0x84000000 0x01400000>;
+                memory-region = <&htc_rtel_mem>;
+                reg-names = "rtel";
+                qcom,client-id = <0x00000001>;
+        };
 
 	ramoops {
 		compatible = "ramoops";
