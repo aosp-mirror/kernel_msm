@@ -1252,7 +1252,7 @@ static bool wcd_is_special_headset(struct wcd_mbhc *mbhc)
 	pr_info("%s: special headset, start register writes\n", __func__); //HTC_AUD
 
 	WCD_MBHC_REG_READ(WCD_MBHC_HS_COMP_RESULT, hs_comp_res);
-	while (hs_comp_res)  {
+	while (!is_spl_hs)  {
 		if (mbhc->hs_detect_work_stop) {
 			pr_debug("%s: stop requested: %d\n", __func__,
 					mbhc->hs_detect_work_stop);
@@ -1675,7 +1675,12 @@ report:
 		pr_debug("%s: Switch level is low\n", __func__);
 		goto exit;
 	}
-	pr_info("%s: Valid plug found, plug type %d wrk_cmpt %d btn_intr %d\n",
+	if (plug_type == MBHC_PLUG_TYPE_GND_MIC_SWAP && mbhc->btn_press_intr) {
+		pr_debug("%s: insertion of headphone with swap\n", __func__);
+		wcd_cancel_btn_work(mbhc);
+		plug_type = MBHC_PLUG_TYPE_HEADPHONE;
+	}
+	pr_debug("%s: Valid plug found, plug type %d wrk_cmpt %d btn_intr %d\n",
 			__func__, plug_type, wrk_complete,
 			mbhc->btn_press_intr); //HTC_AUD
 	WCD_MBHC_RSC_LOCK(mbhc);
