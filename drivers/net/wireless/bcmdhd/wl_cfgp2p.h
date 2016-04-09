@@ -136,9 +136,9 @@ enum wl_cfgp2p_status {
 #define WLC_IOCTL_MAXLEN 8192
 
 #ifdef CUSTOMER_HW4_DEBUG
-#define CFGP2P_ERROR_TEXT		"CFGP2P-INFO2) "
+#define CFGP2P_ERROR_TEXT		"(CFGP2P)"
 #else
-#define CFGP2P_ERROR_TEXT		"CFGP2P-ERROR) "
+#define CFGP2P_ERROR_TEXT		"(CFGP2P)"
 #endif /* CUSTOMER_HW4_DEBUG */
 
 #ifdef DHD_LOG_DUMP
@@ -156,7 +156,7 @@ enum wl_cfgp2p_status {
 #define CFGP2P_ERR(args)									\
 	do {										\
 		if (wl_dbg_level & WL_DBG_ERR) {				\
-			printf(KERN_INFO CFGP2P_ERROR_TEXT "%s : ", __func__);	\
+			printf(CFGP2P_ERROR_TEXT "%s : ", __func__);	\
 			printf args;						\
 		}									\
 	} while (0)

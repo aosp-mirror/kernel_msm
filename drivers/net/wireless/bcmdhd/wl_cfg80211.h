@@ -78,9 +78,9 @@ struct bcm_cfg80211 *wl_get_bcm_cfg80211_ptr(void);
 #define WL_DBG_LEVEL 0xFF
 
 #ifdef CUSTOMER_HW4_DEBUG
-#define CFG80211_ERROR_TEXT		"CFG80211-INFO2) "
+#define CFG80211_ERROR_TEXT		"(CFG80211)"
 #else
-#define CFG80211_ERROR_TEXT		"CFG80211-ERROR) "
+#define CFG80211_ERROR_TEXT		"(CFG80211)"
 #endif /* CUSTOMER_HW4_DEBUG */
 
 #if defined(DHD_DEBUG)
@@ -98,7 +98,7 @@ do {	\
 #define	WL_ERR(args)									\
 do {										\
 	if (wl_dbg_level & WL_DBG_ERR) {				\
-			printf(KERN_INFO CFG80211_ERROR_TEXT "%s : ", __func__);	\
+			printf(CFG80211_ERROR_TEXT "%s : ", __func__);	\
 			printf args;						\
 		}								\
 } while (0)
