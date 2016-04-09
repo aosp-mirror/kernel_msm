@@ -511,6 +511,7 @@ static ssize_t wifi_vendor_read(struct file *file, char __user *userbuf,
 
 	if (NULL == userbuf)
 	{
+		DHD_ERROR(("%s userbuf is NULL!\n", __FUNCTION__));
 		return -EFAULT;
 	}
 
@@ -519,6 +520,7 @@ static ssize_t wifi_vendor_read(struct file *file, char __user *userbuf,
 
 	if(copy_to_user(userbuf, vendor_id, len))
 	{
+		DHD_ERROR(("%s vendor ID copy to user fail!\n", __FUNCTION__));
 		return -EFAULT;
 	}
 
@@ -577,8 +579,8 @@ static int dhd_wifi_get_mac_addr(unsigned char *buf)
 
 	memcpy(buf, g_wlan_ether_addr, ETHER_ADDR_LEN);
 
-	printk(KERN_INFO"%s:MAC:%02X:%02X:%02X:%02X:%02X:%02X\n", __func__,
-			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
+	DHD_INFO(("%s:MAC:%02X:%02X:%02X:%02X:%02X:%02X\n", __func__,
+			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]));
 
 	return 0;
 }
