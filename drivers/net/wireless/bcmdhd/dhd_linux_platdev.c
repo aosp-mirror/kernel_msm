@@ -215,7 +215,7 @@ int wifi_platform_get_mac_addr(wifi_adapter_info_t *adapter, unsigned char *buf)
 {
 	struct wifi_platform_data *plat_data;
 
-	DHD_ERROR(("%s\n", __FUNCTION__));
+	DHD_TRACE(("%s\n", __FUNCTION__));
 	if (!buf || !adapter || !adapter->wifi_plat_data)
 		return -EINVAL;
 	plat_data = adapter->wifi_plat_data;
