@@ -53,6 +53,7 @@
 
 #define AUTO_INPUT_CURRENT_REG	0x3F
 #define MAX_REG_INFO_COUNT	3
+#define DEFAULT_MAX_INPUT_LIMIT	0x54
 struct smb231_charger {
 	int int_smb231_i2c_enable;
 
@@ -353,6 +354,11 @@ static int smb231_set_usb_chg_current(struct smb231_charger *chip)
 {
 	int rc;
 
+	dev_info(chip->dev, "smb231_set_usb_chg_current \n");
+	rc = smb231_enable_volatile_writes(chip);
+	if (rc) 
+		return rc;
+
 	//AC input limit = 500 mA
 	rc = smb231_masked_write(chip, INPUT_CURRENT_LIMIT, (BIT(4) | BIT(3) | BIT(2)), BIT(3));
 	if (rc) 
@@ -518,31 +524,32 @@ static int smb231_battery_get_property(struct power_supply *psy, enum power_supp
 static void smb231_external_power_changed(struct power_supply *psy)
 {
 	int rc, charger_exist = 0;
+	u8 reg = 0;
 	struct smb231_charger *chip = container_of(psy, struct smb231_charger, batt_psy);
 
-	rc = smb231_enable_volatile_writes(chip);
+	rc = smb231_read_reg(chip, INPUT_CURRENT_LIMIT, &reg);
 	if (rc)
 		charger_exist = 0;
 	else
 		charger_exist = 1;
 
+	dev_info(chip->dev, "smb231_external_power_changed, original state = %d, new state = %d \n", chip->int_smb231_i2c_enable, charger_exist);
+	//Make sure the charger setting is the new setting
+	if (charger_exist && (reg == DEFAULT_MAX_INPUT_LIMIT))
+		rc = smb231_set_usb_chg_current(chip);
+
 	//To avoid this function is called multiple times in 1 seconds
-	if((chip->int_smb231_i2c_enable) ^ charger_exist)
+	if ((chip->int_smb231_i2c_enable) ^ charger_exist)
 		chip->int_smb231_i2c_enable = charger_exist;
 	else	
 		return;
 
-	if(!charger_exist) {
-		if(reg_info_timer_add) {
+	if (!charger_exist) {
+		if (reg_info_timer_add) {
 			del_timer(&g_chip->register_info_timer);
 			reg_info_timer_add = false;
 		}
-		return;
-	}
-
-	rc = smb231_set_usb_chg_current(chip);
-	if (rc) {
-		chip->int_smb231_i2c_enable = 0;
+		power_supply_changed(&chip->batt_psy);
 		return;
 	}
 
