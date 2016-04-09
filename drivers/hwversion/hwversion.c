@@ -152,6 +152,8 @@ static int hwver_probe(struct platform_device *pdev)
     struct device_node *np  = NULL;
     static struct proc_dir_entry *hw_version = NULL;
     struct qpnp_vadc_chip *g_chip_ver0 = NULL;
+    struct pinctrl* hwver_pinctrl = NULL;
+    struct pinctrl_state *set_state = NULL;
 
     printk(KERN_ERR "hwver_probe begin...\n");
 
@@ -185,44 +187,69 @@ static int hwver_probe(struct platform_device *pdev)
 
     /*get PCB version GPIOs */
     pcbver_gpio1 = of_get_named_gpio(np, "pcbver1-gpios", 0);
-    if (pcbver_gpio1 < 0)
+    if ( !gpio_is_valid(pcbver_gpio1) )
     {
         printk(KERN_ERR "PCB version GPIO1 get failed!\n ");
         return -1;
     }
 
     pcbver_gpio2 = of_get_named_gpio(np, "pcbver2-gpios", 0);
-    if (pcbver_gpio2 < 0)
+    if (!gpio_is_valid(pcbver_gpio2))
     {
         printk(KERN_ERR "PCB version GPIO2 get failed!\n ");
         return -1;
     }
+
+    /*set the pinctrl state*/
+    hwver_pinctrl = devm_pinctrl_get(&(pdev->dev));
+    if(!hwver_pinctrl)
+    {
+        printk(KERN_ERR "pinctrl get failed\n");
+        return -1;
+    }
+    set_state = pinctrl_lookup_state(hwver_pinctrl,"default");
+    if(!set_state)
+    {
+        printk(KERN_ERR "can not find pinctrl setstate\n");
+        return -1;
+    }
+    pinctrl_select_state(hwver_pinctrl,set_state);
 
     /*get gpio status*/
     pcb1_err = gpio_request(pcbver_gpio1,"pcbver1-gpios");
     if (pcb1_err)
     {
         printk(KERN_ERR "request gpio82 failed\n");
-	    return -1;
+        return -1;
+    }
+    if ( gpio_direction_input(pcbver_gpio1) )
+    {
+        printk(KERN_ERR "GPIO input_mode set failed\n");
+        return -1;
     }
     pcb1_status = gpio_get_value_cansleep(pcbver_gpio1);
     if ( pcb1_status != 0 && pcb1_status != 1 )
     {
         printk(KERN_ERR "gpio82 status error\n");
-	    return -1;
+        return -1;
     }
 
     pcb2_err = gpio_request(pcbver_gpio2,"pcbver2-gpios");
     if (pcb2_err)
     {
         printk(KERN_ERR "request gpio83 failed\n");
-	    return -1;
+        return -1;
+    }
+    if ( gpio_direction_input(pcbver_gpio2) )
+    {
+        printk(KERN_ERR "GPIO input_mode set failed\n");
+        return -1;
     }
     pcb2_status = gpio_get_value_cansleep(pcbver_gpio2);
     if ( pcb2_status != 0 && pcb2_status != 1 )
     {
         printk(KERN_ERR "gpio83 status error\n");
-	    return -1;
+        return -1;
     }
 
     pcb_num1 = pcb1_status;
