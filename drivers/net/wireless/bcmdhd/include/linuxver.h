@@ -556,7 +556,11 @@ typedef struct {
 /* requires  tsk_ctl_t tsk  argument, the caller's priv data is passed in owner ptr */
 /* note this macro assumes there may be only one context waiting on thread's completion */
 #ifdef DHD_DEBUG
-#define DBG_THR(x) printk x
+#define DBG_THR(x) \
+do { \
+	printk("BCMDHD:"); \
+	printk x; \
+} while (0)
 #else
 #define DBG_THR(x)
 #endif

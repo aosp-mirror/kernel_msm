@@ -6076,7 +6076,7 @@ dhd_open(struct net_device *net)
 		atomic_set(&dhd->pend_8021x_cnt, 0);
 #if defined(WL_CFG80211)
 		if (!dhd_download_fw_on_driverload) {
-			DHD_ERROR(("\n%s\n", dhd_version));
+			DHD_ERROR(("%s\n", dhd_version));
 #if defined(USE_INITIAL_SHORT_DWELL_TIME)
 			g_first_broadcast_scan = TRUE;
 #endif 
@@ -6921,14 +6921,19 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	adapter = dhd_wifi_platform_get_adapter(bus_type, bus_num, slot_num);
 
 	/* Allocate primary dhd_info */
+#ifdef CONFIG_DHD_USE_STATIC_BUF
 	dhd = wifi_platform_prealloc(adapter, DHD_PREALLOC_DHD_INFO, sizeof(dhd_info_t));
 	if (dhd == NULL) {
-		dhd = MALLOC(osh, sizeof(dhd_info_t));
-		if (dhd == NULL) {
-			DHD_ERROR(("%s: OOM - alloc dhd_info\n", __FUNCTION__));
-			goto fail;
-		}
+		DHD_ERROR(("%s: OOM - prealloc dhd_info\n", __FUNCTION__));
+		goto fail;
 	}
+#else
+	dhd = MALLOC(osh, sizeof(dhd_info_t));
+	if (dhd == NULL) {
+		DHD_ERROR(("%s: OOM - alloc dhd_info\n", __FUNCTION__));
+		goto fail;
+	}
+#endif
 	memset(dhd, 0, sizeof(dhd_info_t));
 	dhd_state |= DHD_ATTACH_STATE_DHD_ALLOC;
 
@@ -8268,8 +8273,7 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	}
 #endif /* DISABLE_PRUNED_SCAN */
 
-	DHD_ERROR(("Firmware up: op_mode=0x%04x, MAC="MACDBG"\n",
-		dhd->op_mode, MAC2STRDBG(dhd->mac.octet)));
+	DHD_ERROR(("Firmware up: op_mode=0x%04x\n", dhd->op_mode));
 	#if defined(RXFRAME_THREAD) && defined(RXTHREAD_ONLYSTA)
 	if (dhd->op_mode == DHD_FLAG_HOSTAP_MODE)
 		dhd->info->rxthread_enabled = FALSE;
@@ -8280,8 +8284,9 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	if (dhd->dhd_cspec.ccode[0] != 0) {
 		bcm_mkiovar("country", (char *)&dhd->dhd_cspec,
 			sizeof(wl_country_t), iovbuf, sizeof(iovbuf));
-		if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0)) < 0)
-			DHD_ERROR(("%s: country code setting failed\n", __FUNCTION__));
+		if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0)) < 0){
+			DHD_ERROR(("%s: country code setting failed returned(%d)\n", __FUNCTION__, ret));
+		}
 	}
 
 
@@ -9275,11 +9280,11 @@ dhd_register_if(dhd_pub_t *dhdp, int ifidx, bool need_rtnl_lock)
 
 
 
-	printf("Register interface [%s]  MAC: "MACDBG"\n\n", net->name,
+	DHD_TRACE(("Register interface [%s]  MAC: "MACDBG"\n\n", net->name,
 #if defined(CUSTOMER_HW4_DEBUG)
-		MAC2STRDBG(dhd->pub.mac.octet));
+		MAC2STRDBG(dhd->pub.mac.octet)));
 #else
-		MAC2STRDBG(net->dev_addr));
+		MAC2STRDBG(net->dev_addr)));
 #endif /* CUSTOMER_HW4_DEBUG */
 
 #if defined(SOFTAP) && defined(WL_WIRELESS_EXT) && !defined(WL_CFG80211)
