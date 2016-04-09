@@ -12,11 +12,14 @@
 #include "HB442528EBC-XWD-4v35-300mah.dtsi"
 &soc {
     /*ADC for hw version*/
-	qcom,hwversion {
-		compatible = "qcom,hwversion";
-		qcom,hwver0-vadc = <&pm8916_vadc>;/* hwver0 */
-		pcbver1-gpios = <&msm_gpio 82 0>;/* pcbver0*/
-		pcbver2-gpios = <&msm_gpio 83 0>;/* pcbver1*/
+    qcom,hwversion {
+                compatible = "qcom,hwversion";
+                qcom,hwver0-vadc = <&pm8916_vadc>;/* hwver0 */
+                pcbver1-gpios = <&msm_gpio 82 0>;/* pcbver0*/
+                pcbver2-gpios = <&msm_gpio 83 0>;/* pcbver1*/
+                pinctrl-names = "default","suspend";
+                pinctrl-0 = <&pcb_ver_0_active &pcb_ver_1_active>;
+                pinctrl-1 = <&pcb_ver_0_suspend &pcb_ver_1_suspend>;
 	};
 
     i2c@78b8000 {
