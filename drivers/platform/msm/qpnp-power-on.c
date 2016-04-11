@@ -292,6 +292,17 @@ static const char * const qpnp_poff_reason[] = {
 
 //ASUS_BSP YuSiang: "keypad test for factory"
 #ifdef ASUS_FACTORY_BUILD
+#define CLASS_NAME	"keypad_test"
+#define DRV_NAME	"pwr_key"
+
+struct keypad_test_node {
+	struct class *dev_class;
+	dev_t dev_num;
+	struct device *dev;
+};
+static struct keypad_test_node pwrkey_node;
+
+
 ssize_t pwr_test_enable;
 ssize_t pwr_press_count = 0;
 ssize_t pwr_key_code_pressed = 0;
@@ -2300,11 +2311,31 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 	
 //ASUS_BSP YuSiang: "keypad test for factory"
 #ifdef ASUS_FACTORY_BUILD
-	rc = device_create_file(&spmi->dev, &dev_attr_test_pwrkey);
+	pwrkey_node.dev_class = class_create(THIS_MODULE, CLASS_NAME);
+	if (pwrkey_node.dev_class == NULL) {
+		dev_err(pwrkey_node.dev,"%s: class_create fail.\n",__func__);
+		goto res_err;
+	}
+
+	rc = alloc_chrdev_region(&pwrkey_node.dev_num, 0, 1, DRV_NAME);
 	if (rc) {
-		dev_err(&spmi->dev, "sys file creation failed rc: %d\n",
+		dev_err(pwrkey_node.dev,"%s: alloc_chrdev_region fail.\n",__func__);
+		goto alloc_chrdev_region_err;
+	}
+
+	pwrkey_node.dev = device_create(pwrkey_node.dev_class, NULL,
+				     pwrkey_node.dev_num,
+				     &pwrkey_node, DRV_NAME);
+	if (IS_ERR(pwrkey_node.dev)) {
+		dev_err(pwrkey_node.dev,"%s: device_create fail.\n",__func__);
+		goto device_create_err;
+	}
+
+	rc = device_create_file(pwrkey_node.dev, &dev_attr_test_pwrkey);
+	if (rc) {
+		dev_err(pwrkey_node.dev, "sys file creation failed rc: %d\n",
 			rc);
-		return rc;
+		goto device_create_file_err;
 	}
 #endif
 
@@ -2329,6 +2360,16 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 
 	qpnp_pon_debugfs_init(spmi);
 	return 0;
+
+#ifdef ASUS_FACTORY_BUILD
+device_create_file_err:
+device_create_err:
+	unregister_chrdev_region(pwrkey_node.dev_num, 1);
+alloc_chrdev_region_err:
+	class_destroy(pwrkey_node.dev_class);
+res_err:
+	return -ENODEV;
+#endif
 }
 
 static int qpnp_pon_remove(struct spmi_device *spmi)
@@ -2340,7 +2381,7 @@ static int qpnp_pon_remove(struct spmi_device *spmi)
 
 //ASUS_BSP YuSiang: "keypad test for factory"
 #ifdef ASUS_FACTORY_BUILD
-	device_remove_file(&spmi->dev, &dev_attr_test_pwrkey);
+	device_remove_file(pwrkey_node.dev, &dev_attr_test_pwrkey);
 #endif
 
 	cancel_delayed_work_sync(&pon->bark_work);
