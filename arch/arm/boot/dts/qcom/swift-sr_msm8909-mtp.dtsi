@@ -246,7 +246,8 @@
 	vdd-supply = <&pm8909_l8>;
 	qcom,vdd-voltage-level = <2900000 2900000>;
 	qcom,vdd-current-level = <200 400000>;
-
+	qcom,vdd-always-on; /*ASUS_BSP: make sure eMMC VDD alawys on even suspend*/
+	
 	vdd-io-supply = <&pm8909_l5>;
 	qcom,vdd-io-always-on;
 	qcom,vdd-io-lpm-sup;
