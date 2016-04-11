@@ -1862,6 +1862,8 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		}
 
 		ret = mdss_fb_blank_blank(mfd, req_power_state);
+		pr_debug("[Debug] set to ULP 3-bit mode\n");
+		mdss_fb_set_3bit_color_mode(mfd, true);
 		break;
 	case BLANK_FLAG_LP:
 		req_power_state = MDSS_PANEL_POWER_LP1;
@@ -1878,10 +1880,7 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		}
 
 		ret = mdss_fb_blank_blank(mfd, req_power_state);
-
-		pr_debug("[Debug] set to 3-bit mode\n");
-		mdss_fb_set_3bit_color_mode(mfd, true);
-		
+	
 		break;
 	case FB_BLANK_HSYNC_SUSPEND:
 	case FB_BLANK_POWERDOWN:
