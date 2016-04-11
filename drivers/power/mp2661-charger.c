@@ -1513,7 +1513,10 @@ static int mp2661_hw_init(struct mp2661_chg *chip)
         return rc;
     }
 
-    rc = mp2661_ntc_enable(chip, true);
+    /* TODO (b/30979364): The ntc temp of mp2661 is 60 and easily cause board to shutdown,
+     * So disable ntc temporarily here but we need to re-enable it before product release.
+    */
+    rc = mp2661_ntc_enable(chip, false);
     if (rc)
     {
         pr_err("Couldn't enable ntc rc=%d\n", rc);
