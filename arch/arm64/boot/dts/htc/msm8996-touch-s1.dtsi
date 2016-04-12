@@ -1,5 +1,7 @@
 &soc {
-	/delete-node/ touch_fw_update;
+	touch_fw_update {
+		compatible = "htc,touch_fwu";
+	};
 };
 
 &tlmm {
@@ -157,4 +159,132 @@
 	};
 
 	/delete-node/ synaptics_dsx@20;
+	synaptics_dsx@20 {
+		compatible = "synaptics,dsx-i2c";
+		reg = <0x20>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <125 0x2008>;
+		synaptics,irq-gpio = <&tlmm 125 0x2008>;  /* IRQF_ONESHOT | IRQF_TRIGGER_LOW */
+		synaptics,reset-gpio = <&tlmm 89 0x00>;
+		synaptics,reset-on-state = <0>;
+		synaptics,reset-active-ms = <1>;
+		synaptics,reset-delay-ms = <20>;
+		synaptics,switch-gpio = <&tlmm 80 0x00>;
+		synaptics,update-feature = <0>;
+		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
+		pinctrl-0 = <&ts_rst_active &ts_intr_active>;
+		pinctrl-1 = <&ts_rst_suspend &ts_intr_suspend>;
+
+		config_0 {
+			pr_number     = <2235544>;
+			sensor_id = <0x0>;
+			config = [
+				03 18 00 02 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				04 7F 03 1E 05 51 0E 37
+				04 7F 07 46 3E 2F 3F 03
+				03 03 03 10 1C 1E 05 F5
+				28 1E 05 28 30 00 30 00
+				F0 D2 F0 D2 25 0D 05 8C
+				00 00 05 0F 80 0F 0A 20
+				00 01 01 07 04 04 0A C0
+				19 64 26 26 80 80 00 00
+				C8 C0 53 5B 80 5A 19 01
+				40 40 32 50 00 00 00 00
+				4C 04 6C 07 3C 32 00 00
+				00 00 4C 04 6C 07 1E 05
+				1E 04 0A 04 0A 00 0A 04
+				04 00 0A 78 02 00 7D 00
+				02 00 C8 00 00 00 96 00
+				00 00 00 00 15 0A 00 00
+				00 78 00 96 00 32 00 00
+				00 00 00 00 00 00 00 0D
+				00 00 14 03 0C 0F 0A 00
+				4B 00 00 FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF 00 01 00 00
+				32 00 14 00 14 00 64 00
+				64 00 10 00 10 00 7D 00
+				7D 00 40 66 58 1B 28 00
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				01 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 FF
+				00 FF 14 55 09 0E 3C 0A
+				0F 64 64 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF 00 01 8C
+				00 80 04 1B 00 00 FF FF
+				FF FF FF FF FF FF FF 00
+				C0 80 04 10 0A 18 00 79
+				00 FF FF 01 FF FF FF FF
+				04 04 07 07 02 FF FF 01
+				04 05 40 00 17 00 00 00
+				02 00 01 2A 85 3E 00 17
+				00 01 00 02 00 01 2C 84
+				3D 00 17 00 02 00 02 00
+				01 2D 84 3C 00 16 00 03
+				00 05 00 02 26 84 3B 00
+				16 00 04 00 05 00 02 27
+				84 39 00 15 00 05 00 05
+				00 02 28 84 38 00 15 00
+				06 00 05 00 02 28 84 37
+				00 14 00 07 00 05 00 02
+				29 02 02 02 02 02 02 02
+				02 02 02 02 02 02 02 02
+				02 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 1C 00 06 00 A6
+				00 14 64 00 01 1B 01 00
+				08 08 A0 00 A0 00 50 50
+				1E 03 0C 0C 14 28 04 00
+				00 00 00 00 00 00 00 00
+				00 16 0A 80 07 07 07 06
+				1B 1B 00 00 07 07 07 07
+				06 1B 1B 00 00 07 04 04
+				50 00 07 05 00 40 38 00
+				05 0B 00 22 02 00 00 00
+				0D DD DD FF 0D EE EE 55
+				00 00 0D EE EE 00 0D EE
+				EE AA 00 00 00 FF FF FF
+				FF FF FF FF FF 51 51 51
+				51 CD 0D 04 83 10 10 10
+				10 61 24 64 01 12 18 1A
+				38 36 31 35 32 3A 37 14
+				34 15 33 17 11 FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF 30
+				28 2F 2A 29 2C 27 2B 1B
+				1D 1E 1F 1C 0D 10 0F 0C
+				07 0E 08 09 03 06 02 0A
+				0B 04 05 FF FF FF FF FF
+				FF 00 10 00 10 00 10 00
+				10 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 00 10 00
+				10 00 10 00 10 00 00 16
+				19 24 39 FF FF FF FF 0B
+				0B 04 00 00 00
+			];
+		};
+	};
 };
