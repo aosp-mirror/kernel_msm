@@ -90,11 +90,11 @@
 		];
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
 		qcom,cont-splash-enabled;
-		qcom,panel-supply-entries = <&dsi_panel_pwr_supply_ea8064tg>;
+		qcom,panel-supply-entries = <&dsi_panel_pwr_supply_s6e3ha3>;
 		qcom,mdss-dsi-lp11-init;
 		qcom,esd-check-enabled;
 		qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";
-		htc,brt-bl-table = <30 37>, <142 1075>, <255 4095>;
-		htc,mdss-camera-blk = <170>;
+		htc,brt-bl-table = <30 7>, <142 78>, <255 255>;
+		htc,mdss-camera-blk = <196>;
 	};
 };

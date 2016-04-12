@@ -78,8 +78,6 @@
                 pm8994_l29: regulator-l29 {
                         regulator-min-microvolt = <3000000>;
                         regulator-max-microvolt = <3000000>;
-                        regulator-boot-on;
-                        regulator-always-on;
                         qcom,init-voltage = <3000000>;
                         status = "okay";
                 };
