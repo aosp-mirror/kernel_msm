@@ -35178,6 +35178,7 @@ int wma_dfs_indicate_radar(struct ieee80211com *ic,
 		{
 			WMA_LOGE("%s:Application triggered channel switch in progress!.. drop radar event indiaction to SAP",
 				__func__);
+			vos_mem_free(radar_event);
 			adf_os_spin_unlock_bh(&ic->chan_lock);
 			return 0;
 		}
