@@ -478,6 +478,27 @@ static struct stc311x_platform_data stc3117_data = {
 	.ForceExternalTemperature = 0,
 };
 
+static int stc311x_set_property(struct power_supply *psy,
+				  enum power_supply_property psp,
+				  const union power_supply_propval *val)
+{
+	struct stc311x_chip *chip = container_of(psy,
+						 struct stc311x_chip, battery);
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
+		if(val->intval)
+			chip->status = POWER_SUPPLY_STATUS_CHARGING;
+		else
+			chip->status = POWER_SUPPLY_STATUS_DISCHARGING;
+		power_supply_changed(&chip->battery);
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
 static int stc311x_get_property(struct power_supply *psy,
 				enum power_supply_property psp,
 				union power_supply_propval *val)
@@ -2220,7 +2241,7 @@ static void stc311x_work(struct work_struct *work)
 	else
 		low_battery_counter = 0;
 
-	pr_err("stc311x_work() ***** SOC = %d, voltage = %d mv, current = %d mA, Temperature = %d ***** \n", chip->batt_soc, chip->batt_voltage, chip->batt_current, chip->Temperature);
+	dev_info(chip->dev, "stc311x_work() ***** SOC = %d, voltage = %d mv, current = %d mA, Temperature = %d, charging_status = %s ***** \n", chip->batt_soc, chip->batt_voltage, chip->batt_current, chip->Temperature, charge_status[chip->status]);
 
 	stc311x_updata();
 	stc311x_get_online(sav_client);
@@ -2279,6 +2300,7 @@ static int stc311x_probe(struct i2c_client *client,
 	chip->battery.name		= "battery";
 	chip->battery.type		= POWER_SUPPLY_TYPE_BATTERY;
 	chip->battery.get_property	= stc311x_get_property;
+	chip->battery.set_property	= stc311x_set_property;
 	chip->battery.properties	= stc311x_battery_props;
 	chip->battery.num_properties	= ARRAY_SIZE(stc311x_battery_props);
 
