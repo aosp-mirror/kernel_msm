@@ -67,10 +67,10 @@ static struct {
 	u32 mid;
 	char *vendor_name;
 } emmc_mid_tbl[] = {
-     { 0x90, "HYNIX"}
-    ,{ 0x45, "SANDISK"}
-    ,{ 0x15, "SAMSUNG"}
-    ,{ 0x11, "TOSHIBA"}
+     { 0x90, "Hynix-"}
+    ,{ 0x45, "Sandisk-"}
+    ,{ 0x15, "Samsung-"}
+    ,{ 0x11, "Toshiba-"}
 };
 #define EMMC_MID_TBL_MAX	(sizeof(emmc_mid_tbl)/sizeof(emmc_mid_tbl[0]))
 
@@ -86,19 +86,30 @@ static char* asus_get_emmc_status(struct mmc_card *card)
 			memset(whole_name, 0, sizeof(whole_name));
 			strcpy(whole_name, emmc_mid_tbl[i].vendor_name);
 
+		if(card->ext_csd.sectors > 80000000)
+			strcat(whole_name, "64G");
+		else if(card->ext_csd.sectors > 50000000)
+			strcat(whole_name, "32G");
+		else if(card->ext_csd.sectors > 20000000)
+			strcat(whole_name, "16G");
+		else if(card->ext_csd.sectors > 9000000)
+			strcat(whole_name, "8G");
+		else
+			strcat(whole_name, "4G");
+
 			switch(card->ext_csd.rev)
 			{
 				case 5:
-					strcat(whole_name, "-v4.41");
+					strcat(whole_name, "-4.41");
 					break;
 				case 6:
-					strcat(whole_name, "-v4.5");
+					strcat(whole_name, "-4.5");
 					break;
 				case 7:
-					strcat(whole_name, "-v5.0");
+					strcat(whole_name, "-5.0");
 					break;
 				case 8:
-					strcat(whole_name, "-v5.1");
+					strcat(whole_name, "-5.1");
 					break;
 				default:
 					strcat(whole_name, "-Unknown");
@@ -539,8 +550,10 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			sprintf(card->mmc_total_size, "32");
 		else if(card->ext_csd.sectors > 20000000)
 			sprintf(card->mmc_total_size, "16");
-		else
+		else if(card->ext_csd.sectors > 9000000)
 			sprintf(card->mmc_total_size, "8");
+		else
+			sprintf(card->mmc_total_size, "4");
 //ASUS_BSP --- "add eMMC total size for AMAX"
 	}
 
