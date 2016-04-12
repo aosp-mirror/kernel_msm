@@ -22,6 +22,8 @@
 #include "Log.h"
 #endif // FSC_DEBUG
 
+#include <linux/printk.h>
+
 #include "PD_Types.h"
 #include "PDPolicy.h"
 #include "PDProtocol.h"
@@ -2037,6 +2039,8 @@ void PolicySinkWaitCaps(void)
     }
 }
 
+extern u8 platform_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], int *device_max_ma);
+
 void PolicySinkEvaluateCaps(void)
 {
     // Due to latency with the PC and evaluating capabilities, we are always going to select the first one by default (5V default)
@@ -2044,6 +2048,7 @@ void PolicySinkEvaluateCaps(void)
     // If we want to automatically show the selection of a different capabilities message, we need to build in the functionality here
     // The evaluate caps
     FSC_S32 i, reqPos;
+    FSC_S32 device_max_ma = 0;
     FSC_U32 objVoltage = 0;
     FSC_U32 objCurrent, objPower, MaxPower, SelVoltage, ReqCurrent;
     objCurrent = 0;
@@ -2089,6 +2094,17 @@ void PolicySinkEvaluateCaps(void)
             reqPos = i + 1;                                                     // Store the position of the object
         }
     }
+
+    reqPos = platform_select_source_capability(CapsHeaderReceived.NumDataObjects, CapsReceived, &device_max_ma);
+    if (reqPos >= 0) {
+        if (CapsReceived[reqPos].PDO.SupplyType == pdoTypeFixed)
+            SelVoltage = CapsReceived[reqPos].FPDOSupply.Voltage;
+
+        reqPos++;
+    }
+
+    pr_info("FUSB %s: reqPos = %d, SelVoltage = %d after selection\n", __func__, reqPos, SelVoltage);
+
     if ((reqPos > 0) && (SelVoltage > 0))
     {
         PartnerCaps.object = CapsReceived[0].object;
@@ -2096,15 +2112,14 @@ void PolicySinkEvaluateCaps(void)
         SinkRequest.FVRDO.GiveBack = SinkGotoMinCompatible;                     // Set whether we will respond to the GotoMin message
         SinkRequest.FVRDO.NoUSBSuspend = SinkUSBSuspendOperation;               // Set whether we want to continue pulling power during USB Suspend
         SinkRequest.FVRDO.USBCommCapable = SinkUSBCommCapable;                  // Set whether USB communications is active
-        ReqCurrent = SinkRequestOpPower / SelVoltage;                           // Calculate the requested operating current
+        ReqCurrent = device_max_ma / 10;
         SinkRequest.FVRDO.OpCurrent = (ReqCurrent & 0x3FF);                     // Set the current based on the selected voltage (in 10mA units)
-        ReqCurrent = SinkRequestMaxPower / SelVoltage;                          // Calculate the requested maximum current
         SinkRequest.FVRDO.MinMaxCurrent = (ReqCurrent & 0x3FF);                 // Set the min/max current based on the selected voltage (in 10mA units)
         if (SinkGotoMinCompatible)                                              // If the give back flag is set...
             SinkRequest.FVRDO.CapabilityMismatch = FALSE;                       // There can't be a capabilities mismatch
         else                                                                    // Otherwise...
         {
-            if (objCurrent < ReqCurrent)                                 // If the max power available is less than the max power requested...
+            if (MaxPower < ReqCurrent * SelVoltage)                             // If the max power available is less than the max power requested...
             {
                 SinkRequest.FVRDO.CapabilityMismatch = TRUE;                    // flag the source that we need more power
                 SinkRequest.FVRDO.MinMaxCurrent = objCurrent;                     // Set operating power to max available

@@ -32,6 +32,7 @@
 #include <linux/of_irq.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/regulator/consumer.h>
+#include <linux/power/htc_battery.h>
 
 #include "fusb30x_global.h"                                                     // Chip structure access
 #include "../core/core.h"                                                       // Core access
@@ -937,6 +938,28 @@ void fusb_Delay10us(FSC_U32 delay10us)
     {
         msleep(us / 1000);                                  // Convert to ms. Non-blocking, low-precision sleep
     }
+}
+
+u8 fusb_battery_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], int *device_max_ma)
+{
+    u8 i, sel_voltage_pdo_index;
+    struct htc_pd_data htc_pdo_data;
+
+    for (i = 0; i <= obj_cnt; i++) {
+        if (i > 5) {
+            obj_cnt = 6;
+            break;
+        }
+        if (pd_data[i].PDO.SupplyType == pdoTypeFixed) {
+            htc_pdo_data.pd_list[i][0] = pd_data[i].FPDOSupply.Voltage * 50; // voltage (mV)
+            htc_pdo_data.pd_list[i][1] = pd_data[i].FPDOSupply.MaxCurrent * 10; // current (mA)
+        }
+    }
+
+    sel_voltage_pdo_index = htc_battery_pd_charger_support(obj_cnt, htc_pdo_data, device_max_ma);
+    pr_info("FUSB %s: device_max_ma = %d, cnt %d index %d\n", __func__, *device_max_ma, obj_cnt, sel_voltage_pdo_index);
+
+    return sel_voltage_pdo_index;
 }
 
 #ifdef FSC_DEBUG

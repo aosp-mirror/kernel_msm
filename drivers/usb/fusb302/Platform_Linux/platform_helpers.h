@@ -20,6 +20,8 @@
 #ifndef __FUSB_PLATFORM_HELPERS_H_
 #define __FUSB_PLATFORM_HELPERS_H_
 
+#include "../core/PD_Types.h"                                                   // State Log states
+
 #define INIT_DELAY_MS   500     // Time to wait before initializing the device, in ms
 #define RETRIES_I2C 3           // Number of retries for I2C reads/writes
 
@@ -68,6 +70,9 @@ FSC_BOOL fusb_GPIO_Get_IntN(void);
 * Description:     Sets or clear the value of the VCONN GPIO pin
 ********************************************************************************/
 FSC_BOOL fusb_Power_Vconn(FSC_BOOL set);
+
+u8 fusb_battery_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], int *device_max_ma);
+
 
 #ifdef FSC_DEBUG
 /*******************************************************************************

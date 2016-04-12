@@ -19,6 +19,7 @@
  */
 #include <linux/printk.h>                                                       // pr_err, printk, etc
 #include <linux/delay.h>
+#include "../core/PD_Types.h"
 #include "fusb30x_global.h"                                                     // Chip structure
 #include "platform_helpers.h"                                                   // Implementation details
 #include "../core/platform.h"
@@ -334,6 +335,11 @@ void platform_notify_attached_source(int value)
 			msleep(5000);
 		}
 	} while (notify_retry_count <= 3);
+}
+
+u8 platform_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], int *device_max_ma)
+{
+    return fusb_battery_select_source_capability(obj_cnt, pd_data, device_max_ma);
 }
 
 int usb_controller_register(struct device *parent, struct usb_controller *uc)
