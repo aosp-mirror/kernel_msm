@@ -4181,17 +4181,17 @@ static VOS_STATUS hdd_parse_ese_beacon_req(tANI_U8 *pValue,
     /* no argument followed by spaces */
     if ('\0' == *inPtr) return -EINVAL;
 
-    /* Getting the first argument ie measurement token */
+    /* Getting the first argument ie Number of IE fields */
     v = sscanf(inPtr, "%31s ", buf);
     if (1 != v) return -EINVAL;
 
     v = kstrtos32(buf, 10, &tempInt);
     if (v < 0) return -EINVAL;
 
+    tempInt = VOS_MIN(tempInt, SIR_ESE_MAX_MEAS_IE_REQS);
     pEseBcnReq->numBcnReqIe = tempInt;
 
-    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO_HIGH,
-               "Number of Bcn Req Ie fields(%d)", pEseBcnReq->numBcnReqIe);
+    hddLog(LOG1, "Number of Bcn Req Ie fields: %d", pEseBcnReq->numBcnReqIe);
 
     for (j = 0; j < (pEseBcnReq->numBcnReqIe); j++) {
         for (i = 0; i < 4; i++) {
@@ -4525,7 +4525,7 @@ static int hdd_set_rx_filter(hdd_adapter_t *adapter, bool action,
 			uint8_t pattern)
 {
 	int ret;
-	uint8_t i;
+	uint8_t i, j;
 	tHalHandle handle;
 	tSirRcvFltMcAddrList *filter;
 	hdd_context_t* hdd_ctx = WLAN_HDD_GET_CTX(adapter);
@@ -4564,19 +4564,20 @@ static int hdd_set_rx_filter(hdd_adapter_t *adapter, bool action,
 		}
 		vos_mem_zero(filter, sizeof(*filter));
 		filter->action = action;
-		for (i = 0; i < adapter->mc_addr_list.mc_cnt; i++) {
+		for (i = 0, j = 0; i < adapter->mc_addr_list.mc_cnt; i++) {
 			if (!memcmp(adapter->mc_addr_list.addr[i],
 				&pattern, 1)) {
-				memcpy(filter->multicastAddr[i],
+				memcpy(filter->multicastAddr[j],
 					adapter->mc_addr_list.addr[i],
 					sizeof(adapter->mc_addr_list.addr[i]));
-				filter->ulMulticastAddrCnt++;
 				hddLog(LOG1, "%s RX filter : addr ="
 				    MAC_ADDRESS_STR,
 				    action ? "setting" : "clearing",
-				    MAC_ADDR_ARRAY(filter->multicastAddr[i]));
+				    MAC_ADDR_ARRAY(filter->multicastAddr[j]));
+				j++;
 			}
 		}
+		filter->ulMulticastAddrCnt = j;
 		/* Set rx filter */
 		sme_8023MulticastList(handle, adapter->sessionId, filter);
 		vos_mem_free(filter);
@@ -7809,6 +7810,9 @@ static int hdd_driver_command(hdd_adapter_t *pAdapter,
                                           14, &priv_data);
            hddLog(LOG1, FL("Get antenna mode ret: %d mode: %s"),
                   ret, priv_data.buf);
+       } else if (strncmp(command, "STOP", 4) == 0) {
+          hddLog(LOG1, FL("STOP command"));
+          pHddCtx->driver_being_stopped = true;
        } else {
            MTRACE(vos_trace(VOS_MODULE_ID_HDD,
                             TRACE_CODE_HDD_UNSUPPORTED_IOCTL,
@@ -8858,6 +8862,8 @@ static int __hdd_open(struct net_device *dev)
        return -ENODEV;
    }
 
+   pHddCtx->driver_being_stopped = false;
+
    status = hdd_get_front_adapter (pHddCtx, &pAdapterNode);
    while ((NULL != pAdapterNode) && (VOS_STATUS_SUCCESS == status)) {
       if (test_bit(DEVICE_IFACE_OPENED, &pAdapterNode->pAdapter->event_flags)) {
@@ -9080,7 +9086,11 @@ static int kickstart_driver(bool load)
  */
 static inline void wlan_hdd_stop_enter_lowpower(hdd_context_t *hdd_ctx)
 {
-	kickstart_driver(false);
+	/* Do not clean up n/w ifaces if we are in DRIVER STOP phase or else
+	 * DRIVER START will fail and Wi-Fi will not resume successfully
+	 */
+	if (hdd_ctx && !hdd_ctx->driver_being_stopped)
+		kickstart_driver(false);
 }
 
 /**
@@ -9090,10 +9100,27 @@ static inline void wlan_hdd_stop_enter_lowpower(hdd_context_t *hdd_ctx)
  * Check if hardware can enter low power mode when all the interfaces are down.
  * For static driver, hardware can enter low power mode for all types of
  * interfaces.
+ *
+ * Return: true for power save allowed and false for power save not allowed
  */
-static inline int wlan_hdd_stop_can_enter_lowpower(hdd_adapter_t *adapter)
+static inline bool wlan_hdd_stop_can_enter_lowpower(hdd_adapter_t *adapter)
 {
-	return 1;
+	hdd_context_t *hdd_ctx =  WLAN_HDD_GET_CTX(adapter);
+
+	/* In static driver case, we need to distinguish between WiFi OFF and
+	 * DRIVER STOP. In both cases "ifconfig down" is happening. In OFF case,
+	 * want to allow lowest power mode and driver cleanup. In case of DRIVER
+	 * STOP do not want to allow power collapse for GO/SAP case. STOP
+	 * behavior is now identical across both DLKM and Static driver case.
+	 */
+	if (hdd_ctx && !hdd_ctx->driver_being_stopped)
+		return true;
+	else if ((WLAN_HDD_SOFTAP == adapter->device_mode) ||
+		(WLAN_HDD_MONITOR == adapter->device_mode) ||
+		(WLAN_HDD_P2P_GO == adapter->device_mode))
+		return false;
+	else
+		return true;
 }
 #endif
 
@@ -12816,7 +12843,6 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
 #endif
 
 #ifdef WLAN_KD_READY_NOTIFIER
-   cnss_diag_notify_wlan_close();
    nl_srv_exit(pHddCtx->ptt_pid);
 #else
    nl_srv_exit();
@@ -12910,6 +12936,7 @@ void __hdd_wlan_exit(void)
    }
 
    pHddCtx->isUnloadInProgress = TRUE;
+   pHddCtx->driver_being_stopped = false;
 
    vos_set_load_unload_in_progress(VOS_MODULE_ID_VOSS, TRUE);
    vos_set_unload_in_progress(TRUE);
@@ -13473,8 +13500,10 @@ static void hdd_bus_bw_compute_cbk(void *priv)
     tx_packets += (uint64_t)ipa_tx_packets;
     rx_packets += (uint64_t)ipa_rx_packets;
 
-    pValidAdapter->stats.tx_packets += ipa_tx_packets;
-    pValidAdapter->stats.rx_packets += ipa_rx_packets;
+    if (pValidAdapter) {
+        pValidAdapter->stats.tx_packets += ipa_tx_packets;
+        pValidAdapter->stats.rx_packets += ipa_rx_packets;
+    }
 #endif /* IPA_UC_OFFLOAD */
     if (!connected) {
         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
@@ -13873,6 +13902,10 @@ static void hdd_state_info_dump(char **buf_ptr, uint16_t *size)
 	}
 
 	hdd_ctx_ptr = vos_get_context(VOS_MODULE_ID_HDD, vos_ctx_ptr);
+	if (!hdd_ctx_ptr) {
+		hddLog(LOGE, FL("Failed to get hdd context "));
+		return;
+	}
 
 	hddLog(LOG1, FL("size of buffer: %d"), *size);
 
@@ -14012,9 +14045,9 @@ static int hdd_cnss_wlan_mac(hdd_context_t *hdd_ctx)
  * provisioned with mac addresses, driver uses it, else it will use wlan_mac.bin
  * to update HW MAC addresses.
  *
- * Return: None
+ * Return: 0 if success, errno otherwise
  */
-static void hdd_initialize_mac_address(hdd_context_t *hdd_ctx)
+static int hdd_initialize_mac_address(hdd_context_t *hdd_ctx)
 {
 	VOS_STATUS status;
 	int ret;
@@ -14022,15 +14055,18 @@ static void hdd_initialize_mac_address(hdd_context_t *hdd_ctx)
 	ret = hdd_cnss_wlan_mac(hdd_ctx);
 
 	if (ret == 0)
-		return;
+		return ret;
 
-	hddLog(LOGW, FL("Can't update mac config via platform driver ret:%d"),
-	       ret);
+	hddLog(LOGW, FL("Can't update MAC via platform driver ret: %d"), ret);
 
 	status = hdd_update_mac_config(hdd_ctx);
-	if (status != VOS_STATUS_SUCCESS)
+	if (status != VOS_STATUS_SUCCESS) {
 		hddLog(LOGW,
-		       FL("can't update mac config, using MAC from ini file"));
+		      FL("Failed to update MAC from %s status: %d"),
+		      WLAN_MAC_FILE, status);
+		return -EIO;
+	}
+	return 0;
 }
 /**---------------------------------------------------------------------------
 
@@ -14442,7 +14478,13 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
       goto err_wiphy_unregister;
    }
 
-   hdd_initialize_mac_address(pHddCtx);
+   ret = hdd_initialize_mac_address(pHddCtx);
+   if (!pHddCtx->cfg_ini->g_use_otpmac && ret) {
+       hddLog(LOGE,
+        FL("Failed to read MAC from platform driver or %s (driver load failed)"),
+        WLAN_MAC_FILE);
+       goto err_wiphy_unregister;
+   }
 
    {
       eHalStatus halStatus;
@@ -15003,6 +15045,13 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
       hddLog(LOG1, FL("Registered IPv4 notifier"));
 
    ol_pktlog_init(hif_sc);
+
+   /*
+    * Send btc page and wlan (p2p/sta/sap) interval to firmware if
+    * relevant parameters set in ini file.
+    */
+   hdd_set_btc_bt_wlan_interval(pHddCtx);
+
    hdd_runtime_suspend_init(pHddCtx);
    pHddCtx->isLoadInProgress = FALSE;
    vos_set_load_unload_in_progress(VOS_MODULE_ID_VOSS, FALSE);
@@ -15019,7 +15068,6 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
 
 err_nl_srv:
 #ifdef WLAN_KD_READY_NOTIFIER
-   cnss_diag_notify_wlan_close();
    nl_srv_exit(pHddCtx->ptt_pid);
 #else
    nl_srv_exit();
@@ -15239,7 +15287,9 @@ static int hdd_driver_init( void)
       hdd_set_conparam((v_UINT_t)con_mode);
 #endif
 
-#define HDD_WLAN_START_WAIT_TIME VOS_WDA_TIMEOUT + 5000
+/* accommodate the request firmware bin time out 2 min */
+#define REQUEST_FWR_TIMEOUT 120000
+#define HDD_WLAN_START_WAIT_TIME (VOS_WDA_TIMEOUT + 5000 + REQUEST_FWR_TIMEOUT)
 
    init_completion(&wlan_start_comp);
 
@@ -15368,6 +15418,8 @@ static void hdd_driver_exit(void)
        * If not, force shut down HW pipe
        */
       hdd_ipa_uc_force_pipe_shutdown(pHddCtx);
+
+      pHddCtx->driver_being_stopped = false;
 
 #ifdef QCA_PKT_PROTO_TRACE
       vos_pkt_proto_trace_close();

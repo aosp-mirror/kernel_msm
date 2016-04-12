@@ -213,7 +213,8 @@ enum log_event_indicator {
  * @WLAN_LOG_REASON_ADD_BSS_STA_FAIL: ADD BSS/STA rsp is failure
  * @WLAN_LOG_REASON_HDD_TIME_OUT: Wait for event Timeout in HDD layer
  * @WLAN_LOG_REASON_MGMT_FRAME_TIMEOUT:Management frame timedout
-   @WLAN_LOG_REASON_SME_OUT_OF_CMD_BUFL sme out of cmd buffer
+ * @WLAN_LOG_REASON_SME_OUT_OF_CMD_BUFL sme out of cmd buffer
+ * @WLAN_LOG_REASON_NO_SCAN_RESULTS: no scan results to report from HDD
  * This enum contains the different reason codes for bug report
  */
 enum log_event_host_reason_code {
@@ -233,6 +234,7 @@ enum log_event_host_reason_code {
 	WLAN_LOG_REASON_HDD_TIME_OUT,
 	WLAN_LOG_REASON_MGMT_FRAME_TIMEOUT,
 	WLAN_LOG_REASON_SME_OUT_OF_CMD_BUF,
+	WLAN_LOG_REASON_NO_SCAN_RESULTS,
 };
 
 

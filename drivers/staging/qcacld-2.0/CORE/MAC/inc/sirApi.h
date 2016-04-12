@@ -3476,6 +3476,8 @@ typedef struct sSirSmeAddStaSelfReq
     tANI_U16        pkt_err_disconn_th;
     uint8_t         nss_2g;
     uint8_t         nss_5g;
+    uint32_t        tx_aggregation_size;
+    uint32_t        rx_aggregation_size;
 }tSirSmeAddStaSelfReq, *tpSirSmeAddStaSelfReq;
 
 typedef struct sSirSmeDelStaSelfReq
@@ -4411,31 +4413,31 @@ typedef struct sSirScanOffloadReq {
 } tSirScanOffloadReq, *tpSirScanOffloadReq;
 
 /**
- * lim_scan_event_type - scan event types used in LIM
- * @LIM_SCAN_EVENT_STARTED - scan command accepted by FW
- * @LIM_SCAN_EVENT_COMPLETED - scan has been completed by FW
- * @LIM_SCAN_EVENT_BSS_CHANNEL - FW is going to move to HOME channel
- * @LIM_SCAN_EVENT_FOREIGN_CHANNEL - FW is going to move to FORIEGN channel
- * @LIM_SCAN_EVENT_DEQUEUED - scan request got dequeued
- * @LIM_SCAN_EVENT_PREEMPTED - preempted by other high priority scan
- * @LIM_SCAN_EVENT_START_FAILED - scan start failed
- * @LIM_SCAN_EVENT_RESTARTED - scan restarted
- * @LIM_SCAN_EVENT_MAX - max value for event type
+ * sir_scan_event_type - scan event types used in LIM
+ * @SIR_SCAN_EVENT_STARTED - scan command accepted by FW
+ * @SIR_SCAN_EVENT_COMPLETED - scan has been completed by FW
+ * @SIR_SCAN_EVENT_BSS_CHANNEL - FW is going to move to HOME channel
+ * @SIR_SCAN_EVENT_FOREIGN_CHANNEL - FW is going to move to FORIEGN channel
+ * @SIR_SCAN_EVENT_DEQUEUED - scan request got dequeued
+ * @SIR_SCAN_EVENT_PREEMPTED - preempted by other high priority scan
+ * @SIR_SCAN_EVENT_START_FAILED - scan start failed
+ * @SIR_SCAN_EVENT_RESTARTED - scan restarted
+ * @SIR_SCAN_EVENT_MAX - max value for event type
 */
-enum lim_scan_event_type {
-    LIM_SCAN_EVENT_STARTED=0x1,
-    LIM_SCAN_EVENT_COMPLETED=0x2,
-    LIM_SCAN_EVENT_BSS_CHANNEL=0x4,
-    LIM_SCAN_EVENT_FOREIGN_CHANNEL = 0x8,
-    LIM_SCAN_EVENT_DEQUEUED=0x10,
-    LIM_SCAN_EVENT_PREEMPTED=0x20,
-    LIM_SCAN_EVENT_START_FAILED=0x40,
-    LIM_SCAN_EVENT_RESTARTED=0x80,
-    LIM_SCAN_EVENT_MAX=0x8000
+enum sir_scan_event_type {
+    SIR_SCAN_EVENT_STARTED=0x1,
+    SIR_SCAN_EVENT_COMPLETED=0x2,
+    SIR_SCAN_EVENT_BSS_CHANNEL=0x4,
+    SIR_SCAN_EVENT_FOREIGN_CHANNEL = 0x8,
+    SIR_SCAN_EVENT_DEQUEUED=0x10,
+    SIR_SCAN_EVENT_PREEMPTED=0x20,
+    SIR_SCAN_EVENT_START_FAILED=0x40,
+    SIR_SCAN_EVENT_RESTARTED=0x80,
+    SIR_SCAN_EVENT_MAX=0x8000
 };
 
 typedef struct sSirScanOffloadEvent{
-    enum lim_scan_event_type event;
+    enum sir_scan_event_type event;
     tSirResultCodes reasonCode;
     tANI_U32 chanFreq;
     tANI_U32 requestor;
@@ -7302,5 +7304,17 @@ struct sme_ndp_peer_ind {
 };
 
 #endif /* WLAN_FEATURE_NAN_DATAPATH */
+
+/**
+ * struct sir_set_tx_rx_aggregation_size - sets tx rx aggregation size
+ * @vdev_id: vdev id of the session
+ * @tx_aggregation_size: Tx aggregation size
+ * @rx_aggregation_size: Rx aggregation size
+ */
+struct sir_set_tx_rx_aggregation_size {
+	uint8_t vdev_id;
+	uint32_t tx_aggregation_size;
+	uint32_t rx_aggregation_size;
+};
 
 #endif /* __SIR_API_H */

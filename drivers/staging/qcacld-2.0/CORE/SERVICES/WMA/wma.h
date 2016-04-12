@@ -71,6 +71,7 @@
 #include "wlan_qct_wda.h"
 #include <linux/workqueue.h>
 #include "ol_defines.h"
+#include "limTypes.h"
 
 /* Platform specific configuration for max. no. of fragments */
 #define QCA_OL_11AC_TX_MAX_FRAGS            2
@@ -185,7 +186,7 @@ typedef struct probeTime_dwellTime {
 
 static const t_probeTime_dwellTime
 	probeTime_dwellTime_map[WMA_DWELL_TIME_PROBE_TIME_MAP_SIZE] = {
-	{28, 0}, /* 0 SSID */
+	{28, 11}, /* 0 SSID */
 	{28, 20}, /* 1 SSID */
 	{28, 20}, /* 2 SSID */
 	{28, 20}, /* 3 SSID */
@@ -1710,12 +1711,19 @@ void wma_send_flush_logs_to_fw(tp_wma_handle wma_handle);
 struct wma_txrx_node *wma_get_interface_by_vdev_id(uint8_t vdev_id);
 bool wma_is_vdev_up(uint8_t vdev_id);
 
+int wma_btc_set_bt_wlan_interval(tp_wma_handle wma_handle,
+			WMI_COEX_CONFIG_CMD_fixed_param *interval);
+
+
 int wma_crash_inject(tp_wma_handle wma_handle, uint32_t type,
 			uint32_t delay_time_ms);
 
 uint32_t wma_get_vht_ch_width(void);
 
 VOS_STATUS wma_get_wakelock_stats(struct sir_wake_lock_stats *wake_lock_stats);
+VOS_STATUS wma_set_tx_rx_aggregation_size
+	(struct sir_set_tx_rx_aggregation_size *tx_rx_aggregation_size);
+
 /**
  * wma_find_vdev_by_id() - Find vdev handle for given vdev id.
  * @wma: WMA handle

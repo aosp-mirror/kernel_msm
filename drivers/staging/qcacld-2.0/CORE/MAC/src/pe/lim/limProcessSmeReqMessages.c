@@ -5350,6 +5350,8 @@ __limProcessSmeAddStaSelfReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
    pAddStaSelfParams->pkt_err_disconn_th = pSmeReq->pkt_err_disconn_th;
    pAddStaSelfParams->nss_2g = pSmeReq->nss_2g;
    pAddStaSelfParams->nss_5g = pSmeReq->nss_5g;
+   pAddStaSelfParams->tx_aggregation_size = pSmeReq->tx_aggregation_size;
+   pAddStaSelfParams->rx_aggregation_size = pSmeReq->rx_aggregation_size;
 
    msg.type = SIR_HAL_ADD_STA_SELF_REQ;
    msg.reserved = 0;
