@@ -20,5 +20,14 @@
 			<258 0>,
 			<275 0>,
 			<300 0>;
-	qcom,board-id = <151 0>;
+
+	/* For V2/V3 version of DTBs we have platform version field as part
+	 * of variant ID, in such case the subtype will be mentioned as 0x0
+	 * As the qcom, board-id = <0xSSPMPmPH, 0x0>
+	 * SS -- Subtype
+	 * PM -- Platform major version
+	 * Pm -- Platform minor version
+	 * PH -- Platform hardware CDP/MTP
+	 */
+	qcom,board-id = <0x000097 0>;
 };
