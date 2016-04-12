@@ -33,8 +33,8 @@
 };
 
 &soc {
-
 	i2c_6: i2c@78ba000 { /* BLSP1 QUP6 */
+		status = "disabled";
 		compatible = "qcom,i2c-msm-v2";
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -90,10 +90,6 @@
 };
 
 &i2c_1 {
-	status = "disabled";
-};
-
-&spi_0 {
 	status = "disabled";
 };
 

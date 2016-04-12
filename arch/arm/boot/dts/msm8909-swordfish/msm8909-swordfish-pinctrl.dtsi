@@ -131,7 +131,7 @@
 			spi0_cs0_active: spi0_cs0_active {
 				mux {
 					pins = "gpio10";
-					function = "blsp_spi6";
+					function = "gpio";
 				};
 				config {
 					pins = "gpio10";

@@ -23,6 +23,14 @@
 	status = "okay";
 };
 
+&i2c_6 {
+	status = "ok";
+};
+
+&spi_0 {
+	status = "disabled";
+};
+
 /* pinctrl for slimport */
 &msm_gpio {
 	pmx_sp {
