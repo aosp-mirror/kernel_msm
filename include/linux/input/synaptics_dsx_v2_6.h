@@ -97,7 +97,6 @@ struct synaptics_dsx_board_data {
 	int power_on_state;
 	int reset_gpio;
 	int reset_on_state;
-	int switch_gpio;
 	int max_y_for_2d;
 	unsigned long irq_flags;
 	unsigned short i2c_addr;
@@ -116,6 +115,7 @@ struct synaptics_dsx_board_data {
 	struct synaptics_dsx_button_map *cap_button_map;
 	struct synaptics_dsx_button_map *vir_button_map;
 #ifdef HTC_FEATURE
+	int switch_gpio;
 	uint8_t update_feature;
 #endif
 };

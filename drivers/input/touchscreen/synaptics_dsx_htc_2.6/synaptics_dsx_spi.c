@@ -155,6 +155,14 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 		bdata->reset_delay_ms = 0;
 	}
 
+#ifdef HTC_FEATURE
+	bdata->switch_gpio = of_get_named_gpio_flags(np,
+			"synaptics,switch-gpio", 0, NULL);
+	if (bdata->switch_gpio < 0) {
+		bdata->switch_gpio = -1;
+	}
+#endif
+
 	prop = of_find_property(np, "synaptics,byte-delay-us", NULL);
 	if (prop && prop->length) {
 		retval = of_property_read_u32(np, "synaptics,byte-delay-us",
