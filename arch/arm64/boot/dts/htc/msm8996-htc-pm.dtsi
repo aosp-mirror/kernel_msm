@@ -46,4 +46,10 @@
 	reg-names = "phys_addr_base";
 	qcom,sleep-stats-version = <3>;
 	};
+
+	qcom,rpm-stats-ver {
+	compatible = "qcom,rpm-stats-ver";
+	reg = <0x290000 0x4>;
+	reg-names = "rpm_data_base";
+	};
 };
