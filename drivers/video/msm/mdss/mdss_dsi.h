@@ -19,6 +19,8 @@
 #include <linux/irqreturn.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/gpio.h>
+#include <linux/wakelock.h>
+
 
 #include "mdss_panel.h"
 #include "mdss_dsi_cmd.h"
@@ -462,6 +464,13 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds post_panel_on_cmds;
 	struct dsi_panel_cmds off_cmds;
 	struct dsi_panel_cmds status_cmds;
+	int idle;
+	struct dsi_panel_cmds idle_on_cmds;
+	struct dsi_panel_cmds idle_off_cmds;
+	struct dsi_panel_cmds brightness_cmds;
+	struct work_struct idle_on_work;
+	struct wake_lock idle_on_wakelock;
+
 	u32 *status_valid_params;
 	u32 *status_cmds_rlen;
 	u32 *status_value;
