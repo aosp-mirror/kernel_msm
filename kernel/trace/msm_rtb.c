@@ -234,46 +234,59 @@ EXPORT_SYMBOL(uncached_logk);
 static int msm_rtb_probe(struct platform_device *pdev)
 {
 	struct msm_rtb_platform_data *d = pdev->dev.platform_data;
+	struct resource *res = NULL;
 #if defined(CONFIG_MSM_RTB_SEPARATE_CPUS)
 	unsigned int cpu;
 #endif
 	int ret;
 
 	if (!pdev->dev.of_node) {
+		if (!d) {
+			return -EINVAL;
+		}
 		msm_rtb.size = d->size;
 	} else {
-		u64 size;
-		struct device_node *pnode;
-
-		pnode = of_parse_phandle(pdev->dev.of_node,
-						"linux,contiguous-region", 0);
-		if (pnode != NULL) {
-			const u32 *addr;
-
-			addr = of_get_address(pnode, 0, &size, NULL);
-			if (!addr) {
-				of_node_put(pnode);
-				return -EINVAL;
-			}
-			of_node_put(pnode);
+		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "msm_rtb_res");
+		if (res) {
+			msm_rtb.size = resource_size(res);
 		} else {
-			ret = of_property_read_u32(pdev->dev.of_node,
-					"qcom,rtb-size",
-					(u32 *)&size);
-			if (ret < 0)
-				return ret;
+			u64 size;
+			struct device_node *pnode;
 
+			pnode = of_parse_phandle(pdev->dev.of_node,
+							"linux,contiguous-region", 0);
+			if (pnode != NULL) {
+				const u32 *addr;
+
+				addr = of_get_address(pnode, 0, &size, NULL);
+				if (!addr) {
+					of_node_put(pnode);
+					return -EINVAL;
+				}
+				of_node_put(pnode);
+			} else {
+				ret = of_property_read_u32(pdev->dev.of_node,
+						"qcom,rtb-size",
+						(u32 *)&size);
+				if (ret < 0)
+					return ret;
+			}
+			msm_rtb.size = size;
 		}
-
-		msm_rtb.size = size;
 	}
+	pr_info("msm_rtb.size: 0x%x\n", msm_rtb.size);
 
 	if (msm_rtb.size <= 0 || msm_rtb.size > SZ_1M)
 		return -EINVAL;
 
-	msm_rtb.rtb = dma_alloc_coherent(&pdev->dev, msm_rtb.size,
-						&msm_rtb.phys,
-						GFP_KERNEL);
+	if (res) {
+		msm_rtb.phys = res->start;
+		msm_rtb.rtb = ioremap(msm_rtb.phys, msm_rtb.size);
+	} else {
+		msm_rtb.rtb = dma_alloc_coherent(&pdev->dev, msm_rtb.size, &msm_rtb.phys, GFP_KERNEL);
+	}
+
+	pr_info("msm_rtb set ok: phys: 0x%llx, size: 0x%x\n", msm_rtb.phys, msm_rtb.size);
 
 	if (!msm_rtb.rtb)
 		return -ENOMEM;
