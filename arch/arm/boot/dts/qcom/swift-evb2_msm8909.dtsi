@@ -1714,6 +1714,7 @@
 		qcom,sleep-status-mask= <0x80000>;
 	};
 };
+
 &gdsc_mdss {
 	clock-names = "core_clk", "bus_clk";
 	clocks = <&clock_gcc clk_gcc_mdss_mdp_clk>,
