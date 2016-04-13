@@ -54,6 +54,11 @@
 		};
 	};
 
+	qcom,msm-rtb {
+		reg = <0x83700000 0x100000>;
+		reg-names = "msm_rtb_res";
+	};
+
 	ramoops {
 		compatible = "ramoops";
 		status = "ok";
