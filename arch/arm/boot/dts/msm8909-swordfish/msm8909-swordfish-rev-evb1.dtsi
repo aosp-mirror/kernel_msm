@@ -14,4 +14,5 @@
 #include "../qcom/msm8909w-gpu.dtsi"
 #include "../qcom/msm8909-pm8916.dtsi"
 #include "../qcom/msm8909w.dtsi"
+#include "msm8909-swordfish-panel.dtsi"
 #include "msm8909-pm8916-swordfish.dtsi"

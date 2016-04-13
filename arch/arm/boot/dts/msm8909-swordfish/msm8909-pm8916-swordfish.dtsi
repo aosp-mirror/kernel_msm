@@ -10,7 +10,6 @@
  * GNU General Public License for more details.
  */
 
-#include "msm8909-swordfish-panel.dtsi"
 #include "msm8909-swordfish-pm.dtsi"
 
 / {

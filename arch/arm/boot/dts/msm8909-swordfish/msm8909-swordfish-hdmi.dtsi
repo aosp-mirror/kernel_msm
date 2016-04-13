@@ -1,0 +1,60 @@
+/* Copyright (c) 2016, LGE Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	i2c@78b5000 { /* BLSP1 QUP1 */
+		anx7805@72 {
+			compatible = "analogix,anx7805";
+			status = "ok";
+			reg = <0x72>;
+			analogix,reset-gpio = <&msm_gpio 24 0x00>;
+			analogix,irq-gpio = <&msm_gpio 25 0x00>;
+			analogix,p-dwn-gpio = <&msm_gpio 26 0x00>;
+			analogix,i2c-pull-up-gpio = <&msm_gpio 99 0x00>;
+			analogix,vdd_33-supply = <&pm8916_l17>;
+			analogix,vdd_18-supply = <&pm8916_l15>;
+			analogix,vdd_10-supply = <&pm8916_l11>;
+
+			pinctrl-names = "sp_active","sp_sleep";
+			pinctrl-0 = <&sp_rst_active
+				     &sp_isr_active
+				     &sp_pdwn_active
+				     &sp_i2c_active>;
+			pinctrl-1 = <&sp_rst_suspend
+				     &sp_isr_suspend
+				     &sp_pdwn_suspend
+				     &sp_i2c_suspend>;
+		};
+	};
+};
+
+&rpm_bus {
+	rpm-regulator-ldoa11 {
+		status = "okay";
+		pm8916_l11: regulator-l11 {
+			regulator-min-microvolt = <2950000>;
+			regulator-max-microvolt = <2950000>;
+			qcom,init-voltage = <2950000>;
+			status = "okay";
+		};
+	};
+	rpm-regulator-ldoa17 {
+		status = "okay";
+		pm8916_l17: regulator-l17 {
+			regulator-min-microvolt = <3300000>;
+			regulator-max-microvolt = <3300000>;
+			qcom,init-voltage = <3300000>;
+			status = "okay";
+		};
+	};
+};
+
