@@ -2962,7 +2962,9 @@ static void msm_otg_set_vbus_state(int online)
 		pr_debug("PMIC: BSV init complete\n");
 		msm_otg_dbg_log_event(&motg->phy, "PMIC: BSV INIT COMPLETE",
 				init, motg->inputs);
-		return;
+//ASUS_BSP+++ "[USB][NA][Spec] Avoid to ignore first VBUS event"
+		//return;
+//ASUS_BSP--- "[USB][NA][Spec] Avoid to ignore first VBUS event"
 	}
 
 out:
