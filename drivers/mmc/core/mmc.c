@@ -940,7 +940,7 @@ MMC_DEV_ATTR(rel_sectors, "%#x\n", card->ext_csd.rel_sectors);
 //ASUS_BSP +++ "emmc info for ATD"
 MMC_DEV_ATTR(life_time_A, "0x%x\n", card->ext_csd.raw_device_life_time_A);
 MMC_DEV_ATTR(life_time_B, "0x%x\n", card->ext_csd.raw_device_life_time_B);
-MMC_DEV_ATTR(emmc_prv, "0x%x\n", asus_get_emmc_prv(card));
+MMC_DEV_ATTR(emmc_prv, "0x%02x\n", asus_get_emmc_prv(card));
 MMC_DEV_ATTR(emmc_status, "%s\n", asus_get_emmc_status(card));
 MMC_DEV_ATTR(emmc_size, "0x%02x%02x%02x%02x\n", card->ext_csd.raw_sectors[3], card->ext_csd.raw_sectors[2],
 	card->ext_csd.raw_sectors[1], card->ext_csd.raw_sectors[0]);
