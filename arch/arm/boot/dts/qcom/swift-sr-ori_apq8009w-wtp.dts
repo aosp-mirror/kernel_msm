@@ -1,0 +1,40 @@
+/*
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+
+#include "swift-sr_msm8909-mtp.dtsi"
+#include "swift-sr_msm8909w-gpu.dtsi"
+#include "swift-sr_msm8909-pm8916.dtsi"
+#include "swift-sr_msm8909-pm8916-mtp.dtsi"
+#include "swift-sr_msm8909w.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. APQ8009W-PM8916 MTP SWIFT SR ORI";
+	compatible = "qcom,apq8009-mtp", "qcom,apq8009", "qcom,mtp";
+	qcom,msm-id = <265 0>,
+		      <301 0>;
+	qcom,board-id= <8 0x141>;
+};
+
+&external_image_mem {
+	reg = <0x0 0x87a00000 0x0 0x0600000>;
+};
+
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x02c00000>;
+};
+
+&peripheral_mem {
+	reg = <0x0 0x8ac00000 0x0 0x0500000>;
+};
