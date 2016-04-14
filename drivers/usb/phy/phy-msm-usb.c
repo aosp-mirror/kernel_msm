@@ -4117,6 +4117,9 @@ struct msm_otg_platform_data *msm_otg_dt_to_pdata(struct platform_device *pdev)
 
 	pdata->enable_sdp_typec_current_limit = of_property_read_bool(node,
 					"qcom,enable-sdp-typec-current-limit");
+
+	pdata->disable_reset_on_disconnect = 0;
+
 	return pdata;
 }
 
