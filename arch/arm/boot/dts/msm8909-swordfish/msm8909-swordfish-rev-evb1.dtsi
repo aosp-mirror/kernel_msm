@@ -16,3 +16,4 @@
 #include "../qcom/msm8909w.dtsi"
 #include "msm8909-swordfish-panel.dtsi"
 #include "msm8909-pm8916-swordfish.dtsi"
+#include "msm8909-swordfish-sound.dtsi"
