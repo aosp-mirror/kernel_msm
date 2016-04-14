@@ -2579,6 +2579,7 @@ static void msm_otg_init_sm(struct msm_otg *motg)
 				msm_otg_dbg_log_event(&motg->phy,
 						"PMIC VBUS WAIT TMOUT",
 						motg->inputs, motg->phy.state);
+				pr_info("[USB] %s: timeout waiting for PMIC VBUS\n", __func__);
 				clear_bit(B_SESS_VLD, &motg->inputs);
 				pmic_vbus_init.done = 1;
 			}
@@ -2925,13 +2926,13 @@ static void msm_otg_set_vbus_state(int online)
 		return;
 
 	if (online) {
-		pr_debug("PMIC: BSV set\n");
+		pr_info("[USB] PMIC: BSV set\n");
 		msm_otg_dbg_log_event(&motg->phy, "PMIC: BSV SET",
 				init, motg->inputs);
 		if (test_and_set_bit(B_SESS_VLD, &motg->inputs) && init)
 			return;
 	} else {
-		pr_debug("PMIC: BSV clear\n");
+		pr_info("[USB] PMIC: BSV clear\n");
 		msm_otg_dbg_log_event(&motg->phy, "PMIC: BSV CLEAR",
 				init, motg->inputs);
 		if (!test_and_clear_bit(B_SESS_VLD, &motg->inputs) && init)
@@ -3008,7 +3009,7 @@ static void msm_id_status_w(struct work_struct *w)
 		if (gpio_is_valid(motg->pdata->switch_sel_gpio))
 			gpio_direction_input(motg->pdata->switch_sel_gpio);
 		if (!test_and_set_bit(ID, &motg->inputs)) {
-			pr_debug("ID set\n");
+			pr_info("[USB] ID set\n");
 			msm_otg_dbg_log_event(&motg->phy, "ID SET",
 					motg->inputs, motg->phy.state);
 			work = 1;
@@ -3017,7 +3018,7 @@ static void msm_id_status_w(struct work_struct *w)
 		if (gpio_is_valid(motg->pdata->switch_sel_gpio))
 			gpio_direction_output(motg->pdata->switch_sel_gpio, 1);
 		if (test_and_clear_bit(ID, &motg->inputs)) {
-			pr_debug("ID clear\n");
+			pr_info("[USB] ID clear\n");
 			msm_otg_dbg_log_event(&motg->phy, "ID CLEAR",
 					motg->inputs, motg->phy.state);
 			work = 1;
@@ -3407,6 +3408,7 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 	struct msm_otg_platform_data *pdata = motg->pdata;
 
 	msm_otg_dbg_log_event(&motg->phy, "SET PWR PROPERTY", psp, psy->type);
+	pr_info("[USB] SET PWR PROPERTY: %d \n", psp);
 	switch (psp) {
 	case POWER_SUPPLY_PROP_USB_OTG:
 		motg->id_state = val->intval ? USB_ID_GROUND : USB_ID_FLOAT;
@@ -3495,6 +3497,7 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 			motg->chg_state = USB_CHG_STATE_DETECTED;
 		}
 
+		pr_info("[USB] set_chg_mode: %s\n", chg_to_string(motg->chg_type));
 		dev_dbg(motg->phy.dev, "%s: charger type = %s\n", __func__,
 			chg_to_string(motg->chg_type));
 		msm_otg_dbg_log_event(&motg->phy, "SET CHARGER TYPE ",
