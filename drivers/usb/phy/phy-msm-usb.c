@@ -2484,7 +2484,9 @@ static void msm_chg_detect_work(struct work_struct *w)
 	queue_delayed_work(motg->otg_wq, &motg->chg_work, delay);
 }
 
-#define VBUS_INIT_TIMEOUT	msecs_to_jiffies(5000)
+//ASUS_BSP+++ "[USB][NA][Spec] Modify VBUS_INIT_TIMEOUT to fix boot adb fail"
+#define VBUS_INIT_TIMEOUT	msecs_to_jiffies(6500)
+//ASUS_BSP--- "[USB][NA][Spec] Modify VBUS_INIT_TIMEOUT to fix boot adb fail"
 
 /*
  * We support OTG, Peripheral only and Host only configurations. In case
