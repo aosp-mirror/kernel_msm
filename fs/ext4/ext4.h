@@ -204,6 +204,7 @@ struct ext4_io_submit {
 	struct bio		*io_bio;
 	ext4_io_end_t		*io_end;
 	sector_t		io_next_block;
+	struct inode		*io_crypt_inode;
 };
 
 /*
@@ -2132,7 +2133,7 @@ static inline void ext4_fname_free_filename(struct ext4_filename *fname) { }
 /* crypto_key.c */
 void ext4_free_crypt_info(struct ext4_crypt_info *ci);
 void ext4_free_encryption_info(struct inode *inode, struct ext4_crypt_info *ci);
-int _ext4_get_encryption_info(struct inode *inode);
+int _ext4_get_encryption_info(struct inode *inode, bool keep_raw_key);
 
 #ifdef CONFIG_EXT4_FS_ENCRYPTION
 int ext4_has_encryption_key(struct inode *inode);
@@ -2146,7 +2147,7 @@ static inline int ext4_get_encryption_info(struct inode *inode)
 	     (ci->ci_keyring_key->flags & ((1 << KEY_FLAG_INVALIDATED) |
 					   (1 << KEY_FLAG_REVOKED) |
 					   (1 << KEY_FLAG_DEAD)))))
-		return _ext4_get_encryption_info(inode);
+		return _ext4_get_encryption_info(inode, pfk_is_ready());
 	return 0;
 }
 

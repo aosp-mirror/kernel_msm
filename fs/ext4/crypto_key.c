@@ -111,7 +111,7 @@ void ext4_free_encryption_info(struct inode *inode,
 	ext4_free_crypt_info(ci);
 }
 
-int _ext4_get_encryption_info(struct inode *inode)
+int _ext4_get_encryption_info(struct inode *inode, bool keep_raw_key)
 {
 	struct ext4_inode_info *ei = EXT4_I(inode);
 	struct ext4_crypt_info *crypt_info;
@@ -124,7 +124,6 @@ int _ext4_get_encryption_info(struct inode *inode)
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct crypto_ablkcipher *ctfm;
 	const char *cipher_str;
-	char raw_key[EXT4_MAX_KEY_SIZE];
 	char mode;
 	int res;
 
@@ -190,7 +189,7 @@ retry:
 		goto out;
 	}
 	if (DUMMY_ENCRYPTION_ENABLED(sbi)) {
-		memset(raw_key, 0x42, EXT4_AES_256_XTS_KEY_SIZE);
+		memset(crypt_info->ci_raw_key, 0x42, EXT4_AES_256_XTS_KEY_SIZE);
 		goto got_key;
 	}
 	memcpy(full_key_descriptor, EXT4_KEY_DESC_PREFIX,
@@ -232,7 +231,7 @@ retry:
 		goto out;
 	}
 	res = ext4_derive_key_aes(ctx.nonce, master_key->raw,
-				  raw_key);
+				  crypt_info->ci_raw_key);
 	up_read(&keyring_key->sem);
 	if (res)
 		goto out;
@@ -249,11 +248,21 @@ got_key:
 	crypto_ablkcipher_clear_flags(ctfm, ~0);
 	crypto_tfm_set_flags(crypto_ablkcipher_tfm(ctfm),
 			     CRYPTO_TFM_REQ_WEAK_KEY);
-	res = crypto_ablkcipher_setkey(ctfm, raw_key,
+	res = crypto_ablkcipher_setkey(ctfm, crypt_info->ci_raw_key,
 				       ext4_encryption_key_size(mode));
 	if (res)
 		goto out;
-	memset(raw_key, 0, sizeof(raw_key));
+	if (keep_raw_key) {
+		/* TODO(mhalcrow): Put one copy of each master key in
+		 * an in-memory superblock structure and reference
+		 * that instead. */
+		memcpy(crypt_info->ci_raw_key, master_key->raw,
+		       EXT4_MAX_KEY_SIZE);
+		crypt_info->ci_flags |= EXT4_RAW_KEY_SET_FL;
+	} else {
+		memset(crypt_info->ci_raw_key, 0,
+		       sizeof(crypt_info->ci_raw_key));
+	}
 	if (cmpxchg(&ei->i_crypt_info, NULL, crypt_info) != NULL) {
 		ext4_free_crypt_info(crypt_info);
 		goto retry;
@@ -263,8 +272,8 @@ got_key:
 out:
 	if (res == -ENOKEY)
 		res = 0;
+	memset(crypt_info->ci_raw_key, 0, sizeof(crypt_info->ci_raw_key));
 	ext4_free_crypt_info(crypt_info);
-	memset(raw_key, 0, sizeof(raw_key));
 	return res;
 }
 
@@ -273,4 +282,21 @@ int ext4_has_encryption_key(struct inode *inode)
 	struct ext4_inode_info *ei = EXT4_I(inode);
 
 	return (ei->i_crypt_info != NULL);
+}
+
+void ext4_set_bio_crypt_context(struct inode *inode, struct bio *bio)
+{
+	struct ext4_crypt_info *ci =
+		(ext4_encrypted_inode(inode) && pfk_is_ready() ?
+		 ext4_encryption_info(inode) :
+		 NULL);
+
+	if (ci && (ci->ci_flags & EXT4_RAW_KEY_SET_FL)) {
+		bio->bi_crypt_ctx.bc_flags |= (BC_ENCRYPT_FL |
+					       BC_AES_256_XTS_FL);
+		bio->bi_crypt_ctx.bc_key_size = EXT4_AES_256_XTS_KEY_SIZE;
+		/* TODO(mhalcrow): Keep ci around until blk i/o complete? */
+		memcpy(bio->bi_crypt_ctx.bc_key, ci->ci_raw_key, 64);
+	} else
+		bio->bi_crypt_ctx.bc_flags &= ~BC_ENCRYPT_FL;
 }

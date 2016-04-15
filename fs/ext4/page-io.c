@@ -362,6 +362,14 @@ void ext4_io_submit(struct ext4_io_submit *io)
 
 	if (bio) {
 		bio_get(io->io_bio);
+
+#ifdef CONFIG_EXT4_FS_ENCRYPTION
+		if (io->io_crypt_inode) {
+			ext4_set_bio_crypt_context(io->io_crypt_inode,
+						   io->io_bio);
+		}
+#endif
+
 		submit_bio(io->io_op, io->io_bio);
 		BUG_ON(bio_flagged(io->io_bio, BIO_EOPNOTSUPP));
 		bio_put(io->io_bio);
@@ -493,7 +501,11 @@ int ext4_bio_write_page(struct ext4_io_submit *io,
 		gfp_t gfp_flags = GFP_NOFS;
 
 	retry_encrypt:
-		data_page = ext4_encrypt(inode, page, gfp_flags);
+		if (pfk_is_ready())
+			io->io_crypt_inode = inode;
+		else
+			data_page = ext4_encrypt(inode, page, gfp_flags);
+
 		if (IS_ERR(data_page)) {
 			ret = PTR_ERR(data_page);
 			if (ret == ENOMEM && wbc->sync_mode == WB_SYNC_ALL) {
@@ -507,7 +519,8 @@ int ext4_bio_write_page(struct ext4_io_submit *io,
 			data_page = NULL;
 			goto out;
 		}
-	}
+	} else
+		io->io_crypt_inode = NULL;
 
 	/* Now submit buffers to write */
 	do {

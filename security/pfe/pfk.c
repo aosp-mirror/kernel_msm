@@ -153,10 +153,11 @@ static int __init pfk_lsm_init(void)
  *
  * Return: true if the driver is ready.
  */
-static inline bool pfk_is_ready(void)
+inline bool pfk_is_ready(void)
 {
 	return pfk_ready;
 }
+EXPORT_SYMBOL(pfk_is_ready);
 
 /**
  * pfk_get_page_index() - get the inode from a bio.
@@ -476,31 +477,54 @@ int pfk_load_key_start(const struct bio *bio,
 		return -EINVAL;
 	}
 
-	ret = pfk_bio_to_key(bio, &key, &key_size, &salt, &salt_size, is_pfe);
-	if (ret != 0)
-		return ret;
+	if (bio->bi_crypt_ctx.bc_flags & BC_ENCRYPT_FL) {
+		if (!(bio->bi_crypt_ctx.bc_flags & BC_AES_256_XTS_FL)) {
+			printk(KERN_WARNING "%s: Unsupported mode\n", __func__);
+			return -EINVAL;
+		}
+		if (bio->bi_crypt_ctx.bc_key_size !=
+		    (PFK_SUPPORTED_KEY_SIZE + PFK_SUPPORTED_SALT_SIZE)) {
+			printk(KERN_WARNING
+			       "%s: Unsupported key size. Expected [%d], "
+			       "got [%d]\n", __func__,
+			       (PFK_SUPPORTED_KEY_SIZE +
+				PFK_SUPPORTED_SALT_SIZE),
+			       bio->bi_crypt_ctx.bc_key_size);
+			return -EINVAL;
+		}
+		key = &bio->bi_crypt_ctx.bc_key[0];
+		key_size = PFK_SUPPORTED_KEY_SIZE;
+		salt = &bio->bi_crypt_ctx.bc_key[PFK_SUPPORTED_KEY_SIZE];
+		salt_size = PFK_SUPPORTED_SALT_SIZE;
+		algo_mode = ICE_CRYPTO_ALGO_MODE_AES_XTS;
+		key_size_type = ICE_CRYPTO_KEY_SIZE_256;
+	} else {
+		ret = pfk_bio_to_key(bio, &key, &key_size, &salt, &salt_size, is_pfe);
+		if (ret != 0)
+			return ret;
 
-	inode = pfk_bio_get_inode(bio);
-	if (!inode) {
-		*is_pfe = false;
-		return -EINVAL;
+		inode = pfk_bio_get_inode(bio);
+		if (!inode) {
+			*is_pfe = false;
+			return -EINVAL;
+		}
+
+		ecryptfs_data = pfk_get_ecryptfs_data(inode);
+		if (!ecryptfs_data) {
+			*is_pfe = false;
+			return -EPERM;
+		}
+
+		ret = pfk_parse_cipher(ecryptfs_data, &algo_mode);
+		if (ret != 0) {
+			pr_err("not supported cipher\n");
+			return ret;
+		}
+
+		ret = pfk_key_size_to_key_type(key_size, &key_size_type);
+		if (ret != 0)
+			return ret;
 	}
-
-	ecryptfs_data = pfk_get_ecryptfs_data(inode);
-	if (!ecryptfs_data) {
-		*is_pfe = false;
-		return -EPERM;
-	}
-
-	ret = pfk_parse_cipher(ecryptfs_data, &algo_mode);
-	if (ret != 0) {
-		pr_err("not supported cipher\n");
-		return ret;
-	}
-
-	ret = pfk_key_size_to_key_type(key_size, &key_size_type);
-	if (ret != 0)
-		return ret;
 
 	ret = pfk_kc_load_key_start(key, key_size, salt, salt_size, &key_index,
 			async);

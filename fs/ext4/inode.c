@@ -949,7 +949,7 @@ static int ext4_block_write_begin(struct page *page, loff_t pos, unsigned len,
 			ll_rw_block(READ, 1, &bh);
 			*wait_bh++ = bh;
 			decrypt = ext4_encrypted_inode(inode) &&
-				S_ISREG(inode->i_mode);
+				S_ISREG(inode->i_mode) && !pfk_is_ready();
 		}
 	}
 	/*

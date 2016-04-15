@@ -532,6 +532,28 @@ static void blk_account_io_merge(struct request *req)
 	}
 }
 
+static bool crypto_not_mergeable(const struct bio *bio, const struct bio *nxt)
+{
+	/* If neither is encrypted, no veto from us. */
+	if (~(bio->bi_crypt_ctx.bc_flags | nxt->bi_crypt_ctx.bc_flags) &
+	    BC_ENCRYPT_FL) {
+		return false;
+	}
+
+	/* If one's encrypted and the other isn't, don't merge. */
+	if ((bio->bi_crypt_ctx.bc_flags ^ nxt->bi_crypt_ctx.bc_flags)
+	    & BC_ENCRYPT_FL) {
+		return true;
+	}
+
+	/* If the key lengths are different or the key values aren't
+	 * the same, don't merge. */
+	return ((bio->bi_crypt_ctx.bc_key_size !=
+		 nxt->bi_crypt_ctx.bc_key_size) ||
+		memcmp(bio->bi_crypt_ctx.bc_key, nxt->bi_crypt_ctx.bc_key,
+		       bio->bi_crypt_ctx.bc_key_size) != 0);
+}
+
 /*
  * Has to be called with the request spinlock acquired
  */
@@ -557,6 +579,9 @@ static int attempt_merge(struct request_queue *q, struct request *req,
 
 	if (req->cmd_flags & REQ_WRITE_SAME &&
 	    !blk_write_same_mergeable(req->bio, next->bio))
+		return 0;
+
+	if (crypto_not_mergeable(req->bio, next->bio))
 		return 0;
 
 	/*
@@ -675,6 +700,9 @@ bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 
 	/* Don't merge bios of files with different encryption */
 	if (!security_allow_merge_bio(rq->bio, bio))
+		return false;
+
+	if (crypto_not_mergeable(rq->bio, bio))
 		return false;
 
 	return true;

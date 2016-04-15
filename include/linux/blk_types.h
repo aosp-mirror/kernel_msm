@@ -17,6 +17,19 @@ struct cgroup_subsys_state;
 typedef void (bio_end_io_t) (struct bio *, int);
 typedef void (bio_destructor_t) (struct bio *);
 
+#define BC_ENCRYPT_FL		0x00000001
+#define BC_AES_256_XTS_FL	0x00000002
+
+#define BC_MAX_ENCRYPTION_KEY_SIZE	64
+
+struct bio_crypt_ctx {
+	unsigned int	bc_flags;
+	unsigned int	bc_key_size;
+	/* TODO(mhalcrow): Reference something in the file system that
+	 * we can count on sticking around until bio is complete. */
+	char		bc_key[BC_MAX_ENCRYPTION_KEY_SIZE];
+};
+
 /*
  * was unsigned short, but we might as well be ready for > 64kB I/O pages
  */
@@ -104,6 +117,9 @@ struct bio {
 	struct bio_vec		*bi_io_vec;	/* the actual vec list */
 
 	struct bio_set		*bi_pool;
+
+	/* Encryption context. May contain secret key material. */
+	struct bio_crypt_ctx	bi_crypt_ctx;
 
 	/*
 	 * We can inline a number of vecs at the end of the bio, to avoid
