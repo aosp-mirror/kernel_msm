@@ -64,4 +64,12 @@
 		pinctrl-0 = <&mcu_wakeup_ap_active>;
 		pinctrl-1 = <&mcu_wakeup_ap_suspend>;
 	};
+
+	mcu,readsync {
+		compatible = "mcu,readsync";
+		ap_read_sync = <&msm_gpio 90 0>;
+		pinctrl-names = "ap_read_sync_active","ap_read_sync_suspend";
+		pinctrl-0 = <&ap_read_sync_active>;
+		pinctrl-1 = <&ap_read_sync_suspend>;
+	};
 };
