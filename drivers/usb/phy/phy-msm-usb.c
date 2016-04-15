@@ -3401,8 +3401,8 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 {
 	struct msm_otg *motg = container_of(psy, struct msm_otg, usb_psy);
 	struct msm_otg_platform_data *pdata = motg->pdata;
-	struct power_supply *battery_psy;
 	union power_supply_propval data;
+	struct power_supply *charger_psy;
 
 	msm_otg_dbg_log_event(&motg->phy, "SET PWR PROPERTY", psp, psy->type);
 	switch (psp) {
@@ -3425,10 +3425,10 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 		if (usb_online ^ val->intval) {
 			usb_online = val->intval;
 			data.intval = val->intval;
-			//Notify battery driver to update charging status
-			battery_psy = power_supply_get_by_name("battery");
-			if (battery_psy)
-				battery_psy->set_property(battery_psy, POWER_SUPPLY_PROP_STATUS, &data);
+			//Notify charger driver to update charging status
+			charger_psy = power_supply_get_by_name("charger");
+			if (charger_psy)
+				charger_psy->set_property(charger_psy, POWER_SUPPLY_PROP_STATUS, &data);
 		}
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:

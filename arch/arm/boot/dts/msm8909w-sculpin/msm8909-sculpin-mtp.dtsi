@@ -26,6 +26,20 @@
 			pinctrl-names = "default", "suspend";
 			pinctrl-0 = <&smb_stat_default>;
 			pinctrl-1 = <&smb_stat_suspend>;
+
+			qcom,float-voltage-mv = <4360>;
+			qcom,aicl-disabled;
+			qcom,hot-bat-decidegc = <550>;
+			qcom,warm-bat-decidegc = <400>;
+			qcom,cool-bat-decidegc = <100>;
+			qcom,cold-bat-decidegc = <0>;
+			qcom,soft-temp-vfloat-comp-mv = <160>;
+			qcom,soft-temp-current-comp-ma = <100>;
+			cei,max-ac-current-ma = <500>;
+			cei,prechg-current-ma = <20>;
+			cei,chg-en-active = <0>;
+			cei,sys-voltage = <2>;
+			cei,sys-voltage-threshold = <2>;
 		};
 		st-fg@70 {
 			compatible = "st,stc3117";
