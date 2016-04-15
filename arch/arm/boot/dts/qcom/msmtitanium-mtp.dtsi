@@ -120,9 +120,6 @@
 &flash_led {
 	compatible = "qcom,qpnp-flash-led";
 	reg = <0xd300 0x100>;
-	pinctrl-names = "flash_led_enable","flash_led_disable";
-	pinctrl-0 = <&rear_flash_led_enable>;
-	pinctrl-1 = <&rear_flash_led_disable>;
 	qcom,follow-otst2-rb-disabled;
 };
 
@@ -182,6 +179,10 @@
 	status = "ok";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart_console_active>;
+};
+
+&mem_client_3_size {
+	qcom,peripheral-size = <0x500000>;
 };
 
 &sdhc_1 {
