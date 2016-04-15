@@ -4251,6 +4251,27 @@ static int himax_parse_dt(struct himax_ts_data *ts,
 }
 #endif
 
+#ifdef ASUS_FACTORY_BUILD
+static int g_bmmi_status = 0;
+
+static ssize_t himax_show_status(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, 20, "%d\n", g_bmmi_status);
+}
+
+static DEVICE_ATTR(mode, S_IRUGO, himax_show_status, NULL);
+
+static struct attribute *himax_attrs[] = {
+	&dev_attr_mode.attr,
+	NULL
+};
+
+static const struct attribute_group himax_attribute_group = {
+	.attrs = himax_attrs,
+};
+#endif
+
 static int himax852xes_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	int err = -ENOMEM;
@@ -4428,6 +4449,12 @@ static int himax852xes_probe(struct i2c_client *client, const struct i2c_device_
 	ESD_RESET_ACTIVATE = 0;
 #endif
 	HW_RESET_ACTIVATE = 0;
+#ifdef ASUS_FACTORY_BUILD
+	g_bmmi_status = 1;
+	err = sysfs_create_group(&client->dev.kobj, &himax_attribute_group);
+	if (err)
+		goto exit_sysfs;
+#endif
 	err = himax_ts_register_interrupt(ts->client);
 	if (err)
 		goto err_register_interrupt_failed;
@@ -4452,6 +4479,10 @@ err_register_interrupt_failed:
 	cancel_delayed_work_sync(&ts->himax_chip_monitor);
 	destroy_workqueue(ts->himax_chip_monitor_wq);
 err_create_chip_monitor_wq_failed:
+#endif
+#ifdef ASUS_FACTORY_BUILD
+exit_sysfs:
+	sysfs_remove_group(&client->dev.kobj, &himax_attribute_group);
 #endif
 #ifdef CONFIG_FB
 	cancel_delayed_work_sync(&ts->work_att);
