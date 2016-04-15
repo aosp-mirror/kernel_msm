@@ -45,14 +45,9 @@
 		qcom,mdss-dsi-border-color = <0>;
 		qcom,mdss-dsi-on-command = [
 
-			15 01 00 00 00 00 02 FE 05
-			15 01 00 00 00 00 02 05 00
-			15 01 00 00 00 00 02 FE 07
-			15 01 00 00 00 00 02 07 4F
-			15 01 00 00 00 00 02 FE 0A
-			15 01 00 00 00 00 02 1C 1B
 			15 01 00 00 00 00 02 FE 00
 			15 01 00 00 00 00 02 35 00
+			15 01 00 00 00 00 02 53 20
 			05 01 00 00 00 00 02 11 00
 			32 01 00 00 00 00 02 00 00
 			05 01 00 00 FF 00 02 29 00
@@ -73,6 +68,19 @@
 					05 01 00 00 64 00 02 38 00
 					];
 
+		qcom,mdss-dsi-high-brightness-on-command = [
+					15 01 00 00 00 00 02 FE 05
+					15 01 00 00 00 00 02 C0 01
+					15 01 00 00 00 00 02 C1 17
+					15 01 00 00 00 00 02 FE 00
+					];
+		qcom,mdss-dsi-high-brightness-off-command = [
+					15 01 00 00 00 00 02 FE 05
+					15 01 00 00 00 00 02 C0 05
+					15 01 00 00 00 00 02 C1 12
+					15 01 00 00 00 00 02 FE 00
+					];
+
 		//qcom,mdss-dsi-panel-status-command = [06 01 00 01 05 00 02 0A 08];
 
 		qcom,mdss-dsi-idle-command-state = "dsi_lp_mode";
@@ -81,12 +89,13 @@
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-bllp-eof-power-mode;
 		qcom,mdss-dsi-bllp-power-mode;
-		//qcom,mdss-dsi-lane-map = "lane_map_3012"; /* Eagle's lane map does not need to remap */
 		qcom,mdss-dsi-lane-0-state;
 		qcom,mdss-dsi-te-pin-select = <1>;
 		qcom,mdss-dsi-te-dcs-command = <1>;
 		qcom,mdss-dsi-te-check-enable;
 		qcom,mdss-dsi-te-using-te-pin;
+		qcom,suspend-ulps-enabled = <1>;
+		qcom,ulps-enabled = <1>;
 
 		/* By AUO's suggestion: MIPI Clock rate = ~290Mbps. */
 		qcom,mdss-dsi-panel-timings = [38 0C 08 00 64 64 0C 19 08 03 04 00];
