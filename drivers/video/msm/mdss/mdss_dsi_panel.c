@@ -27,6 +27,12 @@
 #ifdef TARGET_HW_MDSS_HDMI
 #include "mdss_dba_utils.h"
 #endif
+
+/* Lock backlight of ambient mode to 28nits */
+#define AMBIENT_BL_LEVEL_V1	(40)
+static int ambient_bl_level = AMBIENT_BL_LEVEL_V1;
+static int backup_bl_level = 0;
+
 #define DT_CMD_HDR 6
 #define MIN_REFRESH_RATE 48
 #define DEFAULT_MDP_TRANSFER_TIME 14000
@@ -847,11 +853,31 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	pr_debug("%s: ctrl=%pK ndx=%d enable=%d\n", __func__, ctrl, ctrl->ndx,
+	printk("%s: ctrl=%p ndx=%d enable=%d\n", __func__, ctrl, ctrl->ndx,
 		enable);
 
-	/* Any panel specific low power commands/config */
+	mutex_lock(&ctrl->ambientcmd_mutex);
 
+	/* Any panel specific low power commands/config */
+	if (enable) {
+		if (ctrl->idle_on_cmds.cmd_cnt){
+			printk("MDSS:AMB: set idle ON command!\n");
+			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_on_cmds, CMD_REQ_COMMIT);
+			mdss_dsi_panel_bl_ctrl(pdata, ambient_bl_level);
+		} else {
+			printk("MDSS:AMB: idle ON command is not set!\n");
+		}
+	} else {
+		if (ctrl->idle_off_cmds.cmd_cnt){
+			printk("MDSS:AMB: set idle OFF command!\n");
+			mdss_dsi_panel_bl_ctrl(pdata, backup_bl_level);
+			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_off_cmds, CMD_REQ_COMMIT);
+		} else {
+			printk("MDSS:AMB: idle OFF command is not set!\n");
+		}
+	}
+
+	mutex_unlock(&ctrl->ambientcmd_mutex);
 	pr_debug("%s:-\n", __func__);
 	return 0;
 }
@@ -2427,6 +2453,10 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->off_cmds,
 		"qcom,mdss-dsi-off-command", "qcom,mdss-dsi-off-command-state");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_on_cmds,
+		"qcom,mdss-dsi-idle-on-command", "qcom,mdss-dsi-on-command-state");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_off_cmds,
+		"qcom,mdss-dsi-idle-off-command", "qcom,mdss-dsi-off-command-state");
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_on_cmds,
 		"qcom,mdss-dsi-idle-on-command", "qcom,mdss-dsi-idle-on-command-state");

@@ -544,6 +544,10 @@ struct mdss_dsi_ctrl_pdata {
 
 	bool timing_db_mode;
 	bool update_phy_timing; /* flag to recalculate PHY timings */
+
+	/* ASUS extend properties for panel low power mode */
+	struct mutex blcmd_mutex;
+	struct mutex ambientcmd_mutex;
 };
 
 struct dsi_status_data {

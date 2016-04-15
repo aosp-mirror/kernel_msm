@@ -326,11 +326,26 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 /* Panel power control when entering/exiting lp mode */
 static int mdss_dsi_panel_power_lp(struct mdss_panel_data *pdata, int enable)
 {
-	/* Control idle mode for panel */
-	 if (pdata && pdata->set_idle)
-		 pdata->set_idle(pdata, enable);
+	int ret;
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 
-	return 0;
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return -EINVAL;
+	}
+
+	/* Handle panel idle on after dsi off */
+	if (enable)
+		return 0;
+
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	/* Panel power control when entering/exiting lp mode */
+	printk("[MDSS] mdss_dsi_panel_power_lp: enable=%d\n", enable);
+	if (ctrl_pdata->low_power_config)
+			ret = ctrl_pdata->low_power_config(pdata, enable);
+	return ret;
 }
 
 static int mdss_dsi_panel_power_ulp(struct mdss_panel_data *pdata,
