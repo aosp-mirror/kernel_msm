@@ -192,8 +192,8 @@
 		};
 
 	/*for MCU: AP power on detect*/
-	ap_power_on_detect{
-		ap_power_on_detect_active:ap_power_on_detect_active {
+	ap_status{
+		ap_status_active:ap_status_active {
 			mux {
 				pins = "gpio26";
 				function = "gpio";
@@ -204,7 +204,7 @@
 				bias-pull-up;
 			};
 		};
-		ap_power_on_detect_suspend:ap_power_on_detect_suspend {
+		ap_status_suspend:ap_status_suspend {
 			mux {
 				pins = "gpio26";
 				function = "gpio";
@@ -467,25 +467,25 @@
 	};
 
 	/*AP status:show wakeup or sleep status of AP to MCU*/
-	ap_status{
-		ap_status_active:ap_status_active {
+	ap_read_sync{
+		ap_read_sync_active:ap_read_sync_active {
 			mux {
-				pins = "gpio74";
+				pins = "gpio90";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio74";
+				pins = "gpio90";
 				drive-strength = <2>;
 				bias-pull-down;
 			};
 		};
-		ap_status_suspend:ap_status_suspend {
+		ap_read_sync_suspend:ap_read_sync_suspend {
 			mux {
-				pins = "gpio74";
+				pins = "gpio90";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio74";
+				pins = "gpio90";
 				drive-strength = <2>;
 				bias-disable;
 			};

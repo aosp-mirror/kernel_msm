@@ -40,6 +40,7 @@
 
 #include <linux/uaccess.h>
 #include <linux/of_gpio.h>
+#include <linux/delay.h>
 
 /*
  * This supports access to SPI devices using normal userspace I/O calls.
@@ -56,6 +57,9 @@
  */
 #define SPIDEV_MAJOR			153	/* assigned */
 #define N_SPI_MINORS			32	/* ... up to 256 */
+
+#define SPIDEV_BUF_MAX_NODE_N 16
+
 
 static DECLARE_BITMAP(minors, N_SPI_MINORS);
 
@@ -77,6 +81,13 @@ static DECLARE_BITMAP(minors, N_SPI_MINORS);
 				| SPI_NO_CS | SPI_READY | SPI_TX_DUAL \
 				| SPI_TX_QUAD | SPI_RX_DUAL | SPI_RX_QUAD)
 
+typedef struct _spidev_buf_list
+{
+	struct list_head list;
+	unsigned int read_cnt;
+	unsigned char *buffer;
+}spidev_buf_list;
+
 struct spidev_data {
 	dev_t			devt;
 	spinlock_t		spi_lock;
@@ -85,17 +96,21 @@ struct spidev_data {
 
 	/* TX/RX buffers are NULL unless this device is open (users > 0) */
 	struct mutex		buf_lock;
+	struct mutex		tx_buf_lock;
+	struct mutex		buf_list_lock;
+	struct mutex		spi_op_lock;
 	unsigned		users;
 	u8			*tx_buffer;
 	u8			*rx_buffer;
 
-	unsigned char *rx_buf;
 	unsigned char *tx_buf;
 	unsigned int wake_irq;
 	int wake_irq_gpio;
 	int wakeup_mcu_gpio;
-	unsigned int read_cnt;
+	int read_sync_gpio;
 	spidev_work_mode_type work_mode;
+	spidev_buf_list *idle_buf_head;
+	spidev_buf_list *read_buf_head;
 	struct completion read_compl;
 	struct work_struct wakeup_read_work;
 };
@@ -195,6 +210,34 @@ spidev_sync_read(struct spidev_data *spidev, size_t len)
 	return spidev_sync(spidev, &m);
 }
 
+static inline ssize_t
+spidev_sync_write_ext(struct spidev_data *spidev, size_t len)
+{
+	struct spi_transfer	t = {
+		.tx_buf	= spidev->tx_buf,
+		.len	= len,
+	};
+	struct spi_message	m;
+
+	spi_message_init(&m);
+	spi_message_add_tail(&t, &m);
+	return spidev_sync(spidev, &m);
+}
+
+static inline ssize_t
+spidev_sync_read_ext(struct spidev_data *spidev, spidev_buf_list *node, size_t len)
+{
+	struct spi_transfer	t = {
+		.rx_buf	= node->buffer,
+		.len	= len,
+	};
+	struct spi_message	m;
+
+	spi_message_init(&m);
+	spi_message_add_tail(&t, &m);
+	return spidev_sync(spidev, &m);
+}
+
 static int spidev_request_gpio(struct spidev_data	*spidev)
 {
 	struct device_node *np = NULL;
@@ -253,6 +296,29 @@ static int spidev_request_gpio(struct spidev_data	*spidev)
 
 	pr_info("gpio_request ap_wakeup_mcu gpio:%d done\n", spidev->wakeup_mcu_gpio);
 
+	/*Get AP Read Sync Gpio*/
+	np = of_find_compatible_node(NULL, NULL, "mcu,readsync");
+	if (!np)
+	{
+		pr_err("%s: %s node not found\n", __FUNCTION__, "mcu,wakeupmcu");
+		return -ENODEV;
+	}
+
+	spidev->read_sync_gpio= of_get_named_gpio(np, "ap_read_sync", 0);
+	if (spidev->read_sync_gpio < 0)
+	{
+		pr_err("%s: %s gpio not found:\n", __FUNCTION__, "read_sync_gpio");
+		return -ENODEV;
+	}
+
+	if (gpio_request(spidev->read_sync_gpio, "ap_read_sync"))
+	{
+		pr_err("Failed to request gpio %d for ap_wakeup_mcu\n", spidev->read_sync_gpio);
+		return -ENODEV;
+	}
+
+	pr_info("gpio_request read_sync_gpio gpio:%d done\n", spidev->read_sync_gpio);
+
 	return 0;
 }
 
@@ -262,6 +328,7 @@ static void spidev_release_gpio(struct spidev_data	*spidev)
 	{
 		gpio_free(spidev->wake_irq_gpio);
 		gpio_free(spidev->wakeup_mcu_gpio);
+		gpio_free(spidev->read_sync_gpio);
 	}
 }
 
@@ -273,6 +340,7 @@ spidev_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 {
 	struct spidev_data	*spidev;
 	ssize_t			status = 0;
+	spidev_buf_list *spidev_buf_node = NULL;
 
 	/* chipselect only toggles at start or end of operation */
 	if (count > bufsiz)
@@ -302,26 +370,37 @@ spidev_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 		/*wait for spi read complete*/
 		wait_for_completion(&spidev->read_compl);
 
-		pr_debug("spidev_read status:%d buff:%x :%x\n", status, spidev->rx_buf[0], spidev->rx_buf[1]);
-		/*spi read completion, and copy to userspace*/
-		status = spidev->read_cnt;
-
-		pr_debug("spidev read status = %d\n",status);
-		if (status > 0)
+		mutex_lock(&spidev->buf_list_lock);
+		if (!list_empty(&spidev->read_buf_head->list))
 		{
-			unsigned long missing = 0;
+			spidev_buf_node = list_first_entry(&spidev->read_buf_head->list, spidev_buf_list, list);
+			/*spi read completion, and copy to userspace*/
+			status = spidev_buf_node->read_cnt;
 
-			missing = copy_to_user(buf, spidev->rx_buf, status);
+			if (status > 0)
+			{
+				unsigned long missing = 0;
 
-			if (missing == status)
-			{
-				status = -EFAULT;
+				missing = copy_to_user(buf, spidev_buf_node->buffer, status);
+
+				if (missing == status)
+				{
+					status = -EFAULT;
+				}
+				else
+				{
+					status = status - missing;
+				}
 			}
-			else
-			{
-				status = status - missing;
-			}
+
+			list_move_tail(&spidev_buf_node->list, &spidev->idle_buf_head->list);
 		}
+		else
+		{
+			status = -EFAULT;
+		}
+
+		mutex_unlock(&spidev->buf_list_lock);
 		pr_debug("SPIDEV: user read done: %d\n", status);
 
 	}
@@ -365,22 +444,22 @@ spidev_write(struct file *filp, const char __user *buf,
 		}
 		else
 		{
+			mutex_lock(&spidev->spi_op_lock);
 			memset(spidev->tx_buf, 0x00, SPIDEV_KERNEL_MODE_LENGTH);
 			missing = copy_from_user(spidev->tx_buf, buf, count);
 			if (missing == 0)
 			{
-				mutex_lock(&spidev->buf_lock);
-				memcpy(spidev->tx_buffer, spidev->tx_buf, SPIDEV_KERNEL_MODE_LENGTH);
 				gpio_direction_output(spidev->wakeup_mcu_gpio, 1);
-				status = spidev_sync_write(spidev, SPIDEV_KERNEL_MODE_LENGTH);
+				udelay(500);
+				status = spidev_sync_write_ext(spidev, SPIDEV_KERNEL_MODE_LENGTH);
 				gpio_direction_output(spidev->wakeup_mcu_gpio, 0);
-				mutex_unlock(&spidev->buf_lock);
 			}
 			else
 			{
 				pr_err("SPIDEV data missing while copy from user\n");
 				status = -EFAULT;
 			}
+			mutex_unlock(&spidev->spi_op_lock);
 		}
 	}
 
@@ -488,22 +567,47 @@ done:
 static void spidev_wakeup_read_work(struct work_struct *work)
 {
 	struct spidev_data *spidev = container_of(work, struct spidev_data, wakeup_read_work);
+	spidev_buf_list *spidev_buf_node = NULL;
 
+	mutex_lock(&spidev->spi_op_lock);
 	if (spidev)
 	{
-		mutex_lock(&spidev->buf_lock);
-		memset(spidev->tx_buffer,0x00,bufsiz);
-		spidev->read_cnt = spidev_sync_read(spidev, SPIDEV_KERNEL_MODE_LENGTH);
-		memcpy(spidev->rx_buf,spidev->rx_buffer,spidev->read_cnt);
-		pr_info("spidev_wakeup_read_work status:%d buff:%x :%x: %x :%x :%x\n", spidev->read_cnt, spidev->rx_buffer[0], spidev->rx_buffer[1],
-			spidev->rx_buffer[2], spidev->rx_buffer[3],spidev->rx_buffer[4]);
-		mutex_unlock(&spidev->buf_lock);
-		spidev_complete(&spidev->read_compl);
+	retry:
+		mutex_lock(&spidev->buf_list_lock);
+
+		if (!list_empty(&spidev->idle_buf_head->list))
+		{
+			/*Get buf note from idle list*/
+			spidev_buf_node = list_entry(spidev->idle_buf_head->list.prev, spidev_buf_list, list);
+
+			gpio_direction_output(spidev->read_sync_gpio, 1);
+
+			udelay(500);
+			/*Execute Sync Read Operation*/
+			spidev_buf_node->read_cnt = spidev_sync_read_ext(spidev, spidev_buf_node, SPIDEV_KERNEL_MODE_LENGTH);
+
+			gpio_direction_output(spidev->read_sync_gpio, 0);
+
+			/*move the buf node to read buf list*/
+			list_move_tail(&spidev_buf_node->list, &spidev->read_buf_head->list);
+			mutex_unlock(&spidev->buf_list_lock);
+			spidev_complete(&spidev->read_compl);
+		}
+		else
+		{
+			/*No Buf in idle list, sleep 2ms and retry*/
+			mutex_unlock(&spidev->buf_list_lock);
+			pr_info("spidev_wakeup_read_work buf list is full wait 2ms\n");
+			msleep(2);
+			goto retry;
+		}
 	}
 	else
 	{
-	    pr_err("spidev_wakeup_read_task spidev NULL\n");
+		pr_err("spidev_wakeup_read_task spidev NULL\n");
 	}
+
+	mutex_unlock(&spidev->spi_op_lock);
 }
 
 static irqreturn_t spidev_wake_irq(int irq, void *arg)
@@ -512,7 +616,6 @@ static irqreturn_t spidev_wake_irq(int irq, void *arg)
 
 	if (spidev && (spidev->work_mode == SPIDEV_WORK_MODE_KERNEL))
 	{
-		disable_irq_nosync(spidev->wake_irq);
 		schedule_work(&spidev->wakeup_read_work);
 	}
 	return IRQ_HANDLED;
@@ -560,7 +663,7 @@ spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	/* use the buffer lock here for triple duty:
 	 *  - prevent I/O (from us) so calling spi_setup() is safe;
 	 *  - prevent concurrent SPI_IOC_WR_* from morphing
-	 *    data fields while SPI_IOC_RD_* reads them;
+	 *	data fields while SPI_IOC_RD_* reads them;
 	 *  - SPI_IOC_MESSAGE needs the buffer locked "normally".
 	 */
 	mutex_lock(&spidev->buf_lock);
@@ -658,7 +761,7 @@ spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		retval = __get_user(tmp, (__u32 __user *)arg);
 		if (retval != 0)
 		{
-		    dev_err(&spi->dev, "get user data error\n");
+			dev_err(&spi->dev, "get user data error\n");
 			break;
 		}
 
@@ -677,7 +780,7 @@ spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (spidev->work_mode == SPIDEV_WORK_MODE_KERNEL)
 		{
 			retval = request_irq(spidev->wake_irq, spidev_wake_irq,
-				IRQF_DISABLED | IRQF_TRIGGER_HIGH,
+					IRQF_DISABLED | IRQF_TRIGGER_RISING,
 				"spidev wake irq", spidev);
 			if (retval < 0)
 			{
@@ -691,7 +794,6 @@ spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				dev_err(&spi->dev,"Couldn't enable mcu_host_wake as wakeup interrupt\n");
 				break;
 			}
-			disable_irq(spidev->wake_irq);
 		}
 
 		break;
@@ -750,6 +852,9 @@ static int spidev_open(struct inode *inode, struct file *filp)
 {
 	struct spidev_data	*spidev;
 	int			status = -ENXIO;
+	int  idx = 0;
+	spidev_buf_list *spidev_buf_node = NULL;
+	spidev_buf_list *spidev_tmp_node = NULL;
 
 	mutex_lock(&device_list_lock);
 
@@ -783,16 +888,6 @@ static int spidev_open(struct inode *inode, struct file *filp)
 		}
 	}
 
-	if (!spidev->rx_buf)
-	{
-		spidev->rx_buf = kmalloc(SPIDEV_KERNEL_MODE_LENGTH, GFP_KERNEL);
-		if (!spidev->rx_buf)
-		{
-			dev_dbg(&spidev->spi->dev, "open rx buf/ENOMEM\n");
-			status = -ENOMEM;
-		}
-	}
-
 	if (!spidev->tx_buf)
 	{
 		spidev->tx_buf = kmalloc(SPIDEV_KERNEL_MODE_LENGTH, GFP_KERNEL);
@@ -800,6 +895,62 @@ static int spidev_open(struct inode *inode, struct file *filp)
 		{
 			dev_dbg(&spidev->spi->dev, "open tx buf/ENOMEM\n");
 			status = -ENOMEM;
+			goto err_alloc_rx_buf;
+		}
+	}
+	if (!spidev->read_buf_head)
+	{
+		spidev->read_buf_head = kmalloc(sizeof(spidev_buf_list), GFP_KERNEL);
+		if (!spidev->read_buf_head)
+		{
+			dev_err(&spidev->spi->dev, "open read_buf_head alloc /ENOMEM\n");
+			status = -ENOMEM;
+			goto err_alloc_rx_buf;
+		}
+		else
+		{
+			INIT_LIST_HEAD(&spidev->read_buf_head->list);
+		}
+	}
+
+	if (!spidev->idle_buf_head)
+	{
+		spidev->idle_buf_head = kmalloc(sizeof(spidev_buf_list), GFP_KERNEL);
+		if (!spidev->idle_buf_head)
+		{
+			dev_err(&spidev->spi->dev, "open idle_buf_head alloc /ENOMEM\n");
+			status =  -ENOMEM;
+			goto err_alloc_rx_buf;
+		}
+		else
+		{
+			INIT_LIST_HEAD(&spidev->idle_buf_head->list);
+
+			/*alloc spidev node buffer*/
+			for (idx = 0; idx < SPIDEV_BUF_MAX_NODE_N; idx++)
+			{
+				spidev_buf_node = kmalloc(sizeof(spidev_buf_list), GFP_KERNEL);
+
+				if (spidev_buf_node == NULL)
+				{
+					dev_err(&spidev->spi->dev, "open spidev buf node/ENOMEM\n");
+					status = -ENOMEM;
+					goto err_alloc_rx_buf;
+				}
+				else
+				{
+					list_add_tail(&spidev_buf_node->list, &spidev->idle_buf_head->list);
+					spidev_buf_node->read_cnt = 0;
+					spidev_buf_node->buffer = kmalloc(SPIDEV_KERNEL_MODE_LENGTH, GFP_KERNEL);
+					if (spidev_buf_node->buffer == NULL)
+					{
+						dev_err(&spidev->spi->dev, "open spidev buf /ENOMEM\n");
+						status = -ENOMEM;
+						goto err_alloc_rx_buf;
+					}
+				}
+			}
+
 		}
 	}
 	spidev->users++;
@@ -812,16 +963,42 @@ static int spidev_open(struct inode *inode, struct file *filp)
 err_alloc_rx_buf:
 	kfree(spidev->tx_buffer);
 	spidev->tx_buffer = NULL;
-	if (spidev->rx_buf)
+	if (spidev->rx_buffer)
 	{
-		kfree(spidev->rx_buf);
-		spidev->rx_buf = NULL;
+		kfree(spidev->rx_buffer);
+		spidev->rx_buffer = NULL;
 	}
 
 	if (spidev->tx_buf)
 	{
 		kfree(spidev->tx_buf);
 		spidev->tx_buf = NULL;
+	}
+	if (spidev->read_buf_head)
+	{
+		kfree(spidev->read_buf_head);
+		spidev->read_buf_head = NULL;
+	}
+
+	if (spidev->idle_buf_head)
+	{
+		/*free buffer node*/
+		list_for_each_entry_safe(spidev_buf_node, spidev_tmp_node, &(spidev->idle_buf_head->list), list)
+		{
+			if (spidev_buf_node)
+			{
+				if (spidev_buf_node->buffer)
+				{
+					kfree(spidev_buf_node->buffer);
+				}
+				list_del(&spidev_buf_node->list);
+				kfree(spidev_buf_node);
+			}
+		}
+
+		/*free head list*/
+		kfree(spidev->idle_buf_head);
+		spidev->idle_buf_head = NULL;
 	}
 err_find_dev:
 	mutex_unlock(&device_list_lock);
@@ -832,6 +1009,8 @@ static int spidev_release(struct inode *inode, struct file *filp)
 {
 	struct spidev_data	*spidev;
 	int			status = 0;
+	spidev_buf_list *spidev_buf_node = NULL;
+	spidev_buf_list *spidev_tmp_node = NULL;
 
 	mutex_lock(&device_list_lock);
 	spidev = filp->private_data;
@@ -853,10 +1032,25 @@ static int spidev_release(struct inode *inode, struct file *filp)
 
 		kfree(spidev->rx_buffer);
 		spidev->rx_buffer = NULL;
-		kfree(spidev->rx_buf);
-		spidev->rx_buf = NULL;
 		kfree(spidev->tx_buf);
 		spidev->tx_buf = NULL;
+		list_for_each_entry_safe(spidev_buf_node, spidev_tmp_node,&(spidev->idle_buf_head->list), list)
+		{
+			kfree(spidev_buf_node->buffer);
+			list_del(&spidev_buf_node->list);
+			kfree(spidev_buf_node);
+		}
+
+		list_for_each_entry_safe(spidev_buf_node, spidev_tmp_node,&(spidev->read_buf_head->list), list)
+		{
+			kfree(spidev_buf_node->buffer);
+			list_del(&spidev_buf_node->list);
+			kfree(spidev_buf_node);
+		}
+		kfree(spidev->idle_buf_head);
+		spidev->idle_buf_head = NULL;
+		kfree(spidev->read_buf_head);
+		spidev->read_buf_head = NULL;
 
 		/* ... after we unbound from the underlying device? */
 		spin_lock_irq(&spidev->spi_lock);
@@ -912,6 +1106,9 @@ static int spidev_probe(struct spi_device *spi)
 	spidev->spi = spi;
 	spin_lock_init(&spidev->spi_lock);
 	mutex_init(&spidev->buf_lock);
+	mutex_init(&spidev->tx_buf_lock);
+	mutex_init(&spidev->buf_list_lock);
+	mutex_init(&spidev->spi_op_lock);
 
 	INIT_LIST_HEAD(&spidev->device_entry);
 
@@ -925,8 +1122,8 @@ static int spidev_probe(struct spi_device *spi)
 
 		spidev->devt = MKDEV(SPIDEV_MAJOR, minor);
 		dev = device_create(spidev_class, &spi->dev, spidev->devt,
-				    spidev, "spidev%d.%d",
-				    spi->master->bus_num, spi->chip_select);
+					spidev, "spidev%d.%d",
+					spi->master->bus_num, spi->chip_select);
 		status = PTR_ERR_OR_ZERO(dev);
 	} else {
 		dev_dbg(&spi->dev, "no minor number available!\n");
