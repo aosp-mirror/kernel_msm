@@ -5431,13 +5431,14 @@ static inline int find_best_target(struct task_struct *p)
 	int idle_cpu = -1;
 	int best_idle_cstate = INT_MAX;
 	int backup_cpu = -1;
-	unsigned long new_util;
+	unsigned long task_util_boosted, new_util;
 
 	/*
 	 * Favor 1) busy cpu with most capacity at current OPP
 	 *       2) idle_cpu with capacity at current OPP
 	 *       3) busy cpu with capacity at higher OPP
 	 */
+	task_util_boosted = boosted_task_util(p);
 	for_each_cpu(i, tsk_cpus_allowed(p)) {
 
 		int cur_capacity = capacity_curr_of(i);
@@ -5447,7 +5448,7 @@ static inline int find_best_target(struct task_struct *p)
 		 * so prev_cpu will receive a negative bias due to the double
 		 * accounting. However, the blocked utilization may be zero.
 		 */
-		new_util = cpu_util(i, UTIL_EST) + boosted_task_util(p);
+		new_util = cpu_util(i, UTIL_EST) + task_util_boosted;
 
 		/*
 		 * Ensure minimum capacity to grant the required boost.
@@ -5494,7 +5495,7 @@ static int energy_aware_wake_cpu(struct task_struct *p, int target, int sync)
 	struct sched_group *sg, *sg_target;
 	int target_max_cap = INT_MAX;
 	int target_cpu = task_cpu(p);
-	unsigned long new_util;
+	unsigned long task_util_boosted, new_util;
 	int i;
 
 	if (sysctl_sched_sync_hint_enable && sync) {
@@ -5538,6 +5539,7 @@ static int energy_aware_wake_cpu(struct task_struct *p, int target, int sync)
 			}
 		} while (sg = sg->next, sg != sd->groups);
 
+		task_util_boosted = boosted_task_util(p);
 		/* Find cpu with sufficient capacity */
 		for_each_cpu_and(i, tsk_cpus_allowed(p), sched_group_cpus(sg_target)) {
 			/*
@@ -5545,7 +5547,7 @@ static int energy_aware_wake_cpu(struct task_struct *p, int target, int sync)
 			 * so prev_cpu will receive a negative bias due to the double
 			 * accounting. However, the blocked utilization may be zero.
 			 */
-			new_util = cpu_util(i, UTIL_EST) + boosted_task_util(p);
+			new_util = cpu_util(i, UTIL_EST) + task_util_boosted;
 
 			/*
 			 * Ensure minimum capacity to grant the required boost.
