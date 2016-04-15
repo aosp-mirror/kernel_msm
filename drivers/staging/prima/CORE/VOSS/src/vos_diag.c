@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -142,6 +142,9 @@ void vos_log_submit(v_VOID_t *plog_hdr_ptr)
         return;
     }
 
+    if (nl_srv_is_initialized() != 0)
+        return;
+
 #ifdef WLAN_KD_READY_NOTIFIER
     /* NL is not ready yet, WLAN KO started first */
     if ((pHddCtx->kd_nl_init) && (!pHddCtx->ptt_pid))
@@ -149,9 +152,6 @@ void vos_log_submit(v_VOID_t *plog_hdr_ptr)
         nl_srv_nl_ready_indication();
     }
 #endif /* WLAN_KD_READY_NOTIFIER */
-
-    if (nl_srv_is_initialized() != 0)
-        return;
 
    /* Send the log data to the ptt app only if it is registered with the wlan driver*/
     if(vos_is_multicast_logging())
@@ -270,6 +270,9 @@ void vos_event_report_payload(v_U16_t event_Id, v_U16_t length, v_VOID_t *pPaylo
         return;
     }
 
+    if (nl_srv_is_initialized() != 0)
+        return;
+
 #ifdef WLAN_KD_READY_NOTIFIER
     /* NL is not ready yet, WLAN KO started first */
     if ((pHddCtx->kd_nl_init) && (!pHddCtx->ptt_pid))
@@ -278,9 +281,6 @@ void vos_event_report_payload(v_U16_t event_Id, v_U16_t length, v_VOID_t *pPaylo
     }
 #endif /* WLAN_KD_READY_NOTIFIER */
     
-    if (nl_srv_is_initialized() != 0)
-        return;
-
     /* Send the log data to the ptt app only if it is registered with the wlan driver*/
     if(vos_is_multicast_logging())
     {

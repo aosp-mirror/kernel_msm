@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1626,16 +1626,10 @@ int wlan_hdd_ftm_close(hdd_context_t *pHddCtx)
         wlan_ftm_stop(pHddCtx);
     }
 
-#ifdef WLAN_KD_READY_NOTIFIER
-    nl_srv_exit(pHddCtx->ptt_pid);
-#else
-    nl_srv_exit();
-#endif /* WLAN_KD_READY_NOTIFIER */
     //TODO----------
     //Deregister the device with the kernel
     hdd_UnregisterWext(pAdapter->dev);
 
-    hdd_close_all_adapters( pHddCtx );
 #if 0
     if(test_bit(NET_DEVICE_REGISTERED, &pAdapter->event_flags))
     {
@@ -1655,7 +1649,13 @@ int wlan_hdd_ftm_close(hdd_context_t *pHddCtx)
     //Close VOSS
     wlan_ftm_vos_close(vosContext);
 
+#ifdef WLAN_KD_READY_NOTIFIER
+    nl_srv_exit(pHddCtx->ptt_pid);
+#else
+    nl_srv_exit();
+#endif /* WLAN_KD_READY_NOTIFIER */
 
+    hdd_close_all_adapters( pHddCtx );
     vosStatus = vos_event_destroy(&pHddCtx->ftm.ftm_vos_event);
     if (!VOS_IS_STATUS_SUCCESS(vosStatus))
     {

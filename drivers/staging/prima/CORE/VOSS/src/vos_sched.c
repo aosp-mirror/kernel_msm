@@ -73,7 +73,6 @@
 #define MAX_SSR_WAIT_ITERATIONS 200
 /* Timer value for detecting thread stuck issues */
 #define THREAD_STUCK_TIMER_VAL 5000 // 5 seconds
-#define THREAD_STUCK_COUNT 3
 
 #define MC_Thread 0
 #define TX_Thread 1
@@ -609,11 +608,9 @@ VosMCThread
                              &pSchedContext->mcEventFlag))
       {
         spin_lock(&pSchedContext->McThreadLock);
-
+        INIT_COMPLETION(pSchedContext->ResumeMcEvent);
         /* Mc Thread Suspended */
         complete(&pHddCtx->mc_sus_event_var);
-
-        INIT_COMPLETION(pSchedContext->ResumeMcEvent);
         spin_unlock(&pSchedContext->McThreadLock);
 
         /* Wait foe Resume Indication */
@@ -666,19 +663,6 @@ static void vos_wd_detect_thread_stuck(void)
   unsigned long flags;
 
   spin_lock_irqsave(&gpVosWatchdogContext->thread_stuck_lock, flags);
-
-  if ((gpVosWatchdogContext->mcThreadStuckCount == THREAD_STUCK_COUNT) ||
-      (gpVosWatchdogContext->txThreadStuckCount == THREAD_STUCK_COUNT) ||
-      (gpVosWatchdogContext->rxThreadStuckCount == THREAD_STUCK_COUNT))
-  {
-     spin_unlock_irqrestore(&gpVosWatchdogContext->thread_stuck_lock, flags);
-     hddLog(LOGE, FL("Thread Stuck !!! MC Count %d RX count %d TX count %d"),
-         gpVosWatchdogContext->mcThreadStuckCount,
-         gpVosWatchdogContext->rxThreadStuckCount,
-         gpVosWatchdogContext->txThreadStuckCount);
-     vos_wlanRestart();
-     return;
-  }
 
   if (gpVosWatchdogContext->mcThreadStuckCount ||
       gpVosWatchdogContext->txThreadStuckCount ||
@@ -825,7 +809,8 @@ VosWDThread
   daemonize("WD_Thread");
 #endif
   /* Initialize the timer to detect thread stuck issues */
-  if (vos_timer_init(&pWdContext->threadStuckTimer, VOS_TIMER_TYPE_SW,
+  if (vos_timer_init_deferrable(&pWdContext->threadStuckTimer,
+          VOS_TIMER_TYPE_SW,
           vos_wd_detect_thread_stuck_cb, NULL)) {
        hddLog(LOGE, FL("Unable to initialize thread stuck timer"));
   }
@@ -1157,13 +1142,10 @@ static int VosTXThread ( void * Arg )
                              &pSchedContext->txEventFlag))
       {
         spin_lock(&pSchedContext->TxThreadLock);
-
+        INIT_COMPLETION(pSchedContext->ResumeTxEvent);
         /* Tx Thread Suspended */
         complete(&pHddCtx->tx_sus_event_var);
-
-        INIT_COMPLETION(pSchedContext->ResumeTxEvent);
         spin_unlock(&pSchedContext->TxThreadLock);
-
         /* Wait foe Resume Indication */
         wait_for_completion_interruptible(&pSchedContext->ResumeTxEvent);
       }
@@ -1359,11 +1341,9 @@ static int VosRXThread ( void * Arg )
                              &pSchedContext->rxEventFlag))
       {
         spin_lock(&pSchedContext->RxThreadLock);
-
+        INIT_COMPLETION(pSchedContext->ResumeRxEvent);
         /* Rx Thread Suspended */
         complete(&pHddCtx->rx_sus_event_var);
-
-        INIT_COMPLETION(pSchedContext->ResumeRxEvent);
         spin_unlock(&pSchedContext->RxThreadLock);
 
         /* Wait for Resume Indication */
