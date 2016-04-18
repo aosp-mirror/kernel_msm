@@ -51,12 +51,6 @@
 #define SEMCO_CHIP_VENDOR_ID 0X3333
 #define MURATA_CHIP_VENDOR_ID 0X2200
 
-#define WLAN_SEMCO_FW_PATH "/system/vendor/firmware/fw_semco_bcmdhd.bin"
-#define WLAN_SEMCO_NV_PATH "/system/etc/wifi/nv_semco_bcm4343w.txt"
-
-#define WLAN_MURATA_FW_PATH "/system/vendor/firmware/fw_murata_bcmdhd.bin"
-#define WLAN_MURATA_NV_PATH "/system/etc/wifi/nv_murata_bcm4343w.txt"
-
 struct pinctrl_data {
 	struct pinctrl          *pctrl;
 	struct pinctrl_state    *pins_active;
@@ -542,26 +536,27 @@ void dhd_wlan_get_fw_nv_path(const char **fw, const char **nv)
 	vendor_id = get_wlan_chip_vendor_id();
 	if (SEMCO_CHIP_VENDOR_ID == vendor_id)
 	{
-		*fw = WLAN_SEMCO_FW_PATH;
-		*nv = WLAN_SEMCO_NV_PATH;
+		*fw = CONFIG_BCMDHD_SEMCO_FW_PATH;
+		*nv = CONFIG_BCMDHD_SEMCO_NVRAM_PATH;
 
-		DHD_ERROR(("wlan vendor: SEMCO\n"));
+		printk(KERN_INFO "BCMDHD:wlan vendor: SEMCO\n");
 	}
 	else if (MURATA_CHIP_VENDOR_ID == vendor_id)
 	{
-		*fw = WLAN_MURATA_FW_PATH;
-		*nv = WLAN_MURATA_NV_PATH;
+		*fw = CONFIG_BCMDHD_MURATA_FW_PATH;
+		*nv = CONFIG_BCMDHD_MURATA_NVRAM_PATH;
 
-		DHD_ERROR(("wlan vendor: MURATA\n"));
+		printk(KERN_INFO "BCMDHD:wlan vendor: MURATA\n");
 	}
 	else
 	{
-		DHD_ERROR(("wlan vendor ERROR!!!\n"));
+		*fw = CONFIG_BCMDHD_SEMCO_FW_PATH;
+		*nv = CONFIG_BCMDHD_SEMCO_NVRAM_PATH;
+		printk(KERN_WARNING "BCMDHD:Warning: wlan vendor id ERROR!!! default use semco\n");
 	}
 
 	return;
 }
-
 
 /* wifi mac custom */
 static int dhd_wifi_get_mac_addr(unsigned char *buf)

@@ -25,19 +25,33 @@ config BCM4356
 	depends on BCMDHD
 	default n
 
-config BCMDHD_FW_PATH
+config BCMDHD_SEMCO_FW_PATH
 	depends on BCMDHD
-	string "Firmware path"
-	default "/system/vendor/firmware/fw_bcmdhd.bin"
+	string "Semco Firmware path"
+	default "/system/vendor/firmware/semco/fw_bcmdhd.bin"
 	---help---
-	  Path to the firmware file.
+	  Path to the semco firmware file.
 
-config BCMDHD_NVRAM_PATH
+config BCMDHD_MURATA_FW_PATH
+        depends on BCMDHD
+        string "Murata Firmware path"
+        default "/system/vendor/firmware/murata/fw_bcmdhd.bin"
+        ---help---
+          Path to the murata firmware file.
+
+config BCMDHD_SEMCO_NVRAM_PATH
 	depends on BCMDHD
-	string "NVRAM path"
-	default "/system/etc/wifi/bcmdhd.cal"
+	string "Semco NVRAM path"
+	default "/system/etc/wifi/nv_semco.txt"
 	---help---
-	  Path to the calibration file.
+	  Path to the semco calibration file.
+
+config BCMDHD_MURATA_NVRAM_PATH
+        depends on BCMDHD
+        string "Murata NVRAM path"
+        default "/system/etc/wifi/nv_murata.txt"
+        ---help---
+          Path to the murata calibration file.
 
 config BCMDHD_WEXT
 	bool "Enable WEXT support"
