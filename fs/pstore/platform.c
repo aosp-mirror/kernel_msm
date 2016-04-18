@@ -196,6 +196,7 @@ error:
 
 static void allocate_buf_for_compression(void)
 {
+#if 0
 	size_t size;
 	size_t cmpr;
 
@@ -234,7 +235,10 @@ static void allocate_buf_for_compression(void)
 		pr_err("No memory for uncompressed data; skipping compression\n");
 		stream.workspace = NULL;
 	}
-
+#else
+		pr_err("No memory for uncompressed data; skipping compression\n");
+		stream.workspace = NULL;
+#endif
 }
 
 /*
