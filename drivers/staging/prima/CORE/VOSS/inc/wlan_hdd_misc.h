@@ -30,6 +30,9 @@
 
 #ifdef MSM_PLATFORM
 #ifdef QC_WLAN_CHIPSET_PRIMA
+//S: [Bug24][PFW2]Wi-Fi read/write MAC
+#define WLAN_PERSIST_FILE          "wlan/prima/wlan.ini"
+//E: [Bug24][PFW2]Wi-Fi read/write MAC
 #define WLAN_INI_FILE              "wlan/prima/WCNSS_qcom_cfg.ini"
 #define WLAN_CFG_FILE              "wlan/prima/WCNSS_cfg.dat"
 #define WLAN_FW_FILE               ""

@@ -3408,6 +3408,13 @@ REG_VARIABLE( CFG_EXTSCAN_ENABLE, WLAN_PARAM_Integer,
                  CFG_RPS_CPU_MAP_DEFAULT,
                  CFG_RPS_CPU_MAP_MIN,
                  CFG_RPS_CPU_MAP_MAX),
+
+    REG_VARIABLE(CFG_SAR_BOFFSET_SET_CORRECTION_NAME, WLAN_PARAM_Integer,
+                 hdd_config_t, boffset_correction_enable,
+                 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                 CFG_SAR_BOFFSET_SET_CORRECTION_DEFAULT,
+                 CFG_SAR_BOFFSET_SET_CORRECTION_MIN,
+                 CFG_SAR_BOFFSET_SET_CORRECTION_MAX),
 };
 
 /*
@@ -3505,6 +3512,109 @@ void dump_cfg_ini (tCfgIniEntry* iniTable, unsigned long entries)
 }
 #endif
 
+/* S: [Bug24] Implement Wi-Fi Read/Write MAC address */
+/* This function reads the wlan.ini file and
+ * parses each 'Name=Value' pair in the ini file
+ */
+char *tTemp;
+unsigned long hdd_parse_wlan_ini(hdd_context_t *pHddCtx,
+				tCfgIniEntry *iniTable, unsigned long entries)
+{
+	int status, i = 0, idx, idy, max = entries;
+	const struct firmware *fw = NULL;
+	char *buffer, *line;
+	size_t size;
+	char *name, *value;
+	tCfgIniEntry macIniTable[VOS_MAX_CONCURRENCY_PERSONA];
+
+	memset(macIniTable, 0, sizeof(macIniTable));
+	status = request_firmware(&fw, WLAN_PERSIST_FILE, pHddCtx->parent_dev);
+
+	if (status) {
+		hddLog(VOS_TRACE_LEVEL_FATAL, "%s: request_firmware failed %d",
+		__func__, status);
+		return entries;
+	}
+
+	if (!fw || !fw->data || !fw->size) {
+		hddLog(VOS_TRACE_LEVEL_FATAL, "%s: %s download failed",
+		__func__, WLAN_PERSIST_FILE);
+		return entries;
+	}
+
+	buffer = (char *)vos_mem_malloc(fw->size);
+	if (NULL == buffer) {
+		hddLog(VOS_TRACE_LEVEL_FATAL, "%s: kmalloc failure", __func__);
+		release_firmware(fw);
+		return entries;
+	}
+	tTemp = buffer;
+
+	vos_mem_copy((void *)buffer, (void *)fw->data, fw->size);
+	size = fw->size;
+
+	while (buffer != NULL) {
+		line = get_next_line(buffer, (tTemp + (fw->size-1)));
+		buffer = i_trim(buffer);
+
+		hddLog(LOG1, "%s: item", buffer);
+
+		if (strlen((char *)buffer) == 0 || *buffer == '#') {
+			buffer = line;
+			continue;
+		} else if (strncmp(buffer, "END", 3) == 0) {
+			break;
+		} else {
+			name = buffer;
+			while (*buffer != '=' && *buffer != '\0')
+				buffer++;
+			if (*buffer != '\0') {
+				*buffer++ = '\0';
+				i_trim(name);
+				if (strlen(name) != 0) {
+					buffer = i_trim(buffer);
+					if (strlen(buffer) > 0) {
+						value = buffer;
+						while (!i_isspace(*buffer) && *buffer != '\0')
+							buffer++;
+						*buffer = '\0';
+						macIniTable[i].name = name;
+						macIniTable[i++].value = value;
+						if (i >= MAX_CFG_INI_ITEMS) {
+							hddLog(LOGE, "%s: Number of items in %s > %d \n",
+							__func__, WLAN_PERSIST_FILE, MAX_CFG_INI_ITEMS);
+							break;
+						}
+					}
+				}
+			}
+		}
+		buffer = line;
+	}
+
+	for (idx = 0; idx < i; idx++) {
+		int override = 0;
+		for (idy = 0; idy < max; idy++) {
+			if (strcmp(iniTable[idy].name, macIniTable[idx].name) == 0) {
+				hddLog(VOS_TRACE_LEVEL_FATAL, "%s: Override (%2d)%s: %s -> %s",
+				__func__, idy, iniTable[idy].name, iniTable[idy].value, macIniTable[idx].value);
+				iniTable[idy].value = macIniTable[idx].value;
+				override = 1;
+				break;
+			}
+		}
+		if (override == 0) {
+			iniTable[entries].name = macIniTable[idx].name;
+			iniTable[entries++].value = macIniTable[idx].value;
+			hddLog(VOS_TRACE_LEVEL_FATAL, "%s: Add (%lu)%s: %s",
+			__func__, entries-1, iniTable[entries-1].name, iniTable[entries-1].value);
+		}
+	}
+
+	release_firmware(fw);
+	return entries;
+}
+/* E: [Bug24] Implement Wi-Fi Read/Write MAC address */
 /*
  * This function reads the qcom_cfg.ini file and
  * parses each 'Name=Value' pair in the ini file
@@ -3612,15 +3722,20 @@ VOS_STATUS hdd_parse_config_ini(hdd_context_t* pHddCtx)
             }
          }
       }
+
       buffer = line;
    }
+   /* S: [Bug24] Implement Wi-Fi Read/Write MAC address */
+   /* request wlan.ini from persist */
+   i = hdd_parse_wlan_ini(pHddCtx, cfgIniTable, i);
+   /* E: [Bug24] Implement Wi-Fi Read/Write MAC address */
 
-   //Loop through the registry table and apply all these configs
    vos_status = hdd_apply_cfg_ini(pHddCtx, cfgIniTable, i);
 
 config_exit:
    release_firmware(fw);
    vos_mem_vfree(pTemp);
+   vos_mem_vfree(tTemp);
    return vos_status;
 }
 
@@ -5399,6 +5514,14 @@ v_BOOL_t hdd_update_config_dat( hdd_context_t *pHddCtx )
    {
       fStatus = FALSE;
       hddLog(LOGE, "Could not pass on WNI_CFG_ENABLE_MAC_ADDR_SPOOFING ");
+   }
+
+   if (ccmCfgSetInt(pHddCtx->hHal, WNI_CFG_SAR_BOFFSET_SET_CORRECTION,
+               pConfig->boffset_correction_enable,
+               NULL, eANI_BOOLEAN_FALSE) == eHAL_STATUS_FAILURE)
+   {
+       fStatus = FALSE;
+       hddLog(LOGE, "Could not pass on WNI_CFG_SAR_BOFFSET_SET_CORRECTION to CCM");
    }
 
    return fStatus;
