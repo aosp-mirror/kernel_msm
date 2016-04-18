@@ -1806,7 +1806,7 @@ static int msm_otg_set_power(struct usb_phy *phy, unsigned mA)
 	 * states when CDP/ACA is connected.
 	 */
 	if (motg->chg_type == USB_SDP_CHARGER)
-		msm_otg_notify_charger(motg, mA);
+		msm_otg_notify_charger(motg, 300);
 
 	return 0;
 }

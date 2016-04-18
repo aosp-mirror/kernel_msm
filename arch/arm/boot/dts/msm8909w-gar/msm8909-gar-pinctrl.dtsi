@@ -276,22 +276,22 @@
 		smb_int_pin {
 			smb_int_default: smb_int_default {
 				mux {
-					pins = "gpio58";
+					pins = "gpio55";
 					function ="smb1360_int_gpio";
 				};
 				config {
-					pins = "gpio58";
+					pins = "gpio55";
 					drive-strength = <2>;   /* 2 MA */
 					bias-pull-up;           /* PULL UP*/
 				};
 			};
 			smb_int_sleep: smb_int_sleep {
 				mux {
-					pins = "gpio58";
+					pins = "gpio55";
 					function ="smb1360_int_gpio";
 				};
 				config {
-					pins = "gpio58";
+					pins = "gpio55";
 					drive-strength = <2>;   /* 2 MA */
 					bias-pull-up;           /* PULL UP*/
 				};
@@ -1077,11 +1077,11 @@
 		tpiu_seta_14 {
 			seta_14: seta {
 				mux {
-					pins = "gpio58";
+					pins = "gpio55";
 					function = "qdss_tracedata_a";
 				};
 				config {
-					pins = "gpio58";
+					pins = "gpio55";
 					drive-strength = <16>;
 					bias-disable;
 				};

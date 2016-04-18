@@ -57,8 +57,88 @@
 	status = "disabled";
 };
 
+/* Charger/FG configuration */
+&pm8916_chg {
+	qcom,use-external-charger;
+};
+
+&pm8916_bms {
+	status = "disabled";
+};
+
+&msm_gpio {
+	/* Delete gpio58 configuration */
+	/delete-node/ tpiu_seta_14;
+	/delete-node/ smb_int_pin;
+	smb_int_default: smb_int_default {
+		mux {
+			pins = "gpio49";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio49";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+		};
+	};
+};
+
 &blsp1_uart2 {
 	status = "ok";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart_console_sleep>;
+};
+
+&i2c_4 {
+	status = "ok";
+	smb23x-lbc@12 {
+		compatible = "qcom,smb231-lbc";
+		reg = <0x12>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <49 2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&smb_int_default>;
+
+		qcom,bms-psy-name = "bms";
+		qcom,float-voltage-mv = <4360>;
+		qcom,charging-timeout = <360>;
+		qcom,recharge-thresh-mv = <150>;
+		qcom,iterm-ma = <50>;
+		qcom,fastchg-ma = <100>;
+		qcom,hot-bat-decidegc = <450>;
+		qcom,warm-bat-decidegc = <450>;
+		qcom,cool-bat-decidegc = <80>;
+		qcom,cold-bat-decidegc = <(30)>;
+		qcom,soft-temp-vfloat-comp-mv = <160>;
+		qcom,soft-temp-current-comp-ma = <100>;
+		qcom,chg-inhibit-disabled;
+		qcom,apsd-disabled;
+		qcom,aicl-disabled;
+	};
+
+	st-fg@70 {
+		compatible = "st,stc3117";
+		reg = <0x70>;
+		st,rbatt-mohm = <818>;
+		st,nom-capacity-mah = <390>;
+		st,rsense-mohm = <10>;
+		st,float-voltage-mv = <4330>;
+		st,alarm-soc = <10>;
+		st,alarm-voltage-mv = <3400>;
+		st,term-current-ma = <50>;
+		st,relax-current-ma = <20>;
+		st,adaptive-capacity-tbl =
+			/bits/ 16 <0x00 0x00 0x00 0x25 0x25 0xC3 0x2D0>;
+		st,ocv-tbl =
+			/bits/ 16 <3300 3568 3674 3685 3703 3732
+				3749 3770 3802 3840 3907 3953
+				3985 4093 4193 4306>;
+		st,soc-tbl = /bits/ 8 <0 3 6 10 15 20
+					25 30 40 50 60 65
+					70 80 90 100>;
+		st,vmtemp-tbl =
+			/bits/ 16 <0x55 0x5a 0x64 0xa0 0x140 0x1b8 0x348>;
+		st,temp-tbl =
+			/bits/ 16 <60 40 25 10 0 (-10) (-20)>;
+	};
 };

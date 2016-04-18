@@ -22,6 +22,12 @@
 #include <linux/debugfs.h>
 #include <linux/pm_wakeup.h>
 #include <linux/spinlock.h>
+#include <linux/power/smb23x.h>
+#include <linux/gpio.h>
+#include <linux/alarmtimer.h>
+#include <linux/timer.h>
+#include <linux/time.h>
+#include <linux/delay.h>
 
 struct smb23x_wakeup_source {
 	struct wakeup_source source;
@@ -155,31 +161,31 @@ static int inhibit_mv_table[] = {
 };
 
 static int cold_bat_decidegc_table[] = {
-	100,
-	50,
-	0,
-	-50,
+	30,
+	-20,
+	-70,
+	-130,
 };
 
 static int cool_bat_decidegc_table[] = {
-	150,
-	100,
-	50,
-	0,
+	80,
+	30,
+	-20,
+	-70,
 };
 
 static int warm_bat_decidegc_table[] = {
-	400,
+	340,
+	390,
 	450,
 	500,
-	550,
 };
 
 static int hot_bat_decidegc_table[] = {
+	450,
 	500,
 	550,
 	600,
-	650,
 };
 
 
@@ -212,6 +218,7 @@ static int hot_bat_decidegc_table[] = {
 #define FLOAT_VOLTAGE_MASK	SMB_MASK(4, 0)
 
 #define CFG_REG_4		0x04
+#define SYSTEM_VOLTAGE_MASK	SMB_MASK(1, 0)
 #define CHG_EN_ACTIVE_LOW_BIT	BIT(5)
 #define SAFETY_TIMER_MASK	SMB_MASK(4, 3)
 #define SAFETY_TIMER_OFFSET	3
@@ -335,6 +342,18 @@ static int hot_bat_decidegc_table[] = {
 #define USB5_LIMIT		BIT(4)
 #define USB1_LIMIT		BIT(5)
 
+#define ENABLE			1
+#define DISABLE			0
+
+#define GPIO_WPC_EN1		(33)
+#define GPIO_WPC_EN2		(35)
+#define GPIO_SMB_SUSP_PIN	(58)
+
+#define TRIM_PERIOD_NS		(1LL * NSEC_PER_SEC)
+
+long CEI_EN1 = DISABLE;
+long CEI_EN2 = DISABLE;
+
 struct smb_irq_info {
 	const char	*name;
 	int		(*smb_irq)(struct smb23x_chip *chip, u8 rt_stat);
@@ -360,12 +379,23 @@ enum {
 	WRKRND_IRQ_POLLING = BIT(0),
 };
 
+struct smb23x_chip *cei_chip;
+int CEI_STATUS = STATUS_NORMAL;
+struct alarm wpc_check_alarm;
+struct work_struct WPC_check;
+int cei_flag = true;
+
 static irqreturn_t smb23x_stat_handler(int irq, void *dev_id);
+static void reconfig_upon_unplug(struct smb23x_chip *chip);
+static int smb23x_get_prop_batt_voltage(struct smb23x_chip *chip);
 
 static int __smb23x_read(struct smb23x_chip *chip, u8 reg, u8 *val)
 {
 	int rc;
 
+	if (cei_flag == false) {
+		return 0;
+	}
 	rc = i2c_smbus_read_byte_data(chip->client, reg);
 	if (rc < 0) {
 		pr_err("Reading 0x%02x failed, rc = %d\n", reg, rc);
@@ -380,6 +410,10 @@ static int __smb23x_read(struct smb23x_chip *chip, u8 reg, u8 *val)
 static int __smb23x_write(struct smb23x_chip *chip, u8 reg, u8 val)
 {
 	int rc;
+
+	if (cei_flag == false) {
+		return 0;
+	}
 
 	rc = i2c_smbus_write_byte_data(chip->client, reg, val);
 	if (rc < 0) {
@@ -902,6 +936,15 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 			pr_err("Set float voltage failed, rc=%d\n", rc);
 			return rc;
 		}
+		if (chip->cfg_vfloat_mv >= 4300) {
+			rc = smb23x_masked_write(chip, CFG_REG_4,
+				SYSTEM_VOLTAGE_MASK, 0x3);
+			if (rc < 0) {
+				pr_err("Set system voltage failed, rc=%d\n",
+				       rc);
+				return rc;
+			}
+		}
 	}
 
 	/* fastchg current setting */
@@ -1082,8 +1125,18 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 
 static int hot_hard_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
+	ktime_t kt;
+
 	pr_warn("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_hot = !!rt_sts;
+
+	if (chip->batt_hot == true) {
+		CEI_STATUS = STATUS_OVER_TEMP;
+		pr_err("SMB231:temperature too high turn off WPC");
+		gpio_direction_output(GPIO_WPC_EN1, 1);
+		kt = ns_to_ktime(TRIM_PERIOD_NS * 60 * 1);
+		alarm_start_relative(&wpc_check_alarm, kt);
+	}
 	return 0;
 }
 
@@ -1156,8 +1209,32 @@ static int taper_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int iterm_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
+	u8 reg = 0;
+	int rc;
+	ktime_t kt;
+
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_full = !!rt_sts;
+	if (chip->batt_full == true) {
+		rc = smb23x_read(chip, IRQ_A_STATUS_REG, &reg);
+		if (rc < 0) {
+			pr_err("Read STATUS_C failed, rc=%d\n", rc);
+			return rc;
+		}
+		if ((reg & 0x44) == 0)	{
+			CEI_STATUS = STATUS_FULL;
+			pr_err("SMB231:battery is full turn off WPC\n");
+			gpio_direction_output(GPIO_WPC_EN1, 1);
+			kt = ns_to_ktime(TRIM_PERIOD_NS * 30 * 1);
+			alarm_start_relative(&wpc_check_alarm, kt);
+		} else {
+			CEI_STATUS = STATUS_OVER_TEMP;
+			pr_err("SMB231:temperature is warm and full turn off WPC\n");
+			gpio_direction_output(GPIO_WPC_EN1, 1);
+			kt = ns_to_ktime(TRIM_PERIOD_NS * 60 * 1);
+			alarm_start_relative(&wpc_check_alarm, kt);
+		}
+	}
 	return 0;
 }
 
@@ -1217,12 +1294,45 @@ static int handle_usb_insertion(struct smb23x_chip *chip)
 	return 0;
 }
 
+/*
 static int handle_usb_removal(struct smb23x_chip *chip)
 {
 	power_supply_set_supply_type(chip->usb_psy,
 			POWER_SUPPLY_TYPE_UNKNOWN);
 	power_supply_set_present(chip->usb_psy, chip->usb_present);
 	power_supply_set_online(chip->usb_psy, false);
+
+	return 0;
+}
+*/
+
+int usb_insertion(void)
+{
+	enum power_supply_type usb_type;
+
+	cei_chip->usb_present = true;
+	cei_flag = true;
+	usb_type = get_usb_supply_type(cei_chip);
+	power_supply_set_present(cei_chip->usb_psy, true);
+	power_supply_set_online(cei_chip->usb_psy, true);
+
+	power_supply_changed(cei_chip->usb_psy);
+	reconfig_upon_unplug(cei_chip);
+
+	return 0;
+}
+
+int usb_removal(void)
+{
+	cei_chip->usb_present = false;
+	cei_flag = false;
+	power_supply_set_supply_type(cei_chip->usb_psy,
+			POWER_SUPPLY_TYPE_UNKNOWN);
+	power_supply_set_present(cei_chip->usb_psy, false);
+	power_supply_set_online(cei_chip->usb_psy, false);
+
+	power_supply_changed(cei_chip->usb_psy);
+	reconfig_upon_unplug(cei_chip);
 
 	return 0;
 }
@@ -1233,7 +1343,7 @@ static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 	pr_debug("chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present, usb_present);
-
+/*
 	if (usb_present && !chip->usb_present) {
 		chip->usb_present = usb_present;
 		handle_usb_insertion(chip);
@@ -1241,7 +1351,7 @@ static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 		chip->usb_present = usb_present;
 		handle_usb_removal(chip);
 	}
-
+*/
 	return 0;
 }
 
@@ -1271,11 +1381,13 @@ static int usbin_ov_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 	pr_debug("chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present,  usb_present);
-	if (chip->usb_present != usb_present) {
+/*	if (chip->usb_present != usb_present) {
 		chip->usb_present = usb_present;
 		power_supply_set_present(chip->usb_psy, usb_present);
 		power_supply_set_health_state(chip->usb_psy, health);
 	}
+*/
+	power_supply_set_health_state(chip->usb_psy, health);
 
 	return 0;
 }
@@ -1293,6 +1405,35 @@ static void smb23x_irq_polling_work_fn(struct work_struct *work)
 			msecs_to_jiffies(IRQ_POLLING_MS));
 }
 
+static enum alarmtimer_restart wpc_check_alarm_function(struct alarm *alarm,
+							ktime_t now)
+{
+	schedule_work(&WPC_check);
+
+	return ALARMTIMER_NORESTART;
+}
+
+static void WPC_check_work(struct work_struct *work)
+{
+	ktime_t kt;
+
+	if (CEI_STATUS == STATUS_OVER_TEMP || CEI_STATUS == STATUS_NORMAL) {
+		pr_err("SMB231:OVER TEMP turn on WPC");
+		gpio_direction_output(GPIO_WPC_EN1, 0);
+		CEI_STATUS = STATUS_NORMAL;
+	} else if (CEI_STATUS == STATUS_FULL) {
+		if (smb23x_get_prop_batt_voltage(cei_chip) <= 4200000) {
+			pr_err("SMB231:FULL turn on WPC");
+			gpio_direction_output(GPIO_WPC_EN1, 0);
+			CEI_STATUS = STATUS_NORMAL;
+		} else {
+			gpio_direction_output(GPIO_WPC_EN1, 1);
+			kt = ns_to_ktime(TRIM_PERIOD_NS * 30 * 1);
+			alarm_start_relative(&wpc_check_alarm, kt);
+		}
+	}
+}
+
 /*
  * On some of the parts, the Non-volatile register values will
  * be reloaded upon unplug event. Even the unplug event won't be
@@ -1306,42 +1447,48 @@ static void reconfig_upon_unplug(struct smb23x_chip *chip)
 	int rc;
 	int reason;
 
-	if (chip->workaround_flags & WRKRND_IRQ_POLLING) {
-		if (chip->usb_present) {
-			smb23x_stay_awake(&chip->smb23x_ws,
-					WAKEUP_SRC_IRQ_POLLING);
-			schedule_delayed_work(&chip->irq_polling_work,
-					msecs_to_jiffies(IRQ_POLLING_MS));
-		} else {
-			pr_debug("restore software settings after unplug\n");
-			smb23x_relax(&chip->smb23x_ws, WAKEUP_SRC_IRQ_POLLING);
-			rc = smb23x_hw_init(chip);
-			if (rc)
-				pr_err("smb23x init upon unplug failed, rc=%d\n",
-							rc);
-			/*
-			 * Retore the CHARGE_EN && USB_SUSPEND bit
-			 * according to the status maintained in sw.
-			 */
-			mutex_lock(&chip->chg_disable_lock);
-			reason = chip->chg_disabled_status;
-			mutex_unlock(&chip->chg_disable_lock);
-			rc = smb23x_charging_disable(chip, reason,
-					!!reason ? true : false);
-			if (rc < 0)
-				pr_err("%s charging failed\n",
-					!!reason ? "Disable" : "Enable");
+/*	if (chip->workaround_flags & WRKRND_IRQ_POLLING) {*/
+	if (chip->usb_present) {
+		smb23x_stay_awake(&chip->smb23x_ws,
+				  WAKEUP_SRC_IRQ_POLLING);
+		rc = smb23x_charging_disable(chip, USER, false);
 
-			mutex_lock(&chip->usb_suspend_lock);
-			reason = chip->usb_suspended_status;
-			mutex_unlock(&chip->usb_suspend_lock);
-			rc = smb23x_suspend_usb(chip, reason,
+		rc = smb23x_hw_init(chip);
+		if (rc)
+			pr_err("smb23x upon unplug failed, rc=%d\n",
+			       rc);
+		schedule_delayed_work(&chip->irq_polling_work,
+				      msecs_to_jiffies(IRQ_POLLING_MS));
+	} else {
+		pr_debug("restore software settings after unplug\n");
+		smb23x_relax(&chip->smb23x_ws, WAKEUP_SRC_IRQ_POLLING);
+/*		rc = smb23x_hw_init(chip);
+		if (rc)
+			pr_err("smb23x init upon unplug failed, rc=%d\n",
+			       rc);*/
+		/*
+		 * Retore the CHARGE_EN && USB_SUSPEND bit
+		 * according to the status maintained in sw.
+		 */
+		mutex_lock(&chip->chg_disable_lock);
+		reason = chip->chg_disabled_status;
+		mutex_unlock(&chip->chg_disable_lock);
+		rc = smb23x_charging_disable(chip, reason,
+					     !!reason ? true : false);
+		if (rc < 0)
+			pr_err("%s charging failed\n",
+			       !!reason ? "Disable" : "Enable");
+
+		mutex_lock(&chip->usb_suspend_lock);
+		reason = chip->usb_suspended_status;
+		mutex_unlock(&chip->usb_suspend_lock);
+		rc = smb23x_suspend_usb(chip, reason,
 					!!reason ? true : false);
-			if (rc < 0)
-				pr_err("%suspend USB failed\n",
-					!!reason ? "S" : "Un-s");
-		}
+		if (rc < 0)
+			pr_err("%suspend USB failed\n",
+			       !!reason ? "S" : "Un-s");
 	}
+/*	}*/
 }
 
 static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
@@ -1352,11 +1499,12 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 					chip->usb_present,  usb_present);
 	if (chip->usb_present == usb_present)
 		return 0;
-
+/*
 	chip->usb_present = usb_present;
 	reconfig_upon_unplug(chip);
 	power_supply_set_present(chip->usb_psy, usb_present);
-
+*/
+	cei_flag = false;
 	return 0;
 }
 
@@ -1621,10 +1769,12 @@ static irqreturn_t smb23x_stat_handler(int irq, void *dev_id)
 	if (handler_count) {
 		pr_debug("batt psy changed\n");
 		power_supply_changed(&chip->batt_psy);
+/*
 		if (chip->usb_psy) {
 			pr_debug("usb psy changed\n");
 			power_supply_changed(chip->usb_psy);
 		}
+*/
 	}
 
 	mutex_unlock(&chip->irq_complete);
@@ -1640,6 +1790,8 @@ static enum power_supply_property smb23x_battery_properties[] = {
 	POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
 };
@@ -1673,7 +1825,10 @@ static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
 	rc = smb23x_read(chip, CHG_STATUS_B_REG, &tmp);
 	if (rc < 0) {
 		pr_err("Read STATUS_B failed, rc=%d\n", rc);
-		return POWER_SUPPLY_STATUS_UNKNOWN;
+		if (chip->usb_present == true)
+			return POWER_SUPPLY_STATUS_UNKNOWN;
+		else
+			return POWER_SUPPLY_STATUS_DISCHARGING;
 	}
 
 	status = tmp & CHARGE_TYPE_MASK;
@@ -1706,7 +1861,9 @@ static int smb23x_get_prop_charging_enabled(struct smb23x_chip *chip)
 
 static int smb23x_get_prop_batt_present(struct smb23x_chip *chip)
 {
-	return chip->batt_present ? 1 : 0;
+	return true;
+
+	/*return chip->batt_present ? 1 : 0;*/
 }
 
 static int smb23x_get_prop_charge_type(struct smb23x_chip *chip)
@@ -1748,6 +1905,35 @@ static int smb23x_get_prop_batt_capacity(struct smb23x_chip *chip)
 	}
 
 	return DEFAULT_BATT_CAPACITY;
+}
+
+
+#define DEFAULT_BATT_VOLTAGE	3700
+static int smb23x_get_prop_batt_voltage(struct smb23x_chip *chip)
+{
+	union power_supply_propval ret = {0, };
+
+	if (chip->bms_psy) {
+		chip->bms_psy->get_property(chip->bms_psy,
+				POWER_SUPPLY_PROP_VOLTAGE_NOW, &ret);
+		return ret.intval;
+	}
+
+	return DEFAULT_BATT_VOLTAGE;
+}
+
+#define DEFAULT_BATT_CURRENT	0
+static int smb23x_get_prop_batt_current(struct smb23x_chip *chip)
+{
+	union power_supply_propval ret = {0, };
+
+	if (chip->bms_psy) {
+		chip->bms_psy->get_property(chip->bms_psy,
+				POWER_SUPPLY_PROP_CURRENT_NOW, &ret);
+		return ret.intval;
+	}
+
+	return DEFAULT_BATT_CURRENT;
 }
 
 #define DEFAULT_BATT_TEMP	280
@@ -1826,6 +2012,12 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = smb23x_get_prop_batt_capacity(chip);
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		val->intval = smb23x_get_prop_batt_voltage(chip);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		val->intval = smb23x_get_prop_batt_current(chip);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = smb23x_get_prop_batt_temp(chip);
@@ -1961,13 +2153,14 @@ static void smb23x_external_power_changed(struct power_supply *psy)
 		pr_err("Get ONLINE from usb failed, rc=%d\n", rc);
 	else
 		online = !!prop.intval;
-
+/*
 	if (chip->usb_present && chip->usb_psy_ma != 0) {
 		if (!online && !chip->apsd_enabled)
 			power_supply_set_online(chip->usb_psy, true);
 	} else if (online && !chip->apsd_enabled) {
 		power_supply_set_online(chip->usb_psy, false);
 	}
+*/
 }
 
 #define LAST_CNFG_REG	0x1F
@@ -2142,6 +2335,34 @@ static int force_irq_set(void *data, u64 val)
 }
 DEFINE_SIMPLE_ATTRIBUTE(force_irq_ops, NULL, force_irq_set, "0x%02llx\n");
 
+static ssize_t sculld_show_CEI_EN1(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	if (CEI_EN1 == ENABLE)
+		return snprintf(buf, 10, "ENABLE");
+	else
+		return snprintf(buf, 10, "DISABLE");
+}
+
+static ssize_t sculld_store_CEI_EN1(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+
+{
+	int ret;
+
+	ret = kstrtol(buf, 10, &CEI_EN1);
+
+	gpio_direction_output(GPIO_WPC_EN1, (int) CEI_EN1);
+	gpio_direction_output(GPIO_WPC_EN2, (int) CEI_EN1);
+	return count;
+}
+
+static DEVICE_ATTR(CEI_EN1, 0664 ,
+		   sculld_show_CEI_EN1,
+		   sculld_store_CEI_EN1);
+
 static int create_debugfs_entries(struct smb23x_chip *chip)
 {
 	chip->debug_root = debugfs_create_dir("smb23x", NULL);
@@ -2234,6 +2455,23 @@ static int smb23x_probe(struct i2c_client *client,
 	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
 	if (chip == NULL)
 		return (-ENOMEM);
+
+	if (gpio_request(GPIO_SMB_SUSP_PIN, "SMB_SUSP_PIN") == 0)
+		gpio_direction_output(GPIO_SMB_SUSP_PIN, 1);
+	else
+		pr_err("smb231:SMB_SUSP_PIN request fail");
+
+	if (gpio_request(GPIO_WPC_EN1, "WPC_EN1") == 0)
+		gpio_direction_output(GPIO_WPC_EN1, 0);
+	else
+		pr_err("smb231:WPC_EN1 request fail");
+
+	if (gpio_request(GPIO_WPC_EN2, "WPC_EN2") == 0)
+		gpio_direction_output(GPIO_WPC_EN2, 0);
+	else
+		pr_err("smb231:WPC_EN2 request fail");
+
+	mdelay(100);
 
 	chip->client = client;
 	chip->dev = &client->dev;
@@ -2330,6 +2568,16 @@ static int smb23x_probe(struct i2c_client *client,
 
 	pr_info("SMB23x successfully probed batt=%d usb = %d\n",
 			smb23x_get_prop_batt_present(chip), chip->usb_present);
+
+	rc = device_create_file(chip->dev, &dev_attr_CEI_EN1);
+
+	cei_chip = chip;
+	cei_smb231_flag = true;
+
+	INIT_WORK(&WPC_check, WPC_check_work);
+	alarm_init(&wpc_check_alarm, ALARM_REALTIME, wpc_check_alarm_function);
+
+	gpio_direction_output(GPIO_SMB_SUSP_PIN, 0);
 
 	return 0;
 unregister_batt_psy:

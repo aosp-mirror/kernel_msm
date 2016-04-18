@@ -29,6 +29,8 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/qpnp/power-on.h>
+#include <linux/power_supply.h>
+#include <linux/power/smb23x.h>
 
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
@@ -220,6 +222,9 @@ struct qpnp_pon {
 	bool			store_hard_reset_reason;
 };
 
+struct delayed_work smb231_updata;
+static int vbus;
+int cei_smb231_flag = false;
 static struct qpnp_pon *sys_reset_dev;
 static DEFINE_SPINLOCK(spon_list_slock);
 static LIST_HEAD(spon_dev_list);
@@ -844,14 +849,34 @@ static irqreturn_t qpnp_kpdpwr_resin_bark_irq(int irq, void *_pon)
 	return IRQ_HANDLED;
 }
 
+static void smb231_updata_work(struct work_struct *work)
+{
+	struct qpnp_pon *pon = sys_reset_dev;
+
+	if (cei_smb231_flag == true) {
+		if (vbus == 1)
+			usb_insertion();
+		else
+			usb_removal();
+	}
+
+	pm_relax(&pon->spmi->dev);
+}
+
 static irqreturn_t qpnp_cblpwr_irq(int irq, void *_pon)
 {
 	int rc;
 	struct qpnp_pon *pon = _pon;
 
+	pm_stay_awake(&pon->spmi->dev);
+
+	vbus = !!irq_read_line(irq);
+
 	rc = qpnp_pon_input_dispatch(pon, PON_CBLPWR);
 	if (rc)
 		dev_err(&pon->spmi->dev, "Unable to send input event\n");
+
+	schedule_delayed_work(&smb231_updata, 100);
 
 	return IRQ_HANDLED;
 }
@@ -1164,6 +1189,7 @@ qpnp_pon_request_irqs(struct qpnp_pon *pon, struct qpnp_pon_config *cfg)
 							cfg->state_irq);
 			return rc;
 		}
+		enable_irq_wake(cfg->state_irq);
 		break;
 	case PON_KPDPWR_RESIN:
 		if (cfg->use_bark) {
@@ -2175,6 +2201,7 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 	dev_set_drvdata(&spmi->dev, pon);
 
 	INIT_DELAYED_WORK(&pon->bark_work, bark_work_func);
+	INIT_DELAYED_WORK(&smb231_updata, smb231_updata_work);
 
 	/* register the PON configurations */
 	rc = qpnp_pon_config_init(pon);
