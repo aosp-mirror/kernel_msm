@@ -775,4 +775,13 @@
 			};
 		};
 	};
+
+	/* Change the sdio clock drive-strength */
+	pmx_sdc2_clk {
+		sdc2_clk_on: sdc2_clk_on {
+			config {
+				drive-strength = <8>; /* 8 MA */
+			};
+		};
+	};
 };
