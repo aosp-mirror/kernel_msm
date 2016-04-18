@@ -48,7 +48,7 @@
 #define ETHER_BUFFER_LEN 16
 
 /* wifi chip vendor */
-#define SEMCO_CHIP_VENDOR_ID 0X3333
+#define SEMCO_CHIP_VENDOR_ID 0X8833
 #define MURATA_CHIP_VENDOR_ID 0X2200
 
 struct pinctrl_data {
