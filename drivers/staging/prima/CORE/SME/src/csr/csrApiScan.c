@@ -5246,12 +5246,9 @@ eHalStatus csrScanSmeScanResponse( tpAniSirGlobal pMac, void *pMsgBuf )
         pCommand = GET_BASE_ADDR( pEntry, tSmeCmd, Link );
         if ( eSmeCommandScan == pCommand->command )
         {
-            pScanChnInfo = (tSmeGetScanChnRsp *)pMsgBuf;
-            /* Purge the scan results based on Aging and Ref count */
-            csrPurgeScanResultByAge(pMac);
-            if (pScanChnInfo)
-                csrScanAgeResults(pMac, pScanChnInfo);
-            scanStatus = (eSIR_SME_SUCCESS == pScanRsp->statusCode) ? eCSR_SCAN_SUCCESS : eCSR_SCAN_FAILURE;
+            /* Purge the scan results based on Aging */
+            if (pEntry && pMac->scan.scanResultCfgAgingTime)
+                csrPurgeScanResultByAge(pMac);
             reason = pCommand->u.scanCmd.reason;
             switch(pCommand->u.scanCmd.reason)
             {
@@ -5261,11 +5258,13 @@ eHalStatus csrScanSmeScanResponse( tpAniSirGlobal pMac, void *pMsgBuf )
             case eCsrScanBGScanEnable:
                 break;
             case eCsrScanGetScanChnInfo:
+                pScanChnInfo = (tSmeGetScanChnRsp *)pMsgBuf;
                 /*
                  * status code not available in tSmeGetScanChnRsp, so 
                  * by default considereing it to be success
                  */
                 scanStatus = eSIR_SME_SUCCESS;
+                csrScanAgeResults(pMac, pScanChnInfo);
                 break;
             case eCsrScanForCapsChange:
                 csrScanProcessScanResults( pMac, pCommand, pScanRsp, &fRemoveCommand );
