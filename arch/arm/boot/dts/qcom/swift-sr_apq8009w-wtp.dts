@@ -38,3 +38,38 @@
 &peripheral_mem {
 	reg = <0x0 0x8ac00000 0x0 0x0500000>;
 };
+
+&apc_vreg_corner {
+	qcom,cpr-voltage-ceiling = <1000000 1175000 1350000>;
+	qcom,cpr-voltage-floor = <950000 950000 1155000>;
+	qcom,cpr-init-voltage-ref = <1000000 1175000 1350000>;
+	qcom,cpr-corner-map = <1 1 1 2 3 3 3 3 3>;
+};
+
+&soc {
+	clock_cpu {
+		qcom,speed2-bin-v0 =
+			<          0 0>,
+			<  533330000 3>,
+			<  800000000 4>,
+			< 1094400000 6>;
+	};
+
+	qcom,msm-cpufreq {
+		qcom,cpufreq-table =
+			 <  533330 >,
+			 <  800000 >,
+			 < 1094400 >,
+			 < 1267200 >;
+	};
+
+	devfreq-cpufreq {
+		cpubw-cpufreq {
+			cpu-to-dev-map =
+				 <  533330  2929>,
+				 <  800000  2929>,
+				 < 1094400  2929>,
+				 < 1267200  2929>;
+		};
+	};
+};
