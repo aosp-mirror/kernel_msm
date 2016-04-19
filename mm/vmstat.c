@@ -1521,6 +1521,29 @@ static struct notifier_block vmstat_notifier =
 	{ &vmstat_cpuup_callback, NULL, 0 };
 #endif
 
+#ifdef CONFIG_VM_EVENT_COUNTERS
+void dump_vm_events_counter(void)
+{
+	static unsigned long prev_events[NR_VM_EVENT_ITEMS];
+	unsigned long events[NR_VM_EVENT_ITEMS];
+	int i;
+
+	all_vm_events(events);
+	/* sectors -> kbytes */
+	events[PGPGIN] /= 2;
+	events[PGPGOUT] /= 2;
+
+	/* dump increased counters within a certain period of time */
+	for (i = 0; i < NR_VM_EVENT_ITEMS; i++) {
+		if (events[i] - prev_events[i] > 0)
+			pr_info("[K] %s_diff = %lu\n",
+				vmstat_text[i + NR_VM_ZONE_STAT_ITEMS + NR_VM_WRITEBACK_STAT_ITEMS],
+				events[i] - prev_events[i]);
+	}
+	memcpy(prev_events, events, sizeof(unsigned long) * NR_VM_EVENT_ITEMS);
+}
+#endif
+
 static int __init setup_vmstat(void)
 {
 #ifdef CONFIG_SMP

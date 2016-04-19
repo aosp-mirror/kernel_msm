@@ -9,115 +9,10 @@
 #include <linux/vmalloc.h>
 #include <linux/pm_wakeup.h>
 #include <linux/kernel_stat.h>
-/* #include <mach/devices_dtb.h> Not implemented yet */
 #include <soc/qcom/htc_util.h>
 #include <linux/irq.h>
 #include <soc/qcom/pm.h>
-//#include <linux/htc_flags.h>
 #include "../../../drivers/soc/qcom/rpm_stats.h"
-
-#ifdef CONFIG_VM_EVENT_COUNTERS
-#include <linux/mm.h>
-#include <linux/vmstat.h>
-unsigned long prev_vm_event[NR_VM_EVENT_ITEMS];
-static int s_on;
-#ifdef CONFIG_ZONE_DMA
-#define TEXT_FOR_DMA(xx) xx "_dma",
-#else
-#define TEXT_FOR_DMA(xx)
-#endif
-
-#ifdef CONFIG_ZONE_DMA32
-#define TEXT_FOR_DMA32(xx) xx "_dma32",
-#else
-#define TEXT_FOR_DMA32(xx)
-#endif
-
-#ifdef CONFIG_HIGHMEM
-#define TEXT_FOR_HIGHMEM(xx) xx "_high",
-#else
-#define TEXT_FOR_HIGHMEM(xx)
-#endif
-#define TEXTS_FOR_ZONES(xx) TEXT_FOR_DMA(xx) TEXT_FOR_DMA32(xx) xx "_normal", \
-					TEXT_FOR_HIGHMEM(xx) xx "_movable",
-const char * const vm_event_text[] = {
-	"pgpgin",
-	"pgpgout",
-	"pswpin",
-	"pswpout",
-
-	TEXTS_FOR_ZONES("pgalloc")
-
-	"pgfree",
-	"pgactivate",
-	"pgdeactivate",
-
-	"pgfault",
-	"pgmajfault",
-
-	TEXTS_FOR_ZONES("pgrefill")
-	TEXTS_FOR_ZONES("pgsteal_kswapd")
-	TEXTS_FOR_ZONES("pgsteal_direct")
-	TEXTS_FOR_ZONES("pgscan_kswapd")
-	TEXTS_FOR_ZONES("pgscan_direct")
-	"pgscan_direct_throttle",
-
-#ifdef CONFIG_NUMA
-	"zone_reclaim_failed",
-#endif
-	"pginodesteal",
-	"slabs_scanned",
-	"kswapd_inodesteal",
-	"kswapd_low_wmark_hit_quickly",
-	"kswapd_high_wmark_hit_quickly",
-	"pageoutrun",
-	"allocstall",
-
-	"pgrotated",
-
-#ifdef CONFIG_NUMA_BALANCING
-	"numa_pte_updates",
-	"numa_huge_pte_updates",
-	"numa_hint_faults",
-	"numa_hint_faults_local",
-	"numa_pages_migrated",
-#endif
-#ifdef CONFIG_MIGRATION
-	"pgmigrate_success",
-	"pgmigrate_fail",
-#endif
-#ifdef CONFIG_COMPACTION
-	"compact_migrate_scanned",
-	"compact_free_scanned",
-	"compact_isolated",
-	"compact_stall",
-	"compact_fail",
-	"compact_success",
-#endif
-
-#ifdef CONFIG_HUGETLB_PAGE
-	"htlb_buddy_alloc_success",
-	"htlb_buddy_alloc_fail",
-#endif
-	"unevictable_pgs_culled",
-	"unevictable_pgs_scanned",
-	"unevictable_pgs_rescued",
-	"unevictable_pgs_mlocked",
-	"unevictable_pgs_munlocked",
-	"unevictable_pgs_cleared",
-	"unevictable_pgs_stranded",
-
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	"thp_fault_alloc",
-	"thp_fault_fallback",
-	"thp_collapse_alloc",
-	"thp_collapse_alloc_failed",
-	"thp_split",
-	"thp_zero_page_alloc",
-	"thp_zero_page_alloc_failed",
-#endif
-};
-#endif
 
 #define USE_STATISTICS_STRATEGY_CONTINUOUS_3    0
 #define SEND_KOBJECT_UEVENT_ENV_ENABLED         0
@@ -142,7 +37,8 @@ struct process_monitor_statistic {
 #endif /*SEND_KOBJECT_UEVENT_ENV_ENABLED */
 };
 
-static int pm_monitor_enabled = 0;
+/* Default Enable */
+static int pm_monitor_enabled = 1;
 
 static struct workqueue_struct *htc_pm_monitor_wq = NULL;
 static struct workqueue_struct *htc_kernel_top_monitor_wq = NULL;
@@ -487,19 +383,6 @@ static void htc_idle_stat_show(void)
 	msm_rpm_dump_stat();
 }
 
-static void htc_debug_flag_show(void)
-{
-
-	unsigned int cfg = 1 ;
-    /* To check debug flag and set cfg to 1 if kernel flag is 6 4 or 6 4000000 */
-    /* [Fix me] Disablae the config setting due to the get tamper_sf & get kernel_flag() not ready yet
-	if(get_tamper_sf() == 0){
-		if((get_kernel_flag() & FORCE_CHARGE) || (get_kernel_flag() & Y_CABLE))
-			cfg = 1 ;
-	}*/
-	pr_info("[K] CFG:0x%x\n", cfg);
-}
-
 #ifdef arch_idle_time
 static cputime64_t get_idle_time(int cpu)
 {
@@ -659,6 +542,7 @@ static void htc_kernel_top_cal(struct _htc_kernel_top *ktop, int type)
 	spin_lock_irqsave(&ktop->lock, flags);
 
 	/* Calculate cpu time of each process */
+	rcu_read_lock();
 	for_each_process(process) {
 		thread_group_cputime(process, &cputime);
 		if (process->pid < MAX_PID) {
@@ -672,6 +556,7 @@ static void htc_kernel_top_cal(struct _htc_kernel_top *ktop, int type)
 			}
 		}
 	}
+	rcu_read_unlock();
 	sort_cputime_by_pid(ktop->curr_proc_delta, ktop->curr_proc_pid, pid_cnt, ktop->top_loading_pid);
 
 	/* Calculate cpu time of cpus */
@@ -687,12 +572,14 @@ static void htc_kernel_top_cal(struct _htc_kernel_top *ktop, int type)
 	}
 
 	/* Save old process cpu time info */
+	rcu_read_lock();
 	for_each_process(process) {
 		if (process->pid < MAX_PID) {
 			thread_group_cputime(process, &cputime);
 			ktop->prev_proc_stat[process->pid] = cputime.stime + cputime.utime;
 		}
 	}
+	rcu_read_unlock();
 	memcpy(&ktop->prev_cpustat, &ktop->curr_cpustat, sizeof(struct kernel_cpustat));
 	spin_unlock_irqrestore(&ktop->lock, flags);
 }
@@ -724,18 +611,17 @@ extern int sensor_get_temp(uint32_t sensor_id, long *temp);
 
 static void htc_show_sensor_temp(void)
 {
-	int ret, id, i;
+	int ret = 0, id, i;
 	long temp;
-	char *sensors[] = {"emmc_therm", "quiet_therm"};
+	char *sensors[] = {"emmc_therm", "quiet_therm", "msm_therm"};
+	char buf[BUFFER_WARN_LEN*2] = "";
 
 	for (i = 0; i < ARRAY_SIZE(sensors); i++) {
 		id = sensor_get_id(sensors[i]);
-		if (id >= 0) {
-			temp = 0;
-			ret = sensor_get_temp(id, &temp);
-			pr_info("[K][PM] %s (id: %d): %ld degC (err: %d)\n", sensors[i], id, temp, ret);
-		}
+		ret = ((sensor_get_temp(id, &temp) != 0) ? 1 : 0) + (ret << 1);
+		snprintf (buf, sizeof(buf), "%s %s[%d]: %ld degC,", buf, sensors[i], id, temp);
 	}
+	pr_info("[K][PM]%s(err: %d)\n", buf, ret);
 }
 
 extern void htc_print_pon_boot_reason(void);
@@ -747,9 +633,6 @@ static void htc_pm_monitor_work_func(struct work_struct *work)
 	struct timespec ts;
 	struct rtc_time tm;
 
-	unsigned long vm_event[NR_VM_EVENT_ITEMS];
-	int i;
-
 	if (!htc_pm_monitor_wq) {
 		pr_info("[K] htc_pm_monitor_wq is unavaliable.\n");
 		return;
@@ -760,8 +643,8 @@ static void htc_pm_monitor_work_func(struct work_struct *work)
 	pr_info("[K][PM] hTC PM Statistic start (%02d-%02d %02d:%02d:%02d)\n",
 		tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 
-  /*Show the boot reason*/
-  htc_print_pon_boot_reason();
+	/*Show the boot reason*/
+	htc_print_pon_boot_reason();
 
 	/* Show interesting sensor temperature */
 	htc_show_sensor_temp();
@@ -785,21 +668,7 @@ static void htc_pm_monitor_work_func(struct work_struct *work)
 	htc_kernel_top_cal(ktop, KERNEL_TOP);
 	htc_kernel_top_show(ktop, KERNEL_TOP);
 
-	/* Show Debug flag */
-	htc_debug_flag_show();
-
-	if (s_on == 0) {
-		all_vm_events(vm_event);
-		vm_event[PGPGIN] /= 2;
-		/* sectors -> kbytes */
-		vm_event[PGPGOUT] /= 2;
-
-		for(i = 0; i < NR_VM_EVENT_ITEMS; i++) {
-			if (vm_event[i] - prev_vm_event[i] > 0)
-				pr_info("[K] %s = %lu\n", vm_event_text[i], vm_event[i] - prev_vm_event[i]);
-		}
-		memcpy(prev_vm_event, vm_event, sizeof(unsigned long) * NR_VM_EVENT_ITEMS);
-	}
+	dump_vm_events_counter();
 
 	pr_info("[K][PM] hTC PM Statistic done\n");
 }
@@ -836,16 +705,6 @@ void htc_monitor_init(void)
 	struct _htc_kernel_top *htc_kernel_top;
 	struct _htc_kernel_top *htc_kernel_top_accu;
 
-	/*
-	*  enable: writeconfig 6 2000000
-	*/
-	/* if ((get_kernel_flag() & KERNEL_FLAG_PM_MONITOR) ||
-		!(get_kernel_flag() & KERNEL_FLAG_TEST_PWR_SUPPLY)) { Not implemeted yet */
-	if (true) {
-		pm_monitor_enabled = 1;
-	} else
-		pm_monitor_enabled = 0;
-
 	if (pm_monitor_enabled) {
 		if (htc_pm_monitor_wq == NULL)
 			/* Create private workqueue */
@@ -872,11 +731,6 @@ void htc_monitor_init(void)
 		get_all_cpustat(&htc_kernel_top->curr_cpustat);
 	        get_all_cpustat(&htc_kernel_top->prev_cpustat);
 
-		/* [Fix me]
-		when get_tamper_sf() implement
-		s_on =  get_tamper_sf();
-		*/
-		s_on = 0;
 		INIT_DELAYED_WORK(&htc_kernel_top->dwork, htc_pm_monitor_work_func);
 		queue_delayed_work(htc_pm_monitor_wq, &htc_kernel_top->dwork,
 						msecs_to_jiffies(msm_htc_util_delay_time));

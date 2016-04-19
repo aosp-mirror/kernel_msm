@@ -55,6 +55,8 @@ extern void all_vm_events(unsigned long *);
 
 extern void vm_events_fold_cpu(int cpu);
 
+extern void dump_vm_events_counter(void);
+
 #else
 
 /* Disable counters */
@@ -76,7 +78,9 @@ static inline void all_vm_events(unsigned long *ret)
 static inline void vm_events_fold_cpu(int cpu)
 {
 }
-
+static inline void dump_vm_events_counter(void)
+{
+}
 #endif /* CONFIG_VM_EVENT_COUNTERS */
 
 #ifdef CONFIG_NUMA_BALANCING
