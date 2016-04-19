@@ -87,7 +87,7 @@
 //===========Himax Option function=============
 #define HX_RST_PIN_FUNC
 //#define HX_LOADIN_CONFIG
-//#define HX_AUTO_UPDATE_FW
+#define HX_AUTO_UPDATE_FW
 //#define HX_AUTO_UPDATE_CONFIG		//if enable HX_AUTO_UPDATE_CONFIG, need to disable HX_LOADIN_CONFIG
 #define HX_SMART_WAKEUP
 #define HX_PALM_REPORT
