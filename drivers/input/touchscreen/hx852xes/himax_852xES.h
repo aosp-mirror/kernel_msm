@@ -345,31 +345,13 @@ static unsigned char E_IrefTable_7[16][2] = { {0x20,0x0C},{0x20,0x1C},{0x20,0x2C
 static u8 		HW_RESET_ACTIVATE 	= 1;
 
 #if defined(CONFIG_TOUCHSCREEN_HIMAX_DEBUG)
-	#define HIMAX_PROC_TOUCH_FOLDER 	"android_touch"
-	#define HIMAX_PROC_DEBUG_LEVEL_FILE	"debug_level"
-	#define HIMAX_PROC_VENDOR_FILE		"vendor"
-	#define HIMAX_PROC_ATTN_FILE		"attn"
-	#define HIMAX_PROC_INT_EN_FILE		"int_en"
-	#define HIMAX_PROC_LAYOUT_FILE		"layout"
-
-	static struct proc_dir_entry *himax_touch_proc_dir 			= NULL;
-	static struct proc_dir_entry *himax_proc_debug_level_file 	= NULL;
-	static struct proc_dir_entry *himax_proc_vendor_file 		= NULL;
-	static struct proc_dir_entry *himax_proc_attn_file 			= NULL;
-	static struct proc_dir_entry *himax_proc_int_en_file 		= NULL;
-	static struct proc_dir_entry *himax_proc_layout_file 		= NULL;
-
 	static uint8_t HX_PROC_SEND_FLAG;
 
-#ifdef HX_TP_PROC_RESET
-#define HIMAX_PROC_RESET_FILE		"reset"
-static struct proc_dir_entry *himax_proc_reset_file 		= NULL;
-#endif
-
 #ifdef HX_TP_PROC_DIAG
-	#define HIMAX_PROC_DIAG_FILE	"diag"
+	#define HIMAX_PROC_TOUCH_FOLDER 	"himax_touch"
+	static struct proc_dir_entry *himax_touch_proc_dir = NULL;
+	#define HIMAX_PROC_DIAG_FILE    "diag"
 	static struct proc_dir_entry *himax_proc_diag_file = NULL;
-
 	static int  touch_monitor_stop_flag 		= 0;
 	static int 	touch_monitor_stop_limit 		= 5;
 	static uint8_t x_channel 		= 0;
@@ -413,9 +395,6 @@ static struct proc_dir_entry *himax_proc_reset_file 		= NULL;
 #endif
 
 #ifdef HX_TP_PROC_REGISTER
-	#define HIMAX_PROC_REGISTER_FILE	"register"
-	static struct proc_dir_entry *himax_proc_register_file = NULL;
-
 	static uint8_t register_command 			= 0;
 	static uint8_t multi_register_command = 0;
 	static uint8_t multi_register[8] 			= {0x00};
@@ -425,8 +404,6 @@ static struct proc_dir_entry *himax_proc_reset_file 		= NULL;
 #endif
 
 #ifdef HX_TP_PROC_DEBUG
-	#define HIMAX_PROC_DEBUG_FILE	"debug"
-	static struct proc_dir_entry *himax_proc_debug_file = NULL;
 	static bool	fw_update_complete = false;
 
 	static int handshaking_result = 0;
@@ -435,9 +412,6 @@ static struct proc_dir_entry *himax_proc_reset_file 		= NULL;
 #endif
 
 #ifdef HX_TP_PROC_FLASH_DUMP
-	#define HIMAX_PROC_FLASH_DUMP_FILE	"flash_dump"
-	static struct proc_dir_entry *himax_proc_flash_dump_file = NULL;
-
 	static uint8_t *flash_buffer 				= NULL;
 	static uint8_t flash_command 				= 0;
 	static uint8_t flash_read_step 			= 0;
@@ -470,16 +444,7 @@ static struct proc_dir_entry *himax_proc_reset_file 		= NULL;
 	static void setFlashDumpPage(uint8_t page);
 	static void setFlashDumpGoing(bool going);
 #endif
-
-#ifdef HX_TP_PROC_SELF_TEST
-	#define HIMAX_PROC_SELF_TEST_FILE	"self_test"
-	static struct proc_dir_entry *himax_proc_self_test_file = NULL;
-#endif
-
 #ifdef HX_TP_PROC_HITOUCH
-	#define HIMAX_PROC_HITOUCH_FILE	"hitouch"
-	static struct proc_dir_entry *himax_proc_hitouch_file = NULL;
-
 	static int	hitouch_command			= 0;
 	static bool hitouch_is_connect	= false;
 #endif
@@ -497,8 +462,6 @@ static struct proc_dir_entry *himax_proc_reset_file 		= NULL;
 #endif
 
 #ifdef HX_SMART_WAKEUP
-#define HIMAX_PROC_SMWP_FILE "SMWP"
-static struct proc_dir_entry *himax_proc_SMWP_file = NULL;
 static bool FAKE_POWER_KEY_SEND = false;
 #endif
 
