@@ -149,6 +149,7 @@
 #define PRODUCT_ID_SIZE 10
 #ifdef HTC_FEATURE
 #define CHIP_ID_SIZE 2
+#define SENSOR_ID_CHECKING_EN (1 << 16)
 #endif
 #define BUILD_ID_SIZE 3
 
@@ -440,6 +441,7 @@ struct synaptics_rmi4_data {
 	unsigned short f34_data_base_addr;
 	unsigned int chip_id;
 	char config_version[65];
+	uint16_t tw_vendor;
 #endif
 	int irq;
 	int sensor_max_x;

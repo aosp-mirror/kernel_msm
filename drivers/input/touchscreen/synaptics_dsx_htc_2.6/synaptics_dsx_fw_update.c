@@ -270,6 +270,9 @@ enum v5v6_flash_command {
 	CMD_V5V6_READ_CONFIG = 0x5,
 	CMD_V5V6_WRITE_CONFIG = 0x6,
 	CMD_V5V6_ERASE_UI_CONFIG = 0x7,
+#ifdef HTC_FEATURE
+	CMD_V5V6_SENSOR_ID = 0x8,
+#endif
 	CMD_V5V6_ERASE_BL_CONFIG = 0x9,
 	CMD_V5V6_ERASE_DISP_CONFIG = 0xa,
 	CMD_V5V6_ERASE_GUEST_CODE = 0xb,
@@ -296,6 +299,9 @@ enum flash_command {
 	CMD_ERASE_BOOTLOADER,
 	CMD_ERASE_UTILITY_PARAMETER,
 	CMD_ENABLE_FLASH_PROG,
+#ifdef HTC_FEATURE
+	CMD_READ_SENSOR_ID,
+#endif
 };
 
 enum f35_flash_command {
@@ -760,6 +766,26 @@ static struct device_attribute attrs[] = {
 static struct synaptics_rmi4_fwu_handle *fwu;
 
 DECLARE_COMPLETION(fwu_remove_complete);
+#ifdef HTC_FEATURE
+static uint32_t syn_crc(uint16_t *data, uint32_t len)
+{
+	uint32_t sum1, sum2;
+
+	sum1 = sum2 = 0xFFFF;
+	if (data) {
+		while (len--) {
+			sum1 += *data++;
+			sum2 += sum1;
+			sum1 = (sum1 & 0xFFFF) + (sum1 >> 16);
+			sum2 = (sum2 & 0xFFFF) + (sum2 >> 16);
+		}
+	} else {
+		pr_err("%s: data incorrect", __func__);
+		return (0xFFFF | 0xFFFF << 16);
+	}
+	return sum1 | (sum2 << 16);
+}
+#endif
 
 #ifndef SYNA_SIMPLE_UPDATE
 static void calculate_checksum(unsigned short *data, unsigned long len,
@@ -1534,6 +1560,11 @@ static int fwu_write_f34_v7_command(unsigned char cmd)
 	case CMD_ENABLE_FLASH_PROG:
 		command = CMD_V7_ENTER_BL;
 		break;
+#ifdef HTC_FEATURE
+	case CMD_READ_SENSOR_ID:
+		command = CMD_V7_SENSOR_ID;
+		break;
+#endif
 	default:
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Invalid command 0x%02x\n",
@@ -1620,6 +1651,11 @@ static int fwu_write_f34_v5v6_command(unsigned char cmd)
 	case CMD_ENABLE_FLASH_PROG:
 		command = CMD_V5V6_ENABLE_FLASH_PROG;
 		break;
+#ifdef HTC_FEATURE
+	case CMD_READ_SENSOR_ID:
+		command = CMD_V5V6_SENSOR_ID;
+		break;
+#endif
 	default:
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Invalid command 0x%02x\n",
@@ -1738,6 +1774,11 @@ static int fwu_write_f34_v7_partition_id(unsigned char cmd)
 	case CMD_ENABLE_FLASH_PROG:
 		partition = BOOTLOADER_PARTITION;
 		break;
+#ifdef HTC_FEATURE
+	case CMD_READ_SENSOR_ID:
+		partition = BOOTLOADER_PARTITION;
+		break;
+#endif
 	default:
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Invalid command 0x%02x\n",
@@ -3454,6 +3495,266 @@ static int fwu_write_bl_area_v7(void)
 }
 #endif
 
+#ifdef HTC_FEATURE
+static int fwu_get_tw_vendor_v7(void)
+{
+	int retval;
+	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+	unsigned char base;
+	unsigned char data[10], mask_data[2];
+	uint16_t tw_pin_mask = rmi4_data->hw_if->board_data->tw_pin_mask;
+
+	base = fwu->f34_fd.data_base_addr;
+
+	memcpy(&mask_data, &tw_pin_mask, sizeof(tw_pin_mask));
+	memset(data, 0x00, sizeof(data));
+	data[0] = BOOTLOADER_PARTITION;
+	data[5] = (unsigned char) CMD_V7_SENSOR_ID;
+	data[6] = data[8] = mask_data[0];
+	data[7] = data[9] = mask_data[1];
+
+	retval = synaptics_rmi4_reg_write(rmi4_data,
+			base + fwu->off.partition_id,
+			data,
+			sizeof(data));
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to write tw vendor pin\n",
+				__func__);
+		return -EINVAL;
+	}
+
+	retval = fwu_wait_for_idle(ENABLE_WAIT_MS, false);
+	if (retval < 0)
+		return retval;
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			base + fwu->off.payload,
+			data,
+			sizeof(data));
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to read tw vendor pin\n",
+				__func__);
+		return -EINVAL;
+	}
+	rmi4_data->tw_vendor = (data[5] << 8) | data[4];
+
+	dev_info(rmi4_data->pdev->dev.parent, " %s: tw_vendor = 0x%x\n",
+			__func__,
+			rmi4_data->tw_vendor);
+
+	return 0;
+}
+
+static int fwu_get_tw_vendor_v5v6(void)
+{
+	int retval;
+	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+	uint16_t tw_pin_mask = rmi4_data->hw_if->board_data->tw_pin_mask;
+	uint8_t data[6];
+
+	memcpy(&data, &tw_pin_mask, sizeof(tw_pin_mask));
+	data[2] = data[0];
+	data[3] = data[1];
+	retval = synaptics_rmi4_reg_write(rmi4_data,
+			fwu->f34_fd.data_base_addr + 1,
+			data,
+			4);
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to write tw vendor pin\n",
+				__func__);
+		return -EINVAL;
+	}
+	retval = fwu_write_f34_command(CMD_READ_SENSOR_ID);
+	if (retval < 0)
+		return retval;
+
+	retval = fwu_wait_for_idle(ENABLE_WAIT_MS, false);
+	if (retval < 0)
+		return retval;
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			fwu->f34_fd.data_base_addr + 1,
+			data,
+			sizeof(data));
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to read tw vendor pin\n",
+				__func__);
+		return -EINVAL;
+	}
+	rmi4_data->tw_vendor = (data[5] << 8) | data[4];
+	dev_info(rmi4_data->pdev->dev.parent, " %s: tw_vendor = 0x%x\n",
+			__func__,
+			rmi4_data->tw_vendor);
+
+	return 0;
+}
+
+static int fwu_get_tw_vendor(void)
+{
+	int retval;
+
+	if (fwu->bl_version == BL_V7)
+		retval = fwu_get_tw_vendor_v7();
+	else
+		retval = fwu_get_tw_vendor_v5v6();
+
+	return retval;
+}
+
+static int crc_comparison_v5v6(uint32_t config_crc)
+{
+	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+	uint8_t data[17];
+	int retval;
+	uint32_t flash_crc;
+
+	data[0] = fwu->config_block_count-1;
+	data[1] = 0x00;
+	retval = synaptics_rmi4_reg_write(rmi4_data,
+			fwu->f34_fd.data_base_addr,
+			data,
+			2);
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to write crc addr\n",
+				__func__);
+		return retval;
+	}
+
+	retval = fwu_write_f34_command(CMD_READ_CONFIG);
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to write read config command\n",
+				__func__);
+		return retval;
+	}
+
+	retval = fwu_wait_for_idle(WRITE_WAIT_MS, false);
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to wait for idle status\n",
+				__func__);
+		return retval;
+	}
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			fwu->f34_fd.data_base_addr + 1,
+			data,
+			sizeof(data));
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to read crc data\n",
+				__func__);
+		return retval;
+	}
+
+	memcpy(&flash_crc, &data[12], 4);
+	dev_info(rmi4_data->pdev->dev.parent, " %s: config_crc = %X, flash_crc = %X\n",
+					__func__, config_crc, flash_crc);
+
+	if (flash_crc == config_crc)
+		return 0;
+	else
+		return 1;
+}
+
+static int crc_comparison_v7(uint32_t config_crc)
+{
+	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+	uint8_t data[16];
+	uint8_t length[2];
+	unsigned char base;
+	int retval;
+	uint32_t flash_crc;
+
+	fwu->config_area = UI_CONFIG_AREA;
+	retval = fwu_write_f34_partition_id(CMD_READ_CONFIG);
+	if (retval < 0)
+		return retval;
+
+	base = fwu->f34_fd.data_base_addr;
+	data[0] = fwu->config_block_count-1;
+	data[1] = 0x00;
+	retval = synaptics_rmi4_reg_write(rmi4_data,
+			base + fwu->off.block_number,
+			data,
+			2);
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to write crc addr\n",
+				__func__);
+		return retval;
+	}
+
+	if (fwu->bl_version == BL_V7) {
+		length[0] = 1;
+		length[1] = 0;
+		retval = synaptics_rmi4_reg_write(rmi4_data,
+				base + fwu->off.transfer_length,
+				length,
+				sizeof(length));
+		if (retval < 0) {
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s: Failed to write transfer length\n",
+					__func__);
+			return retval;
+		}
+	}
+
+	retval = fwu_write_f34_command(CMD_READ_CONFIG);
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to write read config command\n",
+				__func__);
+		return retval;
+	}
+
+	retval = fwu_wait_for_idle(WRITE_WAIT_MS, false);
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to wait for idle status\n",
+				__func__);
+		return retval;
+	}
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			base + fwu->off.payload,
+			data,
+			sizeof(data));
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to read crc data\n",
+				__func__);
+		return retval;
+	}
+
+	memcpy(&flash_crc, &data[12], 4);
+	dev_info(rmi4_data->pdev->dev.parent, " %s: config_crc = %X, flash_crc = %X\n",
+					__func__, config_crc, flash_crc);
+
+	if (flash_crc == config_crc)
+		return 0;
+	else
+		return 1;
+}
+
+static int crc_comparison(uint32_t config_crc)
+{
+	int retval;
+
+	if (fwu->bl_version == BL_V7)
+		retval = crc_comparison_v7(config_crc);
+	else
+		retval = crc_comparison_v5v6(config_crc);
+
+	return retval;
+}
+#endif
+
 static int fwu_do_reflash(void)
 {
 	int retval;
@@ -4531,6 +4832,18 @@ exit:
 	return retval;
 }
 
+#ifdef HTC_FEATURE
+static int fwu_do_write_config(uint8_t *config_data)
+{
+	fwu->config_area = UI_CONFIG_AREA;
+	fwu->config_data = config_data;
+	fwu->config_size = fwu->blkcount.ui_config * fwu->block_size;
+	fwu->config_block_count = fwu->blkcount.ui_config;
+
+	return fwu_write_configuration();
+}
+#endif
+
 int synaptics_fw_updater(const unsigned char *fw_data)
 {
 	int retval;
@@ -4555,6 +4868,190 @@ int synaptics_fw_updater(const unsigned char *fw_data)
 EXPORT_SYMBOL(synaptics_fw_updater);
 
 #ifdef DO_STARTUP_FW_UPDATE
+#ifdef HTC_FEATURE
+int synaptics_config_updater(struct synaptics_dsx_board_data *bdata)
+{
+	int retval, i, ii;
+	struct synaptics_rmi4_config *cfg_table = bdata->config_table;
+	struct synaptics_rmi4_data *rmi4_data;
+	unsigned int device_fw_id;
+	uint16_t tw_pin_mask = bdata->tw_pin_mask;
+	int config_num = bdata->config_num;
+	uint32_t crc_checksum;
+	unsigned char config_id_size;
+	unsigned char config_id[32];
+	uint8_t *config_data;
+	uint32_t config_size;
+	char str_buf[128];
+	char tmp_buf[5];
+	int config_diff = 0;
+
+	pr_info("%s\n", __func__);
+
+	if (!fwu)
+		return -ENODEV;
+
+	if (!fwu->initialized)
+		return -ENODEV;
+
+	rmi4_data = fwu->rmi4_data;
+	device_fw_id = rmi4_data->firmware_id;
+
+	rmi4_data->stay_awake = true;
+
+	if (fwu->bl_version == BL_V7)
+		config_id_size = V7_CONFIG_ID_SIZE;
+	else
+		config_id_size = V5V6_CONFIG_ID_SIZE;
+
+	/* Get device config ID */
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+				fwu->f34_fd.ctrl_base_addr,
+				config_id,
+				config_id_size);
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to read device config ID\n",
+				__func__);
+		goto exit;
+	}
+
+	memset(str_buf, 0, sizeof(str_buf));
+	for (ii = 0; ii < config_id_size; ii++) {
+		snprintf(tmp_buf, 3, "%02x ", config_id[ii]);
+		strlcat(str_buf, tmp_buf, sizeof(str_buf));
+	}
+
+	dev_info(rmi4_data->pdev->dev.parent,
+			"%s: Device config ID = %s\n",
+			__func__,
+			str_buf);
+
+	fwu->config_area = UI_CONFIG_AREA;
+	fwu->config_size = fwu->blkcount.ui_config * fwu->block_size;
+	fwu->config_block_count = fwu->blkcount.ui_config;
+	config_size = fwu->config_size;
+
+	pr_notice("%s: Start of write config process\n", __func__);
+
+	retval = fwu_enter_flash_prog();
+	if (retval < 0)
+		goto exit;
+
+	if (tw_pin_mask) {
+		retval = fwu_get_tw_vendor();
+		if (retval < 0)
+			goto exit;
+	}
+
+	i = 0;
+	while (cfg_table[i].pr_number > device_fw_id) {
+		i++;
+		if (i == config_num) {
+			dev_info(rmi4_data->pdev->dev.parent,
+					" %s: no config data - pr_number does not match\n",
+					__func__);
+			goto exit;
+		}
+	}
+
+	if (tw_pin_mask) {
+		while ((cfg_table[i].sensor_id > 0) &&
+			(cfg_table[i].sensor_id != (rmi4_data->tw_vendor |
+					SENSOR_ID_CHECKING_EN))) {
+			i++;
+			if (i == config_num) {
+				dev_info(rmi4_data->pdev->dev.parent,
+						" %s: no config data - sensor_id does not match\n",
+						__func__);
+				goto exit;
+			}
+		}
+	}
+
+	if (cfg_table[i].sensor_id != (rmi4_data->tw_vendor |
+			SENSOR_ID_CHECKING_EN)) {
+		dev_info(rmi4_data->pdev->dev.parent,
+				" %s: no config data - cross_combination does not match\n",
+				__func__);
+		goto exit;
+	}
+	config_data = cfg_table[i].config;
+
+	/* Get image config ID */
+	memset(str_buf, 0, sizeof(str_buf));
+	for (ii = 0; ii < config_id_size; ii++) {
+		snprintf(tmp_buf, 3, "%02x", config_data[ii]);
+		strlcat(str_buf, tmp_buf, sizeof(str_buf));
+	}
+
+	dev_info(rmi4_data->pdev->dev.parent,
+			"%s: Image config ID = %s\n",
+			__func__,
+			str_buf);
+
+	pr_info("%s: config_size = %d\n", __func__, config_size);
+	if (config_size > SYN_CONFIG_SIZE)
+		config_size = SYN_CONFIG_SIZE;
+	crc_checksum = syn_crc((uint16_t *)config_data, (config_size)/2-2);
+	if (crc_checksum == 0xFFFFFFFF) {
+		dev_err(rmi4_data->pdev->dev.parent,
+			"%s: crc_checksum Error", __func__);
+		goto exit;
+	}
+	memcpy(&config_data[(config_size) - 4], &crc_checksum, 4);
+	dev_info(rmi4_data->pdev->dev.parent, " %s: crc_cksum = %X\n",
+					__func__, crc_checksum);
+
+	for (ii = 0; ii < config_id_size; ii++) {
+		if (config_data[ii] != fwu->config_id[ii]) {
+			config_diff = 1;
+			break;
+		}
+	}
+
+	if (!config_diff) {
+		retval = crc_comparison(crc_checksum);
+		if (retval < 0) {
+			dev_info(rmi4_data->pdev->dev.parent, " %s: CRC comparison fail!\n",
+					__func__);
+			goto exit;
+		} else if (retval == 0) {
+			dev_info(rmi4_data->pdev->dev.parent, " %s: No need to update\n",
+					__func__);
+			goto exit;
+		}
+	}
+
+	fwu->config_area = UI_CONFIG_AREA;
+	retval = fwu_erase_configuration();
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to erase config\n",
+				__func__);
+		goto exit;
+	}
+
+	retval = fwu_do_write_config(config_data);
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to write config\n",
+				__func__);
+	}
+
+exit:
+	rmi4_data->reset_device(rmi4_data, false);
+
+	rmi4_data->stay_awake = false;
+	pr_notice("%s: End of write config process\n", __func__);
+
+	dev_info(rmi4_data->pdev->dev.parent, " %s end\n", __func__);
+
+	return retval;
+}
+EXPORT_SYMBOL(synaptics_config_updater);
+#endif
+
 static void fwu_startup_fw_update_work(struct work_struct *work)
 {
 	static unsigned char do_once = 1;
@@ -4591,8 +5088,8 @@ static void fwu_startup_fw_update_work(struct work_struct *work)
 	if (bdata->update_feature & SYNAPTICS_RMI4_UPDATE_IMAGE)
 		synaptics_fw_updater(fw_source);
 
-//	if (bdata->update_feature & SYNAPTICS_RMI4_UPDATE_CONFIG)
-//		synaptics_config_updater(bdata);
+	if (bdata->update_feature & SYNAPTICS_RMI4_UPDATE_CONFIG)
+		synaptics_config_updater(bdata);
 	wake_unlock(&fwu->fwu_wake_lock);
 
 	if (fw_source)

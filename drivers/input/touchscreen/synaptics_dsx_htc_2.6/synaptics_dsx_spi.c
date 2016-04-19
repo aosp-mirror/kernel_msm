@@ -51,6 +51,77 @@ static unsigned char *buf;
 static struct spi_transfer *xfer;
 
 #ifdef CONFIG_OF
+#ifdef HTC_FEATURE
+static int parse_config(struct device *dev,
+		struct synaptics_dsx_board_data *bdata)
+{
+	struct synaptics_rmi4_config *cfg_table;
+	struct device_node *node, *pp = NULL;
+	struct property *prop;
+	uint8_t cnt = 0, i = 0;
+	u32 data = 0;
+	int len = 0;
+
+	pr_info(" %s\n", __func__);
+	node = dev->of_node;
+	if (node == NULL) {
+		pr_err(" %s, can't find device_node", __func__);
+		return -ENODEV;
+	}
+
+	while ((pp = of_get_next_child(node, pp)))
+		cnt++;
+
+	if (!cnt)
+		return -ENODEV;
+
+	cfg_table = kzalloc((cnt * sizeof(*cfg_table)), GFP_KERNEL);
+	if (!cfg_table)
+		return -ENOMEM;
+
+	pp = NULL;
+	while ((pp = of_get_next_child(node, pp))) {
+		if (of_property_read_u32(pp, "sensor_id", &data) == 0)
+			cfg_table[i].sensor_id = (data | SENSOR_ID_CHECKING_EN);
+
+		if (of_property_read_u32(pp, "pr_number", &data) == 0)
+			cfg_table[i].pr_number = data;
+
+		prop = of_find_property(pp, "config", &len);
+		if (!prop) {
+			pr_err(" %s:Looking up %s property in node %s failed",
+				__func__, "config", pp->full_name);
+			return -ENODEV;
+		} else if (!len) {
+			pr_err(" %s:Invalid length of configuration data\n",
+				__func__);
+			return -EINVAL;
+		}
+
+		cfg_table[i].length = len;
+		memcpy(cfg_table[i].config, prop->value, cfg_table[i].length);
+		/*pr_info(rmi4_data->pdev->dev.parent,
+				" DT#%d-id:%05x, pr:%d, len:%d\n",
+				i,
+				cfg_table[i].sensor_id,
+				cfg_table[i].pr_number,
+				cfg_table[i].length);
+		pr_info(rmi4_data->pdev->dev.parent,
+				" cfg=[%02x,%02x,%02x,%02x]\n",
+				cfg_table[i].config[0],
+				cfg_table[i].config[1],
+				cfg_table[i].config[2],
+				cfg_table[i].config[3]);*/
+		i++;
+	}
+
+	bdata->config_num = cnt;
+	bdata->config_table = cfg_table;
+
+	return 0;
+}
+#endif
+
 static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 {
 	int retval;
@@ -291,12 +362,21 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 	}
 
 #ifdef HTC_FEATURE
+	retval = of_property_read_u32(np, "synaptics,tw-pin-mask",
+			&value);
+	if (retval < 0)
+		bdata->tw_pin_mask = 0;
+	else
+		bdata->tw_pin_mask = value;
+
 	retval = of_property_read_u32(np, "synaptics,update-feature",
 			&value);
 	if (retval < 0)
 		bdata->update_feature = 0;
 	else
 		bdata->update_feature = value;
+
+	parse_config(dev, bdata);
 #endif
 	return 0;
 }

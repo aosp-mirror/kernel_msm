@@ -901,28 +901,28 @@ static ssize_t synaptics_rmi4_wake_gesture_store(struct device *dev,
 
 #ifdef HTC_FEATURE
 static ssize_t synaptics_reset_store(struct device *dev,
-                struct device_attribute *attr, const char *buf, size_t count)
+		struct device_attribute *attr, const char *buf, size_t count)
 {
-        ssize_t ret = 0;
-        struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
-        unsigned int reset;
+	ssize_t ret = 0;
+	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
+	unsigned int reset;
 
-        pr_info(" %s\n", __func__);
-        if (sscanf(buf, "%u", &reset) != 1)
-                return -EINVAL;
+	pr_info(" %s\n", __func__);
+	if (sscanf(buf, "%u", &reset) != 1)
+		return -EINVAL;
 
-        if (reset != 1)
-                return -EINVAL;
+	if (reset != 1)
+		return -EINVAL;
 
-        ret = synaptics_rmi4_hw_reset_device(rmi4_data);
-        if (ret < 0) {
-                dev_err(rmi4_data->pdev->dev.parent,
-                                "%s: Failed to issue reset command, error = %ld\n",
-                                __func__, ret);
-                return ret;
-        }
+	ret = synaptics_rmi4_hw_reset_device(rmi4_data);
+	if (ret < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to issue reset command, error = %ld\n",
+				__func__, ret);
+		return ret;
+	}
 
-        return count;
+	return count;
 }
 
 static ssize_t touch_vendor_show(struct device *dev,
@@ -930,14 +930,15 @@ static ssize_t touch_vendor_show(struct device *dev,
 {
 	ssize_t ret = 0;
 	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
-///TODO
-/*	const struct synaptics_dsx_board_data *bdata =
+
+	const struct synaptics_dsx_board_data *bdata =
 			rmi4_data->hw_if->board_data;
-*/
+
 	ret = snprintf(buf, PAGE_SIZE, "synaptics-%d", rmi4_data->chip_id);
-///TODO
-/*	if (bdata->tw_pin_mask != 0)
+
+	if (bdata->tw_pin_mask != 0)
 		ret += scnprintf(buf+ret, PAGE_SIZE-ret, "_twID-0x%x", rmi4_data->tw_vendor);
+/*
 	if (strlen(rmi4_data->lcm_vendor))
 		ret += scnprintf(buf+ret, PAGE_SIZE-ret, "_LCM-%s", rmi4_data->lcm_vendor);
 */
@@ -3468,12 +3469,13 @@ flash_prog_mode:
 				__func__, rmi4_data->chip_id, rmi4_data->firmware_id);
 
 	switch (rmi4_data->chip_id) {
-		case 3708:
-			config_id_size = V7_CONFIG_ID_SIZE;
-			break;
-		default:
-			config_id_size = V5V6_CONFIG_ID_SIZE;
-			break;
+	case 3708:
+	case 3718:
+		config_id_size = V7_CONFIG_ID_SIZE;
+		break;
+	default:
+		config_id_size = V5V6_CONFIG_ID_SIZE;
+		break;
 	}
 
 	retval = synaptics_rmi4_reg_read(rmi4_data,
@@ -4146,24 +4148,24 @@ exit:
 
 static int synaptics_rmi4_hw_reset(struct synaptics_rmi4_data *rmi4_data)
 {
-        const struct synaptics_dsx_board_data *bdata =
-                        rmi4_data->hw_if->board_data;
-        int retval;
+	const struct synaptics_dsx_board_data *bdata =
+			rmi4_data->hw_if->board_data;
+	int retval;
 
-        if (bdata->reset_gpio >= 0) { 
-                gpio_set_value(bdata->reset_gpio, bdata->reset_on_state);
-                msleep(bdata->reset_active_ms);
-                gpio_set_value(bdata->reset_gpio, !bdata->reset_on_state);
-        }    
+	if (bdata->reset_gpio >= 0) {
+		gpio_set_value(bdata->reset_gpio, bdata->reset_on_state);
+		msleep(bdata->reset_active_ms);
+		gpio_set_value(bdata->reset_gpio, !bdata->reset_on_state);
+	}
 
-        if (rmi4_data->hw_if->ui_hw_init) {
-                retval = rmi4_data->hw_if->ui_hw_init(rmi4_data);
-                if (retval < 0) 
-                        return retval;
-        }    
+	if (rmi4_data->hw_if->ui_hw_init) {
+		retval = rmi4_data->hw_if->ui_hw_init(rmi4_data);
+		if (retval < 0)
+			return retval;
+	}
 
-        return 0;
-}                                      
+	return 0;
+}
 
 static int synaptics_rmi4_reinit_device(struct synaptics_rmi4_data *rmi4_data)
 {
@@ -4210,19 +4212,19 @@ exit:
 
 static int synaptics_rmi4_hw_reset_device(struct synaptics_rmi4_data *rmi4_data)
 {
-        int retval;
+	int retval;
 
-        pr_info(" %s\n", __func__);
+	pr_info(" %s\n", __func__);
 
-        retval = synaptics_rmi4_hw_reset(rmi4_data);
-        if (retval < 0) {
-                dev_err(rmi4_data->pdev->dev.parent,
-                                "%s: Failed to issue reset command\n",
-                                __func__);
-                return retval;
-        }
+	retval = synaptics_rmi4_hw_reset(rmi4_data);
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to issue reset command\n",
+				__func__);
+		return retval;
+	}
 
-        return 0;
+	return 0;
 }
 
 static int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data,
