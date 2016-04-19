@@ -131,6 +131,7 @@ static int synaptics_rmi4_reinit_device(struct synaptics_rmi4_data *rmi4_data);
 static int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data,
 		bool rebuild);
 static int synaptics_rmi4_hw_reset_device(struct synaptics_rmi4_data *rmi4_data);
+static irqreturn_t synaptics_rmi4_irq(int irq, void *data);
 
 #ifdef CONFIG_FB
 static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
@@ -178,9 +179,6 @@ static ssize_t synaptics_rmi4_wake_gesture_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 
 static ssize_t synaptics_rmi4_wake_gesture_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count);
-
-static ssize_t synaptics_reset_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
 
 #ifdef USE_DATA_SERVER
@@ -714,9 +712,6 @@ static struct device_attribute attrs[] = {
 	__ATTR(wake_gesture, (S_IRUGO | S_IWUSR | S_IWGRP),
 			synaptics_rmi4_wake_gesture_show,
 			synaptics_rmi4_wake_gesture_store),
-	__ATTR(hw_reset, S_IRUGO | S_IWUSR | S_IWGRP,
-			synaptics_rmi4_show_error,
-			synaptics_reset_store),
 #ifdef USE_DATA_SERVER
 	__ATTR(synad_pid, S_IWUGO,
 			synaptics_rmi4_show_error,
@@ -904,6 +899,7 @@ static ssize_t synaptics_rmi4_wake_gesture_store(struct device *dev,
 	return count;
 }
 
+#ifdef HTC_FEATURE
 static ssize_t synaptics_reset_store(struct device *dev,
                 struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -929,7 +925,6 @@ static ssize_t synaptics_reset_store(struct device *dev,
         return count;
 }
 
-#ifdef HTC_FEATURE
 static ssize_t touch_vendor_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -1019,14 +1014,64 @@ static ssize_t synaptics_diag_store(struct device *dev,
 	return count;
 }
 */
+
+static ssize_t int_status_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
+	size_t count = 0;
+
+	count += snprintf(buf + count, PAGE_SIZE, "%d ", rmi4_data->irq_enabled);
+	count += snprintf(buf + count, PAGE_SIZE, "\n");
+
+	return count;
+}
+
+static ssize_t int_status_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
+	const struct synaptics_dsx_board_data *bdata =
+			rmi4_data->hw_if->board_data;
+	int value, ret = 0;
+
+	if (sysfs_streq(buf, "0"))
+		value = false;
+	else if (sysfs_streq(buf, "1"))
+		value = true;
+	else
+		return -EINVAL;
+
+	if (value) {
+		ret = request_threaded_irq(rmi4_data->irq, NULL,
+				synaptics_rmi4_irq, bdata->irq_flags,
+				PLATFORM_DRIVER_NAME, rmi4_data);
+		if (ret == 0) {
+			rmi4_data->irq_enabled = true;
+			pr_info("%s: interrupt enable: %x\n", __func__, rmi4_data->irq_enabled);
+		}
+	} else {
+		disable_irq(rmi4_data->irq);
+		free_irq(rmi4_data->irq, rmi4_data);
+		rmi4_data->irq_enabled = false;
+		pr_info("%s: interrupt disable: %x\n", __func__, rmi4_data->irq_enabled);
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR(reset, S_IWUSR, NULL, synaptics_reset_store);
 static DEVICE_ATTR(vendor, S_IRUGO, touch_vendor_show, NULL);
 static DEVICE_ATTR(config, S_IRUGO, touch_config_show, NULL);
 //static DEVICE_ATTR(diag, (S_IWUSR | S_IRUGO), synaptics_diag_show, synaptics_diag_store),
+static DEVICE_ATTR(enabled, (S_IWUSR|S_IRUGO), int_status_show, int_status_store);
 
 static struct attribute *htc_attrs[] = {
+	&dev_attr_reset.attr,
 	&dev_attr_vendor.attr,
 	&dev_attr_config.attr,
 //	&dev_attr_diag.attr,
+	&dev_attr_enabled.attr,
 	NULL
 };
 
