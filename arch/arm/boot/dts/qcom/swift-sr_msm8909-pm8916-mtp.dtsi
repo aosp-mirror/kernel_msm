@@ -103,11 +103,12 @@
 
 	mpp@a300 { /* MPP 4 */
 		/* Backlight PWM */
-		qcom,mode = <1>;		/* Digital output */
-		qcom,invert = <0>;		/* Disable invert */
-		qcom,src-sel = <4>;		/* DTEST1 */
+		qcom,mode = <4>; /* AIN input */
+		qcom,invert = <1>; /* Enable MPP */
+		qcom,src-sel = <0>; /* Function constant */
 		qcom,vin-sel = <0>;		/* VPH_PWR */
-		qcom,master-en = <1>;		/* Enable MPP */
+		qcom,ain-route = <3>; /* AMUX 8 */
+		qcom,master-en = <1>; /* Enable features */
 	};
 };
 
