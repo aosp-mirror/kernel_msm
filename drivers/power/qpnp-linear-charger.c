@@ -26,6 +26,7 @@
 #include <linux/leds.h>
 #include <linux/debugfs.h>
 #include <linux/proc_fs.h>
+#include <linux/gpio.h>
 
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
@@ -137,6 +138,9 @@ struct qpnp_lbc_irq {
 	unsigned long	disabled;
 	bool            is_wake;
 };
+
+static int MPP4_read;
+static int GPIO_num17 = 17;
 
 enum {
 	USBIN_VALID = 0,
@@ -404,6 +408,21 @@ struct qpnp_lbc_chip *g_lbc_chip;
 bool eng_charging_limit;
 #endif
 // BSP Steve2: charging limit ---
+
+static int
+get_prop_mpp4_voltage(struct qpnp_lbc_chip *chip)
+{
+	int rc = 0;
+	struct qpnp_vadc_result results;
+
+	rc = qpnp_vadc_read(chip->vadc_dev, P_MUX4_1_3, &results);
+	if (rc) {
+		pr_debug("Unable to read MPP4 voltage rc=%d\n", rc);
+		return 0;
+	}
+
+	return (int)results.physical;
+}
 
 static void qpnp_lbc_enable_irq(struct qpnp_lbc_chip *chip,
 					struct qpnp_lbc_irq *irq)
@@ -2525,6 +2544,9 @@ static irqreturn_t qpnp_lbc_chg_gone_irq_handler(int irq, void *_chip)
 	if (chip->cfg_collapsible_chgr_support) {
 		chg_gone = qpnp_lbc_is_chg_gone(chip);
 		pr_debug("chg-gone triggered, rt_sts: %d\n", chg_gone);
+		gpio_set_value(GPIO_num17,1);
+		printk("---chg_gone GPIO17 value = %d\n", gpio_get_value(GPIO_num17));
+
 		if (chg_gone) {
 			/*
 			 * Disable charger to prevent fastchg irq storming
@@ -2554,6 +2576,8 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 	struct qpnp_lbc_chip *chip = _chip;
 	int usb_present;
 	unsigned long flags;
+	int type;
+	type = chip->usb_psy->type;
 
 	usb_present = qpnp_lbc_is_usb_chg_plugged_in(chip);
 	pr_debug("usbin-valid triggered: %d\n", usb_present);
@@ -2590,6 +2614,15 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 						&chip->irqs[USB_CHG_GONE]);
 				qpnp_chg_collapsible_chgr_config(chip, 1);
 			}
+
+			if (type == POWER_SUPPLY_TYPE_USB_DCP || type == POWER_SUPPLY_TYPE_USB_CDP) {
+				gpio_set_value(GPIO_num17,1);
+			} else if (type == POWER_SUPPLY_TYPE_USB) {
+				gpio_set_value(GPIO_num17,0);
+			} else {
+				gpio_set_value(GPIO_num17,0);
+			}
+
 			/*
 			 * Enable SOC based charging to make sure
 			 * charging gets enabled on USB insertion
@@ -2706,6 +2739,8 @@ static irqreturn_t qpnp_lbc_fastchg_irq_handler(int irq, void *_chip)
 	ktime_t kt;
 	struct qpnp_lbc_chip *chip = _chip;
 	bool fastchg_on = false;
+	int type;
+	type = chip->usb_psy->type;
 
 	fastchg_on = qpnp_lbc_is_fastchg_on(chip);
 
@@ -2714,6 +2749,15 @@ static irqreturn_t qpnp_lbc_fastchg_irq_handler(int irq, void *_chip)
 	if (chip->fastchg_on ^ fastchg_on) {
 		chip->fastchg_on = fastchg_on;
 		if (fastchg_on) {
+
+			if (type == POWER_SUPPLY_TYPE_USB_DCP || type == POWER_SUPPLY_TYPE_USB_CDP) {
+				gpio_set_value(GPIO_num17,1);
+			} else if (type == POWER_SUPPLY_TYPE_USB) {
+				gpio_set_value(GPIO_num17,0);
+			} else {
+				gpio_set_value(GPIO_num17,0);
+			}
+
 			mutex_lock(&chip->chg_enable_lock);
 			chip->chg_done = false;
 			mutex_unlock(&chip->chg_enable_lock);
@@ -3263,8 +3307,15 @@ static int charger_type_proc_read(struct seq_file *buf, void *v)
 	int type;
 	type = g_lbc_chip->usb_psy->type;
 
+	MPP4_read = get_prop_mpp4_voltage(g_lbc_chip);
 	if (type == POWER_SUPPLY_TYPE_USB_DCP || type == POWER_SUPPLY_TYPE_USB_CDP) {
-		seq_printf(buf, "AC_Fast\n");
+		if (MPP4_read > 600000 && MPP4_read < 900000) {
+			seq_printf(buf, "AC_Fast\n");
+		} else if (MPP4_read > 2400000 && MPP4_read < 2800000) {
+			seq_printf(buf, "Power_Bank\n");
+		} else {
+			seq_printf(buf, "AC_Normal\n");
+		}
 	} else if (type == POWER_SUPPLY_TYPE_USB) {
 		seq_printf(buf, "USB_Normal\n");
 	} else if (type == POWER_SUPPLY_TYPE_UNKNOWN) {
@@ -3316,6 +3367,62 @@ void static create_charger_type_proc_file(void)
 }
 #endif
 //BSP Steve2 BMMI Adb Interface chager type---
+
+//BSP Steve2 read mpp4 voltage Interface++
+#if defined(ASUS_FACTORY_BUILD)
+#define	mpp4_vol_PROC_FILE	"driver/mpp4_vol"
+static struct proc_dir_entry *mpp4_vol_proc_file;
+static int mpp4_vol_proc_read(struct seq_file *buf, void *v)
+{
+	MPP4_read = get_prop_mpp4_voltage(g_lbc_chip);
+	pr_debug("MPP4 Voltage=%d\n", MPP4_read);
+	seq_printf(buf, "%d\n", MPP4_read);
+	return 0;
+}
+static int mpp4_vol_proc_open(struct inode *inode, struct  file *file)
+{
+    return single_open(file, mpp4_vol_proc_read, NULL);
+}
+
+static ssize_t mpp4_vol_proc_write(struct file *filp, const char __user *buff,
+		size_t len, loff_t *data)
+{
+	int val;
+
+	char messages[256];
+
+	if (len > 256) {
+		len = 256;
+	}
+
+	if (copy_from_user(messages, buff, len)) {
+		return -EFAULT;
+	}
+
+	val = (int)simple_strtol(messages, NULL, 10);
+	printk("[BAT][CHG][PMIC][Proc]mpp4 value File: %d\n", val);
+
+	return len;
+}
+
+static const struct file_operations mpp4_vol_fops = {
+	.owner = THIS_MODULE,
+	.open = mpp4_vol_proc_open,
+	.write = mpp4_vol_proc_write,
+	.read = seq_read,
+};
+void static create_mpp4_vol_proc_file(void)
+{
+	mpp4_vol_proc_file = proc_create(mpp4_vol_PROC_FILE, 0644, NULL, &mpp4_vol_fops);
+
+	if (mpp4_vol_proc_file) {
+		pr_info("[Proc]%s sucessed!\n", __FUNCTION__);
+	} else{
+		pr_info("[Proc]%s failed!\n", __FUNCTION__);
+	}
+}
+#endif
+//BSP Steve2 read mpp4 voltage Interface---
 
 static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 {
@@ -3556,6 +3663,15 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 			pr_err("Couldn't create lbc_config debug file\n");
 	}
 
+	rc = gpio_request_one(GPIO_num17, GPIOF_OUT_INIT_LOW, "asus_muxsel0_default");
+	if (rc) {
+		pr_err("Failed to request init gpio 17 Low: %d\n", rc);
+	} else {
+		pr_debug("Success to request init gpio 17 Low \n");
+	}
+	gpio_set_value(GPIO_num17,0);
+	pr_debug("GPIO17 value = %d\n", gpio_get_value(GPIO_num17));
+
 #if defined(ASUS_FACTORY_BUILD)
 	rc = asus_battery_charging_limit_wq();
 
@@ -3563,6 +3679,8 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 	create_charger_limit_enable_proc_file();
 
 	create_charger_type_proc_file();
+
+	create_mpp4_vol_proc_file();
 #endif
 
 	pr_info("Probe chg_dis=%d bpd=%d usb=%d batt_pres=%d batt_volt=%d soc=%d\n",

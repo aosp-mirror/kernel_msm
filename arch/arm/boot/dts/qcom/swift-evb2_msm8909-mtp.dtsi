@@ -371,3 +371,9 @@
 	pinctrl-5 = <&qdsd_clk_spmi &qdsd_cmd_spmi
 		     &qdsd_data0_spmi &qdsd_data3_spmi>;
 };
+
+&asus_muxsel0_default {
+	pinctrl-states = "default";
+	pinctrl-names = "asus_muxsel0_default";
+	pinctrl-0 = <&asus_muxsel0_default>;
+};

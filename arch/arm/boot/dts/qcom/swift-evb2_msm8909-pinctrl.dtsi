@@ -43,6 +43,17 @@
 			};
 		};
 
+		asus_muxsel0_default: asus_muxsel0_default {
+			mux {
+				pins = "gpio17";
+				function = "gpio";
+			};
+			config {
+				drive-strength = <8>; /* 8 MA */
+				bias-disable; /* No PULL */
+			};
+		};
+
 		pmx_mdss {
 			mdss_dsi_active: mdss_dsi_active {
 				mux {
