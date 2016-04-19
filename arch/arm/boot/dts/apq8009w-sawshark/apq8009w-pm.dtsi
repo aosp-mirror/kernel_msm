@@ -89,7 +89,6 @@
 		/delete-node/ qcom,mtp-3000mah;
 	};
 };
-
 &pm8916_vadc {
 	/delete-node/ chan@30;
 	/*add the mpp2 chan*/
@@ -100,6 +99,18 @@
 		qcom,pre-div-channel-scaling = <0>;
 		qcom,calibration-type = "ratiometric";
 		qcom,scale-function = <1>;
+		qcom,hw-settle-time = <0xb>;
+		qcom,fast-avg-setup = <0>;
+	};
+
+	/*add the mpp3 chan*/
+	chan@12 {
+		label = "temp_ambient";
+		reg = <0x12>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <17>;
 		qcom,hw-settle-time = <0xb>;
 		qcom,fast-avg-setup = <0>;
 	};
@@ -131,6 +142,19 @@
 		qcom,fast-avg-setup = <0x2>;
 		qcom,btm-channel-number = <0x48>;
 	};
+
+	/*add the mpp3 temp_ambient*/
+	chan@12 {
+		label = "temp_ambient";
+		reg = <0x12>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <17>;
+		qcom,hw-settle-time = <0xb>;
+		qcom,fast-avg-setup = <0x2>;
+		qcom,btm-channel-number = <0x48>;
+	};
 };
 &pm8916_mpps {
 	mpp@a100 { /* MPP 2 */
@@ -138,6 +162,15 @@
 		qcom,mode = <4>;		/* Digital input ,QPNP_PIN_MODE_AIN*/
 		qcom,src-sel = <0>;		/* QPNP_PIN_SEL_FUNC_CONSTANT */
 		qcom,ain-route = <1>;		/*QPNP_PIN_AIN_AMUX_CH6 */
+		qcom,master-en = <1>;		/* Enable MPP */
+		status = "ok";
+	};
+
+	mpp@a200 { /* MPP 3 */
+		/* temp_ambient */
+		qcom,mode = <4>;		/* Digital input ,QPNP_PIN_MODE_AIN*/
+		qcom,src-sel = <0>;		/* QPNP_PIN_SEL_FUNC_CONSTANT */
+		qcom,ain-route = <2>;		/*QPNP_PIN_AIN_AMUX_CH7 */
 		qcom,master-en = <1>;		/* Enable MPP */
 		status = "ok";
 	};
