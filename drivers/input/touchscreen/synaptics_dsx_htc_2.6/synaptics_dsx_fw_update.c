@@ -4050,10 +4050,22 @@ static int fwu_start_reflash(void)
 		}
 	}
 #endif
+#ifdef HTC_FEATURE
+	if (fwu->bootloader_id[1] != fwu->img.bootloader.data[0] ||
+		fwu->bootloader_id[0] != fwu->img.bootloader.data[1]) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Bootloader version mismatch (chip: %d-%d, img: %d-%d)\n",
+				__func__,
+				fwu->bootloader_id[1],
+				fwu->bootloader_id[0],
+				fwu->img.bootloader.data[0],
+				fwu->img.bootloader.data[1]);
+#else
 	if (fwu->bl_version != fwu->img.bl_version) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Bootloader version mismatch\n",
 				__func__);
+#endif
 		retval = -EINVAL;
 		goto exit;
 	}
