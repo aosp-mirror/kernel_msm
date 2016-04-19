@@ -3693,6 +3693,8 @@ static int ci13xxx_stop(struct usb_gadget *gadget,
 	usb_ep_free_request(&udc->ep0in.ep, udc->status);
 	kfree(udc->status_buf);
 
+	udc->driver = NULL;
+
 	return 0;
 }
 
