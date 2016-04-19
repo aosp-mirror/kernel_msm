@@ -273,6 +273,7 @@ static enum power_supply_property mp2661_battery_properties[] = {
     POWER_SUPPLY_PROP_HEALTH,
     POWER_SUPPLY_PROP_TECHNOLOGY,
     POWER_SUPPLY_PROP_TEMP,
+    POWER_SUPPLY_PROP_TEMP_AMBIENT,
     POWER_SUPPLY_PROP_VOLTAGE_NOW,
     POWER_SUPPLY_PROP_CURRENT_NOW,
 };
@@ -392,6 +393,23 @@ static int mp2661_get_prop_batt_temp(struct mp2661_chg *chip)
         return DEFAULT_TEMP;
     }
     pr_debug("get_batt_temp %d, %lld\n",
+        results.adc_code, results.physical);
+
+    return (int)results.physical;
+}
+
+static int mp2661_get_prop_ambient_temp(struct mp2661_chg *chip)
+{
+    int rc = 0;
+    struct qpnp_vadc_result results;
+
+    rc = qpnp_vadc_read(chip->vadc_dev, P_MUX3_1_1, &results);
+    if (rc)
+    {
+        pr_err("Unable to read ambient temperature rc=%d\n", rc);
+        return DEFAULT_TEMP;
+    }
+    pr_debug("get_ambient_temp %d, %lld\n",
         results.adc_code, results.physical);
 
     return (int)results.physical;
@@ -953,6 +971,9 @@ static int mp2661_battery_get_property(struct power_supply *psy,
             break;
         case POWER_SUPPLY_PROP_TEMP:
             val->intval = mp2661_get_prop_batt_temp(chip);
+            break;
+        case POWER_SUPPLY_PROP_TEMP_AMBIENT:
+            val->intval = mp2661_get_prop_ambient_temp(chip);
             break;
         case POWER_SUPPLY_PROP_VOLTAGE_NOW:
             val->intval = mp2661_get_prop_battery_voltage_now(chip);
