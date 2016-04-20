@@ -462,6 +462,15 @@ config SMB23X_CHARGER
 	  The driver reports the charger status via the power supply framework.
 	  A charger status change triggers an IRQ via the device STAT pin.
 
+config MP2661_CHARGER
+	tristate "MP2661 Battery Charger"
+	depends on I2C
+	help
+	  Say Y to include support for MP2661 Battery Charger.
+	  The driver supports charger enable/disable.
+	  The driver reports the charger status via the power supply framework.
+	  A charger status change triggers an IRQ via the device STAT pin.
+
 config BATTERY_BQ28400
 	tristate "BQ28400 battery driver"
 	depends on I2C

@@ -1220,7 +1220,7 @@ static int get_batt_therm(struct qpnp_bms_chip *chip, int *batt_temp)
 	int rc;
 	struct qpnp_vadc_result result;
 
-	rc = qpnp_vadc_read(chip->vadc_dev, LR_MUX1_BATT_THERM, &result);
+	rc = qpnp_vadc_read(chip->vadc_dev, P_MUX2_1_1, &result);
 	if (rc) {
 		pr_err("error reading adc channel = %d, rc = %d\n",
 					LR_MUX1_BATT_THERM, rc);

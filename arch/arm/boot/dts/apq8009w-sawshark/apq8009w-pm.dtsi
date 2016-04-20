@@ -9,56 +9,117 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
+#include "HB442528EBC-XWD-4v35-300mah.dtsi"
 &soc {
     i2c@78b8000 {
 		/*delete the qcom charger*/
 		/delete-node/ smb1357-charger@57;
 
-		/*add the mp2660 charger*/
-		mp2660_otg_vreg: mp2660-charger@57 {
-			compatible = "qcom,mp2660-charger";
-			reg = <0x57>;
+		/*add the mp2661 charger*/
+		mp2661_otg_vreg: mp2661-charger@9 {
+			compatible = "qcom,mp2661-charger";
+			reg = <0x9>;
 			interrupt-parent = <&msm_gpio>;
 			interrupts = <58 8>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&charger_int_default>;
+			regulator-name = "mp2661_otg_vreg";
 
-			qcom,bmd-algo-disabled;
-			qcom,float-voltage-mv = <4200>;
-			qcom,charging-timeout = <1536>;
-			qcom,recharge-thresh-mv = <100>;
-			regulator-name = "mp2660_otg_vreg";
-			qcom,soft-vfloat-comp-disabled;
-			qcom,thermal-mitigation = <1500 700 600 0>;
+			qcom,chg-vadc = <&pm8916_vadc>;
+			qcom,chg-adc_tm = <&pm8916_adc_tm>;
 
 			qcom,bms-psy-name = "bms";
+			qcom,using-pmic-therm;
 
-			/*
-			 * Disable SMB1357 based charging termination as BMS
-			 * controls charging.
-			 */
-			qcom,iterm-disabled;
+			qcom,cold-batt-decidegc = <0>;
+			qcom,normal-state1-batt-decidegc = <100>;
+			qcom,normal-state2-batt-decidegc = <150>;
+			qcom,normal-state3-batt-decidegc = <200>;
+			qcom,hot-batt-decidegc = <450>;
 
-			/*
-			 * Disable charge inhibit feature to start chargin on
-			 * charger insertion independent of battery voltage.
-			 */
-			qcom,inhibit-disabled;
+			qcom,batt-full-mv = <4395>;
+			qcom,batt-full-terminate-ma = <20>;
+			qcom,usb-input-ma = <220>;
+			qcom,usb-input-regulation-mv = <3880>;
+			qcom,batt-charging-ma-max = <195>;
 
-			/* BMS is controlling charging/re-charge */
-			qcom,bms-controlled-charging;
+			/* bat temp states charge current */
+			qcom,batt-charging-ma-mitigation = <0 25 93 127 195 0>;
 
-			/*
-			 * To enable charger node:
-			 * set status = "ok" and
-			 * add 'qcom,use-external-charger' to pm8909_chg node
-			 */
-			status = "disabled";
+			/* trickle charge parameters */
+			qcom,batt-trickle-charging-ma = <20>;
+			qcom,batt-trickle-to-cc-theshold-mv = <3000>;
+
+			qcom,batt-uvlo-theshold-mv = <2800>;
+			qcom,batt-auto-recharge-delta-mv = <200>;
+
+			qcom,batt-discharging-ma = <1500>;
+			qcom,thermal-regulation-threshold = <120>;
+
+			status = "ok";
 		};
+
     };
 };
+&pm8916_chg {
+	status = "ok";
+	qcom,use-external-charger;
+};
+&pm8916_bms {
+	status = "ok";
+	qcom,resume-soc = <99>;
+};
 
+/{
+	mtp_batterydata: qcom,battery-data {
+		qcom,rpull-up-kohm = <100>;
+		qcom,vref-batt-therm = <1800000>;
+		/delete-node/ qcom,palladium-batterydata;
+		/delete-node/ qcom,mtp-3000mah;
+	};
+};
+
+&pm8916_vadc {
+	/delete-node/ chan@30;
+	/*add the mpp2 chan*/
+	chan@11 {
+		label = "batt_therm";
+		reg = <0x11>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <1>;
+		qcom,hw-settle-time = <0xb>;
+		qcom,fast-avg-setup = <0>;
+	};
+};
+&pm8916_adc_tm {
+	/*delete the qcom charger*/
+	/delete-node/ chan@30;
+
+	/*add the mpp2 batt_therm*/
+	chan@11 {
+		label = "batt_therm";
+		reg = <0x11>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <1>;
+		qcom,hw-settle-time = <0xb>;
+		qcom,fast-avg-setup = <0x2>;
+		qcom,btm-channel-number = <0x48>;
+	};
+};
+&pm8916_mpps {
+	mpp@a100 { /* MPP 2 */
+		/* batter-therm */
+		qcom,mode = <4>;		/* Digital input ,QPNP_PIN_MODE_AIN*/
+		qcom,src-sel = <0>;		/* QPNP_PIN_SEL_FUNC_CONSTANT */
+		qcom,ain-route = <1>;		/*QPNP_PIN_AIN_AMUX_CH6 */
+		qcom,master-en = <1>;		/* Enable MPP */
+		status = "ok";
+	};
+};
 &rpm_bus {
 	rpm-regulator-ldoa5 {
 		regulator-always-on;
