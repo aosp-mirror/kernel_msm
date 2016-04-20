@@ -1,0 +1,29 @@
+/* Copyright (c) 2016,  HUAWEI TECHNOLOGIES CO., LTD.  All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	vibrator,enable {
+		compatible = "vibrator,enable";
+		vibrator_enable = <&msm_gpio 68 0>;
+		pinctrl-names = "vibrator_enable_active","vibrator_enable_suspend";
+		pinctrl-0 = <&vibrator_enable_active>;
+		pinctrl-1 = <&vibrator_enable_suspend>;
+	};
+
+	vibrator,trigger {
+		compatible = "vibrator,trigger";
+		vibrator_trigger = <&msm_gpio 69 0>;
+		pinctrl-names = "vibrator_trigger_active","vibrator_trigger_suspend";
+		pinctrl-0 = <&vibrator_trigger_active>;
+		pinctrl-1 = <&vibrator_trigger_suspend>;
+	};
+};
