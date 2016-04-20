@@ -4237,6 +4237,14 @@ int sdhci_add_host(struct sdhci_host *host)
 		}
 	}
 
+	/* just for broadcom sdio device, beacuse its io voltage is 1.8V, but it only support sdio2.0 */
+	#ifdef CONFIG_BCMDHD
+		if (0 == strncmp("mmc1", mmc_hostname(mmc), strlen("mmc1")))
+		{
+			caps[0] |= SDHCI_CAN_VDD_300 | SDHCI_CAN_VDD_330;
+		}
+	#endif /* CONFIG_BCMDHD */
+
 	if (caps[0] & SDHCI_CAN_VDD_330) {
 		ocr_avail |= MMC_VDD_32_33 | MMC_VDD_33_34;
 
