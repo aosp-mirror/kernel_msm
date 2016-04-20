@@ -25,6 +25,7 @@
 #include "apq8009w-sawshark/apq8009w-pm.dtsi"
 #include "apq8009w-sawshark/apq8009w-touch.dtsi"
 #include "apq8009w-sawshark/apq8009w-vibrator.dtsi"
+#include "apq8009w-sawshark/apq8009w-bt.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. APQ8009W-PM8916 MTP";

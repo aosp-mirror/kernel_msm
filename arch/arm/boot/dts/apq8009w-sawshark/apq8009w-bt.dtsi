@@ -1,0 +1,58 @@
+/* Copyright (c) 2016,  HUAWEI TECHNOLOGIES CO., LTD.  All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	qcom,bluesleep {
+		compatible = "qcom,bluesleep";
+		host-wake-gpio = <&msm_gpio 77 0>;
+		ext-wake-gpio = <&msm_gpio 47 0>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <47 0>;
+		pinctrl-names = "default","sleep";
+		pinctrl-0 = <&bt_wakeup_ap_active>;
+		pinctrl-1 = <&bt_wakeup_ap_suspend>;
+	};
+
+	huawei,bluetooth_rfkill {
+		compatible = "huawei,bluetooth_rfkill";
+		huawei,reg_on_gpio = <&msm_gpio 80 0>;
+	};
+	hserial:serial@78b0000 {
+		compatible = "qcom,msm-hsuart-v14";
+		reg = <0x78b0000 0x200>,
+		      <0x7884000 0x23000>;
+		reg-names = "core_mem", "bam_mem";
+		interrupts = <0 108 0>, <0 238 0>;
+		interrupt-names = "core_irq", "bam_irq";
+
+		qcom,tx-gpio = <&msm_gpio 20 0x00>;
+		qcom,rx-gpio = <&msm_gpio 21 0x00>;
+		qcom,cts-gpio = <&msm_gpio 112 0x00>;
+		qcom,rfr-gpio = <&msm_gpio 111 0x00>;
+
+		qcom,rx-char-to-inject = <0xFD>;
+
+		qcom,bam-tx-ep-pipe-index = <2>;
+		qcom,bam-rx-ep-pipe-index = <3>;
+
+		qcom,msm-bus,name = "hserial";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<86 512 0 0>,
+				<86 512 500 800>;
+
+		clocks = <&clock_gcc clk_gcc_blsp1_uart2_apps_clk>,
+			<&clock_gcc clk_gcc_blsp1_ahb_clk>;
+		clock-names = "core_clk", "iface_clk";
+	};
+};

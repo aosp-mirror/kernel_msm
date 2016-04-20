@@ -35,6 +35,7 @@
 	/delete-node/ qcom,wcnss-wlan@a000000;
 	/delete-node/ gpio_keys;
 	/delete-node/ serial@78b0000;
+	/delete-node/ blsp1_uart2;
 };
 &i2c_1 {
 	status = "disabled";
