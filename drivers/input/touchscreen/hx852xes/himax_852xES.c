@@ -20,7 +20,7 @@
 
 #if defined(HX_AUTO_UPDATE_FW)||defined(HX_AUTO_UPDATE_CONFIG)
 static unsigned char i_CTPM_FW[] = {
-#include "himax_FW_x120FF3.i"
+#include "himax_FW_xE30301.i"
 };
 #endif
 
