@@ -1,0 +1,102 @@
+/* Copyright (c) 2016,  HUAWEI TECHNOLOGIES CO., LTD.  All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+    i2c@78b8000 {
+		/*delete the qcom charger*/
+		/delete-node/ smb1357-charger@57;
+
+		/*add the mp2660 charger*/
+		mp2660_otg_vreg: mp2660-charger@57 {
+			compatible = "qcom,mp2660-charger";
+			reg = <0x57>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <58 8>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&charger_int_default>;
+
+			qcom,bmd-algo-disabled;
+			qcom,float-voltage-mv = <4200>;
+			qcom,charging-timeout = <1536>;
+			qcom,recharge-thresh-mv = <100>;
+			regulator-name = "mp2660_otg_vreg";
+			qcom,soft-vfloat-comp-disabled;
+			qcom,thermal-mitigation = <1500 700 600 0>;
+
+			qcom,bms-psy-name = "bms";
+
+			/*
+			 * Disable SMB1357 based charging termination as BMS
+			 * controls charging.
+			 */
+			qcom,iterm-disabled;
+
+			/*
+			 * Disable charge inhibit feature to start chargin on
+			 * charger insertion independent of battery voltage.
+			 */
+			qcom,inhibit-disabled;
+
+			/* BMS is controlling charging/re-charge */
+			qcom,bms-controlled-charging;
+
+			/*
+			 * To enable charger node:
+			 * set status = "ok" and
+			 * add 'qcom,use-external-charger' to pm8909_chg node
+			 */
+			status = "disabled";
+		};
+    };
+};
+
+&rpm_bus {
+	rpm-regulator-ldoa5 {
+		regulator-always-on;
+	};
+
+	rpm-regulator-ldoa6 {
+		regulator-always-on;
+	};
+	rpm-regulator-ldoa9 {
+		pm8916_l9: regulator-l9 {
+			regulator-min-microvolt = <3100000>;
+			regulator-max-microvolt = <3100000>;
+			qcom,init-voltage = <3100000>;
+		};
+	};
+	rpm-regulator-ldoa10 {
+		regulator-always-on;
+	};
+
+	rpm-regulator-ldoa1 {
+		status = "disabled";
+	};
+	rpm-regulator-ldoa11 {
+		status = "disabled";
+	};
+	rpm-regulator-ldoa12 {
+		status = "disabled";
+	};
+	rpm-regulator-ldoa14 {
+		status = "disabled";
+	};
+	rpm-regulator-ldoa15 {
+		status = "disabled";
+	};
+	rpm-regulator-ldoa16 {
+		status = "disabled";
+	};
+	rpm-regulator-ldoa18 {
+		status = "disabled";
+	};
+};
