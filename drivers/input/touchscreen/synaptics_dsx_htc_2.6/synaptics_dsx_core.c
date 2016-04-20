@@ -1223,7 +1223,6 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 				x = rmi4_data->sensor_max_x - x;
 			if (rmi4_data->hw_if->board_data->y_flip)
 				y = rmi4_data->sensor_max_y - y;
-
 			input_report_key(rmi4_data->input_dev,
 					BTN_TOUCH, 1);
 			input_report_key(rmi4_data->input_dev,
@@ -1438,7 +1437,6 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			input_mt_report_slot_state(rmi4_data->input_dev,
 					MT_TOOL_FINGER, 1);
 #endif
-
 			input_report_key(rmi4_data->input_dev,
 					BTN_TOUCH, 1);
 			input_report_key(rmi4_data->input_dev,
@@ -1477,8 +1475,11 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 					pressure = (int)f_data[f_lsb];
 #endif
 				}
-
 				pressure = pressure > 0 ? pressure : 1;
+				input_report_abs(rmi4_data->input_dev,
+						ABS_MT_PRESSURE, pressure);
+			} else {
+				pressure = finger_data->z;
 				input_report_abs(rmi4_data->input_dev,
 						ABS_MT_PRESSURE, pressure);
 			}
@@ -1555,6 +1556,8 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			input_mt_report_slot_state(rmi4_data->input_dev,
 					MT_TOOL_FINGER, 0);
 #endif
+			if(rmi4_data->report_pressure == true)
+				input_report_abs(rmi4_data->input_dev, ABS_MT_PRESSURE, 0);
 			break;
 		}
 	}
@@ -1584,6 +1587,9 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			}
 			input_sync(rmi4_data->stylus_dev);
 		}
+
+		if(rmi4_data->report_pressure == true)
+			input_report_abs(rmi4_data->input_dev, ABS_MT_PRESSURE, 0);
 	}
 
 	input_sync(rmi4_data->input_dev);
@@ -3528,11 +3534,9 @@ static void synaptics_rmi4_set_params(struct synaptics_rmi4_data *rmi4_data)
 #endif
 
 #ifdef REPORT_2D_PRESSURE
-	if (rmi4_data->report_pressure) {
-		input_set_abs_params(rmi4_data->input_dev,
-				ABS_MT_PRESSURE, rmi4_data->force_min,
-				rmi4_data->force_max, 0, 0);
-	}
+	input_set_abs_params(rmi4_data->input_dev,
+			ABS_MT_PRESSURE, rmi4_data->force_min,
+			rmi4_data->force_max, 0, 0);
 #elif defined(F51_DISCRETE_FORCE)
 	input_set_abs_params(rmi4_data->input_dev,
 			ABS_MT_PRESSURE, 0,
@@ -3663,7 +3667,6 @@ static int synaptics_rmi4_set_input_dev(struct synaptics_rmi4_data *rmi4_data)
 #ifdef INPUT_PROP_DIRECT
 	set_bit(INPUT_PROP_DIRECT, rmi4_data->stylus_dev->propbit);
 #endif
-
 	input_set_abs_params(rmi4_data->stylus_dev, ABS_X, 0,
 			rmi4_data->sensor_max_x, 0, 0);
 	input_set_abs_params(rmi4_data->stylus_dev, ABS_Y, 0,
