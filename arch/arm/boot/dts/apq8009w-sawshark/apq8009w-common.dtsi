@@ -1,0 +1,78 @@
+/* Copyright (c) 2016,  HUAWEI TECHNOLOGIES CO., LTD. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+&external_image_mem {
+	reg = <0x0 0x87a00000 0x0 0x0600000>;
+};
+
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x02c00000>;
+};
+
+&peripheral_mem {
+	reg = <0x0 0x8ac00000 0x0 0x0500000>;
+};
+
+
+&soc {
+	i2c@78b9000 { /* BLSP1 QUP5 */
+		/delete-node/ it7260@46;
+	};
+	i2c@78b6000 {
+		/delete-node/ nfc-nci@e;
+	};
+
+	/delete-node/ qcom,msm-ssc-sensors;
+	/delete-node/ cti@816000;
+	/delete-node/ qcom,wcnss-wlan@a000000;
+	/delete-node/ gpio_keys;
+	/delete-node/ serial@78b0000;
+};
+&i2c_1 {
+	status = "disabled";
+};
+
+&i2c_2 {
+	status = "disabled";
+};
+
+&spi_0 {
+	status = "ok";
+};
+
+&i2c_3 {
+	status = "disabled";
+};
+
+&blsp1_uart1 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_sleep>;
+};
+
+&audio_codec_mtp {
+	pinctrl-names = "cdc_lines_act",
+			"cdc_lines_sus",
+			"cross_conn_det_act",
+			"cross_conn_det_sus";
+	pinctrl-0 = <&cdc_pdm_lines_act>;
+	pinctrl-1 = <&cdc_pdm_lines_sus>;
+	pinctrl-2 = <&cross_conn_det_act>;
+	pinctrl-3 = <&cross_conn_det_sus>;
+};
+
+&soc {
+	tlmm_pinmux: pinctrl@1000000 {
+		vdd_spkdrv {
+			status = "disabled";
+		};
+	};
+};

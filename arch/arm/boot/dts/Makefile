@@ -516,6 +516,8 @@ dtb-$(CONFIG_MACH_DOVE) += dove-cm-a510.dtb \
 	dove-d3plug.dtb \
 	dove-dove-db.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt6589-aquaris5.dtb
+dtb-$(CONFIG_HUAWEI_SAWSHARK) += apq8009w-sawshark.dtb
+
 
 #used for cleaning - not building
 subdir- := qcom
