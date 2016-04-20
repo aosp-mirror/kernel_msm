@@ -18,7 +18,8 @@
 *.so
 *.so.dbg
 *.mod.c
-*.i
+# Allow *.i files for ASUS Touch Firmware
+#*.i
 *.lst
 *.symtypes
 *.order
