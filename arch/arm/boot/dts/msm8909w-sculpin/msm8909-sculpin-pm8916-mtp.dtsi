@@ -137,7 +137,7 @@
 		qcom,vibrator@c000 {
 			status = "okay";
 			qcom,vib-timeout-ms = <15000>;
-			qcom,vib-vtg-level-mV = <1500>;
+			qcom,vib-vtg-level-mV = <2800>;
 		};
 	};
 };
