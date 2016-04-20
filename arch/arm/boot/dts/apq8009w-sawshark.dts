@@ -21,6 +21,7 @@
 
 #include "apq8009w-sawshark/apq8009w-common.dtsi"
 #include "apq8009w-sawshark/apq8009w-dispaly.dtsi"
+#include "apq8009w-sawshark/apq8009w-pinctrl.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. APQ8009W-PM8916 MTP";
