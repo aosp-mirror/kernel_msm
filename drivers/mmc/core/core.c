@@ -3822,7 +3822,8 @@ void mmc_rescan(struct work_struct *work)
 	}
 
 	mmc_claim_host(host);
-	(void) mmc_rescan_try_freq(host, host->f_min);
+	if (mmc_rescan_try_freq(host, host->f_min))
+		host->rescan_entered = 0;
 	mmc_release_host(host);
 
  out:
