@@ -25,10 +25,6 @@
 	qcom,board-id = <0 0>;
 };
 
-&mdss_fb0 {
-	qcom,mdss-mixer-swap;
-};
-
 &pm8994_gpios {
 	gpio@c500 { /* GPIO 6 */
 		qcom,mode = <0>;		/* Input	*/
