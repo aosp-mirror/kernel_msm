@@ -139,7 +139,11 @@ struct qpnp_lbc_irq {
 	bool            is_wake;
 };
 
+//BSP Steve2 read mpp4 voltage Interface+++
+#if defined(ASUS_FACTORY_BUILD)
 static int MPP4_read;
+#endif
+//BSP Steve2 read mpp4 voltage Interface---
 static int GPIO_num17 = 17;
 
 enum {
@@ -409,6 +413,8 @@ bool eng_charging_limit;
 #endif
 // BSP Steve2: charging limit ---
 
+//BSP Steve2 read mpp4 voltage Interface+++
+#if defined(ASUS_FACTORY_BUILD)
 static int
 get_prop_mpp4_voltage(struct qpnp_lbc_chip *chip)
 {
@@ -423,6 +429,8 @@ get_prop_mpp4_voltage(struct qpnp_lbc_chip *chip)
 
 	return (int)results.physical;
 }
+#endif
+//BSP Steve2 read mpp4 voltage Interface---
 
 static void qpnp_lbc_enable_irq(struct qpnp_lbc_chip *chip,
 					struct qpnp_lbc_irq *irq)
