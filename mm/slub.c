@@ -160,8 +160,7 @@ static inline bool kmem_cache_has_cpu_partial(struct kmem_cache *s)
  */
 #define MAX_PARTIAL 10
 
-#define DEBUG_DEFAULT_FLAGS (SLAB_DEBUG_FREE | SLAB_RED_ZONE | \
-				SLAB_POISON | SLAB_STORE_USER)
+#define DEBUG_DEFAULT_FLAGS 0
 
 /*
  * Debugging flags that require metadata to be stored in the slab.  These get
