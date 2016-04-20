@@ -15,7 +15,7 @@
 		compatible = "htc,nc_pin";
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&sailfish_nc_pins_in_pd &sailfish_nc_pins_out_low>;
+		pinctrl-0 = <&sailfish_nc_pins_in_pd &sailfish_nc_pins_out_low &sailfish_nc_pins_out_high>;
 	};
 };
 
@@ -40,16 +40,30 @@
 	sailfish_nc_pins_out_low {
 		sailfish_nc_pins_out_low: sailfish_nc_pins_out_low {
 			mux {
-				pins = "gpio0", "gpio2", "gpio3", "gpio32", "gpio33", "gpio85", "gpio95", "gpio96", "gpio105", "gpio106", "gpio107", "gpio118";
+				pins = "gpio0", "gpio2", "gpio3", "gpio32", "gpio33", "gpio85", "gpio105", "gpio106", "gpio107", "gpio118";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio0", "gpio2", "gpio3", "gpio32", "gpio33", "gpio85", "gpio95", "gpio96", "gpio105", "gpio106", "gpio107", "gpio118";
+				pins = "gpio0", "gpio2", "gpio3", "gpio32", "gpio33", "gpio85", "gpio105", "gpio106", "gpio107", "gpio118";
 				drive-strength = <2>;		/* 2 mA */
 				output-low;			/* OUTPUT LOW */
 			};
 		};
+	};
+	sailfish_nc_pins_out_high {
+		sailfish_nc_pins_out_high: sailfish_nc_pins_out_high {
+                        mux {
+                                pins = "gpio95", "gpio96", "gpio120";
+                                function = "gpio";
+                        };
+
+                        config {
+                                pins = "gpio95", "gpio96", "gpio120";
+                                drive-strength = <2>;           /* 2 mA */
+                                output-high;                     /* OUTPUT HIGH */
+                        };
+                };
 	};
 };
 
