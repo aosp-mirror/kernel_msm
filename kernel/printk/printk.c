@@ -942,7 +942,11 @@ void __init setup_log_buf(int early)
 		free, (free * 100) / __LOG_BUF_LEN);
 }
 
+#ifdef ASUS_USER_BUILD
 static bool __read_mostly ignore_loglevel;
+#else
+static bool __read_mostly ignore_loglevel = true;
+#endif
 
 static int __init ignore_loglevel_setup(char *str)
 {
