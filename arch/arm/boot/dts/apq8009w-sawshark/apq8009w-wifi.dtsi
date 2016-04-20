@@ -1,0 +1,56 @@
+/* Copyright (c) 2016,  HUAWEI TECHNOLOGIES CO., LTD.  All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+
+	wifi,mmc {
+		compatible = "bcmdhd_wlan,mmc";
+		sdhci-name = <&sdhc_2>;
+	};
+
+	wifi,regon {
+		compatible = "bcmdhd_wlan,reg_on";
+		wl_reg_on = <&msm_gpio 78 0>;
+		pinctrl-names = "wifi_reg_on_active","wifi_reg_on_suspend";
+		pinctrl-0 = <&wifi_reg_on_active>;
+		pinctrl-1 = <&wifi_reg_on_suspend>;
+	};
+
+	wifi,wakeup {
+		compatible = "bcmdhd_wlan,wake_up";
+		wl_host_wake = <&msm_gpio 28 0>;
+		pinctrl-names = "wifi_wakeup_ap_active","wifi_wakeup_ap_suspend";
+		pinctrl-0 = <&wifi_wakeup_ap_active>;
+		pinctrl-1 = <&wifi_wakeup_ap_suspend>;
+	};
+};
+
+&sdhc_2 {
+	 interrupt-map = <0 &intc 0 125 0
+			1 &intc 0 221 0>;
+	 interrupt-names = "hc_irq", "pwr_irq";
+	/delete-property/ cd-gpios;
+
+	/delete-property/ vdd-supply;
+	/delete-property/ qcom,vdd-voltage-level;
+	/delete-property/ qcom,vdd-current-level;
+
+	vdd-io-supply = <&pm8916_l5>;
+	qcom,vdd-io-voltage-level = <1800000 1800000>;
+	qcom,vdd-io-current-level = <200 50000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
+
+	qcom,nonremovable;
+};
