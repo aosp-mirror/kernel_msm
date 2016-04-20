@@ -158,6 +158,7 @@ typedef  enum  {
     WMI_SERVICE_ENHANCED_MCAST_FILTER,/* FW supports enhanced multicast filtering (of mcast IP inside ucast WLAN) */
     WMI_SERVICE_PERIODIC_CHAN_STAT_SUPPORT, /* periodic channel stats service */
     WMI_SERVICE_MESH_11S,
+    WMI_SERVICE_HALF_RATE_QUARTER_RATE_SUPPORT, /* FW+HW supports 10 MHz (half rate) and 5 MHz (quarter rate) channel bandwidth */
     WMI_MAX_SERVICE=128               /* max service */
 } WMI_SERVICE;
 
