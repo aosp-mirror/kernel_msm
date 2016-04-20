@@ -25,6 +25,8 @@
 	huawei,bluetooth_rfkill {
 		compatible = "huawei,bluetooth_rfkill";
 		huawei,reg_on_gpio = <&msm_gpio 80 0>;
+		vdd-supply = <&pm8916_l9>;
+		vdd-voltage-level = <3100000 3100000>;
 	};
 	hserial:serial@78b0000 {
 		compatible = "qcom,msm-hsuart-v14";
@@ -34,10 +36,9 @@
 		interrupts = <0 108 0>, <0 238 0>;
 		interrupt-names = "core_irq", "bam_irq";
 
-		qcom,tx-gpio = <&msm_gpio 20 0x00>;
-		qcom,rx-gpio = <&msm_gpio 21 0x00>;
-		qcom,cts-gpio = <&msm_gpio 112 0x00>;
-		qcom,rfr-gpio = <&msm_gpio 111 0x00>;
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&bt_uart_data_active &bt_uart_ctl_active>;
+		pinctrl-1 = <&bt_uart_data_suspend &bt_uart_ctl_suspend>;
 
 		qcom,rx-char-to-inject = <0xFD>;
 
