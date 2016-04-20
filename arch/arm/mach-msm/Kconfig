@@ -219,4 +219,10 @@ config ARCH_MSM8909
 	select MSM_BIMC_BWMON
 
 endmenu
+
+config HUAWEI_SAWSHARK
+	bool "Use HUAWEI Sawshark DTS"
+	default n
+	help
+	  use huawei DTS
 endif
