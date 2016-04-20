@@ -24,6 +24,10 @@
 #include "sdio_cis.h"
 #include "sdio_ops.h"
 
+#ifdef CONFIG_BCMDHD
+extern void wlan_vendor_set(int vendorId);
+#endif
+
 static int cistpl_vers_1(struct mmc_card *card, struct sdio_func *func,
 			 const unsigned char *buf, unsigned size)
 {
@@ -217,12 +221,45 @@ static int cistpl_funce(struct mmc_card *card, struct sdio_func *func,
 			     buf[0], buf, size);
 }
 
+static int cistpl_vendor_code(struct mmc_card *card, struct sdio_func *func,
+			       const unsigned char *buf, unsigned size)
+{
+	int vendor_code = 0x00;
+	/* Only valid for the common CIS (function 0) */
+	if (func)
+		return -EINVAL;
+
+	vendor_code = buf[1] | (buf[2] << 8);
+
+#ifdef CONFIG_BCMDHD
+	wlan_vendor_set(vendor_code);
+#endif
+	return 0;
+}
+
+static const struct cis_tpl cis_tpl_other_list[] = {
+	{	0x81,	3,	cistpl_vendor_code		},
+};
+
+static int cistpl_other(struct mmc_card *card, struct sdio_func *func,
+			const unsigned char *buf, unsigned size)
+{
+	if (size < 1)
+		return -EINVAL;
+
+	return cis_tpl_parse(card, func, "CIS_VENDOR_CODE",
+			     cis_tpl_other_list,
+			     ARRAY_SIZE(cis_tpl_other_list),
+			     buf[0], buf, size);
+}
+
 /* Known TPL_CODEs table for CIS tuples */
 static const struct cis_tpl cis_tpl_list[] = {
 	{	0x15,	3,	cistpl_vers_1		},
 	{	0x20,	4,	cistpl_manfid		},
 	{	0x21,	2,	/* cistpl_funcid */	},
 	{	0x22,	0,	cistpl_funce		},
+	{	0x80,	0,	cistpl_other		},
 };
 
 static int sdio_read_cis(struct mmc_card *card, struct sdio_func *func)
