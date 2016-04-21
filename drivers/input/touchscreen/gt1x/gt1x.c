@@ -404,6 +404,7 @@ static s32 gt1x_request_io_port(void)
 	if (ret < 0) {
 		GTP_ERROR("Failed to request GPIO:%d, ERRNO:%d", (s32) GTP_INT_PORT, ret);
 		ret = -ENODEV;
+		goto err_gpio_irq;
 	} else {
 		GTP_GPIO_AS_INT(GTP_INT_PORT);
 		gt1x_i2c_client->irq = GTP_INT_IRQ;
@@ -413,24 +414,25 @@ static s32 gt1x_request_io_port(void)
 	if (ret < 0) {
 		GTP_ERROR("Failed to request GPIO:%d, ERRNO:%d", (s32) GTP_RST_PORT, ret);
 		ret = -ENODEV;
-	}
+		goto err_gpio_reset;
+	} else
+		GTP_GPIO_AS_INPUT(GTP_RST_PORT);
 
 	ret = gpio_request(GTP_SWITCH_PORT, "GTP_SWITCH_PORT");
 	if (ret < 0) {
 		GTP_ERROR("Failed to request switch GPIO:%d, ERRNO:%d", (s32) GTP_SWITCH_PORT, ret);
 		ret = -ENODEV;
-	}
+		goto err_gpio_switch;
+	} else
+		GTP_GPIO_OUTPUT(GTP_SWITCH_PORT, 0);
 
-	GTP_DEBUG("INT=%d, RST=%d, SWITCH=%d, ret=%d", GTP_INT_IRQ, GTP_RST_PORT, GTP_SWITCH_PORT, ret);
+	GTP_DEBUG("INT=%d, RST=%d, SWITCH=%d", GTP_INT_IRQ, GTP_RST_PORT, GTP_SWITCH_PORT);
 
-	GTP_GPIO_AS_INPUT(GTP_RST_PORT);
-	GTP_GPIO_OUTPUT(GTP_SWITCH_PORT, 0);
-	if (ret < 0) {
-		gpio_free(GTP_RST_PORT);
-		gpio_free(GTP_INT_PORT);
-		gpio_free(GTP_SWITCH_PORT);
-	}
-
+err_gpio_switch:
+	gpio_free(GTP_RST_PORT);
+err_gpio_reset:
+	gpio_free(GTP_INT_PORT);
+err_gpio_irq:
 	return ret;
 }
 
