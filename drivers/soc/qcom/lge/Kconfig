@@ -4,7 +4,13 @@ config MACH_SWORDFISH
 	bool "MSM8909 SWORDFISH"
 	depends on ARCH_MSM8909
 	help
-	  Support for the LGE MSM8909 SWORDFISH device.
+	  Support for the LGE MSM8909W SWORDFISH device.
+
+config MACH_ANGELFISH
+	bool "APQ8009W ANGELFISH"
+	depends on ARCH_MSM8909
+	help
+	  Support for the LGE APQ8009W SWORDFISH device.
 
 endmenu
 

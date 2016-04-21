@@ -170,6 +170,9 @@ dtb-$(CONFIG_MACH_SWORDFISH) += \
 	msm8909-swordfish-rev-evb2.dtb \
 	msm8909-swordfish-rev-evb1.dtb \
 	msm8909-swordfish-rev-evb1-hdmi.dtb
+dtb-$(CONFIG_MACH_ANGELFISH) += \
+	apq8009-angelfish-rev-evb2.dtb \
+	apq8009-angelfish-rev-evb1.dtb
 dtb-$(CONFIG_ARCH_MXC) += \
 	imx1-ads.dtb \
 	imx1-apf9328.dtb \
