@@ -1,0 +1,5 @@
+config HTC_DEBUG_FOOTPRINT
+    bool "HTC Debug footprint support"
+    default y
+    help
+      Say yes to enable HTC debug footprint for CPU related function.

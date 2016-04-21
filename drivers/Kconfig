@@ -202,4 +202,6 @@ source "drivers/bif/Kconfig"
 
 source "drivers/gud/Kconfig"
 
+source "drivers/htc_mnemosyne/Kconfig"
+
 endmenu
