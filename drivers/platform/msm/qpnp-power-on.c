@@ -1184,6 +1184,9 @@ qpnp_pon_request_irqs(struct qpnp_pon *pon, struct qpnp_pon_config *cfg)
 							cfg->state_irq);
 			return rc;
 		}
+		//Wake up system to notify charger state change
+		enable_irq_wake(cfg->state_irq);
+		
 		break;
 	case PON_KPDPWR_RESIN:
 		if (cfg->use_bark) {
