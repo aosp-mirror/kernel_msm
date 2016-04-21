@@ -2083,6 +2083,13 @@ VOS_STATUS vos_watchdog_wlan_shutdown(void)
 */
 VOS_STATUS vos_watchdog_wlan_re_init(void)
 {
+    /* Make sure that Vos Watchdog context has been initialized */
+    if (gpVosWatchdogContext == NULL) {
+       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
+           "%s: gpVosWatchdogContext == NULL", __func__);
+       return VOS_STATUS_E_FAILURE;
+    }
+
     /* watchdog task is still running, it is not closed in shutdown */
     set_bit(WD_WLAN_REINIT_EVENT, &gpVosWatchdogContext->wdEventFlag);
     set_bit(WD_POST_EVENT, &gpVosWatchdogContext->wdEventFlag);
