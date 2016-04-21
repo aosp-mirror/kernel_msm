@@ -162,6 +162,43 @@
 	qcom,vmax-mv = <2828>;
 };
 
+&pm8994_gpios {	/* COVER_INT1 & COVER_INT2 */
+	gpio@c100 { /* GPIO 2 */
+		qcom,mode = <0>;	/* DIGITAL INPUT */
+		qcom,pull = <5>;	/* No Pull */
+		qcom,vin-sel = <2>;
+		qcom,src-sel = <0>;
+		status = "okay";
+	};
+
+	gpio@c400 { /* GPIO 5 */
+		qcom,mode = <0>;	/* DIGITAL INPUT */
+		qcom,pull = <5>;	/* No Pull */
+		qcom,vin-sel = <2>;
+		qcom,src-sel = <0>;
+		status = "okay";
+	};
+};
+
+&pmi8994_mpps {	/* FLASH_STROBE */
+	mpp@a100 {
+		qcom,mode = <0>;        /* QPNP_PIN_MODE_DIG_IN */
+		qcom,pull = <2>;	/* QPNP_PIN_MPP_PULL_UP_10KOHM */
+		qcom,vin-sel = <2>;     /* QPNP_PIN_VIN2 */
+		qcom,src-sel = <0>;     /* QPNP_PIN_SEL_FUNC_CONSTANT */
+		qcom,master-en = <1>;   /* Enable */
+		status = "okay";
+	};
+};
+
+&spmi_bus {	/* FLASH_STROBE */
+	qcom,pmi8994@3 {
+		qcom,leds@d300 {
+			qcom,gpio-flash-strobe = <&tlmm 22 0x00>;
+		};
+	};
+};
+
 &pmi8994_flash0 {
 	qcom,duration = <600>;
 };
