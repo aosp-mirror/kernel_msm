@@ -38,12 +38,11 @@ struct nanohub_data;
 struct nanohub_comms {
 	struct semaphore sem;
 	uint32_t seq;
-	int timeout_write;
 	int timeout_ack;
 	int timeout_reply;
 	int (*open)(void *);
 	void (*close)(void *);
-	int (*write)(void *, uint8_t *, int, int);
+	int (*write)(void *, uint8_t *, int);
 	int (*read)(void *, uint8_t *, int, int);
 
 	union {
