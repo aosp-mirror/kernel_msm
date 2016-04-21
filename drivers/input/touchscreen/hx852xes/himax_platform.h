@@ -28,63 +28,63 @@
 
 #if defined(CONFIG_HMX_DB)
 /* Analog voltage @2.7 V */
-#define HX_VTG_MIN_UV			2700000
-#define HX_VTG_MAX_UV			3300000
-#define HX_ACTIVE_LOAD_UA		15000
-#define HX_LPM_LOAD_UA 			10
+#define HX_VTG_MIN_UV            2700000
+#define HX_VTG_MAX_UV            3300000
+#define HX_ACTIVE_LOAD_UA        15000
+#define HX_LPM_LOAD_UA             10
 /* Digital voltage @1.8 V */
-#define HX_VTG_DIG_MIN_UV		1800000
-#define HX_VTG_DIG_MAX_UV		1800000
-#define HX_ACTIVE_LOAD_DIG_UA	10000
-#define HX_LPM_LOAD_DIG_UA 		10
+#define HX_VTG_DIG_MIN_UV        1800000
+#define HX_VTG_DIG_MAX_UV        1800000
+#define HX_ACTIVE_LOAD_DIG_UA    10000
+#define HX_LPM_LOAD_DIG_UA         10
 
-#define HX_I2C_VTG_MIN_UV		1800000
-#define HX_I2C_VTG_MAX_UV		1800000
-#define HX_I2C_LOAD_UA 			10000
-#define HX_I2C_LPM_LOAD_UA 		10
+#define HX_I2C_VTG_MIN_UV        1800000
+#define HX_I2C_VTG_MAX_UV        1800000
+#define HX_I2C_LOAD_UA             10000
+#define HX_I2C_LPM_LOAD_UA         10
 #endif
 
 struct himax_i2c_platform_data {
-	int abs_x_min;
-	int abs_x_max;
-	int abs_x_fuzz;
-	int abs_y_min;
-	int abs_y_max;
-	int abs_y_fuzz;
-	int abs_pressure_min;
-	int abs_pressure_max;
-	int abs_pressure_fuzz;
-	int abs_width_min;
-	int abs_width_max;
-	int screenWidth;
-	int screenHeight;
-	uint8_t fw_version;
-	uint8_t tw_id;
-	uint8_t powerOff3V3;
-	uint8_t cable_config[2];
-	uint8_t protocol_type;
-	int gpio_irq;
-	int gpio_reset;
-	int gpio_3v3_en;
-	int (*power)(int on);
-	void (*reset)(void);
-	struct himax_virtual_key *virtual_key;
-	struct kobject *vk_obj;
-	struct kobj_attribute *vk2Use;
+    int abs_x_min;
+    int abs_x_max;
+    int abs_x_fuzz;
+    int abs_y_min;
+    int abs_y_max;
+    int abs_y_fuzz;
+    int abs_pressure_min;
+    int abs_pressure_max;
+    int abs_pressure_fuzz;
+    int abs_width_min;
+    int abs_width_max;
+    int screenWidth;
+    int screenHeight;
+    uint8_t fw_version;
+    uint8_t tw_id;
+    uint8_t powerOff3V3;
+    uint8_t cable_config[2];
+    uint8_t protocol_type;
+    int gpio_irq;
+    int gpio_reset;
+    int gpio_3v3_en;
+    int (*power)(int on);
+    void (*reset)(void);
+    struct himax_virtual_key *virtual_key;
+    struct kobject *vk_obj;
+    struct kobj_attribute *vk2Use;
 
-	struct himax_config *hx_config;
-	int hx_config_size;
+    struct himax_config *hx_config;
+    int hx_config_size;
 #if defined(CONFIG_HMX_DB)
-	bool	i2c_pull_up;
-	bool	digital_pwr_regulator;
-	int reset_gpio;
-	u32 reset_gpio_flags;
-	int irq_gpio;
-	u32 irq_gpio_flags;
+    bool    i2c_pull_up;
+    bool    digital_pwr_regulator;
+    int reset_gpio;
+    u32 reset_gpio_flags;
+    int irq_gpio;
+    u32 irq_gpio_flags;
 
-	struct regulator *vcc_ana; //For Dragon Board
-	struct regulator *vcc_dig; //For Dragon Board
-	struct regulator *vcc_i2c; //For Dragon Board
+    struct regulator *vcc_ana; //For Dragon Board
+    struct regulator *vcc_dig; //For Dragon Board
+    struct regulator *vcc_i2c; //For Dragon Board
 #endif
 };
 
