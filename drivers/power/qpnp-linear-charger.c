@@ -144,6 +144,13 @@ struct qpnp_lbc_irq {
 static int MPP4_read;
 #endif
 //BSP Steve2 read mpp4 voltage Interface---
+
+//BSP Steve2 read current value Interface+++
+#if defined(ASUS_FACTORY_BUILD)
+static int CURRENT_value_read;
+#endif
+//BSP Steve2 read current value Interface---
+
 static int GPIO_num17 = 17;
 
 enum {
@@ -3316,10 +3323,10 @@ static int charger_type_proc_read(struct seq_file *buf, void *v)
 	type = g_lbc_chip->usb_psy->type;
 
 	MPP4_read = get_prop_mpp4_voltage(g_lbc_chip);
-	if (type == POWER_SUPPLY_TYPE_USB_DCP || type == POWER_SUPPLY_TYPE_USB_CDP) {
-		if (MPP4_read > 600000 && MPP4_read < 900000) {
+	if (type == POWER_SUPPLY_TYPE_USB_DCP) {
+		if (MPP4_read > 600000 && MPP4_read < 1000000) {
 			seq_printf(buf, "AC_Fast\n");
-		} else if (MPP4_read > 2400000 && MPP4_read < 2800000) {
+		} else if (MPP4_read > 1800000 && MPP4_read < 2800000) {
 			seq_printf(buf, "Power_Bank\n");
 		} else {
 			seq_printf(buf, "AC_Normal\n");
@@ -3431,6 +3438,62 @@ void static create_mpp4_vol_proc_file(void)
 }
 #endif
 //BSP Steve2 read mpp4 voltage Interface---
+
+//BSP Steve2 read current value Interface+++
+#if defined(ASUS_FACTORY_BUILD)
+#define	current_value_PROC_FILE	"driver/current_value"
+static struct proc_dir_entry *current_value_proc_file;
+static int current_value_proc_read(struct seq_file *buf, void *v)
+{
+	CURRENT_value_read = get_prop_current_now(g_lbc_chip) * -1 / 1000;
+	pr_debug("CURRENT NOW value=%d\n", CURRENT_value_read);
+	seq_printf(buf, "%d\n", CURRENT_value_read);
+	return 0;
+}
+static int current_value_proc_open(struct inode *inode, struct  file *file)
+{
+    return single_open(file, current_value_proc_read, NULL);
+}
+
+static ssize_t current_value_proc_write(struct file *filp, const char __user *buff,
+		size_t len, loff_t *data)
+{
+	int val;
+
+	char messages[256];
+
+	if (len > 256) {
+		len = 256;
+	}
+
+	if (copy_from_user(messages, buff, len)) {
+		return -EFAULT;
+	}
+
+	val = (int)simple_strtol(messages, NULL, 10);
+	printk("[BAT][CHG][PMIC][Proc]current now value File: %d\n", val);
+
+	return len;
+}
+
+static const struct file_operations current_value_fops = {
+	.owner = THIS_MODULE,
+	.open = current_value_proc_open,
+	.write = current_value_proc_write,
+	.read = seq_read,
+};
+void static create_current_value_proc_file(void)
+{
+	current_value_proc_file = proc_create(current_value_PROC_FILE, 0644, NULL, &current_value_fops);
+
+	if (current_value_proc_file) {
+		pr_info("[Proc]%s sucessed!\n", __FUNCTION__);
+	} else{
+		pr_info("[Proc]%s failed!\n", __FUNCTION__);
+	}
+}
+#endif
+//BSP Steve2 read current value Interface---
 
 static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 {
@@ -3689,6 +3752,8 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 	create_charger_type_proc_file();
 
 	create_mpp4_vol_proc_file();
+	
+	create_current_value_proc_file();
 #endif
 
 	pr_info("Probe chg_dis=%d bpd=%d usb=%d batt_pres=%d batt_volt=%d soc=%d\n",
