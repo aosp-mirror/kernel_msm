@@ -9871,8 +9871,8 @@ void wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, v_U8_t set)
                 for (i = 0; i < pAdapter->mc_addr_list.mc_cnt; i++)
                 {
                     memcpy(pMulticastAddrs->multicastAddr[i],
-                           pAdapter->mc_addr_list.addr[i],
-                           sizeof(pAdapter->mc_addr_list.addr[i]));
+                           &pAdapter->mc_addr_list.addr[i * ETH_ALEN],
+                           ETH_ALEN);
                     hddLog(VOS_TRACE_LEVEL_INFO,
                             "%s: %s multicast filter: addr ="
                             MAC_ADDRESS_STR,
@@ -9892,10 +9892,13 @@ void wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, v_U8_t set)
             {
                 pMulticastAddrs->ulMulticastAddrCnt =
                                  pAdapter->mc_addr_list.mc_cnt;
-                for (i = 0; i < pAdapter->mc_addr_list.mc_cnt; i++) {
+                i = 0;
+                while (0 < pAdapter->mc_addr_list.mc_cnt) {
                     memcpy(pMulticastAddrs->multicastAddr[i],
-                           pAdapter->mc_addr_list.addr[i],
-                           sizeof(pAdapter->mc_addr_list.addr[i]));
+                           &pAdapter->mc_addr_list.addr[i * ETH_ALEN],
+                           ETH_ALEN);
+                    pAdapter->mc_addr_list.mc_cnt--;
+                    i++;
                     hddLog(VOS_TRACE_LEVEL_INFO,
                             "%s: clearing multicast filter: addr ="
                             MAC_ADDRESS_STR,

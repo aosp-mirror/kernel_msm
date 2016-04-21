@@ -32952,6 +32952,8 @@ static void wma_update_hdd_cfg(tp_wma_handle wma_handle)
 	hdd_tgt_cfg.bpf_enabled = wma_handle->bpf_enabled;
 	wma_update_hdd_cfg_ndp(wma_handle, &hdd_tgt_cfg);
 	wma_setup_egap_support(&hdd_tgt_cfg, wma_handle);
+        hdd_tgt_cfg.max_mc_addr_list =
+                wma_handle->wlan_resource_config.num_multicast_filter_entries;
 	wma_handle->tgt_cfg_update_cb(hdd_ctx, &hdd_tgt_cfg);
 }
 static wmi_buf_t wma_setup_wmi_init_msg(tp_wma_handle wma_handle,

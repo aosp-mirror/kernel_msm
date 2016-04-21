@@ -880,14 +880,12 @@ typedef struct hdd_scaninfo_s
 
 }hdd_scaninfo_t;
 
-#define WLAN_HDD_MAX_MC_ADDR_LIST 10
-
 #ifdef WLAN_FEATURE_PACKET_FILTERING
 typedef struct multicast_addr_list
 {
    v_U8_t isFilterApplied;
    v_U8_t mc_cnt;
-   v_U8_t addr[WLAN_HDD_MAX_MC_ADDR_LIST][ETH_ALEN];
+   v_U8_t *addr;
 } t_multicast_add_list;
 #endif
 
@@ -1757,6 +1755,7 @@ struct hdd_context_s
 #endif
     unsigned int last_scan_bug_report_timestamp;
     bool driver_being_stopped; /* Track if DRIVER STOP cmd is sent */
+    uint8_t max_mc_addr_list;
 };
 
 /*---------------------------------------------------------------------------
@@ -2074,4 +2073,20 @@ eHalStatus hdd_smeCloseSessionCallback(void *pContext);
 
 int hdd_enable_disable_ca_event(hdd_context_t *hddctx,
 				tANI_U8 set_value);
+
+#ifdef WLAN_FEATURE_PACKET_FILTERING
+int hdd_init_packet_filtering(hdd_context_t *hdd_ctx,
+					hdd_adapter_t *adapter);
+void hdd_deinit_packet_filtering(hdd_adapter_t *adapter);
+#else
+static inline int hdd_init_packet_filtering(hdd_context_t *hdd_ctx,
+						hdd_adapter_t *adapter)
+{
+	return 0;
+}
+static inline void hdd_deinit_packet_filtering(hdd_adapter_t *adapter)
+{
+}
+#endif
+
 #endif    // end #if !defined( WLAN_HDD_MAIN_H )
