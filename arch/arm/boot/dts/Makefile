@@ -166,6 +166,7 @@ dtb-$(CONFIG_ARCH_MARCO) += marco-evb.dtb
 dtb-$(CONFIG_MACH_MESON6) += meson6-atv1200.dtb
 dtb-$(CONFIG_ARCH_MOXART) += moxart-uc7112lx.dtb
 dtb-$(CONFIG_MACH_SWORDFISH) += \
+	msm8909-swordfish-rev-evb2.dtb \
 	msm8909-swordfish-rev-evb1.dtb \
 	msm8909-swordfish-rev-evb1-hdmi.dtb
 dtb-$(CONFIG_ARCH_MXC) += \
