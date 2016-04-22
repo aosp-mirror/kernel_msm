@@ -94,9 +94,6 @@ const DECLARE_TLV_DB_LINEAR(msm_compr_vol_gain, 0,
 #define STREAM_ARRAY_INDEX(stream_id) (stream_id - 1)
 
 #define MAX_NUMBER_OF_STREAMS 2
-//HTC_AUD_START
-struct wake_lock compr_lpa_q6_cb_wakelock;
-//HTC_AUD_END
 
 /*
  * Max size for getting DTS EAGLE Param through kcontrol
@@ -240,8 +237,6 @@ static int msm_compr_wait_event_freezable(struct msm_compr_audio *prtd, bool eos
 				pr_info("Get sw interrupt and get signal\n");
 				break;
 			}
-			pr_info("wake_unlock compr_lpa_q6_cb_wakelock due to eos_wait\n");
-			wake_unlock(&compr_lpa_q6_cb_wakelock );
 			freezable_schedule();
 			wait_times++;
 		}
@@ -255,8 +250,6 @@ static int msm_compr_wait_event_freezable(struct msm_compr_audio *prtd, bool eos
 				pr_info("Get sw interrupt and get signal\n");
 				break;
 			}
-			pr_info("wake_unlock compr_lpa_q6_cb_wakelock due to drain_wait\n");
-			wake_unlock(&compr_lpa_q6_cb_wakelock );
 			freezable_schedule();
 			wait_times++;
 		}
@@ -453,10 +446,7 @@ static void compr_event_handler(uint32_t opcode,
 	pr_debug("%s opcode =%08x\n", __func__, opcode);
 	switch (opcode) {
 	case ASM_DATA_EVENT_WRITE_DONE_V2:
-//HTC_AUD_START
-		wake_lock_timeout(&compr_lpa_q6_cb_wakelock, 5 * HZ);
-		pr_info("ASM_DATA_EVENT_WRITE_DONE_V2 hold compr_lpa_q6_cb_wakelock 5s\n");
-//HTC_AUD_END
+		pr_info("ASM_DATA_EVENT_WRITE_DONE_V2\n");
 		spin_lock_irqsave(&prtd->lock, flags);
 
 		if (payload[3]) {
@@ -525,11 +515,6 @@ static void compr_event_handler(uint32_t opcode,
 			   && atomic_read(&prtd->drain)) {
 			prtd->last_buffer = 1;
 			msm_compr_send_buffer(prtd);
-//HTC_AUD_START
-			//we should do this after 8952 deep sleep playback workaround
-			pr_info("wake_unlock compr_lpa_q6_cb_wakelock due to last_buffer\n");
-			wake_unlock(&compr_lpa_q6_cb_wakelock );
-//HTC_AUD_END
 			prtd->last_buffer = 0;
 		} else
 			msm_compr_send_buffer(prtd);
@@ -537,10 +522,6 @@ static void compr_event_handler(uint32_t opcode,
 		spin_unlock_irqrestore(&prtd->lock, flags);
 		break;
 	case ASM_DATA_EVENT_RENDERED_EOS:
-//HTC_AUD_START
-		wake_lock_timeout(&compr_lpa_q6_cb_wakelock, 5 * HZ);
-		pr_info("ASM_DATA_EVENT_RENDERED_EOS hold compr_lpa_q6_cb_wakelock 5s\n");
-//HTC_AUD_END
 		spin_lock_irqsave(&prtd->lock, flags);
 		pr_debug("%s: ASM_DATA_CMDRSP_EOS token 0x%x,stream id %d\n",
 			  __func__, token, STREAM_ID_FROM_TOKEN(token));
@@ -1035,15 +1016,6 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 		bits_per_sample = 24;
 	else if (prtd->codec_param.codec.format == SNDRV_PCM_FORMAT_S32_LE)
 		bits_per_sample = 32;
-
-//HTC_AUD_START
-	if (htc_acoustic_query_feature(HTC_AUD_24BIT) && prtd->codec != FORMAT_FLAC) {
-		pr_info("%s: enable 24 bit Audio in POPP\n",
-			__func__);
-		bits_per_sample = 24;
-	}
-	prtd->bits_per_sample = bits_per_sample;
-//HTC_AUD_END
 
 	if (prtd->compr_passthr != LEGACY_PCM) {
 		ret = q6asm_open_write_compressed(ac, prtd->codec,
@@ -3562,9 +3534,6 @@ static struct platform_driver msm_compr_driver = {
 
 static int __init msm_soc_platform_init(void)
 {
-//HTC_AUD_START
-	wake_lock_init(&compr_lpa_q6_cb_wakelock, WAKE_LOCK_SUSPEND, "compr_lpa_q6_cb");
-//HTC_AUD_END
 	return platform_driver_register(&msm_compr_driver);
 }
 module_init(msm_soc_platform_init);

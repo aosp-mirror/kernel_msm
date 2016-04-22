@@ -36,7 +36,6 @@ static struct acoustic_ops *the_ops = NULL;
 static struct switch_dev sdev_beats;
 static struct switch_dev sdev_dq;
 static struct switch_dev sdev_fm;
-extern struct wake_lock compr_lpa_q6_cb_wakelock;
 static struct wake_lock htc_acoustic_wakelock;
 static struct wake_lock htc_acoustic_wakelock_timeout;
 struct avcs_ctl {
@@ -349,8 +348,6 @@ acoustic_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				}
 				if (s32_value == 1) {
 					wake_lock_timeout(&htc_acoustic_wakelock, 60*HZ);
-					D("%s %d: wake_unlock compr_lpa_q6_cb_wakelock\n", __func__, __LINE__);
-					wake_unlock(&compr_lpa_q6_cb_wakelock );
 				} else {
 					wake_lock_timeout(&htc_acoustic_wakelock_timeout, 1*HZ);
 					wake_unlock(&htc_acoustic_wakelock);
