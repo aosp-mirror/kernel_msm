@@ -471,6 +471,12 @@ config MP2661_CHARGER
 	  The driver reports the charger status via the power supply framework.
 	  A charger status change triggers an IRQ via the device STAT pin.
 
+config IDTP9220_RECEIVER
+	tristate "IDTP9220 Wireless Receiver"
+	depends on I2C
+	help
+	  Say Y to include support for IDTP9220 wireless receiver.
+
 config BATTERY_BQ28400
 	tristate "BQ28400 battery driver"
 	depends on I2C
