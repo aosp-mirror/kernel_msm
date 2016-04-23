@@ -70,6 +70,20 @@
 			status = "ok";
 		};
 
+		/*add the wireless idtp9220 receiver*/
+		idtp9220_otg_vreg: idtp9220-receiver@61 {
+			compatible = "idt,idtp9220-receiver";
+			reg = <0x61>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <91 8>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&wireless_int_default &mask_wireless_int_default>;
+			wireless-int-gpio = <&msm_gpio 91 0>;
+			mask-wireless-int-gpio = <&msm_gpio 23 0>;
+
+			status = "ok";
+		};
+
     };
 };
 &pm8916_chg {

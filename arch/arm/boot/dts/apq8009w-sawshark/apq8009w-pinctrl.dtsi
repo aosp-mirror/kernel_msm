@@ -409,6 +409,36 @@
 		};
 	};
 
+	/*wireless receiver interrupt to AP*/
+	wireless_int{
+		wireless_int_default: wireless_int_default  {
+			mux {
+				pins = "gpio91";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio91";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+	};
+
+	/*AP mask wireless receiver interrupt*/
+	mask_wireless_int{
+		mask_wireless_int_default: mask_wireless_int_default  {
+			mux {
+				pins = "gpio23";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio23";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+
 	/*vibrator enable*/
 	vibrator_enable{
 		vibrator_enable_active:vibrator_enable_active {
@@ -694,31 +724,6 @@
 		};
 	};
 
-	/*wireless charge interrupt*/
-	wireless_chg_int{
-		wireless_chg_int_active:wireless_chg_int_active {
-			mux {
-				pins = "gpio91";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio91";
-				drive-strength = <2>;
-				bias-disable ;
-			};
-		};
-		wireless_chg_int_suspend:wireless_chg_int_suspend {
-			mux {
-				pins = "gpio91";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio91";
-				drive-strength = <2>;
-				bias-disable;
-			};
-		};
-	};
 
 	/*cdc ext i2s*/
 	cdc-ext-tlmm-lines{
