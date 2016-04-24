@@ -109,6 +109,14 @@
         qcom,cnss {
                 /delete-property/ wlan-ant-switch-supply;
         };
+
+        pil_gpu: qcom,kgsl-hyp {
+                qcom,firmware-name = "a530_zap_signed";
+        };
+
+        msm_gpu: qcom,kgsl-3d0@b00000 {
+                qcom,firmware-name = "a530_zap_signed";
+        };
 };
 
 /{
