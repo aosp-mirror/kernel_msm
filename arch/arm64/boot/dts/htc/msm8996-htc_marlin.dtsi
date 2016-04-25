@@ -119,6 +119,33 @@
         };
 };
 
+&pm8994_mpps {
+    mpp@a600 { /* MPP 7 */
+    /* USB_PWR_TEMP - To detect USB board temperature
+    for VZW requirement */
+
+        qcom,mode = <4>;                /* QPNP_PIN_MODE_AIN */
+        qcom,vin-sel = <2>;             /* S4 1.8V */
+        qcom,src-sel = <0>;             /* Constant */
+        qcom,ain-route = <2>;           /* QPNP_PIN_AIN_AMUX_CH7 */
+        qcom,master-en = <1>;           /* Enable GPIO */
+        status = "okay";
+    };
+};
+
+&pmi8994_gpios {
+    gpio@c600 {  /* GPIO 7 */
+    /* ACOK - Charger OVP IC power good pin */
+
+    qcom,mode = <0>;                /* DIGITAL INPUT */
+    qcom,pull = <5>;                /* No Pull */
+    qcom,vin-sel = <0>;             /* VDD_MSM_IO 1.8V */
+    qcom,src-sel = <0>;             /* CONSTANT */
+    qcom,master-en = <1>;           /* ENABLE GPIO */
+    status = "okay";
+    };
+};
+
 /{
         qcom,battery-data {
                 qcom,batt-id-range-pct = <15>;
