@@ -2425,7 +2425,8 @@ __acquires(udc->lock)
 			CI13XXX_CONTROLLER_RESUME_EVENT);
 		if (udc->transceiver)
 			usb_phy_set_suspend(udc->transceiver, 0);
-		udc->driver->resume(&udc->gadget);
+		if (udc->driver->resume)
+			udc->driver->resume(&udc->gadget);
 		udc->suspended = 0;
 	}
 
@@ -2489,7 +2490,8 @@ static void isr_suspend_handler(struct ci13xxx *udc)
 		udc->vbus_active) {
 		if (udc->suspended == 0) {
 			spin_unlock(udc->lock);
-			udc->driver->suspend(&udc->gadget);
+			if (udc->driver->suspend)
+				udc->driver->suspend(&udc->gadget);
 			if (udc->udc_driver->notify_event)
 				udc->udc_driver->notify_event(udc,
 				CI13XXX_CONTROLLER_SUSPEND_EVENT);
