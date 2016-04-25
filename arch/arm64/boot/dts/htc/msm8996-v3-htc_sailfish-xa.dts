@@ -126,3 +126,9 @@
 		status = "okay";		/* show status	*/
 	};
 };
+
+&soc {
+	sound-9335 {
+		rcv-amp-gpio-en	= <&tlmm 2 0>;
+	};
+};
