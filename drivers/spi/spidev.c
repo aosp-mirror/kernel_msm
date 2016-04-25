@@ -59,7 +59,7 @@
 #define N_SPI_MINORS			32	/* ... up to 256 */
 
 #define SPIDEV_BUF_MAX_NODE_N 16
-
+#define SPIDEV_NON_BLOCK_READ_TIMEOUT 3
 
 static DECLARE_BITMAP(minors, N_SPI_MINORS);
 
@@ -368,7 +368,18 @@ spidev_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 		pr_debug("spidev read in kernel mode\n");
 
 		/*wait for spi read complete*/
-		wait_for_completion(&spidev->read_compl);
+		if (filp->f_flags & O_NONBLOCK)
+		{
+			if(wait_for_completion_timeout(&spidev->read_compl, SPIDEV_NON_BLOCK_READ_TIMEOUT) == 0)
+			{
+				pr_info("O_NONBLOCK, spidev_read timeout\n");
+				return -ETIMEDOUT;
+			}
+		}
+		else
+		{
+			wait_for_completion(&spidev->read_compl);
+		}
 
 		mutex_lock(&spidev->buf_list_lock);
 		if (!list_empty(&spidev->read_buf_head->list))
