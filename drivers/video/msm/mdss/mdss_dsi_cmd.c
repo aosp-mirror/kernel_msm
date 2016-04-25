@@ -685,6 +685,22 @@ static char set_tear_off[2] = {0x34, 0x00};
 static struct dsi_cmd_desc dsi_tear_off_cmd = {
 	{DTYPE_DCS_WRITE, 1, 0, 0, 0, sizeof(set_tear_off)}, set_tear_off};
 
+static char set_ucs[2] = {0xfe, 0x00};
+static struct dsi_cmd_desc dsi_ucs_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_ucs)}, set_ucs};
+
+static char set_3bit_pre[2] = {0xfe, 0x01};
+static struct dsi_cmd_desc dsi_3bit_pre_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_3bit_pre)}, set_3bit_pre};
+
+static char set_3bit_on[2] = {0x2a, 0x23};
+static struct dsi_cmd_desc dsi_3bit_on_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_3bit_on)}, set_3bit_on};
+
+static char set_3bit_off[2] = {0x2a, 0x03};
+static struct dsi_cmd_desc dsi_3bit_off_cmd = {
+       {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_3bit_off)}, set_3bit_off};
+
 static char set_idle_mode[2] = {0x39, 0x00};
 static struct dsi_cmd_desc dsi_into_idle_cmd = {
           {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_idle_mode)}, set_idle_mode};
@@ -692,36 +708,53 @@ static struct dsi_cmd_desc dsi_into_idle_cmd = {
 static char set_non_idle_mode[2] = {0x38, 0x00};
 static struct dsi_cmd_desc dsi_exit_idle_cmd = {
           {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_non_idle_mode)}, set_non_idle_mode};		  
+
+void mdss_dsi_send_cmd(struct mdss_dsi_ctrl_pdata *ctrl, struct dsi_cmd_desc *cmd)
+{
+	struct dcs_cmd_req cmdreq;
+
+	cmdreq.cmds = cmd;
+	cmdreq.cmds_cnt = 1;
+	cmdreq.flags = CMD_REQ_COMMIT;
+	cmdreq.rlen = 0;
+	cmdreq.cb = NULL;
+	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+}
 		  
 void mdss_dsi_3bit_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 {
-	struct dcs_cmd_req cmdreq;
 	struct mdss_panel_info *pinfo;
+	static bool is_3bit_mode = false;
    
 	pinfo = &(ctrl->panel_data.panel_info);
 	if (pinfo->dcs_cmd_by_left && ctrl->ndx != DSI_CTRL_LEFT)
 		return;
 
-	pr_debug("[DEBUG] set 3bit color mode, enable:%d\n",enable);
-
-	if(enable)
+	if(enable && is_3bit_mode == false)
 	{
-		cmdreq.cmds = &dsi_into_idle_cmd;
-		cmdreq.cmds_cnt = 1;
-		cmdreq.flags = CMD_REQ_COMMIT;
-		cmdreq.rlen = 0;
-		cmdreq.cb = NULL;
-		mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+		is_3bit_mode = true;
+
+		pr_debug("[Debug] set 3-bit color mode enable\n");
+	
+		mdss_dsi_send_cmd(ctrl, &dsi_3bit_pre_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_3bit_on_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_ucs_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_into_idle_cmd);
+	}
+	else if((!enable) && (is_3bit_mode == true))
+	{
+		is_3bit_mode = false;
+
+		pr_debug("[Debug] set 3-bit color mode disable\n");
+	
+		mdss_dsi_send_cmd(ctrl, &dsi_3bit_pre_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_3bit_off_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_ucs_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_exit_idle_cmd);
 	}
 	else
-	{
-		cmdreq.cmds = &dsi_exit_idle_cmd;
-		cmdreq.cmds_cnt = 1;
-		cmdreq.flags = CMD_REQ_COMMIT;
-		cmdreq.rlen = 0;
-		cmdreq.cb = NULL;
-		mdss_dsi_cmdlist_put(ctrl, &cmdreq);
-	}
+		pr_debug("[Debug] skip LCM 3-bit mode command, is_3bit_mode: %d, enable:%d \n",is_3bit_mode, enable);
+
 } 
 
 void mdss_dsi_set_tear_on(struct mdss_dsi_ctrl_pdata *ctrl)
