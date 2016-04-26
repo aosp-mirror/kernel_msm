@@ -104,6 +104,19 @@ static struct msm_pcm_route_bdai_pp_params
 	{HDMI_RX, 0, 0, 0}
 };
 
+extern int msm_i2s_function_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
+extern int msm_i2s_function_put(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
+static const char *const mi2s_function_text[] = {"music", "voice"};
+static const struct soc_enum msm_mi2s_function_enum[] = {
+       SOC_ENUM_SINGLE_EXT(2, mi2s_function_text),
+};
+extern int msm_external_pa_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
+extern int msm_external_pa_put(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
+static const char *const external_pa_text[] = {"disable", "enable"};
+static const struct soc_enum msm_external_pa_enum[] = {
+       SOC_ENUM_SINGLE_EXT(2, external_pa_text),
+};
+
 static int msm_routing_send_device_pp_params(int port_id,  int copp_idx);
 
 static bool msm_is_fractional_resample_needed(int input_sr, int output_sr)
@@ -5514,6 +5527,10 @@ static const struct snd_kcontrol_new lsm_function[] = {
 		     msm_routing_lsm_func_get, msm_routing_lsm_func_put),
 	SOC_ENUM_EXT(TERT_MI2S_TX_TEXT" "LSM_FUNCTION_TEXT, lsm_func_enum,
 		    msm_routing_lsm_func_get, msm_routing_lsm_func_put),
+	SOC_ENUM_EXT("Initial external PA", msm_external_pa_enum[0],
+			msm_external_pa_get, msm_external_pa_put),
+	SOC_ENUM_EXT("I2s function", msm_mi2s_function_enum[0],
+			msm_i2s_function_get, msm_i2s_function_put),
 };
 
 static const char * const aanc_slim_0_rx_text[] = {
