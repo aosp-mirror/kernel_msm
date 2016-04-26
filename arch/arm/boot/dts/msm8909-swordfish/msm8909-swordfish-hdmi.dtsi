@@ -19,7 +19,6 @@
 			analogix,reset-gpio = <&msm_gpio 24 0x00>;
 			analogix,irq-gpio = <&msm_gpio 25 0x00>;
 			analogix,p-dwn-gpio = <&msm_gpio 26 0x00>;
-			analogix,i2c-pull-up-gpio = <&msm_gpio 99 0x00>;
 			analogix,vdd_33-supply = <&pm8916_l17>;
 			analogix,vdd_18-supply = <&pm8916_l15>;
 			analogix,vdd_10-supply = <&pm8916_l11>;
@@ -27,12 +26,10 @@
 			pinctrl-names = "sp_active","sp_sleep";
 			pinctrl-0 = <&sp_rst_active
 				     &sp_isr_active
-				     &sp_pdwn_active
-				     &sp_i2c_active>;
+				     &sp_pdwn_active>;
 			pinctrl-1 = <&sp_rst_suspend
 				     &sp_isr_suspend
-				     &sp_pdwn_suspend
-				     &sp_i2c_suspend>;
+				     &sp_pdwn_suspend>;
 		};
 	};
 };
