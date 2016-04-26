@@ -52,6 +52,9 @@
 #define MAX_WSA_CODEC_NAME_LENGTH 80
 #define MSM_DT_MAX_PROP_SIZE 80
 
+#define GPIO_SDA4_AP_PA       29
+#define GPIO_SCL4_AP_PA       30
+
 enum btsco_rates {
 	RATE_8KHZ_ID,
 	RATE_16KHZ_ID,
@@ -71,6 +74,41 @@ static int mi2s_rx_sample_rate = SAMPLING_RATE_48KHZ;
 static atomic_t quat_mi2s_clk_ref;
 static atomic_t quin_mi2s_clk_ref;
 static atomic_t auxpcm_mi2s_clk_ref;
+
+static int msm_quat_mi2s_clk = 0;
+static int msm_function_mi2s = 0;
+static int muxsel_csr_gp_io_mux_mic_ctl = 0;
+static int muxsel_csr_gp_io_mux_mic_ctl_size = 0;
+
+static struct afe_clk_cfg lpass_music_mi2s_enable = {
+		AFE_API_VERSION_I2S_CONFIG,
+		Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ,
+		Q6AFE_LPASS_OSR_CLK_12_P288_MHZ,
+		Q6AFE_LPASS_CLK_SRC_INTERNAL,
+		Q6AFE_LPASS_CLK_ROOT_DEFAULT,
+		Q6AFE_LPASS_MODE_CLK1_VALID,
+		0,
+};
+
+static struct afe_clk_cfg lpass_voice_mi2s_enable = {
+		AFE_API_VERSION_I2S_CONFIG,
+		Q6AFE_LPASS_IBIT_CLK_256_KHZ,
+		Q6AFE_LPASS_OSR_CLK_12_P288_MHZ,
+		Q6AFE_LPASS_CLK_SRC_INTERNAL,
+		Q6AFE_LPASS_CLK_ROOT_DEFAULT,
+		Q6AFE_LPASS_MODE_CLK1_VALID,
+		0,
+};
+
+static struct afe_clk_cfg lpass_mi2s_disable = {
+		AFE_API_VERSION_I2S_CONFIG,
+		0,
+		0,
+		Q6AFE_LPASS_CLK_SRC_INTERNAL,
+		Q6AFE_LPASS_CLK_ROOT_DEFAULT,
+		Q6AFE_LPASS_MODE_CLK1_VALID,
+		0,
+};
 
 static int msm8952_enable_dig_cdc_clk(struct snd_soc_codec *codec, int enable,
 					bool dapm);
@@ -517,8 +555,13 @@ static uint32_t get_mi2s_rx_clk_val(int port_id)
 	} else {
 		if (mi2s_rx_bit_format == SNDRV_PCM_FORMAT_S24_LE)
 			clk_val =  Q6AFE_LPASS_IBIT_CLK_3_P072_MHZ;
-		else
-			clk_val = Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
+		else{
+			if(msm_function_mi2s){
+				clk_val = Q6AFE_LPASS_IBIT_CLK_256_KHZ;
+			} else {
+				clk_val = Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
+			}
+		}
 	}
 	pr_debug("%s: MI2S Rx bit clock value: 0x%0x\n", __func__, clk_val);
 	return clk_val;
@@ -556,7 +599,7 @@ static int msm_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V1) {
 				mi2s_tx_clk_v1.clk_val1 =
-						Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
+						get_mi2s_rx_clk_val(port_id);
 				ret = afe_set_lpass_clock(port_id,
 							&mi2s_tx_clk_v1);
 			} else {
@@ -975,6 +1018,175 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 			mi2s_rx_sample_rate_get, mi2s_rx_sample_rate_put),
 };
 
+static int msm8952_tfa98xx_i2c_gpio_request(void)
+{
+	int rtn = 0;
+	pr_info("%s: request i2c gpios\n", __func__);
+
+	rtn = gpio_request(GPIO_SDA4_AP_PA,"SPK_I2C_SDA");
+	if (rtn)
+	{
+		pr_err("%s: Failed to request GPIO_SDA4_AP_PA\n", __func__);
+		return rtn;
+	}
+
+	rtn = gpio_request(GPIO_SCL4_AP_PA,"SPK_I2C_SCL");
+	if (rtn)
+	{
+		pr_err("%s: Failed to request GPIO_SCL4_AP_PA\n", __func__);
+		gpio_free(GPIO_SDA4_AP_PA);
+		return rtn;
+	}
+	return rtn;
+}
+
+static int msm8952_tfa98xx_i2c_gpio_free(void)
+{
+	pr_info("%s: free i2c gpios\n", __func__);
+	gpio_free(GPIO_SDA4_AP_PA);
+	gpio_free(GPIO_SCL4_AP_PA);
+	return 0;
+}
+
+int msm_q6_enable_mi2s_clocks(bool enable, u32 rate)
+{
+	union afe_port_config port_config;
+	int rc = 0;
+
+	if(enable)
+	{
+		port_config.i2s.channel_mode = AFE_PORT_I2S_SD0;
+		port_config.i2s.mono_stereo = MSM_AFE_CH_STEREO;
+		port_config.i2s.data_format= 0;
+		port_config.i2s.bit_width = 16;
+		port_config.i2s.reserved = 0;
+		port_config.i2s.i2s_cfg_minor_version = AFE_API_VERSION_I2S_CONFIG;
+		port_config.i2s.sample_rate = rate;
+		port_config.i2s.ws_src = 1;
+
+		rc = afe_port_start(AFE_PORT_ID_QUATERNARY_MI2S_RX, &port_config, rate);
+		if(IS_ERR_VALUE(rc))
+		{
+			pr_err("%s:fail to open AFE port\n",__func__);
+			return -EINVAL;
+		}
+
+		pr_debug("<%s> <%d>: Config AFE_PORT_ID_QUATERNARY_MI2S_RX success.\n", __func__, __LINE__);
+		pr_debug("<%s> <%d>: port_config.i2s.sample_rate =%d.\n", __func__, __LINE__,port_config.i2s.sample_rate);
+		}
+		else
+		{
+			rc = afe_port_stop_nowait(AFE_PORT_ID_QUATERNARY_MI2S_RX);
+			if (IS_ERR_VALUE(rc))
+			{
+				pr_err(KERN_ERR"fail to stop AFE port\n");
+				return -EINVAL;
+			}
+
+			pr_debug("<%s> <%d>: Stop AFE_PORT_ID_QUATERNARY_MI2S_RX success.\n", __func__, __LINE__);
+		}
+	return rc;
+}
+
+int msm_i2s_function_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: function = %d\n", __func__, msm_function_mi2s);
+	ucontrol->value.integer.value[0] = msm_function_mi2s;
+	return 0;
+}
+int msm_i2s_function_put(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	msm_function_mi2s = ucontrol->value.integer.value[0];
+	pr_debug("%s: msm_function_mi2s : %d\n",__func__, msm_function_mi2s);
+	return 0;
+}
+
+int msm_external_pa_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_quat_mi2s_clk = %d\n", __func__, msm_quat_mi2s_clk);
+	ucontrol->value.integer.value[0] = msm_quat_mi2s_clk;
+	return 0;
+}
+
+int msm_external_pa_put(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = -EINVAL;
+	int rate = 0, val = 0;
+	void __iomem *mic_ctl = NULL;
+	struct afe_clk_cfg *afe_cfg = NULL;
+	msm_quat_mi2s_clk = ucontrol->value.integer.value[0];
+	pr_debug("%s:msm_quat_mi2s_clk: %d, msm_function_mi2s: %d\n",__func__, msm_quat_mi2s_clk, msm_function_mi2s);
+	pr_debug("%s begin: quat_mi2s_clk_ref %d\n", __func__, quat_mi2s_clk_ref.counter);
+	if(msm_quat_mi2s_clk)
+	{
+		if(msm_function_mi2s)
+		{
+			afe_cfg = &lpass_voice_mi2s_enable;
+			rate = 8000;
+		}
+		else
+		{
+			afe_cfg = &lpass_music_mi2s_enable;
+			rate = 48000;
+		}
+		if(atomic_inc_return(&quat_mi2s_clk_ref) == 1)
+		{
+			msm8952_tfa98xx_i2c_gpio_request();
+
+			mic_ctl = ioremap(muxsel_csr_gp_io_mux_mic_ctl, muxsel_csr_gp_io_mux_mic_ctl_size);
+			val = ioread32(mic_ctl);
+			val = val | 0x02020002;
+			iowrite32(val, mic_ctl);
+
+			ret = afe_set_lpass_clock(AFE_PORT_ID_QUATERNARY_MI2S_RX, afe_cfg);
+			if (ret < 0)
+			{
+				pr_err("%s: enable afe_set_lpass_clock failed\n", __func__);
+				return ret;
+			}
+
+			ret = msm_gpioset_activate(CLIENT_WCD_INT, "quat_i2s");
+			if (ret < 0) {
+				pr_err("%s:failed to enable codec gpios\n",__func__);
+			}
+
+			ret = msm_q6_enable_mi2s_clocks(1, rate);
+			if (ret < 0)
+			{
+				pr_err("%s: enable_mi2s_clocks failed\n", __func__);
+				return ret;
+			}
+		}
+	}
+	else
+	{
+		if(atomic_dec_return(&quat_mi2s_clk_ref) == 0)
+		{
+			ret = msm_q6_enable_mi2s_clocks(0, rate);
+			if (ret < 0)
+			{
+				pr_err("%s: disable_mi2s_clocks failed\n", __func__);
+				return ret;
+			}
+
+			ret = afe_set_lpass_clock(AFE_PORT_ID_QUATERNARY_MI2S_RX, &lpass_mi2s_disable);
+			if (ret < 0)
+			{
+				pr_err("%s: disable afe_set_lpass_clock failed\n", __func__);
+				return ret;
+			}
+
+			ret = msm_gpioset_suspend(CLIENT_WCD_INT, "quat_i2s");
+			if (ret < 0) {
+				pr_err("%s: gpio set cannot be de-activated %sd", __func__, "quat_i2s");
+			}
+			msm8952_tfa98xx_i2c_gpio_free();
+		}
+	}
+	pr_debug("%s end: quat_mi2s_clk_ref %d\n", __func__, quat_mi2s_clk_ref.counter);
+	return ret;
+}
+
 static int msm8952_mclk_event(struct snd_soc_dapm_widget *w,
 			      struct snd_kcontrol *kcontrol, int event)
 {
@@ -1349,6 +1561,7 @@ static int msm_quat_mi2s_snd_startup(struct snd_pcm_substream *substream)
 
 	pr_debug("%s(): substream = %s  stream = %d\n", __func__,
 				substream->name, substream->stream);
+	pr_debug("%s begin: quat_mi2s_clk_ref %d\n", __func__, quat_mi2s_clk_ref.counter);
 	if ((pdata->ext_pa & QUAT_MI2S_ID) == QUAT_MI2S_ID) {
 		if (pdata->vaddr_gpio_mux_mic_ctl) {
 			val = ioread32(pdata->vaddr_gpio_mux_mic_ctl);
@@ -1369,10 +1582,15 @@ static int msm_quat_mi2s_snd_startup(struct snd_pcm_substream *substream)
 			pr_err("%s: error codec type\n", __func__);
 	}
 	if (atomic_inc_return(&quat_mi2s_clk_ref) == 1) {
+		if(substream->stream == SNDRV_PCM_STREAM_PLAYBACK){
+			msm8952_tfa98xx_i2c_gpio_request();
+		}
 		ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_CBS_CFS);
 		if (ret < 0)
 			pr_err("%s: set fmt cpu dai failed\n", __func__);
 	}
+	pr_debug("%s end: quat_mi2s_clk_ref %d\n", __func__, quat_mi2s_clk_ref.counter);
+
 	return ret;
 err:
 	ret = msm_mi2s_sclk_ctl(substream, false);
@@ -1390,12 +1608,17 @@ static void msm_quat_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 
 	pr_debug("%s(): substream = %s  stream = %d\n", __func__,
 				substream->name, substream->stream);
+	pr_debug("%s begin: quat_mi2s_clk_ref %d\n", __func__, quat_mi2s_clk_ref.counter);
+
 	if ((pdata->ext_pa & QUAT_MI2S_ID) == QUAT_MI2S_ID) {
 		ret = msm_mi2s_sclk_ctl(substream, false);
 		if (ret < 0)
 			pr_err("%s:clock disable failed\n", __func__);
-		if (atomic_read(&quat_mi2s_clk_ref) > 0)
-			atomic_dec(&quat_mi2s_clk_ref);
+		if (atomic_dec_return(&quat_mi2s_clk_ref) == 0){
+			if(substream->stream == SNDRV_PCM_STREAM_PLAYBACK){
+				msm8952_tfa98xx_i2c_gpio_free();
+			}
+		}
 		ret = msm_gpioset_suspend(CLIENT_WCD_INT, "quat_i2s");
 		if (ret < 0) {
 			pr_err("%s: gpio set cannot be de-activated %sd",
@@ -1403,6 +1626,7 @@ static void msm_quat_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 			return;
 		}
 	}
+	pr_debug("%s end: quat_mi2s_clk_ref %d\n", __func__, quat_mi2s_clk_ref.counter);
 }
 
 static int msm_quin_mi2s_snd_startup(struct snd_pcm_substream *substream)
@@ -2872,6 +3096,8 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 		ret = -ENODEV;
 		goto err1;
 	}
+	muxsel_csr_gp_io_mux_mic_ctl = muxsel->start;
+	muxsel_csr_gp_io_mux_mic_ctl_size = resource_size(muxsel);
 	pdata->vaddr_gpio_mux_mic_ctl =
 		ioremap(muxsel->start, resource_size(muxsel));
 	if (pdata->vaddr_gpio_mux_mic_ctl == NULL) {
