@@ -13,6 +13,9 @@
 #define __Q6AFE_V2_H__
 #include <sound/apr_audio-v2.h>
 #include <linux/qdsp6v2/rtac.h>
+#include <sound/asound.h>
+#include <sound/control.h>
+
 
 #define IN			0x000
 #define OUT			0x001
@@ -330,4 +333,6 @@ int afe_send_custom_tdm_header_cfg(
 	u16 port_id);
 int afe_tdm_port_start(u16 port_id, struct afe_tdm_port_config *tdm_port,
 		u32 rate);
+int msm_external_pa_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
+
 #endif /* __Q6AFE_V2_H__ */
