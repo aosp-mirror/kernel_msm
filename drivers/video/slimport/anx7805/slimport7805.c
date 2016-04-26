@@ -329,7 +329,8 @@ static void anx7805_free_gpio(struct anx7805_data *anx7805)
 	gpio_free(anx7805->gpio_int);
 	gpio_free(anx7805->gpio_reset);
 	gpio_free(anx7805->gpio_p_dwn);
-	gpio_free(anx7805->gpio_i2c);
+	if (gpio_is_valid(anx7805->gpio_i2c))
+		gpio_free(anx7805->gpio_i2c);
 }
 
 static int anx7805_init_gpio(struct anx7805_data *anx7805)
@@ -361,15 +362,17 @@ static int anx7805_init_gpio(struct anx7805_data *anx7805)
 	}
 	gpio_direction_input(anx7805->gpio_int);
 
-	ret = gpio_request(anx7805->gpio_i2c, "anx7805_i2c_pull_up");
-	if (ret) {
-		pr_err("%s : failed to request i2c gpio %d\n", __func__,
-				anx7805->gpio_i2c);
-		goto err2;
-	}
-	gpio_direction_output(anx7805->gpio_i2c, 1);
+	if (gpio_is_valid(anx7805->gpio_i2c)) {
+		ret = gpio_request(anx7805->gpio_i2c, "anx7805_i2c_pull_up");
+		if (ret) {
+			pr_err("%s : failed to request i2c gpio %d\n", __func__,
+					anx7805->gpio_i2c);
+			goto err2;
+		}
+		gpio_direction_output(anx7805->gpio_i2c, 1);
 
-	gpio_set_value(anx7805->gpio_i2c, 1);
+		gpio_set_value(anx7805->gpio_i2c, 1);
+	}
 	gpio_set_value(anx7805->gpio_reset, 0);
 	gpio_set_value(anx7805->gpio_p_dwn, 1);
 
@@ -484,8 +487,7 @@ static int anx7805_parse_dt(struct device_node *node,
 	anx7805->gpio_i2c =
 	    of_get_named_gpio(node, "analogix,i2c-pull-up-gpio", 0);
 	if (anx7805->gpio_i2c < 0) {
-		pr_err("failed to get analogix,i2c-pull-up-gpio.\n");
-		ret = anx7805->gpio_i2c;
+		pr_warn("failed to get analogix,i2c-pull-up-gpio (optional).\n");
 		goto out;
 	}
 
