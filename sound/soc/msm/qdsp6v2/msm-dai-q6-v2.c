@@ -3197,9 +3197,13 @@ static void msm_dai_q6_mi2s_shutdown(struct snd_pcm_substream *substream,
 		(substream->stream == SNDRV_PCM_STREAM_PLAYBACK ?
 		 &mi2s_dai_data->rx_dai.mi2s_dai_data :
 		 &mi2s_dai_data->tx_dai.mi2s_dai_data);
-	 u16 port_id = 0;
+	u16 port_id = 0;
 	int rc = 0;
+	struct snd_kcontrol kcontrol;
+	struct snd_ctl_elem_value ucontrol;
 
+	memset(&kcontrol, 0, sizeof(kcontrol));
+	memset(&ucontrol, 0, sizeof(ucontrol));
 	if (msm_mi2s_get_port_id(dai->id, substream->stream,
 				 &port_id) != 0) {
 		dev_err(dai->dev, "%s: Invalid Port ID 0x%x\n",
