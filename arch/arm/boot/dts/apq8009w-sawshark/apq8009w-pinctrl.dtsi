@@ -41,6 +41,8 @@
 	/delete-node/ pmx_mdss;
 	/delete-node/ pmx_i2c_2;
 
+	/delete-node/ trigout_a0;
+
 	/*Mars configuration begin*/
 	/*MCU Reset*/
 	mcu_reset{
@@ -163,6 +165,23 @@
 		};
 	};
 
+	/*Modify GPIO24 */
+	pmx_mdss_te {
+		mdss_te_active: mdss_te_active {
+			config {
+				/delete-property/ bias-pull-down;
+				bias-pull-up; /* pull up */
+			};
+		};
+
+		mdss_te_suspend: mdss_te_suspend {
+			config {
+				/delete-property/ bias-pull-down;
+				bias-pull-up; /* pull up */
+			};
+		};
+	};
+
 	pmx_mdss {
 			mdss_dsi_active: mdss_dsi_active {
 				mux {
@@ -171,8 +190,9 @@
 				};
 
 				config {
+					pins = "gpio25", "gpio37";
 					drive-strength = <8>; /* 8 mA */
-					bias-disable = <0>; /* no pull */
+					bias-pull-down; /* pull down */
 					output-low;
 				};
 			};
@@ -184,6 +204,7 @@
 				};
 
 				config {
+					pins = "gpio25", "gpio37";
 					drive-strength = <2>; /* 2 mA */
 					bias-pull-down; /* pull down */
 					output-low;
@@ -191,7 +212,7 @@
 			};
 		};
 
-	/*for MCU: AP power on detect*/
+	/*AP status:show wakeup or sleep status of AP to MCU*/
 	ap_status{
 		ap_status_active:ap_status_active {
 			mux {
@@ -212,33 +233,7 @@
 			config {
 				pins = "gpio26";
 				drive-strength = <2>;
-				bias-disable;
-			};
-		};
-	};
-
-	/*for MCU: AP ULPS mode status*/
-	ap_ulps_status{
-		ap_ulps_status_active:ap_ulps_status_active {
-			mux {
-				pins = "gpio27";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio27";
-				drive-strength = <2>;
-				bias-pull-down;
-			};
-		};
-		ap_ulps_status_suspend:ap_ulps_status_suspend {
-			mux {
-				pins = "gpio27";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio27";
-				drive-strength = <2>;
-				bias-disable;
+				bias-pull-up;
 			};
 		};
 	};
@@ -264,7 +259,7 @@
 			config {
 				pins = "gpio28";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-down;
 			};
 		};
 	};
@@ -290,7 +285,7 @@
 			config {
 				pins = "gpio31";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-down;
 			};
 		};
 	};
@@ -316,7 +311,7 @@
 			config {
 				pins = "gpio47";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-down;
 			};
 		};
 	};
@@ -342,7 +337,7 @@
 			config {
 				pins = "gpio49";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-down;
 			};
 		};
 	};
@@ -357,7 +352,7 @@
 			config {
 				pins = "gpio50";
 				drive-strength = <2>;
-				bias-pull-down;
+				bias-disable;
 			};
 		};
 		mcu_wakeup_ap_suspend:mcu_wakeup_ap_suspend {
@@ -409,7 +404,7 @@
 			config {
 				pins = "gpio58";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-up;
 			};
 		};
 	};
@@ -435,7 +430,7 @@
 			config {
 				pins = "gpio68";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-down;
 			};
 		};
 	};
@@ -461,12 +456,12 @@
 			config {
 				pins = "gpio69";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-down;
 			};
 		};
 	};
 
-	/*AP status:show wakeup or sleep status of AP to MCU*/
+	/*AP read sync: When PU,MCU can TX and AP can RX*/
 	ap_read_sync{
 		ap_read_sync_active:ap_read_sync_active {
 			mux {
@@ -487,33 +482,7 @@
 			config {
 				pins = "gpio90";
 				drive-strength = <2>;
-				bias-disable;
-			};
-		};
-	};
-
-	/*MCU status:show wakeup or sleep status of MCU to AP*/
-	mcu_status{
-		mcu_status_active:mcu_status_active {
-			mux {
-				pins = "gpio76";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio76";
-				drive-strength = <2>;
 				bias-pull-down;
-			};
-		};
-		mcu_status_suspend:mcu_status_suspend {
-			mux {
-				pins = "gpio76";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio76";
-				drive-strength = <2>;
-				bias-disable;
 			};
 		};
 	};
@@ -539,7 +508,7 @@
 			config {
 				pins = "gpio77";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-down;
 			};
 		};
 	};
@@ -565,7 +534,7 @@
 			config {
 				pins = "gpio78";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-down;
 			};
 		};
 	};
@@ -591,7 +560,7 @@
 			config {
 				pins = "gpio80";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-down;
 			};
 		};
 	};
@@ -669,7 +638,7 @@
 			config {
 				pins = "gpio85";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-up ;
 			};
 		};
 	};
@@ -694,7 +663,7 @@
 			config {
 				pins = "gpio86";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-down ;
 			};
 		};
 	};
