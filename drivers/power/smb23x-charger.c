@@ -778,6 +778,9 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 
 	current_ma = min(therm_ma, usb_current);
 
+	if (current_ma >= 300)
+		current_ma = 300;
+
 	if (current_ma <= CURRENT_SUSPEND) {
 		/* suspend USB input */
 		rc = smb23x_suspend_usb(chip, CURRENT, true);
@@ -793,14 +796,6 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 		if (rc)
 			pr_err("Set USB100 failed, rc=%d\n", rc);
 		pr_debug("Setting USB 100\n");
-	} else if (current_ma <= CURRENT_500_MA) {
-		/* USB 500 */
-		rc = smb23x_masked_write(chip, CMD_REG_1,
-				USB500_MODE_BIT | USBAC_MODE_BIT,
-				USB500_MODE_BIT);
-		if (rc)
-			pr_err("Set USB500 failed, rc=%d\n", rc);
-		pr_debug("Setting USB 500\n");
 	} else {
 		/* USB AC */
 		rc = smb23x_masked_write(chip, CMD_REG_1,
@@ -1326,6 +1321,13 @@ int usb_removal(void)
 {
 	cei_chip->usb_present = false;
 	cei_flag = false;
+
+	cei_chip->batt_full = false;
+	cei_chip->batt_hot = false;
+	cei_chip->batt_cold = false;
+	cei_chip->batt_warm = false;
+	cei_chip->batt_cool = false;
+
 	power_supply_set_supply_type(cei_chip->usb_psy,
 			POWER_SUPPLY_TYPE_UNKNOWN);
 	power_supply_set_present(cei_chip->usb_psy, false);
@@ -1451,12 +1453,15 @@ static void reconfig_upon_unplug(struct smb23x_chip *chip)
 	if (chip->usb_present) {
 		smb23x_stay_awake(&chip->smb23x_ws,
 				  WAKEUP_SRC_IRQ_POLLING);
-		rc = smb23x_charging_disable(chip, USER, false);
+		rc = smb23x_charging_disable(chip, USER, true);
 
 		rc = smb23x_hw_init(chip);
 		if (rc)
 			pr_err("smb23x upon unplug failed, rc=%d\n",
 			       rc);
+
+		rc = smb23x_charging_disable(chip, USER, false);
+
 		schedule_delayed_work(&chip->irq_polling_work,
 				      msecs_to_jiffies(IRQ_POLLING_MS));
 	} else {
