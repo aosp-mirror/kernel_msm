@@ -27,6 +27,35 @@
 };
 
 &tlmm {
+
+	vconn_ctrl {
+		vconn_enable: vconn_enable {
+			mux {
+				pins = "gpio11";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio11";
+				drive-strength = <2>;
+				output-high;
+			};
+		};
+
+		vconn_disable: vconn_disable {
+			mux {
+				pins = "gpio11";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio11";
+				drive-strength = <2>;
+				output-low;
+			};
+		};
+	};
+
 	i2c_9 {
 		i2c_9_active: i2c_9_active {
 			mux {
@@ -130,15 +159,18 @@
 			reg = <0x22>;
 			vdd-supply = <&pm8994_l21>;
 			switch_vdd-supply = <&pm8994_l23>;
+			V_USB_boost-supply = <&pmi8994_boost_pin_ctrl>;
 			status = "okay";
 			interrupt-parent = <&tlmm>;
 			interrupt = <124 0>;
 			fairchild,int_n = <&tlmm 124 0x00>;
 			fairchild,usb_sel = <&tlmm 30 0x00>;
-			pinctrl-names = "default", "usb3_switch_sel_0", "usb3_switch_sel_1";
+			pinctrl-names = "default", "usb3_switch_sel_0", "usb3_switch_sel_1", "vconn_enable", "vconn_disable";
 			pinctrl-0 = <&fusbc_int_default>;
 			pinctrl-1 = <&usb3_switch_sel_0>;
 			pinctrl-2 = <&usb3_switch_sel_1>;
+			pinctrl-3 = <&vconn_enable>;
+			pinctrl-4 = <&vconn_disable>;
 		};
 	};
 };
