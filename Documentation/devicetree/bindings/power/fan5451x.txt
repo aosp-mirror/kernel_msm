@@ -1,0 +1,57 @@
+Fairchild Switch mode Charger
+
+The charger module supports the switch battery charger peripherals on
+Fairchild Semiconductor.
+
+This node should be included into I2C parent node.
+The node required properties:
+
+- compatible: Must be "fcs,fan5451x".
+- reg:        Specifies the I2C address.
+- interrupts: Specifies the interrupt GPIO with the peripheral.
+- interrupt-names: Specifies the interrupt names for the peripheral.
+
+- qcom,chg-vadc: Specifies PMIC's vadc dev reference.
+- stat-gpio:     Specifies /STAT GPIO output pin that open-drain output indicating charge status.
+- disable-gpio:  Specifies DIS GPIO input pin that turned off creating a high Z condition
+                 if this pin is held HIGH.
+
+- vbatmin: Specifies CC start voltage.
+- vfloat:  Specifies Battery maximum charge voltage.
+- ibus:    Specifies vbus maximum current draw.
+- iochrg:  Specifies Battery charge current.
+- iterm:   Specifies charge termination current in condition CV charge state.
+- prechg:  Specifies trickle charge current.
+- topoff-enable: Specifies post charging configuration that
+                 is able to charge battery after happening charge termination.
+- vbusovp: Specifies over voltage protection for vbus input.
+- vbuslim: Specifies under voltage protection for vbus input.
+- vinovp: Specifies over voltage protection for vin input.
+- vinlim: Specifies under voltage protection for vin input.
+- fctmr:  Specifies fast charge time timer configuration.
+
+Example:
+	fan5451x_chg: fan5451x@6b {
+		status = "ok";
+		compatible = "fcs,fan5451x";
+		reg = <0x6b>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <92 0>;
+
+		qcom,chg-vadc = <&pm8916_vadc>;
+		stat-gpio = <&msm_gpio 16 0x00>;
+		disable-gpio = <&msm_gpio 83 0x00>;
+
+		vbatmin = <3000>;    //CC start voltage 3.0V
+		vfloat = <4400>;     //vbatmax
+		ibus = <500>;        //iusb for vbus
+		iochrg = <400>;      //CC current
+		iterm = <50>;        //term current
+		prechg = <200>;      //pre charge current
+		topoff-enable = <0>; //post charging flag
+		vbusovp = <10500>;   //ovd for usb
+		vbuslim = <4560>;    //uvd for usb
+		vinovp = <10500>;    //ovd for wireless
+		vinlim = <4560>;     //uvd for wireless
+		fctmr = <0>;         //fast charge timer off
+	};
