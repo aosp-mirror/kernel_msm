@@ -49,11 +49,11 @@
 		qcom,mdss-dsi-lane-3-state;
 		qcom,mdss-dsi-panel-timings = [D6 38 26 00 68 6E 2A 3C 2C 03 04 00];
 		qcom,mdss-dsi-panel-timings-8996 = [
-			25 20 09 0A 06 03 04 a0
-			25 20 09 0A 06 03 04 a0
-			25 20 09 0A 06 03 04 a0
-			25 20 09 0A 06 03 04 a0
-			25 1F 09 0A 06 03 04 a0
+			25 20 09 0A 06 03 04 A0
+			25 20 09 0A 06 03 04 A0
+			25 20 09 0A 06 03 04 A0
+			25 20 09 0A 06 03 04 A0
+			25 1F 09 0A 06 03 04 A0
 		];
 		qcom,mdss-dsi-reset-sequence =  <1 2>, <0 1>, <1 10>;
 		qcom,mdss-dsi-t-clk-post = <0x0E>;
@@ -77,11 +77,10 @@
 			29 01 00 00 00 00 14 C2 00 08 D8 D8 00 80 2B 05 08 0E 07 0B 05 0D 0A 15 13 20 1E /* pentile setting */
 			29 01 00 00 00 00 0A F6 42 57 37 00 AA CC D0 00 00 /* ESD refresh setting 1*/
 			29 01 00 00 00 00 03 F0 A5 A5 /* key lock */
-			29 01 00 00 78 00 01 12 /* ESD refresh setting 2 */
+			29 01 00 00 78 00 02 12 00 /* ESD refresh setting 2 */
 			05 01 00 00 00 00 02 35 00 /* TE on */
 			15 01 00 00 00 00 02 53 20 /* brightness control */
-			15 01 00 00 00 00 02 51 FF /* brightness level */
-			05 01 00 00 00 00 02 29 32 /* display on */
+			05 01 00 00 32 00 02 29 00 /* display on */
 		];
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-off-command = [
@@ -89,6 +88,7 @@
 			05 01 00 00 78 00 02 10 00
 		];
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-default-command-state = "dsi_hs_mode";
 		qcom,cont-splash-enabled;
 		qcom,panel-supply-entries = <&dsi_panel_pwr_supply_s6e3ha3>;
 		qcom,mdss-dsi-lp11-init;
