@@ -173,7 +173,8 @@ dtb-$(CONFIG_ARCH_MSM8909_default) += msm8909-pm8916-mtp.dtb \
 	msm8909w-swoctp.dtb \
 	apq8009w-swoctp.dtb \
 	msm8909-pm8916-cdp.dtb \
-	msm8909w-cdp.dtb
+	msm8909w-cdp.dtb \
+	msm8909w-1gb-wtp.dtb
 
 dtb-$(CONFIG_ARCH_MSM8909) += swift-evb2_apq8009w-wtp.dtb \
 	swift-sr_apq8009w-wtp.dtb \
