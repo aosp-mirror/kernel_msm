@@ -4721,7 +4721,7 @@ void slimport_hdcp_authentication(BYTE enable)
 
 void SP_CTRL_TimerProcess (void)
 {
-	pr_info("%s %s sp_tx_system_state = %d\n",LOG_TAG,__func__,sp_tx_system_state);
+	pr_debug("%s %s sp_tx_system_state = %d\n",LOG_TAG,__func__,sp_tx_system_state);
 	switch(sp_tx_system_state) {
 	default:
 	case SP_TX_INITIAL:
