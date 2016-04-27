@@ -23,7 +23,6 @@
 	status = "okay";
 };
 
-
 /* pinctrl for slimport */
 &msm_gpio {
 	pmx_sp {
@@ -109,4 +108,12 @@
 			};
 		};
 	};
+};
+
+&fan5451x_chg {
+	status = "disabled";
+};
+
+&pm8916_chg {
+	status = "ok";
 };

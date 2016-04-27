@@ -17,3 +17,11 @@
 #include "msm8909-swordfish-panel.dtsi"
 #include "msm8909-pm8916-swordfish.dtsi"
 #include "msm8909-swordfish-sound.dtsi"
+
+&fan5451x_chg {
+	status = "disabled";
+};
+
+&pm8916_chg {
+	status = "ok";
+};

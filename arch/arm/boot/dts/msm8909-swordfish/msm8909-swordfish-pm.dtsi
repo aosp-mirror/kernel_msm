@@ -160,6 +160,31 @@
 			maxim,dpacc = <0x0C80>;
 			maxim,param-version = <0x2>;
 		};
+
+		fan5451x_chg: fan5451x@6b {
+			status = "ok";
+			compatible = "fcs,fan5451x";
+			reg = <0x6b>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <92 0>;
+
+			qcom,chg-vadc = <&pm8916_vadc>;
+			stat-gpio = <&msm_gpio 16 0x00>;
+			disable-gpio = <&msm_gpio 83 0x00>;
+
+			vbatmin = <3000>;    //CC start voltage 3.0V
+			vfloat = <4400>;     //vbatmax
+			ibus = <500>;        //iusb for vbus
+			iochrg = <400>;      //CC current
+			iterm = <50>;        //term current
+			prechg = <200>;      //pre charge current
+			topoff-enable = <0>; //post charging flag
+			vbusovp = <10500>;   //ovd for usb
+			vbuslim = <4560>;    //uvd for usb
+			vinovp = <10500>;    //ovd for wireless
+			vinlim = <4560>;     //uvd for wireless
+			fctmr = <0>;         //fast charge timer off
+		};
 	};
 
 	battery_tm {
@@ -181,7 +206,7 @@
 };
 
 &pm8916_chg {
-	status = "ok";
+	status = "disabled";
 	qcom,vddmax-mv = <4425>;
 	qcom,vddsafe-mv = <4425>;
 	qcom,vinmin-mv = <4470>;
