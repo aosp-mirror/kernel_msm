@@ -76,6 +76,7 @@ obj-$(CONFIG_QPNP_SMBCHARGER)	+= qpnp-smbcharger.o pmic-voter.o
 obj-$(CONFIG_QPNP_TYPEC)	+= qpnp-typec.o
 obj-$(CONFIG_CHARGER_TPS65090)	+= tps65090-charger.o
 obj-$(CONFIG_BATTERY_BCL)	+= battery_current_limit.o
+obj-$(CONFIG_HTC_BATT)		+= htc_battery.o
 obj-$(CONFIG_MSM_BCL_CTL)	+= msm_bcl.o
 obj-$(CONFIG_MSM_BCL_PERIPHERAL_CTL) += bcl_peripheral.o
 obj-$(CONFIG_POWER_RESET)	+= reset/

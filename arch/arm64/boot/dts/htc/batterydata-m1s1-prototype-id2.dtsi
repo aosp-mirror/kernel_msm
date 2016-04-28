@@ -16,7 +16,7 @@ qcom,m1s1-prototype-id2-batterydata {
 	qcom,nom-batt-capacity-mah = <3000>;
 	qcom,batt-id-kohm = <33>;
 	qcom,battery-beta = <4360>;
-	qcom,battery-type = "m1s1_prototype_id2";
+	qcom,battery-type = "2";
 	qcom,chg-rslow-comp-c1 = <2378826>;
 	qcom,chg-rslow-comp-c2 = <2172944>;
 	qcom,chg-rs-to-rslow = <1144693>;
