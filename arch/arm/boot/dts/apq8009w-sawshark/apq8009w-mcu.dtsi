@@ -72,4 +72,12 @@
 		pinctrl-0 = <&ap_read_sync_active>;
 		pinctrl-1 = <&ap_read_sync_suspend>;
 	};
+
+	mcu,mcusleep {
+		compatible = "mcu,mcusleep";
+		ap_status = <&msm_gpio 26 0>;
+		pinctrl-names = "ap_status_active", "ap_status_suspend";
+		pinctrl-0 = <&ap_status_active>;
+		pinctrl-1 = <&ap_status_suspend>;
+	};
 };
