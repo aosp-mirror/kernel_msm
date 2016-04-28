@@ -18,6 +18,27 @@
 #include <linux/ratelimit.h>
 #include <linux/mmc/host.h>
 
+#define SDHCI_TRACE_RBUF_SZ_ORDER	2	/* 2^2 pages */
+#define SDHCI_TRACE_RBUF_SZ		\
+	(PAGE_SIZE * (1 << SDHCI_TRACE_RBUF_SZ_ORDER))
+#define SDHCI_TRACE_EVENT_SZ		256
+#define SDHCI_TRACE_RBUF_NUM_EVENTS	\
+	(SDHCI_TRACE_RBUF_SZ / SDHCI_TRACE_EVENT_SZ)
+
+#define	SDHCI_TRACE_COMM_LEN		12
+
+#define SDHCI_TRACE_EVENT_DATA_SZ \
+	SDHCI_TRACE_EVENT_SZ
+
+struct sdhci_trace_event {
+	char	data[SDHCI_TRACE_EVENT_DATA_SZ];
+};
+
+struct sdhci_trace_buffer {
+	struct sdhci_trace_event	*rbuf;
+	atomic_t			wr_idx;
+};
+
 struct sdhci_next {
 	unsigned int sg_count;
 	s32 cookie;
@@ -192,6 +213,8 @@ struct sdhci_host {
 	u64 dma_mask;		/* custom DMA mask */
 	u64 coherent_dma_mask;
 
+/* Start logging events */
+#define SDHCI_QUIRK2_TRACE_ON				(1<<22)
 #if defined(CONFIG_LEDS_CLASS) || defined(CONFIG_LEDS_CLASS_MODULE)
 	struct led_classdev led;	/* LED control */
 	char led_name[32];
@@ -287,6 +310,7 @@ struct sdhci_host {
 	bool sdio_irq_async_status;
 
 	u32 auto_cmd_err_sts;
+	struct sdhci_trace_buffer trace_buf;
 	struct ratelimit_state dbg_dump_rs;
 	struct cmdq_host *cq_host;
 	int reset_wa_applied; /* reset workaround status */
