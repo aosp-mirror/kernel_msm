@@ -1,0 +1,50 @@
+/* Copyright (c) 2016, Google. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/*
+ * msm8909-swordfish-nanohub: nanohub config
+ */
+
+&spi_3 {
+	sensorhub@0 {
+		compatible = "nanohub";
+		reg = <0>;
+		spi-max-frequency = <25000000>;
+		spi-cpol;
+		spi-cpha;
+
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <36 0x2>;
+
+		sensorhub,nreset-gpio = <&msm_gpio 70 0x00>;
+		sensorhub,boot0-gpio = <&msm_gpio 71 0x00>;
+		sensorhub,wakeup-gpio = <&msm_gpio 96 0x00>;
+		sensorhub,irq1-gpio = <&msm_gpio 36 0x00>;
+		sensorhub,irq2-gpio = <&msm_gpio 65 0x00>;
+		sensorhub,spi-cs-gpio = <&msm_gpio 2 0x00>;
+		sensorhub,bl-addr = <0x08000000>;
+		sensorhub,kernel-addr = <0x0800C000>;
+		sensorhub,shared-addr = <0x08040000>;
+		sensorhub,flash-banks = <0 0x08000000 0x04000>,
+			<3 0x0800C000 0x04000>,
+			<4 0x08010000 0x10000>,
+			<5 0x08020000 0x20000>;
+		sensorhub,num-flash-banks = <4>;
+		sensorhub,shared-flash-banks = <6 0x08040000 0x20000>,
+			<7 0x08060000 0x20000>;
+		sensorhub,num-shared-flash-banks = <2>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&sensorhub_ctrl_active>;
+	};
+};
+

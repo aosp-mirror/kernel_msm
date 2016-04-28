@@ -17,6 +17,7 @@
 #include "msm8909-swordfish-panel.dtsi"
 #include "msm8909-pm8916-swordfish.dtsi"
 #include "msm8909-swordfish-sound.dtsi"
+#include "msm8909-swordfish-nanohub.dtsi"
 #include "msm8909-swordfish-rsb.dtsi"
 
 &rsb {

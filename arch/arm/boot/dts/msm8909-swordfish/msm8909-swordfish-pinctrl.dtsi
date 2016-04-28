@@ -152,6 +152,49 @@
 			};
 		};
 
+		spi3 {
+			spi3_active: spi3_active {
+				mux {
+					pins = "gpio0", "gpio1", "gpio3";
+					function = "blsp_spi3";
+				};
+				config {
+					pins = "gpio0", "gpio1", "gpio3";
+					drive-strength = <12>;
+					bias-disable;
+				};
+			};
+			spi3_sleep: spi3_sleep {
+				mux {
+					pins = "gpio0", "gpio1", "gpio3";
+					function = "blsp_spi3";
+				};
+				config {
+					pins = "gpio0", "gpio1", "gpio3";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
+
+		sensorhub_ctrl {
+			/* SH_SPI_CS, SH_NRST, SH_BOOT0, AP_SH_INT, SH_AP_INT,
+				SH_AP_NW_INT */
+			sensorhub_ctrl_active: sensorhub_ctrl_active {
+				mux {
+					pins = "gpio2", "gpio70", "gpio71",
+						"gpio96", "gpio36", "gpio65";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio2", "gpio70", "gpio71",
+						"gpio96", "gpio36", "gpio65";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+
 		pmx_i2c_1 {
 			i2c_1_active: i2c_1_active {
 				mux {

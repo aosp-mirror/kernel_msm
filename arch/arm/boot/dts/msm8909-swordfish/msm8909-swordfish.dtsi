@@ -17,6 +17,7 @@
 / {
 	aliases {
 		i2c6 = &i2c_6; /* I2C6 controller device */
+		spi3 = &spi_3; /* SPI3 controller device */
 	};
 };
 
@@ -77,6 +78,35 @@
 		dmas = <&dma_blsp1 6 64 0x20000020 0x20>,
 			<&dma_blsp1 7 32 0x20000020 0x20>;
 		dma-names = "tx", "rx";
+		qcom,master-id = <86>;
+	};
+
+	spi_3: spi@78b7000 { /* BLSP1 QUP3 */
+		compatible = "qcom,spi-qup-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "spi_physical", "spi_bam_physical";
+		reg = <0x78b7000 0x600>, <0x7884000 0x23000>;
+		interrupt-names = "spi_irq", "spi_bam_irq";
+		interrupts = <0 97 0>, <0 238 0>;
+
+		qcom,use-bam;
+		qcom,bam-consumer-pipe-index = <8>;
+		qcom,bam-producer-pipe-index = <9>;
+
+		spi-max-frequency = <50000000>;
+
+		qcom,use-pinctrl;
+		pinctrl-names = "spi_default", "spi_sleep";
+		pinctrl-0 = <&spi3_active>;
+		pinctrl-1 = <&spi3_sleep>;
+
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp1_qup3_spi_apps_clk>;
+
+		qcom,infinite-mode = <0>;
+		qcom,ver-reg-exists;
 		qcom,master-id = <86>;
 	};
 
