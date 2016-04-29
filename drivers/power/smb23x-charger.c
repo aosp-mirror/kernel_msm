@@ -22,6 +22,7 @@
 #include <linux/debugfs.h>
 #include <linux/pm_wakeup.h>
 #include <linux/spinlock.h>
+#include <linux/delay.h>	/* for udelay() */
 
 struct smb23x_wakeup_source {
 	struct wakeup_source source;
@@ -100,9 +101,9 @@ struct smb23x_chip {
 	struct smb23x_wakeup_source	smb23x_ws;
 
 	/* sculpin */
-	u8				cfg_en_active;
-	u8				sys_voltage;
-	u8				sys_vthreshold;
+	int				cfg_en_active;
+	int				sys_voltage;
+	int				sys_vthreshold;
 	int				max_ac_current_ma;
 	int				prechg_current_ma;
 	int				charger_plugin;
@@ -233,6 +234,7 @@ static int hot_bat_decidegc_table[] = {
 
 #define CFG_REG_4		0x04
 #define CHG_EN_ACTIVE_LOW_BIT	BIT(5)
+#define CHG_EN_ACTIVE_OFFSET	5
 #define SAFETY_TIMER_MASK	SMB_MASK(4, 3)
 #define SAFETY_TIMER_OFFSET	3
 #define SAFETY_TIMER_DISABLE	SMB_MASK(4, 3)
@@ -252,6 +254,7 @@ static int hot_bat_decidegc_table[] = {
 #define CHG_INHIBIT_THRESH_MASK	SMB_MASK(7, 6)
 #define INHIBIT_THRESH_OFFSET	6
 #define SYS_VTHRESHOLD_MASK		SMB_MASK(5, 4)
+#define SYS_VTHRESHOLD_OFFSET	4
 #define BMD_ALGO_MASK		SMB_MASK(1, 0)
 #define BMD_ALGO_THERM_IO	SMB_MASK(1, 0)
 
@@ -530,6 +533,10 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 	if (rc) {
 		chip->bms_psy_name = NULL;
 		chip->cfg_bms_controlled_charging = false;
+	} else {
+		chip->bms_psy = power_supply_get_by_name((char *)chip->bms_psy_name);
+		if (chip->bms_psy == NULL)
+			pr_err("smb23x can't find bms device \n");
 	}
 
 	/*
@@ -631,17 +638,17 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 		}
 	}
 
-	rc = of_property_read_u8(node, "cei,chg-en-active",
+	rc = of_property_read_u32(node, "cei,chg-en-active",
 					&chip->cfg_en_active);
 	if (rc < 0)
 		chip->cfg_en_active = -EINVAL;
 
-	rc = of_property_read_u8(node, "cei,sys-voltage",
+	rc = of_property_read_u32(node, "cei,sys-voltage",
 					&chip->sys_voltage);
 	if (rc < 0)
 		chip->sys_voltage = -EINVAL;
 
-	rc = of_property_read_u8(node, "cei,sys-voltage-threshold",
+	rc = of_property_read_u32(node, "cei,sys-voltage-threshold",
 					&chip->sys_vthreshold);
 	if (rc < 0)
 		chip->sys_vthreshold = -EINVAL;
@@ -1057,11 +1064,8 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 		}
 	}
 	if (chip->cfg_temp_comp_ma != -EINVAL) {
-		int compensated_ma;
-
-		compensated_ma = chip->cfg_fastchg_ma - chip->cfg_temp_comp_ma;
 		i = find_closest_in_ascendant_list(
-			compensated_ma, fastchg_current_ma_table,
+			chip->cfg_temp_comp_ma, fastchg_current_ma_table,
 			ARRAY_SIZE(fastchg_current_ma_table));
 		tmp = i << FASTCHG_CURR_SOFT_COMP_OFFSET;
 		rc = smb23x_masked_write(chip, CFG_REG_3,
@@ -1185,8 +1189,9 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 
 	//Charger enable polarity
 	if (chip->cfg_en_active != -EINVAL) {
+		tmp = chip->cfg_en_active << CHG_EN_ACTIVE_OFFSET;
 		rc = smb23x_masked_write(chip, CFG_REG_4,
-				CHG_EN_ACTIVE_LOW_BIT, chip->cfg_en_active);
+				CHG_EN_ACTIVE_LOW_BIT, tmp);
 		if (rc < 0) {
 			pr_err("Set Charger enable polarity failed, rc=%d\n", rc);
 			return rc;
@@ -1205,8 +1210,9 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 
 	//System voltage threshold for initiating charge current reduction
 	if (chip->sys_vthreshold != -EINVAL) {
+		tmp = chip->sys_vthreshold << SYS_VTHRESHOLD_OFFSET;
 		rc = smb23x_masked_write(chip, CFG_REG_6,
-				SYS_VTHRESHOLD_MASK, chip->sys_vthreshold);
+				SYS_VTHRESHOLD_MASK, tmp);
 		if (rc < 0) {
 			pr_err("Set System voltage threshold failed, rc=%d\n", rc);
 			return rc;
@@ -1788,6 +1794,7 @@ static enum power_supply_property smb23x_battery_properties[] = {
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
 #else
+	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CHARGING_ENABLED,
@@ -1795,10 +1802,13 @@ static enum power_supply_property smb23x_battery_properties[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
 	POWER_SUPPLY_PROP_RESISTANCE,
+	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_TEMP,	
 #endif
 };
 
-#ifdef QTI_SMB231
 static int smb23x_get_prop_batt_health(struct smb23x_chip *chip)
 {
 	int health;
@@ -1816,21 +1826,21 @@ static int smb23x_get_prop_batt_health(struct smb23x_chip *chip)
 
 	return health;
 }
-#endif //QTI_SMB231
 
 static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
 {
 	int rc;
 	u8 reg = 0;
 
-//	if (chip->int_smb231_i2c_enable == 0)
-//		return POWER_SUPPLY_STATUS_UNKNOWN;
-
 	rc = smb23x_read(chip, IRQ_C_STATUS_REG, &reg);
-	if (rc)
+	if (rc) {
 		pr_err("IRQ_C_STATUS_REG read fail. rc=%d\n", rc);
-	else if ((reg & ITERM_BIT) ? true : false)
+		return POWER_SUPPLY_STATUS_UNKNOWN;
+	}
+	else if ((reg & ITERM_BIT) ? true : false) {
+		pr_info("smb23x status: FULL \n");
 		return POWER_SUPPLY_STATUS_FULL;
+	}
 
 	rc = smb23x_read(chip, CHG_STATUS_B_REG, &reg);
 	if (rc < 0) {
@@ -1838,8 +1848,10 @@ static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
 		return POWER_SUPPLY_STATUS_UNKNOWN;
 	}
 
-	if (reg & HOLD_OFF_BIT)
+	if (reg & HOLD_OFF_BIT) {
+		pr_err("smb23x status: hold-off, STATUS_B_REG = 0x%x \n", reg);
 		return POWER_SUPPLY_STATUS_NOT_CHARGING;
+	}
 
 	if (reg & CHARGE_TYPE_MASK)
 		return POWER_SUPPLY_STATUS_CHARGING;
@@ -1872,9 +1884,6 @@ static int smb23x_get_prop_charging_enabled(struct smb23x_chip *chip)
 	int rc;
 	u8 reg = 0;
 
-//	if (chip->int_smb231_i2c_enable == 0)
-//		return 0;
-
 	rc = smb23x_read(chip, CHG_STATUS_B_REG, &reg);
 	if (rc) {
 		pr_err("CHG_STATUS_B_REG read fail. rc=%d\n", rc);
@@ -1886,26 +1895,13 @@ static int smb23x_get_prop_charging_enabled(struct smb23x_chip *chip)
 
 static int smb23x_get_prop_batt_present(struct smb23x_chip *chip)
 {
-	int rc;
-	u8 reg = 0;
-
-//	if (chip->int_smb231_i2c_enable == 0)
-//		return true;
-
-	rc = smb23x_read(chip, IRQ_B_STATUS_REG, &reg);
-	if (rc)
-		pr_err("IRQ_B_STATUS_REG read fail. rc=%d\n", rc);
-
-	return  (reg & BATT_ABSENT_BIT) ? false : true;
+	return true;
 }
 
 static int smb23x_get_prop_charge_type(struct smb23x_chip *chip)
 {
 	int rc;
 	u8 reg = 0;
-
-//	if (chip->int_smb231_i2c_enable == 0)
-//		return POWER_SUPPLY_CHARGE_TYPE_UNKNOWN;
 
 	rc = smb23x_read(chip, CHG_STATUS_B_REG, &reg);
 	if (rc) {
@@ -1925,11 +1921,48 @@ static int smb23x_get_prop_charge_type(struct smb23x_chip *chip)
 		return POWER_SUPPLY_CHARGE_TYPE_NONE;
 }
 
-#ifdef QTI_SMB231
-#define DEFAULT_BATT_CAPACITY	50
+#define DEFAULT_BATT_VOLTAGE	3700
+static int smb23x_get_prop_batt_voltage(struct smb23x_chip *chip)
+{
+	union power_supply_propval ret = {0, };
+
+	chip->bms_psy = power_supply_get_by_name((char *)chip->bms_psy_name);
+	if (chip->bms_psy == NULL)
+			pr_err("smb23x can't find bms device \n");
+
+	if (chip->bms_psy) {
+		chip->bms_psy->get_property(chip->bms_psy,
+				POWER_SUPPLY_PROP_VOLTAGE_NOW, &ret);
+		return ret.intval;
+	}
+	return DEFAULT_BATT_VOLTAGE;
+}
+
+#define DEFAULT_BATT_CURRENT	0
+static int smb23x_get_prop_batt_current(struct smb23x_chip *chip)
+{
+	union power_supply_propval ret = {0, };
+
+	chip->bms_psy = power_supply_get_by_name((char *)chip->bms_psy_name);
+	if (chip->bms_psy == NULL)
+			pr_err("smb23x can't find bms device \n");
+
+	if (chip->bms_psy) {
+		chip->bms_psy->get_property(chip->bms_psy,
+				POWER_SUPPLY_PROP_CURRENT_NOW, &ret);
+		return ret.intval;
+	}
+	return DEFAULT_BATT_CURRENT;
+}
+
+#define DEFAULT_BATT_CAPACITY	60
 static int smb23x_get_prop_batt_capacity(struct smb23x_chip *chip)
 {
 	union power_supply_propval ret = {0, };
+
+	chip->bms_psy = power_supply_get_by_name((char *)chip->bms_psy_name);
+	if (chip->bms_psy == NULL)
+			pr_err("smb23x can't find bms device \n");
 
 	if (chip->fake_battery_soc != -EINVAL)
 		return chip->fake_battery_soc;
@@ -1948,6 +1981,10 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 {
 	union power_supply_propval ret = {0, };
 
+	chip->bms_psy = power_supply_get_by_name((char *)chip->bms_psy_name);
+	if (chip->bms_psy == NULL)
+			pr_err("smb23x can't find bms device \n");
+
 	if (chip->bms_psy) {
 		chip->bms_psy->get_property(chip->bms_psy,
 				POWER_SUPPLY_PROP_TEMP, &ret);
@@ -1956,7 +1993,7 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 
 	return DEFAULT_BATT_TEMP;
 }
-
+#ifdef QTI_SMB231
 static int smb23x_system_temp_level_set(struct smb23x_chip *chip, int lvl_sel)
 {
 	int rc = 0;
@@ -2081,6 +2118,8 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 {
 	struct smb23x_chip *chip = container_of(psy,
 			struct smb23x_chip, batt_psy);
+	int rc;
+	u8 reg = 0;
 
 	switch (prop) {
 #ifdef QTI_SMB231
@@ -2112,6 +2151,9 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 		val->intval = chip->therm_lvl_sel;
 		break;
 #else
+	case POWER_SUPPLY_PROP_HEALTH:
+		val->intval = smb23x_get_prop_batt_health(chip);
+		break;
 	case POWER_SUPPLY_PROP_STATUS:
 		val->intval = smb23x_get_prop_batt_status(chip);
 		break;
@@ -2125,10 +2167,29 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 		val->intval = smb23x_get_prop_charge_type(chip);
 		break;
 	case POWER_SUPPLY_PROP_RESISTANCE:
-		val->intval = smb23x_print_register(chip);
+		smb23x_print_register(chip);
+
+		rc = smb23x_read(chip, CFG_REG_0, &reg);
+		if (rc)
+			val->intval = 0x00;
+		else
+			val->intval = reg;
+		pr_info("RESISTANCE 0x00=0x%02x\n", reg);
 		break;
 #endif
-	default:
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		val->intval = smb23x_get_prop_batt_voltage(chip);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		val->intval = smb23x_get_prop_batt_current(chip);
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY:
+		val->intval = smb23x_get_prop_batt_capacity(chip);
+		break;
+	case POWER_SUPPLY_PROP_TEMP:
+		val->intval = smb23x_get_prop_batt_temp(chip);
+		break;
+default:
 		return (-EINVAL);
 	}
 	pr_debug("get_property: prop(%d) = %d\n", (int)prop, (int)val->intval);
@@ -2145,9 +2206,6 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 #ifdef QTI_SMB231
 	int rc;
 #endif
-	struct power_supply *battery_psy;
-	union power_supply_propval data;
-
 	pr_debug("set_property: prop(%d) = %d\n", (int)prop, (int)val->intval);
 
 	switch (prop) {
@@ -2209,12 +2267,8 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 			chip->timer_init_register.expires = jiffies + HZ;
 			add_timer(&chip->timer_init_register); 
 		}
-		//Notify battery driver to update charging status
-		data.intval = val->intval;
-		battery_psy = power_supply_get_by_name("bms");
-		if (battery_psy)
-			battery_psy->set_property(battery_psy, POWER_SUPPLY_PROP_STATUS, &data);
-		pr_err("Charger plug, state=%d\n", chip->charger_plugin);
+		pr_info("Charger plug, state=%d\n", chip->charger_plugin);
+		power_supply_changed(&chip->batt_psy);
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 		smb23x_charging_enable(chip, val->intval);
@@ -2629,7 +2683,7 @@ static int smb23x_probe(struct i2c_client *client,
 #endif
 
 	/* register battery power_supply */
-	chip->batt_psy.name		= "charger";
+	chip->batt_psy.name		= "battery";
 	chip->batt_psy.type		= POWER_SUPPLY_TYPE_BATTERY;
 	chip->batt_psy.get_property	= smb23x_battery_get_property;
 	chip->batt_psy.set_property	= smb23x_battery_set_property;

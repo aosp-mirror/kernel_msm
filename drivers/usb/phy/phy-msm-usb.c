@@ -3378,6 +3378,7 @@ static int otg_power_get_property_usb(struct power_supply *psy,
 		val->intval = motg->online;
 		break;
 	case POWER_SUPPLY_PROP_TYPE:
+		pr_info("[phy-msm-usb] get_property: type = %d \n", psy->type);
 		val->intval = psy->type;
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
@@ -3420,13 +3421,14 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 		break;
 	/* The ONLINE property reflects if usb has enumerated */
 	case POWER_SUPPLY_PROP_ONLINE:
+		pr_info("[phy-msm-usb] set_property: online = %d \n", val->intval);
 		motg->online = val->intval;
 		
 		if (usb_online ^ val->intval) {
 			usb_online = val->intval;
 			data.intval = val->intval;
 			//Notify charger driver to update charging status
-			charger_psy = power_supply_get_by_name("charger");
+			charger_psy = power_supply_get_by_name("battery");
 			if (charger_psy)
 				charger_psy->set_property(charger_psy, POWER_SUPPLY_PROP_STATUS, &data);
 		}
@@ -3502,6 +3504,7 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 			motg->chg_state = USB_CHG_STATE_DETECTED;
 		}
 
+		pr_info("[phy-msm-usb] set_property: type = %s \n", chg_to_string(motg->chg_type));
 		dev_dbg(motg->phy.dev, "%s: charger type = %s\n", __func__,
 			chg_to_string(motg->chg_type));
 		msm_otg_dbg_log_event(&motg->phy, "SET CHARGER TYPE ",
@@ -3540,7 +3543,6 @@ static int otg_power_property_is_writeable_usb(struct power_supply *psy,
 
 static char *otg_pm_power_supplied_to[] = {
 	"battery",
-	"charger",
 };
 
 static enum power_supply_property otg_pm_power_props_usb[] = {
