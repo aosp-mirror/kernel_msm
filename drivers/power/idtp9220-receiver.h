@@ -47,22 +47,44 @@ struct idtp9220_packet_t{        // write to structure at SRAM address 0x0400
 };
 
 union idtp9220_interactive_data{
-	u8     strval[2];
-	u16    shortval;
+    bool   result;
+    u8     strval[2];
+    u16    shortval;
 };
 
-enum idtp9220_data_type_property {
-	GET_TX_HARDWARE_VERSION = 1,
+enum idtp9220_request_type_need_rx {
+    SET_LDO_ENABLE,
+    SET_VOUT_VOLTAGE,
+    SET_COUT_CURRENT,
+    SET_OPER_FREQ,
+    GET_OPER_FREQ,
+    GET_CHIP_INFO,
+    IS_LDO_ENABLED,
+    IS_RX_FW_BURNED,
+    DO_BURN_RX_FW,
+    DO_VERIFY_RX_FW,
+
+    /* the follow need tx return data */
+    GET_TX_HARDWARE_VERSION,
     GET_TX_TEMP,
+    GET_TX_SOFTWARE_VERSION,
+    GET_TX_VIN,
+};
+
+enum idtp9220_request_type_need_tx {
+    GET_TX_HARDWARE_VERSION_COMMAND = 1,
+    GET_TX_TEMP_COMMAND,
     SET_TX_OPER_FREQ,
-    GET_TX_OPER_FREQ,
+    /*GET_TX_OPER_FREQ,*/
+    GET_TX_SOFTWARE_VERSION_COMMAND = 5,
+    GET_TX_VIN_COMMAND = 7,
 };
 
 struct idtp9220_receiver {
     struct i2c_client                           *client;
     struct device                               *dev;
     struct mutex                                read_write_lock;
-	struct mutex                                service_request_lock;
+    struct mutex                                service_request_lock;
     int                                         wireless_int_gpio;
     int                                         mask_wireless_int_gpio;
 
@@ -78,7 +100,7 @@ struct idtp9220_receiver {
     struct timespec                             resume_time;
 
     /* process interupt event */
-	struct work_struct		                    process_intr_work;
+    struct work_struct                          process_intr_work;
 
     /* using default vout */
     bool                                        using_default_vout_flag;
@@ -95,6 +117,8 @@ struct idtp9220_receiver {
                 (RIGHT_BIT_POS))
 
 /* Globle paremeters */
+#define WAIT_TX_RETURN_DATA_TIMEOUT_ERR         1
+#define TX_RETURN_DATA_IS_NOT_DEMAND_ERR        2
 #define IDTP9220_I2C_READ_BYTES                 1
 #define IDTP9220_DELAY_MS_MAX                   5000
 #define IDTP9220_VOUT_CHECK_PERIOD_MS           180000
@@ -120,6 +144,7 @@ struct idtp9220_receiver {
 /* Chip ID Register */
 #define CHIP_ID_L_REG                           0x0000
 #define CHIP_ID_H_REG                           0x0001
+#define CHIP_ID_VALUE                           0x9220
 
 /* Chip Revision and Font Register */
 #define CHIP_REV_FONT_REG                       0x0002
@@ -131,6 +156,10 @@ struct idtp9220_receiver {
 /* OTP Firmware Major Revision Registers */
 #define RX_FW_MAJOR_REV_L_REG                   0x0004
 #define RX_FW_MAJOR_REV_H_REG                   0x0005
+
+/*OTP Firmware Minor Revision Registers */
+#define RX_FW_MINOR_REV_L_REG                   0x0006
+#define RX_FW_MINOR_REV_H_REG                   0x0007
 
 /* Status Register */
 #define STATUS_L_REG                            0x0034
@@ -152,6 +181,10 @@ struct idtp9220_receiver {
 #define VOUT_SET_REG                            0x003E
 #define RX_LOUT_L_REG                           0x0044
 #define RX_LOUT_H_REG                           0x0045
+
+/* Operating Frequency in Registers*/
+#define OP_FREQ_L_REG                           0x0048
+#define OP_FREQ_H_REG                           0x0049
 
 /* command register */
 #define COMMAND_REG                             0x004E
@@ -181,11 +214,17 @@ enum{
     IS_TX_TEMP_DATA,
     IS_SET_TX_FREQ_DATA,
     IS_GET_TX_FREQ_DATA,
+    IS_TX_SOFTWARE_VERSIION_DATA,
+    IS_TX_VIN = 7,
 };
 
 /* TX Data Value Register */
 #define TX_DATA_01_REG                          0x005A
 #define TX_DATA_02_REG                          0x005B
+
+/* rx fw burn magic number */
+#define RX_BURN_MAGIC_NUMBER_ADDR               0x3800
+static const char burn_magic_number[] = {0xAA, 0xBB, 0xCC, 0xDD};
 
 /* rx bootloader for download rx fw */
 static const char rx_bootloader_data[] = {
