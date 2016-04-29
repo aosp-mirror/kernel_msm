@@ -12,6 +12,7 @@
 
 #include "dsi-panel-edo-rm67160-hvga-video.dtsi"
 #include "dsi-panel-auo-rm69080-hvga-video.dtsi"
+#include "dsi-panel-auo-rm69080-hvga-small.dtsi"
 #include "dsi-panel-edo-rm67160-hvga-video-old.dtsi"
 
 &mdss_dsi0 {
@@ -21,6 +22,10 @@
 };
 
 &dsi_auo_rm69080_hvga_video{
+	qcom,cont-splash-enabled;
+};
+
+&dsi_auo_rm69080_hvga_small{
 	qcom,cont-splash-enabled;
 };
 
