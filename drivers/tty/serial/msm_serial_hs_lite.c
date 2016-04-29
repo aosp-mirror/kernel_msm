@@ -95,6 +95,16 @@ struct msm_hsl_port {
 	struct msm_bus_scale_pdata *bus_scale_table;
 };
 
+static int msm_serial_hsl_enable = 0;
+
+static int __init htcuarton_set(char *str)
+{
+	msm_serial_hsl_enable = 1;
+	pr_debug("msm_serial_hsl_enable is set to 1 (%s)\n", str);
+	return 0;
+}
+__setup("uart=1", htcuarton_set);
+
 #define UARTDM_VERSION_11_13	0
 #define UARTDM_VERSION_14	1
 
@@ -1698,6 +1708,13 @@ static int msm_serial_hsl_probe(struct platform_device *pdev)
 	const struct of_device_id *match;
 	u32 line;
 	int ret;
+
+#ifdef CONFIG_SERIAL_MSM_HSL_CONSOLE
+	if (!msm_serial_hsl_enable) {
+		pr_info("serial console disabled, do not proceed msm_serial_hsl_probe().\n");
+		return -ENODEV;
+	}
+#endif
 
 	if (pdev->id == -1)
 		pdev->id = atomic_inc_return(&msm_serial_hsl_next_id) - 1;
