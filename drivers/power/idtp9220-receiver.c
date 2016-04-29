@@ -17,7 +17,7 @@ static int __idtp9220_read(struct idtp9220_receiver *chip, u16 reg,
 {
     struct i2c_client *client = chip->client;
     struct i2c_msg msg[2];
-    u8 ret = 0;
+    int ret = 0;
     u16 reg_be = cpu_to_be16(reg);
 
     memset(msg, 0, sizeof(msg));
@@ -38,7 +38,7 @@ static int __idtp9220_read(struct idtp9220_receiver *chip, u16 reg,
     msg[1].buf = val;
 
     ret = i2c_transfer(client->adapter, msg, 2);
-    if(ret != 2)
+    if(2 == ret)
     {
         ret = 0;
     }
@@ -134,7 +134,7 @@ static int idtp9220_Xfer9220i2c(struct idtp9220_receiver *chip, u16 reg, char *b
 
     for (i = 0; i < bSize; i++)
     {
-        rc = idtp9220_write(chip, reg+i, bBuf[bOffs+i]);
+        rc = idtp9220_write(chip, reg + i, bBuf[bOffs + i]);
         if(rc < 0)
         {
             return rc;
@@ -159,7 +159,7 @@ static int idtp9220_set_ldout_enable(struct idtp9220_receiver *chip, bool enable
     return 0;
 }
 
-static int idtp9220_set_vout_voltage(struct idtp9220_receiver *chip, int voltage)
+static int idtp9220_set_vout_voltage(struct idtp9220_receiver *chip, u16 voltage)
 {
     int rc,i;
 
@@ -211,16 +211,15 @@ static int idtp9220_clear_tx_data_receiv_intr(struct idtp9220_receiver *chip)
     return rc;
 }
 
-static int idtp9220_operate_device_action(struct idtp9220_receiver *chip,
-                       enum idtp9220_data_type_property data_type,
+static int idtp9220_rx_communicate_with_tx(struct idtp9220_receiver *chip,
+                       enum idtp9220_request_type_need_tx command_type,
                        union idtp9220_interactive_data *val)
 {
     int rc;
     u8 reg;
-    bool clear_int_flg = false;
 
     /* set data commond */
-    rc = idtp9220_write(chip, RX_DATA_COMMAND_REG, data_type);
+    rc = idtp9220_write(chip, RX_DATA_COMMAND_REG, command_type);
     if (rc < 0)
     {
         return rc;
@@ -234,155 +233,181 @@ static int idtp9220_operate_device_action(struct idtp9220_receiver *chip,
         return rc;
     }
 
-    /* set tx freq*/
-    if(SET_TX_OPER_FREQ == data_type)
-    {
-        rc = idtp9220_write(chip, RX_FREQ_DATA_L_REG, val->strval[0]);
-        if (rc < 0)
-        {
-            pr_err("cannot set freq_l to %dKHZ rc = %d\n", val->strval[0], rc);
-            return rc;
-        }
-
-        rc = idtp9220_write(chip, RX_FREQ_DATA_H_REG, val->strval[1]);
-        if (rc < 0)
-        {
-            pr_err("cannot set freq_l to %dKHZ rc = %d\n", val->strval[1], rc);
-            return rc;
-        }
-    }
-
     /* wait Tx return result  */
     if (down_timeout(&chip->tx_send_data_int, msecs_to_jiffies(IDTP9220_DELAY_MS_MAX)))
     {
-        pr_err("wait tx version data  intr timeout\n");
-        return 1;
+        pr_err("wait tx version data intr timeout\n");
+        rc = WAIT_TX_RETURN_DATA_TIMEOUT_ERR;
+        goto clerar_interrupt;
     }
 
     /* get Tx return result */
     rc = idtp9220_read(chip, TX_DATA_COMMAND_REG, &reg);
     if(rc < 0)
     {
-        return rc;
+        goto clerar_interrupt;
     }
 
     /* process return data */
-    if(reg != data_type)
+    if(reg != command_type)
     {
-        pr_err("return tx data type is error, reg = %d, data_type = %d\n", reg, data_type);
-        return 2;
+        pr_err("return tx data type is error, reg = %d, data_type = %d\n", reg, command_type);
+        rc = TX_RETURN_DATA_IS_NOT_DEMAND_ERR;
+        goto clerar_interrupt;
     }
 
-    clear_int_flg = true;
-
-    if(IS_TX_HARDWARE_VERSION_DATA == reg)
+    if((IS_TX_HARDWARE_VERSION_DATA == reg) || (IS_TX_SOFTWARE_VERSIION_DATA == reg))
     {
         /* read hardware version*/
         rc = idtp9220_read(chip, TX_DATA_01_REG, &val->strval[0]);
         if(rc < 0)
         {
-            return rc;
+            goto clerar_interrupt;
         }
 
         val->strval[1] = 0;
 
     }
-    else if((IS_TX_TEMP_DATA == reg) || (IS_GET_TX_FREQ_DATA == reg))
+    else if((IS_TX_TEMP_DATA == reg) || (IS_TX_VIN == reg))
     {
         /* read tx NTC1 temp or freq_l*/
         rc = idtp9220_read(chip, TX_DATA_01_REG, &val->strval[0]);
         if(rc < 0)
         {
-            return rc;
+            goto clerar_interrupt;
         }
 
         /* read NTC2 temp or freq_h*/
         rc = idtp9220_read(chip, TX_DATA_02_REG, &val->strval[1]);
         if(rc < 0)
         {
-            return rc;
+            goto clerar_interrupt;
         }
     }
-    else if(IS_SET_TX_FREQ_DATA == reg)
+    else
     {
     }
 
-    /* clear interrupt */
-    if(clear_int_flg)
-    {
-        rc = idtp9220_clear_tx_data_receiv_intr(chip);
-        if (rc < 0)
-        {
-            return rc;
-        }
-    }
-
-    return 0;
-}
-
-
-static int idtp9220_get_tx_version(struct idtp9220_receiver *chip, union idtp9220_interactive_data *value)
-{
-    int rc;
-
-    mutex_lock(&chip->service_request_lock);
-    pm_stay_awake(chip->dev);
-
-    rc = idtp9220_operate_device_action(chip, GET_TX_HARDWARE_VERSION, value);
-
-    pm_relax(chip->dev);
-    mutex_unlock(&chip->service_request_lock);
+clerar_interrupt:
+    /* clear interrupt, do not care return value */
+    idtp9220_clear_tx_data_receiv_intr(chip);
 
     return rc;
 }
+
+static int idtp9220_get_tx_hard_version(struct idtp9220_receiver *chip, union idtp9220_interactive_data *value)
+{
+    int rc;
+
+    pm_stay_awake(chip->dev);
+    rc = idtp9220_rx_communicate_with_tx(chip, GET_TX_HARDWARE_VERSION_COMMAND, value);
+    pm_relax(chip->dev);
+
+    return rc;
+}
+
+static int idtp9220_get_tx_soft_version(struct idtp9220_receiver *chip, union idtp9220_interactive_data *value)
+{
+    int rc;
+
+    pm_stay_awake(chip->dev);
+    rc = idtp9220_rx_communicate_with_tx(chip, GET_TX_SOFTWARE_VERSION_COMMAND, value);
+    pm_relax(chip->dev);
+
+    return rc;
+}
+
+static int idtp9220_get_tx_vin(struct idtp9220_receiver *chip, union idtp9220_interactive_data *value)
+{
+    int rc;
+
+    pm_stay_awake(chip->dev);
+    rc = idtp9220_rx_communicate_with_tx(chip, GET_TX_VIN_COMMAND, value);
+    pm_relax(chip->dev);
+
+    return rc;
+}
+
 
 static int idtp9220_get_tx_temp(struct idtp9220_receiver *chip, union idtp9220_interactive_data *temp)
 {
     int rc;
 
-    mutex_lock(&chip->service_request_lock);
     pm_stay_awake(chip->dev);
-
-    rc = idtp9220_operate_device_action(chip, GET_TX_TEMP, temp);
-
+    rc = idtp9220_rx_communicate_with_tx(chip, GET_TX_TEMP_COMMAND, temp);
     pm_relax(chip->dev);
-    mutex_unlock(&chip->service_request_lock);
 
     return rc;
 }
 
 static int idtp9220_get_freq(struct idtp9220_receiver *chip, union idtp9220_interactive_data *freq)
 {
-
     int rc;
 
-    mutex_lock(&chip->service_request_lock);
-    pm_stay_awake(chip->dev);
+    /* read freq_l */
+    rc = idtp9220_read(chip, OP_FREQ_L_REG, &freq->strval[0]);
+    if(rc < 0)
+    {
+        return rc;
+    }
 
-    rc = idtp9220_operate_device_action(chip, GET_TX_OPER_FREQ, freq);
+    /* read freq_h */
+    rc = idtp9220_read(chip, OP_FREQ_H_REG, &freq->strval[1]);
+    if(rc < 0)
+    {
+        return rc;
+    }
 
-    pm_relax(chip->dev);
-    mutex_unlock(&chip->service_request_lock);
-
-    return rc;
+    return 0;
 }
 
 static int idtp9220_set_freq(struct idtp9220_receiver *chip, union idtp9220_interactive_data *freq)
 {
     int rc;
 
-    mutex_lock(&chip->service_request_lock);
-    pm_stay_awake(chip->dev);
+    if ((freq->shortval < IDT9200_FREQ_MIN_KHZ) ||
+        (freq->shortval > IDT9200_FREQ_MAX_KHZ))
+    {
+        pr_err( "bad freq %d asked to set\n", freq->shortval);
+        return -EINVAL;
+    }
 
-    rc = idtp9220_operate_device_action(chip, SET_TX_OPER_FREQ, freq);
+    /* set  freq command */
+    rc = idtp9220_write(chip, RX_DATA_COMMAND_REG, SET_TX_OPER_FREQ);
+    if (rc < 0)
+    {
+        pr_err("cannot set freq command\n");
+        return rc;
+    }
 
-    pm_relax(chip->dev);
-    mutex_unlock(&chip->service_request_lock);
+    /* set freq value */
+    rc = idtp9220_write(chip, RX_FREQ_DATA_L_REG, freq->strval[0]);
+    if (rc < 0)
+    {
+        pr_err("cannot set freq_l to %dKHZ rc = %d\n", freq->strval[0], rc);
+        return rc;
+    }
 
-    return rc;
+    rc = idtp9220_write(chip, RX_FREQ_DATA_H_REG, freq->strval[1]);
+    if (rc < 0)
+    {
+        pr_err("cannot set freq_l to %dKHZ rc = %d\n", freq->strval[1], rc);
+        return rc;
+    }
+
+    /* M0 to sends data command and value to TX*/
+    rc = idtp9220_masked_write(chip, COMMAND_REG, SEND_RX_DATA_MASK,
+			   1 << SEND_RX_DATA_MASK_SHIFT);
+    if (rc < 0)
+    {
+        pr_err("cannot sends data command and value to TX, rc = %d\n", rc);
+        return rc;
+    }
+
+    return 0;
 }
 
-static int idt9220_set_cout_current(struct idtp9220_receiver *chip, int current_ma)
+static int idtp9220_set_cout_current(struct idtp9220_receiver *chip, u16 current_ma)
 {
     int rc,i;
 
@@ -402,6 +427,22 @@ static int idt9220_set_cout_current(struct idtp9220_receiver *chip, int current_
     }
 
     return rc;
+}
+
+static bool idtp9220_detect_tx_data_receive(struct idtp9220_receiver *chip)
+{
+    int rc;
+    u8 reg_status;
+    rc = idtp9220_read(chip, STATUS_L_REG, &reg_status);
+    if (rc < 0)
+    {
+         pr_err("Unable to read system status reg rc = %d\n", rc);
+         return false;
+    }
+
+    pr_err("reg status:%02x\n", reg_status);
+
+    return reg_status & STATUS_TX_DATA_RECV;
 }
 
 static int idtp9220_is_ldoout_enable(struct idtp9220_receiver *chip, bool *ldoout_enable)
@@ -428,20 +469,126 @@ static int idtp9220_is_ldoout_enable(struct idtp9220_receiver *chip, bool *ldoou
 
 }
 
-static bool idtp9220_chip_detect_receive(struct idtp9220_receiver *chip)
+static int idtp9220_verify_fw_prepare(struct idtp9220_receiver *chip)
 {
     int rc;
-    u8 reg_status;
-    rc = idtp9220_read(chip, STATUS_L_REG, &reg_status);
+
+    /* disable PWM */
+    rc = idtp9220_write(chip, 0x3c00, 0x80);
     if (rc < 0)
     {
-         pr_err("Unable to read system status reg rc = %d\n", rc);
-         return false;
+        return rc;
     }
 
-    pr_err("reg status:%02x\n", reg_status);
+    /* core key */
+    rc = idtp9220_write(chip, 0x3000, 0x5a);
+    if (rc < 0)
+    {
+        return rc;
+    }
 
-    return reg_status & STATUS_TX_DATA_RECV;
+    /* hold M0 */
+    rc = idtp9220_write(chip, 0x3040, 0x11);
+    if (rc < 0)
+    {
+        return rc;
+    }
+
+    /* OTP_VRR (VRR=3.0V) */
+    rc = idtp9220_write(chip, 0x5c04, 0x05);
+    if (rc < 0)
+    {
+        return rc;
+    }
+
+    /* OTP_CTRL (VRR_EN=1, EN=1) */
+    rc = idtp9220_write(chip, 0x5c00, 0x11);
+    if (rc < 0)
+    {
+        return rc;
+    }
+
+    return 0;
+}
+
+static int idtp9220_verify_otp_fw(struct idtp9220_receiver *chip, bool *result)
+{
+    unsigned char data;
+    int rc, i, reg, size;
+
+    rc = idtp9220_verify_fw_prepare(chip);
+    if(rc < 0)
+    {
+        pr_err("idtp9220_verify_fw_prepare failed\n");
+        return rc;
+    }
+
+    reg = 0x8000;
+    size = sizeof(idt_firmware);
+    for (i = 0; i < size; i++)
+    {
+        data = 0;
+        rc = idtp9220_read(chip, reg + i, &data);
+        if(rc <0)
+        {
+            return rc;
+        }
+
+        if (data != idt_firmware[i])
+        {
+            pr_err("fw check err data[%d]:%02x != boot[%d]:%02x.\n",
+                i, data, i, idt_firmware[i]);
+            return 0;
+        }
+    }
+
+    *result = true;
+
+    return 0;
+}
+
+static int idtp9220_is_fw_burned(struct idtp9220_receiver *chip, bool *is_burned)
+{
+    int rc, len, i, reg;
+    u8 data;
+
+	/* verify rx burn magic number */
+    rc = idtp9220_verify_fw_prepare(chip);
+    if(rc < 0)
+    {
+        pr_err("idtp9220_verify_fw_prepare failed\n");
+        return rc;
+    }
+
+    reg = 0x8000 + RX_BURN_MAGIC_NUMBER_ADDR;
+    len = sizeof(burn_magic_number);
+    for (i = 0; i < len; i++)
+    {
+        data = 0;
+        rc = idtp9220_read(chip, reg + i, &data);
+        if(rc <0)
+        {
+            pr_err("cannot read magic[%d]\n", i);
+            return rc;
+        }
+
+        if (data != burn_magic_number[i])
+        {
+            pr_err("burn magic number check err data[%d]:%02x != magic[%d]:%02x.\n", i, data, i, burn_magic_number[i]);
+            break;
+		}
+    }
+
+    if(i == len)
+    {
+        *is_burned = true;
+    }
+    else
+    {
+        *is_burned = false;
+    }
+
+    return 0;
 }
 
 static int idtp9220_burn_fw_prepare(struct idtp9220_receiver *chip)
@@ -531,7 +678,7 @@ static int idtp9220_burn_fw_prepare(struct idtp9220_receiver *chip)
 }
 
 static int idtp9220_burn_fw_process(struct idtp9220_receiver *chip, char *srcData,
-    int srcOffs, int size)
+    int srcOffs, int size, int otp_address)
 {
     int rc, i,j;
     u16 StartAddr, CheckSum, CodeLength;
@@ -539,15 +686,21 @@ static int idtp9220_burn_fw_process(struct idtp9220_receiver *chip, char *srcDat
     for (i = 0; i < size; i += 128)        // program pages of 128 bytes
     {
         /* build a packet */
-        StartAddr = (u16)i;
+        StartAddr = (u16)otp_address + i;
         CheckSum = StartAddr;
         CodeLength = 128;
 
         memset(&chip->burn_packet, 0, sizeof(chip->burn_packet));
 
         /* (1) copy the 128 bytes of the OTP image data to the packet data buffer */
-        memcpy(&chip->burn_packet.dataBuf, srcData + i + srcOffs, 128);
-
+        if(size < 128)
+        {
+            memcpy(&chip->burn_packet.dataBuf, srcData + i + srcOffs, size);
+        }
+        else
+        {
+            memcpy(&chip->burn_packet.dataBuf, srcData + i + srcOffs, 128);
+        }
         /* (2) calculate the packet checksum of the 128-byte data, StartAddr, and CodeLength */
         for (j = 127; j >= 0; j--)        // find the 1st non zero value byte from the end of the sBuf[] buffer
         {
@@ -649,9 +802,26 @@ static int idtp9220_burn_fw_end(struct idtp9220_receiver *chip)
     return 0;
 }
 
-static int idtp9220_burn_fw(struct idtp9220_receiver *chip)
+static int idtp9220_burn_fw(struct idtp9220_receiver *chip, bool *result)
 {
     int rc, len;
+    bool is_burned = false;
+
+    /* check whether fw has been burned */
+    rc = idtp9220_is_fw_burned(chip, &is_burned);
+    if(rc)
+    {
+        pr_err("check fw burned status failed\n");
+        return rc;
+    }
+
+    if(is_burned)
+    {
+        pr_err("fw has been burned before and return\n");
+        return 0;
+    }
+
+    pr_err("fw has not been burned and continue\n");
 
     /*  === Step-1 ===
      *Transfer 9220 boot loader code "OTPBootloader" to 9220 SRAM
@@ -667,10 +837,10 @@ static int idtp9220_burn_fw(struct idtp9220_receiver *chip)
     pr_err("step1 success\n");
 
     /* === Step-2 ===
-      * program OTP image data to 9220 OTP memory
-      */
+     * program OTP image data to 9220 OTP memory
+     */
     len = sizeof(idt_firmware);
-    rc = idtp9220_burn_fw_process(chip, idt_firmware, 0, len);
+    rc = idtp9220_burn_fw_process(chip, idt_firmware, 0, len, 0);
     if(rc != 1)
     {
         pr_err("can not download firmware to otp\n");
@@ -679,92 +849,88 @@ static int idtp9220_burn_fw(struct idtp9220_receiver *chip)
     pr_err("step2 success\n");
 
     /* === Step-3 ===
-        *restore system (Need to reset or power cycle 9220 to run the OTP code)
-        */
+       * write burn magic number
+       */
+    len = sizeof(burn_magic_number);
+    rc = idtp9220_burn_fw_process(chip, (char*)burn_magic_number, 0, len, RX_BURN_MAGIC_NUMBER_ADDR);
+    if(rc != 1)
+    {
+        pr_err("can not write magic number to otp\n");
+        return rc;
+    }
+    pr_err("step3 success\n");
+
+	/* === Step-4 ===
+     * restore system (Need to reset or power cycle 9220 to run the OTP code)
+     */
     rc = idtp9220_burn_fw_end(chip);
     if(rc < 0)
     {
         return rc;
     }
-    pr_err("step3 success\n");
+    pr_err("step4 success\n");
+
+    *result = true;
 
     return 0;
 }
 
-static int idtp9220_verify_fw_prepare(struct idtp9220_receiver *chip)
+static int idtp9220_do_device_action(struct idtp9220_receiver *chip,
+                       enum idtp9220_request_type_need_rx request_type,
+                       union idtp9220_interactive_data *val)
 {
     int rc;
 
-    /* disable PWM */
-    rc = idtp9220_write(chip, 0x3c00, 0x80);
-    if (rc < 0)
+    mutex_lock(&chip->service_request_lock);
+
+    switch (request_type)
     {
-        return rc;
+        case SET_LDO_ENABLE:
+            rc = idtp9220_set_ldout_enable(chip, val->result);
+            break;
+        case SET_VOUT_VOLTAGE:
+            rc = idtp9220_set_vout_voltage(chip, val->shortval);
+            break;
+        case SET_COUT_CURRENT:
+            rc = idtp9220_set_cout_current(chip, val->shortval);
+            break;
+        case SET_OPER_FREQ:
+            rc = idtp9220_set_freq(chip, val);
+            break;
+        case GET_OPER_FREQ:
+            rc = idtp9220_get_freq(chip, val);
+            break;
+        case GET_CHIP_INFO:
+            break;
+        case IS_LDO_ENABLED:
+            rc = idtp9220_is_ldoout_enable(chip, &val->result);
+            break;
+        case IS_RX_FW_BURNED:
+            rc = idtp9220_is_fw_burned(chip, &val->result);
+            break;
+        case DO_BURN_RX_FW:
+            rc = idtp9220_burn_fw(chip, &val->result);
+            break;
+        case DO_VERIFY_RX_FW:
+            rc = idtp9220_verify_otp_fw(chip, &val->result);
+            break;
+        case GET_TX_HARDWARE_VERSION:
+            rc = idtp9220_get_tx_hard_version(chip, val);
+            break;
+        case GET_TX_TEMP:
+            rc = idtp9220_get_tx_temp(chip, val);
+            break;
+        case GET_TX_SOFTWARE_VERSION:
+            rc = idtp9220_get_tx_soft_version(chip, val);
+            break;
+        case GET_TX_VIN:
+            rc = idtp9220_get_tx_vin(chip, val);
+            break;
     }
 
-    /* core key */
-    rc = idtp9220_write(chip, 0x3000, 0x5a);
-    if (rc < 0)
-    {
-        return rc;
-    }
+    mutex_unlock(&chip->service_request_lock);
 
-    /* hold M0 */
-    rc = idtp9220_write(chip, 0x3040, 0x11);
-    if (rc < 0)
-    {
-        return rc;
-    }
-
-    /* OTP_VRR (VRR=3.0V) */
-    rc = idtp9220_write(chip, 0x5c04, 0x05);
-    if (rc < 0)
-    {
-        return rc;
-    }
-
-    /* OTP_CTRL (VRR_EN=1, EN=1) */
-    rc = idtp9220_write(chip, 0x5c00, 0x11);
-    if (rc < 0)
-    {
-        return rc;
-    }
-
-    return 0;
-}
-
-static int idtp9220_verify_otp_fw(struct idtp9220_receiver *chip)
-{
-    unsigned char data;
-    int rc, i, reg, size;
-
-    rc = idtp9220_verify_fw_prepare(chip);
-    if(rc < 0)
-    {
-        pr_err("idtp9220_verify_fw_prepare failed\n");
-        return rc;
-    }
-
-    reg = 0x8000;
-    size = sizeof(idt_firmware);
-    for (i = 0; i < size; i++)
-    {
-        data = 0;
-        rc = idtp9220_read(chip, reg + i, &data);
-        if(rc <0)
-        {
-            return rc;
-        }
-
-        if (data != idt_firmware[i])
-        {
-            pr_err("fw check err data[%d]:%02x != boot[%d]:%02x.\n",
-                i, data, i, idt_firmware[i]);
-            return 0;
-        }
-    }
-
-    return 1;
+    return rc;
 }
 
 static ssize_t idtp9220_version_show(struct device *dev,
@@ -772,38 +938,39 @@ static ssize_t idtp9220_version_show(struct device *dev,
                                  char *buf)
 {
     int rc;
-    u8 chip_id_l, chip_id_h, chip_rev, vset, status, cust_id, rx_fw_rev_l, rx_fw_rev_h ;
+    union idtp9220_interactive_data chip_id, rx_fw_major_rev, rx_fw_minor_rev;
+    u8 chip_rev, vset, status, cust_id;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
 
     rc = idtp9220_read(chip, STATUS_L_REG, &status);
     if(rc < 0)
     {
-        return rc;
+        goto read_version_err;
     }
 
     rc = idtp9220_read(chip, VOUT_SET_REG, &vset);
     if(rc < 0)
     {
-        return rc;
+        goto read_version_err;
     }
 
-    rc = idtp9220_read(chip, CHIP_ID_L_REG, &chip_id_l);
+    rc = idtp9220_read(chip, CHIP_ID_L_REG, &chip_id.strval[0]);
     if(rc < 0)
     {
-        return rc;
+        goto read_version_err;
     }
 
-    rc = idtp9220_read(chip, CHIP_ID_H_REG, &chip_id_h);
+    rc = idtp9220_read(chip, CHIP_ID_H_REG, &chip_id.strval[1]);
     if(rc < 0)
     {
-        return rc;
+        goto read_version_err;
     }
 
     rc = idtp9220_read(chip, CHIP_REV_FONT_REG, &chip_rev);
     if(rc < 0)
     {
-        return rc;
+        goto read_version_err;
     }
 
     chip_rev = chip_rev >> CHIP_REV_MASK_SHIFT;
@@ -811,26 +978,41 @@ static ssize_t idtp9220_version_show(struct device *dev,
     rc = idtp9220_read(chip, CTM_ID_REG, &cust_id);
     if(rc < 0)
     {
-        return rc;
+        goto read_version_err;
     }
 
-    rc = idtp9220_read(chip, RX_FW_MAJOR_REV_L_REG, &rx_fw_rev_l);
+    rc = idtp9220_read(chip, RX_FW_MAJOR_REV_L_REG, &rx_fw_major_rev.strval[0]);
     if(rc < 0)
     {
-        return rc;
+        goto read_version_err;
     }
 
-    rc = idtp9220_read(chip, RX_FW_MAJOR_REV_H_REG, &rx_fw_rev_h);
+    rc = idtp9220_read(chip, RX_FW_MAJOR_REV_H_REG, &rx_fw_major_rev.strval[1]);
     if(rc < 0)
     {
-        return rc;
+        goto read_version_err;
     }
 
-    return sprintf(buf, "chip_id_l:%02x\nchip_id_h:%02x\nchip_rev:%02x\ncust_id:%02x status:%02x vset:%02x\nrx_fw_rev_l:%02x\nrx_fw_rev_h:%02x\n",
-                 chip_id_l, chip_id_h, chip_rev, cust_id, status, vset, rx_fw_rev_l, rx_fw_rev_h);
+    rc = idtp9220_read(chip, RX_FW_MINOR_REV_L_REG, &rx_fw_minor_rev.strval[0]);
+    if(rc < 0)
+    {
+        goto read_version_err;
+    }
+
+    rc = idtp9220_read(chip, RX_FW_MINOR_REV_H_REG, &rx_fw_minor_rev.strval[1]);
+    if(rc < 0)
+    {
+        goto read_version_err;
+    }
+
+    return sprintf(buf, "chip_id:%04x\nchip_rev:%02x\ncust_id:%02x status:%02x vset:%02x\nrx_fw_major_rev:%04x\nrx_fw_minor_rev:%04x\n",
+                 chip_id.shortval, chip_rev, cust_id, status, vset, rx_fw_major_rev.shortval,rx_fw_minor_rev.shortval);
+
+read_version_err:
+	return sprintf(buf, "Can not access idtp9220\n");
 }
 
-static ssize_t idtp9220_detect_receive_show(struct device *dev,
+static ssize_t idtp9220_detect_tx_data_show(struct device *dev,
                                         struct device_attribute *attr,
                                         char *buf)
 {
@@ -838,7 +1020,7 @@ static ssize_t idtp9220_detect_receive_show(struct device *dev,
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
 
-    receive = idtp9220_chip_detect_receive(chip);
+    receive = idtp9220_detect_tx_data_receive(chip);
 
     if (receive)
     {
@@ -854,18 +1036,19 @@ static ssize_t idtp9220_ldout_enable_show(struct device *dev,
                                       struct device_attribute *attr,
                                       char *buf)
 {
+    int rc;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
-    bool ldoout_enable;
-    int rc;
+    union idtp9220_interactive_data result = {0};
 
-    rc = idtp9220_is_ldoout_enable(chip, &ldoout_enable);
-    if(rc < 0 )
+    rc = idtp9220_do_device_action(chip, IS_LDO_ENABLED, &result);
+
+    if(rc)
     {
         return sprintf(buf, "Can not access idtp9220\n");
     }
 
-    if(ldoout_enable)
+    if(result.result)
     {
         return sprintf(buf, "LDO Vout is ON.\n");
     }
@@ -880,20 +1063,18 @@ static ssize_t idtp9220_ldout_enable_store(struct device *dev,
                                        const char *buf,
                                        size_t count)
 {
+    int rc;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
-    bool ldout_enable = strncmp(buf, "1", 1) ? false : true;
+    union idtp9220_interactive_data result = {0};
 
-    if (ldout_enable)
-    {
-        pr_err("enable LDO Vout.\n");
-    }
-    else
-    {
-        pr_err("disable LDO Vout.\n");
-    }
+    result.result = strncmp(buf, "1", 1) ? false : true;
 
-    idtp9220_set_ldout_enable(chip, ldout_enable);
+    rc = idtp9220_do_device_action(chip, SET_LDO_ENABLE, &result);
+    if(rc)
+    {
+        pr_err("can not change ldoout enable\n");
+    }
 
     return count;
 }
@@ -911,7 +1092,7 @@ static ssize_t idtp9220_vout_show(struct device *dev,
     rc = idtp9220_read(di, ADC_VOUT_L_REG, &vout.strval[0]);
     if(rc < 0)
     {
-        return rc;
+        return sprintf(buf, "Can not access idtp9220\n");
     }
 
     rc = idtp9220_read(di, ADC_VOUT_H_REG, &vout.strval[1]);
@@ -934,13 +1115,19 @@ static ssize_t idtp9220_vout_store(struct device *dev,
                                const char *buf,
                                size_t count)
 {
-    int voltage;
+    int rc;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
+    union idtp9220_interactive_data voltage = {0};
 
-    voltage = (int)simple_strtoul(buf, NULL, 10);
+    voltage.shortval = (u16)simple_strtoul(buf, NULL, 10);
 
-    idtp9220_set_vout_voltage(chip, voltage);
+    rc = idtp9220_do_device_action(chip, SET_VOUT_VOLTAGE, &voltage);
+    if(rc)
+    {
+        pr_err("can not change vout voltage\n");
+    }
+
     return count;
 }
 
@@ -948,12 +1135,22 @@ static ssize_t idtp9220_cout_show(struct device *dev,
                               struct device_attribute *attr,
                               char *buf)
 {
+    int rc;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *di = i2c_get_clientdata(client);
     union idtp9220_interactive_data cout;
 
-    idtp9220_read(di, RX_LOUT_L_REG, &cout.strval[0]);
-    idtp9220_read(di, RX_LOUT_H_REG, &cout.strval[1]);
+    rc = idtp9220_read(di, RX_LOUT_L_REG, &cout.strval[0]);
+    if(rc < 0)
+    {
+        return sprintf(buf, "Can not access idtp9220\n");
+    }
+
+    rc = idtp9220_read(di, RX_LOUT_H_REG, &cout.strval[1]);
+    if(rc < 0)
+    {
+        return sprintf(buf, "Can not access idtp9220\n");
+    }
 
     pr_info("cout_l:%02x cout_h:%02x\n", cout.strval[0], cout.strval[1]);
 
@@ -965,13 +1162,18 @@ static ssize_t idtp9220_cout_store(struct device *dev,
                                const char *buf,
                                size_t count)
 {
-    int current_ma;
+    int rc;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
+    union idtp9220_interactive_data value = {0};
 
-    current_ma = (int)simple_strtoul(buf, NULL, 10);
+    value.shortval = (u16)simple_strtoul(buf, NULL, 10);
 
-    idt9220_set_cout_current(chip, current_ma);
+    rc = idtp9220_do_device_action(chip, SET_COUT_CURRENT, &value);
+    if(rc)
+    {
+        pr_err("can not change COUT current\n");
+    }
 
     return count;
 }
@@ -983,16 +1185,20 @@ static ssize_t idtp9220_burn_fw_show(struct device *dev,
     u16 rc;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
+    union idtp9220_interactive_data value = {0};
 
-    rc = idtp9220_burn_fw(chip);
+    rc = idtp9220_do_device_action(chip, DO_BURN_RX_FW, &value);
     if(rc)
     {
-        return sprintf(buf, "burn fw failed\n");
+        pr_err("can not do burn rx fw\n");
     }
-    else
+
+    if(!value.result)
     {
-        return sprintf(buf, "burn fw success\n");
+        return sprintf(buf, "burn fw fail\n");
     }
+
+    return sprintf(buf, "burn fw success\n");
 }
 
 static ssize_t idtp9220_verify_otp_fw_show(struct device *dev,
@@ -1002,9 +1208,15 @@ static ssize_t idtp9220_verify_otp_fw_show(struct device *dev,
     int rc;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
+    union idtp9220_interactive_data value = {0};
 
-    rc = idtp9220_verify_otp_fw(chip);
-    if(rc <= 0)
+    rc = idtp9220_do_device_action(chip, DO_VERIFY_RX_FW, &value);
+    if(rc)
+    {
+        pr_err("can not do burn rx fw\n");
+    }
+
+    if(!value.result)
     {
         return sprintf(buf, "otp verify failed\n");
     }
@@ -1012,7 +1224,30 @@ static ssize_t idtp9220_verify_otp_fw_show(struct device *dev,
     return sprintf(buf, "otp verify ok\n");
 }
 
-static ssize_t idtp9220_rxint_gpio_store(struct device *dev,
+static ssize_t idtp9220_is_burned_fw_show(struct device *dev,
+                              struct device_attribute *attr,
+                              char *buf)
+{
+    int rc;
+    struct i2c_client *client = container_of(dev, struct i2c_client, dev);
+    struct idtp9220_receiver *chip = i2c_get_clientdata(client);
+    union idtp9220_interactive_data value = {0};
+
+    rc = idtp9220_do_device_action(chip, IS_RX_FW_BURNED, &value);
+    if(rc)
+    {
+        pr_err("can not do burn rx fw\n");
+    }
+
+    if(!value.result)
+    {
+        return sprintf(buf, "rx fw is not burned\n");
+    }
+
+    return sprintf(buf, "rx fw is burned\n");
+}
+
+static ssize_t idtp9220_ap_mask_rxint_gpio_store(struct device *dev,
                                struct device_attribute *attr,
                                const char *buf,
                                size_t count)
@@ -1023,7 +1258,6 @@ static ssize_t idtp9220_rxint_gpio_store(struct device *dev,
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
 
     enable = (int)simple_strtoul(buf, NULL, 10);
-
     pr_err("set mask rxint GPIO status to %d\n", enable);
     gpio_set_value(chip->mask_wireless_int_gpio, enable);
     return count;
@@ -1036,73 +1270,118 @@ static ssize_t idtp9220_freq_show(struct device *dev,
     int rc;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
+    union idtp9220_interactive_data freq = {0};
+    u16 real_freq = 0;
 
-    union idtp9220_interactive_data freq;
-
-    rc = idtp9220_get_freq(chip, &freq);
-    if(!rc)
+    rc = idtp9220_do_device_action(chip, GET_OPER_FREQ, &freq);
+    if(rc)
     {
-        return sprintf(buf, "freq Value: %dKHz\n", freq.shortval);
+        return sprintf(buf, "can not get freq\n");
     }
 
-    return sprintf(buf, "can not get freq\n");
- }
+    pr_err("freq_l =%d, freq_h =%d\n", freq.strval[0], freq.strval[1]);
+    if(freq.shortval)
+    {
+           real_freq = (64 * 6000)/freq.shortval;
+    }
+
+    return sprintf(buf, "freq Value: %dKHz\n", real_freq);
+}
 
 static ssize_t idtp9220_freq_store(struct device *dev,
                                struct device_attribute *attr,
                                const char *buf,
                                size_t count)
 {
+    int rc;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
-    union idtp9220_interactive_data freq;
+    union idtp9220_interactive_data freq = {0};
 
-    freq.shortval= simple_strtoul(buf, NULL, 10);
+    freq.shortval = (u16)simple_strtoul(buf, NULL, 10);
 
-    idtp9220_set_freq(chip, &freq);
+    rc = idtp9220_do_device_action(chip, SET_OPER_FREQ, &freq);
+    if(rc)
+    {
+        pr_err("can not change freq\n");
+    }
 
     return count;
 }
 
-static ssize_t idtp9220_temp_show(struct device *dev,
+static ssize_t idtp9220_tx_temp_show(struct device *dev,
                               struct device_attribute *attr,
                               char *buf)
 {
     int rc;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
-
     union idtp9220_interactive_data temp;
 
-    rc = idtp9220_get_tx_temp(chip, &temp);
-    if(!rc)
+    rc = idtp9220_do_device_action(chip, GET_TX_TEMP, &temp);
+    if(rc)
     {
-        return sprintf(buf, "temp1 = %d, temp2 = %d\n", temp.strval[0], temp.strval[1]);
+        return sprintf(buf, "can not get temp\n");
     }
 
-    return sprintf(buf, "can not get temp\n");
-}
+    return sprintf(buf, "temp1 = %d, temp2 = %d\n", (int)temp.strval[0], (int)temp.strval[1]);
+ }
 
-static ssize_t idtp9220_hard_version_show(struct device *dev,
+static ssize_t idtp9220_tx_hard_version_show(struct device *dev,
                               struct device_attribute *attr,
                               char *buf)
 {
     int rc;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
-
     union idtp9220_interactive_data hard_version;
 
-    rc = idtp9220_get_tx_version(chip, &hard_version);
-    if(!rc)
+    rc = idtp9220_do_device_action(chip, GET_TX_HARDWARE_VERSION, &hard_version);
+    if(rc)
     {
-        return sprintf(buf, "tx hard version = %d\n", hard_version.shortval);
+        return sprintf(buf, "can not get hard version\n");
     }
 
-    return sprintf(buf, "can not get tx version\n");
+    return sprintf(buf, "tx hard version = %d\n", hard_version.shortval);
 }
 
-static ssize_t idtp9220_intr_reg_show(struct device *dev,
+static ssize_t idtp9220_tx_soft_version_show(struct device *dev,
+                              struct device_attribute *attr,
+                              char *buf)
+{
+    int rc;
+    struct i2c_client *client = container_of(dev, struct i2c_client, dev);
+    struct idtp9220_receiver *chip = i2c_get_clientdata(client);
+    union idtp9220_interactive_data soft_version;
+
+    rc = idtp9220_do_device_action(chip, GET_TX_SOFTWARE_VERSION, &soft_version);
+    if(rc)
+    {
+        return sprintf(buf, "can not get tx software version\n");
+    }
+
+    return sprintf(buf, "tx soft version = %d\n", soft_version.shortval);
+}
+
+static ssize_t idtp9220_tx_vin_show(struct device *dev,
+                              struct device_attribute *attr,
+                              char *buf)
+{
+    int rc;
+    struct i2c_client *client = container_of(dev, struct i2c_client, dev);
+    struct idtp9220_receiver *chip = i2c_get_clientdata(client);
+    union idtp9220_interactive_data tx_vin;
+
+    rc = idtp9220_do_device_action(chip, GET_TX_VIN, &tx_vin);
+    if(rc)
+    {
+       return sprintf(buf, "can not get tx vin\n");
+    }
+
+    return sprintf(buf, "tx vin = %dMV\n", tx_vin.shortval);
+}
+
+static ssize_t idtp9220_intr_status_show(struct device *dev,
                               struct device_attribute *attr,
                               char *buf)
 {
@@ -1114,7 +1393,7 @@ static ssize_t idtp9220_intr_reg_show(struct device *dev,
 
     idtp9220_read(chip, INTR_H_REG, &intr_reg.strval[1]);
 
-    if (gpio_is_valid(chip->wireless_int_gpio))
+    if(gpio_is_valid(chip->wireless_int_gpio))
     {
         return sprintf(buf, "INTR_L_REG = %d, INTR_H_REG = %d, wireless_int_gpio status = %d\n",
                     intr_reg.strval[0], intr_reg.strval[1], gpio_get_value(chip->wireless_int_gpio));
@@ -1164,12 +1443,12 @@ static ssize_t idtp9220_using_default_vout_flag_store(struct device *dev,
 
     flag = simple_strtoul(buf, NULL, 10);
 
-	if(flag)
+    if(flag)
     {
         chip->using_default_vout_flag = true;
     }
-	else
-	{
+    else
+    {
         chip->using_default_vout_flag = false;
     }
 
@@ -1179,35 +1458,41 @@ static ssize_t idtp9220_using_default_vout_flag_store(struct device *dev,
 }
 
 static DEVICE_ATTR(version, S_IRUGO, idtp9220_version_show, NULL);
-static DEVICE_ATTR(detect_receive, S_IRUGO, idtp9220_detect_receive_show, NULL);
+static DEVICE_ATTR(detect_tx_data, S_IRUGO, idtp9220_detect_tx_data_show, NULL);
 static DEVICE_ATTR(ldout_enable, S_IWUSR | S_IRUGO, idtp9220_ldout_enable_show, idtp9220_ldout_enable_store);
 static DEVICE_ATTR(vout, S_IWUSR | S_IRUGO, idtp9220_vout_show, idtp9220_vout_store);
 static DEVICE_ATTR(cout, S_IWUSR | S_IRUGO, idtp9220_cout_show, idtp9220_cout_store);
-static DEVICE_ATTR(burn_fw, S_IWUSR | S_IRUGO, idtp9220_burn_fw_show, NULL);
-static DEVICE_ATTR(verify_otp_fw, S_IWUSR | S_IRUGO, idtp9220_verify_otp_fw_show, NULL);
-static DEVICE_ATTR(mask_rxint_gpio, S_IWUSR, NULL, idtp9220_rxint_gpio_store);
+static DEVICE_ATTR(verify_otp_fw, S_IRUSR, idtp9220_verify_otp_fw_show, NULL);
+static DEVICE_ATTR(is_burned_fw, S_IRUSR, idtp9220_is_burned_fw_show, NULL);
+static DEVICE_ATTR(burn_fw, S_IRUSR, idtp9220_burn_fw_show, NULL);
 static DEVICE_ATTR(freq, S_IWUSR | S_IRUGO, idtp9220_freq_show, idtp9220_freq_store);
-static DEVICE_ATTR(temp, S_IWUSR | S_IRUGO, idtp9220_temp_show, NULL);
-static DEVICE_ATTR(hard_version, S_IWUSR | S_IRUGO, idtp9220_hard_version_show, NULL);
-static DEVICE_ATTR(intr_reg, S_IWUSR | S_IRUGO, idtp9220_intr_reg_show, NULL);
-static DEVICE_ATTR(clear_int, S_IWUSR | S_IRUGO, idtp9220_clear_int_show, NULL);
-static DEVICE_ATTR(using_default_vout_flag, S_IWUSR, idtp9220_using_default_vout_flag_show, idtp9220_using_default_vout_flag_store);
+static DEVICE_ATTR(tx_temp, S_IRUGO, idtp9220_tx_temp_show, NULL);
+static DEVICE_ATTR(tx_hard_version, S_IRUGO, idtp9220_tx_hard_version_show, NULL);
+static DEVICE_ATTR(tx_soft_version, S_IRUGO, idtp9220_tx_soft_version_show, NULL);
+static DEVICE_ATTR(tx_vin, S_IRUGO, idtp9220_tx_vin_show, NULL);
+static DEVICE_ATTR(intr_status, S_IRUGO, idtp9220_intr_status_show, NULL);
+static DEVICE_ATTR(clear_int, S_IRUGO, idtp9220_clear_int_show, NULL);
+static DEVICE_ATTR(using_default_vout_flag,  S_IWUSR | S_IRUGO, idtp9220_using_default_vout_flag_show, idtp9220_using_default_vout_flag_store);
+static DEVICE_ATTR(ap_mask_rxint_gpio, S_IWUSR, NULL, idtp9220_ap_mask_rxint_gpio_store);
 
 static struct attribute *idtp9220_sysfs_attrs[] = {
     &dev_attr_version.attr,
-    &dev_attr_detect_receive.attr,
+    &dev_attr_detect_tx_data.attr,
     &dev_attr_ldout_enable.attr,
     &dev_attr_vout.attr,
     &dev_attr_cout.attr,
-    &dev_attr_burn_fw.attr,
     &dev_attr_verify_otp_fw.attr,
-    &dev_attr_mask_rxint_gpio.attr,
+    &dev_attr_is_burned_fw.attr,
+    &dev_attr_burn_fw.attr,
     &dev_attr_freq.attr,
-    &dev_attr_temp.attr,
-    &dev_attr_hard_version.attr,
-    &dev_attr_intr_reg.attr,
+    &dev_attr_tx_temp.attr,
+    &dev_attr_tx_hard_version.attr,
+    &dev_attr_tx_soft_version.attr,
+    &dev_attr_tx_vin.attr,
+    &dev_attr_intr_status.attr,
     &dev_attr_clear_int.attr,
     &dev_attr_using_default_vout_flag.attr,
+    &dev_attr_ap_mask_rxint_gpio.attr,
     NULL,
 };
 
@@ -1255,7 +1540,7 @@ static void idtp9220_adjust_vout_work(struct work_struct *work)
                     vout = vbat + IDTP9220_VOUT_ADJUST_STEP_MV;
                 }
 
-                pr_info("vbat =%d, vout = %d\n",vbat, vout);
+                pr_info("vbat = %d, vout = %d\n",vbat, vout);
                 get_monotonic_boottime(&chip->last_set_vout_time);
                 pr_info("chip->last_setvout_time =%ld\n",
                              chip->last_set_vout_time.tv_sec);
@@ -1304,7 +1589,7 @@ static int idtp9220_initialize_gpio_state(struct idtp9220_receiver *chip)
     struct pinctrl *pctrl;
     struct pinctrl_state *pctrl_state;
 
-    /*set the pinctrl state*/
+    /* set the pinctrl state */
     pctrl = devm_pinctrl_get(chip->dev);
     if (IS_ERR(pctrl))
     {
@@ -1361,7 +1646,7 @@ static int idtp9220_initialize_gpio_direction_value(struct idtp9220_receiver *ch
     }
     gpio_direction_output(chip->mask_wireless_int_gpio, 0);
 
-    /*initialize rx int ap gpio*/
+    /* initialize rx int ap gpio */
     chip->wireless_int_gpio= of_get_named_gpio(chip->dev->of_node, "wireless-int-gpio", 0);
     if (!gpio_is_valid(chip->wireless_int_gpio))
     {
