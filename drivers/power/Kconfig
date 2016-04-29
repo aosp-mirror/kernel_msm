@@ -623,6 +623,13 @@ config MSM_BCL_PERIPHERAL_CTL
 	  provides routines to configure and monitor the BCL
 	  PMIC peripheral.
 
+config IDTP9017_WIRELESS_CHARGER
+	tristate "idtp9017 wireless charger control driver"
+	depends on I2C
+	default n
+	help
+	  Say Y to enable idtp9017 wireless charger.
+
 config BATTERY_TEMP_MONITOR
 	bool "Battery Temperature Monitoring driver"
 	depends on THERMAL_QPNP_ADC_TM
