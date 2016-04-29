@@ -1193,10 +1193,6 @@ static int msm_compr_open(struct snd_compr_stream *cstream)
 //HTC_AUD_START
 	prtd->stream_end = false;
 	prtd->lasttimestamp = 0;
-	if (q6asm_set_io_mode(prtd->audio_client, (COMPRESSED_IO | ASYNC_IO_MODE))) {
-		pr_err("%s: Set IO mode failed\n", __func__);
-		return -EINVAL;
-	}
 //HTC_AUD_END
 
 	/*
