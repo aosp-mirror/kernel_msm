@@ -276,6 +276,7 @@ static enum power_supply_property mp2661_battery_properties[] = {
     POWER_SUPPLY_PROP_TEMP_AMBIENT,
     POWER_SUPPLY_PROP_VOLTAGE_NOW,
     POWER_SUPPLY_PROP_CURRENT_NOW,
+    POWER_SUPPLY_PROP_USB_INPUT_CURRENT,
 };
 
 static int mp2661_get_prop_batt_status(struct mp2661_chg *chip)
@@ -413,6 +414,26 @@ static int mp2661_get_prop_ambient_temp(struct mp2661_chg *chip)
         results.adc_code, results.physical);
 
     return (int)results.physical;
+}
+
+static int usb_input_current_limit[];
+static int mp2661_get_usb_input_current(struct mp2661_chg *chip)
+{
+    union power_supply_propval ret = {0,};
+
+    int rc;
+    u8 reg;
+
+    rc = mp2661_read(chip, INPUT_SOURCE_CTRL_REG, &reg);
+    if (rc < 0)
+    {
+        pr_err("Couldn't read INPUT_SOURCE_CTRL_REG rc = %d\n", rc);
+        return rc;
+    }
+
+    ret.intval =  usb_input_current_limit[reg];
+
+    return ret.intval;
 }
 
 static int
@@ -928,6 +949,10 @@ static int mp2661_battery_set_property(struct power_supply *psy,
             rc = mp2661_set_charging_enable(chip, val->intval);
             update_psy = 1;
             break;
+        case POWER_SUPPLY_PROP_USB_INPUT_CURRENT:
+            rc = mp2661_set_usb_input_current(chip, val->intval);
+            update_psy = 1;
+            break;
         default:
             rc = -EINVAL;
     }
@@ -980,6 +1005,9 @@ static int mp2661_battery_get_property(struct power_supply *psy,
             break;
         case POWER_SUPPLY_PROP_CURRENT_NOW:
             val->intval = mp2661_get_prop_current_now(chip);
+            break;
+        case POWER_SUPPLY_PROP_USB_INPUT_CURRENT:
+            val->intval = mp2661_get_usb_input_current(chip);
             break;
         default:
             return -EINVAL;
@@ -1636,6 +1664,21 @@ static void mp2661_initialize_qpnp_adc_tm_btm(struct mp2661_chg *chip)
     }
 }
 
+/*writable properties*/
+static int mp2661_batt_property_is_writeable(struct power_supply *psy,
+                enum power_supply_property psp)
+{
+    switch (psp)
+    {
+        case POWER_SUPPLY_PROP_USB_INPUT_CURRENT:
+            return 1;
+        default:
+            break;
+    }
+
+    return 0;
+}
+
 static int mp2661_charger_probe(struct i2c_client *client,
                 const struct i2c_device_id *id)
 {
@@ -1719,6 +1762,7 @@ static int mp2661_charger_probe(struct i2c_client *client,
     chip->batt_psy.external_power_changed = mp2661_external_power_changed;
     chip->batt_psy.supplied_to    = pm_batt_supplied_to;
     chip->batt_psy.num_supplicants    = ARRAY_SIZE(pm_batt_supplied_to);
+    chip->batt_psy.property_is_writeable = mp2661_batt_property_is_writeable;
 
     rc = power_supply_register(chip->dev, &chip->batt_psy);
     if (rc < 0)
