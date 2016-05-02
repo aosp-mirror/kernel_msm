@@ -73,6 +73,7 @@
 #include "vos_types.h"
 #include "vos_packet.h"
 #include "vos_memory.h"
+#include "nan_datapath.h"
 
 void limLogSessionStates(tpAniSirGlobal pMac);
 
@@ -1454,6 +1455,8 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
         case eWNI_SME_EXT_CHANGE_CHANNEL:
         case eWNI_SME_ROAM_RESTART_REQ:
         case eWNI_SME_REGISTER_MGMT_FRAME_CB:
+        case eWNI_SME_NDP_INITIATOR_REQ:
+        case eWNI_SME_NDP_RESPONDER_REQ:
             // These messages are from HDD
             limProcessNormalHddMsg(pMac, limMsg, false);   //no need to response to hdd
             break;
@@ -2195,13 +2198,17 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
         lim_sap_offload_del_sta(pMac, limMsg);
         break;
 #endif /* SAP_AUTH_OFFLOAD */
-
     case eWNI_SME_DEL_ALL_TDLS_PEERS:
         lim_process_sme_del_all_tdls_peers(pMac, limMsg->bodyptr);
         vos_mem_free((v_VOID_t*)limMsg->bodyptr);
         limMsg->bodyptr = NULL;
         break;
-
+    case SIR_HAL_NDP_INITIATOR_RSP:
+    case SIR_HAL_NDP_INDICATION:
+    case SIR_HAL_NDP_CONFIRM:
+    case SIR_HAL_NDP_RESPONDER_RSP:
+        lim_handle_ndp_event_message(pMac, limMsg);
+        break;
     default:
         vos_mem_free((v_VOID_t*)limMsg->bodyptr);
         limMsg->bodyptr = NULL;

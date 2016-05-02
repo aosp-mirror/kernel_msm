@@ -43,6 +43,7 @@
 #include <adf_os_time.h>
 #include "pktlog_ac.h"
 #include <linux/rtc.h>
+#include <linux/skbuff.h>
 #include <vos_diag_core_log.h>
 #include "limApi.h"
 #include "ol_txrx_api.h"
@@ -1132,8 +1133,8 @@ static int wlan_get_pkt_stats_free_node(void)
 		ret = 1;
 	}
 
-	/* Reset the current node values */
-	gwlan_logging.pkt_stats_pcur_node->skb->len = 0;
+	/* Reset the skb values, essential if dequeued from filled list */
+	skb_trim(gwlan_logging.pkt_stats_pcur_node->skb, 0);
 	return ret;
 }
 
@@ -1294,7 +1295,7 @@ static void send_packetdump(adf_nbuf_t netbuf, uint8_t status,
 
 	pd_hdr.status = status;
 	pd_hdr.type = type;
-	pd_hdr.driver_ts = vos_timer_get_system_time();
+	pd_hdr.driver_ts = vos_get_monotonic_boottime();
 
 	if ((type == TX_MGMT_PKT) || (type == TX_DATA_PKT))
 		gtx_count++;

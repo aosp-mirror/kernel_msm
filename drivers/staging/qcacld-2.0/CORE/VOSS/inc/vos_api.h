@@ -75,6 +75,8 @@
 
 #define VOS_WDA_TIMEOUT 15000
 
+#define vos_roundup(x, y) roundup(x, y);
+
 /*-------------------------------------------------------------------------
   Function declarations and documenation
   ------------------------------------------------------------------------*/

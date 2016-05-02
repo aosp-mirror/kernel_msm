@@ -68,6 +68,7 @@
 #include "limAssocUtils.h"
 #endif
 
+#include "nan_datapath.h"
 /* Static global used to mark situations where pMac->lim.gLimTriggerBackgroundScanDuringQuietBss is SET
  * and limTriggerBackgroundScanDuringQuietBss() returned failure.  In this case, we will stop data
  * traffic instead of going into scan.  The recover function limProcessQuietBssTimeout() needs to have
@@ -6668,34 +6669,53 @@ tANI_U8 limGetCurrentOperatingChannel(tpAniSirGlobal pMac)
     return 0;
 }
 
-void limProcessAddStaRsp(tpAniSirGlobal pMac,tpSirMsgQ limMsgQ)
+/**
+ * limProcessAddStaRsp() - process WDA_ADD_STA_RSP from WMA
+ * @mac_ctx: Pointer to Global MAC structure
+ * @msg: msg from WMA
+ *
+ * @Return: None
+ */
+void limProcessAddStaRsp(tpAniSirGlobal mac_ctx, tpSirMsgQ msg)
 {
-    tpPESession         psessionEntry;
-    tpAddStaParams      pAddStaParams;
+	tpPESession         session;
+	tpAddStaParams      add_sta_params;
 
-    pAddStaParams = (tpAddStaParams)limMsgQ->bodyptr;
+	if (NULL == msg) {
+		limLog(mac_ctx, LOGE, FL("NULL add_sta_rsp"));
+		return;
+	}
 
-    if((psessionEntry = peFindSessionBySessionId(pMac,pAddStaParams->sessionId))==NULL)
-    {
-        limLog(pMac, LOGP,FL("Session Does not exist for given sessionID"));
-        vos_mem_free(pAddStaParams);
-        return;
-    }
-    psessionEntry->csaOffloadEnable = pAddStaParams->csaOffloadEnable;
-    if (LIM_IS_IBSS_ROLE(psessionEntry))
-        (void) limIbssAddStaRsp(pMac, limMsgQ->bodyptr,psessionEntry);
+	add_sta_params = (tpAddStaParams)msg->bodyptr;
+	session = peFindSessionBySessionId(mac_ctx, add_sta_params->sessionId);
+	if (NULL == session) {
+		limLog(mac_ctx, LOGP,
+		       FL("Session does not exist for given sessionID"));
+		vos_mem_free(add_sta_params);
+		return;
+	}
+	session->csaOffloadEnable = add_sta_params->csaOffloadEnable;
+
+	if (LIM_IS_IBSS_ROLE(session)) {
+		limIbssAddStaRsp(mac_ctx, msg->bodyptr, session);
+		return;
+	}
+
+	if (LIM_IS_NDI_ROLE(session)) {
+		lim_ndp_add_sta_rsp(mac_ctx, session, msg->bodyptr);
+		return;
+	}
+
 #ifdef FEATURE_WLAN_TDLS
-    else if(pMac->lim.gLimAddStaTdls)
-    {
-        limProcessTdlsAddStaRsp(pMac, limMsgQ->bodyptr, psessionEntry) ;
-        pMac->lim.gLimAddStaTdls = FALSE ;
-    }
+	if (mac_ctx->lim.gLimAddStaTdls) {
+		limProcessTdlsAddStaRsp(mac_ctx, msg->bodyptr, session);
+		mac_ctx->lim.gLimAddStaTdls = FALSE;
+		return;
+	}
 #endif
-    else
-        limProcessMlmAddStaRsp(pMac, limMsgQ,psessionEntry);
 
+	limProcessMlmAddStaRsp(mac_ctx, msg, session);
 }
-
 
 void limUpdateBeacon(tpAniSirGlobal pMac)
 {
@@ -8735,5 +8755,37 @@ bool lim_is_robust_mgmt_action_frame(uint8_t action_catagory)
 		break;
 	}
 	return false;
+}
+
+/**
+ * lim_update_caps_info_for_bss - Update capability info for this BSS
+ *
+ * @mac_ctx: mac context
+ * @caps: Pointer to capability info to be updated
+ * @bss_caps: Capability info of the BSS
+ *
+ * Update the capability info in Assoc/Reassoc request frames and reset
+ * the spectrum management, short preamble, immediate block ack bits
+ * if the BSS doesnot support it
+ *
+ * Return: None
+ */
+void lim_update_caps_info_for_bss(tpAniSirGlobal mac_ctx,
+					uint16_t *caps, uint16_t bss_caps)
+{
+	if (!(bss_caps & LIM_SPECTRUM_MANAGEMENT_BIT_MASK)) {
+		*caps &= (~LIM_SPECTRUM_MANAGEMENT_BIT_MASK);
+		limLog(mac_ctx, LOG1, FL("Clearing spectrum management:no AP support"));
+	}
+
+	if (!(bss_caps & LIM_SHORT_PREAMBLE_BIT_MASK)) {
+		*caps &= (~LIM_SHORT_PREAMBLE_BIT_MASK);
+		limLog(mac_ctx, LOG1, FL("Clearing short preamble:no AP support"));
+	}
+
+	if (!(bss_caps & LIM_IMMEDIATE_BLOCK_ACK_MASK)) {
+		*caps &= (~LIM_IMMEDIATE_BLOCK_ACK_MASK);
+		limLog(mac_ctx, LOG1, FL("Clearing Immed Blk Ack:no AP support"));
+	}
 }
 

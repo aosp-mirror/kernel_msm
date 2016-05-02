@@ -250,6 +250,21 @@ struct sme_ap_find_request_req{
 };
 #endif /* WLAN_FEATURE_APFIND */
 
+/**
+ * struct sme_oem_capability - OEM capability to be exchanged between host
+ *                             and userspace
+ * @ftm_rr: FTM range report capability bit
+ * @lci_capability: LCI capability bit
+ * @reserved1: reserved
+ * @reserved2: reserved
+ */
+struct sme_oem_capability {
+	uint32_t ftm_rr:1;
+	uint32_t lci_capability:1;
+	uint32_t reserved1:30;
+	uint32_t reserved2;
+};
+
 /*-------------------------------------------------------------------------
   Function declarations and documentation
   ------------------------------------------------------------------------*/
@@ -1952,6 +1967,11 @@ eHalStatus sme_OemDataReq(tHalHandle hHal,
                                        tANI_U8 sessionId,
                                        tOemDataReqConfig *,
                                        tANI_U32 *pOemDataReqID);
+
+VOS_STATUS sme_oem_update_capability(tHalHandle hHal,
+				     struct sme_oem_capability *cap);
+VOS_STATUS sme_oem_get_capability(tHalHandle hHal,
+				  struct sme_oem_capability *cap);
 
 #endif /*FEATURE_OEM_DATA_SUPPORT*/
 

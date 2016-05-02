@@ -305,7 +305,17 @@ static int hdd_ParseIBSSTXFailEventParams(tANI_U8 *pValue,
 
 void wlan_hdd_restart_timer_cb(v_PVOID_t usrDataForCallback);
 
-struct completion wlan_start_comp;
+/**
+ * struct init_comp - Driver loading status
+ * @wlan_start_comp: Completion event
+ * @status: Success/Failure
+ */
+struct init_comp {
+	struct completion wlan_start_comp;
+	int status;
+};
+static struct init_comp wlan_comp;
+
 #ifdef QCA_WIFI_FTM
 extern int hdd_ftm_start(hdd_context_t *pHddCtx);
 extern int hdd_ftm_stop(hdd_context_t *pHddCtx);
@@ -2195,16 +2205,15 @@ hdd_parse_send_action_frame_v1_data(const tANI_U8 *pValue,
 static int
 hdd_sendactionframe(hdd_adapter_t *pAdapter, const tANI_U8 *bssid,
                     const tANI_U8 channel, const tANI_U8 dwell_time,
-                    const tANI_U8 payload_len, const tANI_U8 *payload)
+                    const int payload_len, const tANI_U8 *payload)
 {
    struct ieee80211_channel chan;
-   tANI_U8 frame_len;
+   int frame_len, ret = 0;
    tANI_U8 *frame;
    struct ieee80211_hdr_3addr *hdr;
    u64 cookie;
    hdd_station_ctx_t *pHddStaCtx;
    hdd_context_t *pHddCtx;
-   int ret = 0;
    tpSirMacVendorSpecificFrameHdr pVendorSpecific =
                    (tpSirMacVendorSpecificFrameHdr) payload;
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0)) || defined(WITH_BACKPORTS)
@@ -2361,45 +2370,57 @@ hdd_parse_sendactionframe_v1(hdd_adapter_t *pAdapter, const char *command)
    return ret;
 }
 
-/*
-  \brief hdd_parse_sendactionframe_v2() - parse version 2 of the
-         SENDACTIONFRAME command
-
-  This function parses the v2 SENDACTIONFRAME command with the format
-
-      SENDACTIONFRAME <android_wifi_af_params>
-
-  \param - pAdapter - Adapter upon which the command was received
-  \param - command - command that was received, ASCII command followed
-                     by binary data
-
-  \return - 0 for success non-zero for failure
-
-  --------------------------------------------------------------------------*/
+/**
+ * hdd_parse_sendactionframe_v2() - parse version 2 of the
+ *                                  SENDACTIONFRAME command
+ * @pAdapter: Adapter upon which the command was received
+ * @command: command that was received, ASCII command followed
+ *           by binary data
+ * @total_len: total length of command
+ *
+ * This function parses the v2 SENDACTIONFRAME command with the format
+ * SENDACTIONFRAME <android_wifi_af_params>
+ *
+ * Return: 0 for success non-zero for failure
+ */
 static int
 hdd_parse_sendactionframe_v2(hdd_adapter_t *pAdapter,
-                             const char *command)
+                             const char *command, int total_len)
 {
-   struct android_wifi_af_params *params;
-   tSirMacAddr bssid;
-   int ret;
+	struct android_wifi_af_params *params;
+	tSirMacAddr bssid;
+	int ret;
 
-   /* params are large so keep off the stack */
-   params = kmalloc(sizeof(*params), GFP_KERNEL);
-   if (!params) return -ENOMEM;
+	/* The params are located after "SENDACTIONFRAME " */
+	total_len -= 16;
+	params = (struct android_wifi_af_params *)(command + 16);
 
-   /* The params are located after "SENDACTIONFRAME " */
-   memcpy(params, command + 16, sizeof(*params));
+	if (params->len <= 0 || params->len > ANDROID_WIFI_ACTION_FRAME_SIZE ||
+            (params->len > total_len)) {
+		hddLog(LOGE, FL("Invalid payload length: %d"), params->len);
+		return -EINVAL;
+	}
 
-   if (!mac_pton(params->bssid, (u8 *)&bssid)) {
-      hddLog(LOGE, "%s: MAC address parsing failed", __func__);
-      ret = -EINVAL;
-   } else {
-      ret = hdd_sendactionframe(pAdapter, bssid, params->channel,
-                                params->dwell_time, params->len, params->data);
-   }
-   kfree(params);
-   return ret;
+	if (!mac_pton(params->bssid, (u8 *)&bssid)) {
+		hddLog(LOGE, FL("MAC address parsing failed"));
+		return -EINVAL;
+	}
+
+	if (params->channel < 0 ||
+	    params->channel > WNI_CFG_CURRENT_CHANNEL_STAMAX) {
+		hddLog(LOGE, FL("Invalid channel: %d"), params->channel);
+		return -EINVAL;
+	}
+
+	if (params->dwell_time < 0) {
+		hddLog(LOGE, FL("Invalid dwell_time: %d"), params->dwell_time);
+		return -EINVAL;
+	}
+
+	ret = hdd_sendactionframe(pAdapter, bssid, params->channel,
+				params->dwell_time, params->len, params->data);
+
+	return ret;
 }
 
 /*
@@ -2419,7 +2440,8 @@ hdd_parse_sendactionframe_v2(hdd_adapter_t *pAdapter,
 
   --------------------------------------------------------------------------*/
 static int
-hdd_parse_sendactionframe(hdd_adapter_t *pAdapter, const char *command)
+hdd_parse_sendactionframe(hdd_adapter_t *pAdapter, const char *command,
+                          int total_len)
 {
    int ret;
 
@@ -2435,11 +2457,19 @@ hdd_parse_sendactionframe(hdd_adapter_t *pAdapter, const char *command)
     * SENDACTIONFRAME xx:xx:xx:xx:xx:xx*
     *           111111111122222222223333
     * 0123456789012345678901234567890123
+    *
+    * For both the commands, a valid command must have atleast first 34 length
+    * of data.
     */
+   if (total_len < 34) {
+       hddLog(LOGE, FL("Invalid command (total_len=%d)"), total_len);
+       return -EINVAL;
+   }
+
    if (command[33]) {
       ret = hdd_parse_sendactionframe_v1(pAdapter, command);
    } else {
-      ret = hdd_parse_sendactionframe_v2(pAdapter, command);
+      ret = hdd_parse_sendactionframe_v2(pAdapter, command, total_len);
    }
 
    return ret;
@@ -2992,8 +3022,9 @@ static eHalStatus hdd_parse_plm_cmd(tANI_U8 *pValue, tSirPlmReq *pPlmRequest)
         if (content < 0)
            return eHAL_STATUS_FAILURE;
 
+        content = VOS_MIN(content, WNI_CFG_VALID_CHANNEL_LIST_LEN);
         pPlmRequest->plmNumCh = content;
-        hddLog(VOS_TRACE_LEVEL_DEBUG, "numch %d", pPlmRequest->plmNumCh);
+        hddLog(LOG1, FL("Numch: %d"), pPlmRequest->plmNumCh);
 
         /* Channel numbers */
         for (count = 0; count < pPlmRequest->plmNumCh; count++)
@@ -3011,10 +3042,9 @@ static eHalStatus hdd_parse_plm_cmd(tANI_U8 *pValue, tSirPlmReq *pPlmRequest)
              if (1 != ret) return eHAL_STATUS_FAILURE;
 
              ret = kstrtos32(buf, 10, &content);
-             if ( ret < 0) return eHAL_STATUS_FAILURE;
-
-             if (content <= 0)
-                return eHAL_STATUS_FAILURE;
+             if (ret < 0 || content <= 0 ||
+                 content > WNI_CFG_CURRENT_CHANNEL_STAMAX)
+                 return eHAL_STATUS_FAILURE;
 
              pPlmRequest->plmChList[count]= content;
              hddLog(VOS_TRACE_LEVEL_DEBUG, " ch- %d",
@@ -4966,6 +4996,84 @@ exit:
 }
 
 /**
+ * hdd_decide_dynamic_chain_mask() - Dynamically decide and set chain mask
+ * for STA
+ * @hdd_ctx: Pointer to hdd context
+ * @forced_mode: set to valid mode to force the mode
+ *
+ * This function decides the chain mask to set considering number of
+ * active sessions, type of active sessions and concurrency.
+ * If forced_mode is valid, chan mask is set to the forced_mode.
+ *
+ * Return: void
+ */
+void hdd_decide_dynamic_chain_mask(hdd_context_t *hdd_ctx,
+	enum antenna_mode forced_mode)
+{
+	int ret;
+	hdd_adapter_t *sta_adapter;
+	hdd_station_ctx_t *hdd_sta_ctx;
+	enum antenna_mode mode;
+
+	if (wlan_hdd_validate_context(hdd_ctx))
+		return;
+
+	if (!hdd_ctx->cfg_ini->enable_dynamic_sta_chainmask ||
+	    !hdd_is_supported_chain_mask_2x2(hdd_ctx)) {
+		hddLog(LOG1,
+			FL("dynamic antenna mode in INI is %d or 2x2 not supported"),
+			hdd_ctx->cfg_ini->enable_dynamic_sta_chainmask);
+		return;
+	}
+	sta_adapter = hdd_get_adapter(hdd_ctx, WLAN_HDD_INFRA_STATION);
+	if (!sta_adapter) {
+		hddLog(LOGE, FL("Sta adapter null!!"));
+		return;
+	}
+	hddLog(LOG1, FL("Current antenna mode: %d"),
+		hdd_ctx->current_antenna_mode);
+	hdd_sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(sta_adapter);
+
+	if (HDD_ANTENNA_MODE_INVALID != forced_mode) {
+		mode = forced_mode;
+	} else if (!wlan_hdd_get_active_session_count(hdd_ctx)) {
+		/* If no active connection set 1x1 */
+		mode = HDD_ANTENNA_MODE_1X1;
+	} else if (1 == wlan_hdd_get_active_session_count(hdd_ctx) &&
+		   hdd_ctx->no_of_active_sessions[WLAN_HDD_INFRA_STATION]) {
+		if (!hdd_connIsConnected(hdd_sta_ctx)) {
+			hddLog(LOGE, FL("Sta not connected"));
+			return;
+		}
+		/*
+		 * In case only sta is connected set value depending
+		 * on AP capability.
+		 */
+		mode = hdd_sta_ctx->conn_info.nss;
+	} else {
+		/* If non sta is active or concurrency set 2x2 */
+		mode = HDD_ANTENNA_MODE_2X2;
+	}
+
+	if (mode != hdd_ctx->current_antenna_mode) {
+
+		ret = wlan_hdd_update_txrx_chain_mask(hdd_ctx,
+			(HDD_ANTENNA_MODE_2X2 == mode) ? 0x3 : 0x1);
+
+		if (0 != ret) {
+			hddLog(LOGE,
+				FL("Failed to update chain mask: %d"),
+				mode);
+			return;
+		}
+		hdd_ctx->current_antenna_mode = mode;
+
+		hddLog(LOG1, FL("Antenna mode updated to: %d"),
+			hdd_ctx->current_antenna_mode);
+	}
+}
+
+/**
  * drv_cmd_set_antenna_mode() - SET ANTENNA MODE driver command
  * handler
  * @hdd_ctx: Pointer to hdd context
@@ -5841,7 +5949,8 @@ static int hdd_driver_command(hdd_adapter_t *pAdapter,
        }
        else if (strncmp(command, "SENDACTIONFRAME", 15) == 0)
        {
-           ret = hdd_parse_sendactionframe(pAdapter, command);
+           ret = hdd_parse_sendactionframe(pAdapter, command,
+                                           priv_data.total_len);
        }
        else if (strncmp(command, "GETROAMSCANCHANNELMINTIME", 25) == 0)
        {
@@ -6454,11 +6563,11 @@ static int hdd_driver_command(hdd_adapter_t *pAdapter,
        {
            tANI_U8 *value = command;
            eHalStatus status = eHAL_STATUS_SUCCESS;
-           tpSirPlmReq pPlmRequest = NULL;
+           tpSirPlmReq pPlmRequest;
 
            pPlmRequest = vos_mem_malloc(sizeof(tSirPlmReq));
            if (NULL == pPlmRequest){
-               ret = -EINVAL;
+               ret = -ENOMEM;
                goto exit;
            }
 
@@ -7124,7 +7233,7 @@ static int hdd_driver_command(hdd_adapter_t *pAdapter,
          }
 
          /* Get station index for the peer mac address and sanitize it */
-         hdd_Ibss_GetStaId(pHddStaCtx, &peerMacAddr, &staIdx);
+         hdd_get_peer_sta_id(pHddStaCtx, &peerMacAddr, &staIdx);
 
          if (staIdx > HDD_MAX_NUM_IBSS_STA)
          {
@@ -12878,7 +12987,7 @@ free_hdd_ctx:
 
    wlan_hdd_deinit_tx_rx_histogram(pHddCtx);
    wiphy_unregister(wiphy) ;
-
+   wlan_hdd_cfg80211_deinit(wiphy);
    wiphy_free(wiphy) ;
    if (hdd_is_ssr_required())
    {
@@ -14602,7 +14711,8 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
       memdump_init();
       hdd_driver_memdump_init();
       hddLog(LOGE, FL("FTM driver loaded"));
-      complete(&wlan_start_comp);
+      wlan_comp.status = 0;
+      complete(&wlan_comp.wlan_start_comp);
       return VOS_STATUS_SUCCESS;
    }
 
@@ -15056,6 +15166,10 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
    pHddCtx->isLoadInProgress = FALSE;
    vos_set_load_unload_in_progress(VOS_MODULE_ID_VOSS, FALSE);
    vos_set_load_in_progress(VOS_MODULE_ID_VOSS, FALSE);
+
+   if (pHddCtx->cfg_ini->enable_dynamic_sta_chainmask)
+      hdd_decide_dynamic_chain_mask(pHddCtx,
+                            HDD_ANTENNA_MODE_1X1);
    memdump_init();
    hdd_driver_memdump_init();
    if (pHddCtx->cfg_ini->goptimize_chan_avoid_event) {
@@ -15063,7 +15177,8 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
        if (eHAL_STATUS_SUCCESS != hal_status)
            hddLog(LOGE, FL("Failed to disable Chan Avoidance Indcation"));
    }
-   complete(&wlan_start_comp);
+   wlan_comp.status = 0;
+   complete(&wlan_comp.wlan_start_comp);
    goto success;
 
 err_nl_srv:
@@ -15117,6 +15232,7 @@ err_ipa_cleanup:
 
 err_wiphy_unregister:
    wiphy_unregister(wiphy);
+   wlan_hdd_cfg80211_deinit(wiphy);
 
 err_vosclose:
    status = vos_sched_close( pVosContext );
@@ -15176,11 +15292,55 @@ err_free_hdd_context:
    }
    hdd_set_ssr_required (VOS_FALSE);
 
+   wlan_comp.status = -EAGAIN;
+   complete(&wlan_comp.wlan_start_comp);
    return -EIO;
 
 success:
    EXIT();
    return 0;
+}
+
+/* accommodate the request firmware bin time out 2 min */
+#define REQUEST_FWR_TIMEOUT 120000
+#define HDD_WLAN_START_WAIT_TIME (VOS_WDA_TIMEOUT + 5000 + REQUEST_FWR_TIMEOUT)
+/**
+ * hdd_hif_register_driver() - API for HDD to register with HIF
+ *
+ * API for HDD to register with HIF layer
+ *
+ * Return: success/failure
+ */
+int hdd_hif_register_driver(void)
+{
+	int ret;
+	unsigned long rc, timeout;
+
+	init_completion(&wlan_comp.wlan_start_comp);
+	wlan_comp.status = 0;
+
+	ret = hif_register_driver();
+
+	if (ret) {
+		hddLog(LOGE, FL("HIF registration failed"));
+		return ret;
+	}
+
+	timeout = msecs_to_jiffies(HDD_WLAN_START_WAIT_TIME);
+
+	rc = wait_for_completion_timeout(&wlan_comp.wlan_start_comp, timeout);
+
+	if (!rc) {
+		hddLog(LOGE, FL("hif registration timedout"));
+		return -EAGAIN;
+	}
+
+	if (wlan_comp.status)
+		hddLog(LOGE,
+		       FL("hdd_wlan_startup failed status:%d jiffies_left:%lu"),
+		       wlan_comp.status, rc);
+
+	return wlan_comp.status;
 }
 
 /**---------------------------------------------------------------------------
@@ -15200,7 +15360,6 @@ static int hdd_driver_init( void)
    VOS_STATUS status;
    v_CONTEXT_t pVosContext = NULL;
    int ret_status = 0;
-   unsigned long rc;
    u_int64_t start;
 
    start = adf_get_boottime();
@@ -15287,25 +15446,7 @@ static int hdd_driver_init( void)
       hdd_set_conparam((v_UINT_t)con_mode);
 #endif
 
-/* accommodate the request firmware bin time out 2 min */
-#define REQUEST_FWR_TIMEOUT 120000
-#define HDD_WLAN_START_WAIT_TIME (VOS_WDA_TIMEOUT + 5000 + REQUEST_FWR_TIMEOUT)
-
-   init_completion(&wlan_start_comp);
-
-   ret_status = hif_register_driver();
-   if (!ret_status) {
-       rc = wait_for_completion_timeout(
-                           &wlan_start_comp,
-                           msecs_to_jiffies(HDD_WLAN_START_WAIT_TIME));
-       if (!rc) {
-          hddLog(VOS_TRACE_LEVEL_FATAL,
-            "%s: timed-out waiting for hif_register_driver", __func__);
-           ret_status = -1;
-       } else
-           ret_status = 0;
-   }
-
+   ret_status = hdd_hif_register_driver();
    vos_remove_pm_qos();
    hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_DRIVER_INIT);
 

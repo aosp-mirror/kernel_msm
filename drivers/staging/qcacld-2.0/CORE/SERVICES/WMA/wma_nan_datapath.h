@@ -29,13 +29,11 @@
 
 #include "wma.h"
 #include "sirApi.h"
+#include "sme_nan_datapath.h"
 
 #ifdef WLAN_FEATURE_NAN_DATAPATH
 #define WMA_IS_VDEV_IN_NDI_MODE(intf, vdev_id) \
 				(WMI_VDEV_TYPE_NDI == intf[vdev_id].type)
-
-void wma_add_bss_ndi_mode(tp_wma_handle wma, tpAddBssParams add_bss);
-
 /**
  * wma_update_hdd_cfg_ndp() - Update target device NAN datapath capability
  * @wma_handle: pointer to WMA context
@@ -48,6 +46,8 @@ static inline void wma_update_hdd_cfg_ndp(tp_wma_handle wma_handle,
 {
 	tgt_cfg->nan_datapath_enabled = wma_handle->nan_datapath_enabled;
 }
+VOS_STATUS wma_handle_ndp_responder_req(tp_wma_handle wma_handle,
+					struct ndp_responder_req *req_params);
 void wma_delete_all_nan_remote_peers(tp_wma_handle wma,
 					uint32_t vdev_id);
 void wma_ndp_register_all_event_handlers(tp_wma_handle wma_handle);
@@ -55,11 +55,12 @@ void wma_ndp_unregister_all_event_handlers(tp_wma_handle wma_handle);
 void wma_ndp_add_wow_wakeup_event(tp_wma_handle wma_handle,
 						bool enable);
 void wma_ndp_wow_event_callback(void *handle, void *event, uint32_t len);
+void wma_add_bss_ndi_mode(tp_wma_handle wma, tpAddBssParams add_bss);
+void wma_add_sta_ndi_mode(tp_wma_handle wma, tpAddStaParams add_sta);
+VOS_STATUS wma_handle_ndp_initiator_req(tp_wma_handle wma_handle, void *req);
 #else
 static inline void wma_add_bss_ndi_mode(tp_wma_handle wma,
-					tpAddBssParams add_bss)
-{
-}
+					tpAddBssParams add_bss) {}
 static inline void wma_update_hdd_cfg_ndp(tp_wma_handle wma_handle,
 					  struct hdd_tgt_cfg *tgt_cfg) {}
 static inline void wma_ndp_register_all_event_handlers(
@@ -72,5 +73,18 @@ static inline void wma_ndp_add_wow_wakeup_event(tp_wma_handle wma_handle,
 						bool enable) {}
 static inline void wma_ndp_wow_event_callback(void *handle, void *event,
 						uint32_t len) {}
+static inline void wma_add_sta_ndi_mode(tp_wma_handle wma,
+					tpAddStaParams add_sta) {}
+static inline VOS_STATUS wma_handle_ndp_initiator_req(tp_wma_handle wma_handle,
+						      void *req)
+{
+	return VOS_STATUS_SUCCESS;
+}
+static inline VOS_STATUS wma_handle_ndp_responder_req(tp_wma_handle wma_handle,
+					void *req_params)
+{
+	return VOS_STATUS_SUCCESS;
+}
+
 #endif /* WLAN_FEATURE_NAN_DATAPATH */
 #endif /* __WMA_NAN_DATAPATH_H */

@@ -990,7 +990,8 @@ typedef struct sSirOemDataRsp
     tANI_U16             messageType;
     tANI_U16             length;
     bool                 target_rsp;
-    tANI_U8              oemDataRsp[OEM_DATA_RSP_SIZE];
+    uint32_t             rsp_len;
+    uint8_t              *oem_data_rsp;
 } tSirOemDataRsp, *tpSirOemDataRsp;
 
 #endif //FEATURE_OEM_DATA_SUPPORT
@@ -5214,6 +5215,7 @@ struct extscan_hotlist_match
  * @scan_id: a unique identifier for the scan unit
  * @flags: a bitmask with additional information about scan
  * @num_results: number of bssids retrieved by the scan
+ * @buckets_scanned: bitmask of buckets scanned in current extscan cycle
  * @ap: wifi scan bssid results info
  */
 struct extscan_cached_scan_result
@@ -5221,6 +5223,7 @@ struct extscan_cached_scan_result
 	uint32_t    scan_id;
 	uint32_t    flags;
 	uint32_t    num_results;
+	uint32_t    buckets_scanned;
 	tSirWifiScanResult *ap;
 };
 
@@ -5250,7 +5253,6 @@ typedef struct
  * @more_data: 0 - for last fragment
  *	       1 - still more fragment(s) coming
  * @num_scan_ids: number of scan ids
- * @buckets_scanned: bitmask of buckets scanned in current extscan cycle
  * @result: wifi scan result
  */
 struct extscan_cached_scan_results
@@ -5258,7 +5260,6 @@ struct extscan_cached_scan_results
 	uint32_t    request_id;
 	bool        more_data;
 	uint32_t    num_scan_ids;
-	uint32_t    buckets_scanned;
 	struct extscan_cached_scan_result  *result;
 };
 
@@ -5873,12 +5874,13 @@ typedef struct
      * (32 bits number accruing over time)
      */
     tANI_U32        onTimeHs20;
-    /* number of channels */
-    tANI_U32        numChannels;
 
     /** tx time (in milliseconds) per TPC level (0.5 dBm) */
-    uint32_t tx_time_per_tpc[MAX_TPC_LEVELS];
+    uint32_t total_num_tx_power_levels;
+    uint32_t *tx_time_per_power_level;
 
+    /* number of channels */
+    tANI_U32        numChannels;
     /* channel statistics tSirWifiChannelStats */
     tSirWifiChannelStats channels[0];
 } tSirWifiRadioStat, *tpSirWifiRadioStat;
@@ -7005,7 +7007,7 @@ enum ndp_response_code {
 struct ndp_cfg {
 	uint32_t tag;
 	uint32_t ndp_cfg_len;
-	uint8_t ndp_cfg[];
+	uint8_t *ndp_cfg;
 };
 
 /**
@@ -7031,7 +7033,7 @@ struct ndp_qos_cfg {
 struct ndp_app_info {
 	uint32_t tag;
 	uint32_t ndp_app_info_len;
-	uint8_t ndp_app_info[];
+	uint8_t *ndp_app_info;
 };
 
 /**
@@ -7106,7 +7108,7 @@ struct ndp_initiator_req {
 };
 
 /**
- * struct ndp_initiator_rsp_event - response event from FW
+ * struct ndp_initiator_rsp - response event from FW
  * @transaction_id: unique identifier
  * @vdev_id: session id of the interface over which ndp is being created
  * @ndp_instance_id: locally created NDP instance ID
@@ -7114,12 +7116,11 @@ struct ndp_initiator_req {
  * @reason: reason for failure if any
  *
  */
-struct ndp_initiator_rsp_event {
+struct ndp_initiator_rsp {
 	uint32_t transaction_id;
 	uint32_t vdev_id;
 	uint32_t ndp_instance_id;
 	uint32_t status;
-	uint32_t reason;
 };
 
 /**
@@ -7127,6 +7128,7 @@ struct ndp_initiator_rsp_event {
  * @vdev_id: session id of the interface over which ndp is being created
  * @service_instance_id: Service identifier
  * @peer_discovery_mac_addr: Peer's discovery mac address
+ * @peer_mac_addr: Peer's NDI mac address
  * @ndp_initiator_mac_addr: NDI mac address of the peer initiating NDP
  * @ndp_instance_id: locally created NDP instance ID
  * @role: self role for NDP
@@ -7139,7 +7141,7 @@ struct ndp_indication_event {
 	uint32_t vdev_id;
 	uint32_t service_instance_id;
 	v_MACADDR_t peer_discovery_mac_addr;
-	v_MACADDR_t ndp_initiator_mac_addr;
+	v_MACADDR_t peer_mac_addr;
 	uint32_t ndp_instance_id;
 	enum ndp_self_role role;
 	enum ndp_accept_policy policy;
@@ -7172,6 +7174,7 @@ struct ndp_responder_req {
  * @vdev_id: session id of the interface over which ndp is being created
  * @status: command status
  * @reason: reason for failure if any
+ * @peer_mac_addr: Peer's mac address
  *
  */
 struct ndp_responder_rsp_event {
@@ -7179,6 +7182,7 @@ struct ndp_responder_rsp_event {
 	uint32_t vdev_id;
 	uint32_t status;
 	uint32_t reason;
+	v_MACADDR_t peer_mac_addr;
 };
 
 /**

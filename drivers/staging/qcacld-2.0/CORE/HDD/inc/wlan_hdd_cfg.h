@@ -1351,6 +1351,11 @@ typedef enum
 #define CFG_VHT_ENABLE_2x2_CAP_FEATURE_MAX     ( 1 )
 #define CFG_VHT_ENABLE_2x2_CAP_FEATURE_DEFAULT ( 0 )
 
+#define CFG_ENABLE_VHT_DYNAMIC_STA_CHAINMASK    "gEnableDynamicSTAChainMask"
+#define CFG_ENABLE_VHT_DYNAMIC_STA_CHAINMASK_MIN     (0)
+#define CFG_ENABLE_VHT_DYNAMIC_STA_CHAINMASK_MAX     (1)
+#define CFG_ENABLE_VHT_DYNAMIC_STA_CHAINMASK_DEFAULT (0)
+
 /*
  * Valid chain mask values.
  * 01 - enables chain0
@@ -2269,7 +2274,7 @@ typedef enum
 #define CFG_TX_LDPC_ENABLE_FEATURE         "gTxLdpcEnable"
 #define CFG_TX_LDPC_ENABLE_FEATURE_MIN     ( 0 )
 #define CFG_TX_LDPC_ENABLE_FEATURE_MAX     ( 3 )
-#define CFG_TX_LDPC_ENABLE_FEATURE_DEFAULT ( 0 )
+#define CFG_TX_LDPC_ENABLE_FEATURE_DEFAULT ( 3 )
 
 /*
  * Enable / Disable MCC Adaptive Scheduler feature
@@ -4562,6 +4567,7 @@ struct hdd_config {
    uint32_t                    edca_vi_aifs;
    uint32_t                    edca_bk_aifs;
    uint32_t                    edca_be_aifs;
+   bool                        enable_dynamic_sta_chainmask;
 };
 
 typedef struct hdd_config hdd_config_t;

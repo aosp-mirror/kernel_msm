@@ -176,15 +176,16 @@ extern VOS_STATUS hdd_rx_packet_cbk(v_VOID_t *vosContext, adf_nbuf_t rxBufChain,
   ===========================================================================*/
 extern v_BOOL_t hdd_IsEAPOLPacket( vos_pkt_t *pVosPacket );
 
-/**============================================================================
-  @brief hdd_Ibss_GetStaId() - Get the StationID using the Peer Mac address
-  @param pHddStaCtx : [in] pointer to HDD Station Context
-  pMacAddress [in]  pointer to Peer Mac address
-  staID [out]  pointer to Station Index
-  @return    : VOS_STATUS_SUCCESS/VOS_STATUS_E_FAILURE
-  ===========================================================================*/
-VOS_STATUS hdd_Ibss_GetStaId(hdd_station_ctx_t *pHddStaCtx,
-                                  v_MACADDR_t *pMacAddress, v_U8_t *staId);
+ /**
+ * hdd_get_peer_sta_id() - Get the StationID using the Peer Mac address
+ * @sta_ctx: pointer to HDD Station Context
+ * @peer_mac_addr: pointer to Peer Mac address
+ * @sta_id: pointer to Station Index
+ *
+ * Returns: VOS_STATUS_SUCCESS on success, VOS_STATUS_E_FAILURE on error
+ */
+VOS_STATUS hdd_get_peer_sta_id(hdd_station_ctx_t *sta_ctx,
+                               v_MACADDR_t *peer_mac_addr, uint8_t *sta_id);
 
 /**============================================================================
   @brief hdd_flush_ibss_tx_queues() -

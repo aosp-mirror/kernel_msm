@@ -1909,7 +1909,6 @@ htt_rx_amsdu_rx_in_order_pop_ll(
 #ifdef FEATURE_MARK_FIRST_WOW_WAKEUP
         if (HTT_RX_IN_ORD_PADDR_IND_MSDU_INFO_GET(*(msg_word + 1)) &
                              FW_MSDU_INFO_FIRST_WAKEUP_M) {
-                adf_os_print("%s: first packet after WOW wakeup\n", __func__);
                 adf_nbuf_update_skb_mark(msdu, HTT_MARK_FIRST_WAKEUP_PACKET);
         }
 #endif

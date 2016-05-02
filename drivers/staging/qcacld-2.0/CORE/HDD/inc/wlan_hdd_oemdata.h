@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -157,6 +157,26 @@ typedef PACKED_PRE struct PACKED_POST
     /* channel info on which peer is connected */
     tHddChannelInfo peer_chan_info;
 } tPeerStatusInfo;
+
+/**
+ * enum oem_capability_mask - mask field for userspace client capabilities
+ * @OEM_CAP_RM_FTMRR: FTM range report mask bit
+ * @OEM_CAP_RM_LCI: LCI capability mask bit
+ */
+enum oem_capability_mask {
+	OEM_CAP_RM_FTMRR = (1 << (0)),
+	OEM_CAP_RM_LCI = (1 << (1)),
+};
+
+/**
+ * struct oem_get_capability_rsp - capabilites set by userspace and target.
+ * @target_cap: target capabilities
+ * @client_capabilities: capabilities set by userspace via set request
+ */
+struct oem_get_capability_rsp {
+	t_iw_oem_data_cap target_cap;
+	struct sme_oem_capability cap;
+};
 
 #endif //__WLAN_HDD_OEM_DATA_H__
 

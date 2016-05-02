@@ -698,6 +698,7 @@ static u_int8_t* get_wmi_cmd_string(WMI_CMD_ID wmi_command)
 		CASE_RETURN_STRING(WMI_VDEV_SET_CUSTOM_AGGR_SIZE_CMDID);
 		CASE_RETURN_STRING(WMI_PDEV_WAL_POWER_DEBUG_CMDID);
 		CASE_RETURN_STRING(WMI_VDEV_WISA_CMDID);
+		CASE_RETURN_STRING(WMI_SCAN_ADAPTIVE_DWELL_CONFIG_CMDID);
         }
 	return "Invalid WMI cmd";
 }
@@ -708,6 +709,73 @@ inline bool wmi_get_runtime_pm_inprogress(wmi_unified_t wmi_handle)
 	return adf_os_atomic_read(&wmi_handle->runtime_pm_inprogress);
 }
 #endif
+
+/**
+ * wmi_set_htc_tx_tag() - set HTC TX tag for WMI commands
+ * @wmi_handle: WMI handle
+ * @buf: WMI buffer
+ * @cmd_id: WMI command Id
+ *
+ * Return htc_tx_tag
+ */
+static uint16_t wmi_set_htc_tx_tag(wmi_unified_t wmi_handle,
+				wmi_buf_t buf,
+				WMI_CMD_ID cmd_id)
+{
+	uint16_t htc_tx_tag = 0;
+	wmi_vdev_set_param_cmd_fixed_param *set_cmd;
+	wmi_sta_powersave_param_cmd_fixed_param *ps_cmd;
+
+	switch(cmd_id) {
+	case WMI_WOW_ENABLE_CMDID:
+	case WMI_PDEV_SUSPEND_CMDID:
+	case WMI_WOW_ENABLE_DISABLE_WAKE_EVENT_CMDID:
+	case WMI_WOW_ADD_WAKE_PATTERN_CMDID:
+	case WMI_WOW_HOSTWAKEUP_FROM_SLEEP_CMDID:
+	case WMI_PDEV_RESUME_CMDID:
+	case WMI_WOW_DEL_WAKE_PATTERN_CMDID:
+#ifdef FEATURE_WLAN_D0WOW
+	case WMI_D0_WOW_ENABLE_DISABLE_CMDID:
+#endif
+		htc_tx_tag = HTC_TX_PACKET_TAG_AUTO_PM;
+	case WMI_FORCE_FW_HANG_CMDID:
+	if (wmi_handle->tag_crash_inject) {
+		htc_tx_tag = HTC_TX_PACKET_TAG_AUTO_PM;
+		wmi_handle->tag_crash_inject = false;
+	}
+	default:
+		break;
+	}
+
+	if(cmd_id == WMI_VDEV_SET_PARAM_CMDID)
+	{
+		set_cmd = (wmi_vdev_set_param_cmd_fixed_param *)
+			wmi_buf_data(buf);
+
+		switch(set_cmd->param_id) {
+		case WMI_VDEV_PARAM_LISTEN_INTERVAL:
+		case WMI_VDEV_PARAM_DTIM_POLICY:
+			htc_tx_tag = HTC_TX_PACKET_TAG_AUTO_PM;
+		default:
+			break;
+		}
+	}
+
+	if(cmd_id == WMI_STA_POWERSAVE_PARAM_CMDID)
+	{
+		ps_cmd = (wmi_sta_powersave_param_cmd_fixed_param *)
+			wmi_buf_data(buf);
+
+		switch(ps_cmd->param) {
+		case WMI_STA_PS_ENABLE_QPOWER:
+			htc_tx_tag = HTC_TX_PACKET_TAG_AUTO_PM;
+		default:
+			break;
+		}
+	}
+
+	return htc_tx_tag;
+}
 
 /* WMI command API */
 int wmi_unified_cmd_send(wmi_unified_t wmi_handle, wmi_buf_t buf, int len,
@@ -739,26 +807,8 @@ int wmi_unified_cmd_send(wmi_unified_t wmi_handle, wmi_buf_t buf, int len,
 		goto dont_tag;
 
 skip_suspend_check:
-	switch(cmd_id) {
-	case WMI_WOW_ENABLE_CMDID:
-	case WMI_PDEV_SUSPEND_CMDID:
-	case WMI_WOW_ENABLE_DISABLE_WAKE_EVENT_CMDID:
-	case WMI_WOW_ADD_WAKE_PATTERN_CMDID:
-	case WMI_WOW_HOSTWAKEUP_FROM_SLEEP_CMDID:
-	case WMI_PDEV_RESUME_CMDID:
-	case WMI_WOW_DEL_WAKE_PATTERN_CMDID:
-#ifdef FEATURE_WLAN_D0WOW
-	case WMI_D0_WOW_ENABLE_DISABLE_CMDID:
-#endif
-		htc_tag = HTC_TX_PACKET_TAG_AUTO_PM;
-	case WMI_FORCE_FW_HANG_CMDID:
-		if (wmi_handle->tag_crash_inject) {
-			htc_tag = HTC_TX_PACKET_TAG_AUTO_PM;
-			wmi_handle->tag_crash_inject = false;
-		}
-	default:
-		break;
-	}
+	htc_tag = (A_UINT16) wmi_set_htc_tx_tag(wmi_handle,
+						buf, cmd_id);
 
 dont_tag:
 	/* Do sanity check on the TLV parameter structure */

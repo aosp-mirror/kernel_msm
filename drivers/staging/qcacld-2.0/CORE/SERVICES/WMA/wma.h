@@ -575,6 +575,8 @@ struct wma_txrx_node {
 	uint8_t wps_state;
 	uint8_t nss_2g;
 	uint8_t nss_5g;
+	uint32_t tx_aggregation_size;
+	uint32_t rx_aggregation_size;
 
 	uint8_t wep_default_key_idx;
 	bool is_vdev_valid;
@@ -864,6 +866,7 @@ typedef struct wma_handle {
 
 	/* NAN datapath support enabled in firmware */
 	bool nan_datapath_enabled;
+	tSirLLStatsResults *link_stats_results;
 }t_wma_handle, *tp_wma_handle;
 
 struct wma_target_cap {
@@ -1791,5 +1794,8 @@ void wma_remove_peer(tp_wma_handle wma, u_int8_t *bssid,
 
 void wma_add_wow_wakeup_event(tp_wma_handle wma, WOW_WAKE_EVENT_TYPE event,
 			bool enable);
-
+VOS_STATUS wma_create_peer(tp_wma_handle wma, ol_txrx_pdev_handle pdev,
+			   ol_txrx_vdev_handle vdev, u8 peer_addr[6],
+			   u_int32_t peer_type, u_int8_t vdev_id,
+			   v_BOOL_t roam_synch_in_progress);
 #endif

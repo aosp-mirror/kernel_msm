@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -67,6 +67,10 @@
 #define ANI_MSG_CHANNEL_INFO_RSP    (ANI_DRIVER_MSG_START + 5)
 #define ANI_MSG_OEM_ERROR           (ANI_DRIVER_MSG_START + 6)
 #define ANI_MSG_PEER_STATUS_IND     (ANI_DRIVER_MSG_START + 7)
+#define ANI_MSG_SET_OEM_CAP_REQ     (ANI_DRIVER_MSG_START + 8)
+#define ANI_MSG_SET_OEM_CAP_RSP     (ANI_DRIVER_MSG_START + 9)
+#define ANI_MSG_GET_OEM_CAP_REQ     (ANI_DRIVER_MSG_START + 10)
+#define ANI_MSG_GET_OEM_CAP_RSP     (ANI_DRIVER_MSG_START + 11)
 
 #define ANI_MAX_RADIOS      3
 #define ANI_NL_MSG_OK       0

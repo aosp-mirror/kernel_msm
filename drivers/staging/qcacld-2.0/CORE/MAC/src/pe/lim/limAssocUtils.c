@@ -2341,10 +2341,10 @@ limAddSta(
 #ifdef FEATURE_WLAN_TDLS
     /* SystemRole shouldn't be matter if staType is TDLS peer */
     else if(STA_ENTRY_TDLS_PEER == pStaDs->staType)
-    {
         pStaAddr = &pStaDs->staAddr ;
-    }
 #endif
+    else if (STA_ENTRY_NDI_PEER == pStaDs->staType)
+        pStaAddr = &pStaDs->staAddr;
     else
         pStaAddr = &staMac;
 

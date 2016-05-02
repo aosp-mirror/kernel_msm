@@ -1186,15 +1186,30 @@ static eHalStatus hdd_DisConnectHandler( hdd_adapter_t *pAdapter, tCsrRoamInfo *
                    pAdapter->sessionId);
     }
 
+    wlan_hdd_clear_link_layer_stats(pAdapter);
+
+    /* Decide ANTENNA_MODE on STA/CLI disconnect */
+    if (pHddCtx->cfg_ini->enable_dynamic_sta_chainmask)
+       hdd_decide_dynamic_chain_mask(pHddCtx,
+                          HDD_ANTENNA_MODE_INVALID);
     //Unblock anyone waiting for disconnect to complete
     complete(&pAdapter->disconnect_comp_var);
     return( status );
 }
-static VOS_STATUS hdd_roamRegisterSTA( hdd_adapter_t *pAdapter,
-                                       tCsrRoamInfo *pRoamInfo,
-                                       v_U8_t staId,
-                                       v_MACADDR_t *pPeerMacAddress,
-                                       tSirBssDescription *pBssDesc )
+
+/**
+ * hdd_roamRegisterSTA() - Registers new STA to TL module
+ * @pAdapter: pointer to adapter context
+ * @pRoamInfo: roam info struct pointer
+ * @staId: station ID
+ * @pPeerMacAddress: mac address of new STA
+ * @pBssDesc: bss descriptor
+ *
+ * Return: status of operation
+ */
+VOS_STATUS hdd_roamRegisterSTA(hdd_adapter_t *pAdapter, tCsrRoamInfo *pRoamInfo,
+                               uint8_t staId, v_MACADDR_t *pPeerMacAddress,
+                               tSirBssDescription *pBssDesc)
 {
    VOS_STATUS vosStatus = VOS_STATUS_E_FAILURE;
    WLAN_STADescType staDesc = {0};
@@ -1633,6 +1648,7 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
     hdd_adapter_t *sap_adapter;
     hdd_ap_ctx_t *hdd_ap_ctx;
     uint8_t default_sap_channel = 6;
+    u16 reason_code;
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
     if (pRoamInfo && pRoamInfo->roamSynchInProgress) {
        /* change logging before release */
@@ -2135,37 +2151,12 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
             }
             else
             {
-                if (pRoamInfo) {
-                    eCsrAuthType authType =
-                      pWextState->roamProfile.AuthType.authType[0];
-                    eCsrEncryptionType encryptionType =
-                      pWextState->roamProfile.EncryptionType.encryptionType[0];
-                    v_BOOL_t isWep =
-                      (((authType == eCSR_AUTH_TYPE_OPEN_SYSTEM) ||
-                       (authType == eCSR_AUTH_TYPE_SHARED_KEY)) &&
-                       ((encryptionType == eCSR_ENCRYPT_TYPE_WEP40) ||
-                        (encryptionType == eCSR_ENCRYPT_TYPE_WEP104) ||
-                        (encryptionType ==
-                                   eCSR_ENCRYPT_TYPE_WEP40_STATICKEY) ||
-                        (encryptionType ==
-                                   eCSR_ENCRYPT_TYPE_WEP104_STATICKEY)));
+                reason_code = WLAN_STATUS_UNSPECIFIED_FAILURE;
+                if (pRoamInfo && pRoamInfo->reasonCode)
+                    reason_code = (u16)pRoamInfo->reasonCode;
 
-                    /* In case of OPEN-WEP or SHARED-WEP authentication,
-                     * send exact protocol reason code. This enables user
-                     * applications to reconnect the station with correct
-                     * configuration.
-                     */
-                    hdd_connect_result(dev, pRoamInfo->bssid,
-                        NULL, 0, NULL, 0,
-                        (isWep && pRoamInfo->reasonCode) ?
-                        pRoamInfo->reasonCode :
-                        WLAN_STATUS_UNSPECIFIED_FAILURE,
-                        GFP_KERNEL);
-                } else
-                    hdd_connect_result(dev, pWextState->req_bssId,
-                        NULL, 0, NULL, 0,
-                        WLAN_STATUS_UNSPECIFIED_FAILURE,
-                        GFP_KERNEL);
+                 cfg80211_connect_result(dev, pWextState->req_bssId,
+                    NULL, 0, NULL, 0, reason_code, GFP_KERNEL);
             }
             /* Clear the roam profile */
             hdd_clearRoamProfileIe(pAdapter);
@@ -2241,6 +2232,18 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
 
 
     }
+
+    /*
+     * Call hdd_decide_dynamic_chain_mask only when CSR has
+     * completed connect with failure or success i.e. with
+     * ASSOCIATION_FAILURE status or with eCSR_ROAM_RESULT_ASSOCIATED
+     * result.
+     */
+    if (pHddCtx->cfg_ini->enable_dynamic_sta_chainmask &&
+       ((eCSR_ROAM_ASSOCIATION_FAILURE == roamStatus) ||
+       (eCSR_ROAM_RESULT_ASSOCIATED == roamResult)))
+         hdd_decide_dynamic_chain_mask(pHddCtx,
+                         HDD_ANTENNA_MODE_INVALID);
 
 #ifdef FEATURE_WLAN_FORCE_SAP_SCC
     if (eCSR_ROAM_RESULT_ASSOCIATED == roamResult &&
@@ -2383,35 +2386,34 @@ static void hdd_RoamIbssIndicationHandler( hdd_adapter_t *pAdapter,
    return;
 }
 
-/**============================================================================
+/**
+ * hdd_save_peer() - Save peer MAC address in adapter peer table.
+ * @sta_ctx: pointer to hdd station context
+ * @sta_id: station ID
+ * @peer_mac_addr: mac address of new peer
  *
-  @brief roamSaveIbssStation() - Save the IBSS peer MAC address in the adapter.
-  This information is passed to iwconfig later. The peer that joined
-  last is passed as information to iwconfig.
-  If we add HDD_MAX_NUM_IBSS_STA or less STA we return success else we
-  return FALSE.
+ * This information is passed to iwconfig later. The peer that joined
+ * last is passed as information to iwconfig.
 
-  ===========================================================================*/
-static int roamSaveIbssStation( hdd_station_ctx_t *pHddStaCtx, v_U8_t staId, v_MACADDR_t *peerMacAddress )
+ * Return: true if success, false otherwise
+ */
+bool hdd_save_peer(hdd_station_ctx_t *sta_ctx, uint8_t sta_id,
+		   v_MACADDR_t *peer_mac_addr)
 {
-   int fSuccess = FALSE;
-   int idx = 0;
+	int idx;
 
-   for ( idx = 0; idx < HDD_MAX_NUM_IBSS_STA; idx++ )
-   {
-      if ( 0 == pHddStaCtx->conn_info.staId[ idx ] )
-      {
-         pHddStaCtx->conn_info.staId[ idx ] = staId;
-
-         vos_copy_macaddr( &pHddStaCtx->conn_info.peerMacAddress[ idx ], peerMacAddress );
-
-         fSuccess = TRUE;
-         break;
-      }
-   }
-
-   return( fSuccess );
+	for (idx = 0; idx < HDD_MAX_NUM_IBSS_STA; idx++) {
+		if (0 == sta_ctx->conn_info.staId[idx]) {
+			sta_ctx->conn_info.staId[idx] = sta_id;
+			vos_copy_macaddr(
+				&sta_ctx->conn_info.peerMacAddress[idx],
+				peer_mac_addr);
+			return true;
+		}
+	}
+	return false;
 }
+
 /**============================================================================
  *
   @brief roamRemoveIbssStation() - Remove the IBSS peer MAC address in the adapter.
@@ -2569,7 +2571,7 @@ static eHalStatus hdd_RoamSetKeyCompleteHandler( hdd_adapter_t *pAdapter, tCsrRo
          }
          else
          {
-            vosStatus = hdd_Ibss_GetStaId(pHddStaCtx,
+            vosStatus = hdd_get_peer_sta_id(pHddStaCtx,
                               (v_MACADDR_t*)pRoamInfo->peerMac,
                               &staId);
             if ( VOS_STATUS_SUCCESS == vosStatus )
@@ -2716,8 +2718,9 @@ static eHalStatus roamRoamConnectStatusUpdateHandler( hdd_adapter_t *pAdapter, t
                     MAC_ADDR_ARRAY(pHddStaCtx->conn_info.bssId),
                     pRoamInfo->staId );
 
-         if ( !roamSaveIbssStation( WLAN_HDD_GET_STATION_CTX_PTR(pAdapter), pRoamInfo->staId, (v_MACADDR_t *)pRoamInfo->peerMac ) )
-         {
+         if (!hdd_save_peer(WLAN_HDD_GET_STATION_CTX_PTR(pAdapter),
+                            pRoamInfo->staId,
+                            (v_MACADDR_t *)pRoamInfo->peerMac)) {
             VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_WARN,
                        "New IBSS peer but we already have the max we can handle.  Can't register this one" );
             break;

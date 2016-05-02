@@ -66,6 +66,8 @@
 #include <wlan_hdd_ipa.h>
 #endif
 
+#include "wlan_hdd_nan_datapath.h"
+
 /*---------------------------------------------------------------------------
   Preprocessor definitions and constants
   -------------------------------------------------------------------------*/
@@ -482,8 +484,8 @@ int __hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
            v_MACADDR_t *pDestMacAddress = (v_MACADDR_t*)skb->data;
 
            if ( VOS_STATUS_SUCCESS !=
-               hdd_Ibss_GetStaId(&pAdapter->sessionCtx.station,
-                                 pDestMacAddress, &STAId))
+               hdd_get_peer_sta_id(&pAdapter->sessionCtx.station,
+                                   pDestMacAddress, &STAId))
            {
                STAId = HDD_WLAN_INVALID_STA_ID;
            }
@@ -502,9 +504,17 @@ int __hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
                     "%s: Received Unicast frame with invalid staID", __func__);
                goto drop_pkt;
            }
-       }
-       else
-       {
+       } else if (WLAN_HDD_NDI == pAdapter->device_mode) {
+           v_MACADDR_t *pDestMacAddress = (v_MACADDR_t *)skb->data;
+           if (hdd_get_peer_sta_id(&pAdapter->sessionCtx.station,
+                                   pDestMacAddress, &STAId)
+                       != VOS_STATUS_SUCCESS) {
+               VOS_TRACE(VOS_MODULE_ID_HDD_DATA, VOS_TRACE_LEVEL_WARN,
+                         FL("Can't find peer: %pM, dropping packet"),
+                         pDestMacAddress);
+               goto drop_pkt;
+           }
+       } else {
            if (WLAN_HDD_OCB != pAdapter->device_mode
                && eConnectionState_Associated !=
                   pHddStaCtx->conn_info.connState) {
@@ -702,30 +712,29 @@ int hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	return ret;
 }
 
-/**============================================================================
-  @brief hdd_Ibss_GetStaId() - Get the StationID using the Peer Mac address
-
-  @param pHddStaCtx : [in] pointer to HDD Station Context
-  pMacAddress [in]  pointer to Peer Mac address
-  staID [out]  pointer to Station Index
-  @return    : VOS_STATUS_SUCCESS/VOS_STATUS_E_FAILURE
-  ===========================================================================*/
-
-VOS_STATUS hdd_Ibss_GetStaId(hdd_station_ctx_t *pHddStaCtx, v_MACADDR_t *pMacAddress, v_U8_t *staId)
+/**
+ * hdd_get_peer_sta_id() - Get the StationID using the Peer Mac address
+ * @sta_ctx: pointer to HDD Station Context
+ * @peer_mac_addr: pointer to Peer Mac address
+ * @sta_id: pointer to Station Index
+ *
+ * Returns: VOS_STATUS_SUCCESS on success, VOS_STATUS_E_FAILURE on error
+ */
+VOS_STATUS hdd_get_peer_sta_id(hdd_station_ctx_t *sta_ctx,
+			     v_MACADDR_t *peer_mac_addr,
+			     uint8_t *sta_id)
 {
-    v_U8_t idx;
+	v_U8_t idx;
 
-    for (idx = 0; idx < HDD_MAX_NUM_IBSS_STA; idx++)
-    {
-        if (vos_mem_compare(&pHddStaCtx->conn_info.peerMacAddress[ idx ],
-                pMacAddress, sizeof(v_MACADDR_t)))
-        {
-            *staId = pHddStaCtx->conn_info.staId[idx];
-            return VOS_STATUS_SUCCESS;
-        }
-    }
+	for (idx = 0; idx < HDD_MAX_NUM_IBSS_STA; idx++) {
+		if (vos_mem_compare(&sta_ctx->conn_info.peerMacAddress[idx],
+				peer_mac_addr, sizeof(v_MACADDR_t))) {
+			*sta_id = sta_ctx->conn_info.staId[idx];
+			return VOS_STATUS_SUCCESS;
+		}
+	}
 
-    return VOS_STATUS_E_FAILURE;
+	return VOS_STATUS_E_FAILURE;
 }
 
 /**

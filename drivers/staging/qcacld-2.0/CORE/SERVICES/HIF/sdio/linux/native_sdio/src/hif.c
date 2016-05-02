@@ -45,6 +45,7 @@
 #define HIF_USE_DMA_BOUNCE_BUFFER 1
 #define ATH_MODULE_NAME hif
 #include "a_debug.h"
+#include "vos_sched.h"
 
 #if HIF_USE_DMA_BOUNCE_BUFFER
 /* macro to check if DMA buffer is WORD-aligned and DMA-able.  Most host controllers assume the
@@ -279,7 +280,7 @@ static void ResetAllCards(void);
 static A_STATUS hifDisableFunc(HIF_DEVICE *device, struct sdio_func *func);
 static A_STATUS hifEnableFunc(HIF_DEVICE *device, struct sdio_func *func);
 
-#ifdef DEBUG
+#ifdef WLAN_DEBUG
 
 ATH_DEBUG_INSTANTIATE_MODULE_VAR(hif,
                                  "hif",
@@ -2763,9 +2764,13 @@ static int hif_sdio_device_reinit(struct sdio_func *func, const struct sdio_devi
 static void hif_sdio_device_shutdown(struct sdio_func *func)
 {
 	vos_set_logp_in_progress(VOS_MODULE_ID_HIF, TRUE);
+	vos_set_shutdown_in_progress(VOS_MODULE_ID_HIF, TRUE);
+	if (!vos_is_ssr_ready(__func__))
+		pr_err(" %s Host driver is not ready for SSR, attempting anyway\n", __func__);
 
 	if (func != NULL)
 		hifDeviceRemoved(func);
+	vos_set_shutdown_in_progress(VOS_MODULE_ID_HIF, FALSE);
 }
 
 static void hif_sdio_crash_shutdown(struct sdio_func *func)

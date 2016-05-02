@@ -2533,11 +2533,12 @@ void hif_pci_crash_shutdown(struct pci_dev *pdev)
         }
     }
 
+    hif_pci_pm_runtime_exit(sc);
     adf_os_spin_lock_irqsave(&hif_state->suspend_lock);
 
     hif_irq_record(HIF_CRASH, sc);
 
-#ifdef DEBUG
+#ifdef WLAN_DEBUG
     if (hif_pci_check_soc_status(scn->hif_sc)
         || dump_CE_register(scn)) {
         goto out;
@@ -2651,7 +2652,7 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
             goto out;
         }
 
-        pr_info("%s: Suspend completes (D0WOW)\n", __func__);
+        pr_debug("%s: Suspend completes (D0WOW)\n", __func__);
         ret = 0;
         goto out;
     }
@@ -2702,11 +2703,11 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
     }
 
 skip:
-    pr_info("%s: Suspend completes%s in%s mode event:%d device_state:%d\n",
+    pr_debug("%s: Suspend completes%s in%s mode event:%d device_state:%d\n",
                    __func__, runtime_pm ? " for runtime pm" : "",
                    wma_is_wow_mode_selected(temp_module) ? " wow" : " pdev",
                    state.event, val);
-    printk("%s: Suspend completes%s\n", __func__,
+    pr_debug("%s: Suspend completes%s\n", __func__,
             runtime_pm ? " for runtime pm" : "");
 
     ret = 0;
@@ -2845,7 +2846,7 @@ skip:
     }
 #endif
 
-    pr_info("%s: Resume completes%s in%s mode\n", __func__,
+    pr_debug("%s: Resume completes%s in%s mode\n", __func__,
                 runtime_pm ? " for runtime pm" : "",
                 wma_is_wow_mode_selected(temp_module) ? " wow" : " pdev");
 out:

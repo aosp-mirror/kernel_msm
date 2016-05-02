@@ -268,4 +268,5 @@ VOS_STATUS vos_init_wiphy_from_eeprom(void);
 bool vos_is_dsrc_channel(uint16_t);
 uint32_t vos_nv_get_channel_flags(uint32_t rf_channel);
 int vos_update_band(uint8_t  band);
+void vos_reset_global_reg_params(void);
 #endif // __VOS_NVITEM_H

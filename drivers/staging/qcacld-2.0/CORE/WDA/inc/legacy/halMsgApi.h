@@ -49,6 +49,7 @@
 #ifdef FEATURE_WLAN_TDLS
 #define STA_ENTRY_TDLS_PEER         4
 #endif /* FEATURE_WLAN_TDLS */
+#define STA_ENTRY_NDI_PEER          5
 
 #define STA_ENTRY_TRANSMITTER       STA_ENTRY_SELF
 #define STA_ENTRY_RECEIVER          STA_ENTRY_OTHER
@@ -541,6 +542,8 @@ typedef struct
     uint8_t wps_state;
     uint8_t nss_2g;
     uint8_t nss_5g;
+    uint32_t tx_aggregation_size;
+    uint32_t rx_aggregation_size;
 } tAddBssParams, * tpAddBssParams;
 
 typedef struct
@@ -757,7 +760,8 @@ typedef struct
 typedef struct
 {
     bool                target_rsp;
-    tANI_U8             oemDataRsp[OEM_DATA_RSP_SIZE];
+    uint32_t            rsp_len;
+    uint8_t             *oem_data_rsp;
 } tStartOemDataRsp, *tpStartOemDataRsp;
 #endif
 

@@ -1407,7 +1407,9 @@ error:
         return;
     }
 
+    vos_mem_zero(pMlmOemDataRsp, sizeof(*pMlmOemDataRsp));
     pMlmOemDataRsp->target_rsp = false;
+    pMlmOemDataRsp->oem_data_rsp = NULL;
 
     if(NULL != pMac->lim.gpLimMlmOemDataReq)
     {
@@ -1730,6 +1732,10 @@ limMlmAddBss (
     if (VOS_IBSS_MODE == pAddBssParams->halPersona) {
         pAddBssParams->nss_2g = pMac->vdev_type_nss_2g.ibss;
         pAddBssParams->nss_5g = pMac->vdev_type_nss_5g.ibss;
+        pAddBssParams->tx_aggregation_size =
+                 pMac->roam.configParam.tx_aggregation_size;
+        pAddBssParams->rx_aggregation_size =
+                 pMac->roam.configParam.rx_aggregation_size;
     }
     pAddBssParams->dot11_mode = psessionEntry->dot11mode;
     limLog(pMac, LOG2, FL("dot11_mode:%d"), pAddBssParams->dot11_mode);
@@ -2041,11 +2047,11 @@ static void limProcessMlmOemDataReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
 
         /// Return Meas confirm with INVALID_PARAMETERS
         pMlmOemDataRsp = vos_mem_malloc(sizeof(tLimMlmOemDataRsp));
-        if ( pMlmOemDataRsp != NULL)
-        {
+        if (pMlmOemDataRsp != NULL) {
+            vos_mem_zero(pMlmOemDataRsp, sizeof(*pMlmOemDataRsp));
             pMlmOemDataRsp->target_rsp = false;
+            pMlmOemDataRsp->oem_data_rsp = NULL;
             limPostSmeMessage(pMac, LIM_MLM_OEM_DATA_CNF, (tANI_U32*)pMlmOemDataRsp);
-            vos_mem_free(pMlmOemDataRsp);
         }
         else
         {

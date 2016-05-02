@@ -589,7 +589,7 @@ static inline int vos_unregister_oob_irq_handler(void *pm_oob)
 {
 	return -ENOSYS;
 }
-#endif /*END CONFIG_CNSS_SDIO */
+#endif /* END CONFIG_CNSS && HIF_SDIO */
 #endif /* CONFIG_CNSS */
 
 #endif/* _VOS_CNSS_H */
