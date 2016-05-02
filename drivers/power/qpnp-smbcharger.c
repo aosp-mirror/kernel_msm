@@ -2623,6 +2623,12 @@ static void smbchg_parallel_usb_check_ok(struct smbchg_chip *chip)
 	if (!parallel_psy || !chip->parallel_charger_detected)
 		return;
 
+#ifdef CONFIG_HTC_BATT
+	/* Wait for 5V/2A detection finish */
+	if (!g_is_charger_ability_detected)
+		return;
+#endif
+
 	smbchg_stay_awake(chip, PM_PARALLEL_CHECK);
 	schedule_delayed_work(&chip->parallel_en_work, 0);
 }
@@ -5055,6 +5061,8 @@ static void smbchg_downgrade_iusb_work(struct work_struct *work)
 				msecs_to_jiffies(AICL_DOWNGRADE_IUSB_DELAY_MS));
 		return;
 	} else {
+		g_is_5v_2a_detected = true;
+		g_is_charger_ability_detected = true;
 		pr_smb(PR_STATUS, "Downgrade to 1.5A done, "
 			"current_aicl=%dmA, vbus=%duV, hard_limit=%d\n",
 			current_aicl, vbus, hard_limit);
@@ -5101,8 +5109,6 @@ static void smbchg_iusb_5v_2a_detect_work(struct work_struct *work)
 
 	if (!hard_limit || vbus < (SMBCHG_VIN_MIN_MV + 50) ||
 			vbus < (vbat_mv + SMBCHG_5V2A_VBATT_MV)) {
-		g_is_5v_2a_detected = true;
-		g_is_charger_ability_detected = true;
 		if (delayed_work_pending(&chip->downgrade_iusb_work))
 			cancel_delayed_work_sync(&chip->downgrade_iusb_work);
 		schedule_delayed_work(&chip->downgrade_iusb_work, 0);
@@ -7396,7 +7402,7 @@ void check_charger_ability(int aicl_level)
 	}
 
 	/* Detect for 1.5A & 2A charger */
-	if (g_is_hvdcp_detect_done){
+	if (!the_chip->hvdcp_not_supported && g_is_hvdcp_detect_done){
 		if (aicl_level < USB_MA_2000){
 			rc = vote(the_chip->usb_icl_votable, PSY_ICL_VOTER,
 				true, USB_MA_1500);
@@ -7417,6 +7423,23 @@ void check_charger_ability(int aicl_level)
 		g_is_charger_ability_detected = true;
 		smbchg_rerun_aicl(the_chip);
 		return;
+	}
+
+	/* Start 5V2A detection */
+	if (the_chip->hvdcp_not_supported &&
+			!g_is_charger_ability_detected) {
+		/*Disable HW AICL to apply SW AICL*/
+		set_aicl_enable(false);
+		/*Disable Input Missing Poller before 5V2A detection*/
+		rc = smbchg_sec_masked_write(the_chip,
+			the_chip->misc_base + TRIM_OPTIONS_7_0,
+			INPUT_MISSING_POLLER_EN_BIT, 0);
+		if (rc < 0)
+			pr_err("Couldn't disable input missing poller rc=%d\n", rc);
+		if (delayed_work_pending(&the_chip->iusb_5v_2a_detect_work))
+			cancel_delayed_work(&the_chip->iusb_5v_2a_detect_work);
+		schedule_delayed_work(&the_chip->iusb_5v_2a_detect_work,
+			msecs_to_jiffies(AICL_5V_2A_DETECT_DELAY_MS));
 	}
 	return;
 }
