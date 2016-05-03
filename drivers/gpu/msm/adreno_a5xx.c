@@ -177,6 +177,7 @@ static const struct {
 	{ adreno_is_a530, a530_efuse_speed_bin },
 	{ adreno_is_a530, a540_efuse_firmware_name },
 	{ adreno_is_a540v1, a540_efuse_firmware_name },
+	{ adreno_is_a505, a530_efuse_speed_bin },
 };
 
 static void a5xx_check_features(struct adreno_device *adreno_dev)

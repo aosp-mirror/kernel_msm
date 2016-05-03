@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -159,7 +159,6 @@ static bool ocr_nodes_called;
 static bool ocr_probed;
 static bool ocr_reg_init_defer;
 static bool hotplug_enabled;
-static bool interrupt_mode_enable;
 static bool msm_thermal_probed;
 static bool gfx_crit_phase_ctrl_enabled;
 static bool gfx_warm_phase_ctrl_enabled;
@@ -1806,14 +1805,14 @@ static int vdd_restriction_apply_voltage(struct rail *r, int level)
 	/* level = -1: disable, level = 0,1,2..n: enable */
 	if (level == -1) {
 		ret = regulator_set_voltage(r->reg, r->min_level,
-			r->levels[r->num_levels - 1]);
+			INT_MAX);
 		if (!ret)
 			r->curr_level = -1;
 		pr_debug("Requested min level for %s. curr level: %d\n",
 				r->name, r->curr_level);
 	} else if (level >= 0 && level < (r->num_levels)) {
 		ret = regulator_set_voltage(r->reg, r->levels[level],
-			r->levels[r->num_levels - 1]);
+			INT_MAX);
 		if (!ret)
 			r->curr_level = level;
 		pr_debug("Requesting level %d for %s. curr level: %d\n",
@@ -2695,8 +2694,12 @@ static void vdd_mx_notify(struct therm_threshold *trig_thresh)
 			pr_err("Failed to remove vdd mx restriction\n");
 	}
 	mutex_unlock(&vdd_mx_mutex);
-	sensor_mgr_set_threshold(trig_thresh->sensor_id,
+
+	if (trig_thresh->cur_state != trig_thresh->trip_triggered) {
+		sensor_mgr_set_threshold(trig_thresh->sensor_id,
 					trig_thresh->threshold);
+		trig_thresh->cur_state = trig_thresh->trip_triggered;
+	}
 }
 
 static void msm_thermal_bite(int zone_id, long temp)
@@ -4069,8 +4072,11 @@ static void cx_phase_ctrl_notify(struct therm_threshold *trig_thresh)
 cx_phase_unlock_exit:
 	mutex_unlock(&cx_mutex);
 cx_phase_ctrl_exit:
-	sensor_mgr_set_threshold(trig_thresh->sensor_id,
+	if (trig_thresh->cur_state != trig_thresh->trip_triggered) {
+		sensor_mgr_set_threshold(trig_thresh->sensor_id,
 					trig_thresh->threshold);
+		trig_thresh->cur_state = trig_thresh->trip_triggered;
+	}
 	return;
 }
 
@@ -4198,8 +4204,11 @@ static void vdd_restriction_notify(struct therm_threshold *trig_thresh)
 unlock_and_exit:
 	mutex_unlock(&vdd_rstr_mutex);
 set_and_exit:
-	sensor_mgr_set_threshold(trig_thresh->sensor_id,
+	if (trig_thresh->cur_state != trig_thresh->trip_triggered) {
+		sensor_mgr_set_threshold(trig_thresh->sensor_id,
 					trig_thresh->threshold);
+		trig_thresh->cur_state = trig_thresh->trip_triggered;
+	}
 	return;
 }
 
@@ -4247,8 +4256,11 @@ static void ocr_notify(struct therm_threshold *trig_thresh)
 unlock_and_exit:
 	mutex_unlock(&ocr_mutex);
 set_and_exit:
-	sensor_mgr_set_threshold(trig_thresh->sensor_id,
-					trig_thresh->threshold);
+	if (trig_thresh->cur_state != trig_thresh->trip_triggered) {
+		sensor_mgr_set_threshold(trig_thresh->sensor_id,
+				trig_thresh->threshold);
+		trig_thresh->cur_state = trig_thresh->trip_triggered;
+	}
 	return;
 }
 
@@ -4483,6 +4495,7 @@ int sensor_mgr_init_threshold(struct threshold_info *thresh_inp,
 			thresh_ptr[i].notify = callback;
 			thresh_ptr[i].trip_triggered = -1;
 			thresh_ptr[i].parent = thresh_inp;
+			thresh_ptr[i].cur_state = -1;
 			thresh_ptr[i].threshold[0].temp =
 				high_temp * tsens_scaling_factor;
 			thresh_ptr[i].threshold[0].trip =
@@ -4503,6 +4516,7 @@ int sensor_mgr_init_threshold(struct threshold_info *thresh_inp,
 		thresh_ptr->notify = callback;
 		thresh_ptr->trip_triggered = -1;
 		thresh_ptr->parent = thresh_inp;
+		thresh_ptr->cur_state = -1;
 		thresh_ptr->threshold[0].temp = high_temp * tsens_scaling_factor;
 		thresh_ptr->threshold[0].trip =
 			THERMAL_TRIP_CONFIGURABLE_HI;
@@ -4679,10 +4693,9 @@ static void __ref disable_msm_thermal(void)
 
 static void interrupt_mode_init(void)
 {
-	if (!msm_thermal_probed) {
-		interrupt_mode_enable = true;
+	if (!msm_thermal_probed)
 		return;
-	}
+
 	if (polling_enabled) {
 		polling_enabled = 0;
 		create_sensor_zone_id_map();
@@ -5784,6 +5797,13 @@ static int probe_vdd_mx(struct device_node *node,
 	if (ret)
 		goto read_node_done;
 
+	/*
+	 * Monitor only this sensor if defined, otherwise monitor all tsens
+	 */
+	key = "qcom,mx-restriction-sensor_id";
+	if (of_property_read_u32(node, key, &data->vdd_mx_sensor_id))
+		data->vdd_mx_sensor_id = MONITOR_ALL_TSENS;
+
 	vdd_mx = devm_regulator_get(&pdev->dev, "vdd-mx");
 	if (IS_ERR_OR_NULL(vdd_mx)) {
 		ret = PTR_ERR(vdd_mx);
@@ -5810,7 +5830,7 @@ static int probe_vdd_mx(struct device_node *node,
 	}
 
 	ret = sensor_mgr_init_threshold(&thresh[MSM_VDD_MX_RESTRICTION],
-			MONITOR_ALL_TSENS,
+			data->vdd_mx_sensor_id,
 			data->vdd_mx_temp_degC + data->vdd_mx_temp_hyst_degC,
 			data->vdd_mx_temp_degC, vdd_mx_notify);
 
@@ -6749,6 +6769,9 @@ static void thermal_mx_config_read(struct seq_file *m, void *data)
 		if (vdd_cx)
 			seq_printf(m, "cx retention value:%d\n",
 				msm_thermal_info.vdd_cx_min);
+		if (msm_thermal_info.vdd_mx_sensor_id != MONITOR_ALL_TSENS)
+			seq_printf(m, "tsens sensor:tsens_tz_sensor%d\n",
+				msm_thermal_info.vdd_mx_sensor_id);
 	}
 }
 
@@ -7094,11 +7117,6 @@ static int msm_thermal_dev_probe(struct platform_device *pdev)
 	ret = msm_thermal_init(&data);
 	msm_thermal_probed = true;
 
-	if (interrupt_mode_enable) {
-		interrupt_mode_init();
-		interrupt_mode_enable = false;
-	}
-
 	return ret;
 fail:
 	if (ret)
@@ -7234,7 +7252,6 @@ int __init msm_thermal_late_init(void)
 		}
 	}
 	msm_thermal_add_mx_nodes();
-	interrupt_mode_init();
 	create_cpu_topology_sysfs();
 	create_thermal_debugfs();
 	msm_thermal_add_bucket_info_nodes();
