@@ -19,7 +19,7 @@
 
 #include "sched.h"
 
-#define THROTTLE_DOWN_NSEC	20000000 /* 20ms default */
+#define THROTTLE_DOWN_NSEC	50000000 /* 50ms default */
 #define THROTTLE_UP_NSEC	500000 /* 500us default */
 
 struct static_key __read_mostly __sched_freq = STATIC_KEY_INIT_FALSE;
