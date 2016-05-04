@@ -155,15 +155,7 @@
 };
 
 &i2c_1 {
-	al3320@1c {
-		compatible = "dynaimage,al3320";
-		reg = <0x1c>;
-		interrupt-parent = <&msm_gpio>;
-		interrupts = <94 0x2>;
-		pinctrl-states = "default";
-		pinctrl-names = "al3320_int_pin_default";
-		pinctrl-0 = <&al3320_int_default>;
-	};
+	status = "disabled";
 };
 
 &i2c_2 {
