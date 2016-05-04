@@ -21,7 +21,7 @@
 #define HTC_KERNEL_TOP_CPU_USAGE_THRESHOLD      30
 #define BUFFER_WARN_LEN                         64
 #define BUFFER_TEMP_LEN                         32
-#define CPU_MODE				2
+#define CPU_MODE				3
 
 #define FORCE_CHARGE		(1<<2)
 #define Y_CABLE			(1<<26)
@@ -67,10 +67,9 @@ struct st_htc_idle_statistic {
 
 struct st_htc_idle_statistic htc_idle_stat[CONFIG_NR_CPUS][CPU_MODE];
 
-static int msm_htc_util_delay_time = 10000;
+static int p_on_reason_cycle = 3;
+static int msm_htc_util_delay_time = 60000;
 module_param_named(kmonitor_delay, msm_htc_util_delay_time, int, S_IRUGO | S_IWUSR | S_IWGRP);
-static int msm_htc_util_top_delay_time = 60000;
-module_param_named(ktop_delay, msm_htc_util_top_delay_time, int, S_IRUGO | S_IWUSR | S_IWGRP);
 
 enum {
 	KERNEL_TOP,
@@ -327,9 +326,13 @@ void htc_idle_stat_add(int sleep_mode, u32 time)
 			htc_idle_stat[cpu][0].count++;
 			htc_idle_stat[cpu][0].time += time;
 			break;
-		case 1 : //MSM_PM_SLEEP_MODE_FASTPC:
+		case 1 : //MSM_PM_SLEEP_MODE_FASTPC_DEF:
 			htc_idle_stat[cpu][1].count++;
 			htc_idle_stat[cpu][1].time += time;
+			break;
+		case 2 : //MSM_PM_SLEEP_MODE_FASTPC:
+			htc_idle_stat[cpu][2].count++;
+			htc_idle_stat[cpu][2].time += time;
 			break;
 		default:
 			break;
@@ -369,12 +372,13 @@ static void htc_xo_vddmin_stat_show(void)
 static void htc_idle_stat_show(void)
 {
 	int i = 0, cpu = 0;
+	char Mode[CPU_MODE][11] = {"C1_wfi", "C4_fpc-def", "C4_fpc"};
 
 	pr_info("[K] cpu_id\tcpu_state\tidle_count\tidle_time\n");
 	for (cpu = 0; cpu < CONFIG_NR_CPUS; cpu++) {
 		for (i = 0; i < CPU_MODE; i++) {
 			if (htc_idle_stat[cpu][i].count) {
-				pr_info("[K]\t%d\tC%d\t\t%d\t\t%dms\n", cpu, i?4:1,
+				pr_info("[K]\t%d\t%s\t\t%d\t\t%dms\n", cpu, Mode[i],
 					htc_idle_stat[cpu][i].count, htc_idle_stat[cpu][i].time / 1000);
 			}
 		}
@@ -644,22 +648,17 @@ static void htc_pm_monitor_work_func(struct work_struct *work)
 		tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 
 	/*Show the boot reason*/
-	htc_print_pon_boot_reason();
+	if ( p_on_reason_cycle > 0){
+		htc_print_pon_boot_reason();
+		p_on_reason_cycle--;
+	}
 
 	/* Show interesting sensor temperature */
 	htc_show_sensor_temp();
 
-	/* Show interrupt status */
-	htc_show_interrupts();
-
 	/* Show idle stats */
 	htc_idle_stat_show();
 	htc_idle_stat_clear();
-
-	/* Show timer stats */
-	htc_timer_stats_onoff('0');
-	htc_timer_stats_show(300); /*Show timer events which greater than 300 every 10 sec*/
-	htc_timer_stats_onoff('1');
 
 	/* Show wakeup source */
 	htc_print_active_wakeup_sources();
@@ -673,37 +672,9 @@ static void htc_pm_monitor_work_func(struct work_struct *work)
 	pr_info("[K][PM] hTC PM Statistic done\n");
 }
 
-static void htc_kernel_top_accumulation_monitor_work_func(struct work_struct *work)
-{
-        struct _htc_kernel_top *ktop = container_of(work, struct _htc_kernel_top,
-		                        dwork.work);
-	struct timespec ts;
-	struct rtc_time tm;
-
-	if (htc_kernel_top_monitor_wq == NULL){
-		if (pm_monitor_enabled)
-			printk( "[K] hTc Kernel Top statistic is NULL.\n");
-		return;
-	}
-
-	getnstimeofday(&ts);
-	rtc_time_to_tm(ts.tv_sec - (sys_tz.tz_minuteswest * 60), &tm);
-	if (pm_monitor_enabled)
-		printk("[K][KTOP] hTC Kernel Top Statistic start (%02d-%02d %02d:%02d:%02d) \n",
-			tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
-
-	queue_delayed_work(htc_kernel_top_monitor_wq, &ktop->dwork, msecs_to_jiffies(msm_htc_util_top_delay_time));
-	htc_kernel_top_cal(ktop, KERNEL_TOP_ACCU);
-	htc_kernel_top_show(ktop, KERNEL_TOP_ACCU);
-
-	if (pm_monitor_enabled)
-		printk("[K][KTOP] hTC Kernel Top Statistic done\n");
-}
-
 void htc_monitor_init(void)
 {
 	struct _htc_kernel_top *htc_kernel_top;
-	struct _htc_kernel_top *htc_kernel_top_accu;
 
 	if (pm_monitor_enabled) {
 		if (htc_pm_monitor_wq == NULL)
@@ -756,25 +727,6 @@ void htc_monitor_init(void)
 	clear_process_monitor_array(&process_monitor_5_in_10_array[0],
 						SIZE_OF_PROCESS_MONITOR_5_IN_10_ARRAY);
 #endif /* USE_STATISTICS_STRATEGY_CONTINUOUS_3 */
-
-	htc_kernel_top_accu = vmalloc(sizeof(*htc_kernel_top_accu));
-	spin_lock_init(&htc_kernel_top_accu->lock);
-
-        htc_kernel_top_accu->prev_proc_stat = vmalloc(sizeof(long) * MAX_PID);
-	htc_kernel_top_accu->curr_proc_delta = vmalloc(sizeof(long) * MAX_PID);
-        htc_kernel_top_accu->task_ptr_array = vmalloc(sizeof(long) * MAX_PID);
-	htc_kernel_top_accu->curr_proc_pid = vmalloc(sizeof(long) * MAX_PID);
-        memset(htc_kernel_top_accu->prev_proc_stat, 0, sizeof(long) * MAX_PID);
-        memset(htc_kernel_top_accu->curr_proc_delta, 0, sizeof(long) * MAX_PID);
-        memset(htc_kernel_top_accu->task_ptr_array, 0, sizeof(long) * MAX_PID);
-        memset(htc_kernel_top_accu->curr_proc_pid, 0, sizeof(long) * MAX_PID);
-
-        get_all_cpustat(&htc_kernel_top_accu->curr_cpustat);
-        get_all_cpustat(&htc_kernel_top_accu->prev_cpustat);
-	INIT_DELAYED_WORK(&htc_kernel_top_accu->dwork,
-					htc_kernel_top_accumulation_monitor_work_func);
-	queue_delayed_work(htc_kernel_top_monitor_wq, &htc_kernel_top_accu->dwork,
-						msecs_to_jiffies(msm_htc_util_top_delay_time));
 }
 
 static int __init htc_cpu_monitor_init(void)
