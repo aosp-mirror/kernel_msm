@@ -146,6 +146,10 @@
     };
 };
 
+&pmi8994_charger {
+        qcom,hvdcp-not-support;
+};
+
 /{
         qcom,battery-data {
                 qcom,batt-id-range-pct = <15>;
