@@ -64,6 +64,7 @@
 
 #define REPORT_2D_PRESSURE
 #define TEMP_FORCE_WA
+#define USE_DATA_SERVER
 
 
 #define F12_DATA_15_WORKAROUND
@@ -713,7 +714,7 @@ static struct device_attribute attrs[] = {
 			synaptics_rmi4_wake_gesture_show,
 			synaptics_rmi4_wake_gesture_store),
 #ifdef USE_DATA_SERVER
-	__ATTR(synad_pid, S_IWUGO,
+	__ATTR(synad_pid, S_IRUGO | S_IWUSR | S_IWGRP,
 			synaptics_rmi4_show_error,
 			synaptics_rmi4_synad_pid_store),
 #endif
@@ -1124,7 +1125,7 @@ static ssize_t synaptics_rmi4_synad_pid_store(struct device *dev,
 		return -EINVAL;
 
 	synad_pid = input;
-
+	pr_notice("%s: Use data server and synad_pid =%d\n", __func__, synad_pid);
 	if (synad_pid) {
 		synad_task = pid_task(find_vpid(synad_pid), PIDTYPE_PID);
 		if (!synad_task)
@@ -3591,6 +3592,9 @@ static void synaptics_rmi4_set_params(struct synaptics_rmi4_data *rmi4_data)
 #endif
 
 #ifdef TYPE_B_PROTOCOL
+	if (rmi4_data->input_dev->mt &&
+		rmi4_data->input_dev->mt->num_slots != rmi4_data->num_of_fingers)
+		input_mt_destroy_slots(rmi4_data->input_dev);
 #ifdef KERNEL_ABOVE_3_6
 	input_mt_init_slots(rmi4_data->input_dev,
 			rmi4_data->num_of_fingers, INPUT_MT_DIRECT);
@@ -4263,6 +4267,8 @@ static int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data,
 				__func__);
 		goto exit;
 	}
+
+	synaptics_rmi4_set_params(rmi4_data);
 
 	mutex_lock(&exp_data.mutex);
 	if (!list_empty(&exp_data.list)) {

@@ -46,6 +46,8 @@
 #endif
 
 #define FW_IMAGE_NAME "synaptics.img"
+#define FW_IMAGE_NAME_BL71 "synaptics_bl71.img"
+#define FW_IMAGE_NAME_BL77 "synaptics_bl77.img"
 
 #define DO_STARTUP_FW_UPDATE
 #define SYNA_SIMPLE_UPDATE
@@ -4290,7 +4292,6 @@ static int fwu_start_reflash(void)
 {
 	int retval = 0;
 	enum flash_area flash_area;
-	bool do_rebuild = false;
 	const struct firmware *fw_entry = NULL;
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
 
@@ -4308,9 +4309,15 @@ static int fwu_start_reflash(void)
 	pr_notice("%s: Start of reflash process\n", __func__);
 
 	if (fwu->image == NULL) {
-		retval = secure_memcpy(fwu->image_name, MAX_IMAGE_NAME_LEN,
-				FW_IMAGE_NAME, sizeof(FW_IMAGE_NAME),
-				sizeof(FW_IMAGE_NAME));
+		if(fwu->bootloader_id[1] == 7 && fwu->bootloader_id[0] == 7)
+			retval = secure_memcpy(fwu->image_name, MAX_IMAGE_NAME_LEN,
+					FW_IMAGE_NAME_BL77, sizeof(FW_IMAGE_NAME_BL77),
+					sizeof(FW_IMAGE_NAME_BL77));
+		else
+			retval = secure_memcpy(fwu->image_name, MAX_IMAGE_NAME_LEN,
+					FW_IMAGE_NAME_BL71, sizeof(FW_IMAGE_NAME_BL71),
+					sizeof(FW_IMAGE_NAME_BL71));
+
 		if (retval < 0) {
 			dev_err(rmi4_data->pdev->dev.parent,
 					"%s: Failed to copy image file name\n",
@@ -4427,8 +4434,8 @@ static int fwu_start_reflash(void)
 
 	switch (flash_area) {
 	case UI_FIRMWARE:
-		do_rebuild = true;
 		retval = fwu_do_reflash();
+		rmi4_data->reset_device(rmi4_data, false);
 #ifdef F51_DISCRETE_FORCE
 		if (retval < 0)
 			break;
@@ -4449,7 +4456,6 @@ static int fwu_start_reflash(void)
 #endif
 		break;
 	case UI_CONFIG:
-		do_rebuild = true;
 		retval = fwu_check_ui_configuration_size();
 		if (retval < 0)
 			break;
@@ -4458,6 +4464,7 @@ static int fwu_start_reflash(void)
 		if (retval < 0)
 			break;
 		retval = fwu_write_ui_configuration();
+		rmi4_data->reset_device(rmi4_data, false);
 #ifdef F51_DISCRETE_FORCE
 		if (retval < 0)
 			break;
@@ -4470,11 +4477,11 @@ static int fwu_start_reflash(void)
 		break;
 	case NONE:
 	default:
+		rmi4_data->reset_device(rmi4_data, false);
 		break;
 	}
 
 	if (retval < 0) {
-		do_rebuild = false;
 		rmi4_data->reset_device(rmi4_data, false);
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to do reflash\n",
@@ -4512,9 +4519,6 @@ static int fwu_start_reflash(void)
 exit:
 	if (fw_entry)
 		release_firmware(fw_entry);
-
-	if (do_rebuild)
-		rmi4_data->reset_device(rmi4_data, true);
 
 	pr_notice("%s: End of reflash process\n", __func__);
 
