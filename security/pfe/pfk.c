@@ -457,6 +457,7 @@ int pfk_load_key_start(const struct bio *bio,
 	void *ecryptfs_data = NULL;
 	u32 key_index = 0;
 	struct inode *inode = NULL;
+	struct key *keyring_key = NULL;
 
 	if (!is_pfe) {
 		pr_err("is_pfe is NULL\n");
@@ -478,6 +479,8 @@ int pfk_load_key_start(const struct bio *bio,
 	}
 
 	if (bio->bi_crypt_ctx.bc_flags & BC_ENCRYPT_FL) {
+		struct user_key_payload *ukp;
+		struct ext4_encryption_key *master_key;
 		if (!(bio->bi_crypt_ctx.bc_flags & BC_AES_256_XTS_FL)) {
 			printk(KERN_WARNING "%s: Unsupported mode\n", __func__);
 			return -EINVAL;
@@ -492,14 +495,33 @@ int pfk_load_key_start(const struct bio *bio,
 			       bio->bi_crypt_ctx.bc_key_size);
 			return -EINVAL;
 		}
-		key = &bio->bi_crypt_ctx.bc_key[0];
 		key_size = PFK_SUPPORTED_KEY_SIZE;
-		salt = &bio->bi_crypt_ctx.bc_key[PFK_SUPPORTED_KEY_SIZE];
 		salt_size = PFK_SUPPORTED_SALT_SIZE;
 		algo_mode = ICE_CRYPTO_ALGO_MODE_AES_XTS;
 		key_size_type = ICE_CRYPTO_KEY_SIZE_256;
+		keyring_key = bio->bi_crypt_ctx.bc_keyring_key;
+		BUG_ON(!keyring_key);
+try_lock_key:
+		ret = down_read_trylock(&keyring_key->sem);
+		if (!ret)
+			goto try_lock_key;
+		ukp = ((struct user_key_payload *)keyring_key->payload.data);
+		if (ukp->datalen != sizeof(struct ext4_encryption_key)) {
+			up_read(&keyring_key->sem);
+			return -ENOKEY;
+		}
+		master_key = (struct ext4_encryption_key *)ukp->data;
+		if (master_key->size != PFK_AES_256_XTS_KEY_SIZE) {
+			printk_once(KERN_WARNING "%s: key size incorrect: %d\n",
+				    __func__, master_key->size);
+			up_read(&keyring_key->sem);
+			return -ENOKEY;
+		}
+		key = &master_key->raw[0];
+		salt = &master_key->raw[PFK_SUPPORTED_KEY_SIZE];
 	} else {
-		ret = pfk_bio_to_key(bio, &key, &key_size, &salt, &salt_size, is_pfe);
+		ret = pfk_bio_to_key(bio, &key, &key_size, &salt, &salt_size,
+				     is_pfe);
 		if (ret != 0)
 			return ret;
 
@@ -525,14 +547,20 @@ int pfk_load_key_start(const struct bio *bio,
 		if (ret != 0)
 			return ret;
 	}
-
+#if 0  /* debug */
+	printk(KERN_WARNING "%s: Loading key w/ key[0:1] == [%.2x%.2x] and "
+	       "salt[0:1] == [%.2x%.2x] into key_index [%d]\n", __func__,
+	       key[0], key[1], salt[0], salt[1], key_index);
+#endif
 	ret = pfk_kc_load_key_start(key, key_size, salt, salt_size, &key_index,
 			async);
+	if (keyring_key)
+		up_read(&keyring_key->sem);
 	if (ret) {
-		if (ret != -EBUSY && ret != -EAGAIN)
-			pr_err("start: could not load key into pfk key cache, error %d\n",
-					ret);
-
+		if (ret != -EBUSY && ret != -EAGAIN) {
+			pr_err("start: could not load key into pfk key cache, "
+			       "error %d\n", ret);
+		}
 		return ret;
 	}
 

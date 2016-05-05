@@ -600,6 +600,7 @@ enum {
 #define EXT4_ENCRYPTION_MODE_AES_256_GCM	2
 #define EXT4_ENCRYPTION_MODE_AES_256_CBC	3
 #define EXT4_ENCRYPTION_MODE_AES_256_CTS	4
+#define EXT4_ENCRYPTION_MODE_PRIVATE		127
 
 #include "ext4_crypto.h"
 
@@ -2133,10 +2134,23 @@ static inline void ext4_fname_free_filename(struct ext4_filename *fname) { }
 /* crypto_key.c */
 void ext4_free_crypt_info(struct ext4_crypt_info *ci);
 void ext4_free_encryption_info(struct inode *inode, struct ext4_crypt_info *ci);
-int _ext4_get_encryption_info(struct inode *inode, bool keep_raw_key);
+int _ext4_get_encryption_info(struct inode *inode);
 
 #ifdef CONFIG_EXT4_FS_ENCRYPTION
 int ext4_has_encryption_key(struct inode *inode);
+
+static inline struct ext4_crypt_info *ext4_encryption_info(struct inode *inode)
+{
+	return EXT4_I(inode)->i_crypt_info;
+}
+
+static inline int ext4_using_hardware_encryption(struct inode *inode)
+{
+	struct ext4_crypt_info *ci = ext4_encryption_info(inode);
+
+	return S_ISREG(inode->i_mode) && ci &&
+		ci->ci_data_mode == EXT4_ENCRYPTION_MODE_PRIVATE;
+}
 
 static inline int ext4_get_encryption_info(struct inode *inode)
 {
@@ -2147,13 +2161,8 @@ static inline int ext4_get_encryption_info(struct inode *inode)
 	     (ci->ci_keyring_key->flags & ((1 << KEY_FLAG_INVALIDATED) |
 					   (1 << KEY_FLAG_REVOKED) |
 					   (1 << KEY_FLAG_DEAD)))))
-		return _ext4_get_encryption_info(inode, pfk_is_ready());
+		return _ext4_get_encryption_info(inode);
 	return 0;
-}
-
-static inline struct ext4_crypt_info *ext4_encryption_info(struct inode *inode)
-{
-	return EXT4_I(inode)->i_crypt_info;
 }
 
 #else

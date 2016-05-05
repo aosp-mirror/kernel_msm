@@ -546,12 +546,12 @@ static bool crypto_not_mergeable(const struct bio *bio, const struct bio *nxt)
 		return true;
 	}
 
-	/* If the key lengths are different or the key values aren't
-	 * the same, don't merge. */
+	/* If the key lengths are different or the keys aren't the
+	 * same, don't merge. */
 	return ((bio->bi_crypt_ctx.bc_key_size !=
 		 nxt->bi_crypt_ctx.bc_key_size) ||
-		memcmp(bio->bi_crypt_ctx.bc_key, nxt->bi_crypt_ctx.bc_key,
-		       bio->bi_crypt_ctx.bc_key_size) != 0);
+		(bio->bi_crypt_ctx.bc_keyring_key !=
+		 nxt->bi_crypt_ctx.bc_keyring_key));
 }
 
 /*

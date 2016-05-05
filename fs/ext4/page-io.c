@@ -501,7 +501,7 @@ int ext4_bio_write_page(struct ext4_io_submit *io,
 		gfp_t gfp_flags = GFP_NOFS;
 
 	retry_encrypt:
-		if (pfk_is_ready())
+		if (ext4_using_hardware_encryption(inode))
 			io->io_crypt_inode = inode;
 		else
 			data_page = ext4_encrypt(inode, page, gfp_flags);

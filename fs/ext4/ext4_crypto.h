@@ -62,17 +62,11 @@ struct ext4_encryption_context {
 #define EXT4_AES_256_CBC_KEY_SIZE 32
 #define EXT4_AES_256_CTS_KEY_SIZE 32
 #define EXT4_AES_256_XTS_KEY_SIZE 64
+#define EXT4_PRIVATE_KEY_SIZE 64
 #define EXT4_MAX_KEY_SIZE 64
 
 #define EXT4_KEY_DESC_PREFIX "ext4:"
 #define EXT4_KEY_DESC_PREFIX_SIZE 5
-
-/* This is passed in from userspace into the kernel keyring */
-struct ext4_encryption_key {
-        __u32 mode;
-        char raw[EXT4_MAX_KEY_SIZE];
-        __u32 size;
-} __attribute__((__packed__));
 
 struct ext4_crypt_info {
 	char		ci_data_mode;
@@ -86,7 +80,6 @@ struct ext4_crypt_info {
 
 #define EXT4_CTX_REQUIRES_FREE_ENCRYPT_FL             0x00000001
 #define EXT4_WRITE_PATH_FL			      0x00000002
-#define EXT4_RAW_KEY_SET_FL			      0x00000004
 
 struct ext4_crypto_ctx {
 	union {
@@ -117,6 +110,7 @@ static inline int ext4_encryption_key_size(int mode)
 {
 	switch (mode) {
 	case EXT4_ENCRYPTION_MODE_AES_256_XTS:
+	case EXT4_ENCRYPTION_MODE_PRIVATE:
 		return EXT4_AES_256_XTS_KEY_SIZE;
 	case EXT4_ENCRYPTION_MODE_AES_256_GCM:
 		return EXT4_AES_256_GCM_KEY_SIZE;

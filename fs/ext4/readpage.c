@@ -62,9 +62,7 @@ static void completion_pages(struct work_struct *work)
 	bio_for_each_segment_all(bv, bio, i) {
 		struct page *page = bv->bv_page;
 
-		/* TODO(mhalcrow): (bio->bi_crypt_ctx.bc_flags &
-		 * BC_ENCRYPT_FL) might be a better check */
-		if (pfk_is_ready()) {
+		if (bio->bi_crypt_ctx.bc_flags & BC_ENCRYPT_FL) {
 			SetPageUptodate(page);
 		} else {
 			int ret = ext4_decrypt(page);

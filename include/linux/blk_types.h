@@ -25,9 +25,7 @@ typedef void (bio_destructor_t) (struct bio *);
 struct bio_crypt_ctx {
 	unsigned int	bc_flags;
 	unsigned int	bc_key_size;
-	/* TODO(mhalcrow): Reference something in the file system that
-	 * we can count on sticking around until bio is complete. */
-	char		bc_key[BC_MAX_ENCRYPTION_KEY_SIZE];
+	struct key	*bc_keyring_key;
 };
 
 /*
