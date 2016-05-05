@@ -162,6 +162,12 @@
         };
 };
 
+&soc {
+	qcom,ssc@1c00000 {
+		vdd_px-supply = <&pm8994_lvs1>;
+	};
+};
+
 &pmi8994_haptics {
 	status = "okay";
 	qcom,wave-play-rate-us = <4878>;
