@@ -447,6 +447,7 @@
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
 
 	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
+	qcom,platform-enable-gpio = <&msm_gpio 22 0>;
 	qcom,platform-bklight-en-gpio = <&msm_gpio 37 0>;
 };
 
