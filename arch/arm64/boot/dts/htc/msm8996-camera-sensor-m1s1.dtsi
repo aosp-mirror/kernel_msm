@@ -20,56 +20,6 @@
 				qcom,vin-sel = <2>;  /* VIN2 */
 				status = "ok";
 			};
-	gpio@c500 {
-				reg = <0xc500 0x100>;
-				qcom,pin-num = <6>;
-				status = "ok";
-			};
-	gpio@c600 {
-				reg = <0xc600 0x100>;
-				qcom,pin-num = <7>;
-				qcom,vin-sel = <2>;  /* VIN2 */
-				status = "ok";
-			};
-	gpio@c800 {
-				reg = <0xc800 0x100>;
-				qcom,mode = <1>;                /* Digital output*/
-				qcom,pin-num = <9>;
-				qcom,vin-sel = <2>;  /* VIN2 */
-				qcom,src-sel = <0>;             /* GPIO */
-				qcom,master-en = <1>;           /* Enable GPIO */
-				qcom,invert = <0>;      /* Output low initially */
-				status = "ok";
-			};
-};
-
-&pmi8994_gpios {
-			gpio@c100 {
-				reg = <0xc100 0x100>;
-				qcom,pin-num = <2>;
-				status = "ok";
-			};
-			gpio@c700 {
-				reg = <0xc700 0x100>;
-				qcom,pin-num = <8>;
-				status = "ok";
-			};
-			gpio@c800 {
-				reg = <0xc800 0x100>;
-				qcom,pin-num = <9>;
-				qcom,vin-sel = <2>;  /* VIN2 */
-				status = "ok";
-			};
-			gpio@c900 {
-				reg = <0xc900 0x100>;
-				qcom,pull = <5>;    /* No Pull */
-				status = "ok";
-			};
-			gpio@c900 {
-				reg = <0xc900 0x100>;
-				qcom,pin-num = <10>;
-				status = "ok";
-			};
 };
 
 &soc {
@@ -272,11 +222,10 @@ eeprom0: qcom,eeprom@0 {
 		qcom,cci-master = <0>;
 		cam_vdig-supply = <&pm8994_l3>;
 		cam_vio-supply = <&pm8994_l14>;
-		cam_vana-supply = <&pm8994_l10>;
-		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana";
-		qcom,cam-vreg-min-voltage = <1050000 1800000 2850000>;
-		qcom,cam-vreg-max-voltage = <1050000 1800000 2850000>;
-		qcom,cam-vreg-op-mode = <0 0 0>;
+		qcom,cam-vreg-name = "cam_vdig", "cam_vio";
+		qcom,cam-vreg-min-voltage = <1100000 1800000>;
+		qcom,cam-vreg-max-voltage = <1100000 1800000>;
+		qcom,cam-vreg-op-mode = <0 0>;
 		qcom,gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk0_active &cam_sensor_rear_active>;
@@ -338,13 +287,12 @@ qcom,camera@0 {
 		qcom,eeprom-src = <&eeprom0>;
 		qcom,camera-ver = <2>;
 		cam_vdig-supply = <&pm8994_l3>;//212mA
-		cam_vana-supply =<&pm8994_l10>;//91mA
 		cam_vio-supply = <&pm8994_l14>;//7mA
-		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana";
-		qcom,cam-vreg-type = <0 0 0>;
-		qcom,cam-vreg-min-voltage = <1050000 1800000 2850000>;
-		qcom,cam-vreg-max-voltage = <1050000 1800000 2850000>;
-		qcom,cam-vreg-op-mode = <0 0 0>;//uA
+		qcom,cam-vreg-name = "cam_vdig", "cam_vio";
+		qcom,cam-vreg-type = <0 0>;
+		qcom,cam-vreg-min-voltage = <1100000 1800000>;
+		qcom,cam-vreg-max-voltage = <1100000 1800000>;
+		qcom,cam-vreg-op-mode = <0 0>;//uA
 		qcom,gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk0_active &cam_sensor_rear_active &cci0_active>;
