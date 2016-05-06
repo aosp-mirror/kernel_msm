@@ -170,10 +170,124 @@
 		synaptics,reset-active-ms = <1>;
 		synaptics,reset-delay-ms = <20>;
 		synaptics,switch-gpio = <&tlmm 80 0x00>;
-		synaptics,update-feature = <0>;
+		synaptics,update-feature = <3>;
 		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
 		pinctrl-0 = <&ts_rst_active &ts_intr_active>;
 		pinctrl-1 = <&ts_rst_suspend &ts_intr_suspend>;
+
+		config_1 {
+			pr_number     = <2326474>;
+			sensor_id = <0x0>;
+			config = [
+				53 31 76 31 00 03 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 07 03 1E 05 51 0E 38
+				04 80 07 46 3E 2B 3F 00
+				00 20 00 10 1C 1E 05 BF
+				0F 31 02 2D 14 02 14 02
+				84 D2 81 D1 25 0D 05 8C
+				00 00 0F 12 82 0F 0A 78
+				00 01 01 07 04 04 32 28
+				08 7D 26 26 80 80 00 00
+				C8 01 64 00 05 0A 00 FF
+				05 01 28 FF C0 53 5B 80
+				4D 14 00 40 3A 32 50 00
+				00 00 00 4C 04 6C 07 3C
+				32 00 00 00 00 4C 04 6C
+				07 1E 05 1E 04 0A 04 0A
+				00 0A 04 04 00 0A 78 02
+				00 7D 00 02 00 C8 00 00
+				00 96 00 00 00 00 01 05
+				0A 00 00 00 78 00 96 00
+				32 00 00 00 00 00 00 00
+				00 00 0D 00 00 14 03 0C
+				0F 0A 00 4B 00 00 FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF 00
+				01 00 00 32 00 14 00 14
+				00 64 00 64 00 10 00 10
+				00 7D 00 7D 00 40 66 58
+				1B 28 00 FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF 01 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 FF 00 FF 14 55 09
+				0E 3C 0A 0F 64 64 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 00 00
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				00 00 60 00 80 04 1B 00
+				00 FF 2C 01 FF FF CC 03
+				E8 03 00 C0 80 04 10 0A
+				18 00 79 08 08 00 01 2C
+				01 06 00 02 02 07 07 05
+				FA 00 01 04 83 36 00 16
+				00 00 00 02 00 01 2D 84
+				35 00 16 00 01 00 05 00
+				02 27 04 34 00 15 00 02
+				00 05 00 02 28 83 33 00
+				15 00 03 00 05 00 02 28
+				83 32 00 14 00 04 00 05
+				00 02 29 03 31 00 14 00
+				05 00 05 00 02 29 83 2F
+				00 13 00 07 00 03 00 01
+				24 03 2D 00 13 00 09 00
+				03 00 01 25 03 03 03 03
+				03 03 03 03 03 03 03 03
+				03 03 03 03 00 00 00 00
+				00 00 00 00 00 00 00 00
+				00 00 00 00 00 00 21 00
+				06 00 A6 00 14 32 00 01
+				1B 01 06 46 46 50 00 50
+				00 50 50 1E 03 0C 0C 14
+				28 04 00 00 00 00 00 00
+				00 00 00 00 15 00 80 07
+				01 07 07 1D 1D 00 00 07
+				07 01 07 07 1D 1D 00 00
+				07 04 04 50 00 07 03 00
+				36 22 00 05 0B 00 22 02
+				00 00 00 0D DD DD 55 0D
+				22 22 00 01 50 0D 00 00
+				00 0D AA AA 00 00 00 00
+				FF FF FF FF FF FF FF FF
+				51 51 51 51 CD 0D 04 83
+				10 10 10 10 61 24 64 01
+				12 18 1A 38 36 31 35 32
+				3A 37 14 34 15 33 17 11
+				FF FF FF FF FF FF FF FF
+				FF FF FF FF FF FF FF FF
+				FF FF 30 28 2F 2A 29 2C
+				27 2B 1B 1D 1E 1F 1C 0D
+				10 0F 0C 07 0E 08 09 03
+				06 02 0A 0B 04 05 FF FF
+				FF FF FF FF 00 10 00 10
+				00 10 00 10 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				80 80 80 80 80 80 80 80
+				00 10 00 10 00 10 00 10
+				00 00 16 19 24 39 FF FF
+				FF FF 0B 0B 04 00 44 44
+				78
+			];
+		};
 
 		config_0 {
 			pr_number     = <2235544>;
