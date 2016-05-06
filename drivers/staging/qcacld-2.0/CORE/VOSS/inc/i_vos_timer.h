@@ -67,6 +67,27 @@ typedef struct vos_timer_platform_s
 
 } vos_timer_platform_t;
 
+/**
+ * __vos_system_ticks() - get system ticks
+ *
+ * Return: system tick in jiffies
+ */
+static inline vos_time_t __vos_system_ticks(void)
+{
+	return jiffies;
+}
+
+/**
+ * __vos_system_ticks_to_msecs() - convert system ticks into milli seconds
+ * @ticks: System ticks
+ *
+ * Return: system tick converted into milli seconds
+ */
+static inline uint32_t __vos_system_ticks_to_msecs(vos_time_t ticks)
+{
+	return jiffies_to_msecs(ticks);
+}
+
 /*
  * TODOs: Need to add deferred timer implementation
  *

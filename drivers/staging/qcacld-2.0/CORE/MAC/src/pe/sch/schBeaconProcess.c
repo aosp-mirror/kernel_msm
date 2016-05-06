@@ -757,6 +757,10 @@ void schBeaconProcess(tpAniSirGlobal pMac, tANI_U8* pRxPacketInfo, tpPESession p
     {
         PELOGE(schLog(pMac, LOGE, FL("beacon parsing failed"));)
         pMac->sch.gSchBcnParseErrorCnt++;
+        if ((NULL != psessionEntry) &&
+           (!psessionEntry->currentBssBeaconCnt))
+             lim_parse_beacon_for_tim(pMac,
+                 pRxPacketInfo, psessionEntry);
         return;
     }
 

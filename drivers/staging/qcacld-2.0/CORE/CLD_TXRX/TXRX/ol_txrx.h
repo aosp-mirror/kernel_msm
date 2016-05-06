@@ -59,4 +59,9 @@ ol_tx_desc_pool_size_hl(ol_pdev_handle ctrl_pdev);
 #ifdef CONFIG_TX_DESC_HI_PRIO_RESERVE
 #define TXRX_HL_TX_DESC_HI_PRIO_RESERVED 20
 #endif
+
+A_STATUS
+ol_txrx_get_ll_queue_pause_bitmap(uint8_t vdev_id,
+	uint8_t *pause_bitmap, adf_os_time_t *pause_timestamp);
+
 #endif /* _OL_TXRX__H_ */

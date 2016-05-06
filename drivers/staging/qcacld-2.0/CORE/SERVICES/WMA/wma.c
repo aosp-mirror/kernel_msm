@@ -9026,7 +9026,10 @@ VOS_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
                         cmd->scan_ctrl_flags |= WMI_SCAN_ADD_BCAST_PROBE_REQ;
 		if (scan_req->scanType == eSIR_PASSIVE_SCAN)
 			cmd->scan_ctrl_flags |= WMI_SCAN_FLAG_PASSIVE;
+
+		cmd->scan_ctrl_flags |= WMI_SCAN_ADD_TPC_IE_IN_PROBE_REQ;
 		cmd->scan_ctrl_flags |= WMI_SCAN_FILTER_PROBE_REQ;
+
 		/*
 		 * Decide burst_duration and dwell_time_active based on
 		 * what type of devices are active.
@@ -20635,7 +20638,9 @@ static void wma_wow_wake_up_stats(tp_wma_handle wma, uint8_t *data,
 	switch(event) {
 
 	case WOW_REASON_PATTERN_MATCH_FOUND:
-		if (WMA_BCAST_MAC_ADDR == *data) {
+		if (WMA_ICMP_V6_RA_TYPE == *data) {
+			wma->wow_ipv6_mcast_ra_stats++;
+		} else if (WMA_BCAST_MAC_ADDR == *data) {
 			wma->wow_bcast_wake_up_count++;
 		} else if (WMA_MCAST_IPV4_MAC_ADDR == *data) {
 			wma->wow_ipv4_mcast_wake_up_count++;
@@ -20852,6 +20857,7 @@ static int wma_wow_wakeup_host_event(void *handle, u_int8_t *event,
 
 	case WOW_REASON_HTT_EVENT:
 		break;
+	case WOW_REASON_BPF_ALLOW:
 	case WOW_REASON_PATTERN_MATCH_FOUND:
 		WMA_LOGD("Wake up for Rx packet, dump starting from ethernet hdr");
 		if (param_buf->wow_packet_buffer) {
@@ -27342,6 +27348,11 @@ VOS_STATUS  wma_ipa_offload_enable_disable(tp_wma_handle wma,
 		return VOS_STATUS_E_INVAL;
 	}
 
+	if (vos_is_load_unload_in_progress(VOS_MODULE_ID_VOSS, NULL)) {
+		WMA_LOGE("%s: Driver load/unload in progress", __func__);
+		return VOS_STATUS_E_INVAL;
+	}
+
 	len  = sizeof(*cmd);
 	wmi_buf = wmi_buf_alloc(wma->wmi_handle, len);
 	if (!wmi_buf) {
@@ -29093,7 +29104,6 @@ static VOS_STATUS wma_set_bpf_instructions(tp_wma_handle wma,
 		buf_ptr += WMI_TLV_HDR_SIZE;
 		vos_mem_copy(buf_ptr, bpf_set_offload->program,
 					bpf_set_offload->current_length);
-		vos_mem_free(bpf_set_offload->program);
 	}
 
 	if (wmi_unified_cmd_send(wma->wmi_handle, wmi_buf, len,
@@ -35165,6 +35175,7 @@ int wma_dfs_indicate_radar(struct ieee80211com *ic,
 		{
 			WMA_LOGE("%s:Application triggered channel switch in progress!.. drop radar event indiaction to SAP",
 				__func__);
+			vos_mem_free(radar_event);
 			adf_os_spin_unlock_bh(&ic->chan_lock);
 			return 0;
 		}

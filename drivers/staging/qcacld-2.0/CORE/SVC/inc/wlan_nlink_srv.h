@@ -105,7 +105,7 @@ static inline int nl_srv_bcast(struct sk_buff *skb)
 	return 0;
 }
 
-static inline int nl_srv_is_initialized()
+static inline int nl_srv_is_initialized(void)
 {
 	return -EPERM;
 }

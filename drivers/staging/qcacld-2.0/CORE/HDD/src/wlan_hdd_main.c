@@ -56,6 +56,7 @@
 /*--------------------------------------------------------------------------
   Include Files
   ------------------------------------------------------------------------*/
+#include<net/addrconf.h>
 #include <wlan_hdd_includes.h>
 #include <vos_api.h>
 #include <vos_sched.h>
@@ -80,7 +81,6 @@
 #include "vos_types.h"
 #include "vos_trace.h"
 
-#include<net/addrconf.h>
 #include <linux/wireless.h>
 #include <net/cfg80211.h>
 #include <linux/inetdevice.h>
@@ -8996,7 +8996,9 @@ static int __hdd_open(struct net_device *dev)
    if (hdd_connIsConnected(WLAN_HDD_GET_STATION_CTX_PTR(pAdapter))) {
        hddLog(LOG1, FL("Enabling Tx Queues"));
        /* Enable TX queues only when we are connected */
-       netif_tx_start_all_queues(dev);
+       wlan_hdd_netif_queue_control(pAdapter,
+            WLAN_START_ALL_NETIF_QUEUE,
+            WLAN_CONTROL_PATH);
    }
 
    return 0;
@@ -9275,10 +9277,8 @@ static int __hdd_stop(struct net_device *dev)
     * be called on that interface
     */
    hddLog(LOG1, FL("Disabling queues"));
-   netif_tx_disable(pAdapter->dev);
-
-   /* Mark the interface status as "down" for outside world */
-   netif_carrier_off(pAdapter->dev);
+   wlan_hdd_netif_queue_control(pAdapter, WLAN_NETIF_TX_DISABLE_N_CARRIER,
+                         WLAN_CONTROL_PATH);
 
    /* The interface is marked as down for outside world (aka kernel)
     * But the driver is pretty much alive inside. The driver needs to
@@ -10135,6 +10135,10 @@ static hdd_adapter_t* hdd_alloc_station_adapter( hdd_context_t *pHddCtx, tSirMac
       SET_NETDEV_DEV(pWlanDev, pHddCtx->parent_dev);
       hdd_wmm_init( pAdapter );
       hdd_adapter_runtime_suspend_init(pAdapter);
+      spin_lock_init(&pAdapter->pause_map_lock);
+      pAdapter->last_tx_jiffies = jiffies;
+      pAdapter->bug_report_count = 0;
+      pAdapter->start_time = pAdapter->last_time = vos_system_ticks();
    }
 
    return pAdapter;
@@ -10253,8 +10257,9 @@ static void hdd_close_tx_queues(hdd_context_t *hdd_ctx)
 	while (NULL != adapter_node && VOS_STATUS_SUCCESS == status) {
 		adapter = adapter_node->pAdapter;
 		if (adapter && adapter->dev) {
-			netif_tx_disable (adapter->dev);
-			netif_carrier_off(adapter->dev);
+			wlan_hdd_netif_queue_control(adapter,
+				WLAN_NETIF_TX_DISABLE_N_CARRIER,
+				WLAN_CONTROL_PATH);
 		}
 		status = hdd_get_next_adapter(hdd_ctx, adapter_node,
 						&next_adapter);
@@ -10884,8 +10889,9 @@ hdd_adapter_t* hdd_open_adapter( hdd_context_t *pHddCtx, tANI_U8 session_type,
 
          //Stop the Interface TX queue.
          hddLog(LOG1, FL("Disabling queues"));
-         netif_tx_disable(pAdapter->dev);
-         netif_carrier_off(pAdapter->dev);
+         wlan_hdd_netif_queue_control(pAdapter,
+            WLAN_NETIF_TX_DISABLE_N_CARRIER,
+            WLAN_CONTROL_PATH);
 
 #ifdef QCA_LL_TX_FLOW_CT
          /* SAT mode default TX Flow control instance
@@ -10935,9 +10941,9 @@ hdd_adapter_t* hdd_open_adapter( hdd_context_t *pHddCtx, tANI_U8 session_type,
          }
 
          hddLog(LOG1, FL("Disabling queues"));
-         netif_tx_disable(pAdapter->dev);
-         netif_carrier_off(pAdapter->dev);
-
+         wlan_hdd_netif_queue_control(pAdapter,
+             WLAN_NETIF_TX_DISABLE_N_CARRIER,
+             WLAN_CONTROL_PATH);
          hdd_set_conparam( 1 );
 
          break;
@@ -10963,8 +10969,9 @@ hdd_adapter_t* hdd_open_adapter( hdd_context_t *pHddCtx, tANI_U8 session_type,
 
          //Stop the Interface TX queue.
          hddLog(LOG1, FL("Disabling queues"));
-         netif_tx_disable(pAdapter->dev);
-         netif_carrier_off(pAdapter->dev);
+         wlan_hdd_netif_queue_control(pAdapter,
+            WLAN_NETIF_TX_DISABLE_N_CARRIER,
+            WLAN_CONTROL_PATH);
       }
          break;
       default:
@@ -11360,8 +11367,8 @@ VOS_STATUS hdd_stop_adapter( hdd_context_t *pHddCtx, hdd_adapter_t *pAdapter,
    ENTER();
 
    hddLog(LOG1, FL("Disabling queues"));
-   netif_tx_disable(pAdapter->dev);
-   netif_carrier_off(pAdapter->dev);
+   wlan_hdd_netif_queue_control(pAdapter, WLAN_NETIF_TX_DISABLE_N_CARRIER,
+                                    WLAN_CONTROL_PATH);
    switch(pAdapter->device_mode)
    {
       case WLAN_HDD_INFRA_STATION:
@@ -11589,8 +11596,9 @@ VOS_STATUS hdd_reset_all_adapters( hdd_context_t *pHddCtx )
    {
       pAdapter = pAdapterNode->pAdapter;
       hddLog(LOG1, FL("Disabling queues"));
-      netif_tx_disable(pAdapter->dev);
-      netif_carrier_off(pAdapter->dev);
+      wlan_hdd_netif_queue_control(pAdapter,
+          WLAN_NETIF_TX_DISABLE_N_CARRIER,
+          WLAN_CONTROL_PATH);
 
       pAdapter->sessionCtx.station.hdd_ReassocScenario = VOS_FALSE;
 
@@ -13704,6 +13712,120 @@ void wlan_hdd_clear_tx_rx_histogram(hdd_context_t *pHddCtx)
     pHddCtx->hdd_txrx_hist_idx = 0;
     vos_mem_zero(pHddCtx->hdd_txrx_hist,
         (sizeof(struct hdd_tx_rx_histogram) * NUM_TX_RX_HISTOGRAM));
+}
+
+/**
+ * wlan_hdd_display_adapter_netif_queue_history() - display adapter's netif
+ *                                                  queue operation history
+ * @adapter: hdd adapter
+ *
+ * Return: none
+ */
+static inline void
+wlan_hdd_display_adapter_netif_queue_history(hdd_adapter_t *adapter)
+{
+	int i;
+	adf_os_time_t total, pause, unpause, curr_time;
+
+	if (!adapter)
+		return;
+	hddLog(LOGE, FL("Session_id %d device mode %d"),
+		adapter->sessionId, adapter->device_mode);
+
+	hddLog(LOGE, "Netif queue operation statistics:");
+	hddLog(LOGE, "Current pause_map value %x", adapter->pause_map);
+	curr_time = vos_system_ticks();
+	total = curr_time - adapter->start_time;
+	if (adapter->pause_map) {
+		pause = adapter->total_pause_time +
+			curr_time - adapter->last_time;
+		unpause = adapter->total_unpause_time;
+	} else {
+		unpause = adapter->total_unpause_time +
+			curr_time - adapter->last_time;
+		pause = adapter->total_pause_time;
+	}
+	hddLog(LOGE, "Total: %ums Pause: %ums Unpause: %ums",
+		vos_system_ticks_to_msecs(total),
+		vos_system_ticks_to_msecs(pause),
+		vos_system_ticks_to_msecs(unpause));
+	hddLog(LOGE, "  reason_type: pause_cnt: unpause_cnt");
+
+	for (i = 0; i < WLAN_REASON_TYPE_MAX; i++) {
+		hddLog(LOGE, "%s: %d: %d",
+		       hdd_reason_type_to_string(i),
+		       adapter->queue_oper_stats[i].pause_count,
+		       adapter->queue_oper_stats[i].unpause_count);
+	}
+
+	hddLog(LOGE, "Netif queue operation history: current index %d",
+		adapter->history_index);
+	hddLog(LOGE, "index: time: action_type: reason_type: pause_map");
+
+	for (i = 0; i < WLAN_HDD_MAX_HISTORY_ENTRY; i++) {
+		hddLog(LOGE, "%d: %u: %s: %s: %x",
+		       i, vos_system_ticks_to_msecs(
+				adapter->queue_oper_history[i].time),
+		       hdd_action_type_to_string(
+				adapter->queue_oper_history[i].netif_action),
+		       hdd_reason_type_to_string(
+				adapter->queue_oper_history[i].netif_reason),
+		       adapter->queue_oper_history[i].pause_map);
+	}
+}
+
+/**
+ * wlan_hdd_display_netif_queue_history() - display netif queue
+ *                                          operation history
+ * @hdd_ctx: hdd context
+ *
+ * Return: none
+ */
+void wlan_hdd_display_netif_queue_history(hdd_context_t *hdd_ctx)
+{
+	hdd_adapter_t *adapter;
+	hdd_adapter_list_node_t *adapter_node = NULL, *next = NULL;
+	VOS_STATUS status;
+
+	status = hdd_get_front_adapter(hdd_ctx, &adapter_node);
+	while (NULL != adapter_node && VOS_STATUS_SUCCESS == status) {
+		adapter = adapter_node->pAdapter;
+
+		wlan_hdd_display_adapter_netif_queue_history(adapter);
+
+		status = hdd_get_next_adapter(hdd_ctx, adapter_node, &next);
+		adapter_node = next;
+	}
+}
+
+/**
+ * wlan_hdd_clear_netif_queue_history() - clear netif queue operation history
+ * @hdd_ctx: hdd context
+ *
+ * Return: none
+ */
+void wlan_hdd_clear_netif_queue_history(hdd_context_t *hdd_ctx)
+{
+	hdd_adapter_t *adapter = NULL;
+	hdd_adapter_list_node_t *adapter_node = NULL, *next = NULL;
+	VOS_STATUS status;
+
+	status = hdd_get_front_adapter(hdd_ctx, &adapter_node);
+	while (NULL != adapter_node && VOS_STATUS_SUCCESS == status) {
+		adapter = adapter_node->pAdapter;
+
+		vos_mem_zero(adapter->queue_oper_stats,
+			     sizeof(adapter->queue_oper_stats));
+		vos_mem_zero(adapter->queue_oper_history,
+			     sizeof(adapter->queue_oper_history));
+
+		adapter->history_index = 0;
+		adapter->start_time = adapter->last_time = vos_system_ticks();
+		adapter->total_pause_time = 0;
+		adapter->total_unpause_time = 0;
+		status = hdd_get_next_adapter(hdd_ctx, adapter_node, &next);
+		adapter_node = next;
+	}
 }
 
 /**---------------------------------------------------------------------------

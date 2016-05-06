@@ -13508,7 +13508,7 @@ eHalStatus sme_ocb_set_utc_time(struct sir_ocb_utc *utc)
 						       &msg))) {
 		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
 			  FL("Not able to post message to WDA"));
-		vos_mem_free(utc);
+		vos_mem_free(sme_utc);
 		return eHAL_STATUS_FAILURE;
 	}
 
@@ -15377,7 +15377,7 @@ VOS_STATUS sme_UpdateDSCPtoUPMapping( tHalHandle hHal,
         }
 
         if (!pSession->QosMapSet.present) {
-            VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_WARN,
+            VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO,
                      FL("QOS Mapping IE not present"));
             sme_ReleaseGlobalLock( &pMac->sme);
             return eHAL_STATUS_FAILURE;
@@ -18238,14 +18238,15 @@ eHalStatus sme_set_bpf_instructions(tHalHandle hal,
 	vos_msg_t           vos_msg;
 	struct sir_bpf_set_offload *set_offload;
 
-	set_offload = vos_mem_malloc(sizeof(*set_offload));
+	set_offload = vos_mem_malloc(sizeof(*set_offload) +
+					req->current_length);
 
 	if (NULL == set_offload) {
 		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
 			FL("Failed to alloc set_offload"));
 		return eHAL_STATUS_FAILED_ALLOC;
 	}
-	vos_mem_zero(set_offload, sizeof(*set_offload));
+	vos_mem_zero(set_offload, sizeof(*set_offload) + req->current_length);
 
 	set_offload->session_id = req->session_id;
 	set_offload->filter_id = req->filter_id;
@@ -18253,8 +18254,8 @@ eHalStatus sme_set_bpf_instructions(tHalHandle hal,
 	set_offload->total_length = req->total_length;
 	set_offload->current_length = req->current_length;
 	if (set_offload->total_length) {
-		set_offload->program = vos_mem_malloc(sizeof(uint8_t) *
-						req->current_length);
+		set_offload->program = ((uint8_t *)set_offload) +
+					sizeof(*set_offload);
 		vos_mem_copy(set_offload->program, req->program,
 				set_offload->current_length);
 	}
@@ -18269,16 +18270,12 @@ eHalStatus sme_set_bpf_instructions(tHalHandle hal,
 			VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
 				FL("Post BPF set offload msg fail"));
 			status = eHAL_STATUS_FAILURE;
-			if (set_offload->total_length)
-				vos_mem_free(set_offload->program);
 			vos_mem_free(set_offload);
 		}
 		sme_ReleaseGlobalLock(&mac_ctx->sme);
 	} else {
 		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
 				FL("sme_AcquireGlobalLock failed"));
-		if (set_offload->total_length)
-			vos_mem_free(set_offload->program);
 		vos_mem_free(set_offload);
 	}
 	return status;

@@ -13993,7 +13993,8 @@ static int wlan_hdd_change_iface_to_sta_mode(struct net_device *ndev,
     wext->roamProfile.pAddIEScan = pAdapter->scan_info.scanAddIE.addIEdata;
     wext->roamProfile.nAddIEScanLength = pAdapter->scan_info.scanAddIE.length;
     EXIT();
-    return status;
+
+    return vos_status_to_os_return(status);
 }
 
 static int wlan_hdd_cfg80211_change_bss (struct wiphy *wiphy,
@@ -14084,9 +14085,9 @@ static int __wlan_hdd_cfg80211_change_iface(struct wiphy *wiphy,
         switch (type) {
         case NL80211_IFTYPE_STATION:
         case NL80211_IFTYPE_P2P_CLIENT:
-           vstatus = wlan_hdd_change_iface_to_sta_mode(ndev, type);
-           if (vstatus != VOS_STATUS_SUCCESS)
-               return -EINVAL;
+           status = wlan_hdd_change_iface_to_sta_mode(ndev, type);
+           if (status != 0)
+               return status;
 
 #ifdef QCA_LL_TX_FLOW_CT
            if (pAdapter->tx_flow_timer_initialized == VOS_FALSE) {
@@ -14255,7 +14256,7 @@ static int __wlan_hdd_cfg80211_change_iface(struct wiphy *wiphy,
        case NL80211_IFTYPE_P2P_CLIENT:
        case NL80211_IFTYPE_ADHOC:
           status = wlan_hdd_change_iface_to_sta_mode(ndev, type);
-          if (status != VOS_STATUS_SUCCESS)
+          if (status != 0)
               return status;
 
 #ifdef QCA_LL_TX_FLOW_CT
@@ -16846,6 +16847,14 @@ void hdd_select_cbmode(hdd_adapter_t *pAdapter, v_U8_t operationChannel,
         *vht_channel_width =
                   (WLAN_HDD_GET_CTX(pAdapter))->cfg_ini->vhtChannelWidth;
 
+    /*
+     * In IBSS mode while operating in 2.4 GHz,
+     * the device will be configured to CBW 20
+     */
+    if ((WLAN_HDD_IBSS == pAdapter->device_mode) &&
+            (SIR_11B_CHANNEL_END >= operationChannel))
+        *vht_channel_width = eHT_CHANNEL_WIDTH_20MHZ;
+
     switch ( iniDot11Mode )
     {
        case eHDD_DOT11_MODE_AUTO:
@@ -18202,8 +18211,8 @@ int wlan_hdd_disconnect( hdd_adapter_t *pAdapter, u16 reason )
 
     /*stop tx queues*/
     hddLog(LOG1, FL("Disabling queues"));
-    netif_tx_disable(pAdapter->dev);
-    netif_carrier_off(pAdapter->dev);
+    wlan_hdd_netif_queue_control(pAdapter, WLAN_NETIF_TX_DISABLE_N_CARRIER,
+          WLAN_CONTROL_PATH);
     pHddCtx->isAmpAllowed = VOS_TRUE;
     hdd_connSetConnectionState(pAdapter,
                                 eConnectionState_Disconnecting);
@@ -19357,11 +19366,17 @@ static int __wlan_hdd_cfg80211_get_station(struct wiphy *wiphy,
                 }
                 else if (DATA_RATE_11AC_MAX_MCS_9 == vhtMaxMcs)
                 {
-                    //VHT20 is supporting 0~8
-                    if (rate_flags & eHAL_TX_RATE_VHT20)
+                    /*
+                     * 'IEEE_P802.11ac_2013.pdf' page 325, 326
+                     * - MCS9 is valid for VHT20 when Nss = 3 or Nss = 6
+                     * - MCS9 is not valid for VHT20 when Nss = 1,2,4,5,7,8
+                     */
+                    if ((rate_flags & eHAL_TX_RATE_VHT20) &&
+                        (nss != 3 && nss != 6)) {
                         maxMCSIdx = 8;
-                    else
+                    } else {
                         maxMCSIdx = 9;
+                    }
                 }
 
                 if (rssidx != 0)
@@ -19468,6 +19483,20 @@ static int __wlan_hdd_cfg80211_get_station(struct wiphy *wiphy,
            {
               maxSpeedMCS = 1;
               maxMCSIdx = pAdapter->hdd_stats.ClassA_stat.mcs_index;
+              /*
+               * 'IEEE_P802.11ac_2013.pdf' page 325, 326
+               * - MCS9 is valid for VHT20 when Nss = 3 or Nss = 6
+               * - MCS9 is not valid for VHT20 when Nss = 1,2,4,5,7,8
+               */
+              if ((rate_flags & eHAL_TX_RATE_VHT20) &&
+                  (maxMCSIdx > 8) &&
+                  (nss != 3 && nss != 6)) {
+#ifdef LINKSPEED_DEBUG_ENABLED
+                  pr_info("MCS%d is not valid for VHT20 when nss=%d, hence report MCS8.",
+                          maxMCSIdx, nss);
+#endif
+                  maxMCSIdx = 8;
+              }
            }
         }
 

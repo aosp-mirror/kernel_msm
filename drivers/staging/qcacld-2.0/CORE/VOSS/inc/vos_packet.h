@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2012,2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2012,2014,2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -57,7 +57,6 @@ struct vos_pkt_t;
 typedef struct vos_pkt_t vos_pkt_t;
 
 
-#ifdef QCA_PKT_PROTO_TRACE
 #include "adf_nbuf.h"
 
 #define VOS_PKT_TRAC_TYPE_EAPOL   NBUF_PKT_TRAC_TYPE_EAPOL
@@ -82,6 +81,8 @@ v_U8_t vos_pkt_get_proto_type
    v_U8_t tracking_map,
    v_BOOL_t dot11_type
 );
+
+#ifdef QCA_PKT_PROTO_TRACE
 
 /*---------------------------------------------------------------------------
 

@@ -152,7 +152,9 @@ void hddDevTmTxBlockTimeoutHandler(void *usrData)
    /* Resume TX flow */
 
    hddLog(LOG1, FL("Enabling queues"));
-   netif_tx_wake_all_queues(staAdapater->dev);
+   wlan_hdd_netif_queue_control(staAdapater,
+        WLAN_WAKE_ALL_NETIF_QUEUE,
+        WLAN_CONTROL_PATH);
    pHddCtx->tmInfo.qBlocked = VOS_FALSE;
    mutex_unlock(&pHddCtx->tmInfo.tmOperationLock);
 

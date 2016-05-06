@@ -67,10 +67,49 @@ enum wlan_op_mode {
 #define OL_TXQ_PAUSE_REASON_MCC_VDEV_START    (1 << 5)
 #define OL_TXQ_PAUSE_REASON_THROTTLE          (1 << 6)
 
+/**
+ * enum netif_action_type - Type of actions on netif queues
+ * @WLAN_STOP_ALL_NETIF_QUEUE: stop all netif queues
+ * @WLAN_START_ALL_NETIF_QUEUE: start all netif queues
+ * @WLAN_WAKE_ALL_NETIF_QUEUE: wake all netif queues
+ * @WLAN_STOP_ALL_NETIF_QUEUE_N_CARRIER: stop all queues and off carrier
+ * @WLAN_START_ALL_NETIF_QUEUE_N_CARRIER: start all queues and on carrier
+ * @WLAN_NETIF_TX_DISABLE: disable tx
+ * @WLAN_NETIF_TX_DISABLE_N_CARRIER: disable tx and off carrier
+ * @WLAN_NETIF_CARRIER_ON: on carrier
+ * @WLAN_NETIF_CARRIER_OFF: off carrier
+ */
+enum netif_action_type {
+	WLAN_STOP_ALL_NETIF_QUEUE = 1,
+	WLAN_START_ALL_NETIF_QUEUE,
+	WLAN_WAKE_ALL_NETIF_QUEUE,
+	WLAN_STOP_ALL_NETIF_QUEUE_N_CARRIER,
+	WLAN_START_ALL_NETIF_QUEUE_N_CARRIER,
+	WLAN_NETIF_TX_DISABLE,
+	WLAN_NETIF_TX_DISABLE_N_CARRIER,
+	WLAN_NETIF_CARRIER_ON,
+	WLAN_NETIF_CARRIER_OFF,
+	WLAN_NETIF_ACTION_TYPE_MAX,
+};
+
+/**
+ * enum netif_reason_type - reason for netif queue action
+ * @WLAN_CONTROL_PATH: action from control path
+ * @WLAN_DATA_FLOW_CONTROL: because of flow control
+ * @WLAN_REASON_TYPE_MAX: max netif reason
+ */
+enum netif_reason_type {
+	WLAN_CONTROL_PATH = 1,
+	WLAN_DATA_FLOW_CONTROL,
+	WLAN_REASON_TYPE_MAX,
+};
+
 /* command options for dumpStats*/
 #define WLAN_HDD_STATS               0
 #define WLAN_TXRX_STATS              1
 #define WLAN_TXRX_HIST_STATS         2
+#define WLAN_TXRX_DESC_STATS         3
+#define WLAN_HDD_NETIF_OPER_HISTORY  4
 #ifdef CONFIG_HL_SUPPORT
 #define WLAN_SCHEDULER_STATS        21
 #define WLAN_TX_QUEUE_STATS         22

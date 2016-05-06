@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014,2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -84,6 +84,15 @@ struct cvg_nbuf_cb {
     } txrx_field;
 
     /*
+     * Store info for data path tracing
+     */
+    struct {
+        uint8_t packet_state;
+        uint8_t packet_track;
+        uint8_t dp_trace;
+    } trace;
+
+    /*
      * Store the DMA mapping info for the network buffer fragments
      * provided by the OS.
      */
@@ -131,7 +140,7 @@ struct cvg_nbuf_cb {
     unsigned char tx_htt2_frm: 1;
     unsigned char tx_htt2_reserved: 7;
 #endif /* QCA_TX_HTT2_SUPPORT */
-};
+} __packed;
 
 #ifdef QCA_ARP_SPOOFING_WAR
 #define NBUF_CB_PTR(skb) \
@@ -192,6 +201,27 @@ struct cvg_nbuf_cb {
 #define NBUF_CB_ID(skb) \
     (&((struct cvg_nbuf_cb *)((skb)->cb))->tx_desc_id)
 #endif
+
+#define NBUF_SET_PACKET_STATE(skb, pkt_state) \
+    (((struct cvg_nbuf_cb *)((skb)->cb))->trace.packet_state = \
+                                           pkt_state)
+#define NBUF_GET_PACKET_STATE(skb) \
+    (((struct cvg_nbuf_cb *)((skb)->cb))->trace.packet_state)
+
+#define NBUF_SET_PACKET_TRACK(skb, pkt_track) \
+    (((struct cvg_nbuf_cb *)((skb)->cb))->trace.packet_track = \
+                                           pkt_track)
+#define NBUF_GET_PACKET_TRACK(skb) \
+    (((struct cvg_nbuf_cb *)((skb)->cb))->trace.packet_track)
+
+#define NBUF_UPDATE_TX_PKT_COUNT(skb, PACKET_STATE) \
+    adf_nbuf_set_state(skb, PACKET_STATE)
+
+#define ADF_NBUF_SET_DP_TRACE(skb, enable) \
+    (((struct cvg_nbuf_cb *)((skb)->cb))->trace.dp_trace \
+                                     = enable)
+#define ADF_NBUF_GET_DP_TRACE(skb) \
+    (((struct cvg_nbuf_cb *)((skb)->cb))->trace.dp_trace)
 
 #define __adf_nbuf_get_num_frags(skb)              \
     /* assume the OS provides a single fragment */ \

@@ -117,8 +117,9 @@ static int hdd_close_ndi(hdd_adapter_t *adapter)
 		hddLog(LOGE, FL("Interface is not in NDI mode"));
 		return -EINVAL;
 	}
-	netif_tx_disable(adapter->dev);
-	netif_carrier_off(adapter->dev);
+	wlan_hdd_netif_queue_control(adapter,
+		WLAN_NETIF_TX_DISABLE_N_CARRIER,
+		WLAN_CONTROL_PATH);
 
 #ifdef WLAN_OPEN_SOURCE
 	cancel_work_sync(&adapter->ipv4NotifierWorkQueue);
@@ -807,8 +808,9 @@ static void hdd_ndp_iface_create_rsp_handler(hdd_adapter_t *adapter,
 		hddLog(LOGE, FL("NDI interface successfully created"));
 		ndp_ctx->ndp_create_transaction_id = 0;
 		ndp_ctx->state = NAN_DATA_NDI_CREATED_STATE;
-		netif_carrier_on(adapter->dev);
-		netif_tx_start_all_queues(adapter->dev);
+		wlan_hdd_netif_queue_control(adapter,
+			WLAN_START_ALL_NETIF_QUEUE_N_CARRIER,
+			WLAN_CONTROL_PATH);
 	} else {
 		hddLog(LOGE,
 			FL("NDI interface creation failed with reason %d"),
@@ -857,8 +859,9 @@ static void hdd_ndp_iface_delete_rsp_handler(hdd_adapter_t *adapter,
 			FL("NDI BSS stop failed with reason %d"),
 			ndi_rsp->reason);
 
-	netif_carrier_off(adapter->dev);
-	netif_tx_stop_all_queues(adapter->dev);
+	wlan_hdd_netif_queue_control(adapter,
+		WLAN_STOP_ALL_NETIF_QUEUE_N_CARRIER,
+		WLAN_CONTROL_PATH);
 	complete(&adapter->disconnect_comp_var);
 	return;
 }
@@ -1084,7 +1087,9 @@ static void hdd_ndp_new_peer_ind_handler(hdd_adapter_t *adapter,
 		hddLog(LOG1, FL("Set ctx connection state to connected"));
 		sta_ctx->conn_info.connState = eConnectionState_NdiConnected;
 		hdd_wmm_connect(adapter, &roam_info, eCSR_BSS_TYPE_NDI);
-		netif_tx_wake_all_queues(adapter->dev);
+		wlan_hdd_netif_queue_control(adapter,
+			WLAN_WAKE_ALL_NETIF_QUEUE,
+			WLAN_CONTROL_PATH);
 	}
 	EXIT();
 }

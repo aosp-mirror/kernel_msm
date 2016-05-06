@@ -65,6 +65,7 @@
 #ifdef IPA_OFFLOAD
 #include <wlan_hdd_ipa.h>
 #endif
+#include "adf_trace.h"
 
 #include "wlan_hdd_nan_datapath.h"
 
@@ -309,7 +310,8 @@ void hdd_tx_resume_timer_expired_handler(void *adapter_context)
    }
 
    hddLog(LOG1, FL("Enabling queues"));
-   netif_tx_wake_all_queues(pAdapter->dev);
+   wlan_hdd_netif_queue_control(pAdapter, WLAN_WAKE_ALL_NETIF_QUEUE,
+            WLAN_CONTROL_PATH);
    pAdapter->hdd_stats.hddTxRxStats.txflow_unpause_cnt++;
    pAdapter->hdd_stats.hddTxRxStats.is_txflow_paused = FALSE;
 
@@ -353,7 +355,9 @@ void hdd_tx_resume_cb(void *adapter_context,
            return;
        }
        hddLog(LOG1, FL("Enabling queues"));
-       netif_tx_wake_all_queues(pAdapter->dev);
+       wlan_hdd_netif_queue_control(pAdapter,
+            WLAN_WAKE_ALL_NETIF_QUEUE,
+            WLAN_DATA_FLOW_CONTROL);
        pAdapter->hdd_stats.hddTxRxStats.txflow_unpause_cnt++;
        pAdapter->hdd_stats.hddTxRxStats.is_txflow_paused = FALSE;
 
@@ -362,7 +366,9 @@ void hdd_tx_resume_cb(void *adapter_context,
     else if (VOS_FALSE == tx_resume)  /* Pause TX  */
     {
         hddLog(LOG1, FL("Disabling queues"));
-        netif_tx_stop_all_queues(pAdapter->dev);
+        wlan_hdd_netif_queue_control(pAdapter,
+            WLAN_STOP_ALL_NETIF_QUEUE,
+            WLAN_DATA_FLOW_CONTROL);
         if (VOS_TIMER_STATE_STOPPED ==
             vos_timer_getCurrentState(&pAdapter->tx_flow_control_timer))
         {
@@ -398,6 +404,13 @@ void hdd_tx_resume_cb(void *adapter_context,
  */
 void hdd_drop_skb(hdd_adapter_t *adapter, struct sk_buff *skb)
 {
+	DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_DROP_PACKET_RECORD,
+			(uint8_t *)skb->data, skb->len));
+	if (skb->len > ADF_DP_TRACE_RECORD_SIZE)
+		DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_DROP_PACKET_RECORD,
+				(uint8_t *)&skb->data[ADF_DP_TRACE_RECORD_SIZE],
+				(skb->len - ADF_DP_TRACE_RECORD_SIZE)));
+
 	++adapter->stats.tx_dropped;
 	++adapter->hdd_stats.hddTxRxStats.txXmitDropped;
 	kfree_skb(skb);
@@ -418,6 +431,14 @@ void hdd_drop_skb_list(hdd_adapter_t *adapter, struct sk_buff *skb,
 	struct sk_buff *skb_next;
 
 	while (skb) {
+		DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_DROP_PACKET_RECORD,
+				(uint8_t *)skb->data, skb->len));
+		if (skb->len > ADF_DP_TRACE_RECORD_SIZE)
+			DPTRACE(adf_dp_trace(skb,
+				ADF_DP_TRACE_DROP_PACKET_RECORD,
+				(uint8_t *)&skb->data[ADF_DP_TRACE_RECORD_SIZE],
+				(skb->len - ADF_DP_TRACE_RECORD_SIZE)));
+
 		++adapter->stats.tx_dropped;
 		++adapter->hdd_stats.hddTxRxStats.txXmitDropped;
 		if (is_update_ac_stats == TRUE) {
@@ -541,7 +562,8 @@ int __hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
                                     pAdapter->tx_flow_low_watermark,
                                     pAdapter->tx_flow_high_watermark_offset)) {
            hddLog(LOG1, FL("Disabling queues"));
-           netif_tx_stop_all_queues(dev);
+           wlan_hdd_netif_queue_control(pAdapter, WLAN_STOP_ALL_NETIF_QUEUE,
+                    WLAN_DATA_FLOW_CONTROL);
            if ((pAdapter->tx_flow_timer_initialized == TRUE) &&
                (VOS_TIMER_STATE_STOPPED ==
                 vos_timer_getCurrentState(&pAdapter->tx_flow_control_timer))) {
@@ -660,6 +682,20 @@ int __hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
            list_tail->next = skb;
            list_tail = list_tail->next;
        }
+       vos_mem_zero(skb->cb, sizeof(skb->cb));
+       NBUF_SET_PACKET_TRACK(skb, NBUF_TX_PKT_DATA_TRACK);
+       NBUF_UPDATE_TX_PKT_COUNT(skb, NBUF_TX_PKT_HDD);
+
+       adf_dp_trace_set_track(skb);
+       DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_PACKET_PTR_RECORD,
+                 (uint8_t *)skb->data, sizeof(skb->data)));
+       DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_PACKET_RECORD,
+                 (uint8_t *)skb->data, skb->len));
+       if (skb->len > ADF_DP_TRACE_RECORD_SIZE)
+           DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_PACKET_RECORD,
+                      (uint8_t *)&skb->data[ADF_DP_TRACE_RECORD_SIZE],
+                      (skb->len - ADF_DP_TRACE_RECORD_SIZE)));
+
        skb = skb_next;
        continue;
 
@@ -738,6 +774,64 @@ VOS_STATUS hdd_get_peer_sta_id(hdd_station_ctx_t *sta_ctx,
 }
 
 /**
+ * wlan_display_tx_timeout_stats() - HDD tx timeout stats display handler
+ * @adapter: hdd adapter
+ *
+ * Function called by tx timeout handler to display the stats when timeout
+ * occurs during trabsmission.
+ *
+ * Return: none
+ */
+void wlan_display_tx_timeout_stats(hdd_adapter_t *adapter)
+{
+	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
+	uint8_t pause_bitmap = 0;
+	vos_time_t pause_timestamp = 0;
+	A_STATUS status;
+
+	VOS_TRACE(VOS_MODULE_ID_HDD_DATA, VOS_TRACE_LEVEL_INFO,
+		  "carrier state: %d", netif_carrier_ok(adapter->dev));
+
+	/* to display the neif queue pause/unpause history */
+	wlan_hdd_display_netif_queue_history(hdd_ctx);
+
+	/* to display the count of packets at diferent layers */
+	adf_nbuf_tx_desc_count_display();
+
+	/* printing last 100 records from DPTRACE */
+	adf_dp_trace_dump_all(100);
+
+	/* to print the pause bitmap of local ll queues */
+	status = tlshim_get_ll_queue_pause_bitmap(adapter->sessionId,
+			&pause_bitmap, &pause_timestamp);
+	if (status != A_OK)
+		hddLog(LOGE, FL("vdev is NULL for vdev id %d"),
+		       adapter->sessionId);
+	else
+		hddLog(LOGE,
+		       FL("LL vdev queues pause bitmap: %d, last pause timestamp %lu"),
+		       pause_bitmap, pause_timestamp);
+
+	/*
+	 * To invoke the bug report to flush driver as well as fw logs
+	 * when timeout happens. It happens when it has been more
+	 * than 5 minutes and the timeout has happened at least 3 times
+	 * since the last generation of bug report.
+	 */
+	adapter->bug_report_count++;
+	if (adapter->bug_report_count >= HDD_BUG_REPORT_MIN_COUNT &&
+	   (jiffies_to_msecs(jiffies - adapter->last_tx_jiffies) >=
+	    HDD_BUG_REPORT_MIN_TIME)) {
+		adapter->bug_report_count = 0;
+		adapter->last_tx_jiffies = jiffies;
+		vos_flush_logs(WLAN_LOG_TYPE_FATAL,
+			       WLAN_LOG_INDICATOR_HOST_DRIVER,
+			       WLAN_LOG_REASON_HDD_TIME_OUT,
+			       true);
+	}
+}
+
+/**
  * __hdd_tx_timeout() - HDD tx timeout handler
  * @dev: pointer to net_device structure
  *
@@ -755,6 +849,8 @@ static void __hdd_tx_timeout(struct net_device *dev)
 
    hddLog(LOGE, FL("Transmission timeout occurred jiffies %lu trans_start %lu"),
           jiffies, dev->trans_start);
+   DPTRACE(adf_dp_trace(NULL, ADF_DP_TRACE_HDD_TX_TIMEOUT,
+                        NULL, 0));
    /*
     * Getting here implies we disabled the TX queues for too long. Queues are
     * disabled either because of disassociation or low resource scenarios. In
@@ -778,12 +874,10 @@ static void __hdd_tx_timeout(struct net_device *dev)
 
    for (i = 0; i < NUM_TX_QUEUES; i++) {
       txq = netdev_get_tx_queue(dev, i);
-      hddLog(LOG1, FL("Queue%d status: %d txq->trans_start %lu"),
+      hddLog(LOGE, FL("Queue%d status: %d txq->trans_start %lu"),
              i, netif_tx_queue_stopped(txq), txq->trans_start);
    }
-
-   VOS_TRACE( VOS_MODULE_ID_HDD_DATA, VOS_TRACE_LEVEL_INFO,
-              "carrier state: %d", netif_carrier_ok(dev));
+   wlan_display_tx_timeout_stats(pAdapter);
 }
 
 /**
@@ -1347,3 +1441,250 @@ void wlan_hdd_log_eapol(struct sk_buff *skb,
 	}
 }
 #endif /* FEATURE_WLAN_DIAG_SUPPORT */
+
+/**
+ * hdd_reason_type_to_string() - return string conversion of reason type
+ * @reason: reason type
+ *
+ * This utility function helps log string conversion of reason type.
+ *
+ * Return: string conversion of device mode, if match found;
+ *        "Unknown" otherwise.
+ */
+const char *hdd_reason_type_to_string(enum netif_reason_type reason)
+{
+	switch (reason) {
+	CASE_RETURN_STRING(WLAN_CONTROL_PATH);
+	CASE_RETURN_STRING(WLAN_DATA_FLOW_CONTROL);
+	default:
+		return "Invalid";
+	}
+}
+
+/**
+ * hdd_action_type_to_string() - return string conversion of action type
+ * @action: action type
+ *
+ * This utility function helps log string conversion of action_type.
+ *
+ * Return: string conversion of device mode, if match found;
+ *        "Unknown" otherwise.
+ */
+const char *hdd_action_type_to_string(enum netif_action_type action)
+{
+	switch (action) {
+	CASE_RETURN_STRING(WLAN_STOP_ALL_NETIF_QUEUE);
+	CASE_RETURN_STRING(WLAN_START_ALL_NETIF_QUEUE);
+	CASE_RETURN_STRING(WLAN_WAKE_ALL_NETIF_QUEUE);
+	CASE_RETURN_STRING(WLAN_STOP_ALL_NETIF_QUEUE_N_CARRIER);
+	CASE_RETURN_STRING(WLAN_START_ALL_NETIF_QUEUE_N_CARRIER);
+	CASE_RETURN_STRING(WLAN_NETIF_TX_DISABLE);
+	CASE_RETURN_STRING(WLAN_NETIF_TX_DISABLE_N_CARRIER);
+	CASE_RETURN_STRING(WLAN_NETIF_CARRIER_ON);
+	CASE_RETURN_STRING(WLAN_NETIF_CARRIER_OFF);
+	default:
+		return "Invalid";
+	}
+}
+
+/**
+ * wlan_hdd_update_queue_oper_stats - update queue operation statistics
+ * @adapter: adapter handle
+ * @action: action type
+ * @reason: reason type
+ */
+static void wlan_hdd_update_queue_oper_stats(hdd_adapter_t *adapter,
+	enum netif_action_type action, enum netif_reason_type reason)
+{
+	switch (action) {
+	case WLAN_STOP_ALL_NETIF_QUEUE:
+	case WLAN_STOP_ALL_NETIF_QUEUE_N_CARRIER:
+	case WLAN_NETIF_TX_DISABLE:
+	case WLAN_NETIF_TX_DISABLE_N_CARRIER:
+		adapter->queue_oper_stats[reason].pause_count++;
+		break;
+	case WLAN_START_ALL_NETIF_QUEUE:
+	case WLAN_WAKE_ALL_NETIF_QUEUE:
+	case WLAN_START_ALL_NETIF_QUEUE_N_CARRIER:
+		adapter->queue_oper_stats[reason].unpause_count++;
+		break;
+	default:
+		break;
+	}
+}
+
+/**
+ * wlan_hdd_update_txq_timestamp() - update txq timestamp
+ * @dev: net device
+ *
+ * Return: none
+ */
+static void wlan_hdd_update_txq_timestamp(struct net_device *dev)
+{
+	struct netdev_queue *txq;
+	int i;
+	bool unlock;
+
+	for (i = 0; i < NUM_TX_QUEUES; i++) {
+		txq = netdev_get_tx_queue(dev, i);
+		unlock = __netif_tx_trylock(txq);
+		txq_trans_update(txq);
+		if (unlock == true)
+			__netif_tx_unlock(txq);
+	}
+}
+
+/**
+ * wlan_hdd_update_unpause_time() - update unpause time
+ * @adapter: hdd adapter handle
+ *
+ * Return: none
+ */
+static void wlan_hdd_update_unpause_time(hdd_adapter_t *adapter)
+{
+	adf_os_time_t curr_time = vos_system_ticks();
+
+	adapter->total_unpause_time += curr_time - adapter->last_time;
+	adapter->last_time = curr_time;
+}
+
+/**
+ * wlan_hdd_update_pause_time() - update pause time
+ * @adapter: hdd adapter handle
+ *
+ * Return: none
+ */
+static void wlan_hdd_update_pause_time(hdd_adapter_t *adapter)
+{
+	adf_os_time_t curr_time = vos_system_ticks();
+
+	adapter->total_pause_time += curr_time - adapter->last_time;
+	adapter->last_time = curr_time;
+}
+
+/**
+ * wlan_hdd_netif_queue_control() - Use for netif_queue related actions
+ * @adapter: adapter handle
+ * @action: action type
+ * @reason: reason type
+ *
+ * This is single function which is used for netif_queue related
+ * actions like start/stop of network queues and on/off carrier
+ * option.
+ *
+ * Return: None
+ */
+void wlan_hdd_netif_queue_control(hdd_adapter_t *adapter,
+		enum netif_action_type action, enum netif_reason_type reason)
+{
+	if ((!adapter) || (WLAN_HDD_ADAPTER_MAGIC != adapter->magic) ||
+	    (!adapter->dev)) {
+		hddLog(LOGE, FL("adapter is invalid"));
+		return;
+	}
+
+	switch (action) {
+	case WLAN_NETIF_CARRIER_ON:
+		netif_carrier_on(adapter->dev);
+		break;
+
+	case WLAN_NETIF_CARRIER_OFF:
+		netif_carrier_off(adapter->dev);
+		break;
+
+	case WLAN_STOP_ALL_NETIF_QUEUE:
+		spin_lock_bh(&adapter->pause_map_lock);
+		if (!adapter->pause_map) {
+			netif_tx_stop_all_queues(adapter->dev);
+			wlan_hdd_update_txq_timestamp(adapter->dev);
+			wlan_hdd_update_unpause_time(adapter);
+		}
+		adapter->pause_map |= (1 << reason);
+		spin_unlock_bh(&adapter->pause_map_lock);
+		break;
+
+	case WLAN_START_ALL_NETIF_QUEUE:
+		spin_lock_bh(&adapter->pause_map_lock);
+		adapter->pause_map &= ~(1 << reason);
+		if (!adapter->pause_map) {
+			netif_tx_start_all_queues(adapter->dev);
+			wlan_hdd_update_pause_time(adapter);
+		}
+		spin_unlock_bh(&adapter->pause_map_lock);
+		break;
+
+	case WLAN_WAKE_ALL_NETIF_QUEUE:
+		spin_lock_bh(&adapter->pause_map_lock);
+		adapter->pause_map &= ~(1 << reason);
+		if (!adapter->pause_map) {
+			netif_tx_wake_all_queues(adapter->dev);
+			wlan_hdd_update_pause_time(adapter);
+		}
+		spin_unlock_bh(&adapter->pause_map_lock);
+		break;
+
+	case WLAN_STOP_ALL_NETIF_QUEUE_N_CARRIER:
+		spin_lock_bh(&adapter->pause_map_lock);
+		if (!adapter->pause_map) {
+			netif_tx_stop_all_queues(adapter->dev);
+			wlan_hdd_update_txq_timestamp(adapter->dev);
+			wlan_hdd_update_unpause_time(adapter);
+		}
+		adapter->pause_map |= (1 << reason);
+		netif_carrier_off(adapter->dev);
+		spin_unlock_bh(&adapter->pause_map_lock);
+		break;
+
+	case WLAN_START_ALL_NETIF_QUEUE_N_CARRIER:
+		spin_lock_bh(&adapter->pause_map_lock);
+		netif_carrier_on(adapter->dev);
+		adapter->pause_map &= ~(1 << reason);
+		if (!adapter->pause_map) {
+			netif_tx_start_all_queues(adapter->dev);
+			wlan_hdd_update_pause_time(adapter);
+		}
+		spin_unlock_bh(&adapter->pause_map_lock);
+		break;
+
+	case WLAN_NETIF_TX_DISABLE:
+		spin_lock_bh(&adapter->pause_map_lock);
+		if (!adapter->pause_map) {
+			netif_tx_disable(adapter->dev);
+			wlan_hdd_update_txq_timestamp(adapter->dev);
+			wlan_hdd_update_unpause_time(adapter);
+		}
+		adapter->pause_map |= (1 << reason);
+		spin_unlock_bh(&adapter->pause_map_lock);
+		break;
+
+	case WLAN_NETIF_TX_DISABLE_N_CARRIER:
+		spin_lock_bh(&adapter->pause_map_lock);
+		if (!adapter->pause_map) {
+			netif_tx_disable(adapter->dev);
+			wlan_hdd_update_txq_timestamp(adapter->dev);
+			wlan_hdd_update_unpause_time(adapter);
+		}
+		adapter->pause_map |= (1 << reason);
+		netif_carrier_off(adapter->dev);
+		spin_unlock_bh(&adapter->pause_map_lock);
+		break;
+
+	default:
+		hddLog(LOGE, FL("unsupported netif queue action %d"), action);
+	}
+
+	wlan_hdd_update_queue_oper_stats(adapter, action, reason);
+
+	adapter->queue_oper_history[adapter->history_index].time =
+						vos_system_ticks();
+	adapter->queue_oper_history[adapter->history_index].netif_action =
+						action;
+	adapter->queue_oper_history[adapter->history_index].netif_reason =
+						reason;
+	adapter->queue_oper_history[adapter->history_index].pause_map =
+						adapter->pause_map;
+	if (++adapter->history_index == WLAN_HDD_MAX_HISTORY_ENTRY)
+		adapter->history_index = 0;
+
+}
+

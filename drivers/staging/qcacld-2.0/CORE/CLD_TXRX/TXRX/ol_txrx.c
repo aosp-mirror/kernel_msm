@@ -1081,6 +1081,7 @@ ol_txrx_vdev_attach(
 
     adf_os_spinlock_init(&vdev->ll_pause.mutex);
     vdev->ll_pause.paused_reason = 0;
+    vdev->ll_pause.pause_timestamp = 0;
 #if defined(CONFIG_HL_SUPPORT)
     vdev->hl_paused_reason = 0;
 #endif
@@ -2706,6 +2707,9 @@ void ol_txrx_display_stats(struct ol_txrx_pdev_t *pdev, uint16_t value)
         case WLAN_TXRX_STATS:
             ol_txrx_stats_display(pdev);
             break;
+        case WLAN_TXRX_DESC_STATS:
+            adf_nbuf_tx_desc_count_display();
+            break;
 #ifdef CONFIG_HL_SUPPORT
         case WLAN_SCHEDULER_STATS:
             ol_tx_sched_cur_state_display(pdev);
@@ -2741,6 +2745,9 @@ void ol_txrx_clear_stats(struct ol_txrx_pdev_t *pdev, uint16_t value)
         case WLAN_TXRX_STATS:
             ol_txrx_stats_clear(pdev);
             break;
+        case WLAN_TXRX_DESC_STATS:
+            adf_nbuf_tx_desc_count_clear();
+            break;
 #ifdef CONFIG_HL_SUPPORT
         case WLAN_SCHEDULER_STATS:
             ol_tx_sched_stats_clear(pdev);
@@ -2762,5 +2769,33 @@ void ol_txrx_clear_stats(struct ol_txrx_pdev_t *pdev, uint16_t value)
                                           "%s: Unknown value",__func__);
             break;
     }
+}
+
+/*
+ * ol_txrx_get_ll_queue_pause_bitmap() - to obtain ll queue pause bitmap and
+ *                                       last pause timestamp
+ * @vdev_id: vdev id
+ * @pause_bitmap: pointer to return ll queue pause bitmap
+ * @pause_timestamp: pointer to return pause timestamp to calling func.
+ *
+ * Return: status -> A_OK - for success, A_ERROR for failure
+ *
+ */
+A_STATUS ol_txrx_get_ll_queue_pause_bitmap(uint8_t vdev_id,
+	uint8_t *pause_bitmap, adf_os_time_t *pause_timestamp)
+{
+	ol_txrx_vdev_handle vdev = NULL;
+
+	vdev = (ol_txrx_vdev_handle) ol_txrx_get_vdev_from_vdev_id(vdev_id);
+	if (!vdev) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			"%s: vdev handle is NULL for vdev id %d",
+			__func__, vdev_id);
+		return A_ERROR;
+	}
+
+	*pause_timestamp = vdev->ll_pause.pause_timestamp;
+	*pause_bitmap = vdev->ll_pause.paused_reason;
+	return A_OK;
 }
 

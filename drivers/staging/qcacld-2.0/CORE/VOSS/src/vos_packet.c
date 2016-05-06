@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -49,7 +49,6 @@
 #include "vos_memory.h"
 #include "adf_os_mem.h"
 
-#ifdef QCA_PKT_PROTO_TRACE
 /* Protocol specific packet tracking feature */
 #define VOS_PKT_TRAC_ETH_TYPE_OFFSET 12
 #define VOS_PKT_TRAC_IP_OFFSET       14
@@ -57,6 +56,7 @@
 #define VOS_PKT_TRAC_DHCP_SRV_PORT   67
 #define VOS_PKT_TRAC_DHCP_CLI_PORT   68
 #define VOS_PKT_TRAC_EAPOL_ETH_TYPE  0x888E
+#ifdef QCA_PKT_PROTO_TRACE
 #define VOS_PKT_TRAC_MAX_STRING_LEN  12
 #define VOS_PKT_TRAC_MAX_TRACE_BUF   50
 #define VOS_PKT_TRAC_MAX_STRING_BUF  64
@@ -236,7 +236,6 @@ VOS_STATUS vos_pkt_extract_data( vos_pkt_t *pPacket,
    return VOS_STATUS_SUCCESS;
 }
 
-#ifdef QCA_PKT_PROTO_TRACE
 /*---------------------------------------------------------------------------
 
   * brief vos_pkt_get_proto_type() -
@@ -298,6 +297,7 @@ v_U8_t vos_pkt_get_proto_type
    return pkt_proto_type;
 }
 
+#ifdef QCA_PKT_PROTO_TRACE
 /*---------------------------------------------------------------------------
 
   * brief vos_pkt_trace_buf_update() -

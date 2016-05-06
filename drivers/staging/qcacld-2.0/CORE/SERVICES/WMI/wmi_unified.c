@@ -723,6 +723,7 @@ static uint16_t wmi_set_htc_tx_tag(wmi_unified_t wmi_handle,
 				WMI_CMD_ID cmd_id)
 {
 	uint16_t htc_tx_tag = 0;
+	uint16_t cur_tx_tag = 0;
 	wmi_vdev_set_param_cmd_fixed_param *set_cmd;
 	wmi_sta_powersave_param_cmd_fixed_param *ps_cmd;
 
@@ -747,6 +748,9 @@ static uint16_t wmi_set_htc_tx_tag(wmi_unified_t wmi_handle,
 		break;
 	}
 
+	if(!adf_os_atomic_read(&wmi_handle->is_target_suspended))
+		cur_tx_tag = HTC_TX_PACKET_TAG_AUTO_PM;
+
 	if(cmd_id == WMI_VDEV_SET_PARAM_CMDID)
 	{
 		set_cmd = (wmi_vdev_set_param_cmd_fixed_param *)
@@ -755,7 +759,7 @@ static uint16_t wmi_set_htc_tx_tag(wmi_unified_t wmi_handle,
 		switch(set_cmd->param_id) {
 		case WMI_VDEV_PARAM_LISTEN_INTERVAL:
 		case WMI_VDEV_PARAM_DTIM_POLICY:
-			htc_tx_tag = HTC_TX_PACKET_TAG_AUTO_PM;
+			htc_tx_tag = cur_tx_tag;
 		default:
 			break;
 		}
@@ -768,7 +772,7 @@ static uint16_t wmi_set_htc_tx_tag(wmi_unified_t wmi_handle,
 
 		switch(ps_cmd->param) {
 		case WMI_STA_PS_ENABLE_QPOWER:
-			htc_tx_tag = HTC_TX_PACKET_TAG_AUTO_PM;
+			htc_tx_tag = cur_tx_tag;
 		default:
 			break;
 		}

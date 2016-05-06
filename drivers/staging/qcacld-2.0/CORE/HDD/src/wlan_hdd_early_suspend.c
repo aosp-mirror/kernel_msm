@@ -40,6 +40,7 @@
 *   Include files
 * ----------------------------------------------------------------------------*/
 
+#include <net/addrconf.h>
 #include <linux/pm.h>
 #include <linux/wait.h>
 #include <linux/cpu.h>
@@ -69,7 +70,6 @@
 #include <linux/inetdevice.h>
 #include <wlan_hdd_cfg.h>
 #include <wlan_hdd_cfg80211.h>
-#include <net/addrconf.h>
 #ifdef IPA_OFFLOAD
 #include <wlan_hdd_ipa.h>
 #endif
@@ -344,8 +344,8 @@ VOS_STATUS hdd_enter_deep_sleep(hdd_context_t *pHddCtx, hdd_adapter_t *pAdapter)
 
    //Stop the Interface TX queue.
    hddLog(LOG1, FL("Disabling queues"));
-   netif_tx_disable(pAdapter->dev);
-   netif_carrier_off(pAdapter->dev);
+   wlan_hdd_netif_queue_control(pAdapter, WLAN_NETIF_TX_DISABLE_N_CARRIER,
+        WLAN_CONTROL_PATH);
 
    //Disable IMPS,BMPS as we do not want the device to enter any power
    //save mode on it own during suspend sequence
@@ -1575,8 +1575,9 @@ void hdd_suspend_wlan(void (*callback)(void *callbackContext, boolean suspended)
        {
           //stop the interface before putting the chip to standby
           hddLog(LOG1, FL("Disabling queues"));
-          netif_tx_disable(pAdapter->dev);
-          netif_carrier_off(pAdapter->dev);
+          wlan_hdd_netif_queue_control(pAdapter,
+            WLAN_NETIF_TX_DISABLE_N_CARRIER,
+            WLAN_CONTROL_PATH);
        }
        else if (pHddCtx->cfg_ini->nEnableSuspend ==
                WLAN_MAP_SUSPEND_TO_DEEP_SLEEP)
@@ -1589,7 +1590,8 @@ void hdd_suspend_wlan(void (*callback)(void *callbackContext, boolean suspended)
 send_suspend_ind:
        //stop all TX queues before suspend
        hddLog(LOG1, FL("Disabling queues"));
-       netif_tx_disable(pAdapter->dev);
+       wlan_hdd_netif_queue_control(pAdapter, WLAN_NETIF_TX_DISABLE,
+                  WLAN_CONTROL_PATH);
        WLANTL_PauseUnPauseQs(pVosContext, true);
 
       /* Keep this suspend indication at the end (before processing next adaptor)
@@ -1838,7 +1840,9 @@ send_resume_ind:
       hddLog(LOG1, FL("Enabling queues"));
       WLANTL_PauseUnPauseQs(pVosContext, false);
 
-      netif_tx_wake_all_queues(pAdapter->dev);
+      wlan_hdd_netif_queue_control(pAdapter,
+            WLAN_WAKE_ALL_NETIF_QUEUE,
+            WLAN_CONTROL_PATH);
 
       hdd_conf_resume_ind(pAdapter);
 

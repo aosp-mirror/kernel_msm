@@ -42,6 +42,7 @@
 #include <adf_os_types.h>
 #include <adf_os_dma.h>
 #include <adf_net_types.h>
+#include <adf_os_lock.h>
 #include <adf_nbuf_pvt.h>
 
 #ifdef IPA_OFFLOAD
@@ -60,6 +61,23 @@
 #define ADF_NBUF_TRAC_DHCP_CLI_PORT     68
 #define ADF_NBUF_TRAC_ETH_TYPE_OFFSET   12
 #define ADF_NBUF_TRAC_EAPOL_ETH_TYPE    0x888E
+
+/* Tracked Packet types */
+#define NBUF_TX_PKT_INVALID              0
+#define NBUF_TX_PKT_DATA_TRACK           1
+#define NBUF_TX_PKT_MGMT_TRACK           2
+
+/* Different Packet states */
+#define NBUF_TX_PKT_HDD                  1
+#define NBUF_TX_PKT_TXRX_ENQUEUE         2
+#define NBUF_TX_PKT_TXRX_DEQUEUE         3
+#define NBUF_TX_PKT_TXRX                 4
+#define NBUF_TX_PKT_HTT                  5
+#define NBUF_TX_PKT_HTC                  6
+#define NBUF_TX_PKT_HIF                  7
+#define NBUF_TX_PKT_CE                   8
+#define NBUF_TX_PKT_FREE                 9
+#define NBUF_TX_PKT_STATE_MAX            10
 
 /**
  * struct mon_rx_status - This will have monitor mode rx_status extracted from
@@ -1238,5 +1256,9 @@ adf_nbuf_update_skb_mark(adf_nbuf_t skb, uint32_t mask)
 {
 	 __adf_nbuf_update_skb_mark(skb, mask);
 }
+
+void adf_nbuf_set_state(adf_nbuf_t nbuf, uint8_t current_state);
+void adf_nbuf_tx_desc_count_display(void);
+void adf_nbuf_tx_desc_count_clear(void);
 
 #endif

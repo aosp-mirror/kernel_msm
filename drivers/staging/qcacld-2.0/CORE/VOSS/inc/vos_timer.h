@@ -329,6 +329,26 @@ v_TIME_t vos_timer_get_system_ticks( v_VOID_t );
   ------------------------------------------------------------------------*/
 v_TIME_t vos_timer_get_system_time( v_VOID_t );
 
+/**
+ * vos_system_ticks() - get system ticks
+ *
+ * Return: system tick in jiffies
+ */
+static inline vos_time_t vos_system_ticks(void)
+{
+	return __vos_system_ticks();
+}
+
+/**
+ * vos_system_ticks_to_msecs() - convert system ticks into milli seconds
+ * @ticks: System ticks
+ *
+ * Return: system tick converted into milli seconds
+ */
+static inline uint32_t vos_system_ticks_to_msecs(vos_time_t ticks)
+{
+	return __vos_system_ticks_to_msecs(ticks);
+}
 
 
 #endif // #if !defined __VOSS_TIMER_H

@@ -33,6 +33,7 @@
 #include <adf_os_mem.h> /* adf_os_mem_alloc */
 #include <vos_getBin.h>
 #include "epping_main.h"
+#include "adf_trace.h"
 
 #define HTC_DATA_RESOURCE_THRS 256
 #define HTC_DATA_MINDESC_PERPACKET 2
@@ -1322,6 +1323,11 @@ A_STATUS HTCSendDataPkt(HTC_HANDLE HTCHandle, adf_nbuf_t       netbuf, int Epid,
     HTC_WRITE32(((A_UINT32 *)pHtcHdr) + 1, SM(pEndpoint->SeqNo, HTC_FRAME_HDR_CONTROLBYTES1));
 
     pEndpoint->SeqNo++;
+
+    NBUF_UPDATE_TX_PKT_COUNT(netbuf, NBUF_TX_PKT_HTC);
+    DPTRACE(adf_dp_trace(netbuf, ADF_DP_TRACE_HTC_PACKET_PTR_RECORD,
+                (uint8_t *)(adf_nbuf_data(netbuf)),
+                sizeof(adf_nbuf_data(netbuf))));
 
     status = HIFSend_head(target->hif_dev,
             pEndpoint->UL_PipeID,

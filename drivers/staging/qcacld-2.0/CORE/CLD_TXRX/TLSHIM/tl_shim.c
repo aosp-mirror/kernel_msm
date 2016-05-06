@@ -43,6 +43,7 @@
 #include "vos_utils.h"
 #include "wdi_out.h"
 #include "ol_rx_fwd.h"
+#include "ol_txrx.h"
 
 #define TLSHIM_PEER_AUTHORIZE_WAIT 50
 
@@ -487,12 +488,10 @@ static int tlshim_mgmt_rx_process(void *context, u_int8_t *data,
 		return 0;
 	}
 
-#ifdef FEATURE_WLAN_D0WOW
 	if (!wma_handle) {
 		TLSHIM_LOGE("%s: Failed to get WMA context!", __func__);
 		return 0;
 	}
-#endif
 
 	adf_os_spin_lock_bh(&tl_shim->mgmt_lock);
 	param_tlvs = (WMI_MGMT_RX_EVENTID_param_tlvs *) data;
@@ -1205,8 +1204,6 @@ adf_nbuf_t WLANTL_SendSTA_DataFrame(void *vos_ctx, void *vdev,
 
 	skb_list_head = skb;
 	while (skb) {
-		/* Zero out skb's context buffer for the driver to use */
-		adf_os_mem_set(skb->cb, 0, sizeof(skb->cb));
 		adf_nbuf_map_single(adf_ctx, skb, ADF_OS_DMA_TO_DEVICE);
 
 #ifdef QCA_PKT_PROTO_TRACE
@@ -2666,3 +2663,21 @@ uint64_t tlshim_get_fwd_to_tx_packet_count(uint8_t session_id)
 {
 	return ol_rx_get_fwd_to_tx_packet_count(session_id);
 }
+
+/*
+ * tlshim_get_ll_queue_pause_bitmap() - to obtain ll queue pause bitmap and
+ *                                      last pause timestamp
+ * @session_id: vdev id
+ * @pause_bitmap: pointer to return ll queue pause bitmap
+ * @pause_timestamp: pointer to return pause timestamp to calling func.
+ *
+ * Return: status -> A_OK - for success, A_ERROR for failure
+ *
+ */
+A_STATUS tlshim_get_ll_queue_pause_bitmap(uint8_t session_id,
+	uint8_t *pause_bitmap, adf_os_time_t *pause_timestamp)
+{
+	return ol_txrx_get_ll_queue_pause_bitmap(session_id,
+		pause_bitmap, pause_timestamp);
+}
+

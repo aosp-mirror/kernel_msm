@@ -158,7 +158,7 @@ typedef struct
 
 #define QCSAP_IOCTL_PRIV_SET_THREE_INT_GET_NONE (SIOCIWFIRSTPRIV+15)
 #define WE_SET_WLAN_DBG 1
-/* 2 is unused */
+#define WE_SET_DP_TRACE 2
 #define WE_SET_SAP_CHANNELS  3
 
 #define QCSAP_IOCTL_PRIV_SET_VAR_INT_GET_NONE (SIOCIWFIRSTPRIV+16)
@@ -189,6 +189,7 @@ typedef struct
 #ifdef WLAN_DEBUG
 #define QCSAP_IOCTL_SET_FW_CRASH_INJECT 1
 #endif
+#define QCSAP_IOCTL_DUMP_DP_TRACE_LEVEL 2
 
 #define MAX_VAR_ARGS         7
 

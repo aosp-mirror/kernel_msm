@@ -78,4 +78,8 @@ config WLAN_WOW_PULSE
 	bool "Enable WOW Pulse feature"
 	default n
 
+config DPTRACE_ENABLE
+	bool "Enable DPTRACE feature for non performance builds"
+	default n
+
 endif # QCA_CLD_WLAN

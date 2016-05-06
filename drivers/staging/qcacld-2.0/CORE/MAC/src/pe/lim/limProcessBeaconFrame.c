@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2013, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -124,6 +124,10 @@ limProcessBeaconFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession ps
                    FL("Received invalid Beacon in state %X"),
                    psessionEntry->limMlmState);
             limPrintMlmState(pMac, LOGW,  psessionEntry->limMlmState);
+            if ((!psessionEntry->currentBssBeaconCnt) &&
+               (sirCompareMacAddr(psessionEntry->bssId, pHdr->sa)))
+                 lim_parse_beacon_for_tim(pMac,
+                    pRxPacketInfo, psessionEntry);
             vos_mem_free(pBeacon);
             return;
         }

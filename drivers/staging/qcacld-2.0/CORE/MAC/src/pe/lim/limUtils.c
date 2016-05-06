@@ -98,6 +98,11 @@ static const tANI_U8 aUnsortedChannelList[]= {52,56,60,64,100,104,108,112,116,
 
 #define SUCCESS 1
 
+#define MAX_DTIM_PERIOD 15
+#define MAX_DTIM_COUNT  15
+#define DTIM_PERIOD_DEFAULT 1
+#define DTIM_COUNT_DEFAULT  1
+
 #define MAX_BA_WINDOW_SIZE_FOR_CISCO 25
 
 /** -------------------------------------------------------------
@@ -8787,5 +8792,61 @@ void lim_update_caps_info_for_bss(tpAniSirGlobal mac_ctx,
 		*caps &= (~LIM_IMMEDIATE_BLOCK_ACK_MASK);
 		limLog(mac_ctx, LOG1, FL("Clearing Immed Blk Ack:no AP support"));
 	}
+}
+
+/*
+ * lim_parse_beacon_for_tim() - Extract TIM and beacon timestamp
+ * from beacon frame.
+ * @mac_ctx: mac context
+ * @rx_packet_info: beacon frame
+ * @session: Session on which beacon is received
+ *
+ * This function is used if beacon is corrupted and parser API fails to
+ * parse the whole beacon. Try to extract the TIM params and timestamp
+ * from the beacon, required to enter BMPS
+ *
+ * Return: void
+ */
+void lim_parse_beacon_for_tim(tpAniSirGlobal mac_ctx,
+	uint8_t* rx_packet_info, tpPESession session)
+{
+	uint32_t frame_len;
+	uint8_t *frame;
+	uint8_t *ie_ptr;
+	tSirMacTim *tim;
+
+	frame = WDA_GET_RX_MPDU_DATA(rx_packet_info);
+	frame_len = WDA_GET_RX_PAYLOAD_LEN(rx_packet_info);
+
+	if (frame_len < (SIR_MAC_B_PR_SSID_OFFSET + SIR_MAC_MIN_IE_LEN)) {
+		limLog(mac_ctx, LOGE, FL("Beacon length too short to parse"));
+		return;
+	}
+
+	ie_ptr = lim_get_ie_ptr((frame + SIR_MAC_B_PR_SSID_OFFSET),
+				frame_len, SIR_MAC_TIM_EID);
+
+	if (NULL != ie_ptr) {
+		/* Ignore EID and Length field */
+		tim = (tSirMacTim *)(ie_ptr + IE_LEN_SIZE + IE_EID_SIZE);
+
+		vos_mem_copy((uint8_t*)&session->lastBeaconTimeStamp,
+				(uint8_t*)frame, sizeof(uint64_t));
+		if (tim->dtimCount >= MAX_DTIM_COUNT)
+			tim->dtimCount = DTIM_COUNT_DEFAULT;
+		if (tim->dtimPeriod >= MAX_DTIM_PERIOD)
+			tim->dtimPeriod = DTIM_PERIOD_DEFAULT;
+		session->lastBeaconDtimCount = tim->dtimCount;
+		session->lastBeaconDtimPeriod = tim->dtimPeriod;
+		session->currentBssBeaconCnt++;
+
+		limLog(mac_ctx, LOG1,
+			FL("currentBssBeaconCnt %d lastBeaconDtimCount %d lastBeaconDtimPeriod %d"),
+			session->currentBssBeaconCnt,
+			session->lastBeaconDtimCount,
+			session->lastBeaconDtimPeriod);
+
+	}
+	return;
 }
 
