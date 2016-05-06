@@ -185,6 +185,7 @@ enum {
     QCSAP_PARAM_SET_MC_RATE = 10,
     QCSAP_PARAM_SET_AUTO_CHANNEL = 11,
     QCSAP_PARAM_GET_FRAME_LOGS = 12,
+    QCSAP_PARAM_SET_PROXIMITY = 13
 };
 
 int iw_softap_get_channel_list(struct net_device *dev, 
