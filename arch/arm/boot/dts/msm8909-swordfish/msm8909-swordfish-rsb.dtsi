@@ -20,11 +20,14 @@
 	rsb: rsb@0 {
 		compatible = "rsb";
 		reg = <0>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <95 0x00>;
 		spi-max-frequency = <2000000>;
 
 		rsb,spi-cs-gpio = <&msm_gpio 10 0x00>;
+		rsb,motion-gpio = <&msm_gpio 95 0x00>;
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&spi0_cs0_active>;
+		pinctrl-0 = <&spi0_cs0_active &rsb_motion_gpio>;
 	};
 };

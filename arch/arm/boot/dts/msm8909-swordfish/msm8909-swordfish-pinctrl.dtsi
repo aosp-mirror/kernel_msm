@@ -560,6 +560,18 @@
 			};
 		};
 
+		rsb_motion_gpio: rsb_motion_gpio {
+			mux {
+				pins = "gpio95";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio95";
+				drive-strength = <2>;
+				bias-pull-up; /* PULL UP */
+			};
+		};
+
 		wcnss_pmux_gpio: wcnss_pmux_gpio {
 			wcnss_gpio_default: wcnss_gpio_default {
 				mux {

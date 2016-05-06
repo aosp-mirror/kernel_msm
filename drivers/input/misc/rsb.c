@@ -17,6 +17,7 @@
 #include <linux/err.h>
 #include <linux/gpio.h>
 #include <linux/input.h>
+#include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of_gpio.h>
@@ -48,6 +49,8 @@ struct rsb_drv_data {
 	struct task_struct *poll_thread;
 	struct input_dev *in_dev;
 	int cs;
+	int motion_gpio;
+	int irq;
 	struct regulator *vld_reg; /* power supply voltage v3.3 */
 	struct regulator *vdd_reg; /* power supply voltage for IO v1.8 */
 };
@@ -265,7 +268,14 @@ static int rsb_parse_dt(struct spi_device *spi_dev)
 	struct rsb_drv_data *rsb_data = spi_get_drvdata(spi_dev);
 
 	ret = rsb_data->cs = of_get_named_gpio(dt, "rsb,spi-cs-gpio", 0);
-	dev_info(&spi_dev->dev, "GPIO read from DT:%u", rsb_data->cs);
+	dev_info(&spi_dev->dev, "cs GPIO read from DT:%u",
+			rsb_data->cs);
+
+	ret = rsb_data->motion_gpio = of_get_named_gpio(dt,
+		"rsb,motion-gpio", 0);
+	dev_info(&spi_dev->dev, "motion gpio read from DT:%u",
+			rsb_data->motion_gpio);
+
 	return 0;
 }
 #else
@@ -329,45 +339,27 @@ static int rsb_init_sequence(struct rsb_drv_data *rsb_data)
 	return 0;
 }
 
-static void rsb_read_motion(struct rsb_drv_data *rsb_data, int8_t *dx,
-		int8_t *dy)
+static irqreturn_t rsb_handler(int irq, void *dev_id)
 {
-	int8_t deltax_i = 0, deltay_i = 0;
+	int8_t delta_x, delta_y;
+	struct rsb_drv_data *rsb_data = dev_id;
 	uint8_t rx_val;
 
 	rsb_data->comms.read(rsb_data, &rx_val, 0x02);
-	if (rx_val & 0x80) {
+	while (rx_val & 0x80) {
 		rsb_data->comms.read(rsb_data, &rx_val, 0x03);
-		deltax_i = (int8_t)rx_val;
+		delta_x = (int8_t)rx_val;
 		rsb_data->comms.read(rsb_data, &rx_val, 0x04);
-		deltay_i = (int8_t)rx_val;
-	}
-
-	*dx = deltax_i;
-	*dy = deltay_i;
-}
-
-static int rsb_poll(void *data)
-{
-	int8_t delta_x, delta_y;
-	struct rsb_drv_data *rsb_data = data;
-
-	while (true) {
-		rsb_read_motion(rsb_data, &delta_x, &delta_y);
+		delta_y = (int8_t)rx_val;
 		if ((delta_x | delta_y) != 0) {
 			input_report_rel(rsb_data->in_dev, REL_WHEEL,
-				delta_x);
+					delta_x);
 			input_sync(rsb_data->in_dev);
 		}
-		/*
-		 * TODO(pmalani): Need to revisit this based on how
-		 * long a SPI transaction takes. This will also
-		 * change once we move to interrupt based event
-		 * handling.
-		 */
-		usleep_range(10000, 15000);
+		rsb_data->comms.read(rsb_data, &rx_val, 0x02);
 	}
-	return 0;
+
+	return IRQ_HANDLED;
 }
 
 static void rsb_init_regulator(struct spi_device *spi_dev)
@@ -413,7 +405,7 @@ static int rsb_probe(struct spi_device *spi)
 	rsb_create_debugfs(rsb_data);
 
 	if (rsb_parse_dt(spi) != 0)
-		goto probe_err;
+		goto probe_err_cs;
 
 	if (gpio_is_valid(rsb_data->cs)) {
 		err = gpio_request(rsb_data->cs, "rsb_spi_cs");
@@ -421,15 +413,31 @@ static int rsb_probe(struct spi_device *spi)
 			dev_err(&spi->dev,
 				"spi_cs_gpio:%d request failed\n",
 				rsb_data->cs);
-			goto probe_err;
+			goto probe_err_cs;
 		} else {
 			gpio_direction_output(rsb_data->cs, 1);
 		}
 	} else {
 		dev_err(&spi->dev, "spi_cs_gpio:%d is not valid\n",
 			rsb_data->cs);
-		goto probe_err;
+		goto probe_err_cs;
 	}
+
+	/* Set up Motion GPIO for IRQ */
+	if (gpio_is_valid(rsb_data->motion_gpio)) {
+		err = gpio_request(rsb_data->motion_gpio, "rsb_motion");
+		if (err) {
+			dev_err(&spi->dev,
+				"motion_gpio:%d request failed\n",
+				rsb_data->motion_gpio);
+			goto probe_err_cs;
+		} else {
+			gpio_direction_input(rsb_data->motion_gpio);
+			rsb_data->irq =
+				gpio_to_irq(rsb_data->motion_gpio);
+		}
+	}
+
 	/* Initialize regulators */
 	rsb_init_regulator(spi);
 
@@ -437,13 +445,13 @@ static int rsb_probe(struct spi_device *spi)
 	rsb_data->comms.open(rsb_data);
 
 	if (rsb_init_sequence(rsb_data) != 0)
-		goto probe_err;
+		goto probe_err_motion;
 
 	/* Allocate and register an input device */
 	rsb_data->in_dev = input_allocate_device();
 	if (!rsb_data->in_dev) {
 		dev_err(&spi->dev, "Couldn't allocate input device\n");
-		goto probe_err;
+		goto probe_err_motion;
 	}
 
 	rsb_data->in_dev->evbit[0] = BIT_MASK(EV_REL);
@@ -456,25 +464,23 @@ static int rsb_probe(struct spi_device *spi)
 		goto probe_input_err;
 	}
 
-	/*
-	 * Create and run a thread to pull for rsb values.
-	 * TODO: Eventually, for power purposes we may want to run this
-	 * only when the motion interrupt is triggered, but for the time
-	 * being it's fine to poll, since we just want to make sure we
-	 * can receive events.
-	 */
-	rsb_data->poll_thread = kthread_run(&rsb_poll, (void *)rsb_data,
-			"rsb_poll_thread");
-	if (rsb_data->poll_thread == ERR_PTR(-ENOMEM)) {
-		dev_err(&spi->dev, "Failed to create polling thread\n");
-		goto probe_err;
+	err = request_threaded_irq(rsb_data->irq, NULL, rsb_handler,
+		IRQF_ONESHOT | IRQF_TRIGGER_FALLING | IRQF_TRIGGER_LOW,
+		"rsb_handler", rsb_data);
+	if (err) {
+		dev_err(&spi->dev,
+			"Failed to register irq handler IRQ:%d\n",
+			rsb_data->irq);
+		goto probe_input_err;
 	}
 
 	return 0;
 
 probe_input_err:
 	input_free_device(rsb_data->in_dev);
-probe_err:
+probe_err_motion:
+	gpio_free(rsb_data->motion_gpio);
+probe_err_cs:
 	gpio_free(rsb_data->cs);
 	debugfs_remove_recursive(rsb_data->dent);
 	kfree(rsb_data);
