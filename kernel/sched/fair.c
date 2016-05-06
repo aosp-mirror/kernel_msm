@@ -3927,17 +3927,6 @@ static inline int select_best_cpu(struct task_struct *p, int target,
 	return 0;
 }
 
-unsigned int power_cost(int cpu, u64 demand)
-{
-	return SCHED_CAPACITY_SCALE;
-}
-
-static inline int
-spill_threshold_crossed(struct cpu_select_env *env, struct rq *rq)
-{
-	return 0;
-}
-
 static inline int sched_boost(void)
 {
 	return 0;
@@ -3979,11 +3968,7 @@ inc_hmp_sched_stats_fair(struct rq *rq, struct task_struct *p) { }
 static inline void
 dec_hmp_sched_stats_fair(struct rq *rq, struct task_struct *p) { }
 
-static inline int
-preferred_cluster(struct sched_cluster *cluster, struct task_struct *p)
-{
-	return 1;
-}
+#define preferred_cluster(...) 1
 
 #endif	/* CONFIG_SCHED_HMP */
 
@@ -9458,7 +9443,7 @@ static inline int find_new_hmp_ilb(int type)
 	return nr_cpu_ids;
 }
 #else	/* CONFIG_SCHED_HMP */
-static inline int find_new_hmp_ilb(void)
+static inline int find_new_hmp_ilb(int type)
 {
 	return 0;
 }

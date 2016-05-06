@@ -48,6 +48,10 @@
 			ite,avdd-lpm-cur = <3000>;
 		};
 	};
+
+        qcom,msm-ssc-sensors {
+                compatible = "qcom,msm-ssc-sensors";
+        };
 };
 
 &external_image_mem {
