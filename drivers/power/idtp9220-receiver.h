@@ -80,6 +80,13 @@ enum idtp9220_request_type_need_tx {
     GET_TX_VIN_COMMAND = 7,
 };
 
+enum idtp9220_verify_or_burn_result {
+    NOT_PROCESSING,
+    IN_PROCESSING,
+    PROCESSING_OK,
+    PROCESSING_FAIL,
+};
+
 struct idtp9220_receiver {
     struct i2c_client                           *client;
     struct device                               *dev;
@@ -102,11 +109,21 @@ struct idtp9220_receiver {
     /* process interupt event */
     struct work_struct                          process_intr_work;
 
+    /* process burn fw event */
+    struct work_struct                          process_burn_fw_work;
+
+    /* process verify fw event */
+    struct work_struct                          process_verify_fw_work;
+
     /* using default vout */
     bool                                        using_default_vout_flag;
 
     /* burn rx firmware */
     struct idtp9220_packet_t                    burn_packet;
+    /* rx burn result */
+    enum idtp9220_verify_or_burn_result         burn_result;
+    /* rx verify result */
+    enum idtp9220_verify_or_burn_result         verify_result;
 };
 
 /* Mask/Bit helpers */
