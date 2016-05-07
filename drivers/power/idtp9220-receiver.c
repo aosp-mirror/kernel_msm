@@ -547,19 +547,36 @@ static int idtp9220_verify_otp_fw(struct idtp9220_receiver *chip, bool *result)
     return 0;
 }
 
+static int idtp9220_burn_fw_end(struct idtp9220_receiver *chip)
+{
+    /* write key */
+    idtp9220_write(chip, 0x3000, 0x5a);
+    /* remove code remapping */
+    idtp9220_write(chip, 0x3048, 0x00);
+
+    /* reset M0 */
+    idtp9220_write(chip, 0x3040, 0x80);
+    mdelay(100);
+
+    return 0;
+}
+
 static int idtp9220_is_fw_burned(struct idtp9220_receiver *chip, bool *is_burned)
 {
     int rc, len, i, reg;
     u8 data;
 
-	/* verify rx burn magic number */
+    /* read otp value prepare */
     rc = idtp9220_verify_fw_prepare(chip);
     if(rc < 0)
     {
         pr_err("idtp9220_verify_fw_prepare failed\n");
+        /* reset M0 */
+        idtp9220_burn_fw_end(chip);
         return rc;
     }
 
+    /* verify rx burn magic number */
     reg = 0x8000 + RX_BURN_MAGIC_NUMBER_ADDR;
     len = sizeof(burn_magic_number);
     for (i = 0; i < len; i++)
@@ -569,6 +586,8 @@ static int idtp9220_is_fw_burned(struct idtp9220_receiver *chip, bool *is_burned
         if(rc <0)
         {
             pr_err("cannot read magic[%d]\n", i);
+            /* reset M0 */
+            idtp9220_burn_fw_end(chip);
             return rc;
         }
 
@@ -587,6 +606,9 @@ static int idtp9220_is_fw_burned(struct idtp9220_receiver *chip, bool *is_burned
     {
         *is_burned = false;
     }
+
+    /* reset M0 */
+    idtp9220_burn_fw_end(chip);
 
     return 0;
 }
@@ -782,32 +804,14 @@ static int idtp9220_burn_fw_process(struct idtp9220_receiver *chip, char *srcDat
     return 1;
 }
 
-static int idtp9220_burn_fw_end(struct idtp9220_receiver *chip)
-{
-    int rc;
-
-    /* write key */
-    rc = idtp9220_write(chip, 0x3000, 0x5a);
-    if(rc < 0)
-    {
-        return rc;
-    }
-
-    /* remove code remapping */
-    idtp9220_write(chip, 0x3048, 0x00);
-
-    /* reset M0 */
-    idtp9220_write(chip, 0x3040, 0x80);
-
-    return 0;
-}
-
 static int idtp9220_burn_fw(struct idtp9220_receiver *chip, bool *result)
 {
     int rc, len;
     bool is_burned = false;
 
-    /* check whether fw has been burned */
+    pr_err("process burn fw event\n");
+
+    /*  Step1 : check whether fw has been burned */
     rc = idtp9220_is_fw_burned(chip, &is_burned);
     if(rc)
     {
@@ -821,24 +825,21 @@ static int idtp9220_burn_fw(struct idtp9220_receiver *chip, bool *result)
         return 0;
     }
 
-    pr_err("fw has not been burned and continue\n");
+    pr_err("step1 success\n");
 
-    /*  === Step-1 ===
-     *Transfer 9220 boot loader code "OTPBootloader" to 9220 SRAM
-     *- Setup 9220 registers before transferring the boot loader code
-     *- Transfer the boot loader code to 9220 SRAM
-     *- Reset 9220 => 9220 M0 runs the boot loader
+    /*  step2: Transfer 9220 boot loader code "OTPBootloader" to 9220 SRAM
+     * - Setup 9220 registers before transferring the boot loader code
+     * - Transfer the boot loader code to 9220 SRAM
+     * - Reset 9220 => 9220 M0 runs the boot loader
      */
     rc = idtp9220_burn_fw_prepare(chip);
     if(rc < 0)
     {
         return rc;
     }
-    pr_err("step1 success\n");
+    pr_err("step2 success\n");
 
-    /* === Step-2 ===
-     * program OTP image data to 9220 OTP memory
-     */
+    /* Step3: program OTP image data to 9220 OTP memory */
     len = sizeof(idt_firmware);
     rc = idtp9220_burn_fw_process(chip, idt_firmware, 0, len, 0);
     if(rc != 1)
@@ -846,11 +847,9 @@ static int idtp9220_burn_fw(struct idtp9220_receiver *chip, bool *result)
         pr_err("can not download firmware to otp\n");
         return rc;
     }
-    pr_err("step2 success\n");
+    pr_err("step3 success\n");
 
-    /* === Step-3 ===
-       * write burn magic number
-       */
+    /* Step4: write burn magic number */
     len = sizeof(burn_magic_number);
     rc = idtp9220_burn_fw_process(chip, (char*)burn_magic_number, 0, len, RX_BURN_MAGIC_NUMBER_ADDR);
     if(rc != 1)
@@ -858,17 +857,15 @@ static int idtp9220_burn_fw(struct idtp9220_receiver *chip, bool *result)
         pr_err("can not write magic number to otp\n");
         return rc;
     }
-    pr_err("step3 success\n");
+    pr_err("step4 success\n");
 
-	/* === Step-4 ===
-     * restore system (Need to reset or power cycle 9220 to run the OTP code)
-     */
+    /* Step5: restore system (Need to reset or power cycle 9220 to run the OTP code) */
     rc = idtp9220_burn_fw_end(chip);
     if(rc < 0)
     {
         return rc;
     }
-    pr_err("step4 success\n");
+    pr_err("step5 success\n");
 
     *result = true;
 
@@ -909,9 +906,11 @@ static int idtp9220_do_device_action(struct idtp9220_receiver *chip,
             rc = idtp9220_is_fw_burned(chip, &val->result);
             break;
         case DO_BURN_RX_FW:
+            chip->burn_result = IN_PROCESSING;
             rc = idtp9220_burn_fw(chip, &val->result);
             break;
         case DO_VERIFY_RX_FW:
+            chip->verify_result = IN_PROCESSING;
             rc = idtp9220_verify_otp_fw(chip, &val->result);
             break;
         case GET_TX_HARDWARE_VERSION:
@@ -931,6 +930,64 @@ static int idtp9220_do_device_action(struct idtp9220_receiver *chip,
     mutex_unlock(&chip->service_request_lock);
 
     return rc;
+}
+
+static void idtp9220_process_burn_fw_work(struct work_struct *work)
+{
+    int rc;
+    struct idtp9220_receiver *chip = container_of(work,
+                struct idtp9220_receiver, process_burn_fw_work);
+    union idtp9220_interactive_data value = {0};
+
+    pm_stay_awake(chip->dev);
+    rc = idtp9220_do_device_action(chip, DO_BURN_RX_FW, &value);
+    if(rc)
+    {
+        pr_err("can not do burn rx fw\n");
+        pm_relax(chip->dev);
+        return;
+    }
+
+    if(!value.result)
+    {
+        pr_err("burn fw fail\n");
+        chip->burn_result = PROCESSING_FAIL;
+    }
+    else
+    {
+        pr_err("burn fw success\n");
+        chip->burn_result = PROCESSING_OK;
+    }
+    pm_relax(chip->dev);
+}
+
+static void idtp9220_process_verify_fw_work(struct work_struct *work)
+{
+    int rc;
+    struct idtp9220_receiver *chip = container_of(work,
+                struct idtp9220_receiver, process_verify_fw_work);
+    union idtp9220_interactive_data value = {0};
+
+    pm_stay_awake(chip->dev);
+    rc = idtp9220_do_device_action(chip, DO_VERIFY_RX_FW, &value);
+    if(rc)
+    {
+        pr_err("can not do verify rx fw\n");
+        pm_relax(chip->dev);
+        return;
+	}
+
+    if(!value.result)
+    {
+        pr_err("burn fw fail\n");
+        chip->verify_result = PROCESSING_FAIL;
+    }
+    else
+    {
+        pr_err("burn fw success\n");
+        chip->verify_result = PROCESSING_OK;
+    }
+    pm_relax(chip->dev);
 }
 
 static ssize_t idtp9220_version_show(struct device *dev,
@@ -1182,46 +1239,54 @@ static ssize_t idtp9220_burn_fw_show(struct device *dev,
                               struct device_attribute *attr,
                               char *buf)
 {
-    u16 rc;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
-    union idtp9220_interactive_data value = {0};
 
-    rc = idtp9220_do_device_action(chip, DO_BURN_RX_FW, &value);
-    if(rc)
+    return sprintf(buf, "%d\n", chip->burn_result);
+}
+
+static ssize_t idtp9220_burn_fw_store(struct device *dev,
+                                       struct device_attribute *attr,
+                                       const char *buf,
+                                       size_t count)
+{
+    struct i2c_client *client = container_of(dev, struct i2c_client, dev);
+    struct idtp9220_receiver *chip = i2c_get_clientdata(client);
+    bool enable = strncmp(buf, "1", 1) ? false : true;
+
+    if(true == enable)
     {
-        pr_err("can not do burn rx fw\n");
+        schedule_work(&chip->process_burn_fw_work);
     }
 
-    if(!value.result)
-    {
-        return sprintf(buf, "burn fw fail\n");
-    }
-
-    return sprintf(buf, "burn fw success\n");
+    return count;
 }
 
 static ssize_t idtp9220_verify_otp_fw_show(struct device *dev,
                               struct device_attribute *attr,
                               char *buf)
 {
-    int rc;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
-    union idtp9220_interactive_data value = {0};
 
-    rc = idtp9220_do_device_action(chip, DO_VERIFY_RX_FW, &value);
-    if(rc)
+    return sprintf(buf, "%d\n", chip->verify_result);
+}
+
+static ssize_t idtp9220_verify_otp_fw_store(struct device *dev,
+                                       struct device_attribute *attr,
+                                       const char *buf,
+                                       size_t count)
+{
+    struct i2c_client *client = container_of(dev, struct i2c_client, dev);
+    struct idtp9220_receiver *chip = i2c_get_clientdata(client);
+    bool enable = strncmp(buf, "1", 1) ? false : true;
+
+    if(true == enable)
     {
-        pr_err("can not do burn rx fw\n");
+        schedule_work(&chip->process_verify_fw_work);
     }
 
-    if(!value.result)
-    {
-        return sprintf(buf, "otp verify failed\n");
-    }
-
-    return sprintf(buf, "otp verify ok\n");
+    return count;
 }
 
 static ssize_t idtp9220_is_burned_fw_show(struct device *dev,
@@ -1241,10 +1306,10 @@ static ssize_t idtp9220_is_burned_fw_show(struct device *dev,
 
     if(!value.result)
     {
-        return sprintf(buf, "rx fw is not burned\n");
+        return sprintf(buf, "false\n");
     }
 
-    return sprintf(buf, "rx fw is burned\n");
+    return sprintf(buf, "true\n");
 }
 
 static ssize_t idtp9220_ap_mask_rxint_gpio_store(struct device *dev,
@@ -1462,9 +1527,9 @@ static DEVICE_ATTR(detect_tx_data, S_IRUGO, idtp9220_detect_tx_data_show, NULL);
 static DEVICE_ATTR(ldout_enable, S_IWUSR | S_IRUGO, idtp9220_ldout_enable_show, idtp9220_ldout_enable_store);
 static DEVICE_ATTR(vout, S_IWUSR | S_IRUGO, idtp9220_vout_show, idtp9220_vout_store);
 static DEVICE_ATTR(cout, S_IWUSR | S_IRUGO, idtp9220_cout_show, idtp9220_cout_store);
-static DEVICE_ATTR(verify_otp_fw, S_IRUSR, idtp9220_verify_otp_fw_show, NULL);
+static DEVICE_ATTR(verify_otp_fw, S_IWUSR | S_IRUGO, idtp9220_verify_otp_fw_show, idtp9220_verify_otp_fw_store);
 static DEVICE_ATTR(is_burned_fw, S_IRUSR, idtp9220_is_burned_fw_show, NULL);
-static DEVICE_ATTR(burn_fw, S_IRUSR, idtp9220_burn_fw_show, NULL);
+static DEVICE_ATTR(burn_fw, S_IWUSR | S_IRUGO, idtp9220_burn_fw_show, idtp9220_burn_fw_store);
 static DEVICE_ATTR(freq, S_IWUSR | S_IRUGO, idtp9220_freq_show, idtp9220_freq_store);
 static DEVICE_ATTR(tx_temp, S_IRUGO, idtp9220_tx_temp_show, NULL);
 static DEVICE_ATTR(tx_hard_version, S_IRUGO, idtp9220_tx_hard_version_show, NULL);
@@ -1472,7 +1537,7 @@ static DEVICE_ATTR(tx_soft_version, S_IRUGO, idtp9220_tx_soft_version_show, NULL
 static DEVICE_ATTR(tx_vin, S_IRUGO, idtp9220_tx_vin_show, NULL);
 static DEVICE_ATTR(intr_status, S_IRUGO, idtp9220_intr_status_show, NULL);
 static DEVICE_ATTR(clear_int, S_IRUGO, idtp9220_clear_int_show, NULL);
-static DEVICE_ATTR(using_default_vout_flag,  S_IWUSR | S_IRUGO, idtp9220_using_default_vout_flag_show, idtp9220_using_default_vout_flag_store);
+static DEVICE_ATTR(using_default_vout_flag, S_IWUSR | S_IRUGO, idtp9220_using_default_vout_flag_show, idtp9220_using_default_vout_flag_store);
 static DEVICE_ATTR(ap_mask_rxint_gpio, S_IWUSR, NULL, idtp9220_ap_mask_rxint_gpio_store);
 
 static struct attribute *idtp9220_sysfs_attrs[] = {
@@ -1725,6 +1790,8 @@ static int idtp9220_receiver_probe(struct i2c_client *client,
     memset(&chip->last_set_vout_time, 0, sizeof(struct timespec));
     INIT_DELAYED_WORK(&chip->adjust_vout_work, idtp9220_adjust_vout_work);
     INIT_WORK(&chip->process_intr_work, idtp9220_process_intr_work);
+    INIT_WORK(&chip->process_burn_fw_work, idtp9220_process_burn_fw_work);
+    INIT_WORK(&chip->process_verify_fw_work, idtp9220_process_verify_fw_work);
     schedule_delayed_work(&chip->adjust_vout_work,
         msecs_to_jiffies(IDTP9220_VOUT_CHECK_PERIOD_MS));
 
