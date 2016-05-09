@@ -91,6 +91,7 @@
 //#define HX_AUTO_UPDATE_CONFIG        //if enable HX_AUTO_UPDATE_CONFIG, need to disable HX_LOADIN_CONFIG
 #define HX_SMART_WAKEUP
 #define HX_PALM_REPORT
+#define HX_CHECK_CRC_AP
 //#define HX_ESD_WORKAROUND
 //#define HX_CHIP_STATUS_MONITOR        //for ESD 2nd solution,default off
 
@@ -469,6 +470,13 @@ static bool FAKE_POWER_KEY_SEND = false;
 static int        CFB_START_ADDR                    = 0;
 static int        CFB_LENGTH                        = 0;
 static int        CFB_INFO_LENGTH                 = 0;
+#endif
+
+#ifdef HX_AUTO_UPDATE_FW
+#define FW_UPDATE_MANUAL_MODE 2
+static uint8_t ASUS_FW_MAJ = 0x19;
+static int i_update_FW(bool manual);
+static bool fw_update_result = false;
 #endif
 
 #ifdef HX_CHIP_STATUS_MONITOR
