@@ -948,10 +948,12 @@ static int adjust_uuc(struct qpnp_bms_chip *chip, int soc_uuc)
 	return chip->prev_soc_uuc;
 }
 
+static int get_battery_status(struct qpnp_bms_chip *chip);
 static int lookup_soc_ocv(struct qpnp_bms_chip *chip, int ocv_uv, int batt_temp)
 {
 	int soc_ocv = 0, soc_cutoff = 0, soc_final = 0;
 	int fcc, acc, soc_uuc = 0, soc_acc = 0, iavg_ma = 0;
+	int status = -1;
 
 	soc_ocv = interpolate_pc(chip->batt_data->pc_temp_ocv_lut,
 					batt_temp, ocv_uv / 1000);
@@ -961,9 +963,11 @@ static int lookup_soc_ocv(struct qpnp_bms_chip *chip, int ocv_uv, int batt_temp)
 	soc_final = DIV_ROUND_CLOSEST(100 * (soc_ocv - soc_cutoff),
 							(100 - soc_cutoff));
 
+	status = get_battery_status(chip);
+
 	if (chip->batt_data->ibat_acc_lut) {
 		/* Apply  ACC logic only if we discharging */
-		if (chip->current_now > 0) {
+		if (2 == status && chip->current_now > 0) {
 
 			/*
 			 * IBAT averaging is disabled at low temp.
@@ -1593,6 +1597,8 @@ static int report_vm_bms_soc(struct qpnp_bms_chip *chip)
 	int time_since_last_change_sec = 0, charge_time_sec = 0;
 	unsigned long last_change_sec;
 	bool charging;
+	int status = -1;
+	int vbatt = 0;
 
 	soc = chip->calculated_soc;
 
@@ -1600,6 +1606,8 @@ static int report_vm_bms_soc(struct qpnp_bms_chip *chip)
 	calculate_delta_time(&last_change_sec, &time_since_last_change_sec);
 
 	charging = is_battery_charging(chip);
+	status = get_battery_status(chip);
+	get_battery_voltage(chip, &vbatt);
 
 	pr_debug("charging=%d last_soc=%d last_soc_unbound=%d\n",
 		charging, chip->last_soc, chip->last_soc_unbound);
@@ -1718,6 +1726,16 @@ static int report_vm_bms_soc(struct qpnp_bms_chip *chip)
 	 * We do not want the algorithm to be based of a wrong
 	 * initial OCV.
 	 */
+
+	if(chip->last_soc < 4 && vbatt > chip->dt.cfg_v_cutoff_uv)
+	{
+		chip->last_soc = 4;
+	}
+
+	if(vbatt <= chip->dt.cfg_v_cutoff_uv)
+	{
+		chip->last_soc = 0;
+	}
 
 	backup_ocv_soc(chip, chip->last_ocv_uv, chip->last_soc);
 
@@ -2863,9 +2881,12 @@ static void adjust_pon_ocv(struct qpnp_bms_chip *chip, int batt_temp)
 	}
 }
 
+extern int usb_flag;
+
 static int calculate_initial_soc(struct qpnp_bms_chip *chip)
 {
 	int rc, batt_temp = 0, est_ocv = 0;
+	int vbatt = 0;
 
 	rc = get_batt_therm(chip, &batt_temp);
 	if (rc < 0) {
@@ -2878,6 +2899,39 @@ static int calculate_initial_soc(struct qpnp_bms_chip *chip)
 	if (rc) {
 		pr_err("Unable to read PON OCV rc=%d\n", rc);
 		return rc;
+	}
+
+	switch(usb_flag)
+	{
+	case 0:
+		pr_debug("Triggered from Hard Reset\n");
+		break;
+	case 1:
+		pr_debug("Triggered from SMPL (sudden momentary power loss)\n");
+		break;
+	case 2:
+		pr_debug("Triggered from RTC (RTC alarm expiry)\n");
+		break;
+	case 3:
+		pr_debug("Triggered from DC (DC charger insertion)\n");
+		break;
+	case 4:
+		pr_debug("Triggered from USB (USB charger insertion)\n");
+		break;
+	case 5:
+		pr_debug("Triggered from PON1 (secondary PMIC)\n");
+		break;
+	case 6:
+		pr_debug("Triggered from CBL (external power supply)\n");
+		chip->last_ocv_uv -= 120000;//compensated PON_OCV
+		pr_debug("Compensated PON_OCV = %d\n", chip->last_ocv_uv);
+		break;
+	case 7:
+		pr_debug("Triggered from KPD (power key press)\n");
+		break;
+	default:
+		pr_debug("pon reason err\n");
+		break;
 	}
 
 	rc = read_shutdown_ocv_soc(chip);
@@ -2916,6 +2970,19 @@ static int calculate_initial_soc(struct qpnp_bms_chip *chip)
 		 */
 		if (chip->workaround_flag & WRKARND_PON_OCV_COMP)
 			adjust_pon_ocv(chip, batt_temp);
+
+		/* lk->kernel PON_OCV compensate */
+		rc = get_battery_voltage(chip, &vbatt);
+		if (rc < 0) {
+			pr_err("Unable to read battery-voltage rc=%d\n", rc);
+			return rc;
+		}
+
+		if(vbatt < 3650000)
+		{
+			chip->last_ocv_uv = 3600000;
+			pr_debug("lk->kernel PON_OCV compensate:%d\n", chip->last_ocv_uv);
+		}
 
 		 /* !warm_reset use PON OCV only if shutdown SOC is invalid */
 		chip->calculated_soc = lookup_soc_ocv(chip,
