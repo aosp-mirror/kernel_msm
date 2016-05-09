@@ -64,7 +64,7 @@
 
 #define REPORT_2D_PRESSURE
 #define TEMP_FORCE_WA
-#define USE_DATA_SERVER
+/* #define USE_DATA_SERVER */
 
 
 #define F12_DATA_15_WORKAROUND
