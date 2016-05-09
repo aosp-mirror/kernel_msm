@@ -70,11 +70,6 @@
 		status = "disabled";
 	};
 
-	mpp@a100 { /* MPP 2 */
-		/* HR LED */
-		status = "disabled";
-	};
-
 	mpp@a200 { /* MPP 3 */
 		/* VREF DAC */
 		status = "disabled";

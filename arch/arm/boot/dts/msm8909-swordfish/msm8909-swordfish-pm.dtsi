@@ -248,6 +248,17 @@
 		qcom,scale-function = <0x0>;
 		reg = <0x13>;
 	};
+
+	chan@11 {
+		label = "pa_therm1";
+		qcom,calibration-type = "ratiometric";
+		qcom,decimation = <0x0>;
+		qcom,fast-avg-setup = <0x0>;
+		qcom,hw-settle-time = <0x2>;
+		qcom,pre-div-channel-scaling = <0x0>;
+		qcom,scale-function = <0x2>;
+		reg = <0x11>;
+	};
 };
 
 &pm8916_pon {
@@ -259,6 +270,14 @@
 };
 
 &pm8916_mpps {
+	mpp@a100 { // MPP 2 For PPG_THERM_1
+		qcom,mode = <4>;      // MODE_CTL: ANALOG_INPUT
+		qcom,invert = <1>;    // MODE_CTL: ANALOG Enable
+		qcom,master-en = <1>; // EN_CTL: MPP Enabled
+		qcom,ain-route = <1>; // ANA_IN_CTL: HKADC6
+		qcom,src-sel = <0>;   // MODE_CTL: Source 0
+	};
+
 	mpp@a300 { // MPP 4 For PM_USB_ID ADC
 		qcom,mode = <4>;      // MODE_CTL: ANALOG_INPUT
 		qcom,invert = <1>;    // MODE_CTL: ANALOG Enable
