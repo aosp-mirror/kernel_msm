@@ -71,3 +71,9 @@ config KEEP_POWER_ON_WHEN_PANEL_OFF
 	time and power consuming because it will take more time and power
 	on panel on sequence. Set this option true if you don't want to
 	turn panel power off when panel off.
+
+config ASUS_BACKLIGHT_DEBUG
+    bool 'enable backlight debug mode'
+    default n
+    ---help---
+        Enable backlight debug mode
