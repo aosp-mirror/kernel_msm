@@ -2104,6 +2104,14 @@ bool htc_battery_get_pd_type(int *curr)
 	return g_is_pd_charger;
 }
 
+int htc_battery_get_pd_vbus(int *vbus)
+{
+	if (g_is_pd_charger) {
+		*vbus = g_pd_voltage;
+		return 0;
+	} else
+		return -EINVAL;
+}
 
 static ssize_t htc_battery_set_phone_call(struct device *dev,
                 struct device_attribute *attr,

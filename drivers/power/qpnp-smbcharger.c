@@ -5174,8 +5174,9 @@ static void handle_usb_removal(struct smbchg_chip *chip)
 {
 	struct power_supply *parallel_psy = get_parallel_psy(chip);
 	int rc;
-
 #ifdef CONFIG_HTC_BATT
+	union power_supply_propval voltage_max = {0, };
+
 	if (g_rerun_apsd_ignore_uv){
 		pr_smb(PR_STATUS, "Ignore removal for rerun APSD!!\n");
 		return;
@@ -5246,6 +5247,13 @@ static void handle_usb_removal(struct smbchg_chip *chip)
 		INPUT_MISSING_POLLER_EN_BIT, INPUT_MISSING_POLLER_EN_BIT);
 	if (rc < 0)
 		pr_err("Couldn't enable input missing poller rc=%d\n", rc);
+
+	voltage_max.intval = 0;
+	rc = chip->usb_psy->set_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_VOLTAGE_MAX,
+			&voltage_max);
+	if (rc)
+		pr_err("failed to set voltage max rc=%d\n", rc);
 #else
 	if (!chip->hvdcp_not_supported)
 		restore_from_hvdcp_detection(chip);
@@ -5268,6 +5276,7 @@ static bool is_usbin_uv_high(struct smbchg_chip *chip)
 #define HVDCP_NOTIFY_MS		2500
 #ifdef CONFIG_HTC_BATT
 #define AICL_INIT_BIT	BIT(7)
+#define DEFAULT_VBUS_VOLTAGE 5100000
 #endif /* CONFIG_HTC_BATT */
 static void handle_usb_insertion(struct smbchg_chip *chip)
 {
@@ -5279,6 +5288,7 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 	char *usb_type_name = "null";
 #ifdef CONFIG_HTC_BATT
 	int pd_current;
+	union power_supply_propval voltage_max = {0, };
 
 		smbchg_sec_masked_write(chip, chip->misc_base + MISC_TRIM_OPT_15_8,
 				AICL_INIT_BIT, 0);
@@ -5324,10 +5334,27 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 	if(htc_battery_get_pd_type(&pd_current)){
 		g_is_charger_ability_detected = true;
 		set_aicl_enable(false);
+		rc = htc_battery_get_pd_vbus(&voltage_max.intval);
+		if (!rc) {
+			voltage_max.intval = (voltage_max.intval + 100) * 1000;
+			rc = chip->usb_psy->set_property(chip->usb_psy,
+					POWER_SUPPLY_PROP_VOLTAGE_MAX,
+					&voltage_max);
+			if (rc)
+				pr_err("failed to set voltage max rc=%d\n", rc);
+		}
+
 		if (!parallel_psy){
 			pr_smb(PR_STATUS, "Parallel charging not enabled for PD\n");
 			return;
 		}
+	} else {
+		voltage_max.intval = DEFAULT_VBUS_VOLTAGE;
+		rc = chip->usb_psy->set_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_VOLTAGE_MAX,
+				&voltage_max);
+		if (rc)
+			pr_err("failed to set voltage max rc=%d\n", rc);
 	}
 #endif /* CONFIG_HTC_BATT */
 

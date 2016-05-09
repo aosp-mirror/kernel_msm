@@ -246,6 +246,7 @@ int htc_battery_level_adjust(void);
 int htc_battery_charger_switch_internal(int enable);
 int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *max_mA);
 bool htc_battery_get_pd_type(int *curr);
+int htc_battery_get_pd_vbus(int *vbus);
 
 /* Implement on QCT driver */
 int request_charger_status(enum htc_charger_request mode, void *ret_buf);
