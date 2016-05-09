@@ -305,7 +305,8 @@ void ext4_set_bio_crypt_context(struct inode *inode, struct bio *bio)
 	struct ext4_crypt_info *ci = ext4_encrypted_inode(inode) ?
 		ext4_encryption_info(inode) : NULL;
 
-	if (ci && (ci->ci_data_mode == EXT4_ENCRYPTION_MODE_PRIVATE)) {
+	if (S_ISREG(inode->i_mode) && ci &&
+	    (ci->ci_data_mode == EXT4_ENCRYPTION_MODE_PRIVATE)) {
 		BUG_ON(!pfk_is_ready());
 		bio->bi_crypt_ctx.bc_flags |= (BC_ENCRYPT_FL |
 					       BC_AES_256_XTS_FL);
