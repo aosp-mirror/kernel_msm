@@ -1,0 +1,31 @@
+/* STMicroelectronics stc3117 battery gauge */
+
+Required properties:
+       - compatible : should be: "st,stc3117"
+               - Magnetometer:  "st,lsm303agr-magn"
+       - reg : the I2C address the device 0x70
+
+       Electrical parameters:
+       - st,nbc-mAh :
+               nominal battery capacity [mAh];
+       - st,nbii-microohm:
+               nominal battery internal impedance [mOhms];
+       - st,ncc-cnf:
+               nominal CC_cnf;
+       - st,nvm-cnf:
+               nominal VM cnf;
+       - st,rsns-microhom:
+               sense resistor [mOhms];
+Example:
+
+stc3117@70 {
+       pinctrl-names = "default";
+       compatible = "st,stc3117";
+       reg = <0x70>;
+       status = "ok";
+       st,nbc-mAh = <1500>;
+       st,nbii-microohm = <200>;
+       st,ncc-cnf = <303>;
+       st,nvm-cnf = <307>;
+       st,rsns-microhom = <10>;
+};

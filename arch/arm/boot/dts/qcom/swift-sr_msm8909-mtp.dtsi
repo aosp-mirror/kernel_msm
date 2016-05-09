@@ -157,6 +157,16 @@
 };
 
 &i2c_4 {
+	status = "ok";
+	stc3117@70 {
+		compatible = "st,stc3117";
+		reg = <0x70>;
+		st,nbc-mAh = <300>;
+		st,nbii-microohm = <330>;
+		st,ncc-cnf = <59>;
+		st,nvm-cnf = <271>;
+		st,rsns-microhom = <10>;
+	};
 };
 
 &i2c_5 {

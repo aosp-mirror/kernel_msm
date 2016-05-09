@@ -545,6 +545,14 @@ config BATTERY_GOLDFISH
 	  Say Y to enable support for the battery and AC power in the
 	  Goldfish emulator.
 
+config BATTERY_STC3117
+	tristate "STMicroelectronics STC3117 Fuel Gauge"
+	depends on I2C
+	help
+	  STC3117 is fuel-gauge systems for lithium-ion (Li+) batteries
+	  in handheld and portable equipment. The STC3117 is configured
+	  to operate with a single lithium cell
+
 config QPNP_VM_BMS
 	tristate "QPNP Voltage-Mode Battery Monitoring System driver"
 	depends on SPMI || MSM_SPMI
