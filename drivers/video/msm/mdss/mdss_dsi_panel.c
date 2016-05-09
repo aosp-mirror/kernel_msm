@@ -28,10 +28,19 @@
 #include "mdss_dba_utils.h"
 #endif
 
+#include <linux/debugfs.h>
+#ifdef CONFIG_ASUS_BACKLIGHT_DEBUG
+#include <linux/uaccess.h>
+#endif
+
 /* Lock backlight of ambient mode to 28nits */
 #define AMBIENT_BL_LEVEL_V1	(40)
 static int ambient_bl_level = AMBIENT_BL_LEVEL_V1;
 static int backup_bl_level = 0;
+
+#ifdef CONFIG_ASUS_BACKLIGHT_DEBUG
+static int brightness_lock = 0;
+#endif
 
 #define DT_CMD_HDR 6
 #define MIN_REFRESH_RATE 48
@@ -658,6 +667,11 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 {
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	struct mdss_dsi_ctrl_pdata *sctrl = NULL;
+
+#ifdef CONFIG_ASUS_BACKLIGHT_DEBUG
+    if(brightness_lock)
+        return;
+#endif
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -2506,6 +2520,46 @@ error:
 	return -EINVAL;
 }
 
+#ifdef CONFIG_ASUS_BACKLIGHT_DEBUG
+static int brightness_lock_dbgfs_show(struct seq_file *s, void *unused)
+{
+    seq_printf(s, "%s: %d\n","success", brightness_lock);
+    return 0;
+}
+
+static int brightness_lock_dbgfs_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, brightness_lock_dbgfs_show, NULL);
+}
+
+static int brightness_lock_dbgfs_write(struct file *file,
+            const char __user *buf, size_t count, loff_t *ppos)
+{
+    char temp[32];
+    size_t buf_size;
+
+    buf_size = min(count, (sizeof(temp)-1));
+    if (copy_from_user(temp, buf, buf_size))
+        return -EFAULT;
+    switch (temp[0]) {
+    case '0':
+        brightness_lock=0;
+        break;
+    case '1':
+        brightness_lock=1;
+        break;
+    }
+
+    return count;
+}
+
+static const struct file_operations brightness_lock_debug_fops = {
+    .open = brightness_lock_dbgfs_open,
+    .read = seq_read,
+    .write = brightness_lock_dbgfs_write
+};
+#endif
+
 int mdss_dsi_panel_init(struct device_node *node,
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 	int ndx)
@@ -2549,6 +2603,12 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
 	ctrl_pdata->panel_data.set_idle = mdss_dsi_panel_set_idle_mode;
 	ctrl_pdata->panel_data.get_idle = mdss_dsi_panel_get_idle_mode;
+
+#ifdef CONFIG_ASUS_BACKLIGHT_DEBUG
+    (void)debugfs_create_file("brightness_lock",\
+                S_IRUGO | S_IWUSR | S_IWGRP,\
+                NULL, NULL, &brightness_lock_debug_fops);
+#endif
 
 	return 0;
 }
