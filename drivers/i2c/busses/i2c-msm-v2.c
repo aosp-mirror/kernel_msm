@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2170,27 +2170,54 @@ static bool i2c_msm_xfer_next_buf(struct i2c_msm_ctrl *ctrl)
 	return  true;
 }
 
-static void i2c_msm_pm_clk_disable_unprepare(struct i2c_msm_ctrl *ctrl)
+static void i2c_msm_pm_clk_unprepare(struct i2c_msm_ctrl *ctrl)
 {
-	clk_disable_unprepare(ctrl->rsrcs.core_clk);
-	clk_disable_unprepare(ctrl->rsrcs.iface_clk);
+	clk_unprepare(ctrl->rsrcs.core_clk);
+	clk_unprepare(ctrl->rsrcs.iface_clk);
 }
 
-static int i2c_msm_pm_clk_prepare_enable(struct i2c_msm_ctrl *ctrl)
+static int i2c_msm_pm_clk_prepare(struct i2c_msm_ctrl *ctrl)
 {
 	int ret;
-	ret = clk_prepare_enable(ctrl->rsrcs.iface_clk);
+	ret = clk_prepare(ctrl->rsrcs.iface_clk);
 	if (ret) {
 		dev_err(ctrl->dev,
-			"error on clk_prepare_enable(iface_clk):%d\n", ret);
+			"error on clk_prepare(iface_clk):%d\n", ret);
 		return ret;
 	}
 
-	ret = clk_prepare_enable(ctrl->rsrcs.core_clk);
+	ret = clk_prepare(ctrl->rsrcs.core_clk);
 	if (ret) {
-		clk_disable_unprepare(ctrl->rsrcs.iface_clk);
+		clk_unprepare(ctrl->rsrcs.iface_clk);
 		dev_err(ctrl->dev,
-			"error clk_prepare_enable(core_clk):%d\n", ret);
+			"error clk_prepare(core_clk):%d\n", ret);
+	}
+	return ret;
+}
+
+static void i2c_msm_pm_clk_disable(struct i2c_msm_ctrl *ctrl)
+{
+	clk_disable(ctrl->rsrcs.core_clk);
+	clk_disable(ctrl->rsrcs.iface_clk);
+}
+
+static int i2c_msm_pm_clk_enable(struct i2c_msm_ctrl *ctrl)
+{
+	int ret;
+
+	ret = clk_enable(ctrl->rsrcs.iface_clk);
+	if (ret) {
+		dev_err(ctrl->dev,
+			"error on clk_enable(iface_clk):%d\n", ret);
+		i2c_msm_pm_clk_unprepare(ctrl);
+		return ret;
+	}
+	ret = clk_enable(ctrl->rsrcs.core_clk);
+	if (ret) {
+		clk_disable(ctrl->rsrcs.iface_clk);
+		i2c_msm_pm_clk_unprepare(ctrl);
+		dev_err(ctrl->dev,
+			"error clk_enable(core_clk):%d\n", ret);
 	}
 	return ret;
 }
@@ -2211,6 +2238,7 @@ static int i2c_msm_pm_xfer_start(struct i2c_msm_ctrl *ctrl)
 		return -EIO;
 	}
 
+	i2c_msm_pm_pinctrl_state(ctrl, true);
 	pm_runtime_get_sync(ctrl->dev);
 	/*
 	 * if runtime PM callback was not invoked (when both runtime-pm
@@ -2221,7 +2249,7 @@ static int i2c_msm_pm_xfer_start(struct i2c_msm_ctrl *ctrl)
 		i2c_msm_pm_resume(ctrl->dev);
 	}
 
-	ret = i2c_msm_pm_clk_prepare_enable(ctrl);
+	ret = i2c_msm_pm_clk_enable(ctrl);
 	if (ret) {
 		mutex_unlock(&ctrl->xfer.mtx);
 		return ret;
@@ -2248,13 +2276,14 @@ static void i2c_msm_pm_xfer_end(struct i2c_msm_ctrl *ctrl)
 	if (ctrl->xfer.mode_id == I2C_MSM_XFER_MODE_DMA)
 		i2c_msm_dma_free_channels(ctrl);
 
-	i2c_msm_pm_clk_disable_unprepare(ctrl);
+	i2c_msm_pm_clk_disable(ctrl);
 
 	if (!pm_runtime_enabled(ctrl->dev))
 		i2c_msm_pm_suspend(ctrl->dev);
 
 	pm_runtime_mark_last_busy(ctrl->dev);
 	pm_runtime_put_autosuspend(ctrl->dev);
+	i2c_msm_pm_pinctrl_state(ctrl, false);
 	mutex_unlock(&ctrl->xfer.mtx);
 }
 
@@ -2676,7 +2705,7 @@ static void i2c_msm_pm_suspend(struct device *dev)
 		return;
 	}
 	i2c_msm_dbg(ctrl, MSM_DBG, "suspending...");
-	i2c_msm_pm_pinctrl_state(ctrl, false);
+	i2c_msm_pm_clk_unprepare(ctrl);
 	i2c_msm_clk_path_unvote(ctrl);
 
 	/*
@@ -2703,7 +2732,7 @@ static int i2c_msm_pm_resume(struct device *dev)
 	i2c_msm_dbg(ctrl, MSM_DBG, "resuming...");
 
 	i2c_msm_clk_path_vote(ctrl);
-	i2c_msm_pm_pinctrl_state(ctrl, true);
+	i2c_msm_pm_clk_prepare(ctrl);
 	ctrl->pwr_state = I2C_MSM_PM_RT_ACTIVE;
 	return 0;
 }
@@ -2883,9 +2912,13 @@ static int i2c_msm_probe(struct platform_device *pdev)
 	/* vote for clock to enable reading the version number off the HW */
 	i2c_msm_clk_path_vote(ctrl);
 
-	ret = i2c_msm_pm_clk_prepare_enable(ctrl);
+	ret = i2c_msm_pm_clk_prepare(ctrl);
+	if (ret)
+		goto clk_err;
+
+	ret = i2c_msm_pm_clk_enable(ctrl);
 	if (ret) {
-		dev_err(ctrl->dev, "error in enabling clocks:%d\n", ret);
+		i2c_msm_pm_clk_unprepare(ctrl);
 		goto clk_err;
 	}
 
@@ -2897,7 +2930,8 @@ static int i2c_msm_probe(struct platform_device *pdev)
 	if (ret)
 		dev_err(ctrl->dev, "error error on qup software reset\n");
 
-	i2c_msm_pm_clk_disable_unprepare(ctrl);
+	i2c_msm_pm_clk_disable(ctrl);
+	i2c_msm_pm_clk_unprepare(ctrl);
 	i2c_msm_clk_path_unvote(ctrl);
 
 	ret = i2c_msm_rsrcs_gpio_pinctrl_init(ctrl);
