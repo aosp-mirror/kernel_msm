@@ -190,12 +190,8 @@
 static const int TempTable[NTEMP] = {60, 40, 25, 10, 0, -10, -20};
 static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 static const char *charger_name = "battery";
-//static int g_low_battery_counter;
 static bool g_debug;
-static bool g_soc_jump;
 static int g_new_soc;
-static int g_last_soc;
-static int g_soc_update_count;
 static const char * const charge_status[] = {
 	"unknown",
 	"charging",
@@ -2290,68 +2286,21 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 }
 
 /*
-* 1. Only change 1% one time
-* 2. When discharging, soc can only decrease
-* 3. If SOC jumps > 2%, abort this change and  start adjustment 
+* When discharging, soc can only decrease
 */
 void CEI_soc_adjustment(struct stc311x_chip *chip)
 {
-	int stc311x_new_soc = 0, diff = 0;
-	//union power_supply_propval ret = {0,};
-	//struct power_supply *charger_psy = power_supply_get_by_name((char *)charger_name);
+	pr_err("enter: status = %d, original soc = %d,  ST soc = %d \n", chip->status,  g_new_soc, chip->batt_soc);
 
-	pr_err("stc311x() CEI_soc_adjustment enter: current = %d, original soc = %d,  ST soc = %d \n", 
-		chip->batt_current,  g_new_soc, chip->batt_soc);
-	
-	if ((g_soc_jump == false) && (chip->batt_soc == g_new_soc))
-		return;
-
-	//if discharging, the new SOC can only decrease
-	if (chip->batt_current <= 0 && chip->batt_soc > g_new_soc) {
-		pr_err("stc311x() CEI_soc_adjustment: Discharging, original soc = %d,  new soc = %d, abort \n", g_new_soc, chip->batt_soc);
-		return;
-	}
-
-	stc311x_new_soc = chip->batt_soc;
-	if (g_soc_jump == false) {
-		if (stc311x_new_soc >= g_new_soc)
-			diff = stc311x_new_soc - g_new_soc;
-		else
-			diff = g_new_soc - stc311x_new_soc;
-
-		//only change 1%, update new soc
-		if (diff == 1) {
-			g_last_soc = g_new_soc;
-			g_new_soc = stc311x_new_soc;
-		} else {
-			//this is the first time SOC jumps more than 2%, start adjustment
-			g_soc_jump = true;
-			g_soc_update_count = 0;
+	if ((chip->status == POWER_SUPPLY_STATUS_CHARGING) || (chip->status == POWER_SUPPLY_STATUS_FULL))
+		g_new_soc = chip->batt_soc;
+	else {
+		//when discharging, unknown or not charging, the new SOC can only decrease
+		if (chip->batt_soc > g_new_soc) {
+			pr_err("Discharging, original soc = %d,  new soc = %d, abort \n", g_new_soc, chip->batt_soc);
 			return;
-		}
-	} else {
-		g_soc_update_count++;
-		if (((g_new_soc >= 15) && (g_soc_update_count >= SOC_CHANGE_COUNT_NORMAL)) ||
-			((g_new_soc < 15) && (g_soc_update_count >= SOC_CHANGE_COUNT_LOW_BATTERY))) {
-			g_soc_update_count = 0;
-
-			diff = 0;
-			if (stc311x_new_soc >= g_new_soc)
-				diff = stc311x_new_soc - g_new_soc;
-			else
-				diff = g_new_soc - stc311x_new_soc;
-
-			if  ((stc311x_new_soc == g_new_soc) || (diff == 1)) {
-				g_soc_jump = false;
-				g_new_soc = stc311x_new_soc;
-				return;
-			} else if (stc311x_new_soc > g_new_soc)
-				g_new_soc +=1;
-			else
-				g_new_soc -=1;
-
-			pr_err("stc311x() CEI_soc_adjustment done, ST soc = %d, new soc = %d \n", chip->batt_soc, g_new_soc);	
-		} 
+		} else
+			g_new_soc = chip->batt_soc;
 	}
 }
 
@@ -2427,27 +2376,8 @@ static void stc311x_work(struct work_struct *work)
 		chip->batt_voltage = GasGaugeData.Voltage;
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
 		chip->Temperature = 250;
+		pr_err("stc311x read i2c fail, return default value \n");
 	}
-
-/*
-	// update temperature by pmic ADC. If fail, use stc3117 data
-	if (stc311x_read_pmic_adc_temperature(chip)) {
-		if (res >0)
-			chip->Temperature = GasGaugeData.Temperature;  // read pmic adc fail
-		else if (res == -1)
-			chip->Temperature = 250;
-	}
-
-	// Avoid 0% = 3.1v or 3.2v, default 0% = 3.3v
-	// If battery voltage < 3.3v, re-check 30 sec and shutdown
-	if (chip->batt_voltage <= 3300) {
-		g_low_battery_counter++;
-		if (g_low_battery_counter >= LOW_BATTERY_COUNT_THRESHOLD)
-			chip->batt_soc = 0;
-	}
-	else
-		g_low_battery_counter = 0;
-*/
 
 	if (g_debug) {
 		pr_err(" ===  After GasGauge_Task() === \n");
@@ -2455,7 +2385,9 @@ static void stc311x_work(struct work_struct *work)
 	}
 
 	stc311x_check_charger_state(chip);
-	CEI_soc_adjustment(chip);
+
+	if ((res > 0) && (chip->batt_soc ^ g_new_soc))
+		CEI_soc_adjustment(chip);
 
 	stc311x_updata();
 	pr_err("stc311x_work() ***** ST_SOC = %d, CEI_SOC = %d, voltage = %d mv, current = %d mA, Temperature = %d, charging_status = %d ***** \n", chip->batt_soc, g_new_soc, chip->batt_voltage, chip->batt_current, chip->Temperature, chip->status);
@@ -2501,8 +2433,6 @@ static int stc311x_probe(struct i2c_client *client,
 
 	pr_err("\n\nstc311x probe started\n\n");
 	g_debug = 0;
-	g_soc_jump = false;
-	g_soc_update_count = 0;
 
 	/* The common I2C client data is placed right specific data. */
 	chip->client = client;
@@ -2603,7 +2533,6 @@ static int stc311x_probe(struct i2c_client *client,
 		chip->Temperature = 250;
 	}
 	g_new_soc = chip->batt_soc;
-	g_last_soc = chip->batt_soc;
 	INIT_DEFERRABLE_WORK(&chip->work, stc311x_work);
 
 	schedule_delayed_work(&chip->work, STC311x_DELAY);
