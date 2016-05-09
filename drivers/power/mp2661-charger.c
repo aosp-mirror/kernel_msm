@@ -416,26 +416,6 @@ static int mp2661_get_prop_ambient_temp(struct mp2661_chg *chip)
     return (int)results.physical;
 }
 
-static int usb_input_current_limit[];
-static int mp2661_get_usb_input_current(struct mp2661_chg *chip)
-{
-    union power_supply_propval ret = {0,};
-
-    int rc;
-    u8 reg;
-
-    rc = mp2661_read(chip, INPUT_SOURCE_CTRL_REG, &reg);
-    if (rc < 0)
-    {
-        pr_err("Couldn't read INPUT_SOURCE_CTRL_REG rc = %d\n", rc);
-        return rc;
-    }
-
-    ret.intval =  usb_input_current_limit[reg];
-
-    return ret.intval;
-}
-
 static int
 mp2661_get_prop_battery_voltage_now(struct mp2661_chg *chip)
 {
@@ -541,6 +521,26 @@ static int mp2661_set_usb_input_current(struct mp2661_chg *chip,
         pr_err("cannot set usb input current to %dma rc = %d\n", current_limit, rc);
     }
     return rc;
+}
+
+static int mp2661_get_usb_input_current(struct mp2661_chg *chip)
+{
+    union power_supply_propval ret = {0,};
+
+    int rc;
+    u8 reg;
+
+    rc = mp2661_read(chip, INPUT_SOURCE_CTRL_REG, &reg);
+    if (rc < 0)
+    {
+        pr_err("Couldn't read INPUT_SOURCE_CTRL_REG rc = %d\n", rc);
+        return rc;
+    }
+
+    reg = (reg >> INPUT_SOURCE_CURRENT_LIMIT_MASK_SHIFT) & INPUT_SOURCE_CURRENT_LIMIT_MASK;
+    ret.intval =  usb_input_current_limit[reg];
+
+    return ret.intval;
 }
 
 #define MP2661_USB_INPUT_VOLTAGE_STEP_MV    80
