@@ -80,3 +80,5 @@ config HTC_WLAN_NV
 	default n
 	help
 	  Say Y here if you want the HTC WLAN NV features
+
+source "drivers/net/wireless/cnss/logger/Kconfig"
