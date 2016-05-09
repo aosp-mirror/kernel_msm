@@ -291,6 +291,11 @@ static const char * const qpnp_poff_reason[] = {
 };
 
 /*
+*power_on(usb)
+*/
+int usb_flag;
+
+/*
  * On the kernel command line specify
  * qpnp-power-on.warm_boot=1 to indicate a warm
  * boot of the device.
@@ -2052,6 +2057,8 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 		return rc;
 	}
 
+	usb_flag = 0;
+
 	index = ffs(pon_sts) - 1;
 	cold_boot = !qpnp_pon_is_warm_reset();
 	if (index >= ARRAY_SIZE(qpnp_pon_reason) || index < 0) {
@@ -2064,6 +2071,8 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 			"PMIC@SID%d Power-on reason: %s and '%s' boot\n",
 			pon->spmi->sid, qpnp_pon_reason[index],
 			cold_boot ? "cold" : "warm");
+
+		usb_flag = index;
 	}
 
 	/* POFF reason */
