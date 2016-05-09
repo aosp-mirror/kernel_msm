@@ -805,18 +805,89 @@ static void himax_power_on_initCMD(struct i2c_client *client)
     msleep(50);
 }
 
+#ifdef HX_CHECK_CRC_AP
+static bool Calculate_CRC_with_AP(unsigned char *FW_content)
+{
+    int i, j;
+    int fw_data;
+    int fw_data_2;
+    int CRC = 0xFFFFFFFF;
+    int PolyNomial = 0x82F63B78;
+    int length = 0;
+
+    length = 0x2000; //32k
+    for (i = 0; i < length; i++) {
+        fw_data = FW_content[i * 4 ];
+        for (j = 1; j < 4; j++) {
+            fw_data_2 = FW_content[i * 4 + j];
+            fw_data += (fw_data_2) << (8 * j);
+        }
+        CRC = fw_data ^ CRC;
+        for (j = 0; j < 32; j++) {
+            if ((CRC % 2) != 0) {
+                CRC = ((CRC >> 1) & 0x7FFFFFFF) ^ PolyNomial;
+            } else {
+                CRC = (((CRC >> 1) & 0x7FFFFFFF)& 0x7FFFFFFF);
+            }
+        }
+    }
+    I("CRC calculate from bin file is %x", CRC);
+
+    if (CRC == 0)
+        return true;
+    else
+        return false;
+}
+#endif
+
 #ifdef HX_AUTO_UPDATE_FW
-static int i_update_FW(void)
+static int i_update_FW(bool manual)
 {
     int upgrade_times = 0;
     unsigned char *ImageBuffer = i_CTPM_FW;
     int fullFileLength = sizeof(i_CTPM_FW);
-    I("IMAGE FW_VER=%x,%x.\n", i_CTPM_FW[FW_VER_MAJ_FLASH_ADDR], i_CTPM_FW[FW_VER_MIN_FLASH_ADDR]);
-    I("IMAGE CFG_VER=%x.\n", i_CTPM_FW[FW_CFG_VER_FLASH_ADDR]);
-    if (( private_ts->vendor_fw_ver_H < i_CTPM_FW[FW_VER_MAJ_FLASH_ADDR] )
-        || ( private_ts->vendor_fw_ver_L < i_CTPM_FW[FW_VER_MIN_FLASH_ADDR] )
-        || ( private_ts->vendor_config_ver < i_CTPM_FW[FW_CFG_VER_FLASH_ADDR] )
-        || ( himax_calculateChecksum(false) == 0 )) {
+    uint8_t FW_MAJ, FW_MIN, NEW_FW_MAJ, NEW_FW_MIN;
+    uint8_t CFG_VER, NEW_CFG_VER;
+    bool need_update_flag = false;
+
+    FW_MAJ = private_ts->vendor_fw_ver_H;
+    FW_MIN = private_ts->vendor_fw_ver_L;
+    CFG_VER = private_ts->vendor_config_ver;
+    NEW_FW_MAJ = i_CTPM_FW[FW_VER_MAJ_FLASH_ADDR];
+    NEW_FW_MIN = i_CTPM_FW[FW_VER_MIN_FLASH_ADDR];
+    NEW_CFG_VER = i_CTPM_FW[FW_CFG_VER_FLASH_ADDR];
+    I("Start to update FW.");
+    I("FW_VER=%2x,%2x. CFG_VER=%2x.\n", FW_MAJ, FW_MIN, CFG_VER);
+    I("NEW FW_VER=%2x,%2x. NEW CFG_VER=%2x.\n", NEW_FW_MAJ, NEW_FW_MIN, NEW_CFG_VER);
+
+#ifdef HX_CHECK_CRC_AP
+    if (!Calculate_CRC_with_AP(i_CTPM_FW)) {
+        I("New FW CRC fail, do not update.");
+        goto no_update;
+    }
+#endif
+    if (NEW_FW_MAJ != ASUS_FW_MAJ) {
+        I("Non ASUS FW, do not update.");
+        goto no_update;
+    }
+
+    if (!manual) {
+        if ( (NEW_FW_MIN <= FW_MIN) || ( (NEW_FW_MIN == FW_MIN) && (NEW_CFG_VER <= CFG_VER) )) {
+            if ( himax_calculateChecksum(false) == 0 ) {
+                I("IC Checksum fail, update to new FW.");
+                need_update_flag = true;
+            } else {
+                I("No new FW version and IC Checksum pass, do not update.");
+                goto no_update;
+            }
+        } else {
+            I("Larger new FW version, update to new FW.");
+            need_update_flag = true;
+        }
+    } else
+        need_update_flag = true;
+
+    if (need_update_flag) {
 update_retry:
 #ifdef HX_RST_PIN_FUNC
         himax_HW_reset(false, true);
@@ -824,10 +895,12 @@ update_retry:
         if (fts_ctpm_fw_upgrade_with_fs(ImageBuffer, fullFileLength, true) == 0) {
             E("%s: TP upgrade error\n", __func__);
             upgrade_times++;
-            if (upgrade_times < 3)
+            if (upgrade_times < 3) {
                 goto update_retry;
-            else
+            } else {
+                fw_update_result = false;
                 return -1;//upgrade fail
+            }
         } else {
             I("%s: TP upgrade OK\n", __func__);
             private_ts->vendor_fw_ver_H = i_CTPM_FW[FW_VER_MAJ_FLASH_ADDR];
@@ -837,9 +910,13 @@ update_retry:
 #ifdef HX_RST_PIN_FUNC
         himax_HW_reset(false, true);
 #endif
+        fw_update_result = true;
         return 1;//upgrade success
     } else
-        return 0;//NO upgrade
+        goto no_update;
+no_update:
+    fw_update_result = true;
+    return 0;//NO upgrade
 }
 #endif
 
@@ -2748,6 +2825,13 @@ static ssize_t himax_debug_write(struct device *dev,
         filp_close(hx_filp, NULL);
         I("%s: upgrade start,len %d: %02X, %02X, %02X, %02X\n", __func__, result, upgrade_fw[0], upgrade_fw[1], upgrade_fw[2], upgrade_fw[3]);
         if (result > 0) {
+#ifdef HX_CHECK_CRC_AP
+            result = Calculate_CRC_with_AP(upgrade_fw);
+            if (result){
+                I("CRC Check sum fail");
+                goto firmware_upgrade_done;
+            }
+#endif
             // start to upgrade
 #ifdef HX_RST_PIN_FUNC
             himax_HW_reset(false, true);
@@ -4001,6 +4085,50 @@ static int himax_parse_dt(struct himax_ts_data *ts,
 }
 #endif
 
+#ifdef HX_AUTO_UPDATE_FW
+static ssize_t himax_fw_update_read(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+    int ret;
+    if (fw_update_result)
+        ret += sprintf(buf, "FW Update Success \n");
+    else
+        ret += sprintf(buf, "FW Update Fail \n");
+    return ret;
+}
+
+static ssize_t himax_fw_update_write(struct device *dev,
+                struct device_attribute *attr, const char *buf, size_t size)
+{
+    int mode = 0;
+    int ret;
+    bool manualUpgrade = false;
+
+    sscanf(buf, "%d", &mode);
+    manualUpgrade = mode == FW_UPDATE_MANUAL_MODE;
+    ret = i_update_FW(manualUpgrade);
+    return size;
+}
+
+static ssize_t himax_fw_version_read(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+    int ret;
+    himax_read_FW_ver(true);
+    ret = sprintf(buf, "FW_Ver: %x.%x, CFG_Ver: %x \n", private_ts->vendor_fw_ver_H,
+        private_ts->vendor_fw_ver_L, private_ts->vendor_config_ver);
+    return ret;
+}
+
+static ssize_t himax_checksum_read(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+    int ret;
+    ret = himax_calculateChecksum(false);
+    return sprintf(buf, "%s\n", ret ? "pass" : "fail");
+}
+#endif
+
 #ifdef ASUS_FACTORY_BUILD
 static int g_bmmi_status = 0;
 
@@ -4041,6 +4169,11 @@ static DEVICE_ATTR(hitouch, S_IWUSR|S_IWGRP|S_IRUGO, himax_hitouch_read, himax_h
 #ifdef HX_SMART_WAKEUP
 static DEVICE_ATTR(SMWP, S_IWUSR|S_IWGRP|S_IRUGO, himax_SMWP_read, himax_SMWP_write);
 #endif
+#ifdef HX_AUTO_UPDATE_FW
+static DEVICE_ATTR(fw_update, S_IWUSR|S_IWGRP|S_IRUGO, himax_fw_update_read, himax_fw_update_write);
+static DEVICE_ATTR(fw_version, S_IRUGO, himax_fw_version_read, NULL);
+static DEVICE_ATTR(checksum, S_IRUGO, himax_checksum_read, NULL);
+#endif
 
 static struct attribute *himax_attrs[] = {
 #ifdef ASUS_FACTORY_BUILD
@@ -4073,6 +4206,11 @@ static struct attribute *himax_attrs[] = {
 #endif
 #ifdef HX_SMART_WAKEUP
     &dev_attr_SMWP.attr,
+#endif
+#ifdef HX_AUTO_UPDATE_FW
+    &dev_attr_fw_update.attr,
+    &dev_attr_fw_version.attr,
+    &dev_attr_checksum.attr,
 #endif
     NULL
 };
@@ -4161,7 +4299,7 @@ static int himax852xes_probe(struct i2c_client *client, const struct i2c_device_
 #endif
     himax_read_TP_info(client);
 #ifdef HX_AUTO_UPDATE_FW
-    err = i_update_FW();
+    err = i_update_FW(false);
     if (err == 0)
         I("NOT Have new FW=NOT UPDATE=\n");
     else if (err > 0)
