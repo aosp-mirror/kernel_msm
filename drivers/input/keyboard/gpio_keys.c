@@ -385,6 +385,11 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 
 	state = (__gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;
 
+	if (state == 1)
+		printk("[KEYPAD] linux,code=%d , state:press \n", button->code);
+	else
+		printk("[KEYPAD] linux,code=%d , state=release \n",button->code);
+
 //ASUS_BSP YuSiang: "keypad test for factory"
 #ifdef ASUS_FACTORY_BUILD
 	if (test_enable == 1){        

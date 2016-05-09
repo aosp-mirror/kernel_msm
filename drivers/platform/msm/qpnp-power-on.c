@@ -821,6 +821,11 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 		input_sync(pon->pon_input);
 	}
 
+	if ((pon_rt_sts & pon_rt_bit) > 0)  //press
+		printk("[KEYPAD] linux,code=%d , state:press \n", cfg->key_code);
+	else //release
+		printk("[KEYPAD] linux,code=%d , state:release \n", cfg->key_code);
+
 //ASUS_BSP YuSiang: "keypad test for factory"
 #ifdef ASUS_FACTORY_BUILD
 	if(pwr_test_enable==1){
