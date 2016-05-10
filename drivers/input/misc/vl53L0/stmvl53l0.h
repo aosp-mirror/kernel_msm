@@ -172,6 +172,10 @@ struct stmvl53l0_data {
     struct device *laser_dev;
     bool laser_power;
     FixPoint1616_t cali_distance;
+    uint32_t refSpadCount;
+    uint8_t isApertureSpads;
+    uint8_t VhvSettings;
+    uint8_t PhaseCal;
     int offset_kvalue;
     FixPoint1616_t xtalk_kvalue;
     u8 cali_status;

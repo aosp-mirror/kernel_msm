@@ -38,39 +38,42 @@ extern "C" {
 #endif
 
 VL53L0_Error VL53L0_perform_xtalk_calibration(VL53L0_DEV Dev,
-		FixPoint1616_t XTalkCalDistance,
-		FixPoint1616_t *pXTalkCompensationRateMegaCps);
+        FixPoint1616_t XTalkCalDistance,
+        FixPoint1616_t *pXTalkCompensationRateMegaCps);
 
 VL53L0_Error VL53L0_perform_offset_calibration(VL53L0_DEV Dev,
-		FixPoint1616_t CalDistanceMilliMeter,
-		int32_t *pOffsetMicroMeter);
+        FixPoint1616_t CalDistanceMilliMeter,
+        int32_t *pOffsetMicroMeter);
 
 VL53L0_Error VL53L0_set_offset_calibration_data_micro_meter(VL53L0_DEV Dev,
-		int32_t OffsetCalibrationDataMicroMeter);
+        int32_t OffsetCalibrationDataMicroMeter);
 
 VL53L0_Error VL53L0_get_offset_calibration_data_micro_meter(VL53L0_DEV Dev,
-		int32_t *pOffsetCalibrationDataMicroMeter);
+        int32_t *pOffsetCalibrationDataMicroMeter);
 
 VL53L0_Error VL53L0_apply_offset_adjustment(VL53L0_DEV Dev);
 
 VL53L0_Error VL53L0_perform_ref_spad_management(VL53L0_DEV Dev,
-		uint32_t *refSpadCount, uint8_t *isApertureSpads);
+        uint32_t *refSpadCount, uint8_t *isApertureSpads);
 
 VL53L0_Error VL53L0_set_reference_spads(VL53L0_DEV Dev,
-		uint32_t count, uint8_t isApertureSpads);
+        uint32_t count, uint8_t isApertureSpads);
 
 VL53L0_Error VL53L0_get_reference_spads(VL53L0_DEV Dev,
-		uint32_t *pSpadCount, uint8_t *pIsApertureSpads);
+        uint32_t *pSpadCount, uint8_t *pIsApertureSpads);
 
+VL53L0_Error VL53L0_perform_phase_calibration(VL53L0_DEV Dev,
+        uint8_t *pPhaseCal, const uint8_t get_data_enable,
+        const uint8_t restore_config);
 
 VL53L0_Error VL53L0_perform_ref_calibration(VL53L0_DEV Dev,
-	uint8_t *pVhvSettings, uint8_t *pPhaseCal, uint8_t get_data_enable);
+        uint8_t *pVhvSettings, uint8_t *pPhaseCal, uint8_t get_data_enable);
 
 VL53L0_Error VL53L0_set_ref_calibration(VL53L0_DEV Dev,
-		uint8_t VhvSettings, uint8_t PhaseCal);
+        uint8_t VhvSettings, uint8_t PhaseCal);
 
 VL53L0_Error VL53L0_get_ref_calibration(VL53L0_DEV Dev,
-		uint8_t *pVhvSettings, uint8_t *pPhaseCal);
+        uint8_t *pVhvSettings, uint8_t *pPhaseCal);
 
 
 
