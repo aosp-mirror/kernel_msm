@@ -677,6 +677,35 @@ int mdss_dsi_long_read_resp(struct dsi_buf *rp)
 	return rp->len;
 }
 
+static char set_3bit_on[2] = {0x39, 0x00};
+static struct dsi_cmd_desc dsi_3bit_on_cmd = {
+    {DTYPE_DCS_WRITE, 1, 0, 0, 0, sizeof(set_3bit_on)}, set_3bit_on};
+static char set_3bit_off[2] = {0x38, 0x00};
+static struct dsi_cmd_desc dsi_3bit_off_cmd = {
+    {DTYPE_DCS_WRITE, 1, 0, 0, 0, sizeof(set_3bit_off)}, set_3bit_off};
+
+void mdss_dsi_3bit_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
+{
+    struct dcs_cmd_req cmdreq;
+    struct mdss_panel_info *pinfo;
+
+    pinfo = &(ctrl->panel_data.panel_info);
+    if (pinfo->dcs_cmd_by_left && ctrl->ndx != DSI_CTRL_LEFT)
+        return;
+
+    if (enable)
+        cmdreq.cmds = &dsi_3bit_on_cmd;
+    else
+        cmdreq.cmds = &dsi_3bit_off_cmd;
+
+    cmdreq.cmds_cnt = 1;
+    cmdreq.flags = CMD_REQ_COMMIT;
+    cmdreq.rlen = 0;
+    cmdreq.cb = NULL;
+
+    mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+}
+
 static char set_tear_on[2] = {0x35, 0x00};
 static struct dsi_cmd_desc dsi_tear_on_cmd = {
 	{DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_tear_on)}, set_tear_on};

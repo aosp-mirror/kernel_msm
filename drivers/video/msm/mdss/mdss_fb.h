@@ -275,6 +275,7 @@ struct msm_fb_data_type {
 	int idle_time;
 	u32 idle_state;
 	struct delayed_work idle_notify_work;
+	struct delayed_work delay_3bit_work;
 
 	bool atomic_commit_pending;
 
