@@ -168,7 +168,9 @@
 	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on>;
 	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off>;
 
-	qcom,bus-speed-mode = "HS200_1p8v", "DDR_1p8v";
+	/* TODO: we need a fine tune for eMMC
+	   qcom,bus-speed-mode = "HS200_1p8v", "DDR_1p8v"; */
+	qcom,bus-speed-mode = "DDR_1p8v";
 	qcom,nonremovable;
 
 	status = "ok";
