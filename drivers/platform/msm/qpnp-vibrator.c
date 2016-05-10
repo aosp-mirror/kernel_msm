@@ -169,6 +169,7 @@ static int qpnp_vib_set(struct qpnp_vib *vib, int on)
 			if (rc < 0)
 				return rc;
 			vib->reg_en_ctl = val;
+			printk("[VIBRATOR] turn off\n");
 		}
 	}
 
@@ -192,6 +193,7 @@ static void qpnp_vib_enable(struct timed_output_dev *dev, int value)
 		hrtimer_start(&vib->vib_timer,
 			      ktime_set(value / 1000, (value % 1000) * 1000000),
 			      HRTIMER_MODE_REL);
+		printk("[VIBRATOR] turn on %d ms\n",value);
 	}
 	mutex_unlock(&vib->lock);
 	schedule_work(&vib->work);
