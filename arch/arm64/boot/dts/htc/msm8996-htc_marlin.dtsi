@@ -170,10 +170,10 @@
 
 &pmi8994_haptics {
 	status = "okay";
-	qcom,wave-play-rate-us = <4878>;
+	qcom,wave-play-rate-us = <5000>;
 	qcom,actuator-type = "lra";
 	qcom,wave-shape = "sine";
-	qcom,vmax-mv = <2828>;
+	qcom,vmax-mv = <3596>;
 };
 
 &pm8994_gpios {	/* COVER_INT1 & COVER_INT2 */
