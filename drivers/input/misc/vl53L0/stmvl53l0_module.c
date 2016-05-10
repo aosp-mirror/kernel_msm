@@ -48,6 +48,7 @@
 
 #define HTC_MODIFY
 #define HTC
+
 #ifdef HTC
 #define OFFSET_CALI_TARGET_DISTANCE	     100 // Target: 100 mm
 #define RANGE_MEASUREMENT_TIMES		     10
@@ -76,8 +77,11 @@ static int g_offsetMicroMeter = 0;
 static uint8_t g_VhvSettings = 0;
 static uint8_t g_PhaseCal = 0;
 static FixPoint1616_t g_XTalkCompensationRateMegaCps = 0;
+#ifdef USE_LONG_RANGING
+static unsigned long g_ranging_mode = 1;
+#endif // USE_LONG_RANGING
 struct timeval start_tv, stop_tv;
-#endif
+#endif //HTC
 
 /*
  * Global data
@@ -1281,6 +1285,33 @@ static ssize_t laser_xtalk_calibrate_show(struct device *dev,
     }
 }
 
+#ifdef USE_LONG_RANGING
+static ssize_t laser_ranging_mode_store(struct device *dev,
+                       struct device_attribute *attr,
+                       const char *buf, size_t count)
+{
+    int err = 0;
+    struct stmvl53l0_data *data = dev_get_drvdata(dev);
+
+    err = kstrtoul(buf, 10, &g_ranging_mode);
+    if (data->enable_ps_sensor) {
+        mutex_lock(&data->work_mutex);
+        stmvl53l0_stop(data);
+        stmvl53l0_start(data, 3, NORMAL_MODE);
+        mutex_unlock(&data->work_mutex);
+    }
+
+    return count;
+}
+
+static ssize_t laser_ranging_mode_show(struct device *dev,
+                      struct device_attribute *attr, char *buf)
+{
+    return scnprintf(buf, PAGE_SIZE, "Ranging mode = %s\n", g_ranging_mode ?
+                                            "Long ranging":"Normal Ranging");
+}
+#endif // USE_LONG_RANGING
+
 static ssize_t laser_cali_status_show(struct device *dev,
         struct device_attribute *attr, char *buf)
 {
@@ -1466,14 +1497,17 @@ static struct device_attribute attributes[] = {
     __ATTR(laser_offset_calibrate, 0440, laser_offset_calibrate_show, NULL),
     __ATTR(laser_xtalk_calibrate, 0660, laser_xtalk_calibrate_show, laser_xtalk_calibrate_store),
     __ATTR(laser_cali_status, 0440, laser_cali_status_show, NULL),
+#ifdef USE_LONG_RANGING
+    __ATTR(laser_ranging_mode, 0660, laser_ranging_mode_show, laser_ranging_mode_store),
+#endif // USE_LONG_RANGING
 #ifdef HTC_MODIFY
     __ATTR(enable_ps_sensor, 0664, stmvl53l0_show_enable_ps_sensor, stmvl53l0_store_enable_ps_sensor),
     __ATTR(enable_debug, 0660, stmvl53l0_show_enable_debug, stmvl53l0_store_enable_debug),
     __ATTR(enable_timing_debug, 0660, stmvl53l0_show_enable_timing_debug, stmvl53l0_store_enable_timing_debug),
     __ATTR(set_delay_ms, 0660, stmvl53l0_show_set_delay_ms, stmvl53l0_store_set_delay_ms),
-#endif
+#endif // HTC_MODIFY
 };
-#endif
+#endif // HTC
 
 /*
  * misc device file operation functions
@@ -2014,6 +2048,21 @@ static int stmvl53l0_init_client(struct stmvl53l0_data *data)
         Status = papi_func_tbl->StaticInit(vl53l0_dev);
     }
 
+#ifdef USE_LONG_RANGING
+    if(g_ranging_mode) {
+        /* Long ranging */
+        if (Status == VL53L0_ERROR_NONE) {
+            Status = papi_func_tbl->SetVcselPulsePeriod(vl53l0_dev,
+                    VL53L0_VCSEL_PERIOD_PRE_RANGE, 18);
+        }
+        if (Status == VL53L0_ERROR_NONE) {
+            Status = papi_func_tbl->SetVcselPulsePeriod(vl53l0_dev,
+                    VL53L0_VCSEL_PERIOD_FINAL_RANGE, 14);
+        }
+        vl53l0_dbgmsg("Set long ranging mode pt.1\n");
+    }
+#endif
+
     /* Ref SPAD calibration */
     if (Status == VL53L0_ERROR_NONE && data->reset) {
         if(data->refSpadCount == 0 && data->isApertureSpads == 0) {
@@ -2109,28 +2158,60 @@ static int stmvl53l0_init_client(struct stmvl53l0_data *data)
                 VL53L0_DEVICEMODE_SINGLE_RANGING);
     }
 
-    if (Status == VL53L0_ERROR_NONE) {
-        Status = papi_func_tbl->GetLimitCheckValue(vl53l0_dev,
-                VL53L0_CHECKENABLE_SIGMA_FINAL_RANGE,
-                &LimitValue);
+#ifdef USE_LONG_RANGING
+    if(g_ranging_mode) {
+        /* Long ranging */
+        if (Status == VL53L0_ERROR_NONE) {
+            Status = papi_func_tbl->SetLimitCheckEnable(vl53l0_dev,
+                    VL53L0_CHECKENABLE_SIGMA_FINAL_RANGE, 1);
+        }
+        if (Status == VL53L0_ERROR_NONE) {
+            Status = papi_func_tbl->SetLimitCheckEnable(vl53l0_dev,
+                    VL53L0_CHECKENABLE_SIGNAL_RATE_FINAL_RANGE, 1);
+        }
+        if (Status == VL53L0_ERROR_NONE) {
+            Status = papi_func_tbl->SetLimitCheckValue(vl53l0_dev,
+                    VL53L0_CHECKENABLE_SIGNAL_RATE_FINAL_RANGE,
+                    (10 * 65536 / 100));
+        }
+        if (Status == VL53L0_ERROR_NONE) {
+            Status = papi_func_tbl->SetLimitCheckValue(vl53l0_dev,
+                    VL53L0_CHECKENABLE_SIGMA_FINAL_RANGE,(60<<16));
+        }
+        if (Status == VL53L0_ERROR_NONE) {
+            Status = papi_func_tbl->SetMeasurementTimingBudgetMicroSeconds(
+                    vl53l0_dev, 33000);
+        }
+        vl53l0_dbgmsg("Set long ranging mode\n");
+    } else {
+#endif // USE_LONG_RANGING
+        /* Normal ranging */
+        if (Status == VL53L0_ERROR_NONE) {
+            Status = papi_func_tbl->GetLimitCheckValue(vl53l0_dev,
+                    VL53L0_CHECKENABLE_SIGMA_FINAL_RANGE,
+                    &LimitValue);
 
-        Status = papi_func_tbl->GetLimitCheckEnable(vl53l0_dev,
-                VL53L0_CHECKENABLE_SIGMA_FINAL_RANGE,
-                &LimitEnable);
+            Status = papi_func_tbl->GetLimitCheckEnable(vl53l0_dev,
+                    VL53L0_CHECKENABLE_SIGMA_FINAL_RANGE,
+                    &LimitEnable);
 
-        vl53l0_dbgmsg("Get LimitCheckValue SIGMA_FINAL_RANGE as:%d,"
-                "Enable:%d\n", (LimitValue>>16), LimitEnable);
+            vl53l0_dbgmsg("Get LimitCheckValue SIGMA_FINAL_RANGE as:%d,"
+                    "Enable:%d\n", (LimitValue>>16), LimitEnable);
+        }
+        if (Status == VL53L0_ERROR_NONE) {
+            Status = papi_func_tbl->GetLimitCheckValue(vl53l0_dev,
+                    VL53L0_CHECKENABLE_SIGNAL_RATE_FINAL_RANGE,
+                    &LimitValue);
+            Status = papi_func_tbl->GetLimitCheckEnable(vl53l0_dev,
+                    VL53L0_CHECKENABLE_SIGNAL_RATE_FINAL_RANGE,
+                    &LimitEnable);
+            vl53l0_dbgmsg("Get LimitCheckValue SIGNAL_FINAL_RANGE as:%d"
+                    "(Fix1616),Eanble:%d\n", (LimitValue), LimitEnable);
+        }
+        vl53l0_dbgmsg("Set normal ranging mode pt.2\n");
+#ifdef USE_LONG_RANGING
     }
-    if (Status == VL53L0_ERROR_NONE) {
-        Status = papi_func_tbl->GetLimitCheckValue(vl53l0_dev,
-                VL53L0_CHECKENABLE_SIGNAL_RATE_FINAL_RANGE,
-                &LimitValue);
-        Status = papi_func_tbl->GetLimitCheckEnable(vl53l0_dev,
-                VL53L0_CHECKENABLE_SIGNAL_RATE_FINAL_RANGE,
-                &LimitEnable);
-        vl53l0_dbgmsg("Get LimitCheckValue SIGNAL_FINAL_RANGE as:%d"
-                "(Fix1616),Eanble:%d\n", (LimitValue), LimitEnable);
-    }
+#endif // USE_LONG_RANGING
 
     if (Status == VL53L0_ERROR_NONE) {
         Status = papi_func_tbl->GetLimitCheckValue(vl53l0_dev,
