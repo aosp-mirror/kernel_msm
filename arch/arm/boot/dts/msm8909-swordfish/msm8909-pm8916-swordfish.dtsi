@@ -102,8 +102,12 @@
 	};
 
 	gpio@c300 { /* GPIO 4 */
-		/* External regulator control for APC */
-		status = "disabled";
+		/* alternative sleep_clk for sensor hub */
+		qcom,mode = <1>;    /* QPNP_PIN_MODE_DIG_OUT */
+		qcom,pull = <5>;    /* QPNP_PIN_GPIO_PULL_NO */
+		qcom,vin-sel = <3>; /* QPNP_PIN_VIN3(VREG_L5)*/
+		qcom,src-sel = <2>; /* SPECIAL_FUNC_1(0x4) */
+		qcom,master-en = <1>;
 	};
 };
 
