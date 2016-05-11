@@ -378,7 +378,11 @@ spidev_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 		}
 		else
 		{
-			wait_for_completion(&spidev->read_compl);
+			if (wait_for_completion_interruptible(&spidev->read_compl) < 0)
+			{
+				pr_info("spidev_read interuptible\n");
+				return -ERESTARTSYS;
+			}
 		}
 
 		mutex_lock(&spidev->buf_list_lock);
