@@ -126,17 +126,9 @@ static void send_reset(struct sk_buff *oldskb, int hook)
 	kfree_skb(nskb);
 }
 
-static inline void send_unreach(struct sk_buff *skb_in, int code)
+static inline void send_unreach(struct sk_buff *skb_in, int code, int hook)
 {
 	icmp_send(skb_in, ICMP_DEST_UNREACH, code, 0);
-#ifdef CONFIG_IP_NF_TARGET_REJECT_SKERR
-	if (skb_in->sk) {
-		skb_in->sk->sk_err = icmp_err_convert[code].errno;
-		skb_in->sk->sk_error_report(skb_in->sk);
-		pr_debug("ipt_REJECT: sk_err=%d for skb=%p sk=%p\n",
-			skb_in->sk->sk_err, skb_in, skb_in->sk);
-	}
-#endif
 }
 
 static unsigned int
@@ -146,25 +138,25 @@ reject_tg(struct sk_buff *skb, const struct xt_action_param *par)
 
 	switch (reject->with) {
 	case IPT_ICMP_NET_UNREACHABLE:
-		send_unreach(skb, ICMP_NET_UNREACH);
+		send_unreach(skb, ICMP_NET_UNREACH, par->hooknum);
 		break;
 	case IPT_ICMP_HOST_UNREACHABLE:
-		send_unreach(skb, ICMP_HOST_UNREACH);
+		send_unreach(skb, ICMP_HOST_UNREACH, par->hooknum);
 		break;
 	case IPT_ICMP_PROT_UNREACHABLE:
-		send_unreach(skb, ICMP_PROT_UNREACH);
+		send_unreach(skb, ICMP_PROT_UNREACH, par->hooknum);
 		break;
 	case IPT_ICMP_PORT_UNREACHABLE:
-		send_unreach(skb, ICMP_PORT_UNREACH);
+		send_unreach(skb, ICMP_PORT_UNREACH, par->hooknum);
 		break;
 	case IPT_ICMP_NET_PROHIBITED:
-		send_unreach(skb, ICMP_NET_ANO);
+		send_unreach(skb, ICMP_NET_ANO, par->hooknum);
 		break;
 	case IPT_ICMP_HOST_PROHIBITED:
-		send_unreach(skb, ICMP_HOST_ANO);
+		send_unreach(skb, ICMP_HOST_ANO, par->hooknum);
 		break;
 	case IPT_ICMP_ADMIN_PROHIBITED:
-		send_unreach(skb, ICMP_PKT_FILTERED);
+		send_unreach(skb, ICMP_PKT_FILTERED, par->hooknum);
 		break;
 	case IPT_TCP_RESET:
 		send_reset(skb, par->hooknum);
