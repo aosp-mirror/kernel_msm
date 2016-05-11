@@ -441,3 +441,4 @@ CONFIG_BCMDHD=y
 #TODO: We will move to nitrous driver once bluetooth is stable
 CONFIG_RFKILL=y
 CONFIG_IDTP9220_RECEIVER=y
+CONFIG_BRCM_BT_SLEEP=y
