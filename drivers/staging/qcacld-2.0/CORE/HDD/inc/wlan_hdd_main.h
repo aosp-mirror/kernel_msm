@@ -2087,9 +2087,9 @@ wlan_hdd_clean_tx_flow_control_timer(hdd_context_t *hddctx,
 #endif
 
 void hdd_connect_result(struct net_device *dev, const u8 *bssid,
-			const u8 *req_ie, size_t req_ie_len,
-			const u8 * resp_ie, size_t resp_ie_len,
-			u16 status, gfp_t gfp);
+			tCsrRoamInfo *roam_info, const u8 *req_ie,
+			size_t req_ie_len, const u8 * resp_ie,
+			size_t resp_ie_len, u16 status, gfp_t gfp);
 
 int wlan_hdd_init_tx_rx_histogram(hdd_context_t *pHddCtx);
 void wlan_hdd_deinit_tx_rx_histogram(hdd_context_t *pHddCtx);
@@ -2122,4 +2122,6 @@ int hdd_enable_disable_ca_event(hdd_context_t *hddctx,
 				tANI_U8 set_value);
 void hdd_decide_dynamic_chain_mask(hdd_context_t *hdd_ctx,
 				enum antenna_mode forced);
+int hdd_reassoc(hdd_adapter_t *pAdapter, const tANI_U8 *bssid,
+		const tANI_U8 channel, const handoff_src src);
 #endif    // end #if !defined( WLAN_HDD_MAIN_H )

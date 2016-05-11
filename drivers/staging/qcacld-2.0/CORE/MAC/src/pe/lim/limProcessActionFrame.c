@@ -2188,6 +2188,11 @@ limProcessActionFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession ps
 
     switch (pActionHdr->category)
     {
+        /*
+         * WARNING: If you add Action frame category case here, set the
+         * corresponding bit to 1 in sme_set_allowed_action_frames() for
+         * the FW to hand over that frame to host without dropping itself
+         */
         case SIR_MAC_ACTION_QOS_MGMT:
             if ( (psessionEntry->limQosEnabled) ||
                   (pActionHdr->actionID == SIR_MAC_QOS_MAP_CONFIGURE) )

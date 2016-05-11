@@ -541,6 +541,7 @@ typedef enum
     eCSR_ROAM_EXT_CHG_CHNL_IND,
 
     eCSR_ROAM_NDP_STATUS_UPDATE,
+    eCSR_ROAM_UPDATE_SCAN_RESULT,
 }eRoamCmdStatus;
 
 
@@ -1646,12 +1647,6 @@ typedef void * tScanResultHandle;
 #define CSR_INVALID_SCANRESULT_HANDLE       (NULL)
 
 #ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
-typedef enum
-{
-    REASSOC     = 0,
-    FASTREASSOC = 1
-}handoff_src;
-
 typedef struct tagCsrHandoffRequest
 {
     tCsrBssid bssid;
@@ -1659,6 +1654,13 @@ typedef struct tagCsrHandoffRequest
     tANI_U8 src;     /* To check if its a REASSOC or a FASTREASSOC IOCTL */
 }tCsrHandoffRequest;
 #endif
+
+typedef enum
+{
+    REASSOC     = 0,
+    FASTREASSOC = 1,
+    CONNECT_CMD_USERSPACE = 2,
+}handoff_src;
 
 #if defined(FEATURE_WLAN_ESE) && defined(FEATURE_WLAN_ESE_UPLOAD)
 typedef struct tagCsrEseBeaconReqParams

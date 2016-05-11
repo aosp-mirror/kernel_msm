@@ -1959,4 +1959,6 @@ void wlan_hdd_clear_link_layer_stats(hdd_adapter_t *adapter);
 static inline void wlan_hdd_clear_link_layer_stats(hdd_adapter_t *adapter) {}
 #endif
 
+struct cfg80211_bss *wlan_hdd_cfg80211_inform_bss_frame(hdd_adapter_t *pAdapter,
+		tSirBssDescription *bss_desc);
 #endif

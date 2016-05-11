@@ -2234,6 +2234,76 @@ eHalStatus sme_HDDReadyInd(tHalHandle hHal)
    return status;
 }
 
+/**
+ * sme_set_allowed_action_frames() - Set allowed action frames to wma
+ * @hal: Handler to HAL
+ *
+ * This function conveys the list of action frames that needs to be forwarded
+ * to driver by FW. Rest of the action frames can be dropped in FW. Bitmask is
+ * set with ALLOWED_ACTION_FRAMES_BITMAP0~7
+ *
+ * Return: None
+ */
+static void sme_set_allowed_action_frames(tHalHandle hal)
+{
+	eHalStatus status;
+	tpAniSirGlobal mac = PMAC_STRUCT(hal);
+	vos_msg_t message;
+	VOS_STATUS vos_status;
+	struct sir_allowed_action_frames *sir_allowed_action_frames;
+
+	sir_allowed_action_frames =
+			vos_mem_malloc(sizeof(*sir_allowed_action_frames));
+	if (!sir_allowed_action_frames) {
+		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+			"Not able to allocate memory for WDA_SET_ALLOWED_ACTION_FRAMES_IND");
+		return;
+	}
+
+	vos_mem_zero(sir_allowed_action_frames,
+			sizeof(*sir_allowed_action_frames));
+	sir_allowed_action_frames->operation = WOW_ACTION_WAKEUP_OPERATION_SET;
+
+	sir_allowed_action_frames->action_category_map[0] =
+				(ALLOWED_ACTION_FRAMES_BITMAP0);
+	sir_allowed_action_frames->action_category_map[1] =
+				(ALLOWED_ACTION_FRAMES_BITMAP1);
+	sir_allowed_action_frames->action_category_map[2] =
+				(ALLOWED_ACTION_FRAMES_BITMAP2);
+	sir_allowed_action_frames->action_category_map[3] =
+				(ALLOWED_ACTION_FRAMES_BITMAP3);
+	sir_allowed_action_frames->action_category_map[4] =
+				(ALLOWED_ACTION_FRAMES_BITMAP4);
+	sir_allowed_action_frames->action_category_map[5] =
+				(ALLOWED_ACTION_FRAMES_BITMAP5);
+	sir_allowed_action_frames->action_category_map[6] =
+				(ALLOWED_ACTION_FRAMES_BITMAP6);
+	sir_allowed_action_frames->action_category_map[7] =
+				(ALLOWED_ACTION_FRAMES_BITMAP7);
+
+	status = sme_AcquireGlobalLock(&mac->sme);
+	if (status == eHAL_STATUS_SUCCESS) {
+		/* serialize the req through MC thread */
+		message.bodyptr = sir_allowed_action_frames;
+		message.type = SIR_HAL_SET_ALLOWED_ACTION_FRAMES;
+
+		vos_status = vos_mq_post_message(VOS_MQ_ID_WDA, &message);
+		if (!VOS_IS_STATUS_SUCCESS(vos_status)) {
+			VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+				"Not able to post SIR_HAL_SET_ALLOWED_ACTION_FRAMES message to HAL");
+			vos_mem_free(sir_allowed_action_frames);
+		}
+
+		sme_ReleaseGlobalLock( &mac->sme );
+	} else {
+		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: "
+			"sme_AcquireGlobalLock error", __func__);
+		vos_mem_free(sir_allowed_action_frames);
+	}
+
+	return;
+}
+
 /*--------------------------------------------------------------------------
 
   \brief sme_Start() - Put all SME modules at ready state.
@@ -2295,6 +2365,8 @@ eHalStatus sme_Start(tHalHandle hHal)
 
       pMac->sme.state = SME_STATE_START;
    }while (0);
+
+   sme_set_allowed_action_frames(hHal);
 
    return status;
 }
@@ -12829,7 +12901,6 @@ void sme_set_pdev_ht_vht_ies(tHalHandle hal, bool enable2x2)
 		if (eHAL_STATUS_SUCCESS != status) {
 			smsLog(mac_ctx, LOGE, FL(
 				"SME_PDEV_SET_HT_VHT_IE msg to PE failed"));
-			vos_mem_free(ht_vht_cfg);
 		}
 		sme_ReleaseGlobalLock(&mac_ctx->sme);
 	}
@@ -14605,8 +14676,13 @@ eHalStatus sme_set_miracast(tHalHandle hal, uint8_t filter_type)
 	uint32_t *val;
 	tpAniSirGlobal mac_ptr = PMAC_STRUCT(hal);
 
+	if (NULL == mac_ptr) {
+		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+				"%s: Invalid MAC pointer", __func__);
+		return eHAL_STATUS_FAILURE;
+	}
 	val = vos_mem_malloc(sizeof(*val));
-	if (NULL == val || NULL == mac_ptr) {
+	if (NULL == val) {
 		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
 				"%s: Invalid pointer", __func__);
 		return eHAL_STATUS_E_MALLOC_FAILED;
@@ -14621,8 +14697,8 @@ eHalStatus sme_set_miracast(tHalHandle hal, uint8_t filter_type)
 	if (!VOS_IS_STATUS_SUCCESS(
 				vos_mq_post_message(VOS_MODULE_ID_WDA, &msg))) {
 		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
-				"%s: Not able to post WDA_SET_MAS_ENABLE_DISABLE to WMA!",
-				__func__);
+			"%s: Not able to post SIR_HAL_SET_MIRACAST to WMA!",
+			__func__);
 		vos_mem_free(val);
 		return eHAL_STATUS_FAILURE;
 	}

@@ -469,6 +469,7 @@ static eHalStatus sme_RrmSendScanResult( tpAniSirGlobal pMac,
    tANI_U8 counter=0;
    tpRrmSMEContext pSmeRrmContext = &pMac->rrm.rrmSmeContext;
    tANI_U32 sessionId;
+   tCsrRoamInfo *roam_info;
 
 #if defined WLAN_VOWIFI_DEBUG
    smsLog( pMac, LOGE, "Send scan result to PE ");
@@ -595,6 +596,17 @@ static eHalStatus sme_RrmSendScanResult( tpAniSirGlobal pMac,
              pScanResult->timer, RRM_scan_timer);
       if(pScanResult->timer >= RRM_scan_timer)
       {
+          roam_info = vos_mem_malloc(sizeof(*roam_info));
+          if (NULL == roam_info) {
+              smsLog( pMac, LOGP, FL("vos_mem_malloc failed:") );
+              status =  eHAL_STATUS_FAILED_ALLOC;
+              goto rrm_send_scan_results_done;
+          }
+          vos_mem_zero(roam_info, sizeof(*roam_info));
+          roam_info->pBssDesc = &pScanResult->BssDescriptor;
+          csrRoamCallCallback(pMac, sessionId, roam_info, 0,
+                           eCSR_ROAM_UPDATE_SCAN_RESULT, eCSR_ROAM_RESULT_NONE);
+          vos_mem_free(roam_info);
           pScanResultsArr[counter++] = pScanResult;
       }
       pScanResult = pNextResult; //sme_ScanResultGetNext(hHal, pResult);
@@ -625,6 +637,8 @@ static eHalStatus sme_RrmSendScanResult( tpAniSirGlobal pMac,
                                     pScanResultsArr,
                                     measurementDone, counter);
    }
+
+rrm_send_scan_results_done:
    sme_ScanResultPurge(pMac, pResult);
 
    return status;
@@ -718,6 +732,7 @@ eHalStatus sme_RrmIssueScanReq( tpAniSirGlobal pMac )
    tpRrmSMEContext pSmeRrmContext = &pMac->rrm.rrmSmeContext;
    tANI_U32 sessionId;
    tSirScanType scanType;
+   v_TIME_t current_time;
 
    status = csrRoamGetSessionIdFromBSSID( pMac, (tCsrBssid*)pSmeRrmContext->sessionBssId, &sessionId );
    if( status != eHAL_STATUS_SUCCESS )
@@ -776,6 +791,25 @@ eHalStatus sme_RrmIssueScanReq( tpAniSirGlobal pMac )
 
        smsLog( pMac, LOG1, "Scan Type(%d) Max Dwell Time(%d)", scanRequest.scanType,
                   scanRequest.maxChnTime );
+      /**
+       * For RRM scans timing is very important especially when the request
+       * is for limited channels. There is no need for firmware to rest for
+       * about 100-200 ms on the home channel. Instead, it can start the
+       * scan right away which will make the host to respond with the beacon
+       * report as quickly as possible. Ensure that the scan requests are
+       * not back to back and hence there is a check to see if the requests
+       * are atleast 1 second apart.
+       */
+       current_time = vos_timer_get_system_time();
+       smsLog(pMac, LOG1, "prev scan triggered before %ld ms, totalchannels %d",
+              current_time - RRM_scan_timer,
+              pSmeRrmContext->channelList.numOfChannels);
+       if ((abs(current_time - RRM_scan_timer) > 1000) &&
+               (pSmeRrmContext->channelList.numOfChannels == 1)) {
+            scanRequest.restTime = 1;
+            scanRequest.min_rest_time = 1;
+            scanRequest.idle_time = 1;
+       }
 
        RRM_scan_timer = vos_timer_get_system_time();
 

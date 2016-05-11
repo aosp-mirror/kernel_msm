@@ -7249,6 +7249,7 @@ VOS_STATUS WDA_open(v_VOID_t *vos_context, v_VOID_t *os_ctx,
 	wma_handle->frame_xln_reqd = mac_params->frameTransRequired;
 	wma_handle->driver_type = mac_params->driverType;
 	wma_handle->ssdp = mac_params->ssdp;
+	wma_handle->enable_mc_list = mac_params->enable_mc_list;
 	wma_handle->enable_bcst_ptrn = mac_params->enable_bcst_ptrn;
 #ifdef FEATURE_WLAN_RA_FILTERING
 	wma_handle->IsRArateLimitEnabled = mac_params->IsRArateLimitEnabled;
@@ -11920,8 +11921,21 @@ VOS_STATUS wma_process_dhcp_ind(tp_wma_handle wma_handle,
 	return VOS_STATUS_SUCCESS;
 }
 
-static WLAN_PHY_MODE wma_chan_to_mode(u8 chan, ePhyChanBondState chan_offset,
-                                      u8 vht_capable, u8 dot11_mode)
+/**
+ * wma_chan_to_mode() - calculate phy mode corresponding to channel
+ * @chan: channel
+ * @chan_offset: secondary channel offset
+ * @vht_capable: If vht capable
+ * @dot11_mode: dot11 mode
+ *
+ * calculate phy mode corresponding to channel, dot11 mode, vht capability
+ * and secondary channel offset.
+ *
+ * Return: WLAN_PHY_MODE
+ */
+
+WLAN_PHY_MODE wma_chan_to_mode(uint8_t chan, ePhyChanBondState chan_offset,
+	uint8_t vht_capable, uint8_t dot11_mode)
 {
 	WLAN_PHY_MODE phymode = MODE_UNKNOWN;
 
@@ -21763,14 +21777,110 @@ static VOS_STATUS wma_wow_sta_ra_filter(tp_wma_handle wma, u_int8_t vdev_id)
 }
 #endif /* FEATURE_WLAN_RA_FILTERING */
 
+/**
+ * wma_configure_wow_ssdp() - API to configure WoW SSDP
+ * @wma: WMA Handle
+ * @vdev_id: Vdev Id
+ *
+ * API to configure SSDP pattern as WoW pattern
+ *
+ * Return: Success/Failure
+ */
+static VOS_STATUS wma_configure_wow_ssdp(tp_wma_handle wma, uint8_t vdev_id)
+{
+	VOS_STATUS status = VOS_STATUS_SUCCESS;
+	static const uint8_t discvr_ptrn[] = { 0xe0, 0x00, 0x00, 0xf8 };
+	static const uint8_t discvr_mask[] = { 0xf0, 0x00, 0x00, 0xf8 };
+	static const uint8_t discvr_offset = 30;
+
+	status = wma_send_wow_patterns_to_fw(wma, vdev_id,
+					     wma->wow.free_ptrn_id[wma->
+					     wow.used_free_ptrn_id++],
+					     discvr_ptrn, sizeof(discvr_ptrn),
+					     discvr_offset, discvr_mask,
+					     sizeof(discvr_ptrn));
+	if (status != VOS_STATUS_SUCCESS)
+		WMA_LOGE("Failed to add WOW mDNS/SSDP/LLMNR pattern");
+
+	return status;
+}
+
+/**
+ * wma_configure_mc_ssdp() - API to configure SSDP address as MC list
+ * @wma: WMA Handle
+ * @vdev_id: Vdev Id
+ *
+ * SSDP address 239.255.255.250 is converted to Multicast Mac address
+ * and configure it to FW. Firmware will apply this pattern on the incoming
+ * packets to filter them out during chatter/wow mode.
+ *
+ * Return: Success/Failure
+ */
+static VOS_STATUS wma_configure_mc_ssdp(tp_wma_handle wma, uint8_t vdev_id)
+{
+	WMI_SET_MCASTBCAST_FILTER_CMD_fixed_param *cmd;
+	wmi_buf_t buf;
+	const tSirMacAddr ssdp_addr = {0x01, 0x00, 0x5e, 0x7f, 0xff, 0xfa};
+	int ret;
+	uint32_t tag =
+		WMITLV_TAG_STRUC_WMI_SET_MCASTBCAST_FILTER_CMD_fixed_param;
+
+	WMI_SET_MCASTBCAST_FILTER_CMD_fixed_param fixed_param;
+
+	buf = wmi_buf_alloc(wma->wmi_handle, sizeof(*cmd));
+	if (!buf) {
+		WMA_LOGE("%s No Memory for MC address", __func__);
+		return VOS_STATUS_E_NOMEM;
+	}
+
+	cmd = (WMI_SET_MCASTBCAST_FILTER_CMD_fixed_param *) wmi_buf_data(buf);
+
+	WMITLV_SET_HDR(&cmd->tlv_header, tag,
+		       WMITLV_GET_STRUCT_TLVLEN(fixed_param));
+
+	cmd->action = WMI_MCAST_FILTER_SET;
+	cmd->vdev_id = vdev_id;
+	WMI_CHAR_ARRAY_TO_MAC_ADDR(ssdp_addr, &cmd->mcastbdcastaddr);
+	ret = wmi_unified_cmd_send(wma->wmi_handle, buf, sizeof(*cmd),
+				   WMI_SET_MCASTBCAST_FILTER_CMDID);
+	if (ret != VOS_STATUS_SUCCESS) {
+		WMA_LOGE("%s Failed to configure FW with SSDP MC address",
+			 __func__);
+		wmi_buf_free(buf);
+		return VOS_STATUS_E_FAILURE;
+	}
+	return VOS_STATUS_SUCCESS;
+}
+
+/**
+ * wma_configure_ssdp() - API to Configure SSDP pattern to FW
+ * @wma: WMA Handle
+ * @vdev_id: Vdev Id
+ *
+ * Setup multicast pattern for mDNS 224.0.0.251,
+ * SSDP 239.255.255.250 and LLMNR 224.0.0.252
+ *
+ * Return: Success/Failure.
+ */
+static VOS_STATUS wma_configure_ssdp(tp_wma_handle wma, uint8_t vdev_id)
+{
+	if (!wma->ssdp) {
+		WMA_LOGD("mDNS, SSDP, LLMNR patterns are disabled from ini");
+		return VOS_STATUS_SUCCESS;
+	}
+
+	WMA_LOGD("%s, enable_mc_list:%d", __func__, wma->enable_mc_list);
+
+	if (wma->enable_mc_list)
+		return wma_configure_mc_ssdp(wma, vdev_id);
+	else
+		return wma_configure_wow_ssdp(wma, vdev_id);
+}
 
 /* Configures default WOW pattern for the given vdev_id which is in STA mode. */
 static VOS_STATUS wma_wow_sta(tp_wma_handle wma, u_int8_t vdev_id,
 			      u_int8_t *enable_ptrn_match, bool runtime_pm)
 {
-	static const u_int8_t discvr_ptrn[] = { 0xe0, 0x00, 0x00, 0xf8 };
-	static const u_int8_t discvr_mask[] = { 0xf0, 0x00, 0x00, 0xf8 };
-	static const u_int8_t discvr_offset = 30;
 	u_int8_t mac_mask[ETH_ALEN], free_slot;
 	VOS_STATUS ret = VOS_STATUS_SUCCESS;
 	static const u_int8_t arp_ptrn[] = { 0x08, 0x06 };
@@ -21807,31 +21917,18 @@ static VOS_STATUS wma_wow_sta(tp_wma_handle wma, u_int8_t vdev_id,
 		return ret;
 	}
 
-	/*
-	 * Setup multicast pattern for mDNS 224.0.0.251,
-	 * SSDP 239.255.255.250 and LLMNR 224.0.0.252
-	 */
-	if (wma->ssdp) {
-		ret = wma_send_wow_patterns_to_fw(wma, vdev_id,
-				wma->wow.free_ptrn_id[wma->wow.used_free_ptrn_id++],
-				discvr_ptrn, sizeof(discvr_ptrn), discvr_offset,
-				discvr_mask, sizeof(discvr_ptrn));
-		if (ret != VOS_STATUS_SUCCESS) {
-			WMA_LOGE("Failed to add WOW mDNS/SSDP/LLMNR pattern");
-			return ret;
-		}
-	}
-	else
-		WMA_LOGD("mDNS, SSDP, LLMNR patterns are disabled from ini");
-
 	if (runtime_pm && wma->enable_bcst_ptrn) {
 		ret = wma_send_wow_patterns_to_fw(wma, vdev_id,
 			wma->wow.free_ptrn_id[wma->wow.used_free_ptrn_id++],
 			bcst_ptrn, sizeof(bcst_ptrn), bcst_offset,
 			bcst_mask, sizeof(bcst_mask));
 		if (ret != VOS_STATUS_SUCCESS)
-			WMA_LOGE("Failed to add BCAST wakeup pattern\n");
+			WMA_LOGE("Failed to add BCAST wakeup pattern");
 	}
+
+	ret = wma_configure_ssdp(wma, vdev_id);
+	if (ret != VOS_STATUS_SUCCESS)
+		WMA_LOGE("Failed to configure SSDP patterns to FW");
 
 	/* when arp offload or ns offloaded is disabled
 	 * from ini file, configure broad cast arp pattern
@@ -21999,6 +22096,61 @@ pdev_resume:
 		vos_runtime_pm_allow_suspend(wma->runtime_context.resume);
 
 	return ret;
+}
+
+/**
+ * wma_feed_allowed_action_frame_patterns() - config action frame map to fw
+ * @wma: wma handler
+ *
+ * This is called to push action frames wow patterns from local
+ * cache to firmware.
+ *
+ * Return: VOS_STATUS
+ */
+static VOS_STATUS wma_feed_allowed_action_frame_patterns(tp_wma_handle wma)
+{
+	WMI_WOW_SET_ACTION_WAKE_UP_CMD_fixed_param *cmd;
+	u_int16_t len;
+	wmi_buf_t buf;
+	int ret;
+	int i;
+
+	len = sizeof(WMI_WOW_SET_ACTION_WAKE_UP_CMD_fixed_param);
+	buf = wmi_buf_alloc(wma->wmi_handle, len);
+	if (!buf) {
+		WMA_LOGE("%s: Failed to allocate buf for wow action frame map",
+			__func__);
+		return VOS_STATUS_E_NOMEM;
+	}
+
+	cmd = (WMI_WOW_SET_ACTION_WAKE_UP_CMD_fixed_param *) wmi_buf_data(buf);
+	WMITLV_SET_HDR(&cmd->tlv_header,
+		       WMITLV_TAG_STRUC_wmi_wow_set_action_wake_up_cmd_fixed_param,
+		       WMITLV_GET_STRUCT_TLVLEN(
+				WMI_WOW_SET_ACTION_WAKE_UP_CMD_fixed_param));
+	cmd->vdev_id = 0;
+	cmd->operation = wma->allowed_action_frames.operation;
+
+	for (i = 0; i < MAX_SUPPORTED_ACTION_CATEGORY_ELE_LIST; i++) {
+		if (i < (SIR_MAC_ACTION_MAX / 32))
+			cmd->action_category_map[i] =
+			     wma->allowed_action_frames.action_category_map[i];
+		else
+			cmd->action_category_map[i] = 0;
+
+		WMA_LOGD("%s: %d action Wakeup pattern 0x%x in fw",
+			__func__, i, cmd->action_category_map[i]);
+	}
+
+	ret = wmi_unified_cmd_send(wma->wmi_handle, buf, len,
+				   WMI_WOW_SET_ACTION_WAKE_UP_CMDID);
+	if (ret) {
+		WMA_LOGE("Failed to config wow action frame map, ret %d", ret);
+		wmi_buf_free(buf);
+		return VOS_STATUS_E_FAILURE;
+	}
+
+	return VOS_STATUS_SUCCESS;
 }
 
 /*
@@ -22477,6 +22629,8 @@ suspend_all_iface:
 		}
 	}
 #endif
+
+	wma_feed_allowed_action_frame_patterns(wma);
 
 	ret = wma_feed_wow_config_to_fw(wma, pno_in_progress,
 				extscan_in_progress, pno_matched,
@@ -29267,6 +29421,37 @@ VOS_STATUS wma_set_tx_rx_aggregation_size
 	return VOS_STATUS_SUCCESS;
 }
 
+/**
+ * wma_process_set_allowed_action_frames_ind() - Set bitmap to wma cache
+ * @wma_handle: WMI handle
+ * @allowed_action_frames: sir_allowed_action_frames parameter
+ *
+ * This function is used to set the allowed action frames to wma cache,
+ * that will allow the fw to wake up the host about the expected action frame.
+ *
+ * Return: None
+ */
+void wma_process_set_allowed_action_frames_ind(tp_wma_handle wma_handle,
+		struct sir_allowed_action_frames *allowed_action_frames)
+{
+	uint32_t i;
+
+	wma_handle->allowed_action_frames.operation =
+			allowed_action_frames->operation;
+	WMA_LOGD("%s: action frames wow operation type = %d",
+			__func__, allowed_action_frames->operation);
+
+	for (i = 0; i < (SIR_MAC_ACTION_MAX / 32); i++) {
+		wma_handle->allowed_action_frames.action_category_map[i] =
+				allowed_action_frames->action_category_map[i];
+		WMA_LOGD("%s: action frames wow bitmap%d = 0x%x", __func__,
+			i, allowed_action_frames->action_category_map[i]);
+	}
+
+	return;
+}
+
+
 /*
  * function   : wma_mc_process_msg
  * Description :
@@ -30135,6 +30320,11 @@ VOS_STATUS wma_mc_process_msg(v_VOID_t *vos_context, vos_msg_t *msg)
 			break;
 		case SIR_HAL_NDP_RESPONDER_REQ:
 			wma_handle_ndp_responder_req(wma_handle, msg->bodyptr);
+			vos_mem_free(msg->bodyptr);
+			break;
+		case SIR_HAL_SET_ALLOWED_ACTION_FRAMES:
+			wma_process_set_allowed_action_frames_ind(wma_handle,
+								  msg->bodyptr);
 			vos_mem_free(msg->bodyptr);
 			break;
 		default:

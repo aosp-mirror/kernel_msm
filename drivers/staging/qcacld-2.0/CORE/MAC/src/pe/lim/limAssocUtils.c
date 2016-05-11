@@ -2574,6 +2574,7 @@ limAddSta(
        pPeerNode = limIbssPeerFind(pMac, *pStaAddr);
        if (!pPeerNode) {
              limLog( pMac, LOGP, FL("Can't find IBSS peer node for ADD_STA"));
+             vos_mem_free(pAddStaParams);
              return eSIR_HAL_STA_DOES_NOT_EXIST;
        }
 
@@ -3673,7 +3674,7 @@ tSirRetStatus limStaSendAddBss( tpAniSirGlobal pMac, tpSirAssocRsp pAssocRsp,
 {
     tSirMsgQ msgQ;
     tpAddBssParams pAddBssParams = NULL;
-    tANI_U32 retCode;
+    tSirRetStatus retCode = eSIR_SUCCESS;
     tANI_U8 i;
     tpDphHashNode pStaDs = NULL;
     tANI_U8 chanWidthSupp = 0;
@@ -3891,7 +3892,8 @@ tSirRetStatus limStaSendAddBss( tpAniSirGlobal pMac, tpSirAssocRsp pAssocRsp,
             PELOGE(limLog(pMac, LOGE, FL("Couldn't get assoc id for "
                        "MAC ADDR: " MAC_ADDRESS_STR),
                        MAC_ADDR_ARRAY(pAddBssParams->staContext.staMac));)
-            return eSIR_FAILURE;
+            retCode = eSIR_FAILURE;
+            goto returnFailure;
         }
 
         if(!pMac->psOffloadEnabled)
@@ -4201,7 +4203,6 @@ tSirRetStatus limStaSendAddBss( tpAniSirGlobal pMac, tpSirAssocRsp pAssocRsp,
     if( eSIR_SUCCESS != retCode)
     {
         SET_LIM_PROCESS_DEFD_MESGS(pMac, true);
-        vos_mem_free(pAddBssParams);
         limLog( pMac, LOGE, FL("Posting ADD_BSS_REQ to HAL failed, reason=%X"),
                 retCode );
         goto returnFailure;
@@ -4211,6 +4212,8 @@ tSirRetStatus limStaSendAddBss( tpAniSirGlobal pMac, tpSirAssocRsp pAssocRsp,
         return retCode;
 
  returnFailure:
+    if (pAddBssParams != NULL)
+        vos_mem_free(pAddBssParams);
     // Clean-up will be done by the caller...
     return retCode;
 }
