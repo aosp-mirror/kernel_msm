@@ -872,7 +872,7 @@ static int i_update_FW(bool manual)
     }
 
     if (!manual) {
-        if ( (NEW_FW_MIN <= FW_MIN) || ( (NEW_FW_MIN == FW_MIN) && (NEW_CFG_VER <= CFG_VER) )) {
+        if ( (NEW_FW_MIN < FW_MIN) || ( (NEW_FW_MIN == FW_MIN) && (NEW_CFG_VER <= CFG_VER) )) {
             if ( himax_calculateChecksum(false) == 0 ) {
                 I("IC Checksum fail, update to new FW.");
                 need_update_flag = true;
