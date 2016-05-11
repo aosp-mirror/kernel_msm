@@ -1433,6 +1433,7 @@ kgsl_iommu_map(struct kgsl_pagetable *pt,
 	uint64_t addr = memdesc->gpuaddr;
 	uint64_t size = memdesc->size;
 	unsigned int flags;
+	struct sg_table *sgt = NULL;
 
 	BUG_ON(NULL == pt->priv);
 
@@ -1445,13 +1446,33 @@ kgsl_iommu_map(struct kgsl_pagetable *pt,
 	if (memdesc->priv & KGSL_MEMDESC_PRIVILEGED)
 		flags |= IOMMU_PRIV;
 
+	/*
+	 * For paged memory allocated through kgsl, memdesc->pages is not NULL.
+	 * Allocate sgt here just for its map operation. Contiguous memory
+	 * already has its sgt, so no need to allocate it here.
+	 */
+	if (memdesc->pages != NULL) {
+		sgt = kgsl_alloc_sgt_from_pages(memdesc);
+		memdesc->sgt = sgt;
+	}
+
+	if (IS_ERR(sgt))
+		return PTR_ERR(sgt);
+
 	ret = _iommu_map_sg_sync_pc(pt, addr, memdesc, flags);
+
 	if (ret)
-		return ret;
+		goto done;
 
 	ret = _iommu_map_guard_page(pt, memdesc, addr + size, flags);
 	if (ret)
 		_iommu_unmap_sync_pc(pt, memdesc, addr, size);
+
+done:
+	if (memdesc->pages != NULL) {
+		kgsl_free_sgt(sgt);
+		memdesc->sgt = NULL;
+	}
 
 	return ret;
 }
