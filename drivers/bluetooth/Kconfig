@@ -262,4 +262,10 @@ config MSM_BT_POWER
 	  Provides a parameter to switch on/off power from PMIC
 	  to Bluetooth device.
 
+config BRCM_BT_SLEEP
+        tristate "Bluetooth low power driver"
+        depends on BT
+        help
+          Bluetooth low power test
+
 endmenu
