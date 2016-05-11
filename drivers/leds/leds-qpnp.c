@@ -188,6 +188,7 @@
 #define	PWM_LUT_MAX_SIZE		63
 #define	PWM_GPLED_LUT_MAX_SIZE		31
 #define RGB_LED_DISABLE			0x00
+#define RGB_LED_MAX_BRIGHTNESS	100
 #define RGB_LED_MIN_MS			50
 #define RGB_LED_MAX_MS			10000
 #define RGB_LED_RAMP_STEP_COUNT		5
@@ -509,6 +510,7 @@ struct rgb_config_data {
 	u8	enable;
 	u32	on_ms;
 	u32	off_ms;
+	u32	max_brightness;
 };
 
 /**
@@ -1739,6 +1741,7 @@ static int rgb_duration_config(struct qpnp_led_data *led)
 {
 	int rc = 0;
 	int i;
+	u32 max_brightness = led->rgb_cfg->max_brightness;
 	unsigned long on_ms = led->rgb_cfg->on_ms;
 	unsigned long off_ms = led->rgb_cfg->off_ms;
 	unsigned long ramp_step_ms, num_duty_pcts;
@@ -1763,13 +1766,15 @@ static int rgb_duration_config(struct qpnp_led_data *led)
 	if (!off_ms) {
 		num_duty_pcts = 1;
 		pwm_cfg->duty_cycles->duty_pcts[0] =
-			(100 * led->cdev.brightness) / RGB_MAX_LEVEL;
+			(max_brightness * led->cdev.brightness) / RGB_MAX_LEVEL;
+		if(pwm_cfg->duty_cycles->duty_pcts[0] == 0)
+			pwm_cfg->duty_cycles->duty_pcts[0] = 1;
 	} else {
 		num_duty_pcts = RGB_LED_RAMP_STEP_COUNT;
 		for (i = 0; i < num_duty_pcts; i++) {
 			pwm_cfg->duty_cycles->duty_pcts[i] =
 				(led->cdev.brightness *
-				 (100 / (RGB_LED_RAMP_STEP_COUNT - 1)) *
+				 (max_brightness / (RGB_LED_RAMP_STEP_COUNT - 1)) *
 				 (num_duty_pcts - i - 1)) / RGB_MAX_LEVEL;
 		}
 	}
@@ -3817,6 +3822,7 @@ static int qpnp_get_config_rgb(struct qpnp_led_data *led,
 				struct device_node *node)
 {
 	int rc;
+	u32 val;
 	u8 led_mode;
 	const char *mode;
 
@@ -3856,6 +3862,15 @@ static int qpnp_get_config_rgb(struct qpnp_led_data *led,
 		led->rgb_cfg->pwm_cfg->default_mode = led_mode;
 	} else
 		return rc;
+
+	rc = of_property_read_u32(node, "rgb,max_brightness", &val);
+	if (!rc) {
+		if(val > RGB_LED_MAX_BRIGHTNESS)
+			led->rgb_cfg->max_brightness = RGB_LED_MAX_BRIGHTNESS;
+		else
+			led->rgb_cfg->max_brightness = val;
+	} else
+		led->rgb_cfg->max_brightness = RGB_LED_MAX_BRIGHTNESS;
 
 	rc = qpnp_get_config_pwm(led->rgb_cfg->pwm_cfg, led->spmi_dev, node);
 	if (rc < 0)
