@@ -28,6 +28,22 @@
 		vdd-supply = <&pm8916_l9>;
 		vdd-voltage-level = <3100000 3100000>;
 	};
+
+	bt_nitrous {
+		compatible = "goog,nitrous";
+		uart-port = <0>;
+		power-gpio = <&msm_gpio 80 0>;
+		host-wake-gpio = <&msm_gpio 47 0>;
+		host-wake-polarity = <0>;
+		dev-wake-gpio = <&msm_gpio 77 0>;
+		dev-wake-polarity = <0>;
+		vdd-supply = <&pm8916_l9>;
+		vdd-voltage-level = <3100000 3100000>;
+		pinctrl-names = "default","sleep";
+		pinctrl-0 = <&bt_wakeup_ap_active>;
+		pinctrl-1 = <&bt_wakeup_ap_suspend>;
+	};
+
 	hserial:serial@78b0000 {
 		compatible = "qcom,msm-hsuart-v14";
 		reg = <0x78b0000 0x200>,
@@ -39,7 +55,6 @@
 		pinctrl-names = "default", "sleep";
 		pinctrl-0 = <&bt_uart_data_active &bt_uart_ctl_active>;
 		pinctrl-1 = <&bt_uart_data_suspend &bt_uart_ctl_suspend>;
-
 		qcom,rx-char-to-inject = <0xFD>;
 
 		qcom,bam-tx-ep-pipe-index = <2>;
