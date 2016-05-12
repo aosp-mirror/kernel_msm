@@ -140,7 +140,9 @@ struct mp2661_chg {
     /* adc_tm parameters */
     struct qpnp_vadc_chip    *vadc_dev;
     struct qpnp_adc_tm_chip    *adc_tm_dev;
+#if 0
     struct qpnp_adc_tm_btm_param    adc_param;
+#endif
 
     bool               using_pmic_therm;
     /* batt temp states decidegc */
@@ -164,6 +166,13 @@ struct mp2661_chg {
     int                batt_auto_recharge_delta_mv;
     int                batt_discharging_ma;
     int                thermal_regulation_threshold;
+
+    /* monitor some events */
+    struct delayed_work      monitor_work;
+
+    struct timespec          resume_time;
+    struct timespec          last_monitor_time;
+    int                      last_temp;
 };
 
 #define RETRY_COUNT 5
@@ -1284,6 +1293,7 @@ static int create_debugfs_entries(struct mp2661_chg *chip)
     return 0;
 }
 
+#if 0
 #define HYSTERESIS_DECIDEGC 20
 static void mp2661_chg_adc_notification(enum qpnp_tm_state state, void *ctx)
 {
@@ -1434,6 +1444,7 @@ static void mp2661_chg_adc_notification(enum qpnp_tm_state state, void *ctx)
         pr_err("request ADC error\n");
     }
 }
+#endif
 
 static void mp2661_initialize_batt_temp_status(struct mp2661_chg *chip)
 {
@@ -1464,6 +1475,7 @@ static void mp2661_initialize_batt_temp_status(struct mp2661_chg *chip)
         chip->batt_temp_status = BAT_TEMP_STATUS_COLD;
     }
 
+    chip->last_temp = temp;
     pr_info("temp = %d,chip->batt_temp_status = %d\n", temp, chip->batt_temp_status);
 }
 
@@ -1606,6 +1618,7 @@ static int mp2661_hw_init(struct mp2661_chg *chip)
     return 0;
 }
 
+#if 0
 static void mp2661_initialize_qpnp_adc_tm_btm(struct mp2661_chg *chip)
 {
     int rc;
@@ -1663,6 +1676,7 @@ static void mp2661_initialize_qpnp_adc_tm_btm(struct mp2661_chg *chip)
         pr_err("requesting ADC error %d\n", rc);
     }
 }
+#endif
 
 /*writable properties*/
 static int mp2661_batt_property_is_writeable(struct power_supply *psy,
@@ -1677,6 +1691,52 @@ static int mp2661_batt_property_is_writeable(struct power_supply *psy,
     }
 
     return 0;
+}
+
+#define MONITOR_WORK_DELAY_MS         10000
+#define MONITOR_TEMP_DELTA            10
+static void mp2661_monitor_work(struct work_struct *work)
+{
+    int temp;
+    int last_batt_temp_status;
+    struct delayed_work *dwork = to_delayed_work(work);
+    struct mp2661_chg *chip = container_of(dwork,
+                   struct mp2661_chg, monitor_work);
+
+    get_monotonic_boottime(&chip->last_monitor_time);
+
+    temp = mp2661_get_prop_batt_temp(chip);
+
+    if(abs(temp - chip->last_temp) >= MONITOR_TEMP_DELTA)
+    {
+        pr_err("temp = %d, last_temp = %d\n", temp, chip->last_temp);
+
+        last_batt_temp_status = chip->batt_temp_status;
+
+        mp2661_initialize_batt_temp_status(chip);
+
+        if(chip->batt_temp_status != last_batt_temp_status)
+        {
+            if (BAT_TEMP_STATUS_HOT == chip->batt_temp_status
+                   || BAT_TEMP_STATUS_COLD == chip->batt_temp_status)
+            {
+                mp2661_set_charging_enable(chip, false);
+            }
+            else if(BAT_TEMP_STATUS_HOT == last_batt_temp_status
+                || BAT_TEMP_STATUS_COLD == last_batt_temp_status)
+            {
+                mp2661_set_charging_enable(chip, true);
+                mp2661_set_appropriate_batt_charging_current(chip);
+            }
+            else
+            {
+                mp2661_set_appropriate_batt_charging_current(chip);
+            }
+        }
+    }
+
+    schedule_delayed_work(&chip->monitor_work,
+            msecs_to_jiffies(MONITOR_WORK_DELAY_MS));
 }
 
 static int mp2661_charger_probe(struct i2c_client *client,
@@ -1727,6 +1787,7 @@ static int mp2661_charger_probe(struct i2c_client *client,
         return rc;
     }
 
+#if 0
     /* using adc_tm for implementing pmic therm */
     if (chip->using_pmic_therm)
     {
@@ -1741,6 +1802,7 @@ static int mp2661_charger_probe(struct i2c_client *client,
             return rc;
         }
     }
+#endif
 
     mp2661_initialize_batt_temp_status(chip);
 
@@ -1786,10 +1848,16 @@ static int mp2661_charger_probe(struct i2c_client *client,
         enable_irq_wake(client->irq);
     }
 
+#if 0
     if (chip->using_pmic_therm)
     {
         mp2661_initialize_qpnp_adc_tm_btm(chip);
     }
+#endif
+
+    INIT_DELAYED_WORK(&chip->monitor_work, mp2661_monitor_work);
+    schedule_delayed_work(&chip->monitor_work,
+        msecs_to_jiffies(MONITOR_WORK_DELAY_MS));
 
     create_debugfs_entries(chip);
 
@@ -1806,6 +1874,7 @@ static int mp2661_charger_remove(struct i2c_client *client)
 
     debugfs_remove_recursive(chip->debug_root);
     power_supply_unregister(&chip->batt_psy);
+    cancel_delayed_work_sync(&chip->monitor_work);
 
     return 0;
 }
@@ -1822,7 +1891,29 @@ static int mp2661_suspend_noirq(struct device *dev)
 
 static int mp2661_resume(struct device *dev)
 {
-    return 0;
+     struct i2c_client *client = to_i2c_client(dev);
+     struct mp2661_chg *chip = i2c_get_clientdata(client);
+
+     if(!chip->usb_present)
+     {
+         return 0;
+     }
+
+     get_monotonic_boottime(&chip->resume_time);
+     pr_info("mp2661 resume_time = %ld, last_monitor_time =%ld\n",
+            chip->resume_time.tv_sec, chip->last_monitor_time.tv_sec);
+     if( (chip->resume_time.tv_sec - chip->last_monitor_time.tv_sec) >
+             MONITOR_WORK_DELAY_MS / 1000)
+     {
+         /*make sure no work waits in the queue, if the work is already queued
+          *(not on the timer) the cancel will fail. That is not a problem
+          *because we just want the work started.
+          */
+         cancel_delayed_work_sync(&chip->monitor_work);
+         schedule_delayed_work(&chip->monitor_work, 0);
+     }
+
+     return 0;
 }
 
 static const struct dev_pm_ops mp2661_pm_ops = {
