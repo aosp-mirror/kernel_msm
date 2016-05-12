@@ -1880,13 +1880,18 @@ void htc_stats_update_charging_statistics(int latest, int prev)
 
 void htc_battery_info_update(enum power_supply_property prop, int intval)
 {
+	int online = 0;
 	if (!g_htc_battery_probe_done)
 		return;
 
 	switch (prop) {
 		case POWER_SUPPLY_PROP_STATUS:
 			/* Get charger type from usb psy interface. */
-			g_latest_chg_src = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_TYPE);
+			online = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_ONLINE);
+			if (online)
+				g_latest_chg_src = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_TYPE);
+			else
+				g_latest_chg_src = POWER_SUPPLY_TYPE_UNKNOWN;
 			if (htc_batt_info.rep.status != intval ||
 				g_latest_chg_src != htc_batt_info.rep.charging_source) {
                                 htc_stats_update_charging_statistics(g_latest_chg_src, htc_batt_info.rep.charging_source);
