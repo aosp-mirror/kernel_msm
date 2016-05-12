@@ -21,7 +21,7 @@
 #include <linux/mutex.h>
 #include <linux/rwsem.h>
 #include <net/cnss.h>
-#include <net/cnss_common.h>
+#include "cnss_common.h"
 #include <net/cfg80211.h>
 
 enum cnss_dev_bus_type {
@@ -244,7 +244,10 @@ EXPORT_SYMBOL(cnss_dump_stack);
 
 enum cnss_dev_bus_type cnss_get_dev_bus_type(struct device *dev)
 {
-	if (!dev || !dev->bus)
+	if (!dev)
+		return CNSS_BUS_NONE;
+
+	if (!dev->bus)
 		return CNSS_BUS_NONE;
 
 	if (memcmp(dev->bus->name, "sdio", 4) == 0)
