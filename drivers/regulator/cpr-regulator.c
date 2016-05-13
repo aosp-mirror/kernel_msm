@@ -236,6 +236,8 @@ enum vdd_mx_vmin_method {
  */
 #define CPR_FUSE_CORNER_LIMIT	100
 
+extern int g_oemperf_mode;
+
 struct quot_adjust_info {
 	int speed_bin;
 	int virtual_corner;
@@ -1822,6 +1824,7 @@ static int cpr_adjust_init_voltages(struct device_node *of_node,
 	if (!of_find_property(of_node, "qcom,cpr-init-voltage-adjustment",
 				&len)) {
 		/* No initial voltage adjustment needed. */
+		cpr_info(cpr_vreg, "%s: No initial voltage adjustment needed", __func__);
 		return 0;
 	}
 
@@ -1934,6 +1937,13 @@ static int cpr_pvs_per_corner_init(struct device_node *of_node,
 
 	rc = of_property_read_u32_array(of_node, "qcom,cpr-init-voltage-ref",
 		&ref_uv[CPR_FUSE_CORNER_MIN], cpr_vreg->num_fuse_corners);
+
+	if (0 == g_oemperf_mode) {
+		ref_uv[1] = 1050000;
+		ref_uv[2] = 1150000;
+		ref_uv[3] = 1350000;
+	}
+
 	if (rc < 0) {
 		cpr_err(cpr_vreg,
 			"read qcom,cpr-init-voltage-ref failed, rc = %d\n", rc);
@@ -1954,7 +1964,7 @@ static int cpr_pvs_per_corner_init(struct device_node *of_node,
 				cpr_vreg->pvs_corner_v[i],
 				cpr_vreg->step_volt) *
 				cpr_vreg->step_volt;
-		cpr_debug(cpr_vreg, "corner %d: sign = %d, steps = %d, volt = %d uV\n",
+		cpr_info(cpr_vreg, "corner %d: sign = %d, steps = %d, volt = %d uV\n",
 			i, sign, steps, cpr_vreg->pvs_corner_v[i]);
 		fuse_sel += 4;
 	}
@@ -5602,6 +5612,19 @@ static int cpr_voltage_plan_init(struct platform_device *pdev,
 	if (rc < 0) {
 		cpr_err(cpr_vreg, "cpr-voltage-floor missing: rc=%d\n", rc);
 		return rc;
+	}
+
+	if (0 == g_oemperf_mode) {
+		cpr_vreg->fuse_ceiling_volt[1] = 1050000;
+		cpr_vreg->fuse_floor_volt[1] = 1050000;
+		cpr_vreg->fuse_ceiling_volt[2] = 1225000;
+		cpr_vreg->fuse_floor_volt[2] = 1050000;
+		cpr_vreg->fuse_ceiling_volt[3] = 1350000;
+		cpr_vreg->fuse_floor_volt[3] = 1155000;
+	}
+
+	for (i = CPR_FUSE_CORNER_MIN; i <= cpr_vreg->num_fuse_corners; i++) {
+		cpr_info(cpr_vreg, "%s: #%d, ceiling = %d, floor = %d\n", __func__, i, cpr_vreg->fuse_ceiling_volt[i], cpr_vreg->fuse_floor_volt[i]);
 	}
 
 	cpr_parse_cond_min_volt_fuse(cpr_vreg, of_node);
