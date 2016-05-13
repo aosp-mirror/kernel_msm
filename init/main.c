@@ -132,6 +132,24 @@ static char *initcall_command_line;
 static char *execute_command;
 static char *ramdisk_execute_command;
 
+int g_oemperf_mode=1;
+EXPORT_SYMBOL(g_oemperf_mode);
+static int set_oem_perf_on(char *str)
+{
+	g_oemperf_mode = 1;
+	printk("g_oemperf_mode = %d\n", g_oemperf_mode);
+	return 0;
+}
+__setup("oem_perf_on", set_oem_perf_on);
+
+static int set_oem_perf_off(char *str)
+{
+	g_oemperf_mode = 0;
+	printk("g_oemperf_mode = %d\n", g_oemperf_mode);
+	return 0;
+}
+__setup("oem_perf_off", set_oem_perf_off);
+
 /*
  * Used to generate warnings if static_key manipulation functions are used
  * before jump_label_init is called.
