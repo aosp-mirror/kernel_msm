@@ -10897,8 +10897,6 @@ typedef struct {
     A_UINT32 rsp_status;
     /** Reason code defined in wmi_ndp_cmd_reason_code */
     A_UINT32 reason_code;
-    /** Number of bytes in TLV wmi_ndp_end_rsp_per_ndi */
-    A_UINT32 data_end_req_rsp_len;
     /**
      * TLV (tag length value ) parameters follow the ndp_end_rsp
      * structure. The TLV's are:
