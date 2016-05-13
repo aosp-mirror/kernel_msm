@@ -503,33 +503,31 @@ int get_wlan_chip_vendor_id(void)
 	return wifi_vendor_id;
 }
 
-static ssize_t wifi_vendor_read(struct file *file, char __user *userbuf,
-							size_t bytes, loff_t *off)
+static int  proc_vendor_show(struct seq_file *file, void *v)
 {
-	char vendor_id[5] = {0};
-	int len = 0;
 
-	if (NULL == userbuf)
+	if (NULL == file)
 	{
-		DHD_ERROR(("%s userbuf is NULL!\n", __FUNCTION__));
+		DHD_ERROR(("%s seq_file is NULL!\n", __FUNCTION__));
 		return -EFAULT;
 	}
 
-	snprintf(vendor_id, 5, "%x", wifi_vendor_id);
-	len = strlen(vendor_id);
+	seq_printf(file, "%x", wifi_vendor_id);
 
-	if(copy_to_user(userbuf, vendor_id, len))
-	{
-		DHD_ERROR(("%s vendor ID copy to user fail!\n", __FUNCTION__));
-		return -EFAULT;
-	}
+	return 0;
+}
 
-	return len;
+static int proc_vendor_open(struct inode *inode, struct file *file)
+{
+	single_open(file, proc_vendor_show, NULL);
+	return 0;
 }
 
 static const struct file_operations proc_fops_wifi_vendor = {
 	.owner = THIS_MODULE,
-	.read = wifi_vendor_read,
+	.open = proc_vendor_open,
+	.read = seq_read,	   /* in linux/seq_file.c */
+	.release = single_release, /* in linux/seq_file.c */
 };
 
 void dhd_wlan_get_fw_nv_path(const char **fw, const char **nv)
