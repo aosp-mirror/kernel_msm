@@ -237,6 +237,8 @@ struct vddtrim_map {
 	int			trim_val;
 };
 
+extern int g_bootdbguart;
+
 /*
  * VDDTRIM is a 3 bit value which is split across two
  * register TRIM3(bit 5:4)	-> VDDTRIM bit(2:1)
@@ -2559,8 +2561,6 @@ static irqreturn_t qpnp_lbc_chg_gone_irq_handler(int irq, void *_chip)
 	if (chip->cfg_collapsible_chgr_support) {
 		chg_gone = qpnp_lbc_is_chg_gone(chip);
 		pr_debug("chg-gone triggered, rt_sts: %d\n", chg_gone);
-		gpio_set_value(GPIO_num17,1);
-		printk("---chg_gone GPIO17 value = %d\n", gpio_get_value(GPIO_num17));
 
 		if (chg_gone) {
 			/*
@@ -2611,6 +2611,14 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 
 			if (chip->supported_feature_flag & VDD_TRIM_SUPPORTED)
 				alarm_try_to_cancel(&chip->vddtrim_alarm);
+
+			if (g_bootdbguart == 1) {
+				gpio_set_value(GPIO_num17,1);
+				pr_info("usbin gpio_17 set to 1\n");
+			} else {
+				gpio_set_value(GPIO_num17,0);
+				pr_info("usbin gpio_17 set to 0\n");
+			}
 		} else {
 			/*
 			 * Override VBAT_DET comparator to start charging
@@ -2764,14 +2772,6 @@ static irqreturn_t qpnp_lbc_fastchg_irq_handler(int irq, void *_chip)
 	if (chip->fastchg_on ^ fastchg_on) {
 		chip->fastchg_on = fastchg_on;
 		if (fastchg_on) {
-
-			if (type == POWER_SUPPLY_TYPE_USB_DCP || type == POWER_SUPPLY_TYPE_USB_CDP) {
-				gpio_set_value(GPIO_num17,1);
-			} else if (type == POWER_SUPPLY_TYPE_USB) {
-				gpio_set_value(GPIO_num17,0);
-			} else {
-				gpio_set_value(GPIO_num17,0);
-			}
 
 			mutex_lock(&chip->chg_enable_lock);
 			chip->chg_done = false;
@@ -3561,6 +3561,7 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 	struct qpnp_lbc_chip *chip;
 	struct power_supply *usb_psy;
 	int rc = 0;
+	u8 usbin_chg_sts;
 
 	usb_psy = power_supply_get_by_name("usb");
 	if (!usb_psy) {
@@ -3740,8 +3741,6 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 	} else {
 		pr_debug("Success to request init gpio 17 Low \n");
 	}
-	gpio_set_value(GPIO_num17,0);
-	pr_debug("GPIO17 value = %d\n", gpio_get_value(GPIO_num17));
 
 #if defined(ASUS_FACTORY_BUILD)
 	rc = asus_battery_charging_limit_wq();
@@ -3765,6 +3764,20 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 			get_prop_capacity(chip));
 
 	g_lbc_chip = chip;
+
+	rc = qpnp_lbc_read(chip, chip->usb_chgpth_base + CHG_STATUS_REG,
+			&usbin_chg_sts, 1);
+
+	if (usbin_chg_sts & 0x10) {
+		gpio_set_value(GPIO_num17,0);
+		pr_info("lbc_probe gpio_17 set to 0\n");
+	} else if ((usbin_chg_sts & 0x10) == 0 && g_bootdbguart == 1) {
+		gpio_set_value(GPIO_num17,1);
+		pr_info("lbc_probe gpio_17 set to 1\n");
+	} else {
+		gpio_set_value(GPIO_num17,0);
+		pr_info("lbc_probe gpio_17 set to 0\n");
+	}
 
 	return 0;
 
