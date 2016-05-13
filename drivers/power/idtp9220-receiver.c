@@ -397,7 +397,7 @@ static int idtp9220_set_freq(struct idtp9220_receiver *chip, union idtp9220_inte
 
     /* M0 to sends data command and value to TX*/
     rc = idtp9220_masked_write(chip, COMMAND_REG, SEND_RX_DATA_MASK,
-			   1 << SEND_RX_DATA_MASK_SHIFT);
+               1 << SEND_RX_DATA_MASK_SHIFT);
     if (rc < 0)
     {
         pr_err("cannot sends data command and value to TX, rc = %d\n", rc);
@@ -595,7 +595,7 @@ static int idtp9220_is_fw_burned(struct idtp9220_receiver *chip, bool *is_burned
         {
             pr_err("burn magic number check err data[%d]:%02x != magic[%d]:%02x.\n", i, data, i, burn_magic_number[i]);
             break;
-		}
+        }
     }
 
     if(i == len)
@@ -975,7 +975,7 @@ static void idtp9220_process_verify_fw_work(struct work_struct *work)
         pr_err("can not do verify rx fw\n");
         pm_relax(chip->dev);
         return;
-	}
+    }
 
     if(!value.result)
     {
@@ -1066,7 +1066,7 @@ static ssize_t idtp9220_version_show(struct device *dev,
                  chip_id.shortval, chip_rev, cust_id, status, vset, rx_fw_major_rev.shortval,rx_fw_minor_rev.shortval);
 
 read_version_err:
-	return sprintf(buf, "Can not access idtp9220\n");
+    return sprintf(buf, "Can not access idtp9220\n");
 }
 
 static ssize_t idtp9220_detect_tx_data_show(struct device *dev,
@@ -1565,15 +1565,17 @@ static const struct attribute_group idtp9220_sysfs_group_attrs = {
   .attrs = idtp9220_sysfs_attrs,
 };
 
-static void idtp9220_adjust_vout_work(struct work_struct *work)
+static void idtp9220_monitor_work(struct work_struct *work)
 {
+    int vbat;
     union power_supply_propval ret = {0,};
-    int vbat, vout;
-    bool ldoout_enable = 0;
+    union idtp9220_interactive_data ldoout_enable = {0};
+    union idtp9220_interactive_data vout = {0};
+    union power_supply_propval new_current_limit = {0,};
 
     struct delayed_work *dwork = to_delayed_work(work);
     struct idtp9220_receiver *chip = container_of(dwork,
-                    struct idtp9220_receiver, adjust_vout_work);
+                    struct idtp9220_receiver, monitor_work);
 
     if (!chip->batt_psy)
     {
@@ -1582,9 +1584,14 @@ static void idtp9220_adjust_vout_work(struct work_struct *work)
 
     if(chip->batt_psy)
     {
-        /* check rx ldo out is on */
-        idtp9220_is_ldoout_enable(chip, &ldoout_enable);
-        if(ldoout_enable)
+        /* idtp9220 monitor mechanism:
+         * condition is that rx ldo  is on and can get vbat.
+         * rx vout vary with vbat.
+         * usb input current limit vary with vbat.
+         */
+        idtp9220_do_device_action(chip, IS_LDO_ENABLED, &ldoout_enable);
+
+        if(ldoout_enable.result)
         {
             /* check whether battery is present */
             chip->batt_psy->get_property(chip->batt_psy,
@@ -1598,24 +1605,43 @@ static void idtp9220_adjust_vout_work(struct work_struct *work)
 
                 if(vbat < IDTP9220_VBAT_DEFAULT_MV)
                 {
-                    vout = IDTP9220_VOUT_DEFAULT_MV;
+                    vout.shortval = IDTP9220_VOUT_DEFAULT_MV;
                 }
                 else
                 {
-                    vout = vbat + IDTP9220_VOUT_ADJUST_STEP_MV;
+                    vout.shortval = vbat + IDTP9220_VOUT_ADJUST_STEP_MV;
                 }
 
-                pr_info("vbat = %d, vout = %d\n",vbat, vout);
+                /* danymic change rx vout */
+                pr_info("vbat = %d, vout = %d\n",vbat, vout.shortval);
                 get_monotonic_boottime(&chip->last_set_vout_time);
                 pr_info("chip->last_setvout_time =%ld\n",
                              chip->last_set_vout_time.tv_sec);
-                idtp9220_set_vout_voltage(chip, vout);
+                idtp9220_do_device_action(chip, SET_VOUT_VOLTAGE, &vout);
+
+                /* danymic change usb input current */
+                if(vbat >= IDTP9220_VBAT_HIGH_MV && !chip->vbat_high)
+                {
+                    pr_err("adjust to low usb inpuct current limit\n");
+                    chip->vbat_high = true;
+                    new_current_limit.intval = IDTP9220_VBAT_HIGH_CUR_LIMIT_MA;
+                    chip->batt_psy->set_property(chip->batt_psy,
+                        POWER_SUPPLY_PROP_USB_INPUT_CURRENT, &new_current_limit);
+                }
+                else if(vbat < IDTP9220_VBAT_HIGH_MV - IDTP9220_VBAT_HIGH_DELTA_MV && chip->vbat_high)
+                {
+                    pr_err("adjust to low cur limit\n");
+                    chip->vbat_high = false;
+                    new_current_limit.intval = IDTP9220_VBAT_LOW_CUR_LIMIT_MA;
+                    chip->batt_psy->set_property(chip->batt_psy,
+                        POWER_SUPPLY_PROP_USB_INPUT_CURRENT, &new_current_limit);
+                }
             }
         }
     }
 
-    schedule_delayed_work(&chip->adjust_vout_work,
-            msecs_to_jiffies(IDTP9220_VOUT_CHECK_PERIOD_MS));
+    schedule_delayed_work(&chip->monitor_work,
+            msecs_to_jiffies(IDTP9220_MONITOR_PERIOD_MS));
 }
 
 static void idtp9220_process_intr_work(struct work_struct *work)
@@ -1778,7 +1804,6 @@ static int idtp9220_receiver_probe(struct i2c_client *client,
 
     sema_init(&chip->tx_send_data_int, 0);
 
-
     chip->batt_psy = power_supply_get_by_name("battery");
 
     if(sysfs_create_group(&client->dev.kobj, &idtp9220_sysfs_group_attrs))
@@ -1788,12 +1813,12 @@ static int idtp9220_receiver_probe(struct i2c_client *client,
     }
 
     memset(&chip->last_set_vout_time, 0, sizeof(struct timespec));
-    INIT_DELAYED_WORK(&chip->adjust_vout_work, idtp9220_adjust_vout_work);
+    INIT_DELAYED_WORK(&chip->monitor_work, idtp9220_monitor_work);
     INIT_WORK(&chip->process_intr_work, idtp9220_process_intr_work);
     INIT_WORK(&chip->process_burn_fw_work, idtp9220_process_burn_fw_work);
     INIT_WORK(&chip->process_verify_fw_work, idtp9220_process_verify_fw_work);
-    schedule_delayed_work(&chip->adjust_vout_work,
-        msecs_to_jiffies(IDTP9220_VOUT_CHECK_PERIOD_MS));
+    schedule_delayed_work(&chip->monitor_work,
+        msecs_to_jiffies(IDTP9220_MONITOR_PERIOD_MS));
 
     return 0;
 }
@@ -1802,7 +1827,7 @@ static int idtp9220_receiver_remove(struct i2c_client *client)
 {
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
 
-    cancel_delayed_work_sync(&chip->adjust_vout_work);
+    cancel_delayed_work_sync(&chip->monitor_work);
 
     return 0;
 }
@@ -1821,14 +1846,14 @@ static int idtp9220_resume(struct device *dev)
             chip->resume_time.tv_sec, chip->last_set_vout_time.tv_sec);
 
         if( (chip->resume_time.tv_sec - chip->last_set_vout_time.tv_sec) >
-             IDTP9220_VOUT_CHECK_PERIOD_MS / 1000)
+             IDTP9220_MONITOR_PERIOD_MS / 1000)
         {
             /*make sure no work waits in the queue, if the work is already queued
              *(not on the timer) the cancel will fail. That is not a problem
              *because we just want the work started.
              */
-            cancel_delayed_work_sync(&chip->adjust_vout_work);
-            schedule_delayed_work(&chip->adjust_vout_work, 0);
+            cancel_delayed_work_sync(&chip->monitor_work);
+            schedule_delayed_work(&chip->monitor_work, 0);
         }
     }
 

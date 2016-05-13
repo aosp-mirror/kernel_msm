@@ -102,7 +102,7 @@ struct idtp9220_receiver {
     struct semaphore                            tx_send_data_int;
 
     /* dynamatic adjust vout */
-    struct delayed_work                         adjust_vout_work;
+    struct delayed_work                         monitor_work;
     struct timespec                             last_set_vout_time;
     struct timespec                             resume_time;
 
@@ -124,6 +124,9 @@ struct idtp9220_receiver {
     enum idtp9220_verify_or_burn_result         burn_result;
     /* rx verify result */
     enum idtp9220_verify_or_burn_result         verify_result;
+
+    /* vbat is high flag */
+    bool                                        vbat_high;
 };
 
 /* Mask/Bit helpers */
@@ -138,11 +141,14 @@ struct idtp9220_receiver {
 #define TX_RETURN_DATA_IS_NOT_DEMAND_ERR        2
 #define IDTP9220_I2C_READ_BYTES                 1
 #define IDTP9220_DELAY_MS_MAX                   5000
-#define IDTP9220_VOUT_CHECK_PERIOD_MS           180000
+#define IDTP9220_MONITOR_PERIOD_MS              60000
 #define IDTP9220_VBAT_DEFAULT_MV                3600
 #define IDTP9220_VOUT_DEFAULT_MV                4000
-#define IDTP9220_VOUT_ADJUST_STEP_MV            500
-
+#define IDTP9220_VOUT_ADJUST_STEP_MV            600
+#define IDTP9220_VBAT_HIGH_MV                   4350
+#define IDTP9220_VBAT_HIGH_DELTA_MV             50
+#define IDTP9220_VBAT_HIGH_CUR_LIMIT_MA         130
+#define IDTP9220_VBAT_LOW_CUR_LIMIT_MA          220
 
 /* Vout config parameters */
 #define IDT9200_VOUT_STEP_MV                    100
