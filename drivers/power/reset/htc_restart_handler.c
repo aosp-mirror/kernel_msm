@@ -31,6 +31,7 @@ struct htc_reboot_params {
 	unsigned abnrst;
 	unsigned xbl_log_addr;
 	unsigned ddr_vendor;
+	unsigned lock_state;
 	char msg;
 };
 
