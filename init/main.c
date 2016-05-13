@@ -139,6 +139,24 @@ static char *ramdisk_execute_command;
 bool static_key_initialized __read_mostly;
 EXPORT_SYMBOL_GPL(static_key_initialized);
 
+int g_bootdbguart = 0;
+EXPORT_SYMBOL(g_bootdbguart);
+static int set_user_dbg_mode(char *str)
+{
+    if ( strcmp("y", str) == 0 )
+    {
+        g_bootdbguart = 1;
+    }
+    else
+    {
+        g_bootdbguart = 0;
+    }
+    printk("Bootloader Uart Mode = %d\n", g_bootdbguart);
+
+    return 0;
+}
+__setup("bootdbguart=", set_user_dbg_mode);
+
 /*
  * If set, this is an indication to the drivers that reset the underlying
  * device before going ahead with the initialization otherwise driver might
