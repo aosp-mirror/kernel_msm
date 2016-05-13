@@ -212,7 +212,7 @@
 		qcom,rpull-up-kohm = <100>;
 		qcom,vref-batt-therm = <1800000>;
 
-		#include "batterydata-palladium.dtsi"
+		#include "wren-C11N1541_2229841_290mAh-batterydata.dtsi"
 	};
 };
 
