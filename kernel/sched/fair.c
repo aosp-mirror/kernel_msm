@@ -8212,7 +8212,7 @@ static int idle_balance(struct rq *this_rq)
 	struct sched_domain *sd;
 	int pulled_task = 0;
 	u64 curr_cost = 0;
-	long removed_util;
+	long removed_util=0;
 
 	idle_enter_fair(this_rq);
 
