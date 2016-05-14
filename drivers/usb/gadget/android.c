@@ -803,14 +803,14 @@ acm_function_bind_config(struct android_usb_function *f,
 			ports++;
 			if (ports >= MAX_ACM_INSTANCES) {
 				pr_err("acm: max ports reached '%s'", name);
-				goto out;
+				goto err_acm_init_port;
 			}
 		}
 	}
 	err = acm_port_setup(c);
 	if (err) {
 		pr_err("acm: Cannot setup transports");
-		goto out;
+		goto err_acm_init_port;
 	}
 
 	for (i = 0; i < ports; i++) {
@@ -851,9 +851,13 @@ err_usb_get_function_instance:
 err_usb_get_function:
 		usb_put_function_instance(config->f_acm_inst[i]);
 	}
-
+	acm_port_cleanup();
+err_acm_init_port:
+	acm_deinit_port();
+	ports = 0;
 out:
 	config->instances_on = 0;
+	acm_initialized = 0;
 	return err;
 }
 

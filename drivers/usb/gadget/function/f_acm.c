@@ -113,11 +113,17 @@ int acm_port_setup(struct usb_configuration *c)
 			ret = gserial_alloc_line(
 					&gacm_ports[i].client_port_num);
 			if (ret)
-				return ret;
+				goto err_gserial_alloc_line;
 		}
 	}
 	if (no_acm_smd_ports)
 		ret = gsmd_setup(c->cdev->gadget, no_acm_smd_ports);
+
+	return ret;
+
+err_gserial_alloc_line:
+	while (i-- > 0)
+		gserial_free_line(gacm_ports[i].client_port_num);
 
 	return ret;
 }
@@ -1014,4 +1020,14 @@ int acm_init_port(int port_num, const char *name)
 	nr_acm_ports++;
 
 	return 0;
+}
+
+/**
+ * acm_deinit_port - reset all ports
+ */
+void acm_deinit_port(void)
+{
+	no_acm_tty_ports = 0;
+	no_acm_smd_ports = 0;
+	nr_acm_ports = 0;
 }
