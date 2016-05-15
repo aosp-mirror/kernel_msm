@@ -31,9 +31,10 @@
 #define RSB_MAGIC_PID		0x30
 
 /* MOTION Register addresses */
-#define MOTION		0x02
-#define DELTA_X		0x03
-#define DELTA_Y		0x04
+#define RSB_MOTION	0x02
+#define RSB_DELTA_X	0x03
+#define RSB_DELTA_Y	0x04
+#define RSB_CONFIG	0x06
 #define MOTION_BITMASK	0x80
 
 struct rsb_spi_comms {
@@ -344,18 +345,18 @@ static irqreturn_t rsb_handler(int irq, void *dev_id)
 	struct rsb_drv_data *rsb_data = dev_id;
 	uint8_t rx_val;
 
-	rsb_data->comms.read(rsb_data, &rx_val, MOTION);
+	rsb_data->comms.read(rsb_data, &rx_val, RSB_MOTION);
 	while (rx_val & MOTION_BITMASK) {
-		rsb_data->comms.read(rsb_data, &rx_val, DELTA_X);
+		rsb_data->comms.read(rsb_data, &rx_val, RSB_DELTA_X);
 		delta_x = (int8_t)rx_val;
-		rsb_data->comms.read(rsb_data, &rx_val, DELTA_Y);
+		rsb_data->comms.read(rsb_data, &rx_val, RSB_DELTA_Y);
 		delta_y = (int8_t)rx_val;
 		if ((delta_x | delta_y) != 0) {
 			input_report_rel(rsb_data->in_dev, REL_WHEEL,
 					delta_x);
 			input_sync(rsb_data->in_dev);
 		}
-		rsb_data->comms.read(rsb_data, &rx_val, MOTION);
+		rsb_data->comms.read(rsb_data, &rx_val, RSB_MOTION);
 	}
 
 	return IRQ_HANDLED;
@@ -503,10 +504,44 @@ static int rsb_remove(struct spi_device *spi)
 	return 0;
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int rsb_suspend(struct device *device)
+{
+	struct spi_device *spidev = container_of(device,
+		struct spi_device, dev);
+	struct rsb_drv_data *rsb_data = spi_get_drvdata(spidev);
+	int ret;
+
+	ret = rsb_data->comms.write(rsb_data, 0x8, RSB_CONFIG);
+	if (ret)
+		dev_warn(device, "Failed to put RSB into low power.\n");
+	disable_irq(spidev->irq);
+	return 0;
+}
+
+static int rsb_resume(struct device *device)
+{
+	struct spi_device *spidev = container_of(device,
+		struct spi_device, dev);
+	struct rsb_drv_data *rsb_data = spi_get_drvdata(spidev);
+	int ret;
+
+	enable_irq(spidev->irq);
+	ret = rsb_data->comms.write(rsb_data, 0x0, RSB_CONFIG);
+	if (ret)
+		dev_warn(device,
+			"Failed to take RSB out of low power.\n");
+	return 0;
+}
+#endif
+
+SIMPLE_DEV_PM_OPS(rsb_pm_ops, rsb_suspend, rsb_resume);
+
 static struct spi_driver rsb_driver = {
 	.driver = {
 		.name = "rsb",
 		.owner = THIS_MODULE,
+		.pm  = &rsb_pm_ops,
 	},
 	.probe = rsb_probe,
 	.remove = rsb_remove,
