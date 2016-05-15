@@ -30,6 +30,12 @@
 
 #define RSB_MAGIC_PID		0x30
 
+/* MOTION Register addresses */
+#define MOTION		0x02
+#define DELTA_X		0x03
+#define DELTA_Y		0x04
+#define MOTION_BITMASK	0x80
+
 struct rsb_spi_comms {
 	int (*open)(void *);
 	void (*close)(void *);
@@ -49,8 +55,6 @@ struct rsb_drv_data {
 	struct task_struct *poll_thread;
 	struct input_dev *in_dev;
 	int cs;
-	int motion_gpio;
-	int irq;
 	struct regulator *vld_reg; /* power supply voltage v3.3 */
 	struct regulator *vdd_reg; /* power supply voltage for IO v1.8 */
 };
@@ -268,13 +272,8 @@ static int rsb_parse_dt(struct spi_device *spi_dev)
 	struct rsb_drv_data *rsb_data = spi_get_drvdata(spi_dev);
 
 	ret = rsb_data->cs = of_get_named_gpio(dt, "rsb,spi-cs-gpio", 0);
-	dev_info(&spi_dev->dev, "cs GPIO read from DT:%u",
+	dev_info(&spi_dev->dev, "cs GPIO read from DT:%u\n",
 			rsb_data->cs);
-
-	ret = rsb_data->motion_gpio = of_get_named_gpio(dt,
-		"rsb,motion-gpio", 0);
-	dev_info(&spi_dev->dev, "motion gpio read from DT:%u",
-			rsb_data->motion_gpio);
 
 	return 0;
 }
@@ -345,113 +344,127 @@ static irqreturn_t rsb_handler(int irq, void *dev_id)
 	struct rsb_drv_data *rsb_data = dev_id;
 	uint8_t rx_val;
 
-	rsb_data->comms.read(rsb_data, &rx_val, 0x02);
-	while (rx_val & 0x80) {
-		rsb_data->comms.read(rsb_data, &rx_val, 0x03);
+	rsb_data->comms.read(rsb_data, &rx_val, MOTION);
+	while (rx_val & MOTION_BITMASK) {
+		rsb_data->comms.read(rsb_data, &rx_val, DELTA_X);
 		delta_x = (int8_t)rx_val;
-		rsb_data->comms.read(rsb_data, &rx_val, 0x04);
+		rsb_data->comms.read(rsb_data, &rx_val, DELTA_Y);
 		delta_y = (int8_t)rx_val;
 		if ((delta_x | delta_y) != 0) {
 			input_report_rel(rsb_data->in_dev, REL_WHEEL,
 					delta_x);
 			input_sync(rsb_data->in_dev);
 		}
-		rsb_data->comms.read(rsb_data, &rx_val, 0x02);
+		rsb_data->comms.read(rsb_data, &rx_val, MOTION);
 	}
 
 	return IRQ_HANDLED;
 }
 
-static void rsb_init_regulator(struct spi_device *spi_dev)
+static int rsb_init_regulator(struct spi_device *spi_dev)
 {
 	struct rsb_drv_data *rsb_data = spi_get_drvdata(spi_dev);
+	int ret = 0;
 
-	rsb_data->vld_reg = regulator_get(&spi_dev->dev, "rsb,vld");
+	rsb_data->vld_reg = devm_regulator_get(&spi_dev->dev,
+		"rsb,vld");
 	if (IS_ERR(rsb_data->vld_reg)) {
-		dev_warn(&spi_dev->dev, "regulator: VLD request failed\n");
+		dev_warn(&spi_dev->dev,
+			"regulator: VLD request failed\n");
+		ret = (int)rsb_data->vld_reg;
 		rsb_data->vld_reg = NULL;
+		/*
+		 * Surface up the error obtained from the get() call.
+		 * If it is EPROBE_DEFER, surface that up to the
+		 * probe() caller. If it is anything else, continue with
+		 * the probe function execution.
+		 */
+		return ret;
 	}
 
-	rsb_data->vdd_reg = regulator_get(&spi_dev->dev, "rsb,vdd");
+	rsb_data->vdd_reg = devm_regulator_get(&spi_dev->dev,
+		"rsb,vdd");
 	if (IS_ERR(rsb_data->vdd_reg)) {
-		dev_warn(&spi_dev->dev, "regulator: VDD request failed\n");
+		dev_warn(&spi_dev->dev,
+			"regulator: VDD request failed\n");
+		ret = (int)rsb_data->vld_reg;
 		rsb_data->vdd_reg = NULL;
+		return ret;
 	}
 
 	if (rsb_data->vld_reg) {
-		if (regulator_enable(rsb_data->vld_reg))
-			dev_warn(&spi_dev->dev, "regulator: VLD enable failed\n");
+		ret = regulator_enable(rsb_data->vld_reg);
+		if (ret) {
+			dev_warn(&spi_dev->dev,
+				"regulator: VLD enable failed\n");
+			return ret;
+		}
 	}
 
 	if (rsb_data->vdd_reg) {
-		if (regulator_enable(rsb_data->vdd_reg))
-			dev_warn(&spi_dev->dev, "regulator: VDD enable failed\n");
+		ret = regulator_enable(rsb_data->vdd_reg);
+		if (ret) {
+			dev_warn(&spi_dev->dev,
+				"regulator: VDD enable failed\n");
+			return ret;
+		}
 	}
+	return 0;
 }
 
 static int rsb_probe(struct spi_device *spi)
 {
 	struct rsb_drv_data *rsb_data;
-	int err;
+	int err = 0;
 
-	rsb_data = kzalloc(sizeof(struct rsb_drv_data), GFP_KERNEL);
+	rsb_data = devm_kzalloc(&spi->dev, sizeof(struct rsb_drv_data),
+		GFP_KERNEL);
 
-	if (IS_ERR(rsb_data))
-		return PTR_ERR(rsb_data);
+	if (!rsb_data)
+		return -ENOMEM;
 
 	spi_set_drvdata(spi, rsb_data);
 	rsb_data->device = spi;
 	rsb_spi_comms_init(rsb_data);
-	rsb_create_debugfs(rsb_data);
 
-	if (rsb_parse_dt(spi) != 0)
-		goto probe_err_cs;
+	err = rsb_parse_dt(spi);
+	if (err)
+		return err;
 
 	if (gpio_is_valid(rsb_data->cs)) {
-		err = gpio_request(rsb_data->cs, "rsb_spi_cs");
+		err = devm_gpio_request(&spi->dev, rsb_data->cs,
+			"rsb_spi_cs");
 		if (err) {
 			dev_err(&spi->dev,
 				"spi_cs_gpio:%d request failed\n",
 				rsb_data->cs);
-			goto probe_err_cs;
+			return err;
 		} else {
 			gpio_direction_output(rsb_data->cs, 1);
 		}
 	} else {
 		dev_err(&spi->dev, "spi_cs_gpio:%d is not valid\n",
 			rsb_data->cs);
-		goto probe_err_cs;
-	}
-
-	/* Set up Motion GPIO for IRQ */
-	if (gpio_is_valid(rsb_data->motion_gpio)) {
-		err = gpio_request(rsb_data->motion_gpio, "rsb_motion");
-		if (err) {
-			dev_err(&spi->dev,
-				"motion_gpio:%d request failed\n",
-				rsb_data->motion_gpio);
-			goto probe_err_cs;
-		} else {
-			gpio_direction_input(rsb_data->motion_gpio);
-			rsb_data->irq =
-				gpio_to_irq(rsb_data->motion_gpio);
-		}
+		return -EINVAL;
 	}
 
 	/* Initialize regulators */
-	rsb_init_regulator(spi);
+	err = rsb_init_regulator(spi);
+	if (err)
+		return err;
 
 	/* Should the open of the SPI bus be done only once?? */
 	rsb_data->comms.open(rsb_data);
 
-	if (rsb_init_sequence(rsb_data) != 0)
-		goto probe_err_motion;
+	err = rsb_init_sequence(rsb_data);
+	if (err)
+		return err;
 
 	/* Allocate and register an input device */
-	rsb_data->in_dev = input_allocate_device();
+	rsb_data->in_dev = devm_input_allocate_device(&spi->dev);
 	if (!rsb_data->in_dev) {
 		dev_err(&spi->dev, "Couldn't allocate input device\n");
-		goto probe_err_motion;
+		return -ENOMEM;
 	}
 
 	rsb_data->in_dev->evbit[0] = BIT_MASK(EV_REL);
@@ -461,30 +474,21 @@ static int rsb_probe(struct spi_device *spi)
 	err = input_register_device(rsb_data->in_dev);
 	if (err) {
 		dev_err(&spi->dev, "Failed to register rsb device\n");
-		goto probe_input_err;
+		return err;
 	}
 
-	err = request_threaded_irq(rsb_data->irq, NULL, rsb_handler,
-		IRQF_ONESHOT | IRQF_TRIGGER_FALLING | IRQF_TRIGGER_LOW,
-		"rsb_handler", rsb_data);
+	err = devm_request_threaded_irq(&spi->dev, spi->irq, NULL,
+		rsb_handler, IRQF_ONESHOT | IRQF_TRIGGER_FALLING |
+		IRQF_TRIGGER_LOW, "rsb_handler", rsb_data);
 	if (err) {
 		dev_err(&spi->dev,
 			"Failed to register irq handler IRQ:%d\n",
-			rsb_data->irq);
-		goto probe_input_err;
+			spi->irq);
+		return err;
 	}
 
+	rsb_create_debugfs(rsb_data);
 	return 0;
-
-probe_input_err:
-	input_free_device(rsb_data->in_dev);
-probe_err_motion:
-	gpio_free(rsb_data->motion_gpio);
-probe_err_cs:
-	gpio_free(rsb_data->cs);
-	debugfs_remove_recursive(rsb_data->dent);
-	kfree(rsb_data);
-	return -EAGAIN;
 }
 
 static int rsb_remove(struct spi_device *spi)
@@ -492,13 +496,9 @@ static int rsb_remove(struct spi_device *spi)
 	struct rsb_drv_data *rsb_data;
 
 	rsb_data = spi_get_drvdata(spi);
-	kthread_stop(rsb_data->poll_thread);
-	input_unregister_device(rsb_data->in_dev);
-	input_free_device(rsb_data->in_dev);
+
 	rsb_data->comms.close(rsb_data);
-	gpio_free(rsb_data->cs);
 	debugfs_remove_recursive(rsb_data->dent);
-	kfree(rsb_data);
 
 	return 0;
 }
