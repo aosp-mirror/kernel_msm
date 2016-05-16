@@ -4933,16 +4933,17 @@ static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
 			container_of(self, struct synaptics_rmi4_data,
 			fb_notifier);
 
-	if (evdata && evdata->data && rmi4_data) {
-		if (event == FB_EVENT_BLANK) {
-			transition = evdata->data;
-			if (*transition == FB_BLANK_POWERDOWN) {
-				synaptics_rmi4_suspend(&rmi4_data->pdev->dev);
-				rmi4_data->fb_ready = false;
-			} else if (*transition == FB_BLANK_UNBLANK) {
-				synaptics_rmi4_resume(&rmi4_data->pdev->dev);
-				rmi4_data->fb_ready = true;
-			}
+	if (evdata && evdata->data && event == FB_EARLY_EVENT_BLANK) {
+		transition = evdata->data;
+		dev_info(rmi4_data->pdev->dev.parent, "%s, event = %ld blank = %d\n",
+				__func__, event, *transition);
+		if (*transition == FB_BLANK_POWERDOWN) {
+			synaptics_rmi4_suspend(&rmi4_data->pdev->dev);
+			rmi4_data->fb_ready = false;
+		} else if ((*transition == FB_BLANK_NORMAL || *transition == FB_BLANK_UNBLANK)
+				&& (rmi4_data->fb_ready == false)) {
+			synaptics_rmi4_resume(&rmi4_data->pdev->dev);
+			rmi4_data->fb_ready = true;
 		}
 	}
 
