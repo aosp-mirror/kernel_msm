@@ -13,7 +13,7 @@
 &mdss_mdp {
 	mdss_dsi_samsung_ea8064tg_1080p_cmd: qcom,mdss_dsi_samsung_ea8064tg_1080p_cmd {
 		compatible = "qcom,mdss_dsi_samsung_ea8064tg_1080p_cmd";
-		qcom,mdss-dsi-panel-name = "S1 FHD SAMSUNG/EA8064TG 5.2\" command mode panel";
+		qcom,mdss-dsi-panel-name = "S1 FHD SAMSUNG EA8064TG 5.0 command mode panel";
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-panel-framerate = <60>;
 		qcom,mdss-dsi-virtual-channel-id = <0>;
