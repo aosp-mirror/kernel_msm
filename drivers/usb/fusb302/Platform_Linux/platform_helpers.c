@@ -3279,8 +3279,10 @@ void fusb_Sysfs_Init(void)
 /*********************************************************************************************************************/
 void fusb_InitializeCore(void)
 {
+#ifndef FSC_INTERRUPT_TRIGGERED
     fusb_StartTimers();
     pr_debug("FUSB  %s - Timers are started!\n", __func__);
+#endif
     core_initialize();
     pr_debug("FUSB  %s - Core is initialized!\n", __func__);
     core_enable_typec(TRUE);

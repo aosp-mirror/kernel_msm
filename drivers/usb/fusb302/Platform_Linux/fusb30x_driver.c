@@ -228,9 +228,9 @@ static int fusb30x_remove(struct i2c_client* client)
 
 #ifndef FSC_INTERRUPT_TRIGGERED // Polling mode by default
     fusb_StopThreads();
+    fusb_StopTimers();
 #endif  // !FSC_INTERRUPT_TRIGGERED
 
-    fusb_StopTimers();
     fusb_GPIO_Cleanup();
     pr_debug("FUSB  %s - FUSB30x device removed from driver...\n", __func__);
     return 0;
