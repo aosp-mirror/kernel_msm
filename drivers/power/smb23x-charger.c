@@ -1903,6 +1903,10 @@ static int smb23x_get_prop_batt_capacity(struct smb23x_chip *chip)
 	if (chip->fake_battery_soc != -EINVAL)
 		return chip->fake_battery_soc;
 
+	if (chip->bms_psy_name && chip->bms_psy == NULL)
+		chip->bms_psy =
+			power_supply_get_by_name((char *)chip->bms_psy_name);
+
 	if (chip->bms_psy) {
 		chip->bms_psy->get_property(chip->bms_psy,
 				POWER_SUPPLY_PROP_CAPACITY, &ret);
@@ -1918,6 +1922,10 @@ static int smb23x_get_prop_batt_voltage(struct smb23x_chip *chip)
 {
 	union power_supply_propval ret = {0, };
 
+	if (chip->bms_psy_name && chip->bms_psy == NULL)
+		chip->bms_psy =
+			power_supply_get_by_name((char *)chip->bms_psy_name);
+
 	if (chip->bms_psy) {
 		chip->bms_psy->get_property(chip->bms_psy,
 				POWER_SUPPLY_PROP_VOLTAGE_NOW, &ret);
@@ -1932,6 +1940,10 @@ static int smb23x_get_prop_batt_current(struct smb23x_chip *chip)
 {
 	union power_supply_propval ret = {0, };
 
+	if (chip->bms_psy_name && chip->bms_psy == NULL)
+		chip->bms_psy =
+			power_supply_get_by_name((char *)chip->bms_psy_name);
+
 	if (chip->bms_psy) {
 		chip->bms_psy->get_property(chip->bms_psy,
 				POWER_SUPPLY_PROP_CURRENT_NOW, &ret);
@@ -1945,6 +1957,10 @@ static int smb23x_get_prop_batt_current(struct smb23x_chip *chip)
 static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 {
 	union power_supply_propval ret = {0, };
+
+	if (chip->bms_psy_name && chip->bms_psy == NULL)
+		chip->bms_psy =
+			power_supply_get_by_name((char *)chip->bms_psy_name);
 
 	if (chip->bms_psy) {
 		chip->bms_psy->get_property(chip->bms_psy,
