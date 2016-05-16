@@ -1,0 +1,30 @@
+/* Copyright (c) 2016, LGE Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&i2c_2 { /* BLSP1 QUP2 */
+	haptics: haptics@5a {
+		compatible = "ti,drv2625";
+		reg = <0x5a>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <31 0x00>;
+		vdd-supply = <&haptic_ext_vreg>;
+		enable-gpio = <&msm_gpio 88 0x00>;
+		loop = <0x00>; /* CSLOSE: 0x00, OPEN: 0x01 */
+		actuator {
+			name = "actuator";
+			actuator-type = <0x01>; /* ERM: 0x00, LRA: 0x01 */
+			rated-volt = <0x3d>;
+			od-clamp-volt = <0x87>;
+			lra-freq = <204>;
+		};
+	};
+};
