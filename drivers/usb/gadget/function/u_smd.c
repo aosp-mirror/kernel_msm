@@ -848,15 +848,25 @@ static int gsmd_ch_remove(struct platform_device *pdev)
 static void gsmd_port_free(int portno)
 {
 	struct gsmd_port *port = smd_ports[portno].port;
+	struct platform_driver *pdrv = &smd_ports[portno].pdrv;
 
-	if (!port)
+	if (port) {
+		platform_driver_unregister(pdrv);
 		kfree(port);
+		smd_ports[portno].port = NULL;
+	}
 }
 
 static int gsmd_port_alloc(int portno, struct usb_cdc_line_coding *coding)
 {
 	struct gsmd_port *port;
 	struct platform_driver *pdrv;
+
+	if (smd_ports[portno].port) {
+		pr_warn("%s: port:%p portno:%d already allocated\n", __func__,
+				smd_ports[portno].port, portno);
+		return 0;
+	}
 
 	port = kzalloc(sizeof(struct gsmd_port), GFP_KERNEL);
 	if (!port)
@@ -1002,11 +1012,13 @@ int gsmd_setup(struct usb_gadget *g, unsigned count)
 	coding.bParityType = USB_CDC_NO_PARITY;
 	coding.bDataBits = USB_CDC_1_STOP_BITS;
 
-	gsmd_wq = create_singlethread_workqueue("k_gsmd");
 	if (!gsmd_wq) {
-		pr_err("%s: Unable to create workqueue gsmd_wq\n",
-				__func__);
-		return -ENOMEM;
+		gsmd_wq = create_singlethread_workqueue("k_gsmd");
+		if (!gsmd_wq) {
+			pr_err("%s: Unable to create workqueue gsmd_wq\n",
+					__func__);
+			return -ENOMEM;
+		}
 	}
 	extra_sz = g->extra_buf_alloc;
 
