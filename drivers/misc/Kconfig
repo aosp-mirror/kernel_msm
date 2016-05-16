@@ -561,6 +561,10 @@ config USB_EXT_TYPE_C_TI
 	  This adds support for detecting USB Type-C chargers that
 	  can supply upto 3A Vbus current for charging.
 
+config ASUS_UTILITY
+    tristate "ASUS Utility for Mode Notifier"
+    depends on MODULES
+
 config TI_DRV2667
 	tristate "TI's DRV2667 haptic controller support"
 	depends on I2C
