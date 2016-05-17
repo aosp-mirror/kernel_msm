@@ -56,7 +56,7 @@
 #define TYPE_B_PROTOCOL
 #endif
 
-#define WAKEUP_GESTURE false
+#define WAKEUP_GESTURE true
 
 #define NO_0D_WHILE_2D
 #define REPORT_2D_Z
@@ -123,6 +123,8 @@
 #ifdef HTC_FEATURE
 #define V5V6_CONFIG_ID_SIZE 4
 #define V7_CONFIG_ID_SIZE 32
+/* temporary to support dynamic wakeup gesture */
+static int tp_wakeup_gesture_enable = 0;
 #endif
 
 static int synaptics_rmi4_check_status(struct synaptics_rmi4_data *rmi4_data,
@@ -542,6 +544,27 @@ struct synaptics_rmi4_f12_ctrl_23 {
 	};
 };
 
+struct synaptics_rmi4_f12_ctrl_27 {
+	union {
+		struct {
+			unsigned char double_tap_enable:1;
+			unsigned char swipe_enable:1;
+			unsigned char tap_and_hold_enable:1;
+			unsigned char circle_enable:1;
+			unsigned char triangle_enable:1;
+			unsigned char vee_enable:1;
+			unsigned char unicode_enable:1;
+			unsigned char unused:1;
+			unsigned char lpwg_report_rate:8;
+			unsigned char false_activation_threshold:8;
+			unsigned char maximum_active_duration:8;
+			unsigned char timer_1_duration:8;
+			unsigned char maximum_active_duration_timeout:8;
+		};
+		unsigned char data[6];
+	};
+};
+
 struct synaptics_rmi4_f12_ctrl_31 {
 	union {
 		struct {
@@ -894,8 +917,10 @@ static ssize_t synaptics_rmi4_wake_gesture_store(struct device *dev,
 
 	input = input > 0 ? 1 : 0;
 
-	if (rmi4_data->f11_wakeup_gesture || rmi4_data->f12_wakeup_gesture)
+	if (rmi4_data->f11_wakeup_gesture || rmi4_data->f12_wakeup_gesture) {
 		rmi4_data->enable_wakeup_gesture = input;
+		tp_wakeup_gesture_enable = input; //temparary to support dynamic wakeup gesture
+	}
 
 	return count;
 }
@@ -2412,6 +2437,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 	unsigned char ctrl_8_offset;
 	unsigned char ctrl_20_offset;
 	unsigned char ctrl_23_offset;
+	unsigned char ctrl_27_offset;
 	unsigned char ctrl_28_offset;
 	unsigned char ctrl_31_offset;
 	unsigned char ctrl_58_offset;
@@ -2428,7 +2454,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 
 	fhandler->fn_number = fd->fn_number;
 	fhandler->num_of_data_sources = fd->intr_src_count;
-	fhandler->extra = kmalloc(sizeof(*extra_data), GFP_KERNEL);
+	fhandler->extra = kzalloc(sizeof(*extra_data), GFP_KERNEL);
 	if (!fhandler->extra) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for fhandler->extra\n",
@@ -2438,7 +2464,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 	extra_data = (struct synaptics_rmi4_f12_extra_data *)fhandler->extra;
 	size_of_2d_data = sizeof(struct synaptics_rmi4_f12_finger_data);
 
-	query_5 = kmalloc(sizeof(*query_5), GFP_KERNEL);
+	query_5 = kzalloc(sizeof(*query_5), GFP_KERNEL);
 	if (!query_5) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for query_5\n",
@@ -2447,7 +2473,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		goto exit;
 	}
 
-	query_8 = kmalloc(sizeof(*query_8), GFP_KERNEL);
+	query_8 = kzalloc(sizeof(*query_8), GFP_KERNEL);
 	if (!query_8) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for query_8\n",
@@ -2456,7 +2482,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		goto exit;
 	}
 
-	ctrl_8 = kmalloc(sizeof(*ctrl_8), GFP_KERNEL);
+	ctrl_8 = kzalloc(sizeof(*ctrl_8), GFP_KERNEL);
 	if (!ctrl_8) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for ctrl_8\n",
@@ -2465,7 +2491,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		goto exit;
 	}
 
-	ctrl_23 = kmalloc(sizeof(*ctrl_23), GFP_KERNEL);
+	ctrl_23 = kzalloc(sizeof(*ctrl_23), GFP_KERNEL);
 	if (!ctrl_23) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for ctrl_23\n",
@@ -2474,7 +2500,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		goto exit;
 	}
 
-	ctrl_31 = kmalloc(sizeof(*ctrl_31), GFP_KERNEL);
+	ctrl_31 = kzalloc(sizeof(*ctrl_31), GFP_KERNEL);
 	if (!ctrl_31) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for ctrl_31\n",
@@ -2483,7 +2509,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		goto exit;
 	}
 
-	ctrl_58 = kmalloc(sizeof(*ctrl_58), GFP_KERNEL);
+	ctrl_58 = kzalloc(sizeof(*ctrl_58), GFP_KERNEL);
 	if (!ctrl_58) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for ctrl_58\n",
@@ -2538,11 +2564,13 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 			query_5->ctrl21_is_present +
 			query_5->ctrl22_is_present;
 
-	ctrl_28_offset = ctrl_23_offset +
+	ctrl_27_offset = ctrl_23_offset +
 			query_5->ctrl23_is_present +
 			query_5->ctrl24_is_present +
 			query_5->ctrl25_is_present +
-			query_5->ctrl26_is_present +
+			query_5->ctrl26_is_present;
+
+	ctrl_28_offset = ctrl_27_offset +
 			query_5->ctrl27_is_present;
 
 	ctrl_31_offset = ctrl_28_offset +
@@ -2783,6 +2811,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 	rmi4_data->f12_wakeup_gesture = query_5->ctrl27_is_present;
 	if (rmi4_data->f12_wakeup_gesture) {
 		extra_data->ctrl20_offset = ctrl_20_offset;
+		extra_data->ctrl27_offset = ctrl_27_offset;
 		extra_data->data4_offset = query_8->data0_is_present +
 				query_8->data1_is_present +
 				query_8->data2_is_present +
@@ -3130,7 +3159,7 @@ static void synaptics_rmi4_set_configured(struct synaptics_rmi4_data *rmi4_data)
 static int synaptics_rmi4_alloc_fh(struct synaptics_rmi4_fn **fhandler,
 		struct synaptics_rmi4_fn_desc *rmi_fd, int page_number)
 {
-	*fhandler = kmalloc(sizeof(**fhandler), GFP_KERNEL);
+	*fhandler = kzalloc(sizeof(**fhandler), GFP_KERNEL);
 	if (!(*fhandler))
 		return -ENOMEM;
 
@@ -3517,7 +3546,9 @@ flash_prog_mode:
 	}
 
 	if (rmi4_data->f11_wakeup_gesture || rmi4_data->f12_wakeup_gesture)
-		rmi4_data->enable_wakeup_gesture = WAKEUP_GESTURE;
+		rmi4_data->enable_wakeup_gesture = WAKEUP_GESTURE &&
+			tp_wakeup_gesture_enable;
+
 	else
 		rmi4_data->enable_wakeup_gesture = false;
 
@@ -4866,8 +4897,8 @@ static void synaptics_rmi4_f12_wg(struct synaptics_rmi4_data *rmi4_data,
 		bool enable)
 {
 	int retval;
-	unsigned char offset;
 	unsigned char reporting_control[3];
+	struct synaptics_rmi4_f12_ctrl_27 ctrl_27;
 	struct synaptics_rmi4_f12_extra_data *extra_data;
 	struct synaptics_rmi4_fn *fhandler;
 	struct synaptics_rmi4_device_info *rmi;
@@ -4880,10 +4911,10 @@ static void synaptics_rmi4_f12_wg(struct synaptics_rmi4_data *rmi4_data,
 	}
 
 	extra_data = (struct synaptics_rmi4_f12_extra_data *)fhandler->extra;
-	offset = extra_data->ctrl20_offset;
 
 	retval = synaptics_rmi4_reg_read(rmi4_data,
-			fhandler->full_addr.ctrl_base + offset,
+			fhandler->full_addr.ctrl_base +
+				extra_data->ctrl20_offset,
 			reporting_control,
 			sizeof(reporting_control));
 	if (retval < 0) {
@@ -4893,13 +4924,51 @@ static void synaptics_rmi4_f12_wg(struct synaptics_rmi4_data *rmi4_data,
 		return;
 	}
 
-	if (enable)
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			fhandler->full_addr.ctrl_base +
+				extra_data->ctrl27_offset,
+			ctrl_27.data,
+			sizeof(ctrl_27.data));
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to change lpwg settings\n",
+				__func__);
+		return;
+	}
+
+	if (enable) {
 		reporting_control[2] = F12_WAKEUP_GESTURE_MODE;
-	else
+		ctrl_27.double_tap_enable = 1;
+		ctrl_27.lpwg_report_rate = 20;
+		ctrl_27.false_activation_threshold = 3;
+		ctrl_27.maximum_active_duration = 12;
+		ctrl_27.timer_1_duration = 15;
+		ctrl_27.maximum_active_duration_timeout = 10;
+	} else {
 		reporting_control[2] = F12_CONTINUOUS_MODE;
+		ctrl_27.double_tap_enable = 0;
+		ctrl_27.lpwg_report_rate = 20;
+		ctrl_27.false_activation_threshold = 3;
+		ctrl_27.maximum_active_duration = 12;
+		ctrl_27.timer_1_duration = 15;
+		ctrl_27.maximum_active_duration_timeout = 10;
+	}
 
 	retval = synaptics_rmi4_reg_write(rmi4_data,
-			fhandler->full_addr.ctrl_base + offset,
+			fhandler->full_addr.ctrl_base +
+				extra_data->ctrl27_offset,
+			ctrl_27.data,
+			sizeof(ctrl_27.data));
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to change lpwg settings\n",
+				__func__);
+		return;
+	}
+
+	retval = synaptics_rmi4_reg_write(rmi4_data,
+			fhandler->full_addr.ctrl_base +
+				extra_data->ctrl20_offset,
 			reporting_control,
 			sizeof(reporting_control));
 	if (retval < 0) {
