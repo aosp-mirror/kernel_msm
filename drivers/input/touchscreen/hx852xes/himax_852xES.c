@@ -855,6 +855,8 @@ static bool Calculate_CRC_with_AP(unsigned char *FW_content)
 #ifdef HX_AUTO_UPDATE_FW
 static int i_update_FW(bool manual)
 {
+    struct file *hx_filp = NULL;
+    mm_segment_t oldfs;
     unsigned char *ImageBuffer;
     int fullFileLength;
     int upgrade_times = 0;
@@ -862,24 +864,50 @@ static int i_update_FW(bool manual)
     uint8_t FW_MAJ, FW_MIN, NEW_FW_MAJ, NEW_FW_MIN;
     uint8_t CFG_VER, NEW_CFG_VER;
     bool need_update_flag = false;
+    bool asus_load_fail = false;
 
     if (private_ts->suspended) {
         goto no_update;
     }
     I("Start to update fw. \n");
     fw_update_processing= true;
-    result = request_firmware(&private_ts->fw, HMX_FW_NAME, &private_ts->client->dev);
-    if (private_ts->fw == NULL) {
-        E("No firmware file, ignored firmware update \n");
-        goto no_update;
-    } else if (result) {
-        E("Request_firmware failed, ret = %d \n", result);
-        goto no_update;
+
+    // load bin from ASUSFW
+    hx_filp = filp_open(ASUS_FW_NAME, O_RDONLY, 0);
+    if (IS_ERR(hx_filp)) {
+        I("Open firmware file from ASUSFW failed \n");
+        asus_load_fail = true;
+    } else {
+        oldfs = get_fs();
+        set_fs(get_ds());
+        result = hx_filp->f_op->read(hx_filp, upgrade_fw, sizeof(upgrade_fw), &hx_filp->f_pos);
+        if (result < 0) {
+            I("Read firmware file from ASUSFW failed \n");
+            asus_load_fail = true;
+        } else {
+            set_fs(oldfs);
+            filp_close(hx_filp, NULL);
+            I("Update firmware from ASUSFW \n");
+            ImageBuffer = (u8 *) upgrade_fw;
+            fullFileLength = result;
+        }
     }
-    private_ts->fw_data_start = (u8 *)private_ts->fw->data;
-    private_ts->fw_size = private_ts->fw->size;
-    ImageBuffer = private_ts->fw_data_start;
-    fullFileLength = private_ts->fw->size;
+
+    // load bin by using request_firmware
+    if (asus_load_fail) {
+        result = request_firmware(&private_ts->fw, HMX_FW_NAME, &private_ts->client->dev);
+        if (private_ts->fw == NULL) {
+            E("No firmware file, ignored firmware update \n");
+            goto no_update;
+        } else if (result) {
+            E("Request_firmware failed, ret = %d \n", result);
+            goto no_update;
+        }
+        private_ts->fw_data_start = (u8 *)private_ts->fw->data;
+        private_ts->fw_size = private_ts->fw->size;
+        ImageBuffer = private_ts->fw_data_start;
+        fullFileLength = private_ts->fw->size;
+    }
 
     FW_MAJ = private_ts->vendor_fw_ver_H;
     FW_MIN = private_ts->vendor_fw_ver_L;

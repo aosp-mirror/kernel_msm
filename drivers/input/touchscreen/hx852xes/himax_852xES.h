@@ -478,6 +478,7 @@ static int        CFB_INFO_LENGTH                 = 0;
 #ifdef HX_AUTO_UPDATE_FW
 #define FW_UPDATE_MANUAL_MODE 2
 #define HMX_FW_NAME "HX852XES.bin"
+#define ASUS_FW_NAME "/asusfw/touch/HX852XES.bin"
 static uint8_t ASUS_FW_MAJ = 0x19;
 static uint8_t IC_checksum[4];
 static bool fw_update_result = false;
