@@ -497,7 +497,7 @@
 		qcom,freq-mitigation-temp-hysteresis = <12>;
 		qcom,freq-mitigation-value = <400000>;
 		qcom,online-hotplug-core;
-		qcom,therm-reset-temp = <115>;
+		qcom,therm-reset-temp = <85>;
 		qcom,disable-cx-phase-ctrl;
 		qcom,disable-gfx-phase-ctrl;
 		qcom,disable-vdd-mx;
