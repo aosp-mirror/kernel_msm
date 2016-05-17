@@ -1836,6 +1836,7 @@ static int mp2661_charger_probe(struct i2c_client *client,
     /* stat irq configuration */
     if (client->irq)
     {
+        mp2661_chg_stat_handler(client->irq, chip);
         rc = devm_request_threaded_irq(&client->dev, client->irq, NULL,
                 mp2661_chg_stat_handler,
                 IRQF_TRIGGER_LOW | IRQF_ONESHOT,
