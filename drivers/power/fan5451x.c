@@ -32,6 +32,7 @@
 
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/power/fan5451x.h>
+#include <linux/wakelock.h>
 
 #define FAN5451x_DEV_NAME "fan5451x"
 
@@ -46,10 +47,11 @@ struct fan5451x_chip {
 
 	int stat_gpio;
 	int disable_gpio;
-
+	/* charger param */
 	int vbatmin;
 	int vfloat;
 	int ibus;
+	int iin;
 	int iochrg;
 	int iterm;
 	int prechg;
@@ -59,19 +61,24 @@ struct fan5451x_chip {
 	int vinovp;
 	int vinlim;
 	int fctmr;
-
+	/* charger status */
 	int health;
 	int enable;
-
 	int usb_present;
 	int wlc_present;
-
+	/* battery temp scenario */
 	int prev_ibus_ma;
 	unsigned int set_ibat_ma;
 	unsigned int ext_set_ibat_ma;
 	unsigned int set_vddmax_mv;
 	unsigned int ext_set_vddmax_mv;
 	unsigned int ext_batt_health;
+	/* step charging */
+	struct delayed_work vbat_measure_work;
+	struct wake_lock chg_wake_lock;
+	int ibat_offset_ma;
+	int step_dwn_offset_ma;
+	unsigned int step_dwn_thr_mv;
 };
 
 static int fan5451x_read_reg(struct i2c_client *client, u8 reg)
@@ -221,13 +228,17 @@ static int fan5451x_set_iochrg(struct fan5451x_chip *chip, int ma)
 
 static void fan5451x_set_appropriate_current(struct fan5451x_chip *chip)
 {
-	unsigned int chg_current = chip->set_ibat_ma;
+	static unsigned int prev_chg_current;
+	unsigned int chg_current = chip->set_ibat_ma - chip->ibat_offset_ma;
 
 	if (chip->ext_set_ibat_ma)
 		chg_current = min(chg_current, chip->ext_set_ibat_ma);
 
-	pr_info("setting charger current %d mA\n", chg_current);
-	fan5451x_set_iochrg(chip, chg_current);
+	if (prev_chg_current != chg_current) {
+		prev_chg_current = chg_current;
+		pr_info("setting charger current %d mA\n", chg_current);
+		fan5451x_set_iochrg(chip, chg_current);
+	}
 }
 
 #define IBUS_MIN_MA 100
@@ -248,6 +259,24 @@ static int fan5451x_set_ibus(struct fan5451x_chip *chip, int ma)
 	return fan5451x_write_reg(chip->client, REG_IBUS, reg_val);
 }
 
+#define IIN_MIN_MA 325
+#define IIN_MAX_MA 2000
+#define IIN_STEP_MA 25
+static int fan5451x_set_iin(struct fan5451x_chip *chip, int ma)
+{
+	u8 reg_val;
+
+	if (ma < IIN_MIN_MA)
+		ma = IIN_MIN_MA;
+	else if (ma > IIN_MAX_MA)
+		ma = IIN_MAX_MA;
+
+	reg_val = (ma - IIN_MIN_MA) / IIN_STEP_MA;
+	chip->iin = reg_val * IIN_STEP_MA + IIN_MIN_MA;
+
+	return fan5451x_write_reg(chip->client, REG_IIN, reg_val);
+}
+
 #define VBATMIN_MIN_MA 2700
 #define VBATMIN_MAX_MA 3400
 #define VBATMIN_STEP_MA 100
@@ -263,7 +292,7 @@ static int fan5451x_set_vbatmin(struct fan5451x_chip *chip, int ma)
 	reg_val = (ma - VBATMIN_MIN_MA) / VBATMIN_STEP_MA;
 	chip->vbatmin = reg_val * VBATMIN_STEP_MA + VBATMIN_MIN_MA;
 
-	return fan5451x_write_reg(chip->client, REG_IBUS, reg_val);
+	return fan5451x_update_reg(chip->client, REG_CON0, reg_val, CON0_VBATMIN);
 }
 
 #define ITERM_MIN_MA 25
@@ -419,44 +448,81 @@ static int fan5451x_set_protection(struct fan5451x_chip *chip,
 	return ret;
 }
 
+static inline void fan5451x_vbat_measure(struct fan5451x_chip *chip)
+{
+	if (chip->step_dwn_offset_ma && chip->step_dwn_thr_mv) {
+		if (chip->usb_present || chip->wlc_present) {
+			if (!wake_lock_active(&chip->chg_wake_lock))
+				wake_lock(&chip->chg_wake_lock);
+			schedule_delayed_work(&chip->vbat_measure_work, 0);
+		} else {
+			cancel_delayed_work_sync(&chip->vbat_measure_work);
+			chip->ibat_offset_ma = 0;
+			fan5451x_set_appropriate_current(chip);
+			if (wake_lock_active(&chip->chg_wake_lock))
+				wake_unlock(&chip->chg_wake_lock);
+		}
+	}
+}
+
 static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 {
 	u8 intr[3];
+	u8 statr[3];
 	int ret;
 	struct fan5451x_chip *chip = (struct fan5451x_chip *)handle;
 	int usb_present;
 	int wlc_present;
+	bool found = false;
 
 	ret = i2c_smbus_read_i2c_block_data(chip->client, REG_INT0, 3, intr);
 	if (ret < 0) {
-		pr_err("error i2c read block\n");
+		pr_err("error i2c read REG_INT block\n");
 		return ret;
 	}
 
-	pr_info("IRQ INT0:0x%02x, INT1:0x%02x, INT2:0x%02x\n",
-			intr[0], intr[1], intr[2]);
+	ret = i2c_smbus_read_i2c_block_data(chip->client, REG_STAT0, 3, statr);
+	if (ret < 0) {
+		pr_err("error i2c read REG_STAT block\n");
+		return ret;
+	}
+
+	pr_info("IRQ INT0:0x%02x, INT1:0x%02x, INT2:0x%02x, "
+			"ST0:0x%02x, ST1:0x%02x, ST2:0x%02x\n",
+			intr[0], intr[1], intr[2],
+			statr[0], statr[1], statr[2]);
 
 	if (intr[0] & INT0_VBUSINT) {
 		usb_present = fan5451x_usb_chg_plugged_in(chip);
 
 		if (chip->usb_present ^ usb_present) {
 			chip->usb_present = usb_present;
+			pr_info("usb present %d\n", usb_present);
 			power_supply_set_present(chip->usb_psy,
 					chip->usb_present);
+			found = true;
 		}
-	} else if (intr[0] & INT0_VBUSINT) {
+	}
+
+	if (intr[0] & INT0_VININT) {
 		wlc_present = fan5451x_wlc_chg_plugged_in(chip);
 
-		if (chip->wlc_present ^ wlc_present)
+		if (chip->wlc_present ^ wlc_present) {
 			chip->wlc_present = wlc_present;
-
-		/* Todo Wireless charger control via wireless drv */
+			pr_info("wlc present %d\n", wlc_present);
+			found = true;
+		}
 	}
+
+	if (found)
+		fan5451x_vbat_measure(chip);
 
 	if (intr[0] & INT0_CHGEND)
 		pr_info("EOC IRQ\n");
 	else if (intr[1] & INT1_RCHGN)
 		pr_info("Rechg IRQ\n");
+
+	power_supply_changed(&chip->batt_psy);
 
 	return IRQ_HANDLED;
 }
@@ -532,6 +598,7 @@ static ssize_t show_chip_param(struct device *dev,
 		"vbatmin:%d\n"
 		"vfloat:%d\n"
 		"ibus:%d\n"
+		"iin:%d\n"
 		"iochrg:%d\n"
 		"iterm:%d\n"
 		"prechg:%d\n"
@@ -545,13 +612,16 @@ static ssize_t show_chip_param(struct device *dev,
 		"ext_set_ibat_ma:%d\n"
 		"set_vddmax_mv:%d\n"
 		"ext_set_vddmax_mv:%d\n"
-		"ext_batt_health:%d\n",
-		chip->vbatmin, chip->vfloat, chip->ibus, chip->iochrg,
-		chip->iterm, chip->prechg, chip->topoff_enable,
+		"ext_batt_health:%d\n"
+		"step_dwn_offset_ma:%d\n"
+		"step_dwn_thr_mv:%d\n",
+		chip->vbatmin, chip->vfloat, chip->ibus, chip->iin,
+		chip->iochrg, chip->iterm, chip->prechg, chip->topoff_enable,
 		chip->vbusovp, chip->vbuslim, chip->vinovp, chip->vinlim,
 		chip->fctmr, chip->set_ibat_ma, chip->ext_set_ibat_ma,
 		chip->set_vddmax_mv, chip->ext_set_vddmax_mv,
-		chip->ext_batt_health);
+		chip->ext_batt_health,
+		chip->step_dwn_offset_ma, chip->step_dwn_thr_mv);
 }
 
 static DEVICE_ATTR(chip_param, S_IRUGO, show_chip_param, NULL);
@@ -587,6 +657,7 @@ static void fan5451x_initialization(struct fan5451x_chip *chip)
 	ret |= fan5451x_set_vfloat(chip, chip->vfloat);
 
 	ret |= fan5451x_set_ibus(chip, chip->ibus);
+	ret |= fan5451x_set_iin(chip, chip->iin);
 
 	chip->set_ibat_ma = chip->iochrg;
 	ret |= fan5451x_set_iochrg(chip, chip->iochrg);
@@ -648,6 +719,7 @@ static enum power_supply_property msm_batt_power_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_TEMP,
 };
@@ -854,6 +926,9 @@ static int fan5451x_batt_power_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = get_prop_capacity(chip);
 		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		val->intval = chip->ext_set_ibat_ma * 1000;
+		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = get_prop_current_now(chip);
 		break;
@@ -898,6 +973,28 @@ static int fan5451x_batt_power_set_property(struct power_supply *psy,
 	return ret;
 };
 
+#define VBAT_MEASURE_DELAY (10 * HZ)
+#define STEPUP_OFFSET_MV 100
+#define STEPDOWN_OFFSET_MV 100
+static void
+fan5451x_vbat_measure_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct fan5451x_chip *chip = container_of(dwork,
+				struct fan5451x_chip, vbat_measure_work);
+	int batt_volt;
+
+	batt_volt = get_prop_battery_voltage_now(chip);
+	if (batt_volt > (chip->step_dwn_thr_mv + STEPDOWN_OFFSET_MV) * 1000)
+		chip->ibat_offset_ma = chip->step_dwn_offset_ma;
+	else if (batt_volt < (chip->step_dwn_thr_mv - STEPUP_OFFSET_MV) * 1000)
+		chip->ibat_offset_ma = 0;
+
+	fan5451x_set_appropriate_current(chip);
+
+	schedule_delayed_work(&chip->vbat_measure_work, VBAT_MEASURE_DELAY);
+}
+
 #define OF_PROP_READ(chip, prop, dt_property, retval, optional)	\
 do { \
 	if (retval) \
@@ -936,6 +1033,7 @@ static int fan5451x_parse_dt(struct fan5451x_chip *chip)
 	OF_PROP_READ(chip, vbatmin, "vbatmin", ret, 0);
 	OF_PROP_READ(chip, vfloat, "vfloat", ret, 0);
 	OF_PROP_READ(chip, ibus, "ibus", ret, 0);
+	OF_PROP_READ(chip, iin, "iin", ret, 0);
 	OF_PROP_READ(chip, iochrg, "iochrg", ret, 0);
 	OF_PROP_READ(chip, iterm, "iterm", ret, 0);
 	OF_PROP_READ(chip, prechg, "prechg", ret, 0);
@@ -946,6 +1044,8 @@ static int fan5451x_parse_dt(struct fan5451x_chip *chip)
 	OF_PROP_READ(chip, vinovp, "vinovp", ret, 0);
 	OF_PROP_READ(chip, vinlim, "vinlim", ret, 0);
 	OF_PROP_READ(chip, fctmr, "fctmr", ret, 0);
+	OF_PROP_READ(chip, step_dwn_offset_ma, "step-dwn-offset-ma", ret, 1);
+	OF_PROP_READ(chip, step_dwn_thr_mv, "step-dwn-thr-mv", ret, 1);
 
 	return ret;
 }
@@ -1023,6 +1123,14 @@ static int fan5451x_probe(struct i2c_client *client,
 		goto err_gpio_free;
 	}
 
+	wake_lock_init(&chip->chg_wake_lock,
+			WAKE_LOCK_SUSPEND, "fan5451x_chg");
+
+	if (chip->step_dwn_offset_ma && chip->step_dwn_thr_mv) {
+		INIT_DELAYED_WORK(&chip->vbat_measure_work,
+				fan5451x_vbat_measure_work);
+	}
+
 	ret = request_threaded_irq(client->irq, NULL, fan5451x_irq_thread,
 			IRQF_TRIGGER_LOW | IRQF_ONESHOT, "fan5451x_irq", chip);
 	if (ret) {
@@ -1034,7 +1142,9 @@ static int fan5451x_probe(struct i2c_client *client,
 	/* Set initial state */
 	chip->usb_present = fan5451x_usb_chg_plugged_in(chip);
 	power_supply_set_present(chip->usb_psy, chip->usb_present);
+	chip->wlc_present = fan5451x_wlc_chg_plugged_in(chip);
 	fan5451x_enable(chip, 1);
+	fan5451x_vbat_measure(chip);
 
 	ret = device_create_file(&client->dev, &dev_attr_addr_register);
 	ret |= device_create_file(&client->dev, &dev_attr_status_register);
@@ -1053,6 +1163,7 @@ err_device_create_file:
 	free_irq(client->irq, chip);
 err_psy_unreg:
 	power_supply_unregister(&chip->batt_psy);
+	wake_lock_destroy(&chip->chg_wake_lock);
 err_gpio_free:
 	gpio_free(chip->disable_gpio);
 	gpio_free(chip->stat_gpio);
@@ -1067,6 +1178,8 @@ static int fan5451x_remove(struct i2c_client *client)
 {
 	struct fan5451x_chip *chip = i2c_get_clientdata(client);
 
+	cancel_delayed_work_sync(&chip->vbat_measure_work);
+
 	device_remove_file(&client->dev, &dev_attr_addr_register);
 	device_remove_file(&client->dev, &dev_attr_status_register);
 	device_remove_file(&client->dev, &dev_attr_chip_param);
@@ -1075,6 +1188,7 @@ static int fan5451x_remove(struct i2c_client *client)
 	free_irq(client->irq, chip);
 
 	power_supply_unregister(&chip->batt_psy);
+	wake_lock_destroy(&chip->chg_wake_lock);
 
 	gpio_free(chip->disable_gpio);
 	gpio_free(chip->stat_gpio);
