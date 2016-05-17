@@ -206,6 +206,60 @@
 		qcom,thermal-mitigation = <1500 900 500 100>;
 	};
 
+        smb348_otg_vreg: smb348-charger@57 {
+		compatible = "qcom,smb348-charger";
+		reg = <0x57>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <49 2>;
+		pinctrl-names = "default";
+		//pinctrl-0 = <&smb_int_default>;
+		pinctrl-0 = <&smb_int_default &smb_susp_default &wpc_stat_default &wpc_dock_det_default>;
+
+		//qcom,chg-valid-gpio = <&msm_gpio 37 0x00>;
+		qcom,chg-end-gpio = <&msm_gpio 17 0x00>;
+		qcom,wpc-stat-gpio = <&msm_gpio 22 0x00>;
+		qcom,wpc-enable-gpio = <&msm_gpio 26 0x00>;
+		qcom,wpc-dock-detect-gpio = <&msm_gpio 69 0x00>;
+		qcom,float-voltage-mv = <4400>;
+		qcom,recharge-mv = <200>;
+		regulator-name = "smb348_otg_vreg";
+		qcom,thermal-mitigation = <1500 700 600 0>;
+		qcom,fastchg-current-max-ma = <200>;
+		qcom,fastchg-current-mitigation-ma = <100>;
+
+		qcom,disable-apsd;
+		qcom,bms-psy-name = "bms";
+		qcom,bms-controlled-charging;
+		qcom,dc-psy-type = "Wireless";
+		qcom,dc-psy-ma = <500>;
+		//qcom,iterm-disabled;
+		qcom,iterm-ma = <30>;
+		qcom,chg-inhibit-disabled;
+		qcom,skip-usb-suspend-for-fake-battery;
+		/*
+		 * In some of designs, the battery thermistor
+		 * is only connected to the PMIC THERM pin.
+		 * In this condition, we should define 'qcom,using-pmic-therm'.
+		 */
+		qcom,hot-bat-decidegc = <550>;
+		qcom,cold-bat-decidegc = <(-50)>;
+		qcom,bat-present-decidegc = <200>;
+		/*
+		 * Below preperties are used for enable JEITA
+		 */
+		qcom,warm-bat-decidegc = <450>;
+		qcom,cool-bat-decidegc = <100>;
+		qcom,warm-bat-ma = <100>;
+		qcom,cool-bat-ma = <100>;
+		qcom,warm-bat-mv = <4100>;
+		qcom,cool-bat-mv = <4100>;
+		/*
+		 * To enable charger node:
+		 * set status = "ok" and
+		 * add 'qcom,use-external-charger' to pm8909_chg node
+		 */
+		status = "ok";
+	};
 	st-fg@70 {
 		compatible = "st,stc3117";
 		reg = <0x70>;
