@@ -244,6 +244,8 @@ enum{
 /* TX Data Value Register */
 #define TX_DATA_01_REG                          0x005A
 #define TX_DATA_02_REG                          0x005B
+#define TX_DATA_03_REG                          0x005C
+#define TX_DATA_04_REG                          0x005D
 
 /* rx fw burn magic number */
 #define RX_BURN_MAGIC_NUMBER_ADDR               0x3800
