@@ -363,7 +363,7 @@ static struct stc311x_platform_data stc3117_data = {
 	/* nominal capacity in mAh, coming from battery characterisation*/
 	.Cnom = 400,
 	.Rsense = 10, /* sense resistor mOhms*/
-	.RelaxCurrent = 20, /* current for relaxation in mA (< C/20) */
+	.RelaxCurrent = 5, /* current for relaxation in mA (< C/20) */
 	.Adaptive = 1, /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 
 	/* Elentec Co Ltd Battery pack - 80 means 8% */
