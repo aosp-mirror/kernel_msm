@@ -1835,7 +1835,7 @@ static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
 	rc = smb23x_read(chip, IRQ_C_STATUS_REG, &reg);
 	if (rc) {
 		pr_err("IRQ_C_STATUS_REG read fail. rc=%d\n", rc);
-		return POWER_SUPPLY_STATUS_UNKNOWN;
+		return POWER_SUPPLY_STATUS_DISCHARGING;
 	}
 	else if ((reg & ITERM_BIT) ? true : false) {
 		pr_info("smb23x status: FULL \n");
@@ -1845,7 +1845,7 @@ static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
 	rc = smb23x_read(chip, CHG_STATUS_B_REG, &reg);
 	if (rc < 0) {
 		pr_err("Read STATUS_B failed, rc=%d\n", rc);
-		return POWER_SUPPLY_STATUS_UNKNOWN;
+		return POWER_SUPPLY_STATUS_DISCHARGING;
 	}
 
 	if (reg & HOLD_OFF_BIT) {
