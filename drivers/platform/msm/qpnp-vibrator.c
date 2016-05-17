@@ -25,11 +25,15 @@
 #define QPNP_VIB_VTG_CTL(base)		(base + 0x41)
 #define QPNP_VIB_EN_CTL(base)		(base + 0x46)
 
-#define QPNP_VIB_MAX_LEVEL		31
-#define QPNP_VIB_MIN_LEVEL		12
+/* AWA spec.
+   Model name:BW-9227
+   Operating voltage range: 1.5~2.0V
+*/
+#define QPNP_VIB_MAX_LEVEL		20
+#define QPNP_VIB_MIN_LEVEL		15
 
 #define QPNP_VIB_DEFAULT_TIMEOUT	15000
-#define QPNP_VIB_DEFAULT_VTG_LVL	3100
+#define QPNP_VIB_DEFAULT_VTG_LVL	1800
 
 #define QPNP_VIB_EN			BIT(7)
 #define QPNP_VIB_VTG_SET_MASK		0x1F
