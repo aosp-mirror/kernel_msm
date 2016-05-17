@@ -187,6 +187,7 @@ static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 
 static long CEI_SOC_Set = 999;
 static long CEI_Temperature = 9999;
+static int stc3117_count_check = 0;
 /* Private variables -------------------------------------------------------*/
 
 /* structure of the STC311x battery monitoring parameters */
@@ -1023,6 +1024,10 @@ static int STC311x_ReadBatteryData(struct STC311x_BattDataTypeDef *BattData)
 		return res;  /* read failed */
 	BattData->RelaxTimer = data[0];
 
+	if (BattData->RelaxTimer >= 120)
+		stc3117_count_check++;
+	else
+		stc3117_count_check = 0;
 
 	return OK;
 }
@@ -1223,6 +1228,7 @@ static void MM_FSM(void)
 				/* end of charge detected */
 				STC311x_SetSOC(MAX_HRSOC);
 				BattData.SOC = MAX_SOC;  /* 100% */
+				stc3117_count_check = 0;
 			}
 			/* end of charge cycle */
 			BattData.BattState = BATT_IDLE;
@@ -1589,12 +1595,24 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 	/* check STC3117 status */
 #ifdef BATD_UC8
 	/* check STC3117 status */
-	if ((BattData.STC_Status & (M_BATFAIL | M_UVLOD)) != 0) {
+	if (((BattData.STC_Status & (M_BATFAIL | M_UVLOD)) != 0) ||
+	    (stc3117_count_check >= 2)) {
 		/* BATD or UVLO detected */
 		if (BattData.ConvCounter > 0) {
 			GG->Voltage = BattData.Voltage;
 			GG->SOC = (BattData.HRSOC*10+256)/512;
 		}
+
+		if ((BattData.STC_Status & M_BATFAIL) != 0)
+			pr_err("stc3117 BATD error, gauge reset.\n");
+		else if ((BattData.STC_Status & M_UVLOD) != 0)
+			pr_err("stc3117 UVLOD error, gauge reset.\n");
+		else if (stc3117_count_check >= 2)
+			pr_err("stc3117 current count error, gauge reset.\n");
+		else
+			pr_err("stc3117 unknow error, gauge reset.\n");
+
+		stc3117_count_check = 0;
 
 		/* BATD or UVLO detected */
 		GasGauge_Reset();
@@ -2158,7 +2176,7 @@ static int stc311x_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, chip);
 
 	chip->battery.name		= "bms";
-	chip->battery.type		= POWER_SUPPLY_TYPE_BATTERY;
+	chip->battery.type		= POWER_SUPPLY_TYPE_BMS;
 	chip->battery.get_property	= stc311x_get_property;
 	chip->battery.properties	= stc311x_battery_props;
 	chip->battery.num_properties	= ARRAY_SIZE(stc311x_battery_props);
@@ -2289,6 +2307,7 @@ static int stc311x_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct stc311x_chip *chip = i2c_get_clientdata(client);
 
+	stc3117_count_check = 0;
 	cancel_delayed_work(&chip->work);
 	return 0;
 }
