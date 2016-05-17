@@ -256,7 +256,7 @@ static int idtp9220_rx_communicate_with_tx(struct idtp9220_receiver *chip,
         goto clerar_interrupt;
     }
 
-    if((IS_TX_HARDWARE_VERSION_DATA == reg) || (IS_TX_SOFTWARE_VERSIION_DATA == reg))
+    if(IS_TX_HARDWARE_VERSION_DATA == reg)
     {
         /* read hardware version*/
         rc = idtp9220_read(chip, TX_DATA_01_REG, &val->strval[0]);
@@ -267,6 +267,36 @@ static int idtp9220_rx_communicate_with_tx(struct idtp9220_receiver *chip,
 
         val->strval[1] = 0;
 
+    }
+    else if(IS_TX_SOFTWARE_VERSIION_DATA == reg)
+    {
+        /* read tx software version0*/
+        rc = idtp9220_read(chip, TX_DATA_01_REG, &(val[0].strval[0]));
+        if(rc < 0)
+        {
+              goto clerar_interrupt;
+        }
+
+        /* read tx software version1*/
+        rc = idtp9220_read(chip, TX_DATA_02_REG, &(val[0].strval[1]));
+        if(rc < 0)
+        {
+             goto clerar_interrupt;
+        }
+
+        /* read tx software version2*/
+        rc = idtp9220_read(chip, TX_DATA_03_REG, &(val[1].strval[0]));
+        if(rc < 0)
+        {
+             goto clerar_interrupt;
+        }
+
+        /* read tx software version3*/
+        rc = idtp9220_read(chip, TX_DATA_04_REG, &(val[1].strval[1]));
+        if(rc < 0)
+        {
+             goto clerar_interrupt;
+        }
     }
     else if((IS_TX_TEMP_DATA == reg) || (IS_TX_VIN == reg))
     {
@@ -1417,15 +1447,16 @@ static ssize_t idtp9220_tx_soft_version_show(struct device *dev,
     int rc;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     struct idtp9220_receiver *chip = i2c_get_clientdata(client);
-    union idtp9220_interactive_data soft_version;
+    union idtp9220_interactive_data soft_version[2];
 
-    rc = idtp9220_do_device_action(chip, GET_TX_SOFTWARE_VERSION, &soft_version);
+    rc = idtp9220_do_device_action(chip, GET_TX_SOFTWARE_VERSION, soft_version);
     if(rc)
     {
         return sprintf(buf, "can not get tx software version\n");
     }
 
-    return sprintf(buf, "tx soft version = %d\n", soft_version.shortval);
+    return sprintf(buf, "tx soft version = %d.%d.%d.%d\n", soft_version[1].strval[1],
+             soft_version[1].strval[0], soft_version[0].strval[1], soft_version[0].strval[0]);
 }
 
 static ssize_t idtp9220_tx_vin_show(struct device *dev,
