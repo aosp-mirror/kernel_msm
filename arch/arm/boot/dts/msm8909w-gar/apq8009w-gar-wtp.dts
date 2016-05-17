@@ -103,9 +103,9 @@
 		qcom,float-voltage-mv = <4360>;
 		qcom,charging-timeout = <360>;
 		qcom,recharge-thresh-mv = <150>;
-		qcom,iterm-ma = <50>;
+		qcom,iterm-ma = <20>;
 		qcom,fastchg-ma = <100>;
-		qcom,hot-bat-decidegc = <450>;
+		qcom,hot-bat-decidegc = <550>;
 		qcom,warm-bat-decidegc = <450>;
 		qcom,cool-bat-decidegc = <80>;
 		qcom,cold-bat-decidegc = <(30)>;
