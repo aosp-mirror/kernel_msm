@@ -2714,8 +2714,7 @@ static void msm_thermal_bite(int zone_id, long temp)
 			tsens_id, temp);
 	}
 	if (!is_scm_armv8()) {
-		//scm_call_atomic1(SCM_SVC_BOOT, THERM_SECURE_BITE_CMD, 0);
-		kernel_power_off();
+		scm_call_atomic1(SCM_SVC_BOOT, THERM_SECURE_BITE_CMD, 0);
 	} else {
 		desc.args[0] = 0;
 		desc.arginfo = SCM_ARGS(1);
