@@ -13,11 +13,14 @@
 
 enum{
 	STATUS_NORMAL           = 0,
-	STATUS_FULL             = 1,
-	STATUS_OVER_TEMP        = 2,
+	STATUS_FULL_CHECK	= 1,
+	STATUS_FULL_WARM	= 2,
+	STATUS_FULL             = 3,
+	STATUS_OVER_TEMP        = 4,
+	STATUS_BATT_OV		= 5,
 };
 
 extern int cei_smb231_flag;
 extern int usb_insertion(void);
+extern int usb_pre_removal(void);
 extern int usb_removal(void);
-

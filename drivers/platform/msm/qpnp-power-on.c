@@ -872,6 +872,9 @@ static irqreturn_t qpnp_cblpwr_irq(int irq, void *_pon)
 
 	vbus = !!irq_read_line(irq);
 
+	if (vbus == 0)
+		usb_pre_removal();
+
 	rc = qpnp_pon_input_dispatch(pon, PON_CBLPWR);
 	if (rc)
 		dev_err(&pon->spmi->dev, "Unable to send input event\n");

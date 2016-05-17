@@ -388,12 +388,14 @@ int cei_flag = true;
 static irqreturn_t smb23x_stat_handler(int irq, void *dev_id);
 static void reconfig_upon_unplug(struct smb23x_chip *chip);
 static int smb23x_get_prop_batt_voltage(struct smb23x_chip *chip);
+static int smb23x_determine_initial_status(struct smb23x_chip *chip);
 
 static int __smb23x_read(struct smb23x_chip *chip, u8 reg, u8 *val)
 {
 	int rc;
 
 	if (cei_flag == false) {
+		*val = 0;
 		return 0;
 	}
 	rc = i2c_smbus_read_byte_data(chip->client, reg);
@@ -835,6 +837,9 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 		return rc;
 	}
 
+
+	rc = smb23x_masked_write(chip, CFG_REG_2,
+				 BIT(3), 0);
 	/* iterm setting */
 	if (chip->cfg_iterm_disabled) {
 		rc = smb23x_masked_write(chip, CFG_REG_2,
@@ -1123,7 +1128,14 @@ static int hot_hard_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	ktime_t kt;
 
 	pr_warn("rt_sts = 0x02%x\n", rt_sts);
-	chip->batt_hot = !!rt_sts;
+
+	if (cei_flag == true)
+		chip->batt_hot = !!rt_sts;
+	else
+		chip->batt_hot = false;
+
+	if (CEI_STATUS != STATUS_NORMAL)
+		return 0;
 
 	if (chip->batt_hot == true) {
 		CEI_STATUS = STATUS_OVER_TEMP;
@@ -1138,21 +1150,30 @@ static int hot_hard_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 static int cold_hard_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
-	chip->batt_cold = !!rt_sts;
+	if (cei_flag == true)
+		chip->batt_cold = !!rt_sts;
+	else
+		chip->batt_cold = false;
 	return 0;
 }
 
 static int hot_soft_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
-	chip->batt_warm = !!rt_sts;
+	if (cei_flag == true)
+		chip->batt_warm = !!rt_sts;
+	else
+		chip->batt_warm = false;
 	return 0;
 }
 
 static int cold_soft_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
-	chip->batt_cool = !!rt_sts;
+	if (cei_flag == true)
+		chip->batt_cool = !!rt_sts;
+	else
+		chip->batt_cool = false;
 	return 0;
 }
 
@@ -1192,7 +1213,6 @@ static int chg_error_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 static int recharge_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
-	chip->batt_full = !rt_sts;
 	return 0;
 }
 
@@ -1204,31 +1224,24 @@ static int taper_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int iterm_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	u8 reg = 0;
-	int rc;
 	ktime_t kt;
 
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
-	chip->batt_full = !!rt_sts;
+
+	if (cei_flag == true)
+		chip->batt_full = !!rt_sts;
+	else
+		chip->batt_full = false;
+
+	if (CEI_STATUS != STATUS_NORMAL)
+		return 0;
+
 	if (chip->batt_full == true) {
-		rc = smb23x_read(chip, IRQ_A_STATUS_REG, &reg);
-		if (rc < 0) {
-			pr_err("Read STATUS_C failed, rc=%d\n", rc);
-			return rc;
-		}
-		if ((reg & 0x44) == 0)	{
-			CEI_STATUS = STATUS_FULL;
-			pr_err("SMB231:battery is full turn off WPC\n");
-			gpio_direction_output(GPIO_WPC_EN1, 1);
-			kt = ns_to_ktime(TRIM_PERIOD_NS * 30 * 1);
-			alarm_start_relative(&wpc_check_alarm, kt);
-		} else {
-			CEI_STATUS = STATUS_OVER_TEMP;
-			pr_err("SMB231:temperature is warm and full turn off WPC\n");
-			gpio_direction_output(GPIO_WPC_EN1, 1);
-			kt = ns_to_ktime(TRIM_PERIOD_NS * 60 * 1);
-			alarm_start_relative(&wpc_check_alarm, kt);
-		}
+		CEI_STATUS = STATUS_FULL_CHECK;
+		pr_err("SMB231:battery is FULL_CHECK turn off WPC");
+		gpio_direction_output(GPIO_WPC_EN1, 1);
+		kt = ns_to_ktime(TRIM_PERIOD_NS * 15 * 1);
+		alarm_start_relative(&wpc_check_alarm, kt);
 	}
 	return 0;
 }
@@ -1281,6 +1294,8 @@ static int handle_usb_insertion(struct smb23x_chip *chip)
 {
 	enum power_supply_type usb_type;
 
+	cei_flag = true;
+
 	usb_type = get_usb_supply_type(chip);
 	power_supply_set_supply_type(chip->usb_psy, usb_type);
 	power_supply_set_present(chip->usb_psy, chip->usb_present);
@@ -1308,11 +1323,20 @@ int usb_insertion(void)
 	cei_chip->usb_present = true;
 	cei_flag = true;
 	usb_type = get_usb_supply_type(cei_chip);
+	smb23x_determine_initial_status(cei_chip);
 	power_supply_set_present(cei_chip->usb_psy, true);
 	power_supply_set_online(cei_chip->usb_psy, true);
 
 	power_supply_changed(cei_chip->usb_psy);
 	reconfig_upon_unplug(cei_chip);
+
+	return 0;
+}
+
+int usb_pre_removal(void)
+{
+	cei_chip->usb_present = false;
+	cei_flag = false;
 
 	return 0;
 }
@@ -1418,22 +1442,62 @@ static enum alarmtimer_restart wpc_check_alarm_function(struct alarm *alarm,
 static void WPC_check_work(struct work_struct *work)
 {
 	ktime_t kt;
+	int battery_voltage;
+
+	battery_voltage = smb23x_get_prop_batt_voltage(cei_chip);
+
+	pr_debug("battery_voltage=%d\n", battery_voltage);
 
 	if (CEI_STATUS == STATUS_OVER_TEMP || CEI_STATUS == STATUS_NORMAL) {
 		pr_err("SMB231:OVER TEMP turn on WPC");
 		gpio_direction_output(GPIO_WPC_EN1, 0);
 		CEI_STATUS = STATUS_NORMAL;
+		return;
+	} else if (CEI_STATUS == STATUS_FULL_CHECK) {
+		if (battery_voltage <= 4280000) {
+			CEI_STATUS = STATUS_FULL_WARM;
+			gpio_direction_output(GPIO_WPC_EN1, 1);
+			kt = ns_to_ktime(TRIM_PERIOD_NS * 45 * 1);
+			alarm_start_relative(&wpc_check_alarm, kt);
+			return;
+		} else {
+			CEI_STATUS = STATUS_FULL;
+			gpio_direction_output(GPIO_WPC_EN1, 1);
+			kt = ns_to_ktime(TRIM_PERIOD_NS * 15 * 1);
+			alarm_start_relative(&wpc_check_alarm, kt);
+			return;
+		}
+	} else if (CEI_STATUS == STATUS_FULL_WARM) {
+		pr_err("SMB231:WARM and FULL turn on WPC");
+		gpio_direction_output(GPIO_WPC_EN1, 0);
+		CEI_STATUS = STATUS_NORMAL;
+		return;
 	} else if (CEI_STATUS == STATUS_FULL) {
-		if (smb23x_get_prop_batt_voltage(cei_chip) <= 4200000) {
+		if (battery_voltage <= 4280000) {
 			pr_err("SMB231:FULL turn on WPC");
 			gpio_direction_output(GPIO_WPC_EN1, 0);
 			CEI_STATUS = STATUS_NORMAL;
+			return;
 		} else {
 			gpio_direction_output(GPIO_WPC_EN1, 1);
 			kt = ns_to_ktime(TRIM_PERIOD_NS * 30 * 1);
 			alarm_start_relative(&wpc_check_alarm, kt);
+			return;
+		}
+	} else if (CEI_STATUS == STATUS_BATT_OV) {
+		if (battery_voltage <= 4350000) {
+			pr_err("SMB231:batt OV turn on WPC");
+			gpio_direction_output(GPIO_WPC_EN1, 0);
+			CEI_STATUS = STATUS_NORMAL;
+			return;
+		} else {
+			gpio_direction_output(GPIO_WPC_EN1, 1);
+			kt = ns_to_ktime(TRIM_PERIOD_NS * 60 * 1);
+			alarm_start_relative(&wpc_check_alarm, kt);
+			return;
 		}
 	}
+
 }
 
 /*
@@ -1502,14 +1566,7 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 	pr_debug("chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present,  usb_present);
-	if (chip->usb_present == usb_present)
-		return 0;
-/*
-	chip->usb_present = usb_present;
-	reconfig_upon_unplug(chip);
-	power_supply_set_present(chip->usb_psy, usb_present);
-*/
-	cei_flag = false;
+
 	return 0;
 }
 
@@ -1718,6 +1775,25 @@ static int smb23x_irq_read(struct smb23x_chip *chip)
 	return rc;
 }
 
+static void smb23x_check_batt_ov(struct smb23x_chip *chip) {
+	int battery_voltage;
+	ktime_t kt;
+
+	battery_voltage = smb23x_get_prop_batt_voltage(chip);
+	pr_err("=====ov_check battery_voltage=%d=====\n", battery_voltage);
+
+	if (CEI_STATUS != STATUS_NORMAL)
+		return;
+
+	if (battery_voltage >= 4450000) {
+		CEI_STATUS = STATUS_BATT_OV;
+		pr_err("SMB231:battery is OV turn off WPC");
+		gpio_direction_output(GPIO_WPC_EN1, 1);
+		kt = ns_to_ktime(TRIM_PERIOD_NS * 60 * 1);
+		alarm_start_relative(&wpc_check_alarm, kt);
+	}
+}
+
 #define IRQ_LATCHED_MASK	0x02
 #define IRQ_STATUS_MASK		0x01
 #define BITS_PER_IRQ		2
@@ -1741,6 +1817,8 @@ static irqreturn_t smb23x_stat_handler(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 	chip->irq_waiting = false;
+
+	smb23x_check_batt_ov(chip);
 
 	smb23x_irq_read(chip);
 	for (i = 0; i < ARRAY_SIZE(handlers); i++) {
