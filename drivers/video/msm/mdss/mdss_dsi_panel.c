@@ -33,15 +33,6 @@
 #include <linux/uaccess.h>
 #endif
 
-#ifdef CONFIG_ASUS_BACKLIGHT_DEBUG
-static int brightness_lock = 0;
-#endif
-
-#include <linux/debugfs.h>
-#ifdef CONFIG_ASUS_BACKLIGHT_DEBUG
-#include <linux/uaccess.h>
-#endif
-
 /* Lock backlight of ambient mode to 28nits */
 #define AMBIENT_BL_LEVEL_V1	(40)
 static int ambient_bl_level = AMBIENT_BL_LEVEL_V1;
