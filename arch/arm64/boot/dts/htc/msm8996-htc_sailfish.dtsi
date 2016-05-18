@@ -56,7 +56,12 @@
 /{
         qcom,battery-data {
                 qcom,batt-id-range-pct = <15>;
-                #include "batterydata-m1s1-prototype-id1.dtsi"
-                #include "batterydata-m1s1-prototype-id2.dtsi"
+                /delete-node/ qcom,itech-3000mah;
+                /delete-node/ qcom,m1s1-prototype-id1-batterydata;
+                /delete-node/ qcom,m1s1-prototype-id2-batterydata;
+                #include "batterydata-s1-id1.dtsi"
+                #include "batterydata-s1-id2.dtsi"
+                #include "batterydata-s1-id3.dtsi"
+
         };
 };
