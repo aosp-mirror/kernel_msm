@@ -149,6 +149,7 @@ struct idtp9220_receiver {
 #define IDTP9220_VBAT_HIGH_DELTA_MV             50
 #define IDTP9220_VBAT_HIGH_CUR_LIMIT_MA         130
 #define IDTP9220_VBAT_LOW_CUR_LIMIT_MA          220
+#define IDTP9220_TX_FREQ_KHZ                    470
 
 /* Vout config parameters */
 #define IDT9200_VOUT_STEP_MV                    100
