@@ -25,7 +25,8 @@ qcom,m1s1-prototype-id1-batterydata {
 	qcom,gui-version = "PMI8996GUI - 1.0.1.4";
 	htc,batt_id = <1>;
 	htc,id_raw_min = <0>;
-	htc,id_raw_max = <22000>;
+	htc,id_raw_max = <16000>;
+	htc,bat-ful-chg-criteria-ma = <323>;
 	qcom,fg-profile-data = [
 		 E2 83 DE 7C
 		 34 81 86 77
