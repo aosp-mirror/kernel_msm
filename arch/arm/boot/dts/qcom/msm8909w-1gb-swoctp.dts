@@ -16,11 +16,11 @@
 #include "msm8909w-swoctp.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MSM8909W-PM8916 SWOC MTP";
+	model = "Qualcomm Technologies, Inc. MSM8909W-PM8916 1GB SWOC TP";
 	compatible = "qcom,msm8909-mtp", "qcom,msm8909", "qcom,mtp";
 	qcom,msm-id =   <245 0>,
 			<258 0>,
 			<275 0>,
 			<300 0>;
-	qcom,board-id= <8 0x109>;
+	qcom,board-id= <8 0x9>; /* CX, APC split with PM8916+SMB231, STC3117 */
 };

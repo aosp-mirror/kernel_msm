@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,30 +13,38 @@
 
 /dts-v1/;
 
-#include "msm8909-mtp.dtsi"
+#include "msm8909-cdp.dtsi"
 #include "msm8909w-gpu.dtsi"
-#include "msm8909-pm8916.dtsi"
-#include "msm8909-pm8916-mtp.dtsi"
+#include "msm8909-pm8916-cdp.dtsi"
 #include "msm8909w.dtsi"
 #include "msm8909w-memory.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MSM8909W-PM8916 MTP";
-	compatible = "qcom,msm8909-mtp", "qcom,msm8909", "qcom,mtp";
+	model = "Qualcomm Technologies, Inc. MSM8909W-PM8916 1GB CDP";
+	compatible = "qcom,msm8909-cdp", "qcom,msm8909", "qcom,cdp";
 	qcom,msm-id =   <245 0>,
 			<258 0>,
 			<275 0>,
 			<300 0>;
-	qcom,board-id= <8 0x105>;
+	qcom,board-id= <1 0x3>; /* CX, APC split with PM8916 & 320p display */
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_hx8394d_480_vid>;
 };
 
 &soc {
 	i2c@78b9000 { /* BLSP1 QUP5 */
+
+		/delete-node/ atmel_mxt_ts@4a;
+
 		synaptics@20 {
-			synaptics,display-coords = <0 0 479 479>;
 			/delete-property/ synaptics,power-down;
 			/delete-property/ synaptics,disable-gpios;
 			synaptics,is_wake;
+			synaptics,device1 {
+				synaptics,display-coords = <0 0 479 479>;
+			};
 		};
 
 		it7260@46 {
@@ -47,7 +55,8 @@
 			avdd-supply = <&pm8916_l17>;
 			vdd-supply = <&pm8916_l6>;
 			/* pins used by touchscreen */
-			pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
+			pinctrl-names = "pmx_ts_active","pmx_ts_suspend",
+					"pmx_ts_release";
 			pinctrl-0 = <&ts_int_active &ts_ite_reset_active>;
 			pinctrl-1 = <&ts_int_suspend &ts_ite_reset_suspend>;
 			pinctrl-2 = <&ts_release>;
@@ -69,6 +78,7 @@
 	qcom,msm-ssc-sensors {
 		compatible = "qcom,msm-ssc-sensors";
 	};
+
 };
 
 &i2c_1 {
@@ -89,10 +99,10 @@
 	pinctrl-0 = <&uart_console_sleep>;
 };
 
-&gdsc_oxili_gx {
-	clock-names = "core_root_clk";
-	clocks =<&clock_gcc clk_gfx3d_clk_src>;
-	qcom,enable-root-clk;
-	qcom,clk-dis-wait-val = <0x5>;
-	status = "okay";
+&soc {
+	tlmm_pinmux: pinctrl@1000000 {
+		vdd_spkdrv {
+			status = "disabled";
+		};
+	};
 };

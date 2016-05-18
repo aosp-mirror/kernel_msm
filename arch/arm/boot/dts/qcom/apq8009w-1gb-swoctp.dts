@@ -13,14 +13,12 @@
 
 /dts-v1/;
 
-#include "msm8909w-swoctp.dtsi"
+#include "apq8009w-swoctp.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MSM8909W-PM8916 SWOC MTP";
-	compatible = "qcom,msm8909-mtp", "qcom,msm8909", "qcom,mtp";
-	qcom,msm-id =   <245 0>,
-			<258 0>,
-			<275 0>,
-			<300 0>;
-	qcom,board-id= <8 0x109>;
+	model = "Qualcomm Technologies, Inc. APQ8009W-PM8916 1GB SWOC TP";
+	compatible = "qcom,apq8009-mtp", "qcom,apq8009", "qcom,mtp";
+	qcom,msm-id = <265 0>,
+		      <301 0>;
+	qcom,board-id= <8 0x9>; /* CX, APC split with PM8916+SMB231, STC3117 */
 };
