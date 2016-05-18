@@ -627,6 +627,9 @@ struct fg_chip {
 	struct delayed_work	check_sanity_work;
 	struct fg_wakeup_source	sanity_wakeup_source;
 	u8			last_beat_count;
+#ifdef CONFIG_HTC_BATT
+	int			batt_full_charge_criteria_ma;
+#endif //CONFIG_HTC_BATT
 };
 
 /* FG_MEMIF DEBUGFS structures */
@@ -4391,6 +4394,16 @@ static int fg_property_is_writeable(struct power_supply *psy,
 
 
 #ifdef CONFIG_HTC_BATT
+int fg_get_batt_full_charge_criteria_ma(void)
+{
+	if (!the_chip) {
+		pr_err("[Battery_FDA] Called before init\n");
+		/*Set 300mA as default criteria*/
+		return 300;
+	} else
+		return the_chip->batt_full_charge_criteria_ma;
+}
+
 #define DUMP_FG_REG_START	0x4000
 #define DUMP_FG_REG_SIZE		0x500
 void dump_fg_reg(void)
@@ -5912,6 +5925,19 @@ wait:
 		rc = 0;
 		goto no_profile;
 	}
+
+#ifdef CONFIG_HTC_BATT
+	/* read 0.1C full charge criteria(ma) from device tree if available */
+	rc = of_property_read_u32(profile_node, "htc,bat-ful-chg-criteria-ma",
+					&chip->batt_full_charge_criteria_ma);
+	if (rc) {
+		chip->batt_full_charge_criteria_ma = 300;
+		if (rc != -EINVAL)
+			pr_err("Read bat_ful_chg_criteria_ma failed:%d\n", rc);
+	}
+	pr_info("batt_full_charge_criteria_ma = %d\n",
+					chip->batt_full_charge_criteria_ma);
+#endif /* CONFIG_HTC_BATT */
 
 	if (!chip->batt_profile)
 		chip->batt_profile = devm_kzalloc(chip->dev,

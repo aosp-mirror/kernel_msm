@@ -125,6 +125,7 @@ struct htc_charger {
 
 struct htc_gauge {
 	int (*get_attr_text)(char *buf, int size);
+	int (*get_full_ma)(void);
 };
 
 struct htc_battery_info {
@@ -172,6 +173,7 @@ struct htc_battery_timer {
 
 struct htc_battery_platform_data {
 	struct htc_charger icharger;
+	struct htc_gauge igauge;
 };
 
 struct htc_pd_data {
@@ -253,6 +255,7 @@ int request_charger_status(enum htc_charger_request mode, void *ret_buf);
 void set_aicl_enable(bool bEnable);
 void impedance_set_iusb_max (int current_ua, bool mode);
 int charger_dump_all(void);
+int fg_get_batt_full_charge_criteria_ma(void);
 int pmi8994_get_usbin_voltage_now(void);
 int pmi8994_charger_get_attr_text(char *buf, int size);
 int pmi8994_is_batt_full_eoc_stop(int *result);

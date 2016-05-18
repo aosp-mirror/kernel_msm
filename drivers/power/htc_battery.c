@@ -2468,9 +2468,10 @@ void htc_battery_probe_process(enum htc_batt_probe probe_type) {
 					htc_batt_info.rep.batt_id = 255;
 				}
 			}
-
-			BATT_LOG("%s: catch name %s, set batt id=%d\n",
-				__func__, prop.strval, htc_batt_info.rep.batt_id);
+			htc_batt_info.batt_full_current_ma = htc_batt_info.igauge->get_full_ma();
+			BATT_LOG("%s: catch name %s, set batt id=%d, full_ma=%d\n",
+				__func__, prop.strval, htc_batt_info.rep.batt_id,
+				htc_batt_info.batt_full_current_ma);
 		}
 
 		BATT_LOG("Probe process done.\n");
@@ -2484,6 +2485,7 @@ static struct htc_battery_platform_data htc_battery_pdev_data = {
 	.icharger.get_vbus = pmi8994_get_usbin_voltage_now,
 	.icharger.get_attr_text = pmi8994_charger_get_attr_text,
 	.icharger.is_battery_full_eoc_stop = pmi8994_is_batt_full_eoc_stop,
+	.igauge.get_full_ma = fg_get_batt_full_charge_criteria_ma,
 };
 static void batt_regular_timer_handler(unsigned long data) {
 	htc_batt_schedule_batt_info_update();
@@ -2619,6 +2621,7 @@ static int htc_battery_probe(struct platform_device *pdev)
 	struct htc_battery_platform_data *pdata = pdev->dev.platform_data;
 
 	htc_batt_info.icharger = &pdata->icharger;
+	htc_batt_info.igauge = &pdata->igauge;
 	INIT_WORK(&htc_batt_timer.batt_work, batt_worker);
         INIT_DELAYED_WORK(&htc_batt_info.cable_impedance_work, cable_impedance_worker);
 	INIT_DELAYED_WORK(&htc_batt_info.chg_full_check_work, chg_full_check_worker);
