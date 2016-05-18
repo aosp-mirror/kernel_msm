@@ -1602,6 +1602,7 @@ static void idtp9220_monitor_work(struct work_struct *work)
     union power_supply_propval ret = {0,};
     union idtp9220_interactive_data ldoout_enable = {0};
     union idtp9220_interactive_data vout = {0};
+    union idtp9220_interactive_data freq = {0};
     union power_supply_propval new_current_limit = {0,};
 
     struct delayed_work *dwork = to_delayed_work(work);
@@ -1624,6 +1625,10 @@ static void idtp9220_monitor_work(struct work_struct *work)
 
         if(ldoout_enable.result)
         {
+            /* set freq */
+            freq.shortval = IDTP9220_TX_FREQ_KHZ;
+            idtp9220_do_device_action(chip, SET_OPER_FREQ, &freq);
+
             /* check whether battery is present */
             chip->batt_psy->get_property(chip->batt_psy,
                   POWER_SUPPLY_PROP_PRESENT, &ret);
