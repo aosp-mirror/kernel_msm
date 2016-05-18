@@ -1043,6 +1043,31 @@ static int mdss_fb_init_panel_modes(struct msm_fb_data_type *mfd,
 	return 0;
 }
 
+static void mdss_fb_set_3bit_color_mode(struct msm_fb_data_type *mfd, int enable)
+{
+	struct mdss_panel_data *pdata;
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+
+	pdata = dev_get_platdata(&mfd->pdev->dev);
+	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
+
+	pr_debug("[Debug]3-bit color mode %s\n", enable ? "enabled" : "disabled");
+	if (mfd->panel_info->type !=  MIPI_CMD_PANEL)
+		pr_debug("[Debug]3-bit color mode only supported for cmd mode panel\n");
+	else
+		mdss_dsi_3bit_mode_enable(ctrl, enable);
+}
+
+static void __mdss_fb_idle_3bit_work(struct work_struct *work)
+{
+	struct delayed_work *dw = to_delayed_work(work);
+	struct msm_fb_data_type *mfd = container_of(dw, struct msm_fb_data_type,
+		idle_3bit_work);
+
+	pr_debug("[Debug] Send idle and 3bit command\n");
+	mdss_fb_set_3bit_color_mode(mfd, true);
+}
+
 static int mdss_fb_probe(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd = NULL;
@@ -1205,6 +1230,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 			pr_err("failed to register input handler\n");
 
 	INIT_DELAYED_WORK(&mfd->idle_notify_work, __mdss_fb_idle_notify_work);
+	INIT_DELAYED_WORK(&mfd->idle_3bit_work, __mdss_fb_idle_3bit_work);
 
 	return rc;
 }
@@ -1789,25 +1815,6 @@ error:
 	return ret;
 }
 
-static void mdss_fb_set_3bit_color_mode(struct msm_fb_data_type *mfd, int enable)
-{
-	//struct fb_info *fbi = dev_get_drvdata(dev);
-	//struct msm_fb_data_type *mfd = fbi->par; 
-	struct mdss_panel_data *pdata;
-	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
-
-	pdata = dev_get_platdata(&mfd->pdev->dev);
-	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
-
-	pr_debug("[Debug]3-bit color mode %s\n", enable ? "enabled" : "disabled");
-	if (mfd->panel_info->type !=  MIPI_CMD_PANEL)
-		pr_debug("[Debug]3-bit color mode only supported for cmd mode panel\n");
-	else
-		mdss_dsi_3bit_mode_enable(ctrl, enable);
-	//return count;
-}
-
-
 static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 			     int op_enable)
 {
@@ -1855,6 +1862,8 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	switch (blank_mode) {
 	case FB_BLANK_UNBLANK:
 		pr_debug("unblank called. cur pwr state=%d\n", cur_power_state);
+		
+		cancel_delayed_work_sync(&mfd->idle_3bit_work);
 		mdss_fb_set_3bit_color_mode(mfd, false); 
 		ret = mdss_fb_blank_unblank(mfd);
 		break;
@@ -1867,8 +1876,7 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		}
 
 		ret = mdss_fb_blank_blank(mfd, req_power_state);
-		pr_debug("[Debug] set to ULP 3-bit mode\n");
-		mdss_fb_set_3bit_color_mode(mfd, true);
+		schedule_delayed_work(&mfd->idle_3bit_work, msecs_to_jiffies(300));
 		break;
 	case BLANK_FLAG_LP:
 		req_power_state = MDSS_PANEL_POWER_LP1;
@@ -1885,7 +1893,7 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		}
 
 		ret = mdss_fb_blank_blank(mfd, req_power_state);
-	
+		schedule_delayed_work(&mfd->idle_3bit_work, msecs_to_jiffies(300));
 		break;
 	case FB_BLANK_HSYNC_SUSPEND:
 	case FB_BLANK_POWERDOWN:
