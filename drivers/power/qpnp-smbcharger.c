@@ -5276,7 +5276,7 @@ static bool is_usbin_uv_high(struct smbchg_chip *chip)
 #define HVDCP_NOTIFY_MS		2500
 #ifdef CONFIG_HTC_BATT
 #define AICL_INIT_BIT	BIT(7)
-#define DEFAULT_VBUS_VOLTAGE 5100000
+#define DEFAULT_VBUS_VOLTAGE 5000000
 #endif /* CONFIG_HTC_BATT */
 static void handle_usb_insertion(struct smbchg_chip *chip)
 {
