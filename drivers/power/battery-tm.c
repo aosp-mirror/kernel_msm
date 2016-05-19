@@ -200,7 +200,6 @@ static int batt_tm_parse_dt(struct device_node *np,
 				struct batt_tm_data *batt_tm)
 {
 	int ret;
-	struct device_node *charger_node = NULL;
 
 	batt_tm->adc_tm_dev = qpnp_get_adc_tm(batt_tm->dev, "batt-tm");
 	if (IS_ERR(batt_tm->adc_tm_dev)) {
@@ -209,28 +208,19 @@ static int batt_tm_parse_dt(struct device_node *np,
 		goto out;
 	}
 
-	charger_node = of_parse_phandle(np, "qcom,charger", 0);
-	if (!charger_node) {
-		pr_err("failed to get charger phandle\n");
-		ret = -EINVAL;
-		goto out;
-	}
-
-	ret = of_property_read_u32(charger_node, "qcom,ibatsafe-ma",
+	ret = of_property_read_u32(np, "tm,current-ma",
 					&batt_tm->current_ma);
 	if (ret) {
 		pr_err("failed to get tm,current-ma\n");
 		goto out;
 	}
 
-	ret = of_property_read_u32(charger_node, "qcom,vddmax-mv",
+	ret = of_property_read_u32(np, "tm,batt-vreg-mv",
 					&batt_tm->batt_vreg_mv);
 	if (ret) {
-		pr_err("failed to get qcom,vddmax-mv\n");
+		pr_err("failed to get tm,batt-vreg-mv\n");
 		goto out;
 	}
-
-	of_node_put(charger_node);
 
 	ret = of_property_read_u32(np, "tm,low-vreg-mv",
 				&batt_tm->low_batt_vreg_mv);
@@ -290,7 +280,7 @@ static int batt_tm_parse_dt(struct device_node *np,
 					(u32 *)batt_tm->cool_cfg,
 					batt_tm->cool_cfg_size / sizeof(u32));
 	if (ret) {
-		pr_err("failed to get tm,warm-cfg\n");
+		pr_err("failed to get tm,cool-cfg\n");
 		goto out;
 	}
 
