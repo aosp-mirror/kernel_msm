@@ -427,7 +427,7 @@ CE_sendlist_send(struct CE_handle *copyeng,
                               NBUF_TX_PKT_CE);
         DPTRACE(adf_dp_trace((adf_nbuf_t)per_transfer_context,
                 ADF_DP_TRACE_CE_PACKET_PTR_RECORD,
-               (uint8_t *)(((adf_nbuf_t)per_transfer_context)->data),
+               (uint8_t *)&(((adf_nbuf_t)per_transfer_context)->data),
                sizeof(((adf_nbuf_t)per_transfer_context)->data)));
     } else {
         /*

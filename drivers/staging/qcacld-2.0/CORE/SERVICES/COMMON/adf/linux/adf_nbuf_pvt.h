@@ -332,6 +332,8 @@ void            __adf_nbuf_dmamap_set_cb(__adf_os_dma_map_t dmap, void *cb, void
 void            __adf_nbuf_reg_trace_cb(adf_nbuf_trace_update_t cb_func_ptr);
 a_status_t      __adf_nbuf_is_dhcp_pkt(struct sk_buff *skb);
 a_status_t      __adf_nbuf_is_eapol_pkt(struct sk_buff *skb);
+bool            __adf_nbuf_is_ipv4_arp_pkt(struct sk_buff *skb);
+
 
 #ifdef QCA_PKT_PROTO_TRACE
 void
@@ -1006,6 +1008,21 @@ __adf_nbuf_data(struct sk_buff *skb)
 {
     return skb->data;
 }
+
+/**
+ * __adf_nbuf_data_addr() - Return the address of skb->data
+ * @skb: skb
+ *
+ * This function returns the address of skb->data
+ *
+ * Return: skb->data address
+ */
+static inline uint8_t *
+__adf_nbuf_data_addr(struct sk_buff *skb)
+{
+	return (uint8_t *)&skb->data;
+}
+
 
 /**
  * @brief return the priority value of the skb

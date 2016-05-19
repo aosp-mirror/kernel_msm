@@ -229,7 +229,7 @@ ol_tx_vdev_pause_queue_append(
         NBUF_UPDATE_TX_PKT_COUNT(msdu_list, NBUF_TX_PKT_TXRX_ENQUEUE);
         DPTRACE(adf_dp_trace(msdu_list,
                 ADF_DP_TRACE_TXRX_QUEUE_PACKET_PTR_RECORD,
-                (uint8_t *)(adf_nbuf_data(msdu_list)),
+                adf_nbuf_data_addr(msdu_list),
                 sizeof(adf_nbuf_data(msdu_list))));
 
         vdev->ll_pause.txq.depth++;

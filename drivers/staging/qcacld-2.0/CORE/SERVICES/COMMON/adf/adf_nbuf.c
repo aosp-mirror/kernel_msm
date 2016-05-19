@@ -605,6 +605,27 @@ __adf_nbuf_is_eapol_pkt(struct sk_buff *skb)
     }
 }
 
+/**
+ * __adf_nbuf_is_ipv4_arp_pkt() - check if skb data is a arp packet.
+ * @skb: Pointer to network buffer
+ *
+ * This api is for ipv4 packet.
+ *
+ * Return: true if packet is ARP packet
+ */
+bool __adf_nbuf_is_ipv4_arp_pkt(struct sk_buff *skb)
+{
+	uint16_t ether_type;
+
+	ether_type = (uint16_t)(*(uint16_t *)(skb->data +
+				ADF_NBUF_TRAC_ETH_TYPE_OFFSET));
+
+	if (ether_type == adf_os_cpu_to_be16(ADF_NBUF_TRAC_ARP_ETH_TYPE))
+		return true;
+	else
+		return false;
+}
+
 #ifdef QCA_PKT_PROTO_TRACE
 void
 __adf_nbuf_trace_update(struct sk_buff *buf, char *event_string)

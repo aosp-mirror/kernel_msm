@@ -474,7 +474,7 @@ htt_tx_send_std(
 
     NBUF_UPDATE_TX_PKT_COUNT(msdu, NBUF_TX_PKT_HTT);
     DPTRACE(adf_dp_trace(msdu, ADF_DP_TRACE_HTT_PACKET_PTR_RECORD,
-                (uint8_t *)(adf_nbuf_data(msdu)),
+                adf_nbuf_data_addr(msdu),
                 sizeof(adf_nbuf_data(msdu))));
 
     if (adf_nbuf_queue_len(&pdev->txnbufq) > 0) {

@@ -52,8 +52,10 @@
 #define NBUF_PKT_TRAC_TYPE_EAPOL   0x02
 #define NBUF_PKT_TRAC_TYPE_DHCP    0x04
 #define NBUF_PKT_TRAC_TYPE_MGMT_ACTION    0x08
+#define NBUF_PKT_TRAC_TYPE_ARP     0x10
 #define NBUF_PKT_TRAC_MAX_STRING   12
 #define NBUF_PKT_TRAC_PROTO_STRING 4
+#define ADF_NBUF_PKT_ERROR         1
 
 #define ADF_NBUF_TRAC_IPV4_OFFSET       14
 #define ADF_NBUF_TRAC_IPV4_HEADER_SIZE  20
@@ -61,6 +63,18 @@
 #define ADF_NBUF_TRAC_DHCP_CLI_PORT     68
 #define ADF_NBUF_TRAC_ETH_TYPE_OFFSET   12
 #define ADF_NBUF_TRAC_EAPOL_ETH_TYPE    0x888E
+#define ADF_NBUF_TRAC_ARP_ETH_TYPE      0x0806
+#define ADF_NBUF_DEST_MAC_OFFSET        0
+#define ADF_NBUF_SRC_MAC_OFFSET         6
+
+/* EAPOL Related MASK */
+#define EAPOL_PACKET_TYPE_OFFSET        15
+#define EAPOL_KEY_INFO_OFFSET           19
+#define EAPOL_MASK                      0x8013
+#define EAPOL_M1_BIT_MASK               0x8000
+#define EAPOL_M2_BIT_MASK               0x0001
+#define EAPOL_M3_BIT_MASK               0x8013
+#define EAPOL_M4_BIT_MASK               0x0003
 
 /* Tracked Packet types */
 #define NBUF_TX_PKT_INVALID              0
@@ -101,6 +115,28 @@ struct mon_rx_status {
 	uint8_t  ant_signal_db;
 	uint8_t  nr_ant;
 };
+
+/* DHCP Related Mask */
+#define DHCP_OPTION53                 (0x35)
+#define DHCP_OPTION53_LENGTH          (1)
+#define DHCP_OPTION53_OFFSET          (0x11A)
+#define DHCP_OPTION53_LENGTH_OFFSET   (0x11B)
+#define DHCP_OPTION53_STATUS_OFFSET   (0x11C)
+#define DHCPDISCOVER                  (1)
+#define DHCPOFFER                     (2)
+#define DHCPREQUEST                   (3)
+#define DHCPDECLINE                   (4)
+#define DHCPACK                       (5)
+#define DHCPNAK                       (6)
+#define DHCPRELEASE                   (7)
+#define DHCPINFORM                    (8)
+
+#define ARP_SUB_TYPE_OFFSET           20
+#define ARP_REQUEST                   (1)
+#define ARP_RESPONSE                  (2)
+
+#define ADF_NBUF_IPA_CHECK_MASK       0x80000000
+
 
 /**
  * @brief Platform indepedent packet abstraction
@@ -568,6 +604,19 @@ adf_nbuf_data(adf_nbuf_t buf)
     return __adf_nbuf_data(buf);
 }
 
+/**
+ * adf_nbuf_data_addr() - Return the address of skb->data
+ * @buf: buffer
+ *
+ * This function returns the address of skb->data
+ *
+ * Return: skb->data address
+ */
+static inline uint8_t *
+adf_nbuf_data_addr(adf_nbuf_t buf)
+{
+	return __adf_nbuf_data_addr(buf);
+}
 
 /**
  * @brief return the amount of headroom int the current nbuf
@@ -1231,6 +1280,20 @@ static inline a_status_t
 adf_nbuf_is_eapol_pkt(adf_nbuf_t buf)
 {
     return (__adf_nbuf_is_eapol_pkt(buf));
+}
+
+/**
+ * adf_nbuf_is_ipv4_arp_pkt() - check if packet is a arp packet or not
+ * @buf:  buffer
+ *
+ * This api is for ipv4 packet.
+ *
+ * Return: true if packet is ARP packet
+ */
+static inline
+bool adf_nbuf_is_ipv4_arp_pkt(adf_nbuf_t buf)
+{
+	return __adf_nbuf_is_ipv4_arp_pkt(buf);
 }
 
 /**
