@@ -728,6 +728,19 @@ int
 ol_txrx_get_tx_pending(
     ol_txrx_pdev_handle pdev);
 
+/**
+ * ol_txrx_get_queue_status() - Get the status of tx queues.
+ * @pdev: the data physical device object
+ *
+ * This api is used while trying to go in suspend mode.
+ *
+ * Return - status: A_OK - if all queues are empty
+ *                  A_ERROR - if any queue is not empty
+ */
+A_STATUS
+ol_txrx_get_queue_status(
+	ol_txrx_pdev_handle pdev);
+
 void ol_txrx_dump_tx_desc(ol_txrx_pdev_handle pdev);
 
 /**

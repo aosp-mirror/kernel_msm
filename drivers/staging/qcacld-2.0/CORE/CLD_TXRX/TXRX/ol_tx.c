@@ -51,6 +51,7 @@
 
 /* internal header files relevant only for specific systems (Pronto) */
 #include <ol_txrx_encap.h>    /* OL_TX_ENCAP, etc */
+#include "vos_lock.h"
 
 #define ol_tx_prepare_ll(tx_desc, vdev, msdu, msdu_info) \
     do {                                                                      \
@@ -213,6 +214,13 @@ ol_tx_vdev_pause_queue_append(
    u_int8_t start_timer)
 {
     adf_os_spin_lock_bh(&vdev->ll_pause.mutex);
+
+    if (vdev->ll_pause.paused_reason &
+               OL_TXQ_PAUSE_REASON_FW) {
+        if ((!vdev->ll_pause.txq.depth) &&
+                     msdu_list)
+            vos_request_runtime_pm_resume();
+    }
 
     while (msdu_list &&
             vdev->ll_pause.txq.depth < vdev->ll_pause.max_q_depth)

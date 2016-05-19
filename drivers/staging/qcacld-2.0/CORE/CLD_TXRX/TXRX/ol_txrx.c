@@ -1895,6 +1895,31 @@ ol_txrx_get_tx_pending(ol_txrx_pdev_handle pdev_handle)
     return (total - pdev->tx_desc.num_free);
 }
 
+/*
+ * ol_txrx_get_queue_status() - get vdev tx ll queues status
+ * pdev_handle: pdev handle
+ *
+ * Return: A_OK - if all queues are empty
+ *         A_ERROR - if any queue is not empty
+ */
+A_STATUS
+ol_txrx_get_queue_status(ol_txrx_pdev_handle pdev_handle)
+{
+	struct ol_txrx_pdev_t *pdev = (ol_txrx_pdev_handle)pdev_handle;
+	struct ol_txrx_vdev_t *vdev;
+	A_STATUS status = A_OK;
+
+	TAILQ_FOREACH(vdev, &pdev->vdev_list, vdev_list_elem) {
+		if ((vdev->ll_pause.paused_reason & OL_TXQ_PAUSE_REASON_FW) &&
+			 vdev->ll_pause.txq.depth) {
+			status = A_ERROR;
+			break;
+		}
+	}
+
+	return status;
+}
+
 void
 ol_txrx_discard_tx_pending(ol_txrx_pdev_handle pdev_handle)
 {

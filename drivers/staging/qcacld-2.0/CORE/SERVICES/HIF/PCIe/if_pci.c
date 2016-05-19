@@ -1160,7 +1160,8 @@ static int __hif_pci_runtime_suspend(struct pci_dev *pdev)
 		goto out;
 	}
 
-	if ((test = ol_txrx_get_tx_pending(txrx_pdev))) {
+	if ((test = ol_txrx_get_tx_pending(txrx_pdev)) ||
+		 ol_txrx_get_queue_status(txrx_pdev)) {
 		pr_err("%s: txrx pending(%d), get: %u, put: %u\n", __func__,
 				test,
 				sc->pm_stats.runtime_get,
@@ -2602,7 +2603,8 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
         goto out;
     }
     /* Wait for pending tx completion */
-    while (ol_txrx_get_tx_pending(txrx_pdev)) {
+    while (ol_txrx_get_tx_pending(txrx_pdev) ||
+           ol_txrx_get_queue_status(txrx_pdev)) {
         msleep(OL_ATH_TX_DRAIN_WAIT_DELAY);
         if (++tx_drain_wait_cnt > OL_ATH_TX_DRAIN_WAIT_CNT) {
             printk("%s: tx frames are pending\n", __func__);
