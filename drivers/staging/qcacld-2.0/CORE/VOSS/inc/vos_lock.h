@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -313,4 +313,5 @@ VOS_STATUS vos_runtime_pm_prevent_suspend_timeout(runtime_pm_context_t context,
 						unsigned int msec);
 void *vos_runtime_pm_prevent_suspend_init(const char *);
 void vos_runtime_pm_prevent_suspend_deinit(runtime_pm_context_t);
+VOS_STATUS vos_request_runtime_pm_resume(void);
 #endif // __VOSS_LOCK_H
