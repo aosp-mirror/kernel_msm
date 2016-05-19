@@ -18,12 +18,6 @@
 #define SUPPORT_FINGER_DATA_CHECKSUM    0x0F
 #define TS_WAKE_LOCK_TIMEOUT            (2 * HZ)
 
-#if defined(HX_AUTO_UPDATE_FW)||defined(HX_AUTO_UPDATE_CONFIG)
-static unsigned char i_CTPM_FW[] = {
-#include "himax_FW_xE190303.i"
-};
-#endif
-
 static unsigned char IC_CHECKSUM = 0;
 static unsigned char IC_TYPE = 0;
 
@@ -409,6 +403,10 @@ static uint8_t himax_calculateChecksum(bool change_iref)
             return -1;
         }
         I("%s 0xAD[0,1,2,3] = %d,%d,%d,%d \n", __func__, cmd[0], cmd[1], cmd[2], cmd[3]);
+        IC_checksum[0] = cmd[0];
+        IC_checksum[1] = cmd[1];
+        IC_checksum[2] = cmd[2];
+        IC_checksum[3] = cmd[3];
         if (cmd[0] == 0 && cmd[1] == 0 && cmd[2] == 0 && cmd[3] == 0 ) {
             himax_FlashMode(0);
             goto CHECK_PASS;
@@ -541,7 +539,7 @@ int fts_ctpm_fw_upgrade_with_fs(unsigned char *fw, int len, bool change_iref)
             if (i == (FileLength - 1)) {
                 himax_FlashMode(0);
                 himax_ManualMode(0);
-                checksumResult = himax_calculateChecksum(change_iref);//
+                checksumResult = himax_calculateChecksum(change_iref);
                 //himax_ManualMode(0);
                 himax_lock_flash(1);
                 if (checksumResult) { //Success
@@ -843,25 +841,38 @@ static bool Calculate_CRC_with_AP(unsigned char *FW_content)
 #ifdef HX_AUTO_UPDATE_FW
 static int i_update_FW(bool manual)
 {
+    unsigned char *ImageBuffer;
+    int fullFileLength;
     int upgrade_times = 0;
-    unsigned char *ImageBuffer = i_CTPM_FW;
-    int fullFileLength = sizeof(i_CTPM_FW);
+    int result;
     uint8_t FW_MAJ, FW_MIN, NEW_FW_MAJ, NEW_FW_MIN;
     uint8_t CFG_VER, NEW_CFG_VER;
     bool need_update_flag = false;
 
+    result = request_firmware(&private_ts->fw, HMX_FW_NAME, &private_ts->client->dev);
+    if (private_ts->fw == NULL) {
+        E("No firmware file, ignored firmware update \n");
+        goto no_update;
+    } else if (result) {
+        E("Request_firmware failed, ret = %d \n", result);
+        goto no_update;
+    }
+    private_ts->fw_data_start = (u8 *)private_ts->fw->data;
+    private_ts->fw_size = private_ts->fw->size;
+    ImageBuffer = private_ts->fw_data_start;
+    fullFileLength = private_ts->fw->size;
+
     FW_MAJ = private_ts->vendor_fw_ver_H;
     FW_MIN = private_ts->vendor_fw_ver_L;
     CFG_VER = private_ts->vendor_config_ver;
-    NEW_FW_MAJ = i_CTPM_FW[FW_VER_MAJ_FLASH_ADDR];
-    NEW_FW_MIN = i_CTPM_FW[FW_VER_MIN_FLASH_ADDR];
-    NEW_CFG_VER = i_CTPM_FW[FW_CFG_VER_FLASH_ADDR];
-    I("Start to update FW.");
-    I("FW_VER=%2x,%2x. CFG_VER=%2x.\n", FW_MAJ, FW_MIN, CFG_VER);
-    I("NEW FW_VER=%2x,%2x. NEW CFG_VER=%2x.\n", NEW_FW_MAJ, NEW_FW_MIN, NEW_CFG_VER);
+    NEW_FW_MAJ = ImageBuffer[FW_VER_MAJ_FLASH_ADDR];
+    NEW_FW_MIN = ImageBuffer[FW_VER_MIN_FLASH_ADDR];
+    NEW_CFG_VER = ImageBuffer[FW_CFG_VER_FLASH_ADDR];
+    I("FW_VER=%2x,%2x. CFG_VER=%2x. \n", FW_MAJ, FW_MIN, CFG_VER);
+    I("NEW FW_VER=%2x,%2x. NEW CFG_VER=%2x. \n", NEW_FW_MAJ, NEW_FW_MIN, NEW_CFG_VER);
 
 #ifdef HX_CHECK_CRC_AP
-    if (!Calculate_CRC_with_AP(i_CTPM_FW)) {
+    if (!Calculate_CRC_with_AP(ImageBuffer)) {
         I("New FW CRC fail, do not update.");
         goto no_update;
     }
@@ -874,14 +885,14 @@ static int i_update_FW(bool manual)
     if (!manual) {
         if ( (NEW_FW_MIN < FW_MIN) || ( (NEW_FW_MIN == FW_MIN) && (NEW_CFG_VER <= CFG_VER) )) {
             if ( himax_calculateChecksum(false) == 0 ) {
-                I("IC Checksum fail, update to new FW.");
+                I("IC Checksum fail, update to new FW. \n");
                 need_update_flag = true;
             } else {
-                I("No new FW version and IC Checksum pass, do not update.");
+                I("No new FW version and IC Checksum pass, do not update. \n");
                 goto no_update;
             }
         } else {
-            I("Larger new FW version, update to new FW.");
+            I("Larger new FW version, update to new FW. \n");
             need_update_flag = true;
         }
     } else
@@ -893,19 +904,19 @@ update_retry:
         himax_HW_reset(false, true);
 #endif
         if (fts_ctpm_fw_upgrade_with_fs(ImageBuffer, fullFileLength, true) == 0) {
-            E("%s: TP upgrade error\n", __func__);
-            upgrade_times++;
             if (upgrade_times < 3) {
+                upgrade_times++;
+                E("TP upgrade Error, Count: %d \n", upgrade_times);
                 goto update_retry;
             } else {
                 fw_update_result = false;
                 return -1;//upgrade fail
             }
         } else {
-            I("%s: TP upgrade OK\n", __func__);
-            private_ts->vendor_fw_ver_H = i_CTPM_FW[FW_VER_MAJ_FLASH_ADDR];
-            private_ts->vendor_fw_ver_L = i_CTPM_FW[FW_VER_MIN_FLASH_ADDR];
-            private_ts->vendor_config_ver = i_CTPM_FW[FW_CFG_VER_FLASH_ADDR];
+            I("TP upgrade OK \n");
+            private_ts->vendor_fw_ver_H = NEW_FW_MAJ;
+            private_ts->vendor_fw_ver_L = NEW_FW_MIN;
+            private_ts->vendor_config_ver = NEW_CFG_VER;
         }
 #ifdef HX_RST_PIN_FUNC
         himax_HW_reset(false, true);
@@ -1158,7 +1169,7 @@ int fts_ctpm_fw_upgrade_with_i_file_flash_cfg(struct himax_config *cfg)
             if (i == (FileLength - 1)) {
                 himax_FlashMode(0);
                 himax_ManualMode(0);
-                checksumResult = himax_calculateChecksum(true);//
+                checksumResult = himax_calculateChecksum(true);
                 //himax_ManualMode(0);
                 himax_lock_flash(1);
                 I(" %s: flash CONFIG only END!\n", __func__);
@@ -1420,15 +1431,16 @@ static u8 himax_read_FW_ver(bool hw_reset)
         return 0;
     }
     private_ts->vendor_fw_ver_L = cmd[0];
-    I("FW_VER : %d,%d \n", private_ts->vendor_fw_ver_H, private_ts->vendor_fw_ver_L);
+    I("FW_VER : %x,%x \n", private_ts->vendor_fw_ver_H, private_ts->vendor_fw_ver_L);
     if (i2c_himax_read(private_ts->client, HX_VER_FW_CFG, cmd, 1, 3) < 0) {
         E("%s: i2c access fail!\n", __func__);
         return 0;
     }
     private_ts->vendor_config_ver = cmd[0];
-    I("CFG_VER : %d \n", private_ts->vendor_config_ver);
+    I("CFG_VER : %x \n", private_ts->vendor_config_ver);
 #ifdef HX_RST_PIN_FUNC
-    himax_HW_reset(true, true);
+    if (hw_reset)
+        himax_HW_reset(true, true);
 #endif
     himax_int_enable(private_ts->client->irq, 1, true);
     return 0;
@@ -2827,8 +2839,8 @@ static ssize_t himax_debug_write(struct device *dev,
         if (result > 0) {
 #ifdef HX_CHECK_CRC_AP
             result = Calculate_CRC_with_AP(upgrade_fw);
-            if (result){
-                I("CRC Check sum fail");
+            if (!result) {
+                I("CRC Check sum fail \n");
                 goto firmware_upgrade_done;
             }
 #endif
@@ -4106,7 +4118,9 @@ static ssize_t himax_fw_update_write(struct device *dev,
 
     sscanf(buf, "%d", &mode);
     manualUpgrade = mode == FW_UPDATE_MANUAL_MODE;
+    himax_int_enable(private_ts->client->irq, 0, true);
     ret = i_update_FW(manualUpgrade);
+    himax_int_enable(private_ts->client->irq, 1, true);
     return size;
 }
 
@@ -4114,8 +4128,8 @@ static ssize_t himax_fw_version_read(struct device *dev,
                 struct device_attribute *attr, char *buf)
 {
     int ret;
-    himax_read_FW_ver(true);
-    ret = sprintf(buf, "FW_Ver: %x.%x, CFG_Ver: %x \n", private_ts->vendor_fw_ver_H,
+    himax_read_FW_ver(false);
+    ret = sprintf(buf, "%x.%x,%x\n", private_ts->vendor_fw_ver_H,
         private_ts->vendor_fw_ver_L, private_ts->vendor_config_ver);
     return ret;
 }
@@ -4125,7 +4139,7 @@ static ssize_t himax_checksum_read(struct device *dev,
 {
     int ret;
     ret = himax_calculateChecksum(false);
-    return sprintf(buf, "%s\n", ret ? "pass" : "fail");
+    return sprintf(buf, "%d,%d,%d,%d\n", IC_checksum[0],IC_checksum[1],IC_checksum[2],IC_checksum[3]);
 }
 #endif
 
@@ -4298,20 +4312,7 @@ static int himax852xes_probe(struct i2c_client *client, const struct i2c_device_
     setFlashBuffer();
 #endif
     himax_read_TP_info(client);
-#ifdef HX_AUTO_UPDATE_FW
-    err = i_update_FW(false);
-    if (err == 0)
-        I("NOT Have new FW=NOT UPDATE=\n");
-    else if (err > 0)
-        I("Have new FW=UPDATE=\n");
-    else {
-        E("FW UPDATE Fail\n");
-        goto err_FW_CRC_failed;
-    }
-#else
-    if (himax_calculateChecksum(false) == 0)
-        goto err_FW_CRC_failed;
-#endif
+
     //Himax Power On and Load Config
     if (himax_loadSensorConfig(client, pdata) < 0) {
         E("%s: Load Sesnsor configuration failed, unload driver.\n", __func__);
@@ -4442,7 +4443,6 @@ err_input_register_device_failed:
 err_setchannel_failed:
 #endif
 err_detect_failed:
-err_FW_CRC_failed:
 #ifdef  HX_TP_PROC_FLASH_DUMP
     destroy_workqueue(ts->flash_wq);
 err_create_flash_wq_failed:
