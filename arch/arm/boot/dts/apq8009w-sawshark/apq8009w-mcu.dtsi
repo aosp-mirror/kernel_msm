@@ -24,7 +24,7 @@
 
 	mcu,boot0 {
 		compatible = "mcu,boot0";
-		mcu_boot_0 = <&msm_gpio 85 0>;
+		mcu_boot_0 = <&msm_gpio 41 0>;
 		pinctrl-names = "mcu_boot_0_active","mcu_boot_0_suspend";
 		pinctrl-0 = <&mcu_boot_0_active>;
 		pinctrl-1 = <&mcu_boot_0_suspend>;
@@ -32,7 +32,7 @@
 
 	mcu,boot1 {
 		compatible = "mcu,boot1";
-		mcu_boot_1 = <&msm_gpio 86 0>;
+		mcu_boot_1 = <&msm_gpio 42 0>;
 		pinctrl-names = "mcu_boot_1_active","mcu_boot_1_suspend";
 		pinctrl-0 = <&mcu_boot_1_active>;
 		pinctrl-1 = <&mcu_boot_1_suspend>;
@@ -67,7 +67,7 @@
 
 	mcu,readsync {
 		compatible = "mcu,readsync";
-		ap_read_sync = <&msm_gpio 90 0>;
+		ap_read_sync = <&msm_gpio 36 0>;
 		pinctrl-names = "ap_read_sync_active","ap_read_sync_suspend";
 		pinctrl-0 = <&ap_read_sync_active>;
 		pinctrl-1 = <&ap_read_sync_suspend>;
