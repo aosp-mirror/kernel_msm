@@ -30,7 +30,7 @@
 	/delete-node/ i2c@78b6000;
 };
 &i2c_1 {
-	status = "disabled";
+	status = "ok";
 };
 
 &spi_0 {
