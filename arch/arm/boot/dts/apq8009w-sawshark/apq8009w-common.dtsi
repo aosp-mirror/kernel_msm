@@ -13,15 +13,6 @@
 	reg = <0x0 0x87a00000 0x0 0x0600000>;
 };
 
-&modem_adsp_mem {
-	reg = <0x0 0x88000000 0x0 0x02c00000>;
-};
-
-&peripheral_mem {
-	reg = <0x0 0x8ac00000 0x0 0x0500000>;
-};
-
-
 &soc {
 	i2c@78b9000 { /* BLSP1 QUP5 */
 		/delete-node/ it7260@46;
