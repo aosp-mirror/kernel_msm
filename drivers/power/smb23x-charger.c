@@ -1780,7 +1780,7 @@ static void smb23x_check_batt_ov(struct smb23x_chip *chip) {
 	ktime_t kt;
 
 	battery_voltage = smb23x_get_prop_batt_voltage(chip);
-	pr_err("=====ov_check battery_voltage=%d=====\n", battery_voltage);
+	pr_debug("ov_check battery_voltage=%d\n", battery_voltage);
 
 	if (CEI_STATUS != STATUS_NORMAL)
 		return;
