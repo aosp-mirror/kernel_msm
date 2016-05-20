@@ -319,7 +319,7 @@ int Capacity_Adjust;
 /*   TO BE ADJUSTED ACCORDING TO BATTERY/APPLICATION CHARACTERISTICS        */
 /* ------------------------------------------------------------------------ */
 
-#define STC3100_BATTERY_FULL 100
+#define STC311x_BATTERY_FULL 100
 #define STC311x_DELAY	 3000 //30 sec
 #define STC311x_DELAY_LOW_BATT 500 //5 sec
 #define STC311x_SOC_THRESHOLD 5
@@ -2286,22 +2286,25 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 }
 
 /*
-* When discharging, soc can only decrease
+* 1. If charge is fulled and charger exists, keep soc = 100% 
+* 2. When discharging, soc can only decrease
 */
 void CEI_soc_adjustment(struct stc311x_chip *chip)
 {
 	pr_err("enter: status = %d, original soc = %d,  ST soc = %d \n", chip->status,  g_new_soc, chip->batt_soc);
+	if ((g_new_soc == STC311x_BATTERY_FULL) && (chip->status != POWER_SUPPLY_STATUS_DISCHARGING))
+		return;
 
-	if ((chip->status == POWER_SUPPLY_STATUS_CHARGING) || (chip->status == POWER_SUPPLY_STATUS_FULL))
-		g_new_soc = chip->batt_soc;
-	else {
-		//when discharging, unknown or not charging, the new SOC can only decrease
+	if (chip->status == POWER_SUPPLY_STATUS_DISCHARGING) {
+		//when discharging, the new SOC can only decrease
 		if (chip->batt_soc > g_new_soc) {
 			pr_err("Discharging, original soc = %d,  new soc = %d, abort \n", g_new_soc, chip->batt_soc);
 			return;
 		} else
 			g_new_soc = chip->batt_soc;
-	}
+	} else
+		g_new_soc = chip->batt_soc;
+	
 }
 
 static void stc311x_work(struct work_struct *work)
