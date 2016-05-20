@@ -253,6 +253,7 @@
 		qcom,leds@d300 {
 			qcom,gpio-flash-strobe = <&tlmm 22 0x00>;
 		};
+		/delete-node/ qcom,leds@d800;
 	};
 };
 
