@@ -13,7 +13,7 @@
 &soc {
 	qcom,bluesleep {
 		compatible = "qcom,bluesleep";
-		host-wake-gpio = <&msm_gpio 77 0>;
+		host-wake-gpio = <&msm_gpio 38 0>;
 		ext-wake-gpio = <&msm_gpio 47 0>;
 		interrupt-parent = <&msm_gpio>;
 		interrupts = <47 0>;
@@ -24,7 +24,7 @@
 
 	huawei,bluetooth_rfkill {
 		compatible = "huawei,bluetooth_rfkill";
-		huawei,reg_on_gpio = <&msm_gpio 80 0>;
+		huawei,reg_on_gpio = <&msm_gpio 52 0>;
 		vdd-supply = <&pm8916_l9>;
 		vdd-voltage-level = <3100000 3100000>;
 	};

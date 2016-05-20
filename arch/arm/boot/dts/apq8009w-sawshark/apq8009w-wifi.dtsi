@@ -16,7 +16,7 @@
 		compatible = "android,bcmdhd_wlan";
 		sdhci-name = <&sdhc_2>;
 
-		wl_reg_on = <&msm_gpio 78 0>;
+		wl_reg_on = <&msm_gpio 39 0>;
 		wl_host_wake = <&msm_gpio 28 0>;
 
 		vdd-rf-supply = <&pm8916_l9>;
