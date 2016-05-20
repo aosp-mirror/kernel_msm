@@ -481,6 +481,7 @@ static int        CFB_INFO_LENGTH                 = 0;
 static uint8_t ASUS_FW_MAJ = 0x19;
 static uint8_t IC_checksum[4];
 static bool fw_update_result = false;
+static bool fw_update_processing= false;
 static int i_update_FW(bool manual);
 #endif
 

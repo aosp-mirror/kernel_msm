@@ -347,11 +347,17 @@ static void himax_changeIref(int selected_iref)
     }
 }
 
-static uint8_t himax_calculateChecksum(bool change_iref)
+static uint8_t himax_calculateChecksum(bool change_iref, bool sense_off)
 {
     int iref_flag = 0;
     uint8_t cmd[10];
     memset(cmd, 0x00, sizeof(cmd));
+    if (sense_off) {
+        if ( i2c_himax_write(private_ts->client, HX_CMD_TSSOFF , &cmd[0], 0, DEFAULT_RETRY_CNT) < 0) {
+            return 0;
+        }
+        msleep(30);
+    }
     //Sleep out
     if ( i2c_himax_write(private_ts->client, HX_CMD_TSSLPOUT , &cmd[0], 0, DEFAULT_RETRY_CNT) < 0) {
         E("%s: i2c access fail!\n", __func__);
@@ -419,14 +425,22 @@ CHECK_PASS:
             if (iref_flag < 3) {
                 continue;
             } else {
+                if (sense_off)
+                    i2c_himax_write_command(private_ts->client, HX_CMD_TSSON, DEFAULT_RETRY_CNT);
                 return 1;
             }
         } else {
+            if (sense_off)
+                    i2c_himax_write_command(private_ts->client, HX_CMD_TSSON, DEFAULT_RETRY_CNT);
             return 1;
         }
 CHECK_FAIL:
+        if (sense_off)
+            i2c_himax_write_command(private_ts->client, HX_CMD_TSSON, DEFAULT_RETRY_CNT);
         return 0;
     }
+    if (sense_off)
+        i2c_himax_write_command(private_ts->client, HX_CMD_TSSON, DEFAULT_RETRY_CNT);
     return 0;
 }
 
@@ -539,7 +553,7 @@ int fts_ctpm_fw_upgrade_with_fs(unsigned char *fw, int len, bool change_iref)
             if (i == (FileLength - 1)) {
                 himax_FlashMode(0);
                 himax_ManualMode(0);
-                checksumResult = himax_calculateChecksum(change_iref);
+                checksumResult = himax_calculateChecksum(change_iref, false);
                 //himax_ManualMode(0);
                 himax_lock_flash(1);
                 if (checksumResult) { //Success
@@ -849,6 +863,11 @@ static int i_update_FW(bool manual)
     uint8_t CFG_VER, NEW_CFG_VER;
     bool need_update_flag = false;
 
+    if (private_ts->suspended) {
+        goto no_update;
+    }
+    I("Start to update fw. \n");
+    fw_update_processing= true;
     result = request_firmware(&private_ts->fw, HMX_FW_NAME, &private_ts->client->dev);
     if (private_ts->fw == NULL) {
         E("No firmware file, ignored firmware update \n");
@@ -884,7 +903,7 @@ static int i_update_FW(bool manual)
 
     if (!manual) {
         if ( (NEW_FW_MIN < FW_MIN) || ( (NEW_FW_MIN == FW_MIN) && (NEW_CFG_VER <= CFG_VER) )) {
-            if ( himax_calculateChecksum(false) == 0 ) {
+            if ( himax_calculateChecksum(false, true) == 0 ) {
                 I("IC Checksum fail, update to new FW. \n");
                 need_update_flag = true;
             } else {
@@ -910,6 +929,7 @@ update_retry:
                 goto update_retry;
             } else {
                 fw_update_result = false;
+                fw_update_processing= false;
                 return -1;//upgrade fail
             }
         } else {
@@ -919,14 +939,16 @@ update_retry:
             private_ts->vendor_config_ver = NEW_CFG_VER;
         }
 #ifdef HX_RST_PIN_FUNC
-        himax_HW_reset(false, true);
+        himax_HW_reset(true, true);
 #endif
         fw_update_result = true;
+        fw_update_processing= false;
         return 1;//upgrade success
     } else
         goto no_update;
 no_update:
     fw_update_result = true;
+    fw_update_processing= false;
     return 0;//NO upgrade
 }
 #endif
@@ -1169,7 +1191,7 @@ int fts_ctpm_fw_upgrade_with_i_file_flash_cfg(struct himax_config *cfg)
             if (i == (FileLength - 1)) {
                 himax_FlashMode(0);
                 himax_ManualMode(0);
-                checksumResult = himax_calculateChecksum(true);
+                checksumResult = himax_calculateChecksum(true, false);
                 //himax_ManualMode(0);
                 himax_lock_flash(1);
                 I(" %s: flash CONFIG only END!\n", __func__);
@@ -4138,7 +4160,7 @@ static ssize_t himax_checksum_read(struct device *dev,
                 struct device_attribute *attr, char *buf)
 {
     int ret;
-    ret = himax_calculateChecksum(false);
+    ret = himax_calculateChecksum(false, true);
     return sprintf(buf, "%d,%d,%d,%d\n", IC_checksum[0],IC_checksum[1],IC_checksum[2],IC_checksum[3]);
 }
 #endif
@@ -4512,85 +4534,89 @@ static int himax852xes_suspend(struct device *dev)
         I("%s: Driver probe fail. \n", __func__);
         return 0;
     }
-    I("%s: Enter suspended. \n", __func__);
-    ts = dev_get_drvdata(dev);
-    if (ts->suspended) {
-        I("%s: Already suspended. Skipped. \n", __func__);
+    if (fw_update_processing) {
         return 0;
     } else {
-        ts->suspended = true;
-        I("%s: enter \n", __func__);
-    }
-#ifdef HX_TP_PROC_FLASH_DUMP
-    if (getFlashDumpGoing()) {
-        I("[himax] %s: Flash dump is going, reject suspend\n", __func__);
-        return 0;
-    }
-#endif
-#ifdef HX_TP_PROC_HITOUCH
-    if (hitouch_is_connect) {
-        I("[himax] %s: Hitouch connect, reject suspend\n", __func__);
-        return 0;
-    }
-#endif
-#ifdef HX_CHIP_STATUS_MONITOR
-    if (HX_ON_HAND_SHAKING) { //chip on hand shaking,wait hand shaking
-        for (t = 0; t < 100; t++) {
-            if (HX_ON_HAND_SHAKING == 0) { //chip on hand shaking end
-                I("%s:HX_ON_HAND_SHAKING OK check %d times\n", __func__, t);
-                break;
-            } else
-                msleep(1);
+        I("%s: Enter suspended. \n", __func__);
+        ts = dev_get_drvdata(dev);
+        if (ts->suspended) {
+            I("%s: Already suspended. Skipped. \n", __func__);
+            return 0;
+        } else {
+            ts->suspended = true;
+            I("%s: enter \n", __func__);
         }
-        if (t == 100) {
-            E("%s:HX_ON_HAND_SHAKING timeout reject suspend\n", __func__);
+#ifdef HX_TP_PROC_FLASH_DUMP
+        if (getFlashDumpGoing()) {
+            I("[himax] %s: Flash dump is going, reject suspend\n", __func__);
             return 0;
         }
-    }
+#endif
+#ifdef HX_TP_PROC_HITOUCH
+        if (hitouch_is_connect) {
+            I("[himax] %s: Hitouch connect, reject suspend\n", __func__);
+            return 0;
+        }
+#endif
+#ifdef HX_CHIP_STATUS_MONITOR
+        if (HX_ON_HAND_SHAKING) { //chip on hand shaking,wait hand shaking
+            for (t = 0; t < 100; t++) {
+                if (HX_ON_HAND_SHAKING == 0) { //chip on hand shaking end
+                    I("%s:HX_ON_HAND_SHAKING OK check %d times\n", __func__, t);
+                    break;
+                } else
+                    msleep(1);
+            }
+            if (t == 100) {
+                E("%s:HX_ON_HAND_SHAKING timeout reject suspend\n", __func__);
+                return 0;
+            }
+        }
 #endif
 #ifdef HX_SMART_WAKEUP
-    if (ts->SMWP_enable) {
-        atomic_set(&ts->suspend_mode, 1);
-        ts->pre_finger_mask = 0;
-        FAKE_POWER_KEY_SEND = false;
-        buf[0] = 0x8F;
-        buf[1] = 0x20;
-        ret = i2c_himax_master_write(ts->client, buf, 2, DEFAULT_RETRY_CNT);
+        if (ts->SMWP_enable) {
+            atomic_set(&ts->suspend_mode, 1);
+            ts->pre_finger_mask = 0;
+            FAKE_POWER_KEY_SEND = false;
+            buf[0] = 0x8F;
+            buf[1] = 0x20;
+            ret = i2c_himax_master_write(ts->client, buf, 2, DEFAULT_RETRY_CNT);
+            if (ret < 0) {
+                E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
+            }
+            I("Enable GESTURE and DOUBLE CLICK, reject suspend \n");
+            return 0;
+        }
+#endif
+        himax_int_enable(ts->client->irq, 0, true);
+#ifdef HX_CHIP_STATUS_MONITOR
+        HX_CHIP_POLLING_COUNT = 0;
+        cancel_delayed_work_sync(&ts->himax_chip_monitor);
+#endif
+        //Himax 852xes IC enter sleep mode
+        buf[0] = HX_CMD_TSSOFF;
+        ret = i2c_himax_master_write(ts->client, buf, 1, DEFAULT_RETRY_CNT);
         if (ret < 0) {
             E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
         }
-        I("Enable GESTURE and DOUBLE CLICK, reject suspend \n");
+        msleep(40);
+        buf[0] = HX_CMD_TSSLPIN;
+        ret = i2c_himax_master_write(ts->client, buf, 1, DEFAULT_RETRY_CNT);
+        if (ret < 0) {
+            E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
+        }
+        if (!ts->use_irq) {
+            ret = cancel_work_sync(&ts->work);
+            if (ret)
+                himax_int_enable(ts->client->irq, 1, true);
+        }
+        //ts->first_pressed = 0;
+        atomic_set(&ts->suspend_mode, 1);
+        ts->pre_finger_mask = 0;
+        if (ts->pdata->powerOff3V3 && ts->pdata->power)
+            ts->pdata->power(0);
         return 0;
     }
-#endif
-    himax_int_enable(ts->client->irq, 0, true);
-#ifdef HX_CHIP_STATUS_MONITOR
-    HX_CHIP_POLLING_COUNT = 0;
-    cancel_delayed_work_sync(&ts->himax_chip_monitor);
-#endif
-    //Himax 852xes IC enter sleep mode
-    buf[0] = HX_CMD_TSSOFF;
-    ret = i2c_himax_master_write(ts->client, buf, 1, DEFAULT_RETRY_CNT);
-    if (ret < 0) {
-        E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
-    }
-    msleep(40);
-    buf[0] = HX_CMD_TSSLPIN;
-    ret = i2c_himax_master_write(ts->client, buf, 1, DEFAULT_RETRY_CNT);
-    if (ret < 0) {
-        E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
-    }
-    if (!ts->use_irq) {
-        ret = cancel_work_sync(&ts->work);
-        if (ret)
-            himax_int_enable(ts->client->irq, 1, true);
-    }
-    //ts->first_pressed = 0;
-    atomic_set(&ts->suspend_mode, 1);
-    ts->pre_finger_mask = 0;
-    if (ts->pdata->powerOff3V3 && ts->pdata->power)
-        ts->pdata->power(0);
-    return 0;
 }
 
 static int himax852xes_resume(struct device *dev)
