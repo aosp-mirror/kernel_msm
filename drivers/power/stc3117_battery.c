@@ -192,6 +192,7 @@ static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 static const char *charger_name = "battery";
 static bool g_debug;
 static int g_new_soc;
+static int stc3117_count_check = 0;
 static const char * const charge_status[] = {
 	"unknown",
 	"charging",
@@ -381,7 +382,7 @@ static struct stc311x_platform_data stc3117_data = {
 	/* nominal capacity in mAh, coming from battery characterisation*/
 	.Cnom = 400,
 	.Rsense = 10, /* sense resistor mOhms*/
-	.RelaxCurrent = 20, /* current for relaxation in mA (< C/20) */
+	.RelaxCurrent = 5, /* current for relaxation in mA (< C/20) */
 	.Adaptive = 1, /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 
 	/* Elentec Co Ltd Battery pack - 80 means 8% */
@@ -1075,7 +1076,10 @@ static int STC311x_ReadBatteryData(struct STC311x_BattDataTypeDef *BattData)
 	if (res < 0)
 		return res;  /* read failed */
 	BattData->RelaxTimer = data[0];
-
+	if (BattData->RelaxTimer >= 120)
+		stc3117_count_check++;
+	else
+		stc3117_count_check = 0;
 
 	return OK;
 }
@@ -1275,6 +1279,7 @@ static void MM_FSM(void)
 				/* end of charge detected */
 				STC311x_SetSOC(MAX_HRSOC);
 				BattData.SOC = MAX_SOC;  /* 100% */
+				stc3117_count_check = 0;
 			}
 			/* end of charge cycle */
 			BattData.BattState = BATT_IDLE;
@@ -1802,12 +1807,23 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 	/* check STC3117 status */
 #ifdef BATD_UC8
 	/* check STC3117 status */
-	if ((BattData.STC_Status & (M_BATFAIL | M_UVLOD)) != 0) {
+	if (((BattData.STC_Status & (M_BATFAIL | M_UVLOD)) != 0) ||
+	    (stc3117_count_check >= 2)) {
 		/* BATD or UVLO detected */
 		if (BattData.ConvCounter > 0) {
 			GG->Voltage = BattData.Voltage;
 			GG->SOC = (BattData.HRSOC*10+256)/512;
 		}
+		if ((BattData.STC_Status & M_BATFAIL) != 0)
+			pr_err("stc3117 BATD error, gauge reset.\n");
+		else if ((BattData.STC_Status & M_UVLOD) != 0)
+			pr_err("stc3117 UVLOD error, gauge reset.\n");
+		else if (stc3117_count_check >= 2)
+			pr_err("stc3117 current count error, gauge reset.\n");
+		else
+			pr_err("stc3117 unknow error, gauge reset.\n");
+
+		stc3117_count_check = 0;
 
 		/* BATD or UVLO detected */
 		GasGauge_Reset();
@@ -2573,6 +2589,7 @@ static int stc311x_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct stc311x_chip *chip = i2c_get_clientdata(client);
 
+	stc3117_count_check = 0;
 	cancel_delayed_work(&chip->work);
 	return 0;
 }
