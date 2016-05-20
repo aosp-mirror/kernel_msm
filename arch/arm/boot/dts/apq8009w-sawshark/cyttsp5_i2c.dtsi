@@ -22,7 +22,7 @@
 			pinctrl-0 = <&ts_int_active>;
 			pinctrl-1 = <&ts_int_suspend>;
 			interrupt-parent = <&msm_gpio>;
-			interrupts = <13 0x2008>;
+			interrupts = <94 0x2008>;
 			cy,adapter_id = "cyttsp5_i2c_adapter";
 			vdd-supply = <&pm8916_l5>;
 			vcc_i2c-supply = <&pm8916_l10>;
@@ -31,8 +31,8 @@
 				cy,name = "cyttsp5_core";
 				cy,product_name = "cy_tp";
 				cy,chip_name = "CS445";
-				cy,irq-gpio = <&msm_gpio 13 0x2008>;
-				cy,reset-gpio = <&msm_gpio 12 0x00>;
+				cy,irq-gpio = <&msm_gpio 94 0x2008>;
+				cy,reset-gpio = <&msm_gpio 16 0x00>;
 				cy,vdd-type = <2>;	/* 0:null, 1:gpio, 2:pmu*/
 				cy,vbus-type = <2>; 	/* 0:null, 1:gpio, 2:pmu*/
 				cy,vdd = "vdd";

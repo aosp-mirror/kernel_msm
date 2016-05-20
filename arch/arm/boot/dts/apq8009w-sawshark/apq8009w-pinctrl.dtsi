@@ -44,6 +44,68 @@
 	/delete-node/ trigout_a0;
 
 	/*Mars configuration begin*/
+
+	/*change the GPIO of TP*/
+	pmx_ts_int_active {
+		ts_int_active: ts_int_active {
+			mux {
+				pins = "gpio94";
+			};
+
+			config {
+				pins = "gpio94";
+			};
+		};
+	};
+
+	pmx_ts_int_suspend {
+		ts_int_suspend: ts_int_suspend {
+			mux {
+				pins = "gpio94";
+			};
+
+			config {
+				pins = "gpio94";
+			};
+		};
+	};
+
+	pmx_ts_reset_active {
+		ts_reset_active: ts_reset_active {
+			mux {
+				pins = "gpio16";
+			};
+
+			config {
+				pins = "gpio16";
+			};
+		};
+	};
+
+	pmx_ts_reset_suspend {
+		ts_reset_suspend: ts_reset_suspend {
+			mux {
+				pins = "gpio16";
+			};
+
+			config {
+				pins = "gpio16";
+			};
+		};
+	};
+
+	pmx_ts_release {
+		ts_release: ts_release {
+			mux {
+				pins = "gpio94", "gpio16";
+			};
+
+			config {
+				pins = "gpio94", "gpio16";
+			};
+		};
+	};
+
 	/*MCU Reset*/
 	mcu_reset{
 		mcu_reset_active:mcu_reset_active {
@@ -443,22 +505,22 @@
 	vibrator_enable{
 		vibrator_enable_active:vibrator_enable_active {
 			mux {
-				pins = "gpio68";
+				pins = "gpio92";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio68";
+				pins = "gpio92";
 				drive-strength = <2>;
 				bias-pull-down;
 			};
 		};
 		vibrator_enable_suspend:vibrator_enable_suspend {
 			mux {
-				pins = "gpio68";
+				pins = "gpio92";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio68";
+				pins = "gpio92";
 				drive-strength = <2>;
 				bias-pull-down;
 			};
@@ -469,22 +531,22 @@
 	vibrator_trigger{
 		vibrator_trigger_active:vibrator_trigger_active {
 			mux {
-				pins = "gpio69";
+				pins = "gpio95";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio69";
+				pins = "gpio95";
 				drive-strength = <2>;
 				bias-pull-down;
 			};
 		};
 		vibrator_trigger_suspend:vibrator_trigger_suspend {
 			mux {
-				pins = "gpio69";
+				pins = "gpio95";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio69";
+				pins = "gpio95";
 				drive-strength = <2>;
 				bias-pull-down;
 			};
@@ -495,22 +557,22 @@
 	ap_read_sync{
 		ap_read_sync_active:ap_read_sync_active {
 			mux {
-				pins = "gpio90";
+				pins = "gpio36";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio90";
+				pins = "gpio36";
 				drive-strength = <2>;
 				bias-pull-down;
 			};
 		};
 		ap_read_sync_suspend:ap_read_sync_suspend {
 			mux {
-				pins = "gpio90";
+				pins = "gpio36";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio90";
+				pins = "gpio36";
 				drive-strength = <2>;
 				bias-pull-down;
 			};
@@ -547,22 +609,22 @@
 	wifi_reg_on{
 		wifi_reg_on_active:wifi_reg_on_active {
 			mux {
-				pins = "gpio78";
+				pins = "gpio39";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio78";
+				pins = "gpio39";
 				drive-strength = <2>;
 				bias-pull-down;
 			};
 		};
 		wifi_reg_on_suspend:wifi_reg_on_suspend {
 			mux {
-				pins = "gpio78";
+				pins = "gpio39";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio78";
+				pins = "gpio39";
 				drive-strength = <2>;
 				bias-pull-down;
 			};
@@ -573,22 +635,22 @@
 	bt_reg_on{
 		bt_reg_on_active:bt_reg_on_active {
 			mux {
-				pins = "gpio80";
+				pins = "gpio52";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio80";
+				pins = "gpio52";
 				drive-strength = <2>;
 				bias-pull-down;
 			};
 		};
 		bt_reg_on_suspend:bt_reg_on_suspend {
 			mux {
-				pins = "gpio80";
+				pins = "gpio52";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio80";
+				pins = "gpio52";
 				drive-strength = <2>;
 				bias-pull-down;
 			};
@@ -599,22 +661,22 @@
 	pcb_ver_0{
 		pcb_ver_0_active:pcb_ver_0_active {
 			mux {
-				pins = "gpio82";
+				pins = "gpio90";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio82";
+				pins = "gpio90";
 				drive-strength = <2>;
 				bias-disable;
 			};
 		};
 		pcb_ver_0_suspend:pcb_ver_0_suspend {
 			mux {
-				pins = "gpio82";
+				pins = "gpio90";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio82";
+				pins = "gpio90";
 				drive-strength = <2>;
 				bias-disable;
 			};
@@ -625,22 +687,22 @@
 	pcb_ver_1{
 		pcb_ver_1_active:pcb_ver_1_active {
 			mux {
-				pins = "gpio83";
+				pins = "gpio91";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio83";
+				pins = "gpio91";
 				drive-strength = <2>;
 				bias-disable;
 			};
 		};
 		pcb_ver_1_suspend:pcb_ver_1_suspend {
 			mux {
-				pins = "gpio83";
+				pins = "gpio91";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio83";
+				pins = "gpio91";
 				drive-strength = <2>;
 				bias-disable;
 			};
@@ -651,24 +713,24 @@
 	mcu_boot_0{
 		mcu_boot_0_active:mcu_boot_0_active {
 			mux {
-				pins = "gpio85";
+				pins = "gpio41";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio85";
+				pins = "gpio41";
 				drive-strength = <2>;
-				bias-pull-up ;
+				bias-pull-down ;
 			};
 		};
 		mcu_boot_0_suspend:mcu_boot_0_suspend {
 			mux {
-				pins = "gpio85";
+				pins = "gpio41";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio85";
+				pins = "gpio41";
 				drive-strength = <2>;
-				bias-pull-up ;
+				bias-pull-down ;
 			};
 		};
 	};
@@ -676,22 +738,22 @@
 	mcu_boot_1{
 		mcu_boot_1_active:mcu_boot_1_active {
 			mux {
-				pins = "gpio86";
+				pins = "gpio42";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio86";
+				pins = "gpio42";
 				drive-strength = <2>;
 				bias-pull-down ;
 			};
 		};
 		mcu_boot_1_suspend:mcu_boot_1_suspend {
 			mux {
-				pins = "gpio86";
+				pins = "gpio42";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio86";
+				pins = "gpio42";
 				drive-strength = <2>;
 				bias-pull-down ;
 			};
