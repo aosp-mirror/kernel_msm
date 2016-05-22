@@ -40,10 +40,60 @@
 
 	/delete-node/ pmx_mdss;
 	/delete-node/ pmx_i2c_2;
-
+	/delete-node/ pmx_i2c_4;
 	/delete-node/ trigout_a0;
 
 	/*Mars configuration begin*/
+	spi1 {
+		spi1_default: spi1_default {
+			mux {
+				pins = "gpio12", "gpio13",
+					"gpio15";
+				function = "blsp_spi4";
+			};
+			config {
+				pins = "gpio12", "gpio13",
+					"gpio15";
+				drive-strength = <12>; /* 12 MA */
+				bias-disable; /* No PULL */
+			};
+		};
+		spi1_sleep: spi1_sleep {
+			mux {
+				pins = "gpio12", "gpio13",
+					"gpio15";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio12", "gpio13",
+					"gpio15";
+				drive-strength = <2>; /* 2 MA */
+				bias-pull-down; /* pull down */
+			};
+		};
+		spi1_cs0_active: spi1_cs0_active {
+			mux {
+				pins = "gpio14";
+				function = "blsp_spi4";
+			};
+			config {
+				pins = "gpio14";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+		spi1_cs0_sleep: spi1_cs0_sleep {
+			mux {
+				pins = "gpio14";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio14";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+	};
 
 	/*change the GPIO of TP*/
 	pmx_ts_int_active {
