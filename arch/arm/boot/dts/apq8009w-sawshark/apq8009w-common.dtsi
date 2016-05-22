@@ -28,6 +28,7 @@
 	/delete-node/ serial@78b0000;
 	/delete-node/ blsp1_uart2;
 	/delete-node/ i2c@78b6000;
+	/delete-node/ i2c@78b8000;
 };
 &i2c_1 {
 	status = "ok";
@@ -61,5 +62,7 @@
 / {
 	aliases {
 		/delete-property/ i2c2;
+		/delete-property/ i2c4;
+		spi1 = &spi_1; /* SPI1 controller device */
 	};
 };
