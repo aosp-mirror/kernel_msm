@@ -2266,7 +2266,6 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 
 	if (!charger_psy) {
 			pr_err("%s not registered \n", charger_name);
-			chip->status = 0;
 			return;
 	}
 	else {
@@ -2275,7 +2274,6 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 		rc = charger_psy->get_property(charger_psy, POWER_SUPPLY_PROP_STATUS, &ret);
 		if (rc) {
 			pr_err("stc311x can't get smb23x register data \n");	
-			chip->status = 0;
 			return;
 		} else
 			chip->status = ret.intval;
@@ -2285,7 +2283,6 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 					POWER_SUPPLY_PROP_RESISTANCE, &ret);
 		if (rc) {
 			pr_err("stc311x can't get smb23x register data \n");	
-			chip->status = 0;
 			return;
 		}
 
@@ -2296,8 +2293,7 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 				ret.intval = 1;	
 				charger_psy->set_property(charger_psy, POWER_SUPPLY_PROP_STATUS, &ret);
 			}
-		} else
-			chip->status = 0;
+		}
 	}
 }
 
@@ -2552,6 +2548,7 @@ static int stc311x_probe(struct i2c_client *client,
 		chip->Temperature = 250;
 	}
 	g_new_soc = chip->batt_soc;
+	chip->status = POWER_SUPPLY_STATUS_UNKNOWN;
 	INIT_DEFERRABLE_WORK(&chip->work, stc311x_work);
 
 	schedule_delayed_work(&chip->work, STC311x_DELAY);
