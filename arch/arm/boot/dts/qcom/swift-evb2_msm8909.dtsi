@@ -23,21 +23,6 @@
 			<275 0>;
 	interrupt-parent = <&intc>;
 
-//adbg++
-	qcom,asusdebug {
-		compatible = "qcom,asusdebug";
-		/* Remove 2MB at 0x1FF00000*/
-		qcom,memblock-remove = <0x11F00000 0x200000>;
-	};
-
-	qcom,asusdebug {
-		compatible = "qcom,asusdebug";
-		/* Fixed Memory region of 2MB at 0x1FF00000*/
-		qcom,memory-fixed = <0x11F00000 0x200000>;
-	};
-//adbg--
-
-
 	chosen {
 		bootargs = "sched_enable_hmp=1";
 	};
