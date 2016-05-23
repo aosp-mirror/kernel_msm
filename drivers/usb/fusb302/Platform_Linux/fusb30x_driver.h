@@ -55,16 +55,25 @@ MODULE_DEVICE_TABLE(i2c, fusb30x_i2c_device_id);                                
 /*******************************************************************************                        
  * Driver module functions
  ******************************************************************************/                        
+static int fusb30x_pm_suspend(struct device *dev);
+static int fusb30x_pm_resume(struct device *dev);
+
 static int __init fusb30x_init(void);                                                                   // Called when driver is inserted into the kernel
 static void __exit fusb30x_exit(void);                                                                  // Called when driver is removed from the kernel
 static int fusb30x_probe(struct i2c_client* client,                                                     // Called when the associated device is added
                          const struct i2c_device_id* id);
 static int fusb30x_remove(struct i2c_client* client);                                                   // Called when the associated device is removed
 
+static const struct dev_pm_ops fusb30x_pm_ops = {
+    .suspend = fusb30x_pm_suspend,
+    .resume = fusb30x_pm_resume,
+};
+
 /* Defines our driver's name, device-tree match, and required driver callbacks */
 static struct i2c_driver fusb30x_driver = {
     .driver = {
         .name = FUSB30X_I2C_DRIVER_NAME,                                        // Must match our id_table name
+        .pm = &fusb30x_pm_ops,
         .of_match_table = of_match_ptr(fusb30x_dt_match),                       // Device-tree match structure to pair the DT device with our driver
     },
     .probe = fusb30x_probe,                                                     // Called on device add, inits/starts driver

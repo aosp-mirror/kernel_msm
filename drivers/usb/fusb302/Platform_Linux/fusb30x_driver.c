@@ -52,6 +52,22 @@ extern bool VCONN_enabled;
 /******************************************************************************
 * Driver functions
 ******************************************************************************/
+static int fusb30x_pm_suspend(struct device *dev)
+{
+    struct fusb30x_chip *chip = fusb30x_GetChip();
+    dev_dbg(dev, "FUSB PM suspend\n");
+    atomic_set(&chip->pm_suspended, 1);
+    return 0;
+}
+
+static int fusb30x_pm_resume(struct device *dev)
+{
+    struct fusb30x_chip *chip = fusb30x_GetChip();
+    dev_dbg(dev, "FUSB PM resume\n");
+    atomic_set(&chip->pm_suspended, 0);
+    return 0;
+}
+
 static int __init fusb30x_init(void)
 {
     pr_debug("FUSB  %s - Start driver initialization...\n", __func__);

@@ -23,6 +23,7 @@
 
 #include <linux/i2c.h>                              // i2c_client, spinlock_t
 #include <linux/hrtimer.h>                          // hrtimer
+#include <linux/wakelock.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/usb/usb_controller.h>
 #include "FSCTypes.h"                               // FUSB30x custom types
@@ -74,6 +75,9 @@ struct fusb30x_chip                                 // Contains data required by
 
     /* Timers */
     struct hrtimer timer_state_machine;             // High-resolution timer for the state machine
+
+    atomic_t pm_suspended;
+    struct wake_lock fusb_wlock;
 
     struct usb_controller *uc;
 };

@@ -55,6 +55,8 @@ const char* FUSB_DT_INTERRUPT_INTN =    "fsc_interrupt_int_n";      // Name of t
 #define FUSB_DT_GPIO_VBUS_5V            "fairchild,vbus5v"          // Name of the VBus 5V GPIO pin in the Device Tree
 #define FUSB_DT_GPIO_VBUS_OTHER         "fairchild,vbusOther"       // Name of the VBus Other GPIO pin in the Device Tree
 
+#define FUSB_I2C_RETRY_DELAY            50                          // in ms
+
 #ifdef FSC_DEBUG
 #define FUSB_DT_GPIO_DEBUG_SM_TOGGLE    "fairchild,dbg_sm"          // Name of the debug State Machine toggle GPIO pin in the Device Tree
 #endif  // FSC_DEBUG
@@ -524,6 +526,12 @@ FSC_BOOL fusb_I2C_WriteData(FSC_U8 address, FSC_U8 length, FSC_U8* data)
     // Retry on failure up to the retry limit
     for (i = 0; i <= chip->numRetriesI2C; i++)
     {
+        if (atomic_read(&chip->pm_suspended)) {
+            pr_debug("FUSB %s: pm_suspended, retry\n", __func__);
+            msleep(FUSB_I2C_RETRY_DELAY);
+            continue;
+        }
+
         ret = i2c_smbus_write_i2c_block_data(chip->client,                      // Perform the actual I2C write on our client
                                              address,                           // Register address to write to
                                              length,                            // Number of bytes to write
@@ -624,6 +632,12 @@ FSC_BOOL fusb_I2C_ReadData(FSC_U8 address, FSC_U8* data)
     // Retry on failure up to the retry limit
     for (i = 0; i <= chip->numRetriesI2C; i++)
     {
+        if (atomic_read(&chip->pm_suspended)) {
+            pr_debug("FUSB %s: pm_suspended, retry\n", __func__);
+            msleep(FUSB_I2C_RETRY_DELAY);
+            continue;
+        }
+
         ret = i2c_smbus_read_byte_data(chip->client, (u8)address);         // Read a byte of data from address
         if (ret < 0)                                                            // Errors report as negative
         {
@@ -723,6 +737,12 @@ FSC_BOOL fusb_I2C_ReadBlockData(FSC_U8 address, FSC_U8 length, FSC_U8* data)
     // Retry on failure up to the retry limit
     for (i = 0; i <= chip->numRetriesI2C; i++)
     {
+        if (atomic_read(&chip->pm_suspended)) {
+            pr_debug("FUSB %s: pm_suspended, retry\n", __func__);
+            msleep(FUSB_I2C_RETRY_DELAY);
+            continue;
+        }
+
         ret = i2c_smbus_read_i2c_block_data(chip->client, (u8)address, (u8)length, (u8*)data);          // Read a byte of data from address
         if (ret < 0)                                                                                    // Errors report as negative
         {
@@ -3362,6 +3382,8 @@ FSC_S32 fusb_EnableInterrupts(void)
         return -ENOMEM;
     }
 
+    wake_lock_init(&chip->fusb_wlock, WAKE_LOCK_SUSPEND, "fusb_wlock");
+
     /* Set up IRQ for INT_N GPIO */
     ret = gpio_to_irq(chip->gpio_IntN); // Returns negative errno on error
     if (ret < 0)
@@ -3382,6 +3404,9 @@ FSC_S32 fusb_EnableInterrupts(void)
         fusb_GPIO_Cleanup();
         return ret;
     }
+
+    if (chip->gpio_IntN_irq)
+        enable_irq_wake(chip->gpio_IntN_irq);
 
     return 0;
 }
@@ -3414,8 +3439,11 @@ static irqreturn_t _fusb_isr_intn(FSC_S32 irq, void *dev_id)
     }
 #endif  // FSC_DEBUG
 
+    wake_lock_timeout(&chip->fusb_wlock, 2 * HZ);
     core_state_machine();                                               // Run the state machine
+    wake_unlock(&chip->fusb_wlock);
 
+    pr_info("FUSB [%s]: FUSB-interrupt handled ++ \n", __func__);
     return IRQ_HANDLED;
 }
 
@@ -3498,6 +3526,10 @@ void fusb_StopThreads(void)
     // Cancel the main worker
     flush_work(&chip->worker);
     cancel_work_sync(&chip->worker);
+
+    if (chip->gpio_IntN_irq)
+        disable_irq_wake(chip->gpio_IntN_irq);
+    wake_lock_destroy(&chip->fusb_wlock);
 }
 
 void fusb_ScheduleWork(void)
