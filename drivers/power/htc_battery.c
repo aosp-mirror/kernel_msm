@@ -151,7 +151,8 @@ static int is_bounding_fully_charged_level(void)
 	int is_batt_chg_off_by_bounding = 0;
 	int upperbd = htc_batt_info.rep.full_level;
 	int current_level = htc_batt_info.rep.level;
-	int lowerbd = upperbd - 5; /* 5% range */
+	/* Default 5% range, set 30% when 6 4000000 is set*/
+	int lowerbd = g_flag_force_ac_chg ? (upperbd-30) : (upperbd-5);
 
 	if (0 < htc_batt_info.rep.full_level &&
 			htc_batt_info.rep.full_level < 100) {
