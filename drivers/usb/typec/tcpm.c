@@ -21,7 +21,6 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/proc_fs.h>
-#include <linux/sched.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
@@ -186,6 +185,7 @@ struct tcpm_port {
 	bool send_discover;
 	bool op_vsafe5v;
 
+	int try_role;
 	int try_snk_count;
 	int try_src_count;
 
@@ -303,16 +303,21 @@ struct pd_rx_event {
 
 
 #define tcpm_try_snk(port) \
-	((port)->try_snk_count == 0 && \
-	(port)->tcpc->config->try_snk)
+	((port)->try_snk_count == 0 && (port)->try_role == TYPEC_SINK)
 
 #define tcpm_try_src(port) \
-	((port)->try_src_count == 0 && \
-	(port)->tcpc->config->try_src)
+	((port)->try_src_count == 0 && (port)->try_role == TYPEC_SOURCE)
 
-#define tcpm_default_state(port) \
-	((port)->tcpc->config->default_role == TYPEC_SOURCE ? \
-					SRC_UNATTACHED : SNK_UNATTACHED)
+static enum tcpm_state tcpm_default_state(struct tcpm_port *port)
+{
+	if (port->try_role == TYPEC_SINK)
+		return SNK_UNATTACHED;
+	else if (port->try_role == TYPEC_SOURCE)
+		return SRC_UNATTACHED;
+	else if (port->tcpc->config->default_role == TYPEC_SINK)
+		return SNK_UNATTACHED;
+	return SRC_UNATTACHED;
+}
 
 static inline
 struct tcpm_port *typec_cap_to_tcpm(const struct typec_capability *cap)
@@ -394,7 +399,8 @@ static void tcpm_log(struct tcpm_port *port, const char *fmt, ...)
 
 	/* Do not log while disconnected and unattached */
 	if (tcpm_port_is_disconnected(port) &&
-	    (port->state == SRC_UNATTACHED || port->state == SNK_UNATTACHED))
+	    (port->state == SRC_UNATTACHED || port->state == SNK_UNATTACHED ||
+	     port->state == DRP_TOGGLING))
 		return;
 
 	va_start(args, fmt);
@@ -646,8 +652,8 @@ static enum typec_cc_status tcpm_rp_cc(struct tcpm_port *port)
 	return TYPEC_CC_RP_DEF;
 }
 
-static int tcpm_set_roles(struct tcpm_port *port, enum typec_role role,
-			  enum typec_data_role data)
+static int tcpm_set_roles(struct tcpm_port *port, bool attached,
+			  enum typec_role role, enum typec_data_role data)
 {
 	int ret;
 
@@ -660,12 +666,7 @@ static int tcpm_set_roles(struct tcpm_port *port, enum typec_role role,
 	if (ret < 0)
 		return ret;
 
-	ret = port->tcpc->set_pd_header(port->tcpc, role, data);
-	if (ret < 0)
-		return ret;
-	ret = port->tcpc->set_usb_data_role(port->tcpc,
-					    !tcpm_port_is_disconnected(port),
-					    data);
+	ret = port->tcpc->set_roles(port->tcpc, attached, role, data);
 	if (ret < 0)
 		return ret;
 
@@ -681,7 +682,8 @@ static int tcpm_set_pwr_role(struct tcpm_port *port, enum typec_role role)
 {
 	int ret;
 
-	ret = port->tcpc->set_pd_header(port->tcpc, role, port->con.data_role);
+	ret = port->tcpc->set_roles(port->tcpc, true, role,
+				    port->con.data_role);
 	if (ret < 0)
 		return ret;
 
@@ -1785,10 +1787,9 @@ static bool tcpm_start_drp_toggling(struct tcpm_port *port)
 {
 	int ret;
 
-	tcpm_log(port, "Start DRP toggling");
-
 	if (port->tcpc->start_drp_toggling &&
 	    port->typec_caps.type == TYPEC_PORT_DRP) {
+		tcpm_log(port, "Start DRP toggling");
 		ret = port->tcpc->start_drp_toggling(port->tcpc,
 						     tcpm_rp_cc(port));
 		if (!ret)
@@ -1845,7 +1846,7 @@ static int tcpm_src_attach(struct tcpm_port *port)
 	if (ret < 0)
 		return ret;
 
-	ret = tcpm_set_roles(port, TYPEC_SOURCE, TYPEC_HOST);
+	ret = tcpm_set_roles(port, true, TYPEC_SOURCE, TYPEC_HOST);
 	if (ret < 0)
 		return ret;
 
@@ -1908,7 +1909,7 @@ static void tcpm_reset_port(struct tcpm_port *port)
 	tcpm_init_vconn(port);
 	tcpm_set_current_limit(port, 0, 0);
 	tcpm_set_polarity(port, TYPEC_POLARITY_CC1);
-	tcpm_mux_set(port, TYPEC_MUX_NONE, TCPC_USB_SWITCH_DISCONNECT);
+	tcpm_set_roles(port, false, port->con.pwr_role, port->con.data_role);
 }
 
 static void tcpm_detach(struct tcpm_port *port)
@@ -1919,7 +1920,6 @@ static void tcpm_detach(struct tcpm_port *port)
 	if (tcpm_port_is_disconnected(port))
 		port->hard_reset_count = 0;
 
-	port->tcpc->set_usb_data_role(port->tcpc, false, port->con.data_role);
 	tcpm_reset_port(port);
 }
 
@@ -1940,7 +1940,7 @@ static int tcpm_snk_attach(struct tcpm_port *port)
 	if (ret < 0)
 		return ret;
 
-	ret = tcpm_set_roles(port, TYPEC_SINK, TYPEC_DEVICE);
+	ret = tcpm_set_roles(port, true, TYPEC_SINK, TYPEC_DEVICE);
 	if (ret < 0)
 		return ret;
 
@@ -1968,7 +1968,7 @@ static int tcpm_acc_attach(struct tcpm_port *port)
 	if (!port->attached)
 		return 0;
 
-	ret = tcpm_set_roles(port, TYPEC_SOURCE, TYPEC_HOST);
+	ret = tcpm_set_roles(port, true, TYPEC_SOURCE, TYPEC_HOST);
 	if (ret < 0)
 		return ret;
 
@@ -2388,7 +2388,7 @@ static void run_state_machine(struct tcpm_port *port)
 	case SRC_HARD_RESET_VBUS_OFF:
 		tcpm_set_vconn(port, true);
 		tcpm_set_vbus(port, false);
-		tcpm_set_roles(port, TYPEC_SOURCE, TYPEC_HOST);
+		tcpm_set_roles(port, false, TYPEC_SOURCE, TYPEC_HOST);
 		tcpm_set_state(port, SRC_HARD_RESET_VBUS_ON, PD_T_SRC_RECOVER);
 		break;
 	case SRC_HARD_RESET_VBUS_ON:
@@ -2399,7 +2399,7 @@ static void run_state_machine(struct tcpm_port *port)
 	case SNK_HARD_RESET_SINK_OFF:
 		tcpm_set_vconn(port, false);
 		tcpm_set_charge(port, false);
-		tcpm_set_roles(port, TYPEC_SINK, TYPEC_DEVICE);
+		tcpm_set_roles(port, false, TYPEC_SINK, TYPEC_DEVICE);
 		/*
 		 * VBUS may or may not toggle, depending on the adapter.
 		 * If it doesn't toggle, transition to SNK_HARD_RESET_SINK_ON
@@ -2467,10 +2467,10 @@ static void run_state_machine(struct tcpm_port *port)
 	case DR_SWAP_CHANGE_DR:
 		if (port->con.data_role == TYPEC_HOST) {
 			tcpm_unregister_altmodes(port);
-			tcpm_set_roles(port, port->con.pwr_role,
+			tcpm_set_roles(port, true, port->con.pwr_role,
 				       TYPEC_DEVICE);
 		} else {
-			tcpm_set_roles(port, port->con.pwr_role,
+			tcpm_set_roles(port, true, port->con.pwr_role,
 				       TYPEC_HOST);
 			port->send_discover = true;
 		}
@@ -3145,6 +3145,22 @@ swap_unlock:
 	return ret;
 }
 
+static int tcpm_try_role(const struct typec_capability *cap, int role)
+{
+	struct tcpm_port *port = typec_cap_to_tcpm(cap);
+	struct tcpc_dev	*tcpc = port->tcpc;
+	int ret = 0;
+
+	mutex_lock(&port->lock);
+	if (tcpc->try_role)
+		ret = tcpc->try_role(tcpc, role);
+	if (!ret && !tcpc->config->try_role_hw)
+		port->try_role = role;
+	mutex_unlock(&port->lock);
+
+	return ret;
+}
+
 static void tcpm_init(struct tcpm_port *port)
 {
 	enum typec_cc_status cc1, cc2;
@@ -3258,7 +3274,7 @@ struct tcpm_port *tcpm_register_port(struct device *dev, struct tcpc_dev *tcpc)
 	if (!dev || !tcpc || !tcpc->config ||
 	    !tcpc->get_vbus || !tcpc->set_cc || !tcpc->get_cc ||
 	    !tcpc->set_polarity || !tcpc->set_vconn || !tcpc->set_vbus ||
-	    !tcpc->set_pd_rx || !tcpc->set_pd_header || !tcpc->pd_transmit)
+	    !tcpc->set_pd_rx || !tcpc->set_roles || !tcpc->pd_transmit)
 		return ERR_PTR(-EINVAL);
 
 	port = devm_kzalloc(dev, sizeof(*port), GFP_KERNEL);
@@ -3292,12 +3308,18 @@ struct tcpm_port *tcpm_register_port(struct device *dev, struct tcpc_dev *tcpc)
 	port->max_snk_ma = tcpc->config->max_snk_ma;
 	port->max_snk_mw = tcpc->config->max_snk_mw;
 	port->operating_snk_mw = tcpc->config->operating_snk_mw;
+	if (!tcpc->config->try_role_hw)
+		port->try_role = tcpc->config->default_role;
+	else
+		port->try_role = TYPEC_NO_PREFERRED_ROLE;
 
+	port->typec_caps.prefer_role = tcpc->config->default_role;
 	port->typec_caps.type = tcpc->config->type;
 	port->typec_caps.usb_pd = 1;
 	port->typec_caps.dr_set = tcpm_dr_set;
 	port->typec_caps.pr_set = tcpm_pr_set;
 	port->typec_caps.vconn_set = tcpm_vconn_set;
+	port->typec_caps.try_role = tcpm_try_role;
 	port->typec_caps.alt_modes = tcpc->config->alt_modes;
 
 	port->con.partner = &port->partner;

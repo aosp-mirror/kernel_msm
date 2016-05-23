@@ -67,9 +67,7 @@ struct tcpc_config {
 
 	enum typec_port_type type;
 	enum typec_role default_role;
-
-	bool try_snk;
-	bool try_src;
+	bool try_role_hw;	/* try.{src,snk} implemented in hardware */
 
 	struct typec_altmode *alt_modes;
 };
@@ -116,14 +114,13 @@ struct tcpc_dev {
 	int (*set_vbus)(struct tcpc_dev *dev, bool on, bool charge);
 	int (*set_current_limit)(struct tcpc_dev *dev, u32 max_ma, u32 mv);
 	int (*set_pd_rx)(struct tcpc_dev *dev, bool on);
-	int (*set_pd_header)(struct tcpc_dev *dev, enum typec_role role,
-			     enum typec_data_role data);
+	int (*set_roles)(struct tcpc_dev *dev, bool attached,
+			 enum typec_role role, enum typec_data_role data);
 	int (*start_drp_toggling)(struct tcpc_dev *dev,
 				  enum typec_cc_status cc);
+	int (*try_role)(struct tcpc_dev *dev, int role);
 	int (*pd_transmit)(struct tcpc_dev *dev, enum tcpm_transmit_type type,
 			   const struct pd_message *msg);
-	int (*set_usb_data_role)(struct tcpc_dev *dev, bool attached,
-			     enum typec_data_role data);
 	struct tcpc_mux_dev *mux;
 };
 
