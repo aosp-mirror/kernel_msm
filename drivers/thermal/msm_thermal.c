@@ -3475,6 +3475,39 @@ static int __ref msm_thermal_cpu_callback(struct notifier_block *nfb,
 	return NOTIFY_OK;
 }
 
+static void do_thermal_core_control(bool online_offline_flag)
+{
+	int i = 0;
+	int ret = 0;
+	struct device *cpu_dev = NULL;
+	mutex_lock(&core_control_mutex);
+	for (i = num_possible_cpus(); i > 0; i--)
+	{
+		lock_device_hotplug();
+		if (online_offline_flag && !cpu_online(i) && i == 1) {
+			cpu_dev = get_cpu_device(i);
+			trace_thermal_pre_core_online(i);
+			ret = device_online(cpu_dev);
+			if (ret)
+				pr_err("Error %d online core %d\n", ret, i);
+
+			trace_thermal_post_core_online(i,
+				cpumask_test_cpu(i, cpu_online_mask));
+		} else if (online_offline_flag == false && cpu_online(i)){
+			cpu_dev = get_cpu_device(i);
+			trace_thermal_pre_core_offline(i);
+			ret = device_offline(cpu_dev);
+			if (ret)
+				pr_err("Error %d offline core %d\n", ret, i);
+
+			trace_thermal_post_core_offline(i,
+				cpumask_test_cpu(i, cpu_online_mask));
+		}
+		unlock_device_hotplug();
+	}
+	mutex_unlock(&core_control_mutex);
+}
+
 static struct notifier_block __refdata msm_thermal_cpu_notifier = {
 	.notifier_call = msm_thermal_cpu_callback,
 };
@@ -3491,10 +3524,12 @@ static int hotplug_notify(enum thermal_trip_type type, int temp, void *data)
 	case THERMAL_TRIP_CONFIGURABLE_HI:
 		if (!(cpu_node->offline))
 			cpu_node->offline = 1;
+		do_thermal_core_control(false);
 		break;
 	case THERMAL_TRIP_CONFIGURABLE_LOW:
 		if (cpu_node->offline)
 			cpu_node->offline = 0;
+		do_thermal_core_control(true);
 		break;
 	default:
 		break;
