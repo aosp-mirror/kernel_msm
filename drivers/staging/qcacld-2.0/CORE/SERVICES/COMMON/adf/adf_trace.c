@@ -407,33 +407,12 @@ void adf_dp_add_record(enum ADF_DP_TRACE_ID code,
 bool adf_log_eapol_pkt(uint8_t session_id, struct sk_buff *skb,
 		       uint8_t event_type)
 {
-	uint16_t mask;
-	uint16_t eapol_key_info;
 	enum adf_proto_subtype subtype;
 
 	if ((adf_dp_get_proto_bitmap() & NBUF_PKT_TRAC_TYPE_EAPOL) &&
 		adf_nbuf_is_eapol_pkt(skb) == A_STATUS_OK) {
 
-		eapol_key_info = (uint16_t)(*(uint16_t *)
-					(skb->data + EAPOL_KEY_INFO_OFFSET));
-
-		mask = eapol_key_info & EAPOL_MASK;
-		switch (mask) {
-		case EAPOL_M1_BIT_MASK:
-			subtype = ADF_PROTO_EAPOL_M1;
-			break;
-		case EAPOL_M2_BIT_MASK:
-			subtype = ADF_PROTO_EAPOL_M2;
-			break;
-		case EAPOL_M3_BIT_MASK:
-			subtype = ADF_PROTO_EAPOL_M3;
-			break;
-		case EAPOL_M4_BIT_MASK:
-			subtype = ADF_PROTO_EAPOL_M4;
-			break;
-		default:
-			subtype = ADF_PROTO_INVALID;
-		}
+		subtype = adf_nbuf_get_eapol_subtype(skb);
 		DPTRACE(adf_dp_trace_proto_pkt(ADF_DP_TRACE_EAPOL_PACKET_RECORD,
 			session_id, (skb->data + ADF_NBUF_SRC_MAC_OFFSET),
 			(skb->data + ADF_NBUF_DEST_MAC_OFFSET),
@@ -462,39 +441,7 @@ bool adf_log_dhcp_pkt(uint8_t session_id, struct sk_buff *skb,
 	if ((adf_dp_get_proto_bitmap() & NBUF_PKT_TRAC_TYPE_DHCP) &&
 		adf_nbuf_is_dhcp_pkt(skb) == A_STATUS_OK) {
 
-		if ((skb->data[DHCP_OPTION53_OFFSET] == DHCP_OPTION53) &&
-		    (skb->data[DHCP_OPTION53_LENGTH_OFFSET] ==
-						 DHCP_OPTION53_LENGTH)) {
-
-			switch (skb->data[DHCP_OPTION53_STATUS_OFFSET]) {
-			case DHCPDISCOVER:
-				subtype = ADF_PROTO_DHCP_DISCOVER;
-				break;
-			case DHCPREQUEST:
-				subtype = ADF_PROTO_DHCP_REQUEST;
-				break;
-			case DHCPOFFER:
-				subtype = ADF_PROTO_DHCP_OFFER;
-				break;
-			case DHCPACK:
-				subtype = ADF_PROTO_DHCP_ACK;
-				break;
-			case DHCPNAK:
-				subtype = ADF_PROTO_DHCP_NACK;
-				break;
-			case DHCPRELEASE:
-				subtype = ADF_PROTO_DHCP_RELEASE;
-				break;
-			case DHCPINFORM:
-				subtype = ADF_PROTO_DHCP_INFORM;
-				break;
-			case DHCPDECLINE:
-				subtype = ADF_PROTO_DHCP_DECLINE;
-				break;
-			default:
-				subtype = ADF_PROTO_INVALID;
-			}
-		}
+		subtype = adf_nbuf_get_dhcp_subtype(skb);
 		DPTRACE(adf_dp_trace_proto_pkt(ADF_DP_TRACE_DHCP_PACKET_RECORD,
 			session_id, (skb->data + ADF_NBUF_SRC_MAC_OFFSET),
 			(skb->data + ADF_NBUF_DEST_MAC_OFFSET),
@@ -518,24 +465,12 @@ bool adf_log_dhcp_pkt(uint8_t session_id, struct sk_buff *skb,
 bool adf_log_arp_pkt(uint8_t session_id, struct sk_buff *skb,
 		     uint8_t event_type)
 {
-	uint16_t subtype;
 	enum adf_proto_subtype proto_subtype;
 
 	if ((adf_dp_get_proto_bitmap() & NBUF_PKT_TRAC_TYPE_ARP) &&
 	     adf_nbuf_is_ipv4_arp_pkt(skb) == true) {
 
-	     subtype = (uint16_t)(*(uint16_t *)
-			(skb->data + ARP_SUB_TYPE_OFFSET));
-		switch (adf_os_cpu_to_be16(subtype)) {
-		case ARP_REQUEST:
-			proto_subtype = ADF_PROTO_ARP_REQ;
-			break;
-		case ARP_RESPONSE:
-			proto_subtype = ADF_PROTO_ARP_RES;
-			break;
-		default:
-			proto_subtype = ADF_PROTO_INVALID;
-		}
+		proto_subtype = adf_nbuf_get_arp_subtype(skb);
 
 		DPTRACE(adf_dp_trace_proto_pkt(ADF_DP_TRACE_ARP_PACKET_RECORD,
 			session_id, (skb->data + ADF_NBUF_SRC_MAC_OFFSET),
