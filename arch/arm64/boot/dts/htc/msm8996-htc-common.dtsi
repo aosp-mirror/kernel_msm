@@ -69,6 +69,12 @@
 		reg-names = "msm_rtb_res";
 	};
 
+	htc_mnemosyne@0 {
+		compatible = "htc,mnemosyne";
+		reg = <0x83CE0000 0x2000>;
+		reg-names = "htc_mnemosyne_res";
+	};
+
         qcom,rmtfs_rtel_sharedmem@0 {
                 compatible = "htc,rtel-uio";
                 reg = <0x84000000 0x01400000>;
