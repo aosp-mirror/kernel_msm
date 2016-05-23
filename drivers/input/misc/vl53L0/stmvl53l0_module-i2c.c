@@ -49,6 +49,7 @@
 #include "stmvl53l0.h"
 #ifndef CAMERA_CCI
 
+#define HTC_MODIFY
 #define HTC
 // HTC ADD ++//
 #ifdef HTC
@@ -298,25 +299,10 @@ static struct i2c_driver stmvl53l0_driver = {
 int stmvl53l0_power_up_i2c(void *i2c_object, unsigned int *preset_flag)
 {
     int ret = 0;
-#ifndef STM_TEST
     struct i2c_data *data = (struct i2c_data *)i2c_object;
-#endif
 
     vl53l0_dbgmsg("Enter\n");
-
-    /* actual power on */
-#ifndef STM_TEST
-    ret = regulator_set_voltage(data->vana,	VL53L0_VDD_MIN, VL53L0_VDD_MAX);
-    if (ret < 0) {
-        vl53l0_errmsg("set_vol(%p) fail %d\n", data->vana , ret);
-        //		return ret;
-    }
-    ret = regulator_enable(data->vana);
-    msleep(3);
-    if (ret < 0) {
-        vl53l0_errmsg("reg enable(%p) failed.rc=%d\n", data->vana, ret);
-        //		return ret;
-    }
+#ifdef HTC_MODIFY
     data->power_up = 1;
     *preset_flag = 1;
 #endif
@@ -327,21 +313,12 @@ int stmvl53l0_power_up_i2c(void *i2c_object, unsigned int *preset_flag)
 int stmvl53l0_power_down_i2c(void *i2c_object)
 {
     int ret = 0;
-#ifndef STM_TEST
     struct i2c_data *data = (struct i2c_data *)i2c_object;
-#endif
 
     vl53l0_dbgmsg("Enter\n");
-#ifndef STM_TEST
-    msleep(3);
-    ret = regulator_disable(data->vana);
-    if (ret < 0)
-        vl53l0_errmsg("reg disable(%p) failed.rc=%d\n",
-                data->vana, ret);
-
+#ifdef HTC_MODIFY
     data->power_up = 0;
 #endif
-
     vl53l0_dbgmsg("End\n");
     return ret;
 }
