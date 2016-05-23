@@ -405,19 +405,10 @@ static struct wcd_mbhc_config wcd_mbhc_cfg = {
 	.mono_stero_detection = false,
 	.swap_gnd_mic = NULL,
 	.hs_ext_micbias = true,
-//HTC_AUD_START
-#if 0
 	.key_code[0] = KEY_MEDIA,
 	.key_code[1] = KEY_VOICECOMMAND,
 	.key_code[2] = KEY_VOLUMEUP,
 	.key_code[3] = KEY_VOLUMEDOWN,
-#else
-	.key_code[0] = KEY_MEDIA,
-	.key_code[1] = KEY_VOLUMEUP,
-	.key_code[2] = KEY_VOLUMEDOWN,
-	.key_code[3] = 0,
-#endif
-//HTC_AUD_END
 	.key_code[4] = 0,
 	.key_code[5] = 0,
 	.key_code[6] = 0,
@@ -3710,16 +3701,14 @@ static void *def_tasha_mbhc_cal(void)
 	btn_high = ((void *)&btn_cfg->_v_btn_low) +
 		(sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
 
-//HTC_AUD_START
-	btn_high[0] = 88;
-	btn_high[1] = 213;
-	btn_high[2] = 438;
-	btn_high[3] = 438;
-	btn_high[4] = 438;
-	btn_high[5] = 438;
-	btn_high[6] = 438;
-	btn_high[7] = 438;
-//HTC_AUD_END
+	btn_high[0] = 75;
+	btn_high[1] = 137;
+	btn_high[2] = 237;
+	btn_high[3] = 500;
+	btn_high[4] = 500;
+	btn_high[5] = 500;
+	btn_high[6] = 500;
+	btn_high[7] = 500;
 
 	return tasha_wcd_cal;
 }
