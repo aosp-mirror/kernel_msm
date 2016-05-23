@@ -24,17 +24,64 @@
 
 #include <soc/qcom/secure_buffer.h>
 
+#include <linux/slab.h>
+#include <linux/remote_spinlock.h>
+#include <soc/qcom/smem.h>
+#include <soc/qcom/ramdump.h>
+#include <soc/qcom/subsystem_notif.h>
+
 #include "sharedmem_qmi.h"
 
 #define CLIENT_ID_PROP "qcom,client-id"
 
 #define MPSS_RMTS_CLIENT_ID 1
 
+struct restart_notifier_block {
+	unsigned processor;
+	char *name;
+	struct notifier_block nb;
+};
+
+static struct ramdump_segment *rtel_ramdump_segments;
+static void *rtel_ramdump_dev;
+
 static void *uio_vaddr;
 static struct device *uio_dev;
 
 static int setup_shared_ram_perms(u32 client_id, phys_addr_t addr, u32 size);
 static int clear_shared_ram_perms(u32 client_id, phys_addr_t addr, u32 size);
+
+static int restart_notifier_cb(struct notifier_block *this,
+				unsigned long code,
+				void *data)
+{
+        if ( code == SUBSYS_RAMDUMP_NOTIFICATION ) {
+		struct restart_notifier_block *notifier;
+
+		notifier = container_of(this,
+					struct restart_notifier_block, nb);
+		pr_info("[rtel]%s: ssrestart for processor %d ('%s')\n",
+				__func__, notifier->processor,
+				notifier->name);
+
+		if (rtel_ramdump_dev && rtel_ramdump_segments ) {
+			int ret;
+
+			pr_info("[rtel]%s: saving runtime embedded log ramdump.\n", __func__);
+			ret = do_ramdump(rtel_ramdump_dev,
+					rtel_ramdump_segments, 1 );
+			if (ret < 0)
+				pr_err("[rtel]%s: unable to dump runtime embedded log %d\n",
+								__func__, ret);
+		}
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct restart_notifier_block restart_notifiers[] = {
+	{SMEM_MODEM, "modem", .nb.notifier_call = restart_notifier_cb},
+};
 
 static ssize_t rtel_show(struct device *d,
                           struct device_attribute *attr,
@@ -55,6 +102,8 @@ static ssize_t rtel_store(struct device *d,
         u64 rmtfs_addr = 0, rtel_addr = 0;
         u32 rmtfs_size = 0, rtel_size = 0;
         struct uio_info *info = dev_get_drvdata(d);
+        void *handle;
+        struct restart_notifier_block *nb;
 
         if ( !info ) {
           pr_err("can't get correct uio info.\n");
@@ -86,6 +135,42 @@ static ssize_t rtel_store(struct device *d,
 
           if ( ret )
             pr_err("%s setup_shared_ram_perms fail.\n", info->name);
+
+	  if ( rtel_ramdump_dev )
+            return count;
+
+	  rtel_ramdump_segments = kzalloc(sizeof(struct ramdump_segment), GFP_KERNEL);
+	  if (IS_ERR_OR_NULL(rtel_ramdump_segments)) {
+	    pr_err("[rtel]%s: rtel_ramdump_segments memory allocate fail\n", __func__);
+	    rtel_ramdump_segments = NULL;
+	  }
+	  else {
+	    rtel_ramdump_segments->address = rtel_addr + rmtfs_size;
+	    rtel_ramdump_segments->size = rtel_size - rmtfs_size;
+	    rtel_ramdump_segments->v_address = uio_vaddr + rmtfs_size;
+
+	    pr_info("[rtel] rtel address= 0x%lx, size= 0x%lx, v_address= 0x%p\n",
+		     rtel_ramdump_segments->address,
+		     rtel_ramdump_segments->size,
+		     rtel_ramdump_segments->v_address);
+	  }
+
+	  rtel_ramdump_dev = (struct ramdump_device *)create_ramdump_device("rtel", NULL);
+	  if (IS_ERR_OR_NULL(rtel_ramdump_dev)) {
+	    pr_err("[rtel]%s: Unable to create rtel ramdump device.\n", __func__);
+	    rtel_ramdump_dev = NULL;
+	  }
+
+	  if ( rtel_ramdump_segments && rtel_ramdump_dev ) {
+	    nb = &restart_notifiers[0];
+	    handle = subsys_notif_register_notifier(nb->name, &nb->nb);
+	    if (IS_ERR_OR_NULL(handle)) {
+	      pr_err("[rtel]%s: Unable to register subsys notify.\n", __func__);
+	    }
+	    else {
+              pr_info("[rtel] registering notif for '%s', handle=0x%p\n", nb->name, handle);
+	    }
+	  }
         }
         else if ( uio_vaddr && !strncmp( buf, "release", 7 ) ) {
           clear_shared_ram_perms( MPSS_RMTS_CLIENT_ID, rtel_addr, rtel_size);
