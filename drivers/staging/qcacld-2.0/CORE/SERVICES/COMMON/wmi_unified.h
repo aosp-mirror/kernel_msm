@@ -3598,6 +3598,32 @@ typedef struct {
 #define WMI_FAST_DIVERSITY_BIT_OFFSET 0
 #define WMI_SLOW_DIVERSITY_BIT_OFFSET 1
 
+#define WMI_SLOW_DIVERSITY_CH0_WEIGHT_SHIFT 2
+#define WMI_SLOW_DIVERSITY_CH0_WEIGHT_MASK \
+		(0xf << WMI_SLOW_DIVERSITY_CH0_WEIGHT_SHIFT)
+#define WMI_SLOW_DIVERSITY_CH0_WEIGHT_GET_BITS(word32) \
+	(((word32) & WMI_SLOW_DIVERSITY_CH0_WEIGHT_MASK) >> \
+		WMI_SLOW_DIVERSITY_CH0_WEIGHT_SHIFT)
+#define WMI_SLOW_DIVERSITY_CH0_WEIGHT_SET_BITS(word32, value) \
+	do { \
+		(word32) &= ~WMI_SLOW_DIVERSITY_CH0_WEIGHT_MASK; \
+		(word32) |= ((value) << WMI_SLOW_DIVERSITY_CH0_WEIGHT_SHIFT) & \
+			WMI_SLOW_DIVERSITY_CH0_WEIGHT_MASK; \
+	} while (0)
+
+#define WMI_SLOW_DIVERSITY_CH1_WEIGHT_SHIFT 6
+#define WMI_SLOW_DIVERSITY_CH1_WEIGHT_MASK \
+		(0xf << WMI_SLOW_DIVERSITY_CH1_WEIGHT_SHIFT)
+#define WMI_SLOW_DIVERSITY_CH1_WEIGHT_GET_BITS(word32) \
+	(((word32) & WMI_SLOW_DIVERSITY_CH1_WEIGHT_MASK) >> \
+		WMI_SLOW_DIVERSITY_CH1_WEIGHT_SHIFT)
+#define WMI_SLOW_DIVERSITY_CH1_WEIGHT_SET_BITS(word32, value) \
+	do { \
+		(word32) &= ~WMI_SLOW_DIVERSITY_CH1_WEIGHT_MASK; \
+		(word32) |= ((value) << WMI_SLOW_DIVERSITY_CH1_WEIGHT_SHIFT) & \
+			WMI_SLOW_DIVERSITY_CH1_WEIGHT_MASK; \
+	} while (0)
+
 typedef struct {
     A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_pdev_set_antenna_diversity_cmd_fixed_param */
     union {
@@ -3607,8 +3633,18 @@ typedef struct {
          */
         A_UINT32 pdev_id;
     };
-    /** parameter   */
-    A_UINT32 value;      /** bit0 is for enable/disable FAST diversity, and bit1 is for enable/disable SLOW diversity, 0->disable, 1->enable */
+    /**
+     * The following "value" field is divided into bit fields as follows:
+     *     bits | purpose
+     *     -----+---------------------------------------
+     *        0 | enable/disable FAST diversity
+     *        1 | enable/disable SLOW diversity
+     *      5:2 | chain0 slow-diversity weighting factor
+     *      9:6 | chain1 slow-diversity weighting factor
+     *     31:10| currenty unused (set to 0x0)
+     * Refer to the above WMI_[FAST/SLOW]_DIVERSITY constants.
+     */
+    A_UINT32 value;
 } wmi_pdev_set_antenna_diversity_cmd_fixed_param;
 
 #define WMI_MAX_RSSI_THRESHOLD_SUPPORTED 3
