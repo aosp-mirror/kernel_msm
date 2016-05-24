@@ -33,3 +33,8 @@
 &i2c_6 {
 	status = "ok";
 };
+
+&battery_tm {
+	tm,batt-vreg-mv = <4425>;
+	tm,current-ma = <540>;
+};

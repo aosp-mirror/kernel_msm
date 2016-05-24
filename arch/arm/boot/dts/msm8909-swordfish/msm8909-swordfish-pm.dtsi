@@ -187,11 +187,12 @@
 		};
 	};
 
-	battery_tm {
+	battery_tm: battery_tm {
 		compatible = "battery_tm";
 		status = "ok";
 		qcom,batt-tm-adc_tm = <&pm8916_adc_tm>;
-		qcom,charger = <&pm8916_chg>;
+		tm,batt-vreg-mv = <4400>;
+		tm,current-ma = <400>;
 		tm,low-vreg-mv = <4100>;
 		tm,low-current-ma = <200>;
 		tm,warm-cfg = <
