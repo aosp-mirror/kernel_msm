@@ -32,10 +32,10 @@
 	bt_nitrous {
 		compatible = "goog,nitrous";
 		uart-port = <0>;
-		power-gpio = <&msm_gpio 80 0>;
+		power-gpio = <&msm_gpio 52 0>;
 		host-wake-gpio = <&msm_gpio 47 0>;
 		host-wake-polarity = <0>;
-		dev-wake-gpio = <&msm_gpio 77 0>;
+		dev-wake-gpio = <&msm_gpio 38 0>;
 		dev-wake-polarity = <0>;
 		vdd-supply = <&pm8916_l9>;
 		vdd-voltage-level = <3100000 3100000>;
