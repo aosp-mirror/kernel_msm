@@ -170,6 +170,8 @@
 #define WMA_ICMP_V6_HEADER_OFFSET (6 + 6 + 2 + 6)
 /* WMA_ICMP_V6_TYPE_OFFSET = sa(6) + da(6) + eth_type(2) + 40 */
 #define WMA_ICMP_V6_TYPE_OFFSET (6 + 6 + 2 + 40)
+/* WMA_IPV4_PROTOCOL = sa(6) + da(6) + eth_type(2) + 9 */
+#define WMA_IPV4_PROTOCOL (6 + 6 + 2 + 9)
 
 #define WMA_ICMP_V6_HEADER_TYPE (0x3A)
 #define WMA_ICMP_V6_RA_TYPE (0x86)
@@ -178,6 +180,7 @@
 #define WMA_BCAST_MAC_ADDR (0xFF)
 #define WMA_MCAST_IPV4_MAC_ADDR (0x01)
 #define WMA_MCAST_IPV6_MAC_ADDR (0x33)
+#define WMA_ICMP_PROTOCOL (0x01)
 
 typedef struct probeTime_dwellTime {
 	u_int8_t dwell_time;
@@ -854,6 +857,8 @@ typedef struct wma_handle {
 	uint32_t wow_ipv6_mcast_ra_stats;
 	uint32_t wow_ipv6_mcast_ns_stats;
 	uint32_t wow_ipv6_mcast_na_stats;
+	uint32_t wow_icmpv4_count;
+	uint32_t wow_icmpv6_uc_bc_count;
 	uint32_t wow_wakeup_enable_mask;
 	uint32_t wow_wakeup_disable_mask;
 	uint16_t max_mgmt_tx_fail_count;
