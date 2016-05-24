@@ -37,9 +37,7 @@
 #define DSPS_IOCTL_READ_SLOW_TIMER32 _IOR(DSPS_IOCTL_MAGIC, 3, compat_uint_t)
 #endif
 
-#ifdef ASUS_FACTORY_BUILD
 static int sensor_ssc_status = 0;
-#endif
 
 struct sns_ssc_control_s {
 	struct class *dev_class;
@@ -245,14 +243,12 @@ static u32 sns_read_qtimer(void)
 	return (u32)val;
 }
 
-#ifdef ASUS_FACTORY_BUILD
 static ssize_t sensor_ssc_status_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return snprintf(buf, sizeof(sensor_ssc_status), "%d\n", sensor_ssc_status);
 }
 
 static DEVICE_ATTR(status, S_IRUGO|S_IWUSR|S_IRGRP, sensor_ssc_status_show, NULL);
-#endif
 
 static int sensors_ssc_open(struct inode *ip, struct file *fp)
 {
@@ -340,20 +336,16 @@ static int sensors_ssc_probe(struct platform_device *pdev)
 		goto cdev_add_err;
 	}
 
-#ifdef ASUS_FACTORY_BUILD
 	sensor_ssc_status = 1;
 	ret = device_create_file(sns_ctl.dev, &dev_attr_status);
 	if (ret < 0) {
 		pr_err("%s: device_create_file fail.\n", __func__);
 		goto device_create_file_err;
 	}
-#endif
 
 	return 0;
 
-#ifdef ASUS_FACTORY_BUILD
 device_create_file_err:
-#endif
 cdev_add_err:
 	kfree(sns_ctl.cdev);
 cdev_alloc_err:
@@ -369,9 +361,7 @@ res_err:
 static int sensors_ssc_remove(struct platform_device *pdev)
 {
 	slpi_loader_remove(pdev);
-#ifdef ASUS_FACTORY_BUILD
 	device_remove_file(sns_ctl.dev, &dev_attr_status);
-#endif
 	cdev_del(sns_ctl.cdev);
 	kfree(sns_ctl.cdev);
 	sns_ctl.cdev = NULL;
