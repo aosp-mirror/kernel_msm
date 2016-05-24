@@ -78,6 +78,7 @@ extern "C" {
 
 #define MAX_TX_RATE_VALUES      10 /*Max Tx Rates*/
 #define MAX_RSSI_VALUES         10 /*Max Rssi values*/
+#define MAX_CHAINS 8
 
 /* The WLAN_MAX_AC macro cannot be changed without breaking
    WMI compatibility. */
@@ -4001,6 +4002,7 @@ typedef enum {
     WMI_REQUEST_VDEV_RATE_STAT = 0x20,
     WMI_REQUEST_INST_STAT      = 0x40,
     WMI_REQUEST_MIB_STAT       = 0x80,
+    WMI_REQUEST_RSSI_PER_CHAIN_STAT = 0x100,
 } wmi_stats_id;
 
 typedef struct {
@@ -4660,6 +4662,24 @@ typedef struct {
     A_UINT32 reserved_3;
     A_UINT32 reserved_4;
 } wmi_mib_stats;
+
+typedef struct {
+    /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_rssi_stats */
+    A_UINT32 tlv_header;
+    A_UINT32 vdev_id;
+    A_INT32  rssi_avg_beacon[MAX_CHAINS];
+    A_INT32  rssi_avg_data[MAX_CHAINS];
+    wmi_mac_addr peer_macaddr;
+} wmi_rssi_stats;
+
+typedef struct {
+    /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_per_chain_rssi_stats */
+    A_UINT32 tlv_header;
+    A_UINT32 num_per_chain_rssi_stats;
+   /* This TLV is followed by another TLV of array of structs:
+    * wmi_rssi_stats rssi_stats[num_per_chain_rssi_stats];
+    */
+} wmi_per_chain_rssi_stats;
 
 typedef struct {
     A_UINT32 tlv_header;     /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_vdev_create_cmd_fixed_param */
