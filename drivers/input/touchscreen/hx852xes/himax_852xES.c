@@ -577,7 +577,7 @@ static int himax_input_register(struct himax_ts_data *ts)
         E("%s: Failed to allocate input device\n", __func__);
         return ret;
     }
-    ts->input_dev->name = "himax-touchscreen";
+    ts->input_dev->name = INPUT_DEV_NAME;
     set_bit(EV_SYN, ts->input_dev->evbit);
     set_bit(EV_ABS, ts->input_dev->evbit);
     set_bit(EV_KEY, ts->input_dev->evbit);
@@ -2021,12 +2021,14 @@ static irqreturn_t himax_ts_thread(int irq, void *ptr)
     if (atomic_read(&ts->suspend_mode) && (!FAKE_POWER_KEY_SEND) && (ts->SMWP_enable)) {
         wake_lock_timeout(&ts->ts_SMWP_wake_lock, TS_WAKE_LOCK_TIMEOUT);
         if (himax_parse_wake_event((struct himax_ts_data *)ptr)) {
-            I(" %s SMART WAKEUP KEY power event press\n", __func__);
-            input_report_key(ts->input_dev, KEY_POWER, 1);
+            I("[%d] %s Touch DOWN x = %d, y = %d.\n", __LINE__, __func__, 1, 1);
+            input_mt_slot(ts->input_dev,0);
+            input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, true);
+            input_report_abs(ts->input_dev, ABS_MT_POSITION_X, 1);
+            input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, 1);
             input_sync(ts->input_dev);
-            msleep(100);
-            I(" %s SMART WAKEUP KEY power event release\n", __func__);
-            input_report_key(ts->input_dev, KEY_POWER, 0);
+            input_mt_slot(ts->input_dev,0);
+            input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
             input_sync(ts->input_dev);
             FAKE_POWER_KEY_SEND = true;
             return IRQ_HANDLED;

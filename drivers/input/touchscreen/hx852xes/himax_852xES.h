@@ -53,7 +53,7 @@
 #define HIMAX852xes_NAME "Himax852xes"
 #define HIMAX852xes_FINGER_SUPPORT_NUM 10
 #define HIMAX_I2C_ADDR                0x48
-#define INPUT_DEV_NAME    "himax-touchscreen"
+#define INPUT_DEV_NAME    "HX852XES"
 #define FLASH_DUMP_FILE "/data/user/Flash_Dump.bin"
 #define DIAG_COORDINATE_FILE "/sdcard/Coordinate_Dump.csv"
 
