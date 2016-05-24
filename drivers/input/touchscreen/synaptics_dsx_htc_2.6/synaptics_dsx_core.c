@@ -123,8 +123,6 @@
 #ifdef HTC_FEATURE
 #define V5V6_CONFIG_ID_SIZE 4
 #define V7_CONFIG_ID_SIZE 32
-/* temporary to support dynamic wakeup gesture */
-static int tp_wakeup_gesture_enable = 0;
 #endif
 
 static int synaptics_rmi4_check_status(struct synaptics_rmi4_data *rmi4_data,
@@ -927,10 +925,8 @@ static ssize_t synaptics_rmi4_wake_gesture_store(struct device *dev,
 
 	input = input > 0 ? 1 : 0;
 
-	if (rmi4_data->f11_wakeup_gesture || rmi4_data->f12_wakeup_gesture) {
+	if (rmi4_data->f11_wakeup_gesture || rmi4_data->f12_wakeup_gesture)
 		rmi4_data->enable_wakeup_gesture = input;
-		tp_wakeup_gesture_enable = input; //temparary to support dynamic wakeup gesture
-	}
 
 	return count;
 }
@@ -3575,9 +3571,7 @@ flash_prog_mode:
 	}
 
 	if (rmi4_data->f11_wakeup_gesture || rmi4_data->f12_wakeup_gesture)
-		rmi4_data->enable_wakeup_gesture = WAKEUP_GESTURE &&
-			tp_wakeup_gesture_enable;
-
+		rmi4_data->enable_wakeup_gesture = WAKEUP_GESTURE;
 	else
 		rmi4_data->enable_wakeup_gesture = false;
 
