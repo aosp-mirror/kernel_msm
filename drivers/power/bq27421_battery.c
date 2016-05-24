@@ -27,6 +27,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/power/bq27421_battery.h>
 #include <linux/qpnp/qpnp-adc.h>
+#include <linux/debugfs.h>
 
 #define RETRY_CNT_EXIT_CFGUPDATE 100
 #define RETRY_CNT_ENTER_CFGUPDATE 10
@@ -48,6 +49,8 @@ struct bq27421_chip {
 	int temperature;
 	struct qpnp_vadc_chip *vadc_dev;
 	bool is_fuelerr;
+	int empty_soc;
+	struct dentry *dent;
 };
 
 static int bq27421_read_byte(struct i2c_client *client, u8 reg)
@@ -284,7 +287,8 @@ static void bq27421_update(struct bq27421_chip *chip)
 
 	ret = bq27421_read_word(client, BQ27421_SOC);
 	if (ret >= 0)
-		chip->soc = ret;
+		chip->soc = ((ret - chip->empty_soc) * 100) /
+			(100 - chip->empty_soc);
 
 	/* next update must be at least 1 second later */
 	ktime_get_ts(&chip->next_update_time);
@@ -434,6 +438,47 @@ static int bq27421_get_vadc(struct bq27421_chip *chip)
 	return 0;
 }
 
+static int set_empty_soc(void *data, u64 val)
+{
+	int *empty_soc = data;
+
+	if (val > 100 || val < 0) {
+		pr_err("bq27421: Tried to set empty_soc to illegal value\n");
+		return -EINVAL;
+	}
+
+	*empty_soc = (int)val;
+	return 0;
+}
+
+static int get_empty_soc(void *data, u64 *val)
+{
+	int *empty_soc = data;
+
+	*val = (u64)*empty_soc;
+
+	return 0;
+}
+DEFINE_SIMPLE_ATTRIBUTE(empty_soc_fops, get_empty_soc, set_empty_soc, "%llu\n");
+
+static void bq27421_create_debugfs_entries(struct bq27421_chip *chip)
+{
+	struct dentry *file;
+	chip->dent = debugfs_create_dir("bq27421", NULL);
+	if (IS_ERR(chip->dent)) {
+		pr_err("bq27421 driver couldn't create debugfs\n");
+		return;
+	}
+
+	file = debugfs_create_file("empty_soc", 0644, chip->dent,
+		(void *) &(chip->empty_soc), &empty_soc_fops);
+
+	if (IS_ERR(file)) {
+		pr_err("bq72421 couldn't create empty_soc node\n");
+		return;
+	}
+}
+
 static int bq27421_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
@@ -512,12 +557,16 @@ static int bq27421_probe(struct i2c_client *client,
 		}
 	}
 
+	bq27421_create_debugfs_entries(chip);
+
 	return ret;
 }
 
 static int bq27421_remove(struct i2c_client *client)
 {
 	struct bq27421_chip *chip = i2c_get_clientdata(client);
+
+	debugfs_remove_recursive(chip->dent);
 
 	if (client->irq)
 		disable_irq_wake(client->irq);
