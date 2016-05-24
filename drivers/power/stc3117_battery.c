@@ -327,9 +327,6 @@ static int stc311x_get_property(struct power_supply *psy,
  */
 
 	switch (psp) {
-	case POWER_SUPPLY_PROP_STATUS:
-		val->intval = chip->status;
-		break;
 	case POWER_SUPPLY_PROP_ONLINE:
 		val->intval = chip->online;
 		break;
@@ -1961,7 +1958,6 @@ static void stc311x_work(struct work_struct *work)
 
 
 static enum power_supply_property stc311x_battery_props[] = {
-	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
