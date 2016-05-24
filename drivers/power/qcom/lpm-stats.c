@@ -28,9 +28,6 @@
 
 #define MAX_STR_LEN 256
 #define MAX_TIME_LEN 20
-
-unsigned int pwrcs_time, pm_pwrcs_ret=0;
-
 const char *lpm_stats_reset = "reset";
 const char *lpm_stats_suspend = "suspend";
 
@@ -870,10 +867,5 @@ void lpm_stats_suspend_exit(void)
 	getnstimeofday(&ts);
 	exit_time = timespec_to_ns(&ts) - suspend_time_stats.enter_time;
 	update_level_stats(&suspend_time_stats, exit_time, true);
-
-	do_div(exit_time, NSEC_PER_SEC / 100);
-	pwrcs_time = exit_time;
-	pr_info("[PM]Suspended for %d.%02d seconds\n", pwrcs_time/100, pwrcs_time%100);
-	pm_pwrcs_ret=1;
 }
 EXPORT_SYMBOL(lpm_stats_suspend_exit);
