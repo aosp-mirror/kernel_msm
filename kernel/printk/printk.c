@@ -56,6 +56,8 @@
 #include "braille.h"
 #include <linux/asusdebug.h>
 
+int suspend_in_progress = 0;
+
 #ifdef CONFIG_EARLY_PRINTK_DIRECT
 extern void printascii(char *);
 #endif
@@ -2053,6 +2055,8 @@ MODULE_PARM_DESC(console_suspend, "suspend console during suspend"
  */
 void suspend_console(void)
 {
+	suspend_in_progress = 1;
+
 	if (!console_suspend_enabled)
 		return;
 	printk("Suspending console(s) (use no_console_suspend to debug)\n");
@@ -2064,7 +2068,7 @@ void suspend_console(void)
 void resume_console(void)
 {
 	int i;
-
+	suspend_in_progress = 0;
 	if (pm_pwrcs_ret) {
 		ASUSEvtlog("[PM] Suspended for %d.%02d secs \n", pwrcs_time/100,pwrcs_time % 100);
 
