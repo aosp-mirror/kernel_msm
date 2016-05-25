@@ -34,9 +34,6 @@
 	status = "ok";
 };
 
-&spi_0 {
-	status = "ok";
-};
 
 &i2c_3 {
 	status = "disabled";
