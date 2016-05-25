@@ -35,9 +35,14 @@
 #include <linux/timer.h>
 #include <linux/wakelock.h>
 #include <linux/workqueue.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
+#include <linux/debugfs.h>
+#include <linux/string.h>
+#include <linux/ctype.h>
 #include "../staging/android/timed_output.h"
 
+
+#define DRV2625_SEQ_MAX_NUM  8
 
 struct drv2625_platform_data {
 	int mnGpioNRST;
@@ -62,6 +67,7 @@ struct drv2625_data {
 	struct work_struct vibrator_work;
 	struct timed_output_dev to_dev;
 	struct regulator *vdd_reg;
+	struct dentry *dent;
 };
 
 static struct drv2625_data *g_DRV2625data = NULL;
@@ -869,6 +875,173 @@ static int drv2625_parse_dt(struct device *dev,
 }
 #endif
 
+static int drv2625_debugfs_set_go(void *data, u64 val)
+{
+	struct drv2625_data *pDrv2625data = data;
+
+	return drv2625_set_go_bit(pDrv2625data, (unsigned char)val);
+}
+
+static int drv2625_debugfs_get_go(void *data, u64 *val)
+{
+	int ret;
+	struct drv2625_data *pDrv2625data = data;
+
+	ret = drv2625_reg_read(pDrv2625data, DRV2625_REG_GO) & 0x01;
+	if (ret >= 0) {
+		*val = (u64)ret;
+		ret = 0;
+	}
+
+	return ret;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(drv2625_debugfs_go_fops,
+		drv2625_debugfs_get_go,
+		drv2625_debugfs_set_go,
+		"%llu\n");
+
+static int drv2625_debugfs_set_mode(void *data, u64 val)
+{
+	struct drv2625_data *pDrv2625data = data;
+
+	drv2625_change_mode(pDrv2625data, (unsigned char)val);
+
+	return 0;
+}
+
+static int drv2625_debugfs_get_mode(void *data, u64 *val)
+{
+	int ret;
+	struct drv2625_data *pDrv2625data = data;
+
+	ret = drv2625_reg_read(pDrv2625data, DRV2625_REG_MODE) &
+		DRV2625_MODE_MASK;
+	if (ret >= 0) {
+		*val = (u64)ret;
+		ret = 0;
+	}
+
+	return ret;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(drv2625_debugfs_mode_fops,
+		drv2625_debugfs_get_mode,
+		drv2625_debugfs_set_mode,
+		"%llu\n");
+
+static int drv2625_debugfs_seq_open(struct inode *inode, struct file *file)
+{
+	file->private_data = inode->i_private;
+	return nonseekable_open(inode, file);
+}
+
+static ssize_t drv2625_debugfs_seq_write(struct file *file, const char *buf,
+		size_t len, loff_t *off)
+{
+	struct drv2625_data *pDrv2625data =
+		(struct drv2625_data *)file->private_data;
+	unsigned char args[2] = {0, }; /* seq_num, effect_num */
+	char *temp, *token;
+	size_t size;
+	int i = 0;
+	int ret;
+
+	size = len + 1;
+	size = min(size, (size_t)PAGE_SIZE);
+	temp = kmemdup(buf, size, GFP_KERNEL);
+	if (!temp) {
+		dev_err(pDrv2625data->dev, "%s: no mem\n", __func__);
+		return -ENOMEM;
+	}
+	temp[size-1] = '\0';
+
+	while (temp) {
+		token = strsep(&temp, " ");
+		if (!isalnum(*token))
+			continue;
+
+		ret = kstrtou8(token, 0, &args[i++]);
+		if (ret < 0) {
+			dev_err(pDrv2625data->dev, "%s: invalid value\n",
+					__func__);
+			goto error;
+		}
+	}
+
+	if (i != 2 || args[0] == 0 || args[0] > DRV2625_SEQ_MAX_NUM) {
+		dev_err(pDrv2625data->dev, "%s: invalid arguments\n", __func__);
+		ret = -EINVAL;
+		goto error;
+	}
+
+	ret = drv2625_reg_write(pDrv2625data,
+			DRV2625_REG_SEQUENCER_1 + (args[0] - 1),
+			args[1]);
+	if (ret)
+		goto error;
+
+	dev_info(pDrv2625data->dev, "WAV_FRM_SEQ%u => %u\n",
+			args[0], args[1]);
+	kfree(temp);
+	return len;
+
+error:
+	kfree(temp);
+	return ret;
+}
+
+static int drv2625_debugfs_seq_release(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static const struct file_operations drv2625_debugfs_seq_fops = {
+	.open    = drv2625_debugfs_seq_open,
+	.release = drv2625_debugfs_seq_release,
+	.write   = drv2625_debugfs_seq_write,
+	.llseek  = no_llseek,
+};
+
+static void drv2625_create_debugfs_entries(
+		struct drv2625_data *pDrv2625data)
+{
+	struct dentry *file;
+
+	pDrv2625data->dent = debugfs_create_dir(HAPTICS_DEVICE_NAME, NULL);
+	if (IS_ERR(pDrv2625data->dent)) {
+		dev_err(pDrv2625data->dev,
+				"%s: %s driver couldn't create debugfs\n",
+				__func__, HAPTICS_DEVICE_NAME);
+		return;
+	}
+
+	file = debugfs_create_file("go", S_IRUSR | S_IWUSR, pDrv2625data->dent,
+			(void *)pDrv2625data, &drv2625_debugfs_go_fops);
+	if (IS_ERR(file)) {
+		dev_err(pDrv2625data->dev, "%s: %s couldn't create go node\n",
+				 __func__, HAPTICS_DEVICE_NAME);
+		return;
+	}
+
+	file = debugfs_create_file("mode", S_IRUSR | S_IWUSR,
+			pDrv2625data->dent, (void *)pDrv2625data,
+			&drv2625_debugfs_mode_fops);
+	if (IS_ERR(file)) {
+		dev_err(pDrv2625data->dev, "%s: %s couldn't create mode node\n",
+				 __func__, HAPTICS_DEVICE_NAME);
+		return;
+	}
+
+	file = debugfs_create_file("seq", S_IWUSR, pDrv2625data->dent,
+			(void *)pDrv2625data, &drv2625_debugfs_seq_fops);
+	if (IS_ERR(file)) {
+		dev_err(pDrv2625data->dev, "%s: %s couldn't create seq node\n",
+				 __func__, HAPTICS_DEVICE_NAME);
+		return;
+	}
+}
+
 static int drv2625_probe(struct i2c_client* client,
 		const struct i2c_device_id* id)
 {
@@ -1001,6 +1174,8 @@ static int drv2625_probe(struct i2c_client* client,
 	wake_lock_init(&pDrv2625data->wklock, WAKE_LOCK_SUSPEND, "vibrator");
 	mutex_init(&pDrv2625data->lock);
 
+	drv2625_create_debugfs_entries(pDrv2625data);
+
 	dev_info(pDrv2625data->dev, "probe succeeded\n");
 	return 0;
 
@@ -1019,6 +1194,7 @@ static int drv2625_remove(struct i2c_client* client)
 {
 	struct drv2625_data *pDrv2625data = i2c_get_clientdata(client);
 
+	debugfs_remove_recursive(pDrv2625data->dent);
 	wake_lock_destroy(&pDrv2625data->wklock);
 	mutex_destroy(&pDrv2625data->lock);
 	timed_output_dev_unregister(&pDrv2625data->to_dev);
