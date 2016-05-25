@@ -51,6 +51,8 @@ static uint8_t Last_EN_NoiseFilter = 0x00;
 static uint8_t HX_DRIVER_PROBE_Fial = 0;
 static int hx_point_num = 0;      //for himax_ts_work_func use
 static int p_point_num = 0xFFFF;
+static int point_flag[2] = {0};
+static int haspoint = false;
 
 static bool config_load = false;
 static struct himax_config *config_selected = NULL;
@@ -1873,6 +1875,11 @@ bypass_checksum_failed_packet:
                 input_report_abs(ts->input_dev, ABS_MT_PRESSURE, w);
                 input_report_abs(ts->input_dev, ABS_MT_POSITION_X, x);
                 input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, y);
+                if (point_flag[loop_i] == 0) { //print out touch down coordinate
+                    point_flag[loop_i] = 1;
+                    I("P%d DOWN, x = %d, y = %d \n", loop_i+1, x, y);
+                    haspoint = true;
+                }
                 if (ts->protocol_type == PROTOCOL_TYPE_A) {
                     input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, loop_i);
                     input_mt_sync(ts->input_dev);
@@ -1893,6 +1900,10 @@ bypass_checksum_failed_packet:
                 if (ts->protocol_type == PROTOCOL_TYPE_B) {
                     input_mt_slot(ts->input_dev, loop_i);
                     input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
+                    if (point_flag[loop_i] == 1) {
+                        point_flag[loop_i] = 0;
+                        I("P%d Up \n", loop_i+1);
+                    }
                     if (ts->debug_log_level & BIT(1))
                         I("All Finger leave_Clear_last_event\n");
                 }
@@ -1928,7 +1939,6 @@ bypass_checksum_failed_packet:
         x = buf[base] << 8 | buf[base + 1];
         y = (buf[base + 2] << 8 | buf[base + 3]);
         w = buf[(ts->nFinger_support * 4) + loop_i];
-        I(" %s HX_PALM_REPORT_loopi=%d,base=%x,X=%x,Y=%x,W=%x \n", __func__, loop_i, base, x, y, w);
         if ((!atomic_read(&ts->suspend_mode)) && (x == 0xFA5A) && (y == 0xFA5A) && (w == 0x00)) {
             I(" %s HX_PALM_REPORT KEY power event press\n", __func__);
             input_report_key(ts->input_dev, KEY_SLEEP, 1);
@@ -1938,6 +1948,9 @@ bypass_checksum_failed_packet:
             input_report_key(ts->input_dev, KEY_SLEEP, 0);
             input_sync(ts->input_dev);
             return;
+        } else {
+            if (!AA_press)
+                I(" %s HX_PALM_REPORT_loopi=%d,base=%x,X=%x,Y=%x,W=%x \n", __func__, loop_i, base, x, y, w);
         }
 #endif
         if (AA_press) { // leave event
@@ -1949,6 +1962,10 @@ bypass_checksum_failed_packet:
                     if (ts->protocol_type == PROTOCOL_TYPE_B) {
                         input_mt_slot(ts->input_dev, loop_i);
                         input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
+                        if (haspoint) {
+                            point_flag[loop_i] = 0;
+                            I("P%d Up \n",loop_i+1);
+                        }
                     }
                 }
             }
@@ -4555,6 +4572,7 @@ static int himax852xes_remove(struct i2c_client *client)
 static int himax852xes_suspend(struct device *dev)
 {
     int ret;
+    int i = 0;
     uint8_t buf[2] = {0};
 #ifdef HX_CHIP_STATUS_MONITOR
     int t = 0;
@@ -4603,6 +4621,17 @@ static int himax852xes_suspend(struct device *dev)
             }
         }
 #endif
+        if (haspoint) {
+            for (i = 0; i < ts->nFinger_support; i++) {
+                if (point_flag[i] == 1) {
+                    point_flag[i] = 0;
+                    input_mt_slot(ts->input_dev, i);
+                    input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
+                }
+            }
+            input_sync(ts->input_dev);
+            haspoint = false;
+        }
 #ifdef HX_SMART_WAKEUP
         if (ts->SMWP_enable) {
             atomic_set(&ts->suspend_mode, 1);
