@@ -1169,7 +1169,7 @@
 		clock-frequency = <32768>;
 	};
 
-	spi_0: spi@78ba000 { /* BLSP1 QUP6 */
+	spi_1: spi@78ba000 { /* BLSP1 QUP6 */
 		compatible = "qcom,spi-qup-v2";
 		#address-cells = <1>;
 		#size-cells = <0>;
