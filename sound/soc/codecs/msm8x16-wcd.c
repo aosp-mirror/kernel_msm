@@ -1333,18 +1333,6 @@ static void msm8x16_wcd_boost_on(struct snd_soc_codec *codec)
 	struct msm8x16_wcd_spmi *wcd = &msm8x16_wcd_modules[0];
 	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
 
-	ret = spmi_ext_register_readl(wcd->spmi->ctrl, PMIC_SLAVE_ID_1,
-					PMIC_LDO7_EN_CTL, &dest, 1);
-	if (ret != 0) {
-		pr_err("%s: failed to read the device:%d\n", __func__, ret);
-		return;
-	}
-	pr_debug("%s: LDO state: 0x%x\n", __func__, dest);
-
-	if ((dest & MASK_MSB_BIT) == 0) {
-		pr_err("LDO7 not enabled return!\n");
-		return;
-	}
 	ret = spmi_ext_register_readl(wcd->spmi->ctrl, PMIC_SLAVE_ID_0,
 						PMIC_MBG_OK, &dest, 1);
 	if (ret != 0) {
@@ -5638,7 +5626,7 @@ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
 	 * set to default boost option BOOST_SWITCH, user mixer path can change
 	 * it to BOOST_ALWAYS or BOOST_BYPASS based on solution chosen.
 	 */
-	msm8x16_wcd_priv->boost_option = BOOST_SWITCH;
+	msm8x16_wcd_priv->boost_option = BOOST_ALWAYS;
 	msm8x16_wcd_dt_parse_boost_info(codec);
 	msm8x16_wcd_set_boost_v(codec);
 
