@@ -51,6 +51,8 @@
 #include "irq-gic-common.h"
 #include "irqchip.h"
 
+int gpio_irq_cnt, gpio_resume_irq[8];
+
 union gic_base {
 	void __iomem *common_base;
 	void __percpu * __iomem *percpu_base;
@@ -294,6 +296,8 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 	u32 pending[32];
 	void __iomem *base = gic_data_dist_base(gic);
 
+	gpio_irq_cnt=0;
+
 	if (!msm_show_resume_irq_mask)
 		return;
 
@@ -316,8 +320,11 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 		else if (desc->action && desc->action->name)
 			name = desc->action->name;
 
-		pr_warning("%s: %d triggered %s\n", __func__,
-					i + gic->irq_offset, name);
+		pr_warning("%s: %d triggered %s (%d)\n", __func__, i, name, i + gic->irq_offset);
+		if(gpio_irq_cnt < 8) {
+			gpio_resume_irq[gpio_irq_cnt]=i;
+			gpio_irq_cnt++;
+		}
 
 		//ASUS_BSP+++ "for wlan wakeup trace"
 		if( (i + gic->irq_offset) == g_wcnss_wlanrx_irq ){

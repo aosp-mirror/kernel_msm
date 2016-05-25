@@ -54,6 +54,7 @@
 
 #include "console_cmdline.h"
 #include "braille.h"
+#include <linux/asusdebug.h>
 
 #ifdef CONFIG_EARLY_PRINTK_DIRECT
 extern void printascii(char *);
@@ -2062,6 +2063,23 @@ void suspend_console(void)
 
 void resume_console(void)
 {
+	int i;
+
+	if (pm_pwrcs_ret) {
+		ASUSEvtlog("[PM] Suspended for %d.%02d secs \n", pwrcs_time/100,pwrcs_time % 100);
+
+		if (qpnpint_irq != -1) {
+			ASUSEvtlog("[PM] qpnpint irq triggered: %d\n", qpnpint_irq);
+			qpnpint_irq = -1;
+		}
+		if (gpio_irq_cnt>0) {
+			for (i=0;i<gpio_irq_cnt;i++)
+				ASUSEvtlog("[PM] GPIO triggered: %d\n", gpio_resume_irq[i]);
+			gpio_irq_cnt=0; //clear log count.
+		}
+		pm_pwrcs_ret=0;
+	}
+
 	if (!console_suspend_enabled)
 		return;
 	down_console_sem();
