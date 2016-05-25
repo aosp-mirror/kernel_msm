@@ -148,7 +148,7 @@ static int drv2625_set_go_bit(struct drv2625_data *pDrv2625data,
 static void drv2625_change_mode(struct drv2625_data *pDrv2625data,
 		unsigned char work_mode)
 {
-	drv2625_set_bits(pDrv2625data, DRV2625_REG_MODE, MODE_MASK , work_mode);
+	drv2625_set_bits(pDrv2625data, DRV2625_REG_MODE, DRV2625_MODE_MASK , work_mode);
 }
 
 static int vibrator_get_time(struct timed_output_dev *dev)
@@ -191,7 +191,7 @@ static void vibrator_enable( struct timed_output_dev *dev, int value)
 
 		wake_lock(&pDrv2625data->wklock);
 
-		drv2625_change_mode(pDrv2625data, MODE_RTP);
+		drv2625_change_mode(pDrv2625data, DRV2625_MODE_RTP);
 		pDrv2625data->mnVibratorPlaying = YES;
 		drv2625_set_go_bit(pDrv2625data, GO);
 		value = (value>MAX_TIMEOUT)?MAX_TIMEOUT:value;
@@ -246,8 +246,8 @@ static void vibrator_work_routine(struct work_struct *work)
 
 		if (status & PROCESS_DONE_MASK){
 			mode = drv2625_reg_read(pDrv2625data,
-					DRV2625_REG_MODE) & MODE_MASK;
-			if (mode == MODE_CALIBRATION){
+					DRV2625_REG_MODE) & DRV2625_MODE_MASK;
+			if (mode == DRV2625_MODE_CALIBRATION){
 				if ((status&DIAG_MASK) != DIAG_SUCCESS){
 					dev_err(pDrv2625data->dev,
 							"Calibration fail\n");
@@ -266,7 +266,7 @@ static void vibrator_work_routine(struct work_struct *work)
 						"AutoCal : Comp=0x%x, Bemf=0x%x, Gain=0x%x\n",
 						calComp, calBemf, calBemfGain);
 				}
-			} else if (mode == MODE_DIAGNOSTIC){
+			} else if (mode == DRV2625_MODE_DIAGNOSTIC){
 				if ((status&DIAG_MASK) != DIAG_SUCCESS) {
 					dev_err(pDrv2625data->dev,
 							"Diagnostic fail\n");
@@ -281,7 +281,7 @@ static void vibrator_work_routine(struct work_struct *work)
 						"Diag : ZResult=0x%x, CurrentK=0x%x\n",
 						diagZ, diagK);
 				}
-			} else if (mode == MODE_WAVEFORM_SEQUENCER) {
+			} else if (mode == DRV2625_MODE_WAVEFORM_SEQUENCER) {
 				dev_info(pDrv2625data->dev,
 					"Waveform Sequencer Playback finished\n");
 			}
@@ -377,8 +377,8 @@ static int drv2625_get_diag_result(struct drv2625_data *pDrv2625data,
 
 	memset(&diagResult, 0, sizeof(struct drv2625_diag_result));
 
-	mode = drv2625_reg_read(pDrv2625data, DRV2625_REG_MODE) & MODE_MASK;
-	if (mode != MODE_DIAGNOSTIC) {
+	mode = drv2625_reg_read(pDrv2625data, DRV2625_REG_MODE) & DRV2625_MODE_MASK;
+	if (mode != DRV2625_MODE_DIAGNOSTIC) {
 		diagResult.mnFinished = -EFAULT;
 		return ret;
 	}
@@ -409,8 +409,8 @@ static int drv2625_get_autocal_result(struct drv2625_data *pDrv2625data,
 
 	memset(&autocalResult, 0, sizeof(struct drv2625_autocal_result));
 
-	mode = drv2625_reg_read(pDrv2625data, DRV2625_REG_MODE) & MODE_MASK;
-	if (mode != MODE_CALIBRATION) {
+	mode = drv2625_reg_read(pDrv2625data, DRV2625_REG_MODE) & DRV2625_MODE_MASK;
+	if (mode != DRV2625_MODE_CALIBRATION) {
 		autocalResult.mnFinished = -EFAULT;
 		return ret;
 	}
@@ -479,7 +479,7 @@ static long drv2625_file_unlocked_ioctl(struct file *file, unsigned int cmd,
 
 			wake_lock(&pDrv2625data->wklock);
 			pDrv2625data->mnVibratorPlaying = YES;
-			drv2625_change_mode(pDrv2625data, MODE_WAVEFORM_SEQUENCER);
+			drv2625_change_mode(pDrv2625data, DRV2625_MODE_WAVEFORM_SEQUENCER);
 			drv2625_set_go_bit(pDrv2625data, GO);
 		}
 		break;
@@ -496,7 +496,7 @@ static long drv2625_file_unlocked_ioctl(struct file *file, unsigned int cmd,
 
 			wake_lock(&pDrv2625data->wklock);
 			pDrv2625data->mnVibratorPlaying = YES;
-			drv2625_change_mode(pDrv2625data, MODE_DIAGNOSTIC);
+			drv2625_change_mode(pDrv2625data, DRV2625_MODE_DIAGNOSTIC);
 			drv2625_set_go_bit(pDrv2625data, GO);
 		}
 		break;
@@ -511,7 +511,7 @@ static long drv2625_file_unlocked_ioctl(struct file *file, unsigned int cmd,
 
 			wake_lock(&pDrv2625data->wklock);
 			pDrv2625data->mnVibratorPlaying = YES;
-			drv2625_change_mode(pDrv2625data, MODE_CALIBRATION);
+			drv2625_change_mode(pDrv2625data, DRV2625_MODE_CALIBRATION);
 			drv2625_set_go_bit(pDrv2625data, GO);
 		}
 		break;
