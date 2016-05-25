@@ -278,7 +278,8 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 	for (i = find_first_bit((unsigned long *)pending, gic->gic_irqs);
 	i < gic->gic_irqs;
 	i = find_next_bit((unsigned long *)pending, gic->gic_irqs, i+1)) {
-		struct irq_desc *desc = irq_to_desc(i + gic->irq_offset);
+		int linux_irq = irq_find_mapping(gic->domain, i + gic->irq_offset);
+		struct irq_desc *desc = irq_to_desc(linux_irq);
 		const char *name = "null";
 
 		if (desc == NULL)
@@ -286,7 +287,7 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 		else if (desc->action && desc->action->name)
 			name = desc->action->name;
 
-		pr_warning("%s: %d triggered %s\n", __func__,
+		pr_warning("%s: hwirq %d triggered %s\n", __func__,
 					i + gic->irq_offset, name);
 	}
 }
