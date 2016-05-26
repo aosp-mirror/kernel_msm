@@ -23,6 +23,8 @@
 		interrupt-parent = <&msm_gpio>;
 		interrupts = <95 0x00>;
 		spi-max-frequency = <2000000>;
+		rsb,vld-supply = <&haptic_ext_vreg>;
+		rsb,vdd-supply = <&pm8916_l16>;
 
 		rsb,spi-cs-gpio = <&msm_gpio 10 0x00>;
 

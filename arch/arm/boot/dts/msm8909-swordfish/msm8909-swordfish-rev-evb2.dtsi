@@ -22,6 +22,7 @@
 
 &rsb {
 	rsb,vld-supply = <&pm8916_l17>;
+	/delete-property/rsb,vdd-supply;
 };
 
 &rpm_bus {
