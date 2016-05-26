@@ -1643,6 +1643,32 @@ static ssize_t show_tp_disable_big_area_event_tag(struct device *dev,
 }
 
 #endif
+
+static ssize_t tp_enable_irq_func(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	enable_irq(fts_wq_data->client->irq);
+	return snprintf(buf, 64, "TP irq enable\n");
+}
+
+static ssize_t tp_disable_irq_func(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	disable_irq(fts_wq_data->client->irq);
+	return snprintf(buf, 64, "TP irq disable\n");
+}
+
+static ssize_t show_tp_irq_debug_info(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct irq_desc *desc = irq_to_desc(fts_wq_data->client->irq);
+
+	return snprintf(buf, 256, "fts_wq_queue_result: %u, disable_depth: %u,\n"
+				"irq_handler_recovery_count: %u, suspend_resume_recovery_count: %u\n",
+				fts_wq_queue_result, desc->depth,
+				irq_handler_recovery_count, suspend_resume_recovery_count);
+}
+
 /****************************************/
 /* sysfs */
 /*get the fw version
@@ -1700,6 +1726,13 @@ static DEVICE_ATTR(disable_big_area_event, S_IRUGO,
 
 #endif
 
+static DEVICE_ATTR(enable_tp_irq, S_IRUGO,
+		tp_enable_irq_func, NULL);
+static DEVICE_ATTR(disable_tp_irq, S_IRUGO,
+		tp_disable_irq_func, NULL);
+static DEVICE_ATTR(tp_irq_debug_info, S_IRUGO,
+		show_tp_irq_debug_info, NULL);
+
 /*add your attr in here*/
 static struct attribute *fts_attributes[] = {
 	&dev_attr_ftstpfwver.attr,
@@ -1720,6 +1753,9 @@ static struct attribute *fts_attributes[] = {
 	&dev_attr_enable_big_area_event.attr,
 	&dev_attr_disable_big_area_event.attr,
 #endif
+	&dev_attr_enable_tp_irq.attr,
+	&dev_attr_disable_tp_irq.attr,
+	&dev_attr_tp_irq_debug_info.attr,
 	NULL
 };
 

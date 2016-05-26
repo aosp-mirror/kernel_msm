@@ -381,6 +381,10 @@ extern bool print_gesture;
 extern bool en_big_area_func;
 #endif
 
+extern bool fts_wq_queue_result;
+extern unsigned int irq_handler_recovery_count;
+extern unsigned int suspend_resume_recovery_count;
+
 static DEFINE_MUTEX(i2c_rw_access);
 
 /* upgrade functions */
