@@ -25,6 +25,7 @@
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
 #include <linux/regulator/consumer.h>
+#include <linux/workqueue.h>
 
 #define NUM_WRITE_RETRIES	5
 
@@ -36,6 +37,8 @@
 #define RSB_DELTA_Y	0x04
 #define RSB_CONFIG	0x06
 #define MOTION_BITMASK	0x80
+
+#define RSB_DELAY_MS_AFTER_VDD 10
 
 struct rsb_spi_comms {
 	int (*open)(void *);
@@ -58,6 +61,7 @@ struct rsb_drv_data {
 	int cs;
 	struct regulator *vld_reg; /* power supply voltage v3.3 */
 	struct regulator *vdd_reg; /* power supply voltage for IO v1.8 */
+	struct work_struct init_work;
 };
 
 static struct spi_device_id rsb_spi_id[] = {
@@ -367,50 +371,104 @@ static int rsb_init_regulator(struct spi_device *spi_dev)
 	struct rsb_drv_data *rsb_data = spi_get_drvdata(spi_dev);
 	int ret = 0;
 
-	rsb_data->vld_reg = devm_regulator_get(&spi_dev->dev,
-		"rsb,vld");
-	if (IS_ERR(rsb_data->vld_reg)) {
-		dev_warn(&spi_dev->dev,
-			"regulator: VLD request failed\n");
-		ret = (int)rsb_data->vld_reg;
-		rsb_data->vld_reg = NULL;
-		/*
-		 * Surface up the error obtained from the get() call.
-		 * If it is EPROBE_DEFER, surface that up to the
-		 * probe() caller. If it is anything else, continue with
-		 * the probe function execution.
-		 */
-		return ret;
-	}
-
-	rsb_data->vdd_reg = devm_regulator_get(&spi_dev->dev,
-		"rsb,vdd");
-	if (IS_ERR(rsb_data->vdd_reg)) {
-		dev_warn(&spi_dev->dev,
-			"regulator: VDD request failed\n");
-		ret = (int)rsb_data->vld_reg;
-		rsb_data->vdd_reg = NULL;
-		return ret;
-	}
-
-	if (rsb_data->vld_reg) {
-		ret = regulator_enable(rsb_data->vld_reg);
-		if (ret) {
+	if (!rsb_data->vld_reg) {
+		rsb_data->vld_reg = devm_regulator_get(&spi_dev->dev,
+			"rsb,vld");
+		if (IS_ERR(rsb_data->vld_reg)) {
 			dev_warn(&spi_dev->dev,
-				"regulator: VLD enable failed\n");
+				"regulator: VLD request failed\n");
+			ret = (int)rsb_data->vld_reg;
+			rsb_data->vld_reg = NULL;
 			return ret;
 		}
 	}
 
-	if (rsb_data->vdd_reg) {
-		ret = regulator_enable(rsb_data->vdd_reg);
-		if (ret) {
+
+	if (!rsb_data->vdd_reg) {
+		rsb_data->vdd_reg = devm_regulator_get(&spi_dev->dev,
+			"rsb,vdd");
+		if (IS_ERR(rsb_data->vdd_reg)) {
 			dev_warn(&spi_dev->dev,
-				"regulator: VDD enable failed\n");
+				"regulator: VDD request failed\n");
+			ret = (int)rsb_data->vld_reg;
+			rsb_data->vdd_reg = NULL;
 			return ret;
 		}
 	}
 	return 0;
+}
+
+static int rsb_set_regulator(struct regulator *reg, int enable)
+{
+	int ret;
+
+	if (!reg)
+		return 0;
+
+	if (enable)
+		ret = regulator_enable(reg);
+	else
+		ret = regulator_disable(reg);
+
+	return ret;
+}
+
+static int rsb_set_regulator_vld(struct spi_device *spi, int enable)
+{
+	struct rsb_drv_data *rsb_data = spi_get_drvdata(spi);
+	int ret;
+
+	ret = rsb_set_regulator(rsb_data->vld_reg, enable);
+	if (ret)
+		dev_err(&spi->dev, "couldn't %s regulator vld\n",
+				enable? "enable" : "disable");
+	return ret;
+}
+
+static int rsb_set_regulator_vdd(struct spi_device *spi, int enable)
+{
+	struct rsb_drv_data *rsb_data = spi_get_drvdata(spi);
+	int ret;
+
+	ret = rsb_set_regulator(rsb_data->vdd_reg, enable);
+	if (ret)
+		dev_err(&spi->dev, "couldn't %s regulator vdd\n",
+				enable? "enable" : "disable");
+
+	return ret;
+}
+
+static void rsb_init_work(struct work_struct *work)
+{
+	struct rsb_drv_data *rsb_data = container_of(work,
+			struct rsb_drv_data, init_work);
+	struct spi_device *spi = rsb_data->device;
+
+	/* Initialize regulators */
+	if (rsb_init_regulator(spi))
+		return;
+
+	/* Turn on VDD */
+	if (rsb_set_regulator_vdd(spi, 1))
+		return;
+
+	msleep(RSB_DELAY_MS_AFTER_VDD);
+
+	/* Should the open of the SPI bus be done only once?? */
+	rsb_data->comms.open(rsb_data);
+
+	if (rsb_init_sequence(rsb_data))
+		goto error;
+
+	/* Turn on VLD */
+	if (rsb_set_regulator_vld(spi, 1))
+		goto error;
+
+	return;
+
+error:
+	rsb_set_regulator_vdd(spi, 0);
+	dev_err(&spi->dev, "RSB init failed\n");
 }
 
 static int rsb_probe(struct spi_device *spi)
@@ -449,17 +507,8 @@ static int rsb_probe(struct spi_device *spi)
 		return -EINVAL;
 	}
 
-	/* Initialize regulators */
-	err = rsb_init_regulator(spi);
-	if (err)
-		return err;
-
-	/* Should the open of the SPI bus be done only once?? */
-	rsb_data->comms.open(rsb_data);
-
-	err = rsb_init_sequence(rsb_data);
-	if (err)
-		return err;
+	INIT_WORK(&rsb_data->init_work, rsb_init_work);
+	schedule_work(&rsb_data->init_work);
 
 	/* Allocate and register an input device */
 	rsb_data->in_dev = devm_input_allocate_device(&spi->dev);
@@ -500,6 +549,9 @@ static int rsb_remove(struct spi_device *spi)
 
 	rsb_data->comms.close(rsb_data);
 	debugfs_remove_recursive(rsb_data->dent);
+
+	rsb_set_regulator_vld(spi, 0);
+	rsb_set_regulator_vdd(spi, 0);
 
 	return 0;
 }
