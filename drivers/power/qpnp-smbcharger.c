@@ -936,6 +936,12 @@ static int get_type(u8 type_reg)
 /* helper to return the string of USB type */
 static inline char *get_usb_type_name(int type)
 {
+#ifdef CONFIG_HTC_BATT
+	int pd_current;
+	/*Force set DCP type for PD charger*/
+	if (htc_battery_get_pd_type(&pd_current))
+		return usb_type_str[2];
+#endif /* CONFIG_HTC_BATT */
 	return usb_type_str[type];
 }
 
@@ -950,6 +956,12 @@ static enum power_supply_type usb_type_enum[] = {
 /* helper to return enum power_supply_type of USB type */
 static inline enum power_supply_type get_usb_supply_type(int type)
 {
+#ifdef CONFIG_HTC_BATT
+	int pd_current;
+	/*Force set DCP type for PD charger*/
+	if (htc_battery_get_pd_type(&pd_current))
+		return usb_type_enum[2];
+#endif /* CONFIG_HTC_BATT */
 	return usb_type_enum[type];
 }
 

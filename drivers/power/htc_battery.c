@@ -1178,6 +1178,7 @@ static void batt_worker(struct work_struct *work)
 	unsigned long time_since_last_update_ms;
 	unsigned long cur_jiffies;
 	int cc_uah_now;
+	int current_max = 0;
 	char chg_strbuf[20];
 	/* reference from power_supply.h power_supply_type */
 	char *chr_src[] = {"NONE", "BATTERY", "UPS", "MAINS", "USB",
@@ -1484,6 +1485,10 @@ static void batt_worker(struct work_struct *work)
 				pr_info("Fix the current max.\n");
 				set_aicl_enable(false);
 				pmi8994_set_iusb_max(g_pd_current * 1000);
+				current_max = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
+				/* Update current max value */
+				if ((current_max/1000) < g_pd_current)
+					power_supply_set_current_limit(htc_batt_info.usb_psy, g_pd_current * 1000);
 			}
                 }
 	}
