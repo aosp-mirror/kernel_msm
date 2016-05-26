@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2014, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -242,6 +242,7 @@ struct htt_pdev_t {
         int is_high_latency;
         int is_full_reorder_offload;
         int default_tx_comp_req;
+        uint8_t is_first_wakeup_packet;
     } cfg;
     struct {
         u_int8_t major;
