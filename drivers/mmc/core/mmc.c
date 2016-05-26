@@ -1767,6 +1767,9 @@ static void mmc_get_manf(unsigned int id, char *manf)
 		case 0x11:
 			strcpy(manf, "TOSHIBA");
 			break;
+		case 0x15:
+			strcpy(manf, "SAMSUNG");
+			break;
 		default:
 			strcpy(manf, "UNKNOWN");
 			break;
