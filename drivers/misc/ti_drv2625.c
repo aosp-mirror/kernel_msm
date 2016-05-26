@@ -961,6 +961,13 @@ static ssize_t drv2625_debugfs_seq_write(struct file *file, const char *buf,
 		if (!isalnum(*token))
 			continue;
 
+		if (i >= 2) {
+			dev_err(pDrv2625data->dev, "%s: too many arguments\n",
+					__func__);
+			ret = -EINVAL;
+			goto error;
+		}
+
 		ret = kstrtou8(token, 0, &args[i++]);
 		if (ret < 0) {
 			dev_err(pDrv2625data->dev, "%s: invalid value\n",
