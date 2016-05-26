@@ -1155,7 +1155,7 @@ static int fts_ts_start(struct device *dev)
 		gpio_set_value_cansleep(data->pdata->reset_gpio, 1);
 		pr_info("[fts]%s, HW reset on resume\n", __func__);
 	}
-	msleep(data->pdata->soft_rst_dly);
+	msleep(30);
 
 #ifndef FTS_GESTRUE_EN
 	enable_irq(data->client->irq);
