@@ -439,16 +439,8 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 	if (intr[0] & INT0_VBUSINT) {
 		usb_present = fan5451x_usb_chg_plugged_in(chip);
 
-		/* Todo Wireless charger control via wireless drv */
 		if (chip->usb_present ^ usb_present) {
 			chip->usb_present = usb_present;
-			if (usb_present) {
-				fan5451x_enable(chip, 1);
-				/* set WLC_OFF_PIN to HIGH */
-			} else {
-				fan5451x_enable(chip, 0);
-				/* set WLC_OFF_PIN to LOW */
-			}
 			power_supply_set_present(chip->usb_psy,
 					chip->usb_present);
 		}
@@ -788,7 +780,7 @@ static int get_prop_batt_health(struct fan5451x_chip *chip)
 	batt_temp = get_prop_batt_temp(chip);
 	if (batt_temp >= BATT_OVERHEAT_TEMP)
 		return POWER_SUPPLY_HEALTH_OVERHEAT;
-	else if (BATT_OVERHEAT_TEMP <= BATT_COLD_TEMP)
+	else if (batt_temp <= BATT_COLD_TEMP)
 		return POWER_SUPPLY_HEALTH_COLD;
 
 	return POWER_SUPPLY_HEALTH_GOOD;
@@ -1042,7 +1034,7 @@ static int fan5451x_probe(struct i2c_client *client,
 	/* Set initial state */
 	chip->usb_present = fan5451x_usb_chg_plugged_in(chip);
 	power_supply_set_present(chip->usb_psy, chip->usb_present);
-	fan5451x_enable(chip, chip->usb_present);
+	fan5451x_enable(chip, 1);
 
 	ret = device_create_file(&client->dev, &dev_attr_addr_register);
 	ret |= device_create_file(&client->dev, &dev_attr_status_register);
