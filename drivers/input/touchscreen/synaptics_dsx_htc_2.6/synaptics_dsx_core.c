@@ -2960,7 +2960,7 @@ static int synaptics_rmi4_f1a_button_map(struct synaptics_rmi4_data *rmi4_data,
 				__func__);
 		return -ENODEV;
 	} else if (!bdata->cap_button_map->map) {
-		dev_err(rmi4_data->pdev->dev.parent,
+		dev_dbg(rmi4_data->pdev->dev.parent,
 				"%s: Button map is missing in board file\n",
 				__func__);
 		return -ENODEV;
