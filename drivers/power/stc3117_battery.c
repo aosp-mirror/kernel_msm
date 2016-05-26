@@ -27,6 +27,7 @@
 
 #include <linux/qpnp/qpnp-adc.h>
 
+#define FEATURE_GAUGE_LOCKED_WORKAROUND
 #define MODE_REG		0x0
 #define VMODE_BIT		BIT(0)
 #define FORCE_CD_BIT		BIT(2)
@@ -1712,6 +1713,12 @@ static int stc311x_probe(struct i2c_client *client,
 	struct stc311x_chip *chip;
 	int rc;
 	u8 reg;
+#ifdef FEATURE_GAUGE_LOCKED_WORKAROUND
+	u8 mode_reg;
+	u8 ctrl_reg;
+	u8 mask;
+	bool gg_run_bit, uvlod_bit;
+#endif /* FEATURE_GAUGE_LOCKED_WORKAROUND */
 
 	/*First check the functionality supported by the host*/
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_READ_I2C_BLOCK))
@@ -1755,6 +1762,36 @@ static int stc311x_probe(struct i2c_client *client,
 	chip->cutoff_wake_source.disabled = 1;
 	wakeup_source_init(&chip->cutoff_wake_source.source,
 				"fg_cutoff_wake");
+
+#ifdef FEATURE_GAUGE_LOCKED_WORKAROUND
+	rc = stc311x_read_raw(chip, MODE_REG, &mode_reg, 1);
+	if (rc) {
+		pr_err("failed to read mode reg rc=%d\n", rc);
+		goto fail;
+	}
+	pr_debug("[Alan] Mode reg =0x%02x\n", mode_reg);
+	mask = GG_RUN_BIT;
+	gg_run_bit = (mode_reg & mask) >> 4;
+	if (!gg_run_bit)
+		pr_err("[Alan] Standby Mode! Abnormal case, need do reset!\n");
+
+	rc = stc311x_read_raw(chip, CTRL_REG, &ctrl_reg, 1);
+	if (rc) {
+		pr_err("failed to read ctrl reg rc=%d\n", rc);
+		goto fail;
+	}
+	pr_debug("[Alan] CTRL reg =0x%02x\n", ctrl_reg);
+	mask = UVLOD_BIT;
+	uvlod_bit = (ctrl_reg & mask) >> 7;
+	if (uvlod_bit)
+		pr_err("[Alan] UVLOD is set!\n");
+
+	if ( !gg_run_bit || uvlod_bit ) {
+		pr_err("[Alan] Do reset!\n");
+		stc311x_reset(chip);
+	}
+#endif /* FEATURE_GAUGE_LOCKED_WORKAROUND */
+
 	rc = stc311x_start(chip);
 	if (rc) {
 		pr_err("failed to start rc=%d\n", rc);
