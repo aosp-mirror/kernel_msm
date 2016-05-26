@@ -2057,28 +2057,29 @@ module_param_named(
 
 #define PD_MAX_VBUS 9000
 #define PD_MAX_POWER 18000000
+#define MESG_MAX_LENGTH 300
 int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *max_mA)
 {
 	int i = 0;
 	int set_max_mA = 0, set_ID = 0;
 	int pd_power = 0, set_power = 0, pd_vbus_vol = 0, pd_ma = 0;
+        int msg_len = 0;
+        char buffer[MESG_MAX_LENGTH] = "";
 
 	if(size <= 0)
 		return -EINVAL;
 
-	for(i = 0; i < size ; i++){
+	for (i = 0; i < size ; i++) {
 		pd_vbus_vol = pd_data.pd_list[i][0];
 		pd_ma = pd_data.pd_list[i][1];
 		pd_power = pd_vbus_vol * pd_ma;
 
-		pr_info("[BATT] PD list [%d]: %dW (%dmV-%dmA)\n",
-					i , pd_power/1000000, pd_vbus_vol, pd_ma);
 		if (pd_vbus_vol > PD_MAX_VBUS) {
-			pr_info("[BATT] PD Voltage > %dV, skip to prevent OVP\n",
-						PD_MAX_VBUS/1000);
+			pr_debug("[BATT] PD Voltage %dV > %dV, skip to prevent OVP\n",
+					pd_vbus_vol/1000, PD_MAX_VBUS/1000);
 		} else if (pd_power > PD_MAX_POWER) {
-			pr_info("[BATT] PD Power > %dW, skip to protect device\n",
-						PD_MAX_POWER/1000000);
+			pr_debug("[BATT] PD Power %dW > %dW, skip to protect device\n",
+					pd_power/1000000, PD_MAX_POWER/1000000);
 		} else if (pd_power > set_power) {
 			set_ID = i;
 			set_max_mA = pd_ma;
@@ -2102,7 +2103,18 @@ int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *ma
 			g_pd_current = *max_mA = pd_data.pd_list[pd_select_id][1];
 			return pd_select_id;
 		} else {
-			pr_info("[BATT] PD support, set ID = %d\n", set_ID);
+			msg_len = snprintf(buffer, MESG_MAX_LENGTH, "[BATT] PD support, set ID(%d), List:", set_ID);
+
+			for (i = 0; i < size ; i++) {
+				pd_vbus_vol = pd_data.pd_list[i][0];
+				pd_ma = pd_data.pd_list[i][1];
+				pd_power = pd_vbus_vol * pd_ma;
+
+				if (msg_len < MESG_MAX_LENGTH)
+					msg_len += snprintf(buffer+msg_len, MESG_MAX_LENGTH - msg_len, " [%d]:%dW(%dmV-%dmA)",
+							i, pd_power/1000000, pd_vbus_vol, pd_ma);
+			}
+			pr_info("%s\n", buffer);
 			return set_ID;
 		}
 	}

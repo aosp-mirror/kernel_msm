@@ -977,7 +977,6 @@ u8 fusb_battery_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], 
     }
 
     sel_voltage_pdo_index = htc_battery_pd_charger_support(obj_cnt, htc_pdo_data, device_max_ma);
-    pr_info("FUSB %s: device_max_ma = %d, cnt %d index %d\n", __func__, *device_max_ma, obj_cnt, sel_voltage_pdo_index);
 
     return sel_voltage_pdo_index;
 }

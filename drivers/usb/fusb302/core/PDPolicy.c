@@ -2103,7 +2103,7 @@ void PolicySinkEvaluateCaps(void)
         reqPos++;
     }
 
-    pr_info("FUSB %s: reqPos = %d, SelVoltage = %d after selection\n", __func__, reqPos, SelVoltage);
+    pr_debug("FUSB %s:cnt = %d, reqPos = %d, SelVoltage = %d, device_max_ma = %d after selection\n", __func__, CapsHeaderReceived.NumDataObjects, reqPos, SelVoltage, device_max_ma);
 
     if ((reqPos > 0) && (SelVoltage > 0))
     {
