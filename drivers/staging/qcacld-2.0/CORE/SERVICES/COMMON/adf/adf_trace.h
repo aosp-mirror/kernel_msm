@@ -264,6 +264,7 @@ adf_dp_display_ptr_record(struct adf_dp_trace_record_s *pRecord,
 
 static inline uint8_t adf_dp_get_proto_bitmap(void)
 {
+    return 0;
 }
 
 static inline void
