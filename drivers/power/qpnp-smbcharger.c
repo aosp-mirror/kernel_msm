@@ -5356,6 +5356,13 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 				pr_err("failed to set voltage max rc=%d\n", rc);
 		}
 
+		/* use override for PD charger */
+		rc = smbchg_sec_masked_write(chip,
+			chip->usb_chgpth_base + CMD_IL,
+			ICL_OVERRIDE_BIT, ICL_OVERRIDE_BIT);
+		if (rc < 0)
+			pr_err("Couldn't set override rc = %d\n", rc);
+
 		if (!parallel_psy){
 			pr_smb(PR_STATUS, "Parallel charging not enabled for PD\n");
 			return;

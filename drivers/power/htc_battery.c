@@ -2056,7 +2056,6 @@ module_param_named(
 );
 
 #define PD_MAX_VBUS 9000
-#define PD_MAX_POWER 18000000
 #define MESG_MAX_LENGTH 300
 int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *max_mA)
 {
@@ -2077,9 +2076,6 @@ int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *ma
 		if (pd_vbus_vol > PD_MAX_VBUS) {
 			pr_debug("[BATT] PD Voltage %dV > %dV, skip to prevent OVP\n",
 					pd_vbus_vol/1000, PD_MAX_VBUS/1000);
-		} else if (pd_power > PD_MAX_POWER) {
-			pr_debug("[BATT] PD Power %dW > %dW, skip to protect device\n",
-					pd_power/1000000, PD_MAX_POWER/1000000);
 		} else if (pd_power > set_power) {
 			set_ID = i;
 			set_max_mA = pd_ma;
