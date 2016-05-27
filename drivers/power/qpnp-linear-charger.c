@@ -126,6 +126,9 @@
 
 #define QPNP_CHG_I_MAX_MIN_90                   90
 
+/* Linear coin cell charging register */
+#define COIN_EN_CTL				0x2846
+
 /* Feature flags */
 #define VDD_TRIM_SUPPORTED			BIT(0)
 
@@ -3499,6 +3502,7 @@ static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 {
 	int rc = 0;
 	struct qpnp_lbc_chip *chip;
+	u8 reg_val;
 
 	chip = devm_kzalloc(&spmi->dev, sizeof(struct qpnp_lbc_chip),
 							GFP_KERNEL);
@@ -3534,6 +3538,11 @@ static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 		return rc;
 	}
 
+	reg_val = 0x00;
+	rc = qpnp_lbc_write(chip, COIN_EN_CTL, &reg_val, 1);
+	if (rc)
+		pr_err("Failed to set COIN_EN_CTL rc=%d\n", rc);
+
 	chip->parallel_psy.name		= "usb-parallel";
 	chip->parallel_psy.type		= POWER_SUPPLY_TYPE_USB_PARALLEL;
 	chip->parallel_psy.get_property	= qpnp_lbc_parallel_get_property;
@@ -3562,6 +3571,7 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 	struct power_supply *usb_psy;
 	int rc = 0;
 	u8 usbin_chg_sts;
+	u8 reg_val;
 
 	usb_psy = power_supply_get_by_name("usb");
 	if (!usb_psy) {
@@ -3742,6 +3752,10 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 		pr_debug("Success to request init gpio 17 Low \n");
 	}
 
+	reg_val = 0x00;
+	rc = qpnp_lbc_write(chip, COIN_EN_CTL, &reg_val, 1);
+	if (rc)
+		pr_err("Failed to set COIN_EN_CTL rc=%d\n", rc);
 #if defined(ASUS_FACTORY_BUILD)
 	rc = asus_battery_charging_limit_wq();
 
