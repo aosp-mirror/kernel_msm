@@ -433,7 +433,7 @@ CHECK_PASS:
             }
         } else {
             if (sense_off)
-                    i2c_himax_write_command(private_ts->client, HX_CMD_TSSON, DEFAULT_RETRY_CNT);
+                i2c_himax_write_command(private_ts->client, HX_CMD_TSSON, DEFAULT_RETRY_CNT);
             return 1;
         }
 CHECK_FAIL:
@@ -2906,13 +2906,6 @@ static ssize_t himax_debug_write(struct device *dev,
         filp_close(hx_filp, NULL);
         I("%s: upgrade start,len %d: %02X, %02X, %02X, %02X\n", __func__, result, upgrade_fw[0], upgrade_fw[1], upgrade_fw[2], upgrade_fw[3]);
         if (result > 0) {
-#ifdef HX_CHECK_CRC_AP
-            result = Calculate_CRC_with_AP(upgrade_fw);
-            if (!result) {
-                I("CRC Check sum fail \n");
-                goto firmware_upgrade_done;
-            }
-#endif
             // start to upgrade
 #ifdef HX_RST_PIN_FUNC
             himax_HW_reset(false, true);
