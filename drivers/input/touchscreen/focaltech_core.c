@@ -131,6 +131,13 @@ bool big_area_enabled_flag = false;
 bool en_big_area_func = true;
 #endif
 
+bool fts_wq_queue_result = false;
+bool fts_wq_running = false;
+unsigned int irq_handler_recovery_count = 0;
+unsigned int suspend_resume_recovery_count = 0;
+
+struct irq_desc *fts_irq_desc = NULL;
+
 u8 buf_touch_data[30*POINT_READ_BUF] = { 0 };
 
 #ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR
@@ -471,13 +478,22 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 {
 	struct fts_ts_data *fts_ts = dev_id;
 
-	disable_irq_nosync(fts_ts->client->irq);
-
 	if (!fts_ts) {
 		pr_err("%s: Invalid fts_ts\n", __func__);
 		return IRQ_HANDLED;
 	}
-	queue_work(fts_ts->ts_workqueue, &fts_ts->touch_event_work);
+
+	if (fts_wq_data->suspending)
+		return IRQ_HANDLED;
+
+	disable_irq_nosync(fts_ts->client->irq);
+
+	fts_wq_queue_result = queue_work(fts_ts->ts_workqueue, &fts_ts->touch_event_work);
+
+	if (fts_wq_queue_result == false) {
+		enable_irq(fts_ts->client->irq);
+		irq_handler_recovery_count++;
+	}
 
 	return IRQ_HANDLED;
 }
@@ -660,6 +676,7 @@ static void fts_report_value(struct fts_ts_data *data)
 			uppoint++;
 			input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, false);
 			data->touchs &= ~BIT(event->au8_finger_id[i]);
+			printk(KERN_INFO "[fts] finger id=%d x=%d y=%d release\n", i, event->au16_x[i], event->au16_y[i]);
 		}
 	}
 
@@ -734,6 +751,9 @@ static void fts_gesture_check(struct fts_ts_data *data)
 static void fts_touch_irq_work(struct work_struct *work)
 {
 	int ret = -1;
+
+	fts_wq_running = true;
+
 #ifdef FTS_GESTRUE_EN
 	if (fts_wq_data->suspended) {
 		fts_gesture_check(fts_wq_data);
@@ -745,6 +765,7 @@ static void fts_touch_irq_work(struct work_struct *work)
 			fts_report_value(fts_wq_data);
 	}
 	enable_irq(fts_wq_data->client->irq);
+	fts_wq_running = false;
 }
 
 /*******************************************************************************
@@ -1070,6 +1091,13 @@ static int fts_ts_start(struct device *dev)
 #ifdef FTS_GESTRUE_EN
 	big_area_enabled_flag = false;
 #endif
+
+	if (fts_irq_desc->depth > 0 && fts_wq_running == false) {
+		pr_info("[fts]%s, enable irq, disable depth : %u\n", __func__, fts_irq_desc->depth);
+		enable_irq(fts_wq_data->client->irq);
+		suspend_resume_recovery_count++;
+	}
+
 	data->suspended = false;
 
 	return err;
@@ -1194,6 +1222,12 @@ int fts_ts_stop(struct device *dev)
 	}
 #endif
 
+	if (fts_irq_desc->depth > 0 && fts_wq_running == false) {
+		pr_info("[fts]%s, enable irq, disable depth : %u\n", __func__, fts_irq_desc->depth);
+			enable_irq(fts_wq_data->client->irq);
+		suspend_resume_recovery_count++;
+	}
+
 	data->suspended = true;
 
 	return 0;
@@ -1255,6 +1289,7 @@ int fts_ts_suspend(struct device *dev)
 		dev_info(dev, "Already in suspend state\n");
 		return 0;
 	}
+	data->suspending = true;
 
 	#ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR	
 	if (fts_psensor_support_enabled() && data->pdata->psensor_support &&
@@ -1273,6 +1308,7 @@ int fts_ts_suspend(struct device *dev)
 	err = fts_ts_stop(dev);
 
 	printk(KERN_ERR "[fts]%s, finish, err : %d\n", __func__, err);
+	data->suspending = false;
 	if (err < 0)
 		return err;
 
@@ -1291,6 +1327,7 @@ int fts_ts_resume(struct device *dev)
 	int err;
 	struct fts_ts_data *data = dev_get_drvdata(dev);
 
+	printk(KERN_INFO "[fts]%s, start\n", __func__);
 	if (!data->suspended) {
 		dev_dbg(dev, "Already in awake state\n");
 		return 0;
@@ -1309,6 +1346,7 @@ int fts_ts_resume(struct device *dev)
 #endif
 
 	err = fts_ts_start(dev);
+	printk(KERN_INFO "[fts]%s, finish, err : %d\n", __func__, err);
 	if (err < 0)
 		return err;
 	return 0;
@@ -2034,6 +2072,7 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 		goto free_wake_irq;
 	}
 
+	fts_irq_desc = irq_to_desc(client->irq);
 	disable_irq(client->irq);
 
 	#ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR
