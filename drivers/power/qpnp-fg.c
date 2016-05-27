@@ -629,6 +629,9 @@ struct fg_chip {
 	u8			last_beat_count;
 #ifdef CONFIG_HTC_BATT
 	int			batt_full_charge_criteria_ma;
+	int			batt_fcc_ma;
+	int			batt_capacity_mah;
+	int			fcc_half_capacity_ma;
 #endif //CONFIG_HTC_BATT
 };
 
@@ -4394,6 +4397,16 @@ static int fg_property_is_writeable(struct power_supply *psy,
 
 
 #ifdef CONFIG_HTC_BATT
+int fg_get_batt_fcc_ma(void)
+{
+	if (!the_chip) {
+		pr_err("[Battery_FDA] Called before init\n");
+		return 2600; // Return a safe value instead of -EINVAL
+	} else
+		return the_chip->batt_fcc_ma;
+}
+
+
 int fg_get_batt_full_charge_criteria_ma(void)
 {
 	if (!the_chip) {
@@ -4402,6 +4415,24 @@ int fg_get_batt_full_charge_criteria_ma(void)
 		return 300;
 	} else
 		return the_chip->batt_full_charge_criteria_ma;
+}
+
+int fg_get_batt_capacity_mah(void)
+{
+	if (!the_chip) {
+		pr_err("[Battery_FDA] Called before init\n");
+		return 3000;  // Return a safe value instead of -EINVAL
+	} else
+		return the_chip->batt_capacity_mah;
+}
+
+int fg_get_fcc_half_capacity_ma(void)
+{
+	if (!the_chip) {
+		pr_err("[Battery_FDA] Called before init\n");
+		return 0;  // Return a safe value instead of -EINVAL
+	} else
+		return the_chip->fcc_half_capacity_ma;
 }
 
 #define DUMP_FG_REG_START	0x4000
@@ -5937,6 +5968,36 @@ wait:
 	}
 	pr_info("batt_full_charge_criteria_ma = %d\n",
 					chip->batt_full_charge_criteria_ma);
+
+	/* read default fast charging current (1C) from DT, unit is mA */
+	rc = of_property_read_u32(profile_node, "qcom,fastchg-current-ma",
+						&chip->batt_fcc_ma);
+	if (rc) {
+		chip->batt_fcc_ma = 2500;
+		if (rc != -EINVAL)
+			pr_err("Read fastchg-current-ma failed:%d\n", rc);
+	}
+	pr_info("batt_fcc_ma = %d\n", chip->batt_fcc_ma);
+
+	/* read battery design capacity from DT, unit is mAh */
+	rc = of_property_read_u32(profile_node, "qcom,nom-batt-capacity-mah",
+						&chip->batt_capacity_mah);
+	if (rc) {
+		chip->batt_capacity_mah = 3000;
+		if (rc != -EINVAL)
+			pr_err("Read nom-batt-capacity-mah failed:%d\n", rc);
+	}
+	pr_info("batt_capacity_mah = %d\n", chip->batt_capacity_mah);
+
+	/* read battery design capacity from DT, unit is mAh */
+	rc = of_property_read_u32(profile_node, "htc,fcc-half-capacity-ma",
+						&chip->fcc_half_capacity_ma);
+	if (rc) {
+		chip->fcc_half_capacity_ma = 0;
+		if (rc != -EINVAL)
+			pr_err("Read fcc-half-capacity-ma failed:%d\n", rc);
+	}
+	pr_info("fcc_half_capacity_ma = %d\n", chip->fcc_half_capacity_ma);
 #endif /* CONFIG_HTC_BATT */
 
 	if (!chip->batt_profile)

@@ -13,7 +13,7 @@
 qcom,s1-id3-batterydata {
 	qcom,max-voltage-uv = <4400000>;
 	qcom,v-cutoff-uv = <3250000>;
-	qcom,nom-batt-capacity-mah = <2700>;
+	qcom,nom-batt-capacity-mah = <2770>;
 	qcom,batt-id-kohm = <22>;
 	qcom,battery-beta = <4360>;
 	qcom,battery-type = "3";
@@ -23,6 +23,7 @@ qcom,s1-id3-batterydata {
 	qcom,chg-rslow-comp-thr = <0x99>;
 	qcom,checksum = <0x42A0>;
 	qcom,gui-version = "PMI8996GUI - 1.1.0.0";
+	qcom,fastchg-current-ma = <2800>;
 	htc,batt_id = <3>;
 	htc,id_raw_min = <16001>;
 	htc,id_raw_max = <27500>;

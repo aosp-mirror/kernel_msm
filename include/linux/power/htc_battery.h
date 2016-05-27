@@ -126,6 +126,9 @@ struct htc_charger {
 struct htc_gauge {
 	int (*get_attr_text)(char *buf, int size);
 	int (*get_full_ma)(void);
+	int (*get_batt_fcc_ma)(void);
+	int (*get_batt_capacity_mah)(void);
+	int (*get_fcc_half_capacity_ma)(void);
 };
 
 struct htc_battery_info {
@@ -137,6 +140,7 @@ struct htc_battery_info {
 	struct power_supply		*batt_psy;
 	struct power_supply		*bms_psy;
 	struct power_supply		*usb_psy;
+	struct power_supply             *parallel_psy;
 	int critical_low_voltage_mv;
 	int smooth_chg_full_delay_min;
 	int decreased_batt_level_check;
@@ -151,6 +155,9 @@ struct htc_battery_info {
 	int vbus;
 	int k_debug_flag;
 	int current_limit_reason;
+	int batt_fcc_ma;
+	int batt_capacity_mah;
+	int fcc_half_capacity_ma;
 #if defined(CONFIG_FB)
 	struct notifier_block fb_notif;
 	struct workqueue_struct *batt_fb_wq;
@@ -257,6 +264,9 @@ void set_aicl_enable(bool bEnable);
 void impedance_set_iusb_max (int current_ua, bool mode);
 int charger_dump_all(void);
 int fg_get_batt_full_charge_criteria_ma(void);
+int fg_get_batt_fcc_ma(void);
+int fg_get_batt_capacity_mah(void);
+int fg_get_fcc_half_capacity_ma(void);
 int pmi8994_get_usbin_voltage_now(void);
 int pmi8994_charger_get_attr_text(char *buf, int size);
 int pmi8994_is_batt_full_eoc_stop(int *result);
@@ -265,6 +275,7 @@ void pmi8994_set_iusb_max (int current_ua);
 void pmi8994_set_batt_health_good(void);
 void pmi8994_rerun_apsd(void);
 bool is_otg_enabled(void);
+bool is_parallel_enabled(void);
 void force_dump_fg_sram(void);
 bool get_ima_error_status(void);
 

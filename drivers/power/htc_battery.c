@@ -68,6 +68,7 @@ static unsigned int g_charger_ctrl_stat;
 /* Set true when all battery need file probe done */
 static bool g_htc_battery_probe_done = false;
 
+static bool g_is_fcc_limited = false;
 static bool g_is_unknown_charger = false;
 static bool g_rerun_apsd_done = false;
 
@@ -214,7 +215,7 @@ static int get_property(struct power_supply *psy, enum power_supply_property pro
 			return -1;
 		}
 	} else {
-		pr_err("[BATT] batt_psy is null.\n");
+		pr_err("[BATT] psy is null.\n");
 		return -1;
 	}
 
@@ -932,70 +933,120 @@ void update_htc_chg_src(void)
 	htc_batt_info.rep.chg_src = chg_src;
 }
 
-
-#define IBAT_MAX_UA			2900000
-#define IBAT_MAX_UA_LOW		2800000
-#define IBAT_HVDCP_LIMITED	2000000
-#define IBAT_HVDCP_3_LIMITED	2100000
+#define IBAT_LIMITED_VBATT_THRESHOLD            4250
+#define IBAT_LIMITED_RECOVERY_VBATT_THRESHOLD   4000
+#define IBAT_OVER_CHARGE_DECREASING_MA 100
+#define IBAT_HVDCP_LIMITED		2000000
+#define IBAT_HVDCP_3_LIMITED		2100000
 #define IBAT_LIMITED_UA		300000
-#define IBAT_HEALTH_TEMP_WARM_HIGH	450
-#define IBAT_HEALTH_TEMP_WARM_LOW	430
-#define IBAT_HEALTH_TEMP_COOL		100
+#define IBAT_HEALTH_TEMP_SLIGHT_WARM_HIGH	420
+#define IBAT_HEALTH_TEMP_SLIGHT_WARM_LOW	400
+#define IBAT_HEALTH_TEMP_WARM_HIGH	480
+#define IBAT_HEALTH_TEMP_WARM_LOW	460
+#define IBAT_HEALTH_TEMP_COOL_HIGH	100
+#define IBAT_HEALTH_TEMP_COOL_LOW	120
 int update_ibat_setting (void)
 {
 	static bool s_prev_health_warm = false;
 	static bool s_is_over_ibat = false;
 	static bool s_prev_vol_limit = false;
 	static int s_prev_ibat_health = POWER_SUPPLY_HEALTH_GOOD;
-	static int ibat_new = IBAT_MAX_UA;
-	int ibat_max = IBAT_MAX_UA;
 	int ibat_hvdcp_limited = IBAT_HVDCP_3_LIMITED;
+	int ibat_new = htc_batt_info.batt_fcc_ma * 1000;
+	int ibat_max = htc_batt_info.batt_fcc_ma * 1000;
 
-	if (htc_batt_info.rep.batt_current < -3010000)
+	/* check for over charge condition due to PMIC tolerance */
+	if (htc_batt_info.rep.batt_current <
+			(-1) * htc_batt_info.batt_capacity_mah * 1000)
 		s_is_over_ibat = true;
 
 	if (s_is_over_ibat)
-		ibat_max = IBAT_MAX_UA_LOW;
-	else
-		ibat_max = IBAT_MAX_UA;
+		ibat_max = ibat_max - (IBAT_OVER_CHARGE_DECREASING_MA * 1000);
 
 	/* check for temperature condition */
 	if (htc_batt_info.rep.batt_temp >= IBAT_HEALTH_TEMP_WARM_HIGH)
 		s_prev_ibat_health = POWER_SUPPLY_HEALTH_WARM;
-	else if (htc_batt_info.rep.batt_temp <= IBAT_HEALTH_TEMP_COOL)
+	else if (htc_batt_info.rep.batt_temp < IBAT_HEALTH_TEMP_COOL_HIGH)
 		s_prev_ibat_health = POWER_SUPPLY_HEALTH_COOL;
 	else {
 		if ((s_prev_ibat_health = POWER_SUPPLY_HEALTH_WARM) &&
-			(htc_batt_info.rep.batt_temp < IBAT_HEALTH_TEMP_WARM_LOW))
+			(htc_batt_info.rep.batt_temp <= IBAT_HEALTH_TEMP_WARM_LOW))
 			s_prev_ibat_health = POWER_SUPPLY_HEALTH_GOOD;
-		else if ((s_prev_ibat_health = IBAT_HEALTH_TEMP_COOL) &&
-			(htc_batt_info.rep.batt_temp > IBAT_HEALTH_TEMP_COOL))
+		else if ((s_prev_ibat_health = POWER_SUPPLY_HEALTH_COOL) &&
+			(htc_batt_info.rep.batt_temp >= IBAT_HEALTH_TEMP_COOL_LOW))
 			s_prev_ibat_health = POWER_SUPPLY_HEALTH_GOOD;
 	}
 	if ((s_prev_ibat_health == POWER_SUPPLY_HEALTH_GOOD) ||
 		g_flag_keep_charge_on) {
-		if ((htc_batt_info.rep.batt_vol < 4100) || !s_prev_vol_limit) {
-			s_prev_vol_limit = false;
-			ibat_new =  ibat_max;
-		} else if ((htc_batt_info.rep.batt_vol > 4250) || s_prev_vol_limit) {
+		if (s_prev_vol_limit ||
+			(htc_batt_info.rep.batt_vol >= IBAT_LIMITED_VBATT_THRESHOLD)) {
 			s_prev_vol_limit = true;
-			ibat_new =  2100000;
+			g_is_fcc_limited = true;
+			if (htc_batt_info.fcc_half_capacity_ma)
+				ibat_new = htc_batt_info.fcc_half_capacity_ma * 1000;
+			else
+				ibat_new = ibat_max * 5/10;	// Set MAX IBAT as 0.5C
+		}
+		if (!s_prev_vol_limit ||
+				(htc_batt_info.rep.batt_vol <= IBAT_LIMITED_RECOVERY_VBATT_THRESHOLD)) {
+			s_prev_vol_limit = false;
+			g_is_fcc_limited = false;
+			if (s_prev_health_warm)
+				ibat_new = ibat_max * 8/10; // Set MAX IBAT as 0.8C
+			else
+				ibat_new = ibat_max;
+		}
+		if (s_prev_health_warm ||
+				htc_batt_info.rep.batt_temp >= IBAT_HEALTH_TEMP_SLIGHT_WARM_HIGH) {
+			s_prev_health_warm = true;
+			if (s_prev_vol_limit)
+				if (htc_batt_info.fcc_half_capacity_ma)
+					ibat_new = htc_batt_info.fcc_half_capacity_ma * 1000;
+				else
+					ibat_new = ibat_max * 5/10;	// Set MAX IBAT as 0.5C
+			else
+				ibat_new = ibat_max * 8/10; // Set MAX IBAT as 0.8C
+		}
+		if (!s_prev_health_warm ||
+				(htc_batt_info.rep.batt_temp <= IBAT_HEALTH_TEMP_SLIGHT_WARM_LOW)){
+			s_prev_health_warm = false;
+			if (s_prev_vol_limit)
+				if (htc_batt_info.fcc_half_capacity_ma)
+					ibat_new = htc_batt_info.fcc_half_capacity_ma * 1000;
+				else
+					ibat_new = ibat_max * 5/10;	// Set MAX IBAT as 0.5C
+			else
+				ibat_new = ibat_max;
 		}
 	} else if (s_prev_ibat_health == POWER_SUPPLY_HEALTH_COOL) {
-		if ((htc_batt_info.rep.batt_vol > 4250) || s_prev_vol_limit) {
+		if (s_prev_vol_limit ||
+			(htc_batt_info.rep.batt_vol >= IBAT_LIMITED_VBATT_THRESHOLD)) {
 			s_prev_vol_limit = true;
-			ibat_new =  1500000;
-		} else if ((htc_batt_info.rep.batt_vol < 4100) || !s_prev_vol_limit) {
+			g_is_fcc_limited = true;
+			ibat_new = ibat_max * 3/10;	// Set MAX IBAT as 0.3C
+		}
+		if (!s_prev_vol_limit ||
+			(htc_batt_info.rep.batt_vol <= IBAT_LIMITED_RECOVERY_VBATT_THRESHOLD)) {
 			s_prev_vol_limit = false;
-			ibat_new =  2100000;
+			g_is_fcc_limited = false;
+			ibat_new = ibat_max * 7/10;	// Set MAX IBAT as 0.7C
 		}
 	} else if (s_prev_ibat_health == POWER_SUPPLY_HEALTH_WARM) {
-		if (htc_batt_info.rep.batt_vol < 4100) {
-			ibat_new =   ibat_max;
+		if (s_prev_vol_limit ||
+			(htc_batt_info.rep.batt_vol >= IBAT_LIMITED_VBATT_THRESHOLD)) {
+			s_prev_vol_limit = true;
+			g_is_fcc_limited = true;
+			ibat_new = 0;			// Set MAX IBAT as 0
+		}
+		if (!s_prev_vol_limit ||
+			(htc_batt_info.rep.batt_vol <= IBAT_LIMITED_RECOVERY_VBATT_THRESHOLD)) {
+			s_prev_vol_limit = false;
+			g_is_fcc_limited = false;
+			ibat_new = ibat_max * 7/10;	// Set MAX IBAT as 0.7C
 		}
 	}
 
-	/* check for hvdcp condition */
+	/* check for hvdcp condition (M1S1 will not enter this block) */
 	if (htc_batt_info.rep.charging_source == POWER_SUPPLY_TYPE_USB_HVDCP)
 		ibat_hvdcp_limited = IBAT_HVDCP_LIMITED;
 
@@ -1021,6 +1072,11 @@ int update_ibat_setting (void)
 	/* check for limit charge condition */
 	if (g_chg_limit_reason)
 		ibat_new = IBAT_LIMITED_UA;
+
+	BATT_EMBEDDED("prev_vol_limit=%d, ibat_max=%d, ibat_new=%d,"
+			" prev_ibat_health=%d, prev_health_warm=%d, chg_limit_reason=%d",
+			s_prev_vol_limit, ibat_max, ibat_new,
+			s_prev_ibat_health, s_prev_health_warm, g_chg_limit_reason);
 
 	return ibat_new;
 }
@@ -1192,8 +1248,8 @@ static void batt_worker(struct work_struct *work)
 	int charging_enabled = gs_prev_charging_enabled;
 	int user_set_chg_curr = s_prev_user_set_chg_curr;
 	int src = 0;
-	int ibat = 0;
-	int ibat_new = 0;
+	int ibat_pmi = 0, ibat_smb = 0;
+	int ibat_total = 0, ibat_total_new = 0;
 	int aicl_now;
 	unsigned long time_since_last_update_ms;
 	unsigned long cur_jiffies;
@@ -1380,17 +1436,35 @@ static void batt_worker(struct work_struct *work)
 		}
 
 		/* STEP 11.2.4 check ibat setting */
-		ibat = get_property(htc_batt_info.batt_psy, POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX);
-		ibat_new = update_ibat_setting();
+		ibat_smb = get_property(htc_batt_info.parallel_psy,
+					POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX);
+
+		if(!is_parallel_enabled())
+			ibat_smb = 0;
+
+		ibat_pmi = get_property(htc_batt_info.batt_psy,
+					POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX);
+
+		ibat_total = ibat_pmi + ibat_smb;
+
+		ibat_total_new = update_ibat_setting();
 
 #ifdef CONFIG_HTC_CHARGER
-		if (ibat != ibat_new && htc_batt_info.rep.is_htcchg_ext_mode == false) {
+		if (((ibat_total != ibat_total_new) || (ibat_smb!= 0 && g_is_fcc_limited)) &&
+			htc_batt_info.rep.is_htcchg_ext_mode == false) {
 #else
-		if (ibat != ibat_new) {
+		if ((ibat_total != ibat_total_new) || (ibat_smb!= 0 && g_is_fcc_limited)) {
 #endif // CONFIG_HTC_CHARGER
-			BATT_EMBEDDED("set ibat(%d)", ibat_new);
-			set_batt_psy_property(POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, ibat_new);
-		}
+			BATT_EMBEDDED("set ibat max(%d),ibat_total=%d[%d,%d],"
+					"ibat_total_new=%d,is_parallel=%d",
+					ibat_total_new, ibat_total, ibat_pmi,
+					ibat_smb, ibat_total_new, is_parallel_enabled());
+			set_batt_psy_property(POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, ibat_total_new);
+		} else
+			BATT_EMBEDDED("ibat_total=%d[%d,%d],"
+					"ibat_total_new=%d,is_parallel=%d",
+					ibat_total, ibat_pmi, ibat_smb,
+					ibat_total_new, is_parallel_enabled());
 
 		if (charging_enabled != gs_prev_charging_enabled) {
 			BATT_EMBEDDED("set charging_enable(%d)", charging_enabled);
@@ -2470,6 +2544,7 @@ void htc_battery_probe_process(enum htc_batt_probe probe_type) {
 		htc_batt_info.batt_psy = power_supply_get_by_name("battery");
 		htc_batt_info.bms_psy = power_supply_get_by_name("bms");
 		htc_batt_info.usb_psy = power_supply_get_by_name("usb");
+		htc_batt_info.parallel_psy = power_supply_get_by_name("usb-parallel");
 
 		/* initial debug flag through QCT exist prop. setting */
 		if (g_flag_keep_charge_on || g_flag_disable_safety_timer)
@@ -2498,9 +2573,15 @@ void htc_battery_probe_process(enum htc_batt_probe probe_type) {
 				}
 			}
 			htc_batt_info.batt_full_current_ma = htc_batt_info.igauge->get_full_ma();
-			BATT_LOG("%s: catch name %s, set batt id=%d, full_ma=%d\n",
+			htc_batt_info.batt_fcc_ma = htc_batt_info.igauge->get_batt_fcc_ma();
+			htc_batt_info.batt_capacity_mah = htc_batt_info.igauge->get_batt_capacity_mah();
+			htc_batt_info.fcc_half_capacity_ma = htc_batt_info.igauge->get_fcc_half_capacity_ma();
+			BATT_LOG("%s: catch name %s, set batt id=%d, full_ma=%d, fcc_ma=%d, capacity=%d, "
+					"half_capacity_ma:%d\n",
 				__func__, prop.strval, htc_batt_info.rep.batt_id,
-				htc_batt_info.batt_full_current_ma);
+				htc_batt_info.batt_full_current_ma,
+				htc_batt_info.batt_fcc_ma, htc_batt_info.batt_capacity_mah,
+				htc_batt_info.fcc_half_capacity_ma);
 		}
 
 		BATT_LOG("Probe process done.\n");
@@ -2514,7 +2595,10 @@ static struct htc_battery_platform_data htc_battery_pdev_data = {
 	.icharger.get_vbus = pmi8994_get_usbin_voltage_now,
 	.icharger.get_attr_text = pmi8994_charger_get_attr_text,
 	.icharger.is_battery_full_eoc_stop = pmi8994_is_batt_full_eoc_stop,
+	.igauge.get_batt_fcc_ma = fg_get_batt_fcc_ma,
 	.igauge.get_full_ma = fg_get_batt_full_charge_criteria_ma,
+	.igauge.get_batt_capacity_mah = fg_get_batt_capacity_mah,
+	.igauge.get_fcc_half_capacity_ma = fg_get_fcc_half_capacity_ma,
 };
 static void batt_regular_timer_handler(unsigned long data) {
 	htc_batt_schedule_batt_info_update();
@@ -2786,6 +2870,8 @@ static int __init htc_battery_init(void)
 	htc_batt_info.store.consistent_flag = false;
 	htc_batt_info.vbus = 0;
 	htc_batt_info.current_limit_reason = 0;
+	htc_batt_info.batt_fcc_ma = 2000;
+	htc_batt_info.batt_capacity_mah = 3000;
 
 	node = of_find_compatible_node(NULL, NULL, "htc,htc_battery_store");
 	if (node) {
