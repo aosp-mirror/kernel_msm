@@ -59,7 +59,7 @@
 #define N_SPI_MINORS			32	/* ... up to 256 */
 
 #define SPIDEV_BUF_MAX_NODE_N 16
-#define SPIDEV_NON_BLOCK_READ_TIMEOUT 3
+#define SPIDEV_NON_BLOCK_READ_TIMEOUT (2*HZ)
 
 static DECLARE_BITMAP(minors, N_SPI_MINORS);
 
