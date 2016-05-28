@@ -1887,10 +1887,6 @@ static int smb23x_get_prop_batt_health(struct smb23x_chip *chip)
 		health = POWER_SUPPLY_HEALTH_OVERHEAT;
 	else if (chip->batt_cold)
 		health = POWER_SUPPLY_HEALTH_COLD;
-	else if (chip->batt_warm)
-		health = POWER_SUPPLY_HEALTH_WARM;
-	else if (chip->batt_cool)
-		health = POWER_SUPPLY_HEALTH_COOL;
 	else
 		health = POWER_SUPPLY_HEALTH_GOOD;
 
