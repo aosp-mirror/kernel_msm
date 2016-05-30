@@ -44,6 +44,7 @@
 #include "wcd-mbhc-v2.h"
 #include "msm8916-wcd-irq.h"
 #include "msm8x16_wcd_registers.h"
+#include <linux/asusdebug.h>
 
 /* ASUS_BSP Ken_Cheng +++ */
 #include <linux/proc_fs.h>
@@ -1359,6 +1360,7 @@ static void msm8x16_wcd_boost_on(struct snd_soc_codec *codec)
 			return;
 		}
 	}
+	ASUSEvtlog("[Audio] 5V boost for driving speaker = on");
 	snd_soc_update_bits(codec,
 		MSM8X16_WCD_A_DIGITAL_PERPH_RESET_CTL3,
 		0x0F, 0x0F);
@@ -1424,6 +1426,7 @@ static void msm8x16_wcd_boost_on(struct snd_soc_codec *codec)
 
 static void msm8x16_wcd_boost_off(struct snd_soc_codec *codec)
 {
+	ASUSEvtlog("[Audio] 5V boost for driving speaker = off");
 	snd_soc_update_bits(codec,
 		MSM8X16_WCD_A_ANALOG_BOOST_EN_CTL,
 		0xDF, 0x5F);
