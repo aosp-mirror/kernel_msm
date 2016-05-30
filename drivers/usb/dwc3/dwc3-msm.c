@@ -45,6 +45,7 @@
 #include <linux/clk/msm-clk.h>
 #include <linux/msm-bus.h>
 #include <linux/irq.h>
+#include <linux/qpnp/pin.h>
 
 #include "power.h"
 #include "core.h"
@@ -243,6 +244,9 @@ struct dwc3_msm {
 	atomic_t                in_p3;
 	unsigned int		lpm_to_suspend_delay;
 	bool			init;
+
+	int                     redrive_3p0_c1;
+	int                     redrive_3p0_c2;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -2908,6 +2912,22 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		}
 	}
 
+	mdwc->redrive_3p0_c1 = of_get_named_gpio(node,
+					"nxp,3p0_re-drive_c1", 0);
+
+	if (!gpio_is_valid(mdwc->redrive_3p0_c1)
+			|| devm_gpio_request(&pdev->dev, mdwc->redrive_3p0_c1,
+			"nxp,3p0_re-drive_c1"))
+		dev_err(&pdev->dev, "dwc3: fail to config mdwc->redrive_3p0_c1(%d)\n", mdwc->redrive_3p0_c1);
+
+	mdwc->redrive_3p0_c2 = of_get_named_gpio(node,
+					"nxp,3p0_re-drive_c2", 0);
+
+	if (!gpio_is_valid(mdwc->redrive_3p0_c2)
+			|| devm_gpio_request(&pdev->dev, mdwc->redrive_3p0_c2,
+			"nxp,3p0_re-drive_c2"))
+		dev_err(&pdev->dev, "dwc3: fail to config mdwc->redrive_3p0_c2(%d)\n", mdwc->redrive_3p0_c2);
+
 	ext_hub_reset_gpio = of_get_named_gpio(node,
 					"qcom,ext-hub-reset-gpio", 0);
 
@@ -3697,6 +3717,66 @@ ret:
 }
 
 #ifdef CONFIG_PM_SLEEP
+static int redrive_ic_suspend(struct dwc3_msm *mdwc)
+{
+	int ret = 0;
+	struct qpnp_pin_cfg qpc;
+
+	qpc.mode = QPNP_PIN_MODE_DIG_OUT;
+	qpc.output_type = QPNP_PIN_OUT_BUF_CMOS;
+	qpc.invert = QPNP_PIN_INVERT_DISABLE;
+	qpc.pull = QPNP_PIN_GPIO_PULL_DN;
+	qpc.vin_sel = QPNP_PIN_VIN2;
+	qpc.out_strength = QPNP_PIN_OUT_STRENGTH_LOW;
+	qpc.src_sel = QPNP_PIN_SEL_FUNC_CONSTANT;
+	qpc.master_en = QPNP_PIN_MASTER_ENABLE;
+	qpc.aout_ref = 0;
+	qpc.ain_route = 0;
+	qpc.cs_out = 0;
+	qpc.apass_sel = 0;
+	qpc.dtest_sel = 1;
+
+	// pull low c1 to enter deep power-saving mode
+	ret = qpnp_pin_config(mdwc->redrive_3p0_c1, &qpc);
+
+	pr_debug("dwc3 suspend config re-drive ic, result = %d\n", ret);
+
+	return ret;
+}
+
+static int redrive_ic_resume(struct dwc3_msm *mdwc)
+{
+	int ret = 0;
+	struct qpnp_pin_cfg qpc;
+
+	qpc.mode = QPNP_PIN_MODE_DIG_OUT;
+	qpc.output_type = QPNP_PIN_OUT_BUF_CMOS;
+	qpc.invert = QPNP_PIN_INVERT_ENABLE;
+	qpc.pull = QPNP_PIN_GPIO_PULL_NO;
+	qpc.vin_sel = QPNP_PIN_VIN2;
+	qpc.out_strength = QPNP_PIN_OUT_STRENGTH_LOW;
+	qpc.src_sel = QPNP_PIN_SEL_FUNC_CONSTANT;
+	qpc.master_en = QPNP_PIN_MASTER_ENABLE;
+	qpc.aout_ref = 0;
+	qpc.ain_route = 0;
+	qpc.cs_out = 0;
+	qpc.apass_sel = 0;
+	qpc.dtest_sel = 1;
+
+	// pull high to exit deep power-saving mode
+	ret = qpnp_pin_config(mdwc->redrive_3p0_c1, &qpc);
+	if (ret)
+		pr_err("%s: fail to exit deep power-saving mode\n", __func__);
+
+	// config c1 as high-Z
+	qpc.master_en = QPNP_PIN_MASTER_DISABLE;
+	ret = qpnp_pin_config(mdwc->redrive_3p0_c1, &qpc);
+
+	pr_debug("dwc3 resume config re-drive ic, result = %d\n", ret);
+
+	return ret;
+}
+
 static int dwc3_msm_pm_suspend(struct device *dev)
 {
 	int ret = 0;
@@ -3712,6 +3792,10 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 		return -EBUSY;
 	}
 
+	ret = redrive_ic_suspend(mdwc);
+	if (ret)
+		dev_err(dev, "re-drive ic suspend fail\n");
+
 	ret = dwc3_msm_suspend(mdwc);
 	if (!ret)
 		atomic_set(&mdwc->pm_suspended, 1);
@@ -3722,10 +3806,15 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 static int dwc3_msm_pm_resume(struct device *dev)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
+	int ret;
 
 	dev_dbg(dev, "dwc3-msm PM resume\n");
 
 	dbg_event(0xFF, "PM Res", 0);
+
+	ret = redrive_ic_resume(mdwc);
+	if (ret)
+		dev_err(dev, "re-drive ic resume fail\n");
 
 	/* flush to avoid race in read/write of pm_suspended */
 	flush_workqueue(mdwc->dwc3_wq);
