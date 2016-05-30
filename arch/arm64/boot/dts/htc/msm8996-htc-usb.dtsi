@@ -39,10 +39,15 @@
 		qcom,pin-num = <10>;
 		qcom,mode = <1>;
 		qcom,pull = <4>;
-		qcom,vin-sel = <0>;
+		qcom,vin-sel = <2>;
 		qcom,master-en = <1>;
 		status = "okay";
 	};
+};
+
+&usb3 {
+	nxp,3p0_re-drive_c1 = <&pm8994_gpios 1 0>;
+	nxp,3p0_re-drive_c2 = <&pm8994_gpios 10 0>;
 };
 
 &tlmm {
