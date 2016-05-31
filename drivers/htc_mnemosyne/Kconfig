@@ -1,5 +1,6 @@
 config HTC_DEBUG_FOOTPRINT
     bool "HTC Debug footprint support"
+    depends on CONFIG_ARCH_MSM8996
     default y
     help
       Say yes to enable HTC debug footprint for CPU related function.
