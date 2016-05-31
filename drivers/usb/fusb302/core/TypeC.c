@@ -20,6 +20,8 @@
 
 #include <linux/printk.h>
 
+#include "../Platform_Linux/fusb30x_global.h"
+
 #include "TypeC.h"
 #include "fusb30X.h"
 #include "AlternateModes.h"
@@ -2267,6 +2269,8 @@ CCTermType DecodeCCTerminationSink(void) // Port asserts Rd
 #ifdef FSC_HAVE_SNK
 void UpdateSinkCurrent(CCTermType Termination)
 {
+	struct fusb30x_chip* chip = fusb30x_GetChip();
+
     switch (Termination)
     {
         case CCTypeRdUSB:                       // If we detect the default...
@@ -2282,6 +2286,8 @@ void UpdateSinkCurrent(CCTermType Termination)
             SinkCurrent = utccNone;
             break;
     }
+	if (chip != NULL && chip->utc != NULL)
+		chip->utc->sink_current = (u8)SinkCurrent;
 }
 #endif // FSC_HAVE_SNK
 

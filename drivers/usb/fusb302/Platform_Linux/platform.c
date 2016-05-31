@@ -352,3 +352,14 @@ int usb_controller_register(struct device *parent, struct usb_controller *uc)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(usb_controller_register);
+
+int usb_typec_ctrl_register(struct device *parent, struct usb_typec_ctrl *utc)
+{
+	struct fusb30x_chip* chip = fusb30x_GetChip();
+	if (chip == NULL)
+		return -ENODEV;
+
+	chip->utc = utc;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(usb_typec_ctrl_register);

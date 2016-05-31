@@ -26,6 +26,7 @@
 #include <linux/wakelock.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/usb/usb_controller.h>
+#include <linux/usb/usb_typec.h>
 #include "FSCTypes.h"                               // FUSB30x custom types
 
 #ifdef FSC_DEBUG
@@ -80,6 +81,7 @@ struct fusb30x_chip                                 // Contains data required by
     struct wake_lock fusb_wlock;
 
     struct usb_controller *uc;
+	struct usb_typec_ctrl *utc;
 };
 
 extern struct fusb30x_chip* g_chip;
