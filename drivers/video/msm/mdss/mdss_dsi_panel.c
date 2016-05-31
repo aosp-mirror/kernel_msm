@@ -34,7 +34,7 @@
 #endif
 
 /* Lock backlight of ambient mode to 28nits */
-#define AMBIENT_BL_LEVEL_V1	(40)
+#define AMBIENT_BL_LEVEL_V1	(51)
 static int ambient_bl_level = AMBIENT_BL_LEVEL_V1;
 static int backup_bl_level = 0;
 
