@@ -30,7 +30,7 @@
 			qcom,float-voltage-mv = <4360>;
 			qcom,recharge-thresh-mv = <80>;
 			qcom,aicl-disabled;
-			qcom,hot-bat-decidegc = <550>;
+			qcom,hot-bat-decidegc = <500>;
 			qcom,warm-bat-decidegc = <400>;
 			qcom,cool-bat-decidegc = <100>;
 			qcom,cold-bat-decidegc = <0>;
