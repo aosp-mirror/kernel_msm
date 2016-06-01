@@ -23,6 +23,7 @@
 #include <linux/power/stc3117_battery.h>
 #include <linux/slab.h>
 #include <linux/qpnp/qpnp-adc.h> 
+#include <linux/wakelock.h>
 
 #define GG_VERSION "1.00a"
 
@@ -191,7 +192,7 @@ static const int TempTable[NTEMP] = {60, 40, 25, 10, 0, -10, -20};
 static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 static const char *charger_name = "battery";
 static bool g_debug;
-static int g_new_soc;
+static int g_new_soc, g_last_status;
 static int stc3117_count_check = 0;
 static const char * const charge_status[] = {
 	"unknown",
@@ -334,6 +335,7 @@ struct stc311x_chip {
 	struct delayed_work		work;
 	struct power_supply		battery;
 	struct stc311x_platform_data	*pdata;
+	struct wake_lock wlock;
 
 	/* State Of Connect */
 	int online;
@@ -2275,9 +2277,13 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 		if (rc) {
 			pr_err("stc311x can't get smb23x register data \n");	
 			return;
-		} else
+		} else {
+			g_last_status = chip->status;
 			chip->status = ret.intval;
-		
+			if (chip->status == POWER_SUPPLY_STATUS_DISCHARGING)
+				return;
+		}
+
 		ret.intval = 0;
 		rc = charger_psy->get_property(charger_psy,
 					POWER_SUPPLY_PROP_RESISTANCE, &ret);
@@ -2299,7 +2305,8 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 
 /*
 * 1. If charge is fulled and charger exists, keep soc = 100% 
-* 2. When discharging, soc can only decrease
+* 2. The moment when charger is removed, if soc = 100% and drops, keep 100%. Else, update soc
+* 3. When discharging, soc can only decrease
 */
 void CEI_soc_adjustment(struct stc311x_chip *chip)
 {
@@ -2308,9 +2315,20 @@ void CEI_soc_adjustment(struct stc311x_chip *chip)
 		return;
 
 	if (chip->status == POWER_SUPPLY_STATUS_DISCHARGING) {
+		//charger is plugged out
+		if (g_last_status != POWER_SUPPLY_STATUS_DISCHARGING) {
+			if (g_new_soc == STC311x_BATTERY_FULL)
+				return;
+			else {
+				g_new_soc = chip->batt_soc;
+				pr_info("charger plugged out, update SOC = %d \n", g_new_soc);
+				return;
+			}
+		}
+		
 		//when discharging, the new SOC can only decrease
 		if (chip->batt_soc > g_new_soc) {
-			pr_err("Discharging, original soc = %d,  new soc = %d, abort \n", g_new_soc, chip->batt_soc);
+			pr_err("Discharging, new soc = %d > original soc = %d, abort \n", chip->batt_soc, g_new_soc);
 			return;
 		} else
 			g_new_soc = chip->batt_soc;
@@ -2387,11 +2405,18 @@ static void stc311x_work(struct work_struct *work)
 		chip->batt_voltage = GasGaugeData.Voltage;
 		chip->batt_current = GasGaugeData.Current;
 		chip->Temperature = GasGaugeData.Temperature;
+	} else if (res == 0) {
+		/* SOC and Voltage  available */
+		chip->batt_soc = (GasGaugeData.SOC+5)/10;
+		chip->batt_voltage = GasGaugeData.Voltage;
+		chip->batt_current = 0;
+		chip->Temperature = 250;
+		pr_err("GasGauge_Task return (0) \n");
 	} else if (res == -1) {
 		chip->batt_voltage = GasGaugeData.Voltage;
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
 		chip->Temperature = 250;
-		pr_err("stc311x read i2c fail, return default value \n");
+		pr_err("GasGauge_Task return (-1), read i2c fail \n");
 	}
 
 	if (g_debug) {
@@ -2411,6 +2436,12 @@ static void stc311x_work(struct work_struct *work)
 		schedule_delayed_work(&chip->work, STC311x_DELAY);
 	else
 		schedule_delayed_work(&chip->work, STC311x_DELAY_LOW_BATT);
+
+	if (wake_lock_active(&chip->wlock)) {
+		wake_unlock(&chip->wlock);
+		pr_info("stc311x_wake_unlock \n");
+	}
+
 }
 
 
@@ -2549,6 +2580,8 @@ static int stc311x_probe(struct i2c_client *client,
 	}
 	g_new_soc = chip->batt_soc;
 	chip->status = POWER_SUPPLY_STATUS_UNKNOWN;
+	g_last_status = POWER_SUPPLY_STATUS_UNKNOWN;
+	wake_lock_init(&chip->wlock, WAKE_LOCK_SUSPEND, "stc311x");
 	INIT_DEFERRABLE_WORK(&chip->work, stc311x_work);
 
 	schedule_delayed_work(&chip->work, STC311x_DELAY);
@@ -2574,6 +2607,7 @@ static int stc311x_remove(struct i2c_client *client)
 	else
 		power_supply_unregister(&chip->battery);
 	cancel_delayed_work(&chip->work);
+	wake_lock_destroy(&chip->wlock);
 	kfree(chip);
 
 	return 0;
@@ -2586,6 +2620,7 @@ static int stc311x_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct stc311x_chip *chip = i2c_get_clientdata(client);
 
+	pr_info("stc311x_suspend \n");
 	stc3117_count_check = 0;
 	cancel_delayed_work(&chip->work);
 	return 0;
@@ -2596,8 +2631,13 @@ static int stc311x_resume(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct stc311x_chip *chip = i2c_get_clientdata(client);
 
-	pr_err("stc311x_resume \n");
-	schedule_delayed_work(&chip->work, 300);
+	pr_info("stc311x_resume \n");
+
+	if (!wake_lock_active(&chip->wlock)) {
+		wake_lock(&chip->wlock);
+		pr_info("stc311x_wake_lock \n");
+	}
+	schedule_delayed_work(&chip->work, 0);
 	return 0;
 }
 static SIMPLE_DEV_PM_OPS(stc311x_pm_ops, stc311x_suspend, stc311x_resume);
