@@ -184,6 +184,11 @@ static ssize_t synaptics_rmi4_wake_gesture_show(struct device *dev,
 static ssize_t synaptics_rmi4_wake_gesture_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
 
+#ifdef HTC_FEATURE
+static ssize_t synaptics_rmi4_wake_event_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+#endif
+
 #ifdef USE_DATA_SERVER
 static ssize_t synaptics_rmi4_synad_pid_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
@@ -736,6 +741,11 @@ static struct device_attribute attrs[] = {
 	__ATTR(wake_gesture, (S_IRUGO | S_IWUSR | S_IWGRP),
 			synaptics_rmi4_wake_gesture_show,
 			synaptics_rmi4_wake_gesture_store),
+#ifdef HTC_FEATURE
+	__ATTR(wake_event, (S_IRUGO),
+			synaptics_rmi4_wake_event_show,
+			synaptics_rmi4_store_error),
+#endif
 #ifdef USE_DATA_SERVER
 	__ATTR(synad_pid, S_IRUGO | S_IWUSR | S_IWGRP,
 			synaptics_rmi4_show_error,
@@ -924,6 +934,14 @@ static ssize_t synaptics_rmi4_wake_gesture_store(struct device *dev,
 
 	return count;
 }
+
+#ifdef HTC_FEATURE
+static ssize_t synaptics_rmi4_wake_event_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "0\n");
+}
+#endif
 
 #ifdef HTC_FEATURE
 static ssize_t synaptics_reset_store(struct device *dev,
@@ -1182,6 +1200,13 @@ static ssize_t synaptics_rmi4_virtual_key_map_show(struct kobject *kobj,
 	return count;
 }
 
+#ifdef HTC_FEATURE
+static void report_wake_event(struct synaptics_rmi4_data *rmi4_data)
+{
+	sysfs_notify(&rmi4_data->input_dev->dev.kobj, NULL, "wake_event");
+}
+#endif
+
 static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 		struct synaptics_rmi4_fn *fhandler)
 {
@@ -1395,10 +1420,14 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 		gesture_type = rmi4_data->gesture_detection[0];
 
 		if (gesture_type && gesture_type != F12_UDG_DETECT) {
+#ifdef HTC_FEATURE
+			report_wake_event(rmi4_data);
+#else
 			input_report_key(rmi4_data->input_dev, KEY_WAKEUP, 1);
 			input_sync(rmi4_data->input_dev);
 			input_report_key(rmi4_data->input_dev, KEY_WAKEUP, 0);
 			input_sync(rmi4_data->input_dev);
+#endif
 			rmi4_data->suspend = false;
 		}
 
