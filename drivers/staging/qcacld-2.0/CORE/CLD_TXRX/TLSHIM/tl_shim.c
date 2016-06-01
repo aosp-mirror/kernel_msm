@@ -462,6 +462,94 @@ is_ccmp_pn_replay_attack(void *vos_ctx, struct ieee80211_frame *wh,
 }
 #endif
 
+/**
+ * tlshim_is_pkt_drop_candidate() - check if the mgmt frame should be droppped
+ * @wma_handle: wma handle
+ * @peer_addr: peer MAC address
+ * @subtype: Management frame subtype
+ *
+ * This function is used to decide if a particular management frame should be
+ * dropped to prevent DOS attack. Timestamp is used to decide the DOS attack.
+ *
+ * Return: true if the packet should be dropped and false oterwise
+ */
+static bool tlshim_is_pkt_drop_candidate(tp_wma_handle wma_handle,
+					 uint8_t *peer_addr, uint8_t subtype)
+{
+	struct ol_txrx_peer_t *peer;
+	struct ol_txrx_pdev_t *pdev_ctx;
+	uint8_t peer_id;
+	tANI_BOOLEAN should_drop = eANI_BOOLEAN_FALSE;
+
+	/*
+	 * Currently this function handles only Disassoc,
+	 * Deauth and Assoc req frames. Return false for all other frames.
+	 */
+	if (subtype != IEEE80211_FC0_SUBTYPE_DISASSOC &&
+	    subtype != IEEE80211_FC0_SUBTYPE_DEAUTH &&
+	    subtype != IEEE80211_FC0_SUBTYPE_ASSOC_REQ) {
+		should_drop = FALSE;
+		goto end;
+	}
+
+	pdev_ctx = vos_get_context(VOS_MODULE_ID_TXRX, wma_handle->vos_context);
+	if (!pdev_ctx) {
+		TLSHIM_LOGE(FL("Failed to get the context"));
+		should_drop = TRUE;
+		goto end;
+	}
+
+	peer = ol_txrx_find_peer_by_addr(pdev_ctx, peer_addr, &peer_id);
+	if (!peer) {
+		if (SIR_MAC_MGMT_ASSOC_REQ != subtype) {
+			TLSHIM_LOGE(FL("Received mgmt frame: %0x from unknow peer: %pM"),
+				subtype, peer_addr);
+			should_drop = TRUE;
+		}
+		goto end;
+	}
+
+	switch (subtype) {
+	case SIR_MAC_MGMT_ASSOC_REQ:
+		if (peer->last_assoc_rcvd) {
+			if (adf_os_gettimestamp() - peer->last_assoc_rcvd <
+			    TLSHIM_MGMT_FRAME_DETECT_DOS_TIMER) {
+				TLSHIM_LOGD(FL("Dropping Assoc Req received"));
+				should_drop = TRUE;
+			}
+		}
+		peer->last_assoc_rcvd = adf_os_gettimestamp();
+		break;
+	case SIR_MAC_MGMT_DISASSOC:
+		if (peer->last_disassoc_rcvd) {
+			if (adf_os_gettimestamp() -
+			    peer->last_disassoc_rcvd <
+			    TLSHIM_MGMT_FRAME_DETECT_DOS_TIMER) {
+				TLSHIM_LOGD(FL("Dropping DisAssoc received"));
+				should_drop = TRUE;
+			}
+		}
+		peer->last_disassoc_rcvd = adf_os_gettimestamp();
+		break;
+	case SIR_MAC_MGMT_DEAUTH:
+		if (peer->last_deauth_rcvd) {
+			if (adf_os_gettimestamp() -
+			    peer->last_deauth_rcvd <
+			    TLSHIM_MGMT_FRAME_DETECT_DOS_TIMER) {
+				TLSHIM_LOGD(FL("Dropping Deauth received"));
+				should_drop = TRUE;
+			}
+		}
+		peer->last_deauth_rcvd = adf_os_gettimestamp();
+		break;
+	default:
+		break;
+	}
+
+end:
+	return should_drop;
+}
+
 static int tlshim_mgmt_rx_process(void *context, u_int8_t *data,
 				       u_int32_t data_len, bool saved_beacon, u_int32_t vdev_id)
 {
@@ -764,6 +852,11 @@ static int tlshim_mgmt_rx_process(void *context, u_int8_t *data,
 		}
 	}
 #endif /* WLAN_FEATURE_11W */
+	if (tlshim_is_pkt_drop_candidate(wma_handle, wh->i_addr2,
+					 mgt_subtype)) {
+		vos_pkt_return_packet(rx_pkt);
+		return -EINVAL;
+	}
 	return tl_shim->mgmt_rx(vos_ctx, rx_pkt);
 }
 

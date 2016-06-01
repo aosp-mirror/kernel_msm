@@ -34,6 +34,9 @@
 #include <adf_os_atomic.h>
 #include <vos_sched.h>
 
+/* Time(in ms) to detect DOS attack */
+#define TLSHIM_MGMT_FRAME_DETECT_DOS_TIMER 1000
+
 #ifdef FEATURE_WLAN_ESE
 typedef struct deferred_iapp_work {
     pVosContextType pVosGCtx;

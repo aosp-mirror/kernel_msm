@@ -1144,6 +1144,10 @@ ol_rx_peer_init(struct ol_txrx_pdev_t *pdev, struct ol_txrx_peer_t *peer)
     peer->security[txrx_sec_ucast].sec_type =
         peer->security[txrx_sec_mcast].sec_type = htt_sec_type_none;
     peer->keyinstalled = 0;
+    peer->last_assoc_rcvd = 0;
+    peer->last_disassoc_rcvd = 0;
+    peer->last_deauth_rcvd = 0;
+
     adf_os_atomic_init(&peer->fw_pn_check);
 }
 
@@ -1151,6 +1155,9 @@ void
 ol_rx_peer_cleanup(struct ol_txrx_vdev_t *vdev, struct ol_txrx_peer_t *peer)
 {
     peer->keyinstalled = 0;
+    peer->last_assoc_rcvd = 0;
+    peer->last_disassoc_rcvd = 0;
+    peer->last_deauth_rcvd = 0;
     ol_rx_reorder_peer_cleanup(vdev, peer);
     adf_os_mem_free(peer->reorder_history);
     peer->reorder_history = NULL;

@@ -718,6 +718,13 @@ limHandle80211Frames(tpAniSirGlobal pMac, tpSirMsgQ limMsg, tANI_U8 *pDeferMsg)
     fcOffset = (v_U8_t)WDA_GET_RX_MPDU_HEADER_OFFSET(pRxPacketInfo);
     fc = pHdr->fc;
 
+    if (pMac->sap.SapDfsInfo.is_dfs_cac_timer_running) {
+        psessionEntry = peFindSessionByBssid(pMac, pHdr->bssId, &sessionId);
+        if (psessionEntry && (VOS_STA_SAP_MODE == psessionEntry->pePersona)) {
+            limLog(pMac, LOG1, FL("CAC timer running - drop the frame"));
+            goto end;
+        }
+    }
 #ifdef WLAN_DUMP_MGMTFRAMES
     limLog( pMac, LOGE, FL("ProtVersion %d, Type %d, Subtype %d rateIndex=%d"),
             fc.protVer, fc.type, fc.subType,

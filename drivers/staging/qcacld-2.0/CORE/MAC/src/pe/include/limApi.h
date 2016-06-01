@@ -181,10 +181,6 @@ void limPsOffloadHandleMissedBeaconInd(tpAniSirGlobal pMac, tpSirMsgQ pMsg);
 void
 limSendHeartBeatTimeoutInd(tpAniSirGlobal pMac, tpPESession psessionEntry);
 tMgmtFrmDropReason limIsPktCandidateForDrop(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tANI_U32 subType);
-bool lim_is_deauth_diassoc_for_drop(tpAniSirGlobal mac, uint8_t *rx_pkt_info);
-#ifdef WLAN_FEATURE_11W
-bool lim_is_assoc_req_for_drop(tpAniSirGlobal mac, uint8_t *rx_pkt_info);
-#endif
 void limMicFailureInd(tpAniSirGlobal pMac, tpSirMsgQ pMsg);
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 void limRoamOffloadSynchInd(tpAniSirGlobal pMac, tpSirMsgQ pMsg);

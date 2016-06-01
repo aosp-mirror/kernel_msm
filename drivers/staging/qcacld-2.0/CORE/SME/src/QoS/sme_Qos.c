@@ -2315,10 +2315,18 @@ sme_QosStatusType sme_QosInternalReleaseReq(tpAniSirGlobal pMac,
    v_BOOL_t uplinkFlowsPresent = VOS_FALSE;
    v_BOOL_t downlinkFlowsPresent = VOS_FALSE;
    tListElem *pResult= NULL;
+
    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO_HIGH,
              "%s: %d: invoked for flow %d",
              __func__, __LINE__,
              QosFlowID);
+
+   if (!CSR_IS_SESSION_VALID(pMac, sessionId)) {
+      VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+                "%s: %d: Session Id:%d is invalid",
+                __func__, __LINE__, sessionId);
+      return status;
+   }
 
    vos_mem_zero(&search_key, sizeof(sme_QosSearchInfo));
    //set the key type & the key to be searched in the Flow List
