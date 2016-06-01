@@ -15,5 +15,31 @@
 		synaptics@20 {
 			status = "disable";
 		};
+
+		atmel_u144@4a {
+			compatible = "atmel,u144";
+			status = "okay";
+			reg = <0x4a>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <13 0x2008>;
+			vdd_ana-supply = <0>;
+			vcc_i2c-supply = <&pm8916_l16>;
+			vcc_dig-supply = <&pm8916_l10>;
+			atmel,reset-gpio = <&msm_gpio 12 0x00>;
+			atmel,irq-gpio = <&msm_gpio 13 0x2008>;
+			atmel,numtouch = <2>; /*multi-touch count*/
+			atmel,irqflags = <0x00000002>;
+			atmel,fw_name = "atmel_touch.fw";
+			atmel,accuracy_filter_enable = <0>;
+			atmel,knock_on_type = <0>;
+			atmel,global_access_pixel = <0>;
+			atmel,use_mfts = <1>;
+			atmel,lcd_x = <479>;
+			atmel,lcd_y = <479>;
+
+			pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
+			pinctrl-0 = <&ts_int_active &ts_reset_active>;
+			pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+		};
 	};
 };
