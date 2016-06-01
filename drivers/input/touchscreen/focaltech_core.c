@@ -1082,8 +1082,6 @@ static int fts_ts_start(struct device *dev)
 		gpio_set_value_cansleep(data->pdata->reset_gpio, 1);
 	}
 
-	msleep(data->pdata->soft_rst_dly);
-
 #ifndef FTS_GESTRUE_EN
 	enable_irq(data->client->irq);
 #endif
