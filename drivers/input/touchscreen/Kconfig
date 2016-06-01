@@ -1125,5 +1125,17 @@ config TOUCHSCREEN_MAXIM_STI
 	  To compile this driver as a module, choose M here: the
 	  module will be called maxim_sti.
 
+config TOUCHSCREEN_ATMEL_U144
+	tristate "Atmel mXT U144 I2C Touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have Atmel mXT series I2C touchscreen,
+	  such as mXT144UUU, connected to your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called atmel_u144.
+
 source "drivers/input/touchscreen/gt9xx/Kconfig"
 endif
