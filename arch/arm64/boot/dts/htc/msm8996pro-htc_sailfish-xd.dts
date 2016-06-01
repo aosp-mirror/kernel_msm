@@ -1,0 +1,26 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+
+/dts-v1/;
+
+#include "../qcom/msm8996pro.dtsi"
+#include "../qcom/msm-pmi8996.dtsi"
+#include "../qcom/msm8996-mtp.dtsi"
+#include "msm8996-nc-pins-htc_sailfish-xb.dtsi"
+#include "msm8996-htc_sailfish.dtsi"
+
+/ {
+	model = "HTC Corporation. MSM8996pro + PMI8996 Sailfish XD";
+	qcom,msm-id = <420 0x10000>, <421 0x10000>;
+	qcom,board-id = <3 0>;
+};
