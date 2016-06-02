@@ -1628,6 +1628,27 @@ static int smb1351_parallel_set_property(struct power_supply *psy,
 			chip->vfloat_mv = val->intval;
 		}
 		break;
+	case POWER_SUPPLY_PROP_USB_OTG:
+		/*Set OTG current limit to 1A*/
+		rc = smb1351_masked_write(chip, OTG_TLIM_CTRL_REG, OTG_OC_LIMIT_MASK, OTG_OC_LIMIT_MASK);
+		if (rc)
+			pr_err("Couldn't set OTG OCP rc=%d\n", rc);
+
+		if (val->intval) {
+			rc = smb1351_masked_write(chip, CMD_CHG_REG, CMD_OTG_EN_BIT, CMD_OTG_EN_BIT);
+			if (rc)
+				pr_err("Couldn't enable  OTG mode rc=%d\n", rc);
+
+			pr_info("SMB1351 OTG Boost is enabled\n");
+		}
+		else {
+			rc = smb1351_masked_write(chip, CMD_CHG_REG, CMD_OTG_EN_BIT, 0);
+			if (rc)
+				pr_err("Couldn't disable OTG mode rc=%d\n", rc);
+
+			pr_info("SMB1351 OTG Boost is disabled\n");
+		}
+		break;
 	default:
 		return -EINVAL;
 	}

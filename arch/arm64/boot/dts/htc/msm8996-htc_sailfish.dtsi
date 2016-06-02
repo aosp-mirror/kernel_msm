@@ -36,6 +36,7 @@
         qcom,charging-timeout-mins = <768>;
         qcom,precharging-timeout-mins = <24>;
         qcom,resume-delta-mv = <100>;
+        /delete-property/ otg-parent-supply;
 };
 
 &pmi8994_fg {
@@ -64,4 +65,8 @@
                 #include "batterydata-s1-id3.dtsi"
 
         };
+};
+
+&usb3 {
+        vbus_dwc3-supply = <&smbcharger_external_otg>;
 };
