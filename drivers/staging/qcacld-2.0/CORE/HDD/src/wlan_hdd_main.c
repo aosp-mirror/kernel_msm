@@ -15475,7 +15475,8 @@ static void hdd_driver_exit(void)
       pHddCtx->driver_being_stopped = false;
 
 #ifdef QCA_PKT_PROTO_TRACE
-      vos_pkt_proto_trace_close();
+      if (VOS_FTM_MODE != hdd_get_conparam())
+          vos_pkt_proto_trace_close();
 #endif /* QCA_PKT_PROTO_TRACE */
       while(pHddCtx->isLogpInProgress ||
             vos_is_logp_in_progress(VOS_MODULE_ID_VOSS, NULL)) {
