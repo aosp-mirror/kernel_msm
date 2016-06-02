@@ -18,6 +18,7 @@
 &mdss_mdp {
 	dsi_auo_rm69080_hvga_video: qcom,mdss_dsi_auo_rm69080_hvga_video {
 		qcom,mdss-dsi-panel-name = "auo rm69080 hvga video mode dsi panel";
+		qcom,mdss-dsi-panel-signature = <1>;
 		qcom,mdss-dsi-panel-controller = <&mdss_dsi0>;
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-panel-destination = "display_1";

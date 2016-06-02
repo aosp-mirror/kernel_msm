@@ -826,6 +826,26 @@ static ssize_t mdss_fb_get_display_mode(struct device *dev,
 	return ret;
 }
 
+static ssize_t mdss_fb_get_panel_signature(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct mdss_panel_data *pdata;
+	struct mdss_panel_info *pinfo;
+	int ret;
+
+	pdata = dev_get_platdata(&mfd->pdev->dev);
+	if (!pdata) {
+		pr_err("no panel connected!\n");
+		return -EINVAL;
+	}
+	pinfo = &pdata->panel_info;
+
+	ret = scnprintf(buf, PAGE_SIZE, "%d\n",pinfo->signature);
+
+	return ret;
+}
 
 
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
@@ -846,7 +866,7 @@ static DEVICE_ATTR(msm_fb_dfps_mode, S_IRUGO | S_IWUSR,
 	mdss_fb_get_dfps_mode, mdss_fb_change_dfps_mode);
 static DEVICE_ATTR(idle_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL, mdss_fb_set_idle_mode);
 static DEVICE_ATTR(display_mode, S_IRUGO | S_IWUSR | S_IWGRP, mdss_fb_get_display_mode, NULL);
-
+static DEVICE_ATTR(panel_signature, S_IRUGO | S_IWUSR | S_IWGRP, mdss_fb_get_panel_signature, NULL);
 
 
 static struct attribute *mdss_fb_attrs[] = {
@@ -862,6 +882,7 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_dfps_mode.attr,
 	&dev_attr_idle_mode.attr,
 	&dev_attr_display_mode.attr,
+	&dev_attr_panel_signature.attr,
 	NULL,
 };
 

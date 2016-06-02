@@ -640,6 +640,7 @@ struct mdss_panel_info {
 	void *dba_data;
 	void *cec_data;
 
+	u32 signature;
 	char panel_name[MDSS_MAX_PANEL_LEN];
 	struct mdss_mdp_pp_tear_check te;
 
