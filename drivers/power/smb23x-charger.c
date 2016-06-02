@@ -1832,6 +1832,11 @@ static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
 	int rc;
 	u8 reg = 0;
 
+	if (chip->charger_plugin == 0) {
+		pr_debug("charger_plugin = 0\n");
+		return POWER_SUPPLY_STATUS_DISCHARGING;
+	}
+
 	rc = smb23x_read(chip, IRQ_C_STATUS_REG, &reg);
 	if (rc) {
 		pr_err("IRQ_C_STATUS_REG read fail. rc=%d\n", rc);
@@ -1855,8 +1860,8 @@ static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
 
 	if (reg & CHARGE_TYPE_MASK)
 		return POWER_SUPPLY_STATUS_CHARGING;
-
-	return POWER_SUPPLY_STATUS_DISCHARGING;
+	else
+		return POWER_SUPPLY_STATUS_NOT_CHARGING;
 }
 
 #ifdef QTI_SMB231
@@ -1884,6 +1889,11 @@ static int smb23x_get_prop_charging_enabled(struct smb23x_chip *chip)
 	int rc;
 	u8 reg = 0;
 
+	if (chip->charger_plugin == 0) {
+		pr_debug("charger_plugin = 0\n");
+		return 0;
+	}
+
 	rc = smb23x_read(chip, CHG_STATUS_B_REG, &reg);
 	if (rc) {
 		pr_err("CHG_STATUS_B_REG read fail. rc=%d\n", rc);
@@ -1902,6 +1912,11 @@ static int smb23x_get_prop_charge_type(struct smb23x_chip *chip)
 {
 	int rc;
 	u8 reg = 0;
+
+	if (chip->charger_plugin == 0) {
+		pr_debug("charger_plugin = 0\n");
+		return POWER_SUPPLY_CHARGE_TYPE_NONE;
+	}
 
 	rc = smb23x_read(chip, CHG_STATUS_B_REG, &reg);
 	if (rc) {
@@ -2081,6 +2096,11 @@ void smb23x_delaywork_init_register(struct work_struct *work)
 	int rc;
 
 	pr_err("Enter !\n");
+	if (g_chip->charger_plugin == 0xFF) {
+		rc = smb23x_enable_volatile_writes(g_chip);
+		g_chip->charger_plugin = (rc < 0) ? 0 : 1;
+	}
+
 	rc = smb23x_hw_init(g_chip);
 	if (rc < 0) {
 		pr_err("Initialize register failed!\n");
@@ -2717,7 +2737,10 @@ static int smb23x_probe(struct i2c_client *client,
 	init_timer(&chip->timer_init_register);
 	chip->timer_init_register.function = smb23x_timer_init_register;
 	chip->timer_init_register.expires = jiffies + 10*HZ;
-	add_timer(&chip->timer_init_register); 
+	add_timer(&chip->timer_init_register);
+
+	//Init variable
+  	chip->charger_plugin = 0xFF;
 
 	//Set timer to print register value
 	INIT_DELAYED_WORK(&chip->delaywork_print_register, smb23x_delaywork_print_register);
