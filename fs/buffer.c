@@ -3049,11 +3049,11 @@ int _submit_bh_crypt(struct inode *inode, int rw, struct buffer_head *bh,
 	bio->bi_end_io = end_bio_bh_io_sync;
 	bio->bi_private = bh;
 	bio->bi_flags |= bio_flags;
-
 	/* TODO(mhalcrow): Don't stupid. */
+#ifdef CONFIG_EXT4_FS_ENCRYPTION
 	if (inode)
 		ext4_set_bio_crypt_context(inode, bio);
-
+#endif
 	/* Take care of bh's that straddle the end of the device */
 	guard_bio_eod(rw, bio);
 
