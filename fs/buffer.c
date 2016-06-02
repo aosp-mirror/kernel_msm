@@ -3010,7 +3010,11 @@ void guard_bio_eod(int rw, struct bio *bio)
 	}
 }
 
-int _submit_bh(int rw, struct buffer_head *bh, unsigned long bio_flags)
+/* TODO(mhalcrow): Big fat layering violation for proof-of-concept fix */
+void ext4_set_bio_crypt_context(struct inode *inode, struct bio *bio);
+
+int _submit_bh_crypt(struct inode *inode, int rw, struct buffer_head *bh,
+		     unsigned long bio_flags)
 {
 	struct bio *bio;
 	int ret = 0;
@@ -3046,6 +3050,10 @@ int _submit_bh(int rw, struct buffer_head *bh, unsigned long bio_flags)
 	bio->bi_private = bh;
 	bio->bi_flags |= bio_flags;
 
+	/* TODO(mhalcrow): Don't stupid. */
+	if (inode)
+		ext4_set_bio_crypt_context(inode, bio);
+
 	/* Take care of bh's that straddle the end of the device */
 	guard_bio_eod(rw, bio);
 
@@ -3063,11 +3071,23 @@ int _submit_bh(int rw, struct buffer_head *bh, unsigned long bio_flags)
 	bio_put(bio);
 	return ret;
 }
+
+
+int _submit_bh(int rw, struct buffer_head *bh, unsigned long bio_flags)
+{
+	return _submit_bh_crypt(NULL, rw, bh, bio_flags);
+}
 EXPORT_SYMBOL_GPL(_submit_bh);
+
+int submit_bh_crypt(struct inode *inode, int rw, struct buffer_head *bh)
+{
+	return _submit_bh_crypt(inode, rw, bh, 0);
+}
+EXPORT_SYMBOL(submit_bh_crypt);
 
 int submit_bh(int rw, struct buffer_head *bh)
 {
-	return _submit_bh(rw, bh, 0);
+	return _submit_bh_crypt(NULL, rw, bh, 0);
 }
 EXPORT_SYMBOL(submit_bh);
 
@@ -3096,7 +3116,8 @@ EXPORT_SYMBOL(submit_bh);
  * All of the buffers must be for the same device, and must also be a
  * multiple of the current approved size for the device.
  */
-void ll_rw_block(int rw, int nr, struct buffer_head *bhs[])
+void ll_rw_block_crypt(struct inode *inode, int rw, int nr,
+		       struct buffer_head *bhs[])
 {
 	int i;
 
@@ -3116,12 +3137,18 @@ void ll_rw_block(int rw, int nr, struct buffer_head *bhs[])
 			if (!buffer_uptodate(bh)) {
 				bh->b_end_io = end_buffer_read_sync;
 				get_bh(bh);
-				submit_bh(rw, bh);
+				submit_bh_crypt(inode, rw, bh);
 				continue;
 			}
 		}
 		unlock_buffer(bh);
 	}
+}
+EXPORT_SYMBOL(ll_rw_block_crypt);
+
+void ll_rw_block(int rw, int nr, struct buffer_head *bhs[])
+{
+	ll_rw_block_crypt(NULL, rw, nr, bhs);
 }
 EXPORT_SYMBOL(ll_rw_block);
 

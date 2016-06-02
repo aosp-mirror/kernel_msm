@@ -315,3 +315,4 @@ void ext4_set_bio_crypt_context(struct inode *inode, struct bio *bio)
 	} else
 		bio->bi_crypt_ctx.bc_flags &= ~BC_ENCRYPT_FL;
 }
+EXPORT_SYMBOL(ext4_set_bio_crypt_context); /* TODO(mhalcrow): Just for proof-of-concept */
