@@ -2550,6 +2550,7 @@ int mdss_dsi_panel_init(struct device_node *node,
 	int ndx)
 {
 	int rc = 0;
+	u32 tmp = 0;
 	static const char *panel_name;
 	struct mdss_panel_info *pinfo;
 
@@ -2570,6 +2571,13 @@ int mdss_dsi_panel_init(struct device_node *node,
 		pr_info("%s: Panel Name = %s\n", __func__, panel_name);
 		strlcpy(&pinfo->panel_name[0], panel_name, MDSS_MAX_PANEL_LEN);
 	}
+	/*read panel signature*/
+	rc = of_property_read_u32(node, "qcom,mdss-dsi-panel-signature", &tmp);
+	if (rc) {
+		pr_info("%s:%d, panel signature not specified\n", __func__, __LINE__);
+	}
+	pinfo->signature = (!rc ? tmp : 0);
+
 	rc = mdss_panel_parse_dt(node, ctrl_pdata);
 	if (rc) {
 		pr_err("%s:%d panel dt parse failed\n", __func__, __LINE__);
