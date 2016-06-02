@@ -55,7 +55,9 @@ union idtp9220_interactive_data{
 enum idtp9220_request_type_need_rx {
     SET_LDO_ENABLE,
     SET_VOUT_VOLTAGE,
+    GET_VOUT_VOLTAGE,
     SET_COUT_CURRENT,
+    GET_COUT_CURRENT,
     SET_OPER_FREQ,
     GET_OPER_FREQ,
     GET_CHIP_INFO,

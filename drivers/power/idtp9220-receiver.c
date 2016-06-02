@@ -187,6 +187,32 @@ static int idtp9220_set_vout_voltage(struct idtp9220_receiver *chip, u16 voltage
     return rc;
 }
 
+static int idtp9220_get_vout_voltage(struct idtp9220_receiver *chip, union idtp9220_interactive_data *vout)
+{
+    int rc;
+
+    rc = idtp9220_read(chip, ADC_VOUT_L_REG, &vout->strval[0]);
+    if(rc < 0)
+    {
+        return rc;
+    }
+
+    rc = idtp9220_read(chip, ADC_VOUT_H_REG, &vout->strval[1]);
+    if(rc < 0)
+    {
+        return rc;
+    }
+
+    vout->strval[1] = vout->strval[1] & 0xf;
+
+    vout->shortval = vout->shortval * 6 * 21 * 1000 / 40950 + ADJUST_METE_MV; //vout = val/4095*6*2.1
+
+    pr_info("vout_l:%02x vout_h:%02x\n", vout->strval[0], vout->strval[1]);
+
+    return 0;
+}
+
+
 static int idtp9220_clear_tx_data_receiv_intr(struct idtp9220_receiver *chip)
 {
     int rc, i;
@@ -458,6 +484,26 @@ static int idtp9220_set_cout_current(struct idtp9220_receiver *chip, u16 current
 
     return rc;
 }
+
+static int idtp9220_get_cout_current(struct idtp9220_receiver *chip, union idtp9220_interactive_data *cout)
+{
+    int rc;
+
+    rc = idtp9220_read(chip, RX_LOUT_L_REG, &cout->strval[0]);
+    if(rc < 0)
+    {
+        return rc;
+    }
+
+    rc = idtp9220_read(chip, RX_LOUT_H_REG, &cout->strval[1]);
+    if(rc < 0)
+    {
+        return rc;
+    }
+
+    return 0;
+}
+
 
 static bool idtp9220_detect_tx_data_receive(struct idtp9220_receiver *chip)
 {
@@ -918,8 +964,14 @@ static int idtp9220_do_device_action(struct idtp9220_receiver *chip,
         case SET_VOUT_VOLTAGE:
             rc = idtp9220_set_vout_voltage(chip, val->shortval);
             break;
+        case GET_VOUT_VOLTAGE:
+            rc = idtp9220_get_vout_voltage(chip, val);
+            break;
         case SET_COUT_CURRENT:
             rc = idtp9220_set_cout_current(chip, val->shortval);
+            break;
+        case GET_COUT_CURRENT:
+            rc = idtp9220_get_cout_current(chip, val);
             break;
         case SET_OPER_FREQ:
             rc = idtp9220_set_freq(chip, val);
@@ -1176,23 +1228,11 @@ static ssize_t idtp9220_vout_show(struct device *dev,
 
     union idtp9220_interactive_data vout;
 
-    rc = idtp9220_read(di, ADC_VOUT_L_REG, &vout.strval[0]);
-    if(rc < 0)
+    rc = idtp9220_do_device_action(di, GET_VOUT_VOLTAGE, &vout);
+    if(rc)
     {
-        return sprintf(buf, "Can not access idtp9220\n");
+        return sprintf(buf, "can not get vout\n");
     }
-
-    rc = idtp9220_read(di, ADC_VOUT_H_REG, &vout.strval[1]);
-    if(rc < 0)
-    {
-        return rc;
-    }
-
-    vout.strval[1] = vout.strval[1] & 0xf;
-
-    vout.shortval = vout.shortval * 6 * 21 * 1000 / 40950 + ADJUST_METE_MV; //vout = val/4095*6*2.1
-
-    pr_info("vout_l:%02x vout_h:%02x\n", vout.strval[0], vout.strval[1]);
 
     return sprintf(buf, "Vout ADC Value: %dMV\n", vout.shortval);
 }
@@ -1227,16 +1267,10 @@ static ssize_t idtp9220_cout_show(struct device *dev,
     struct idtp9220_receiver *di = i2c_get_clientdata(client);
     union idtp9220_interactive_data cout;
 
-    rc = idtp9220_read(di, RX_LOUT_L_REG, &cout.strval[0]);
-    if(rc < 0)
+    rc = idtp9220_do_device_action(di, GET_COUT_CURRENT, &cout);
+    if(rc)
     {
-        return sprintf(buf, "Can not access idtp9220\n");
-    }
-
-    rc = idtp9220_read(di, RX_LOUT_H_REG, &cout.strval[1]);
-    if(rc < 0)
-    {
-        return sprintf(buf, "Can not access idtp9220\n");
+        return sprintf(buf, "can not get cout\n");
     }
 
     pr_info("cout_l:%02x cout_h:%02x\n", cout.strval[0], cout.strval[1]);
