@@ -18,6 +18,7 @@
 &mdss_mdp {
 	dsi_edo_rm67169_hvga_cmd: qcom,mdss_dsi_edo_rm67169_hvga_cmd {
 		qcom,mdss-dsi-panel-name = "edo rm67169 hvga cmd mode dsi panel";
+		qcom,mdss-dsi-panel-signature = <2>;
 		qcom,mdss-dsi-panel-controller = <&mdss_dsi0>;
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-panel-destination = "display_1";
