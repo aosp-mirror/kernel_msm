@@ -638,7 +638,7 @@ static int c_show(struct seq_file *m, void *v)
 				seq_printf(m, "%lld ", htc_target_quot[i][j]);
 		}
 	}
-	seq_printf(m, "\n: ");
+	seq_printf(m, "\n");
 
 	if (!arch_read_hardware_id)
 		seq_printf(m, "Hardware\t: %s\n", machine_name);
