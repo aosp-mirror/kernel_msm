@@ -44,6 +44,7 @@
 #define FALSE       0x00
 
 #define CMD_GET_HDR_SZ 16
+#define FRAME_NUM   (8)
 
 enum {
 	ASM_TOPOLOGY_CAL = 0,
@@ -1051,6 +1052,8 @@ int q6asm_audio_client_buf_alloc(unsigned int dir,
 			pr_debug("%s: buffer already allocated\n", __func__);
 			return 0;
 		}
+		if (bufcnt != FRAME_NUM)
+			goto fail;
 		mutex_lock(&ac->cmd_lock);
 		buf = kzalloc(((sizeof(struct audio_buffer))*bufcnt),
 				GFP_KERNEL);
