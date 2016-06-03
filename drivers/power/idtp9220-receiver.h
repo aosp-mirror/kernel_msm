@@ -62,6 +62,7 @@ enum idtp9220_request_type_need_rx {
     GET_OPER_FREQ,
     GET_CHIP_INFO,
     IS_LDO_ENABLED,
+    IS_LDO_HARD_ENABLED,
     IS_RX_FW_BURNED,
     DO_BURN_RX_FW,
     DO_VERIFY_RX_FW,
@@ -251,6 +252,10 @@ enum{
 #define TX_DATA_02_REG                          0x005B
 #define TX_DATA_03_REG                          0x005C
 #define TX_DATA_04_REG                          0x005D
+
+/* ldo out hard enable Register */
+#define LDO_OUT_HARD_ENABLE_REG                 0x301C
+#define LDO_OUT_HARD_ENABLE                     1
 
 /* rx fw burn magic number */
 #define RX_BURN_MAGIC_NUMBER_ADDR               0x3800
