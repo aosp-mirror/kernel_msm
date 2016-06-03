@@ -1057,7 +1057,7 @@ static int qpnp_lbc_ibatsafe_set(struct qpnp_lbc_chip *chip, int safe_current)
 
 	reg_val = (safe_current - QPNP_LBC_IBATSAFE_MIN_MA)
 			/ QPNP_LBC_I_STEP_MA;
-	pr_debug("Ibate_safe=%d setting %02x\n", safe_current, reg_val);
+	printk("Ibate_safe=%d setting %02x\n", safe_current, reg_val);
 
 	rc = qpnp_lbc_write(chip, chip->chgr_base + CHG_IBAT_SAFE_REG,
 				&reg_val, 1);
@@ -1092,6 +1092,7 @@ static int qpnp_lbc_ibatmax_set(struct qpnp_lbc_chip *chip, int chg_current)
 	else
 		chip->prev_max_ma = chg_current;
 
+	printk("ibatmax:%d\n", chg_current);
 	return rc;
 }
 
@@ -1410,8 +1411,7 @@ static int get_prop_batt_temp(struct qpnp_lbc_chip *chip)
 		pr_debug("Unable to read batt temperature rc=%d\n", rc);
 		return DEFAULT_TEMP;
 	}
-	pr_debug("get_bat_temp %d, %lld\n", results.adc_code,
-							results.physical);
+	printk("get_bat_temp %d, %lld\n", results.adc_code, results.physical);
 
 	return (int)results.physical;
 }
@@ -3130,6 +3130,12 @@ static int qpnp_lbc_parallel_charger_init(struct qpnp_lbc_chip *chip)
 		return rc;
 	}
 
+	rc = qpnp_lbc_ibatsafe_set(chip, chip->cfg_safe_current);
+	if (rc) {
+		pr_err("Failed to set ibat_safe rc=%d\n", rc);
+		return rc;
+	}
+
 	/* disable charging */
 	rc = qpnp_lbc_charger_enable(chip, PARALLEL, 0);
 	if (rc) {
@@ -3504,6 +3510,14 @@ static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 	struct qpnp_lbc_chip *chip;
 	u8 reg_val;
 
+	rc = gpio_request_one(GPIO_num17, GPIOF_OUT_INIT_LOW, "asus_muxsel0_default");
+	if (rc)
+		pr_err("Failed to request init gpio 17 Low: %d\n", rc);
+	else
+		pr_err("Success to request init gpio 17 Low \n");
+
+	gpio_set_value(GPIO_num17,0);
+
 	chip = devm_kzalloc(&spmi->dev, sizeof(struct qpnp_lbc_chip),
 							GFP_KERNEL);
 	if (!chip) {
@@ -3529,6 +3543,12 @@ static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 	rc = qpnp_lbc_parse_resources(chip);
 	if (rc) {
 		pr_err("Unable to parse LBC(parallel) resources rc=%d\n", rc);
+		return rc;
+	}
+	/* Get all device-tree properties */
+	rc = qpnp_charger_read_dt_props(chip);
+	if (rc) {
+		pr_err("Failed to read DT properties rc=%d\n", rc);
 		return rc;
 	}
 

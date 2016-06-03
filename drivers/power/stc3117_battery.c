@@ -339,6 +339,9 @@ static int stc311x_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = chip->batt_soc;
 		break;
+	case POWER_SUPPLY_PROP_TEMP:
+		val->intval = BattData.Temperature;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -892,6 +895,8 @@ static int STC311x_ReadBatteryData(STC311x_BattDataTypeDef *BattData)
 	value=data[10];
 	if (value>=0x80) value -= 0x100;	/* convert to signed value */
 	BattData->Temperature = value*10;	/* result in 0.1 degrC */
+
+	pr_err("BattData->Temperature = %d\n", BattData->Temperature);
 
 	/* Avg current */
 	value=data[12]; value = (value<<8) + data[11];
@@ -1962,6 +1967,7 @@ static enum power_supply_property stc311x_battery_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_TEMP,
 };
 
 #ifdef CONFIG_OF
