@@ -890,6 +890,7 @@ void fusb_StartTimers(void)
 {
     ktime_t ktime;
     struct fusb30x_chip* chip;
+    int ret;
 
     chip = fusb30x_GetChip();
     if (!chip)
@@ -905,7 +906,20 @@ void fusb_StartTimers(void)
 #endif  // FSC_DEBUG
 
     ktime = ktime_set(0, g_fusb_timer_tick_period_ns);                                      // Convert our timer period (in ns) to ktime
+    pr_debug("FUSB  %s - Timer starting!\n", __func__);
+    mutex_lock(&chip->lock);
+    if (hrtimer_active(&chip->timer_state_machine) != 0)
+    {
+        ret = hrtimer_cancel(&chip->timer_state_machine);
+        pr_info("%s - Active state machine hrtimer canceled: %d\n", __func__, ret);
+    }
+    if (hrtimer_is_queued(&chip->timer_state_machine) != 0)
+    {
+        ret = hrtimer_cancel(&chip->timer_state_machine);
+        pr_info("%s - Queued state machine hrtimer canceled: %d\n", __func__, ret);
+    }
     hrtimer_start(&chip->timer_state_machine, ktime, HRTIMER_MODE_REL);                     // Start the timer
+    mutex_unlock(&chip->lock);
 }
 
 void fusb_StopTimers(void)
@@ -3438,7 +3452,7 @@ static irqreturn_t _fusb_isr_intn(FSC_S32 irq, void *dev_id)
     }
 #endif  // FSC_DEBUG
 
-    wake_lock_timeout(&chip->fusb_wlock, 2 * HZ);
+    wake_lock(&chip->fusb_wlock);
     core_state_machine();                                               // Run the state machine
     wake_unlock(&chip->fusb_wlock);
 
