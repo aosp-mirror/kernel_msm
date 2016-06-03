@@ -550,8 +550,31 @@ static int idtp9220_is_ldoout_enable(struct idtp9220_receiver *chip, bool *ldoou
     }
 
     return 0;
-
 }
+
+static int idtp9220_is_ldoout_hard_enable(struct idtp9220_receiver *chip, bool *ldoout_enable)
+{
+    int rc;
+    u8 reg;
+
+    rc = idtp9220_read(chip, LDO_OUT_HARD_ENABLE_REG, &reg);
+    if(rc < 0)
+    {
+        return rc;
+    }
+
+    if(reg & LDO_OUT_HARD_ENABLE)
+    {
+        *ldoout_enable = true;
+    }
+    else
+    {
+        *ldoout_enable = false;
+    }
+
+    return 0;
+}
+
 
 static int idtp9220_verify_fw_prepare(struct idtp9220_receiver *chip)
 {
@@ -962,6 +985,12 @@ static int idtp9220_do_device_action(struct idtp9220_receiver *chip,
 {
     int rc;
 
+    if(!chip || !val)
+    {
+        pr_err("parameter is NULL\n");
+        return -EINVAL;
+    }
+
     mutex_lock(&chip->service_request_lock);
 
     switch (request_type)
@@ -991,6 +1020,9 @@ static int idtp9220_do_device_action(struct idtp9220_receiver *chip,
             break;
         case IS_LDO_ENABLED:
             rc = idtp9220_is_ldoout_enable(chip, &val->result);
+            break;
+        case IS_LDO_HARD_ENABLED:
+            rc = idtp9220_is_ldoout_hard_enable(chip, &val->result);
             break;
         case IS_RX_FW_BURNED:
             rc = idtp9220_is_fw_burned(chip, &val->result);
@@ -1838,6 +1870,29 @@ static int idtp9220_initialize_gpio_direction_value(struct idtp9220_receiver *ch
     }
 
     gpio_direction_input(chip->wireless_int_gpio);
+
+    return 0;
+}
+
+int idtp9220_extern_ldoout_hard_enable(bool *ldoout_enable)
+{
+    int rc;
+    union idtp9220_interactive_data result = {0};
+
+    rc = idtp9220_do_device_action(global_idtp9220_receiver, IS_LDO_HARD_ENABLED, &result);
+    if(rc)
+    {
+        return rc;
+    }
+
+    if(result.result)
+    {
+        *ldoout_enable = true;
+    }
+    else
+    {
+        *ldoout_enable = false;
+    }
 
     return 0;
 }
