@@ -131,6 +131,8 @@ struct idtp9220_receiver {
     bool                                        vbat_high;
 };
 
+struct idtp9220_receiver  *global_idtp9220_receiver = NULL;
+
 /* Mask/Bit helpers */
 #define _IDTP9220_MASK(BITS, POS) \
     ((unsigned char)(((1 << (BITS)) - 1) << (POS)))
