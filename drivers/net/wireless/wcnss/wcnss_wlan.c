@@ -245,6 +245,7 @@ static struct notifier_block wnb = {
 	.notifier_call = wcnss_notif_cb,
 };
 
+#define NVBIN_FILE_MAX_LEN 256
 #define NVBIN_FILE "wlan/prima/WCNSS_qcom_wlan_nv.bin"
 
 /* On SMD channel 4K of maximum data can be transferred, including message
@@ -421,6 +422,7 @@ static struct {
 	int pc_disabled;
 	struct delayed_work wcnss_pm_qos_del_req;
 	struct mutex pm_qos_mutex;
+	char nvbin_file[NVBIN_FILE_MAX_LEN];
 } *penv = NULL;
 
 static ssize_t wcnss_wlan_macaddr_store(struct device *dev,
@@ -535,6 +537,33 @@ static ssize_t wcnss_version_show(struct device *dev,
 
 static DEVICE_ATTR(wcnss_version, S_IRUSR,
 		wcnss_version_show, NULL);
+
+static ssize_t wcnss_nvbin_file_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	if (!penv)
+		return -ENODEV;
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n", penv->nvbin_file);
+}
+
+static ssize_t wcnss_nvbin_file_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	if (!penv)
+		return -ENODEV;
+
+	if (count >= NVBIN_FILE_MAX_LEN)
+		return -EINVAL;
+
+	memcpy(penv->nvbin_file, buf, count);
+	penv->nvbin_file[count] = '\0';
+
+	return count;
+}
+
+static DEVICE_ATTR(wcnss_nvbin_file, S_IRUSR | S_IWUSR,
+		wcnss_nvbin_file_show, wcnss_nvbin_file_store);
 
 /* wcnss_reset_fiq() is invoked when host drivers fails to
  * communicate with WCNSS over SMD; so logging these registers
@@ -1151,8 +1180,14 @@ static int wcnss_create_sysfs(struct device *dev)
 	if (ret)
 		goto remove_version;
 
+	ret = device_create_file(dev, &dev_attr_wcnss_nvbin_file);
+	if (ret)
+		goto remove_mac_addr;
+
 	return 0;
 
+remove_mac_addr:
+	device_remove_file(dev, &dev_attr_wcnss_mac_addr);
 remove_version:
 	device_remove_file(dev, &dev_attr_wcnss_version);
 remove_thermal:
@@ -1170,6 +1205,7 @@ static void wcnss_remove_sysfs(struct device *dev)
 		device_remove_file(dev, &dev_attr_thermal_mitigation);
 		device_remove_file(dev, &dev_attr_wcnss_version);
 		device_remove_file(dev, &dev_attr_wcnss_mac_addr);
+		device_remove_file(dev, &dev_attr_wcnss_nvbin_file);
 	}
 }
 
@@ -2335,11 +2371,11 @@ static void wcnss_nvbin_dnld(void)
 
 	down_read(&wcnss_pm_sem);
 
-	ret = request_firmware(&nv, NVBIN_FILE, dev);
+	ret = request_firmware(&nv, penv->nvbin_file, dev);
 
 	if (ret || !nv || !nv->data || !nv->size) {
 		pr_err("wcnss: %s: request_firmware failed for %s (ret = %d)\n",
-			__func__, NVBIN_FILE, ret);
+			__func__, penv->nvbin_file, ret);
 		goto out;
 	}
 
@@ -3439,6 +3475,9 @@ wcnss_wlan_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 	penv->pdev = pdev;
+
+	/* set default nvbin file */
+	strncpy(penv->nvbin_file, NVBIN_FILE, NVBIN_FILE_MAX_LEN);
 
 	/* register sysfs entries */
 	ret = wcnss_create_sysfs(&pdev->dev);
