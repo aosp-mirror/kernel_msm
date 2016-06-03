@@ -23,6 +23,7 @@
 #include <linux/debugfs.h>
 #include <linux/pm_wakeup.h>
 #include <linux/spinlock.h>
+#include <linux/delay.h>
 
 struct smb23x_wakeup_source {
 	struct wakeup_source source;
@@ -32,6 +33,7 @@ struct smb23x_wakeup_source {
 
 enum wakeup_src {
 	WAKEUP_SRC_IRQ_POLLING = 0,
+	WAKEUP_SRC_PARALLEL,
 	WAKEUP_SRC_MAX,
 };
 #define WAKEUP_SRC_MASK (~(~0 << WAKEUP_SRC_MAX))
@@ -79,8 +81,10 @@ struct smb23x_chip {
 	int				usb_psy_ma;
 
 	/* others */
+	int				parallel_chg_disable_status;
 	bool				irq_waiting;
 	bool				resume_completed;
+	bool				parallel_charging;
 	u8				irq_cfg_mask;
 	u32				peek_poke_address;
 	int				fake_battery_soc;
@@ -88,10 +92,12 @@ struct smb23x_chip {
 	int				thermal_levels;
 	u32				workaround_flags;
 	const char			*bms_psy_name;
+	struct power_supply		*parallel_psy;
 	struct power_supply		*usb_psy;
 	struct power_supply		*bms_psy;
 	struct power_supply		batt_psy;
 	struct mutex			read_write_lock;
+	struct mutex			parallel_chg_lock;
 	struct mutex			irq_complete;
 	struct mutex			chg_disable_lock;
 	struct mutex			usb_suspend_lock;
@@ -99,6 +105,7 @@ struct smb23x_chip {
 	struct dentry			*debug_root;
 	struct delayed_work		irq_polling_work;
 	struct smb23x_wakeup_source	smb23x_ws;
+	struct work_struct		parallel_work;
 };
 
 static int usbin_current_ma_table[] = {
@@ -217,6 +224,7 @@ static int hot_bat_decidegc_table[] = {
 #define SAFETY_TIMER_MASK	SMB_MASK(4, 3)
 #define SAFETY_TIMER_OFFSET	3
 #define SAFETY_TIMER_DISABLE	SMB_MASK(4, 3)
+#define SYSTEM_VOLTAGE_MASK		SMB_MASK(1, 0)
 
 #define CFG_REG_5		0x05
 #define BAT_THERM_DIS_BIT	BIT(7)
@@ -230,6 +238,7 @@ static int hot_bat_decidegc_table[] = {
 
 #define CFG_REG_6		0x06
 #define CHG_INHIBIT_THRESH_MASK	SMB_MASK(7, 6)
+#define CHG_CHARGE_SYS_VOLT_MASK	SMB_MASK(5, 4)
 #define INHIBIT_THRESH_OFFSET	6
 #define BMD_ALGO_MASK		SMB_MASK(1, 0)
 #define BMD_ALGO_THERM_IO	SMB_MASK(1, 0)
@@ -623,6 +632,25 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 	return 0;
 }
 
+#define MAX_PARALLEL_CURRENT		1000
+static int smb23x_parse_parallel_charging_params(struct smb23x_chip *chip)
+{
+	struct device_node *node = chip->dev->of_node;
+
+	chip->parallel_charging = true;
+	chip->cfg_fastchg_ma = MAX_PARALLEL_CURRENT;
+	of_property_read_u32(node, "qcom,fastchg-ma",
+					&chip->cfg_fastchg_ma);
+
+	pr_debug("Max parallel charger current = %dma\n",
+			chip->cfg_fastchg_ma);
+
+	/* mark the parallel-charger as disabled */
+	chip->parallel_chg_disable_status |= CURRENT;
+
+	return 0;
+}
+
 static int smb23x_enable_volatile_writes(struct smb23x_chip *chip)
 {
 	int rc;
@@ -713,6 +741,72 @@ static int smb23x_charging_disable(struct smb23x_chip *chip,
 	return rc;
 }
 
+static struct power_supply *get_parallel_psy(struct smb23x_chip *chip)
+{
+	if (chip->parallel_psy)
+		return chip->parallel_psy;
+	chip->parallel_psy = power_supply_get_by_name("usb-parallel");
+	if (!chip->parallel_psy)
+		pr_debug("parallel charger not found\n");
+	return chip->parallel_psy;
+}
+
+static int __smb23x_parallel_charger_enable(struct smb23x_chip *chip,
+							bool enable)
+{
+	struct power_supply *parallel_psy = get_parallel_psy(chip);
+	union power_supply_propval pval = {0, };
+
+	if (!parallel_psy)
+		return 0;
+
+	pval.intval = (enable ? (chip->cfg_fastchg_ma * 1000) / 2 : 0);
+	parallel_psy->set_property(parallel_psy,
+		POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &pval);
+	pval.intval = (enable ? 1 : 0);
+	parallel_psy->set_property(parallel_psy,
+		POWER_SUPPLY_PROP_CHARGING_ENABLED, &pval);
+
+	printk("Parallel-charger %s max_chg_current=%d\n",
+		enable ? "enabled" : "disabled",
+		enable ? (chip->cfg_fastchg_ma * 1000) : 0);
+
+	return 0;
+}
+
+static int smb23x_parallel_charger_enable(struct smb23x_chip *chip,
+						int reason, bool enable)
+{
+	int disabled, *disabled_status;
+
+	mutex_lock(&chip->parallel_chg_lock);
+
+	disabled = chip->parallel_chg_disable_status;
+	disabled_status = &chip->parallel_chg_disable_status;
+
+	pr_debug("reason=0x%x requested=%s disabled_status=0x%x\n",
+			reason, enable ? "enable" : "disable", disabled);
+
+	if (enable == true)
+		disabled &= ~reason;
+	else
+		disabled |= reason;
+
+	if (*disabled_status && !disabled)
+		__smb23x_parallel_charger_enable(chip, true);
+
+	if (!(*disabled_status) && disabled)
+		__smb23x_parallel_charger_enable(chip, false);
+
+	*disabled_status = disabled;
+
+	pr_debug("disabled_status = %x\n", *disabled_status);
+
+	mutex_unlock(&chip->parallel_chg_lock);
+
+	return 0;
+}
+
 static int smb23x_suspend_usb(struct smb23x_chip *chip,
 			int reason, bool suspend)
 {
@@ -732,8 +826,11 @@ static int smb23x_suspend_usb(struct smb23x_chip *chip,
 		pr_err("Write USB_SUSPEND failed, rc=%d\n", rc);
 	} else {
 		chip->usb_suspended_status = suspended;
-		pr_debug("%suspend USB!\n", suspend ? "S" : "Un-s");
+		printk("%suspend USB!\n", suspend ? "S" : "Un-s");
+		if (suspend)
+			smb23x_parallel_charger_enable(chip, CURRENT, false);
 	}
+
 	mutex_unlock(&chip->usb_suspend_lock);
 
 	return rc;
@@ -809,6 +906,50 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 		pr_err("Un-suspend USB failed, rc=%d\n", rc);
 
 	return rc;
+}
+
+static void smb23x_parallel_work(struct work_struct *work)
+{
+	int rc, i, tmp;
+	struct smb23x_chip *chip = container_of(work,
+	struct smb23x_chip, parallel_work);
+
+	smb23x_enable_volatile_writes(chip);
+
+	if (chip->parallel_charging) {
+		/* Strong Charger - Enable parallel path */
+		i = find_closest_in_ascendant_list(
+			chip->cfg_fastchg_ma , fastchg_current_ma_table,
+			ARRAY_SIZE(fastchg_current_ma_table));
+		tmp = i;
+		pr_debug("Strong Charger tmp:%02x\n", tmp);
+		rc = smb23x_masked_write(chip, CFG_REG_2,
+				FASTCHG_CURR_MASK, tmp);
+		pr_debug("fast-chg (parallel-mode) current set to = %d\n",
+							chip->cfg_fastchg_ma);
+
+		smb23x_enable_volatile_writes(chip);
+		// Set input current limit
+		smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x08);
+
+		// Set system voltage to VBATT tracking(VBATT + 250mV)
+		smb23x_masked_write(chip, CFG_REG_4, SYSTEM_VOLTAGE_MASK, 0x2);
+
+		// Set system voltage threshold for initiating charge current deduction
+		smb23x_masked_write(chip, CFG_REG_6, CHG_CHARGE_SYS_VOLT_MASK, 0x20);
+
+		rc = smb23x_parallel_charger_enable(chip, CURRENT, true);
+		if (rc < 0)
+			printk("Disable charging for CURRENT failed, rc=%d\n", rc);
+	} else {
+		/* Weak-charger - Disable parallel path */
+		printk("Weak-charger - Disable parallel path\n");
+		rc = smb23x_parallel_charger_enable(chip, CURRENT, false);
+		if (rc < 0)
+			pr_err("Disable charging for CURRENT failed, rc=%d\n", rc);
+	}
+
+	smb23x_relax(&chip->smb23x_ws, WAKEUP_SRC_PARALLEL);
 }
 
 static int smb23x_hw_init(struct smb23x_chip *chip)
@@ -1095,11 +1236,11 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 	return rc;
 }
 
-
 static int hot_hard_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_warn("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_hot = !!rt_sts;
+
 	return 0;
 }
 
@@ -1145,7 +1286,7 @@ static int batt_low_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int pre_to_fast_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
+	printk("pre_to_fast_irq_handler rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_full = false;
 
 	return 0;
@@ -1174,6 +1315,7 @@ static int iterm_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_full = !!rt_sts;
+
 	return 0;
 }
 
@@ -1250,7 +1392,7 @@ static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	if (!chip->apsd_enabled)
 		return 0;
 
-	pr_debug("chip->usb_present = %d, usb_present = %d\n",
+	printk("chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present, usb_present);
 
 	if (usb_present && !chip->usb_present) {
@@ -1266,7 +1408,7 @@ static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int aicl_done_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
+	printk("aicl_done_irq_handler rt_sts = 0x02%x\n", rt_sts);
 	return 0;
 }
 
@@ -1288,7 +1430,7 @@ static int usbin_ov_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	int health = !!rt_sts ? POWER_SUPPLY_HEALTH_OVERVOLTAGE :
 				POWER_SUPPLY_HEALTH_GOOD;
 
-	pr_debug("chip->usb_present = %d, usb_present = %d\n",
+	printk("usbin_ov_irq_handler chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present,  usb_present);
 	if (chip->usb_present != usb_present) {
 		chip->usb_present = usb_present;
@@ -1331,8 +1473,9 @@ static void reconfig_upon_unplug(struct smb23x_chip *chip)
 					WAKEUP_SRC_IRQ_POLLING);
 			schedule_delayed_work(&chip->irq_polling_work,
 					msecs_to_jiffies(IRQ_POLLING_MS));
+			printk("reconfig_upon_unplug\n");
 		} else {
-			pr_debug("restore software settings after unplug\n");
+			printk("restore software settings after unplug\n");
 			smb23x_relax(&chip->smb23x_ws, WAKEUP_SRC_IRQ_POLLING);
 			rc = smb23x_hw_init(chip);
 			if (rc)
@@ -1367,12 +1510,13 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	bool usb_present = !rt_sts;
 
-	pr_debug("chip->usb_present = %d, usb_present = %d\n",
+	printk("usbin_uv_irq_handler chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present,  usb_present);
 	if (chip->usb_present == usb_present)
 		return 0;
 
 	chip->usb_present = usb_present;
+	msleep(300);
 	reconfig_upon_unplug(chip);
 	power_supply_set_present(chip->usb_psy, usb_present);
 
@@ -1381,7 +1525,12 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int power_ok_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
+	pr_err("rt_sts = 0x02%x\n", rt_sts);
+	if (rt_sts == 0) {
+		printk("power_ok_irq_handler usb_present:%d\n", chip->usb_present);
+		smb23x_parallel_charger_enable(chip, CURRENT, false);
+		smb23x_suspend_usb(chip, CURRENT, true);
+	}
 	return 0;
 }
 
@@ -1584,6 +1733,27 @@ static int smb23x_irq_read(struct smb23x_chip *chip)
 	return rc;
 }
 
+static int smb23x_get_prop_battery_charging_enabled(struct smb23x_chip *chip)
+{
+	int rc, status;
+	u8 tmp;
+
+	rc = smb23x_read(chip, CHG_STATUS_B_REG, &tmp);
+	if (rc < 0) {
+		pr_err("Read STATUS_B failed, rc=%d\n", rc);
+		return !chip->chg_disabled_status;
+	}
+
+	printk("smb23x_get_prop_battery_charging_enabled\n");
+
+	status = tmp & CHARGE_EN_STS_BIT;
+	printk("battery_charging status: %d\n", status);
+	if (status && !chip->chg_disabled_status)
+		return 1;
+	else
+		return 0;
+}
+
 #define IRQ_LATCHED_MASK	0x02
 #define IRQ_STATUS_MASK		0x01
 #define BITS_PER_IRQ		2
@@ -1698,24 +1868,6 @@ static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
 	status = tmp & CHARGE_TYPE_MASK;
 	return (status == NO_CHARGE_VAL) ? POWER_SUPPLY_STATUS_DISCHARGING :
 						POWER_SUPPLY_STATUS_CHARGING;
-}
-
-static int smb23x_get_prop_battery_charging_enabled(struct smb23x_chip *chip)
-{
-	int rc, status;
-	u8 tmp;
-
-	rc = smb23x_read(chip, CHG_STATUS_B_REG, &tmp);
-	if (rc < 0) {
-		pr_err("Read STATUS_B failed, rc=%d\n", rc);
-		return !chip->chg_disabled_status;
-	}
-
-	status = tmp & CHARGE_EN_STS_BIT;
-	if (status && !chip->chg_disabled_status)
-		return 1;
-	else
-		return 0;
 }
 
 static int smb23x_get_prop_charging_enabled(struct smb23x_chip *chip)
@@ -1904,7 +2056,10 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 			break;
 		}
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		smb23x_suspend_usb(chip, USER, !val->intval);
+		smb23x_enable_volatile_writes(chip);
+		smb23x_charging_disable(chip, USER, !val->intval);
+		if (chip->parallel_charging)
+			smb23x_parallel_charger_enable(chip, USER, val->intval);
 		power_supply_changed(&chip->batt_psy);
 		power_supply_changed(chip->usb_psy);
 		break;
@@ -1965,6 +2120,8 @@ static void smb23x_external_power_changed(struct power_supply *psy)
 		icl = prop.intval / 1000;
 	pr_debug("current_limit = %d\n", icl);
 
+	smb23x_enable_volatile_writes(chip);
+
 	if (chip->usb_psy_ma != icl) {
 		mutex_lock(&chip->icl_set_lock);
 		chip->usb_psy_ma = icl;
@@ -1986,6 +2143,25 @@ static void smb23x_external_power_changed(struct power_supply *psy)
 			power_supply_set_online(chip->usb_psy, true);
 	} else if (online && !chip->apsd_enabled) {
 		power_supply_set_online(chip->usb_psy, false);
+	}
+
+	if (smb23x_get_prop_battery_charging_enabled(chip) == true) {
+		if (chip->parallel_charging) {
+			cancel_work_sync(&chip->parallel_work);
+			smb23x_stay_awake(&chip->smb23x_ws, WAKEUP_SRC_PARALLEL);
+			schedule_work(&chip->parallel_work);
+		}
+	} else {
+		if (icl <= 2) {
+			pr_debug("current_ma=%d <= 2 set USB current to minimum\n", icl);
+			rc = smb23x_masked_write(chip, CFG_REG_2,
+				FASTCHG_CURR_MASK, 0);
+			if (rc < 0)
+				pr_err("Couldn't to set minimum USB current rc = %d\n", rc);
+			/* disable parallel charger */
+			if (chip->parallel_charging)
+				smb23x_parallel_charger_enable(chip, CURRENT, false);
+		}
 	}
 }
 
@@ -2261,12 +2437,16 @@ static int smb23x_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, chip);
 
 	mutex_init(&chip->read_write_lock);
+	mutex_init(&chip->parallel_chg_lock);
 	mutex_init(&chip->irq_complete);
 	mutex_init(&chip->chg_disable_lock);
 	mutex_init(&chip->usb_suspend_lock);
 	mutex_init(&chip->icl_set_lock);
 	smb23x_wakeup_src_init(chip);
 	INIT_DELAYED_WORK(&chip->irq_polling_work, smb23x_irq_polling_work_fn);
+	INIT_WORK(&chip->parallel_work, smb23x_parallel_work);
+
+	smb23x_enable_volatile_writes(chip);
 
 	rc = smb23x_parse_dt(chip);
 	if (rc < 0) {
@@ -2289,6 +2469,9 @@ static int smb23x_probe(struct i2c_client *client,
 		pr_err("Initialize hardware failed!\n");
 		goto destroy_mutex;
 	}
+	rc = smb23x_parse_parallel_charging_params(chip);
+	if (rc)
+		pr_err("Couldn't parse parallel charginng params rc=%d\n", rc);
 
 	smb23x_irq_polling_wa_check(chip);
 
@@ -2356,6 +2539,7 @@ unregister_batt_psy:
 destroy_mutex:
 	wakeup_source_trash(&chip->smb23x_ws.source);
 	mutex_destroy(&chip->read_write_lock);
+	mutex_destroy(&chip->parallel_chg_lock);
 	mutex_destroy(&chip->irq_complete);
 	mutex_destroy(&chip->chg_disable_lock);
 	mutex_destroy(&chip->usb_suspend_lock);
@@ -2435,6 +2619,7 @@ static int smb23x_remove(struct i2c_client *client)
 	mutex_destroy(&chip->chg_disable_lock);
 	mutex_destroy(&chip->usb_suspend_lock);
 	mutex_destroy(&chip->icl_set_lock);
+	mutex_destroy(&chip->parallel_chg_lock);
 
 	return 0;
 }

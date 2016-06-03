@@ -226,7 +226,7 @@
 			qcom,vddmax-mv = <4350>;
 			qcom,vddsafe-mv = <4380>;
 			qcom,vinmin-mv = <4450>;
-			qcom,ibatsafe-ma = <1440>;
+			qcom,ibatsafe-ma = <540>;
 			qcom,thermal-mitigation = <1440 720 630 0>;
 			qcom,cool-bat-decidegc = <220>;
 			qcom,warm-bat-decidegc = <450>;

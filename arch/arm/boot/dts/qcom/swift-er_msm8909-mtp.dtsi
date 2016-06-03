@@ -158,6 +158,29 @@
 
 &i2c_4 {
 	status = "ok";
+	smb23x-lbc@12 {
+		compatible = "qcom,smb231-lbc";
+		reg = <0x12>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <49 2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&smb_int_default &smb_susp_default>;
+
+		qcom,float-voltage-mv = <4360>;
+		qcom,charging-timeout = <360>;
+		qcom,recharge-thresh-mv = <150>;
+		qcom,iterm-ma = <20>;
+		qcom,fastchg-ma = <1000>;
+		qcom,hot-bat-decidegc = <700>;
+		qcom,warm-bat-decidegc = <450>;
+		qcom,cool-bat-decidegc = <220>;
+		qcom,cold-bat-decidegc = <0>;
+		qcom,soft-temp-vfloat-comp-mv = <200>;
+		qcom,soft-temp-current-comp-ma = <400>;
+		qcom,thermal-mitigation = <1500 900 500 100>;
+		qcom,apsd-disabled;
+		qcom,bms-psy-name;
+	};
 	stc3117@70 {
 		compatible = "st,stc3117";
 		reg = <0x70>;
@@ -335,6 +358,33 @@
 			config {
 				pins = "gpio24";
 			};
+		};
+	};
+	/* Delete gpio58 configuration */
+	/delete-node/ tpiu_seta_14;
+	/delete-node/ smb_int_pin;
+	smb_int_default: smb_int_default {
+		mux {
+			pins = "gpio49";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio49";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+		};
+	};
+
+	smb_susp_default: smb_susp_default {
+		mux {
+			pins = "gpio58";
+			function ="gpio";
+		};
+		config {
+			pins = "gpio58";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+			output-high;
 		};
 	};
 };
