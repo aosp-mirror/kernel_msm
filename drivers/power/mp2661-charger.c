@@ -125,7 +125,6 @@ struct mp2661_chg {
     struct i2c_client        *client;
     struct device            *dev;
     struct mutex            read_write_lock;
-    struct mutex            irq_complete;
 
     bool                usb_present;
     int                fake_battery_soc;
@@ -136,6 +135,8 @@ struct mp2661_chg {
     struct power_supply        batt_psy;
     struct power_supply        *bms_psy;
     const char            *bms_psy_name;
+
+    struct work_struct        process_interrupt_work;
 
     /* adc_tm parameters */
     struct qpnp_vadc_chip    *vadc_dev;
@@ -1038,19 +1039,36 @@ static void mp2661_external_power_changed(struct power_supply *psy)
     }
 }
 
-static irqreturn_t mp2661_chg_stat_handler(int irq, void *dev_id)
+extern int idtp9220_extern_ldoout_hard_enable(bool *ldoout_enable);
+static void mp2661_process_interrupt_work(struct work_struct *work)
 {
-    int usb_present;
-    struct mp2661_chg *chip = dev_id;
-    mutex_lock(&chip->irq_complete);
-    usb_present = mp2661_is_chg_plugged_in(chip);
-    if (chip->usb_present ^ usb_present)
+    int rc, usb_present;
+    bool ldoout_on = false;
+    struct mp2661_chg *chip = container_of(work, struct mp2661_chg, process_interrupt_work);
+
+    rc = idtp9220_extern_ldoout_hard_enable(&ldoout_on);
+    if(rc)
     {
-        chip->usb_present = usb_present;
-        power_supply_set_present(chip->usb_psy, chip->usb_present);
+        pr_err("Can not access idtp9220 LDO status\n");
     }
 
-    mutex_unlock(&chip->irq_complete);
+    if(!ldoout_on)
+    {
+        usb_present = mp2661_is_chg_plugged_in(chip);
+        if (chip->usb_present ^ usb_present)
+        {
+            chip->usb_present = usb_present;
+            pr_err("usb_present = %d\n", chip->usb_present);
+            power_supply_set_present(chip->usb_psy, chip->usb_present);
+        }
+    }
+}
+
+static irqreturn_t mp2661_chg_stat_handler(int irq, void *dev_id)
+{
+    struct mp2661_chg *chip = dev_id;
+
+    schedule_work(&chip->process_interrupt_work);
 
     return IRQ_HANDLED;
 }
@@ -1798,7 +1816,7 @@ static int mp2661_charger_probe(struct i2c_client *client,
     }
 
     mutex_init(&chip->read_write_lock);
-    mutex_init(&chip->irq_complete);
+    device_init_wakeup(chip->dev, true);
 
     rc = mp2661_parse_dt(chip);
     if (rc < 0)
@@ -1852,6 +1870,8 @@ static int mp2661_charger_probe(struct i2c_client *client,
         pr_err("Unable to register batt_psy rc = %d\n", rc);
         return rc;
     }
+
+    INIT_WORK(&chip->process_interrupt_work, mp2661_process_interrupt_work);
 
     /* stat irq configuration */
     if (client->irq)
