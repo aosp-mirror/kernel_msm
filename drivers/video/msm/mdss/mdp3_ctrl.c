@@ -1359,7 +1359,7 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 	mdp3_session->vsync_before_commit = 0;
 	if (!splash_done || mdp3_session->esd_recovery == true) {
 		if (panel && panel->set_backlight)
-			panel->set_backlight(panel, panel->panel_info.bl_max);
+			panel->set_backlight(panel, 45);
 		splash_done = true;
 		mdp3_session->esd_recovery = false;
 	}
