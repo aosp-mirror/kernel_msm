@@ -173,6 +173,9 @@ struct mp2661_chg {
     struct timespec          resume_time;
     struct timespec          last_monitor_time;
     int                      last_temp;
+
+    /* ap mask rx int gpio */
+    bool                     ap_mask_rx_int_gpio;
 };
 
 #define RETRY_COUNT 5
@@ -1695,6 +1698,9 @@ static int mp2661_batt_property_is_writeable(struct power_supply *psy,
 
 #define MONITOR_WORK_DELAY_MS         10000
 #define MONITOR_TEMP_DELTA            10
+#define AP_MASK_RX_GPIO_TEMP          450
+#define AP_MASK_RX_GPIO_TEMP_DELTA    30
+extern void idtp9220_ap_mask_rxint_enable(bool enable);
 static void mp2661_monitor_work(struct work_struct *work)
 {
     int temp;
@@ -1706,6 +1712,20 @@ static void mp2661_monitor_work(struct work_struct *work)
     get_monotonic_boottime(&chip->last_monitor_time);
 
     temp = mp2661_get_prop_batt_temp(chip);
+
+    /* wireless rx whether to sleep */
+    if(!chip->ap_mask_rx_int_gpio && (temp >= AP_MASK_RX_GPIO_TEMP))
+    {
+        pr_err("disable rx charging\n");
+        idtp9220_ap_mask_rxint_enable(true);
+        chip->ap_mask_rx_int_gpio = true;
+    }
+    else if(chip->ap_mask_rx_int_gpio && (temp <= (AP_MASK_RX_GPIO_TEMP - AP_MASK_RX_GPIO_TEMP_DELTA)))
+    {
+        pr_err("enable rx charging\n");
+        idtp9220_ap_mask_rxint_enable(false);
+        chip->ap_mask_rx_int_gpio = false;
+    }
 
     if(abs(temp - chip->last_temp) >= MONITOR_TEMP_DELTA)
     {

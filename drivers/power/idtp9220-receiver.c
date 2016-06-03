@@ -212,6 +212,14 @@ static int idtp9220_get_vout_voltage(struct idtp9220_receiver *chip, union idtp9
     return 0;
 }
 
+void idtp9220_ap_mask_rxint_enable(bool enable)
+{
+    if(global_idtp9220_receiver && global_idtp9220_receiver->mask_wireless_int_gpio)
+    {
+        pr_err("set sleep gpio to %d\n", enable);
+        gpio_set_value(global_idtp9220_receiver->mask_wireless_int_gpio, enable);
+    }
+}
 
 static int idtp9220_clear_tx_data_receiv_intr(struct idtp9220_receiver *chip)
 {
@@ -1889,6 +1897,8 @@ static int idtp9220_receiver_probe(struct i2c_client *client,
     INIT_WORK(&chip->process_verify_fw_work, idtp9220_process_verify_fw_work);
     schedule_delayed_work(&chip->monitor_work,
         msecs_to_jiffies(IDTP9220_MONITOR_PERIOD_MS));
+
+    global_idtp9220_receiver = chip;
 
     return 0;
 }
