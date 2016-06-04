@@ -757,6 +757,8 @@ int mdss_dsi_cmdlist_put(struct mdss_dsi_ctrl_pdata *ctrl,
 	struct dcs_cmd_list *clist;
 	int ret = 0;
 
+	if(ctrl->ulps_mode)
+		return ret;
 	mutex_lock(&ctrl->cmd_mutex);
 	mutex_lock(&ctrl->cmdlist_mutex);
 	clist = &ctrl->cmdlist;
