@@ -2926,8 +2926,15 @@ static void msm_otg_set_vbus_state(int online)
 		pr_debug("PMIC: BSV set\n");
 		msm_otg_dbg_log_event(&motg->phy, "PMIC: BSV SET",
 				init, motg->inputs);
-		if (test_and_set_bit(B_SESS_VLD, &motg->inputs) && init)
+		if (test_and_set_bit(B_SESS_VLD, &motg->inputs) && init) {
+
+			if ((motg->chg_state == USB_CHG_STATE_DETECTED) &&
+			    (motg->chg_type != USB_INVALID_CHARGER)) {
+				msm_otg_notify_charger(motg, 100);
+				msm_otg_notify_charger(motg, IDEV_CHG_MAX);
+			}
 			return;
+		}
 	} else {
 		pr_debug("PMIC: BSV clear\n");
 		msm_otg_dbg_log_event(&motg->phy, "PMIC: BSV CLEAR",

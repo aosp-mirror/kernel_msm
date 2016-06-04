@@ -21,6 +21,7 @@ enum{
 };
 
 extern int cei_smb231_flag;
+extern int smb23x_disable_input_current(bool disable);
 extern int usb_insertion(void);
 extern int usb_pre_removal(void);
 extern int usb_removal(void);

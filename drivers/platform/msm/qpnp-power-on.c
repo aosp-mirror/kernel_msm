@@ -223,8 +223,10 @@ struct qpnp_pon {
 };
 
 struct delayed_work smb231_updata;
+struct delayed_work smb231_disable_charger;
 static int vbus;
 int cei_smb231_flag = false;
+struct mutex smb231_work_lock;
 static struct qpnp_pon *sys_reset_dev;
 static DEFINE_SPINLOCK(spon_list_slock);
 static LIST_HEAD(spon_dev_list);
@@ -849,9 +851,47 @@ static irqreturn_t qpnp_kpdpwr_resin_bark_irq(int irq, void *_pon)
 	return IRQ_HANDLED;
 }
 
+static int
+qpnp_pon_CBLPWR_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
+{
+	int rc;
+	struct qpnp_pon_config *cfg = NULL;
+	u8 pon_rt_sts = 0, pon_rt_bit = 0;
+	u32 key_status;
+
+	cfg = qpnp_get_cfg(pon, pon_type);
+	if (!cfg)
+		return -EINVAL;
+
+	rc = spmi_ext_register_readl(pon->spmi->ctrl, pon->spmi->sid,
+				     QPNP_PON_RT_STS(pon), &pon_rt_sts, 1);
+	if (rc) {
+		dev_err(&pon->spmi->dev, "Unable to read PON RT status\n");
+		return rc;
+	}
+
+	pon_rt_bit = QPNP_PON_CBLPWR_N_SET;
+
+	key_status = pon_rt_sts & pon_rt_bit;
+	pr_debug("PMIC input: PON_CBLPWR key_status=%d\n", key_status);
+
+	vbus = (key_status == 4)? 1 : 0;
+
+	return 0;
+}
+
 static void smb231_updata_work(struct work_struct *work)
 {
 	struct qpnp_pon *pon = sys_reset_dev;
+	int rc;
+
+	mutex_lock(&smb231_work_lock);
+
+	rc = qpnp_pon_CBLPWR_input_dispatch(pon, PON_CBLPWR);
+	if (rc)
+		dev_err(&pon->spmi->dev, "Unable to send input event\n");
+
+	pr_err("smb231_updata_work vbus = %d\n", vbus);
 
 	if (cei_smb231_flag == true) {
 		if (vbus == 1)
@@ -861,25 +901,44 @@ static void smb231_updata_work(struct work_struct *work)
 	}
 
 	pm_relax(&pon->spmi->dev);
+	mutex_unlock(&smb231_work_lock);
+}
+
+static void smb231_disable_charger_work(struct work_struct *work)
+{
+	struct qpnp_pon *pon = sys_reset_dev;
+	int rc;
+
+	mutex_lock(&smb231_work_lock);
+
+	rc = qpnp_pon_CBLPWR_input_dispatch(pon, PON_CBLPWR);
+	if (rc)
+		dev_err(&pon->spmi->dev, "Unable to send input event\n");
+
+	if (cei_smb231_flag == true) {
+		if (vbus == 1) {
+			rc = smb23x_disable_input_current(true);
+		} else {
+			usb_pre_removal();
+		}
+	}
+
+	schedule_delayed_work(&smb231_updata, 100);
+
+	mutex_unlock(&smb231_work_lock);
+
 }
 
 static irqreturn_t qpnp_cblpwr_irq(int irq, void *_pon)
 {
-	int rc;
 	struct qpnp_pon *pon = _pon;
 
 	pm_stay_awake(&pon->spmi->dev);
 
-	vbus = !!irq_read_line(irq);
+	cancel_delayed_work(&smb231_updata);
+	cancel_delayed_work(&smb231_disable_charger);
 
-	if (vbus == 0)
-		usb_pre_removal();
-
-	rc = qpnp_pon_input_dispatch(pon, PON_CBLPWR);
-	if (rc)
-		dev_err(&pon->spmi->dev, "Unable to send input event\n");
-
-	schedule_delayed_work(&smb231_updata, 100);
+	schedule_delayed_work(&smb231_disable_charger, 11);
 
 	return IRQ_HANDLED;
 }
@@ -2205,6 +2264,8 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 
 	INIT_DELAYED_WORK(&pon->bark_work, bark_work_func);
 	INIT_DELAYED_WORK(&smb231_updata, smb231_updata_work);
+	INIT_DELAYED_WORK(&smb231_disable_charger, smb231_disable_charger_work);
+	mutex_init(&smb231_work_lock);
 
 	/* register the PON configurations */
 	rc = qpnp_pon_config_init(pon);
