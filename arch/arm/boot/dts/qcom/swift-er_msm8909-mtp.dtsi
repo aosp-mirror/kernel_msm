@@ -170,7 +170,7 @@
 		qcom,charging-timeout = <360>;
 		qcom,recharge-thresh-mv = <150>;
 		qcom,iterm-ma = <20>;
-		qcom,fastchg-ma = <1000>;
+		qcom,fastchg-ma = <1200>;
 		qcom,hot-bat-decidegc = <700>;
 		qcom,warm-bat-decidegc = <450>;
 		qcom,cool-bat-decidegc = <220>;

@@ -3510,6 +3510,12 @@ static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 	struct qpnp_lbc_chip *chip;
 	u8 reg_val;
 
+/*
+ *  To-Be-Fix :
+ *  We remove gpio17 config from here since it cause parallel charge fail
+ *  this code should be moved to other suitable code segement.
+ */
+/*
 	rc = gpio_request_one(GPIO_num17, GPIOF_OUT_INIT_LOW, "asus_muxsel0_default");
 	if (rc)
 		pr_err("Failed to request init gpio 17 Low: %d\n", rc);
@@ -3517,7 +3523,7 @@ static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 		pr_err("Success to request init gpio 17 Low \n");
 
 	gpio_set_value(GPIO_num17,0);
-
+*/
 	chip = devm_kzalloc(&spmi->dev, sizeof(struct qpnp_lbc_chip),
 							GFP_KERNEL);
 	if (!chip) {
