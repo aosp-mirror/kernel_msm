@@ -3509,12 +3509,22 @@ static const struct file_operations bms_data_debugfs_ops = {
 	.release	= single_release,
 };
 
+int hwver_num0;
+extern int get_hwver_num(struct qpnp_vadc_chip *vadc, enum qpnp_vadc_channels channel);
 static int set_battery_data(struct qpnp_bms_chip *chip)
 {
 	int64_t battery_id;
 	int rc = 0;
 	struct bms_battery_data *batt_data;
 	struct device_node *node;
+
+	hwver_num0 = -1;
+	hwver_num0 = get_hwver_num(chip->vadc_dev, P_MUX4_1_1);
+	if(0 > hwver_num0)
+	{
+		pr_debug("P_MUX4_1_1 get error hwver_num0 = %d.\n", hwver_num0);
+		return -EINVAL;
+	}
 
 	battery_id = read_battery_id(chip);
 	if (battery_id < 0) {
