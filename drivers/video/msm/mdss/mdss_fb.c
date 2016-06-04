@@ -846,7 +846,35 @@ static ssize_t mdss_fb_get_panel_signature(struct device *dev,
 
 	return ret;
 }
+static ssize_t mdss_fb_set_ulps_mode(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	struct mdss_panel_data *pdata;
+	int rc = 0;
+	int ulps_mode = 0;
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 
+	pdata = dev_get_platdata(&mfd->pdev->dev);
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	rc = kstrtoint(buf, 10, &ulps_mode);
+	if (rc) {
+		pr_err("kstrtoint failed. rc=%d\n", rc);
+		return rc;
+	}
+
+	pr_debug("ulps_mode = %d\n", ulps_mode);
+
+	if(ulps_mode == 1){
+		ctrl_pdata->ulps_mode = 1;
+		mfd->ulps_fmode = true;
+	}
+
+	return count;
+}
 
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
@@ -867,6 +895,7 @@ static DEVICE_ATTR(msm_fb_dfps_mode, S_IRUGO | S_IWUSR,
 static DEVICE_ATTR(idle_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL, mdss_fb_set_idle_mode);
 static DEVICE_ATTR(display_mode, S_IRUGO | S_IWUSR | S_IWGRP, mdss_fb_get_display_mode, NULL);
 static DEVICE_ATTR(panel_signature, S_IRUGO | S_IWUSR | S_IWGRP, mdss_fb_get_panel_signature, NULL);
+static DEVICE_ATTR(ulps_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL, mdss_fb_set_ulps_mode);
 
 
 static struct attribute *mdss_fb_attrs[] = {
@@ -883,6 +912,7 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_idle_mode.attr,
 	&dev_attr_display_mode.attr,
 	&dev_attr_panel_signature.attr,
+	&dev_attr_ulps_mode.attr,
 	NULL,
 };
 
@@ -1186,6 +1216,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	mfd->ad_bl_level = 0;
 	mfd->fb_imgType = MDP_RGBA_8888;
 	mfd->calib_mode_bl = 0;
+	mfd->ulps_fmode = false;
 
 	mfd->pdev = pdev;
 
@@ -3536,7 +3567,7 @@ static int __mdss_fb_perform_commit(struct msm_fb_data_type *mfd)
 			mfd->pending_switch = false;
 	}
 	if (fb_backup->disp_commit.flags & MDP_DISPLAY_COMMIT_OVERLAY) {
-		if (mfd->mdp.kickoff_fnc)
+		if (mfd->mdp.kickoff_fnc && !mfd->ulps_fmode)
 			ret = mfd->mdp.kickoff_fnc(mfd,
 					&fb_backup->disp_commit);
 		else
