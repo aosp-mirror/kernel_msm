@@ -398,7 +398,10 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
 			gpio_free(ctrl_pdata->disp_en_gpio);
 		}
-		gpio_set_value((ctrl_pdata->rst_gpio), 1);
+		if(ctrl_pdata->ulps_mode)
+			gpio_set_value((ctrl_pdata->rst_gpio), 0);
+		else
+			gpio_set_value((ctrl_pdata->rst_gpio), 1);
 		gpio_free(ctrl_pdata->rst_gpio);
 		if (gpio_is_valid(ctrl_pdata->mode_gpio))
 			gpio_free(ctrl_pdata->mode_gpio);
@@ -2598,6 +2601,7 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->panel_data.get_idle = mdss_dsi_panel_get_idle_mode;
 
 	ctrl_pdata->idle = 0;
+	ctrl_pdata->ulps_mode = 0;
 	INIT_WORK(&ctrl_pdata->idle_on_work, idle_on_work);
 	wake_lock_init(&ctrl_pdata->idle_on_wakelock, WAKE_LOCK_SUSPEND,
                         "IDLE_ON_WAKELOCK");
