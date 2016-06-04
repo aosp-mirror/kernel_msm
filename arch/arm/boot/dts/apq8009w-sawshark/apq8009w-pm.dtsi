@@ -9,7 +9,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-#include "HB442528EBC-XWD-4v35-300mah.dtsi"
+#include "HB432628EBW-LS-4v4-350mah.dtsi"
+#include "HB432628EBW-DS-4v0-240mah.dtsi"
 &soc {
     /*ADC for hw version*/
     qcom,hwversion {

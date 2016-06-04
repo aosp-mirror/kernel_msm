@@ -1,0 +1,131 @@
+/* Copyright (c) 2015, HUAWEI TECHNOLOGIES CO., LTD. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+&mtp_batterydata {
+	qcom,Huawei240-batterydata {
+		qcom,battery-type = "F-Huawei240";
+		qcom,batt-id-kohm = <39>;
+		qcom,chg-term-ua = <7000>;
+		qcom,default-rbatt-mohm = <710>;
+		qcom,fcc-mah = <240>;
+		qcom,max-voltage-uv = <4000000>;
+		qcom,rbatt-capacitive-mohm = <50>;
+		qcom,v-cutoff-uv = <3200000>;
+
+		qcom,flat-ocv-threshold-uv = <3800000>;
+		qcom,batt-name = "F-Huawei240";
+
+		qcom,warm-bat-decidegc = <450>;
+		qcom,warm-bat-mv = <4100>;
+		qcom,ibatmax-warm-ma = <150>;
+
+		qcom,cool-bat-decidegc = <100>;
+		qcom,cool-bat-mv = <4200>;
+		qcom,ibatmax-cool-ma = <100>;
+
+		qcom,hot-bat-decidegc = <500>;
+		qcom,cold-bat-decidegc = <0>;
+
+		qcom,fcc-temp-lut {
+			qcom,lut-col-legend = <(-20) 0 25 40 60>;
+			qcom,lut-data = <248 249 249 249 248>;
+		};
+
+		qcom,ibat-acc-lut {
+			qcom,lut-col-legend = <(-20) 0 25>;
+			qcom,lut-row-legend = <0 240>;
+			qcom,lut-data = <246 246 246>,
+					<1 150 237>;
+		};
+
+		qcom,pc-temp-ocv-lut {
+			qcom,lut-col-legend = <(-20) 0 25 40 60>;
+			qcom,lut-row-legend = <100 95 90 85 80>,
+						<75 70 65 60 55>,
+						<50 45 40 35 30>,
+						<25 20 16 13 11>,
+						<10 9 8 7 6>,
+						<5 4 3 2 1>,
+						<0>;
+			qcom,lut-data = <4400 4396 4389 4384 4378>,
+					<4302 4328 4330 4328 4322>,
+					<4228 4266 4271 4268 4264>,
+					<4162 4206 4212 4210 4204>,
+					<4102 4148 4154 4152 4148>,
+					<4050 4089 4098 4096 4092>,
+					<3965 4031 4045 4044 4040>,
+					<3917 3962 3988 3992 3991>,
+					<3878 3920 3936 3941 3942>,
+					<3840 3884 3892 3893 3893>,
+					<3812 3852 3858 3859 3859>,
+					<3794 3824 3831 3832 3832>,
+					<3779 3800 3809 3810 3809>,
+					<3766 3781 3790 3790 3788>,
+					<3752 3768 3772 3769 3762>,
+					<3738 3754 3754 3747 3735>,
+					<3720 3736 3733 3725 3712>,
+					<3704 3718 3711 3704 3690>,
+					<3688 3706 3692 3686 3674>,
+					<3672 3698 3689 3683 3672>,
+					<3662 3694 3688 3682 3670>,
+					<3650 3691 3686 3680 3669>,
+					<3635 3686 3683 3676 3664>,
+					<3614 3679 3673 3664 3652>,
+					<3588 3660 3646 3636 3621>,
+					<3551 3623 3607 3598 3585>,
+					<3501 3574 3562 3556 3544>,
+					<3432 3516 3510 3500 3488>,
+					<3344 3442 3433 3422 3408>,
+					<3246 3331 3308 3293 3279>,
+					<3000 3000 3000 3000 3000>;
+		};
+
+		qcom,rbatt-sf-lut {
+			qcom,lut-col-legend = <(-20) 0 25 40 60>;
+			qcom,lut-row-legend = <100 95 90 85 80>,
+						<75 70 65 60 55>,
+						<50 45 40 35 30>,
+						<25 20 16 13 11>,
+						<10 9 8 7 6>,
+						<5 4 3 2 1>;
+			qcom,lut-data = <1567 366 100 65 46>,
+					<1563 366 100 65 46>,
+					<1461 364 103 68 48>,
+					<1380 358 108 72 51>,
+					<1328 352 113 77 55>,
+					<1316 342 120 83 59>,
+					<1244 342 125 89 64>,
+					<1235 317 121 91 67>,
+					<1238 311 107 81 63>,
+					<1240 311 97 68 50>,
+					<1264 313 97 68 50>,
+					<1310 317 102 73 54>,
+					<1368 323 107 78 59>,
+					<1442 332 111 81 63>,
+					<1538 348 110 78 58>,
+					<1656 371 106 71 51>,
+					<1834 395 106 71 51>,
+					<2040 423 105 71 51>,
+					<1634 403 95 63 46>,
+					<1852 426 100 67 50>,
+					<2048 445 104 71 52>,
+					<2278 466 109 75 56>,
+					<2550 494 115 79 57>,
+					<2903 517 116 78 55>,
+					<3398 540 113 75 55>,
+					<4102 576 117 83 64>,
+					<5230 652 132 94 73>,
+					<7352 763 148 100 76>,
+					<14194 903 158 110 84>,
+					<28388 1682 211 154 151>;
+		};
+	};
+};
