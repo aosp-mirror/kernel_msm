@@ -65,7 +65,7 @@ FUNCTION   get_hwver_num
 DESCRIPTION :Return hardware version on success, -1 otherwise
 
 **************************************************************************/
-static int get_hwver_num(struct qpnp_vadc_chip *vadc, enum qpnp_vadc_channels channel)
+int get_hwver_num(struct qpnp_vadc_chip *vadc, enum qpnp_vadc_channels channel)
 {
     int rc = 0;
     int i = 0;
