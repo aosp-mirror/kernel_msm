@@ -33,6 +33,7 @@
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/power/fan5451x.h>
 #include <linux/wakelock.h>
+#include <linux/debugfs.h>
 
 #define FAN5451x_DEV_NAME "fan5451x"
 
@@ -79,6 +80,9 @@ struct fan5451x_chip {
 	int ibat_offset_ma;
 	int step_dwn_offset_ma;
 	unsigned int step_dwn_thr_mv;
+	/* debugfs */
+	struct dentry *dent;
+	int fake_capacity;
 };
 
 static int fan5451x_read_reg(struct i2c_client *client, u8 reg)
@@ -626,6 +630,52 @@ static ssize_t show_chip_param(struct device *dev,
 
 static DEVICE_ATTR(chip_param, S_IRUGO, show_chip_param, NULL);
 
+static int fan5451x_debugfs_get_fake_capacity(void *data, u64 *val)
+{
+	struct fan5451x_chip *chip = data;
+
+	*val = (u64)chip->fake_capacity;
+
+	return 0;
+}
+
+static int fan5451x_debugfs_set_fake_capacity(void *data, u64 val)
+{
+	struct fan5451x_chip *chip = data;
+
+	chip->fake_capacity = (int)val;
+	chip->fake_capacity = max(chip->fake_capacity, 0);
+	chip->fake_capacity = min(chip->fake_capacity, 100);
+
+	power_supply_changed(&chip->batt_psy);
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(fan5451x_debugfs_fake_capacity_fops,
+		fan5451x_debugfs_get_fake_capacity,
+		fan5451x_debugfs_set_fake_capacity,
+		 "%llu\n");
+
+static void fan5451x_create_debugfs_entries(
+		struct fan5451x_chip *chip)
+{
+	struct dentry *file;
+
+	chip->dent = debugfs_create_dir("fan5451x", NULL);
+	if (IS_ERR(chip->dent)) {
+		pr_err("fan5451x driver couldn't create debugfs\n");
+		return;
+	}
+
+	file = debugfs_create_file("fake_capacity", S_IRUSR | S_IWUSR,
+			chip->dent, (void *)chip,
+			&fan5451x_debugfs_fake_capacity_fops);
+	if (IS_ERR(file)) {
+		pr_err("fan5451x couldn't create fake_capacity node\n");
+		return;
+	}
+}
+
 static int fan5451x_gpio_init(struct fan5451x_chip *chip)
 {
 	int ret;
@@ -862,6 +912,9 @@ static int get_prop_batt_health(struct fan5451x_chip *chip)
 static int get_prop_capacity(struct fan5451x_chip *chip)
 {
 	union power_supply_propval ret = {0,};
+
+	if (chip->fake_capacity)
+		return chip->fake_capacity;
 
 	if (chip->bms_psy) {
 		chip->bms_psy->get_property(chip->bms_psy,
@@ -1147,18 +1200,26 @@ static int fan5451x_probe(struct i2c_client *client,
 	fan5451x_vbat_measure(chip);
 
 	ret = device_create_file(&client->dev, &dev_attr_addr_register);
-	ret |= device_create_file(&client->dev, &dev_attr_status_register);
-	ret |= device_create_file(&client->dev, &dev_attr_chip_param);
-	if (ret) {
-		pr_err("failed to register attributes (%d)\n", ret);
-		goto err_device_create_file;
-	}
+	if (ret)
+		goto err_sysfs_addr_register;
+	ret = device_create_file(&client->dev, &dev_attr_status_register);
+	if (ret)
+		goto err_sysfs_status_register;
+	ret = device_create_file(&client->dev, &dev_attr_chip_param);
+	if (ret)
+		goto err_sysfs_chip_param;
+
+	fan5451x_create_debugfs_entries(chip);
 
 	pr_info("FAN5451x initialized\n");
 
 	return 0;
 
-err_device_create_file:
+err_sysfs_chip_param:
+	device_remove_file(&client->dev, &dev_attr_status_register);
+err_sysfs_status_register:
+	device_remove_file(&client->dev, &dev_attr_addr_register);
+err_sysfs_addr_register:
 	disable_irq_wake(client->irq);
 	free_irq(client->irq, chip);
 err_psy_unreg:
@@ -1177,6 +1238,8 @@ err_chip_clear:
 static int fan5451x_remove(struct i2c_client *client)
 {
 	struct fan5451x_chip *chip = i2c_get_clientdata(client);
+
+	debugfs_remove_recursive(chip->dent);
 
 	cancel_delayed_work_sync(&chip->vbat_measure_work);
 
