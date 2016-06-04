@@ -410,6 +410,9 @@ struct device_node *of_batterydata_get_best_profile(
 	return best_node;
 }
 
+#define    HW_VER0    0
+#define    HW_VER1    1
+extern int hwver_num0;
 int of_batterydata_read_data(struct device_node *batterydata_container_node,
 				struct bms_battery_data *batt_data,
 				int batt_id_uv)
@@ -440,13 +443,41 @@ int of_batterydata_read_data(struct device_node *batterydata_container_node,
 						"qcom,batt-id-kohm",
 						&batt_ids);
 		if (rc)
+		{
 			continue;
-		for (i = 0; i < batt_ids.num; i++) {
-			delta = abs(batt_ids.kohm[i] - batt_id_kohm);
-			if (delta < best_delta || !best_node) {
-				best_node = node;
-				best_delta = delta;
-				best_id_kohm = batt_ids.kohm[i];
+		}
+
+		rc = of_property_read_string(node, "qcom,battery-type",
+									&battery_type);
+		if (rc)
+		{
+			pr_err("read property failed\n");
+			continue;
+		}
+
+		if(NULL != battery_type)
+		{
+			if ((HW_VER0 == hwver_num0) && ('M' == battery_type[0]))
+			{
+				for (i = 0; i < batt_ids.num; i++) {
+					delta = abs(batt_ids.kohm[i] - batt_id_kohm);
+					if (delta < best_delta || !best_node) {
+						best_node = node;
+						best_delta = delta;
+						best_id_kohm = batt_ids.kohm[i];
+					}
+				}
+			}
+			else if ((HW_VER1 == hwver_num0) && ('F' == battery_type[0]))
+			{
+				for (i = 0; i < batt_ids.num; i++) {
+					delta = abs(batt_ids.kohm[i] - batt_id_kohm);
+					if (delta < best_delta || !best_node) {
+						best_node = node;
+						best_delta = delta;
+						best_id_kohm = batt_ids.kohm[i];
+					}
+				}
 			}
 		}
 	}
