@@ -55,6 +55,26 @@ static void *msm_imem_base;
 static int dummy_arg;
 
 static int subsys_crash_magic = 0x0;
+static bool lge_crash_handler_skipped = false;
+
+void lge_check_crash_skipped(char *reason)
+{
+	char *p;
+
+	p = strstr(reason, "Intentionally crash with err f");
+	if (p)
+		lge_crash_handler_skipped = true;
+}
+
+bool lge_is_crash_skipped(void)
+{
+	return lge_crash_handler_skipped;
+}
+
+void lge_clear_crash_skipped(void)
+{
+	lge_crash_handler_skipped = false;
+}
 
 void lge_set_subsys_crash_reason(const char *name, int type)
 {
