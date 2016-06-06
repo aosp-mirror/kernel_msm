@@ -653,6 +653,9 @@ struct rq {
 	u64 window_start;
 	u64 curr_runnable_sum;
 	u64 prev_runnable_sum;
+	u64 cur_irqload;
+	u64 avg_irqload;
+	u64 irqload_ts;
 #endif /* CONFIG_SCHED_WALT */
 
 

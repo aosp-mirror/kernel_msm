@@ -7480,6 +7480,11 @@ void __init sched_init(void)
 		rq->max_idle_balance_cost = sysctl_sched_migration_cost;
 		rq->cstate = 0;
 		rq->wakeup_latency = 0;
+#ifdef CONFIG_SCHED_WALT
+		rq->cur_irqload = 0;
+		rq->avg_irqload = 0;
+		rq->irqload_ts = 0;
+#endif
 
 		INIT_LIST_HEAD(&rq->cfs_tasks);
 

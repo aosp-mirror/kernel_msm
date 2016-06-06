@@ -61,6 +61,8 @@ unsigned int sysctl_sched_cstate_aware = 1;
 #ifdef CONFIG_SCHED_WALT
 unsigned int sysctl_sched_use_walt_cpu_util = 1;
 unsigned int sysctl_sched_use_walt_task_util = 1;
+__read_mostly unsigned int sysctl_sched_walt_cpu_high_irqload =
+    (10 * NSEC_PER_MSEC);
 #endif
 /*
  * The initial- and re-scaling of tunables is configurable
@@ -5486,6 +5488,11 @@ static inline int find_best_target(struct task_struct *p)
 
 		if (new_util > capacity_orig_of(i))
 			continue;
+
+#ifdef CONFIG_SCHED_WALT
+		if(walt_cpu_high_irqload(i))
+			continue;
+#endif
 
 		if (new_util < cur_capacity) {
 			if (cpu_rq(i)->nr_running) {
