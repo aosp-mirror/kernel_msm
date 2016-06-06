@@ -1062,6 +1062,9 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
             power_supply_set_present(chip->usb_psy, chip->usb_present);
         }
     }
+
+    pr_debug("batt psy changed\n");
+    power_supply_changed(&chip->batt_psy);
 }
 
 static irqreturn_t mp2661_chg_stat_handler(int irq, void *dev_id)
