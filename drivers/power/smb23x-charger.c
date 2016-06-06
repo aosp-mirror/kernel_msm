@@ -733,6 +733,29 @@ static int smb23x_charging_disable(struct smb23x_chip *chip,
 	return rc;
 }
 
+
+int smb23x_disable_input_current(bool disable)
+{
+	int rc = 0;
+
+	mutex_lock(&cei_chip->usb_suspend_lock);
+
+	cei_flag = true;
+
+	rc = smb23x_masked_write(cei_chip, CMD_REG_0, USB_SUSPEND_BIT,
+			disable ? USB_SUSPEND_BIT : 0);
+	if (rc < 0) {
+		pr_err("Write USB_SUSPEND failed, rc=%d\n", rc);
+	} else {
+		pr_debug("%suspend USB!\n", disable ? "S" : "Un-s");
+	}
+	cei_flag = false;
+
+	mutex_unlock(&cei_chip->usb_suspend_lock);
+
+	return rc;
+}
+
 static int smb23x_suspend_usb(struct smb23x_chip *chip,
 			int reason, bool suspend)
 {
@@ -1324,18 +1347,17 @@ int usb_insertion(void)
 	cei_flag = true;
 	usb_type = get_usb_supply_type(cei_chip);
 	smb23x_determine_initial_status(cei_chip);
+	reconfig_upon_unplug(cei_chip);
 	power_supply_set_present(cei_chip->usb_psy, true);
 	power_supply_set_online(cei_chip->usb_psy, true);
 
 	power_supply_changed(cei_chip->usb_psy);
-	reconfig_upon_unplug(cei_chip);
 
 	return 0;
 }
 
 int usb_pre_removal(void)
 {
-	cei_chip->usb_present = false;
 	cei_flag = false;
 
 	return 0;
@@ -1518,6 +1540,7 @@ static void reconfig_upon_unplug(struct smb23x_chip *chip)
 		smb23x_stay_awake(&chip->smb23x_ws,
 				  WAKEUP_SRC_IRQ_POLLING);
 		rc = smb23x_charging_disable(chip, USER, true);
+		rc = smb23x_suspend_usb(chip, USER, true);
 
 		rc = smb23x_hw_init(chip);
 		if (rc)
@@ -1525,6 +1548,7 @@ static void reconfig_upon_unplug(struct smb23x_chip *chip)
 			       rc);
 
 		rc = smb23x_charging_disable(chip, USER, false);
+		rc = smb23x_suspend_usb(chip, USER, false);
 
 		schedule_delayed_work(&chip->irq_polling_work,
 				      msecs_to_jiffies(IRQ_POLLING_MS));
@@ -1895,23 +1919,10 @@ static int smb23x_get_prop_batt_health(struct smb23x_chip *chip)
 
 static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
 {
-	int rc, status;
-	u8 tmp;
-
 	if (chip->batt_full)
 		return POWER_SUPPLY_STATUS_FULL;
 
-	rc = smb23x_read(chip, CHG_STATUS_B_REG, &tmp);
-	if (rc < 0) {
-		pr_err("Read STATUS_B failed, rc=%d\n", rc);
-		if (chip->usb_present == true)
-			return POWER_SUPPLY_STATUS_UNKNOWN;
-		else
-			return POWER_SUPPLY_STATUS_DISCHARGING;
-	}
-
-	status = tmp & CHARGE_TYPE_MASK;
-	return (status == NO_CHARGE_VAL) ? POWER_SUPPLY_STATUS_DISCHARGING :
+	return (chip->usb_present != true) ? POWER_SUPPLY_STATUS_DISCHARGING :
 						POWER_SUPPLY_STATUS_CHARGING;
 }
 
@@ -2233,14 +2244,12 @@ static void smb23x_external_power_changed(struct power_supply *psy)
 		icl = prop.intval / 1000;
 	pr_debug("current_limit = %d\n", icl);
 
-	if (chip->usb_psy_ma != icl) {
-		mutex_lock(&chip->icl_set_lock);
-		chip->usb_psy_ma = icl;
-		rc = smb23x_set_appropriate_usb_current(chip);
-		mutex_unlock(&chip->icl_set_lock);
-		if (rc < 0)
-			pr_err("Set appropriate current failed, rc=%d\n", rc);
-	}
+	mutex_lock(&chip->icl_set_lock);
+	chip->usb_psy_ma = icl;
+	rc = smb23x_set_appropriate_usb_current(chip);
+	mutex_unlock(&chip->icl_set_lock);
+	if (rc < 0)
+		pr_err("Set appropriate current failed, rc=%d\n", rc);
 
 	rc = chip->usb_psy->get_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_ONLINE, &prop);
