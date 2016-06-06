@@ -1965,7 +1965,11 @@ static __iw_softap_setparam(struct net_device *dev,
                 }
                 break;
             }
-
+        case QCSAP_PARAM_SET_PROXIMITY:
+            {
+                ret = wlan_hdd_set_proximity(set_value);
+                break;
+            }
         default:
             hddLog(LOGE, FL("Invalid setparam command %d value %d"),
                     sub_cmd, set_value);
@@ -4228,7 +4232,7 @@ static int iw_softap_version(struct net_device *dev,
     return ret;
 }
 
-VOS_STATUS hdd_softap_get_sta_info(hdd_adapter_t *pAdapter, v_U8_t *pBuf, int buf_len)
+int hdd_softap_get_sta_info(hdd_adapter_t *pAdapter, v_U8_t *pBuf, int buf_len)
 {
     v_U8_t i;
     int len = 0;
@@ -4265,7 +4269,11 @@ VOS_STATUS hdd_softap_get_sta_info(hdd_adapter_t *pAdapter, v_U8_t *pBuf, int bu
         return VOS_STATUS_E_FAULT;
     }
 
-    len = scnprintf(pBuf, buf_len, sta_info_header);
+    len = snprintf(pBuf, buf_len, sta_info_header);
+    if (len >= buf_len) {
+        hddLog(LOGE, FL("Insufficient buffer:%d, %d"), buf_len, len);
+        return -E2BIG;
+    }
     pBuf += len;
     buf_len -= len;
 
@@ -4281,6 +4289,10 @@ VOS_STATUS hdd_softap_get_sta_info(hdd_adapter_t *pAdapter, v_U8_t *pBuf, int bu
                                        pSapCtx->aStaInfo[i].macAddrSTA.bytes[3],
                                        pSapCtx->aStaInfo[i].macAddrSTA.bytes[4],
                                        pSapCtx->aStaInfo[i].macAddrSTA.bytes[5]);
+            if (len >= buf_len) {
+                hddLog(LOGE, FL("Insufficient buffer:%d, %d"), buf_len, len);
+                return -E2BIG;
+            }
             pBuf += len;
             buf_len -= len;
         }
@@ -4290,7 +4302,7 @@ VOS_STATUS hdd_softap_get_sta_info(hdd_adapter_t *pAdapter, v_U8_t *pBuf, int bu
         }
     }
     EXIT();
-    return VOS_STATUS_SUCCESS;
+    return 0;
 }
 
 static int __iw_softap_get_sta_info(struct net_device *dev,
@@ -4299,12 +4311,12 @@ static int __iw_softap_get_sta_info(struct net_device *dev,
                                     char *extra)
 {
     hdd_adapter_t *pHostapdAdapter = (netdev_priv(dev));
-    VOS_STATUS status;
+    int ret;
     ENTER();
-    status = hdd_softap_get_sta_info(pHostapdAdapter, extra, WE_SAP_MAX_STA_INFO);
-    if ( !VOS_IS_STATUS_SUCCESS( status ) ) {
+    ret = hdd_softap_get_sta_info(pHostapdAdapter, extra, WE_SAP_MAX_STA_INFO);
+    if (ret) {
        hddLog(VOS_TRACE_LEVEL_ERROR, "%s Failed!!!",__func__);
-       return -EINVAL;
+       return ret;
     }
     wrqu->data.length = strlen(extra);
     EXIT();
@@ -4507,7 +4519,7 @@ int __iw_get_softap_linkspeed(struct net_device *dev,
            kfree(pmacAddress);
            return -EFAULT;
        }
-       pmacAddress[MAC_ADDRESS_STR_LEN] = '\0';
+       pmacAddress[MAC_ADDRESS_STR_LEN-1] = '\0';
 
        status = hdd_string_to_hex (pmacAddress, MAC_ADDRESS_STR_LEN, macAddress );
        kfree(pmacAddress);
@@ -4669,6 +4681,8 @@ static const struct iw_priv_args hostapd_private_args[] = {
       IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1, 0,  "hideSSID" },
    { QCSAP_PARAM_SET_MC_RATE,
       IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1, 0,  "setMcRate" },
+  { QCSAP_PARAM_SET_PROXIMITY,
+      IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1, 0,  "setProximity" },
   { QCSAP_IOCTL_GETPARAM,
       IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
       IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,    "getparam" },

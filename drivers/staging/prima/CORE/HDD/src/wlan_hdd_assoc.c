@@ -1552,7 +1552,6 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
 #endif
     int status;
     v_BOOL_t hddDisconInProgress = FALSE;
-    tANI_U16 reason_code;
 
     /* HDD has initiated disconnect, do not send connect result indication
      * to kernel as it will be handled by __cfg80211_disconnect.
@@ -1996,13 +1995,18 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
             }
             else
             {
-                reason_code = WLAN_STATUS_UNSPECIFIED_FAILURE;
-
-                if (pRoamInfo && pRoamInfo->reasonCode)
-                    reason_code = (tANI_U16)pRoamInfo->reasonCode;
-
-                cfg80211_connect_result(dev, pWextState->req_bssId,
-                    NULL, 0, NULL, 0, reason_code, GFP_KERNEL);
+                if (pRoamInfo)
+                    cfg80211_connect_result ( dev, pRoamInfo->bssid,
+                        NULL, 0, NULL, 0,
+                        pRoamInfo->reasonCode ?
+                        pRoamInfo->reasonCode :
+                        WLAN_STATUS_UNSPECIFIED_FAILURE,
+                        GFP_KERNEL );
+                else
+                    cfg80211_connect_result ( dev, pWextState->req_bssId,
+                        NULL, 0, NULL, 0,
+                        WLAN_STATUS_UNSPECIFIED_FAILURE,
+                         GFP_KERNEL );
             }
             /*Clear the roam profile*/
             hdd_clearRoamProfileIe( pAdapter );
