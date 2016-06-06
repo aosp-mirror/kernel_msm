@@ -247,7 +247,8 @@ void htc_battery_probe_process(enum htc_batt_probe probe_type);
 int htc_battery_level_adjust(void);
 int htc_battery_charger_switch_internal(int enable);
 int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *max_mA);
-bool htc_battery_get_pd_type(int *curr);
+bool htc_battery_is_pd_detected(void);
+int htc_battery_get_pd_current(void);
 int htc_battery_get_pd_vbus(int *vbus);
 
 /* Implement on QCT driver */

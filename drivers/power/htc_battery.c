@@ -132,6 +132,19 @@ enum {
 		printk(KERN_DEBUG"[BATT] " x); \
 } while (0)
 
+static bool need_to_check_cable(int type) {
+	return ((type == POWER_SUPPLY_TYPE_USB_DCP) ||
+		(type == POWER_SUPPLY_TYPE_USB_ACA) ||
+		(type == POWER_SUPPLY_TYPE_USB_CDP) ||
+		(type == POWER_SUPPLY_TYPE_USB_HVDCP) ||
+		(type == POWER_SUPPLY_TYPE_USB_HVDCP_3) ||
+		(type == POWER_SUPPLY_TYPE_USB_PD) ||
+		(type == POWER_SUPPLY_TYPE_USB_PD_DRP) ||
+		(type == POWER_SUPPLY_TYPE_USB_TYPE_C) ||
+		(type == POWER_SUPPLY_TYPE_MAINS) ||
+		(type == POWER_SUPPLY_TYPE_UPS));
+}
+
 struct dec_level_by_current_ua {
 	int threshold_ua;
 	int dec_level;
@@ -905,6 +918,9 @@ void update_htc_chg_src(void)
 		case POWER_SUPPLY_TYPE_USB_ACA:
 		case POWER_SUPPLY_TYPE_USB_HVDCP:
 		case POWER_SUPPLY_TYPE_USB_HVDCP_3:
+		case POWER_SUPPLY_TYPE_USB_TYPE_C:
+		case POWER_SUPPLY_TYPE_USB_PD:
+		case POWER_SUPPLY_TYPE_USB_PD_DRP:
 			chg_src = 2; /* AC */
 			break;
 		case POWER_SUPPLY_TYPE_WIRELESS:
@@ -1028,20 +1044,20 @@ static void cable_impedance_worker(struct work_struct *work)
 	int rc;
 	int vbus1, vbus2, vbus3;
 	int vbus_now;
+	int src = htc_batt_info.rep.charging_source;
 
-	//int cnt = 0;
-        if (htc_batt_info.rep.charging_source != POWER_SUPPLY_TYPE_USB_DCP){
-		pr_info("[Cable impedance]Not correct charger source, ignore detection.!\n");
+        if (!need_to_check_cable(src)) {
+		pr_info("[Cable impedance] Incorrect charger type, ignore detection.\n");
 		return;
 	}
 
         if(g_is_pd_charger){
 		vbus_now = htc_batt_info.icharger->get_vbus();
-		pr_info("[Cable impedance]PD vbus : %d\n", vbus_now);
+		pr_info("[Cable impedance] PD vbus : %d\n", vbus_now);
 
 		if(vbus_now > 4400000) return; //vBus lower than 4.4V
 
-                pr_info("[Cable impedance]Start to calculate cable impedance!\n");
+                pr_info("[Cable impedance] Start to calculate cable impedance!\n");
                 gs_cable_impedance = 4;
 	        set_aicl_enable(true);
 		msleep(6000);
@@ -1049,24 +1065,24 @@ static void cable_impedance_worker(struct work_struct *work)
 	rc =  request_charger_status(CHARGER_ABILITY_DETECT_DONE, NULL);
 	if(rc == 0)
 	{
-		pr_info("[Cable impedance]AICL is not ready, pending the detection 2 seconds.!\n");
+		pr_info("[Cable impedance] AICL is not ready, pending the detection 2 seconds.!\n");
                 schedule_delayed_work(&htc_batt_info.cable_impedance_work, msecs_to_jiffies(2000));
 		return;
 	}
 	rc =  request_charger_status(CHARGER_5V_2A_DETECT_DONE, NULL);
 	if(rc == true)
 	{
-		pr_info("[Cable impedance]5V/2A detection is applied, calbe is good enough!\n");
+		pr_info("[Cable impedance] 5V/2A detection is applied, cable is good enough!\n");
 		return;
 	}
-	pr_info("[Cable impedance]Start to calculate cable impedance!\n");
+	pr_info("[Cable impedance] Start to calculate cable impedance!\n");
 	gs_cable_impedance = 4;
 
 	aicl_result = get_property(htc_batt_info.batt_psy,POWER_SUPPLY_PROP_INPUT_CURRENT_MAX)/1000;
 	gs_aicl_result = aicl_result;
 
 	if ((aicl_result > 700) || (htc_batt_info.rep.health != POWER_SUPPLY_HEALTH_GOOD)){
-		pr_info("[Cable impedance]Ignore the detecttion, aicl=%dmA\n", aicl_result );
+		pr_info("[Cable impedance] Ignore the detecttion, aicl=%dmA\n", aicl_result );
 		gs_cable_impedance = 1;
 		return;
 	}
@@ -1076,8 +1092,9 @@ static void cable_impedance_worker(struct work_struct *work)
 
         impedance_set_iusb_max(500000, true);
 	msleep(3000);
-        if (htc_batt_info.rep.charging_source != POWER_SUPPLY_TYPE_USB_DCP){
-                pr_info("[Cable impedance]Not correct charger source, ignore detection.!\n");
+	src = htc_batt_info.rep.charging_source;
+	if (!need_to_check_cable(src)) {
+		pr_info("[Cable impedance] Incorrect charger type, ignore detection.!\n");
 		gs_cable_impedance = 1;
                 goto endWorker;
         }
@@ -1092,13 +1109,14 @@ static void cable_impedance_worker(struct work_struct *work)
 
         impedance_set_iusb_max(300000, true);
 	msleep(3000);
-        if (htc_batt_info.rep.charging_source != POWER_SUPPLY_TYPE_USB_DCP){
-                pr_info("[Cable impedance]Not correct charger source, ignore detection.!\n");
+	src = htc_batt_info.rep.charging_source;
+	if (!need_to_check_cable(src)) {
+		pr_info("[Cable impedance] Incorrect charger type, ignore detection.!\n");
 		gs_cable_impedance = 1;
                 goto endWorker;
         }
 
-         aicl_result = get_property(htc_batt_info.batt_psy,POWER_SUPPLY_PROP_INPUT_CURRENT_MAX)/1000;
+	aicl_result = get_property(htc_batt_info.batt_psy,POWER_SUPPLY_PROP_INPUT_CURRENT_MAX)/1000;
 
 	vbus1 = pmi8994_get_usbin_voltage_now()/1000;//htc_batt_info.icharger->get_vbus();
 	vbus2 = pmi8994_get_usbin_voltage_now()/1000;//htc_batt_info.icharger->get_vbus();
@@ -1113,12 +1131,13 @@ static void cable_impedance_worker(struct work_struct *work)
 	}
 
 	msleep(3000);
-        if (htc_batt_info.rep.charging_source != POWER_SUPPLY_TYPE_USB_DCP){
-                pr_info("[Cable impedance]Not correct charger source, ignore detection.!\n");
+	src = htc_batt_info.rep.charging_source;
+	if (!need_to_check_cable(src)) {
+		pr_info("[Cable impedance] Incorrect charger type, ignore detection.!\n");
 		gs_cable_impedance = 1;
                 goto endWorker;
         }
-        aicl_result = get_property(htc_batt_info.batt_psy,POWER_SUPPLY_PROP_INPUT_CURRENT_MAX)/1000;
+	aicl_result = get_property(htc_batt_info.batt_psy,POWER_SUPPLY_PROP_INPUT_CURRENT_MAX)/1000;
 
         vbus1 = pmi8994_get_usbin_voltage_now()/1000;//htc_batt_info.icharger->get_vbus();
         vbus2 = pmi8994_get_usbin_voltage_now()/1000;//htc_batt_info.icharger->get_vbus();
@@ -1183,8 +1202,9 @@ static void batt_worker(struct work_struct *work)
 	char chg_strbuf[20];
 	/* reference from power_supply.h power_supply_type */
 	char *chr_src[] = {"NONE", "BATTERY", "UPS", "MAINS", "USB",
-		"AC(USB_DCP)", "USB_CDP", "USB_ACA", "USB_HVDCP","USB_HVDCP_3",
-		"WIRELESS","BMS","USB_PARALLEL","WIPOWER"};
+		"AC(USB_DCP)", "USB_CDP", "USB_ACA", "USB_C", "USB_PD", "USB_PD_DRP",
+		"USB_HVDCP","USB_HVDCP_3", "WIRELESS", "BMS", "USB_PARALLEL",
+		"WIPOWER"};
 
 	/* STEP 1: print out and reset total_time since last update */
 	cur_jiffies = jiffies;
@@ -1212,9 +1232,7 @@ static void batt_worker(struct work_struct *work)
 
 	/* STEP: Update safety timer setting when cable just plug in */
 	if (htc_batt_info.rep.charging_source != htc_batt_info.prev.charging_source) {
-		if (((htc_batt_info.rep.charging_source != POWER_SUPPLY_TYPE_USB_DCP) &&
-			(htc_batt_info.rep.charging_source != POWER_SUPPLY_TYPE_USB_HVDCP) &&
-			(htc_batt_info.rep.charging_source != POWER_SUPPLY_TYPE_USB_HVDCP_3)) ||
+		if (!need_to_check_cable(htc_batt_info.rep.charging_source) ||
 			g_flag_keep_charge_on || g_flag_disable_safety_timer) {
 			set_batt_psy_property(POWER_SUPPLY_PROP_SAFETY_TIMER_ENABLE, 0);
 		} else {
@@ -1450,8 +1468,9 @@ static void batt_worker(struct work_struct *work)
 		}
 	}
 
-        if (htc_batt_info.rep.charging_source != htc_batt_info.prev.charging_source){
-               if (htc_batt_info.rep.charging_source != POWER_SUPPLY_TYPE_USB_DCP) {
+	src = htc_batt_info.rep.charging_source;
+	if (src != htc_batt_info.prev.charging_source){
+               if (!need_to_check_cable(src)) {
 			gs_cable_impedance = 0;
 			htc_batt_info.htc_extension &= ~HTC_EXT_BAD_CABLE_USED;
 			gs_R_cable_impedance = 0;
@@ -1469,7 +1488,7 @@ static void batt_worker(struct work_struct *work)
 			}
 		}
 	}
-	if (htc_batt_info.rep.charging_source == POWER_SUPPLY_TYPE_USB_DCP){
+	if (need_to_check_cable(src)) {
 		BATT_EMBEDDED("cable_impedance: %d, R_cable_impedance: %d, aicl_result: %d",
 		gs_cable_impedance, gs_R_cable_impedance, gs_aicl_result);
 	}
@@ -1480,18 +1499,16 @@ static void batt_worker(struct work_struct *work)
 		else
 			sprintf(chg_strbuf, "PD%dV_%d.%dA", g_pd_voltage/1000,  g_pd_current/1000, (g_pd_current % 1000)/100);
 
-		if(htc_batt_info.rep.charging_source == POWER_SUPPLY_TYPE_USB_DCP){
-			aicl_now = get_property(htc_batt_info.batt_psy,POWER_SUPPLY_PROP_INPUT_CURRENT_MAX)/1000;
-			if(aicl_now != g_pd_current){
-				pr_info("Fix the current max.\n");
-				set_aicl_enable(false);
-				pmi8994_set_iusb_max(g_pd_current * 1000);
-				current_max = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
-				/* Update current max value */
-				if ((current_max/1000) < g_pd_current)
-					power_supply_set_current_limit(htc_batt_info.usb_psy, g_pd_current * 1000);
-			}
-                }
+		aicl_now = get_property(htc_batt_info.batt_psy,POWER_SUPPLY_PROP_INPUT_CURRENT_MAX);
+		if(aicl_now != g_pd_current * 1000) {
+			pr_info("Fix the current max.\n");
+			set_aicl_enable(false);
+			pmi8994_set_iusb_max(g_pd_current * 1000);
+		}
+		current_max = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
+		/* Update current max value */
+		if (current_max < g_pd_current * 1000)
+			power_supply_set_current_limit(htc_batt_info.usb_psy, g_pd_current * 1000);
 	}
 
 	/* FIXME: htc_extension not ready */
@@ -1689,15 +1706,6 @@ static void chk_unknown_chg_worker(struct work_struct *work)
 }
 #endif
 
-bool htc_stats_is_ac(int type)
-{
-    return type == POWER_SUPPLY_TYPE_USB_DCP ||
-           type == POWER_SUPPLY_TYPE_USB_ACA ||
-           type == POWER_SUPPLY_TYPE_USB_CDP ||
-           type == POWER_SUPPLY_TYPE_USB_HVDCP ||
-           type == POWER_SUPPLY_TYPE_USB_HVDCP_3;
-}
-
 const char* htc_stats_classify(unsigned long sum, int sample_count)
 {
     char* ret;
@@ -1827,8 +1835,8 @@ void htc_stats_update_charging_statistics(int latest, int prev)
         time_info.tm_min,
         time_info.tm_sec);
 
-    // When AC is plugged in
-    if (prev == POWER_SUPPLY_TYPE_UNKNOWN && htc_stats_is_ac(latest) && !g_htc_stats_charging)
+    /* When cable plug in */
+    if (prev == POWER_SUPPLY_TYPE_UNKNOWN && need_to_check_cable(latest) && !g_htc_stats_charging)
     {
         g_htc_stats_charging = true;
 
@@ -1868,8 +1876,8 @@ void htc_stats_update_charging_statistics(int latest, int prev)
             time_str);
     }
 
-    // When AC is plugged out
-    if (htc_stats_is_ac(prev) && latest == POWER_SUPPLY_TYPE_UNKNOWN && g_htc_stats_charging)
+    /* When cable plug out */
+    if (need_to_check_cable(prev) && latest == POWER_SUPPLY_TYPE_UNKNOWN && g_htc_stats_charging)
     {
         g_htc_stats_charging = false;
 
@@ -2117,10 +2125,17 @@ int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *ma
 	return -EINVAL;
 }
 
-bool htc_battery_get_pd_type(int *curr)
+bool htc_battery_is_pd_detected(void)
 {
-	*curr = g_pd_current;
 	return g_is_pd_charger;
+}
+
+int htc_battery_get_pd_current(void)
+{
+	if (g_is_pd_charger)
+		return g_pd_current;
+	else
+		return 0;
 }
 
 int htc_battery_get_pd_vbus(int *vbus)

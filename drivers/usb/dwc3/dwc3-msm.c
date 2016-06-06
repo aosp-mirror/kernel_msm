@@ -167,6 +167,9 @@ enum dwc3_chg_type {
 	DWC3_SDP_CHARGER,
 	DWC3_DCP_CHARGER,
 	DWC3_CDP_CHARGER,
+	DWC3_TYPEC_CHARGER,
+	DWC3_PD_CHARGER,
+	DWC3_PD_DRP_CHARGER,
 	DWC3_PROPRIETARY_CHARGER,
 	DWC3_FLOATED_CHARGER,
 };
@@ -1802,6 +1805,9 @@ static const char *chg_to_string(enum dwc3_chg_type chg_type)
 	case DWC3_SDP_CHARGER:		return "USB_SDP_CHARGER";
 	case DWC3_DCP_CHARGER:		return "USB_DCP_CHARGER";
 	case DWC3_CDP_CHARGER:		return "USB_CDP_CHARGER";
+	case DWC3_TYPEC_CHARGER:	return "USB_TYPEC_CHARGER";
+	case DWC3_PD_CHARGER:		return "USB_PD_CHARGER";
+	case DWC3_PD_DRP_CHARGER:	return "USB_PD_DRP_CHARGER";
 	case DWC3_PROPRIETARY_CHARGER:	return "USB_PROPRIETARY_CHARGER";
 	case DWC3_FLOATED_CHARGER:	return "USB_FLOATED_CHARGER";
 	default:			return "UNKNOWN_CHARGER";
@@ -2466,6 +2472,15 @@ static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 		psy->type = val->intval;
 
 		switch (psy->type) {
+		case POWER_SUPPLY_TYPE_USB_TYPE_C:
+			mdwc->chg_type = DWC3_TYPEC_CHARGER;
+			break;
+		case POWER_SUPPLY_TYPE_USB_PD:
+			mdwc->chg_type = DWC3_PD_CHARGER;
+			break;
+		case POWER_SUPPLY_TYPE_USB_PD_DRP:
+			mdwc->chg_type = DWC3_PD_DRP_CHARGER;
+			break;
 		case POWER_SUPPLY_TYPE_USB:
 			mdwc->chg_type = DWC3_SDP_CHARGER;
 			break;

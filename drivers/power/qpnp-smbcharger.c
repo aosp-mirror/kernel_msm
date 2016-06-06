@@ -40,6 +40,7 @@
 #include <linux/ktime.h>
 #ifdef CONFIG_HTC_BATT
 #include <linux/power/htc_battery.h>
+#include <linux/usb/usb_typec.h>
 #endif /* CONFIG_HTC_BATT */
 #include "pmic-voter.h"
 
@@ -278,7 +279,8 @@ struct smbchg_chip {
 	struct delayed_work		downgrade_iusb_work;
 	struct delayed_work		force_hvdcp_work;
 	struct work_struct		hvdcp_redet_work;
-	u32						htc_wa_flags;
+	struct usb_typec_ctrl           utc;
+	u32				htc_wa_flags;
 #endif /* CONFIG_HTC_BATT */
 
 	/* voters */
@@ -299,6 +301,7 @@ struct smbchg_chip {
 #define HOT_COLD_SL_COMP_BITS                0
 #define HARD_TEMP_MASK                       SMB_MASK(6, 5)
 #define SOFT_TEMP_MASK                       SMB_MASK(3, 0)
+#define SKIP_HARD_LIMIT_CHECK_LEVEL     70
 static struct smbchg_chip *the_chip;
 static bool g_is_batt_full_eoc_stop = false;
 
@@ -326,6 +329,14 @@ bool g_smb_flag_enable_batt_debug_log = false;
 #define USB_MA_1500	(1500)
 #define USB_MA_1600	(1600)
 #define USB_MA_2000	(2000)
+#define USB_MA_3000	(3000)
+
+typedef enum {
+	utccNone = 0,
+	utccDefault,
+	utcc1p5A,
+	utcc3p0A
+} USBTypeCCurrent;
 #endif /* CONFIG_HTC_BATT */
 
 enum qpnp_schg {
@@ -921,6 +932,9 @@ static char *usb_type_str[] = {
 	"DCP",		/* bit 2 */
 	"CDP",		/* bit 3 */
 	"NONE",		/* bit 4 error case */
+	"USB_C",	/* Type C Port */
+	"USB_PD",	/* Power Delivery Port */
+	"USB_PD_DRP"	/* PD Dual Role Port */
 };
 
 #define N_TYPE_BITS		4
@@ -936,12 +950,6 @@ static int get_type(u8 type_reg)
 /* helper to return the string of USB type */
 static inline char *get_usb_type_name(int type)
 {
-#ifdef CONFIG_HTC_BATT
-	int pd_current;
-	/*Force set DCP type for PD charger*/
-	if (htc_battery_get_pd_type(&pd_current))
-		return usb_type_str[2];
-#endif /* CONFIG_HTC_BATT */
 	return usb_type_str[type];
 }
 
@@ -951,17 +959,14 @@ static enum power_supply_type usb_type_enum[] = {
 	POWER_SUPPLY_TYPE_USB_DCP,	/* bit 2 */
 	POWER_SUPPLY_TYPE_USB_CDP,	/* bit 3 */
 	POWER_SUPPLY_TYPE_UNKNOWN,	/* bit 4 error case, report unknown */
+	POWER_SUPPLY_TYPE_USB_TYPE_C,	/* Type C Port */
+	POWER_SUPPLY_TYPE_USB_PD,	/* Power Delivery Port */
+	POWER_SUPPLY_TYPE_USB_PD_DRP,	/* PD Dual Role Port */
 };
 
 /* helper to return enum power_supply_type of USB type */
 static inline enum power_supply_type get_usb_supply_type(int type)
 {
-#ifdef CONFIG_HTC_BATT
-	int pd_current;
-	/*Force set DCP type for PD charger*/
-	if (htc_battery_get_pd_type(&pd_current))
-		return usb_type_enum[2];
-#endif /* CONFIG_HTC_BATT */
 	return usb_type_enum[type];
 }
 
@@ -990,7 +995,20 @@ static void read_usb_type(struct smbchg_chip *chip, char **usb_type_name,
 		*usb_supply_type = POWER_SUPPLY_TYPE_UNKNOWN;
 		return;
 	}
-
+#ifdef CONFIG_HTC_BATT
+	/* Precedence: PD > Type-C (3A or 1.5A) -> SDP, CDP, DCP from APSD
+	 * Origin table matches with APSD detection(SMBCHGL_MISC_IDEV_STS[7:4])
+	 * Now we extended it with below two types
+	 * - Type 5: Type C Port
+	 * - Type 6: Power Delivery Port
+	 */
+	if (htc_battery_is_pd_detected())
+		type = 6;
+	else if (chip->utc.sink_current &&
+			chip->utc.sink_current != utccDefault)
+		type = 5;
+	else {
+#endif /* CONFIG_HTC_BATT */
 	rc = smbchg_read(chip, &reg, chip->misc_base + IDEV_STS, 1);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't read status 5 rc = %d\n", rc);
@@ -999,6 +1017,9 @@ static void read_usb_type(struct smbchg_chip *chip, char **usb_type_name,
 		return;
 	}
 	type = get_type(reg);
+#ifdef CONFIG_HTC_BATT
+	}
+#endif /* CONFIG_HTC_BATT */
 	*usb_type_name = get_usb_type_name(type);
 	*usb_supply_type = get_usb_supply_type(type);
 }
@@ -1834,9 +1855,6 @@ static int smbchg_set_usb_current_max(struct smbchg_chip *chip,
 							int current_ma)
 {
 	int rc = 0;
-#ifdef CONFIG_HTC_BATT
-	int pd_current;
-#endif
 
 	/*
 	 * if the battery is not present, do not allow the usb ICL to lower in
@@ -1850,8 +1868,8 @@ static int smbchg_set_usb_current_max(struct smbchg_chip *chip,
 
 #ifdef CONFIG_HTC_BATT
 	if(g_is_limit_IUSB && (current_ma >= USB_MA_1000) &&
-		(chip->usb_supply_type == POWER_SUPPLY_TYPE_USB_DCP) &&
-		!htc_battery_get_pd_type(&pd_current)){
+			(chip->usb_supply_type == POWER_SUPPLY_TYPE_USB_DCP) &&
+			!htc_battery_is_pd_detected()){
 		pr_smb(PR_STATUS, "Charger is bad, force limit current %d -> 1000 mA\n",current_ma);
 		current_ma = USB_MA_1000;
 		g_is_limit_IUSB = false;
@@ -1870,24 +1888,24 @@ static int smbchg_set_usb_current_max(struct smbchg_chip *chip,
 	}
 
 	switch (chip->usb_supply_type) {
-	case POWER_SUPPLY_TYPE_USB:
 #ifdef CONFIG_HTC_BATT
-		if(htc_battery_get_pd_type(&pd_current)){
-			if (current_ma <= CURRENT_1500_MA) {
-				/* use override for CDP */
-				rc = smbchg_masked_write(chip,
-						chip->usb_chgpth_base + CMD_IL,
-						ICL_OVERRIDE_BIT, ICL_OVERRIDE_BIT);
-				if (rc < 0)
-					pr_err("Couldn't set override rc = %d\n", rc);
-			}
-
-			rc = smbchg_set_high_usb_chg_current(chip, current_ma);
-			if (rc < 0)
-				pr_err("Couldn't set %dmA rc = %d\n", current_ma, rc);
-			break;
-		}
+	case POWER_SUPPLY_TYPE_USB_PD_DRP:
+	case POWER_SUPPLY_TYPE_USB_PD:
+		g_is_charger_ability_detected = true;
+	case POWER_SUPPLY_TYPE_USB_TYPE_C:
+		/* PMIC doesn't recognize PD or Type-C, override APSD with
+		   command register. */
+		rc = smbchg_masked_write(chip,
+			chip->usb_chgpth_base + CMD_IL,
+			ICL_OVERRIDE_BIT, ICL_OVERRIDE_BIT);
+		if (rc < 0)
+			pr_err("Couldn't set override rc = %d\n", rc);
+		rc = smbchg_set_high_usb_chg_current(chip, current_ma);
+		if (rc < 0)
+			pr_err("Couldn't set %dmA rc = %d\n", current_ma, rc);
+		break;
 #endif /* CONFIG_HTC_BATT */
+	case POWER_SUPPLY_TYPE_USB:
 		if ((current_ma < CURRENT_150_MA) &&
 				(chip->wa_flags & SMBCHG_USB100_WA))
 			current_ma = CURRENT_150_MA;
@@ -2225,8 +2243,7 @@ static int smbchg_sw_esr_pulse_en(struct smbchg_chip *chip, bool en)
 static void smbchg_rerun_aicl(struct smbchg_chip *chip)
 {
 #ifdef CONFIG_HTC_BATT
-	int pd_current;
-	if (htc_battery_get_pd_type(&pd_current)){
+	if (htc_battery_is_pd_detected()){
 		set_aicl_enable(false);
 		pr_info("PD charger donot rerun AICL.\n");
 		return;
@@ -4739,9 +4756,6 @@ static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 						enum power_supply_type type)
 {
 	int rc, current_limit_ma;
-#ifdef CONFIG_HTC_BATT
-	int pd_current;
-#endif /* CONFIG_HTC_BATT */
 
 	/*
 	 * if the type is not unknown, set the type before changing ICL vote
@@ -4756,6 +4770,19 @@ static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 	 * modes, skip all BC 1.2 current if external typec is supported.
 	 * Note: for SDP supporting current based on USB notifications.
 	 */
+#ifdef CONFIG_HTC_BATT
+	/*
+	 * Precedence: PD > Type-C (3A or 1.5A) -> SDP, CDP, DCP from APSD
+	 */
+	if (type == POWER_SUPPLY_TYPE_USB_PD) {
+		current_limit_ma = htc_battery_get_pd_current();
+	} else if (type == POWER_SUPPLY_TYPE_USB_TYPE_C) {
+		if (chip->utc.sink_current == utcc1p5A)
+			current_limit_ma = 1500;
+		else if (chip->utc.sink_current == utcc3p0A)
+			current_limit_ma = 3000;
+	} else
+#endif /* CONFIG_HTC_BATT */
 	if (chip->typec_psy && (type != POWER_SUPPLY_TYPE_USB))
 		current_limit_ma = chip->typec_current_ma;
 	else if (type == POWER_SUPPLY_TYPE_USB)
@@ -4768,10 +4795,6 @@ static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 		current_limit_ma = smbchg_default_hvdcp_icl_ma;
 	else if (type == POWER_SUPPLY_TYPE_USB_HVDCP_3)
 		current_limit_ma = smbchg_default_hvdcp3_icl_ma;
-#ifdef CONFIG_HTC_BATT
-	else if (htc_battery_get_pd_type(&pd_current))
-		current_limit_ma = pd_current;
-#endif /* CONFIG_HTC_BATT */
 	else
 		current_limit_ma = smbchg_default_dcp_icl_ma;
 
@@ -5092,7 +5115,7 @@ static void smbchg_downgrade_iusb_work(struct work_struct *work)
 static void smbchg_iusb_5v_2a_detect_work(struct work_struct *work)
 {
 	int upgrade_index, target_index;
-	int rc = 0, current_aicl = 0, vbat_mv = 0, vbus = 0;
+	int rc = 0, current_aicl = 0, vbat_mv = 0, vbus = 0, level = 0;
 	bool hard_limit = false;
 	struct smbchg_chip *chip = the_chip;
 
@@ -5104,6 +5127,7 @@ static void smbchg_iusb_5v_2a_detect_work(struct work_struct *work)
 		vbat_mv = get_prop_batt_voltage_now(chip)/1000;
 		vbus = pmi8994_get_usbin_voltage_now()/1000;
 		hard_limit = is_smbchg_hard_limit(chip);
+		level = get_prop_batt_capacity(chip);
 	}
 
 	if (g_is_charger_ability_detected)
@@ -5119,8 +5143,9 @@ static void smbchg_iusb_5v_2a_detect_work(struct work_struct *work)
 			USB_MA_2000,
 			chip->tables.usb_ilim_ma_len);
 
-	if (!hard_limit || vbus < (SMBCHG_VIN_MIN_MV + 50) ||
-			vbus < (vbat_mv + SMBCHG_5V2A_VBATT_MV)) {
+	if ((!hard_limit && level > SKIP_HARD_LIMIT_CHECK_LEVEL) ||
+			(vbus < (SMBCHG_VIN_MIN_MV + 50)) ||
+			(vbus < (vbat_mv + SMBCHG_5V2A_VBATT_MV))) {
 		if (delayed_work_pending(&chip->downgrade_iusb_work))
 			cancel_delayed_work_sync(&chip->downgrade_iusb_work);
 		schedule_delayed_work(&chip->downgrade_iusb_work, 0);
@@ -5141,7 +5166,6 @@ static void smbchg_iusb_5v_2a_detect_work(struct work_struct *work)
 	} else {
 		/*5V/2A Adapter is detected*/
 		g_is_5v_2a_detected = true;
-		g_is_charger_ability_detected = true;
 		pr_smb(PR_STATUS, "Upgrade to 2A done, "
 			"current_aicl=%dmA, vbatt=%dmV, vbus=%duV, hard_limit=%d\n\n",
 		current_aicl, vbat_mv, vbus, hard_limit);
@@ -5153,6 +5177,22 @@ static void smbchg_iusb_5v_2a_detect_work(struct work_struct *work)
 			pr_err("Couldn't enable input missing poller rc=%d\n", rc);
 		/*Enable HW AICL to run 2A again*/
 		set_aicl_enable(true);
+
+		/* Detection of Type-C 3A charger */
+		if (the_chip->utc.sink_current == utcc3p0A) {
+			pr_smb(PR_STATUS, "Type-C 3A charger true\n");
+			rc = vote(the_chip->usb_icl_votable, PSY_ICL_VOTER,
+			true, USB_MA_3000);
+			if (rc < 0) {
+				pr_err("Couldn't vote for ICL rc=%d\n", rc);
+				return;
+			}
+			smbchg_rerun_aicl(the_chip);
+		} else
+			pr_smb(PR_STATUS, "Type-C 3A charger false\n");
+
+		/* Charger ability detection done */
+		g_is_charger_ability_detected = true;
 	}
 }
 #endif /* CONFIG_HTC_BATT */
@@ -5299,7 +5339,6 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 	int rc;
 	char *usb_type_name = "null";
 #ifdef CONFIG_HTC_BATT
-	int pd_current;
 	union power_supply_propval voltage_max = {0, };
 
 		smbchg_sec_masked_write(chip, chip->misc_base + MISC_TRIM_OPT_15_8,
@@ -5343,8 +5382,7 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 	schedule_work(&chip->usb_set_online_work);
 
 #ifdef CONFIG_HTC_BATT
-	if(htc_battery_get_pd_type(&pd_current)){
-		g_is_charger_ability_detected = true;
+	if(htc_battery_is_pd_detected()){
 		set_aicl_enable(false);
 		rc = htc_battery_get_pd_vbus(&voltage_max.intval);
 		if (!rc) {
@@ -5355,13 +5393,6 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 			if (rc)
 				pr_err("failed to set voltage max rc=%d\n", rc);
 		}
-
-		/* use override for PD charger */
-		rc = smbchg_sec_masked_write(chip,
-			chip->usb_chgpth_base + CMD_IL,
-			ICL_OVERRIDE_BIT, ICL_OVERRIDE_BIT);
-		if (rc < 0)
-			pr_err("Couldn't set override rc = %d\n", rc);
 
 		if (!parallel_psy){
 			pr_smb(PR_STATUS, "Parallel charging not enabled for PD\n");
@@ -7373,7 +7404,6 @@ static irqreturn_t otg_fail_handler(int irq, void *_chip)
 }
 
 #ifdef CONFIG_HTC_BATT
-#define SKIP_HARD_LIMIT_CHECK_LEVEL	70
 void check_charger_ability(int aicl_level)
 {
 	union power_supply_propval prop = {0,};
@@ -7393,7 +7423,8 @@ void check_charger_ability(int aicl_level)
 	pr_smb(PR_STATUS, "CHG_TYPE is %d, AICL is %d, level is %d\n",
 		usb_supply_type, aicl_level, level);
 
-	if (usb_supply_type != POWER_SUPPLY_TYPE_USB_DCP)
+	if (usb_supply_type != POWER_SUPPLY_TYPE_USB_DCP &&
+		usb_supply_type != POWER_SUPPLY_TYPE_USB_TYPE_C)
 		return;
 
 	//checking for hard limit behavior
@@ -7403,7 +7434,15 @@ void check_charger_ability(int aicl_level)
 		pr_err("Failed to read FV state rc=%d\n", rc);
 	pr_smb(PR_STATUS, "FV status = %02x, Hard Limit = %d\n", reg, ((reg & FV_AICL_STS_BIT)!=0));
 	if (((reg & FV_AICL_STS_BIT) == 0) && (level > SKIP_HARD_LIMIT_CHECK_LEVEL)){
-		if (aicl_level > USB_MA_2000){
+		if (the_chip->utc.sink_current == utcc3p0A) {
+			rc = vote(the_chip->usb_icl_votable, PSY_ICL_VOTER,
+				true, USB_MA_3000);
+			if (rc < 0) {
+				pr_err("Couldn't vote for ICL rc=%d\n", rc);
+				return;
+			}
+			pr_smb(PR_STATUS, "No Hard Limit, set AICL to 3000mA\n");
+		} else if (aicl_level > USB_MA_2000){
 			rc = vote(the_chip->usb_icl_votable, PSY_ICL_VOTER,
 				true, USB_MA_2000);
 			if (rc < 0) {
@@ -7474,9 +7513,9 @@ void check_charger_ability(int aicl_level)
 	/* Start 5V2A detection */
 	if (the_chip->hvdcp_not_supported &&
 			!g_is_charger_ability_detected) {
-		/*Disable HW AICL to apply SW AICL*/
+		/* Disable HW AICL to apply SW AICL */
 		set_aicl_enable(false);
-		/*Disable Input Missing Poller before 5V2A detection*/
+		/* Disable Input Missing Poller before 5V2A detection */
 		rc = smbchg_sec_masked_write(the_chip,
 			the_chip->misc_base + TRIM_OPTIONS_7_0,
 			INPUT_MISSING_POLLER_EN_BIT, 0);
@@ -9777,6 +9816,13 @@ static int smbchg_probe(struct spmi_device *spmi)
 	}
 
 #ifdef CONFIG_HTC_BATT
+	chip->utc.sink_current = utccNone;
+	rc = usb_typec_ctrl_register(chip->dev, &chip->utc);
+	if (rc < 0) {
+		dev_err(&spmi->dev,
+		"Unable to register usb_typec_ctrl rc = %d\n", rc);
+	}
+
 	htc_battery_create_attrs(chip->batt_psy.dev);
 #endif /* CONFIG_HTC_BATT */
 
