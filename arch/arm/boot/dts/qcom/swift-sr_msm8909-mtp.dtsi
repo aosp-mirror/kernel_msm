@@ -161,10 +161,10 @@
 	stc3117@70 {
 		compatible = "st,stc3117";
 		reg = <0x70>;
-		st,nbc-mAh = <300>;
-		st,nbii-microohm = <330>;
-		st,ncc-cnf = <59>;
-		st,nvm-cnf = <271>;
+		st,nbc-mAh = <340>;
+		st,nbii-microohm = <501>;
+		st,ncc-cnf = <66>;
+		st,nvm-cnf = <184>;
 		st,rsns-microhom = <10>;
 	};
 };
