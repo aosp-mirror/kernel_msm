@@ -2677,6 +2677,11 @@ static int smb23x_probe(struct i2c_client *client,
 
 	cei_chip = chip;
 	cei_smb231_flag = true;
+	if (chip->usb_present) {
+		cei_flag = true;
+	} else {
+		cei_flag = false;
+	}
 
 	INIT_WORK(&WPC_check, WPC_check_work);
 	alarm_init(&wpc_check_alarm, ALARM_REALTIME, wpc_check_alarm_function);
