@@ -58,56 +58,56 @@ static struct stc311x_platform_data default_stc3117_platform_data = {
 	//Gas gauge specific, Default:
 	.Alm_SOC = 10,      /* SOC alm level %*/
 	.Alm_Vbat = 3600,   /* Vbat alm level mV*/
-	.CC_cnf = 59,      /* nominal CC_cnf, coming from battery characterisation*/
-	.VM_cnf = 271,      /* nominal VM cnf , coming from battery characterisation*/
-	.Rint = 330,		/* nominal internal impedance*/
-	.Cnom = 300,       /* nominal capacity in mAh, coming from battery characterisation*/
+	.CC_cnf = 66,      /* nominal CC_cnf, coming from battery characterisation*/
+	.VM_cnf = 184,      /* nominal VM cnf , coming from battery characterisation*/
+	.Rint = 501,		/* nominal internal impedance*/
+	.Cnom = 340,       /* nominal capacity in mAh, coming from battery characterisation*/
 	.Rsense = 10,       /* sense resistor mOhms*/
-	.RelaxCurrent = 150, /* current for relaxation in mA (< C/20) */
+	.RelaxCurrent = 17, /* current for relaxation in mA (< C/20) */
 	.Adaptive = 1,     /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 
 	/* Elentec Co Ltd Battery pack - 80 means 8% */
-	.CapDerating[6] = -5,   /* capacity derating in 0.1%, for temp = -20°C */
-	.CapDerating[5] = -5,   /* capacity derating in 0.1%, for temp = -10°C */
-	.CapDerating[4] = -5,    /* capacity derating in 0.1%, for temp = 0°C */
-	.CapDerating[3] = -5,  /* capacity derating in 0.1%, for temp = 10°C */
-	.CapDerating[2] = -5,  /* capacity derating in 0.1%, for temp = 25°C */
+	.CapDerating[6] = 37,   /* capacity derating in 0.1%, for temp = -20°C */
+	.CapDerating[5] = 37,   /* capacity derating in 0.1%, for temp = -10°C */
+	.CapDerating[4] = 37,    /* capacity derating in 0.1%, for temp = 0°C */
+	.CapDerating[3] = 10,  /* capacity derating in 0.1%, for temp = 10°C */
+	.CapDerating[2] = 0,  /* capacity derating in 0.1%, for temp = 25°C */
 	.CapDerating[1] = 0,  /* capacity derating in 0.1%, for temp = 40°C */
 	.CapDerating[0] = 0,  /* capacity derating in 0.1%, for temp = 60°C */
 
-	.OCVValue[0] = 3300,             /* OCV curve adjustment */
-	.OCVValue[1] = 3559,             /* OCV curve adjustment */
-	.OCVValue[2] = 3671,             /* OCV curve adjustment */
-	.OCVValue[3] = 3684,             /* OCV curve adjustment */
-	.OCVValue[4] = 3702,             /* OCV curve adjustment */
-	.OCVValue[5] = 3730,             /* OCV curve adjustment */
-	.OCVValue[6] = 3747,             /* OCV curve adjustment */
-	.OCVValue[7] = 3765,             /* OCV curve adjustment */
-	.OCVValue[8] = 3795,             /* OCV curve adjustment */
-	.OCVValue[9] = 3832,             /* OCV curve adjustment */
-	.OCVValue[10] = 3899,            /* OCV curve adjustment */
-	.OCVValue[11] = 3941,            /* OCV curve adjustment */
-	.OCVValue[12] = 3967,            /* OCV curve adjustment */
-	.OCVValue[13] = 4087,            /* OCV curve adjustment */
-	.OCVValue[14] = 4181,            /* OCV curve adjustment */
-	.OCVValue[15] = 4297,            /* OCV curve adjustment */
+	.OCVValue[0] = 3400,             /* OCV curve adjustment */
+	.OCVValue[1] = 3605,             /* OCV curve adjustment */
+	.OCVValue[2] = 3672,             /* OCV curve adjustment */
+	.OCVValue[3] = 3687,             /* OCV curve adjustment */
+	.OCVValue[4] = 3704,             /* OCV curve adjustment */
+	.OCVValue[5] = 3734,             /* OCV curve adjustment */
+	.OCVValue[6] = 3755,             /* OCV curve adjustment */
+	.OCVValue[7] = 3779,             /* OCV curve adjustment */
+	.OCVValue[8] = 3818,             /* OCV curve adjustment */
+	.OCVValue[9] = 3866,             /* OCV curve adjustment */
+	.OCVValue[10] = 3947,            /* OCV curve adjustment */
+	.OCVValue[11] = 3999,            /* OCV curve adjustment */
+	.OCVValue[12] = 4053,            /* OCV curve adjustment */
+	.OCVValue[13] = 4160,            /* OCV curve adjustment */
+	.OCVValue[14] = 4277,            /* OCV curve adjustment */
+	.OCVValue[15] = 4388,            /* OCV curve adjustment */
 
 	.SOCValue[0]  = 0x0,
-	.SOCValue[1]  = 0x6,
-	.SOCValue[2]  = 0x0C,
-	.SOCValue[3]  = 0x14,
-	.SOCValue[4]  = 0x1E,
-	.SOCValue[5]  = 0x28,
-	.SOCValue[6]  = 0x32,
-	.SOCValue[7]  = 0x3C,
-	.SOCValue[8]  = 0x50,
-	.SOCValue[9]  = 0x64,
-	.SOCValue[10] = 0x78,
-	.SOCValue[11] = 0x82,
-	.SOCValue[12] = 0x8C,
-	.SOCValue[13] = 0xA0,
-	.SOCValue[14] = 0xB4,
-	.SOCValue[15] = 0xC8,
+	.SOCValue[1]  = 0x3,
+	.SOCValue[2]  = 0x6,
+	.SOCValue[3]  = 0x0A,
+	.SOCValue[4]  = 0x0F,
+	.SOCValue[5]  = 0x14,
+	.SOCValue[6]  = 0x19,
+	.SOCValue[7]  = 0x1E,
+	.SOCValue[8]  = 0x28,
+	.SOCValue[9]  = 0x32,
+	.SOCValue[10] = 0x3C,
+	.SOCValue[11] = 0x41,
+	.SOCValue[12] = 0x46,
+	.SOCValue[13] = 0x50,
+	.SOCValue[14] = 0x5A,
+	.SOCValue[15] = 0x64,
 
 	/*if the application temperature data is preferred than the STC3117 temperature*/
 	.ExternalTemperature = Temperature_fn, /*External temperature fonction, return °C*/
