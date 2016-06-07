@@ -40,23 +40,9 @@
 
 #define RSB_DELAY_MS_AFTER_VDD 10
 
-struct rsb_spi_comms {
-	int (*open)(void *);
-	void (*close)(void *);
-	int (*write)(void *, uint8_t, uint8_t);
-	int (*read)(void *, uint8_t *, uint8_t);
-	int (*write_read)(void *, uint8_t, uint8_t);
-
-	struct spi_device *spi_device;
-	uint8_t tx_buf;
-	uint8_t rx_buf;
-};
-
 struct rsb_drv_data {
 	struct spi_device *device;
-	struct rsb_spi_comms comms;
 	struct dentry *dent;
-	struct task_struct *poll_thread;
 	struct input_dev *in_dev;
 	int cs;
 	struct regulator *vld_reg; /* power supply voltage v3.3 */
@@ -115,6 +101,42 @@ static uint8_t init_writes[][2] = {
 	{0x79, 0x08 },
 };
 
+/*
+ * SPI device protocol to read a register.
+ * Write a 8 bit address value, and read an 8 bit value back.
+ */
+static int rsb_read(struct rsb_drv_data *rsb_data, uint8_t *rx, uint8_t addr)
+{
+
+	/* TODO(pmalani): Do we need a timeout check?? */
+	int ret = 0;
+	uint8_t read_buf[2];
+	struct spi_transfer xfers[2] = {
+		{
+			.tx_buf = &read_buf[0],
+			.len = 1,
+			.delay_usecs = 10,
+		},
+		{
+			.rx_buf = &read_buf[1],
+			.len = 1,
+		},
+	};
+
+	read_buf[0] = addr;
+
+	gpio_set_value(rsb_data->cs, 0);
+	ret = spi_sync_transfer(rsb_data->device, xfers, 2);
+	if (ret == 0) {
+		*rx = read_buf[1];
+	} else {
+		dev_err(&rsb_data->device->dev,
+			"SPI Protocol message read failed\n");
+	}
+
+	gpio_set_value(rsb_data->cs, 1);
+	return ret;
+}
 
 static int get_test_read(void *data, u64 *val)
 {
@@ -124,7 +146,7 @@ static int get_test_read(void *data, u64 *val)
 	dev_info(&rsb_data->device->dev, "Writing to debugfs\n");
 
 	/* Read the sensorPID */
-	if (rsb_data->comms.read(data, &rx_data, 0x00) == 0)
+	if (rsb_read(data, &rx_data, 0x00) == 0)
 		dev_info(&rsb_data->device->dev, "PID is %x\n",
 			rx_data);
 	else
@@ -135,47 +157,32 @@ static int get_test_read(void *data, u64 *val)
 DEFINE_SIMPLE_ATTRIBUTE(test_read_fops, get_test_read, NULL, "%llu\n");
 
 /*
- * SPI device protocol to read a register.
- * Write a 8 bit address value, and read an 8 bit value back.
- */
-static int rsb_spi_read(void *data, uint8_t *rx, uint8_t addr)
-{
-
-	/* TODO(pmalani): Do we need a timeout check?? */
-	struct rsb_drv_data *rsb_data = data;
-
-	rsb_data->comms.tx_buf = (0 << 7) | addr;
-
-	gpio_set_value(rsb_data->cs, 0);
-	spi_write(rsb_data->device, &(rsb_data->comms.tx_buf), 1);
-	spi_read(rsb_data->device, &(rsb_data->comms.rx_buf), 1);
-	gpio_set_value(rsb_data->cs, 1);
-
-	memcpy(rx, &(rsb_data->comms.rx_buf), sizeof(*rx));
-	return 0;
-}
-
-/*
  * SPI Protocol to write a byte to an address.
  * Returns 0 on success, -1 otherwise.
  */
-static int rsb_spi_write(void *data, uint8_t tx_val, uint8_t addr)
+static int rsb_write(struct rsb_drv_data *rsb_data, uint8_t tx_val,
+	uint8_t addr)
 {
-	struct rsb_drv_data *rsb_data = data;
-	uint8_t tx_buf[2] = {0};
+	int ret = 0;
+	uint8_t write_buf[2];
 
-	tx_buf[0] = (1 << 7) | addr;
-	tx_buf[1] = tx_val;
+	struct spi_transfer xfer = {
+			.tx_buf = write_buf,
+			.len = 2,
+	};
+
+	write_buf[0] = (1 << 7) | addr;
+	write_buf[1] = tx_val;
 
 	gpio_set_value(rsb_data->cs, 0);
-	if (spi_write(rsb_data->device, tx_buf, 2) == 0) {
-		gpio_set_value(rsb_data->cs, 1);
-		return 0;
+	ret = spi_sync_transfer(rsb_data->device, &xfer, 1);
+	if (ret != 0) {
+		dev_err(&rsb_data->device->dev,
+			"SPI Protocol write message failed\n");
 	}
+	gpio_set_value(rsb_data->cs, 1);
 
-	dev_warn(&rsb_data->device->dev,
-		"Write %x to addr %x failed\n", tx_val, addr);
-	return -EIO;
+	return ret;
 }
 
 /*
@@ -183,15 +190,19 @@ static int rsb_spi_write(void *data, uint8_t tx_val, uint8_t addr)
  * Also reads back the address to make sure it's written correctly.
  * Returns 0 on success, -1 otherwise.
  */
-static int rsb_spi_write_read(void *data, uint8_t tx_val, uint8_t addr)
+static int rsb_write_read(struct rsb_drv_data *rsb_data, uint8_t tx_val,
+	uint8_t addr)
 {
-	struct rsb_drv_data *rsb_data = data;
 	uint8_t num_retries = NUM_WRITE_RETRIES;
 	uint8_t read_val;
 
 	do {
-		rsb_data->comms.write(rsb_data, tx_val, addr);
-		rsb_data->comms.read(rsb_data, &read_val, addr);
+		if (rsb_write(rsb_data, tx_val, addr))
+			break;
+
+		if (rsb_read(rsb_data, &read_val, addr))
+			break;
+
 		if (read_val == tx_val) {
 			dev_info(&rsb_data->device->dev,
 				"Addr %x: Wrote %x got back %x\n",
@@ -205,9 +216,8 @@ static int rsb_spi_write_read(void *data, uint8_t tx_val, uint8_t addr)
 	return -EIO;
 }
 
-static int rsb_spi_open(void *data)
+static int rsb_open(struct rsb_drv_data *rsb_data)
 {
-	struct rsb_drv_data *rsb_data = data;
 	int ret;
 
 	/* TODO(pmalani): How much of this is prepopulated from DT? */
@@ -225,27 +235,6 @@ static int rsb_spi_open(void *data)
 	}
 
 	return ret;
-}
-
-static void rsb_spi_close(void *data)
-{
-	struct rsb_drv_data *rsb_data = data;
-
-	gpio_set_value(rsb_data->cs, 1);
-}
-
-/*
- * Initialize SPI related communications callbacks and buffers
- */
-void rsb_spi_comms_init(struct rsb_drv_data *rsb_data)
-{
-	struct rsb_spi_comms *comms = &(rsb_data->comms);
-
-	comms->open = rsb_spi_open;
-	comms->close = rsb_spi_close;
-	comms->write = rsb_spi_write;
-	comms->read = rsb_spi_read;
-	comms->write_read = rsb_spi_write_read;
 }
 
 static int rsb_create_debugfs(struct rsb_drv_data *rsb_data)
@@ -298,10 +287,9 @@ static int rsb_init_sequence(struct rsb_drv_data *rsb_data)
 {
 	uint8_t read_val;
 	int i;
-	struct rsb_spi_comms *comms = &rsb_data->comms;
 
 	/* Read the SensorPID to ensure the SPI Link is valid */
-	if (comms->read(rsb_data, &read_val, 0x00) == 0) {
+	if (rsb_read(rsb_data, &read_val, 0x00) == 0) {
 		if (read_val != RSB_MAGIC_PID) {
 			dev_err(&rsb_data->device->dev,
 				"Couldn't read SPI Magic PID,"
@@ -310,33 +298,33 @@ static int rsb_init_sequence(struct rsb_drv_data *rsb_data)
 		}
 	}
 
-	if (comms->write(rsb_data, 0x00, 0x7F) != 0)
+	if (rsb_write(rsb_data, 0x00, 0x7F) != 0)
 		return -EIO;
 
-	if (comms->write_read(rsb_data, 0x5A, 0x09) != 0)
+	if (rsb_write_read(rsb_data, 0x5A, 0x09) != 0)
 		return -EIO;
 
 	for (i = 0; i <= INIT_WRITES_FIRST_BATCH_INDEX; i++) {
-		if (comms->write_read(rsb_data, init_writes[i][1],
+		if (rsb_write_read(rsb_data, init_writes[i][1],
 			init_writes[i][0]) != 0) {
 			return -EIO;
 		}
 	}
 
-	if (comms->write(rsb_data, 0x01, 0x7F) != 0)
+	if (rsb_write(rsb_data, 0x01, 0x7F) != 0)
 		return -EIO;
 
 	for (; i <= INIT_WRITES_SECOND_BATCH_INDEX; i++) {
-		if (comms->write_read(rsb_data, init_writes[i][1],
+		if (rsb_write_read(rsb_data, init_writes[i][1],
 			init_writes[i][0]) != 0) {
 			return -EIO;
 		}
 	}
 
-	if (comms->write(rsb_data, 0x00, 0x7F) != 0)
+	if (rsb_write(rsb_data, 0x00, 0x7F) != 0)
 		return -EIO;
 
-	if (comms->write_read(rsb_data, 0x00, 0x09) != 0)
+	if (rsb_write_read(rsb_data, 0x00, 0x09) != 0)
 		return -EIO;
 
 	dev_info(&rsb_data->device->dev, "Rsb init success\n");
@@ -345,23 +333,22 @@ static int rsb_init_sequence(struct rsb_drv_data *rsb_data)
 
 static irqreturn_t rsb_handler(int irq, void *dev_id)
 {
-	int8_t delta_x, delta_y;
+	static int8_t delta_x, delta_y, motion;
 	struct rsb_drv_data *rsb_data = dev_id;
-	uint8_t rx_val;
 
-	rsb_data->comms.read(rsb_data, &rx_val, RSB_MOTION);
-	while (rx_val & MOTION_BITMASK) {
-		rsb_data->comms.read(rsb_data, &rx_val, RSB_DELTA_X);
-		delta_x = (int8_t)rx_val;
-		rsb_data->comms.read(rsb_data, &rx_val, RSB_DELTA_Y);
-		delta_y = (int8_t)rx_val;
-		if ((delta_x | delta_y) != 0) {
+	do {
+		if (rsb_read(rsb_data, &delta_x, RSB_DELTA_X) != 0)
+			break;
+		if (rsb_read(rsb_data, &delta_y, RSB_DELTA_Y) != 0)
+			break;
+		if (delta_x != 0) {
 			input_report_rel(rsb_data->in_dev, REL_WHEEL,
 					delta_x);
 			input_sync(rsb_data->in_dev);
 		}
-		rsb_data->comms.read(rsb_data, &rx_val, RSB_MOTION);
-	}
+		if (rsb_read(rsb_data, &motion, RSB_MOTION) != 0)
+			break;
+	} while (motion & MOTION_BITMASK);
 
 	return IRQ_HANDLED;
 }
@@ -455,7 +442,7 @@ static void rsb_init_work(struct work_struct *work)
 	msleep(RSB_DELAY_MS_AFTER_VDD);
 
 	/* Should the open of the SPI bus be done only once?? */
-	rsb_data->comms.open(rsb_data);
+	rsb_open(rsb_data);
 
 	if (rsb_init_sequence(rsb_data))
 		goto error;
@@ -484,7 +471,6 @@ static int rsb_probe(struct spi_device *spi)
 
 	spi_set_drvdata(spi, rsb_data);
 	rsb_data->device = spi;
-	rsb_spi_comms_init(rsb_data);
 
 	err = rsb_parse_dt(spi);
 	if (err)
@@ -547,7 +533,8 @@ static int rsb_remove(struct spi_device *spi)
 
 	rsb_data = spi_get_drvdata(spi);
 
-	rsb_data->comms.close(rsb_data);
+	gpio_set_value(rsb_data->cs, 1);
+
 	debugfs_remove_recursive(rsb_data->dent);
 
 	rsb_set_regulator_vld(spi, 0);
@@ -564,7 +551,7 @@ static int rsb_suspend(struct device *device)
 	struct rsb_drv_data *rsb_data = spi_get_drvdata(spidev);
 	int ret;
 
-	ret = rsb_data->comms.write(rsb_data, 0x8, RSB_CONFIG);
+	ret = rsb_write(rsb_data, 0x8, RSB_CONFIG);
 	if (ret)
 		dev_warn(device, "Failed to put RSB into low power.\n");
 	disable_irq(spidev->irq);
@@ -579,7 +566,7 @@ static int rsb_resume(struct device *device)
 	int ret;
 
 	enable_irq(spidev->irq);
-	ret = rsb_data->comms.write(rsb_data, 0x0, RSB_CONFIG);
+	ret = rsb_write(rsb_data, 0x0, RSB_CONFIG);
 	if (ret)
 		dev_warn(device,
 			"Failed to take RSB out of low power.\n");
