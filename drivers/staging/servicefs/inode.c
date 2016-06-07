@@ -677,7 +677,7 @@ static int __init servicefs_init(void)
 {
 	int retval;
 
-	retval = servicefs_message_cache_init();
+	retval = servicefs_cache_init();
 	if (retval)
 		return retval;
 

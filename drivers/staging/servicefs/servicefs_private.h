@@ -25,6 +25,7 @@ struct service {
 
 	struct list_head     s_channels;       // connected channels
 
+	struct list_head     s_impulses;       // pending async messages
 	struct list_head     s_messages;       // pending sync messages (blocked client threads)
 	struct list_head     s_active;         // active sync messages (received but not completed)
 
@@ -96,10 +97,27 @@ struct message {
 	ssize_t              m_status;         // return code
 };
 
+
+struct impulse {
+	struct list_head     i_impulses_node;  // hangs on s_impulses
+
+	pid_t                i_pid;            // sender tgid
+	pid_t                i_tid;            // sender pid
+	uid_t                i_euid;           // sender euid
+	gid_t                i_egid;           // sender egid
+
+	struct service *     i_service;
+	struct channel *     i_channel;
+
+	int                  i_op;
+	long                 i_data[4];
+	size_t               i_len;
+};
+
 /*
- * Message cache init.
+ * Initialize caches.
  */
-int servicefs_message_cache_init(void);
+int servicefs_cache_init(void);
 
 /*
  * Creation, status, and removal of services.
@@ -166,6 +184,8 @@ static inline bool __is_message_detached(struct message *m)
 	return m->m_channel == NULL;
 }
 
+void __cancel_impulse(struct impulse *i);
+
 /*
  * Removal of a service's dentry.
  */
@@ -218,6 +238,8 @@ int servicefs_msg_get_fd(struct service *svc, int msgid, unsigned int index);
  */
 ssize_t servicefs_msg_sendv(struct channel *c, int op, const iov *svec, size_t scnt,
 		const iov *rvec, size_t rcnt, const int *fds, size_t fdcnt, long task_state);
+int servicefs_msg_send_impulse(struct channel *c, int op,
+		void __user *buf, size_t len);
 
 static inline ssize_t servicefs_msg_sendv_interruptible(struct channel *c, int op,
 		const iov *svec, size_t scnt, const iov *rvec, size_t rcnt,
@@ -234,7 +256,6 @@ static inline ssize_t servicefs_msg_sendv_uninterruptible(struct channel *c, int
 	return servicefs_msg_sendv(c, op, svec, scnt, rvec, rcnt, fds, fdcnt,
 			TASK_UNINTERRUPTIBLE);
 }
-
 /*
  * Data transfer utilities for moving data between address spaces.
  */

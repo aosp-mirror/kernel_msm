@@ -37,7 +37,12 @@ static DEFINE_MUTEX(service_ref_mutex);
  */
 static struct kmem_cache *message_cache;
 
-int servicefs_message_cache_init(void)
+/**
+ * impulse_cache - cache for impulse structs.
+ */
+static struct kmem_cache *impulse_cache;
+
+int servicefs_cache_init(void)
 {
 	unsigned long flags = SLAB_HWCACHE_ALIGN;
 #ifdef CONFIG_SERVICEFS_USE_POISON
@@ -46,9 +51,25 @@ int servicefs_message_cache_init(void)
 
 	message_cache = KMEM_CACHE(message, flags);
 	if (!message_cache)
-		return -ENOMEM;
+		goto error;
+
+	impulse_cache = KMEM_CACHE(impulse, flags);
+	if (!impulse_cache)
+		goto error;
 
 	return 0;
+
+error:
+	if (message_cache) {
+		kmem_cache_destroy(message_cache);
+		message_cache = NULL;
+	}
+	if (impulse_cache) {
+		kmem_cache_destroy(impulse_cache);
+		impulse_cache = NULL;
+	}
+
+	return -ENOMEM;
 }
 
 void __message_get(struct message *msg);
@@ -89,6 +110,11 @@ void message_free(struct message *m)
 	kmem_cache_free(message_cache, m);
 }
 
+void impulse_free(struct impulse *i)
+{
+	kmem_cache_free(impulse_cache, i);
+}
+
 /**
  * service_release_kref - clean up a service that is no longer referenced
  * @ref: pointer to the service's s_ref member
@@ -100,6 +126,7 @@ static void service_release_kref(struct kref *ref)
 
 	/* make sure everything is already properly cleaned up */
 	BUG_ON(!list_empty(&svc->s_channels));
+	BUG_ON(!list_empty(&svc->s_impulses));
 	BUG_ON(!list_empty(&svc->s_messages));
 	BUG_ON(!list_empty(&svc->s_active));
 	BUG_ON(waitqueue_active(&svc->s_wqreceivers));
@@ -163,6 +190,7 @@ struct service *get_new_service(void)
 	idr_init(&svc->s_message_idr);
 
 	INIT_LIST_HEAD(&svc->s_channels);
+	INIT_LIST_HEAD(&svc->s_impulses);
 	INIT_LIST_HEAD(&svc->s_messages);
 	INIT_LIST_HEAD(&svc->s_active);
 
@@ -178,6 +206,7 @@ out:
 void cancel_service(struct service *svc)
 {
 	struct channel *c, *cn;
+	struct impulse *i, *in;
 	struct message *m, *mn;
 
 	pr_debug("cancelling service=%p\n", svc);
@@ -185,6 +214,10 @@ void cancel_service(struct service *svc)
 	mutex_lock(&svc->s_mutex);
 
 	svc->s_flags |= SERVICE_FLAGS_CANCELED;
+
+	list_for_each_entry_safe(i, in, &svc->s_impulses, i_impulses_node) {
+		__cancel_impulse(i);
+	}
 
 	list_for_each_entry_safe(m, mn, &svc->s_messages, m_messages_node) {
 		__cancel_message(m);
@@ -387,6 +420,7 @@ void __cancel_channel(struct channel *c)
  */
 void remove_channel(struct channel *c)
 {
+	struct impulse *i, *in;
 	struct message *m, *mn;
 	struct service *svc = c->c_service;
 	BUG_ON(svc == NULL);
@@ -397,6 +431,12 @@ void remove_channel(struct channel *c)
 
 	if (!__is_channel_canceled(c))
 		__cancel_channel(c);
+
+	/* cancel all the pending impulses on this channel */
+	list_for_each_entry_safe(i, in, &svc->s_impulses, i_impulses_node) {
+		if (i->i_channel == c)
+			__cancel_impulse(i);
+	}
 
 	/* cancel all the pending messages on this channel */
 	list_for_each_entry_safe(m, mn, &svc->s_messages, m_messages_node) {
@@ -450,6 +490,12 @@ void __detach_message(struct message *msg)
 	msg->m_channel = NULL;
 }
 
+void __cancel_impulse(struct impulse *impulse)
+{
+	list_del_init(&impulse->i_impulses_node);
+	impulse_free(impulse);
+}
+
 struct channel *__lookup_channel(struct service *svc, int cid)
 {
 	return idr_find(&svc->s_channel_idr, cid);
@@ -501,7 +547,6 @@ struct message *lookup_and_lock_message(struct service *svc, int mid,
 struct message *__peek_message(struct service *svc)
 {
 	lockdep_assert_held(&svc->s_mutex);
-
 	return list_first_entry_or_null(&svc->s_messages, struct message, m_messages_node);
 }
 
@@ -524,6 +569,16 @@ int __activate_message(struct message *msg)
 
 error:
 	return ret;
+}
+
+struct impulse *__dequeue_impulse(struct service *svc)
+{
+	struct impulse *impulse;
+	lockdep_assert_held(&svc->s_mutex);
+	impulse = list_first_entry_or_null(&svc->s_impulses, struct impulse, i_impulses_node);
+	if (impulse)
+		list_del_init(&impulse->i_impulses_node);
+	return impulse;
 }
 
 /**
@@ -824,7 +879,9 @@ static inline bool is_message_pending(struct service *svc)
 	bool pending;
 
 	mutex_lock(&svc->s_mutex);
-	pending = __is_service_canceled(svc) || !list_empty(&svc->s_messages);
+	pending = __is_service_canceled(svc)
+			|| !list_empty(&svc->s_impulses)
+			|| !list_empty(&svc->s_messages);
 	mutex_unlock(&svc->s_mutex);
 
 	return pending;
@@ -834,7 +891,10 @@ int servicefs_msg_recv(struct service *svc,
 		struct servicefs_msg_info_struct __user *msg_info, long timeout)
 {
 	struct message *msg;
-	void __user * svc_context;
+	struct impulse *impulse;
+	void __user * s_context;
+	void __user * c_context;
+	int c_id;
 	struct servicefs_msg_info_struct info_out;
 	int ret;
 
@@ -851,6 +911,10 @@ int servicefs_msg_recv(struct service *svc,
 			service_put(svc);
 			return -ESHUTDOWN;
 		}
+
+		/* impulses take priority over messages */
+		if (!list_empty(&svc->s_impulses))
+			goto impulse_path;
 
 		if (!list_empty(&svc->s_messages))
 			goto message_path;
@@ -892,8 +956,10 @@ message_path:
 		return ret;
 	}
 
-	/* grab the service context before releasing s_mutex */
-	svc_context = svc->s_context;
+	/* grab the service/channel context and channel id before releasing s_mutex */
+	s_context = svc->s_context;
+	c_context = msg->m_channel ? msg->m_channel->c_context : NULL;
+	c_id = msg->m_channel ? msg->m_channel->c_id : -1;
 
 	mutex_lock(&msg->m_mutex);
 	mutex_unlock(&svc->s_mutex);
@@ -903,17 +969,20 @@ message_path:
 
 	info_out.pid = msg->m_pid;
 	info_out.tid = msg->m_tid;
-	info_out.cid = msg->m_channel ? msg->m_channel->c_id : -1;
+	info_out.cid = c_id;
 	info_out.mid = msg->m_id;
 	info_out.euid = msg->m_euid;
 	info_out.egid = msg->m_egid;
-	info_out.service_private = svc_context;
-	info_out.channel_private = msg->m_channel ? msg->m_channel->c_context : NULL;
+	info_out.service_private = s_context;
+	info_out.channel_private = c_context;
 	info_out.op = msg->m_op;
 	info_out.flags = 0;
 	info_out.send_len = msg->m_sbuf.i_len;
 	info_out.recv_len = msg->m_rbuf.i_len;
 	info_out.fd_count = msg->m_fdcnt;
+
+	/* clear the impulse payload to prevent leaking stack contents */
+	memset(info_out.impulse, 0, sizeof(info_out.impulse));
 
 	if (copy_to_user(msg_info, &info_out, sizeof(info_out))) {
 		pr_debug("Fault transferring msg info: pid=%d\n",
@@ -925,6 +994,50 @@ message_path:
 	}
 
 	mutex_unlock(&msg->m_mutex);
+	service_put(svc);
+	return 0;
+
+impulse_path:
+	pr_debug("impulse_path\n");
+	impulse = __dequeue_impulse(svc);
+	BUG_ON(!impulse);
+
+	/* grab the service/channel context and channel id before releasing s_mutex */
+	s_context = svc->s_context;
+	c_context = impulse->i_channel ? impulse->i_channel->c_context : NULL;
+	c_id = impulse->i_channel ? impulse->i_channel->c_id : -1;
+
+	mutex_unlock(&svc->s_mutex);
+
+	pr_debug("i_op=%d i_len=%zu\n", impulse->i_op, impulse->i_len);
+
+	info_out.pid = impulse->i_pid;
+	info_out.tid = impulse->i_tid;
+	info_out.cid = c_id;
+	info_out.mid = MESSAGE_NO_ID; // impulses have no message id.
+	info_out.euid = impulse->i_euid;
+	info_out.egid = impulse->i_egid;
+	info_out.service_private = s_context;
+	info_out.channel_private = c_context;
+	info_out.op = impulse->i_op;
+	info_out.flags = 0;
+	info_out.send_len = impulse->i_len;
+	info_out.recv_len = 0;
+	info_out.fd_count = 0;
+
+	/* copy the impulse payload and clear the remaining bytes */
+	memcpy(info_out.impulse, impulse->i_data, impulse->i_len);
+	memset(((uint8_t *) info_out.impulse) + impulse->i_len, 0,
+			sizeof(info_out.impulse) - impulse->i_len);
+
+	if (copy_to_user(msg_info, &info_out, sizeof(info_out))) {
+		pr_debug("Fault transferring msg info: pid=%d\n",
+				pid_vnr(task_tgid(current)));
+		impulse_free(impulse);
+		service_put(svc);
+		return -EFAULT;
+	}
+
 	service_put(svc);
 	return 0;
 }
@@ -1377,3 +1490,72 @@ ssize_t servicefs_msg_sendv(struct channel *c, int op, const iov *svec,
 	return ret;
 }
 
+int servicefs_msg_send_impulse(struct channel *c, int op,
+		void __user *buf, size_t len)
+{
+	struct impulse *impulse;
+	struct service *svc;
+	kuid_t kuid;
+	kgid_t kgid;
+
+	svc = c->c_service;
+	BUG_ON(!svc);
+
+	if (len > sizeof(impulse->i_data))
+		return -EINVAL;
+
+	impulse = kmem_cache_alloc(impulse_cache, GFP_KERNEL);
+	if (!impulse)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&impulse->i_impulses_node);
+	impulse->i_op = op;
+	impulse->i_channel = c;
+	impulse->i_service = svc;
+	impulse->i_len = len;
+
+	current_euid_egid(&kuid, &kgid);
+	impulse->i_euid = __kuid_val(kuid);
+	impulse->i_egid = __kgid_val(kgid);
+
+	impulse->i_pid = pid_vnr(task_tgid(current));
+	impulse->i_tid = pid_vnr(task_pid(current));
+
+	if (len > 0 && copy_from_user(&impulse->i_data, buf, len)) {
+		pr_debug("Fault transferring impulse payload: pid=%d\n",
+			pid_vnr(task_tgid(current)));
+		impulse_free(impulse);
+		return -EFAULT;
+	}
+
+	mutex_lock(&svc->s_mutex);
+
+	/*
+	 * Messages can't be sent after a channel has shutdown, but channels
+	 * remain until the last reference to their open file description is
+	 * closed. Make sure we don't queue any messages after the channel
+	 * is shutdown.
+	 */
+	if (__is_channel_canceled(c) || __is_service_canceled(svc)) {
+		pr_debug("cid=%d channel_canceled=%d service_canceled=%d\n",
+				c->c_id, __is_channel_canceled(c), __is_service_canceled(svc));
+		impulse_free(impulse);
+		mutex_unlock(&svc->s_mutex);
+		return -ESHUTDOWN;
+	}
+
+	list_add_tail(&impulse->i_impulses_node, &svc->s_impulses);
+
+	pr_debug("svc=%p s_wqreceivers=%s s_wqselect=%s\n", svc,
+		waitqueue_active(&svc->s_wqreceivers) ? "active" : "empty",
+		waitqueue_active(&svc->s_wqselect) ? "active" : "empty");
+
+	if (waitqueue_active(&svc->s_wqreceivers))
+		wake_up(&svc->s_wqreceivers);
+	else
+		wake_up_poll(&svc->s_wqselect, POLLIN | POLLRDNORM);
+
+	mutex_unlock(&svc->s_mutex);
+
+	return 0;
+}

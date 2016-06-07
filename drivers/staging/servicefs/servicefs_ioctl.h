@@ -112,7 +112,7 @@ struct servicefs_check_channel_struct {
 #define SERVICEFS_MSG_SEEK                  _IOW ('x',  6, struct servicefs_msg_seek_struct)
 #define SERVICEFS_MSG_BUSV                  _IOWR('x',  7, struct servicefs_msg_busv_struct)
 #define SERVICEFS_MSG_REPLY                 _IOW ('x',  8, struct servicefs_msg_reply_struct)
-// Removed ioctl 9.
+#define SERVICEFS_MSG_SEND_IMPULSE          _IOW ('x',  9, struct servicefs_msg_send_impulse_struct)
 #define SERVICEFS_MSG_REPLY_FD              _IOW ('x', 10, struct servicefs_msg_reply_struct)
 #define SERVICEFS_MOD_CHANNEL_EVENTS        _IOW ('x', 11, struct servicefs_mod_channel_events_struct)
 #define SERVICEFS_MSG_PUSH_FD               _IOW ('x', 12, struct servicefs_msg_push_fd_struct)
@@ -128,5 +128,6 @@ struct servicefs_check_channel_struct {
 #define SERVICEFS_OP_UNIX_READ              (-3)
 #define SERVICEFS_OP_UNIX_WRITE             (-4)
 #define SERVICEFS_OP_UNIX_SEEK              (-5)
+
 #endif
 

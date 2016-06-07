@@ -455,7 +455,7 @@ static unsigned int service_poll(struct file *filp, poll_table *wait)
 
 	poll_wait(filp, &svc->s_wqselect, wait);
 
-	if (!list_empty(&svc->s_messages))
+	if (!list_empty(&svc->s_impulses) || !list_empty(&svc->s_messages))
 		mask = POLLIN | POLLRDNORM;
 
 	mutex_unlock(&svc->s_mutex);
@@ -593,6 +593,30 @@ static long channel_ioctl(struct file *filp, unsigned int cmd,
 			ret = servicefs_msg_sendv_interruptible(c, params.op,
 					svec, params.scnt, rvec, params.rcnt,
 					fds, params.fdcnt);
+		}
+		break;
+
+		case SERVICEFS_MSG_SEND_IMPULSE: {
+			struct servicefs_msg_send_impulse_struct params;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			/*
+			 * prevent spoofing open/close ops and enforce that NULL arrays
+			 * must have 0 element counts.
+			 */
+			if ((params.op == SERVICEFS_OP_UNIX_OPEN)
+				    || (params.op == SERVICEFS_OP_UNIX_CLOSE)
+				    || (!params.buf && params.len)) {
+				ret = -EINVAL;
+				goto error;
+			}
+
+			ret = servicefs_msg_send_impulse(c, params.op,
+					params.buf, params.len);
 		}
 		break;
 
