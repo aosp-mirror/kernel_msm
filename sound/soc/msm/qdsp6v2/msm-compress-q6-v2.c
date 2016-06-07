@@ -2918,7 +2918,7 @@ static int msm_compr_probe(struct snd_soc_platform *platform)
 	 * control is used to decide if dsp gapless mode needs to be enabled.
 	 * Gapless is disabled by default.
 	 */
-	pdata->use_dsp_gapless_mode = false;
+	pdata->use_dsp_gapless_mode = true;
 	return 0;
 }
 
