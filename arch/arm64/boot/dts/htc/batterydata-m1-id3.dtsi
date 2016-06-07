@@ -1,0 +1,66 @@
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+*/
+
+qcom,m1-id3-batterydata {
+	qcom,max-voltage-uv = <4400000>;
+	qcom,v-cutoff-uv = <3250000>;
+	qcom,nom-batt-capacity-mah = <3450>;
+	qcom,batt-id-kohm = <22>;
+	qcom,battery-beta = <4360>;
+	qcom,battery-type = "3";
+	qcom,chg-rslow-comp-c1 = <6263388>;
+	qcom,chg-rslow-comp-c2 = <15716860>;
+	qcom,chg-rs-to-rslow = <1788554>;
+	qcom,chg-rslow-comp-thr = <0xCD>;
+	qcom,checksum = <0x5103>;
+	qcom,gui-version = "PMI8996GUI - 1.1.0.0";
+	qcom,fastchg-current-ma = <3400>;
+	htc,batt_id = <3>;
+	htc,id_raw_min = <16001>;
+	htc,id_raw_max = <27500>;
+	htc,bat-ful-chg-criteria-ma = <345>;
+	htc,fcc-half-capacity-ma = <1600>;
+	qcom,fg-profile-data = [
+		BB 83 06 76
+		82 7A CC 6D
+		59 83 41 65
+		46 83 88 8E
+		40 82 AF 98
+		94 B6 3A C2
+		54 12 55 83
+		DA 63 EF 60
+		37 69 41 83
+		5E 78 57 84
+		5B 7A 54 82
+		53 99 69 BC
+		E5 C8 6B 0C
+		CC 0D 17 5A
+		14 70 B8 FE
+		F6 3D A0 45
+		C6 42 00 00
+		C3 47 31 43
+		7A 44 00 00
+		00 00 00 00
+		00 00 00 00
+		84 70 9A 6B
+		8C 6B 1F 89
+		12 76 4D 68
+		A1 60 C1 81
+		6A 75 4C 63
+		9E 56 2B B1
+		1B 58 63 1B
+		65 A0 71 0C
+		28 00 FF 36
+		F0 11 30 03
+		00 00 00 0C
+	];
+};

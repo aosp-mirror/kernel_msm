@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
 */
 
-qcom,m1s1-prototype-id1-batterydata {
+qcom,m1-id1-batterydata {
 	qcom,max-voltage-uv = <4400000>;
 	qcom,v-cutoff-uv = <3250000>;
 	qcom,nom-batt-capacity-mah = <3230>;

@@ -1674,7 +1674,7 @@ static void batt_worker(struct work_struct *work)
 
 }
 
-#define CHG_FULL_CHECK_PERIOD_MS	10000
+#define CHG_FULL_CHECK_PERIOD_MS	20000
 #define CLEAR_FULL_STATE_BY_LEVEL_THR 97
 #define CONSECUTIVE_COUNT             3
 static void chg_full_check_worker(struct work_struct *work)

@@ -47,7 +47,7 @@
         qcom,cool-bat-decidegc = <100>;
         qcom,hot-bat-decidegc = <550>;
         qcom,cold-bat-decidegc = <0>;
-        qcom,fg-iterm-ma = <270>;
+        qcom,fg-iterm-ma = <277>;
         qcom,fg-chg-iterm-ma = <50>;
         qcom,fg-cc-cv-threshold-mv = <4390>;
         qcom,ext-sense-type = <1>;
@@ -59,8 +59,9 @@
         qcom,battery-data {
                 qcom,batt-id-range-pct = <15>;
                 /delete-node/ qcom,itech-3000mah;
-                /delete-node/ qcom,m1s1-prototype-id1-batterydata;
-                /delete-node/ qcom,m1s1-prototype-id2-batterydata;
+                /delete-node/ qcom,m1-id1-batterydata;
+                /delete-node/ qcom,m1-id2-batterydata;
+                /delete-node/ qcom,m1-id3-batterydata;
                 #include "batterydata-s1-id1.dtsi"
                 #include "batterydata-s1-id2.dtsi"
                 #include "batterydata-s1-id3.dtsi"

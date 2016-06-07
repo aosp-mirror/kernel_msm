@@ -17,11 +17,11 @@ qcom,s1-id2-batterydata {
 	qcom,batt-id-kohm = <10>;
 	qcom,battery-beta = <4360>;
 	qcom,battery-type = "2";
-	qcom,chg-rslow-comp-c1 = <2974834>;
-	qcom,chg-rslow-comp-c2 = <3566426>;
-	qcom,chg-rs-to-rslow = <1134960>;
-	qcom,chg-rslow-comp-thr = <0x99>;
-	qcom,checksum = <0x42A0>;
+	qcom,chg-rslow-comp-c1 = <3538198>;
+	qcom,chg-rslow-comp-c2 = <5411244>;
+	qcom,chg-rs-to-rslow = <1036471>;
+	qcom,chg-rslow-comp-thr = <0xAC>;
+	qcom,checksum = <0x497A>;
 	qcom,gui-version = "PMI8996GUI - 1.1.0.0";
 	qcom,fastchg-current-ma = <2800>;
 	htc,batt_id = <2>;
@@ -29,35 +29,35 @@ qcom,s1-id2-batterydata {
 	htc,id_raw_max = <16000>;
 	htc,bat-ful-chg-criteria-ma = <277>;
 	qcom,fg-profile-data = [
-		6D 83 ED 6D
-		5F 7A 58 74
-		31 83 83 73
-		8E 7E 55 7A
-		CF 81 6D 9B
-		B8 BE 7E D0
-		7D 0E 12 88
-		34 7F 14 83
-		A4 7D 5F 83
-		10 65 CD 83
-		E3 8E 4E 82
-		4E 98 AD B5
-		07 C1 58 18
-		2F 0B 12 5A
-		14 70 B8 FE
-		7A 45 61 46
-		B3 48 00 00
-		4D 47 E5 39
-		FE 1A 00 00
+		DE 83 B1 7C
+		07 81 29 77
+		64 83 1F 74
+		46 89 55 94
+		22 82 A3 99
+		57 BC 84 C8
+		56 11 F8 83
+		23 7D 3A 81
+		65 77 51 83
+		57 70 49 6B
+		1D 84 57 82
+		6B 99 A7 BC
+		66 C9 58 0E
+		FC 0A 1D 5B
+		14 70 15 FC
+		E8 35 AA 44
+		AF 39 00 00
+		5F 47 A4 31
+		5F 28 00 00
 		00 00 00 00
 		00 00 00 00
-		FE 70 C4 6B
-		3D 61 25 88
-		06 76 D1 68
-		31 58 DD 7B
-		3C 74 E0 59
-		84 62 40 B3
-		1B FE 60 66
-		5E A0 71 0C
+		44 70 EB 6A
+		60 68 24 8A
+		E9 75 95 6A
+		93 67 53 7A
+		0A 74 4E 63
+		7F 55 39 AA
+		1D 44 63 0E
+		65 A0 71 0C
 		28 00 FF 36
 		F0 11 30 03
 		00 00 00 0C
