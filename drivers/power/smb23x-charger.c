@@ -388,6 +388,8 @@ enum {
 
 #ifdef QTI_SMB231
 static irqreturn_t smb23x_stat_handler(int irq, void *dev_id);
+#else
+static int smb23x_get_prop_batt_capacity(struct smb23x_chip *chip);
 #endif
 
 static int __smb23x_read(struct smb23x_chip *chip, u8 reg, u8 *val)
@@ -1837,16 +1839,6 @@ static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
 		return POWER_SUPPLY_STATUS_DISCHARGING;
 	}
 
-	rc = smb23x_read(chip, IRQ_C_STATUS_REG, &reg);
-	if (rc) {
-		pr_err("IRQ_C_STATUS_REG read fail. rc=%d\n", rc);
-		return POWER_SUPPLY_STATUS_DISCHARGING;
-	}
-	else if ((reg & ITERM_BIT) ? true : false) {
-		pr_info("smb23x status: FULL \n");
-		return POWER_SUPPLY_STATUS_FULL;
-	}
-
 	rc = smb23x_read(chip, CHG_STATUS_B_REG, &reg);
 	if (rc < 0) {
 		pr_err("Read STATUS_B failed, rc=%d\n", rc);
@@ -1857,6 +1849,9 @@ static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
 		pr_err("smb23x status: hold-off, STATUS_B_REG = 0x%x \n", reg);
 		return POWER_SUPPLY_STATUS_NOT_CHARGING;
 	}
+
+	if (100 == smb23x_get_prop_batt_capacity(chip))
+		return POWER_SUPPLY_STATUS_FULL;
 
 	if (reg & CHARGE_TYPE_MASK)
 		return POWER_SUPPLY_STATUS_CHARGING;
