@@ -7063,7 +7063,7 @@ static int msm_thermal_dev_probe(struct platform_device *pdev)
 
 	ret = probe_vdd_mx(node, &data, pdev);
 	if (ret == -EPROBE_DEFER)
-		goto fail;
+		goto probe_exit;
 	/*
 	 * Probe optional properties below. Call probe_psm before
 	 * probe_vdd_rstr because rpm_regulator_get has to be called
@@ -7074,12 +7074,12 @@ static int msm_thermal_dev_probe(struct platform_device *pdev)
 	 */
 	ret = probe_psm(node, &data, pdev);
 	if (ret == -EPROBE_DEFER)
-		goto fail;
+		goto probe_exit;
 
 	update_cpu_topology(&pdev->dev);
 	ret = probe_vdd_rstr(node, &data, pdev);
 	if (ret == -EPROBE_DEFER)
-		goto fail;
+		goto probe_exit;
 	ret = probe_ocr(node, &data, pdev);
 
 	ret = fetch_cpu_mitigaiton_info(&data, pdev);
