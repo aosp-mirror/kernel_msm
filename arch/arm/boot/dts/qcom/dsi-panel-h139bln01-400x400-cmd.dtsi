@@ -90,6 +90,7 @@
 		qcom,mdss-dsi-te-dcs-command = <1>;
 		qcom,mdss-dsi-te-check-enable;
 		qcom,mdss-dsi-te-using-te-pin;
+		qcom,suspend-ulps-enabled;
 		qcom,ulps-enabled = <1>;
 
 		/* By AUO's suggestion: MIPI Clock rate = ~290Mbps. */
