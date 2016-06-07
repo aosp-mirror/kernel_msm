@@ -572,6 +572,14 @@ config TI_DRV2667
 	  To compile this driver as a module, choose M here: the
 	  module will be called ti_drv2667.
 
+config IDME
+	bool "IDME support"
+	depends on PROC_FS
+	help
+	  Select Y here to enable IDME support to read the data
+	  via userspace (i.e. /proc/idme/* entries)
+
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
