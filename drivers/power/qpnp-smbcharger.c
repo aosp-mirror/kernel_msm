@@ -4789,6 +4789,8 @@ static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 			current_limit_ma = 1500;
 		else if (chip->utc.sink_current == utcc3p0A)
 			current_limit_ma = 3000;
+		power_supply_set_current_limit(chip->usb_psy,
+			current_limit_ma * 1000);
 	} else
 #endif /* CONFIG_HTC_BATT */
 	if (chip->typec_psy && (type != POWER_SUPPLY_TYPE_USB))
@@ -5314,6 +5316,8 @@ static void handle_usb_removal(struct smbchg_chip *chip)
 			&voltage_max);
 	if (rc)
 		pr_err("failed to set voltage max rc=%d\n", rc);
+
+	power_supply_set_current_limit(chip->usb_psy, 0);
 #else
 	if (!chip->hvdcp_not_supported)
 		restore_from_hvdcp_detection(chip);
