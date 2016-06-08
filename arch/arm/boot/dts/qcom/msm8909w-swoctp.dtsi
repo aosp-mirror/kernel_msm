@@ -16,6 +16,7 @@
 #include "msm8909-pm8916.dtsi"
 #include "msm8909-pm8916-mtp.dtsi"
 #include "msm8909w.dtsi"
+#include "msm8909w-memory.dtsi"
 
 &soc {
 	i2c@78b9000 { /* BLSP1 QUP5 */
@@ -52,18 +53,6 @@
         qcom,msm-ssc-sensors {
                 compatible = "qcom,msm-ssc-sensors";
         };
-};
-
-&external_image_mem {
-	reg = <0x0 0x87a00000 0x0 0x0600000>;
-};
-
-&modem_adsp_mem {
-	reg = <0x0 0x88000000 0x0 0x05200000>;
-};
-
-&peripheral_mem {
-	reg = <0x0 0x8d200000 0x0 0x0500000>;
 };
 
 &blsp1_uart1 {
@@ -179,4 +168,10 @@
 		qcom,fg-vadc = <&pm8916_vadc>;
 		qcom,fg-adc_tm = <&pm8916_adc_tm>;
 	};
+};
+
+&sdhc_2 {
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
 };

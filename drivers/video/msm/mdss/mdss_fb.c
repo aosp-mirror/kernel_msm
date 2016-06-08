@@ -1995,7 +1995,9 @@ void mdss_fb_free_fb_ion_memory(struct msm_fb_data_type *mfd)
 
 	ion_unmap_kernel(mfd->fb_ion_client, mfd->fb_ion_handle);
 
-	if (mfd->mdp.fb_mem_get_iommu_domain) {
+	if (mfd->mdp.fb_mem_get_iommu_domain && !(!mfd->fb_attachment ||
+		!mfd->fb_attachment->dmabuf ||
+		!mfd->fb_attachment->dmabuf->ops)) {
 		dma_buf_unmap_attachment(mfd->fb_attachment, mfd->fb_table,
 				DMA_BIDIRECTIONAL);
 		dma_buf_detach(mfd->fbmem_buf, mfd->fb_attachment);
@@ -3955,8 +3957,8 @@ static int mdss_fb_async_position_update_ioctl(struct fb_info *info,
 	input_layer_list = update_pos.input_layers;
 
 	layer_cnt = update_pos.input_layer_cnt;
-	if (!layer_cnt) {
-		pr_err("no async layers to update\n");
+	if ((!layer_cnt) || (layer_cnt > MAX_LAYER_COUNT)) {
+		pr_err("invalid async layers :%d to update\n", layer_cnt);
 		return -EINVAL;
 	}
 

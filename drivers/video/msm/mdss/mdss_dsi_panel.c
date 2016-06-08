@@ -1724,61 +1724,6 @@ static void mdss_dsi_parse_esd_params(struct device_node *np,
 	if (!pinfo->esd_check_enabled)
 		return;
 
-	mdss_dsi_parse_dcs_cmds(np, &ctrl->status_cmds,
-			"qcom,mdss-dsi-panel-status-command",
-				"qcom,mdss-dsi-panel-status-command-state");
-
-	rc = of_property_read_u32(np, "qcom,mdss-dsi-panel-max-error-count",
-		&tmp);
-	ctrl->max_status_error_count = (!rc ? tmp : 0);
-
-	if (!mdss_dsi_parse_esd_status_len(np,
-		"qcom,mdss-dsi-panel-status-read-length",
-		&ctrl->status_cmds_rlen, ctrl->status_cmds.cmd_cnt)) {
-		pinfo->esd_check_enabled = false;
-		return;
-	}
-
-	if (mdss_dsi_parse_esd_status_len(np,
-		"qcom,mdss-dsi-panel-status-valid-params",
-		&ctrl->status_valid_params, ctrl->status_cmds.cmd_cnt)) {
-		if (!mdss_dsi_parse_esd_check_valid_params(ctrl))
-			goto error1;
-	}
-
-	status_len = 0;
-	lenp = ctrl->status_valid_params ?: ctrl->status_cmds_rlen;
-	for (i = 0; i < ctrl->status_cmds.cmd_cnt; ++i)
-		status_len += lenp[i];
-
-	data = of_find_property(np, "qcom,mdss-dsi-panel-status-value", &tmp);
-	tmp /= sizeof(u32);
-	if (!IS_ERR_OR_NULL(data) && tmp != 0 && (tmp % status_len) == 0) {
-		ctrl->groups = tmp / status_len;
-	} else {
-		pr_err("%s: Error parse panel-status-value\n", __func__);
-		goto error1;
-	}
-
-	ctrl->status_value = kzalloc(sizeof(u32) * status_len * ctrl->groups,
-				GFP_KERNEL);
-	if (!ctrl->status_value)
-		goto error1;
-
-	ctrl->return_buf = kcalloc(status_len * ctrl->groups,
-			sizeof(unsigned char), GFP_KERNEL);
-	if (!ctrl->return_buf)
-		goto error2;
-
-	rc = of_property_read_u32_array(np,
-		"qcom,mdss-dsi-panel-status-value",
-		ctrl->status_value, ctrl->groups * status_len);
-	if (rc) {
-		pr_debug("%s: Error reading panel status values\n",
-				__func__);
-		memset(ctrl->status_value, 0, ctrl->groups * status_len);
-	}
-
 	ctrl->status_mode = ESD_MAX;
 	rc = of_property_read_string(np,
 			"qcom,mdss-dsi-panel-status-check-mode", &string);
@@ -1806,14 +1751,71 @@ static void mdss_dsi_parse_esd_params(struct device_node *np,
 			goto error;
 		}
 	}
+	pr_info("ESD status check mode : %s\n", string);
+	if ((ctrl->status_mode == ESD_BTA) ||
+		(ctrl->status_mode == ESD_TE))
+		return;
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl->status_cmds,
+			"qcom,mdss-dsi-panel-status-command",
+				"qcom,mdss-dsi-panel-status-command-state");
+
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-panel-max-error-count",
+		&tmp);
+	ctrl->max_status_error_count = (!rc ? tmp : 0);
+
+	if (!mdss_dsi_parse_esd_status_len(np,
+		"qcom,mdss-dsi-panel-status-read-length",
+		&ctrl->status_cmds_rlen, ctrl->status_cmds.cmd_cnt)) {
+		pinfo->esd_check_enabled = false;
+		return;
+	}
+
+	if (mdss_dsi_parse_esd_status_len(np,
+		"qcom,mdss-dsi-panel-status-valid-params",
+		&ctrl->status_valid_params, ctrl->status_cmds.cmd_cnt)) {
+		if (!mdss_dsi_parse_esd_check_valid_params(ctrl))
+			goto error;
+	}
+
+	status_len = 0;
+	lenp = ctrl->status_valid_params ?: ctrl->status_cmds_rlen;
+	for (i = 0; i < ctrl->status_cmds.cmd_cnt; ++i)
+		status_len += lenp[i];
+
+	data = of_find_property(np, "qcom,mdss-dsi-panel-status-value", &tmp);
+	tmp /= sizeof(u32);
+	if (!IS_ERR_OR_NULL(data) && tmp != 0 && (tmp % status_len) == 0) {
+		ctrl->groups = tmp / status_len;
+	} else {
+		pr_err("%s: Error parse panel-status-value\n", __func__);
+		goto error;
+	}
+
+	ctrl->status_value = kzalloc(sizeof(u32) * status_len * ctrl->groups,
+				GFP_KERNEL);
+	if (!ctrl->status_value)
+		goto error;
+
+	ctrl->return_buf = kcalloc(status_len * ctrl->groups,
+			sizeof(unsigned char), GFP_KERNEL);
+	if (!ctrl->return_buf)
+		goto error1;
+
+	rc = of_property_read_u32_array(np,
+		"qcom,mdss-dsi-panel-status-value",
+		ctrl->status_value, ctrl->groups * status_len);
+	if (rc) {
+		pr_debug("%s: Error reading panel status values\n",
+				__func__);
+		memset(ctrl->status_value, 0, ctrl->groups * status_len);
+	}
 
 	return;
 
-error:
-	kfree(ctrl->return_buf);
-error2:
-	kfree(ctrl->status_value);
 error1:
+	kfree(ctrl->status_value);
+error:
 	kfree(ctrl->status_valid_params);
 	kfree(ctrl->status_cmds_rlen);
 	pinfo->esd_check_enabled = false;

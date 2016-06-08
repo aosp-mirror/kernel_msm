@@ -103,6 +103,97 @@ static void sdhci_dump_state(struct sdhci_host *host)
 		mmc->parent->power.disable_depth);
 }
 
+void sdhci_trace_write(struct sdhci_host *host, int in_irq,
+			const char *fmt, ...)
+{
+	u64 ts = 0;
+	unsigned int idx;
+	va_list args;
+	struct sdhci_trace_event *event;
+
+	if (!(host->quirks2 & SDHCI_QUIRK2_TRACE_ON))
+		return;
+
+	if (!host->trace_buf.rbuf)
+		return;
+
+	/* To prevent taking a spinlock here an atomic increment
+	 * is used, and modulus is used to keep index within
+	 * array bounds. The cast to unsigned is necessary so
+	 * increment and rolover wraps to 0 correctly
+	 */
+	idx = ((unsigned int)atomic_inc_return(&host->trace_buf.wr_idx)) &
+			(SDHCI_TRACE_RBUF_NUM_EVENTS - 1);
+
+	/* Catch some unlikely machine specific wrap-around bug */
+	if (unlikely(idx > (SDHCI_TRACE_RBUF_NUM_EVENTS - 1)))
+		return;
+
+	/* No timestamp in irq to speed up logging as cpu_clock()
+	 * may have barriers
+	 */
+	if (!in_irq)
+		ts = cpu_clock(0);
+
+	event = &host->trace_buf.rbuf[idx];
+	va_start(args, fmt);
+	vscnprintf(event->data, SDHCI_TRACE_EVENT_DATA_SZ, fmt, args);
+	va_end(args);
+}
+
+#define SDHCI_TRACE(host, fmt, ...) \
+		sdhci_trace_write(host, 0, fmt, ##__VA_ARGS__)
+#define SDHCI_TRACE_IRQ(host, fmt, ...) \
+		sdhci_trace_write(host, 0, fmt, ##__VA_ARGS__)
+
+#ifdef CONFIG_MMC_SDHCI_RING_BUFFER
+static void sdhci_trace_init(struct sdhci_host *host)
+{
+	BUILD_BUG_ON_NOT_POWER_OF_2(SDHCI_TRACE_RBUF_NUM_EVENTS);
+
+
+	host->trace_buf.rbuf = (struct sdhci_trace_event *)
+				__get_free_pages(GFP_KERNEL|__GFP_ZERO,
+				SDHCI_TRACE_RBUF_SZ_ORDER);
+
+	if (!host->trace_buf.rbuf) {
+		pr_err("Unable to allocate trace for sdhci\n");
+		return;
+	}
+
+	atomic_set(&host->trace_buf.wr_idx, -1);
+}
+#else
+static void sdhci_trace_init(struct sdhci_host *host) {}
+#endif
+
+static void sdhci_dump_irq_buffer(struct sdhci_host *host)
+{
+	unsigned int idx, l;
+	unsigned int N = SDHCI_TRACE_RBUF_NUM_EVENTS - 1;
+	struct sdhci_trace_event *event;
+
+	if (!(host->quirks2 & SDHCI_QUIRK2_TRACE_ON))
+		return;
+
+	if (!host->trace_buf.rbuf)
+		return;
+
+	idx = ((unsigned int)atomic_read(&host->trace_buf.wr_idx)) & N;
+	l = (idx + 1) & N;
+
+	do {
+		event = &host->trace_buf.rbuf[l];
+		pr_crit("%s", (char *)event->data);
+		l = (l + 1) & N;
+		if (l == idx) {
+			event = &host->trace_buf.rbuf[l];
+			pr_crit("%s", (char *)event->data);
+			break;
+		}
+	} while (1);
+}
+
 static void sdhci_dumpregs(struct sdhci_host *host)
 {
 	pr_info(DRIVER_NAME ": =========== REGISTER DUMP (%s)===========\n",
@@ -166,6 +257,7 @@ static void sdhci_dumpregs(struct sdhci_host *host)
 		host->ops->dump_vendor_regs(host);
 	sdhci_dump_state(host);
 	pr_info(DRIVER_NAME ": ===========================================\n");
+	sdhci_dump_irq_buffer(host);
 	if (host->slot_no == 1)
 		BUG_ON(1);
 }
@@ -1044,6 +1136,11 @@ static void sdhci_prepare_data(struct sdhci_host *host, struct mmc_command *cmd)
 	/* Set the DMA boundary value and block size */
 	sdhci_set_blk_size_reg(host, data->blksz, SDHCI_DEFAULT_BOUNDARY_ARG);
 	sdhci_writew(host, data->blocks, SDHCI_BLOCK_COUNT);
+	SDHCI_TRACE(host, "%lld: %s: %s: 0x28=0x%08x 0x3E=0x%08x\n",
+			ktime_to_ms(ktime_get()), __func__,
+			mmc_hostname(host->mmc),
+			sdhci_readb(host, SDHCI_HOST_CONTROL),
+			sdhci_readw(host, SDHCI_HOST_CONTROL2));
 }
 
 static void sdhci_set_transfer_mode(struct sdhci_host *host,
@@ -1093,6 +1190,11 @@ static void sdhci_set_transfer_mode(struct sdhci_host *host,
 	if (host->flags & SDHCI_REQ_USE_DMA)
 		mode |= SDHCI_TRNS_DMA;
 
+	SDHCI_TRACE(host, "%lld: %s: %s: 0x00=0x%08x\n",
+			ktime_to_ms(ktime_get()), __func__,
+			mmc_hostname(host->mmc),
+			sdhci_readw(host, SDHCI_ARGUMENT2));
+
 	sdhci_writew(host, mode, SDHCI_TRANSFER_MODE);
 }
 
@@ -1105,6 +1207,10 @@ static void sdhci_finish_data(struct sdhci_host *host)
 	data = host->data;
 	host->data = NULL;
 
+	SDHCI_TRACE(host, "%lld: %s: %s: 0x24=0x%08x",
+			ktime_to_ms(ktime_get()), __func__,
+			mmc_hostname(host->mmc),
+			sdhci_readl(host, SDHCI_PRESENT_STATE));
 	if (host->flags & SDHCI_REQ_USE_DMA) {
 		if (host->flags & SDHCI_USE_ADMA)
 			sdhci_adma_table_post(host, data);
@@ -1232,6 +1338,13 @@ void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 		host->data_start_time = ktime_get();
 	trace_mmc_cmd_rw_start(cmd->opcode, cmd->arg, cmd->flags);
 	sdhci_writew(host, SDHCI_MAKE_CMD(cmd->opcode, flags), SDHCI_COMMAND);
+	SDHCI_TRACE(host,
+		"%lld: %s: %s: updated 0x8=0x%08x 0xC=0x%08x 0xE=0x%08x\n",
+			ktime_to_ms(ktime_get()), __func__,
+			mmc_hostname(host->mmc),
+			sdhci_readl(host, SDHCI_ARGUMENT),
+			sdhci_readw(host, SDHCI_TRANSFER_MODE),
+			sdhci_readw(host, SDHCI_COMMAND));
 }
 EXPORT_SYMBOL_GPL(sdhci_send_command);
 
@@ -2295,6 +2408,10 @@ static int sdhci_do_start_signal_voltage_switch(struct sdhci_host *host,
 				return -EIO;
 			}
 		}
+		SDHCI_TRACE(host, "%lld: %s: %s: 0x24=0x%08x",
+			    ktime_to_ms(ktime_get()), __func__,
+			    mmc_hostname(host->mmc),
+			    sdhci_readl(host, SDHCI_PRESENT_STATE));
 
 		/*
 		 * Enable 1.8V Signal Enable in the Host Control2
@@ -2827,6 +2944,7 @@ static void sdhci_cmd_irq(struct sdhci_host *host, u32 intmask, u32 *mask)
 		auto_cmd_status = host->auto_cmd_err_sts;
 		pr_err_ratelimited("%s: %s: AUTO CMD err sts 0x%08x\n",
 			mmc_hostname(host->mmc), __func__, auto_cmd_status);
+
 		if (auto_cmd_status & (SDHCI_AUTO_CMD12_NOT_EXEC |
 				       SDHCI_AUTO_CMD_INDEX_ERR |
 				       SDHCI_AUTO_CMD_ENDBIT_ERR))
@@ -2946,6 +3064,10 @@ static void sdhci_data_irq(struct sdhci_host *host, u32 intmask)
 		if (host->cmd && (host->cmd->flags & MMC_RSP_BUSY)) {
 			if (intmask & SDHCI_INT_DATA_TIMEOUT) {
 				host->cmd->error = -ETIMEDOUT;
+				pr_err("%s: Got INT_DATA_TIMEOUT for busy command (%d)\n",
+						mmc_hostname(host->mmc),
+						host->cmd->opcode);
+				sdhci_dumpregs(host);
 				tasklet_schedule(&host->finish_tasklet);
 				return;
 			}
@@ -3121,6 +3243,14 @@ static irqreturn_t sdhci_irq(int irq, void *dev_id)
 		spin_unlock(&host->lock);
 		return IRQ_NONE;
 	}
+	SDHCI_TRACE(host,
+		"%lld: %s: %s: resp 0: 0x%08x resp 1: 0x%08x resp 2: 0x%08x resp 3: 0x%08x\n",
+		    ktime_to_ms(ktime_get()), __func__,
+		    mmc_hostname(host->mmc),
+		    sdhci_readl(host, SDHCI_RESPONSE),
+		    sdhci_readl(host, SDHCI_RESPONSE + 0x4),
+		    sdhci_readl(host, SDHCI_RESPONSE + 0x8),
+		    sdhci_readl(host, SDHCI_RESPONSE + 0xC));
 
 	if (!host->clock && host->mmc->card &&
 			mmc_card_sdio(host->mmc->card)) {
@@ -3161,6 +3291,10 @@ static irqreturn_t sdhci_irq(int irq, void *dev_id)
 			if (result == IRQ_HANDLED)
 				goto out;
 		}
+
+		SDHCI_TRACE_IRQ(host, "%s: %s: intmask: 0x%x\n",
+				__func__,
+				mmc_hostname(host->mmc), intmask);
 
 		if (intmask & SDHCI_INT_AUTO_CMD_ERR)
 			host->auto_cmd_err_sts = sdhci_readw(host,
@@ -4246,6 +4380,9 @@ int sdhci_add_host(struct sdhci_host *host)
 #endif
 
 	mmiowb();
+
+	if (host->quirks2 & SDHCI_QUIRK2_TRACE_ON)
+		sdhci_trace_init(host);
 
 	if (host->quirks2 & SDHCI_QUIRK2_IGN_DATA_END_BIT_ERROR) {
 		host->ier = (host->ier & ~SDHCI_INT_DATA_END_BIT);
