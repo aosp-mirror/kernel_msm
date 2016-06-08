@@ -171,8 +171,7 @@ static void mdp3_dispatch_clk_off(struct work_struct *work)
 		return;
 
 	mutex_lock(&session->lock);
-	if (session->vsync_enabled ||
-		atomic_read(&session->vsync_countdown) > 0) {
+	if(atomic_read(&session->vsync_countdown) > 0) {
 		mutex_unlock(&session->lock);
 		pr_debug("Ignoring clk shut down\n");
 		return;
@@ -1015,6 +1014,18 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 			mdp3_session->overlay.id = MSMFB_NEW_REQUEST;
 			mdp3_bufq_deinit(&mdp3_session->bufq_in);
 		}
+	}
+	if (mdss_fb_is_power_on_ulp(mfd) &&
+		(mfd->panel.type == MIPI_CMD_PANEL)) {
+		pr_debug("%s: Disable MDP clocks in ulps\n", __func__);
+		/*
+		 * Disable vsync reset vsync_count to 1 and start
+		 * vsync tick countdown in ulps
+		 */
+		atomic_set(&mdp3_session->vsync_countdown, 0);
+		mdp3_session->vsync_enabled = 0;
+		mdp3_ctrl_vsync_enable(mdp3_session->mfd, 0);
+		mdp3_ctrl_clk_enable(mdp3_session->mfd, 0);
 	}
 off_error:
 	mutex_unlock(&mdp3_session->lock);
