@@ -322,7 +322,8 @@ int nanohub_spi_read(void *data, uint8_t *rx, int max_length, int timeout)
 		if (offset > 0) {
 			packet = (struct nanohub_packet *)rx;
 			memcpy(&rx[offset], comms->rx_buffer, xfer.len);
-			spi_data->rx_offset = spi_data->rx_length = 0;
+			spi_data->rx_length = xfer.len;
+			spi_data->rx_offset = min_size + packet->len - offset;
 		} else {
 			for (i = 0; i < xfer.len; i++) {
 				if (comms->rx_buffer[i] != 0xFF) {
@@ -455,6 +456,11 @@ static int nanohub_spi_probe(struct spi_device *spi)
 	spi_data->data.bl.cmd_erase = CMD_ERASE;
 	spi_data->data.bl.cmd_read_memory = CMD_READ_MEMORY;
 	spi_data->data.bl.cmd_write_memory = CMD_WRITE_MEMORY;
+	spi_data->data.bl.cmd_get_version = CMD_GET_VERSION;
+	spi_data->data.bl.cmd_get_id = CMD_GET_ID;
+	spi_data->data.bl.cmd_readout_protect = CMD_READOUT_PROTECT;
+	spi_data->data.bl.cmd_readout_unprotect = CMD_READOUT_UNPROTECT;
+	spi_data->data.bl.cmd_update_finished = CMD_UPDATE_FINISHED;
 	nanohub_spi_bl_init(spi_data);
 
 	nanohub_reset(&spi_data->data);

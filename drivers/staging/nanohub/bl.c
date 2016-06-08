@@ -284,6 +284,22 @@ out:
 	return status;
 }
 
+uint8_t nanohub_bl_erase_shared_bl(struct nanohub_data *data)
+{
+	uint8_t status;
+
+	status = nanohub_bl_sync(data);
+
+	if (status != CMD_ACK) {
+		pr_err("nanohub_bl_erase_shared_bl: sync=%02x\n", status);
+		goto out;
+	}
+
+	status = nanohub_bl_erase_special(data, 0xFFF0);
+out:
+	return status;
+}
+
 /* erase a single sector */
 uint8_t nanohub_bl_erase_sector(struct nanohub_data *data, uint16_t sector)
 {
@@ -297,6 +313,21 @@ uint8_t nanohub_bl_erase_sector(struct nanohub_data *data, uint16_t sector)
 		ret = read_ack_loop(data);
 	if (ret == CMD_ACK)
 		ret = write_cnt(data, sector);
+	if (ret != CMD_NACK)
+		ret = read_ack_loop(data);
+
+	return ret;
+}
+
+/* erase special */
+uint8_t nanohub_bl_erase_special(struct nanohub_data *data, uint16_t special)
+{
+	uint8_t ret;
+
+	data->bl.write_cmd(data, data->bl.cmd_erase);
+	ret = data->bl.read_ack(data);
+	if (ret == CMD_ACK)
+		ret = write_cnt(data, special);
 	if (ret != CMD_NACK)
 		ret = read_ack_loop(data);
 
@@ -373,6 +404,97 @@ uint8_t nanohub_bl_write_memory(struct nanohub_data *data, uint32_t addr,
 			}
 		}
 	}
+
+	return ret;
+}
+
+uint8_t nanohub_bl_get_version(struct nanohub_data *data, uint8_t *version)
+{
+	uint8_t status;
+
+	status = nanohub_bl_sync(data);
+	if (status != CMD_ACK) {
+		pr_err("nanohub_bl_get_version: sync=%02x\n", status);
+		goto out;
+	}
+
+	data->bl.write_cmd(data, data->bl.cmd_get_version);
+	status = data->bl.read_ack(data);
+	if (status == CMD_ACK)
+		data->bl.read_data(data, version, 1);
+	status = data->bl.read_ack(data);
+out:
+	return status;
+}
+
+uint8_t nanohub_bl_get_id(struct nanohub_data *data, uint16_t *id)
+{
+	uint8_t status;
+	uint8_t len;
+	uint8_t buffer[256];
+
+	status = nanohub_bl_sync(data);
+	if (status != CMD_ACK) {
+		pr_err("nanohub_bl_get_id: sync=%02x\n", status);
+		goto out;
+	}
+
+	data->bl.write_cmd(data, data->bl.cmd_get_id);
+	status = data->bl.read_ack(data);
+	if (status == CMD_ACK) {
+		data->bl.read_data(data, &len, 1);
+		data->bl.read_data(data, buffer, len+1);
+		*id = (buffer[0] << 8) | buffer[1];
+	}
+	status = data->bl.read_ack(data);
+out:
+	return status;
+}
+
+uint8_t nanohub_bl_lock(struct nanohub_data *data)
+{
+	uint8_t status;
+
+	status = nanohub_bl_sync(data);
+
+	if (status != CMD_ACK) {
+		pr_err("nanohub_bl_lock: sync=%02x\n", status);
+		goto out;
+	}
+
+	data->bl.write_cmd(data, data->bl.cmd_readout_protect);
+	status = data->bl.read_ack(data);
+	if (status == CMD_ACK)
+		status = read_ack_loop(data);
+out:
+	return status;
+}
+
+uint8_t nanohub_bl_unlock(struct nanohub_data *data)
+{
+	uint8_t status;
+
+	status = nanohub_bl_sync(data);
+
+	if (status != CMD_ACK) {
+		pr_err("nanohub_bl_lock: sync=%02x\n", status);
+		goto out;
+	}
+
+	data->bl.write_cmd(data, data->bl.cmd_readout_unprotect);
+	status = data->bl.read_ack(data);
+	if (status == CMD_ACK)
+		status = read_ack_loop(data);
+out:
+	return status;
+}
+
+uint8_t nanohub_bl_update_finished(struct nanohub_data *data)
+{
+	uint8_t ret;
+
+	data->bl.write_cmd(data, data->bl.cmd_update_finished);
+	ret = read_ack_loop(data);
 
 	return ret;
 }
