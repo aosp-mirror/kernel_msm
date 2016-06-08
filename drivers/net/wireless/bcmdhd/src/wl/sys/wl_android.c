@@ -920,6 +920,12 @@ int wl_android_send_action_frame(struct net_device *dev, char *command, int tota
 		goto send_action_frame_out;
 	}
 
+	if (params->len > ANDROID_WIFI_ACTION_FRAME_SIZE) {
+		DHD_ERROR(("%s: Requested action frame len was out of range(%d)\n",
+			__FUNCTION__, params->len));
+		goto send_action_frame_out;
+	}
+
 	smbuf = kmalloc(WLC_IOCTL_MAXLEN, GFP_KERNEL);
 	if (smbuf == NULL) {
 		DHD_ERROR(("%s: failed to allocated memory %d bytes\n",
@@ -2583,13 +2589,13 @@ int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 
 	net_os_wake_lock(net);
 
-	if (!ifr->ifr_data) {
-		ret = -EINVAL;
+	if (!capable(CAP_NET_ADMIN)) {
+		ret = -EPERM;
 		goto exit;
 	}
 
-	if (!capable(CAP_NET_ADMIN)) {
-		ret = -EPERM;
+	if (!ifr->ifr_data) {
+		ret = -EINVAL;
 		goto exit;
 	}
 
