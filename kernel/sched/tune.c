@@ -466,33 +466,14 @@ schedtune_boostgroup_init(struct schedtune *st)
 	return 0;
 }
 
-static int
-schedtune_init(void)
-{
-	struct boost_groups *bg;
-	int cpu;
-
-	/* Initialize the per CPU boost groups */
-	for_each_possible_cpu(cpu) {
-		bg = &per_cpu(cpu_boost_groups, cpu);
-		memset(bg, 0, sizeof(struct boost_groups));
-	}
-
-	pr_info("  schedtune configured to support %d boost groups\n",
-		BOOSTGROUPS_COUNT);
-	return 0;
-}
-
 static struct cgroup_subsys_state *
 schedtune_css_alloc(struct cgroup_subsys_state *parent_css)
 {
 	struct schedtune *st;
 	int idx;
 
-	if (!parent_css) {
-		schedtune_init();
+	if (!parent_css)
 		return &root_schedtune.css;
-	}
 
 	/* Allow only single level hierachies */
 	if (parent_css != &root_schedtune.css) {
@@ -552,6 +533,22 @@ struct cgroup_subsys schedtune_cgrp_subsys = {
 	.legacy_cftypes	= files,
 	.early_init	= 1,
 };
+
+static inline void
+schedtune_init_cgroups(void)
+{
+	struct boost_groups *bg;
+	int cpu;
+
+	/* Initialize the per CPU boost groups */
+	for_each_possible_cpu(cpu) {
+		bg = &per_cpu(cpu_boost_groups, cpu);
+		memset(bg, 0, sizeof(struct boost_groups));
+	}
+
+	pr_info("schedtune: configured to support %d boost groups\n",
+		BOOSTGROUPS_COUNT);
+}
 
 #else /* CONFIG_CGROUP_SCHEDTUNE */
 
@@ -700,7 +697,7 @@ schedtune_add_cluster_nrg(
  * that bind the EM to the topology information.
  */
 static int
-schedtune_init_late(void)
+schedtune_init(void)
 {
 	struct target_nrg *ste = &schedtune_target_nrg;
 	unsigned long delta_pwr = 0;
@@ -740,11 +737,18 @@ schedtune_init_late(void)
 		ste->rdiv.m, ste->rdiv.sh1, ste->rdiv.sh2);
 
 	schedtune_test_nrg(delta_pwr);
+
+#ifdef CONFIG_CGROUP_SCHEDTUNE
+	schedtune_init_cgroups();
+#else
+	pr_info("schedtune: configured to support global boosting only\n");
+#endif
+
 	return 0;
 
 nodata:
 	rcu_read_unlock();
 	return -EINVAL;
 }
-late_initcall(schedtune_init_late);
+late_initcall(schedtune_init);
 
