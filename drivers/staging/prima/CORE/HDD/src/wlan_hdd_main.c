@@ -7433,8 +7433,7 @@ VOS_STATUS hdd_stop_adapter( hdd_context_t *pHddCtx, hdd_adapter_t *pAdapter,
          }
          else if(pScanInfo != NULL && pHddCtx->scan_info.mScanPending)
          {
-            hdd_abort_mac_scan(pHddCtx, pScanInfo->sessionId,
-                               eCSR_SCAN_ABORT_DEFAULT);
+            wlan_hdd_scan_abort(pAdapter);
          }
        if ((pAdapter->device_mode != WLAN_HDD_INFRA_STATION) &&
                    (pAdapter->device_mode != WLAN_HDD_IBSS))

@@ -10365,6 +10365,13 @@ static eHalStatus hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
         goto allow_suspend;
     }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
+    if (!(pAdapter->dev->flags & IFF_UP))
+    {
+        hddLog(VOS_TRACE_LEVEL_ERROR, FL("Interface is down"));
+        goto allow_suspend;
+    }
+#endif
     pScanInfo = &pHddCtx->scan_info;
 
     hddLog(VOS_TRACE_LEVEL_INFO,
@@ -10477,7 +10484,9 @@ static eHalStatus hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
     {
          aborted = true;
     }
+
     cfg80211_scan_done(req, aborted);
+
     complete(&pScanInfo->abortscan_event_var);
 
     if ((pHddCtx->cfg_ini->enableMacSpoofing == MAC_ADDR_SPOOFING_FW_HOST_ENABLE
