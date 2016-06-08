@@ -234,6 +234,14 @@
 	};
 };
 
+&pm8916_pon {
+	qcom,pon_1 {
+		qcom,s1-timer = <6720>;
+		qcom,s2-timer = <2000>;
+		qcom,s2-type = <7>;
+	};
+};
+
 &pm8916_mpps {
 	mpp@a300 { // MPP 4 For PM_USB_ID ADC
 		qcom,mode = <4>;      // MODE_CTL: ANALOG_INPUT
