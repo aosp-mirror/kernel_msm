@@ -11822,8 +11822,9 @@ static void wl_update_hidden_ap_ie(struct wl_bss_info *bi, u8 *ie_stream, u32 *i
 		}
 		if (roam) {
 			WL_ERR(("Changing the SSID Info.\n"));
-			memmove(ssidie + bi->SSID_len + 2,
-				(ssidie + 2) + ssidie[1], remaining_ie_buf_len);
+			memmove(ssidie + ssid_len + 2,
+				(ssidie + 2) + ssidie[1],
+				remaining_ie_buf_len);
 			memcpy(ssidie + 2, bi->SSID, ssid_len);
 			*ie_size = *ie_size + ssid_len - ssidie[1];
 			ssidie[1] = ssid_len;

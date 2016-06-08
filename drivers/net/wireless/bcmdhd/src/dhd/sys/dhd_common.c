@@ -1192,47 +1192,86 @@ wl_show_host_event(wl_event_msg_t *event, void *event_data)
 #endif /* SHOW_EVENTS */
 
 int
+is_wlc_event_frame(void *pktdata, wl_event_msg_t *event, uint pktlen)
+{
+	uint32 datalen;
+	uint evlen;
+	uint16 subtype, usr_subtype;
+	bcm_event_t *pvt_data = (bcm_event_t *)pktdata;
+
+	if (pktlen < sizeof(bcm_event_t))
+		return (BCME_BADLEN);
+
+	if (bcmp(BRCM_OUI, &pvt_data->bcm_hdr.oui[0], DOT11_OUI_LEN))
+		return (BCME_ERROR);
+
+	subtype = ntoh16_ua((void *)&pvt_data->bcm_hdr.subtype);
+	if (subtype != BCMILCP_SUBTYPE_VENDOR_LONG)
+		return (BCME_ERROR);
+
+	usr_subtype = ntoh16_ua((void *)&pvt_data->bcm_hdr.usr_subtype);
+	if (usr_subtype != BCMILCP_BCM_SUBTYPE_EVENT)
+		return (BCME_ERROR);
+
+	datalen = ntoh32_ua((void *)&pvt_data->event.datalen);
+	evlen = datalen + sizeof(bcm_event_t);
+	if (evlen > pktlen)
+		return (BCME_BADLEN);
+
+	/* copy event header only if proper event pointer is passed,
+	 * if passed NULL, do not copy.
+	 */
+	if (event) {
+		/* memcpy since BRCM event pkt may be unaligned. */
+		memcpy(event, &pvt_data->event, sizeof(wl_event_msg_t));
+	}
+
+	return BCME_OK;
+}
+
+/* Check whether packet is a BRCM event pkt. If it is, record event data. */
+int
+wl_host_event_get_data(void *pktdata, wl_event_msg_t *event, void **data_ptr, unsigned int pktlen)
+{
+	int ret;
+	bcm_event_t *pvt_data = (bcm_event_t *)pktdata;
+
+	ret = is_wlc_event_frame(pktdata, event, pktlen);
+	if (ret) {
+		DHD_ERROR(("%s: is_wlc_event_frame failed\n", __FUNCTION__));
+		return ret;
+	}
+
+	*data_ptr = &pvt_data[1];
+
+	return BCME_OK;
+}
+
+int
 wl_host_event(dhd_pub_t *dhd_pub, int *ifidx, void *pktdata, size_t pktlen,
               wl_event_msg_t *event, void **data_ptr)
 {
-	/* check whether packet is a BRCM event pkt */
-	bcm_event_t *pvt_data = (bcm_event_t *)pktdata;
+	bcm_event_t *pvt_data;
 	uint8 *event_data;
 	uint32 type, status, datalen;
 	uint16 flags;
-	int evlen;
+	uint evlen;
+	int ret;
 
-	if (bcmp(BRCM_OUI, &pvt_data->bcm_hdr.oui[0], DOT11_OUI_LEN)) {
-		DHD_ERROR(("%s: mismatched OUI, bailing\n", __FUNCTION__));
-		return (BCME_ERROR);
-	}
+	/* make sure it is a BRCM event pkt and record event data */
+	ret = wl_host_event_get_data(pktdata, event, data_ptr, pktlen);
+	if (ret != BCME_OK)
+		return ret;
 
-	/* BRCM event pkt may be unaligned - use xxx_ua to load user_subtype. */
-	if (ntoh16_ua((void *)&pvt_data->bcm_hdr.usr_subtype) != BCMILCP_BCM_SUBTYPE_EVENT) {
-		DHD_ERROR(("%s: mismatched subtype, bailing\n", __FUNCTION__));
-		return (BCME_ERROR);
-	}
+	pvt_data = (bcm_event_t *)pktdata;
 
-	if (pktlen < sizeof(bcm_event_t))
-		return (BCME_ERROR);
-
-	*data_ptr = &pvt_data[1];
 	event_data = *data_ptr;
-
-	/* memcpy since BRCM event pkt may be unaligned. */
-	memcpy(event, &pvt_data->event, sizeof(wl_event_msg_t));
 
 	type = ntoh32_ua((void *)&event->event_type);
 	flags = ntoh16_ua((void *)&event->flags);
 	status = ntoh32_ua((void *)&event->status);
-
 	datalen = ntoh32_ua((void *)&event->datalen);
-	if (datalen > pktlen)
-		return (BCME_ERROR);
-
 	evlen = datalen + sizeof(bcm_event_t);
-	if (evlen > pktlen)
-		return (BCME_ERROR);
 
 	switch (type) {
 #ifdef PROP_TXSTATUS
