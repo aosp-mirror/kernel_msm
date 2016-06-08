@@ -26,6 +26,9 @@
 #define READ_ACK_TIMEOUT_MS	10
 #define READ_MSG_TIMEOUT_MS	70
 
+#define RESEND_SHORT_DELAY_US   500     /* 500us - 1ms */
+#define RESEND_LONG_DELAY_US    100000  /* 100ms - 200ms */
+
 static const uint32_t crc_table[] = {
 	0x00000000, 0x04C11DB7, 0x09823B6E, 0x0D4326D9,
 	0x130476DC, 0x17C56B6B, 0x1A864DB2, 0x1E475005,
@@ -159,7 +162,7 @@ static int read_ack(struct nanohub_data *data, struct nanohub_packet *response,
 	    sizeof(struct nanohub_packet_crc);
 	unsigned long end = jiffies + msecs_to_jiffies(READ_ACK_TIMEOUT_MS);
 
-	for (i = 0; time_before(jiffies, end); i++) {
+	for (i = 0; time_before_eq(jiffies, end); i++) {
 		ret =
 		    data->comms.read(data, (uint8_t *) response, max_size,
 				     timeout);
@@ -205,7 +208,7 @@ static int read_msg(struct nanohub_data *data, struct nanohub_packet *response,
 	    sizeof(struct nanohub_packet_crc);
 	unsigned long end = jiffies + msecs_to_jiffies(READ_MSG_TIMEOUT_MS);
 
-	for (i = 0; time_before(jiffies, end); i++) {
+	for (i = 0; time_before_eq(jiffies, end); i++) {
 		ret =
 		    data->comms.read(data, (uint8_t *) response, max_size,
 				     timeout);
@@ -376,7 +379,8 @@ int nanohub_comms_rx_retrans_boottime(struct nanohub_data *data, uint32_t cmd,
 			if (retrans_cnt >= 0)
 				udelay(retrans_delay);
 		} else if (ret == ERROR_BUSY) {
-			usleep_range(100000, 200000);
+			usleep_range(RESEND_LONG_DELAY_US,
+				     RESEND_LONG_DELAY_US * 2);
 		}
 	} while ((ret == ERROR_BUSY)
 		 || (ret == ERROR_NACK && retrans_cnt >= 0));
@@ -424,7 +428,8 @@ int nanohub_comms_tx_rx_retrans(struct nanohub_data *data, uint32_t cmd,
 			if (retrans_cnt >= 0)
 				udelay(retrans_delay);
 		} else if (ret == ERROR_BUSY) {
-			usleep_range(100000, 200000);
+			usleep_range(RESEND_LONG_DELAY_US,
+				     RESEND_LONG_DELAY_US * 2);
 		}
 	} while ((ret == ERROR_BUSY)
 		 || (ret == ERROR_NACK && retrans_cnt >= 0));
@@ -442,7 +447,7 @@ struct firmware_header {
 
 struct firmware_chunk {
 	uint32_t offset;
-	uint8_t data[252 - sizeof(uint32_t)];
+	uint8_t data[128];
 }
 __packed;
 
@@ -457,8 +462,9 @@ static int nanohub_comms_download(struct nanohub_data *data,
 	int chunk_size;
 	uint32_t offset = 0;
 	int ret;
-	uint8_t chunk_reply, upload_reply = 0;
+	uint8_t chunk_reply, upload_reply = 0, last_reply = 0;
 	uint32_t clear_interrupts[8] = { 0x00000008 };
+	uint32_t delay;
 
 	header.type = type;
 	header.size = cpu_to_le32(length);
@@ -477,6 +483,7 @@ static int nanohub_comms_download(struct nanohub_data *data,
 			if (request_wakeup(data))
 				continue;
 
+			delay = 0;
 			chunk.offset = cpu_to_le32(offset);
 			if (offset + max_chunk_size > length)
 				chunk_size = length - offset;
@@ -495,11 +502,11 @@ static int nanohub_comms_download(struct nanohub_data *data,
 							false, 10, 10);
 
 			pr_debug("nanohub: ret=%d, chunk_reply=%d, offset=%d\n",
-				 ret, chunk_reply, offset);
+				ret, chunk_reply, offset);
 			if (ret == sizeof(chunk_reply)) {
-				if (chunk_reply == CHUNK_REPLY_ACCEPTED)
+				if (chunk_reply == CHUNK_REPLY_ACCEPTED) {
 					offset += chunk_size;
-				else if (chunk_reply == CHUNK_REPLY_WAIT) {
+				} else if (chunk_reply == CHUNK_REPLY_WAIT) {
 					ret = nanohub_wait_for_interrupt(data);
 					if (ret < 0) {
 						release_wakeup(data);
@@ -512,9 +519,12 @@ static int nanohub_comms_download(struct nanohub_data *data,
 					    (uint8_t *)data->interrupts,
 					    sizeof(data->interrupts),
 					    false, 10, 0);
-				} else if (chunk_reply == CHUNK_REPLY_RESEND)
-					;
-				else if (chunk_reply == CHUNK_REPLY_RESTART)
+				} else if (chunk_reply == CHUNK_REPLY_RESEND) {
+					if (last_reply == CHUNK_REPLY_RESEND)
+						delay = RESEND_LONG_DELAY_US;
+					else
+						delay = RESEND_SHORT_DELAY_US;
+				} else if (chunk_reply == CHUNK_REPLY_RESTART)
 					offset = 0;
 				else if (chunk_reply == CHUNK_REPLY_CANCEL ||
 				    chunk_reply ==
@@ -522,15 +532,22 @@ static int nanohub_comms_download(struct nanohub_data *data,
 					release_wakeup(data);
 					break;
 				}
+				last_reply = chunk_reply;
 			} else if (ret <= 0) {
 				release_wakeup(data);
 				break;
 			}
 			release_wakeup(data);
+			if (delay > 0)
+				usleep_range(delay, delay * 2);
 		} while (offset < length);
 	}
 
 	do {
+		if (upload_reply == UPLOAD_REPLY_PROCESSING)
+			usleep_range(RESEND_LONG_DELAY_US,
+				     RESEND_LONG_DELAY_US * 2);
+
 		if (request_wakeup(data)) {
 			ret = sizeof(upload_reply);
 			upload_reply = UPLOAD_REPLY_PROCESSING;

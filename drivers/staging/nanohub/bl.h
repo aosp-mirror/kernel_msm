@@ -25,6 +25,11 @@ struct nanohub_bl {
 	uint8_t cmd_erase;
 	uint8_t cmd_read_memory;
 	uint8_t cmd_write_memory;
+	uint8_t cmd_get_version;
+	uint8_t cmd_get_id;
+	uint8_t cmd_readout_protect;
+	uint8_t cmd_readout_unprotect;
+	uint8_t cmd_update_finished;
 
 	int (*open)(const void *);
 	void (*close)(const void *);
@@ -44,11 +49,18 @@ void nanohub_bl_close(struct nanohub_data *);
 uint8_t nanohub_bl_download(struct nanohub_data *, uint32_t addr,
 			    const uint8_t *data, size_t length);
 uint8_t nanohub_bl_erase_shared(struct nanohub_data *);
+uint8_t nanohub_bl_erase_shared_bl(struct nanohub_data *);
 uint8_t nanohub_bl_erase_sector(struct nanohub_data *, uint16_t);
+uint8_t nanohub_bl_erase_special(struct nanohub_data *, uint16_t);
 uint8_t nanohub_bl_read_memory(struct nanohub_data *, uint32_t, uint32_t,
 			       uint8_t *);
 uint8_t nanohub_bl_write_memory(struct nanohub_data *, uint32_t, uint32_t,
 				const uint8_t *);
+uint8_t nanohub_bl_get_version(struct nanohub_data *, uint8_t *);
+uint8_t nanohub_bl_get_id(struct nanohub_data *, uint16_t *);
+uint8_t nanohub_bl_lock(struct nanohub_data *);
+uint8_t nanohub_bl_unlock(struct nanohub_data *);
+uint8_t nanohub_bl_update_finished(struct nanohub_data *);
 
 /*
  * Bootloader commands
@@ -78,5 +90,7 @@ uint8_t nanohub_bl_write_memory(struct nanohub_data *, uint32_t, uint32_t,
 #define CMD_READOUT_UNPROTECT		0x92
 #define CMD_READOUT_UNPROTECT_NS	0x93
 #define CMD_SOF_ACK			0xA5
+#define CMD_GET_SIZES			0xEE
+#define CMD_UPDATE_FINISHED		0xEF
 
 #endif

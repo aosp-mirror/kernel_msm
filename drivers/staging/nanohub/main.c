@@ -560,7 +560,7 @@ static inline int nanohub_wakeup_lock(struct nanohub_data *data, int mode)
 		return ret;
 	}
 
-	if (mode == LOCK_MODE_IO)
+	if (mode == LOCK_MODE_IO || mode == LOCK_MODE_IO_BL)
 		ret = nanohub_bl_open(data);
 	if (ret < 0) {
 		release_wakeup_ex(data, KEY_WAKEUP_LOCK, mode);
@@ -570,7 +570,7 @@ static inline int nanohub_wakeup_lock(struct nanohub_data *data, int mode)
 		disable_irq(data->irq1);
 
 	atomic_set(&data->lock_mode, mode);
-	mcu_wakeup_gpio_set_value(data, 1);
+	mcu_wakeup_gpio_set_value(data, mode != LOCK_MODE_IO_BL);
 
 	return 0;
 }
@@ -583,7 +583,7 @@ static inline int nanohub_wakeup_unlock(struct nanohub_data *data)
 	atomic_set(&data->lock_mode, LOCK_MODE_NONE);
 	if (mode != LOCK_MODE_SUSPEND_RESUME)
 		enable_irq(data->irq1);
-	if (mode == LOCK_MODE_IO)
+	if (mode == LOCK_MODE_IO || mode == LOCK_MODE_IO_BL)
 		nanohub_bl_close(data);
 	if (data->irq2)
 		enable_irq(data->irq2);
@@ -600,12 +600,12 @@ static void __nanohub_hw_reset(struct nanohub_data *data, int boot0)
 	const struct nanohub_platform_data *pdata = data->pdata;
 
 	gpio_set_value(pdata->nreset_gpio, 0);
-	gpio_set_value(pdata->boot0_gpio, boot0 ? 1 : 0);
+	gpio_set_value(pdata->boot0_gpio, boot0 > 0);
 	usleep_range(30, 40);
 	gpio_set_value(pdata->nreset_gpio, 1);
-	if (boot0)
+	if (boot0 > 0)
 		usleep_range(70000, 75000);
-	else
+	else if (!boot0)
 		usleep_range(750000, 800000);
 }
 
@@ -644,6 +644,30 @@ static ssize_t nanohub_erase_shared(struct device *dev,
 	status = nanohub_bl_erase_shared(data);
 	dev_info(dev, "nanohub_bl_erase_shared: status=%02x\n",
 		 status);
+
+	__nanohub_hw_reset(data, 0);
+	nanohub_wakeup_unlock(data);
+
+	return ret < 0 ? ret : count;
+}
+
+static ssize_t nanohub_erase_shared_bl(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	struct nanohub_data *data = dev_get_nanohub_data(dev);
+	uint8_t status = CMD_ACK;
+	int ret;
+
+	ret = nanohub_wakeup_lock(data, LOCK_MODE_IO_BL);
+	if (ret < 0)
+		return ret;
+
+	data->err_cnt = 0;
+	__nanohub_hw_reset(data, -1);
+
+	status = nanohub_bl_erase_shared_bl(data);
+	dev_info(dev, "%s: status=%02x\n", __func__, status);
 
 	__nanohub_hw_reset(data, 0);
 	nanohub_wakeup_unlock(data);
@@ -706,6 +730,51 @@ static ssize_t nanohub_download_kernel(struct device *dev,
 		return count;
 	}
 
+}
+
+static ssize_t nanohub_download_kernel_bl(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t count)
+{
+	struct nanohub_data *data = dev_get_nanohub_data(dev);
+	const struct firmware *fw_entry;
+	int ret;
+	uint8_t status = CMD_ACK;
+
+	ret = request_firmware(&fw_entry, "nanohub.kernel.signed", dev);
+	if (ret) {
+		dev_err(dev, "%s: err=%d\n", __func__, ret);
+	} else {
+		ret = nanohub_wakeup_lock(data, LOCK_MODE_IO_BL);
+		if (ret < 0)
+			return ret;
+
+		data->err_cnt = 0;
+		__nanohub_hw_reset(data, -1);
+
+		status = nanohub_bl_erase_shared_bl(data);
+		dev_info(dev, "%s: (erase) status=%02x\n", __func__, status);
+		if (status == CMD_ACK) {
+			status = nanohub_bl_write_memory(data, 0x50000000,
+							 fw_entry->size,
+							 fw_entry->data);
+			mcu_wakeup_gpio_set_value(data, 1);
+			dev_info(dev, "%s: (write) status=%02x\n", __func__, status);
+			if (status == CMD_ACK) {
+				status = nanohub_bl_update_finished(data);
+				dev_info(dev, "%s: (finish) status=%02x\n", __func__, status);
+			}
+		} else {
+			mcu_wakeup_gpio_set_value(data, 1);
+		}
+
+		__nanohub_hw_reset(data, 0);
+		nanohub_wakeup_unlock(data);
+
+		release_firmware(fw_entry);
+	}
+
+	return ret < 0 ? ret : count;
 }
 
 static ssize_t nanohub_download_app(struct device *dev,
@@ -796,15 +865,71 @@ static ssize_t nanohub_download_app(struct device *dev,
 	return count;
 }
 
+static ssize_t nanohub_lock_bl(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct nanohub_data *data = dev_get_nanohub_data(dev);
+	int ret;
+	uint8_t status = CMD_ACK;
+
+	ret = nanohub_wakeup_lock(data, LOCK_MODE_IO);
+	if (ret < 0)
+		return ret;
+
+	data->err_cnt = 0;
+	__nanohub_hw_reset(data, 1);
+
+	gpio_set_value(data->pdata->boot0_gpio, 0);
+	/* this command reboots itself */
+	status = nanohub_bl_lock(data);
+	dev_info(dev, "%s: status=%02x\n", __func__, status);
+	msleep(350);
+
+	nanohub_wakeup_unlock(data);
+
+	return ret < 0 ? ret : count;
+}
+
+static ssize_t nanohub_unlock_bl(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	struct nanohub_data *data = dev_get_nanohub_data(dev);
+	int ret;
+	uint8_t status = CMD_ACK;
+
+	ret = nanohub_wakeup_lock(data, LOCK_MODE_IO);
+	if (ret < 0)
+		return ret;
+
+	data->err_cnt = 0;
+	__nanohub_hw_reset(data, 1);
+
+	gpio_set_value(data->pdata->boot0_gpio, 0);
+	/* this command reboots itself (erasing the flash) */
+	status = nanohub_bl_unlock(data);
+	dev_info(dev, "%s: status=%02x\n", __func__, status);
+	msleep(20);
+
+	nanohub_wakeup_unlock(data);
+
+	return ret < 0 ? ret : count;
+}
+
 static struct device_attribute attributes[] = {
 	__ATTR(wakeup, 0440, nanohub_wakeup_query, NULL),
 	__ATTR(app_info, 0440, nanohub_app_info, NULL),
 	__ATTR(firmware_version, 0440, nanohub_firmware_query, NULL),
 	__ATTR(download_bl, 0220, NULL, nanohub_download_bl),
 	__ATTR(download_kernel, 0220, NULL, nanohub_download_kernel),
+	__ATTR(download_kernel_bl, 0220, NULL, nanohub_download_kernel_bl),
 	__ATTR(download_app, 0220, NULL, nanohub_download_app),
 	__ATTR(erase_shared, 0220, NULL, nanohub_erase_shared),
+	__ATTR(erase_shared_bl, 0220, NULL, nanohub_erase_shared_bl),
 	__ATTR(reset, 0220, NULL, nanohub_hw_reset),
+	__ATTR(lock, 0220, NULL, nanohub_lock_bl),
+	__ATTR(unlock, 0220, NULL, nanohub_unlock_bl),
 };
 
 static inline int nanohub_create_sensor(struct nanohub_data *data)
