@@ -48,17 +48,18 @@ int cnss_set_wlan_unsafe_channel(u16 *unsafe_ch_list, u16 ch_count)
 	struct cnss_unsafe_channel_list *unsafe_list;
 
 	mutex_lock(&unsafe_channel_list_lock);
-	if ((!unsafe_ch_list) || (!ch_count) || (ch_count > CNSS_MAX_CH_NUM)) {
+	if ((!unsafe_ch_list) || (ch_count > CNSS_MAX_CH_NUM)) {
 		mutex_unlock(&unsafe_channel_list_lock);
 		return -EINVAL;
 	}
 
-	unsafe_list = &unsafe_channel_list;
 	unsafe_channel_list.unsafe_ch_count = ch_count;
 
-	memcpy(
-		(char *)unsafe_list->unsafe_ch_list,
-		(char *)unsafe_ch_list, ch_count * sizeof(u16));
+	if (ch_count != 0) {
+		memcpy(
+			(char *)unsafe_list->unsafe_ch_list,
+			(char *)unsafe_ch_list, ch_count * sizeof(u16));
+	}
 	mutex_unlock(&unsafe_channel_list_lock);
 
 	return 0;
@@ -382,3 +383,45 @@ int cnss_common_set_wlan_mac_address(
 	return ret;
 }
 EXPORT_SYMBOL(cnss_common_set_wlan_mac_address);
+
+int cnss_power_up(struct device *dev)
+{
+	int ret;
+
+	switch (cnss_get_dev_bus_type(dev)) {
+	case CNSS_BUS_PCI:
+		ret = cnss_pcie_power_up(dev);
+		break;
+	case CNSS_BUS_SDIO:
+		ret = cnss_sdio_power_up(dev);
+		break;
+	default:
+		pr_err("%s: Invalid Bus Type\n", __func__);
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(cnss_power_up);
+
+int cnss_power_down(struct device *dev)
+{
+	int ret;
+
+	switch (cnss_get_dev_bus_type(dev)) {
+	case CNSS_BUS_PCI:
+		ret = cnss_pcie_power_down(dev);
+		break;
+	case CNSS_BUS_SDIO:
+		ret = cnss_sdio_power_down(dev);
+		break;
+	default:
+		pr_err("%s: Invalid Bus Type\n", __func__);
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(cnss_power_down);

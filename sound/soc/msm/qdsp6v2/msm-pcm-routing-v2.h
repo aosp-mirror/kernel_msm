@@ -425,4 +425,6 @@ int htc_adm_effect_control(enum HTC_ADM_EFFECT_ID effect_id, u16 port_id, uint32
 ushort get_adm_custom_effect_status(void);
 //HTC_AUD_END
 
+int msm_pcm_routing_get_stream_app_type_cfg(int fedai_id, int *app_type,
+					int *acdb_dev_id, int *sample_rate);
 #endif /*_MSM_PCM_H*/

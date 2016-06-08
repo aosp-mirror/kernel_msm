@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -147,7 +147,7 @@
 #define QPNP_HAP_CYCLS			5
 #define QPNP_TEST_TIMER_MS		5
 
-#define AUTO_RES_ENABLE_TIMEOUT		20000
+#define QPNP_HAP_TIME_REQ_FOR_BACK_EMF_GEN 20000
 #define AUTO_RES_ERR_CAPTURE_RES	5
 #define AUTO_RES_ERR_MAX		15
 
@@ -256,6 +256,8 @@ struct qpnp_pwm_info {
  *  @ auto_res_mode - auto resonace mode
  *  @ lra_high_z - high z option line
  *  @ timeout_ms - max timeout in ms
+ *  @ time_required_to_generate_back_emf_us - the time required for sufficient
+      back-emf to be generated for auto resonance to be successful
  *  @ vmax_mv - max voltage in mv
  *  @ ilim_ma - limiting current in ma
  *  @ sc_deb_cycles - short circuit debounce cycles
@@ -306,6 +308,7 @@ struct qpnp_hap {
 	enum qpnp_hap_auto_res_mode auto_res_mode;
 	enum qpnp_hap_high_z lra_high_z;
 	u32 timeout_ms;
+	u32 time_required_to_generate_back_emf_us;
 	u32 vmax_mv;
 	u32 ilim_ma;
 	u32 sc_deb_cycles;
@@ -1534,6 +1537,7 @@ static int qpnp_hap_set(struct qpnp_hap *hap, int on)
 	int rc = 0;
 	u8 val = 0;
 	unsigned long timeout_ns = POLL_TIME_AUTO_RES_ERR_NS;
+	u32 back_emf_delay_us = hap->time_required_to_generate_back_emf_us;
 
 	if (hap->play_mode == QPNP_HAP_PWM) {
 		if (on)
@@ -1543,6 +1547,18 @@ static int qpnp_hap_set(struct qpnp_hap *hap, int on)
 	} else if (hap->play_mode == QPNP_HAP_BUFFER ||
 			hap->play_mode == QPNP_HAP_DIRECT) {
 		if (on) {
+			/*
+			 * For auto resonance detection to work properly,
+			 * sufficient back-emf has to be generated. In general,
+			 * back-emf takes some time to build up. When the auto
+			 * resonance mode is chosen as QWD, high-z will be
+			 * applied for every LRA cycle and hence there won't be
+			 * enough back-emf at the start-up. Hence, the motor
+			 * needs to vibrate for few LRA cycles after the PLAY
+			 * bit is asserted. So disable the auto resonance here
+			 * and enable it after the sleep of
+			 * 'time_required_to_generate_back_emf_us' is completed.
+			 */
 			if (hap->correct_lra_drive_freq ||
 				hap->auto_res_mode == QPNP_HAP_AUTO_RES_QWD)
 				qpnp_hap_auto_res_enable(hap, 0);
@@ -1553,17 +1569,17 @@ static int qpnp_hap_set(struct qpnp_hap *hap, int on)
 
 			rc = qpnp_hap_play(hap, on);
 
-			if ((hap->act_type == QPNP_HAP_LRA &&
-				hap->correct_lra_drive_freq) ||
-				hap->auto_res_mode == QPNP_HAP_AUTO_RES_QWD) {
-				usleep_range(AUTO_RES_ENABLE_TIMEOUT,
-					(AUTO_RES_ENABLE_TIMEOUT + 1));
-
+			if (hap->act_type == QPNP_HAP_LRA &&
+				(hap->correct_lra_drive_freq ||
+				hap->auto_res_mode == QPNP_HAP_AUTO_RES_QWD)) {
+				usleep_range(back_emf_delay_us,
+							back_emf_delay_us + 1);
 				rc = qpnp_hap_auto_res_enable(hap, 1);
 				if (rc < 0)
 					return rc;
 			}
-			if (hap->correct_lra_drive_freq) {
+			if (hap->act_type == QPNP_HAP_LRA &&
+						hap->correct_lra_drive_freq) {
 				/*
 				 * Start timer to poll Auto Resonance error bit
 				 */
@@ -1797,8 +1813,9 @@ static SIMPLE_DEV_PM_OPS(qpnp_haptic_pm_ops, qpnp_haptic_suspend, qpnp_haptic_re
 /* Configuration api for haptics registers */
 static int qpnp_hap_config(struct qpnp_hap *hap)
 {
-	u8 reg = 0, error_code = 0, unlock_val, error_value;
-	int rc, i, temp;
+	u8 reg = 0, error_code = 0, unlock_val, rc_clk_err_percent_x10;
+	u32 temp;
+	int rc, i;
 
 	/* Configure the ACTUATOR TYPE register */
 	rc = qpnp_hap_read_reg(hap, &reg, QPNP_HAP_ACT_TYPE_REG(hap->base));
@@ -1929,11 +1946,12 @@ static int qpnp_hap_config(struct qpnp_hap *hap)
 	temp = hap->wave_play_rate_us / QPNP_HAP_RATE_CFG_STEP_US;
 
 	/*
-	 * The frequency of 19.2Mzhz RC clock is subject to variation.
-	 * In PMI8950, TRIM_ERROR_RC19P2_CLK register in MISC module
-	 * holds the frequency error in 19.2Mhz RC clock
+	 * The frequency of 19.2Mzhz RC clock is subject to variation. Currently
+	 * PMI8950 and PMI8937 modules have MISC_TRIM_ERROR_RC19P2_CLK register
+	 * present in the MISC  block. This register holds the frequency error
+	 * in 19.2Mhz RC clock.
 	 */
-	if ((hap->act_type == QPNP_HAP_LRA) && hap->correct_lra_drive_freq
+	if (hap->act_type == QPNP_HAP_LRA
 			&& hap->misc_trim_error_rc19p2_clk_reg_present) {
 		unlock_val = MISC_SEC_UNLOCK;
 		rc = spmi_ext_register_writel(hap->spmi->ctrl,
@@ -1946,12 +1964,24 @@ static int qpnp_hap_config(struct qpnp_hap *hap)
 		spmi_ext_register_readl(hap->spmi->ctrl, PMI8950_MISC_SID,
 			 MISC_TRIM_ERROR_RC19P2_CLK, &error_code, 1);
 
-		error_value = (error_code & 0x0F) * 7;
+		rc_clk_err_percent_x10 = (error_code & 0x0F) * 7;
 
-		if (error_code & 0x80)
-			temp = (temp * (1000 - error_value)) / 1000;
+		/*
+		 * If the TRIM register holds value less than 0x80,
+		 * then there is a positive error in the RC clock.
+		 * If the TRIM register holds value greater than or equal to
+		 * 0x80, then there is a negative error in the RC clock.
+		 * The adjusted play rate code is calculated as follows:
+		 * LRA_drive_period_code = (200Khz * (1+%error/100)) / LRA_freq
+		 */
+		if (error_code >= 128)
+			temp = (temp * (1000 - rc_clk_err_percent_x10)) / 1000;
 		else
-			temp = (temp * (1000 + error_value)) / 1000;
+			temp = (temp * (1000 + rc_clk_err_percent_x10)) / 1000;
+
+		dev_dbg(&hap->spmi->dev,
+			"TRIM register = 0x%x Play rate code after RC clock correction 0x%x\n",
+					error_code, temp);
 	}
 
 	reg = temp & QPNP_HAP_RATE_CFG1_MASK;
@@ -2128,6 +2158,19 @@ static int qpnp_hap_parse_dt(struct qpnp_hap *hap)
 		hap->misc_trim_error_rc19p2_clk_reg_present =
 				of_property_read_bool(spmi->dev.of_node,
 				"qcom,misc-trim-error-rc19p2-clk-reg-present");
+
+		if (hap->auto_res_mode == QPNP_HAP_AUTO_RES_QWD) {
+			hap->time_required_to_generate_back_emf_us =
+					QPNP_HAP_TIME_REQ_FOR_BACK_EMF_GEN;
+			rc = of_property_read_u32(spmi->dev.of_node,
+				"qcom,time-required-to-generate-back-emf-us",
+				&temp);
+			if (!rc)
+				hap->time_required_to_generate_back_emf_us =
+									temp;
+		} else {
+			hap->time_required_to_generate_back_emf_us = 0;
+		}
 	}
 
 	rc = of_property_read_string(spmi->dev.of_node,

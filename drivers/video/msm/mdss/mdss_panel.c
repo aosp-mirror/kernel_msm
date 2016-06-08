@@ -228,6 +228,7 @@ struct dentry *panel_debugfs_create_array(const char *name, umode_t mode,
 	    (size != sizeof(u16)) &&
 	    (size != sizeof(u32))) {
 		pr_warn("Value size %zu bytes is not supported\n", size);
+		kfree(data);
 		return NULL;
 	}
 
@@ -644,6 +645,7 @@ void mdss_panel_info_from_timing(struct mdss_panel_timing *pt,
 	pinfo->fbc = pt->fbc;
 	pinfo->compression_mode = pt->compression_mode;
 
+	pinfo->roi_alignment = pt->roi_alignment;
 	pinfo->te = pt->te;
 
 	/* override te parameters if panel is in sw te mode */

@@ -75,6 +75,7 @@
 
 #define QPNP_FG_DEV_NAME "qcom,qpnp-fg"
 #define MEM_IF_TIMEOUT_MS	5000
+#define FG_CYCLE_MS		1500
 #define BUCKET_COUNT		8
 #define BUCKET_SOC_PCT		(256 / BUCKET_COUNT)
 
@@ -111,6 +112,7 @@ enum pmic_subtype {
 	PMI8950		= 17,
 	PMI8996		= 19,
 	PMI8937		= 55,
+	PMI8940		= 64,
 };
 
 enum wa_flags {
@@ -7505,19 +7507,23 @@ static int bcl_trim_workaround(struct fg_chip *chip)
 	return 0;
 }
 
-#define FG_ALG_SYSCTL_1	0x4B0
-#define SOC_CNFG	0x450
-#define SOC_DELTA_OFFSET	3
-#define DELTA_SOC_PERCENT	1
-#define I_TERM_QUAL_BIT		BIT(1)
-#define PATCH_NEG_CURRENT_BIT	BIT(3)
+#define FG_ALG_SYSCTL_1			0x4B0
 #define KI_COEFF_PRED_FULL_ADDR		0x408
-#define KI_COEFF_PRED_FULL_4_0_MSB	0x88
-#define KI_COEFF_PRED_FULL_4_0_LSB	0x00
 #define TEMP_FRAC_SHIFT_REG		0x4A4
 #define FG_ADC_CONFIG_REG		0x4B8
+#define KI_COEFF_PRED_FULL_4_0_MSB	0x88
+#define KI_COEFF_PRED_FULL_4_0_LSB	0x00
 #define FG_BCL_CONFIG_OFFSET		0x3
+#define ALERT_CFG_OFFSET		3
+#define I_TERM_QUAL_BIT			BIT(1)
+#define PATCH_NEG_CURRENT_BIT		BIT(3)
 #define BCL_FORCED_HPM_IN_CHARGE	BIT(2)
+#define IRQ_USE_VOLTAGE_HYST_BIT	BIT(0)
+#define EMPTY_FROM_VOLTAGE_BIT		BIT(1)
+#define EMPTY_FROM_SOC_BIT		BIT(2)
+#define EMPTY_SOC_IRQ_MASK		(IRQ_USE_VOLTAGE_HYST_BIT | \
+					EMPTY_FROM_SOC_BIT | \
+					EMPTY_FROM_VOLTAGE_BIT)
 static int fg_common_hw_init(struct fg_chip *chip)
 {
 	int rc;
@@ -7645,6 +7651,27 @@ static int fg_common_hw_init(struct fg_chip *chip)
 	if (fg_debug_mask & FG_STATUS)
 		pr_info("rslow_comp active is %sabled\n",
 			chip->rslow_comp.active ? "en" : "dis");
+
+	/*
+	 * Clear bits 0-2 in 0x4B3 and set them again to make empty_soc irq
+	 * trigger again.
+	 */
+	rc = fg_mem_masked_write(chip, FG_ALG_SYSCTL_1, EMPTY_SOC_IRQ_MASK,
+			0, ALERT_CFG_OFFSET);
+	if (rc) {
+		pr_err("failed to write to 0x4B3 rc=%d\n", rc);
+		return rc;
+	}
+
+	/* Wait for a FG cycle before enabling empty soc irq configuration */
+	msleep(FG_CYCLE_MS);
+
+	rc = fg_mem_masked_write(chip, FG_ALG_SYSCTL_1, EMPTY_SOC_IRQ_MASK,
+			EMPTY_SOC_IRQ_MASK, ALERT_CFG_OFFSET);
+	if (rc) {
+		pr_err("failed to write to 0x4B3 rc=%d\n", rc);
+		return rc;
+	}
 
 	return 0;
 }
@@ -7776,6 +7803,7 @@ static int fg_hw_init(struct fg_chip *chip)
 		break;
 	case PMI8950:
 	case PMI8937:
+	case PMI8940:
 		rc = fg_8950_hw_init(chip);
 		/* Setup workaround flag based on PMIC type */
 		chip->wa_flag |= BCL_HI_POWER_FOR_CHGLED_WA;
@@ -8119,6 +8147,7 @@ static int fg_detect_pmic_type(struct fg_chip *chip)
 	case PMI8950:
 	case PMI8937:
 	case PMI8996:
+	case PMI8940:
 		chip->pmic_subtype = pmic_rev_id->pmic_subtype;
 		chip->pmic_revision[REVID_RESERVED]	= pmic_rev_id->rev1;
 		chip->pmic_revision[REVID_VARIANT]	= pmic_rev_id->rev2;

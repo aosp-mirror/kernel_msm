@@ -211,10 +211,15 @@ static struct clk *smmu_clk;
 struct ipa3_context *ipa3_ctx;
 static struct device *master_dev;
 struct platform_device *ipa3_pdev;
-static bool smmu_present;
-static bool arm_smmu;
-static bool smmu_disable_htw;
-static bool smmu_s1_bypass;
+static struct {
+	bool present;
+	bool arm_smmu;
+	bool disable_htw;
+	bool fast_map;
+	bool s1_bypass;
+	u32 ipa_base;
+	u32 ipa_size;
+} smmu_info;
 
 static char *active_clients_table_buf;
 
@@ -396,19 +401,38 @@ struct iommu_domain *ipa3_get_smmu_domain(void)
 
 struct iommu_domain *ipa3_get_uc_smmu_domain(void)
 {
-	struct iommu_domain *domain = NULL;
-
 	if (smmu_cb[IPA_SMMU_CB_UC].valid)
-		domain = smmu_cb[IPA_SMMU_CB_UC].mapping->domain;
-	else
-		IPAERR("CB not valid\n");
+		return smmu_cb[IPA_SMMU_CB_UC].mapping->domain;
 
-	return domain;
+	IPAERR("CB not valid\n");
+
+	return NULL;
 }
+
+struct iommu_domain *ipa3_get_wlan_smmu_domain(void)
+{
+	if (smmu_cb[IPA_SMMU_CB_WLAN].valid)
+		return smmu_cb[IPA_SMMU_CB_WLAN].iommu;
+
+	IPAERR("CB not valid\n");
+
+	return NULL;
+}
+
 
 struct device *ipa3_get_dma_dev(void)
 {
 	return ipa3_ctx->pdev;
+}
+
+/**
+ * ipa3_get_smmu_ctx()- Return the wlan smmu context
+ *
+ * Return value: pointer to smmu context address
+ */
+struct ipa_smmu_cb_ctx *ipa3_get_smmu_ctx(void)
+{
+	return &smmu_cb[IPA_SMMU_CB_AP];
 }
 
 /**
@@ -1635,141 +1659,73 @@ static void ipa3_q6_avoid_holb(void)
 	}
 }
 
-static u32 ipa3_get_max_flt_rt_cmds(u32 num_pipes)
-{
-	u32 max_cmds = 0;
-
-	/*
-	 * As many filter tables as there are filtering pipes,
-	 *	x4 for IPv4/IPv6 and hashable/non-hashable combinations
-	 */
-	max_cmds += ipa3_ctx->ep_flt_num * 4;
-
-	/* For each of the Modem routing tables - x2 for hash/non-hash */
-	max_cmds += ((IPA_MEM_PART(v4_modem_rt_index_hi) -
-		     IPA_MEM_PART(v4_modem_rt_index_lo) + 1) * 2);
-
-	max_cmds += ((IPA_MEM_PART(v6_modem_rt_index_hi) -
-		     IPA_MEM_PART(v6_modem_rt_index_lo) + 1) * 2);
-
-	/* One cmd for Hash flushing */
-	max_cmds++;
-
-	return max_cmds;
-}
-
-static int ipa3_q6_clean_q6_tables(void)
+static int ipa3_q6_clean_q6_flt_tbls(enum ipa_ip_type ip,
+	enum ipa_rule_type rlt, const struct ipa3_mem_buffer *mem)
 {
 	struct ipa3_desc *desc;
 	struct ipahal_imm_cmd_dma_shared_mem cmd;
 	struct ipahal_imm_cmd_pyld **cmd_pyld;
-	struct ipahal_imm_cmd_register_write reg_write_cmd = {0};
+	int retval = 0;
 	int pipe_idx;
+	int flt_idx = 0;
 	int num_cmds = 0;
 	int index;
-	int retval;
-	struct ipa3_mem_buffer mem = { 0 };
-	struct ipahal_reg_fltrt_hash_flush flush;
-	struct ipahal_reg_valmask valmask;
-	u64 *entry;
-	u32 max_cmds = ipa3_get_max_flt_rt_cmds(ipa3_ctx->ipa_num_pipes);
-	int flt_idx = 0;
+	u32 lcl_addr_mem_part;
 
-	mem.size = IPA_HW_TBL_HDR_WIDTH;
-	mem.base = dma_alloc_coherent(ipa3_ctx->pdev, mem.size,
-		&mem.phys_base, GFP_KERNEL);
-	if (!mem.base) {
-		IPAERR("failed to alloc DMA buff of size %d\n", mem.size);
+	IPADBG("Entry\n");
+
+	if (!mem || (ip >= IPA_IP_MAX) || (rlt >= IPA_RULE_TYPE_MAX)) {
+		IPAERR("Input Err: mem=%p ; ip=%d ; rlt=%d\n",
+			mem, ip, rlt);
+		return -EINVAL;
+	}
+
+	/* Up to filtering pipes we have filtering tables */
+	desc = kcalloc(ipa3_ctx->ep_flt_num, sizeof(struct ipa3_desc),
+		GFP_KERNEL);
+	if (!desc) {
+		IPAERR("failed to allocate memory\n");
 		return -ENOMEM;
 	}
 
-	entry = mem.base;
-	*entry = ipa3_ctx->empty_rt_tbl_mem.phys_base;
-
-	desc = kcalloc(max_cmds, sizeof(struct ipa3_desc), GFP_KERNEL);
-	if (!desc) {
-		IPAERR("failed to allocate memory\n");
-		retval = -ENOMEM;
-		goto bail_dma;
-	}
-
-	cmd_pyld = kcalloc(max_cmds, sizeof(struct ipahal_imm_cmd_pyld *),
-		GFP_KERNEL);
+	cmd_pyld = kcalloc(ipa3_ctx->ep_flt_num,
+		sizeof(struct ipahal_imm_cmd_pyld *), GFP_KERNEL);
 	if (!cmd_pyld) {
 		IPAERR("failed to allocate memory\n");
 		retval = -ENOMEM;
-		goto bail_desc;
+		goto free_desc;
 	}
 
-	flush.v4_flt = true;
-	flush.v4_rt = true;
-	flush.v6_flt = true;
-	flush.v6_rt = true;
-	ipahal_get_fltrt_hash_flush_valmask(&flush, &valmask);
-	reg_write_cmd.skip_pipeline_clear = false;
-	reg_write_cmd.pipeline_clear_options = IPAHAL_HPS_CLEAR;
-	reg_write_cmd.offset = ipahal_get_reg_ofst(IPA_FILT_ROUT_HASH_FLUSH);
-	reg_write_cmd.value = valmask.val;
-	reg_write_cmd.value_mask = valmask.mask;
-	cmd_pyld[num_cmds] = ipahal_construct_imm_cmd(
-		IPA_IMM_CMD_REGISTER_WRITE, &reg_write_cmd, false);
-	if (!cmd_pyld[num_cmds]) {
-		IPAERR("fail construct register_write imm cmd\n");
-		goto bail_cmd;
-	}
-	desc[num_cmds].opcode =
-		ipahal_imm_cmd_get_opcode(IPA_IMM_CMD_REGISTER_WRITE);
-	desc[num_cmds].pyld = cmd_pyld[num_cmds]->data;
-	desc[num_cmds].len = cmd_pyld[num_cmds]->len;
-	desc[num_cmds].type = IPA_IMM_CMD_DESC;
-	num_cmds++;
+	if (ip == IPA_IP_v4)
+		lcl_addr_mem_part =
+			rlt == IPA_RULE_HASHABLE ?
+			IPA_MEM_PART(v4_flt_hash_ofst) :
+			IPA_MEM_PART(v4_flt_nhash_ofst);
+	else
+		lcl_addr_mem_part =
+			rlt == IPA_RULE_HASHABLE ?
+			IPA_MEM_PART(v6_flt_hash_ofst) :
+			IPA_MEM_PART(v6_flt_nhash_ofst);
 
-	/*
-	 * Iterating over all the filtering pipes which are
-	 * either invalid but connected or connected but not configured by AP.
-	 */
 	for (pipe_idx = 0; pipe_idx < ipa3_ctx->ipa_num_pipes; pipe_idx++) {
 		if (!ipa_is_ep_support_flt(pipe_idx))
 			continue;
 
+		/*
+		 * Iterating over all the filtering pipes which are either
+		 * invalid but connected or connected but not configured by AP.
+		 */
 		if (!ipa3_ctx->ep[pipe_idx].valid ||
 		    ipa3_ctx->ep[pipe_idx].skip_ep_cfg) {
-			/*
-			 * Need to point v4 and v6 hash fltr tables to an
-			 * empty table
-			 */
-			cmd.is_read = false;
-			cmd.skip_pipeline_clear = 0;
-			cmd.pipeline_clear_options = IPAHAL_HPS_CLEAR;
-			cmd.size = mem.size;
-			cmd.system_addr = mem.phys_base;
-			cmd.local_addr =
-				ipa3_ctx->smem_restricted_bytes +
-				IPA_MEM_PART(v4_flt_hash_ofst) +
-				IPA_HW_TBL_HDR_WIDTH +
-				flt_idx * IPA_HW_TBL_HDR_WIDTH;
-			cmd_pyld[num_cmds] = ipahal_construct_imm_cmd(
-				IPA_IMM_CMD_DMA_SHARED_MEM, &cmd, false);
-			if (!cmd_pyld[num_cmds]) {
-				IPAERR("fail construct dma_shared_mem cmd\n");
-				retval = -ENOMEM;
-				goto bail_cmd;
-			}
-			desc[num_cmds].opcode = ipahal_imm_cmd_get_opcode(
-				IPA_IMM_CMD_DMA_SHARED_MEM);
-			desc[num_cmds].pyld = cmd_pyld[num_cmds]->data;
-			desc[num_cmds].len = cmd_pyld[num_cmds]->len;
-			desc[num_cmds].type = IPA_IMM_CMD_DESC;
-			num_cmds++;
 
 			cmd.is_read = false;
 			cmd.skip_pipeline_clear = false;
 			cmd.pipeline_clear_options = IPAHAL_HPS_CLEAR;
-			cmd.size = mem.size;
-			cmd.system_addr =  mem.phys_base;
+			cmd.size = mem->size;
+			cmd.system_addr = mem->phys_base;
 			cmd.local_addr =
 				ipa3_ctx->smem_restricted_bytes +
-				IPA_MEM_PART(v6_flt_hash_ofst) +
+				lcl_addr_mem_part +
 				IPA_HW_TBL_HDR_WIDTH +
 				flt_idx * IPA_HW_TBL_HDR_WIDTH;
 			cmd_pyld[num_cmds] = ipahal_construct_imm_cmd(
@@ -1777,59 +1733,7 @@ static int ipa3_q6_clean_q6_tables(void)
 			if (!cmd_pyld[num_cmds]) {
 				IPAERR("fail construct dma_shared_mem cmd\n");
 				retval = -ENOMEM;
-				goto bail_cmd;
-			}
-			desc[num_cmds].opcode = ipahal_imm_cmd_get_opcode(
-				IPA_IMM_CMD_DMA_SHARED_MEM);
-			desc[num_cmds].pyld = cmd_pyld[num_cmds]->data;
-			desc[num_cmds].len = cmd_pyld[num_cmds]->len;
-			desc[num_cmds].type = IPA_IMM_CMD_DESC;
-			num_cmds++;
-
-			/*
-			 * Need to point v4 and v6 non-hash fltr tables to an
-			 * empty table
-			 */
-			cmd.is_read = false;
-			cmd.skip_pipeline_clear = false;
-			cmd.pipeline_clear_options = IPAHAL_HPS_CLEAR;
-			cmd.size = mem.size;
-			cmd.system_addr = mem.phys_base;
-			cmd.local_addr =
-				ipa3_ctx->smem_restricted_bytes +
-				IPA_MEM_PART(v4_flt_nhash_ofst) +
-				IPA_HW_TBL_HDR_WIDTH +
-				flt_idx * IPA_HW_TBL_HDR_WIDTH;
-			cmd_pyld[num_cmds] = ipahal_construct_imm_cmd(
-				IPA_IMM_CMD_DMA_SHARED_MEM, &cmd, false);
-			if (!cmd_pyld[num_cmds]) {
-				IPAERR("fail construct dma_shared_mem cmd\n");
-				retval = -ENOMEM;
-				goto bail_cmd;
-			}
-			desc[num_cmds].opcode = ipahal_imm_cmd_get_opcode(
-				IPA_IMM_CMD_DMA_SHARED_MEM);
-			desc[num_cmds].pyld = cmd_pyld[num_cmds]->data;
-			desc[num_cmds].len = cmd_pyld[num_cmds]->len;
-			desc[num_cmds].type = IPA_IMM_CMD_DESC;
-			num_cmds++;
-
-			cmd.is_read = false;
-			cmd.skip_pipeline_clear = 0;
-			cmd.pipeline_clear_options = IPAHAL_HPS_CLEAR;
-			cmd.size = mem.size;
-			cmd.system_addr =  mem.phys_base;
-			cmd.local_addr =
-				ipa3_ctx->smem_restricted_bytes +
-				IPA_MEM_PART(v6_flt_nhash_ofst) +
-				IPA_HW_TBL_HDR_WIDTH +
-				flt_idx * IPA_HW_TBL_HDR_WIDTH;
-			cmd_pyld[num_cmds] = ipahal_construct_imm_cmd(
-				IPA_IMM_CMD_DMA_SHARED_MEM, &cmd, false);
-			if (!cmd_pyld[num_cmds]) {
-				IPAERR("fail construct dma_shared_mem cmd\n");
-				retval = -ENOMEM;
-				goto bail_cmd;
+				goto free_cmd_pyld;
 			}
 			desc[num_cmds].opcode = ipahal_imm_cmd_get_opcode(
 				IPA_IMM_CMD_DMA_SHARED_MEM);
@@ -1842,118 +1746,216 @@ static int ipa3_q6_clean_q6_tables(void)
 		flt_idx++;
 	}
 
-	/* Need to point v4/v6 modem routing tables to an empty table */
-	for (index = IPA_MEM_PART(v4_modem_rt_index_lo);
-		 index <= IPA_MEM_PART(v4_modem_rt_index_hi);
-		 index++) {
-		cmd.is_read = false;
-		cmd.skip_pipeline_clear = false;
-		cmd.pipeline_clear_options = IPAHAL_HPS_CLEAR;
-		cmd.size = mem.size;
-		cmd.system_addr =  mem.phys_base;
-		cmd.local_addr = ipa3_ctx->smem_restricted_bytes +
-			IPA_MEM_PART(v4_rt_hash_ofst) +
-			index * IPA_HW_TBL_HDR_WIDTH;
-		cmd_pyld[num_cmds] = ipahal_construct_imm_cmd(
-			IPA_IMM_CMD_DMA_SHARED_MEM, &cmd, false);
-		if (!cmd_pyld[num_cmds]) {
-			IPAERR("failed to construct dma_shared_mem imm cmd\n");
-			retval = -ENOMEM;
-			goto bail_cmd;
-		}
-		desc[num_cmds].opcode =
-			ipahal_imm_cmd_get_opcode(IPA_IMM_CMD_DMA_SHARED_MEM);
-		desc[num_cmds].pyld = cmd_pyld[num_cmds]->data;
-		desc[num_cmds].len = cmd_pyld[num_cmds]->len;
-		desc[num_cmds].type = IPA_IMM_CMD_DESC;
-		num_cmds++;
-
-		cmd.is_read = false;
-		cmd.skip_pipeline_clear = false;
-		cmd.pipeline_clear_options = IPAHAL_HPS_CLEAR;
-		cmd.size = mem.size;
-		cmd.system_addr =  mem.phys_base;
-		cmd.local_addr = ipa3_ctx->smem_restricted_bytes +
-			IPA_MEM_PART(v4_rt_nhash_ofst) +
-			index * IPA_HW_TBL_HDR_WIDTH;
-		cmd_pyld[num_cmds] = ipahal_construct_imm_cmd(
-			IPA_IMM_CMD_DMA_SHARED_MEM, &cmd, false);
-		if (!cmd_pyld[num_cmds]) {
-			IPAERR("failed to construct dma_shared_mem imm cmd\n");
-			retval = -ENOMEM;
-			goto bail_cmd;
-		}
-		desc[num_cmds].opcode =
-			ipahal_imm_cmd_get_opcode(IPA_IMM_CMD_DMA_SHARED_MEM);
-		desc[num_cmds].pyld = cmd_pyld[num_cmds]->data;
-		desc[num_cmds].len = cmd_pyld[num_cmds]->len;
-		desc[num_cmds].type = IPA_IMM_CMD_DESC;
-		num_cmds++;
-	}
-
-	for (index = IPA_MEM_PART(v6_modem_rt_index_lo);
-		 index <= IPA_MEM_PART(v6_modem_rt_index_hi);
-		 index++) {
-		cmd.is_read = false;
-		cmd.skip_pipeline_clear = false;
-		cmd.pipeline_clear_options = IPAHAL_HPS_CLEAR;
-		cmd.size = mem.size;
-		cmd.system_addr =  mem.phys_base;
-		cmd.local_addr = ipa3_ctx->smem_restricted_bytes +
-			IPA_MEM_PART(v6_rt_hash_ofst) +
-			index * IPA_HW_TBL_HDR_WIDTH;
-		cmd_pyld[num_cmds] = ipahal_construct_imm_cmd(
-			IPA_IMM_CMD_DMA_SHARED_MEM, &cmd, false);
-		if (!cmd_pyld[num_cmds]) {
-			IPAERR("failed to construct dma_shared_mem imm cmd\n");
-			retval = -ENOMEM;
-			goto bail_cmd;
-		}
-		desc[num_cmds].opcode =
-			ipahal_imm_cmd_get_opcode(IPA_IMM_CMD_DMA_SHARED_MEM);
-		desc[num_cmds].pyld = cmd_pyld[num_cmds]->data;
-		desc[num_cmds].len = cmd_pyld[num_cmds]->len;
-		desc[num_cmds].type = IPA_IMM_CMD_DESC;
-		num_cmds++;
-
-		cmd.is_read = false;
-		cmd.skip_pipeline_clear = false;
-		cmd.pipeline_clear_options = IPAHAL_HPS_CLEAR;
-		cmd.size = mem.size;
-		cmd.system_addr =  mem.phys_base;
-		cmd.local_addr = ipa3_ctx->smem_restricted_bytes +
-			IPA_MEM_PART(v6_rt_nhash_ofst) +
-			index * IPA_HW_TBL_HDR_WIDTH;
-		cmd_pyld[num_cmds] = ipahal_construct_imm_cmd(
-			IPA_IMM_CMD_DMA_SHARED_MEM, &cmd, false);
-		if (!cmd_pyld[num_cmds]) {
-			IPAERR("failed to construct dma_shared_mem imm cmd\n");
-			retval = -ENOMEM;
-			goto bail_cmd;
-		}
-		desc[num_cmds].opcode =
-			ipahal_imm_cmd_get_opcode(IPA_IMM_CMD_DMA_SHARED_MEM);
-		desc[num_cmds].pyld = cmd_pyld[num_cmds]->data;
-		desc[num_cmds].len = cmd_pyld[num_cmds]->len;
-		desc[num_cmds].type = IPA_IMM_CMD_DESC;
-		num_cmds++;
-	}
-
+	IPADBG("Sending %d descriptors for flt tbl clearing\n", num_cmds);
 	retval = ipa3_send_cmd(num_cmds, desc);
 	if (retval) {
 		IPAERR("failed to send immediate command (err %d)\n", retval);
 		retval = -EFAULT;
 	}
 
-bail_cmd:
+free_cmd_pyld:
 	for (index = 0; index < num_cmds; index++)
 		ipahal_destroy_imm_cmd(cmd_pyld[index]);
 	kfree(cmd_pyld);
+free_desc:
+	kfree(desc);
+	return retval;
+}
+
+static int ipa3_q6_clean_q6_rt_tbls(enum ipa_ip_type ip,
+	enum ipa_rule_type rlt, const struct ipa3_mem_buffer *mem)
+{
+	struct ipa3_desc *desc;
+	struct ipahal_imm_cmd_dma_shared_mem cmd;
+	struct ipahal_imm_cmd_pyld **cmd_pyld;
+	int tbls_cnt;
+	int retval = 0;
+	int num_cmds = 0;
+	int index;
+	u32 modem_rt_index_lo;
+	u32 modem_rt_index_hi;
+	u32 lcl_addr_mem_part;
+
+	IPADBG("Entry\n");
+
+	if (!mem || (ip >= IPA_IP_MAX) || (rlt >= IPA_RULE_TYPE_MAX)) {
+		IPAERR("Input Err: mem=%p ; ip=%d ; rlt=%d\n",
+			mem, ip, rlt);
+		return -EINVAL;
+	}
+
+	if (ip == IPA_IP_v4) {
+		modem_rt_index_lo = IPA_MEM_PART(v4_modem_rt_index_lo);
+		modem_rt_index_hi = IPA_MEM_PART(v4_modem_rt_index_hi);
+		lcl_addr_mem_part =
+			rlt == IPA_RULE_HASHABLE ?
+			IPA_MEM_PART(v4_rt_hash_ofst) :
+			IPA_MEM_PART(v4_rt_nhash_ofst);
+	} else {
+		modem_rt_index_lo = IPA_MEM_PART(v6_modem_rt_index_lo);
+		modem_rt_index_hi = IPA_MEM_PART(v6_modem_rt_index_hi);
+		lcl_addr_mem_part =
+			rlt == IPA_RULE_HASHABLE ?
+			IPA_MEM_PART(v6_rt_hash_ofst) :
+			IPA_MEM_PART(v6_rt_nhash_ofst);
+	}
+	tbls_cnt = modem_rt_index_hi - modem_rt_index_lo + 1;
+
+	desc = kcalloc(tbls_cnt, sizeof(struct ipa3_desc), GFP_KERNEL);
+	if (!desc) {
+		IPAERR("failed to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	cmd_pyld = kcalloc(tbls_cnt, sizeof(struct ipahal_imm_cmd_pyld *),
+		GFP_KERNEL);
+	if (!cmd_pyld) {
+		IPAERR("failed to allocate memory\n");
+		retval = -ENOMEM;
+		goto free_desc;
+	}
+
+	for (index = modem_rt_index_lo; index <= modem_rt_index_hi; index++) {
+		cmd.is_read = false;
+		cmd.skip_pipeline_clear = false;
+		cmd.pipeline_clear_options = IPAHAL_HPS_CLEAR;
+		cmd.size = mem->size;
+		cmd.system_addr =  mem->phys_base;
+		cmd.local_addr = ipa3_ctx->smem_restricted_bytes +
+			lcl_addr_mem_part +
+			index * IPA_HW_TBL_HDR_WIDTH;
+		cmd_pyld[num_cmds] = ipahal_construct_imm_cmd(
+			IPA_IMM_CMD_DMA_SHARED_MEM, &cmd, false);
+		if (!cmd_pyld[num_cmds]) {
+			IPAERR("failed to construct dma_shared_mem imm cmd\n");
+			retval = -ENOMEM;
+			goto free_cmd_pyld;
+		}
+		desc[num_cmds].opcode =
+			ipahal_imm_cmd_get_opcode(IPA_IMM_CMD_DMA_SHARED_MEM);
+		desc[num_cmds].pyld = cmd_pyld[num_cmds]->data;
+		desc[num_cmds].len = cmd_pyld[num_cmds]->len;
+		desc[num_cmds].type = IPA_IMM_CMD_DESC;
+		num_cmds++;
+	}
+
+	IPADBG("Sending %d descriptors for rt tbl clearing\n", num_cmds);
+	retval = ipa3_send_cmd(num_cmds, desc);
+	if (retval) {
+		IPAERR("failed to send immediate command (err %d)\n", retval);
+		retval = -EFAULT;
+	}
+
+free_cmd_pyld:
+	for (index = 0; index < num_cmds; index++)
+		ipahal_destroy_imm_cmd(cmd_pyld[index]);
+	kfree(cmd_pyld);
+free_desc:
+	kfree(desc);
+	return retval;
+}
+
+static int ipa3_q6_clean_q6_tables(void)
+{
+	struct ipa3_desc *desc;
+	struct ipahal_imm_cmd_pyld *cmd_pyld;
+	struct ipahal_imm_cmd_register_write reg_write_cmd = {0};
+	int retval;
+	struct ipa3_mem_buffer mem = { 0 };
+	struct ipahal_reg_fltrt_hash_flush flush;
+	struct ipahal_reg_valmask valmask;
+	u64 *entry;
+
+	IPADBG("Entry\n");
+
+	mem.size = IPA_HW_TBL_HDR_WIDTH;
+	mem.base = dma_alloc_coherent(ipa3_ctx->pdev, mem.size,
+		&mem.phys_base, GFP_KERNEL);
+	if (!mem.base) {
+		IPAERR("failed to alloc DMA buff of size %d\n", mem.size);
+		return -ENOMEM;
+	}
+
+	entry = mem.base;
+	*entry = ipa3_ctx->empty_rt_tbl_mem.phys_base;
+
+	if (ipa3_q6_clean_q6_flt_tbls(IPA_IP_v4, IPA_RULE_HASHABLE, &mem)) {
+		IPAERR("failed to clean q6 flt tbls (v4/hashable)\n");
+		goto bail_desc;
+	}
+	if (ipa3_q6_clean_q6_flt_tbls(IPA_IP_v6, IPA_RULE_HASHABLE, &mem)) {
+		IPAERR("failed to clean q6 flt tbls (v6/hashable)\n");
+		goto bail_desc;
+	}
+	if (ipa3_q6_clean_q6_flt_tbls(IPA_IP_v4, IPA_RULE_NON_HASHABLE, &mem)) {
+		IPAERR("failed to clean q6 flt tbls (v4/non-hashable)\n");
+		goto bail_desc;
+	}
+	if (ipa3_q6_clean_q6_flt_tbls(IPA_IP_v6, IPA_RULE_NON_HASHABLE, &mem)) {
+		IPAERR("failed to clean q6 flt tbls (v6/non-hashable)\n");
+		goto bail_desc;
+	}
+
+	if (ipa3_q6_clean_q6_rt_tbls(IPA_IP_v4, IPA_RULE_HASHABLE, &mem)) {
+		IPAERR("failed to clean q6 rt tbls (v4/hashable)\n");
+		goto bail_desc;
+	}
+	if (ipa3_q6_clean_q6_rt_tbls(IPA_IP_v6, IPA_RULE_HASHABLE, &mem)) {
+		IPAERR("failed to clean q6 rt tbls (v6/hashable)\n");
+		goto bail_desc;
+	}
+	if (ipa3_q6_clean_q6_rt_tbls(IPA_IP_v4, IPA_RULE_NON_HASHABLE, &mem)) {
+		IPAERR("failed to clean q6 rt tbls (v4/non-hashable)\n");
+		goto bail_desc;
+	}
+	if (ipa3_q6_clean_q6_rt_tbls(IPA_IP_v6, IPA_RULE_NON_HASHABLE, &mem)) {
+		IPAERR("failed to clean q6 rt tbls (v6/non-hashable)\n");
+		goto bail_desc;
+	}
+
+	/* Flush rules cache */
+	desc = kzalloc(sizeof(struct ipa3_desc), GFP_KERNEL);
+	if (!desc) {
+		IPAERR("failed to allocate memory\n");
+		retval = -ENOMEM;
+		goto bail_dma;
+	}
+
+	flush.v4_flt = true;
+	flush.v4_rt = true;
+	flush.v6_flt = true;
+	flush.v6_rt = true;
+	ipahal_get_fltrt_hash_flush_valmask(&flush, &valmask);
+	reg_write_cmd.skip_pipeline_clear = false;
+	reg_write_cmd.pipeline_clear_options = IPAHAL_HPS_CLEAR;
+	reg_write_cmd.offset = ipahal_get_reg_ofst(IPA_FILT_ROUT_HASH_FLUSH);
+	reg_write_cmd.value = valmask.val;
+	reg_write_cmd.value_mask = valmask.mask;
+	cmd_pyld = ipahal_construct_imm_cmd(IPA_IMM_CMD_REGISTER_WRITE,
+		&reg_write_cmd, false);
+	if (!cmd_pyld) {
+		IPAERR("fail construct register_write imm cmd\n");
+		goto bail_desc;
+	}
+	desc->opcode =
+		ipahal_imm_cmd_get_opcode(IPA_IMM_CMD_REGISTER_WRITE);
+	desc->pyld = cmd_pyld->data;
+	desc->len = cmd_pyld->len;
+	desc->type = IPA_IMM_CMD_DESC;
+
+	IPADBG("Sending 1 descriptor for tbls flush\n");
+	retval = ipa3_send_cmd(1, desc);
+	if (retval) {
+		IPAERR("failed to send immediate command (err %d)\n", retval);
+		retval = -EFAULT;
+	}
+
+	ipahal_destroy_imm_cmd(cmd_pyld);
 bail_desc:
 	kfree(desc);
 bail_dma:
 	dma_free_coherent(ipa3_ctx->pdev, mem.size, mem.base, mem.phys_base);
-
+	IPADBG("Done - retval = %d\n", retval);
 	return retval;
 }
 
@@ -2035,13 +2037,13 @@ static int ipa3_q6_set_ex_path_to_apps(void)
 }
 
 /**
-* ipa3_q6_cleanup() - A cleanup for all Q6 related configuration
+* ipa3_q6_pre_shutdown_cleanup() - A cleanup for all Q6 related configuration
 *                    in IPA HW. This is performed in case of SSR.
 *
 * This is a mandatory procedure, in case one of the steps fails, the
 * AP needs to restart.
 */
-void ipa3_q6_cleanup(void)
+void ipa3_q6_pre_shutdown_cleanup(void)
 {
 	IPADBG_LOW("ENTER\n");
 
@@ -2067,13 +2069,13 @@ void ipa3_q6_cleanup(void)
 }
 
 /*
- * ipa3_validate_q6_gsi_channel_empty() - Check if GSI channel related to Q6
- *  producer client is empty. This is used in case of SSR.
+ * ipa3_q6_post_shutdown_cleanup() - As part of this cleanup
+ * check if GSI channel related to Q6 producer client is empty.
  *
  * Q6 GSI channel emptiness is needed to garantee no descriptors with invalid
  *  info are injected into IPA RX from IPA_IF, while modem is restarting.
  */
-void ipa3_validate_q6_gsi_channel_empty(void)
+void ipa3_q6_post_shutdown_cleanup(void)
 {
 	int client_idx;
 
@@ -2656,6 +2658,15 @@ static int ipa3_setup_apps_pipes(void)
 	struct ipa_sys_connect_params sys_in;
 	int result = 0;
 
+	if (ipa3_ctx->gsi_ch20_wa) {
+		IPADBG("Allocating GSI physical channel 20\n");
+		result = ipa_gsi_ch20_wa();
+		if (result) {
+			IPAERR("ipa_gsi_ch20_wa failed %d\n", result);
+			goto fail_cmd;
+		}
+	}
+
 	/* CMD OUT (AP->IPA) */
 	memset(&sys_in, 0, sizeof(struct ipa_sys_connect_params));
 	sys_in.client = IPA_CLIENT_APPS_CMD_PROD;
@@ -2940,7 +2951,7 @@ static int ipa3_get_clks(struct device *dev)
 		return PTR_ERR(ipa3_clk);
 	}
 
-	if (smmu_present && arm_smmu) {
+	if (smmu_info.present && smmu_info.arm_smmu) {
 		smmu_clk = clk_get(dev, "smmu_clk");
 		if (IS_ERR(smmu_clk)) {
 			if (smmu_clk != ERR_PTR(-EPROBE_DEFER))
@@ -3990,12 +4001,13 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 
 	ipa3_ctx->pdev = ipa_dev;
 	ipa3_ctx->uc_pdev = ipa_dev;
-	ipa3_ctx->smmu_present = smmu_present;
+	ipa3_ctx->smmu_present = smmu_info.present;
 	if (!ipa3_ctx->smmu_present)
 		ipa3_ctx->smmu_s1_bypass = true;
 	else
-		ipa3_ctx->smmu_s1_bypass = smmu_s1_bypass;
+		ipa3_ctx->smmu_s1_bypass = smmu_info.s1_bypass;
 	ipa3_ctx->ipa_wrapper_base = resource_p->ipa_mem_base;
+	ipa3_ctx->ipa_wrapper_size = resource_p->ipa_mem_size;
 	ipa3_ctx->ipa_hw_type = resource_p->ipa_hw_type;
 	ipa3_ctx->ipa3_hw_mode = resource_p->ipa3_hw_mode;
 	ipa3_ctx->use_ipa_teth_bridge = resource_p->use_ipa_teth_bridge;
@@ -4008,6 +4020,7 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	ipa3_ctx->transport_prototype = resource_p->transport_prototype;
 	ipa3_ctx->ee = resource_p->ee;
 	ipa3_ctx->apply_rg10_wa = resource_p->apply_rg10_wa;
+	ipa3_ctx->gsi_ch20_wa = resource_p->gsi_ch20_wa;
 	ipa3_ctx->ipa3_active_clients_logging.log_rdy = false;
 
 	/* default aggregation parameters */
@@ -4508,8 +4521,9 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 	ipa_drv_res->ipa_wdi2 = false;
 	ipa_drv_res->wan_rx_ring_size = IPA_GENERIC_RX_POOL_SZ;
 	ipa_drv_res->apply_rg10_wa = false;
+	ipa_drv_res->gsi_ch20_wa = false;
 
-	smmu_disable_htw = of_property_read_bool(pdev->dev.of_node,
+	smmu_info.disable_htw = of_property_read_bool(pdev->dev.of_node,
 			"qcom,smmu-disable-htw");
 
 	/* Get IPA HW Version */
@@ -4610,6 +4624,9 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 			ipa_drv_res->ipa_mem_base,
 			ipa_drv_res->ipa_mem_size);
 
+	smmu_info.ipa_base = ipa_drv_res->ipa_mem_base;
+	smmu_info.ipa_size = ipa_drv_res->ipa_mem_size;
+
 	if (ipa_drv_res->transport_prototype == IPA_TRANSPORT_TYPE_SPS) {
 		/* Get IPA BAM address */
 		resource = platform_get_resource_byname(pdev, IORESOURCE_MEM,
@@ -4693,14 +4710,22 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 		ipa_drv_res->apply_rg10_wa
 		? "True" : "False");
 
+	ipa_drv_res->gsi_ch20_wa =
+		of_property_read_bool(pdev->dev.of_node,
+		"qcom,do-not-use-ch-gsi-20");
+	IPADBG(": GSI CH 20 WA is = %s\n",
+		ipa_drv_res->apply_rg10_wa
+		? "Needed" : "Not needed");
+
 	return 0;
 }
 
 static int ipa_smmu_wlan_cb_probe(struct device *dev)
 {
-	struct ipa_smmu_cb_ctx *cb = &smmu_cb[IPA_SMMU_CB_WLAN];
+	struct ipa_smmu_cb_ctx *cb = ipa3_get_wlan_smmu_ctx();
 	int disable_htw = 1;
 	int atomic_ctx = 1;
+	int fast = 1;
 	int bypass = 1;
 	int ret;
 
@@ -4713,18 +4738,20 @@ static int ipa_smmu_wlan_cb_probe(struct device *dev)
 		/* assume this failure is because iommu driver is not ready */
 		return -EPROBE_DEFER;
 	}
+	cb->valid = true;
 
-	if (smmu_disable_htw) {
+	if (smmu_info.disable_htw) {
 		ret = iommu_domain_set_attr(cb->iommu,
 			DOMAIN_ATTR_COHERENT_HTW_DISABLE,
 			&disable_htw);
 		if (ret) {
 			IPAERR("couldn't disable coherent HTW\n");
+			cb->valid = false;
 			return -EIO;
 		}
 	}
 
-	if (smmu_s1_bypass) {
+	if (smmu_info.s1_bypass) {
 		if (iommu_domain_set_attr(cb->iommu,
 					DOMAIN_ATTR_S1_BYPASS,
 					&bypass)) {
@@ -4738,9 +4765,21 @@ static int ipa_smmu_wlan_cb_probe(struct device *dev)
 					DOMAIN_ATTR_ATOMIC,
 					&atomic_ctx)) {
 			IPAERR("couldn't disable coherent HTW\n");
+			cb->valid = false;
 			return -EIO;
 		}
 		IPADBG("SMMU ATTR ATOMIC\n");
+
+		if (smmu_info.fast_map) {
+			if (iommu_domain_set_attr(cb->iommu,
+						DOMAIN_ATTR_FAST,
+						&fast)) {
+				IPAERR("couldn't set fast map\n");
+				cb->valid = false;
+				return -EIO;
+			}
+			IPADBG("SMMU fast map set\n");
+		}
 	}
 
 	ret = iommu_attach_device(cb->iommu, dev);
@@ -4750,19 +4789,31 @@ static int ipa_smmu_wlan_cb_probe(struct device *dev)
 		return ret;
 	}
 
-	cb->valid = true;
-
 	return 0;
 }
 
 static int ipa_smmu_uc_cb_probe(struct device *dev)
 {
-	struct ipa_smmu_cb_ctx *cb = &smmu_cb[IPA_SMMU_CB_UC];
+	struct ipa_smmu_cb_ctx *cb = ipa3_get_uc_smmu_ctx();
 	int disable_htw = 1;
+	int atomic_ctx = 1;
 	int bypass = 1;
+	int fast = 1;
 	int ret;
+	u32 iova_ap_mapping[2];
 
-	IPADBG("sub pdev=%p\n", dev);
+	IPADBG("UC CB PROBE sub pdev=%p\n", dev);
+
+	ret = of_property_read_u32_array(dev->of_node, "qcom,iova-mapping",
+			iova_ap_mapping, 2);
+	if (ret) {
+		IPAERR("Fail to read UC start/size iova addresses\n");
+		return ret;
+	}
+	cb->va_start = iova_ap_mapping[0];
+	cb->va_size = iova_ap_mapping[1];
+	cb->va_end = cb->va_start + cb->va_size;
+	IPADBG("UC va_start=0x%x va_sise=0x%x\n", cb->va_start, cb->va_size);
 
 	if (dma_set_mask(dev, DMA_BIT_MASK(32)) ||
 		    dma_set_coherent_mask(dev, DMA_BIT_MASK(32))) {
@@ -4770,89 +4821,33 @@ static int ipa_smmu_uc_cb_probe(struct device *dev)
 		return -EOPNOTSUPP;
 	}
 
+	IPADBG("UC CB PROBE=%p create IOMMU mapping\n", dev);
+
 	cb->dev = dev;
 	cb->mapping = arm_iommu_create_mapping(msm_iommu_get_bus(dev),
-			IPA_SMMU_UC_VA_START, IPA_SMMU_UC_VA_SIZE);
+			cb->va_start, cb->va_size);
 	if (IS_ERR(cb->mapping)) {
 		IPADBG("Fail to create mapping\n");
 		/* assume this failure is because iommu driver is not ready */
 		return -EPROBE_DEFER;
 	}
+	IPADBG("SMMU mapping created\n");
+	cb->valid = true;
 
-	if (smmu_disable_htw) {
+	IPADBG("UC CB PROBE sub pdev=%p disable htw\n", dev);
+	if (smmu_info.disable_htw) {
 		if (iommu_domain_set_attr(cb->mapping->domain,
 				DOMAIN_ATTR_COHERENT_HTW_DISABLE,
 				 &disable_htw)) {
 			IPAERR("couldn't disable coherent HTW\n");
+			arm_iommu_release_mapping(cb->mapping);
+			cb->valid = false;
 			return -EIO;
 		}
 	}
 
 	IPADBG("UC CB PROBE sub pdev=%p set attribute\n", dev);
-	if (smmu_s1_bypass) {
-		if (iommu_domain_set_attr(cb->mapping->domain,
-				DOMAIN_ATTR_S1_BYPASS,
-				&bypass)) {
-			IPAERR("couldn't set bypass\n");
-			arm_iommu_release_mapping(cb->mapping);
-			cb->valid = false;
-			return -EIO;
-		}
-		IPADBG("SMMU S1 BYPASS\n");
-	}
-	IPADBG("UC CB PROBE sub pdev=%p attaching IOMMU device\n", dev);
-
-
-	ret = arm_iommu_attach_device(cb->dev, cb->mapping);
-	if (ret) {
-		IPAERR("could not attach device ret=%d\n", ret);
-		arm_iommu_release_mapping(cb->mapping);
-		cb->valid = false;
-		return ret;
-	}
-
-	cb->valid = true;
-	cb->next_addr = IPA_SMMU_UC_VA_END;
-	ipa3_ctx->uc_pdev = dev;
-
-	return 0;
-}
-
-static int ipa_smmu_ap_cb_probe(struct device *dev)
-{
-	struct ipa_smmu_cb_ctx *cb = &smmu_cb[IPA_SMMU_CB_AP];
-	int result;
-	int disable_htw = 1;
-	int atomic_ctx = 1;
-	int bypass = 1;
-
-	IPADBG("sub pdev=%p\n", dev);
-
-	if (dma_set_mask(dev, DMA_BIT_MASK(32)) ||
-		    dma_set_coherent_mask(dev, DMA_BIT_MASK(32))) {
-		IPAERR("DMA set mask failed\n");
-		return -EOPNOTSUPP;
-	}
-
-	cb->dev = dev;
-	cb->mapping = arm_iommu_create_mapping(msm_iommu_get_bus(dev),
-			IPA_SMMU_AP_VA_START, IPA_SMMU_AP_VA_SIZE);
-	if (IS_ERR(cb->mapping)) {
-		IPADBG("Fail to create mapping\n");
-		/* assume this failure is because iommu driver is not ready */
-		return -EPROBE_DEFER;
-	}
-
-	if (smmu_disable_htw) {
-		if (iommu_domain_set_attr(cb->mapping->domain,
-				DOMAIN_ATTR_COHERENT_HTW_DISABLE,
-				 &disable_htw)) {
-			IPAERR("couldn't disable coherent HTW\n");
-			arm_iommu_detach_device(cb->dev);
-			return -EIO;
-		}
-	}
-	if (smmu_s1_bypass) {
+	if (smmu_info.s1_bypass) {
 		if (iommu_domain_set_attr(cb->mapping->domain,
 				DOMAIN_ATTR_S1_BYPASS,
 				&bypass)) {
@@ -4871,16 +4866,127 @@ static int ipa_smmu_ap_cb_probe(struct device *dev)
 			cb->valid = false;
 			return -EIO;
 		}
+		IPADBG("SMMU atomic set\n");
+
+		if (smmu_info.fast_map) {
+			if (iommu_domain_set_attr(cb->mapping->domain,
+					DOMAIN_ATTR_FAST,
+					&fast)) {
+				IPAERR("couldn't set fast map\n");
+				arm_iommu_release_mapping(cb->mapping);
+				cb->valid = false;
+				return -EIO;
+			}
+			IPADBG("SMMU fast map set\n");
+		}
+	}
+
+	IPADBG("UC CB PROBE sub pdev=%p attaching IOMMU device\n", dev);
+	ret = arm_iommu_attach_device(cb->dev, cb->mapping);
+	if (ret) {
+		IPAERR("could not attach device ret=%d\n", ret);
+		arm_iommu_release_mapping(cb->mapping);
+		cb->valid = false;
+		return ret;
+	}
+
+	cb->next_addr = cb->va_end;
+	ipa3_ctx->uc_pdev = dev;
+
+	return 0;
+}
+
+static int ipa_smmu_ap_cb_probe(struct device *dev)
+{
+	struct ipa_smmu_cb_ctx *cb = ipa3_get_smmu_ctx();
+	int result;
+	int disable_htw = 1;
+	int atomic_ctx = 1;
+	int fast = 1;
+	int bypass = 1;
+	u32 iova_ap_mapping[2];
+
+	IPADBG("AP CB probe: sub pdev=%p\n", dev);
+
+	result = of_property_read_u32_array(dev->of_node, "qcom,iova-mapping",
+		iova_ap_mapping, 2);
+	if (result) {
+		IPAERR("Fail to read AP start/size iova addresses\n");
+		return result;
+	}
+	cb->va_start = iova_ap_mapping[0];
+	cb->va_size = iova_ap_mapping[1];
+	cb->va_end = cb->va_start + cb->va_size;
+	IPADBG("AP va_start=0x%x va_sise=0x%x\n", cb->va_start, cb->va_size);
+
+	if (dma_set_mask(dev, DMA_BIT_MASK(32)) ||
+		    dma_set_coherent_mask(dev, DMA_BIT_MASK(32))) {
+		IPAERR("DMA set mask failed\n");
+		return -EOPNOTSUPP;
+	}
+
+	cb->dev = dev;
+	cb->mapping = arm_iommu_create_mapping(msm_iommu_get_bus(dev),
+					cb->va_start, cb->va_size);
+	if (IS_ERR(cb->mapping)) {
+		IPADBG("Fail to create mapping\n");
+		/* assume this failure is because iommu driver is not ready */
+		return -EPROBE_DEFER;
+	}
+	IPADBG("SMMU mapping created\n");
+	cb->valid = true;
+
+	if (smmu_info.disable_htw) {
+		if (iommu_domain_set_attr(cb->mapping->domain,
+				DOMAIN_ATTR_COHERENT_HTW_DISABLE,
+				 &disable_htw)) {
+			IPAERR("couldn't disable coherent HTW\n");
+			arm_iommu_release_mapping(cb->mapping);
+			cb->valid = false;
+			return -EIO;
+		}
+		IPADBG("SMMU disable HTW\n");
+	}
+	if (smmu_info.s1_bypass) {
+		if (iommu_domain_set_attr(cb->mapping->domain,
+				DOMAIN_ATTR_S1_BYPASS,
+				&bypass)) {
+			IPAERR("couldn't set bypass\n");
+			arm_iommu_release_mapping(cb->mapping);
+			cb->valid = false;
+			return -EIO;
+		}
+		IPADBG("SMMU S1 BYPASS\n");
+	} else {
+		if (iommu_domain_set_attr(cb->mapping->domain,
+				DOMAIN_ATTR_ATOMIC,
+				&atomic_ctx)) {
+			IPAERR("couldn't set domain as atomic\n");
+			arm_iommu_release_mapping(cb->mapping);
+			cb->valid = false;
+			return -EIO;
+		}
+		IPADBG("SMMU atomic set\n");
+
+		if (iommu_domain_set_attr(cb->mapping->domain,
+				DOMAIN_ATTR_FAST,
+				&fast)) {
+			IPAERR("couldn't set fast map\n");
+			arm_iommu_release_mapping(cb->mapping);
+			cb->valid = false;
+			return -EIO;
+		}
+		IPADBG("SMMU fast map set\n");
 	}
 
 	result = arm_iommu_attach_device(cb->dev, cb->mapping);
 	if (result) {
 		IPAERR("couldn't attach to IOMMU ret=%d\n", result);
+		cb->valid = false;
 		return result;
 	}
 
-	cb->valid = true;
-	smmu_present = true;
+	smmu_info.present = true;
 
 	if (!ipa3_bus_scale_table)
 		ipa3_bus_scale_table = msm_bus_cl_get_pdata(ipa3_pdev);
@@ -4891,6 +4997,7 @@ static int ipa_smmu_ap_cb_probe(struct device *dev)
 		IPAERR("ipa_init failed\n");
 		arm_iommu_detach_device(cb->dev);
 		arm_iommu_release_mapping(cb->mapping);
+		cb->valid = false;
 		return result;
 	}
 
@@ -5009,8 +5116,13 @@ int ipa3_plat_drv_probe(struct platform_device *pdev_p,
 	if (of_property_read_bool(pdev_p->dev.of_node, "qcom,arm-smmu")) {
 		if (of_property_read_bool(pdev_p->dev.of_node,
 		    "qcom,smmu-s1-bypass"))
-			smmu_s1_bypass = true;
-		arm_smmu = true;
+			smmu_info.s1_bypass = true;
+		if (of_property_read_bool(pdev_p->dev.of_node,
+			"qcom,smmu-fast-map"))
+			smmu_info.fast_map = true;
+		smmu_info.arm_smmu = true;
+		pr_info("IPA smmu_info.s1_bypass=%d smmu_info.fast_map=%d\n",
+			smmu_info.s1_bypass, smmu_info.fast_map);
 	} else if (of_property_read_bool(pdev_p->dev.of_node,
 				"qcom,msm-smmu")) {
 		IPAERR("Legacy IOMMU not supported\n");
@@ -5239,6 +5351,39 @@ int ipa3_register_ipa_ready_cb(void (*ipa_ready_cb)(void *), void *user_data)
 	mutex_unlock(&ipa3_ctx->lock);
 
 	return 0;
+}
+
+int ipa3_iommu_map(struct iommu_domain *domain,
+	unsigned long iova, phys_addr_t paddr, size_t size, int prot)
+{
+	struct ipa_smmu_cb_ctx *ap_cb = ipa3_get_smmu_ctx();
+	struct ipa_smmu_cb_ctx *uc_cb = ipa3_get_uc_smmu_ctx();
+
+	IPADBG("domain =0x%p iova 0x%lx\n", domain, iova);
+	IPADBG("paddr =0x%pa size 0x%x\n", &paddr, (u32)size);
+
+	/* make sure no overlapping */
+	if (domain == ipa3_get_smmu_domain()) {
+		if (iova >= ap_cb->va_start && iova < ap_cb->va_end) {
+			IPAERR("iommu AP overlap addr 0x%lx\n", iova);
+			BUG();
+			return -EFAULT;
+		}
+	} else if (domain == ipa3_get_wlan_smmu_domain()) {
+		/* wlan is one time map */
+	} else if (domain == ipa3_get_uc_smmu_domain()) {
+		if (iova >= uc_cb->va_start && iova < uc_cb->va_end) {
+			IPAERR("iommu uC overlap addr 0x%lx\n", iova);
+			BUG();
+			return -EFAULT;
+		}
+	} else {
+		IPAERR("Unexpected domain 0x%p\n", domain);
+		BUG();
+		return -EFAULT;
+	}
+
+	return iommu_map(domain, iova, paddr, size, prot);
 }
 
 MODULE_LICENSE("GPL v2");

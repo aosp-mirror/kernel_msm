@@ -85,6 +85,7 @@ struct glink_qos_priority_bin {
  * @tx_task:		handle to the running kthread
  * @channels:			list of all existing channels on this transport
  * @dummy_in_use:		True when channels are being migrated to dummy.
+ * @notified:			list holds channels during dummy xprt cleanup.
  * @mtu:			MTU supported by this transport.
  * @token_count:		Number of tokens to be assigned per assignment.
  * @curr_qos_rate_kBps:		Aggregate of currently supported QoS requests.
@@ -120,6 +121,7 @@ struct glink_core_xprt_ctx {
 	struct list_head channels;
 	uint32_t next_lcid;
 	struct list_head free_lcid_list;
+	struct list_head notified;
 	bool dummy_in_use;
 
 	uint32_t max_cid;
@@ -140,11 +142,28 @@ struct glink_core_xprt_ctx {
 	bool qos_req_active;
 	bool tx_path_activity;
 	struct delayed_work pm_qos_work;
+	struct glink_core_edge_ctx *edge_ctx;
 
 	struct mutex xprt_dbgfs_lock_lhb4;
 	void *log_ctx;
 };
 
+/**
+ * Edge Context
+ * @list_node		edge list node used by edge list
+ * @name:		name of the edge
+ * @edge_migration_lock:mutex lock for migration over edge
+ * @edge_ref_lock:	lock for reference count
+ */
+struct glink_core_edge_ctx {
+	struct list_head list_node;
+	char name[GLINK_NAME_SIZE];
+	struct mutex edge_migration_lock_lhd2;
+	struct rwref_lock edge_ref_lock_lhd1;
+};
+
+static LIST_HEAD(edge_list);
+static DEFINE_MUTEX(edge_list_lock_lhd0);
 /**
  * Channel Context
  * @xprt_state_lhb0:	controls read/write access to channel state
@@ -949,6 +968,83 @@ static void *linearize_vector(void *iovec, size_t size,
 err:
 	kfree(bounce_buf);
 	return NULL;
+}
+
+/**
+ * glink_core_migration_edge_lock() - gains a reference count for edge and
+ *					take muted lock
+ * @xprt_ctx:	transport of the edge
+ */
+static void glink_core_migration_edge_lock(struct glink_core_xprt_ctx *xprt_ctx)
+{
+	struct glink_core_edge_ctx *edge_ctx = xprt_ctx->edge_ctx;
+
+	rwref_get(&edge_ctx->edge_ref_lock_lhd1);
+	mutex_lock(&edge_ctx->edge_migration_lock_lhd2);
+}
+
+/**
+ * glink_core_migration_edge_unlock() - release a reference count for edge
+ *					and release muted lock.
+ * @xprt_ctx:	transport of the edge
+ */
+static void glink_core_migration_edge_unlock(
+					struct glink_core_xprt_ctx *xprt_ctx)
+{
+	struct glink_core_edge_ctx *edge_ctx = xprt_ctx->edge_ctx;
+
+	mutex_unlock(&edge_ctx->edge_migration_lock_lhd2);
+	rwref_put(&edge_ctx->edge_ref_lock_lhd1);
+}
+
+/**
+ * glink_edge_ctx_release - Free the edge context
+ * @ch_st_lock:	handle to the rwref_lock associated with the edge
+ *
+ * This should only be called when the reference count associated with the
+ * edge goes to zero.
+ */
+static void glink_edge_ctx_release(struct rwref_lock *ch_st_lock)
+{
+	struct glink_core_edge_ctx *ctx = container_of(ch_st_lock,
+					struct glink_core_edge_ctx,
+						edge_ref_lock_lhd1);
+
+	mutex_lock(&edge_list_lock_lhd0);
+	list_del(&ctx->list_node);
+	mutex_unlock(&edge_list_lock_lhd0);
+	kfree(ctx);
+}
+
+
+/**
+ * edge_name_to_ctx_create() - lookup a edge by name, create the edge ctx if
+ *                              it is not found.
+ * @xprt_ctx:	Transport to search for a matching edge.
+ *
+ * Return: The edge ctx corresponding to edge of @xprt_ctx.
+ */
+static struct glink_core_edge_ctx *edge_name_to_ctx_create(
+				struct glink_core_xprt_ctx *xprt_ctx)
+{
+	struct glink_core_edge_ctx *edge_ctx;
+
+	mutex_lock(&edge_list_lock_lhd0);
+	list_for_each_entry(edge_ctx, &edge_list, list_node) {
+		if (!strcmp(edge_ctx->name, xprt_ctx->edge)) {
+			rwref_get(&edge_ctx->edge_ref_lock_lhd1);
+			mutex_unlock(&edge_list_lock_lhd0);
+			return edge_ctx;
+		}
+	}
+	edge_ctx = kzalloc(sizeof(struct glink_core_edge_ctx), GFP_KERNEL);
+	strlcpy(edge_ctx->name, xprt_ctx->edge, GLINK_NAME_SIZE);
+	rwref_lock_init(&edge_ctx->edge_ref_lock_lhd1, glink_edge_ctx_release);
+	mutex_init(&edge_ctx->edge_migration_lock_lhd2);
+	INIT_LIST_HEAD(&edge_ctx->list_node);
+	list_add_tail(&edge_ctx->list_node, &edge_list);
+	mutex_unlock(&edge_list_lock_lhd0);
+	return edge_ctx;
 }
 
 /**
@@ -2537,7 +2633,8 @@ static bool glink_delete_ch_from_list(struct channel_ctx *ctx, bool add_flcid)
 				flags);
 	if (!list_empty(&ctx->port_list_node))
 		list_del_init(&ctx->port_list_node);
-	if (list_empty(&ctx->transport_ptr->channels))
+	if (list_empty(&ctx->transport_ptr->channels) &&
+			list_empty(&ctx->transport_ptr->notified))
 		ret = true;
 	spin_unlock_irqrestore(
 			&ctx->transport_ptr->xprt_ctx_lock_lhb1,
@@ -3437,6 +3534,7 @@ void glink_xprt_ctx_release(struct rwref_lock *xprt_st_lock)
 	xprt_rm_dbgfs.par_name = "xprt";
 	glink_debugfs_remove_recur(&xprt_rm_dbgfs);
 	GLINK_INFO("%s: xprt debugfs removec\n", __func__);
+	rwref_put(&xprt_ctx->edge_ctx->edge_ref_lock_lhd1);
 	kthread_stop(xprt_ctx->tx_task);
 	xprt_ctx->tx_task = NULL;
 	glink_core_deinit_xprt_qos_cfg(xprt_ctx);
@@ -3706,6 +3804,7 @@ int glink_core_register_transport(struct glink_transport_if *if_ptr,
 	xprt_ptr->versions_entries = cfg->versions_entries;
 	xprt_ptr->local_version_idx = cfg->versions_entries - 1;
 	xprt_ptr->remote_version_idx = cfg->versions_entries - 1;
+	xprt_ptr->edge_ctx = edge_name_to_ctx_create(xprt_ptr);
 	xprt_ptr->l_features =
 			cfg->versions[cfg->versions_entries - 1].features;
 	if (!if_ptr->poll)
@@ -3735,6 +3834,7 @@ int glink_core_register_transport(struct glink_transport_if *if_ptr,
 	xprt_ptr->local_state = GLINK_XPRT_DOWN;
 	xprt_ptr->remote_neg_completed = false;
 	INIT_LIST_HEAD(&xprt_ptr->channels);
+	INIT_LIST_HEAD(&xprt_ptr->notified);
 
 	spin_lock_init(&xprt_ptr->tx_ready_lock_lhb3);
 	mutex_init(&xprt_ptr->xprt_dbgfs_lock_lhb4);
@@ -3905,6 +4005,7 @@ static struct glink_core_xprt_ctx *glink_create_dummy_xprt_ctx(
 	xprt_ptr->remote_neg_completed = false;
 	INIT_LIST_HEAD(&xprt_ptr->channels);
 	xprt_ptr->dummy_in_use = true;
+	INIT_LIST_HEAD(&xprt_ptr->notified);
 	spin_lock_init(&xprt_ptr->tx_ready_lock_lhb3);
 	mutex_init(&xprt_ptr->xprt_dbgfs_lock_lhb4);
 	return xprt_ptr;
@@ -3975,8 +4076,12 @@ static void glink_core_channel_cleanup(struct glink_core_xprt_ctx *xprt_ptr)
 	rwref_read_put(&xprt_ptr->xprt_state_lhb0);
 
 	spin_lock_irqsave(&dummy_xprt_ctx->xprt_ctx_lock_lhb1, d_flags);
-	list_for_each_entry_safe(ctx, tmp_ctx, &dummy_xprt_ctx->channels,
-						port_list_node) {
+	while (!list_empty(&dummy_xprt_ctx->channels)) {
+		ctx = list_first_entry(&dummy_xprt_ctx->channels,
+					struct channel_ctx, port_list_node);
+		list_move_tail(&ctx->port_list_node,
+					&dummy_xprt_ctx->notified);
+
 		rwref_get(&ctx->ch_state_lhb2);
 		spin_unlock_irqrestore(&dummy_xprt_ctx->xprt_ctx_lock_lhb1,
 				d_flags);
@@ -4313,6 +4418,10 @@ static bool will_migrate(struct channel_ctx *l_ctx, struct channel_ctx *r_ctx)
 	if (l_ctx->local_xprt_req > r_ctx->transport_ptr->id)
 		l_ctx->local_xprt_req = r_ctx->transport_ptr->id;
 
+	if (ch_is_fully_opened(l_ctx) &&
+		(l_ctx->transport_ptr->id == l_ctx->local_xprt_req))
+		goto exit;
+
 	new_xprt = max(l_ctx->local_xprt_req, r_ctx->remote_xprt_req);
 
 	if (new_xprt == l_ctx->transport_ptr->id)
@@ -4360,6 +4469,12 @@ static bool ch_migrate(struct channel_ctx *l_ctx, struct channel_ctx *r_ctx)
 	else
 		rwref_get(&l_ctx->ch_state_lhb2);
 	if (!l_ctx) {
+		rwref_put(&r_ctx->ch_state_lhb2);
+		return migrated;
+	}
+	if (ch_is_fully_opened(l_ctx) &&
+		(l_ctx->transport_ptr->id == l_ctx->local_xprt_req)) {
+		rwref_put(&l_ctx->ch_state_lhb2);
 		rwref_put(&r_ctx->ch_state_lhb2);
 		return migrated;
 	}
@@ -4538,11 +4653,13 @@ static void glink_core_rx_cmd_ch_remote_open(struct glink_transport_if *if_ptr,
 	uint16_t xprt_resp;
 	bool do_migrate;
 
+	glink_core_migration_edge_lock(if_ptr->glink_core_priv);
 	ctx = ch_name_to_ch_ctx_create(if_ptr->glink_core_priv, name);
 	if (ctx == NULL) {
 		GLINK_ERR_XPRT(if_ptr->glink_core_priv,
 		       "%s: invalid rcid %u received, name '%s'\n",
 		       __func__, rcid, name);
+		glink_core_migration_edge_unlock(if_ptr->glink_core_priv);
 		return;
 	}
 
@@ -4551,6 +4668,7 @@ static void glink_core_rx_cmd_ch_remote_open(struct glink_transport_if *if_ptr,
 		GLINK_ERR_CH(ctx,
 		       "%s: Duplicate remote open for rcid %u, name '%s'\n",
 		       __func__, rcid, name);
+		glink_core_migration_edge_unlock(if_ptr->glink_core_priv);
 		return;
 	}
 
@@ -4572,6 +4690,7 @@ static void glink_core_rx_cmd_ch_remote_open(struct glink_transport_if *if_ptr,
 
 	if (do_migrate)
 		ch_migrate(NULL, ctx);
+	glink_core_migration_edge_unlock(if_ptr->glink_core_priv);
 }
 
 /**
@@ -4585,13 +4704,14 @@ static void glink_core_rx_cmd_ch_open_ack(struct glink_transport_if *if_ptr,
 	uint32_t lcid, uint16_t xprt_resp)
 {
 	struct channel_ctx *ctx;
-
+	glink_core_migration_edge_lock(if_ptr->glink_core_priv);
 	ctx = xprt_lcid_to_ch_ctx_get(if_ptr->glink_core_priv, lcid);
 	if (!ctx) {
 		/* unknown LCID received - this shouldn't happen */
 		GLINK_ERR_XPRT(if_ptr->glink_core_priv,
 				"%s: invalid lcid %u received\n", __func__,
 				(unsigned)lcid);
+		glink_core_migration_edge_unlock(if_ptr->glink_core_priv);
 		return;
 	}
 
@@ -4600,6 +4720,7 @@ static void glink_core_rx_cmd_ch_open_ack(struct glink_transport_if *if_ptr,
 			"%s: unexpected open ack receive for lcid. Current state: %u. Thread: %u\n",
 				__func__, ctx->local_open_state, current->pid);
 		rwref_put(&ctx->ch_state_lhb2);
+		glink_core_migration_edge_unlock(if_ptr->glink_core_priv);
 		return;
 	}
 
@@ -4618,6 +4739,7 @@ static void glink_core_rx_cmd_ch_open_ack(struct glink_transport_if *if_ptr,
 		}
 	}
 	rwref_put(&ctx->ch_state_lhb2);
+	glink_core_migration_edge_unlock(if_ptr->glink_core_priv);
 }
 
 /**
