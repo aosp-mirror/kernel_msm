@@ -465,7 +465,8 @@ void schedtune_dequeue_task(struct task_struct *p, int cpu)
 	 * dequeued and enqueued multiple times in the exit path.
 	 * Thus we avoid any further update, since we do not want to change
 	 * CPU boosting while the task is exiting.
-	 * The last dequeue will be done by cgroup exit() callback.
+	 * The last dequeue is already enforce by the do_exit() code path
+	 * via schedtune_exit_task().
 	 */
 	if (p->flags & PF_EXITING)
 		return;
@@ -484,6 +485,26 @@ void schedtune_dequeue_task(struct task_struct *p, int cpu)
 
 	rcu_read_unlock();
 	raw_spin_unlock_irqrestore(&bg->lock, irq_flags);
+}
+
+void schedtune_exit_task(struct task_struct *tsk)
+{
+	struct schedtune *st;
+	unsigned long irq_flags;
+	unsigned int cpu;
+	struct rq *rq;
+	int idx;
+
+	rq = lock_rq_of(tsk, &irq_flags);
+	rcu_read_lock();
+
+	cpu = cpu_of(rq);
+	st = task_schedtune(tsk);
+	idx = st->idx;
+	schedtune_tasks_update(tsk, cpu, idx, DEQUEUE_TASK);
+
+	rcu_read_unlock();
+	unlock_rq_of(rq, tsk, &irq_flags);
 }
 
 int schedtune_cpu_boost(int cpu)
