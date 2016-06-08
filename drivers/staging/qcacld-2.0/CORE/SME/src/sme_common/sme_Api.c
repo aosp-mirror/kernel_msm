@@ -95,7 +95,6 @@ extern void csr_release_roc_req_cmd(tpAniSirGlobal mac_ctx);
 extern eHalStatus p2pProcessRemainOnChannelCmd(tpAniSirGlobal pMac, tSmeCmd *p2pRemainonChn);
 extern eHalStatus sme_remainOnChnRsp( tpAniSirGlobal pMac, tANI_U8 *pMsg);
 extern eHalStatus sme_remainOnChnReady( tHalHandle hHal, tANI_U8* pMsg);
-extern eHalStatus sme_sendActionCnf( tHalHandle hHal, tANI_U8* pMsg);
 extern eHalStatus p2pProcessNoAReq(tpAniSirGlobal pMac, tSmeCmd *pNoACmd);
 
 static eHalStatus initSmeCmdList(tpAniSirGlobal pMac);
@@ -2679,6 +2678,7 @@ eHalStatus sme_SetEseBeaconRequest(tHalHandle hHal, const tANI_U8 sessionId,
    if(status != eHAL_STATUS_SUCCESS)
       pSmeRrmContext->eseBcnReqInProgress = FALSE;
 
+   vos_mem_free(pSmeBcnReportReq);
    return status;
 }
 
@@ -2913,17 +2913,6 @@ eHalStatus sme_ProcessMsg(tHalHandle hHal, vos_msg_t* pMsg)
                 else
                 {
                     smsLog( pMac, LOGE, "Empty rsp message for meas (eWNI_SME_REMAIN_ON_CHN_RDY_IND), nothing to process");
-                }
-                break;
-           case eWNI_SME_ACTION_FRAME_SEND_CNF:
-                if(pMsg->bodyptr)
-                {
-                    status = sme_sendActionCnf(pMac, pMsg->bodyptr);
-                    vos_mem_free(pMsg->bodyptr);
-                }
-                else
-                {
-                    smsLog( pMac, LOGE, "Empty rsp message for meas (eWNI_SME_ACTION_FRAME_SEND_CNF), nothing to process");
                 }
                 break;
           case eWNI_SME_COEX_IND:
@@ -7608,6 +7597,7 @@ eHalStatus smeIssueFastRoamNeighborAPEvent(tHalHandle hHal,
              pUsrCtx = vos_mem_malloc(sizeof(*pUsrCtx));
              if (NULL == pUsrCtx) {
                  smsLog(pMac, LOGE, FL("Memory allocation failed"));
+                 sme_ReleaseGlobalLock( &pMac->sme );
                  return eHAL_STATUS_FAILED_ALLOC;
              }
 
@@ -7834,6 +7824,46 @@ eHalStatus sme_GetOperationChannel(tHalHandle hHal, tANI_U32 *pChannel, tANI_U8 
     }
     return eHAL_STATUS_FAILURE;
 }// sme_GetOperationChannel ends here
+
+/**
+ * sme_register_p2p_ack_ind_callback() - p2p ack indication callback
+ * @hal: hal pointer
+ * @callback: callback pointer to be registered
+ *
+ * This function is used to register a callback to PE for p2p ack
+ * indication
+ *
+ * Return: Success if msg is posted to PE else Failure.
+ */
+eHalStatus sme_register_p2p_ack_ind_callback(tHalHandle hal,
+				sir_p2p_ack_ind_callback callback)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+	struct sir_sme_p2p_ack_ind_cb_req *msg;
+	eHalStatus status = eHAL_STATUS_SUCCESS;
+
+	smsLog(mac_ctx, LOG1, FL(": ENTER"));
+
+	if (eHAL_STATUS_SUCCESS ==
+			sme_AcquireGlobalLock(&mac_ctx->sme)) {
+		msg = vos_mem_malloc(sizeof(*msg));
+		if (NULL == msg) {
+			smsLog(mac_ctx, LOGE,
+				FL("Failed to allocate memory"));
+			sme_ReleaseGlobalLock(&mac_ctx->sme);
+			return eHAL_STATUS_FAILURE;
+		}
+		vos_mem_set(msg, sizeof(*msg), 0);
+		msg->message_type = eWNI_SME_REGISTER_P2P_ACK_CB;
+		msg->length = sizeof(*msg);
+
+		msg->callback = callback;
+		status = palSendMBMessage(mac_ctx->hHdd, msg);
+		sme_ReleaseGlobalLock(&mac_ctx->sme);
+		return status;
+	}
+	return eHAL_STATUS_FAILURE;
+}
 
 /**
  * sme_register_mgmt_frame_ind_callback() - Register a callback for
@@ -12452,6 +12482,7 @@ eHalStatus sme_get_rssi(tHalHandle hal, struct sir_rssi_req req,
 		if (!VOS_IS_STATUS_SUCCESS(vosstatus)) {
 			VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
 				"%s: Post get rssi msg fail", __func__);
+			vos_mem_free(vosmessage.bodyptr);
 			status = eHAL_STATUS_FAILURE;
 		}
 		sme_ReleaseGlobalLock(&mac->sme);
@@ -14445,6 +14476,12 @@ eHalStatus sme_SendRateUpdateInd(tHalHandle hHal,
 
         sme_ReleaseGlobalLock(&pMac->sme);
         return eHAL_STATUS_SUCCESS;
+    }
+    else
+    {
+        vos_mem_free(rateUpdate);
+        VOS_TRACE( VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+                   FL("sme_AcquireGlobalLock error"));
     }
 
     return status;

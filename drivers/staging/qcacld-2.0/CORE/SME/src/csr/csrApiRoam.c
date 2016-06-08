@@ -1213,6 +1213,7 @@ static void initConfigParam(tpAniSirGlobal pMac)
 #endif
     pMac->roam.configParam.IsIdleScanEnabled = TRUE; //enable the idle scan by default
     pMac->roam.configParam.nTxPowerCap = CSR_MAX_TX_POWER;
+    pMac->roam.configParam.allow_tpc_from_ap = TRUE;
     pMac->roam.configParam.statsReqPeriodicity = CSR_MIN_GLOBAL_STAT_QUERY_PERIOD;
     pMac->roam.configParam.statsReqPeriodicityInPS = CSR_MIN_GLOBAL_STAT_QUERY_PERIOD_IN_BMPS;
 #ifdef WLAN_FEATURE_VOWIFI_11R
@@ -1901,6 +1902,7 @@ eHalStatus csrChangeDefaultConfigParam(tpAniSirGlobal pMac, tCsrConfigParam *pPa
         pMac->roam.configParam.statsReqPeriodicityInPS = pParam->statsReqPeriodicityInPS;
         //Assign this before calling CsrInit11dInfo
         pMac->roam.configParam.nTxPowerCap = pParam->nTxPowerCap;
+        pMac->roam.configParam.allow_tpc_from_ap = pParam->allow_tpc_from_ap;
         if( csrIs11dSupported( pMac ) )
         {
             status = CsrInit11dInfo(pMac, &pParam->Csr11dinfo);
@@ -2126,6 +2128,7 @@ eHalStatus csrGetConfigParam(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
         pParam->vccUlMacLossThreshold = pMac->roam.configParam.vccUlMacLossThreshold;
         pParam->IsIdleScanEnabled = pMac->roam.configParam.IsIdleScanEnabled;
         pParam->nTxPowerCap = pMac->roam.configParam.nTxPowerCap;
+        pParam->allow_tpc_from_ap = pMac->roam.configParam.allow_tpc_from_ap;
         pParam->statsReqPeriodicity = pMac->roam.configParam.statsReqPeriodicity;
         pParam->statsReqPeriodicityInPS = pMac->roam.configParam.statsReqPeriodicityInPS;
         pParam->addTSWhenACMIsOff = pMac->roam.configParam.addTSWhenACMIsOff;

@@ -114,6 +114,7 @@ struct hdd_tgt_cfg {
 #ifdef WLAN_FEATURE_NAN_DATAPATH
         bool nan_datapath_enabled;
 #endif
+        uint8_t max_mc_addr_list;
 };
 
 struct hdd_dfs_radar_ind {

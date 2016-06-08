@@ -1161,9 +1161,7 @@ eHalStatus csrIssueRoamAfterLostlinkScan(tpAniSirGlobal pMac, tANI_U32 sessionId
 }
 
 
-eHalStatus csrScanGetScanChnInfo(tpAniSirGlobal pMac, tANI_U8 sessionId,
-                                 void *pContext, void *callback,
-                                 tANI_U32 scanID)
+eHalStatus csrScanGetScanChnInfo(tpAniSirGlobal pMac, tSmeCmd *pCommand)
 {
     eHalStatus status = eHAL_STATUS_SUCCESS;
     tSmeCmd *pScanCmd;
@@ -1175,22 +1173,21 @@ eHalStatus csrScanGetScanChnInfo(tpAniSirGlobal pMac, tANI_U8 sessionId,
         {
             pScanCmd->command = eSmeCommandScan;
             vos_mem_set(&pScanCmd->u.scanCmd, sizeof(tScanCmd), 0);
-            pScanCmd->u.scanCmd.callback = callback;
-            pScanCmd->u.scanCmd.pContext = pContext;
             pScanCmd->u.scanCmd.reason = eCsrScanGetScanChnInfo;
-            if (callback)
+            /* Need to make the following atomic */
+            pScanCmd->u.scanCmd.scanID =
+                               pMac->scan.nextScanID++; /* let it wrap around */
+            pScanCmd->sessionId = pCommand->sessionId;
+            if (eCsrScanUserRequest == pCommand->u.scanCmd.reason)
             {
-                //use same scanID as maintained in pAdapter
-                pScanCmd->u.scanCmd.scanID = scanID;
+                 pScanCmd->u.scanCmd.callback = NULL;
+                 pScanCmd->u.scanCmd.pContext = NULL;
+            } else {
+                 pScanCmd->u.scanCmd.callback = pCommand->u.scanCmd.callback;
+                 pScanCmd->u.scanCmd.pContext = pCommand->u.scanCmd.pContext;
+                 pScanCmd->u.scanCmd.abort_scan_indication =
+                           pCommand->u.scanCmd.abort_scan_indication;
             }
-            else
-            {
-                //Need to make the following atomic
-                pScanCmd->u.scanCmd.scanID =
-                                   pMac->scan.nextScanID++; //let it wrap around
-            }
-
-            pScanCmd->sessionId = sessionId;
             status = csrQueueSmeCommand(pMac, pScanCmd, eANI_BOOLEAN_FALSE);
             if( !HAL_STATUS_SUCCESS( status ) )
             {
@@ -4684,7 +4681,8 @@ tANI_BOOLEAN csrScanComplete( tpAniSirGlobal pMac, tSirSmeScanRsp *pScanRsp )
                 //This check only valid here because csrSaveScanresults is not yet called
                 fSuccess = (!csrLLIsListEmpty(&pMac->scan.tempScanResults, LL_ACCESS_LOCK));
             }
-            if (pCommand->u.scanCmd.abortScanDueToBandChange)
+            if (pCommand->u.scanCmd.abort_scan_indication &
+                                   eCSR_SCAN_ABORT_DUE_TO_BAND_CHANGE)
             {
                 /*
                  * Scan aborted due to band change
@@ -4702,8 +4700,6 @@ tANI_BOOLEAN csrScanComplete( tpAniSirGlobal pMac, tSirSmeScanRsp *pScanRsp )
                     smsLog(pMac, LOG1, FL("11d_scan_done will flush the scan"
                                           " results"));
                 }
-                pCommand->u.scanCmd.abortScanDueToBandChange
-                    = eANI_BOOLEAN_FALSE;
             }
             csrSaveScanResults(pMac, pCommand->u.scanCmd.reason, sessionId);
 
@@ -5486,29 +5482,15 @@ eHalStatus csrScanSmeScanResponse( tpAniSirGlobal pMac, void *pMsgBuf )
                      * wild card scan because it may cause scan results got
                      * aged out incorrectly.
                      */
-                    if( csrScanIsWildCardScan( pMac, pCommand ) && (!pCommand->u.scanCmd.u.scanRequest.p2pSearch)
+                    if (csrScanIsWildCardScan(pMac, pCommand) &&
+                             (!pCommand->u.scanCmd.u.scanRequest.p2pSearch)
 #ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
                         && (pCommand->u.scanCmd.reason != eCsrScanGetLfrResult)
 #endif
                       )
-                    {
-                        //Get the list of channels scanned
-                       if( pCommand->u.scanCmd.reason != eCsrScanUserRequest)
-                       {
-                           csrScanGetScanChnInfo(pMac, pCommand->sessionId,
-                                                 NULL, NULL,
-                                                 pCommand->u.scanCmd.scanID);
-                       }
-                       else
-                       {
-                           csrScanGetScanChnInfo(pMac,
-                                   pCommand->sessionId,
-                                   pCommand->u.scanCmd.pContext,
-                                   pCommand->u.scanCmd.callback,
-                                   pCommand->u.scanCmd.scanID);
-                           pCommand->u.scanCmd.callback = NULL;
-                       }
-                    }
+                   {
+                         csrScanGetScanChnInfo(pMac, pCommand);
+                   }
                 }
                 break;
             }//switch
@@ -6641,6 +6623,10 @@ void csrScanCallCallback(tpAniSirGlobal pMac, tSmeCmd *pCommand, eCsrScanStatus 
 {
     if(pCommand->u.scanCmd.callback)
     {
+        if (pCommand->u.scanCmd.abort_scan_indication) {
+             smsLog(pMac, LOG1, FL("scanDone due to abort"));
+             scanStatus = eCSR_SCAN_ABORT;
+        }
         pCommand->u.scanCmd.callback(pMac, pCommand->u.scanCmd.pContext,
                                      pCommand->sessionId,
                                      pCommand->u.scanCmd.scanID, scanStatus);
@@ -8179,10 +8165,11 @@ eHalStatus csrScanAbortMacScan(tpAniSirGlobal pMac, tANI_U8 sessionId,
             }
             else
             {
+                pCommand->u.scanCmd.abort_scan_indication = eCSR_SCAN_ABORT_DEFAULT;
                 if(reason == eCSR_SCAN_ABORT_DUE_TO_BAND_CHANGE)
                 {
-                    pCommand->u.scanCmd.abortScanDueToBandChange
-                        = eANI_BOOLEAN_TRUE;
+                    pCommand->u.scanCmd.abort_scan_indication
+                        = eCSR_SCAN_ABORT_DUE_TO_BAND_CHANGE;
                 }
                 vos_mem_set((void *)pMsg, msgLen, 0);
                 pMsg->type = pal_cpu_to_be16((tANI_U16)eWNI_SME_SCAN_ABORT_IND);

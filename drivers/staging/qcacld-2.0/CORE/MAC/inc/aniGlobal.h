@@ -1268,6 +1268,7 @@ typedef struct sAniSirGlobal
     bool first_scan_done;
     int8_t first_scan_bucket_threshold;
     sir_mgmt_frame_ind_callback mgmt_frame_ind_cb;
+    sir_p2p_ack_ind_callback p2p_ack_ind_cb;
 } tAniSirGlobal;
 
 typedef enum

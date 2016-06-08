@@ -221,26 +221,6 @@ eHalStatus sme_remainOnChnReady( tHalHandle hHal, tANI_U8* pMsg)
     return status;
 }
 
-
-eHalStatus sme_sendActionCnf( tHalHandle hHal, tANI_U8* pMsg)
-{
-   tpAniSirGlobal pMac = PMAC_STRUCT( hHal );
-   eHalStatus  status = eHAL_STATUS_SUCCESS;
-   tCsrRoamInfo RoamInfo;
-   tSirSmeRsp* pSmeRsp = (tSirSmeRsp*)pMsg;
-
-    /* forward the indication to HDD */
-    //RoamInfo can be passed as NULL....todo
-    csrRoamCallCallback(pMac, pSmeRsp->sessionId, &RoamInfo, 0,
-                        eCSR_ROAM_SEND_ACTION_CNF,
-                       (pSmeRsp->statusCode == eSIR_SME_SUCCESS) ? 0:
-                        eCSR_ROAM_RESULT_SEND_ACTION_FAIL);
-    return status;
-}
-
-
-
-
 eHalStatus sme_p2pOpen( tHalHandle hHal )
 {
    tpAniSirGlobal pMac = PMAC_STRUCT(hHal);

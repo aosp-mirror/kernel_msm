@@ -9808,7 +9808,7 @@ VOS_STATUS wma_update_channel_list(WMA_HANDLE handle,
 
 		WMI_SET_CHANNEL_REG_POWER(chan_info,
 					  chan_list->chanParam[i].pwr);
-		WMA_LOGD(FL("Channel %u[%d] DFS[%d] TX power = %d "),
+		WMA_LOGI(FL("Channel %u[%d] DFS[%d] TX pwr = %d "),
 				chan_info->mhz, i, chan_list->chanParam[i].dfsSet,
 				chan_list->chanParam[i].pwr);
 		/*TODO: Set WMI_SET_CHANNEL_MIN_POWER */
@@ -15367,6 +15367,9 @@ wma_vdev_set_bss_params(tp_wma_handle wma, int vdev_id,
 		WMA_LOGW("Setting Tx power limit to 0");
 	}
 
+	WMA_LOGI("%s: Set maxTx pwr [WMI_VDEV_PARAM_TX_PWRLIMIT] to %d",
+						__func__, maxTxPower);
+
 	ret = wmi_unified_vdev_set_param_send(wma->wmi_handle, vdev_id,
 					WMI_VDEV_PARAM_TX_PWRLIMIT,
 					maxTxPower);
@@ -18011,7 +18014,7 @@ static void wma_set_tx_power(WMA_HANDLE handle,
 	if (wma_handle->interfaces[vdev_id].tx_power != tx_pwr_params->power) {
 
 		/* tx_power changed, Push the tx_power to FW */
-		WMA_LOGW("%s: Set TX power limit [WMI_VDEV_PARAM_TX_PWRLIMIT] to %d",
+		WMA_LOGI("%s: Set TX pwr limit WMI_VDEV_PARAM_TX_PWRLIMIT %d",
 			__func__, tx_pwr_params->power);
 		ret = wmi_unified_vdev_set_param_send(wma_handle->wmi_handle, vdev_id,
 				WMI_VDEV_PARAM_TX_PWRLIMIT, tx_pwr_params->power);
@@ -18067,7 +18070,7 @@ static void wma_set_max_tx_power(WMA_HANDLE handle,
 		ret = 0;
 		goto end;
 	}
-	WMA_LOGW("Set MAX TX power limit [WMI_VDEV_PARAM_TX_PWRLIMIT] to %d",
+	WMA_LOGI("Set MAX TX pwr limit [WMI_VDEV_PARAM_TX_PWRLIMIT] to %d",
 		wma_handle->interfaces[vdev_id].max_tx_power);
 	ret = wmi_unified_vdev_set_param_send(wma_handle->wmi_handle, vdev_id,
 			WMI_VDEV_PARAM_TX_PWRLIMIT,
@@ -32723,6 +32726,8 @@ static void wma_update_hdd_cfg(tp_wma_handle wma_handle)
 	hdd_tgt_cfg.bpf_enabled = wma_handle->bpf_enabled;
 	wma_update_hdd_cfg_ndp(wma_handle, &hdd_tgt_cfg);
 	wma_setup_egap_support(&hdd_tgt_cfg, wma_handle);
+        hdd_tgt_cfg.max_mc_addr_list =
+                wma_handle->wlan_resource_config.num_multicast_filter_entries;
 	wma_handle->tgt_cfg_update_cb(hdd_ctx, &hdd_tgt_cfg);
 }
 static wmi_buf_t wma_setup_wmi_init_msg(tp_wma_handle wma_handle,

@@ -691,15 +691,6 @@ WLANSAP_RoamCallback
                               eSAP_REMAIN_CHAN_READY,
                               (v_PVOID_t) eSAP_STATUS_SUCCESS);
             break;
-        case eCSR_ROAM_SEND_ACTION_CNF:
-            VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH,
-                        FL("CSR roamStatus = %s (%d)"),
-                        "eCSR_ROAM_SEND_ACTION_CNF", roamStatus);
-            sapSignalHDDevent(sapContext, pCsrRoamInfo,
-                            eSAP_SEND_ACTION_CNF,
-                            (v_PVOID_t)((eSapStatus)((roamResult == eCSR_ROAM_RESULT_NONE)
-                            ? eSAP_STATUS_SUCCESS : eSAP_STATUS_FAILURE)));
-            break;
 
        case eCSR_ROAM_DISCONNECT_ALL_P2P_CLIENTS:
             VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH,

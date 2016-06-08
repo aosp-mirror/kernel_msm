@@ -80,7 +80,6 @@ extern tSirRetStatus limSetLinkState(
                          tpSetLinkStateCallback callback, void *callbackArg);
 
 static tSirRetStatus limCreateSessionForRemainOnChn(tpAniSirGlobal pMac, tPESession **ppP2pSession);
-eHalStatus limP2PActionCnf(tpAniSirGlobal pMac, tANI_U32 txCompleteSuccess);
 /*------------------------------------------------------------------
  *
  * Below function is callback function, it is called when
@@ -603,7 +602,7 @@ void limRemainOnChnRsp(tpAniSirGlobal pMac, eHalStatus status, tANI_U32 *data)
      * indicaiton confirmation with status failure */
     if (pMac->lim.mgmtFrameSessionId != 0xff)
     {
-       limP2PActionCnf(pMac, 0);
+       limP2PActionCnf(pMac, false);
     }
 
     return;
@@ -725,9 +724,9 @@ eHalStatus limP2PActionCnf(tpAniSirGlobal pMac, tANI_U32 txCompleteSuccess)
     {
         /* The session entry might be invalid(0xff) action confirmation received after
          * remain on channel timer expired */
-        limSendSmeRsp(pMac, eWNI_SME_ACTION_FRAME_SEND_CNF,
-                (txCompleteSuccess ? eSIR_SME_SUCCESS : eSIR_SME_SEND_ACTION_FAIL),
-                pMac->lim.mgmtFrameSessionId, 0);
+        if (pMac->p2p_ack_ind_cb)
+             pMac->p2p_ack_ind_cb(pMac->lim.mgmtFrameSessionId,
+                                  txCompleteSuccess);
         pMac->lim.mgmtFrameSessionId = 0xff;
     }
 
@@ -769,8 +768,7 @@ void limSendP2PActionFrame(tpAniSirGlobal pMac, tpSirMsgQ pMsg)
         {
             limLog(pMac, LOGE,
                     FL("Remain on channel is not running"));
-            limSendSmeRsp(pMac, eWNI_SME_ACTION_FRAME_SEND_CNF,
-                    eHAL_STATUS_FAILURE, pMbMsg->sessionId, 0);
+            limP2PActionCnf(pMac, false);
             return;
         }
         smeSessionId = pMbMsg->sessionId;
@@ -807,8 +805,7 @@ void limSendP2PActionFrame(tpAniSirGlobal pMac, tpSirMsgQ pMsg)
         }
         if( !isSessionActive )
         {
-            limSendSmeRsp(pMac, eWNI_SME_ACTION_FRAME_SEND_CNF,
-                          eHAL_STATUS_FAILURE, pMbMsg->sessionId, 0);
+            limP2PActionCnf(pMac, false);
             return;
         }
     }
@@ -966,8 +963,7 @@ send_action_frame:
             {
                 limLog(pMac, LOGE,
                             FL("Failed to Send Action frame"));
-                limSendSmeRsp(pMac, eWNI_SME_ACTION_FRAME_SEND_CNF,
-                        eHAL_STATUS_FAILURE, pMbMsg->sessionId, 0);
+                limP2PActionCnf(pMac, false);
                 return;
             }
         }
@@ -1048,8 +1044,8 @@ send_frame1:
 
         if (!pMbMsg->noack)
         {
-           limSendSmeRsp(pMac, eWNI_SME_ACTION_FRAME_SEND_CNF,
-               halstatus, pMbMsg->sessionId, 0);
+            limP2PActionCnf(pMac, (HAL_STATUS_SUCCESS(halstatus)) ?
+                                                       true : false);
         }
         pMac->lim.mgmtFrameSessionId = 0xff;
     }
@@ -1064,8 +1060,7 @@ send_frame1:
         if ( ! HAL_STATUS_SUCCESS ( halstatus ) )
         {
              limLog( pMac, LOGE, FL("could not send action frame!" ));
-             limSendSmeRsp(pMac, eWNI_SME_ACTION_FRAME_SEND_CNF, halstatus,
-                pMbMsg->sessionId, 0);
+             limP2PActionCnf(pMac, false);
              pMac->lim.mgmtFrameSessionId = 0xff;
         }
         else

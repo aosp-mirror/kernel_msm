@@ -2938,13 +2938,6 @@ sapSignalHDDevent
                           "eSAP_REMAIN_CHAN_READY");
            sapApAppEvent.sapHddEventCode = eSAP_REMAIN_CHAN_READY;
             break;
-       case eSAP_SEND_ACTION_CNF:
-            VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH,
-                       FL("SAP event callback event = %s"),
-                          "eSAP_SEND_ACTION_CNF");
-            sapApAppEvent.sapHddEventCode = eSAP_SEND_ACTION_CNF;
-            sapApAppEvent.sapevt.sapActionCnf.actionSendSuccess = (eSapStatus)context;
-            break;
 
        case eSAP_DISCONNECT_ALL_P2P_CLIENT:
             VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH,

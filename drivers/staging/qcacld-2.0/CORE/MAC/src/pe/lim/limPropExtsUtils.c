@@ -193,25 +193,32 @@ limExtractApCapability(tpAniSirGlobal pMac, tANI_U8 *pIE, tANI_U16 ieLen,
         // Extract the UAPSD flag from WMM Parameter element
         if (pBeaconStruct->wmeEdcaPresent)
             *uapsd = pBeaconStruct->edcaParams.qosInfo.uapsd;
+
+        if (pMac->roam.configParam.allow_tpc_from_ap) {
+
+            if (pBeaconStruct->powerConstraintPresent) {
+#if defined WLAN_FEATURE_VOWIFI
+                *localConstraint -=
+                  pBeaconStruct->localPowerConstraint.localPowerConstraints;
+#else
+                localPowerConstraints =
+                       (tANI_U32)pBeaconStruct->localPowerConstraint.
+                                                     localPowerConstraints;
+#endif
+            }
+            else {
 #if defined FEATURE_WLAN_ESE
-        /* If there is Power Constraint Element specifically,
-         * adapt to it. Hence there is else condition check
-         * for this if statement.
-         */
-        if ( pBeaconStruct->eseTxPwr.present)
-        {
-            *localConstraint = pBeaconStruct->eseTxPwr.power_limit;
-        }
-        psessionEntry->is_ese_version_ie_present =
+            /* If there is Power Constraint Element specifically,
+             * adapt to it. Hence there is else condition check
+             * for this if statement.
+             */
+            if ( pBeaconStruct->eseTxPwr.present)
+                 *localConstraint = pBeaconStruct->eseTxPwr.power_limit;
+
+                 psessionEntry->is_ese_version_ie_present =
                               pBeaconStruct->is_ese_ver_ie_present;
 #endif
-        if (pBeaconStruct->powerConstraintPresent)
-        {
-#if defined WLAN_FEATURE_VOWIFI
-           *localConstraint -= pBeaconStruct->localPowerConstraint.localPowerConstraints;
-#else
-           localPowerConstraints = (tANI_U32)pBeaconStruct->localPowerConstraint.localPowerConstraints;
-#endif
+            }
         }
 #if !defined WLAN_FEATURE_VOWIFI
         if (cfgSetInt(pMac, WNI_CFG_LOCAL_POWER_CONSTRAINT, localPowerConstraints) != eSIR_SUCCESS)

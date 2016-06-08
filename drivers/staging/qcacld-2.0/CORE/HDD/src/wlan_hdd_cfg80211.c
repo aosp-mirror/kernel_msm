@@ -8106,7 +8106,7 @@ out:
 		if (temp_skbuff != NULL)
 			return cfg80211_vendor_cmd_reply(temp_skbuff);
 	}
-
+	wlan_hdd_undo_acs(adapter);
 	clear_bit(ACS_IN_PROGRESS, &hdd_ctx->g_event_flags);
 
 	return status;
@@ -8136,6 +8136,26 @@ static int wlan_hdd_cfg80211_do_acs(struct wiphy *wiphy,
 	vos_ssr_unprotect(__func__);
 
 	return ret;
+}
+
+/**
+ * wlan_hdd_undo_acs : Do cleanup of DO_ACS
+ * @adapter:  Pointer to adapter struct
+ *
+ * This function handle cleanup of what was done in DO_ACS, including free
+ * memory.
+ *
+ * Return: void
+ */
+
+void wlan_hdd_undo_acs(hdd_adapter_t *adapter)
+{
+	if (adapter == NULL)
+		return;
+	if (adapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list) {
+		vos_mem_free(adapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list);
+		adapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list = NULL;
+	}
 }
 
 /**
@@ -8512,12 +8532,27 @@ static int __wlan_hdd_cfg80211_wifi_configuration_set(struct wiphy *wiphy,
 			tb[QCA_WLAN_VENDOR_ATTR_CONFIG_RX_MPDU_AGGREGATION]);
 		request.vdev_id = pAdapter->sessionId;
 
-		vos_status = wma_set_tx_rx_aggregation_size(&request);
-		if (vos_status != VOS_STATUS_SUCCESS) {
+		if (request.tx_aggregation_size >=
+					CFG_TX_AGGREGATION_SIZE_MIN &&
+			request.tx_aggregation_size <=
+					CFG_TX_AGGREGATION_SIZE_MAX &&
+			request.rx_aggregation_size >=
+					CFG_RX_AGGREGATION_SIZE_MIN &&
+			request.rx_aggregation_size <=
+					CFG_RX_AGGREGATION_SIZE_MAX) {
+			vos_status = wma_set_tx_rx_aggregation_size(&request);
+			if (vos_status != VOS_STATUS_SUCCESS) {
+				hddLog(LOGE,
+					FL("failed to set aggr sizes err %d"),
+					vos_status);
+				ret_val = -EPERM;
+			}
+		} else {
 			hddLog(LOGE,
-				FL("failed to set aggregation sizes(err=%d)"),
-				vos_status);
-			ret_val = -EPERM;
+				FL("TX %d RX %d MPDU aggr size not in range"),
+				request.tx_aggregation_size,
+				request.rx_aggregation_size);
+			ret_val = -EINVAL;
 		}
 	}
 	return ret_val;
@@ -9999,6 +10034,7 @@ static int hdd_set_reset_bpf_offload(hdd_context_t *hdd_ctx,
 	struct sir_bpf_set_offload *bpf_set_offload;
 	eHalStatus hstatus;
 	int prog_len;
+	int ret_val = -EINVAL;
 
 	ENTER();
 
@@ -10038,6 +10074,11 @@ static int hdd_set_reset_bpf_offload(hdd_context_t *hdd_ctx,
 
 	prog_len = nla_len(tb[BPF_PROGRAM]);
 	bpf_set_offload->program = vos_mem_malloc(sizeof(uint8_t) * prog_len);
+	if (!bpf_set_offload->program) {
+		hddLog(LOGE, FL("failed to allocate memory for bpf filter"));
+		ret_val = -ENOMEM;
+		goto fail;
+	}
 	bpf_set_offload->current_length = prog_len;
 	nla_memcpy(bpf_set_offload->program, tb[BPF_PROGRAM], prog_len);
 	bpf_set_offload->session_id = adapter->sessionId;
@@ -10081,7 +10122,7 @@ fail:
 	if (bpf_set_offload->current_length)
 		vos_mem_free(bpf_set_offload->program);
 	vos_mem_free(bpf_set_offload);
-	return -EINVAL;
+	return ret_val;
 }
 
 /**
@@ -11331,6 +11372,9 @@ void wlan_hdd_cfg80211_register_frames(hdd_adapter_t* pAdapter)
     ENTER();
     /* Register frame indication call back */
     sme_register_mgmt_frame_ind_callback(hHal, hdd_indicate_mgmt_frame);
+
+    /* Register for p2p ack indication */
+    sme_register_p2p_ack_ind_callback(hHal, hdd_send_action_cnf_cb);
 
    /* Right now we are registering these frame when driver is getting
       initialized. Once we will move to 2.6.37 kernel, in which we have
@@ -13455,7 +13499,7 @@ static int __wlan_hdd_cfg80211_stop_ap (struct wiphy *wiphy,
     VOS_STATUS      status     = VOS_STATUS_E_FAILURE;
     tSirUpdateIE    updateIE;
     beacon_data_t  *old;
-    int             ret;
+    int             ret = 0;
     unsigned long   rc;
     hdd_adapter_list_node_t *pAdapterNode = NULL;
     hdd_adapter_list_node_t *pNext        = NULL;
@@ -13482,18 +13526,6 @@ static int __wlan_hdd_cfg80211_stop_ap (struct wiphy *wiphy,
            pAdapter->device_mode);
 
     pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
-    ret = wlan_hdd_validate_context(pHddCtx);
-    if (0 != ret) {
-        if (pHddCtx->isUnloadInProgress) {
-            /*
-             * Unloading the driver so free the memory for ch_list,
-             * otherwise it will result in memory leak
-             */
-            if (pAdapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list)
-                vos_mem_free(pAdapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list);
-        }
-        return ret;
-    }
 
     status = hdd_get_front_adapter (pHddCtx, &pAdapterNode);
     while (NULL != pAdapterNode && VOS_STATUS_SUCCESS == status) {
@@ -13538,8 +13570,8 @@ static int __wlan_hdd_cfg80211_stop_ap (struct wiphy *wiphy,
     }
 
     pAdapter->sessionCtx.ap.sapConfig.acs_cfg.acs_mode = false;
-    if (pAdapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list)
-        vos_mem_free(pAdapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list);
+    wlan_hdd_undo_acs(pAdapter);
+
     vos_mem_zero(&pAdapter->sessionCtx.ap.sapConfig.acs_cfg,
                                                     sizeof(struct sap_acs_cfg));
 
@@ -17234,6 +17266,21 @@ int wlan_hdd_cfg80211_connect_start( hdd_adapter_t  *pAdapter,
             }
             hdd_select_cbmode(pAdapter,operatingChannel, &ch_width);
             pRoamProfile->vht_channel_width = ch_width;
+        }
+        /*
+         * if MFPEnabled is set but the peer AP is non-PMF i.e ieee80211w=2
+         * or pmf=2 is an explicit configuration in the supplicant
+         * configuration, drop the connection request.
+         */
+         if (pWextState->roamProfile.MFPEnabled &&
+            !(pWextState->roamProfile.MFPRequired ||
+            pWextState->roamProfile.MFPCapable)) {
+             hddLog(LOGE,
+                FL("Drop connect req as supplicant has indicated PMF required for the non-PMF peer. MFPEnabled %d MFPRequired %d MFPCapable %d"),
+                pWextState->roamProfile.MFPEnabled,
+                pWextState->roamProfile.MFPRequired,
+                pWextState->roamProfile.MFPCapable);
+             return -EINVAL;
         }
         /*
          * Change conn_state to connecting before sme_RoamConnect(),
@@ -22783,6 +22830,18 @@ int __wlan_hdd_cfg80211_suspend_wlan(struct wiphy *wiphy,
         if (sme_staInMiddleOfRoaming(pHddCtx->hHal, pAdapter->sessionId)) {
             hddLog(LOG1, FL("Roaming in progress, do not allow suspend"));
             return -EAGAIN;
+        }
+
+        if (pHddCtx->cfg_ini->enablePowersaveOffload &&
+            pHddCtx->cfg_ini->fIsBmpsEnabled &&
+            ((WLAN_HDD_INFRA_STATION == pAdapter->device_mode) ||
+            (WLAN_HDD_P2P_CLIENT == pAdapter->device_mode))) {
+            if (!sme_PsOffloadIsStaInPowerSave(pHddCtx->hHal,
+                                               pAdapter->sessionId)) {
+                hddLog(VOS_TRACE_LEVEL_DEBUG,
+                  FL("STA is not in power save, Do not allow suspend"));
+                return -EAGAIN;
+            }
         }
 
         if (pScanInfo->mScanPending && pAdapter->request)

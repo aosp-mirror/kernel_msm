@@ -193,7 +193,7 @@ typedef enum
  */
 typedef enum
 {
-    eCSR_SCAN_ABORT_DEFAULT,
+    eCSR_SCAN_ABORT_DEFAULT = 1,
     eCSR_SCAN_ABORT_DUE_TO_BAND_CHANGE, //Scan aborted due to band change
 }eCsrAbortReason;
 
@@ -499,7 +499,6 @@ typedef enum
 #endif
     eCSR_ROAM_FT_START,
     eCSR_ROAM_REMAIN_CHAN_READY,
-    eCSR_ROAM_SEND_ACTION_CNF,
     //this mean error happens before association_start or roaming_start is called.
     eCSR_ROAM_SESSION_OPENED,
     eCSR_ROAM_FT_REASSOC_FAILED,
@@ -1210,6 +1209,7 @@ typedef struct tagCsrConfigParam
     //The actual TX power is the lesser of this value and 11d.
     //If 11d is disable, the lesser of this and default setting.
     tANI_U8 nTxPowerCap;
+    tANI_BOOLEAN allow_tpc_from_ap;
     tANI_U32  statsReqPeriodicity;  //stats request frequency from PE while in full power
     tANI_U32  statsReqPeriodicityInPS;//stats request frequency from PE while in power save
 #ifdef WLAN_FEATURE_VOWIFI_11R

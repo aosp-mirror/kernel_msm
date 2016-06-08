@@ -637,6 +637,10 @@ enum
 //Not to use CFG default because if no registry setting, this is ignored by SME.
 #define CFG_MAX_TX_POWER_DEFAULT                WNI_CFG_CURRENT_TX_POWER_LEVEL_STAMAX
 
+#define CFG_TX_POWER_CTRL_NAME                 "gAllowTPCfromAP"
+#define CFG_TX_POWER_CTRL_DEFAULT              (1)
+#define CFG_TX_POWER_CTRL_MIN                  (0)
+#define CFG_TX_POWER_CTRL_MAX                  (1)
 
 #define CFG_LOW_GAIN_OVERRIDE_NAME             "gLowGainOverride"
 #define CFG_LOW_GAIN_OVERRIDE_MIN              WNI_CFG_LOW_GAIN_OVERRIDE_STAMIN
@@ -2355,14 +2359,6 @@ typedef enum
 #define CFG_MAX_MEDIUM_TIME_STADEFAULT           WNI_CFG_MAX_MEDIUM_TIME_STADEF
 
 /*
- * SCAN Offload
- */
-#define CFG_SCAN_OFFLOAD_NAME                     "gEnableDirectedScanOffload"
-#define CFG_SCAN_OFFLOAD_DISABLE                  ( 0 )
-#define CFG_SCAN_OFFLOAD_ENABLE                   ( 1 )
-#define CFG_SCAN_OFFLOAD_DEFAULT                  ( CFG_SCAN_OFFLOAD_DISABLE )
-
-/*
  * Enable legacy fast roaming (LFR) on STA link during concurrent sessions
  */
 #ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
@@ -3887,6 +3883,7 @@ struct hdd_config {
    v_U32_t       goLinkMonitorPeriod;
    v_U32_t       nBeaconInterval;
    v_U8_t        nTxPowerCap;   //In dBm
+   v_BOOL_t      allow_tpc_from_ap;
    v_BOOL_t      fIsLowGainOverride;
    v_U8_t        disablePacketFilter;
 #if defined WLAN_FEATURE_VOWIFI
@@ -4240,7 +4237,6 @@ struct hdd_config {
    v_BOOL_t                    enableSSR;
    v_U32_t                     cfgMaxMediumTime;
    v_BOOL_t                    enableVhtFor24GHzBand;
-   v_U8_t                      fScanOffload;
 #ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
    /* Flag indicating whether legacy fast roam during concurrency is enabled in cfg.ini or not */
    v_BOOL_t                    bFastRoamInConIniFeatureEnabled;

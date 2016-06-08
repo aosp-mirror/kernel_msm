@@ -4054,10 +4054,6 @@ hdd_smeRoamCallback(void *pContext, tCsrRoamInfo *pRoamInfo, tANI_U32 roamId,
         case eCSR_ROAM_REMAIN_CHAN_READY:
             hdd_remainChanReadyHandler( pAdapter );
             break;
-        case eCSR_ROAM_SEND_ACTION_CNF:
-            hdd_sendActionCnf( pAdapter,
-               (roamResult == eCSR_ROAM_RESULT_NONE) ? TRUE : FALSE );
-            break;
 #ifdef FEATURE_WLAN_TDLS
         case eCSR_ROAM_TDLS_STATUS_UPDATE:
             halStatus = hdd_RoamTdlsStatusUpdateHandler( pAdapter, pRoamInfo,

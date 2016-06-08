@@ -97,6 +97,7 @@
 #elif defined(HIF_SDIO)
 #include "if_ath_sdio.h"
 #endif
+#include <wlan_hdd_p2p.h>
 
 #include "ol_fw.h"
 /* Time in msec */
@@ -2303,7 +2304,6 @@ VOS_STATUS hdd_wlan_re_init(void *hif_sc)
    pHddCtx->hdd_mcastbcast_filter_set = FALSE;
    pHddCtx->btCoexModeSet = false;
    hdd_register_mcast_bcast_filter(pHddCtx);
-   hdd_ssr_timer_del();
 
    wlan_hdd_send_svc_nlink_msg(WLAN_SVC_FW_CRASHED_IND, NULL, 0);
 
@@ -2319,6 +2319,9 @@ VOS_STATUS hdd_wlan_re_init(void *hif_sc)
    vos_set_reinit_in_progress(VOS_MODULE_ID_VOSS, FALSE);
 
    sme_register_mgmt_frame_ind_callback(pHddCtx->hHal, hdd_indicate_mgmt_frame);
+
+   /* Register for p2p ack indication */
+   sme_register_p2p_ack_ind_callback(pHddCtx->hHal, hdd_send_action_cnf_cb);
 
 #ifdef FEATURE_WLAN_EXTSCAN
    sme_ExtScanRegisterCallback(pHddCtx->hHal,
@@ -2383,5 +2386,6 @@ success:
    /* Trigger replay of BTC events */
    send_btc_nlink_msg(WLAN_MODULE_DOWN_IND, 0);
    pHddCtx->isLogpInProgress = FALSE;
+   hdd_ssr_timer_del();
    return VOS_STATUS_SUCCESS;
 }

@@ -174,7 +174,6 @@ typedef enum {
     eSAP_GET_WPSPBC_SESSION_EVENT,  /* Event send when user call  WLANSAP_getWpsSessionOverlap */
     eSAP_WPS_PBC_PROBE_REQ_EVENT, /* Event send on WPS PBC probe request is received */
     eSAP_REMAIN_CHAN_READY,
-    eSAP_SEND_ACTION_CNF,
     eSAP_DISCONNECT_ALL_P2P_CLIENT,
     eSAP_MAC_TRIG_STOP_BSS_EVENT,
     eSAP_UNKNOWN_STA_JOIN, /* Event send when a STA in neither white list or black list tries to associate in softap mode */
@@ -412,7 +411,7 @@ typedef struct sap_Event_s {
         tSap_AssocStaListEvent                    sapAssocStaListEvent; /*SAP_ASSOC_STA_CALLBACK_EVENT */
         tSap_GetWPSPBCSessionEvent                sapGetWPSPBCSessionEvent; /*SAP_GET_WPSPBC_SESSION_EVENT */
         tSap_WPSPBCProbeReqEvent                  sapPBCProbeReqEvent; /*eSAP_WPS_PBC_PROBE_REQ_EVENT */
-        tSap_SendActionCnf                        sapActionCnf;  /* eSAP_SEND_ACTION_CNF */
+        tSap_SendActionCnf                        sapActionCnf;
         tSap_UnknownSTAJoinEvent                  sapUnknownSTAJoin; /* eSAP_UNKNOWN_STA_JOIN */
         tSap_MaxAssocExceededEvent                sapMaxAssocExceeded; /* eSAP_MAX_ASSOC_EXCEEDED */
         tSap_DfsNolInfo                           sapDfsNolInfo;    /*eSAP_DFS_NOL_XXX */

@@ -5072,9 +5072,7 @@ void limProcessRxScanEvent(tpAniSirGlobal pMac, void *buf)
                  * pending then indicate confirmation with status failure
                  */
                 if (pMac->lim.mgmtFrameSessionId != 0xff) {
-                    limSendSmeRsp(pMac, eWNI_SME_ACTION_FRAME_SEND_CNF,
-                                        eSIR_SME_SEND_ACTION_FAIL,
-                                        pMac->lim.mgmtFrameSessionId, 0);
+                    limP2PActionCnf(pMac, false);
                     pMac->lim.mgmtFrameSessionId = 0xff;
                 }
 
