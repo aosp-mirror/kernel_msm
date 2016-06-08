@@ -364,6 +364,92 @@ void schedtune_enqueue_task(struct task_struct *p, int cpu)
 	raw_spin_unlock_irqrestore(&bg->lock, irq_flags);
 }
 
+int schedtune_allow_attach(struct cgroup_subsys_state *css,
+		struct cgroup_taskset *tset)
+{
+	/* We always allows tasks to be moved between existing CGroups */
+	return 0;
+}
+
+int schedtune_can_attach(struct cgroup_subsys_state *css,
+			  struct cgroup_taskset *tset)
+{
+	struct task_struct *task;
+	struct boost_groups *bg;
+	unsigned long irq_flags;
+	unsigned int cpu;
+	struct rq *rq;
+	int src_bg; /* Source boost group index */
+	int dst_bg; /* Destination boost group index */
+	int tasks;
+
+	cgroup_taskset_for_each(task, tset) {
+
+		/*
+		 * Lock the CPU's RQ the task is enqueued to avoid race
+		 * conditions with migration code while the task is being
+		 * accounted
+		 */
+		rq = lock_rq_of(task, &irq_flags);
+
+		if (!task->on_rq) {
+			unlock_rq_of(rq, task, &irq_flags);
+			continue;
+		}
+
+		/*
+		 * Boost group accouting is protected by a per-cpu lock and requires
+		 * interrupt to be disabled to avoid race conditions on...
+		 */
+		cpu = cpu_of(rq);
+		bg = &per_cpu(cpu_boost_groups, cpu);
+		raw_spin_lock(&bg->lock);
+
+		dst_bg = css_st(css)->idx;
+		src_bg = task_schedtune(task)->idx;
+
+		/*
+		 * Current task is not changing boostgroup, which can
+		 * happen when the new hierarchy is in use.
+		 */
+		if (unlikely(dst_bg == src_bg)) {
+			raw_spin_unlock(&bg->lock);
+			unlock_rq_of(rq, task, &irq_flags);
+			continue;
+		}
+
+		/*
+		 * This is the case of a RUNNABLE task which is switching its
+		 * current boost group.
+		 */
+
+		/* Move task from src to dst boost group */
+		tasks = bg->group[src_bg].tasks - 1;
+		bg->group[src_bg].tasks = max(0, tasks);
+		bg->group[dst_bg].tasks += 1;
+
+		raw_spin_unlock(&bg->lock);
+		unlock_rq_of(rq, task, &irq_flags);
+
+		/* Update CPU boost group */
+		if (bg->group[src_bg].tasks == 0 || bg->group[dst_bg].tasks == 1)
+			schedtune_cpu_update(task_cpu(task));
+
+	}
+
+	return 0;
+}
+
+void schedtune_cancel_attach(struct cgroup_subsys_state *css,
+			     struct cgroup_taskset *tset)
+{
+	/* This can happen only if SchedTune controller is mounted with
+	 * other hierarchies ane one of them fails. Since usually SchedTune is
+	 * mouted on its own hierarcy, for the time being we do not implement
+	 * a proper rollback mechanism */
+	WARN(1, "SchedTune cancel attach not implemented");
+}
+
 /*
  * NOTE: This function must be called while holding the lock on the CPU RQ
  */
@@ -547,6 +633,9 @@ schedtune_css_free(struct cgroup_subsys_state *css)
 struct cgroup_subsys schedtune_cgrp_subsys = {
 	.css_alloc	= schedtune_css_alloc,
 	.css_free	= schedtune_css_free,
+	.allow_attach   = schedtune_allow_attach,
+	.can_attach     = schedtune_can_attach,
+	.cancel_attach  = schedtune_cancel_attach,
 	.legacy_cftypes	= files,
 	.early_init	= 1,
 };
