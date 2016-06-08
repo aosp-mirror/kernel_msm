@@ -4774,6 +4774,9 @@ static int smbchg_set_optimal_charging_mode(struct smbchg_chip *chip, int type)
 
 #define DEFAULT_SDP_MA		100
 #define DEFAULT_CDP_MA		1500
+#ifdef CONFIG_HTC_BATT
+#define DEFAULT_TYPE_UNKNOWN_MA	1100
+#endif /* CONFIG_HTC_BATT */
 static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 						enum power_supply_type type)
 {
@@ -4819,6 +4822,10 @@ static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 		current_limit_ma = smbchg_default_hvdcp_icl_ma;
 	else if (type == POWER_SUPPLY_TYPE_USB_HVDCP_3)
 		current_limit_ma = smbchg_default_hvdcp3_icl_ma;
+#ifdef CONFIG_HTC_BATT
+	else if (type == POWER_SUPPLY_TYPE_UNKNOWN)
+		current_limit_ma = DEFAULT_TYPE_UNKNOWN_MA;
+#endif /* CONFIG_HTC_BATT */
 	else
 		current_limit_ma = smbchg_default_dcp_icl_ma;
 
