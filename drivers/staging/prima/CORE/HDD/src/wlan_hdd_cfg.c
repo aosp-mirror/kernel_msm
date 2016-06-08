@@ -3516,13 +3516,13 @@ void dump_cfg_ini (tCfgIniEntry* iniTable, unsigned long entries)
 /* This function reads the wlan.ini file and
  * parses each 'Name=Value' pair in the ini file
  */
-char *tTemp;
 unsigned long hdd_parse_wlan_ini(hdd_context_t *pHddCtx,
 				tCfgIniEntry *iniTable, unsigned long entries)
 {
 	int status, i = 0, idx, idy, max = entries;
 	const struct firmware *fw = NULL;
 	char *buffer, *line;
+	char *tTemp;
 	size_t size;
 	char *name, *value;
 	tCfgIniEntry macIniTable[VOS_MAX_CONCURRENCY_PERSONA];
@@ -3612,6 +3612,7 @@ unsigned long hdd_parse_wlan_ini(hdd_context_t *pHddCtx,
 	}
 
 	release_firmware(fw);
+	vos_mem_free(tTemp);
 	return entries;
 }
 /* E: [Bug24] Implement Wi-Fi Read/Write MAC address */
@@ -3735,7 +3736,6 @@ VOS_STATUS hdd_parse_config_ini(hdd_context_t* pHddCtx)
 config_exit:
    release_firmware(fw);
    vos_mem_vfree(pTemp);
-   vos_mem_vfree(tTemp);
    return vos_status;
 }
 
