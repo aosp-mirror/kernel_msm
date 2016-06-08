@@ -5121,6 +5121,8 @@ static void smbchg_downgrade_iusb_work(struct work_struct *work)
 			chip->tables.usb_ilim_ma_table[downgrade_index],
 			chip->tables.usb_ilim_ma_table[target_index],
 			current_aicl, vbus, hard_limit);
+		power_supply_set_current_limit(chip->usb_psy,
+			chip->tables.usb_ilim_ma_table[downgrade_index]*1000);
 		vote(chip->usb_icl_votable, PSY_ICL_VOTER, true,
 			chip->tables.usb_ilim_ma_table[downgrade_index]);
 		schedule_delayed_work(&chip->downgrade_iusb_work,
@@ -5189,6 +5191,8 @@ static void smbchg_iusb_5v_2a_detect_work(struct work_struct *work)
 			chip->tables.usb_ilim_ma_table[upgrade_index],
 			chip->tables.usb_ilim_ma_table[target_index],
 			current_aicl, vbat_mv, vbus, hard_limit);
+		power_supply_set_current_limit(chip->usb_psy,
+			chip->tables.usb_ilim_ma_table[upgrade_index]*1000);
 		vote(chip->usb_icl_votable, PSY_ICL_VOTER, true,
 			chip->tables.usb_ilim_ma_table[upgrade_index]);
 		schedule_delayed_work(&chip->iusb_5v_2a_detect_work,
