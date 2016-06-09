@@ -356,10 +356,12 @@ static int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 		ret = mdss_dsi_panel_power_off(pdata);
 		break;
 	case MDSS_PANEL_POWER_ON:
-		if (mdss_dsi_is_panel_on_lp(pdata))
+		if (mdss_dsi_is_panel_on_lp(pdata)) {
 			ret = mdss_dsi_panel_power_lp(pdata, false);
-		else
+			goto end;
+		} else {
 			ret = mdss_dsi_panel_power_on(pdata);
+		}
 		break;
 	case MDSS_PANEL_POWER_LP1:
 	case MDSS_PANEL_POWER_LP2:
@@ -374,6 +376,7 @@ static int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 	if (!ret)
 		pinfo->panel_power_state = power_state;
 
+end:
 	return ret;
 }
 
@@ -1477,6 +1480,7 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 		pr_debug("%s: dsi_unblank with panel always on\n", __func__);
 		if (ctrl_pdata->low_power_config)
 			ret = ctrl_pdata->low_power_config(pdata, false);
+		pdata->panel_info.panel_power_state = MDSS_PANEL_POWER_ON;
 		goto error;
 	}
 
