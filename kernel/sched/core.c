@@ -791,8 +791,6 @@ void sched_avg_update(struct rq *rq)
 	}
 }
 
-#ifdef CONFIG_SCHED_HMP
-
 /*
  * Note C-state for (idle) cpus.
  *
@@ -7312,8 +7310,6 @@ void __init sched_init_smp(void)
 	hotcpu_notifier(sched_domains_numa_masks_update, CPU_PRI_SCHED_ACTIVE);
 	hotcpu_notifier(cpuset_cpu_active, CPU_PRI_CPUSET_ACTIVE);
 	hotcpu_notifier(cpuset_cpu_inactive, CPU_PRI_CPUSET_INACTIVE);
-
-	update_cluster_topology();
 
 	init_hrtick();
 
