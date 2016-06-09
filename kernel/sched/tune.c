@@ -306,28 +306,24 @@ schedtune_boostgroup_update(int idx, int boost)
 	return 0;
 }
 
+#define ENQUEUE_TASK  1
+#define DEQUEUE_TASK -1
+
 static inline void
 schedtune_tasks_update(struct task_struct *p, int cpu, int idx, int task_count)
 {
-	struct boost_groups *bg;
-	int tasks;
-
-	bg = &per_cpu(cpu_boost_groups, cpu);
+	struct boost_groups *bg = &per_cpu(cpu_boost_groups, cpu);
+	int tasks = bg->group[idx].tasks + task_count;
 
 	/* Update boosted tasks count while avoiding to make it negative */
-	if (task_count < 0 && bg->group[idx].tasks <= -task_count)
-		bg->group[idx].tasks = 0;
-	else
-		bg->group[idx].tasks += task_count;
-
-	/* Boost group activation or deactivation on that RQ */
-	tasks = bg->group[idx].tasks;
-	if (tasks == 1 || tasks == 0)
-		schedtune_cpu_update(cpu);
+	bg->group[idx].tasks = max(0, tasks);
 
 	trace_sched_tune_tasks_update(p, cpu, tasks, idx,
 			bg->group[idx].boost, bg->boost_max);
 
+	/* Boost group activation or deactivation on that RQ */
+	if (tasks == 1 || tasks == 0)
+		schedtune_cpu_update(cpu);
 }
 
 /*
@@ -353,7 +349,7 @@ void schedtune_enqueue_task(struct task_struct *p, int cpu)
 	idx = st->idx;
 	rcu_read_unlock();
 
-	schedtune_tasks_update(p, cpu, idx, 1);
+	schedtune_tasks_update(p, cpu, idx, ENQUEUE_TASK);
 }
 
 /*
@@ -380,7 +376,7 @@ void schedtune_dequeue_task(struct task_struct *p, int cpu)
 	idx = st->idx;
 	rcu_read_unlock();
 
-	schedtune_tasks_update(p, cpu, idx, -1);
+	schedtune_tasks_update(p, cpu, idx, DEQUEUE_TASK);
 }
 
 int schedtune_cpu_boost(int cpu)
