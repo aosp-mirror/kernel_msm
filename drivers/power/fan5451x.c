@@ -784,6 +784,8 @@ static enum power_supply_property msm_batt_power_props[] = {
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CURRENT_AVG,
+	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_TEMP,
 };
 
@@ -957,6 +959,36 @@ static int get_prop_current_now(struct fan5451x_chip *chip)
 	return 0;
 }
 
+static int get_prop_current_avg(struct fan5451x_chip *chip)
+{
+	union power_supply_propval ret = {0,};
+
+	if (chip->bms_psy) {
+		chip->bms_psy->get_property(chip->bms_psy,
+			  POWER_SUPPLY_PROP_CURRENT_AVG, &ret);
+		return ret.intval;
+	}
+
+	pr_debug("No BMS supply registered return 0\n");
+
+	return 0;
+}
+
+static int get_prop_charge_counter(struct fan5451x_chip *chip)
+{
+	union power_supply_propval ret = {0,};
+
+	if (chip->bms_psy) {
+		chip->bms_psy->get_property(chip->bms_psy,
+			  POWER_SUPPLY_PROP_CHARGE_COUNTER, &ret);
+		return ret.intval;
+	}
+
+	pr_debug("No BMS supply registered return 0\n");
+
+	return 0;
+}
+
 static int fan5451x_batt_power_get_property(struct power_supply *psy,
 				       enum power_supply_property psp,
 				       union power_supply_propval *val)
@@ -997,6 +1029,12 @@ static int fan5451x_batt_power_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = get_prop_current_now(chip);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_AVG:
+		val->intval = get_prop_current_avg(chip);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		val->intval = get_prop_charge_counter(chip);
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 		val->intval = chip->enable;
