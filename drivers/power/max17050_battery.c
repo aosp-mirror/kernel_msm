@@ -547,6 +547,7 @@ static enum power_supply_property max17050_battery_props[] = {
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CURRENT_AVG,
+	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 };
 
 static int max17050_get_property(struct power_supply *psy,
@@ -610,6 +611,12 @@ static int max17050_get_property(struct power_supply *psy,
 		val->intval = (s32)s16_value;
 		val->intval *= 1562500 / chip->pdata->r_sns;
 		val->intval *= -1;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		/* Remaining battery capacity in microampere-hours */
+		s16_value = (s16)chip->repcap;
+		val->intval = (s32)s16_value;
+		val->intval *= 5000000 / chip->pdata->r_sns;
 		break;
 	default:
 		return -EINVAL;
