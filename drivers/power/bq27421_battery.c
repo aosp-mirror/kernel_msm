@@ -267,6 +267,14 @@ static void bq27421_set_pwr_off_data(struct bq27421_chip *chip)
 	mutex_unlock(&chip->mutex);
 }
 
+static int check_limits(int max, int min, int val)
+{
+	val = max(min, val);
+	val = min(max, val);
+
+	return val;
+}
+
 /* Must call with mutex locked */
 static void bq27421_update(struct bq27421_chip *chip)
 {
@@ -286,9 +294,11 @@ static void bq27421_update(struct bq27421_chip *chip)
 		chip->current_now = ret;
 
 	ret = bq27421_read_word(client, BQ27421_SOC);
-	if (ret >= 0)
+	if (ret >= 0) {
 		chip->soc = ((ret - chip->empty_soc) * 100) /
 			(100 - chip->empty_soc);
+		chip->soc = check_limits(100, 0, chip->soc);
+	}
 
 	/* next update must be at least 1 second later */
 	ktime_get_ts(&chip->next_update_time);
