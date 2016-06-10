@@ -816,7 +816,6 @@ static int smp_cmd_encrypt_info(struct l2cap_conn *conn, struct sk_buff *skb)
 {
 	struct smp_cmd_encrypt_info *rp = (void *) skb->data;
 	struct smp_chan *smp = conn->smp_chan;
-	BT_DBG("conn %pK", conn);
 
 	skb_pull(skb, sizeof(*rp));
 
@@ -936,7 +935,6 @@ int smp_distribute_keys(struct l2cap_conn *conn, __u8 force)
 	struct smp_cmd_pairing *req, *rsp;
 	struct smp_chan *smp = conn->smp_chan;
 	__u8 *keydist;
-
 
 	BT_DBG("conn %pK force %d", conn, force);
 

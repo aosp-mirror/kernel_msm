@@ -706,10 +706,6 @@ static int rfcomm_tty_open(struct tty_struct *tty, struct file *filp)
 	}
 	set_current_state(TASK_RUNNING);
 	remove_wait_queue(&dev->wait, &wait);
-	BT_DBG("tty %pK id %d", tty, tty->index);
-
-	BT_DBG("dev %pK dst %pMR channel %d opened %d", dev, &dev->dst,
-	       dev->channel, dev->port.count);
 
 	if (err == 0)
 		device_move(dev->tty_dev, rfcomm_get_device(dev),
@@ -809,7 +805,6 @@ static int rfcomm_tty_write_room(struct tty_struct *tty)
 	room = rfcomm_room(dev->dlc) - atomic_read(&dev->wmem_alloc);
 	if (room < 0)
 		room = 0;
-	BT_DBG("tty %pK room %d", tty, room);
 
 	return room;
 }
