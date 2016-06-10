@@ -456,7 +456,7 @@ static int sco_sock_bind(struct socket *sock, struct sockaddr *addr, int alen)
 	struct sock *sk = sock->sk;
 	int len, err = 0;
 
-	BT_DBG("sk %pK %pMR", sk, &sa->sco_bdaddr);
+	BT_DBG("sk %pK %pMR", sk, &sa.sco_bdaddr);
 
 	if (!addr || addr->sa_family != AF_BLUETOOTH)
 		return -EINVAL;

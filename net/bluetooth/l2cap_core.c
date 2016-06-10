@@ -618,7 +618,8 @@ void l2cap_chan_close(struct l2cap_chan *chan, int reason)
 	struct l2cap_conn *conn = chan->conn;
 	struct sock *sk = chan->sk;
 
-	BT_DBG("chan %pK state %s sk %pK", chan, state_to_string(chan->state),sk);
+	BT_DBG("chan %pK state %s sk %pK", chan, state_to_string(chan->state),
+	       sk);
 
 	switch (chan->state) {
 	case BT_LISTEN:
@@ -1332,7 +1333,6 @@ static struct l2cap_chan *l2cap_global_chan_by_scid(int state, u16 cid,
 				c1 = c;
 		}
 	}
-	BT_DBG("%s conn %pK", hdev->name, c);
 
 	read_unlock(&chan_list_lock);
 
@@ -2262,8 +2262,7 @@ static struct sk_buff *l2cap_create_connless_pdu(struct l2cap_chan *chan,
 	int err, count, hlen = L2CAP_HDR_SIZE + L2CAP_PSMLEN_SIZE;
 	struct l2cap_hdr *lh;
 
-	BT_DBG("chan %pK psm 0x%2.2x len %zu", chan,
-	       __le16_to_cpu(chan->psm), len);
+	BT_DBG("chan %pK len %zu priority %u", chan, len, priority);
 
 	count = min_t(unsigned int, (conn->mtu - hlen), len);
 
@@ -2457,7 +2456,6 @@ int l2cap_chan_send(struct l2cap_chan *chan, struct msghdr *msg, size_t len,
 		skb = l2cap_create_connless_pdu(chan, msg, len, priority);
 		if (IS_ERR(skb))
 			return PTR_ERR(skb);
-	BT_DBG("chan %pK len %zu", chan, len);
 
 		l2cap_do_send(chan, skb);
 		return len;
@@ -3620,7 +3618,6 @@ void __l2cap_connect_rsp_defer(struct l2cap_chan *chan)
 		rsp_code = L2CAP_CREATE_CHAN_RSP;
 	else
 		rsp_code = L2CAP_CONN_RSP;
-
 
 	BT_DBG("chan %pK rsp_code %u", chan, rsp_code);
 
