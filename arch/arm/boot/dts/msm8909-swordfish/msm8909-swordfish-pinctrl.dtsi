@@ -44,28 +44,54 @@
 		};
 
 		pmx_mdss {
-			mdss_dsi_active: mdss_dsi_active {
+			mdss_reset_active: mdss_reset_active {
 				mux {
-					pins = "gpio25", "gpio38";
+					pins = "gpio25";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio25", "gpio38";
+					pins = "gpio25";
+					drive-strength = <8>; /* 8 mA */
+					bias-disable = <0>; /* no pull */
+				};
+			};
+
+			mdss_reset_suspend: mdss_reset_suspend {
+				mux {
+					pins = "gpio25";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio25";
+					drive-strength = <2>; /* 2 mA */
+					bias-pull-down; /* pull down */
+				};
+			};
+
+			mdss_enable_active: mdss_enable_active {
+				mux {
+					pins = "gpio38";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio38";
 					drive-strength = <8>; /* 8 mA */
 					bias-disable = <0>; /* no pull */
 					output-high;
 				};
 			};
 
-			mdss_dsi_suspend: mdss_dsi_suspend {
+			mdss_enable_suspend: mdss_enable_suspend {
 				mux {
-					pins = "gpio25", "gpio38";
+					pins = "gpio38";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio25", "gpio38";
+					pins = "gpio38";
 					drive-strength = <2>; /* 2 mA */
 					bias-pull-down; /* pull down */
 					output-low;
