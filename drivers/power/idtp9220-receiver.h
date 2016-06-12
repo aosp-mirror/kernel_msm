@@ -152,7 +152,7 @@ struct idtp9220_receiver  *global_idtp9220_receiver = NULL;
 #define IDTP9220_VOUT_ADJUST_STEP_MV            600
 #define IDTP9220_VBAT_HIGH_MV                   4350
 #define IDTP9220_VBAT_HIGH_DELTA_MV             50
-#define IDTP9220_VBAT_HIGH_CUR_LIMIT_MA         130
+#define IDTP9220_VBAT_HIGH_CUR_LIMIT_MA         220
 #define IDTP9220_TX_FREQ_KHZ                    470
 
 /* Vout config parameters */
