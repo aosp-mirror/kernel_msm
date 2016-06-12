@@ -127,6 +127,7 @@ struct mp2661_chg {
     struct mutex            read_write_lock;
 
     bool                usb_present;
+    int                 charging_status;
     int                fake_battery_soc;
     struct dentry            *debug_root;
 
@@ -1061,30 +1062,48 @@ static void mp2661_external_power_changed(struct power_supply *psy)
 extern int idtp9220_extern_ldoout_hard_enable(bool *ldoout_enable);
 static void mp2661_process_interrupt_work(struct work_struct *work)
 {
-    int rc, usb_present;
+    int rc, status, usb_present;
     bool ldoout_on = false;
     struct mp2661_chg *chip = container_of(work, struct mp2661_chg, process_interrupt_work);
 
-    rc = idtp9220_extern_ldoout_hard_enable(&ldoout_on);
-    if(rc)
+    /* check charging status */
+    status = mp2661_get_prop_batt_status(chip);
+    if(chip->charging_status != status)
     {
-        pr_err("Can not access idtp9220 LDO status\n");
-    }
-
-    if(!ldoout_on)
-    {
-        usb_present = mp2661_is_chg_plugged_in(chip);
-        if (chip->usb_present ^ usb_present)
+        pr_debug("charing status change from %d to %d\n", chip->charging_status, status);
+        chip->charging_status = status;
+        if(POWER_SUPPLY_STATUS_FULL == status)
         {
-            chip->usb_present = usb_present;
-            pr_err("usb_present = %d\n", chip->usb_present);
-            power_supply_set_present(chip->usb_psy, chip->usb_present);
+            pr_info("battery is full\n");
+            power_supply_changed(chip->bms_psy);
         }
     }
 
-    pr_debug("batt psy changed\n");
-    power_supply_changed(&chip->batt_psy);
-}
+    /* check usb status */
+    usb_present = mp2661_is_chg_plugged_in(chip);
+    if (chip->usb_present != usb_present)
+    {
+        chip->usb_present = usb_present;
+        pr_info("usb_present = %d\n", chip->usb_present);
+
+        rc = idtp9220_extern_ldoout_hard_enable(&ldoout_on);
+        if(rc)
+        {
+            pr_err("Can not access idtp9220 LDO status\n");
+        }
+
+        if(!ldoout_on)
+        {
+            power_supply_set_present(chip->usb_psy, chip->usb_present);
+            pr_info("usb psy changed\n");
+            power_supply_changed(chip->usb_psy);
+        }
+        else
+        {
+            power_supply_changed(&chip->batt_psy);
+        }
+    }
+ }
 
 static irqreturn_t mp2661_chg_stat_handler(int irq, void *dev_id)
 {
