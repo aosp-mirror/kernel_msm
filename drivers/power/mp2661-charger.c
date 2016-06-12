@@ -179,6 +179,8 @@ struct mp2661_chg {
     bool                     ap_mask_rx_int_gpio;
 };
 
+struct mp2661_chg  *global_mp2661 = NULL;
+
 #define RETRY_COUNT 5
 int retry_sleep_ms[RETRY_COUNT] = {
     10, 20, 30, 40, 50
@@ -534,6 +536,23 @@ static int mp2661_set_usb_input_current(struct mp2661_chg *chip,
         pr_err("cannot set usb input current to %dma rc = %d\n", current_limit, rc);
     }
     return rc;
+}
+
+void mp2661_global_set_usb_input_current_default(void)
+{
+    int rc;
+
+    if(!global_mp2661)
+    {
+        pr_err("mp2661 chip can not register\n");
+        return;
+    }
+
+    rc = mp2661_set_usb_input_current(global_mp2661, global_mp2661->usb_input_ma);
+    if(rc)
+    {
+        pr_err("Couldn't set usb input current rc = %d\n", rc);
+    }
 }
 
 static int mp2661_get_usb_input_current(struct mp2661_chg *chip)
@@ -1904,6 +1923,8 @@ static int mp2661_charger_probe(struct i2c_client *client,
         msecs_to_jiffies(MONITOR_WORK_DELAY_MS));
 
     create_debugfs_entries(chip);
+
+    global_mp2661 = chip;
 
     return 0;
 unregister_batt_psy:
