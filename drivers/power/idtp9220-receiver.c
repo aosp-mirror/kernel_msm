@@ -1670,6 +1670,7 @@ static const struct attribute_group idtp9220_sysfs_group_attrs = {
   .attrs = idtp9220_sysfs_attrs,
 };
 
+extern void mp2661_global_set_usb_input_current_default(void);
 static void idtp9220_monitor_work(struct work_struct *work)
 {
     int vbat;
@@ -1732,7 +1733,7 @@ static void idtp9220_monitor_work(struct work_struct *work)
                 /* danymic change usb input current */
                 if(vbat >= IDTP9220_VBAT_HIGH_MV && !chip->vbat_high)
                 {
-                    pr_err("adjust to low usb inpuct current limit\n");
+                    pr_err("adjust to low usb input current limit\n");
                     chip->vbat_high = true;
                     new_current_limit.intval = IDTP9220_VBAT_HIGH_CUR_LIMIT_MA;
                     chip->batt_psy->set_property(chip->batt_psy,
@@ -1740,11 +1741,9 @@ static void idtp9220_monitor_work(struct work_struct *work)
                 }
                 else if(vbat < IDTP9220_VBAT_HIGH_MV - IDTP9220_VBAT_HIGH_DELTA_MV && chip->vbat_high)
                 {
-                    pr_err("adjust to low cur limit\n");
+                    pr_err("restore to default usb input current limit\n");
                     chip->vbat_high = false;
-                    new_current_limit.intval = IDTP9220_VBAT_LOW_CUR_LIMIT_MA;
-                    chip->batt_psy->set_property(chip->batt_psy,
-                        POWER_SUPPLY_PROP_USB_INPUT_CURRENT, &new_current_limit);
+                    mp2661_global_set_usb_input_current_default();
                 }
             }
         }
