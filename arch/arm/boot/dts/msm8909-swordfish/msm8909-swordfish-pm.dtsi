@@ -187,8 +187,8 @@
 			vbatmin = <3000>;    //CC start voltage 3.0V
 			vfloat = <4400>;     //vbatmax
 			ibus = <500>;        //iusb for vbus
-			iin = <425>;         //iusb for wlc
-			iochrg = <400>;      //CC current
+			iin = <400>;         //iusb for wlc
+			iochrg = <250>;      //CC current
 			iterm = <50>;        //term current
 			prechg = <200>;      //pre charge current
 			topoff-enable = <0>; //post charging flag
@@ -197,7 +197,7 @@
 			vinovp = <10500>;    //ovd for wireless
 			vinlim = <4560>;     //uvd for wireless
 			fctmr = <0>;         //fast charge timer off
-			step-dwn-offset-ma = <200>;
+			step-dwn-offset-ma = <50>;
 			step-dwn-thr-mv = <4200>;
 		};
 	};
