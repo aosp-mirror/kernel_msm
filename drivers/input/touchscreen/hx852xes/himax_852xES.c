@@ -4191,7 +4191,7 @@ static ssize_t himax_fw_version_read(struct device *dev,
 {
     int ret;
     himax_read_FW_ver(false);
-    ret = sprintf(buf, "%x.%x,%x\n", private_ts->vendor_fw_ver_H,
+    ret = sprintf(buf, "%x.%x.%x\n", private_ts->vendor_fw_ver_H,
         private_ts->vendor_fw_ver_L, private_ts->vendor_config_ver);
     return ret;
 }
@@ -4201,7 +4201,7 @@ static ssize_t himax_checksum_read(struct device *dev,
 {
     int ret;
     ret = himax_calculateChecksum(false, true);
-    return sprintf(buf, "%d,%d,%d,%d\n", IC_checksum[0],IC_checksum[1],IC_checksum[2],IC_checksum[3]);
+    return sprintf(buf, "%d%d%d%d\n", IC_checksum[0],IC_checksum[1],IC_checksum[2],IC_checksum[3]);
 }
 #endif
 
