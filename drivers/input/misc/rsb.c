@@ -222,7 +222,7 @@ static int rsb_open(struct rsb_drv_data *rsb_data)
 
 	/* TODO(pmalani): How much of this is prepopulated from DT? */
 	rsb_data->device->max_speed_hz = 2000000;
-	rsb_data->device->mode = SPI_MODE_0;
+	rsb_data->device->mode = SPI_MODE_3;
 	rsb_data->device->bits_per_word = 8;
 	ret = spi_setup(rsb_data->device);
 	if (!ret) {
