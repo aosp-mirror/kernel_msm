@@ -161,6 +161,19 @@
 			maxim,param-version = <0x2>;
 		};
 
+		idtp9017@68 {
+			compatible = "idt,idtp9017";
+			status = "ok";
+			reg = <0x68>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <94 0x0>;
+			idt,wlc-enable-gpio = <&msm_gpio 94 0>;
+			idt,wlc-full-chg-gpio = <&msm_gpio 23 0>;
+			idt,wlc-off-gpio = <&msm_gpio 22 0>;
+			idt,limit-current = <500>; /* To check charging current */
+			idt,out-voltage = <6500>;
+		};
+
 		fan5451x_chg: fan5451x@6b {
 			status = "ok";
 			compatible = "fcs,fan5451x";
