@@ -71,10 +71,6 @@
 
 #define IGNORE_FN_INIT_FAILURE
 
-#define FB_READY_RESET
-#define FB_READY_WAIT_MS 100
-#define FB_READY_TIMEOUT_S 30
-
 #define RPT_TYPE (1 << 0)
 #define RPT_X_LSB (1 << 1)
 #define RPT_X_MSB (1 << 2)
@@ -947,7 +943,7 @@ static ssize_t synaptics_reset_store(struct device *dev,
 	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
 	unsigned int reset;
 
-	pr_info(" %s\n", __func__);
+	pr_info("%s\n", __func__);
 	if (sscanf(buf, "%u", &reset) != 1)
 		return -EINVAL;
 
@@ -4272,7 +4268,7 @@ static int synaptics_rmi4_hw_reset_device(struct synaptics_rmi4_data *rmi4_data)
 {
 	int retval;
 
-	pr_info(" %s\n", __func__);
+	pr_info("%s from %pS\n", __func__, __builtin_return_address(0));
 
 	retval = synaptics_rmi4_hw_reset(rmi4_data);
 	if (retval < 0) {
@@ -4290,6 +4286,8 @@ static int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data,
 {
 	int retval;
 	struct synaptics_rmi4_exp_fhandler *exp_fhandler;
+
+	pr_info("%s from %pS, rebuild = %d\n", __func__, __builtin_return_address(0), rebuild);
 
 	if (rebuild) {
 		queue_delayed_work(rmi4_data->rb_workqueue,
