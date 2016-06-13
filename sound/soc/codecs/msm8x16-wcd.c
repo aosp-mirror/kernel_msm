@@ -5567,7 +5567,7 @@ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
 	msm8x16_wcd_configure_cap(codec, false, false);
 	registered_codec = codec;
 	adsp_state_notifier =
-	    subsys_notif_register_notifier("adsp",
+	    subsys_notif_register_notifier("modem",
 					   &adsp_state_notifier_block);
 	if (!adsp_state_notifier) {
 		dev_err(codec->dev, "Failed to register adsp state notifier\n");

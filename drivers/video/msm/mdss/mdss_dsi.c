@@ -649,8 +649,10 @@ static ssize_t mdss_dsi_cmd_state_write(struct file *file,
 		return -ENOMEM;
 	}
 
-	if (copy_from_user(input, p, count))
+	if (copy_from_user(input, p, count)) {
+		kfree(input);
 		return -EFAULT;
+	}
 	input[count-1] = '\0';
 
 	if (strnstr(input, "dsi_hs_mode", strlen("dsi_hs_mode")))
@@ -2242,6 +2244,7 @@ static int mdss_dsi_set_stream_size(struct mdss_panel_data *pdata)
 	return 0;
 }
 
+#ifdef TARGET_HW_MDSS_HDMI
 static void mdss_dsi_dba_work(struct work_struct *work)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
@@ -2287,7 +2290,7 @@ static void mdss_dsi_dba_work(struct work_struct *work)
 				&ctrl_pdata->dba_work, HZ);
 	}
 }
-
+#endif
 static int mdss_dsi_reset_write_ptr(struct mdss_panel_data *pdata)
 {
 
@@ -2825,7 +2828,7 @@ static int mdss_dsi_ctrl_clock_init(struct platform_device *ctrl_pdev,
 error_clk_client_deregister:
 	mdss_dsi_clk_deregister(ctrl_pdata->dsi_clk_handle);
 error_clk_deinit:
-	mdss_dsi_clk_deinit(ctrl_pdata);
+	mdss_dsi_clk_deinit(ctrl_pdata->clk_mngr);
 error_link_clk_deinit:
 	mdss_dsi_link_clk_deinit(&ctrl_pdev->dev, ctrl_pdata);
 	return rc;
@@ -3080,9 +3083,9 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		rc = -EPERM;
 		goto error_pan_node;
 	}
-
+#ifdef TARGET_HW_MDSS_HDMI
 	INIT_DELAYED_WORK(&ctrl_pdata->dba_work, mdss_dsi_dba_work);
-
+#endif
 	pr_debug("%s: Dsi Ctrl->%d initialized\n", __func__, index);
 
 	if (index == 0)
@@ -3174,15 +3177,15 @@ static void mdss_dsi_res_deinit(struct platform_device *pdev)
 
 	for (i = 0; i < DSI_CTRL_MAX; i++) {
 		if (dsi_res->ctrl_pdata[i]) {
+#ifdef TARGET_HW_MDSS_HDMI
 			if (dsi_res->ctrl_pdata[i]->ds_registered) {
 				struct mdss_panel_info *pinfo =
 					&dsi_res->ctrl_pdata[i]->
 						panel_data.panel_info;
-
 				if (pinfo)
 					mdss_dba_utils_deinit(pinfo->dba_data);
 			}
-
+#endif
 			devm_kfree(&pdev->dev, dsi_res->ctrl_pdata[i]);
 		}
 	}
