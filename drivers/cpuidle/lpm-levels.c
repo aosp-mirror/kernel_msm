@@ -381,7 +381,12 @@ int set_l2_mode(struct low_power_ops *ops, int mode, bool notify_rpm)
 		lpm = MSM_SPM_MODE_DISABLED;
 		break;
 	}
-	rc = msm_spm_config_low_power_mode(ops->spm, lpm, notify_rpm);
+
+	if (lpm_wa_get_skip_l2_spm())
+		rc = msm_spm_config_low_power_mode_addr(ops->spm, lpm,
+							notify_rpm);
+	else
+		rc = msm_spm_config_low_power_mode(ops->spm, lpm, notify_rpm);
 
 	if (rc)
 		pr_err("%s: Failed to set L2 low power mode %d, ERR %d",
@@ -1276,7 +1281,6 @@ static int lpm_suspend_enter(suspend_state_t state)
 	struct lpm_cpu *lpm_cpu = cluster->cpu;
 	const struct cpumask *cpumask = get_cpu_mask(cpu);
 	int idx;
-	int64_t time = ktime_to_ns(ktime_get());
 
 	for (idx = lpm_cpu->nlevels - 1; idx >= 0; idx--) {
 
@@ -1288,7 +1292,7 @@ static int lpm_suspend_enter(suspend_state_t state)
 		return 0;
 	}
 	cpu_prepare(cluster, idx, false);
-	cluster_prepare(cluster, cpumask, idx, false, time);
+	cluster_prepare(cluster, cpumask, idx, false, 0);
 	if (idx > 0)
 		update_debug_pc_event(CPU_ENTER, idx, 0xdeaffeed,
 					0xdeaffeed, false);
@@ -1310,8 +1314,7 @@ static int lpm_suspend_enter(suspend_state_t state)
 		update_debug_pc_event(CPU_EXIT, idx, true, 0xdeaffeed,
 					false);
 
-	time = ktime_to_ns(ktime_get());
-	cluster_unprepare(cluster, cpumask, idx, false, time);
+	cluster_unprepare(cluster, cpumask, idx, false, 0);
 	cpu_unprepare(cluster, idx, false);
 	return 0;
 }
