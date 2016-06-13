@@ -131,12 +131,11 @@ struct max17050_platform_data {
 	u16 config;
 	u16 filtercfg;
 	u16 learncfg;
-	u16 misccfg;
 	u16 fullsocthr;
+	u16 iavg_empty;
 
 	u16 rcomp0;
 	u16 tempco;
-	u16 tempnom;
 	u16 tgain;
 	u16 toff;
 
@@ -150,7 +149,7 @@ struct max17050_platform_data {
 	u16 capacity;
 	u16 vf_fullcap;
 
-	u16 temperature;
+	u16 cycles;
 	u16 dpacc;
 	u16 param_version;
 

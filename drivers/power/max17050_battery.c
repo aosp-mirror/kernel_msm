@@ -187,18 +187,19 @@ static void max17050_init_chip(struct max17050_chip *chip)
 	u16 vfsoc;
 	u16 remcap;
 	u16 repcap;
+	u16 qh;
 	u8 i;
 
 	/* Wait 500ms after power up */
 	msleep(500);
 
 	/* Init config registers */
-	max17050_write_reg(client, MAX17050_RELAXCFG, chip->pdata->relaxcfg);
 	max17050_write_reg(client, MAX17050_CONFIG, chip->pdata->config);
 	max17050_write_reg(client, MAX17050_FILTERCFG, chip->pdata->filtercfg);
+	max17050_write_reg(client, MAX17050_RELAXCFG, chip->pdata->relaxcfg);
 	max17050_write_reg(client, MAX17050_LEARNCFG, chip->pdata->learncfg);
-	max17050_write_reg(client, MAX17050_MISCCFG, chip->pdata->misccfg);
 	max17050_write_reg(client, MAX17050_FULLSOCTHR, chip->pdata->fullsocthr);
+	max17050_write_reg(client, MAX17050_IAVG_EMPTY,	chip->pdata->iavg_empty);
 
 	/* Unlock model using magic lock numbers from Maxim */
 	max17050_write_reg(client, MAX17050_MODEL_LOCK1, 0x59);
@@ -222,14 +223,12 @@ static void max17050_init_chip(struct max17050_chip *chip)
 						chip->pdata->rcomp0);
 	max17050_write_verify_reg(client, MAX17050_TEMPCO,
 						chip->pdata->tempco);
-	max17050_write_verify_reg(client, MAX17050_TEMPNOM,
-						chip->pdata->tempnom);
+	max17050_write_verify_reg(client, MAX17050_ICHGTERM,
+						chip->pdata->ichgterm);
 	max17050_write_verify_reg(client, MAX17050_TGAIN,
 						chip->pdata->tgain);
 	max17050_write_verify_reg(client, MAX17050_TOFF,
 						chip->pdata->toff);
-	max17050_write_verify_reg(client, MAX17050_ICHGTERM,
-						chip->pdata->ichgterm);
 	max17050_write_verify_reg(client, MAX17050_V_EMPTY,
 						chip->pdata->vempty);
 	max17050_write_verify_reg(client, MAX17050_QRTABLE00,
@@ -256,11 +255,12 @@ static void max17050_init_chip(struct max17050_chip *chip)
 	vfsoc = max17050_read_reg(client, MAX17050_VFSOC);
 	max17050_write_reg(client, MAX17050_VFSOC0_LOCK, 0x0080);
 	max17050_write_verify_reg(client, MAX17050_VFSOC0, vfsoc);
+	qh = max17050_read_reg(client, MAX17050_QH);
+	max17050_write_reg(client, MAX17050_QH0, qh);
 	max17050_write_reg(client, MAX17050_VFSOC0_LOCK, 0);
 
-	/* Write temperature */
-	max17050_write_verify_reg(client, MAX17050_TEMP,
-						chip->pdata->temperature);
+	/* Advance to Coulomb-Counter Mode */
+	max17050_write_verify_reg(client, MAX17050_CYCLES, chip->pdata->cycles);
 
 	/* Load new capacity params */
 	remcap = (vfsoc * chip->pdata->vf_fullcap) / 25600;
@@ -268,15 +268,16 @@ static void max17050_init_chip(struct max17050_chip *chip)
 	repcap = remcap;
 	max17050_write_verify_reg(client, MAX17050_REPCAP, repcap);
 
+	max17050_write_verify_reg(client, MAX17050_DPACC, chip->pdata->dpacc);
 	max17050_write_verify_reg(client, MAX17050_DQACC,
 						chip->pdata->vf_fullcap / 16);
-	max17050_write_verify_reg(client, MAX17050_DPACC, chip->pdata->dpacc);
 	max17050_write_verify_reg(client, MAX17050_FULLCAP,
 						chip->pdata->capacity);
 	max17050_write_reg(client, MAX17050_DESIGNCAP,
 						chip->pdata->vf_fullcap);
 	max17050_write_verify_reg(client, MAX17050_FULLCAPNOM,
 						chip->pdata->vf_fullcap);
+	max17050_write_reg(client, MAX17050_REPSOC, vfsoc);
 
 	/* Complete initialisation */
 	chip->status = max17050_read_reg(client, MAX17050_STATUS);
@@ -359,9 +360,9 @@ static void max17050_restore_learned_params(struct max17050_chip *chip)
 	max17050_write_verify_reg(client, MAX17050_REMCAP, remcap);
 	max17050_write_verify_reg(client, MAX17050_FULLCAP,
 						chip->learned.fullcap);
+	max17050_write_verify_reg(client, MAX17050_DPACC, chip->pdata->dpacc);
 	max17050_write_verify_reg(client, MAX17050_DQACC,
 						chip->learned.fullcap / 16);
-	max17050_write_verify_reg(client, MAX17050_DPACC, chip->pdata->dpacc);
 
 	msleep(350);
 
@@ -751,16 +752,14 @@ max17050_get_pdata(struct device *dev)
 		pdata->filtercfg = prop;
 	if (of_property_read_u32(np, "maxim,learncfg", &prop) == 0)
 		pdata->learncfg = prop;
-	if (of_property_read_u32(np, "maxim,misccfg", &prop) == 0)
-		pdata->misccfg = prop;
 	if (of_property_read_u32(np, "maxim,fullsocthr", &prop) == 0)
 		pdata->fullsocthr = prop;
+	if (of_property_read_u32(np, "maxim,iavg_empty", &prop) == 0)
+		pdata->iavg_empty = prop;
 	if (of_property_read_u32(np, "maxim,rcomp0", &prop) == 0)
 		pdata->rcomp0 = prop;
 	if (of_property_read_u32(np, "maxim,tempco", &prop) == 0)
 		pdata->tempco = prop;
-	if (of_property_read_u32(np, "maxim,tempnom", &prop) == 0)
-		pdata->tempnom = prop;
 	if (of_property_read_u32(np, "maxim,tgain", &prop) == 0)
 		pdata->tgain = prop;
 	if (of_property_read_u32(np, "maxim,toff", &prop) == 0)
@@ -781,8 +780,8 @@ max17050_get_pdata(struct device *dev)
 		pdata->capacity = prop;
 	if (of_property_read_u32(np, "maxim,vf_fullcap", &prop) == 0)
 		pdata->vf_fullcap = prop;
-	if (of_property_read_u32(np, "maxim,temperature", &prop) == 0)
-		pdata->temperature = prop;
+	if (of_property_read_u32(np, "maxim,cycles", &prop) == 0)
+		pdata->cycles = prop;
 	if (of_property_read_u32(np, "maxim,dpacc", &prop) == 0)
 		pdata->dpacc = prop;
 	if (of_property_read_u32(np, "maxim,empty-soc", &prop) == 0)
