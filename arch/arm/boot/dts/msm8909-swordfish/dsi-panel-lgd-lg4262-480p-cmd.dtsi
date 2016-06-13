@@ -43,7 +43,6 @@
 		qcom,esd-check-enabled;
 		qcom,mdss-dsi-on-command = [
 			15 01 00 00 00 00 02 53 20 /* Display Control */
-			39 01 00 00 00 00 03 51 01 00
 			05 01 00 00 66 00 01 11 /* Sleep out */
 			15 01 00 00 00 00 02 5C 20 /* Image Enhancement Control*/
 			39 01 00 00 00 00 02 5E 0B
