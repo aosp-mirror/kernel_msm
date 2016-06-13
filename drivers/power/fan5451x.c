@@ -44,6 +44,7 @@ struct fan5451x_chip {
 	struct power_supply batt_psy;
 	struct power_supply *usb_psy;
 	struct power_supply *bms_psy;
+	struct power_supply *wlc_psy;
 	struct qpnp_vadc_chip *vadc_dev;
 
 	int stat_gpio;
@@ -514,6 +515,9 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 		if (chip->wlc_present ^ wlc_present) {
 			chip->wlc_present = wlc_present;
 			pr_info("wlc present %d\n", wlc_present);
+			if (chip->wlc_psy)
+				power_supply_set_present(chip->wlc_psy,
+						chip->wlc_present);
 			found = true;
 		}
 	}
@@ -737,6 +741,15 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 
 	if (!chip->bms_psy)
 		chip->bms_psy = power_supply_get_by_name("bms");
+
+	if (!chip->wlc_psy) {
+		chip->wlc_psy = power_supply_get_by_name("wireless");
+		if (chip->wlc_psy) {
+			chip->wlc_present = fan5451x_wlc_chg_plugged_in(chip);
+			power_supply_set_present(chip->wlc_psy, chip->wlc_present);
+			pr_info("wlc present %d\n", chip->wlc_present);
+		}
+	}
 
 	if (fan5451x_usb_chg_plugged_in(chip)) {
 		chip->usb_psy->get_property(chip->usb_psy,
