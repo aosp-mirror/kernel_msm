@@ -32,6 +32,8 @@
 #define USB_SSPHY_1P8_VOL_MAX		1800000 /* uV */
 #define USB_SSPHY_1P8_HPM_LOAD		23000	/* uA */
 
+#define USB3_QSERDES_TX_DRV_LVL		0x22C
+#define USB3_QSERDES_TX_DRV_LVL_VALUE	0x13
 
 /* USB3PHY_PCIE_USB3_PCS_PCS_STATUS bit */
 #define PHYSTATUS				BIT(6)
@@ -528,6 +530,7 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 	unsigned init_timeout_usec = INIT_MAX_TIME_USEC;
 	u32 revid;
 	const struct qmp_reg_val *reg = NULL, *misc = NULL, *pll = NULL;
+	u8 tx_drv_value = USB3_QSERDES_TX_DRV_LVL_VALUE;
 
 	dev_dbg(uphy->dev, "Initializing QMP phy\n");
 
@@ -594,6 +597,11 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 		dev_err(uphy->dev, "Failed the main PHY configuration\n");
 		return ret;
 	}
+
+	/* Overwrite default settings for TX eye-diagram tuning */
+	writel_relaxed(tx_drv_value, phy->base + USB3_QSERDES_TX_DRV_LVL);
+	tx_drv_value = readl_relaxed(phy->base + USB3_QSERDES_TX_DRV_LVL);
+	pr_info("[USB] USB3_QSERDES_TX_DRV_LVL = 0x%x\n", tx_drv_value);
 
 	/* Feature specific configurations */
 	if (phy->override_pll_cal) {
