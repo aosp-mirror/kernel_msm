@@ -1256,8 +1256,8 @@ static int get_prop_batt_temp(struct smbchg_chip *chip)
 #ifdef CONFIG_HTC_BATT
 	if (g_smb_test_power_monitor)
 		temp = POWER_MONITOR_BATT_TEMP;
-	if (temp > 650 && g_smb_flag_keep_charge_on)
-		temp = 650;
+	if (temp > 570 && g_smb_flag_keep_charge_on)
+		temp = 570;
 #endif /* CONFIG_HTC_BATT */
 
 	return temp;
