@@ -55,25 +55,25 @@ static struct stc311x_platform_data stc3117_data = {
 	.OCVValue[15] = 4388,            /* OCV curve adjustment */
 
 	.SOCValue[0]  = 0x0,
-	.SOCValue[1]  = 0x3,
-	.SOCValue[2]  = 0x6,
-	.SOCValue[3]  = 0x0A,
-	.SOCValue[4]  = 0x0F,
-	.SOCValue[5]  = 0x14,
-	.SOCValue[6]  = 0x19,
-	.SOCValue[7]  = 0x1E,
-	.SOCValue[8]  = 0x28,
-	.SOCValue[9]  = 0x32,
-	.SOCValue[10] = 0x3C,
-	.SOCValue[11] = 0x41,
-	.SOCValue[12] = 0x46,
-	.SOCValue[13] = 0x50,
-	.SOCValue[14] = 0x5A,
-	.SOCValue[15] = 0x64,
+	.SOCValue[1]  = 0x6,
+	.SOCValue[2]  = 0x0C,
+	.SOCValue[3]  = 0x14,
+	.SOCValue[4]  = 0x1E,
+	.SOCValue[5]  = 0x28,
+	.SOCValue[6]  = 0x32,
+	.SOCValue[7]  = 0x3C,
+	.SOCValue[8]  = 0x50,
+	.SOCValue[9]  = 0x64,
+	.SOCValue[10] = 0x78,
+	.SOCValue[11] = 0x82,
+	.SOCValue[12] = 0x8C,
+	.SOCValue[13] = 0xA0,
+	.SOCValue[14] = 0xB4,
+	.SOCValue[15] = 0xC8,
 
-		/*if the application temperature data is preferred than the STC3117 temperature*/
-		.ExternalTemperature = Temperature_fn, /*External temperature fonction, return °C*/
-		.ForceExternalTemperature = 0, /* 1=External temperature, 0=STC3117 temperature */
+	/*if the application temperature data is preferred than the STC3117 temperature*/
+	.ExternalTemperature = Temperature_fn, /*External temperature fonction, return °C*/
+	.ForceExternalTemperature = 0, /* 1=External temperature, 0=STC3117 temperature */
 
 };
 #endif
