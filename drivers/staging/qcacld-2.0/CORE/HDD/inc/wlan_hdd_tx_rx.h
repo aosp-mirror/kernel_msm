@@ -77,6 +77,11 @@
 
 #define HDD_ETH_HEADER_LEN      14
 
+#define TX_PATH 1
+#define RX_PATH 0
+#define STA  1
+#define AP 0
+
 /*---------------------------------------------------------------------------
   Type declarations
   -------------------------------------------------------------------------*/
@@ -245,4 +250,7 @@ void hdd_tx_resume_timer_expired_handler(void *adapter_context);
  */
 VOS_STATUS hdd_mon_rx_packet_cbk(v_VOID_t *vos_ctx, adf_nbuf_t rx_buf,
 				 uint8_t sta_id);
+
+void hdd_dhcp_pkt_trace_buf_update(struct sk_buff *skb, int is_transmission,
+				   int is_sta);
 #endif    // end #if !defined( WLAN_HDD_TX_RX_H )
