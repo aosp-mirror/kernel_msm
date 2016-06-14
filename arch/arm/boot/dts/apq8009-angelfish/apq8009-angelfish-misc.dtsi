@@ -16,7 +16,7 @@
 		reg = <0x5a>;
 		interrupt-parent = <&msm_gpio>;
 		interrupts = <31 0x00>;
-		vdd-supply = <&haptic_ext_vreg>;
+		vdd-supply = <&pm8916_l17>;
 		enable-gpio = <&msm_gpio 88 0x00>;
 		loop = <0x00>; /* CSLOSE: 0x00, OPEN: 0x01 */
 		actuator {
