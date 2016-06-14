@@ -631,6 +631,7 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	case BL_DCS_CMD:
 		if (!mdss_dsi_sync_wait_enable(ctrl_pdata)) {
 			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
+			mdss_dsi_brightness_boost_enable(ctrl_pdata, bl_level);
 			break;
 		}
 		/*
@@ -643,10 +644,12 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 		 */
 		sctrl = mdss_dsi_get_other_ctrl(ctrl_pdata);
 		if (mdss_dsi_sync_wait_trigger(ctrl_pdata)) {
+			mdss_dsi_brightness_boost_enable(ctrl_pdata, bl_level);
 			if (sctrl)
 				mdss_dsi_panel_bklt_dcs(sctrl, bl_level);
 			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
 		} else {
+			mdss_dsi_brightness_boost_enable(ctrl_pdata, bl_level);
 			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
 			if (sctrl)
 				mdss_dsi_panel_bklt_dcs(sctrl, bl_level);

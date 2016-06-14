@@ -707,8 +707,33 @@ static struct dsi_cmd_desc dsi_into_idle_cmd = {
 
 static char set_non_idle_mode[2] = {0x38, 0x00};
 static struct dsi_cmd_desc dsi_exit_idle_cmd = {
-          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_non_idle_mode)}, set_non_idle_mode};		  
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_non_idle_mode)}, set_non_idle_mode};
+		  
+// Set Brightness boost mode
+static char set_brightness_mode_start[2] = {0xfe, 0x05};
+static struct dsi_cmd_desc dsi_brightness_mode_start_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_brightness_mode_start)}, set_brightness_mode_start};
+		  
+static char set_brightness_mode_1[2] = {0xc0, 0x01};
+static struct dsi_cmd_desc dsi_brightness_mode_1_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_brightness_mode_1)}, set_brightness_mode_1};
+		  
+static char set_brightness_mode_2[2] = {0xc1, 0x17};
+static struct dsi_cmd_desc dsi_brightness_mode_2_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_brightness_mode_2)}, set_brightness_mode_2};
 
+static char set_brightness_mode_exit_1[2] = {0xc0, 0x05};
+static struct dsi_cmd_desc dsi_brightness_mode_exit_1_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_brightness_mode_exit_1)}, set_brightness_mode_exit_1};
+		  
+static char set_brightness_mode_exit_2[2] = {0xc1, 0x12};
+static struct dsi_cmd_desc dsi_brightness_mode_exit_2_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_brightness_mode_exit_2)}, set_brightness_mode_exit_2};		  
+		  
+static char set_brightness_mode_done[2] = {0xfe, 0x00};
+static struct dsi_cmd_desc dsi_brightness_mode_done_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_brightness_mode_done)}, set_brightness_mode_done};
+		  
 void mdss_dsi_send_cmd(struct mdss_dsi_ctrl_pdata *ctrl, struct dsi_cmd_desc *cmd)
 {
 	struct dcs_cmd_req cmdreq;
@@ -720,6 +745,42 @@ void mdss_dsi_send_cmd(struct mdss_dsi_ctrl_pdata *ctrl, struct dsi_cmd_desc *cm
 	cmdreq.cb = NULL;
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
+
+void mdss_dsi_brightness_boost_enable(struct mdss_dsi_ctrl_pdata *ctrl, int brightness)
+{
+	struct mdss_panel_info *pinfo;
+	static bool is_brightness_boost_mode = false;
+	
+	pinfo = &(ctrl->panel_data.panel_info);
+	if (pinfo->dcs_cmd_by_left && ctrl->ndx != DSI_CTRL_LEFT)
+		return;
+
+	if ((brightness == pinfo->brightness_max) && (is_brightness_boost_mode == false))
+	{
+		is_brightness_boost_mode = true;
+
+		pr_debug("[Debug] Brightness boost mode enable!!!, brightness:%d\n", brightness);
+
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_start_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_1_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_2_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_done_cmd);
+	}
+	
+	if ((brightness != pinfo->brightness_max) && (is_brightness_boost_mode == true))
+	{
+		is_brightness_boost_mode = false;
+
+		pr_debug("[Debug] Brightness boost mode disable!!!brightness:%d\n", brightness);
+
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_start_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_exit_1_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_exit_2_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_done_cmd);
+	}
+	else
+		pr_debug("[Debug] Skip brightness boost command, is_brightness_boost_mode: %d, brightness:%d \n",is_brightness_boost_mode, brightness);
+} 
 		  
 void mdss_dsi_3bit_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 {
