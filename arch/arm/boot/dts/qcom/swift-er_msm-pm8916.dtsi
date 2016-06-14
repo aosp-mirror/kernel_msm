@@ -223,14 +223,14 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 
-			qcom,vddmax-mv = <4350>;
-			qcom,vddsafe-mv = <4380>;
-			qcom,vinmin-mv = <4450>;
+			qcom,vddmax-mv = <4400>;
+			qcom,vddsafe-mv = <4430>;
+			qcom,vinmin-mv = <4500>;
 			qcom,ibatsafe-ma = <540>;
 			qcom,thermal-mitigation = <1440 720 630 0>;
 			qcom,cool-bat-decidegc = <220>;
 			qcom,warm-bat-decidegc = <450>;
-			qcom,cool-bat-mv = <4350>;
+			qcom,cool-bat-mv = <4400>;
 			qcom,warm-bat-mv = <4100>;
 			qcom,ibatmax-warm-ma = <360>;
 			qcom,ibatmax-cool-ma = <360>;
