@@ -1,0 +1,101 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "mdm9640-v2.dtsi"
+#include "mdm9640-pinctrl.dtsi"
+
+&soc {
+	sound {
+		qcom,cdc-micbias2-headset-only;
+	};
+};
+
+&blsp1_uart3 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart3_console_active>;
+};
+
+&blsp1_uart2 {
+	status = "ok";
+};
+
+&ipa_hw {
+	qcom,ipa-hw-mode = <1>; /* IPA hw type = Virtual */
+};
+
+&i2c_3 {
+	smb1357_otg_supply: smb1357-charger@1c {
+		compatible = "qcom,smb1357-charger";
+		reg = <0x1c>;
+		interrupt-parent = <&tlmm_pinmux>;
+		interrupts = <83 0>;    /* MDM GPIO 83 */
+		qcom,float-voltage-mv = <4200>;
+		qcom,charging-timeout = <1536>;
+		qcom,recharge-thresh-mv = <200>;
+		qcom,iterm-ma = <100>;
+		regulator-name = "smb1357_otg_supply";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pmx_smb_stat_active>;
+		qcom,id-line-not-connected;
+		qcom,bmd-algo-disabled;
+	};
+};
+
+&pmd9635_gpios {
+	gpio@c000 { /* GPIO 1 */
+	};
+
+	gpio@c100 { /* GPIO 2 */
+		qcom,mode = <1>;               /* Digital output */
+		qcom,output-type = <0>;        /* CMOS logic */
+		qcom,invert = <0>;             /* no inversion */
+		qcom,vin-sel = <2>;            /* VIN 2 */
+		qcom,src-sel = <2>;            /* Function 2 */
+		qcom,out-strength = <2>;       /* Medium */
+		qcom,master-en = <1>;          /* Enable GPIO */
+		status = "ok";
+	};
+
+	gpio@c200 { /* GPIO 3 */
+	};
+
+	gpio@c300 { /* GPIO 4 */
+		status = "ok";
+		qcom,mode = <0>;	/* Digital input */
+		qcom,pull = <1>;	/* Pull up 1.5 uA */
+		qcom,vin-sel = <2>;	/* PMD9635 LDO 6 = 1.8 V */
+		qcom,master-en = <1>;	/* Enable GPIO */
+	};
+
+	gpio@c400 { /* GPIO 5 */
+	};
+
+	gpio@c500 { /* GPIO 6 */
+		qcom,mode = <1>;         /* Digital output*/
+		qcom,pull = <4>;         /* Pulldown 10uA */
+		qcom,vin-sel = <2>;      /* VIN2 */
+		qcom,src-sel = <0>;      /* GPIO */
+		qcom,invert = <0>;       /* Invert */
+		qcom,master-en = <1>;    /* Enable GPIO */
+		status = "ok";
+	};
+};
+
+&qnand_1 {
+	status = "ok";
+};
+
+&usb3 {
+	vbus_dwc3-supply = <&smb1357_otg_supply>;
+	qcom,cpe-gpio = <&tlmm_pinmux 87 0>;
+};

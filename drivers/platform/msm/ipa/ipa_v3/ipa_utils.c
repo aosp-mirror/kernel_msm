@@ -45,6 +45,13 @@
 #define IPA_EOT_COAL_GRAN_MIN (1)
 #define IPA_EOT_COAL_GRAN_MAX (16)
 
+#define IPA_AGGR_BYTE_LIMIT (\
+		IPA_ENDP_INIT_AGGR_N_AGGR_BYTE_LIMIT_BMSK >> \
+		IPA_ENDP_INIT_AGGR_N_AGGR_BYTE_LIMIT_SHFT)
+#define IPA_AGGR_PKT_LIMIT (\
+		IPA_ENDP_INIT_AGGR_n_AGGR_PKT_LIMIT_BMSK >> \
+		IPA_ENDP_INIT_AGGR_n_AGGR_PKT_LIMIT_SHFT)
+
 /* In IPAv3 only endpoints 0-3 can be configured to deaggregation */
 #define IPA_EP_SUPPORTS_DEAGGR(idx) ((idx) >= 0 && (idx) <= 3)
 
@@ -2278,6 +2285,7 @@ int ipa3_generate_flt_eq_ip4(enum ipa_ip_type ip,
 	return 0;
 }
 
+/* This is called only before sending ipa_install_fltr_rule_req_msg to Q6 */
 int ipa3_generate_flt_eq_ip6(enum ipa_ip_type ip,
 		const struct ipa_rule_attrib *attrib,
 		struct ipa_ipfltri_rule_eq *eq_atrb)
@@ -2308,22 +2316,23 @@ int ipa3_generate_flt_eq_ip6(enum ipa_ip_type ip,
 		}
 		*en_rule |= ipa_ofst_meq128[ofst_meq128];
 		eq_atrb->offset_meq_128[ofst_meq128].offset = 8;
+		/* use the same word order as in ipa v2 */
 		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].mask + 0)
-			= attrib->u.v6.src_addr_mask[3];
-		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].mask + 4)
-			= attrib->u.v6.src_addr_mask[2];
-		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].mask + 8)
-			= attrib->u.v6.src_addr_mask[1];
-		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].mask + 12)
 			= attrib->u.v6.src_addr_mask[0];
+		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].mask + 4)
+			= attrib->u.v6.src_addr_mask[1];
+		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].mask + 8)
+			= attrib->u.v6.src_addr_mask[2];
+		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].mask + 12)
+			= attrib->u.v6.src_addr_mask[3];
 		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].value + 0)
-			= attrib->u.v6.src_addr[3];
+			= attrib->u.v6.src_addr[0];
 		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].value + 4)
-			= attrib->u.v6.src_addr[2];
-		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].value + 8)
 			= attrib->u.v6.src_addr[1];
+		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].value + 8)
+			= attrib->u.v6.src_addr[2];
 		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].value +
-				12) = attrib->u.v6.src_addr[0];
+				12) = attrib->u.v6.src_addr[3];
 		ofst_meq128++;
 	}
 
@@ -2334,22 +2343,23 @@ int ipa3_generate_flt_eq_ip6(enum ipa_ip_type ip,
 		}
 		*en_rule |= ipa_ofst_meq128[ofst_meq128];
 		eq_atrb->offset_meq_128[ofst_meq128].offset = 24;
+		/* use the same word order as in ipa v2 */
 		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].mask + 0)
-			= attrib->u.v6.dst_addr_mask[3];
-		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].mask + 4)
-			= attrib->u.v6.dst_addr_mask[2];
-		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].mask + 8)
-			= attrib->u.v6.dst_addr_mask[1];
-		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].mask + 12)
 			= attrib->u.v6.dst_addr_mask[0];
+		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].mask + 4)
+			= attrib->u.v6.dst_addr_mask[1];
+		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].mask + 8)
+			= attrib->u.v6.dst_addr_mask[2];
+		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].mask + 12)
+			= attrib->u.v6.dst_addr_mask[3];
 		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].value + 0)
-			= attrib->u.v6.dst_addr[3];
+			= attrib->u.v6.dst_addr[0];
 		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].value + 4)
-			= attrib->u.v6.dst_addr[2];
-		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].value + 8)
 			= attrib->u.v6.dst_addr[1];
+		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].value + 8)
+			= attrib->u.v6.dst_addr[2];
 		*(u32 *)(eq_atrb->offset_meq_128[ofst_meq128].value +
-				12) = attrib->u.v6.dst_addr[0];
+				12) = attrib->u.v6.dst_addr[3];
 		ofst_meq128++;
 	}
 
@@ -4497,6 +4507,16 @@ static void *ipa3_get_ipc_logbuf_low(void)
 	return NULL;
 }
 
+static void ipa3_get_holb(int ep_idx, struct ipa_ep_cfg_holb *holb)
+{
+	*holb = ipa3_ctx->ep[ep_idx].holb;
+}
+
+static void ipa3_set_tag_process_before_gating(bool val)
+{
+	ipa3_ctx->tag_process_before_gating = val;
+}
+
 int ipa3_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 	struct ipa_api_controller *api_ctrl)
 {
@@ -4519,6 +4539,9 @@ int ipa3_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 	api_ctrl->ipa_cfg_ep_deaggr = ipa3_cfg_ep_deaggr;
 	api_ctrl->ipa_cfg_ep_route = ipa3_cfg_ep_route;
 	api_ctrl->ipa_cfg_ep_holb = ipa3_cfg_ep_holb;
+	api_ctrl->ipa_get_holb = ipa3_get_holb;
+	api_ctrl->ipa_set_tag_process_before_gating =
+			ipa3_set_tag_process_before_gating;
 	api_ctrl->ipa_cfg_ep_cfg = ipa3_cfg_ep_cfg;
 	api_ctrl->ipa_cfg_ep_metadata_mask = ipa3_cfg_ep_metadata_mask;
 	api_ctrl->ipa_cfg_ep_holb_by_client = ipa3_cfg_ep_holb_by_client;
@@ -4590,13 +4613,32 @@ int ipa3_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 	api_ctrl->ipa_dma_async_memcpy = ipa3_dma_async_memcpy;
 	api_ctrl->ipa_dma_uc_memcpy = ipa3_dma_uc_memcpy;
 	api_ctrl->ipa_dma_destroy = ipa3_dma_destroy;
-	api_ctrl->ipa_mhi_init = ipa3_mhi_init;
-	api_ctrl->ipa_mhi_start = ipa3_mhi_start;
-	api_ctrl->ipa_mhi_connect_pipe = ipa3_mhi_connect_pipe;
-	api_ctrl->ipa_mhi_disconnect_pipe = ipa3_mhi_disconnect_pipe;
-	api_ctrl->ipa_mhi_suspend = ipa3_mhi_suspend;
-	api_ctrl->ipa_mhi_resume = ipa3_mhi_resume;
-	api_ctrl->ipa_mhi_destroy = ipa3_mhi_destroy;
+	api_ctrl->ipa_mhi_init_engine = ipa3_mhi_init_engine;
+	api_ctrl->ipa_connect_mhi_pipe = ipa3_connect_mhi_pipe;
+	api_ctrl->ipa_disconnect_mhi_pipe = ipa3_disconnect_mhi_pipe;
+	api_ctrl->ipa_mhi_stop_gsi_channel = ipa3_mhi_stop_gsi_channel;
+	api_ctrl->ipa_uc_mhi_reset_channel = ipa3_uc_mhi_reset_channel;
+	api_ctrl->ipa_qmi_enable_force_clear_datapath_send =
+			ipa3_qmi_enable_force_clear_datapath_send;
+	api_ctrl->ipa_qmi_disable_force_clear_datapath_send =
+			ipa3_qmi_disable_force_clear_datapath_send;
+	api_ctrl->ipa_mhi_reset_channel_internal =
+			ipa3_mhi_reset_channel_internal;
+	api_ctrl->ipa_mhi_start_channel_internal =
+			ipa3_mhi_start_channel_internal;
+	api_ctrl->ipa_mhi_query_ch_info = ipa3_mhi_query_ch_info;
+	api_ctrl->ipa_mhi_resume_channels_internal =
+			ipa3_mhi_resume_channels_internal;
+	api_ctrl->ipa_has_open_aggr_frame = ipa3_has_open_aggr_frame;
+	api_ctrl->ipa_mhi_destroy_channel = ipa3_mhi_destroy_channel;
+	api_ctrl->ipa_uc_mhi_send_dl_ul_sync_info =
+			ipa3_uc_mhi_send_dl_ul_sync_info;
+	api_ctrl->ipa_uc_mhi_init = ipa3_uc_mhi_init;
+	api_ctrl->ipa_uc_mhi_suspend_channel = ipa3_uc_mhi_suspend_channel;
+	api_ctrl->ipa_uc_mhi_stop_event_update_channel =
+			ipa3_uc_mhi_stop_event_update_channel;
+	api_ctrl->ipa_uc_mhi_cleanup = ipa3_uc_mhi_cleanup;
+	api_ctrl->ipa_uc_state_check = ipa3_uc_state_check;
 	api_ctrl->ipa_write_qmap_id = ipa3_write_qmap_id;
 	api_ctrl->ipa_add_interrupt_handler = ipa3_add_interrupt_handler;
 	api_ctrl->ipa_remove_interrupt_handler = ipa3_remove_interrupt_handler;
@@ -4864,7 +4906,7 @@ void ipa3_suspend_apps_pipes(bool suspend)
  */
 int ipa3_inject_dma_task_for_gsi(void)
 {
-	static struct ipa3_mem_buffer mem = {0};
+	static struct ipa_mem_buffer mem = {0};
 	struct ipahal_imm_cmd_dma_task_32b_addr cmd = {0};
 	static struct ipahal_imm_cmd_pyld *cmd_pyld;
 	struct ipa3_desc desc = {0};
@@ -4921,7 +4963,7 @@ int ipa3_inject_dma_task_for_gsi(void)
  */
 int ipa3_stop_gsi_channel(u32 clnt_hdl)
 {
-	struct ipa3_mem_buffer mem;
+	struct ipa_mem_buffer mem;
 	int res = 0;
 	int i;
 	struct ipa3_ep_context *ep;
