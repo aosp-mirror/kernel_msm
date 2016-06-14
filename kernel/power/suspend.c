@@ -30,6 +30,7 @@
 #include <trace/events/power.h>
 #include <linux/compiler.h>
 #include <linux/wakeup_reason.h>
+#include <linux/asusdebug.h>
 
 #include "power.h"
 
@@ -501,6 +502,7 @@ static void pm_suspend_marker(char *annotation)
 	pr_info("PM: suspend %s %d-%02d-%02d %02d:%02d:%02d.%09lu UTC\n",
 		annotation, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
 		tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
+	ASUSEvtlog("[MODE] pm_suspend : %s\n", annotation);
 }
 
 /**
