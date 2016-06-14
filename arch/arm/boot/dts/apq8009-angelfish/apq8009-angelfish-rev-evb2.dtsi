@@ -11,9 +11,6 @@
  */
 
 #include "apq8009-angelfish.dtsi"
-#include "../qcom/msm8909w-gpu.dtsi"
-#include "../qcom/msm8909-pm8916.dtsi"
-#include "../qcom/msm8909w.dtsi"
 #include "apq8009-angelfish-panel.dtsi"
 #include "apq8009-pm8916-angelfish.dtsi"
 #include "apq8009-angelfish-sound.dtsi"

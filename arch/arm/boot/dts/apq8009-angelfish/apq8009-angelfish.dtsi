@@ -11,6 +11,9 @@
  */
 
 #include "../qcom/msm8909.dtsi"
+#include "../qcom/msm8909w-gpu.dtsi"
+#include "../qcom/msm8909-pm8916.dtsi"
+#include "../qcom/msm8909w.dtsi"
 #include "apq8009-angelfish-pinctrl.dtsi"
 #include "apq8009-angelfish-input.dtsi"
 #include "apq8009-angelfish-regulator.dtsi"
