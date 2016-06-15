@@ -988,6 +988,7 @@ static bool is_src_detect_high(struct smbchg_chip *chip)
 	return reg &= USBIN_SRC_DET_BIT;
 }
 
+int bc12_power_supply_type = 0;
 static void read_usb_type(struct smbchg_chip *chip, char **usb_type_name,
 				enum power_supply_type *usb_supply_type)
 {
@@ -1000,6 +1001,17 @@ static void read_usb_type(struct smbchg_chip *chip, char **usb_type_name,
 		*usb_supply_type = POWER_SUPPLY_TYPE_UNKNOWN;
 		return;
 	}
+
+	rc = smbchg_read(chip, &reg, chip->misc_base + IDEV_STS, 1);
+	if (rc < 0) {
+		dev_err(chip->dev, "Couldn't read status 5 rc = %d\n", rc);
+		*usb_type_name = "Other";
+		*usb_supply_type = POWER_SUPPLY_TYPE_UNKNOWN;
+		return;
+	}
+	type = get_type(reg);
+	bc12_power_supply_type = get_usb_supply_type(type);
+
 #ifdef CONFIG_HTC_BATT
 	/* Precedence: PD > Type-C (3A or 1.5A) -> SDP, CDP, DCP from APSD
 	 * Origin table matches with APSD detection(SMBCHGL_MISC_IDEV_STS[7:4])
@@ -1012,18 +1024,6 @@ static void read_usb_type(struct smbchg_chip *chip, char **usb_type_name,
 	else if (chip->utc.sink_current &&
 			chip->utc.sink_current != utccDefault)
 		type = 5;
-	else {
-#endif /* CONFIG_HTC_BATT */
-	rc = smbchg_read(chip, &reg, chip->misc_base + IDEV_STS, 1);
-	if (rc < 0) {
-		dev_err(chip->dev, "Couldn't read status 5 rc = %d\n", rc);
-		*usb_type_name = "Other";
-		*usb_supply_type = POWER_SUPPLY_TYPE_UNKNOWN;
-		return;
-	}
-	type = get_type(reg);
-#ifdef CONFIG_HTC_BATT
-	}
 #endif /* CONFIG_HTC_BATT */
 	*usb_type_name = get_usb_type_name(type);
 	*usb_supply_type = get_usb_supply_type(type);

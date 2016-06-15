@@ -2500,7 +2500,7 @@ static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 
 		switch (psy->type) {
 		case POWER_SUPPLY_TYPE_USB_TYPE_C:
-			mdwc->chg_type = DWC3_SDP_CHARGER;
+			mdwc->chg_type = DWC3_TYPEC_CHARGER;
 			break;
 		case POWER_SUPPLY_TYPE_USB_PD:
 			mdwc->chg_type = DWC3_PD_CHARGER;
@@ -3642,6 +3642,7 @@ static void dwc3_initialize(struct dwc3_msm *mdwc)
  *
  * NOTE: After any change in otg_state, we must reschdule the state machine.
  */
+extern int bc12_power_supply_type;
 static void dwc3_otg_sm_work(struct work_struct *w)
 {
 	struct dwc3_msm *mdwc = container_of(w, struct dwc3_msm, sm_work.work);
@@ -3702,6 +3703,14 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 				break;
 			case DWC3_CDP_CHARGER:
 			case DWC3_SDP_CHARGER:
+			case DWC3_TYPEC_CHARGER:
+			case DWC3_PD_CHARGER:
+			case DWC3_PD_DRP_CHARGER:
+				if (bc12_power_supply_type != POWER_SUPPLY_TYPE_USB &&
+						bc12_power_supply_type != POWER_SUPPLY_TYPE_USB_CDP) {
+					pr_info("dwc3 %s: DWC3 CHARGER TYPE: %d\n", __func__, mdwc->chg_type);
+					break;
+				}
 				atomic_set(&dwc->in_lpm, 0);
 				pm_runtime_set_active(mdwc->dev);
 				pm_runtime_enable(mdwc->dev);
@@ -3752,6 +3761,14 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 				dwc3_msm_gadget_vbus_draw(mdwc,
 						DWC3_IDEV_CHG_MAX);
 				/* fall through */
+			case DWC3_TYPEC_CHARGER:
+			case DWC3_PD_CHARGER:
+			case DWC3_PD_DRP_CHARGER:
+				if (bc12_power_supply_type != POWER_SUPPLY_TYPE_USB &&
+						bc12_power_supply_type != POWER_SUPPLY_TYPE_USB_CDP) {
+					pr_info("dwc3 %s: DWC3 CHARGER TYPE: %d\n", __func__, mdwc->chg_type);
+					break;
+				}
 			case DWC3_SDP_CHARGER:
 				/*
 				 * Increment pm usage count upon cable
