@@ -25,9 +25,10 @@
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
 #include <linux/regulator/consumer.h>
-#include <linux/workqueue.h>
 
 #define NUM_WRITE_RETRIES	5
+#define SAMPLING_PERIOD_US_MIN	5000
+#define SAMPLING_PERIOD_US_MAX	9000
 
 #define RSB_MAGIC_PID		0x30
 
@@ -343,9 +344,10 @@ static irqreturn_t rsb_handler(int irq, void *dev_id)
 			break;
 		if (delta_x != 0) {
 			input_report_rel(rsb_data->in_dev, REL_WHEEL,
-					delta_x);
+				delta_x);
 			input_sync(rsb_data->in_dev);
 		}
+		usleep_range(SAMPLING_PERIOD_US_MIN, SAMPLING_PERIOD_US_MAX);
 		if (rsb_read(rsb_data, &motion, RSB_MOTION) != 0)
 			break;
 	} while (motion & MOTION_BITMASK);
