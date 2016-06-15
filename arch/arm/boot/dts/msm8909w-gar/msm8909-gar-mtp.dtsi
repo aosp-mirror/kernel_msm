@@ -396,6 +396,7 @@
 };
 
 &dsi_auo_320x290_cmd {
+    qcom,esd-check-enabled;
     qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
     qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };

@@ -29,6 +29,7 @@
 #include "mdss_debug.h"
 #include "mdss_smmu.h"
 #include "mdss_dsi_phy.h"
+#include "mdss_dsi_cmd.h"
 
 #define VSYNC_PERIOD 17
 #define DMA_TX_TIMEOUT 200
@@ -1093,6 +1094,24 @@ static int mdss_dsi_read_status(struct mdss_dsi_ctrl_pdata *ctrl)
 	int i, rc, *lenp;
 	int start = 0;
 	struct dcs_cmd_req cmdreq;
+	char buf[4] = {0};
+	static bool is_init = true;
+
+	if(is_init) {
+		rc = mdss_dsi_read_crc(ctrl, buf);
+		if (rc <= 0) {
+			pr_err("%s: get init crc status: fail\n", __func__);
+			return rc;
+		}
+		is_init = false;
+		ctrl->status_value[0] = buf[0];
+		ctrl->status_value[1] = buf[1];
+		ctrl->status_value[2] = buf[2];
+		ctrl->status_value[3] = buf[3];
+		pr_debug("%s: get init value, 0x%02X 0x%02X 0x%02X 0x%02X\n", __func__,
+			ctrl->status_value[0], ctrl->status_value[1], ctrl->status_value[2],
+			ctrl->status_value[3]);
+	}
 
 	rc = 1;
 	lenp = ctrl->status_valid_params ?: ctrl->status_cmds_rlen;
@@ -1101,7 +1120,17 @@ static int mdss_dsi_read_status(struct mdss_dsi_ctrl_pdata *ctrl)
 		memset(&cmdreq, 0, sizeof(cmdreq));
 		cmdreq.cmds = ctrl->status_cmds.cmds + i;
 		cmdreq.cmds_cnt = 1;
-		cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL | CMD_REQ_RX;
+		switch(cmdreq.cmds->dchdr.dtype) {
+			case DTYPE_DCS_READ:
+			case DTYPE_GEN_READ:
+			case DTYPE_GEN_READ1:
+			case DTYPE_GEN_READ2:
+				cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL | CMD_REQ_RX;
+				break;
+			default:
+				cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
+				break;
+		}
 		cmdreq.rlen = ctrl->status_cmds_rlen[i];
 		cmdreq.cb = NULL;
 		cmdreq.rbuf = ctrl->status_buf.data;

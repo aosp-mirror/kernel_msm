@@ -18,6 +18,7 @@
 
 #include "mdss_dsi.h"
 #include "mdp3_ctrl.h"
+#include "mdss_dsi_cmd.h"
 
 /*
  * mdp3_check_dsi_ctrl_status() - Check MDP3 DSI controller status periodically.
@@ -90,18 +91,12 @@ void mdp3_check_dsi_ctrl_status(struct work_struct *work,
 	mutex_unlock(&mdp3_session->lock);
 
 	if (mdss_fb_is_power_on_interactive(pdsi_status->mfd)) {
-		if (ret > 0) {
-			schedule_delayed_work(&pdsi_status->check_status,
-						msecs_to_jiffies(interval));
-		} else {
-			char *envp[2] = {"PANEL_ALIVE=0", NULL};
-			pdata->panel_info.panel_dead = true;
-			ret = kobject_uevent_env(
-					&pdsi_status->mfd->fbi->dev->kobj,
-					KOBJ_CHANGE, envp);
-			pr_err("%s: Panel has gone bad, sending uevent - %s\n",
-							__func__, envp[0]);
+		if (ret < 0) {
+			pr_err("%s: send esd recovery cmd\n", __func__);
+			mdss_dsi_esd_recovery(ctrl_pdata);
 		}
+		schedule_delayed_work(&pdsi_status->check_status,
+					msecs_to_jiffies(interval));
 	}
 }
 

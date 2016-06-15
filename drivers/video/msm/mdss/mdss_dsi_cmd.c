@@ -790,3 +790,93 @@ int mdss_dsi_cmdlist_put(struct mdss_dsi_ctrl_pdata *ctrl,
 	return ret;
 }
 
+int mdss_dsi_read_crc(struct mdss_dsi_ctrl_pdata *ctrl, char* buf)
+{
+	struct dcs_cmd_req cmdreq;
+	int i, rc;
+
+	char ff20_cmd[2] = {0xFF, 0x20};
+	char cal_cmd1[2] = {0x37, 0x00};
+	char cal_cmd2[2] = {0x37, 0x01};
+	struct dsi_cmd_desc dsi_cmd1[3] = {
+		{{DTYPE_DCS_WRITE1, 1, 0, 0, 0,    sizeof(ff20_cmd)}, ff20_cmd},
+		{{DTYPE_DCS_WRITE1, 1, 0, 0, 0,    sizeof(cal_cmd1)}, cal_cmd1},
+		{{DTYPE_DCS_WRITE1, 1, 0, 0, 0x14, sizeof(cal_cmd2)}, cal_cmd2}};
+
+	char cmds[4] = {0x4A, 0x4B, 0x4C, 0x4D};
+	char read_cmd[2] = {0x00, 0x00};
+	struct dsi_cmd_desc dsi_read_cmd = {
+		{DTYPE_DCS_READ,  1, 0, 1, 5, sizeof(read_cmd)}, read_cmd};
+
+	char ff10_cmd[2] = {0xFF, 0x10};
+		struct dsi_cmd_desc dsi_ff10_cmd = {
+		{DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(ff10_cmd)}, ff10_cmd};
+
+	// write ff 20, 37 00, 37 01
+	memset(&cmdreq, 0, sizeof(cmdreq));
+	cmdreq.cmds_cnt = 3;
+	cmdreq.cmds = dsi_cmd1;
+	cmdreq.flags = CMD_REQ_COMMIT;
+	cmdreq.rlen = 0;
+	cmdreq.cb = NULL;
+	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+
+	// read 4A 4B 4C 4D
+	rc = 1;
+	memset(&cmdreq, 0, sizeof(cmdreq));
+	cmdreq.cmds_cnt = 1;
+	cmdreq.cmds = &dsi_read_cmd;
+	cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL | CMD_REQ_RX;
+	if (ctrl->status_cmds.link_state == DSI_LP_MODE)
+		cmdreq.flags  |= CMD_REQ_LP_MODE;
+	else if (ctrl->status_cmds.link_state == DSI_HS_MODE)
+		cmdreq.flags |= CMD_REQ_HS_MODE;
+	cmdreq.rlen = 1;
+	cmdreq.cb = NULL;
+	for (i = 0; i < 4; i++) {
+		read_cmd[0] = cmds[i];
+		cmdreq.rbuf = buf + i;
+		rc = mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+		if (rc <= 0) {
+			pr_err("%s: get crc status: fail\n", __func__);
+			return rc;
+		}
+	}
+
+	// write ff 10
+	memset(&cmdreq, 0, sizeof(cmdreq));
+	cmdreq.cmds_cnt = 1;
+	cmdreq.cmds = &dsi_ff10_cmd;
+	cmdreq.flags = CMD_REQ_COMMIT;
+	cmdreq.rlen = 0;
+	cmdreq.cb = NULL;
+	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+
+	return rc;
+}
+
+int mdss_dsi_esd_recovery(struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	struct dcs_cmd_req cmdreq;
+	char cmd0[2] = {0xFF, 0x10};
+	char cmd1[2] = {0x11, 0x00};
+	char cmd2[2] = {0x35, 0x00};
+	char cmd3[2] = {0xFF, 0x23};
+	char cmd4[2] = {0x05, 0x97};
+	char cmd5[2] = {0xFF, 0x10};
+	struct dsi_cmd_desc dsi_cmd[6] = {
+		{{DTYPE_DCS_WRITE1, 1, 0, 0, 0,    sizeof(cmd0)}, cmd0},
+		{{DTYPE_DCS_WRITE , 1, 0, 0, 0x78, sizeof(cmd1)}, cmd1},
+		{{DTYPE_DCS_WRITE1, 1, 0, 0, 0,    sizeof(cmd2)}, cmd2},
+		{{DTYPE_DCS_WRITE1, 1, 0, 0, 0,    sizeof(cmd3)}, cmd3},
+		{{DTYPE_DCS_WRITE1, 1, 0, 0, 0,    sizeof(cmd4)}, cmd4},
+		{{DTYPE_DCS_WRITE1, 1, 0, 0, 0,    sizeof(cmd5)}, cmd5}};
+
+	memset(&cmdreq, 0, sizeof(cmdreq));
+	cmdreq.cmds_cnt = sizeof(dsi_cmd)/sizeof(dsi_cmd[1]);
+	cmdreq.cmds = dsi_cmd;
+	cmdreq.flags = CMD_REQ_COMMIT;
+	cmdreq.rlen = 0;
+	cmdreq.cb = NULL;
+	return mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+}

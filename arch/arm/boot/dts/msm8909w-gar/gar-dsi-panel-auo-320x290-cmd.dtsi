@@ -52,7 +52,8 @@
                 15 01 00 00 00 00 02 05 97
                 15 01 00 00 00 00 02 FF 10
                 15 01 00 00 00 00 02 C0 01
-                05 01 00 00 00 00 02 29 00];
+                05 01 00 00 00 00 02 29 00
+                05 01 00 00 00 00 02 35 00];
 		qcom,mdss-dsi-off-command = [15 01 00 00 00 00 02 FF 10
                  05 01 00 00 00 00 02 28 00
                  05 01 00 00 78 00 02 10 00];
@@ -79,5 +80,19 @@
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 		qcom,mdss-dsi-reset-sequence = <1 1>, <0 10>, <1 120>;
+		/* esd recovery */
+		qcom,mdss-dsi-panel-status-command = [15 01 00 00 00 00 02 FF 20
+		15 01 00 00 00 00 02 37 00
+		15 01 00 00 14 00 02 37 01
+		06 01 00 01 05 00 02 4A 00
+		06 01 00 01 05 00 02 4B 00
+		06 01 00 01 05 00 02 4C 00
+		06 01 00 01 05 00 02 4D 00
+		15 01 00 00 00 00 02 FF 10];
+		qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
+		qcom,mdss-dsi-panel-status-check-mode = "reg_read";
+		qcom,mdss-dsi-panel-status-read-length = <0 0 0 1 1 1 1 0>;
+		qcom,mdss-dsi-panel-status-value = <0xFF 0xFF 0xFF 0xFF>;
+		qcom,mdss-dsi-panel-max-error-count = <5>;
 	};
 };
