@@ -207,7 +207,7 @@
 		status = "ok";
 		qcom,batt-tm-adc_tm = <&pm8916_adc_tm>;
 		tm,batt-vreg-mv = <4400>;
-		tm,current-ma = <400>;
+		tm,current-ma = <250>;
 		tm,low-vreg-mv = <4100>;
 		tm,low-current-ma = <200>;
 		tm,warm-cfg = <
