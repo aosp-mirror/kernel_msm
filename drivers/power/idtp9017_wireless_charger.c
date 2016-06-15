@@ -48,16 +48,33 @@ struct idtp9017_chip {
 	int die_temp_hys;
 	int mode_depth;
 	bool online;
+	bool psy_chg_en;
 	bool wlc_chg_en;
 	struct power_supply wlc_psy;
 	struct delayed_work wlc_status_work;
 	struct delayed_work set_env_work;
 };
 
+static void idtp9017_off_gpio_ctrl(struct idtp9017_chip *chip, bool value)
+{
+	static bool prev_val;
+
+	if (!gpio_is_valid(chip->wlc_off_gpio))
+		return;
+
+	if (prev_val == value)
+		return;
+
+	prev_val = value;
+	gpio_set_value(chip->wlc_off_gpio, value);
+	dev_info(chip->dev, "Set WLC TX Off - %d\n", value);
+}
+
 static enum power_supply_property pm_power_props_wireless[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_TYPE,
+	POWER_SUPPLY_PROP_CHARGING_ENABLED,
 };
 
 static char *pm_power_supplied_to[] = {
@@ -78,6 +95,9 @@ static int pm_power_get_property_wireless(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_TYPE:
 		val->intval = psy->type;
+		break;
+	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
+		val->intval = chip->psy_chg_en;
 		break;
 	default:
 		return -EINVAL;
@@ -100,6 +120,10 @@ static int pm_power_set_property_wireless(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_TYPE:
 		psy->type = val->intval;
+		break;
+	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
+		chip->psy_chg_en = !!val->intval;
+		idtp9017_off_gpio_ctrl(chip, !chip->psy_chg_en);
 		break;
 	default:
 		return -EINVAL;
@@ -1030,7 +1054,7 @@ static int idtp9017_init_gpio(struct idtp9017_chip *chip)
 	}
 
 	ret = devm_gpio_request_one(chip->dev,
-			chip->wlc_full_chg_gpio, GPIOF_DIR_OUT,
+			chip->wlc_full_chg_gpio, GPIOF_OUT_INIT_LOW,
 			"wlc_full_chg_gpio");
 	if (ret < 0) {
 		dev_err(chip->dev, "Fail to request wlc_full_chg_gpio\n");
@@ -1038,7 +1062,7 @@ static int idtp9017_init_gpio(struct idtp9017_chip *chip)
 	}
 
 	ret = devm_gpio_request_one(chip->dev,
-			chip->wlc_off_gpio, GPIOF_DIR_OUT,
+			chip->wlc_off_gpio, GPIOF_OUT_INIT_LOW,
 			"wlc_off_gpio");
 	if (ret < 0) {
 		dev_err(chip->dev, "Fail to request wlc_off_gpio\n");
@@ -1070,6 +1094,7 @@ static int idtp9017_probe(struct i2c_client *client,
 
 	chip->client = client;
 	chip->dev = &client->dev;
+	chip->psy_chg_en = 1;
 
 	/* need dts parser */
 	if (dev_node) {
