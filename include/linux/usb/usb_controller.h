@@ -15,6 +15,8 @@
 
 struct usb_controller {
 	int (*notify_attached_source)(struct usb_controller *uc, int value);
+	int (*pd_vbus_ctrl)(int on, bool isPRSwap);
+	bool (*vbus_boost_enabled)(void);
 };
 
 extern int usb_controller_register(struct device* parent, struct usb_controller *uc);

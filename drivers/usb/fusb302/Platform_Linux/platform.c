@@ -23,6 +23,7 @@
 #include "fusb30x_global.h"                                                     // Chip structure
 #include "platform_helpers.h"                                                   // Implementation details
 #include "../core/platform.h"
+#include "../core/TypeC_Types.h"
 
 /*******************************************************************************
 * Function:        platform_set/get_vbus_lvl_enable
@@ -255,6 +256,9 @@ void platform_delay_10us(FSC_U32 delayCount)
     fusb_Delay10us(delayCount);
 }
 
+extern FSC_BOOL IsPRSwap;
+extern CCTermType CC1TermCCDebounce;
+extern CCTermType CC2TermCCDebounce;
 /*******************************************************************************
 * Function:        platform_notify_cc_orientation
 * Input:           orientation - Orientation of CC (NONE, CC1, CC2)
@@ -269,7 +273,7 @@ void platform_notify_cc_orientation(CC_ORIENTATION orientation)
 	struct fusb30x_chip* chip = fusb30x_GetChip();
 
 	// Optional: Notify platform of CC orientation
-	printk(KERN_INFO "FUSB %s: orientation=[%d]\n", __func__, orientation);
+	pr_info("FUSB %s: orientation=[%d], CC1=[%d], CC2=[%d]\n", __func__, orientation, CC1TermCCDebounce, CC2TermCCDebounce);
 	if (orientation == CC1) {
 		if (chip->fusb302_pinctrl) {
 			set_state = pinctrl_lookup_state(chip->fusb302_pinctrl, "usb3_switch_sel_0");
@@ -290,9 +294,17 @@ void platform_notify_cc_orientation(CC_ORIENTATION orientation)
 
 			pinctrl_select_state(chip->fusb302_pinctrl, set_state);
 		}
+	} else if (orientation == NONE) {
+		if (chip && chip->uc && chip->uc->pd_vbus_ctrl) {
+			chip->uc->pd_vbus_ctrl(-1, FALSE);
+			if (!IsPRSwap)
+				platform_notify_attached_source(0);
+		}
 	}
 }
 
+extern ConnectionState         ConnState;          // Variable indicating the current connection state
+extern PolicyState_t           PolicyState;
 /*******************************************************************************
 * Function:        platform_notify_pd_contract
 * Input:           contract - TRUE: Contract, FALSE: No Contract
@@ -302,8 +314,21 @@ void platform_notify_cc_orientation(CC_ORIENTATION orientation)
 *******************************************************************************/
 void platform_notify_pd_contract(FSC_BOOL contract)
 {
+	struct fusb30x_chip* chip = fusb30x_GetChip();
+
     // Optional: Notify platform of PD contract
-    printk(KERN_INFO "FUSB %s: Contract=[%d]\n", __func__, contract);
+	pr_info("FUSB %s: Contract=[%d], typec_state=%d\n", __func__, contract, ConnState);
+	if (contract) {
+		if (ConnState == AttachedSink) {
+			if (chip && chip->uc && chip->uc->pd_vbus_ctrl) {
+				chip->uc->pd_vbus_ctrl(0, FALSE);
+			}
+		} else if (ConnState == AttachedSource) {
+			if (chip && chip->uc && chip->uc->pd_vbus_ctrl) {
+				chip->uc->pd_vbus_ctrl(1, FALSE);
+			}
+		}
+	}
 }
 
 /*******************************************************************************
@@ -324,6 +349,8 @@ void platform_notify_attached_source(int value)
 {
 	struct fusb30x_chip* chip = fusb30x_GetChip();
 	int notify_retry_count = 0;
+
+	pr_info("FUSB %s: value(%d), typec_state(%d), pd_state(%d)\n", __func__, value, ConnState, PolicyState);
 
 	do {
 		if (chip != NULL && chip->uc != NULL && chip->uc->notify_attached_source != NULL) {

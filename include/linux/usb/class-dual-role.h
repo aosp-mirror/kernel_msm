@@ -15,7 +15,7 @@ enum dual_role_supported_modes {
 	DUAL_ROLE_PROP_SUPPORTED_MODES_TOTAL,
 };
 
-enum {
+enum dual_role_prop_mode {
 	DUAL_ROLE_PROP_MODE_UFP = 0,
 	DUAL_ROLE_PROP_MODE_DFP,
 	DUAL_ROLE_PROP_MODE_NONE,
@@ -23,7 +23,7 @@ enum {
 	DUAL_ROLE_PROP_MODE_TOTAL,
 };
 
-enum {
+enum dual_role_prop_power_role {
 	DUAL_ROLE_PROP_PR_SRC = 0,
 	DUAL_ROLE_PROP_PR_SNK,
 	DUAL_ROLE_PROP_PR_NONE,
@@ -32,7 +32,7 @@ enum {
 
 };
 
-enum {
+enum dual_role_prop_data_role {
 	DUAL_ROLE_PROP_DR_HOST = 0,
 	DUAL_ROLE_PROP_DR_DEVICE,
 	DUAL_ROLE_PROP_DR_NONE,
@@ -40,7 +40,7 @@ enum {
 	DUAL_ROLE_PROP_DR_TOTAL,
 };
 
-enum {
+enum dual_role_prop_vconn_supply {
 	DUAL_ROLE_PROP_VCONN_SUPPLY_NO = 0,
 	DUAL_ROLE_PROP_VCONN_SUPPLY_YES,
 /*The following should be the last element*/
@@ -109,18 +109,18 @@ extern int dual_role_property_is_writeable(struct dual_role_phy_instance
 					   enum dual_role_property prop);
 extern void *dual_role_get_drvdata(struct dual_role_phy_instance *dual_role);
 #else /* CONFIG_DUAL_ROLE_USB_INTF */
-static void dual_role_instance_changed(struct dual_role_phy_instance
+static void __maybe_unused dual_role_instance_changed(struct dual_role_phy_instance
 				       *dual_role){}
-static struct dual_role_phy_instance *__must_check
-devm_dual_role_instance_register(struct device *parent,
+static struct dual_role_phy_instance
+__maybe_unused *devm_dual_role_instance_register(struct device *parent,
 				 const struct dual_role_phy_desc *desc)
 {
 	return ERR_PTR(-ENOSYS);
 }
-static void devm_dual_role_instance_unregister(struct device *dev,
+static void __maybe_unused devm_dual_role_instance_unregister(struct device *dev,
 					       struct dual_role_phy_instance
 					       *dual_role){}
-static void *dual_role_get_drvdata(struct dual_role_phy_instance *dual_role)
+static void __maybe_unused *dual_role_get_drvdata(struct dual_role_phy_instance *dual_role)
 {
 	return ERR_PTR(-ENOSYS);
 }

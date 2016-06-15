@@ -177,7 +177,7 @@ void InitializePDPolicyVariables(void)
     CapsSink[0].FPDOSink.OperationalCurrent = 10;                               // Set that our device will consume 100mA for this object
     CapsSink[0].FPDOSink.DataRoleSwap = 1;                                      // By default, enable DR_SWAP
     CapsSink[0].FPDOSink.USBCommCapable = 0;                                    // By default, USB communications is not allowed
-    CapsSink[0].FPDOSink.ExternallyPowered = 1;                                 // By default, we are externally powered
+    CapsSink[0].FPDOSink.ExternallyPowered = 0;                                 // By default, we are not externally powered
     CapsSink[0].FPDOSink.HigherCapability = FALSE;                              // By default, don't require more than vSafe5V
     CapsSink[0].FPDOSink.DualRolePower = 1;                                     // By default, enable PR_SWAP
     CapsSink[0].FPDOSink.Reserved = 0;
@@ -209,7 +209,7 @@ void InitializePDPolicyVariables(void)
     CapsSource[0].FPDOSupply.PeakCurrent = 0;                                   // Set peak equal to max
     CapsSource[0].FPDOSupply.DataRoleSwap = TRUE;                               // By default, don't enable DR_SWAP
     CapsSource[0].FPDOSupply.USBCommCapable = FALSE;                            // By default, USB communications is not allowed
-    CapsSource[0].FPDOSupply.ExternallyPowered = TRUE;                          // By default, state that we are externally powered
+    CapsSource[0].FPDOSupply.ExternallyPowered = FALSE;                         // By default, state that we are not externally powered
     CapsSource[0].FPDOSupply.USBSuspendSupport = FALSE;                         // By default, allow  USB Suspend
     CapsSource[0].FPDOSupply.DualRolePower = TRUE;                              // By default, enable PR_SWAP
     CapsSource[0].FPDOSupply.SupplyType = 0;                                    // Fixed supply
@@ -266,6 +266,7 @@ void USBPDEnable(FSC_BOOL DeviceUpdate, SourceOrSink TypeCDFP)
     IsPRSwap = FALSE;
     HardResetCounter = 0;
 
+    pr_debug("FUSB %s: IsPRSwap=%d\n", __func__, IsPRSwap);
     if (USBPDEnabled == TRUE)
     {
         if (blnCCPinIsCC1) {                                                    // If the CC pin is on CC1
@@ -685,6 +686,7 @@ void PolicySourceStartup(void)
             USBPDContract.object = 0;                                           // Clear the USB PD contract (output power to 5V default)
             PartnerCaps.object = 0;                                             // Clear partner sink caps
             IsPRSwap = FALSE;
+            pr_debug("FUSB %s: IsPRSwap=%d\n", __func__, IsPRSwap);
             PolicyIsSource = TRUE;                                              // Set the flag to indicate that we are a source (PRSwaps)
             Registers.Switches.POWERROLE = PolicyIsSource;
             DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]);
@@ -1514,6 +1516,7 @@ void PolicySourceSendPRSwap(void)
                     {
                         case CMTAccept:                                         // If we get the Accept message...
                             IsPRSwap = TRUE;
+                            pr_debug("FUSB %s(%d): IsPRSwap=%d\n", __func__, __LINE__, IsPRSwap);
                             PolicyHasContract = FALSE;
                             platform_notify_pd_contract(FALSE);
                             PRSwapTimer = tPRSwapBailout;                       // Initialize the PRSwapTimer to indicate we are in the middle of a swap
@@ -1525,6 +1528,7 @@ void PolicySourceSendPRSwap(void)
                             PolicyState = peSourceReady;                        // Go back to the source ready state
                             PolicySubIndex = 0;                                 // Clear the sub index
                             IsPRSwap = FALSE;
+                            pr_debug("FUSB %s(%d): IsPRSwap=%d\n", __func__, __LINE__, IsPRSwap);
                             PDTxStatus = txIdle;                                // Clear the transmitter status
                             break;
                         default:                                                // For all other commands received, simply ignore them
@@ -1537,6 +1541,7 @@ void PolicySourceSendPRSwap(void)
                 PolicyState = peSourceReady;                                    // Go back to the source ready state
                 PolicySubIndex = 0;                                             // Clear the sub index
                 IsPRSwap = FALSE;
+                pr_debug("FUSB %s(%d): IsPRSwap=%d\n", __func__, __LINE__, IsPRSwap);
                 PDTxStatus = txIdle;                                            // Clear the transmitter status
             }
             break;
@@ -1561,6 +1566,7 @@ void PolicySourceSendPRSwap(void)
             break;
         case 4: // Allow time for the supply to fall and then send the PS_RDY message
                 Status = PolicySendCommandNoReset(CMTPS_RDY, peSourceSendPRSwap, 5);
+                pr_debug("FUSB %s PS_READY\n", __func__);
                 if (Status == STAT_SUCCESS)                                     // If we successfully sent the PS_RDY command and received the goodCRC
                     PolicyStateTimer = tPSSourceOn;                          // Start the PSSourceOn timer to allow time for the new supply to come up
                 else if (Status == STAT_ERROR)
@@ -1609,7 +1615,10 @@ void PolicySourceEvaluatePRSwap(void)
     switch(PolicySubIndex)
     {
         case 0: // Send either the Accept or Reject command
-            if ((CapsSource[0].FPDOSupply.DualRolePower == FALSE) || (PartnerCaps.FPDOSink.DualRolePower == FALSE) || // Determine Accept/Reject based on DualRolePower bit in current PDO
+            pr_info("FUSB %s: Source.DRPower=%d, Sink.DRPower=%d, Source.Ext=%d, Sink.Ext=%d, Sink.ST=%d", 
+				__func__, CapsSource[0].FPDOSupply.DualRolePower, PartnerCaps.FPDOSink.DualRolePower,
+				CapsSource[0].FPDOSupply.ExternallyPowered, PartnerCaps.FPDOSink.ExternallyPowered, PartnerCaps.FPDOSink.SupplyType);
+            if ((CapsSource[0].FPDOSupply.DualRolePower == FALSE) || // Determine Accept/Reject based on DualRolePower bit in current PDO
                 ((CapsSource[0].FPDOSupply.ExternallyPowered == TRUE) && // Must also reject if we are externally powered and partner is not
                     (PartnerCaps.FPDOSink.SupplyType == pdoTypeFixed) && (PartnerCaps.FPDOSink.ExternallyPowered == FALSE)))   
             {              
@@ -1620,6 +1629,7 @@ void PolicySourceEvaluatePRSwap(void)
                 if (PolicySendCommand(CMTAccept, peSourceEvaluatePRSwap, 1) == STAT_SUCCESS) // Send the Accept message and wait for the good CRC
                 {
                     IsPRSwap = TRUE;
+                    pr_debug("FUSB %s(%d): IsPRSwap=%d\n", __func__, __LINE__, IsPRSwap);
                     PolicyHasContract = FALSE;
                     platform_notify_pd_contract(FALSE);
                     RoleSwapToAttachedSink();
@@ -1668,6 +1678,7 @@ void PolicySourceEvaluatePRSwap(void)
                     switch (PolicyRxHeader.MessageType)                         // Determine which command was received
                     {
                         case CMTPS_RDY:                                         // If we get the PS_RDY message...
+                            pr_debug("FUSB %s: receive PS_RDY\n", __func__);
                             PolicySubIndex++;                                 // Increment the sub index
                             PolicyStateTimer = tGoodCRCDelay;                   // Make sure GoodCRC has time to send
                             break;
@@ -1961,6 +1972,7 @@ void PolicySinkStartup(void)
     USBPDContract.object = 0;                                           // Clear the USB PD contract (output power to 5V default)
     PartnerCaps.object = 0;                                         // Clear partner sink caps
     IsPRSwap = FALSE;
+    pr_debug("FUSB %s(%d): IsPRSwap=%d\n", __func__, __LINE__, IsPRSwap);
     PolicyIsSource = FALSE;                                                     // Clear the flag to indicate that we are a sink (for PRSwaps)
     Registers.Switches.POWERROLE = PolicyIsSource;
     DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]);
@@ -2606,6 +2618,7 @@ void PolicySinkSendPRSwap(void)
                     {
                         case CMTAccept:                                         // If we get the Accept message...
                             IsPRSwap = TRUE;
+                            pr_debug("FUSB %s(%d): IsPRSwap=%d\n", __func__, __LINE__, IsPRSwap);
                             PolicyHasContract = FALSE;
                             platform_notify_pd_contract(FALSE);
                             PRSwapTimer = tPRSwapBailout;                       // Initialize the PRSwapTimer to indicate we are in the middle of a swap
@@ -2617,6 +2630,7 @@ void PolicySinkSendPRSwap(void)
                             PolicyState = peSinkReady;                          // Go back to the sink ready state
                             PolicySubIndex = 0;                                 // Clear the sub index
                             IsPRSwap = FALSE;
+                            pr_debug("FUSB %s(%d): IsPRSwap=%d\n", __func__, __LINE__, IsPRSwap);
                             PDTxStatus = txIdle;                                // Clear the transmitter status
                             break;
                         default:                                                // For all other commands received, simply ignore them
@@ -2629,6 +2643,7 @@ void PolicySinkSendPRSwap(void)
                 PolicyState = peSinkReady;                                      // Go back to the sink ready state
                 PolicySubIndex = 0;                                             // Clear the sub index
                 IsPRSwap = FALSE;
+                pr_debug("FUSB %s(%d): IsPRSwap=%d\n", __func__, __LINE__, IsPRSwap);
                 PDTxStatus = txIdle;                                            // Clear the transmitter status
             }
             break;
@@ -2641,6 +2656,7 @@ void PolicySinkSendPRSwap(void)
                     switch (PolicyRxHeader.MessageType)                         // Determine which command was received
                     {
                         case CMTPS_RDY:                                         // If we get the PS_RDY message...
+                            pr_debug("FUSB %s sink receive PS_READY\n", __func__);
                             RoleSwapToAttachedSource();                         // Initiate the Type-C state machine for a power role swap
                             PolicyIsSource = TRUE;
                             Registers.Switches.POWERROLE = PolicyIsSource;
@@ -2663,6 +2679,7 @@ void PolicySinkSendPRSwap(void)
         default: // Allow time for the supply to rise and then send the PS_RDY message
             if (!PolicyStateTimer)
             {
+                pr_debug("FUSB %s sink send PS_READY\n", __func__);
                 Status = PolicySendCommandNoReset(CMTPS_RDY, peSourceStartup, 0);   // When we get the good CRC, we move onto the source startup state to complete the swap
                 if (Status == STAT_ERROR)
                     PolicyState = peErrorRecovery;                              // If we get an error, go to the error recovery state
@@ -2689,6 +2706,7 @@ void PolicySinkEvaluatePRSwap(void)
                 if (PolicySendCommand(CMTAccept, peSinkEvaluatePRSwap, 1) == STAT_SUCCESS) // Send the Accept message and wait for the good CRC
                 {
                     IsPRSwap = TRUE;
+                    pr_debug("FUSB %s(%d): IsPRSwap=%d\n", __func__, __LINE__, IsPRSwap);
                     PolicyHasContract = FALSE;
                     platform_notify_pd_contract(FALSE);
                     PRSwapTimer = tPRSwapBailout;                               // Initialize the PRSwapTimer to indicate we are in the middle of a swap

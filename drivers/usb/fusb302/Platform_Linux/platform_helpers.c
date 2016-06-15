@@ -249,13 +249,30 @@ FSC_S32 fusb_InitializeGPIO(void)
     return 0;   // Success!
 }
 
+extern FSC_BOOL                IsPRSwap;           // Variable indicating that a PRSwap is occurring
+extern ConnectionState         ConnState;          // Variable indicating the current connection state
+extern PolicyState_t           PolicyState;
 void fusb_GPIO_Set_VBus5v(FSC_BOOL set)
 {
     struct fusb30x_chip* chip = fusb30x_GetChip();
+    int ret = -1, retry = 0;
+
     if (!chip)
     {
         pr_err("FUSB  %s - Error: Chip structure is NULL!\n", __func__);
+        return;
     }
+
+    do {
+        pr_info("FUSB %s: set vbus ctrl: %d, typec_state(%d), pd_state(%d), retry: %d\n", __func__, set, ConnState, PolicyState, retry);
+        if (chip->uc && chip->uc->pd_vbus_ctrl)
+            ret = chip->uc->pd_vbus_ctrl(set ? 1 : 0, IsPRSwap);
+
+        if (ret < 0) {
+            msleep(1000);
+            retry++;
+        }
+    } while(ret < 0 && retry < 5);
 
 #ifdef VBUS_5V_SUPPORTED
     // GPIO must be valid by this point
@@ -309,13 +326,17 @@ void fusb_GPIO_Set_VBusOther(FSC_BOOL set)
 FSC_BOOL fusb_GPIO_Get_VBus5v(void)
 {
     struct fusb30x_chip* chip = fusb30x_GetChip();
+    FSC_BOOL ret = false;
     if (!chip)
     {
         pr_err("FUSB  %s - Error: Chip structure is NULL!\n", __func__);
         return false;
     }
 
-    return false;
+    if (chip->uc && chip->uc->vbus_boost_enabled)
+        ret = chip->uc->vbus_boost_enabled();
+
+    return ret;
 #ifdef VBUS_5V_SUPPORTED
     if (!gpio_is_valid(chip->gpio_VBus5V))
     {
@@ -3375,6 +3396,11 @@ void fusb_InitChipData(void)
     chip->InitDelayMS = INIT_DELAY_MS;                                              // Time to wait before device init
     chip->numRetriesI2C = RETRIES_I2C;                                              // Number of times to retry I2C reads and writes
     chip->use_i2c_blocks = false;                                                   // Assume failure
+
+    chip->pmode = DUAL_ROLE_PROP_MODE_NONE;
+    chip->prole = DUAL_ROLE_PROP_PR_NONE;
+    chip->drole = DUAL_ROLE_PROP_DR_NONE;
+    chip->vconn = DUAL_ROLE_PROP_VCONN_SUPPLY_NO;
 }
 
 

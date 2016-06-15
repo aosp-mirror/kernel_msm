@@ -1136,6 +1136,8 @@ void SetStateDelayUnattached(void)
 
 void SetStateUnattached(void)
 {
+    struct fusb30x_chip *chip = fusb30x_GetChip();
+
     if(alternateModes)
     {
         SetStateAlternateUnattached();
@@ -1148,6 +1150,7 @@ void SetStateUnattached(void)
         else {
             pr_info("FUSB [%s]: State Unattached, power off the VCONN\n", __func__);
             VCONN_enabled = FALSE;
+            chip->vconn = DUAL_ROLE_PROP_VCONN_SUPPLY_NO;
         }
     }
 
@@ -1208,6 +1211,11 @@ void SetStateUnattached(void)
 #ifdef FSC_DEBUG
     WriteStateLog(&TypeCStateLog, ConnState, Timer_tms, Timer_S);
 #endif // FSC_DEBUG
+    chip->pmode = DUAL_ROLE_PROP_MODE_NONE;
+    chip->prole = DUAL_ROLE_PROP_PR_NONE;
+    chip->drole = DUAL_ROLE_PROP_DR_NONE;
+    if (chip->fusb_instance)
+        dual_role_instance_changed(chip->fusb_instance);
 }
 
 #ifdef FSC_HAVE_SNK
@@ -1394,13 +1402,19 @@ void SetStateAttachWaitAccessory(void)
 #ifdef FSC_HAVE_SRC
 void SetStateAttachedSource(void)
 {
+    struct fusb30x_chip *chip = fusb30x_GetChip();
 #ifdef FSC_INTERRUPT_TRIGGERED                                                  // Mask for COMP
     Registers.Mask.M_COMP_CHNG = 0;
     DeviceWrite(regMask, 1, &Registers.Mask.byte);
 #endif  // FSC_INTERRUPT_TRIGGERED
+    chip->pmode = DUAL_ROLE_PROP_MODE_DFP;
+    chip->prole = DUAL_ROLE_PROP_PR_SRC;
+    chip->drole = DUAL_ROLE_PROP_DR_HOST;
+    dual_role_instance_changed(chip->fusb_instance);
     
     platform_set_vbus_lvl_enable(VBUS_LVL_5V, TRUE, TRUE);                      // Enable only the 5V output
-    platform_notify_attached_source(1);
+    if (!IsPRSwap)
+        platform_notify_attached_source(1);
     ConnState = AttachedSource;                                                 // Set the state machine variable to Attached.Src
     TypeCSubState = 0;
     sourceOrSink = SOURCE;
@@ -1423,6 +1437,7 @@ void SetStateAttachedSource(void)
             else {
                 pr_info("FUSB [%s]: Ra detected on CC2, power on the VCONN\n", __func__);
                 VCONN_enabled = TRUE;
+                chip->vconn = DUAL_ROLE_PROP_VCONN_SUPPLY_YES;
             }
         }
         setDebounceVariablesCC1(CCTypeUndefined);
@@ -1439,6 +1454,7 @@ void SetStateAttachedSource(void)
             else {
                 pr_info("FUSB [%s]: Ra detected on CC1, power on the VCONN\n", __func__);
                 VCONN_enabled = TRUE;
+                chip->vconn = DUAL_ROLE_PROP_VCONN_SUPPLY_YES;
             }
         }
         setDebounceVariablesCC2(CCTypeUndefined);
@@ -1463,6 +1479,7 @@ void SetStateAttachedSource(void)
 #ifdef FSC_HAVE_SNK
 void SetStateAttachedSink(void)
 {
+    struct fusb30x_chip *chip = fusb30x_GetChip();
 #ifdef FSC_INTERRUPT_TRIGGERED
     g_Idle = TRUE;                                                              // Mask for VBUSOK
     Registers.Mask.M_VBUSOK = 0;
@@ -1470,6 +1487,10 @@ void SetStateAttachedSink(void)
     platform_enable_timer(FALSE);
 #endif  
     loopCounter = 0;
+    chip->pmode = DUAL_ROLE_PROP_MODE_UFP;
+    chip->prole = DUAL_ROLE_PROP_PR_SNK;
+    chip->drole = DUAL_ROLE_PROP_DR_DEVICE;
+    dual_role_instance_changed(chip->fusb_instance);
     
     platform_set_vbus_lvl_enable(VBUS_LVL_ALL, FALSE, FALSE);                   // Disable the vbus outputs
     ConnState = AttachedSink;                                                   // Set the state machine variable to Attached.Sink
@@ -1513,6 +1534,7 @@ void SetStateAttachedSink(void)
 #ifdef FSC_HAVE_DRP
 void RoleSwapToAttachedSink(void)
 {
+    struct fusb30x_chip *chip = fusb30x_GetChip();
     ConnState = AttachedSink;                                       // Set the state machine variable to Attached.Sink   
     sourceOrSink = SINK;
     if (blnCCPinIsCC1)                                              // If the CC pin is CC1...
@@ -1537,6 +1559,8 @@ void RoleSwapToAttachedSink(void)
     CCDebounce = tCCDebounce;                                     // Disable the 2nd level debounce timer, not used in this state
     ToggleTimer = T_TIMER_DISABLE;                                        
     OverPDDebounce = T_TIMER_DISABLE;  // Disable PD filter timer
+    chip->prole = DUAL_ROLE_PROP_PR_SNK;
+    dual_role_instance_changed(chip->fusb_instance);
 #ifdef FSC_DEBUG
     WriteStateLog(&TypeCStateLog, ConnState, Timer_tms, Timer_S);
 #endif // FSC_DEBUG
@@ -1546,6 +1570,7 @@ void RoleSwapToAttachedSink(void)
 #ifdef FSC_HAVE_DRP
 void RoleSwapToAttachedSource(void)
 {
+    struct fusb30x_chip *chip = fusb30x_GetChip();
     platform_set_vbus_lvl_enable(VBUS_LVL_5V, TRUE, TRUE);          // Enable only the 5V output
     ConnState = AttachedSource;                                     // Set the state machine variable to Attached.Src
     TypeCSubState = 0;
@@ -1573,6 +1598,8 @@ void RoleSwapToAttachedSource(void)
     CCDebounce = tCCDebounce;                                     // Disable the 2nd level debouncing, not needed in this state
     ToggleTimer = T_TIMER_DISABLE;                                        // Disable the toggle timer, not used in this state
     OverPDDebounce = T_TIMER_DISABLE;  // Disable PD filter timer
+    chip->prole = DUAL_ROLE_PROP_PR_SRC;
+    dual_role_instance_changed(chip->fusb_instance);
 #ifdef FSC_DEBUG
     WriteStateLog(&TypeCStateLog, ConnState, Timer_tms, Timer_S);
 #endif // FSC_DEBUG

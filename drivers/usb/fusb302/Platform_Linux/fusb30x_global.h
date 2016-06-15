@@ -26,6 +26,7 @@
 #include <linux/wakelock.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/usb/usb_controller.h>
+#include <linux/usb/class-dual-role.h>
 #include <linux/usb/usb_typec.h>
 #include "FSCTypes.h"                               // FUSB30x custom types
 
@@ -82,6 +83,12 @@ struct fusb30x_chip                                 // Contains data required by
 
     struct usb_controller *uc;
 	struct usb_typec_ctrl *utc;
+
+    struct dual_role_phy_instance *fusb_instance;
+    enum dual_role_prop_mode pmode;
+    enum dual_role_prop_power_role prole;
+    enum dual_role_prop_data_role drole;
+    enum dual_role_prop_vconn_supply vconn;
 };
 
 extern struct fusb30x_chip* g_chip;

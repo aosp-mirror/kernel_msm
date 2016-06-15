@@ -26,12 +26,14 @@
 #include <linux/slab.h>                                                         // devm_kzalloc
 #include <linux/types.h>                                                        // Kernel datatypes
 #include <linux/errno.h>                                                        // EINVAL, ERANGE, etc
+#include <linux/interrupt.h>
 #include <linux/of_device.h>                                                    // Device tree functionality
 #include <linux/regulator/consumer.h>
 
 /* Driver-specific includes */
 #include "fusb30x_global.h"                                                     // Driver-specific structures/types
 #include "platform_helpers.h"                                                   // I2C R/W, GPIO, misc, etc
+#include "../core/TypeC_Types.h"
 
 #ifdef FSC_DEBUG
 #include "../core/core.h"                                                       // GetDeviceTypeCStatus
@@ -52,6 +54,121 @@ extern bool VCONN_enabled;
 /******************************************************************************
 * Driver functions
 ******************************************************************************/
+
+int fusb_dual_role_get_property(struct dual_role_phy_instance *dual_role,
+                                           enum dual_role_property prop,
+                                           unsigned int *val)
+{
+    struct fusb30x_chip *chip = fusb30x_GetChip();
+
+    switch (prop) {
+        case DUAL_ROLE_PROP_SUPPORTED_MODES:
+            break;
+        case DUAL_ROLE_PROP_MODE:
+            *val = (unsigned int)chip->pmode;
+            break;
+        case DUAL_ROLE_PROP_PR:
+            *val = (unsigned int)chip->prole;
+            break;
+        case DUAL_ROLE_PROP_DR:
+            *val = (unsigned int)chip->drole;
+            break;
+        case DUAL_ROLE_PROP_VCONN_SUPPLY:
+            *val = (unsigned int)chip->vconn;
+            break;
+        default:
+            break;
+    }
+    return 0;
+}
+
+
+extern ConnectionState          ConnState;          // Variable indicating the current connection state
+extern PolicyState_t            PolicyState;                                    // State variable for Policy Engine
+extern FSC_U8                   PolicySubIndex;                                 // Sub index for policy states
+extern PDTxStatus_t             PDTxStatus;                                     // Status variable for current transmission
+int fusb_dual_role_set_property(struct dual_role_phy_instance *dual_role,
+                                           enum dual_role_property prop,
+                                           const unsigned int *val)
+{
+    struct fusb30x_chip *chip = fusb30x_GetChip();
+
+    switch (prop) {
+        case DUAL_ROLE_PROP_SUPPORTED_MODES:
+            pr_info("FUSB %s: prop: %d, not supported case so far\n", __func__, prop);
+            break;
+        case DUAL_ROLE_PROP_MODE:
+            pr_info("FUSB %s: prop: %d, not supported case so far\n", __func__, prop);
+            break;
+        case DUAL_ROLE_PROP_PR:
+            pr_info("FUSB %s: prop: %d, supported case so far\n", __func__, prop);
+			pr_info("FUSB %s: ConnState=%x\n", __func__, ConnState);
+            if (ConnState == AttachedSource)
+                PolicyState = peSourceSendPRSwap;						// Issue a PR_Swap message
+            else if (ConnState == AttachedSink)
+                PolicyState = peSinkSendPRSwap;						// Issue a PR_Swap message
+            else
+                break;
+            PolicySubIndex = 0; 									// Clear the sub index
+            PDTxStatus = txIdle;									// Clear the transmitter status
+            disable_irq(chip->gpio_IntN_irq);
+            core_state_machine();
+            enable_irq(chip->gpio_IntN_irq);
+            break;
+        case DUAL_ROLE_PROP_DR:
+            pr_info("FUSB %s: prop: %d, not supported case so far\n", __func__, prop);
+            break;
+        case DUAL_ROLE_PROP_VCONN_SUPPLY:
+            pr_info("FUSB %s: prop: %d, not supported case so far\n", __func__, prop);
+            break;
+        default:
+            pr_info("FUSB %s: the input(prop: %d) is not supported\n", __func__, prop);
+            break;
+    }
+    return 0;
+}
+
+int fusb_dual_role_property_is_writeable(struct dual_role_phy_instance *dual_role,
+                                             enum dual_role_property prop)
+{
+    int val = 0;
+    switch (prop) {
+        case DUAL_ROLE_PROP_SUPPORTED_MODES:
+            val = 0;
+            break;
+        case DUAL_ROLE_PROP_MODE:
+            val = 1;
+            break;
+        case DUAL_ROLE_PROP_PR:
+        case DUAL_ROLE_PROP_DR:
+            val = 1;
+            break;
+        case DUAL_ROLE_PROP_VCONN_SUPPLY:
+            val = 1;
+            break;
+        default:
+            break;
+    }
+    return val;
+}
+
+enum dual_role_property fusb_properties[] = {
+    DUAL_ROLE_PROP_SUPPORTED_MODES,
+    DUAL_ROLE_PROP_MODE,
+    DUAL_ROLE_PROP_PR,
+    DUAL_ROLE_PROP_DR,
+    DUAL_ROLE_PROP_VCONN_SUPPLY,
+};
+
+static const struct dual_role_phy_desc fusb_desc = {
+    .name = "otg_default",
+    .properties = fusb_properties,
+    .num_properties = 5,
+    .get_property = fusb_dual_role_get_property,
+    .set_property = fusb_dual_role_set_property,
+    .property_is_writeable = fusb_dual_role_property_is_writeable,
+};
+
 static int fusb30x_pm_suspend(struct device *dev)
 {
     struct fusb30x_chip *chip = fusb30x_GetChip();
@@ -234,14 +351,19 @@ static int fusb30x_probe (struct i2c_client* client,
     pr_debug("FUSB  %s - Workers initialized and scheduled!\n", __func__);
 #endif  // ifdef FSC_POLLING elif FSC_INTERRUPT_TRIGGERED
 
+    chip->fusb_instance = devm_dual_role_instance_register(&client->dev, &fusb_desc);
+
     dev_info(&client->dev, "FUSB  %s - FUSB30X Driver loaded successfully!\n", __func__);
 	return ret;
 }
 
 static int fusb30x_remove(struct i2c_client* client)
 {
+    struct fusb30x_chip *chip = fusb30x_GetChip();
+
     pr_debug("FUSB  %s - Removing fusb30x device!\n", __func__);
 
+    devm_dual_role_instance_unregister(&client->dev, chip->fusb_instance);
 #ifndef FSC_INTERRUPT_TRIGGERED // Polling mode by default
     fusb_StopThreads();
     fusb_StopTimers();

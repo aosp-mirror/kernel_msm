@@ -250,6 +250,8 @@ struct dwc3_msm {
 
 	int                     redrive_3p0_c1;
 	int                     redrive_3p0_c2;
+	struct delayed_work	vbus_notify_work;
+	bool			pd_vbus_change;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -266,6 +268,7 @@ struct dwc3_msm {
 
 #define DSTS_CONNECTSPD_SS		0x4
 
+static struct dwc3_msm *context = NULL;
 
 static void dwc3_pwr_event_handler(struct dwc3_msm *mdwc);
 static int dwc3_msm_gadget_vbus_draw(struct dwc3_msm *mdwc, unsigned mA);
@@ -2173,6 +2176,7 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	return 0;
 }
 
+extern bool IsPRSwap;
 /**
  * dwc3_ext_event_notify - callback to handle events from external transceiver
  *
@@ -2195,7 +2199,7 @@ static void dwc3_ext_event_notify(struct dwc3_msm *mdwc)
 		clear_bit(ID, &mdwc->inputs);
 	}
 
-	if (mdwc->vbus_active && !mdwc->in_restart) {
+	if ((mdwc->vbus_active || IsPRSwap) && !mdwc->in_restart) {
 		dev_dbg(mdwc->dev, "XCVR: BSV set\n");
 		set_bit(B_SESS_VLD, &mdwc->inputs);
 	} else {
@@ -2445,6 +2449,20 @@ static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 			break;
 
 		mdwc->vbus_active = val->intval;
+
+#ifdef CONFIG_FUSB_30X
+		/*
+		 * only Sink -> Source case needs to delay 500ms
+		 * Due to Vbus change 1 -> 0 comes first, we should delay this event
+		 * If pr_swap, the pd_vbus_change flag should be set within 500ms.
+		 */
+		if (!mdwc->vbus_active) {
+			pr_info("%s: delay 500ms to confirm disconnect or pr_swap\n", __func__);
+			schedule_delayed_work(&mdwc->vbus_notify_work, msecs_to_jiffies(500));
+		} else { /* Source -> Sink case: Vbus change 0 -> 1 comes later, no need to delay */
+			schedule_delayed_work(&mdwc->vbus_notify_work, 12);
+		}
+#else
 		if (dwc->is_drd && !mdwc->in_restart) {
 			/*
 			 * Set debouncing delay to 120ms. Otherwise battery
@@ -2454,6 +2472,7 @@ static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 			queue_delayed_work(mdwc->dwc3_wq,
 					&mdwc->resume_work, 12);
 		}
+#endif
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
 		mdwc->online = val->intval;
@@ -2703,6 +2722,116 @@ static int dwc3_msm_get_clk_gdsc(struct dwc3_msm *mdwc)
 	return 0;
 }
 
+bool dwc3_vbus_boost_enabled(void)
+{
+        struct dwc3_msm *mdwc = context;
+        struct dwc3 *dwc;
+        bool ret = false;
+
+        if (mdwc == NULL || mdwc->dwc3 == NULL)
+                return -ENODEV;
+
+        dwc = platform_get_drvdata(mdwc->dwc3);
+
+        if (!mdwc->vbus_reg) {
+                mdwc->vbus_reg = devm_regulator_get_optional(mdwc->dev,
+                                        "vbus_dwc3");
+                if (IS_ERR(mdwc->vbus_reg) &&
+                                PTR_ERR(mdwc->vbus_reg) == -EPROBE_DEFER) {
+                        /* regulators may not be ready, so retry again later */
+                        mdwc->vbus_reg = NULL;
+                        return -EPROBE_DEFER;
+                }
+        }
+
+	if (!IS_ERR(mdwc->vbus_reg)) {
+		ret = regulator_is_enabled(mdwc->vbus_reg);
+	}
+
+	return ret;
+}
+
+int dwc3_pd_vbus_ctrl(int on, bool isPRSwap)
+{
+	struct dwc3_msm *mdwc = context;
+	struct dwc3 *dwc;
+	int ret = 0;
+
+	if (mdwc == NULL || mdwc->dwc3 == NULL)
+		return -ENODEV;
+
+	dwc = platform_get_drvdata(mdwc->dwc3);
+
+	pr_debug("%s: on = %d, isPRSwap = %d\n", __func__, on, isPRSwap);
+	if (on == -1) {
+		mdwc->pd_vbus_change = 0;
+	} else {
+		mdwc->pd_vbus_change = isPRSwap ? 1 : 0;
+		pr_info("%s: set pd vbus flag to %d\n", __func__, mdwc->pd_vbus_change);
+	}
+
+	if (!mdwc->vbus_reg) {
+		mdwc->vbus_reg = devm_regulator_get_optional(mdwc->dev,
+					"vbus_dwc3");
+		if (IS_ERR(mdwc->vbus_reg) &&
+				PTR_ERR(mdwc->vbus_reg) == -EPROBE_DEFER) {
+			/* regulators may not be ready, so retry again later */
+			mdwc->vbus_reg = NULL;
+			return -EPROBE_DEFER;
+		}
+	}
+
+	if (on == 1) {
+		dev_dbg(mdwc->dev, "%s: turn on regulator\n", __func__);
+
+		if (!IS_ERR(mdwc->vbus_reg)) {
+			if (!regulator_is_enabled(mdwc->vbus_reg)) {
+				ret = regulator_enable(mdwc->vbus_reg);
+				pr_debug("%s: regulator_enable, ret = %d\n", __func__, ret);
+				if (ret) {
+					dev_err(dwc->dev, "unable to enable vbus_reg\n");
+					pr_err("%s: unable to enable vbus_reg\n", __func__);
+					return ret;
+				}
+			} else
+				pr_info("%s: regulator already enabled\n", __func__);
+		} else {
+			pr_err("%s: ERR: vbus_reg, err_code = %ld\n", __func__, PTR_ERR(mdwc->vbus_reg));
+			return -1;
+		}
+		pr_debug("%s: turn on vbus\n", __func__);
+	} else {
+		dev_dbg(dwc->dev, "%s: turn off regulator\n", __func__);
+
+		if (!IS_ERR(mdwc->vbus_reg) && regulator_is_enabled(mdwc->vbus_reg))
+			ret = regulator_disable(mdwc->vbus_reg);
+		if (ret) {
+			dev_err(dwc->dev, "unable to disable vbus_reg\n");
+			return ret;
+		}
+		pr_debug("%s: turn off Vbus\n", __func__);
+	}
+
+	return ret;
+}
+
+static void dwc3_notify_vbus_work(struct work_struct *w)
+{
+	struct dwc3_msm *mdwc = container_of(w, struct dwc3_msm, vbus_notify_work.work);
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+
+	pr_info("%s: pd_vbus_change = %d\n", __func__, mdwc->pd_vbus_change);
+	if (!mdwc->pd_vbus_change) {
+		if (dwc->is_drd && !mdwc->in_restart) {
+			pr_info("%s: maybe cable out or SINK first connect, resume state machine\n", __func__);
+			queue_delayed_work(mdwc->dwc3_wq, &mdwc->resume_work, 0);
+		}
+	} else
+		pr_info("%s: during PR_SWAP, skip this PMIC event\n", __func__);
+
+	mdwc->pd_vbus_change = 0;
+}
+
 static int dwc3_msm_probe(struct platform_device *pdev)
 {
 	struct device_node *node = pdev->dev.of_node, *dwc3_node;
@@ -2730,6 +2859,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, mdwc);
+	context = mdwc;
 	mdwc->dev = &pdev->dev;
 
 	INIT_LIST_HEAD(&mdwc->req_complete_list);
@@ -2737,6 +2867,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	INIT_WORK(&mdwc->restart_usb_work, dwc3_restart_usb_work);
 	INIT_WORK(&mdwc->bus_vote_w, dwc3_msm_bus_vote_w);
 	INIT_DELAYED_WORK(&mdwc->sm_work, dwc3_otg_sm_work);
+	INIT_DELAYED_WORK(&mdwc->vbus_notify_work, dwc3_notify_vbus_work);
 
 	mdwc->dwc3_wq = alloc_ordered_workqueue("dwc3_wq", 0);
 	if (!mdwc->dwc3_wq) {
@@ -3010,6 +3141,8 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	}
 
 	mdwc->uc.notify_attached_source = dwc3_msm_notify_attached_source;
+	mdwc->uc.pd_vbus_ctrl = dwc3_pd_vbus_ctrl;
+	mdwc->uc.vbus_boost_enabled = dwc3_vbus_boost_enabled;
 
 	ret = usb_controller_register(&pdev->dev, &mdwc->uc);
 	if (ret < 0) {
@@ -3224,6 +3357,7 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 		mdwc->hs_phy->flags |= PHY_HOST_MODE;
 		mdwc->ss_phy->flags |= PHY_HOST_MODE;
 		usb_phy_notify_connect(mdwc->hs_phy, USB_SPEED_HIGH);
+#if 0
 		if (!IS_ERR(mdwc->vbus_reg))
 			ret = regulator_enable(mdwc->vbus_reg);
 		if (ret) {
@@ -3235,7 +3369,7 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 				atomic_read(&mdwc->dev->power.usage_count));
 			return ret;
 		}
-
+#endif
 		dwc3_set_mode(dwc, DWC3_GCTL_PRTCAP_HOST);
 
 		/*
@@ -3279,14 +3413,14 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 		pm_runtime_put_sync_autosuspend(mdwc->dev);
 	} else {
 		dev_dbg(mdwc->dev, "%s: turn off host\n", __func__);
-
+#if 0
 		if (!IS_ERR(mdwc->vbus_reg))
 			ret = regulator_disable(mdwc->vbus_reg);
 		if (ret) {
 			dev_err(mdwc->dev, "unable to disable vbus_reg\n");
 			return ret;
 		}
-
+#endif
 		pm_runtime_get_sync(mdwc->dev);
 		dbg_event(0xFF, "StopHost gsync",
 			atomic_read(&mdwc->dev->power.usage_count));

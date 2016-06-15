@@ -110,9 +110,11 @@ void xhci_quiesce(struct xhci_hcd *xhci)
 int xhci_halt(struct xhci_hcd *xhci)
 {
 	int ret;
+	unsigned int retry_count = 0;
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init, "// Halt the HC");
 	xhci_quiesce(xhci);
 
+retry_halt:
 	ret = xhci_handshake(xhci, &xhci->op_regs->status,
 			STS_HALT, STS_HALT, XHCI_MAX_HALT_USEC);
 	if (!ret) {
@@ -125,9 +127,12 @@ int xhci_halt(struct xhci_hcd *xhci)
 			del_timer(&xhci->cmd_timer);
 			xhci_cleanup_command_queue(xhci);
 		}
-	} else
-		xhci_warn(xhci, "Host not halted after %u microseconds.\n",
-				XHCI_MAX_HALT_USEC);
+	} else {
+		retry_count++;
+		xhci_warn(xhci, "Host not halted after %u microseconds, retry_count %u.\n",
+				XHCI_MAX_HALT_USEC, retry_count);
+		if (retry_count < 5) goto retry_halt;
+	}
 	return ret;
 }
 

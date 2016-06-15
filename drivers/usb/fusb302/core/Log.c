@@ -20,6 +20,7 @@
 #ifdef FSC_DEBUG
 
 #include "Log.h"
+#include <linux/printk.h>
 
 void InitializeStateLog(StateLog *log)
 {
@@ -28,8 +29,17 @@ void InitializeStateLog(StateLog *log)
     log->Start = 0;
 }
 
+extern StateLog TypeCStateLog;
+extern StateLog PDStateLog;
 FSC_BOOL WriteStateLog(StateLog *log, FSC_U16 state, FSC_U16 time_ms, FSC_U16 time_s)
 {
+    if (log == &TypeCStateLog)
+        pr_debug("FUSB TYPEC state log, state: 0x%x\n", state);
+	else if (log == &PDStateLog)
+		pr_debug("FUSB PDPolicy state log, state: 0x%x\n", state);
+	else
+		pr_debug("not match TYPEC & PDPolicy\n");
+
     if(!IsStateLogFull(log))
     {
         FSC_U8 index = log->End;
