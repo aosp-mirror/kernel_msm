@@ -94,6 +94,7 @@ static void mxt_regulator_disable(struct mxt_data *data);
 static void mxt_regulator_enable(struct mxt_data *data);
 void trigger_usb_state_from_otg(int usb_type);
 static void mxt_read_fw_version(struct mxt_data *data);
+static int mxt_read_t100_config(struct mxt_data *data);
 
 char *knockon_event[2] = { "TOUCH_GESTURE_WAKEUP=WAKEUP", NULL };
 
@@ -514,6 +515,9 @@ struct mxt_object *mxt_get_object(struct mxt_data *data, u8 type)
 	struct mxt_object *object = NULL;
 	int i = 0;
 
+	if (!data->info || !data->object_table)
+		return NULL;
+
 	for (i = 0; i < data->info->object_num; i++) {
 		object = data->object_table + i;
 		if (object->type == type)
@@ -895,9 +899,9 @@ static void mxt_firmware_update_func(struct work_struct *work_firmware_update)
 	}
 
 	if (data->T100_reportid_min) {
-		error = mxt_initialize_t100_input_device(data);
-		if (error){
-			TOUCH_ERR_MSG("Failed to init t100\n");
+		error = mxt_read_t100_config(data);
+		if (error) {
+			TOUCH_ERR_MSG("Failed to initialize T100 resolution\n");
 			goto exit;
 		}
 	} else {
@@ -3335,9 +3339,9 @@ static ssize_t mxt_update_fw_store(struct mxt_data *data, const char *buf,
 	}
 
 	if (data->T100_reportid_min) {
-		error = mxt_initialize_t100_input_device(data);
-		if (error){
-			TOUCH_ERR_MSG("Failed to init t100\n");
+		error = mxt_read_t100_config(data);
+		if (error) {
+			TOUCH_ERR_MSG("Failed to initialize T100 resolution\n");
 			goto exit;
 		}
 	} else {
@@ -4019,8 +4023,10 @@ static int mxt_read_t100_config(struct mxt_data *data)
 	u8 aux = 0;
 
 	object = mxt_get_object(data, MXT_TOUCH_MULTITOUCHSCREEN_T100);
-	if (!object)
+	if (!object) {
+		TOUCH_ERR_MSG("Couldn't get object\n");
 		return -EINVAL;
+	}
 
 	error = __mxt_read_reg(client,
 			       object->start_address + MXT_T100_XRANGE,
@@ -4043,11 +4049,32 @@ static int mxt_read_t100_config(struct mxt_data *data)
 				1, &cfg);
 	if (error)
 		return error;
+
 	error =  __mxt_read_reg(client,
 				object->start_address + MXT_T100_TCHAUX,
 				1, &tchaux);
 	if (error)
 		return error;
+
+	error = __mxt_read_reg(data->client, data->T100_address + 8, 1,
+			&data->channel_size.start_x);
+
+	error |= __mxt_read_reg(data->client, data->T100_address + 9, 1,
+			&data->channel_size.size_x);
+
+	error |= __mxt_read_reg(data->client, data->T100_address + 19, 1,
+			&data->channel_size.start_y);
+
+	error |= __mxt_read_reg(data->client, data->T100_address + 20, 1,
+			&data->channel_size.size_y);
+
+	if (!error) {
+		TOUCH_DEBUG_MSG("Succeed to read channel_size %d %d %d %d \n",
+			data->channel_size.start_x,
+			data->channel_size.start_y,
+			data->channel_size.size_x,
+			data->channel_size.size_y);
+	}
 
 	/* Handle default values */
 	if (range_x == 0)
@@ -4088,6 +4115,41 @@ static int mxt_read_t100_config(struct mxt_data *data)
 	TOUCH_DEBUG_MSG("T100 Touchscreen size X%uY%u\n",
 			data->max_x, data->max_y);
 
+	if (data->input_dev) {
+		struct input_dev *input_dev = data->input_dev;
+
+		/* For multi touch */
+		error = input_mt_init_slots(input_dev, data->num_touchids,
+				INPUT_MT_DIRECT);
+		if (error) {
+			TOUCH_ERR_MSG("Error %d initialising slots\n", error);
+			return error;
+		}
+
+		input_set_abs_params(input_dev, ABS_MT_TRACKING_ID, 0,
+				data->pdata->numtouch, 0, 0);
+		input_set_abs_params(input_dev, ABS_MT_WIDTH_MAJOR, 0,
+				MXT_MAX_AREA, 0, 0);
+		input_set_abs_params(input_dev, ABS_MT_WIDTH_MINOR, 0,
+				MXT_MAX_AREA, 0, 0);
+		input_set_abs_params(input_dev, ABS_MT_POSITION_X, 0,
+				data->max_x, 0, 0);
+		input_set_abs_params(input_dev, ABS_MT_POSITION_Y, 0,
+				data->max_y, 0, 0);
+
+		if (data->t100_aux_area)
+			input_set_abs_params(input_dev,
+				ABS_MT_TOUCH_MAJOR, 0, MXT_MAX_AREA, 0, 0);
+
+		if (data->t100_aux_ampl)
+			input_set_abs_params(input_dev,
+				ABS_MT_PRESSURE, 0, 255, 0, 0);
+
+		if (data->t100_aux_vect)
+			input_set_abs_params(input_dev,
+				ABS_MT_ORIENTATION, 0, 255, 0, 0);
+	}
+
 	return 0;
 }
 
@@ -4096,12 +4158,13 @@ int mxt_initialize_t100_input_device(struct mxt_data *data)
 	struct input_dev *input_dev;
 	int error;
 
-	error = mxt_read_t100_config(data);
-	if (error)
-		TOUCH_ERR_MSG("Failed to initialize T100 resolution\n");
+	if (data->input_dev) {
+		TOUCH_WARN_MSG("Input device already registered\n");
+		return 0;
+	}
 
 	input_dev = input_allocate_device();
-	if (!data || !input_dev) {
+	if (!input_dev) {
 		TOUCH_ERR_MSG("Failed to allocate memory\n");
 		return -ENOMEM;
 	}
@@ -4997,9 +5060,6 @@ int mxt_request_firmware_work(const struct firmware *fw, void *context)
 
 	mxt_power_block(POWERLOCK_FW_UP);
 
-	if (is_probing)
-		goto ts_rest_init;
-
 	data->fw_info.data = data;
 	if (fw) {
 		error = mxt_verify_fw(&data->fw_info, fw);
@@ -5024,9 +5084,6 @@ ts_rest_init:
 		goto out;
 	}
 
-	if (is_probing)
-		goto out;
-
 	error = mxt_config_initialize(&data->fw_info);
 	if (error) {
 		TOUCH_ERR_MSG("Failed to rest initialize\n");
@@ -5047,7 +5104,7 @@ int mxt_update_firmware(struct mxt_data *data, const char *fwname)
 
 	TOUCH_INFO_MSG("%s [%s]\n", __func__, fwname);
 
-	if (!is_probing && fwname) {
+	if (fwname) {
 		error = request_firmware(&fw, fwname, &data->client->dev);
 		if (error) {
 			TOUCH_ERR_MSG("%s error request_firmware \n", __func__);
@@ -5074,7 +5131,6 @@ int mxt_update_firmware(struct mxt_data *data, const char *fwname)
 	}
 
 	return 0;
-
 }
 
 static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
@@ -5178,21 +5234,10 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		goto err_probe_regulators;
 	mxt_regulator_enable(data);
 
-	error = mxt_update_firmware(data, data->pdata->fw_name);
-	if (error) {
-		TOUCH_ERR_MSG("Failed to request firmware\n");
-		goto err_update_firmware;
-	}
-
-	if (data->T100_reportid_min) {
-		error = mxt_initialize_t100_input_device(data);
-		if (error){
-			TOUCH_ERR_MSG("Failed to init t100\n");
-			goto err_update_firmware;
-		}
-	} else {
-		TOUCH_ERR_MSG("Failed to read touch object\n");
-		goto err_update_firmware;
+	error = mxt_initialize_t100_input_device(data);
+	if (error){
+		TOUCH_ERR_MSG("Failed to init t100\n");
+		goto err_init_t100_input_device;
 	}
 
 	INIT_DELAYED_WORK(&data->work_button_lock, mxt_button_lock_func);
@@ -5201,32 +5246,11 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	INIT_DELAYED_WORK(&data->work_firmware_update,
 			mxt_firmware_update_func);
 
-	/* channal size init for reference check */
-	error = __mxt_read_reg(data->client, data->T100_address + 8, 1,
-			&data->channel_size.start_x);
-	error |= __mxt_read_reg(data->client, data->T100_address + 9, 1,
-			&data->channel_size.size_x);
-	error |= __mxt_read_reg(data->client, data->T100_address + 19, 1,
-			&data->channel_size.start_y);
-	error |= __mxt_read_reg(data->client, data->T100_address + 20, 1,
-			&data->channel_size.size_y);
-	if (!error) {
-		TOUCH_DEBUG_MSG("Succeed to read channel_size %d %d %d %d \n",
-			data->channel_size.start_x,
-			data->channel_size.start_y,
-			data->channel_size.size_x,
-			data->channel_size.size_y);
-	}
-
 	/* disabled report touch event to prevent unnecessary event.
 	 * it will be enabled in open function
 	 */
 	data->suspended = true;
 	data->enable_reporting = false;
-	if (error) {
-		touch_enable_irq(data->irq);
-		mxt_t109_command(data, MXT_T109_CMD, MXT_T109_CMD_TUNE);
-	}
 
 	/* Register sysfs for making fixed communication path to
 	 * framework layer
@@ -5235,14 +5259,14 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	if (error < 0) {
 		TOUCH_ERR_MSG("%s, bus is not registered, error : %d\n",
 				__func__, error);
-		goto err_update_firmware;
+		goto err_init_t100_input_device;
 	}
 
 	error = device_register(&device_touch);
 	if (error < 0) {
 		TOUCH_ERR_MSG("%s, device is not registered, error : %d\n",
 				__func__, error);
-		goto err_update_firmware;
+		goto err_init_t100_input_device;
 	}
 
 	error = kobject_init_and_add(&data->mxt_touch_kobj,
@@ -5254,12 +5278,6 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		goto err_mxt_touch_sysfs_init_and_add;
 	}
 
-	if (global_mxt_data)
-		TOUCH_DEBUG_MSG("%s global_mxt_data exist \n", __func__);
-	else
-		TOUCH_ERR_MSG("%s global_mxt_data is NULL \n", __func__);
-
-	trigger_usb_state_from_otg(g_usb_type);
 	TOUCH_INFO_MSG("%s success...\n", __func__);
 
 	return 0;
@@ -5267,7 +5285,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 err_mxt_touch_sysfs_init_and_add:
 	kobject_del(&data->mxt_touch_kobj);
 	device_unregister(&device_touch);
-err_update_firmware:
+err_init_t100_input_device:
 	mxt_regulator_disable(data);
 err_probe_regulators:
 	mutex_destroy(&i2c_suspend_lock);
