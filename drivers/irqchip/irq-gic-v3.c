@@ -25,6 +25,7 @@
 #include <linux/percpu.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/wakeup_reason.h>
 
 #include <linux/irqchip/arm-gic-v3.h>
 #include <linux/syscore_ops.h>
@@ -392,6 +393,7 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 		else if (desc->action && desc->action->name)
 			name = desc->action->name;
 
+		log_base_wakeup_reason(irq);
 #ifdef CONFIG_HTC_POWER_DEBUG
 		if (EE0_KRAIT_HLOS_SPMI_PERIPH_IRQ != irq )
 			if (TLMM_MSM_SUMMARY_IRQ != irq )
