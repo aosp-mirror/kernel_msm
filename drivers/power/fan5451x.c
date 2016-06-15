@@ -1052,6 +1052,7 @@ static int fan5451x_batt_power_set_property(struct power_supply *psy,
 {
 	struct fan5451x_chip *chip =
 		container_of(psy, struct fan5451x_chip, batt_psy);
+	int enable;
 	int ret = 0;
 
 	switch (psp) {
@@ -1059,7 +1060,11 @@ static int fan5451x_batt_power_set_property(struct power_supply *psy,
 		chip->ext_batt_health = val->intval;
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		fan5451x_enable(chip, !!val->intval);
+		enable = !!val->intval;
+		fan5451x_enable(chip, enable);
+		if (chip->wlc_psy)
+			power_supply_set_charging_enabled(chip->wlc_psy,
+					enable);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		chip->ext_set_vddmax_mv = val->intval / 1000;
