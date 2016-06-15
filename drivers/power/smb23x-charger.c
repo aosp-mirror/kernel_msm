@@ -1255,6 +1255,9 @@ static int hot_soft_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_warm = !!rt_sts;
+
+	smb23x_enable_volatile_writes(chip);
+	smb23x_masked_write(chip, CFG_REG_3, FASTCHG_CURR_SOFT_COMP, 0);
 	return 0;
 }
 
@@ -1262,6 +1265,9 @@ static int cold_soft_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_cool = !!rt_sts;
+
+	smb23x_enable_volatile_writes(chip);
+	smb23x_masked_write(chip, CFG_REG_3, FASTCHG_CURR_SOFT_COMP, 0);
 	return 0;
 }
 
@@ -2527,6 +2533,9 @@ static int smb23x_probe(struct i2c_client *client,
 		}
 		enable_irq_wake(client->irq);
 	}
+
+	smb23x_enable_volatile_writes(chip);
+	smb23x_masked_write(chip, CFG_REG_3, FASTCHG_CURR_SOFT_COMP, 0);
 
 	create_debugfs_entries(chip);
 
