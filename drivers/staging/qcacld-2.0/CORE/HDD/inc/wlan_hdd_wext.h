@@ -334,8 +334,6 @@ typedef struct hdd_wext_state_s
    v_BOOL_t isESEConnection;
    eCsrAuthType collectedAuthType; /* Collected from ALL SIOCSIWAUTH Ioctls. Will be negotiatedAuthType - in tCsrProfile */
 #endif
-   /* Wireless statistics */
-   struct iw_statistics iw_stats;
 }hdd_wext_state_t;
 
 typedef struct ccp_freq_chan_map_s{

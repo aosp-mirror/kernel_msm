@@ -38,6 +38,7 @@
 #include <asm/types.h>
 #include <asm/scatterlist.h>
 #include <adf_os_types.h>
+#include <adf_nbuf.h>
 
 #define __ADF_NBUF_NULL   NULL
 
@@ -330,8 +331,23 @@ void            __adf_nbuf_dmamap_info(__adf_os_dma_map_t bmap, adf_os_dmamap_in
 void            __adf_nbuf_frag_info(struct sk_buff *skb, adf_os_sglist_t  *sg);
 void            __adf_nbuf_dmamap_set_cb(__adf_os_dma_map_t dmap, void *cb, void *arg);
 void            __adf_nbuf_reg_trace_cb(adf_nbuf_trace_update_t cb_func_ptr);
-a_status_t      __adf_nbuf_is_dhcp_pkt(struct sk_buff *skb);
-a_status_t      __adf_nbuf_is_eapol_pkt(struct sk_buff *skb);
+bool            __adf_nbuf_data_is_ipv4_pkt(uint8_t *data);
+bool            __adf_nbuf_data_is_ipv6_pkt(uint8_t *data);
+bool            __adf_nbuf_data_is_icmp_pkt(uint8_t *data);
+bool            __adf_nbuf_data_is_icmpv6_pkt(uint8_t *data);
+bool            __adf_nbuf_data_is_ipv4_udp_pkt(uint8_t *data);
+bool            __adf_nbuf_data_is_ipv4_tcp_pkt(uint8_t *data);
+bool            __adf_nbuf_data_is_ipv6_udp_pkt(uint8_t *data);
+bool            __adf_nbuf_data_is_ipv6_tcp_pkt(uint8_t *data);
+a_status_t      __adf_nbuf_data_is_dhcp_pkt(uint8_t *data);
+a_status_t      __adf_nbuf_data_is_eapol_pkt(uint8_t *data);
+bool            __adf_nbuf_data_is_ipv4_arp_pkt(uint8_t *data);
+enum adf_proto_subtype  __adf_nbuf_data_get_dhcp_subtype(uint8_t *data);
+enum adf_proto_subtype  __adf_nbuf_data_get_eapol_subtype(uint8_t *data);
+enum adf_proto_subtype  __adf_nbuf_data_get_arp_subtype(uint8_t *data);
+enum adf_proto_subtype  __adf_nbuf_data_get_icmp_subtype(uint8_t *data);
+enum adf_proto_subtype  __adf_nbuf_data_get_icmpv6_subtype(uint8_t *data);
+
 
 #ifdef QCA_PKT_PROTO_TRACE
 void
@@ -1006,6 +1022,21 @@ __adf_nbuf_data(struct sk_buff *skb)
 {
     return skb->data;
 }
+
+/**
+ * __adf_nbuf_data_addr() - Return the address of skb->data
+ * @skb: skb
+ *
+ * This function returns the address of skb->data
+ *
+ * Return: skb->data address
+ */
+static inline uint8_t *
+__adf_nbuf_data_addr(struct sk_buff *skb)
+{
+	return (uint8_t *)&skb->data;
+}
+
 
 /**
  * @brief return the priority value of the skb

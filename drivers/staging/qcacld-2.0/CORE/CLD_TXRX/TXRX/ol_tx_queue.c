@@ -1059,9 +1059,6 @@ ol_txrx_vdev_pause(ol_txrx_vdev_handle vdev, u_int32_t reason)
         adf_os_spin_unlock_bh(&vdev->ll_pause.mutex);
     }
 
-    DPTRACE(adf_dp_trace(NULL, ADF_DP_TRACE_VDEV_PAUSE,
-                NULL, 0));
-
     TX_SCHED_DEBUG_PRINT("Leave %s\n", __func__);
 }
 
@@ -1117,9 +1114,6 @@ ol_txrx_vdev_unpause(ol_txrx_vdev_handle vdev, u_int32_t reason)
             adf_os_spin_unlock_bh(&vdev->ll_pause.mutex);
         }
     }
-
-    DPTRACE(adf_dp_trace(NULL, ADF_DP_TRACE_VDEV_UNPAUSE,
-               NULL, 0));
 
     TX_SCHED_DEBUG_PRINT("Leave %s\n", __func__);
 }

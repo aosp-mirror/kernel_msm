@@ -133,7 +133,6 @@ ol_rx_fwd_to_tx(struct ol_txrx_vdev_t *vdev, adf_nbuf_t msdu)
      * Map the netbuf, so it's accessible to the DMA that
      * sends it to the target.
      */
-    adf_nbuf_map_single(pdev->osdev, msdu, ADF_OS_DMA_TO_DEVICE);
     adf_nbuf_set_next(msdu, NULL); /* add NULL terminator */
 
     /* for HL, point to payload before send to tx again.*/
@@ -154,7 +153,6 @@ ol_rx_fwd_to_tx(struct ol_txrx_vdev_t *vdev, adf_nbuf_t msdu)
          * We could store the frame and try again later,
          * but the simplest solution is to discard the frames.
          */
-        adf_nbuf_unmap_single(pdev->osdev, msdu, ADF_OS_DMA_TO_DEVICE);
         adf_nbuf_free(msdu);
     }
 }

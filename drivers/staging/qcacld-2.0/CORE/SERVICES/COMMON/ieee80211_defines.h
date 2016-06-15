@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -528,13 +528,13 @@ typedef struct _ieee80211_scan_request_info {
 typedef void (*ieee80211_acs_event_handler) (void *arg, wlan_chan_t channel);
 #endif /* EXTERNAL_USE_ONLY */
 
-#define MAX_CHAINS 3
+#define MAX_CHAINS_SUPPORTED 3
 
 typedef struct _wlan_rssi_info {
     int8_t      avg_rssi;     /* average rssi */
     u_int8_t    valid_mask;   /* bitmap of valid elements in rssi_ctrl/ext array */
-    int8_t      rssi_ctrl[MAX_CHAINS];
-    int8_t      rssi_ext[MAX_CHAINS];
+    int8_t      rssi_ctrl[MAX_CHAINS_SUPPORTED];
+    int8_t      rssi_ext[MAX_CHAINS_SUPPORTED];
 } wlan_rssi_info;
 
 typedef enum _wlan_rssi_type {

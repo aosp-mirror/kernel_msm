@@ -134,6 +134,11 @@ tpDphHashNode dphLookupHashEntry(tpAniSirGlobal pMac, tANI_U8 staAddr[], tANI_U1
     tpDphHashNode ptr = NULL;
     tANI_U16 index = hashFunction(pMac, staAddr, pDphHashTable->size);
 
+    if (!pDphHashTable->pHashTable) {
+        limLog(pMac, LOGE, FL(" pHashTable is NULL "));
+        return ptr;
+    }
+
     for (ptr = pDphHashTable->pHashTable[index]; ptr; ptr = ptr->next)
         {
             if (dphCompareMacAddr(staAddr, ptr->staAddr))

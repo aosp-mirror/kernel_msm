@@ -471,9 +471,11 @@ static inline void hdd_update_channel_bw_info(hdd_context_t *hdd_ctx,
 	uint16_t sec_ch_2g = 0;
 	uint8_t vht_capable;
 	WLAN_PHY_MODE phy_mode;
-	uint8_t dot11_mode = hdd_ctx->cfg_ini->dot11Mode;
+	uint32_t wni_dot11_mode;
 
-	vht_capable = IS_DOT11_MODE_VHT(dot11_mode);
+	wni_dot11_mode = sme_get_wni_dot11_mode(hdd_ctx->hHal);
+
+	vht_capable = IS_DOT11_MODE_VHT(wni_dot11_mode);
 
 	if (chan <= SIR_11B_CHANNEL_END) {
 		if (chan <= 5)
@@ -488,15 +490,16 @@ static inline void hdd_update_channel_bw_info(hdd_context_t *hdd_ctx,
 
 	vos_set_channel_params(chan, sec_ch_2g, &ch_params);
 	if (ch_params.center_freq_seg0)
-		hdd_chan_info->band_center_freq1 = ch_params.center_freq_seg0;
+		hdd_chan_info->band_center_freq1 =
+			ch_params.center_freq_seg0;
 
 	hddLog(LOG1,
-		FL("chan %d ch_width %d sec offset %d center_freq_seg0 %d"),
-		chan, ch_params.ch_width, ch_params.sec_ch_offset,
-		ch_params.center_freq_seg0);
+		FL("chan %d wni_dot11_mode %d ch_width %d sec offset %d center_freq_seg0 %d"),
+		chan, wni_dot11_mode, ch_params.ch_width,
+		ch_params.sec_ch_offset, ch_params.center_freq_seg0);
 
 	phy_mode = wma_chan_to_mode(chan, ch_params.sec_ch_offset,
-				vht_capable, dot11_mode);
+				vht_capable, wni_dot11_mode);
 	WMI_SET_CHANNEL_MODE(hdd_chan_info, phy_mode);
 }
 

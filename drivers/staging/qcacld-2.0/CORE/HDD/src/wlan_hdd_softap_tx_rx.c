@@ -355,7 +355,7 @@ int __hdd_softap_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
        ac = hdd_QdiscAcToTlAC[skb->queue_mapping];
        ++pAdapter->hdd_stats.hddTxRxStats.txXmitClassifiedAC[ac];
 
-       wlan_hdd_log_eapol(skb,
+       adf_dp_trace_log_pkt(pAdapter->sessionId, skb,
                           WIFI_EVENT_DRIVER_EAPOL_FRAME_TRANSMIT_REQUESTED);
 
 #ifdef QCA_PKT_PROTO_TRACE
@@ -392,7 +392,7 @@ int __hdd_softap_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
        adf_dp_trace_set_track(skb);
        DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_PACKET_PTR_RECORD,
-                  (uint8_t *)skb->data, sizeof(skb->data)));
+                  (uint8_t *)&skb->data, sizeof(skb->data)));
        DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_PACKET_RECORD,
                   (uint8_t *)skb->data, skb->len));
        if (skb->len > ADF_DP_TRACE_RECORD_SIZE)
@@ -835,7 +835,8 @@ VOS_STATUS hdd_softap_rx_packet_cbk(v_VOID_t *vosContext,
       ++pAdapter->stats.rx_packets;
       pAdapter->stats.rx_bytes += skb->len;
 
-      wlan_hdd_log_eapol(skb, WIFI_EVENT_DRIVER_EAPOL_FRAME_RECEIVED);
+      adf_dp_trace_log_pkt(pAdapter->sessionId, skb,
+          WIFI_EVENT_DRIVER_EAPOL_FRAME_RECEIVED);
 #ifdef QCA_PKT_PROTO_TRACE
       if ((pHddCtx->cfg_ini->gEnableDebugLog & VOS_PKT_TRAC_TYPE_EAPOL) ||
           (pHddCtx->cfg_ini->gEnableDebugLog & VOS_PKT_TRAC_TYPE_DHCP)) {
