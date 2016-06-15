@@ -20,6 +20,7 @@
 #include <linux/power_supply.h>
 #include <linux/power/stc3117_battery.h>
 #include <linux/slab.h>
+#include <soc/qcom/smsm.h>
 
 #define GG_VERSION "1.00a"
 
@@ -56,9 +57,9 @@
 /* ------------------------------------------------------------------------ */
 /*                                                                          */
 /* min voltage at the end of the charge (mV)      */
-#define BATT_CHG_VOLTAGE   4330
+#define BATT_CHG_VOLTAGE   4200
 /* nearly empty battery detection level (mV)      */
-#define BATT_MIN_VOLTAGE   3300
+#define BATT_MIN_VOLTAGE   3500
 #define MAX_HRSOC          51200  /* 100% in 1/512% units*/
 #define MAX_SOC            1000   /* 100% in 0.1% units */
 
@@ -66,7 +67,7 @@
 #define CHG_END_CURRENT      40   /* end charge current in mA*/
 /* minimum application current consumption in mA ( <0 !) */
 #define APP_MIN_CURRENT     (-5)
-#define APP_MIN_VOLTAGE	    3000  /* application cut-off voltage*/
+#define APP_MIN_VOLTAGE	    3300  /* application cut-off voltage*/
 #define TEMP_MIN_ADJ	    (-5) /* minimum temperature for gain adjustment */
 
 /* normalized VM_CNF at 60, 40, 25, 10, 0, -10°C, -20°C */
@@ -293,9 +294,15 @@ static union {
 	} reg;
 } GG_Ram;
 
+typedef struct {
+	long cei_proj_id;
+	long cei_hw_id;
+	long cei_qfuse;
+	unsigned int battery_volt;
+} cei_hwid_data_type;
 
 int Capacity_Adjust;
-
+static cei_hwid_data_type *cei_hwid_data;
 
 /* ------------------------------------------------------------------------ */
 /*        INTERNAL ANDROID DRIVER PARAMETERS                                */
@@ -355,43 +362,43 @@ static struct stc311x_platform_data stc3117_data = {
 	.Alm_SOC = 10,/* SOC alm level %*/
 	.Alm_Vbat = 3600,/* Vbat alm level mV*/
 	/* nominal CC_cnf, coming from battery characterisation*/
-	.CC_cnf = 82,
+	.CC_cnf = 71,
 	/* nominal VM cnf , coming from battery characterisation*/
-	.VM_cnf = 340,
+	.VM_cnf = 295,
 	/* nominal internal impedance*/
 	.Rint = 818,
 	/* nominal capacity in mAh, coming from battery characterisation*/
-	.Cnom = 400,
+	.Cnom = 351,
 	.Rsense = 10, /* sense resistor mOhms*/
 	.RelaxCurrent = 5, /* current for relaxation in mA (< C/20) */
 	.Adaptive = 1, /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 
 	/* Elentec Co Ltd Battery pack - 80 means 8% */
-	.CapDerating[6] = 720,/* capacity derating in 0.1%, for temp = -20°C */
-	.CapDerating[5] = 195,/* capacity derating in 0.1%, for temp = -10°C */
-	.CapDerating[4] = 37,/* capacity derating in 0.1%, for temp = 0°C */
-	.CapDerating[3] = 37, /* capacity derating in 0.1%, for temp = 10°C */
+	.CapDerating[6] = 957,/* capacity derating in 0.1%, for temp = -20°C */
+	.CapDerating[5] = 229,/* capacity derating in 0.1%, for temp = -10°C */
+	.CapDerating[4] = 57,/* capacity derating in 0.1%, for temp = 0°C */
+	.CapDerating[3] = 43, /* capacity derating in 0.1%, for temp = 10°C */
 	.CapDerating[2] = 0, /* capacity derating in 0.1%, for temp = 25°C */
 	.CapDerating[1] = 0, /* capacity derating in 0.1%, for temp = 40°C */
 	.CapDerating[0] = 0, /* capacity derating in 0.1%, for temp = 60°C */
 
 	/*OCV curve example for a 4.35V li-ion battery*/
-	.OCVValue[15] = 4306,            /* OCV curve adjustment */
-	.OCVValue[14] = 4193,            /* OCV curve adjustment */
-	.OCVValue[13] = 4093,            /* OCV curve adjustment */
-	.OCVValue[12] = 3985,            /* OCV curve adjustment */
-	.OCVValue[11] = 3953,            /* OCV curve adjustment */
-	.OCVValue[10] = 3907,            /* OCV curve adjustment */
-	.OCVValue[9] = 3840,             /* OCV curve adjustment */
-	.OCVValue[8] = 3802,             /* OCV curve adjustment */
-	.OCVValue[7] = 3770,             /* OCV curve adjustment */
-	.OCVValue[6] = 3749,             /* OCV curve adjustment */
-	.OCVValue[5] = 3732,             /* OCV curve adjustment */
-	.OCVValue[4] = 3703,             /* OCV curve adjustment */
-	.OCVValue[3] = 3685,             /* OCV curve adjustment */
-	.OCVValue[2] = 3674,             /* OCV curve adjustment */
-	.OCVValue[1] = 3568,             /* OCV curve adjustment */
-	.OCVValue[0] = 3300,             /* OCV curve adjustment */
+	.OCVValue[15] = 4194,            /* OCV curve adjustment */
+	.OCVValue[14] = 4105,            /* OCV curve adjustment */
+	.OCVValue[13] = 4012,            /* OCV curve adjustment */
+	.OCVValue[12] = 3942,            /* OCV curve adjustment */
+	.OCVValue[11] = 3902,            /* OCV curve adjustment */
+	.OCVValue[10] = 3873,            /* OCV curve adjustment */
+	.OCVValue[9] = 3826,             /* OCV curve adjustment */
+	.OCVValue[8] = 3794,             /* OCV curve adjustment */
+	.OCVValue[7] = 3764,             /* OCV curve adjustment */
+	.OCVValue[6] = 3746,             /* OCV curve adjustment */
+	.OCVValue[5] = 3731,             /* OCV curve adjustment */
+	.OCVValue[4] = 3706,             /* OCV curve adjustment */
+	.OCVValue[3] = 3690,             /* OCV curve adjustment */
+	.OCVValue[2] = 3679,             /* OCV curve adjustment */
+	.OCVValue[1] = 3636,             /* OCV curve adjustment */
+	.OCVValue[0] = 3505,             /* OCV curve adjustment */
 
 	/* SOC_TAB data */
 	.SOCValue[15] = 100,
@@ -749,8 +756,14 @@ static int STC311x_Startup(void)
 		curr -= 0x4000;  /* convert to signed value */
 	if (BattData.Rsense != 0) {
 		/*avoid divide by 0*/
-		ocv = ocv - BattData.Rint * curr * 588 /
-			BattData.Rsense / 55000;
+		if ((cei_hwid_data->battery_volt == 9999) ||
+			(cei_hwid_data->battery_volt <= 3200) ||
+			(cei_hwid_data->battery_volt >= 4200)) {
+			ocv = ocv - BattData.Rint * curr * 588 /
+				BattData.Rsense / 55000;
+		} else {
+			ocv = (cei_hwid_data->battery_volt * 100) / 55;
+		}
 	} else {
 		return (-1);
 	}
@@ -1681,13 +1694,15 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 		value = BattData.AvgVoltage;
 		if (BattData.Voltage < value)
 			value = BattData.Voltage;
-		if (value < (APP_MIN_VOLTAGE+200) &&
-		    value > (APP_MIN_VOLTAGE-500)) {
-			if (value < APP_MIN_VOLTAGE)
+		if (value < (APP_MIN_VOLTAGE+50) &&
+		    value > (APP_MIN_VOLTAGE-200)) {
+			if ((value < APP_MIN_VOLTAGE) &&
+			    ((BattData.AvgCurrent > -240)&&
+			     (BattData.AvgCurrent < 0)))
 				BattData.SOC = 0;
 			else
 				BattData.SOC = BattData.SOC *
-					(value - APP_MIN_VOLTAGE) / 200;
+					(value - APP_MIN_VOLTAGE) / 50;
 		}
 
 		BattData.AccVoltage += (BattData.Voltage - BattData.AvgVoltage);
@@ -1720,11 +1735,11 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 			}
 			/* Lately empty compensation*/
 			if (BattData.AvgCurrent < 0 &&
-			   BattData.SOC >= 15 &&
-			   BattData.SOC < 20 &&
+			   BattData.SOC >= 5 &&
+			   BattData.SOC < 10 &&
 			   BattData.Voltage > (APP_MIN_VOLTAGE+50)) {
-				BattData.SOC = 20;
-				STC311x_SetSOC(2*512);
+				BattData.SOC = 10;
+				STC311x_SetSOC(512);
 			}
 		}
 
@@ -2146,6 +2161,18 @@ static DEVICE_ATTR(CEI_Temperature, 0664 ,
 		   sculld_show_CEI_Temperature,
 		   sculld_store_CEI_Temperature);
 
+static void cei_hwid_read_smem(void)
+{
+	unsigned hwid_smem_size;
+
+	cei_hwid_data = (cei_hwid_data_type *)(smem_get_entry(SMEM_ID_VENDOR0,
+			&hwid_smem_size, 0, SMEM_ANY_HOST_FLAG));
+
+	if (cei_hwid_data->battery_volt != 3600)
+		cei_hwid_data->battery_volt = 9999;
+}
+
+
 static int stc311x_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
 {
@@ -2180,6 +2207,8 @@ static int stc311x_probe(struct i2c_client *client,
 	chip->battery.get_property	= stc311x_get_property;
 	chip->battery.properties	= stc311x_battery_props;
 	chip->battery.num_properties	= ARRAY_SIZE(stc311x_battery_props);
+
+	cei_hwid_read_smem();
 
 	if (chip->pdata && chip->pdata->power_supply_register)
 		ret = chip->pdata->power_supply_register(&client->dev,
