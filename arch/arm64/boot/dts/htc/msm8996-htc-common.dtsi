@@ -101,6 +101,14 @@
 		linux,contiguous-region = <&msm_rtb_mem>;
 		memory-region = <&msm_rtb_mem>;
 	};
+
+	qcom,bcl {
+		/delete-property/ qcom,bcl-hotplug-list;
+		/delete-property/ qcom,bcl-soc-hotplug-list;
+		qcom,ibat-monitor {
+			qcom,mitigation-freq-khz = <1132800>;
+		};
+	};
 };
 
 &wdog {
