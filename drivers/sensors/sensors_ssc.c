@@ -248,7 +248,7 @@ static ssize_t sensor_ssc_status_show(struct device *dev, struct device_attribut
 	return snprintf(buf, sizeof(sensor_ssc_status), "%d\n", sensor_ssc_status);
 }
 
-static DEVICE_ATTR(status, S_IRUGO|S_IWUSR|S_IRGRP, sensor_ssc_status_show, NULL);
+static DEVICE_ATTR(status, S_IRUGO|S_IRGRP, sensor_ssc_status_show, NULL);
 
 static int sensors_ssc_open(struct inode *ip, struct file *fp)
 {
