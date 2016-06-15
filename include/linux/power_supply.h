@@ -372,6 +372,8 @@ extern int power_supply_set_dp_dm(struct power_supply *psy,
 							int value);
 extern int power_supply_is_system_supplied(void);
 extern int power_supply_set_scope(struct power_supply *psy, int scope);
+extern int power_supply_set_charging_enabled(struct power_supply *psy,
+					     bool enable);
 /* For APM emulation, think legacy userspace. */
 extern struct class *power_supply_class;
 
