@@ -1203,6 +1203,7 @@ VOS_STATUS hdd_rx_packet_cbk(v_VOID_t *vosContext,
    return VOS_STATUS_SUCCESS;
 }
 
+#ifdef QCA_PKT_PROTO_TRACE
 /**
  * hdd_dhcp_pkt_trace_buf_update() - Update protocol trace buffer with DHCP
  * packet info.
@@ -1281,3 +1282,4 @@ void hdd_dhcp_pkt_trace_buf_update (struct sk_buff *skb, int is_transmission,
 			  FL("%s"), tbuf);
 	}
 }
+#endif
