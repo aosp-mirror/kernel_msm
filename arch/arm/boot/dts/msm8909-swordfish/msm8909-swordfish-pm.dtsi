@@ -208,8 +208,8 @@
 		qcom,batt-tm-adc_tm = <&pm8916_adc_tm>;
 		tm,batt-vreg-mv = <4400>;
 		tm,current-ma = <250>;
-		tm,low-vreg-mv = <4100>;
-		tm,low-current-ma = <200>;
+		tm,low-vreg-mv = <4400>;
+		tm,low-current-ma = <250>;
 		tm,warm-cfg = <
 			 (-50) (-100) (450) 0 1
 			 (450)  (430) (550) 1 2
