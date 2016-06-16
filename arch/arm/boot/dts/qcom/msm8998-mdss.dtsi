@@ -610,6 +610,7 @@
 
 	mdss_hdmi_tx: qcom,hdmi_tx@c9a0000 {
 		cell-index = <0>;
+		status = "disabled";
 		compatible = "qcom,hdmi-tx";
 
 		reg =	<0xc9a0000 0x50c>,
