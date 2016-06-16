@@ -22,7 +22,6 @@
 					09 0A 0B 0C 0D 0E 0F 10
 					11 12 13 14 15 16 17 18];
 				linux,default-trigger = "none";
-				rgb,max_brightness = <8>;
 			};
 
 			qcom,rgb_1 {
@@ -34,7 +33,6 @@
 					09 0A 0B 0C 0D 0E 0F 10
 					11 12 13 14 15 16 17 18];
 				linux,default-trigger = "none";
-				rgb,max_brightness = <8>;
 			};
 
 			qcom,rgb_2 {
@@ -46,7 +44,6 @@
 					09 0A 0B 0C 0D 0E 0F 10
 					11 12 13 14 15 16 17 18];
 				linux,default-trigger = "none";
-				rgb,max_brightness = <8>;
 			};
         };
 	};
