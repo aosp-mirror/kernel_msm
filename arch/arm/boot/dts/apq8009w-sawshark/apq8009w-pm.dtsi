@@ -65,7 +65,7 @@
 			qcom,batt-uvlo-theshold-mv = <2800>;
 			qcom,batt-auto-recharge-delta-mv = <200>;
 
-			qcom,batt-discharging-ma = <1400>;
+			qcom,batt-discharging-ma = <3200>;
 			qcom,thermal-regulation-threshold = <120>;
 
 			status = "ok";
