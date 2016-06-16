@@ -179,7 +179,7 @@
 		qcom,soft-temp-current-comp-ma = <400>;
 		qcom,thermal-mitigation = <1500 900 500 100>;
 		qcom,apsd-disabled;
-		qcom,bms-psy-name;
+		qcom,bms-psy-name = "bms";
 	};
 	stc3117@70 {
 		compatible = "st,stc3117";

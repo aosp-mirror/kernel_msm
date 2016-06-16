@@ -129,6 +129,9 @@
 /* Linear coin cell charging register */
 #define COIN_EN_CTL				0x2846
 
+/* USB suspend register */
+#define USB_SUSP				0x1347
+
 /* Feature flags */
 #define VDD_TRIM_SUPPORTED			BIT(0)
 
@@ -426,23 +429,35 @@ bool eng_charging_limit;
 // BSP Steve2: charging limit ---
 
 //BSP Steve2 read mpp4 voltage Interface+++
-#if defined(ASUS_FACTORY_BUILD)
 static int
 get_prop_mpp4_voltage(struct qpnp_lbc_chip *chip)
 {
 	int rc = 0;
 	struct qpnp_vadc_result results;
 
-	rc = qpnp_vadc_read(chip->vadc_dev, P_MUX4_1_3, &results);
-	if (rc) {
-		pr_debug("Unable to read MPP4 voltage rc=%d\n", rc);
+	if (chip->vadc_dev) {
+		rc = qpnp_vadc_read(chip->vadc_dev, P_MUX4_1_3, &results);
+		if (rc) {
+			pr_debug("Unable to read MPP4 voltage rc=%d\n", rc);
+			return 0;
+		}
+	} else {
+		printk("chip->vadc_dev is null\n");
 		return 0;
 	}
 
 	return (int)results.physical;
 }
-#endif
 //BSP Steve2 read mpp4 voltage Interface---
+
+int smb23x_mpp4_vol_proc_read(void)
+{
+	int mpp4_result = 0;
+	if (g_lbc_chip)
+		mpp4_result = get_prop_mpp4_voltage(g_lbc_chip);
+	return mpp4_result;
+}
+EXPORT_SYMBOL(smb23x_mpp4_vol_proc_read);
 
 static void qpnp_lbc_enable_irq(struct qpnp_lbc_chip *chip,
 					struct qpnp_lbc_irq *irq)
@@ -1870,6 +1885,8 @@ static void qpnp_lbc_parallel_work(struct work_struct *work)
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct qpnp_lbc_chip *chip = container_of(dwork,
 				struct qpnp_lbc_chip, parallel_work);
+	u8 reg_val;
+	int rc;
 
 	if (is_vinmin_set(chip)) {
 		/* vinmin-loop triggered - stop ibat increase */
@@ -1883,6 +1900,10 @@ static void qpnp_lbc_parallel_work(struct work_struct *work)
 			goto exit_work;
 		}
 		chip->ichg_now = temp;
+		reg_val = 0;
+		rc = qpnp_lbc_write(chip, USB_SUSP, &reg_val, 1);
+		if (rc)
+			pr_err("Failed to set USB_SUSP rc=%d\n", rc);
 		qpnp_lbc_ibatmax_set(chip, chip->ichg_now);
 		pr_debug("ichg_now increased to %d\n", chip->ichg_now);
 	}
@@ -1894,6 +1915,20 @@ static void qpnp_lbc_parallel_work(struct work_struct *work)
 exit_work:
 	pm_relax(chip->dev);
 }
+
+void lbc_set_suspend(u8 reg_val)
+{
+	int rc;
+
+	if (g_lbc_chip) {
+		rc = qpnp_lbc_write(g_lbc_chip, USB_SUSP, &reg_val, 1);
+		if (rc)
+			pr_err("Failed to set USB_SUSP rc=%d\n", rc);
+	} else {
+		pr_err("g_lbc_chip is null\n");
+	}
+}
+EXPORT_SYMBOL(lbc_set_suspend);
 
 static int qpnp_lbc_parallel_charging_config(struct qpnp_lbc_chip *chip,
 					int enable)
@@ -3524,6 +3559,7 @@ static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 
 	gpio_set_value(GPIO_num17,0);
 */
+
 	chip = devm_kzalloc(&spmi->dev, sizeof(struct qpnp_lbc_chip),
 							GFP_KERNEL);
 	if (!chip) {
@@ -3569,6 +3605,11 @@ static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 	if (rc)
 		pr_err("Failed to set COIN_EN_CTL rc=%d\n", rc);
 
+	reg_val = 0x01;
+	rc = qpnp_lbc_write(chip, USB_SUSP, &reg_val, 1);
+	if (rc)
+		pr_err("Failed to set USB_SUSP rc=%d\n", rc);
+
 	chip->parallel_psy.name		= "usb-parallel";
 	chip->parallel_psy.type		= POWER_SUPPLY_TYPE_USB_PARALLEL;
 	chip->parallel_psy.get_property	= qpnp_lbc_parallel_get_property;
@@ -3584,6 +3625,14 @@ static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 		pr_err("Unable to register LBC parallel_psy rc = %d\n", rc);
 		return rc;
 	}
+
+	chip->vadc_dev = qpnp_get_vadc(chip->dev, "chg");
+	if (IS_ERR(chip->vadc_dev)) {
+		rc = PTR_ERR(chip->vadc_dev);
+		if (rc != -EPROBE_DEFER)
+			pr_err("vadc prop missing rc=%d\n", rc);
+	}
+	g_lbc_chip = chip;
 
 	pr_info("LBC (parallel) registered successfully!\n");
 

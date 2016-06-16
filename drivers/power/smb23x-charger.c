@@ -24,6 +24,7 @@
 #include <linux/pm_wakeup.h>
 #include <linux/spinlock.h>
 #include <linux/delay.h>
+#include <linux/gpio.h>
 
 struct smb23x_wakeup_source {
 	struct wakeup_source source;
@@ -371,6 +372,8 @@ enum {
 };
 
 static irqreturn_t smb23x_stat_handler(int irq, void *dev_id);
+static int MPP4_read;
+static int GPIO_num17 = 17;
 
 #define MAX_RW_RETRIES		3
 static int __smb23x_read(struct smb23x_chip *chip, u8 reg, u8 *val)
@@ -913,8 +916,16 @@ static void smb23x_parallel_work(struct work_struct *work)
 	int rc, i, tmp;
 	struct smb23x_chip *chip = container_of(work,
 	struct smb23x_chip, parallel_work);
+	int type;
+	extern int smb23x_mpp4_vol_proc_read(void);
+	extern void lbc_set_suspend(u8 reg_val);
+
+	MPP4_read = smb23x_mpp4_vol_proc_read();
+	printk("charger_type_proc_read MPP4 voltage:%d\n", MPP4_read);
 
 	smb23x_enable_volatile_writes(chip);
+
+	type = chip->usb_psy->type;
 
 	if (chip->parallel_charging) {
 		/* Strong Charger - Enable parallel path */
@@ -941,6 +952,35 @@ static void smb23x_parallel_work(struct work_struct *work)
 		rc = smb23x_parallel_charger_enable(chip, CURRENT, true);
 		if (rc < 0)
 			printk("Disable charging for CURRENT failed, rc=%d\n", rc);
+
+		if (type == POWER_SUPPLY_TYPE_USB_DCP) {
+			gpio_set_value(GPIO_num17,1);
+			printk("gpio_17 set to 1\n");
+			if (MPP4_read > 500000 && MPP4_read < 900000) {
+				printk("USB_TYPE: AC_Fast\n");
+			} else if (MPP4_read > 2200000 && MPP4_read < 2850000) {
+				printk("USB_TYPE: Power_Bank\n");
+			} else {
+				printk("USB_TYPE: AC_Normal\n");
+			}
+		} else if (type == POWER_SUPPLY_TYPE_USB_CDP) {
+			gpio_set_value(GPIO_num17,0);
+			printk("gpio_17 set to 0\n");
+			printk("USB_TYPE: USB_Fast\n");
+		} else if (type == POWER_SUPPLY_TYPE_USB) {
+			gpio_set_value(GPIO_num17,0);
+			printk("gpio_17 set to 0\n");
+			rc = smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x02);
+			lbc_set_suspend(0x01);
+			printk("USB_TYPE: USB_Normal\n");
+		} else if (type == POWER_SUPPLY_TYPE_UNKNOWN) {
+			gpio_set_value(GPIO_num17,1);
+			printk("gpio_17 set to 1\n");
+			rc = smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x00);
+			lbc_set_suspend(0x01);
+			printk("USB_TYPE: UNKNOWN\n");
+		}
+
 	} else {
 		/* Weak-charger - Disable parallel path */
 		printk("Weak-charger - Disable parallel path\n");
@@ -1515,6 +1555,14 @@ static void reconfig_upon_unplug(struct smb23x_chip *chip)
 static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	bool usb_present = !rt_sts;
+
+	if (chip->usb_present == 0 && usb_present == 1) {
+		gpio_set_value(GPIO_num17,0);
+		printk("gpio_17 set to 0\n");
+	} else if (chip->usb_present == 1 && usb_present == 0) {
+		gpio_set_value(GPIO_num17,1);
+		printk("gpio_17 set to 1\n");
+	}
 
 	printk("usbin_uv_irq_handler chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present,  usb_present);
@@ -2449,6 +2497,14 @@ static int smb23x_probe(struct i2c_client *client,
 	mutex_init(&chip->usb_suspend_lock);
 	mutex_init(&chip->icl_set_lock);
 	smb23x_wakeup_src_init(chip);
+
+	rc = gpio_request_one(GPIO_num17, GPIOF_OUT_INIT_LOW, "asus_muxsel0_default");
+	if (rc) {
+		pr_err("Failed to request init gpio 17 Low: %d\n", rc);
+	} else {
+		pr_debug("Success to request init gpio 17 Low \n");
+	}
+
 	INIT_DELAYED_WORK(&chip->irq_polling_work, smb23x_irq_polling_work_fn);
 	INIT_WORK(&chip->parallel_work, smb23x_parallel_work);
 
