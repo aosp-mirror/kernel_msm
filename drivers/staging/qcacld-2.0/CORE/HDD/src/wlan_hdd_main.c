@@ -9862,14 +9862,9 @@ static void __hdd_set_multicast_list(struct net_device *dev)
    {
       mc_count = netdev_mc_count(dev);
       hddLog(VOS_TRACE_LEVEL_INFO,
-            "%s: mc_count : %u, max_mc_addr_list : %d",
-             __func__, mc_count, pHddCtx->max_mc_addr_list);
+            "%s: mc_count = %u", __func__, mc_count);
 
       netdev_for_each_mc_addr(ha, dev) {
-         hddLog(VOS_TRACE_LEVEL_INFO,
-                FL("ha_addr[%d] "MAC_ADDRESS_STR),
-                i, MAC_ADDR_ARRAY(ha->addr));
-
          if (i == mc_count || i == pHddCtx->max_mc_addr_list)
             break;
          /*
@@ -10178,6 +10173,9 @@ static hdd_adapter_t* hdd_alloc_station_adapter( hdd_context_t *pHddCtx, tSirMac
 VOS_STATUS hdd_register_interface( hdd_adapter_t *pAdapter, tANI_U8 rtnl_lock_held )
 {
    struct net_device *pWlanDev = pAdapter->dev;
+   //hdd_station_ctx_t *pHddStaCtx = &pAdapter->sessionCtx.station;
+   //hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX( pAdapter );
+   //eHalStatus halStatus = eHAL_STATUS_SUCCESS;
 
    if( rtnl_lock_held )
    {
@@ -15325,7 +15323,7 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
 #endif
 
    if (WLAN_HDD_RX_HANDLE_RPS == pHddCtx->cfg_ini->rxhandle)
-       hdd_set_rps_cpu_mask(pHddCtx);
+      hdd_dp_util_send_rps_ind(pHddCtx);
 
    hal_status = sme_set_lost_link_info_cb(pHddCtx->hHal,
                                           hdd_lost_link_info_cb);
@@ -15771,8 +15769,7 @@ static void hdd_driver_exit(void)
       pHddCtx->driver_being_stopped = false;
 
 #ifdef QCA_PKT_PROTO_TRACE
-      if (VOS_FTM_MODE != hdd_get_conparam())
-          vos_pkt_proto_trace_close();
+      vos_pkt_proto_trace_close();
 #endif /* QCA_PKT_PROTO_TRACE */
       while(pHddCtx->isLogpInProgress ||
             vos_is_logp_in_progress(VOS_MODULE_ID_VOSS, NULL)) {
@@ -17836,28 +17833,6 @@ void hdd_deinit_packet_filtering(hdd_adapter_t *adapter)
 	adapter->mc_addr_list.addr = NULL;
 }
 #endif
-
-/**
- * hdd_set_rps_cpu_mask - set RPS CPU mask for interfaces
- * @hdd_ctx: pointer to hdd_context_t
- *
- * Return: none
- */
-void hdd_set_rps_cpu_mask(hdd_context_t *hdd_ctx)
-{
-	hdd_adapter_t *adapter;
-	hdd_adapter_list_node_t *adapter_node, *next;
-	VOS_STATUS status = VOS_STATUS_SUCCESS;
-
-	status = hdd_get_front_adapter (hdd_ctx, &adapter_node);
-	while (NULL != adapter_node && VOS_STATUS_SUCCESS == status) {
-		adapter = adapter_node->pAdapter;
-		if (NULL != adapter)
-			hdd_dp_util_send_rps_ind(adapter);
-		status = hdd_get_next_adapter (hdd_ctx, adapter_node, &next);
-		adapter_node = next;
-	}
-}
 
 //Register the module init/exit functions
 module_init(hdd_module_init);

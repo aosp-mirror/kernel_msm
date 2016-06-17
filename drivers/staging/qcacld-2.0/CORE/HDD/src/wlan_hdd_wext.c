@@ -3811,7 +3811,6 @@ static void hdd_get_station_statisticsCB(void *pStats, void *pContext)
    struct statsContext *pStatsContext;
    tCsrSummaryStatsInfo      *pSummaryStats;
    tCsrGlobalClassAStatsInfo *pClassAStats;
-   struct csr_per_chain_rssi_stats_info *per_chain_rssi_stats;
    hdd_adapter_t *pAdapter;
 
    if (ioctl_debug)
@@ -3836,8 +3835,6 @@ static void hdd_get_station_statisticsCB(void *pStats, void *pContext)
 
    pSummaryStats = (tCsrSummaryStatsInfo *)pStats;
    pClassAStats  = (tCsrGlobalClassAStatsInfo *)( pSummaryStats + 1 );
-   per_chain_rssi_stats = (struct csr_per_chain_rssi_stats_info *)
-                                  (pClassAStats + 1);
    pStatsContext = pContext;
    pAdapter      = pStatsContext->pAdapter;
    if ((NULL == pAdapter) || (STATS_CONTEXT_MAGIC != pStatsContext->magic))
@@ -3863,7 +3860,6 @@ static void hdd_get_station_statisticsCB(void *pStats, void *pContext)
    /* copy over the stats. do so as a struct copy */
    pAdapter->hdd_stats.summary_stat = *pSummaryStats;
    pAdapter->hdd_stats.ClassA_stat = *pClassAStats;
-   pAdapter->hdd_stats.per_chain_rssi_stats = *per_chain_rssi_stats;
 
    /* notify the caller */
    complete(&pStatsContext->completion);
@@ -3895,8 +3891,7 @@ VOS_STATUS  wlan_hdd_get_station_stats(hdd_adapter_t *pAdapter)
    hstatus = sme_GetStatistics(WLAN_HDD_GET_HAL_CTX(pAdapter),
                                eCSR_HDD,
                                SME_SUMMARY_STATS |
-                               SME_GLOBAL_CLASSA_STATS |
-                               SME_PER_CHAIN_RSSI_STATS,
+                               SME_GLOBAL_CLASSA_STATS,
                                hdd_get_station_statisticsCB,
                                0, // not periodic
                                FALSE, //non-cached results
@@ -4787,12 +4782,48 @@ static int iw_get_nick(struct net_device *dev,
  * __get_wireless_stats() - get wireless stats
  * @dev: pointer to net_device
  *
- * Return: %NULL
+ * Return: pointer to iw_statistics on success, NULL otherwise
  */
 static struct iw_statistics *__get_wireless_stats(struct net_device *dev)
 {
+	hdd_adapter_t *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
+	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
+	hdd_wext_state_t  *wext_state =  WLAN_HDD_GET_WEXT_STATE_PTR(adapter);
+	hdd_station_ctx_t *hdd_sta_ctx;
+	v_S7_t snr = 0, rssi = 0;
+	int status;
+
 	ENTER();
-	return NULL;
+
+	status = wlan_hdd_validate_context(hdd_ctx);
+	if (0 != status)
+		return NULL;
+
+	hdd_sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(adapter);
+	if (eConnectionState_Associated != hdd_sta_ctx->conn_info.connState) {
+		hddLog(VOS_TRACE_LEVEL_INFO,
+			FL("not in associated state: %d"),
+				hdd_sta_ctx->conn_info.connState);
+		return NULL;
+	}
+
+	wlan_hdd_get_station_stats(adapter);
+	wlan_hdd_get_snr(adapter, &snr);
+	wlan_hdd_get_rssi(adapter, &rssi);
+
+	vos_mem_zero(&wext_state->iw_stats, sizeof(wext_state->iw_stats));
+	wext_state->iw_stats.status = 0;
+	wext_state->iw_stats.qual.qual = snr;
+	wext_state->iw_stats.qual.level = rssi;
+	wext_state->iw_stats.qual.noise = rssi - snr;
+	wext_state->iw_stats.discard.code = 0;
+	wext_state->iw_stats.discard.retries = 0;
+	wext_state->iw_stats.miss.beacon = 0;
+	wext_state->iw_stats.qual.updated =
+					IW_QUAL_ALL_UPDATED | IW_QUAL_DBM;
+
+	EXIT();
+	return &(wext_state->iw_stats);
 }
 
 /**
@@ -4812,7 +4843,6 @@ static struct iw_statistics *get_wireless_stats(struct net_device *dev)
 
 	return iw_stats;
 }
-
 
 /**
  * __iw_set_encode() - SIOCSIWENCODE ioctl handler
@@ -9065,8 +9095,7 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
                     hddLog(LOGE, FL("Invalid MODULE ID %d"), apps_args[0]);
                     return -EINVAL;
                 }
-                if ((apps_args[1] > (WMA_MAX_NUM_ARGS)) ||
-                    (apps_args[1] < 0)) {
+                if (apps_args[1] > (WMA_MAX_NUM_ARGS)) {
                     hddLog(LOGE, FL("Too Many args %d"), apps_args[1]);
                     return -EINVAL;
                 }
@@ -9079,8 +9108,7 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
                 unitTestArgs->vdev_id            = (int)pAdapter->sessionId;
                 unitTestArgs->module_id          = apps_args[0];
                 unitTestArgs->num_args           = apps_args[1];
-                for (i = 0, j = 2; i < unitTestArgs->num_args - 1;
-                     i++, j++) {
+                for (i = 0, j = 2; i < unitTestArgs->num_args; i++, j++) {
                     unitTestArgs->args[i] = apps_args[j];
                 }
                 msg.type = SIR_HAL_UNIT_TEST_CMD;
@@ -10293,11 +10321,6 @@ void wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, v_U8_t set)
                 /* Set multicast filter */
                 sme_8023MulticastList(hHal, pAdapter->sessionId,
                                       pMulticastAddrs);
-            }
-            else {
-                hddLog(VOS_TRACE_LEVEL_INFO,
-                       FL("MC address list not sent to FW, cnt: %d"),
-                        pAdapter->mc_addr_list.mc_cnt);
             }
         }
         else

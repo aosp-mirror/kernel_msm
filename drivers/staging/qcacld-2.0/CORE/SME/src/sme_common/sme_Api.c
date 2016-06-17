@@ -2236,7 +2236,6 @@ eHalStatus sme_HDDReadyInd(tHalHandle hHal)
 /**
  * sme_set_allowed_action_frames() - Set allowed action frames to wma
  * @hal: Handler to HAL
- * @bitmap0: Bitmap for allowed action frames
  *
  * This function conveys the list of action frames that needs to be forwarded
  * to driver by FW. Rest of the action frames can be dropped in FW. Bitmask is
@@ -2244,7 +2243,7 @@ eHalStatus sme_HDDReadyInd(tHalHandle hHal)
  *
  * Return: None
  */
-void sme_set_allowed_action_frames(tHalHandle hal, uint32_t bitmap0)
+static void sme_set_allowed_action_frames(tHalHandle hal)
 {
 	eHalStatus status;
 	tpAniSirGlobal mac = PMAC_STRUCT(hal);
@@ -2264,7 +2263,8 @@ void sme_set_allowed_action_frames(tHalHandle hal, uint32_t bitmap0)
 			sizeof(*sir_allowed_action_frames));
 	sir_allowed_action_frames->operation = WOW_ACTION_WAKEUP_OPERATION_SET;
 
-	sir_allowed_action_frames->action_category_map[0] = bitmap0;
+	sir_allowed_action_frames->action_category_map[0] =
+				(ALLOWED_ACTION_FRAMES_BITMAP0);
 	sir_allowed_action_frames->action_category_map[1] =
 				(ALLOWED_ACTION_FRAMES_BITMAP1);
 	sir_allowed_action_frames->action_category_map[2] =
@@ -2365,7 +2365,7 @@ eHalStatus sme_Start(tHalHandle hHal)
       pMac->sme.state = SME_STATE_START;
    }while (0);
 
-   sme_set_allowed_action_frames(hHal, ALLOWED_ACTION_FRAMES_BITMAP0_STA);
+   sme_set_allowed_action_frames(hHal);
 
    return status;
 }
@@ -10576,46 +10576,6 @@ eHalStatus sme_UpdateIsFastRoamIniFeatureEnabled
   return eHAL_STATUS_SUCCESS;
 }
 
-/**
- * sme_config_fast_roaming() - enable/disable LFR support at runtime
- * @hhal - The handle returned by macOpen.
- * @session_id - Session Identifier
- * @is_fast_roam_enabled - flag to enable/disable roaming
- *
- * When Supplicant issues enabled/disable fast roaming on the basis
- * of the Bssid modification in network block (e.g. AutoJoin mode N/W block)
- *
- * Return: eHalStatus
- */
-
-eHalStatus sme_config_fast_roaming(tHalHandle hhal, tANI_U8 session_id,
-				    const bool is_fast_roam_enabled)
-{
-	tpAniSirGlobal pmac = PMAC_STRUCT(hhal);
-	tCsrRoamSession *psession = CSR_GET_SESSION(pmac, session_id);
-	eHalStatus status;
-
-	if (!pmac->roam.configParam.isFastRoamIniFeatureEnabled) {
-		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO,
-			  FL("FastRoam is disabled through ini"));
-		if (!is_fast_roam_enabled)
-			return eHAL_STATUS_SUCCESS;
-		return  eHAL_STATUS_FAILURE;
-	}
-
-	if (is_fast_roam_enabled && psession && psession->pCurRoamProfile)
-		psession->pCurRoamProfile->do_not_roam = false;
-	status = csrNeighborRoamUpdateFastRoamingEnabled(pmac,
-					 session_id, is_fast_roam_enabled);
-	if (!HAL_STATUS_SUCCESS(status)) {
-		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
-			FL("csrNeighborRoamUpdateFastRoamingEnabled failed"));
-		return  eHAL_STATUS_FAILURE;
-	}
-
-	return eHAL_STATUS_SUCCESS;
-}
-
 /*--------------------------------------------------------------------------
   \brief sme_UpdateIsMAWCIniFeatureEnabled() -
   Enable/disable LFR MAWC support at runtime
@@ -14562,19 +14522,6 @@ eHalStatus sme_getRegInfo(tHalHandle hHal, tANI_U8 chanId,
         sme_ReleaseGlobalLock(&pMac->sme);
     }
     return status;
-}
-
-/* sme_get_wni_dot11_mode() - return configured wni dot11mode
- * @hHal: hal pointer
- *
- * Return: wni dot11 mode.
- */
-uint32_t sme_get_wni_dot11_mode(tHalHandle hal)
-{
-	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
-
-	return csrTranslateToWNICfgDot11Mode(mac_ctx,
-			mac_ctx->roam.configParam.uCfgDot11Mode);
 }
 
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN

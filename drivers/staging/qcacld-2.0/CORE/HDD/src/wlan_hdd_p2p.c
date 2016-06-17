@@ -2271,15 +2271,11 @@ struct net_device* __wlan_hdd_add_virtual_intf(
                                          wlan_hdd_get_session_type(type),
                                          name, p2pDeviceAddress.bytes,
                                          VOS_TRUE );
-            if (WLAN_HDD_RX_HANDLE_RPS == pHddCtx->cfg_ini->rxhandle)
-                hdd_dp_util_send_rps_ind(pAdapter);
     }
     else
     {
        pAdapter = hdd_open_adapter( pHddCtx, wlan_hdd_get_session_type(type),
                           name, wlan_hdd_get_intf_addr(pHddCtx), VOS_TRUE );
-       if (WLAN_HDD_RX_HANDLE_RPS == pHddCtx->cfg_ini->rxhandle)
-           hdd_dp_util_send_rps_ind(pAdapter);
     }
 
     if( NULL == pAdapter)

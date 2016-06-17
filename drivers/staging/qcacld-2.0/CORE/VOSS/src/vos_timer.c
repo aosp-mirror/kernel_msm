@@ -45,7 +45,6 @@
 #include <vos_api.h>
 #include "wlan_qct_sys.h"
 #include "vos_sched.h"
-#include <linux/rtc.h>
 
 /*--------------------------------------------------------------------------
   Preprocessor definitions and constants
@@ -190,7 +189,7 @@ static void vos_linux_timer_callback (unsigned long data)
    if (vos_is_wd_thread(threadId)) {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
                 "TIMER callback: running on wd thread");
-      callback(userData);
+      callback(NULL);
       return;
    }
 
@@ -847,25 +846,4 @@ v_TIME_t vos_timer_get_system_time( v_VOID_t )
    struct timeval tv;
    do_gettimeofday(&tv);
    return tv.tv_sec*1000 + tv.tv_usec/1000;
-}
-
-/**
- * vos_get_time_of_the_day_ms() - get time in milisec
- *
- * Return: time of the day in ms
- */
-unsigned long vos_get_time_of_the_day_ms(void)
-{
-	struct timeval tv;
-	unsigned long local_time;
-	struct rtc_time tm;
-
-	do_gettimeofday(&tv);
-
-	local_time = (uint32_t)(tv.tv_sec -
-		(sys_tz.tz_minuteswest * 60));
-	rtc_time_to_tm(local_time, &tm);
-	return ((tm.tm_hour * 60 * 60 * 1000) +
-		(tm.tm_min *60 * 1000) + (tm.tm_sec * 1000)+
-		(tv.tv_usec/1000));
 }

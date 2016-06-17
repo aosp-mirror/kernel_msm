@@ -2837,17 +2837,14 @@ limSendReassocReqWithFTIEsMgmtFrame(tpAniSirGlobal     pMac,
                 (nBytes + ft_ies_length));)
 #endif
 
-#if defined(WLAN_FEATURE_VOWIFI_11R) || defined(FEATURE_WLAN_ESE) || defined(FEATURE_WLAN_LFR)
-    if ((NULL != psessionEntry->ftPEContext.pFTPreAuthReq) &&
-         ( SIR_BAND_5_GHZ == limGetRFBand(
-              psessionEntry->ftPEContext.pFTPreAuthReq->preAuthchannelNum)))
-         txFlag |= HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME;
-    else
-#endif
-     if( (SIR_BAND_5_GHZ == limGetRFBand(psessionEntry->currentOperChannel)) ||
-                (psessionEntry->pePersona == VOS_P2P_CLIENT_MODE) ||
-                (psessionEntry->pePersona == VOS_P2P_GO_MODE))
-         txFlag |= HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME;
+
+    if( ( SIR_BAND_5_GHZ == limGetRFBand(psessionEntry->currentOperChannel))
+       || ( psessionEntry->pePersona == VOS_P2P_CLIENT_MODE ) ||
+         ( psessionEntry->pePersona == VOS_P2P_GO_MODE)
+         )
+    {
+        txFlag |= HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME;
+    }
 
     if( NULL != psessionEntry->assocReq )
     {
@@ -3237,9 +3234,10 @@ limSendReassocReqMgmtFrame(tpAniSirGlobal     pMac,
         psessionEntry->assocReqLen = nPayload;
     }
 
-    if( (SIR_BAND_5_GHZ == limGetRFBand(psessionEntry->currentOperChannel)) ||
-            (psessionEntry->pePersona == VOS_P2P_CLIENT_MODE) ||
-            (psessionEntry->pePersona == VOS_P2P_GO_MODE))
+    if( ( SIR_BAND_5_GHZ == limGetRFBand(psessionEntry->currentOperChannel))
+       || ( psessionEntry->pePersona == VOS_P2P_CLIENT_MODE ) ||
+         ( psessionEntry->pePersona == VOS_P2P_GO_MODE)
+         )
     {
         txFlag |= HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME;
     }
@@ -3599,19 +3597,20 @@ limSendAuthMgmtFrame(tpAniSirGlobal pMac,
     }
     PELOG2(sirDumpBuf(pMac, SIR_LIM_MODULE_ID, LOG2, pFrame, frameLen);)
 
-#if defined(WLAN_FEATURE_VOWIFI_11R) || defined(FEATURE_WLAN_ESE) || defined(FEATURE_WLAN_LFR)
-    if ((NULL != psessionEntry->ftPEContext.pFTPreAuthReq) &&
-         ( SIR_BAND_5_GHZ == limGetRFBand(
-             psessionEntry->ftPEContext.pFTPreAuthReq->preAuthchannelNum)))
-        txFlag |= HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME;
-    else
-#endif
     if( (SIR_BAND_5_GHZ == limGetRFBand(psessionEntry->currentOperChannel)) ||
-         (psessionEntry->pePersona == VOS_P2P_CLIENT_MODE) ||
-         (psessionEntry->pePersona == VOS_P2P_GO_MODE))
+        (psessionEntry->pePersona == VOS_P2P_CLIENT_MODE) ||
+        (psessionEntry->pePersona == VOS_P2P_GO_MODE)
+#if defined(WLAN_FEATURE_VOWIFI_11R) || defined(FEATURE_WLAN_ESE) || defined(FEATURE_WLAN_LFR)
+         ||  ((NULL != psessionEntry->ftPEContext.pFTPreAuthReq) &&
+         (SIR_BAND_5_GHZ ==
+           limGetRFBand(psessionEntry->ftPEContext.pFTPreAuthReq->preAuthchannelNum)))
+#endif
+      )
+    {
         txFlag |= HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME;
+    }
 
-   if(psessionEntry->pePersona == VOS_P2P_CLIENT_MODE ||
+    if(psessionEntry->pePersona == VOS_P2P_CLIENT_MODE ||
        psessionEntry->pePersona == VOS_STA_MODE)
     {
         txFlag |= HAL_USE_PEER_STA_REQUESTED_MASK;
@@ -3861,13 +3860,11 @@ end:
 
 eHalStatus limDisassocTxCompleteCnf(tpAniSirGlobal pMac, tANI_U32 txCompleteSuccess)
 {
-    limLog(pMac, LOG1, FL("txCompleteSuccess: %d"), txCompleteSuccess);
     return limSendDisassocCnf(pMac);
 }
 
 eHalStatus limDeauthTxCompleteCnf(tpAniSirGlobal pMac, tANI_U32 txCompleteSuccess)
 {
-    limLog(pMac, LOG1, FL("txCompleteSuccess: %d"), txCompleteSuccess);
     return limSendDeauthCnf(pMac);
 }
 

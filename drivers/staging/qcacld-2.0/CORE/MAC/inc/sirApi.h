@@ -100,8 +100,6 @@ typedef tANI_U8 tSirVersionString[SIR_VERSION_STRING_LEN];
 #define WLAN_EXTSCAN_MAX_SIGNIFICANT_CHANGE_APS   64
 #define WLAN_EXTSCAN_MAX_HOTLIST_SSIDS            8
 
-#define NUM_CHAINS_MAX  2
-
 typedef enum
 {
     eSIR_EXTSCAN_INVALID,
@@ -3782,7 +3780,7 @@ typedef struct sSirSetRSSIFilterReq
  * SIR_MAC_ACTION_VHT             21      1
  * ----------------------------+------+-------+
  */
-#define ALLOWED_ACTION_FRAMES_BITMAP0_STA \
+#define ALLOWED_ACTION_FRAMES_BITMAP0 \
 		((1 << SIR_MAC_ACTION_SPECTRUM_MGMT) | \
 		 (1 << SIR_MAC_ACTION_QOS_MGMT) | \
 		 (1 << SIR_MAC_ACTION_PUBLIC_USAGE) | \
@@ -3792,9 +3790,6 @@ typedef struct sSirSetRSSIFilterReq
 		 (1 << SIR_MAC_ACTION_WME) | \
 		 (1 << SIR_MAC_ACTION_VHT))
 
-#define ALLOWED_ACTION_FRAMES_BITMAP0_SAP \
-		((ALLOWED_ACTION_FRAMES_BITMAP0_STA) | \
-		 (1 << SIR_MAC_ACTION_HT))
 #define ALLOWED_ACTION_FRAMES_BITMAP1	0x0
 #define ALLOWED_ACTION_FRAMES_BITMAP2	0x0
 #define ALLOWED_ACTION_FRAMES_BITMAP3	0x0
@@ -6847,8 +6842,6 @@ struct sir_bpf_get_offload {
  * @wow_ipv6_mcast_ra_stats: ipv6 multicast ra stats
  * @wow_ipv6_mcast_ns_stats: ipv6 multicast ns stats
  * @wow_ipv6_mcast_na_stats: ipv6 multicast na stats
- * @wow_icmpv4_count: ipv4 icmp packet count
- * @wow_icmpv6_uc_bc_count: ipv6 icmp packet count for unicast and broadcast
  */
 struct sir_wake_lock_stats {
 	uint32_t wow_ucast_wake_up_count;
@@ -6858,8 +6851,6 @@ struct sir_wake_lock_stats {
 	uint32_t wow_ipv6_mcast_ra_stats;
 	uint32_t wow_ipv6_mcast_ns_stats;
 	uint32_t wow_ipv6_mcast_na_stats;
-	uint32_t wow_icmpv4_count;
-	uint32_t wow_icmpv6_uc_bc_count;
 };
 
 /**

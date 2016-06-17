@@ -796,10 +796,6 @@ static int tlshim_mgmt_rx_process(void *context, u_int8_t *data,
 				adf_nbuf_pull_head(wbuf, IEEE80211_CCMP_HEADERLEN);
 				adf_nbuf_trim_tail(wbuf, IEEE80211_CCMP_MICLEN);
 
-				/* wh is moved, restore wh with relocated
-				 * ieee80211_frame header.
-				 */
-				wh = (struct ieee80211_frame *) adf_nbuf_data(wbuf);
 				rx_pkt->pkt_meta.mpdu_hdr_ptr = adf_nbuf_data(wbuf);
 				rx_pkt->pkt_meta.mpdu_len = adf_nbuf_len(wbuf);
 				rx_pkt->pkt_meta.mpdu_data_len =
@@ -1281,10 +1277,16 @@ adf_nbuf_t WLANTL_SendSTA_DataFrame(void *vos_ctx, void *vdev,
 {
 	struct txrx_tl_shim_ctx *tl_shim = vos_get_context(VOS_MODULE_ID_TL,
 							   vos_ctx);
+	void *adf_ctx = vos_get_context(VOS_MODULE_ID_ADF, vos_ctx);
 	adf_nbuf_t ret, skb_list_head;
 
 	if (!tl_shim) {
 		TLSHIM_LOGE("tl_shim is NULL");
+		return skb;
+	}
+
+	if (!adf_ctx) {
+		TLSHIM_LOGE("adf_ct is NULL");
 		return skb;
 	}
 
@@ -1295,6 +1297,8 @@ adf_nbuf_t WLANTL_SendSTA_DataFrame(void *vos_ctx, void *vdev,
 
 	skb_list_head = skb;
 	while (skb) {
+		adf_nbuf_map_single(adf_ctx, skb, ADF_OS_DMA_TO_DEVICE);
+
 #ifdef QCA_PKT_PROTO_TRACE
 		adf_nbuf_trace_set_proto_type(skb, proto_type);
 #endif /* QCA_PKT_PROTO_TRACE */
@@ -1308,8 +1312,16 @@ adf_nbuf_t WLANTL_SendSTA_DataFrame(void *vos_ctx, void *vdev,
 	}
 
 	ret = tl_shim->tx(vdev, skb_list_head);
-	if (ret)
-		return ret;
+	if (ret) {
+		skb_list_head = ret;
+		TLSHIM_LOGW("Failed to tx");
+		while (ret) {
+			adf_nbuf_unmap_single(adf_ctx, ret,
+						ADF_OS_DMA_TO_DEVICE);
+			ret = ret->next;
+		}
+		return skb_list_head;
+	}
 
 	return NULL;
 }
