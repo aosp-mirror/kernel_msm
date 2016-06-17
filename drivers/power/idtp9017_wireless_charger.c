@@ -25,7 +25,7 @@
 #include <linux/power_supply.h>
 #include <linux/power/idtp9017_wireless_charger.h>
 
-#define WLC_GET_INFO_DELAY_MS     (50*1000)
+#define WLC_GET_INFO_DELAY_MS     (10*1000)
 #define WLC_SET_ENV_INTERVAL_MS   (10*1000)
 #define WLC_SET_ENV_DELAY_MS       500
 #define WLC_CHECK_STATUS_DELAY_MS  500
@@ -183,7 +183,7 @@ static int idtp9017_masked_write(struct i2c_client *client,
 	return ret;
 }
 
-static int idtp9017_wlc_status(struct idtp9017_chip *chip)
+static int idtp9017_wlc_status(struct idtp9017_chip *chip, int *res)
 {
 	struct i2c_client *client;
 	u8 reg_val_H = 0x00;
@@ -238,10 +238,12 @@ static int idtp9017_wlc_status(struct idtp9017_chip *chip)
 		enable = 1;
 	}
 
-	return enable;
+	*res = enable;
+
+	return 0;
 }
 
-static int idtp9017_get_chg_mode(struct idtp9017_chip *chip)
+static int idtp9017_get_chg_mode(struct idtp9017_chip *chip, int *res)
 {
 	struct i2c_client *client;
 	u8 reg_val = 0x00;
@@ -266,10 +268,12 @@ static int idtp9017_get_chg_mode(struct idtp9017_chip *chip)
 	else
 		wpc_mode = false;
 
-	return wpc_mode;
+	*res = wpc_mode;
+
+	return 0;
 }
 
-static int idtp9017_get_out_voltage(struct idtp9017_chip *chip)
+static int idtp9017_get_out_voltage(struct idtp9017_chip *chip, int *res)
 {
 	u8 reg_val_1 = 0x00;
 	u8 reg_val_2 = 0x00;
@@ -296,10 +300,12 @@ static int idtp9017_get_out_voltage(struct idtp9017_chip *chip)
 	read_voltage = (reg_sum * 25) / 10;
 	dev_dbg(chip->dev, "Read Vout: %d\n", read_voltage);
 
-	return read_voltage;
+	*res = read_voltage;
+
+	return 0;
 }
 
-static int idtp9017_get_out_current(struct idtp9017_chip *chip)
+static int idtp9017_get_out_current(struct idtp9017_chip *chip, int *res)
 {
 	u8 reg_val_1 = 0x00;
 	u8 reg_val_2 = 0x00;
@@ -324,10 +330,12 @@ static int idtp9017_get_out_current(struct idtp9017_chip *chip)
 	read_current = ((int)reg_sum * 5) / 10;
 	pr_debug("Read Iout : %d\n", read_current);
 
-	return read_current;
+	*res = read_current;
+
+	return 0;
 }
 
-static int idtp9017_get_voltage_rect(struct idtp9017_chip *chip)
+static int idtp9017_get_voltage_rect(struct idtp9017_chip *chip, int *res)
 {
 	u8 reg_val_1 = 0x00;
 	u8 reg_val_2 = 0x00;
@@ -353,10 +361,12 @@ static int idtp9017_get_voltage_rect(struct idtp9017_chip *chip)
 	read_voltage = (reg_sum * 25) / 10;
 	dev_dbg(chip->dev, "Read Vrect: %d\n", read_voltage);
 
-	return read_voltage;
+	*res = read_voltage;
+
+	return 0;
 }
 
-static int idtp9017_get_die_temperature(struct idtp9017_chip *chip)
+static int idtp9017_get_die_temperature(struct idtp9017_chip *chip, int *res)
 {
 	u8 reg_val = 0x00;
 	int ret = 0;
@@ -381,49 +391,48 @@ static int idtp9017_get_die_temperature(struct idtp9017_chip *chip)
 	dev_dbg(chip->dev, "Read die_temp :%d val: 0x%02x\n",
 			read_temperature, reg_val);
 
-	return read_temperature;
+	*res =  read_temperature;
+
+	return 0;
 }
 
-static int idtp9017_get_align_axis(struct idtp9017_chip *chip,
-		int sign, char axis)
+static int idtp9017_get_align_axis(struct idtp9017_chip *chip)
 {
-	u8 reg_val = 0x00;
-	u8 sign_reg = 0x00;
+	u8 x, y;
 	int ret = 0;
-	unsigned int axis_value = 0;
 
-	if (axis == 'x') {
-		ret = idtp9017_read_reg(chip->client, RDST_36_L, &reg_val);
-		if (ret < 0) {
-			dev_err(chip->dev, "Fail to Vout rdst_36_h reg\n");
-			return ret;
-		}
-	} else if (axis == 'y') {
-		ret = idtp9017_read_reg(chip->client, RDST_37_L, &reg_val);
-		if (ret < 0) {
-			dev_err(chip->dev, "Fail to Vout rdst_37_h reg\n");
-			return ret;
-		}
+	ret = idtp9017_read_reg(chip->client, RDST_36_L, &x);
+	if (ret < 0) {
+		dev_err(chip->dev, "Fail to Vout rdst_36_h reg\n");
+		return ret;
 	}
 
-	sign_reg &= SIGN_BIT;
-	if (sign_reg)
-		sign = 1;	/* '1' minus */
-	else
-		sign = 0;	/* '0' plus */
+	ret = idtp9017_read_reg(chip->client, RDST_37_L, &y);
+	if (ret < 0) {
+		dev_err(chip->dev, "Fail to Vout rdst_37_h reg\n");
+		return ret;
+	}
 
-	reg_val &= ADC_7BIT;
-	axis_value = (int)reg_val;
+	chip->x_axis = (int)(x & ADC_7BIT);
+	chip->y_axis = (int)(y & ADC_7BIT);
 
-	dev_dbg(chip->dev, "%s: %c axis, %s %d\n", __func__,
-			axis, sign ? "-" : "+", axis_value);
+	/*
+	 * check sign bit: 1 negative, 0 positive
+	 */
+	if (x & SIGN_BIT)
+		chip->x_axis = -chip->x_axis;
+	if (y & SIGN_BIT)
+		chip->y_axis = -chip->x_axis;
 
-	return axis_value;
+	dev_dbg(chip->dev, "%s: x axis: %d, y axis: %d\n", __func__,
+			chip->x_axis, chip->y_axis);
+
+	return 0;
 }
 
 /* Select select_fod_reg "1" or "2" */
 static int idtp9017_get_fod_gain(struct idtp9017_chip *chip,
-		int select_fod_reg)
+		int select_fod_reg, int *res)
 {
 	u8 reg_val = 0x00;
 	int ret = 0;
@@ -449,7 +458,9 @@ static int idtp9017_get_fod_gain(struct idtp9017_chip *chip,
 		fod_gain = (int)((reg_val * 3904) - 58560);
 	}
 
-	return fod_gain;
+	*res = fod_gain;
+
+	return 0;
 }
 
 static int idtp9017_set_fod_gain(struct idtp9017_chip *chip,
@@ -502,7 +513,7 @@ static int idtp9017_set_fod_gain(struct idtp9017_chip *chip,
 }
 
 #define DEFAULT_CURRENT 1600
-static int idtp9017_get_i_limit(struct idtp9017_chip *chip)
+static int idtp9017_get_i_limit(struct idtp9017_chip *chip, int *res)
 {
 	u8 reg_val = 0x00;
 	int ret = 0;
@@ -536,10 +547,12 @@ static int idtp9017_get_i_limit(struct idtp9017_chip *chip)
 				read_i_limit);
 	}
 
-	return read_i_limit;
+	*res = read_i_limit;
+
+	return 0;
 }
 
-static int idtp9017_get_target_voltage(struct idtp9017_chip *chip)
+static int idtp9017_get_target_voltage(struct idtp9017_chip *chip, int *res)
 {
 	u8 reg_val = 0x00;
 	int ret = 0;
@@ -557,7 +570,9 @@ static int idtp9017_get_target_voltage(struct idtp9017_chip *chip)
 	dev_dbg(chip->dev, "target_voltage: val: 0x%02x voltage: %d mV\n",
 			reg_val, read_voltage);
 
-	return read_voltage;
+	*res = read_voltage;
+
+	return 0;
 }
 
 static int idtp9017_enable_i_limit(struct idtp9017_chip *chip,
@@ -706,12 +721,12 @@ static int die_temp_control(struct idtp9017_chip *chip,
 	return 0;
 }
 
-static int idtp9017_get_operate_freq(struct idtp9017_chip *chip)
+static int idtp9017_get_operate_freq_in_khz(struct idtp9017_chip *chip, int *res)
 {
 	u8 reg_val = 0x00;
-	u16 reg_sum = 0x000;
+	int reg_sum = 0;
 	int ret = 0;
-	int get_freq = 0;
+	int freq_in_khz = 0;
 
 	ret = idtp9017_read_reg(chip->client, REG_3F_H, &reg_val);
 	if (ret < 0) {
@@ -727,12 +742,15 @@ static int idtp9017_get_operate_freq(struct idtp9017_chip *chip)
 		return ret;
 	}
 	reg_sum |= reg_val;
-	get_freq = (1 / (reg_sum * 3125)) * 10^6;
+	/* freq = 1 / (reg_sum * 3.125ns) */
+	freq_in_khz = 1000000 / ((reg_sum * 3125) / 1000);
 
-	dev_dbg(chip->dev, "reg_val : 0x%03x, get_freq : %d MHz\n",
-			reg_sum, get_freq);
+	dev_dbg(chip->dev, "reg_val : 0x%03x, freq : %d KHz\n",
+			reg_sum, freq_in_khz);
 
-	return get_freq;
+	*res = freq_in_khz;
+
+	return 0;
 }
 
 static void idtp9017_set_enviroment(struct work_struct *work)
@@ -858,84 +876,71 @@ error:
 
 static void wlc_info_worker(struct work_struct *work)
 {
-	static int temp_counter;
 	static int check_counter;
 	struct idtp9017_chip *chip = container_of(work, struct idtp9017_chip,
 			wlc_status_work.work);
-	int limit_cur_ma = 0; int out_cur_ma = 0;
-	int out_vol_mv = 0;  int target_vol = 0;
+	int limit_cur_ma = 0;
+	int out_cur_ma = 0;
+	int out_vol_mv = 0;
+	int target_vol = 0;
 	int rect_vol_mv = 0;
 	int wpc_mode = 0;
 	int die_temp = 0;
 	int delay = WLC_GET_INFO_DELAY_MS;
-	int fod1_gain = 0; int fod2_gain = 0;
+	int fod1_gain = 0;
+	int fod2_gain = 0;
 	int wlc_status = 0;
-	int temp_sign_x = 0;
-	int temp_sign_y = 0;
-	int op_freq = 0;
+	int op_freq_in_khz = 0;
 	int chg_done = 0;
 
 	chip->wlc_chg_en = !(gpio_get_value(chip->wlc_enable_gpio));
-
 	if (chip->wlc_chg_en)
 		check_counter++;
 	else
 		check_counter = 0;
 
-	if (chip->wlc_chg_en && check_counter >= 2) {
-		limit_cur_ma = idtp9017_get_i_limit(chip);
-		out_cur_ma = idtp9017_get_out_current(chip);
-		out_vol_mv = idtp9017_get_out_voltage(chip);
-		target_vol = idtp9017_get_target_voltage(chip);
-		die_temp = idtp9017_get_die_temperature(chip);
-		rect_vol_mv = idtp9017_get_voltage_rect(chip);
-		wpc_mode = idtp9017_get_chg_mode(chip);
-		fod1_gain = idtp9017_get_fod_gain(chip, 1);
-		fod2_gain = idtp9017_get_fod_gain(chip, 2);
-		chip->x_axis = idtp9017_get_align_axis(chip, temp_sign_x, 'x');
-		chip->y_axis = idtp9017_get_align_axis(chip, temp_sign_y, 'y');
-		wlc_status = idtp9017_wlc_status(chip);
-		op_freq = idtp9017_get_operate_freq(chip);
-		chg_done = idtp9017_wlc_status(chip);
-		if (chg_done == 2)
+	if (check_counter >= 2) {
+		idtp9017_get_i_limit(chip, &limit_cur_ma);
+		idtp9017_get_out_current(chip, &out_cur_ma);
+		idtp9017_get_out_voltage(chip, &out_vol_mv);
+		idtp9017_get_target_voltage(chip, &target_vol);
+		idtp9017_get_die_temperature(chip, &die_temp);
+		idtp9017_get_voltage_rect(chip, &rect_vol_mv);
+		idtp9017_get_chg_mode(chip, &wpc_mode);
+		idtp9017_get_fod_gain(chip, 1, &fod1_gain);
+		idtp9017_get_fod_gain(chip, 2, &fod2_gain);
+		idtp9017_get_align_axis(chip);
+		idtp9017_get_operate_freq_in_khz(chip, &op_freq_in_khz);
+		idtp9017_wlc_status(chip, &wlc_status);
+		if (wlc_status == 2)
 			chg_done = 1;
-		else
-			chg_done = 0;
 
-		dev_info(chip->dev, "chg_en : %s, chg_mode : %s, chg_done : %s\n",
+		dev_info(chip->dev, "chg_en: %s, chg_mode: %s, chg_done: %s\n",
 				wpc_mode ? "wpc_mode" : "pma_mode",
 				wlc_status ? "enable" : "disable",
 				chg_done ? "Done" : "Not yet");
-		dev_info(chip->dev, "Op_freq : %d MHz, Limit_cur : %d mA,"
+		dev_info(chip->dev, "Op_freq: %d KHz, Limit_cur: %d mA,"
 				" Out_cur %dmA\n",
-				op_freq, limit_cur_ma, out_cur_ma);
-		dev_info(chip->dev, "target_vol : %dmV, Out_vol : %dmV,"
-				" Vrect : %dmV\n",
+				op_freq_in_khz, limit_cur_ma, out_cur_ma);
+		dev_info(chip->dev, "target_vol: %dmV, Out_vol: %dmV,"
+				" Vrect: %dmV\n",
 				target_vol, out_vol_mv, rect_vol_mv);
-		dev_info(chip->dev, "Die_temperature : %d, Axis(%s%d, %s%d)\n",
-				die_temp,
-				temp_sign_x ? "-" : "+", chip->x_axis,
-				temp_sign_y ? "-" : "+", chip->y_axis);
-		dev_info(chip->dev, "Fod1_gain : %d.%d%%, Fod2_gain : %d.%dmW\n",
+		dev_info(chip->dev, "Die_temperature: %d, Axis(%d, %d)\n",
+				die_temp, chip->x_axis, chip->y_axis);
+		dev_info(chip->dev, "Fod1_gain: %d.%d%%, Fod2_gain: %d.%dmW\n",
 				fod1_gain/100, fod1_gain%100, fod2_gain/100,
 				fod2_gain%100);
-		temp_counter = 0;
-		check_counter = 3;
 		if (chg_done)
-			delay = delay * 20;
+			delay = delay * 100;
 		else
-			delay = delay * 10;
-	} else {
-		delay /= 5;
-		if (temp_counter <= 2) {
-			dev_info(chip->dev, "WLC is not connected\n");
-			temp_counter = 3;
-		}
-		temp_counter++;
+			delay = delay * 50;
 	}
 
-	schedule_delayed_work(&chip->wlc_status_work,
+	if (check_counter)
+		schedule_delayed_work(&chip->wlc_status_work,
 			round_jiffies_relative(msecs_to_jiffies(delay)));
+	else
+		dev_warn(chip->dev, "WLC is not connected\n");
 }
 
 static irqreturn_t idtp9017_irq_thread(int irq, void *handle)
@@ -1160,7 +1165,8 @@ static void idtp9017_resume(struct device *dev)
 {
 	struct idtp9017_chip *chip = dev_get_drvdata(dev);
 
-	schedule_delayed_work(&chip->wlc_status_work,
+	if (chip->wlc_chg_en)
+		schedule_delayed_work(&chip->wlc_status_work,
 			round_jiffies_relative(
 				msecs_to_jiffies(WLC_CHECK_STATUS_DELAY_MS)));
 }
@@ -1169,7 +1175,8 @@ static int idtp9017_suspend(struct device *dev)
 {
 	struct idtp9017_chip *chip = dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&chip->wlc_status_work);
+	if (chip->wlc_chg_en)
+		cancel_delayed_work_sync(&chip->wlc_status_work);
 
 	return 0;
 }
