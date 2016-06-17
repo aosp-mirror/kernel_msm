@@ -34,8 +34,11 @@
 #include <linux/power/fan5451x.h>
 #include <linux/wakelock.h>
 #include <linux/debugfs.h>
+#include <linux/delay.h>
 
 #define FAN5451x_DEV_NAME "fan5451x"
+#define RECHG_CHECK_DELAY_MS      30
+#define RECHG_CHECK_DELAY_FAST_MS 10
 
 static unsigned int att_addr = REG_IOCHRG;
 
@@ -68,6 +71,7 @@ struct fan5451x_chip {
 	int enable;
 	int usb_present;
 	int wlc_present;
+	bool eoc;
 	/* battery temp scenario */
 	int prev_ibus_ma;
 	unsigned int set_ibat_ma;
@@ -84,7 +88,13 @@ struct fan5451x_chip {
 	/* debugfs */
 	struct dentry *dent;
 	int fake_capacity;
+	/* wlc fake online */
+	int wlc_fake_online;
+	struct delayed_work rechg_check_work;
+	bool thermal_chg_stop;
 };
+
+static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set);
 
 static int fan5451x_read_reg(struct i2c_client *client, u8 reg)
 {
@@ -492,10 +502,12 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 		return ret;
 	}
 
-	pr_info("IRQ INT0:0x%02x, INT1:0x%02x, INT2:0x%02x, "
-			"ST0:0x%02x, ST1:0x%02x, ST2:0x%02x\n",
-			intr[0], intr[1], intr[2],
-			statr[0], statr[1], statr[2]);
+	if (!chip->wlc_fake_online) {
+		pr_info("IRQ INT0:0x%02x, INT1:0x%02x, INT2:0x%02x, "
+				"ST0:0x%02x, ST1:0x%02x, ST2:0x%02x\n",
+				intr[0], intr[1], intr[2],
+				statr[0], statr[1], statr[2]);
+	}
 
 	if (intr[0] & INT0_VBUSINT) {
 		usb_present = fan5451x_usb_chg_plugged_in(chip);
@@ -514,10 +526,13 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 
 		if (chip->wlc_present ^ wlc_present) {
 			chip->wlc_present = wlc_present;
-			pr_info("wlc present %d\n", wlc_present);
-			if (chip->wlc_psy)
+			if (chip->wlc_psy && !chip->wlc_fake_online) {
+				pr_info("wlc present %d\n", wlc_present);
 				power_supply_set_present(chip->wlc_psy,
 						chip->wlc_present);
+				if (chip->wlc_present && chip->thermal_chg_stop)
+					fan5451x_wlc_fake_online(chip, 1);
+			}
 			found = true;
 		}
 	}
@@ -525,12 +540,18 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 	if (found)
 		fan5451x_vbat_measure(chip);
 
-	if (intr[0] & INT0_CHGEND)
+	if (intr[0] & INT0_CHGEND) {
 		pr_info("EOC IRQ\n");
-	else if (intr[1] & INT1_RCHGN)
+		fan5451x_wlc_fake_online(chip, 1);
+		chip->eoc = true;
+		schedule_delayed_work(&chip->rechg_check_work,
+				round_jiffies_relative(msecs_to_jiffies(
+				RECHG_CHECK_DELAY_MS)));
+	} else if (intr[1] & INT1_RCHGN)
 		pr_info("Rechg IRQ\n");
 
-	power_supply_changed(&chip->batt_psy);
+	if (!chip->wlc_fake_online)
+		power_supply_changed(&chip->batt_psy);
 
 	return IRQ_HANDLED;
 }
@@ -731,6 +752,18 @@ static void fan5451x_initialization(struct fan5451x_chip *chip)
 		pr_err("failed to set initial configuration\n");
 }
 
+static int power_supply_get_online(struct power_supply *psy)
+{
+	union power_supply_propval val;
+
+	if (psy->get_property) {
+		psy->get_property(psy, POWER_SUPPLY_PROP_ONLINE, &val);
+		return val.intval;
+	}
+
+	return -ENXIO;
+}
+
 #define USB_CHG_I_MAX_MIN_100  100
 static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 {
@@ -738,6 +771,7 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 		container_of(psy, struct fan5451x_chip, batt_psy);
 	union power_supply_propval ret = {0,};
 	int current_ma;
+	int wlc_present;
 
 	if (!chip->bms_psy)
 		chip->bms_psy = power_supply_get_by_name("bms");
@@ -748,6 +782,14 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 			chip->wlc_present = fan5451x_wlc_chg_plugged_in(chip);
 			power_supply_set_present(chip->wlc_psy, chip->wlc_present);
 			pr_info("wlc present %d\n", chip->wlc_present);
+		}
+	}
+
+	if (chip->wlc_fake_online) {
+		wlc_present = power_supply_get_online(chip->wlc_psy);
+		if (!wlc_present) {
+			pr_info("wlc present 0, fake online off\n");
+			fan5451x_wlc_fake_online(chip, 0);
 		}
 	}
 
@@ -1060,11 +1102,13 @@ static int fan5451x_batt_power_set_property(struct power_supply *psy,
 		chip->ext_batt_health = val->intval;
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
+		/* In eoc case, TX does not turn on until below Rechg voltage */
 		enable = !!val->intval;
-		fan5451x_enable(chip, enable);
-		if (chip->wlc_psy)
-			power_supply_set_charging_enabled(chip->wlc_psy,
-					enable);
+		chip->thermal_chg_stop = !enable;
+		if (chip->eoc)
+			pr_info("EOC!! skip charging_enable to %d.\n", enable);
+		else
+			fan5451x_wlc_fake_online(chip, !enable);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		chip->ext_set_vddmax_mv = val->intval / 1000;
@@ -1102,6 +1146,67 @@ fan5451x_vbat_measure_work(struct work_struct *work)
 	fan5451x_set_appropriate_current(chip);
 
 	schedule_delayed_work(&chip->vbat_measure_work, VBAT_MEASURE_DELAY);
+}
+
+static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set)
+{
+	static int prev_state;
+
+	if (prev_state == set)
+		return;
+
+	prev_state = set;
+
+	fan5451x_enable(chip, !set);
+
+	if (!chip->wlc_psy)
+		return;
+
+	pr_debug("fake wlc present: %d\n", set);
+
+	if (set) {
+		/* fake state */
+		chip->wlc_fake_online = 1;
+		power_supply_set_charging_enabled(chip->wlc_psy, 0); //WLC TX off
+		disable_irq_wake(chip->client->irq);
+	} else {
+		/* normal state */
+		enable_irq_wake(chip->client->irq);
+		power_supply_set_charging_enabled(chip->wlc_psy, 1); //WLC TX on
+		chip->wlc_fake_online = 0;
+	}
+}
+
+#define RECHG_VOLTAGE_OFFSET_MV 150
+#define RECHG_CHECK_CNT 3
+static void fan5451x_rechg_check_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct fan5451x_chip *chip = container_of(dwork,
+				struct fan5451x_chip, rechg_check_work);
+	static int rechg_cnt;
+	unsigned long delay;
+	int volt;
+
+	volt = get_prop_battery_voltage_now(chip);
+	if (volt < (chip->vfloat - RECHG_VOLTAGE_OFFSET_MV) * 1000) {
+		rechg_cnt++;
+		pr_debug("Rechg check cnt(%d/3) volt(%d)\n", rechg_cnt, volt);
+		delay = RECHG_CHECK_DELAY_FAST_MS;
+	} else {
+		rechg_cnt = 0;
+		delay = RECHG_CHECK_DELAY_MS;
+	}
+
+	if (rechg_cnt > RECHG_CHECK_CNT) {
+		pr_info("Rechg occur!! volt(%d)\n", volt);
+		chip->eoc = false;
+		fan5451x_wlc_fake_online(chip, 0);
+		return;
+	}
+
+	schedule_delayed_work(&chip->rechg_check_work,
+			round_jiffies_relative(msecs_to_jiffies(delay)));
 }
 
 #define OF_PROP_READ(chip, prop, dt_property, retval, optional)	\
@@ -1240,6 +1345,9 @@ static int fan5451x_probe(struct i2c_client *client,
 				fan5451x_vbat_measure_work);
 	}
 
+	INIT_DELAYED_WORK(&chip->rechg_check_work,
+			fan5451x_rechg_check_work);
+
 	ret = request_threaded_irq(client->irq, NULL, fan5451x_irq_thread,
 			IRQF_TRIGGER_LOW | IRQF_ONESHOT, "fan5451x_irq", chip);
 	if (ret) {
@@ -1297,6 +1405,7 @@ static int fan5451x_remove(struct i2c_client *client)
 
 	debugfs_remove_recursive(chip->dent);
 
+	cancel_delayed_work_sync(&chip->rechg_check_work);
 	cancel_delayed_work_sync(&chip->vbat_measure_work);
 
 	device_remove_file(&client->dev, &dev_attr_addr_register);
@@ -1318,6 +1427,44 @@ static int fan5451x_remove(struct i2c_client *client)
 	return 0;
 }
 
+#define WLC_TX_ON_LATENCY_MS 3000
+/* For Wireless charger detection in SBL1 */
+static void fan5451x_shutdown(struct i2c_client *client)
+{
+	struct fan5451x_chip *chip = i2c_get_clientdata(client);
+
+	if (chip->wlc_fake_online) {
+		disable_irq(client->irq);
+		fan5451x_wlc_fake_online(chip, 0);
+		msleep(WLC_TX_ON_LATENCY_MS);
+	}
+}
+
+static int fan5451x_pm_prepare(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct fan5451x_chip *chip = i2c_get_clientdata(client);
+
+	if (chip->eoc)
+		cancel_delayed_work_sync(&chip->rechg_check_work);
+
+	return 0;
+}
+
+static void fan5451x_pm_complete(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct fan5451x_chip *chip = i2c_get_clientdata(client);
+
+	if (chip->eoc)
+		schedule_delayed_work(&chip->rechg_check_work, 0);
+}
+
+static const struct dev_pm_ops fan5451x_pm_ops = {
+	.prepare = fan5451x_pm_prepare,
+	.complete = fan5451x_pm_complete,
+};
+
 static const struct of_device_id fan5451x_of_match[] = {
 	{ .compatible = "fcs,fan5451x" },
 	{ },
@@ -1334,9 +1481,11 @@ static struct i2c_driver fan5451x_i2c_driver = {
 	.driver = {
 		.name = "fan5451x",
 		.of_match_table = of_match_ptr(fan5451x_of_match),
+		.pm = &fan5451x_pm_ops,
 	},
 	.probe = fan5451x_probe,
 	.remove = fan5451x_remove,
+	.shutdown = fan5451x_shutdown,
 	.id_table = fan5451x_id,
 };
 module_i2c_driver(fan5451x_i2c_driver);
