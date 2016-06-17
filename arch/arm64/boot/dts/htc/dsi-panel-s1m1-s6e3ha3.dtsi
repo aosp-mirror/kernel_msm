@@ -70,7 +70,7 @@
 		qcom,mdss-dsi-te-check-enable;
 		qcom,mdss-dsi-te-using-te-pin;
 		qcom,mdss-dsi-on-command = [
-			05 01 00 00 14 00 02 11 00 /* sleep out */
+			05 01 00 00 0A 00 02 11 00 /* sleep out */
 			29 01 00 00 00 00 03 F0 5A 5A /* key unlock */
 			29 01 00 00 00 00 02 C4 03 /* dual control 1 */
 			29 01 00 00 00 00 02 F9 03 /* dual control 2 */
@@ -80,7 +80,7 @@
 			29 01 00 00 78 00 02 12 00 /* ESD refresh setting 2 */
 			05 01 00 00 00 00 02 35 00 /* TE on */
 			15 01 00 00 00 00 02 53 20 /* brightness control */
-			05 01 00 00 32 00 02 29 00 /* display on */
+			05 01 00 00 00 00 02 29 00 /* display on */
 		];
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-off-command = [
