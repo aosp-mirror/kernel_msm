@@ -69,6 +69,7 @@
 		qcom,mdss-dsi-te-dcs-command = <1>;
 		qcom,mdss-dsi-te-check-enable;
 		qcom,mdss-dsi-te-using-te-pin;
+		qcom,dcs-cmd-by-left;
 		qcom,mdss-dsi-on-command = [
 			05 01 00 00 0A 00 02 11 00 /* sleep out */
 			29 01 00 00 00 00 03 F0 5A 5A /* key unlock */
