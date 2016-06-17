@@ -228,6 +228,7 @@
 	qcom,actuator-type = "lra";
 	qcom,wave-shape = "sine";
 	qcom,vmax-mv = <3596>;
+	qcom,brake-pattern = [03 03 03 03];
 };
 
 &pm8994_gpios {	/* COVER_INT1 & COVER_INT2 */
