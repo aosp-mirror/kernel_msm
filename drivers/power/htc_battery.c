@@ -1757,27 +1757,37 @@ static void chg_full_check_worker(struct work_struct *work)
 			BATT_EMBEDDED("%s: vol:%d, curr=%d, is_full_count=%d, is_full=%d", __func__,
 				vol, curr, chg_full_count, htc_batt_info.rep.is_full);
 		}
-	        if((htc_batt_info.htc_extension & 0x8)){
-			pr_info("charger_exist_lock Unlock\n");
+
+	        if ((htc_batt_info.htc_extension & 0x8)) {
 			b_recharging_cycle = true;
-			wake_unlock(&htc_batt_info.charger_exist_lock);
-	        }else{
-			if((g_batt_full_eoc_stop != 0) && (b_recharging_cycle))
+			if (wake_lock_active(&htc_batt_info.charger_exist_lock)) {
 				wake_unlock(&htc_batt_info.charger_exist_lock);
-			else{
-				b_recharging_cycle = false;
+				BATT_EMBEDDED("charger_exist_lock Unlock");
+			}
+	        } else if ((g_batt_full_eoc_stop != 0) && b_recharging_cycle) {
+			if (wake_lock_active(&htc_batt_info.charger_exist_lock)) {
+				wake_unlock(&htc_batt_info.charger_exist_lock);
+				BATT_EMBEDDED("charger_exist_lock Unlock");
+			}
+		} else {
+			b_recharging_cycle = false;
+			if (!wake_lock_active(&htc_batt_info.charger_exist_lock)) {
 				wake_lock(&htc_batt_info.charger_exist_lock);
+				BATT_EMBEDDED("charger_exist_lock Lock");
 			}
 	        }
-	} else {
+	} else { /* Cable out (g_latest_chg_src == POWER_SUPPLY_TYPE_UNKNOW) */
 		chg_full_count = 0;
 		htc_batt_info.rep.is_full = false;
-		wake_unlock(&htc_batt_info.charger_exist_lock);
+		if (wake_lock_active(&htc_batt_info.charger_exist_lock)) {
+			wake_unlock(&htc_batt_info.charger_exist_lock);
+			BATT_EMBEDDED("charger_exist_lock Unlock");
+		}
 		return;
 	}
 
 	schedule_delayed_work(&htc_batt_info.chg_full_check_work,
-							msecs_to_jiffies(CHG_FULL_CHECK_PERIOD_MS));
+		msecs_to_jiffies(CHG_FULL_CHECK_PERIOD_MS));
 
 }
 
@@ -2032,8 +2042,11 @@ void htc_battery_info_update(enum power_supply_property prop, int intval)
 				htc_batt_schedule_batt_info_update();
 				if (!delayed_work_pending(&htc_batt_info.chg_full_check_work)
 					&& (g_latest_chg_src > POWER_SUPPLY_TYPE_UNKNOWN)) {
-						wake_lock(&htc_batt_info.charger_exist_lock);
-					schedule_delayed_work(&htc_batt_info.chg_full_check_work,0);
+						if (!wake_lock_active(&htc_batt_info.charger_exist_lock)) {
+							wake_lock(&htc_batt_info.charger_exist_lock);
+							BATT_EMBEDDED("charger_exist_lock Lock");
+						}
+						schedule_delayed_work(&htc_batt_info.chg_full_check_work,0);
 				} else {
 					if (delayed_work_pending(&htc_batt_info.chg_full_check_work)
 						&& (g_latest_chg_src == POWER_SUPPLY_TYPE_UNKNOWN)) {
