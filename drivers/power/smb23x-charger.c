@@ -1387,6 +1387,11 @@ int usb_removal(void)
 	return 0;
 }
 
+int smb23x_usb_present(void)
+{
+	return cei_chip->usb_present;
+}
+
 static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	bool usb_present = !!rt_sts;

@@ -25,3 +25,4 @@ extern int smb23x_disable_input_current(bool disable);
 extern int usb_insertion(void);
 extern int usb_pre_removal(void);
 extern int usb_removal(void);
+extern int smb23x_usb_present(void);

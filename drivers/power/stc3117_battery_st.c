@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include <linux/power_supply.h>
 #include <linux/power/stc3117_battery.h>
+#include <linux/power/smb23x.h>
 #include <linux/slab.h>
 #include <soc/qcom/smsm.h>
 
@@ -328,6 +329,8 @@ struct stc311x_chip {
 	int online;
 	/* battery SOC (capacity) */
 	int batt_soc;
+	/* UI battery SOC (capacity) */
+	int ui_soc;
 	/* battery voltage */
 	int batt_voltage;
 	/* Current */
@@ -337,6 +340,8 @@ struct stc311x_chip {
 
 	int Temperature;
 };
+
+static int ui_soc_count = 0;
 
 int null_fn(void)
 {
@@ -451,7 +456,7 @@ static int stc311x_get_property(struct power_supply *psy,
 		val->intval = chip->batt_current * 1000;  /* in uA */
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		val->intval = chip->batt_soc;
+		val->intval = chip->ui_soc;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		if (CEI_Temperature == 9999)
@@ -2027,7 +2032,29 @@ int stc311x_updata(void)
 
 
 /* -------------------------------------------------------------- */
+static void ui_soc_calculate(struct stc311x_chip *chip)
+{
+	if ((smb23x_usb_present() == true) && (chip->batt_current >= 0)) {
+		if (chip->ui_soc < chip->batt_soc)
+			chip->ui_soc++;
+	} else if ((smb23x_usb_present() == true) && (chip->batt_current <= 0)) {
+		if (chip->ui_soc > chip->batt_soc + 5)
+			chip->ui_soc--;
+		else if (chip->batt_voltage < APP_MIN_VOLTAGE)
+			chip->ui_soc--;
+	} else if ((smb23x_usb_present() == false) && (chip->batt_current <= 0)) {
+		if  (chip->ui_soc > chip->batt_soc)
+			chip->ui_soc--;
+		else if (chip->batt_voltage < APP_MIN_VOLTAGE)
+			chip->ui_soc--;
+	}
+	if (chip->ui_soc <= 0)
+		chip->ui_soc = 0;
+	else if (chip->ui_soc >= 100)
+		chip->ui_soc = 100;
 
+	pr_debug("ui_soc=%d   gauge_soc=%d\n",chip->ui_soc,chip->batt_soc);
+}
 
 
 static void stc311x_work(struct work_struct *work)
@@ -2099,9 +2126,21 @@ static void stc311x_work(struct work_struct *work)
 		chip->Temperature = 250;
 	}
 
+	if (chip->ui_soc > STC311x_SOC_THRESHOLD) {
+		ui_soc_count = 0;
+		ui_soc_calculate(chip);
+	} else {
+		if (ui_soc_count <= 3) {
+			ui_soc_count++;
+		} else {
+			ui_soc_count = 0;
+			ui_soc_calculate(chip);
+		}
+	}
+
 	stc311x_updata();
 
-	if (chip->batt_soc > STC311x_SOC_THRESHOLD)
+	if (chip->ui_soc > STC311x_SOC_THRESHOLD)
 		schedule_delayed_work(&chip->work, STC311x_DELAY);
 	else
 		schedule_delayed_work(&chip->work, STC311x_DELAY_LOW_BATT);
@@ -2294,6 +2333,8 @@ static int stc311x_probe(struct i2c_client *client,
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
 		chip->Temperature = 250;
 	}
+
+	chip->ui_soc = chip->batt_soc;
 
 	ret = device_create_file(&client->dev,
 				 &dev_attr_CEI_SOC_Set);
