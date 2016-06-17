@@ -362,6 +362,15 @@ static int idtp9017_get_die_temperature(struct idtp9017_chip *chip)
 	int ret = 0;
 	int read_temperature = 0;
 
+	/* order in which to read the temperature
+	 * 1st : only read RDSS_33_H reg.
+	 * 2nd : read  die_temp of RDSS_33_L reg. */
+	ret = idtp9017_read_reg(chip->client, RDST_33_H, &reg_val);
+	if (ret < 0) {
+		dev_err(chip->dev, "Fail to Vout rdst_33_H reg\n");
+		return ret;
+	}
+
 	ret = idtp9017_read_reg(chip->client, RDST_33_L, &reg_val);
 	if (ret < 0) {
 		dev_err(chip->dev, "Fail to Vout rdst_33_L reg\n");
