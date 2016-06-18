@@ -25,8 +25,8 @@
 		qcom,mdss-dsi-panel-framerate = <60>;
 		qcom,mdss-dsi-virtual-channel-id = <0>;
 		qcom,mdss-dsi-stream = <0>;
-		qcom,mdss-dsi-panel-width = <400>;
-		qcom,mdss-dsi-panel-height = <392>;
+		qcom,mdss-dsi-panel-width = <390>;
+		qcom,mdss-dsi-panel-height = <390>;
 		qcom,mdss-dsi-h-front-porch = <20>;
 		qcom,mdss-dsi-h-back-porch = <40>;
 		qcom,mdss-dsi-h-pulse-width = <20>;
@@ -46,16 +46,20 @@
 		qcom,ulps-enabled;
 		qcom,mdss-dsi-on-command = [
 			15 01 00 00 00 00 02 FE 01
-			15 01 00 00 00 00 02 1d 0a
-			15 01 00 00 00 00 02 1e 00
-			15 01 00 00 00 00 02 3f 30
-			15 01 00 00 00 00 02 40 1c
+			15 01 00 00 00 00 02 1d 07
+			15 01 00 00 00 00 02 1e 1d
+			15 01 00 00 00 00 02 3f 68
+			15 01 00 00 00 00 02 40 0c
+			15 01 00 00 00 00 02 fe 04
+			15 01 00 00 00 00 02 70 05
 			15 01 00 00 00 00 02 fe 05
 			15 01 00 00 00 00 02 05 00
 			15 01 00 00 00 00 02 fe 00
 			15 01 00 00 00 00 02 35 00
 			15 01 00 00 00 00 02 36 c0
-			05 01 00 00 78 00 02 11 00
+			39 01 00 00 00 00 05 2A 00 06 01 8b
+			39 01 00 00 00 00 05 2B 00 02 01 87
+			05 01 00 00 80 00 02 11 00
 			05 01 00 00 00 00 02 29 00];
 		qcom,mdss-dsi-off-command = [05 01 00 00 00 00 02 28 00
 					05 01 00 00 78 00 02 10 00
