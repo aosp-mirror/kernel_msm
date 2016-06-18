@@ -60,58 +60,58 @@
 #define MXT_MAX_BLOCK_WRITE	256
 
 /* Object types */
-#define MXT_DEBUG_DIAGNOSTIC_T37	37
-#define MXT_GEN_MESSAGE_T5		5
-#define MXT_GEN_COMMAND_T6		6
-#define MXT_GEN_POWER_T7		7
-#define MXT_GEN_ACQUIRE_T8		8
-#define MXT_TOUCH_KEYARRAY_T15		15
-#define MXT_TOUCH_PROXIMITY_T23		23
-#define MXT_TOUCH_MULTITOUCHSCREEN_T100 100
-#define MXT_PROCI_GRIPSUPPRESSION_T40	40
-#define MXT_PROCI_TOUCHSUPPRESSION_T42	42
-#define MXT_PROCI_STYLUS_T47		47
-#define MXT_PROCI_ADAPTIVETHRESHOLD_T55	55
-#define MXT_PROCI_SHIELDLESS_T56	56
+#define MXT_GEN_MESSAGE_T5                      5
+#define MXT_GEN_COMMAND_T6                      6
+#define MXT_GEN_POWER_T7                        7
+#define MXT_GEN_ACQUIRE_T8                      8
+#define MXT_TOUCH_KEYARRAY_T15                  15
+#define MXT_SPT_COMMSCONFIG_T18                 18
+#define MXT_SPT_GPIOPWM_T19                     19
+#define MXT_TOUCH_PROXIMITY_T23                 23
+#define MXT_PROCI_ONETOUCH_T24                  24
+#define MXT_SPT_SELFTEST_T25                    25
+#define MXT_SPT_PROTOTYPE_T35                   35
+#define MXT_DEBUG_DIAGNOSTIC_T37                37
+#define MXT_SPT_USERDATA_T38                    38
+#define MXT_PROCI_GRIPSUPPRESSION_T40           40
+#define MXT_PROCI_TOUCHSUPPRESSION_T42          42
+#define MXT_SPT_MESSAGECOUNT_T44                44
+#define MXT_SPT_CTECONFIG_T46                   46
+#define MXT_PROCI_STYLUS_T47                    47
+#define MXT_PROCI_ADAPTIVETHRESHOLD_T55         55
+#define MXT_PROCI_SHIELDLESS_T56                56
 #define MXT_PROCI_EXTRATOUCHSCREENDATA_T57      57
-#define MXT_PROCI_LENSBENDING_T65	65
-#define MXT_PROCI_PALMGESTUREPROCESSOR_T69	69
-#define MXT_PROCG_NOISESUPPRESSION_T72	72
-#define MXT_GLOVEDETECTION_T78		78
-#define MXT_RETRANSMISSIONCOMPENSATION_T80	80
-#define MXT_PROCI_GESTUREPROCESSOR_T84		84
-#define MXT_PROCI_TOUCH_SEQUENCE_LOGGER_T93	93
-#define MXT_PROCI_SCHNOISESUPPRESSION_T103	103
-#define MXT_SPT_COMMSCONFIG_T18		18
-#define MXT_SPT_GPIOPWM_T19		19
-#define MXT_SPT_SELFTEST_T25		25
-#define MXT_SPT_USERDATA_T38		38
-#define MXT_SPT_MESSAGECOUNT_T44	44
-#define MXT_SPT_CTECONFIG_T46		46
-#define MXT_SPT_TIMER_T61		61
-#define MXT_SPT_GOLDENREFERENCES_T66	66
-#define MXT_SPT_DYNAMICCONFIGURATIONCONTROLLER_T70	70
-#define MXT_SPT_DYNAMICCONFIGURATIONCONTAINER_T71	71
-#define MXT_SPT_SELFCAPCBCRCONFIG_T102	102
-#define MXT_SPT_AUXTOUCHCONFIG_T104	104
-#define MXT_SPT_TOUCHSCREENHOVER_T101	101
-#define MXT_SPT_DRIVENPLATEHOVERCONFIG_T105	105
-#define MXT_PROCI_ONETOUCH_T24		24
-#define MXT_SPT_PROTOTYPE_T35		35
-#define MXT_SPT_SELFCAPGLOBALCONFIG_T109	109
+#define MXT_SPT_TIMER_T61                       61
+#define MXT_PROCI_LENSBENDING_T65               65
+#define MXT_SPT_GOLDENREFERENCES_T66            66
+#define MXT_PROCI_PALMGESTUREPROCESSOR_T69      69
+#define MXT_SPT_DYNAMICCONFIGURATIONCONTROLLER_T70 70
+#define MXT_SPT_DYNAMICCONFIGURATIONCONTAINER_T71  71
+#define MXT_PROCG_NOISESUPPRESSION_T72          72
+#define MXT_GLOVEDETECTION_T78                  78
+#define MXT_RETRANSMISSIONCOMPENSATION_T80      80
+#define MXT_PROCI_GESTUREPROCESSOR_T84          84
+#define MXT_PROCI_TOUCH_SEQUENCE_LOGGER_T93     93
+#define MXT_TOUCH_MULTITOUCHSCREEN_T100         100
+#define MXT_SPT_TOUCHSCREENHOVER_T101           101
+#define MXT_SPT_SELFCAPCBCRCONFIG_T102          102
+#define MXT_PROCI_SCHNOISESUPPRESSION_T103      103
+#define MXT_SPT_AUXTOUCHCONFIG_T104             104
+#define MXT_SPT_DRIVENPLATEHOVERCONFIG_T105     105
+#define MXT_SPT_SELFCAPGLOBALCONFIG_T109        109
 
 /* Not for ATMEL S540 */
-#define MXT_GEN_DATASOURCE_T53		53
 #define MXT_TOUCH_MULTI_T9		9
-#define MXT_TOUCH_PROXKEY_T52		52
 #define MXT_PROCI_GRIPFACE_T20		20
 #define MXT_PROCG_NOISE_T22		22
 #define MXT_PROCI_TWOTOUCH_T27		27
-#define MXT_PROCI_PALM_T41		41
-#define MXT_PROCG_NOISESUPPRESSION_T48	48
 #define MXT_SPT_CTECONFIG_T28		28
+#define MXT_PROCI_PALM_T41		41
 #define MXT_SPT_DIGITIZER_T43		43
 #define MXT_SPT_NOISESUPPRESSION_T48	48
+#define MXT_PROCG_NOISESUPPRESSION_T48	48
+#define MXT_TOUCH_PROXKEY_T52		52
+#define MXT_GEN_DATASOURCE_T53		53
 #define MXT_PROCI_ACTIVE_STYLUS_T63	63
 #define MXT_RESERVED_T255 		255
 
@@ -183,7 +183,8 @@
 #define MXT_TOUCH_MAJOR_T47_STYLUS	1
 
 /* T72 NOISE SUPPRESSION */
-#define MXT_T72_VNOI	0x42	/* Very noisy state Touch & No Touch Byte: 66 ~ 75 */
+/* Very noisy state Touch & No Touch Byte: 66 ~ 75 */
+#define MXT_T72_VNOI	0x42
 
 /* T100 Multiple Touch Touchscreen */
 #define MXT_T100_CTRL		0
@@ -581,20 +582,6 @@ struct mxt_channel_size {
 	u8 size_y;
 };
 
-struct mxt_ref_limit {
-	u8 ref_chk_using;
-	u8 ref_x_all_err_line;
-	u8 ref_y_all_err_line;
-	u8 xline_max_err_cnt;
-	u8 yline_max_err_cnt;
-	u8 err_weight;
-	u8 ref_rng_limit;
-	u8 ref_diff_max;
-	u8 ref_err_cnt;
-	s8 y_line_dif[14];
-	s8 butt_dif[3];
-};
-
 struct mxt_patch{
 	u8* patch;
 	u16* stage_addr;
@@ -763,8 +750,6 @@ struct mxt_data {
 	u8 T80_reportid;
 
 	struct mxt_channel_size channel_size;
-	struct mxt_ref_limit ref_limit;
-	u8 ref_chk;
 
 	/* for fw update in bootloader */
 	struct completion bl_completion;
@@ -838,10 +823,17 @@ struct mxt_data {
 	int self_cap;
 };
 
-#define TOUCH_INFO_MSG(fmt, args...) 	printk(KERN_INFO "Touch atmel: " fmt, ##args)
-#define TOUCH_DEBUG_MSG(fmt, args...) 	printk(KERN_DEBUG "Touch atmel: " fmt, ##args)
-#define TOUCH_ERR_MSG(fmt, args...)	printk(KERN_ERR "Touch atmel: [%s %d] " fmt, __FUNCTION__, __LINE__, ##args)
-#define TOUCH_PATCH_INFO_MSG(fmt, args...)	printk(KERN_INFO "Touch atmel: Patch: " fmt, ##args)
+#define TOUCH_INFO_MSG(fmt, args...) \
+	printk(KERN_INFO "Touch atmel: " fmt, ##args)
+#define TOUCH_DEBUG_MSG(fmt, args...) \
+	printk(KERN_DEBUG "Touch atmel: " fmt, ##args)
+#define TOUCH_WARN_MSG(fmt, args...) \
+	printk(KERN_WARNING "Touch atmel: " fmt, ##args)
+#define TOUCH_ERR_MSG(fmt, args...) \
+	printk(KERN_ERR "Touch atmel: [%s %d] " fmt, \
+			__FUNCTION__, __LINE__, ##args)
+#define TOUCH_PATCH_INFO_MSG(fmt, args...) \
+	printk(KERN_INFO "Touch atmel: Patch: " fmt, ##args)
 
 int mxt_initialize_t9_input_device(struct mxt_data *data);
 int mxt_initialize_t100_input_device(struct mxt_data *data);
@@ -852,6 +844,5 @@ int mxt_write_object(struct mxt_data *data, u8 type, u8 offset, u8 val);
 struct mxt_object *mxt_get_object(struct mxt_data *data, u8 type);
 int mxt_read_object(struct mxt_data *data, u8 type, u8 offset, u8 *val);
 int mxt_update_firmware(struct mxt_data *data, const char *fwname);
-int mxt_get_reference_chk(struct mxt_data *data);
 
 #endif /* __LINUX_ATMEL_MXT_TS_H__ */

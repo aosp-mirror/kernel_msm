@@ -12,10 +12,10 @@
  *
  */
 
-#include "atmel_u144.h"
-
 #ifndef __LINUX_ATMEL_PATCH_TS_H__
 #define __LINUX_ATMEL_PATCH_TS_H__
+
+#include "atmel_u144.h"
 
 #define TIME_WRAP_AROUND(x, y)		(((y)>(x)) ? (y)-(x) : (0-(x))+(y))
 
