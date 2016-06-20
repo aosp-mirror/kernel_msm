@@ -36,6 +36,8 @@
 
 #include "gadget_chips.h"
 
+static bool connect2pc;
+
 #include "u_fs.h"
 #include "u_ecm.h"
 #include "u_ncm.h"
@@ -417,6 +419,9 @@ static void android_work(struct work_struct *data)
 	unsigned long flags;
 	int pm_qos_vote = -1;
 
+	pr_info("[USB] %s: sw_suspended %d, suspended %d config %d,connect2pc %d", __func__, dev->sw_suspended,dev->suspended,cdev->config?1:0,connect2pc);
+	pr_info("[USB] %s: sw_connected %d, connected %d last_uevent %d\n", __func__, dev->sw_connected,dev->connected,last_uevent);
+
 	spin_lock_irqsave(&cdev->lock, flags);
 	if (dev->suspended != dev->sw_suspended && cdev->config) {
 		if (strncmp(dev->pm_qos, "low", 3))
@@ -484,7 +489,20 @@ static void android_work(struct work_struct *data)
 		pr_info("%s: did not send uevent (%d %d %p)\n", __func__,
 			 dev->connected, dev->sw_connected, cdev->config);
 	}
+	if (connect2pc != dev->sw_connected) {
+		connect2pc = dev->sw_connected;
+		pr_info("[USB] %s: set usb_connect2pc = %d\n", __func__, connect2pc);
+		if (!connect2pc) {
+			pr_info("%s: OS_NOT_YET\n", __func__);
+		}
+	}
 }
+
+bool get_connect2pc(void)
+{
+	return connect2pc;
+}
+EXPORT_SYMBOL_GPL(get_connect2pc);
 
 #define MIN_DISCONNECT_DELAY_MS	30
 
@@ -4303,6 +4321,8 @@ static struct platform_driver android_platform_driver = {
 static int __init init(void)
 {
 	int ret;
+
+	connect2pc = false;
 
 	INIT_LIST_HEAD(&android_dev_list);
 	android_dev_count = 0;
