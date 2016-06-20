@@ -599,6 +599,8 @@ TRACE_EVENT(sched_contrib_scale_f,
 		  __entry->cpu_scale_factor)
 );
 
+#ifdef CONFIG_SMP
+
 /*
  * Tracepoint for accounting sched averages for tasks.
  */
@@ -1077,6 +1079,8 @@ TRACE_EVENT(walt_migration_update_sum,
 		   __entry->pid)
 );
 #endif /* CONFIG_SCHED_WALT */
+
+#endif /* CONFIG_SMP */
 
 #endif /* _TRACE_SCHED_H */
 
