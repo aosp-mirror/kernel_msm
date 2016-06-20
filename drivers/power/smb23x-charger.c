@@ -976,8 +976,8 @@ static void smb23x_parallel_work(struct work_struct *work)
 			lbc_set_suspend(0x01);
 			printk("USB_TYPE: USB_Normal\n");
 		} else if (type == POWER_SUPPLY_TYPE_UNKNOWN) {
-			gpio_set_value(GPIO_num17,1);
-			printk("gpio_17 set to 1\n");
+			gpio_set_value(GPIO_num17,0);
+			printk("gpio_17 set to 0\n");
 			rc = smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x00);
 			lbc_set_suspend(0x01);
 			printk("USB_TYPE: UNKNOWN\n");
