@@ -355,109 +355,61 @@ static irqreturn_t rsb_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static int rsb_init_regulator(struct spi_device *spi_dev)
+static int rsb_setup_regulators(struct rsb_drv_data *rsb_data)
 {
-	struct rsb_drv_data *rsb_data = spi_get_drvdata(spi_dev);
-	int ret = 0;
-
-	if (!rsb_data->vld_reg) {
-		rsb_data->vld_reg = devm_regulator_get(&spi_dev->dev,
-			"rsb,vld");
-		if (IS_ERR(rsb_data->vld_reg)) {
-			dev_warn(&spi_dev->dev,
-				"regulator: VLD request failed\n");
-			ret = (int)rsb_data->vld_reg;
-			rsb_data->vld_reg = NULL;
-			return ret;
-		}
-	}
-
-
-	if (!rsb_data->vdd_reg) {
-		rsb_data->vdd_reg = devm_regulator_get(&spi_dev->dev,
-			"rsb,vdd");
-		if (IS_ERR(rsb_data->vdd_reg)) {
-			dev_warn(&spi_dev->dev,
-				"regulator: VDD request failed\n");
-			ret = (int)rsb_data->vld_reg;
-			rsb_data->vdd_reg = NULL;
-			return ret;
-		}
-	}
-	return 0;
-}
-
-static int rsb_set_regulator(struct regulator *reg, int enable)
-{
-	int ret;
-
-	if (!reg)
-		return 0;
-
-	if (enable)
-		ret = regulator_enable(reg);
-	else
-		ret = regulator_disable(reg);
-
-	return ret;
-}
-
-static int rsb_set_regulator_vld(struct spi_device *spi, int enable)
-{
-	struct rsb_drv_data *rsb_data = spi_get_drvdata(spi);
-	int ret;
-
-	ret = rsb_set_regulator(rsb_data->vld_reg, enable);
-	if (ret)
-		dev_err(&spi->dev, "couldn't %s regulator vld\n",
-				enable? "enable" : "disable");
-	return ret;
-}
-
-static int rsb_set_regulator_vdd(struct spi_device *spi, int enable)
-{
-	struct rsb_drv_data *rsb_data = spi_get_drvdata(spi);
-	int ret;
-
-	ret = rsb_set_regulator(rsb_data->vdd_reg, enable);
-	if (ret)
-		dev_err(&spi->dev, "couldn't %s regulator vdd\n",
-				enable? "enable" : "disable");
-
-	return ret;
-}
-
-static void rsb_init_work(struct work_struct *work)
-{
-	struct rsb_drv_data *rsb_data = container_of(work,
-			struct rsb_drv_data, init_work);
 	struct spi_device *spi = rsb_data->device;
+	int ret;
 
 	/* Initialize regulators */
-	if (rsb_init_regulator(spi))
-		return;
+	rsb_data->vld_reg = devm_regulator_get(&spi->dev,
+		"rsb,vld");
+	if (IS_ERR(rsb_data->vld_reg)) {
+		dev_warn(&spi->dev,
+			"regulator: VLD request failed\n");
+		ret = (int)rsb_data->vld_reg;
+		rsb_data->vld_reg = NULL;
+		return ret;
+	}
+
+	rsb_data->vdd_reg = devm_regulator_get(&spi->dev,
+		"rsb,vdd");
+	if (IS_ERR(rsb_data->vdd_reg)) {
+		dev_warn(&spi->dev,
+			"regulator: VDD request failed\n");
+		ret = (int)rsb_data->vld_reg;
+		rsb_data->vdd_reg = NULL;
+		return ret;
+	}
 
 	/* Turn on VDD */
-	if (rsb_set_regulator_vdd(spi, 1))
-		return;
+	ret = regulator_enable(rsb_data->vdd_reg);
+	if (ret) {
+		dev_err(&spi->dev, "couldn't enable regulator vdd\n");
+		return ret;
+	}
 
 	msleep(RSB_DELAY_MS_AFTER_VDD);
 
 	/* Should the open of the SPI bus be done only once?? */
 	rsb_open(rsb_data);
 
-	if (rsb_init_sequence(rsb_data))
+	ret = rsb_init_sequence(rsb_data);
+	if (ret)
 		goto error;
 
 	/* Turn on VLD */
-	if (rsb_set_regulator_vld(spi, 1))
+	ret = regulator_enable(rsb_data->vld_reg);
+	if (ret) {
+		dev_err(&spi->dev, "couldn't enable regulator vld\n");
 		goto error;
+	}
 
-	return;
+	return 0;
 
 error:
-	rsb_set_regulator_vdd(spi, 0);
+	regulator_disable(rsb_data->vdd_reg);
 	dev_err(&spi->dev, "RSB init failed\n");
+	return ret;
 }
 
 static int rsb_probe(struct spi_device *spi)
@@ -495,8 +447,9 @@ static int rsb_probe(struct spi_device *spi)
 		return -EINVAL;
 	}
 
-	INIT_WORK(&rsb_data->init_work, rsb_init_work);
-	schedule_work(&rsb_data->init_work);
+	err = rsb_setup_regulators(rsb_data);
+	if (err)
+		return err;
 
 	/* Allocate and register an input device */
 	rsb_data->in_dev = devm_input_allocate_device(&spi->dev);
@@ -539,8 +492,8 @@ static int rsb_remove(struct spi_device *spi)
 
 	debugfs_remove_recursive(rsb_data->dent);
 
-	rsb_set_regulator_vld(spi, 0);
-	rsb_set_regulator_vdd(spi, 0);
+	regulator_disable(rsb_data->vld_reg);
+	regulator_disable(rsb_data->vdd_reg);
 
 	return 0;
 }
