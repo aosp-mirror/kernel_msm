@@ -66,6 +66,9 @@
 #include "wlan_hdd_hostapd.h"
 #include "vos_utils.h"
 #include <wlan_hdd_wext.h>
+//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+#include <linux/asusdebug.h>
+//ASUS_BSP--- "for /data/log/ASUSEvtlog"
 
 v_BOOL_t mibIsDot11DesiredBssTypeInfrastructure( hdd_adapter_t *pAdapter );
 
@@ -678,6 +681,11 @@ static void hdd_SendAssociationEvent(struct net_device *dev,tCsrRoamInfo *pCsrRo
         pr_info("wlan: " MAC_ADDRESS_STR " connected to " MAC_ADDRESS_STR "\n",
                 MAC_ADDR_ARRAY(pAdapter->macAddressCurrent.bytes),
                 MAC_ADDR_ARRAY(wrqu.ap_addr.sa_data));
+        //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+        ASUSEvtlog("wlan: " MAC_ADDRESS_STR " connected to " MAC_ADDRESS_STR "\n",
+                MAC_ADDR_ARRAY(pAdapter->macAddressCurrent.bytes),
+                MAC_ADDR_ARRAY(wrqu.ap_addr.sa_data));
+        //ASUS_BSP--- "for /data/log/ASUSEvtlog"
 
 //ASUS_BSP+++ set/clear NetBios packet filter
         vos_mem_copy( wlan_selfMacAddr, pAdapter->macAddressCurrent.bytes, sizeof(tSirMacAddr));
@@ -718,6 +726,9 @@ static void hdd_SendAssociationEvent(struct net_device *dev,tCsrRoamInfo *pCsrRo
     else /* Not Associated */
     {
         pr_info("[wlan]: disconnected\n");
+        //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+        ASUSEvtlog("[wlan]: disconnected.\n");
+        //ASUS_BSP--- "for /data/log/ASUSEvtlog"
         type = WLAN_STA_DISASSOC_DONE_IND;
         memset(wrqu.ap_addr.sa_data,'\0',ETH_ALEN);
     }
