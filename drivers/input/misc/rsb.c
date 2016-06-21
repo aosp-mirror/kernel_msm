@@ -45,7 +45,6 @@ struct rsb_drv_data {
 	struct spi_device *device;
 	struct dentry *dent;
 	struct input_dev *in_dev;
-	int cs;
 	struct regulator *vld_reg; /* power supply voltage v3.3 */
 	struct regulator *vdd_reg; /* power supply voltage for IO v1.8 */
 	struct work_struct init_work;
@@ -126,7 +125,6 @@ static int rsb_read(struct rsb_drv_data *rsb_data, uint8_t *rx, uint8_t addr)
 
 	read_buf[0] = addr;
 
-	gpio_set_value(rsb_data->cs, 0);
 	ret = spi_sync_transfer(rsb_data->device, xfers, 2);
 	if (ret == 0) {
 		*rx = read_buf[1];
@@ -135,7 +133,6 @@ static int rsb_read(struct rsb_drv_data *rsb_data, uint8_t *rx, uint8_t addr)
 			"SPI Protocol message read failed\n");
 	}
 
-	gpio_set_value(rsb_data->cs, 1);
 	return ret;
 }
 
@@ -175,13 +172,11 @@ static int rsb_write(struct rsb_drv_data *rsb_data, uint8_t tx_val,
 	write_buf[0] = (1 << 7) | addr;
 	write_buf[1] = tx_val;
 
-	gpio_set_value(rsb_data->cs, 0);
 	ret = spi_sync_transfer(rsb_data->device, &xfer, 1);
 	if (ret != 0) {
 		dev_err(&rsb_data->device->dev,
 			"SPI Protocol write message failed\n");
 	}
-	gpio_set_value(rsb_data->cs, 1);
 
 	return ret;
 }
@@ -220,6 +215,10 @@ static int rsb_write_read(struct rsb_drv_data *rsb_data, uint8_t tx_val,
 static int rsb_open(struct rsb_drv_data *rsb_data)
 {
 	int ret;
+	struct spi_transfer xfer = {
+		.len = 0,
+		.delay_usecs = 1000,
+	};
 
 	/* TODO(pmalani): How much of this is prepopulated from DT? */
 	rsb_data->device->max_speed_hz = 2000000;
@@ -229,10 +228,13 @@ static int rsb_open(struct rsb_drv_data *rsb_data)
 	if (!ret) {
 		dev_info(&rsb_data->device->dev,
 			"SPI device set up successfully!\n");
-		/* Toggle CS low for 1ms at power up. */
-		gpio_set_value(rsb_data->cs, 0);
-		udelay(1000);
-		gpio_set_value(rsb_data->cs, 1);
+
+		/* Assert chip select for 1ms at power up. */
+		ret = spi_sync_transfer(rsb_data->device, &xfer, 1);
+		if (ret != 0) {
+			dev_err(&rsb_data->device->dev,
+				"SPI Protocol write message failed\n");
+		}
 	}
 
 	return ret;
@@ -258,28 +260,6 @@ static int rsb_create_debugfs(struct rsb_drv_data *rsb_data)
 	}
 	return 0;
 }
-
-#ifdef CONFIG_OF
-static int rsb_parse_dt(struct spi_device *spi_dev)
-{
-	int ret;
-	struct device_node *dt = spi_dev->dev.of_node;
-	struct rsb_drv_data *rsb_data = spi_get_drvdata(spi_dev);
-
-	ret = rsb_data->cs = of_get_named_gpio(dt, "rsb,spi-cs-gpio", 0);
-	dev_info(&spi_dev->dev, "cs GPIO read from DT:%u\n",
-			rsb_data->cs);
-
-	return 0;
-}
-#else
-static int rsb_parse_dt(struct spi_device *spi_dev)
-{
-	dev_err(&spi_dev->dev,
-		"Kernel not configured with DT support\n");
-	return -EINVAL;
-}
-#endif
 
 /*
  * Sequence of start up writes mandated by the RSB data sheet.
@@ -426,27 +406,6 @@ static int rsb_probe(struct spi_device *spi)
 	spi_set_drvdata(spi, rsb_data);
 	rsb_data->device = spi;
 
-	err = rsb_parse_dt(spi);
-	if (err)
-		return err;
-
-	if (gpio_is_valid(rsb_data->cs)) {
-		err = devm_gpio_request(&spi->dev, rsb_data->cs,
-			"rsb_spi_cs");
-		if (err) {
-			dev_err(&spi->dev,
-				"spi_cs_gpio:%d request failed\n",
-				rsb_data->cs);
-			return err;
-		} else {
-			gpio_direction_output(rsb_data->cs, 1);
-		}
-	} else {
-		dev_err(&spi->dev, "spi_cs_gpio:%d is not valid\n",
-			rsb_data->cs);
-		return -EINVAL;
-	}
-
 	err = rsb_setup_regulators(rsb_data);
 	if (err)
 		return err;
@@ -487,8 +446,6 @@ static int rsb_remove(struct spi_device *spi)
 	struct rsb_drv_data *rsb_data;
 
 	rsb_data = spi_get_drvdata(spi);
-
-	gpio_set_value(rsb_data->cs, 1);
 
 	debugfs_remove_recursive(rsb_data->dent);
 

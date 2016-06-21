@@ -25,10 +25,7 @@
 		spi-max-frequency = <2000000>;
 		rsb,vld-supply = <&haptic_ext_vreg>;
 		rsb,vdd-supply = <&pm8916_l16>;
-
-		rsb,spi-cs-gpio = <&msm_gpio 10 0x00>;
-
 		pinctrl-names = "default";
-		pinctrl-0 = <&spi0_cs0_active &rsb_motion_gpio>;
+		pinctrl-0 = <&rsb_motion_gpio>;
 	};
 };
