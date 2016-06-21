@@ -29750,7 +29750,7 @@ static VOS_STATUS wma_set_beacon_filter(tp_wma_handle wma,
 	ie_map = (A_UINT32 *)(buf + WMI_TLV_HDR_SIZE);
 	for (i = 0; i < BCN_FLT_MAX_ELEMS_IE_LIST; i++) {
 		ie_map[i] = filter_params->ie_map[i];
-		WMA_LOGA("beacon filter ie map = %u", ie_map[i]);
+		WMA_LOGD("beacon filter ie map = %u", ie_map[i]);
 	}
 
 	vos_status = wmi_unified_cmd_send(wma->wmi_handle, wmi_buf, len,
@@ -29761,7 +29761,7 @@ static VOS_STATUS wma_set_beacon_filter(tp_wma_handle wma,
 		wmi_buf_free(wmi_buf);
 		return VOS_STATUS_E_FAILURE;
 	}
-	WMA_LOGA("added beacon filter = %d", vos_status);
+	WMA_LOGD("added beacon filter = %d", vos_status);
 
 	return vos_status;
 }
