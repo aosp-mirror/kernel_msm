@@ -1221,7 +1221,6 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 	u8 vector, height, width;
 	static int pre_id = 0, pre_x = 0, pre_y = 0;
 	static int return_cnt = 0;
-	int tmp;
 
 	/* do not report events if input device not yet registered */
 	if (!data->enable_reporting){
@@ -1245,10 +1244,6 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 	status = message[1];
 	x = (message[3] << 8) | message[2];
 	y = (message[5] << 8) | message[4];
-
-	tmp = x;
-	x = y;
-	y = tmp;
 
 	vector =  message[data->t100_aux_vect];
 	amplitude = message[data->t100_aux_ampl];	/* message[6] */
@@ -1363,7 +1358,7 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 				data->ts_data.curr_data[id].touch_major,
 				data->ts_data.curr_data[id].touch_minor);
 #endif
-	} else {
+	} else if ((status & MXT_T100_STATUS_MASK) == MXT_T100_RELEASE){
 		/* Touch Release */
 		data->ts_data.curr_data[id].id = id;
 		data->ts_data.curr_data[id].status = FINGER_RELEASED;
@@ -1804,12 +1799,27 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 		    data->ts_data.curr_data[i].skip_report) {
 			continue;
 		}
+		if (data->ts_data.curr_data[i].pressure == 255 &&
+			!data->palm) {
+			mxt_reset_slots(data);
+			input_report_key(data->input_dev, KEY_SLEEP, 1);
+			input_sync(data->input_dev);
+			data->palm = true;
+			goto out;
+		}
 		if (data->ts_data.curr_data[i].status == FINGER_RELEASED) {
-			input_mt_slot(data->input_dev,
-					data->ts_data.curr_data[i].id);
-			input_mt_report_slot_state(data->input_dev,
-					MT_TOOL_FINGER, 0);
-		} else {
+			if (data->palm) {
+				input_report_key(data->input_dev, KEY_SLEEP, 0);
+				input_sync(data->input_dev);
+				data->palm = false;
+				goto out;
+			} else {
+				input_mt_slot(data->input_dev,
+						data->ts_data.curr_data[i].id);
+				input_mt_report_slot_state(data->input_dev,
+						MT_TOOL_FINGER, 0);
+			}
+		} else if (data->palm == false) {
 			input_mt_slot(data->input_dev,
 					data->ts_data.curr_data[i].id);
 			input_mt_report_slot_state(data->input_dev,
@@ -4176,6 +4186,9 @@ int mxt_initialize_t100_input_device(struct mxt_data *data)
 	input_dev->close = mxt_input_close;
 
 	__set_bit(EV_ABS, input_dev->evbit);
+
+	__set_bit(EV_KEY, input_dev->evbit);
+	__set_bit(KEY_SLEEP, input_dev->keybit);
 
 	/* For multi touch */
 	error = input_mt_init_slots(input_dev, data->num_touchids,
