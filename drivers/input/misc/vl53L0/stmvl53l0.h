@@ -23,12 +23,13 @@
 #include <linux/mutex.h>
 #include <linux/workqueue.h>
 #include <linux/miscdevice.h>
+#include <linux/wait.h>
 
 
 #define STMVL53L0_DRV_NAME	"stmvl53l0"
 #define STMVL53L0_SLAVE_ADDR	(0x52>>1)
 
-#define DRIVER_VERSION		"1.0.1"
+#define DRIVER_VERSION		"1.0.5.1"
 #define I2C_M_WR			0x00
 /* #define INT_POLLING_DELAY	20 */
 
@@ -67,6 +68,8 @@ typedef enum {
 	HIGHTHRESH_PAR = 5,
 	DEVICEMODE_PAR = 6,
 	INTERMEASUREMENT_PAR = 7,
+	REFERENCESPADS_PAR = 8,
+	REFCALIBRATION_PAR = 9,
 } parameter_name_e;
 
 enum {
@@ -92,7 +95,19 @@ struct stmvl53l0_parameter {
 	uint32_t is_read; /*1: Get 0: Set*/
 	parameter_name_e name;
 	int32_t value;
+	int32_t value2;
 	int32_t status;
+};
+
+/*
+ *  IOCTL Custom Use Case
+ */
+struct stmvl53l0_custom_use_case {
+    FixPoint1616_t  signalRateLimit;
+    FixPoint1616_t  sigmaLimit;
+    uint32_t        preRangePulsePeriod;
+    uint32_t        finalRangePulsePeriod;
+    uint32_t        timingBudget;
 };
 
 /*
@@ -138,6 +153,26 @@ struct stmvl53l0_data {
 	unsigned int offsetCalDistance;
 	unsigned int xtalkCalDistance;
 
+    /* Calibration values */
+    uint32_t refSpadCount;
+    uint8_t isApertureSpads;
+    uint8_t VhvSettings;
+    uint8_t PhaseCal;
+    int32_t OffsetMicroMeter;
+    FixPoint1616_t XTalkCompensationRateMegaCps;
+    uint32_t  setCalibratedValue;
+
+#ifdef HTC
+    /* HTC */
+    int offset_kvalue;
+    FixPoint1616_t xtalk_kvalue;
+#endif
+
+    /* Custom values set by app */
+    FixPoint1616_t signalRateLimit;
+    FixPoint1616_t sigmaLimit;
+    uint32_t        preRangePulsePeriod;
+    uint32_t        finalRangePulsePeriod;
 
 	/* Range Data */
 	VL53L0_RangingMeasurementData_t rangeData;
@@ -153,7 +188,26 @@ struct stmvl53l0_data {
 	/* delay time in miniseconds*/
 	uint8_t delay_ms;
 
+	/* Timing Budget */
+	uint32_t 	   timingBudget;
+	/* Use this threshold to force restart ranging */
+	uint32_t       noInterruptCount;
+    /* Use this flag to denote use case*/
+    uint8_t         useCase;
+    /* Use this flag to indicate an update of use case */
+    uint8_t         updateUseCase;
+
+	/* Polling thread */
+	struct task_struct *poll_thread;
+	/* Wait Queue on which the poll thread blocks */
+	wait_queue_head_t poll_thread_wq;
+
+	/* Recent interrupt status */
+	uint32_t		interruptStatus;
 	struct mutex work_mutex;
+
+    struct timer_list timer;
+    uint32_t flushCount;
 
 	/* Debug */
 	unsigned int enableDebug;
@@ -172,12 +226,6 @@ struct stmvl53l0_data {
     struct device *laser_dev;
     bool laser_power;
     FixPoint1616_t cali_distance;
-    uint32_t refSpadCount;
-    uint8_t isApertureSpads;
-    uint8_t VhvSettings;
-    uint8_t PhaseCal;
-    int offset_kvalue;
-    FixPoint1616_t xtalk_kvalue;
     u8 cali_status;
 #endif
 };
@@ -195,5 +243,6 @@ struct stmvl53l0_module_fn_t {
 
 
 int stmvl53l0_setup(struct stmvl53l0_data *data);
+void stmvl53l0_cleanup(struct stmvl53l0_data *data);
 
 #endif /* STMVL53L0_H */

@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright © 2015, STMicroelectronics International N.V.
+Copyright ?2015, STMicroelectronics International N.V.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -78,9 +78,12 @@ extern uint32_t _trace_level;
 int32_t VL53L0_trace_config(char *filename, uint32_t modules,
 			uint32_t level, uint32_t functions);
 
+#if 0
 void trace_print_module_function(uint32_t module, uint32_t level,
 			uint32_t function, const char *format, ...);
-
+#else
+#define trace_print_module_function(...)
+#endif
 
 #define LOG_GET_TIME() (int)0
 /*
@@ -101,7 +104,7 @@ void trace_print_module_function(uint32_t module, uint32_t level,
 		__func__, LOG_GET_TIME(), ##__VA_ARGS__)
 
 #define _LOG_FUNCTION_END(module, status, ...)\
-		pr_err("end %s start @%d\t" fmt "\n", \
+		pr_err("end %s start @%d Status %d\n", \
 		 __func__, LOG_GET_TIME(), (int)status)
 
 #define _LOG_FUNCTION_END_FMT(module, status, fmt, ...)\

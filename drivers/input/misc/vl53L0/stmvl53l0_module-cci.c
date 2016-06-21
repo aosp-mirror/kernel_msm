@@ -312,6 +312,7 @@ static int32_t stmvl53l0_platform_remove(struct platform_device *pdev)
 {
 	struct stmvl53l0_data *vl53l0_data = platform_get_drvdata(pdev);
 
+	stmvl53l0_cleanup(vl53l0_data);
 	platform_set_drvdata(pdev, NULL);
 
 	kfree(vl53l0_data->client_object);

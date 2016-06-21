@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright © 2016, STMicroelectronics International N.V.
+Copyright ?2016, STMicroelectronics International N.V.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -80,9 +80,9 @@ extern "C" {
 /** VL53L0 PAL IMPLEMENTATION minor version */
 #define VL53L0_IMPLEMENTATION_VER_MINOR   1
 /** VL53L0 PAL IMPLEMENTATION sub version */
-#define VL53L0_IMPLEMENTATION_VER_SUB     18
+#define VL53L0_IMPLEMENTATION_VER_SUB	  20
 /** VL53L0 PAL IMPLEMENTATION sub version */
-#define VL53L0_IMPLEMENTATION_VER_REVISION    4357
+#define VL53L0_IMPLEMENTATION_VER_REVISION	  4606
 #define VL53L0_DEFAULT_MAX_LOOP 200
 #define VL53L0_MAX_STRING_LENGTH 32
 
@@ -157,6 +157,8 @@ typedef int8_t VL53L0_Error;
 /*!< User tried to setup a non-existing GPIO pin */
 #define VL53L0_ERROR_GPIO_FUNCTIONALITY_NOT_SUPPORTED  ((VL53L0_Error) - 11)
 /*!< unsupported GPIO functionality */
+#define VL53L0_ERROR_INTERRUPT_NOT_CLEARED		((VL53L0_Error) -12)
+	/*!< Error during interrupt clear */
 #define VL53L0_ERROR_CONTROL_INTERFACE                 ((VL53L0_Error) - 20)
 /*!< error reported from IO functions */
 #define VL53L0_ERROR_INVALID_COMMAND                   ((VL53L0_Error) - 30)
@@ -461,6 +463,8 @@ typedef struct {
     uint16_t SigmaEstEffAmbWidth;
     /*!< Effective Ambient width for sigma estimate in 1/100th of ns
      * e.g. 500 = 5.0ns */
+	uint8_t StopVariable;
+	/*!< StopVariable used during the stop sequence */
     uint16_t targetRefRate;
     /*!< Target Ambient Rate for Ref spad management */
     FixPoint1616_t SigmaEstimate;

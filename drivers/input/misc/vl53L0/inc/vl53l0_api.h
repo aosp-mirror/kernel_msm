@@ -1,5 +1,5 @@
 /*******************************************************************************
- Copyright © 2016, STMicroelectronics International N.V.
+ Copyright Â© 2016, STMicroelectronics International N.V.
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -1729,6 +1729,24 @@ VL53L0_API VL53L0_Error VL53L0_GetInterruptThresholds(VL53L0_DEV Dev,
         FixPoint1616_t *pThresholdHigh);
 
 /**
+ * @brief Return device stop completion status
+ *
+ * @par Function Description
+ * Returns stop completiob status.
+ * User shall call this function after a stop command
+ *
+ * @note This function Access to the device
+ *
+ * @param   Dev                    Device Handle
+ * @param   pStopStatus            Pointer to status variable to update
+ * @return  VL53L0_ERROR_NONE      Success
+ * @return  "Other error code"     See ::VL53L0_Error
+ */
+VL53L0_API VL53L0_Error VL53L0_GetStopCompletedStatus(VL53L0_DEV Dev,
+	uint32_t *pStopStatus);
+
+
+/**
  * @brief Clear given system interrupt condition
  *
  * @par Function Description
@@ -1739,6 +1757,8 @@ VL53L0_API VL53L0_Error VL53L0_GetInterruptThresholds(VL53L0_DEV Dev,
  * @param   Dev                  Device Handle
  * @param   InterruptMask        Mask of interrupts to clear
  * @return  VL53L0_ERROR_NONE    Success
+ * @return  VL53L0_ERROR_INTERRUPT_NOT_CLEARED    Cannot clear interrupts
+ *
  * @return  "Other error code"   See ::VL53L0_Error
  */
 VL53L0_API VL53L0_Error VL53L0_ClearInterruptMask(VL53L0_DEV Dev,

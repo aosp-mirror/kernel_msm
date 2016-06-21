@@ -265,7 +265,7 @@ static int stmvl53l0_remove(struct i2c_client *client)
 
     /* Power down the device */
     stmvl53l0_power_down_i2c(data->client_object);
-
+	stmvl53l0_cleanup(data);
     kfree(data->client_object);
     kfree(data);
     vl53l0_dbgmsg("End\n");

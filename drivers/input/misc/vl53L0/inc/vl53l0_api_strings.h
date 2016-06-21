@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright © 2016, STMicroelectronics International N.V.
+Copyright ?2016, STMicroelectronics International N.V.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -174,6 +174,8 @@ VL53L0_Error VL53L0_get_limit_check_info(VL53L0_DEV Dev, uint16_t LimitCheckId,
 			"GPIO not existing"
 	#define  VL53L0_STRING_ERROR_GPIO_FUNCTIONALITY_NOT_SUPPORTED \
 			"GPIO funct not supported"
+	#define  VL53L0_STRING_ERROR_INTERRUPT_NOT_CLEARED \
+			"Interrupt not Cleared"
 	#define  VL53L0_STRING_ERROR_CONTROL_INTERFACE \
 			"Control Interface Error"
 	#define  VL53L0_STRING_ERROR_INVALID_COMMAND \
@@ -253,6 +255,10 @@ VL53L0_Error VL53L0_get_limit_check_info(VL53L0_DEV Dev, uint16_t LimitCheckId,
 			"SIGNAL REF CLIP"
 	#define  VL53L0_STRING_CHECKENABLE_RANGE_IGNORE_THRESHOLD \
 			"RANGE IGNORE THRESHOLD"
+	#define  VL53L0_STRING_CHECKENABLE_SIGNAL_RATE_MSRC \
+			"SIGNAL RATE MSRC"
+	#define  VL53L0_STRING_CHECKENABLE_SIGNAL_RATE_PRE_RANGE \
+			"SIGNAL RATE PRE RANGE"
 
 	/* Sequence Step */
 	#define  VL53L0_STRING_SEQUENCESTEP_TCC                   "TCC"

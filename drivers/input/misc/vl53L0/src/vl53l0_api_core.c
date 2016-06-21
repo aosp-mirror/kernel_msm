@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright © 2016, STMicroelectronics International N.V.
+  Copyright ?2016, STMicroelectronics International N.V.
   All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
@@ -1430,14 +1430,6 @@ VL53L0_Error VL53L0_load_tuning_settings(VL53L0_DEV Dev,
             Status = VL53L0_ERROR_INVALID_PARAMS;
         }
     }
-
-    /* Set Pulse Width Offset. This duplicates the previous setting
-     * applied in the tuning list, however is required because the
-     * register value appears to have not been set.
-     */
-    Status |= VL53L0_WrByte(Dev, 0xff, 0x01);
-    Status |= VL53L0_WrByte(Dev, 0x50, 0x06);
-    Status |= VL53L0_WrByte(Dev, 0xff, 0x00);
 
     LOG_FUNCTION_END(Status);
     return Status;
