@@ -201,7 +201,6 @@ static void vibrator_enable( struct timed_output_dev *dev, int value)
 		drv2625_change_mode(pDrv2625data, DRV2625_MODE_RTP);
 		pDrv2625data->mnVibratorPlaying = YES;
 		drv2625_set_go_bit(pDrv2625data, GO);
-		value = (value>MAX_TIMEOUT)?MAX_TIMEOUT:value;
 		hrtimer_start(&pDrv2625data->timer,
 			ns_to_ktime((u64)value * NSEC_PER_MSEC),
 			HRTIMER_MODE_REL);

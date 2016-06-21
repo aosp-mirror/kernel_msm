@@ -116,7 +116,6 @@
 
 #define HAPTIC_CMDID_STOP                   0xFF
 
-#define MAX_TIMEOUT                         10000 /* 10s */
 #define	MAX_READ_BYTES                      0xff
 #define	DRV2625_SEQUENCER_SIZE              8
 
