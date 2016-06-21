@@ -390,6 +390,7 @@ typedef struct hdd_stats_s
    tCsrGlobalClassCStatsInfo  ClassC_stat;
    tCsrGlobalClassDStatsInfo  ClassD_stat;
    tCsrPerStaStatsInfo        perStaStats;
+   struct csr_per_chain_rssi_stats_info  per_chain_rssi_stats;
    hdd_tx_rx_stats_t          hddTxRxStats;
 #ifdef WLAN_FEATURE_11W
    hdd_pmf_stats_t            hddPmfStats;
@@ -2141,4 +2142,5 @@ static inline void hdd_deinit_packet_filtering(hdd_adapter_t *adapter)
 }
 #endif
 
+void hdd_set_rps_cpu_mask(hdd_context_t *hdd_ctx);
 #endif    // end #if !defined( WLAN_HDD_MAIN_H )

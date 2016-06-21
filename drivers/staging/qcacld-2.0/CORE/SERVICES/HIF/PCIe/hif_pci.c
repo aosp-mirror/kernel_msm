@@ -374,7 +374,7 @@ HIFSend_head(HIF_DEVICE *hif_device,
 
     NBUF_UPDATE_TX_PKT_COUNT(nbuf, NBUF_TX_PKT_HIF);
     DPTRACE(adf_dp_trace(nbuf, ADF_DP_TRACE_HIF_PACKET_PTR_RECORD,
-                (uint8_t *)(adf_nbuf_data(nbuf)),
+                adf_nbuf_data_addr(nbuf),
                 sizeof(adf_nbuf_data(nbuf))));
     status = CE_sendlist_send(ce_hdl, nbuf, &sendlist, transfer_id);
     A_ASSERT(status == A_OK);
@@ -3594,6 +3594,24 @@ void hif_runtime_pm_prevent_suspend_deinit(void *data)
 void hif_pm_ssr_runtime_allow_suspend(struct hif_pci_softc *sc, void *context)
 {
 	__hif_pm_runtime_allow_suspend(sc, context);
+}
+
+/**
+ * hif_request_runtime_pm_resume() - API to do runtime resume
+ * @ol_sc: HIF context
+ *
+ * API to request runtime resume
+ *
+ * Return: void
+ */
+void hif_request_runtime_pm_resume(void *ol_sc)
+{
+	struct ol_softc *sc = (struct ol_softc *)ol_sc;
+	struct hif_pci_softc *hif_sc = sc->hif_sc;
+	struct device *dev = hif_sc->dev;
+
+	hif_pm_request_resume(dev);
+	hif_pm_runtime_mark_last_busy(dev);
 }
 #endif
 

@@ -51,6 +51,7 @@
 
 /* internal header files relevant only for specific systems (Pronto) */
 #include <ol_txrx_encap.h>    /* OL_TX_ENCAP, etc */
+#include "vos_lock.h"
 
 #define ol_tx_prepare_ll(tx_desc, vdev, msdu, msdu_info) \
     do {                                                                      \
@@ -77,6 +78,8 @@ ol_tx_ll(ol_txrx_vdev_handle vdev, adf_nbuf_t msdu_list)
 {
     adf_nbuf_t msdu = msdu_list;
     struct ol_txrx_msdu_info_t msdu_info;
+    v_CONTEXT_t vos_ctx = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
+    void *adf_ctx = vos_get_context(VOS_MODULE_ID_ADF, vos_ctx);
 
     msdu_info.htt.info.l2_hdr_type = vdev->pdev->htt_pkt_type;
     msdu_info.htt.action.tx_comp_req = 0;
@@ -93,6 +96,8 @@ ol_tx_ll(ol_txrx_vdev_handle vdev, adf_nbuf_t msdu_list)
         msdu_info.htt.info.ext_tid = adf_nbuf_get_tid(msdu);
         msdu_info.peer = NULL;
 
+        adf_nbuf_map_single(adf_ctx, msdu,
+                             ADF_OS_DMA_TO_DEVICE);
         ol_tx_prepare_ll(tx_desc, vdev, msdu, &msdu_info);
 
         /*
@@ -114,7 +119,7 @@ ol_tx_ll(ol_txrx_vdev_handle vdev, adf_nbuf_t msdu_list)
 
 #ifdef QCA_SUPPORT_TXRX_VDEV_LL_TXQ
 
-#define OL_TX_VDEV_PAUSE_QUEUE_SEND_MARGIN 400
+#define OL_TX_VDEV_PAUSE_QUEUE_SEND_MARGIN 50
 #define OL_TX_VDEV_PAUSE_QUEUE_SEND_PERIOD_MS 5
 
 /**
@@ -143,7 +148,7 @@ ol_tx_vdev_ll_pause_start_timer(struct ol_txrx_vdev_t *vdev)
 static void
 ol_tx_vdev_ll_pause_queue_send_base(struct ol_txrx_vdev_t *vdev)
 {
-    int max_to_accept;
+    int max_to_accept, margin;
 
     adf_os_spin_lock_bh(&vdev->ll_pause.mutex);
     if (vdev->ll_pause.paused_reason) {
@@ -163,8 +168,16 @@ ol_tx_vdev_ll_pause_queue_send_base(struct ol_txrx_vdev_t *vdev)
      * from multiple vdev's pause queues is not sufficient to outweigh
      * the extra complexity.
      */
-    max_to_accept =
-        vdev->pdev->tx_desc.num_free - OL_TX_VDEV_PAUSE_QUEUE_SEND_MARGIN;
+
+    /* we should keep margin below flow control threshold otherwise
+     * we can observe overflow of packets.
+     */
+
+    margin = (vdev->tx_fl_lwm > OL_TX_VDEV_PAUSE_QUEUE_SEND_MARGIN) ?
+               (vdev->tx_fl_lwm - OL_TX_VDEV_PAUSE_QUEUE_SEND_MARGIN) :
+                vdev->tx_fl_lwm;
+
+    max_to_accept = vdev->pdev->tx_desc.num_free - margin;
     while (max_to_accept > 0 && vdev->ll_pause.txq.depth) {
         adf_nbuf_t tx_msdu;
         max_to_accept--;
@@ -214,6 +227,13 @@ ol_tx_vdev_pause_queue_append(
 {
     adf_os_spin_lock_bh(&vdev->ll_pause.mutex);
 
+    if (vdev->ll_pause.paused_reason &
+               OL_TXQ_PAUSE_REASON_FW) {
+        if ((!vdev->ll_pause.txq.depth) &&
+                     msdu_list)
+            vos_request_runtime_pm_resume();
+    }
+
     while (msdu_list &&
             vdev->ll_pause.txq.depth < vdev->ll_pause.max_q_depth)
     {
@@ -221,7 +241,7 @@ ol_tx_vdev_pause_queue_append(
         NBUF_UPDATE_TX_PKT_COUNT(msdu_list, NBUF_TX_PKT_TXRX_ENQUEUE);
         DPTRACE(adf_dp_trace(msdu_list,
                 ADF_DP_TRACE_TXRX_QUEUE_PACKET_PTR_RECORD,
-                (uint8_t *)(adf_nbuf_data(msdu_list)),
+                adf_nbuf_data_addr(msdu_list),
                 sizeof(adf_nbuf_data(msdu_list))));
 
         vdev->ll_pause.txq.depth++;

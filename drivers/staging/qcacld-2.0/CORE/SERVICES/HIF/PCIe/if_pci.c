@@ -1160,7 +1160,8 @@ static int __hif_pci_runtime_suspend(struct pci_dev *pdev)
 		goto out;
 	}
 
-	if ((test = ol_txrx_get_tx_pending(txrx_pdev))) {
+	if ((test = ol_txrx_get_tx_pending(txrx_pdev)) ||
+		 ol_txrx_get_queue_status(txrx_pdev)) {
 		pr_err("%s: txrx pending(%d), get: %u, put: %u\n", __func__,
 				test,
 				sc->pm_stats.runtime_get,
@@ -2502,66 +2503,119 @@ void hif_pci_shutdown(struct pci_dev *pdev)
     printk("%s: WLAN host driver shutting down completed!\n", __func__);
 }
 
-void hif_pci_crash_shutdown(struct pci_dev *pdev)
-{
 #ifdef TARGET_RAMDUMP_AFTER_KERNEL_PANIC
-    struct hif_pci_softc *sc;
-    struct ol_softc *scn;
-    struct HIF_CE_state *hif_state;
+#ifdef FEATURE_RUNTIME_PM
+static bool is_hif_runtime_active(struct hif_pci_softc *sc)
+{
+	int pm_state = adf_os_atomic_read(&sc->pm_state);
 
-    sc = pci_get_drvdata(pdev);
-    if (!sc)
-        return;
+	if (pm_state  == HIF_PM_RUNTIME_STATE_ON ||
+	    pm_state == HIF_PM_RUNTIME_STATE_NONE)
+		return true;
 
-    hif_state = (struct HIF_CE_state *)sc->hif_device;
-    if (!hif_state)
-        return;
-
-    scn = sc->ol_sc;
-    if (!scn)
-        return;
-
-    if (OL_TRGET_STATUS_RESET == scn->target_status) {
-        printk("%s: Target is already asserted, ignore!\n", __func__);
-        return;
-    }
-
-    if (vos_is_load_unload_in_progress(VOS_MODULE_ID_HIF, NULL)) {
-        if (!vos_is_load_in_progress(VOS_MODULE_ID_VOSS, NULL)) {
-            pr_info("%s: Load/unload is in progress, ignore!\n", __func__);
-            return;
-        }
-    }
-
-    hif_pci_pm_runtime_exit(sc);
-    adf_os_spin_lock_irqsave(&hif_state->suspend_lock);
-
-    hif_irq_record(HIF_CRASH, sc);
+	return false;
+}
+#else /* ELSE FEATURE_RUNTIME_PM */
+static bool is_hif_runtime_active(struct hif_pci_softc *sc)
+{
+	return true;
+}
+#endif /* END FEATURE_RUNTIME_PM */
 
 #ifdef WLAN_DEBUG
-    if (hif_pci_check_soc_status(scn->hif_sc)
-        || dump_CE_register(scn)) {
-        goto out;
-    }
+static void hif_dump_soc_and_ce_registers(struct hif_pci_softc *sc)
+{
+	int ret;
+	struct ol_softc *scn = sc->ol_sc;
 
-    dump_CE_debug_register(scn->hif_sc);
-#endif
+	ret = hif_pci_check_soc_status(sc);
 
-    if (ol_copy_ramdump(scn)) {
-        goto out;
-    }
+	if (ret) {
+		pr_err("%s: SOC wakeup Failed\n", __func__);
+		return;
+	}
 
-    printk("%s: RAM dump collecting completed!\n", __func__);
+	ret = dump_CE_register(scn);
 
-out:
-    adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
-    return;
-#else
-    printk("%s: Collecting target RAM dump after kernel panic is disabled!\n",
-           __func__);
-    return;
-#endif
+	if (ret) {
+		pr_err("%s: Failed to dump Copy Engine Registers\n", __func__);
+		return;
+	}
+
+	dump_CE_debug_register(sc);
 }
+#else
+static void hif_dump_soc_and_ce_registers(struct hif_pci_softc *sc)
+{
+}
+#endif
+
+static void hif_dump_crash_debug_info(struct hif_pci_softc *sc)
+{
+	struct HIF_CE_state *hif_state = (struct HIF_CE_state *)sc->hif_device;
+	struct ol_softc *scn = sc->ol_sc;
+	int ret;
+
+	if (!hif_state)
+		return;
+
+	adf_os_spin_lock_irqsave(&hif_state->suspend_lock);
+	hif_irq_record(HIF_CRASH, sc);
+	hif_dump_soc_and_ce_registers(sc);
+
+	ret = ol_copy_ramdump(scn);
+
+	if (ret) {
+		pr_err("%s: Failed to Copy Target Memory to Host DDR\n",
+		       __func__);
+		goto out;
+	}
+
+	pr_info("%s: RAM dump collecting completed!\n", __func__);
+out:
+	adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
+}
+
+void hif_pci_crash_shutdown(struct pci_dev *pdev)
+{
+	struct hif_pci_softc *sc;
+	struct ol_softc *scn;
+
+	sc = pci_get_drvdata(pdev);
+	if (!sc)
+		return;
+
+	scn = sc->ol_sc;
+	if (!scn)
+		return;
+
+	if (OL_TRGET_STATUS_RESET == scn->target_status) {
+		pr_info("%s: Target is already asserted, ignore!\n", __func__);
+		return;
+	}
+
+	if (vos_is_load_unload_in_progress(VOS_MODULE_ID_HIF, NULL)) {
+		if (!vos_is_load_in_progress(VOS_MODULE_ID_VOSS, NULL)) {
+			pr_info("%s: Load/unload is in progress, ignore!\n",
+				__func__);
+			return;
+		}
+	}
+
+	if (is_hif_runtime_active(sc))
+		hif_dump_crash_debug_info(sc);
+	else
+		pr_info("%s: Runtime Suspended; Ramdump Collection disabled\n",
+			__func__);
+
+	pr_info("%s: Crash Shutdown Complete\n", __func__);
+}
+#else /* TARGET_RAMDUMP_AFTER_KERNEL_PANIC */
+void hif_pci_crash_shutdown(struct pci_dev *pdev)
+{
+	pr_info("%s: QCA Ramdump Collected Disabled!\n", __func__);
+}
+#endif
 #endif
 
 #define OL_ATH_PCI_PM_CONTROL 0x44
@@ -2594,7 +2648,8 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
         goto out;
     }
     /* Wait for pending tx completion */
-    while (ol_txrx_get_tx_pending(txrx_pdev)) {
+    while (ol_txrx_get_tx_pending(txrx_pdev) ||
+           ol_txrx_get_queue_status(txrx_pdev)) {
         msleep(OL_ATH_TX_DRAIN_WAIT_DELAY);
         if (++tx_drain_wait_cnt > OL_ATH_TX_DRAIN_WAIT_CNT) {
             printk("%s: tx frames are pending\n", __func__);

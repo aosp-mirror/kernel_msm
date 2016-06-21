@@ -1015,6 +1015,7 @@ typedef struct tagCsrRoamProfile
     /* addIe params */
     tSirAddIeParams        addIeParams;
     uint8_t sap_dot11mc;
+    bool do_not_roam;
 }tCsrRoamProfile;
 
 
@@ -1590,6 +1591,11 @@ typedef struct tagCsrPerStaStatsInfo
    tANI_U32 tx_ampdu_cnt;
    tANI_U32 tx_mpdu_in_ampdu_cnt;
 } tCsrPerStaStatsInfo;
+
+struct csr_per_chain_rssi_stats_info {
+  int8 rssi[NUM_CHAINS_MAX];
+  tSirMacAddr peer_mac_addr;
+};
 
 typedef struct tagCsrRoamSetKey
 {

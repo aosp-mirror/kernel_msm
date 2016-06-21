@@ -831,6 +831,13 @@ static int wlan_logging_proc_sock_rx_msg(struct sk_buff *skb)
 		return -EINVAL;
 	}
 
+	if (wnl->wmsg.length > skb->data_len) {
+		LOGGING_TRACE(VOS_TRACE_LEVEL_ERROR,
+			"%s: invalid length msgLen:%x skb data_len:%x\n",
+			__func__, wnl->wmsg.length, skb->data_len);
+		return -EINVAL;
+	}
+
 	if (gapp_pid != INVALID_PID) {
 		if (wnl->nlh.nlmsg_pid > gapp_pid) {
 			gapp_pid = wnl->nlh.nlmsg_pid;

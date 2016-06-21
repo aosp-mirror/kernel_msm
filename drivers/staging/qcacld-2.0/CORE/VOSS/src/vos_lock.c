@@ -745,3 +745,30 @@ void vos_runtime_pm_prevent_suspend_deinit(runtime_pm_context_t data)
 {
 	hif_runtime_pm_prevent_suspend_deinit(data);
 }
+
+/**
+ * vos_request_runtime_pm_resume() - API to ensure driver is runtime pm active
+ *
+ * Driver modules can use this API to ensure driver is runtime pm active
+ *
+ * Return: VOS_STATUS
+ */
+VOS_STATUS vos_request_runtime_pm_resume(void)
+{
+	void *ol_sc;
+	v_CONTEXT_t gContext;
+
+	gContext = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
+
+	ol_sc = vos_get_context(VOS_MODULE_ID_HIF, gContext);
+
+	if (ol_sc == NULL) {
+		VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+				"%s: HIF context is null!", __func__);
+		return VOS_STATUS_E_INVAL;
+	}
+
+	hif_request_runtime_pm_resume(ol_sc);
+
+	return VOS_STATUS_SUCCESS;
+}

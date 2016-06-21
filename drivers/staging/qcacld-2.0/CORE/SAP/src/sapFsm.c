@@ -2463,6 +2463,8 @@ sap_OpenSession (tHalHandle hHal, ptSapContext sapContext)
         return VOS_STATUS_E_FAILURE;
     }
 
+    sme_set_allowed_action_frames(hHal, ALLOWED_ACTION_FRAMES_BITMAP0_SAP);
+
     pMac->sap.sapCtxList [ sapContext->sessionId ].sessionID =
                                sapContext->sessionId;
     pMac->sap.sapCtxList [ sapContext->sessionId ].pSapContext = sapContext;
@@ -3146,6 +3148,14 @@ eHalStatus sap_CloseSession(tHalHandle hHal,
         pMac->sap.SapDfsInfo.cac_state = eSAP_DFS_DO_NOT_SKIP_CAC;
         sap_CacResetNotify(hHal);
         vos_mem_zero(&pMac->sap, sizeof(pMac->sap));
+
+        /*
+         * No valid concurrent AP sessions(SAP/P2PGO), switch back the
+         * allowed action frames bitmask to STA mode and set the same
+         * to FW
+         */
+        sme_set_allowed_action_frames(hHal,
+                           ALLOWED_ACTION_FRAMES_BITMAP0_STA);
     }
 
     return halstatus;

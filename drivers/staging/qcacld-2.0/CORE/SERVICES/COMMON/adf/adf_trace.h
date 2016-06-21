@@ -39,6 +39,7 @@
 
  /* Include Files */
 #include  <adf_nbuf.h>
+#include "vos_types.h"
 
 #ifdef FEATURE_DPTRACE_ENABLE
  /* DP Trace Implementation */
@@ -56,6 +57,14 @@
 #define ADF_DP_TRACE_VERBOSITY_DEFAULT 0
 
 /**
+ * struct adf_mac_addr - mac address array
+ * @bytes: MAC address bytes
+ */
+struct adf_mac_addr {
+	uint8_t bytes[VOS_MAC_ADDR_SIZE];
+};
+
+/**
  * enum ADF_DP_TRACE_ID - Generic ID to identify various events in data path
  * @ADF_DP_TRACE_INVALID: Invalid ID
  * @ADF_DP_TRACE_DROP_PACKET_RECORD: Dropped packet stored with this id
@@ -70,29 +79,55 @@
  * @ADF_DP_TRACE_HIF_PACKET_PTR_RECORD: nbuf->data ptr of hif
  * @ADF_DP_TRACE_HDD_TX_TIMEOUT: hdd tx timeout event
  * @ADF_DP_TRACE_HDD_SOFTAP_TX_TIMEOUT: hdd tx softap timeout event
- * @ADF_DP_TRACE_VDEV_PAUSE: vdev pause event
- * @ADF_DP_TRACE_VDEV_UNPAUSE: vdev unpause event
  *
  */
-enum  ADF_DP_TRACE_ID {
-	ADF_DP_TRACE_INVALID                           = 0,
-	ADF_DP_TRACE_DROP_PACKET_RECORD                = 1,
-	ADF_DP_TRACE_HDD_PACKET_PTR_RECORD             = 2,
-	ADF_DP_TRACE_HDD_PACKET_RECORD                 = 3,
-	ADF_DP_TRACE_CE_PACKET_PTR_RECORD              = 4,
-	ADF_DP_TRACE_CE_PACKET_RECORD                  = 5,
-	ADF_DP_TRACE_TXRX_QUEUE_PACKET_PTR_RECORD      = 6,
-	ADF_DP_TRACE_TXRX_PACKET_PTR_RECORD            = 7,
-	ADF_DP_TRACE_HTT_PACKET_PTR_RECORD             = 8,
-	ADF_DP_TRACE_HTC_PACKET_PTR_RECORD             = 9,
-	ADF_DP_TRACE_HIF_PACKET_PTR_RECORD             = 10,
-	ADF_DP_TRACE_HDD_TX_TIMEOUT                    = 11,
-	ADF_DP_TRACE_HDD_SOFTAP_TX_TIMEOUT             = 12,
-	ADF_DP_TRACE_VDEV_PAUSE                        = 13,
-	ADF_DP_TRACE_VDEV_UNPAUSE                      = 14,
-	ADF_DP_TRACE_MAX
 
+enum  ADF_DP_TRACE_ID {
+	ADF_DP_TRACE_INVALID = 0,
+	ADF_DP_TRACE_DROP_PACKET_RECORD,
+	ADF_DP_TRACE_EAPOL_PACKET_RECORD,
+	ADF_DP_TRACE_DHCP_PACKET_RECORD,
+	ADF_DP_TRACE_ARP_PACKET_RECORD,
+	ADF_DP_TRACE_DEFAULT_VERBOSITY,
+	ADF_DP_TRACE_HDD_TX_TIMEOUT,
+	ADF_DP_TRACE_HDD_SOFTAP_TX_TIMEOUT,
+	ADF_DP_TRACE_HDD_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_CE_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_CE_FAST_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_FREE_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_LOW_VERBOSITY,
+	ADF_DP_TRACE_TXRX_QUEUE_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_TXRX_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_TXRX_FAST_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_HTT_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_HTC_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_HIF_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_MED_VERBOSITY,
+	ADF_DP_TRACE_HDD_PACKET_RECORD,
+	ADF_DP_TRACE_HIGH_VERBOSITY,
+	ADF_DP_TRACE_MAX
 };
+
+enum adf_proto_dir {
+	ADF_TX,
+	ADF_RX
+};
+
+struct adf_dp_trace_ptr_buf {
+	uint64_t cookie;
+	uint16_t msdu_id;
+	uint16_t status;
+};
+
+struct adf_dp_trace_proto_buf {
+	struct adf_mac_addr sa;
+	struct adf_mac_addr da;
+	uint8_t vdev_id;
+	uint8_t type;
+	uint8_t subtype;
+	uint8_t dir;
+};
+
 
 /**
  * struct adf_dp_trace_record_s - Describes a record in DP trace
@@ -146,6 +181,20 @@ void adf_dp_trace_dump_all(uint32_t count);
 typedef void (*tp_adf_dp_trace_cb)(struct adf_dp_trace_record_s* , uint16_t);
 void adf_dp_display_record(struct adf_dp_trace_record_s *record,
 							uint16_t index);
+void adf_dp_trace_ptr(adf_nbuf_t nbuf, enum ADF_DP_TRACE_ID code,
+		uint8_t *data, uint8_t size, uint16_t msdu_id, uint16_t status);
+
+void adf_dp_display_ptr_record(struct adf_dp_trace_record_s *pRecord,
+				uint16_t recIndex);
+uint8_t adf_dp_get_proto_bitmap(void);
+void
+adf_dp_trace_proto_pkt(enum ADF_DP_TRACE_ID code, uint8_t vdev_id,
+		uint8_t *sa, uint8_t *da, enum adf_proto_type type,
+		enum adf_proto_subtype subtype, enum adf_proto_dir dir);
+void adf_dp_display_proto_pkt(struct adf_dp_trace_record_s *record,
+				uint16_t index);
+void adf_dp_trace_log_pkt(uint8_t session_id, struct sk_buff *skb,
+				uint8_t event_type);
 
 #else
 static inline void adf_dp_trace_init(void)
@@ -174,6 +223,41 @@ static inline void adf_dp_display_record(struct adf_dp_trace_record_s *record,
 							uint16_t index)
 {
 }
+
+static inline void adf_dp_trace_ptr(adf_nbuf_t nbuf, enum ADF_DP_TRACE_ID code,
+		uint8_t *data, uint8_t size, uint16_t msdu_id, uint16_t status)
+{
+}
+
+static inline void
+adf_dp_display_ptr_record(struct adf_dp_trace_record_s *pRecord,
+				uint16_t recIndex)
+{
+}
+
+static inline uint8_t adf_dp_get_proto_bitmap(void)
+{
+    return 0;
+}
+
+static inline void
+adf_dp_trace_proto_pkt(enum ADF_DP_TRACE_ID code, uint8_t vdev_id,
+		uint8_t *sa, uint8_t *da, enum adf_proto_type type,
+		enum adf_proto_subtype subtype, enum adf_proto_dir dir)
+{
+}
+
+static inline void
+adf_dp_display_proto_pkt(struct adf_dp_trace_record_s *record,
+				uint16_t index)
+{
+}
+
+static inline void adf_dp_trace_log_pkt(uint8_t session_id, struct sk_buff *skb,
+				uint8_t event_type)
+{
+}
+
 #endif
 
 #endif  /* __ADF_TRACE_H */

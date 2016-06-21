@@ -220,9 +220,9 @@ ol_tx_send(
     msdu_credit_consumed = ol_tx_send_base(pdev, tx_desc, msdu);
     id = ol_tx_desc_id(pdev, tx_desc);
     NBUF_UPDATE_TX_PKT_COUNT(msdu, NBUF_TX_PKT_TXRX);
-    DPTRACE(adf_dp_trace(msdu, ADF_DP_TRACE_TXRX_PACKET_PTR_RECORD,
-                (uint8_t *)(adf_nbuf_data(msdu)),
-                sizeof(adf_nbuf_data(msdu))));
+    DPTRACE(adf_dp_trace_ptr(msdu, ADF_DP_TRACE_TXRX_PACKET_PTR_RECORD,
+                adf_nbuf_data_addr(msdu),
+                sizeof(adf_nbuf_data(msdu)), tx_desc->id, 0));
 
     failed = htt_tx_send_std(pdev->htt_pdev, msdu, id);
     if (adf_os_unlikely(failed)) {
@@ -555,7 +555,11 @@ ol_tx_completion_handler(
         tx_desc = td_array[tx_desc_id].tx_desc;
         tx_desc->status = status;
         netbuf = tx_desc->netbuf;
-
+        DPTRACE(adf_dp_trace_ptr(netbuf,
+                                 ADF_DP_TRACE_FREE_PACKET_PTR_RECORD,
+                                 adf_nbuf_data_addr(netbuf),
+                                 sizeof(adf_nbuf_data(netbuf)),
+                                 tx_desc->id, status));
         if (pdev->cfg.is_high_latency) {
             OL_TX_DESC_UPDATE_GROUP_CREDIT(pdev, tx_desc_id, 1, 0, status);
         }

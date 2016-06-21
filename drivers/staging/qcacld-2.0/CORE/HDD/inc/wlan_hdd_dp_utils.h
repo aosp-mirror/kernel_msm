@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -115,11 +115,11 @@ VOS_STATUS hdd_list_peek_front( hdd_list_t *pList, hdd_list_node_t **ppNode );
 VOS_STATUS hdd_list_peek_next( hdd_list_t *pList, hdd_list_node_t *pNode,
                                hdd_list_node_t **ppNode );
 VOS_STATUS hdd_string_to_hex( char *pSrcMac, int length, char *pDescMac );
-struct hdd_context_s;
+struct hdd_adapter_s;
 #ifdef QCA_FEATURE_RPS
-void hdd_dp_util_send_rps_ind(struct hdd_context_s *hdd_ctx);
+void hdd_dp_util_send_rps_ind(struct hdd_adapter_s *adapter);
 #else
-static inline void hdd_dp_util_send_rps_ind(struct hdd_context_s *hdd_ctx)
+static inline void hdd_dp_util_send_rps_ind(struct hdd_adapter_s *adapter)
 {
 	return;
 }

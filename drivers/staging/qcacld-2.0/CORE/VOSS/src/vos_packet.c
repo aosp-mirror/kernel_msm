@@ -69,9 +69,9 @@ typedef struct
    char     event_string[VOS_PKT_TRAC_MAX_STRING_LEN];
 } vos_pkt_proto_trace_t;
 
-vos_pkt_proto_trace_t  *trace_buffer = NULL;
+vos_pkt_proto_trace_t   *trace_buffer = NULL;
 unsigned int            trace_buffer_order = 0;
-vos_spin_lock_t         trace_buffer_lock;
+spinlock_t              trace_buffer_lock;
 #endif /* QCA_PKT_PROTO_TRACE */
 
 /**
@@ -298,14 +298,10 @@ v_U8_t vos_pkt_get_proto_type
 }
 
 #ifdef QCA_PKT_PROTO_TRACE
-/*---------------------------------------------------------------------------
-
-  * brief vos_pkt_trace_buf_update() -
-      Update storage buffer with interest event string
-
-  * event_string Event String may packet type or outstanding event
-
----------------------------------------------------------------------------*/
+/**
+ * vos_pkt_trace_buf_update - Update storage buffer with interested event string
+ * @event_string: A string for packet type or outstanding event
+ */
 void vos_pkt_trace_buf_update
 (
    char    *event_string
@@ -315,7 +311,7 @@ void vos_pkt_trace_buf_update
 
    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
              "%s %d, %s", __func__, __LINE__, event_string);
-   vos_spin_lock_acquire(&trace_buffer_lock);
+   spin_lock_bh(&trace_buffer_lock);
    slot = trace_buffer_order % VOS_PKT_TRAC_MAX_TRACE_BUF;
    trace_buffer[slot].order = trace_buffer_order;
    trace_buffer[slot].event_time = vos_timer_get_system_time();
@@ -326,17 +322,14 @@ void vos_pkt_trace_buf_update
                 (VOS_PKT_TRAC_MAX_STRING_LEN < strlen(event_string))?
                 VOS_PKT_TRAC_MAX_STRING_LEN:strlen(event_string));
    trace_buffer_order++;
-   vos_spin_lock_release(&trace_buffer_lock);
+   spin_unlock_bh(&trace_buffer_lock);
 
    return;
 }
 
-/*---------------------------------------------------------------------------
-
-  * brief vos_pkt_trace_buf_dump() -
-      Dump stored information into kernel log
-
----------------------------------------------------------------------------*/
+/**
+ * vos_pkt_trace_buf_dump - Dump stored information into kernel log
+ */
 void vos_pkt_trace_buf_dump
 (
    void
@@ -344,7 +337,7 @@ void vos_pkt_trace_buf_dump
 {
    v_U32_t slot, idx;
 
-   vos_spin_lock_acquire(&trace_buffer_lock);
+   spin_lock_bh(&trace_buffer_lock);
    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
              "PACKET TRACE DUMP START Current Timestamp %u",
               (unsigned int)vos_timer_get_system_time());
@@ -376,24 +369,22 @@ void vos_pkt_trace_buf_dump
 
    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
              "PACKET TRACE DUMP END");
-   vos_spin_lock_release(&trace_buffer_lock);
+   spin_unlock_bh(&trace_buffer_lock);
 
    return;
 }
 
-/*---------------------------------------------------------------------------
-
-  * brief vos_pkt_proto_trace_init() -
-      Initialize protocol trace functionality, allocate required resource
-
----------------------------------------------------------------------------*/
+/**
+ * vos_pkt_proto_trace_init -  Initialize protocol trace functionality and
+ * allocate required resources
+ */
 void vos_pkt_proto_trace_init
 (
    void
 )
 {
    /* Init spin lock to protect global memory */
-   vos_spin_lock_init(&trace_buffer_lock);
+   spin_lock_init(&trace_buffer_lock);
    trace_buffer_order = 0;
    trace_buffer = vos_mem_malloc(
        VOS_PKT_TRAC_MAX_TRACE_BUF * sizeof(vos_pkt_proto_trace_t));
@@ -420,7 +411,6 @@ void vos_pkt_proto_trace_close
    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
              "%s %d", __func__, __LINE__);
    vos_mem_free(trace_buffer);
-   vos_spin_lock_destroy(&trace_buffer_lock);
 
    return;
 }

@@ -251,6 +251,15 @@
 #define CFG_ADVERTISE_CONCURRENT_OPERATION_MIN     ( 0 )
 #define CFG_ADVERTISE_CONCURRENT_OPERATION_MAX     ( 1 )
 
+/*
+ * Force softap to 11n, when gSapForce11NFor11AC is set to 1 from ini
+ * despite of hostapd.conf request for 11ac
+ */
+#define CFG_SAP_FORCE_11N_FOR_11AC_NAME    "gSapForce11NFor11AC"
+#define CFG_SAP_FORCE_11N_FOR_11AC_MIN     (0)
+#define CFG_SAP_FORCE_11N_FOR_11AC_MAX     (1)
+#define CFG_SAP_FORCE_11N_FOR_11AC_DEFAULT (0)
+
 typedef enum
 {
     eHDD_DOT11_MODE_AUTO = 0, //covers all things we support
@@ -3810,6 +3819,11 @@ enum dot11p_mode {
 #define CFG_EDCA_BE_AIFS_VALUE_MAX        (15)
 #define CFG_EDCA_BE_AIFS_VALUE_DEFAULT    (3)
 
+#define CFG_TGT_GTX_USR_CFG_NAME      "tgt_gtx_usr_cfg"
+#define CFG_TGT_GTX_USR_CFG_MIN       (0)
+#define CFG_TGT_GTX_USR_CFG_MAX       (32)
+#define CFG_TGT_GTX_USR_CFG_DEFAULT   (32)
+
 /*---------------------------------------------------------------------------
   Type declarations
   -------------------------------------------------------------------------*/
@@ -4564,6 +4578,11 @@ struct hdd_config {
    uint32_t                    edca_bk_aifs;
    uint32_t                    edca_be_aifs;
    bool                        enable_dynamic_sta_chainmask;
+   /* parameter to force sap into 11n */
+   bool                        sap_force_11n_for_11ac;
+
+   /* parameter to control GTX */
+   uint32_t                    tgt_gtx_usr_cfg;
 };
 
 typedef struct hdd_config hdd_config_t;
