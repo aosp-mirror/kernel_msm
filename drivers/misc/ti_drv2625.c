@@ -174,6 +174,7 @@ static void drv2625_stop(struct drv2625_data *pDrv2625data)
 {
 	if (pDrv2625data->mnVibratorPlaying == YES){
 		hrtimer_cancel(&pDrv2625data->timer);
+        	drv2625_change_mode(pDrv2625data, DRV2625_MODE_WAVEFORM_SEQUENCER);
 		drv2625_set_go_bit(pDrv2625data, STOP);
 		pDrv2625data->mnVibratorPlaying = NO;
 		wake_unlock(&pDrv2625data->wklock);
