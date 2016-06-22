@@ -119,6 +119,16 @@
 #ifdef HTC_FEATURE
 #define V5V6_CONFIG_ID_SIZE 4
 #define V7_CONFIG_ID_SIZE 32
+
+#define REPORT_INDEX_OFFSET 1
+#define REPORT_DATA_OFFSET 3
+#define NO_SELF_CAPACITY_DATA 0
+#define READ_DIFF_DATA 2
+#define READ_RAW_DATA 3
+#define READ_DIFF_SELF_DATA 59
+#define READ_RAW_SELF_DATA 63
+
+static DECLARE_WAIT_QUEUE_HEAD(syn_data_ready_wq);
 #endif
 
 static int synaptics_rmi4_check_status(struct synaptics_rmi4_data *rmi4_data,
@@ -686,6 +696,145 @@ struct synaptics_rmi4_f1a_handle {
 	struct synaptics_rmi4_f1a_control button_control;
 };
 
+#ifdef HTC_FEATURE
+struct synaptics_rmi4_f54_query {
+	union {
+		struct {
+			/* query 0 */
+			unsigned char num_of_rx_electrodes;
+
+			/* query 1 */
+			unsigned char num_of_tx_electrodes;
+
+			/* query 2 */
+			unsigned char f54_query2_b0__1:2;
+			unsigned char has_baseline:1;
+			unsigned char has_image8:1;
+			unsigned char f54_query2_b4__5:2;
+			unsigned char has_image16:1;
+			unsigned char f54_query2_b7:1;
+
+			/* queries 3.0 and 3.1 */
+			unsigned short clock_rate;
+
+			/* query 4 */
+			unsigned char touch_controller_family;
+
+			/* query 5 */
+			unsigned char has_pixel_touch_threshold_adjustment:1;
+			unsigned char f54_query5_b1__7:7;
+
+			/* query 6 */
+			unsigned char has_sensor_assignment:1;
+			unsigned char has_interference_metric:1;
+			unsigned char has_sense_frequency_control:1;
+			unsigned char has_firmware_noise_mitigation:1;
+			unsigned char has_ctrl11:1;
+			unsigned char has_two_byte_report_rate:1;
+			unsigned char has_one_byte_report_rate:1;
+			unsigned char has_relaxation_control:1;
+
+			/* query 7 */
+			unsigned char curve_compensation_mode:2;
+			unsigned char f54_query7_b2__7:6;
+
+			/* query 8 */
+			unsigned char f54_query8_b0:1;
+			unsigned char has_iir_filter:1;
+			unsigned char has_cmn_removal:1;
+			unsigned char has_cmn_maximum:1;
+			unsigned char has_touch_hysteresis:1;
+			unsigned char has_edge_compensation:1;
+			unsigned char has_per_frequency_noise_control:1;
+			unsigned char has_enhanced_stretch:1;
+
+			/* query 9 */
+			unsigned char has_force_fast_relaxation:1;
+			unsigned char has_multi_metric_state_machine:1;
+			unsigned char has_signal_clarity:1;
+			unsigned char has_variance_metric:1;
+			unsigned char has_0d_relaxation_control:1;
+			unsigned char has_0d_acquisition_control:1;
+			unsigned char has_status:1;
+			unsigned char has_slew_metric:1;
+
+			/* query 10 */
+			unsigned char has_h_blank:1;
+			unsigned char has_v_blank:1;
+			unsigned char has_long_h_blank:1;
+			unsigned char has_startup_fast_relaxation:1;
+			unsigned char has_esd_control:1;
+			unsigned char has_noise_mitigation2:1;
+			unsigned char has_noise_state:1;
+			unsigned char has_energy_ratio_relaxation:1;
+
+			/* query 11 */
+			unsigned char has_excessive_noise_reporting:1;
+			unsigned char has_slew_option:1;
+			unsigned char has_two_overhead_bursts:1;
+			unsigned char has_query13:1;
+			unsigned char has_one_overhead_burst:1;
+			unsigned char f54_query11_b5:1;
+			unsigned char has_ctrl88:1;
+			unsigned char has_query15:1;
+
+			/* query 12 */
+			unsigned char number_of_sensing_frequencies:4;
+			unsigned char f54_query12_b4__7:4;
+		} __packed;
+		unsigned char data[14];
+	};
+};
+
+struct synaptics_rmi4_f54_query_13 {
+	union {
+		struct {
+			unsigned char has_ctrl86:1;
+			unsigned char has_ctrl87:1;
+			unsigned char has_ctrl87_sub0:1;
+			unsigned char has_ctrl87_sub1:1;
+			unsigned char has_ctrl87_sub2:1;
+			unsigned char has_cidim:1;
+			unsigned char has_noise_mitigation_enhancement:1;
+			unsigned char has_rail_im:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct synaptics_rmi4_f54_query_15 {
+	union {
+		struct {
+			unsigned char has_ctrl90:1;
+			unsigned char has_transmit_strength:1;
+			unsigned char has_ctrl87_sub3:1;
+			unsigned char has_query16:1;
+			unsigned char has_query20:1;
+			unsigned char has_query21:1;
+			unsigned char has_query22:1;
+			unsigned char has_query25:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+
+struct synaptics_rmi4_f54_query_16 {
+	union {
+		struct {
+			unsigned char has_query17:1;
+			unsigned char has_data17:1;
+			unsigned char has_ctrl92:1;
+			unsigned char has_ctrl93:1;
+			unsigned char has_ctrl94_query18:1;
+			unsigned char has_ctrl95_query19:1;
+			unsigned char has_ctrl99:1;
+			unsigned char has_ctrl100:1;
+		} __packed;
+		unsigned char data[1];
+	};
+};
+#endif
+
 struct synaptics_rmi4_exp_fhandler {
 	struct synaptics_rmi4_exp_fn *exp_fn;
 	bool insert;
@@ -993,22 +1142,20 @@ static ssize_t touch_config_show(struct device *dev,
 
 	return ret;
 }
-/*
-static ssize_t synaptics_diag_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+
+int synaptics_read_diag_data(struct synaptics_rmi4_data *rmi4_data)
 {
-	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
-	size_t count = 0;
 	unsigned char cmd = 0x01;
 	int retval = 0;
-	uint16_t i, j;
 
 	retval = synaptics_rmi4_reg_write(rmi4_data,
 			rmi4_data->f54_data_base_addr,
 			&rmi4_data->diag_command,
 			sizeof(rmi4_data->diag_command));
-	if (retval < 0){
-		dev_info(rmi4_data->pdev->dev.parent," %s write error:1", __func__);
+	if (retval < 0) {
+		dev_info(rmi4_data->pdev->dev.parent,
+				"%s: Failed to write report type\n",
+				__func__);
 		return retval;
 	}
 
@@ -1020,18 +1167,92 @@ static ssize_t synaptics_diag_show(struct device *dev,
 			sizeof(cmd));
 	if (retval < 0) {
 		atomic_set(&rmi4_data->data_ready, 1);
-		dev_err(rmi4_data->pdev->dev.parent," %s write error:2", __func__);
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to write get report command\n",
+				__func__);
 		return retval;
 	}
 
 	wait_event_interruptible_timeout(syn_data_ready_wq,
 			atomic_read(&rmi4_data->data_ready), 50);
 
+	//Read the self-capacity data
+	switch (rmi4_data->diag_command) {
+		case READ_DIFF_DATA:
+			rmi4_data->diag_command = READ_DIFF_SELF_DATA;
+			retval = synaptics_read_diag_data(rmi4_data);
+			break;
+		case READ_RAW_DATA:
+			rmi4_data->diag_command = READ_RAW_SELF_DATA;
+			retval = synaptics_read_diag_data(rmi4_data);
+			break;
+		case READ_DIFF_SELF_DATA:
+			rmi4_data->diag_command = READ_DIFF_DATA;
+			break;
+		case READ_RAW_SELF_DATA:
+			rmi4_data->diag_command = READ_RAW_DATA;
+			break;
+		default:
+			retval = NO_SELF_CAPACITY_DATA;
+			dev_info(rmi4_data->pdev->dev.parent,
+					"%s: no self-capacity data\n",
+					__func__);
+			break;
+	}
+
+	return retval;
+}
+
+static ssize_t synaptics_diag_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
+	size_t count = 0;
+	int retval = 0;
+	uint16_t i, j;
+
+	retval = synaptics_read_diag_data(rmi4_data);
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to get diag data\n",
+				__func__);
+		return retval;
+	}
+
 	for (i = 0; i < rmi4_data->num_of_tx; i++) {
 		for (j = 0; j < rmi4_data->num_of_rx; j++) {
-					count += snprintf(buf + count, PAGE_SIZE, "%5d", rmi4_data->report_data[i*rmi4_data->num_of_rx + j]);
+			switch (rmi4_data->chip_id) {
+				case 2200:
+				case 3202:
+				case 7508:
+					count += snprintf(buf + count, PAGE_SIZE, "%5d",
+							rmi4_data->report_data[i + j * rmi4_data->num_of_tx]);
+					break;
+				//case 3201:
+				//case 3508:
+				//case 3528:
+				//case 3351:
+				default:
+					count += snprintf(buf + count, PAGE_SIZE, "%5d",
+							rmi4_data->report_data[i * rmi4_data->num_of_rx + j]);
+					break;
 			}
 		}
+		if (retval != NO_SELF_CAPACITY_DATA)
+			count += snprintf(buf + count, PAGE_SIZE, "\t  %5d\n",
+					rmi4_data->report_data_32[rmi4_data->num_of_rx + i]);
+		count += snprintf(buf + count, PAGE_SIZE, "\n");
+	}
+
+	if (retval != NO_SELF_CAPACITY_DATA) {
+		count += snprintf(buf + count, PAGE_SIZE, "\n");
+		for (i = 0; i < rmi4_data->num_of_rx; i += 2)
+			count += snprintf(buf + count, PAGE_SIZE, "%5d     ",
+					rmi4_data->report_data_32[i]);
+		count += snprintf(buf + count, PAGE_SIZE, "\n");
+		for (i = 1; i < rmi4_data->num_of_rx; i += 2)
+			count += snprintf(buf + count, PAGE_SIZE, "     %5d",
+					rmi4_data->report_data_32[i]);
 		count += snprintf(buf + count, PAGE_SIZE, "\n");
 	}
 
@@ -1044,13 +1265,12 @@ static ssize_t synaptics_diag_store(struct device *dev,
 	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
 
 	if (buf[0] == '1')
-		rmi4_data->diag_command = 2;
+		rmi4_data->diag_command = READ_DIFF_DATA;
 	else if (buf[0] == '2')
-		rmi4_data->diag_command = 3;
+		rmi4_data->diag_command = READ_RAW_DATA;
 
 	return count;
 }
-*/
 
 static ssize_t int_status_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -1100,14 +1320,14 @@ static ssize_t int_status_store(struct device *dev,
 static DEVICE_ATTR(reset, S_IWUSR, NULL, synaptics_reset_store);
 static DEVICE_ATTR(vendor, S_IRUGO, touch_vendor_show, NULL);
 static DEVICE_ATTR(config, S_IRUGO, touch_config_show, NULL);
-//static DEVICE_ATTR(diag, (S_IWUSR | S_IRUGO), synaptics_diag_show, synaptics_diag_store),
+static DEVICE_ATTR(diag, (S_IWUSR | S_IRUGO), synaptics_diag_show, synaptics_diag_store);
 static DEVICE_ATTR(enabled, (S_IWUSR|S_IRUGO), int_status_show, int_status_store);
 
 static struct attribute *htc_attrs[] = {
 	&dev_attr_reset.attr,
 	&dev_attr_vendor.attr,
 	&dev_attr_config.attr,
-//	&dev_attr_diag.attr,
+	&dev_attr_diag.attr,
 	&dev_attr_enabled.attr,
 	NULL
 };
@@ -1796,6 +2016,57 @@ static void synaptics_rmi4_f1a_report(struct synaptics_rmi4_data *rmi4_data,
 	return;
 }
 
+#ifdef HTC_FEATURE
+static void synaptics_rmi4_f54_report(struct synaptics_rmi4_data *rmi4_data)
+{
+	int ret, size;
+	uint8_t data[2] = {0};
+
+	ret = synaptics_rmi4_reg_write(rmi4_data,
+			rmi4_data->f54_data_base_addr + REPORT_INDEX_OFFSET,
+			data,
+			sizeof(data));
+	if (ret < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s write error\n",
+				__func__);
+	} else {
+		if (rmi4_data->diag_command == READ_DIFF_DATA ||
+				rmi4_data->diag_command == READ_RAW_DATA)
+			size = rmi4_data->num_of_tx * rmi4_data->num_of_rx * 2;
+		else
+			size = (rmi4_data->num_of_tx + rmi4_data->num_of_rx) * 4;
+
+		ret = synaptics_rmi4_reg_read(rmi4_data,
+				rmi4_data->f54_data_base_addr + REPORT_DATA_OFFSET,
+				rmi4_data->temp_report_data,
+				size);
+
+		if (ret >= 0) {
+			if (rmi4_data->diag_command == READ_DIFF_DATA ||
+					rmi4_data->diag_command == READ_RAW_DATA)
+				memcpy(rmi4_data->report_data, rmi4_data->temp_report_data, size);
+			else
+				memcpy(rmi4_data->report_data_32, rmi4_data->temp_report_data, size);
+		} else {
+			if (rmi4_data->diag_command == READ_DIFF_DATA ||
+					rmi4_data->diag_command == READ_RAW_DATA)
+				memset(rmi4_data->report_data, 0x0,
+						(4 * rmi4_data->num_of_tx * rmi4_data->num_of_rx));
+			else
+				memset(rmi4_data->report_data_32, 0x0,
+						(4 * (rmi4_data->num_of_tx + rmi4_data->num_of_rx)));
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s Read error\n",
+					__func__);
+		}
+	}
+
+	atomic_set(&rmi4_data->data_ready, 1);
+	wake_up(&syn_data_ready_wq);
+}
+#endif
+
 static void synaptics_rmi4_report_touch(struct synaptics_rmi4_data *rmi4_data,
 		struct synaptics_rmi4_fn *fhandler)
 {
@@ -1827,6 +2098,11 @@ static void synaptics_rmi4_report_touch(struct synaptics_rmi4_data *rmi4_data,
 	case SYNAPTICS_RMI4_F1A:
 		synaptics_rmi4_f1a_report(rmi4_data, fhandler);
 		break;
+#ifdef HTC_FEATURE
+	case SYNAPTICS_RMI4_F54:
+		synaptics_rmi4_f54_report(rmi4_data);
+		break;
+#endif
 	case SYNAPTICS_RMI4_F51:
 #ifdef USE_DATA_SERVER
 		if (synad_pid)
@@ -2796,6 +3072,11 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 				((unsigned int)ctrl_8->max_y_coord_msb << 8);
 
 		rmi4_data->max_touch_width = MAX_F12_TOUCH_WIDTH;
+
+#ifdef HTC_FEATURE
+		rmi4_data->num_of_rx = ctrl_8->num_of_rx;
+		rmi4_data->num_of_tx = ctrl_8->num_of_tx;
+#endif
 	} else {
 		rmi4_data->wedge_sensor = true;
 
@@ -2817,11 +3098,21 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		rmi4_data->max_touch_width = MAX_F12_TOUCH_WIDTH;
 	}
 
+#ifdef HTC_FEATURE
+	dev_info(rmi4_data->pdev->dev.parent,
+			"%s: Function %02x max x = %d max y = %d Rx: %d Tx: %d\n",
+			__func__, fhandler->fn_number,
+			rmi4_data->sensor_max_x,
+			rmi4_data->sensor_max_y,
+			rmi4_data->num_of_rx,
+			rmi4_data->num_of_tx);
+#else
 	dev_dbg(rmi4_data->pdev->dev.parent,
 			"%s: Function %02x max x = %d max y = %d\n",
 			__func__, fhandler->fn_number,
 			rmi4_data->sensor_max_x,
 			rmi4_data->sensor_max_y);
+#endif
 
 	if (bdata->swap_axes) {
 		temp = rmi4_data->sensor_max_x;
@@ -2851,6 +3142,27 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		retval = -ENOMEM;
 		goto exit;
 	}
+
+#ifdef HTC_FEATURE
+	if (rmi4_data->temp_report_data != NULL)
+		kfree(rmi4_data->temp_report_data);
+	if (rmi4_data->report_data != NULL)
+		kfree(rmi4_data->report_data);
+	rmi4_data->temp_report_data =
+			kzalloc(4 * rmi4_data->num_of_tx * rmi4_data->num_of_rx, GFP_KERNEL);
+	rmi4_data->report_data =
+			kzalloc(4 * rmi4_data->num_of_tx * rmi4_data->num_of_rx, GFP_KERNEL);
+	if(rmi4_data->temp_report_data == NULL || rmi4_data->report_data == NULL) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s report data init fail\n",
+				__func__);
+		return -1;
+	}
+
+	dev_info(rmi4_data->pdev->dev.parent,
+			"%s report data init done\n",
+			__func__);
+#endif
 
 exit:
 	kfree(query_5);
@@ -3067,6 +3379,168 @@ static int synaptics_rmi4_f34_init(struct synaptics_rmi4_data *rmi4_data,
 		(fd->data_base_addr | (page_number << 8));
 	rmi4_data->f34_cmd_base_addr =
 		(fd->cmd_base_addr | (page_number << 8));
+
+	return 0;
+}
+
+static int synaptics_rmi4_f54_init(struct synaptics_rmi4_data *rmi4_data,
+		struct synaptics_rmi4_fn *fhandler,
+		struct synaptics_rmi4_fn_desc *fd,
+		unsigned int intr_count,
+		unsigned int page_number)
+{
+	struct synaptics_rmi4_f54_query f54_query;
+	struct synaptics_rmi4_f54_query_13 query_13;
+	struct synaptics_rmi4_f54_query_15 query_15;
+	struct synaptics_rmi4_f54_query_16 query_16;
+	unsigned char data_offset = REPORT_DATA_OFFSET;
+	unsigned char offset;
+	int retval;
+
+	fhandler->fn_number = fd->fn_number;
+	fhandler->num_of_data_sources = fd->intr_src_count;
+	fhandler->data = NULL;
+	fhandler->extra = NULL;
+
+	synaptics_rmi4_set_intr_mask(fhandler, fd, intr_count);
+
+	rmi4_data->f54_query_base_addr =
+		(fd->query_base_addr | (page_number << 8));
+	rmi4_data->f54_ctrl_base_addr =
+		(fd->ctrl_base_addr | (page_number << 8));
+	rmi4_data->f54_data_base_addr =
+		(fd->data_base_addr | (page_number << 8));
+	rmi4_data->f54_cmd_base_addr =
+		(fd->cmd_base_addr | (page_number << 8));
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_query_base_addr,
+			f54_query.data,
+			sizeof(f54_query));
+	if (retval < 0)
+		return retval;
+
+	offset = sizeof(f54_query.data);
+
+	/* query 12 */
+	if (f54_query.has_sense_frequency_control == 0)
+		offset -= 1;
+
+	/* query 13 */
+	if (f54_query.has_query13) {
+		retval = synaptics_rmi4_reg_read(rmi4_data,
+				rmi4_data->f54_query_base_addr + offset,
+				query_13.data,
+				sizeof(query_13.data));
+		if (retval < 0)
+			return retval;
+		offset += 1;
+	}
+
+	/* query 14 */
+	if (query_13.has_ctrl87)
+		offset += 1;
+
+	/* query 15 */
+	if (f54_query.has_query15) {
+		retval = synaptics_rmi4_reg_read(rmi4_data,
+				rmi4_data->f54_query_base_addr + offset,
+				query_15.data,
+				sizeof(query_15.data));
+		if (retval < 0)
+			return retval;
+		offset += 1;
+	}
+
+	/* query 16 */
+	if (query_15.has_query16) {
+		retval = synaptics_rmi4_reg_read(rmi4_data,
+				rmi4_data->f54_query_base_addr + offset,
+				query_16.data,
+				sizeof(query_16.data));
+		if (retval < 0)
+			return retval;
+		offset += 1;
+	}
+
+	/* data 4 */
+	if (f54_query.has_sense_frequency_control)
+		data_offset += 1;
+
+	/* data 5 reserved */
+
+	/* data 6 */
+	if (f54_query.has_interference_metric) {
+		rmi4_data->f54_im_offset = data_offset + 1;
+		data_offset += 2;
+	}
+
+	/* data 7.0 */
+	if (f54_query.has_two_byte_report_rate |
+			f54_query.has_one_byte_report_rate)
+		data_offset += 1;
+
+	/* data 7.1 */
+	if (f54_query.has_two_byte_report_rate)
+		data_offset += 1;
+
+	/* data 8 */
+	if (f54_query.has_variance_metric)
+		data_offset += 2;
+
+	/* data 9 */
+	if (f54_query.has_multi_metric_state_machine)
+		data_offset += 2;
+
+	/* data 10 */
+	if (f54_query.has_multi_metric_state_machine |
+			f54_query.has_noise_state) {
+		data_offset += 1;
+		rmi4_data->f54_ns_offset = data_offset;
+	}
+
+	/* data 11 */
+	if (f54_query.has_status)
+		data_offset += 1;
+
+	/* data 12 */
+	if (f54_query.has_slew_metric)
+		data_offset += 2;
+
+	/* data 13 */
+	if (f54_query.has_multi_metric_state_machine)
+		data_offset += 2;
+
+	/* data 14 */
+	if (query_13.has_cidim) {
+		data_offset += 1;
+		rmi4_data->f54_cidim_offset = data_offset;
+	}
+
+	/* data 15 */
+	if (query_13.has_rail_im)
+		data_offset += 1;
+
+	/* data 16 */
+	if (query_13.has_noise_mitigation_enhancement)
+		data_offset += 1;
+
+	/* data 17 */
+	if (query_16.has_data17) {
+		data_offset += 1;
+		rmi4_data->f54_freq_offset = data_offset;
+	}
+
+	if (rmi4_data->report_data_32 != NULL)
+		kfree(rmi4_data->report_data_32);
+	rmi4_data->report_data_32 =
+			kzalloc(4 * (rmi4_data->num_of_tx + rmi4_data->num_of_rx), GFP_KERNEL);
+	if(rmi4_data->report_data_32 == NULL) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s report data 32 init fail\n",
+				__func__);
+		return -1;
+	}
 
 	return 0;
 }
@@ -3377,6 +3851,24 @@ rescan_pdt:
 					return retval;
 				}
 				retval = synaptics_rmi4_f34_init(rmi4_data,
+						fhandler, &rmi_fd, intr_count,page_number);
+				if (retval < 0)
+					return retval;
+				break;
+			case SYNAPTICS_RMI4_F54:
+				if (rmi_fd.intr_src_count == 0)
+					break;
+
+				retval = synaptics_rmi4_alloc_fh(&fhandler,
+						&rmi_fd, page_number);
+				if (retval < 0) {
+					dev_err(rmi4_data->pdev->dev.parent,
+							"%s: Failed to alloc for F%d\n",
+							__func__,
+							rmi_fd.fn_number);
+					return retval;
+				}
+				retval = synaptics_rmi4_f54_init(rmi4_data,
 						fhandler, &rmi_fd, intr_count,page_number);
 				if (retval < 0)
 					return retval;
@@ -4707,6 +5199,11 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 			create_singlethread_workqueue("dsx_rebuild_workqueue");
 	INIT_DELAYED_WORK(&rmi4_data->rb_work, synaptics_rmi4_rebuild_work);
 
+#ifdef HTC_FEATURE
+	rmi4_data->diag_command = READ_RAW_DATA;
+
+	init_waitqueue_head(&syn_data_ready_wq);
+#endif
 	exp_data.workqueue = create_singlethread_workqueue("dsx_exp_workqueue");
 	INIT_DELAYED_WORK(&exp_data.work, synaptics_rmi4_exp_fn_work);
 	exp_data.rmi4_data = rmi4_data;
@@ -4756,6 +5253,12 @@ err_enable_irq:
 
 	synaptics_rmi4_empty_fn_list(rmi4_data);
 	input_unregister_device(rmi4_data->input_dev);
+#ifdef HTC_FEATURE
+	if (rmi4_data->temp_report_data != NULL)
+		kfree(rmi4_data->temp_report_data);
+	if (rmi4_data->report_data != NULL)
+		kfree(rmi4_data->report_data);
+#endif
 	rmi4_data->input_dev = NULL;
 	if (rmi4_data->stylus_enable) {
 		input_unregister_device(rmi4_data->stylus_dev);
@@ -4838,6 +5341,12 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 	unregister_early_suspend(&rmi4_data->early_suspend);
 #endif
 
+#ifdef HTC_FEATURE
+	if (rmi4_data->temp_report_data != NULL)
+		kfree(rmi4_data->temp_report_data);
+	if (rmi4_data->report_data != NULL)
+		kfree(rmi4_data->report_data);
+#endif
 	synaptics_rmi4_empty_fn_list(rmi4_data);
 	input_unregister_device(rmi4_data->input_dev);
 	rmi4_data->input_dev = NULL;

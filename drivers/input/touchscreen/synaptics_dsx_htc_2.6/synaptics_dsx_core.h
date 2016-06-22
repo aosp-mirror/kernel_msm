@@ -440,9 +440,22 @@ struct synaptics_rmi4_data {
 	unsigned short f34_cmd_base_addr;
 	unsigned short f34_ctrl_base_addr;
 	unsigned short f34_data_base_addr;
+	unsigned short f54_query_base_addr;
+	unsigned short f54_cmd_base_addr;
+	unsigned short f54_ctrl_base_addr;
+	unsigned short f54_data_base_addr;
 	unsigned int chip_id;
 	char config_version[65];
 	uint16_t tw_vendor;
+	unsigned char diag_command;
+	atomic_t data_ready;
+	int16_t *report_data;
+	int32_t *report_data_32;
+	uint8_t *temp_report_data;
+	uint16_t f54_im_offset;
+	uint16_t f54_ns_offset;
+	uint16_t f54_cidim_offset;
+	uint16_t f54_freq_offset;
 #endif
 	int irq;
 	int sensor_max_x;
