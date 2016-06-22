@@ -632,6 +632,26 @@ static int mp2661_set_batt_charging_current(struct mp2661_chg *chip,
     return rc;
 }
 
+extern int mp2661_global_get_batt_charging_current(void)
+{
+    union power_supply_propval ret = {0,};
+    int rc;
+    u8 reg;
+
+    rc = mp2661_read(global_mp2661, CHG_CURRENT_CTRL_REG, &reg);
+    if (rc < 0)
+    {
+        pr_err("Couldn't read CHG_CURRENT_CTRL_REG rc = %d\n", rc);
+        return rc;
+    }
+
+    reg = (reg >> BATT_CHARGING_CURRENT_MASK_SHIFT) & BATT_CHARGING_CURRENT_MASK;
+    reg = reg >> BATT_CHARGING_CURRENT_MASK_SHIFT;
+    ret.intval = reg * MP2661_BATT_CHARGING_STEP_MA + MP2661_BATT_CHARGING_MIN_MA;
+
+    return ret.intval;
+}
+
 static void mp2661_set_appropriate_batt_charging_current(
                 struct mp2661_chg *chip)
 {
