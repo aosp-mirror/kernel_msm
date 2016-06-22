@@ -1576,9 +1576,8 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int power_ok_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_err("rt_sts = 0x02%x\n", rt_sts);
+	printk("power_ok_irq_handler rt_sts = 0x02%x\n", rt_sts);
 	if (rt_sts == 0) {
-		printk("power_ok_irq_handler usb_present:%d\n", chip->usb_present);
 		smb23x_parallel_charger_enable(chip, CURRENT, false);
 		smb23x_suspend_usb(chip, CURRENT, true);
 

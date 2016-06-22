@@ -896,7 +896,7 @@ static int STC311x_ReadBatteryData(STC311x_BattDataTypeDef *BattData)
 	if (value>=0x80) value -= 0x100;	/* convert to signed value */
 	BattData->Temperature = value*10;	/* result in 0.1 degrC */
 
-	pr_err("BattData->Temperature = %d\n", BattData->Temperature);
+	printk("[stc3117] BattData->Temperature = %d\n", BattData->Temperature);
 
 	/* Avg current */
 	value=data[12]; value = (value<<8) + data[11];
@@ -1308,9 +1308,9 @@ int GasGauge_Start(GasGauge_DataTypeDef *GG)
 	BattData.Alm_SOC = GG-> Alm_SOC;
 	BattData.Alm_Vbat = GG->Alm_Vbat;
 	BattData.RelaxThreshold = GG->RelaxCurrent;
-	printk("### Cnom:%d, Rsense:%d, Rint:%d Vmode:%d CC_cnf:%d\n", GG->Cnom,
+	printk("[stc3117] Cnom:%d, Rsense:%d, Rint:%d Vmode:%d CC_cnf:%d\n", GG->Cnom,
 				GG->Rsense,GG->Rint,GG->Vmode,GG->CC_cnf);
-	printk("### VM_cnf:%d, Alm_SOC:%d, Alm_Vbat:%d, RelaxThreshold:%d\n", GG->VM_cnf,
+	printk("[stc3117] VM_cnf:%d, Alm_SOC:%d, Alm_Vbat:%d, RelaxThreshold:%d\n", GG->VM_cnf,
 				GG->Alm_SOC,GG->Alm_Vbat, GG->RelaxCurrent);
 	/* Init averaging */
 	BattData.AvgVoltage = 0;
@@ -1942,7 +1942,7 @@ static void stc311x_work(struct work_struct *work)
 		chip->batt_voltage = GasGaugeData.Voltage;
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
 	}
-	printk("chip->batt_soc:%d, chip->batt_voltage:%d, chip->batt_current:%d\n", chip->batt_soc, chip->batt_voltage, chip->batt_current);
+	printk("[stc3117] chip->batt_soc:%d, chip->batt_voltage:%d, chip->batt_current:%d\n", chip->batt_soc, chip->batt_voltage, chip->batt_current);
 
 	for (RegAddress=0; RegAddress<31; RegAddress++) {
 		HEX=STC31xx_ReadByte(RegAddress);
@@ -2115,10 +2115,10 @@ static int stc311x_probe(struct i2c_client *client,
 		GasGaugeData.RelaxCurrent = chip->pdata->RelaxCurrent; /* current for relaxation in mA (< C/20) */
 		GasGaugeData.Adaptive = chip->pdata->Adaptive;		 /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 		/* capacity derating in 0.1%, for temp = 60, 40, 25, 10,	 0, -10 degrC */
-		printk("Vmode:%d\n", GasGaugeData.Vmode);
-		printk("Alm_SOC:%d, Alm_Vbat:%d, CC_cnf:%d Rint:%d Cnom:%d\n", GasGaugeData.Alm_SOC,
+		printk("[stc3117] Vmode:%d\n", GasGaugeData.Vmode);
+		printk("[stc3117] Alm_SOC:%d, Alm_Vbat:%d, CC_cnf:%d Rint:%d Cnom:%d\n", GasGaugeData.Alm_SOC,
 							GasGaugeData.Alm_Vbat,GasGaugeData.CC_cnf,GasGaugeData.Rint,GasGaugeData.Cnom);
-		printk("Rsense:%d, RelaxCurrent:%d, Adaptive:%d, VM_cnf:%d\n", GasGaugeData.Rsense,
+		printk("[stc3117] Rsense:%d, RelaxCurrent:%d, Adaptive:%d, VM_cnf:%d\n", GasGaugeData.Rsense,
 							GasGaugeData.RelaxCurrent,GasGaugeData.Adaptive, GasGaugeData.VM_cnf);
 		for(Loop=0;Loop<NTEMP;Loop++)
 			GasGaugeData.CapDerating[Loop] = chip->pdata->CapDerating[Loop];
@@ -2162,7 +2162,7 @@ static int stc311x_probe(struct i2c_client *client,
 		chip->batt_voltage = GasGaugeData.Voltage;
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
 	}
-	printk("chip->batt_soc:%d, chip->batt_voltage:%d, chip->batt_current:%d\n", chip->batt_soc, chip->batt_voltage, chip->batt_current);
+	printk("[stc3117] chip->batt_soc:%d, chip->batt_voltage:%d, chip->batt_current:%d\n", chip->batt_soc, chip->batt_voltage, chip->batt_current);
 
 	dev_info(&client->dev, "init deferrable start: %s\n", __func__);
 	INIT_DEFERRABLE_WORK(&chip->work, stc311x_work);
@@ -2171,7 +2171,7 @@ static int stc311x_probe(struct i2c_client *client,
 	//The specified delay depends of every platform and Linux kernel. It has to be checked physically during the driver integration
 	//a delay of about 5 seconds is correct but 30 seconds is enough compare to the battery SOC evolution speed
 	dev_info(&client->dev, "Probe end: %s\n", __func__);
-	printk("stc3117 Probe end\n");
+	printk("[stc3117] stc3117 Probe end\n");
 	return 0;
 
 }

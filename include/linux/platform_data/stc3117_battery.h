@@ -111,7 +111,7 @@ static struct stc311x_platform_data default_stc3117_platform_data = {
 
 	/*if the application temperature data is preferred than the STC3117 temperature*/
 	.ExternalTemperature = Temperature_fn, /*External temperature fonction, return °C*/
-	.ForceExternalTemperature = 1, /* 1=External temperature, 0=STC3117 temperature */
+	.ForceExternalTemperature = 0, /* 1=External temperature, 0=STC3117 temperature */
 };
 
 #endif
