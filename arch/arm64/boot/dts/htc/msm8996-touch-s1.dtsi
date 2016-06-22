@@ -143,21 +143,6 @@
 };
 
 &i2c_3 {
-	goodix_ts@5d {
-		compatible = "goodix,gt1x";
-		reg = <0x5d>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <125 0x2008>;
-//		vdd_ana-supply = <&pm8994_l22>;
-//		vcc_i2c-supply = <&pm8994_l18>;
-		goodix,rst-gpio = <&tlmm 89 0x00>;
-		goodix,irq-gpio = <&tlmm 125 0x00>;
-		goodix,switch-gpio = <&tlmm 80 0x00>;
-		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
-		pinctrl-0 = <&ts_rst_active &ts_intr_active>;
-		pinctrl-1 = <&ts_rst_suspend &ts_intr_suspend>;
-	};
-
 	/delete-node/ synaptics_dsx@20;
 	synaptics_dsx@20 {
 		compatible = "synaptics,dsx-i2c";
