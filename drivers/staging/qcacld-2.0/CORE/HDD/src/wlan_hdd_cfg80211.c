@@ -14575,6 +14575,15 @@ static int wlan_hdd_tdls_add_station(struct wiphy *wiphy,
         return -ENOTSUPP;
     }
 
+    if (!test_bit(TDLS_INIT_DONE, &pAdapter->event_flags)) {
+        hddLog(LOG1, FL("TDLS init was not done!"));
+        if (0 != wlan_hdd_tdls_init(pAdapter)) {
+            hddLog(LOGE, FL("wlan_hdd_tdls_init failed, exit"));
+            return -EINVAL;
+        }
+        set_bit(TDLS_INIT_DONE, &pAdapter->event_flags);
+    }
+
     pTdlsPeer = wlan_hdd_tdls_get_peer(pAdapter, mac);
 
     if ( NULL == pTdlsPeer ) {
