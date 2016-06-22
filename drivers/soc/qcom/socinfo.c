@@ -113,6 +113,7 @@ enum {
 	PLATFORM_SUBTYPE_STRANGE_2A = 0x3,
 	PLATFORM_SUBTYPE_ANTHIAS = 0x4,
 	PLATFORM_SUBTYPE_G_QVGA = 0x5,
+	PLATFORM_SUBTYPE_JDI_QVGA = 0x6,
 	PLATFORM_SUBTYPE_INVALID,
 };
 
@@ -123,6 +124,7 @@ const char *hw_platform_subtype[] = {
 	[PLATFORM_SUBTYPE_STRANGE_2A] = "strange_2a",
 	[PLATFORM_SUBTYPE_ANTHIAS] = "anthias",
 	[PLATFORM_SUBTYPE_G_QVGA] = "qvga_g",
+	[PLATFORM_SUBTYPE_JDI_QVGA] = "jdi_qvga",
 };
 
 /* Used to parse shared memory.  Must match the modem. */
