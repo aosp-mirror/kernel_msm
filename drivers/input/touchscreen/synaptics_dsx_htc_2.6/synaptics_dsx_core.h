@@ -326,6 +326,17 @@ struct synaptics_rmi4_device_info {
 	struct list_head support_fn_list;
 };
 
+#ifdef HTC_FEATURE
+struct synaptics_rmi4_noise_state {
+	uint16_t im;
+	uint16_t im_m;
+	uint16_t cidim;
+	uint16_t cidim_m;
+	uint8_t freq;
+	uint8_t ns;
+};
+#endif
+
 /*
  * struct synaptics_rmi4_data - RMI4 device instance data
  * @pdev: pointer to platform device
@@ -436,6 +447,7 @@ struct synaptics_rmi4_data {
 #endif
 	unsigned int firmware_id;
 #ifdef HTC_FEATURE
+	struct synaptics_rmi4_noise_state noise_state;
 	unsigned short f34_query_base_addr;
 	unsigned short f34_cmd_base_addr;
 	unsigned short f34_ctrl_base_addr;

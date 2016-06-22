@@ -128,6 +128,8 @@
 #define READ_DIFF_SELF_DATA 59
 #define READ_RAW_SELF_DATA 63
 
+#define FREQ_MASK 0x7F
+
 static DECLARE_WAIT_QUEUE_HEAD(syn_data_ready_wq);
 #endif
 
@@ -1417,6 +1419,67 @@ static void report_wake_event(struct synaptics_rmi4_data *rmi4_data)
 {
 	sysfs_notify(&rmi4_data->input_dev->dev.kobj, NULL, "wake_event");
 }
+
+static int synaptics_rmi4_get_noise_state(struct synaptics_rmi4_data *rmi4_data)
+{
+	int retval;
+	uint8_t data[2], ns = 0, freq = 0;
+	uint16_t im = 0, cidim = 0;
+	struct synaptics_rmi4_noise_state noise_state;
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_data_base_addr + rmi4_data->f54_im_offset,
+			data, sizeof(data));
+	if (retval < 0)
+		return retval;
+	im = (data[1] << 8) | data[0];
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_data_base_addr + rmi4_data->f54_ns_offset,
+			&ns, sizeof(ns));
+	if (retval < 0)
+		return retval;
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_data_base_addr + rmi4_data->f54_cidim_offset,
+			data, sizeof(data));
+	if (retval < 0)
+		return retval;
+	cidim = (data[1] << 8) | data[0];
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_data_base_addr + rmi4_data->f54_freq_offset,
+			&freq, sizeof(freq));
+	if (retval < 0)
+		return retval;
+	freq &= FREQ_MASK;
+
+	noise_state.im_m = (im > rmi4_data->noise_state.im_m) ?
+			im : rmi4_data->noise_state.im_m;
+	noise_state.cidim_m = (cidim > rmi4_data->noise_state.cidim_m) ?
+			cidim : rmi4_data->noise_state.cidim_m;
+	noise_state.im = im;
+	noise_state.cidim = cidim;
+	noise_state.freq = freq;
+	noise_state.ns = ns;
+
+	if((noise_state.freq != rmi4_data->noise_state.freq) ||
+			(noise_state.ns != rmi4_data->noise_state.ns)) {
+		pr_info("[NS]: IM:%d(M-%d), CIDIM:%d(M-%d), Freq:%d, NS:%d\n",
+				im,
+				noise_state.im_m,
+				cidim,
+				noise_state.cidim_m,
+				freq,
+				ns);
+		noise_state.im_m = 0;
+		noise_state.cidim_m = 0;
+	}
+
+	memcpy(&rmi4_data->noise_state, &noise_state, sizeof(noise_state));
+
+	return 0;
+}
 #endif
 
 static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
@@ -1906,6 +1969,10 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	}
 
 	input_sync(rmi4_data->input_dev);
+
+#ifdef HTC_FEATURE
+	synaptics_rmi4_get_noise_state(rmi4_data);
+#endif
 
 	mutex_unlock(&(rmi4_data->rmi4_report_mutex));
 
@@ -5201,6 +5268,8 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 
 #ifdef HTC_FEATURE
 	rmi4_data->diag_command = READ_RAW_DATA;
+	rmi4_data->noise_state.im_m = 0;
+	rmi4_data->noise_state.cidim_m = 0;
 
 	init_waitqueue_head(&syn_data_ready_wq);
 #endif
