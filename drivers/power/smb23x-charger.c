@@ -398,6 +398,9 @@ static int __smb23x_read(struct smb23x_chip *chip, u8 reg, u8 *val)
 {
 	int rc, i;
 
+	if (g_chip->charger_plugin == 0)
+		return (-EINVAL);
+
 	for (i = 0; i < MAX_RW_RETRIES; i++) {
 		rc = i2c_smbus_read_byte_data(chip->client, reg);
 		if (rc >= 0)
@@ -419,6 +422,9 @@ static int __smb23x_read(struct smb23x_chip *chip, u8 reg, u8 *val)
 static int __smb23x_write(struct smb23x_chip *chip, u8 reg, u8 val)
 {
 	int rc, i;
+
+	if (g_chip->charger_plugin == 0)
+		return (-EINVAL);
 
 	for (i = 0; i < MAX_RW_RETRIES; i++) {
 		rc = i2c_smbus_write_byte_data(chip->client, reg, val);
