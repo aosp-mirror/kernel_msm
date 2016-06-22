@@ -12169,12 +12169,13 @@ eHalStatus sme_UpdateFwTdlsState(tHalHandle hHal, void  *psmeTdlsParams,
     tpAniSirGlobal pMac = NULL;
     vos_msg_t vosMessage;
 
+    pMac = PMAC_STRUCT(hHal);
+    if (NULL == pMac) {
+        return eHAL_STATUS_FAILURE;
+    }
+
     /* only acquire sme global lock before state update if asked to */
     if (useSmeLock) {
-        pMac = PMAC_STRUCT(hHal);
-        if (NULL == pMac)
-            return eHAL_STATUS_FAILURE;
-
         status = sme_AcquireGlobalLock(&pMac->sme);
         if (eHAL_STATUS_SUCCESS != status)
             return status;
