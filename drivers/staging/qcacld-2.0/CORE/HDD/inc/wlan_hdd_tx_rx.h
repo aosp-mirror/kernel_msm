@@ -80,6 +80,12 @@
 
 #define HDD_BUG_REPORT_MIN_COUNT  3
 #define HDD_BUG_REPORT_MIN_TIME   300000     /* 5 minutes */
+
+#define TX_PATH 1
+#define RX_PATH 0
+#define STA  1
+#define AP 0
+
 /*---------------------------------------------------------------------------
   Type declarations
   -------------------------------------------------------------------------*/
@@ -257,4 +263,6 @@ const char *hdd_action_type_to_string(enum netif_action_type action);
 void wlan_hdd_netif_queue_control(hdd_adapter_t *adapter,
 		enum netif_action_type action, enum netif_reason_type reason);
 
+void hdd_dhcp_pkt_trace_buf_update(struct sk_buff *skb, int is_transmission,
+				   int is_sta);
 #endif    // end #if !defined( WLAN_HDD_TX_RX_H )

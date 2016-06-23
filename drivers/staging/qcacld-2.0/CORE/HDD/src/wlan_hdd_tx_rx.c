@@ -617,7 +617,7 @@ int __hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
            }
            else if (VOS_PKT_TRAC_TYPE_DHCP & proto_type)
            {
-               vos_pkt_trace_buf_update("ST:T:DHC");
+               hdd_dhcp_pkt_trace_buf_update(skb, TX_PATH, STA);
            }
        }
 #endif /* QCA_PKT_PROTO_TRACE */
@@ -1217,7 +1217,7 @@ VOS_STATUS hdd_rx_packet_cbk(v_VOID_t *vosContext,
          if (VOS_PKT_TRAC_TYPE_EAPOL & proto_type)
             vos_pkt_trace_buf_update("ST:R:EPL");
          else if (VOS_PKT_TRAC_TYPE_DHCP & proto_type)
-            vos_pkt_trace_buf_update("ST:R:DHC");
+            hdd_dhcp_pkt_trace_buf_update(skb, RX_PATH, STA);
       }
 #endif /* QCA_PKT_PROTO_TRACE */
 
@@ -1520,3 +1520,81 @@ void wlan_hdd_netif_queue_control(hdd_adapter_t *adapter,
 
 }
 
+/**
+ * hdd_dhcp_pkt_trace_buf_update() - Update protocol trace buffer with DHCP
+ * packet info.
+ * @skb: skb pointer
+ * @is_transmission: packet is in transmission or in rx
+ * @is_sta: tx/rx by STA mode
+ *
+ * Return: None
+ */
+void hdd_dhcp_pkt_trace_buf_update (struct sk_buff *skb, int is_transmission,
+				    int is_sta)
+{
+	char tbuf[20];
+	if ((skb->data[DHCP_OPTION53_OFFSET] == DHCP_OPTION53) &&
+	   (skb->data[DHCP_OPTION53_LENGTH_OFFSET] ==
+	   DHCP_OPTION53_LENGTH)) {
+
+		switch (skb->data[DHCP_OPTION53_STATUS_OFFSET]) {
+		case DHCPDISCOVER:
+			snprintf(tbuf, sizeof(tbuf),
+				"%s:%s:DHCP DIS",
+				is_sta?"ST":"HA",
+				is_transmission?"T":"R");
+			break;
+		case DHCPREQUEST:
+			snprintf(tbuf, sizeof(tbuf),
+				"%s:%s:DHCP REQ",
+				is_sta?"ST":"HA",
+				is_transmission?"T":"R");
+			break;
+		case DHCPOFFER:
+			snprintf(tbuf, sizeof(tbuf),
+				"%s:%s:DHCP OFF",
+				is_sta?"ST":"HA",
+				is_transmission?"T":"R");
+			break;
+		case DHCPACK:
+			snprintf(tbuf, sizeof(tbuf),
+				"%s:%s:DHCP ACK",
+				is_sta?"ST":"HA",
+				is_transmission?"T":"R");
+			break;
+		case DHCPNAK:
+			snprintf(tbuf, sizeof(tbuf),
+				"%s:%s:DHCP NAK",
+				is_sta?"ST":"HA",
+				is_transmission?"T":"R");
+			break;
+		case DHCPRELEASE:
+			snprintf(tbuf, sizeof(tbuf),
+				"%s:%s:DHCP REL",
+				is_sta?"ST":"HA",
+				is_transmission?"T":"R");
+			break;
+		case DHCPINFORM:
+			snprintf(tbuf, sizeof(tbuf),
+				"%s:%s:DHCP INF",
+				is_sta?"ST":"HA",
+				is_transmission?"T":"R");
+			break;
+		case DHCPDECLINE:
+			snprintf(tbuf, sizeof(tbuf),
+				"%s:%s:DHCP DELC",
+				is_sta?"ST":"HA",
+				is_transmission?"T":"R");
+			break;
+		default:
+			snprintf(tbuf, sizeof(tbuf),
+				"%s:%s:DHCP INVL",
+				is_sta?"ST":"HA",
+				is_transmission?"T":"R");
+			break;
+		}
+		vos_pkt_trace_buf_update(tbuf);
+		VOS_TRACE(VOS_MODULE_ID_HDD_DATA, VOS_TRACE_LEVEL_INFO,
+			  FL("%s"), tbuf);
+	}
+}

@@ -371,7 +371,7 @@ int __hdd_softap_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
            }
            else if (VOS_PKT_TRAC_TYPE_DHCP & proto_type)
            {
-               vos_pkt_trace_buf_update("HA:T:DHC");
+               hdd_dhcp_pkt_trace_buf_update(skb, TX_PATH, AP);
            }
        }
 #endif /* QCA_PKT_PROTO_TRACE */
@@ -845,7 +845,7 @@ VOS_STATUS hdd_softap_rx_packet_cbk(v_VOID_t *vosContext,
          if (VOS_PKT_TRAC_TYPE_EAPOL & proto_type)
             vos_pkt_trace_buf_update("HA:R:EPL");
          else if (VOS_PKT_TRAC_TYPE_DHCP & proto_type)
-            vos_pkt_trace_buf_update("HA:R:DHC");
+            hdd_dhcp_pkt_trace_buf_update(skb, RX_PATH, AP);
       }
 #endif /* QCA_PKT_PROTO_TRACE */
 
