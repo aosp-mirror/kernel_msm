@@ -1699,6 +1699,8 @@ struct hdd_context_s
 
     struct work_struct  sap_start_work;
     bool is_sap_restart_required;
+    bool is_ch_avoid_in_progress;
+
     bool is_sta_connection_pending;
     spinlock_t sap_update_info_lock;
     spinlock_t sta_update_info_lock;
@@ -2149,12 +2151,14 @@ uint8_t hdd_find_prefd_safe_chnl(hdd_context_t *hdd_ctxt,
 		hdd_adapter_t *ap_adapter);
 void hdd_unsafe_channel_restart_sap(hdd_context_t *hdd_ctx);
 
-#if defined (FEATURE_WLAN_MCC_TO_SCC_SWITCH) || \
-	defined (FEATURE_WLAN_STA_AP_MODE_DFS_DISABLE)
+#if defined (FEATURE_WLAN_MCC_TO_SCC_SWITCH) || defined (FEATURE_WLAN_STA_AP_MODE_DFS_DISABLE) || defined (FEATURE_WLAN_CH_AVOID)
 void wlan_hdd_restart_sap(hdd_adapter_t *ap_adapter);
 #else
 static inline void wlan_hdd_restart_sap(hdd_adapter_t *ap_adapter)
 {
 }
 #endif
+
+void hdd_sap_restart_handle(struct work_struct *work);
+
 #endif    // end #if !defined( WLAN_HDD_MAIN_H )

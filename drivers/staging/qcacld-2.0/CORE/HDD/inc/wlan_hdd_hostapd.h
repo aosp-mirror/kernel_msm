@@ -170,16 +170,18 @@ hdd_change_sta_conn_pending_status(hdd_context_t *hdd_ctx,
 static inline bool
 hdd_is_sap_restart_required(hdd_context_t *hdd_ctx)
 {
-    bool status;
+    bool status = false;
     spin_lock(&hdd_ctx->sap_update_info_lock);
-    status = hdd_ctx->is_sap_restart_required;
+    if (!hdd_ctx->is_ch_avoid_in_progress)
+        status = hdd_ctx->is_sap_restart_required;
     spin_unlock(&hdd_ctx->sap_update_info_lock);
     return status;
 }
 
 /**
  * hdd_change_sap_restart_required_status() - This function will change the
- *                                            value of is_sap_restart_required
+ * value of is_sap_restart_required
+ *
  * @hdd_ctx: pointer to hdd context
  * @value: value to set
  *
@@ -193,6 +195,25 @@ hdd_change_sap_restart_required_status(hdd_context_t *hdd_ctx,
 {
     spin_lock(&hdd_ctx->sap_update_info_lock);
     hdd_ctx->is_sap_restart_required = value;
+    spin_unlock(&hdd_ctx->sap_update_info_lock);
+}
+
+/**
+ * hdd_change_ch_avoidance_status() - update is_ch_avoid_in_progress flag
+ *
+ * @hdd_ctx: pointer to hdd context
+ * @value: value to set
+ *
+ * This function will change the value of is_ch_avoid_in_progress
+ *
+ * Return: none
+ */
+static inline void
+hdd_change_ch_avoidance_status(hdd_context_t *hdd_ctx,
+                               bool value)
+{
+    spin_lock(&hdd_ctx->sap_update_info_lock);
+    hdd_ctx->is_ch_avoid_in_progress = value;
     spin_unlock(&hdd_ctx->sap_update_info_lock);
 }
 
