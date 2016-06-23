@@ -376,6 +376,8 @@ static irqreturn_t smb23x_stat_handler(int irq, void *dev_id);
 static int MPP4_read;
 static int GPIO_num17 = 17;
 
+extern int g_bootdbguart;
+
 #define MAX_RW_RETRIES		3
 static int __smb23x_read(struct smb23x_chip *chip, u8 reg, u8 *val)
 {
@@ -912,9 +914,15 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 	return rc;
 }
 
+static const char * const usb_type_dcp_str[] = {
+        "AC_Fast",
+        "Power_Bank",
+        "AC_Normal",
+};
+
 static void smb23x_parallel_work(struct work_struct *work)
 {
-	int rc, i, tmp;
+	int rc, i, tmp, usb_type_dcp_num;
 	struct smb23x_chip *chip = container_of(work,
 	struct smb23x_chip, parallel_work);
 	int type;
@@ -957,18 +965,22 @@ static void smb23x_parallel_work(struct work_struct *work)
 
 		smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
 		if (type == POWER_SUPPLY_TYPE_USB_DCP) {
-			gpio_set_value(GPIO_num17,1);
-			printk("gpio_17 set to 1\n");
 			if (MPP4_read > 500000 && MPP4_read < 900000) {
 				printk("USB_TYPE: AC_Fast\n");
-				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 1, MPP4_read:%d, USB_TYPE:AC_Fast\n", MPP4_read);
+				usb_type_dcp_num = 0;
 			} else if (MPP4_read > 2200000 && MPP4_read < 2850000) {
 				printk("USB_TYPE: Power_Bank\n");
-				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 1, MPP4_read:%d, USB_TYPE:Power_Bank\n", MPP4_read);
+				usb_type_dcp_num = 1;
 			} else {
 				printk("USB_TYPE: AC_Normal\n");
-				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 1, MPP4_read:%d, USB_TYPE:AC_Normal\n", MPP4_read);
+				usb_type_dcp_num = 2;
 			}
+			if (g_bootdbguart == 1) {
+				gpio_set_value(GPIO_num17,1);
+				printk("gpio_17 set to 1\n");
+				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 1, MPP4_read:%d, USB_TYPE:%s\n", MPP4_read, usb_type_dcp_str[usb_type_dcp_num]);
+                        } else
+				ASUSEvtlog("[BAT][CHG] MPP4_read:%d, USB_TYPE:%s\n", MPP4_read, usb_type_dcp_str[usb_type_dcp_num]);
 		} else if (type == POWER_SUPPLY_TYPE_USB_CDP) {
 			gpio_set_value(GPIO_num17,0);
 			printk("gpio_17 set to 0\n");
@@ -1573,8 +1585,10 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 		gpio_set_value(GPIO_num17,0);
 		printk("gpio_17 set to 0\n");
 	} else if (chip->usb_present == 1 && usb_present == 0) {
-		gpio_set_value(GPIO_num17,1);
-		printk("gpio_17 set to 1\n");
+		if (g_bootdbguart == 1) {
+			gpio_set_value(GPIO_num17,1);
+			printk("gpio_17 set to 1\n");
+		}
 	}
 
 	printk("usbin_uv_irq_handler chip->usb_present = %d, usb_present = %d\n",
