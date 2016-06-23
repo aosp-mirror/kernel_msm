@@ -33415,7 +33415,7 @@ static wmi_buf_t wma_setup_wmi_init_msg(tp_wma_handle wma_handle,
 			 host_mem_chunks[idx].ptr) ;
 	}
 	cmd->num_host_mem_chunks = wma_handle->num_mem_chunks;
-	len += (wma_handle->num_mem_chunks * sizeof(wlan_host_memory_chunk));
+	*len += (wma_handle->num_mem_chunks * sizeof(wlan_host_memory_chunk));
 	WMITLV_SET_HDR((buf_ptr + sizeof(*cmd) + sizeof(wmi_resource_config)),
 			WMITLV_TAG_ARRAY_STRUC,
 			(sizeof(wlan_host_memory_chunk) *
