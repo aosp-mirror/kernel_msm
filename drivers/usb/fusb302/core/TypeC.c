@@ -685,20 +685,36 @@ void StateMachineAttachWaitAccessory(void)
 #ifdef FSC_HAVE_SNK
 void StateMachineAttachedSink(void)
 {
+    CCTermType CCUpdate;
     //debounceCC();
     
     if ((!IsPRSwap) && (IsHardReset == FALSE) && !Registers.Status.VBUSOK)      // If VBUS is removed and we are not in the middle of a power role swap...   
     {
         SetStateDelayUnattached();                                              // Go to the unattached state
     }
-    
+
+    CCUpdate = DecodeCCTerminationSink();
+
+    pr_debug("FUSB %s: ACTIVITY(%d), PolicyHasContract(%d), CCUpdate(%d), CC1TermCCDebounce(%d), CC2TermCCDebounce(%d)\n", __func__, Registers.Status.ACTIVITY, PolicyHasContract, CCUpdate, CC1TermCCDebounce, CC2TermCCDebounce);
     if (blnCCPinIsCC1)
     {
-        UpdateSinkCurrent(CC1TermCCDebounce);                                   // Update the advertised current
+        if (CC1TermCCDebounce != CCUpdate) {
+            if (Registers.Status.ACTIVITY == 0 && PolicyHasContract == FALSE) {
+                pr_info("FUSB %s: update new CC1 term %d -> %d\n", __func__, CC1TermCCDebounce, CCUpdate);
+                CC1TermCCDebounce = CCUpdate;
+            }
+            UpdateSinkCurrent(CC1TermCCDebounce);                                   // Update the advertised current
+        }
     }
     else if(blnCCPinIsCC2)
     {
-        UpdateSinkCurrent(CC2TermCCDebounce);                                   // Update the advertised current
+        if (CC2TermCCDebounce != CCUpdate) {
+            if (Registers.Status.ACTIVITY == 0 && PolicyHasContract == FALSE) {
+                pr_info("FUSB %s: update new CC2 term %d -> %d\n", __func__, CC2TermCCDebounce, CCUpdate);
+                CC2TermCCDebounce = CCUpdate;
+            }
+            UpdateSinkCurrent(CC2TermCCDebounce);                                   // Update the advertised current
+        }
     }
 
 }
@@ -1503,6 +1519,7 @@ void SetStateAttachedSink(void)
 #ifdef FSC_INTERRUPT_TRIGGERED
     g_Idle = TRUE;                                                              // Mask for VBUSOK
     Registers.Mask.M_VBUSOK = 0;
+    Registers.Mask.M_BC_LVL = 0;
     DeviceWrite(regMask, 1, &Registers.Mask.byte);
     platform_enable_timer(FALSE);
 #endif  
@@ -2325,6 +2342,7 @@ CCTermType DecodeCCTerminationSink(void) // Port asserts Rd
 void UpdateSinkCurrent(CCTermType Termination)
 {
 	struct fusb30x_chip* chip = fusb30x_GetChip();
+    int ret;
 
     switch (Termination)
     {
@@ -2343,6 +2361,11 @@ void UpdateSinkCurrent(CCTermType Termination)
     }
 	if (chip != NULL && chip->utc != NULL)
 		chip->utc->sink_current = (u8)SinkCurrent;
+
+    ret = platform_set_sink_current(SinkCurrent);
+
+    if (ret)
+        pr_err("FUSB %s: set_sink_current error(%d)\n", __func__, ret);
 }
 #endif // FSC_HAVE_SNK
 

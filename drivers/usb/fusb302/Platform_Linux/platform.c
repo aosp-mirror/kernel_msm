@@ -19,6 +19,7 @@
  */
 #include <linux/printk.h>                                                       // pr_err, printk, etc
 #include <linux/delay.h>
+#include <linux/power_supply.h>
 #include "../core/PD_Types.h"
 #include "fusb30x_global.h"                                                     // Chip structure
 #include "platform_helpers.h"                                                   // Implementation details
@@ -386,6 +387,22 @@ void platform_notify_attached_source(int value)
 u8 platform_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], int *device_max_ma)
 {
     return fusb_battery_select_source_capability(obj_cnt, pd_data, device_max_ma);
+}
+
+int platform_set_sink_current(USBTypeCCurrent sinkCurrent)
+{
+    struct fusb30x_chip* chip = fusb30x_GetChip();
+    int ret = -ENODEV;
+
+    if (!chip->batt_psy)
+        chip->batt_psy = power_supply_get_by_name("battery");
+
+#ifdef CONFIG_HTC_BATT
+    if (chip->batt_psy && chip->batt_psy->set_property)
+        ret = chip->batt_psy->set_property(chip->batt_psy, POWER_SUPPLY_PROP_TYPEC_SINK_CURRENT, (const union power_supply_propval *)&sinkCurrent);
+#endif
+
+    return ret;
 }
 
 int usb_controller_register(struct device *parent, struct usb_controller *uc)
