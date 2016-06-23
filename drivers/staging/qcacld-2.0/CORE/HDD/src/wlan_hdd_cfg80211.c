@@ -13481,6 +13481,15 @@ static int __wlan_hdd_cfg80211_add_beacon(struct wiphy *wiphy,
         hddLog(VOS_TRACE_LEVEL_DEBUG, FL("Reached max concurrent connections"));
         return -EINVAL;
     }
+    if (pAdapter->device_mode == WLAN_HDD_P2P_GO) {
+        hdd_adapter_t  *pP2pAdapter = NULL;
+        pP2pAdapter = hdd_get_adapter(pHddCtx, WLAN_HDD_P2P_DEVICE);
+        if (pP2pAdapter) {
+            hddLog(VOS_TRACE_LEVEL_DEBUG,
+                FL("cancel active p2p device ROC before GO starting"));
+            wlan_hdd_cancel_existing_remain_on_channel(pP2pAdapter);
+        }
+    }
 
     if ((pAdapter->device_mode == WLAN_HDD_SOFTAP) ||
         (pAdapter->device_mode == WLAN_HDD_P2P_GO)) {
@@ -13563,6 +13572,15 @@ static int __wlan_hdd_cfg80211_set_beacon(struct wiphy *wiphy,
     if (VOS_FTM_MODE == hdd_get_conparam()) {
         hddLog(LOGE, FL("Command not allowed in FTM mode"));
         return -EINVAL;
+    }
+    if (pAdapter->device_mode == WLAN_HDD_P2P_GO) {
+        hdd_adapter_t  *pP2pAdapter = NULL;
+        pP2pAdapter = hdd_get_adapter(pHddCtx, WLAN_HDD_P2P_DEVICE);
+        if (pP2pAdapter) {
+            hddLog(VOS_TRACE_LEVEL_DEBUG,
+                FL("cancel active p2p device ROC before GO starting"));
+            wlan_hdd_cancel_existing_remain_on_channel(pP2pAdapter);
+        }
     }
 
     if ((pAdapter->device_mode == WLAN_HDD_SOFTAP) ||
@@ -13869,6 +13887,15 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
         hddLog(VOS_TRACE_LEVEL_DEBUG, FL("Reached max concurrent connections"));
         return -EINVAL;
     }
+    if (pAdapter->device_mode == WLAN_HDD_P2P_GO) {
+        hdd_adapter_t  *pP2pAdapter = NULL;
+        pP2pAdapter = hdd_get_adapter(pHddCtx, WLAN_HDD_P2P_DEVICE);
+        if (pP2pAdapter) {
+            hddLog(VOS_TRACE_LEVEL_DEBUG,
+                FL("cancel active p2p device ROC before GO starting"));
+            wlan_hdd_cancel_existing_remain_on_channel(pP2pAdapter);
+        }
+    }
 
     if ((pAdapter->device_mode == WLAN_HDD_SOFTAP)
       || (pAdapter->device_mode == WLAN_HDD_P2P_GO)
@@ -14002,6 +14029,15 @@ static int __wlan_hdd_cfg80211_change_beacon(struct wiphy *wiphy,
     if (!(pAdapter->device_mode == WLAN_HDD_SOFTAP ||
           pAdapter->device_mode == WLAN_HDD_P2P_GO)) {
         return -EOPNOTSUPP;
+    }
+    if (pAdapter->device_mode == WLAN_HDD_P2P_GO) {
+        hdd_adapter_t  *pP2pAdapter = NULL;
+        pP2pAdapter = hdd_get_adapter(pHddCtx, WLAN_HDD_P2P_DEVICE);
+        if (pP2pAdapter) {
+            hddLog(VOS_TRACE_LEVEL_DEBUG,
+                FL("cancel active p2p device ROC before GO starting"));
+            wlan_hdd_cancel_existing_remain_on_channel(pP2pAdapter);
+        }
     }
 
     old = pAdapter->sessionCtx.ap.beacon;
