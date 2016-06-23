@@ -1283,6 +1283,7 @@ endWorker:
 #define VFLOAT_COMP_NORMAL	0x0		// 0x10F4[5:0] - 0x0 = 4.4V
 #define CHG_UNKNOWN_CHG_PERIOD_MS	9000
 #define VBUS_VALID_THRESHOLD			4250000
+extern bool get_connect2pc(void);
 static void batt_worker(struct work_struct *work)
 {
 	static int s_first = 1;
@@ -1399,17 +1400,15 @@ static void batt_worker(struct work_struct *work)
 			/* WA: QCT  recorgnize D+/D- open charger won't set 500mA. */
 			if ((htc_batt_info.rep.charging_source == POWER_SUPPLY_TYPE_USB)) {
 				s_prev_user_set_chg_curr = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
-				if (s_prev_user_set_chg_curr == 0) {
-#if 0 /* FIXME not support get_connect2pc API yet */
-					user_set_chg_curr = 150000;
+				if (!get_connect2pc() && !g_rerun_apsd_done && !g_is_unknown_charger) {
+					user_set_chg_curr = SLOW_CHARGE_CURR;
 					if (delayed_work_pending(&htc_batt_info.chk_unknown_chg_work))
 						cancel_delayed_work(&htc_batt_info.chk_unknown_chg_work);
 					schedule_delayed_work(&htc_batt_info.chk_unknown_chg_work,
 							msecs_to_jiffies(CHG_UNKNOWN_CHG_PERIOD_MS));
-#else
-					user_set_chg_curr = 500000;
-#endif
 				} else {
+					if (s_prev_user_set_chg_curr < SLOW_CHARGE_CURR)
+						s_prev_user_set_chg_curr = SLOW_CHARGE_CURR;
 					user_set_chg_curr = s_prev_user_set_chg_curr;
 				}
 			} else if (htc_batt_info.rep.charging_source == POWER_SUPPLY_TYPE_USB_HVDCP){
@@ -1532,7 +1531,6 @@ static void batt_worker(struct work_struct *work)
 			user_set_chg_curr = 0;
 			charging_enabled = 0;
 			pwrsrc_enabled = 0;
-			g_is_unknown_charger = false;
 			s_vbus_valid_no_chger_cnt = 0;
 			if(s_first){
 				pr_info("ignore the fist time on boot.\n");
@@ -1541,12 +1539,13 @@ static void batt_worker(struct work_struct *work)
 				g_pd_voltage = 0;
 				g_pd_current = 0;
 			}
-			g_rerun_apsd_done = false;
 			power_supply_set_current_limit(htc_batt_info.usb_psy, 0);
-#if 0 /* FIXME not support get_connect2pc API yet */
-			if (delayed_work_pending(&htc_batt_info.chk_unknown_chg_work))
-				cancel_delayed_work(&htc_batt_info.chk_unknown_chg_work);
-#endif
+			if (htc_batt_info.vbus < VBUS_VALID_THRESHOLD) {
+				g_is_unknown_charger = false;
+				g_rerun_apsd_done = false;
+				if (delayed_work_pending(&htc_batt_info.chk_unknown_chg_work))
+					cancel_delayed_work(&htc_batt_info.chk_unknown_chg_work);
+			}
 		}
 	}
 
@@ -1794,8 +1793,6 @@ static void chg_full_check_worker(struct work_struct *work)
 
 }
 
-#if 0 /* FIXME not support get_connect2pc API yet */
-extern bool get_connect2pc(void);
 #define CHK_UNKNOWN_CHG_RERUN_APSD_PERIOD_MS	3000
 static void chk_unknown_chg_worker(struct work_struct *work)
 {
@@ -1807,36 +1804,31 @@ static void chk_unknown_chg_worker(struct work_struct *work)
 	}
 
 	current_max_now = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
-	if (current_max_now < SLOW_CHARGE_CURR) {
+	if (!get_connect2pc()) {
 		if (g_rerun_apsd_done) {
-			if (get_connect2pc())
-				BATT_EMBEDDED("set charging_current(%d), PC connected", SLOW_CHARGE_CURR);
-			else {
-				BATT_EMBEDDED("set charging_current(%d), UNKNOWN CHARGER", SLOW_CHARGE_CURR);
-				g_is_unknown_charger = true;
-			}
+			BATT_EMBEDDED("set charging_current(%d), UNKNOWN CHARGER", SLOW_CHARGE_CURR);
+			g_is_unknown_charger = true;
 			power_supply_set_current_limit(htc_batt_info.usb_psy, SLOW_CHARGE_CURR);
 			g_rerun_apsd_done = false;
 			update_htc_chg_src();
 			update_htc_extension_state();
 			return;
 		}
-		if (get_connect2pc()){
-			power_supply_set_current_limit(htc_batt_info.usb_psy, SLOW_CHARGE_CURR);
-			BATT_EMBEDDED("set charging_current(%d), PC connected", SLOW_CHARGE_CURR);
-			return;
-		}
 		BATT_EMBEDDED("rerun APSD");
 		pmi8994_rerun_apsd();
 		g_rerun_apsd_done = true;
+		if (delayed_work_pending(&htc_batt_info.chk_unknown_chg_work))
+			cancel_delayed_work(&htc_batt_info.chk_unknown_chg_work);
 		schedule_delayed_work(&htc_batt_info.chk_unknown_chg_work,
-							msecs_to_jiffies(CHK_UNKNOWN_CHG_RERUN_APSD_PERIOD_MS));
+			msecs_to_jiffies(CHK_UNKNOWN_CHG_RERUN_APSD_PERIOD_MS));
 	} else {
+		if (current_max_now < SLOW_CHARGE_CURR)
+			current_max_now = SLOW_CHARGE_CURR;
+		BATT_EMBEDDED("set charging_current(%d), PC connected", current_max_now);
 		g_rerun_apsd_done = false;
 		power_supply_set_current_limit(htc_batt_info.usb_psy, current_max_now);
 	}
 }
-#endif
 
 const char* htc_stats_classify(unsigned long sum, int sample_count)
 {
@@ -2833,9 +2825,7 @@ static int htc_battery_probe(struct platform_device *pdev)
 	INIT_WORK(&htc_batt_timer.batt_work, batt_worker);
         INIT_DELAYED_WORK(&htc_batt_info.cable_impedance_work, cable_impedance_worker);
 	INIT_DELAYED_WORK(&htc_batt_info.chg_full_check_work, chg_full_check_worker);
-#if 0 /* FIXME not support get_connect2pc API yet */
 	INIT_DELAYED_WORK(&htc_batt_info.chk_unknown_chg_work, chk_unknown_chg_worker);
-#endif
 	init_timer(&htc_batt_timer.batt_timer);
 	htc_batt_timer.batt_timer.function = batt_regular_timer_handler;
 	alarm_init(&htc_batt_timer.batt_check_wakeup_alarm, ALARM_REALTIME,
