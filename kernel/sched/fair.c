@@ -5455,7 +5455,7 @@ done:
 
 static inline int find_best_target(struct task_struct *p)
 {
-	int i;
+	int i, boosted;
 	int target_cpu = -1;
 	int target_capacity = 0;
 	int idle_cpu = -1;
@@ -5468,10 +5468,12 @@ static inline int find_best_target(struct task_struct *p)
 	 *       2) idle_cpu with capacity at current OPP
 	 *       3) busy cpu with capacity at higher OPP
 	 */
+	boosted = schedtune_task_boost(p);
 	task_util_boosted = boosted_task_util(p);
 	for_each_cpu(i, tsk_cpus_allowed(p)) {
-
 		int cur_capacity = capacity_curr_of(i);
+		struct rq *rq = cpu_rq(i);
+		int idle_idx = idle_get_state_idx(rq);
 
 		/*
 		 * p's blocked utilization is still accounted for on prev_cpu
@@ -5494,6 +5496,20 @@ static inline int find_best_target(struct task_struct *p)
 			continue;
 #endif
 
+		/*
+		 * For boosted tasks we favor idle cpus unconditionally to
+		 * improve latency.
+		 */
+		if (idle_idx >= 0 && boosted) {
+			if (idle_cpu < 0 ||
+				(sysctl_sched_cstate_aware &&
+				 best_idle_cstate > idle_idx)) {
+				best_idle_cstate = idle_idx;
+				idle_cpu = i;
+			}
+			continue;
+		}
+
 		if (new_util < cur_capacity) {
 			if (cpu_rq(i)->nr_running) {
 				if (target_capacity < cur_capacity) {
@@ -5501,9 +5517,7 @@ static inline int find_best_target(struct task_struct *p)
 					target_cpu = i;
 					target_capacity = cur_capacity;
 				}
-			} else {
-				struct rq *rq = cpu_rq(i);
-				int idle_idx = idle_get_state_idx(rq);
+			} else if (!boosted) {
 				if (idle_cpu < 0 || 
 					(sysctl_sched_cstate_aware &&
 					 	best_idle_cstate > idle_idx)) {
@@ -5517,10 +5531,12 @@ static inline int find_best_target(struct task_struct *p)
 		}
 	}
 
-	if (target_cpu < 0) {
+	if (!boosted && target_cpu < 0) {
 		target_cpu = idle_cpu >= 0 ? idle_cpu : backup_cpu;
 	}
 
+	if (boosted && idle_cpu >= 0)
+		target_cpu = idle_cpu;
 	return target_cpu;
 }
 
