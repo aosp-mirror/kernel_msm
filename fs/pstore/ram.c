@@ -34,6 +34,7 @@
 #include <linux/slab.h>
 #include <linux/compiler.h>
 #include <linux/pstore_ram.h>
+#include <linux/proc_fs.h>
 
 #define RAMOOPS_KERNMSG_HDR "===="
 #define MIN_MEM_SIZE 4096UL
@@ -443,6 +444,29 @@ void notrace ramoops_console_write_buf(const char *buf, size_t size)
 	persistent_ram_write(cxt->cprz, buf, size);
 }
 
+static int last_kmsg_proc_show(struct seq_file *seq, void *v)
+{
+	if (oops_cxt.cprz && persistent_ram_old(oops_cxt.cprz)) {
+		seq_write(seq, persistent_ram_old(oops_cxt.cprz),
+			persistent_ram_old_size(oops_cxt.cprz));
+	} else
+		seq_puts(seq, "");
+	return 0;
+}
+
+static int last_kmsg_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, last_kmsg_proc_show, inode->i_private);
+}
+
+static const struct file_operations last_kmsg_proc_fops = {
+	.owner = THIS_MODULE,
+	.open = last_kmsg_proc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 static int ramoops_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -542,6 +566,8 @@ static int ramoops_probe(struct platform_device *pdev)
 	pr_info("attached 0x%lx@0x%llx, ecc: %d/%d\n",
 		cxt->size, (unsigned long long)cxt->phys_addr,
 		cxt->ecc_info.ecc_size, cxt->ecc_info.block_size);
+
+	proc_create("last_kmsg", 0444, NULL, &last_kmsg_proc_fops);
 
 	return 0;
 
