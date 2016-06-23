@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2014-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2014-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -657,4 +657,24 @@ void htt_clear_bundle_stats(htt_pdev_handle pdev)
     HTCClearBundleStats(pdev->htc_pdev);
 }
 #endif
+
+/**
+ * htt_mark_first_wakeup_packet() - set flag to indicate that
+ *    fw is compatible for marking first packet after wow wakeup
+ * @pdev: pointer to htt pdev
+ * @value: 1 for enabled/ 0 for disabled
+ *
+ * Return: None
+ */
+void htt_mark_first_wakeup_packet(htt_pdev_handle pdev,
+			uint8_t value)
+{
+	if (!pdev) {
+		adf_os_print("%s: htt pdev is NULL", __func__);
+		return;
+	}
+
+	pdev->cfg.is_first_wakeup_packet = value;
+}
+
 

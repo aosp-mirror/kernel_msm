@@ -72,6 +72,28 @@
 
 /*=== function definitions ===*/
 
+/**
+ * ol_tx_mark_first_wakeup_packet() - set flag to indicate that
+ *    fw is compatible for marking first packet after wow wakeup
+ * @value: 1 for enabled/ 0 for disabled
+ *
+ * Return: None
+ */
+void ol_tx_mark_first_wakeup_packet(uint8_t value)
+{
+	void *vos_context = vos_get_global_context(VOS_MODULE_ID_TXRX, NULL);
+	struct ol_txrx_pdev_t *pdev = vos_get_context(VOS_MODULE_ID_TXRX,
+						vos_context);
+
+	if (!pdev) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			"%s: pdev is NULL\n", __func__);
+		return;
+	}
+
+	htt_mark_first_wakeup_packet(pdev->htt_pdev, value);
+}
+
 u_int16_t
 ol_tx_desc_pool_size_hl(ol_pdev_handle ctrl_pdev)
 {

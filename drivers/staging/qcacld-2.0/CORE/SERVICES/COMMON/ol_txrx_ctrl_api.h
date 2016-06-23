@@ -1453,5 +1453,6 @@ void ol_txrx_clear_stats(struct ol_txrx_pdev_t *pdev, uint16_t bitmap);
 void ol_rx_reset_pn_replay_counter(struct ol_txrx_pdev_t *pdev);
 uint32_t ol_rx_get_tkip_replay_counter(struct ol_txrx_pdev_t *pdev);
 uint32_t ol_rx_get_ccmp_replay_counter(struct ol_txrx_pdev_t *pdev);
+void ol_tx_mark_first_wakeup_packet(uint8_t value);
 
 #endif /* _OL_TXRX_CTRL_API__H_ */
