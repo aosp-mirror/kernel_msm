@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -356,7 +356,7 @@ eHalStatus csrNeighborRoamStartLfrScan(tpAniSirGlobal pMac, tANI_U8 sessionId);
 VOS_STATUS csrSetCCKMIe(tpAniSirGlobal pMac, const tANI_U8 sessionId,
                             const tANI_U8 *pCckmIe,
                             const tANI_U8 ccKmIeLen);
-VOS_STATUS csrRoamReadTSF(tpAniSirGlobal pMac, tANI_U8 *pTimestamp,
+eHalStatus csrRoamReadTSF(tpAniSirGlobal pMac, tANI_U8 *pTimestamp,
                           const tANI_U8 sessionId);
 #endif /*FEATURE_WLAN_ESE && FEATURE_WLAN_ESE_UPLOAD */
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD

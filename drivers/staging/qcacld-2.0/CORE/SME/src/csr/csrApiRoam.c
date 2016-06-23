@@ -18871,11 +18871,14 @@ void csrRoamFTPreAuthRspProcessor( tHalHandle hHal, tpSirFTPreAuthRsp pFTPreAuth
             eCSR_ROAM_FT_RESPONSE, eCSR_ROAM_RESULT_NONE);
 
 #if defined(FEATURE_WLAN_ESE) && defined(FEATURE_WLAN_ESE_UPLOAD)
-   if (csrRoamIsESEAssoc(pMac, pFTPreAuthRsp->smeSessionId))
-   {
+   if (csrRoamIsESEAssoc(pMac, pFTPreAuthRsp->smeSessionId)) {
       /* read TSF */
-      csrRoamReadTSF(pMac, (tANI_U8 *)roamInfo.timestamp,
-                     pFTPreAuthRsp->smeSessionId);
+      status = csrRoamReadTSF(pMac, (tANI_U8 *)roamInfo.timestamp,
+                       pFTPreAuthRsp->smeSessionId);
+      if (eHAL_STATUS_SUCCESS != status) {
+         smsLog(pMac, LOGE, FL("TSF read failed.Timestamp may be invalid"));
+         return;
+      }
       // Save the bssid from the received response
       vos_mem_copy((void *)&roamInfo.bssid,
             (void *)pFTPreAuthRsp->preAuthbssId, sizeof(tCsrBssid));
@@ -19137,15 +19140,18 @@ VOS_STATUS csrSetCCKMIe(tpAniSirGlobal pMac, const tANI_U8 sessionId,
     \param  pTimestamp - output TSF time stamp
     \- return Success or failure
     -------------------------------------------------------------------------*/
-VOS_STATUS csrRoamReadTSF(tpAniSirGlobal pMac, tANI_U8 *pTimestamp,
+eHalStatus csrRoamReadTSF(tpAniSirGlobal pMac, tANI_U8 *pTimestamp,
                           tANI_U8 sessionId)
 {
-    eHalStatus              status     = eHAL_STATUS_SUCCESS;
-    tCsrNeighborRoamBSSInfo handoffNode;
+    tCsrNeighborRoamBSSInfo handoffNode = {{0}};
     tANI_U32                timer_diff = 0;
     tANI_U32                timeStamp[2];
     tpSirBssDescription     pBssDescription = NULL;
-    csrNeighborRoamGetHandoffAPInfo(pMac, &handoffNode, sessionId);
+
+    if (!csrNeighborRoamGetHandoffAPInfo(pMac, &handoffNode, sessionId)) {
+        smsLog(pMac, LOGE, FL("invalid handoff node"));
+        return eHAL_STATUS_FAILURE;
+    }
     pBssDescription = handoffNode.pBssDescription;
     // Get the time diff in milli seconds
     timer_diff = vos_timer_get_system_time() - pBssDescription->scanSysTimeMsec;
@@ -19156,7 +19162,8 @@ VOS_STATUS csrRoamReadTSF(tpAniSirGlobal pMac, tANI_U8 *pTimestamp,
     UpdateCCKMTSF(&(timeStamp[0]), &(timeStamp[1]), &timer_diff);
     vos_mem_copy(pTimestamp, (void *) &timeStamp[0],
                  sizeof (tANI_U32) * 2);
-    return status;
+
+    return eHAL_STATUS_SUCCESS;
 }
 #endif /*FEATURE_WLAN_ESE && FEATURE_WLAN_ESE_UPLOAD */
 
