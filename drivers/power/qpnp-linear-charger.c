@@ -2677,7 +2677,8 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 			}
 
 			if (type == POWER_SUPPLY_TYPE_USB_DCP || type == POWER_SUPPLY_TYPE_USB_CDP) {
-				gpio_set_value(GPIO_num17,1);
+				if (g_bootdbguart == 1)
+					gpio_set_value(GPIO_num17,1);
 			} else if (type == POWER_SUPPLY_TYPE_USB) {
 				gpio_set_value(GPIO_num17,0);
 			} else {
