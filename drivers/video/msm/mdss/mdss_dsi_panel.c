@@ -928,6 +928,43 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	return 0;
 }
 
+static int mdss_dsi_panel_boost_config(struct mdss_panel_data *pdata,
+	int enable)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+	struct mdss_panel_info *pinfo;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return -EINVAL;
+	}
+
+	pinfo = &pdata->panel_info;
+	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	if(ctrl->boost == enable){
+		pr_debug("%s: idle: no change(%d)\n",__func__,enable);
+		return 0;
+	}
+
+	ctrl->boost = enable;
+	if (enable)
+	{
+
+		if(ctrl->boost_on_cmds.cmd_cnt){
+			mdss_dsi_panel_cmds_send(ctrl, &ctrl->boost_on_cmds, CMD_REQ_COMMIT);}
+	}
+	else
+	{
+
+		if(ctrl->boost_off_cmds.cmd_cnt){
+			mdss_dsi_panel_cmds_send(ctrl, &ctrl->boost_off_cmds, CMD_REQ_COMMIT);}
+	}
+
+	return 0;
+}
+
 static void mdss_dsi_parse_trigger(struct device_node *np, char *trigger,
 		char *trigger_key)
 {
@@ -2508,6 +2545,11 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-idle-fps", &tmp);
 	pinfo->mipi.frame_rate_idle = (!rc ? tmp : 60);
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->boost_on_cmds,
+		"qcom,mdss-dsi-boost-on-command", "qcom,mdss-dsi-boost-on-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->boost_off_cmds,
+		"qcom,mdss-dsi-boost-off-command", "qcom,mdss-dsi-boost-off-command-state");
 
 	rc = of_property_read_u32(np, "qcom,adjust-timer-wakeup-ms", &tmp);
 	pinfo->adjust_timer_delay_ms = (!rc ? tmp : 0);
@@ -2595,6 +2637,7 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->post_panel_on = mdss_dsi_post_panel_on;
 	ctrl_pdata->off = mdss_dsi_panel_off;
 	ctrl_pdata->low_power_config = mdss_dsi_panel_low_power_config;
+	ctrl_pdata->boost_mode_config= mdss_dsi_panel_boost_config;
 	ctrl_pdata->panel_data.set_backlight = mdss_dsi_panel_bl_ctrl;
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
 	ctrl_pdata->panel_data.set_idle = mdss_dsi_panel_set_idle_mode;

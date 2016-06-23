@@ -72,6 +72,16 @@
 					05 01 00 00 00 00 02 38 00/*Idle Mode Off*/
 					];
 		qcom,mdss-dsi-idle-off-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-boost-on-command = [
+					15 01 00 00 00 00 02 FE 04
+					15 01 00 00 00 00 02 53 92
+					];
+		qcom,mdss-dsi-boost-on-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-boost-off-command = [
+					15 01 00 00 00 00 02 FE 04
+					15 01 00 00 00 00 02 53 de
+					];
+		qcom,mdss-dsi-boost-off-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-h-sync-pulse = <1>;
 		qcom,mdss-dsi-traffic-mode = "burst_mode";
 		qcom,mdss-dsi-lane-map = "lane_map_3012";
