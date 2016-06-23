@@ -29,6 +29,8 @@
 #include <linux/regulator/machine.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/qpnp/qpnp-adc.h>
+#include <linux/kthread.h>
+#include <linux/sched.h>
 
 /* Mask/Bit helpers */
 #define _mp2661_MASK(BITS, POS) \
@@ -169,9 +171,9 @@ struct mp2661_chg {
     int                batt_discharging_ma;
     int                thermal_regulation_threshold;
 
-    /* monitor some events */
-    struct delayed_work      monitor_work;
-
+    /* monitor temp task */
+    struct task_struct       *monitor_temp_task;
+    struct semaphore         monitor_temp_sem;
     struct timespec          resume_time;
     struct timespec          last_monitor_time;
     int                      last_temp;
@@ -1760,62 +1762,70 @@ static int mp2661_batt_property_is_writeable(struct power_supply *psy,
 #define AP_MASK_RX_GPIO_TEMP          450
 #define AP_MASK_RX_GPIO_TEMP_DELTA    30
 extern void idtp9220_ap_mask_rxint_enable(bool enable);
-static void mp2661_monitor_work(struct work_struct *work)
+static __ref int mp2661_monitor_kthread(void *arg)
 {
     int temp;
     int last_batt_temp_status;
-    struct delayed_work *dwork = to_delayed_work(work);
-    struct mp2661_chg *chip = container_of(dwork,
-                   struct mp2661_chg, monitor_work);
+    struct mp2661_chg *chip = (struct mp2661_chg *)arg;
+    struct sched_param param = {.sched_priority = MAX_RT_PRIO - 1};
 
-    get_monotonic_boottime(&chip->last_monitor_time);
+    sched_setscheduler(current, SCHED_FIFO, &param);
+    pr_info("enter mp2661 monitor thread\n");
 
-    temp = mp2661_get_prop_batt_temp(chip);
-
-    /* wireless rx whether to sleep */
-    if(!chip->ap_mask_rx_int_gpio && (temp >= AP_MASK_RX_GPIO_TEMP))
+    while(1)
     {
-        pr_err("disable rx charging\n");
-        idtp9220_ap_mask_rxint_enable(true);
-        chip->ap_mask_rx_int_gpio = true;
-    }
-    else if(chip->ap_mask_rx_int_gpio && (temp <= (AP_MASK_RX_GPIO_TEMP - AP_MASK_RX_GPIO_TEMP_DELTA)))
-    {
-        pr_err("enable rx charging\n");
-        idtp9220_ap_mask_rxint_enable(false);
-        chip->ap_mask_rx_int_gpio = false;
-    }
-
-    if(abs(temp - chip->last_temp) >= MONITOR_TEMP_DELTA)
-    {
-        pr_err("temp = %d, last_temp = %d\n", temp, chip->last_temp);
-
-        last_batt_temp_status = chip->batt_temp_status;
-
-        mp2661_initialize_batt_temp_status(chip);
-
-        if(chip->batt_temp_status != last_batt_temp_status)
+        get_monotonic_boottime(&chip->last_monitor_time);
+        temp = mp2661_get_prop_batt_temp(chip);
+        pr_info("temp = %d\n",temp);
+        /* wireless rx whether to sleep */
+        if(!chip->ap_mask_rx_int_gpio && (temp >= AP_MASK_RX_GPIO_TEMP))
         {
-            if (BAT_TEMP_STATUS_HOT == chip->batt_temp_status
+            pr_err("disable rx charging\n");
+            idtp9220_ap_mask_rxint_enable(true);
+            chip->ap_mask_rx_int_gpio = true;
+        }
+        else if(chip->ap_mask_rx_int_gpio && (temp <= (AP_MASK_RX_GPIO_TEMP - AP_MASK_RX_GPIO_TEMP_DELTA)))
+        {
+            pr_err("enable rx charging\n");
+            idtp9220_ap_mask_rxint_enable(false);
+            chip->ap_mask_rx_int_gpio = false;
+        }
+
+        if(abs(temp - chip->last_temp) >= MONITOR_TEMP_DELTA)
+        {
+            pr_err("temp = %d, last_temp = %d\n", temp, chip->last_temp);
+
+            last_batt_temp_status = chip->batt_temp_status;
+
+            mp2661_initialize_batt_temp_status(chip);
+
+            if(chip->batt_temp_status != last_batt_temp_status)
+            {
+                if (BAT_TEMP_STATUS_HOT == chip->batt_temp_status
                    || BAT_TEMP_STATUS_COLD == chip->batt_temp_status)
-            {
-                mp2661_set_charging_enable(chip, false);
+                {
+                    mp2661_set_charging_enable(chip, false);
+                }
+                else if(BAT_TEMP_STATUS_HOT == last_batt_temp_status
+                    || BAT_TEMP_STATUS_COLD == last_batt_temp_status)
+                {
+                    mp2661_set_charging_enable(chip, true);
+                    mp2661_set_appropriate_batt_charging_current(chip);
+                }
+                else
+                {
+                    mp2661_set_appropriate_batt_charging_current(chip);
+                }
             }
-            else if(BAT_TEMP_STATUS_HOT == last_batt_temp_status
-                || BAT_TEMP_STATUS_COLD == last_batt_temp_status)
-            {
-                mp2661_set_charging_enable(chip, true);
-                mp2661_set_appropriate_batt_charging_current(chip);
-            }
-            else
-            {
-                mp2661_set_appropriate_batt_charging_current(chip);
-            }
+        }
+
+        if(down_timeout(&chip->monitor_temp_sem, msecs_to_jiffies(MONITOR_WORK_DELAY_MS)))
+        {
+            pr_debug("Unable to acquire monitor temp lock\n");
         }
     }
 
-    schedule_delayed_work(&chip->monitor_work,
-            msecs_to_jiffies(MONITOR_WORK_DELAY_MS));
+    return 0;
 }
 
 static int mp2661_charger_probe(struct i2c_client *client,
@@ -1937,13 +1947,22 @@ static int mp2661_charger_probe(struct i2c_client *client,
     }
 #endif
 
-    INIT_DELAYED_WORK(&chip->monitor_work, mp2661_monitor_work);
-    schedule_delayed_work(&chip->monitor_work,
-        msecs_to_jiffies(MONITOR_WORK_DELAY_MS));
 
     create_debugfs_entries(chip);
 
     global_mp2661 = chip;
+
+    chip->monitor_temp_task = kthread_create(mp2661_monitor_kthread, global_mp2661,
+        "monitor_temp");
+    if (IS_ERR(chip->monitor_temp_task))
+    {
+        pr_err("can not creat monitor temp threthd\n");
+    }
+    else
+    {
+        sema_init(&chip->monitor_temp_sem, 1);
+        wake_up_process(chip->monitor_temp_task);
+    }
 
     return 0;
 unregister_batt_psy:
@@ -1958,7 +1977,10 @@ static int mp2661_charger_remove(struct i2c_client *client)
 
     debugfs_remove_recursive(chip->debug_root);
     power_supply_unregister(&chip->batt_psy);
-    cancel_delayed_work_sync(&chip->monitor_work);
+    if (!IS_ERR(chip->monitor_temp_task))
+    {
+        kthread_stop(chip->monitor_temp_task);
+    }
 
     return 0;
 }
@@ -1978,7 +2000,7 @@ static int mp2661_resume(struct device *dev)
      struct i2c_client *client = to_i2c_client(dev);
      struct mp2661_chg *chip = i2c_get_clientdata(client);
 
-     if(!chip->usb_present)
+     if(!chip->usb_present && !chip->ap_mask_rx_int_gpio)
      {
          return 0;
      }
@@ -1989,12 +2011,7 @@ static int mp2661_resume(struct device *dev)
      if( (chip->resume_time.tv_sec - chip->last_monitor_time.tv_sec) >
              MONITOR_WORK_DELAY_MS / 1000)
      {
-         /*make sure no work waits in the queue, if the work is already queued
-          *(not on the timer) the cancel will fail. That is not a problem
-          *because we just want the work started.
-          */
-         cancel_delayed_work_sync(&chip->monitor_work);
-         schedule_delayed_work(&chip->monitor_work, 0);
+          up(&chip->monitor_temp_sem);
      }
 
      return 0;
