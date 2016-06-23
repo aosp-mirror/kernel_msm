@@ -14094,6 +14094,10 @@ eHalStatus csrSendJoinReqMsg( tpAniSirGlobal pMac, tANI_U32 sessionId, tSirBssDe
         {
             dwTmp = pal_cpu_to_be32(eSIR_ED_NONE);
         }
+        if (pProfile->MFPEnabled &&
+           !(pProfile->MFPRequired) && ((pIes->RSN.present) &&
+           (!(pIes->RSN.RSN_Cap[0] >> 7) & 0x1)))
+            dwTmp = pal_cpu_to_be32(eSIR_ED_NONE);
         vos_mem_copy(pBuf, &dwTmp, sizeof(tANI_U32));
         pBuf += sizeof(tANI_U32);
 #endif
