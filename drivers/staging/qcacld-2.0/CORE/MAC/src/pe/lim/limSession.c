@@ -592,6 +592,12 @@ void peDeleteSession(tpAniSirGlobal pMac, tpPESession psessionEntry)
     tANI_U16 n;
     TX_TIMER *timer_ptr;
 
+    if (!psessionEntry->valid) {
+        limLog(pMac, LOG1, FL("peSession %d already deleted"),
+                   psessionEntry->peSessionId);
+        return;
+    }
+
     VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_DEBUG,
           "Trying to delete PE session %d Opmode %d BssIdx %d"
           " BSSID: " MAC_ADDRESS_STR, psessionEntry->peSessionId,
