@@ -161,6 +161,11 @@ typedef  enum  {
     WMI_SERVICE_HALF_RATE_QUARTER_RATE_SUPPORT, /* FW+HW supports 10 MHz (half rate) and 5 MHz (quarter rate) channel bandwidth */
     WMI_SERVICE_VDEV_RX_FILTER,       /* Support per-vdev specs of which rx frames to filter out */
     WMI_SERVICE_P2P_LISTEN_OFFLOAD_SUPPORT,
+    /*
+     * FW supports marking the first data packet which wakes
+     * the host from suspend
+     */
+    WMI_SERVICE_MARK_FIRST_WAKEUP_PACKET,
     WMI_MAX_SERVICE=128               /* max service */
 } WMI_SERVICE;
 
