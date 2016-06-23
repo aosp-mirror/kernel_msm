@@ -396,6 +396,7 @@ struct mdss_dsi_ctrl_pdata {
 	int (*post_panel_on)(struct mdss_panel_data *pdata);
 	int (*off) (struct mdss_panel_data *pdata);
 	int (*low_power_config) (struct mdss_panel_data *pdata, int enable);
+	int (*boost_mode_config) (struct mdss_panel_data *pdata, int enable);
 	int (*set_col_page_addr)(struct mdss_panel_data *pdata, bool force);
 	int (*check_status) (struct mdss_dsi_ctrl_pdata *pdata);
 	int (*check_read_status) (struct mdss_dsi_ctrl_pdata *pdata);
@@ -466,8 +467,11 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds status_cmds;
 	int idle;
 	int ulps_mode;
+	int boost;
 	struct dsi_panel_cmds idle_on_cmds;
 	struct dsi_panel_cmds idle_off_cmds;
+	struct dsi_panel_cmds boost_on_cmds;
+	struct dsi_panel_cmds boost_off_cmds;
 	struct dsi_panel_cmds brightness_cmds;
 	struct work_struct idle_on_work;
 	struct wake_lock idle_on_wakelock;

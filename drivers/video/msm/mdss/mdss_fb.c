@@ -876,6 +876,36 @@ static ssize_t mdss_fb_set_ulps_mode(struct device *dev,
 	return count;
 }
 
+static ssize_t mdss_fb_set_boost_mode(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	struct mdss_panel_data *pdata;
+	int rc = 0;
+	int boost_mode = 0;
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+
+	pdata = dev_get_platdata(&mfd->pdev->dev);
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	rc = kstrtoint(buf, 10, &boost_mode);
+	if (rc) {
+		pr_err("kstrtoint failed. rc=%d\n", rc);
+		return rc;
+	}
+
+	pr_err("boost_mode = %d\n", boost_mode);
+
+	if (mfd->index == 0) {
+		if (ctrl_pdata && ctrl_pdata->boost_mode_config)
+			ctrl_pdata->boost_mode_config(pdata, boost_mode);
+	}
+
+	return count;
+}
+
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -896,6 +926,8 @@ static DEVICE_ATTR(idle_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL, mdss_fb_set_idl
 static DEVICE_ATTR(display_mode, S_IRUGO | S_IWUSR | S_IWGRP, mdss_fb_get_display_mode, NULL);
 static DEVICE_ATTR(panel_signature, S_IRUGO | S_IWUSR | S_IWGRP, mdss_fb_get_panel_signature, NULL);
 static DEVICE_ATTR(ulps_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL, mdss_fb_set_ulps_mode);
+static DEVICE_ATTR(boost_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL, mdss_fb_set_boost_mode);
+
 
 
 static struct attribute *mdss_fb_attrs[] = {
@@ -913,6 +945,7 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_display_mode.attr,
 	&dev_attr_panel_signature.attr,
 	&dev_attr_ulps_mode.attr,
+	&dev_attr_boost_mode.attr,
 	NULL,
 };
 
