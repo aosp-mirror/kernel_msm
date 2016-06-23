@@ -2149,4 +2149,12 @@ uint8_t hdd_find_prefd_safe_chnl(hdd_context_t *hdd_ctxt,
 		hdd_adapter_t *ap_adapter);
 void hdd_unsafe_channel_restart_sap(hdd_context_t *hdd_ctx);
 
+#if defined (FEATURE_WLAN_MCC_TO_SCC_SWITCH) || \
+	defined (FEATURE_WLAN_STA_AP_MODE_DFS_DISABLE)
+void wlan_hdd_restart_sap(hdd_adapter_t *ap_adapter);
+#else
+static inline void wlan_hdd_restart_sap(hdd_adapter_t *ap_adapter)
+{
+}
+#endif
 #endif    // end #if !defined( WLAN_HDD_MAIN_H )

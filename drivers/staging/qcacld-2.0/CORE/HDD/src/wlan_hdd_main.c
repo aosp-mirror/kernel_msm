@@ -866,18 +866,17 @@ static void hdd_smps_force_mode_cb(void *context,
 }
 
 #if defined (FEATURE_WLAN_MCC_TO_SCC_SWITCH) || defined (FEATURE_WLAN_STA_AP_MODE_DFS_DISABLE)
-/**---------------------------------------------------------------------------
+/**
+ * wlan_hdd_restart_sap() - This function is used to restart SAP in driver internally
+ * @ap_adapter: - Pointer to SAP hdd_adapter_t structure
+ *
+ * wlan_hdd_restart_sap first delete SAP and do cleanup.
+ * After that WLANSAP_StartBss start re-start process of SAP.
+ *
+ * Return: None
+ */
 
-  \brief wlan_hdd_restart_sap() - This function is used to restart SAP in
-                                  driver internally
-
-  \param  - ap_adapter - Pointer to SAP hdd_adapter_t structure
-
-  \return - void
-
-  --------------------------------------------------------------------------*/
-
-static void wlan_hdd_restart_sap(hdd_adapter_t *ap_adapter)
+void wlan_hdd_restart_sap(hdd_adapter_t *ap_adapter)
 {
     hdd_ap_ctx_t *pHddApCtx;
     hdd_hostapd_state_t *pHostapdState;
