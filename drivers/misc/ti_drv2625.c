@@ -1010,6 +1010,49 @@ static const struct file_operations drv2625_debugfs_seq_fops = {
 	.llseek  = no_llseek,
 };
 
+static int drv2625_debugfs_set_amp(void *data, u64 val)
+{
+	struct drv2625_data *pDrv2625data = data;
+	int ret;
+
+	if (val > 127) {
+		dev_err(pDrv2625data->dev,
+			"%s: Invalid amplitude supplied\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	ret = drv2625_reg_write(pDrv2625data, DRV2625_REG_RTP_INPUT,
+		(uint8_t)val);
+	if (ret) {
+		dev_err(pDrv2625data->dev,
+			"%s: Error writing reg %02x\n", __func__,
+			DRV2625_REG_RTP_INPUT);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int drv2625_debugfs_get_amp(void *data, u64 *val)
+{
+	int ret;
+	struct drv2625_data *pDrv2625data = data;
+
+	ret = drv2625_reg_read(pDrv2625data, DRV2625_REG_RTP_INPUT);
+	if (ret >= 0) {
+		*val = (u64)ret;
+		ret = 0;
+	}
+
+	return ret;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(drv2625_debugfs_amp_fops,
+		drv2625_debugfs_get_amp,
+		drv2625_debugfs_set_amp,
+		"%llu\n");
+
 static void drv2625_create_debugfs_entries(
 		struct drv2625_data *pDrv2625data)
 {
@@ -1044,6 +1087,15 @@ static void drv2625_create_debugfs_entries(
 			(void *)pDrv2625data, &drv2625_debugfs_seq_fops);
 	if (IS_ERR(file)) {
 		dev_err(pDrv2625data->dev, "%s: %s couldn't create seq node\n",
+				 __func__, HAPTICS_DEVICE_NAME);
+		return;
+	}
+
+	file = debugfs_create_file("amp", S_IRUSR | S_IWUSR,
+			pDrv2625data->dent, (void *)pDrv2625data,
+			&drv2625_debugfs_amp_fops);
+	if (IS_ERR(file)) {
+		dev_err(pDrv2625data->dev, "%s: %s couldn't create amp node\n",
 				 __func__, HAPTICS_DEVICE_NAME);
 		return;
 	}
