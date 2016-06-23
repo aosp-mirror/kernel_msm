@@ -9864,12 +9864,20 @@ static void __hdd_set_multicast_list(struct net_device *dev)
             "%s: mc_count : %u, max_mc_addr_list : %d",
              __func__, mc_count, pHddCtx->max_mc_addr_list);
 
+      if (mc_count > pHddCtx->max_mc_addr_list) {
+         hddLog(VOS_TRACE_LEVEL_INFO,
+                "%s: No free filter available; allow all multicast frames",
+                __func__);
+         pAdapter->mc_addr_list.mc_cnt = 0;
+         return;
+      }
+
       netdev_for_each_mc_addr(ha, dev) {
          hddLog(VOS_TRACE_LEVEL_INFO,
                 FL("ha_addr[%d] "MAC_ADDRESS_STR),
                 i, MAC_ADDR_ARRAY(ha->addr));
 
-         if (i == mc_count || i == pHddCtx->max_mc_addr_list)
+         if (i == mc_count)
             break;
          /*
           * Skip following addresses:
