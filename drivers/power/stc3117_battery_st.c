@@ -1042,7 +1042,8 @@ static int STC311x_ReadBatteryData(struct STC311x_BattDataTypeDef *BattData)
 		return res;  /* read failed */
 	BattData->RelaxTimer = data[0];
 
-	if (BattData->RelaxTimer >= 120)
+	if ((BattData->RelaxTimer >= 120) &&
+		((BattData->STC_Status & M_RUN) == 0))
 		stc3117_count_check++;
 	else
 		stc3117_count_check = 0;
