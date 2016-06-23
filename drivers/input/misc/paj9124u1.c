@@ -216,6 +216,26 @@ static int paj9124u1_write_read(struct paj9124u1_drv_data *paj9124u1_data,
 	return -EIO;
 }
 
+static int paj9124u1_set_bits(struct paj9124u1_drv_data *paj9124u1_data,
+		uint8_t mask, uint8_t tx_val, uint8_t addr)
+{
+	uint8_t v;
+	int ret;
+
+	ret = paj9124u1_read(paj9124u1_data, &v, addr);
+	if (ret)
+		return ret;
+
+	v &= ~(mask);
+	v |= (mask & tx_val);
+
+	ret = paj9124u1_write(paj9124u1_data, v, addr);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 static int paj9124u1_open(struct paj9124u1_drv_data *paj9124u1_data)
 {
 	int ret;
@@ -467,7 +487,7 @@ static int paj9124u1_suspend(struct device *device)
 	struct paj9124u1_drv_data *paj9124u1_data = spi_get_drvdata(spidev);
 	int ret;
 
-	ret = paj9124u1_write(paj9124u1_data, 0x8, PAJ9124U1_CONFIG);
+	ret = paj9124u1_set_bits(paj9124u1_data, 0x88, 0x8, PAJ9124U1_CONFIG);
 	if (ret)
 		dev_warn(device, "Failed to put paj9124u1 into low power.\n");
 	disable_irq(spidev->irq);
@@ -482,7 +502,7 @@ static int paj9124u1_resume(struct device *device)
 	int ret;
 
 	enable_irq(spidev->irq);
-	ret = paj9124u1_write(paj9124u1_data, 0x0, PAJ9124U1_CONFIG);
+	ret = paj9124u1_set_bits(paj9124u1_data, 0x88, 0x0, PAJ9124U1_CONFIG);
 	if (ret)
 		dev_warn(device,
 			"Failed to take paj9124u1 out of low power.\n");
