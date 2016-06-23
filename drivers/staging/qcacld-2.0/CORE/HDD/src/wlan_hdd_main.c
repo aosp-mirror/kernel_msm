@@ -110,7 +110,6 @@
 #include "regdomain_common.h"
 
 extern int hdd_hostapd_stop (struct net_device *dev);
-void hdd_ch_avoid_cb(void *hdd_context,void *indi_param);
 #endif /* FEATURE_WLAN_CH_AVOID */
 
 #ifdef WLAN_FEATURE_NAN
@@ -16433,7 +16432,7 @@ VOS_STATUS hdd_issta_p2p_clientconnected(hdd_context_t *pHddCtx)
 
 #ifdef FEATURE_WLAN_CH_AVOID
 /**
- * hdd_find_prefd_safe_chnl : Finds safe channel within preferred channel
+ * hdd_find_prefd_safe_chnl - Finds safe channel within preferred channel
  * @hdd_ctxt: hdd context pointer
  * @ap_adapter: hdd hostapd adapter pointer
  *
@@ -16446,7 +16445,7 @@ VOS_STATUS hdd_issta_p2p_clientconnected(hdd_context_t *pHddCtx)
  * 0: could not found preferred safe channel
  */
 
-static uint8_t hdd_find_prefd_safe_chnl(hdd_context_t *hdd_ctxt,
+uint8_t hdd_find_prefd_safe_chnl(hdd_context_t *hdd_ctxt,
                                                   hdd_adapter_t *ap_adapter)
 {
    uint16_t             safe_channels[NUM_20MHZ_RF_CHANNELS];
@@ -16502,6 +16501,81 @@ static uint8_t hdd_find_prefd_safe_chnl(hdd_context_t *hdd_ctxt,
    return 0;
 }
 
+/**
+ * hdd_unsafe_channel_restart_sap - restart sap if sap is on unsafe channel
+ * @hdd_ctx: hdd context pointer
+ *
+ * hdd_unsafe_channel_restart_sap check all unsafe channel list
+ * and if ACS is enabled, driver will ask userspace to restart the
+ * sap. User space on LTE coex indication restart driver.
+ *
+ * Return - none
+ */
+void hdd_unsafe_channel_restart_sap(hdd_context_t *hdd_ctx)
+{
+	hdd_adapter_list_node_t *adapter_node = NULL, *next = NULL;
+	eRfChannels channel_loop;
+	hdd_adapter_t *adapter;
+	VOS_STATUS status;
+
+	static bool restart_sap_in_progress = false;
+
+	status = hdd_get_front_adapter(hdd_ctx, &adapter_node);
+	while (NULL != adapter_node && VOS_STATUS_SUCCESS == status) {
+		adapter = adapter_node->pAdapter;
+
+		if (!(adapter && (WLAN_HDD_SOFTAP == adapter->device_mode))) {
+			status = hdd_get_next_adapter(hdd_ctx, adapter_node,
+					&next);
+			adapter_node = next;
+			continue;
+		}
+		/*
+		 * If auto channel select is enabled
+		 * preferred channel is in safe channel,
+		 * re-start softap interface with safe channel.
+		 * no overlap with preferred channel and safe channel
+		 * do not re-start softap interface
+		 * stay current operating channel.
+		 */
+		if ((adapter->sessionCtx.ap.sapConfig.acs_cfg.acs_mode) &&
+				(!hdd_find_prefd_safe_chnl(hdd_ctx, adapter)))
+			return;
+		hddLog(LOG1, FL("Current operation channel %d"),
+			adapter->sessionCtx.ap.operatingChannel);
+
+		hddLog(LOG1, FL("sessionCtx.ap.sapConfig.channel %d"),
+			adapter->sessionCtx.ap.sapConfig.channel);
+
+		for (channel_loop = 0;
+			channel_loop < hdd_ctx->unsafe_channel_count;
+			channel_loop++) {
+			if (((hdd_ctx->unsafe_channel_list[channel_loop] ==
+				adapter->sessionCtx.ap.operatingChannel)) &&
+				(adapter->sessionCtx.ap.sapConfig.acs_cfg.
+				 acs_mode == true) &&
+				!restart_sap_in_progress) {
+				hddLog(LOGE,
+				FL("Restarting SAP due to unsafe channel"));
+				wlan_hdd_send_svc_nlink_msg(
+						WLAN_SVC_LTE_COEX_IND,
+						NULL,
+						0);
+				restart_sap_in_progress = true;
+				/*
+				 * current operating channel
+				 * is un-safe channel, restart driver
+				 */
+				hdd_hostapd_stop(adapter->dev);
+				return;
+			}
+		}
+		status = hdd_get_next_adapter(hdd_ctx, adapter_node, &next);
+		adapter_node = next;
+	}
+	return;
+}
+
 /**---------------------------------------------------------------------------
 
   \brief hdd_ch_avoid_cb() -
@@ -16522,7 +16596,6 @@ void hdd_ch_avoid_cb
    void *indi_param
 )
 {
-   hdd_adapter_t      *hostapd_adapter = NULL;
    hdd_context_t      *hdd_ctxt;
    tSirChAvoidIndType *ch_avoid_indi;
    v_U8_t              range_loop;
@@ -16531,11 +16604,8 @@ void hdd_ch_avoid_cb
    v_U16_t             start_channel;
    v_U16_t             end_channel;
    v_CONTEXT_t         vos_context;
-   static int          restart_sap_in_progress = 0;
    tHddAvoidFreqList   hdd_avoid_freq_list;
    tANI_U32            i;
-   hdd_adapter_list_node_t *adapter_node = NULL, *next = NULL;
-   VOS_STATUS status;
 
    /* Basic sanity */
    if (!hdd_context || !indi_param)
@@ -16663,53 +16733,8 @@ void hdd_ch_avoid_cb
     if (0 == hdd_ctxt->unsafe_channel_count)
        return;
 
-    status = hdd_get_front_adapter(hdd_ctxt, &adapter_node);
-    while (NULL != adapter_node && VOS_STATUS_SUCCESS == status) {
-        hostapd_adapter = adapter_node->pAdapter;
-
-        if( hostapd_adapter && (WLAN_HDD_SOFTAP ==
-                               hostapd_adapter->device_mode)) {
-            /* If auto channel select is enabled
-             * preferred channel is in safe channel,
-             * re-start softap interface with safe channel.
-             * no overlap with preferred channel and safe channel
-             * do not re-start softap interface
-             * stay current operating channel.
-             */
-             if ((hostapd_adapter->sessionCtx.ap.sapConfig.acs_cfg.acs_mode) &&
-                 (!hdd_find_prefd_safe_chnl(hdd_ctxt, hostapd_adapter)))
-                 return;
-
-            hddLog(LOG1, FL("Current operation channel %d"),
-                      hostapd_adapter->sessionCtx.ap.operatingChannel);
-
-            hddLog(LOG1, FL("sessionCtx.ap.sapConfig.channel %d"),
-                      hostapd_adapter->sessionCtx.ap.sapConfig.channel);
-
-            for (channel_loop = 0;
-                 channel_loop < hdd_ctxt->unsafe_channel_count;
-                 channel_loop++) {
-                if (((hdd_ctxt->unsafe_channel_list[channel_loop] ==
-                     hostapd_adapter->sessionCtx.ap.operatingChannel)) &&
-                     (hostapd_adapter->sessionCtx.ap.sapConfig.acs_cfg.acs_mode
-                                                                       == true)
-                      && !restart_sap_in_progress) {
-
-                    hddLog(LOG1, FL("Restarting SAP"));
-                    wlan_hdd_send_svc_nlink_msg(WLAN_SVC_LTE_COEX_IND, NULL, 0);
-                    restart_sap_in_progress = 1;
-                    /* current operating channel is un-safe channel,
-                     * restart driver
-                     */
-                    hdd_hostapd_stop(hostapd_adapter->dev);
-                    return;
-                }
-            }
-        }
-        status = hdd_get_next_adapter (hdd_ctxt, adapter_node, &next);
-        adapter_node = next;
-     }
-     return;
+    hdd_unsafe_channel_restart_sap(hdd_ctxt);
+    return;
 }
 #endif /* FEATURE_WLAN_CH_AVOID */
 
