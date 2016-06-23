@@ -25,6 +25,7 @@
 #include <linux/spinlock.h>
 #include <linux/delay.h>
 #include <linux/gpio.h>
+#include <linux/asusdebug.h>
 
 struct smb23x_wakeup_source {
 	struct wakeup_source source;
@@ -960,27 +961,33 @@ static void smb23x_parallel_work(struct work_struct *work)
 			printk("gpio_17 set to 1\n");
 			if (MPP4_read > 500000 && MPP4_read < 900000) {
 				printk("USB_TYPE: AC_Fast\n");
+				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 1, MPP4_read:%d, USB_TYPE:AC_Fast\n", MPP4_read);
 			} else if (MPP4_read > 2200000 && MPP4_read < 2850000) {
 				printk("USB_TYPE: Power_Bank\n");
+				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 1, MPP4_read:%d, USB_TYPE:Power_Bank\n", MPP4_read);
 			} else {
 				printk("USB_TYPE: AC_Normal\n");
+				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 1, MPP4_read:%d, USB_TYPE:AC_Normal\n", MPP4_read);
 			}
 		} else if (type == POWER_SUPPLY_TYPE_USB_CDP) {
 			gpio_set_value(GPIO_num17,0);
 			printk("gpio_17 set to 0\n");
 			printk("USB_TYPE: USB_Fast\n");
+			ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:USB_Fast\n", MPP4_read);
 		} else if (type == POWER_SUPPLY_TYPE_USB) {
 			gpio_set_value(GPIO_num17,0);
 			printk("gpio_17 set to 0\n");
 			rc = smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x02);
 			lbc_set_suspend(0x01);
 			printk("USB_TYPE: USB_Normal\n");
+			ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:USB_Normal\n", MPP4_read);
 		} else if (type == POWER_SUPPLY_TYPE_UNKNOWN) {
 			gpio_set_value(GPIO_num17,0);
 			printk("gpio_17 set to 0\n");
 			rc = smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x00);
 			lbc_set_suspend(0x01);
 			printk("USB_TYPE: UNKNOWN\n");
+			ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:UNKNOWN\n", MPP4_read);
 		}
 
 	} else {
@@ -1283,6 +1290,7 @@ static int hot_hard_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	pr_warn("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_hot = !!rt_sts;
 
+	ASUSEvtlog("[BAT][CHG] hot_hard_irq_handler rt_sts = 0x02%x\n", rt_sts);
 	return 0;
 }
 
@@ -1290,6 +1298,8 @@ static int cold_hard_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_cold = !!rt_sts;
+
+	ASUSEvtlog("[BAT][CHG] cold_hard_irq_handler rt_sts = 0x02%x\n", rt_sts);
 	return 0;
 }
 
@@ -1297,6 +1307,8 @@ static int hot_soft_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_warm = !!rt_sts;
+
+	ASUSEvtlog("[BAT][CHG] hot_soft_irq_handler rt_sts = 0x02%x\n", rt_sts);
 
 	smb23x_enable_volatile_writes(chip);
 	smb23x_masked_write(chip, CFG_REG_3, FASTCHG_CURR_SOFT_COMP, 0);
@@ -1307,6 +1319,8 @@ static int cold_soft_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_cool = !!rt_sts;
+
+	ASUSEvtlog("[BAT][CHG] cold_soft_irq_handler rt_sts = 0x02%x\n", rt_sts);
 
 	smb23x_enable_volatile_writes(chip);
 	smb23x_masked_write(chip, CFG_REG_3, FASTCHG_CURR_SOFT_COMP, 0);
@@ -1323,6 +1337,8 @@ static int batt_missing_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_present = !rt_sts;
+
+	ASUSEvtlog("[BAT][CHG] batt_missing_irq_handler rt_sts = 0x02%x\n", rt_sts);
 	return 0;
 }
 
@@ -1562,6 +1578,8 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	}
 
 	printk("usbin_uv_irq_handler chip->usb_present = %d, usb_present = %d\n",
+					chip->usb_present,  usb_present);
+	ASUSEvtlog("[BAT][CHG] usbin_uv_irq_handler chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present,  usb_present);
 	if (chip->usb_present == usb_present)
 		return 0;
@@ -2056,6 +2074,7 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
 		val->intval = chip->therm_lvl_sel;
+		ASUSEvtlog("[BAT][CHG] set SYSTEM_TEMP_LEVEL:%d \n",val->intval);
 		break;
 	default:
 		return (-EINVAL);
