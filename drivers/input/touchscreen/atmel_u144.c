@@ -918,6 +918,7 @@ exit:
 	touch_enable_irq(data->irq);
 
 	mxt_read_fw_version(data);
+	data->enable_reporting = true;
 }
 
 static void mxt_button_lock_func(struct work_struct *work_button_lock)
