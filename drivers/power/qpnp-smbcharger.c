@@ -5122,8 +5122,6 @@ static void smbchg_downgrade_iusb_work(struct work_struct *work)
 			chip->tables.usb_ilim_ma_table[downgrade_index],
 			chip->tables.usb_ilim_ma_table[target_index],
 			current_aicl, vbus, hard_limit);
-		power_supply_set_current_limit(chip->usb_psy,
-			chip->tables.usb_ilim_ma_table[downgrade_index]*1000);
 		vote(chip->usb_icl_votable, PSY_ICL_VOTER, true,
 			chip->tables.usb_ilim_ma_table[downgrade_index]);
 		schedule_delayed_work(&chip->downgrade_iusb_work,
@@ -5131,10 +5129,10 @@ static void smbchg_downgrade_iusb_work(struct work_struct *work)
 		return;
 	} else {
 		g_is_5v_2a_detected = true;
-		g_is_charger_ability_detected = true;
 		pr_smb(PR_STATUS, "Downgrade to 1.5A done, "
 			"current_aicl=%dmA, vbus=%duV, hard_limit=%d\n",
 			current_aicl, vbus, hard_limit);
+		power_supply_set_current_limit(chip->usb_psy, USB_MA_1500 * 1000);
 		/*Enable Input Missing Poller after 5V2A detection*/
 		rc = smbchg_sec_masked_write(chip,
 			chip->misc_base + TRIM_OPTIONS_7_0,
@@ -5192,8 +5190,6 @@ static void smbchg_iusb_5v_2a_detect_work(struct work_struct *work)
 			chip->tables.usb_ilim_ma_table[upgrade_index],
 			chip->tables.usb_ilim_ma_table[target_index],
 			current_aicl, vbat_mv, vbus, hard_limit);
-		power_supply_set_current_limit(chip->usb_psy,
-			chip->tables.usb_ilim_ma_table[upgrade_index]*1000);
 		vote(chip->usb_icl_votable, PSY_ICL_VOTER, true,
 			chip->tables.usb_ilim_ma_table[upgrade_index]);
 		schedule_delayed_work(&chip->iusb_5v_2a_detect_work,
@@ -5205,6 +5201,7 @@ static void smbchg_iusb_5v_2a_detect_work(struct work_struct *work)
 		pr_smb(PR_STATUS, "Upgrade to 2A done, "
 			"current_aicl=%dmA, vbatt=%dmV, vbus=%duV, hard_limit=%d\n\n",
 		current_aicl, vbat_mv, vbus, hard_limit);
+		power_supply_set_current_limit(chip->usb_psy, USB_MA_2000 * 1000);
 		/*Enable Input Missing Poller after 5V2A detection*/
 		rc = smbchg_sec_masked_write(chip,
 			chip->misc_base + TRIM_OPTIONS_7_0,
@@ -7590,6 +7587,14 @@ static irqreturn_t aicl_done_handler(int irq, void *_chip)
 
 #ifdef CONFIG_HTC_BATT
 	pr_smb(PR_INTERRUPT, "triggered, aicl: %d, vbus: %d\n", aicl_level, pmi8994_get_usbin_voltage_now());
+	if (g_is_5v_2a_detected && !g_is_charger_ability_detected) {
+		/* Check charger ability again if aicl result < 1.5A after 5V2A detect */
+		if (aicl_level < USB_MA_1500)
+			check_charger_ability(aicl_level);
+		else
+			g_is_charger_ability_detected = true;
+	}
+
 	if (!g_is_charger_ability_detected)
 		check_charger_ability(aicl_level);
 #else
