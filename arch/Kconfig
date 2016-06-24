@@ -217,8 +217,8 @@ config ARCH_INIT_TASK
 config ARCH_TASK_STRUCT_ALLOCATOR
 	bool
 
-# Select if arch has its private alloc_thread_info() function
-config ARCH_THREAD_INFO_ALLOCATOR
+# Select if arch has its private alloc_thread_stack() function
+config ARCH_THREAD_STACK_ALLOCATOR
 	bool
 
 config HAVE_REGS_AND_STACK_ACCESS_API
