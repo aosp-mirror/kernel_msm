@@ -773,7 +773,7 @@ static int __smb23x_parallel_charger_enable(struct smb23x_chip *chip,
 	parallel_psy->set_property(parallel_psy,
 		POWER_SUPPLY_PROP_CHARGING_ENABLED, &pval);
 
-	printk("Parallel-charger %s max_chg_current=%d\n",
+	pr_info("[BAT][CHG] Parallel-charger %s max_chg_current=%d\n",
 		enable ? "enabled" : "disabled",
 		enable ? (chip->cfg_fastchg_ma * 1000) : 0);
 
@@ -832,7 +832,7 @@ static int smb23x_suspend_usb(struct smb23x_chip *chip,
 		pr_err("Write USB_SUSPEND failed, rc=%d\n", rc);
 	} else {
 		chip->usb_suspended_status = suspended;
-		printk("%suspend USB!\n", suspend ? "S" : "Un-s");
+		pr_info("[BAT][CHG] %suspend USB!\n", suspend ? "S" : "Un-s");
 		if (suspend)
 			smb23x_parallel_charger_enable(chip, CURRENT, false);
 	}
@@ -930,7 +930,7 @@ static void smb23x_parallel_work(struct work_struct *work)
 	extern void lbc_set_suspend(u8 reg_val);
 
 	MPP4_read = smb23x_mpp4_vol_proc_read();
-	printk("charger_type_proc_read MPP4 voltage:%d\n", MPP4_read);
+	pr_info("[BAT][CHG] charger_type_proc_read MPP4 voltage:%d\n", MPP4_read);
 
 	smb23x_enable_volatile_writes(chip);
 
@@ -961,50 +961,50 @@ static void smb23x_parallel_work(struct work_struct *work)
 
 		rc = smb23x_parallel_charger_enable(chip, CURRENT, true);
 		if (rc < 0)
-			printk("Disable charging for CURRENT failed, rc=%d\n", rc);
+			pr_err("Disable charging for CURRENT failed, rc=%d\n", rc);
 
 		smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
 		if (type == POWER_SUPPLY_TYPE_USB_DCP) {
 			if (MPP4_read > 500000 && MPP4_read < 900000) {
-				printk("USB_TYPE: AC_Fast\n");
+				pr_info("[BAT][CHG] USB_TYPE: AC_Fast\n");
 				usb_type_dcp_num = 0;
 			} else if (MPP4_read > 2200000 && MPP4_read < 2850000) {
-				printk("USB_TYPE: Power_Bank\n");
+				pr_info("[BAT][CHG] USB_TYPE: Power_Bank\n");
 				usb_type_dcp_num = 1;
 			} else {
-				printk("USB_TYPE: AC_Normal\n");
+				pr_info("[BAT][CHG] USB_TYPE: AC_Normal\n");
 				usb_type_dcp_num = 2;
 			}
 			if (g_bootdbguart == 1) {
 				gpio_set_value(GPIO_num17,1);
-				printk("gpio_17 set to 1\n");
+				pr_info("[BAT][CHG] gpio_17 set to 1\n");
 				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 1, MPP4_read:%d, USB_TYPE:%s\n", MPP4_read, usb_type_dcp_str[usb_type_dcp_num]);
                         } else
 				ASUSEvtlog("[BAT][CHG] MPP4_read:%d, USB_TYPE:%s\n", MPP4_read, usb_type_dcp_str[usb_type_dcp_num]);
 		} else if (type == POWER_SUPPLY_TYPE_USB_CDP) {
 			gpio_set_value(GPIO_num17,0);
-			printk("gpio_17 set to 0\n");
-			printk("USB_TYPE: USB_Fast\n");
+			pr_info("[BAT][CHG] gpio_17 set to 0\n");
+			pr_info("[BAT][CHG] USB_TYPE: USB_Fast\n");
 			ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:USB_Fast\n", MPP4_read);
 		} else if (type == POWER_SUPPLY_TYPE_USB) {
 			gpio_set_value(GPIO_num17,0);
-			printk("gpio_17 set to 0\n");
+			pr_info("[BAT][CHG] gpio_17 set to 0\n");
 			rc = smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x02);
 			lbc_set_suspend(0x01);
-			printk("USB_TYPE: USB_Normal\n");
+			pr_info("[BAT][CHG] USB_TYPE: USB_Normal\n");
 			ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:USB_Normal\n", MPP4_read);
 		} else if (type == POWER_SUPPLY_TYPE_UNKNOWN) {
 			gpio_set_value(GPIO_num17,0);
-			printk("gpio_17 set to 0\n");
+			pr_info("[BAT][CHG] gpio_17 set to 0\n");
 			rc = smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x00);
 			lbc_set_suspend(0x01);
-			printk("USB_TYPE: UNKNOWN\n");
+			pr_info("[BAT][CHG] USB_TYPE: UNKNOWN\n");
 			ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:UNKNOWN\n", MPP4_read);
 		}
 
 	} else {
 		/* Weak-charger - Disable parallel path */
-		printk("Weak-charger - Disable parallel path\n");
+		pr_info("[BAT][CHG] Weak-charger - Disable parallel path\n");
 		rc = smb23x_parallel_charger_enable(chip, CURRENT, false);
 		if (rc < 0)
 			pr_err("Disable charging for CURRENT failed, rc=%d\n", rc);
@@ -1362,7 +1362,7 @@ static int batt_low_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int pre_to_fast_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	printk("pre_to_fast_irq_handler rt_sts = 0x02%x\n", rt_sts);
+	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_full = false;
 
 	return 0;
@@ -1468,7 +1468,7 @@ static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	if (!chip->apsd_enabled)
 		return 0;
 
-	printk("chip->usb_present = %d, usb_present = %d\n",
+	pr_info("[BAT][CHG] chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present, usb_present);
 
 	if (usb_present && !chip->usb_present) {
@@ -1484,7 +1484,7 @@ static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int aicl_done_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	printk("aicl_done_irq_handler rt_sts = 0x02%x\n", rt_sts);
+	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
 	return 0;
 }
 
@@ -1506,7 +1506,7 @@ static int usbin_ov_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	int health = !!rt_sts ? POWER_SUPPLY_HEALTH_OVERVOLTAGE :
 				POWER_SUPPLY_HEALTH_GOOD;
 
-	printk("usbin_ov_irq_handler chip->usb_present = %d, usb_present = %d\n",
+	pr_info("[BAT][CHG] chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present,  usb_present);
 	if (chip->usb_present != usb_present) {
 		chip->usb_present = usb_present;
@@ -1548,9 +1548,9 @@ static void reconfig_upon_unplug(struct smb23x_chip *chip)
 				WAKEUP_SRC_IRQ_POLLING);
 		schedule_delayed_work(&chip->irq_polling_work,
 				msecs_to_jiffies(IRQ_POLLING_MS));
-		printk("reconfig_upon_unplug\n");
+		pr_info("[BAT][CHG] reconfig_upon_unplug\n");
 	} else {
-		printk("restore software settings after unplug\n");
+		pr_info("[BAT][CHG] restore software settings after unplug\n");
 		smb23x_relax(&chip->smb23x_ws, WAKEUP_SRC_IRQ_POLLING);
 		rc = smb23x_hw_init(chip);
 		if (rc)
@@ -1583,15 +1583,15 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 	if (chip->usb_present == 0 && usb_present == 1) {
 		gpio_set_value(GPIO_num17,0);
-		printk("gpio_17 set to 0\n");
+		pr_info("[BAT][CHG] gpio_17 set to 0\n");
 	} else if (chip->usb_present == 1 && usb_present == 0) {
 		if (g_bootdbguart == 1) {
 			gpio_set_value(GPIO_num17,1);
-			printk("gpio_17 set to 1\n");
+			pr_info("[BAT][CHG] gpio_17 set to 1\n");
 		}
 	}
 
-	printk("usbin_uv_irq_handler chip->usb_present = %d, usb_present = %d\n",
+	pr_info("[BAT][CHG] chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present,  usb_present);
 	ASUSEvtlog("[BAT][CHG] usbin_uv_irq_handler chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present,  usb_present);
@@ -1608,7 +1608,7 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int power_ok_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	printk("power_ok_irq_handler rt_sts = 0x02%x\n", rt_sts);
+	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
 	if (rt_sts == 0) {
 		smb23x_parallel_charger_enable(chip, CURRENT, false);
 		smb23x_suspend_usb(chip, CURRENT, true);
@@ -1829,10 +1829,8 @@ static int smb23x_get_prop_battery_charging_enabled(struct smb23x_chip *chip)
 		return !chip->chg_disabled_status;
 	}
 
-	printk("smb23x_get_prop_battery_charging_enabled\n");
-
 	status = tmp & CHARGE_EN_STS_BIT;
-	printk("battery_charging status: %d\n", status);
+	pr_info("[BAT][CHG] battery_charging status: %d\n", status);
 	if (status && !chip->chg_disabled_status)
 		return 1;
 	else

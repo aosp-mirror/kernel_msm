@@ -438,11 +438,11 @@ get_prop_mpp4_voltage(struct qpnp_lbc_chip *chip)
 	if (chip->vadc_dev) {
 		rc = qpnp_vadc_read(chip->vadc_dev, P_MUX4_1_3, &results);
 		if (rc) {
-			pr_debug("Unable to read MPP4 voltage rc=%d\n", rc);
+			pr_err("[BAT][CHG] Unable to read MPP4 voltage rc=%d\n", rc);
 			return 0;
 		}
 	} else {
-		printk("chip->vadc_dev is null\n");
+		pr_err("[BAT][CHG] chip->vadc_dev is null\n");
 		return 0;
 	}
 
@@ -1072,7 +1072,7 @@ static int qpnp_lbc_ibatsafe_set(struct qpnp_lbc_chip *chip, int safe_current)
 
 	reg_val = (safe_current - QPNP_LBC_IBATSAFE_MIN_MA)
 			/ QPNP_LBC_I_STEP_MA;
-	printk("Ibate_safe=%d setting %02x\n", safe_current, reg_val);
+	pr_info("[BAT][CHG] Ibate_safe=%d setting %02x\n", safe_current, reg_val);
 
 	rc = qpnp_lbc_write(chip, chip->chgr_base + CHG_IBAT_SAFE_REG,
 				&reg_val, 1);
@@ -1107,7 +1107,7 @@ static int qpnp_lbc_ibatmax_set(struct qpnp_lbc_chip *chip, int chg_current)
 	else
 		chip->prev_max_ma = chg_current;
 
-	printk("ibatmax:%d\n", chg_current);
+	pr_info("[BAT][CHG] ibatmax:%d\n", chg_current);
 	return rc;
 }
 
@@ -1426,7 +1426,7 @@ static int get_prop_batt_temp(struct qpnp_lbc_chip *chip)
 		pr_debug("Unable to read batt temperature rc=%d\n", rc);
 		return DEFAULT_TEMP;
 	}
-	printk("get_bat_temp %d, %lld\n", results.adc_code, results.physical);
+	pr_info("[BAT][CHG] get_bat_temp %d, %lld\n", results.adc_code, results.physical);
 
 	return (int)results.physical;
 }
@@ -3404,7 +3404,7 @@ static ssize_t charger_type_proc_write(struct file *filp, const char __user *buf
 	}
 
 	val = (int)simple_strtol(messages, NULL, 10);
-	printk("[BAT][CHG][PMIC][Proc]Charger type File: %d\n", val);
+	pr_info("[BAT][CHG] Charger type File: %d\n", val);
 
 	return len;
 }
@@ -3460,7 +3460,7 @@ static ssize_t mpp4_vol_proc_write(struct file *filp, const char __user *buff,
 	}
 
 	val = (int)simple_strtol(messages, NULL, 10);
-	printk("[BAT][CHG][PMIC][Proc]mpp4 value File: %d\n", val);
+	pr_info("[BAT][CHG] mpp4 value File: %d\n", val);
 
 	return len;
 }
@@ -3516,7 +3516,7 @@ static ssize_t current_value_proc_write(struct file *filp, const char __user *bu
 	}
 
 	val = (int)simple_strtol(messages, NULL, 10);
-	printk("[BAT][CHG][PMIC][Proc]current now value File: %d\n", val);
+	pr_info("[BAT][CHG] current now value File: %d\n", val);
 
 	return len;
 }
