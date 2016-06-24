@@ -42,12 +42,14 @@
 #include "../staging/android/timed_output.h"
 
 
-#define DRV2625_SEQ_MAX_NUM  8
+#define DRV2625_SEQ_MAX_NUM        8
+#define DRV2625_AUTOCAL_WAIT_COUNT 5
 
 struct drv2625_platform_data {
 	int mnGpioNRST;
 	enum loop_type meLoop;
 	struct actuator_data msActuator;
+	bool autocal_enabled;
 };
 
 struct drv2625_data {
@@ -266,7 +268,7 @@ static void vibrator_work_routine(struct work_struct *work)
 							DRV2625_REG_CAL_BEMF);
 					unsigned char calBemfGain =
 						drv2625_reg_read(pDrv2625data,
-							DRV2625_REG_CAL_COMP) &
+							DRV2625_REG_LOOP_CONTROL) &
 							BEMFGAIN_MASK;
 					dev_info(pDrv2625data->dev,
 						"AutoCal : Comp=0x%x, Bemf=0x%x, Gain=0x%x\n",
@@ -691,6 +693,90 @@ static struct miscdevice drv2625_misc =
 	.fops = &fops,
 };
 
+static void drv2625_auto_cal(struct drv2625_data *pDrv2625data)
+{
+	struct drv2625_platform_data *pDrv2625Platdata =
+		&pDrv2625data->msPlatData;
+	struct actuator_data actuator = pDrv2625Platdata->msActuator;
+	unsigned char value_temp = 0;
+	unsigned char mask_temp = 0;
+	unsigned char DriveTime = 0;
+	unsigned char calComp = 0;
+	unsigned char calBemf = 0;
+	unsigned char calBemfGain = 0;
+	int cnt = 0;
+
+	drv2625_change_mode(pDrv2625data, DRV2625_MODE_CALIBRATION);
+
+	drv2625_set_bits(pDrv2625data, DRV2625_REG_CONTROL1, ACTUATOR_MASK,
+			(actuator.meActuatorType << ACTUATOR_SHIFT));
+
+	mask_temp = FB_BRK_FACTOR_MASK | LOOP_GAIN_MASK;
+	value_temp = (3 << FB_BRK_FACTOR_SHIFT) | (2 << LOOP_GAIN_SHIFT);
+	drv2625_set_bits(pDrv2625data, DRV2625_REG_LOOP_CONTROL,
+			mask_temp, value_temp);
+
+	drv2625_reg_write(pDrv2625data,
+		DRV2625_REG_RATED_VOLTAGE, actuator.mnRatedVoltage);
+
+	drv2625_reg_write(pDrv2625data,
+		DRV2625_REG_OVERDRIVE_CLAMP, actuator.mnOverDriveClampVoltage);
+
+	drv2625_reg_write(pDrv2625data, DRV2625_REG_AUTO_CAL_TIME, 3);
+
+	DriveTime = 5*(1000 - actuator.mnLRAFreq)/actuator.mnLRAFreq;
+	drv2625_set_bits(pDrv2625data, DRV2625_REG_DRIVE_TIME,
+			DRIVE_TIME_MASK, DriveTime);
+
+	mask_temp = BRK_TIME_MASK | IDISS_TIME_MASK;
+	value_temp = (1 << BRK_TIME_SHIFT) | 0x1;
+	drv2625_set_bits(pDrv2625data, DRV2625_REG_BRK_TIME,
+			mask_temp, value_temp);
+
+	mask_temp = SAMPLE_TIME_MASK | ZC_DET_TIME_MASK;
+	value_temp = (3 << SAMPLE_TIME_SHIFT);
+	drv2625_set_bits(pDrv2625data, DRV2625_REG_OD_CLAMP_TIME,
+			mask_temp, value_temp);
+
+	drv2625_set_go_bit(pDrv2625data, GO);
+
+	calComp = drv2625_reg_read(pDrv2625data, DRV2625_REG_CAL_COMP);
+	calBemf = drv2625_reg_read(pDrv2625data, DRV2625_REG_CAL_BEMF);
+	calBemfGain = drv2625_reg_read(pDrv2625data, DRV2625_REG_LOOP_CONTROL) &
+			BEMFGAIN_MASK;
+	dev_dbg(pDrv2625data->dev,
+		"AutoCal(before) : Comp=0x%x, Bemf=0x%x, Gain=0x%x\n",
+		calComp, calBemf, calBemfGain);
+	dev_dbg(pDrv2625data->dev,
+		"%s: vibrator is auto calibrating(1000ms)...\n",__func__);
+	msleep(1000);
+
+	drv2625_set_go_bit(pDrv2625data, STOP);
+
+	do {
+		pDrv2625data->mnIntStatus =
+			drv2625_reg_read(pDrv2625data,DRV2625_REG_STATUS);
+		if (pDrv2625data->mnIntStatus & PROCESS_DONE_MASK)
+			break;
+
+		msleep(20);
+	} while (cnt++ < DRV2625_AUTOCAL_WAIT_COUNT);
+
+	dev_dbg(pDrv2625data->dev,
+			"%s: vibrator auto calibration waiting(%dms)\n",
+			__func__, cnt * 20);
+
+	if (cnt > DRV2625_AUTOCAL_WAIT_COUNT) {
+		dev_warn(pDrv2625data->dev,
+			"%s: vibrator auto calibration is failed(timeout)\n",
+			__func__);
+		return;
+	}
+
+	pDrv2625data->mnWorkMode |= WORK_IRQ;
+	schedule_work(&pDrv2625data->vibrator_work);
+}
+
 static void dev_init_platform_data(struct drv2625_data *pDrv2625data)
 {
 	struct drv2625_platform_data *pDrv2625Platdata =
@@ -859,6 +945,12 @@ static int drv2625_parse_dt(struct device *dev,
 		pDrv2625Platdata->msActuator.mnLRAFreq = prop_val;
 		dev_info(dev, "Actuator LRA Freq: %d\n",
 			pDrv2625Platdata->msActuator.mnLRAFreq);
+
+		pDrv2625Platdata->autocal_enabled =
+			of_property_read_bool(node, "autocal-enabled");
+
+		dev_info(dev, "Actuator Auto Cal enabled: %d\n",
+			pDrv2625Platdata->autocal_enabled);
 	} else {
 		dev_err(dev, "%s: No node for actuator\n", __func__);
 		return -ENODEV;
@@ -1228,6 +1320,9 @@ static int drv2625_probe(struct i2c_client* client,
 	mutex_init(&pDrv2625data->lock);
 
 	drv2625_create_debugfs_entries(pDrv2625data);
+
+	if (pDrv2625data->msPlatData.autocal_enabled)
+		drv2625_auto_cal(pDrv2625data);
 
 	dev_info(pDrv2625data->dev, "probe succeeded\n");
 	return 0;
