@@ -1318,13 +1318,13 @@ static int _request_firmware(struct fw_desc *desc)
 
 	if (strncmp(buf->fw_id, "wcnss", 5) == 0) {
 		/* load firmware from user helper first for wcnss firmware */
-		dev_err(desc->device, "[wlan]: %s: firmware name = %s\n", __func__, buf->fw_id);
+		printk("[wlan]: %s: firmware name = %s\n", __func__, buf->fw_id);
 		ret = fw_load_from_user_helper(fw, desc, timeout);
 		if (!ret)
-			dev_err(desc->device, "[wlan]: %s: loading wcnss fw from fw_load_from_user_helper\n"
+			printk("[wlan]: %s: loading wcnss fw from fw_load_from_user_helper\n"
 				, __func__);
 		else { /* fw_load_from_user_helper failed */
-			dev_err(desc->device, "[wlan]: %s: loading wcnss fw from fw_get_filesystem_firmware\n"
+			printk("[wlan]: %s: loading wcnss fw from fw_get_filesystem_firmware\n"
 				, __func__);
 			ret = fw_get_filesystem_firmware(desc->device, fw->priv,
 				 desc->dest_addr, desc->dest_size);
