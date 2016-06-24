@@ -1016,22 +1016,16 @@ static int drv2625_debugfs_set_amp(void *data, u64 val)
 	int ret;
 
 	if (val > 127) {
-		dev_err(pDrv2625data->dev,
-			"%s: Invalid amplitude supplied\n",
-			__func__);
+		dev_err(pDrv2625data->dev, "Invalid amplitude supplied\n");
 		return -EINVAL;
 	}
 
 	ret = drv2625_reg_write(pDrv2625data, DRV2625_REG_RTP_INPUT,
 		(uint8_t)val);
-	if (ret) {
-		dev_err(pDrv2625data->dev,
-			"%s: Error writing reg %02x\n", __func__,
-			DRV2625_REG_RTP_INPUT);
-		return ret;
-	}
+	if (ret)
+		dev_err(pDrv2625data->dev, "Error writing amplitude\n");
 
-	return 0;
+	return ret;
 }
 
 static int drv2625_debugfs_get_amp(void *data, u64 *val)
