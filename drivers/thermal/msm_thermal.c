@@ -49,6 +49,7 @@
 #include <linux/suspend.h>
 #include <linux/uaccess.h>
 #include <linux/uio_driver.h>
+#include <linux/asusdebug.h>
 
 #define CREATE_TRACE_POINTS
 #define TRACE_MSM_THERMAL
@@ -2711,6 +2712,8 @@ static void msm_thermal_bite(int zone_id, long temp)
 			zone_id, temp, ret);
 	} else {
 		pr_err("Tsens:%d reached temperature:%ld. System reset\n",
+			tsens_id, temp);
+		ASUSEvtlog("[TSENS]tsens-%d reached temperature:%ld. System reset !!!\n",
 			tsens_id, temp);
 	}
 	if (!is_scm_armv8()) {
