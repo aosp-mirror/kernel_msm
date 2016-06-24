@@ -1324,7 +1324,7 @@ VOS_STATUS vos_nv_open(void)
        vos_mem_free(pnvData);
     }
 
-    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
         "INFO: NV version = %d is loaded, driver supports NV version = %d",
         gnvEFSTable->halnv.fields.nvVersion, WLAN_NV_VERSION);
 

@@ -5961,7 +5961,7 @@ VOS_STATUS hdd_request_firmware(char *pfileName,v_VOID_t *pCtx,v_VOID_t **ppfw_d
        else {
          *ppfw_data = (v_VOID_t *)pHddCtx->nv->data;
          *pSize = pHddCtx->nv->size;
-          hddLog(1, "[wlan]: (%s), size=%d.", pfileName, *pSize);
+          printk("[wlan]: (%s), size=%d.", pfileName, *pSize);
        }
    }
 
