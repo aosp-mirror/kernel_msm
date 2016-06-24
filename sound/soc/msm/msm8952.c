@@ -1194,7 +1194,7 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 	}
 	if (atomic_read(&pdata->mclk_rsc_ref) > 0) {
 		atomic_dec(&pdata->mclk_rsc_ref);
-		pr_err("%s: decrementing mclk_res_ref %d\n",
+		pr_debug("%s: decrementing mclk_res_ref %d\n",
 				__func__, atomic_read(&pdata->mclk_rsc_ref));
 	}
 }
