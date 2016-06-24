@@ -1142,14 +1142,14 @@ static int pmic_arb_version_specific_init(struct spmi_pmic_arb_dev *pmic_arb,
 	version = readl_relaxed(pmic_arb->base + PMIC_ARB_VERSION);
 
 	if (version < PMIC_ARB_V2_MIN) {
-		dev_err(&pdev->dev, "PMIC Arb Version-1 0x%x\n", version);
+		dev_info(&pdev->dev, "PMIC Arb Version-1 0x%x\n", version);
 		pmic_arb->rdbase	 = pmic_arb->base;
 		pmic_arb->wrbase	 = pmic_arb->base;
 		pmic_arb->dbg.rdbase_phy = pmic_arb->dbg.base_phy;
 		pmic_arb->dbg.wrbase_phy = pmic_arb->dbg.base_phy;
 		pmic_arb->ver		 = &spmi_pmic_arb_v1;
 	} else {
-		dev_err(&pdev->dev, "PMIC Arb Version-2 0x%x\n", version);
+		dev_info(&pdev->dev, "PMIC Arb Version-2 0x%x\n", version);
 		ret = pmic_arb_chnl_tbl_create(pmic_arb);
 		if (ret)
 			return ret;

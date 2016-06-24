@@ -897,7 +897,7 @@ static int STC311x_ReadBatteryData(STC311x_BattDataTypeDef *BattData)
 	if (value>=0x80) value -= 0x100;	/* convert to signed value */
 	BattData->Temperature = value*10;	/* result in 0.1 degrC */
 
-	printk("[stc3117] BattData->Temperature = %d\n", BattData->Temperature);
+	pr_info("[BAT] BattData->Temperature = %d\n", BattData->Temperature);
 
 	/* Avg current */
 	value=data[12]; value = (value<<8) + data[11];
@@ -1309,9 +1309,9 @@ int GasGauge_Start(GasGauge_DataTypeDef *GG)
 	BattData.Alm_SOC = GG-> Alm_SOC;
 	BattData.Alm_Vbat = GG->Alm_Vbat;
 	BattData.RelaxThreshold = GG->RelaxCurrent;
-	printk("[stc3117] Cnom:%d, Rsense:%d, Rint:%d Vmode:%d CC_cnf:%d\n", GG->Cnom,
+	pr_info("[BAT] Cnom:%d, Rsense:%d, Rint:%d Vmode:%d CC_cnf:%d\n", GG->Cnom,
 				GG->Rsense,GG->Rint,GG->Vmode,GG->CC_cnf);
-	printk("[stc3117] VM_cnf:%d, Alm_SOC:%d, Alm_Vbat:%d, RelaxThreshold:%d\n", GG->VM_cnf,
+	pr_info("[BAT] VM_cnf:%d, Alm_SOC:%d, Alm_Vbat:%d, RelaxThreshold:%d\n", GG->VM_cnf,
 				GG->Alm_SOC,GG->Alm_Vbat, GG->RelaxCurrent);
 	/* Init averaging */
 	BattData.AvgVoltage = 0;
@@ -1948,7 +1948,7 @@ static void stc311x_work(struct work_struct *work)
 		chip->batt_voltage = GasGaugeData.Voltage;
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
 	}
-	printk("[stc3117] chip->batt_soc:%d, chip->batt_voltage:%d, chip->batt_current:%d\n", chip->batt_soc, chip->batt_voltage, chip->batt_current);
+	pr_info("[BAT] chip->batt_soc:%d, chip->batt_voltage:%d, chip->batt_current:%d\n", chip->batt_soc, chip->batt_voltage, chip->batt_current);
 	ASUSEvtlog("[BAT] report Capacity==>%d, Cnom:%dmAh, ChargeValue:%dmAh, Alm_SOC:%d, V:%d, Cur:%d, Temp:%d\n",
 		chip->batt_soc, GasGaugeData.Cnom, GasGaugeData.ChargeValue, GasGaugeData.Alm_SOC,
 		chip->batt_voltage, chip->batt_current, GasGaugeData.Temperature);
@@ -2067,7 +2067,7 @@ static int stc311x_probe(struct i2c_client *client,
 	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
 	{
-		printk("Out of memory to create client structure for stc311x\n");
+		pr_err("Out of memory to create client structure for stc311x\n");
 		return -ENOMEM;	/*Out of memory*/
 	}
 
@@ -2123,10 +2123,10 @@ static int stc311x_probe(struct i2c_client *client,
 		GasGaugeData.RelaxCurrent = chip->pdata->RelaxCurrent; /* current for relaxation in mA (< C/20) */
 		GasGaugeData.Adaptive = chip->pdata->Adaptive;		 /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 		/* capacity derating in 0.1%, for temp = 60, 40, 25, 10,	 0, -10 degrC */
-		printk("[stc3117] Vmode:%d\n", GasGaugeData.Vmode);
-		printk("[stc3117] Alm_SOC:%d, Alm_Vbat:%d, CC_cnf:%d Rint:%d Cnom:%d\n", GasGaugeData.Alm_SOC,
+		pr_info("[BAT] Vmode:%d\n", GasGaugeData.Vmode);
+		pr_info("[BAT] Alm_SOC:%d, Alm_Vbat:%d, CC_cnf:%d Rint:%d Cnom:%d\n", GasGaugeData.Alm_SOC,
 							GasGaugeData.Alm_Vbat,GasGaugeData.CC_cnf,GasGaugeData.Rint,GasGaugeData.Cnom);
-		printk("[stc3117] Rsense:%d, RelaxCurrent:%d, Adaptive:%d, VM_cnf:%d\n", GasGaugeData.Rsense,
+		pr_info("[BAT] Rsense:%d, RelaxCurrent:%d, Adaptive:%d, VM_cnf:%d\n", GasGaugeData.Rsense,
 							GasGaugeData.RelaxCurrent,GasGaugeData.Adaptive, GasGaugeData.VM_cnf);
 		for(Loop=0;Loop<NTEMP;Loop++)
 			GasGaugeData.CapDerating[Loop] = chip->pdata->CapDerating[Loop];
@@ -2170,7 +2170,7 @@ static int stc311x_probe(struct i2c_client *client,
 		chip->batt_voltage = GasGaugeData.Voltage;
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
 	}
-	printk("[stc3117] chip->batt_soc:%d, chip->batt_voltage:%d, chip->batt_current:%d\n", chip->batt_soc, chip->batt_voltage, chip->batt_current);
+	pr_info("[BAT] chip->batt_soc:%d, chip->batt_voltage:%d, chip->batt_current:%d\n", chip->batt_soc, chip->batt_voltage, chip->batt_current);
 
 	dev_info(&client->dev, "init deferrable start: %s\n", __func__);
 	INIT_DEFERRABLE_WORK(&chip->work, stc311x_work);
@@ -2179,7 +2179,7 @@ static int stc311x_probe(struct i2c_client *client,
 	//The specified delay depends of every platform and Linux kernel. It has to be checked physically during the driver integration
 	//a delay of about 5 seconds is correct but 30 seconds is enough compare to the battery SOC evolution speed
 	dev_info(&client->dev, "Probe end: %s\n", __func__);
-	printk("[stc3117] stc3117 Probe end\n");
+	pr_info("[BAT] stc3117 Probe end\n");
 	return 0;
 
 }
