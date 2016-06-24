@@ -121,6 +121,7 @@ struct htc_charger {
 	int (*get_vbus)(void);
 	int (*get_attr_text)(char *buf, int size);
 	int (*is_battery_full_eoc_stop)(int *result);
+	bool (*pd_is_limited_5v)(void);
 };
 
 struct htc_gauge {
@@ -158,6 +159,7 @@ struct htc_battery_info {
 	int batt_fcc_ma;
 	int batt_capacity_mah;
 	int fcc_half_capacity_ma;
+	bool pd_is_limited_5v;
 #if defined(CONFIG_FB)
 	struct notifier_block fb_notif;
 	struct workqueue_struct *batt_fb_wq;
@@ -270,6 +272,7 @@ int fg_get_fcc_half_capacity_ma(void);
 int pmi8994_get_usbin_voltage_now(void);
 int pmi8994_charger_get_attr_text(char *buf, int size);
 int pmi8994_is_batt_full_eoc_stop(int *result);
+bool pmi8994_pd_is_limited_5v(void);
 int pmi8994_set_float_voltage_comp (int vfloat_comp);
 void pmi8994_set_iusb_max (int current_ua);
 void pmi8994_set_batt_health_good(void);

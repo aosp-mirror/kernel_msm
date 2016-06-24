@@ -38,6 +38,7 @@
         qcom,resume-delta-mv = <100>;
         qcom,parallel-main-chg-icl-percent = <50>;
         /delete-property/ otg-parent-supply;
+        qcom,pd-is-limited-5v;
 };
 
 &pmi8994_fg {

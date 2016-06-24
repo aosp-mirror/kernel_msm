@@ -147,6 +147,7 @@ struct smbchg_chip {
 	bool				restricted_charging;
 	bool				skip_usb_suspend_for_fake_battery;
 	bool				hvdcp_not_supported;
+	bool				pd_is_limited_5v;
 	bool				otg_pinctrl;
 	bool				cfg_override_usb_current;
 	u8				original_usbin_allowance;
@@ -8495,6 +8496,8 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 #ifdef CONFIG_HTC_BATT
 	chip->hvdcp_not_supported = of_property_read_bool(node,
 				"qcom,hvdcp-not-support");
+	chip->pd_is_limited_5v = of_property_read_bool(node,
+				"qcom,pd-is-limited-5v");
 #endif /* CONFIG_HTC_BATT*/
 
 	/* parse the battery missing detection pin source */
@@ -9300,6 +9303,16 @@ int pmi8994_is_batt_full_eoc_stop(int *result)
 {
 	*result = g_is_batt_full_eoc_stop;
 	return 0;
+}
+
+bool pmi8994_pd_is_limited_5v(void)
+{
+	if(!the_chip) {
+		pr_err("called before init\n");
+		return false;
+	}
+
+	return the_chip->pd_is_limited_5v;
 }
 
 int pmi8994_set_float_voltage_comp (int vfloat_comp)

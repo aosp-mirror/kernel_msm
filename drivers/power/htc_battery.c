@@ -124,6 +124,9 @@ static bool g_is_pd_charger = false;
 static int g_pd_voltage = 0;
 static int g_pd_current = 0;
 
+/* Charger driver is ready */
+static bool g_is_charger_ready = false;
+
 /* statistics of charging info */
 bool g_htc_stats_charging = false;
 struct htc_statistics_category g_htc_stats_category_all;
@@ -2196,17 +2199,25 @@ module_param_named(
 );
 
 #define PD_MAX_VBUS 9000
+#define PD_LIMIT_VBUS_MV 5000
+#define PD_LIMIT_CURRENT_MA 3000
 #define MESG_MAX_LENGTH 300
 int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *max_mA)
 {
 	int i = 0;
 	int set_max_mA = 0, set_ID = 0;
 	int pd_power = 0, set_power = 0, pd_vbus_vol = 0, pd_ma = 0;
-        int msg_len = 0;
-        char buffer[MESG_MAX_LENGTH] = "";
+	int msg_len = 0;
+	char buffer[MESG_MAX_LENGTH] = "";
 
 	if(size <= 0)
 		return -EINVAL;
+
+	if (!g_is_charger_ready) {
+		pr_info("[BATT][PD] Charger driver is not ready!\n");
+		/* feedback USB to retry later */
+		return -1;
+	}
 
 	for (i = 0; i < size ; i++) {
 		pd_vbus_vol = pd_data.pd_list[i][0];
@@ -2214,8 +2225,15 @@ int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *ma
 		pd_power = pd_vbus_vol * pd_ma;
 
 		if (pd_vbus_vol > PD_MAX_VBUS) {
-			pr_debug("[BATT] PD Voltage %dV > %dV, skip to prevent OVP\n",
+			pr_debug("[BATT][PD] Voltage %dV > %dV, skip to prevent OVP\n",
 					pd_vbus_vol/1000, PD_MAX_VBUS/1000);
+		} else if (htc_batt_info.pd_is_limited_5v &&
+				pd_vbus_vol == PD_LIMIT_VBUS_MV && pd_ma == PD_LIMIT_CURRENT_MA) {
+			set_ID = i;
+			set_max_mA = pd_ma;
+			set_power = pd_power;
+			pr_debug("[BATT][PD] Force limit PD on 5V3A\n");
+			break;
 		} else if (pd_power > set_power) {
 			set_ID = i;
 			set_max_mA = pd_ma;
@@ -2224,7 +2242,7 @@ int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *ma
 	}
 
 	if(set_max_mA == 0){
-		pr_info("[BATT] PD not support\n");
+		pr_info("[BATT][PD] Not support\n");
 		return -EINVAL;
 	} else {
 		g_is_pd_charger = true;
@@ -2233,13 +2251,14 @@ int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *ma
 		*max_mA = set_max_mA;
 
 		if (pd_debug_enable && pd_select_id < size) {
-			pr_info("[BATT] PD debug enable, select ID=%d (origin ID=%d)\n)",
+			pr_info("[BATT][PD] Debug enable, select ID=%d (origin ID=%d)\n)",
 								pd_select_id, set_ID);
 			g_pd_voltage = pd_data.pd_list[pd_select_id][0];
 			g_pd_current = *max_mA = pd_data.pd_list[pd_select_id][1];
 			return pd_select_id;
 		} else {
-			msg_len = snprintf(buffer, MESG_MAX_LENGTH, "[BATT] PD support, set ID(%d), List:", set_ID);
+			msg_len = snprintf(buffer, MESG_MAX_LENGTH, "[BATT][PD] Set ID(%d), pd_is_limited:%d, List:",
+						set_ID, htc_batt_info.pd_is_limited_5v);
 
 			for (i = 0; i < size ; i++) {
 				pd_vbus_vol = pd_data.pd_list[i][0];
@@ -2597,6 +2616,9 @@ void htc_battery_probe_process(enum htc_batt_probe probe_type) {
 	s_probe_finish_process++;
 	BATT_LOG("Probe process: (%d, %d)\n", probe_type, s_probe_finish_process);
 
+	if (probe_type == CHARGER_PROBE_DONE)
+		g_is_charger_ready = true;
+
 	if (s_probe_finish_process == BATT_PROBE_MAX) {
 
 		htc_batt_info.batt_psy = power_supply_get_by_name("battery");
@@ -2634,12 +2656,13 @@ void htc_battery_probe_process(enum htc_batt_probe probe_type) {
 			htc_batt_info.batt_fcc_ma = htc_batt_info.igauge->get_batt_fcc_ma();
 			htc_batt_info.batt_capacity_mah = htc_batt_info.igauge->get_batt_capacity_mah();
 			htc_batt_info.fcc_half_capacity_ma = htc_batt_info.igauge->get_fcc_half_capacity_ma();
+			htc_batt_info.pd_is_limited_5v = htc_batt_info.icharger->pd_is_limited_5v();
 			BATT_LOG("%s: catch name %s, set batt id=%d, full_ma=%d, fcc_ma=%d, capacity=%d, "
-					"half_capacity_ma:%d\n",
+					"half_capacity_ma:%d, pd_is_limited:%d\n",
 				__func__, prop.strval, htc_batt_info.rep.batt_id,
 				htc_batt_info.batt_full_current_ma,
 				htc_batt_info.batt_fcc_ma, htc_batt_info.batt_capacity_mah,
-				htc_batt_info.fcc_half_capacity_ma);
+				htc_batt_info.fcc_half_capacity_ma, htc_batt_info.pd_is_limited_5v);
 		}
 
 		BATT_LOG("Probe process done.\n");
@@ -2653,6 +2676,7 @@ static struct htc_battery_platform_data htc_battery_pdev_data = {
 	.icharger.get_vbus = pmi8994_get_usbin_voltage_now,
 	.icharger.get_attr_text = pmi8994_charger_get_attr_text,
 	.icharger.is_battery_full_eoc_stop = pmi8994_is_batt_full_eoc_stop,
+	.icharger.pd_is_limited_5v = pmi8994_pd_is_limited_5v,
 	.igauge.get_batt_fcc_ma = fg_get_batt_fcc_ma,
 	.igauge.get_full_ma = fg_get_batt_full_charge_criteria_ma,
 	.igauge.get_batt_capacity_mah = fg_get_batt_capacity_mah,
