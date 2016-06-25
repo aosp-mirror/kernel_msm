@@ -1,0 +1,33 @@
+/* Copyright (c) 2016, LGE Inc.  All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+#include "msm8909-swordfish/msm8909-swordfish-rev-b.dtsi"
+
+/ {
+	model = "LGE MSM 8909 SWORDFISH rev-b";
+	compatible = "qcom,msm8909";
+	qcom,msm-id =   <245 0>,
+			<258 0>,
+			<275 0>,
+			<300 0>;
+
+	/* For V2/V3 version of DTBs we have platform version field as part
+	 * of variant ID, in such case the subtype will be mentioned as 0x0
+	 * As the qcom, board-id = <0xSSPMPmPH, 0x0>
+	 * SS -- Subtype
+	 * PM -- Platform major version
+	 * Pm -- Platform minor version
+	 * PH -- Platform hardware CDP/MTP
+	 */
+	qcom,board-id = <0x000497 0>;
+};
