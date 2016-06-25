@@ -16,7 +16,7 @@
 			status = "disable";
 		};
 
-		atmel_u144@4a {
+		atmel_u114: atmel_u144@4a {
 			compatible = "atmel,u144";
 			status = "okay";
 			reg = <0x4a>;
@@ -36,6 +36,7 @@
 			atmel,use_mfts = <1>;
 			atmel,lcd_x = <479>;
 			atmel,lcd_y = <479>;
+			atmel,palm-enabled;
 
 			pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
 			pinctrl-0 = <&ts_int_active &ts_reset_active>;
