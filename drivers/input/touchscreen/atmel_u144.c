@@ -1729,6 +1729,7 @@ static int mxt_read_and_process_messages(struct mxt_data *data, u8 count)
 
 static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 {
+	struct mxt_platform_data *pdata = data->pdata;
 	int ret;
 	int report_num = 0;
 	int i = 0;
@@ -1800,7 +1801,7 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 			continue;
 		}
 		if (data->ts_data.curr_data[i].pressure == 255 &&
-			!data->palm) {
+		    pdata->palm_enabled && !data->palm) {
 			mxt_reset_slots(data);
 			input_report_key(data->input_dev, KEY_SLEEP, 1);
 			input_sync(data->input_dev);
@@ -1808,7 +1809,7 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 			goto out;
 		}
 		if (data->ts_data.curr_data[i].status == FINGER_RELEASED) {
-			if (data->palm) {
+			if (pdata->palm_enabled && data->palm) {
 				input_report_key(data->input_dev, KEY_SLEEP, 0);
 				input_sync(data->input_dev);
 				data->palm = false;
@@ -4000,6 +4001,11 @@ static int mxt_parse_dt(struct device *dev, struct mxt_platform_data *pdata)
 		TOUCH_DEBUG_MSG("DT : lcd_y: %d\n",pdata->lcd_y);
 	}
 
+	pdata->palm_enabled = of_property_read_bool(node,
+			"atmel,palm-enabled");
+	TOUCH_DEBUG_MSG("DT : palm %s\n",
+			pdata->palm_enabled? "enabled" : "disabled");
+
 	return 0;
 }
 
@@ -5166,7 +5172,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		if (error)
 			return error;
 	} else {
-		TOUCH_ERR_MSG("DT support required\n");
+		TOUCH_ERR_MSG("OF support required\n");
 		return -ENODEV;
 	}
 

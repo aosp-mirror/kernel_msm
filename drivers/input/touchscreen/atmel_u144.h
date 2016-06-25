@@ -484,6 +484,7 @@ struct mxt_platform_data {
 	int use_debug_reason;
 	int realtime_use_debug_reason;
 #endif
+	bool palm_enabled;
 };
 
 struct mxt_finger {
