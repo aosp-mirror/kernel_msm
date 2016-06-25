@@ -3517,15 +3517,6 @@ static ssize_t mxt_power_control_store(struct mxt_data *data, const char *buf,
 
 }
 
-static ssize_t mxt_get_knockon_type(struct mxt_data *data, char *buf)
-{
-	ssize_t ret = 0;
-
-	ret += sprintf(buf+ret, "%d", data->pdata->knock_on_type);
-
-	return ret;
-}
-
 static ssize_t mxt_global_access_pixel_show(struct mxt_data *data, char *buf)
 {
 	ssize_t len = 0;
@@ -3707,7 +3698,6 @@ static MXT_TOUCH_ATTR(update_raw, S_IWUSR, NULL, mxt_update_raw_store);
 static MXT_TOUCH_ATTR(debug_enable, S_IWUSR | S_IRUSR, mxt_debug_enable_show, mxt_debug_enable_store);
 static MXT_TOUCH_ATTR(t57_debug_enable, S_IWUSR | S_IRUSR, NULL, mxt_t57_debug_enable_store);
 static MXT_TOUCH_ATTR(patch_debug_enable, S_IWUSR | S_IRUSR, mxt_patch_debug_enable_show, mxt_patch_debug_enable_store);
-static MXT_TOUCH_ATTR(knock_on_type, S_IRUGO, mxt_get_knockon_type, NULL);
 static MXT_TOUCH_ATTR(update_patch, S_IWUSR, NULL, mxt_update_patch_store);
 static MXT_TOUCH_ATTR(update_fw, S_IWUSR, NULL, mxt_update_fw_store);
 static MXT_TOUCH_ATTR(check_fw, S_IWUSR, NULL, mxt_check_fw_store);
@@ -3732,7 +3722,6 @@ static struct attribute *mxt_touch_attribute_list[] = {
 	&mxt_touch_attr_debug_enable.attr,
 	&mxt_touch_attr_t57_debug_enable.attr,
 	&mxt_touch_attr_patch_debug_enable.attr,
-	&mxt_touch_attr_knock_on_type.attr,
 	&mxt_touch_attr_update_patch.attr,
 	&mxt_touch_attr_update_fw.attr,
 	&mxt_touch_attr_check_fw.attr,
@@ -3972,15 +3961,6 @@ static int mxt_parse_dt(struct device *dev, struct mxt_platform_data *pdata)
 		TOUCH_DEBUG_MSG("DT : ref_reg_weight_val = %d\n",
 				pdata->ref_reg_weight_val);
 	}
-
-	rc = of_property_read_u32(node, "atmel,knock_on_type",  &temp_val);
-	if (rc) {
-		TOUCH_ERR_MSG("DT : Unable to read knock_on_type - set as 0\n");
-		pdata->knock_on_type = 0;
-	} else {
-		pdata->knock_on_type = temp_val;
-	}
-	TOUCH_DEBUG_MSG("DT : knock_on_type = %d \n",pdata->knock_on_type);
 
 	rc = of_property_read_u32(node, "atmel,global_access_pixel",
 			&temp_val);

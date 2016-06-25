@@ -472,7 +472,6 @@ struct mxt_platform_data {
 	const char *fw_name_lgd;
 	const char *fw_name_laibao;
 	const char *extra_fw_name_gf2;
-	char knock_on_type;
 	unsigned int lcd_x;
 	unsigned int lcd_y;
 	int global_access_pixel;
