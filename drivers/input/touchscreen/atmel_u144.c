@@ -5165,6 +5165,9 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		error = mxt_parse_dt(&client->dev, pdata);
 		if (error)
 			return error;
+	} else {
+		TOUCH_ERR_MSG("DT support required\n");
+		return -ENODEV;
 	}
 
 	if (!pdata->fw_name) {
