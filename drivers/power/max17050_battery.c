@@ -551,6 +551,10 @@ static enum power_supply_property max17050_battery_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 };
 
+static char *pm_batt_supplied_to[] = {
+	"battery",
+};
+
 static int max17050_get_property(struct power_supply *psy,
 			    enum power_supply_property psp,
 			    union power_supply_propval *val)
@@ -850,6 +854,9 @@ static int max17050_probe(struct i2c_client *client,
 	chip->battery.get_property = max17050_get_property;
 	chip->battery.properties = max17050_battery_props;
 	chip->battery.num_properties = ARRAY_SIZE(max17050_battery_props);
+	chip->battery.supplied_to = pm_batt_supplied_to;
+	chip->battery.num_supplicants =
+		ARRAY_SIZE(pm_batt_supplied_to);
 
 	/*
 	 * When current is not measured, CURRENT_NOW property should be
