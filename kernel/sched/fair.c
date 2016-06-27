@@ -5458,6 +5458,7 @@ static inline int find_best_target(struct task_struct *p)
 	int i, boosted;
 	int target_cpu = -1;
 	int target_capacity = 0;
+	int backup_capacity = 0;
 	int idle_cpu = -1;
 	int best_idle_cstate = INT_MAX;
 	int backup_cpu = -1;
@@ -5492,7 +5493,7 @@ static inline int find_best_target(struct task_struct *p)
 			continue;
 
 #ifdef CONFIG_SCHED_WALT
-		if(walt_cpu_high_irqload(i))
+		if (walt_cpu_high_irqload(i))
 			continue;
 #endif
 
@@ -5512,21 +5513,24 @@ static inline int find_best_target(struct task_struct *p)
 
 		if (new_util < cur_capacity) {
 			if (cpu_rq(i)->nr_running) {
-				if (target_capacity < cur_capacity) {
+				if (target_capacity == 0 ||
+					target_capacity > cur_capacity) {
 					/* busy CPU with most capacity at current OPP */
 					target_cpu = i;
 					target_capacity = cur_capacity;
 				}
 			} else if (!boosted) {
-				if (idle_cpu < 0 || 
+				if (idle_cpu < 0 ||
 					(sysctl_sched_cstate_aware &&
 					 	best_idle_cstate > idle_idx)) {
 					best_idle_cstate = idle_idx;
 					idle_cpu = i;
 				}
 			}
-		} else if (backup_cpu < 0 && cpu_rq(i)->nr_running) {
+		} else if (backup_capacity == 0 ||
+				backup_capacity > cur_capacity) {
 			/* first busy CPU with capacity at higher OPP */
+			backup_capacity = cur_capacity;
 			backup_cpu = i;
 		}
 	}
