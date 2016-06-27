@@ -3288,6 +3288,8 @@ static void battery_age_work(struct work_struct *work)
 	estimate_battery_age(chip, &chip->actual_cap_uah);
 }
 
+static int fg_get_coulomb_count(struct fg_chip *chip);
+
 static enum power_supply_property fg_power_props[] = {
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_CAPACITY_RAW,
@@ -3295,6 +3297,7 @@ static enum power_supply_property fg_power_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_OCV,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
+	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_CHARGE_NOW,
 	POWER_SUPPLY_PROP_CHARGE_NOW_RAW,
 	POWER_SUPPLY_PROP_CHARGE_NOW_ERROR,
@@ -3415,6 +3418,9 @@ static int fg_power_get_property(struct power_supply *psy,
 #endif /* CONFIG_HTC_BATT */
 	case POWER_SUPPLY_PROP_SOC_REPORTING_READY:
 		val->intval = !!chip->profile_loaded;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		val->intval = fg_get_coulomb_count(chip);
 		break;
 	default:
 		return -EINVAL;
@@ -3614,7 +3620,7 @@ fail:
 #define CC_SOC_BASE_REG		0x5BC
 #define CC_SOC_OFFSET		3
 #define CC_SOC_MAGNITUDE_MASK	0x1FFFFFFF
-#define CC_SOC_NEGATIVE_BIT	BIT(29)
+#define CC_SOC_NEGATIVE_BIT	BIT(28)
 static int fg_get_cc_soc(struct fg_chip *chip, int *cc_soc)
 {
 	int rc;
@@ -4015,6 +4021,17 @@ static int fg_cap_learning_check(struct fg_chip *chip)
 fail:
 	mutex_unlock(&chip->learning_data.learning_lock);
 	return rc;
+}
+
+static int fg_get_coulomb_count(struct fg_chip *chip)
+{
+	int cc_pc_val;
+
+	if (fg_get_cc_soc(chip, &cc_pc_val))
+		return 0;
+
+	return div64_s64(chip->batt_capacity_mah * (int64_t) cc_pc_val,
+			 FULL_PERCENT_28BIT / 1000);
 }
 
 static bool is_usb_present(struct fg_chip *chip)
