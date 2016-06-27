@@ -1885,8 +1885,6 @@ static void qpnp_lbc_parallel_work(struct work_struct *work)
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct qpnp_lbc_chip *chip = container_of(dwork,
 				struct qpnp_lbc_chip, parallel_work);
-	u8 reg_val;
-	int rc;
 
 	if (is_vinmin_set(chip)) {
 		/* vinmin-loop triggered - stop ibat increase */
@@ -1900,10 +1898,6 @@ static void qpnp_lbc_parallel_work(struct work_struct *work)
 			goto exit_work;
 		}
 		chip->ichg_now = temp;
-		reg_val = 0;
-		rc = qpnp_lbc_write(chip, USB_SUSP, &reg_val, 1);
-		if (rc)
-			pr_err("Failed to set USB_SUSP rc=%d\n", rc);
 		qpnp_lbc_ibatmax_set(chip, chip->ichg_now);
 		pr_debug("ichg_now increased to %d\n", chip->ichg_now);
 	}
