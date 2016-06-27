@@ -21,6 +21,9 @@
 #include <linux/qpnp/pwm.h>
 #include <linux/err.h>
 #include "../../staging/android/timed_output.h"
+#include <linux/gar_hw_id.h>
+#include <linux/gpio.h>
+
 
 #define QPNP_VIB_VTG_CTL(base)		(base + 0x41)
 #define QPNP_VIB_EN_CTL(base)		(base + 0x46)
@@ -29,11 +32,14 @@
 #define QPNP_VIB_MIN_LEVEL		12
 
 #define QPNP_VIB_DEFAULT_TIMEOUT	15000
-#define QPNP_VIB_DEFAULT_VTG_LVL	3100
+#define QPNP_VIB_DEFAULT_VTG_LVL	2000
+#define QPNP_VIB_HI_VTG_LVL		3000
+
 
 #define QPNP_VIB_EN			BIT(7)
 #define QPNP_VIB_VTG_SET_MASK		0x1F
 #define QPNP_VIB_LOGIC_SHIFT		4
+#define GPIO_VIB (94)
 
 enum qpnp_vib_mode {
 	QPNP_VIB_MANUAL,
@@ -250,6 +256,7 @@ static int qpnp_vib_parse_dt(struct qpnp_vib *vib)
 	int rc;
 	const char *mode;
 	u32 temp_val;
+	int hwid, pjid;
 
 	vib->timeout = QPNP_VIB_DEFAULT_TIMEOUT;
 	rc = of_property_read_u32(spmi->dev.of_node,
@@ -265,7 +272,31 @@ static int qpnp_vib_parse_dt(struct qpnp_vib *vib)
 	rc = of_property_read_u32(spmi->dev.of_node,
 			"qcom,vib-vtg-level-mV", &temp_val);
 	if (!rc) {
-		vib->vtg_level = temp_val;
+		hwid = get_gar_hw_id();
+		pjid = get_gar_proj_id();
+		dev_warn(&spmi->dev, "%s - HWID : [%d], PJID : [%d]",
+			__func__, hwid, pjid);
+		if ((hwid > 2) || (pjid == 5)) {
+			if (gpio_request(GPIO_VIB,"VIB_GPIO") == 0) {
+				if (gpio_get_value(GPIO_VIB)) {
+					vib->vtg_level = QPNP_VIB_HI_VTG_LVL;
+					dev_warn(&spmi->dev, "%s - HI Voltage VIB\n",
+						__func__);
+				} else {
+					vib->vtg_level = temp_val;
+					dev_warn(&spmi->dev, "%s - LO Voltage VIB\n",
+						__func__);
+				}
+			} else {
+				vib->vtg_level = temp_val;
+				dev_err(&spmi->dev, "%s - request GPIO94 fail !!!\n",
+					__func__);
+			}
+		} else {
+			vib->vtg_level = temp_val;
+			dev_warn(&spmi->dev, "%s - LO Voltage VIB\n", __func__);
+		}
+
 	} else if (rc != -EINVAL) {
 		dev_err(&spmi->dev, "Unable to read vtg level\n");
 		return rc;
