@@ -1599,14 +1599,9 @@ static int report_vm_bms_soc(struct qpnp_bms_chip *chip)
 	bool charging;
 	int status = -1;
 	int vbatt = 0;
-
-	if((2 == status) && (chip->current_now > 0))
-	{
-		if(chip->last_soc > chip->calculated_soc)
-		{
-			chip->last_soc = chip->calculated_soc;
-		}
-	}
+	int pc = 0;
+	int rbatt_mohm = 0;
+	int vbatt_tmp = 0;
 
 	soc = chip->calculated_soc;
 
@@ -1737,7 +1732,32 @@ static int report_vm_bms_soc(struct qpnp_bms_chip *chip)
 	 */
 	if((2 == status) && (chip->current_now > 0))
 	{
-		chip->calculated_soc = chip->last_ocv_uv;
+		if(chip->calculated_soc > chip->last_soc)
+		{
+			chip->calculated_soc = chip->last_soc;
+		}
+	}
+
+	/*
+	 * low soc compensate
+	 */
+	if((2 == status) && (chip->current_now > 0))
+	{
+		pc = interpolate_pc(chip->batt_data->pc_temp_ocv_lut,
+					batt_temp, chip->last_ocv_uv / 1000);
+
+		if (pc < 2)
+		{
+			pc = 2;
+		}
+
+		rbatt_mohm = get_rbatt(chip, pc, batt_temp);
+		vbatt_tmp = vbatt + 200 * rbatt_mohm;
+		pr_debug("low soc last_ocv = %d\n", chip->last_ocv_uv);
+		if((chip->last_ocv_uv > vbatt_tmp) && (chip->last_soc <= 5))
+		{
+			chip->last_ocv_uv = vbatt_tmp;
+		}
 	}
 
 	if(chip->last_ocv_uv <= 3200000)
@@ -3074,7 +3094,7 @@ static int calculate_initial_soc(struct qpnp_bms_chip *chip)
 					chip->last_ocv_uv, batt_temp);
 		if (!chip->shutdown_soc_invalid &&
 			(abs(chip->shutdown_soc - chip->calculated_soc) <
-				chip->dt.cfg_shutdown_soc_valid_limit / 50)) {
+				chip->dt.cfg_shutdown_soc_valid_limit)) {
 			chip->last_ocv_uv = chip->shutdown_ocv;
 			chip->last_soc = chip->shutdown_soc;
 			chip->calculated_soc = lookup_soc_ocv(chip,
