@@ -5518,7 +5518,7 @@ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
 	 * set to default boost option BOOST_SWITCH, user mixer path can change
 	 * it to BOOST_ALWAYS or BOOST_BYPASS based on solution chosen.
 	 */
-	msm8x16_wcd_priv->boost_option = BOOST_SWITCH;
+	msm8x16_wcd_priv->boost_option = BYPASS_ALWAYS;
 	msm8x16_wcd_dt_parse_boost_info(codec);
 	msm8x16_wcd_set_boost_v(codec);
 
