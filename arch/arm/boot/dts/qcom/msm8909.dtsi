@@ -818,11 +818,11 @@
 		qcom,usb-bam-fifo-baseaddr = <0x08603800>;
 		qcom,ignore-core-reset-ack;
 		qcom,disable-clk-gating;
+		qcom,bam-type = <1>;
 
 		qcom,pipe0 {
 			label = "hsusb-qdss-in-0";
 			qcom,usb-bam-mem-type = <3>;
-			qcom,bam-type = <1>;
 			qcom,dir = <1>;
 			qcom,pipe-num = <0>;
 			qcom,peer-bam = <1>;
