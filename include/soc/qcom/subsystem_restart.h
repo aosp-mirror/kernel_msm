@@ -17,6 +17,8 @@
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>
 
+#define MAX_SSR_REASON_LEN  81U
+
 struct subsys_device;
 
 enum {
@@ -85,6 +87,7 @@ struct subsys_desc {
 	int sysmon_shutdown_ret;
 	bool system_debug;
 	const char *edge;
+	char last_crash_reason[MAX_SSR_REASON_LEN];
 };
 
 /**
