@@ -315,6 +315,14 @@ void vos_pkt_trace_buf_update
    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
              "%s %d, %s", __func__, __LINE__, event_string);
    spin_lock_bh(&trace_buffer_lock);
+
+   if (!trace_buffer) {
+      VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
+                "trace_buffer is already free");
+      spin_unlock_bh(&trace_buffer_lock);
+      return;
+   }
+
    slot = trace_buffer_order % VOS_PKT_TRAC_MAX_TRACE_BUF;
    trace_buffer[slot].order = trace_buffer_order;
    do_gettimeofday(&tv);
@@ -342,7 +350,13 @@ void vos_pkt_trace_buf_dump
    unsigned long local_time;
 
    spin_lock_bh(&trace_buffer_lock);
-   VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+   if (!trace_buffer) {
+      VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
+                "trace_buffer is already free");
+      spin_unlock_bh(&trace_buffer_lock);
+      return;
+   }
+   VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
              "PACKET TRACE DUMP START Current Timestamp %u",
               (unsigned int)vos_timer_get_system_time());
    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
@@ -423,7 +437,10 @@ void vos_pkt_proto_trace_close
 {
    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
              "%s %d", __func__, __LINE__);
+   spin_lock_bh(&trace_buffer_lock);
    vos_mem_free(trace_buffer);
+   trace_buffer = NULL;
+   spin_unlock_bh(&trace_buffer_lock);
 
    return;
 }
