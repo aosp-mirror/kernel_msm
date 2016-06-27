@@ -3809,6 +3809,11 @@ enum dot11p_mode {
 #define CFG_EDCA_BE_AIFS_VALUE_MAX        (15)
 #define CFG_EDCA_BE_AIFS_VALUE_DEFAULT    (3)
 
+#define CFG_RX_WAKELOCK_TIMEOUT_NAME         "rx_wakelock_timeout"
+#define CFG_RX_WAKELOCK_TIMEOUT_DEFAULT      (50)
+#define CFG_RX_WAKELOCK_TIMEOUT_MIN          (0)
+#define CFG_RX_WAKELOCK_TIMEOUT_MAX          (100)
+
 /*---------------------------------------------------------------------------
   Type declarations
   -------------------------------------------------------------------------*/
@@ -4562,6 +4567,7 @@ struct hdd_config {
    uint32_t                    edca_vi_aifs;
    uint32_t                    edca_bk_aifs;
    uint32_t                    edca_be_aifs;
+   uint32_t                    rx_wakelock_timeout;
 };
 
 typedef struct hdd_config hdd_config_t;

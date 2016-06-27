@@ -4554,6 +4554,13 @@ REG_TABLE_ENTRY g_registry_table[] =
                 CFG_EDCA_BE_AIFS_VALUE_DEFAULT,
                 CFG_EDCA_BE_AIFS_VALUE_MIN,
                 CFG_EDCA_BE_AIFS_VALUE_MAX),
+
+   REG_VARIABLE(CFG_RX_WAKELOCK_TIMEOUT_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, rx_wakelock_timeout,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_RX_WAKELOCK_TIMEOUT_DEFAULT,
+                CFG_RX_WAKELOCK_TIMEOUT_MIN,
+                CFG_RX_WAKELOCK_TIMEOUT_MAX)
 };
 
 
