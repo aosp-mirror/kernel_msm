@@ -1233,8 +1233,7 @@ check_event_log_sequence_number(uint32 seq_no)
 #endif /* SHOW_LOGTRACE */
 
 static void
-wl_show_host_event(dhd_pub_t *dhd_pub, wl_event_msg_t *event, void *event_data,
-	void *raw_event_ptr, char *eventmask)
+wl_show_host_event(wl_event_msg_t *event, void *event_data)
 {
 	uint i, status, reason;
 	bool group = FALSE, flush_txq = FALSE, link = FALSE;
@@ -1643,38 +1642,57 @@ wl_show_host_event(dhd_pub_t *dhd_pub, wl_event_msg_t *event, void *event_data,
 }
 #endif /* SHOW_EVENTS */
 
+/* Check whether packet is a BRCM event pkt. If it is, record event data. */
+int
+wl_host_event_get_data(void *pktdata, uint pktlen, bcm_event_msg_u_t *evu)
+{
+    int ret;
+
+    ret = is_wlc_event_frame(pktdata, pktlen, 0, evu);
+    if (ret != BCME_OK) {
+        DHD_ERROR(("%s: Invalid event frame, err = %d\n",
+            __FUNCTION__, ret));
+    }
+
+    return ret;
+}
+
 int
 wl_host_event(dhd_pub_t *dhd_pub, int *ifidx, void *pktdata, size_t pktlen,
-	wl_event_msg_t *event, void **data_ptr, void *raw_event)
+            wl_event_msg_t *event, void **data_ptr)
 {
 	/* check whether packet is a BRCM event pkt */
-	bcm_event_t *pvt_data;
+	bcm_event_t *pvt_data = (bcm_event_t *)pktdata;
 	uint8 *event_data;
 	uint32 type, status, datalen;
 	uint16 flags;
 	uint evlen;
+	int ret;
+	uint16 usr_subtype;
+	bcm_event_msg_u_t evu;
 	int hostidx;
 
-	if (pktlen < sizeof(bcm_event_t))
-	return (BCME_ERROR);
-
-	pvt_data = (bcm_event_t *)pktdata;
-
-	if (ntoh16_ua((void *)&pvt_data->bcm_hdr.subtype) != BCMILCP_SUBTYPE_VENDOR_LONG ||
-		(bcmp(BRCM_OUI, &pvt_data->bcm_hdr.oui[0], DOT11_OUI_LEN)) ||
-		ntoh16_ua((void *)&pvt_data->bcm_hdr.usr_subtype) != BCMILCP_BCM_SUBTYPE_EVENT)
-	{
-		DHD_ERROR(("%s: mismatched bcm_event_t info, bailing out\n", __FUNCTION__));
-		return (BCME_ERROR);
+	ret = wl_host_event_get_data(pktdata, pktlen, &evu);
+	if (ret != BCME_OK) {
+		return ret;
 	}
 
-	*data_ptr = &pvt_data[1];
+	usr_subtype = ntoh16_ua((void *)&pvt_data->bcm_hdr.usr_subtype);
+	switch (usr_subtype) {
+	case BCMILCP_BCM_SUBTYPE_EVENT:
+		memcpy(event, &evu.event, sizeof(wl_event_msg_t));
+		*data_ptr = &pvt_data[1];
+		break;
+
+	case BCMILCP_BCM_SUBTYPE_DNGLEVENT:
+		return BCME_NOTFOUND;
+
+	default:
+		return BCME_NOTFOUND;
+	}
+
+	/* start wl_event_msg process */
 	event_data = *data_ptr;
-
-
-	/* memcpy since BRCM event pkt may be unaligned. */
-	memcpy(event, &pvt_data->event, sizeof(wl_event_msg_t));
-
 	type = ntoh32_ua((void *)&event->event_type);
 	flags = ntoh16_ua((void *)&event->flags);
 	status = ntoh32_ua((void *)&event->status);
@@ -1856,8 +1874,7 @@ wl_host_event(dhd_pub_t *dhd_pub, int *ifidx, void *pktdata, size_t pktlen,
 	}
 
 #ifdef SHOW_EVENTS
-	wl_show_host_event(dhd_pub, event,
-		(void *)event_data, raw_event, dhd_pub->enable_log);
+	wl_show_host_event(event, (void *)event_data);
 #endif /* SHOW_EVENTS */
 
 	return (BCME_OK);
