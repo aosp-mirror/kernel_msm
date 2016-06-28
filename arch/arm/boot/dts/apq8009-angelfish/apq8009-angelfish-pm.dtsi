@@ -189,7 +189,7 @@
 			ibus = <500>;        //iusb for vbus
 			iin = <400>;         //iusb for wlc
 			iochrg = <200>;      //CC current
-			iterm = <50>;        //term current
+			iterm = <25>;        //term current
 			prechg = <200>;      //pre charge current
 			topoff-enable = <0>; //post charging flag
 			vbusovp = <10500>;   //ovd for usb
