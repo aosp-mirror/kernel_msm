@@ -2648,6 +2648,9 @@ wl_cfgp2p_del_p2p_disc_if(struct wireless_dev *wdev, struct bcm_cfg80211 *cfg)
 	if (rollback_lock)
 		rtnl_unlock();
 
+	/* Wait until all pending rcu_read_lock released */
+	synchronize_rcu();
+
 	kfree(wdev);
 
 	if (cfg)
