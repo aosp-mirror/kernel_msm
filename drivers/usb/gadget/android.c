@@ -91,6 +91,10 @@ static const char longname[] = "Gadget Android";
 #define MIDI_BUFFER_SIZE    1024
 #define MIDI_QUEUE_LENGTH   32
 
+//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
+struct android_dev *_android_dev;
+//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
+
 struct android_usb_function {
 	char *name;
 	void *config;
@@ -282,6 +286,18 @@ enum android_device_state {
 	USB_SUSPENDED,
 	USB_RESUMED
 };
+
+//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
+bool getSoftconnect(void)
+{
+	struct android_dev *dev = _android_dev;
+
+	if ( dev != NULL )
+		return dev->enabled;
+	else
+		return 0;
+}
+//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
 
 static const char *pm_qos_to_string(enum android_pm_qos_state state)
 {
@@ -4270,6 +4286,10 @@ static int android_probe(struct platform_device *pdev)
 		android_dev->idle_pc_rpm_no_int_secs = IDLE_PC_RPM_NO_INT_SECS;
 	}
 	strlcpy(android_dev->pm_qos, "high", sizeof(android_dev->pm_qos));
+
+//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
+	_android_dev = android_dev;
+//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
 
 	return ret;
 err_probe:
