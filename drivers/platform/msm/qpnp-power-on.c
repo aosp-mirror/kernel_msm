@@ -923,7 +923,7 @@ static void smb231_disable_charger_work(struct work_struct *work)
 		}
 	}
 
-	schedule_delayed_work(&smb231_updata, 100);
+	schedule_delayed_work(&smb231_updata, 90);
 
 	mutex_unlock(&smb231_work_lock);
 

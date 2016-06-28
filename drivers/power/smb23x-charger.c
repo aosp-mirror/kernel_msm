@@ -275,6 +275,7 @@ static int hot_bat_decidegc_table[] = {
 
 #define CMD_REG_0		0x30
 #define VOLATILE_WRITE_ALLOW	BIT(7)
+#define RESET_BIT			BIT(6)
 #define USB_SUSPEND_BIT		BIT(2)
 #define CHARGE_EN_BIT		BIT(1)
 #define STATE_PIN_OUT_DIS_BIT	BIT(0)
@@ -1353,11 +1354,14 @@ int usb_insertion(void)
 
 	power_supply_changed(cei_chip->usb_psy);
 
+	gpio_direction_output(GPIO_SMB_SUSP_PIN, 0);
+
 	return 0;
 }
 
 int usb_pre_removal(void)
 {
+	gpio_direction_output(GPIO_SMB_SUSP_PIN, 1);
 	cei_flag = false;
 
 	return 0;
@@ -1365,6 +1369,26 @@ int usb_pre_removal(void)
 
 int usb_removal(void)
 {
+	int rc;
+	u8 reg=0;
+
+	cei_flag = true;
+	rc = smb23x_masked_write(cei_chip, CMD_REG_0, RESET_BIT, RESET_BIT);
+	if (rc < 0) {
+		pr_err("Set RESET failed\n");
+	}
+
+	msleep(150);
+
+	rc = smb23x_read(cei_chip, CHG_STATUS_A_REG, &reg);
+	if (rc < 0) {
+		pr_err("Read CHG_STATUS_A failed, rc=%d\n", rc);
+	}
+
+	if (reg & POWER_OK_BIT) {
+		return 0;
+	}
+
 	cei_chip->usb_present = false;
 	cei_flag = false;
 
@@ -1375,7 +1399,6 @@ int usb_removal(void)
 	cei_chip->batt_cool = false;
 	CEI_MASK_FULL = false;
 
-	gpio_direction_output(GPIO_SMB_SUSP_PIN, 1);
 	power_supply_set_supply_type(cei_chip->usb_psy,
 			POWER_SUPPLY_TYPE_UNKNOWN);
 	power_supply_set_present(cei_chip->usb_psy, false);
@@ -1383,6 +1406,8 @@ int usb_removal(void)
 
 	power_supply_changed(cei_chip->usb_psy);
 	reconfig_upon_unplug(cei_chip);
+
+	gpio_direction_output(GPIO_SMB_SUSP_PIN, 0);
 
 	return 0;
 }
@@ -2166,32 +2191,6 @@ static int smb23x_system_temp_level_set(struct smb23x_chip *chip, int lvl_sel)
 	return rc;
 }
 
-void smb23x_check_USBINOV(void) {
-	int rc = 0;
-	u8 reg;
-	int temp = cei_flag;
-
-
-	if (cei_smb231_flag == true) {
-		cei_flag = true;
-		rc = smb23x_read(cei_chip, CHG_STATUS_A_REG, &reg);
-
-		if (rc < 0) {
-			pr_err("Read CHG_STATUS_A failed, rc=%d\n", rc);
-		}
-
-		if ((reg & USBIN_OV_BIT) || (reg & USBIN_UV_BIT)) {
-			if (reg & BIT(3)) {
-				rc = smb23x_write(cei_chip, CMD_REG_0, BIT(6));
-				if (rc < 0)
-					pr_err("Set reset failed, rc = %d\n", rc);
-			}
-		}
-		cei_flag = temp;
-	}
-}
-
-
 static int smb23x_battery_get_property(struct power_supply *psy,
 				enum power_supply_property prop,
 				union power_supply_propval *val)
@@ -2202,7 +2201,6 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 	switch (prop) {
 	case POWER_SUPPLY_PROP_HEALTH:
 		val->intval = smb23x_get_prop_batt_health(chip);
-		smb23x_check_USBINOV();
 		break;
 	case POWER_SUPPLY_PROP_STATUS:
 		val->intval = smb23x_get_prop_batt_status(chip);
@@ -2789,7 +2787,7 @@ static int smb23x_probe(struct i2c_client *client,
 	INIT_WORK(&WPC_check, WPC_check_work);
 	alarm_init(&wpc_check_alarm, ALARM_REALTIME, wpc_check_alarm_function);
 
-	gpio_direction_output(GPIO_SMB_SUSP_PIN, 1);
+	gpio_direction_output(GPIO_SMB_SUSP_PIN, 0);
 
 	return 0;
 unregister_batt_psy:
