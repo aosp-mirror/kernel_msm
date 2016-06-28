@@ -615,7 +615,7 @@ int diag_copy_remote(char __user *buf, size_t count, int *pret, int *pnum_data)
 
 		for (i = 0; i < diag_hsic[index].poolsize_hsic_write; i++) {
 			if (hsic_buf_tbl[i].length > 0) {
-				pr_debug("diag: HSIC copy to user, i: %d, buf: %p, len: %d\n",
+				pr_debug("diag: HSIC copy to user, i: %d, buf: %pK, len: %d\n",
 					i, hsic_buf_tbl[i].buf,
 					hsic_buf_tbl[i].length);
 				num_data++;
@@ -1481,7 +1481,7 @@ drop_rsp:
 		for (i = 0; i < driver->buf_tbl_size; i++) {
 			if (driver->buf_tbl[i].length > 0) {
 #ifdef DIAG_DEBUG
-				pr_debug("diag: WRITING the buf address and length is %p , %d\n",
+				pr_debug("diag: WRITING the buf address and length is %pK , %d\n",
 					 driver->buf_tbl[i].buf,
 					 driver->buf_tbl[i].length);
 #endif
@@ -1504,7 +1504,7 @@ drop_rsp:
 				ret += driver->buf_tbl[i].length;
 drop:
 #ifdef DIAG_DEBUG
-				pr_debug("diag: DEQUEUE buf address and length is %p, %d\n",
+				pr_debug("diag: DEQUEUE buf address and length is %pK, %d\n",
 					 driver->buf_tbl[i].buf,
 					 driver->buf_tbl[i].length);
 #endif
