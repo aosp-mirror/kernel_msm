@@ -939,9 +939,6 @@ static void smb23x_parallel_work(struct work_struct *work)
 
 		smb23x_enable_volatile_writes(chip);
 
-		// Re-run AICL
-		smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
-
 		// Set input current limit value follow register setting
 		smb23x_masked_write(chip, CMD_REG_1, USBAC_MODE_BIT, 0x01);
 
@@ -1486,6 +1483,10 @@ static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 static int aicl_done_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
+	if (chip->parallel_charging && rt_sts == 0x10) {
+		smb23x_enable_volatile_writes(chip);
+		smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 0);
+	}
 	return 0;
 }
 
@@ -1543,6 +1544,7 @@ static void reconfig_upon_unplug(struct smb23x_chip *chip)
 {
 	int rc;
 	int reason;
+
 	if (chip->workaround_flags & WRKRND_IRQ_POLLING) {
 		if (chip->usb_present) {
 			smb23x_stay_awake(&chip->smb23x_ws,
@@ -1586,9 +1588,6 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	if (chip->usb_present == 0 && usb_present == 1) {
 		gpio_set_value(GPIO_num17,0);
 		pr_info("[BAT][CHG] gpio_17 set to 0\n");
-
-		smb23x_enable_volatile_writes(chip);
-		smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 0);
 	} else if (chip->usb_present == 1 && usb_present == 0) {
 		if (g_bootdbguart == 1) {
 			gpio_set_value(GPIO_num17,1);
@@ -1596,6 +1595,8 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 		}
 		smb23x_enable_volatile_writes(chip);
 		smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
+
+		smb23x_relax(&chip->smb23x_ws, WAKEUP_SRC_PARALLEL);
 	}
 
 	pr_info("[BAT][CHG] chip->usb_present = %d, usb_present = %d\n",
@@ -1618,6 +1619,9 @@ static int power_ok_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
 	if (rt_sts == 0) {
 		smb23x_parallel_charger_enable(chip, CURRENT, false);
+		smb23x_charging_disable(chip, USER, true);
+	} else {
+		smb23x_charging_disable(chip, USER, false);
 	}
 	return 0;
 }
