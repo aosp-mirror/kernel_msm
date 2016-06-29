@@ -177,6 +177,16 @@ static struct dec_level_by_current_ua g_dec_level_curr_table[] = {
 
 static const int g_DEC_LEVEL_CURR_TABLE_SIZE = sizeof(g_dec_level_curr_table) / sizeof (g_dec_level_curr_table[0]);
 
+#define IS_BOOTING_THRESHOLD_SEC	120
+static bool is_booting_stage(void)
+{
+	struct timespec xtime = ktime_to_timespec(ktime_get());
+	if (xtime.tv_sec <= IS_BOOTING_THRESHOLD_SEC)
+		return true;
+	else
+		return false;
+}
+
 static int is_bounding_fully_charged_level(void)
 {
 	static int s_pingpong = 1;
@@ -1673,15 +1683,15 @@ static void batt_worker(struct work_struct *work)
 		gs_cable_impedance, gs_R_cable_impedance, gs_aicl_result);
 	}
 
-	if(g_is_pd_charger){
+	if(g_is_pd_charger && (htc_batt_info.rep.charging_source > 0)){
 		if (g_pd_current % 1000 == 0)
 			sprintf(chg_strbuf, "PD%dV_%dA", g_pd_voltage/1000, g_pd_current/1000);
 		else
 			sprintf(chg_strbuf, "PD%dV_%d.%dA", g_pd_voltage/1000,  g_pd_current/1000, (g_pd_current % 1000)/100);
 
 		aicl_now = get_property(htc_batt_info.batt_psy,POWER_SUPPLY_PROP_INPUT_CURRENT_MAX);
-		if(aicl_now != g_pd_current * 1000) {
-			pr_info("Fix the current max.\n");
+		if (aicl_now != g_pd_current * 1000) {
+			BATT_EMBEDDED("Fix the current max for PD charger");
 			set_aicl_enable(false);
 			pmi8994_set_iusb_max(g_pd_current * 1000);
 		}
@@ -1749,16 +1759,19 @@ static void batt_worker(struct work_struct *work)
 		gs_update_PSY = false;
 		power_supply_changed(htc_batt_info.batt_psy);
 	}
-
-	if (htc_batt_info.rep.chg_src == POWER_SUPPLY_TYPE_UNKNOWN){
-		if (htc_batt_info.vbus > VBUS_VALID_THRESHOLD)
+	if (is_booting_stage()) {
+		BATT_EMBEDDED("Device is at booting stage");
+	} else {
+		if ((htc_batt_info.rep.chg_src == POWER_SUPPLY_TYPE_UNKNOWN) &&
+				(htc_batt_info.vbus > VBUS_VALID_THRESHOLD)) {
+			BATT_EMBEDDED("VBUS valid but no charger source");
 			s_vbus_valid_no_chger_cnt++;
+		}
 	}
-
 	if (s_vbus_valid_no_chger_cnt >= 2){
 		s_vbus_valid_no_chger_cnt = 0;
 		if (!is_otg_enabled()){
-			pr_info("Charger type can't detect, rerun APSD.\n");
+			BATT_EMBEDDED("Charger type can't detect, rerun APSD");
 			pmi8994_rerun_apsd();
 		}
 	}

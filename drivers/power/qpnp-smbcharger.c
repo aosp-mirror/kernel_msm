@@ -2540,12 +2540,20 @@ static bool smbchg_is_parallel_usb_ok(struct smbchg_chip *chip,
 	}
 
 	type = get_type(reg);
+#ifdef CONFIG_HTC_BATT
+	if (chip->usb_supply_type == POWER_SUPPLY_TYPE_USB_CDP) {
+#else
 	if (get_usb_supply_type(type) == POWER_SUPPLY_TYPE_USB_CDP) {
+#endif /* CONFIG_HTC_BATT */
 		pr_smb(PR_STATUS, "CDP adapter, skipping\n");
 		return false;
 	}
 
+#ifdef CONFIG_HTC_BATT
+	if (chip->usb_supply_type == POWER_SUPPLY_TYPE_USB) {
+#else
 	if (get_usb_supply_type(type) == POWER_SUPPLY_TYPE_USB) {
+#endif
 		pr_smb(PR_STATUS, "SDP adapter, skipping\n");
 		return false;
 	}
@@ -9283,9 +9291,9 @@ static void smbchg_hvdcp_redet_worker(struct work_struct *work)
 void impedance_set_iusb_max (int current_ua, bool mode)
 {
         int rc;
-        rc = vote(the_chip->usb_icl_votable, USER_ICL_VOTER,
+	pr_smb(PR_STATUS, "set iusb max = %d\n", current_ua / 1000);
+	rc = vote(the_chip->usb_icl_votable, USER_ICL_VOTER,
                         mode, current_ua / 1000);
-        pr_smb(PR_STATUS, "set iusb max = %d\n",current_ua / 1000);
         if (rc < 0) {
                 pr_err("Can't vote %d current limit rc=%d\n",
                         current_ua, rc);
@@ -9300,10 +9308,9 @@ void pmi8994_set_iusb_max (int current_ua)
 		pr_err("called before init\n");
 		return;
 	}
-
+	pr_smb(PR_STATUS, "set iusb max = %d\n", current_ua / 1000);
 	rc = vote(the_chip->usb_icl_votable, PSY_ICL_VOTER,
 			true, current_ua / 1000);
-	pr_smb(PR_STATUS, "set iusb max = %d\n",current_ua / 1000);
 	if (rc < 0) {
 		pr_err("Can't vote %d current limit rc=%d\n",
 			current_ua, rc);
