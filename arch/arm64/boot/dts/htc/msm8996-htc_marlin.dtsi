@@ -271,10 +271,12 @@
 
 &pmi8994_flash0 {
 	qcom,duration = <600>;
+	qcom,current = <1000>;
 };
 
 &pmi8994_flash1 {
 	qcom,duration = <600>;
+	qcom,current = <1000>;
 };
 
 &pmi8994_switch {
