@@ -49,3 +49,10 @@
 		clock-names = "ref_clk";
 	};
 };
+
+&soc {
+	charger-dock {
+		compatible = "charger-dock-detector";
+		status = "okay";
+	};
+};
