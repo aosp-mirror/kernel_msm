@@ -49,6 +49,8 @@
 
 #include <linux/msm-bus.h>
 
+#include <linux/asusevtlog.h>
+
 //ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
 static struct delayed_work asus_chg_work;
 static struct work_struct asus_usb_work;
@@ -2439,6 +2441,7 @@ static void asus_usb_detect_work(struct work_struct *w)
 		msm_otg_notify_charger(motg, 500);
 	}
 	printk("[USB] set_chg_mode: USB\n");
+	ASUSEvtlog("[USB] set_chg_mode: USB\n");
 }
 static void asus_chg_detect_work(struct work_struct *w)
 {
@@ -2448,6 +2451,7 @@ static void asus_chg_detect_work(struct work_struct *w)
 			motg->chg_type = USB_INVALID_CHARGER;
 			msm_otg_notify_charger(motg, 100);
 			printk("[USB] set_chg_mode: UNKNOWN\n");
+			ASUSEvtlog("[USB] set_chg_mode: UNKNOWN\n");
 		}
 		else{
 			printk("[USB] asus_chg_detect_work: BSV is not set,need re-check.(%d,%d)\n",motg->vbus_state,test_bit(B_SESS_VLD, &motg->inputs));
@@ -2579,8 +2583,10 @@ static void msm_chg_detect_work(struct work_struct *w)
 					schedule_delayed_work(&asus_chg_cdp_work, (2000 * HZ/1000));
 				}
 				printk("[USB] set_chg_mode: ASUS CDP\n");
+				ASUSEvtlog("[USB] set_chg_mode: ASUS CDP\n");
 			} else
 				printk("[USB] set_chg_mode: ASUS DCP\n");
+				ASUSEvtlog("[USB] set_chg_mode: ASUS DCP\n");
 		}
 		else{
 			if(g_usb_boot == MSM_OTG_USB_BOOT_IRQ){
@@ -2906,6 +2912,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			cancel_delayed_work_sync(&asus_chg_work);
 			cancel_delayed_work_sync(&asus_chg_cdp_work);
 			printk("[USB] set_chg_mode: None\n");
+			ASUSEvtlog("[USB] set_chg_mode: None\n");
 			if ( !getSoftconnect() ) {
 				g_usb_boot = MSM_OTG_USB_BOOT_INIT;
 				usb_gadget_disconnect(otg->gadget);
@@ -2938,6 +2945,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			clear_bit(B_FALSE_SDP, &motg->inputs);
 			msm_otg_notify_charger(motg, IDEV_CHG_MAX);
 			printk("[USB] set_chg_mode: ASUS DCP\n");
+			ASUSEvtlog("[USB] set_chg_mode: ASUS DCP\n");
 			otg->phy->state = OTG_STATE_B_IDLE;
 			msm_otg_dbg_log_event(&motg->phy, "B_FALSE_SDP PUT",
 				get_pm_runtime_counter(dev), motg->inputs);
@@ -3091,13 +3099,17 @@ static void msm_otg_set_vbus_state(int online)
 		return;
 
 	if (online) {
-		pr_info("[USB] PMIC: BSV set\n");
+		pr_debug("[USB] PMIC: BSV set\n");
+		printk("[USB] plugin\n");
+		ASUSEvtlog("[USB] plugin\n");
 		msm_otg_dbg_log_event(&motg->phy, "PMIC: BSV SET",
 				init, motg->inputs);
 		if (test_and_set_bit(B_SESS_VLD, &motg->inputs) && init)
 			return;
 	} else {
-		pr_info("[USB] PMIC: BSV clear\n");
+		pr_debug("[USB] PMIC: BSV clear\n");
+		printk("[USB] unplug\n");
+		ASUSEvtlog("[USB] unplug\n");
 		msm_otg_dbg_log_event(&motg->phy, "PMIC: BSV CLEAR",
 				init, motg->inputs);
 		if (!test_and_clear_bit(B_SESS_VLD, &motg->inputs) && init)
@@ -3662,7 +3674,7 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 			motg->chg_state = USB_CHG_STATE_DETECTED;
 		}
 
-		pr_info("[USB] set_chg_mode: %s\n", chg_to_string(motg->chg_type));
+		pr_debug("[USB] set_chg_mode: %s\n", chg_to_string(motg->chg_type));
 		dev_dbg(motg->phy.dev, "%s: charger type = %s\n", __func__,
 			chg_to_string(motg->chg_type));
 		msm_otg_dbg_log_event(&motg->phy, "SET CHARGER TYPE ",
