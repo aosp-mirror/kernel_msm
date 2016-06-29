@@ -605,12 +605,8 @@ static void STC311x_SetParam(void)
 	}
 
 	/* relaxation timer */
-	if (BattData.RelaxThreshold !=0 )
-	{
-		value= ((BattData.RelaxThreshold << 9) / BattData.CurrentFactor);	 /* LSB=8*5.88uV/Rsense */
-	value = value & 0x7f;
-		STC31xx_WriteByte(STC311x_REG_CURRENT_THRES,value);
-	}
+	if (BattData.RelaxThreshold != 0)
+		STC31xx_WriteByte(STC311x_REG_CURRENT_THRES,BattData.RelaxThreshold);
 
 	/* set parameters if different from default, only if a restart is done (battery change) */
 	if (GG_Ram.reg.CC_cnf !=0 ) STC31xx_WriteWord(STC311x_REG_CC_CNF,GG_Ram.reg.CC_cnf);
@@ -716,7 +712,7 @@ static int STC311x_Powerdown(void)
 	STC31xx_WriteByte(STC311x_REG_CTRL, 0x01);
 
 	/* write 0 into the REG_MODE register to put the STC311x in standby mode */
-	 res = STC31xx_WriteByte(STC311x_REG_MODE, 0);
+	 res = STC31xx_WriteByte(STC311x_REG_MODE,0x19);	/*	 set GG_RUN=1, voltage mode, alm enabled */
 	 if (res!= OK) return (res);
 
 	 return (OK);
@@ -1920,8 +1916,8 @@ static void stc311x_work(struct work_struct *work)
 		for(Loop = 0; Loop < 16; Loop++) {
 			GasGaugeData.OCVValue[Loop] = chip->pdata->OCVValue[Loop];
 			GasGaugeData.SOCValue[Loop] = chip->pdata->SOCValue[Loop];
-			pr_debug("stc311x_work: GasGaugeData.OCVValue:%x\n", GasGaugeData.OCVValue[Loop]);
-			pr_debug("stc311x_work: GasGaugeData.SOCValue:%x\n", GasGaugeData.SOCValue[Loop]);
+			pr_debug("stc311x_work: GasGaugeData.OCVValue:0x%x\n", GasGaugeData.OCVValue[Loop]);
+			pr_debug("stc311x_work: GasGaugeData.SOCValue:0x%x\n", GasGaugeData.SOCValue[Loop]);
 		}
 
 		if (chip->pdata->ForceExternalTemperature == 1) {
@@ -2172,6 +2168,8 @@ static int stc311x_probe(struct i2c_client *client,
 	}
 	pr_info("[BAT] chip->batt_soc:%d, chip->batt_voltage:%d, chip->batt_current:%d\n", chip->batt_soc, chip->batt_voltage, chip->batt_current);
 
+	STC31xx_WriteByte(STC311x_REG_MODE,0x18);	/*	 set GG_RUN=1, mixed mode, alm enabled */
+
 	dev_info(&client->dev, "init deferrable start: %s\n", __func__);
 	INIT_DEFERRABLE_WORK(&chip->work, stc311x_work);
 
@@ -2210,7 +2208,7 @@ static int stc311x_remove(struct i2c_client *client)
 static int stc311x_suspend(struct device *dev)
 {
 	struct stc311x_chip *chip = dev_get_drvdata(dev);
-
+	STC31xx_WriteByte(STC311x_REG_MODE,0x19);	/*	 set GG_RUN=1, voltage mode, alm enabled */
 	cancel_delayed_work(&chip->work);
 	return 0;
 }
