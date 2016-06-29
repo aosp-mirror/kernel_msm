@@ -1,0 +1,101 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+
+/dts-v1/;
+
+#include "../qcom/msm8996pro-v1.1.dtsi"
+#include "../qcom/msm-pmi8996.dtsi"
+#include "../qcom/msm8996-mtp.dtsi"
+#include "msm8996-nc-pins-htc_sailfish-xb.dtsi"
+#include "msm8996-htc_sailfish.dtsi"
+
+/ {
+	model = "HTC Corporation. MSM8996pro v1.1 + PMI8996 Sailfish A";
+	qcom,msm-id = <420 0x10001>, <421 0x10001>;
+	qcom,board-id = <0x80 0>;
+};
+&pm8994_gpios {
+	gpio@c500 { /* GPIO 6 */
+		qcom,master-en = <0>;	/* Disable GPIO */
+		status = "okay";		/* show status  */
+	};
+	gpio@c600 { /* GPIO 7 */
+		qcom,master-en = <0>;	/* Disable GPIO */
+		status = "okay";		/* show status  */
+	};
+	gpio@cb00 { /* GPIO 12*/
+		qcom,master-en = <0>;	/* Disable GPIO */
+		status = "okay";		/* show status  */
+	};
+	gpio@cc00 { /* GPIO 13*/
+		qcom,master-en = <0>;	/* Disable GPIO */
+		status = "okay";		/* show status  */
+	};
+	gpio@d500 { /* GPIO 22 */
+		qcom,master-en = <0>;	/* Disable GPIO */
+		status = "okay";		/* show status  */
+	};
+};
+
+&pm8994_mpps  {
+	mpp@a300 { /* MPP 4 */
+		qcom,master-en = <0>;	/* Disable MPP	*/
+		status = "okay";		/* show status	*/
+	};
+	mpp@a400 { /* MPP 5 */
+		qcom,master-en = <0>;	/* Disable MPP	*/
+		status = "okay";		/* show status	*/
+	};
+	mpp@a700 { /* MPP 8 */
+		qcom,master-en = <0>;	/* Disable MPP	*/
+		status = "okay";		/* show status	*/
+	};
+};
+
+&pmi8994_gpios{
+	gpio@c000 { /* GPIO 1 */
+		qcom,master-en = <0>;	/* Disable GPIO */
+		status = "okay";		/* show status  */
+	};
+	gpio@c100 { /* GPIO 2 */
+		qcom,master-en = <0>;	/* Disable GPIO */
+		status = "okay";		/* show status  */
+	};
+	gpio@c300 { /* GPIO 4 */
+		qcom,master-en = <0>;	/* Disable GPIO */
+		status = "okay";		/* show status  */
+	};
+	gpio@c400 { /* GPIO 5 */
+		qcom,master-en = <0>;	/* Disable GPIO */
+		status = "okay";		/* show status  */
+	};
+	gpio@c500 { /* GPIO 6 */
+		qcom,master-en = <0>;	/* Disable GPIO */
+		status = "okay";		/* show status  */
+	};
+	gpio@c700 { /* GPIO 8 */
+		qcom,master-en = <0>;	/* Disable GPIO */
+		status = "okay";		/* show status  */
+	};
+	gpio@c800 { /* GPIO 9 */
+		qcom,master-en = <0>;	/* Disable GPIO */
+		status = "okay";		/* show status	*/
+	};
+};
+
+&pmi8994_mpps {
+	mpp@a300 { /* MPP 4 */
+		qcom,master-en = <0>;	/* Disable MPP	*/
+		status = "okay";		/* show status	*/
+	};
+};
