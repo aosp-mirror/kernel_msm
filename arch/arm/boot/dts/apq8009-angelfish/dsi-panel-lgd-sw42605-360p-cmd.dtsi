@@ -1,0 +1,160 @@
+/* Copyright (c) 2016, LGE Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+	dsi_lgd_sw42605_cmd: qcom,mdss_dsi_lgd_sw42605_cmd {
+		qcom,mdss-dsi-panel-name = "SW42605 360P POLED command mode dsi panel";
+		qcom,mdss-dsi-panel-controller = <&mdss_dsi0>;
+		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+		qcom,mdss-dsi-panel-destination = "display_1";
+		qcom,mdss-dsi-panel-framerate = <60>;
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-panel-width = <360>;
+		qcom,mdss-dsi-panel-height = <360>;
+		qcom,mdss-dsi-h-front-porch = <5>;
+		qcom,mdss-dsi-h-back-porch = <5>;
+		qcom,mdss-dsi-h-pulse-width = <123>;
+		qcom,mdss-dsi-h-sync-skew = <0>;
+		qcom,mdss-dsi-v-back-porch = <5>;
+		qcom,mdss-dsi-v-front-porch = <5>;
+		qcom,mdss-dsi-v-pulse-width = <123>;
+		qcom,mdss-dsi-h-left-border = <0>;
+		qcom,mdss-dsi-h-right-border = <0>;
+		qcom,mdss-dsi-v-top-border = <0>;
+		qcom,mdss-dsi-v-bottom-border = <0>;
+		qcom,mdss-pan-physical-width-dimension = <30>;
+		qcom,mdss-pan-physical-height-dimension = <30>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
+		qcom,mdss-dsi-underflow-color = <0xff>;
+		qcom,mdss-dsi-border-color = <0>;
+		qcom,mdss-dsi-panel-status-check-mode ="te_signal_check";
+		qcom,esd-check-enabled;
+		qcom,mdss-dsi-on-command = [
+			39 01 00 00 00 00 05 2A 00 00 01 67  /* Column Address Setting */
+			39 01 00 00 00 00 05 2B 00 00 01 67  /* Page Address Setting */
+			15 01 00 00 00 00 02 53 20 			 /* Display Control */
+			15 01 00 00 00 00 02 55 00 			 /* Write Power Save */
+			15 01 00 00 00 00 02 36 00  		 /* Memory Access Control */
+			05 01 00 00 78 00 01 11  /* Sleep Out */
+			05 01 00 00 00 00 01 35  /* TE On */
+			];
+		qcom,mdss-dsi-post-panel-on-command = [
+			05 01 00 00 00 00 01 29  /* Display On */
+			];
+		qcom,mdss-dsi-off-command = [
+			05 01 00 00 00 00 01 28  /* Display Off */
+			05 01 00 00 78 00 01 10  /* Sleep In */
+			];
+		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-idle-on-command = [
+			39 01 00 00 00 00 02 53 20	   /* Display Control */
+			39 01 00 00 00 00 03 61 32 00  /* Write Display Brightness in PSM */
+			39 01 00 00 00 00 02 63 60     /* Write Control Display in PSM */
+			15 01 00 00 00 00 02 B0 AC     /* Manufacturer Command Protection */
+			39 01 00 00 00 00 35 DB
+			01 1B 08 14 33 FF
+			FF 11 3F 3F 3F 22
+			9F 03 84 80 6D 20
+			00 17 1A 7F 0F 00
+			20 E4 0C 44 15 44
+			15 01 80 01 34 00
+			04 01 34 00 C8 00
+			04 90 00 10 00 00
+			00 00 00 00  /* PSM */
+			05 01 00 00 00 00 01 39  /* Idle Mode On */
+			];
+		qcom,mdss-dsi-idle-on-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-idle-off-command = [
+			39 01 00 00 00 00 03 61 32 00   /* Write Display Brightness in PSM */
+			39 01 00 00 00 00 02 63 60  	/* Write Control Display in PSM */
+			39 01 00 00 00 00 03 51 F2 00 	/* Normal DBV Set (F2:400nit) */
+			15 01 00 00 00 00 02 B0 AC 	 	/* Manufacturer Command Protection */
+			39 01 00 00 00 00 35 DB
+			01 1B 08 14 33 FF
+			FF 11 3F 3F 3F 22
+			9F 03 84 80 6D 20
+			00 17 1A 7F 0F 55
+			20 E4 0C 44 15 44
+			15 01 80 01 34 00
+			04 01 34 00 C8 00
+			04 90 00 10 00 00
+			00 00 00 00  /* PSM */
+			05 01 00 00 00 00 01 38  /* Idle Mode Off */
+			05 01 00 00 00 00 01 34  /* TE Off */
+			];
+		qcom,mdss-dsi-idle-off-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-panel-reset-command =[
+			05 01 00 00 00 00 01 10
+			05 01 00 00 00 00 01 38
+			15 01 00 00 00 00 02 53 20
+			39 01 00 00 00 00 03 51 F2 00
+			05 01 00 00 78 00 01 11
+			05 01 00 00 00 00 01 35
+			05 01 00 00 00 00 01 29
+			];
+		qcom,mdss-dsi-idle-fps = <30>;
+		qcom,mdss-dsi-h-sync-pulse = <1>;
+		qcom,mdss-dsi-traffic-mode = "burst_mode";
+		qcom,mdss-dsi-lane-map = "lane_map_0123";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-te-pin-select = <1>;
+		qcom,mdss-dsi-te-v-sync-rd-ptr-irq-line = <0x2c>;
+		qcom,mdss-dsi-te-dcs-command = <1>;
+		qcom,mdss-dsi-te-check-enable;
+		qcom,mdss-dsi-te-using-te-pin;
+		qcom,mdss-dsi-panel-timings = [6A 16 0E 00 38 3A 12 18 10 03 04 00];
+		qcom,mdss-dsi-t-clk-post = <0x04>;
+		qcom,mdss-dsi-t-clk-pre = <0x23>;
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-reset-sequence = <1 15>;
+		qcom,mdss-brightness-default-level = <208>;
+		qcom,ulps-enabled;
+		qcom,mdss-dsi-lp11-init;
+		qcom,mdss-dsi-off-pre-reset-delay = <20>;
+		qcom,mdss-dsi-off-post-reset-delay = <20>;
+		qcom,blmap = /bits/ 8 <
+			0 1 1 1 1 1 1 2 2 2                          /* 0-9 */
+			2 2 3 3 4 4 5 5 6 6                          /* 10-19 */
+			7 7 8 8 9 9 10 10 11 11                      /* 20-29 */
+			12 12 13 13 13 14 14 14 15 15                /* 30-39 */
+			15 16 16 16 17 17 17 18 18 18                /* 40-49 */
+			19 19 20 20 21 21 22 22 23 23                /* 50-59 */
+			24 25 26 27 28 29 30 31 32 33                /* 60-69 */
+			34 35 36 37 38 39 40 41 42 43                /* 70-79 */
+			44 45 46 47 48 49 50 51 52 53                /* 80-89 */
+			54 55 56 57 58 59 60 61 62 63                /* 90-99 */
+			64 65 66 67 68 69 70 71 72 73                /* 100-109 */
+			74 75 76 77 78 79 80 81 82 83                /* 110-119 */
+			84 85 86 87 88 89 90 91 92 93                /* 120-129 */
+			95 96 97 99 100 101 102 103 104 105          /* 130-139 */
+			107 108 109 110 111 112 113 114 115 116      /* 140-149 */
+			118 120 121 122 123 124 125 126 127 128      /* 150-159 */
+			130 131 133 134 135 137 138 140 141 142      /* 160-169 */
+			143 145 146 147 148 150 151 152 153 154      /* 170-179 */
+			155 157 158 159 160 161 162 163 164 165      /* 180-189 */
+			166 167 168 169 170 171 172 173 174 175      /* 190-199 */
+			176 177 177 178 178 179 179 180 180 181      /* 200-209 */
+			182 183 185 187 189 191 193 195 197 199      /* 210-219 */
+			201 203 205 207 209 211 212 213 214 215      /* 220-229 */
+			217 219 220 221 222 223 224 225 226 227      /* 230-239 */
+			228 229 230 231 232 233 234 235 236 237      /* 240-249 */
+			238 239 240 241 242 255                      /* 250-255 */
+		>;
+	};
+};

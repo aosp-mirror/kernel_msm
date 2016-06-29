@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 
+#include "dsi-panel-lgd-sw42605-360p-cmd.dtsi"
 #include "dsi-panel-lgd-lg4262-480p-cmd.dtsi"
 
 &mdss_mdp {
@@ -17,7 +18,7 @@
 };
 
 &mdss_dsi0 {
-	qcom,dsi-pref-prim-pan = <&dsi_lgd_lg4262_cmd>;
+	qcom,dsi-pref-prim-pan = <&dsi_lgd_sw42605_cmd>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_reset_active &mdss_enable_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_reset_suspend &mdss_enable_suspend &mdss_te_suspend>;
@@ -34,6 +35,14 @@
 
 &mdss_dsi0_pll {
 	vddio-supply = <&pm8916_l6>;
+};
+
+&dsi_lgd_sw42605_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs_l";
+	qcom,mdss-dsi-bl-min-level = <0>;
+	qcom,mdss-dsi-bl-max-level = <255>;
+	qcom,cont-splash-enabled;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
 &dsi_lgd_lg4262_cmd {

@@ -19,3 +19,7 @@
 &atmel_u114 {
 	/delete-property/atmel,palm-enabled;
 };
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_lgd_lg4262_cmd>;
+};
