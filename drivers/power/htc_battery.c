@@ -504,7 +504,7 @@ static void batt_level_adjust(unsigned long time_since_last_update_ms)
 		 * - level cannot increase while discharging.
 		 */
 		if (time_accumulated_level_change < DISCHG_UPDATE_PERIOD_MS
-				&& !s_first) {
+				&& !s_first && htc_batt_info.rep.batt_temp > 0) {
 			/* level should keep the previous one */
 			BATT_DEBUG("%s: total_time since last batt level update = %lu ms.",
 			__func__, time_accumulated_level_change);
@@ -545,11 +545,17 @@ static void batt_level_adjust(unsigned long time_since_last_update_ms)
 
 			if (time_since_last_update_ms <= ONE_PERCENT_LIMIT_PERIOD_MS) {
 				if (1 <= drop_raw_level) {
-					adjust_store_level(&s_store_level, drop_raw_level, 1, htc_batt_info.prev.level);
+					int drop_ui = 0;
+					if (htc_batt_info.rep.batt_temp > 0)
+						drop_ui = (2 <= drop_raw_level) ? 2 : 1;
+					else
+						drop_ui = (6 <= drop_raw_level) ? 6 : drop_raw_level;
+
+					adjust_store_level(&s_store_level, drop_raw_level, drop_ui, htc_batt_info.prev.level);
 					BATT_LOG("%s: remap: normal soc drop = %d%% in %lu ms."
-							" UI only allow -1%%, store_level:%d, ui:%d%%\n",
+							" UI allow -%d%%, store_level:%d, ui:%d%%\n",
 							__func__, drop_raw_level, time_since_last_update_ms,
-							s_store_level, htc_batt_info.rep.level);
+							drop_ui, s_store_level, htc_batt_info.rep.level);
 				}
 			} else if ((suspend_highfreq_check_reason & SUSPEND_HIGHFREQ_CHECK_BIT_TALK) &&
 				(time_since_last_update_ms <= FIVE_PERCENT_LIMIT_PERIOD_MS)) {
