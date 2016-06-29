@@ -2820,23 +2820,27 @@ static void __ref do_core_control(long temp)
 				cpu_dev = get_cpu_device(i);
 				trace_thermal_pre_core_offline(i);
 				ret = device_offline(cpu_dev);
-				if (ret)
+				if (ret) {
+					cpus_offlined &= ~BIT(i);
 					pr_err("Error %d offline core %d\n",
 					       ret, i);
+				} else {
+					cpus_offlined |= BIT(i);
+				}
 				trace_thermal_post_core_offline(i,
 					cpumask_test_cpu(i, cpu_online_mask));
+			} else {
+				cpus_offlined |= BIT(i);
 			}
 			unlock_device_hotplug();
-			cpus_offlined |= BIT(i);
 			break;
 		}
 	} else if (msm_thermal_info.core_control_mask && cpus_offlined &&
 		temp <= (msm_thermal_info.core_limit_temp_degC -
 			msm_thermal_info.core_temp_hysteresis_degC)) {
 		for (i = 0; i < num_possible_cpus(); i++) {
-			if (!(cpus_offlined & BIT(i)))
+			if (!(cpus_offlined & BIT(i)) && cpu_online(i))
 				continue;
-			cpus_offlined &= ~BIT(i);
 			pr_info("Allow Online CPU%d Temp: %ld\n",
 					i, temp);
 			/*
@@ -2845,6 +2849,7 @@ static void __ref do_core_control(long temp)
 			 */
 			lock_device_hotplug();
 			if (cpu_online(i)) {
+				cpus_offlined &= ~BIT(i);
 				unlock_device_hotplug();
 				continue;
 			}
@@ -2857,9 +2862,13 @@ static void __ref do_core_control(long temp)
 			cpu_dev = get_cpu_device(i);
 			trace_thermal_pre_core_online(i);
 			ret = device_online(cpu_dev);
-			if (ret)
+			if (ret) {
+				cpus_offlined |= BIT(i);
 				pr_err("Error %d online core %d\n",
 						ret, i);
+			} else {
+				cpus_offlined &= ~BIT(i);
+			}
 			trace_thermal_post_core_online(i,
 				cpumask_test_cpu(i, cpu_online_mask));
 			unlock_device_hotplug();
@@ -2872,15 +2881,14 @@ static void __ref do_core_control(long temp)
 static int __ref update_offline_cores(int val)
 {
 	uint32_t cpu = 0;
+	int rval = 0;
 	int ret = 0;
-	uint32_t previous_cpus_offlined = 0;
 	bool pend_hotplug_req = false;
 	struct device *cpu_dev = NULL;
 
 	if (!core_control_enabled)
 		return 0;
 
-	previous_cpus_offlined = cpus_offlined;
 	cpus_offlined = msm_thermal_info.core_control_mask & val;
 
 	for_each_possible_cpu(cpu) {
@@ -2894,6 +2902,7 @@ static int __ref update_offline_cores(int val)
 			trace_thermal_pre_core_offline(cpu);
 			ret = device_offline(cpu_dev);
 			if (ret) {
+				cpus_offlined &= ~BIT(cpu);
 				pr_err_ratelimited(
 					"Unable to offline CPU%d. err:%d\n",
 					cpu, ret);
@@ -2904,12 +2913,8 @@ static int __ref update_offline_cores(int val)
 			trace_thermal_post_core_offline(cpu,
 				cpumask_test_cpu(cpu, cpu_online_mask));
 			unlock_device_hotplug();
-		} else if (online_core && (previous_cpus_offlined & BIT(cpu))) {
+		} else if (online_core && !cpu_online(cpu)) {
 			lock_device_hotplug();
-			if (cpu_online(cpu)) {
-				unlock_device_hotplug();
-				continue;
-			}
 			/* If this core wasn't previously online don't put it
 			   online */
 			if (!(cpumask_test_cpu(cpu, cpus_previously_online))) {
@@ -2920,8 +2925,11 @@ static int __ref update_offline_cores(int val)
 			trace_thermal_pre_core_online(cpu);
 			ret = device_online(cpu_dev);
 			if (ret && ret == notifier_to_errno(NOTIFY_BAD)) {
+				rval |= ret;
+				cpus_offlined |= BIT(cpu);
 				pr_debug("Onlining CPU%d is vetoed\n", cpu);
 			} else if (ret) {
+				rval |= ret;
 				cpus_offlined |= BIT(cpu);
 				pend_hotplug_req = true;
 				pr_err_ratelimited(
@@ -2944,7 +2952,7 @@ static int __ref update_offline_cores(int val)
 			msecs_to_jiffies(HOTPLUG_RETRY_INTERVAL_MS));
 	}
 
-	return ret;
+	return rval;
 }
 
 static __ref int do_hotplug(void *data)
@@ -4697,6 +4705,7 @@ static void interrupt_mode_init(void)
 		return;
 
 	if (polling_enabled) {
+		pr_info("switch to interrupt mode\n,");
 		polling_enabled = 0;
 		create_sensor_zone_id_map();
 		disable_msm_thermal();
@@ -4825,6 +4834,7 @@ static ssize_t __ref store_cpus_offlined(struct kobject *kobj,
 		if (!(msm_thermal_info.core_control_mask & BIT(cpu)))
 			continue;
 		cpus[cpu].user_offline = !!(val & BIT(cpu));
+		cpus[cpu].offline = !!(val & BIT(cpu));
 		pr_debug("\"%s\"(PID:%i) requests %s CPU%d.\n", current->comm,
 			current->pid, (cpus[cpu].user_offline) ? "offline" :
 			"online", cpu);
