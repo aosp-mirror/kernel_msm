@@ -11,4 +11,4 @@
  */
 
 #include "dsi-panel-x145aln01-280x280-cmd.dtsi"
-#include "dsi-panel-h139bln01-400x400-cmd.dtsi"
+#include "swift-er_dsi-panel-h139bln01-400x400-cmd.dtsi"
