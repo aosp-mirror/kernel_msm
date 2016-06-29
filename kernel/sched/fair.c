@@ -5469,7 +5469,7 @@ static inline int find_best_target(struct task_struct *p)
 	 *       2) idle_cpu with capacity at current OPP
 	 *       3) busy cpu with capacity at higher OPP
 	 */
-	boosted = schedtune_task_boost(p);
+	boosted = schedtune_task_boost(p) > 0;
 	task_util_boosted = boosted_task_util(p);
 	for_each_cpu(i, tsk_cpus_allowed(p)) {
 		int cur_capacity = capacity_curr_of(i);
@@ -5535,12 +5535,12 @@ static inline int find_best_target(struct task_struct *p)
 		}
 	}
 
-	if (!boosted && target_cpu < 0) {
+	if (boosted && idle_cpu >= 0)
+		target_cpu = idle_cpu;
+	else if (target_cpu < 0) {
 		target_cpu = idle_cpu >= 0 ? idle_cpu : backup_cpu;
 	}
 
-	if (boosted && idle_cpu >= 0)
-		target_cpu = idle_cpu;
 	return target_cpu;
 }
 
