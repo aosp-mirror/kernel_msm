@@ -1,4 +1,7 @@
 /*
+ *
+ * PAJ9124U1 Optical Track Sensor driver.
+ *
  * Copyright (C) 2016 Google, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
@@ -30,18 +33,18 @@
 #define SAMPLING_PERIOD_US_MIN	5000
 #define SAMPLING_PERIOD_US_MAX	9000
 
-#define RSB_MAGIC_PID		0x30
+#define PAJ9124U1_MAGIC_PID		0x30
 
 /* MOTION Register addresses */
-#define RSB_MOTION	0x02
-#define RSB_DELTA_X	0x03
-#define RSB_DELTA_Y	0x04
-#define RSB_CONFIG	0x06
+#define PAJ9124U1_MOTION	0x02
+#define PAJ9124U1_DELTA_X	0x03
+#define PAJ9124U1_DELTA_Y	0x04
+#define PAJ9124U1_CONFIG	0x06
 #define MOTION_BITMASK	0x80
 
-#define RSB_DELAY_MS_AFTER_VDD 10
+#define PAJ9124U1_DELAY_MS_AFTER_VDD 10
 
-struct rsb_drv_data {
+struct paj9124u1_drv_data {
 	struct spi_device *device;
 	struct dentry *dent;
 	struct input_dev *in_dev;
@@ -50,15 +53,15 @@ struct rsb_drv_data {
 	struct work_struct init_work;
 };
 
-static struct spi_device_id rsb_spi_id[] = {
-	{"rsb", 0},
+static struct spi_device_id paj9124u1_spi_id[] = {
+	{"paj9124u1", 0},
 	{},
 };
 
 /*
  * We iterate over this array, writing all the registers to the addresses
  * NOTE: Please make sure the #define values are kept in lock step with the
- * size of the array. If not, the RSB will *not* be initialized properly!
+ * size of the array. If not, the paj9124u1 will *not* be initialized properly!
  */
 #define INIT_WRITES_FIRST_BATCH_INDEX	5
 #define INIT_WRITES_SECOND_BATCH_INDEX	34
@@ -105,7 +108,8 @@ static uint8_t init_writes[][2] = {
  * SPI device protocol to read a register.
  * Write a 8 bit address value, and read an 8 bit value back.
  */
-static int rsb_read(struct rsb_drv_data *rsb_data, uint8_t *rx, uint8_t addr)
+static int paj9124u1_read(struct paj9124u1_drv_data *paj9124u1_data, uint8_t *rx,
+	uint8_t addr)
 {
 
 	/* TODO(pmalani): Do we need a timeout check?? */
@@ -125,11 +129,11 @@ static int rsb_read(struct rsb_drv_data *rsb_data, uint8_t *rx, uint8_t addr)
 
 	read_buf[0] = addr;
 
-	ret = spi_sync_transfer(rsb_data->device, xfers, 2);
+	ret = spi_sync_transfer(paj9124u1_data->device, xfers, 2);
 	if (ret == 0) {
 		*rx = read_buf[1];
 	} else {
-		dev_err(&rsb_data->device->dev,
+		dev_err(&paj9124u1_data->device->dev,
 			"SPI Protocol message read failed\n");
 	}
 
@@ -138,17 +142,17 @@ static int rsb_read(struct rsb_drv_data *rsb_data, uint8_t *rx, uint8_t addr)
 
 static int get_test_read(void *data, u64 *val)
 {
-	struct rsb_drv_data *rsb_data = data;
+	struct paj9124u1_drv_data *paj9124u1_data = data;
 	uint8_t rx_data;
 
-	dev_info(&rsb_data->device->dev, "Writing to debugfs\n");
+	dev_info(&paj9124u1_data->device->dev, "Writing to debugfs\n");
 
 	/* Read the sensorPID */
-	if (rsb_read(data, &rx_data, 0x00) == 0)
-		dev_info(&rsb_data->device->dev, "PID is %x\n",
+	if (paj9124u1_read(data, &rx_data, 0x00) == 0)
+		dev_info(&paj9124u1_data->device->dev, "PID is %x\n",
 			rx_data);
 	else
-		dev_err(&rsb_data->device->dev, "read error\n");
+		dev_err(&paj9124u1_data->device->dev, "read error\n");
 
 	return 0;
 }
@@ -158,7 +162,7 @@ DEFINE_SIMPLE_ATTRIBUTE(test_read_fops, get_test_read, NULL, "%llu\n");
  * SPI Protocol to write a byte to an address.
  * Returns 0 on success, -1 otherwise.
  */
-static int rsb_write(struct rsb_drv_data *rsb_data, uint8_t tx_val,
+static int paj9124u1_write(struct paj9124u1_drv_data *paj9124u1_data, uint8_t tx_val,
 	uint8_t addr)
 {
 	int ret = 0;
@@ -172,9 +176,9 @@ static int rsb_write(struct rsb_drv_data *rsb_data, uint8_t tx_val,
 	write_buf[0] = (1 << 7) | addr;
 	write_buf[1] = tx_val;
 
-	ret = spi_sync_transfer(rsb_data->device, &xfer, 1);
+	ret = spi_sync_transfer(paj9124u1_data->device, &xfer, 1);
 	if (ret != 0) {
-		dev_err(&rsb_data->device->dev,
+		dev_err(&paj9124u1_data->device->dev,
 			"SPI Protocol write message failed\n");
 	}
 
@@ -186,33 +190,33 @@ static int rsb_write(struct rsb_drv_data *rsb_data, uint8_t tx_val,
  * Also reads back the address to make sure it's written correctly.
  * Returns 0 on success, -1 otherwise.
  */
-static int rsb_write_read(struct rsb_drv_data *rsb_data, uint8_t tx_val,
-	uint8_t addr)
+static int paj9124u1_write_read(struct paj9124u1_drv_data *paj9124u1_data,
+	uint8_t tx_val, uint8_t addr)
 {
 	uint8_t num_retries = NUM_WRITE_RETRIES;
 	uint8_t read_val;
 
 	do {
-		if (rsb_write(rsb_data, tx_val, addr))
+		if (paj9124u1_write(paj9124u1_data, tx_val, addr))
 			break;
 
-		if (rsb_read(rsb_data, &read_val, addr))
+		if (paj9124u1_read(paj9124u1_data, &read_val, addr))
 			break;
 
 		if (read_val == tx_val) {
-			dev_info(&rsb_data->device->dev,
+			dev_info(&paj9124u1_data->device->dev,
 				"Addr %x: Wrote %x got back %x\n",
 				addr, tx_val, read_val);
 			return 0;
 		}
 	} while (num_retries-- > 0);
 
-	dev_warn(&rsb_data->device->dev,
+	dev_warn(&paj9124u1_data->device->dev,
 		"Write_read %x to addr %x failed\n", tx_val, addr);
 	return -EIO;
 }
 
-static int rsb_open(struct rsb_drv_data *rsb_data)
+static int paj9124u1_open(struct paj9124u1_drv_data *paj9124u1_data)
 {
 	int ret;
 	struct spi_transfer xfer = {
@@ -221,18 +225,18 @@ static int rsb_open(struct rsb_drv_data *rsb_data)
 	};
 
 	/* TODO(pmalani): How much of this is prepopulated from DT? */
-	rsb_data->device->max_speed_hz = 2000000;
-	rsb_data->device->mode = SPI_MODE_3;
-	rsb_data->device->bits_per_word = 8;
-	ret = spi_setup(rsb_data->device);
+	paj9124u1_data->device->max_speed_hz = 2000000;
+	paj9124u1_data->device->mode = SPI_MODE_3;
+	paj9124u1_data->device->bits_per_word = 8;
+	ret = spi_setup(paj9124u1_data->device);
 	if (!ret) {
-		dev_info(&rsb_data->device->dev,
+		dev_info(&paj9124u1_data->device->dev,
 			"SPI device set up successfully!\n");
 
 		/* Assert chip select for 1ms at power up. */
-		ret = spi_sync_transfer(rsb_data->device, &xfer, 1);
+		ret = spi_sync_transfer(paj9124u1_data->device, &xfer, 1);
 		if (ret != 0) {
-			dev_err(&rsb_data->device->dev,
+			dev_err(&paj9124u1_data->device->dev,
 				"SPI Protocol write message failed\n");
 		}
 	}
@@ -240,21 +244,21 @@ static int rsb_open(struct rsb_drv_data *rsb_data)
 	return ret;
 }
 
-static int rsb_create_debugfs(struct rsb_drv_data *rsb_data)
+static int paj9124u1_create_debugfs(struct paj9124u1_drv_data *paj9124u1_data)
 {
 	struct dentry *file;
 
-	rsb_data->dent = debugfs_create_dir("rsb", NULL);
-	if (IS_ERR(rsb_data->dent)) {
-		dev_err(&rsb_data->device->dev,
-			"rsb driver couldn't create debugfs dir\n");
+	paj9124u1_data->dent = debugfs_create_dir("paj9124u1", NULL);
+	if (IS_ERR(paj9124u1_data->dent)) {
+		dev_err(&paj9124u1_data->device->dev,
+			"paj9124u1 driver couldn't create debugfs dir\n");
 		return -EFAULT;
 	}
 
-	file = debugfs_create_file("test_read", 0644, rsb_data->dent,
-			(void *)rsb_data, &test_read_fops);
+	file = debugfs_create_file("test_read", 0644, paj9124u1_data->dent,
+			(void *)paj9124u1_data, &test_read_fops);
 	if (IS_ERR(file)) {
-		dev_err(&rsb_data->device->dev,
+		dev_err(&paj9124u1_data->device->dev,
 			"debugfs create file for test_read failed\n");
 		return -EFAULT;
 	}
@@ -262,123 +266,123 @@ static int rsb_create_debugfs(struct rsb_drv_data *rsb_data)
 }
 
 /*
- * Sequence of start up writes mandated by the RSB data sheet.
+ * Sequence of start up writes mandated by the paj9124u1 data sheet.
  */
-static int rsb_init_sequence(struct rsb_drv_data *rsb_data)
+static int paj9124u1_init_sequence(struct paj9124u1_drv_data *paj9124u1_data)
 {
 	uint8_t read_val;
 	int i;
 
 	/* Read the SensorPID to ensure the SPI Link is valid */
-	if (rsb_read(rsb_data, &read_val, 0x00) == 0) {
-		if (read_val != RSB_MAGIC_PID) {
-			dev_err(&rsb_data->device->dev,
+	if (paj9124u1_read(paj9124u1_data, &read_val, 0x00) == 0) {
+		if (read_val != PAJ9124U1_MAGIC_PID) {
+			dev_err(&paj9124u1_data->device->dev,
 				"Couldn't read SPI Magic PID,"
 				 "value read: %u\n", read_val);
 			return -EIO;
 		}
 	}
 
-	if (rsb_write(rsb_data, 0x00, 0x7F) != 0)
+	if (paj9124u1_write(paj9124u1_data, 0x00, 0x7F) != 0)
 		return -EIO;
 
-	if (rsb_write_read(rsb_data, 0x5A, 0x09) != 0)
+	if (paj9124u1_write_read(paj9124u1_data, 0x5A, 0x09) != 0)
 		return -EIO;
 
 	for (i = 0; i <= INIT_WRITES_FIRST_BATCH_INDEX; i++) {
-		if (rsb_write_read(rsb_data, init_writes[i][1],
+		if (paj9124u1_write_read(paj9124u1_data, init_writes[i][1],
 			init_writes[i][0]) != 0) {
 			return -EIO;
 		}
 	}
 
-	if (rsb_write(rsb_data, 0x01, 0x7F) != 0)
+	if (paj9124u1_write(paj9124u1_data, 0x01, 0x7F) != 0)
 		return -EIO;
 
 	for (; i <= INIT_WRITES_SECOND_BATCH_INDEX; i++) {
-		if (rsb_write_read(rsb_data, init_writes[i][1],
+		if (paj9124u1_write_read(paj9124u1_data, init_writes[i][1],
 			init_writes[i][0]) != 0) {
 			return -EIO;
 		}
 	}
 
-	if (rsb_write(rsb_data, 0x00, 0x7F) != 0)
+	if (paj9124u1_write(paj9124u1_data, 0x00, 0x7F) != 0)
 		return -EIO;
 
-	if (rsb_write_read(rsb_data, 0x00, 0x09) != 0)
+	if (paj9124u1_write_read(paj9124u1_data, 0x00, 0x09) != 0)
 		return -EIO;
 
-	dev_info(&rsb_data->device->dev, "Rsb init success\n");
+	dev_info(&paj9124u1_data->device->dev, "paj9124u1 init success\n");
 	return 0;
 }
 
-static irqreturn_t rsb_handler(int irq, void *dev_id)
+static irqreturn_t paj9124u1_handler(int irq, void *dev_id)
 {
 	static int8_t delta_x, delta_y, motion;
-	struct rsb_drv_data *rsb_data = dev_id;
+	struct paj9124u1_drv_data *paj9124u1_data = dev_id;
 
 	do {
-		if (rsb_read(rsb_data, &delta_x, RSB_DELTA_X) != 0)
+		if (paj9124u1_read(paj9124u1_data, &delta_x, PAJ9124U1_DELTA_X) != 0)
 			break;
-		if (rsb_read(rsb_data, &delta_y, RSB_DELTA_Y) != 0)
+		if (paj9124u1_read(paj9124u1_data, &delta_y, PAJ9124U1_DELTA_Y) != 0)
 			break;
 		if (delta_x != 0) {
-			input_report_rel(rsb_data->in_dev, REL_WHEEL,
+			input_report_rel(paj9124u1_data->in_dev, REL_WHEEL,
 				delta_x);
-			input_sync(rsb_data->in_dev);
+			input_sync(paj9124u1_data->in_dev);
 		}
 		usleep_range(SAMPLING_PERIOD_US_MIN, SAMPLING_PERIOD_US_MAX);
-		if (rsb_read(rsb_data, &motion, RSB_MOTION) != 0)
+		if (paj9124u1_read(paj9124u1_data, &motion, PAJ9124U1_MOTION) != 0)
 			break;
 	} while (motion & MOTION_BITMASK);
 
 	return IRQ_HANDLED;
 }
 
-static int rsb_setup_regulators(struct rsb_drv_data *rsb_data)
+static int paj9124u1_setup_regulators(struct paj9124u1_drv_data *paj9124u1_data)
 {
-	struct spi_device *spi = rsb_data->device;
+	struct spi_device *spi = paj9124u1_data->device;
 	int ret;
 
 	/* Initialize regulators */
-	rsb_data->vld_reg = devm_regulator_get(&spi->dev,
-		"rsb,vld");
-	if (IS_ERR(rsb_data->vld_reg)) {
+	paj9124u1_data->vld_reg = devm_regulator_get(&spi->dev,
+		"pixart,vld");
+	if (IS_ERR(paj9124u1_data->vld_reg)) {
 		dev_warn(&spi->dev,
 			"regulator: VLD request failed\n");
-		ret = (int)rsb_data->vld_reg;
-		rsb_data->vld_reg = NULL;
+		ret = (int)paj9124u1_data->vld_reg;
+		paj9124u1_data->vld_reg = NULL;
 		return ret;
 	}
 
-	rsb_data->vdd_reg = devm_regulator_get(&spi->dev,
-		"rsb,vdd");
-	if (IS_ERR(rsb_data->vdd_reg)) {
+	paj9124u1_data->vdd_reg = devm_regulator_get(&spi->dev,
+		"pixart,vdd");
+	if (IS_ERR(paj9124u1_data->vdd_reg)) {
 		dev_warn(&spi->dev,
 			"regulator: VDD request failed\n");
-		ret = (int)rsb_data->vld_reg;
-		rsb_data->vdd_reg = NULL;
+		ret = (int)paj9124u1_data->vld_reg;
+		paj9124u1_data->vdd_reg = NULL;
 		return ret;
 	}
 
 	/* Turn on VDD */
-	ret = regulator_enable(rsb_data->vdd_reg);
+	ret = regulator_enable(paj9124u1_data->vdd_reg);
 	if (ret) {
 		dev_err(&spi->dev, "couldn't enable regulator vdd\n");
 		return ret;
 	}
 
-	msleep(RSB_DELAY_MS_AFTER_VDD);
+	msleep(PAJ9124U1_DELAY_MS_AFTER_VDD);
 
 	/* Should the open of the SPI bus be done only once?? */
-	rsb_open(rsb_data);
+	paj9124u1_open(paj9124u1_data);
 
-	ret = rsb_init_sequence(rsb_data);
+	ret = paj9124u1_init_sequence(paj9124u1_data);
 	if (ret)
 		goto error;
 
 	/* Turn on VLD */
-	ret = regulator_enable(rsb_data->vld_reg);
+	ret = regulator_enable(paj9124u1_data->vld_reg);
 	if (ret) {
 		dev_err(&spi->dev, "couldn't enable regulator vld\n");
 		goto error;
@@ -387,49 +391,49 @@ static int rsb_setup_regulators(struct rsb_drv_data *rsb_data)
 	return 0;
 
 error:
-	regulator_disable(rsb_data->vdd_reg);
-	dev_err(&spi->dev, "RSB init failed\n");
+	regulator_disable(paj9124u1_data->vdd_reg);
+	dev_err(&spi->dev, "paj9124u1 init failed\n");
 	return ret;
 }
 
-static int rsb_probe(struct spi_device *spi)
+static int paj9124u1_probe(struct spi_device *spi)
 {
-	struct rsb_drv_data *rsb_data;
+	struct paj9124u1_drv_data *paj9124u1_data;
 	int err = 0;
 
-	rsb_data = devm_kzalloc(&spi->dev, sizeof(struct rsb_drv_data),
+	paj9124u1_data = devm_kzalloc(&spi->dev, sizeof(struct paj9124u1_drv_data),
 		GFP_KERNEL);
 
-	if (!rsb_data)
+	if (!paj9124u1_data)
 		return -ENOMEM;
 
-	spi_set_drvdata(spi, rsb_data);
-	rsb_data->device = spi;
+	spi_set_drvdata(spi, paj9124u1_data);
+	paj9124u1_data->device = spi;
 
-	err = rsb_setup_regulators(rsb_data);
+	err = paj9124u1_setup_regulators(paj9124u1_data);
 	if (err)
 		return err;
 
 	/* Allocate and register an input device */
-	rsb_data->in_dev = devm_input_allocate_device(&spi->dev);
-	if (!rsb_data->in_dev) {
+	paj9124u1_data->in_dev = devm_input_allocate_device(&spi->dev);
+	if (!paj9124u1_data->in_dev) {
 		dev_err(&spi->dev, "Couldn't allocate input device\n");
 		return -ENOMEM;
 	}
 
-	rsb_data->in_dev->evbit[0] = BIT_MASK(EV_REL);
-	rsb_data->in_dev->relbit[0] = BIT_MASK(REL_WHEEL);
-	rsb_data->in_dev->name = "rsb";
+	paj9124u1_data->in_dev->evbit[0] = BIT_MASK(EV_REL);
+	paj9124u1_data->in_dev->relbit[0] = BIT_MASK(REL_WHEEL);
+	paj9124u1_data->in_dev->name = "paj9124u1";
 
-	err = input_register_device(rsb_data->in_dev);
+	err = input_register_device(paj9124u1_data->in_dev);
 	if (err) {
-		dev_err(&spi->dev, "Failed to register rsb device\n");
+		dev_err(&spi->dev, "Failed to register paj9124u1 device\n");
 		return err;
 	}
 
 	err = devm_request_threaded_irq(&spi->dev, spi->irq, NULL,
-		rsb_handler, IRQF_ONESHOT | IRQF_TRIGGER_FALLING |
-		IRQF_TRIGGER_LOW, "rsb_handler", rsb_data);
+		paj9124u1_handler, IRQF_ONESHOT | IRQF_TRIGGER_FALLING |
+		IRQF_TRIGGER_LOW, "paj9124u1_handler", paj9124u1_data);
 	if (err) {
 		dev_err(&spi->dev,
 			"Failed to register irq handler IRQ:%d\n",
@@ -437,81 +441,81 @@ static int rsb_probe(struct spi_device *spi)
 		return err;
 	}
 
-	rsb_create_debugfs(rsb_data);
+	paj9124u1_create_debugfs(paj9124u1_data);
 	return 0;
 }
 
-static int rsb_remove(struct spi_device *spi)
+static int paj9124u1_remove(struct spi_device *spi)
 {
-	struct rsb_drv_data *rsb_data;
+	struct paj9124u1_drv_data *paj9124u1_data;
 
-	rsb_data = spi_get_drvdata(spi);
+	paj9124u1_data = spi_get_drvdata(spi);
 
-	debugfs_remove_recursive(rsb_data->dent);
+	debugfs_remove_recursive(paj9124u1_data->dent);
 
-	regulator_disable(rsb_data->vld_reg);
-	regulator_disable(rsb_data->vdd_reg);
+	regulator_disable(paj9124u1_data->vld_reg);
+	regulator_disable(paj9124u1_data->vdd_reg);
 
 	return 0;
 }
 
 #ifdef CONFIG_PM_SLEEP
-static int rsb_suspend(struct device *device)
+static int paj9124u1_suspend(struct device *device)
 {
 	struct spi_device *spidev = container_of(device,
 		struct spi_device, dev);
-	struct rsb_drv_data *rsb_data = spi_get_drvdata(spidev);
+	struct paj9124u1_drv_data *paj9124u1_data = spi_get_drvdata(spidev);
 	int ret;
 
-	ret = rsb_write(rsb_data, 0x8, RSB_CONFIG);
+	ret = paj9124u1_write(paj9124u1_data, 0x8, PAJ9124U1_CONFIG);
 	if (ret)
-		dev_warn(device, "Failed to put RSB into low power.\n");
+		dev_warn(device, "Failed to put paj9124u1 into low power.\n");
 	disable_irq(spidev->irq);
 	return 0;
 }
 
-static int rsb_resume(struct device *device)
+static int paj9124u1_resume(struct device *device)
 {
 	struct spi_device *spidev = container_of(device,
 		struct spi_device, dev);
-	struct rsb_drv_data *rsb_data = spi_get_drvdata(spidev);
+	struct paj9124u1_drv_data *paj9124u1_data = spi_get_drvdata(spidev);
 	int ret;
 
 	enable_irq(spidev->irq);
-	ret = rsb_write(rsb_data, 0x0, RSB_CONFIG);
+	ret = paj9124u1_write(paj9124u1_data, 0x0, PAJ9124U1_CONFIG);
 	if (ret)
 		dev_warn(device,
-			"Failed to take RSB out of low power.\n");
+			"Failed to take paj9124u1 out of low power.\n");
 	return 0;
 }
 #endif
 
-SIMPLE_DEV_PM_OPS(rsb_pm_ops, rsb_suspend, rsb_resume);
+SIMPLE_DEV_PM_OPS(paj9124u1_pm_ops, paj9124u1_suspend, paj9124u1_resume);
 
-static struct spi_driver rsb_driver = {
+static struct spi_driver paj9124u1_driver = {
 	.driver = {
-		.name = "rsb",
+		.name = "paj9124u1",
 		.owner = THIS_MODULE,
-		.pm  = &rsb_pm_ops,
+		.pm  = &paj9124u1_pm_ops,
 	},
-	.probe = rsb_probe,
-	.remove = rsb_remove,
-	.id_table = rsb_spi_id,
+	.probe = paj9124u1_probe,
+	.remove = paj9124u1_remove,
+	.id_table = paj9124u1_spi_id,
 };
 
-int __init rsb_init(void)
+int __init paj9124u1_init(void)
 {
-	return spi_register_driver(&rsb_driver);
+	return spi_register_driver(&paj9124u1_driver);
 }
 
-static void __exit rsb_exit(void)
+static void __exit paj9124u1_exit(void)
 {
-	spi_unregister_driver(&rsb_driver);
+	spi_unregister_driver(&paj9124u1_driver);
 }
 
 
-module_init(rsb_init);
-module_exit(rsb_exit);
+module_init(paj9124u1_init);
+module_exit(paj9124u1_exit);
 
 MODULE_AUTHOR("Prashant Malani");
 MODULE_LICENSE("GPL");

@@ -746,10 +746,10 @@ config INPUT_DRV2667_HAPTICS
 	  To compile this driver as a module, choose M here: the
 	  module will be called drv260x-haptics.
 
-config RSB
-	bool "Rotating Side Button"
+config PAJ9124U1
+	bool "Pixart PAJ9124U1 Optical Track Sensor"
 	default N
 	help
-	  Enable support for Rotating Side Button
+	  Enable support for Pixart PAJ9124U1 Optical Track Sensor
 
 endif
