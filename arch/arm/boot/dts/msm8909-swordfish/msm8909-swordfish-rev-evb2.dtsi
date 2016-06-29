@@ -18,11 +18,11 @@
 #include "msm8909-pm8916-swordfish.dtsi"
 #include "msm8909-swordfish-sound.dtsi"
 #include "msm8909-swordfish-nanohub.dtsi"
-#include "msm8909-swordfish-rsb.dtsi"
+#include "msm8909-swordfish-paj9124u1.dtsi"
 
-&rsb {
-	rsb,vld-supply = <&pm8916_l17>;
-	/delete-property/rsb,vdd-supply;
+&paj9124u1 {
+	pixart,vld-supply = <&pm8916_l17>;
+	/delete-property/pixart,vdd-supply;
 };
 
 &rpm_bus {

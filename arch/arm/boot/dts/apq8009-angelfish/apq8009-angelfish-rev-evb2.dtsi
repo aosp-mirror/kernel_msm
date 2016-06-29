@@ -14,7 +14,7 @@
 #include "apq8009-angelfish-panel.dtsi"
 #include "apq8009-pm8916-angelfish.dtsi"
 #include "apq8009-angelfish-sound.dtsi"
-#include "apq8009-angelfish-rsb.dtsi"
+#include "apq8009-angelfish-paj9124u1.dtsi"
 
 &atmel_u114 {
 	/delete-property/atmel,palm-enabled;

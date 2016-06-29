@@ -10,22 +10,21 @@
  */
 
 /*
- * msm8909-swordfish-rsb: rotating side button config
+ * apq8009-angelfish-paj9124u1: rotating side button config
  */
 
 &spi_0  {
 	pinctrl-names = "spi_default", "spi_sleep";
 	pinctrl-0 = <&spi0_default>;
 	pinctrl-1 = <&spi0_sleep>;
-	rsb: rsb@0 {
-		compatible = "rsb";
+	paj9124u1: paj9124u1@0 {
+		compatible = "paj9124u1";
 		reg = <0>;
 		interrupt-parent = <&msm_gpio>;
 		interrupts = <95 0x00>;
 		spi-max-frequency = <2000000>;
-		rsb,vld-supply = <&haptic_ext_vreg>;
-		rsb,vdd-supply = <&pm8916_l16>;
+
 		pinctrl-names = "default";
-		pinctrl-0 = <&rsb_motion_gpio>;
+		pinctrl-0 = <&paj9124u1_motion_gpio>;
 	};
 };

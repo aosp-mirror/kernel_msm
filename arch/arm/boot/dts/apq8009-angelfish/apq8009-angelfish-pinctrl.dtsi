@@ -543,7 +543,7 @@
 			};
 		};
 
-		rsb_motion_gpio: rsb_motion_gpio {
+		paj9124u1_motion_gpio: paj9124u1_motion_gpio {
 			mux {
 				pins = "gpio95";
 				function = "gpio";

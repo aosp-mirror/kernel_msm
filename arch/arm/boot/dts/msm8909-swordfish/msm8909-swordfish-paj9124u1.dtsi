@@ -10,23 +10,22 @@
  */
 
 /*
- * apq8009-angelfish-rsb: rotating side button config
+ * msm8909-swordfish-paj9124u1: Pixart rotating side button config
  */
 
 &spi_0  {
 	pinctrl-names = "spi_default", "spi_sleep";
 	pinctrl-0 = <&spi0_default>;
 	pinctrl-1 = <&spi0_sleep>;
-	rsb: rsb@0 {
-		compatible = "rsb";
+	paj9124u1: paj9124u1@0 {
+		compatible = "paj9124u1";
 		reg = <0>;
 		interrupt-parent = <&msm_gpio>;
 		interrupts = <95 0x00>;
 		spi-max-frequency = <2000000>;
-
-		rsb,spi-cs-gpio = <&msm_gpio 10 0x00>;
-
+		pixart,vld-supply = <&haptic_ext_vreg>;
+		pixart,vdd-supply = <&pm8916_l16>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&spi0_cs0_active &rsb_motion_gpio>;
+		pinctrl-0 = <&paj9124u1_motion_gpio>;
 	};
 };
