@@ -38,6 +38,8 @@
 #define PANEL_TX_MAX_BUF 256
 #define PANEL_CMD_MIN_TX_COUNT 2
 #define PANEL_DATA_NODE_LEN 80
+/* MDP3 HW Version */
+#define MDP_CORE_HW_VERSION 0x03050306
 
 static char panel_reg[2] = {DEFAULT_READ_PANEL_POWER_MODE_REG, 0x00};
 
@@ -131,8 +133,9 @@ static ssize_t panel_debug_base_reg_write(struct file *file,
 	char *bufp;
 
 	struct mdss_data_type *mdata = mdss_res;
-	struct mdss_mdp_ctl *ctl;
-	struct mdss_dsi_ctrl_pdata *ctrl_pdata;
+	struct mdss_mdp_ctl *ctl = mdata->ctl_off + 0;
+	struct mdss_panel_data *panel_data = NULL;
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	struct dsi_cmd_desc dsi_write_cmd = {
 		{0/*data type*/, 1, 0, 0, 0, 0/* len */}, reg};
 	struct dcs_cmd_req cmdreq;
@@ -146,6 +149,15 @@ static ssize_t panel_debug_base_reg_write(struct file *file,
 
 	if (copy_from_user(buf, user_buf, count))
 		return -EFAULT;
+
+	if ((mdata->mdp_rev <= MDSS_MDP_HW_REV_105) ||
+			(mdata->mdp_rev == MDP_CORE_HW_VERSION))
+		panel_data = mdss_res->pdata;
+	else
+		panel_data = ctl->panel_data;
+
+	ctrl_pdata = container_of(panel_data,
+			struct mdss_dsi_ctrl_pdata, panel_data);
 
 	buf[count] = 0;	/* end of string */
 
@@ -197,9 +209,8 @@ static ssize_t panel_debug_base_reg_read(struct file *file,
 	char *panel_reg_buf, *rx_buf;
 	struct mdss_data_type *mdata = mdss_res;
 	struct mdss_mdp_ctl *ctl = mdata->ctl_off + 0;
-	struct mdss_panel_data *panel_data = ctl->panel_data;
-	struct mdss_dsi_ctrl_pdata *ctrl_pdata = container_of(panel_data,
-					struct mdss_dsi_ctrl_pdata, panel_data);
+	struct mdss_panel_data *panel_data = NULL;
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 
 	if (!dbg)
 		return -ENODEV;
@@ -225,12 +236,24 @@ static ssize_t panel_debug_base_reg_read(struct file *file,
 		mdata->debug_inf.debug_enable_clock(1);
 
 	panel_reg[0] = dbg->off;
+
+	if ((mdata->mdp_rev <= MDSS_MDP_HW_REV_105) ||
+			(mdata->mdp_rev == MDP_CORE_HW_VERSION))
+		panel_data = mdss_res->pdata;
+	else
+		panel_data = ctl->panel_data;
+
+	ctrl_pdata = container_of(panel_data,
+			struct mdss_dsi_ctrl_pdata, panel_data);
+
 	mdss_dsi_panel_cmd_read(ctrl_pdata, panel_reg[0], panel_reg[1],
 				NULL, rx_buf, dbg->cnt);
 
 	len = snprintf(panel_reg_buf, reg_buf_len, "0x%02zx: ", dbg->off);
 	if (len < 0)
 		goto read_reg_fail;
+
+	pr_emerg("%s len=%d reg_buf_len=%d rx_len=%d\n",__func__,len,reg_buf_len,ctrl_pdata->rx_len);
 
 	for (i = 0; (len < reg_buf_len) && (i < ctrl_pdata->rx_len); i++)
 		len += scnprintf(panel_reg_buf + len, reg_buf_len - len,
