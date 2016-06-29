@@ -920,7 +920,7 @@ static struct android_usb_function acm_function = {
 
 /*rmnet transport string format(per port):"ctrl0,data0,ctrl1,data1..." */
 #define MAX_XPORT_STR_LEN 50
-static char rmnet_transports[MAX_XPORT_STR_LEN];
+static char rmnet_transports[MAX_XPORT_STR_LEN] = "qti,bam2bam_ipa";
 
 /*rmnet transport name string - "rmnet_hsic[,rmnet_hsusb]" */
 static char rmnet_xport_names[MAX_XPORT_STR_LEN];
@@ -1516,7 +1516,7 @@ static struct android_usb_function audio_function = {
 
 
 /* DIAG */
-static char diag_clients[32];	    /*enabled DIAG clients- "diag[,diag_mdm]" */
+static char diag_clients[32] = "diag";	    /*enabled DIAG clients- "diag[,diag_mdm]" */
 static ssize_t clients_store(
 		struct device *device, struct device_attribute *attr,
 		const char *buff, size_t size)
@@ -1766,7 +1766,7 @@ struct serial_function_config {
 	struct usb_function_instance *f_serial_inst[MAX_SERIAL_INSTANCES];
 };
 
-static char serial_transports[32];	/*enabled FSERIAL ports - "tty[,sdio]"*/
+static char serial_transports[32] = "char_bridge,tty";	/*enabled FSERIAL ports - "tty[,sdio]"*/
 static ssize_t serial_transports_store(
 		struct device *device, struct device_attribute *attr,
 		const char *buff, size_t size)
@@ -3324,6 +3324,7 @@ static int android_enable_function(struct android_dev *dev,
 	return -EINVAL;
 }
 
+#include "htc_attr.c"
 /*-------------------------------------------------------------------------*/
 /* /sys/class/android_usb/android%d/ interface */
 
@@ -3408,6 +3409,7 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	struct android_usb_function_holder *f_holder;
 	char *name;
 	char buf[256], *b;
+	const char *buffer;
 	char aliases[256], *a;
 	int err;
 	int is_ffs;
@@ -3434,7 +3436,11 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 		INIT_LIST_HEAD(&conf->enabled_functions);
 	}
 
-	strlcpy(buf, buff, sizeof(buf));
+	buffer = buff;
+	if (enable_htc_radio_debug_func)
+		buffer = add_usb_radio_debug_function(buff);
+
+	strlcpy(buf, buffer, sizeof(buf));
 	b = strim(buf);
 
 	while (b) {
@@ -3538,6 +3544,9 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 		cdev->desc.bDeviceClass = device_desc.bDeviceClass;
 		cdev->desc.bDeviceSubClass = device_desc.bDeviceSubClass;
 		cdev->desc.bDeviceProtocol = device_desc.bDeviceProtocol;
+
+		if (enable_htc_radio_debug_func)
+			check_usb_vid_pid(cdev);
 
 		/* Audio dock accessory is unable to enumerate device if
 		 * pull-up is enabled immediately. The enumeration is
