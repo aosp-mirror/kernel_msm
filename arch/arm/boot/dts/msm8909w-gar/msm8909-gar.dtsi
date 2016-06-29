@@ -127,7 +127,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x9ff00000 0x0 0x00100000>;
+			reg = <0x0 0x9ff00000 0x0 0x00040000>;
 			label = "pstore_reserve_mem";
 		};
 
