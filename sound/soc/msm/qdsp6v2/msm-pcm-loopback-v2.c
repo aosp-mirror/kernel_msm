@@ -50,7 +50,7 @@ struct msm_pcm_loopback {
 	int capture_start;
 	int session_id;
 	struct audio_client *audio_client;
-	uint32_t volume;
+	int volume;
 };
 
 struct fe_dai_session_map {
@@ -150,8 +150,7 @@ static int msm_pcm_loopback_probe(struct snd_soc_platform *platform)
 
 	return 0;
 }
-static int pcm_loopback_set_volume(struct msm_pcm_loopback *prtd,
-				   uint32_t volume)
+static int pcm_loopback_set_volume(struct msm_pcm_loopback *prtd, int volume)
 {
 	int rc = -EINVAL;
 
@@ -458,52 +457,52 @@ static int msm_pcm_volume_ctl_put(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
 {
 	int rc = 0;
-	struct snd_pcm_volume *vol = kcontrol->private_data;
-	struct snd_pcm_substream *substream = vol->pcm->streams[0].substream;
+	struct snd_pcm_volume *vol = snd_kcontrol_chip(kcontrol);
+	struct snd_pcm_substream *substream = vol->pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream;
 	struct msm_pcm_loopback *prtd;
 	int volume = ucontrol->value.integer.value[0];
 
-	pr_debug("%s: volume : 0x%x\n", __func__, volume);
-	if ((!substream) || (!substream->runtime)) {
-		pr_err("%s substream or runtime not found\n", __func__);
-		rc = -ENODEV;
-		goto exit;
+	if (!substream) {
+		pr_err("%s substream not found\n", __func__);
+		return -ENODEV;
 	}
+	if (!substream->runtime) {
+		pr_err("%s substream runtime not found\n", __func__);
+		return 0;
+	}
+	if (volume < 0){
+		volume = 0;
+	}
+
 	prtd = substream->runtime->private_data;
-	if (!prtd) {
-		rc = -ENODEV;
-		goto exit;
-	}
 	rc = pcm_loopback_set_volume(prtd, volume);
 
-exit:
 	return rc;
 }
 
 static int msm_pcm_volume_ctl_get(struct snd_kcontrol *kcontrol,
-				  struct snd_ctl_elem_value *ucontrol)
+		      struct snd_ctl_elem_value *ucontrol)
 {
-	int rc = 0;
 	struct snd_pcm_volume *vol = snd_kcontrol_chip(kcontrol);
 	struct snd_pcm_substream *substream =
 		vol->pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream;
 	struct msm_pcm_loopback *prtd;
 
-	pr_debug("%s\n", __func__);
-	if ((!substream) || (!substream->runtime)) {
-		pr_err("%s substream or runtime not found\n", __func__);
-		rc = -ENODEV;
-		goto exit;
+	if (!substream) {
+		pr_err("%s substream not found\n", __func__);
+		return -ENODEV;
+	}
+	if (!substream->runtime) {
+		pr_err("%s substream runtime not found\n", __func__);
+		return -ENODEV;
 	}
 	prtd = substream->runtime->private_data;
-	if (!prtd) {
-		rc = -ENODEV;
-		goto exit;
+	if (prtd){
+		ucontrol->value.integer.value[0] = prtd->volume;
+		return 0;
+	}else	{
+		return -EINVAL;
 	}
-	ucontrol->value.integer.value[0] = prtd->volume;
-
-exit:
-	return rc;
 }
 
 static int msm_pcm_add_volume_controls(struct snd_soc_pcm_runtime *rtd)
