@@ -76,7 +76,7 @@ int STC31xx_RelaxTmrSet(int CurrentThreshold);
 #define CHG_MIN_CURRENT		200	 /* min charge current in mA											 */
 #define CHG_END_CURRENT		20	 /* end charge current in mA											 */
 #define APP_MIN_CURRENT		(-5)	/* minimum application current consumption in mA ( <0 !) */
-#define APP_MIN_VOLTAGE		3000	/* application cut-off voltage										*/
+#define APP_MIN_VOLTAGE		3400	/* application cut-off voltage										*/
 #define TEMP_MIN_ADJ		(-5) /* minimum temperature for gain adjustment */
 
 #define VMTEMPTABLE			{ 85, 90, 100, 160, 320, 440, 840 }	/* normalized VM_CNF at 60, 40, 25, 10, 0, -10, -20 degrees C */
@@ -299,6 +299,7 @@ struct stc311x_chip {
 	struct delayed_work		work;
 	struct power_supply		battery;
 	struct stc311x_platform_data	*pdata;
+	struct power_supply		*batt_psy;
 
 	/* State Of Connect */
 	int online;
@@ -1881,6 +1882,24 @@ static void STC311x_ForceCD_low(void)
 }
 #endif
 
+static int get_battery_status(struct stc311x_chip *chip)
+{
+	union power_supply_propval ret = {0,};
+
+	if (chip->batt_psy == NULL)
+		chip->batt_psy = power_supply_get_by_name("battery");
+	if (chip->batt_psy) {
+		/* if battery has been registered, use the status property */
+		chip->batt_psy->get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_STATUS, &ret);
+		return ret.intval;
+	}
+
+	/* Default to false if the battery power supply is not registered. */
+	pr_err("battery power supply is not registered\n");
+	return POWER_SUPPLY_STATUS_UNKNOWN;
+}
+
 static void stc311x_work(struct work_struct *work)
 {
 	struct stc311x_chip *chip;
@@ -1961,6 +1980,10 @@ static void stc311x_work(struct work_struct *work)
 
 	stc311x_get_status(sav_client);
 	stc311x_get_online(sav_client);
+
+	if (get_battery_status(chip) == POWER_SUPPLY_STATUS_FULL) {
+		chip->batt_soc = 100;
+	}
 
 	schedule_delayed_work(&chip->work, STC311x_DELAY);
 }

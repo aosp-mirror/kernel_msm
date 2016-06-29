@@ -170,12 +170,12 @@
 		qcom,charging-timeout = <360>;
 		qcom,recharge-thresh-mv = <150>;
 		qcom,iterm-ma = <20>;
-		qcom,fastchg-ma = <1000>;
-		qcom,hot-bat-decidegc = <550>;
-		qcom,warm-bat-decidegc = <400>;
+		qcom,fastchg-ma = <1100>;
+		qcom,hot-bat-decidegc = <600>;
+		qcom,warm-bat-decidegc = <550>;
 		qcom,cool-bat-decidegc = <150>;
 		qcom,cold-bat-decidegc = <50>;
-		qcom,soft-temp-vfloat-comp-mv = <200>;
+		qcom,soft-temp-vfloat-comp-mv = <300>;
 		qcom,soft-temp-current-comp-ma = <400>;
 		qcom,thermal-mitigation = <1500 900 500 100>;
 		qcom,apsd-disabled;

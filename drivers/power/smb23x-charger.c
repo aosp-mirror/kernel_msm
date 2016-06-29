@@ -955,8 +955,8 @@ static void smb23x_parallel_work(struct work_struct *work)
 		smb23x_masked_write(chip, CFG_REG_6, CHG_CHARGE_SYS_VOLT_MASK, 0x20);
 
 		if (type == POWER_SUPPLY_TYPE_USB_DCP) {
-			// Set SMB231 input current limit to 500mA
-			smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x08);
+			// Set SMB231 input current limit to 300mA
+			smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
 			lbc_set_suspend(0x00);
 
 			if (MPP4_read > 500000 && MPP4_read < 900000) {
@@ -976,8 +976,8 @@ static void smb23x_parallel_work(struct work_struct *work)
                         } else
 				ASUSEvtlog("[BAT][CHG] MPP4_read:%d, USB_TYPE:%s\n", MPP4_read, usb_type_dcp_str[usb_type_dcp_num]);
 		} else if (type == POWER_SUPPLY_TYPE_USB_CDP) {
-			// Set SMB231 input current limit to 500mA
-			smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x08);
+			// Set SMB231 input current limit to 300mA
+			smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
 			lbc_set_suspend(0x00);
 
 			gpio_set_value(GPIO_num17,0);
@@ -1382,6 +1382,10 @@ static int recharge_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_full = !rt_sts;
+
+	smb23x_enable_volatile_writes(chip);
+	smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
+	smb23x_charging_disable(chip, USER, false);
 	return 0;
 }
 
