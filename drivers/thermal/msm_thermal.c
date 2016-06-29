@@ -6397,11 +6397,9 @@ static int probe_cc(struct device_node *node, struct msm_thermal_data *data,
 
 	if (num_possible_cpus() > 1) {
 		key = "qcom,disable-core-control";
-		if (!of_property_read_bool(node, key)) {
+		if (!of_property_read_bool(node, key))
 			core_control_enabled = 1;
-			hotplug_enabled = 1;
-			msm_thermal_add_cc_nodes();
-		}
+		hotplug_enabled = 1;
 	}
 
 	key = "qcom,core-limit-temp";
@@ -7244,6 +7242,8 @@ int __init msm_thermal_late_init(void)
 	if (!msm_thermal_probed)
 		return 0;
 
+	if (num_possible_cpus() > 1)
+		msm_thermal_add_cc_nodes();
 	msm_thermal_add_psm_nodes();
 	msm_thermal_add_vdd_rstr_nodes();
 	msm_thermal_add_sensor_info_nodes();
