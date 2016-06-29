@@ -56,6 +56,7 @@
 
 #define DWC3_IDEV_CHG_MAX 1500
 #define DWC3_HVDCP_CHG_MAX 1800
+#define DWC3_IDEV_CHG_MIN 500
 
 /* AHB2PHY register offsets */
 #define PERIPH_SS_AHB2PHY_TOP_CFG 0x10
@@ -3542,6 +3543,21 @@ skip_psy_type:
 		return 0;
 
 	dev_info(mdwc->dev, "Avail curr from USB = %u\n", mA);
+
+	/* When usb suspend, current_ma will be set to 2mA and stop charging.
+	   If Vbus is present, we would like to keep charging.*/
+	if (mdwc->vbus_active && (mA == 2)) {
+		switch (mdwc->chg_type) {
+			case DWC3_CDP_CHARGER:
+				mA = DWC3_IDEV_CHG_MAX;
+				break;
+			default:
+				mA = DWC3_IDEV_CHG_MIN;
+				break;
+		}
+		pr_info("%s: USB suspends while charger exists, reset to %d mA\n",
+			__func__, mA);
+	}
 
 	if (mdwc->max_power <= 2 && mA > 2) {
 		/* Enable Charging */
