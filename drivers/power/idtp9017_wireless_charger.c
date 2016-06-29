@@ -201,6 +201,9 @@ static int pm_power_property_is_writeable(struct power_supply *psy,
 
 static char *pm_power_supplied_to[] = {
 	"battery",
+#ifdef CONFIG_CHARGER_DOCK
+	"dock",
+#endif
 };
 
 static int pm_power_get_property_wireless(struct power_supply *psy,

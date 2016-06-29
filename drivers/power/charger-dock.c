@@ -28,6 +28,7 @@
 struct dock_device {
 	struct power_supply psy;
 	struct power_supply *usb_psy;
+	struct power_supply *wlc_psy;
 	struct switch_dev *sdev;
 	struct wake_lock wakelock;
 	int docked;
@@ -38,26 +39,39 @@ static void dock_external_power_changed(struct power_supply *psy)
 	struct dock_device *dock_dev = container_of(psy, struct dock_device,
 			psy);
 	union power_supply_propval res = {0, };
-	struct power_supply *usb_psy = NULL;
+	int online = 0;
 
 	if (!dock_dev->usb_psy)
 		dock_dev->usb_psy = power_supply_get_by_name("usb");
 
-	usb_psy = dock_dev->usb_psy;
-	if (!usb_psy) {
-		pr_debug("%s: no usb power supply\n", __func__);
+	if (!dock_dev->wlc_psy)
+		dock_dev->wlc_psy = power_supply_get_by_name("wireless");
+
+	if (!dock_dev->usb_psy && !dock_dev->wlc_psy) {
+		pr_debug("%s: no any power supply\n", __func__);
 		return;
 	}
-	usb_psy->get_property(usb_psy, POWER_SUPPLY_PROP_ONLINE, &res);
 
-	if (!(res.intval^dock_dev->docked))
+	if (dock_dev->usb_psy) {
+		dock_dev->usb_psy->get_property(
+			dock_dev->usb_psy, POWER_SUPPLY_PROP_ONLINE, &res);
+		online |= res.intval;
+	}
+
+	if (dock_dev->wlc_psy) {
+		dock_dev->wlc_psy->get_property(
+			dock_dev->wlc_psy, POWER_SUPPLY_PROP_ONLINE, &res);
+		online |= res.intval;
+	}
+
+	if (!(online^dock_dev->docked))
 		return;
 
-	dock_dev->docked = res.intval;
+	dock_dev->docked = online;
 	switch_set_state(dock_dev->sdev, !!dock_dev->docked);
 	wake_lock_timeout(&dock_dev->wakelock, msecs_to_jiffies(DOCK_TIMEOUT));
 
-	pr_info("%s: docked = %d\n", __func__, res.intval);
+	pr_info("%s: docked = %d\n", __func__, dock_dev->docked);
 }
 
 static int dock_get_property(struct power_supply *psy,
