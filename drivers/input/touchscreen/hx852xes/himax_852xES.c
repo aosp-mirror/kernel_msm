@@ -670,7 +670,8 @@ void himax_touch_information(void)
         i2c_himax_read(private_ts->client, 0x5A, data, 12, DEFAULT_RETRY_CNT);
         HX_RX_NUM = data[0];                    // FE(70)
         HX_TX_NUM = data[1];                    // FE(71)
-        HX_MAX_PT = (data[2] & 0xF0) >> 4;      // FE(72)
+        //HX_MAX_PT = (data[2] & 0xF0) >> 4;      // FE(72)
+        HX_MAX_PT = 2;
         if ((data[4] & 0x04) == 0x04) {         //FE(74)
             HX_XY_REVERSE = true;
             HX_Y_RES = data[6] * 256 + data[7]; //FE(76),FE(77)
