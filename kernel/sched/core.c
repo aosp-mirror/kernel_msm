@@ -1325,6 +1325,7 @@ static struct sched_cluster init_cluster = {
 	.max_mitigated_freq	=	UINT_MAX,
 	.min_freq		=	1,
 	.max_possible_freq	=	1,
+	.cpu_cycle_max_scale_factor	= 1,
 	.dstate			=	0,
 	.dstate_wakeup_energy	=	0,
 	.dstate_wakeup_latency	=	0,
@@ -1474,6 +1475,7 @@ static struct sched_cluster *alloc_new_cluster(const struct cpumask *cpus)
 	cluster->max_mitigated_freq	=	UINT_MAX;
 	cluster->min_freq		=	1;
 	cluster->max_possible_freq	=	1;
+	cluster->cpu_cycle_max_scale_factor =	1;
 	cluster->dstate			=	0;
 	cluster->dstate_wakeup_energy	=	0;
 	cluster->dstate_wakeup_latency	=	0;
@@ -1538,15 +1540,38 @@ static void init_clusters(void)
 	INIT_LIST_HEAD(&cluster_head);
 }
 
+static inline void
+__update_cpu_cycle_max_possible_freq(struct sched_cluster *cluster)
+{
+	int cpu = cluster_first_cpu(cluster);
+
+	cluster->cpu_cycle_max_scale_factor =
+	    div64_u64(cluster->max_possible_freq * NSEC_PER_USEC,
+		      cpu_cycle_counter_cb.get_cpu_cycles_max_per_us(cpu));
+}
+
+static inline void
+update_cpu_cycle_max_possible_freq(struct sched_cluster *cluster)
+{
+	if (!use_cycle_counter)
+		return;
+
+	__update_cpu_cycle_max_possible_freq(cluster);
+}
+
 int register_cpu_cycle_counter_cb(struct cpu_cycle_counter_cb *cb)
 {
+	struct sched_cluster *cluster = NULL;
+
 	mutex_lock(&cluster_lock);
-	if (!cb->get_cpu_cycle_counter) {
+	if (!cb->get_cpu_cycle_counter || !cb->get_cpu_cycles_max_per_us) {
 		mutex_unlock(&cluster_lock);
 		return -EINVAL;
 	}
 
 	cpu_cycle_counter_cb = *cb;
+	for_each_sched_cluster(cluster)
+		__update_cpu_cycle_max_possible_freq(cluster);
 	use_cycle_counter = true;
 	mutex_unlock(&cluster_lock);
 
@@ -1884,7 +1909,8 @@ static inline u64 scale_exec_time(u64 delta, struct rq *rq,
 	int cpu = cpu_of(rq);
 	int sf;
 
-	delta = DIV64_U64_ROUNDUP(delta * cc->cycles,
+	delta = DIV64_U64_ROUNDUP(delta * cc->cycles *
+				  cpu_cycle_max_scale_factor(cpu),
 				  max_possible_freq * cc->time);
 	sf = DIV_ROUND_UP(cpu_efficiency(cpu) * 1024, max_possible_efficiency);
 
@@ -2782,7 +2808,6 @@ get_task_cpu_cycles(struct task_struct *p, struct rq *rq, int event,
 		cc.cycles = cur_cycles + (U64_MAX - p->cpu_cycles);
 	else
 		cc.cycles = cur_cycles - p->cpu_cycles;
-	cc.cycles = cc.cycles * NSEC_PER_MSEC;
 	cc.time = wallclock - p->ravg.mark_start;
 	BUG_ON((s64)cc.time < 0);
 
@@ -4210,6 +4235,7 @@ static int cpufreq_notifier_policy(struct notifier_block *nb,
 
 			sort_clusters();
 			update_all_clusters_stats();
+			update_cpu_cycle_max_possible_freq(cluster);
 			mutex_unlock(&cluster_lock);
 			continue;
 		}
