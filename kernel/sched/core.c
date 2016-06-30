@@ -1680,10 +1680,10 @@ struct cpu_cycle {
 
 /*
  * Tasks that are runnable continuously for a period greather than
- * EARLY_DETECTION_DURATION can be flagged early as potential
+ * sysctl_early_detection_duration can be flagged early as potential
  * high load tasks.
  */
-#define EARLY_DETECTION_DURATION 9500000
+__read_mostly unsigned int sysctl_early_detection_duration = 9500000;
 
 static __read_mostly unsigned int sched_ravg_hist_size = 5;
 __read_mostly unsigned int sysctl_sched_ravg_hist_size = 5;
@@ -5918,7 +5918,8 @@ static bool early_detection_notify(struct rq *rq, u64 wallclock)
 		if (!loop_max)
 			break;
 
-		if (wallclock - p->last_wake_ts >= EARLY_DETECTION_DURATION) {
+		if (wallclock - p->last_wake_ts >=
+				sysctl_early_detection_duration) {
 			rq->ed_task = p;
 			return 1;
 		}
