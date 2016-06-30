@@ -4577,6 +4577,7 @@ static int himax852xes_suspend(struct device *dev)
         return 0;
     }
     if (fw_update_processing) {
+        I("fw updating, skip suspend\n");
         return 0;
     } else {
         I("%s: Enter suspended. \n", __func__);
@@ -4686,53 +4687,62 @@ static int himax852xes_resume(struct device *dev)
         I("%s: Driver probe fail. \n", __func__);
         return 0;
     }
-    I("%s: enter \n", __func__);
-    ts = dev_get_drvdata(dev);
-    if (ts->pdata->powerOff3V3 && ts->pdata->power)
-        ts->pdata->power(1);
+    if (fw_update_processing) {
+        I("fw updating, skip resume\n");
+        return 0;
+    } else {
+        I("%s: enter \n", __func__);
+        ts = dev_get_drvdata(dev);
+        if (ts->pdata->powerOff3V3 && ts->pdata->power)
+            ts->pdata->power(1);
 #ifdef HX_CHIP_STATUS_MONITOR
-    if (HX_ON_HAND_SHAKING) { //chip on hand shaking,wait hand shaking
-        for (t = 0; t < 100; t++) {
-            if (HX_ON_HAND_SHAKING == 0) { //chip on hand shaking end
-                I("%s:HX_ON_HAND_SHAKING OK check %d times\n", __func__, t);
-                break;
-            } else
-                msleep(1);
+        if (HX_ON_HAND_SHAKING) { //chip on hand shaking,wait hand shaking
+            for (t = 0; t < 100; t++) {
+                if (HX_ON_HAND_SHAKING == 0) { //chip on hand shaking end
+                    I("%s:HX_ON_HAND_SHAKING OK check %d times\n", __func__, t);
+                    break;
+                } else
+                    msleep(1);
+            }
+            if (t == 100) {
+                E("%s:HX_ON_HAND_SHAKING timeout reject resume\n", __func__);
+                return 0;
+            }
         }
-        if (t == 100) {
-            E("%s:HX_ON_HAND_SHAKING timeout reject resume\n", __func__);
-            return 0;
-        }
-    }
 #endif
 #ifdef HX_SMART_WAKEUP
-    if (ts->SMWP_enable) {
-        //Sense Off
-        i2c_himax_write_command(ts->client, HX_CMD_TSSOFF, DEFAULT_RETRY_CNT);
-        msleep(40);
-        //Sleep in
-        i2c_himax_write_command(ts->client, HX_CMD_TSSLPIN, DEFAULT_RETRY_CNT);
-        buf[0] = 0x8F;
-        buf[1] = 0x00;
-        ret = i2c_himax_master_write(ts->client, buf, 2, DEFAULT_RETRY_CNT);
-        if (ret < 0) {
-            E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
+        if (ts->SMWP_enable) {
+            //Sense Off
+            i2c_himax_write_command(ts->client, HX_CMD_TSSOFF, DEFAULT_RETRY_CNT);
+            msleep(40);
+            //Sleep in
+            i2c_himax_write_command(ts->client, HX_CMD_TSSLPIN, DEFAULT_RETRY_CNT);
+            buf[0] = 0x8F;
+            buf[1] = 0x00;
+            ret = i2c_himax_master_write(ts->client, buf, 2, DEFAULT_RETRY_CNT);
+            if (ret < 0) {
+                E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
+            }
+            msleep(50);
         }
-        msleep(50);
-    }
 #endif
-    //Sense On
-    i2c_himax_write_command(ts->client, HX_CMD_TSSON, DEFAULT_RETRY_CNT);
-    msleep(30);
-    i2c_himax_write_command(ts->client, HX_CMD_TSSLPOUT, DEFAULT_RETRY_CNT);
-    atomic_set(&ts->suspend_mode, 0);
-    himax_int_enable(ts->client->irq, 1, true);
+        //Sense On
+        i2c_himax_write_command(ts->client, HX_CMD_TSSON, DEFAULT_RETRY_CNT);
+        msleep(30);
+        i2c_himax_write_command(ts->client, HX_CMD_TSSLPOUT, DEFAULT_RETRY_CNT);
+        atomic_set(&ts->suspend_mode, 0);
+#ifdef HX_SMART_WAKEUP
+        if (!ts->SMWP_enable) {
+            himax_int_enable(ts->client->irq, 1, true);
+        }
+#endif
 #ifdef HX_CHIP_STATUS_MONITOR
-    HX_CHIP_POLLING_COUNT = 0;
-    queue_delayed_work(ts->himax_chip_monitor_wq, &ts->himax_chip_monitor, HX_POLLING_TIMER * HZ); //for ESD solution
+        HX_CHIP_POLLING_COUNT = 0;
+        queue_delayed_work(ts->himax_chip_monitor_wq, &ts->himax_chip_monitor, HX_POLLING_TIMER * HZ); //for ESD solution
 #endif
-    ts->suspended = false;
-    return 0;
+        ts->suspended = false;
+        return 0;
+    }
 }
 
 #ifdef CONFIG_FB
