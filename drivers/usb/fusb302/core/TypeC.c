@@ -178,7 +178,7 @@ void InitializeTypeCVariables(void)
     Registers.Switches.SPECREV = 0b10;
     DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]);
     
-    SourceCurrent = utcc1p5A;                                                   // Set 1.5A host current
+    SourceCurrent = utccDefault;                                                   // Set default USB current
     updateSourceCurrent();
     
     blnSMEnabled = FALSE;                // Enable the TypeC state machine by default
@@ -193,7 +193,7 @@ void InitializeTypeCVariables(void)
 
 #ifdef FSC_HAVE_DRP
     blnSrcPreferred = FALSE;            // Clear the source preferred flag by default
-    blnSnkPreferred = FALSE;            // Clear the sink preferred flag by default
+    blnSnkPreferred = TRUE;            // Set the sink preferred flag by default
 #endif // FSC_HAVE_DRP
 
     g_Idle = FALSE;
