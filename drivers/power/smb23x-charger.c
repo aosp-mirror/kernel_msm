@@ -915,14 +915,20 @@ static void smb23x_parallel_work(struct work_struct *work)
 	int rc, i, tmp, usb_type_dcp_num;
 	struct smb23x_chip *chip = container_of(work,
 	struct smb23x_chip, parallel_work);
-	int type;
-
-	MPP4_read = smb23x_mpp4_vol_proc_read();
-	pr_info("[BAT][CHG] charger_type_proc_read MPP4 voltage:%d\n", MPP4_read);
+	union power_supply_propval prop = {0,};
+	int type, current_max;
 
 	smb23x_enable_volatile_writes(chip);
-
 	type = chip->usb_psy->type;
+
+	rc = chip->usb_psy->get_property(chip->usb_psy,
+		POWER_SUPPLY_PROP_CURRENT_MAX, &prop);
+	if (rc < 0)
+		pr_err("Get CURRENT_MAX from usb failed, rc=%d\n", rc);
+	else
+		current_max = prop.intval / 1000;
+	MPP4_read = smb23x_mpp4_vol_proc_read();
+	pr_info("[BAT][CHG] MPP4 voltage:%d, current_max:%d\n", MPP4_read, current_max);
 
 	if (chip->parallel_charging) {
 
@@ -979,24 +985,24 @@ static void smb23x_parallel_work(struct work_struct *work)
 			pr_info("[BAT][CHG] USB_TYPE: USB_Fast\n");
 			ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:USB_Fast\n", MPP4_read);
 		} else if (type == POWER_SUPPLY_TYPE_USB) {
-			// Set SMB231 input current limit to 300mA
-			smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
-			smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x02);
-			lbc_set_suspend(0x01);
+			if (current_max >= 500) {
+				// Set SMB231 input current limit to 300mA
+				smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
+				smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x02);
+				lbc_set_suspend(0x01);
 
-			gpio_set_value(GPIO_num17,0);
-			pr_info("[BAT][CHG] gpio_17 set to 0\n");
-			pr_info("[BAT][CHG] USB_TYPE: USB_Normal\n");
-			ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:USB_Normal\n", MPP4_read);
-		} else if (type == POWER_SUPPLY_TYPE_UNKNOWN) {
-			// Set SMB231 input current limit to 100mA
-			smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x00);
-			lbc_set_suspend(0x01);
+				pr_info("[BAT][CHG] USB_TYPE: USB_Normal\n");
+				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:USB_Normal\n", MPP4_read);
+			} else {
+				// Set SMB231 input current limit to 100mA
+				smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x00);
+				smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x00);
+				lbc_set_suspend(0x01);
 
+				pr_info("[BAT][CHG] USB_TYPE: UNKNOWN\n");
+				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:UNKNOWN\n", MPP4_read);
+			}
 			gpio_set_value(GPIO_num17,0);
-			pr_info("[BAT][CHG] gpio_17 set to 0\n");
-			pr_info("[BAT][CHG] USB_TYPE: UNKNOWN\n");
-			ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:UNKNOWN\n", MPP4_read);
 		}
 		rc = smb23x_parallel_charger_enable(chip, CURRENT, true);
 		if (rc < 0)
