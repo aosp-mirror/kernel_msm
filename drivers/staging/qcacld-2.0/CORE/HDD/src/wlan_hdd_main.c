@@ -14638,7 +14638,9 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
    }
 
 #ifdef QCA_PKT_PROTO_TRACE
-   vos_pkt_proto_trace_init();
+   /* Ensure pkt tracing happen only in Non FTM mode */
+   if (VOS_FTM_MODE != hdd_get_conparam())
+       vos_pkt_proto_trace_init();
 #endif /* QCA_PKT_PROTO_TRACE */
 
  ftm_processing:
@@ -15158,8 +15160,6 @@ err_unregister_pmops:
 
    hdd_debugfs_exit(pHddCtx);
 
-
-
 err_close_adapter:
 #if defined(CONFIG_HDD_INIT_WITH_RTNL_LOCK)
    if (rtnl_lock_enable == TRUE) {
@@ -15168,6 +15168,11 @@ err_close_adapter:
    }
 #endif
    hdd_close_all_adapters( pHddCtx );
+
+#ifdef QCA_PKT_PROTO_TRACE
+   if (VOS_FTM_MODE != hdd_get_conparam())
+       vos_pkt_proto_trace_close();
+#endif /* QCA_PKT_PROTO_TRACE */
 
 err_vosstop:
    vos_stop(pVosContext);
@@ -15514,6 +15519,11 @@ static void hdd_driver_exit(void)
    hif_unregister_driver();
    vos_preClose( &pVosContext );
 
+#ifdef QCA_PKT_PROTO_TRACE
+   if (VOS_FTM_MODE != hdd_get_conparam())
+       vos_pkt_proto_trace_close();
+#endif /* QCA_PKT_PROTO_TRACE */
+
 #ifdef TIMER_MANAGER
    vos_timer_exit();
 #endif
@@ -15524,11 +15534,6 @@ static void hdd_driver_exit(void)
 #ifdef WLAN_LOGGING_SOCK_SVC_ENABLE
    wlan_logging_sock_deinit_svc();
 #endif
-
-#ifdef QCA_PKT_PROTO_TRACE
-      if (VOS_FTM_MODE != hdd_get_conparam())
-          vos_pkt_proto_trace_close();
-#endif /* QCA_PKT_PROTO_TRACE */
 
 done:
    vos_wake_lock_destroy(&wlan_wake_lock);
