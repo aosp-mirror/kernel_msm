@@ -1861,12 +1861,15 @@ static int qpnp_adc_tm_read_status(struct qpnp_adc_tm_chip *chip)
 fail:
 	mutex_unlock(&chip->adc->adc_lock);
 
-	if (chip->th_info.adc_tm_high_enable || chip->th_info.adc_tm_low_enable)
-		queue_work(chip->sensor[sensor_num].req_wq,
-				&chip->sensor[sensor_num].work);
-	if (rc < 0 || (!chip->th_info.adc_tm_high_enable &&
-					!chip->th_info.adc_tm_low_enable))
-		atomic_dec(&chip->wq_cnt);
+	if (chip->th_info.adc_tm_high_enable || chip->th_info.adc_tm_low_enable) {
+		chip->th_info.adc_tm_low_enable = 0;
+		chip->th_info.adc_tm_high_enable = 0;
+		if (queue_work(chip->sensor[sensor_num].req_wq,
+				&chip->sensor[sensor_num].work))
+			return rc;
+	}
+
+	atomic_dec(&chip->wq_cnt);
 
 	return rc;
 }
