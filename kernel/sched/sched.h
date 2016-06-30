@@ -385,16 +385,6 @@ struct related_thread_group {
 	struct sched_cluster *preferred_cluster;
 	struct rcu_head rcu;
 	u64 last_update;
-#ifdef CONFIG_SCHED_FREQ_INPUT
-	struct group_cpu_time __percpu *cpu_time;	/* one per cluster */
-#endif
-};
-
-struct migration_sum_data {
-	struct rq *src_rq, *dst_rq;
-#ifdef CONFIG_SCHED_FREQ_INPUT
-	struct group_cpu_time *src_cpu_time, *dst_cpu_time;
-#endif
 };
 
 extern struct list_head cluster_head;
@@ -718,7 +708,7 @@ struct rq {
 	struct task_struct *ed_task;
 
 #ifdef CONFIG_SCHED_FREQ_INPUT
-	u64 old_busy_time, old_busy_time_group;
+	unsigned int old_busy_time;
 	int notifier_sent;
 	u64 old_estimated_time;
 #endif
@@ -1268,16 +1258,7 @@ add_new_task_to_grp(struct task_struct *new) {}
 #ifdef CONFIG_SCHED_FREQ_INPUT
 #define PRED_DEMAND_DELTA ((s64)new_pred_demand - p->ravg.pred_demand)
 
-extern void
-check_for_freq_change(struct rq *rq, bool check_pred, bool check_groups);
-
-struct group_cpu_time {
-	u64 curr_runnable_sum;
-	u64 prev_runnable_sum;
-	u64 nt_curr_runnable_sum;
-	u64 nt_prev_runnable_sum;
-	u64 window_start;
-};
+extern void check_for_freq_change(struct rq *rq, bool check_cra);
 
 /* Is frequency of two cpus synchronized with each other? */
 static inline int same_freq_domain(int src_cpu, int dst_cpu)
@@ -1295,8 +1276,7 @@ static inline int same_freq_domain(int src_cpu, int dst_cpu)
 #define sched_migration_fixup	0
 #define PRED_DEMAND_DELTA (0)
 
-static inline void
-check_for_freq_change(struct rq *rq, bool check_pred, bool check_groups) { }
+static inline void check_for_freq_change(struct rq *rq, bool check_cra) { }
 
 static inline int same_freq_domain(int src_cpu, int dst_cpu)
 {
