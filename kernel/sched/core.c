@@ -9974,7 +9974,7 @@ static void sched_init_numa(void)
 
 			sched_domains_numa_masks[i][j] = mask;
 
-			for_each_node(k) {
+			for (k = 0; k < nr_node_ids; k++) {
 				if (node_distance(j, k) > sched_domains_numa_distance[i])
 					continue;
 
