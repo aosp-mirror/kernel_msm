@@ -95,6 +95,10 @@
 	};
 };
 
+&spi_0 {
+	cs-gpios = <&msm_gpio 10 0x00>;
+};
+
 &i2c_1 {
 	status = "disabled";
 };
