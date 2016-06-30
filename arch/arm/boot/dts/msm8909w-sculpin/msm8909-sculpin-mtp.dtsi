@@ -30,10 +30,10 @@
 			qcom,float-voltage-mv = <4360>;
 			qcom,recharge-thresh-mv = <80>;
 			qcom,aicl-disabled;
-			qcom,hot-bat-decidegc = <500>;
-			qcom,warm-bat-decidegc = <400>;
-			qcom,cool-bat-decidegc = <100>;
-			qcom,cold-bat-decidegc = <0>;
+			qcom,hot-bat-decidegc = <550>;
+			qcom,warm-bat-decidegc = <450>;
+			qcom,cool-bat-decidegc = <150>;
+			qcom,cold-bat-decidegc = <50>;
 			qcom,fastchg-ma = <250>;
 			qcom,soft-temp-vfloat-comp-mv = <160>;
 			qcom,soft-temp-current-comp-ma = <250>;
@@ -43,6 +43,10 @@
 			cei,sys-voltage = <2>;
 			cei,sys-voltage-threshold = <2>;
 			qcom,bms-psy-name = "bms";
+			cei,dvt-hot-bat-decidegc = <500>;
+			cei,dvt-warm-bat-decidegc = <400>;
+			cei,dvt-cool-bat-decidegc = <100>;
+			cei,dvt-cold-bat-decidegc = <0>;
 
 		};
 		st-fg@70 {

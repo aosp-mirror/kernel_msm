@@ -24,6 +24,7 @@
 #include <linux/pm_wakeup.h>
 #include <linux/spinlock.h>
 #include <linux/delay.h>	/* for udelay() */
+#include <linux/gpio.h>
 
 struct smb23x_wakeup_source {
 	struct wakeup_source source;
@@ -387,6 +388,13 @@ enum {
 	WRKRND_IRQ_POLLING = BIT(0),
 };
 
+enum {
+	EVT = 0,
+	DVT1 = 1,
+	DVT2 = 2,
+	PVT = 6,
+};
+
 #ifdef QTI_SMB231
 static irqreturn_t smb23x_stat_handler(int irq, void *dev_id);
 #else
@@ -527,6 +535,22 @@ static void smb23x_relax(struct smb23x_wakeup_source *source,
 }
 #endif
 
+static int smb23x_get_buildphase(void)
+{
+	int val = 0, buildphase = 0;
+
+	val = gpio_get_value(99);
+	buildphase = buildphase | val;
+
+	val = gpio_get_value(98);
+	buildphase = (buildphase << 1) | val;
+
+	val = gpio_get_value(97);
+	buildphase = (buildphase << 1) | val;
+
+	return buildphase;
+}
+
 static int smb23x_parse_dt(struct smb23x_chip *chip)
 {
 	int rc = 0;
@@ -605,25 +629,47 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 	if (rc < 0)
 		chip->cfg_fastchg_ma = -EINVAL;
 
-	rc = of_property_read_u32(node, "qcom,cold-bat-decidegc",
+	if (smb23x_get_buildphase() <= DVT2) {
+		rc = of_property_read_u32(node, "cei,dvt-cold-bat-decidegc",
 					&chip->cfg_cold_bat_decidegc);
-	if (rc < 0)
-		chip->cfg_cold_bat_decidegc = -EINVAL;
+		if (rc < 0)
+			chip->cfg_cold_bat_decidegc = -EINVAL;
 
-	rc = of_property_read_u32(node, "qcom,cool-bat-decidegc",
+		rc = of_property_read_u32(node, "cei,dvt-cool-bat-decidegc",
 					&chip->cfg_cool_bat_decidegc);
-	if (rc < 0)
-		chip->cfg_cool_bat_decidegc = -EINVAL;
+		if (rc < 0)
+			chip->cfg_cool_bat_decidegc = -EINVAL;
 
-	rc = of_property_read_u32(node, "qcom,warm-bat-decidegc",
+		rc = of_property_read_u32(node, "cei,dvt-warm-bat-decidegc",
 					&chip->cfg_warm_bat_decidegc);
-	if (rc < 0)
-		chip->cfg_warm_bat_decidegc = -EINVAL;
+		if (rc < 0)
+			chip->cfg_warm_bat_decidegc = -EINVAL;
 
-	rc = of_property_read_u32(node, "qcom,hot-bat-decidegc",
+		rc = of_property_read_u32(node, "cei,dvt-hot-bat-decidegc",
 					&chip->cfg_hot_bat_decidegc);
-	if (rc < 0)
-		chip->cfg_hot_bat_decidegc = -EINVAL;
+		if (rc < 0)
+			chip->cfg_hot_bat_decidegc = -EINVAL;
+	} else {
+		rc = of_property_read_u32(node, "qcom,cold-bat-decidegc",
+					&chip->cfg_cold_bat_decidegc);
+		if (rc < 0)
+			chip->cfg_cold_bat_decidegc = -EINVAL;
+
+		rc = of_property_read_u32(node, "qcom,cool-bat-decidegc",
+					&chip->cfg_cool_bat_decidegc);
+		if (rc < 0)
+			chip->cfg_cool_bat_decidegc = -EINVAL;
+
+		rc = of_property_read_u32(node, "qcom,warm-bat-decidegc",
+					&chip->cfg_warm_bat_decidegc);
+		if (rc < 0)
+			chip->cfg_warm_bat_decidegc = -EINVAL;
+
+		rc = of_property_read_u32(node, "qcom,hot-bat-decidegc",
+					&chip->cfg_hot_bat_decidegc);
+		if (rc < 0)
+			chip->cfg_hot_bat_decidegc = -EINVAL;
+	}
 
 	rc = of_property_read_u32(node, "qcom,soft-temp-vfloat-comp-mv",
 					&chip->cfg_temp_comp_mv);
