@@ -41,6 +41,7 @@
 #define RECHG_CHECK_DELAY_FAST_MS 10
 #define WLC_TX_RECHECK_WORK_DELAY_MS  10000
 #define WLC_TX_RECHECK_RETRY_COUNT    6
+#define STEP_OFFSET_MV 200
 
 static unsigned int att_addr = REG_IOCHRG;
 
@@ -82,8 +83,8 @@ struct fan5451x_chip {
 	unsigned int ext_set_vddmax_mv;
 	unsigned int ext_batt_health;
 	/* step charging */
-	struct delayed_work vbat_measure_work;
-	struct wake_lock chg_wake_lock;
+	struct qpnp_adc_tm_btm_param vbat_param;
+	struct qpnp_adc_tm_chip *adc_tm_dev;
 	int ibat_offset_ma;
 	int step_dwn_offset_ma;
 	unsigned int step_dwn_thr_mv;
@@ -470,15 +471,15 @@ static inline void fan5451x_vbat_measure(struct fan5451x_chip *chip)
 {
 	if (chip->step_dwn_offset_ma && chip->step_dwn_thr_mv) {
 		if (chip->usb_present || chip->wlc_present) {
-			if (!wake_lock_active(&chip->chg_wake_lock))
-				wake_lock(&chip->chg_wake_lock);
-			schedule_delayed_work(&chip->vbat_measure_work, 0);
+			chip->vbat_param.high_thr = chip->step_dwn_thr_mv * 1000;
+			chip->vbat_param.state_request = ADC_TM_HIGH_THR_ENABLE;
+			qpnp_adc_tm_channel_measure(chip->adc_tm_dev,
+						&chip->vbat_param);
 		} else {
-			cancel_delayed_work_sync(&chip->vbat_measure_work);
+			qpnp_adc_tm_disable_chan_meas(chip->adc_tm_dev,
+						&chip->vbat_param);
 			chip->ibat_offset_ma = 0;
 			fan5451x_set_appropriate_current(chip);
-			if (wake_lock_active(&chip->chg_wake_lock))
-				wake_unlock(&chip->chg_wake_lock);
 		}
 	}
 }
@@ -548,7 +549,7 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 		}
 	}
 
-	if (found)
+	if (found && !chip->wlc_fake_online)
 		fan5451x_vbat_measure(chip);
 
 	if (intr[0] & INT0_CHGEND) {
@@ -801,6 +802,7 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 		if (!wlc_present) {
 			pr_info("wlc present 0, fake online off\n");
 			fan5451x_wlc_fake_online(chip, 0);
+			fan5451x_vbat_measure(chip);
 		}
 	}
 
@@ -1137,26 +1139,28 @@ static int fan5451x_batt_power_set_property(struct power_supply *psy,
 	return ret;
 };
 
-#define VBAT_MEASURE_DELAY (10 * HZ)
-#define STEPUP_OFFSET_MV 100
-#define STEPDOWN_OFFSET_MV 100
 static void
-fan5451x_vbat_measure_work(struct work_struct *work)
+fan5451x_vbat_notification(enum qpnp_tm_state state, void *ctx)
 {
-	struct delayed_work *dwork = to_delayed_work(work);
-	struct fan5451x_chip *chip = container_of(dwork,
-				struct fan5451x_chip, vbat_measure_work);
-	int batt_volt;
+	struct fan5451x_chip *chip = ctx;
 
-	batt_volt = get_prop_battery_voltage_now(chip);
-	if (batt_volt > (chip->step_dwn_thr_mv + STEPDOWN_OFFSET_MV) * 1000)
+	if (state >= ADC_TM_STATE_NUM) {
+		pr_err("invalid notification %d\n", state);
+		return;
+	}
+	if (state == ADC_TM_HIGH_STATE) {
 		chip->ibat_offset_ma = chip->step_dwn_offset_ma;
-	else if (batt_volt < (chip->step_dwn_thr_mv - STEPUP_OFFSET_MV) * 1000)
+		chip->vbat_param.state_request = ADC_TM_LOW_THR_ENABLE;
+		chip->vbat_param.low_thr =
+			(chip->step_dwn_thr_mv - STEP_OFFSET_MV) * 1000;
+	} else {
 		chip->ibat_offset_ma = 0;
-
+		chip->vbat_param.state_request = ADC_TM_HIGH_THR_ENABLE;
+		chip->vbat_param.high_thr = chip->step_dwn_thr_mv * 1000;
+	}
 	fan5451x_set_appropriate_current(chip);
-
-	schedule_delayed_work(&chip->vbat_measure_work, VBAT_MEASURE_DELAY);
+	qpnp_adc_tm_channel_measure(chip->adc_tm_dev,
+					&chip->vbat_param);
 }
 
 static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set)
@@ -1361,6 +1365,18 @@ static int fan5451x_probe(struct i2c_client *client,
 		}
 	}
 
+	if (chip->step_dwn_offset_ma || chip->step_dwn_thr_mv) {
+		chip->adc_tm_dev = qpnp_get_adc_tm(&client->dev, "chg");
+		if (IS_ERR(chip->adc_tm_dev)) {
+			ret = PTR_ERR(chip->adc_tm_dev);
+			if (ret != -EPROBE_DEFER)
+				pr_err("adc_tm_dev missing\n");
+			else
+				pr_err("adc_tm_dev not found deferring probe\n");
+			goto err_chip_clear;
+		}
+	}
+
 	ret = fan5451x_gpio_init(chip);
 	if (ret)
 		goto err_chip_clear;
@@ -1387,14 +1403,6 @@ static int fan5451x_probe(struct i2c_client *client,
 		goto err_gpio_free;
 	}
 
-	wake_lock_init(&chip->chg_wake_lock,
-			WAKE_LOCK_SUSPEND, "fan5451x_chg");
-
-	if (chip->step_dwn_offset_ma && chip->step_dwn_thr_mv) {
-		INIT_DELAYED_WORK(&chip->vbat_measure_work,
-				fan5451x_vbat_measure_work);
-	}
-
 	INIT_DELAYED_WORK(&chip->rechg_check_work,
 			fan5451x_rechg_check_work);
 	INIT_DELAYED_WORK(&chip->wlc_tx_recheck_work,
@@ -1407,6 +1415,14 @@ static int fan5451x_probe(struct i2c_client *client,
 		goto err_psy_unreg;
 	}
 	enable_irq_wake(client->irq);
+
+	if (chip->step_dwn_offset_ma && chip->step_dwn_thr_mv) {
+		chip->vbat_param.timer_interval = ADC_MEAS1_INTERVAL_2S;
+		chip->vbat_param.btm_ctx = chip;
+		chip->vbat_param.threshold_notification =
+					fan5451x_vbat_notification;
+		chip->vbat_param.channel = VBAT_SNS;
+	}
 
 	/* Set initial state */
 	chip->usb_present = fan5451x_usb_chg_plugged_in(chip);
@@ -1440,7 +1456,6 @@ err_sysfs_addr_register:
 	free_irq(client->irq, chip);
 err_psy_unreg:
 	power_supply_unregister(&chip->batt_psy);
-	wake_lock_destroy(&chip->chg_wake_lock);
 err_gpio_free:
 	gpio_free(chip->disable_gpio);
 	gpio_free(chip->stat_gpio);
@@ -1459,8 +1474,6 @@ static int fan5451x_remove(struct i2c_client *client)
 
 	cancel_delayed_work_sync(&chip->wlc_tx_recheck_work);
 	cancel_delayed_work_sync(&chip->rechg_check_work);
-	cancel_delayed_work_sync(&chip->vbat_measure_work);
-
 	device_remove_file(&client->dev, &dev_attr_addr_register);
 	device_remove_file(&client->dev, &dev_attr_status_register);
 	device_remove_file(&client->dev, &dev_attr_chip_param);
@@ -1469,7 +1482,6 @@ static int fan5451x_remove(struct i2c_client *client)
 	free_irq(client->irq, chip);
 
 	power_supply_unregister(&chip->batt_psy);
-	wake_lock_destroy(&chip->chg_wake_lock);
 
 	gpio_free(chip->disable_gpio);
 	gpio_free(chip->stat_gpio);
