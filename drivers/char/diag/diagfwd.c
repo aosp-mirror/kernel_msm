@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2014, 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -813,7 +813,7 @@ void diag_update_pkt_buffer(unsigned char *buf, int type)
 	}
 
 	if (!ptr || length == 0) {
-		pr_err("diag: Invalid ptr %p and length %d in %s",
+		pr_err("diag: Invalid ptr %pK and length %d in %s",
 						ptr, length, __func__);
 		return;
 	}
@@ -926,7 +926,7 @@ int diag_process_stm_cmd(unsigned char *buf, unsigned char *dest_buf)
 	int i;
 
 	if (!buf || !dest_buf) {
-		pr_err("diag: Invalid pointers buf: %p, dest_buf %p in %s\n",
+		pr_err("diag: Invalid pointers buf: %pK, dest_buf %pK in %s\n",
 		       buf, dest_buf, __func__);
 		return -EIO;
 	}
@@ -1925,7 +1925,7 @@ int diag_smd_write(struct diag_smd_info *smd_info, void *buf, int len)
 	int max_retries = 3;
 
 	if (!smd_info || !buf || len <= 0) {
-		pr_err_ratelimited("diag: In %s, invalid params, smd_info: %p, buf: %p, len: %d\n",
+		pr_err_ratelimited("diag: In %s, invalid params, smd_info: %pK, buf: %pK, len: %d\n",
 				   __func__, smd_info, buf, len);
 		return -EINVAL;
 	}
