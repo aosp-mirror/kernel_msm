@@ -145,6 +145,16 @@
 };
 
 &pm8994_mpps {
+    mpp@a100 { /* MPP 2 */
+    /* CHARGER_THERM */
+        qcom,mode = <4>;                /* QPNP_PIN_MODE_AIN */
+        qcom,vin-sel = <2>;             /* S4 1.8V */
+        qcom,src-sel = <0>;             /* Constant */
+        qcom,ain-route = <2>;           /* QPNP_PIN_AIN_AMUX_CH7 */
+        qcom,master-en = <1>;           /* Enable GPIO */
+        status = "okay";
+    };
+
     mpp@a600 { /* MPP 7 */
     /* USB_PWR_TEMP - To detect USB board temperature
     for VZW requirement */
