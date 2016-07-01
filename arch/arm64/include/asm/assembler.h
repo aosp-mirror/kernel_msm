@@ -51,6 +51,15 @@
 	msr	daifclr, #2
 	.endm
 
+	.macro	save_and_disable_irq, flags
+	mrs	\flags, daif
+	msr	daifset, #2
+	.endm
+
+	.macro	restore_irq, flags
+	msr	daif, \flags
+	.endm
+
 /*
  * Save/disable and restore interrupts.
  */
@@ -304,5 +313,13 @@ lr	.req	x30		// link register
 	.set	__pi_##x, x;		\
 	.size	__pi_##x, . - x;	\
 	ENDPROC(x)
+
+/*
+ * Return the current thread_info.
+ */
+	.macro	get_thread_info, rd
+	mov	\rd, sp
+	and	\rd, \rd, #~(THREAD_SIZE - 1)	// top of stack
+	.endm
 
 #endif	/* __ASM_ASSEMBLER_H */
