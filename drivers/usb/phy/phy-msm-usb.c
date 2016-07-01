@@ -2584,9 +2584,10 @@ static void msm_chg_detect_work(struct work_struct *w)
 				}
 				printk("[USB] set_chg_mode: ASUS CDP\n");
 				ASUSEvtlog("[USB] set_chg_mode: ASUS CDP\n");
-			} else
+			} else {
 				printk("[USB] set_chg_mode: ASUS DCP\n");
 				ASUSEvtlog("[USB] set_chg_mode: ASUS DCP\n");
+			}
 		}
 		else{
 			if(g_usb_boot == MSM_OTG_USB_BOOT_IRQ){
