@@ -18,6 +18,7 @@
 
 &atmel_u114 {
 	/delete-property/atmel,palm-enabled;
+	atmel,fw_name = "atmel_touch_w3.fw";
 };
 
 &mdss_dsi0 {
