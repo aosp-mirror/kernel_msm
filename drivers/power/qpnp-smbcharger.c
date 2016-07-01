@@ -4008,13 +4008,27 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 	if (rc == 0)
 		current_limit = prop.intval / 1000;
 
+#ifdef CONFIG_HTC_BATT
+	rc = chip->usb_psy->get_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_TYPE, &prop);
+	if (rc == 0)
+		usb_supply_type = prop.intval;
+	else
+		read_usb_type(chip, &usb_type_name, &usb_supply_type);
+#else
 	read_usb_type(chip, &usb_type_name, &usb_supply_type);
+#endif /* CONFIG_HTC_BATT */
 
 	if (usb_supply_type != POWER_SUPPLY_TYPE_USB)
 		goto  skip_current_for_non_sdp;
 
+#ifdef CONFIG_HTC_BATT
+	pr_smb(PR_MISC, "CHG_TYPE is %d, current_limit = %d, rc = %d\n",
+			usb_supply_type, current_limit, rc);
+#else
 	pr_smb(PR_MISC, "usb type = %s current_limit = %d\n",
 			usb_type_name, current_limit);
+#endif /* CONFIG_HTC_BATT */
 
 	rc = vote(chip->usb_icl_votable, PSY_ICL_VOTER, true,
 				current_limit);
@@ -9437,6 +9451,8 @@ int charger_dump_all(void)
 	u8 chgr_rt_sts = 0, bat_if_rt_sts = 0, chgpth_rt_sts = 0;
 	u8 misc_rt_sts = 0, bat_if_cmd = 0, chgpth_cmd = 0;
 	u8 pmic_revid_rev3 = 0, pmic_revid_rev4 = 0;
+	u8 pmic_chg_type = 0, sink_current = 0;
+	bool pd_charger = false;
 	int cc_uah = 0, rc = 0, warm_temp = 0, cool_temp = 0;
 
 	if(!the_chip) {
@@ -9450,6 +9466,7 @@ int charger_dump_all(void)
 	smbchg_read(the_chip, &chgpth_rt_sts, the_chip->usb_chgpth_base + RT_STS, 1);
 	smbchg_read(the_chip, &chgpth_cmd, the_chip->usb_chgpth_base + CMD_IL, 1);
 	smbchg_read(the_chip, &misc_rt_sts, the_chip->misc_base + RT_STS, 1);
+	smbchg_read(the_chip, &pmic_chg_type, the_chip->misc_base + IDEV_STS, 1);
 	smbchg_read(the_chip, &pmic_revid_rev3, PMIC_REVID_REVISION3, 1);
 	smbchg_read(the_chip, &pmic_revid_rev4, PMIC_REVID_REVISION4, 1);
 	rc = get_property_from_fg(the_chip, POWER_SUPPLY_PROP_CHARGE_NOW_RAW, &cc_uah);
@@ -9466,11 +9483,14 @@ int charger_dump_all(void)
 	if (chgpth_rt_sts & USBIN_OV_BIT)
 		pr_smb(PR_STATUS, "Charging Fail. Over voltage.\n");
 
+	sink_current = the_chip->utc.sink_current;
+	pd_charger = htc_battery_is_pd_detected();
+
 	printk(KERN_INFO "[BATT][SMBCHG] "
-		"0x1010=%02x,0x1210=%02x,0x1242=%02x,0x1310=%02x,0x1340=%02x,0x1610=%02x,"
-		"cc=%duAh,warm_temp=%d,cool_temp=%d,pmic=rev%d.%d\n",
-		chgr_rt_sts,bat_if_rt_sts,bat_if_cmd,chgpth_rt_sts,chgpth_cmd,misc_rt_sts,
-		cc_uah,warm_temp,cool_temp,pmic_revid_rev4,pmic_revid_rev3);
+		"0x1010=%02x,0x1210=%02x,0x1242=%02x,0x1310=%02x,0x1340=%02x,0x1608=%02x,0x1610=%02x,"
+		"cc=%duAh,warm_temp=%d,cool_temp=%d,pmic=rev%d.%d,sink_current=%d,pd_chgr=%d\n",
+		chgr_rt_sts,bat_if_rt_sts,bat_if_cmd,chgpth_rt_sts,chgpth_cmd,pmic_chg_type,misc_rt_sts,
+		cc_uah,warm_temp,cool_temp,pmic_revid_rev4,pmic_revid_rev3,sink_current,pd_charger);
 
 	smbchg_dump_reg();
 
@@ -9592,14 +9612,8 @@ int pmi8994_charger_get_attr_text(char *buf, int size)
 		smbchg_read(the_chip, &reg, the_chip->usb_chgpth_base + addr, 1); //"USB Config"
 		len += scnprintf(buf + len, size -len, "0x%04x: 0x%02x\n", the_chip->usb_chgpth_base + addr, reg);
 	}
-	/* dc charge path peripheral */
-	smbchg_read(the_chip, &reg, the_chip->dc_chgpth_base + RT_STS, 1);
-	len += scnprintf(buf + len, size -len, "DC_Status(0x%04x): 0x%02x\n", the_chip->dc_chgpth_base + RT_STS, reg);
-	len += scnprintf(buf + len, size -len, "DC_CF ------\n");
-	for (addr = 0xF0; addr <= 0xF6; addr++){
-		smbchg_read(the_chip, &reg, the_chip->dc_chgpth_base + addr, 1); //"DC Config"
-		len += scnprintf(buf + len, size -len, "0x%04x: 0x%02x\n", the_chip->dc_chgpth_base + addr, reg);
-	}
+	len += scnprintf(buf + len, size -len, "USB_sink_curr: %d\n", the_chip->utc.sink_current);
+	len += scnprintf(buf + len, size -len, "PD_charger: %d\n", htc_battery_is_pd_detected());
 	/* misc peripheral */
 	smbchg_read(the_chip, &reg, the_chip->misc_base + IDEV_STS, 1);
 	len += scnprintf(buf + len, size -len, "MISC_STS(0x%04x): 0x%02x\n", the_chip->misc_base + IDEV_STS, reg);
