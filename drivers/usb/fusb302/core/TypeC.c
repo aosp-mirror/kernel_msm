@@ -64,8 +64,8 @@ volatile FSC_U16        Timer_tms;          // Tracks tenths of milliseconds ela
 /////////////////////////////////////////////////////////////////////////////
 
 #ifdef FSC_HAVE_DRP
-static FSC_BOOL         blnSrcPreferred;        // Flag to indicate whether we prefer the Src role when in DRP
-static FSC_BOOL         blnSnkPreferred;        // Flag to indicate whether we prefer the Snk role when in DRP
+FSC_BOOL         blnSrcPreferred;        // Flag to indicate whether we prefer the Src role when in DRP
+FSC_BOOL         blnSnkPreferred;        // Flag to indicate whether we prefer the Snk role when in DRP
 #endif // FSC_HAVE_DRP
 
 #ifdef FSC_HAVE_ACCMODE
@@ -302,7 +302,7 @@ void EnableTypeCStateMachine(void)
  ******************************************************************************/
 void StateMachineTypeC(void)
 {
-	printk(KERN_INFO "%s: enter\n", __func__);
+	pr_info("FUSB %s: enter\n", __func__);
 #ifdef  FSC_INTERRUPT_TRIGGERED
         do{
 #endif // FSC_INTERRUPT_TRIGGERED
@@ -408,7 +408,7 @@ void StateMachineTypeC(void)
         platform_delay_10us(SLEEP_DELAY);
     } while(g_Idle == FALSE);
 #endif // FSC_INTERRUPT_TRIGGERED
-    printk(KERN_INFO "%s: leave with state %d\n", __func__, ConnState);
+    pr_info("FUSB %s: leave typec_state(0x%x), pd_state=(0x%x)\n", __func__, ConnState, PolicyState);
 }
 
 void StateMachineDisabled(void)
@@ -535,6 +535,9 @@ void StateMachineUnattached(void)   //TODO: Update to account for Ra detection (
 void StateMachineAttachWaitSink(void)
 {
     debounceCC();
+
+    pr_debug("FUSB %s: CC1TermPDDebounce(0x%x), CC2TermPDDebounce(0x%x), PortType(0x%x), Registers.Status.VBUSOK(%d), blnSrcPreferred(%d)\n",
+            __func__, CC1TermPDDebounce, CC2TermPDDebounce, PortType, Registers.Status.VBUSOK, blnSrcPreferred);
     
     if ((CC1TermPDDebounce == CCTypeOpen) && (CC2TermPDDebounce == CCTypeOpen)) // If we have detected SNK.Open for atleast tPDDebounce on both pins...
     {
@@ -720,7 +723,6 @@ void StateMachineAttachedSource(void)
 #endif // FSC_HAVE_DRP
                     {   
                         platform_set_vbus_lvl_enable(VBUS_LVL_ALL, FALSE, FALSE);       // Disable the vbus outputs
-                        platform_notify_attached_source(0);
                         platform_notify_cc_orientation(NONE);
                         USBPDDisable(TRUE);                                             // Disable the USB PD state machine
                         Registers.Switches.byte[0] = 0x00;                              // Disabled until vSafe0V
@@ -741,7 +743,6 @@ void StateMachineAttachedSource(void)
 #endif // FSC_HAVE_DRP
                     {   
                         platform_set_vbus_lvl_enable(VBUS_LVL_ALL, FALSE, FALSE);       // Disable the vbus outputs
-                        platform_notify_attached_source(0);
                         platform_notify_cc_orientation(NONE);
                         USBPDDisable(TRUE);                                             // Disable the USB PD state machine
                         Registers.Switches.byte[0] = 0x00;                              // Disabled until vSafe0V
@@ -813,7 +814,7 @@ void StateMachineTrySource(void)
     {
         SetStateAttachedSource();                                                  // Go to the Attached.Src state
     }
-    else if ((CC1TermPDDebounce == CCTypeOpen) && (CC2TermPDDebounce == CCTypeOpen))  // If we haven't detected Rd on exactly one of the pins and we have waited for tDRPTry...
+    else if ((StateTimer == 0) && (CC1TermPDDebounce == CCTypeOpen) && (CC2TermPDDebounce == CCTypeOpen))  // If we haven't detected Rd on exactly one of the pins and we have waited for tDRPTry...
     {
         SetStateTryWaitSink();                                                   // Move onto the TryWait.Snk state to not get stuck in here
     }
@@ -926,26 +927,39 @@ void StateMachineUnsupportedAccessory(void)
 #ifdef FSC_HAVE_DRP
 void stateMachineTrySink(void)
 {
-    if (StateTimer == 0)
+    switch (TypeCSubState)
     {
+    case 0:
+        if (StateTimer == 0)
+        {
+            StateTimer = tDRPTryWait;
+            TypeCSubState++;
+        }
+        break;
+    case 1:
         debounceCC();
-    }
-    
-    if(Registers.Status.VBUSOK)
-    {
-        if ((CC1TermPDDebounce >= CCTypeRdUSB) && (CC1TermPDDebounce < CCTypeUndefined) && (CC2TermPDDebounce == CCTypeOpen))    // If the CC1 pin is Rd for atleast tPDDebounce...
+
+        pr_info("FUSB %s: Registers.Status.VBUSOK(%d), CC1TermPDDebounce(0x%x), CC2TermPDDebounce(0x%x)\n", __func__, Registers.Status.VBUSOK, CC1TermPDDebounce, CC2TermPDDebounce);
+        if(Registers.Status.VBUSOK)
         {
-            SetStateAttachedSink();                                                  // Go to the Attached.Src state
+            if ((CC1TermPDDebounce >= CCTypeRdUSB) && (CC1TermPDDebounce < CCTypeUndefined) && (CC2TermPDDebounce == CCTypeOpen))    // If the CC1 pin is Rd for atleast tPDDebounce...
+            {
+                SetStateAttachedSink();                                                  // Go to the Attached.Src state
+            }
+            else if ((CC2TermPDDebounce >= CCTypeRdUSB) && (CC2TermPDDebounce < CCTypeUndefined) && (CC1TermPDDebounce == CCTypeOpen))   // If the CC2 pin is Rd for atleast tPDDebounce...
+            {
+                SetStateAttachedSink();                                                  // Go to the Attached.Src state
+            }
         }
-        else if ((CC2TermPDDebounce >= CCTypeRdUSB) && (CC2TermPDDebounce < CCTypeUndefined) && (CC1TermPDDebounce == CCTypeOpen))   // If the CC2 pin is Rd for atleast tPDDebounce...
+
+        if ((CC1TermPDDebounce == CCTypeOpen) && (CC2TermPDDebounce == CCTypeOpen))
         {
-            SetStateAttachedSink();                                                  // Go to the Attached.Src state
+            SetStateTryWaitSource();
         }
-    }
-    
-    if ((CC1TermPDDebounce == CCTypeOpen) && (CC2TermPDDebounce == CCTypeOpen))
-    {
-        SetStateTryWaitSource();
+        break;
+    default:
+        TypeCSubState = 0;
+        break;
     }
 }
 #endif // FSC_HAVE_DRP
@@ -1399,6 +1413,7 @@ void SetStateAttachWaitAccessory(void)
 }
 #endif // FSC_HAVE_ACCMODE
 
+extern bool is_mode_change;
 #ifdef FSC_HAVE_SRC
 void SetStateAttachedSource(void)
 {
@@ -1462,6 +1477,11 @@ void SetStateAttachedSource(void)
     }
     DeviceWrite(regSwitches0, 1, &Registers.Switches.byte[0]);                  // Commit the switch state
 
+    if (is_mode_change) {
+        blnSrcPreferred = FALSE;
+        blnSnkPreferred = TRUE;
+        is_mode_change = FALSE;
+    }
     
     USBPDEnable(TRUE, TRUE);                                                    // Enable the USB PD state machine if applicable (no need to write to Device again), set as DFP
     SinkCurrent = utccNone;                                                     // Set the Sink current to none (not used in source)
@@ -1519,6 +1539,13 @@ void SetStateAttachedSink(void)
         platform_notify_cc_orientation(CC2);
     }
     DeviceWrite(regSwitches0, 1, &Registers.Switches.byte[0]);                  // Commit the switch state
+
+    if (is_mode_change) {
+        blnSrcPreferred = FALSE;
+        blnSnkPreferred = TRUE;
+        is_mode_change = FALSE;
+    }
+
     USBPDEnable(TRUE, FALSE);                                      // Enable the USB PD state machine (no need to write Device again since we are doing it here)
     StateTimer = T_TIMER_DISABLE;                                         // Disable the state timer, not used in this state
     PDDebounce = tPDDebounce;                                // Set the debounce timer to tPDDebounceMin for detecting changes in advertised current
@@ -1694,7 +1721,7 @@ void SetStateTrySource(void)
     DeviceWrite(regSwitches0, 1, &Registers.Switches.byte[0]);     // Commit the switch state
     SinkCurrent = utccNone;                                         // Set current to none
     OverPDDebounce = T_TIMER_DISABLE;  // Disable PD filter timer
-    StateTimer = T_TIMER_DISABLE;                                           // Set the state timer to disabled
+    StateTimer = tDRPTry;                                           // Set the state timer to tDRPTry
     PDDebounce = tPDDebounce;                                // Debouncing is based solely off of tPDDebounce
     CCDebounce = T_TIMER_DISABLE;                                     // Disable the 2nd level since it's not needed
     ToggleTimer = T_TIMER_DISABLE;                                   // No toggle on sources
@@ -1718,6 +1745,7 @@ void SetStateTrySink(void)
     platform_enable_timer(TRUE);
 #endif  
     platform_set_vbus_lvl_enable(VBUS_LVL_ALL, FALSE, FALSE);       // Disable the vbus outputs
+    TypeCSubState = 0;
     ConnState = TrySink;                                            // Set the state machine variable to Try.Snk
     sourceOrSink = SINK;
 
@@ -1727,7 +1755,7 @@ void SetStateTrySink(void)
     DeviceWrite(regSwitches0, 1, &Registers.Switches.byte[0]);     // Commit the switch state
     resetDebounceVariables();
     SinkCurrent = utccNone;                                         // Not used in Try.Src
-    StateTimer = tDRPTry;                                           // Set the state timer to tDRPTry to timeout if Rd isn't detected
+    StateTimer = tDRPTryWait;                                           // Set the state timer to tDRPTryWait to timeout if Rd isn't detected
     PDDebounce = tPDDebounce;                                // Debouncing is based solely off of tPDDebounce
     CCDebounce = T_TIMER_DISABLE;                                     // Disable the 2nd level since it's not needed
     ToggleTimer = tDeviceToggle;                                   // Keep the pull-ups on for the max tPDDebounce to ensure that the other side acknowledges the pull-up

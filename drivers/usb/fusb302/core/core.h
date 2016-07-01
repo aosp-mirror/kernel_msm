@@ -65,6 +65,8 @@ FSC_U8 core_get_manual_retries(void);
     
 void core_set_state_unattached(void);               // Set state machine to unattached so modes update
 void core_reset_pd(void);
+void core_requestPRSwap(void);
+void core_requestDRSwap(void);
 
 /*******************************************************************************
 * Function:         core_get_advertised_current

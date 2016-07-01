@@ -89,6 +89,7 @@ FSC_BOOL platform_get_vbus_lvl_enable(VBUS_LVL level)
     }
 }
 
+extern FSC_BOOL VCONN_enabled;
 /*******************************************************************************
  * Function:        platform_set_vconn_enable
  * Input:           blnEnable - enable or disable VCONN
@@ -97,7 +98,18 @@ FSC_BOOL platform_get_vbus_lvl_enable(VBUS_LVL level)
  ******************************************************************************/
 FSC_BOOL platform_set_vconn_enable(FSC_BOOL blnEnable)
 {
-    return fusb_Power_Vconn(blnEnable);
+    struct fusb30x_chip *chip = fusb30x_GetChip();
+    FSC_BOOL ret;
+
+    ret = fusb_Power_Vconn(blnEnable);
+
+    if (ret && VCONN_enabled != blnEnable) {
+        chip->vconn = blnEnable ? DUAL_ROLE_PROP_VCONN_SUPPLY_YES : DUAL_ROLE_PROP_VCONN_SUPPLY_NO;
+        if (chip->fusb_instance)
+            dual_role_instance_changed(chip->fusb_instance);
+    }
+
+    return ret;
 }
 
 /*******************************************************************************
@@ -317,7 +329,7 @@ void platform_notify_pd_contract(FSC_BOOL contract)
 	struct fusb30x_chip* chip = fusb30x_GetChip();
 
     // Optional: Notify platform of PD contract
-	pr_info("FUSB %s: Contract=[%d], typec_state=%d\n", __func__, contract, ConnState);
+	pr_info("FUSB %s: Contract=[%d], typec_state(0x%x), pd_state(0x%x)\n", __func__, contract, ConnState, PolicyState);
 	if (contract) {
 		if (ConnState == AttachedSink) {
 			if (chip && chip->uc && chip->uc->pd_vbus_ctrl) {
@@ -345,12 +357,13 @@ void platform_notify_unsupported_accessory(void)
     printk(KERN_INFO "FUSB %s: invoked\n", __func__);
 }
 
+extern FSC_BOOL PolicyIsDFP;
 void platform_notify_attached_source(int value)
 {
 	struct fusb30x_chip* chip = fusb30x_GetChip();
 	int notify_retry_count = 0;
 
-	pr_info("FUSB %s: value(%d), typec_state(%d), pd_state(%d)\n", __func__, value, ConnState, PolicyState);
+	pr_info("FUSB %s: value(%d), typec_state(0x%x), pd_state(0x%x)\n", __func__, value, ConnState, PolicyState);
 
 	do {
 		if (chip != NULL && chip->uc != NULL && chip->uc->notify_attached_source != NULL) {
@@ -362,6 +375,12 @@ void platform_notify_attached_source(int value)
 			msleep(5000);
 		}
 	} while (notify_retry_count <= 3);
+
+	PolicyIsDFP = value ? TRUE : FALSE;
+	chip->pmode = value ? DUAL_ROLE_PROP_MODE_DFP : DUAL_ROLE_PROP_MODE_UFP;
+	chip->drole = value ? DUAL_ROLE_PROP_DR_HOST : DUAL_ROLE_PROP_DR_DEVICE;
+	if (chip->fusb_instance)
+		dual_role_instance_changed(chip->fusb_instance);
 }
 
 u8 platform_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], int *device_max_ma)

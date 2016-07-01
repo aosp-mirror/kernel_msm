@@ -83,40 +83,87 @@ int fusb_dual_role_get_property(struct dual_role_phy_instance *dual_role,
 }
 
 
+bool is_mode_change = false;
 extern ConnectionState          ConnState;          // Variable indicating the current connection state
 extern PolicyState_t            PolicyState;                                    // State variable for Policy Engine
-extern FSC_U8                   PolicySubIndex;                                 // Sub index for policy states
-extern PDTxStatus_t             PDTxStatus;                                     // Status variable for current transmission
+extern FSC_BOOL                 PolicyHasContract;
+extern FSC_BOOL                 blnSrcPreferred;
+extern FSC_BOOL                 blnSnkPreferred;
+extern void SetStateDelayUnattached(void);
+static void fusb_do_mode_change(enum dual_role_property prop)
+{
+    struct fusb30x_chip* chip = fusb30x_GetChip();
+
+    if (chip == NULL) {
+        pr_err("%s - chip structure is null!\n", __func__);
+        return;
+    }
+
+    mutex_lock(&chip->statemachine_lock);
+    is_mode_change = true;
+    if (ConnState == AttachedSource) {
+        blnSrcPreferred = false;
+        blnSnkPreferred = true;
+    } else if (ConnState == AttachedSink) {
+        blnSrcPreferred = true;
+        blnSnkPreferred = false;
+    }
+    SetStateDelayUnattached();
+    core_state_machine();
+    mutex_unlock(&chip->statemachine_lock);
+}
+
+static void fusb_send_PDCmd_RoleSwap(enum dual_role_property prop, int val)
+{
+    struct fusb30x_chip* chip = fusb30x_GetChip();
+
+    if (chip == NULL) {
+        pr_err("%s - chip structure is null!\n", __func__);
+        return;
+    }
+
+    mutex_lock(&chip->statemachine_lock);
+    if (prop == DUAL_ROLE_PROP_PR) {
+        if (chip->prole != val)
+            core_requestPRSwap();
+    } else if (prop == DUAL_ROLE_PROP_DR) {
+        if (chip->drole != val)
+            core_requestDRSwap();
+    } else {
+        mutex_unlock(&chip->statemachine_lock);
+        return;
+    }
+    core_state_machine();
+    mutex_unlock(&chip->statemachine_lock);
+    return;
+}
+
 int fusb_dual_role_set_property(struct dual_role_phy_instance *dual_role,
                                            enum dual_role_property prop,
                                            const unsigned int *val)
 {
-    struct fusb30x_chip *chip = fusb30x_GetChip();
-
+    pr_info("FUSB %s: prop(%d), val(%d), typec_state(0x%x), pd_state(0x%x), PolicyHasContract(%d)\n",
+            __func__, prop, *val, ConnState, PolicyState, PolicyHasContract);
     switch (prop) {
         case DUAL_ROLE_PROP_SUPPORTED_MODES:
             pr_info("FUSB %s: prop: %d, not supported case so far\n", __func__, prop);
             break;
         case DUAL_ROLE_PROP_MODE:
-            pr_info("FUSB %s: prop: %d, not supported case so far\n", __func__, prop);
+            fusb_do_mode_change(prop);
             break;
         case DUAL_ROLE_PROP_PR:
-            pr_info("FUSB %s: prop: %d, supported case so far\n", __func__, prop);
-			pr_info("FUSB %s: ConnState=%x\n", __func__, ConnState);
-            if (ConnState == AttachedSource)
-                PolicyState = peSourceSendPRSwap;						// Issue a PR_Swap message
-            else if (ConnState == AttachedSink)
-                PolicyState = peSinkSendPRSwap;						// Issue a PR_Swap message
-            else
-                break;
-            PolicySubIndex = 0; 									// Clear the sub index
-            PDTxStatus = txIdle;									// Clear the transmitter status
-            disable_irq(chip->gpio_IntN_irq);
-            core_state_machine();
-            enable_irq(chip->gpio_IntN_irq);
+            if (PolicyHasContract)
+                fusb_send_PDCmd_RoleSwap(prop, *val);
+            else {
+                pr_info("FUSB %s: fallback to mode change\n", __func__);
+                fusb_do_mode_change(prop);
+            }
             break;
         case DUAL_ROLE_PROP_DR:
-            pr_info("FUSB %s: prop: %d, not supported case so far\n", __func__, prop);
+            if (PolicyHasContract)
+                fusb_send_PDCmd_RoleSwap(prop, *val);
+            else
+                pr_info("FUSB %s: NO PD Contract\n", __func__);
             break;
         case DUAL_ROLE_PROP_VCONN_SUPPLY:
             pr_info("FUSB %s: prop: %d, not supported case so far\n", __func__, prop);
@@ -140,11 +187,13 @@ int fusb_dual_role_property_is_writeable(struct dual_role_phy_instance *dual_rol
             val = 1;
             break;
         case DUAL_ROLE_PROP_PR:
-        case DUAL_ROLE_PROP_DR:
             val = 1;
             break;
+        case DUAL_ROLE_PROP_DR:
+            val = 0;
+            break;
         case DUAL_ROLE_PROP_VCONN_SUPPLY:
-            val = 1;
+            val = 0;
             break;
         default:
             break;
@@ -233,6 +282,7 @@ static int fusb30x_probe (struct i2c_client* client,
 
     /* Initialize the chip lock */
     mutex_init(&chip->lock);
+    mutex_init(&chip->statemachine_lock);
 
     /* Initialize the chip's data members */
     fusb_InitChipData();

@@ -92,7 +92,7 @@
 #define TICK_SCALE_TO_MS        1
 
 #define tNoResponse             5000    * TICK_SCALE_TO_MS
-#define tSenderResponse         27	* TICK_SCALE_TO_MS
+#define tSenderResponse         28	* TICK_SCALE_TO_MS
 #define tTypeCSendSourceCap     150     * TICK_SCALE_TO_MS
 #define tSinkWaitCap            500     * TICK_SCALE_TO_MS                      // Setting to tTypeCSinkWaitCap for now
 #define tTypeCSinkWaitCap       500     * TICK_SCALE_TO_MS               

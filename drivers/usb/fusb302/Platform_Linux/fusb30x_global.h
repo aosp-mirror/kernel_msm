@@ -37,6 +37,7 @@
 struct fusb30x_chip                                 // Contains data required by this driver
 {
     struct mutex lock;                              // Synchronization lock
+    struct mutex statemachine_lock;
 
 #ifdef FSC_DEBUG
     FSC_U8 dbgTimerTicks;                           // Count of timer ticks

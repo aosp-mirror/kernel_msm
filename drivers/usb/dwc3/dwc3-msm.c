@@ -2178,6 +2178,8 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 }
 
 extern bool IsPRSwap;
+extern bool PolicyIsDFP;
+bool dwc3_vbus_boost_enabled(void);
 /**
  * dwc3_ext_event_notify - callback to handle events from external transceiver
  *
@@ -2200,7 +2202,7 @@ static void dwc3_ext_event_notify(struct dwc3_msm *mdwc)
 		clear_bit(ID, &mdwc->inputs);
 	}
 
-	if ((mdwc->vbus_active || IsPRSwap) && !mdwc->in_restart) {
+	if ((mdwc->vbus_active || (!PolicyIsDFP && dwc3_vbus_boost_enabled())) && !mdwc->in_restart) {
 		dev_dbg(mdwc->dev, "XCVR: BSV set\n");
 		set_bit(B_SESS_VLD, &mdwc->inputs);
 	} else {

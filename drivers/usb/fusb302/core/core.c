@@ -262,4 +262,18 @@ void core_reset_pd(void)
     USBPDEnable(TRUE, sourceOrSink);
 }
 
+void core_requestPRSwap(void)
+{
+    PDTransmitHeader.NumDataObjects = 0;
+    PDTransmitHeader.MessageType = CMTPR_Swap;
+    USBPDTxFlag = TRUE;
+}
+
+void core_requestDRSwap(void)
+{
+    PDTransmitHeader.NumDataObjects = 0;
+    PDTransmitHeader.MessageType = CMTDR_Swap;
+    USBPDTxFlag = TRUE;
+}
+
 #endif // FSC_DEBUG

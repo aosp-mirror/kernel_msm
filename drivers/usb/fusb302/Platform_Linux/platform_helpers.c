@@ -97,14 +97,14 @@ FSC_S32 fusb_InitializeGPIO(void)
     if (chip->fusb302_pinctrl) {
         set_state = pinctrl_lookup_state(chip->fusb302_pinctrl, "default");
         if (IS_ERR(set_state)) {
-            pr_err("cannot get fusb302 pinctrl default state");
+            pr_err("FUSB: cannot get fusb302 pinctrl default state");
             return PTR_ERR(set_state);
         }
         pinctrl_select_state(chip->fusb302_pinctrl, set_state);
 
         set_state = pinctrl_lookup_state(chip->fusb302_pinctrl, "vconn_disable");
         if (IS_ERR(set_state)) {
-            pr_err("cannot get fusb302 pinctrl vconn_disable state");
+            pr_err("FUSB: cannot get fusb302 pinctrl vconn_disable state");
             return PTR_ERR(set_state);
         }
         pinctrl_select_state(chip->fusb302_pinctrl, set_state);
@@ -264,7 +264,7 @@ void fusb_GPIO_Set_VBus5v(FSC_BOOL set)
     }
 
     do {
-        pr_info("FUSB %s: set vbus ctrl: %d, typec_state(%d), pd_state(%d), retry: %d\n", __func__, set, ConnState, PolicyState, retry);
+        pr_info("FUSB %s: set vbus ctrl: %d, typec_state(0x%x), pd_state(0x%x), retry: %d\n", __func__, set, ConnState, PolicyState, retry);
         if (chip->uc && chip->uc->pd_vbus_ctrl)
             ret = chip->uc->pd_vbus_ctrl(set ? 1 : 0, IsPRSwap);
 
@@ -402,29 +402,31 @@ FSC_BOOL fusb_Power_Vconn(FSC_BOOL set)
     if (!chip->boost_5v) {
         chip->boost_5v = devm_regulator_get(&chip->client->dev, "V_USB_boost");
         if (IS_ERR(chip->boost_5v)) {
-            pr_err("%s: still unable to get boost_5v regulator\n", __func__);
+            pr_err("FUSB %s: still unable to get boost_5v regulator\n", __func__);
             return FALSE;
         }
     }
 
+    pr_info("FUSB %s: typec_state(0x%x), pd_state(0x%x), set=%d\n", __func__, ConnState, PolicyState, set);
+
     if (set) {
         if (regulator_enable(chip->boost_5v)) {
-            pr_err("%s: Unable to disable boost_5v regulator\n", __func__);
+            pr_err("FUSB %s: Unable to disable boost_5v regulator\n", __func__);
             return FALSE;
         }
-        pr_info("Vconn enabled\n");
+        pr_info("FUSB : Vconn enabled\n");
     } else {
         if (regulator_disable(chip->boost_5v)) {
-            pr_err("%s: Unable to enable boost_5v regulator\n", __func__);
+            pr_err("FUSB %s: Unable to enable boost_5v regulator\n", __func__);
             return FALSE;
         }
-        pr_info("Vconn disabled\n");
+        pr_info("FUSB : Vconn disabled\n");
     }
 
     if (chip->fusb302_pinctrl) {
         set_state = pinctrl_lookup_state(chip->fusb302_pinctrl, set ? "vconn_enable" : "vconn_disable");
         if (IS_ERR(set_state)) {
-            pr_err("cannot get fusb302 pinctrl vconn_contrl state");
+            pr_err("FUSB : cannot get fusb302 pinctrl vconn_contrl state");
             return FALSE;
         }
         pinctrl_select_state(chip->fusb302_pinctrl, set_state);
@@ -537,7 +539,7 @@ FSC_BOOL fusb_I2C_WriteData(FSC_U8 address, FSC_U8 length, FSC_U8* data)
     struct fusb30x_chip* chip = fusb30x_GetChip();
     if (chip == NULL || chip->client == NULL || data == NULL)               // Sanity check
     {
-        pr_err("%s - Error: %s is NULL!\n", __func__, (chip == NULL ? "Internal chip structure"
+        pr_err("FUSB %s - Error: %s is NULL!\n", __func__, (chip == NULL ? "Internal chip structure"
             : (chip->client == NULL ? "I2C Client"
             : "Write data buffer")));
         return false;
@@ -644,7 +646,7 @@ FSC_BOOL fusb_I2C_ReadData(FSC_U8 address, FSC_U8* data)
     struct fusb30x_chip* chip = fusb30x_GetChip();
     if (chip == NULL || chip->client == NULL || data == NULL)
     {
-        pr_err("%s - Error: %s is NULL!\n", __func__, (chip == NULL ? "Internal chip structure"
+        pr_err("FUSB %s - Error: %s is NULL!\n", __func__, (chip == NULL ? "Internal chip structure"
             : (chip->client == NULL ? "I2C Client"
             : "read data buffer")));
         return false;
@@ -747,7 +749,7 @@ FSC_BOOL fusb_I2C_ReadBlockData(FSC_U8 address, FSC_U8 length, FSC_U8* data)
     struct fusb30x_chip* chip = fusb30x_GetChip();
     if (chip == NULL || chip->client == NULL || data == NULL)
     {
-        pr_err("%s - Error: %s is NULL!\n", __func__, (chip == NULL ? "Internal chip structure"
+        pr_err("FUSB %s - Error: %s is NULL!\n", __func__, (chip == NULL ? "Internal chip structure"
             : (chip->client == NULL ? "I2C Client"
             : "block read data buffer")));
         return false;
@@ -932,12 +934,12 @@ void fusb_StartTimers(void)
     if (hrtimer_active(&chip->timer_state_machine) != 0)
     {
         ret = hrtimer_cancel(&chip->timer_state_machine);
-        pr_info("%s - Active state machine hrtimer canceled: %d\n", __func__, ret);
+        pr_info("FUSB %s - Active state machine hrtimer canceled: %d\n", __func__, ret);
     }
     if (hrtimer_is_queued(&chip->timer_state_machine) != 0)
     {
         ret = hrtimer_cancel(&chip->timer_state_machine);
-        pr_info("%s - Queued state machine hrtimer canceled: %d\n", __func__, ret);
+        pr_info("FUSB %s - Queued state machine hrtimer canceled: %d\n", __func__, ret);
     }
     hrtimer_start(&chip->timer_state_machine, ktime, HRTIMER_MODE_REL);                     // Start the timer
     mutex_unlock(&chip->lock);
@@ -974,7 +976,7 @@ void fusb_Delay10us(FSC_U32 delay10us)
     FSC_U32 us = 0;
     if (delay10us > MAX_DELAY_10US)
     {
-        pr_err("%s - Error: Delay of '%u' is too long! Must be less than '%u'.\n", __func__, delay10us, MAX_DELAY_10US);
+        pr_err("FUSB %s - Error: Delay of '%u' is too long! Must be less than '%u'.\n", __func__, delay10us, MAX_DELAY_10US);
         return;
     }
 
@@ -3478,9 +3480,11 @@ static irqreturn_t _fusb_isr_intn(FSC_S32 irq, void *dev_id)
     }
 #endif  // FSC_DEBUG
 
+    mutex_lock(&chip->statemachine_lock);
     wake_lock(&chip->fusb_wlock);
     core_state_machine();                                               // Run the state machine
     wake_unlock(&chip->fusb_wlock);
+    mutex_unlock(&chip->statemachine_lock);
 
     pr_info("FUSB [%s]: FUSB-interrupt handled ++ \n", __func__);
     return IRQ_HANDLED;

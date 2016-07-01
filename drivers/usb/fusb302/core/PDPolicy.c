@@ -843,12 +843,14 @@ void PolicySourceTransitionDefault(void)
                 PolicyIsDFP = TRUE;;                                            // Set the current data role
                 Registers.Switches.DATAROLE = PolicyIsDFP;                      // Update the data role
                 DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]);      // Commit the data role in the 302
+                platform_notify_attached_source(PolicyIsDFP);
             }
             if(IsVCONNSource)                                                   // Disable VCONN if VCONN Source
             {
                 Registers.Switches.VCONN_CC1 = 0;                               
                 Registers.Switches.VCONN_CC2 = 0;
                 DeviceWrite(regSwitches0, 1, &Registers.Switches.byte[0]);
+                platform_set_vconn_enable(FALSE);
             }
             PolicySubIndex++;
             // Adjust output if necessary and start timer prior to going to startup state?
@@ -869,6 +871,7 @@ void PolicySourceTransitionDefault(void)
             break;
         default:
                 platform_set_vbus_lvl_enable(VBUS_LVL_5V, TRUE, FALSE);         // Enable the 5V source
+                platform_set_vconn_enable(TRUE);
                 if(blnCCPinIsCC1)
                 {
                     Registers.Switches.VCONN_CC2 = 1;
@@ -1331,10 +1334,13 @@ void PolicySourceSendDRSwap(void)
     {
         case 0:
             Status = PolicySendCommandNoReset(CMTDR_Swap, peSourceSendDRSwap, 1);   // Send the DR_Swap message
-            if (Status == STAT_SUCCESS)                                         // If we received the good CRC message...
+            if (Status == STAT_SUCCESS) {                                       // If we received the good CRC message...
+                pr_info("FUSB %s: send data role swap, status(%d)\n", __func__, Status);
                 PolicyStateTimer = tSenderResponse;                             // Initialize for SenderResponseTimer
-            else if (Status == STAT_ERROR)                                      // If there was an error...
+            } else if (Status == STAT_ERROR) {                                  // If there was an error...
+                pr_err("FUSB %s: send data role swap, status(%d)\n", __func__, Status);
                 PolicyState = peErrorRecovery;                                  // Go directly to the error recovery state
+            }
             break;
         default:
             if (ProtocolMsgRx)
@@ -1349,6 +1355,8 @@ void PolicySourceSendDRSwap(void)
                             Registers.Switches.DATAROLE = PolicyIsDFP;          // Update the data role
                             DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]); // Commit the data role in the 302 for the auto CRC
                             PolicyState = peSourceReady;                        // Source ready state
+                            pr_info("FUSB %s: accept, PolicyIsDFP(%d)\n", __func__, PolicyIsDFP);
+                            platform_notify_attached_source(PolicyIsDFP);
                             break;
                         case CMTSoftReset:
                             PolicyState = peSourceSoftReset;                    // Go to the soft reset state if we received a reset command
@@ -1387,13 +1395,15 @@ void PolicySourceEvaluateDRSwap(void)
         return;
     }
 #endif // FSC_HAVE_VDM
-
+    pr_info("FUSB %s: enter\n", __func__);
     Status = PolicySendCommandNoReset(CMTAccept, peSourceReady, 0);         // Send the Accept message and wait for the good CRC
     if (Status == STAT_SUCCESS)                                             // If we received the good CRC...
     {
         PolicyIsDFP = (PolicyIsDFP == TRUE) ? FALSE : TRUE;                 // We're not really doing anything except flipping the bit
         Registers.Switches.DATAROLE = PolicyIsDFP;                          // Update the data role
         DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]);          // Commit the data role in the 302 for the auto CRC
+        pr_info("FUSB %s: accept, PolicyIsDFP(%d)\n", __func__, PolicyIsDFP);
+        platform_notify_attached_source(PolicyIsDFP);
     }
     else if (Status == STAT_ERROR)                                          // If we didn't receive the good CRC...
     {
@@ -1448,6 +1458,7 @@ void PolicySourceSendVCONNSwap(void)
             }
             else                                                                // Otherwise we need to start sourcing VCONN
             {
+                platform_set_vconn_enable(TRUE);
                 if (blnCCPinIsCC1)                                              // If the CC pin is CC1...
                     Registers.Switches.VCONN_CC2 = 1;                           // Enable VCONN for CC2
                 else                                                            // Otherwise the CC pin is CC2
@@ -1470,6 +1481,7 @@ void PolicySourceSendVCONNSwap(void)
                             Registers.Switches.VCONN_CC1 = 0;                   // Disable the VCONN source
                             Registers.Switches.VCONN_CC2 = 0;                   // Disable the VCONN source
                             DeviceWrite(regSwitches0, 1, &Registers.Switches.byte[0]); // Commit the register setting to the device
+                            platform_set_vconn_enable(FALSE);
                             IsVCONNSource = FALSE;
                             PolicyState = peSourceReady;                        // Move onto the Sink Ready state
                             PolicySubIndex = 0;                                 // Clear the sub index
@@ -1503,6 +1515,7 @@ void PolicySourceSendPRSwap(void)
     switch(PolicySubIndex)
     {
         case 0: // Send the PRSwap command
+            pr_info("FUSB %s: send PR_Swap command\n", __func__);
             if (PolicySendCommand(CMTPR_Swap, peSourceSendPRSwap, 1) == STAT_SUCCESS) // Send the PR_Swap message and wait for the good CRC
                 PolicyStateTimer = tSenderResponse;                             // Once we receive the good CRC, set the sender response timer
             break;
@@ -1742,6 +1755,7 @@ void PolicySourceEvaluateVCONNSwap(void)
     switch(PolicySubIndex)
     {
         case 0:
+            pr_info("FUSB %s: accept vconn swap, IsVCONNSource=%d\n", __func__, IsVCONNSource);
             PolicySendCommand(CMTAccept, peSourceEvaluateVCONNSwap, 1);         // Send the Accept message and wait for the good CRC
             break;
         case 1:
@@ -1752,6 +1766,7 @@ void PolicySourceEvaluateVCONNSwap(void)
             }
             else                                                                // Otherwise we need to start sourcing VCONN
             {
+                platform_set_vconn_enable(TRUE);
                 if (blnCCPinIsCC1)                                              // If the CC pin is CC1...
                 {
                     Registers.Switches.VCONN_CC2 = 1;                           // Enable VCONN for CC2
@@ -1782,6 +1797,7 @@ void PolicySourceEvaluateVCONNSwap(void)
                             Registers.Switches.PDWN1 = 1;                       // Ensure the pull-down on CC1 is enabled
                             Registers.Switches.PDWN2 = 1;                       // Ensure the pull-down on CC2 is enabled
                             DeviceWrite(regSwitches0, 1, &Registers.Switches.byte[0]); // Commit the register setting to the device
+                            platform_set_vconn_enable(FALSE);
                             IsVCONNSource = FALSE;
                             PolicyState = peSourceReady;                          // Move onto the Sink Ready state
                             PolicySubIndex = 0;                                 // Clear the sub index
@@ -1874,12 +1890,14 @@ void PolicySinkTransitionDefault(void)
                 PolicyIsDFP = FALSE;                                            // Set the current data role
                 Registers.Switches.DATAROLE = PolicyIsDFP;                      // Update the data role
                 DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]);      // Commit the data role in the 302
+                platform_notify_attached_source(PolicyIsDFP);
             }
             if(IsVCONNSource)                                                   // Disable VCONN if VCONN Source
             {
                 Registers.Switches.VCONN_CC1 = 0;                               
                 Registers.Switches.VCONN_CC2 = 0;
                 DeviceWrite(regSwitches0, 1, &Registers.Switches.byte[0]);
+                platform_set_vconn_enable(FALSE);
                 IsVCONNSource = FALSE;
             }
             PolicySubIndex++;
@@ -2162,6 +2180,7 @@ void PolicySinkSelectCapability(void)
             if (PolicySendData(DMTRequest, 1, &SinkRequest, peSinkSelectCapability, 1, SOP_TYPE_SOP) == STAT_SUCCESS)
             {
                 NoResponseTimer = tSenderResponse;                                   // If there is a good CRC start retry timer
+                PolicyStateTimer = tSenderResponse;                                     // re-Initialize the sender response timer
             }
             break;
        case 1:
@@ -2455,10 +2474,13 @@ void PolicySinkSendDRSwap(void)
     {
         case 0:
             Status = PolicySendCommandNoReset(CMTDR_Swap, peSinkSendDRSwap, 1); // Send the DR_Swap command
-            if (Status == STAT_SUCCESS)                                         // If we received a good CRC message...
+            if (Status == STAT_SUCCESS) {                                       // If we received a good CRC message...
+                pr_info("FUSB %s: send data role swap, status(%d)\n", __func__, Status);
                 PolicyStateTimer = tSenderResponse;                             // Initialize for SenderResponseTimer if we received the GoodCRC
-            else if (Status == STAT_ERROR)                                      // If there was an error...
+            } else if (Status == STAT_ERROR) {                                  // If there was an error...
+                pr_err("FUSB %s: send data role swap, status(%d)\n", __func__, Status);
                 PolicyState = peErrorRecovery;                                  // Go directly to the error recovery state
+            }
             break;
         default:
             if (ProtocolMsgRx)
@@ -2473,6 +2495,8 @@ void PolicySinkSendDRSwap(void)
                             Registers.Switches.DATAROLE = PolicyIsDFP;          // Update the data role
                             DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]); // Commit the data role in the 302 for the auto CRC
                             PolicyState = peSinkReady;                          // Sink ready state
+                            pr_info("FUSB %s: accept, PolicyIsDFP(%d)\n", __func__, PolicyIsDFP);
+                            platform_notify_attached_source(PolicyIsDFP);
                             break;
                         case CMTSoftReset:
                             PolicyState = peSinkSoftReset;                      // Go to the soft reset state if we received a reset command
@@ -2512,12 +2536,15 @@ void PolicySinkEvaluateDRSwap(void)
     }
 #endif // FSC_HAVE_VDM
 
+    pr_info("FUSB %s: enter\n", __func__);
     Status = PolicySendCommandNoReset(CMTAccept, peSinkReady, 0);           // Send the Accept message and wait for the good CRC
     if (Status == STAT_SUCCESS)                                             // If we received the good CRC...
     {
         PolicyIsDFP = (PolicyIsDFP == TRUE) ? FALSE : TRUE;                 // We're not really doing anything except flipping the bit
         Registers.Switches.DATAROLE = PolicyIsDFP;                          // Update the data role
         DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]);         // Commit the data role in the 302 for the auto CRC
+        pr_info("FUSB %s: accept, PolicyIsDFP(%d)\n", __func__, PolicyIsDFP);
+        platform_notify_attached_source(PolicyIsDFP);
     }
     else if (Status == STAT_ERROR)                                          // If we didn't receive the good CRC...
     {
@@ -2532,6 +2559,7 @@ void PolicySinkEvaluateVCONNSwap(void)
     switch(PolicySubIndex)
     {
         case 0:
+            pr_info("FUSB %s: accept vconn swap, IsVCONNSource=%d\n", __func__, IsVCONNSource);
             PolicySendCommand(CMTAccept, peSinkEvaluateVCONNSwap, 1);           // Send the Accept message and wait for the good CRC
             break;
         case 1:
@@ -2542,6 +2570,7 @@ void PolicySinkEvaluateVCONNSwap(void)
             }
             else                                                                // Otherwise we need to start sourcing VCONN
             {
+                platform_set_vconn_enable(TRUE);
                 if (blnCCPinIsCC1)                                              // If the CC pin is CC1...
                 {
                     Registers.Switches.VCONN_CC2 = 1;                           // Enable VCONN for CC2
@@ -2572,6 +2601,7 @@ void PolicySinkEvaluateVCONNSwap(void)
                             Registers.Switches.PDWN1 = 1;                       // Ensure the pull-down on CC1 is enabled
                             Registers.Switches.PDWN2 = 1;                       // Ensure the pull-down on CC2 is enabled
                             DeviceWrite(regSwitches0, 1, &Registers.Switches.byte[0]); // Commit the register setting to the device
+                            platform_set_vconn_enable(FALSE);
                             IsVCONNSource = FALSE;
                             PolicyState = peSinkReady;                          // Move onto the Sink Ready state
                             PolicySubIndex = 0;                                 // Clear the sub index
@@ -2605,6 +2635,7 @@ void PolicySinkSendPRSwap(void)
     switch(PolicySubIndex)
     {
         case 0: // Send the PRSwap command
+            pr_info("FUSB %s: send PR_Swap command\n", __func__);
             if (PolicySendCommand(CMTPR_Swap, peSinkSendPRSwap, 1) == STAT_SUCCESS) // Send the PR_Swap message and wait for the good CRC
                 PolicyStateTimer = tSenderResponse;                             // Once we receive the good CRC, set the sender response timer
             break;
