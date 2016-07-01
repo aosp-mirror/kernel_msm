@@ -1520,6 +1520,7 @@ void wlan_hdd_netif_queue_control(hdd_adapter_t *adapter,
 
 }
 
+#ifdef QCA_PKT_PROTO_TRACE
 /**
  * hdd_dhcp_pkt_trace_buf_update() - Update protocol trace buffer with DHCP
  * packet info.
@@ -1598,6 +1599,7 @@ void hdd_dhcp_pkt_trace_buf_update (struct sk_buff *skb, int is_transmission,
 			  FL("%s"), tbuf);
 	}
 }
+#endif
 
 #ifdef FEATURE_BUS_BANDWIDTH
 /**

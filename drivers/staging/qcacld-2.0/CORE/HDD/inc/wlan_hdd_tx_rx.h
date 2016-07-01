@@ -273,6 +273,14 @@ const char *hdd_action_type_to_string(enum netif_action_type action);
 void wlan_hdd_netif_queue_control(hdd_adapter_t *adapter,
 		enum netif_action_type action, enum netif_reason_type reason);
 
+#ifdef QCA_PKT_PROTO_TRACE
 void hdd_dhcp_pkt_trace_buf_update(struct sk_buff *skb, int is_transmission,
 				   int is_sta);
+#else
+static inline void hdd_dhcp_pkt_trace_buf_update(struct sk_buff *skb,
+					    int is_transmission, int is_sta)
+{
+	return;
+}
+#endif
 #endif    // end #if !defined( WLAN_HDD_TX_RX_H )
