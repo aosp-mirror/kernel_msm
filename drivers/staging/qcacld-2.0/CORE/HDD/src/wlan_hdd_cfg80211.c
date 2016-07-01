@@ -10573,6 +10573,7 @@ static int __wlan_hdd_cfg80211_fast_roaming(struct wiphy *wiphy,
 	hdd_adapter_t *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_MAX + 1];
 	uint32_t is_fast_roam_enabled;
+	eHalStatus status;
 	int ret;
 
 	ENTER();
@@ -10604,12 +10605,15 @@ static int __wlan_hdd_cfg80211_fast_roaming(struct wiphy *wiphy,
 	hddLog(LOG1, FL("isFastRoamEnabled %d"), is_fast_roam_enabled);
 
 	/* Update roaming */
-	ret = sme_config_fast_roaming(hdd_ctx->hHal, adapter->sessionId,
+	status = sme_config_fast_roaming(hdd_ctx->hHal, adapter->sessionId,
 					 is_fast_roam_enabled);
-	if (ret)
-		hddLog(LOGE, FL("sme_config_fast_roaming failed"));
+	if (!HAL_STATUS_SUCCESS(status)) {
+		hddLog(LOGE,
+			FL("sme_config_fast_roaming (err=%d)"), status);
+		return -EINVAL;
+	}
 	EXIT();
-	return ret;
+	return 0;
 }
 
 /**
