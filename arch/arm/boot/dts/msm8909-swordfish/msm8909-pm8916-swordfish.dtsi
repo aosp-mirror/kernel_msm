@@ -111,6 +111,7 @@
 };
 
 &pm8916_l6 {
+	qcom,init-ldo-mode = <1>; /* NPM */
 	regulator-always-on; /* Always on for sensor hub */
 };
 
