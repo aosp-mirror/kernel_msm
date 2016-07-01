@@ -7706,8 +7706,10 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
                     hddLog(LOGE, FL("Invalid MODULE ID %d"), apps_args[0]);
                     return -EINVAL;
                 }
-                if (apps_args[1] > (WMA_MAX_NUM_ARGS)) {
-                    hddLog(LOGE, FL("Too Many args %d"), apps_args[1]);
+
+                if ((apps_args[1] > (WMA_MAX_NUM_ARGS)) ||
+                    (apps_args[1] < 0)) {
+                    hddLog(LOGE, FL("Too Many/Few args %d"), apps_args[1]);
                     return -EINVAL;
                 }
                 unitTestArgs = vos_mem_malloc(sizeof(*unitTestArgs));
