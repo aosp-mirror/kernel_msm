@@ -9067,7 +9067,7 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
                 }
                 if ((apps_args[1] > (WMA_MAX_NUM_ARGS)) ||
                     (apps_args[1] < 0)) {
-                    hddLog(LOGE, FL("Too Many args %d"), apps_args[1]);
+                    hddLog(LOGE, FL("Too Many/Few args %d"), apps_args[1]);
                     return -EINVAL;
                 }
                 unitTestArgs = vos_mem_malloc(sizeof(*unitTestArgs));
@@ -9079,8 +9079,7 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
                 unitTestArgs->vdev_id            = (int)pAdapter->sessionId;
                 unitTestArgs->module_id          = apps_args[0];
                 unitTestArgs->num_args           = apps_args[1];
-                for (i = 0, j = 2; i < unitTestArgs->num_args - 1;
-                     i++, j++) {
+                for (i = 0, j = 2; i < unitTestArgs->num_args; i++, j++) {
                     unitTestArgs->args[i] = apps_args[j];
                 }
                 msg.type = SIR_HAL_UNIT_TEST_CMD;
