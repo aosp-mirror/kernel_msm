@@ -156,20 +156,22 @@ limConvertSupportedChannels(tpAniSirGlobal pMac,
         pMlmAssocInd->supportedChannels.numChnl);)
 }
 
-/**---------------------------------------------------------------
-\fn     lim_check_sta_in_pe_entries
-\brief  This function is called by limProcessAssocReqFrame()
-\       to check if STA entry already exists in any of the
-\       PE entries of the AP. If it exists, deauth will be
-\       sent on that session and the STA deletion will
-\       happen. After this, the ASSOC request will be
-\       processed
-\
-\param pMac - A pointer to Global MAC structure
-\param pHdr - A pointer to the MAC header
-\return None
-------------------------------------------------------------------*/
-void lim_check_sta_in_pe_entries(tpAniSirGlobal pMac, tpSirMacMgmtHdr pHdr)
+/**
+ * lim_check_sta_in_pe_entries() - to check if sta entry already exists
+ * @pMac - A pointer to Global MAC structure
+ * @pHdr - A pointer to the MAC header
+ * @sessionid - session id for which session is initiated
+ *
+ * This function is called by limProcessAssocReqFrame()
+ * to check if STA entry already exists in any of the
+ * PE entries of the AP. If it exists, deauth will be
+ * sent on that session and the STA deletion will
+ * happen. After this, the ASSOC request will be processed
+ *
+ * Return: None
+ */
+void lim_check_sta_in_pe_entries(tpAniSirGlobal pMac, tpSirMacMgmtHdr pHdr,
+                                 uint16_t sessionid)
 {
     tANI_U8 i;
     tANI_U16 assocId = 0;
@@ -188,7 +190,8 @@ void lim_check_sta_in_pe_entries(tpAniSirGlobal pMac, tpSirMacMgmtHdr pHdr)
                             &psessionEntry->dph.dphHashTable);
             if (pStaDs
 #ifdef WLAN_FEATURE_11W
-                && !pStaDs->rmfEnabled
+                && (!pStaDs->rmfEnabled ||
+                    (sessionid != psessionEntry->peSessionId))
 #endif
                ) {
                 limLog(pMac, LOGE,
@@ -320,7 +323,7 @@ limProcessAssocReqFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,
         }
     }
 
-    lim_check_sta_in_pe_entries(pMac, pHdr);
+    lim_check_sta_in_pe_entries(pMac, pHdr, psessionEntry->peSessionId);
 
     // Get pointer to Re/Association Request frame body
     pBody = WDA_GET_RX_MPDU_DATA(pRxPacketInfo);
