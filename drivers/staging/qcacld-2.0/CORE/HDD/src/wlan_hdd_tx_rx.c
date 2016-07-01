@@ -1598,3 +1598,28 @@ void hdd_dhcp_pkt_trace_buf_update (struct sk_buff *skb, int is_transmission,
 			  FL("%s"), tbuf);
 	}
 }
+
+#ifdef FEATURE_BUS_BANDWIDTH
+/**
+ * hdd_rst_tcp_delack() - Reset tcp delack value to original level
+ * @hdd_context_t : HDD context
+ *
+ * This is single function which is used for reseting TCP delack
+ * value to its original value.
+ *
+ * Return: None
+ */
+void hdd_rst_tcp_delack(hdd_context_t *hdd_ctx)
+{
+	enum cnss_bus_width_type  next_level = CNSS_BUS_WIDTH_LOW;
+
+	hdd_ctx->rx_high_ind_cnt = 0;
+	wlan_hdd_send_svc_nlink_msg(WLAN_SVC_WLAN_TP_IND, &next_level,
+							sizeof(next_level));
+}
+#else
+void hdd_rst_tcp_delack(hdd_context_t *hdd_ctx)
+{
+	return;
+}
+#endif /* FEATURE_BUS_BANDWIDTH */

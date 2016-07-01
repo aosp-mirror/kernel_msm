@@ -242,6 +242,16 @@ void hdd_tx_resume_timer_expired_handler(void *adapter_context);
 #endif /* QCA_LL_TX_FLOW_CT */
 
 /**
+ * hdd_rst_tcp_delack() - Reset tcp delack value to original level.
+ * @hdd_context_t : HDD context
+ *
+ * HDD will call this API on unloading path to clear delack value.
+ *
+ * Return: None
+ */
+void hdd_rst_tcp_delack(hdd_context_t *hdd_ctx);
+
+/**
  * hdd_mon_rx_packet_cbk() - Receive callback registered with TL.
  * @vosContext: [in] pointer to VOS context
  * @staId:      [in] Station Id

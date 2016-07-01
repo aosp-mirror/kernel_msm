@@ -12897,6 +12897,7 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
                         vos_timer_getCurrentState(&pHddCtx->bus_bw_timer))
    {
       vos_timer_stop(&pHddCtx->bus_bw_timer);
+      hdd_rst_tcp_delack(pHddCtx);
    }
 
    if (!VOS_IS_STATUS_SUCCESS(vos_timer_destroy(
@@ -13585,10 +13586,15 @@ void hdd_cnss_request_bus_bandwidth(hdd_context_t *pHddCtx,
     /* fine-tuning parameters for RX Flows */
     temp_rx = (rx_packets + pHddCtx->prev_rx) / 2;
     pHddCtx->prev_rx = rx_packets;
-    if (temp_rx > pHddCtx->cfg_ini->tcpDelackThresholdHigh)
-        next_rx_level = WLAN_SVC_TP_HIGH;
-    else
-        next_rx_level = WLAN_SVC_TP_LOW;
+    if (temp_rx > pHddCtx->cfg_ini->tcpDelackThresholdHigh) {
+        if ((pHddCtx->cur_rx_level != WLAN_SVC_TP_HIGH) &&
+        (++pHddCtx->rx_high_ind_cnt == pHddCtx->cfg_ini->tcpDelackTimerCount)) {
+            next_rx_level = WLAN_SVC_TP_HIGH;
+        }
+    } else {
+            next_rx_level = WLAN_SVC_TP_LOW;
+            pHddCtx->rx_high_ind_cnt = 0;
+    }
 
     pHddCtx->hdd_txrx_hist[pHddCtx->hdd_txrx_hist_idx].next_rx_level
                                                           = next_rx_level;
@@ -17236,6 +17242,7 @@ void hdd_stop_bus_bw_compute_timer(hdd_adapter_t *pAdapter)
 
     if (can_stop == VOS_TRUE) {
         vos_timer_stop(&pHddCtx->bus_bw_timer);
+        hdd_rst_tcp_delack(pHddCtx);
         tlshim_reset_bundle_require();
     }
 }

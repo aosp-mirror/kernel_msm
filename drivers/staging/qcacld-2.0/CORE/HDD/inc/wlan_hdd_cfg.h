@@ -2889,6 +2889,11 @@ This feature requires the dependent cfg.ini "gRoamPrefer5GHz" set to 1 */
 #define CFG_TCP_DELACK_THRESHOLD_LOW_MIN           ( 0 )
 #define CFG_TCP_DELACK_THRESHOLD_LOW_MAX           ( 10000 )
 
+#define CFG_TCP_DELACK_TIMER_COUNT                 "gTcpDelAckTimerCount"
+#define CFG_TCP_DELACK_TIMER_COUNT_DEFAULT         ( 30 )
+#define CFG_TCP_DELACK_TIMER_COUNT_MIN             ( 1 )
+#define CFG_TCP_DELACK_TIMER_COUNT_MAX             ( 1000 )
+
 
 /* TCP_TX_HIGH_TPUT_THRESHOLD specifies the threshold of packets transmitted
  * over a period of 100 ms beyond which TCP can be considered to have a high
@@ -4369,6 +4374,7 @@ struct hdd_config {
    v_U32_t                     busBandwidthComputeInterval;
    v_U32_t                     tcpDelackThresholdHigh;
    v_U32_t                     tcpDelackThresholdLow;
+   uint32_t                    tcpDelackTimerCount;
    uint32_t                    tcp_tx_high_tput_thres;
 #endif /* FEATURE_BUS_BANDWIDTH */
 #ifdef QCA_SUPPORT_TXRX_HL_BUNDLE
