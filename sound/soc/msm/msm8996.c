@@ -822,6 +822,16 @@ static int msm_ext_rcv_event(struct snd_soc_dapm_widget *w,
 	}
 	return ret;
 }
+
+static int msm_handset_mic_event(struct snd_soc_dapm_widget *w,
+				 struct snd_kcontrol *k, int event)
+{
+
+	if (SND_SOC_DAPM_EVENT_ON(event))
+		usleep_range(10000, 10000);
+
+	return 0;
+}
 /*HTC_AUD_END*/
 
 static const struct snd_soc_dapm_widget msm8996_dapm_widgets[] = {
@@ -840,7 +850,7 @@ static const struct snd_soc_dapm_widget msm8996_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("Lineout_4 amp", NULL),
 	SND_SOC_DAPM_SPK("ultrasound amp", msm_ext_ultrasound_event),
 	SND_SOC_DAPM_SPK("hifi amp", msm_hifi_ctrl_event),
-	SND_SOC_DAPM_MIC("Handset Mic", NULL),
+	SND_SOC_DAPM_MIC("Handset Mic", msm_handset_mic_event),
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("ANCRight Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("ANCLeft Headset Mic", NULL),
