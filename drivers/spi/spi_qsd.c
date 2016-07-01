@@ -2508,6 +2508,23 @@ skip_dma_resources:
 	if (rc)
 		goto err_probe_reg_master;
 
+	if (!dd->pdata->is_shared && master->cs_gpios) {
+		for (i = 0; i < master->num_chipselect; i++) {
+			if (!gpio_is_valid(master->cs_gpios[i]))
+				continue;
+
+			rc = devm_gpio_request_one(&pdev->dev,
+					master->cs_gpios[i],
+					GPIOF_DIR_OUT,
+					spi_cs_rsrcs[i]);
+			if (rc) {
+				dev_err(&pdev->dev, "Can't get CS GPIO %i\n",
+						master->cs_gpios[i]);
+				goto err_attrs;
+			}
+		}
+	}
+
 	rc = sysfs_create_group(&(dd->dev->kobj), &dev_attr_grp);
 	if (rc) {
 		dev_err(&pdev->dev, "failed to create dev. attrs : %d\n", rc);
