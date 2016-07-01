@@ -76,7 +76,7 @@ void
 limInitPeerIdxpool(tpAniSirGlobal pMac,tpPESession pSessionEntry)
 {
     tANI_U8 i;
-    tANI_U8 maxAssocSta = pMac->lim.gLimAssocStaLimit;
+    tANI_U8 maxAssocSta = pMac->lim.maxStation;
 
     pSessionEntry->gpLimPeerIdxpool[0]=0;
 
@@ -92,7 +92,6 @@ limInitPeerIdxpool(tpAniSirGlobal pMac,tpPESession pSessionEntry)
 #ifdef QCA_IBSS_SUPPORT
     if (LIM_IS_IBSS_ROLE(pSessionEntry)) {
         pSessionEntry->freePeerIdxHead=LIM_START_PEER_IDX;
-        maxAssocSta = pMac->lim.gLimIbssStaLimit;
     }
     else
 #endif
