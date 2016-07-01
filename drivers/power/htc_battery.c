@@ -2213,7 +2213,7 @@ int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *ma
 	if(size <= 0)
 		return -EINVAL;
 
-	if (!g_is_charger_ready) {
+	if (!g_is_charger_ready || !g_htc_battery_probe_done) {
 		pr_info("[BATT][PD] Charger driver is not ready!\n");
 		/* feedback USB to retry later */
 		return -1;
