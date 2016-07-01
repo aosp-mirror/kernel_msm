@@ -1160,23 +1160,34 @@ void ol_schedule_ramdump_work(struct ol_softc *scn)
 	schedule_work(&ramdump_work);
 }
 
+#ifndef HIF_USB
 static void fw_indication_work_handler(struct work_struct *fw_indication)
 {
-#if !defined(HIF_SDIO)
 	struct device *dev = NULL;
 
 	if (ramdump_scn && ramdump_scn->adf_dev
 			&& ramdump_scn->adf_dev->dev)
 		dev = ramdump_scn->adf_dev->dev;
 
+	if (!dev) {
+		pr_err("%s Device is Invalid\n", __func__);
+		return;
+	}
+
 	vos_device_self_recovery(dev);
-#endif
 }
+#else
+static void fw_indication_work_handler(struct work_struct *fw_indication)
+{
+}
+#endif
+
 
 static DECLARE_WORK(fw_indication_work, fw_indication_work_handler);
 
 void ol_schedule_fw_indication_work(struct ol_softc *scn)
 {
+	ramdump_scn = scn;
 	schedule_work(&fw_indication_work);
 }
 #endif
