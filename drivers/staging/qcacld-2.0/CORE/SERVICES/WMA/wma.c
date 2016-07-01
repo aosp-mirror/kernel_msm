@@ -21097,8 +21097,8 @@ static void wma_wow_parse_data_pkt_buffer(uint8_t *data,
 	WMA_LOGD("wow_buf_pkt_len: %d", buf_len);
 	if (buf_len >= ADF_NBUF_TRAC_ETH_TYPE_OFFSET)
 		WMA_LOGE("Src_mac: " MAC_ADDRESS_STR " Dst_mac: " MAC_ADDRESS_STR,
-			MAC_ADDR_ARRAY(data),
-			MAC_ADDR_ARRAY(data + ADF_NBUF_SRC_MAC_OFFSET));
+			MAC_ADDR_ARRAY(data + ADF_NBUF_SRC_MAC_OFFSET),
+			MAC_ADDR_ARRAY(data));
 	else
 		goto end;
 
