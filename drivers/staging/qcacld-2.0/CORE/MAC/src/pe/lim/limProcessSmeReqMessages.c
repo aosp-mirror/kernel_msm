@@ -2442,6 +2442,45 @@ __limProcessSmeReassocReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
     psessionEntry->dot11mode = pReassocReq->dot11mode;
     psessionEntry->vhtCapability = IS_DOT11_MODE_VHT(pReassocReq->dot11mode);
 
+#ifdef WLAN_FEATURE_11AC
+        if (psessionEntry->vhtCapability) {
+            if (psessionEntry->pePersona == VOS_STA_MODE)
+                psessionEntry->txBFIniFeatureEnabled =
+                      pReassocReq->txBFIniFeatureEnabled;
+            else
+                psessionEntry->txBFIniFeatureEnabled = 0;
+
+            psessionEntry->txMuBformee = pReassocReq->txMuBformee;
+            psessionEntry->enableVhtpAid = pReassocReq->enableVhtpAid;
+            psessionEntry->enableVhtGid = pReassocReq->enableVhtGid;
+            if (psessionEntry->txBFIniFeatureEnabled) {
+                if (cfgSetInt(pMac, WNI_CFG_VHT_SU_BEAMFORMEE_CAP,
+                                 psessionEntry->txBFIniFeatureEnabled)
+                                                      != eSIR_SUCCESS) {
+                    limLog(pMac, LOGE, FL("could not set  "
+                                "WNI_CFG_VHT_SU_BEAMFORMEE_CAP at CFG"));
+                    retCode = eSIR_LOGP_EXCEPTION;
+                    goto end;
+                }
+                if (cfgSetInt(pMac, WNI_CFG_VHT_CSN_BEAMFORMEE_ANT_SUPPORTED,
+                                              pReassocReq->txBFCsnValue)
+                                                       != eSIR_SUCCESS) {
+                    limLog(pMac, LOGE, FL("could not set "
+                     "WNI_CFG_VHT_CSN_BEAMFORMEE_ANT_SUPPORTED at CFG"));
+                    retCode = eSIR_LOGP_EXCEPTION;
+                    goto end;
+                }
+            }
+        }
+        limLog(pMac, LOG1,
+               FL("vhtCapability: %d txBFIniFeatureEnabled: %d"
+                 "txBFCsnValue: %d txMuBformee: %d"),
+               psessionEntry->vhtCapability,
+               psessionEntry->txBFIniFeatureEnabled,
+               pReassocReq->txBFCsnValue,
+               psessionEntry->txMuBformee);
+#endif
+
     psessionEntry->enableHtSmps = pReassocReq->enableHtSmps;
     psessionEntry->htSmpsvalue = pReassocReq->htSmps;
     limLog(pMac, LOG1, FL("enableHtSmps: %d htSmps: %d supported nss 1x1: %d"),
