@@ -15806,13 +15806,7 @@ static void hdd_driver_exit(void)
    }
 
    vos_wait_for_work_thread_completion(__func__);
-#ifdef QCA_PKT_PROTO_TRACE
-      if (VOS_FTM_MODE != hdd_get_conparam())
-          vos_pkt_proto_trace_close();
-#endif /* QCA_PKT_PROTO_TRACE */
-
    hif_unregister_driver();
-
    vos_preClose( &pVosContext );
 
 #ifdef TIMER_MANAGER
@@ -15825,6 +15819,11 @@ static void hdd_driver_exit(void)
 #ifdef WLAN_LOGGING_SOCK_SVC_ENABLE
    wlan_logging_sock_deinit_svc();
 #endif
+
+#ifdef QCA_PKT_PROTO_TRACE
+      if (VOS_FTM_MODE != hdd_get_conparam())
+          vos_pkt_proto_trace_close();
+#endif /* QCA_PKT_PROTO_TRACE */
 
 done:
    vos_wake_lock_destroy(&wlan_wake_lock);
