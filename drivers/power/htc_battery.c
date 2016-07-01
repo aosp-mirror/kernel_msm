@@ -108,6 +108,11 @@ unsigned int g_overheat_55_sec;
 unsigned int g_batt_first_use_time;
 unsigned int g_batt_cycle_checksum;
 
+/*USB CONN temp*/
+static bool g_usb_overheat = false;
+static unsigned int g_usb_overheat_check_count = 0;
+static int g_usb_temp = 0;
+
 /*cable impedance*/
 static bool gs_measure_cable_impedance = true;
 static int gs_R_cable_impedance = 0;
@@ -815,6 +820,7 @@ static void batt_update_info_from_charger(void)
 	htc_batt_info.rep.is_htcchg_ext_mode =
 		get_property(htc_batt_info.batt_psy, POWER_SUPPLY_PROP_HTCCHG_EXT);
 #endif // CONFIG_HTC_CHARGER
+	g_usb_temp = pmi8996_get_usb_temp();
 
 }
 
@@ -1147,6 +1153,43 @@ static int fb_notifier_callback(struct notifier_block *self,
 }
 #endif /* CONFIG_FB */
 
+#define USB_OVERHEAT_CHECK_PERIOD_MS 30000
+static void is_usb_overheat_worker(struct work_struct *work)
+{
+	int usb_pwr_temp = pmi8996_get_usb_temp();
+	static int last_usb_pwr_temp = 0;
+	if (g_latest_chg_src > POWER_SUPPLY_TYPE_UNKNOWN) {
+		if(!g_usb_overheat) {
+			pr_debug("USB CONN Temp = %d\n",usb_pwr_temp);
+			g_usb_temp = usb_pwr_temp;
+			if(usb_pwr_temp > 650)
+				g_usb_overheat = true;
+			if(g_usb_overheat_check_count == 0)
+				last_usb_pwr_temp = usb_pwr_temp;
+			else if(((usb_pwr_temp - last_usb_pwr_temp) > 300) &&
+					(g_usb_overheat_check_count <= 6))
+				g_usb_overheat = true;
+		}
+
+		/* Avoid count overflow */
+		if (g_usb_overheat_check_count < U32_MAX)
+			g_usb_overheat_check_count++;
+
+		if(!g_usb_overheat)
+			schedule_delayed_work(&htc_batt_info.is_usb_overheat_work,
+				msecs_to_jiffies(USB_OVERHEAT_CHECK_PERIOD_MS));
+		else {
+			BATT_LOG("%s: USB overheat! cable_in_usb_temp:%d, usb_temp:%d, count = %d\n",
+				__func__, last_usb_pwr_temp, usb_pwr_temp, g_usb_overheat_check_count);
+			htc_batt_schedule_batt_info_update();
+		}
+	} else {
+		g_usb_overheat = false;
+		g_usb_overheat_check_count = 0;
+		last_usb_pwr_temp = 0;
+	}
+}
+
 static void cable_impedance_worker(struct work_struct *work)
 {
 	int R_HW_MB_Impedance = 115;
@@ -1436,6 +1479,14 @@ static void batt_worker(struct work_struct *work)
 		else
 			g_pwrsrc_dis_reason &= ~HTC_BATT_PWRSRC_DIS_BIT_MFG;
 
+		if (g_usb_overheat){
+			g_pwrsrc_dis_reason |= HTC_BATT_PWRSRC_DIS_BIT_USB_OVERHEAT;
+			g_chg_dis_reason |= HTC_BATT_CHG_DIS_BIT_USB_OVERHEAT;
+		} else {
+			g_pwrsrc_dis_reason &= ~HTC_BATT_PWRSRC_DIS_BIT_USB_OVERHEAT;
+			g_chg_dis_reason &= ~HTC_BATT_CHG_DIS_BIT_USB_OVERHEAT;
+		}
+
 		/* STEP 11.2.1 determin charging_eanbled for charger control */
 		if (g_chg_dis_reason)
 			charging_enabled = 0;
@@ -1538,6 +1589,8 @@ static void batt_worker(struct work_struct *work)
 			charging_enabled = 0;
 			pwrsrc_enabled = 0;
 			s_vbus_valid_no_chger_cnt = 0;
+			g_usb_overheat = false;
+			g_usb_overheat_check_count = 0;
 			if(s_first){
 				pr_info("ignore the fist time on boot.\n");
 			}else{
@@ -1662,6 +1715,8 @@ static void batt_worker(struct work_struct *work)
 #ifdef CONFIG_HTC_CHARGER
 		"htcchg=%d,"
 #endif // CONFIG_HTC_CHARGER
+		"usb_temp=%d,"
+		"usb_overheat=%d,"
 		"level_accu=%d",
 		htc_batt_info.rep.batt_id,
 		htc_batt_info.rep.level,
@@ -1686,6 +1741,8 @@ static void batt_worker(struct work_struct *work)
 #ifdef CONFIG_HTC_CHARGER
 		htc_batt_info.rep.is_htcchg_ext_mode,
 #endif // CONFIG_HTC_CHARGER
+		g_usb_temp,
+		g_usb_overheat? 1 : 0,
 		g_total_level_raw);
 
 	if(gs_update_PSY){
@@ -2056,6 +2113,10 @@ void htc_battery_info_update(enum power_supply_property prop, int intval)
 						schedule_delayed_work(&htc_batt_info.chg_full_check_work,0);
  					}
 				}
+				if (!g_flag_keep_charge_on && !g_usb_overheat) {
+					if(!delayed_work_pending(&htc_batt_info.is_usb_overheat_work))
+						schedule_delayed_work(&htc_batt_info.is_usb_overheat_work, 0);
+				}
 			}
 			break;
 		case POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED:
@@ -2296,6 +2357,11 @@ int htc_battery_get_pd_vbus(int *vbus)
 		return -EINVAL;
 }
 
+bool htc_battery_get_discharging_reason(void)
+{
+	return g_chg_dis_reason;
+}
+
 static ssize_t htc_battery_set_phone_call(struct device *dev,
                 struct device_attribute *attr,
                 const char *buf, size_t count)
@@ -2461,6 +2527,13 @@ static ssize_t htc_battery_show_htc_extension_attr(struct device *dev,
 	return sprintf(buf, "%d\n", htc_batt_info.htc_extension);;
 }
 
+static ssize_t htc_battery_show_usb_overheat(struct device *dev,
+                struct device_attribute *attr,
+                char *buf)
+{
+	return sprintf(buf, "%d\n", g_usb_overheat? 1:0);
+}
+
 static ssize_t htc_battery_show_batt_attr(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
@@ -2585,6 +2658,7 @@ static struct device_attribute htc_battery_attrs[] = {
 	__ATTR(charging_source, S_IRUGO, htc_battery_charging_source, NULL),
 	__ATTR(batt_temp, S_IRUGO, htc_battery_temp, NULL),
 	__ATTR(batt_state, S_IRUGO, htc_battery_state, NULL),
+	__ATTR(usb_overheat, S_IRUGO, htc_battery_show_usb_overheat, NULL),
 };
 
 int htc_battery_create_attrs(struct device *dev)
@@ -2829,8 +2903,9 @@ static int htc_battery_probe(struct platform_device *pdev)
 	htc_batt_info.icharger = &pdata->icharger;
 	htc_batt_info.igauge = &pdata->igauge;
 	INIT_WORK(&htc_batt_timer.batt_work, batt_worker);
-        INIT_DELAYED_WORK(&htc_batt_info.cable_impedance_work, cable_impedance_worker);
+	INIT_DELAYED_WORK(&htc_batt_info.cable_impedance_work, cable_impedance_worker);
 	INIT_DELAYED_WORK(&htc_batt_info.chg_full_check_work, chg_full_check_worker);
+	INIT_DELAYED_WORK(&htc_batt_info.is_usb_overheat_work, is_usb_overheat_worker);
 	INIT_DELAYED_WORK(&htc_batt_info.chk_unknown_chg_work, chk_unknown_chg_worker);
 	init_timer(&htc_batt_timer.batt_timer);
 	htc_batt_timer.batt_timer.function = batt_regular_timer_handler;

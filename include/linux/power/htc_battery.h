@@ -16,6 +16,7 @@
 #include <linux/alarmtimer.h>
 #include <linux/wakelock.h>
 #include <linux/power_supply.h>
+#include <linux/qpnp/qpnp-adc.h>
 
 #define BATT_LOG(x...) do { \
 printk(KERN_INFO "[BATT] " x); \
@@ -150,6 +151,7 @@ struct htc_battery_info {
 	int overload_curr_thr_ma;
 	struct wake_lock charger_exist_lock;
 	struct delayed_work chg_full_check_work;
+	struct delayed_work is_usb_overheat_work;
 	struct delayed_work chk_unknown_chg_work;
 	struct delayed_work cable_impedance_work;
 	int state;
@@ -250,6 +252,130 @@ enum htc_charger_request {
 	CHARGER_5V_2A_DETECT_DONE,
 };
 
+static const struct qpnp_vadc_map_pt usb_adcmap_btm_threshold[] = {
+        {-200, 1668},
+        {-190, 1659},
+        {-180, 1651},
+        {-170, 1641},
+        {-160, 1632},
+        {-150, 1622},
+        {-140, 1611},
+        {-130, 1600},
+        {-120, 1589},
+        {-110, 1577},
+        {-100, 1565},
+        {-90, 1552},
+        {-80, 1539},
+        {-70, 1525},
+        {-60, 1511},
+        {-50, 1496},
+        {-40, 1481},
+        {-30, 1466},
+        {-20, 1449},
+        {-10, 1433},
+        {0, 1416},
+        {10, 1398},
+        {20, 1381},
+        {30, 1362},
+        {40, 1344},
+        {50, 1325},
+        {60, 1305},
+        {70, 1286},
+        {80, 1266},
+        {90, 1245},
+        {100, 1225},
+        {110, 1204},
+        {120, 1183},
+        {130, 1161},
+        {140, 1140},
+        {150, 1118},
+        {160, 1096},
+        {170, 1075},
+        {180, 1053},
+        {190, 1031},
+        {200, 1009},
+        {210, 987},
+        {220, 965},
+        {230, 943},
+        {240, 922},
+        {250, 900},
+        {260, 879},
+        {270, 857},
+        {280, 836},
+        {290, 815},
+        {300, 795},
+        {310, 774},
+        {320, 754},
+        {330, 734},
+        {340, 715},
+        {350, 695},
+        {360, 677},
+        {370, 658},
+        {380, 640},
+        {390, 622},
+        {400, 604},
+        {410, 587},
+        {420, 570},
+        {430, 554},
+        {440, 537},
+        {450, 522},
+        {460, 506},
+        {470, 491},
+        {480, 477},
+        {490, 462},
+        {500, 449},
+        {510, 435},
+        {520, 422},
+        {530, 409},
+        {540, 397},
+        {550, 385},
+        {560, 373},
+        {570, 361},
+        {580, 350},
+        {590, 339},
+        {600, 329},
+        {610, 319},
+        {620, 309},
+        {630, 300},
+        {640, 290},
+        {650, 281},
+        {660, 273},
+        {670, 264},
+        {680, 256},
+        {690, 248},
+        {700, 241},
+        {710, 233},
+        {720, 226},
+        {730, 219},
+        {740, 212},
+        {750, 206},
+        {760, 200},
+        {770, 193},
+        {780, 188},
+        {790, 182},
+        {800, 176},
+        {810, 171},
+        {820, 166},
+        {830, 161},
+        {840, 156},
+        {850, 151},
+        {860, 147},
+        {870, 142},
+        {880, 138},
+        {890, 134},
+        {900, 130},
+        {910, 126},
+        {920, 123},
+        {930, 119},
+        {940, 116},
+        {950, 112},
+        {960, 109},
+        {970, 106},
+        {980, 103},
+        {990, 100},
+        {1000, 97}
+};
+
 int htc_battery_create_attrs(struct device *dev);
 void htc_battery_info_update(enum power_supply_property prop, int intval);
 void htc_battery_probe_process(enum htc_batt_probe probe_type);
@@ -280,6 +406,8 @@ void pmi8994_rerun_apsd(void);
 bool is_otg_enabled(void);
 bool is_parallel_enabled(void);
 void force_dump_fg_sram(void);
+int pmi8996_get_usb_temp(void);
+bool htc_battery_get_discharging_reason(void);
 bool get_ima_error_status(void);
 
 #endif /* __HTC_BATTERY_H__ */

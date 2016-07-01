@@ -155,10 +155,7 @@
         status = "okay";
     };
 
-    mpp@a600 { /* MPP 7 */
-    /* USB_PWR_TEMP - To detect USB board temperature
-    for VZW requirement */
-
+    mpp@a600 { /* MPP 7 - USB_PWR_TEMP */
         qcom,mode = <4>;                /* QPNP_PIN_MODE_AIN */
         qcom,vin-sel = <2>;             /* S4 1.8V */
         qcom,src-sel = <0>;             /* Constant */
@@ -166,6 +163,30 @@
         qcom,master-en = <1>;           /* Enable GPIO */
         status = "okay";
     };
+};
+
+&pm8994_vadc {
+        chan@16 {
+                label = "mpp7_div1";
+                reg = <0x16>;
+                qcom,decimation = <0>;
+                qcom,pre-div-channel-scaling = <0>;
+                qcom,calibration-type = "ratiometric";
+                qcom,scale-function = <0>;
+                qcom,hw-settle-time = <1>;
+                qcom,fast-avg-setup = <2>;
+        };
+
+        chan@26 {
+                label = "mpp7_div3";
+                reg = <0x26>;
+                qcom,decimation = <0>;
+                qcom,pre-div-channel-scaling = <1>;
+                qcom,calibration-type = "absolute";
+                qcom,scale-function = <0>;
+                qcom,hw-settle-time = <1>;
+                qcom,fast-avg-setup = <2>;
+        };
 };
 
 &pmi8994_gpios {
@@ -191,6 +212,7 @@
         qcom,precharging-timeout-mins = <24>;
         qcom,resume-delta-mv = <100>;
         qcom,parallel-main-chg-icl-percent = <50>;
+        qcom,usb_pwr_temp-vadc = <&pm8994_vadc>;
         /delete-property/ otg-parent-supply;
 };
 

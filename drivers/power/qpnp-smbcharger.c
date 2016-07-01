@@ -1110,15 +1110,23 @@ static int get_prop_batt_status(struct smbchg_chip *chip)
 		if (chip->usb_supply_type > POWER_SUPPLY_TYPE_UNKNOWN) {
 			if (level == 100)
 				status = POWER_SUPPLY_STATUS_FULL;
-			else
-				status = POWER_SUPPLY_STATUS_CHARGING;
+			else {
+				if(htc_battery_get_discharging_reason())
+					status = POWER_SUPPLY_STATUS_DISCHARGING;
+				else
+					status = POWER_SUPPLY_STATUS_CHARGING;
+			}
 		} else
 			status = POWER_SUPPLY_STATUS_DISCHARGING;
 	else {
 		if (level == 100)
 			status = POWER_SUPPLY_STATUS_FULL;
-	else
-		status = POWER_SUPPLY_STATUS_CHARGING;
+		else {
+			if(htc_battery_get_discharging_reason())
+				status = POWER_SUPPLY_STATUS_DISCHARGING;
+			else
+				status = POWER_SUPPLY_STATUS_CHARGING;
+		}
 	}
 #else
 	if (chg_type == BATT_NOT_CHG_VAL && !chip->hvdcp_3_det_ignore_uv)
@@ -9392,6 +9400,79 @@ bool is_parallel_enabled(void)
 		return false;
 }
 
+static int adc_map_temp_voltage(int input, int *output)
+{
+        int i = 0;
+        const struct qpnp_vadc_map_pt *pts;
+        int tablesize;
+
+        pts  = usb_adcmap_btm_threshold;
+        if (pts == NULL)
+                return -EINVAL;
+
+        tablesize = ARRAY_SIZE(usb_adcmap_btm_threshold);
+
+        while (i < tablesize) {
+                if ((pts[i].y < input)) {
+                        /* table entry is less than measured
+                                value and table is descending, stop */
+                        break;
+                } else {
+                        i++;
+                }
+        }
+
+        if (i == 0) {
+                *output = pts[0].x;
+        } else if (i == tablesize) {
+                *output = pts[tablesize-1].x;
+        } else {
+                /* result is between search_index and search_index-1 */
+                /* interpolate linearly */
+                *output = (( ((pts[i].x - pts[i-1].x)*
+                        (input - pts[i-1].y))/
+                        (pts[i].y - pts[i-1].y))+
+                        pts[i-1].x);
+        }
+
+        return 0;
+}
+
+int pmi8996_get_usb_temp_adc(void)
+{
+	int rc = 0;
+	struct qpnp_vadc_result results;
+	struct qpnp_vadc_chip *l_vadc_dev = NULL;
+
+	if(!the_chip) {
+		pr_err("called before init\n");
+		return -EINVAL;
+	} else {
+		l_vadc_dev = qpnp_get_vadc(the_chip->dev, "usb_pwr_temp");
+		if (IS_ERR(l_vadc_dev)) {
+			pr_err("vadc driver not ready!\n");
+			return PTR_ERR(l_vadc_dev);
+		}
+	}
+
+	rc = qpnp_vadc_read(l_vadc_dev, P_MUX7_1_1, &results);
+	if (rc) {
+		pr_err("Unable to read usb_pwr_temp rc=%d\n", rc);
+		return -EINVAL;
+	} else
+		return (int)results.physical;
+}
+
+int pmi8996_get_usb_temp(void)
+{
+	int usb_pwr_temp_uv, usb_pwr_temp;
+
+	usb_pwr_temp_uv = pmi8996_get_usb_temp_adc();
+	adc_map_temp_voltage(usb_pwr_temp_uv/1000, &usb_pwr_temp);
+
+	return usb_pwr_temp;
+}
+
 void smbchg_dump_reg(void)
 {
 	static u8 chgr_sts[5];
@@ -9519,6 +9600,7 @@ int pmi8994_charger_get_attr_text(char *buf, int size)
 	u8 chgpth_rt_sts = 0, iusb_reg = 0, aicl_reg = 0;
 	int batt_soc, system_soc, aicl_result, cc_uah, rc;
 	int warm_temp = 0, cool_temp = 0;
+	int usb_pwr_temp_uv, usb_pwr_temp;
 	u8 pmic_revid_rev3 = 0, pmic_revid_rev4 = 0;
 
 	if(!the_chip) {
@@ -9584,6 +9666,14 @@ int pmi8994_charger_get_attr_text(char *buf, int size)
 			chgr_sts, chgr_rt_sts, bat_if_rt_sts, chgpth_rt_sts,
 			iusb_reg, aicl_reg, batt_soc, system_soc, cc_uah, aicl_result,
 			warm_temp, cool_temp, pmic_revid_rev4, pmic_revid_rev3);
+
+	usb_pwr_temp_uv = pmi8996_get_usb_temp_adc();
+	adc_map_temp_voltage(usb_pwr_temp_uv/1000, &usb_pwr_temp);
+
+	len += scnprintf(buf + len, size -len,
+			"USB_PWR_TEMP(uV): %d;\n"
+			"USB_PWR_TEMP(degree): %d\n",
+			usb_pwr_temp_uv, usb_pwr_temp);
 
 	/* charger peripheral */
 	len += scnprintf(buf + len, size -len, "CHGR_STS ------\n");
