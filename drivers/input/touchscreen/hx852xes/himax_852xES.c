@@ -873,6 +873,7 @@ static int i_update_FW(bool manual)
         goto no_update;
     }
     I("Start to update fw\n");
+    wake_lock(&private_ts->ts_flash_wake_lock);
     fw_update_processing= true;
 
     // load bin from ASUSFW
@@ -959,8 +960,11 @@ update_retry:
                 E("TP upgrade Error, Count: %d\n", upgrade_times);
                 goto update_retry;
             } else {
+                if (private_ts->fw_size)
+                    release_firmware(private_ts->fw);
                 fw_update_result = false;
                 fw_update_processing= false;
+                wake_unlock(&private_ts->ts_flash_wake_lock);
                 return -1;//upgrade fail
             }
         } else {
@@ -972,14 +976,20 @@ update_retry:
 #ifdef HX_RST_PIN_FUNC
         himax_HW_reset(true, true);
 #endif
+        if (private_ts->fw_size)
+            release_firmware(private_ts->fw);
         fw_update_result = true;
         fw_update_processing= false;
+        wake_unlock(&private_ts->ts_flash_wake_lock);
         return 1;//upgrade success
     } else
         goto no_update;
 no_update:
+    if (private_ts->fw_size)
+        release_firmware(private_ts->fw);
     fw_update_result = true;
     fw_update_processing= false;
+    wake_unlock(&private_ts->ts_flash_wake_lock);
     return 0;//NO upgrade
 }
 #endif
