@@ -2331,8 +2331,10 @@ static int synaptics_rmi4_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 {
 	int retval = 0;
 	unsigned char data[MAX_INTR_REGISTERS];
+#ifndef HTC_FEATURE
 	const struct synaptics_dsx_board_data *bdata =
 			rmi4_data->hw_if->board_data;
+#endif
 
 	mutex_lock(&(rmi4_data->rmi4_irq_enable_mutex));
 
@@ -2365,6 +2367,9 @@ static int synaptics_rmi4_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 			goto exit;
 		}
 
+#ifdef HTC_FEATURE
+		enable_irq(rmi4_data->irq);
+#else
 		retval = request_threaded_irq(rmi4_data->irq, NULL,
 				synaptics_rmi4_irq, bdata->irq_flags,
 				PLATFORM_DRIVER_NAME, rmi4_data);
@@ -2374,6 +2379,7 @@ static int synaptics_rmi4_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 					__func__);
 			goto exit;
 		}
+#endif
 
 		retval = synaptics_rmi4_int_enable(rmi4_data, true);
 		if (retval < 0)
@@ -2383,7 +2389,9 @@ static int synaptics_rmi4_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 	} else {
 		if (rmi4_data->irq_enabled) {
 			disable_irq(rmi4_data->irq);
+#ifndef HTC_FEATURE
 			free_irq(rmi4_data->irq, rmi4_data);
+#endif
 			rmi4_data->irq_enabled = false;
 		}
 	}
@@ -5209,6 +5217,23 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 
 	rmi4_data->irq = gpio_to_irq(bdata->irq_gpio);
 
+#ifdef HTC_FEATURE
+	retval = request_threaded_irq(rmi4_data->irq, NULL,
+			synaptics_rmi4_irq, bdata->irq_flags,
+			PLATFORM_DRIVER_NAME, rmi4_data);
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to create irq thread\n",
+				__func__);
+		goto err_request_irq;
+	}
+
+	rmi4_data->irq_enabled = true;
+
+	if (rmi4_data->enable_wakeup_gesture)
+		irq_set_irq_wake(rmi4_data->irq, 1);
+#endif
+
 	retval = synaptics_rmi4_irq_enable(rmi4_data, true, false);
 	if (retval < 0) {
 		dev_err(&pdev->dev,
@@ -5309,9 +5334,12 @@ err_virtual_buttons:
 	}
 
 	synaptics_rmi4_irq_enable(rmi4_data, false, false);
-	free_irq(rmi4_data->irq, rmi4_data);
 
 err_enable_irq:
+#ifdef HTC_FEATURE
+	free_irq(rmi4_data->irq, rmi4_data);
+err_request_irq:
+#endif
 #ifdef CONFIG_FB
 	fb_unregister_client(&rmi4_data->fb_notifier);
 #endif
@@ -5401,6 +5429,9 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 	}
 
 	synaptics_rmi4_irq_enable(rmi4_data, false, false);
+#ifdef HTC_FEATURE
+	free_irq(rmi4_data->irq, rmi4_data);
+#endif
 
 #ifdef CONFIG_FB
 	fb_unregister_client(&rmi4_data->fb_notifier);
