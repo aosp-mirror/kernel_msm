@@ -881,25 +881,12 @@ static int32_t qpnp_adc_tm_manage_thresholds(struct qpnp_adc_tm_chip *chip,
 {
 	struct qpnp_adc_thr_client_info *client_info = NULL;
 	struct list_head *thr_list;
-	int high_thr = 0, low_thr = 0, rc = 0;
+	int high_thr = INT_MAX, low_thr = INT_MIN, rc = 0;
 
 
-	/* high_thr/low_thr starting point and reset the high_thr_set and
-		low_thr_set back to reset since the thresholds will be
-		recomputed */
-	list_for_each(thr_list,
-			&chip->sensor[dt_index].thr_list) {
-		client_info = list_entry(thr_list,
-					struct qpnp_adc_thr_client_info, list);
-		high_thr = client_info->high_thr_requested;
-		low_thr = client_info->low_thr_requested;
-		client_info->high_thr_set = false;
-		client_info->low_thr_set = false;
-	}
-
-	pr_debug("init threshold is high:%d and low:%d\n", high_thr, low_thr);
-
-	/* Find the min of high_thr and max of low_thr */
+	/* Find the min of high_thr and max of low_thr
+	 * Reset the high_thr_set and low_thr_set back to reset
+	 * since the thresholds will be recomputed */
 	list_for_each(thr_list,
 			&chip->sensor[dt_index].thr_list) {
 		client_info = list_entry(thr_list,
@@ -915,6 +902,9 @@ static int32_t qpnp_adc_tm_manage_thresholds(struct qpnp_adc_tm_chip *chip,
 						ADC_TM_HIGH_LOW_THR_ENABLE))
 			if (client_info->low_thr_requested > low_thr)
 				low_thr = client_info->low_thr_requested;
+
+		client_info->high_thr_set = false;
+		client_info->low_thr_set = false;
 
 		pr_debug("threshold compared is high:%d and low:%d\n",
 				client_info->high_thr_requested,
