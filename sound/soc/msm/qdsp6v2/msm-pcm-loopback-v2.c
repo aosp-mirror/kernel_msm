@@ -139,8 +139,8 @@ done:
 }
 
 static struct snd_kcontrol_new msm_loopback_controls[] = {
-	SOC_SINGLE_EXT("HFP TX Mute", SND_SOC_NOPM, 0, 1, 0,
-			NULL, msm_loopback_session_mute_put),
+	SOC_SINGLE_MULTI_EXT("HFP Tx Mute", SND_SOC_NOPM, 0, 0xFFFFFFFF,
+				      0, 3, NULL, msm_loopback_session_mute_put),
 };
 
 static int msm_pcm_loopback_probe(struct snd_soc_platform *platform)
@@ -466,6 +466,12 @@ static int msm_pcm_volume_ctl_put(struct snd_kcontrol *kcontrol,
 	return rc;
 }
 
+static int msm_pcm_volume_ctl_get(struct snd_kcontrol *kcontrol,
+                                 struct snd_ctl_elem_value *ucontrol)
+{
+	return 0;
+}
+
 static int msm_pcm_add_controls(struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_pcm *pcm = rtd->pcm->streams[0].pcm;
@@ -481,6 +487,7 @@ static int msm_pcm_add_controls(struct snd_soc_pcm_runtime *rtd)
 	if (ret < 0)
 		return ret;
 	kctl = volume_info->kctl;
+	kctl->get = msm_pcm_volume_ctl_get;
 	kctl->put = msm_pcm_volume_ctl_put;
 	kctl->tlv.p = loopback_rx_vol_gain;
 	return 0;
