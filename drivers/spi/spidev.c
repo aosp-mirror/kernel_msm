@@ -109,6 +109,8 @@ struct spidev_data {
 	int wakeup_mcu_gpio;
 	int read_sync_gpio;
 	spidev_work_mode_type work_mode;
+	bool is_suspended;
+	bool pending_irq;
 	spidev_buf_list *idle_buf_head;
 	spidev_buf_list *read_buf_head;
 	struct completion read_compl;
@@ -631,7 +633,14 @@ static irqreturn_t spidev_wake_irq(int irq, void *arg)
 
 	if (spidev && (spidev->work_mode == SPIDEV_WORK_MODE_KERNEL))
 	{
-		schedule_work(&spidev->wakeup_read_work);
+		if (spidev->is_suspended)
+		{
+			spidev->pending_irq = true;
+		}
+		else
+		{
+			schedule_work(&spidev->wakeup_read_work);
+		}
 	}
 	return IRQ_HANDLED;
 }
@@ -800,13 +809,6 @@ spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			if (retval < 0)
 			{
 				dev_err(&spi->dev,"Couldn't acquire MCU HOST WAKE UP IRQ reval = %d\n",retval);
-				break;
-			}
-
-			retval = enable_irq_wake(spidev->wake_irq);
-			if (retval < 0)
-			{
-				dev_err(&spi->dev,"Couldn't enable mcu_host_wake as wakeup interrupt\n");
 				break;
 			}
 		}
@@ -1193,6 +1195,57 @@ static int spidev_remove(struct spi_device *spi)
 	return 0;
 }
 
+static int spidev_suspend(struct spi_device *spi, pm_message_t mesg)
+{
+	struct spidev_data	*spidev = spi_get_drvdata(spi);
+	int retval = 0;
+
+	pr_info("%s:enter",__func__);
+	if (spidev->work_mode == SPIDEV_WORK_MODE_KERNEL)
+	{
+		retval = enable_irq_wake(spidev->wake_irq);
+		if (retval < 0)
+		{
+			dev_err(&spi->dev,"Couldn't enable mcu_host_wake as wakeup interrupt\n");
+		}
+
+		/*Reset flag to capture pending irq before resume */
+		spidev->pending_irq = false;
+
+		spidev->is_suspended = true;
+	}
+
+	return 0;
+}
+
+static int spidev_resume(struct spi_device *spi)
+{
+	struct spidev_data	*spidev = spi_get_drvdata(spi);
+	int retval = 0;
+
+	pr_info("%s:enter",__func__);
+	if (spidev->work_mode == SPIDEV_WORK_MODE_KERNEL)
+	{
+		retval = disable_irq_wake(spidev->wake_irq);
+		if (retval < 0)
+		{
+			dev_err(&spi->dev,"Couldn't disable mcu_host_wake as wakeup interrupt\n");
+		}
+
+		spidev->is_suspended = false;
+
+		if (spidev->pending_irq)
+		{
+			pr_info("%s: pending spidev irq\n", __func__);
+			spidev->pending_irq = false;
+			schedule_work(&spidev->wakeup_read_work);
+		}
+	}
+
+	return 0;
+}
+
+
 static const struct of_device_id spidev_dt_ids[] = {
 	{ .compatible = "rohm,dh2228fv", },
 	{ .compatible = "qcom,spi-msm-codec-slave", },
@@ -1209,6 +1262,8 @@ static struct spi_driver spidev_spi_driver = {
 	},
 	.probe =	spidev_probe,
 	.remove =	spidev_remove,
+	.suspend =	spidev_suspend,
+	.resume =	spidev_resume,
 
 	/* NOTE:  suspend/resume methods are not necessary here.
 	 * We don't do anything except pass the requests to/from
