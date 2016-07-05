@@ -194,9 +194,7 @@ static void vibrator_enable( struct timed_output_dev *dev, int value)
 	drv2625_stop(pDrv2625data);
 
 	if (value > 0) {
-		dev_dbg(pDrv2625data->dev,
-				"%s: vibrator playing start(%d ms)!",
-				__func__, value);
+		dev_info(pDrv2625data->dev, "vibe for %dms", value);
 
 		wake_lock(&pDrv2625data->wklock);
 
