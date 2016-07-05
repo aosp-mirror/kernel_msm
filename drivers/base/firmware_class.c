@@ -1329,6 +1329,9 @@ static int _request_firmware(struct fw_desc *desc)
 			ret = fw_get_filesystem_firmware(desc->device, fw->priv,
 				 desc->dest_addr, desc->dest_size);
 		}
+	} else if (strncmp(buf->fw_id, "HX852XES", 8) == 0) {
+		/* load firmware from user helper for touch firmware */
+		ret = fw_load_from_user_helper(fw, desc, timeout);
 	} else { /* qualcomm default action */
 		ret = fw_get_filesystem_firmware(desc->device, fw->priv,
 				 desc->dest_addr, desc->dest_size);
