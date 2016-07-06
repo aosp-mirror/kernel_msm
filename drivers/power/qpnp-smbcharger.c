@@ -9151,6 +9151,7 @@ void pmi8994_set_batt_health_good(void)
 void pmi8994_rerun_apsd(void)
 {
 	int rc;
+	int vbus_mv;
 
 	if (!the_chip) {
 		pr_err("called before init\n");
@@ -9188,6 +9189,13 @@ void pmi8994_rerun_apsd(void)
 	}
 
 	g_rerun_apsd_ignore_uv = false;
+
+	vbus_mv = pmi8994_get_usbin_voltage_now() / 1000;
+	if (vbus_mv < 4250) {
+		pr_smb(PR_STATUS, "Cable out during rerun APSD!!\n");
+		update_usb_status(the_chip, false, true);
+		return;
+	}
 }
 
 void pmi8994_boot_update_usb_status(void)
