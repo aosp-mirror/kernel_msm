@@ -97,8 +97,11 @@ static void tfa98xx_tapdet_check_update(struct tfa98xx *tfa98xx);
 static void tfa98xx_interrupt_restore(struct tfa98xx *tfa98xx);
 static int tfa98xx_get_fssel(unsigned int rate);
 
-static int get_profile_from_list(char *buf, int id);
+static int get_profile_from_list(char *buf, int id, int size);
 static int get_profile_id_for_sr(int id, unsigned int rate);
+
+static int tfa98xx_spk_event(struct snd_soc_dapm_widget *w,
+				 struct snd_kcontrol *k, int event);
 
 struct tfa98xx_rate {
 	unsigned int rate;
@@ -1119,7 +1122,7 @@ static int tfa98xx_set_profile(struct snd_kcontrol *kcontrol,
 	int err;
 	int ready = 0;
 	int prof_idx;
-
+	char profile_name[MAX_CONTROL_NAME] = {0};
 
 	if (no_start != 0)
 		return 0;
@@ -1136,7 +1139,8 @@ static int tfa98xx_set_profile(struct snd_kcontrol *kcontrol,
 		pr_err("tfa98xx: sample rate [%d] not supported for this mixer profile [%d].\n", tfa98xx->rate, new_profile);
 		return 0;
 	}
-	pr_debug("selected container profile [%d]\n", prof_idx);
+	get_profile_from_list(profile_name, new_profile, MAX_CONTROL_NAME);
+	pr_info("tfa changes profile %s [%d]\n", profile_name, prof_idx);
 
 	/* update mixer profile */
 	tfa98xx_mixer_profile = new_profile;
@@ -1215,13 +1219,13 @@ static void get_profile_basename(char *buf, char *profile)
 }
 
 /* return the profile name accociated with id from the profile list */
-static int get_profile_from_list(char *buf, int id)
+static int get_profile_from_list(char *buf, int id, int size)
 {
 	struct tfa98xx_baseprofile *bprof;
 
 	list_for_each_entry(bprof, &profile_list, list) {
 		if (bprof->item_id == id) {
-			strlcpy(buf, bprof->basename, sizeof(buf));
+			strlcpy(buf, bprof->basename, size);
 			return 0;
 		}
 	}
@@ -1325,7 +1329,8 @@ static int tfa98xx_info_profile(struct snd_kcontrol *kcontrol,
 	if (uinfo->value.enumerated.item >= count)
 		uinfo->value.enumerated.item = count - 1;
 
-	err = get_profile_from_list(profile_name, uinfo->value.enumerated.item);
+	err = get_profile_from_list(profile_name, uinfo->value.enumerated.item,
+		MAX_CONTROL_NAME);
 	if (err != 0)
 		return -EINVAL;
 
@@ -1493,6 +1498,7 @@ static struct snd_soc_dapm_widget tfa98xx_dapm_widgets_common[] = {
 	SND_SOC_DAPM_AIF_OUT("AIF OUT", "AIF Capture", 0, SND_SOC_NOPM, 0, 0),
 
 	SND_SOC_DAPM_OUTPUT("OUTL"),
+	SND_SOC_DAPM_SPK("TFA98XX_SPK", tfa98xx_spk_event),
 	SND_SOC_DAPM_INPUT("AEC Loopback"),
 };
 
@@ -1513,6 +1519,7 @@ static struct snd_soc_dapm_widget tfa9888_dapm_inputs[] = {
 
 static const struct snd_soc_dapm_route tfa98xx_dapm_routes_common[] = {
 	{ "OUTL", NULL, "AIF IN" },
+	{ "TFA98XX_SPK", NULL, "AIF IN" },
 	{ "AIF OUT", NULL, "AEC Loopback" },
 };
 
@@ -1579,6 +1586,9 @@ static void tfa98xx_add_widgets(struct tfa98xx *tfa98xx)
 		snd_soc_dapm_add_routes(dapm, tfa98xx_dapm_routes_saam,
 					ARRAY_SIZE(tfa98xx_dapm_routes_saam));
 	}
+
+	snd_soc_dapm_ignore_suspend(dapm, "OUTL");
+	snd_soc_dapm_ignore_suspend(dapm, "TFA98XX_SPK");
 }
 
 
@@ -2430,9 +2440,7 @@ static int tfa98xx_startup(struct snd_pcm_substream *substream,
 	unsigned int sr;
 	int len, prof, nprof = tfaContMaxProfile(0), idx = 0;
 
-	char *basename = devm_kzalloc(tfa98xx->codec->dev, MAX_CONTROL_NAME, GFP_KERNEL);
-	if (!basename)
-		return -ENOMEM;
+	char basename[MAX_CONTROL_NAME] = {0};
 
 	/* copy profile name into basename until the . */
 	get_profile_basename(basename, tfaContProfileName(tfa98xx->handle, tfa98xx_profile));
@@ -2546,9 +2554,8 @@ static int tfa98xx_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int tfa98xx_mute(struct snd_soc_dai *dai, int mute, int stream)
+static int tfa98xx_mute(struct snd_soc_codec *codec, int mute, int stream)
 {
-	struct snd_soc_codec *codec = dai->codec;
 	struct tfa98xx *tfa98xx = snd_soc_codec_get_drvdata(codec);
 
 	dev_dbg(&tfa98xx->i2c->dev, "state: %d\n", mute);
@@ -2597,12 +2604,23 @@ static int tfa98xx_mute(struct snd_soc_dai *dai, int mute, int stream)
 	return 0;
 }
 
+static int tfa98xx_spk_event(struct snd_soc_dapm_widget *w,
+				 struct snd_kcontrol *k, int event)
+{
+	pr_info("event %d\n", event);
+	if (SND_SOC_DAPM_EVENT_ON(event))
+		tfa98xx_mute(w->codec, 0, SNDRV_PCM_STREAM_PLAYBACK);
+	else
+		tfa98xx_mute(w->codec, 1, SNDRV_PCM_STREAM_PLAYBACK);
+
+	return 0;
+}
+
 static const struct snd_soc_dai_ops tfa98xx_dai_ops = {
 	.startup = tfa98xx_startup,
 	.set_fmt = tfa98xx_set_fmt,
 	.set_sysclk = tfa98xx_set_dai_sysclk,
 	.hw_params = tfa98xx_hw_params,
-	.mute_stream = tfa98xx_mute,
 };
 
 static struct snd_soc_dai_driver tfa98xx_dai[] = {

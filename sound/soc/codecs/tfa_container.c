@@ -54,7 +54,8 @@ enum tfa_error tfa_load_cnt(void *cnt, int length)
 		return tfa_error_container;
 
 	if ((HDR(cntbuf->id[0], cntbuf->id[1])) != paramsHdr) {
-		pr_err("wrong header type: 0x%02x 0x%02x\n", cntbuf->id[0], g_cont->id[1]);
+		pr_err("wrong header type: 0x%02x 0x%02x\n", cntbuf->id[0],
+			cntbuf->id[1]);
 		return tfa_error_container;
 	}
 
