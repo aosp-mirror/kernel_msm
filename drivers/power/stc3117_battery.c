@@ -2182,8 +2182,13 @@ static int stc311x_probe(struct i2c_client *client,
 
 }
 
+void stc311x_shutdown(struct i2c_client *client)
+{
+	STC31xx_WriteByte(STC311x_REG_CTRL,0x01);	/*	 release IO0_DATA_BIT */
+	STC31xx_WriteByte(STC311x_REG_MODE,0x19);	/*	 set GG_RUN=1, voltage mode, alm enabled */
 
-
+	pr_info("[BAT] stc3117 shutdown\n");
+}
 static int stc311x_remove(struct i2c_client *client)
 {
 	struct stc311x_chip *chip = i2c_get_clientdata(client);
@@ -2216,6 +2221,7 @@ static int stc311x_suspend(struct device *dev)
 static int stc311x_resume(struct device *dev)
 {
 	struct stc311x_chip *chip = dev_get_drvdata(dev);
+	STC31xx_WriteByte(STC311x_REG_MODE,0x18);	/*	 set GG_RUN=1, mixed mode, alm enabled */
 
 	schedule_delayed_work(&chip->work, 0);
 	return 0;
@@ -2257,6 +2263,7 @@ static struct i2c_driver stc311x_i2c_driver = {
 	.probe		= stc311x_probe,
 	.remove		= stc311x_remove,
 	.id_table	= stc311x_i2c_ids,
+	.shutdown	= stc311x_shutdown,
 };
 module_i2c_driver(stc311x_i2c_driver);
 
