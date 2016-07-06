@@ -525,11 +525,11 @@
 	wireless_int{
 		wireless_int_default: wireless_int_default  {
 			mux {
-				pins = "gpio91";
+				pins = "gpio43";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio91";
+				pins = "gpio43";
 				drive-strength = <2>;
 				bias-pull-up;
 			};
