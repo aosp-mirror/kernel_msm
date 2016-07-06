@@ -2618,6 +2618,17 @@ static irqreturn_t qpnp_lbc_chg_gone_irq_handler(int irq, void *_chip)
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t qpnp_lbc_usbin_valid_irq_fake_handler(int irq, void *_chip)
+{
+	struct qpnp_lbc_chip *chip = _chip;
+	int usb_present;
+
+	usb_present = qpnp_lbc_is_usb_chg_plugged_in(chip);
+	pr_info("usbin-valid_irq_fake triggered: %d\n", usb_present);
+
+	return IRQ_HANDLED;
+}
+
 static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 {
 	struct qpnp_lbc_chip *chip = _chip;
@@ -3628,6 +3639,18 @@ static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 			pr_err("vadc prop missing rc=%d\n", rc);
 	}
 	g_lbc_chip = chip;
+
+	rc = 0;
+	rc = devm_request_irq(chip->dev,
+		chip->irqs[USBIN_VALID].irq,
+		qpnp_lbc_usbin_valid_irq_fake_handler,
+		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "usbin_valid", chip);
+	if (rc < 0) {
+		pr_err("Request IRQ(%d) failed, rc = %d\n", chip->irqs[USBIN_VALID].irq, rc);
+	} else {
+		enable_irq_wake(chip->irqs[USBIN_VALID].irq);
+		chip->irqs[USBIN_VALID].is_wake = true;
+	}
 
 	pr_info("LBC (parallel) registered successfully!\n");
 
