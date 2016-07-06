@@ -22,9 +22,9 @@
 		actuator {
 			name = "actuator";
 			actuator-type = <0x01>; /* ERM: 0x00, LRA: 0x01 */
-			rated-volt = <0x3d>;
-			od-clamp-volt = <0x87>;
-			lra-freq = <204>;
+			rated-volt = <0x53>;
+			od-clamp-volt = <0xA6>;
+			lra-freq = <0xB5>;
 		};
 	};
 
