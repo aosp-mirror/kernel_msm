@@ -1971,8 +1971,8 @@ static irqreturn_t qpnp_adc_tm_high_thr_isr(int irq, void *data)
 		}
 	}
 
-	atomic_inc(&chip->wq_cnt);
-	queue_work(chip->high_thr_wq, &chip->trigger_high_thr_work);
+	if (queue_work(chip->high_thr_wq, &chip->trigger_high_thr_work))
+		atomic_inc(&chip->wq_cnt);
 
 	return IRQ_HANDLED;
 }
@@ -2072,8 +2072,8 @@ static irqreturn_t qpnp_adc_tm_low_thr_isr(int irq, void *data)
 		}
 	}
 
-	atomic_inc(&chip->wq_cnt);
-	queue_work(chip->low_thr_wq, &chip->trigger_low_thr_work);
+	if (queue_work(chip->low_thr_wq, &chip->trigger_low_thr_work))
+		atomic_inc(&chip->wq_cnt);
 
 	return IRQ_HANDLED;
 }
@@ -2628,8 +2628,9 @@ static int qpnp_adc_tm_suspend_noirq(struct device *dev)
 	struct qpnp_adc_tm_chip *chip = dev_get_drvdata(dev);
 
 	if (0 != atomic_read(&chip->wq_cnt)) {
-		pr_err(
-			"Aborting suspend, adc_tm notification running while suspending\n");
+		pr_err("Aborting suspend, adc_tm notification running"
+		       " while suspending (wq_cnt %d)\n",
+		       atomic_read(&chip->wq_cnt));
 		return -EBUSY;
 	}
 	return 0;
