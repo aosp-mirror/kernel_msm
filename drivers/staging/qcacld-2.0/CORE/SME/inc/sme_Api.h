@@ -4548,5 +4548,6 @@ VOS_STATUS sme_is_session_valid(tHalHandle hal_handle, uint8_t session_id);
 
 eHalStatus sme_enable_disable_chanavoidind_event(tHalHandle hHal,
 							tANI_U8 set_value);
-
+eHalStatus sme_remove_bssid_from_scan_list(tHalHandle hal,
+	tSirMacAddr bssid);
 #endif //#if !defined( __SME_API_H )
