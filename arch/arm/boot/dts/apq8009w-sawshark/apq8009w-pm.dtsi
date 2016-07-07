@@ -82,7 +82,7 @@
 			wireless-int-gpio = <&msm_gpio 43 0>;
 			mask-wireless-int-gpio = <&msm_gpio 23 0>;
 
-			status = "ok";
+			status = "disabled";
 		};
 
     };
