@@ -199,6 +199,10 @@ static inline s64 timekeeping_get_ns(struct tk_read_base *tkr)
 	/* read clocksource: */
 	cycle_now = tkr->read(tkr->clock);
 
+	/* If cntvct_el0 is 0, set it as the previous value to avoid kernel BUG happening */
+	if(cycle_now == 0)
+		cycle_now = tkr->cycle_last;
+
 	/* calculate the delta since the last update_wall_time: */
 	delta = clocksource_delta(cycle_now, tkr->cycle_last, tkr->mask);
 
