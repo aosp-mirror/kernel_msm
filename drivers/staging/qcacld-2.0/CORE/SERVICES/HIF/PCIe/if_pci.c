@@ -1287,7 +1287,9 @@ static int __hif_pci_runtime_resume(struct pci_dev *pdev)
 out:
 	/* In Resume we should never fail */
 	hif_pci_runtime_pm_warn(sc, "Runtime Resume Failed");
-	VOS_BUG(0);
+	/* skip VOS_BUG if SSR is already in progress */
+	if (!vos_is_logp_in_progress(VOS_MODULE_ID_HIF, NULL))
+		VOS_BUG(0);
 	return ret;
 }
 
