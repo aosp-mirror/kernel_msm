@@ -17028,9 +17028,6 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
        request->n_channels = MAX_CHANNEL;
     }
 
-    hddLog(VOS_TRACE_LEVEL_INFO,
-           "No of Scan Channels: %d", request->n_channels);
-
     if (request->n_channels)
     {
        char chList [(request->n_channels*5)+1];
@@ -17053,8 +17050,8 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
           }
        }
 
+       hddLog(LOG1, "No of Scan Channels: %d", num_chan);
        hddLog(VOS_TRACE_LEVEL_INFO, "Channel-List: %s", chList);
-
     }
 
     if (!num_chan) {
