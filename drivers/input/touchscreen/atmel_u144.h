@@ -754,15 +754,6 @@ struct mxt_data {
 	/* for fw update in bootloader */
 	struct completion bl_completion;
 
-	/* for reset handling */
-	struct completion reset_completion;
-
-	/* for reset handling */
-	struct completion crc_completion;
-
-	/* Auto touch test */
-	struct completion t25_completion;
-
 	/* Enable reporting of input events */
 	bool enable_reporting;
 

@@ -779,13 +779,7 @@ static void mxt_proc_t6_messages(struct mxt_data *data, u8 *msg)
 	if (crc != data->config_crc) {
 		data->config_crc = crc;
 		TOUCH_INFO_MSG("T6 Config Checksum: 0x%06X\n", crc);
-		complete(&data->crc_completion);
 	}
-
-	/* Detect transition out of reset */
-	if ((data->t6_status & MXT_T6_STATUS_RESET) &&
-	    !(status & MXT_T6_STATUS_RESET))
-		complete(&data->reset_completion);
 
 	/* Output debug if status has changed */
 	if (status != data->t6_status)
@@ -1172,7 +1166,6 @@ static int mxt_proc_t25_message(struct mxt_data *data, u8 *message)
 	}
 
 	selftest_enable = false;
-	complete(&data->t25_completion);
 	return 0;
 }
 
@@ -2007,8 +2000,6 @@ static int mxt_soft_reset(struct mxt_data *data)
 
 	TOUCH_INFO_MSG("%s \n", __func__);
 
-	reinit_completion(&data->reset_completion);
-
 	ret = mxt_t6_command(data, MXT_COMMAND_RESET, MXT_RESET_VALUE, false);
 	if (ret)
 		return ret;
@@ -2038,7 +2029,6 @@ static void mxt_update_crc(struct mxt_data *data, u8 cmd, u8 value)
 {
 	/* on failure, CRC is set to 0 and config will always be downloaded */
 	data->config_crc = 0;
-	reinit_completion(&data->crc_completion);
 
 	mxt_t6_command(data, cmd, value, true);
 	/* Wait for crc message. On failure, CRC is set to 0 and config will
@@ -5190,9 +5180,6 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	i2c_set_clientdata(client, data);
 
 	init_completion(&data->bl_completion);
-	init_completion(&data->reset_completion);
-	init_completion(&data->crc_completion);
-	init_completion(&data->t25_completion);
 
 	/* request reset pin */
 	if (gpio_is_valid(pdata->gpio_reset)) {
