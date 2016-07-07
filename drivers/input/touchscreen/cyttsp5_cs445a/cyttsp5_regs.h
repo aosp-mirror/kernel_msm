@@ -759,6 +759,7 @@ struct cyttsp5_mt_data {
 	int or_max;
 	int t_min;
 	int t_max;
+	bool palm_down;
 };
 
 struct cyttsp5_btn_data {

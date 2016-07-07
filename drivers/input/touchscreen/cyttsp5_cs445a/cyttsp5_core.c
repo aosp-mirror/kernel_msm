@@ -4976,9 +4976,16 @@ static void cyttsp5_startup_work_function(struct work_struct *work)
 static int cyttsp5_core_rt_suspend(struct device *dev)
 {
 	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
+	struct cyttsp5_mt_data *md = &cd->md;
 	int rc;
 
 	tp_log_warning("%s %d:Enter rt suspend.\n", __func__, __LINE__);
+	if (md->palm_down) {
+		md->palm_down = false;
+		// finish KEY_SLEEP UP event
+		input_report_key(md->input, KEY_SLEEP, 0);
+		input_sync(md->input);
+	}
 	/* move to the end of core sleep */
 	rc = cyttsp5_core_sleep(cd);
 	if (rc < 0) {
@@ -6301,7 +6308,14 @@ static int cyttsp5_setup_irq_gpio(struct cyttsp5_core_data *cd)
 	if (rc < 0) {
 		tp_log_err("%s %d: Error, could not request irq, rc = %d\n",
 					__func__, __LINE__, rc);
+		return rc;
 	}
+	/*configured as a wake up source*/
+	tp_log_debug("%s: irq_set_irq_wake\n", __func__);
+	rc = irq_set_irq_wake(cd->irq, 1);
+	if (rc < 0){
+		tp_log_err("%s: irq_set_irq_wake fail!\n", __func__);
+		}
 	return rc;
 }
 
