@@ -153,10 +153,6 @@ int cyttsp5_init(struct cyttsp5_core_platform_data *pdata,
 				} else {
 					gpio_direction_input(irq_gpio);
 				}
-				/*configured as a wake up source*/
-				rc = irq_set_irq_wake(irq_gpio, 1);
-				if (rc < 0)
-					return rc;
 			}
 		}
 	} else {
