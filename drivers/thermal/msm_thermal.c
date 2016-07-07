@@ -136,6 +136,7 @@ static struct completion freq_mitigation_complete;
 static struct completion thermal_monitor_complete;
 static struct timer_list thermal_core_control_timer;
 static struct delayed_work thermal_fb_work;
+struct work_struct do_thermal_core_control_work;
 
 static int enabled;
 static int polling_enabled;
@@ -200,6 +201,7 @@ static cpumask_t throttling_mask;
 static int tsens_scaling_factor = SENSOR_SCALING_FACTOR;
 static bool do_thermal_core_control_flag = false;
 static bool ambient_flag = false;
+static bool online_offline_flag;
 
 static LIST_HEAD(devices_list);
 static LIST_HEAD(thresholds_list);
@@ -3523,7 +3525,7 @@ static void thermal_fb_register(struct work_struct *work)
 		pr_err(" Unable to register fb_notifier: %d\n", ret);
 }
 
-static void do_thermal_core_control(bool online_offline_flag)
+static void do_thermal_core_control(struct work_struct *work)
 {
 	int i = 0;
 	int ret = 0;
@@ -3577,18 +3579,23 @@ static int hotplug_notify(enum thermal_trip_type type, int temp, void *data)
 	case THERMAL_TRIP_CONFIGURABLE_HI:
 		if (!(cpu_node->offline))
 			cpu_node->offline = 1;
-		if (do_thermal_core_control_flag)
-			do_thermal_core_control(false);
+		if (do_thermal_core_control_flag) {
+			online_offline_flag = false;
+		}
 		break;
 	case THERMAL_TRIP_CONFIGURABLE_LOW:
 		if (cpu_node->offline)
 			cpu_node->offline = 0;
-		if (!ambient_flag)
-			do_thermal_core_control(true);
+		if (!ambient_flag) {
+			online_offline_flag = true;
+		}
 		break;
 	default:
 		break;
 	}
+
+	schedule_work(&do_thermal_core_control_work);
+
 	if (hotplug_task) {
 		cpu_node->hotplug_thresh_clear = true;
 		complete(&hotplug_notify_complete);
@@ -5235,6 +5242,8 @@ int msm_thermal_init(struct msm_thermal_data *pdata)
 	schedule_delayed_work(&check_temp_work, 0);
 	INIT_DELAYED_WORK(&thermal_fb_work, thermal_fb_register);
 	schedule_delayed_work(&thermal_fb_work, 0);
+
+	INIT_WORK(&do_thermal_core_control_work, do_thermal_core_control);
 
 	if (num_possible_cpus() > 1) {
 		cpus_previously_online_update();
