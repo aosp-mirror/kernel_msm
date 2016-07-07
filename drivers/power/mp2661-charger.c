@@ -1081,11 +1081,9 @@ static void mp2661_external_power_changed(struct power_supply *psy)
     }
 }
 
-extern int idtp9220_extern_ldoout_hard_enable(bool *ldoout_enable);
 static void mp2661_process_interrupt_work(struct work_struct *work)
 {
-    int rc, status, usb_present;
-    bool ldoout_on = false;
+    int status, usb_present;
     struct mp2661_chg *chip = container_of(work, struct mp2661_chg, process_interrupt_work);
 
     /* check charging status */
@@ -1108,22 +1106,9 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
         chip->usb_present = usb_present;
         pr_info("usb_present = %d\n", chip->usb_present);
 
-        rc = idtp9220_extern_ldoout_hard_enable(&ldoout_on);
-        if(rc)
-        {
-            pr_err("Can not access idtp9220 LDO status\n");
-        }
-
-        if(!ldoout_on)
-        {
-            power_supply_set_present(chip->usb_psy, chip->usb_present);
-            pr_info("usb psy changed\n");
-            power_supply_changed(chip->usb_psy);
-        }
-        else
-        {
-            power_supply_changed(&chip->batt_psy);
-        }
+        power_supply_set_present(chip->usb_psy, chip->usb_present);
+        pr_info("usb psy changed\n");
+        power_supply_changed(chip->usb_psy);
     }
  }
 
@@ -1797,19 +1782,6 @@ static __ref int mp2661_monitor_kthread(void *arg)
         get_monotonic_boottime(&chip->last_monitor_time);
         temp = mp2661_get_prop_batt_temp(chip);
         pr_info("temp = %d\n",temp);
-        /* wireless rx whether to sleep */
-        if(!chip->ap_mask_rx_int_gpio && (temp >= AP_MASK_RX_GPIO_TEMP))
-        {
-            pr_err("disable rx charging\n");
-            idtp9220_ap_mask_rxint_enable(true);
-            chip->ap_mask_rx_int_gpio = true;
-        }
-        else if(chip->ap_mask_rx_int_gpio && (temp <= (AP_MASK_RX_GPIO_TEMP - AP_MASK_RX_GPIO_TEMP_DELTA)))
-        {
-            pr_err("enable rx charging\n");
-            idtp9220_ap_mask_rxint_enable(false);
-            chip->ap_mask_rx_int_gpio = false;
-        }
 
         if(abs(temp - chip->last_temp) >= MONITOR_TEMP_DELTA)
         {
