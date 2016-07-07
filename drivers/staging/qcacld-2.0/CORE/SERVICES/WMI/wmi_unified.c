@@ -715,6 +715,70 @@ inline bool wmi_get_runtime_pm_inprogress(wmi_unified_t wmi_handle)
 }
 #endif
 
+static uint16_t wmi_tag_vdev_set_cmd(wmi_unified_t wmi_hdl, wmi_buf_t buf)
+{
+	wmi_vdev_set_param_cmd_fixed_param *set_cmd;
+
+	set_cmd = (wmi_vdev_set_param_cmd_fixed_param *)wmi_buf_data(buf);
+
+	switch(set_cmd->param_id) {
+	case WMI_VDEV_PARAM_LISTEN_INTERVAL:
+	case WMI_VDEV_PARAM_DTIM_POLICY:
+		return HTC_TX_PACKET_TAG_AUTO_PM;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static uint16_t wmi_tag_sta_powersave_cmd(wmi_unified_t wmi_hdl, wmi_buf_t buf)
+{
+	wmi_sta_powersave_param_cmd_fixed_param *ps_cmd;
+
+	ps_cmd = (wmi_sta_powersave_param_cmd_fixed_param *)wmi_buf_data(buf);
+
+	switch(ps_cmd->param) {
+	case WMI_STA_PS_ENABLE_QPOWER:
+		return HTC_TX_PACKET_TAG_AUTO_PM;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static uint16_t wmi_tag_common_cmd(wmi_unified_t wmi_hdl, wmi_buf_t buf,
+				   WMI_CMD_ID cmd_id)
+{
+	tp_wma_handle wma = wmi_hdl->scn_handle;
+
+	if (adf_os_atomic_read(&wma->is_wow_bus_suspended))
+		return 0;
+
+	switch(cmd_id) {
+	case WMI_VDEV_SET_PARAM_CMDID:
+		return wmi_tag_vdev_set_cmd(wmi_hdl, buf);
+	case WMI_STA_POWERSAVE_PARAM_CMDID:
+		return wmi_tag_sta_powersave_cmd(wmi_hdl, buf);
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static uint16_t wmi_tag_fw_hang_cmd(wmi_unified_t wmi_handle)
+{
+	uint16_t tag = 0;
+
+	if (wmi_handle->tag_crash_inject)
+		tag = HTC_TX_PACKET_TAG_AUTO_PM;
+
+	wmi_handle->tag_crash_inject = false;
+	return tag;
+}
+
 /**
  * wmi_set_htc_tx_tag() - set HTC TX tag for WMI commands
  * @wmi_handle: WMI handle
@@ -728,9 +792,6 @@ static uint16_t wmi_set_htc_tx_tag(wmi_unified_t wmi_handle,
 				WMI_CMD_ID cmd_id)
 {
 	uint16_t htc_tx_tag = 0;
-	uint16_t cur_tx_tag = 0;
-	wmi_vdev_set_param_cmd_fixed_param *set_cmd;
-	wmi_sta_powersave_param_cmd_fixed_param *ps_cmd;
 
 	switch(cmd_id) {
 	case WMI_WOW_ENABLE_CMDID:
@@ -745,43 +806,15 @@ static uint16_t wmi_set_htc_tx_tag(wmi_unified_t wmi_handle,
 	case WMI_D0_WOW_ENABLE_DISABLE_CMDID:
 #endif
 		htc_tx_tag = HTC_TX_PACKET_TAG_AUTO_PM;
+		break;
 	case WMI_FORCE_FW_HANG_CMDID:
-	if (wmi_handle->tag_crash_inject) {
-		htc_tx_tag = HTC_TX_PACKET_TAG_AUTO_PM;
-		wmi_handle->tag_crash_inject = false;
-	}
+		htc_tx_tag = wmi_tag_fw_hang_cmd(wmi_handle);
+		break;
+	case WMI_VDEV_SET_PARAM_CMDID:
+	case WMI_STA_POWERSAVE_PARAM_CMDID:
+		htc_tx_tag = wmi_tag_common_cmd(wmi_handle, buf, cmd_id);
 	default:
 		break;
-	}
-
-	if(!adf_os_atomic_read(&wmi_handle->is_target_suspended))
-		cur_tx_tag = HTC_TX_PACKET_TAG_AUTO_PM;
-
-	if(cmd_id == WMI_VDEV_SET_PARAM_CMDID)
-	{
-		set_cmd = (wmi_vdev_set_param_cmd_fixed_param *)
-			wmi_buf_data(buf);
-
-		switch(set_cmd->param_id) {
-		case WMI_VDEV_PARAM_LISTEN_INTERVAL:
-		case WMI_VDEV_PARAM_DTIM_POLICY:
-			htc_tx_tag = cur_tx_tag;
-		default:
-			break;
-		}
-	}
-
-	if(cmd_id == WMI_STA_POWERSAVE_PARAM_CMDID)
-	{
-		ps_cmd = (wmi_sta_powersave_param_cmd_fixed_param *)
-			wmi_buf_data(buf);
-
-		switch(ps_cmd->param) {
-		case WMI_STA_PS_ENABLE_QPOWER:
-			htc_tx_tag = cur_tx_tag;
-		default:
-			break;
-		}
 	}
 
 	return htc_tx_tag;
