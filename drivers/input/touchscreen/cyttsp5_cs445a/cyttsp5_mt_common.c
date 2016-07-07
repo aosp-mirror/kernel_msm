@@ -270,7 +270,7 @@ static void cyttsp5_mt_gesture_report(struct cyttsp5_core_data *cd)
 	return;
 }
 
-static int cyttp5_palm_report(struct cyttsp5_mt_data *md)
+static int cyttp5_palm_report(struct cyttsp5_mt_data *md,int value)
 {
 	struct device *dev = md->input->dev.parent;
 	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
@@ -290,10 +290,9 @@ static int cyttp5_palm_report(struct cyttsp5_mt_data *md)
 report_key:
 
 	tp_log_debug("%s:reprot_gesture_key_value = %d",__func__, reprot_gesture_key_value);
-	input_report_key(cd->md.input, reprot_gesture_key_value, 1);
+	input_report_key(cd->md.input, reprot_gesture_key_value, value);
 	input_sync(cd->md.input);
-	input_report_key(cd->md.input, reprot_gesture_key_value, 0);
-	input_sync(cd->md.input);
+
 	return 1;
 }
 
@@ -413,7 +412,6 @@ static int cyttsp5_xy_worker(struct cyttsp5_mt_data *md)
 	struct cyttsp5_touch tch;
 	u8 num_cur_tch;
 	int rc = 0;
-	static bool palm_flag = false;
 
 	cyttsp5_get_touch_hdr(md, &tch, si->xy_mode + 3);
 
@@ -424,19 +422,21 @@ static int cyttsp5_xy_worker(struct cyttsp5_mt_data *md)
 		num_cur_tch = max_tch;
 	}
 
-	if (tch.hdr[CY_TCH_LO]) {
+	if (tch.hdr[CY_TCH_LO]&&!md->palm_down) {
 		tp_log_info( "%s: Large area detected\n", __func__);
 		num_cur_tch = 0;
-		if(!palm_flag){
-			rc = cyttp5_palm_report(md);
-			if(1 == rc){
-				return 0;
-			}
-			palm_flag = true;
+		rc = cyttp5_palm_report(md,1);
+		md->palm_down = true;
+		if(1 == rc){
+			return 0;
 		}
-
-	} else {
-		palm_flag = false;
+	} else if (!tch.hdr[CY_TCH_LO]&&md->palm_down){
+		tp_log_info( "%s: Large area removed\n", __func__);
+		rc = cyttp5_palm_report(md,0);
+		md->palm_down = false;
+		if(1 == rc){
+			return 0;
+		}
 	}
 
 	if (num_cur_tch == 0 && md->num_prv_rec == 0)
@@ -783,6 +783,7 @@ int cyttsp5_mt_probe(struct device *dev)
 	md->input->dev.parent = md->dev;
 	md->input->open = cyttsp5_mt_open;
 	md->input->close = cyttsp5_mt_close;
+	md->palm_down = false;
 	input_set_drvdata(md->input, md);
 
 	/* get sysinfo */
