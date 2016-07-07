@@ -34,6 +34,8 @@
 			qcom,system-reset;
 			qcom,clear-warm-reset;
 			qcom,store-hard-reset-reason;
+			qcom,s3-debounce = <16>;
+			qcom,s3-src = "kpdpwr";
 
 			qcom,pon_1 {
 				qcom,pon-type = <0>;
