@@ -36,7 +36,6 @@
 /* Lock backlight of ambient mode to 28nits */
 #define AMBIENT_BL_LEVEL_V1	(51)
 static int ambient_bl_level = AMBIENT_BL_LEVEL_V1;
-static int backup_bl_level = 0;
 
 #ifdef CONFIG_ASUS_BACKLIGHT_DEBUG
 static int brightness_lock = 0;
@@ -632,13 +631,6 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-    /* avoid MURA effect */
-    if (bl_level > 0 && bl_level < ambient_bl_level)
-        bl_level = ambient_bl_level;
-
-    /* Lock backlight of ambient mode to 28nits */
-    backup_bl_level = bl_level;
-
 	/*
 	 * Some backlight controllers specify a minimum duty cycle
 	 * for the backlight brightness. If the brightness is less
@@ -839,7 +831,7 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	} else {
 		if (ctrl->idle_off_cmds.cmd_cnt){
 			printk("MDSS:AMB: set idle OFF command!\n");
-			mdss_dsi_panel_bl_ctrl(pdata, backup_bl_level);
+			mdss_dsi_panel_bl_ctrl(pdata, ambient_bl_level);
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_off_cmds, CMD_REQ_COMMIT);
 		} else {
 			printk("MDSS:AMB: idle OFF command is not set!\n");
