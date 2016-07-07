@@ -50,6 +50,8 @@
 #include <linux/uaccess.h>
 #include <linux/uio_driver.h>
 #include <linux/asusdebug.h>
+#include <linux/timer.h>
+#include <linux/delay.h>
 
 #define CREATE_TRACE_POINTS
 #define TRACE_MSM_THERMAL
@@ -132,6 +134,8 @@ static struct task_struct *thermal_monitor_task;
 static struct completion hotplug_notify_complete;
 static struct completion freq_mitigation_complete;
 static struct completion thermal_monitor_complete;
+static struct timer_list thermal_core_control_timer;
+static struct delayed_work thermal_fb_work;
 
 static int enabled;
 static int polling_enabled;
@@ -194,6 +198,8 @@ static u32 tsens_temp_print;
 static uint32_t bucket;
 static cpumask_t throttling_mask;
 static int tsens_scaling_factor = SENSOR_SCALING_FACTOR;
+static bool do_thermal_core_control_flag = false;
+static bool ambient_flag = false;
 
 static LIST_HEAD(devices_list);
 static LIST_HEAD(thresholds_list);
@@ -369,6 +375,7 @@ enum ocr_request {
 	OPTIMUM_CURRENT_NR,
 };
 
+static int fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
 static int thermal_config_debugfs_read(struct seq_file *m, void *data);
 static ssize_t thermal_config_debugfs_write(struct file *file,
 					const char __user *buffer,
@@ -3479,6 +3486,43 @@ static int __ref msm_thermal_cpu_callback(struct notifier_block *nfb,
 	return NOTIFY_OK;
 }
 
+static int fb_notifier_callback(struct notifier_block *self,
+		unsigned long event, void *data)
+{
+	struct fb_event *evdata = data;
+	int *blank;
+	struct msm_thermal_data *pdata = container_of(self, struct msm_thermal_data, fb_notif);
+
+	if (evdata && evdata->data && event == FB_EVENT_BLANK && pdata) {
+		blank = evdata->data;
+		switch (*blank) {
+		case FB_BLANK_UNBLANK:
+			ambient_flag = false;
+			break;
+		case FB_BLANK_POWERDOWN:
+		case FB_BLANK_HSYNC_SUSPEND:
+		case FB_BLANK_VSYNC_SUSPEND:
+		case FB_BLANK_NORMAL:
+			ambient_flag = true;
+			break;
+		}
+	}
+	return 0;
+}
+
+static void thermal_fb_register(struct work_struct *work)
+{
+	int ret = 0;
+	struct msm_thermal_data *data = container_of(work, struct msm_thermal_data,
+			work_att.work);
+
+	pr_info(" %s in", __func__);
+	data->fb_notif.notifier_call = fb_notifier_callback;
+	ret = fb_register_client(&data->fb_notif);
+	if (ret)
+		pr_err(" Unable to register fb_notifier: %d\n", ret);
+}
+
 static void do_thermal_core_control(bool online_offline_flag)
 {
 	int i = 0;
@@ -3512,6 +3556,11 @@ static void do_thermal_core_control(bool online_offline_flag)
 	mutex_unlock(&core_control_mutex);
 }
 
+static void enable_thermal_core_control(unsigned long data)
+{
+	do_thermal_core_control_flag = true;
+}
+
 static struct notifier_block __refdata msm_thermal_cpu_notifier = {
 	.notifier_call = msm_thermal_cpu_callback,
 };
@@ -3528,12 +3577,14 @@ static int hotplug_notify(enum thermal_trip_type type, int temp, void *data)
 	case THERMAL_TRIP_CONFIGURABLE_HI:
 		if (!(cpu_node->offline))
 			cpu_node->offline = 1;
-		do_thermal_core_control(false);
+		if (do_thermal_core_control_flag)
+			do_thermal_core_control(false);
 		break;
 	case THERMAL_TRIP_CONFIGURABLE_LOW:
 		if (cpu_node->offline)
 			cpu_node->offline = 0;
-		do_thermal_core_control(true);
+		if (!ambient_flag)
+			do_thermal_core_control(true);
 		break;
 	default:
 		break;
@@ -4695,6 +4746,7 @@ static void __ref disable_msm_thermal(void)
 
 	/* make sure check_temp is no longer running */
 	cancel_delayed_work_sync(&check_temp_work);
+	cancel_delayed_work_sync(&thermal_fb_work);
 
 	get_online_cpus();
 	for_each_possible_cpu(cpu) {
@@ -5181,6 +5233,8 @@ int msm_thermal_init(struct msm_thermal_data *pdata)
 	INIT_DELAYED_WORK(&retry_hotplug_work, retry_hotplug);
 	INIT_DELAYED_WORK(&check_temp_work, check_temp);
 	schedule_delayed_work(&check_temp_work, 0);
+	INIT_DELAYED_WORK(&thermal_fb_work, thermal_fb_register);
+	schedule_delayed_work(&thermal_fb_work, 0);
 
 	if (num_possible_cpus() > 1) {
 		cpus_previously_online_update();
@@ -7131,6 +7185,13 @@ static int msm_thermal_dev_probe(struct platform_device *pdev)
 		interrupt_mode_init();
 		interrupt_mode_enable = false;
 	}
+
+	init_timer(&thermal_core_control_timer);
+
+	thermal_core_control_timer.expires = jiffies + 300 * HZ;
+	thermal_core_control_timer.function = enable_thermal_core_control;
+
+	add_timer(&thermal_core_control_timer);
 
 	return ret;
 fail:
