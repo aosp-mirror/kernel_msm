@@ -427,7 +427,7 @@ struct msm_otg {
 	atomic_t in_lpm;
 	bool err_event_seen;
 	int async_int;
-	unsigned cur_power;
+	int cur_power;
 	int phy_number;
 	struct workqueue_struct *otg_wq;
 	struct delayed_work chg_work;
