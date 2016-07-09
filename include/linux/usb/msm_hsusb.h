@@ -108,6 +108,7 @@ enum msm_usb_phy_type {
 };
 
 #define IDEV_CHG_MAX	1500
+#define IDEV_CHG_MIN	500
 #define IUNIT		100
 #define IDEV_HVDCP_CHG_MAX	1800
 
@@ -272,6 +273,8 @@ enum usb_id_state {
 		for improving data performance.
  * @bool enable_sdp_typec_current_limit: Indicates whether type-c current for
 		sdp charger to be limited.
+ * @bool no_set_vbus_power: Indicates whether vbus power control for
+                the unconfigured usb conection
  */
 struct msm_otg_platform_data {
 	int *phy_init_seq;
@@ -315,6 +318,7 @@ struct msm_otg_platform_data {
 	bool enable_axi_prefetch;
 	bool enable_sdp_typec_current_limit;
 	struct clk *system_clk;
+	bool no_set_vbus_power;
 };
 
 /* phy related flags */
