@@ -173,3 +173,7 @@
 &gdsc_venus_core0 {
 	status = "disabled";
 };
+
+&usb_otg {
+	qcom,no-set-vbus-power;
+};
