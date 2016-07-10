@@ -263,6 +263,8 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 	struct msm_fb_data_type *mfd = dev_get_drvdata(led_cdev->dev->parent);
 	int bl_lvl;
 
+	mfd->bl_level_used = true;
+
 	if (mfd->boot_notification_led) {
 		led_trigger_event(mfd->boot_notification_led, 0);
 		mfd->boot_notification_led = NULL;
@@ -1812,10 +1814,14 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
 			 * the backlight would remain 0 (0 is set in blank).
 			 * Hence resetting back to calibration mode value
 			 */
-			if (!IS_CALIB_MODE_BL(mfd))
+			if (!mfd->bl_level_used) {
+				mdss_fb_set_backlight(mfd,
+					mfd->panel_info->brightness_default);
+			} else if (!IS_CALIB_MODE_BL(mfd)) {
 				mdss_fb_set_backlight(mfd, mfd->unset_bl_level);
-			else
+			} else {
 				mdss_fb_set_backlight(mfd, mfd->calib_mode_bl);
+			}
 
 			/*
 			 * it blocks the backlight update between unblank and
