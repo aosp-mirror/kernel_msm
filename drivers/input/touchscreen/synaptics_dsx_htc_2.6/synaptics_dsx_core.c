@@ -4678,6 +4678,21 @@ static int synaptics_rmi4_free_fingers(struct synaptics_rmi4_data *rmi4_data)
 	return 0;
 }
 
+static int synaptics_rmi4_force_cal(struct synaptics_rmi4_data *rmi4_data)
+{
+	int retval;
+	unsigned char command = 0x02;
+
+	dev_info(rmi4_data->pdev->dev.parent, " %s\n", __func__);
+	retval = synaptics_rmi4_reg_write(rmi4_data,
+			rmi4_data->f54_cmd_base_addr,
+			&command,
+			sizeof(command));
+	 if (retval < 0)
+		 return retval;
+
+	 return 0;
+}
 static int synaptics_rmi4_sw_reset(struct synaptics_rmi4_data *rmi4_data)
 {
 	int retval;
@@ -5769,7 +5784,6 @@ static int synaptics_rmi4_suspend(struct device *dev)
 	if (!rmi4_data->suspend) {
 		synaptics_rmi4_irq_enable(rmi4_data, false, false);
 		synaptics_rmi4_sleep_enable(rmi4_data, true);
-		synaptics_rmi4_free_fingers(rmi4_data);
 	}
 
 exit:
@@ -5797,9 +5811,12 @@ static int synaptics_rmi4_resume(struct device *dev)
 	if (rmi4_data->stay_awake)
 		return 0;
 
+	synaptics_rmi4_free_fingers(rmi4_data);
+
 	if (rmi4_data->enable_wakeup_gesture) {
 		synaptics_rmi4_wakeup_gesture(rmi4_data, false);
 		disable_irq_wake(rmi4_data->irq);
+		synaptics_rmi4_force_cal(rmi4_data);
 		goto exit;
 	}
 
