@@ -55,6 +55,7 @@
         qcom,ext-sense-type = <1>;
         qcom,cold-hot-jeita-hysteresis = <20 30>;
         qcom,fg-cutoff-voltage-mv = <3250>;
+        /delete-property/ qcom,capacity-learning-feedback;
 };
 
 /{
