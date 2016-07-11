@@ -838,6 +838,11 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 
 	if (ctrl->off_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds, CMD_REQ_COMMIT);
+
+	usleep_range(30*1000,30*1000);
+
+	if (ctrl->sleep_cmds.cmd_cnt)
+		mdss_dsi_panel_cmds_send(ctrl, &ctrl->sleep_cmds, CMD_REQ_COMMIT);
 #ifdef TARGET_HW_MDSS_HDMI
 	if (ctrl->ds_registered && pinfo->is_pluggable) {
 		mdss_dba_utils_video_off(pinfo->dba_data);
@@ -2466,6 +2471,8 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->off_cmds,
 		"qcom,mdss-dsi-off-command", "qcom,mdss-dsi-off-command-state");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->sleep_cmds,
+			"qcom,mdss-dsi-sleep-command", "qcom,mdss-dsi-sleep-command-state");
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_on_cmds,
 		"qcom,mdss-dsi-idle-on-command", "qcom,mdss-dsi-on-command-state");
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_off_cmds,
