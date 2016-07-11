@@ -228,7 +228,7 @@
         qcom,fg-cc-cv-threshold-mv = <4390>;
         qcom,ext-sense-type = <1>;
         qcom,cold-hot-jeita-hysteresis = <20 30>;
-        qcom,fg-cutoff-voltage-mv = <3400>;
+        qcom,fg-cutoff-voltage-mv = <3250>;
 };
 
 /{
