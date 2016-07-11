@@ -506,12 +506,12 @@ try_lock_key:
 		if (!ret)
 			goto try_lock_key;
 		ukp = ((struct user_key_payload *)keyring_key->payload.data);
-		if (ukp->datalen != sizeof(struct ext4_encryption_key)) {
+		if (!ukp || ukp->datalen != sizeof(struct ext4_encryption_key)) {
 			up_read(&keyring_key->sem);
 			return -ENOKEY;
 		}
 		master_key = (struct ext4_encryption_key *)ukp->data;
-		if (master_key->size != PFK_AES_256_XTS_KEY_SIZE) {
+		if (!master_key || master_key->size != PFK_AES_256_XTS_KEY_SIZE) {
 			printk_once(KERN_WARNING "%s: key size incorrect: %d\n",
 				    __func__, master_key->size);
 			up_read(&keyring_key->sem);
