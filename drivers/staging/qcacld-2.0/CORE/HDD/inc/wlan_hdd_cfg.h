@@ -3834,6 +3834,11 @@ enum dot11p_mode {
 #define CFG_CH_AVOID_SAP_RESTART_MAX     (1)
 #define CFG_CH_AVOID_SAP_RESTART_DEFAULT (0)
 
+#define CFG_RX_WAKELOCK_TIMEOUT_NAME         "rx_wakelock_timeout"
+#define CFG_RX_WAKELOCK_TIMEOUT_DEFAULT      (50)
+#define CFG_RX_WAKELOCK_TIMEOUT_MIN          (0)
+#define CFG_RX_WAKELOCK_TIMEOUT_MAX          (100)
+
 /*---------------------------------------------------------------------------
   Type declarations
   -------------------------------------------------------------------------*/
@@ -4595,6 +4600,7 @@ struct hdd_config {
    /* parameter to control GTX */
    uint32_t                    tgt_gtx_usr_cfg;
    bool                        sap_restrt_ch_avoid;
+   uint32_t                    rx_wakelock_timeout;
 };
 
 typedef struct hdd_config hdd_config_t;
