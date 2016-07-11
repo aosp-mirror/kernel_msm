@@ -289,7 +289,7 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 
 		pr_warning("%s: hwirq %d triggered %s\n", __func__,
 					i + gic->irq_offset, name);
-		log_base_wakeup_reason(i + gic->irq_offset);
+		log_base_wakeup_reason(linux_irq);
 	}
 }
 
