@@ -94,6 +94,19 @@ typedef BWL_PRE_PACKED_STRUCT struct bcm_event {
 	/* data portion follows */
 } BWL_POST_PACKED_STRUCT bcm_event_t;
 
+/*
+ * used by host event
+ * note: if additional event types are added, it should go with is_wlc_event_frame() as well.
+ */
+typedef union bcm_event_msg_u {
+	wl_event_msg_t		event;
+#if defined(HEALTH_CHECK) || defined(DNGL_EVENT_SUPPORT)
+	bcm_dngl_event_msg_t	dngl_event;
+#endif /* HEALTH_CHECK || DNGL_EVENT_SUPPORT */
+
+	/* add new event here */
+} bcm_event_msg_u_t;
+
 #define BCM_MSG_LEN	(sizeof(bcm_event_t) - sizeof(bcmeth_hdr_t) - sizeof(struct ether_header))
 
 /* Event messages */
@@ -232,6 +245,8 @@ typedef BWL_PRE_PACKED_STRUCT struct bcm_event {
 #error "WLC_E_LAST: Invalid value for last event; must be <= 140."
 #endif /* WLC_E_LAST */
 
+extern int is_wlc_event_frame(void *pktdata, uint pktlen, uint16 exp_usr_subtype,
+	bcm_event_msg_u_t *out_event);
 
 /* Table of event name strings for UIs and debugging dumps */
 typedef struct {
