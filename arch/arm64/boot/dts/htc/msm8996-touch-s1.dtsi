@@ -172,6 +172,7 @@
 		synaptics,switch-gpio = <&tlmm 80 0x00>;
 		synaptics,update-feature = <3>;
 		synaptics,tw-pin-mask = <0x3>;
+		synaptics,display-coords = <0 1080 0 1920>;
 		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
 		pinctrl-0 = <&ts_rst_active &ts_intr_active>;
 		pinctrl-1 = <&ts_rst_suspend &ts_intr_suspend>;
