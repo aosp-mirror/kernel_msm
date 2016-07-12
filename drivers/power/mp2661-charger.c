@@ -1095,7 +1095,20 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
         if(POWER_SUPPLY_STATUS_FULL == status)
         {
             pr_info("battery is full\n");
-            power_supply_changed(chip->bms_psy);
+            if (!chip->bms_psy && chip->bms_psy_name)
+            {
+                pr_info("get bms power supply\n");
+                chip->bms_psy = power_supply_get_by_name((char *)chip->bms_psy_name);
+            }
+
+            if(chip->bms_psy)
+            {
+                power_supply_changed(chip->bms_psy);
+            }
+            else
+            {
+                pr_err("bms_psy is NULL\n");
+            }
         }
     }
 
