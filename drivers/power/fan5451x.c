@@ -39,6 +39,8 @@
 #define FAN5451x_DEV_NAME "fan5451x"
 #define RECHG_CHECK_DELAY_MS      30
 #define RECHG_CHECK_DELAY_FAST_MS 10
+#define WLC_TX_RECHECK_WORK_DELAY_MS  10000
+#define WLC_TX_RECHECK_RETRY_COUNT    6
 
 static unsigned int att_addr = REG_IOCHRG;
 
@@ -92,6 +94,7 @@ struct fan5451x_chip {
 	int wlc_fake_online;
 	struct delayed_work rechg_check_work;
 	bool thermal_chg_stop;
+	struct delayed_work wlc_tx_recheck_work;
 };
 
 static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set);
@@ -523,6 +526,14 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 
 	if (intr[0] & INT0_VININT) {
 		wlc_present = fan5451x_wlc_chg_plugged_in(chip);
+
+		if (!wlc_present) {
+			schedule_delayed_work(
+				&chip->wlc_tx_recheck_work,
+				round_jiffies_relative(
+					msecs_to_jiffies(
+					WLC_TX_RECHECK_WORK_DELAY_MS)));
+		}
 
 		if (chip->wlc_present ^ wlc_present) {
 			chip->wlc_present = wlc_present;
@@ -1209,6 +1220,45 @@ static void fan5451x_rechg_check_work(struct work_struct *work)
 			round_jiffies_relative(msecs_to_jiffies(delay)));
 }
 
+static void
+fan5451x_wlc_tx_recheck_work(struct work_struct *work)
+{
+	static int cnt = 0;
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct fan5451x_chip *chip = container_of(dwork,
+				struct fan5451x_chip, wlc_tx_recheck_work);
+
+	if (!chip->wlc_psy)
+		return;
+
+	if (chip->wlc_present) {
+		pr_info("wireless charging enabled\n");
+		goto out;
+	}
+
+	if (chip->wlc_fake_online || chip->thermal_chg_stop) {
+		pr_info("wireless charging is under other state machine\n");
+		goto out;
+	}
+
+	if (++cnt > WLC_TX_RECHECK_RETRY_COUNT) {
+		pr_info("wireless charging stopped by user or charger"
+			" could not supply sufficient current\n");
+		goto out;
+	}
+
+	/* Try the WLC TX re-working by toggling OFF GPIO. */
+	power_supply_set_charging_enabled(chip->wlc_psy, 0);
+	power_supply_set_charging_enabled(chip->wlc_psy, 1);
+	schedule_delayed_work(&chip->wlc_tx_recheck_work,
+			round_jiffies_relative(msecs_to_jiffies(
+					WLC_TX_RECHECK_WORK_DELAY_MS)));
+	return;
+
+out:
+	cnt = 0;
+}
+
 #define OF_PROP_READ(chip, prop, dt_property, retval, optional)	\
 do { \
 	if (retval) \
@@ -1347,6 +1397,8 @@ static int fan5451x_probe(struct i2c_client *client,
 
 	INIT_DELAYED_WORK(&chip->rechg_check_work,
 			fan5451x_rechg_check_work);
+	INIT_DELAYED_WORK(&chip->wlc_tx_recheck_work,
+			fan5451x_wlc_tx_recheck_work);
 
 	ret = request_threaded_irq(client->irq, NULL, fan5451x_irq_thread,
 			IRQF_TRIGGER_LOW | IRQF_ONESHOT, "fan5451x_irq", chip);
@@ -1405,6 +1457,7 @@ static int fan5451x_remove(struct i2c_client *client)
 
 	debugfs_remove_recursive(chip->dent);
 
+	cancel_delayed_work_sync(&chip->wlc_tx_recheck_work);
 	cancel_delayed_work_sync(&chip->rechg_check_work);
 	cancel_delayed_work_sync(&chip->vbat_measure_work);
 
