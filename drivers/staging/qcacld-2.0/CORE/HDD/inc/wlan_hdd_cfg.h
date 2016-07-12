@@ -3813,6 +3813,26 @@ enum dot11p_mode {
 #define CFG_RX_WAKELOCK_TIMEOUT_DEFAULT      (50)
 #define CFG_RX_WAKELOCK_TIMEOUT_MIN          (0)
 #define CFG_RX_WAKELOCK_TIMEOUT_MAX          (100)
+/*
+ * In static display use case when APPS is in stand alone power save mode enable
+ * active offload mode which helps FW to filter out MC/BC data packets to avoid
+ * APPS wake up and save more power.
+ *
+ * By default enable active mode offload as it helps to save more power in
+ * static display usecase(APPS stand alone power collapse).
+ *
+ * If active mode offload(gActiveModeOffload=1) is enabled then all applicable
+ * data offload/filtering is enabled immediately in FW once config is available
+ * in WLAN driver and FW caches this configuration accross suspend/resume
+ *
+ * If active mode offload is disabled(gActiveModeOffload=0) then all applicable
+ * data offload/filtering is enabled during cfg80211 suspend and disabled
+ * during cfg80211 resume
+ */
+#define CFG_ACTIVE_MODE_OFFLOAD            "gActiveModeOffload"
+#define CFG_ACTIVE_MODE_OFFLOAD_MIN        (0)
+#define CFG_ACTIVE_MODE_OFFLOAD_MAX        (1)
+#define CFG_ACTIVE_MODE_OFFLOAD_DEFAULT    (0)
 
 /*---------------------------------------------------------------------------
   Type declarations
@@ -4568,6 +4588,7 @@ struct hdd_config {
    uint32_t                    edca_bk_aifs;
    uint32_t                    edca_be_aifs;
    uint32_t                    rx_wakelock_timeout;
+   bool                        active_mode_offload;
 };
 
 typedef struct hdd_config hdd_config_t;

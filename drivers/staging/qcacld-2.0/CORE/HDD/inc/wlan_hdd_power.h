@@ -120,6 +120,8 @@ int wlan_hdd_ipv4_changed(struct notifier_block *nb,
 int wlan_hdd_ipv6_changed(struct notifier_block *nb,
 				unsigned long data, void *arg);
 
+void hdd_conf_ns_offload(hdd_adapter_t *pAdapter, int fenable);
+
 #ifdef FEATURE_WLAN_DIAG_SUPPORT
 void hdd_wlan_suspend_resume_event(uint8_t state);
 #else

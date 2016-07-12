@@ -9701,6 +9701,8 @@ __wlan_hdd_cfg80211_set_ns_offload(struct wiphy *wiphy,
 	int status;
 	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_ND_OFFLOAD_MAX + 1];
 	hdd_context_t *pHddCtx = wiphy_priv(wiphy);
+	struct net_device *dev = wdev->netdev;
+	hdd_adapter_t *pAdapter =  WLAN_HDD_GET_PRIV_PTR(dev);
 
 	ENTER();
 
@@ -9726,6 +9728,14 @@ __wlan_hdd_cfg80211_set_ns_offload(struct wiphy *wiphy,
 
 	pHddCtx->ns_offload_enable =
 		nla_get_u8(tb[QCA_WLAN_VENDOR_ATTR_ND_OFFLOAD_FLAG]);
+
+	/* Disable NS offload if active mode offload is enabled */
+	if (!(pHddCtx->ns_offload_enable) &&
+	      pHddCtx->cfg_ini->active_mode_offload) {
+		hddLog(LOG1,
+			FL("Disable NS offload : active offload is enabled"));
+		hdd_conf_ns_offload(pAdapter, 0);
+	}
 
 	return 0;
 }
