@@ -521,6 +521,22 @@ struct synaptics_rmi4_f12_ctrl_8 {
 	};
 };
 
+struct synaptics_rmi4_f12_ctrl_18 {
+	union {
+		struct {
+			unsigned char double_tap_x0_lsb:8;
+			unsigned char double_tap_x0_msb:8;
+			unsigned char double_tap_y0_lsb:8;
+			unsigned char double_tap_y0_msb:8;
+			unsigned char double_tap_x1_lsb:8;
+			unsigned char double_tap_x1_msb:8;
+			unsigned char double_tap_y1_lsb:8;
+			unsigned char double_tap_y1_msb:8;
+		};
+		unsigned char data[8];
+	};
+};
+
 struct synaptics_rmi4_f12_ctrl_23 {
 	union {
 		struct {
@@ -2808,13 +2824,14 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		unsigned int intr_count)
 {
 	int retval = 0;
-	int temp;
+	int temp, double_tap[4] = {0};
 	unsigned char subpacket;
 	unsigned char ctrl_23_size;
 	unsigned char size_of_2d_data;
 	unsigned char size_of_query5;
 	unsigned char size_of_query8;
 	unsigned char ctrl_8_offset;
+	unsigned char ctrl_18_offset;
 	unsigned char ctrl_20_offset;
 	unsigned char ctrl_23_offset;
 	unsigned char ctrl_27_offset;
@@ -2826,6 +2843,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 	struct synaptics_rmi4_f12_query_5 *query_5 = NULL;
 	struct synaptics_rmi4_f12_query_8 *query_8 = NULL;
 	struct synaptics_rmi4_f12_ctrl_8 *ctrl_8 = NULL;
+	struct synaptics_rmi4_f12_ctrl_18 *ctrl_18 = NULL;
 	struct synaptics_rmi4_f12_ctrl_23 *ctrl_23 = NULL;
 	struct synaptics_rmi4_f12_ctrl_31 *ctrl_31 = NULL;
 	struct synaptics_rmi4_f12_ctrl_58 *ctrl_58 = NULL;
@@ -2866,6 +2884,15 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 	if (!ctrl_8) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for ctrl_8\n",
+				__func__);
+		retval = -ENOMEM;
+		goto exit;
+	}
+
+	ctrl_18 = kzalloc(sizeof(*ctrl_18), GFP_KERNEL);
+	if (!ctrl_18) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to alloc mem for ctrl_18\n",
 				__func__);
 		retval = -ENOMEM;
 		goto exit;
@@ -2925,7 +2952,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 			query_5->ctrl6_is_present +
 			query_5->ctrl7_is_present;
 
-	ctrl_20_offset = ctrl_8_offset +
+	ctrl_18_offset = ctrl_8_offset +
 			query_5->ctrl8_is_present +
 			query_5->ctrl9_is_present +
 			query_5->ctrl10_is_present +
@@ -2935,7 +2962,9 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 			query_5->ctrl14_is_present +
 			query_5->ctrl15_is_present +
 			query_5->ctrl16_is_present +
-			query_5->ctrl17_is_present +
+			query_5->ctrl17_is_present;
+
+	ctrl_20_offset = ctrl_18_offset +
 			query_5->ctrl18_is_present +
 			query_5->ctrl19_is_present;
 
@@ -3211,6 +3240,49 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 				query_8->data1_is_present +
 				query_8->data2_is_present +
 				query_8->data3_is_present;
+
+		double_tap[0] = 0;
+		double_tap[1] = 0;
+		double_tap[2] = bdata->display_width - 1;
+		double_tap[3] = bdata->display_height - 1;
+		ctrl_18->double_tap_x0_lsb = double_tap[0] & 0xff;
+		ctrl_18->double_tap_x0_msb = (double_tap[0] >> 8) & 0xff;
+		ctrl_18->double_tap_y0_lsb = double_tap[1] & 0xff;
+		ctrl_18->double_tap_y0_msb = (double_tap[1] >> 8) & 0xff;
+		ctrl_18->double_tap_x1_lsb = double_tap[2] & 0xff;
+		ctrl_18->double_tap_x1_msb = (double_tap[2] >> 8) & 0xff;
+		ctrl_18->double_tap_y1_lsb = double_tap[3] & 0xff;
+		ctrl_18->double_tap_y1_msb = (double_tap[3] >> 8) & 0xff;
+
+		retval = synaptics_rmi4_reg_write(rmi4_data,
+				fhandler->full_addr.ctrl_base + ctrl_18_offset,
+				ctrl_18->data,
+				sizeof(ctrl_18->data));
+		if (retval < 0) {
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s: Failed to change double-tap XY setting\n",
+					__func__);
+			return retval;
+		}
+
+		retval = synaptics_rmi4_reg_read(rmi4_data,
+				fhandler->full_addr.ctrl_base + ctrl_18_offset,
+				ctrl_18->data,
+				sizeof(ctrl_18->data));
+		if (retval < 0) {
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s: Failed to change double-tap XY settings\n",
+					__func__);
+			return retval;
+		}
+
+		double_tap[0] = (ctrl_18->double_tap_x0_msb << 8) | ctrl_18->double_tap_x0_lsb;
+		double_tap[1] = (ctrl_18->double_tap_y0_msb << 8) | ctrl_18->double_tap_y0_lsb;
+		double_tap[2] = (ctrl_18->double_tap_x1_msb << 8) | ctrl_18->double_tap_x1_lsb;
+		double_tap[3] = (ctrl_18->double_tap_y1_msb << 8) | ctrl_18->double_tap_y1_lsb;
+
+		printk("[TP]%s:Wakeup Gesture range (%d,%d) -> (%d,%d)\n", __func__,
+				double_tap[0], double_tap[1], double_tap[2], double_tap[3]);
 	}
 
 	synaptics_rmi4_set_intr_mask(fhandler, fd, intr_count);

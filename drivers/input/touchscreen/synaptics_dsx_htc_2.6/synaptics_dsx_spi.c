@@ -129,6 +129,10 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 	const char *name;
 	struct property *prop;
 	struct device_node *np = dev->of_node;
+#ifdef HTC_FEATURE
+	uint32_t coords[4] = {0};
+	int coords_size;
+#endif
 
 	bdata->irq_gpio = of_get_named_gpio_flags(np,
 			"synaptics,irq-gpio", 0,
@@ -375,6 +379,21 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 		bdata->update_feature = 0;
 	else
 		bdata->update_feature = value;
+
+	prop = of_find_property(np, "synaptics,display-coords", NULL);
+	if (prop) {
+		coords_size = prop->length / sizeof(u32);
+		if (coords_size != 4)
+			pr_info("%s:Invalid display coords size %d", __func__, coords_size);
+
+		retval = of_property_read_u32_array(np, "synaptics,display-coords", coords, coords_size);
+		if (retval && (retval != -EINVAL)) {
+			pr_err("%s:Fail to read display-coords %d\n", __func__, retval);
+			return retval;
+		}
+		bdata->display_width  = coords[1];
+		bdata->display_height = coords[3];
+	}
 
 	parse_config(dev, bdata);
 #endif

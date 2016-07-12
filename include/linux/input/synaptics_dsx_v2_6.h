@@ -131,6 +131,8 @@ struct synaptics_dsx_board_data {
 	uint16_t tw_pin_mask;
 	int config_num;
 	struct synaptics_rmi4_config *config_table;
+	uint32_t display_width;
+	uint32_t display_height;
 #endif
 };
 
