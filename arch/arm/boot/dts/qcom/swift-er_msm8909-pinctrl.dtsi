@@ -1461,6 +1461,61 @@
 				};
 			};
 		};
+		pmx_rd_nfc_int {
+			nfc_int_active: active {
+				mux {
+					pins = "gpio21";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio21";
+					drive-strength = <6>;
+					bias-pull-up;
+				};
+			};
+
+			nfc_int_suspend: suspend {
+				mux {
+					pins = "gpio21";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio21";
+					drive-strength = <6>;
+					bias-pull-up;
+				};
+			};
+		};
+
+		pmx_nfc_power {
+			nfc_enable_active: active {
+				mux {
+					pins = "gpio20";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio20";
+					drive-strength = <6>;
+					bias-pull-up;
+				};
+			};
+
+			nfc_enable_suspend: suspend {
+				mux {
+					pins = "gpio20";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio20";
+					drive-strength = <6>;
+					bias-disable;
+				};
+			};
+		};
 
 		cross-conn-det {
 			cross_conn_det_act: lines_on {

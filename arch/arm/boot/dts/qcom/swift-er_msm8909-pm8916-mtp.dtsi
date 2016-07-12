@@ -19,6 +19,11 @@
 		};
 	};
 
+	i2c@78b6000 {
+		nq@28 {
+			qcom,nq-clkreq = <&pm8916_gpios 2 0>;
+		};
+	};
 };
 
 &audio_codec_mtp {
@@ -125,6 +130,7 @@
 		qcom,vin-sel = <2>; /* QPNP_PIN_VIN2 */
 		qcom,src-sel = <2>; /* QPNP_PIN_SEL_FUNC_1 */
 		qcom,master-en = <1>;
+		status = "okay";
 	};
 
 	gpio@c200 { /* GPIO 3 */
