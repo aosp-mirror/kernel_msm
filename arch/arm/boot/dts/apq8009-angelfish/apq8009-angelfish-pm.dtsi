@@ -124,14 +124,14 @@
 			maxim,full-soc = <99>;
 			maxim,empty-soc = <0>;
 
-			maxim,model = [A0 00 B6 E0 B8 80 BA 40
-					BC A0 BD 70 BE 50 BF 90
-					C1 50 C3 20 C6 10 C9 20
-					CC 60 CF b0 D5 80 D9 90
-					01 30 0F F0 0F 00 0E 20
-					1B 00 13 00 15 10 10 10
-					0D 80 09 40 07 C0 08 A0
-					07 F0 06 F0 05 B0 05 B0
+			maxim,model = [99 30 B6 80 B8 60 B9 10
+					BA D0 BC 80 BE D0 BF 60
+					C1 20 C2 C0 C5 60 C8 10
+					CC C0 CF D0 D2 80 D7 C0
+					01 00 0B B0 13 E0 0E D0
+					0F E0 17 10 10 40 11 30
+					0D E0 09 80 80 40 07 A0
+					08 10 07 F0 07 30 07 30
 					01 00 01 00 01 00 01 00
 					01 00 01 00 01 00 01 00
 					01 00 01 00 01 00 01 00
@@ -140,21 +140,21 @@
 			maxim,config = <0x2104>;
 			maxim,filtercfg = <0x87A4>;
 			maxim,relaxcfg = <0x506B>;
-			maxim,learncfg = <0x2602>;
+			maxim,learncfg = <0x2603>;
 			maxim,fullsocthr = <0x5F00>;
-			maxim,iavg_empty = <0x0272>;
-			maxim,rcomp0 = <0x0037>;
-			maxim,tempco = <0x2344>;
+			maxim,iavg_empty = <0x0174>;
+			maxim,rcomp0 = <0x0034>;
+			maxim,tempco = <0x252F>;
 			maxim,ichgterm = <0x0140>;
 			maxim,tgain = <0xE932>;
 			maxim,toff = <0x2381>;
 			maxim,vempty = <0xA05F>;
-			maxim,qrtable00 = <0x2400>;
-			maxim,qrtable10 = <0x1680>;
-			maxim,qrtable20 = <0x1000>;
-			maxim,qrtable30 = <0x0B04>;
-			maxim,capacity = <0x030F>;
-			maxim,vf_fullcap = <0x030F>;
+			maxim,qrtable00 = <0x1E03>;
+			maxim,qrtable10 = <0x0F03>;
+			maxim,qrtable20 = <0x0782>;
+			maxim,qrtable30 = <0x0681>;
+			maxim,capacity = <0x01D1>;
+			maxim,vf_fullcap = <0x01D1>;
 			maxim,cycles = <0x0060>;
 			maxim,dpacc = <0x0C80>;
 			maxim,param-version = <0x3>;
