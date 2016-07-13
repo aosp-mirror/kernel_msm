@@ -367,43 +367,43 @@ static struct stc311x_platform_data stc3117_data = {
 	.Alm_SOC = 10,/* SOC alm level %*/
 	.Alm_Vbat = 3600,/* Vbat alm level mV*/
 	/* nominal CC_cnf, coming from battery characterisation*/
-	.CC_cnf = 71,
+	.CC_cnf = 76,
 	/* nominal VM cnf , coming from battery characterisation*/
-	.VM_cnf = 295,
+	.VM_cnf = 297,
 	/* nominal internal impedance*/
 	.Rint = 818,
 	/* nominal capacity in mAh, coming from battery characterisation*/
-	.Cnom = 351,
+	.Cnom = 350,
 	.Rsense = 10, /* sense resistor mOhms*/
 	.RelaxCurrent = 5, /* current for relaxation in mA (< C/20) */
 	.Adaptive = 1, /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 
 	/* Elentec Co Ltd Battery pack - 80 means 8% */
-	.CapDerating[6] = 957,/* capacity derating in 0.1%, for temp = -20°C */
-	.CapDerating[5] = 229,/* capacity derating in 0.1%, for temp = -10°C */
-	.CapDerating[4] = 57,/* capacity derating in 0.1%, for temp = 0°C */
-	.CapDerating[3] = 43, /* capacity derating in 0.1%, for temp = 10°C */
+	.CapDerating[6] = 720,/* capacity derating in 0.1%, for temp = -20°C */
+	.CapDerating[5] = 195,/* capacity derating in 0.1%, for temp = -10°C */
+	.CapDerating[4] = 37,/* capacity derating in 0.1%, for temp = 0°C */
+	.CapDerating[3] = 37, /* capacity derating in 0.1%, for temp = 10°C */
 	.CapDerating[2] = 0, /* capacity derating in 0.1%, for temp = 25°C */
 	.CapDerating[1] = 0, /* capacity derating in 0.1%, for temp = 40°C */
 	.CapDerating[0] = 0, /* capacity derating in 0.1%, for temp = 60°C */
 
 	/*OCV curve example for a 4.35V li-ion battery*/
-	.OCVValue[15] = 4194,            /* OCV curve adjustment */
-	.OCVValue[14] = 4105,            /* OCV curve adjustment */
-	.OCVValue[13] = 4012,            /* OCV curve adjustment */
-	.OCVValue[12] = 3942,            /* OCV curve adjustment */
-	.OCVValue[11] = 3902,            /* OCV curve adjustment */
-	.OCVValue[10] = 3873,            /* OCV curve adjustment */
-	.OCVValue[9] = 3826,             /* OCV curve adjustment */
-	.OCVValue[8] = 3794,             /* OCV curve adjustment */
-	.OCVValue[7] = 3764,             /* OCV curve adjustment */
-	.OCVValue[6] = 3746,             /* OCV curve adjustment */
-	.OCVValue[5] = 3731,             /* OCV curve adjustment */
-	.OCVValue[4] = 3706,             /* OCV curve adjustment */
-	.OCVValue[3] = 3690,             /* OCV curve adjustment */
-	.OCVValue[2] = 3679,             /* OCV curve adjustment */
-	.OCVValue[1] = 3636,             /* OCV curve adjustment */
-	.OCVValue[0] = 3505,             /* OCV curve adjustment */
+	.OCVValue[15] = 4207,            /* OCV curve adjustment */
+	.OCVValue[14] = 4111,            /* OCV curve adjustment */
+	.OCVValue[13] = 4019,            /* OCV curve adjustment */
+	.OCVValue[12] = 3941,            /* OCV curve adjustment */
+	.OCVValue[11] = 3907,            /* OCV curve adjustment */
+	.OCVValue[10] = 3866,            /* OCV curve adjustment */
+	.OCVValue[9] = 3820,             /* OCV curve adjustment */
+	.OCVValue[8] = 3790,             /* OCV curve adjustment */
+	.OCVValue[7] = 3763,             /* OCV curve adjustment */
+	.OCVValue[6] = 3747,             /* OCV curve adjustment */
+	.OCVValue[5] = 3733,             /* OCV curve adjustment */
+	.OCVValue[4] = 3708,             /* OCV curve adjustment */
+	.OCVValue[3] = 3684,             /* OCV curve adjustment */
+	.OCVValue[2] = 3682,             /* OCV curve adjustment */
+	.OCVValue[1] = 3641,             /* OCV curve adjustment */
+	.OCVValue[0] = 3500,             /* OCV curve adjustment */
 
 	/* SOC_TAB data */
 	.SOCValue[15] = 100,
