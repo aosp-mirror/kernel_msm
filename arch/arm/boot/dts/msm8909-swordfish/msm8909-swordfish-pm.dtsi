@@ -105,6 +105,17 @@
 				780 409
 				790 407>;
 		};
+
+		rear_tm: rear_tm {
+			compatible = "rear_tm";
+			status = "okay";
+			qcom,rear-tm-adc_tm =  <&pm8916_adc_tm>;
+			qcom,rear-vadc = <&pm8916_vadc>;
+			tm,warm-cfg = <
+				(440) (420) 1
+				(450) (430) 2>;
+			tm,compensated-temp = <0>;
+		};
 	};
 };
 
