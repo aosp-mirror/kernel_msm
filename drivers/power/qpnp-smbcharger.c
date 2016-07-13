@@ -523,7 +523,7 @@ module_param_named(
 );
 
 #ifdef CONFIG_HTC_BATT
-static int smbchg_default_dcp_icl_ma = 1500;
+static int smbchg_default_dcp_icl_ma = 1000;
 #else
 static int smbchg_default_dcp_icl_ma = 1800;
 #endif /* CONFIG_HTC_BATT */
@@ -572,12 +572,11 @@ static inline int ABS(int x) { return x >= 0 ? x : -x; }
 static void dump_regs(struct smbchg_chip *chip);
 int pmi8994_get_usbin_voltage_now(void);
 static void restore_from_hvdcp_detection(struct smbchg_chip *chip);
-
+bool pmi8996_is_booting_stage(void);
 
 /* Constant value declaration */
 #define AICL_5V_2A_DETECT_DELAY_MS	1000
 #define AICL_DOWNGRADE_IUSB_DELAY_MS	1000
-
 
 /* static global variables declaration */
 static bool g_is_limit_IUSB = false;
@@ -1339,6 +1338,15 @@ static int get_prop_system_soc(struct smbchg_chip *chip)
 	return system_soc;
 }
 
+#define IS_BOOTING_THRESHOLD_SEC        120
+bool pmi8996_is_booting_stage(void)
+{
+	struct timespec xtime = ktime_to_timespec(ktime_get());
+	if (xtime.tv_sec <= IS_BOOTING_THRESHOLD_SEC)
+		return true;
+	else
+		return false;
+}
 #endif /* CONFIG_HTC_BATT */
 
 static int get_prop_batt_health(struct smbchg_chip *chip)
@@ -5409,8 +5417,11 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 #ifdef CONFIG_HTC_BATT
 	union power_supply_propval voltage_max = {0, };
 
-		smbchg_sec_masked_write(chip, chip->misc_base + MISC_TRIM_OPT_15_8,
-				AICL_INIT_BIT, 0);
+	smbchg_sec_masked_write(chip, chip->misc_base + MISC_TRIM_OPT_15_8,
+			AICL_INIT_BIT, 0);
+
+	if (!pmi8996_is_booting_stage())
+		smbchg_default_dcp_icl_ma = 1500;
 #endif /* CONFIG_HTC_BATT */
 	pr_smb(PR_STATUS, "triggered\n");
 	/* usb inserted */
@@ -7603,6 +7614,33 @@ void check_charger_ability(int aicl_level)
 			msecs_to_jiffies(AICL_5V_2A_DETECT_DELAY_MS));
 	}
 	return;
+}
+
+void pmi8996_set_dcp_default(void)
+{
+	int aicl_result;
+
+	if(!the_chip) {
+		pr_err("called before init\n");
+		return;
+	}
+
+	aicl_result = smbchg_get_aicl_level_ma(the_chip);
+
+	if ((smbchg_default_dcp_icl_ma > 1000) ||
+			((aicl_result < 1000) && !g_is_parallel_enabled)) {
+		smbchg_default_dcp_icl_ma = 1500;
+		return;
+	}
+
+	g_is_charger_ability_detected = false;
+	g_is_5v_2a_detected = false;
+	smbchg_default_dcp_icl_ma = 1500;
+
+	pr_smb(PR_STATUS, "Recover DCP default icl as %dmA\n",
+				smbchg_default_dcp_icl_ma);
+	vote(the_chip->usb_icl_votable, PSY_ICL_VOTER, true,
+		smbchg_default_dcp_icl_ma);
 }
 #endif /* CONFIG_HTC_BATT */
 /**

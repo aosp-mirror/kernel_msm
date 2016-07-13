@@ -177,16 +177,6 @@ static struct dec_level_by_current_ua g_dec_level_curr_table[] = {
 
 static const int g_DEC_LEVEL_CURR_TABLE_SIZE = sizeof(g_dec_level_curr_table) / sizeof (g_dec_level_curr_table[0]);
 
-#define IS_BOOTING_THRESHOLD_SEC	120
-static bool is_booting_stage(void)
-{
-	struct timespec xtime = ktime_to_timespec(ktime_get());
-	if (xtime.tv_sec <= IS_BOOTING_THRESHOLD_SEC)
-		return true;
-	else
-		return false;
-}
-
 static int is_bounding_fully_charged_level(void)
 {
 	static int s_pingpong = 1;
@@ -1759,7 +1749,7 @@ static void batt_worker(struct work_struct *work)
 		gs_update_PSY = false;
 		power_supply_changed(htc_batt_info.batt_psy);
 	}
-	if (is_booting_stage()) {
+	if (pmi8996_is_booting_stage()) {
 		BATT_EMBEDDED("Device is at booting stage");
 	} else {
 		if ((htc_batt_info.rep.chg_src == POWER_SUPPLY_TYPE_UNKNOWN) &&
@@ -1793,8 +1783,13 @@ static void batt_worker(struct work_struct *work)
 		}
 	}
 
-	wake_unlock(&htc_batt_timer.battery_lock);
+	/* System is at heavy loading while booting, so HW AICL result may not
+	   be stable enough to refer, set DCP default AICL 1A when booting and
+	   turn it back to 1.5A after kernel time 120s */
+	if (!pmi8996_is_booting_stage() && (htc_batt_info.rep.charging_source == POWER_SUPPLY_TYPE_USB_DCP))
+		pmi8996_set_dcp_default();
 
+	wake_unlock(&htc_batt_timer.battery_lock);
 }
 
 #define CHG_FULL_CHECK_PERIOD_MS	20000

@@ -407,6 +407,8 @@ bool is_otg_enabled(void);
 bool is_parallel_enabled(void);
 void force_dump_fg_sram(void);
 int pmi8996_get_usb_temp(void);
+void pmi8996_set_dcp_default(void);
+bool pmi8996_is_booting_stage(void);
 bool htc_battery_get_discharging_reason(void);
 bool get_ima_error_status(void);
 
