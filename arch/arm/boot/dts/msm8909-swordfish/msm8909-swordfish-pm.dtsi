@@ -181,6 +181,7 @@
 			interrupts = <92 0>;
 
 			qcom,chg-vadc = <&pm8916_vadc>;
+			qcom,chg-adc_tm = <&pm8916_adc_tm>;
 			stat-gpio = <&msm_gpio 16 0x00>;
 			disable-gpio = <&msm_gpio 83 0x00>;
 
