@@ -41,17 +41,16 @@ static void *restart_reason;
 static unsigned rst_msg_size;
 
 /*
-   This function should not be called outsite
-   to ensure that others do no change restart reason.
+   This function should not be called outside
+   to ensure that others do not change restart reason.
    Use mode & cmd to set reason & msg in arch_reset().
 */
 static inline void set_restart_msg(const char *msg)
 {
 	if (msg) {
-		pr_notice("%s: set restart msg = `%s'\r\n", __func__, msg);
+		pr_notice("set restart msg = '%s'\n", msg);
 		strncpy(&reboot_params->msg, msg, rst_msg_size - 1);
-	}
-	else {
+	} else {
 		strncpy(&reboot_params->msg, "", rst_msg_size - 1);
 	}
 	mb();
@@ -70,7 +69,7 @@ EXPORT_SYMBOL(get_restart_reason);
 */
 static inline void set_restart_reason(unsigned int reason)
 {
-	pr_notice("%s: set restart reason = %08x\r\n", __func__, reason);
+	pr_notice("set restart reason = 0x%08X\n", reason);
 	__raw_writel(reason, restart_reason);
 	mb();
 }
