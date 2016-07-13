@@ -2756,6 +2756,7 @@ typedef struct wl_pfn_gscan_ch_bucket_cfg {
 } wl_pfn_gscan_ch_bucket_cfg_t;
 
 #define GSCAN_SEND_ALL_RESULTS_MASK          (1 << 0)
+#define FORCE_ALL_CHANNEL_BUCKETS_IN_FIRST_SCAN			(1 << 3) /* BIT1 and BIT2 reserved */
 #define GSCAN_CFG_FLAGS_ONLY_MASK            (1 << 7)
 #define WL_GSCAN_CFG_VERSION                     2
 typedef struct wl_pfn_gscan_cfg {
@@ -2764,6 +2765,7 @@ typedef struct wl_pfn_gscan_cfg {
 	 * BIT1 Reserved
 	 * BIT2 Reserved
 	 * Add any future flags here
+	 * BIT3 1 = scan all buckets in first scan
 	 * BIT7 1 = no other useful cfg sent
 	 */
 	uint8 flags;

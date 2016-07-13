@@ -2234,6 +2234,7 @@ dhd_pno_set_for_gscan(dhd_pub_t *dhd, struct dhd_pno_gscan_params *gscan_params)
 
 	pfn_gscan_cfg_t->flags =
 	         (gscan_params->send_all_results_flag & GSCAN_SEND_ALL_RESULTS_MASK);
+	pfn_gscan_cfg_t->flags |= FORCE_ALL_CHANNEL_BUCKETS_IN_FIRST_SCAN;
 	pfn_gscan_cfg_t->count_of_channel_buckets = num_buckets_to_fw;
 	pfn_gscan_cfg_t->retry_threshold = GSCAN_RETRY_THRESHOLD;
 
