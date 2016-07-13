@@ -186,11 +186,11 @@
 			disable-gpio = <&msm_gpio 83 0x00>;
 
 			vbatmin = <3000>;    //CC start voltage 3.0V
-			vfloat = <4400>;     //vbatmax
-			ibus = <500>;        //iusb for vbus
-			iin = <400>;         //iusb for wlc
+			vfloat = <4420>;     //vbatmax
+			ibus = <325>;        //iusb for vbus
+			iin = <325>;         //iusb for wlc
 			iochrg = <250>;      //CC current
-			iterm = <50>;        //term current
+			iterm = <25>;        //term current
 			prechg = <200>;      //pre charge current
 			topoff-enable = <0>; //post charging flag
 			vbusovp = <10500>;   //ovd for usb
@@ -199,7 +199,7 @@
 			vinlim = <4560>;     //uvd for wireless
 			fctmr = <0>;         //fast charge timer off
 			step-dwn-offset-ma = <50>;
-			step-dwn-thr-mv = <4200>;
+			step-dwn-thr-mv = <4250>;
 		};
 	};
 
@@ -207,10 +207,10 @@
 		compatible = "battery_tm";
 		status = "ok";
 		qcom,batt-tm-adc_tm = <&pm8916_adc_tm>;
-		tm,batt-vreg-mv = <4400>;
-		tm,current-ma = <250>;
-		tm,low-vreg-mv = <4400>;
-		tm,low-current-ma = <250>;
+		tm,batt-vreg-mv = <4420>;
+		tm,current-ma = <200>;
+		tm,low-vreg-mv = <4420>;
+		tm,low-current-ma = <200>;
 		tm,warm-cfg = <
 			 (-50) (-100) (450) 0 1
 			 (450)  (430) (550) 1 2
