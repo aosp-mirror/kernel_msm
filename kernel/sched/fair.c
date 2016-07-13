@@ -5436,11 +5436,11 @@ static int select_idle_sibling(struct task_struct *p, int target)
 					if (i == target || !idle_cpu(i))
 						goto next;
 				}
-			}
 
-			target = cpumask_first_and(sched_group_cpus(sg),
+				target = cpumask_first_and(sched_group_cpus(sg),
 					tsk_cpus_allowed(p));
-			goto done;
+				goto done;
+			}
 next:
 			sg = sg->next;
 		} while (sg != sd->groups);
