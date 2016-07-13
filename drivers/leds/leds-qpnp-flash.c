@@ -2333,12 +2333,12 @@ exit_flash_hdrm_sns:
 	}
 exit_flash_led_work:
 	rc = qpnp_flash_led_module_disable(led, flash_node);
-	if (rc) {
+	if (rc)
 		dev_err(&led->spmi_dev->dev, "Module disable failed\n");
-		goto exit_flash_led_work;
-	}
+
 	if(set_backlight)
 		set_backlight(BACKLIGHT_ON);
+
 error_enable_gpio:
 	if (flash_node->flash_on && flash_node->num_regulators > 0)
 		flash_regulator_enable(led, flash_node, false);

@@ -370,6 +370,9 @@ Required properties:
 Required properties:
 
  - compatible : "qcom,msm-cpe-lsm"
+ - qcom,msm-cpe-lsm-id : lsm afe port ID. CPE lsm driver uses
+   this property to find out the input afe port ID. Currently
+   only supported values are 1 and 3.
 
 * msm-dai-slim
 
@@ -1392,12 +1395,12 @@ Example:
 	qcom,mbhc-audio-jack-type = "6-pole-jack";
 		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,
-				<&afe>, <&lsm>, <&routing>, <&cpe>, <&compr>;
+				<&afe>, <&lsm>, <&routing>, <&cpe>, <&compr>, <&cpe3>;
 		asoc-platform-names = "msm-pcm-dsp.0", "msm-pcm-dsp.1", "msm-pcm-dsp.2",
 				"msm-voip-dsp", "msm-pcm-voice", "msm-pcm-loopback",
 				"msm-compress-dsp", "msm-pcm-hostless", "msm-pcm-afe",
 				"msm-lsm-client", "msm-pcm-routing", "msm-cpe-lsm",
-				"msm-compr-dsp";
+				"msm-compr-dsp", "msm-cpe-lsm.3";
 		asoc-cpu = <&dai_pri_auxpcm>, <&dai_sec_auxpcm>, <&dai_hdmi>, <&dai_mi2s>,
 				<&sb_0_rx>, <&sb_0_tx>, <&sb_1_rx>, <&sb_1_tx>,
 				<&sb_2_rx>, <&sb_2_tx>, <&sb_3_rx>, <&sb_3_tx>,
@@ -1774,12 +1777,13 @@ Example:
 * MDM9607 ASoC Machine driver
 
 Required properties:
-- compatible : "qcom,mdm9607-audio-tomtom"
+- compatible : "qcom,mdm9607-audio-tomtom" for tomtom codec
+	       "qcom,mdm9607-audio-tapan" for tapan codec
 - qcom,model : The user-visible name of this sound card.
 - qcom,audio-routing : A list of the connections between audio components.
 Each entry is a pair of strings, the first being the connection's sink,
 the second being the connection's source.
-- qcom,tomtom-mclk-clk-freq : Master clock value given to codec. Some WCD9XXX
+- qcom,codec-mclk-clk-freq : Master clock value given to codec. Some WCD9XXX
 codec can run at different mclk values. Mclk value can be 9.6MHz or 12.288MHz.
 - asoc-platform: This is phandle list containing the references to platform device
 		 nodes that are used as part of the sound card dai-links.
@@ -1809,7 +1813,7 @@ Optional Properties:
 
 Example:
 
-sound {
+sound-9330 {
 		compatible = "qcom,mdm9607-audio-tomtom";
 		qcom,model = "mdm9607-tomtom-i2s-snd-card";
 
