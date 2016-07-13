@@ -56,6 +56,7 @@ static struct delayed_work asus_chg_work;
 static struct work_struct asus_usb_work;
 static struct delayed_work asus_chg_cdp_work;
 static struct work_struct asus_usb_cdp_work;
+static int g_charger_mode = USB_INVALID_CHARGER;
 enum msm_otg_usb_boot_state {
 	MSM_OTG_USB_BOOT_INIT,
 	MSM_OTG_USB_BOOT_IRQ,//check IRQ to make sure USB is ready
@@ -2435,6 +2436,7 @@ static void asus_usb_detect_work(struct work_struct *w)
 	struct msm_otg *motg = the_msm_otg;
 	struct usb_otg *otg = motg->phy.otg;
 	cancel_delayed_work_sync(&asus_chg_work);
+	g_charger_mode = USB_SDP_CHARGER;
 	if (!getSoftconnect()) {
 		g_usb_boot = MSM_OTG_USB_BOOT_INIT;
 		usb_gadget_disconnect(otg->gadget);
@@ -2450,6 +2452,7 @@ static void asus_chg_detect_work(struct work_struct *w)
 		if(motg->vbus_state){
 			motg->chg_type = USB_INVALID_CHARGER;
 			msm_otg_notify_charger(motg, 100);
+			g_charger_mode = USB_INVALID_CHARGER;
 			printk("[USB] set_chg_mode: UNKNOWN\n");
 			ASUSEvtlog("[USB] set_chg_mode: UNKNOWN\n");
 		}
@@ -2912,6 +2915,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
 			cancel_delayed_work_sync(&asus_chg_work);
 			cancel_delayed_work_sync(&asus_chg_cdp_work);
+			g_charger_mode = USB_INVALID_CHARGER;
 			printk("[USB] set_chg_mode: None\n");
 			ASUSEvtlog("[USB] set_chg_mode: None\n");
 			if ( !getSoftconnect() ) {
@@ -3039,7 +3043,7 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 	usbsts = readl(USB_USBSTS);
 	//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
 	if(usbsts & (1<<6)){//check usb reset
-		if(motg->chg_type != USB_CDP_CHARGER){
+		if((g_charger_mode!=USB_SDP_CHARGER) && (motg->chg_type != USB_CDP_CHARGER)){
 			schedule_work(&asus_usb_work);
 		} else if (motg->chg_type == USB_CDP_CHARGER) {
 			schedule_work(&asus_usb_cdp_work);
