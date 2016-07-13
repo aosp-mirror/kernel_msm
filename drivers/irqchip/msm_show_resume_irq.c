@@ -18,7 +18,7 @@
 #ifdef CONFIG_HTC_POWER_DEBUG
 int msm_show_resume_irq_mask = 1;
 #else
-int msm_show_resume_irq_mask;
+int msm_show_resume_irq_mask = 1;
 #endif
 
 module_param_named(
