@@ -27,6 +27,7 @@
 #include <linux/of.h>
 #include <linux/debugfs.h>
 #include <linux/vmalloc.h>
+#include <linux/sched.h>
 #include <asm/arch_timer.h>
 
 #define CREATE_TRACE_POINTS
