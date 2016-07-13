@@ -477,7 +477,8 @@ static int dapm_connect_mux(struct snd_soc_dapm_context *dapm,
 	const struct snd_kcontrol_new *kcontrol)
 {
 	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
-	unsigned int val, item;
+	unsigned int val = 0;
+	unsigned int item;
 	int i;
 
 	if (e->reg != SND_SOC_NOPM) {
@@ -522,7 +523,7 @@ static void dapm_set_mixer_path_status(struct snd_soc_dapm_widget *w,
 	unsigned int max = mc->max;
 	unsigned int mask = (1 << fls(max)) - 1;
 	unsigned int invert = mc->invert;
-	unsigned int val;
+	unsigned int val = 0;
 
 	if (reg != SND_SOC_NOPM) {
 		soc_dapm_read(w->dapm, reg, &val);
@@ -2714,7 +2715,7 @@ EXPORT_SYMBOL_GPL(snd_soc_dapm_weak_routes);
 int snd_soc_dapm_new_widgets(struct snd_soc_card *card)
 {
 	struct snd_soc_dapm_widget *w;
-	unsigned int val;
+	unsigned int val = 0;
 
 	mutex_lock_nested(&card->dapm_mutex, SND_SOC_DAPM_CLASS_INIT);
 
@@ -2792,7 +2793,7 @@ int snd_soc_dapm_get_volsw(struct snd_kcontrol *kcontrol,
 	int max = mc->max;
 	unsigned int mask = (1 << fls(max)) - 1;
 	unsigned int invert = mc->invert;
-	unsigned int val;
+	unsigned int val = 0;
 	int ret = 0;
 
 	if (snd_soc_volsw_is_stereo(mc))
