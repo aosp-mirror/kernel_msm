@@ -1224,7 +1224,7 @@ static int nanohub_kthread(void *arg)
 			nanohub_set_state(data, ST_RUNNING);
 			break;
 		case ST_ERROR:
-			curr_ts = current_kernel_time();
+			get_monotonic_boottime(&curr_ts);
 			if (curr_ts.tv_sec - first_err_ts.tv_sec > ERR_RESET_TIME_SEC
 				&& data->err_cnt > ERR_RESET_COUNT) {
 				dev_info(sensor_dev, "hard reset due to consistent error\n");
@@ -1274,7 +1274,7 @@ static int nanohub_kthread(void *arg)
 			} else {
 				release_wakeup(data);
 				if (data->err_cnt == 0)
-					first_err_ts = current_kernel_time();
+					get_monotonic_boottime(&first_err_ts);
 
 				if (++data->err_cnt >= ERR_WARNING_COUNT) {
 					dev_err(sensor_dev,
