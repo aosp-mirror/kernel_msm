@@ -1365,7 +1365,7 @@ static int fan5451x_probe(struct i2c_client *client,
 		}
 	}
 
-	if (chip->step_dwn_offset_ma || chip->step_dwn_thr_mv) {
+	if (chip->step_dwn_offset_ma && chip->step_dwn_thr_mv) {
 		chip->adc_tm_dev = qpnp_get_adc_tm(&client->dev, "chg");
 		if (IS_ERR(chip->adc_tm_dev)) {
 			ret = PTR_ERR(chip->adc_tm_dev);
