@@ -1964,7 +1964,7 @@ static void stc311x_work(struct work_struct *work)
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
 	}
 	pr_info("[BAT] chip->batt_soc:%d, chip->batt_voltage:%d, chip->batt_current:%d\n", chip->batt_soc, chip->batt_voltage, chip->batt_current);
-	ASUSEvtlog("[BAT] report Capacity==>%d, Cnom:%dmAh, ChargeValue:%dmAh, Alm_SOC:%d, V:%d, Cur:%d, Temp:%d\n",
+	ASUSEvtlog("[BAT][Ser]report Capacity==>%d, Cnom:%dmAh, ChargeValue:%dmAh, Alm_SOC:%d, V:%d, Cur:%d, Temp:%d\n",
 		chip->batt_soc, GasGaugeData.Cnom, GasGaugeData.ChargeValue, GasGaugeData.Alm_SOC,
 		chip->batt_voltage, chip->batt_current, GasGaugeData.Temperature);
 	for (RegAddress=0; RegAddress<31; RegAddress++) {
