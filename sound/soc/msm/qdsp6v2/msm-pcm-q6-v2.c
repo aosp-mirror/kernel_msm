@@ -746,11 +746,10 @@ static int msm_pcm_playback_close(struct snd_pcm_substream *substream)
 			       __func__, prtd->cmd_pending);
 		if (prtd->session_id) {
 			ret = q6asm_cmd(prtd->audio_client, CMD_CLOSE);
-			if (ret < 0) {
+			if (ret < 0)
 				pr_err("%s: error: ASM close failed returned %d\n",
 					__func__, ret);
-				goto done;
-			}
+			ret = 0;
 		}
 		q6asm_audio_client_buf_free_contiguous(dir,
 					prtd->audio_client);
@@ -759,7 +758,6 @@ static int msm_pcm_playback_close(struct snd_pcm_substream *substream)
 	msm_pcm_routing_dereg_phy_stream(soc_prtd->dai_link->be_id,
 						SNDRV_PCM_STREAM_PLAYBACK);
 	kfree(prtd);
-done:
 	return ret;
 }
 
@@ -857,11 +855,10 @@ static int msm_pcm_capture_close(struct snd_pcm_substream *substream)
 	if (prtd->audio_client) {
 		if (prtd->session_id) {
 			rc = q6asm_cmd(prtd->audio_client, CMD_CLOSE);
-			if (rc < 0) {
+			if (rc < 0)
 				pr_err("%s: error: ASM close failed returned %d\n",
 					__func__, rc);
-				goto done;
-			}
+			rc = 0;
 		}
 		q6asm_audio_client_buf_free_contiguous(dir,
 				prtd->audio_client);
@@ -871,7 +868,6 @@ static int msm_pcm_capture_close(struct snd_pcm_substream *substream)
 	msm_pcm_routing_dereg_phy_stream(soc_prtd->dai_link->be_id,
 		SNDRV_PCM_STREAM_CAPTURE);
 	kfree(prtd);
-done:
 	return rc;
 }
 
