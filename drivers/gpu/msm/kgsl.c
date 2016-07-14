@@ -2730,6 +2730,7 @@ static int kgsl_setup_useraddr(struct kgsl_mem_entry *entry,
 	struct kgsl_map_user_mem *param = data;
 	struct dma_buf *dmabuf = NULL;
 	struct vm_area_struct *vma = NULL;
+	int ret;
 
 	if (param->offset != 0 || param->hostptr == 0
 		|| !KGSL_IS_PAGE_ALIGNED(param->hostptr)
@@ -2746,11 +2747,11 @@ static int kgsl_setup_useraddr(struct kgsl_mem_entry *entry,
 	if (vma && vma->vm_file) {
 		int fd;
     
-    ret = check_vma_flags(vma, entry->memdesc.flags);
-    if (ret) {
-        up_read(&current->mm->mmap_sem);
-        return ret;
-    }
+        ret = check_vma_flags(vma, entry->memdesc.flags);
+        if (ret) {
+            up_read(&current->mm->mmap_sem);
+            return ret;
+        }
 		/*
 		 * Check to see that this isn't our own memory that we have
 		 * already mapped
