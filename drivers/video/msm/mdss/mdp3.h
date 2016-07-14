@@ -25,6 +25,7 @@
 #include "mdp3_dma.h"
 #include "mdss_fb.h"
 #include "mdss.h"
+#include "mdss_dsi.h"
 
 #define MDP_VSYNC_CLK_RATE	19200000
 #define MDP_CORE_CLK_RATE_SVS	160000000
@@ -253,6 +254,8 @@ int mdp3_put_mdp_dsi_clk(void);
 int mdp3_misr_set(struct mdp_misr *misr_req);
 int mdp3_misr_get(struct mdp_misr *misr_resp);
 void mdp3_enable_regulator(int enable);
+int mdp3_check_te_status(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
+       int frame_rate);
 void mdp3_check_dsi_ctrl_status(struct work_struct *work,
 				uint32_t interval);
 int mdp3_dynamic_clock_gating_ctrl(int enable);

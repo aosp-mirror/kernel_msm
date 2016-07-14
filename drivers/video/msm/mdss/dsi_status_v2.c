@@ -19,6 +19,38 @@
 #include "mdss_dsi.h"
 #include "mdp3_ctrl.h"
 #include "mdss_dsi_cmd.h"
+#include <linux/interrupt.h>
+
+/*
+ * mdp3_check_te_status() - Check the status of panel for TE based ESD.
+ * @ctrl_pdata   : dsi controller data
+ * @frame_rate   : panel frame rate
+ *
+ * This function waits for TE signal from the panel for a maximum
+ * duration of 3 vsyncs. If timeout occurs, report the panel to be
+ * dead due to ESD attack.
+ * NOTE: The TE IRQ handling is linked to the ESD thread scheduling,
+ * i.e. rate of TE IRQs firing is bound by the ESD interval.
+ */
+int mdp3_check_te_status(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
+       int frame_rate)
+{
+	int ret;
+
+	pr_debug("%s: Checking panel TE status\n", __func__);
+
+	atomic_set(&ctrl_pdata->te_irq_ready, 0);
+	reinit_completion(&ctrl_pdata->te_irq_comp);
+	enable_irq(gpio_to_irq(ctrl_pdata->disp_te_gpio));
+
+	ret = wait_for_completion_timeout(&ctrl_pdata->te_irq_comp,
+		msecs_to_jiffies((1000 / frame_rate) * 3));
+
+	disable_irq(gpio_to_irq(ctrl_pdata->disp_te_gpio));
+	pr_debug("%s: Panel TE check done with ret = %d\n", __func__, ret);
+
+	return ret;
+}
 
 /*
  * mdp3_check_dsi_ctrl_status() - Check MDP3 DSI controller status periodically.

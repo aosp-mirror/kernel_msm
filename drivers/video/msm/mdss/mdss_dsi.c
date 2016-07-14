@@ -33,6 +33,7 @@
 #include "mdss_debug.h"
 #include "mdss_dsi_phy.h"
 #include "mdss_dba_utils.h"
+#include "mdp3.h"
 
 #define XO_CLK_RATE	19200000
 #define CMDLINE_DSI_CTL_NUM_STRING_LEN 2
@@ -3063,7 +3064,11 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		return rc;
 	}
 
-	if (mdss_dsi_is_te_based_esd(ctrl_pdata)) {
+	if (pinfo->mipi.mode == DSI_CMD_MODE &&
+		pinfo->mipi.hw_vsync_mode ) {
+		int frame_rate = mdss_panel_get_framerate(pinfo);
+
+		init_completion(&ctrl_pdata->te_irq_comp);
 		rc = devm_request_irq(&pdev->dev,
 			gpio_to_irq(ctrl_pdata->disp_te_gpio),
 			hw_vsync_handler, IRQF_TRIGGER_FALLING,
@@ -3073,6 +3078,13 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 			goto error_shadow_clk_deinit;
 		}
 		disable_irq(gpio_to_irq(ctrl_pdata->disp_te_gpio));
+		if (mdp3_check_te_status(ctrl_pdata,
+			frame_rate) <= 0) {
+			ctrl_pdata->panel_data.panel_info.esd_check_enabled = false;
+			pr_err("Disable esd protection\n");
+		}
+		devm_free_irq(&pdev->dev,
+			gpio_to_irq(ctrl_pdata->disp_te_gpio), ctrl_pdata);
 	}
 
 	rc = mdss_dsi_get_bridge_chip_params(pinfo, ctrl_pdata, pdev);
