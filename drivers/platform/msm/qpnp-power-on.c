@@ -143,7 +143,7 @@
 /* Ranges */
 #define QPNP_PON_S1_TIMER_MAX			10256
 #define QPNP_PON_S2_TIMER_MAX			2000
-#define QPNP_PON_S3_TIMER_SECS_MAX		128
+#define QPNP_PON_S3_TIMER_SECS_MAX		3
 #define QPNP_PON_S3_DBC_DELAY_MASK		0x07
 #define QPNP_PON_RESET_TYPE_MAX			0xF
 #define PON_S1_COUNT_MAX			0xF
@@ -2213,7 +2213,7 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 	}
 
 	/* program s3 source */
-	s3_src = "kpdpwr-and-resin";
+	s3_src = "kpdpwr";
 	rc = of_property_read_string(pon->spmi->dev.of_node,
 				"qcom,s3-src", &s3_src);
 	if (rc && rc != -EINVAL) {
