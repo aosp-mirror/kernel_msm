@@ -55,17 +55,9 @@
 		pinctrl-1 = <&mcu_boot_0_suspend>;
 	};
 
-	mcu,boot1 {
-		compatible = "mcu,boot1";
-		mcu_boot_1 = <&msm_gpio 42 0>;
-		pinctrl-names = "mcu_boot_1_active","mcu_boot_1_suspend";
-		pinctrl-0 = <&mcu_boot_1_active>;
-		pinctrl-1 = <&mcu_boot_1_suspend>;
-	};
-
 	mcu,reset {
 		compatible = "mcu,reset";
-		mcu_reset = <&msm_gpio 17 0>;
+		mcu_reset = <&msm_gpio 99 0>;
 		pinctrl-names = "mcu_reset_active","mcu_reset_sleep";
 		pinctrl-0 = <&mcu_reset_active>;
 		pinctrl-1 = <&mcu_reset_sleep>;
