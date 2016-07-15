@@ -1316,18 +1316,14 @@ static int _request_firmware(struct fw_desc *desc)
 	// ASUS_BSP+++ "Load wcnss firmware from /system/etc/firmware instead of /firmware/image"
 	buf = fw->priv;
 
-	if (strncmp(buf->fw_id, "wcnss", 5) == 0) {
+	if ((strncmp(buf->fw_id, "wcnss", 5) == 0) || (strncmp(buf->fw_id, "wlan/prima", 10) == 0)) {
 		/* load firmware from user helper first for wcnss firmware */
-		printk("[wlan]: %s: firmware name = %s\n", __func__, buf->fw_id);
 		ret = fw_load_from_user_helper(fw, desc, timeout);
 		if (!ret)
-			printk("[wlan]: %s: loading wcnss fw from fw_load_from_user_helper\n"
-				, __func__);
+			printk("[wlan]: %s: loading %s from fw_load_from_user_helper\n", __func__, buf->fw_id);
 		else { /* fw_load_from_user_helper failed */
-			printk("[wlan]: %s: loading wcnss fw from fw_get_filesystem_firmware\n"
-				, __func__);
-			ret = fw_get_filesystem_firmware(desc->device, fw->priv,
-				 desc->dest_addr, desc->dest_size);
+			printk("[wlan]: %s: loading %s from fw_get_filesystem_firmware\n", __func__, buf->fw_id);
+			ret = fw_get_filesystem_firmware(desc->device, fw->priv, desc->dest_addr, desc->dest_size);
 		}
 	} else if (strncmp(buf->fw_id, "HX852XES", 8) == 0) {
 		/* load firmware from user helper for touch firmware */
