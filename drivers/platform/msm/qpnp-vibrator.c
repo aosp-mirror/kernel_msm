@@ -368,7 +368,8 @@ static int qpnp_vibrator_probe(struct spmi_device *spmi)
 	vib->timed_dev.enable = qpnp_vib_enable;
 
 	dev_set_drvdata(&spmi->dev, vib);
-
+	qpnp_vib_set(vib, 1);
+	hrtimer_start(&vib->vib_timer, ktime_set(1, 0), HRTIMER_MODE_REL);
 	rc = timed_output_dev_register(&vib->timed_dev);
 	if (rc < 0)
 		return rc;
