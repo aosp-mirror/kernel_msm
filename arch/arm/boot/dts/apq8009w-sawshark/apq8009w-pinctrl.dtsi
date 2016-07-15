@@ -123,11 +123,11 @@
 	pmx_ts_reset_active {
 		ts_reset_active: ts_reset_active {
 			mux {
-				pins = "gpio16";
+				pins = "gpio95";
 			};
 
 			config {
-				pins = "gpio16";
+				pins = "gpio95";
 			};
 		};
 	};
@@ -135,11 +135,11 @@
 	pmx_ts_reset_suspend {
 		ts_reset_suspend: ts_reset_suspend {
 			mux {
-				pins = "gpio16";
+				pins = "gpio95";
 			};
 
 			config {
-				pins = "gpio16";
+				pins = "gpio95";
 			};
 		};
 	};
@@ -147,11 +147,11 @@
 	pmx_ts_release {
 		ts_release: ts_release {
 			mux {
-				pins = "gpio94", "gpio16";
+				pins = "gpio94", "gpio95";
 			};
 
 			config {
-				pins = "gpio94", "gpio16";
+				pins = "gpio94", "gpio95";
 			};
 		};
 	};
@@ -160,22 +160,22 @@
 	mcu_reset{
 		mcu_reset_active:mcu_reset_active {
 			mux {
-				pins = "gpio17";
+				pins = "gpio99";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio17";
+				pins = "gpio99";
 				drive-strength = <2>;
 				bias-pull-down;
 			};
 		};
 		mcu_reset_sleep:mcu_reset_sleep {
 			mux {
-				pins = "gpio17";
+				pins = "gpio99";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio17";
+				pins = "gpio99";
 				drive-strength = <2>;
 				bias-disable;
 			};
@@ -530,6 +530,21 @@
 			};
 			config {
 				pins = "gpio43";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+	};
+
+	/*NFC function key interrupt to AP*/
+	func_key_int{
+		func_key_int_default: func_key_int_default  {
+			mux {
+				pins = "gpio96";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio96";
 				drive-strength = <2>;
 				bias-pull-up;
 			};
