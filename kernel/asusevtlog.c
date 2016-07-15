@@ -7,6 +7,8 @@
 #include <linux/syscalls.h>
 #include <linux/delay.h>
 #include <linux/workqueue.h>
+#include <linux/init.h>
+#include <linux/string.h>
 
 char messages[256];
 
@@ -25,6 +27,12 @@ static int g_bEventlogEnable = 1;
 static void do_write_event_worker(struct work_struct *work)
 {
 	char buffer[256];
+	char *delim = " ";
+	char *pch;
+	char *cmdline;
+	int n = 0;
+	struct rtc_time tm;
+	struct timespec ts;
 
 	while (suspend_in_progress) {
 		msleep(1000);
@@ -48,7 +56,20 @@ static void do_write_event_worker(struct work_struct *work)
 				if (g_hfileEvtlog < 0)
 					printk("[adbg] 1. open %s failed during renaming old one, err:%d\n", ASUS_EVTLOG_PATH"ASUSEvtlog.txt", g_hfileEvtlog);
 			}
-			sprintf(buffer, "\n\n---------------System Boot----%s---------\n", ASUS_SW_VER);
+			n = sprintf(buffer, "\n\n---------------System Boot----%s---------\n", ASUS_SW_VER);
+
+			getnstimeofday(&ts);
+			ts.tv_sec -= sys_tz.tz_minuteswest * 60;
+			rtc_time_to_tm(ts.tv_sec, &tm);
+			get_monotonic_boottime(&ts);
+			n += sprintf(buffer+n, "(%ld)%04d-%02d-%02d %02d:%02d:%02d :",ts.tv_sec,tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+
+			cmdline = saved_command_line;
+			while ((pch = strsep(&cmdline,delim)) != NULL) {
+				if (strnstr(pch, "androidboot.bootreason=",strlen(pch))) {
+					n += sprintf(buffer+n, "[cmdline] %s\n", pch);
+				}
+			}
 
 			sys_write(g_hfileEvtlog, buffer, strlen(buffer));
 			sys_close(g_hfileEvtlog);
