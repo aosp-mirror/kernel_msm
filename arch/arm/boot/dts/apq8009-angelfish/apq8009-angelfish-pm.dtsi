@@ -171,6 +171,7 @@
 			idt,wlc-off-gpio = <&msm_gpio 22 0>;
 			idt,limit-current = <500>; /* To check charging current */
 			idt,out-voltage = <6500>;
+			idt,wlc-online-check-delay = <60>;
 		};
 
 		fan5451x_chg: fan5451x@6b {
