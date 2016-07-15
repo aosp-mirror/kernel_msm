@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  */
 &soc {
-    i2c@78b9000 { /* BLSP1 QUP5 */
+    i2c@78b7000 { /* BLSP1 QUP3 */
 		status = "ok";
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -32,7 +32,7 @@
 				cy,product_name = "cy_tp";
 				cy,chip_name = "CS445";
 				cy,irq-gpio = <&msm_gpio 94 0x2008>;
-				cy,reset-gpio = <&msm_gpio 16 0x00>;
+				cy,reset-gpio = <&msm_gpio 95 0x00>;
 				cy,vdd-type = <2>;	/* 0:null, 1:gpio, 2:pmu*/
 				cy,vbus-type = <2>; 	/* 0:null, 1:gpio, 2:pmu*/
 				cy,vdd = "vdd";
