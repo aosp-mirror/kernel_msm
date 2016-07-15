@@ -288,7 +288,7 @@ int Capacity_Adjust;
 /* -------------------------------------------------------------------------------- */
 
 #define STC3100_BATTERY_FULL 95
-#define STC311x_DELAY	1000
+#define STC311x_DELAY	2000
 
 /* ******************************************************************************** */
 
@@ -894,7 +894,6 @@ static int STC311x_ReadBatteryData(STC311x_BattDataTypeDef *BattData)
 	if (value>=0x80) value -= 0x100;	/* convert to signed value */
 	BattData->Temperature = value*10;	/* result in 0.1 degrC */
 
-	pr_info("[BAT] BattData->Temperature = %d\n", BattData->Temperature);
 
 	/* Avg current */
 	value=data[12]; value = (value<<8) + data[11];
@@ -1923,7 +1922,7 @@ static void stc311x_work(struct work_struct *work)
 		GasGaugeData.Rsense = chip->pdata->Rsense;			/* sense resistor mOhms*/
 		GasGaugeData.RelaxCurrent = chip->pdata->RelaxCurrent; /* current for relaxation in mA (< C/20) */
 		GasGaugeData.Adaptive = chip->pdata->Adaptive;		 /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
-		ASUSEvtlog("[BAT] Vmode:%d, Alm_SOC:%d, Alm_Vbat:%d, CC_cnf:%d, VM_cnf:%d, Rint:%d, Cnom:%d, Rsense:%d, RelaxCurrent:%d, Adaptive:%d\n",
+		pr_info("[BAT] Vmode:%d, Alm_SOC:%d, Alm_Vbat:%d, CC_cnf:%d, VM_cnf:%d, Rint:%d, Cnom:%d, Rsense:%d, RelaxCurrent:%d, Adaptive:%d\n",
 					GasGaugeData.Vmode, GasGaugeData.Alm_SOC, GasGaugeData.Alm_Vbat, GasGaugeData.CC_cnf,
 					GasGaugeData.VM_cnf, GasGaugeData.Rint, GasGaugeData.Cnom, GasGaugeData.Rsense,
 					GasGaugeData.RelaxCurrent, GasGaugeData.Adaptive);
@@ -1963,7 +1962,6 @@ static void stc311x_work(struct work_struct *work)
 		chip->batt_voltage = GasGaugeData.Voltage;
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
 	}
-	pr_info("[BAT] chip->batt_soc:%d, chip->batt_voltage:%d, chip->batt_current:%d\n", chip->batt_soc, chip->batt_voltage, chip->batt_current);
 	ASUSEvtlog("[BAT][Ser]report Capacity==>%d, Cnom:%dmAh, ChargeValue:%dmAh, Alm_SOC:%d, V:%d, Cur:%d, Temp:%d\n",
 		chip->batt_soc, GasGaugeData.Cnom, GasGaugeData.ChargeValue, GasGaugeData.Alm_SOC,
 		chip->batt_voltage, chip->batt_current, GasGaugeData.Temperature);
