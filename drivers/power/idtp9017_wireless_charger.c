@@ -62,6 +62,7 @@ struct idtp9017_chip {
 	bool set_env_complete;
 	bool is_wlc_off_control;
 	struct delayed_work wlc_online_check_work;
+	int wlc_online_chk_delay_ms;
 };
 
 /* OFF PIN should be control from HIGH to LOW with 3sec latency.
@@ -99,7 +100,7 @@ static void idtp9017_off_gpio_ctrl(struct idtp9017_chip *chip, bool value)
 		gpio_set_value(chip->wlc_off_gpio, 1);
 		schedule_delayed_work(&chip->wlc_online_check_work,
 				round_jiffies_relative(
-				msecs_to_jiffies(WLC_ONLINE_CHK_DELAY_MS)));
+				msecs_to_jiffies(chip->wlc_online_chk_delay_ms)));
 	} else {
 		/* Tx on case */
 		cancel_delayed_work_sync(&chip->wlc_online_check_work);
@@ -176,7 +177,7 @@ idtp9017_wlc_online_check_work(struct work_struct *work)
 
 	schedule_delayed_work(&chip->wlc_online_check_work,
 			round_jiffies_relative(msecs_to_jiffies(
-			WLC_ONLINE_CHK_DELAY_MS)));
+			chip->wlc_online_chk_delay_ms)));
 }
 
 static enum power_supply_property pm_power_props_wireless[] = {
@@ -1178,6 +1179,14 @@ static int idtp9017_parse_dt(struct device_node *dev_node,
 	if (ret)
 		dev_err(dev, "Not exist out-voltage paramaeter\n");
 	dev_info(dev, "Get out-voltage: %d\n", chip->set_out_voltage);
+
+	ret = of_property_read_u32(dev_node,
+			"idt,wlc-online-check-delay",
+			&chip->wlc_online_chk_delay_ms);
+	chip->wlc_online_chk_delay_ms = ret? WLC_ONLINE_CHK_DELAY_MS :
+		chip->wlc_online_chk_delay_ms * 1000;
+	dev_info(dev, "Set online check delay %d sec.\n",
+			(int)chip->wlc_online_chk_delay_ms / 1000);
 
 	return 0;
 }
