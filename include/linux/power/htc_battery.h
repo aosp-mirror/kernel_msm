@@ -97,6 +97,7 @@ struct battery_info_reply {
 	u32 over_vchg;
 	u32 health;
 	bool is_full;
+	bool is_eoc;
 #ifdef CONFIG_HTC_CHARGER
 	bool is_htcchg_ext_mode;
 #endif // CONFIG_HTC_CHARGER
@@ -123,6 +124,7 @@ struct htc_charger {
 	int (*get_attr_text)(char *buf, int size);
 	int (*is_battery_full_eoc_stop)(int *result);
 	bool (*pd_is_limited_5v)(void);
+	int (*get_eoc_ma)(void);
 };
 
 struct htc_gauge {
@@ -148,6 +150,7 @@ struct htc_battery_info {
 	int decreased_batt_level_check;
 	int batt_full_voltage_mv;
 	int batt_full_current_ma;
+	int batt_eoc_current_ma;
 	int overload_curr_thr_ma;
 	struct wake_lock charger_exist_lock;
 	struct delayed_work chg_full_check_work;
@@ -399,6 +402,7 @@ int pmi8994_get_usbin_voltage_now(void);
 int pmi8994_charger_get_attr_text(char *buf, int size);
 int pmi8994_is_batt_full_eoc_stop(int *result);
 bool pmi8994_pd_is_limited_5v(void);
+int pmi8996_get_batt_eoc_criteria_ma(void);
 int pmi8994_set_float_voltage_comp (int vfloat_comp);
 void pmi8994_set_iusb_max (int current_ua);
 void pmi8994_set_batt_health_good(void);

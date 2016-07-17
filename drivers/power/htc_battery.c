@@ -894,8 +894,12 @@ static void read_batt_cycle_info(void)
 void update_htc_extension_state(void)
 {
 	if (((g_batt_full_eoc_stop != 0) &&
-		(htc_batt_info.rep.level == 100) &&
-		(htc_batt_info.rep.level_raw == 100)))
+			(htc_batt_info.rep.level == 100) &&
+			(htc_batt_info.rep.level_raw == 100)))
+		htc_batt_info.htc_extension |= HTC_EXT_CHG_FULL_EOC_STOP;
+	else if (htc_batt_info.rep.is_eoc &&
+			(htc_batt_info.rep.level == 100) &&
+			(htc_batt_info.rep.level_raw == 100))
 		htc_batt_info.htc_extension |= HTC_EXT_CHG_FULL_EOC_STOP;
 	else
 		htc_batt_info.htc_extension &= ~HTC_EXT_CHG_FULL_EOC_STOP;
@@ -1801,19 +1805,38 @@ static void chg_full_check_worker(struct work_struct *work)
 	u32 max_vbat = 0;
 	s32 curr = 0;
 	static int chg_full_count = 0;
+	static int chg_eoc_count = 0;
 	static bool b_recharging_cycle = false;
 
 	if (g_latest_chg_src > POWER_SUPPLY_TYPE_UNKNOWN) {
 		if (htc_batt_info.rep.is_full) {
+			vol = get_property(htc_batt_info.bms_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW)/1000;
+			curr = get_property(htc_batt_info.bms_psy, POWER_SUPPLY_PROP_CURRENT_NOW)/1000;
 			if (htc_batt_info.rep.level_raw < CLEAR_FULL_STATE_BY_LEVEL_THR) {
-				vol = get_property(htc_batt_info.bms_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW)/1000;
 				max_vbat = get_property(htc_batt_info.batt_psy, POWER_SUPPLY_PROP_VOLTAGE_MAX);
 				if (vol < (max_vbat - 100)) {
 					chg_full_count = 0;
+					chg_eoc_count = 0;
 					htc_batt_info.rep.is_full = false;
+					htc_batt_info.rep.is_eoc = false;
 				}
 				BATT_EMBEDDED("%s: vol:%d, max_vbat=%d, is_full=%d", __func__,
 					vol, max_vbat, htc_batt_info.rep.is_full);
+			}
+
+			if (!htc_batt_info.rep.is_eoc) {
+				if ((vol >= htc_batt_info.batt_full_voltage_mv)
+					&& (curr < 0) && (abs(curr) <= htc_batt_info.batt_eoc_current_ma)) {
+					chg_eoc_count++;
+					if (chg_eoc_count >= CONSECUTIVE_COUNT)
+						htc_batt_info.rep.is_eoc = true;
+				} else {
+					chg_eoc_count = 0;
+					htc_batt_info.rep.is_eoc = false;
+				}
+				BATT_EMBEDDED("%s: vol:%d, curr=%d, is_eoc_count=%d, is_full=%d, is_eoc=%d",
+					__func__, vol, curr, chg_eoc_count,
+					htc_batt_info.rep.is_full, htc_batt_info.rep.is_eoc);
 			}
 		} else {
 			vol = get_property(htc_batt_info.bms_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW)/1000;
@@ -1831,13 +1854,19 @@ static void chg_full_check_worker(struct work_struct *work)
 				vol, curr, chg_full_count, htc_batt_info.rep.is_full);
 		}
 
-	        if ((htc_batt_info.htc_extension & 0x8)) {
+		if ((htc_batt_info.htc_extension & 0x8)) {
 			b_recharging_cycle = true;
 			if (wake_lock_active(&htc_batt_info.charger_exist_lock)) {
 				wake_unlock(&htc_batt_info.charger_exist_lock);
 				BATT_EMBEDDED("charger_exist_lock Unlock");
 			}
-	        } else if ((g_batt_full_eoc_stop != 0) && b_recharging_cycle) {
+		} else if (htc_batt_info.rep.is_full && htc_batt_info.rep.is_eoc) {
+			b_recharging_cycle = true;
+			if (wake_lock_active(&htc_batt_info.charger_exist_lock)) {
+				wake_unlock(&htc_batt_info.charger_exist_lock);
+				BATT_EMBEDDED("charger_exist_lock Unlock");
+			}
+		} else if ((g_batt_full_eoc_stop != 0) && b_recharging_cycle) {
 			if (wake_lock_active(&htc_batt_info.charger_exist_lock)) {
 				wake_unlock(&htc_batt_info.charger_exist_lock);
 				BATT_EMBEDDED("charger_exist_lock Unlock");
@@ -1848,10 +1877,12 @@ static void chg_full_check_worker(struct work_struct *work)
 				wake_lock(&htc_batt_info.charger_exist_lock);
 				BATT_EMBEDDED("charger_exist_lock Lock");
 			}
-	        }
+		}
 	} else { /* Cable out (g_latest_chg_src == POWER_SUPPLY_TYPE_UNKNOW) */
 		chg_full_count = 0;
+		chg_eoc_count = 0;
 		htc_batt_info.rep.is_full = false;
+		htc_batt_info.rep.is_eoc = false;
 		if (wake_lock_active(&htc_batt_info.charger_exist_lock)) {
 			wake_unlock(&htc_batt_info.charger_exist_lock);
 			BATT_EMBEDDED("charger_exist_lock Unlock");
@@ -2737,12 +2768,15 @@ void htc_battery_probe_process(enum htc_batt_probe probe_type) {
 			htc_batt_info.batt_capacity_mah = htc_batt_info.igauge->get_batt_capacity_mah();
 			htc_batt_info.fcc_half_capacity_ma = htc_batt_info.igauge->get_fcc_half_capacity_ma();
 			htc_batt_info.pd_is_limited_5v = htc_batt_info.icharger->pd_is_limited_5v();
+			htc_batt_info.batt_eoc_current_ma = htc_batt_info.icharger->get_eoc_ma();
 			BATT_LOG("%s: catch name %s, set batt id=%d, full_ma=%d, fcc_ma=%d, capacity=%d, "
-					"half_capacity_ma:%d, pd_is_limited:%d\n",
+					"half_capacity_ma:%d, pd_is_limited:%d,"
+					" batt_eoc_current_ma:%d\n",
 				__func__, prop.strval, htc_batt_info.rep.batt_id,
 				htc_batt_info.batt_full_current_ma,
 				htc_batt_info.batt_fcc_ma, htc_batt_info.batt_capacity_mah,
-				htc_batt_info.fcc_half_capacity_ma, htc_batt_info.pd_is_limited_5v);
+				htc_batt_info.fcc_half_capacity_ma, htc_batt_info.pd_is_limited_5v,
+				htc_batt_info.batt_eoc_current_ma);
 		}
 
 		BATT_LOG("Probe process done.\n");
@@ -2757,6 +2791,7 @@ static struct htc_battery_platform_data htc_battery_pdev_data = {
 	.icharger.get_attr_text = pmi8994_charger_get_attr_text,
 	.icharger.is_battery_full_eoc_stop = pmi8994_is_batt_full_eoc_stop,
 	.icharger.pd_is_limited_5v = pmi8994_pd_is_limited_5v,
+	.icharger.get_eoc_ma = pmi8996_get_batt_eoc_criteria_ma,
 	.igauge.get_batt_fcc_ma = fg_get_batt_fcc_ma,
 	.igauge.get_full_ma = fg_get_batt_full_charge_criteria_ma,
 	.igauge.get_batt_capacity_mah = fg_get_batt_capacity_mah,
@@ -3039,12 +3074,14 @@ static int __init htc_battery_init(void)
 	htc_batt_info.rep.overload = 0;
 	htc_batt_info.rep.over_vchg = 0;
 	htc_batt_info.rep.is_full = false;
+	htc_batt_info.rep.is_eoc = false;
 	htc_batt_info.rep.health = POWER_SUPPLY_HEALTH_UNKNOWN;
 	htc_batt_info.smooth_chg_full_delay_min = 3;
 	htc_batt_info.decreased_batt_level_check = 1;
 	htc_batt_info.critical_low_voltage_mv = 3200;
 	htc_batt_info.batt_full_voltage_mv = 4350;
 	htc_batt_info.batt_full_current_ma = 300;
+	htc_batt_info.batt_eoc_current_ma = 50;
 	htc_batt_info.overload_curr_thr_ma = 0;
 	htc_batt_info.store.batt_stored_magic_num = 0;
 	htc_batt_info.store.batt_stored_soc = 0;
