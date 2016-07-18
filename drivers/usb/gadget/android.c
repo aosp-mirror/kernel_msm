@@ -85,6 +85,12 @@ static const char longname[] = "Gadget Android";
 #define PRODUCT_ID		0x0001
 
 #define ANDROID_DEVICE_NODE_NAME_LENGTH 11
+
+//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+extern struct completion gadget_init;
+struct completion asus_chg_detect_init;
+//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+
 /* f_midi configuration */
 #define MIDI_INPUT_PORTS    1
 #define MIDI_OUTPUT_PORTS   1
@@ -535,6 +541,14 @@ static int android_enable(struct android_dev *dev)
 		diff = ktime_sub(ktime_get(), dev->last_disconnect);
 		if (ktime_to_ms(diff) < MIN_DISCONNECT_DELAY_MS)
 			msleep(MIN_DISCONNECT_DELAY_MS - ktime_to_ms(diff));
+
+		//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+		if (!asus_chg_detect_init.done) {
+			pr_info("[USB] %s: asus_chg_detect_init: wait_for_completion\n", __func__);
+			wait_for_completion(&asus_chg_detect_init);
+			asus_chg_detect_init.done = 1;
+		}
+		//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 
 		usb_gadget_connect(cdev->gadget);
 	}
@@ -3812,6 +3826,13 @@ static int android_bind(struct usb_composite_dev *cdev)
 	 */
 	usb_gadget_disconnect(gadget);
 
+	//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+	if(!gadget_init.done){
+		complete(&gadget_init);
+		pr_info("[USB] %s: gadget_init: complete\n", __func__);
+	}
+	//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+
 	/* Allocate string descriptor numbers ... note that string
 	 * contents can be overridden by the composite_dev glue.
 	 */
@@ -4289,9 +4310,12 @@ static int android_probe(struct platform_device *pdev)
 	}
 	strlcpy(android_dev->pm_qos, "high", sizeof(android_dev->pm_qos));
 
-//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
+	//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
 	_android_dev = android_dev;
-//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
+	//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
+	//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+	init_completion(&asus_chg_detect_init);
+	//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 
 	return ret;
 err_probe:
