@@ -1234,6 +1234,11 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 
 	return_cnt = 0;
 	id = message[0] - data->T100_reportid_min - 2;
+	if (id < 0) {
+		TOUCH_DEBUG_MSG("Not valid touch event (%d: %d)\n",
+				message[0], data->T100_reportid_min);
+		return;
+	}
 
 	status = message[1];
 	x = (message[3] << 8) | message[2];
