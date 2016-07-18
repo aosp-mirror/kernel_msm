@@ -54,8 +54,19 @@
 			05 01 00 00 00 00 01 29  /* Display On */
 			];
 		qcom,mdss-dsi-off-command = [
+			39 01 00 00 00 00 35 DB
+			01 1B 08 14 33 FF
+			FF 11 3F 3F 3F 22
+			9F 03 84 80 6D 20
+			00 17 1A 7F 0F 55
+			20 E4 0C 44 15 44
+			15 01 80 01 34 00
+			04 01 34 00 C8 00
+			04 90 00 10 00 00
+			00 00 00 00  /* PSM */
+			05 01 00 00 78 00 01 38  /* Idle Mode Off */
 			05 01 00 00 00 00 01 28  /* Display Off */
-			05 01 00 00 78 00 01 10  /* Sleep In */
+			05 01 00 00 6E 00 01 10  /* Sleep In */
 			];
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
@@ -80,7 +91,6 @@
 		qcom,mdss-dsi-idle-off-command = [
 			39 01 00 00 00 00 03 61 32 00   /* Write Display Brightness in PSM */
 			39 01 00 00 00 00 02 63 60  	/* Write Control Display in PSM */
-			39 01 00 00 00 00 03 51 F2 00 	/* Normal DBV Set (F2:400nit) */
 			15 01 00 00 00 00 02 B0 AC 	 	/* Manufacturer Command Protection */
 			39 01 00 00 00 00 35 DB
 			01 1B 08 14 33 FF
