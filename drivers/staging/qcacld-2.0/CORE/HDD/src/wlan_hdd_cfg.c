@@ -4595,7 +4595,14 @@ REG_TABLE_ENTRY g_registry_table[] =
                 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
                 CFG_RX_WAKELOCK_TIMEOUT_DEFAULT,
                 CFG_RX_WAKELOCK_TIMEOUT_MIN,
-                CFG_RX_WAKELOCK_TIMEOUT_MAX)
+                CFG_RX_WAKELOCK_TIMEOUT_MAX),
+
+   REG_VARIABLE(CFG_ACTIVE_MODE_OFFLOAD, WLAN_PARAM_Integer,
+                hdd_config_t, active_mode_offload,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_ACTIVE_MODE_OFFLOAD_DEFAULT,
+                CFG_ACTIVE_MODE_OFFLOAD_MIN,
+                CFG_ACTIVE_MODE_OFFLOAD_MAX),
 };
 
 
@@ -5416,6 +5423,9 @@ void print_hdd_cfg(hdd_context_t *pHddCtx)
   hddLog(LOG2, "Name = [%s] Value = [%u]",
                  CFG_CH_AVOID_SAP_RESTART_NAME,
                  pHddCtx->cfg_ini->sap_restrt_ch_avoid);
+  hddLog(LOG2, "Name = [%s] Value = [%u]",
+                 CFG_ACTIVE_MODE_OFFLOAD,
+                 pHddCtx->cfg_ini->active_mode_offload);
   hdd_ndp_print_ini_config(pHddCtx);
 }
 
