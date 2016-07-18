@@ -70,6 +70,9 @@ static int g_usb_boot = MSM_OTG_USB_BOOT_INIT;
 
 #define DRIVER_NAME	"msm_otg"
 
+//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+#define GADGET_INIT_TIMEOUT	msecs_to_jiffies(20000)
+//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 #define CHG_RECHECK_DELAY	(jiffies + msecs_to_jiffies(3000))
 #define ULPI_IO_TIMEOUT_USEC	(10 * 1000)
 #define USB_PHY_3P3_VOL_MIN	3050000 /* uV */
@@ -130,6 +133,10 @@ module_param(dcp_max_current, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(dcp_max_current, "max current drawn for DCP charger");
 
 static DECLARE_COMPLETION(pmic_vbus_init);
+//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+extern struct completion asus_chg_detect_init;
+struct completion gadget_init;
+//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 static struct msm_otg *the_msm_otg;
 static bool debug_bus_voting_enabled;
 
@@ -2440,6 +2447,13 @@ static void asus_usb_detect_work(struct work_struct *w)
 	if (!getSoftconnect()) {
 		g_usb_boot = MSM_OTG_USB_BOOT_INIT;
 		usb_gadget_disconnect(otg->gadget);
+		//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+		if(!asus_chg_detect_init.done) {
+			complete(&asus_chg_detect_init);
+			pr_info("[USB] %s: asus_chg_detect_init: complete\n", __func__);
+			msm_otg_dbg_log_event(&motg->phy, "CHARGER DET WAIT COMPLETE", getSoftconnect(), asus_chg_detect_init.done);
+		}
+		//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 		msm_otg_notify_charger(motg, 500);
 	}
 	printk("[USB] set_chg_mode: USB\n");
@@ -2448,6 +2462,7 @@ static void asus_usb_detect_work(struct work_struct *w)
 static void asus_chg_detect_work(struct work_struct *w)
 {
 	struct msm_otg *motg = the_msm_otg;
+	struct usb_otg *otg = motg->phy.otg;
 	if(g_usb_boot == MSM_OTG_USB_BOOT_DOWN){
 		if(motg->vbus_state){
 			motg->chg_type = USB_INVALID_CHARGER;
@@ -2455,6 +2470,17 @@ static void asus_chg_detect_work(struct work_struct *w)
 			g_charger_mode = USB_INVALID_CHARGER;
 			printk("[USB] set_chg_mode: UNKNOWN\n");
 			ASUSEvtlog("[USB] set_chg_mode: UNKNOWN\n");
+			if (!getSoftconnect()) {
+				g_usb_boot = MSM_OTG_USB_BOOT_INIT;
+				usb_gadget_disconnect(otg->gadget);
+				//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+				if(!asus_chg_detect_init.done) {
+					complete(&asus_chg_detect_init);
+					pr_info("[USB] %s: asus_chg_detect_init: complete\n", __func__);
+					msm_otg_dbg_log_event(&motg->phy, "CHARGER DET WAIT COMPLETE", getSoftconnect(), asus_chg_detect_init.done);
+				}
+				//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+			}
 		}
 		else{
 			printk("[USB] asus_chg_detect_work: BSV is not set,need re-check.(%d,%d)\n",motg->vbus_state,test_bit(B_SESS_VLD, &motg->inputs));
@@ -2477,6 +2503,13 @@ static void asus_usb_detect_cdp_work(struct work_struct *w)
 	pr_debug("[USB] %s: CDP detect finished\n", __func__);
 	if (!getSoftconnect()) {
 		usb_gadget_disconnect(otg->gadget);
+		//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+		if(!asus_chg_detect_init.done) {
+			complete(&asus_chg_detect_init);
+			pr_info("[USB] %s: asus_chg_detect_init: complete\n", __func__);
+			msm_otg_dbg_log_event(&motg->phy, "CHARGER DET WAIT COMPLETE", getSoftconnect(), asus_chg_detect_init.done);
+		}
+		//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 	}
 }
 
@@ -2487,6 +2520,13 @@ static void asus_chg_detect_cdp_work(struct work_struct *w)
 	pr_debug("[USB] %s: CDP detect finished\n", __func__);
 	if (!getSoftconnect()) {
 		usb_gadget_disconnect(otg->gadget);
+		//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+		if(!asus_chg_detect_init.done) {
+			complete(&asus_chg_detect_init);
+			pr_info("[USB] %s: asus_chg_detect_init: complete\n", __func__);
+			msm_otg_dbg_log_event(&motg->phy, "CHARGER DET WAIT COMPLETE", getSoftconnect(), asus_chg_detect_init.done);
+		}
+		//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 	}
 }
 //ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
@@ -2500,10 +2540,32 @@ static void msm_chg_detect_work(struct work_struct *w)
 	static bool dcd;
 	u32 line_state, dm_vlgc;
 	unsigned long delay;
+	int ret;
 
 	dev_dbg(phy->dev, "chg detection work\n");
 	msm_otg_dbg_log_event(phy, "CHG DETECTION WORK",
 			motg->chg_state, get_pm_runtime_counter(phy->dev));
+
+	//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+	if (!gadget_init.done) {
+		pr_info("[USB] %s: gadget_init: wait_for_completion_timeout\n", __func__);
+		ret = wait_for_completion_timeout(&gadget_init,GADGET_INIT_TIMEOUT);
+		if (!ret) {
+			pr_err("[USB] %s: timeout waiting for gadget init\n",__func__);
+			msm_otg_dbg_log_event(&motg->phy,
+						"GADGET INIT WAIT TMOUT",
+						motg->inputs, motg->phy.state);
+		}
+
+		gadget_init.done=1;
+
+		if (!test_bit(B_SESS_VLD, &motg->inputs)) {
+			pr_err("[USB] %s: chg detection work stop (usb unplug)\n", __func__);
+			queue_work(motg->otg_wq, &motg->sm_work);
+			return;
+		}
+	}
+	//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 
 	switch (motg->chg_state) {
 	case USB_CHG_STATE_UNDEFINED:
@@ -2581,7 +2643,11 @@ static void msm_chg_detect_work(struct work_struct *w)
 		//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
 		if(motg->chg_type != USB_SDP_CHARGER){
 			if(motg->chg_type == USB_CDP_CHARGER) {
-				if ( !getSoftconnect() ) {
+				if (!getSoftconnect()) {
+					//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+					asus_chg_detect_init.done = 0;
+					pr_info("[USB] %s: asus_chg_detect_init: set done to %d\n", __func__, asus_chg_detect_init.done);
+					//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 					usb_gadget_connect(otg->gadget);
 					schedule_delayed_work(&asus_chg_cdp_work, (2000 * HZ/1000));
 				}
@@ -2597,8 +2663,13 @@ static void msm_chg_detect_work(struct work_struct *w)
 				g_usb_boot = MSM_OTG_USB_BOOT_DOWN;
 			}
 
-			if ( !getSoftconnect() )
+			if (!getSoftconnect()) {
+				//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+				asus_chg_detect_init.done = 0;
+				pr_info("[USB] %s: asus_chg_detect_init: set done to %d\n", __func__, asus_chg_detect_init.done);
+				//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 				usb_gadget_connect(otg->gadget);
+			}
 
 			//wait 2 sec to check non-asus charger
 			printk("[USB] asus_chg_work: wait 2 sec to check non-asus charger\n");
@@ -2730,6 +2801,13 @@ static void msm_otg_init_sm(struct msm_otg *motg)
 				clear_bit(B_SESS_VLD, &motg->inputs);
 				pmic_vbus_init.done = 1;
 			}
+
+			//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+			if(!asus_chg_detect_init.done){
+				asus_chg_detect_init.done = 1;
+				pr_info("[USB] %s: asus_chg_detect_init: set done to %d\n", __func__, asus_chg_detect_init.done);
+			}
+			//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 		} else if (pdata->otg_control == OTG_USER_CONTROL) {
 			set_bit(ID, &motg->inputs);
 			set_bit(B_SESS_VLD, &motg->inputs);
@@ -2918,9 +2996,16 @@ static void msm_otg_sm_work(struct work_struct *w)
 			g_charger_mode = USB_INVALID_CHARGER;
 			printk("[USB] set_chg_mode: None\n");
 			ASUSEvtlog("[USB] set_chg_mode: None\n");
-			if ( !getSoftconnect() ) {
+			if (!getSoftconnect()) {
 				g_usb_boot = MSM_OTG_USB_BOOT_INIT;
 				usb_gadget_disconnect(otg->gadget);
+				//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+				if(!asus_chg_detect_init.done) {
+					complete(&asus_chg_detect_init);
+					pr_info("[USB] %s: asus_chg_detect_init: complete\n", __func__);
+					msm_otg_dbg_log_event(&motg->phy, "CHARGER DET WAIT COMPLETE", getSoftconnect(), asus_chg_detect_init.done);
+				}
+				//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 			}
 			//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
 			motg->chg_state = USB_CHG_STATE_UNDEFINED;
@@ -3590,7 +3675,6 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 	struct msm_otg_platform_data *pdata = motg->pdata;
 
 	msm_otg_dbg_log_event(&motg->phy, "SET PWR PROPERTY", psp, psy->type);
-	pr_info("[USB] SET PWR PROPERTY: %d \n", psp);
 	switch (psp) {
 	case POWER_SUPPLY_PROP_USB_OTG:
 		motg->id_state = val->intval ? USB_ID_GROUND : USB_ID_FLOAT;
@@ -4877,6 +4961,10 @@ static int msm_otg_probe(struct platform_device *pdev)
 	writel_relaxed(0, USB_OTGSC);
 	/* Ensure that above STOREs are completed before enabling interrupts */
 	mb();
+
+	//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+	init_completion(&gadget_init);
+	//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 
 	motg->id_state = USB_ID_FLOAT;
 	wake_lock_init(&motg->wlock, WAKE_LOCK_SUSPEND, "msm_otg");
