@@ -73,19 +73,19 @@ int get_hwver_num(struct qpnp_vadc_chip *vadc, enum qpnp_vadc_channels channel)
 
     if(NULL == vadc)
     {
-        printk(KERN_ERR "get_hwver_num ERROR.channel = %d \n", channel);
+        printk(KERN_ERR "hwver:get_hwver_num ERROR.channel = %d \n", channel);
         return -1;
     }
     rc = qpnp_vadc_read(vadc, channel, &results_ver);
 
     if (rc)
     {
-        printk(KERN_ERR "Unable to read channel = %d\n", channel);
+        printk(KERN_ERR "hwver:Unable to read channel = %d\n", channel);
         return -1;
     }
 
     rc = (results_ver.physical >> 10);  /*uv to mv*/
-    printk(KERN_ERR "rc=%d\n",rc);
+
     for(i = 0;i < ARRAY_SIZE(g_vol_table);i++)
     {
         if((rc < g_vol_table[i].hig_vol) && (rc > g_vol_table[i].low_vol))
@@ -94,7 +94,7 @@ int get_hwver_num(struct qpnp_vadc_chip *vadc, enum qpnp_vadc_channels channel)
 
     if(i >= ARRAY_SIZE(g_vol_table))
     {
-        printk(KERN_ERR "read rc = %d, error channel = %d\n", rc, channel);
+        printk(KERN_ERR "hwver:read rc = %d, error channel = %d\n", rc, channel);
         return -1;
     }
     return i;
@@ -128,7 +128,7 @@ ssize_t hwver_proc_read(struct file *file, char __user *buf, size_t count, loff_
     ret = copy_to_user(buf, num, count);
     if(0 != ret)
     {
-        printk(KERN_ERR"hwver_proc_read fail.\n");
+        printk(KERN_ERR"hwver:hwver_proc_read fail.\n");
         return -1;
     }
 
@@ -161,7 +161,7 @@ static int hwver_probe(struct platform_device *pdev)
     np = pdev->dev.of_node;
     if (!np)
     {
-        printk(KERN_ERR "get device tree node failed!\n ");
+        printk(KERN_ERR "hwver:get device tree node failed!\n ");
         return -1;
     }
 
@@ -172,7 +172,7 @@ static int hwver_probe(struct platform_device *pdev)
         rc = PTR_ERR(g_chip_ver0);
         if (rc != -EPROBE_DEFER)
         {
-            printk(KERN_ERR "hwver0 vadc property missing\n");
+            printk(KERN_ERR "hwver:hwver0 vadc property missing\n");
             return -1;
         }
     }
@@ -181,22 +181,23 @@ static int hwver_probe(struct platform_device *pdev)
     hwver_num0 = get_hwver_num(g_chip_ver0, P_MUX4_1_1);
     if(0 > hwver_num0)
     {
-        printk(KERN_ERR "P_MUX4_1_1 get error hwver_num0 = %d.\n", hwver_num0);
+        printk(KERN_ERR "hwver:P_MUX4_1_1 get error hwver_num0 = %d.\n", hwver_num0);
         return -1;
     }
+    printk(KERN_INFO "hwver:hwver0 is %d\n",hwver_num0);
 
     /*get PCB version GPIOs */
     pcbver_gpio1 = of_get_named_gpio(np, "pcbver1-gpios", 0);
     if ( !gpio_is_valid(pcbver_gpio1) )
     {
-        printk(KERN_ERR "PCB version GPIO1 get failed!\n ");
+        printk(KERN_ERR "hwver:PCB version GPIO1 get failed!\n ");
         return -1;
     }
 
     pcbver_gpio2 = of_get_named_gpio(np, "pcbver2-gpios", 0);
     if (!gpio_is_valid(pcbver_gpio2))
     {
-        printk(KERN_ERR "PCB version GPIO2 get failed!\n ");
+        printk(KERN_ERR "hwver:PCB version GPIO2 get failed!\n ");
         return -1;
     }
 
@@ -204,13 +205,13 @@ static int hwver_probe(struct platform_device *pdev)
     hwver_pinctrl = devm_pinctrl_get(&(pdev->dev));
     if(!hwver_pinctrl)
     {
-        printk(KERN_ERR "pinctrl get failed\n");
+        printk(KERN_ERR "hwver:pinctrl get failed\n");
         return -1;
     }
     set_state = pinctrl_lookup_state(hwver_pinctrl,"default");
     if(!set_state)
     {
-        printk(KERN_ERR "can not find pinctrl setstate\n");
+        printk(KERN_ERR "hwver:can not find pinctrl setstate\n");
         return -1;
     }
     pinctrl_select_state(hwver_pinctrl,set_state);
@@ -219,36 +220,36 @@ static int hwver_probe(struct platform_device *pdev)
     pcb1_err = gpio_request(pcbver_gpio1,"pcbver1-gpios");
     if (pcb1_err)
     {
-        printk(KERN_ERR "request gpio82 failed\n");
+        printk(KERN_ERR "hwver:request gpio90 failed\n");
         return -1;
     }
     if ( gpio_direction_input(pcbver_gpio1) )
     {
-        printk(KERN_ERR "GPIO input_mode set failed\n");
+        printk(KERN_ERR "hwver:GPIO input_mode set failed\n");
         return -1;
     }
     pcb1_status = gpio_get_value_cansleep(pcbver_gpio1);
     if ( pcb1_status != 0 && pcb1_status != 1 )
     {
-        printk(KERN_ERR "gpio82 status error\n");
+        printk(KERN_ERR "hwver:gpio90 status error\n");
         return -1;
     }
 
     pcb2_err = gpio_request(pcbver_gpio2,"pcbver2-gpios");
     if (pcb2_err)
     {
-        printk(KERN_ERR "request gpio83 failed\n");
+        printk(KERN_ERR "hwver:request gpio91 failed\n");
         return -1;
     }
     if ( gpio_direction_input(pcbver_gpio2) )
     {
-        printk(KERN_ERR "GPIO input_mode set failed\n");
+        printk(KERN_ERR "hwver:GPIO input_mode set failed\n");
         return -1;
     }
     pcb2_status = gpio_get_value_cansleep(pcbver_gpio2);
     if ( pcb2_status != 0 && pcb2_status != 1 )
     {
-        printk(KERN_ERR "gpio83 status error\n");
+        printk(KERN_ERR "hwver:gpio91 status error\n");
         return -1;
     }
 
@@ -258,9 +259,10 @@ static int hwver_probe(struct platform_device *pdev)
     hw_version = proc_create(HW_VER_PROC, PROC_MODE, NULL, &hwver_proc_fops);
     if(NULL == hw_version)
     {
-        printk(KERN_ERR "can't creat /proc/%s .\n", HW_VER_PROC);
+        printk(KERN_ERR "hwver:can't creat /proc/%s .\n", HW_VER_PROC);
         return -1;
     }
+    printk(KERN_INFO "hwver:PCB version is %d\n",(( ( pcb_num1 & 0x1 ) << 1 ) | ( pcb_num2 & 0x1 )));
 
     return 0;
 }
