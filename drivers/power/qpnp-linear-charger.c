@@ -204,7 +204,7 @@ static u8 btc_value[] = {
 	[HOT_THD_25_PCT] = 0x0,
 	[HOT_THD_35_PCT] = BIT(0),
 	[COLD_THD_70_PCT] = 0x0,
-	[COLD_THD_80_PCT] = BIT(1),
+	[COLD_THD_80_PCT] = 0x0,
 };
 
 static inline int get_bpd(const char *name)
@@ -383,6 +383,8 @@ struct qpnp_lbc_chip {
 	int				cfg_bpd_detection;
 	int				cfg_warm_bat_decidegc;
 	int				cfg_cool_bat_decidegc;
+	int                             cfg_warmer_bat_decidegc;
+	int                             cfg_cooler_bat_decidegc;
 	int				fake_battery_soc;
 	int				cfg_soc_resume_limit;
 	int				cfg_float_charge;
@@ -418,6 +420,10 @@ struct qpnp_lbc_chip {
 	/* parallel-chg params */
 	struct power_supply		parallel_psy;
 	struct delayed_work		parallel_work;
+	struct delayed_work             bat_is_cooler_check_work;
+	struct delayed_work             bat_is_warmer_check_work;
+	struct mutex                    bat_is_cooler_lock;
+	struct mutex                    bat_is_warmer_lock;
 };
 
 struct qpnp_lbc_chip *g_lbc_chip;
@@ -427,6 +433,10 @@ struct qpnp_lbc_chip *g_lbc_chip;
 bool eng_charging_limit;
 #endif
 // BSP Steve2: charging limit ---
+static bool g_bat_is_cooler = false;
+static bool g_bat_is_warmer = false;
+extern void adc_notification_set_cool_current(int level);
+extern void adc_notification_set_warm_current(int level);
 
 //BSP Steve2 read mpp4 voltage Interface+++
 static int
@@ -994,7 +1004,7 @@ static int qpnp_lbc_set_appropriate_vddmax(struct qpnp_lbc_chip *chip)
 
 	if (chip->bat_is_cool)
 		rc = qpnp_lbc_vddmax_set(chip, chip->cfg_cool_bat_mv);
-	else if (chip->bat_is_warm)
+	else if (chip->bat_is_warm && (g_bat_is_warmer == true))
 		rc = qpnp_lbc_vddmax_set(chip, chip->cfg_warm_bat_mv);
 	else
 		rc = qpnp_lbc_vddmax_set(chip, chip->cfg_max_voltage_mv);
@@ -1431,17 +1441,34 @@ static int get_prop_batt_temp(struct qpnp_lbc_chip *chip)
 	return (int)results.physical;
 }
 
+int get_lbc_batt_temp(void)
+{
+	int temp;
+
+	if (g_lbc_chip) {
+		temp = get_prop_batt_temp(g_lbc_chip);
+		pr_info("[BAT][CHG] get_bat_temp %d\n", temp);
+		return temp;
+	} else {
+		pr_err("g_lbc_chip is null\n");
+		return DEFAULT_TEMP;
+	}
+}
+EXPORT_SYMBOL(get_lbc_batt_temp);
+
 static void qpnp_lbc_set_appropriate_current(struct qpnp_lbc_chip *chip)
 {
 	unsigned int chg_current = chip->usb_psy_ma;
 
-	if (chip->bat_is_cool && chip->cfg_cool_bat_chg_ma)
+	if (chip->bat_is_cool && chip->cfg_cool_bat_chg_ma) {
 		chg_current = min(chg_current, chip->cfg_cool_bat_chg_ma);
-	if (chip->bat_is_warm && chip->cfg_warm_bat_chg_ma)
+	} else if (chip->bat_is_warm && chip->cfg_warm_bat_chg_ma) {
 		chg_current = min(chg_current, chip->cfg_warm_bat_chg_ma);
-	if (chip->therm_lvl_sel != 0 && chip->thermal_mitigation)
-		chg_current = min(chg_current,
-			chip->thermal_mitigation[chip->therm_lvl_sel]);
+	} else if (chip->therm_lvl_sel != 0 && chip->thermal_mitigation) {
+		chg_current = min(chg_current, chip->thermal_mitigation[chip->therm_lvl_sel]);
+	} else {
+		chg_current = chip->ichg_now;
+	}
 
 	pr_debug("setting charger current %d mA\n", chg_current);
 	qpnp_lbc_ibatmax_set(chip, chg_current);
@@ -2033,12 +2060,95 @@ static int qpnp_lbc_parallel_get_property(struct power_supply *psy,
 	return 0;
 }
 
+#define JEITA_disable_cool	0
+#define JEITA_enable_cool	1
+#define JEITA_enable_cooler	2
 
+#define JEITA_disable_warm	0
+#define JEITA_enable_warm	1
+#define JEITA_enable_warmer	2
+#define EOC_CHECK_PERIOD_MS	1000
+
+static void asus_bat_is_cooler_check_work(struct work_struct *work)
+{
+	int temp;
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct qpnp_lbc_chip *chip = container_of(dwork,
+		      struct qpnp_lbc_chip, bat_is_cooler_check_work);
+
+	pr_info("asus_bat_is_cooler_check_work()\n");
+
+	mutex_lock(&chip->bat_is_cooler_lock);
+	temp = get_prop_batt_temp(chip);
+	if ((temp <= chip->cfg_cooler_bat_decidegc) && (g_bat_is_cooler == false)){
+		g_bat_is_cooler = true;
+		adc_notification_set_cool_current(JEITA_enable_cooler);
+		pr_info("g_bat_is_cooler is true!\n");
+	} else if ((temp >= (chip->cfg_cooler_bat_decidegc + HYSTERISIS_DECIDEGC)) && (g_bat_is_cooler == true)){
+		g_bat_is_cooler = false;
+		adc_notification_set_cool_current(JEITA_enable_cool);
+		pr_info("g_bat_is_cooler is false!\n");
+	} else if (!chip->bat_is_cool){
+		g_bat_is_cooler = false;
+		pr_info("g_bat_is_cooler is cancelled!\n");
+		mutex_unlock(&chip->bat_is_cooler_lock);
+		return;
+	} else if ((temp <= chip->cfg_cool_bat_decidegc) && (g_bat_is_cooler == false)) {
+		g_bat_is_cooler = false;
+		adc_notification_set_cool_current(JEITA_enable_cool);
+		pr_info("g_bat_is_cooler is false!\n");
+	}
+
+	schedule_delayed_work(&chip->bat_is_cooler_check_work,
+			msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+
+	mutex_unlock(&chip->bat_is_cooler_lock);
+	return;
+}
+
+static void asus_bat_is_warmer_check_work(struct work_struct *work)
+{
+	int temp;
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct qpnp_lbc_chip *chip = container_of(dwork,
+		struct qpnp_lbc_chip, bat_is_warmer_check_work);
+
+	pr_info("asus_bat_is_warmer_check_work()\n");
+
+	mutex_lock(&chip->bat_is_warmer_lock);
+	temp = get_prop_batt_temp(chip);
+	if ((temp >= chip->cfg_warmer_bat_decidegc) && (g_bat_is_warmer == false)){
+		g_bat_is_warmer = true;
+		adc_notification_set_warm_current(JEITA_enable_warmer);
+		pr_info("g_bat_is_warmer is true!\n");
+	} else if ((temp <= (chip->cfg_warmer_bat_decidegc - HYSTERISIS_DECIDEGC)) && (g_bat_is_warmer == true)){
+		qpnp_lbc_ibatmax_set(chip, 360);
+		g_bat_is_warmer = false;
+		adc_notification_set_warm_current(JEITA_enable_warm);
+		pr_info("g_bat_is_warmer is false!\n");
+	} else if (!chip->bat_is_warm){
+		g_bat_is_warmer = false;
+		pr_info("g_bat_is_warmer is cancelled!\n");
+		mutex_unlock(&chip->bat_is_warmer_lock);
+		return;
+	} else if ((temp <= chip->cfg_warm_bat_decidegc) && (g_bat_is_warmer == false)) {
+		qpnp_lbc_ibatmax_set(chip, 360);
+		g_bat_is_warmer = false;
+		adc_notification_set_warm_current(JEITA_enable_warm);
+		pr_info("g_bat_is_warmer is false!\n");
+	}
+
+	schedule_delayed_work(&chip->bat_is_warmer_check_work,
+		msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+
+	mutex_unlock(&chip->bat_is_warmer_lock);
+	return;
+}
 static void qpnp_lbc_jeita_adc_notification(enum qpnp_tm_state state, void *ctx)
 {
 	struct qpnp_lbc_chip *chip = ctx;
 	bool bat_warm = 0, bat_cool = 0;
-	int temp;
+	int temp, temp_offset = 0;
 	unsigned long flags;
 
 	if (state >= ADC_TM_STATE_NUM) {
@@ -2048,10 +2158,16 @@ static void qpnp_lbc_jeita_adc_notification(enum qpnp_tm_state state, void *ctx)
 
 	temp = get_prop_batt_temp(chip);
 
+	if ((temp > chip->cfg_cool_bat_decidegc) && (300 - temp >= 0)) {
+		if (temp - chip->cfg_cool_bat_decidegc >= 30)
+			temp_offset = temp - chip->cfg_cool_bat_decidegc;
+		else if (temp - chip->cfg_cool_bat_decidegc != 0)
+			temp_offset = 30;
+	}
+
 	pr_debug("temp = %d state = %s\n", temp,
 			state == ADC_TM_WARM_STATE ? "warm" : "cool");
 
-	if (state == ADC_TM_WARM_STATE) {
 		if (temp >= chip->cfg_warm_bat_decidegc) {
 			/* Normal to warm */
 			bat_warm = true;
@@ -2061,11 +2177,16 @@ static void qpnp_lbc_jeita_adc_notification(enum qpnp_tm_state state, void *ctx)
 					- HYSTERISIS_DECIDEGC;
 			chip->adc_param.state_request =
 				ADC_TM_COOL_THR_ENABLE;
+
+			schedule_delayed_work(&chip->bat_is_warmer_check_work,
+				msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+			pr_info("Normal to warm!\n");
 		} else if (temp >=
 			chip->cfg_cool_bat_decidegc + HYSTERISIS_DECIDEGC) {
 			/* Cool to normal */
 			bat_warm = false;
 			bat_cool = false;
+			adc_notification_set_cool_current(JEITA_disable_cool);
 
 			chip->adc_param.low_temp =
 					chip->cfg_cool_bat_decidegc;
@@ -2073,31 +2194,40 @@ static void qpnp_lbc_jeita_adc_notification(enum qpnp_tm_state state, void *ctx)
 					chip->cfg_warm_bat_decidegc;
 			chip->adc_param.state_request =
 					ADC_TM_HIGH_LOW_THR_ENABLE;
+
+			pr_info("Cool to normal!\n");
 		}
-	} else {
-		if (temp <= chip->cfg_cool_bat_decidegc) {
+		if ((temp <= chip->cfg_cool_bat_decidegc) ||
+				(temp <= chip->cfg_cool_bat_decidegc + temp_offset)) {
 			/* Normal to cool */
 			bat_warm = false;
 			bat_cool = true;
-			chip->adc_param.high_temp =
-					chip->cfg_cool_bat_decidegc
-					+ HYSTERISIS_DECIDEGC;
+
+			if (temp_offset == 0)
+				chip->adc_param.high_temp = chip->cfg_cool_bat_decidegc + HYSTERISIS_DECIDEGC;
+			else
+				chip->adc_param.high_temp = chip->cfg_cool_bat_decidegc + HYSTERISIS_DECIDEGC + temp_offset;
+
 			chip->adc_param.state_request =
 					ADC_TM_WARM_THR_ENABLE;
+			schedule_delayed_work(&chip->bat_is_cooler_check_work,
+				msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+			pr_info("Normal to cool!\n");
 		} else if (temp <= (chip->cfg_warm_bat_decidegc -
 					HYSTERISIS_DECIDEGC)){
 			/* Warm to normal */
 			bat_warm = false;
 			bat_cool = false;
 
+			adc_notification_set_warm_current(JEITA_disable_warm);
 			chip->adc_param.low_temp =
 					chip->cfg_cool_bat_decidegc;
 			chip->adc_param.high_temp =
 					chip->cfg_warm_bat_decidegc;
 			chip->adc_param.state_request =
 					ADC_TM_HIGH_LOW_THR_ENABLE;
+			pr_info("Warm to normal!\n");
 		}
-	}
 
 	if (chip->bat_is_cool ^ bat_cool || chip->bat_is_warm ^ bat_warm) {
 		spin_lock_irqsave(&chip->ibat_change_lock, flags);
@@ -2353,6 +2483,8 @@ static int show_lbc_config(struct seq_file *m, void *data)
 			"cfg_bpd_detection\t=\t%d\n"
 			"cfg_warm_bat_decidegc\t=\t%d\n"
 			"cfg_cool_bat_decidegc\t=\t%d\n"
+			"cfg_warmer_bat_decidegc\t=\t%d\n"
+			"cfg_cooler_bat_decidegc\t=\t%d\n"
 			"cfg_soc_resume_limit\t=\t%d\n"
 			"cfg_float_charge\t=\t%d\n",
 			chip->cfg_charging_disabled,
@@ -2378,7 +2510,9 @@ static int show_lbc_config(struct seq_file *m, void *data)
 			chip->cfg_tchg_mins,
 			chip->cfg_bpd_detection,
 			chip->cfg_warm_bat_decidegc,
+			chip->cfg_warmer_bat_decidegc,
 			chip->cfg_cool_bat_decidegc,
+			chip->cfg_cooler_bat_decidegc,
 			chip->cfg_soc_resume_limit,
 			chip->cfg_float_charge);
 
@@ -2431,6 +2565,8 @@ static int qpnp_charger_read_dt_props(struct qpnp_lbc_chip *chip)
 	OF_PROP_READ(chip, cfg_tchg_mins, "tchg-mins", rc, 1);
 	OF_PROP_READ(chip, cfg_warm_bat_decidegc, "warm-bat-decidegc", rc, 1);
 	OF_PROP_READ(chip, cfg_cool_bat_decidegc, "cool-bat-decidegc", rc, 1);
+	OF_PROP_READ(chip, cfg_warmer_bat_decidegc, "warmer-bat-decidegc", rc, 1);
+	OF_PROP_READ(chip, cfg_cooler_bat_decidegc, "cooler-bat-decidegc", rc, 1);
 	OF_PROP_READ(chip, cfg_hot_batt_p, "batt-hot-percentage", rc, 1);
 	OF_PROP_READ(chip, cfg_cold_batt_p, "batt-cold-percentage", rc, 1);
 	OF_PROP_READ(chip, cfg_batt_weak_voltage_uv, "vbatweak-uv", rc, 1);
@@ -3580,6 +3716,10 @@ static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 	spin_lock_init(&chip->hw_access_lock);
 	spin_lock_init(&chip->ibat_change_lock);
 	INIT_DELAYED_WORK(&chip->parallel_work, qpnp_lbc_parallel_work);
+	mutex_init(&chip->bat_is_cooler_lock);
+	mutex_init(&chip->bat_is_warmer_lock);
+	INIT_DELAYED_WORK(&chip->bat_is_cooler_check_work, asus_bat_is_cooler_check_work);
+	INIT_DELAYED_WORK(&chip->bat_is_warmer_check_work, asus_bat_is_warmer_check_work);
 
 	OF_PROP_READ(chip, cfg_max_voltage_mv, "vddmax-mv", rc, 0);
 	if (rc)
@@ -3625,6 +3765,31 @@ static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 				= qpnp_lbc_parallel_is_writeable;
 	chip->parallel_psy.num_properties
 				= ARRAY_SIZE(qpnp_lbc_parallel_properties);
+
+	if ((chip->cfg_cool_bat_decidegc || chip->cfg_warm_bat_decidegc)
+			&& chip->bat_if_base) {
+		chip->adc_param.low_temp = chip->cfg_cool_bat_decidegc;
+		chip->adc_param.high_temp = chip->cfg_warm_bat_decidegc;
+		chip->adc_param.timer_interval = ADC_MEAS1_INTERVAL_1S;
+		chip->adc_param.state_request = ADC_TM_HIGH_LOW_THR_ENABLE;
+		chip->adc_param.btm_ctx = chip;
+		chip->adc_param.threshold_notification =
+			qpnp_lbc_jeita_adc_notification;
+		chip->adc_param.channel = LR_MUX1_BATT_THERM;
+
+		if (get_prop_batt_present(chip)) {
+			rc = qpnp_adc_tm_channel_measure(chip->adc_tm_dev,
+				&chip->adc_param);
+			if (rc) {
+				pr_err("request ADC error rc=%d\n", rc);
+			}
+		}
+	}
+
+	rc = qpnp_lbc_bat_if_configure_btc(chip);
+	if (rc) {
+		pr_err("Failed to configure btc rc=%d\n", rc);
+	}
 
 	rc = power_supply_register(chip->dev, &chip->parallel_psy);
 	if (rc < 0) {
@@ -3920,11 +4085,15 @@ static int qpnp_lbc_remove(struct spmi_device *spmi)
 		cancel_work_sync(&chip->vddtrim_work);
 	}
 	cancel_delayed_work_sync(&chip->collapsible_detection_work);
+	cancel_delayed_work_sync(&chip->bat_is_cooler_check_work);
+	cancel_delayed_work_sync(&chip->bat_is_warmer_check_work);
 	debugfs_remove_recursive(chip->debug_root);
 	if (chip->bat_if_base)
 		power_supply_unregister(&chip->batt_psy);
 	mutex_destroy(&chip->jeita_configure_lock);
 	mutex_destroy(&chip->chg_enable_lock);
+	mutex_destroy(&chip->bat_is_cooler_lock);
+	mutex_destroy(&chip->bat_is_warmer_lock);
 	dev_set_drvdata(&spmi->dev, NULL);
 	return 0;
 }

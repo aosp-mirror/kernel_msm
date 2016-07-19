@@ -280,6 +280,7 @@ static union {
 
 
 int Capacity_Adjust;
+extern int get_lbc_batt_temp(void);
 
 
 /* -------------------------------------------------------------------------------- */
@@ -342,7 +343,7 @@ static int stc311x_get_property(struct power_supply *psy,
 		val->intval = chip->batt_soc;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		val->intval = BattData.Temperature;
+		val->intval = get_lbc_batt_temp();
 		break;
 	default:
 		return -EINVAL;
