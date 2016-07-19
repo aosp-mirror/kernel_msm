@@ -110,6 +110,7 @@ struct smb23x_chip {
 	int				prechg_current_ma;
 	int				charger_plugin;
 	int				reg_addr;
+	int				reg_print_count;
 	struct workqueue_struct		*workqueue;
 	struct timer_list		timer_init_register;
 	struct delayed_work		delaywork_init_register;
@@ -956,8 +957,6 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 {
 	int rc, i = 0;
 	u8 tmp;
-
-	pr_err("Enter !\n");
 
 	rc = smb23x_enable_volatile_writes(chip);
 	if (rc < 0) {
@@ -1912,12 +1911,12 @@ static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
 
 	rc = smb23x_read(chip, CHG_STATUS_B_REG, &reg);
 	if (rc < 0) {
-		pr_err("Read STATUS_B failed, rc=%d\n", rc);
+		pr_debug("Read STATUS_B failed, rc=%d\n", rc);
 		return POWER_SUPPLY_STATUS_DISCHARGING;
 	}
 
 	if (reg & HOLD_OFF_BIT) {
-		pr_err("smb23x status: hold-off, STATUS_B_REG = 0x%x \n", reg);
+		pr_debug("smb23x status: hold-off, STATUS_B_REG = 0x%x \n", reg);
 		return POWER_SUPPLY_STATUS_NOT_CHARGING;
 	}
 
@@ -2115,7 +2114,6 @@ static int smb23x_print_register(struct smb23x_chip *chip)
 	int rc;
 	u8 reg, addr = 0;
 
-	pr_err("Enter !\n");
 	for(addr = CFG_REG_0 ; addr <= I2C_COMM_CFG_REG ; addr++) {
 		reg = 0;
 		rc = smb23x_read(chip, addr, &reg);
@@ -2161,7 +2159,6 @@ void smb23x_delaywork_init_register(struct work_struct *work)
 {
 	int rc;
 
-	pr_err("Enter !\n");
 	if (g_chip->charger_plugin == 0xFF) {
 		rc = smb23x_enable_volatile_writes(g_chip);
 		g_chip->charger_plugin = (rc < 0) ? 0 : 1;
@@ -2177,6 +2174,7 @@ void smb23x_delaywork_init_register(struct work_struct *work)
 		del_timer(&g_chip->timer_print_register);
 		g_chip->timer_print_register.expires = jiffies + 30*HZ;
 		add_timer(&g_chip->timer_print_register);
+		g_chip->reg_print_count = 0;
 	}
 }
 
@@ -2189,13 +2187,15 @@ void smb23x_delaywork_print_register(struct work_struct *work)
 {
 	int rc;
 
-	pr_err("Enter !\n");
 	rc = smb23x_print_register(g_chip);
 	if (rc < 0)
 		pr_err("print register failed!\n");
 
-	g_chip->timer_print_register.expires = jiffies + 300*HZ;
-	add_timer(&g_chip->timer_print_register);
+	if (g_chip->reg_print_count < 3) {
+		g_chip->timer_print_register.expires = jiffies + 30*HZ;
+		add_timer(&g_chip->timer_print_register);
+		g_chip->reg_print_count++;
+	}
 }
 
 static int smb23x_battery_get_property(struct power_supply *psy,
@@ -2253,8 +2253,6 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 		val->intval = smb23x_get_prop_charge_type(chip);
 		break;
 	case POWER_SUPPLY_PROP_RESISTANCE:
-		smb23x_print_register(chip);
-
 		rc = smb23x_read(chip, CFG_REG_0, &reg);
 		if (rc)
 			val->intval = 0x00;
@@ -2713,8 +2711,6 @@ static int smb23x_probe(struct i2c_client *client,
 	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
 	if (chip == NULL)
 		return (-ENOMEM);
-
-	pr_err("Enter !\n");
 
 	chip->client = client;
 	chip->dev = &client->dev;
