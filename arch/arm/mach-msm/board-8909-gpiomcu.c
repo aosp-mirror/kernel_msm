@@ -27,7 +27,6 @@
 #define GPIO_LEN	  16
 
 int McuGpioBoot0 = 85;
-int McuGpioBoot1 = 86;
 int McuGpioReset = 17;
 
 /* min reset delay time (ms)*/
@@ -88,26 +87,6 @@ static ssize_t mcu_write_proc_gpio_boot0
 	return mcu_write_proc_gpio(McuGpioBoot0, buffer, count);
 }
 
-static ssize_t mcu_read_proc_gpio_boot1
-				(struct file *file, char __user *userbuf,
-				size_t bytes, loff_t *off)
-{
-	return 0;
-}
-
-static ssize_t mcu_write_proc_gpio_boot1
-				(struct file *file, const char __user *buffer,
-				size_t count, loff_t *pos)
-{
-	if (count < 1)
-	{
-		return -EINVAL;
-	}
-
-	return mcu_write_proc_gpio(McuGpioBoot1, buffer, count);
-
-}
-
 static ssize_t mcu_read_proc_gpio_reset
 				(struct file *file, char __user *userbuf,
 				size_t bytes, loff_t *off)
@@ -132,12 +111,6 @@ static const struct file_operations proc_fops_gpio_boot0 = {
 	.owner = THIS_MODULE,
 	.read = mcu_read_proc_gpio_boot0,
 	.write = mcu_write_proc_gpio_boot0,
-};
-
-static const struct file_operations proc_fops_gpio_boot1 = {
-	.owner = THIS_MODULE,
-	.read = mcu_read_proc_gpio_boot1,
-	.write = mcu_write_proc_gpio_boot1,
 };
 
 static const struct file_operations proc_fops_gpio_reset = {
@@ -166,23 +139,6 @@ static int mcu_gpio_request(void)
 			__FUNCTION__, McuGpioBoot0);
 	else
 		printk(KERN_INFO "%s: gpio_request mcu_boot_0 done\n", __FUNCTION__);
-
-	/*mcu boot1*/
-	np = of_find_compatible_node(NULL, NULL, "mcu,boot1");
-	if (!np) {
-		printk(KERN_ERR "%s: %s node not found\n", __FUNCTION__, "mcu,boot1");
-		return -ENODEV;
-	}
-
-	McuGpioBoot1 = of_get_named_gpio(np, "mcu_boot_1", 0);
-	if (McuGpioBoot1 >= 0) {
-		printk(KERN_ERR "%s: mcu_boot_1:%d.\n", __FUNCTION__, McuGpioBoot1);
-	}
-	if (gpio_request(McuGpioBoot1, "mcu_boot_1"))
-		printk(KERN_ERR "%s: Failed to request gpio %d for mcu_boot1\n",
-			__FUNCTION__, McuGpioBoot1);
-	else
-		printk(KERN_INFO "%s: gpio_request mcu_boot_1 done\n", __FUNCTION__);
 
 	/*mcu reset*/
 	np = of_find_compatible_node(NULL, NULL, "mcu,reset");
@@ -225,22 +181,13 @@ static int __init board_mcu_gpio_init(void)
 		goto fail;
 	}
 
-	/* read/write mcu boot1 entries */
-	ent = proc_create("gpio_mcu_boot1", 0660, mcu_dir, &proc_fops_gpio_boot1);
-	if (ent == NULL)
-	{
-		pr_err("Unable to create /proc/mcu/gpio_mcu_boot1 entry.\n");
-		retval = -ENOMEM;
-		goto fail1;
-	}
-
 	/* read/write mcu reset proc entries */
 	ent = proc_create("gpio_mcu_reset", 0660, mcu_dir, &proc_fops_gpio_reset);
 	if (ent == NULL)
 	{
 		pr_err("Unable to create /proc/mcu/gpio_mcu_reset entry.\n");
 		retval = -ENOMEM;
-		goto fail2;
+		goto fail1;
 	}
 
 	/*mcu gpio request*/
@@ -248,15 +195,13 @@ static int __init board_mcu_gpio_init(void)
 	{
 		pr_err( "failed to request mcu gpio\n");
 		retval = -EIO;
-		goto fail3;
+		goto fail2;
 	}
 
 	return 0;
 
-fail3:
-	remove_proc_entry("gpio_mcu_reset", mcu_dir);
 fail2:
-	remove_proc_entry("gpio_mcu_boot1", mcu_dir);
+	remove_proc_entry("gpio_mcu_reset", mcu_dir);
 fail1:
 	remove_proc_entry("gpio_mcu_boot0", mcu_dir);
 fail:
@@ -270,10 +215,8 @@ fail:
 static void __exit board_mcu_gpio_exit(void)
 {
 	gpio_free(McuGpioBoot0);
-	gpio_free(McuGpioBoot1);
 	gpio_free(McuGpioReset);
 	remove_proc_entry("gpio_mcu_boot0", mcu_dir);
-	remove_proc_entry("gpio_mcu_boot1", mcu_dir);
 	remove_proc_entry("gpio_mcu_reset", mcu_dir);
 	remove_proc_entry("mcu", 0);
 }
