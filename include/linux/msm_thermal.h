@@ -49,6 +49,8 @@ struct msm_thermal_data {
 	int32_t core_temp_hysteresis_degC;
 	int32_t hotplug_temp_degC;
 	int32_t hotplug_temp_hysteresis_degC;
+	int32_t core_hotplug_temp_degC;
+	int32_t core_hotplug_temp_hysteresis_degC;
 	uint32_t core_control_mask;
 	uint32_t freq_mitig_temp_degc;
 	uint32_t freq_mitig_temp_hysteresis_degc;

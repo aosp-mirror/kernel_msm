@@ -212,6 +212,8 @@ enum thermal_threshold {
 	HOTPLUG_THRESHOLD_LOW,
 	FREQ_THRESHOLD_HIGH,
 	FREQ_THRESHOLD_LOW,
+	CORE_HOTPLUG_THRESHOLD_HIGH,
+	CORE_HOTPLUG_THRESHOLD_LOW,
 	THRESHOLD_MAX_NR,
 };
 
@@ -2985,6 +2987,10 @@ static __ref int do_hotplug(void *data)
 				sensor_mgr_set_threshold(cpus[cpu].sensor_id,
 				&cpus[cpu].threshold[HOTPLUG_THRESHOLD_HIGH]);
 
+				ret =
+				sensor_mgr_set_threshold(cpus[cpu].sensor_id,
+				&cpus[cpu].threshold[CORE_HOTPLUG_THRESHOLD_HIGH]);
+
 				if (cpus[cpu].offline
 					&& !IS_LOW_THRESHOLD_SET(ret))
 					cpus[cpu].offline = 0;
@@ -3575,26 +3581,19 @@ static int hotplug_notify(enum thermal_trip_type type, int temp, void *data)
 
 	if (!(msm_thermal_info.core_control_mask & BIT(cpu_node->cpu)))
 		return 0;
+
 	switch (type) {
 	case THERMAL_TRIP_CONFIGURABLE_HI:
 		if (!(cpu_node->offline))
 			cpu_node->offline = 1;
-		if (do_thermal_core_control_flag) {
-			online_offline_flag = false;
-		}
 		break;
 	case THERMAL_TRIP_CONFIGURABLE_LOW:
 		if (cpu_node->offline)
 			cpu_node->offline = 0;
-		if (!ambient_flag) {
-			online_offline_flag = true;
-		}
 		break;
 	default:
 		break;
 	}
-
-	schedule_work(&do_thermal_core_control_work);
 
 	if (hotplug_task) {
 		cpu_node->hotplug_thresh_clear = true;
@@ -3603,6 +3602,43 @@ static int hotplug_notify(enum thermal_trip_type type, int temp, void *data)
 		pr_err("Hotplug task is not initialized\n");
 	return 0;
 }
+
+static int core_hotplug_notify(enum thermal_trip_type type, int temp, void *data)
+{
+	struct cpu_info *cpu_node = (struct cpu_info *)data;
+
+	pr_info_ratelimited("%s reach temp threshold: %d\n",
+				cpu_node->sensor_type, temp);
+
+	if (!(msm_thermal_info.core_control_mask & BIT(cpu_node->cpu)))
+		return 0;
+
+	switch (type) {
+	case THERMAL_TRIP_CONFIGURABLE_HI:
+		if (!(cpu_node->offline) && do_thermal_core_control_flag) {
+			cpu_node->offline = 1;
+			online_offline_flag = false;
+			schedule_work(&do_thermal_core_control_work);
+		}
+		break;
+	case THERMAL_TRIP_CONFIGURABLE_LOW:
+		if (cpu_node->offline && !ambient_flag && do_thermal_core_control_flag) {
+			cpu_node->offline = 0;
+			online_offline_flag = true;
+			schedule_work(&do_thermal_core_control_work);
+		}
+		break;
+	default:
+		break;
+	}
+	if (hotplug_task) {
+		cpu_node->hotplug_thresh_clear = true;
+		complete(&hotplug_notify_complete);
+	} else
+		pr_err("Hotplug task is not initialized\n");
+	return 0;
+}
+
 /* Adjust cpus offlined bit based on temperature reading. */
 static int hotplug_init_cpu_offlined(void)
 {
@@ -3645,6 +3681,7 @@ static void hotplug_init(void)
 {
 	uint32_t cpu = 0;
 	struct sensor_threshold *hi_thresh = NULL, *low_thresh = NULL;
+	struct sensor_threshold *core_hi_thresh = NULL, *core_low_thresh = NULL;
 
 	if (hotplug_task)
 		return;
@@ -3671,7 +3708,20 @@ static void hotplug_init(void)
 		hi_thresh->notify = low_thresh->notify = hotplug_notify;
 		hi_thresh->data = low_thresh->data = (void *)&cpus[cpu];
 
+		core_hi_thresh = &cpus[cpu].threshold[CORE_HOTPLUG_THRESHOLD_HIGH];
+		core_low_thresh = &cpus[cpu].threshold[CORE_HOTPLUG_THRESHOLD_LOW];
+		core_hi_thresh->temp = (msm_thermal_info.core_hotplug_temp_degC)
+					* tsens_scaling_factor;
+		core_hi_thresh->trip = THERMAL_TRIP_CONFIGURABLE_HI;
+		core_low_thresh->temp = (msm_thermal_info.core_hotplug_temp_degC -
+					msm_thermal_info.core_hotplug_temp_hysteresis_degC)
+					* tsens_scaling_factor;
+		core_low_thresh->trip = THERMAL_TRIP_CONFIGURABLE_LOW;
+		core_hi_thresh->notify = core_low_thresh->notify = core_hotplug_notify;
+		core_hi_thresh->data = core_low_thresh->data = (void *)&cpus[cpu];
+
 		sensor_mgr_set_threshold(cpus[cpu].sensor_id, hi_thresh);
+		sensor_mgr_set_threshold(cpus[cpu].sensor_id, core_hi_thresh);
 	}
 init_kthread:
 	init_completion(&hotplug_notify_complete);
@@ -4859,6 +4909,9 @@ static ssize_t __ref store_cc_enabled(struct kobject *kobj,
 					continue;
 				sensor_mgr_set_threshold(cpus[cpu].sensor_id,
 				&cpus[cpu].threshold[HOTPLUG_THRESHOLD_HIGH]);
+
+				sensor_mgr_set_threshold(cpus[cpu].sensor_id,
+				&cpus[cpu].threshold[CORE_HOTPLUG_THRESHOLD_HIGH]);
 			}
 		}
 		mutex_unlock(&core_control_mutex);
@@ -5745,6 +5798,11 @@ static void thermal_cpu_hotplug_mit_disable(void)
 			th_cnt <= HOTPLUG_THRESHOLD_LOW; th_cnt++)
 			sensor_cancel_trip(cpus[cpu].sensor_id,
 				&cpus[cpu].threshold[th_cnt]);
+
+		for (th_cnt = CORE_HOTPLUG_THRESHOLD_HIGH;
+			th_cnt <= CORE_HOTPLUG_THRESHOLD_LOW; th_cnt++)
+			sensor_cancel_trip(cpus[cpu].sensor_id,
+				&cpus[cpu].threshold[th_cnt]);
 	}
 
 	dev_mgr = find_device_by_name(HOTPLUG_DEVICE);
@@ -6497,6 +6555,18 @@ static int probe_cc(struct device_node *node, struct msm_thermal_data *data,
 	if (ret)
 		goto hotplug_node_fail;
 
+	key = "qcom,core-hotplug-temp";
+	ret = of_property_read_u32(node, key, &data->core_hotplug_temp_degC);
+	if (ret)
+		goto hotplug_node_fail;
+
+	key = "qcom,core-hotplug-temp-hysteresis";
+	ret = of_property_read_u32(node, key,
+			&data->core_hotplug_temp_hysteresis_degC);
+
+	if (ret)
+		goto hotplug_node_fail;
+
 read_node_fail:
 	if (ret) {
 		dev_info(&pdev->dev,
@@ -6992,13 +7062,19 @@ static void thermal_update_mit_threshold(
 		config[idx].disable_config();
 		enable_config(idx);
 		if (idx >= MSM_LIST_MAX_NR) {
-			if (idx == MSM_LIST_MAX_NR + HOTPLUG_CONFIG)
+			if (idx == MSM_LIST_MAX_NR + HOTPLUG_CONFIG) {
 				UPDATE_CPU_CONFIG_THRESHOLD(
 					msm_thermal_info.core_control_mask,
 					HOTPLUG_THRESHOLD_HIGH,
 					config[idx].thresh,
 					config[idx].thresh_clr);
-			else if (idx == MSM_LIST_MAX_NR + CPUFREQ_CONFIG)
+
+				UPDATE_CPU_CONFIG_THRESHOLD(
+					msm_thermal_info.core_control_mask,
+					CORE_HOTPLUG_THRESHOLD_HIGH,
+					config[idx].thresh,
+					config[idx].thresh_clr);
+			} else if (idx == MSM_LIST_MAX_NR + CPUFREQ_CONFIG)
 				UPDATE_CPU_CONFIG_THRESHOLD(
 					msm_thermal_info
 					.freq_mitig_control_mask,
