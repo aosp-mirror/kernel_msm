@@ -32,6 +32,7 @@
 / {
 	model = "Qualcomm Technologies, Inc. APQ8009W-PM8916 MTP";
 	compatible = "qcom,apq8009-mtp", "qcom,apq8009", "qcom,mtp";
-	qcom,msm-id = <300 0>;
+	qcom,msm-id = <300 0>,
+		      <301 0>;
 	qcom,board-id= <8 5>;
 };
