@@ -9729,12 +9729,15 @@ __wlan_hdd_cfg80211_set_ns_offload(struct wiphy *wiphy,
 	pHddCtx->ns_offload_enable =
 		nla_get_u8(tb[QCA_WLAN_VENDOR_ATTR_ND_OFFLOAD_FLAG]);
 
-	/* Disable NS offload if active mode offload is enabled */
-	if (!(pHddCtx->ns_offload_enable) &&
-	      pHddCtx->cfg_ini->active_mode_offload) {
+	/*
+         * If active mode offload is enabled configure the nsoffload
+         * enable/disable request from the upper layer.
+         */
+	if (pHddCtx->cfg_ini->active_mode_offload) {
 		hddLog(LOG1,
-			FL("Disable NS offload : active offload is enabled"));
-		hdd_conf_ns_offload(pAdapter, 0);
+			FL("Configure NS offload with command: %d"),
+			pHddCtx->ns_offload_enable);
+		hdd_conf_ns_offload(pAdapter, pHddCtx->ns_offload_enable);
 	}
 
 	return 0;
