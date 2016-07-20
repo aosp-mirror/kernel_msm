@@ -236,6 +236,10 @@
 	usbid-pullup-gpio = <&msm_gpio 98 0x00>;
 };
 
+&pm8916_l6{
+	regulator-always-on;
+};
+
 &pm8916_vadc {
 	chan@13 {
 		label = "usb_id";
