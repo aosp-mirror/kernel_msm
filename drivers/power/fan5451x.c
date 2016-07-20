@@ -45,6 +45,21 @@
 
 static unsigned int att_addr = REG_IOCHRG;
 
+struct register_base_t {
+	int int0_vbusint;
+	int int0_vinint;
+	int stat0_vbuspwr;
+	int stat0_vinpwr;
+	int reg_ibus;
+	int reg_vbus;
+	int reg_iin;
+	int reg_vin;
+	int ibus_min_ma;
+	int ibus_max_ma;
+	int iin_min_ma;
+	int iin_max_ma;
+};
+
 struct fan5451x_chip {
 	struct i2c_client *client;
 	struct power_supply batt_psy;
@@ -69,6 +84,9 @@ struct fan5451x_chip {
 	int vinovp;
 	int vinlim;
 	int fctmr;
+	bool swap_vbus_vin;
+	struct register_base_t register_base;
+
 	/* charger status */
 	int health;
 	int enable;
@@ -164,7 +182,7 @@ static int fan5451x_usb_chg_plugged_in(struct fan5451x_chip *chip)
 	if (ret < 0)
 		return 0;
 
-	return (ret & STAT0_VBUSPWR) ? 1 : 0;
+	return (ret & chip->register_base.stat0_vbuspwr) ? 1 : 0;
 }
 
 static int fan5451x_wlc_chg_plugged_in(struct fan5451x_chip *chip)
@@ -175,7 +193,7 @@ static int fan5451x_wlc_chg_plugged_in(struct fan5451x_chip *chip)
 	if (ret < 0)
 		return 0;
 
-	return (ret & STAT0_VINPWR) ? 1 : 0;
+	return (ret & chip->register_base.stat0_vinpwr) ? 1 : 0;
 }
 
 static int fan5451x_enable(struct fan5451x_chip *chip, int enable)
@@ -267,15 +285,16 @@ static int fan5451x_set_ibus(struct fan5451x_chip *chip, int ma)
 {
 	u8 reg_val;
 
-	if (ma < IBUS_MIN_MA)
-		ma = IBUS_MIN_MA;
-	else if (ma > IBUS_MAX_MA)
-		ma = IBUS_MAX_MA;
+	if (ma < chip->register_base.ibus_min_ma)
+		ma = chip->register_base.ibus_min_ma;
+	else if (ma > chip->register_base.ibus_max_ma)
+		ma = chip->register_base.ibus_max_ma;
 
-	reg_val = (ma - IBUS_MIN_MA) / IBUS_STEP_MA;
-	chip->ibus = reg_val * IBUS_STEP_MA + IBUS_MIN_MA;
+	reg_val = (ma - chip->register_base.ibus_min_ma) / IBUS_STEP_MA;
+	chip->ibus = reg_val * IBUS_STEP_MA + chip->register_base.ibus_min_ma;
 
-	return fan5451x_write_reg(chip->client, REG_IBUS, reg_val);
+	return fan5451x_write_reg(chip->client,
+			chip->register_base.reg_ibus, reg_val);
 }
 
 #define IIN_MIN_MA 325
@@ -285,15 +304,16 @@ static int fan5451x_set_iin(struct fan5451x_chip *chip, int ma)
 {
 	u8 reg_val;
 
-	if (ma < IIN_MIN_MA)
-		ma = IIN_MIN_MA;
-	else if (ma > IIN_MAX_MA)
-		ma = IIN_MAX_MA;
+	if (ma < chip->register_base.iin_min_ma)
+		ma = chip->register_base.iin_min_ma;
+	else if (ma > chip->register_base.iin_max_ma)
+		ma = chip->register_base.iin_max_ma;
 
-	reg_val = (ma - IIN_MIN_MA) / IIN_STEP_MA;
-	chip->iin = reg_val * IIN_STEP_MA + IIN_MIN_MA;
+	reg_val = (ma - chip->register_base.iin_min_ma) / IIN_STEP_MA;
+	chip->iin = reg_val * IIN_STEP_MA + chip->register_base.iin_min_ma;
 
-	return fan5451x_write_reg(chip->client, REG_IIN, reg_val);
+	return fan5451x_write_reg(chip->client,
+			chip->register_base.reg_iin, reg_val);
 }
 
 #define VBATMIN_MIN_MA 2700
@@ -453,12 +473,14 @@ static int fan5451x_set_protection(struct fan5451x_chip *chip,
 	uvd_mv = fan5451x_map_uvd[idx].y;
 
 	if (id == VBUS) {
-		ret = fan5451x_write_reg(chip->client, REG_VBUS,
+		ret = fan5451x_write_reg(chip->client,
+			chip->register_base.reg_vbus,
 			(ovd_reg << VBUS_OVP_SHIFT) | (uvd_reg & VBUS_LIM));
 		chip->vbusovp = ovd_mv;
 		chip->vbuslim = uvd_mv;
 	} else if (id == VIN) {
-		ret = fan5451x_write_reg(chip->client, REG_VIN,
+		ret = fan5451x_write_reg(chip->client,
+			chip->register_base.reg_vin,
 			(ovd_reg << VIN_OVP_SHIFT) | (uvd_reg & VIN_LIM));
 		chip->vinovp = ovd_mv;
 		chip->vinlim = uvd_mv;
@@ -513,7 +535,7 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 				statr[0], statr[1], statr[2]);
 	}
 
-	if (intr[0] & INT0_VBUSINT) {
+	if (intr[0] & chip->register_base.int0_vbusint) {
 		usb_present = fan5451x_usb_chg_plugged_in(chip);
 
 		if (chip->usb_present ^ usb_present) {
@@ -525,7 +547,7 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 		}
 	}
 
-	if (intr[0] & INT0_VININT) {
+	if (intr[0] & chip->register_base.int0_vinint) {
 		wlc_present = fan5451x_wlc_chg_plugged_in(chip);
 
 		if (!wlc_present) {
@@ -875,7 +897,8 @@ static int get_prop_batt_status(struct fan5451x_chip *chip)
 		return POWER_SUPPLY_STATUS_UNKNOWN;
 	}
 
-	if (!(stat[0] & (STAT0_VINPWR | STAT0_VBUSPWR)))
+	if (!(stat[0] & (chip->register_base.stat0_vinpwr |
+			chip->register_base.stat0_vbuspwr)))
 		return POWER_SUPPLY_STATUS_DISCHARGING;
 
 	if (stat[0] & STAT0_STAT)
@@ -903,7 +926,8 @@ static int get_prop_charge_type(struct fan5451x_chip *chip)
 		return POWER_SUPPLY_CHARGE_TYPE_UNKNOWN;
 	}
 
-	if (!(stat & (STAT0_VINPWR | STAT0_VBUSPWR)))
+	if (!(stat & (chip->register_base.stat0_vinpwr |
+			chip->register_base.stat0_vbuspwr)))
 		return POWER_SUPPLY_CHARGE_TYPE_NONE;
 
 	if (!(stat & STAT0_STAT))
@@ -1315,7 +1339,44 @@ static int fan5451x_parse_dt(struct fan5451x_chip *chip)
 	OF_PROP_READ(chip, step_dwn_offset_ma, "step-dwn-offset-ma", ret, 1);
 	OF_PROP_READ(chip, step_dwn_thr_mv, "step-dwn-thr-mv", ret, 1);
 
+	chip->swap_vbus_vin = of_property_read_bool(np, "swap-vbus-vin");
+
 	return ret;
+}
+
+static void fan5451x_init_register_base(struct fan5451x_chip *chip)
+{
+	if (chip->swap_vbus_vin) {
+		/* swap register base address between VBUS and VIN.
+		 * VBUS for wireless charger, VIN for usb charger. */
+		chip->register_base.int0_vbusint = INT0_VININT;
+		chip->register_base.int0_vinint = INT0_VBUSINT;
+		chip->register_base.stat0_vbuspwr = STAT0_VINPWR;
+		chip->register_base.stat0_vinpwr = STAT0_VBUSPWR;
+		chip->register_base.reg_ibus = REG_IIN;
+		chip->register_base.reg_vbus = REG_VIN;
+		chip->register_base.reg_iin = REG_IBUS;;
+		chip->register_base.reg_vin = REG_VBUS;
+
+		chip->register_base.ibus_min_ma = IIN_MIN_MA;
+		chip->register_base.ibus_max_ma = IIN_MAX_MA;
+		chip->register_base.iin_min_ma = IBUS_MIN_MA;
+		chip->register_base.iin_max_ma = IBUS_MAX_MA;
+	} else {
+		chip->register_base.int0_vbusint = INT0_VBUSINT;
+		chip->register_base.int0_vinint = INT0_VININT;
+		chip->register_base.stat0_vbuspwr = STAT0_VBUSPWR;
+		chip->register_base.stat0_vinpwr = STAT0_VINPWR;
+		chip->register_base.reg_ibus = REG_IBUS;
+		chip->register_base.reg_vbus = REG_VBUS;
+		chip->register_base.reg_iin = REG_IIN;
+		chip->register_base.reg_vin = REG_VIN;
+
+		chip->register_base.ibus_min_ma = IBUS_MIN_MA;
+		chip->register_base.ibus_max_ma = IBUS_MAX_MA;
+		chip->register_base.iin_min_ma = IIN_MIN_MA;
+		chip->register_base.iin_max_ma = IIN_MAX_MA;
+	}
 }
 
 static int fan5451x_probe(struct i2c_client *client,
@@ -1364,6 +1425,9 @@ static int fan5451x_probe(struct i2c_client *client,
 			goto err_chip_clear;
 		}
 	}
+
+	/* Save the register address at runtime */
+	fan5451x_init_register_base(chip);
 
 	if (chip->step_dwn_offset_ma && chip->step_dwn_thr_mv) {
 		chip->adc_tm_dev = qpnp_get_adc_tm(&client->dev, "chg");
