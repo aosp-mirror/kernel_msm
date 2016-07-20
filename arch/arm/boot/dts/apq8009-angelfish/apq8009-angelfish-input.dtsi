@@ -31,12 +31,12 @@
 			atmel,irqflags = <0x00000002>;
 			atmel,fw_name = "atmel_touch.fw";
 			atmel,accuracy_filter_enable = <0>;
-			atmel,knock_on_type = <0>;
 			atmel,global_access_pixel = <0>;
 			atmel,use_mfts = <1>;
 			atmel,lcd_x = <479>;
 			atmel,lcd_y = <479>;
 			atmel,palm-enabled;
+			atmel,wakeup;
 
 			pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
 			pinctrl-0 = <&ts_int_active &ts_reset_active>;
