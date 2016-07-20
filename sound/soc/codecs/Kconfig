@@ -663,8 +663,8 @@ config AUDIO_EXT_CLK
 	default y if SND_SOC_WCD9335=y || SND_SOC_WCD9330=y || SND_SOC_MSM8X16_WCD=y
 
 config SND_SOC_WCD_MBHC
-	tristate
-	default y if (SND_SOC_MSM8909_WCD=y || SND_SOC_MSM8X16_WCD=y || SND_SOC_WCD9335=y) && SND_SOC_MDMCALIFORNIUM!=y
+	tristate "MBHC(multibutton headset control) support"
+	depends on (SND_SOC_MSM8909_WCD || SND_SOC_MSM8X16_WCD || SND_SOC_WCD9335) && !SND_SOC_MDMCALIFORNIUM
 
 config SND_SOC_WL1273
 	tristate
