@@ -480,6 +480,7 @@ struct mxt_platform_data {
 	int realtime_use_debug_reason;
 #endif
 	bool palm_enabled;
+	bool wakeup;
 };
 
 struct mxt_finger {

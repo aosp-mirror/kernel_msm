@@ -3726,7 +3726,6 @@ static void mxt_stop(struct mxt_data *data)
 	TOUCH_INFO_MSG("%s \n", __func__);
 
 	touch_disable_irq(data->irq);
-	touch_disable_irq_wake(data->irq);
 
 	TOUCH_INFO_MSG("%s MXT_POWER_CFG_DEEPSLEEP\n", __func__);
 	// mxt_set_t7_power_cfg(data, MXT_POWER_CFG_DEEPSLEEP);
@@ -3850,6 +3849,10 @@ static int mxt_parse_dt(struct device *dev, struct mxt_platform_data *pdata)
 	TOUCH_DEBUG_MSG("DT : palm %s\n",
 			pdata->palm_enabled? "enabled" : "disabled");
 
+	pdata->wakeup = of_property_read_bool(node,
+			"atmel,wakeup");
+	TOUCH_DEBUG_MSG("DT : wakeup %s\n",
+			pdata->wakeup? "enabled" : "disabled");
 	return 0;
 }
 
@@ -5121,6 +5124,8 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		goto err_mxt_touch_sysfs_init_and_add;
 	}
 
+	device_init_wakeup(&client->dev, pdata->wakeup);
+
 	TOUCH_INFO_MSG("%s success...\n", __func__);
 
 	return 0;
@@ -5145,6 +5150,7 @@ static int mxt_remove(struct i2c_client *client)
 {
 	struct mxt_data *data = i2c_get_clientdata(client);
 
+	device_init_wakeup(&client->dev, 0);
 	kobject_del(&data->mxt_touch_kobj);
 	device_unregister(&device_touch);
 
@@ -5166,7 +5172,12 @@ static int mxt_suspend(struct device *dev)
 
 	TOUCH_DEBUG_MSG("%s int status:%d\n", __func__,
 			gpio_get_value(data->pdata->gpio_int));
+
+	if (device_may_wakeup(&data->client->dev))
+		touch_enable_irq_wake(data->irq);
+
 	data->pm_state = PM_SUSPEND;
+
 	return 0;
 }
 
@@ -5176,6 +5187,9 @@ static int mxt_resume(struct device *dev)
 
 	TOUCH_DEBUG_MSG("%s int status:%d\n", __func__,
 			gpio_get_value(data->pdata->gpio_int));
+
+	if (device_may_wakeup(&data->client->dev))
+		touch_disable_irq_wake(data->irq);
 
 	if (data->pm_state == PM_SUSPEND_IRQ) {
 		struct irq_desc *desc = irq_to_desc(data->irq);
