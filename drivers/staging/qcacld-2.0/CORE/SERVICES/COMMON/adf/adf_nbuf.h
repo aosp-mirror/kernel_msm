@@ -73,7 +73,7 @@
 #define ADF_NBUF_TRAC_ICMP_TYPE         1
 #define ADF_NBUF_TRAC_TCP_TYPE          6
 #define ADF_NBUF_TRAC_UDP_TYPE          17
-#define ADF_NBUF_TRAC_ICMPv6_TYPE       0x3a
+#define ADF_NBUF_TRAC_ICMPV6_TYPE       0x3a
 
 /* EAPOL Related MASK */
 #define EAPOL_PACKET_TYPE_OFFSET        15
@@ -151,6 +151,8 @@ struct mon_rx_status {
 /* IPV4 Related Mask */
 #define IPV4_PKT_LEN_OFFSET           16
 #define IPV4_TCP_SEQ_NUM_OFFSET       38
+#define IPV4_SRC_PORT_OFFSET          34
+#define IPV4_DST_PORT_OFFSET          36
 
 /* IPV4 ICMP Related Mask */
 #define ICMP_SEQ_NUM_OFFSET           40
@@ -161,6 +163,8 @@ struct mon_rx_status {
 /* IPV6 Related Mask */
 #define IPV6_PKT_LEN_OFFSET           18
 #define IPV6_TCP_SEQ_NUM_OFFSET       58
+#define IPV6_SRC_PORT_OFFSET          54
+#define IPV6_DST_PORT_OFFSET          56
 
 /* IPV6 ICMPV6 Related Mask */
 #define ICMPV6_SEQ_NUM_OFFSET         60
@@ -1474,6 +1478,35 @@ adf_nbuf_data_get_icmpv6_subtype(uint8_t *data)
 	return __adf_nbuf_data_get_icmpv6_subtype(data);
 }
 
+/**
+ * adf_nbuf_data_get_ipv4_proto() - get the proto type
+ *            of IPV4 packet.
+ * @data: Pointer to IPV4 packet data buffer
+ *
+ * This func. returns the proto type of IPV4 packet.
+ *
+ * Return: proto type of IPV4 packet.
+ */
+static inline uint8_t
+adf_nbuf_data_get_ipv4_proto(uint8_t *data)
+{
+	return __adf_nbuf_data_get_ipv4_proto(data);
+}
+
+/**
+ * adf_nbuf_data_get_ipv6_proto() - get the proto type
+ *            of IPV6 packet.
+ * @data: Pointer to IPV6 packet data buffer
+ *
+ * This func. returns the proto type of IPV6 packet.
+ *
+ * Return: proto type of IPV6 packet.
+ */
+static inline uint8_t
+adf_nbuf_data_get_ipv6_proto(uint8_t *data)
+{
+	return __adf_nbuf_data_get_ipv6_proto(data);
+}
 
 /**
  * adf_nbuf_is_dhcp_pkt() - check if it is DHCP packet.
