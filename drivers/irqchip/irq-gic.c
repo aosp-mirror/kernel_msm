@@ -327,7 +327,10 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 		}
 
 		//ASUS_BSP+++ "for wlan wakeup trace"
-		if( (i + gic->irq_offset) == g_wcnss_wlanrx_irq ){
+		if( (i + gic->irq_offset) == 178 ){
+			printk("%s: [wlan] wcnss gic(%d) triggered g_wcnss_wlanrx_irq(%d)\n", __func__,
+					i + gic->irq_offset, g_wcnss_wlanrx_irq);
+			printk("%s: [wlan] wcnss force g_wcnss_wlanrx_irq=178, wcnss_irq_flag_rx=1\n", __func__);
 		    wcnss_irq_flag_rx = 1;
 		    wcnss_irq_flag_wdi = 1;
 		}
