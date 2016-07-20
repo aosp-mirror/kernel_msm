@@ -3053,19 +3053,24 @@ parse_mclk_freq:
 		pr_err("%s:  doesn't support external speaker pa\n",
 				__func__);
 
+	/* Some devices may not support for headset. So this
+	 * should be optional
+	 */
 	ret = of_property_read_string(pdev->dev.of_node,
 		hs_micbias_type, &type);
-	if (ret) {
-		dev_err(&pdev->dev, "%s: missing %s in dt node\n",
+	if (ret)
+		dev_warn(&pdev->dev, "%s: missing %s in dt node\n",
 			__func__, hs_micbias_type);
-		goto err;
-	}
-	if (!strcmp(type, "external")) {
-		dev_dbg(&pdev->dev, "Headset is using external micbias\n");
-		mbhc_cfg.hs_ext_micbias = true;
-	} else {
-		dev_dbg(&pdev->dev, "Headset is using internal micbias\n");
-		mbhc_cfg.hs_ext_micbias = false;
+	if (type) {
+		if (!strcmp(type, "external")) {
+			dev_dbg(&pdev->dev,
+					"Headset is using external micbias\n");
+			mbhc_cfg.hs_ext_micbias = true;
+		} else {
+			dev_dbg(&pdev->dev,
+					"Headset is using internal micbias\n");
+			mbhc_cfg.hs_ext_micbias = false;
+		}
 	}
 
 	ret = of_property_read_u32(pdev->dev.of_node,
