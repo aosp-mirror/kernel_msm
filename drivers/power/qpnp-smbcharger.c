@@ -279,6 +279,7 @@ struct smbchg_chip {
 	struct delayed_work		iusb_5v_2a_detect_work;
 	struct delayed_work		downgrade_iusb_work;
 	struct delayed_work		force_hvdcp_work;
+	struct delayed_work             sink_current_change_work;
 	struct work_struct		hvdcp_redet_work;
 	struct usb_typec_ctrl           utc;
 	u32				htc_wa_flags;
@@ -297,6 +298,7 @@ struct smbchg_chip {
 };
 
 #ifdef CONFIG_HTC_BATT
+#define SINK_CURRENT_CHANGE_WORKER_TIME_MS	2000
 #define TEMP_MONITOR_DISABLE_BIT             0
 #define JEITA_TEMP_HARD_LIMIT_DISABLE_BIT    BIT(5)
 #define HOT_COLD_SL_COMP_BITS                0
@@ -305,6 +307,8 @@ struct smbchg_chip {
 #define SKIP_HARD_LIMIT_CHECK_LEVEL     70
 static struct smbchg_chip *the_chip;
 static bool g_is_batt_full_eoc_stop = false;
+static void handle_usb_insertion(struct smbchg_chip *chip);
+
 
 /* fake soc when set this flag */
 bool g_smb_test_power_monitor = false;
@@ -4815,6 +4819,7 @@ static int smbchg_set_optimal_charging_mode(struct smbchg_chip *chip, int type)
 #define DEFAULT_CDP_MA		1500
 #ifdef CONFIG_HTC_BATT
 #define DEFAULT_TYPE_UNKNOWN_MA	1100
+#define DEFAULT_TYPEC_MA	1500
 #endif /* CONFIG_HTC_BATT */
 static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 						enum power_supply_type type)
@@ -4847,6 +4852,11 @@ static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 			current_limit_ma = 3000;
 		power_supply_set_current_limit(chip->usb_psy,
 			current_limit_ma * 1000);
+
+		/* To make sure Type-C charger do have the ability to work at
+		   3A high current mode, need go through 5v2a detect worker
+		   before setting 3A, so set default low current right here */
+		current_limit_ma = DEFAULT_TYPEC_MA;
 	} else
 #endif /* CONFIG_HTC_BATT */
 	if (chip->typec_psy && (type != POWER_SUPPLY_TYPE_USB))
@@ -5266,6 +5276,48 @@ static void smbchg_iusb_5v_2a_detect_work(struct work_struct *work)
 		g_is_charger_ability_detected = true;
 	}
 }
+
+static void smbchg_sink_current_change_worker(struct work_struct *work)
+{
+	if(!the_chip) {
+		pr_err("called before init\n");
+		return;
+	}
+
+	pr_smb(PR_MISC, "Function enter\n");
+
+	if (!g_is_charger_ability_detected) {
+		pr_smb(PR_STATUS, "Charger detection not done.\n");
+		goto redelay;
+	}
+
+	if (the_chip->wake_reasons & PM_PARALLEL_CHECK) {
+		pr_smb(PR_STATUS, "Parallel charging not done.\n");
+		goto redelay;
+	}
+
+	pr_smb(PR_STATUS, "Handle sink_current change event\n");
+
+	/* These flags need reset before disable parallel charger */
+	g_is_charger_ability_detected = false;
+	g_is_5v_2a_detected = false;
+
+	if (the_chip->parallel.current_max_ma != 0) {
+		mutex_lock(&the_chip->parallel.lock);
+		smbchg_parallel_usb_disable(the_chip);
+		mutex_unlock(&the_chip->parallel.lock);
+	}
+
+	pr_smb(PR_MISC, "Fake cable in for sink_current change");
+	handle_usb_insertion(the_chip);
+
+	return;
+redelay:
+	pr_smb(PR_STATUS, "Re-schedule woker with %d seconds delay\n",
+		(SINK_CURRENT_CHANGE_WORKER_TIME_MS / 1000));
+	schedule_delayed_work(&the_chip->sink_current_change_work,
+		SINK_CURRENT_CHANGE_WORKER_TIME_MS);
+}
 #endif /* CONFIG_HTC_BATT */
 
 #define RESTRICTED_CHG_FCC_PERCENT	50
@@ -5365,6 +5417,10 @@ static void handle_usb_removal(struct smbchg_chip *chip)
 		cancel_delayed_work_sync(&chip->iusb_5v_2a_detect_work);
 	if (delayed_work_pending(&chip->downgrade_iusb_work))
 		cancel_delayed_work_sync(&chip->downgrade_iusb_work);
+	if (delayed_work_pending(&chip->sink_current_change_work))
+		cancel_delayed_work_sync(&chip->sink_current_change_work);
+	if (delayed_work_pending(&chip->parallel_en_work))
+		cancel_delayed_work_sync(&chip->parallel_en_work);
 	/*Enable AICL*/
 	set_aicl_enable(true);
 	/*Default enable Input Missing Poller*/
@@ -5422,6 +5478,11 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 
 	if (!pmi8996_is_booting_stage())
 		smbchg_default_dcp_icl_ma = 1500;
+
+	/* Since usb removal is skipped when rerun APSD, clear these flags here
+	   to ensure charger detect flow can execute successfully */
+	g_is_charger_ability_detected = false;
+	g_is_5v_2a_detected = false;
 #endif /* CONFIG_HTC_BATT */
 	pr_smb(PR_STATUS, "triggered\n");
 	/* usb inserted */
@@ -6132,6 +6193,7 @@ static int rerun_apsd(struct smbchg_chip *chip)
 
 #ifdef CONFIG_HTC_BATT
 	g_is_charger_ability_detected = false;
+	g_is_5v_2a_detected = false;
 	g_is_hvdcp_detect_done = false;
 #endif /* CONFIG_HTC_BATT */
 
@@ -6507,6 +6569,9 @@ static enum power_supply_property smbchg_battery_properties[] = {
 	POWER_SUPPLY_PROP_RERUN_AICL,
 	POWER_SUPPLY_PROP_RESTRICTED_CHARGING,
 	POWER_SUPPLY_PROP_ALLOW_HVDCP3,
+#ifdef CONFIG_HTC_BATT
+	POWER_SUPPLY_PROP_TYPEC_SINK_CURRENT,
+#endif /* CONFIG_HTC_BATT */
 };
 
 static int smbchg_battery_set_property(struct power_supply *psy,
@@ -6590,6 +6655,15 @@ static int smbchg_battery_set_property(struct power_supply *psy,
 			power_supply_changed(&chip->batt_psy);
 		}
 		break;
+#ifdef CONFIG_HTC_BATT
+	case POWER_SUPPLY_PROP_TYPEC_SINK_CURRENT:
+		pr_smb(PR_STATUS, "Received type-c resistor change event\n");
+		if (delayed_work_pending(&chip->sink_current_change_work))
+			cancel_delayed_work_sync(&chip->sink_current_change_work);
+		schedule_delayed_work(&chip->sink_current_change_work,
+			SINK_CURRENT_CHANGE_WORKER_TIME_MS);
+		break;
+#endif /* CONFIG_HTC_BATT */
 	default:
 		return -EINVAL;
 	}
@@ -6614,6 +6688,9 @@ static int smbchg_battery_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_RERUN_AICL:
 	case POWER_SUPPLY_PROP_RESTRICTED_CHARGING:
 	case POWER_SUPPLY_PROP_ALLOW_HVDCP3:
+#ifdef CONFIG_HTC_BATT
+	case POWER_SUPPLY_PROP_TYPEC_SINK_CURRENT:
+#endif /* CONFIG_HTC_BATT */
 		rc = 1;
 		break;
 	default:
@@ -6714,6 +6791,15 @@ static int smbchg_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_ALLOW_HVDCP3:
 		val->intval = chip->allow_hvdcp3_detection;
 		break;
+#ifdef CONFIG_HTC_BATT
+	case POWER_SUPPLY_PROP_TYPEC_SINK_CURRENT:
+		val->intval = 0;
+		if (chip->utc.sink_current == utcc1p5A)
+			val->intval = USB_MA_1500;
+		if (chip->utc.sink_current == utcc3p0A)
+			val->intval = USB_MA_3000;
+		break;
+#endif
 	default:
 		return -EINVAL;
 	}
@@ -7520,16 +7606,8 @@ void check_charger_ability(int aicl_level)
 	if (rc)
 		pr_err("Failed to read FV state rc=%d\n", rc);
 	pr_smb(PR_STATUS, "FV status = %02x, Hard Limit = %d\n", reg, ((reg & FV_AICL_STS_BIT)!=0));
-	if (((reg & FV_AICL_STS_BIT) == 0) && (level > SKIP_HARD_LIMIT_CHECK_LEVEL)){
-		if (the_chip->utc.sink_current == utcc3p0A) {
-			rc = vote(the_chip->usb_icl_votable, PSY_ICL_VOTER,
-				true, USB_MA_3000);
-			if (rc < 0) {
-				pr_err("Couldn't vote for ICL rc=%d\n", rc);
-				return;
-			}
-			pr_smb(PR_STATUS, "No Hard Limit, set AICL to 3000mA\n");
-		} else if (aicl_level > USB_MA_2000){
+	if (((reg & FV_AICL_STS_BIT) == 0) && (level > SKIP_HARD_LIMIT_CHECK_LEVEL)) {
+		if (aicl_level > USB_MA_2000) {
 			rc = vote(the_chip->usb_icl_votable, PSY_ICL_VOTER,
 				true, USB_MA_2000);
 			if (rc < 0) {
@@ -7537,7 +7615,7 @@ void check_charger_ability(int aicl_level)
 				return;
 			}
 			pr_smb(PR_STATUS, "No Hard Limit, set AICL to 2000mA\n");
-		} else if (aicl_level > USB_MA_1500){
+		} else if (aicl_level > USB_MA_1500) {
 			rc = vote(the_chip->usb_icl_votable, PSY_ICL_VOTER,
 				true, USB_MA_1500);
 			if (rc < 0) {
@@ -7560,7 +7638,7 @@ void check_charger_ability(int aicl_level)
 	}
 
 	/* Detect for 1A charger */
-	if (aicl_level < USB_MA_1400){
+	if (aicl_level < USB_MA_1400) {
 		rc = vote(the_chip->usb_icl_votable, PSY_ICL_VOTER,
 			true, USB_MA_1000);
 		if (rc < 0) {
@@ -7573,31 +7651,7 @@ void check_charger_ability(int aicl_level)
 		return;
 	}
 
-	/* Detect for 1.5A & 2A charger */
-	if (!the_chip->hvdcp_not_supported && g_is_hvdcp_detect_done){
-		if (aicl_level < USB_MA_2000){
-			rc = vote(the_chip->usb_icl_votable, PSY_ICL_VOTER,
-				true, USB_MA_1500);
-			if (rc < 0) {
-				pr_err("Couldn't vote for ICL rc=%d\n", rc);
-				return;
-			}
-			pr_smb(PR_STATUS, "1.5A adaptor detected\n");
-		} else {
-			rc = vote(the_chip->usb_icl_votable, PSY_ICL_VOTER,
-				true, USB_MA_2000);
-			if (rc < 0) {
-				pr_err("Couldn't vote for ICL rc=%d\n", rc);
-				return;
-			}
-			pr_smb(PR_STATUS, "2A adaptor detected\n");
-		}
-		g_is_charger_ability_detected = true;
-		smbchg_rerun_aicl(the_chip);
-		return;
-	}
-
-	/* Start 5V2A detection */
+	/* Start 1.5A & 2A & 3A charger detection */
 	if (the_chip->hvdcp_not_supported &&
 			!g_is_charger_ability_detected) {
 		/* Disable HW AICL to apply SW AICL */
@@ -9228,6 +9282,10 @@ void pmi8994_rerun_apsd(void)
 	if (rc < 0) {
 		pr_err("Couldn't disable APSD rc=%d\n", rc);
 	}
+
+	g_is_charger_ability_detected = false;
+	g_is_5v_2a_detected = false;
+
 	msleep(100);
 	/* enable APSD */
 	rc = smbchg_sec_masked_write(the_chip,
@@ -9981,6 +10039,7 @@ static int smbchg_probe(struct spmi_device *spmi)
 	INIT_DELAYED_WORK(&chip->iusb_5v_2a_detect_work, smbchg_iusb_5v_2a_detect_work);
 	INIT_DELAYED_WORK(&chip->downgrade_iusb_work, smbchg_downgrade_iusb_work);
 	INIT_DELAYED_WORK(&chip->force_hvdcp_work, smbchg_force_hvdcp_worker);
+	INIT_DELAYED_WORK(&chip->sink_current_change_work, smbchg_sink_current_change_worker);
 	INIT_WORK(&chip->hvdcp_redet_work, smbchg_hvdcp_redet_worker);
 #endif /* CONFIG_HTC_BATT */
 	init_completion(&chip->src_det_lowered);
