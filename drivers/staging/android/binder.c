@@ -42,9 +42,9 @@
 #include "binder.h"
 #include "binder_trace.h"
 
-static DEFINE_RT_MUTEX(binder_main_lock);
-static DEFINE_RT_MUTEX(binder_deferred_lock);
-static DEFINE_RT_MUTEX(binder_mmap_lock);
+static DEFINE_MUTEX(binder_main_lock);
+static DEFINE_MUTEX(binder_deferred_lock);
+static DEFINE_MUTEX(binder_mmap_lock);
 
 static HLIST_HEAD(binder_procs);
 static HLIST_HEAD(binder_deferred_list);
@@ -430,7 +430,7 @@ static long task_close_fd(struct binder_proc *proc, unsigned int fd)
 static inline void binder_lock(const char *tag)
 {
 	trace_binder_lock(tag);
-	rt_mutex_lock(&binder_main_lock);
+	mutex_lock(&binder_main_lock);
 	preempt_disable();
 	trace_binder_locked(tag);
 }
@@ -438,7 +438,7 @@ static inline void binder_lock(const char *tag)
 static inline void binder_unlock(const char *tag)
 {
 	trace_binder_unlock(tag);
-	rt_mutex_unlock(&binder_main_lock);
+	mutex_unlock(&binder_main_lock);
 	preempt_enable();
 }
 
@@ -2943,7 +2943,7 @@ static int binder_mmap(struct file *filp, struct vm_area_struct *vma)
 	}
 	vma->vm_flags = (vma->vm_flags | VM_DONTCOPY) & ~VM_MAYWRITE;
 
-	rt_mutex_lock(&binder_mmap_lock);
+	mutex_lock(&binder_mmap_lock);
 	if (proc->buffer) {
 		ret = -EBUSY;
 		failure_string = "already mapped";
@@ -2958,7 +2958,7 @@ static int binder_mmap(struct file *filp, struct vm_area_struct *vma)
 	}
 	proc->buffer = area->addr;
 	proc->user_buffer_offset = vma->vm_start - (uintptr_t)proc->buffer;
-	rt_mutex_unlock(&binder_mmap_lock);
+	mutex_unlock(&binder_mmap_lock);
 
 #ifdef CONFIG_CPU_CACHE_VIPT
 	if (cache_is_vipt_aliasing()) {
@@ -3007,12 +3007,12 @@ err_alloc_small_buf_failed:
 	kfree(proc->pages);
 	proc->pages = NULL;
 err_alloc_pages_failed:
-	rt_mutex_lock(&binder_mmap_lock);
+	mutex_lock(&binder_mmap_lock);
 	vfree(proc->buffer);
 	proc->buffer = NULL;
 err_get_vm_area_failed:
 err_already_mapped:
-	rt_mutex_unlock(&binder_mmap_lock);
+	mutex_unlock(&binder_mmap_lock);
 err_bad_arg:
 	pr_err("binder_mmap: %d %lx-%lx %s failed %d\n",
 	       proc->pid, vma->vm_start, vma->vm_end, failure_string, ret);
@@ -3254,10 +3254,10 @@ static void binder_deferred_func(struct work_struct *work)
 
 	do {
 		trace_binder_lock(__func__);
-		rt_mutex_lock(&binder_main_lock);
+		mutex_lock(&binder_main_lock);
 		trace_binder_locked(__func__);
 
-		rt_mutex_lock(&binder_deferred_lock);
+		mutex_lock(&binder_deferred_lock);
 		preempt_disable();
 		if (!hlist_empty(&binder_deferred_list)) {
 			proc = hlist_entry(binder_deferred_list.first,
@@ -3269,7 +3269,7 @@ static void binder_deferred_func(struct work_struct *work)
 			proc = NULL;
 			defer = 0;
 		}
-		rt_mutex_unlock(&binder_deferred_lock);
+		mutex_unlock(&binder_deferred_lock);
 
 		files = NULL;
 		if (defer & BINDER_DEFERRED_PUT_FILES) {
@@ -3285,7 +3285,7 @@ static void binder_deferred_func(struct work_struct *work)
 			binder_deferred_release(proc); /* frees proc */
 
 		trace_binder_unlock(__func__);
-		rt_mutex_unlock(&binder_main_lock);
+		mutex_unlock(&binder_main_lock);
 		preempt_enable_no_resched();
 		if (files)
 			put_files_struct(files);
@@ -3296,14 +3296,14 @@ static DECLARE_WORK(binder_deferred_work, binder_deferred_func);
 static void
 binder_defer_work(struct binder_proc *proc, enum binder_deferred_state defer)
 {
-	rt_mutex_lock(&binder_deferred_lock);
+	mutex_lock(&binder_deferred_lock);
 	proc->deferred_work |= defer;
 	if (hlist_unhashed(&proc->deferred_work_node)) {
 		hlist_add_head(&proc->deferred_work_node,
 				&binder_deferred_list);
 		queue_work(binder_deferred_workqueue, &binder_deferred_work);
 	}
-	rt_mutex_unlock(&binder_deferred_lock);
+	mutex_unlock(&binder_deferred_lock);
 }
 
 static void print_binder_transaction(struct seq_file *m, const char *prefix,
