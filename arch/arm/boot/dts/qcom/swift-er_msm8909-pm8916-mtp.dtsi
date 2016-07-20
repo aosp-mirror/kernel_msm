@@ -12,13 +12,6 @@
  */
 
 &soc {
-	i2c@78b9000 {
-		synaptics@20 {
-			avdd-supply = <&pm8916_l17>;
-			vdd-supply = <&pm8916_l6>;
-		};
-	};
-
 	i2c@78b6000 {
 		nq@28 {
 			qcom,nq-clkreq = <&pm8916_gpios 2 0>;
