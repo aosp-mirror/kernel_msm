@@ -47,7 +47,6 @@ static int mdp3_check_te_status(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 
 	disable_irq(gpio_to_irq(ctrl_pdata->disp_te_gpio));
 	pr_debug("%s: Panel TE check done with ret = %d\n", __func__, ret);
-
 	return ret;
 }
 
@@ -123,7 +122,7 @@ void mdp3_check_dsi_ctrl_status(struct work_struct *work,
 
 		if (mdp3_check_te_status(ctrl_pdata, pdsi_status,
 					 frame_rate) > 0)
-			return;
+			goto sim;
 		goto status_dead;
 	}
 
@@ -143,14 +142,14 @@ void mdp3_check_dsi_ctrl_status(struct work_struct *work,
 		pr_err("%s: wait_for_dma_done error\n", __func__);
 	mutex_unlock(&mdp3_session->lock);
 
-	if (mdss_fb_is_power_on_interactive(pdsi_status->mfd)) {
+	if (mdss_fb_is_power_on(pdsi_status->mfd)) {
 		if (ret > 0)
 			schedule_delayed_work(&pdsi_status->check_status,
 						msecs_to_jiffies(interval));
 		else
 			goto status_dead;
 	}
-
+sim:
 	if (pdata->panel_info.panel_force_dead) {
 		pr_debug("force_dead=%d\n", pdata->panel_info.panel_force_dead);
 		pdata->panel_info.panel_force_dead--;
