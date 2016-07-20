@@ -1201,9 +1201,8 @@ static void cable_impedance_worker(struct work_struct *work)
 	int rc;
 	int vbus1, vbus2, vbus3;
 	int vbus_now;
-	int src = htc_batt_info.rep.charging_source;
 
-        if (!need_to_check_cable(src)) {
+        if (htc_batt_info.rep.charging_source != POWER_SUPPLY_TYPE_USB_DCP) {
 		pr_info("[Cable impedance] Incorrect charger type, ignore detection.\n");
 		return;
 	}
@@ -1249,8 +1248,7 @@ static void cable_impedance_worker(struct work_struct *work)
 
         impedance_set_iusb_max(500000, true);
 	msleep(3000);
-	src = htc_batt_info.rep.charging_source;
-	if (!need_to_check_cable(src)) {
+	if (htc_batt_info.rep.charging_source != POWER_SUPPLY_TYPE_USB_DCP) {
 		pr_info("[Cable impedance] Incorrect charger type, ignore detection.!\n");
 		gs_cable_impedance = 1;
                 goto endWorker;
@@ -1266,8 +1264,7 @@ static void cable_impedance_worker(struct work_struct *work)
 
         impedance_set_iusb_max(300000, true);
 	msleep(3000);
-	src = htc_batt_info.rep.charging_source;
-	if (!need_to_check_cable(src)) {
+	if (htc_batt_info.rep.charging_source != POWER_SUPPLY_TYPE_USB_DCP) {
 		pr_info("[Cable impedance] Incorrect charger type, ignore detection.!\n");
 		gs_cable_impedance = 1;
                 goto endWorker;
@@ -1288,8 +1285,7 @@ static void cable_impedance_worker(struct work_struct *work)
 	}
 
 	msleep(3000);
-	src = htc_batt_info.rep.charging_source;
-	if (!need_to_check_cable(src)) {
+	if (htc_batt_info.rep.charging_source != POWER_SUPPLY_TYPE_USB_DCP) {
 		pr_info("[Cable impedance] Incorrect charger type, ignore detection.!\n");
 		gs_cable_impedance = 1;
                 goto endWorker;
