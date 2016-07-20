@@ -1587,6 +1587,29 @@ static ssize_t show_tp_irq_debug_info(struct device *dev, struct device_attribut
 	return snprintf(buf, 256, "fts_wq_queue_result: %u, disable_depth: %u,\nirq_handler_recovery_count: %u, suspend_resume_recovery_count: %u\n", fts_wq_queue_result, desc->depth, irq_handler_recovery_count, suspend_resume_recovery_count);
 }
 
+static ssize_t fts_tp_pwr_disabled_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	int err = 0 ;
+	unsigned int i;
+
+	err = kstrtouint(buf, 10, &i);
+
+	if(i) {
+		printk(KERN_DEBUG "[fts]%s, Disable TP \n", __func__);
+
+		err = fts_ts_disable(dev);
+	}
+	return count;
+}
+
+static ssize_t fts_tp_pwr_disabled_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	printk(KERN_DEBUG "[fts]%s, Show TP Disable state\n", __func__);
+	return EPERM;
+}
+
+static DEVICE_ATTR(ftstppwrdisable, S_IRUGO|S_IWUSR|S_IWGRP, fts_tp_pwr_disabled_show, fts_tp_pwr_disabled_store);
+
 /****************************************/
 /* sysfs */
 /*get the fw version
@@ -1636,6 +1659,7 @@ static DEVICE_ATTR(tp_irq_debug_info, S_IRUGO, show_tp_irq_debug_info, NULL);
 
 /*add your attr in here*/
 static struct attribute *fts_attributes[] = {
+	&dev_attr_ftstppwrdisable.attr,
 	&dev_attr_ftstpfwver.attr,
 	&dev_attr_ftstpdriverver.attr,
 	&dev_attr_ftsfwupdate.attr,

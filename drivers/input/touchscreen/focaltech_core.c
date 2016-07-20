@@ -135,6 +135,7 @@ bool fts_wq_queue_result = false;
 bool fts_wq_running = false;
 unsigned int irq_handler_recovery_count = 0;
 unsigned int suspend_resume_recovery_count = 0;
+bool ts_pwr_disabled = false;
 
 struct irq_desc *fts_irq_desc = NULL;
 
@@ -1042,6 +1043,16 @@ static int fts_ts_start(struct device *dev)
 {
 	struct fts_ts_data *data = dev_get_drvdata(dev);
 	int err = 0;
+
+	if (ts_pwr_disabled) {
+		err = fts_power_on(data, true);
+		if (err) {
+			dev_err(dev, "power on failed");
+			return err;
+		}
+		ts_pwr_disabled = false;
+	}
+
 #ifdef FTS_POWER_CONTROL
 	if (data->pdata->power_on) {
 		err = data->pdata->power_on(true);
@@ -1269,17 +1280,43 @@ pwr_off_fail:
 }
 
 /*******************************************************************************
-*  Name: fts_ts_suspend
+*  Name: fts_ts_disable
 *  Brief:
 *  Input:
 *  Output: 
 *  Return: 
+*******************************************************************************/
+int fts_ts_disable(struct device *dev)
+{
+	struct fts_ts_data *data = dev_get_drvdata(dev);
+
+	disable_irq(data->client->irq);
+	fts_power_on(data, false);
+	ts_pwr_disabled = true;
+
+	data->suspended = true;
+
+	return 0;
+
+}
+
+/*******************************************************************************
+*  Name: fts_ts_suspend
+*  Brief:
+*  Input:
+*  Output:
+*  Return:
 *******************************************************************************/
 int fts_ts_suspend(struct device *dev)
 {
 	struct fts_ts_data *data = dev_get_drvdata(dev);
 
 	int err = 0;
+
+	if (ts_pwr_disabled) {
+		dev_dbg(dev, "Touch vdd/vcc has been disabled\n");
+		return 0;
+	}
 
 	printk(KERN_ERR "[fts]%s, start\n", __func__);
 

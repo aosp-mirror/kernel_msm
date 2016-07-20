@@ -397,6 +397,8 @@ extern int fts_write_reg(struct i2c_client *client, u8 addr, const u8 val);
 //dean add
 extern void fts_reset_chip(void);
 extern int fts_ts_stop(struct device *dev);
+
+extern int fts_ts_disable(struct device *dev);
 /*******************************************************************************
 * Static function prototypes
 *******************************************************************************/
