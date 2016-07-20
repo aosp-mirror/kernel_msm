@@ -2202,7 +2202,7 @@ static void dwc3_ext_event_notify(struct dwc3_msm *mdwc)
 		clear_bit(ID, &mdwc->inputs);
 	}
 
-	if ((mdwc->vbus_active || (!PolicyIsDFP && dwc3_vbus_boost_enabled())) && !mdwc->in_restart) {
+	if ((mdwc->vbus_active || IsPRSwap || (!PolicyIsDFP && dwc3_vbus_boost_enabled())) && !mdwc->in_restart) {
 		dev_dbg(mdwc->dev, "XCVR: BSV set\n");
 		set_bit(B_SESS_VLD, &mdwc->inputs);
 	} else {
@@ -3503,6 +3503,7 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 	return 0;
 }
 
+extern bool PolicyIsSource;
 static int dwc3_msm_gadget_vbus_draw(struct dwc3_msm *mdwc, unsigned mA)
 {
 	enum power_supply_type power_supply_type;
@@ -3565,19 +3566,23 @@ skip_psy_type:
 	}
 
 	if (mdwc->max_power <= 2 && mA > 2) {
-		/* Enable Charging */
-		if (power_supply_set_online(&mdwc->usb_psy, true))
-			goto psy_error;
-		if (power_supply_set_current_limit(&mdwc->usb_psy, 1000*mA))
-			goto psy_error;
+		if (!PolicyIsSource) {
+			/* Enable Charging */
+			if (power_supply_set_online(&mdwc->usb_psy, true))
+				goto psy_error;
+			if (power_supply_set_current_limit(&mdwc->usb_psy, 1000*mA))
+				goto psy_error;
+		}
 	} else if (mdwc->max_power > 0 && (mA == 0 || mA == 2)) {
 		/* Disable charging */
 		if (power_supply_set_online(&mdwc->usb_psy, false))
 			goto psy_error;
 	} else {
-		/* Enable charging */
-		if (power_supply_set_online(&mdwc->usb_psy, true))
-			goto psy_error;
+		if (!PolicyIsSource) {
+			/* Enable charging */
+			if (power_supply_set_online(&mdwc->usb_psy, true))
+				goto psy_error;
+		}
 	}
 
 	/* Set max current limit in uA */
@@ -3781,6 +3786,8 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 			mdwc->chg_type = DWC3_INVALID_CHARGER;
 		} else if (test_bit(B_SESS_VLD, &mdwc->inputs)) {
 			dev_dbg(mdwc->dev, "b_sess_vld\n");
+			pr_info("[USB] b_sess_vld, chg_type=%d, PolicyIsDFP=%d, dwc3_vbus_boost=%d\n",
+					mdwc->chg_type, PolicyIsDFP, dwc3_vbus_boost_enabled());
 			switch (mdwc->chg_type) {
 			case DWC3_DCP_CHARGER:
 			case DWC3_PROPRIETARY_CHARGER:
@@ -3820,6 +3827,23 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 				dwc3_otg_start_peripheral(mdwc, 1);
 				mdwc->otg_state = OTG_STATE_B_PERIPHERAL;
 				work = 1;
+				break;
+			case DWC3_INVALID_CHARGER:
+				if (!PolicyIsDFP && dwc3_vbus_boost_enabled()) {
+					/*
+					 * Increment pm usage count upon cable
+					 * connect. Count is decremented in
+					 * OTG_STATE_B_PERIPHERAL state on cable
+					 * disconnect or in bus suspend.
+					 */
+					pm_runtime_get_sync(mdwc->dev);
+					dbg_event(0xFF, "CHG gsync",
+						atomic_read(
+							&mdwc->dev->power.usage_count));
+					dwc3_otg_start_peripheral(mdwc, 1);
+					mdwc->otg_state = OTG_STATE_B_PERIPHERAL;
+					work = 1;
+				}
 				break;
 			/* fall through */
 			default:

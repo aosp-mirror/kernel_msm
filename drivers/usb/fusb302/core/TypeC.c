@@ -306,8 +306,10 @@ void StateMachineTypeC(void)
 #ifdef  FSC_INTERRUPT_TRIGGERED
         do{
 #endif // FSC_INTERRUPT_TRIGGERED
-        if (!blnSMEnabled)
+        if (!blnSMEnabled) {
+            pr_info("FUSB %s: leave by SM disabled, typec_state(0x%x), pd_state=(0x%x)\n", __func__, ConnState, PolicyState);
             return;
+        }
         
         if (platform_get_device_irq_state())
         {        

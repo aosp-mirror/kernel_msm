@@ -33,7 +33,7 @@
 /* Driver-specific includes */
 #include "fusb30x_global.h"                                                     // Driver-specific structures/types
 #include "platform_helpers.h"                                                   // I2C R/W, GPIO, misc, etc
-#include "../core/TypeC_Types.h"
+#include "../core/TypeC.h"
 
 #ifdef FSC_DEBUG
 #include "../core/core.h"                                                       // GetDeviceTypeCStatus
@@ -99,6 +99,8 @@ static void fusb_do_mode_change(enum dual_role_property prop)
         return;
     }
 
+    DisableTypeCStateMachine();
+
     mutex_lock(&chip->statemachine_lock);
     is_mode_change = true;
     if (ConnState == AttachedSource) {
@@ -109,6 +111,7 @@ static void fusb_do_mode_change(enum dual_role_property prop)
         blnSnkPreferred = false;
     }
     SetStateDelayUnattached();
+    EnableTypeCStateMachine();
     core_state_machine();
     mutex_unlock(&chip->statemachine_lock);
 }
@@ -190,7 +193,7 @@ int fusb_dual_role_property_is_writeable(struct dual_role_phy_instance *dual_rol
             val = 1;
             break;
         case DUAL_ROLE_PROP_DR:
-            val = 0;
+            val = 1;
             break;
         case DUAL_ROLE_PROP_VCONN_SUPPLY:
             val = 0;
