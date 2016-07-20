@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/sysfs.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/hrtimer.h>
@@ -21,6 +22,11 @@
 #include <linux/qpnp/pwm.h>
 #include <linux/err.h>
 #include "../../staging/android/timed_output.h"
+
+
+static bool mask_vibrator = false;
+static struct class * maskvib_class;
+static struct device * mask_vib_dev;
 
 #define QPNP_VIB_VTG_CTL(base)		(base + 0x41)
 #define QPNP_VIB_EN_CTL(base)		(base + 0x46)
@@ -180,6 +186,9 @@ static void qpnp_vib_enable(struct timed_output_dev *dev, int value)
 	struct qpnp_vib *vib = container_of(dev, struct qpnp_vib,
 					 timed_dev);
 
+	if(mask_vibrator)
+		return;
+
 	mutex_lock(&vib->lock);
 	hrtimer_cancel(&vib->vib_timer);
 
@@ -326,6 +335,29 @@ static int qpnp_vib_parse_dt(struct qpnp_vib *vib)
 	return 0;
 }
 
+static ssize_t mask_vib_show(struct device *dev,
+                                     struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+
+
+static ssize_t mask_vib_store(struct device *dev,
+                                      struct device_attribute *attr, const char *buf, size_t size)
+{
+	if (NULL == buf || size < 1)
+	{
+		return -1;
+	}
+	if ('1' == buf[0])
+	{
+		mask_vibrator = true;
+	}
+	return size;
+}
+
+static DEVICE_ATTR(maskvib,0664, mask_vib_show, mask_vib_store);
+
 static int qpnp_vibrator_probe(struct spmi_device *spmi)
 {
 	struct qpnp_vib *vib;
@@ -373,6 +405,24 @@ static int qpnp_vibrator_probe(struct spmi_device *spmi)
 	rc = timed_output_dev_register(&vib->timed_dev);
 	if (rc < 0)
 		return rc;
+	maskvib_class = class_create(THIS_MODULE,"maskvib");
+	if(IS_ERR(maskvib_class))
+	{
+		printk(KERN_ERR "create class maskvib fail!\n");
+		return -1;
+	}
+	mask_vib_dev = device_create(maskvib_class, NULL, 0, NULL, "mask_vib_dev");
+	if(IS_ERR(mask_vib_dev))
+	{
+		printk(KERN_ERR "create device mask_vib_dev fail!\n");
+		return -1;
+	}
+	rc = device_create_file(mask_vib_dev, &dev_attr_maskvib);
+	if(rc < 0)
+	{
+		printk(KERN_ERR "create device file maskvib fail!\n");
+		return rc;
+	}
 
 	return rc;
 }
