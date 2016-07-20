@@ -182,13 +182,11 @@
 #define WMA_MCAST_IPV6_MAC_ADDR (0x33)
 #define WMA_ICMP_PROTOCOL (0x01)
 
-#define WMA_IS_EAPOL_GET_MIN_LEN          14
 #define WMA_EAPOL_SUBTYPE_GET_MIN_LEN     21
 #define WMA_EAPOL_INFO_GET_MIN_LEN        23
 #define WMA_IS_DHCP_GET_MIN_LEN           38
 #define WMA_DHCP_SUBTYPE_GET_MIN_LEN      0x11D
 #define WMA_DHCP_INFO_GET_MIN_LEN         50
-#define WMA_IS_ARP_GET_MIN_LEN            14
 #define WMA_ARP_SUBTYPE_GET_MIN_LEN       22
 #define WMA_IPV4_PROTO_GET_MIN_LEN        24
 #define WMA_IPV4_PKT_INFO_GET_MIN_LEN     42
