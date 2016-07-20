@@ -569,6 +569,7 @@ struct dsi_status_data {
 	struct msm_fb_data_type *mfd;
 };
 
+void check_dsi_ctrl_status_ext(void);
 void mdss_dsi_read_hw_revision(struct mdss_dsi_ctrl_pdata *ctrl);
 int dsi_panel_device_register(struct platform_device *ctrl_pdev,
 	struct device_node *pan_node, struct mdss_dsi_ctrl_pdata *ctrl_pdata);

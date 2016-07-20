@@ -1875,6 +1875,8 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 	struct mdss_panel_data *pdata;
 	unsigned long flags;
 	int rc = 0;
+	bool esd_check = false;
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 
 	ctx = (struct mdss_mdp_cmd_ctx *) ctl->intf_ctx[MASTER_CTX];
 	if (!ctx) {
@@ -1919,16 +1921,20 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 	}
 
 	if (rc <= 0) {
+		u32 status;
 		pr_err("%s:wait4pingpong timed out ctl=%d rc=%d cnt=%d koff_cnt=%d\n",
 				__func__,
 				ctl->num, rc, ctx->pp_timeout_report_cnt,
 				atomic_read(&ctx->koff_cnt));
-		if (ctx->pp_timeout_report_cnt == 0) {
-			MDSS_XLOG(0xbad);
-			MDSS_XLOG_TOUT_HANDLER("mdp", "dsi0_ctrl", "dsi0_phy",
-				"dsi1_ctrl", "dsi1_phy", "vbif", "vbif_nrt",
-				"dbg_bus", "vbif_dbg_bus");
-		} else if (ctx->pp_timeout_report_cnt == MAX_RECOVERY_TRIALS) {
+		status = readl_relaxed(mdata->mdp_base +
+			MDSS_REG_HW_INTR2_STATUS);
+		if (!(status & BIT(24))) {
+			WARN(1, "%s: wait4pingpong timed out due to no TE\n",
+				__func__);
+			esd_check = true;
+		}
+
+		if (ctx->pp_timeout_report_cnt == MAX_RECOVERY_TRIALS) {
 			MDSS_XLOG(0xbad2);
 			MDSS_XLOG_TOUT_HANDLER("mdp", "dsi0_ctrl", "dsi0_phy",
 				"dsi1_ctrl", "dsi1_phy", "vbif", "vbif_nrt",
@@ -1959,6 +1965,18 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 		mdss_mdp_ctl_notify(ctx->ctl, MDP_NOTIFY_FRAME_DONE);
 
 	MDSS_XLOG(ctl->num, atomic_read(&ctx->koff_cnt), rc);
+
+	if (esd_check) {
+		/*
+		* check panel status and if panel dead, send event to
+		* userspace
+		*/
+		if (ctl->panel_data->event_handler) {
+			pr_err("Checking panel status\n");
+			ctl->panel_data->event_handler(ctl->panel_data,
+				MDSS_EVENT_DSI_PANEL_STATUS, NULL);
+		}
+	}
 
 	return rc;
 }
@@ -2617,6 +2635,7 @@ static int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	struct mdss_mdp_ctl *sctl = NULL, *mctl = ctl;
 	struct mdss_mdp_cmd_ctx *ctx, *sctx = NULL;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+	u32 clearbit = 0;
 
 	ctx = (struct mdss_mdp_cmd_ctx *) ctl->intf_ctx[MASTER_CTX];
 	if (!ctx) {
@@ -2726,6 +2745,13 @@ static int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 		else if (ctx->lineptr_enabled)
 			mdss_mdp_cmd_lineptr_ctrl(ctl, false);
 	}
+
+	clearbit = BIT(24 + ctx->current_pp_num);
+	if (sctx)
+		clearbit |= BIT(24 + sctx->current_pp_num);
+	writel_relaxed(clearbit, ctl->mdata->mdp_base +
+		MDSS_REG_HW_INTR2_CLEAR);
+	wmb();
 
 	/* Kickoff */
 	__mdss_mdp_kickoff(ctl, ctx);
