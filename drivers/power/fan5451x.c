@@ -1236,18 +1236,18 @@ fan5451x_wlc_tx_recheck_work(struct work_struct *work)
 		return;
 
 	if (chip->wlc_present) {
-		pr_info("wireless charging enabled\n");
+		pr_debug("wireless charging enabled\n");
 		goto out;
 	}
 
 	if (chip->wlc_fake_online || chip->thermal_chg_stop) {
-		pr_info("wireless charging is under other state machine\n");
+		pr_debug("wireless charging is under other state machine\n");
 		goto out;
 	}
 
 	if (++cnt > WLC_TX_RECHECK_RETRY_COUNT) {
 		pr_info("wireless charging stopped by user or charger"
-			" could not supply sufficient current\n");
+			" doesn't provide sufficient current\n");
 		goto out;
 	}
 
