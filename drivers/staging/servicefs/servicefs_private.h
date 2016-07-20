@@ -123,7 +123,7 @@ int servicefs_cache_init(void);
  * Creation, status, and removal of services.
  */
 struct service *get_new_service(void);
-void cancel_service(struct service *svc);
+int cancel_service(struct service *svc);
 void remove_service(struct service *svc);
 
 int service_get(struct service *svc);
@@ -213,23 +213,27 @@ struct service *servicefs_get_service_from_file(struct file *filp);
 struct servicefs_msg_info_struct;
 
 int servicefs_push_channel(struct service *svc, int svcfd, int msgid,
-		int flags, int __user *cid, void __user *ctx);
+		int flags, int __user *cid, void __user *ctx, bool is_compat);
 int servicefs_close_channel(struct service *svc, int cid);
 int servicefs_check_channel(struct service *svc, int svcfd, int msgid,
-		int index, int __user *cid, void __user **ctx);
+		int index, int __user *cid, void __user **ctx, bool is_compat);
 
 int servicefs_set_service_context(struct service *svc, void __user *ctx);
 int servicefs_set_channel_context(struct service *svc, int cid, void __user *ctx);
-int servicefs_msg_recv(struct service *svc, struct servicefs_msg_info_struct __user *msg_info,
-		long timeout);
-ssize_t servicefs_msg_readv(struct service *svc, int msgid, const iov *vec, size_t cnt);
-ssize_t servicefs_msg_writev(struct service *svc, int msgid, const iov *vec, size_t cnt);
+int servicefs_msg_recv(struct service *svc,
+		struct servicefs_msg_info_struct __user *msg_info, long timeout,
+		bool is_compat);
+ssize_t servicefs_msg_readv(struct service *svc, int msgid,
+		const iov *vec, size_t cnt);
+ssize_t servicefs_msg_writev(struct service *svc, int msgid,
+		const iov *vec, size_t cnt);
 int servicefs_msg_seek(struct service *svc, int msgid, long offset, int whence);
 ssize_t servicefs_msg_busv(struct service *svc, int dst_msgid, long dst_off,
 		int src_msgid, long src_off, size_t len);
 int servicefs_msg_reply(struct service *svc, int msgid, ssize_t retcode);
 int servicefs_msg_reply_fd(struct service *svc, int msgid, unsigned int pushfd);
-int servicefs_mod_channel_events(struct service *svc, int cid, int clr, int set);
+int servicefs_mod_channel_events(struct service *svc, int cid,
+		int clr, int set);
 int servicefs_msg_push_fd(struct service *svc, int msgid, unsigned int pushfd);
 int servicefs_msg_get_fd(struct service *svc, int msgid, unsigned int index);
 

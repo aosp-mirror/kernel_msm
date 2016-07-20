@@ -24,6 +24,7 @@
 
 #include "servicefs_private.h"
 #include "servicefs_ioctl.h"
+#include "servicefs_compat_ioctl.h"
 
 #define THIS_SERVICE_FD (-1)
 
@@ -203,38 +204,50 @@ out:
 	return svc;
 }
 
-void cancel_service(struct service *svc)
+int cancel_service(struct service *svc)
 {
+	int ret;
 	struct channel *c, *cn;
 	struct impulse *i, *in;
 	struct message *m, *mn;
 
-	pr_debug("cancelling service=%p\n", svc);
-
 	mutex_lock(&svc->s_mutex);
 
-	svc->s_flags |= SERVICE_FLAGS_CANCELED;
+	if (!__is_service_canceled(svc)) {
+		pr_debug("canceling service=%p\n", svc);
+		svc->s_flags |= SERVICE_FLAGS_CANCELED;
 
-	list_for_each_entry_safe(i, in, &svc->s_impulses, i_impulses_node) {
-		__cancel_impulse(i);
+		pr_debug("removing dentry service=%p\n", svc);
+		servicefs_remove(svc->s_filp->f_path.dentry);
+
+		list_for_each_entry_safe(i, in, &svc->s_impulses, i_impulses_node) {
+			__cancel_impulse(i);
+		}
+
+		list_for_each_entry_safe(m, mn, &svc->s_messages, m_messages_node) {
+			__cancel_message(m);
+		}
+
+		list_for_each_entry_safe(m, mn, &svc->s_active, m_messages_node) {
+			__cancel_message(m);
+		}
+
+		list_for_each_entry_safe(c, cn, &svc->s_channels, c_channels_node) {
+			__cancel_channel(c);
+		}
+
+		wake_up_all(&svc->s_wqreceivers);
+		wake_up_poll(&svc->s_wqselect, POLLHUP | POLLFREE);
+
+		ret = 0;
+	} else {
+		pr_debug("already canceled service=%p\n", svc);
+		ret = -ESHUTDOWN;
 	}
-
-	list_for_each_entry_safe(m, mn, &svc->s_messages, m_messages_node) {
-		__cancel_message(m);
-	}
-
-	list_for_each_entry_safe(m, mn, &svc->s_active, m_messages_node) {
-		__cancel_message(m);
-	}
-
-	list_for_each_entry_safe(c, cn, &svc->s_channels, c_channels_node) {
-		__cancel_channel(c);
-	}
-
-	wake_up_all(&svc->s_wqreceivers);
-	wake_up_poll(&svc->s_wqselect, POLLHUP | POLLFREE);
 
 	mutex_unlock(&svc->s_mutex);
+
+	return ret;
 }
 
 /**
@@ -661,65 +674,172 @@ void __complete_message(struct message *msg, int retcode)
 		__message_put(msg);
 }
 
+/*
+ * Utilities to handle differences between 64bit and 32bit userspace data sizes.
+ * When CONFIG_COMPAT is not defined, simplified versions that ignore 32bit are
+ * used and BUG is triggered if requests for 32bit are made.
+ */
+#ifdef CONFIG_COMPAT
+static long copy_msg_info_to_user(
+		struct servicefs_msg_info_struct __user *dest,
+		struct servicefs_msg_info_struct *src, bool is_compat)
+{
+	if (is_compat) {
+		struct servicefs_compat_msg_info_struct compat_info;
+
+		compat_info.pid = src->pid;
+		compat_info.tid = src->tid;
+		compat_info.cid = src->cid;
+		compat_info.mid = src->mid;
+		compat_info.euid= src->euid;
+		compat_info.egid = src->egid;
+		compat_info.service_private = ptr_to_compat(src->service_private);
+		compat_info.channel_private = ptr_to_compat(src->channel_private);
+		compat_info.op = src->op;
+		compat_info.flags = src->flags;
+		compat_info.send_len = src->send_len;
+		compat_info.recv_len = src->recv_len;
+		compat_info.fd_count = src->fd_count;
+		memcpy(compat_info.impulse, src->impulse, sizeof(compat_info.impulse));
+
+		return copy_to_user(dest, &compat_info, sizeof(compat_info));
+	} else {
+		return copy_to_user(dest, src, sizeof(*src));
+	}
+}
+
+static inline bool check_access_cid(int __user *cid, bool is_compat) {
+	size_t size = is_compat ? sizeof(compat_int_t) : sizeof(*cid);
+	return access_ok(VERIFY_WRITE, cid, size);
+}
+
+static inline bool check_access_ctx(void __user **ctx, bool is_compat) {
+	size_t size = is_compat ? sizeof(compat_uptr_t) : sizeof(*ctx);
+	return access_ok(VERIFY_WRITE, ctx, size);
+}
+
+static inline long __put_user_cid(int cid, int __user *cid_ptr,
+		bool is_compat) {
+	if (is_compat) {
+		compat_int_t compat_cid = cid;
+		return __copy_to_user(cid_ptr, &compat_cid, sizeof(compat_cid));
+	} else {
+		return __put_user(cid, cid_ptr);
+	}
+}
+
+static inline long __put_user_ctx(void *ctx, void __user **ctx_ptr,
+		bool is_compat) {
+	if (is_compat) {
+		compat_uptr_t compat_ctx = ptr_to_compat(ctx);
+		return __copy_to_user(ctx_ptr, &compat_ctx, sizeof(compat_ctx));
+	} else {
+		return __put_user(ctx, ctx_ptr);
+	}
+}
+#else
+static long copy_msg_info_to_user(
+		struct servicefs_msg_info_struct __user *dest,
+		struct servicefs_msg_info_struct *src, bool is_compat)
+{
+	BUG_ON(is_compat);
+	return copy_to_user(dest, src, sizeof(*src));
+}
+
+static inline bool check_access_cid(int __user *cid, bool is_compat) {
+	BUG_ON(is_compat);
+	return access_ok(VERIFY_WRITE, cid, sizeof(*cid));
+}
+
+static inline bool check_access_ctx(void __user **ctx, bool is_compat) {
+	BUG_ON(is_compat);
+	return access_ok(VERIFY_WRITE, ctx, sizeof(*ctx));
+}
+
+static inline long __put_user_cid(int cid, int __user *cid_ptr,
+		bool is_compat) {
+	BUG_ON(is_compat);
+	return __put_user(cid, cid_ptr);
+}
+
+static inline long __put_user_ctx(void *ctx, void __user **ctx_ptr,
+		bool is_compat) {
+	BUG_ON(is_compat);
+	return __put_user(ctx, ctx_ptr);
+}
+#endif
+
 /**
  * servicefs_check_channel - check if an fd in a message is a channel
  * @svc: pointer to the service owning the message
  * @svcfd: fd of the service to check the fd against
  * @mgsid: id of the message that the fd is in
- * @index: element in the message's fd array where the fd to check is
+ * @index: index of the fd to check in the message's fd array
  * @cid: optional user pointer to store the channel id
  * @ctx: optional user pointer to store the channel context pointer
  *
- * Checks whether the fd at the given index within the given message's
- * fd array is a channel to the given service. If the fd is a channel
- * to the service, optionally return the channel's id and context
- * pointer before returning success.
+ * Checks whether the fd at the given index within the message's fd
+ * array is a channel to the service described by svcfd. If the fd is
+ * a channel to the service, optionally return the channel's id and
+ * context pointer before returning success.
  *
  * svcfd may be -1, in which case the channel is checked against svc.
  */
 int servicefs_check_channel(struct service *svc, int svcfd, int msgid,
-		int index, int __user *cid, void __user **ctx)
+		int index, int __user *cid, void __user **ctx, bool is_compat)
 {
 	struct service *check_svc;
 	struct message *msg;
 	struct channel *c;
-	struct file *filp;
+	struct file *filp = NULL, *svc_filp = NULL;
+	int ret = 0;
 
 	/* determine which service to check the channel against */
 	if (svcfd == THIS_SERVICE_FD) {
 		check_svc = svc;
 	} else {
-		struct file *svc_filp = fget(svcfd);
-		if (!svc_filp)
-			return -EBADF;
+		svc_filp = fget(svcfd);
+		if (!svc_filp) {
+			ret = -EBADF;
+			goto error;
+		}
 
 		check_svc = servicefs_get_service_from_file(svc_filp);
-		fput(svc_filp);
-		if (!check_svc)
-			return -EINVAL;
+		if (!check_svc) {
+			ret = -EINVAL;
+			goto error;
+		}
 	}
 
 	/* validate arguments and retrieve the message struct */
-	if (cid && !access_ok(VERIFY_WRITE, cid, sizeof(*cid)))
-		return -EFAULT;
+	if (cid && !check_access_cid(cid, is_compat)) {
+		ret = -EFAULT;
+		goto error;
+	}
 
-	if (ctx && !access_ok(VERIFY_WRITE, ctx, sizeof(*ctx)))
-		return -EFAULT;
+	if (ctx && !check_access_ctx(ctx, is_compat)) {
+		ret = -EFAULT;
+		goto error;
+	}
 
 	msg = lookup_and_lock_message(svc, msgid, true);
-	if (IS_ERR(msg))
-		return PTR_ERR(msg);
+	if (IS_ERR(msg)) {
+		ret = PTR_ERR(msg);
+		goto error;
+	}
 
 	if (index < 0 || index >= msg->m_fdcnt) {
 		mutex_unlock(&msg->m_mutex);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto error;
 	}
 
 	/* get a reference to the file object for the fd */
 	filp = servicefs_fget(msg->m_task, msg->m_fds[index]);
 	if (!filp) {
 		mutex_unlock(&msg->m_mutex);
-		return -EBADF;
+		ret = -EBADF;
+		goto error;
 	}
 
 	/* allow other threads the access the message now */
@@ -728,27 +848,31 @@ int servicefs_check_channel(struct service *svc, int svcfd, int msgid,
 	/* get the channel for this file object if it's a channel */
 	c = servicefs_get_channel_from_file(filp);
 	if (!c || c->c_service != check_svc) {
-		fput(filp);
-		return -EOPNOTSUPP;
+		ret = -EOPNOTSUPP;
+		goto error;
 	}
 
 	/* return channel id and context if requested */
-	if (cid && __put_user(c->c_id, cid)) {
-		fput(filp);
-		return -EFAULT;
+	if (cid && __put_user_cid(c->c_id, cid, is_compat)) {
+		ret = -EFAULT;
+		goto error;
 	}
 
-	if (ctx && __put_user(c->c_context, ctx)) {
-		fput(filp);
-		return -EFAULT;
+	if (ctx && __put_user_ctx(c->c_context, ctx, is_compat)) {
+		ret = -EFAULT;
+		goto error;
 	}
 
-	fput(filp);
-	return 0;
+error:
+	if (svc_filp)
+		fput(svc_filp);
+	if (filp)
+		fput(filp);
+	return ret;
 }
 
 int servicefs_push_channel(struct service *svc, int svcfd, int msgid,
-		int flags, int __user *cid, void __user *ctx)
+		int flags, int __user *cid, void __user *ctx, bool is_compat)
 {
 	struct message *msg;
 	struct channel *c;
@@ -775,7 +899,7 @@ int servicefs_push_channel(struct service *svc, int svcfd, int msgid,
 		put_file = svc_file;
 	}
 
-	if (cid && !access_ok(VERIFY_WRITE, cid, sizeof(*cid)))
+	if (cid && !check_access_cid(cid, is_compat))
 		return -EFAULT;
 
 	msg = lookup_and_lock_message(svc, msgid, true);
@@ -802,7 +926,7 @@ int servicefs_push_channel(struct service *svc, int svcfd, int msgid,
 	c->c_context = ctx;
 
 	/* write the new channel id to the user, if cid is not NULL */
-	if (cid && __put_user(c->c_id, cid)) {
+	if (cid && __put_user_cid(c->c_id, cid, is_compat)) {
 		put_unused_fd(fd);
 		fd = -EFAULT;
 		goto error_locked;
@@ -888,7 +1012,8 @@ static inline bool is_message_pending(struct service *svc)
 }
 
 int servicefs_msg_recv(struct service *svc,
-		struct servicefs_msg_info_struct __user *msg_info, long timeout)
+		struct servicefs_msg_info_struct __user *msg_info, long timeout,
+		bool is_compat)
 {
 	struct message *msg;
 	struct impulse *impulse;
@@ -984,7 +1109,7 @@ message_path:
 	/* clear the impulse payload to prevent leaking stack contents */
 	memset(info_out.impulse, 0, sizeof(info_out.impulse));
 
-	if (copy_to_user(msg_info, &info_out, sizeof(info_out))) {
+	if (copy_msg_info_to_user(msg_info, &info_out, is_compat)) {
 		pr_debug("Fault transferring msg info: pid=%d\n",
 				pid_vnr(task_tgid(current)));
 		mutex_unlock(&msg->m_mutex);
@@ -1030,10 +1155,11 @@ impulse_path:
 	memset(((uint8_t *) info_out.impulse) + impulse->i_len, 0,
 			sizeof(info_out.impulse) - impulse->i_len);
 
-	if (copy_to_user(msg_info, &info_out, sizeof(info_out))) {
+	impulse_free(impulse);
+
+	if (copy_msg_info_to_user(msg_info, &info_out, is_compat)) {
 		pr_debug("Fault transferring msg info: pid=%d\n",
 				pid_vnr(task_tgid(current)));
-		impulse_free(impulse);
 		service_put(svc);
 		return -EFAULT;
 	}

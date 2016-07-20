@@ -21,19 +21,31 @@
 
 #include "servicefs_private.h"
 #include "servicefs_ioctl.h"
+#include "servicefs_compat_ioctl.h"
 
 static int initial_open(struct inode *inode, struct file *filp);
 static int initial_release(struct inode *inode, struct file *filp);
 
-static long service_ioctl(struct file *filp, unsigned int op, unsigned long arg);
+static long service_ioctl(struct file *filp, unsigned int cmd,
+		unsigned long arg);
 static unsigned int service_poll(struct file *filp, poll_table *wait);
 static int service_release(struct inode *inode, struct file *filp);
 
-static long channel_ioctl(struct file *filp, unsigned int op, unsigned long arg);
+static long channel_ioctl(struct file *filp, unsigned int cmd,
+		unsigned long arg);
 static unsigned int channel_poll(struct file *filp, poll_table *wait);
 static int channel_release(struct inode *inode, struct file *filp);
-static ssize_t channel_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos);
-static ssize_t channel_write(struct file *filp, const char __user *buf, size_t len, loff_t *ppos);
+static ssize_t channel_read(struct file *filp, char __user *buf,
+		size_t len, loff_t *ppos);
+static ssize_t channel_write(struct file *filp, const char __user *buf,
+		size_t len, loff_t *ppos);
+
+#ifdef CONFIG_COMPAT
+static long service_compat_ioctl(struct file *filp, unsigned int cmd,
+		unsigned long arg);
+static long channel_compat_ioctl(struct file *filp, unsigned int cmd,
+		unsigned long arg);
+#endif
 
 const struct file_operations initial_file_operations = {
 	.owner          = THIS_MODULE,
@@ -44,6 +56,9 @@ const struct file_operations initial_file_operations = {
 static const struct file_operations service_file_operations = {
 	.owner          = THIS_MODULE,
 	.unlocked_ioctl = service_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl   = service_compat_ioctl,
+#endif
 	.release        = service_release,
 	.poll           = service_poll,
 };
@@ -55,7 +70,9 @@ static const struct file_operations channel_file_operations = {
 	.write          = channel_write,
 	.poll           = channel_poll,
 	.unlocked_ioctl = channel_ioctl,
-	.compat_ioctl   = NULL,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl   = channel_compat_ioctl,
+#endif
 	.mmap           = NULL,
 	.flush          = NULL,
 	.release        = channel_release,
@@ -216,7 +233,7 @@ static long service_ioctl(struct file *filp, unsigned int cmd,
 
 		case SERVICEFS_MSG_RECV: {
 			long timeout = filp->f_flags & O_NONBLOCK ? 0 : MAX_SCHEDULE_TIMEOUT;
-			ret = servicefs_msg_recv(svc, ubuf, timeout);
+			ret = servicefs_msg_recv(svc, ubuf, timeout, false);
 		}
 		break;
 
@@ -350,7 +367,7 @@ static long service_ioctl(struct file *filp, unsigned int cmd,
 			}
 
 			ret = servicefs_push_channel(svc, params.svcfd, params.msgid,
-					params.flags, params.cid, params.ctx);
+					params.flags, params.cid, params.ctx, false);
 		}
 		break;
 
@@ -367,9 +384,13 @@ static long service_ioctl(struct file *filp, unsigned int cmd,
 			}
 
 			ret = servicefs_check_channel(svc, params.svcfd, params.msgid,
-					params.index, params.cid, params.ctx);
+					params.index, params.cid, params.ctx, false);
 		}
 		break;
+
+		case SERVICEFS_CANCEL_SERVICE:
+			ret = cancel_service(svc);
+			break;
 
 		default:
 			ret = -ENOTTY;
@@ -382,6 +403,221 @@ error:
 
 	return ret;
 }
+
+#ifdef CONFIG_COMPAT
+static long service_compat_ioctl(struct file *filp, unsigned int cmd,
+		unsigned long arg)
+{
+	int ret;
+	struct service *svc = filp->private_data;
+	void __user *ubuf = compat_ptr(arg);
+	iov iovstack[UIO_FASTIOV];
+	iov *vec = iovstack;
+
+	BUG_ON(svc == NULL);
+
+	if (_IOC_TYPE(cmd) != 'x')
+		return -ENOTTY;
+
+	if (_IOC_NR(cmd) > SERVICEFS_IOCTL_MAX_NR)
+		return -ENOTTY;
+
+	switch (cmd) {
+		case SERVICEFS_COMPAT_SET_SERVICE_CONTEXT:
+			ret = servicefs_set_service_context(svc, ubuf);
+			break;
+
+		case SERVICEFS_COMPAT_SET_CHANNEL_CONTEXT: {
+			struct servicefs_compat_set_channel_context_struct params;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			ret = servicefs_set_channel_context(svc, params.cid,
+					compat_ptr(params.ctx));
+		}
+		break;
+
+		case SERVICEFS_COMPAT_MSG_RECV: {
+			long timeout = filp->f_flags & O_NONBLOCK ? 0 : MAX_SCHEDULE_TIMEOUT;
+			ret = servicefs_msg_recv(svc, ubuf, timeout, true);
+		}
+		break;
+
+		case SERVICEFS_COMPAT_MSG_READV: {
+			struct servicefs_compat_msg_rwvec_struct params;
+			const struct compat_iovec __user *compat_vec;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			compat_vec = compat_ptr(params.vec);
+			ret = compat_rw_copy_check_uvector(WRITE, compat_vec, params.len,
+					ARRAY_SIZE(iovstack), iovstack, &vec);
+			if (ret < 0)
+				goto error;
+
+			ret = servicefs_msg_readv(svc, params.msgid, vec, params.len);
+		}
+		break;
+
+		case SERVICEFS_COMPAT_MSG_WRITEV: {
+			struct servicefs_compat_msg_rwvec_struct params;
+			const struct compat_iovec __user *compat_vec;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			compat_vec = compat_ptr(params.vec);
+			ret = compat_rw_copy_check_uvector(READ, compat_vec, params.len,
+					ARRAY_SIZE(iovstack), iovstack, &vec);
+			if (ret < 0)
+				goto error;
+
+			ret = servicefs_msg_writev(svc, params.msgid, vec, params.len);
+		}
+		break;
+
+		case SERVICEFS_COMPAT_MSG_SEEK: {
+			struct servicefs_compat_msg_seek_struct params;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			ret = servicefs_msg_seek(svc, params.msgid, params.offset,
+					params.whence);
+		}
+		break;
+
+		case SERVICEFS_COMPAT_MSG_BUSV: {
+			struct servicefs_compat_msg_busv_struct params;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			ret = servicefs_msg_busv(svc, params.dst_msgid, params.dst_offset,
+					params.src_msgid, params.src_offset, params.len);
+		}
+		break;
+
+		case SERVICEFS_COMPAT_MSG_REPLY: {
+			struct servicefs_compat_msg_reply_struct params;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			ret = servicefs_msg_reply(svc, params.msgid, params.retcode);
+		}
+		break;
+
+		case SERVICEFS_COMPAT_MSG_REPLY_FD: {
+			struct servicefs_compat_msg_reply_struct params;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			ret = servicefs_msg_reply_fd(svc, params.msgid, params.retcode);
+		}
+		break;
+
+		case SERVICEFS_COMPAT_MOD_CHANNEL_EVENTS: {
+			struct servicefs_compat_mod_channel_events_struct params;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			ret = servicefs_mod_channel_events(svc, params.cid,
+					params.clr, params.set);
+		}
+		break;
+
+		case SERVICEFS_COMPAT_MSG_PUSH_FD: {
+			struct servicefs_compat_msg_push_fd_struct params;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			ret = servicefs_msg_push_fd(svc, params.msgid, params.pushfd);
+		}
+		break;
+
+		case SERVICEFS_COMPAT_MSG_GET_FD: {
+			struct servicefs_compat_msg_get_fd_struct params;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			ret = servicefs_msg_get_fd(svc, params.msgid, params.index);
+		}
+		break;
+
+		case SERVICEFS_COMPAT_PUSH_CHANNEL: {
+			struct servicefs_compat_push_channel_struct params;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			ret = servicefs_push_channel(svc, params.svcfd, params.msgid,
+					params.flags, compat_ptr(params.cid),
+					compat_ptr(params.ctx), true);
+		}
+		break;
+
+		case SERVICEFS_COMPAT_CLOSE_CHANNEL:
+			ret = servicefs_close_channel(svc, arg);
+			break;
+
+		case SERVICEFS_COMPAT_CHECK_CHANNEL: {
+			struct servicefs_compat_check_channel_struct params;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			ret = servicefs_check_channel(svc, params.svcfd, params.msgid,
+					params.index, compat_ptr(params.cid),
+					compat_ptr(params.ctx), true);
+		}
+		break;
+
+		case SERVICEFS_COMPAT_CANCEL_SERVICE:
+			ret = cancel_service(svc);
+			break;
+
+		default:
+			ret = -ENOTTY;
+			break;
+	}
+error:
+	if (vec != iovstack)
+		kfree(vec);
+
+	return ret;
+}
+#endif
 
 struct file *servicefs_create_channel(struct file *svc_file, int flags)
 {
@@ -486,10 +722,6 @@ static int service_release(struct inode *inode, struct file *filp)
 
 	count = atomic_add_return(-1, &svc->s_count);
 	pr_debug("count=%d\n", count);
-
-	pr_debug("removing dentry\n");
-	servicefs_remove(filp->f_path.dentry);
-
 	cancel_service(svc);
 
 	return 0;
@@ -635,6 +867,144 @@ error:
 
 	return ret;
 }
+
+#ifdef CONFIG_COMPAT
+static long channel_compat_ioctl(struct file *filp, unsigned int cmd,
+		unsigned long arg)
+{
+	int ret;
+	struct channel *c = filp->private_data;
+	void __user *ubuf = compat_ptr(arg);
+	iov siovstack[UIO_FASTIOV];
+	iov riovstack[UIO_FASTIOV];
+	iov *svec = siovstack;
+	iov *rvec = riovstack;
+	int fdstack[UIO_FASTIOV];
+	int *fds = fdstack;
+
+	BUG_ON(!c);
+
+	pr_warn("cmd=%08x arg=%08lx", cmd, arg);
+
+	if (_IOC_TYPE(cmd) != 'x')
+		return -ENOTTY;
+
+	if (_IOC_NR(cmd) > SERVICEFS_IOCTL_MAX_NR)
+		return -ENOTTY;
+
+	switch (cmd) {
+		case SERVICEFS_COMPAT_MSG_SENDV: {
+			struct servicefs_compat_msg_sendv_struct params;
+			const struct compat_iovec __user *compat_rvec;
+			const struct compat_iovec __user *compat_svec;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			/*
+			 * prevent spoofing open/close ops and enforce that NULL arrays
+			 * must have 0 element counts.
+			 */
+			if ((params.op == SERVICEFS_OP_UNIX_OPEN)
+				    || (params.op == SERVICEFS_OP_UNIX_CLOSE)
+				    || (!params.svec && params.scnt)
+				    || (!params.rvec && params.rcnt)
+				    || (!params.fds && params.fdcnt)) {
+				ret = -EINVAL;
+				goto error;
+			}
+
+			if (params.svec) {
+				compat_svec = compat_ptr(params.svec);
+				ret = compat_rw_copy_check_uvector(READ, compat_svec,
+						params.scnt, ARRAY_SIZE(siovstack), siovstack, &svec);
+				if (ret < 0)
+					goto error;
+			} else {
+				svec = NULL;
+			}
+
+			if (params.rvec) {
+				compat_rvec = compat_ptr(params.rvec);
+				ret = compat_rw_copy_check_uvector(WRITE, compat_rvec,
+						params.rcnt, ARRAY_SIZE(riovstack), riovstack, &rvec);
+				if (ret < 0)
+					goto error;
+			} else {
+				rvec = NULL;
+			}
+
+			if (params.fds) {
+				if (params.fdcnt > UIO_MAXIOV) {
+					ret = -EINVAL;
+					goto error;
+				}
+
+				if (params.fdcnt > UIO_FASTIOV) {
+					fds = kmalloc(sizeof(int) * params.fdcnt, GFP_KERNEL);
+					if (fds == NULL) {
+						ret = -ENOMEM;
+						goto error;
+					}
+				}
+
+				if (copy_from_user(fds, compat_ptr(params.fds),
+						sizeof(compat_int_t) * params.fdcnt)) {
+					ret = -EFAULT;
+					goto error;
+				}
+			} else {
+				fds = NULL;
+			}
+
+			ret = servicefs_msg_sendv_interruptible(c, params.op,
+					svec, params.scnt, rvec, params.rcnt,
+					fds, params.fdcnt);
+		}
+		break;
+
+		case SERVICEFS_COMPAT_MSG_SEND_IMPULSE: {
+			struct servicefs_compat_msg_send_impulse_struct params;
+
+			if (copy_from_user(&params, ubuf, sizeof(params))) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			/*
+			 * prevent spoofing open/close ops and enforce that NULL arrays
+			 * must have 0 element counts.
+			 */
+			if ((params.op == SERVICEFS_OP_UNIX_OPEN)
+				    || (params.op == SERVICEFS_OP_UNIX_CLOSE)
+				    || (!params.buf && params.len)) {
+				ret = -EINVAL;
+				goto error;
+			}
+
+			ret = servicefs_msg_send_impulse(c, params.op,
+					compat_ptr(params.buf), params.len);
+		}
+		break;
+
+		default:
+			ret = -ENOTTY;
+			break;
+	}
+
+error:
+	if (svec != siovstack)
+		kfree(svec);
+	if (rvec != riovstack)
+		kfree(rvec);
+	if (fds != fdstack)
+		kfree(fds);
+
+	return ret;
+}
+#endif
 
 /**
  * channel_poll - handle the poll file op for channels
