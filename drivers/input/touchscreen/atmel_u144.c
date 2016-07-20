@@ -96,9 +96,7 @@ void trigger_usb_state_from_otg(int usb_type);
 static void mxt_read_fw_version(struct mxt_data *data);
 static int mxt_read_t100_config(struct mxt_data *data);
 
-char *knockon_event[2] = { "TOUCH_GESTURE_WAKEUP=WAKEUP", NULL };
-
-static int touch_enable_irq_wake(unsigned int irq)
+static int __maybe_unused touch_enable_irq_wake(unsigned int irq)
 {
 	int ret = 0;
 
@@ -829,39 +827,12 @@ static void mxt_proc_t6_messages(struct mxt_data *data, u8 *msg)
 				data->stylus_in_a_row_cnt_thr, data->x_zitter, data->y_zitter);
 	}
 
-	/* Set KnockCode Delay after RESET */
-	if (!data->mfts_enable) {
-		if (status & MXT_T6_STATUS_RESET && data->is_knockCodeDelay) {
-			mxt_write_object(data,
-				MXT_PROCI_TOUCH_SEQUENCE_LOGGER_T93, 19, 43);
-			TOUCH_DEBUG_MSG("Set Knock Code delay after RESET (700ms)\n");
-		} else if (status & MXT_T6_STATUS_RESET &&
-				!data->is_knockCodeDelay) {
-			mxt_write_object(data,
-				MXT_PROCI_TOUCH_SEQUENCE_LOGGER_T93, 19, 0);
-			TOUCH_DEBUG_MSG("Set Knock Code delay after RESET (0ms)\n");
-		}
-	}
-
 	if (status & MXT_T6_STATUS_RESET && data->suspended) {
 		TOUCH_DEBUG_MSG("RESET Detected. Start Recover \n");
 
 		if (mxt_patchevent_get(PATCH_EVENT_TA)) {
 			TOUCH_DEBUG_MSG("   Stage 1 : USB/TA \n");
-			global_mxt_data->knock_on_mode = CHARGER_PLUGGED;
-			mxt_patch_event(global_mxt_data,
-					global_mxt_data->knock_on_mode);
-		}
-
-		if (mxt_patchevent_get(PATCH_EVENT_KNOCKON)) {
-			TOUCH_DEBUG_MSG("   Stage 2 : Knock On \n");
-			if (mxt_patchevent_get(PATCH_EVENT_TA)) {
-				mxt_patch_event(global_mxt_data,
-						CHARGER_KNOCKON_SLEEP);
-			} else {
-				mxt_patch_event(global_mxt_data,
-						NOCHARGER_KNOCKON_SLEEP);
-			}
+			mxt_patch_event(global_mxt_data, CHARGER_PLUGGED);
 		}
 		TOUCH_DEBUG_MSG("Recover Complete\n");
 	}
@@ -1167,35 +1138,6 @@ static int mxt_proc_t25_message(struct mxt_data *data, u8 *message)
 
 	selftest_enable = false;
 	return 0;
-}
-
-static void mxt_proc_t24_messages(struct mxt_data *data, u8 *message)
-{
-	u8 msg = 0;
-	int x = 0;
-	int y = 0;
-
-	if (data->in_bootloader)
-		return;
-
-	msg = message[1];
-
-	x = (message[2] << 4) | ((message[4] >> 4) & 0xf);
-	y = (message[3] << 4) | ((message[4] & 0xf));
-
-	/* Handle 10/12 bit switching */
-	if (data->max_x < 1024)
-		x >>= 2;
-	if (data->max_y < 1024)
-		y >>= 2;
-
-	if (msg == 0x04) {
-		wake_lock_timeout(&touch_wake_lock, msecs_to_jiffies(2000));
-		TOUCH_DEBUG_MSG("Knock On detected x[%3d] y[%3d] \n", x, y);
-		kobject_uevent_env(&device_touch.kobj, KOBJ_CHANGE, knockon_event);
-	} else {
-		TOUCH_DEBUG_MSG("%s msg = %d \n", __func__, msg);
-	}
 }
 
 static void mxt_proc_t80_messages(struct mxt_data *data, u8 *message)
@@ -1583,39 +1525,17 @@ void trigger_usb_state_from_otg(int usb_type)
 	mutex_lock(&i2c_suspend_lock);
 	if (usb_type == 0) {
 		if (mxt_patchevent_get(PATCH_EVENT_TA)) {
-			if (mxt_patchevent_get(PATCH_EVENT_KNOCKON)) {
-				mxt_patchevent_unset(PATCH_EVENT_KNOCKON);
-				mxt_patch_event(global_mxt_data, CHARGER_KNOCKON_WAKEUP);
-			}
 			global_mxt_data->charging_mode = 0;
 			mxt_patch_event(global_mxt_data, CHARGER_UNPLUGGED);
 			mxt_patchevent_unset(PATCH_EVENT_TA);
 		}
 	} else {
-		if (mxt_patchevent_get(PATCH_EVENT_KNOCKON)) {
-			mxt_patch_event(global_mxt_data, NOCHARGER_KNOCKON_WAKEUP);
-			mxt_patchevent_unset(PATCH_EVENT_KNOCKON);
-		}
 		global_mxt_data->charging_mode = 1;
-
-
 		mxt_patch_event(global_mxt_data, CHARGER_PLUGGED);
-
 		mxt_patchevent_set(PATCH_EVENT_TA);
 	}
 
 	mutex_unlock(&i2c_suspend_lock);
-}
-
-static void mxt_proc_message_log(struct mxt_data *data, u8 type)
-{
-	if (mxt_patchevent_get(PATCH_EVENT_KNOCKON) &&
-	    (type != MXT_GEN_COMMAND_T6 &&
-	     type != MXT_SPT_CTECONFIG_T46 &&
-	     type != MXT_PROCI_SHIELDLESS_T56 &&
-	     type != MXT_SPT_TIMER_T61 &&
-	     type != MXT_PROCG_NOISESUPPRESSION_T72))
-			TOUCH_DEBUG_MSG("mxt_interrupt T%d \n", type);
 }
 
 static int mxt_proc_message(struct mxt_data *data, u8 *message)
@@ -1629,18 +1549,12 @@ static int mxt_proc_message(struct mxt_data *data, u8 *message)
 
 	type = data->reportids[report_id].type;
 
-	mxt_proc_message_log(data, type);
-
 	switch (type) {
 		case MXT_GEN_COMMAND_T6:
 			mxt_proc_t6_messages(data, message);
 			break;
 		case MXT_TOUCH_MULTI_T9:
 			mxt_proc_t9_message(data, message);
-			break;
-		case MXT_PROCI_ONETOUCH_T24:
-			if (data->mxt_knock_on_enable)
-				mxt_proc_t24_messages(data, message);
 			break;
 		case MXT_SPT_SELFTEST_T25:
 			mxt_proc_t25_message(data, message);
@@ -3312,21 +3226,6 @@ static ssize_t mxt_update_fw_store(struct mxt_data *data, const char *buf,
 
 	wake_lock_timeout(&touch_wake_lock, msecs_to_jiffies(2000));
 
-	if (data->suspended) {
-		TOUCH_DEBUG_MSG("Try LCD On\n");
-		kobject_uevent_env(&device_touch.kobj, KOBJ_CHANGE,
-				knockon_event);
-		while (1) {
-			if (data->suspended) {
-				mdelay(100);
-				wait_cnt++;
-			}
-
-			if (!data->suspended || wait_cnt > 50)
-				break;
-		}
-	}
-
 	TOUCH_DEBUG_MSG("wait_cnt = %d\n", wait_cnt);
 
 	touch_disable_irq(data->irq);
@@ -3793,46 +3692,6 @@ static void mxt_reset_slots(struct mxt_data *data)
 	data->palm = false;
 }
 
-static void mxt_gesture_mode_start(struct mxt_data *data)
-{
-	struct mxt_object *object;
-
-	object = mxt_get_object(data, MXT_PROCI_TOUCH_SEQUENCE_LOGGER_T93);
-	if (!object)
-		return;
-
-	mxt_patchevent_set(PATCH_EVENT_KNOCKON);
-
-	if (mxt_patchevent_get(PATCH_EVENT_TA))
-		mxt_patch_event(data, CHARGER_KNOCKON_SLEEP);
-	else
-		mxt_patch_event(data, NOCHARGER_KNOCKON_SLEEP);
-}
-
-static void mxt_active_mode_start(struct mxt_data *data)
-{
-
-	struct mxt_object *object;
-
-	object = mxt_get_object(data, MXT_PROCI_TOUCH_SEQUENCE_LOGGER_T93);
-	if (!object)
-		return;
-
-	if (mxt_patchevent_get(PATCH_EVENT_TA)) {
-		if (data->mxt_knock_on_enable ||
-		    mxt_patchevent_get(PATCH_EVENT_KNOCKON)) {
-			mxt_patch_event(data, CHARGER_KNOCKON_WAKEUP);
-		}
-	} else {
-		if (data->mxt_knock_on_enable ||
-		    mxt_patchevent_get(PATCH_EVENT_KNOCKON)) {
-			mxt_patch_event(data, NOCHARGER_KNOCKON_WAKEUP);
-		}
-	}
-
-	mxt_patchevent_unset(PATCH_EVENT_KNOCKON);
-}
-
 static void mxt_start(struct mxt_data *data)
 {
 	if (!data->suspended || data->in_bootloader) {
@@ -3851,7 +3710,6 @@ static void mxt_start(struct mxt_data *data)
 
 	mxt_regulator_enable(data);
 
-	mxt_active_mode_start(data);
 	data->delayed_cal = true;
 
 	mxt_reset_slots(data);
@@ -3870,23 +3728,13 @@ static void mxt_stop(struct mxt_data *data)
 	touch_disable_irq(data->irq);
 	touch_disable_irq_wake(data->irq);
 
-	if (data->mxt_knock_on_enable) {
-		mxt_gesture_mode_start(data);
-		mxt_t6_command(data, MXT_COMMAND_CALIBRATE, 1, false);
-	} else {
-		TOUCH_INFO_MSG("%s MXT_POWER_CFG_DEEPSLEEP\n", __func__);
-		// mxt_set_t7_power_cfg(data, MXT_POWER_CFG_DEEPSLEEP);
-		mxt_regulator_disable(data);
-	}
+	TOUCH_INFO_MSG("%s MXT_POWER_CFG_DEEPSLEEP\n", __func__);
+	// mxt_set_t7_power_cfg(data, MXT_POWER_CFG_DEEPSLEEP);
+	mxt_regulator_disable(data);
 
 	mxt_reset_slots(data);
 	data->suspended = true;
 	data->button_lock = false;
-
-	if (data->mxt_knock_on_enable) {
-		touch_enable_irq(data->irq);
-		touch_enable_irq_wake(data->irq);
-	}
 }
 
 static int mxt_input_open(struct input_dev *dev)

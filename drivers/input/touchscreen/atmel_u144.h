@@ -278,11 +278,6 @@
 #define CHARGER_UNPLUGGED		1
 #define DEEP_SLEEP_WAKEUP		2
 
-#define CHARGER_KNOCKON_SLEEP     	3
-#define CHARGER_KNOCKON_WAKEUP   	4
-#define NOCHARGER_KNOCKON_SLEEP   	5
-#define NOCHARGER_KNOCKON_WAKEUP	6
-
 #define PATCH_EVENT_PAIR_NUM 		4
 /* For sensing test */
 #define SELF_CAP_ON_NOISE_RECOVER	11
@@ -762,7 +757,6 @@ struct mxt_data {
 	/* Indicates whether device is in suspend */
 	bool suspended;
 	struct mxt_raw_data *rawdata;
-	bool mxt_knock_on_enable;
 	bool self_test_result;
 	u8 self_test_status[4];
 	u16 reported_keycode;
@@ -782,8 +776,6 @@ struct mxt_data {
 	u16 anti_touch_area;
 	int **full_cap;
 
-	u8 knock_on_mode;
-
 	struct work_struct multi_tap_work;
 
 	/* T71 tmp using before firmware change */
@@ -793,8 +785,6 @@ struct mxt_data {
 	int incoming_call;
 	int error;
 
-	bool is_knockONonly;
-	bool is_knockCodeDelay;
 	bool mxt_mode_changed;
 	bool delayed_cal;
 
