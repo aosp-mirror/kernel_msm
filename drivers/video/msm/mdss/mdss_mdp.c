@@ -1608,7 +1608,6 @@ static int mdss_mdp_gdsc_notifier_call(struct notifier_block *self,
 static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 {
 	int ret;
-	cpumask_t irq_mask;
 
 	ret = of_property_read_u32(mdata->pdev->dev.of_node,
 			"qcom,max-clk-rate", &mdata->max_mdp_clk_rate);
@@ -1680,12 +1679,6 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 	mdss_mdp_set_clk_rate(mdata->max_mdp_clk_rate);
 	pr_debug("mdp clk rate=%ld\n",
 		mdss_mdp_get_clk_rate(MDSS_CLK_MDP_CORE, false));
-
-	/* Set the MDSS affinity to CPU 0 so we can set the CPU affinity
-	 * for the FB thread to avoid the two interfering. */
-	cpumask_clear(&irq_mask);
-	cpumask_set_cpu(0, &irq_mask);
-	irq_set_affinity(mdss_mdp_hw.irq_info->irq, &irq_mask);
 
 	return 0;
 }

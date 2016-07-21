@@ -109,7 +109,7 @@ static void mdss_fb_release_fences(struct msm_fb_data_type *mfd);
 static int __mdss_fb_sync_buf_done_callback(struct notifier_block *p,
 		unsigned long val, void *data);
 static int mdss_fb_set_persistence_mode(struct msm_fb_data_type *mfd,
-					u32 mode);
+                                        u32 mode);
 
 static int __mdss_fb_display_thread(void *data);
 static int mdss_fb_pan_idle(struct msm_fb_data_type *mfd);
@@ -1649,7 +1649,6 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 static int mdss_fb_start_disp_thread(struct msm_fb_data_type *mfd)
 {
 	int ret = 0;
-	cpumask_t disp_mask;
 
 	pr_debug("%pS: start display thread fb%d\n",
 		__builtin_return_address(0), mfd->index);
@@ -1658,14 +1657,8 @@ static int mdss_fb_start_disp_thread(struct msm_fb_data_type *mfd)
 	mdss_fb_get_split(mfd);
 
 	atomic_set(&mfd->commits_pending, 0);
-	mfd->disp_thread = kthread_create(__mdss_fb_display_thread,
-					  mfd, "mdss_fb%d", mfd->index);
-	/* MDSS interrupt runs on CPU 0. don't run mdss threads on CPU 0
-	   otherwise, we'll delay mdss_fb0 by ~200us */
-	cpumask_setall(&disp_mask);
-	cpumask_clear_cpu(0, &disp_mask);
-	kthread_bind_mask(mfd->disp_thread, &disp_mask);
-	wake_up_process(mfd->disp_thread);
+	mfd->disp_thread = kthread_run(__mdss_fb_display_thread,
+				mfd, "mdss_fb%d", mfd->index);
 
 	if (IS_ERR(mfd->disp_thread)) {
 		pr_err("ERROR: unable to start display thread %d\n",
