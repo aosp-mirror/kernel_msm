@@ -1316,19 +1316,6 @@ static int get_prop_batt_voltage_max_design(struct smbchg_chip *chip)
 	return uv;
 }
 
-#define DEFAULT_CHARGE_COUNTER	0
-static int get_prop_batt_charge_counter(struct smbchg_chip *chip)
-{
-	int ua, rc;
-
-	rc = get_property_from_fg(chip, POWER_SUPPLY_PROP_CHARGE_COUNTER, &ua);
-	if (rc) {
-		pr_smb(PR_STATUS, "Couldn't get charge counter rc = %d\n", rc);
-		ua = DEFAULT_CHARGE_COUNTER;
-	}
-	return ua;
-}
-
 #ifdef CONFIG_HTC_BATT
 static int get_prop_batt_soc(struct smbchg_chip *chip)
 {
@@ -6583,7 +6570,6 @@ static enum power_supply_property smbchg_battery_properties[] = {
 	POWER_SUPPLY_PROP_RERUN_AICL,
 	POWER_SUPPLY_PROP_RESTRICTED_CHARGING,
 	POWER_SUPPLY_PROP_ALLOW_HVDCP3,
-	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 #ifdef CONFIG_HTC_BATT
 	POWER_SUPPLY_PROP_TYPEC_SINK_CURRENT,
 #endif /* CONFIG_HTC_BATT */
@@ -6805,9 +6791,6 @@ static int smbchg_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_ALLOW_HVDCP3:
 		val->intval = chip->allow_hvdcp3_detection;
-		break;
-	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-		val->intval = get_prop_batt_charge_counter(chip);
 		break;
 #ifdef CONFIG_HTC_BATT
 	case POWER_SUPPLY_PROP_TYPEC_SINK_CURRENT:
