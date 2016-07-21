@@ -1668,7 +1668,7 @@ static void batt_worker(struct work_struct *work)
 			}
 		}
 	}
-	if (need_to_check_cable(htc_batt_info.rep.charging_source)) {
+	if (need_to_check_cable(src)) {
 		BATT_EMBEDDED("cable_impedance: %d, R_cable_impedance: %d, aicl_result: %d",
 		gs_cable_impedance, gs_R_cable_impedance, gs_aicl_result);
 	}
