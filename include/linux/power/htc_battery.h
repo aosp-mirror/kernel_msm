@@ -411,5 +411,5 @@ void pmi8996_set_dcp_default(void);
 bool pmi8996_is_booting_stage(void);
 bool htc_battery_get_discharging_reason(void);
 bool get_ima_error_status(void);
-
+bool usb_otg_pulse_skip_control(bool disable);
 #endif /* __HTC_BATTERY_H__ */

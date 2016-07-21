@@ -4092,14 +4092,20 @@ static int smbchg_otg_regulator_enable(struct regulator_dev *rdev)
 		return rc;
 	}
 	smbchg_icl_loop_disable_check(chip);
+#ifndef CONFIG_HTC_BATT
 	smbchg_otg_pulse_skip_disable(chip, REASON_OTG_ENABLED, true);
+#else
+	smbchg_otg_pulse_skip_disable(chip, REASON_OTG_ENABLED, false);
+#endif /* CONFIG_HTC_BATT */
 
 	/* If pin control mode then return from here */
 	if (chip->otg_pinctrl)
 		return rc;
 
+#ifndef CONFIG_HTC_BATT
 	/* sleep to make sure the pulse skip is actually disabled */
 	msleep(20);
+#endif /* CONFIG_HTC_BATT */
 	rc = smbchg_masked_write(chip, chip->bat_if_base + CMD_CHG_REG,
 			OTG_EN_BIT, OTG_EN_BIT);
 	if (rc < 0)
@@ -4138,9 +4144,10 @@ static int smbchg_otg_regulator_disable(struct regulator_dev *rdev)
 
 static int smbchg_otg_regulator_is_enable(struct regulator_dev *rdev)
 {
+	struct smbchg_chip *chip = rdev_get_drvdata(rdev);
+#ifndef CONFIG_HTC_BATT
 	int rc = 0;
 	u8 reg = 0;
-	struct smbchg_chip *chip = rdev_get_drvdata(rdev);
 
 	rc = smbchg_read(chip, &reg, chip->bat_if_base + CMD_CHG_REG, 1);
 	if (rc < 0) {
@@ -4150,6 +4157,11 @@ static int smbchg_otg_regulator_is_enable(struct regulator_dev *rdev)
 	}
 
 	return (reg & OTG_EN_BIT) ? 1 : 0;
+#else
+	/* Since OTG_EN_BIT isn't repliable if otg_oc_reset is working */
+	/* Change to use chg_otg_enabled flag to check OTG status */
+	return chip->chg_otg_enabled;
+#endif /* CONFIG_HTC_BATT */
 }
 
 struct regulator_ops smbchg_otg_reg_ops = {
@@ -5544,16 +5556,10 @@ unlock:
 static int otg_oc_reset(struct smbchg_chip *chip)
 {
 	int rc;
-
 #ifdef CONFIG_HTC_BATT
 	int vbus_mv = 0;
+#endif /* CONFIG_HTC_BATT */
 
-	vbus_mv = pmi8994_get_usbin_voltage_now()/1000;
-	if (vbus_mv < 3500) {
-		pr_info("%s: Skip oc_reset due to abnormal vbus voltage (%d mv)\n", __func__, vbus_mv);
-		return 0;
-	}
-#endif //CONFIG_HTC_BATT
 	rc = smbchg_masked_write(chip, chip->bat_if_base + CMD_CHG_REG,
 						OTG_EN_BIT, 0);
 	if (rc)
@@ -5572,6 +5578,12 @@ static int otg_oc_reset(struct smbchg_chip *chip)
 			"OTG is not present, not enabling OTG_EN_BIT\n");
 		goto out;
 	}
+#else
+	if (!chip->chg_otg_enabled) {
+		pr_smb(PR_STATUS,
+			"OTG is not required, not enabling OTG_EN_BIT\n");
+		goto out;
+	}
 #endif /* CONFIG_HTC_BATT */
 
 	rc = smbchg_masked_write(chip, chip->bat_if_base + CMD_CHG_REG,
@@ -5579,9 +5591,19 @@ static int otg_oc_reset(struct smbchg_chip *chip)
 	if (rc)
 		pr_err("Failed to re-enable OTG rc=%d\n", rc);
 
-#ifndef CONFIG_HTC_BATT
-out:
+#ifdef CONFIG_HTC_BATT
+	msleep(10);
+	vbus_mv = pmi8994_get_usbin_voltage_now() / 1000;
+	/* Disable pulse skip to avoid batt UVLO once OTG enabled*/
+	if (vbus_mv >= 3500) {
+		pr_smb(PR_STATUS,
+			"OTG enable, disable pulse skip. Vbus=%dmV\n", vbus_mv);
+		smbchg_otg_pulse_skip_disable(chip, REASON_OTG_ENABLED, true);
+	} else
+		pr_smb(PR_STATUS, "OTG enable fail, Vbus=%dmV\n", vbus_mv);
 #endif /* CONFIG_HTC_BATT */
+
+out:
 	return rc;
 }
 
@@ -7449,15 +7471,7 @@ out:
  * otg_oc_handler() - called when the usb otg goes over current
  */
 
-#ifdef CONFIG_HTC_BATT
-/* Set NUM_OTG_RETRIES to 1 due to too many oc_reset will pull up vbus
- * to a specific value which can trigger large current,	in order to avoid
- * this situation, lower down retry times will be helpful.
-*/
-#define NUM_OTG_RETRIES			1
-#else
 #define NUM_OTG_RETRIES			5
-#endif //CONFIG_HTC_BATT
 
 #define OTG_OC_RETRY_DELAY_US		50000
 static irqreturn_t otg_oc_handler(int irq, void *_chip)
@@ -9447,6 +9461,16 @@ bool is_otg_enabled(void)
 		return true;
 	else
 		return false;
+}
+
+bool usb_otg_pulse_skip_control(bool disable)
+{
+        if(!the_chip) {
+                pr_err("called before init\n");
+                return false;
+        }
+	smbchg_otg_pulse_skip_disable(the_chip, REASON_OTG_ENABLED, disable);
+	return true;
 }
 
 bool is_parallel_enabled(void)
