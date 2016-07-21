@@ -19,6 +19,7 @@
 #define pr_fmt(fmt) "CPU PMU: " fmt
 
 #include <linux/bitmap.h>
+#include <linux/cpu_pm.h>
 #include <linux/export.h>
 #include <linux/kernel.h>
 #include <linux/of.h>
@@ -215,6 +216,104 @@ static struct notifier_block cpu_pmu_hotplug_notifier = {
 	.notifier_call = cpu_pmu_notify,
 };
 
+#ifdef CONFIG_CPU_PM
+static void cpu_pm_pmu_setup(struct arm_pmu *armpmu, unsigned long cmd)
+{
+	struct pmu_hw_events *hw_events = armpmu->get_hw_events();
+	struct perf_event *event;
+	int idx;
+
+	for (idx = 0; idx < armpmu->num_events; idx++) {
+		/*
+		 * If the counter is not used, skip it, there is no
+		 * need of stopping/restarting it.
+		 */
+		if (!test_bit(idx, hw_events->used_mask))
+			continue;
+
+		event = hw_events->events[idx];
+
+		switch (cmd) {
+		case CPU_PM_ENTER:
+			/*
+			 * Stop and update the counter
+			 */
+			armpmu->pmu.stop(event, PERF_EF_UPDATE);
+			break;
+		case CPU_PM_EXIT:
+		case CPU_PM_ENTER_FAILED:
+			/*
+			 * Restore and enable the counter.
+			 * armpmu_start() indirectly calls
+			 *
+			 * perf_event_update_userpage()
+			 *
+			 * that requires RCU read locking to be functional,
+			 * wrap the call within RCU_NONIDLE to make the
+			 * RCU subsystem aware this cpu is no idle from
+			 * an RCU perspective for the armpmu_start() call
+			 * duration.
+			 */
+			 RCU_NONIDLE(armpmu->pmu.start(event, PERF_EF_RELOAD));
+			 break;
+		default:
+			break;
+		}
+	}
+}
+
+static int cpu_pm_pmu_notify(struct notifier_block *b, unsigned long cmd,
+			     void *v)
+{
+	struct pmu_hw_events *hw_events = cpu_pmu->get_hw_events();
+	int enabled = bitmap_weight(hw_events->used_mask, cpu_pmu->num_events);
+
+	if (!cpumask_test_cpu(smp_processor_id(), cpu_online_mask))
+		return NOTIFY_DONE;
+
+	/*
+	 * Always reset the PMU registers on power-up even if
+	 * there are no events running.
+	 */
+	if (cmd == CPU_PM_EXIT && cpu_pmu->reset)
+		cpu_pmu->reset(cpu_pmu);
+
+	if (!enabled)
+		return NOTIFY_OK;
+
+	switch (cmd) {
+	case CPU_PM_ENTER:
+		cpu_pmu->stop(cpu_pmu);
+		cpu_pm_pmu_setup(cpu_pmu, cmd);
+		break;
+	case CPU_PM_EXIT:
+		cpu_pm_pmu_setup(cpu_pmu, cmd);
+	case CPU_PM_ENTER_FAILED:
+		cpu_pmu->start(cpu_pmu);
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block perf_cpu_pm_notifier_block = {
+	.notifier_call = cpu_pm_pmu_notify,
+};
+
+static int cpu_pm_pmu_register(void) {
+	return cpu_pm_register_notifier(&perf_cpu_pm_notifier_block);
+}
+
+static void cpu_pm_pmu_unregister(void) {
+	cpu_pm_unregister_notifier(&perf_cpu_pm_notifier_block);
+}
+#else
+static inline int cpu_pm_pmu_register(void) { return 0; }
+static inline void cpu_pm_pmu_unregister(void) { }
+#endif
+
 /*
  * PMU platform driver and devicetree bindings.
  */
@@ -354,10 +453,19 @@ static int __init register_pmu_driver(void)
 	if (err)
 		return err;
 
+	err = cpu_pm_pmu_register();
+	if (err)
+		goto err_cpu_pm;
+
 	err = platform_driver_register(&cpu_pmu_driver);
 	if (err)
-		unregister_cpu_notifier(&cpu_pmu_hotplug_notifier);
+		goto err_driver;
+	return 0;
 
+err_driver:
+	cpu_pm_pmu_unregister();
+err_cpu_pm:
+	unregister_cpu_notifier(&cpu_pmu_hotplug_notifier);
 	return err;
 }
 device_initcall(register_pmu_driver);
