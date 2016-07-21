@@ -129,7 +129,6 @@ struct smbchg_chip {
 	int				bmd_pin_src;
 	int				jeita_temp_hard_limit;
 	int				aicl_rerun_period_s;
-	int				batt_eoc_current_ma;
 	bool				use_vfloat_adjustments;
 	bool				iterm_disabled;
 	bool				bmd_algo_disabled;
@@ -8626,7 +8625,6 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 				"qcom,hvdcp-not-support");
 	chip->pd_is_limited_5v = of_property_read_bool(node,
 				"qcom,pd-is-limited-5v");
-	OF_PROP_READ(chip, chip->batt_eoc_current_ma, "batt-eoc-current-ma", rc, 1);
 #endif /* CONFIG_HTC_BATT*/
 
 	/* parse the battery missing detection pin source */
@@ -9453,16 +9451,6 @@ bool pmi8994_pd_is_limited_5v(void)
 	}
 
 	return the_chip->pd_is_limited_5v;
-}
-
-int pmi8996_get_batt_eoc_criteria_ma(void)
-{
-	if (!the_chip) {
-		pr_err("[Battery_FDA] Called before init\n");
-		/*Set 50mA as default criteria*/
-		return 50;
-	} else
-		return the_chip->batt_eoc_current_ma;
 }
 
 int pmi8994_set_float_voltage_comp (int vfloat_comp)
