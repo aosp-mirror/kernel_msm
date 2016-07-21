@@ -135,6 +135,8 @@ bool fts_wq_queue_result = false;
 bool fts_wq_running = false;
 unsigned int irq_handler_recovery_count = 0;
 unsigned int suspend_resume_recovery_count = 0;
+unsigned int plam_recovery_count = 0;
+
 bool ts_pwr_disabled = false;
 
 struct irq_desc *fts_irq_desc = NULL;
@@ -609,6 +611,7 @@ static void fts_report_value(struct fts_ts_data *data)
 		if (en_big_area_func) {
 			input_report_key(data->input_dev, KEY_SLEEP, false); //release sleep key
 			input_sync(data->input_dev);
+			queue_delayed_work(data->ts_workqueue, &data->touch_event_recovery_work, msecs_to_jiffies(TP_RECOVERY_TIME));
 		} else {
 			big_area_enabled_flag= false;
 		}
@@ -769,6 +772,21 @@ static void fts_touch_irq_work(struct work_struct *work)
 	fts_wq_running = false;
 }
 
+#ifdef FTS_GESTRUE_EN
+/*******************************************************************************
+*  Name: fts_recovery_work
+*  Brief:
+*  Input:
+*  Output:
+*  Return:
+*******************************************************************************/
+static void fts_touch_recovery_work(struct work_struct *work)
+{
+	pr_err("%s: Recovery TP plam detect\n", __func__);
+	big_area_enabled_flag = false;
+	plam_recovery_count++;
+}
+#endif
 /*******************************************************************************
 *  Name: fts_gpio_configure
 *  Brief:
@@ -1325,6 +1343,11 @@ int fts_ts_suspend(struct device *dev)
 		return 0;
 	}
 	data->suspending = true;
+
+#ifdef FTS_GESTRUE_EN
+	if (big_area_enabled_flag == true)
+		cancel_delayed_work(&data->touch_event_recovery_work);
+#endif
 
 	#ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR	
 	if (fts_psensor_support_enabled() && data->pdata->psensor_support &&
@@ -2095,6 +2118,9 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	dev_err(&client->dev, "pdata irq : %d \n", data->pdata->irq_gpio);
 	dev_err(&client->dev, "client irq : %d, pdata flags : %d \n", client->irq, pdata->irqflags);
+#ifdef FTS_GESTRUE_EN
+	INIT_DELAYED_WORK(&data->touch_event_recovery_work, fts_touch_recovery_work);
+#endif
 
 #ifdef FTS_GESTRUE_EN
 	irq_set_irq_wake(client->irq, 1);

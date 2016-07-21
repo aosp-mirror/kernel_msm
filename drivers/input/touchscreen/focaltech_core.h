@@ -191,6 +191,8 @@
 
 #endif
 #define SELFTEST_ITEM_NUM 4
+/* unit : ms */
+#define TP_RECOVERY_TIME 400
 /*******************************************************************************
 * Private enumerations, structures and unions using typedef
 *******************************************************************************/
@@ -281,6 +283,7 @@ struct fts_ts_data {
 	const struct fts_ts_platform_data *pdata;
 	struct fts_psensor_platform_data *psensor_pdata;
 	struct work_struct 	touch_event_work;
+	struct delayed_work	touch_event_recovery_work;
 	struct workqueue_struct *ts_workqueue;
 	struct regulator *vdd;
 	struct regulator *vcc_i2c;
@@ -355,6 +358,7 @@ extern bool en_big_area_func;
 extern bool fts_wq_queue_result;
 extern unsigned int irq_handler_recovery_count;
 extern unsigned int suspend_resume_recovery_count;
+extern unsigned int plam_recovery_count;
 
 static DEFINE_MUTEX(i2c_rw_access);
 
