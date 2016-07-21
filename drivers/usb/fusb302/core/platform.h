@@ -73,8 +73,6 @@
 #include "../Platform_Linux/FSCTypes.h"
 #endif // FSC_PLATFORM_LINUX
 
-#include "TypeC_Types.h"
-
 typedef enum {
     VBUS_LVL_5V,
   /*VBUS_LVL_9V, */
@@ -219,7 +217,5 @@ void platform_notify_pd_contract(FSC_BOOL contract);
 void platform_notify_unsupported_accessory(void);
 
 void platform_notify_attached_source(int value);
-
-int platform_set_sink_current(USBTypeCCurrent sinkCurrent);
 
 #endif  // _FSC_PLATFORM_H_
