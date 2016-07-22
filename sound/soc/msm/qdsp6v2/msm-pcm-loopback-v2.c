@@ -30,6 +30,7 @@
 
 #define LOOPBACK_VOL_MAX_STEPS 0x2000
 #define LOOPBACK_SESSION_MAX 4
+static bool is_loopback_session_mute;
 
 static DEFINE_MUTEX(loopback_session_lock);
 static const DECLARE_TLV_DB_LINEAR(loopback_rx_vol_gain, 0,
@@ -108,6 +109,13 @@ static void msm_pcm_loopback_event_handler(uint32_t opcode, uint32_t token,
 		break;
 	}
 }
+static int msm_loopback_session_mute_get(
+					struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = is_loopback_session_mute;
+	return 0;
+}
 
 static int msm_loopback_session_mute_put(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
@@ -122,6 +130,7 @@ static int msm_loopback_session_mute_put(struct snd_kcontrol *kcontrol,
 		goto done;
 	}
 
+	is_loopback_session_mute = mute ? true : false;
 	pr_debug("%s: mute=%d\n", __func__, mute);
 
 	for (n = 0; n < LOOPBACK_SESSION_MAX; n++) {
@@ -140,7 +149,7 @@ done:
 
 static struct snd_kcontrol_new msm_loopback_controls[] = {
 	SOC_SINGLE_EXT("HFP TX Mute", SND_SOC_NOPM, 0, 1, 0,
-			NULL, msm_loopback_session_mute_put),
+			msm_loopback_session_mute_get, msm_loopback_session_mute_put),
 };
 
 static int msm_pcm_loopback_probe(struct snd_soc_platform *platform)
