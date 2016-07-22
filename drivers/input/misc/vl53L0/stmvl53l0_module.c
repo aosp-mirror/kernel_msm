@@ -447,7 +447,7 @@ struct stmvl53l0_api_fn_t *papi_func_tbl;
 #define HIGH_ACCURACY_FINAL_RANGE_PULSE_PERIOD  10
 
 #define HIGH_SPEED_TIMING_BUDGET                20000
-#define HIGH_SPEED_SIGNAL_RATE_LIMIT            (25 * 65536 / 100) /* 0.25 * 65536 */
+#define HIGH_SPEED_SIGNAL_RATE_LIMIT            (40 * 65536 / 100) /* 0.40 * 65536 */
 #define HIGH_SPEED_SIGMA_LIMIT                  (32*65536)
 #define HIGH_SPEED_PRE_RANGE_PULSE_PERIOD       14
 #define HIGH_SPEED_FINAL_RANGE_PULSE_PERIOD     10
@@ -2731,30 +2731,28 @@ static int stmvl53l0_init_client(struct stmvl53l0_data *data)
     }
 
     /* Enable Range Ignore Threshold (RIT) */
-    if (data->useCase == USE_CASE_LONG_DISTANCE) {
-        if (Status == VL53L0_ERROR_NONE && data->reset) {
-            if (data->xtalk_kvalue != 0) { /* Xtalk calibration done*/
+    if (Status == VL53L0_ERROR_NONE && data->reset) {
+        if (data->xtalk_kvalue != 0) { /* Xtalk calibration done*/
 
-                FixPoint1616_t ritValue = 0; /* Range Ignore Threshold */
+            FixPoint1616_t ritValue = 0; /* Range Ignore Threshold */
 
-                if (vl53l0_dev->xtalk_kvalue < 7*65536/10000) { //0.7 KCps converted to MCps
-                    ritValue = 15 * 7 * 65536/100000;
-                } else {
-                    ritValue = 15 * vl53l0_dev->xtalk_kvalue/10;
-                }
+            if (vl53l0_dev->xtalk_kvalue < 7*65536/10000) { //0.7 KCps converted to MCps
+                ritValue = 15 * 7 * 65536/100000;
+            } else {
+                ritValue = 15 * vl53l0_dev->xtalk_kvalue/10;
+            }
 
-                if (papi_func_tbl->SetLimitCheckEnable != NULL) {
-                    Status = papi_func_tbl->SetLimitCheckEnable (vl53l0_dev,
-                            VL53L0_CHECKENABLE_RANGE_IGNORE_THRESHOLD, 1);
-                }
+            if (papi_func_tbl->SetLimitCheckEnable != NULL) {
+                Status = papi_func_tbl->SetLimitCheckEnable (vl53l0_dev,
+                        VL53L0_CHECKENABLE_RANGE_IGNORE_THRESHOLD, 1);
+            }
 
-                if ((Status == VL53L0_ERROR_NONE )  &&
-                        (papi_func_tbl->SetLimitCheckValue != NULL)) {
-                    vl53l0_dbgmsg("Set RIT - %u\n", ritValue);
-                    Status = papi_func_tbl->SetLimitCheckValue (vl53l0_dev,
-                            VL53L0_CHECKENABLE_RANGE_IGNORE_THRESHOLD,
-                            ritValue);
-                }
+            if ((Status == VL53L0_ERROR_NONE )  &&
+                    (papi_func_tbl->SetLimitCheckValue != NULL)) {
+                vl53l0_dbgmsg("Set RIT - %u\n", ritValue);
+                Status = papi_func_tbl->SetLimitCheckValue (vl53l0_dev,
+                        VL53L0_CHECKENABLE_RANGE_IGNORE_THRESHOLD,
+                        ritValue);
             }
         }
     }
