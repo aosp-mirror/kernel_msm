@@ -131,7 +131,6 @@
 
 #ifdef CONFIG_TRACING
 #define TRACE_PRINTKS() VMLINUX_SYMBOL(__start___trace_bprintk_fmt) = .;      \
-			 *(__trace_printk_fmt) /* Trace_printk fmt' pointer */ \
 			 VMLINUX_SYMBOL(__stop___trace_bprintk_fmt) = .;
 #define TRACEPOINT_STR() VMLINUX_SYMBOL(__start___tracepoint_str) = .;	\
 			 *(__tracepoint_str) /* Trace_printk fmt' pointer */ \
