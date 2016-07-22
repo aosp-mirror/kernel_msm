@@ -171,7 +171,8 @@ static void mdp3_dispatch_clk_off(struct work_struct *work)
 		return;
 
 	mutex_lock(&session->lock);
-	if (atomic_read(&session->vsync_countdown) > 0) {
+	if (session->vsync_enabled ||
+		atomic_read(&session->vsync_countdown) > 0) {
 		mutex_unlock(&session->lock);
 		pr_debug("%s: Ignoring clk shut down\n", __func__);
 		return;
@@ -1039,6 +1040,7 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 		 * vsync_count to zero and Turn off MDP3 clocks
 		 */
 		atomic_set(&mdp3_session->vsync_countdown, 0);
+		mdp3_session->vsync_enabled = 0;
 		mdp3_ctrl_vsync_enable(mdp3_session->mfd, 0);
 		mdp3_ctrl_clk_enable(mdp3_session->mfd, 0);
 	}
