@@ -39,7 +39,7 @@
 		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
 		qcom,mdss-dsi-underflow-color = <0xff>;
 		qcom,mdss-dsi-border-color = <0>;
-		qcom,mdss-dsi-panel-status-check-mode ="reg_read";
+		qcom,mdss-dsi-panel-status-check-mode ="te_signal_check";
 		qcom,esd-check-enabled;
 		qcom,mdss-dsi-on-command = [
 			15 01 00 00 00 00 02 53 20 /* Display Control */
@@ -59,6 +59,7 @@
 			39 01 00 00 00 00 09 D8
 			61 3F 70 84 85 85
 			69 25
+			15 01 00 00 00 00 02 35 00
 			];
 		qcom,mdss-dsi-post-panel-on-command = [
 			05 01 00 00 00 00 01 29 /* Display On */

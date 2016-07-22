@@ -48,7 +48,7 @@
 			15 01 00 00 00 00 02 55 00 			 /* Write Power Save */
 			15 01 00 00 00 00 02 36 00  		 /* Memory Access Control */
 			05 01 00 00 78 00 01 11  /* Sleep Out */
-			05 01 00 00 00 00 01 35  /* TE On */
+			15 01 00 00 00 00 02 35 00 /* TE On */
 			];
 		qcom,mdss-dsi-post-panel-on-command = [
 			05 01 00 00 00 00 01 29  /* Display On */
