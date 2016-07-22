@@ -166,7 +166,7 @@ static struct sensors_classdev __maybe_unused sensors_proximity_cdev = {
 /*******************************************************************************
 * Static function prototypes
 *******************************************************************************/
-static int fts_ts_start(struct device *dev);
+int fts_ts_start(struct device *dev);
 
 #ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR
 /*******************************************************************************
@@ -1057,7 +1057,7 @@ err_pinctrl_get:
 *  Output: 
 *  Return: 
 *******************************************************************************/
-static int fts_ts_start(struct device *dev)
+int fts_ts_start(struct device *dev)
 {
 	struct fts_ts_data *data = dev_get_drvdata(dev);
 	int err = 0;
@@ -1307,6 +1307,11 @@ pwr_off_fail:
 int fts_ts_disable(struct device *dev)
 {
 	struct fts_ts_data *data = dev_get_drvdata(dev);
+
+	if (ts_pwr_disabled) {
+		dev_dbg(dev, "Touch vdd/vcc has been disabled\n");
+		return 0;
+	}
 
 	disable_irq(data->client->irq);
 	fts_power_on(data, false);

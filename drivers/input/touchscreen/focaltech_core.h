@@ -360,6 +360,8 @@ extern unsigned int irq_handler_recovery_count;
 extern unsigned int suspend_resume_recovery_count;
 extern unsigned int plam_recovery_count;
 
+extern bool ts_pwr_disabled;
+
 static DEFINE_MUTEX(i2c_rw_access);
 
 //Getstre functions
@@ -403,6 +405,7 @@ extern void fts_reset_chip(void);
 extern int fts_ts_stop(struct device *dev);
 
 extern int fts_ts_disable(struct device *dev);
+extern int fts_ts_start(struct device *dev);
 /*******************************************************************************
 * Static function prototypes
 *******************************************************************************/

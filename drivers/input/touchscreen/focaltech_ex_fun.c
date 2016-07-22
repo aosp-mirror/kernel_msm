@@ -1594,14 +1594,24 @@ static ssize_t show_tp_debug_info(struct device *dev, struct device_attribute *a
 static ssize_t fts_tp_pwr_disabled_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	int err = 0 ;
-	unsigned int i;
+	unsigned int disabling_tp;
 
-	err = kstrtouint(buf, 10, &i);
+	err = kstrtouint(buf, 10, &disabling_tp);
 
-	if(i) {
+	if (disabling_tp) {
 		printk(KERN_DEBUG "[fts]%s, Disable TP \n", __func__);
 
 		err = fts_ts_disable(dev);
+		ts_pwr_disabled = true;
+	} else {
+		if (ts_pwr_disabled) {
+			printk(KERN_DEBUG "[fts]%s, Enable TP Now \n", __func__);
+			fts_ts_start(dev);
+			ts_pwr_disabled = false;
+		} else {
+			printk(KERN_INFO "[fts]%s, TP power already on \n", __func__);
+			return count;
+		}
 	}
 	return count;
 }
