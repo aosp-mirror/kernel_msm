@@ -192,7 +192,7 @@ static const int TempTable[NTEMP] = {60, 40, 25, 10, 0, -10, -20};
 static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 static const char *charger_name = "battery";
 static bool g_debug;
-static int g_new_soc, g_last_status;
+static int g_new_soc, g_last_status, g_ocv;
 static const char * const charge_status[] = {
 	"unknown",
 	"charging",
@@ -474,24 +474,19 @@ static int stc311x_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		pr_info("voltage: %d \n", chip->batt_voltage);
 		val->intval = chip->batt_voltage * 1000;  /* in uV */
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		pr_info("current: %d \n", chip->batt_current);
 		val->intval = chip->batt_current * 1000;  /* in uA */
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		pr_info("capacity: %d \n", g_new_soc);
 		//val->intval = chip->batt_soc;
 		val->intval = g_new_soc;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		pr_info("temp: %d \n", chip->Temperature);
 		val->intval = chip->Temperature;
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
-		pr_info("technology: %d \n", g_debug);
 		val->intval = g_debug;
 		break;
 	default:
@@ -1051,6 +1046,7 @@ static int STC311x_ReadBatteryData(struct STC311x_BattDataTypeDef *BattData)
 	value = conv(value, VoltageFactor);
 	value = (value+2) / 4;  /* divide by 4 with rounding */
 	BattData->OCV = value;  /* result in mV */
+	g_ocv = BattData->OCV;
 
 	/* read STC3117 registers CC & VM adj */
 	res = STC31xx_Read(4, STC311x_REG_CC_ADJ, data);
@@ -2295,7 +2291,7 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 * 2. The moment when charger is removed, if soc = 100% and drops, keep 100%. Else, update soc
 * 3. When discharging, soc can only decrease
 */
-void CEI_soc_adjustment(struct stc311x_chip *chip)
+void UI_soc_adjustment(struct stc311x_chip *chip)
 {
 	pr_err("enter: status = %d, original soc = %d,  ST soc = %d \n", chip->status,  g_new_soc, chip->batt_soc);
 	if ((g_new_soc == STC311x_BATTERY_FULL) && (chip->status != POWER_SUPPLY_STATUS_DISCHARGING))
@@ -2414,10 +2410,11 @@ static void stc311x_work(struct work_struct *work)
 	stc311x_check_charger_state(chip);
 
 	if ((res > 0) && (chip->batt_soc ^ g_new_soc))
-		CEI_soc_adjustment(chip);
+		UI_soc_adjustment(chip);
 
 	stc311x_updata();
-	pr_err("stc311x_work() ***** ST_SOC = %d, CEI_SOC = %d, voltage = %d mv, current = %d mA, Temperature = %d, charging_status = %d ***** \n", chip->batt_soc, g_new_soc, chip->batt_voltage, chip->batt_current, chip->Temperature, chip->status);
+	if (g_debug)
+		pr_err("*** ST_SOC = %d, UI_SOC = %d, voltage = %d mv, OCV = %d mv, current = %d mA, Temperature = %d, charging_status = %d *** \n", chip->batt_soc, g_new_soc, chip->batt_voltage, g_ocv, chip->batt_current, chip->Temperature, chip->status);
 
 	if (chip->batt_soc > STC311x_SOC_THRESHOLD)
 		schedule_delayed_work(&chip->work, STC311x_DELAY);
@@ -2577,6 +2574,8 @@ static int stc311x_probe(struct i2c_client *client,
 	/*a delay of about 5 seconds is correct but 30 seconds is enough compare
 	 * to the battery SOC evolution speed*/
 
+	if (g_debug)
+		pr_err("SOC = %d, voltage = %d, OCV = %d, temp = %d \n", chip->batt_soc, chip->batt_voltage, g_ocv, chip->Temperature);
 	pr_info("stc311x FG successfully probed\n");
 	return 0;
 }
