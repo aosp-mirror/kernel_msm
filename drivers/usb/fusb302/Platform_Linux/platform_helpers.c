@@ -255,7 +255,7 @@ extern PolicyState_t           PolicyState;
 void fusb_GPIO_Set_VBus5v(FSC_BOOL set)
 {
     struct fusb30x_chip* chip = fusb30x_GetChip();
-    int ret = -1, retry = 0;
+    int ret = -1, retry = 0, vbus_mv = 0;
 
     if (!chip)
     {
@@ -271,6 +271,17 @@ void fusb_GPIO_Set_VBus5v(FSC_BOOL set)
         if (ret < 0) {
             msleep(1000);
             retry++;
+        } else if (ret == 0) {
+            if (set == 1) {
+                mdelay(5);
+                vbus_mv = pmi8994_get_usbin_voltage_now()/1000;
+                pr_debug("FUSB %s: vbus voltage (%d mv)\n", __func__, vbus_mv);
+                if (vbus_mv >= 3500) {
+                    pr_info("FUSB %s: normal USB OTG, disable pulse skip mode.\n", __func__);
+                    /* the OTG is valid, disable the pulse skip mode. */
+                    usb_otg_pulse_skip_control(1);
+                }
+            }
         }
     } while(ret < 0 && retry < 5);
 
