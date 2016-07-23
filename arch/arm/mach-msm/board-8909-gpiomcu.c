@@ -26,8 +26,8 @@
 
 #define GPIO_LEN	  16
 
-int McuGpioBoot0 = 85;
-int McuGpioReset = 17;
+int McuGpioBoot0 = 41;
+int McuGpioReset = 99;
 
 /* min reset delay time (ms)*/
 #define MIN_MCU_RESET_TIME 20
@@ -149,7 +149,7 @@ static int mcu_gpio_request(void)
 
 	McuGpioReset = of_get_named_gpio(np, "mcu_reset", 0);
 	if (McuGpioReset >= 0) {
-		printk(KERN_ERR "%s: mcu_reset:%d.\n", __FUNCTION__, McuGpioBoot0);
+		printk(KERN_ERR "%s: mcu_reset:%d.\n", __FUNCTION__, McuGpioReset);
 	}
 	if (gpio_request(McuGpioReset, "mcu_reset"))
 		printk(KERN_ERR "%s: Failed to request gpio %d for mcu_reset\n",
