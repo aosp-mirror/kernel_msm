@@ -213,7 +213,6 @@
         qcom,resume-delta-mv = <100>;
         qcom,parallel-main-chg-icl-percent = <50>;
         qcom,usb_pwr_temp-vadc = <&pm8994_vadc>;
-        /delete-property/ otg-parent-supply;
 };
 
 &pmi8994_fg {
@@ -243,10 +242,6 @@
                 #include "batterydata-m1-id2.dtsi"
                 #include "batterydata-m1-id3.dtsi"
         };
-};
-
-&usb3 {
-	vbus_dwc3-supply = <&smbcharger_external_otg>;
 };
 
 &soc {
