@@ -35,7 +35,7 @@ int STC31xx_AlarmSetVoltageThreshold(int VoltThresh);
 int STC31xx_AlarmSetSOCThreshold(int SOCThresh);
 int STC31xx_RelaxTmrSet(int CurrentThreshold);
 
-
+int g_asus_batt_soc, g_asus_batt_soc_previous;
 
 /*********************************************************************************	*/
 /*				STC311x DEVICE SELECTION											*/
@@ -340,7 +340,7 @@ static int stc311x_get_property(struct power_supply *psy,
 		val->intval = chip->batt_current * 1000;	/* in uA */
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		val->intval = chip->batt_soc;
+		val->intval = g_asus_batt_soc;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = get_lbc_batt_temp();
@@ -385,7 +385,7 @@ static void stc311x_get_status(struct i2c_client *client)
 	} else {
 		chip->status = POWER_SUPPLY_STATUS_DISCHARGING;
 	}
-	if (chip->batt_soc > STC3100_BATTERY_FULL)
+	if (g_asus_batt_soc > STC3100_BATTERY_FULL)
 		chip->status = POWER_SUPPLY_STATUS_FULL;
 }
 
@@ -1907,6 +1907,8 @@ static void stc311x_work(struct work_struct *work)
 	int res,Loop;
 	int DEC=0, RegAddress;
 	u8 HEX=0;
+	u8 reg_debug[128];
+
 	chip = container_of(work, struct stc311x_chip, work.work);
 
 	sav_client = chip->client;
@@ -1963,14 +1965,15 @@ static void stc311x_work(struct work_struct *work)
 		chip->batt_voltage = GasGaugeData.Voltage;
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
 	}
-	ASUSEvtlog("[BAT][Ser]report Capacity==>%d, Cnom:%dmAh, ChargeValue:%dmAh, Alm_SOC:%d, V:%d, Cur:%d, Temp:%d\n",
-		chip->batt_soc, GasGaugeData.Cnom, GasGaugeData.ChargeValue, GasGaugeData.Alm_SOC,
-		chip->batt_voltage, chip->batt_current, GasGaugeData.Temperature);
+
+	memset(reg_debug, 0, sizeof(reg_debug));
 	for (RegAddress=0; RegAddress<31; RegAddress++) {
 		HEX=STC31xx_ReadByte(RegAddress);
-		DEC=STC31xx_ReadByte(RegAddress);
-		pr_debug("===stc3117===reg:%d, OCVValue:0x%x, value:%d\n", RegAddress, HEX, DEC);
+		pr_debug("===stc3117===reg:%d, value:0x%02x\n", RegAddress, HEX);
+		snprintf(reg_debug + strlen(reg_debug), 4, "%02x,", HEX);
 	}
+	pr_info("stc3117 reg_debug: %s\n", reg_debug);
+
 	for (RegAddress=48; RegAddress<=96; RegAddress++) {
 		HEX=STC31xx_ReadByte(RegAddress);
 		DEC=STC31xx_ReadByte(RegAddress);
@@ -1980,10 +1983,28 @@ static void stc311x_work(struct work_struct *work)
 	stc311x_get_status(sav_client);
 	stc311x_get_online(sav_client);
 
-	if (get_battery_status(chip) == POWER_SUPPLY_STATUS_FULL) {
-		chip->batt_soc = 100;
+	g_asus_batt_soc = chip->batt_soc;
+
+	switch (get_battery_status(chip)) {
+	case POWER_SUPPLY_STATUS_FULL:
+		g_asus_batt_soc = 100;
+		break;
+	case POWER_SUPPLY_STATUS_DISCHARGING:
+		if (g_asus_batt_soc > g_asus_batt_soc_previous) {
+			ASUSEvtlog("batt soc warning! now:%d, prv:%d\n",
+				g_asus_batt_soc, g_asus_batt_soc_previous);
+			g_asus_batt_soc = g_asus_batt_soc_previous;
+		} else {
+			g_asus_batt_soc_previous = g_asus_batt_soc;
+		}
+		break;
+	default:
+		break;
 	}
 
+	ASUSEvtlog("[BAT][Ser]report Capacity==>%d, ChgVal:%dmAh, Alm_SOC:%d, V:%d, Cur:%d, tmp:%d\n",
+		g_asus_batt_soc, GasGaugeData.ChargeValue, GasGaugeData.Alm_SOC,
+		chip->batt_voltage, chip->batt_current, GasGaugeData.Temperature);
 	schedule_delayed_work(&chip->work, STC311x_DELAY);
 }
 
@@ -2188,7 +2209,10 @@ static int stc311x_probe(struct i2c_client *client,
 		chip->batt_voltage = GasGaugeData.Voltage;
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
 	}
-	pr_info("[BAT] chip->batt_soc:%d, chip->batt_voltage:%d, chip->batt_current:%d\n", chip->batt_soc, chip->batt_voltage, chip->batt_current);
+
+	g_asus_batt_soc = chip->batt_soc;
+	g_asus_batt_soc_previous = chip->batt_soc;
+	pr_info("[BAT] chip->batt_soc:%d, chip->batt_voltage:%d, chip->batt_current:%d\n", g_asus_batt_soc, chip->batt_voltage, chip->batt_current);
 
 	STC31xx_WriteByte(STC311x_REG_MODE,0x18);	/*	 set GG_RUN=1, mixed mode, alm enabled */
 
