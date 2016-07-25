@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -339,7 +339,7 @@ static int32_t msm_csid_cmd(struct csid_device *csid_dev, void *arg)
 			break;
 		}
 		if (csid_params.lut_params.num_cid < 1 ||
-			csid_params.lut_params.num_cid > 16) {
+			csid_params.lut_params.num_cid > MAX_CID) {
 			pr_err("%s: %d num_cid outside range\n",
 				 __func__, __LINE__);
 			rc = -EINVAL;
@@ -368,6 +368,10 @@ static int32_t msm_csid_cmd(struct csid_device *csid_dev, void *arg)
 				break;
 			}
 			csid_params.lut_params.vc_cfg[i] = vc_cfg;
+		}
+		if (rc < 0) {
+			pr_err("%s:%d failed\n", __func__, __LINE__);
+			break;
 		}
 		rc = msm_csid_config(csid_dev, &csid_params);
 		for (i--; i >= 0; i--)
