@@ -9,6 +9,7 @@
 #include <linux/workqueue.h>
 #include <linux/init.h>
 #include <linux/string.h>
+#include <linux/slab.h>
 
 char messages[256];
 
@@ -64,15 +65,21 @@ static void do_write_event_worker(struct work_struct *work)
 			get_monotonic_boottime(&ts);
 			n += sprintf(buffer+n, "(%ld)%04d-%02d-%02d %02d:%02d:%02d :",ts.tv_sec,tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 
-			cmdline = saved_command_line;
-			while ((pch = strsep(&cmdline,delim)) != NULL) {
-				if (strnstr(pch, "androidboot.bootreason=",strlen(pch))) {
-					n += sprintf(buffer+n, "[cmdline] %s\n", pch);
+			cmdline = kstrdup(saved_command_line, GFP_KERNEL);
+
+			if (cmdline != NULL) {
+				while ((pch = strsep(&cmdline,delim)) != NULL) {
+					if (strnstr(pch, "androidboot.bootreason=",strlen(pch))) {
+						n += sprintf(buffer+n, "[cmdline] %s\n", pch);
+					}
 				}
+			} else {
+				printk("[adbg] cmdline is NULL\n");
 			}
 
 			sys_write(g_hfileEvtlog, buffer, strlen(buffer));
 			sys_close(g_hfileEvtlog);
+			kfree(cmdline);
 		}
 	}
 	if (!IS_ERR((const void*)g_hfileEvtlog)) {
