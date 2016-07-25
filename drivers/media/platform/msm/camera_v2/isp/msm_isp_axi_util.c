@@ -2582,6 +2582,7 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev,
 		ISP_DBG("%s: vfe %d camif enable\n", __func__,
 			vfe_dev->pdev->id);
 		vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id = 0;
+		vfe_dev->axi_data.src_info[VFE_PIX_0].eof_id = 0;
 	}
 
 	for (i = 0; i < stream_cfg_cmd->num_streams; i++) {
@@ -3033,8 +3034,9 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 	 * In case of standalone RDI streaming, SOF are used from
 	 * individual intf.
 	 */
-	if (((vfe_dev->axi_data.src_info[VFE_PIX_0].active) && (frame_id <=
-		vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id)) ||
+	if (((vfe_dev->axi_data.src_info[VFE_PIX_0].active) && ((frame_id <=
+		vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id) ||
+		(frame_id <= vfe_dev->axi_data.src_info[VFE_PIX_0].eof_id))) ||
 		((!vfe_dev->axi_data.src_info[VFE_PIX_0].active) && (frame_id <=
 		vfe_dev->axi_data.src_info[frame_src].frame_id)) ||
 		stream_info->undelivered_request_cnt >= MAX_BUFFERS_IN_HW) {
