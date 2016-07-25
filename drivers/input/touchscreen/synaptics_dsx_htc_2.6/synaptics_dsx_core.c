@@ -1725,7 +1725,6 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			input_report_key(rmi4_data->input_dev, KEY_WAKEUP, 0);
 			input_sync(rmi4_data->input_dev);
 #endif
-			rmi4_data->suspend = false;
 		}
 
 		return 0;
