@@ -2282,7 +2282,13 @@ static int mdp3_panel_register_done(struct mdss_panel_data *pdata)
 			rc = mdp3_continuous_splash_on(pdata);
 		}
 	}
-	mdp3_res->allow_iommu_update = true;
+	/*
+	 * We want to prevent iommu from being enabled if there is
+	 * continue splash screen. This would have happened in
+	 * res_update in continuous_splash_on without this flag.
+	 */
+	if (pdata->panel_info.cont_splash_enabled == false)
+		mdp3_res->allow_iommu_update = true;
 
 	return rc;
 }
