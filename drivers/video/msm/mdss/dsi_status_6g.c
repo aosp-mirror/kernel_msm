@@ -93,6 +93,11 @@ void mdss_check_dsi_ctrl_status(struct work_struct *work, uint32_t interval)
 		return;
 	}
 
+	if (ctrl_pdata->err_fg_flag == true) {
+		ctrl_pdata->err_fg_flag = false;
+		goto status_dead;
+	}
+
 	if (!pdata->panel_info.esd_rdy) {
 		pr_debug("%s: unblank not complete, reschedule check status\n",
 			__func__);

@@ -319,6 +319,9 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+	ctrl_pdata->err_fg_flag = false;
+	ctrl_pdata->power_on_detection = true;
+
 	ret = msm_dss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,
 		ctrl_pdata->panel_power_data.num_vreg, 1);
@@ -3141,6 +3144,13 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 			goto error_shadow_clk_deinit;
 		}
 		disable_irq(gpio_to_irq(ctrl_pdata->disp_te_gpio));
+
+		rc = devm_request_irq(&pdev->dev,
+			gpio_to_irq(ctrl_pdata->disp_err_fg_gpio),
+			err_fg_handler, IRQF_TRIGGER_RISING,
+			"ERR_FG_GPIO", ctrl_pdata);
+		if (rc)
+			pr_err("ERR_FG request_irq failed rc=0x%x\n",rc);
 	}
 
 	rc = mdss_dsi_get_bridge_chip_params(pinfo, ctrl_pdata, pdev);
@@ -3897,6 +3907,12 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 	if (!gpio_is_valid(ctrl_pdata->disp_te_gpio))
 		pr_err("%s:%d, TE gpio not specified\n",
 						__func__, __LINE__);
+
+	ctrl_pdata->disp_err_fg_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+		"qcom,platform-err_fg-gpio", 0);
+
+	if (!gpio_is_valid(ctrl_pdata->disp_err_fg_gpio))
+		pr_err("%s:%d: ERR_FG gpio not specified\n",__func__, __LINE__);
 
 	ctrl_pdata->bklt_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 		"qcom,platform-bklight-en-gpio", 0);

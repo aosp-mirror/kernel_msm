@@ -434,6 +434,7 @@ struct mdss_dsi_ctrl_pdata {
 	int panel_mode;
 	int irq_cnt;
 	int disp_te_gpio;
+	int disp_err_fg_gpio;
 	int rst_gpio;
 	int disp_en_gpio;
 	int bklt_en_gpio;
@@ -549,6 +550,7 @@ struct mdss_dsi_ctrl_pdata {
 	/* DBA data */
 	struct workqueue_struct *workq;
 	struct delayed_work dba_work;
+	struct delayed_work err_fg_handler;
 	char bridge_name[MSM_DBA_CHIP_NAME_MAX_LEN];
 	uint32_t bridge_index;
 	bool ds_registered;
@@ -556,7 +558,9 @@ struct mdss_dsi_ctrl_pdata {
 	bool timing_db_mode;
 	bool update_phy_timing; /* flag to recalculate PHY timings */
 	bool dsi_cmd_hs;
+	bool err_fg_flag;
 	struct dsi_cmd_pos lp_off_pos;
+	bool power_on_detection;
 };
 
 struct dsi_status_data {
@@ -595,6 +599,7 @@ int mdss_dsi_wait_for_lane_idle(struct mdss_dsi_ctrl_pdata *ctrl);
 
 irqreturn_t mdss_dsi_isr(int irq, void *ptr);
 irqreturn_t hw_vsync_handler(int irq, void *data);
+irqreturn_t err_fg_handler(int irq, void *data);
 void mdss_dsi_irq_handler_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata);
 
 void mdss_dsi_set_tx_power_mode(int mode, struct mdss_panel_data *pdata);

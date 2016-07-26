@@ -1738,7 +1738,7 @@ static void mdss_dsi_parse_esd_params(struct device_node *np,
 		&tmp);
 	ctrl->max_status_error_count = (!rc ? tmp : 0);
 
-	if (!mdss_dsi_parse_esd_status_len(np,
+	if (ctrl->status_cmds.cmd_cnt && !mdss_dsi_parse_esd_status_len(np,
 		"qcom,mdss-dsi-panel-status-read-length",
 		&ctrl->status_cmds_rlen, ctrl->status_cmds.cmd_cnt)) {
 		pinfo->esd_check_enabled = false;
@@ -1757,24 +1757,28 @@ static void mdss_dsi_parse_esd_params(struct device_node *np,
 	for (i = 0; i < ctrl->status_cmds.cmd_cnt; ++i)
 		status_len += lenp[i];
 
-	data = of_find_property(np, "qcom,mdss-dsi-panel-status-value", &tmp);
-	tmp /= sizeof(u32);
-	if (!IS_ERR_OR_NULL(data) && tmp != 0 && (tmp % status_len) == 0) {
-		ctrl->groups = tmp / status_len;
-	} else {
-		pr_err("%s: Error parse panel-status-value\n", __func__);
-		goto error1;
+	if (ctrl->status_cmds.cmd_cnt) {
+		data = of_find_property(np, "qcom,mdss-dsi-panel-status-value", &tmp);
+		tmp /= sizeof(u32);
+		if (!IS_ERR_OR_NULL(data) && tmp != 0 && (tmp % status_len) == 0) {
+			ctrl->groups = tmp / status_len;
+		} else {
+			pr_err("%s: Error parse panel-status-value\n", __func__);
+			goto error1;
+		}
 	}
 
-	ctrl->status_value = kzalloc(sizeof(u32) * status_len * ctrl->groups,
-				GFP_KERNEL);
-	if (!ctrl->status_value)
-		goto error1;
+	if (status_len) {
+		ctrl->status_value = kzalloc(sizeof(u32) * status_len * ctrl->groups,
+					GFP_KERNEL);
+		if (!ctrl->status_value)
+			goto error1;
 
-	ctrl->return_buf = kcalloc(status_len * ctrl->groups,
-			sizeof(unsigned char), GFP_KERNEL);
-	if (!ctrl->return_buf)
-		goto error2;
+		ctrl->return_buf = kcalloc(status_len * ctrl->groups,
+				sizeof(unsigned char), GFP_KERNEL);
+		if (!ctrl->return_buf)
+			goto error2;
+	}
 
 	rc = of_property_read_u32_array(np,
 		"qcom,mdss-dsi-panel-status-value",

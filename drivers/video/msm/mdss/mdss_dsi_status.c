@@ -88,14 +88,36 @@ irqreturn_t hw_vsync_handler(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
+	if (ctrl_pdata->err_fg_flag == true) {
+		pr_err("%s: Detect ERR_FG_FLAG set, \
+			block hw_vsync_handler to trigger error handler\n", __func__);
+		return IRQ_HANDLED;
+	}
+
 	if (pstatus_data)
 		mod_delayed_work(system_wq, &pstatus_data->check_status,
 			msecs_to_jiffies(interval));
 	else
-		pr_err("Pstatus data is NULL\n");
+		pr_err("%s: Pstatus data is NULL\n", __func__);
 
 	if (!atomic_read(&ctrl_pdata->te_irq_ready))
 		atomic_inc(&ctrl_pdata->te_irq_ready);
+
+	return IRQ_HANDLED;
+}
+
+irqreturn_t err_fg_handler(int irq, void *data)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata =
+		(struct mdss_dsi_ctrl_pdata *)data;
+
+	if (ctrl_pdata->power_on_detection == true) {
+		pr_debug("%s: device power on, not ERR_FG trigger\n", __func__);
+		ctrl_pdata->power_on_detection = false;
+	} else {
+		pr_info("%s: Handle ERR_FG\n", __func__);
+		ctrl_pdata->err_fg_flag = true;
+	}
 
 	return IRQ_HANDLED;
 }
