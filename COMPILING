@@ -1,0 +1,15 @@
+Compile instructions (using the android-msm-sparrow-wren-3.10-e-mr1 branch as an example):
+1.      Init and sync with emerald-dev-sparrow project
+repo init -u https://partner-android.googlesource.com/platform/vendor/pdk/sparrow/sparrow-userdebug/manifest -b emerald-dev-sparrow-device-head
+repo sync -j4
+2.      Clone the kernel git and change the folder's name
+git clone -b android-msm-sparrow-wren-3.10-e-mr1 https://partner-android.googlesource.com/kernel/private/msm-asus-cw/
+mv msm-asus-cw/ kernel
+3.      Make sure you are in Sparrow/Wren branch
+git checkout origin/android-msm-sparrow-wren-3.10-e-mr1
+4.      Source environment variables and lunch sparrow project
+source build/envsetup.sh
+lunch sparrow-userdebug
+export PATH=$PATH:<android source code path>/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8/bin
+5.      Make with correct build flag
+make clean && make bootimage -j32 BUILD_KERNEL_SOURCE=true
