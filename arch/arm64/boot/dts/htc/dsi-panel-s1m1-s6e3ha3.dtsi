@@ -77,6 +77,7 @@
 			29 01 00 00 00 00 02 F9 03 /* dual control 2 */
 			29 01 00 00 00 00 14 C2 00 08 D8 D8 00 80 2B 05 08 0E 07 0B 05 0D 0A 15 13 20 1E /* pentile setting */
 			29 01 00 00 00 00 0A F6 42 57 37 00 AA CC D0 00 00 /* ESD refresh setting 1*/
+			29 01 00 00 00 00 02 ED 44 /* ERR_FG ON */
 			29 01 00 00 00 00 03 F0 A5 A5 /* key lock */
 			29 01 00 00 78 00 02 12 00 /* ESD refresh setting 2 */
 			05 01 00 00 00 00 02 35 00 /* TE on */
@@ -136,7 +137,5 @@
 		qcom,mdss-dsi-lp11-init;
 		qcom,esd-check-enabled;
 		qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";
-		htc,brt-bl-table = <30 7>, <142 78>, <255 255>;
-		htc,mdss-camera-blk = <196>;
 	};
 };

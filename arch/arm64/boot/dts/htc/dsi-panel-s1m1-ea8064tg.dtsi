@@ -75,6 +75,9 @@
 			29 01 00 00 00 00 03 FC 5A 5A /* key unlock */
 			29 01 00 00 00 00 03 F4 00 01 /* clk setting */
 			29 01 00 00 00 00 03 FC A5 A5 /* key lock */
+			29 01 00 00 00 00 03 F0 5A 5A /* Test Key lock*/
+			29 01 00 00 00 00 03 CC 55 9A /* ERR_FG Setting*/
+			29 01 00 00 00 00 03 F0 A5 A5 /* Test key lock */
 			15 01 00 00 00 00 02 53 20 /* brightness control (dimming) */
 			05 01 00 00 00 00 02 29 00 /* display on */
 		];
@@ -130,7 +133,5 @@
 		qcom,mdss-dsi-lp11-init;
 		qcom,esd-check-enabled;
 		qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";
-		htc,brt-bl-table = <30 7>, <142 78>, <255 255>;
-		htc,mdss-camera-blk = <196>;
 	};
 };

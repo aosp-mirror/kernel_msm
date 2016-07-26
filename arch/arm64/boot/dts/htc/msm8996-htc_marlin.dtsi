@@ -34,6 +34,7 @@
 
         qcom,platform-te-gpio = <&tlmm 10 0>;
         qcom,platform-reset-gpio = <&tlmm 39 0>;
+        qcom,platform-err_fg-gpio = <&pmi8994_gpios 10 0>;
         /delete-property/ qcom,platform-bklight-en-gpio;
 };
 
@@ -43,6 +44,7 @@
 
         qcom,platform-te-gpio = <&tlmm 10 0>;
         qcom,platform-reset-gpio = <&tlmm 39 0>;
+        qcom,platform-err_fg-gpio = <&pmi8994_gpios 10 0>;
         /delete-property/ qcom,platform-bklight-en-gpio;
 };
 
@@ -199,6 +201,14 @@
     qcom,src-sel = <0>;             /* CONSTANT */
     qcom,master-en = <1>;           /* ENABLE GPIO */
     status = "okay";
+    };
+
+    gpio@c900 {  /* GPIO 10 */
+        reg = <0xc900 0x100>;
+        qcom,mode = <0>;        /* DIGITAL INPUT */
+        qcom,pull = <5>;        /* No Pull */
+        qcom,pin-num = <10>;
+        status = "okay";
     };
 };
 
