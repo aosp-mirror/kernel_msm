@@ -685,20 +685,42 @@ void StateMachineAttachWaitAccessory(void)
 #ifdef FSC_HAVE_SNK
 void StateMachineAttachedSink(void)
 {
+    CCTermType CCUpdate;
     //debounceCC();
     
     if ((!IsPRSwap) && (IsHardReset == FALSE) && !Registers.Status.VBUSOK)      // If VBUS is removed and we are not in the middle of a power role swap...   
     {
         SetStateDelayUnattached();                                              // Go to the unattached state
     }
-    
+
+    CCUpdate = DecodeCCTerminationSink();
+
+    pr_debug("FUSB %s: ACTIVITY(%d), PolicyHasContract(%d), CCUpdate(%d), CC1TermCCDebounce(%d), CC2TermCCDebounce(%d)\n", __func__, Registers.Status.ACTIVITY, PolicyHasContract, CCUpdate, CC1TermCCDebounce, CC2TermCCDebounce);
     if (blnCCPinIsCC1)
     {
-        UpdateSinkCurrent(CC1TermCCDebounce);                                   // Update the advertised current
+        if (CC1TermCCDebounce != CCUpdate) {
+            if (Registers.Status.ACTIVITY == 0 && PolicyHasContract == FALSE) {
+                pr_info("FUSB %s: update new CC1 term %d -> %d\n", __func__, CC1TermCCDebounce, CCUpdate);
+				UpdateSinkCurrent(CCUpdate);
+                platform_set_sink_current_previous(CC1TermCCDebounce);
+                CC1TermCCDebounce = CCUpdate;
+            }
+            else
+				UpdateSinkCurrent(CC1TermCCDebounce);                                   // Update the advertised current
+        }
     }
     else if(blnCCPinIsCC2)
     {
-        UpdateSinkCurrent(CC2TermCCDebounce);                                   // Update the advertised current
+        if (CC2TermCCDebounce != CCUpdate) {
+            if (Registers.Status.ACTIVITY == 0 && PolicyHasContract == FALSE) {
+                pr_info("FUSB %s: update new CC2 term %d -> %d\n", __func__, CC2TermCCDebounce, CCUpdate);
+				UpdateSinkCurrent(CCUpdate);
+                platform_set_sink_current_previous(CC2TermCCDebounce);
+                CC2TermCCDebounce = CCUpdate;
+            }
+            else
+				UpdateSinkCurrent(CC2TermCCDebounce);                                   // Update the advertised current
+        }
     }
 
 }
@@ -1503,6 +1525,7 @@ void SetStateAttachedSink(void)
 #ifdef FSC_INTERRUPT_TRIGGERED
     g_Idle = TRUE;                                                              // Mask for VBUSOK
     Registers.Mask.M_VBUSOK = 0;
+    Registers.Mask.M_BC_LVL = 0;
     DeviceWrite(regMask, 1, &Registers.Mask.byte);
     platform_enable_timer(FALSE);
 #endif  
@@ -2341,8 +2364,9 @@ void UpdateSinkCurrent(CCTermType Termination)
             SinkCurrent = utccNone;
             break;
     }
-	if (chip != NULL && chip->utc != NULL)
-		chip->utc->sink_current = (u8)SinkCurrent;
+
+    if (chip != NULL && chip->utc != NULL)
+	    chip->utc->sink_current = (u8)SinkCurrent;
 }
 #endif // FSC_HAVE_SNK
 
