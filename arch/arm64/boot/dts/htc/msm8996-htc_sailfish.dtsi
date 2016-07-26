@@ -40,6 +40,7 @@
         qcom,batt-eoc-current-ma = <50>;
         qcom,usb_pwr_temp-vadc = <&pm8994_vadc>;
         qcom,pd-is-limited-5v;
+        qcom,smb_out_isen-vadc = <&pmi8994_vadc>;
 };
 
 &pmi8994_fg {
@@ -69,6 +70,31 @@
                 #include "batterydata-s1-id2.dtsi"
                 #include "batterydata-s1-id3.dtsi"
 
+        };
+};
+
+&pmi8994_mpps {
+       /* MPP 1 - SMB_OUT_ISEN */
+        mpp@a000 {
+                qcom,pin-num = <1>;
+                qcom,mode = <4>;        /* QPNP_PIN_MODE_AIN */
+                qcom,src-sel = <0>;     /* QPNP_PIN_SEL_FUNC_CONSTANT */
+                qcom,ain-route = <0>;   /* QPNP_PIN_AIN_AMUX_CH5 */
+                qcom,master-en = <1>;   /* Enable */
+                status = "okay";
+        };
+};
+
+&pmi8994_vadc {
+        chan@10 {
+                label = "smb_out_isen";
+                reg = <0x10>;
+                qcom,decimation = <0>;
+                qcom,pre-div-channel-scaling = <0>;
+                qcom,calibration-type = "absolute";
+                qcom,scale-function = <0>;
+                qcom,hw-settle-time = <1>;
+                qcom,fast-avg-setup = <2>;
         };
 };
 
