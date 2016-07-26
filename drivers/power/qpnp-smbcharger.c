@@ -4093,20 +4093,15 @@ static int smbchg_otg_regulator_enable(struct regulator_dev *rdev)
 		return rc;
 	}
 	smbchg_icl_loop_disable_check(chip);
-#ifndef CONFIG_HTC_BATT
 	smbchg_otg_pulse_skip_disable(chip, REASON_OTG_ENABLED, true);
-#else
-	smbchg_otg_pulse_skip_disable(chip, REASON_OTG_ENABLED, false);
-#endif /* CONFIG_HTC_BATT */
 
 	/* If pin control mode then return from here */
 	if (chip->otg_pinctrl)
 		return rc;
 
-#ifndef CONFIG_HTC_BATT
 	/* sleep to make sure the pulse skip is actually disabled */
 	msleep(20);
-#endif /* CONFIG_HTC_BATT */
+
 	rc = smbchg_masked_write(chip, chip->bat_if_base + CMD_CHG_REG,
 			OTG_EN_BIT, OTG_EN_BIT);
 	if (rc < 0)
@@ -5595,13 +5590,7 @@ static int otg_oc_reset(struct smbchg_chip *chip)
 #ifdef CONFIG_HTC_BATT
 	msleep(10);
 	vbus_mv = pmi8994_get_usbin_voltage_now() / 1000;
-	/* Disable pulse skip to avoid batt UVLO once OTG enabled*/
-	if (vbus_mv >= 3500) {
-		pr_smb(PR_STATUS,
-			"OTG enable, disable pulse skip. Vbus=%dmV\n", vbus_mv);
-		smbchg_otg_pulse_skip_disable(chip, REASON_OTG_ENABLED, true);
-	} else
-		pr_smb(PR_STATUS, "OTG enable fail, Vbus=%dmV\n", vbus_mv);
+	pr_smb(PR_STATUS, "OTG oc reset done, Vbus=%dmV\n", vbus_mv);
 #endif /* CONFIG_HTC_BATT */
 
 out:
@@ -9473,16 +9462,6 @@ bool is_otg_enabled(void)
 		return true;
 	else
 		return false;
-}
-
-bool usb_otg_pulse_skip_control(bool disable)
-{
-        if(!the_chip) {
-                pr_err("called before init\n");
-                return false;
-        }
-	smbchg_otg_pulse_skip_disable(the_chip, REASON_OTG_ENABLED, disable);
-	return true;
 }
 
 bool is_parallel_enabled(void)
