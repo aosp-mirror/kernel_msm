@@ -89,7 +89,9 @@ struct fan5451x_chip {
 
 	/* charger status */
 	int health;
-	int enable;
+	bool enable;
+	bool enable_for_thermal;
+	bool enable_for_system;
 	int usb_present;
 	int wlc_present;
 	bool eoc;
@@ -112,7 +114,6 @@ struct fan5451x_chip {
 	/* wlc fake online */
 	int wlc_fake_online;
 	struct delayed_work rechg_check_work;
-	bool thermal_chg_stop;
 	struct delayed_work wlc_tx_recheck_work;
 };
 
@@ -198,8 +199,10 @@ static int fan5451x_wlc_chg_plugged_in(struct fan5451x_chip *chip)
 
 static int fan5451x_enable(struct fan5451x_chip *chip, int enable)
 {
-	if (chip->enable ^ enable) {
-		chip->enable = enable;
+	static int prev_enable;
+
+	if (prev_enable ^ enable) {
+		prev_enable = enable;
 		if (enable) {
 			gpio_direction_output(chip->disable_gpio, 0);
 			fan5451x_update_reg(chip->client,
@@ -564,7 +567,7 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 				pr_info("wlc present %d\n", wlc_present);
 				power_supply_set_present(chip->wlc_psy,
 						chip->wlc_present);
-				if (chip->wlc_present && chip->thermal_chg_stop)
+				if (chip->wlc_present && !chip->enable)
 					fan5451x_wlc_fake_online(chip, 1);
 			}
 			found = true;
@@ -823,6 +826,7 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 		wlc_present = power_supply_get_online(chip->wlc_psy);
 		if (!wlc_present) {
 			pr_info("wlc present 0, fake online off\n");
+			chip->eoc = false;
 			fan5451x_wlc_fake_online(chip, 0);
 			fan5451x_vbat_measure(chip);
 		}
@@ -850,6 +854,7 @@ skip_current_config:
 }
 
 static enum power_supply_property msm_batt_power_props[] = {
+	POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
@@ -1115,8 +1120,11 @@ static int fan5451x_batt_power_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
 		val->intval = get_prop_charge_counter(chip);
 		break;
+	case POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED:
+		val->intval = chip->enable_for_thermal;
+		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		val->intval = chip->enable;
+		val->intval = chip->enable_for_system;
 		break;
 	default:
 		return -EINVAL;
@@ -1125,27 +1133,39 @@ static int fan5451x_batt_power_get_property(struct power_supply *psy,
 	return 0;
 };
 
+static void fan5451x_pre_enable(struct fan5451x_chip *chip)
+{
+	chip->enable = chip->enable_for_thermal && chip->enable_for_system;
+	pr_info("enable=%d thermal=%d system=%d\n",
+		chip->enable, chip->enable_for_thermal, chip->enable_for_system);
+
+	/* In eoc case, TX does not turn on until below Rechg voltage */
+	fan5451x_enable(chip, chip->enable);
+	if (chip->eoc)
+		pr_info("EOC!! skip charging_enable to %d.\n", chip->enable);
+	else
+		fan5451x_wlc_fake_online(chip, !chip->enable);
+}
+
 static int fan5451x_batt_power_set_property(struct power_supply *psy,
 				enum power_supply_property psp,
 				const union power_supply_propval *val)
 {
 	struct fan5451x_chip *chip =
 		container_of(psy, struct fan5451x_chip, batt_psy);
-	int enable;
 	int ret = 0;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_HEALTH:
 		chip->ext_batt_health = val->intval;
 		break;
+	case POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED:
+		chip->enable_for_thermal = !!val->intval;
+		fan5451x_pre_enable(chip);
+		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		/* In eoc case, TX does not turn on until below Rechg voltage */
-		enable = !!val->intval;
-		chip->thermal_chg_stop = !enable;
-		if (chip->eoc)
-			pr_info("EOC!! skip charging_enable to %d.\n", enable);
-		else
-			fan5451x_wlc_fake_online(chip, !enable);
+		chip->enable_for_system = !!val->intval;
+		fan5451x_pre_enable(chip);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		chip->ext_set_vddmax_mv = val->intval / 1000;
@@ -1195,8 +1215,6 @@ static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set)
 		return;
 
 	prev_state = set;
-
-	fan5451x_enable(chip, !set);
 
 	if (!chip->wlc_psy)
 		return;
@@ -1264,7 +1282,7 @@ fan5451x_wlc_tx_recheck_work(struct work_struct *work)
 		goto out;
 	}
 
-	if (chip->wlc_fake_online || chip->thermal_chg_stop) {
+	if (chip->wlc_fake_online || !chip->enable) {
 		pr_debug("wireless charging is under other state machine\n");
 		goto out;
 	}
@@ -1416,6 +1434,7 @@ static int fan5451x_probe(struct i2c_client *client,
 	chip->client = client;
 	chip->usb_psy = usb_psy;
 	chip->vadc_dev = vadc_dev;
+	chip->enable = chip->enable_for_thermal = chip->enable_for_system = 1;
 	i2c_set_clientdata(client, chip);
 
 	if (client->dev.of_node) {
@@ -1472,14 +1491,6 @@ static int fan5451x_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&chip->wlc_tx_recheck_work,
 			fan5451x_wlc_tx_recheck_work);
 
-	ret = request_threaded_irq(client->irq, NULL, fan5451x_irq_thread,
-			IRQF_TRIGGER_LOW | IRQF_ONESHOT, "fan5451x_irq", chip);
-	if (ret) {
-		pr_err("failed to reqeust IRQ\n");
-		goto err_psy_unreg;
-	}
-	enable_irq_wake(client->irq);
-
 	if (chip->step_dwn_offset_ma && chip->step_dwn_thr_mv) {
 		chip->vbat_param.timer_interval = ADC_MEAS1_INTERVAL_2S;
 		chip->vbat_param.btm_ctx = chip;
@@ -1494,6 +1505,14 @@ static int fan5451x_probe(struct i2c_client *client,
 	chip->wlc_present = fan5451x_wlc_chg_plugged_in(chip);
 	fan5451x_enable(chip, 1);
 	fan5451x_vbat_measure(chip);
+
+	ret = request_threaded_irq(client->irq, NULL, fan5451x_irq_thread,
+			IRQF_TRIGGER_LOW | IRQF_ONESHOT, "fan5451x_irq", chip);
+	if (ret) {
+		pr_err("failed to reqeust IRQ\n");
+		goto err_psy_unreg;
+	}
+	enable_irq_wake(client->irq);
 
 	ret = device_create_file(&client->dev, &dev_attr_addr_register);
 	if (ret)
