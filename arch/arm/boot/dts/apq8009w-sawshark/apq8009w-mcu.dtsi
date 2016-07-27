@@ -97,4 +97,15 @@
 		pinctrl-0 = <&ap_status_active>;
 		pinctrl-1 = <&ap_status_suspend>;
 	};
+
+	mcu,wakeupdisplay {
+		compatible = "mcu,wakeupdisplay";
+		mcu_wakeup_display = <&msm_gpio 31 0>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <31 0>;
+		interrupt-names = "mcu_wake_display";
+		pinctrl-names = "mcu_wakeup_display_active", "mcu_wakeup_display_suspend";
+		pinctrl-0 = <&mcu_wakeup_display_active>;
+		pinctrl-1 = <&mcu_wakeup_display_suspend>;
+	};
 };
