@@ -747,7 +747,7 @@ static void smbchg_stay_awake(struct smbchg_chip *chip, int reason)
 	mutex_lock(&chip->pm_lock);
 	reasons = chip->wake_reasons | reason;
 	if (reasons != 0 && chip->wake_reasons == 0) {
-		pr_smb(PR_PM, "staying awake: 0x%02x (bit %d)\n",
+		pr_smb(PR_STATUS, "staying awake: 0x%02x (bit %d)\n",
 				reasons, reason);
 		pm_stay_awake(chip->dev);
 	}
@@ -762,7 +762,7 @@ static void smbchg_relax(struct smbchg_chip *chip, int reason)
 	mutex_lock(&chip->pm_lock);
 	reasons = chip->wake_reasons & (~reason);
 	if (reasons == 0 && chip->wake_reasons != 0) {
-		pr_smb(PR_PM, "relaxing: 0x%02x (bit %d)\n",
+		pr_smb(PR_STATUS, "relaxing: 0x%02x (bit %d)\n",
 				reasons, reason);
 		pm_relax(chip->dev);
 	}
@@ -9703,7 +9703,7 @@ int charger_dump_all(void)
 	u8 pmic_revid_rev3 = 0, pmic_revid_rev4 = 0;
 	u8 pmic_chg_type = 0, sink_current = 0;
 	bool pd_charger = false;
-	int cc_uah = 0, rc = 0, warm_temp = 0, cool_temp = 0;
+	int cc_uah = 0, rc = 0, warm_temp = 0, cool_temp = 0, wake_reason = 0;
 
 	if(!the_chip) {
 		pr_err("called before init\n");
@@ -9735,12 +9735,13 @@ int charger_dump_all(void)
 
 	sink_current = the_chip->utc.sink_current;
 	pd_charger = htc_battery_is_pd_detected();
+	wake_reason = the_chip->wake_reasons;
 
 	printk(KERN_INFO "[BATT][SMBCHG] "
 		"0x1010=%02x,0x1210=%02x,0x1242=%02x,0x1310=%02x,0x1340=%02x,0x1608=%02x,0x1610=%02x,"
-		"cc=%duAh,warm_temp=%d,cool_temp=%d,pmic=rev%d.%d,sink_current=%d,pd_chgr=%d\n",
+		"cc=%duAh,warm_temp=%d,cool_temp=%d,pmic=rev%d.%d,sink_current=%d,pd_chgr=%d,wake_reason=%d\n",
 		chgr_rt_sts,bat_if_rt_sts,bat_if_cmd,chgpth_rt_sts,chgpth_cmd,pmic_chg_type,misc_rt_sts,
-		cc_uah,warm_temp,cool_temp,pmic_revid_rev4,pmic_revid_rev3,sink_current,pd_charger);
+		cc_uah,warm_temp,cool_temp,pmic_revid_rev4,pmic_revid_rev3,sink_current,pd_charger,wake_reason);
 
 	smbchg_dump_reg();
 
