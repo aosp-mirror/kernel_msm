@@ -369,6 +369,7 @@ extern int smb23x_mpp4_vol_proc_read(void);
 extern void lbc_set_suspend(u8 reg_val);
 extern int g_bootdbguart;
 struct smb23x_chip *g_smb23x_chip;
+struct completion qpnp_linear_init;
 
 #define MAX_RW_RETRIES		3
 static int __smb23x_read(struct smb23x_chip *chip, u8 reg, u8 *val)
@@ -918,6 +919,12 @@ static void smb23x_parallel_work(struct work_struct *work)
 	struct smb23x_chip, parallel_work);
 	union power_supply_propval prop = {0,};
 	int type, current_max;
+
+	if (!qpnp_linear_init.done) {
+		pr_info("[BAT][CHG] %s qpnp_linear_init: wait_for_completion\n", __func__);
+		wait_for_completion(&qpnp_linear_init);
+		qpnp_linear_init.done = 1;
+	}
 
 	smb23x_enable_volatile_writes(chip);
 	type = chip->usb_psy->type;
@@ -2707,6 +2714,8 @@ static int smb23x_probe(struct i2c_client *client,
 	smb23x_masked_write(chip, CFG_REG_5, SOFT_THERM_BEHAVIOR_MASK, 0);
 
 	create_debugfs_entries(chip);
+
+	init_completion(&qpnp_linear_init);
 
 	pr_info("SMB23x successfully probed batt=%d usb = %d\n",
 			smb23x_get_prop_batt_present(chip), chip->usb_present);
