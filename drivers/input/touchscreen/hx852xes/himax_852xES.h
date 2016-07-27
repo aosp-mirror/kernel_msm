@@ -92,6 +92,7 @@
 #define HX_SMART_WAKEUP
 #define HX_PALM_REPORT
 #define HX_CHECK_CRC_AP
+#define HX_TIME_TELLING
 //#define HX_ESD_WORKAROUND
 //#define HX_CHIP_STATUS_MONITOR        //for ESD 2nd solution,default off
 
@@ -252,10 +253,15 @@ struct himax_ts_data {
 #ifdef HX_RST_PIN_FUNC
     int rst_gpio;
 #endif
-
 #ifdef HX_SMART_WAKEUP
     uint8_t SMWP_enable;
     struct wake_lock ts_SMWP_wake_lock;
+#endif
+#ifdef HX_TIME_TELLING
+    int sleepmode;
+    int timetellmode;
+    struct workqueue_struct *himax_sleepmode_wq;
+    struct work_struct sleepmode_work;
 #endif
     const struct firmware *fw;
     u8 *fw_data_start;
@@ -491,6 +497,14 @@ static int HX_CHIP_POLLING_COUNT;
 static int HX_POLLING_TIMER        =5;//unit:sec
 static int HX_POLLING_TIMES        =2;//ex:5(timer)x2(times)=10sec(polling time)
 static int HX_ON_HAND_SHAKING   =0;//
+#endif
+
+#ifdef HX_TIME_TELLING
+#define TOUCH_ACTIVE    0
+#define TOUCH_SLEEP     1
+#define TOUCH_IDLE      2
+static int touch_mode;
+void himax_timetelling_detection(int supplymode);
 #endif
 
 extern int irq_enable_count;
