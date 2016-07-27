@@ -21,7 +21,7 @@
 	qcom,float-voltage-comp = <8>;
 	qcom,fastchg-current-ma = <2100>;
 	qcom,fastchg-current-comp = <1200>;
-	qcom,charging-timeout-mins = <1536>;
+	qcom,charging-timeout-mins = <768>;
 	qcom,precharging-timeout-mins = <24>;
 	/delete-property/ qcom,charging-disabled;
 	qcom,resume-delta-mv = <200>;
