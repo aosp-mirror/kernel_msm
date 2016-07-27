@@ -45,6 +45,7 @@
 #define SCM_EDLOAD_MODE			0X01
 #define SCM_DLOAD_CMD			0x10
 
+#define ABNORMAL_CRASH_MAGICNUM		0x77665566
 
 static int restart_mode;
 static void *restart_reason, *dload_type_addr;
@@ -573,6 +574,10 @@ skip_sysfs_create:
 
 	if (scm_is_call_available(SCM_SVC_PWR, SCM_IO_DEASSERT_PS_HOLD) > 0)
 		scm_deassert_ps_hold_supported = true;
+
+	if (restart_reason) {
+		__raw_writel(ABNORMAL_CRASH_MAGICNUM, restart_reason);
+	}
 
 	set_dload_mode(download_mode);
 	if (!download_mode)
