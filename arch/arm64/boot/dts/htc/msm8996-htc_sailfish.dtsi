@@ -106,3 +106,7 @@
                 qcom,fast-avg-setup = <2>;
         };
 };
+
+&pmi8994_haptics {
+	qcom,vmax-mv = <3132>;
+};
