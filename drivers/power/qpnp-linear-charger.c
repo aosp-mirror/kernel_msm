@@ -437,6 +437,7 @@ static bool g_bat_is_cooler = false;
 static bool g_bat_is_warmer = false;
 extern void adc_notification_set_cool_current(int level);
 extern void adc_notification_set_warm_current(int level);
+extern struct completion qpnp_linear_init;
 
 //BSP Steve2 read mpp4 voltage Interface+++
 static int
@@ -3817,6 +3818,10 @@ static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 		chip->irqs[USBIN_VALID].is_wake = true;
 	}
 
+	if (!qpnp_linear_init.done) {
+		pr_info("[BAT][CHG] %s qpnp_linear_init: complete\n", __func__);
+		complete(&qpnp_linear_init);
+	}
 	pr_info("LBC (parallel) registered successfully!\n");
 
 	return 0;
