@@ -970,6 +970,9 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 
 	/* Any panel specific low power commands/config */
 
+	/* Control idle mode for panel */
+	mdss_dsi_panel_set_idle_mode(pdata, enable);
+
 	pr_debug("%s:-\n", __func__);
 	return 0;
 }

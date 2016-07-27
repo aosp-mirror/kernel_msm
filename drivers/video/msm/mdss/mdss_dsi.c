@@ -321,11 +321,6 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 static int mdss_dsi_panel_power_lp(struct mdss_panel_data *pdata, int enable)
 {
 	/* Panel power control when entering/exiting lp mode */
-
-	/* Control idle mode for panel */
-	if (pdata && pdata->set_idle)
-		pdata->set_idle(pdata, enable);
-
 	return 0;
 }
 
