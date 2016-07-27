@@ -23,6 +23,7 @@
 #include <linux/wakelock.h>
 #include <linux/asus_utility.h>
 #include <linux/asusdebug.h>
+#include <linux/input/himax_852xES.h>
 
 #define MODE_PROC_MAX_BUFF_SIZE  256
 #define PROC_NODE_MAX_BUFF_SIZE  10
@@ -184,7 +185,7 @@ static const struct file_operations mode_proc_interactive_fops = {
 
 static int mode_proc_show_node1(struct seq_file *seq, void *v)
 {
-	//printk(KERN_DEBUG "[MODE] %s():\n", __func__);
+	//printk(KERN_DEBUG "[MODE] %s: %d\n", __func__, node1_status);
 	seq_printf(seq, "%d\n", node1_status);
 
 	return 0;
@@ -197,21 +198,23 @@ static const struct seq_operations mode_proc_node1_seq = {
 	.stop		= mode_proc_stop,
 };
 
-static int mode_write_proc_node1 (struct file *filp, const char __user *buff, size_t len, loff_t *pos)
+static int mode_write_proc_node1(struct file *filp, const char __user *buff, size_t len, loff_t *pos)
 {
 	char msg[MODE_PROC_MAX_BUFF_SIZE];
 	if (len > MODE_PROC_MAX_BUFF_SIZE)
 		len = MODE_PROC_MAX_BUFF_SIZE;
-	//printk(KERN_DEBUG "[MODE] %s(): len: %d\n", __func__, len);
+	//printk("[MODE] %s: len=%d, buff[0]=%d, buff[1]=%d\n", __func__, len, buff[0], buff[1]);
 
 	if (copy_from_user(msg, buff, len))
 		return len;
 
-	if (msg[0] == 0) {
+	if (msg[0] == '0') {
 		node1_status = 0;
-	} else if (msg[0] == 1) {
+		himax_timetelling_detection(0);
+	} else if (msg[0] == '1') {
 		node1_status = 1;
-	} else{
+		himax_timetelling_detection(1);
+	} else {
 		return len;
 	}
 	return len;
