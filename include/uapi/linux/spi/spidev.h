@@ -115,6 +115,12 @@ typedef enum
 	SPIDEV_WORK_MODE_KERNEL = 1,
 }spidev_work_mode_type;
 
+typedef enum
+{
+	SPIDEV_WAKEUP_DISPLAY_DISABLE = 0,
+	SPIDEV_WAKEUP_DISPLAY_ENALBE = 1,
+}spidev_wakeup_disp_type;
+
 #define SPIDEV_KERNEL_MODE_LENGTH 256
 
 /* not all platforms use <asm-generic/ioctl.h> or _IOC_TYPECHECK() ... */
@@ -146,5 +152,6 @@ typedef enum
 
 #define SPI_IOC_WR_WORK_MODE    _IOW(SPI_IOC_MAGIC, 6, __u32)
 
+#define SPI_IOC_WAKEUP_DISPLAY_CTRL  _IOW(SPI_IOC_MAGIC, 7, __u32)
 
 #endif /* SPIDEV_H */
