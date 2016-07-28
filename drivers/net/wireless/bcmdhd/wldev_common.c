@@ -440,7 +440,9 @@ int wldev_set_country(
 		cspec.rev = revinfo;
 		memcpy(cspec.country_abbrev, country_code, WLC_CNTRY_BUF_SZ);
 		memcpy(cspec.ccode, country_code, WLC_CNTRY_BUF_SZ);
+#ifdef CUSTOM_COUNTRY_CODE
 		dhd_get_customized_country_code(dev, (char *)&cspec.country_abbrev, &cspec);
+#endif
 		error = wldev_iovar_setbuf(dev, "country", &cspec, sizeof(cspec),
 			smbuf, sizeof(smbuf), NULL);
 		if (error < 0) {
