@@ -88,7 +88,7 @@ static const char longname[] = "Gadget Android";
 
 //ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 extern struct completion gadget_init;
-struct completion asus_chg_detect_init;
+extern struct completion asus_chg_detect_init;
 //ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 
 /* f_midi configuration */
@@ -4313,9 +4313,6 @@ static int android_probe(struct platform_device *pdev)
 	//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
 	_android_dev = android_dev;
 	//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
-	//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
-	init_completion(&asus_chg_detect_init);
-	//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 
 	return ret;
 err_probe:
