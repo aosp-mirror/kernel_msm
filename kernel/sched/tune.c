@@ -15,7 +15,7 @@
 static bool schedtune_initialized = false;
 #endif
 
-int sysctl_sched_cfs_boost __read_mostly;
+unsigned int sysctl_sched_cfs_boost __read_mostly;
 
 extern struct target_nrg schedtune_target_nrg;
 
@@ -368,14 +368,14 @@ void schedtune_enqueue_task(struct task_struct *p, int cpu)
 	raw_spin_unlock_irqrestore(&bg->lock, irq_flags);
 }
 
-static int schedtune_allow_attach(struct cgroup_subsys_state *css,
+int schedtune_allow_attach(struct cgroup_subsys_state *css,
 		struct cgroup_taskset *tset)
 {
 	/* We always allows tasks to be moved between existing CGroups */
 	return 0;
 }
 
-static int schedtune_can_attach(struct cgroup_subsys_state *css,
+int schedtune_can_attach(struct cgroup_subsys_state *css,
 			  struct cgroup_taskset *tset)
 {
 	struct task_struct *task;
@@ -447,8 +447,8 @@ static int schedtune_can_attach(struct cgroup_subsys_state *css,
 	return 0;
 }
 
-static void schedtune_cancel_attach(struct cgroup_subsys_state *css,
-				    struct cgroup_taskset *tset)
+void schedtune_cancel_attach(struct cgroup_subsys_state *css,
+			     struct cgroup_taskset *tset)
 {
 	/* This can happen only if SchedTune controller is mounted with
 	 * other hierarchies ane one of them fails. Since usually SchedTune is
