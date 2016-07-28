@@ -75,6 +75,7 @@ void kasan_free_shadow(const struct vm_struct *vm);
 
 size_t ksize(const void *);
 static inline void kasan_unpoison_slab(const void *ptr) { ksize(ptr); }
+size_t kasan_metadata_size(struct kmem_cache *cache);
 
 #else /* CONFIG_KASAN */
 
@@ -117,6 +118,7 @@ static inline int kasan_module_alloc(void *addr, size_t size) { return 0; }
 static inline void kasan_free_shadow(const struct vm_struct *vm) {}
 
 static inline void kasan_unpoison_slab(const void *ptr) { }
+static inline size_t kasan_metadata_size(struct kmem_cache *cache) { return 0; }
 
 #endif /* CONFIG_KASAN */
 
