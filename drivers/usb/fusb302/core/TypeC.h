@@ -36,7 +36,7 @@
 #define tCCDebounce     120 * 1
 #define tPDDebounce     15 * 1
 #define tDRPTry         125 * 1
-#define tDRPTryWait     600 * 1
+#define tDRPTryWait     750 * 1
 #define tErrorRecovery  30 * 1
 
 #define tDeviceToggle   3 * 1      // Duration in ms to wait before checking other CC pin for the device
