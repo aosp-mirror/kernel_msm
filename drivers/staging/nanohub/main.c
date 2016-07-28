@@ -52,6 +52,7 @@
 #define ERR_RESET_TIME_SEC	60
 #define ERR_RESET_COUNT		70
 #define ERR_WARNING_COUNT	10
+#define MAX_SUSPEND_FAILURES	10
 
 /**
  * struct gpio_config - this is a binding between platform data and driver data
@@ -91,6 +92,7 @@ static int nanohub_release(struct inode *, struct file *);
 static struct class *sensor_class;
 static struct timespec first_err_ts;
 static int major;
+static int suspend_failure_count;
 
 static const struct gpio_config gconf[] = {
 	{ PLAT_GPIO_DEF(nreset, GPIOF_OUT_INIT_HIGH) },
@@ -1674,6 +1676,7 @@ int nanohub_remove(struct iio_dev *iio_dev)
 int nanohub_suspend(struct iio_dev *iio_dev)
 {
 	struct nanohub_data *data = iio_priv(iio_dev);
+	struct device *sensor_dev = data->io[ID_NANOHUB_SENSOR].dev;
 	int ret;
 
 	ret = nanohub_wakeup_lock(data, LOCK_MODE_SUSPEND_RESUME);
@@ -1689,6 +1692,7 @@ int nanohub_suspend(struct iio_dev *iio_dev)
 		if (cnt < max_cnt) {
 			dev_dbg(&iio_dev->dev, "%s: cnt=%d\n", __func__, cnt);
 			enable_irq_wake(data->irq1);
+			suspend_failure_count = 0;
 			return 0;
 		}
 		ret = -EBUSY;
@@ -1697,6 +1701,16 @@ int nanohub_suspend(struct iio_dev *iio_dev)
 			 __func__, nanohub_irq1_fired(data),
 			 nanohub_get_state(data));
 		nanohub_wakeup_unlock(data);
+
+		suspend_failure_count++;
+		if (suspend_failure_count >= MAX_SUSPEND_FAILURES) {
+			if (nanohub_hw_reset(data)) {
+				dev_info(sensor_dev,
+					"%s: failed to reset nanohub "
+					"for suspend failures: ret=%d\n",
+					__func__, ret);
+			}
+		}
 	} else {
 		dev_info(&iio_dev->dev, "%s: could not take wakeup lock\n",
 			 __func__);
