@@ -5934,12 +5934,6 @@ exit:
 #endif 
 	dhd->pub.hang_was_sent = 0;
 
-	/* Clear country spec for for built-in type driver */
-	if (!dhd_download_fw_on_driverload) {
-		dhd->pub.dhd_cspec.country_abbrev[0] = 0x00;
-		dhd->pub.dhd_cspec.rev = 0;
-		dhd->pub.dhd_cspec.ccode[0] = 0x00;
-	}
 
 #ifdef BCMDBGFS
 	dhd_dbg_remove();
