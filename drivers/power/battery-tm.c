@@ -73,7 +73,7 @@ static int power_supply_set_chg_enable(struct power_supply *psy, int enable)
 
 	if (psy->set_property)
 		return psy->set_property(psy,
-			POWER_SUPPLY_PROP_CHARGING_ENABLED, &ret);
+			POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED, &ret);
 
 	return -ENXIO;
 }
