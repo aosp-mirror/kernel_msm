@@ -75,6 +75,7 @@ doDataObject_t                  SinkRequest = {0};                              
 FSC_U32                         SinkRequestMaxVoltage;                          // Maximum voltage that the sink will request
 FSC_U32                         SinkRequestMaxPower;                            // Maximum power the sink will request (used to calculate current as well)
 FSC_U32                         SinkRequestOpPower;                             // Operating power the sink will request (used to calculate current as well)
+FSC_U32                         SinkRequestMaxCurrent;                          // Maximum current the sink will request
 FSC_BOOL                        SinkGotoMinCompatible;                          // Whether the sink will respond to the GotoMin command
 FSC_BOOL                        SinkUSBSuspendOperation;                        // Whether the sink wants to continue operation during USB suspend
 FSC_BOOL                        SinkUSBCommCapable;                             // Whether the sink is USB communications capable
@@ -160,21 +161,22 @@ void InitializePDPolicyVariables(void)
     SwapSourceStartTimer = 0;
 
 #ifdef FSC_HAVE_SNK
-    SinkRequestMaxVoltage = 240;                                                // Maximum voltage that the sink will request (12V)
-    SinkRequestMaxPower = 1000;                                                 // Maximum power the sink will request (0.5W, used to calculate current as well)
-    SinkRequestOpPower = 1000;                                                  // Operating power the sink will request (0.5W, sed to calculate current as well)
+    SinkRequestMaxVoltage = 180;                                                // Maximum voltage that the sink will request (9V)
+    SinkRequestMaxPower = 36000;                                                // Maximum power the sink will request (18W, used to calculate current as well)
+    SinkRequestOpPower = 36000;                                                 // Operating power the sink will request (18W, sed to calculate current as well)
     SinkGotoMinCompatible = FALSE;                                              // Whether the sink will respond to the GotoMin command
     SinkUSBSuspendOperation = FALSE;                                            // Whether the sink wants to continue operation during USB suspend
     SinkUSBCommCapable = FALSE;                                                 // Whether the sink is USB communications capable
+    SinkRequestMaxCurrent = 300;
 
-    CapsHeaderSink.NumDataObjects = 2;                                          // Set the number of power objects to 2
+    CapsHeaderSink.NumDataObjects = 3;                                          // Set the number of power objects to 2
     CapsHeaderSink.PortDataRole = 0;                                            // Set the data role to UFP by default
     CapsHeaderSink.PortPowerRole = 0;                                           // By default, set the device to be a sink
     CapsHeaderSink.SpecRevision = 1;                                            // Set the spec revision to 2.0
     CapsHeaderSink.Reserved0 = 0;
     CapsHeaderSink.Reserved1 = 0;
     CapsSink[0].FPDOSink.Voltage = 100;                                         // Set 5V for the first supply option
-    CapsSink[0].FPDOSink.OperationalCurrent = 10;                               // Set that our device will consume 100mA for this object
+    CapsSink[0].FPDOSink.OperationalCurrent = 300;                              // Set that our device will consume 3000mA for this object
     CapsSink[0].FPDOSink.DataRoleSwap = 1;                                      // By default, enable DR_SWAP
     CapsSink[0].FPDOSink.USBCommCapable = 0;                                    // By default, USB communications is not allowed
     CapsSink[0].FPDOSink.ExternallyPowered = 0;                                 // By default, we are not externally powered
@@ -182,13 +184,18 @@ void InitializePDPolicyVariables(void)
     CapsSink[0].FPDOSink.DualRolePower = 1;                                     // By default, enable PR_SWAP
     CapsSink[0].FPDOSink.Reserved = 0;
 
-    CapsSink[1].FPDOSink.Voltage = 240;                                         // Set 12V for the second supply option
-    CapsSink[1].FPDOSink.OperationalCurrent = 10;                               // Set that our device will consume 100mA for this object
+    CapsSink[1].FPDOSink.Voltage = 180;                                         // Set 9V for the second supply option
+    CapsSink[1].FPDOSink.OperationalCurrent = 200;                              // Set that our device will consume 2000mA for this object
     CapsSink[1].FPDOSink.DataRoleSwap = 0;                                      // Not used
     CapsSink[1].FPDOSink.USBCommCapable = 0;                                    // Not used
     CapsSink[1].FPDOSink.ExternallyPowered = 0;                                 // Not used
     CapsSink[1].FPDOSink.HigherCapability = 0;                                  // Not used
     CapsSink[1].FPDOSink.DualRolePower = 0;                                     // Not used
+
+    CapsSink[2].BPDO.MaxPower = 72;                                             // Set 18W for the third supply option
+    CapsSink[2].BPDO.MinVoltage = 80;                                           // Set 4V for minimum voltage
+    CapsSink[2].BPDO.MaxVoltage = 200;                                          // Set 10V for maximum voltage
+    CapsSink[2].BPDO.SupplyType = pdoTypeBattery;
 #endif // FSC_HAVE_SNK
 
 #ifdef FSC_HAVE_SRC
@@ -2129,6 +2136,10 @@ void PolicySinkEvaluateCaps(void)
     if (reqPos >= 0) {
         if (CapsReceived[reqPos].PDO.SupplyType == pdoTypeFixed)
             SelVoltage = CapsReceived[reqPos].FPDOSupply.Voltage;
+        else if (CapsReceived[reqPos].PDO.SupplyType == pdoTypeVariable) {
+            SelVoltage = CapsReceived[reqPos].VPDO.MinVoltage;
+            objCurrent = CapsReceived[reqPos].VPDO.MaxCurrent;
+        }
 
         reqPos++;
     }
@@ -2149,7 +2160,7 @@ void PolicySinkEvaluateCaps(void)
             SinkRequest.FVRDO.CapabilityMismatch = FALSE;                       // There can't be a capabilities mismatch
         else                                                                    // Otherwise...
         {
-            if (MaxPower < ReqCurrent * SelVoltage)                             // If the max power available is less than the max power requested...
+            if (SelVoltage * ReqCurrent < SinkRequestMaxPower)                  // If the max power available is less than the max power requested...
             {
                 SinkRequest.FVRDO.CapabilityMismatch = TRUE;                    // flag the source that we need more power
                 SinkRequest.FVRDO.MinMaxCurrent = objCurrent;                     // Set operating power to max available

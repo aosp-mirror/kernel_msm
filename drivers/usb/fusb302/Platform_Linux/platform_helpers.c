@@ -1010,6 +1010,9 @@ u8 fusb_battery_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], 
         if (pd_data[i].PDO.SupplyType == pdoTypeFixed) {
             htc_pdo_data.pd_list[i][0] = pd_data[i].FPDOSupply.Voltage * 50; // voltage (mV)
             htc_pdo_data.pd_list[i][1] = pd_data[i].FPDOSupply.MaxCurrent * 10; // current (mA)
+        } else if (pd_data[i].PDO.SupplyType == pdoTypeVariable) {
+            htc_pdo_data.pd_list[i][0] = pd_data[i].VPDO.MinVoltage * 50; // voltage (mV)
+            htc_pdo_data.pd_list[i][1] = pd_data[i].VPDO.MaxCurrent * 10; // current (mA)
         }
     }
 
