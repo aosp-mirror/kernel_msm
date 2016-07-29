@@ -1265,7 +1265,6 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 		} else if ((status & MXT_T100_TYPE_MASK) ==
 				MXT_T100_TYPE_PALM) {
 			data->ts_data.curr_data[id].pressure = 255;
-			TOUCH_ERR_MSG("Palm Detected\n");
 		} else {
 			data->ts_data.curr_data[id].pressure = amplitude;
 		}
@@ -1715,6 +1714,7 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 		}
 		if (data->ts_data.curr_data[i].pressure == 255 &&
 		    pdata->palm_enabled && !data->palm) {
+			TOUCH_INFO_MSG("Palm Pressed\n");
 			mxt_reset_slots(data);
 			input_report_key(data->input_dev, KEY_SLEEP, 1);
 			input_sync(data->input_dev);
@@ -1723,6 +1723,7 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 		}
 		if (data->ts_data.curr_data[i].status == FINGER_RELEASED) {
 			if (pdata->palm_enabled && data->palm) {
+				TOUCH_INFO_MSG("Palm Released\n");
 				input_report_key(data->input_dev, KEY_SLEEP, 0);
 				input_sync(data->input_dev);
 				data->palm = false;
@@ -1755,10 +1756,6 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 					data->ts_data.curr_data[i].touch_minor);
 		}
 	}
-
-	if(data->ts_data.total_num < data->ts_data.prev_total_num)
-		TOUCH_DEBUG_MSG( "[finger] Total_num(move+press)= %d\n",
-				data->ts_data.total_num);
 
 	if (data->ts_data.total_num) {
 		data->ts_data.prev_total_num = data->ts_data.total_num;
