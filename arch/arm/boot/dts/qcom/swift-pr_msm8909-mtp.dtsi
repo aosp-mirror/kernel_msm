@@ -1,0 +1,424 @@
+/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "swift-pr_msm8909.dtsi"
+#include "swift-pr_msm8909-pinctrl.dtsi"
+
+&soc {
+	gen-vkeys {
+		compatible = "qcom,gen-vkeys";
+		label = "synaptics_dsx";
+		qcom,disp-maxx = <719>;
+		qcom,disp-maxy = <1279>;
+		qcom,panel-maxx = <719>;
+		qcom,panel-maxy = <1405>;
+		qcom,key-codes = <158 139 172 217>;
+	};
+
+	i2c@78b6000 { /* BLSP1 QUP2 */
+		nq@28 {
+			compatible = "qcom,nq-nci";
+			reg = <0x28>;
+			qcom,nq-irq = <&msm_gpio 21 0x00>;
+			qcom,nq-ven = <&msm_gpio 20 0x00>;
+			qcom,nq-firm= <&msm_gpio 45 0x00>;
+			qcom,clk-src = "BBCLK2";
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <21 0>;
+			interrupt-names = "nfc_irq";
+			pinctrl-names = "nfc_active","nfc_suspend";
+			pinctrl-0 = <&nfc_int_active &nfc_enable_active>;
+			pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend>;
+			clocks = <&clock_rpm clk_bb_clk2_pin>;
+			clock-names = "ref_clk";
+			};
+	};
+
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+		pinctrl-0 = <&gpio_key_active>;
+		pinctrl-1 = <&gpio_key_suspend>;
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&msm_gpio 90 0x1>;
+			linux,input-type = <1>;
+			linux,code = <115>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+
+		vol_down {
+			label = "volume_down";
+			gpios = <&msm_gpio 91 0x1>;
+			linux,input-type = <1>;
+			linux,code = <114>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+	};
+
+	audio_codec_mtp: sound {
+		compatible = "qcom,msm8952-audio-codec";
+		qcom,model = "msm8909-snd-card";
+		reg = <0x7702000 0x4>,
+		      <0x7702004 0x4>,
+		      <0x7702008 0x4>;
+		reg-names = "csr_gp_io_mux_mic_ctl",
+			    "csr_gp_io_mux_spkr_ctl",
+			    "csr_gp_io_lpaif_pri_pcm_pri_mode_muxsel";
+
+		qcom,msm-snd-card-id = <0>;
+		qcom,msm-codec-type = "internal";
+		qcom,msm-ext-pa = "primary";
+		qcom,msm-mclk-freq = <9600000>;
+		qcom,msm-mbhc-hphl-swh = <0>;
+		qcom,msm-mbhc-gnd-swh = <0>;
+		qcom,msm-hs-micbias-type = "internal";
+		qcom,msm-micbias1-ext-cap;
+		qcom,split-a2dp;
+		qcom,msm-afe-clk-ver = <1>;
+		qcom,audio-routing =
+			"RX_BIAS", "MCLK",
+			"SPK_RX_BIAS", "MCLK",
+			"INT_LDO_H", "MCLK",
+			"MIC BIAS External", "Handset Mic",
+			"MIC BIAS Internal2", "Headset Mic",
+			"MIC BIAS External", "Secondary Mic",
+			"AMIC1", "MIC BIAS External",
+			"AMIC2", "MIC BIAS Internal2",
+			"AMIC3", "MIC BIAS External";
+		qcom,msm-gpios =
+			"pri_i2s",
+			"us_eu_gpio";
+		qcom,pinctrl-names =
+			"all_off",
+			"pri_i2s_act",
+			"us_eu_gpio_act",
+			"pri_i2s_us_eu_gpio_act";
+		pinctrl-names =
+			"all_off",
+			"pri_i2s_act",
+			"us_eu_gpio_act",
+			"pri_i2s_us_eu_gpio_act";
+		pinctrl-0 = <&cdc_pdm_lines_sus &cross_conn_det_sus
+							&vdd_spkdrv_sus>;
+		pinctrl-1 = <&cdc_pdm_lines_act &cross_conn_det_sus
+							&vdd_spkdrv_act>;
+		pinctrl-2 = <&cdc_pdm_lines_sus &cross_conn_det_act
+							&vdd_spkdrv_sus>;
+		pinctrl-3 = <&cdc_pdm_lines_act &cross_conn_det_act
+							&vdd_spkdrv_act>;
+		qcom,cdc-us-euro-gpios = <&msm_gpio 97 0>;
+		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
+				<&loopback>, <&compress>, <&hostless>,
+				<&afe>, <&lsm>, <&routing>, <&lpa>,
+				<&voice_svc>;
+		asoc-platform-names = "msm-pcm-dsp.0", "msm-pcm-dsp.1",
+				"msm-pcm-dsp.2", "msm-voip-dsp",
+				"msm-pcm-voice", "msm-pcm-loopback",
+				"msm-compress-dsp", "msm-pcm-hostless",
+				"msm-pcm-afe", "msm-lsm-client",
+				"msm-pcm-routing", "msm-pcm-lpa",
+				"msm-voice-svc";
+		asoc-cpu = <&dai_pri_auxpcm>,
+				<&dai_mi2s0>, <&dai_mi2s1>, <&dai_mi2s2>,
+				<&dai_mi2s3>, <&dai_mi2s5>, <&dai_mi2s6>,
+				<&bt_sco_rx>, <&bt_sco_tx>, <&bt_a2dp_rx>,
+				<&int_fm_rx>, <&int_fm_tx>, <&afe_pcm_rx>,
+				<&afe_pcm_tx>, <&afe_proxy_rx>, <&afe_proxy_tx>,
+				<&incall_record_rx>, <&incall_record_tx>,
+				<&incall_music_rx>, <&incall_music_2_rx>;
+		asoc-cpu-names = "msm-dai-q6-auxpcm.1",
+				"msm-dai-q6-mi2s.0", "msm-dai-q6-mi2s.1",
+				"msm-dai-q6-mi2s.2", "msm-dai-q6-mi2s.3",
+				"msm-dai-q6-mi2s.5", "msm-dai-q6-mi2s.6",
+				"msm-dai-q6-dev.12288", "msm-dai-q6-dev.12289",
+				"msm-dai-q6-dev.12290", "msm-dai-q6-dev.12292",
+				"msm-dai-q6-dev.12293", "msm-dai-q6-dev.224",
+				"msm-dai-q6-dev.225", "msm-dai-q6-dev.241",
+				"msm-dai-q6-dev.240", "msm-dai-q6-dev.32771",
+				"msm-dai-q6-dev.32772", "msm-dai-q6-dev.32773",
+				"msm-dai-q6-dev.32770";
+		asoc-codec = <&stub_codec>, <&pm8909_conga_dig>;
+		asoc-codec-names = "msm-stub-codec.1", "cajon_codec";
+	};
+
+	qcom,msm-ssc-sensors {
+		compatible = "qcom,msm-ssc-sensors";
+	};
+};
+
+&spi_0 {
+	status = "disabled";
+};
+
+&i2c_1 {
+	status = "disabled";
+};
+
+&i2c_2 {
+	status = "disabled";
+};
+
+&i2c_3 {
+};
+
+&i2c_4 {
+	status = "ok";
+	smb23x-lbc@12 {
+		compatible = "qcom,smb231-lbc";
+		reg = <0x12>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <49 2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&smb_int_default &smb_susp_default>;
+
+		qcom,float-voltage-mv = <4400>;
+		qcom,charging-timeout = <360>;
+		qcom,recharge-thresh-mv = <150>;
+		qcom,iterm-ma = <20>;
+		qcom,fastchg-ma = <1100>;
+		qcom,hot-bat-decidegc = <600>;
+		qcom,warm-bat-decidegc = <450>;
+		qcom,cool-bat-decidegc = <150>;
+		qcom,cold-bat-decidegc = <50>;
+		qcom,soft-temp-vfloat-comp-mv = <300>;
+		qcom,soft-temp-current-comp-ma = <400>;
+		qcom,thermal-mitigation = <1500 900 500 100>;
+		qcom,apsd-disabled;
+		qcom,bms-psy-name = "bms";
+	};
+	stc3117@70 {
+		compatible = "st,stc3117";
+		reg = <0x70>;
+		st,nbc-mAh = <340>;
+		st,nbii-microohm = <501>;
+		st,ncc-cnf = <66>;
+		st,nvm-cnf = <184>;
+		st,rsns-microhom = <10>;
+	};
+};
+
+&i2c_5 {
+	himax-ts@48 {
+		compatible = "himax,852xes";
+		reg = <0x48>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <13 0x2>;
+		vdd_ana-supply = <&pm8916_l18>;
+		vcc_i2c-supply = <&pm8916_s3>;
+		himax,panel-coords = <0 400 0 400>;
+		himax,display-coords = <0 400 0 400>;
+		himax,irq-gpio = <&msm_gpio 13 0x00>;
+		himax,rst-gpio = <&msm_gpio 12 0x00>;
+		report_type = <1>;
+	};
+};
+
+&blsp1_uart1 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_sleep>;
+};
+
+/ {
+	mtp_batterydata: qcom,battery-data {
+		qcom,rpull-up-kohm = <100>;
+		qcom,vref-batt-therm = <1800000>;
+
+		#include "wren-C11N1541_2229841_290mAh-batterydata.dtsi"
+	};
+};
+
+&qcom_rng {
+	status = "okay";
+};
+
+&qcom_crypto {
+	status = "okay";
+};
+
+&qcom_cedev {
+	status = "okay";
+};
+
+&qcom_seecom {
+	status = "okay";
+};
+
+&qcom_tzlog {
+	status = "okay";
+};
+
+&sdhc_1 {
+	vdd-supply = <&pm8909_l8>;
+	qcom,vdd-voltage-level = <2900000 2900000>;
+	qcom,vdd-current-level = <200 400000>;
+	qcom,vdd-always-on; /*ASUS_BSP: make sure eMMC VDD alawys on even suspend*/
+	
+	vdd-io-supply = <&pm8909_l5>;
+	qcom,vdd-io-always-on;
+	qcom,vdd-io-lpm-sup;
+	qcom,vdd-io-voltage-level = <1800000 1800000>;
+	qcom,vdd-io-current-level = <200 60000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on>;
+	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off>;
+
+	qcom,bus-speed-mode = "HS200_1p8v", "DDR_1p8v";
+	qcom,nonremovable;
+
+	status = "ok";
+};
+
+&sdhc_2 {
+	 #address-cells = <0>;
+	interrupt-parent = <&sdhc_2>;
+	interrupts = <0 1 2>;
+	#interrupt-cells = <1>;
+	interrupt-map-mask = <0xffffffff>;
+	interrupt-map = <0 &intc 0 125 0
+			1 &intc 0 221 0
+			2 &msm_gpio 38 0>;
+	interrupt-names = "hc_irq", "pwr_irq", "status_irq";
+	cd-gpios = <&msm_gpio 38 0x1>;
+
+	vdd-supply = <&pm8909_l11>;
+	qcom,vdd-voltage-level = <1800000 2950000>;
+	qcom,vdd-current-level = <15000 400000>;
+
+	vdd-io-supply = <&pm8909_l12>;
+	qcom,vdd-io-voltage-level = <1800000 2950000>;
+	qcom,vdd-io-current-level = <200 50000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdc2_cd_off>;
+
+	status = "disabled";
+};
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_x145aln01_280x280_cmd>;
+	//qcom,dsi-pref-prim-pan = <&dsi_h139bln01_400x400_cmd>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+
+	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
+	qcom,platform-te-gpio = <&msm_gpio 24 0>;
+	//qcom,platform-bklight-en-gpio = <&msm_gpio 37 0>;
+};
+
+&msm_gpio {
+	pmx_mdss {
+		mdss_dsi_active: mdss_dsi_active {
+			mux {
+				pins = "gpio25", "gpio37";
+			};
+			config {
+				pins = "gpio25", "gpio37";
+			};
+		};
+		mdss_dsi_suspend: mdss_dsi_suspend {
+			mux {
+				pins = "gpio25", "gpio37";
+			};
+			config {
+				pins = "gpio25", "gpio37";
+			};
+		};
+	};
+	pmx_mdss_te {
+		mdss_te_active: mdss_te_active {
+			mux {
+				pins = "gpio24";
+			};
+			config {
+				pins = "gpio24";
+			};
+		};
+		mdss_te_suspend: mdss_te_suspend {
+			mux {
+				pins = "gpio24";
+			};
+			config {
+				pins = "gpio24";
+			};
+		};
+	};
+	/* Delete gpio58 configuration */
+	/delete-node/ tpiu_seta_14;
+	/delete-node/ smb_int_pin;
+	smb_int_default: smb_int_default {
+		mux {
+			pins = "gpio49";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio49";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+		};
+	};
+
+	smb_susp_default: smb_susp_default {
+		mux {
+			pins = "gpio58";
+			function ="gpio";
+		};
+		config {
+			pins = "gpio58";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+			output-high;
+		};
+	};
+};
+
+/* CoreSight */
+&tpiu {
+	pinctrl-names = "sdcard", "trace", "swduart",
+			"swdtrc", "jtag", "spmi";
+	/* NIDnT */
+	pinctrl-0 = <&qdsd_clk_sdcard &qdsd_cmd_sdcard
+		     &qdsd_data0_sdcard &qdsd_data1_sdcard
+		     &qdsd_data2_sdcard &qdsd_data3_sdcard>;
+	pinctrl-1 = <&qdsd_clk_trace &qdsd_cmd_trace
+		     &qdsd_data0_trace &qdsd_data1_trace
+		     &qdsd_data2_trace &qdsd_data3_trace>;
+	pinctrl-2 = <&qdsd_cmd_swduart &qdsd_data0_swduart
+		     &qdsd_data1_swduart &qdsd_data2_swduart
+		     &qdsd_data3_swduart>;
+	pinctrl-3 = <&qdsd_clk_swdtrc &qdsd_cmd_swdtrc
+		     &qdsd_data0_swdtrc &qdsd_data1_swdtrc
+		     &qdsd_data2_swdtrc &qdsd_data3_swdtrc>;
+	pinctrl-4 = <&qdsd_cmd_jtag &qdsd_data0_jtag
+		     &qdsd_data1_jtag &qdsd_data2_jtag
+		     &qdsd_data3_jtag>;
+	pinctrl-5 = <&qdsd_clk_spmi &qdsd_cmd_spmi
+		     &qdsd_data0_spmi &qdsd_data3_spmi>;
+};
+
+&asus_muxsel0_default {
+	pinctrl-states = "default";
+	pinctrl-names = "asus_muxsel0_default";
+	pinctrl-0 = <&asus_muxsel0_default>;
+};
