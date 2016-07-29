@@ -17210,7 +17210,7 @@ void hdd_stop_bus_bw_compute_timer(hdd_adapter_t *pAdapter)
     if (VOS_TIMER_STATE_RUNNING !=
         vos_timer_getCurrentState(&pHddCtx->bus_bw_timer)) {
         /* trying to stop timer, when not running is not good */
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
                   "bus band width compute timer is not running");
         return;
     }
