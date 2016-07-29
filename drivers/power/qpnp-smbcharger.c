@@ -5458,8 +5458,10 @@ static void handle_usb_removal(struct smbchg_chip *chip)
 		cancel_delayed_work_sync(&chip->downgrade_iusb_work);
 	if (delayed_work_pending(&chip->sink_current_change_work))
 		cancel_delayed_work_sync(&chip->sink_current_change_work);
-	if (delayed_work_pending(&chip->parallel_en_work))
+	if (delayed_work_pending(&chip->parallel_en_work)) {
 		cancel_delayed_work_sync(&chip->parallel_en_work);
+		smbchg_relax(chip, PM_PARALLEL_CHECK);
+	}
 	/*Enable AICL*/
 	set_aicl_enable(true);
 	/*Default enable Input Missing Poller*/
