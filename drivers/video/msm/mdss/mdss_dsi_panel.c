@@ -2604,6 +2604,9 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_cmd_pos(np, &ctrl_pdata->lp_off_pos,
 		"qcom,mdss-dsi-lp-off-offset");
 
+	ctrl_pdata->need_detection = of_property_read_bool(np,
+		"qcom,mdss-dsi-need-power-on-detection");
+
 	ctrl_pdata->dsi_cmd_hs = false;
 	data = of_get_property(np, "qcom,mdss-dsi-default-command-state", NULL);
 	if (data && !strcmp(data, "dsi_hs_mode"))
