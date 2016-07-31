@@ -136,7 +136,7 @@ static int mode_proc_show_interactive(struct seq_file *seq, void *v)
 {
 	printk(KERN_DEBUG "[MODE] %s():\n", __func__);
 
-	//seq_printf(seq, "%d\n", interactive_status);
+	seq_printf(seq, "%d\n", interactive_status);
 
 	return 0;
 }
