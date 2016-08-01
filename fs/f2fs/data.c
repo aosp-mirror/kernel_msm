@@ -24,6 +24,8 @@
 #include "segment.h"
 #include <trace/events/f2fs.h>
 
+#include <trace/events/android_fs.h>
+
 static void f2fs_read_end_io(struct bio *bio, int err)
 {
 	struct bio_vec *bvec;
@@ -956,6 +958,8 @@ static int f2fs_write_begin(struct file *file, struct address_space *mapping,
 	struct dnode_of_data dn;
 	int err = 0;
 
+	trace_android_fs_datawrite_start(inode, pos, len,
+					 current->pid, current->comm);
 	trace_f2fs_write_begin(inode, pos, len, flags);
 
 	f2fs_balance_fs(sbi);
@@ -1048,6 +1052,7 @@ static int f2fs_write_end(struct file *file,
 {
 	struct inode *inode = page->mapping->host;
 
+	trace_android_fs_datawrite_end(inode, pos, len);
 	trace_f2fs_write_end(inode, pos, len, copied);
 
 	if (f2fs_is_atomic_file(inode) || f2fs_is_volatile_file(inode))
@@ -1100,9 +1105,23 @@ static ssize_t f2fs_direct_IO(int rw, struct kiocb *iocb,
 
 	trace_f2fs_direct_IO_enter(inode, offset, count, rw);
 
+	if (rw == READ)
+		trace_android_fs_dataread_start(inode, offset,
+						count, current->pid,
+						current->comm);
+	else
+		trace_android_fs_datawrite_start(inode, offset, count,
+						 current->pid, current->comm);
+
 	err = blockdev_direct_IO(rw, iocb, inode, iter, offset, get_data_block);
+
 	if (err < 0 && (rw & WRITE))
 		f2fs_write_failed(mapping, offset + count);
+
+	if (rw == READ)
+		trace_android_fs_dataread_end(inode, offset, count);
+	else
+		trace_android_fs_datawrite_end(inode, offset, count);
 
 	trace_f2fs_direct_IO_exit(inode, offset, count, rw, err);
 
