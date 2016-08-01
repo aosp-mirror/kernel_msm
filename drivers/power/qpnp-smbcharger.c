@@ -9636,6 +9636,7 @@ int pmi8996_get_usb_temp(void)
 	return usb_pwr_temp;
 }
 
+extern void smb1351_chg_dump_reg(struct power_supply *psy);
 void smbchg_dump_reg(void)
 {
 	static u8 chgr_sts[5];
@@ -9644,6 +9645,7 @@ void smbchg_dump_reg(void)
 	static u8 usb_sts[9];
 	static u8 usb_cfg[6];
 	static u8 misc_cfg[16];
+	struct power_supply *parallel_psy = get_parallel_psy(the_chip);
 
 	// CHGR_STS 0x100B~0x100F //
 	smbchg_read(the_chip, chgr_sts, the_chip->chgr_base + 0x0B, 5);
@@ -9683,7 +9685,7 @@ void smbchg_dump_reg(void)
 		"USB_CFG[F0:F5]=[%02x,%02x,%02x,%02x,%02x,%02x],"
 		"MISC_CFG[F0:F4]=[%02x,%02x,%02x,%02x,%02x],"
 		"MISC_CFG[F5:F9]=[%02x,%02x,%02x,%02x,%02x],"
-		"MISC_CFG[FA:FF]=[%02x,%02x,%02x,%02x,%02x,%02x]\n",
+		"MISC_CFG[FA:FF]=[%02x,%02x,%02x,%02x,%02x,%02x],",
 		// USB_CHGPTH_STS 0x1307~0x130F //
 		usb_sts[0], usb_sts[1], usb_sts[2], usb_sts[3], usb_sts[4],
 		usb_sts[5], usb_sts[6], usb_sts[7], usb_sts[8],
@@ -9693,6 +9695,33 @@ void smbchg_dump_reg(void)
 		misc_cfg[0], misc_cfg[1], misc_cfg[2], misc_cfg[3], misc_cfg[4],
 		misc_cfg[5], misc_cfg[6], misc_cfg[7], misc_cfg[8], misc_cfg[9],
 		misc_cfg[10], misc_cfg[11], misc_cfg[12], misc_cfg[13], misc_cfg[14], misc_cfg[15]);
+
+	if (parallel_psy)
+		smb1351_chg_dump_reg(parallel_psy);
+}
+
+int pmi8996_get_smb_out_isen(void)
+{
+	int rc = 0;
+	struct qpnp_vadc_result results;
+	struct qpnp_vadc_chip *l_vadc_dev = NULL;
+	if(!the_chip) {
+		pr_err("called before init\n");
+		return -EINVAL;
+	} else {
+		l_vadc_dev = qpnp_get_vadc(the_chip->dev, "smb_out_isen");
+		if (IS_ERR(l_vadc_dev)) {
+			pr_err("vadc driver not ready!\n");
+			return PTR_ERR(l_vadc_dev);
+		}
+	}
+
+	rc = qpnp_vadc_read(l_vadc_dev, P_MUX1_1_1, &results);
+	if (rc) {
+		pr_err("[MPP02][P_MUX1_1_1]Unable to read SMB_OUT_ISEN rc=%d\n", rc);
+		return -EINVAL;
+	} else
+		return (int)results.physical;
 }
 
 #define CHG_SFT_RT_STS		BIT(3)
@@ -9705,7 +9734,7 @@ int charger_dump_all(void)
 	u8 pmic_revid_rev3 = 0, pmic_revid_rev4 = 0;
 	u8 pmic_chg_type = 0, sink_current = 0;
 	bool pd_charger = false;
-	int cc_uah = 0, rc = 0, warm_temp = 0, cool_temp = 0, wake_reason = 0;
+	int cc_uah = 0, rc = 0, warm_temp = 0, cool_temp = 0, wake_reason = 0, smb_current = 0;
 
 	if(!the_chip) {
 		pr_err("called before init\n");
@@ -9738,12 +9767,15 @@ int charger_dump_all(void)
 	sink_current = the_chip->utc.sink_current;
 	pd_charger = htc_battery_is_pd_detected();
 	wake_reason = the_chip->wake_reasons;
+	smb_current = (pmi8996_get_smb_out_isen() * 2) / 1000;
 
 	printk(KERN_INFO "[BATT][SMBCHG] "
 		"0x1010=%02x,0x1210=%02x,0x1242=%02x,0x1310=%02x,0x1340=%02x,0x1608=%02x,0x1610=%02x,"
-		"cc=%duAh,warm_temp=%d,cool_temp=%d,pmic=rev%d.%d,sink_current=%d,pd_chgr=%d,wake_reason=%d\n",
+		"cc=%duAh,warm_temp=%d,cool_temp=%d,pmic=rev%d.%d,sink_current=%d,pd_chgr=%d,"
+		"wake_reason=%d,smb_curr=%dmA\n",
 		chgr_rt_sts,bat_if_rt_sts,bat_if_cmd,chgpth_rt_sts,chgpth_cmd,pmic_chg_type,misc_rt_sts,
-		cc_uah,warm_temp,cool_temp,pmic_revid_rev4,pmic_revid_rev3,sink_current,pd_charger,wake_reason);
+		cc_uah,warm_temp,cool_temp,pmic_revid_rev4,pmic_revid_rev3,sink_current,(int)pd_charger,
+		wake_reason,smb_current);
 
 	smbchg_dump_reg();
 

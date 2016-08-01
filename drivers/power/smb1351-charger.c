@@ -4144,6 +4144,39 @@ static void dump_regs(struct smb1351_charger *chip)
 }
 #endif
 
+#ifdef CONFIG_HTC_BATT
+void smb1351_chg_dump_reg(struct power_supply *psy)
+{
+	int rc = 0;
+	u8 reg;
+	u8 addr;
+	struct smb1351_charger *chip = container_of(psy,
+				struct smb1351_charger, parallel_psy);
+
+	if (!chip) {
+		pr_err("smb1351_chg_dump_reg not ready\n");
+		return;
+	}
+
+	printk("SMB1351[00:06]=[");
+	for (addr = 0; addr <= 0x06; addr++) {
+		rc = smb1351_read_reg(chip, addr, &reg);
+		if (rc)
+			pr_err("Couldn't read 0x%02x rc = %d\n", addr, rc);
+		else
+			printk("%02x,", reg);
+	}
+	printk("]");
+
+	rc = smb1351_read_reg(chip, CMD_CHG_REG, &reg);
+	if (rc)
+		pr_err("Couldn't read 0x%02x rc = %d\n", addr, rc);
+	else
+		printk(",[32]=[%02x]\n", reg);
+}
+EXPORT_SYMBOL(smb1351_chg_dump_reg);
+#endif /* CONFIG_HTC_BATT */
+
 #define MAIN_CHG_DEFAULT_FCC_PERCENT	50
 #define MAIN_CHG_DEFAULT_ICL_PERCENT	50
 static int smb1351_parse_parallel_charger_dt(struct smb1351_charger *chip)

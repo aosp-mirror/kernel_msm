@@ -1105,7 +1105,7 @@ int update_ibat_setting (void)
 	BATT_EMBEDDED("ibat_max=%d,ibat_new=%d,prev_vol_limit=%d,"
 			"prev_ibat_health=%d,chg_limit_reason=%d,"
 			"prev_screen_warm=%d,prev_screen_hot=%d,"
-			"is_over_ibat=%d,htc_batt_info.state:0x%X",
+			"is_over_ibat=%d,htc_batt_info.state=0x%X",
 			ibat_max, ibat_new, s_prev_vol_limit,
 			s_prev_ibat_health, g_chg_limit_reason,
 			s_prev_screen_warm, s_prev_screen_hot,
@@ -2994,6 +2994,7 @@ static struct platform_driver htc_battery_driver = {
 static int __init batt_keep_charge_on_set(char *str)
 {
     g_flag_keep_charge_on = true;
+    htc_batt_info.k_debug_flag |= KERNEL_FLAG_KEEP_CHARG_ON;
     BATT_LOG("flag_keep_charge_on is set\n");
     return 0;
 }
@@ -3002,6 +3003,7 @@ __setup("batt_keep_charge_on=1", batt_keep_charge_on_set);
 static int __init batt_disable_safty_timer_set(char *str)
 {
     g_flag_disable_safety_timer = true;
+    htc_batt_info.k_debug_flag |= KERNEL_FLAG_DISABLE_SAFETY_TIMER;
     BATT_LOG("flag_disable_safety_timer is set\n");
     return 0;
 }
@@ -3010,6 +3012,7 @@ __setup("batt_disable_safty_timer=1", batt_disable_safty_timer_set);
 static int __init batt_for_pa_test_set(char *str)
 {
     g_flag_pa_fake_batt_temp = true;
+    htc_batt_info.k_debug_flag |= KERNEL_FLAG_FOR_PA_TEST;
     BATT_LOG("flag_pa_fake_batt_temp is set\n");
     return 0;
 }
@@ -3018,6 +3021,7 @@ __setup("batt_for_pa_test=1", batt_for_pa_test_set);
 static int __init batt_test_pwr_supply_set(char *str)
 {
     g_test_power_monitor = true;
+    htc_batt_info.k_debug_flag |= KERNEL_FLAG_TEST_PWR_SUPPLY;
     BATT_LOG("test_power_monitor is set\n");
     return 0;
 }
@@ -3026,6 +3030,7 @@ __setup("batt_test_pwr_supply=1", batt_test_pwr_supply_set);
 static int __init batt_enable_fast_charge_set(char *str)
 {
     g_flag_force_ac_chg = true;
+    htc_batt_info.k_debug_flag |= KERNEL_FLAG_ENABLE_FAST_CHARGE;
     BATT_LOG("flag_force_ac_chg is set\n");
     return 0;
 }
@@ -3034,6 +3039,7 @@ __setup("batt_enable_fast_charge=1", batt_enable_fast_charge_set);
 static int __init batt_disable_tbatt_protect_set(char *str)
 {
     g_flag_disable_temp_protection = true;
+    htc_batt_info.k_debug_flag |= KERNEL_FLAG_DISABLE_TBATT_PROTECT;
     BATT_LOG("flag_disable_temp_protection is set\n");
     return 0;
 }
@@ -3042,6 +3048,7 @@ __setup("batt_disable_tbatt_protect=1", batt_disable_tbatt_protect_set);
 static int __init batt_enable_bms_charger_log_set(char *str)
 {
     g_flag_enable_batt_debug_log = true;
+    htc_batt_info.k_debug_flag |= KERNEL_FLAG_ENABLE_BMS_CHARGER_LOG;
     BATT_LOG("flag_enable_batt_debug_log is set\n");
     return 0;
 }

@@ -79,6 +79,14 @@ tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec); \
 #define SUSPEND_HIGHFREQ_CHECK_BIT_SEARCH	(1<<1)
 #define SUSPEND_HIGHFREQ_CHECK_BIT_MUSIC	(1<<3)
 
+#define KERNEL_FLAG_KEEP_CHARG_ON 		BIT(2)
+#define KERNEL_FLAG_DISABLE_SAFETY_TIMER 	BIT(13)
+#define KERNEL_FLAG_FOR_PA_TEST 		BIT(14)
+#define KERNEL_FLAG_TEST_PWR_SUPPLY 		BIT(15)
+#define KERNEL_FLAG_ENABLE_FAST_CHARGE		BIT(26)
+#define KERNEL_FLAG_DISABLE_TBATT_PROTECT 	BIT(28)
+#define KERNEL_FLAG_ENABLE_BMS_CHARGER_LOG 	BIT(29)
+
 struct battery_info_reply {
 	u32 batt_vol;
 	u32 batt_id;
