@@ -2000,6 +2000,7 @@ static enum power_supply_property smb23x_battery_properties[] = {
 	POWER_SUPPLY_PROP_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
+	POWER_SUPPLY_PROP_USB_TYPE,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
@@ -2076,6 +2077,56 @@ static int smb23x_get_prop_charge_type(struct smb23x_chip *chip)
 		return POWER_SUPPLY_CHARGE_TYPE_TAPER;
 exit:
 	return POWER_SUPPLY_CHARGE_TYPE_UNKNOWN;
+}
+
+static int smb23x_get_prop_usb_type(struct smb23x_chip *chip)
+{
+	int type, current_max, MPP4_read, rc;
+	union power_supply_propval prop = {0,};
+
+	MPP4_read = smb23x_mpp4_vol_proc_read();
+	type = chip->usb_psy->type;
+	rc = chip->usb_psy->get_property(chip->usb_psy,
+		POWER_SUPPLY_PROP_CURRENT_MAX, &prop);
+	if (rc < 0)
+		pr_err("Get CURRENT_MAX from usb failed, rc=%d\n", rc);
+	else
+		current_max = prop.intval / 1000;
+
+	if (type == POWER_SUPPLY_TYPE_USB_DCP) {
+		gpio_set_value(GPIO_num17, 1);
+		if (MPP4_read > 500000 && MPP4_read < 900000) {
+			pr_debug("[BAT][CHG] USB_TYPE: AC_Fast\n");
+			return POWER_SUPPLY_USB_TYPE_AC_FAST;
+		} else if (MPP4_read > 2200000 && MPP4_read < 2850000) {
+			pr_debug("[BAT][CHG] USB_TYPE: Power_Bank\n");
+			return POWER_SUPPLY_USB_TYPE_AC_FAST;
+		} else {
+			pr_debug("[BAT][CHG] USB_TYPE: AC_Normal\n");
+			return POWER_SUPPLY_USB_TYPE_AC_FAST;
+		}
+	} else if (type == POWER_SUPPLY_TYPE_USB_CDP) {
+		gpio_set_value(GPIO_num17, 0);
+		pr_debug("[BAT][CHG] USB_TYPE: CDP\n");
+		return POWER_SUPPLY_USB_TYPE_USB_FAST;
+	} else if (type == POWER_SUPPLY_TYPE_USB) {
+		gpio_set_value(GPIO_num17, 0);
+		if (current_max >= 500) {
+			pr_debug("[BAT][CHG] USB_TYPE: SDP\n");
+			return POWER_SUPPLY_USB_TYPE_USB_NORMAL;
+		} else {
+			pr_debug("[BAT][CHG] USB_TYPE: POWER_PACK\n");
+			return POWER_SUPPLY_USB_TYPE_POWER_PACK;
+		}
+	} else {
+		if (g_smb23x_chip->usb_present == 1) {
+			pr_debug("[BAT][CHG] USB_TYPE: POWER_PACK\n");
+			return POWER_SUPPLY_USB_TYPE_POWER_PACK;
+		} else {
+			pr_debug("[BAT][CHG] USB_TYPE: UNKNOWN\n");
+			return POWER_SUPPLY_USB_TYPE_UNKNOWN;
+		}
+	}
 }
 
 #define DEFAULT_BATT_CAPACITY	50
@@ -2168,6 +2219,9 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		val->intval = smb23x_get_prop_charge_type(chip);
+		break;
+	case POWER_SUPPLY_PROP_USB_TYPE:
+		val->intval = smb23x_get_prop_usb_type(chip);
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = smb23x_get_prop_batt_capacity(chip);
