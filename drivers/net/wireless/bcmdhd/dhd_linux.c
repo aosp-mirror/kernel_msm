@@ -3853,7 +3853,7 @@ exit:
 	dhd->pub.hang_was_sent = 0;
 
 	/* Clear country spec for for built-in type driver */
-#ifndef CUSTOM_COUNTRY_CODE
+#ifdef CUSTOM_COUNTRY_CODE
 	if (!dhd_download_fw_on_driverload) {
 		dhd->pub.dhd_cspec.country_abbrev[0] = 0x00;
 		dhd->pub.dhd_cspec.rev = 0;
@@ -5774,11 +5774,35 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #ifndef DISABLE_11N
 	bcm_mkiovar("ampdu_hostreorder", (char *)&hostreorder, 4, iovbuf, sizeof(iovbuf));
 	if ((ret2 = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0)) < 0) {
-		DHD_ERROR(("%s wl ampdu_hostreorder failed %d\n", __FUNCTION__, ret2));
+		DHD_ERROR(("%s wl ampdu_hostreorder set failed, ret:%d\n", __FUNCTION__, ret2));
 		if (ret2 != BCME_UNSUPPORTED)
 			ret = ret2;
-		if (ret2 != BCME_OK)
+		if (ret == BCME_NOTDOWN) {
+			uint wl_down = 1;
+			ret2 = dhd_wl_ioctl_cmd(dhd, WLC_DOWN, (char *)&wl_down,
+				sizeof(wl_down), TRUE, 0);
+			if (BCME_OK != ret2) {
+				DHD_ERROR(("%s wl ampdu_hostreorder WL_DOWN fail ret:%d, hostreorder:%d\n",
+					__FUNCTION__, ret2, hostreorder));
+			} else {
+
+				bcm_mkiovar("ampdu_hostreorder", (char *)&hostreorder, 4,
+					iovbuf, sizeof(iovbuf));
+				ret2 = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
+				if (BCME_OK != ret2) {
+					DHD_ERROR(("%s wl ampdu_hostreorder also fail with wl down. ret:%d\n",
+						__FUNCTION__, ret2));
+				} else {
+					DHD_ERROR(("%s wl ampdu_hostreorder set success with wl down.\n",
+						__FUNCTION__));
+				}
+			}
+			if (ret2 != BCME_UNSUPPORTED)
+				ret = ret2;
+		}
+		if (ret2 != BCME_OK) {
 			hostreorder = 0;
+		}
 	}
 #endif /* DISABLE_11N */
 
