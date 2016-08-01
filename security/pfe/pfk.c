@@ -594,6 +594,7 @@ int pfk_load_key_end(const struct bio *bio, bool *is_pfe)
 	const unsigned char *salt = NULL;
 	size_t key_size = 0;
 	size_t salt_size = 0;
+	struct key *keyring_key = NULL;
 
 	if (!is_pfe) {
 		pr_err("is_pfe is NULL\n");
@@ -609,11 +610,54 @@ int pfk_load_key_end(const struct bio *bio, bool *is_pfe)
 	if (!pfk_is_ready())
 		return -ENODEV;
 
-	ret = pfk_bio_to_key(bio, &key, &key_size, &salt, &salt_size, is_pfe);
-	if (ret != 0)
-		return ret;
+	if (bio->bi_crypt_ctx.bc_flags & BC_ENCRYPT_FL) {
+		struct user_key_payload *ukp;
+		struct ext4_encryption_key *master_key;
+		if (!(bio->bi_crypt_ctx.bc_flags & BC_AES_256_XTS_FL)) {
+			printk(KERN_WARNING "%s: Unsupported mode\n", __func__);
+			return -EINVAL;
+		}
+		if (bio->bi_crypt_ctx.bc_key_size !=
+		    (PFK_SUPPORTED_KEY_SIZE + PFK_SUPPORTED_SALT_SIZE)) {
+			printk(KERN_WARNING
+			       "%s: Unsupported key size. Expected [%d], "
+			       "got [%d]\n", __func__,
+			       (PFK_SUPPORTED_KEY_SIZE +
+				PFK_SUPPORTED_SALT_SIZE),
+			       bio->bi_crypt_ctx.bc_key_size);
+			return -EINVAL;
+		}
+		key_size = PFK_SUPPORTED_KEY_SIZE;
+		salt_size = PFK_SUPPORTED_SALT_SIZE;
+		keyring_key = bio->bi_crypt_ctx.bc_keyring_key;
+		BUG_ON(!keyring_key);
+		do {
+			ret = down_read_trylock(&keyring_key->sem);
+		} while (!ret);
+		ukp = ((struct user_key_payload *)keyring_key->payload.data);
+		if (!ukp || ukp->datalen != sizeof(struct ext4_encryption_key)) {
+			up_read(&keyring_key->sem);
+			return -ENOKEY;
+		}
+		master_key = (struct ext4_encryption_key *)ukp->data;
+		if (!master_key || master_key->size != PFK_AES_256_XTS_KEY_SIZE) {
+			printk_once(KERN_WARNING "%s: key size incorrect: %d\n",
+				    __func__, master_key->size);
+			up_read(&keyring_key->sem);
+			return -ENOKEY;
+		}
+		key = &master_key->raw[0];
+		salt = &master_key->raw[PFK_SUPPORTED_KEY_SIZE];
+	} else {
+		ret = pfk_bio_to_key(bio, &key, &key_size, &salt, &salt_size,
+				     is_pfe);
+		if (ret != 0)
+			return ret;
+	}
 
 	pfk_kc_load_key_end(key, key_size, salt, salt_size);
+	if (keyring_key)
+		up_read(&keyring_key->sem);
 
 	return 0;
 }

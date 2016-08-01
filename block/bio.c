@@ -569,6 +569,7 @@ void __bio_clone_fast(struct bio *bio, struct bio *bio_src)
 	bio->bi_iter = bio_src->bi_iter;
 	bio->bi_io_vec = bio_src->bi_io_vec;
 	bio->bi_dio_inode = bio_src->bi_dio_inode;
+	bio->bi_crypt_ctx = bio_src->bi_crypt_ctx;
 }
 EXPORT_SYMBOL(__bio_clone_fast);
 
