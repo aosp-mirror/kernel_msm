@@ -1988,6 +1988,7 @@ static void stc311x_work(struct work_struct *work)
 	switch (get_battery_status(chip)) {
 	case POWER_SUPPLY_STATUS_FULL:
 		g_asus_batt_soc = 100;
+		g_asus_batt_soc_previous = g_asus_batt_soc;
 		break;
 	case POWER_SUPPLY_STATUS_DISCHARGING:
 		if (g_asus_batt_soc > g_asus_batt_soc_previous) {
@@ -1997,6 +1998,9 @@ static void stc311x_work(struct work_struct *work)
 		} else {
 			g_asus_batt_soc_previous = g_asus_batt_soc;
 		}
+		break;
+	case POWER_SUPPLY_STATUS_CHARGING:
+		g_asus_batt_soc_previous = g_asus_batt_soc;
 		break;
 	default:
 		break;

@@ -1469,7 +1469,7 @@ static int taper_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int iterm_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
+	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_full = !!rt_sts;
 
 	return 0;
@@ -1675,6 +1675,7 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 			gpio_set_value(GPIO_num17,1);
 			pr_info("[BAT][CHG] gpio_17 set to 1\n");
 		}
+		chip->batt_full = false;
 		smb23x_enable_volatile_writes(chip);
 		smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
 
@@ -2027,7 +2028,7 @@ static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
 	int rc, status;
 	u8 tmp;
 
-	if (chip->batt_full)
+	if (chip->batt_full && chip->usb_present)
 		return POWER_SUPPLY_STATUS_FULL;
 
 	rc = smb23x_read(chip, CHG_STATUS_B_REG, &tmp);
@@ -2037,8 +2038,10 @@ static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
 	}
 
 	status = tmp & CHARGE_TYPE_MASK;
-	return (status == NO_CHARGE_VAL) ? POWER_SUPPLY_STATUS_DISCHARGING :
-						POWER_SUPPLY_STATUS_CHARGING;
+	if ((status == NO_CHARGE_VAL) && (!chip->usb_present))
+		return POWER_SUPPLY_STATUS_DISCHARGING;
+	else
+		return POWER_SUPPLY_STATUS_CHARGING;
 }
 
 static int smb23x_get_prop_charging_enabled(struct smb23x_chip *chip)
@@ -2317,7 +2320,7 @@ static void smb23x_external_power_changed(struct power_supply *psy)
 		power_supply_set_online(chip->usb_psy, false);
 	}
 
-	if (smb23x_get_prop_battery_charging_enabled(chip) == true) {
+	if ((smb23x_get_prop_battery_charging_enabled(chip) == true) && (chip->usb_present)) {
 		if (chip->parallel_charging) {
 			if (!chip->batt_warm && !chip->batt_cool) {
 				cancel_work_sync(&chip->parallel_work);
