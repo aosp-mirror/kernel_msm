@@ -1877,8 +1877,19 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
          */
         lim_update_rrm_capability(pMac, pSmeJoinReq);
 
-        /* check for the existence of start BSS session  */
+        if (pe_find_session_by_sme_session_id(pMac, pSmeJoinReq->sessionId)) {
+            limLog(pMac, LOGE,
+                 FL("A session already exist for the SME session %d"),
+                 pSmeJoinReq->sessionId);
+            vos_flush_logs(WLAN_LOG_TYPE_FATAL,
+                           WLAN_LOG_INDICATOR_HOST_DRIVER,
+                           WLAN_LOG_REASON_STALE_SESSION_FOUND,
+                           true);
+            retCode = eSIR_SME_REFUSED;
+            goto end;
+        }
 
+        /* check for the existence of start BSS session  */
         if((psessionEntry = peFindSessionByBssid(pMac,pSmeJoinReq->bssDescription.bssId,&sessionId)) != NULL)
         {
             limLog(pMac, LOGE, FL("Session(%d) Already exists for BSSID: "
@@ -2381,6 +2392,7 @@ __limProcessSmeReassocReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
     tpPESession        psessionEntry = NULL;
     tANI_U8            sessionId;
     tANI_U8            smeSessionId;
+    uint8_t            no_of_sessions;
     tANI_U16           transactionId;
     tPowerdBm            localPowerConstraint = 0, regMax = 0;
     tANI_U32           teleBcnEn = 0;
@@ -2414,6 +2426,20 @@ __limProcessSmeReassocReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         retCode = eSIR_SME_INVALID_PARAMETERS;
         goto end;
     }
+
+    no_of_sessions =
+        pe_count_session_with_sme_session_id(pMac, pReassocReq->sessionId);
+    if (no_of_sessions > 1) {
+        limLog(pMac, LOGE,
+               FL("%d sessions exist for the SME session %d"),
+               no_of_sessions, pReassocReq->sessionId);
+        vos_flush_logs(WLAN_LOG_TYPE_FATAL,
+                      WLAN_LOG_INDICATOR_HOST_DRIVER,
+                      WLAN_LOG_REASON_STALE_SESSION_FOUND,
+                      true);
+        retCode = eSIR_SME_REFUSED;
+        goto end;
+   }
 
    if((psessionEntry = peFindSessionByBssid(pMac,pReassocReq->bssDescription.bssId,&sessionId))==NULL)
     {

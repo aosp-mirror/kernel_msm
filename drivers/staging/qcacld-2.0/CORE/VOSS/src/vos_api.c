@@ -2722,7 +2722,8 @@ void vos_get_log_and_reset_completion(uint32_t *is_fatal,
 
 	if ((WLAN_LOG_INDICATOR_HOST_DRIVER == *indicator) &&
 	    ((WLAN_LOG_REASON_SME_OUT_OF_CMD_BUF == *reason_code) ||
-		 (WLAN_LOG_REASON_SME_COMMAND_STUCK == *reason_code)))
+		 (WLAN_LOG_REASON_SME_COMMAND_STUCK == *reason_code) ||
+		 (WLAN_LOG_REASON_STALE_SESSION_FOUND == *reason_code)))
 		*is_ssr_needed = true;
 	else
 		*is_ssr_needed = false;

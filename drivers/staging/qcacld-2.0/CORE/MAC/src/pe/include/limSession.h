@@ -640,6 +640,8 @@ void peDeleteSession(tpAniSirGlobal pMac, tpPESession psessionEntry);
  */
 tpPESession pe_find_session_by_sme_session_id(tpAniSirGlobal mac_ctx,
 					   uint8_t sme_session_id);
+uint8_t pe_count_session_with_sme_session_id(tpAniSirGlobal mac_ctx,
+	uint8_t sme_session_id);
 
 int pe_get_active_session_count(tpAniSirGlobal mac_ctx);
 #endif //#if !defined( __LIM_SESSION_H )

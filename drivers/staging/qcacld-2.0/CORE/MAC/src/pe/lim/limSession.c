@@ -516,6 +516,34 @@ tpPESession pe_find_session_by_sme_session_id(tpAniSirGlobal mac_ctx,
 	return NULL;
 }
 
+/**
+ * pe_count_session_with_sme_session_id() - count PE sessions for given sme
+ * session id
+ * @mac_ctx:          pointer to global adapter context
+ * @sme_session_id:   sme session id
+ *
+ * count PE sessions for given sme session id
+ *
+ * Return: number of pe session entry for given sme session
+ */
+uint8_t pe_count_session_with_sme_session_id(tpAniSirGlobal mac_ctx,
+					uint8_t sme_session_id)
+{
+	uint8_t i, count = 0;
+	for (i = 0; i < mac_ctx->lim.maxBssId; i++) {
+		if ((mac_ctx->lim.gpSession[i].valid) &&
+		    (mac_ctx->lim.gpSession[i].smeSessionId ==
+			sme_session_id)) {
+			count++;
+		}
+	}
+	limLog(mac_ctx, LOG4,
+	       FL("%d sessions found for smeSessionID: %d"),
+	       count, sme_session_id);
+	return count;
+}
+
+
 /*--------------------------------------------------------------------------
   \brief peFindSessionBySessionId() - looks up the PE session given the session ID.
 
