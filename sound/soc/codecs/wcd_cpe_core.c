@@ -192,6 +192,7 @@ static int wcd_cpe_get_sfr_dump(struct wcd_cpe_core *core)
 
 free_sfr_dump:
 	kfree(sfr_dump);
+	sfr_dump = NULL;
 done:
 	/* Even if SFR dump failed, do not return error */
 	return 0;
@@ -359,6 +360,8 @@ done:
 
 fw_req_fail:
 	kfree(segment);
+	segment = NULL;
+
 	return ret;
 }
 
@@ -2077,6 +2080,8 @@ fail_cpe_register:
 
 fail_cpe_initialize:
 	kfree(core);
+	core = NULL;
+
 	return NULL;
 }
 EXPORT_SYMBOL(wcd_cpe_init);
@@ -2662,6 +2667,7 @@ static int wcd_cpe_send_lsm_cal(
 
 free_msg:
 	kfree(inb_msg);
+	inb_msg = NULL;
 
 unlock_cal_mutex:
 	mutex_unlock(&core->cal_data[WCD_CPE_LSM_CAL_LSM]->lock);
@@ -2903,6 +2909,7 @@ static int wcd_cpe_send_param_conf_levels(
 		pr_err("%s: lsm_set_conf_levels failed, err = %d\n",
 			__func__, ret);
 	kfree(message);
+	message = NULL;
 	WCD_CPE_REL_LOCK(&session->lsm_lock, "lsm");
 	return ret;
 }
@@ -2986,6 +2993,8 @@ static int wcd_cpe_send_param_dereg_model(
 	WCD_CPE_REL_LOCK(&session->lsm_lock, "lsm");
 err_ret:
 	kfree(message);
+	message = NULL;
+
 	return rc;
 }
 
@@ -3031,6 +3040,8 @@ static int wcd_cpe_send_custom_param(
 	WCD_CPE_REL_LOCK(&session->lsm_lock, "lsm");
 err_ret:
 	kfree(msg);
+	msg = NULL;
+
 	return rc;
 }
 
@@ -3501,6 +3512,7 @@ err_afe_svc_reg:
 
 err_ret:
 	kfree(session);
+	session = NULL;
 
 err_session_alloc:
 	wcd_cpe_vote(core, false);
@@ -3673,6 +3685,7 @@ static int wcd_cpe_dealloc_lsm_session(void *core_handle,
 	mutex_destroy(&session->lsm_lock);
 	lsm_sessions[session->id] = NULL;
 	kfree(session);
+	session = NULL;
 
 	if (!wcd_cpe_lsm_session_active()) {
 		cmi_deregister(core->cmi_afe_handle);

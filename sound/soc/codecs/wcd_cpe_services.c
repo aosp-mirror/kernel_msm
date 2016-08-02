@@ -375,9 +375,11 @@ static void cpe_cmd_received(struct cpe_info *t_info)
 		switch (proc_rc) {
 		case CPE_PROC_SUCCESS:
 			kfree(node);
+			node = NULL;
 			break;
 		case CPE_PROC_FAILED:
 			kfree(node);
+			node = NULL;
 			pr_err("%s: cmd failed\n", __func__);
 			break;
 		case CPE_PROC_KILLED:
@@ -617,6 +619,7 @@ static enum cpe_svc_result cpe_deregister_generic(struct cpe_info *t_info,
 
 	list_del(&(n->list));
 	kfree(reg_handle);
+	reg_handle = NULL;
 
 	return CPE_SVC_SUCCESS;
 }
@@ -1124,6 +1127,7 @@ static void cpe_clk_plan_work(struct work_struct *work)
 
 cmd_fail:
 	kfree(cmi_msg);
+	cmi_msg = NULL;
 	cmi_deregister(cpe_d.cpe_cmi_handle);
 }
 
@@ -1607,6 +1611,7 @@ void *cpe_svc_initialize(
 
 err_tgt_init:
 	kfree(t_info->tgt);
+	t_info->tgt = NULL;
 
 err_tgt_alloc:
 	kfree(cpe_d.cpe_default_handle);
@@ -1640,7 +1645,9 @@ enum cpe_svc_result cpe_svc_deinitialize(void *cpe_handle)
 			 CPE_SS_IDLE);
 	mutex_destroy(&t_info->msg_lock);
 	kfree(t_info->tgt);
+	t_info->tgt = NULL;
 	kfree(t_info);
+	t_info = NULL;
 	mutex_destroy(&cpe_d.cpe_api_mutex);
 	mutex_destroy(&cpe_d.cpe_svc_lock);
 
@@ -1820,6 +1827,7 @@ static enum cpe_svc_result __cpe_svc_shutdown(void *cpe_handle)
 		list_del(&n->list);
 		cpe_command_cleanup(n);
 		kfree(n);
+		n = NULL;
 	}
 
 	pr_debug("%s: cpe service OFFLINE state\n", __func__);
@@ -2022,6 +2030,7 @@ enum cmi_api_result cmi_send_msg(void *message)
 		pr_err("%s: no memory for cmi payload, sz = %zd\n",
 			__func__, msg->size);
 		kfree(msg);
+		msg = NULL;
 		CPE_SVC_REL_LOCK(&cpe_d.cpe_api_mutex, "cpe_api");
 		return CPE_SVC_NO_MEMORY;
 	}
@@ -2037,7 +2046,9 @@ enum cmi_api_result cmi_send_msg(void *message)
 	if (rc != 0) {
 		pr_err("%s: Failed to queue message\n", __func__);
 		kfree(msg->payload);
+		msg->payload = NULL;
 		kfree(msg);
+		msg = NULL;
 	}
 
 	CPE_SVC_REL_LOCK(&cpe_d.cpe_api_mutex, "cpe_api");
@@ -2148,6 +2159,7 @@ restore_iram:
 
 err_return:
 	kfree(backup_data);
+	backup_data = NULL;
 fail_cmd:
 	CPE_SVC_REL_LOCK(&cpe_d.cpe_api_mutex, "cpe_api");
 	return rc;
@@ -2546,6 +2558,7 @@ static enum cpe_svc_result cpe_tgt_tomtom_init(
 					GFP_KERNEL);
 		if (!param->outbox) {
 			kfree(param->inbox);
+			param->inbox = NULL;
 			pr_err("%s: no memory for inbox, sz = %d\n",
 				__func__, TOMTOM_A_SVASS_SPE_OUTBOX_SIZE);
 			return CPE_SVC_NO_MEMORY;
@@ -2988,6 +3001,7 @@ static enum cpe_svc_result cpe_tgt_wcd9335_init(
 					GFP_KERNEL);
 		if (!param->outbox) {
 			kfree(param->inbox);
+			param->inbox = NULL;
 			pr_err("%s: no memory for inbox, sz = %d\n",
 				__func__, WCD9335_CPE_SS_SPE_OUTBOX_SIZE);
 			return CPE_SVC_NO_MEMORY;
