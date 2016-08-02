@@ -250,6 +250,7 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
             case eSIR_MAC_1X_AUTH_FAILURE_REASON:
             case eSIR_MAC_PREV_AUTH_NOT_VALID_REASON:
             case eSIR_MAC_PEER_REJECT_MECHANISIM_REASON:
+            case eSIR_MAC_XS_UNACKED_FRAMES_REASON:
                 // Valid reasonCode in received Disassociation frame
                 break;
 
@@ -267,12 +268,6 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
                 break;
 
             default:
-                // Invalid reasonCode in received Disassociation frame
-                // Log error and ignore the frame
-                PELOGE(limLog(pMac, LOGE,
-                       FL("received Disassoc frame with invalid reasonCode "
-                       "%d from "MAC_ADDRESS_STR), reasonCode,
-                       MAC_ADDR_ARRAY(pHdr->sa));)
                 break;
         }
     }
