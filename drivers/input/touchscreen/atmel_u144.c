@@ -1438,6 +1438,7 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 		data->T5_msg_size + 1, data->msg_buf);
 	if (ret) {
 		TOUCH_ERR_MSG( "Failed to read T44 and T5 (%d)\n", ret);
+		mxt_hw_reset(data);
 		return IRQ_NONE;
 	}
 
