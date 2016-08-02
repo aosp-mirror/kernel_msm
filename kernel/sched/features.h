@@ -91,3 +91,10 @@ SCHED_FEAT(ENERGY_AWARE, false)
  * UtilEstimation. Use estimated CPU utiliation.
  */
 SCHED_FEAT(UTIL_EST, false)
+
+/*
+ * SchedTune. Use Performance/Energy filtering function to evaluate the
+ * trade off between energy consumption and performance impact when comparing
+ * previous and next candidate CPUs.
+ */
+SCHED_FEAT(ENERGY_FILTER, false)
