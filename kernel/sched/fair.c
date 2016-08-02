@@ -5484,9 +5484,10 @@ static inline int find_best_target(struct task_struct *p, bool boosted, bool pre
 	int best_idle_cpu = -1;
 	int best_idle_cstate = INT_MAX;
 	int backup_cpu = -1;
-	unsigned long task_util_boosted, new_util;
+	unsigned long min_util;
+	unsigned long new_util;
 
-	task_util_boosted = boosted_task_util(p);
+	min_util = boosted_task_util(p);
 	for (iter_cpu = 0; iter_cpu < NR_CPUS; iter_cpu++) {
 		int cur_capacity;
 		struct rq *rq;
@@ -5505,13 +5506,14 @@ static inline int find_best_target(struct task_struct *p, bool boosted, bool pre
 		 * so prev_cpu will receive a negative bias due to the double
 		 * accounting. However, the blocked utilization may be zero.
 		 */
-		new_util = cpu_util(i, UTIL_EST) + task_util_boosted;
+		new_util = cpu_util(i, UTIL_EST) + task_util(p, UTIL_EST);
 
 		/*
 		 * Ensure minimum capacity to grant the required boost.
 		 * The target CPU can be already at a capacity level higher
 		 * than the one required to boost the task.
 		 */
+		new_util = max(min_util, new_util);
 		if (new_util > capacity_orig_of(i))
 			continue;
 
@@ -5583,7 +5585,8 @@ static int energy_aware_wake_cpu(struct task_struct *p, int target, int sync)
 	struct sched_group *sg, *sg_target;
 	int target_max_cap = INT_MAX;
 	int target_cpu = task_cpu(p);
-	unsigned long task_util_boosted, new_util;
+	unsigned long min_util;
+	unsigned long new_util;
 	int i;
 
 	if (sysctl_sched_sync_hint_enable && sync) {
@@ -5627,21 +5630,22 @@ static int energy_aware_wake_cpu(struct task_struct *p, int target, int sync)
 			}
 		} while (sg = sg->next, sg != sd->groups);
 
-		task_util_boosted = boosted_task_util(p);
 		/* Find cpu with sufficient capacity */
+		min_util = boosted_task_util(p);
 		for_each_cpu_and(i, tsk_cpus_allowed(p), sched_group_cpus(sg_target)) {
 			/*
 			 * p's blocked utilization is still accounted for on prev_cpu
 			 * so prev_cpu will receive a negative bias due to the double
 			 * accounting. However, the blocked utilization may be zero.
 			 */
-			new_util = cpu_util(i, UTIL_EST) + task_util_boosted;
+			new_util = cpu_util(i, UTIL_EST) + task_util(p, UTIL_EST);
 
 			/*
 			 * Ensure minimum capacity to grant the required boost.
 			 * The target CPU can be already at a capacity level higher
 			 * than the one required to boost the task.
 			 */
+			new_util = max(min_util, new_util);
 			if (new_util > capacity_orig_of(i))
 				continue;
 
