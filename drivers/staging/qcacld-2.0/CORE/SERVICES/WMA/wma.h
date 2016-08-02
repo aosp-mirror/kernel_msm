@@ -885,7 +885,7 @@ typedef struct wma_handle {
 	uint32_t wow_ipv6_mcast_ns_stats;
 	uint32_t wow_ipv6_mcast_na_stats;
 	uint32_t wow_icmpv4_count;
-	uint32_t wow_icmpv6_uc_bc_count;
+	uint32_t wow_icmpv6_count;
 	uint32_t wow_wakeup_enable_mask;
 	uint32_t wow_wakeup_disable_mask;
 	uint16_t max_mgmt_tx_fail_count;

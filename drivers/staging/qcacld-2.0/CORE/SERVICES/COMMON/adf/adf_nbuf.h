@@ -69,6 +69,7 @@
 #define ADF_NBUF_DEST_MAC_OFFSET        0
 #define ADF_NBUF_SRC_MAC_OFFSET         6
 #define ADF_NBUF_TRAC_IPV4_PROTO_TYPE_OFFSET  23
+#define ADF_NBUF_TRAC_IPV4_DEST_ADDR_OFFSET  30
 #define ADF_NBUF_TRAC_IPV6_PROTO_TYPE_OFFSET  20
 #define ADF_NBUF_TRAC_ICMP_TYPE         1
 #define ADF_NBUF_TRAC_TCP_TYPE          6
@@ -1627,6 +1628,22 @@ bool adf_nbuf_data_is_ipv4_pkt(uint8_t *data)
 {
 	return __adf_nbuf_data_is_ipv4_pkt(data);
 }
+
+/**
+ * adf_nbuf_data_is_ipv4_mcast_pkt() - check if it is IPV4 multicast packet.
+ * @data: Pointer to IPV4 packet data buffer
+ *
+ * This func. checks whether it is a IPV4 multicast packet or not.
+ *
+ * Return: TRUE if it is a IPV4 multicast packet
+ *         FALSE if not
+ */
+static inline
+bool adf_nbuf_data_is_ipv4_mcast_pkt(uint8_t *data)
+{
+	return __adf_nbuf_data_is_ipv4_mcast_pkt(data);
+}
+
 
 /**
  * adf_nbuf_is_ipv6_pkt() - check if it is IPV6 packet.
