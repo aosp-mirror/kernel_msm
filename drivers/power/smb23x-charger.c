@@ -269,6 +269,7 @@ static int hot_bat_decidegc_table[] = {
 
 #define CMD_REG_0		0x30
 #define VOLATILE_WRITE_ALLOW	BIT(7)
+#define POR_BIT			BIT(6)
 #define USB_SUSPEND_BIT		BIT(2)
 #define CHARGE_EN_BIT		BIT(1)
 #define STATE_PIN_OUT_DIS_BIT	BIT(0)
@@ -2852,6 +2853,28 @@ static int smb23x_resume(struct device *dev)
 	return 0;
 }
 
+void smb23x_shutdown(struct i2c_client *client)
+{
+	struct smb23x_chip *chip = i2c_get_clientdata(client);
+
+	pr_info("[BAT][CHG] smb23x_shutdown\n");
+
+	chip->parallel_charging = false;
+	smb23x_enable_volatile_writes(chip);
+
+	// Internal reset for reload NV default values
+	smb23x_masked_write(chip, CMD_REG_0, POR_BIT, 0x40);
+	msleep(100);
+
+	smb23x_enable_volatile_writes(chip);
+	// Set ICL to 100mA
+	smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0);
+
+	// Re-run AICL for adjust ICL
+	smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 0);
+	msleep(30);
+	smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
+}
 static int smb23x_remove(struct i2c_client *client)
 {
 	struct smb23x_chip *chip = i2c_get_clientdata(client);
@@ -2896,6 +2919,7 @@ static struct i2c_driver smb23x_driver = {
 	},
 	.probe		= smb23x_probe,
 	.remove		= smb23x_remove,
+	.shutdown	= smb23x_shutdown,
 	.id_table	= smb23x_id,
 };
 
