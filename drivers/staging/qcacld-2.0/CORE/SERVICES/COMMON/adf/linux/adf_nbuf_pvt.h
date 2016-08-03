@@ -333,6 +333,7 @@ void            __adf_nbuf_dmamap_set_cb(__adf_os_dma_map_t dmap, void *cb, void
 void            __adf_nbuf_reg_trace_cb(adf_nbuf_trace_update_t cb_func_ptr);
 bool            __adf_nbuf_data_is_ipv4_pkt(uint8_t *data);
 bool            __adf_nbuf_data_is_ipv4_mcast_pkt(uint8_t *data);
+bool            __adf_nbuf_data_is_ipv6_mcast_pkt(uint8_t *data);
 bool            __adf_nbuf_data_is_ipv6_pkt(uint8_t *data);
 bool            __adf_nbuf_data_is_icmp_pkt(uint8_t *data);
 bool            __adf_nbuf_data_is_icmpv6_pkt(uint8_t *data);
