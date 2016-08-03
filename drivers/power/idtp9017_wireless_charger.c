@@ -57,10 +57,10 @@ struct idtp9017_chip {
 	struct power_supply wlc_psy;
 	struct delayed_work wlc_status_work;
 	struct delayed_work set_env_work;
-	struct timespec prev_time;
-	struct mutex off_gpio_access_lock;
+	struct timespec next_time;
+	struct mutex wlc_lock;
 	bool set_env_complete;
-	bool is_wlc_off_control;
+	bool wlc_enabled;
 	struct delayed_work wlc_online_check_work;
 	int wlc_online_chk_delay_ms;
 };
@@ -69,115 +69,118 @@ struct idtp9017_chip {
  * Otherwise, LOW state does not work, so wireless Tx does not charging.
  * This func checks the time of OFF PIN HIGH control.
  * Then LOW control also checks if having 3sec latency. */
-static inline void idtp9017_off_gpio_high_time_set(struct idtp9017_chip *chip)
+static inline void idtp9017_update_time(struct idtp9017_chip *chip)
 {
-	get_monotonic_boottime(&chip->prev_time);
-	chip->prev_time.tv_sec += WLC_TX_OFF_LATENCY;
+	get_monotonic_boottime(&chip->next_time);
+	chip->next_time.tv_sec += WLC_TX_OFF_LATENCY;
 }
 
-static void idtp9017_off_gpio_ctrl(struct idtp9017_chip *chip, bool value)
+static void idtp9017_wlc_enable(struct idtp9017_chip *chip, bool enable)
 {
 	struct timespec now;
 
 	if (!gpio_is_valid(chip->wlc_off_gpio))
 		return;
 
-	mutex_lock(&chip->off_gpio_access_lock);
-	if (chip->is_wlc_off_control == value) {
-		mutex_unlock(&chip->off_gpio_access_lock);
+	mutex_lock(&chip->wlc_lock);
+	if (chip->wlc_enabled == enable) {
+		mutex_unlock(&chip->wlc_lock);
 		return;
 	}
 
-	chip->is_wlc_off_control = value;
-	if (value) {
-		/* Tx off case */
-		cancel_delayed_work_sync(&chip->set_env_work);
-		cancel_delayed_work_sync(&chip->wlc_status_work);
-		 /* marking the time of OFF PIN HIGH control */
-		disable_irq_wake(chip->client->irq);
-		disable_irq(chip->client->irq);
-		idtp9017_off_gpio_high_time_set(chip);
-		gpio_set_value(chip->wlc_off_gpio, 1);
-		schedule_delayed_work(&chip->wlc_online_check_work,
-				round_jiffies_relative(
-				msecs_to_jiffies(chip->wlc_online_chk_delay_ms)));
-	} else {
-		/* Tx on case */
-		cancel_delayed_work_sync(&chip->wlc_online_check_work);
+	chip->wlc_enabled = enable;
+	if (enable) {
 		get_monotonic_boottime(&now);
 		/* checking if LOW control has 3sec latency from the time of
 		 * OFF control.If not, should do 3sec sleep.
 		 */
-		if (timespec_compare(&now, &chip->prev_time) < 0)
+		if (timespec_compare(&now, &chip->next_time) < 0)
 			msleep(WLC_TX_OFF_LATENCY * 1000);
 
 		enable_irq(chip->client->irq);
 		enable_irq_wake(chip->client->irq);
 		gpio_set_value(chip->wlc_off_gpio, 0);
-		//irq_thread will start set_env_work and wlc_status_work after wireless active
+		/* irq_thread will start set_env_work and wlc_status_work
+		 * after wireless active
+		 */
+	} else {
+		cancel_delayed_work_sync(&chip->set_env_work);
+		cancel_delayed_work_sync(&chip->wlc_status_work);
+		 /* marking the time of OFF PIN HIGH control */
+		disable_irq_wake(chip->client->irq);
+		disable_irq(chip->client->irq);
+		idtp9017_update_time(chip);
+		gpio_set_value(chip->wlc_off_gpio, 1);
+		schedule_delayed_work(&chip->wlc_online_check_work,
+				round_jiffies_relative(
+				msecs_to_jiffies(chip->wlc_online_chk_delay_ms)));
 	}
-	dev_info(chip->dev, "Set WLC TX Off: %d\n", !chip->psy_chg_en);
-	mutex_unlock(&chip->off_gpio_access_lock);
+	dev_info(chip->dev, "WLC TX enable: %d\n", chip->psy_chg_en);
+	mutex_unlock(&chip->wlc_lock);
 }
 
-static int idtp9017_check_wlc_present(struct idtp9017_chip *chip)
+static int idtp9017_wlc_is_present(struct idtp9017_chip *chip)
 {
 	struct timespec now;
-	int active_n = 0; /* Initial present condition */
+	int present = 1;
+	bool wlc_disabled = false;
 	int i;
 
 	if (!gpio_is_valid(chip->wlc_off_gpio))
-		return -1;
+		return -ENODEV;
 
 	if (!gpio_is_valid(chip->wlc_enable_gpio))
-		return -1;
+		return -ENODEV;
 
-	if (gpio_get_value(chip->wlc_off_gpio)) {
-		/* TX off case */
-		get_monotonic_boottime(&now);
-		/* checking if LOW control has 3sec latency from the time of
-		 * OFF control. If not, should return Tx present state for
-		 * next workqueue's checking function.
-		 * Normally below check logic runs with 10sec latency through
-		 * the workqueue. But in abnormal IRQ storm case that having
-		 * a lot of suspend and resume call, below logic is able to
-		 * run within 3sec. */
-		if (timespec_compare(&now, &chip->prev_time) >= 0) {
+	mutex_lock(&chip->wlc_lock);
+
+	if (gpio_get_value(chip->wlc_off_gpio))
+		wlc_disabled = true;
+
+	get_monotonic_boottime(&now);
+	/* checking if LOW control has 3sec latency from the time of
+	 * OFF control. If not, should return Tx present state for
+	 * next workqueue's checking function.
+	 * Normally below check logic runs with 10sec latency through
+	 * the workqueue. But in abnormal IRQ storm case that having
+	 * a lot of suspend and resume call, below logic is able to
+	 * run within 3sec. */
+	if (timespec_compare(&now, &chip->next_time) >= 0) {
+		if (wlc_disabled)
 			gpio_set_value(chip->wlc_off_gpio, 0);
-			for (i = 0; i < WLC_ACTIVE_CHECK_COUNT; i++) {
-				active_n = gpio_get_value(chip->wlc_enable_gpio);
-				msleep(WLC_ACTIVE_CHECK_SLEEP_MS);
-				if (!active_n)
-					break;
-			}
-			/* marking the time of OFF PIN HIGH control */
-			idtp9017_off_gpio_high_time_set(chip);
-			gpio_set_value(chip->wlc_off_gpio, 1);
+		for (i = 0; i < WLC_ACTIVE_CHECK_COUNT; i++) {
+			present = !gpio_get_value(chip->wlc_enable_gpio);
+			msleep(WLC_ACTIVE_CHECK_SLEEP_MS);
+			if (present)
+				break;
 		}
+		/* marking the time of OFF PIN HIGH control */
+		idtp9017_update_time(chip);
+		if (wlc_disabled)
+			gpio_set_value(chip->wlc_off_gpio, 1);
 	}
-
-	return !active_n;
+	mutex_unlock(&chip->wlc_lock);
+	return present;
 }
 
-static void
-idtp9017_wlc_online_check_work(struct work_struct *work)
+static void idtp9017_wlc_online_check_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct idtp9017_chip *chip = container_of(dwork,
 				struct idtp9017_chip, wlc_online_check_work);
-	int wlc_present;
+	int present;
 
 	/* after setting present, charger's external_power_changed function
 	 * turn on Wireless Tx through charging_enabled psy's prop. */
-	wlc_present = idtp9017_check_wlc_present(chip);
-	if (!wlc_present) {
+	present = idtp9017_wlc_is_present(chip);
+	if (present > 0) {
+		schedule_delayed_work(&chip->wlc_online_check_work,
+			round_jiffies_relative(msecs_to_jiffies(
+			chip->wlc_online_chk_delay_ms)));
+	} else if (!present) {
 		power_supply_set_present(&chip->wlc_psy, 0);
 		return;
 	}
-
-	schedule_delayed_work(&chip->wlc_online_check_work,
-			round_jiffies_relative(msecs_to_jiffies(
-			chip->wlc_online_chk_delay_ms)));
 }
 
 static enum power_supply_property pm_power_props_wireless[] = {
@@ -248,8 +251,8 @@ static int pm_power_set_property_wireless(struct power_supply *psy,
 		psy->type = val->intval;
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		chip->psy_chg_en = !!val->intval;
-		idtp9017_off_gpio_ctrl(chip, !chip->psy_chg_en);
+		chip->psy_chg_en = val->intval;
+		idtp9017_wlc_enable(chip, chip->psy_chg_en);
 		break;
 	default:
 		return -EINVAL;
@@ -1077,7 +1080,7 @@ static irqreturn_t idtp9017_irq_thread(int irq, void *handle)
 
 	dev_dbg(chip->dev, "%s: chg_en: %d\n", __func__, chip->wlc_chg_en);
 
-	if (!chip->is_wlc_off_control) {
+	if (chip->wlc_enabled) {
 		if (chip->wlc_chg_en) {
 			schedule_delayed_work(&chip->set_env_work,
 				round_jiffies_relative(
@@ -1245,6 +1248,7 @@ static int idtp9017_probe(struct i2c_client *client,
 	chip->client = client;
 	chip->dev = &client->dev;
 	chip->psy_chg_en = 1;
+	chip->wlc_enabled = 1;
 
 	/* need dts parser */
 	if (dev_node) {
@@ -1280,7 +1284,7 @@ static int idtp9017_probe(struct i2c_client *client,
 		return ret;
 	}
 
-	mutex_init(&chip->off_gpio_access_lock);
+	mutex_init(&chip->wlc_lock);
 	INIT_DELAYED_WORK(&chip->wlc_status_work, wlc_info_worker);
 	INIT_DELAYED_WORK(&chip->set_env_work, idtp9017_set_enviroment);
 	INIT_DELAYED_WORK(&chip->wlc_online_check_work,
@@ -1310,7 +1314,7 @@ static void idtp9017_resume(struct device *dev)
 	if (!chip->psy_chg_en)
 		schedule_delayed_work(&chip->wlc_online_check_work, 0);
 
-	if (!chip->is_wlc_off_control && chip->wlc_chg_en)
+	if (chip->wlc_enabled && chip->wlc_chg_en)
 		schedule_delayed_work(&chip->wlc_status_work,
 			round_jiffies_relative(
 				msecs_to_jiffies(WLC_CHECK_STATUS_DELAY_MS)));
@@ -1323,7 +1327,7 @@ static int idtp9017_suspend(struct device *dev)
 	if (!chip->psy_chg_en)
 		cancel_delayed_work_sync(&chip->wlc_online_check_work);
 
-	if (!chip->is_wlc_off_control && chip->wlc_chg_en)
+	if (chip->wlc_enabled && chip->wlc_chg_en)
 		cancel_delayed_work_sync(&chip->wlc_status_work);
 
 	return 0;
