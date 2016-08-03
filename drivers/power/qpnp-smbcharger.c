@@ -4207,12 +4207,17 @@ static int smbchg_external_otg_regulator_enable(struct regulator_dev *rdev)
 	 * allowance to 9V, so that the audio boost operating in reverse never
 	 * gets detected as a valid input
 	 */
-	rc = smbchg_sec_masked_write(chip,
-				chip->usb_chgpth_base + CHGPTH_CFG,
-				HVDCP_EN_BIT, 0);
-	if (rc < 0) {
-		dev_err(chip->dev, "Couldn't disable HVDCP rc=%d\n", rc);
-		return rc;
+#ifdef CONFIG_HTC_BATT
+	if (!chip->hvdcp_not_supported)
+#endif
+	{
+		rc = smbchg_sec_masked_write(chip,
+					chip->usb_chgpth_base + CHGPTH_CFG,
+					HVDCP_EN_BIT, 0);
+		if (rc < 0) {
+			dev_err(chip->dev, "Couldn't disable HVDCP rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	rc = smbchg_sec_masked_write(chip,
@@ -4257,12 +4262,17 @@ static int smbchg_external_otg_regulator_disable(struct regulator_dev *rdev)
 	 * value in order to allow normal USBs to be recognized as a valid
 	 * input.
 	 */
-	rc = smbchg_sec_masked_write(chip,
-				chip->usb_chgpth_base + CHGPTH_CFG,
-				HVDCP_EN_BIT, HVDCP_EN_BIT);
-	if (rc < 0) {
-		dev_err(chip->dev, "Couldn't enable HVDCP rc=%d\n", rc);
-		return rc;
+#ifdef CONFIG_HTC_BATT
+	if (!chip->hvdcp_not_supported)
+#endif
+	{
+		rc = smbchg_sec_masked_write(chip,
+					chip->usb_chgpth_base + CHGPTH_CFG,
+					HVDCP_EN_BIT, HVDCP_EN_BIT);
+		if (rc < 0) {
+			dev_err(chip->dev, "Couldn't enable HVDCP rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	rc = smbchg_sec_masked_write(chip,
@@ -5178,7 +5188,7 @@ static void smbchg_downgrade_iusb_work(struct work_struct *work)
 	} else {
 		current_aicl = smbchg_get_aicl_level_ma(chip);
 		hard_limit = is_smbchg_hard_limit(chip);
-		vbus = pmi8994_get_usbin_voltage_now();
+		vbus = pmi8994_get_usbin_voltage_now()/1000;
 	}
 
 	/*Downgrade iusb step by step*/
@@ -5193,7 +5203,7 @@ static void smbchg_downgrade_iusb_work(struct work_struct *work)
 
 	if (downgrade_index >= target_index){
 		pr_smb(PR_STATUS, "Set iusb=%dmA, target=%dmA, "
-		"current_aicl=%dmA, vbus=%duV, hard_limit=%d\n",
+		"current_aicl=%dmA, vbus=%dmV, hard_limit=%d\n",
 			chip->tables.usb_ilim_ma_table[downgrade_index],
 			chip->tables.usb_ilim_ma_table[target_index],
 			current_aicl, vbus, hard_limit);
@@ -5205,7 +5215,7 @@ static void smbchg_downgrade_iusb_work(struct work_struct *work)
 	} else {
 		g_is_5v_2a_detected = true;
 		pr_smb(PR_STATUS, "Downgrade to 1.5A done, "
-			"current_aicl=%dmA, vbus=%duV, hard_limit=%d\n",
+			"current_aicl=%dmA, vbus=%dmV, hard_limit=%d\n",
 			current_aicl, vbus, hard_limit);
 		power_supply_set_current_limit(chip->usb_psy, USB_MA_1500 * 1000);
 		/*Enable Input Missing Poller after 5V2A detection*/
@@ -5261,7 +5271,7 @@ static void smbchg_iusb_5v_2a_detect_work(struct work_struct *work)
 
 	if (upgrade_index <= target_index){
 		pr_smb(PR_STATUS, "Set iusb=%dmA, target=%dmA, "
-			"current_aicl=%dmA, vbatt=%dmV, vbus=%duV, hard_limit=%d\n",
+			"current_aicl=%dmA, vbatt=%dmV, vbus=%dmV, hard_limit=%d\n",
 			chip->tables.usb_ilim_ma_table[upgrade_index],
 			chip->tables.usb_ilim_ma_table[target_index],
 			current_aicl, vbat_mv, vbus, hard_limit);
@@ -5274,7 +5284,7 @@ static void smbchg_iusb_5v_2a_detect_work(struct work_struct *work)
 		/*5V/2A Adapter is detected*/
 		g_is_5v_2a_detected = true;
 		pr_smb(PR_STATUS, "Upgrade to 2A done, "
-			"current_aicl=%dmA, vbatt=%dmV, vbus=%duV, hard_limit=%d\n\n",
+			"current_aicl=%dmA, vbatt=%dmV, vbus=%dmV, hard_limit=%d\n\n",
 		current_aicl, vbat_mv, vbus, hard_limit);
 		power_supply_set_current_limit(chip->usb_psy, USB_MA_2000 * 1000);
 		/*Enable Input Missing Poller after 5V2A detection*/
@@ -8020,6 +8030,16 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
 			return rc;
 		}
 	}
+#ifdef CONFIG_HTC_BATT
+	else {
+		/* disable HVDCP */
+		pr_smb(PR_STATUS, "Disable HVDCP\n");
+		rc = smbchg_sec_masked_write(chip, chip->usb_chgpth_base + CHGPTH_CFG,
+				HVDCP_EN_BIT, 0);
+		if (rc < 0)
+			pr_err("Couldn't disable HVDCP rc=%d\n", rc);
+	}
+#endif /* CONFIG_HTC_BATT */
 
 	if (chip->aicl_rerun_period_s > 0) {
 		rc = smbchg_set_aicl_rerun_period_s(chip,
