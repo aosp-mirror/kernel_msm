@@ -3186,6 +3186,8 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		rmi4_data->report_pressure = true;
 	} else {
 		extra_data->data29_size = 0;
+		rmi4_data->force_min = 0;
+		rmi4_data->force_max = MAX_F12_TOUCH_PRESSURE;
 		rmi4_data->report_pressure = false;
 	}
 #endif
