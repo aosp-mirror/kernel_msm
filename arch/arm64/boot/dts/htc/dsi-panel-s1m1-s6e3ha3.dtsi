@@ -91,6 +91,15 @@
 		];
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-default-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-gain-on-command = [
+			29 01 00 00 00 00 03 F0 5A 5A
+			29 01 00 00 00 00 03 F1 5A 5A
+			29 01 00 00 00 00 07 C8 00 00 00 00 00 00
+			29 01 00 00 00 00 02 F7 03
+			29 01 00 00 00 00 03 F0 A5 A5
+			29 01 00 00 00 00 03 F1 A5 A5
+		];
+		qcom,mdss-dsi-rgb-gain-offset = <2 1 2>;
 		qcom,mdss-dsi-lp-mode-on = [
 			29 01 00 00 00 00 03 F0 5A 5A
 			29 01 00 00 00 00 02 B0 0E
@@ -131,7 +140,7 @@
 			29 01 00 00 00 00 02 51 00
 			29 01 00 00 00 00 03 F0 A5 A5
 		];
-		qcom,mdss-dsi-lp-off-offset = <16 1>;
+		qcom,mdss-dsi-lp-off-offset = <16 1 0>;
 		qcom,cont-splash-enabled;
 		qcom,panel-supply-entries = <&dsi_panel_pwr_supply_s6e3ha3>;
 		qcom,mdss-dsi-lp11-init;
