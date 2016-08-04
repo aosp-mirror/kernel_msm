@@ -61,7 +61,7 @@
         // 1. Mask out the delayed_work trigger in work_handler()
         // 2. Change the delay_ms to 33ms
         // 3. Change the time budget for Long Ranging mode to 26ms
-*/
+
 #define API_VERSION                      "1.1.20.1"
         // 1. Improve S/W architecture regarding mode configuration
         // 2. Config normal mode(high speed mode) as default
@@ -69,6 +69,13 @@
         // 4. Remove the polling process while running interrupt mode
         // 5. At request modify RANGE_MEASUREMENT_TIMES to 30
         // 6. At request modify RANGE_MEASUREMENT_RETRY_TIMES to 39
+*/
+
+#define API_VERSION                      "1.1.20.2"
+        // 1. Error handling while enable process
+        // 2. Workaround to unclog the input sub-system issue caused
+        // by the chip not able to trigger a new interrupt due to
+        // i2c nack while performing API, clear_interrupt().
 
 #define OFFSET_CALI_TARGET_DISTANCE	     100 // Target: 100 mm
 #define RANGE_MEASUREMENT_TIMES		     30
@@ -971,6 +978,7 @@ int stmvl53l0_poll_thread(void *data)
     return 0;
 }
 #endif
+
 /* work handler */
 static void stmvl53l0_work_handler(struct work_struct *work)
 {
@@ -1022,6 +1030,7 @@ static void stmvl53l0_work_handler(struct work_struct *work)
 #endif
             /* clear H/W interrupt flag */
             Status = papi_func_tbl->ClearInterruptMask(vl53l0_dev, 0);
+
             if (Status != VL53L0_ERROR_NONE) {
                 vl53l0_errmsg("VL53L0_ClearInterruptMask failed with "
                                                 "Status = %d\n", Status);
@@ -1149,14 +1158,30 @@ static ssize_t laser_power_store(struct device *dev,
         vl53l0_errmsg("kstrtoul fails, error = %d\n", err);
         return err;
     }
-    if (value == 1)
-        err = stmvl53l0_start(data, 3, NORMAL_MODE);
-    else
-        err = stmvl53l0_stop(data);
-    if (err)
-        return -1;
+
+    mutex_lock(&data->work_mutex);
+
+    if (value == 1) {
+        if (data->enable_ps_sensor == 0) {
+            err = stmvl53l0_start(data, 3, NORMAL_MODE);
+            if (err != VL53L0_ERROR_NONE) {
+                vl53l0_errmsg("Failed to start NORMAL_MODE\n");
+                mutex_unlock(&data->work_mutex);
+                return -1;
+            }
+        } else
+            vl53l0_errmsg("Already enabled. Skip !");
+    } else {
+        if (data->enable_ps_sensor == 1) {
+            data->enable_ps_sensor = 0;
+            stmvl53l0_stop(data);
+        }
+    }
+
+    mutex_unlock(&data->work_mutex);
 
     vl53l0_dbgmsg("End--\n");
+
     return count;
 }
 
@@ -1461,10 +1486,11 @@ static ssize_t stmvl53l0_store_enable_ps_sensor(struct device *dev,
         const char *buf, size_t count)
 {
     struct stmvl53l0_data *data = dev_get_drvdata(dev);
+    VL53L0_Error Status = VL53L0_ERROR_NONE;
 
     unsigned long val = simple_strtoul(buf, NULL, 10);
 
-    if ((val != 0) && (val != 1)) {
+    if ((val != 0) && (val != 1) && (val != 2)) {
         vl53l0_errmsg("store unvalid value=%ld\n", val);
         return count;
     }
@@ -1477,17 +1503,37 @@ static ssize_t stmvl53l0_store_enable_ps_sensor(struct device *dev,
     if (val == 1) {
         if (data->enable_ps_sensor == 0) {
             /* turn on tof sensor */
-            stmvl53l0_start(data, 3, NORMAL_MODE);
+            Status = stmvl53l0_start(data, 3, NORMAL_MODE);
+            if (Status != VL53L0_ERROR_NONE) {
+                vl53l0_errmsg("Failed to start NORMAL_MODE\n");
+                mutex_unlock(&data->work_mutex);
+                return -1;
+            }
         } else {
             vl53l0_errmsg("Already enabled. Skip !");
         }
-    } else {
+    } else if (val == 0){
         /* turn off tof sensor */
         if (data->enable_ps_sensor == 1) {
             data->enable_ps_sensor = 0;
             /* turn off tof sensor */
             stmvl53l0_stop(data);
         }
+    } else {
+        /* Unclog the input device sub-system */
+        input_report_abs(data->input_dev_ps, ABS_DISTANCE, -1);
+        input_report_abs(data->input_dev_ps, ABS_HAT0X, -1);
+        input_report_abs(data->input_dev_ps, ABS_HAT0Y, -1);
+        input_report_abs(data->input_dev_ps, ABS_HAT1X, -1);
+        input_report_abs(data->input_dev_ps, ABS_HAT1Y, -1);
+        input_report_abs(data->input_dev_ps, ABS_HAT2X, -1);
+        input_report_abs(data->input_dev_ps, ABS_HAT2Y, -1);
+        input_report_abs(data->input_dev_ps, ABS_HAT3X, -1);
+        input_report_abs(data->input_dev_ps, ABS_HAT3Y, -1);
+        input_report_abs(data->input_dev_ps, ABS_WHEEL, -1);
+        input_report_abs(data->input_dev_ps, ABS_BRAKE, -1);
+        input_sync(data->input_dev_ps);
+        vl53l0_dbgmsg("Unclog the input sub-system\n");
     }
     vl53l0_dbgmsg("End\n");
 
@@ -2474,6 +2520,7 @@ static int stmvl53l0_ioctl_handler(struct file *file,
 
         case VL53L0_IOCTL_OFFSET_CALI:
             {
+                VL53L0_Error Status = VL53L0_ERROR_NONE;
                 vl53l0_dbgmsg("VL53L0_IOCTL_OFFSET_CALI\n");
 
                 data->offsetCalDistance = OFFSET_CALI_TARGET_DISTANCE;
@@ -2481,7 +2528,11 @@ static int stmvl53l0_ioctl_handler(struct file *file,
                 data->isApertureSpads = g_isApertureSpads = 0;
 
                 /* to start with offset calibration */
-                stmvl53l0_start(data, 3, OFFSETCALIB_MODE);
+                Status = stmvl53l0_start(data, 3, OFFSETCALIB_MODE);
+                if (Status != VL53L0_ERROR_NONE) {
+                    vl53l0_errmsg("Failed in OFFSETCALIB_MODE\n");
+                    return -1;
+                }
 
                 vl53l0_dbgmsg("Offset calibration finished. Offset = %d mm\n",
                         g_offsetMicroMeter);
@@ -2499,7 +2550,11 @@ static int stmvl53l0_ioctl_handler(struct file *file,
                 vl53l0_dbgmsg("VL53L0_IOCTL_XTALK_CALI\n");
 
                 /* to start with xtalk calibration */
-                stmvl53l0_start(data, 3, XTALKCALIB_MODE);
+                Status = stmvl53l0_start(data, 3, XTALKCALIB_MODE);
+                if (Status != VL53L0_ERROR_NONE) {
+                    vl53l0_errmsg("Failed in XTALKCALIB_MODE\n");
+                    return -1;
+                }
 
                 /* read out xtalk value and return */
                 Status = papi_func_tbl->GetXTalkCompensationRateMegaCps(vl53l0_dev,
@@ -2756,7 +2811,9 @@ static int stmvl53l0_init_client(struct stmvl53l0_data *data)
             }
         }
     }
-    data->reset = 0;
+
+    if (Status == VL53L0_ERROR_NONE && data->reset)
+        data->reset = 0;
 
     /* Setup in single ranging mode */
     if (Status == VL53L0_ERROR_NONE) {
@@ -2774,7 +2831,7 @@ static int stmvl53l0_init_client(struct stmvl53l0_data *data)
 
     vl53l0_dbgmsg("End\n");
 
-    return 0;
+    return Status;
 }
 
 static int stmvl53l0_config_use_case(struct stmvl53l0_data *data)
@@ -2884,7 +2941,7 @@ static int stmvl53l0_config_use_case(struct stmvl53l0_data *data)
 static int stmvl53l0_start(struct stmvl53l0_data *data,
         uint8_t scaling, init_mode_e mode)
 {
-    int rc = 0;
+    int rc = 0, err = 0;
     VL53L0_DEV vl53l0_dev = data;
 	VL53L0_Error Status = VL53L0_ERROR_NONE;
 
@@ -2911,13 +2968,13 @@ static int stmvl53l0_start(struct stmvl53l0_data *data,
         vl53l0_errmsg("%d, error rc %d\n", __LINE__, rc);
         pmodule_func_tbl->power_down(data->client_object);
 #ifdef HTC
-        rc = gpio_direction_output(data->pwdn_gpio, 0);
-        if (rc) {
+        err = gpio_direction_output(data->pwdn_gpio, 0);
+        if (err) {
             vl53l0_errmsg("Failed to pull low pwdn_gpio\n");
-            return rc;
+            return err;
         }
 #endif
-        return -EINVAL;
+        return rc;
     }
     /* check mode */
     if (mode != NORMAL_MODE)
@@ -2966,20 +3023,6 @@ static int stmvl53l0_start(struct stmvl53l0_data *data,
         vl53l0_errmsg("Failed to configure Use case = %u\n", vl53l0_dev->useCase);
         return -EPERM;
     }
-
-    /* initialize the input device sub-system */
-    input_report_abs(data->input_dev_ps, ABS_DISTANCE, -1);
-    input_report_abs(data->input_dev_ps, ABS_HAT0X, -1);
-    input_report_abs(data->input_dev_ps, ABS_HAT0Y, -1);
-    input_report_abs(data->input_dev_ps, ABS_HAT1X, -1);
-    input_report_abs(data->input_dev_ps, ABS_HAT1Y, -1);
-    input_report_abs(data->input_dev_ps, ABS_HAT2X, -1);
-    input_report_abs(data->input_dev_ps, ABS_HAT2Y, -1);
-    input_report_abs(data->input_dev_ps, ABS_HAT3X, -1);
-    input_report_abs(data->input_dev_ps, ABS_HAT3Y, -1);
-    input_report_abs(data->input_dev_ps, ABS_WHEEL, -1);
-    input_report_abs(data->input_dev_ps, ABS_BRAKE, -1);
-    input_sync(data->input_dev_ps);
 
     /* start the ranging */
     papi_func_tbl->StartMeasurement(vl53l0_dev);
