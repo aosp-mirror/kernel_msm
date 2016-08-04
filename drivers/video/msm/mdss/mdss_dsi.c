@@ -1527,6 +1527,15 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 			atomic_set(&ctrl_pdata->te_irq_ready, 1);
 		}
 	}
+
+	if (ctrl_pdata->panel_data.apply_display_setting) {
+		ret = ctrl_pdata->panel_data.apply_display_setting(
+			pdata, RGB_GAIN, DISPLAY_RGB_GAIN_MASK);
+		if (ret)
+			pr_warn("%s: unable to set RGB gain\n",
+				__func__);
+	}
+
 	ctrl_pdata->ctrl_state |= CTRL_STATE_PANEL_INIT;
 
 error:

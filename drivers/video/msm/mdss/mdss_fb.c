@@ -4577,7 +4577,8 @@ static int mdss_fb_mode_switch(struct msm_fb_data_type *mfd, u32 mode)
 	return ret;
 }
 
-static int mdss_fb_set_persistence_mode(struct msm_fb_data_type *mfd, u32 mode)
+static int mdss_fb_set_display_setting(struct msm_fb_data_type *mfd,
+	enum panel_setting setting, u32 mode)
 {
 	struct mdss_panel_info *pinfo = NULL;
 	struct mdss_panel_data *pdata;
@@ -4591,10 +4592,15 @@ static int mdss_fb_set_persistence_mode(struct msm_fb_data_type *mfd, u32 mode)
 	mutex_lock(&mfd->bl_lock);
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 	if ((pdata) && (pdata->apply_display_setting))
-		ret = pdata->apply_display_setting(pdata, mode);
+		ret = pdata->apply_display_setting(pdata, setting, mode);
 	mutex_unlock(&mfd->bl_lock);
 
 	return ret;
+}
+
+static int mdss_fb_set_persistence_mode(struct msm_fb_data_type *mfd, u32 mode)
+{
+	return mdss_fb_set_display_setting(mfd, PERSISTENCE_MODE, mode);
 }
 
 static int __ioctl_wait_idle(struct msm_fb_data_type *mfd, u32 cmd)

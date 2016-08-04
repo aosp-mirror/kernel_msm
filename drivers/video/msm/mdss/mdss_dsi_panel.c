@@ -32,6 +32,17 @@
 
 #define VSYNC_DELAY msecs_to_jiffies(17)
 
+#define CALIBRATION_DATA_PATH "/calibration_data"
+#define DISP_FLASH_DATA "disp_flash"
+#define DISP_FLASH_DATA_SIZE 64
+#define LIGHT_CALI_OFFSET 36
+#define LIGHT_CALI_SIZE 8
+#define LIGHT_RATIO_INDEX 0
+#define LIGHT_R_INDEX 1
+#define LIGHT_G_INDEX 2
+#define LIGHT_B_INDEX 3
+#define FORMULA_GAIN(ori,comp) ((uint16_t)(ori*comp/10000))
+
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
@@ -606,17 +617,29 @@ end:
 	return 0;
 }
 
-#define CHANGE_CMD_DATA(cmds,pos,value)	\
+#define CHANGE_CMD_DATA_RGB(cmd,line,ofst,size,gain)	\
 	do {	\
-		cmds[pos.line].payload[pos.offset] = value;	\
+		cmd->cmds[line].payload[ofst] = gain.R/256;	\
+		cmd->cmds[line].payload[ofst+1] = gain.R%256;	\
+		cmd->cmds[line].payload[ofst+size] = gain.G/256;	\
+		cmd->cmds[line].payload[ofst+size+1] = gain.G%256;	\
+		cmd->cmds[line].payload[ofst+size+size] = gain.B/256;	\
+		cmd->cmds[line].payload[ofst+size+size+1] = gain.B%256;	\
+	} while(0)
+
+#define CHANGE_CMD_DATA_LP(cmds,pos,value)        \
+	do {	\
+		cmds[pos.line].payload[pos.offset] = value;     \
 	} while(0)
 
 static int mdss_dsi_panel_apply_display_setting(struct mdss_panel_data *pdata,
-							u32 mode)
+							enum panel_setting setting, u32 mode)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
-	struct dsi_panel_cmds *lp_on_cmds;
-	struct dsi_panel_cmds *lp_off_cmds;
+	struct dsi_panel_cmds *on_cmds;
+	struct dsi_panel_cmds *off_cmds;
+	struct rgb_gain gain;
+	int i;
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -626,15 +649,51 @@ static int mdss_dsi_panel_apply_display_setting(struct mdss_panel_data *pdata,
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	lp_on_cmds = &ctrl->lp_on_cmds;
-	lp_off_cmds = &ctrl->lp_off_cmds;
+	switch (setting) {
+	case PERSISTENCE_MODE:
+		on_cmds = &ctrl->lp_on_cmds;
+		off_cmds = &ctrl->lp_off_cmds;
 
-	// Apply display settings for low-persistence mode
-	if ((mode & DISPLAY_LOW_PERSISTENCE_MASK) && (lp_on_cmds->cmd_cnt))
-		mdss_dsi_panel_apply_settings(ctrl, lp_on_cmds);
-	else if (lp_off_cmds->cmd_cnt) {
-		CHANGE_CMD_DATA(lp_off_cmds->cmds, ctrl->lp_off_pos, led_pwm1[1]);
-		mdss_dsi_panel_apply_settings(ctrl, lp_off_cmds);
+		// Apply display settings for low-persistence mode
+		if ((mode & DISPLAY_LOW_PERSISTENCE_MASK) && (on_cmds && on_cmds->cmd_cnt))
+			mdss_dsi_panel_apply_settings(ctrl, on_cmds);
+		else if (off_cmds && off_cmds->cmd_cnt) {
+			CHANGE_CMD_DATA_LP(off_cmds->cmds, ctrl->lp_off_pos, led_pwm1[1]);
+			mdss_dsi_panel_apply_settings(ctrl, off_cmds);
+		}
+
+		break;
+
+	case RGB_GAIN:
+		gain = ctrl->rgb_gain;
+
+		pr_info("%s: RGB GAIN (%d, %d, %d)\n",
+			__func__, gain.R, gain.G, gain.B);
+
+		if (!gain.R || !gain.G || !gain.B)
+			return -EINVAL;
+
+		if (mode & DISPLAY_RGB_GAIN_MASK) {
+			// Apply display settings for RGB gain
+			on_cmds = &ctrl->gain_on_cmds;
+			if (!on_cmds->cmd_cnt) {
+				pr_err("%s: no command for RGB gain\n", __func__);
+				break;
+			}
+
+			CHANGE_CMD_DATA_RGB(on_cmds, ctrl->rgb_gain_pos.line,
+				ctrl->rgb_gain_pos.offset, ctrl->rgb_gain_pos.size, gain);
+
+			for (i=0;i<on_cmds->cmds[ctrl->rgb_gain_pos.line].dchdr.dlen;i++)
+				pr_debug("%s: %02X \n", __func__,
+					on_cmds->cmds[ctrl->rgb_gain_pos.line].payload[i]);
+
+			mdss_dsi_panel_apply_settings(ctrl, on_cmds);
+		}
+		break;
+	default:
+		pr_err("%s: unknown setting %d, not applied\n", __func__, (int) setting);
+		break;
 	}
 
 	return 0;
@@ -2369,15 +2428,48 @@ static int mdss_dsi_parse_cmd_pos(struct device_node *np,
 {
 	u32 data[3];
 
-	if (of_property_read_u32_array(np, name, data, 2)) {
+	if (of_property_read_u32_array(np, name, data, 3)) {
 		pr_debug("%s: read %s failed\n", __func__, name);
 		return -EINVAL;
 	}
 
 	pos->line = data[0];
 	pos->offset = data[1];
+	pos->size = data[2];
 
 	return 0;
+}
+
+static void mdss_dsi_parse_rgb_gain(struct rgb_gain *gain)
+{
+	struct device_node *disp_cali_offset;
+	char *disp_cali_data = NULL;
+	int disp_cali_size = 0;
+
+	disp_cali_offset = of_find_node_by_path(CALIBRATION_DATA_PATH);
+	if (disp_cali_offset) {
+		disp_cali_data = (char *) of_get_property(disp_cali_offset,
+				DISP_FLASH_DATA, &disp_cali_size);
+		pr_debug("%s: disp_cali_size = %d\n", __func__, disp_cali_size);
+
+		if (disp_cali_data && (disp_cali_size == DISP_FLASH_DATA_SIZE)) {
+			/* RGB brightness calibration data */
+			int i;
+			uint16_t tmp[LIGHT_CALI_SIZE/2];
+			for (i = 0; i < LIGHT_CALI_SIZE/2; i++) {
+				tmp[i] = disp_cali_data[LIGHT_CALI_OFFSET+(i*2)] +
+					(disp_cali_data[LIGHT_CALI_OFFSET+(i*2)+1] << 8);
+				pr_info("%s: PA[%d] = 0x%x\n", __func__, i, tmp[i]);
+			}
+			gain->R = FORMULA_GAIN(tmp[LIGHT_R_INDEX],tmp[LIGHT_RATIO_INDEX]);
+			gain->G = FORMULA_GAIN(tmp[LIGHT_G_INDEX],tmp[LIGHT_RATIO_INDEX]);
+			gain->B = FORMULA_GAIN(tmp[LIGHT_B_INDEX],tmp[LIGHT_RATIO_INDEX]);
+			pr_info("%s: R = 0x%x, G = 0x%x B = 0x%x \n", __func__,
+				gain->R, gain->G, gain->B);
+		} else
+			pr_info("%s: disp_cali data less\n", __func__);
+	} else
+			pr_info("%s: No disp_cali data\n", __func__);
 }
 
 static int mdss_panel_parse_dt(struct device_node *np,
@@ -2600,6 +2692,13 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->lp_off_cmds,
 		"qcom,mdss-dsi-lp-mode-off", NULL);
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->gain_on_cmds,
+		"qcom,mdss-dsi-gain-on-command", NULL);
+
+	mdss_dsi_parse_rgb_gain(&ctrl_pdata->rgb_gain);
+	mdss_dsi_parse_cmd_pos(np, &ctrl_pdata->rgb_gain_pos,
+		"qcom,mdss-dsi-rgb-gain-offset");
 
 	mdss_dsi_parse_cmd_pos(np, &ctrl_pdata->lp_off_pos,
 		"qcom,mdss-dsi-lp-off-offset");
