@@ -4161,18 +4161,20 @@ void smb1351_chg_dump_reg(struct power_supply *psy)
 	printk("SMB1351[00:06]=[");
 	for (addr = 0; addr <= 0x06; addr++) {
 		rc = smb1351_read_reg(chip, addr, &reg);
-		if (rc)
+		if (rc) {
 			pr_err("Couldn't read 0x%02x rc = %d\n", addr, rc);
-		else
-			printk("%02x,", reg);
+			return;
+		}
+		printk("%02x,", reg);
 	}
 	printk("]");
 
 	rc = smb1351_read_reg(chip, CMD_CHG_REG, &reg);
-	if (rc)
+	if (rc) {
 		pr_err("Couldn't read 0x%02x rc = %d\n", addr, rc);
-	else
-		printk(",[32]=[%02x]\n", reg);
+		return;
+	}
+	printk(",[32]=[%02x]\n", reg);
 }
 EXPORT_SYMBOL(smb1351_chg_dump_reg);
 #endif /* CONFIG_HTC_BATT */
