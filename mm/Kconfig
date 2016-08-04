@@ -188,6 +188,7 @@ config MEMORY_HOTPLUG
 	depends on SPARSEMEM || X86_64_ACPI_NUMA
 	depends on ARCH_ENABLE_MEMORY_HOTPLUG
 	depends on (IA64 || X86 || PPC_BOOK3S_64 || SUPERH || S390)
+	depends on !KASAN
 
 config MEMORY_HOTPLUG_SPARSE
 	def_bool y
