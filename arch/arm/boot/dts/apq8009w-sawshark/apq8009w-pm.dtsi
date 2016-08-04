@@ -23,7 +23,7 @@
                 pinctrl-1 = <&pcb_ver_0_suspend &pcb_ver_1_suspend>;
 	};
 
-    i2c@78b5000 {
+    i2c@78b9000 {
 		/*delete the qcom charger*/
 		/delete-node/ smb1357-charger@57;
 

@@ -166,7 +166,7 @@
 			config {
 				pins = "gpio99";
 				drive-strength = <2>;
-				bias-pull-down;
+				bias-disable;
 			};
 		};
 		mcu_reset_sleep:mcu_reset_sleep {
@@ -192,7 +192,7 @@
 			config {
 				pins = "gpio20","gpio21";
 				drive-strength = <2>;
-				bias-pull-down;
+				bias-pull-up;
 			};
 		};
 		bt_uart_data_suspend:bt_uart_data_suspend {
@@ -203,7 +203,7 @@
 			config {
 				pins = "gpio20","gpio21";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-up;
 			};
 		};
 
@@ -215,7 +215,7 @@
 			config {
 				pins = "gpio111","gpio112";
 				drive-strength = <2>;
-				bias-pull-down;
+				bias-pull-up;
 			};
 		};
 		bt_uart_ctl_suspend:bt_uart_ctl_suspend {
@@ -226,7 +226,7 @@
 			config {
 				pins = "gpio111","gpio112";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-up;
 			};
 		};
 	};
@@ -246,7 +246,7 @@
 		ts_reset_suspend {
 			config {
 				/delete-property/ bias-pull-down;
-				bias-pull-up;
+				bias-disable;
 			};
 		};
 	};
@@ -261,7 +261,7 @@
 			config {
 				pins = "gpio22";
 				drive-strength = <2>;
-				bias-pull-up;
+				bias-disable;
 			};
 		};
 		oled_init_ctrl_suspend:oled_init_ctrl_suspend {
@@ -272,7 +272,7 @@
 			config {
 				pins = "gpio22";
 				drive-strength = <2>;
-				bias-pull-up;
+				bias-disable;
 			};
 		};
 	};
@@ -304,7 +304,7 @@
 				config {
 					pins = "gpio25", "gpio37";
 					drive-strength = <8>; /* 8 mA */
-					bias-pull-down; /* pull down */
+					bias-disable; /* no pull */
 					output-low;
 				};
 			};
@@ -318,7 +318,7 @@
 				config {
 					pins = "gpio25", "gpio37";
 					drive-strength = <2>; /* 2 mA */
-					bias-pull-down; /* pull down */
+					bias-disable; /* on pull */
 					output-low;
 				};
 			};
@@ -334,7 +334,7 @@
 			config {
 				pins = "gpio26";
 				drive-strength = <2>;
-				bias-pull-up;
+				bias-disable;
 			};
 		};
 		ap_status_suspend:ap_status_suspend {
@@ -345,7 +345,7 @@
 			config {
 				pins = "gpio26";
 				drive-strength = <2>;
-				bias-pull-up;
+				bias-disable;
 			};
 		};
 	};
@@ -438,7 +438,7 @@
 			config {
 				pins = "gpio49";
 				drive-strength = <2>;
-				bias-pull-down;
+				bias-disable;
 			};
 		};
 		ap_wakeup_mcu_suspend:ap_wakeup_mcu_suspend {
@@ -449,7 +449,7 @@
 			config {
 				pins = "gpio49";
 				drive-strength = <2>;
-				bias-pull-down;
+				bias-disable;
 			};
 		};
 	};
@@ -464,7 +464,7 @@
 			config {
 				pins = "gpio50";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-down;
 			};
 		};
 		mcu_wakeup_ap_suspend:mcu_wakeup_ap_suspend {
@@ -475,7 +475,7 @@
 			config {
 				pins = "gpio50";
 				drive-strength = <2>;
-				bias-disable;
+				bias-pull-down;
 			};
 		};
 	};
@@ -680,7 +680,7 @@
 			config {
 				pins = "gpio39";
 				drive-strength = <2>;
-				bias-pull-down;
+				bias-disable;
 			};
 		};
 		wifi_reg_on_suspend:wifi_reg_on_suspend {
@@ -691,7 +691,7 @@
 			config {
 				pins = "gpio39";
 				drive-strength = <2>;
-				bias-pull-down;
+				bias-disable;
 			};
 		};
 	};
@@ -706,7 +706,7 @@
 			config {
 				pins = "gpio52";
 				drive-strength = <2>;
-				bias-pull-down;
+				bias-disable;
 			};
 		};
 		bt_reg_on_suspend:bt_reg_on_suspend {
@@ -717,7 +717,7 @@
 			config {
 				pins = "gpio52";
 				drive-strength = <2>;
-				bias-pull-down;
+				bias-disable;
 			};
 		};
 	};
@@ -784,7 +784,7 @@
 			config {
 				pins = "gpio41";
 				drive-strength = <2>;
-				bias-pull-down ;
+				bias-disable ;
 			};
 		};
 		mcu_boot_0_suspend:mcu_boot_0_suspend {
@@ -795,7 +795,7 @@
 			config {
 				pins = "gpio41";
 				drive-strength = <2>;
-				bias-pull-down ;
+				bias-disable ;
 			};
 		};
 	};
@@ -882,6 +882,84 @@
 		sdc2_clk_on: sdc2_clk_on {
 			config {
 				drive-strength = <8>; /* 8 MA */
+			};
+		};
+	};
+
+	/* SIM Tybe flag*/
+	hw_ver_0{
+		hw_ver_0_active:hw_ver_0_active {
+			mux {
+				pins = "gpio89";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio89";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+		hw_ver_0_suspend:hw_ver_0_suspend {
+			mux {
+				pins = "gpio89";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio89";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+	};
+
+	/* PCB_A VER0 flag */
+	hw_ver_1{
+		hw_ver_1_active:hw_ver_1_active {
+			mux {
+				pins = "gpio97";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio97";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+		hw_ver_1_suspend:hw_ver_1_suspend {
+			mux {
+				pins = "gpio97";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio97";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+	};
+
+	/* PCB_A VER1 flag */
+	hw_ver_2{
+		hw_ver_2_active:hw_ver_2_active {
+			mux {
+				pins = "gpio93";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio93";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+		hw_ver_2_suspend:hw_ver_2_suspend {
+			mux {
+				pins = "gpio93";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio93";
+				drive-strength = <2>;
+				bias-disable;
 			};
 		};
 	};
