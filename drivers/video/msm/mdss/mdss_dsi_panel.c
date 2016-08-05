@@ -888,7 +888,7 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	} else {
 		if (ctrl->idle_off_cmds.cmd_cnt){
 			printk("MDSS:AMB: set idle OFF command!\n");
-			//mdss_dsi_panel_bl_ctrl(pdata, ambient_bl_level);
+			mdss_dsi_panel_bl_ctrl(pdata, ambient_bl_level);
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_off_cmds, CMD_REQ_COMMIT);
 		} else {
 			printk("MDSS:AMB: idle OFF command is not set!\n");

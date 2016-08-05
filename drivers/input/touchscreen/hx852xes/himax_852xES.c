@@ -4802,7 +4802,7 @@ static int himax852xes_resume(struct device *dev)
         I("FW updating, reject resume\n");
         return 0;
     } else {
-        //I("%s: enter\n", __func__);
+        I("%s: enter\n", __func__);
         ts = dev_get_drvdata(dev);
         if (ts->pdata->powerOff3V3 && ts->pdata->power)
             ts->pdata->power(1);
@@ -4874,14 +4874,14 @@ static int fb_notifier_callback(struct notifier_block *self,
         blank = evdata->data;
         switch (*blank) {
         case FB_BLANK_UNBLANK:
-            //I("%s: call resume\n", __func__);
+            I("%s: call resume\n", __func__);
             himax852xes_resume(&ts->client->dev);
             break;
         case FB_BLANK_POWERDOWN:
         case FB_BLANK_HSYNC_SUSPEND:
         case FB_BLANK_VSYNC_SUSPEND:
         case FB_BLANK_NORMAL:
-            //I("%s: call suspend\n", __func__);
+            I("%s: call suspend\n", __func__);
             himax852xes_suspend(&ts->client->dev);
             break;
         }
@@ -4917,8 +4917,7 @@ static struct i2c_driver himax852xes_driver = {
         .name = HIMAX852xes_NAME,
         .owner = THIS_MODULE,
         .of_match_table = himax_match_table,
-//#ifdef CONFIG_PM
-#if 0
+#ifdef CONFIG_PM
         .pm = &himax852xes_pm_ops,
 #endif
     },
