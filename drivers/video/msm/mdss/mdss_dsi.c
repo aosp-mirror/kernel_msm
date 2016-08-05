@@ -330,6 +330,7 @@ static int mdss_dsi_panel_power_ulp(struct mdss_panel_data *pdata,
 	int ret = 0, i;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	u32 mode = enable ? DSS_REG_MODE_ULP : DSS_REG_MODE_ENABLE;
+	struct dsi_shared_data *sdata;
 
 	pr_debug("%s: +\n", __func__);
 	if (pdata == NULL) {
@@ -339,6 +340,7 @@ static int mdss_dsi_panel_power_ulp(struct mdss_panel_data *pdata,
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
+	sdata = ctrl_pdata->shared_data;
 
 	for (i = 0; i < DSI_MAX_PM; i++) {
 		/*
@@ -347,11 +349,17 @@ static int mdss_dsi_panel_power_ulp(struct mdss_panel_data *pdata,
 		 */
 		if (DSI_CORE_PM == i)
 			continue;
-		ret = msm_dss_config_vreg_opt_mode(
-			ctrl_pdata->power_data[i].vreg_config,
-			ctrl_pdata->power_data[i].num_vreg, mode);
+		if (DSI_PANEL_PM == i)
+			ret = msm_dss_config_vreg_opt_mode(
+				ctrl_pdata->power_data[i].vreg_config,
+				ctrl_pdata->power_data[i].num_vreg, mode);
+		else
+			ret = msm_dss_config_vreg_opt_mode(
+				sdata->power_data[i].vreg_config,
+				sdata->power_data[i].num_vreg, mode);
+
 		if (ret) {
-			pr_err("%s: failed to config lp opt mode for %s.rc=%d\n",
+			pr_err("%s: failed to config ulp opt mode for %s.rc=%d\n",
 				__func__, __mdss_dsi_pm_name(i), ret);
 			goto error;
 		}
