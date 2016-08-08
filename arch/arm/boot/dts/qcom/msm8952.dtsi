@@ -1534,6 +1534,12 @@
 		compatible = "qcom,msm-test-pacman";
 	};
 
+	cpu-pmu {
+		compatible = "arm,armv8-pmuv3";
+		qcom,irq-is-percpu;
+		interrupts = <1 7 0xff00>;
+	};
+
 	qcom_rng: qrng@22000 {
 		compatible = "qcom,msm-rng";
 		reg = <0x22000 0x140>;
