@@ -30,6 +30,20 @@
 #include <linux/regulator/of_regulator.h>
 #include <linux/qpnp/power-on.h>
 
+// Add for power on/off reason +++
+extern u16 warm_reset_value;
+extern u8 power_on_value;
+extern u16 power_off_value;
+extern bool power_on_cold_boot;
+extern bool warm_reset_sid;
+extern bool power_on_sid;
+extern bool power_off_sid;
+extern bool power_on_value_unknown;
+extern bool power_on_value_unable;
+extern bool power_off_value_unknown;
+extern bool power_off_value_unable;
+// Add for power on/off reason ---
+
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
 #define PON_MASK(MSB_BIT, LSB_BIT) \
@@ -522,7 +536,7 @@ static int qpnp_pon_reset_config(struct qpnp_pon *pon,
 				QPNP_PON_PS_HOLD_RST_CTL(pon), rc);
 
 	rc = qpnp_pon_masked_write(pon, rst_en_reg, QPNP_PON_RESET_EN,
-						    QPNP_PON_RESET_EN);
+							QPNP_PON_RESET_EN);
 	if (rc)
 		dev_err(&pon->spmi->dev,
 			"Unable to write to addr=%hx, rc(%d)\n",
@@ -597,9 +611,20 @@ EXPORT_SYMBOL(qpnp_pon_system_pwr_off);
 int qpnp_pon_is_warm_reset(void)
 {
 	struct qpnp_pon *pon = sys_reset_dev;
+	// Add for power on/off reason +++
+	warm_reset_sid = false;
+	warm_reset_value = 0;
+	// Add for power on/off reason ---
 
 	if (!pon)
 		return -EPROBE_DEFER;
+
+	// Add for power on/off reason +++
+	warm_reset_value = (pon->warm_reset_reason1) | (pon->warm_reset_reason2 << 8);
+	if (pon->spmi->sid == 0) {
+		warm_reset_sid = true;
+	}
+	// Add for power on/off reason ---
 
 	if (is_pon_gen1(pon) || pon->subtype == PON_1REG)
 		return pon->warm_reset_reason1
@@ -2003,6 +2028,17 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 	const char *s3_src;
 	u8 s3_src_reg;
 	unsigned long flags;
+	// Add for power on/off reason +++
+	power_on_cold_boot = NULL;
+	power_on_value_unable = false;
+	power_on_value_unknown = false;
+	power_on_sid = false;
+	power_on_value = 0;
+	power_off_value_unable = false;
+	power_off_value_unknown = false;
+	power_off_sid = false;
+	power_off_value = 0;
+	// Add for power on/off reason ---
 
 	pon = devm_kzalloc(&spmi->dev, sizeof(struct qpnp_pon),
 							GFP_KERNEL);
@@ -2112,21 +2148,34 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 	if (rc) {
 		dev_err(&pon->spmi->dev, "Unable to read PON_REASON1 reg rc: %d\n",
 			rc);
+		// Add for power on/off reason +++
+		power_on_value_unable = true;
+		// Add for power on/off reason ---
 		return rc;
 	}
 
+	power_on_value = pon_sts;
 	index = ffs(pon_sts) - 1;
 	cold_boot = !qpnp_pon_is_warm_reset();
+	power_on_cold_boot = cold_boot;
 	if (index >= ARRAY_SIZE(qpnp_pon_reason) || index < 0) {
 		dev_info(&pon->spmi->dev,
 			"PMIC@SID%d Power-on reason: Unknown and '%s' boot\n",
 			pon->spmi->sid, cold_boot ? "cold" : "warm");
+		// Add for power on/off reason +++
+		power_on_value_unknown = true;
+		// Add for power on/off reason ---
 	} else {
 		pon->pon_trigger_reason = index;
 		dev_info(&pon->spmi->dev,
 			"PMIC@SID%d Power-on reason: %s and '%s' boot\n",
 			pon->spmi->sid, qpnp_pon_reason[index],
 			cold_boot ? "cold" : "warm");
+		// Add for power on/off reason +++
+		if (pon->spmi->sid == 0) {
+			power_on_sid = true;
+		}
+		// Add for power on/off reason ---
 	}
 
 	/* POFF reason */
@@ -2142,21 +2191,34 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 		if (rc) {
 			dev_err(&pon->spmi->dev, "Unable to read POFF_REASON regs rc:%d\n",
 				rc);
+			// Add for power on/off reason +++
+			power_off_value_unable = true;
+			// Add for power on/off reason ---
 			return rc;
 		}
 		poff_sts = buf[0] | (buf[1] << 8);
 	}
+
+	power_off_value = poff_sts;
 	index = ffs(poff_sts) - 1 + reason_index_offset;
 	if (index >= ARRAY_SIZE(qpnp_poff_reason) || index < 0) {
 		dev_info(&pon->spmi->dev,
 				"PMIC@SID%d: Unknown power-off reason\n",
 				pon->spmi->sid);
+		// Add for power on/off reason +++
+		power_off_value_unknown = true;
+		// Add for power on/off reason ---
 	} else {
 		pon->pon_power_off_reason = index;
 		dev_info(&pon->spmi->dev,
 				"PMIC@SID%d: Power-off reason: %s\n",
 				pon->spmi->sid,
 				qpnp_poff_reason[index]);
+		// Add for power on/off reason +++
+		if (pon->spmi->sid == 0) {
+			power_off_sid = true;
+		}
+		// Add for power on/off reason ---
 	}
 
 	if (pon->pon_trigger_reason == PON_SMPL ||
@@ -2313,7 +2375,7 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 			rc);
 		return rc;
 	}
-	
+
 //ASUS_BSP YuSiang: "keypad test for factory"
 #ifdef ASUS_FACTORY_BUILD
 	pwrkey_node.dev_class = class_create(THIS_MODULE, CLASS_NAME);
@@ -2329,8 +2391,8 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 	}
 
 	pwrkey_node.dev = device_create(pwrkey_node.dev_class, NULL,
-				     pwrkey_node.dev_num,
-				     &pwrkey_node, DRV_NAME);
+					 pwrkey_node.dev_num,
+					 &pwrkey_node, DRV_NAME);
 	if (IS_ERR(pwrkey_node.dev)) {
 		dev_err(pwrkey_node.dev,"%s: device_create fail.\n",__func__);
 		goto device_create_err;
