@@ -283,8 +283,7 @@ static union {
 
 int Capacity_Adjust;
 extern int get_lbc_batt_temp(void);
-
-
+extern void smb23x_set_float_voltage(u8 reg_val);
 /* -------------------------------------------------------------------------------- */
 /*				INTERNAL ANDROID DRIVER PARAMETERS																				*/
 /*	 TO BE ADJUSTED ACCORDING TO BATTERY/APPLICATION CHARACTERISTICS								*/
@@ -1990,6 +1989,11 @@ static void stc311x_work(struct work_struct *work)
 
 	g_asus_batt_soc = chip->batt_soc;
 
+	if (chip->batt_voltage >= 4420) {
+		smb23x_set_float_voltage(0x16);
+		pr_info("[BAT] Adjust SMB231 float voltage to 4.36V\n");
+	}
+
 	switch (get_battery_status(chip)) {
 	case POWER_SUPPLY_STATUS_FULL:
 		g_asus_batt_soc = 100;
@@ -2005,6 +2009,10 @@ static void stc311x_work(struct work_struct *work)
 		}
 		break;
 	case POWER_SUPPLY_STATUS_CHARGING:
+		if (g_asus_batt_soc == 100) {
+			pr_info("[BAT] Force battery level keep 99 percentange");
+			g_asus_batt_soc = 99;
+		}
 		g_asus_batt_soc_previous = g_asus_batt_soc;
 		break;
 	default:

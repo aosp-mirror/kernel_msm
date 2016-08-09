@@ -1374,6 +1374,20 @@ void adc_notification_set_warm_current(int level)
 }
 EXPORT_SYMBOL(adc_notification_set_warm_current);
 
+void smb23x_set_float_voltage(u8 reg_val)
+{
+	int rc;
+
+	if (g_smb23x_chip) {
+		rc = smb23x_masked_write(g_smb23x_chip, CFG_REG_3, FLOAT_VOLTAGE_MASK, reg_val);
+		if (rc < 0)
+			pr_err("Set float voltage failed, rc=%d\n", rc);
+	} else {
+		pr_err("g_lbc_chip is null\n");
+	}
+}
+EXPORT_SYMBOL(smb23x_set_float_voltage);
+
 static int hot_hard_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_warn("rt_sts = 0x02%x\n", rt_sts);
@@ -1679,6 +1693,9 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 		chip->batt_full = false;
 		smb23x_enable_volatile_writes(chip);
 		smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
+
+		// Set float voltage to 4.4V
+		smb23x_masked_write(chip, CFG_REG_3, FLOAT_VOLTAGE_MASK, 0x17);
 
 		smb23x_relax(&chip->smb23x_ws, WAKEUP_SRC_PARALLEL);
 	}
