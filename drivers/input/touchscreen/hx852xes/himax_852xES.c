@@ -4512,6 +4512,7 @@ static int himax852xes_probe(struct i2c_client *client, const struct i2c_device_
     pdata->cable_config[0]             = 0xF0;
     pdata->cable_config[1]             = 0x00;
     ts->suspended                      = false;
+    ts->resumed                        = true;
     ts->protocol_type = pdata->protocol_type;
     I("Use Protocol Type %c\n", ts->protocol_type == PROTOCOL_TYPE_A ? 'A' : 'B');
     err = himax_input_register(ts);
@@ -4748,6 +4749,7 @@ static int himax852xes_suspend(struct device *dev)
                 E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
             }
             touch_mode = TOUCH_IDLE;
+            ts->resumed = false;
             I("%s: Enable IDLE mode\n", __func__);
             return 0;
         }
@@ -4780,6 +4782,7 @@ static int himax852xes_suspend(struct device *dev)
         ts->pre_finger_mask = 0;
         if (ts->pdata->powerOff3V3 && ts->pdata->power)
             ts->pdata->power(0);
+        ts->resumed = false;
         return 0;
     }
 }
@@ -4802,8 +4805,15 @@ static int himax852xes_resume(struct device *dev)
         I("FW updating, reject resume\n");
         return 0;
     } else {
-        I("%s: enter\n", __func__);
         ts = dev_get_drvdata(dev);
+        if (ts->resumed) {
+            I("Already resumed. Skip\n");
+            return 0;
+        } else {
+            ts->resumed = true;
+            I("%s: enter\n", __func__);
+        }
+
         if (ts->pdata->powerOff3V3 && ts->pdata->power)
             ts->pdata->power(1);
 #ifdef HX_CHIP_STATUS_MONITOR
@@ -4855,7 +4865,7 @@ static int himax852xes_resume(struct device *dev)
             I("%s: Enable ACTIVE mode\n", __func__);
             return 0;
         } else {
-            I("In Time-telling mode or already in Active mode, skip resume");
+            I("In Time-telling mode or already in Active mode, skip resume\n");
             return 0;
         }
     }
@@ -4874,14 +4884,14 @@ static int fb_notifier_callback(struct notifier_block *self,
         blank = evdata->data;
         switch (*blank) {
         case FB_BLANK_UNBLANK:
-            I("%s: call resume\n", __func__);
+            //I("%s: call resume\n", __func__);
             himax852xes_resume(&ts->client->dev);
             break;
         case FB_BLANK_POWERDOWN:
         case FB_BLANK_HSYNC_SUSPEND:
         case FB_BLANK_VSYNC_SUSPEND:
         case FB_BLANK_NORMAL:
-            I("%s: call suspend\n", __func__);
+            //I("%s: call suspend\n", __func__);
             himax852xes_suspend(&ts->client->dev);
             break;
         }
@@ -4917,7 +4927,8 @@ static struct i2c_driver himax852xes_driver = {
         .name = HIMAX852xes_NAME,
         .owner = THIS_MODULE,
         .of_match_table = himax_match_table,
-#ifdef CONFIG_PM
+//#ifdef CONFIG_PM
+#if 0
         .pm = &himax852xes_pm_ops,
 #endif
     },
