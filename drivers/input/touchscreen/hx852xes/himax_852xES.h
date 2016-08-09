@@ -187,6 +187,7 @@ struct himax_config {
 
 struct himax_ts_data {
     bool suspended;
+    bool resumed;
     atomic_t suspend_mode;
     uint8_t x_channel;
     uint8_t y_channel;
