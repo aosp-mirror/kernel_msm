@@ -45,7 +45,7 @@
  * number must be greater than print entry to prevent out of bound xlog
  * entry array access.
  */
-#define MDSS_XLOG_ENTRY	(MDSS_XLOG_PRINT_ENTRY * 4)
+#define MDSS_XLOG_ENTRY	(MDSS_XLOG_PRINT_ENTRY * 16)
 #define MDSS_XLOG_MAX_DATA 15
 #define MDSS_XLOG_BUF_MAX 512
 #define MDSS_XLOG_BUF_ALIGN 32

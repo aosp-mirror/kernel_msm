@@ -284,6 +284,7 @@ static int mdss_rotator_clk_ctrl(struct mdss_rot_mgr *mgr, int enable)
 		}
 	}
 
+	MDSS_XLOG(rot_mgr->rot_enable_clk_cnt, changed, 0x1);
 	if (changed) {
 		pr_debug("Rotator clk %s\n", enable ? "enable" : "disable");
 		for (i = 0; i < MDSS_CLK_ROTATOR_END_IDX; i++) {
@@ -314,6 +315,7 @@ static int mdss_rotator_clk_ctrl(struct mdss_rot_mgr *mgr, int enable)
 		}
 		mutex_unlock(&mgr->bus_lock);
 	}
+	MDSS_XLOG(rot_mgr->rot_enable_clk_cnt, changed, 0x2);
 	mutex_unlock(&mgr->clk_lock);
 
 	return ret;
@@ -1119,6 +1121,7 @@ static void mdss_rotator_release_from_work_distribution(
 			mutex_lock(&mgr->bus_lock);
 			mgr->pending_close_bw_vote -= entry->perf->bw;
 			mutex_unlock(&mgr->bus_lock);
+			MDSS_XLOG(mgr->rot_enable_clk_cnt, 0x1);
 			mdss_rotator_resource_ctrl(mgr, false);
 			devm_kfree(&mgr->pdev->dev,
 				entry->perf->work_distribution);
@@ -1126,6 +1129,7 @@ static void mdss_rotator_release_from_work_distribution(
 			mdss_rotator_update_perf(mgr);
 			mdss_rotator_clk_ctrl(mgr, false);
 			entry->perf = NULL;
+			MDSS_XLOG(mgr->rot_enable_clk_cnt, 0x2);
 		}
 	}
 }
@@ -1965,6 +1969,7 @@ static int mdss_rotator_open_session(struct mdss_rot_mgr *mgr,
 		goto resource_err;
 	}
 
+	MDSS_XLOG(rot_mgr->rot_enable_clk_cnt, 0x1);
 	mdss_rotator_clk_ctrl(rot_mgr, true);
 	ret = mdss_rotator_update_perf(mgr);
 	if (ret) {
@@ -1989,6 +1994,7 @@ copy_user_err:
 alloc_err:
 	devm_kfree(&mgr->pdev->dev, perf);
 done:
+	MDSS_XLOG(rot_mgr->rot_enable_clk_cnt, 0x2);
 	ATRACE_END(__func__);
 	return ret;
 }
@@ -2029,10 +2035,12 @@ static int mdss_rotator_close_session(struct mdss_rot_mgr *mgr,
 		goto done;
 
 	mdss_rotator_resource_ctrl(mgr, false);
+	MDSS_XLOG(rot_mgr->rot_enable_clk_cnt, 0x1);
 	devm_kfree(&mgr->pdev->dev, perf->work_distribution);
 	devm_kfree(&mgr->pdev->dev, perf);
 	mdss_rotator_update_perf(mgr);
 	mdss_rotator_clk_ctrl(rot_mgr, false);
+	MDSS_XLOG(rot_mgr->rot_enable_clk_cnt, 0x2);
 done:
 	pr_debug("Closed session id:%u", id);
 	ATRACE_END(__func__);
@@ -2410,18 +2418,26 @@ static long mdss_rotator_compat_ioctl(struct file *file, unsigned int cmd,
 
 	switch (cmd) {
 	case MDSS_ROTATION_REQUEST:
+		MDSS_XLOG(rot_mgr->rot_enable_clk_cnt, 0x11);
 		ATRACE_BEGIN("rotator_request32");
 		ret = mdss_rotator_handle_request32(rot_mgr, private, arg);
 		ATRACE_END("rotator_request32");
+		MDSS_XLOG(rot_mgr->rot_enable_clk_cnt, 0x12);
 		break;
 	case MDSS_ROTATION_OPEN:
+		MDSS_XLOG(rot_mgr->rot_enable_clk_cnt, 0x21);
 		ret = mdss_rotator_open_session(rot_mgr, private, arg);
+		MDSS_XLOG(rot_mgr->rot_enable_clk_cnt, 0x22);
 		break;
 	case MDSS_ROTATION_CLOSE:
+		MDSS_XLOG(rot_mgr->rot_enable_clk_cnt, 0x31);
 		ret = mdss_rotator_close_session(rot_mgr, private, arg);
+		MDSS_XLOG(rot_mgr->rot_enable_clk_cnt, 0x33);
 		break;
 	case MDSS_ROTATION_CONFIG:
+		MDSS_XLOG(rot_mgr->rot_enable_clk_cnt, 0x41);
 		ret = mdss_rotator_config_session(rot_mgr, private, arg);
+		MDSS_XLOG(rot_mgr->rot_enable_clk_cnt, 0x44);
 		break;
 	default:
 		pr_err("unexpected IOCTL %d\n", cmd);
