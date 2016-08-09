@@ -89,8 +89,8 @@ static struct stc311x_platform_data default_stc3117_platform_data = {
 	.OCVValue[11] = 3999,            /* OCV curve adjustment */
 	.OCVValue[12] = 4053,            /* OCV curve adjustment */
 	.OCVValue[13] = 4160,            /* OCV curve adjustment */
-	.OCVValue[14] = 4277,            /* OCV curve adjustment */
-	.OCVValue[15] = 4388,            /* OCV curve adjustment */
+	.OCVValue[14] = 4226,            /* OCV curve adjustment */
+	.OCVValue[15] = 4390,            /* OCV curve adjustment */
 
 	.SOCValue[0]  = 0x0,
 	.SOCValue[1]  = 0x6,
