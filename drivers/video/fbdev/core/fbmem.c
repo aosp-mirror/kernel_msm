@@ -42,6 +42,12 @@
 
 #define FBPIXMAPSIZE	(1024 * 8)
 
+struct fb_unblank_work {
+	struct work_struct unblank_work;
+	struct fb_event event;
+}g_fb_unblank_work;
+
+
 static DEFINE_MUTEX(registration_lock);
 
 struct fb_info *registered_fb[FB_MAX] __read_mostly;
@@ -1052,11 +1058,16 @@ fb_set_var(struct fb_info *info, struct fb_var_screeninfo *var)
 }
 EXPORT_SYMBOL(fb_set_var);
 
+void unblank_callchain(struct work_struct *work){
+	fb_notifier_call_chain(FB_EVENT_BLANK, &g_fb_unblank_work.event);
+}
+
 int
 fb_blank(struct fb_info *info, int blank)
 {	
 	struct fb_event event;
 	int ret = -EINVAL, early_ret;
+	int temp_blank = blank;
 
  	if (blank > FB_BLANK_POWERDOWN)
  		blank = FB_BLANK_POWERDOWN;
@@ -1067,11 +1078,17 @@ fb_blank(struct fb_info *info, int blank)
 	early_ret = fb_notifier_call_chain(FB_EARLY_EVENT_BLANK, &event);
 
 	if (info->fbops->fb_blank)
- 		ret = info->fbops->fb_blank(blank, info);
+		ret = info->fbops->fb_blank(blank, info);
 
-	if (!ret)
-		fb_notifier_call_chain(FB_EVENT_BLANK, &event);
-	else {
+	if (!ret) {
+		if(blank == FB_BLANK_UNBLANK) {
+			g_fb_unblank_work.event.info = info;
+			memcpy(g_fb_unblank_work.event.data , &temp_blank,sizeof(int));
+			schedule_work(&g_fb_unblank_work.unblank_work);
+		} else {
+			fb_notifier_call_chain(FB_EVENT_BLANK, &event);
+		}
+	} else {
 		/*
 		 * if fb_blank is failed then revert effects of
 		 * the early blank event.
@@ -1080,7 +1097,7 @@ fb_blank(struct fb_info *info, int blank)
 			fb_notifier_call_chain(FB_R_EARLY_EVENT_BLANK, &event);
 	}
 
- 	return ret;
+	return ret;
 }
 EXPORT_SYMBOL(fb_blank);
 
@@ -1859,6 +1876,13 @@ fbmem_init(void)
 		printk(KERN_WARNING "Unable to create fb class; errno = %ld\n", PTR_ERR(fb_class));
 		fb_class = NULL;
 	}
+
+	g_fb_unblank_work.event.data = kmalloc(sizeof(int),GFP_KERNEL);
+	if(!g_fb_unblank_work.event.data){
+		pr_err("memory is not enough\n");
+		return -ENOMEM;
+	}
+	INIT_WORK(&g_fb_unblank_work.unblank_work,unblank_callchain);
 	return 0;
 }
 
@@ -1870,6 +1894,9 @@ fbmem_exit(void)
 	remove_proc_entry("fb", NULL);
 	class_destroy(fb_class);
 	unregister_chrdev(FB_MAJOR, "fb");
+	if(g_fb_unblank_work.event.data){
+		kfree(g_fb_unblank_work.event.data);
+	}
 }
 
 module_exit(fbmem_exit);
