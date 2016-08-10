@@ -65,6 +65,7 @@
 #define REPORT_2D_PRESSURE
 #define TEMP_FORCE_WA
 /* #define USE_DATA_SERVER */
+#define USE_I2C_SWITCH
 
 
 #define F12_DATA_15_WORKAROUND
@@ -2883,6 +2884,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 	struct synaptics_rmi4_f12_ctrl_8 *ctrl_8 = NULL;
 	struct synaptics_rmi4_f12_ctrl_18 *ctrl_18 = NULL;
 	struct synaptics_rmi4_f12_ctrl_23 *ctrl_23 = NULL;
+	struct synaptics_rmi4_f12_ctrl_27 *ctrl_27 = NULL;
 	struct synaptics_rmi4_f12_ctrl_31 *ctrl_31 = NULL;
 	struct synaptics_rmi4_f12_ctrl_58 *ctrl_58 = NULL;
 	const struct synaptics_dsx_board_data *bdata =
@@ -2940,6 +2942,15 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 	if (!ctrl_23) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for ctrl_23\n",
+				__func__);
+		retval = -ENOMEM;
+		goto exit;
+	}
+
+	ctrl_27 = kzalloc(sizeof(*ctrl_27), GFP_KERNEL);
+	if (!ctrl_27) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to alloc mem for ctrl_27\n",
 				__func__);
 		retval = -ENOMEM;
 		goto exit;
@@ -3278,7 +3289,6 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 	rmi4_data->f12_wakeup_gesture = query_5->ctrl27_is_present;
 	if (rmi4_data->f12_wakeup_gesture) {
 		extra_data->ctrl20_offset = ctrl_20_offset;
-		extra_data->ctrl27_offset = ctrl_27_offset;
 		extra_data->data4_offset = query_8->data0_is_present +
 				query_8->data1_is_present +
 				query_8->data2_is_present +
@@ -3326,6 +3336,24 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 
 		printk("[TP]%s:Wakeup Gesture range (%d,%d) -> (%d,%d)\n", __func__,
 				double_tap[0], double_tap[1], double_tap[2], double_tap[3]);
+
+		ctrl_27->double_tap_enable = 1;
+		ctrl_27->lpwg_report_rate = 20;
+		ctrl_27->false_activation_threshold = 3;
+		ctrl_27->maximum_active_duration = 12;
+		ctrl_27->timer_1_duration = 15;
+		ctrl_27->maximum_active_duration_timeout = 10;
+
+		retval = synaptics_rmi4_reg_write(rmi4_data,
+				fhandler->full_addr.ctrl_base + ctrl_27_offset,
+				ctrl_27->data,
+				sizeof(ctrl_27->data));
+		if (retval < 0) {
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s: Failed to change lpwg settings\n",
+					__func__);
+			return retval;
+		}
 	}
 
 	synaptics_rmi4_set_intr_mask(fhandler, fd, intr_count);
@@ -3367,6 +3395,7 @@ exit:
 	kfree(query_8);
 	kfree(ctrl_8);
 	kfree(ctrl_23);
+	kfree(ctrl_27);
 	kfree(ctrl_31);
 	kfree(ctrl_58);
 
@@ -5673,7 +5702,6 @@ static void synaptics_rmi4_f12_wg(struct synaptics_rmi4_data *rmi4_data,
 {
 	int retval;
 	unsigned char reporting_control[3];
-	struct synaptics_rmi4_f12_ctrl_27 ctrl_27;
 	struct synaptics_rmi4_f12_extra_data *extra_data;
 	struct synaptics_rmi4_fn *fhandler;
 	struct synaptics_rmi4_device_info *rmi;
@@ -5699,47 +5727,10 @@ static void synaptics_rmi4_f12_wg(struct synaptics_rmi4_data *rmi4_data,
 		return;
 	}
 
-	retval = synaptics_rmi4_reg_read(rmi4_data,
-			fhandler->full_addr.ctrl_base +
-				extra_data->ctrl27_offset,
-			ctrl_27.data,
-			sizeof(ctrl_27.data));
-	if (retval < 0) {
-		dev_err(rmi4_data->pdev->dev.parent,
-				"%s: Failed to change lpwg settings\n",
-				__func__);
-		return;
-	}
-
-	if (enable) {
+	if (enable)
 		reporting_control[2] = F12_WAKEUP_GESTURE_MODE;
-		ctrl_27.double_tap_enable = 1;
-		ctrl_27.lpwg_report_rate = 20;
-		ctrl_27.false_activation_threshold = 3;
-		ctrl_27.maximum_active_duration = 12;
-		ctrl_27.timer_1_duration = 15;
-		ctrl_27.maximum_active_duration_timeout = 10;
-	} else {
+	else
 		reporting_control[2] = F12_CONTINUOUS_MODE;
-		ctrl_27.double_tap_enable = 0;
-		ctrl_27.lpwg_report_rate = 20;
-		ctrl_27.false_activation_threshold = 3;
-		ctrl_27.maximum_active_duration = 12;
-		ctrl_27.timer_1_duration = 15;
-		ctrl_27.maximum_active_duration_timeout = 10;
-	}
-
-	retval = synaptics_rmi4_reg_write(rmi4_data,
-			fhandler->full_addr.ctrl_base +
-				extra_data->ctrl27_offset,
-			ctrl_27.data,
-			sizeof(ctrl_27.data));
-	if (retval < 0) {
-		dev_err(rmi4_data->pdev->dev.parent,
-				"%s: Failed to change lpwg settings\n",
-				__func__);
-		return;
-	}
 
 	retval = synaptics_rmi4_reg_write(rmi4_data,
 			fhandler->full_addr.ctrl_base +
@@ -5909,6 +5900,13 @@ exit:
 	}
 	mutex_unlock(&exp_data.mutex);
 
+#ifdef USE_I2C_SWITCH
+	gpio_set_value(rmi4_data->hw_if->board_data->switch_gpio, 1);
+	dev_dbg(rmi4_data->pdev->dev.parent,
+		"%s: Switch I2C mux to sensor hub\n",
+		__func__);
+#endif // USE_I2C_SWITCH
+
 	rmi4_data->suspend = true;
 
 	return 0;
@@ -5925,6 +5923,13 @@ static int synaptics_rmi4_resume(struct device *dev)
 	if (rmi4_data->stay_awake)
 		return 0;
 
+#ifdef USE_I2C_SWITCH
+	gpio_set_value(rmi4_data->hw_if->board_data->switch_gpio, 0);
+	dev_dbg(rmi4_data->pdev->dev.parent,
+			"%s: Switch I2C mux to AP\n",
+			__func__);
+#endif // USE_I2C_SWITCH
+
 	synaptics_rmi4_free_fingers(rmi4_data);
 
 	if (rmi4_data->enable_wakeup_gesture) {
@@ -5937,6 +5942,10 @@ static int synaptics_rmi4_resume(struct device *dev)
 	rmi4_data->current_page = MASK_8BIT;
 
 	synaptics_rmi4_sleep_enable(rmi4_data, false);
+#ifdef USE_I2C_SWITCH
+	synaptics_rmi4_wakeup_gesture(rmi4_data, false);
+	synaptics_rmi4_force_cal(rmi4_data);
+#endif
 	synaptics_rmi4_irq_enable(rmi4_data, true, false);
 
 exit:

@@ -272,7 +272,6 @@ struct synaptics_rmi4_f12_extra_data {
 	unsigned char data29_size;
 	unsigned char data29_data[F12_FINGERS_TO_SUPPORT];
 	unsigned char ctrl20_offset;
-	unsigned char ctrl27_offset;
 };
 
 /*
