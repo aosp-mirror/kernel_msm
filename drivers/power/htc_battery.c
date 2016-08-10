@@ -81,6 +81,7 @@ static bool g_htc_battery_probe_done = false;
 static bool g_is_fcc_limited = false;
 static bool g_is_unknown_charger = false;
 static bool g_rerun_apsd_done = false;
+static bool g_critical_shutdown = false;
 
 /* fake soc when set this flag */
 bool g_test_power_monitor = false;
@@ -1409,9 +1410,16 @@ static void batt_worker(struct work_struct *work)
 	batt_level_adjust(time_since_last_update_ms);
 	g_is_rep_level_ready = true;
 
-	/* STEP 7: force level=0 to trigger userspace shutdown
-	FIXME: need discussing with HW which condition needs force shutdown
-	*/
+	/* STEP 7: force level=0 to trigger userspace shutdown */
+	if ((g_critical_shutdown || (htc_batt_info.force_shutdown_batt_vol &&
+			(htc_batt_info.rep.batt_vol <= htc_batt_info.force_shutdown_batt_vol))) &&
+			htc_batt_info.rep.batt_temp > 0) {
+		BATT_LOG("critical shutdown criteria: %dmV (set level=0 to force shutdown)",
+				htc_batt_info.force_shutdown_batt_vol);
+		htc_batt_info.rep.level = 0;
+		gs_update_PSY = true;
+		wake_lock(&htc_batt_info.batt_shutdown_lock);
+	}
 
 	/* STEP 8: Update limited charge
 	Dou to some returned device is cause by limit charge,
@@ -2166,6 +2174,12 @@ void htc_battery_info_update(enum power_supply_property prop, int intval)
 		case POWER_SUPPLY_PROP_HEALTH:
 			if (htc_batt_info.rep.health != intval) {
 				htc_batt_info.rep.health = intval;
+				htc_batt_schedule_batt_info_update();
+			}
+			break;
+		case POWER_SUPPLY_PROP_CRITICAL_SHUTDOWN:
+			if (g_latest_chg_src == POWER_SUPPLY_TYPE_UNKNOWN) {
+				g_critical_shutdown = true;
 				htc_batt_schedule_batt_info_update();
 			}
 			break;
@@ -3062,6 +3076,7 @@ static int __init htc_battery_init(void)
 
 	wake_lock_init(&htc_batt_timer.battery_lock, WAKE_LOCK_SUSPEND, "htc_battery");
 	wake_lock_init(&htc_batt_info.charger_exist_lock, WAKE_LOCK_SUSPEND,"charger_exist_lock");
+	wake_lock_init(&htc_batt_info.batt_shutdown_lock, WAKE_LOCK_SUSPEND, "batt_shutdown");
 
 	/* init battery parameters. */
 	htc_batt_info.rep.batt_vol = 4000;
@@ -3082,6 +3097,7 @@ static int __init htc_battery_init(void)
 	htc_batt_info.smooth_chg_full_delay_min = 3;
 	htc_batt_info.decreased_batt_level_check = 1;
 	htc_batt_info.critical_low_voltage_mv = 3200;
+	htc_batt_info.force_shutdown_batt_vol = 3050;
 	htc_batt_info.batt_full_voltage_mv = 4350;
 	htc_batt_info.batt_full_current_ma = 300;
 	htc_batt_info.batt_eoc_current_ma = 50;

@@ -332,6 +332,7 @@ static int fg_reset_on_lockup;
 #ifdef CONFIG_HTC_BATT
 /* Enable batterydebug log*/
 bool g_fg_flag_enable_batt_debug_log = false;
+int g_empty_soc_irq_count = 0;
 #endif
 
 static int fg_sense_type = -EINVAL;
@@ -636,6 +637,8 @@ struct fg_chip {
 	struct fg_wakeup_source	sanity_wakeup_source;
 	u8			last_beat_count;
 #ifdef CONFIG_HTC_BATT
+	struct delayed_work	clear_empty_soc_irq_counter;
+	struct delayed_work	rearm_empty_soc_irq_work;
 	int			batt_full_charge_criteria_ma;
 	int			batt_fcc_ma;
 	int			batt_capacity_mah;
@@ -5194,6 +5197,70 @@ static irqreturn_t fg_soc_irq_handler(int irq, void *_chip)
 	return IRQ_HANDLED;
 }
 
+#ifdef CONFIG_HTC_BATT
+#define CLEAR_EMPTY_SOC_IRQ_COUNTER_MS	30000
+#define REARM_EMPTY_SOC_IRQ_MS		1000
+#define FG_ALG_SYSCTL_1			0x4B0
+#define ALERT_CFG_OFFSET		3
+#define IRQ_USE_VOLTAGE_HYST_BIT	BIT(0)
+#define EMPTY_FROM_VOLTAGE_BIT		BIT(1)
+#define EMPTY_FROM_SOC_BIT		BIT(2)
+#define EMPTY_SOC_IRQ_MASK		(IRQ_USE_VOLTAGE_HYST_BIT | \
+					EMPTY_FROM_SOC_BIT | \
+					EMPTY_FROM_VOLTAGE_BIT)
+
+static void clear_empty_soc_irq_counter(struct work_struct *work)
+{
+	pr_info("clear empty_soc irq counter\n");
+	g_empty_soc_irq_count = 0;
+}
+
+static void rearm_empty_soc_irq_work(struct work_struct *work)
+{
+	int rc;
+	if (!the_chip) {
+		pr_err("[Battery_FDA] Called before init\n");
+		return;
+	}
+
+	/*
+	* Clear bits 0-2 in 0x4B3 and set them again to make empty_soc irq
+	* trigger again.
+	*/
+	rc = fg_mem_masked_write(the_chip, FG_ALG_SYSCTL_1, EMPTY_SOC_IRQ_MASK,
+			0, ALERT_CFG_OFFSET);
+	if (rc) {
+		pr_err("failed to write to 0x4B3 rc=%d\n", rc);
+		return;
+	}
+
+	/* Wait for a FG cycle before enabling empty soc irq configuration */
+	msleep(FG_CYCLE_MS);
+
+	rc = fg_mem_masked_write(the_chip, FG_ALG_SYSCTL_1, EMPTY_SOC_IRQ_MASK,
+			EMPTY_SOC_IRQ_MASK, ALERT_CFG_OFFSET);
+	if (rc) {
+		pr_err("failed to write to 0x4B3 rc=%d\n", rc);
+		return;
+	}
+}
+
+#define CRITICAL_SHUTDOWN_COUNT	3
+static void rearm_empty_soc_irq(void)
+{
+	if (!the_chip) {
+		pr_err("[Battery_FDA] Called before init\n");
+		return;
+	}
+
+	if (delayed_work_pending(&the_chip->rearm_empty_soc_irq_work))
+		cancel_delayed_work_sync(&the_chip->rearm_empty_soc_irq_work);
+	if (g_empty_soc_irq_count < CRITICAL_SHUTDOWN_COUNT)
+		schedule_delayed_work(&the_chip->rearm_empty_soc_irq_work,
+				REARM_EMPTY_SOC_IRQ_MS);
+}
+#endif /* CONFIG_HTC_BATT */
+
 static irqreturn_t fg_empty_soc_irq_handler(int irq, void *_chip)
 {
 	struct fg_chip *chip = _chip;
@@ -5207,8 +5274,10 @@ static irqreturn_t fg_empty_soc_irq_handler(int irq, void *_chip)
 		goto done;
 	}
 
+#ifndef CONFIG_HTC_BATT
 	if (fg_debug_mask & FG_IRQS)
 		pr_info("triggered 0x%x\n", soc_rt_sts);
+#endif
 	if (fg_is_batt_empty(chip)) {
 		fg_stay_awake(&chip->empty_check_wakeup_source);
 		schedule_delayed_work(&chip->check_empty_work,
@@ -5216,6 +5285,27 @@ static irqreturn_t fg_empty_soc_irq_handler(int irq, void *_chip)
 	} else {
 		chip->soc_empty = false;
 	}
+
+#ifdef CONFIG_HTC_BATT
+	/* Clear critical shutdown count after 30secs */
+	if (!delayed_work_pending(&the_chip->clear_empty_soc_irq_counter))
+		schedule_delayed_work(&the_chip->clear_empty_soc_irq_counter,
+				CLEAR_EMPTY_SOC_IRQ_COUNTER_MS);
+
+	if (g_empty_soc_irq_count < CRITICAL_SHUTDOWN_COUNT
+			&& fg_is_batt_empty(the_chip))
+		g_empty_soc_irq_count++;
+
+	pr_info("triggered=0x%x, vbatt=%dmV, irq_count:%d, is_batt_empty=%d\n",
+		soc_rt_sts, get_sram_prop_now(the_chip, FG_DATA_VOLTAGE) / 1000,
+		g_empty_soc_irq_count, fg_is_batt_empty(the_chip));
+
+	if (g_empty_soc_irq_count >= CRITICAL_SHUTDOWN_COUNT)
+		htc_battery_info_update(POWER_SUPPLY_PROP_CRITICAL_SHUTDOWN,
+			get_sram_prop_now(the_chip, FG_DATA_VOLTAGE) / 1000);
+
+	rearm_empty_soc_irq();
+#endif /* CONFIG_HTC_BATT */
 
 done:
 	return IRQ_HANDLED;
@@ -6703,7 +6793,9 @@ static int update_irq_volt_empty(struct fg_chip *chip)
 
 	data = (u8)VOLT_UV_TO_VOLTCMP8(volt_mv * 1000);
 
+#ifndef CONFIG_HTC_BATT
 	if (fg_debug_mask & FG_STATUS)
+#endif /* CONFIG_HTC_BATT */
 		pr_info("voltage = %d, converted_raw = %04x\n", volt_mv, data);
 	return fg_mem_write(chip, &data,
 			settings[FG_MEM_IRQ_VOLT_EMPTY].address, 1,
@@ -8612,6 +8704,10 @@ static int fg_probe(struct spmi_device *spmi)
 	mutex_init(&chip->rslow_comp.lock);
 	mutex_init(&chip->sysfs_restart_lock);
 	mutex_init(&chip->ima_recovery_lock);
+#ifdef CONFIG_HTC_BATT
+	INIT_DELAYED_WORK(&chip->clear_empty_soc_irq_counter, clear_empty_soc_irq_counter);
+	INIT_DELAYED_WORK(&chip->rearm_empty_soc_irq_work, rearm_empty_soc_irq_work);
+#endif /* CONFIG_HTC_BATT */
 	INIT_DELAYED_WORK(&chip->update_jeita_setting, update_jeita_setting);
 	INIT_DELAYED_WORK(&chip->update_sram_data, update_sram_data_work);
 	INIT_DELAYED_WORK(&chip->update_temp_work, update_temp_data);

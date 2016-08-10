@@ -154,6 +154,7 @@ struct htc_battery_info {
 	struct power_supply		*usb_psy;
 	struct power_supply             *parallel_psy;
 	int critical_low_voltage_mv;
+	int force_shutdown_batt_vol;
 	int smooth_chg_full_delay_min;
 	int decreased_batt_level_check;
 	int batt_full_voltage_mv;
@@ -161,6 +162,7 @@ struct htc_battery_info {
 	int batt_eoc_current_ma;
 	int overload_curr_thr_ma;
 	struct wake_lock charger_exist_lock;
+	struct wake_lock batt_shutdown_lock;
 	struct delayed_work chg_full_check_work;
 	struct delayed_work is_usb_overheat_work;
 	struct delayed_work chk_unknown_chg_work;
