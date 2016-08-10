@@ -146,5 +146,6 @@
 		qcom,mdss-dsi-lp11-init;
 		qcom,esd-check-enabled;
 		qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";
+		qcom,err-flag-check-enabled;
 	};
 };
