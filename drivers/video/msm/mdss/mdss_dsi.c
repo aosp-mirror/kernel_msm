@@ -3150,13 +3150,18 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		}
 		disable_irq(gpio_to_irq(ctrl_pdata->disp_te_gpio));
 
-		rc = devm_request_irq(&pdev->dev,
-			gpio_to_irq(ctrl_pdata->disp_err_fg_gpio),
-			err_fg_handler, IRQF_TRIGGER_RISING,
-			"ERR_FG_GPIO", ctrl_pdata);
-		if (rc)
-			pr_err("ERR_FG request_irq failed rc=0x%x\n",rc);
+		if (pinfo->err_flag_enabled && (gpio_is_valid(ctrl_pdata->disp_err_fg_gpio))) {
+			pr_info("ERR_FG request IRQ\n");
+			rc = devm_request_irq(&pdev->dev,
+				gpio_to_irq(ctrl_pdata->disp_err_fg_gpio),
+				err_fg_handler, IRQF_TRIGGER_RISING,
+				"ERR_FG_GPIO", ctrl_pdata);
+			if (rc)
+				pr_err("ERR_FG request_irq failed rc=0x%x\n",rc);
+
+		}
 	}
+
 
 	rc = mdss_dsi_get_bridge_chip_params(pinfo, ctrl_pdata, pdev);
 	if (rc) {
