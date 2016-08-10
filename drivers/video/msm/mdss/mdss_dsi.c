@@ -426,10 +426,8 @@ int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 	case MDSS_PANEL_POWER_ON:
 		if (mdss_dsi_is_panel_on_ulp(pdata)) {
 			ret = mdss_dsi_panel_power_ulp(pdata, false);
-			goto end;
 		} else if (mdss_dsi_is_panel_on_lp(pdata)) {
 			ret = mdss_dsi_panel_power_lp(pdata, false);
-			goto end;
 		} else {
 			ret = mdss_dsi_panel_power_on(pdata);
 		}
@@ -459,7 +457,6 @@ int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 	if (!ret)
 		pinfo->panel_power_state = power_state;
 
-end:
 	return ret;
 }
 
