@@ -26,6 +26,7 @@
 #include <linux/delay.h>
 #include <linux/gpio.h>
 #include <linux/asusdebug.h>
+#include <linux/reboot.h>
 
 struct smb23x_wakeup_source {
 	struct wakeup_source source;
@@ -84,6 +85,7 @@ struct smb23x_chip {
 
 	/* others */
 	int				parallel_chg_disable_status;
+	int				parallel_count;
 	bool				irq_waiting;
 	bool				resume_completed;
 	bool				parallel_charging;
@@ -106,8 +108,8 @@ struct smb23x_chip {
 	struct mutex			icl_set_lock;
 	struct dentry			*debug_root;
 	struct delayed_work		irq_polling_work;
+	struct delayed_work		parallel_work;
 	struct smb23x_wakeup_source	smb23x_ws;
-	struct work_struct		parallel_work;
 };
 
 static int fastchg_current_ma_table[] = {
@@ -182,10 +184,10 @@ static int hot_bat_decidegc_table[] = {
 	650,
 };
 
-
-#define MIN_FLOAT_MV	3480
-#define MAX_FLOAT_MV	4720
-#define FLOAT_STEP_MV	40
+#define EOC_CHECK_PERIOD_MS	2000
+#define MIN_FLOAT_MV		3480
+#define MAX_FLOAT_MV		4720
+#define FLOAT_STEP_MV		40
 
 #define _SMB_MASK(BITS, POS) \
 	((unsigned char)(((1 << (BITS)) - 1) << (POS)))
@@ -916,8 +918,9 @@ static const char * const usb_type_dcp_str[] = {
 static void smb23x_parallel_work(struct work_struct *work)
 {
 	int rc, i, tmp, usb_type_dcp_num;
-	struct smb23x_chip *chip = container_of(work,
-	struct smb23x_chip, parallel_work);
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct smb23x_chip *chip = container_of(dwork,
+		struct smb23x_chip, parallel_work);
 	union power_supply_propval prop = {0,};
 	int type, current_max;
 
@@ -980,7 +983,6 @@ static void smb23x_parallel_work(struct work_struct *work)
 			}
 			if (g_bootdbguart == 1) {
 				gpio_set_value(GPIO_num17,1);
-				pr_info("[BAT][CHG] gpio_17 set to 1\n");
 				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 1, MPP4_read:%d, USB_TYPE:%s\n", MPP4_read, usb_type_dcp_str[usb_type_dcp_num]);
                         } else
 				ASUSEvtlog("[BAT][CHG] MPP4_read:%d, USB_TYPE:%s\n", MPP4_read, usb_type_dcp_str[usb_type_dcp_num]);
@@ -990,14 +992,12 @@ static void smb23x_parallel_work(struct work_struct *work)
 			lbc_set_suspend(0x00);
 
 			gpio_set_value(GPIO_num17,0);
-			pr_info("[BAT][CHG] gpio_17 set to 0\n");
 			pr_info("[BAT][CHG] USB_TYPE: USB_Fast\n");
 			ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:USB_Fast\n", MPP4_read);
 		} else if (type == POWER_SUPPLY_TYPE_USB) {
 			if (current_max >= 500) {
 				// Set SMB231 input current limit to 300mA
 				smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
-				smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x02);
 				lbc_set_suspend(0x01);
 
 				pr_info("[BAT][CHG] USB_TYPE: USB_Normal\n");
@@ -1005,13 +1005,21 @@ static void smb23x_parallel_work(struct work_struct *work)
 			} else {
 				// Set SMB231 input current limit to 100mA
 				smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x00);
-				smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x00);
 				lbc_set_suspend(0x01);
 
 				pr_info("[BAT][CHG] USB_TYPE: UNKNOWN\n");
 				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:UNKNOWN\n", MPP4_read);
 			}
 			gpio_set_value(GPIO_num17,0);
+		} else if (type == POWER_SUPPLY_TYPE_UNKNOWN) {
+			if (chip->usb_present == 1) {
+				// Set SMB231 input current limit to 100mA
+				smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x00);
+				lbc_set_suspend(0x01);
+				gpio_set_value(GPIO_num17,0);
+				pr_info("[BAT][CHG] USB_TYPE: Power_Pack\n");
+				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:Power_Pack\n", MPP4_read);
+			}
 		}
 		rc = smb23x_parallel_charger_enable(chip, CURRENT, true);
 		if (rc < 0)
@@ -1023,6 +1031,16 @@ static void smb23x_parallel_work(struct work_struct *work)
 		rc = smb23x_parallel_charger_enable(chip, CURRENT, false);
 		if (rc < 0)
 			pr_err("Disable charging for CURRENT failed, rc=%d\n", rc);
+	}
+	smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 0);
+	msleep(30);
+	smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
+	if (chip->parallel_count <= 5) {
+		chip->parallel_count += 1;
+		pr_info("[BAT][CHG] parallel_count: %d\n", chip->parallel_count);
+	} else {
+		pr_info("[BAT][CHG] Cancel parallel_work\n");
+		cancel_delayed_work(&chip->parallel_work);
 	}
 }
 
@@ -1441,7 +1459,8 @@ static int batt_missing_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_present = !rt_sts;
 
-	ASUSEvtlog("[BAT][CHG] batt_missing_irq_handler rt_sts = 0x02%x\n", rt_sts);
+	kernel_power_off();
+	ASUSEvtlog("[BAT][CHG] Trigger shutdown!! rt_sts = 0x02%x\n", rt_sts);
 	return 0;
 }
 
@@ -1580,9 +1599,10 @@ static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 static int aicl_done_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
-	if (chip->parallel_charging && rt_sts == 0x10) {
+	if (chip->parallel_charging && rt_sts == 0x10 && chip->parallel_count <= 4) {
 		smb23x_enable_volatile_writes(chip);
-		smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 0);
+		smb23x_stay_awake(&chip->smb23x_ws, WAKEUP_SRC_PARALLEL);
+		schedule_delayed_work(&chip->parallel_work, msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
 	}
 	return 0;
 }
@@ -1691,6 +1711,8 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 			pr_info("[BAT][CHG] gpio_17 set to 1\n");
 		}
 		chip->batt_full = false;
+		chip->parallel_count = 0;
+		cancel_delayed_work(&chip->parallel_work);
 		smb23x_enable_volatile_writes(chip);
 		smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
 
@@ -2392,21 +2414,14 @@ static void smb23x_external_power_changed(struct power_supply *psy)
 		power_supply_set_online(chip->usb_psy, false);
 	}
 
-	if ((smb23x_get_prop_battery_charging_enabled(chip) == true) && (chip->usb_present)) {
-		if (chip->parallel_charging) {
-			if (!chip->batt_warm && !chip->batt_cool) {
-				cancel_work_sync(&chip->parallel_work);
-				smb23x_stay_awake(&chip->smb23x_ws, WAKEUP_SRC_PARALLEL);
-				schedule_work(&chip->parallel_work);
-			}
-		}
-	} else {
-		if (icl <= 2) {
-			pr_debug("current_ma=%d <= 2 set USB current to minimum\n", icl);
-			rc = smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0);
-			if (rc < 0)
-				pr_err("Couldn't to set minimum USB current rc = %d\n", rc);
-		}
+	if (icl <= 2) {
+		pr_info("[BAT][CHG] current_ma=%d <= 2 set USB current to minimum\n", icl);
+		rc = smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0);
+		if (rc < 0)
+			pr_err("Couldn't to set minimum USB current rc = %d\n", rc);
+		rc = smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0);
+		if (rc < 0)
+			pr_err("Couldn't to set minimum ICL rc = %d\n", rc);
 	}
 }
 
@@ -2697,7 +2712,7 @@ static int smb23x_probe(struct i2c_client *client,
 	}
 
 	INIT_DELAYED_WORK(&chip->irq_polling_work, smb23x_irq_polling_work_fn);
-	INIT_WORK(&chip->parallel_work, smb23x_parallel_work);
+	INIT_DELAYED_WORK(&chip->parallel_work, smb23x_parallel_work);
 
 	smb23x_enable_volatile_writes(chip);
 
@@ -2787,6 +2802,13 @@ static int smb23x_probe(struct i2c_client *client,
 
 	// Disable smb231 soft temp behavior
 	smb23x_masked_write(chip, CFG_REG_5, SOFT_THERM_BEHAVIOR_MASK, 0);
+
+	// Re-run AICL
+	smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 0);
+	msleep(30);
+	smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
+
+	chip->parallel_count = 0;
 
 	create_debugfs_entries(chip);
 
@@ -2900,6 +2922,7 @@ static int smb23x_remove(struct i2c_client *client)
 	wakeup_source_trash(&chip->smb23x_ws.source);
 	mutex_destroy(&chip->read_write_lock);
 	mutex_destroy(&chip->irq_complete);
+	cancel_delayed_work_sync(&chip->parallel_work);
 	mutex_destroy(&chip->chg_disable_lock);
 	mutex_destroy(&chip->usb_suspend_lock);
 	mutex_destroy(&chip->icl_set_lock);
