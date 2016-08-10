@@ -21,6 +21,7 @@
 #include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/asusdebug.h>
+#include <linux/reboot.h>
 
 #define GG_VERSION "2.03"
 
@@ -36,6 +37,7 @@ int STC31xx_AlarmSetSOCThreshold(int SOCThresh);
 int STC31xx_RelaxTmrSet(int CurrentThreshold);
 
 int g_asus_batt_soc, g_asus_batt_soc_previous;
+static int therm_power_off = 0;
 
 /*********************************************************************************	*/
 /*				STC311x DEVICE SELECTION											*/
@@ -284,6 +286,7 @@ static union {
 int Capacity_Adjust;
 extern int get_lbc_batt_temp(void);
 extern void smb23x_set_float_voltage(u8 reg_val);
+extern bool get_pmic_batt_present(void);
 /* -------------------------------------------------------------------------------- */
 /*				INTERNAL ANDROID DRIVER PARAMETERS																				*/
 /*	 TO BE ADJUSTED ACCORDING TO BATTERY/APPLICATION CHARACTERISTICS								*/
@@ -2017,6 +2020,13 @@ static void stc311x_work(struct work_struct *work)
 		break;
 	default:
 		break;
+	}
+
+	if (get_pmic_batt_present() == false) {
+		therm_power_off++;
+		ASUSEvtlog("[BAT] BAT_THM_PRES: %d\n", therm_power_off);
+		if (therm_power_off >= 3)
+			kernel_power_off();
 	}
 
 	ASUSEvtlog("[BAT][Ser]report Capacity==>%d, ChgVal:%dmAh, Alm_SOC:%d, V:%d, Cur:%d, tmp:%d\n",

@@ -132,6 +132,9 @@
 /* USB suspend register */
 #define USB_SUSP				0x1347
 
+/* Battery present register */
+#define BAT_PRES_STATUS 			0x1208
+
 /* Feature flags */
 #define VDD_TRIM_SUPPORTED			BIT(0)
 
@@ -786,6 +789,21 @@ static int qpnp_lbc_is_batt_present(struct qpnp_lbc_chip *chip)
 
 	return (batt_pres_rt_sts & BATT_PRES_IRQ) ? 1 : 0;
 }
+
+bool get_pmic_batt_present(void)
+{
+	u8 batt_pres_rt_sts;
+
+	if (g_lbc_chip) {
+		qpnp_lbc_read(g_lbc_chip, BAT_PRES_STATUS, &batt_pres_rt_sts, 1);
+		pr_info("[BAT][CHG] batt_pres_rt_sts: 0x%x\n", batt_pres_rt_sts);
+		return (batt_pres_rt_sts & BATT_THM_EN) ? 1 : 0;
+	} else {
+		pr_err("[BAT][CHG] g_lbc_chip is null\n");
+		return NULL;
+	}
+}
+EXPORT_SYMBOL(get_pmic_batt_present);
 
 static int qpnp_lbc_bat_if_configure_btc(struct qpnp_lbc_chip *chip)
 {
