@@ -1263,7 +1263,7 @@ static unsigned long venus_hfi_get_core_clock_rate(void *dev, bool actual_rate)
 	struct clock_info *vc;
 
 	if (!device) {
-		dprintk(VIDC_ERR, "%s Invalid args: %p\n", __func__, device);
+		dprintk(VIDC_ERR, "%s Invalid args: %pK\n", __func__, device);
 		return -EINVAL;
 	}
 
@@ -1526,7 +1526,7 @@ static int venus_hfi_scale_clocks(void *dev, int load,
 	struct venus_hfi_device *device = dev;
 
 	if (!device) {
-		dprintk(VIDC_ERR, "Invalid args: %p\n", device);
+		dprintk(VIDC_ERR, "Invalid args: %pK\n", device);
 		return -EINVAL;
 	}
 
@@ -2173,7 +2173,7 @@ static int venus_hfi_core_init(void *device)
 			goto err_core_init;
 		}
 
-		dprintk(VIDC_DBG, "Dev_Virt: %pa, Reg_Virt: %p\n",
+		dprintk(VIDC_DBG, "Dev_Virt: %pa, Reg_Virt: %pK\n",
 			&dev->hal_data->firmware_base,
 			dev->hal_data->register_base);
 
@@ -3545,7 +3545,7 @@ static void venus_hfi_core_work_handler(struct work_struct *work)
 	}
 
 	if (!device->callback) {
-		dprintk(VIDC_ERR, "No interrupt callback function: %p\n",
+		dprintk(VIDC_ERR, "No interrupt callback function: %pK\n",
 				device);
 		goto err_no_work;
 	}
@@ -4610,7 +4610,7 @@ int venus_hfi_initialize(struct hfi_device *hdev, u32 device_id,
 	int rc = 0;
 
 	if (!hdev || !res || !callback) {
-		dprintk(VIDC_ERR, "Invalid params: %p %p %p\n",
+		dprintk(VIDC_ERR, "Invalid params: %pK %pK %pK\n",
 			hdev, res, callback);
 		rc = -EINVAL;
 		goto err_venus_hfi_init;
