@@ -27,6 +27,8 @@
 #include <linux/sched_energy.h>
 #include <linux/stddef.h>
 
+#include "sched.h"
+
 struct sched_group_energy *sge_array[NR_CPUS][NR_SD_LEVELS];
 
 static void free_resources(void)
@@ -59,12 +61,14 @@ void init_sched_energy_costs(void)
 	for_each_possible_cpu(cpu) {
 		cn = of_get_cpu_node(cpu, NULL);
 		if (!cn) {
-			pr_warn("CPU device node missing for CPU %d\n", cpu);
+			if (sched_feat(ENERGY_AWARE))
+				pr_warn("CPU device node missing for CPU %d\n", cpu);
 			return;
 		}
 
 		if (!of_find_property(cn, "sched-energy-costs", NULL)) {
-			pr_warn("CPU device node has no sched-energy-costs\n");
+			if (sched_feat(ENERGY_AWARE))
+				pr_warn("CPU device node has no sched-energy-costs\n");
 			return;
 		}
 
@@ -75,7 +79,8 @@ void init_sched_energy_costs(void)
 
 			prop = of_find_property(cp, "busy-cost-data", NULL);
 			if (!prop || !prop->value) {
-				pr_warn("No busy-cost data, skipping sched_energy init\n");
+				if (sched_feat(ENERGY_AWARE))
+					pr_warn("No busy-cost data, skipping sched_energy init\n");
 				goto out;
 			}
 
@@ -97,7 +102,8 @@ void init_sched_energy_costs(void)
 
 			prop = of_find_property(cp, "idle-cost-data", NULL);
 			if (!prop || !prop->value) {
-				pr_warn("No idle-cost data, skipping sched_energy init\n");
+				if (sched_feat(ENERGY_AWARE))
+					pr_warn("No idle-cost data, skipping sched_energy init\n");
 				goto out;
 			}
 
@@ -117,6 +123,7 @@ void init_sched_energy_costs(void)
 	}
 
 	pr_info("Sched-energy-costs installed from DT\n");
+	set_energy_aware();
 	return;
 
 out:

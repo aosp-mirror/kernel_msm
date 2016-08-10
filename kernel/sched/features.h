@@ -85,7 +85,7 @@ SCHED_FEAT(NUMA_RESIST_LOWER, false)
  * Energy aware scheduling. Use platform energy model to guide scheduling
  * decisions optimizing for energy efficiency.
  */
-SCHED_FEAT(ENERGY_AWARE, true)
+SCHED_FEAT(ENERGY_AWARE, false)
 
 /*
  * UtilEstimation. Use estimated CPU utiliation.

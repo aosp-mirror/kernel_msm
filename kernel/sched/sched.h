@@ -850,6 +850,9 @@ struct sched_group {
 	unsigned long cpumask[0];
 };
 
+void set_energy_aware(void);
+void clear_energy_aware(void);
+
 static inline struct cpumask *sched_group_cpus(struct sched_group *sg)
 {
 	return to_cpumask(sg->cpumask);
