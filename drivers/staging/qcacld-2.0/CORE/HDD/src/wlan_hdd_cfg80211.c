@@ -9040,7 +9040,7 @@ static int __wlan_hdd_cfg80211_wifi_logger_get_ring_data(struct wiphy *wiphy,
 		ret = vos_flush_logs(WLAN_LOG_TYPE_NON_FATAL,
 				     WLAN_LOG_INDICATOR_FRAMEWORK,
 				     WLAN_LOG_REASON_CODE_UNUSED,
-				     true);
+				     DUMP_VOS_TRACE | DUMP_PACKET_TRACE);
 		if (VOS_STATUS_SUCCESS != ret) {
 			hddLog(LOGE, FL("Failed to trigger bug report"));
 			return -EINVAL;
@@ -16170,7 +16170,7 @@ static eHalStatus hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
                 vos_flush_logs(WLAN_LOG_TYPE_NON_FATAL,
                                WLAN_LOG_INDICATOR_HOST_DRIVER,
                                WLAN_LOG_REASON_NO_SCAN_RESULTS,
-                               true);
+                               DUMP_VOS_TRACE);
                 pHddCtx->last_scan_bug_report_timestamp = current_timestamp;
             }
         }
@@ -21165,7 +21165,7 @@ static int __wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
             vos_flush_logs(WLAN_LOG_TYPE_FATAL,
                            WLAN_LOG_INDICATOR_HOST_DRIVER,
                            WLAN_LOG_REASON_HDD_TIME_OUT,
-                           true);
+                           DUMP_VOS_TRACE);
         pAdapter->mgmtTxCompletionStatus = FALSE;
         wlan_hdd_tdls_check_bmps(pAdapter);
         return -EINVAL;

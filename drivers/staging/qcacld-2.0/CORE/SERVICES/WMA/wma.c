@@ -33935,7 +33935,7 @@ VOS_STATUS WDA_TxPacket(void *wma_context, void *tx_frame, u_int16_t frmLen,
 				vos_flush_logs(WLAN_LOG_TYPE_FATAL,
 					       WLAN_LOG_INDICATOR_HOST_DRIVER,
 					       WLAN_LOG_REASON_MGMT_FRAME_TIMEOUT,
-					       true);
+					       DUMP_VOS_TRACE);
 				wmi_crash_inject(wma_handle->wmi_handle,
 					RECOVERY_SIM_ASSERT, 0);
 			}

@@ -504,7 +504,7 @@ tSmeCmd *smeGetCommandBuffer( tpAniSirGlobal pMac )
             vos_flush_logs(WLAN_LOG_TYPE_FATAL,
                            WLAN_LOG_INDICATOR_HOST_DRIVER,
                            WLAN_LOG_REASON_SME_OUT_OF_CMD_BUF,
-                           false);
+                           DUMP_NO_TRACE);
         } else {
             /* Trigger SSR */
             vos_wlanRestart();
@@ -13924,7 +13924,7 @@ void activeListCmdTimeoutHandle(void *userData)
         vos_flush_logs(WLAN_LOG_TYPE_FATAL,
                        WLAN_LOG_INDICATOR_HOST_DRIVER,
                        WLAN_LOG_REASON_SME_COMMAND_STUCK,
-                       false);
+                       DUMP_NO_TRACE);
     } else {
         vosTraceDumpAll(mac_ctx, 0, 0, 500, 0);
     }

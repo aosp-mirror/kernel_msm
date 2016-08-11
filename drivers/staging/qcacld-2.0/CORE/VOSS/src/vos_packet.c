@@ -314,91 +314,93 @@ void vos_pkt_trace_buf_update
 
    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
              "%s %d, %s", __func__, __LINE__, event_string);
-   spin_lock_bh(&trace_buffer_lock);
 
    if (!trace_buffer) {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
                 "trace_buffer is already free");
-      spin_unlock_bh(&trace_buffer_lock);
       return;
    }
 
+   spin_lock_bh(&trace_buffer_lock);
    slot = trace_buffer_order % VOS_PKT_TRAC_MAX_TRACE_BUF;
    trace_buffer[slot].order = trace_buffer_order;
+   trace_buffer_order++;
+   spin_unlock_bh(&trace_buffer_lock);
    do_gettimeofday(&tv);
    trace_buffer[slot].event_sec_time = tv.tv_sec;
    trace_buffer[slot].event_msec_time = tv.tv_usec;
    strncpy(trace_buffer[slot].event_string, event_string,
           (sizeof(trace_buffer[slot].event_string) < strlen(event_string)?
            sizeof(trace_buffer[slot].event_string) : strlen(event_string)));
-   trace_buffer_order++;
-   spin_unlock_bh(&trace_buffer_lock);
 
    return;
 }
 
 /**
+ * vos_pkt_trace_buf_dump_1() - Helper function to dump pkt trace
+ * @slot: index
+ *
+ * Return: none
+ */
+void vos_pkt_trace_buf_dump_1(int slot)
+{
+	struct rtc_time tm;
+	unsigned long local_time;
+
+	local_time = (u32)(trace_buffer[slot].event_sec_time -
+		(sys_tz.tz_minuteswest * 60));
+	rtc_time_to_tm(local_time, &tm);
+	VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+		"%5d : [%02d:%02d:%02d.%06lu] : %s",
+		trace_buffer[slot].order,
+		tm.tm_hour, tm.tm_min, tm.tm_sec,
+		trace_buffer[slot].event_sec_time,
+		trace_buffer[slot].event_string);
+}
+
+/**
  * vos_pkt_trace_buf_dump - Dump stored information into kernel log
  */
-void vos_pkt_trace_buf_dump
-(
-   void
-)
+void vos_pkt_trace_buf_dump(void)
 {
-   v_U32_t slot, idx;
-   struct rtc_time tm;
-   unsigned long local_time;
+	uint32_t i, latest_idx = trace_buffer_order;
+	int slot;
 
-   spin_lock_bh(&trace_buffer_lock);
-   if (!trace_buffer) {
-      VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
-                "trace_buffer is already free");
-      spin_unlock_bh(&trace_buffer_lock);
-      return;
-   }
-   VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
-             "PACKET TRACE DUMP START Current Timestamp %u",
-              (unsigned int)vos_timer_get_system_time());
-   VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-             "ORDER :          RTC TIME :    EVT");
+	if (!trace_buffer || !latest_idx) {
+		VOS_TRACE(VOS_MODULE_ID_SYS, VOS_TRACE_LEVEL_INFO,
+                "trace_buffer is already free trace_buffer_order: %d",
+		trace_buffer_order);
+		return;
+	}
+	VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+		"PACKET TRACE DUMP START Current Timestamp %u",
+		(unsigned int)vos_timer_get_system_time());
+	VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+		"ORDER :          RTC TIME :    EVT");
 
-   if (VOS_PKT_TRAC_MAX_TRACE_BUF > trace_buffer_order)
-   {
-      for (slot = 0 ; slot < trace_buffer_order; slot++)
-      {
-         local_time = (u32)(trace_buffer[slot].event_sec_time -
-                         (sys_tz.tz_minuteswest * 60));
-         rtc_time_to_tm(local_time, &tm);
-         VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                   "%5d : [%02d:%02d:%02d.%06lu] : %s",
-                   trace_buffer[slot].order,
-                   tm.tm_hour, tm.tm_min, tm.tm_sec,
-                   trace_buffer[slot].event_sec_time,
-                   trace_buffer[slot].event_string);
-      }
-   }
-   else
-   {
-      for (idx = 0 ; idx < VOS_PKT_TRAC_MAX_TRACE_BUF; idx++)
-      {
-         slot = (trace_buffer_order + idx) % VOS_PKT_TRAC_MAX_TRACE_BUF;
-         local_time = (u32)(trace_buffer[slot].event_msec_time -
-                         (sys_tz.tz_minuteswest * 60));
-         rtc_time_to_tm(local_time, &tm);
-         VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                   "%5d : [%02d:%02d:%02d.%06lu] : %s",
-                   trace_buffer[slot].order,
-                   tm.tm_hour, tm.tm_min, tm.tm_sec,
-                   trace_buffer[slot].event_msec_time,
-                   trace_buffer[slot].event_string);
-      }
-   }
+	if (VOS_PKT_TRAC_MAX_TRACE_BUF > latest_idx) {
+		/*
+		 * Scenario: Number of trace records less than MAX,
+		 * Circular buffer not overwritten.
+		 */
+		for (slot = latest_idx - 1; slot >= 0; slot--)
+			vos_pkt_trace_buf_dump_1(slot);
+	} else {
+		/*
+		 * Scenario: Number of trace records exceeded MAX,
+		 * Circular buffer is overwritten.
+		 */
+		for (i = 0; i < VOS_PKT_TRAC_MAX_TRACE_BUF; i++) {
+			slot = ((latest_idx - i - 1) %
+				VOS_PKT_TRAC_MAX_TRACE_BUF);
+			vos_pkt_trace_buf_dump_1(slot);
+		}
+	}
 
-   VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-             "PACKET TRACE DUMP END");
-   spin_unlock_bh(&trace_buffer_lock);
+	VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+			"PACKET TRACE DUMP END");
 
-   return;
+	return;
 }
 
 /**

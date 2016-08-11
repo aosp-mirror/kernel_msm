@@ -1878,7 +1878,6 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         lim_update_rrm_capability(pMac, pSmeJoinReq);
 
         /* check for the existence of start BSS session  */
-
         if((psessionEntry = peFindSessionByBssid(pMac,pSmeJoinReq->bssDescription.bssId,&sessionId)) != NULL)
         {
             limLog(pMac, LOGE, FL("Session(%d) Already exists for BSSID: "

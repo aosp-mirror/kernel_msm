@@ -999,7 +999,7 @@ static void vos_wd_detect_thread_stuck(void)
 		vos_flush_logs(WLAN_LOG_TYPE_FATAL,
 			       WLAN_LOG_INDICATOR_HOST_ONLY,
 			       WLAN_LOG_REASON_THREAD_STUCK,
-			       true);
+			       DUMP_VOS_TRACE);
 		spin_lock_irqsave(&gpVosWatchdogContext->thread_stuck_lock,
 			flags);
 	}

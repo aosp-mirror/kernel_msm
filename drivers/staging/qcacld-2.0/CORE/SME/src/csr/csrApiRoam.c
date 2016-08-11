@@ -8762,7 +8762,7 @@ static void csrRoamRoamingStateReassocRspProcessor( tpAniSirGlobal pMac, tpSirSm
         vos_flush_logs(WLAN_LOG_TYPE_FATAL,
                        WLAN_LOG_INDICATOR_HOST_DRIVER,
                        WLAN_LOG_REASON_ROAM_FAIL,
-                       true);
+                       DUMP_VOS_TRACE | DUMP_PACKET_TRACE);
 #if defined(WLAN_FEATURE_VOWIFI_11R) || defined(FEATURE_WLAN_ESE) || \
     defined(FEATURE_WLAN_LFR)
         if ((eSIR_SME_FT_REASSOC_TIMEOUT_FAILURE == pSmeJoinRsp->statusCode) ||
