@@ -32,9 +32,12 @@
 #include <linux/time.h>
 #include <linux/file.h>
 #include <linux/irq.h>
+#include <linux/power_supply.h>
 
 #include "atmel_u144.h"
 #include "atmel_u144_patch.h"
+
+#define MXT_REGISTER_PSY_MS 200
 
 static struct mutex i2c_suspend_lock;
 static struct mutex irq_lock;
@@ -76,8 +79,6 @@ struct mxt_touch_attribute {
 #define jitter_sub(x, y)	(x > y ? x - y : y - x)
 #define get_time_interval(a,b)	a>=b ? a-b : 1000000+a-b
 
-static int g_usb_type = 0;
-
 static int mxt_soft_reset(struct mxt_data *data);
 static int mxt_hw_reset(struct mxt_data *data);
 static int mxt_t6_command(struct mxt_data *data, u16 cmd_offset, u8 value, bool wait);
@@ -95,6 +96,7 @@ static void mxt_regulator_enable(struct mxt_data *data);
 void trigger_usb_state_from_otg(int usb_type);
 static void mxt_read_fw_version(struct mxt_data *data);
 static int mxt_read_t100_config(struct mxt_data *data);
+static void mxt_external_power_changed(struct power_supply *psy);
 
 static int __maybe_unused touch_enable_irq_wake(unsigned int irq)
 {
@@ -875,10 +877,13 @@ static void mxt_firmware_update_func(struct work_struct *work_firmware_update)
 	}
 
 exit:
-	if (mxt_patchevent_get(PATCH_EVENT_TA))
-		trigger_usb_state_from_otg(1);
-	else
+	if (data->charging_mode) {
 		trigger_usb_state_from_otg(0);
+		trigger_usb_state_from_otg(1);
+	} else {
+		trigger_usb_state_from_otg(1);
+		trigger_usb_state_from_otg(0);
+	}
 
 	touch_enable_irq(data->irq);
 
@@ -918,6 +923,25 @@ static void mxt_delay_cal_func(struct work_struct *work_delay_cal)
 	/* Recalibrate since chip has been in deep sleep */
 	mxt_t6_command(data, MXT_COMMAND_CALIBRATE, 1, false);
 	data->enable_reporting = true;
+}
+
+static void mxt_register_psy_func(struct work_struct *work)
+{
+	struct mxt_data *data = container_of(to_delayed_work(work),
+			struct mxt_data, work_register_psy);
+	int error;
+
+	error = power_supply_register(&data->client->dev, &data->psy);
+	if (!error) {
+		mxt_external_power_changed(&data->psy);
+		return;
+	} else if (-EPROBE_DEFER == error) {
+		queue_delayed_work(touch_wq,
+				&data->work_register_psy,
+				msecs_to_jiffies(MXT_REGISTER_PSY_MS));
+	} else if (error < 0) {
+		TOUCH_ERR_MSG("failed power supply register\n");
+	}
 }
 
 static void mxt_proc_t9_message(struct mxt_data *data, u8 *message)
@@ -1437,18 +1461,15 @@ static ssize_t mxt_update_patch_store(struct mxt_data *data, const char *buf,
 		data->patch.patch = NULL;
 	}
 	data->patch.patch = patch_data;
-	
+
 	TOUCH_DEBUG_MSG("%s ppatch:%p %p\n", __func__,
 			patch_data, data->patch.patch);
 
 	ret = mxt_patch_init(data, data->patch.patch);
 	if (ret) {
-		global_mxt_data = NULL;
 		TOUCH_ERR_MSG("%s global_mxt_data is NULL \n", __func__);
 		goto out;
 	}
-
-	global_mxt_data = data;
 
 	release_firmware(fw);
 
@@ -1468,50 +1489,36 @@ out:
 
 void trigger_usb_state_from_otg(int usb_type)
 {
-	TOUCH_INFO_MSG("USB trigger USB_type: %d \n", usb_type);
-	g_usb_type = usb_type;
+	struct mxt_data *data = global_mxt_data;
 
-	if (!global_mxt_data) {
-		TOUCH_ERR_MSG("global_mxt_data is null\n");
+	TOUCH_INFO_MSG("charger: %d\n", usb_type);
+
+	if (!data) {
+		TOUCH_ERR_MSG("data is null\n");
 		return;
 	}
 
-	if (!global_mxt_data->patch.event_cnt) {
+	data->charging_mode = usb_type;
+
+	if (!data->patch.event_cnt) {
 		TOUCH_DEBUG_MSG("patch.event_cnt = 0\n");
 		return;
 	}
 
-	global_mxt_data->global_object =
-		mxt_get_object(global_mxt_data,
-				MXT_PROCI_TOUCH_SEQUENCE_LOGGER_T93);
-	if (!global_mxt_data->global_object)
+	data->global_object = mxt_get_object(data,
+			MXT_PROCI_TOUCH_SEQUENCE_LOGGER_T93);
+	if (!data->global_object)
 		return;
 
-	if (global_mxt_data->regulator_status == 0) {
-		TOUCH_INFO_MSG("IC Regulator Disabled. Do nothing\n");
-		if (usb_type == 0) {
+	if (!data->regulator_status || data->mxt_mode_changed) {
+		if (usb_type == 0)
 			mxt_patchevent_unset(PATCH_EVENT_TA);
-			global_mxt_data->charging_mode = 0;
-		} else {
+		else
 			mxt_patchevent_set(PATCH_EVENT_TA);
-			global_mxt_data->charging_mode = 1;
-		}
 		return;
 	}
 
-	if (global_mxt_data->mxt_mode_changed) {
-		TOUCH_INFO_MSG("Do not change when mxt mode changed\n");
-		if (usb_type == 0) {
-			mxt_patchevent_unset(PATCH_EVENT_TA);
-			global_mxt_data->charging_mode = 0;
-		} else {
-			mxt_patchevent_set(PATCH_EVENT_TA);
-			global_mxt_data->charging_mode = 1;
-		}
-		return;
-	}
-
-	if (global_mxt_data->mfts_enable && global_mxt_data->pdata->use_mfts) {
+	if (data->mfts_enable && data->pdata->use_mfts) {
 		TOUCH_INFO_MSG("MFTS : Not support USB trigger \n");
 		return;
 	}
@@ -1524,16 +1531,15 @@ void trigger_usb_state_from_otg(int usb_type)
 	mutex_lock(&i2c_suspend_lock);
 	if (usb_type == 0) {
 		if (mxt_patchevent_get(PATCH_EVENT_TA)) {
-			global_mxt_data->charging_mode = 0;
-			mxt_patch_event(global_mxt_data, CHARGER_UNPLUGGED);
+			mxt_patch_event(data, CHARGER_UNPLUGGED);
 			mxt_patchevent_unset(PATCH_EVENT_TA);
 		}
 	} else {
-		global_mxt_data->charging_mode = 1;
-		mxt_patch_event(global_mxt_data, CHARGER_PLUGGED);
-		mxt_patchevent_set(PATCH_EVENT_TA);
+		if (!mxt_patchevent_get(PATCH_EVENT_TA)) {
+			mxt_patch_event(data, CHARGER_PLUGGED);
+			mxt_patchevent_set(PATCH_EVENT_TA);
+		}
 	}
-
 	mutex_unlock(&i2c_suspend_lock);
 }
 
@@ -3257,9 +3263,6 @@ exit:
 	if (package_name)
 		kfree(package_name);
 
-	if (mxt_patchevent_get(PATCH_EVENT_TA))
-		trigger_usb_state_from_otg(1);
-
 	touch_enable_irq(data->irq);
 
 	mxt_read_fw_version(data);
@@ -4883,15 +4886,9 @@ static int mxt_config_initialize(struct mxt_fw_info *fw_info)
 
 	if (data->patch.patch) {
 		ret = mxt_patch_init(data, data->patch.patch);
+		if (ret)
+			TOUCH_ERR_MSG("Failed to initialize\n");
 	}
-
-	if (ret == 0) {
-		global_mxt_data = data;
-	} else {
-		global_mxt_data = NULL;
-		TOUCH_ERR_MSG("Failed to get global_mxt_data(NULL) \n");
-	}
-
 out:
 	return ret;
 }
@@ -4976,6 +4973,44 @@ int mxt_update_firmware(struct mxt_data *data, const char *fwname)
 	return 0;
 }
 
+static void mxt_external_power_changed(struct power_supply *psy)
+{
+	struct mxt_data *data = container_of(psy, struct mxt_data,
+			psy);
+	union power_supply_propval res = {0, };
+	int online = 0;
+
+	if (!data->usb_psy)
+		data->usb_psy = power_supply_get_by_name("usb");
+	if (!data->wlc_psy)
+		data->wlc_psy =  power_supply_get_by_name("wireless");
+	if (!data->usb_psy && !data->wlc_psy)
+		return;
+
+	if (data->usb_psy) {
+		data->usb_psy->get_property(
+				data->usb_psy, POWER_SUPPLY_PROP_ONLINE, &res);
+		online |= res.intval;
+	}
+
+	if (data->wlc_psy) {
+		data->wlc_psy->get_property(
+				data->wlc_psy, POWER_SUPPLY_PROP_ONLINE, &res);
+		online |= res.intval;
+	}
+
+	if (online)
+		TOUCH_INFO_MSG("charger detected\n");
+	trigger_usb_state_from_otg(!!online);
+}
+
+static int mxt_get_psy_property(struct power_supply *psy,
+		enum power_supply_property psp,
+		union power_supply_propval *val)
+{
+	return -EINVAL;
+}
+
 static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct mxt_data *data = NULL;
@@ -5027,6 +5062,8 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 	snprintf(data->phys, sizeof(data->phys), "i2c-%u-%04x/input0",
 			client->adapter->nr, client->addr);
+
+	global_mxt_data = data;
 	data->client = client;
 	data->irq = client->irq;
 	data->pdata = pdata;
@@ -5088,6 +5125,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	INIT_DELAYED_WORK(&data->work_delay_cal, mxt_delay_cal_func);
 	INIT_DELAYED_WORK(&data->work_firmware_update,
 			mxt_firmware_update_func);
+	INIT_DELAYED_WORK(&data->work_register_psy, mxt_register_psy_func);
 
 	/* disabled report touch event to prevent unnecessary event.
 	 * it will be enabled in open function
@@ -5123,10 +5161,30 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 	device_init_wakeup(&client->dev, pdata->wakeup);
 
+	/* To get charger type */
+	data->psy.name = "touch";
+	data->psy.type = POWER_SUPPLY_TYPE_UNKNOWN;
+	data->psy.get_property = mxt_get_psy_property;
+	data->psy.external_power_changed = mxt_external_power_changed;
+	data->psy.of_node = client->dev.of_node;
+
+	error = power_supply_register(&client->dev, &data->psy);
+	if (-EPROBE_DEFER == error) {
+		queue_delayed_work(touch_wq,
+				&data->work_register_psy,
+				msecs_to_jiffies(MXT_REGISTER_PSY_MS));
+	} else if (error < 0) {
+		TOUCH_ERR_MSG("failed power supply register\n");
+		goto err_power_supply_register;
+	}
+	mxt_external_power_changed(&data->psy);
+
 	TOUCH_INFO_MSG("%s success...\n", __func__);
 
 	return 0;
 
+err_power_supply_register:
+	device_init_wakeup(&client->dev, 0);
 err_mxt_touch_sysfs_init_and_add:
 	kobject_del(&data->mxt_touch_kobj);
 	device_unregister(&device_touch);
@@ -5140,6 +5198,7 @@ err_probe_regulators:
 	wake_lock_destroy(&touch_wake_lock);
 
 	mxt_free_object_table(data);
+	global_mxt_data = NULL;
 	return error;
 }
 
@@ -5147,6 +5206,7 @@ static int mxt_remove(struct i2c_client *client)
 {
 	struct mxt_data *data = i2c_get_clientdata(client);
 
+	power_supply_unregister(&data->psy);
 	device_init_wakeup(&client->dev, 0);
 	kobject_del(&data->mxt_touch_kobj);
 	device_unregister(&device_touch);
@@ -5159,6 +5219,7 @@ static int mxt_remove(struct i2c_client *client)
 
 	wake_lock_destroy(&pm_touch_wake_lock);
 	wake_lock_destroy(&touch_wake_lock);
+	global_mxt_data = NULL;
 
 	return 0;
 }

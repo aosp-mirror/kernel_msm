@@ -20,6 +20,7 @@
 #include <linux/input/mt.h>
 #include <linux/device.h>
 #include <linux/firmware.h>
+#include <linux/power_supply.h>
 
 #define MXT_TOUCH_NAME		"mxt_touch"
 
@@ -769,6 +770,7 @@ struct mxt_data {
 	struct delayed_work work_deepsleep;
 	struct delayed_work work_delay_cal;
 	struct delayed_work work_firmware_update;
+	struct delayed_work work_register_psy;
 	u8 work_deepsleep_enabled;
 	u8 mfts_enable;
 	/*Charger mode in patch*/
@@ -803,6 +805,10 @@ struct mxt_data {
 	u8 pen_support;
 
 	int self_cap;
+
+	struct power_supply psy;
+	struct power_supply *usb_psy;
+	struct power_supply *wlc_psy;
 };
 
 #define TOUCH_INFO_MSG(fmt, args...) \

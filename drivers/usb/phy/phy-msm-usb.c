@@ -4745,6 +4745,7 @@ static int msm_otg_probe(struct platform_device *pdev)
 
 	motg->usb_psy.name = "usb";
 	motg->usb_psy.type = POWER_SUPPLY_TYPE_USB;
+	motg->usb_psy.of_node = pdev->dev.of_node;
 	motg->usb_psy.supplied_to = otg_pm_power_supplied_to;
 	motg->usb_psy.num_supplicants = ARRAY_SIZE(otg_pm_power_supplied_to);
 	motg->usb_psy.properties = otg_pm_power_props_usb;

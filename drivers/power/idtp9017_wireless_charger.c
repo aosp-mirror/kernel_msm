@@ -1270,6 +1270,7 @@ static int idtp9017_probe(struct i2c_client *client,
 	/*Set Power Supply type for wlc*/
 	chip->wlc_psy.name = "wireless";
 	chip->wlc_psy.type = POWER_SUPPLY_TYPE_WIRELESS;
+	chip->wlc_psy.of_node = client->dev.of_node;
 	chip->wlc_psy.supplied_to = pm_power_supplied_to;
 	chip->wlc_psy.num_supplicants = ARRAY_SIZE(pm_power_supplied_to);
 	chip->wlc_psy.properties = pm_power_props_wireless;
