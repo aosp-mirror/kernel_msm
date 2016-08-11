@@ -194,6 +194,19 @@ enum log_event_indicator {
 };
 
 /**
+ * enum log_dump_trace_mask - Mask to indicate what traces to log
+ * @DUMP_NO_TRACE: Do not dump any logs
+ * @DUMP_VOS_TRACE: Dump vos trace logs
+ * @DUMP_PACKET_TRACE: Dump packet trace
+ *
+ */
+enum log_dump_trace_mask {
+	DUMP_NO_TRACE      = 0x0,
+	DUMP_VOS_TRACE     = 0x1,
+	DUMP_PACKET_TRACE  = 0x2
+};
+
+/**
  * enum log_event_host_reason_code - Reason code for bug report
  * @WLAN_LOG_REASON_CODE_UNUSED: Unused
  * @WLAN_LOG_REASON_ROAM_FAIL: Driver initiated roam has failed

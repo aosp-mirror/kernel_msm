@@ -368,7 +368,7 @@ void vos_deinit_log_completion(void);
 VOS_STATUS vos_flush_logs(uint32_t is_fatal,
 		uint32_t indicator,
 		uint32_t reason_code,
-		bool dump_vos_trace);
+		uint32_t dump_vos_trace);
 void vos_wlan_flush_host_logs_for_fatal(void);
 void vos_logging_set_fw_flush_complete(void);
 void vos_probe_threads(void);

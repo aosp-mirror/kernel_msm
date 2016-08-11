@@ -778,7 +778,7 @@ void wlan_display_tx_timeout_stats(hdd_adapter_t *adapter)
 		vos_flush_logs(WLAN_LOG_TYPE_FATAL,
 			       WLAN_LOG_INDICATOR_HOST_DRIVER,
 			       WLAN_LOG_REASON_HDD_TIME_OUT,
-			       true);
+			       DUMP_VOS_TRACE);
 	}
 }
 

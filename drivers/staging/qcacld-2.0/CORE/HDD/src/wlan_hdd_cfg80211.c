@@ -9067,18 +9067,24 @@ static int __wlan_hdd_cfg80211_wifi_logger_get_ring_data(struct wiphy *wiphy,
 	if (ring_id == RING_ID_PER_PACKET_STATS) {
 		wlan_logging_set_per_pkt_stats();
 		hddLog(LOG1, FL("Flushing/Retrieving packet stats"));
-	}
+	} else if (ring_id == RING_ID_DRIVER_DEBUG) {
+		/*
+		 * As part of DRIVER ring ID, flush both driver and fw logs.
+		 * For other Ring ID's driver doesn't have any rings to flush
+		 */
+		hddLog(LOG1, FL("Bug report triggered by framework"));
 
-	hddLog(LOG1, FL("Bug report triggered by framework"));
-
-	ret = vos_flush_logs(WLAN_LOG_TYPE_NON_FATAL,
-			     WLAN_LOG_INDICATOR_FRAMEWORK,
-			     WLAN_LOG_REASON_CODE_UNUSED,
-			     true);
-	if (VOS_STATUS_SUCCESS != ret) {
-		hddLog(LOGE, FL("Failed to trigger bug report"));
-		return -EINVAL;
-	}
+		ret = vos_flush_logs(WLAN_LOG_TYPE_NON_FATAL,
+				     WLAN_LOG_INDICATOR_FRAMEWORK,
+				     WLAN_LOG_REASON_CODE_UNUSED,
+				     DUMP_VOS_TRACE | DUMP_PACKET_TRACE);
+		if (VOS_STATUS_SUCCESS != ret) {
+			hddLog(LOGE, FL("Failed to trigger bug report"));
+			return -EINVAL;
+		}
+	} else
+		wlan_report_log_completion(0, WLAN_LOG_INDICATOR_FRAMEWORK,
+					   WLAN_LOG_REASON_CODE_UNUSED);
 
 	return 0;
 }
@@ -16581,7 +16587,7 @@ static eHalStatus hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
                 vos_flush_logs(WLAN_LOG_TYPE_NON_FATAL,
                                WLAN_LOG_INDICATOR_HOST_DRIVER,
                                WLAN_LOG_REASON_NO_SCAN_RESULTS,
-                               true);
+                               DUMP_VOS_TRACE);
                 pHddCtx->last_scan_bug_report_timestamp = current_timestamp;
             }
         }
@@ -21700,7 +21706,7 @@ static int __wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
             vos_flush_logs(WLAN_LOG_TYPE_FATAL,
                            WLAN_LOG_INDICATOR_HOST_DRIVER,
                            WLAN_LOG_REASON_HDD_TIME_OUT,
-                           true);
+                           DUMP_VOS_TRACE);
         pAdapter->mgmtTxCompletionStatus = FALSE;
         wlan_hdd_tdls_check_bmps(pAdapter);
         return -EINVAL;
