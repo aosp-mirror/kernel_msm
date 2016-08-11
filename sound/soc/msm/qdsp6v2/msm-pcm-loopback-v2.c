@@ -139,8 +139,8 @@ done:
 }
 
 static struct snd_kcontrol_new msm_loopback_controls[] = {
-	SOC_SINGLE_MULTI_EXT("HFP Tx Mute", SND_SOC_NOPM, 0, 0xFFFFFFFF,
-				      0, 3, NULL, msm_loopback_session_mute_put),
+	SOC_SINGLE_EXT("HFP TX Mute", SND_SOC_NOPM, 0, 1, 0,
+			NULL, msm_loopback_session_mute_put),
 };
 
 static int msm_pcm_loopback_probe(struct snd_soc_platform *platform)
