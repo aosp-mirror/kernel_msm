@@ -521,7 +521,6 @@ static int msm_pcm_add_controls(struct snd_soc_pcm_runtime *rtd)
 	if (ret < 0)
 		return ret;
 	kctl = volume_info->kctl;
-	kctl->get = msm_pcm_volume_ctl_get;
 	kctl->put = msm_pcm_volume_ctl_put;
 	kctl->get = msm_pcm_volume_ctl_get;
 	kctl->tlv.p = loopback_rx_vol_gain;
