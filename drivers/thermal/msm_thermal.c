@@ -128,6 +128,7 @@ static cpumask_var_t cpus_previously_online;
 static DEFINE_MUTEX(core_control_mutex);
 static struct kobject *cc_kobj;
 static struct kobject *mx_kobj;
+static struct kobject *msm_thermal_module_kobj;
 static struct task_struct *hotplug_task;
 static struct task_struct *freq_mitigation_task;
 static struct task_struct *thermal_monitor_task;
@@ -3494,26 +3495,56 @@ static int __ref msm_thermal_cpu_callback(struct notifier_block *nfb,
 	return NOTIFY_OK;
 }
 
+static int msm_thermal_uevent(char *event_string)
+{
+	int ret = 0;
+	char *envp[2]={event_string, NULL};
+
+	if (!msm_thermal_module_kobj) {
+		pr_err("cannot find kobject\n");
+		ret = -ENOENT;
+		goto msm_thermal_uevent_exit;
+	}
+
+	ret = kobject_uevent_env(msm_thermal_module_kobj, KOBJ_CHANGE, envp);
+	if (ret)
+		pr_err("kobject_uevent_env error = %d\n", ret);
+
+msm_thermal_uevent_exit:
+	return ret;
+}
+
 static int fb_notifier_callback(struct notifier_block *self,
 		unsigned long event, void *data)
 {
 	struct fb_event *evdata = data;
 	int *blank;
+	char *event_string = "";
 	struct msm_thermal_data *pdata = container_of(self, struct msm_thermal_data, fb_notif);
 
 	if (evdata && evdata->data && event == FB_EVENT_BLANK && pdata) {
 		blank = evdata->data;
 		switch (*blank) {
 		case FB_BLANK_UNBLANK:
+			event_string = "ASUS_PANEL_MODE=ON";
 			ambient_flag = false;
 			break;
 		case FB_BLANK_POWERDOWN:
+			event_string = "ASUS_PANEL_MODE=OFF";
+			ambient_flag = true;
+			break;
 		case FB_BLANK_HSYNC_SUSPEND:
+			ambient_flag = true;
+			break;
 		case FB_BLANK_VSYNC_SUSPEND:
+			event_string = "ASUS_PANEL_MODE=AMBIENT";
+			ambient_flag = true;
+			break;
 		case FB_BLANK_NORMAL:
 			ambient_flag = true;
 			break;
 		}
+		msm_thermal_uevent(event_string);
 	}
 	return 0;
 }
@@ -4694,6 +4725,21 @@ void sensor_mgr_remove_threshold(struct threshold_info *thresh_inp)
 	mutex_unlock(&threshold_mutex);
 }
 
+static int msm_thermal_module_kobj_init(void)
+{
+	int ret = 0;
+
+	msm_thermal_module_kobj = kset_find_obj(module_kset, KBUILD_MODNAME);
+	if (!msm_thermal_module_kobj) {
+		pr_err("cannot find kobject\n");
+		ret = -ENOENT;
+		goto msm_thermal_module_kobj_init_exit;
+	}
+
+msm_thermal_module_kobj_init_exit:
+	return ret;
+}
+
 static int msm_thermal_add_gfx_nodes(void)
 {
 	struct kobject *module_kobj = NULL;
@@ -4837,6 +4883,7 @@ static void interrupt_mode_init(void)
 		msm_thermal_add_cx_nodes();
 		msm_thermal_add_gfx_nodes();
 	}
+	msm_thermal_module_kobj_init();
 }
 
 static int __ref set_enabled(const char *val, const struct kernel_param *kp)
@@ -7352,6 +7399,8 @@ static int msm_thermal_dev_exit(struct platform_device *inp_dev)
 		kfree(thresh);
 		thresh = NULL;
 	}
+	if (msm_thermal_module_kobj)
+		kfree(msm_thermal_module_kobj);
 	kfree(table);
 	if (core_ptr) {
 		for (; _cluster < core_ptr->entity_count; _cluster++) {
