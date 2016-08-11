@@ -876,18 +876,14 @@ static void mxt_firmware_update_func(struct work_struct *work_firmware_update)
 		goto exit;
 	}
 
-exit:
-	if (data->charging_mode) {
-		trigger_usb_state_from_otg(0);
-		trigger_usb_state_from_otg(1);
-	} else {
+	if (mxt_patchevent_get(PATCH_EVENT_TA)) {
 		trigger_usb_state_from_otg(1);
 		trigger_usb_state_from_otg(0);
 	}
 
-	touch_enable_irq(data->irq);
-
 	mxt_read_fw_version(data);
+exit:
+	touch_enable_irq(data->irq);
 	data->enable_reporting = true;
 }
 
