@@ -1682,6 +1682,7 @@ int mdp3_ppp_res_init(struct msm_fb_data_type *mfd)
 	int rc;
 	struct sched_param param = {.sched_priority = 16};
 	const char timeline_name[] = "mdp3_ppp";
+
 	ppp_stat = kzalloc(sizeof(struct ppp_status), GFP_KERNEL);
 	if (!ppp_stat) {
 		pr_err("%s: kzalloc failed\n", __func__);
@@ -1700,8 +1701,8 @@ int mdp3_ppp_res_init(struct msm_fb_data_type *mfd)
 	init_kthread_worker(&ppp_stat->kworker);
 	init_kthread_work(&ppp_stat->blit_work, mdp3_ppp_blit_handler);
 	ppp_stat->blit_thread = kthread_run(kthread_worker_fn,
-	                                    &ppp_stat->kworker,
-	                                    "mdp3_ppp");
+					&ppp_stat->kworker,
+					"mdp3_ppp");
 
 	if (IS_ERR(ppp_stat->blit_thread)) {
 		rc = PTR_ERR(ppp_stat->blit_thread);
@@ -1709,7 +1710,6 @@ int mdp3_ppp_res_init(struct msm_fb_data_type *mfd)
 		ppp_stat->blit_thread = NULL;
 		return rc;
 	}
-
 	if (sched_setscheduler(ppp_stat->blit_thread, SCHED_FIFO, &param))
 		pr_warn("set priority failed for mdp3 blit thread\n");
 
