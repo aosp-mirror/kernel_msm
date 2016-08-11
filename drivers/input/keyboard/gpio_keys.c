@@ -428,14 +428,14 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 
 	if (type == EV_ABS) {
 		if (state) {
-			pr_info("[KEY] %s: key %x-%x, (%d) changed to %d\n",
+			pr_debug("[KEY] %s: key %x-%x, (%d) changed to %d\n",
 				__func__, type, button->code, button->gpio, button->value);
 
 					debug_combine_key(button->code, button->value);
 					input_event(input, type, button->code, button->value);
 		}
 	} else {
-		pr_info("[KEY] %s: key %x-%x, (%d) changed to %d\n",
+		pr_debug("[KEY] %s: key %x-%x, (%d) changed to %d\n",
 			__func__, type, button->code, button->gpio, !!state);
 
 		debug_combine_key(button->code, !!state);
@@ -518,7 +518,7 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 	struct gpio_button_data *bdata = dev_id;
 	unsigned long irqflags;
 	unsigned int type = bdata->button->type ?: EV_KEY;
-	pr_info("[KEY] %s, irq=%d, gpio=%d\n", __func__, irq, bdata->button->gpio);
+	pr_debug("[KEY] %s, irq=%d, gpio=%d\n", __func__, irq, bdata->button->gpio);
 
 	BUG_ON(irq != bdata->irq);
 
@@ -559,7 +559,7 @@ static void gpio_keys_irq_timer(unsigned long _data)
 
 	spin_lock_irqsave(&bdata->lock, flags);
 	if (bdata->key_pressed) {
-		pr_info("[KEY] %s: key %x-%x, (%d) changed to %d\n",
+		pr_debug("[KEY] %s: key %x-%x, (%d) changed to %d\n",
 			__func__, EV_KEY, bdata->button->code, bdata->button->gpio, 0);
 
 		if (button->gpio && gpio_is_valid(button->gpio))
@@ -583,7 +583,7 @@ static irqreturn_t gpio_keys_irq_isr(int irq, void *dev_id)
 	struct input_dev *input = bdata->input;
 	unsigned long flags;
 
-	pr_info("[KEY] %s, irq=%d, gpio=%d\n", __func__, irq, button->gpio);
+	pr_debug("[KEY] %s, irq=%d, gpio=%d\n", __func__, irq, button->gpio);
 	BUG_ON(irq != bdata->irq);
 
 	spin_lock_irqsave(&bdata->lock, flags);
@@ -592,13 +592,13 @@ static irqreturn_t gpio_keys_irq_isr(int irq, void *dev_id)
 		if (bdata->button->wakeup)
 			pm_wakeup_event(bdata->input->dev.parent, 0);
 
-		pr_info("[KEY] %s: key %x-%x, (%d) changed to %d\n",
+		pr_debug("[KEY] %s: key %x-%x, (%d) changed to %d\n",
 			__func__, EV_KEY, button->code, button->gpio, 1);
 		input_event(input, EV_KEY, button->code, 1);
 		input_sync(input);
 
 		if (!bdata->timer_debounce) {
-			pr_info("[KEY] %s: key %x-%x, (%d) changed to %d\n",
+			pr_debug("[KEY] %s: key %x-%x, (%d) changed to %d\n",
 				__func__, EV_KEY, button->code, button->gpio, 0);
 			input_event(input, EV_KEY, button->code, 0);
 			input_sync(input);
@@ -659,7 +659,7 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 			if (error < 0)
 				bdata->timer_debounce =
 						button->debounce_interval;
-			pr_info("[KEY] %s, error=%d, debounce(%d, %d)\n",
+			pr_debug("[KEY] %s, error=%d, debounce(%d, %d)\n",
 				__func__, error, bdata->timer_debounce,
 				button->debounce_interval);
 		}
