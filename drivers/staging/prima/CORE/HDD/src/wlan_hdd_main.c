@@ -120,6 +120,7 @@ int wlan_hdd_ftm_start(hdd_context_t *pAdapter);
 #endif
 #include "wlan_hdd_debugfs.h"
 #include "sapInternal.h"
+#include <linux/random.h>
 
 #define MAC_FIRMWARE "wlan/prima/mac_addrs.bin"
 v_MACADDR_t mac_addrs[VOS_MAX_CONCURRENCY_PERSONA];
@@ -6171,6 +6172,22 @@ static int hdd_set_mac_address(struct net_device *dev, void *addr)
    return ret;
 }
 
+static void wlan_hdd_set_random_mac_addrs(tANI_U8* addrs)
+{
+    unsigned int rand_mac;
+
+    memset(addrs, 0, VOS_MAC_ADDR_SIZE * VOS_MAX_CONCURRENCY_PERSONA);
+
+    prandom_seed((uint)jiffies);
+    rand_mac = prandom_u32();
+    addrs[0] = 0x00; /* do not edit */
+    addrs[1] = 0x90;
+    addrs[2] = 0x4c;
+    addrs[3] = (tANI_U8)rand_mac;
+    addrs[4] = (tANI_U8)(rand_mac >> 8);
+    addrs[5] = (tANI_U8)(rand_mac >> 16);
+}
+
 tANI_U8* wlan_hdd_get_intf_addr(hdd_context_t* pHddCtx)
 {
    int i;
@@ -6191,17 +6208,26 @@ tANI_U8* wlan_hdd_get_intf_addr(hdd_context_t* pHddCtx)
    {
       printk (KERN_ERR"%s : failed to load firmware (%s)\n",
               __func__, MAC_FIRMWARE);
-      return NULL;
+      goto random_mac;
    }
 
    if (fw_entry->size != VOS_MAC_ADDR_SIZE * VOS_MAX_CONCURRENCY_PERSONA) {
       printk (KERN_ERR"%s : mac file size mismatch\n", __func__);
-      return NULL;
+      release_firmware (fw_entry);
+      goto random_mac;
    }
 
    memcpy (&mac_addrs[0].bytes[0], fw_entry->data, fw_entry->size);
 
    release_firmware (fw_entry);
+
+   /* return the address */
+   return &mac_addrs[i].bytes[0];
+
+random_mac:
+   printk (KERN_INFO"%s : use random mac\n", __func__);
+
+   wlan_hdd_set_random_mac_addrs(&mac_addrs[0].bytes[0]);
 
    /* return the address */
    return &mac_addrs[i].bytes[0];
