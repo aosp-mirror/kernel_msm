@@ -63,7 +63,9 @@
 #define DISCHG_TERM_CURRENT_REG                        0x3
 #define DISCHG_CURRENT_MASK                            mp2661_MASK(6, 3)
 #define DISCHG_CURRENT_MASK_SHIT                       3
-#define TRCIKE_CHARGING_CURRENT_MASK                   mp2661_MASK(2, 0)
+#define TRCIKE_PCB_OTP_DISABLE_MASK                    mp2661_MASK(2, 2)
+#define TRCIKE_PCB_OTP_DISABLE_MASK_SHIFT              2
+#define TRCIKE_CHARGING_CURRENT_MASK                   mp2661_MASK(1, 0)
 #define TRCIKE_CHARGING_CURRENT_MASK_SHIFT             0
 
 /*Charge Voltage Control Register*/
@@ -668,6 +670,21 @@ static void mp2661_set_appropriate_batt_charging_current(
     {
         pr_err("Couldn't set batt appopriate batt charging current rc = %d\n", rc);
     }
+}
+
+static int mp2661_set_pcb_otp_disable(struct mp2661_chg *chip,
+                            bool disable)
+{
+    int rc, i;
+
+    i = disable << TRCIKE_PCB_OTP_DISABLE_MASK_SHIFT;
+    rc = mp2661_masked_write(chip, DISCHG_TERM_CURRENT_REG,
+            TRCIKE_PCB_OTP_DISABLE_MASK, i);
+    if (rc < 0)
+    {
+        pr_err("cannot set pcb otp disable to %d rc = %d\n", disable, rc);
+    }
+    return rc;
 }
 
 #define MP2661_TRICKE_CHARGING_STEP_MA        7
@@ -1598,6 +1615,12 @@ static int mp2661_hw_init(struct mp2661_chg *chip)
     {
         pr_err("Couldn't set batt trickle charging current rc=%d\n", rc);
         return rc;
+    }
+
+    rc = mp2661_set_pcb_otp_disable(chip, false);
+    if (rc)
+    {
+        pr_err("Couldn't set pcb otp disable to false rc=%d\n", rc);
     }
 
     rc = mp2661_set_batt_trickle_to_cc_threshold(chip, chip->batt_trickle_to_cc_theshold_mv);
