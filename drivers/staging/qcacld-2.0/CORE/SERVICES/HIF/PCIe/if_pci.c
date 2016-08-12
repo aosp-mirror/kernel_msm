@@ -1270,8 +1270,10 @@ static int __hif_pci_runtime_resume(struct pci_dev *pdev)
 
 	ret = __hif_pci_resume(pdev, true);
 
-	if (ret)
-		goto out;
+	if (ret) {
+		hif_pci_runtime_pm_warn(sc, "Link Resume Failed");
+		return ret;
+	}
 
 	ret = wma_runtime_resume_req(temp_module);
 	if (ret)
@@ -1288,8 +1290,12 @@ out:
 	/* In Resume we should never fail */
 	hif_pci_runtime_pm_warn(sc, "Runtime Resume Failed");
 	/* skip VOS_BUG if SSR is already in progress */
-	if (!vos_is_logp_in_progress(VOS_MODULE_ID_HIF, NULL))
-		VOS_BUG(0);
+	if (!vos_is_logp_in_progress(VOS_MODULE_ID_HIF, NULL)) {
+		if (sc->ol_sc->enable_self_recovery)
+			vos_trigger_recovery(true);
+		else
+			VOS_BUG(0);
+	}
 	return ret;
 }
 
