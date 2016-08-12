@@ -2363,12 +2363,30 @@ v_BOOL_t vos_is_packet_log_enabled(void)
    return pHddCtx->cfg_ini->enablePacketLog;
 }
 
-void vos_trigger_recovery(void)
+VOS_STATUS vos_config_silent_recovery(pVosContextType vos_context)
+{
+	struct ol_softc *scn;
+	struct device *dev;
+
+	if (vos_is_logp_in_progress(VOS_MODULE_ID_VOSS, NULL)) {
+		VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+			FL("LOGP is in progress, ignore!"));
+		return VOS_STATUS_E_FAILURE;
+	}
+	vos_set_logp_in_progress(VOS_MODULE_ID_VOSS, TRUE);
+	scn = vos_get_context(VOS_MODULE_ID_HIF, vos_context);
+	if (scn && scn->hif_sc) {
+		dev = scn->hif_sc->dev;
+		if (dev)
+			vos_schedule_recovery_work(dev);
+	}
+	return VOS_STATUS_SUCCESS;
+}
+
+void vos_trigger_recovery(bool skip_crash_inject)
 {
 	pVosContextType vos_context;
 	tp_wma_handle wma_handle;
-	struct ol_softc *scn;
-	struct device *dev;
 	VOS_STATUS status = VOS_STATUS_SUCCESS;
 	void *runtime_context = NULL;
 
@@ -2390,28 +2408,23 @@ void vos_trigger_recovery(void)
 	runtime_context = vos_runtime_pm_prevent_suspend_init("vos_recovery");
 	vos_runtime_pm_prevent_suspend(runtime_context);
 
-	wma_crash_inject(wma_handle, RECOVERY_SIM_SELF_RECOVERY, 0);
+	if (!skip_crash_inject) {
+		wma_crash_inject(wma_handle, RECOVERY_SIM_SELF_RECOVERY, 0);
+		status = vos_wait_single_event(&wma_handle->recovery_event,
+			WMA_CRASH_INJECT_TIMEOUT);
 
-	status = vos_wait_single_event(&wma_handle->recovery_event,
-		WMA_CRASH_INJECT_TIMEOUT);
-
-	if (VOS_STATUS_SUCCESS != status) {
-		VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-			"CRASH_INJECT command is timed out!");
-		if (vos_is_logp_in_progress(VOS_MODULE_ID_VOSS, NULL)) {
+		if (VOS_STATUS_SUCCESS != status) {
 			VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-				"LOGP is in progress, ignore!");
+				"CRASH_INJECT command is timed out!");
+			if (!vos_config_silent_recovery(vos_context))
+				goto out;
+		}
+	} else {
+		VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+				FL("trigger silent recovery!"));
+		if (!vos_config_silent_recovery(vos_context))
 			goto out;
-		}
-		vos_set_logp_in_progress(VOS_MODULE_ID_VOSS, TRUE);
-		scn = vos_get_context(VOS_MODULE_ID_HIF, vos_context);
-		if (scn && scn->hif_sc) {
-			dev = scn->hif_sc->dev;
-			if (dev)
-				vos_schedule_recovery_work(dev);
-		}
 	}
-
 out:
 	vos_runtime_pm_allow_suspend(runtime_context);
 	vos_runtime_pm_prevent_suspend_deinit(runtime_context);
