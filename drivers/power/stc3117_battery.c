@@ -134,14 +134,12 @@ static int therm_power_off = 0;
 
 #define STC311x_REG_OCVTAB		0x30
 #define OCVTAB_SIZE				16			/* OCVTAB size of STC311x */
-#define STC311x_REG_SOCTAB		0x50
-#define SOCTAB_SIZE				16			/* SOCTAB size of STC311x */
 
 #define VCOUNT					0			 /* counter value for 1st current/temp measurements */
 
 
 #define M_STAT		0x1010			 /* GG_RUN & PORDET mask in STC311x_BattDataTypeDef status word */
-#define M_RST		0x9800			/* UVLOD & BATFAIL & PORDET mask */
+#define M_RST		0x1800			 /* BATFAIL & PORDET mask */
 #define M_RUN		0x0010			 /* GG_RUN mask in STC311x_BattDataTypeDef status word */
 #define M_GGVM		0x0400			 /* GG_VM mask */
 #define M_BATFAIL	0x0800		/* BATFAIL mask*/
@@ -260,7 +258,7 @@ typedef struct	{
 	int VM_TempTable[NTEMP];
 	int CapacityDerating[NTEMP];
 	int OCVValue[OCVTAB_SIZE];
-	unsigned char SOCValue[SOCTAB_SIZE];
+	unsigned char SOCValue[OCVTAB_SIZE];
 	int Ropt;
 	int Nropt;
 
@@ -619,7 +617,7 @@ static void STC311x_SetParam(void)
 	if (GG_Ram.reg.VM_cnf !=0 ) STC31xx_WriteWord(STC311x_REG_VM_CNF,GG_Ram.reg.VM_cnf);
 	pr_debug("STC311x_SetParam STC311x_REG_VM_CNF:%d, GG_Ram.reg.VM_cnf:%d\n", STC311x_REG_VM_CNF, GG_Ram.reg.VM_cnf);
 
-	STC31xx_WriteByte(STC311x_REG_CTRL,0x83);  /*   clear BATFAIL and ALARMs, free ALM pin, reset conv counter */
+	STC31xx_WriteByte(STC311x_REG_CTRL,0x03);	/*	 clear PORDET, BATFAIL, free ALM pin, reset conv counter */
 	if (BattData.Vmode)
 		STC31xx_WriteByte(STC311x_REG_MODE,0x19);	/*	 set GG_RUN=1, voltage mode, alm enabled */
 	else
@@ -1479,7 +1477,8 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 	/* check STC3117 status */
 #ifdef BATD_UC8
 	/* check STC3117 status */
-	if ((BattData.STC_Status & (M_BATFAIL | M_UVLOD)) != 0)
+	if (((BattData.STC_Status) & (M_BATFAIL | M_UVLOD)) != 0)
+	//if ((BattData.STC_Status & (M_BATFAIL | M_UVLOD) != 0)
 	{
 		/* BATD or UVLO detected */
 		if(BattData.ConvCounter > 0)
@@ -1559,14 +1558,10 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 		if (BattData.Voltage < value) value = BattData.Voltage;
 		if (value<(APP_MIN_VOLTAGE+200) && value>(APP_MIN_VOLTAGE-500))
 		{
-			if (value<APP_MIN_VOLTAGE) {
+			if (value<APP_MIN_VOLTAGE)
 				BattData.SOC=0;
-				pr_info("[BAT] BattData.AvgVoltage < 3.4V\n");
-			}
-			else {
+			else
 				BattData.SOC = BattData.SOC * (value - APP_MIN_VOLTAGE) / 200;
-				pr_info("[BAT] SOC compensate:%d\n", BattData.SOC);
-			}
 		}
 
 		BattData.AccVoltage += (BattData.Voltage - BattData.AvgVoltage);
