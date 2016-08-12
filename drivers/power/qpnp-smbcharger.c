@@ -306,6 +306,7 @@ struct smbchg_chip {
 #define HARD_TEMP_MASK                       SMB_MASK(6, 5)
 #define SOFT_TEMP_MASK                       SMB_MASK(3, 0)
 #define SKIP_HARD_LIMIT_CHECK_LEVEL     70
+#define SKIP_HARD_LIMIT_CHECK_VBAT_MV	3900
 static struct smbchg_chip *the_chip;
 static bool g_is_batt_full_eoc_stop = false;
 static void handle_usb_insertion(struct smbchg_chip *chip);
@@ -7640,32 +7641,27 @@ void check_charger_ability(int aicl_level)
 {
 	union power_supply_propval prop = {0,};
 	int rc, usb_supply_type;
-	u8 reg;
-	int level;
+	int level = 0, vbat_mv = 0;
 
 	if (!the_chip) {
 		pr_err("called before init\n");
 		return;
 	}
 
+	vbat_mv = get_prop_batt_voltage_now(the_chip)/1000;
 	level = get_prop_batt_capacity(the_chip);
 	rc = the_chip->usb_psy->get_property(the_chip->usb_psy,
 				POWER_SUPPLY_PROP_TYPE, &prop);
 	usb_supply_type = prop.intval;
-	pr_smb(PR_STATUS, "CHG_TYPE is %d, AICL is %d, level is %d\n",
-		usb_supply_type, aicl_level, level);
+	pr_smb(PR_STATUS, "CHG_TYPE = %d, AICL = %d, level = %d, vbat_mv = %d, hard_limit = %d\n",
+		usb_supply_type, aicl_level, level, vbat_mv, is_smbchg_hard_limit(the_chip));
 
 	if (usb_supply_type != POWER_SUPPLY_TYPE_USB_DCP &&
 		usb_supply_type != POWER_SUPPLY_TYPE_USB_TYPE_C)
 		return;
 
-	//checking for hard limit behavior
-	rc = smbchg_read(the_chip, &reg,
-				the_chip->chgr_base + FV_STS, 1);
-	if (rc)
-		pr_err("Failed to read FV state rc=%d\n", rc);
-	pr_smb(PR_STATUS, "FV status = %02x, Hard Limit = %d\n", reg, ((reg & FV_AICL_STS_BIT)!=0));
-	if (((reg & FV_AICL_STS_BIT) == 0) && (level > SKIP_HARD_LIMIT_CHECK_LEVEL)) {
+	if ((!is_smbchg_hard_limit(the_chip)) &&
+		((level > SKIP_HARD_LIMIT_CHECK_LEVEL) || (vbat_mv > SKIP_HARD_LIMIT_CHECK_VBAT_MV))) {
 		if (aicl_level > USB_MA_2000) {
 			rc = vote(the_chip->usb_icl_votable, PSY_ICL_VOTER,
 				true, USB_MA_2000);
