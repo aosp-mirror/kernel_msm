@@ -38,6 +38,7 @@
 #include <linux/seq_file.h>
 #include <linux/proc_fs.h>
 #include "himax_platform.h"
+#include <linux/asusevtlog.h>
 
 #ifdef CONFIG_FB
 #include <linux/notifier.h>
