@@ -2051,7 +2051,7 @@ static irqreturn_t himax_ts_thread(int irq, void *ptr)
     if (atomic_read(&ts->suspend_mode) && (!FAKE_POWER_KEY_SEND) && (ts->SMWP_enable)) {
         wake_lock_timeout(&ts->ts_SMWP_wake_lock, TS_WAKE_LOCK_TIMEOUT);
         if (himax_parse_wake_event((struct himax_ts_data *)ptr)) {
-            I("%s: Touch DOWN x = %d, y = %d.\n", __func__, 1, 1);
+            ASUSEvtlog("[PM] GPIO triggered: %d\n", irq);
             input_mt_slot(ts->input_dev,0);
             input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, true);
             input_report_abs(ts->input_dev, ABS_MT_POSITION_X, 1);
