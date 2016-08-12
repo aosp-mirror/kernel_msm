@@ -28,11 +28,11 @@
 #include <linux/spinlock.h>
 
 #define VIB_DBG_LOG(fmt, ...) \
-		printk(KERN_DEBUG "[VIB][DBG] " fmt, ##__VA_ARGS__)
+		pr_debug("[VIB][DBG] " fmt, ##__VA_ARGS__)
 #define VIB_INFO_LOG(fmt, ...) \
-		printk(KERN_INFO "[VIB] " fmt, ##__VA_ARGS__)
+		pr_info("[VIB] " fmt, ##__VA_ARGS__)
 #define VIB_ERR_LOG(fmt, ...) \
-		printk(KERN_ERR "[VIB][ERR] " fmt, ##__VA_ARGS__)
+		pr_error("[VIB][ERR] " fmt, ##__VA_ARGS__)
 
 #define QPNP_IRQ_FLAGS	(IRQF_TRIGGER_RISING | \
 			IRQF_TRIGGER_FALLING | \
@@ -445,10 +445,10 @@ static int qpnp_hap_mod_enable(struct qpnp_hap *hap, int on)
 			QPNP_HAP_EN_CTL_REG(hap->base));
 	if (rc < 0)
 		if (!on)
-			VIB_INFO_LOG("reg=0x%x, rc=%d.\n", val, rc);
+			VIB_DBG_LOG("reg=0x%x, rc=%d.\n", val, rc);
 		if (rc < 0)
 		{
-			if(on) VIB_INFO_LOG("reg=0x%x, err=%d.\n", val, rc);
+			if(on) VIB_DBG_LOG("reg=0x%x, err=%d.\n", val, rc);
 			return rc;
 		}
 
@@ -471,9 +471,9 @@ static int qpnp_hap_play(struct qpnp_hap *hap, int on)
 	rc = qpnp_hap_write_reg(hap, &val,
 			QPNP_HAP_PLAY_REG(hap->base));
 	if (on)
-		VIB_INFO_LOG("on, reg=0x%x, rc=%d.\n", hap->reg_en_ctl, rc);
+		VIB_DBG_LOG("on, reg=0x%x, rc=%d.\n", hap->reg_en_ctl, rc);
 	else
-		VIB_INFO_LOG("off, rc=%d.\n", rc);
+		VIB_DBG_LOG("off, rc=%d.\n", rc);
 	if (rc < 0)
 		return rc;
 
@@ -733,7 +733,7 @@ static int qpnp_hap_vmax_config(struct qpnp_hap *hap)
 	rc = qpnp_hap_write_reg(hap, &reg, QPNP_HAP_VMAX_REG(hap->base));
 	if (rc)
 		return rc;
-	VIB_INFO_LOG("Set voltage = %d, reg = 0x%x", hap->vmax_mv, reg);
+	VIB_DBG_LOG("Set voltage = %d, reg = 0x%x", hap->vmax_mv, reg);
 
 	return 0;
 }
@@ -1247,7 +1247,7 @@ static ssize_t qpnp_hap_voltage_level_store(struct device *dev,
 
 	rc = qpnp_hap_vmax_config(hap);
 	if(rc<0)
-		VIB_INFO_LOG("qpnp_hap_vmax_config set failed(%d)", rc);
+		VIB_DBG_LOG("qpnp_hap_vmax_config set failed(%d)", rc);
 
 	return count;
 }
@@ -1635,7 +1635,7 @@ static void qpnp_hap_td_enable(struct timed_output_dev *dev, int value)
 		}
 		hap->state = 0;
 	} else {
-		VIB_INFO_LOG("enable=%d.\n", value);
+		VIB_DBG_LOG("enable=%d.\n", value);
 		value = (value > hap->timeout_ms ?
 				 hap->timeout_ms : value);
 		hap->state = 1;
@@ -1784,7 +1784,7 @@ static int qpnp_haptic_suspend(struct device *dev)
 
 	if (hap->use_sc_irq && (hap->sc_irq > 0)) {
 		disable_irq(hap->sc_irq);
-		VIB_INFO_LOG("%s: sc_irq = %d\n", __func__, sc_irq_count);
+		VIB_DBG_LOG("%s: sc_irq = %d\n", __func__, sc_irq_count);
 	}
 
 	hrtimer_cancel(&hap->hap_timer);
@@ -1800,7 +1800,7 @@ static int qpnp_haptic_resume(struct device *dev)
 	struct qpnp_hap *hap = dev_get_drvdata(dev);
 
 	if (hap->use_sc_irq && (hap->sc_irq > 0)) {
-		VIB_INFO_LOG("%s: sc_irq = %d\n", __func__, sc_irq_count);
+		VIB_DBG_LOG("%s: sc_irq = %d\n", __func__, sc_irq_count);
 		enable_irq(hap->sc_irq);
 	}
 
@@ -2311,7 +2311,7 @@ static int qpnp_haptic_probe(struct spmi_device *spmi)
 	struct regulator *vcc_pon;
 	int rc, i;
 
-	VIB_INFO_LOG("%s, ++++++++++++++++++++++\n", __func__);
+	VIB_DBG_LOG("%s, ++++++++++++++++++++++\n", __func__);
 	hap = devm_kzalloc(&spmi->dev, sizeof(*hap), GFP_KERNEL);
 	if (!hap)
 		return -ENOMEM;
@@ -2377,8 +2377,8 @@ static int qpnp_haptic_probe(struct spmi_device *spmi)
 		}
 	}
 
-	VIB_INFO_LOG("play_mode=%d\n", hap->play_mode);
-	VIB_INFO_LOG("%s, ----------------------\n", __func__);
+	VIB_DBG_LOG("play_mode=%d\n", hap->play_mode);
+	VIB_DBG_LOG("%s, ----------------------\n", __func__);
 
 	if (hap->manage_pon_supply) {
 		vcc_pon = regulator_get(&spmi->dev, "vcc_pon");
