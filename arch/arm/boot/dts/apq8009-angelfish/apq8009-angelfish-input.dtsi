@@ -25,6 +25,7 @@
 			vdd_ana-supply = <0>;
 			vcc_i2c-supply = <&pm8916_l16>;
 			vcc_dig-supply = <&pm8916_l10>;
+			power-supplies = <&usb_otg>, <&idtp9017_chg>;
 			atmel,reset-gpio = <&msm_gpio 12 0x00>;
 			atmel,irq-gpio = <&msm_gpio 13 0x2008>;
 			atmel,numtouch = <2>; /*multi-touch count*/

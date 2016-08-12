@@ -160,7 +160,7 @@
 			maxim,param-version = <0x4>;
 		};
 
-		idtp9017@68 {
+		idtp9017_chg: idtp9017@68 {
 			compatible = "idt,idtp9017";
 			status = "ok";
 			reg = <0x68>;
