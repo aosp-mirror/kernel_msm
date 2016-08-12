@@ -38,7 +38,7 @@ int STC31xx_RelaxTmrSet(int CurrentThreshold);
 
 int g_asus_batt_soc, g_asus_batt_soc_previous;
 static int therm_power_off = 0;
-
+static int batt_power_off = 0;
 /*********************************************************************************	*/
 /*				STC311x DEVICE SELECTION											*/
 /*				STC3117 version only												*/
@@ -1487,6 +1487,7 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 			GG->SOC=(BattData.HRSOC*10+256)/512;
 		}
 
+		pr_err("[BAT] Detected UVLO or BATD, reset gauge IC\n");
 		/* BATD or UVLO detected */
 		GasGauge_Reset();
 
@@ -1496,6 +1497,7 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 
 	if ((BattData.STC_Status & M_RUN) == 0)
 	{
+		pr_err("[BAT] restore SOC for unexpected reset\n");
 		/* if not running, restore STC3117 */
 		STC311x_Restore();
 		GG_Ram.reg.GG_Status = GG_INIT;
@@ -1902,6 +1904,13 @@ static int get_battery_status(struct stc311x_chip *chip)
 	return POWER_SUPPLY_STATUS_UNKNOWN;
 }
 
+static int bound_soc(int soc)
+{
+	soc = max(0, soc);
+	soc = min(100, soc);
+	return soc;
+}
+
 static void stc311x_work(struct work_struct *work)
 {
 	struct stc311x_chip *chip;
@@ -1965,7 +1974,14 @@ static void stc311x_work(struct work_struct *work)
 	else if(res == -1)
 	{
 		chip->batt_voltage = GasGaugeData.Voltage;
-		chip->batt_soc = (GasGaugeData.SOC+5)/10;
+		chip->batt_soc = g_asus_batt_soc_previous;
+		pr_err("[BAT] GasGauge_Task:res:%d, Voltage:%d, SOC:%d\n", res, GasGaugeData.Voltage, (GasGaugeData.SOC+5)/10);
+	}
+
+	res = STC311x_Status();
+	if ((res <= 0) && (get_battery_status(chip) == POWER_SUPPLY_STATUS_DISCHARGING)) {
+		chip->batt_soc = g_asus_batt_soc_previous;
+		pr_err("[BAT] gauge status bit is not abnormal, report previous soc\n");
 	}
 
 	memset(reg_debug, 0, sizeof(reg_debug));
@@ -1974,7 +1990,8 @@ static void stc311x_work(struct work_struct *work)
 		pr_debug("===stc3117===reg:%d, value:0x%02x\n", RegAddress, HEX);
 		snprintf(reg_debug + strlen(reg_debug), 4, "%02x,", HEX);
 	}
-	pr_info("stc3117 reg_debug: %s\n", reg_debug);
+
+	pr_info("[BAT] stc3117 reg_debug: %s\n", reg_debug);
 
 	for (RegAddress=48; RegAddress<=96; RegAddress++) {
 		HEX=STC31xx_ReadByte(RegAddress);
@@ -1985,7 +2002,7 @@ static void stc311x_work(struct work_struct *work)
 	stc311x_get_status(sav_client);
 	stc311x_get_online(sav_client);
 
-	g_asus_batt_soc = chip->batt_soc;
+	g_asus_batt_soc = bound_soc(chip->batt_soc);
 
 	if (chip->batt_voltage >= 4420) {
 		smb23x_set_float_voltage(0x16);
@@ -2005,12 +2022,21 @@ static void stc311x_work(struct work_struct *work)
 		} else {
 			g_asus_batt_soc_previous = g_asus_batt_soc;
 		}
+		if (chip->batt_voltage <= 3250) {
+			batt_power_off++;
+			ASUSEvtlog("[BAT] low battery voltage count: %d\n", batt_power_off);
+			if (batt_power_off >=5) {
+				ASUSEvtlog("[BAT] Battery voltage is too low: %d, trigger device shutdown!!\n", chip->batt_voltage);
+				kernel_power_off();
+			}
+		}
 		break;
 	case POWER_SUPPLY_STATUS_CHARGING:
 		if (g_asus_batt_soc == 100) {
 			pr_info("[BAT] Force battery level keep 99 percentange");
 			g_asus_batt_soc = 99;
 		}
+		batt_power_off = 0;
 		g_asus_batt_soc_previous = g_asus_batt_soc;
 		break;
 	default:
