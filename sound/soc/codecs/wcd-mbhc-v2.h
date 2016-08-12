@@ -443,6 +443,7 @@ struct wcd_mbhc {
 	struct mutex hphr_pa_lock;
 
 	unsigned long intr_status;
+	bool force_linein;
 //HTC_AUD_START
 	/* Add attribute on sysfs for debugging */
 	struct class *htc_accessory_class;
