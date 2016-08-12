@@ -800,10 +800,7 @@ dont_tag:
 					 __func__, __LINE__);
 				return -EBUSY;
 			}
-			vos_set_logp_in_progress(VOS_MODULE_ID_VOSS, TRUE);
-			pr_err("%s- %d: Start collecting ramdump\n",
-				__func__, __LINE__);
-			ol_schedule_ramdump_work(scn);
+			vos_trigger_recovery(true);
 		} else
 			VOS_BUG(0);
 		return -EBUSY;

@@ -712,7 +712,7 @@ void send_flush_completion_to_user(void)
 
 	wlan_report_log_completion(is_fatal, indicator, reason_code);
 	if (is_ssr_needed)
-		vos_trigger_recovery();
+		vos_trigger_recovery(false);
 }
 
 /**

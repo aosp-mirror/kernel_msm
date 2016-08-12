@@ -13930,7 +13930,7 @@ void activeListCmdTimeoutHandle(void *userData)
 
     if (mac_ctx->sme.enableSelfRecovery) {
         sme_SaveActiveCmdStats(hal);
-        vos_trigger_recovery();
+        vos_trigger_recovery(false);
     } else {
         if (!mac_ctx->roam.configParam.enable_fatal_event &&
             !(vos_is_load_unload_in_progress(VOS_MODULE_ID_SME, NULL) ||
