@@ -1446,7 +1446,8 @@ static int cam_smmu_setup_cb(struct cam_context_bank_info *cb,
 	 */
 	if (cb->scratch_buf_support) {
 		cb->va_start = SCRATCH_ALLOC_END;
-		cb->va_len = VA_SPACE_END - SCRATCH_ALLOC_END;
+        /* only VFE uses scratch_buf_support currently */
+		cb->va_len = SZ_2G + SZ_1G - SCRATCH_ALLOC_END;
 
 		rc = cam_smmu_init_scratch_map(&cb->scratch_map,
 				SCRATCH_ALLOC_START,
