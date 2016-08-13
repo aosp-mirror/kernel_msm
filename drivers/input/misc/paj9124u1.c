@@ -51,6 +51,9 @@ struct paj9124u1_drv_data {
 	struct regulator *vld_reg; /* power supply voltage v3.3 */
 	struct regulator *vdd_reg; /* power supply voltage for IO v1.8 */
 	struct work_struct init_work;
+
+	struct mutex lock;
+	int enabled;
 };
 
 static struct spi_device_id paj9124u1_spi_id[] = {
@@ -416,6 +419,76 @@ error:
 	return ret;
 }
 
+static ssize_t paj9124u1_show_enable(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct spi_device *spidev = container_of(dev, struct spi_device, dev);
+	struct paj9124u1_drv_data *paj9124u1_data = spi_get_drvdata(spidev);
+	int enabled;
+
+	mutex_lock(&paj9124u1_data->lock);
+	enabled = paj9124u1_data->enabled;
+	mutex_unlock(&paj9124u1_data->lock);
+
+	return snprintf(buf, 3, "%d\n", enabled);
+}
+
+static ssize_t paj9124u1_store_enable(
+	struct device *dev, struct device_attribute *attr, const char *buf,
+	size_t cnt)
+{
+	struct spi_device *spidev = container_of(dev, struct spi_device, dev);
+	struct paj9124u1_drv_data *paj9124u1_data = spi_get_drvdata(spidev);
+	int enable, ret = 0;
+
+	ret = kstrtoint(buf, 0, &enable);
+
+	if (ret) {
+		dev_err(dev, "Write to sysfs failed, value:%s\n", buf);
+		return ret;
+	}
+
+	mutex_lock(&paj9124u1_data->lock);
+	if (enable) {
+		ret = paj9124u1_set_bits(paj9124u1_data, 0x88, 0x0,
+			PAJ9124U1_CONFIG);
+		if (ret) {
+			dev_warn(dev,
+				"Failed to take paj9124u1 out of low power.\n");
+			mutex_unlock(&paj9124u1_data->lock);
+			return ret;
+		}
+		enable_irq(spidev->irq);
+		paj9124u1_data->enabled = 1;
+	} else {
+		ret = paj9124u1_set_bits(paj9124u1_data, 0x88, 0x8,
+			PAJ9124U1_CONFIG);
+		if (ret) {
+			dev_warn(dev,
+				"Failed to put paj9124u1 into low power.\n");
+			mutex_unlock(&paj9124u1_data->lock);
+			return ret;
+		}
+		disable_irq(spidev->irq);
+		paj9124u1_data->enabled = 0;
+	}
+
+	mutex_unlock(&paj9124u1_data->lock);
+	return cnt;
+}
+
+static DEVICE_ATTR(enable, S_IWUSR | S_IRUGO, paj9124u1_show_enable,
+		paj9124u1_store_enable);
+
+static struct attribute *paj9124u1_attrs[] = {
+	&dev_attr_enable.attr,
+	NULL
+};
+
+static struct attribute_group paj9124u1_attr_group = {
+	.attrs = paj9124u1_attrs
+};
+
 static int paj9124u1_probe(struct spi_device *spi)
 {
 	struct paj9124u1_drv_data *paj9124u1_data;
@@ -461,7 +534,20 @@ static int paj9124u1_probe(struct spi_device *spi)
 		return err;
 	}
 
+	/* The H/W starts off as enabled */
+	paj9124u1_data->enabled = 1;
+
+	mutex_init(&paj9124u1_data->lock);
+
+	err = sysfs_create_group(&spi->dev.kobj, &paj9124u1_attr_group);
+
+	if (err) {
+		dev_err(&spi->dev, "Failed to create sysfs entries:\n");
+		return err;
+	}
+
 	paj9124u1_create_debugfs(paj9124u1_data);
+
 	return 0;
 }
 
@@ -472,6 +558,7 @@ static int paj9124u1_remove(struct spi_device *spi)
 	paj9124u1_data = spi_get_drvdata(spi);
 
 	debugfs_remove_recursive(paj9124u1_data->dent);
+	sysfs_remove_group(&spi->dev.kobj, &paj9124u1_attr_group);
 
 	regulator_disable(paj9124u1_data->vld_reg);
 	regulator_disable(paj9124u1_data->vdd_reg);
@@ -501,11 +588,19 @@ static int paj9124u1_resume(struct device *device)
 	struct paj9124u1_drv_data *paj9124u1_data = spi_get_drvdata(spidev);
 	int ret;
 
+	/* If the h/w wasn't left enabled before suspend, don't enable it now */
+	mutex_lock(&paj9124u1_data->lock);
+	if (!paj9124u1_data->enabled)
+		goto end_resume;
+
 	enable_irq(spidev->irq);
 	ret = paj9124u1_set_bits(paj9124u1_data, 0x88, 0x0, PAJ9124U1_CONFIG);
 	if (ret)
 		dev_warn(device,
 			"Failed to take paj9124u1 out of low power.\n");
+
+end_resume:
+	mutex_unlock(&paj9124u1_data->lock);
 	return 0;
 }
 #endif
