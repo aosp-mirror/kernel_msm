@@ -860,7 +860,6 @@ static int l2_cache_pmu_probe(struct platform_device *pdev)
 		.read		= l2_cache__event_read,
 		.event_idx	= dummy_event_idx,
 		.attr_groups	= l2_cache_pmu_attr_grps,
-		.events_across_hotplug = 1,
 	};
 
 	l2cache_pmu.num_counters = get_num_counters();
