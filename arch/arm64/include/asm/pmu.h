@@ -67,6 +67,8 @@ struct arm_pmu {
 	u64			max_period;
 	struct platform_device	*plat_device;
 	struct pmu_hw_events	*(*get_hw_events)(void);
+	struct notifier_block	hotplug_nb;
+	struct notifier_block	cpu_pm_nb;
 	int			(*check_event)(
 					 struct arm_pmu *armpmu,
 					 struct hw_perf_event *hwc);
