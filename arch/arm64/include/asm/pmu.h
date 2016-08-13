@@ -34,8 +34,6 @@ struct pmu_hw_events {
 	 */
 	unsigned long           *used_mask;
 
-	u32			*from_idle;
-
 	/*
 	 * Hardware lock to serialize accesses to PMU registers. Needed for the
 	 * read/modify/write sequences.
@@ -64,14 +62,11 @@ struct arm_pmu {
 	void			(*free_irq)(struct arm_pmu *);
 	int			(*map_event)(struct perf_event *event);
 	int			num_events;
-	int			percpu_irq;
 	atomic_t		active_events;
 	struct mutex		reserve_mutex;
 	u64			max_period;
 	struct platform_device	*plat_device;
 	struct pmu_hw_events	*(*get_hw_events)(void);
-	void			(*save_pm_registers)(void *hcpu);
-	void			(*restore_pm_registers)(void *hcpu);
 	int			(*check_event)(
 					 struct arm_pmu *armpmu,
 					 struct hw_perf_event *hwc);
