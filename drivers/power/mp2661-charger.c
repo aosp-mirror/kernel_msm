@@ -85,6 +85,8 @@
 #define I2C_WATCHDOG_TIMER_LIMIT_MASK_SHIFT            4
 #define SAFETY_TIMER_MASK                              mp2661_MASK(3, 3)
 #define SAFETY_TIMER_MASK_SHIFT                        3
+#define CC_CHG_TIMER_MASK                              mp2661_MASK(2, 1)
+#define CC_CHG_TIMER_MASK_SHIFT                        1
 
 /*Miscellaneous Operation Control Register*/
 #define MISCELLANEOUS_OPER_CTRL_REG                    0x6
@@ -172,6 +174,7 @@ struct mp2661_chg {
     int                batt_auto_recharge_delta_mv;
     int                batt_discharging_ma;
     int                thermal_regulation_threshold;
+    int                batt_cc_chg_timer;
 
     /* monitor temp task */
     struct task_struct       *monitor_temp_task;
@@ -961,6 +964,47 @@ static int mp2661_safety_timer_enable(struct mp2661_chg *chip,
     return rc;
 }
 
+static int cc_chg_timer[4] = {
+    3, 5, 8, 12
+};
+static int mp2661_set_cc_chg_timer(struct mp2661_chg *chip,
+                            int time_limit)
+{
+    int rc,i;
+
+    if ((time_limit < cc_chg_timer[0]) ||
+        (time_limit > cc_chg_timer[3]))
+    {
+        pr_err( "bad cc chg timer hours=%d asked to set\n",
+                            time_limit);
+        return -EINVAL;
+    }
+
+    for (i = ARRAY_SIZE(cc_chg_timer) - 1; i >= 0; i--)
+    {
+        if (cc_chg_timer[i] <= time_limit)
+        {
+            break;
+        }
+    }
+
+    if (i < 0)
+    {
+        pr_err("Invalid cc chg timer, setting default timer to %d hours\n",
+                        cc_chg_timer[0]);
+        i = 0;
+    }
+
+    i = i << CC_CHG_TIMER_MASK_SHIFT;
+    rc = mp2661_masked_write(chip, CHG_TERMINATION_TIMER_CTRL_REG,
+            CC_CHG_TIMER_MASK, i);
+    if (rc < 0)
+    {
+        pr_err("cannot set cc chg timer rc = %d\n", rc);
+    }
+    return rc;
+}
+
 static int mp2661_set_charging_enable(struct mp2661_chg *chip, bool enable)
 {
     int rc;
@@ -1293,6 +1337,13 @@ static int mp2661_parse_dt(struct mp2661_chg *chip)
         chip->thermal_regulation_threshold = -EINVAL;
     }
 
+    rc = of_property_read_u32(node, "qcom,batt-cc-chg-timer",
+                            &chip->batt_cc_chg_timer);
+    if (rc < 0)
+    {
+        chip->batt_cc_chg_timer = -EINVAL;
+    }
+
     pr_info("bms-psy-name = %s, using-pmic-therm = %d\n",
                 chip->bms_psy_name, chip->using_pmic_therm);
     pr_info("cold-batt-decidegc = %d, normal-state1-batt-decidegc = %d,\
@@ -1319,6 +1370,7 @@ static int mp2661_parse_dt(struct mp2661_chg *chip)
         chip->batt_uvlo_theshold_mv, chip->batt_auto_recharge_delta_mv);
     pr_info("batt-discharging-ma = %d, thermal-regulation-threshold = %d\n",
         chip->batt_discharging_ma, chip->thermal_regulation_threshold);
+    pr_info("qcom,batt-cc-chg-timer = %d\n", chip->batt_cc_chg_timer);
     return 0;
 }
 
@@ -1697,12 +1749,18 @@ static int mp2661_hw_init(struct mp2661_chg *chip)
         return rc;
     }
 
-    /*disable safety timer*/
-    rc = mp2661_safety_timer_enable(chip, false);
+    /* enable safety timer */
+    rc = mp2661_safety_timer_enable(chip, true);
     if (rc)
     {
-        pr_err("Couldn't set i2c watchdog timer rc=%d\n", rc);
-        return rc;
+        pr_err("Couldn't enable safety timer rc=%d\n", rc);
+    }
+
+    /* set cc chg timer */
+    rc = mp2661_set_cc_chg_timer(chip, chip->batt_cc_chg_timer);
+    if (rc)
+    {
+        pr_err("Couldn't set cc chg timer rc=%d\n", rc);
     }
 
     if (BAT_TEMP_STATUS_HOT == chip->batt_temp_status
