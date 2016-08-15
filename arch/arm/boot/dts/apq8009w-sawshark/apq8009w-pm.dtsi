@@ -68,6 +68,8 @@
 			qcom,batt-discharging-ma = <3200>;
 			qcom,thermal-regulation-threshold = <120>;
 
+			qcom,batt-cc-chg-timer = <5>;
+
 			status = "ok";
 		};
 
