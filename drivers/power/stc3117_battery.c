@@ -1936,10 +1936,6 @@ static void stc311x_work(struct work_struct *work)
 		GasGaugeData.Rsense = chip->pdata->Rsense;			/* sense resistor mOhms*/
 		GasGaugeData.RelaxCurrent = chip->pdata->RelaxCurrent; /* current for relaxation in mA (< C/20) */
 		GasGaugeData.Adaptive = chip->pdata->Adaptive;		 /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
-		pr_info("[BAT] Vmode:%d, Alm_SOC:%d, Alm_Vbat:%d, CC_cnf:%d, VM_cnf:%d, Rint:%d, Cnom:%d, Rsense:%d, RelaxCurrent:%d, Adaptive:%d\n",
-					GasGaugeData.Vmode, GasGaugeData.Alm_SOC, GasGaugeData.Alm_Vbat, GasGaugeData.CC_cnf,
-					GasGaugeData.VM_cnf, GasGaugeData.Rint, GasGaugeData.Cnom, GasGaugeData.Rsense,
-					GasGaugeData.RelaxCurrent, GasGaugeData.Adaptive);
 
 		/* capacity derating in 0.1%, for temp = 60, 40, 25, 10,	 0, -10 degrC */
 		for(Loop = 0; Loop < NTEMP; Loop++)
@@ -2024,7 +2020,7 @@ static void stc311x_work(struct work_struct *work)
 		}
 		if (chip->batt_voltage <= 3250) {
 			batt_power_off++;
-			ASUSEvtlog("[BAT] low battery voltage count: %d\n", batt_power_off);
+			pr_info("[BAT] low battery voltage count: %d\n", batt_power_off);
 			if (batt_power_off >=5) {
 				ASUSEvtlog("[BAT] Battery voltage is too low: %d, trigger device shutdown!!\n", chip->batt_voltage);
 				kernel_power_off();
@@ -2209,12 +2205,8 @@ static int stc311x_probe(struct i2c_client *client,
 		GasGaugeData.Rsense = chip->pdata->Rsense;			/* sense resistor mOhms*/
 		GasGaugeData.RelaxCurrent = chip->pdata->RelaxCurrent; /* current for relaxation in mA (< C/20) */
 		GasGaugeData.Adaptive = chip->pdata->Adaptive;		 /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
+
 		/* capacity derating in 0.1%, for temp = 60, 40, 25, 10,	 0, -10 degrC */
-		pr_info("[BAT] Vmode:%d\n", GasGaugeData.Vmode);
-		pr_info("[BAT] Alm_SOC:%d, Alm_Vbat:%d, CC_cnf:%d Rint:%d Cnom:%d\n", GasGaugeData.Alm_SOC,
-							GasGaugeData.Alm_Vbat,GasGaugeData.CC_cnf,GasGaugeData.Rint,GasGaugeData.Cnom);
-		pr_info("[BAT] Rsense:%d, RelaxCurrent:%d, Adaptive:%d, VM_cnf:%d\n", GasGaugeData.Rsense,
-							GasGaugeData.RelaxCurrent,GasGaugeData.Adaptive, GasGaugeData.VM_cnf);
 		for(Loop=0;Loop<NTEMP;Loop++)
 			GasGaugeData.CapDerating[Loop] = chip->pdata->CapDerating[Loop];
 		/* OCV curve adjustment */
@@ -2260,7 +2252,6 @@ static int stc311x_probe(struct i2c_client *client,
 
 	g_asus_batt_soc = chip->batt_soc;
 	g_asus_batt_soc_previous = chip->batt_soc;
-	pr_info("[BAT] chip->batt_soc:%d, chip->batt_voltage:%d, chip->batt_current:%d\n", g_asus_batt_soc, chip->batt_voltage, chip->batt_current);
 
 	STC31xx_WriteByte(STC311x_REG_MODE,0x18);	/*	 set GG_RUN=1, mixed mode, alm enabled */
 
@@ -2271,7 +2262,7 @@ static int stc311x_probe(struct i2c_client *client,
 	//The specified delay depends of every platform and Linux kernel. It has to be checked physically during the driver integration
 	//a delay of about 5 seconds is correct but 30 seconds is enough compare to the battery SOC evolution speed
 	dev_info(&client->dev, "Probe end: %s\n", __func__);
-	pr_info("[BAT] stc3117 Probe end\n");
+
 	return 0;
 
 }

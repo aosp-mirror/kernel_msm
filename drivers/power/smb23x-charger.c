@@ -828,7 +828,7 @@ static int smb23x_suspend_usb(struct smb23x_chip *chip,
 		pr_err("Write USB_SUSPEND failed, rc=%d\n", rc);
 	} else {
 		chip->usb_suspended_status = suspended;
-		pr_info("[BAT][CHG] %suspend USB!\n", suspend ? "S" : "Un-s");
+		pr_debug("[BAT][CHG] %suspend USB!\n", suspend ? "S" : "Un-s");
 		if (suspend)
 			smb23x_parallel_charger_enable(chip, CURRENT, false);
 	}
@@ -943,7 +943,6 @@ static void smb23x_parallel_work(struct work_struct *work)
 	pr_info("[BAT][CHG] MPP4 voltage:%d, current_max:%d\n", MPP4_read, current_max);
 
 	if (chip->parallel_charging) {
-
 		/* Strong Charger - Enable parallel path */
 		i = find_closest_in_ascendant_list(
 			chip->cfg_fastchg_ma , fastchg_current_ma_table,
@@ -972,43 +971,37 @@ static void smb23x_parallel_work(struct work_struct *work)
 			lbc_set_suspend(0x00);
 
 			if (MPP4_read > 500000 && MPP4_read < 900000) {
-				pr_info("[BAT][CHG] USB_TYPE: AC_Fast\n");
 				usb_type_dcp_num = 0;
 			} else if (MPP4_read > 2200000 && MPP4_read < 2850000) {
-				pr_info("[BAT][CHG] USB_TYPE: Power_Bank\n");
 				usb_type_dcp_num = 1;
 			} else {
-				pr_info("[BAT][CHG] USB_TYPE: AC_Normal\n");
 				usb_type_dcp_num = 2;
 			}
 			if (g_bootdbguart == 1) {
 				gpio_set_value(GPIO_num17,1);
-				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 1, MPP4_read:%d, USB_TYPE:%s\n", MPP4_read, usb_type_dcp_str[usb_type_dcp_num]);
-                        } else
-				ASUSEvtlog("[BAT][CHG] MPP4_read:%d, USB_TYPE:%s\n", MPP4_read, usb_type_dcp_str[usb_type_dcp_num]);
+				pr_info("[BAT][CHG] GPIO_17 set to 1, MPP4_read:%d, USB_TYPE:%s\n", MPP4_read, usb_type_dcp_str[usb_type_dcp_num]);
+			} else
+				pr_info("[BAT][CHG] MPP4_read:%d, USB_TYPE:%s\n", MPP4_read, usb_type_dcp_str[usb_type_dcp_num]);
 		} else if (type == POWER_SUPPLY_TYPE_USB_CDP) {
 			// Set SMB231 input current limit to 300mA
 			smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
 			lbc_set_suspend(0x00);
 
 			gpio_set_value(GPIO_num17,0);
-			pr_info("[BAT][CHG] USB_TYPE: USB_Fast\n");
-			ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:USB_Fast\n", MPP4_read);
+			pr_info("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:USB_Fast\n", MPP4_read);
 		} else if (type == POWER_SUPPLY_TYPE_USB) {
 			if (current_max >= 500) {
 				// Set SMB231 input current limit to 300mA
 				smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
 				lbc_set_suspend(0x01);
 
-				pr_info("[BAT][CHG] USB_TYPE: USB_Normal\n");
-				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:USB_Normal\n", MPP4_read);
+				pr_info("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:USB_Normal\n", MPP4_read);
 			} else {
 				// Set SMB231 input current limit to 100mA
 				smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x00);
 				lbc_set_suspend(0x01);
 
-				pr_info("[BAT][CHG] USB_TYPE: UNKNOWN\n");
-				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:UNKNOWN\n", MPP4_read);
+				pr_info("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:UNKNOWN\n", MPP4_read);
 			}
 			gpio_set_value(GPIO_num17,0);
 		} else if (type == POWER_SUPPLY_TYPE_UNKNOWN) {
@@ -1017,13 +1010,12 @@ static void smb23x_parallel_work(struct work_struct *work)
 				smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x00);
 				lbc_set_suspend(0x01);
 				gpio_set_value(GPIO_num17,0);
-				pr_info("[BAT][CHG] USB_TYPE: Power_Pack\n");
-				ASUSEvtlog("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:Power_Pack\n", MPP4_read);
+				pr_info("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:Power_Pack\n", MPP4_read);
 			}
 		}
 		rc = smb23x_parallel_charger_enable(chip, CURRENT, true);
 		if (rc < 0)
-			printk("Disable charging for CURRENT failed, rc=%d\n", rc);
+			pr_err("Disable charging for CURRENT failed, rc=%d\n", rc);
 
 	} else {
 		/* Weak-charger - Disable parallel path */
@@ -1411,7 +1403,7 @@ static int hot_hard_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	pr_warn("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_hot = !!rt_sts;
 
-	ASUSEvtlog("[BAT][CHG] hot_hard_irq_handler rt_sts = 0x02%x\n", rt_sts);
+	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
 	return 0;
 }
 
@@ -1420,7 +1412,7 @@ static int cold_hard_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_cold = !!rt_sts;
 
-	ASUSEvtlog("[BAT][CHG] cold_hard_irq_handler rt_sts = 0x02%x\n", rt_sts);
+	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
 	return 0;
 }
 
@@ -1429,7 +1421,7 @@ static int hot_soft_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_warm = !!rt_sts;
 
-	ASUSEvtlog("[BAT][CHG] hot_soft_irq_handler rt_sts = 0x02%x\n", rt_sts);
+	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
 
 	smb23x_enable_volatile_writes(chip);
 	smb23x_masked_write(chip, CFG_REG_3, FASTCHG_CURR_SOFT_COMP, 0);
@@ -1441,7 +1433,7 @@ static int cold_soft_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_cool = !!rt_sts;
 
-	ASUSEvtlog("[BAT][CHG] cold_soft_irq_handler rt_sts = 0x02%x\n", rt_sts);
+	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
 
 	smb23x_enable_volatile_writes(chip);
 	smb23x_masked_write(chip, CFG_REG_3, FASTCHG_CURR_SOFT_COMP, 0);
@@ -1472,7 +1464,7 @@ static int batt_low_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int pre_to_fast_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
+	pr_debug("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_full = false;
 
 	return 0;
@@ -1486,7 +1478,7 @@ static int chg_error_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int recharge_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
+	pr_info("BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
 	chip->batt_full = !rt_sts;
 
 	smb23x_enable_volatile_writes(chip);
@@ -1582,7 +1574,7 @@ static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	if (!chip->apsd_enabled)
 		return 0;
 
-	pr_info("[BAT][CHG] chip->usb_present = %d, usb_present = %d\n",
+	pr_debug("[BAT][CHG] chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present, usb_present);
 
 	if (usb_present && !chip->usb_present) {
@@ -1625,7 +1617,7 @@ static int usbin_ov_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	int health = !!rt_sts ? POWER_SUPPLY_HEALTH_OVERVOLTAGE :
 				POWER_SUPPLY_HEALTH_GOOD;
 
-	pr_info("[BAT][CHG] chip->usb_present = %d, usb_present = %d\n",
+	pr_debug("[BAT][CHG] chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present,  usb_present);
 	if (chip->usb_present != usb_present) {
 		chip->usb_present = usb_present;
@@ -1668,9 +1660,9 @@ static void reconfig_upon_unplug(struct smb23x_chip *chip)
 					WAKEUP_SRC_IRQ_POLLING);
 			schedule_delayed_work(&chip->irq_polling_work,
 					msecs_to_jiffies(IRQ_POLLING_MS));
-			pr_info("[BAT][CHG] reconfig_upon_unplug\n");
+			pr_debug("[BAT][CHG] reconfig_upon_unplug\n");
 		} else {
-			pr_info("[BAT][CHG] restore software settings after unplug\n");
+			pr_debug("[BAT][CHG] restore software settings after unplug\n");
 			smb23x_relax(&chip->smb23x_ws, WAKEUP_SRC_IRQ_POLLING);
 			rc = smb23x_hw_init(chip);
 			if (rc)
@@ -1722,8 +1714,6 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 		smb23x_relax(&chip->smb23x_ws, WAKEUP_SRC_PARALLEL);
 	}
 
-	pr_info("[BAT][CHG] chip->usb_present = %d, usb_present = %d\n",
-					chip->usb_present,  usb_present);
 	ASUSEvtlog("[BAT][CHG] usbin_uv_irq_handler chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present,  usb_present);
 	if (chip->usb_present == usb_present)
@@ -1959,7 +1949,7 @@ static int smb23x_get_prop_battery_charging_enabled(struct smb23x_chip *chip)
 	}
 
 	status = tmp & CHARGE_EN_STS_BIT;
-	pr_info("[BAT][CHG] battery_charging status: %d\n", status);
+	pr_debug("[BAT][CHG] battery_charging status: %d\n", status);
 	if (status && !chip->chg_disabled_status)
 		return 1;
 	else
@@ -2271,7 +2261,6 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
 		val->intval = chip->therm_lvl_sel;
-		ASUSEvtlog("[BAT][CHG] set SYSTEM_TEMP_LEVEL:%d \n",val->intval);
 		break;
 	default:
 		return (-EINVAL);
