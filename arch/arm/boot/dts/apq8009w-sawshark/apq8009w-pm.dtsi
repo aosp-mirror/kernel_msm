@@ -49,23 +49,23 @@
 			qcom,normal-state3-batt-decidegc = <200>;
 			qcom,hot-batt-decidegc = <450>;
 
-			qcom,batt-full-mv = <4395>;
+			qcom,batt-full-mv = <4400>;
 			qcom,batt-full-terminate-ma = <20>;
 			qcom,usb-input-ma = <455>;
-			qcom,usb-input-regulation-mv = <4360>;
-			qcom,batt-charging-ma-max = <306>;
+			qcom,usb-input-regulation-mv = <4500>;
+			qcom,batt-charging-ma-max = <450>;
 
 			/* bat temp states charge current */
-			qcom,batt-charging-ma-mitigation = <0 306 306 306 306 0>;
+			qcom,batt-charging-ma-mitigation = <0 41 123 164 450 0>;
 
 			/* trickle charge parameters */
 			qcom,batt-trickle-charging-ma = <20>;
 			qcom,batt-trickle-to-cc-theshold-mv = <3000>;
 
-			qcom,batt-uvlo-theshold-mv = <2800>;
+			qcom,batt-uvlo-theshold-mv = <2900>;
 			qcom,batt-auto-recharge-delta-mv = <200>;
 
-			qcom,batt-discharging-ma = <3200>;
+			qcom,batt-discharging-ma = <2500>;
 			qcom,thermal-regulation-threshold = <120>;
 
 			qcom,batt-cc-chg-timer = <5>;
