@@ -667,11 +667,16 @@ static int mdss_dsi_panel_apply_display_setting(struct mdss_panel_data *pdata,
 	case RGB_GAIN:
 		gain = ctrl->rgb_gain;
 
-		pr_info("%s: RGB GAIN (%d, %d, %d)\n",
+		pr_debug("%s: RGB GAIN (%d, %d, %d)\n",
 			__func__, gain.R, gain.G, gain.B);
 
-		if (!gain.R || !gain.G || !gain.B)
+		if (!gain.R && !gain.G && !gain.B) {
+			pr_debug("%s: Zero RGB gain data\n", __func__);
+			return 0;
+		} else if (!gain.R || !gain.G || !gain.B) {
+			pr_warn("%s: Invalid RGB gain data\n", __func__);
 			return -EINVAL;
+		}
 
 		if (mode & DISPLAY_RGB_GAIN_MASK) {
 			// Apply display settings for RGB gain
