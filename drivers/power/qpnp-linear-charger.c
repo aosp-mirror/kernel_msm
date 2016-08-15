@@ -148,18 +148,6 @@ struct qpnp_lbc_irq {
 	bool            is_wake;
 };
 
-//BSP Steve2 read mpp4 voltage Interface+++
-#if defined(ASUS_FACTORY_BUILD)
-static int MPP4_read;
-#endif
-//BSP Steve2 read mpp4 voltage Interface---
-
-//BSP Steve2 read current value Interface+++
-#if defined(ASUS_FACTORY_BUILD)
-static int CURRENT_value_read;
-#endif
-//BSP Steve2 read current value Interface---
-
 static int GPIO_num17 = 17;
 
 enum {
@@ -431,11 +419,6 @@ struct qpnp_lbc_chip {
 
 struct qpnp_lbc_chip *g_lbc_chip;
 
-// BSP Steve2: charging limit +++
-#if defined(ASUS_FACTORY_BUILD)
-bool eng_charging_limit;
-#endif
-// BSP Steve2: charging limit ---
 static bool g_bat_is_cooler = false;
 static bool g_bat_is_warmer = false;
 extern void adc_notification_set_cool_current(int level);
@@ -796,7 +779,7 @@ bool get_pmic_batt_present(void)
 
 	if (g_lbc_chip) {
 		qpnp_lbc_read(g_lbc_chip, BAT_PRES_STATUS, &batt_pres_rt_sts, 1);
-		pr_info("[BAT][CHG] batt_pres_rt_sts: 0x%x\n", batt_pres_rt_sts);
+		pr_debug("[BAT][CHG] batt_pres_rt_sts: 0x%x\n", batt_pres_rt_sts);
 		return (batt_pres_rt_sts & BATT_THM_EN) ? 1 : 0;
 	} else {
 		pr_err("[BAT][CHG] g_lbc_chip is null\n");
@@ -1101,7 +1084,7 @@ static int qpnp_lbc_ibatsafe_set(struct qpnp_lbc_chip *chip, int safe_current)
 
 	reg_val = (safe_current - QPNP_LBC_IBATSAFE_MIN_MA)
 			/ QPNP_LBC_I_STEP_MA;
-	pr_info("[BAT][CHG] Ibate_safe=%d setting %02x\n", safe_current, reg_val);
+	pr_debug("[BAT][CHG] Ibate_safe=%d setting %02x\n", safe_current, reg_val);
 
 	rc = qpnp_lbc_write(chip, chip->chgr_base + CHG_IBAT_SAFE_REG,
 				&reg_val, 1);
@@ -1136,7 +1119,7 @@ static int qpnp_lbc_ibatmax_set(struct qpnp_lbc_chip *chip, int chg_current)
 	else
 		chip->prev_max_ma = chg_current;
 
-	pr_info("[BAT][CHG] ibatmax:%d\n", chg_current);
+	pr_debug("[BAT][CHG] ibatmax:%d\n", chg_current);
 	return rc;
 }
 
@@ -1466,7 +1449,6 @@ int get_lbc_batt_temp(void)
 
 	if (g_lbc_chip) {
 		temp = get_prop_batt_temp(g_lbc_chip);
-		pr_info("[BAT][CHG] get_bat_temp %d\n", temp);
 		return temp;
 	} else {
 		pr_err("g_lbc_chip is null\n");
@@ -1671,91 +1653,6 @@ static int qpnp_batt_property_is_writeable(struct power_supply *psy,
 
 	return 0;
 }
-
-// BSP Steve2: charging limit +++
-#if defined(ASUS_FACTORY_BUILD)
-static struct workqueue_struct *charger_work_queue;
-static struct delayed_work charginglimit_dete_work;
-
-void update_charginglimit_work(int time)
-{
-	queue_delayed_work(charger_work_queue,
-		&charginglimit_dete_work,
-		time * HZ);
-}
-
-void asus_battery_charging_limit(struct work_struct *dat)
-{
-	int recharging_soc = 50;
-	int discharging_soc = 60;
-	int percentage;
-	int rc = 0;
-
-	if (get_prop_capacity(g_lbc_chip) < 0) {
-		pr_err(" %s: * fail to get battery capacity *\n", __func__);
-	} else{
-		if (eng_charging_limit) {
-			/*BSP Steve2: enable charging when soc < recharging soc*/
-			percentage = get_prop_capacity(g_lbc_chip);
-			if (percentage < recharging_soc) {
-				pr_debug("soc: %d < recharging soc: %d , enable charging\n", percentage, recharging_soc);
-				rc = qpnp_lbc_charger_enable(g_lbc_chip, SOC, 1);
-				if (rc) {
-					pr_err("Failed to enable charging rc=%d\n", rc);
-				} else {
-					mutex_lock(&g_lbc_chip->chg_enable_lock);
-					g_lbc_chip->chg_done = false;
-					pr_debug("resuming charging by bms\n");
-					mutex_unlock(&g_lbc_chip->chg_enable_lock);
-				}
-			/*BSP Steve2: disable charging when soc >= discharging soc*/
-			} else if (percentage >= discharging_soc) {
-				pr_debug("soc: %d >= discharging soc: %d , disable charging\n", percentage, discharging_soc);
-				rc = qpnp_lbc_charger_enable(g_lbc_chip, SOC, 0);
-				if (rc) {
-					pr_err("Failed to disable charging rc=%d\n", rc);
-				} else {
-					mutex_lock(&g_lbc_chip->chg_enable_lock);
-					g_lbc_chip->chg_done = false;
-					pr_debug("status = DISCHARGING chg_done = %d\n", g_lbc_chip->chg_done);
-					mutex_unlock(&g_lbc_chip->chg_enable_lock);
-				}
-			} else{
-				pr_debug("soc: %d, between %d and %d\n", percentage, recharging_soc, discharging_soc);
-			}
-		} else{
-			rc = qpnp_lbc_charger_enable(g_lbc_chip, SOC, 1);
-			if (rc) {
-				pr_err("Failed to enable charging rc=%d\n", rc);
-			} else {
-				mutex_lock(&g_lbc_chip->chg_enable_lock);
-				g_lbc_chip->chg_done = false;
-				pr_debug("resuming charging by bms\n");
-				mutex_unlock(&g_lbc_chip->chg_enable_lock);
-				pr_debug("charging limit disable, enable charging!\n");
-			}
-		}
-	}
-	power_supply_changed(&g_lbc_chip->batt_psy);
-
-	update_charginglimit_work(180);
-}
-
-static int asus_battery_charging_limit_wq(void)
-{
-	pr_debug(" %s\n", __func__);
-
-	INIT_DELAYED_WORK(&charginglimit_dete_work,
-		asus_battery_charging_limit);
-	charger_work_queue =	create_singlethread_workqueue("charginglimit_wq");
-	if (!charger_work_queue) {
-		pr_err(" fail to create charginglimit_wq\n");
-		return -ENOMEM;
-	}
-	return 0;
-}
-#endif
-// BSP Steve2: charging limit ---
 
 /*
  * End of charge happens only when BMS reports the battery status as full. For
@@ -2812,10 +2709,10 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 
 			if (g_bootdbguart == 1) {
 				gpio_set_value(GPIO_num17,1);
-				pr_info("usbin gpio_17 set to 1\n");
+				pr_debug("usbin gpio_17 set to 1\n");
 			} else {
 				gpio_set_value(GPIO_num17,0);
-				pr_info("usbin gpio_17 set to 0\n");
+				pr_debug("usbin gpio_17 set to 0\n");
 			}
 		} else {
 			/*
@@ -3452,274 +3349,11 @@ static int qpnp_lbc_parse_resources(struct qpnp_lbc_chip *chip)
 	return rc;
 }
 
-//BSP Steve2 proc charger_limit_enable Interface +++
-#if defined(ASUS_FACTORY_BUILD)
-static int charger_limit_enable_proc_read(struct seq_file *buf, void *v)
-{
-	if (eng_charging_limit) {
-		seq_printf(buf, "charging limit enable\n");
-	} else{
-		seq_printf(buf, "charging limit disable\n");
-	}
-	return 0;
-}
-
-static ssize_t charger_limit_enable_proc_write(struct file *filp, const char __user *buff,
-		size_t len, loff_t *data)
-{
-	char messages[256];
-
-	if (len > 256) {
-		len = 256;
-	}
-
-	if (copy_from_user(messages, buff, len)) {
-		return -EFAULT;
-	}
-
-	if (buff[0] == '1') {
-		eng_charging_limit = true;
-		/* turn on charging limit in eng mode */
-		update_charginglimit_work(0);
-		pr_info("[BAT][CHG][Proc]charger_limit_enable:%d\n", 1);
-	} else if (buff[0] == '0') {
-		eng_charging_limit = false;
-		/* turn off charging limit in eng mode */
-		cancel_delayed_work(&charginglimit_dete_work);
-		pr_info("[BAT][CHG][Proc]charger_limit_enable:%d\n", 0);
-	}
-
-	return len;
-}
-
-static int charger_limit_enable_proc_open(struct inode *inode, struct  file *file)
-{
-    return single_open(file, charger_limit_enable_proc_read, NULL);
-}
-
-static const struct file_operations charger_limit_enable_fops = {
-	.owner = THIS_MODULE,
-	.open =  charger_limit_enable_proc_open,
-	.write = charger_limit_enable_proc_write,
-	.read = seq_read,
-};
-
-static void create_charger_limit_enable_proc_file(void)
-{
-	struct proc_dir_entry *charger_limit_enable_proc_file = proc_create("driver/charger_limit_enable", 0666, NULL, &charger_limit_enable_fops);
-
-	if (charger_limit_enable_proc_file) {
-		pr_info("[BAT][CHG][Proc]charger_limit_enable create ok!\n");
-	} else{
-		pr_info("[BAT][CHG][Proc]charger_limit_enable create failed!\n");
-	}
-	return;
-}
-#endif
-//BSP Steve2 proc charger_limit_enable Interface ---
-
-//BSP Steve2 BMMI Adb Interface chager type+++
-#if defined(ASUS_FACTORY_BUILD)
-#define	charger_type_PROC_FILE	"driver/charge_type"
-static struct proc_dir_entry *charger_type_proc_file;
-static int charger_type_proc_read(struct seq_file *buf, void *v)
-{
-	int type;
-	type = g_lbc_chip->usb_psy->type;
-
-	MPP4_read = get_prop_mpp4_voltage(g_lbc_chip);
-	if (type == POWER_SUPPLY_TYPE_USB_DCP) {
-		if (MPP4_read > 600000 && MPP4_read < 1000000) {
-			seq_printf(buf, "AC_Fast\n");
-		} else if (MPP4_read > 1800000 && MPP4_read < 2800000) {
-			seq_printf(buf, "Power_Bank\n");
-		} else {
-			seq_printf(buf, "AC_Normal\n");
-		}
-	} else if (type == POWER_SUPPLY_TYPE_USB) {
-		seq_printf(buf, "USB_Normal\n");
-	} else if (type == POWER_SUPPLY_TYPE_UNKNOWN) {
-		seq_printf(buf, "UNKNOWN\n");
-	}
-	return 0;
-}
-static int charger_type_proc_open(struct inode *inode, struct  file *file)
-{
-    return single_open(file, charger_type_proc_read, NULL);
-}
-
-static ssize_t charger_type_proc_write(struct file *filp, const char __user *buff,
-		size_t len, loff_t *data)
-{
-	int val;
-
-	char messages[256];
-
-	if (len > 256) {
-		len = 256;
-	}
-
-	if (copy_from_user(messages, buff, len)) {
-		return -EFAULT;
-	}
-
-	val = (int)simple_strtol(messages, NULL, 10);
-	pr_info("[BAT][CHG] Charger type File: %d\n", val);
-
-	return len;
-}
-
-static const struct file_operations charger_type_fops = {
-	.owner = THIS_MODULE,
-	.open = charger_type_proc_open,
-	.write = charger_type_proc_write,
-	.read = seq_read,
-};
-void static create_charger_type_proc_file(void)
-{
-	charger_type_proc_file = proc_create(charger_type_PROC_FILE, 0644, NULL, &charger_type_fops);
-
-	if (charger_type_proc_file) {
-		pr_info("[Proc]%s sucessed!\n", __FUNCTION__);
-	} else{
-		pr_info("[Proc]%s failed!\n", __FUNCTION__);
-	}
-}
-#endif
-//BSP Steve2 BMMI Adb Interface chager type---
-
-//BSP Steve2 read mpp4 voltage Interface++
-#if defined(ASUS_FACTORY_BUILD)
-#define	mpp4_vol_PROC_FILE	"driver/mpp4_vol"
-static struct proc_dir_entry *mpp4_vol_proc_file;
-static int mpp4_vol_proc_read(struct seq_file *buf, void *v)
-{
-	MPP4_read = get_prop_mpp4_voltage(g_lbc_chip);
-	pr_debug("MPP4 Voltage=%d\n", MPP4_read);
-	seq_printf(buf, "%d\n", MPP4_read);
-	return 0;
-}
-static int mpp4_vol_proc_open(struct inode *inode, struct  file *file)
-{
-    return single_open(file, mpp4_vol_proc_read, NULL);
-}
-
-static ssize_t mpp4_vol_proc_write(struct file *filp, const char __user *buff,
-		size_t len, loff_t *data)
-{
-	int val;
-
-	char messages[256];
-
-	if (len > 256) {
-		len = 256;
-	}
-
-	if (copy_from_user(messages, buff, len)) {
-		return -EFAULT;
-	}
-
-	val = (int)simple_strtol(messages, NULL, 10);
-	pr_info("[BAT][CHG] mpp4 value File: %d\n", val);
-
-	return len;
-}
-
-static const struct file_operations mpp4_vol_fops = {
-	.owner = THIS_MODULE,
-	.open = mpp4_vol_proc_open,
-	.write = mpp4_vol_proc_write,
-	.read = seq_read,
-};
-void static create_mpp4_vol_proc_file(void)
-{
-	mpp4_vol_proc_file = proc_create(mpp4_vol_PROC_FILE, 0644, NULL, &mpp4_vol_fops);
-
-	if (mpp4_vol_proc_file) {
-		pr_info("[Proc]%s sucessed!\n", __FUNCTION__);
-	} else{
-		pr_info("[Proc]%s failed!\n", __FUNCTION__);
-	}
-}
-#endif
-//BSP Steve2 read mpp4 voltage Interface---
-
-//BSP Steve2 read current value Interface+++
-#if defined(ASUS_FACTORY_BUILD)
-#define	current_value_PROC_FILE	"driver/current_value"
-static struct proc_dir_entry *current_value_proc_file;
-static int current_value_proc_read(struct seq_file *buf, void *v)
-{
-	CURRENT_value_read = get_prop_current_now(g_lbc_chip) * -1 / 1000;
-	pr_debug("CURRENT NOW value=%d\n", CURRENT_value_read);
-	seq_printf(buf, "%d\n", CURRENT_value_read);
-	return 0;
-}
-static int current_value_proc_open(struct inode *inode, struct  file *file)
-{
-    return single_open(file, current_value_proc_read, NULL);
-}
-
-static ssize_t current_value_proc_write(struct file *filp, const char __user *buff,
-		size_t len, loff_t *data)
-{
-	int val;
-
-	char messages[256];
-
-	if (len > 256) {
-		len = 256;
-	}
-
-	if (copy_from_user(messages, buff, len)) {
-		return -EFAULT;
-	}
-
-	val = (int)simple_strtol(messages, NULL, 10);
-	pr_info("[BAT][CHG] current now value File: %d\n", val);
-
-	return len;
-}
-
-static const struct file_operations current_value_fops = {
-	.owner = THIS_MODULE,
-	.open = current_value_proc_open,
-	.write = current_value_proc_write,
-	.read = seq_read,
-};
-void static create_current_value_proc_file(void)
-{
-	current_value_proc_file = proc_create(current_value_PROC_FILE, 0644, NULL, &current_value_fops);
-
-	if (current_value_proc_file) {
-		pr_info("[Proc]%s sucessed!\n", __FUNCTION__);
-	} else{
-		pr_info("[Proc]%s failed!\n", __FUNCTION__);
-	}
-}
-#endif
-//BSP Steve2 read current value Interface---
-
 static int qpnp_lbc_parallel_probe(struct spmi_device *spmi)
 {
 	int rc = 0;
 	struct qpnp_lbc_chip *chip;
 	u8 reg_val;
-
-/*
- *  To-Be-Fix :
- *  We remove gpio17 config from here since it cause parallel charge fail
- *  this code should be moved to other suitable code segement.
- */
-/*
-	rc = gpio_request_one(GPIO_num17, GPIOF_OUT_INIT_LOW, "asus_muxsel0_default");
-	if (rc)
-		pr_err("Failed to request init gpio 17 Low: %d\n", rc);
-	else
-		pr_err("Success to request init gpio 17 Low \n");
-
-	gpio_set_value(GPIO_num17,0);
-*/
 
 	chip = devm_kzalloc(&spmi->dev, sizeof(struct qpnp_lbc_chip),
 							GFP_KERNEL);
@@ -4003,7 +3637,7 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 	}
 
 	if (chip->cfg_charging_disabled && !get_prop_batt_present(chip))
-		pr_info("Battery absent and charging disabled !!!\n");
+		pr_err("Battery absent and charging disabled !!!\n");
 
 	/* Configure initial alarm for VDD trim */
 	if ((chip->supported_feature_flag & VDD_TRIM_SUPPORTED) &&
@@ -4037,20 +3671,8 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 	rc = qpnp_lbc_write(chip, COIN_EN_CTL, &reg_val, 1);
 	if (rc)
 		pr_err("Failed to set COIN_EN_CTL rc=%d\n", rc);
-#if defined(ASUS_FACTORY_BUILD)
-	rc = asus_battery_charging_limit_wq();
 
-	eng_charging_limit = true;
-	create_charger_limit_enable_proc_file();
-
-	create_charger_type_proc_file();
-
-	create_mpp4_vol_proc_file();
-	
-	create_current_value_proc_file();
-#endif
-
-	pr_info("Probe chg_dis=%d bpd=%d usb=%d batt_pres=%d batt_volt=%d soc=%d\n",
+	pr_debug("Probe chg_dis=%d bpd=%d usb=%d batt_pres=%d batt_volt=%d soc=%d\n",
 			chip->cfg_charging_disabled,
 			chip->cfg_bpd_detection,
 			qpnp_lbc_is_usb_chg_plugged_in(chip),
@@ -4065,13 +3687,13 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 
 	if (usbin_chg_sts & 0x10) {
 		gpio_set_value(GPIO_num17,0);
-		pr_info("lbc_probe gpio_17 set to 0\n");
+		pr_debug("lbc_probe gpio_17 set to 0\n");
 	} else if ((usbin_chg_sts & 0x10) == 0 && g_bootdbguart == 1) {
 		gpio_set_value(GPIO_num17,1);
-		pr_info("lbc_probe gpio_17 set to 1\n");
+		pr_debug("lbc_probe gpio_17 set to 1\n");
 	} else {
 		gpio_set_value(GPIO_num17,0);
-		pr_info("lbc_probe gpio_17 set to 0\n");
+		pr_debug("lbc_probe gpio_17 set to 0\n");
 	}
 
 	return 0;
