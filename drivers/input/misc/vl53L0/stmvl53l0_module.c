@@ -2015,7 +2015,7 @@ static struct device_attribute attributes[] = {
     __ATTR(set_timing_budget, 0660, stmvl53l0_show_timing_budget, stmvl53l0_store_set_timing_budget),
     __ATTR(set_use_case, 0660, stmvl53l0_show_use_case, stmvl53l0_store_set_use_case),
     __ATTR(laser_current_configuration, 0440, stmvl53l0_show_current_configuration, NULL),
-    __ATTR(do_flush, 0660, NULL, stmvl53l0_do_flush),
+    __ATTR(do_flush, 0220, NULL, stmvl53l0_do_flush),
 #endif // HTC_MODIFY
 };
 #endif // HTC
