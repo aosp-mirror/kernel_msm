@@ -19,6 +19,7 @@
 #include "dsi-panel-booyiOTM1287-720p-video.dtsi"
 #include "dsi-panel-dijingOTM1287-720p-video.dtsi"
 #include "dsi-panel-truly-HX8394F-720p-video.dtsi"
+#include "dsi-panel-truly-R61350-720p-video.dtsi"
 #include "dsi-panel-booyiOTM1287-sec-720p-video.dtsi"
 #include "msm8916-memory.dtsi"
 
@@ -376,6 +377,42 @@
 		himax,i2c-pull-up;
 		report_type = <1>;
 	};
+	focaltech@38 {
+		compatible = "focaltech,fts";
+		reg = <0x38>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <13 0x2>;
+		vdd-supply = <&pm8916_l17>;
+		vcc_i2c-supply = <&pm8916_l6>;
+		/* pins used by touchscreen */
+		pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+		pinctrl-2 = <&ts_release>;
+		focaltech,name = "fts_ts";
+		focaltech,family-id = <0x54>;
+		focaltech,reset-gpio = <&msm_gpio 12 0x0>;
+		focaltech,irq-gpio = <&msm_gpio 13 0x2008>;
+		focaltech,power-gpio = <&msm_gpio 17 0x0>;
+		focaltech,display-coords = <0 0 720 1280>;
+		focaltech,panel-coords = <0 0 720 1280>;
+		focaltech,button-map = <139 102 158>;
+		focaltech,fw-name = "ct820_ft_fw.bin";
+		/*focaltech,fw-auto-update;*/
+		/*focaltech,no-force-update;*/
+		focaltech,i2c-pull-up;
+		focaltech,group-id = <1>;
+		focaltech,hard-reset-delay-ms = <20>;
+		focaltech,soft-reset-delay-ms = <200>;
+		focaltech,num-max-touches = <10>;
+		focaltech,fw-delay-aa-ms = <30>;
+		focaltech,fw-delay-55-ms = <30>;
+		focaltech,fw-upgrade-id1 = <0x79>;
+		focaltech,fw-upgrade-id2 = <0x08>;
+		focaltech,fw-delay-readid-ms = <10>;
+		focaltech,fw-delay-era-flsh-ms = <2000>;
+		focaltech,fw-auto-cal;
+        };
 
 	synaptics@20 {
 		compatible = "synaptics,rmi4";

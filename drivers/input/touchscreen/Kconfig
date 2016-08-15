@@ -955,6 +955,19 @@ config TOUCHSCREEN_FT5X06_GESTURE
 
          If unsure, say N.
 
+config TOUCHSCREEN_FT8716
+       tristate "focaltech touchscreens"
+       depends on I2C
+       help
+         Say Y here if you have a focaltech touchscreen.
+	  controllers are multi touch controllers which can
+	 report 5 touches at a time.
+
+         If unsure, say N.
+
+         To compile this driver as a module, choose M here: the
+         module will be called focaltech.
+
 config TOUCHSCREEN_HIMAX852XES
        tristate "Himax touchscreens"
        depends on I2C
