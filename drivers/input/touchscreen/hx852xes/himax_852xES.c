@@ -4295,6 +4295,9 @@ static ssize_t himax_checksum_read(struct device *dev,
 {
     int ret;
     ret = himax_calculateChecksum(false, true);
+#ifdef HX_RST_PIN_FUNC
+    himax_HW_reset(true, false);
+#endif
     return sprintf(buf, "%d%d%d%d\n", IC_checksum[0],IC_checksum[1],IC_checksum[2],IC_checksum[3]);
 }
 #endif
