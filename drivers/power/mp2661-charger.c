@@ -1849,6 +1849,8 @@ static int mp2661_batt_property_is_writeable(struct power_supply *psy,
     {
         case POWER_SUPPLY_PROP_USB_INPUT_CURRENT:
             return 1;
+        case POWER_SUPPLY_PROP_CHARGING_ENABLED:
+            return 1;
         default:
             break;
     }
