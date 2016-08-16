@@ -3140,6 +3140,8 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	}
 
 	if (mdss_dsi_is_te_based_esd(ctrl_pdata)) {
+		irq_set_status_flags(gpio_to_irq(ctrl_pdata->disp_te_gpio),
+				IRQ_DISABLE_UNLAZY);
 		rc = devm_request_irq(&pdev->dev,
 			gpio_to_irq(ctrl_pdata->disp_te_gpio),
 			hw_vsync_handler, IRQF_TRIGGER_FALLING,
