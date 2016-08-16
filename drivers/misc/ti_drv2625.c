@@ -1192,6 +1192,7 @@ static int drv2625_probe(struct i2c_client* client,
 	struct drv2625_platform_data *pDrv2625Platdata =
 		dev_get_platdata(&client->dev);
 	int err = 0;
+	unsigned char chipid = 0;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		dev_err(&client->dev, "%s: I2C check failed\n", __func__);
@@ -1263,16 +1264,15 @@ static int drv2625_probe(struct i2c_client* client,
 		dev_err(pDrv2625data->dev,
 			"%s, i2c bus fail (%d)\n", __func__, err);
 		goto err_gpio_request;
-	} else {
-		dev_info(pDrv2625data->dev,
-			"%s, ID status (0x%x)\n", __func__, err);
-		pDrv2625data->mnDeviceID = err;
 	}
+	dev_info(pDrv2625data->dev, "Device ID: 0x%x\n", err);
+	pDrv2625data->mnDeviceID = err;
 
-	if (pDrv2625data->mnDeviceID != DRV2625_ID){
+	chipid = pDrv2625data->mnDeviceID & DRV2625_CHIPID_MASK;
+	if (chipid != DRV2625_CHIPID){
 		dev_err(pDrv2625data->dev,
-			"%s, device_id(%d) fail\n",
-			__func__, pDrv2625data->mnDeviceID);
+			"%s, CHIP ID is not matched (0x%x : 0x%x)",
+			__func__, chipid, DRV2625_CHIPID);
 		goto err_gpio_request;
 	}
 

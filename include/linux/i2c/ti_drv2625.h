@@ -17,7 +17,8 @@
 #define HAPTICS_DEVICE_NAME "drv2625"
 
 #define	DRV2625_REG_ID				0x00
-#define	DRV2625_ID				0x12
+#define	DRV2625_CHIPID_MASK			0xf0
+#define	DRV2625_CHIPID				0x10
 
 #define	DRV2625_REG_STATUS			0x01
 #define	DIAG_MASK				0x80
