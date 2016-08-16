@@ -876,7 +876,10 @@ static void mxt_firmware_update_func(struct work_struct *work_firmware_update)
 		goto exit;
 	}
 
-	if (mxt_patchevent_get(PATCH_EVENT_TA)) {
+	if (data->charging_mode) {
+		trigger_usb_state_from_otg(0);
+		trigger_usb_state_from_otg(1);
+	} else {
 		trigger_usb_state_from_otg(1);
 		trigger_usb_state_from_otg(0);
 	}
