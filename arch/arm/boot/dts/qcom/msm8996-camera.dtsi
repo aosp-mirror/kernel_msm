@@ -758,6 +758,12 @@
 		i2c_freq_custom: qcom,i2c_custom_mode {
 			status = "disabled";
 		};
+		i2c_freq_custom1: qcom,i2c_custom_mode1 {
+			status = "disabled";
+		};
+		i2c_freq_custom2: qcom,i2c_custom_mode2 {
+			status = "disabled";
+		};
 		i2c_freq_1Mhz: qcom,i2c_fast_plus_mode {
 			status = "disabled";
 		};
@@ -796,13 +802,46 @@
 
 &i2c_freq_custom {
 	qcom,hw-thigh = <38>;
-	qcom,hw-tlow = <56>;
+    /* 300 Khz */
+	qcom,hw-tlow = <87>;
 	qcom,hw-tsu-sto = <40>;
 	qcom,hw-tsu-sta = <40>;
 	qcom,hw-thd-dat = <22>;
 	qcom,hw-thd-sta = <35>;
 	qcom,hw-tbuf = <62>;
-	qcom,hw-scl-stretch-en = <1>;
+	qcom,hw-scl-stretch-en = <0>;
+	qcom,hw-trdhld = <6>;
+	qcom,hw-tsp = <3>;
+	qcom,cci-clk-src = <37500000>;
+	status = "ok";
+};
+
+&i2c_freq_custom1 {
+	qcom,hw-thigh = <38>;
+    /* 220.6 Khz */
+	qcom,hw-tlow = <132>;
+	qcom,hw-tsu-sto = <40>;
+	qcom,hw-tsu-sta = <40>;
+	qcom,hw-thd-dat = <22>;
+	qcom,hw-thd-sta = <35>;
+	qcom,hw-tbuf = <62>;
+	qcom,hw-scl-stretch-en = <0>;
+	qcom,hw-trdhld = <6>;
+	qcom,hw-tsp = <3>;
+	qcom,cci-clk-src = <37500000>;
+	status = "ok";
+};
+
+&i2c_freq_custom2 {
+	qcom,hw-thigh = <38>;
+    /* 180.3 Khz */
+	qcom,hw-tlow = <170>;
+	qcom,hw-tsu-sto = <40>;
+	qcom,hw-tsu-sta = <40>;
+	qcom,hw-thd-dat = <22>;
+	qcom,hw-thd-sta = <35>;
+	qcom,hw-tbuf = <62>;
+	qcom,hw-scl-stretch-en = <0>;
 	qcom,hw-trdhld = <6>;
 	qcom,hw-tsp = <3>;
 	qcom,cci-clk-src = <37500000>;

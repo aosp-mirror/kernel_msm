@@ -1888,9 +1888,15 @@ static void msm_cci_init_clk_params(struct cci_device *cci_dev)
 		else if (I2C_FAST_PLUS_MODE == count)
 			src_node = of_find_node_by_name(of_node,
 				"qcom,i2c_fast_plus_mode");
-		else
+		else if (I2C_CUSTOM_MODE == count)
 			src_node = of_find_node_by_name(of_node,
 				"qcom,i2c_custom_mode");
+		else if (I2C_CUSTOM1_MODE == count)
+			src_node = of_find_node_by_name(of_node,
+				"qcom,i2c_custom_mode1");
+		else if (I2C_CUSTOM2_MODE == count)
+			src_node = of_find_node_by_name(of_node,
+				"qcom,i2c_custom_mode2");
 
 		rc = of_property_read_u32(src_node, "qcom,hw-thigh", &val);
 		CDBG("%s qcom,hw-thigh %d, rc %d\n", __func__, val, rc);
