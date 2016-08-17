@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013,2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -42,6 +42,7 @@
 /* Timeout (in ms) for Link to Up before Registering Station */
 #define ASSOC_LINKUP_TIMEOUT 60
 #define IBSS_BROADCAST_STAID 0
+#define SCAN_ABORT_THRESHOLD 35
 typedef enum 
 {
    /** Not associated in Infra or participating in an IBSS / Ad-hoc network.*/
