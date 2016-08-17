@@ -43,6 +43,7 @@ struct pmu_hw_events {
 
 struct arm_pmu {
 	struct pmu		pmu;
+	bool			percpu_irq_requested;
 	cpumask_t		active_irqs;
 	const char		*name;
 	irqreturn_t		(*handle_irq)(int irq_num, void *dev);

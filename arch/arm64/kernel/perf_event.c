@@ -393,7 +393,9 @@ armpmu_disable_percpu_irq(void *data)
 static void
 armpmu_release_hardware(struct arm_pmu *armpmu)
 {
+	get_online_cpus();
 	armpmu->free_irq(armpmu);
+	put_online_cpus();
 }
 
 static void
@@ -414,12 +416,12 @@ armpmu_reserve_hardware(struct arm_pmu *armpmu)
 		return -ENODEV;
 	}
 
+	get_online_cpus();
 	err = armpmu->request_irq(armpmu, armpmu->handle_irq);
-	if (err) {
+	if (err)
 		armpmu_release_hardware(armpmu);
-		return err;
-	}
-	return 0;
+	put_online_cpus();
+	return err;
 }
 
 static void
@@ -1042,6 +1044,7 @@ static int armv8pmu_request_irq(struct arm_pmu *cpu_pmu, irq_handler_t handler)
 		}
 
 		on_each_cpu(armpmu_enable_percpu_irq, &irq, 1);
+		cpu_pmu->percpu_irq_requested = true;
 	} else {
 		for (i = 0; i < irqs; ++i) {
 			err = 0;
@@ -1093,6 +1096,7 @@ static void armv8pmu_free_irq(struct arm_pmu *cpu_pmu)
 	if (irq_is_percpu(irq)) {
 		on_each_cpu(armpmu_disable_percpu_irq, &irq, 1);
 		free_percpu_irq(irq, &cpu_hw_events);
+		cpu_pmu->percpu_irq_requested = false;
 	} else {
 		for (i = 0; i < irqs; ++i) {
 			if (!cpumask_test_and_clear_cpu(i,
@@ -1334,16 +1338,28 @@ static int __cpuinit cpu_pmu_notify(struct notifier_block *b,
 {
 	int cpu = (unsigned long)hcpu;
 	struct arm_pmu *pmu = container_of(b, struct arm_pmu, hotplug_nb);
-	if ((action & ~CPU_TASKS_FROZEN) != CPU_STARTING)
-		return NOTIFY_DONE;
-	if (!cpumask_test_cpu(cpu, cpu_online_mask))
-		return NOTIFY_DONE;
 
-	if (pmu->reset)
-		cpu_pmu->reset(pmu);
-	else
-		return NOTIFY_DONE;
-	return NOTIFY_OK;
+	switch (action & ~CPU_TASKS_FROZEN) {
+	case CPU_DOWN_PREPARE:
+		if (pmu->percpu_irq_requested) {
+			int irq = platform_get_irq(pmu->plat_device, 0);
+			smp_call_function_single(cpu,
+				armpmu_disable_percpu_irq, &irq, 1);
+		}
+		break;
+
+	case CPU_STARTING:
+	case CPU_DOWN_FAILED:
+		if (pmu->reset)
+			pmu->reset(pmu);
+		if (pmu->percpu_irq_requested) {
+			int irq = platform_get_irq(pmu->plat_device, 0);
+			smp_call_function_single(cpu,
+				armpmu_enable_percpu_irq, &irq, 1);
+		}
+		break;
+	}
+	return NOTIFY_DONE;
 }
 
 #ifdef CONFIG_CPU_PM
