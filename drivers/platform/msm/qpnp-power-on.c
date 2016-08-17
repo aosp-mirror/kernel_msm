@@ -305,6 +305,7 @@ static const char * const qpnp_poff_reason[] = {
  * boot of the device.
  */
 static int warm_boot;
+static int cblpwr_evt = 0;
 module_param(warm_boot, int, 0);
 
 static int
@@ -859,14 +860,22 @@ static irqreturn_t qpnp_cblpwr_irq(int irq, void *_pon)
 	struct qpnp_pon *pon = _pon;
 	int vbus;
 	struct power_supply *usb_psy;
+	union power_supply_propval data;
+	struct power_supply *charger_psy;
 
 	usb_psy = power_supply_get_by_name("usb");
-	if (usb_psy == NULL)
-		pr_err("qpnp_cblpwr_irq can't find usb device \n");
-	else {
-	vbus = !!irq_read_line(irq);
-	power_supply_set_present(usb_psy, vbus);
+	charger_psy = power_supply_get_by_name("battery");
+	if (usb_psy == NULL || charger_psy == NULL) {
+		pr_err("qpnp_cblpwr_irq can't find psy device \n");
+	} else {
+		vbus = !!irq_read_line(irq);
+		power_supply_set_present(usb_psy, vbus);
 		pr_err("qpnp_cblpwr_irq set usb present: %d \n", vbus);
+		if (cblpwr_evt ^ vbus) {
+			cblpwr_evt = vbus;
+			data.intval = vbus;
+			charger_psy->set_property(charger_psy, POWER_SUPPLY_PROP_STATUS, &data);
+		}
 	}
 
 	rc = qpnp_pon_input_dispatch(pon, PON_CBLPWR);
@@ -1960,6 +1969,8 @@ void qpnp_pon_timer_trigger_usb(struct work_struct *work)
 	int rc;
 	struct power_supply *usb_psy;
 	u8 cblpwr = 0;
+	union power_supply_propval data;
+	struct power_supply *charger_psy;
 
 	pr_err("qpnp_pon_timer_trigger_usb: re-trigger usb detection \n");
 	rc = spmi_ext_register_readl(g_pon->spmi->ctrl, g_pon->spmi->sid, 0x810,
@@ -1970,13 +1981,18 @@ void qpnp_pon_timer_trigger_usb(struct work_struct *work)
 
 	if (cblpwr) {
 		usb_psy = power_supply_get_by_name("usb");
-		if (usb_psy == NULL) {
+		charger_psy = power_supply_get_by_name("battery");
+		if (usb_psy == NULL || charger_psy == NULL) {
 			pr_err("qpnp_pon_timer_trigger_usb can't find usb device \n");
 			return;
-		}
-		else {
+		} else {
 			pr_err("qpnp_pon_timer_trigger_usb: set usb present \n");
 			power_supply_set_present(usb_psy, cblpwr);
+			if (cblpwr_evt ^ cblpwr) {
+				cblpwr_evt = cblpwr;
+				data.intval = cblpwr;
+				charger_psy->set_property(charger_psy, POWER_SUPPLY_PROP_STATUS, &data);
+			}
 		}
 
 		rc = qpnp_pon_input_dispatch(g_pon, PON_CBLPWR);
@@ -2011,6 +2027,8 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 	unsigned long flags;
 	struct power_supply *usb_psy;
 	u8 cblpwr = 0;
+	union power_supply_propval data;
+	struct power_supply *charger_psy;
 
 	pon = devm_kzalloc(&spmi->dev, sizeof(struct qpnp_pon),
 							GFP_KERNEL);
@@ -2353,7 +2371,8 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 	{
 		pr_debug("probe: re-trigger usb detect \n");
 		usb_psy = power_supply_get_by_name("usb");
-		if (usb_psy == NULL) {
+		charger_psy = power_supply_get_by_name("battery");
+		if (usb_psy == NULL || charger_psy == NULL) {
 			pr_err("qpnp_pon_probe can't find usb device \n");
 
 			//if usb is still not ready, init timer and delay 10 sec to re-trigger usb 
@@ -2365,9 +2384,12 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 				pr_err("%s: failed to create qpnp-pon-cblpwr work queue\n", __func__);
 
 			qpnp_pon_init_timer();		
-		}
-		else
+		} else {
 			power_supply_set_present(usb_psy, cblpwr);
+			cblpwr_evt = cblpwr;
+			data.intval = cblpwr;
+			charger_psy->set_property(charger_psy, POWER_SUPPLY_PROP_STATUS, &data);
+		}
 
 		rc = qpnp_pon_input_dispatch(pon, PON_CBLPWR);
 		if (rc)
