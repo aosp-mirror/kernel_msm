@@ -28,3 +28,10 @@
 		};
 	};
 };
+
+&soc {
+	charger-dock {
+		compatible = "charger-dock-detector";
+		status = "okay";
+	};
+};
