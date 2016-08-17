@@ -866,7 +866,7 @@ static ssize_t mdss_fb_set_ulps_mode(struct device *dev,
 		return rc;
 	}
 
-	pr_debug("ulps_mode = %d\n", ulps_mode);
+	pr_err("ulpm_mode = %d\n", ulps_mode);
 
 	if(ulps_mode == 1){
 		ctrl_pdata->ulps_mode = 1;
@@ -3603,6 +3603,8 @@ static int __mdss_fb_perform_commit(struct msm_fb_data_type *mfd)
 		if (mfd->mdp.kickoff_fnc && !mfd->ulps_fmode)
 			ret = mfd->mdp.kickoff_fnc(mfd,
 					&fb_backup->disp_commit);
+		else if(mfd->ulps_fmode)
+			pr_debug("going to ULPS mode\n");
 		else
 			pr_warn("no kickoff function setup for fb%d\n",
 					mfd->index);
