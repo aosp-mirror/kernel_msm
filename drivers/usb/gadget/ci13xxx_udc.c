@@ -2483,23 +2483,23 @@ static void isr_resume_handler(struct ci13xxx *udc)
  * @udc: UDC device
  *
  */
-static void isr_suspend_handler(struct ci13xxx *udc)
-{
-	if (udc->gadget.speed != USB_SPEED_UNKNOWN &&
-		udc->vbus_active) {
-		if (udc->suspended == 0) {
-			spin_unlock(udc->lock);
-			udc->driver->suspend(&udc->gadget);
-			if (udc->udc_driver->notify_event)
-				udc->udc_driver->notify_event(udc,
-				CI13XXX_CONTROLLER_SUSPEND_EVENT);
-			if (udc->transceiver)
-				usb_phy_set_suspend(udc->transceiver, 1);
-			spin_lock(udc->lock);
-			udc->suspended = 1;
-		}
-	}
-}
+//static void isr_suspend_handler(struct ci13xxx *udc)
+//{
+	//if (udc->gadget.speed != USB_SPEED_UNKNOWN &&
+		//udc->vbus_active) {
+		//if (udc->suspended == 0) {
+			//spin_unlock(udc->lock);
+			//udc->driver->suspend(&udc->gadget);
+			//if (udc->udc_driver->notify_event)
+				//udc->udc_driver->notify_event(udc,
+				//CI13XXX_CONTROLLER_SUSPEND_EVENT);
+			//if (udc->transceiver)
+				//usb_phy_set_suspend(udc->transceiver, 1);
+			//spin_lock(udc->lock);
+			//udc->suspended = 1;
+		//}
+	//}
+//}
 
 /**
  * isr_get_status_complete: get_status request complete function
@@ -3758,7 +3758,7 @@ static irqreturn_t udc_irq(void)
 			isr_tr_complete_handler(udc);
 		}
 		if (USBi_SLI & intr) {
-			isr_suspend_handler(udc);
+			//isr_suspend_handler(udc);
 			isr_statistics.sli++;
 		}
 		retval = IRQ_HANDLED;
