@@ -265,6 +265,14 @@ void __weak arch_suspend_enable_irqs(void)
 	local_irq_enable();
 }
 
+extern int msm_thermal_uevent(char*);
+
+static void notify_userspace_resume(void)
+{
+	printk(KERN_INFO "%s\n", __func__);
+        msm_thermal_uevent("ASUS_KERNEL_RESUME=ON");
+}
+
 /**
  * suspend_enter - Make the system enter the given sleep state.
  * @state: System sleep state to enter.
@@ -349,6 +357,7 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 			error = -EBUSY;
 		}
 		syscore_resume();
+		notify_userspace_resume();
 	}
 
 	arch_suspend_enable_irqs();
