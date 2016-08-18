@@ -23,9 +23,8 @@
 			gpios = <&tlmm 126 0x1>;
 			linux,input-type = <1>;
 			linux,code = <115>;
+			gpio-key,wakeup;
 			debounce-interval = <20>;
-
-			/delete-property/ gpio-key,wakeup;
 		};
 
 		vol_down {
@@ -33,6 +32,7 @@
 			gpios = <&tlmm 121 0x1>;
 			linux,input-type = <1>;
 			linux,code = <114>;
+			gpio-key,wakeup;
 			debounce-interval = <20>;
 		};
 
