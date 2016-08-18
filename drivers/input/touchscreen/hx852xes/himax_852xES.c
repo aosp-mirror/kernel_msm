@@ -3776,6 +3776,7 @@ static int himax_sleepmode_switch(int supplymode)
             atomic_set(&private_ts->suspend_mode, 1);
             private_ts->pre_finger_mask = 0;
             private_ts->sleepmode = 1;
+            private_ts->resumed = false;
             touch_mode = TOUCH_SLEEP;
             I("%s: Enable Sleep mode\n", __func__);
             break;
@@ -4740,52 +4741,56 @@ static int himax852xes_suspend(struct device *dev)
             input_sync(ts->input_dev);
             haspoint = false;
         }
+        if (!ts->sleepmode) {
 #ifdef HX_SMART_WAKEUP
-        if (ts->SMWP_enable && touch_mode == TOUCH_ACTIVE) {
-            atomic_set(&ts->suspend_mode, 1);
-            ts->pre_finger_mask = 0;
-            FAKE_POWER_KEY_SEND = false;
-            buf[0] = 0x8F;
-            buf[1] = 0x20;
-            ret = i2c_himax_master_write(ts->client, buf, 2, DEFAULT_RETRY_CNT);
+            if (ts->SMWP_enable && touch_mode == TOUCH_ACTIVE) {
+                atomic_set(&ts->suspend_mode, 1);
+                ts->pre_finger_mask = 0;
+                FAKE_POWER_KEY_SEND = false;
+                buf[0] = 0x8F;
+                buf[1] = 0x20;
+                ret = i2c_himax_master_write(ts->client, buf, 2, DEFAULT_RETRY_CNT);
+                if (ret < 0) {
+                    E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
+                }
+                touch_mode = TOUCH_IDLE;
+                ts->resumed = false;
+                I("%s: Enable IDLE mode\n", __func__);
+                return 0;
+            }
+#endif
+        } else {
+            himax_int_enable(ts->client->irq, 0, true);
+#ifdef HX_CHIP_STATUS_MONITOR
+            HX_CHIP_POLLING_COUNT = 0;
+            cancel_delayed_work_sync(&ts->himax_chip_monitor);
+#endif
+            //Himax 852xes IC enter sleep mode
+            buf[0] = HX_CMD_TSSOFF;
+            ret = i2c_himax_master_write(ts->client, buf, 1, DEFAULT_RETRY_CNT);
             if (ret < 0) {
                 E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
             }
-            touch_mode = TOUCH_IDLE;
+            msleep(40);
+            buf[0] = HX_CMD_TSSLPIN;
+            ret = i2c_himax_master_write(ts->client, buf, 1, DEFAULT_RETRY_CNT);
+            if (ret < 0) {
+                E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
+            }
+            touch_mode = TOUCH_SLEEP;
+            I("%s: Enable SLEEP mode\n", __func__);
+            if (!ts->use_irq) {
+                ret = cancel_work_sync(&ts->work);
+                if (ret)
+                    himax_int_enable(ts->client->irq, 1, true);
+            }
+            //ts->first_pressed = 0;
+            atomic_set(&ts->suspend_mode, 1);
+            ts->pre_finger_mask = 0;
+            if (ts->pdata->powerOff3V3 && ts->pdata->power)
+                ts->pdata->power(0);
             ts->resumed = false;
-            I("%s: Enable IDLE mode\n", __func__);
-            return 0;
         }
-#endif
-        himax_int_enable(ts->client->irq, 0, true);
-#ifdef HX_CHIP_STATUS_MONITOR
-        HX_CHIP_POLLING_COUNT = 0;
-        cancel_delayed_work_sync(&ts->himax_chip_monitor);
-#endif
-        //Himax 852xes IC enter sleep mode
-        buf[0] = HX_CMD_TSSOFF;
-        ret = i2c_himax_master_write(ts->client, buf, 1, DEFAULT_RETRY_CNT);
-        if (ret < 0) {
-            E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
-        }
-        msleep(40);
-        buf[0] = HX_CMD_TSSLPIN;
-        ret = i2c_himax_master_write(ts->client, buf, 1, DEFAULT_RETRY_CNT);
-        if (ret < 0) {
-            E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
-        }
-        touch_mode = TOUCH_SLEEP;
-        if (!ts->use_irq) {
-            ret = cancel_work_sync(&ts->work);
-            if (ret)
-                himax_int_enable(ts->client->irq, 1, true);
-        }
-        //ts->first_pressed = 0;
-        atomic_set(&ts->suspend_mode, 1);
-        ts->pre_finger_mask = 0;
-        if (ts->pdata->powerOff3V3 && ts->pdata->power)
-            ts->pdata->power(0);
-        ts->resumed = false;
         return 0;
     }
 }
@@ -4834,7 +4839,7 @@ static int himax852xes_resume(struct device *dev)
             }
         }
 #endif
-        if (!ts->sleepmode && touch_mode != TOUCH_ACTIVE) {
+        if (touch_mode != TOUCH_ACTIVE) {
 #ifdef HX_SMART_WAKEUP
             if (ts->SMWP_enable && touch_mode == TOUCH_IDLE) {
                 //Sense Off
@@ -4849,7 +4854,7 @@ static int himax852xes_resume(struct device *dev)
                     E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
                 }
                 msleep(50);
-                I("%s: Leave IDLE mode\n", __func__);
+                //I("%s: Leave IDLE mode\n", __func__);
             }
 #endif
             //Sense On
@@ -4868,7 +4873,7 @@ static int himax852xes_resume(struct device *dev)
             I("%s: Enable ACTIVE mode\n", __func__);
             return 0;
         } else {
-            I("In Time-telling mode or already in Active mode, skip resume\n");
+            I("Already in Active mode, skip resume\n");
             return 0;
         }
     }
