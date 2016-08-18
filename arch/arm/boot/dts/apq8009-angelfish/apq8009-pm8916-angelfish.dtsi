@@ -14,8 +14,8 @@
 
 / {
 	reserved-memory {
-	ramoops_mem: ramoops_region@8b100000 {
-			reg = <0x0 0x8b100000 0x0 0x100000>;
+	ramoops_mem: ramoops_region@8aa00000 {
+			reg = <0x0 0x8aa00000 0x0 0x100000>;
 	        compatible = "removed-dma-pool";
 	        no-map;
 	    };
@@ -26,7 +26,7 @@
 	ramoops {
 		compatible = "ramoops";
 		mem-size = <0x80000>;
-		mem-address = <0x8b100000>;
+		mem-address = <0x8aa00000>;
 		record-size = <4096>;
 		console-size = <0x40000>;
 		ftrace-size = <0x40000>;
