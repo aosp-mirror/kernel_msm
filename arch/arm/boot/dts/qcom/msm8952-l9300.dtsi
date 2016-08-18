@@ -550,6 +550,7 @@
 	/delete-property/ qcom,chg-led-sw-controls;
 	/delete-property/ qcom,chg-led-support;
 	qcom,parallel-usb-min-current-ma = <1000>;
+	sharp,batt-default-hvdcp-icl-ma = <2500>;
 	qcom,fastchg-current-ma = <3000>;
 	qcom,fastchg-current-comp = <700>;
 	qcom,thermal-mitigation = <2000 1500 1000 0>;
