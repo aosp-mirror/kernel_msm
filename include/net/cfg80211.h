@@ -75,6 +75,7 @@ struct wiphy;
 #define CFG80211_UPDATE_CONNECT_PARAMS 1
 #define CFG80211_DISCONNECTED_V2 1
 #define CFG80211_SCHED_SCAN_RELATIVE_RSSI 1
+#define CFG80211_CONNECT_TIMEOUT 1
 
 /*
  * wireless hardware capability structures
