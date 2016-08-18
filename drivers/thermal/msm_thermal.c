@@ -3495,7 +3495,7 @@ static int __ref msm_thermal_cpu_callback(struct notifier_block *nfb,
 	return NOTIFY_OK;
 }
 
-static int msm_thermal_uevent(char *event_string)
+int msm_thermal_uevent(char *event_string)
 {
 	int ret = 0;
 	char *envp[2]={event_string, NULL};
@@ -3513,6 +3513,7 @@ static int msm_thermal_uevent(char *event_string)
 msm_thermal_uevent_exit:
 	return ret;
 }
+EXPORT_SYMBOL(msm_thermal_uevent);
 
 static int fb_notifier_callback(struct notifier_block *self,
 		unsigned long event, void *data)
