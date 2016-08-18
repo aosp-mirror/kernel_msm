@@ -450,6 +450,12 @@ static ssize_t paj9124u1_store_enable(
 
 	mutex_lock(&paj9124u1_data->lock);
 	if (enable) {
+		if (paj9124u1_data->enabled) {
+			dev_warn(dev, "Already enabled!\n");
+			mutex_unlock(&paj9124u1_data->lock);
+			return ret;
+		}
+
 		ret = paj9124u1_set_bits(paj9124u1_data, 0x88, 0x0,
 			PAJ9124U1_CONFIG);
 		if (ret) {
@@ -458,9 +464,13 @@ static ssize_t paj9124u1_store_enable(
 			mutex_unlock(&paj9124u1_data->lock);
 			return ret;
 		}
-		enable_irq(spidev->irq);
 		paj9124u1_data->enabled = 1;
 	} else {
+		if (!paj9124u1_data->enabled) {
+			dev_warn(dev, "Already disabled!\n");
+			mutex_unlock(&paj9124u1_data->lock);
+			return ret;
+		}
 		ret = paj9124u1_set_bits(paj9124u1_data, 0x88, 0x8,
 			PAJ9124U1_CONFIG);
 		if (ret) {
@@ -469,7 +479,6 @@ static ssize_t paj9124u1_store_enable(
 			mutex_unlock(&paj9124u1_data->lock);
 			return ret;
 		}
-		disable_irq(spidev->irq);
 		paj9124u1_data->enabled = 0;
 	}
 
@@ -574,10 +583,10 @@ static int paj9124u1_suspend(struct device *device)
 	struct paj9124u1_drv_data *paj9124u1_data = spi_get_drvdata(spidev);
 	int ret;
 
+	disable_irq(spidev->irq);
 	ret = paj9124u1_set_bits(paj9124u1_data, 0x88, 0x8, PAJ9124U1_CONFIG);
 	if (ret)
 		dev_warn(device, "Failed to put paj9124u1 into low power.\n");
-	disable_irq(spidev->irq);
 	return 0;
 }
 
@@ -593,7 +602,6 @@ static int paj9124u1_resume(struct device *device)
 	if (!paj9124u1_data->enabled)
 		goto end_resume;
 
-	enable_irq(spidev->irq);
 	ret = paj9124u1_set_bits(paj9124u1_data, 0x88, 0x0, PAJ9124U1_CONFIG);
 	if (ret)
 		dev_warn(device,
@@ -601,6 +609,7 @@ static int paj9124u1_resume(struct device *device)
 
 end_resume:
 	mutex_unlock(&paj9124u1_data->lock);
+	enable_irq(spidev->irq);
 	return 0;
 }
 #endif
