@@ -22,6 +22,18 @@
                 pinctrl-0 = <&pcb_ver_0_active &pcb_ver_1_active>;
                 pinctrl-1 = <&pcb_ver_0_suspend &pcb_ver_1_suspend>;
 	};
+    gpio_keys {
+                compatible = "gpio-keys";
+                pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+                pinctrl-0 = <&func_key_int_default>;
+                pinctrl-1 = <&func_key_int_default>;
+                button {
+                                label = "GPIO Key UP";
+                                linux,code = <134>;
+                                gpios = <&msm_gpio 96 0x1>;
+                                gpio-key,wakeup;
+                       };
+              };
 
     i2c@78b9000 {
 		/*delete the qcom charger*/
