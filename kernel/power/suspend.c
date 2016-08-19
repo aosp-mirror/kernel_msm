@@ -357,7 +357,6 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 			error = -EBUSY;
 		}
 		syscore_resume();
-		notify_userspace_resume();
 	}
 
 	arch_suspend_enable_irqs();
@@ -378,6 +377,7 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 
  Platform_finish:
 	platform_resume_finish(state);
+	notify_userspace_resume();
 	return error;
 }
 
