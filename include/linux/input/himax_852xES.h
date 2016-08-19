@@ -75,13 +75,6 @@
 #define HX_TP_PROC_HITOUCH
 #define HX_TP_PROC_2T2R //if enable, Need to check "HX_2T2R_Addr"
                         //and "HX_2T2R_en_setting" with project FW eng.
-
-#else
-#define D(x...)
-#define I(x...)
-#define W(x...)
-#define E(x...)
-#define DIF(x...)
 #endif
 //===========Himax Option function=============
 //#define HX_RST_PIN_FUNC

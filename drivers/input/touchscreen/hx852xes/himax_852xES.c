@@ -45,7 +45,6 @@ static unsigned int CFG_VER_MIN_FLASH_ADDR;
 static unsigned int CFG_VER_MIN_FLASH_LENG;
 
 static uint8_t AA_press = 0x00;
-static uint8_t IC_STATUS_CHECK    = 0xAA;
 static uint8_t EN_NoiseFilter = 0x00;
 static uint8_t Last_EN_NoiseFilter = 0x00;
 static uint8_t HX_DRIVER_PROBE_Fial = 0;
@@ -70,6 +69,7 @@ static int himax_parse_config(struct himax_ts_data *ts, struct himax_config *pda
 #endif
 #endif
 
+#ifdef HX_TP_PROC_DEBUG
 static int himax_hand_shaking(void)    //0:Running, 1:Stop, 2:I2C Fail
 {
     int ret, result;
@@ -124,6 +124,7 @@ static int himax_hand_shaking(void)    //0:Running, 1:Stop, 2:I2C Fail
 work_func_send_i2c_msg_fail:
     return 2;
 }
+#endif
 
 static int himax_ManualMode(int enter)
 {
@@ -868,6 +869,8 @@ static int i_update_FW(bool manual)
     uint8_t CFG_VER, NEW_CFG_VER;
     bool need_update_flag = false;
     bool asus_load_fail = false;
+    unsigned char *upgrade_fwfile = NULL;
+    int fw_size = 32*1024;
 
     if (private_ts->suspended) {
         goto no_update;
@@ -879,26 +882,31 @@ static int i_update_FW(bool manual)
     // load bin from ASUSFW
     hx_filp = filp_open(ASUS_FW_NAME, O_RDONLY, 0);
     if (IS_ERR(hx_filp)) {
-        I("Load firmware by using request_fw\n");
         asus_load_fail = true;
     } else {
-        oldfs = get_fs();
-        set_fs(get_ds());
-        result = hx_filp->f_op->read(hx_filp, upgrade_fw, sizeof(upgrade_fw), &hx_filp->f_pos);
-        if (result < 0) {
-            I("Load firmware by using request_fw\n");
+        upgrade_fwfile = kmalloc(fw_size, GFP_USER);
+        if (!upgrade_fwfile) {
             asus_load_fail = true;
         } else {
-            set_fs(oldfs);
-            filp_close(hx_filp, NULL);
-            I("Update firmware from ASUSFW\n");
-            ImageBuffer = (u8 *) upgrade_fw;
-            fullFileLength = result;
+            oldfs = get_fs();
+            set_fs(get_ds());
+            memset(upgrade_fwfile, 0, fw_size);
+            result = hx_filp->f_op->read(hx_filp, upgrade_fwfile, fw_size, &hx_filp->f_pos);
+            if (result < 0) {
+                asus_load_fail = true;
+            } else {
+                set_fs(oldfs);
+                filp_close(hx_filp, NULL);
+                I("Update firmware from ASUSFW\n");
+                ImageBuffer = upgrade_fwfile;
+                fullFileLength = result;
+            }
         }
     }
 
     // load bin by using request_firmware
     if (asus_load_fail) {
+        I("Load firmware by using request_fw\n");
         result = request_firmware(&private_ts->fw, HMX_FW_NAME, &private_ts->client->dev);
         if (private_ts->fw == NULL) {
             E("No firmware file, ignored firmware update\n");
@@ -962,6 +970,8 @@ update_retry:
             } else {
                 if (private_ts->fw_size)
                     release_firmware(private_ts->fw);
+                if (upgrade_fwfile != NULL)
+                    kfree(upgrade_fwfile);
                 fw_update_result = false;
                 fw_update_processing= false;
                 wake_unlock(&private_ts->ts_flash_wake_lock);
@@ -978,6 +988,8 @@ update_retry:
 #endif
         if (private_ts->fw_size)
             release_firmware(private_ts->fw);
+        if (upgrade_fwfile != NULL)
+            kfree(upgrade_fwfile);
         fw_update_result = true;
         fw_update_processing= false;
         wake_unlock(&private_ts->ts_flash_wake_lock);
@@ -987,6 +999,8 @@ update_retry:
 no_update:
     if (private_ts->fw_size)
         release_firmware(private_ts->fw);
+    if (upgrade_fwfile != NULL)
+        kfree(upgrade_fwfile);
     fw_update_result = true;
     fw_update_processing= false;
     wake_unlock(&private_ts->ts_flash_wake_lock);
@@ -1636,7 +1650,6 @@ static int himax_parse_wake_event(struct himax_ts_data *ts)
 
 inline void himax_ts_work(struct himax_ts_data *ts)
 {
-    int ret = 0;
     uint8_t buf[128], finger_num, hw_reset_check[2];
     uint16_t finger_pressed;
     int32_t loop_i;
@@ -1652,6 +1665,7 @@ inline void himax_ts_work(struct himax_ts_data *ts)
     int i, mul_num, self_num;
     int index = 0;
     int temp1, temp2;
+    int ret = 0;
     //coordinate dump start
     char coordinate_char[15 + (HX_MAX_PT + 5) * 2 * 5 + 2];
     struct timeval t;
@@ -3664,40 +3678,6 @@ static ssize_t himax_hitouch_write(struct device *dev,
 }
 #endif
 
-#ifdef HX_SMART_WAKEUP
-static ssize_t himax_SMWP_read(struct device *dev,
-                struct device_attribute *attr, char *buf)
-{
-    struct himax_ts_data *ts = private_ts;
-    size_t ret = 0;
-    if (!HX_PROC_SEND_FLAG) {
-        ret = snprintf(buf, PAGE_SIZE, "%d\n", ts->SMWP_enable);
-        HX_PROC_SEND_FLAG = 1;
-    } else
-        HX_PROC_SEND_FLAG = 0;
-    return ret;
-}
-
-static ssize_t himax_SMWP_write(struct device *dev,
-                struct device_attribute *attr, const char *buf, size_t size)
-{
-    int len = strlen(buf);
-    struct himax_ts_data *ts = private_ts;
-    if (len >= 80) {
-        E("%s: no command exceeds 80 chars.\n", __func__);
-        return -EFAULT;
-    }
-    if (buf[0] == '0')
-        ts->SMWP_enable = 0;
-    else if (buf[0] == '1')
-        ts->SMWP_enable = 1;
-    else
-        return -EINVAL;
-    I("SMART_WAKEUP_enable = %d.\n", ts->SMWP_enable);
-    return len;
-}
-#endif
-
 #ifdef HX_TP_PROC_DIAG
 static int himax_touch_proc_init(void)
 {
@@ -3727,6 +3707,36 @@ static void himax_touch_proc_deinit(void)
 }
 #endif
 
+#endif //end of CONFIG_TOUCHSCREEN_HIMAX_DEBUG
+
+#ifdef HX_SMART_WAKEUP
+static ssize_t himax_SMWP_read(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+    struct himax_ts_data *ts = private_ts;
+    size_t ret = 0;
+    ret = snprintf(buf, PAGE_SIZE, "%d\n", ts->SMWP_enable);
+    return ret;
+}
+
+static ssize_t himax_SMWP_write(struct device *dev,
+                struct device_attribute *attr, const char *buf, size_t size)
+{
+    int len = strlen(buf);
+    struct himax_ts_data *ts = private_ts;
+    if (len >= 80) {
+        E("%s: no command exceeds 80 chars.\n", __func__);
+        return -EFAULT;
+    }
+    if (buf[0] == '0')
+        ts->SMWP_enable = 0;
+    else if (buf[0] == '1')
+        ts->SMWP_enable = 1;
+    else
+        return -EINVAL;
+    I("SMART_WAKEUP_enable = %d.\n", ts->SMWP_enable);
+    return len;
+}
 #endif
 
 #ifdef HX_TIME_TELLING

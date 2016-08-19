@@ -15,12 +15,10 @@
 
 #include "himax_platform.h"
 
-#if defined(CONFIG_TOUCHSCREEN_HIMAX_DEBUG)
 #define D(x...) printk("[HXTP] " x)
 #define I(x...) printk("[HXTP] " x)
 #define W(x...) printk("[HXTP][WARNING] " x)
 #define E(x...) printk("[HXTP][ERROR] " x)
-#endif
 
 int irq_enable_count = 0;
 

@@ -77,13 +77,6 @@
 #define HX_TP_PROC_HITOUCH
 #define HX_TP_PROC_2T2R //if enable, Need to check "HX_2T2R_Addr"
                         //and "HX_2T2R_en_setting" with project FW eng.
-
-#else
-#define D(x...)
-#define I(x...)
-#define W(x...)
-#define E(x...)
-#define DIF(x...)
 #endif
 //===========Himax Option function=============
 #define HX_RST_PIN_FUNC
@@ -416,6 +409,7 @@ static u8         HW_RESET_ACTIVATE     = 1;
 #endif
 
 #ifdef HX_TP_PROC_DEBUG
+    static uint8_t IC_STATUS_CHECK    = 0xAA;
     static bool    fw_update_complete = false;
 
     static int handshaking_result = 0;
