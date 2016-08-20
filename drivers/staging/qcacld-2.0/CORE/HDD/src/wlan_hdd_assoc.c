@@ -1942,7 +1942,7 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
                                        pFTAssocReq, assocReqlen,
                                        pFTAssocRsp, assocRsplen,
                                        WLAN_STATUS_SUCCESS,
-                                       GFP_KERNEL);
+                                       GFP_KERNEL, false);
                 }
             }
             else
@@ -1977,7 +1977,7 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
                                 reqRsnIe, reqRsnLength,
                                 rspRsnIe, rspRsnLength,
                                 WLAN_STATUS_SUCCESS,
-                                GFP_KERNEL);
+                                GFP_KERNEL, false);
                     }
                 }
             }
@@ -2081,6 +2081,7 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
     else
     {
         hdd_context_t* pHddCtx = (hdd_context_t*)pAdapter->pHddCtx;
+        bool connect_timeout = false;
 
         hdd_wext_state_t *pWextState = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
         if (pRoamInfo)
@@ -2155,6 +2156,7 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
                     pRoamInfo ? pRoamInfo->bssid : pWextState->req_bssId);
              sme_remove_bssid_from_scan_list(hHal,
                     pRoamInfo ? pRoamInfo->bssid : pWextState->req_bssId);
+             connect_timeout = true;
         }
 
         /* CR465478: Only send up a connection failure result when CSR has
@@ -2182,12 +2184,12 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
                    hdd_connect_result(dev, pRoamInfo->bssid, NULL,
                         NULL, 0, NULL, 0,
                         WLAN_STATUS_ASSOC_DENIED_UNSPEC,
-                        GFP_KERNEL);
+                        GFP_KERNEL, connect_timeout);
                else
                    hdd_connect_result(dev, pWextState->req_bssId, NULL,
                         NULL, 0, NULL, 0,
                         WLAN_STATUS_ASSOC_DENIED_UNSPEC,
-                        GFP_KERNEL);
+                        GFP_KERNEL, connect_timeout);
             }
             else
             {
@@ -2197,12 +2199,12 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
                         pRoamInfo->reasonCode ?
                         pRoamInfo->reasonCode :
                         WLAN_STATUS_UNSPECIFIED_FAILURE,
-                        GFP_KERNEL);
+                        GFP_KERNEL, connect_timeout);
                else
                    hdd_connect_result(dev, pWextState->req_bssId, NULL,
                         NULL, 0, NULL, 0,
                         WLAN_STATUS_UNSPECIFIED_FAILURE,
-                        GFP_KERNEL);
+                        GFP_KERNEL, connect_timeout);
             }
             /* Clear the roam profile */
             hdd_clearRoamProfileIe(pAdapter);
