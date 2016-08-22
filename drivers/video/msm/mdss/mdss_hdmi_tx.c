@@ -5083,7 +5083,7 @@ static int hdmi_tx_get_dt_vreg_data(struct device *dev,
 			mp->vreg_config[j].vreg_name,
 			mp->vreg_config[j].min_voltage,
 			mp->vreg_config[j].max_voltage,
-			mp->vreg_config[j].load[DSS_REG_MODE_ENSABLE],
+			mp->vreg_config[j].load[DSS_REG_MODE_ENABLE],
 			mp->vreg_config[j].load[DSS_REG_MODE_DISABLE]);
 
 		ndx_mask >>= 1;
