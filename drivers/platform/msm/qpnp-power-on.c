@@ -842,6 +842,11 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 	 * without a press event
 	 */
 	if (!cfg->old_state && !key_status) {
+		if (cfg->key_code == 116) {
+			input_report_key(pon->pon_input, KEY_ASUS_POWER, 1);
+			input_sync(pon->pon_input);
+			printk("[KEYPAD] KEY_ASUS_POWER, status:1\n");
+		}
 		input_report_key(pon->pon_input, cfg->key_code, 1);
 		input_sync(pon->pon_input);
 	}
@@ -861,6 +866,11 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 		input_sync(pon->pon_input);
 	}
 #else
+	if (cfg->key_code == 116) {
+		input_report_key(pon->pon_input, KEY_ASUS_POWER, key_status);
+		input_sync(pon->pon_input);
+		printk("[KEYPAD]  KEY_ASUS_POWER, status:%d\n",  key_status);
+	}
 	input_report_key(pon->pon_input, cfg->key_code, key_status);
 	input_sync(pon->pon_input);
 #endif
@@ -1269,6 +1279,7 @@ qpnp_pon_config_input(struct qpnp_pon *pon,  struct qpnp_pon_config *cfg)
 	/* don't send dummy release event when system resumes */
 	__set_bit(INPUT_PROP_NO_DUMMY_RELEASE, pon->pon_input->propbit);
 	input_set_capability(pon->pon_input, EV_KEY, cfg->key_code);
+	input_set_capability(pon->pon_input, EV_KEY, KEY_ASUS_POWER);
 
 	return 0;
 }
