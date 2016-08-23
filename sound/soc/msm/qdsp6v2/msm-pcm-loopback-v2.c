@@ -462,8 +462,28 @@ static int msm_pcm_volume_ctl_put(struct snd_kcontrol *kcontrol,
 	struct snd_pcm_substream *substream = vol->pcm->streams[0].substream;
 	struct msm_pcm_loopback *prtd;
 	int volume = ucontrol->value.integer.value[0];
+	int volume_curve_orig[15] = {547, 1093, 1639, 2185, 2731, 3277, 3823, 4370,
+								4916, 5462, 6008, 6554, 7100, 7646, 8192};
+	int volume_curve[15] = {82, 164, 246, 328, 410, 492, 573, 656, 779, 902, 1025,
+							2049, 3688, 5737, 8192};
 
+	volume = volume <= volume_curve_orig[0] ? volume_curve[0] :
+			 volume <= volume_curve_orig[1] ? volume_curve[1] :
+			 volume <= volume_curve_orig[2] ? volume_curve[2] :
+			 volume <= volume_curve_orig[3] ? volume_curve[3] :
+			 volume <= volume_curve_orig[4] ? volume_curve[4] :
+			 volume <= volume_curve_orig[5] ? volume_curve[5] :
+			 volume <= volume_curve_orig[6] ? volume_curve[6] :
+			 volume <= volume_curve_orig[7] ? volume_curve[7] :
+			 volume <= volume_curve_orig[8] ? volume_curve[8] :
+			 volume <= volume_curve_orig[9] ? volume_curve[9] :
+			 volume <= volume_curve_orig[10] ? volume_curve[10] :
+			 volume <= volume_curve_orig[11] ? volume_curve[11] :
+			 volume <= volume_curve_orig[12] ? volume_curve[12] :
+			 volume <= volume_curve_orig[13] ? volume_curve[13] :
+			 volume <= volume_curve_orig[14] ? volume_curve[14] : volume_curve[14];
 	pr_debug("%s: volume : 0x%x\n", __func__, volume);
+
 	if ((!substream) || (!substream->runtime)) {
 		pr_err("%s substream or runtime not found\n", __func__);
 		rc = -ENODEV;
