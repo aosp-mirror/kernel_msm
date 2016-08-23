@@ -52,6 +52,7 @@ struct sched_param {
 #include <linux/llist.h>
 #include <linux/uidgid.h>
 #include <linux/gfp.h>
+#include <linux/magic.h>
 
 #include <asm/processor.h>
 
@@ -2471,6 +2472,9 @@ static inline unsigned long *end_of_stack(struct task_struct *p)
 }
 
 #endif
+
+#define task_stack_end_corrupted(task) \
+                (unlikely(*(end_of_stack(task)) != STACK_END_MAGIC))
 
 static inline int object_is_on_stack(void *obj)
 {
