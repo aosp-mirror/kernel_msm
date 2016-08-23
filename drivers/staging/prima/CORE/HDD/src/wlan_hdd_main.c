@@ -151,6 +151,14 @@ static struct kparam_string fwpath = {
    .maxlen = BUF_LEN,
 };
 
+/* Override NV File */
+#define NV_FILE_PATH_LEN 64
+static char nvfile_buffer[NV_FILE_PATH_LEN];
+static struct kparam_string nvfile = {
+   .string = nvfile_buffer,
+   .maxlen = NV_FILE_PATH_LEN,
+};
+
 static char *country_code;
 static int   enable_11d = -1;
 static int   enable_dfs_chan_scan = -1;
@@ -5949,11 +5957,14 @@ VOS_STATUS hdd_request_firmware(char *pfileName,v_VOID_t *pCtx,v_VOID_t **ppfw_d
    }
    else if(!strcmp(WLAN_NV_FILE, pfileName)) {
 
-       status = request_firmware(&pHddCtx->nv, pfileName, pHddCtx->parent_dev);
+       if (!strlen(nvfile_buffer))
+           strlcpy(nvfile_buffer, WLAN_NV_FILE, sizeof(nvfile_buffer));
+
+       status = request_firmware(&pHddCtx->nv, nvfile_buffer, pHddCtx->parent_dev);
 
        if(status || !pHddCtx->nv || !pHddCtx->nv->data) {
            hddLog(VOS_TRACE_LEVEL_FATAL, "%s: nv %s download failed",
-                  __func__, pfileName);
+                  __func__, nvfile_buffer);
            retval = VOS_STATUS_E_FAILURE;
        }
 
@@ -10997,6 +11008,12 @@ static int con_mode_handler(const char *kmessage, struct kernel_param *kp)
 }
 #endif /* #ifdef MODULE */
 
+static int nvfile_changed_handler(const char *kmessage,
+                                 struct kernel_param *kp)
+{
+   return param_set_copystring(kmessage, kp);
+}
+
 /**---------------------------------------------------------------------------
 
   \brief hdd_get_conparam() -
@@ -12250,6 +12267,9 @@ module_param_call(con_mode, con_mode_handler, param_get_int, &con_mode,
                     S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
 module_param_call(fwpath, fwpath_changed_handler, param_get_string, &fwpath,
+                    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+module_param_call(nvfile, nvfile_changed_handler, param_get_string, &nvfile,
                     S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
 module_param(enable_dfs_chan_scan, int,
