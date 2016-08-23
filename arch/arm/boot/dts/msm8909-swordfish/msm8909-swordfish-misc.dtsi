@@ -55,4 +55,13 @@
 		compatible = "charger-dock-detector";
 		status = "okay";
 	};
+
+	load-sw-control {
+		compatible = "lge,load-sw-control";
+		status = "ok";
+		pinctrl-names = "default","suspend";
+		pinctrl-0 = <&load_sw_active>;
+		pinctrl-1 = <&load_sw_suspend>;
+		load-sw-gpio = <&msm_gpio 17 0>;
+	};
 };
