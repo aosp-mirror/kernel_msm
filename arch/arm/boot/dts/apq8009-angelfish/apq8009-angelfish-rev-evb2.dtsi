@@ -23,4 +23,5 @@
 
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_lgd_lg4262_cmd>;
+	vddio-supply = <&pm8916_l15>;
 };

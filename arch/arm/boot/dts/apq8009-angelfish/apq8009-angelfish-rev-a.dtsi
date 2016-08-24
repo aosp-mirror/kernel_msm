@@ -19,3 +19,7 @@
 &fan5451x_chg {
 	swap-vbus-vin;
 };
+
+&mdss_dsi0 {
+	vddio-supply = <&pm8916_l15>;
+};
