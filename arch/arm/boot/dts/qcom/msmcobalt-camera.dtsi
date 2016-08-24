@@ -28,7 +28,10 @@
 		reg-names = "csiphy";
 		interrupts = <0 78 0>;
 		interrupt-names = "csiphy";
-		clocks = <&clock_mmss clk_mmss_mnoc_maxi_clk>,
+		gdscr-supply = <&gdsc_camss_top>;
+		bimc_smmu-supply = <&gdsc_bimc_smmu>;
+		qcom,cam-vreg-name = "gdscr", "bimc_smmu";
+		clocks = <&clock_gcc clk_mmssnoc_axi_clk>,
 			<&clock_mmss clk_mmss_mnoc_ahb_clk>,
 			<&clock_mmss clk_mmss_bimc_smmu_ahb_clk>,
 			<&clock_mmss clk_mmss_bimc_smmu_axi_clk>,
@@ -60,7 +63,10 @@
 		reg-names = "csiphy";
 		interrupts = <0 79 0>;
 		interrupt-names = "csiphy";
-		clocks = <&clock_mmss clk_mmss_mnoc_maxi_clk>,
+		gdscr-supply = <&gdsc_camss_top>;
+		bimc_smmu-supply = <&gdsc_bimc_smmu>;
+		qcom,cam-vreg-name = "gdscr", "bimc_smmu";
+		clocks = <&clock_gcc clk_mmssnoc_axi_clk>,
 			<&clock_mmss clk_mmss_mnoc_ahb_clk>,
 			<&clock_mmss clk_mmss_bimc_smmu_ahb_clk>,
 			<&clock_mmss clk_mmss_bimc_smmu_axi_clk>,
@@ -92,7 +98,10 @@
 		reg-names = "csiphy";
 		interrupts = <0 80 0>;
 		interrupt-names = "csiphy";
-		clocks = <&clock_mmss clk_mmss_mnoc_maxi_clk>,
+		gdscr-supply = <&gdsc_camss_top>;
+		bimc_smmu-supply = <&gdsc_bimc_smmu>;
+		qcom,cam-vreg-name = "gdscr", "bimc_smmu";
+		clocks = <&clock_gcc clk_mmssnoc_axi_clk>,
 			<&clock_mmss clk_mmss_mnoc_ahb_clk>,
 			<&clock_mmss clk_mmss_bimc_smmu_ahb_clk>,
 			<&clock_mmss clk_mmss_bimc_smmu_axi_clk>,
@@ -128,8 +137,9 @@
 		qcom,mipi-csi-vdd-supply = <&pmcobalt_l2>;
 		gdscr-supply = <&gdsc_camss_top>;
 		vdd_sec-supply = <&pmcobalt_l1>;
-		qcom,cam-vreg-name = "vdd_sec", "gdscr";
-		clocks = <&clock_mmss clk_mmss_mnoc_maxi_clk>,
+		bimc_smmu-supply = <&gdsc_bimc_smmu>;
+		qcom,cam-vreg-name = "vdd_sec", "gdscr", "bimc_smmu";
+		clocks = <&clock_gcc clk_mmssnoc_axi_clk>,
 			<&clock_mmss clk_mmss_mnoc_ahb_clk>,
 			<&clock_mmss clk_mmss_bimc_smmu_ahb_clk>,
 			<&clock_mmss clk_mmss_bimc_smmu_axi_clk>,
@@ -166,8 +176,9 @@
 		qcom,mipi-csi-vdd-supply = <&pmcobalt_l2>;
 		gdscr-supply = <&gdsc_camss_top>;
 		vdd_sec-supply = <&pmcobalt_l1>;
-		qcom,cam-vreg-name = "vdd_sec", "gdscr";
-		clocks = <&clock_mmss clk_mmss_mnoc_maxi_clk>,
+		bimc_smmu-supply = <&gdsc_bimc_smmu>;
+		qcom,cam-vreg-name = "vdd_sec", "gdscr", "bimc_smmu";
+		clocks = <&clock_gcc clk_mmssnoc_axi_clk>,
 			<&clock_mmss clk_mmss_mnoc_ahb_clk>,
 			<&clock_mmss clk_mmss_bimc_smmu_ahb_clk>,
 			<&clock_mmss clk_mmss_bimc_smmu_axi_clk>,
@@ -204,8 +215,9 @@
 		qcom,mipi-csi-vdd-supply = <&pmcobalt_l2>;
 		gdscr-supply = <&gdsc_camss_top>;
 		vdd_sec-supply = <&pmcobalt_l1>;
-		qcom,cam-vreg-name = "vdd_sec", "gdscr";
-		clocks = <&clock_mmss clk_mmss_mnoc_maxi_clk>,
+		bimc_smmu-supply = <&gdsc_bimc_smmu>;
+		qcom,cam-vreg-name = "vdd_sec", "gdscr", "bimc_smmu";
+		clocks = <&clock_gcc clk_mmssnoc_axi_clk>,
 			<&clock_mmss clk_mmss_mnoc_ahb_clk>,
 			<&clock_mmss clk_mmss_bimc_smmu_ahb_clk>,
 			<&clock_mmss clk_mmss_bimc_smmu_axi_clk>,
@@ -242,8 +254,9 @@
 		qcom,mipi-csi-vdd-supply = <&pmcobalt_l2>;
 		gdscr-supply = <&gdsc_camss_top>;
 		vdd_sec-supply = <&pmcobalt_l1>;
-		qcom,cam-vreg-name = "vdd_sec", "gdscr";
-		clocks = <&clock_mmss clk_mmss_mnoc_maxi_clk>,
+		bimc_smmu-supply = <&gdsc_bimc_smmu>;
+		qcom,cam-vreg-name = "vdd_sec", "gdscr", "bimc_smmu";
+		clocks = <&clock_gcc clk_mmssnoc_axi_clk>,
 			<&clock_mmss clk_mmss_mnoc_ahb_clk>,
 			<&clock_mmss clk_mmss_bimc_smmu_ahb_clk>,
 			<&clock_mmss clk_mmss_bimc_smmu_axi_clk>,
