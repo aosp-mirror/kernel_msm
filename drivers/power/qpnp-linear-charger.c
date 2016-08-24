@@ -234,8 +234,6 @@ struct vddtrim_map {
 	int			trim_val;
 };
 
-extern int g_bootdbguart;
-
 /*
  * VDDTRIM is a 3 bit value which is split across two
  * register TRIM3(bit 5:4)	-> VDDTRIM bit(2:1)
@@ -2706,14 +2704,8 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 
 			if (chip->supported_feature_flag & VDD_TRIM_SUPPORTED)
 				alarm_try_to_cancel(&chip->vddtrim_alarm);
-
-			if (g_bootdbguart == 1) {
-				gpio_set_value(GPIO_num17,1);
-				pr_debug("usbin gpio_17 set to 1\n");
-			} else {
-				gpio_set_value(GPIO_num17,0);
-				pr_debug("usbin gpio_17 set to 0\n");
-			}
+			gpio_set_value(GPIO_num17,0);
+			pr_debug("usbin gpio_17 set to 0\n");
 		} else {
 			/*
 			 * Override VBAT_DET comparator to start charging
@@ -2732,15 +2724,7 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 						&chip->irqs[USB_CHG_GONE]);
 				qpnp_chg_collapsible_chgr_config(chip, 1);
 			}
-
-			if (type == POWER_SUPPLY_TYPE_USB_DCP || type == POWER_SUPPLY_TYPE_USB_CDP) {
-				if (g_bootdbguart == 1)
-					gpio_set_value(GPIO_num17,1);
-			} else if (type == POWER_SUPPLY_TYPE_USB) {
-				gpio_set_value(GPIO_num17,0);
-			} else {
-				gpio_set_value(GPIO_num17,0);
-			}
+			gpio_set_value(GPIO_num17,0);
 
 			/*
 			 * Enable SOC based charging to make sure
@@ -3685,16 +3669,8 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 	rc = qpnp_lbc_read(chip, chip->usb_chgpth_base + CHG_STATUS_REG,
 			&usbin_chg_sts, 1);
 
-	if (usbin_chg_sts & 0x10) {
-		gpio_set_value(GPIO_num17,0);
-		pr_debug("lbc_probe gpio_17 set to 0\n");
-	} else if ((usbin_chg_sts & 0x10) == 0 && g_bootdbguart == 1) {
-		gpio_set_value(GPIO_num17,1);
-		pr_debug("lbc_probe gpio_17 set to 1\n");
-	} else {
-		gpio_set_value(GPIO_num17,0);
-		pr_debug("lbc_probe gpio_17 set to 0\n");
-	}
+	gpio_set_value(GPIO_num17,0);
+	pr_debug("lbc_probe gpio_17 set to 0\n");
 
 	return 0;
 

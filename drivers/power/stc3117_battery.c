@@ -2007,7 +2007,8 @@ static void stc311x_work(struct work_struct *work)
 
 	switch (get_battery_status(chip)) {
 	case POWER_SUPPLY_STATUS_FULL:
-		g_asus_batt_soc = 100;
+		if ((g_asus_batt_soc_previous >= 97) && (chip->batt_voltage >= 4350))
+			g_asus_batt_soc = 100;
 		g_asus_batt_soc_previous = g_asus_batt_soc;
 		break;
 	case POWER_SUPPLY_STATUS_DISCHARGING:

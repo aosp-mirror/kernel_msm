@@ -370,7 +370,6 @@ static int MPP4_read;
 static int GPIO_num17 = 17;
 extern int smb23x_mpp4_vol_proc_read(void);
 extern void lbc_set_suspend(u8 reg_val);
-extern int g_bootdbguart;
 struct smb23x_chip *g_smb23x_chip;
 struct completion qpnp_linear_init;
 
@@ -969,6 +968,8 @@ static void smb23x_parallel_work(struct work_struct *work)
 			// Set SMB231 input current limit to 300mA
 			smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
 			lbc_set_suspend(0x00);
+			gpio_set_value(GPIO_num17,0);
+			pr_info("[BAT][CHG] MPP4_read:%d, USB_TYPE:%s\n", MPP4_read, usb_type_dcp_str[usb_type_dcp_num]);
 
 			if (MPP4_read > 500000 && MPP4_read < 900000) {
 				usb_type_dcp_num = 0;
@@ -977,11 +978,6 @@ static void smb23x_parallel_work(struct work_struct *work)
 			} else {
 				usb_type_dcp_num = 2;
 			}
-			if (g_bootdbguart == 1) {
-				gpio_set_value(GPIO_num17,1);
-				pr_info("[BAT][CHG] GPIO_17 set to 1, MPP4_read:%d, USB_TYPE:%s\n", MPP4_read, usb_type_dcp_str[usb_type_dcp_num]);
-			} else
-				pr_info("[BAT][CHG] MPP4_read:%d, USB_TYPE:%s\n", MPP4_read, usb_type_dcp_str[usb_type_dcp_num]);
 		} else if (type == POWER_SUPPLY_TYPE_USB_CDP) {
 			// Set SMB231 input current limit to 300mA
 			smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
@@ -1482,8 +1478,14 @@ static int recharge_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	chip->batt_full = !rt_sts;
 
 	smb23x_enable_volatile_writes(chip);
+
+	// Re-run AICL for adjust ICL
+	smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 0);
+	msleep(30);
 	smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
+
 	smb23x_charging_disable(chip, USER, false);
+
 	return 0;
 }
 
@@ -1698,10 +1700,7 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 		gpio_set_value(GPIO_num17,0);
 		pr_info("[BAT][CHG] gpio_17 set to 0\n");
 	} else if (chip->usb_present == 1 && usb_present == 0) {
-		if (g_bootdbguart == 1) {
-			gpio_set_value(GPIO_num17,1);
-			pr_info("[BAT][CHG] gpio_17 set to 1\n");
-		}
+		gpio_set_value(GPIO_num17,0);
 		chip->batt_full = false;
 		chip->parallel_count = 0;
 		cancel_delayed_work(&chip->parallel_work);
@@ -2124,7 +2123,7 @@ static int smb23x_get_prop_usb_type(struct smb23x_chip *chip)
 		current_max = prop.intval / 1000;
 
 	if (type == POWER_SUPPLY_TYPE_USB_DCP) {
-		gpio_set_value(GPIO_num17, 1);
+		gpio_set_value(GPIO_num17, 0);
 		if (MPP4_read > 500000 && MPP4_read < 900000) {
 			pr_debug("[BAT][CHG] USB_TYPE: AC_Fast\n");
 			return POWER_SUPPLY_USB_TYPE_AC_FAST;
@@ -2898,10 +2897,8 @@ void smb23x_shutdown(struct i2c_client *client)
 	// Set ICL to 100mA
 	smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0);
 
-	// Re-run AICL for adjust ICL
-	smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 0);
-	msleep(30);
-	smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
+	// Set ICHG to 100mA
+	smb23x_masked_write(chip, CFG_REG_2, FASTCHG_CURR_MASK, 0);
 }
 static int smb23x_remove(struct i2c_client *client)
 {
