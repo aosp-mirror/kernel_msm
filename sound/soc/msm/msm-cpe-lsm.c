@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014, 2016 Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -579,6 +579,7 @@ static int msm_cpe_lsm_open(struct snd_pcm_substream *substream)
 	}
 
 	init_waitqueue_head(&lsm_d->event_wait);
+	init_waitqueue_head(&lsm_d->lsm_session->lab.period_wait);
 	atomic_set(&lsm_d->event_avail, 0);
 	atomic_set(&lsm_d->event_stop, 0);
 	runtime->private_data = lsm_d;
