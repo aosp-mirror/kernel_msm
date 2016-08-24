@@ -98,7 +98,7 @@ static void mxt_read_fw_version(struct mxt_data *data);
 static int mxt_read_t100_config(struct mxt_data *data);
 static void mxt_external_power_changed(struct power_supply *psy);
 
-static int __maybe_unused touch_enable_irq_wake(unsigned int irq)
+static int touch_enable_irq_wake(unsigned int irq)
 {
 	int ret = 0;
 
@@ -221,23 +221,6 @@ static void mxt_dump_message(struct mxt_data *data, u8 *message)
 {
 	print_hex_dump(KERN_ERR, "MXT MSG:", DUMP_PREFIX_NONE, 16, 1,
 		       message, data->T5_msg_size, false);
-}
-
-static int mxt_wait_for_completion(struct mxt_data *data,
-			struct completion *comp, unsigned int timeout_ms)
-{
-	unsigned long timeout = msecs_to_jiffies(timeout_ms);
-	long ret = 0;
-
-	ret = wait_for_completion_interruptible_timeout(comp, timeout);
-	if (ret < 0) {
-		TOUCH_ERR_MSG("Wait for completion interrupted.\n");
-		return -EINTR;
-	} else if (ret == 0) {
-		TOUCH_ERR_MSG("Wait for completion timed out.\n");
-		return -ETIMEDOUT;
-	}
-	return 0;
 }
 
 static int mxt_bootloader_read(struct mxt_data *data, u8 *val,
@@ -772,9 +755,6 @@ static void mxt_proc_t6_messages(struct mxt_data *data, u8 *msg)
 {
 	u8 status = msg[1];
 	u32 crc = msg[2] | (msg[3] << 8) | (msg[4] << 16);
-	struct mxt_object *object = NULL;
-	u8 stylus_in_a_row_limit[6] = {0};
-	int ret = 0;
 
 	if (crc != data->config_crc) {
 		data->config_crc = crc;
@@ -805,28 +785,6 @@ static void mxt_proc_t6_messages(struct mxt_data *data, u8 *msg)
 					msecs_to_jiffies(200));
 			data->delayed_cal = false;
 		}
-		data->patch.src_item[MXT_PATCH_ITEM_USER4] = 0;
-		object = mxt_get_object(data, MXT_SPT_USERDATA_T38);
-
-		if(!object) {
-			TOUCH_INFO_MSG("fail to get object\n");
-			return;
-		}
-
-		ret = mxt_read_mem(data, object->start_address+2, 6,
-				stylus_in_a_row_limit);
-
-		if (ret)
-			TOUCH_INFO_MSG("T38 stylus_in_a_row_limit read fail\n");
-
-		data->stylus_in_a_row_cnt_thr = stylus_in_a_row_limit[0] << 8 |
-			stylus_in_a_row_limit[1];
-		data->x_zitter = stylus_in_a_row_limit[2] << 8 |
-			stylus_in_a_row_limit[3];
-		data->y_zitter = stylus_in_a_row_limit[4] << 8 |
-			stylus_in_a_row_limit[5];
-		TOUCH_INFO_MSG("Set Stylus limit thr %d x_zitter %d y_zitter %d \n",
-				data->stylus_in_a_row_cnt_thr, data->x_zitter, data->y_zitter);
 	}
 
 	if (status & MXT_T6_STATUS_RESET && data->suspended) {
@@ -838,12 +796,6 @@ static void mxt_proc_t6_messages(struct mxt_data *data, u8 *msg)
 		}
 		TOUCH_DEBUG_MSG("Recover Complete\n");
 	}
-}
-
-static void mxt_input_sync(struct input_dev *input_dev)
-{
-	input_mt_report_pointer_emulation(input_dev, false);
-	input_sync(input_dev);
 }
 
 static void mxt_firmware_update_func(struct work_struct *work_firmware_update)
@@ -941,129 +893,6 @@ static void mxt_register_psy_func(struct work_struct *work)
 	} else if (error < 0) {
 		TOUCH_ERR_MSG("failed power supply register\n");
 	}
-}
-
-static void mxt_proc_t9_message(struct mxt_data *data, u8 *message)
-{
-	struct input_dev *input_dev = data->input_dev;
-	int id = 0;
-	u8 status = 0;
-	int x = 0;
-	int y = 0;
-	int area = 0;
-	int amplitude = 0;
-	u8 vector = 0;
-	int i = 0;
-
-	/* do not report events if input device not yet registered */
-	if (!data->enable_reporting)
-		return;
-
-	id = message[0] - data->T9_reportid_min;
-	status = message[1];
-	x = (message[2] << 4) | ((message[4] >> 4) & 0xf);
-	y = (message[3] << 4) | ((message[4] & 0xf));
-
-	/* Handle 10/12 bit switching */
-	if (data->max_x < 1024)
-		x >>= 2;
-	if (data->max_y < 1024)
-		y >>= 2;
-
-	area = message[5];
-	amplitude = message[6];
-	vector = message[7];
-
-	if (unlikely( id < 0 || id >= MXT_MAX_FINGER)) {
-		TOUCH_INFO_MSG("%s wrong id:%d \n", __func__, id);
-		return;
-	}
-
-	if (status & MXT_T9_SUPPRESS) {
-		if (touched_finger_count) {
-			TOUCH_INFO_MSG(" MXT_T9_SUPPRESS\n");
-			mxt_reset_slots(data);
-		}
-		if (data->palm) {
-			cancel_delayed_work_sync(&data->work_palm_unlock);
-		}
-		data->palm = true;
-		return;
-	}
-
-	if (status & MXT_T9_DETECT) {
-		if ((status & MXT_T9_PRESS ||
-		    (status & MXT_T9_MOVE)) &&
-		    data->ts_data.prev_data[id].status < MXT_STATE_PRESS) {
-			if (data->reported_keycode) {
-				data->reported_keycode = 0;
-				return ;
-			}
-
-			TOUCH_INFO_MSG("%d finger pressed <%d> : x[%3d] y[%3d] z[%3d] area[%3d]\n",
-					++touched_finger_count, id, x, y, amplitude, area);
-		}
-
-		data->fingers[id].state = MXT_STATE_PRESS;
-		data->ts_data.curr_data[id].status = MXT_STATE_PRESS;
-
-		input_mt_slot(input_dev, id);
-		input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, 1);
-		{
-			int tmp;
-			tmp = x;
-			x = y;
-			y = tmp;
-			TOUCH_INFO_MSG("###t9## x[%d], y[%d]\n", x, y);
-		}
-		input_report_abs(input_dev, ABS_MT_POSITION_X, x);
-		input_report_abs(input_dev, ABS_MT_POSITION_Y, y);
-		input_report_abs(input_dev, ABS_MT_PRESSURE, amplitude);
-		input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR, area);
-		input_report_abs(input_dev, ABS_MT_ORIENTATION, vector);
-
-		data->button_lock = true;
-	}
-
-	if (status & MXT_T9_RELEASE) {
-		if (touched_finger_count &&
-		    data->ts_data.prev_data[id].status < MXT_STATE_PRESS) {
-			for (i = MXT_MAX_FINGER - 1; i >= 0; i--) {
-				if (data->ts_data.prev_data[i].status>= MXT_STATE_PRESS) {
-					TOUCH_INFO_MSG("finger id changed <%d> -> <%d> \n", id, i);
-					id = i;
-					data->ts_data.prev_data[id].status = MXT_STATE_PRESS;
-					break;
-				}
-			}
-		}
-
-		input_mt_slot(input_dev, id);
-		input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, 0);
-		TOUCH_INFO_MSG("touch_release    <%d> : x[%3d] y[%3d]\n", id, x, y);
-		data->fingers[id].state = MXT_STATE_RELEASE;
-		data->ts_data.curr_data[id].status= MXT_STATE_RELEASE;
-		data->ts_data.curr_data[id].pressure = 0;
-		if (touched_finger_count)
-			data->ts_data.total_num = --touched_finger_count;
-
-		if (!touched_finger_count)
-			queue_delayed_work(touch_wq,
-				&data->work_button_lock,
-				msecs_to_jiffies(200));
-	}
-
-	input_sync(input_dev);
-
-	data->ts_data.curr_data[id].x_position = x;
-	data->ts_data.curr_data[id].y_position = y;
-	data->ts_data.curr_data[id].pressure = amplitude;
-	data->ts_data.curr_data[id].width_major = area;
-	data->ts_data.curr_data[id].width_orientation = vector;
-	data->ts_data.total_num = touched_finger_count;
-	data->ts_data.prev_data[id]= data->ts_data.curr_data[id];
-	data->ts_data.prev_total_num = data->ts_data.total_num;
-	data->update_input = true;
 }
 
 /* T-series of Atmel Touch IC
@@ -1178,7 +1007,6 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 	int area;
 	int amplitude;
 	u8 vector, height, width;
-	static int pre_id = 0, pre_x = 0, pre_y = 0;
 	static int return_cnt = 0;
 
 	/* do not report events if input device not yet registered */
@@ -1220,50 +1048,6 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 		/* Multiple bits may be set if the host is slow to read the
 		* status messages, indicating all the events that have
 		* happened */
-
-		if ((status & MXT_T100_TYPE_MASK) == MXT_T100_TYPE_STYLUS) {
-			if (data->stylus_in_a_row_cnt == 0)
-				pre_id = id;
-
-			if (data->patch.src_item[MXT_PATCH_ITEM_USER4] == 0) {
-				if (pre_id == id) {
-					if(data->stylus_in_a_row_cnt_thr < data->stylus_in_a_row_cnt++) {
-						data->patch.src_item[MXT_PATCH_ITEM_USER4] = 1;
-						TOUCH_INFO_MSG("Stylus Continually Mode Enter \n");
-						data->stylus_in_a_row_cnt = 0;
-					}
-				} else {
-					data->stylus_in_a_row_cnt = 0;
-				}
-			} else if(data->patch.src_item[MXT_PATCH_ITEM_USER4] == 1) {
-				if(data->stylus_in_a_row_cnt == 0) {
-					pre_x = x;
-					pre_y = y;
-				}
-				if(pre_id == id && pre_x <= (x + data->x_zitter) && pre_x >= (x - data->x_zitter) && pre_y <= (y + data->y_zitter) && pre_y >= (y - data->y_zitter))
-				{
-					if(data->stylus_in_a_row_cnt_thr < data->stylus_in_a_row_cnt++) {
-						data->patch.src_item[MXT_PATCH_ITEM_USER4] = 2;
-						TOUCH_INFO_MSG("Stylus Continually Mode Exit \n");
-						data->stylus_in_a_row_cnt = 0;
-					}
-				}
-				else
-				{
-					data->stylus_in_a_row_cnt = 0;
-				}
-			}
-			else if(data->patch.src_item[MXT_PATCH_ITEM_USER4] == 2)
-			{
-				if(data->stylus_in_a_row_cnt++ > 100) {
-					TOUCH_INFO_MSG("Stylus Continually Mode Re-Chk \n");
-					data->patch.src_item[MXT_PATCH_ITEM_USER4] = 0;
-                            data->stylus_in_a_row_cnt = 0;
-				}
-			}
-		} else {
-			data->stylus_in_a_row_cnt = 0;
-		}
 
 		if ((status & MXT_T100_STATUS_MASK) == MXT_T100_RELEASE ||
 		    (status & MXT_T100_STATUS_MASK) == MXT_T100_SUPPRESSION) {
@@ -1557,9 +1341,6 @@ static int mxt_proc_message(struct mxt_data *data, u8 *message)
 		case MXT_GEN_COMMAND_T6:
 			mxt_proc_t6_messages(data, message);
 			break;
-		case MXT_TOUCH_MULTI_T9:
-			mxt_proc_t9_message(data, message);
-			break;
 		case MXT_SPT_SELFTEST_T25:
 			mxt_proc_t25_message(data, message);
 			break;
@@ -1744,8 +1525,6 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 					data->ts_data.curr_data[i].id);
 			input_mt_report_slot_state(data->input_dev,
 					MT_TOOL_FINGER, 1);
-			input_report_abs(data->input_dev, ABS_MT_TRACKING_ID,
-					data->ts_data.curr_data[i].id);
 			input_report_abs(data->input_dev, ABS_MT_POSITION_X,
 					data->ts_data.curr_data[i].x_position);
 			input_report_abs(data->input_dev, ABS_MT_POSITION_Y,
@@ -1753,7 +1532,6 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 
 			input_report_abs(data->input_dev, ABS_MT_PRESSURE,
 					data->ts_data.curr_data[i].pressure);
-			/* Report Palm event end */
 
 			input_report_abs(data->input_dev, ABS_MT_WIDTH_MAJOR,
 					data->ts_data.curr_data[i].touch_major);
@@ -1775,7 +1553,7 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 
 end:
 	if (data->update_input) {
-		mxt_input_sync(data->input_dev);
+		input_sync(data->input_dev);
 		data->update_input = false;
 	}
 
@@ -1817,7 +1595,7 @@ update_count:
 	data->last_message_count = total_handled;
 
 	if (data->enable_reporting && data->update_input) {
-		mxt_input_sync(data->input_dev);
+		input_sync(data->input_dev);
 		data->update_input = false;
 	}
 
@@ -1946,57 +1724,6 @@ static int mxt_hw_reset(struct mxt_data *data)
 	return 0;
 }
 
-static void mxt_update_crc(struct mxt_data *data, u8 cmd, u8 value)
-{
-	/* on failure, CRC is set to 0 and config will always be downloaded */
-	data->config_crc = 0;
-
-	mxt_t6_command(data, cmd, value, true);
-	/* Wait for crc message. On failure, CRC is set to 0 and config will
-	 * always be downloaded */
-
-	msleep(MXT_CRC_TIMEOUT);
-}
-
-static void mxt_calc_crc24(u32 *crc, u8 firstbyte, u8 secondbyte)
-{
-	static const unsigned int crcpoly = 0x80001B;
-	u32 result = 0;
-	u32 data_word = 0;
-
-	data_word = (secondbyte << 8) | firstbyte;
-	result = ((*crc << 1) ^ data_word);
-
-	if (result & 0x1000000)
-		result ^= crcpoly;
-
-	*crc = result;
-}
-
-static u32 mxt_calculate_crc(u8 *base, off_t start_off, off_t end_off)
-{
-	u32 crc = 0;
-	u8 *ptr = base + start_off;
-	u8 *last_val = base + end_off - 1;
-
-	if (end_off < start_off)
-		return -EINVAL;
-
-	while (ptr < last_val) {
-		mxt_calc_crc24(&crc, *ptr, *(ptr + 1));
-		ptr += 2;
-	}
-
-	/* if len is odd, fill the last byte with 0 */
-	if (ptr == last_val)
-		mxt_calc_crc24(&crc, *ptr, 0);
-
-	/* Mask to 24-bit */
-	crc &= 0x00FFFFFF;
-
-	return crc;
-}
-
 static int mxt_set_t7_power_cfg(struct mxt_data *data, u8 sleep)
 {
 	int error = 0;
@@ -2055,253 +1782,6 @@ recheck:
 	}
 }
 
-static int mxt_check_reg_init(struct mxt_data *data, const char *name)
-{
-	struct device *dev = &data->client->dev;
-	struct mxt_info cfg_info = {0};
-	struct mxt_object *object = NULL;
-	const struct firmware *cfg = NULL;
-	int ret = 0;
-	int offset = 0;
-	int data_pos = 0;
-	int byte_offset = 0;
-	int i = 0;
-	int cfg_start_ofs = 0;
-	u32 info_crc = 0, config_crc = 0, calculated_crc = 0;
-	u8 *config_mem = 0;
-	u32 config_mem_size = 0;
-	unsigned int type = 0, instance, size = 0;
-	u8 val = 0;
-	u16 reg = 0;
-
-	TOUCH_DEBUG_MSG("%s \n", __func__);
-
-	if (!name) {
-		TOUCH_ERR_MSG("Skipping cfg download \n");
-		return 0;
-	}
-
-	ret = request_firmware(&cfg, name, dev);
-	if (ret < 0) {
-		TOUCH_ERR_MSG("Failure to request config file [%s]\n", name);
-		return -EINVAL;
-	}
-
-	TOUCH_DEBUG_MSG("Open [%s] configuration file \n", name);
-
-	mxt_update_crc(data, MXT_COMMAND_REPORTALL, 1);
-
-	if (strncmp(cfg->data, MXT_CFG_MAGIC, strlen(MXT_CFG_MAGIC))) {
-		TOUCH_ERR_MSG("Unrecognised config file\n");
-		ret = -EINVAL;
-		goto release;
-	}
-
-	data_pos = strlen(MXT_CFG_MAGIC);
-
-	/* Load information block and check */
-	for (i = 0; i < sizeof(struct mxt_info); i++) {
-		ret = sscanf(cfg->data + data_pos, "%hhx%n",
-				(unsigned char *)&cfg_info + i, &offset);
-		if (ret != 1) {
-			TOUCH_ERR_MSG("Bad format\n");
-			ret = -EINVAL;
-			goto release;
-		}
-
-		data_pos += offset;
-	}
-
-	/* Read CRCs */
-	ret = sscanf(cfg->data + data_pos, "%x%n", &info_crc, &offset);
-	if (ret != 1) {
-		TOUCH_ERR_MSG("Bad format: failed to parse Info CRC\n");
-		ret = -EINVAL;
-		goto release;
-	}
-	data_pos += offset;
-
-	ret = sscanf(cfg->data + data_pos, "%x%n", &config_crc, &offset);
-	if (ret != 1) {
-		TOUCH_ERR_MSG("Bad format: failed to parse Config CRC\n");
-		ret = -EINVAL;
-		goto release;
-	}
-	data_pos += offset;
-
-	TOUCH_DEBUG_MSG("RAW Config CRC is 0x%06X \n", config_crc);
-
-	if (data->config_crc == config_crc) {
-		TOUCH_INFO_MSG("Config already applied \n");
-		ret = 0;
-		goto release_mem;
-	}
-
-	if (memcmp((char *)data->info, (char *)&cfg_info,
-				sizeof(struct mxt_info)) != 0) {
-		TOUCH_DEBUG_MSG("Compatibility Error. Could not apply\n");
-		TOUCH_DEBUG_MSG("Info Block [IC]   %02X %02X %02X"
-				" %02X %02X %02X %02X \n",
-			data->info->family_id, data->info->variant_id,
-			data->info->version, data->info->build,
-			data->info->matrix_xsize, data->info->matrix_ysize,
-			data->info->object_num);
-
-		TOUCH_DEBUG_MSG("Info Block [File] %02X %02X %02X"
-				" %02X %02X %02X %02X \n",
-			cfg_info.family_id, cfg_info.variant_id,
-			cfg_info.version, cfg_info.build,
-			cfg_info.matrix_xsize, cfg_info.matrix_ysize,
-			cfg_info.object_num);
-
-		ret = -EINVAL;
-		goto release_mem;
-	}
-
-	/* Malloc memory to store configuration */
-	cfg_start_ofs = MXT_OBJECT_START + data->info->object_num *
-		sizeof(struct mxt_object) + MXT_INFO_CHECKSUM_SIZE;
-	config_mem_size = data->mem_size - cfg_start_ofs;
-	config_mem = kzalloc(config_mem_size, GFP_KERNEL);
-	if (!config_mem) {
-		TOUCH_ERR_MSG("Failed to allocate memory\n");
-		ret = -ENOMEM;
-		goto release;
-	}
-
-	while (data_pos < cfg->size) {
-		/* Read type, instance, length */
-		ret = sscanf(cfg->data + data_pos, "%x %x %x%n",
-				&type, &instance, &size, &offset);
-		if (ret == 0) {
-			/* EOF */
-			break;
-		} else if (ret != 3) {
-			TOUCH_ERR_MSG("Bad format: failed to parse object\n");
-			ret = -EINVAL;
-			goto release_mem;
-		}
-		data_pos += offset;
-
-		object = mxt_get_object(data, type);
-		if (!object) {
-			/* Skip object */
-			for (i = 0; i < size; i++) {
-				ret = sscanf(cfg->data + data_pos, "%hhx%n",
-						&val, &offset);
-				data_pos += offset;
-			}
-			continue;
-		}
-
-		if (instance >= mxt_obj_instances(object)) {
-			TOUCH_ERR_MSG("Object instances exceeded!\n");
-			ret = -EINVAL;
-			goto release_mem;
-		}
-
-		reg = object->start_address + mxt_obj_size(object) * instance;
-
-		TOUCH_INFO_MSG("\t %04X %04X %04X \n", type, instance, size);
-
-		if (size != mxt_obj_size(object)) {
-			TOUCH_ERR_MSG("Size mismatched \n");
-			ret = -EINVAL;
-			goto release_mem;
-		}
-
-		for (i = 0; i < size; i++) {
-			ret = sscanf(cfg->data + data_pos, "%hhx%n", &val, &offset);
-			if (ret != 1) {
-				TOUCH_ERR_MSG("Bad format in T%d\n", type);
-				ret = -EINVAL;
-				goto release_mem;
-			}
-
-			if (i > mxt_obj_size(object))
-				continue;
-
-			byte_offset = reg + i - cfg_start_ofs;
-
-			if ((byte_offset >= 0) && (byte_offset <= config_mem_size)) {
-				*(config_mem + byte_offset) = val;
-			} else {
-				TOUCH_ERR_MSG("Bad object: reg:%d, T%d, ofs=%d\n", reg, object->type, byte_offset);
-				ret = -EINVAL;
-				goto release_mem;
-			}
-
-			data_pos += offset;
-		}
-	}
-
-	/* calculate crc of the received configs (not the raw config file) */
-	if (data->T7_address < cfg_start_ofs) {
-		TOUCH_ERR_MSG("Bad T7 address, T7addr = %x, config offset %x\n", data->T7_address, cfg_start_ofs);
-		ret = -EINVAL;
-		goto release_mem;
-	}
-
-	calculated_crc = mxt_calculate_crc(config_mem, data->T7_address - cfg_start_ofs, config_mem_size);
-
-	/* Check the crc, calculated should match what is in file */
-	if (config_crc > 0 && (config_crc != calculated_crc)) {
-		TOUCH_ERR_MSG("CRC mismatch in config file, calculated=0x%06X, file=0x%06X\n", calculated_crc, config_crc);
-		TOUCH_ERR_MSG("Config not apply \n");
-		ret = -EINVAL;
-		goto release_mem;
-	}
-
-	/* Write configuration as blocks */
-	byte_offset = 0;
-	while (byte_offset < config_mem_size) {
-		size = config_mem_size - byte_offset;
-
-		if (size > MXT_MAX_BLOCK_WRITE)
-			size = MXT_MAX_BLOCK_WRITE;
-
-		ret = __mxt_write_reg(data->client, cfg_start_ofs + byte_offset, size, config_mem + byte_offset);
-		if (ret != 0) {
-			TOUCH_ERR_MSG("Config write error, ret=%d\n", ret);
-			ret = -EINVAL;
-			goto release_mem;
-		}
-
-		byte_offset += size;
-	}
-
-	mxt_update_crc(data, MXT_COMMAND_BACKUPNV, MXT_BACKUP_VALUE);
-
-	if ((config_crc > 0) && (config_crc != data->config_crc)) {
-		TOUCH_ERR_MSG("Config CRC is mismatched 0x%06X \n", data->config_crc);
-	}
-
-	ret = mxt_soft_reset(data);
-	if (ret)
-		goto release_mem;
-
-	TOUCH_INFO_MSG("Config written\n");
-
-	/* T7 config may have changed */
-	mxt_init_t7_power_cfg(data);
-
-release_mem:
-	TOUCH_INFO_MSG("kfree in %s \n", __func__);
-	kfree(config_mem);
-release:
-	if(cfg)
-		release_firmware(cfg);
-
-	return ret;
-}
-
-static int mxt_acquire_irq(struct mxt_data *data)
-{
-	touch_enable_irq(data->irq);
-
-	return 0;
-}
-
 static void mxt_free_input_device(struct mxt_data *data)
 {
 	if (data->input_dev) {
@@ -2328,9 +1808,6 @@ static void mxt_free_object_table(struct mxt_data *data)
 	data->T5_msg_size = 0;
 	data->T6_reportid = 0;
 	data->T7_address = 0;
-	data->T9_address = 0;
-	data->T9_reportid_min = 0;
-	data->T9_reportid_max = 0;
 	data->T18_address = 0;
 	data->T24_reportid = 0;
 	data->T35_reportid = 0;
@@ -2406,14 +1883,6 @@ static int mxt_parse_object_table(struct mxt_data *data)
 			break;
 		case MXT_GEN_POWER_T7:
 			data->T7_address = object->start_address;
-			break;
-		case MXT_TOUCH_MULTI_T9:
-			/* Only handle messages from first T9 instance */
-			data->T9_address = object->start_address;
-			data->T9_reportid_min = min_id;
-			data->T9_reportid_max = min_id +
-				object->num_report_ids - 1;
-			data->num_touchids = object->num_report_ids;
 			break;
 		case MXT_SPT_COMMSCONFIG_T18:
 			data->T18_address = object->start_address;
@@ -2586,56 +2055,6 @@ err_free_mem:
 	return error;
 }
 
-static int mxt_read_t9_resolution(struct mxt_data *data)
-{
-	struct i2c_client *client = data->client;
-	int error = 0;
-	struct t9_range range = {0};
-	unsigned char orient = 0;
-	struct mxt_object *object = NULL;
-	u16 tmp = 0;
-
-	memset(&range, 0, sizeof(range));
-
-	object = mxt_get_object(data, MXT_TOUCH_MULTI_T9);
-	if (!object)
-		return -EINVAL;
-
-	tmp = (u16)sizeof(range);
-	error = __mxt_read_reg(client, object->start_address + MXT_T9_RANGE,
-			tmp, &range);
-	if (error)
-		return error;
-
-	le16_to_cpus(range.x);
-	le16_to_cpus(range.y);
-
-	error =  __mxt_read_reg(client, object->start_address + MXT_T9_ORIENT,
-			1, &orient);
-	if (error)
-		return error;
-
-	/* Handle default values */
-	if (range.x == 0)
-		range.x = 2159;
-
-	if (range.y == 0)
-		range.y = 3839;
-
-	if (orient & MXT_T9_ORIENT_SWITCH) {
-		data->max_x = range.y;
-		data->max_y = range.x;
-	} else {
-		data->max_x = range.x;
-		data->max_y = range.y;
-	}
-
-	TOUCH_INFO_MSG("Touchscreen size X:%u Y:%u\n",
-			data->max_x, data->max_y);
-
-	return 0;
-}
-
 static void mxt_regulator_enable(struct mxt_data *data)
 {
 	int error = 0;
@@ -2719,48 +2138,6 @@ static int mxt_probe_regulators(struct mxt_data *data)
 	}
 
 	data->use_regulator = true;
-	return 0;
-}
-
-static int mxt_configure_objects(struct mxt_data *data)
-{
-	int error = 0;
-
-	error = mxt_init_t7_power_cfg(data);
-	if (error) {
-		TOUCH_ERR_MSG("Failed to initialize power cfg\n");
-		return error;
-	}
-
-	/* Check register init values */
-	error = mxt_check_reg_init(data, NULL);
-	if (error) {
-		TOUCH_ERR_MSG("Error %d initialising configuration\n", error);
-		return error;
-	}
-
-	if (data->T9_reportid_min) {
-		error = mxt_initialize_t9_input_device(data);
-		if (error)
-			return error;
-	} else {
-		TOUCH_ERR_MSG("No touch object detected\n");
-	}
-	return 0;
-}
-
-static int mxt_rest_init(struct mxt_data *data)
-{
-	int error = 0;
-
-	error = mxt_acquire_irq(data);
-	if (error)
-		return error;
-
-	error = mxt_configure_objects(data);
-	if (error)
-		return error;
-
 	return 0;
 }
 
@@ -3001,222 +2378,6 @@ error:
 	return error;
 }
 
-static int mxt_check_firmware_format(struct device *dev,
-		const struct firmware *fw)
-{
-	unsigned int pos = 0;
-	char c = 0;
-
-	while (pos < fw->size) {
-		c = *(fw->data + pos);
-
-		if (c < '0' || (c > '9' && c < 'A') || c > 'F')
-			return 0;
-
-		pos++;
-	}
-
-	/* To convert file try
-	 * xxd -r -p mXTXXX__APP_VX-X-XX.enc > maxtouch.fw */
-	TOUCH_ERR_MSG("Aborting: firmware file must be in binary format\n");
-
-	return -EINVAL;
-}
-
-static int mxt_load_bin(struct device *dev, const char *name)
-{
-	struct mxt_data *data = dev_get_drvdata(dev);
-	const struct firmware *fw = NULL;
-	unsigned int frame_size = 0;
-	unsigned int pos = 0;
-	unsigned int retry = 0;
-	unsigned int frame = 0;
-	int ret = 0;
-
-	if (!name) {
-		TOUCH_ERR_MSG("Skipping bin download \n");
-		return 0;
-	}
-
-	ret = request_firmware(&fw, name, dev);
-	if (ret) {
-		TOUCH_ERR_MSG("Unable to open bin [%s]  ret %d\n", name, ret);
-		return ret;
-	}
-	TOUCH_DEBUG_MSG("Open bin [%s]\n", name);
-
-	/* Check for incorrect enc file */
-	ret = mxt_check_firmware_format(dev, fw);
-	if (ret)
-		goto release_firmware;
-
-	if (data->suspended) {
-		if (data->use_regulator)
-			mxt_regulator_enable(data);
-
-		touch_enable_irq(data->irq);
-		data->suspended = false;
-	}
-
-	if (!data->in_bootloader) {
-		/* Change to the bootloader mode */
-		data->in_bootloader = true;
-
-		ret = mxt_t6_command(data, MXT_COMMAND_RESET, MXT_BOOT_VALUE,
-				false);
-		if (ret)
-			goto release_firmware;
-
-		msleep(MXT_RESET_TIME);
-
-		/* At this stage, do not need to scan since we know
-		 * family ID */
-		ret = mxt_lookup_bootloader_address(data, 0);
-		if (ret)
-			goto release_firmware;
-	}
-
-	mxt_free_object_table(data);
-	reinit_completion(&data->bl_completion);
-
-	ret = mxt_check_bootloader(data, MXT_WAITING_BOOTLOAD_CMD);
-	if (ret) {
-		/* Bootloader may still be unlocked from previous update
-		 * attempt */
-		ret = mxt_check_bootloader(data, MXT_WAITING_FRAME_DATA);
-		if (ret)
-			goto disable_irq;
-	} else {
-		TOUCH_INFO_MSG("Unlocking bootloader\n");
-
-		/* Unlock bootloader */
-		ret = mxt_send_bootloader_cmd(data, true);
-		if (ret)
-			goto disable_irq;
-	}
-
-	while (pos < fw->size) {
-		ret = mxt_check_bootloader(data, MXT_WAITING_FRAME_DATA);
-		if (ret)
-			goto disable_irq;
-
-		frame_size = ((*(fw->data + pos) << 8) | *(fw->data + pos + 1));
-
-		/* Take account of CRC bytes */
-		frame_size += 2;
-
-		/* Write one frame to device */
-		ret = mxt_bootloader_write(data, fw->data + pos, frame_size);
-		if (ret)
-			goto disable_irq;
-
-		ret = mxt_check_bootloader(data, MXT_FRAME_CRC_PASS);
-		if (ret) {
-			retry++;
-
-			/* Back off by 20ms per retry */
-			msleep(retry * 20);
-
-			if (retry > 20) {
-				TOUCH_ERR_MSG("Retry count exceeded\n");
-				goto disable_irq;
-			}
-		} else {
-			retry = 0;
-			pos += frame_size;
-			frame++;
-		}
-
-		if (frame % 50 == 0)
-			TOUCH_DEBUG_MSG("Sent %d frames, %d/%zd bytes\n",
-				 frame, pos, fw->size);
-	}
-
-	/* Wait for flash */
-	ret = mxt_wait_for_completion(data, &data->bl_completion,
-				      MXT_FW_RESET_TIME);
-	if (ret)
-		goto disable_irq;
-	TOUCH_DEBUG_MSG("Sent %d frames, %u bytes\n", frame, pos);
-
-	data->in_bootloader = false;
-
-disable_irq:
-	touch_disable_irq(data->irq);
-release_firmware:
-	if (fw)
-		release_firmware(fw);
-	return ret;
-}
-
-static ssize_t mxt_update_bin_store(struct mxt_data *data,
-		const char *buf, size_t count)
-{
-	int error = 0;
-	char *name = NULL;
-
-	error = mxt_update_file_name(&data->client->dev, &name, buf, count);
-	if (error)
-		return error;
-
-	error = mxt_load_bin(&data->client->dev, name);
-	if (error) {
-		TOUCH_ERR_MSG("The bin update failed(%d)\n", error);
-		return error;
-	}
-
-	data->suspended = false;
-
-	mxt_hw_reset(data);
-
-	error = mxt_read_info_block(data);
-	if (error)
-		return error;
-
-	error = mxt_rest_init(data);
-	if (error)
-		return error;
-
-	TOUCH_DEBUG_MSG("The bin update succeeded\n");
-	return count;
-}
-
-static ssize_t mxt_update_raw_store(struct mxt_data *data, const char *buf,
-		size_t count)
-{
-	int ret = 0;
-	int value = 0;
-	char *name = NULL;
-
-	sscanf(buf, "%d", &value);
-	TOUCH_DEBUG_MSG("Update mxt Configuration.\n");
-
-	if (data->in_bootloader) {
-		TOUCH_ERR_MSG("Not in appmode\n");
-		return -EINVAL;
-	}
-
-	ret = mxt_update_file_name(&data->client->dev, &name, buf, count);
-	if (ret)
-		return ret;
-
-	data->enable_reporting = false;
-
-	ret = mxt_check_reg_init(data, name);
-	if (ret < 0) {
-		TOUCH_ERR_MSG("Error mxt_check_reg_init ret=%d\n", ret);
-		goto out;
-	}
-
-	TOUCH_DEBUG_MSG("Update mxt Configuration Success.\n");
-
-	ret = count;
-out:
-	data->enable_reporting = true;
-
-	return ret;
-}
-
 static ssize_t mxt_update_fw_store(struct mxt_data *data, const char *buf,
 		size_t count)
 {
@@ -3224,7 +2385,7 @@ static ssize_t mxt_update_fw_store(struct mxt_data *data, const char *buf,
 	int error = 0;
 	int wait_cnt = 0;
 
-	TOUCH_DEBUG_MSG("%s \n", __func__);
+	TOUCH_DEBUG_MSG("%s\n", __func__);
 
 	wake_lock_timeout(&touch_wake_lock, msecs_to_jiffies(2000));
 
@@ -3235,14 +2396,14 @@ static ssize_t mxt_update_fw_store(struct mxt_data *data, const char *buf,
 	error = mxt_update_file_name(&data->client->dev,
 			&package_name, buf, count);
 	if (error) {
-		TOUCH_ERR_MSG("%s error package_name [%s] \n", __func__,
+		TOUCH_ERR_MSG("%s error package_name [%s]\n", __func__,
 				package_name);
 		goto exit;
 	}
 
 	error = mxt_update_firmware(data, package_name);
 	if (error) {
-		TOUCH_ERR_MSG("%s error \n", __func__);
+		TOUCH_ERR_MSG("%s error\n", __func__);
 		goto exit;
 	}
 
@@ -3588,8 +2749,6 @@ static MXT_TOUCH_ATTR(version, S_IRUGO, mxt_info_show, NULL);
 static MXT_TOUCH_ATTR(mxt_info, S_IRUGO, mxt_info_show, NULL);
 static MXT_TOUCH_ATTR(object, S_IRUGO, mxt_object_show, NULL);
 static MXT_TOUCH_ATTR(object_ctrl, S_IWUSR, NULL, mxt_object_control);
-static MXT_TOUCH_ATTR(update_bin, S_IWUSR, NULL, mxt_update_bin_store);
-static MXT_TOUCH_ATTR(update_raw, S_IWUSR, NULL, mxt_update_raw_store);
 static MXT_TOUCH_ATTR(debug_enable, S_IWUSR | S_IRUSR, mxt_debug_enable_show, mxt_debug_enable_store);
 static MXT_TOUCH_ATTR(t57_debug_enable, S_IWUSR | S_IRUSR, NULL, mxt_t57_debug_enable_store);
 static MXT_TOUCH_ATTR(patch_debug_enable, S_IWUSR | S_IRUSR, mxt_patch_debug_enable_show, mxt_patch_debug_enable_store);
@@ -3612,8 +2771,6 @@ static struct attribute *mxt_touch_attribute_list[] = {
 	&mxt_touch_attr_mxt_info.attr,
 	&mxt_touch_attr_object.attr,
 	&mxt_touch_attr_object_ctrl.attr,
-	&mxt_touch_attr_update_bin.attr,
-	&mxt_touch_attr_update_raw.attr,
 	&mxt_touch_attr_debug_enable.attr,
 	&mxt_touch_attr_t57_debug_enable.attr,
 	&mxt_touch_attr_patch_debug_enable.attr,
@@ -3681,7 +2838,7 @@ static void mxt_reset_slots(struct mxt_data *data)
 		input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, 0);
 	}
 
-	mxt_input_sync(input_dev);
+	input_sync(input_dev);
 	TOUCH_INFO_MSG("Release all event \n");
 
 	memset(data->ts_data.prev_data, 0x0, sizeof(data->ts_data.prev_data));
@@ -3911,7 +3068,7 @@ static int mxt_read_t100_config(struct mxt_data *data)
 			&data->channel_size.size_y);
 
 	if (!error) {
-		TOUCH_DEBUG_MSG("Succeed to read channel_size %d %d %d %d \n",
+		TOUCH_INFO_MSG("Succeed to read channel_size %d %d %d %d \n",
 			data->channel_size.start_x,
 			data->channel_size.start_y,
 			data->channel_size.size_x,
@@ -3954,19 +3111,14 @@ static int mxt_read_t100_config(struct mxt_data *data)
 	if (tchaux & MXT_T100_TCHAUX_RESV)
 		data->t100_aux_resv = aux++;
 
-	TOUCH_DEBUG_MSG("T100 Touchscreen size X%uY%u\n",
+	TOUCH_INFO_MSG("T100 Touchscreen size X%uY%u\n",
 			data->max_x, data->max_y);
 
 	if (data->input_dev) {
 		struct input_dev *input_dev = data->input_dev;
 
 		/* For multi touch */
-		error = input_mt_init_slots(input_dev, data->num_touchids,
-				INPUT_MT_DIRECT);
-		if (error) {
-			TOUCH_ERR_MSG("Error %d initialising slots\n", error);
-			return error;
-		}
+		input_mt_init_slots(input_dev, data->num_touchids, 0);
 
 		input_set_abs_params(input_dev, ABS_MT_TRACKING_ID, 0,
 				data->pdata->numtouch, 0, 0);
@@ -4018,17 +3170,12 @@ int mxt_initialize_t100_input_device(struct mxt_data *data)
 	input_dev->close = mxt_input_close;
 
 	__set_bit(EV_ABS, input_dev->evbit);
-
+	__set_bit(EV_SYN, input_dev->evbit);
 	__set_bit(EV_KEY, input_dev->evbit);
 	__set_bit(KEY_SLEEP, input_dev->keybit);
 
 	/* For multi touch */
-	error = input_mt_init_slots(input_dev, data->num_touchids,
-			INPUT_MT_DIRECT);
-	if (error) {
-		TOUCH_ERR_MSG("Error %d initialising slots\n", error);
-		goto err_free_mem;
-	}
+	input_mt_init_slots(input_dev, data->num_touchids, 0);
 
 	input_set_abs_params(input_dev, ABS_MT_TRACKING_ID, 0,
 			data->pdata->numtouch, 0, 0);
@@ -4069,71 +3216,6 @@ err_free_mem:
 	return error;
 }
 
-int mxt_initialize_t9_input_device(struct mxt_data *data)
-{
-	struct input_dev *input_dev = NULL;
-	int error = 0;
-	unsigned int num_mt_slots = 0;
-
-	if (data->input_dev) {
-		TOUCH_ERR_MSG("ignore %s \n", __func__);
-		return 0;
-	}
-
-	error = mxt_read_t9_resolution(data);
-	if (error)
-		TOUCH_ERR_MSG("Failed to initialize T9 resolution\n");
-
-	input_dev = input_allocate_device();
-	if (!input_dev) {
-		TOUCH_ERR_MSG("Failed to allocate memory\n");
-		return -ENOMEM;
-	}
-
-	input_dev->name = MXT_TOUCH_NAME;
-	input_dev->phys = data->phys;
-	input_dev->id.bustype = BUS_I2C;
-	input_dev->open = mxt_input_open;
-	input_dev->close = mxt_input_close;
-
-	__set_bit(EV_ABS, input_dev->evbit);
-	input_set_capability(input_dev, EV_KEY, BTN_TOUCH);
-
-	num_mt_slots = data->num_touchids;
-	error = input_mt_init_slots(input_dev, num_mt_slots, 0);
-	if (error) {
-		TOUCH_ERR_MSG("Error %d initialising slots\n", error);
-		goto err_free_mem;
-	}
-
-	input_set_abs_params(input_dev,
-			ABS_MT_TOUCH_MAJOR, 0, MXT_MAX_AREA, 0, 0);
-	input_set_abs_params(input_dev,
-			ABS_MT_POSITION_X, 0, data->max_x, 0, 0);
-	input_set_abs_params(input_dev,
-			ABS_MT_POSITION_Y, 0, data->max_y, 0, 0);
-	input_set_abs_params(input_dev, ABS_MT_PRESSURE, 0, 255, 0, 0);
-	input_set_abs_params(input_dev, ABS_MT_ORIENTATION, 0, 255, 0, 0);
-
-	input_set_drvdata(input_dev, data);
-
-	error = input_register_device(input_dev);
-	if (error) {
-		TOUCH_ERR_MSG("Error %d registering input device\n", error);
-		goto err_free_mem;
-	}
-
-	data->input_dev = input_dev;
-
-	TOUCH_INFO_MSG("input_register_device done\n");
-
-	return 0;
-
-err_free_mem:
-	input_free_device(input_dev);
-	return error;
-}
-
 static int mxt_command_reset(struct mxt_data *data, u8 value)
 {
 	int error = 0;
@@ -4165,9 +3247,9 @@ int mxt_write_mem(struct mxt_data *data, u16 reg, u16 len, const u8 *buf)
 	return __mxt_write_reg(data->client, reg, len, buf);
 }
 
-int mxt_verify_fw(struct mxt_fw_info *fw_info, const struct firmware *fw)
+static int mxt_verify_fw(struct mxt_data *data, const struct firmware *fw)
 {
-	struct mxt_data *data = fw_info->data;
+	struct mxt_fw_info *fw_info = &data->fw_info;
 	struct mxt_fw_image *fw_img = NULL;
 	char *extra_info = NULL;
 	struct patch_header* ppheader = NULL;
@@ -4201,10 +3283,10 @@ int mxt_verify_fw(struct mxt_fw_info *fw_info, const struct firmware *fw)
 		fw_info->cfg_crc = le32_to_cpu(fw_img->cfg_crc);
 
 		extra_info = fw_img->extra_info;
-		fw_info->data->pdata->fw_ver[0] = extra_info[0];
-		fw_info->data->pdata->fw_ver[1] = extra_info[1];
-		fw_info->data->pdata->fw_ver[2] = extra_info[2];
-		memcpy(fw_info->data->pdata->product, &extra_info[4], 10);
+		data->pdata->fw_ver[0] = extra_info[0];
+		data->pdata->fw_ver[1] = extra_info[1];
+		data->pdata->fw_ver[2] = extra_info[2];
+		memcpy(data->pdata->product, &extra_info[4], 10);
 
 		/* Check the firmware file with header */
 		if (fw_info->hdr_len != sizeof(struct mxt_fw_image)
@@ -4390,9 +3472,9 @@ err_free_mem:
 	return error;
 }
 
-static int mxt_flash_fw(struct mxt_fw_info *fw_info)
+static int mxt_flash_fw(struct mxt_data *data)
 {
-	struct mxt_data *data = fw_info->data;
+	struct mxt_fw_info *fw_info = &data->fw_info;
 	const u8 *fw_data = fw_info->fw_raw_data;
 	u32 fw_size = fw_info->fw_len;
 	unsigned int frame_size = 0;
@@ -4472,9 +3554,9 @@ out:
 	return ret;
 }
 
-static int mxt_flash_fw_on_probe(struct mxt_fw_info *fw_info)
+static int mxt_flash_fw_on_probe(struct mxt_data *data)
 {
-	struct mxt_data *data = fw_info->data;
+	struct mxt_fw_info *fw_info = &data->fw_info;
 	int error = 0;
 
 	printk("[touch] mxt_flash_fw_on_probe\n");
@@ -4512,7 +3594,7 @@ static int mxt_flash_fw_on_probe(struct mxt_fw_info *fw_info)
 	}
 
 load_fw:
-	error = mxt_flash_fw(fw_info);
+	error = mxt_flash_fw(data);
 	if (error)
 		TOUCH_ERR_MSG("Failed updating firmware\n");
 	else
@@ -4535,7 +3617,6 @@ static void mxt_make_reportid_table(struct mxt_data *data)
 
 			reportids[id].type = objects[i].type;
 			reportids[id].index = j;
-
 		}
 	}
 }
@@ -4629,7 +3710,8 @@ static int mxt_read_message(struct mxt_data *data, struct mxt_message *message)
 			sizeof(struct mxt_message), message);
 }
 
-static int mxt_read_message_reportid(struct mxt_data *data, struct mxt_message *message, u8 reportid)
+static int mxt_read_message_reportid(struct mxt_data *data,
+		struct mxt_message *message, u8 reportid)
 {
 	int try = 0;
 	int error = 0;
@@ -4641,8 +3723,9 @@ static int mxt_read_message_reportid(struct mxt_data *data, struct mxt_message *
 		error = mxt_read_message(data, message);
 		if (error) {
 			TOUCH_ERR_MSG("mxt_read_message error\n");
-			print_hex_dump(KERN_DEBUG, "CRC : ", DUMP_PREFIX_NONE, 16, 1,
-				   message, sizeof(struct mxt_message), false);
+			print_hex_dump(KERN_DEBUG, "CRC : ", DUMP_PREFIX_NONE,
+					16, 1, message,
+					sizeof(struct mxt_message), false);
 			return error;
 		}
 
@@ -4670,21 +3753,22 @@ static int mxt_read_config_crc(struct mxt_data *data, u32 *crc)
 	mxt_write_object(data, MXT_GEN_COMMAND_T6, MXT_COMMAND_REPORTALL, 1);
 
 	/* Read message from command processor, which only has one report ID */
-	error = mxt_read_message_reportid(data, &message, 1);//data->max_reportid);
+	error = mxt_read_message_reportid(data, &message, 1);
 	if (error) {
 		TOUCH_ERR_MSG("Failed to retrieve CRC\n");
 		return error;
 	}
 
 	/* Bytes 1-3 are the checksum. */
-	*crc = message.message[1] | (message.message[2] << 8) | (message.message[3] << 16);
+	*crc = message.message[1] | (message.message[2] << 8) |
+		(message.message[3] << 16);
 
 	return 0;
 }
 
-static int mxt_write_config(struct mxt_fw_info *fw_info)
+static int mxt_write_config(struct mxt_data *data)
 {
-	struct mxt_data *data = fw_info->data;
+	struct mxt_fw_info *fw_info = &data->fw_info;
 	struct mxt_object *object = NULL;
 	struct mxt_cfg_data *cfg_data = NULL;
 	u32 current_crc = 0;
@@ -4870,14 +3954,13 @@ static int mxt_write_config(struct mxt_fw_info *fw_info)
 	return ret;
 }
 
-static int mxt_config_initialize(struct mxt_fw_info *fw_info)
+static int mxt_config_initialize(struct mxt_data *data)
 {
-	struct mxt_data *data = fw_info->data;
 	int ret = 0;
 
 	TOUCH_INFO_MSG("%s \n", __func__);
 
-	ret = mxt_write_config(fw_info);
+	ret = mxt_write_config(data);
 	if (ret) {
 		TOUCH_ERR_MSG("Failed to write config from file\n");
 		goto out;
@@ -4899,20 +3982,18 @@ int mxt_request_firmware_work(const struct firmware *fw, void *context)
 
 	mxt_power_block(POWERLOCK_FW_UP);
 
-	data->fw_info.data = data;
-	if (fw) {
-		error = mxt_verify_fw(&data->fw_info, fw);
-		if (error)
-			goto ts_rest_init;
-	} else {
-		goto out;
-	}
+	if (!fw)
+		goto ts_rest_init;
+
+	error = mxt_verify_fw(data, fw);
+	if (error)
+		goto ts_rest_init;
 
 	/* Skip update on boot up if firmware file does not have a header */
 	if (!data->fw_info.hdr_len)
 		goto ts_rest_init;
 
-	error = mxt_flash_fw_on_probe(&data->fw_info);
+	error = mxt_flash_fw_on_probe(data);
 	if (error)
 		goto out;
 
@@ -4923,14 +4004,14 @@ ts_rest_init:
 		goto out;
 	}
 
-	error = mxt_config_initialize(&data->fw_info);
+	error = mxt_config_initialize(data);
 	if (error) {
 		TOUCH_ERR_MSG("Failed to rest initialize\n");
 		goto out;
 	}
 
 out:
-	if(fw)
+	if (fw)
 		release_firmware(fw);
 	mxt_power_unblock(POWERLOCK_FW_UP);
 	return error;
@@ -4945,27 +4026,25 @@ int mxt_update_firmware(struct mxt_data *data, const char *fwname)
 
 	if (fwname) {
 		error = request_firmware(&fw, fwname, &data->client->dev);
-		if (error) {
-			TOUCH_ERR_MSG("%s error request_firmware \n", __func__);
-			return 1;
-		}
+		if (error)
+			TOUCH_WARN_MSG("%s No firmware\n", __func__);
 	}
 
 	error = mxt_request_firmware_work(fw, data);
 	if (error) {
-		TOUCH_ERR_MSG("%s error mxt_request_firmware_work \n", __func__);
+		TOUCH_ERR_MSG("%s error mxt_request_firmware_work\n", __func__);
 		return 1;
 	}
 
 	error = mxt_read_info_block(data);
 	if (error) {
-		TOUCH_ERR_MSG("%s error mxt_read_info_block \n", __func__);
+		TOUCH_ERR_MSG("%s error mxt_read_info_block\n", __func__);
 		return 1;
 	}
 
 	error = mxt_init_t7_power_cfg(data);
 	if (error) {
-		TOUCH_ERR_MSG("%s error mxt_init_t7_power_cfg \n", __func__);
+		TOUCH_ERR_MSG("%s error mxt_init_t7_power_cfg\n", __func__);
 		return 1;
 	}
 

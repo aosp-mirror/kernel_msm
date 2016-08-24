@@ -145,23 +145,6 @@
 #define MXT_T8_ATCHFRCCALTHR		8
 #define MXT_T8_ATCHFRCCALRATIO		9
 
-/* MXT_TOUCH_MULTI_T9 field */
-#define MXT_T9_ORIENT			9
-#define MXT_T9_RANGE			18
-
-/* MXT_TOUCH_MULTI_T9 status */
-#define MXT_T9_UNGRIP		(1 << 0)
-#define MXT_T9_SUPPRESS		(1 << 1)
-#define MXT_T9_AMP		(1 << 2)
-#define MXT_T9_VECTOR		(1 << 3)
-#define MXT_T9_MOVE		(1 << 4)
-#define MXT_T9_RELEASE		(1 << 5)
-#define MXT_T9_PRESS		(1 << 6)
-#define MXT_T9_DETECT		(1 << 7)
-
-/* MXT_TOUCH_MULTI_T9 orient */
-#define MXT_T9_ORIENT_SWITCH	(1 << 0)
-
 /* MXT_SPT_COMMSCONFIG_T18 */
 #define MXT_COMMS_CTRL		0
 #define MXT_COMMS_CMD		1
@@ -302,11 +285,6 @@
 struct t7_config {
 	u8 idle;
 	u8 active;
-} __packed;
-
-struct t9_range {
-	u16 x;
-	u16 y;
 } __packed;
 
 enum {
@@ -568,7 +546,6 @@ struct mxt_fw_info {
 	u32 cfg_crc;
 	const u8 *cfg_raw_data;	/* start address of configuration data */
 	const u8 *fw_raw_data;	/* start address of firmware data */
-	struct mxt_data *data;
 };
 
 /*Reference Check*/
@@ -705,9 +682,6 @@ struct mxt_data {
 	u16 T6_address;
 	u16 T7_address;
 	u16 T8_address;
-	u16 T9_address;
-	u8 T9_reportid_min;
-	u8 T9_reportid_max;
 	u8 T15_reportid_min;
 	u8 T15_reportid_max;
 	u16 T18_address;
@@ -791,13 +765,6 @@ struct mxt_data {
 	bool mxt_mode_changed;
 	bool delayed_cal;
 
-	/* Count of continuing stylus data */
-	int stylus_in_a_row_cnt;
-
-	/* If stylus_in_a_row_cnt_thr < sylus_in_a_row_cnt valut,
-	 * notify on global valiant.
-	 */
-	int stylus_in_a_row_cnt_thr;
 	int x_zitter;
 	int y_zitter;
 
@@ -823,7 +790,6 @@ struct mxt_data {
 #define TOUCH_PATCH_INFO_MSG(fmt, args...) \
 	printk(KERN_INFO "Touch atmel: Patch: " fmt, ##args)
 
-int mxt_initialize_t9_input_device(struct mxt_data *data);
 int mxt_initialize_t100_input_device(struct mxt_data *data);
 int mxt_request_firmware_work(const struct firmware *fw,void *context);
 int mxt_write_mem(struct mxt_data *data, u16 reg, u16 len, const u8 *buf);
