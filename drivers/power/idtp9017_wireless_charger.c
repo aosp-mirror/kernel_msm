@@ -729,7 +729,6 @@ static int idtp9017_set_i_limit(struct idtp9017_chip *chip,
 	int ret = 0;
 	int i;
 
-	set_current = 1000;
 	for (i = ARRAY_SIZE(icl_ma_table) - 5; i >= 0; i--) {
 		if (icl_ma_table[i].icl_ma == set_current) {
 			reg_val = icl_ma_table[i].value;

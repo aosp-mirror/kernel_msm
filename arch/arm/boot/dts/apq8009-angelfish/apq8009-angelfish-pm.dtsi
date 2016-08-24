@@ -169,7 +169,7 @@
 			idt,wlc-enable-gpio = <&msm_gpio 94 0>;
 			idt,wlc-full-chg-gpio = <&msm_gpio 23 0>;
 			idt,wlc-off-gpio = <&msm_gpio 22 0>;
-			idt,limit-current = <500>; /* To check charging current */
+			idt,limit-current = <1000>; /* To check charging current */
 			idt,out-voltage = <6500>;
 			idt,wlc-online-check-delay = <60>;
 		};
