@@ -120,6 +120,10 @@
 	qcom,msm-ssc-sensors {
 		compatible = "qcom,msm-ssc-sensors";
 	};
+
+	qcom,bam_dmux@4044000 {
+		qcom,no-cpu-affinity;
+	};
 };
 
 &spi_0 {
