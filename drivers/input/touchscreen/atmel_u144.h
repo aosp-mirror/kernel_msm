@@ -258,9 +258,13 @@
 
 #define TOUCHEVENTFILTER	0
 
-#define CHARGER_PLUGGED			0
-#define CHARGER_UNPLUGGED		1
-#define DEEP_SLEEP_WAKEUP		2
+#define CHARGER_PLUGGED         0
+#define CHARGER_UNPLUGGED       1
+#define DEEP_SLEEP_WAKEUP       2
+#define IDLE_IN_CHG             3
+#define ACTIVE_IN_CHG           4
+#define IDLE_IN_NOCHG           5
+#define ACTIVE_IN_NOCHG         6
 
 #define PATCH_EVENT_PAIR_NUM 		4
 /* For sensing test */
@@ -276,10 +280,10 @@
 #define MXT_OBJECT_TABLE_ELEMENT_SIZE	6
 #define MXT_OBJECT_TABLE_START_ADDRESS	7
 
-#define PATCH_EVENT_KNOCKON	(0x01 << 1)
-#define PATCH_EVENT_TA		(0x01 << 2)
-#define POWERLOCK_FW_UP		(0x01 << 1)
-#define POWERLOCK_SYSFS		(0x01 << 2)
+#define PATCH_EVENT_IDLE        (1 << 1)
+#define PATCH_EVENT_TA          (1 << 2)
+#define POWERLOCK_FW_UP         (1 << 1)
+#define POWERLOCK_SYSFS         (1 << 2)
 
 /* MXT_GEN_POWER_T7 field */
 struct t7_config {

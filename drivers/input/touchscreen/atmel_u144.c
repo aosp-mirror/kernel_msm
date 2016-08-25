@@ -788,11 +788,21 @@ static void mxt_proc_t6_messages(struct mxt_data *data, u8 *msg)
 	}
 
 	if (status & MXT_T6_STATUS_RESET && data->suspended) {
-		TOUCH_DEBUG_MSG("RESET Detected. Start Recover \n");
+		TOUCH_DEBUG_MSG("RESET Detected. Start Recover\n");
 
 		if (mxt_patchevent_get(PATCH_EVENT_TA)) {
-			TOUCH_DEBUG_MSG("   Stage 1 : USB/TA \n");
+			TOUCH_DEBUG_MSG("In charging\n");
 			mxt_patch_event(global_mxt_data, CHARGER_PLUGGED);
+			if (mxt_patchevent_get(PATCH_EVENT_IDLE))
+				mxt_patch_event(global_mxt_data, IDLE_IN_CHG);
+			else
+				mxt_patch_event(global_mxt_data, ACTIVE_IN_CHG);
+		} else {
+			mxt_patch_event(global_mxt_data, CHARGER_UNPLUGGED);
+			if (mxt_patchevent_get(PATCH_EVENT_IDLE))
+				mxt_patch_event(global_mxt_data, IDLE_IN_NOCHG);
+			else
+				mxt_patch_event(global_mxt_data, ACTIVE_IN_NOCHG);
 		}
 		TOUCH_DEBUG_MSG("Recover Complete\n");
 	}
@@ -2528,6 +2538,37 @@ static ssize_t mxt_patch_debug_enable_store(struct mxt_data *data,
 	return -EINVAL;
 }
 
+static ssize_t mxt_idle_mode_store(struct mxt_data *data,
+		const char *buf, size_t count)
+{
+	int idle = 0;
+	int ret;
+
+	ret = kstrtoint(buf, 0, &idle);
+	if (ret) {
+		TOUCH_ERR_MSG("%s: invalid parameter\n", __func__);
+		return ret;
+	}
+
+	TOUCH_INFO_MSG("idle %d\n", idle);
+
+	if (idle) {
+		if (!data->charging_mode)
+			mxt_patch_event(data, IDLE_IN_NOCHG);
+		else
+			mxt_patch_event(data, IDLE_IN_CHG);
+		mxt_patchevent_set(PATCH_EVENT_IDLE);
+	} else {
+		if (!data->charging_mode)
+			mxt_patch_event(data, ACTIVE_IN_NOCHG);
+		else
+			mxt_patch_event(data, ACTIVE_IN_CHG);
+		mxt_patchevent_unset(PATCH_EVENT_IDLE);
+	}
+
+	return count;
+}
+
 static ssize_t mxt_power_control_show(struct mxt_data *data, char *buf)
 {
 	size_t ret = 0;
@@ -2764,6 +2805,8 @@ static MXT_TOUCH_ATTR(self_ref_check, S_IRUGO | S_IWUSR, mxt_show_self_ref, NULL
 static MXT_TOUCH_ATTR(self_cap, S_IWUSR | S_IRUGO, mxt_self_cap_show, mxt_self_cap_store);
 static MXT_TOUCH_ATTR(noise_suppression, S_IWUSR | S_IRUGO, mxt_noise_suppression_show, mxt_noise_suppression_store);
 static MXT_TOUCH_ATTR(noise_recover, S_IWUSR | S_IRUGO, mxt_noise_recover_show, mxt_noise_recover_store);
+static MXT_TOUCH_ATTR(idle_mode, S_IWUSR, NULL, mxt_idle_mode_store);
+
 static struct attribute *mxt_touch_attribute_list[] = {
 	&mxt_touch_attr_fw_version.attr,
 	&mxt_touch_attr_hw_version.attr,
@@ -2786,6 +2829,7 @@ static struct attribute *mxt_touch_attribute_list[] = {
 	&mxt_touch_attr_self_cap.attr,
 	&mxt_touch_attr_noise_suppression.attr,
 	&mxt_touch_attr_noise_recover.attr,
+	&mxt_touch_attr_idle_mode.attr,
 	NULL
 };
 
