@@ -33,9 +33,6 @@
 #include <linux/uaccess.h>
 #endif
 
-/* Lock backlight of ambient mode to 28nits */
-#define AMBIENT_BL_LEVEL_V1	(71)
-static int ambient_bl_level = AMBIENT_BL_LEVEL_V1;
 
 #ifdef CONFIG_ASUS_BACKLIGHT_DEBUG
 static int brightness_lock = 0;
@@ -667,6 +664,8 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	struct mdss_dsi_ctrl_pdata *sctrl = NULL;
 
+	pr_debug("%s: level %d\n", __func__,bl_level);
+
 #ifdef CONFIG_ASUS_BACKLIGHT_DEBUG
     if(brightness_lock)
         return;
@@ -880,7 +879,6 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	if (enable) {
 		if (ctrl->idle_on_cmds.cmd_cnt){
 			printk("MDSS:AMB: set idle ON command!\n");
-			mdss_dsi_panel_bl_ctrl(pdata, ambient_bl_level);
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_on_cmds, CMD_REQ_COMMIT);
 		} else {
 			printk("MDSS:AMB: idle ON command is not set!\n");
@@ -888,7 +886,6 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	} else {
 		if (ctrl->idle_off_cmds.cmd_cnt){
 			printk("MDSS:AMB: set idle OFF command!\n");
-			mdss_dsi_panel_bl_ctrl(pdata, ambient_bl_level);
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_off_cmds, CMD_REQ_COMMIT);
 		} else {
 			printk("MDSS:AMB: idle OFF command is not set!\n");
