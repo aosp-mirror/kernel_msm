@@ -1045,6 +1045,31 @@ TRACE_EVENT(sched_get_nr_running_avg,
 	TP_printk("avg=%d big_avg=%d iowait_avg=%d",
 		__entry->avg, __entry->big_avg, __entry->iowait_avg)
 );
+
+/*
+ * Tracepoint for recording the cause of uninterruptible sleep.
+ */
+TRACE_EVENT(sched_blocked_reason,
+
+	TP_PROTO(struct task_struct *tsk),
+
+	TP_ARGS(tsk),
+
+	TP_STRUCT__entry(
+		__field( pid_t,	pid	)
+		__field( void*, caller	)
+		__field( bool, io_wait	)
+	),
+
+	TP_fast_assign(
+		__entry->pid	= tsk->pid;
+		__entry->caller = (void*)get_wchan(tsk);
+		__entry->io_wait = tsk->in_iowait;
+	),
+
+	TP_printk("pid=%d iowait=%d caller=%pS", __entry->pid, __entry->io_wait, __entry->caller)
+);
+
 #endif /* _TRACE_SCHED_H */
 
 /* This part must be outside protection */
