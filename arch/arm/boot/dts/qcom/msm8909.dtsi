@@ -77,6 +77,15 @@
 			reg = <0x0>;
 			qcom,sleep-status = <&cpu0_slp_sts>;
 			qcom,limits-info = <&mitigation_profile0>;
+			current = < 15000 //200000 kHZ
+				    32000 //400000 kHZ
+				    48000 //533330 kHZ
+				    73968 //800000 kHz
+				    88150 //998400 kHZ
+				    92880 //1094400 kHZ
+				    95940 //1190400 kHZ
+				    98740 //1248000 kHZ
+				    105870>; //1267200 kHZ
 		};
 
 		CPU1: cpu@1 {
@@ -85,6 +94,15 @@
 			reg = <0x1>;
 			qcom,sleep-status = <&cpu1_slp_sts>;
 			qcom,limits-info = <&mitigation_profile2>;
+			current = < 15000 //200000 kHZ
+				    32000 //400000 kHZ
+				    48000 //533330 kHZ
+				    73968 //800000 kHz
+				    88150 //998400 kHZ
+				    92880 //1094400 kHZ
+				    95940 //1190400 kHZ
+				    98740 //1248000 kHZ
+				    105870>; //1267200 kHZ
 		};
 
 		CPU2: cpu@2 {
@@ -93,6 +111,15 @@
 			reg = <0x2>;
 			qcom,sleep-status = <&cpu2_slp_sts>;
 			qcom,limits-info = <&mitigation_profile1>;
+			current = < 15000 //200000 kHZ
+				    32000 //400000 kHZ
+				    48000 //533330 kHZ
+				    73968 //800000 kHz
+				    88150 //998400 kHZ
+				    92880 //1094400 kHZ
+				    95940 //1190400 kHZ
+				    98740 //1248000 kHZ
+				    105870>; //1267200 kHZ
 		};
 
 		CPU3: cpu@3 {
@@ -101,6 +128,15 @@
 			reg = <0x3>;
 			qcom,sleep-status = <&cpu3_slp_sts>;
 			qcom,limits-info = <&mitigation_profile2>;
+			current = < 15000 //200000 kHZ
+				    32000 //400000 kHZ
+				    48000 //533330 kHZ
+				    73968 //800000 kHz
+				    88150 //998400 kHZ
+				    92880 //1094400 kHZ
+				    95940 //1190400 kHZ
+				    98740 //1248000 kHZ
+				    105870>; //1267200 kHZ
 		};
 	};
 
