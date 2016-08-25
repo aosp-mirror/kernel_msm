@@ -81,6 +81,23 @@ static int dock_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, dock_dev);
 
+	dock_dev->sdev = devm_kzalloc(&pdev->dev, sizeof(*dock_dev->sdev),
+			GFP_KERNEL);
+	if (!dock_dev->sdev) {
+		pr_err("%s: failed to alloc switch device\n", __func__);
+		return -ENOMEM;
+	}
+
+	dock_dev->sdev->name = "dock";
+	ret = switch_dev_register(dock_dev->sdev);
+	if (ret < 0) {
+		pr_err("%s: failed to register switch device\n", __func__);
+		return ret;
+	}
+
+	wake_lock_init(&dock_dev->wakelock, WAKE_LOCK_SUSPEND,
+			"docked-state-uevent");
+
 	dock_dev->psy.name = "dock";
 	dock_dev->psy.type = POWER_SUPPLY_TYPE_UNKNOWN;
 	dock_dev->psy.get_property = dock_get_property;
@@ -89,32 +106,15 @@ static int dock_probe(struct platform_device *pdev)
 	ret = power_supply_register(&pdev->dev, &dock_dev->psy);
 	if (ret) {
 		pr_err("%s: failed power supply register\n", __func__);
-		return ret;
+		goto err_power_supply_register;
 	}
-
-	dock_dev->sdev = devm_kzalloc(&pdev->dev, sizeof(*dock_dev->sdev),
-			GFP_KERNEL);
-	if (!dock_dev) {
-		pr_err("%s: failed to alloc switch device\n", __func__);
-		ret = -ENOMEM;
-		goto err_switch;
-	}
-
-	dock_dev->sdev->name = "dock";
-	ret = switch_dev_register(dock_dev->sdev);
-	if (ret < 0) {
-		pr_err("%s: failed to register switch device\n", __func__);
-		goto err_switch;
-	}
-
-	wake_lock_init(&dock_dev->wakelock, WAKE_LOCK_SUSPEND,
-			"docked-state-uevent");
 
 	dock_external_power_changed(&dock_dev->psy);
 	return 0;
 
-err_switch:
-	power_supply_unregister(&dock_dev->psy);
+err_power_supply_register:
+	wake_lock_destroy(&dock_dev->wakelock);
+	switch_dev_unregister(dock_dev->sdev);
 	platform_set_drvdata(pdev, NULL);
 	return ret;
 }
@@ -123,9 +123,9 @@ static int dock_remove(struct platform_device *pdev)
 {
 	struct dock_device *dock_dev = platform_get_drvdata(pdev);
 
+	power_supply_unregister(&dock_dev->psy);
 	wake_lock_destroy(&dock_dev->wakelock);
 	switch_dev_unregister(dock_dev->sdev);
-	power_supply_unregister(&dock_dev->psy);
 	platform_set_drvdata(pdev, NULL);
 	return 0;
 }
