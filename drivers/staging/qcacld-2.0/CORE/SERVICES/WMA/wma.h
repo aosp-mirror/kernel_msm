@@ -569,6 +569,10 @@ struct wma_txrx_node {
 	v_BOOL_t vdev_up;
 	u_int64_t tsfadjust;
 	void     *addBssStaContext;
+	/* Have a back up of arp offload req */
+	tSirHostOffloadReq arp_offload_req;
+	/* tSirHostOffloadReq of ns offload req */
+	tSirHostOffloadReq ns_offload_req;
 	tANI_U8 aid;
 	/* Robust Management Frame (RMF) enabled/disabled */
 	tANI_U8 rmfEnabled;
@@ -763,10 +767,6 @@ typedef struct wma_handle {
 	u_int8_t no_of_suspend_ind;
 	u_int8_t no_of_resume_ind;
 
-	/* Have a back up of arp info to send along
-	 * with ns info suppose if ns also enabled
-	 */
-	tSirHostOffloadReq mArpInfo;
 	struct wma_tx_ack_work_ctx *ack_work_ctx;
 	u_int8_t powersave_mode;
 	v_BOOL_t ptrn_match_enable_all_vdev;
