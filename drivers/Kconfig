@@ -200,6 +200,8 @@ source "drivers/bif/Kconfig"
 
 source "drivers/gud/Kconfig"
 
+source "drivers/haptics/Kconfig"
+
 source "drivers/hwmcu/Kconfig"
 
 endmenu
