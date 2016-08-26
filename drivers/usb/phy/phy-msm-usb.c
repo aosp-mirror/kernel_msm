@@ -122,7 +122,6 @@ static struct regulator *hsusb_1p8;
 static struct regulator *hsusb_vdd;
 static struct regulator *vbus_otg;
 static struct power_supply *psy;
-static bool usb_online;
 static int vdd_val[VDD_VAL_MAX];
 static u32 bus_freqs[USB_NUM_BUS_CLOCKS];	/* bimc, snoc, pcnoc clk */;
 static char bus_clkname[USB_NUM_BUS_CLOCKS][20] = {"bimc_clk", "snoc_clk",
@@ -3402,8 +3401,6 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 {
 	struct msm_otg *motg = container_of(psy, struct msm_otg, usb_psy);
 	struct msm_otg_platform_data *pdata = motg->pdata;
-	union power_supply_propval data;
-	struct power_supply *charger_psy;
 
 	msm_otg_dbg_log_event(&motg->phy, "SET PWR PROPERTY", psp, psy->type);
 	switch (psp) {
@@ -3423,15 +3420,6 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_ONLINE:
 		pr_info("[phy-msm-usb] set_property: online = %d \n", val->intval);
 		motg->online = val->intval;
-		
-		if (usb_online ^ val->intval) {
-			usb_online = val->intval;
-			data.intval = val->intval;
-			//Notify charger driver to update charging status
-			charger_psy = power_supply_get_by_name("battery");
-			if (charger_psy)
-				charger_psy->set_property(charger_psy, POWER_SUPPLY_PROP_STATUS, &data);
-		}
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		motg->voltage_max = val->intval;
@@ -4330,7 +4318,6 @@ static int msm_otg_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto otg_remove_devices;
 	}
-	usb_online = 0;
 	the_msm_otg = motg;
 	motg->pdata = pdata;
 	phy = &motg->phy;
