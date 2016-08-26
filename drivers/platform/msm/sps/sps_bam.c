@@ -170,19 +170,19 @@ polling:
 	}
 
 	/* Process active pipe sources */
-	pipe = list_first_entry(&dev->pipes_q, struct sps_pipe, list);
-
-	list_for_each_entry(pipe, &dev->pipes_q, list) {
-		/* Check this pipe's bit in the source mask */
-		if (BAM_PIPE_IS_ASSIGNED(pipe)
+	if (dev->pipes_q && !list_empty(&dev->pipes_q)) {
+		list_for_each_entry(pipe, &dev->pipes_q, list) {
+			/* Check this pipe's bit in the source mask */
+			if (BAM_PIPE_IS_ASSIGNED(pipe)
 				&& (!pipe->disconnecting)
 				&& (source & pipe->pipe_index_mask)) {
-			/* This pipe has an interrupt pending */
-			pipe_handler(dev, pipe);
-			source &= ~pipe->pipe_index_mask;
+				/* This pipe has an interrupt pending */
+				pipe_handler(dev, pipe);
+				source &= ~pipe->pipe_index_mask;
+			}
+			if (source == 0)
+				break;
 		}
-		if (source == 0)
-			break;
 	}
 
 	/* Process any inactive pipe sources */
