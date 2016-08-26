@@ -18857,6 +18857,10 @@ static int __wlan_hdd_cfg80211_disconnect( struct wiphy *wiphy,
              reasonCode = pHddCtx->cfg_ini->gEnableDeauthToDisassocMap ?
                  eCSR_DISCONNECT_REASON_STA_HAS_LEFT :
                  eCSR_DISCONNECT_REASON_DEAUTH;
+             vos_flush_logs(WLAN_LOG_TYPE_NON_FATAL,
+                            WLAN_LOG_INDICATOR_FRAMEWORK,
+                            WLAN_LOG_REASON_CODE_FRAMEWORK,
+                            DUMP_PACKET_TRACE);
              break;
         case WLAN_REASON_DISASSOC_STA_HAS_LEFT:
              reasonCode = eCSR_DISCONNECT_REASON_STA_HAS_LEFT;

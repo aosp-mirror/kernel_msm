@@ -57,6 +57,7 @@
 #define VOS_PKT_TRAC_DHCP_SRV_PORT   67
 #define VOS_PKT_TRAC_DHCP_CLI_PORT   68
 #define VOS_PKT_TRAC_EAPOL_ETH_TYPE  0x888E
+#define VOS_PKT_TRAC_ARP_ETH_TYPE    0x0806
 #ifdef QCA_PKT_PROTO_TRACE
 #define VOS_PKT_TRAC_MAX_STRING_LEN  40
 #define VOS_PKT_TRAC_MAX_TRACE_BUF   50
@@ -256,14 +257,11 @@ v_U8_t vos_pkt_get_proto_type
 )
 {
    v_U8_t     pkt_proto_type = 0;
-   v_U16_t    ether_type;
-   v_U16_t    SPort;
-   v_U16_t    DPort;
 
    if (dot11_type)
    {
       if (dot11_type == (VOS_PKT_TRAC_TYPE_MGMT_ACTION & tracking_map))
-         pkt_proto_type |= VOS_PKT_TRAC_TYPE_MGMT_ACTION;
+         pkt_proto_type = VOS_PKT_TRAC_TYPE_MGMT_ACTION;
 
       /* Protocol type map */
       return pkt_proto_type;
@@ -272,26 +270,48 @@ v_U8_t vos_pkt_get_proto_type
    /* EAPOL Tracking enabled */
    if (VOS_PKT_TRAC_TYPE_EAPOL & tracking_map)
    {
-      ether_type = (v_U16_t)(*(v_U16_t *)(skb->data + VOS_PKT_TRAC_ETH_TYPE_OFFSET));
-      if (VOS_PKT_TRAC_EAPOL_ETH_TYPE == VOS_SWAP_U16(ether_type))
-      {
-         pkt_proto_type |= VOS_PKT_TRAC_TYPE_EAPOL;
+      if (adf_nbuf_is_eapol_pkt(skb) == A_STATUS_OK) {
+         pkt_proto_type = VOS_PKT_TRAC_TYPE_EAPOL;
+         return pkt_proto_type;
       }
    }
 
    /* DHCP Tracking enabled */
    if (VOS_PKT_TRAC_TYPE_DHCP & tracking_map)
    {
-      SPort = (v_U16_t)(*(v_U16_t *)(skb->data + VOS_PKT_TRAC_IP_OFFSET +
-                                     VOS_PKT_TRAC_IP_HEADER_SIZE));
-      DPort = (v_U16_t)(*(v_U16_t *)(skb->data + VOS_PKT_TRAC_IP_OFFSET +
-                                     VOS_PKT_TRAC_IP_HEADER_SIZE + sizeof(v_U16_t)));
-      if (((VOS_PKT_TRAC_DHCP_SRV_PORT == VOS_SWAP_U16(SPort)) &&
-           (VOS_PKT_TRAC_DHCP_CLI_PORT == VOS_SWAP_U16(DPort))) ||
-          ((VOS_PKT_TRAC_DHCP_CLI_PORT == VOS_SWAP_U16(SPort)) &&
-           (VOS_PKT_TRAC_DHCP_SRV_PORT == VOS_SWAP_U16(DPort))))
-      {
-         pkt_proto_type |= VOS_PKT_TRAC_TYPE_DHCP;
+      if (adf_nbuf_is_dhcp_pkt(skb) == A_STATUS_OK) {
+         pkt_proto_type = VOS_PKT_TRAC_TYPE_DHCP;
+         return pkt_proto_type;
+      }
+   }
+
+   /* ARP Tracking enabled */
+   if (VOS_PKT_TRAC_TYPE_ARP & tracking_map) {
+      if (adf_nbuf_is_ipv4_arp_pkt(skb)) {
+          pkt_proto_type = VOS_PKT_TRAC_TYPE_ARP;
+          return pkt_proto_type;
+      }
+   }
+
+   /* IPV6 NS Tracking enabled */
+   if (VOS_PKT_TRAC_TYPE_NS & tracking_map) {
+      if (adf_nbuf_is_icmpv6_pkt(skb)) {
+          if (adf_nbuf_get_icmpv6_subtype(skb) ==
+                   ADF_PROTO_ICMPV6_NS) {
+              pkt_proto_type = VOS_PKT_TRAC_TYPE_NS;
+              return pkt_proto_type;
+          }
+      }
+   }
+
+   /* IPV6 NA Tracking enabled */
+   if (VOS_PKT_TRAC_TYPE_NA & tracking_map) {
+      if (adf_nbuf_is_icmpv6_pkt(skb)) {
+          if (adf_nbuf_get_icmpv6_subtype(skb) ==
+                   ADF_PROTO_ICMPV6_NA) {
+              pkt_proto_type = VOS_PKT_TRAC_TYPE_NA;
+              return pkt_proto_type;
+          }
       }
    }
 
@@ -329,9 +349,8 @@ void vos_pkt_trace_buf_update
    do_gettimeofday(&tv);
    trace_buffer[slot].event_sec_time = tv.tv_sec;
    trace_buffer[slot].event_msec_time = tv.tv_usec;
-   strncpy(trace_buffer[slot].event_string, event_string,
-          (sizeof(trace_buffer[slot].event_string) < strlen(event_string)?
-           sizeof(trace_buffer[slot].event_string) : strlen(event_string)));
+   strlcpy(trace_buffer[slot].event_string, event_string,
+          sizeof(trace_buffer[slot].event_string));
 
    return;
 }

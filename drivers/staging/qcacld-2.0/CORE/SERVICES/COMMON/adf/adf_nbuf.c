@@ -747,6 +747,12 @@ __adf_nbuf_data_get_icmpv6_subtype(uint8_t *data)
 	case ICMPV6_RESPONSE:
 		proto_subtype = ADF_PROTO_ICMPV6_RES;
 		break;
+	case ICMPV6_NS:
+		proto_subtype = ADF_PROTO_ICMPV6_NS;
+		break;
+	case ICMPV6_NA:
+		proto_subtype = ADF_PROTO_ICMPV6_NA;
+		break;
 	default:
 		break;
 	}
@@ -1146,22 +1152,33 @@ __adf_nbuf_trace_update(struct sk_buff *buf, char *event_string)
                    NBUF_PKT_TRAC_MAX_STRING);
    adf_os_mem_copy(string_buf,
                    event_string, adf_os_str_len(event_string));
-   if (NBUF_PKT_TRAC_TYPE_EAPOL &
-       adf_nbuf_trace_get_proto_type(buf)) {
+   switch (adf_nbuf_trace_get_proto_type(buf)) {
+   case NBUF_PKT_TRAC_TYPE_EAPOL:
       adf_os_mem_copy(string_buf + adf_os_str_len(event_string),
-                      "EPL",
-                      NBUF_PKT_TRAC_PROTO_STRING);
-   }
-   else if (NBUF_PKT_TRAC_TYPE_DHCP &
-            adf_nbuf_trace_get_proto_type(buf)) {
+                      "EPL", NBUF_PKT_TRAC_PROTO_STRING);
+      break;
+   case NBUF_PKT_TRAC_TYPE_DHCP:
       adf_os_mem_copy(string_buf + adf_os_str_len(event_string),
-                      "DHC",
-                      NBUF_PKT_TRAC_PROTO_STRING);
-   } else if (NBUF_PKT_TRAC_TYPE_MGMT_ACTION &
-              adf_nbuf_trace_get_proto_type(buf)) {
+                      "DHC", NBUF_PKT_TRAC_PROTO_STRING);
+      break;
+   case NBUF_PKT_TRAC_TYPE_MGMT_ACTION:
       adf_os_mem_copy(string_buf + adf_os_str_len(event_string),
-                      "MACT",
-                      NBUF_PKT_TRAC_PROTO_STRING);
+                      "MACT", NBUF_PKT_TRAC_PROTO_STRING);
+      break;
+   case NBUF_PKT_TRAC_TYPE_ARP:
+      adf_os_mem_copy(string_buf + adf_os_str_len(event_string),
+                      "ARP", NBUF_PKT_TRAC_PROTO_STRING);
+      break;
+   case NBUF_PKT_TRAC_TYPE_NS:
+      adf_os_mem_copy(string_buf + adf_os_str_len(event_string),
+                      "NS", NBUF_PKT_TRAC_PROTO_STRING);
+      break;
+   case NBUF_PKT_TRAC_TYPE_NA:
+      adf_os_mem_copy(string_buf + adf_os_str_len(event_string),
+                      "NA", NBUF_PKT_TRAC_PROTO_STRING);
+      break;
+   default:
+      break;
    }
 
    trace_update_cb(string_buf);

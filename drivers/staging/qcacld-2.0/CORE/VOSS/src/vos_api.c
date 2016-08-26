@@ -2898,11 +2898,11 @@ VOS_STATUS vos_flush_logs(uint32_t is_fatal,
 			"%s: Triggering bug report: type:%d, indicator=%d reason_code=%d dump_trace=0x%x",
 			__func__, is_fatal, indicator, reason_code, dump_trace);
 
-	if (dump_trace | DUMP_VOS_TRACE)
+	if (dump_trace & DUMP_VOS_TRACE)
 		vosTraceDumpAll(vos_context->pMACContext, 0, 0, 500, 0);
 
 #ifdef QCA_PKT_PROTO_TRACE
-	if (dump_trace | DUMP_PACKET_TRACE)
+	if (dump_trace & DUMP_PACKET_TRACE)
 		vos_pkt_trace_buf_dump();
 #endif
 	if (WLAN_LOG_INDICATOR_HOST_ONLY == indicator) {

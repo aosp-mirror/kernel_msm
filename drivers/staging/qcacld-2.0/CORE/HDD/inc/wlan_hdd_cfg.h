@@ -2659,12 +2659,16 @@ This feature requires the dependent cfg.ini "gRoamPrefer5GHz" set to 1 */
  * 0x1 - Enable mgmt pkt logs (no probe req/rsp).
  * 0x2 - Enable EAPOL pkt logs.
  * 0x4 - Enable DHCP pkt logs.
+ * 0x8 - Enable mgmt. action pkt logs.
+ * 0x10 - Enable ARP packet logs.
+ * 0x20 - Enable ICMPv6 NS packet logs.
+ * 0x40 - Enable ICMPv6 NA packet logs.
  * 0x0 - Disable all the above connection related logs.
  */
 #define CFG_ENABLE_DEBUG_CONNECT_ISSUE             "gEnableDebugLog"
 #define CFG_ENABLE_DEBUG_CONNECT_ISSUE_MIN         (0)
 #define CFG_ENABLE_DEBUG_CONNECT_ISSUE_MAX         (0xFF)
-#define CFG_ENABLE_DEBUG_CONNECT_ISSUE_DEFAULT     (6)
+#define CFG_ENABLE_DEBUG_CONNECT_ISSUE_DEFAULT     (0x40 | 0x20 | 0x10 | 0x04 | 0x02)
 
 /*
  * RX packet handling options
