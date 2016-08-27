@@ -293,7 +293,13 @@ static const char * const qpnp_poff_reason[] = {
 /*
 *power_on(usb)
 */
-int usb_flag;
+static int usb_flag;
+
+int get_usb_power_on_flag(void)
+{
+	return usb_flag;
+}
+
 
 /*
  * On the kernel command line specify
