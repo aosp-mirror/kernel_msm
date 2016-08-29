@@ -150,7 +150,7 @@ int lge_uart_console_enabled(void)
 
 static int __init uart_console_setup(char *str)
 {
-	if (str && !strncmp(str, "enable", 6))
+	if (str && strncmp(str, "null", 4))
 		uart_console_enabled = 1;
 
 	pr_info("UART CONSOLE: %s\n",
@@ -159,4 +159,4 @@ static int __init uart_console_setup(char *str)
 	return 1;
 }
 
-__setup("uart_console=", uart_console_setup);
+__setup("androidboot.console=", uart_console_setup);
