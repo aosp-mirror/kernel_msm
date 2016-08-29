@@ -284,7 +284,10 @@ CONFIG_INPUT_GPIO=m
 # CONFIG_INPUT_PIXART_OTS_PAT9125_SWITCH is not set		#disable by Quanta
 # CONFIG_VT is not set
 # CONFIG_LEGACY_PTYS is not set
-# CONFIG_DEVMEM is not set
+# Quanta: CTS android.permission.cts.FileSystemPermissionTest --testDevMemSane {
+# Enable for debug, disabled in perf build
+CONFIG_DEVMEM=y
+# Quanta }
 CONFIG_DEVKMEM=y
 CONFIG_SERIAL_MSM_HSL=y
 CONFIG_SERIAL_MSM_HSL_CONSOLE=y
