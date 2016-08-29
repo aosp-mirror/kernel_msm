@@ -745,8 +745,8 @@ static ssize_t synaptics_rmi4_reg_control_store(struct device *dev,
 	char reg_s[11];
 	char offset_s[11];
 	char value_s[11];
-	int reg;
-	int offset = 0;
+	unsigned reg;
+	unsigned offset = 0;
 	int value;
 	int ret = 0;
 	int num_of_params;
