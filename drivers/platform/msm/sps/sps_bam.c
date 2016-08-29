@@ -170,7 +170,7 @@ polling:
 	}
 
 	/* Process active pipe sources */
-	if (dev->pipes_q && !list_empty(&dev->pipes_q)) {
+	if (!list_empty(&dev->pipes_q)) {
 		list_for_each_entry(pipe, &dev->pipes_q, list) {
 			/* Check this pipe's bit in the source mask */
 			if (BAM_PIPE_IS_ASSIGNED(pipe)
