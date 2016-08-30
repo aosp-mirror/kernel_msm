@@ -2484,6 +2484,8 @@ static void asus_chg_detect_work(struct work_struct *w)
 				asus_usb_gadget_ctrl = false;
 				//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
 			}
+
+			msm_otg_start_peripheral(otg, 0);
 		}
 		else{
 			printk("[USB] asus_chg_detect_work: BSV is not set,need re-check.(%d,%d)\n",motg->vbus_state,test_bit(B_SESS_VLD, &motg->inputs));
