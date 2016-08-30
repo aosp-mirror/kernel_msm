@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -4474,7 +4474,7 @@ int wcd9xxx_mbhc_start(struct wcd9xxx_mbhc *mbhc,
 			schedule_delayed_work(&mbhc->mbhc_firmware_dwork,
 					     usecs_to_jiffies(FW_READ_TIMEOUT));
 		else
-			pr_debug("%s: Skipping to read mbhc fw, 0x%p\n",
+			pr_debug("%s: Skipping to read mbhc fw, 0x%pK\n",
 				 __func__, mbhc->mbhc_fw);
 	}
 
@@ -4941,7 +4941,7 @@ static int wcd9xxx_remeasure_l_r_z_value(struct wcd9xxx_mbhc *mbhc, bool left,
 		reg_array_size = ARRAY_SIZE(reg_set_mux_right);
 	} else {
 		dev_err(codec->dev,
-			"%s: Invalid parameters, left = %d, l = %p, right = %d, r = %p\n",
+			"%s: Invalid parameters, left = %d, l = %pK, right = %d, r = %pK\n",
 			__func__, left, l, right, r);
 		return -EINVAL;
 	}
