@@ -174,4 +174,3 @@ obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 # <t-base drivers
 obj-y                           += hwversion/
 obj-y                           += hwmcu/
-obj-$(CONFIG_TI_VIBRATOR)	+= haptics/
