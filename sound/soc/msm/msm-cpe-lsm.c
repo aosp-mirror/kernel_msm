@@ -1053,7 +1053,7 @@ static int msm_cpe_lsm_copy(struct snd_pcm_substream *substream, int a,
 	if (lab_s->buf_idx >= (lab_s->hw_params.period_count))
 		lab_s->buf_idx = 0;
 	pcm_buf = (lab_s->pcm_buf[lab_s->buf_idx].mem);
-	pr_debug("%s: Buf IDX = 0x%x pcm_buf %pa\n",
+	pr_debug("%s: Buf IDX = 0x%x pcm_buf %pK\n",
 			__func__,
 			lab_s->buf_idx,
 			&(lab_s->pcm_buf[lab_s->buf_idx]));

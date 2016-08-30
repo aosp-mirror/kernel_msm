@@ -292,7 +292,7 @@ static int wcd_cpe_load_fw(struct wcd_cpe_core *core)
 	bool img_dload_fail = false;
 
 	if (!core || !core->cpe_handle) {
-		pr_err("%s: Error CPE core %p\n", __func__,
+		pr_err("%s: Error CPE core %pK\n", __func__,
 		       core);
 		return -EINVAL;
 	}
