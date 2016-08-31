@@ -4050,7 +4050,7 @@ static int populate_system_data(struct fg_chip *chip)
 	}
 	chip->rslow_comp.rslow_thr = buffer[0];
 	rc = fg_mem_read(chip, buffer, TEMP_RS_TO_RSLOW_REG, 2,
-			RSLOW_THRESH_OFFSET, 0);
+			TEMP_RS_TO_RSLOW_OFFSET, 0);
 	if (rc) {
 		pr_err("unable to read rs to rslow: %d\n", rc);
 		goto done;
@@ -5677,6 +5677,7 @@ static int fg_common_hw_init(struct fg_chip *chip)
 	int rc;
 	int resume_soc_raw;
 	u16 address_soc_delta;
+	u8 val;
 
 	update_iterm(chip);
 	update_cutoff_voltage(chip);
@@ -5757,6 +5758,18 @@ static int fg_common_hw_init(struct fg_chip *chip)
 			return rc;
 		}
 	}
+
+	rc = fg_mem_read(chip, &val, RSLOW_CFG_REG, 1, RSLOW_CFG_OFFSET,0);
+	if (rc) {
+		pr_err("unable to read rslow cfg: %d\n", rc);
+		return rc;
+	}
+	if (val & RSLOW_CFG_ON_VAL)
+		chip->rslow_comp.active = true;
+
+	if (fg_debug_mask & FG_STATUS)
+		pr_info("rslow_comp active is %sabled\n",
+				chip->rslow_comp.active ? "en" : "dis");
 
 	return 0;
 }
