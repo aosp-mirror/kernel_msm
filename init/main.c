@@ -175,6 +175,17 @@ static int set_user_dbg_mode(char *str)
 }
 __setup("bootdbguart=", set_user_dbg_mode);
 
+int g_bootdbgrecovery = 0;
+EXPORT_SYMBOL(g_bootdbgrecovery);
+static int set_power_key_mode(char *str)
+{
+	g_bootdbgrecovery = 1;
+	printk("Bootloader Power_key Mode = %d\n", g_bootdbgrecovery);
+
+	return 0;
+}
+__setup("recovery", set_power_key_mode);
+
 /*
  * If set, this is an indication to the drivers that reset the underlying
  * device before going ahead with the initialization otherwise driver might

@@ -329,6 +329,7 @@ ssize_t pwr_key_code_pressed = 0;
  */
 static int warm_boot;
 module_param(warm_boot, int, 0);
+extern int g_bootdbgrecovery;
 
 static int
 qpnp_pon_masked_write(struct qpnp_pon *pon, u16 addr, u8 mask, u8 val)
@@ -844,7 +845,7 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 	if (!cfg->old_state && !key_status) {
 		input_report_key(pon->pon_input, cfg->key_code, 1);
 		input_sync(pon->pon_input);
-		if (cfg->key_code == 116) {
+		if (cfg->key_code == 116 && !g_bootdbgrecovery) {
 			input_report_key(pon->pon_input, KEY_ASUS_POWER, 1);
 			input_sync(pon->pon_input);
 			printk("[KEYPAD] KEY_ASUS_POWER, status:1\n");
@@ -868,7 +869,7 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 #else
 	input_report_key(pon->pon_input, cfg->key_code, key_status);
 	input_sync(pon->pon_input);
-	if (cfg->key_code == 116) {
+	if (cfg->key_code == 116 && !g_bootdbgrecovery) {
 		input_report_key(pon->pon_input, KEY_ASUS_POWER, key_status);
 		input_sync(pon->pon_input);
 		printk("[KEYPAD]  KEY_ASUS_POWER, status:%d\n",  key_status);
