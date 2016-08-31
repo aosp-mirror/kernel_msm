@@ -444,8 +444,9 @@ void msm_vfe47_process_violation_status(
 		violation_status);
 }
 
-void msm_vfe47_process_error_status(struct vfe_device *vfe_dev)
+int msm_vfe47_process_error_status(struct vfe_device *vfe_dev)
 {
+	int ret = 0;
 	uint32_t error_status1 = vfe_dev->error_info.error_mask1;
 
 	if (error_status1 & (1 << 0)) {
@@ -471,6 +472,8 @@ void msm_vfe47_process_error_status(struct vfe_device *vfe_dev)
 		pr_err("%s: realign buf cr overflow\n", __func__);
 	if (error_status1 & (1 << 7)) {
 		msm_vfe47_process_violation_status(vfe_dev);
+		/* force overflow recovery for violation */
+		ret = -1;
 	}
 	if (error_status1 & (1 << 9))
 		pr_err("%s: image master 0 bus overflow\n", __func__);
@@ -506,6 +509,8 @@ void msm_vfe47_process_error_status(struct vfe_device *vfe_dev)
 		pr_err("%s: status aec bg bus overflow\n", __func__);
 	if (error_status1 & (1 << 25))
 		pr_err("%s: status dsp error\n", __func__);
+
+	return ret;
 }
 
 void msm_vfe47_read_irq_status(struct vfe_device *vfe_dev,

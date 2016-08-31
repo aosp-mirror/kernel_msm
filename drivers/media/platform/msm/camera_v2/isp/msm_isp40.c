@@ -466,8 +466,9 @@ static void msm_vfe40_process_violation_status(
 		pr_err("%s: realign buf cr violation\n", __func__);
 }
 
-static void msm_vfe40_process_error_status(struct vfe_device *vfe_dev)
+static int msm_vfe40_process_error_status(struct vfe_device *vfe_dev)
 {
+	int ret = 0;
 	uint32_t error_status1 = vfe_dev->error_info.error_mask1;
 	if (error_status1 & (1 << 0)) {
 		pr_err_ratelimited("%s: vfe %d camif error status: 0x%x\n",
@@ -562,6 +563,8 @@ static void msm_vfe40_process_error_status(struct vfe_device *vfe_dev)
 	/* Update ab/ib values for any overflow that may have occured*/
 	if ((error_status1 >> 9) & 0x7FFF)
 		msm_isp_update_last_overflow_ab_ib(vfe_dev);
+
+	return ret;
 }
 
 static void msm_vfe40_read_irq_status(struct vfe_device *vfe_dev,

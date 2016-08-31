@@ -158,7 +158,7 @@ void msm_vfe47_process_input_irq(struct vfe_device *vfe_dev,
 	struct msm_isp_timestamp *ts);
 void msm_vfe47_process_violation_status(
 	struct vfe_device *vfe_dev);
-void msm_vfe47_process_error_status(struct vfe_device *vfe_dev);
+int msm_vfe47_process_error_status(struct vfe_device *vfe_dev);
 void msm_vfe47_clear_status_reg(struct vfe_device *vfe_dev);
 int msm_vfe47_get_platform_data(struct vfe_device *vfe_dev);
 int msm_vfe47_enable_regulators(struct vfe_device *vfe_dev, int enable);

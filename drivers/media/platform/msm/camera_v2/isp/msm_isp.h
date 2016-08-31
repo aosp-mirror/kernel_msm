@@ -234,7 +234,7 @@ struct msm_vfe_core_ops {
 		struct msm_vfe_rdi_cfg *rdi_cfg,
 		enum msm_vfe_input_src input_src);
 	void (*get_error_mask)(uint32_t *error_mask0, uint32_t *error_mask1);
-	void (*process_error_status)(struct vfe_device *vfe_dev);
+	int (*process_error_status)(struct vfe_device *vfe_dev);
 	void (*get_overflow_mask)(uint32_t *overflow_mask);
 	void (*get_irq_mask)(struct vfe_device *vfe_dev,
 		uint32_t *irq0_mask, uint32_t *irq1_mask);

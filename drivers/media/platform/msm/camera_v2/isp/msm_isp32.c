@@ -484,8 +484,9 @@ static void msm_vfe32_get_overflow_mask(uint32_t *overflow_mask)
 	*overflow_mask = 0x0;
 }
 
-static void msm_vfe32_process_error_status(struct vfe_device *vfe_dev)
+static int msm_vfe32_process_error_status(struct vfe_device *vfe_dev)
 {
+	int ret = 0;
 	uint32_t error_status1 = vfe_dev->error_info.error_mask1;
 
 	if (error_status1 & BIT(0))
@@ -565,6 +566,8 @@ static void msm_vfe32_process_error_status(struct vfe_device *vfe_dev)
 	}
 	if (error_status1 & BIT(22))
 		pr_err("%s: axi error\n", __func__);
+
+	return ret;
 }
 
 static void msm_vfe32_read_irq_status(struct vfe_device *vfe_dev,

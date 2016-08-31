@@ -310,8 +310,9 @@ static void msm_vfe44_process_violation_status(
 		pr_err("%s: bpc violation\n", __func__);
 }
 
-static void msm_vfe44_process_error_status(struct vfe_device *vfe_dev)
+static int msm_vfe44_process_error_status(struct vfe_device *vfe_dev)
 {
+	int ret = 0;
 	uint32_t error_status1 = vfe_dev->error_info.error_mask1;
 	if (error_status1 & (1 << 0)) {
 		pr_err("%s: camif error status: 0x%x\n",
@@ -397,6 +398,8 @@ static void msm_vfe44_process_error_status(struct vfe_device *vfe_dev)
 		vfe_dev->stats->bfscale_overflow++;
 		pr_err("%s: status bf scale bus overflow\n", __func__);
 	}
+
+	return ret;
 }
 
 static void msm_vfe44_read_irq_status(struct vfe_device *vfe_dev,

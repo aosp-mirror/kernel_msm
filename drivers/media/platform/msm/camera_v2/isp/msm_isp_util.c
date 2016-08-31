@@ -1649,19 +1649,21 @@ static int msm_isp_process_iommu_page_fault(struct vfe_device *vfe_dev)
 	return rc;
 }
 
-void msm_isp_process_error_info(struct vfe_device *vfe_dev)
+int msm_isp_process_error_info(struct vfe_device *vfe_dev)
 {
+	int ret = 0;
 	struct msm_vfe_error_info *error_info = &vfe_dev->error_info;
 
 	if (error_info->error_count == 1 ||
 		!(error_info->info_dump_frame_count % 100)) {
-		vfe_dev->hw_info->vfe_ops.core_ops.
+		ret = vfe_dev->hw_info->vfe_ops.core_ops.
 			process_error_status(vfe_dev);
 		error_info->error_mask0 = 0;
 		error_info->error_mask1 = 0;
 		error_info->camif_status = 0;
 		error_info->violation_status = 0;
 	}
+	return ret;
 }
 
 static inline void msm_isp_update_error_info(struct vfe_device *vfe_dev,
@@ -1674,7 +1676,8 @@ static inline void msm_isp_update_error_info(struct vfe_device *vfe_dev,
 
 static void msm_isp_process_overflow_irq(
 	struct vfe_device *vfe_dev,
-	uint32_t *irq_status0, uint32_t *irq_status1)
+	uint32_t *irq_status0, uint32_t *irq_status1,
+	uint32_t force_overflow)
 {
 	uint32_t overflow_mask;
 
@@ -1697,7 +1700,8 @@ static void msm_isp_process_overflow_irq(
 	/*Check if any overflow bit is set*/
 	vfe_dev->hw_info->vfe_ops.core_ops.
 		get_overflow_mask(&overflow_mask);
-	overflow_mask &= *irq_status1;
+	if (!force_overflow)
+		overflow_mask &= *irq_status1;
 
 	if (overflow_mask) {
 		struct msm_isp_event_data error_event;
@@ -1814,7 +1818,7 @@ irqreturn_t msm_isp_process_irq(int irq_num, void *data)
 			irq_status0);
 	}
 	msm_isp_process_overflow_irq(vfe_dev,
-		&irq_status0, &irq_status1);
+		&irq_status0, &irq_status1, 0);
 
 	vfe_dev->hw_info->vfe_ops.core_ops.
 		get_error_mask(&error_mask0, &error_mask1);
@@ -1883,7 +1887,12 @@ void msm_isp_do_tasklet(unsigned long data)
 				__func__);
 			continue;
 		}
-		msm_isp_process_error_info(vfe_dev);
+		if (msm_isp_process_error_info(vfe_dev) == -1) {
+			/* force overflow recovery */
+			msm_isp_process_overflow_irq(vfe_dev,
+				&irq_status0, &irq_status1 ,1);
+			break;
+		}
 		irq_ops->process_stats_irq(vfe_dev,
 			irq_status0, irq_status1,
 			pingpong_status, &ts);

@@ -62,7 +62,7 @@ irqreturn_t msm_isp_process_irq(int irq_num, void *data);
 int msm_isp_set_src_state(struct vfe_device *vfe_dev, void *arg);
 void msm_isp_do_tasklet(unsigned long data);
 void msm_isp_update_error_frame_count(struct vfe_device *vfe_dev);
-void msm_isp_process_error_info(struct vfe_device *vfe_dev);
+int msm_isp_process_error_info(struct vfe_device *vfe_dev);
 int msm_isp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh);
 int msm_isp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh);
 long msm_isp_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg);
