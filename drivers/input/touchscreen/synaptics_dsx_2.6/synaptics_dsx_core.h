@@ -68,7 +68,7 @@
 #define PDT_ENTRY_SIZE (0x0006)
 #define PAGES_TO_SERVICE (10)
 #define PAGE_SELECT_LEN (2)
-#define ADDRESS_WORD_LEN (2)
+#define ADDRESS_LEN (2)
 
 #define SYNAPTICS_RMI4_F01 (0x01)
 #define SYNAPTICS_RMI4_F11 (0x11)
@@ -248,6 +248,11 @@ struct synaptics_rmi4_device_info {
 	struct list_head support_fn_list;
 };
 
+struct rmi_config_id {
+	__u8 chip_type;
+	__u8 sensor;
+	__u16 fw_ver;
+};
 /*
  * struct synaptics_rmi4_data - RMI4 device instance data
  * @pdev: pointer to platform device
@@ -309,8 +314,12 @@ struct synaptics_rmi4_device_info {
  * @report_touch: pointer to touch reporting function
  */
 struct synaptics_rmi4_data {
+	struct pinctrl *ts_pinctrl;
+	struct pinctrl_state *gpio_state_active;
+	struct pinctrl_state *gpio_state_suspend;
 	struct platform_device *pdev;
 	struct input_dev *input_dev;
+	struct i2c_client *i2c_client;
 	struct input_dev *stylus_dev;
 	const struct synaptics_dsx_hw_interface *hw_if;
 	struct synaptics_rmi4_device_info rmi4_mod_info;
@@ -321,8 +330,11 @@ struct synaptics_rmi4_data {
 	struct mutex rmi4_report_mutex;
 	struct mutex rmi4_io_ctrl_mutex;
 	struct mutex rmi4_exp_init_mutex;
+	struct mutex rmi4_irq_enable_mutex;
 	struct delayed_work rb_work;
 	struct workqueue_struct *rb_workqueue;
+	struct work_struct  work;
+	struct rmi_config_id	config_id;
 #ifdef CONFIG_FB
 	struct notifier_block fb_notifier;
 	struct work_struct reset_work;
@@ -452,11 +464,13 @@ static inline int secure_memcpy(unsigned char *dest, unsigned int dest_size,
 		const unsigned char *src, unsigned int src_size,
 		unsigned int count)
 {
-	if (dest == NULL || src == NULL)
+	if (dest == NULL || src == NULL) {
 		return -EINVAL;
+	}
 
-	if (count > dest_size || count > src_size)
+	if (count > dest_size || count > src_size) {
 		return -EINVAL;
+	}
 
 	memcpy((void *)dest, (const void *)src, count);
 

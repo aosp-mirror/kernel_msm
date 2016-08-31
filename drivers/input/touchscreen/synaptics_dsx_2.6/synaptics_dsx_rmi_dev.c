@@ -43,7 +43,7 @@
 #include <linux/uaccess.h>
 #include <linux/cdev.h>
 #include <linux/platform_device.h>
-#include <linux/input/synaptics_dsx.h>
+#include <linux/input/synaptics_dsx_v2_6.h>
 #include "synaptics_dsx_core.h"
 
 #define CHAR_DEVICE_NAME "rmi"
@@ -84,12 +84,6 @@ static ssize_t rmidev_sysfs_intr_mask_show(struct device *dev,
 static ssize_t rmidev_sysfs_intr_mask_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
 
-static ssize_t rmidev_sysfs_concurrent_show(struct device *dev,
-		struct device_attribute *attr, char *buf);
-
-static ssize_t rmidev_sysfs_concurrent_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count);
-
 struct rmidev_handle {
 	dev_t dev_no;
 	pid_t pid;
@@ -104,7 +98,6 @@ struct rmidev_handle {
 	struct task_struct *task;
 	void *data;
 	bool irq_enabled;
-	bool concurrent;
 };
 
 struct rmidev_data {
@@ -126,27 +119,24 @@ static struct bin_attribute attr_data = {
 };
 
 static struct device_attribute attrs[] = {
-	__ATTR(open, S_IWUGO,
+	__ATTR(open, S_IWUSR | S_IWGRP,
 			synaptics_rmi4_show_error,
 			rmidev_sysfs_open_store),
-	__ATTR(release, S_IWUGO,
+	__ATTR(release, S_IWUSR | S_IWGRP,
 			synaptics_rmi4_show_error,
 			rmidev_sysfs_release_store),
 	__ATTR(attn_state, S_IRUGO,
 			rmidev_sysfs_attn_state_show,
 			synaptics_rmi4_store_error),
-	__ATTR(pid, S_IRUGO | S_IWUGO,
+	__ATTR(pid, S_IRUGO | S_IWUSR | S_IWGRP,
 			rmidev_sysfs_pid_show,
 			rmidev_sysfs_pid_store),
-	__ATTR(term, S_IWUGO,
+	__ATTR(term, S_IWUSR | S_IWGRP,
 			synaptics_rmi4_show_error,
 			rmidev_sysfs_term_store),
-	__ATTR(intr_mask, S_IRUGO | S_IWUGO,
+	__ATTR(intr_mask, S_IRUGO | S_IWUSR | S_IWGRP,
 			rmidev_sysfs_intr_mask_show,
 			rmidev_sysfs_intr_mask_store),
-	__ATTR(concurrent, S_IRUGO | S_IWUGO,
-			rmidev_sysfs_concurrent_show,
-			rmidev_sysfs_concurrent_store),
 };
 
 static int rmidev_major_num;
@@ -187,7 +177,7 @@ static int rmidev_sysfs_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 		if (retval < 0)
 			return retval;
 
-		retval = request_threaded_irq(rmi4_data->irq, NULL,
+		retval = request_irq(rmi4_data->irq,
 				rmidev_sysfs_irq, irq_flags,
 				PLATFORM_DRIVER_NAME, rmi4_data);
 		if (retval < 0) {
@@ -214,14 +204,9 @@ static ssize_t rmidev_sysfs_data_show(struct file *data_file,
 		char *buf, loff_t pos, size_t count)
 {
 	int retval;
-	unsigned char intr_status = 0;
 	unsigned int length = (unsigned int)count;
 	unsigned short address = (unsigned short)pos;
-	struct synaptics_rmi4_fn *fhandler;
-	struct synaptics_rmi4_device_info *rmi;
 	struct synaptics_rmi4_data *rmi4_data = rmidev->rmi4_data;
-
-	rmi = &(rmi4_data->rmi4_mod_info);
 
 	if (length > (REG_ADDR_LIMIT - address)) {
 		dev_err(rmi4_data->pdev->dev.parent,
@@ -245,29 +230,6 @@ static ssize_t rmidev_sysfs_data_show(struct file *data_file,
 		return -EINVAL;
 	}
 
-	if (!rmidev->concurrent)
-		goto exit;
-
-	if (address != rmi4_data->f01_data_base_addr)
-		goto exit;
-
-	if (length <= 1)
-		goto exit;
-
-	intr_status = buf[1];
-
-	if (!list_empty(&rmi->support_fn_list)) {
-		list_for_each_entry(fhandler, &rmi->support_fn_list, link) {
-			if (fhandler->num_of_data_sources) {
-				if (fhandler->intr_mask & intr_status) {
-					rmi4_data->report_touch(rmi4_data,
-							fhandler);
-				}
-			}
-		}
-	}
-
-exit:
 	return length;
 }
 
@@ -441,25 +403,6 @@ static ssize_t rmidev_sysfs_intr_mask_store(struct device *dev,
 	return count;
 }
 
-static ssize_t rmidev_sysfs_concurrent_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%d\n", rmidev->concurrent);
-}
-
-static ssize_t rmidev_sysfs_concurrent_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	unsigned int input;
-
-	if (sscanf(buf, "%u", &input) != 1)
-		return -EINVAL;
-
-	rmidev->concurrent = input > 0 ? true : false;
-
-	return count;
-}
-
 static int rmidev_allocate_buffer(int count)
 {
 	if (count + 1 > rmidev->tmpbuf_size) {
@@ -548,14 +491,7 @@ static ssize_t rmidev_read(struct file *filp, char __user *buf,
 		size_t count, loff_t *f_pos)
 {
 	ssize_t retval;
-	unsigned char intr_status = 0;
-	unsigned short address;
 	struct rmidev_data *dev_data = filp->private_data;
-	struct synaptics_rmi4_fn *fhandler;
-	struct synaptics_rmi4_device_info *rmi;
-	struct synaptics_rmi4_data *rmi4_data = rmidev->rmi4_data;
-
-	rmi = &(rmi4_data->rmi4_mod_info);
 
 	if (IS_ERR(dev_data)) {
 		pr_err("%s: Pointer of char device data is invalid", __func__);
@@ -567,8 +503,6 @@ static ssize_t rmidev_read(struct file *filp, char __user *buf,
 
 	if (count > (REG_ADDR_LIMIT - *f_pos))
 		count = REG_ADDR_LIMIT - *f_pos;
-
-	address = (unsigned short)(*f_pos);
 
 	rmidev_allocate_buffer(count);
 
@@ -585,28 +519,6 @@ static ssize_t rmidev_read(struct file *filp, char __user *buf,
 		retval = -EFAULT;
 	else
 		*f_pos += retval;
-
-	if (!rmidev->concurrent)
-		goto clean_up;
-
-	if (address != rmi4_data->f01_data_base_addr)
-		goto clean_up;
-
-	if (count <= 1)
-		goto clean_up;
-
-	intr_status = rmidev->tmpbuf[1];
-
-	if (!list_empty(&rmi->support_fn_list)) {
-		list_for_each_entry(fhandler, &rmi->support_fn_list, link) {
-			if (fhandler->num_of_data_sources) {
-				if (fhandler->intr_mask & intr_status) {
-					rmi4_data->report_touch(rmi4_data,
-							fhandler);
-				}
-			}
-		}
-	}
 
 clean_up:
 	mutex_unlock(&(dev_data->file_mutex));
