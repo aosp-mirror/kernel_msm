@@ -295,8 +295,8 @@ qcom,camera@0 {
 		qcom,cam-vreg-op-mode = <0 0>;//uA
 		qcom,gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <&cam_sensor_mclk0_active &cam_sensor_rear_active &cci0_active>;
-		pinctrl-1 = <&cam_sensor_mclk0_suspend &cam_sensor_rear_suspend &cci0_suspend>;
+		pinctrl-0 = <&cam_sensor_mclk0_active &cam_sensor_rear_active>;
+		pinctrl-1 = <&cam_sensor_mclk0_suspend &cam_sensor_rear_suspend>;
 		gpios = <&tlmm 13 0>,
 			<&tlmm 93 0>,
 			<&tlmm 49 0>;
@@ -337,8 +337,8 @@ qcom,camera@1 {
 		qcom,cam-vreg-op-mode = <0 0 0>;//uA
 		qcom,gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <&cam_sensor_mclk1_active &cam_sensor_rear2_active &cci1_active>;
-		pinctrl-1 = <&cam_sensor_mclk1_suspend &cam_sensor_rear2_suspend &cci0_suspend>;
+		pinctrl-0 = <&cam_sensor_mclk1_active &cam_sensor_rear2_active>;
+		pinctrl-1 = <&cam_sensor_mclk1_suspend &cam_sensor_rear2_suspend>;
 		gpios = <&tlmm 14 0>,
 			<&tlmm 23 0>,
 			<&pm8994_gpios 14 0>;
