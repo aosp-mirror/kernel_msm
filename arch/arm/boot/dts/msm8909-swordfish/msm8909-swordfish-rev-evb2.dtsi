@@ -40,3 +40,7 @@
 &battery_tm {
 	tm,low-vreg-mv = <4420>;
 };
+
+&mdss_dsi0 {
+	vddio-supply = <&pm8916_l15>;
+};

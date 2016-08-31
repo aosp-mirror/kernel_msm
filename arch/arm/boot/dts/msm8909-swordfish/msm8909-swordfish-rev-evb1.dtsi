@@ -38,3 +38,7 @@
 	tm,batt-vreg-mv = <4425>;
 	tm,current-ma = <540>;
 };
+
+&mdss_dsi0 {
+	vddio-supply = <&pm8916_l15>;
+};

@@ -24,3 +24,7 @@
 	swap-vbus-vin;
 	iin = <200>;
 };
+
+&mdss_dsi0 {
+	vddio-supply = <&pm8916_l15>;
+};

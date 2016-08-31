@@ -33,7 +33,7 @@
 
 	vdda-supply = <&pm8916_l2>;
 	vdd-supply = <&pm8916_l11>;
-	vddio-supply = <&pm8916_l15>;
+	vddio-supply = <&pm8916_l6>;
 };
 
 &mdss_dsi0_pll {
