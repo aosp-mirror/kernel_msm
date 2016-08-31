@@ -206,6 +206,7 @@ static int hot_bat_decidegc_table[] = {
 #define RECHARGE_THRESH_MASK	BIT(6)
 #define RECHARGE_THRESH_OFFSET	6
 #define ITERM_DIS_BIT		BIT(5)
+#define BATT_OV_SHUTDOWN_BIT	BIT(3)
 #define FASTCHG_CURR_MASK	SMB_MASK(2, 0)
 
 #define CFG_REG_3		0x03
@@ -1335,6 +1336,9 @@ void adc_notification_set_cool_current(int level)
 		} else if (level == 0) { // JEITA_disable_cool
 			lbc_set_suspend(0x00);
 			g_smb23x_chip->batt_cool = false;
+			smb23x_enable_volatile_writes(g_smb23x_chip);
+			smb23x_masked_write(g_smb23x_chip, CFG_REG_5, AICL_EN_BIT, 0);
+			msleep(30);
 			smb23x_masked_write(g_smb23x_chip, CFG_REG_5, AICL_EN_BIT, 1);
 			smb23x_parallel_charger_enable(g_smb23x_chip, USER, true);
 			smb23x_charging_disable(g_smb23x_chip, USER, false);
@@ -1368,7 +1372,10 @@ void adc_notification_set_warm_current(int level)
 		} else { // JEITA_disable_warm
 			lbc_set_suspend(0x00);
 			g_smb23x_chip->batt_warm = false;
+			smb23x_enable_volatile_writes(g_smb23x_chip);
 			smb23x_masked_write(g_smb23x_chip, CFG_REG_3, FLOAT_VOLTAGE_MASK, 0x17);
+			smb23x_masked_write(g_smb23x_chip, CFG_REG_5, AICL_EN_BIT, 0);
+			msleep(30);
 			smb23x_masked_write(g_smb23x_chip, CFG_REG_5, AICL_EN_BIT, 1);
 			smb23x_parallel_charger_enable(g_smb23x_chip, USER, true);
 			smb23x_charging_disable(g_smb23x_chip, USER, false);
@@ -2795,6 +2802,9 @@ static int smb23x_probe(struct i2c_client *client,
 	smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 0);
 	msleep(30);
 	smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
+
+	// Disable battery over-voltage behavior
+	smb23x_masked_write(chip, CFG_REG_2, BATT_OV_SHUTDOWN_BIT, 0);
 
 	chip->parallel_count = 0;
 
