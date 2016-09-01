@@ -50,7 +50,7 @@ endif
 mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
 current_dir := $(notdir $(patsubst %/,%,$(dir $(mkfile_path))))
 ifeq ($(TARGET_KERNEL_VERSION),)
-    TARGET_KERNEL_VERSION := 3.18
+    TARGET_KERNEL_VERSION := 4.4
 endif
 TARGET_KERNEL := msm-$(TARGET_KERNEL_VERSION)
 ifeq ($(TARGET_KERNEL),$(current_dir))
@@ -64,7 +64,7 @@ else
     # Legacy style, kernel source directly under kernel
     KERNEL_LEGACY_DIR := true
     BUILD_ROOT_LOC := ../
-    TARGET_KERNEL_SOURCE := kernel
+    TARGET_KERNEL_SOURCE := hardware/qcom/msm-4.4
     KERNEL_OUT := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ
 endif
 
