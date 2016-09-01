@@ -23,7 +23,8 @@
 		interrupt-parent = <&msm_gpio>;
 		interrupts = <95 0x00>;
 		spi-max-frequency = <2000000>;
-
+		pixart,vld-supply = <&pm8916_l17>;
+		pixart,vdd-supply = <&pm8916_l16>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&paj9124u1_motion_gpio>;
 	};
