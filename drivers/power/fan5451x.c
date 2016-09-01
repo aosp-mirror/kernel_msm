@@ -118,6 +118,7 @@ struct fan5451x_chip {
 	int wlc_fake_online;
 	struct delayed_work rechg_check_work;
 	struct delayed_work wlc_tx_recheck_work;
+	bool rechg_needed;
 };
 
 static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set);
@@ -583,6 +584,7 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 	if (intr[0] & INT0_CHGEND) {
 		pr_info("EOC IRQ\n");
 		fan5451x_wlc_fake_online(chip, 1);
+		chip->rechg_needed = false;
 		chip->eoc = true;
 		schedule_delayed_work(&chip->rechg_check_work,
 				round_jiffies_relative(msecs_to_jiffies(
@@ -1025,6 +1027,9 @@ static int get_prop_capacity(struct fan5451x_chip *chip)
 		chip->bms_psy->get_property(chip->bms_psy,
 				POWER_SUPPLY_PROP_CAPACITY, &ret);
 
+		if (chip->eoc && ret.intval < 100)
+			chip->rechg_needed = true;
+
 		return ret.intval;
 	}
 
@@ -1261,8 +1266,8 @@ static void fan5451x_rechg_check_work(struct work_struct *work)
 		delay = RECHG_CHECK_DELAY_MS;
 	}
 
-	if (rechg_cnt > RECHG_CHECK_CNT) {
-		pr_info("Rechg occur!! volt(%d)\n", volt);
+	if (rechg_cnt > RECHG_CHECK_CNT || chip->rechg_needed) {
+		pr_info("Rechg occur!! volt(%d) soc_rechg(%d)\n", volt, chip->rechg_needed);
 		chip->eoc = false;
 		fan5451x_wlc_fake_online(chip, 0);
 		return;
