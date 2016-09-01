@@ -18,6 +18,7 @@
 
 &fan5451x_chg {
 	swap-vbus-vin;
+	iin = <150>;
 };
 
 &mdss_dsi0 {
