@@ -372,6 +372,12 @@ static int mp2661_get_prop_batt_capacity(struct mp2661_chg *chip)
         return chip->fake_battery_soc;
     }
 
+    if (!chip->bms_psy && chip->bms_psy_name)
+    {
+        pr_info("get bms power supply\n");
+        chip->bms_psy = power_supply_get_by_name((char *)chip->bms_psy_name);
+    }
+
     if (chip->bms_psy)
     {
         chip->bms_psy->get_property(chip->bms_psy,
@@ -439,24 +445,41 @@ static int mp2661_get_prop_ambient_temp(struct mp2661_chg *chip)
     return (int)results.physical;
 }
 
-static int
-mp2661_get_prop_battery_voltage_now(struct mp2661_chg *chip)
+#define DEFAULT_BATT_VOLTAGE    2800000
+static int mp2661_get_prop_battery_voltage_now(struct mp2661_chg *chip)
 {
-    int rc = 0;
-    struct qpnp_vadc_result results;
+    union power_supply_propval ret = {0, };
 
-    rc = qpnp_vadc_read(chip->vadc_dev, VBAT_SNS, &results);
-    if (rc)
+    if (chip->fake_battery_soc >= 0)
     {
-        pr_err("Unable to read vbatt rc=%d\n", rc);
-        return 0;
+        return chip->fake_battery_soc;
     }
-    return results.physical;
+
+    if (!chip->bms_psy && chip->bms_psy_name)
+    {
+        pr_info("get bms power supply\n");
+        chip->bms_psy = power_supply_get_by_name((char *)chip->bms_psy_name);
+    }
+
+    if (chip->bms_psy)
+    {
+        chip->bms_psy->get_property(chip->bms_psy,
+                POWER_SUPPLY_PROP_VOLTAGE_NOW, &ret);
+        return ret.intval;
+    }
+
+    return DEFAULT_BATT_VOLTAGE;
 }
 
 static int mp2661_get_prop_current_now(struct mp2661_chg *chip)
 {
     union power_supply_propval ret = {0,};
+
+    if (!chip->bms_psy && chip->bms_psy_name)
+    {
+        pr_info("get bms power supply\n");
+        chip->bms_psy = power_supply_get_by_name((char *)chip->bms_psy_name);
+    }
 
     if (chip->bms_psy)
     {
