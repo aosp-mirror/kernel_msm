@@ -477,6 +477,12 @@ config IDTP9220_RECEIVER
 	help
 	  Say Y to include support for IDTP9220 wireless receiver.
 
+config MAX17055_BMS
+	tristate "MAX17055 BMS"
+	depends on I2C
+	help
+	  Say Y to include support for MAX17055 bms.
+
 config BATTERY_BQ28400
 	tristate "BQ28400 battery driver"
 	depends on I2C
