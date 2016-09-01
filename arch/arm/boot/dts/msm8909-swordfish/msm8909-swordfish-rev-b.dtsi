@@ -19,3 +19,7 @@
 #include "msm8909-swordfish-sound.dtsi"
 #include "msm8909-swordfish-nanohub.dtsi"
 #include "msm8909-swordfish-paj9124u1.dtsi"
+
+&battery_tm {
+	tm,low-vreg-mv = <4420>;
+};

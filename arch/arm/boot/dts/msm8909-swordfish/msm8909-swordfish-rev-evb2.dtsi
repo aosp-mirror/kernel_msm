@@ -36,3 +36,7 @@
 		};
 	};
 };
+
+&battery_tm {
+	tm,low-vreg-mv = <4420>;
+};
