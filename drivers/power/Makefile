@@ -69,6 +69,7 @@ obj-$(CONFIG_SMB23X_CHARGER)	+= smb23x-charger.o
 obj-$(CONFIG_BATTERY_BQ28400)	+= bq28400_battery.o
 obj-$(CONFIG_MP2661_CHARGER)	+= mp2661-charger.o
 obj-$(CONFIG_IDTP9220_RECEIVER)	+= idtp9220-receiver.o
+obj-$(CONFIG_MAX17055_BMS)       += max17055_battery.o
 obj-$(CONFIG_QPNP_BMS)		+= qpnp-bms.o batterydata-lib.o
 obj-$(CONFIG_QPNP_VM_BMS)	+= qpnp-vm-bms.o batterydata-lib.o batterydata-interface.o
 obj-$(CONFIG_QPNP_FG)		+= qpnp-fg.o
