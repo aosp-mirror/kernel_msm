@@ -42,6 +42,9 @@
 #define WLC_TX_RECHECK_WORK_DELAY_MS  10000
 #define WLC_TX_RECHECK_RETRY_COUNT    6
 #define STEP_OFFSET_MV 200
+#define IIN_MIN_MA 325
+#define IIN_MAX_MA 2000
+#define IIN_STEP_MA 25
 
 static unsigned int att_addr = REG_IOCHRG;
 
@@ -300,9 +303,6 @@ static int fan5451x_set_ibus(struct fan5451x_chip *chip, int ma)
 			chip->register_base.reg_ibus, reg_val);
 }
 
-#define IIN_MIN_MA 325
-#define IIN_MAX_MA 2000
-#define IIN_STEP_MA 25
 static int fan5451x_set_iin(struct fan5451x_chip *chip, int ma)
 {
 	u8 reg_val;
@@ -313,7 +313,8 @@ static int fan5451x_set_iin(struct fan5451x_chip *chip, int ma)
 		ma = chip->register_base.iin_max_ma;
 
 	reg_val = (ma - chip->register_base.iin_min_ma) / IIN_STEP_MA;
-	chip->iin = reg_val * IIN_STEP_MA + chip->register_base.iin_min_ma;
+	pr_info("set iin %d reg(0x%x)<=0x%x\n",
+			ma, chip->register_base.reg_iin, reg_val);
 
 	return fan5451x_write_reg(chip->client,
 			chip->register_base.reg_iin, reg_val);
@@ -564,6 +565,8 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 		if (chip->wlc_present ^ wlc_present) {
 			chip->wlc_present = wlc_present;
 			if (chip->wlc_psy && !chip->wlc_fake_online) {
+				if (chip->wlc_present)
+					fan5451x_set_iin(chip, chip->iin);
 				pr_info("wlc present %d\n", wlc_present);
 				power_supply_set_present(chip->wlc_psy,
 						chip->wlc_present);
@@ -848,6 +851,9 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 		else
 			fan5451x_set_ibus(chip, current_ma);
 	}
+
+	if (fan5451x_wlc_chg_plugged_in(chip))
+		fan5451x_set_iin(chip, chip->iin);
 
 skip_current_config:
 	power_supply_changed(&chip->batt_psy);
