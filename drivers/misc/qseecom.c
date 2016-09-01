@@ -2866,6 +2866,14 @@ int qseecom_start_app(struct qseecom_handle **handle,
 	data->client.user_virt_sb_base = 0;
 	data->client.ihandle = NULL;
 
+	/* Allocate sglistinfo buffer for kernel client */
+	data->sglistinfo_ptr = kzalloc(SGLISTINFO_TABLE_SIZE, GFP_KERNEL);
+	if (!(data->sglistinfo_ptr)) {
+		kfree(data);
+		kfree(*handle);
+		*handle = NULL;
+		return -ENOMEM;
+	}
 	init_waitqueue_head(&data->abort_wq);
 	atomic_set(&data->ioctl_count, 0);
 
@@ -2873,6 +2881,7 @@ int qseecom_start_app(struct qseecom_handle **handle,
 				ION_HEAP(ION_QSECOM_HEAP_ID), 0);
 	if (IS_ERR_OR_NULL(data->client.ihandle)) {
 		pr_err("Ion client could not retrieve the handle\n");
+		kfree(data->sglistinfo_ptr);
 		kfree(data);
 		kfree(*handle);
 		*handle = NULL;
@@ -2977,6 +2986,7 @@ int qseecom_start_app(struct qseecom_handle **handle,
 	return 0;
 
 err:
+	kfree(data->sglistinfo_ptr);
 	kfree(data);
 	kfree(*handle);
 	*handle = NULL;
@@ -3038,6 +3048,7 @@ int qseecom_shutdown_app(struct qseecom_handle **handle)
 	atomic_dec(&data->ioctl_count);
 	mutex_unlock(&app_access_lock);
 	if (ret == 0) {
+		kzfree(data->sglistinfo_ptr);
 		kzfree(data);
 		kzfree(*handle);
 		kzfree(kclient);
