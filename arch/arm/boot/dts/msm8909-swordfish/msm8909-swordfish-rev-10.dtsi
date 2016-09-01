@@ -22,4 +22,5 @@
 
 &fan5451x_chg {
 	swap-vbus-vin;
+	iin = <200>;
 };
