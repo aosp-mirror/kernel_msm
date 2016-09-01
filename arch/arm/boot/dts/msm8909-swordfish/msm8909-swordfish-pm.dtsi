@@ -121,8 +121,8 @@
 
 			maxim,rsns-microohm = <10000>;
 			maxim,ext_batt_psy;
-			maxim,full-soc = <99>;
-			maxim,empty-soc = <0>;
+			maxim,full-soc = <95>;
+			maxim,empty-soc = <1>;
 
 			maxim,model = [A0 00 B6 E0 B8 80 BA 40
 					BC A0 BD 70 BE 50 BF 90
