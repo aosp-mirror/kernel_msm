@@ -825,6 +825,21 @@
 		};
 	};
 
+	/* max17055_alert */
+	max17055_alert_pmux{
+		max17055_alert:max17055_alert {
+			mux {
+				pins = "gpio42";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio42";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+	};
+
 	/*For PPG:power Ok note*/
 	power_ok_note{
 		power_ok_note_active:power_ok_note_active {
