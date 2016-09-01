@@ -786,18 +786,46 @@ static int idtp9017_enable_out_voltage(struct idtp9017_chip *chip,
 static int idtp9017_set_out_voltage(struct idtp9017_chip *chip,
 		int voltage)
 {
-	u8 reg_val = 0x00;
 	int ret = 0;
+	int i;
+	struct {
+		int x;
+		int y;
+	} vout_map[] = {
+		/* reg_val, mV */
+		{  1, 3250},
+		{  2, 3500},
+		{  3, 3750},
+		{  4, 4000},
+		{  5, 4250},
+		{  6, 4500},
+		{  7, 4750},
+		{  0, 5000},
+		{  9, 5250},
+		{ 11, 5500},
+		{ 13, 5750},
+		{ 15, 6000},
+		{ 18, 6250},
+		{ 22, 6500},
+		{ 26, 6750}
+	};
 
-	reg_val = (voltage - 4100) / 100;
+	voltage = max(voltage, 3250);
+	voltage = min(voltage, 6750);
+
+	for (i = 0; i < ARRAY_SIZE(vout_map); i++) {
+		if (voltage <= vout_map[i].y)
+			break;
+	}
+
 	ret = idtp9017_masked_write(chip->client, REG_19_L,
-			VSET_VALUE, reg_val);
+			VSET_VALUE, vout_map[i].x);
 	if (ret < 0) {
 		dev_err(chip->dev, "Failed to set out_voltage\n");
 		return ret;
 	}
 	dev_info(chip->dev, "out_voltage: val: 0x%02x, voltage: %d\n",
-			reg_val, voltage);
+			vout_map[i].x, vout_map[i].y);
 
 	return 0;
 }
