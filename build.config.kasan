@@ -1,0 +1,27 @@
+function update_kasan_config() {
+    ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
+         -e CONFIG_KASAN \
+         -e CONFIG_KASAN_INLINE \
+         -e CONFIG_TEST_KASAN \
+         -e CONFIG_KCOV \
+         -e CONFIG_SLUB \
+         -e CONFIG_SLUB_DEBUG \
+         -e CONFIG_SLUB_DEBUG_ON \
+         -d CONFIG_SLUB_DEBUG_PANIC_ON \
+         -d CONFIG_KASAN_OUTLINE
+    (cd ${OUT_DIR} && \
+     make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
+}
+
+ARCH=arm64
+BRANCH=android-msm-marlin-3.18
+CROSS_COMPILE=aarch64-linux-android-
+DEFCONFIG=marlin_defconfig
+KERNEL_DIR=private/msm-google
+POST_DEFCONFIG_CMDS="update_kasan_config"
+LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts-master/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin
+FILES="
+arch/arm64/boot/Image.gz-dtb
+vmlinux
+System.map
+"
