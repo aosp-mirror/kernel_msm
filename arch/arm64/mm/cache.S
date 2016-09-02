@@ -23,6 +23,7 @@
 #include <asm/assembler.h>
 #include <asm/cpufeature.h>
 #include <asm/alternative.h>
+#include <asm/uaccess.h>
 
  /*
  *     flush_dcache_louis()
@@ -155,6 +156,7 @@ ENTRY(flush_icache_range)
  *	- end     - virtual end address of region
  */
 ENTRY(__flush_cache_user_range)
+	uaccess_enable_not_uao x2, x3
 	dcache_line_size x2, x3
 	sub	x3, x2, #1
 	bic	x4, x0, x3
@@ -176,6 +178,7 @@ USER(9f, ic	ivau, x4	)		// invalidate I line PoU
 9:						// ignore any faulting cache operation
 	dsb	ish
 	isb
+	uaccess_disable_not_uao x1
 	ret
 ENDPROC(flush_icache_range)
 ENDPROC(__flush_cache_user_range)
