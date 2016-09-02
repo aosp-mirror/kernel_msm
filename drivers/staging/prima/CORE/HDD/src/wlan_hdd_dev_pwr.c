@@ -121,7 +121,8 @@ static int wlan_suspend(hdd_context_t* pHddCtx)
    if(!vos_is_apps_power_collapse_allowed(pHddCtx))
    {
        /* Fail this suspend */
-       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR, "%s: Fail wlan suspend: not in IMPS/BMPS", __func__);
+       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR, "%s: Fail wlan"
+                 "suspend: not in IMPS/BMPS", __func__);
        return -EPERM;
    }
 
