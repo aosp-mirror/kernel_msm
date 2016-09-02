@@ -3161,7 +3161,7 @@ typedef struct sDot11fIEExtCap {
 #define DOT11F_EID_EXTCAP ( 127 )
 
 // N.B. These #defines do *not* include the EID & length
-#define DOT11F_IE_EXTCAP_MIN_LEN ( 8 )
+#define DOT11F_IE_EXTCAP_MIN_LEN ( 1 )
 
 #define DOT11F_IE_EXTCAP_MAX_LEN ( 9 )
 
