@@ -349,10 +349,11 @@ static int mdss_dsi_panel_power_ulp(struct mdss_panel_data *pdata,
 		 */
 		if (DSI_CORE_PM == i)
 			continue;
+
 		if (DSI_PANEL_PM == i)
 			ret = msm_dss_config_vreg_opt_mode(
-				ctrl_pdata->power_data[i].vreg_config,
-				ctrl_pdata->power_data[i].num_vreg, mode);
+				ctrl_pdata->panel_power_data.vreg_config,
+				ctrl_pdata->panel_power_data.num_vreg, mode);
 		else
 			ret = msm_dss_config_vreg_opt_mode(
 				sdata->power_data[i].vreg_config,
@@ -379,7 +380,7 @@ error:
 int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 	int power_state)
 {
-	int ret;
+	int ret = 0;
 	struct mdss_panel_info *pinfo;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 
