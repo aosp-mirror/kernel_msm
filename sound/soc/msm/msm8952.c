@@ -52,8 +52,8 @@
 #define MAX_WSA_CODEC_NAME_LENGTH 80
 #define MSM_DT_MAX_PROP_SIZE 80
 
-#define GPIO_SDA4_AP_PA       29
-#define GPIO_SCL4_AP_PA       30
+#define GPIO_SDA4_AP_PA       18
+#define GPIO_SCL4_AP_PA       19
 
 enum btsco_rates {
 	RATE_8KHZ_ID,
@@ -397,10 +397,14 @@ static int msm_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	struct snd_interval *channels = hw_param_interval(params,
 					SNDRV_PCM_HW_PARAM_CHANNELS);
 
-	pr_debug("%s(), channel:%d\n", __func__, msm_ter_mi2s_tx_ch);
+	pr_debug("%s(), channel:%d, func_mi2s: %d\n", __func__, msm_ter_mi2s_tx_ch, msm_function_mi2s);
 	param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
 			SNDRV_PCM_FORMAT_S16_LE);
-	rate->min = rate->max = 48000;
+	if(msm_function_mi2s){
+		rate->min = rate->max = 8000;
+	}else {
+		rate->min = rate->max = 48000;
+	}
 	channels->min = channels->max = msm_ter_mi2s_tx_ch;
 
 	return 0;
@@ -430,9 +434,14 @@ static int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	struct snd_interval *channels = hw_param_interval(params,
 					SNDRV_PCM_HW_PARAM_CHANNELS);
 
-	pr_debug("%s()\n", __func__);
-	rate->min = rate->max = 48000;
-	channels->min = channels->max = 2;
+	pr_debug("%s(),func_mi2s = %d\n", __func__,msm_function_mi2s);
+	if(msm_function_mi2s){
+		rate->min = rate->max = 8000;
+		channels->min = channels->max = 1;
+	}else {
+		rate->min = rate->max = 48000;
+		channels->min = channels->max = 2;
+	}
 
 	return 0;
 }
@@ -563,7 +572,7 @@ static uint32_t get_mi2s_rx_clk_val(int port_id)
 			}
 		}
 	}
-	pr_debug("%s: MI2S Rx bit clock value: 0x%0x\n", __func__, clk_val);
+	pr_debug("%s: MI2S Rx bit clock value: 0x%0x, func_mi2s: %d\n", __func__, clk_val, msm_function_mi2s);
 	return clk_val;
 }
 
@@ -1166,14 +1175,12 @@ int msm_external_pa_put(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value
 			if (ret < 0)
 			{
 				pr_err("%s: disable_mi2s_clocks failed\n", __func__);
-				return ret;
 			}
 
 			ret = afe_set_lpass_clock(AFE_PORT_ID_QUATERNARY_MI2S_RX, &lpass_mi2s_disable);
 			if (ret < 0)
 			{
 				pr_err("%s: disable afe_set_lpass_clock failed\n", __func__);
-				return ret;
 			}
 
 			ret = msm_gpioset_suspend(CLIENT_WCD_INT, "quat_i2s");
