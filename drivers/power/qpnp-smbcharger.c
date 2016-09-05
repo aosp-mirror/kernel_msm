@@ -4182,8 +4182,10 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 				struct smbchg_chip, batt_psy);
 	union power_supply_propval prop = {0,};
 	int rc, current_limit = 0, soc;
+#ifndef CONFIG_HTC_BATT
 	enum power_supply_type usb_supply_type;
 	char *usb_type_name = "null";
+#endif /* CONFIG_HTC_BATT */
 
 	if (chip->bms_psy_name)
 		chip->bms_psy =
@@ -4217,23 +4219,16 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 		current_limit = prop.intval / 1000;
 
 #ifdef CONFIG_HTC_BATT
-	rc = chip->usb_psy->get_property(chip->usb_psy,
-				POWER_SUPPLY_PROP_TYPE, &prop);
-	if (rc == 0)
-		usb_supply_type = prop.intval;
-	else
-		read_usb_type(chip, &usb_type_name, &usb_supply_type);
+	pr_smb(PR_STATUS, "usb type = %d, current_limit = %d, rc = %d\n",
+				chip->usb_supply_type, current_limit, rc);
+
+	if (chip->usb_supply_type != POWER_SUPPLY_TYPE_USB)
+		goto  skip_current_for_non_sdp;
 #else
 	read_usb_type(chip, &usb_type_name, &usb_supply_type);
-#endif /* CONFIG_HTC_BATT */
-
 	if (usb_supply_type != POWER_SUPPLY_TYPE_USB)
 		goto  skip_current_for_non_sdp;
 
-#ifdef CONFIG_HTC_BATT
-	pr_smb(PR_MISC, "CHG_TYPE is %d, current_limit = %d, rc = %d\n",
-			usb_supply_type, current_limit, rc);
-#else
 	pr_smb(PR_MISC, "usb type = %s current_limit = %d\n",
 			usb_type_name, current_limit);
 #endif /* CONFIG_HTC_BATT */
