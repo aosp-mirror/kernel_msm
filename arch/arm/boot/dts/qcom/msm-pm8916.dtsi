@@ -267,10 +267,10 @@
 			compatible = "qcom,qpnp-vm-bms";
 			#address-cells = <1>;
 			#size-cells = <1>;
-			status = "disabled";
+			status = "ok";
 
 			qcom,v-cutoff-uv = <3400000>;
-			qcom,max-voltage-uv = <4200000>;
+			qcom,max-voltage-uv = <4400000>;
 			qcom,r-conn-mohm = <0>;
 			qcom,shutdown-soc-valid-limit = <100>;
 			qcom,low-soc-calculate-soc-threshold = <15>;
@@ -289,6 +289,8 @@
 			qcom,force-s3-on-suspend;
 			qcom,force-s2-in-charging;
 			qcom,report-charger-eoc;
+			qcom,resume-soc = <96>;
+			qcom,use-reported-soc;
 
 			qcom,batt-pres-status@1208 {
 				reg = <0x1208 0x1>;
