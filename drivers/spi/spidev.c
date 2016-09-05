@@ -60,6 +60,8 @@
 
 #define SPIDEV_BUF_MAX_NODE_N 16
 #define SPIDEV_NON_BLOCK_READ_TIMEOUT (2*HZ)
+#define SPIDEV_READ_DELAY_TIME_US (100)
+#define SPIDEV_READ_MAX_DELAY_TIMES (10)
 
 static DECLARE_BITMAP(minors, N_SPI_MINORS);
 
@@ -585,6 +587,7 @@ static void spidev_wakeup_read_work(struct work_struct *work)
 {
 	struct spidev_data *spidev = container_of(work, struct spidev_data, wakeup_read_work);
 	spidev_buf_list *spidev_buf_node = NULL;
+	unsigned int delay_times = 0;
 
 	mutex_lock(&spidev->spi_op_lock);
 	if (spidev)
@@ -599,7 +602,15 @@ static void spidev_wakeup_read_work(struct work_struct *work)
 
 			gpio_direction_output(spidev->read_sync_gpio, 1);
 
-			udelay(500);
+			do
+			{
+				udelay(SPIDEV_READ_DELAY_TIME_US);
+				if (delay_times++ > SPIDEV_READ_MAX_DELAY_TIMES)
+				{
+					pr_err("spidev_wakeup_read_work delay times is out of range\n");
+					break;
+				}
+			}while(gpio_get_value(spidev->wake_irq_gpio) == 1);
 			/*Execute Sync Read Operation*/
 			spidev_buf_node->read_cnt = spidev_sync_read_ext(spidev, spidev_buf_node, SPIDEV_KERNEL_MODE_LENGTH);
 
