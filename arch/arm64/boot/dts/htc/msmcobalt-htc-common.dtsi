@@ -1,3 +1,64 @@
 /*
  * msmcobalt-htc-common: common configs of msmcobalt HTC projects
  */
+
+
+&i2c_6 {
+	status = "disabled";
+};
+
+&i2c_7 {
+	status = "okay";
+};
+
+&i2c_8 {
+	status = "okay";
+};
+
+&i2c_9 {
+	status = "okay";
+};
+
+&i2c_5_active {
+	config {
+		drive-strength = <8>;
+	};
+};
+&i2c_5_sleep {
+	config {
+		drive-strength = <8>;
+	};
+};
+
+&i2c_7_active {
+	config {
+		drive-strength = <8>;
+	};
+};
+&i2c_7_sleep {
+	config {
+		drive-strength = <8>;
+	};
+};
+
+&i2c_8_active {
+	config {
+		drive-strength = <8>;
+	};
+};
+&i2c_8_sleep {
+	config {
+		drive-strength = <8>;
+	};
+};
+
+&i2c_9_active {
+	config {
+		drive-strength = <8>;
+	};
+};
+&i2c_9_sleep {
+	config {
+		drive-strength = <8>;
+	};
+};
