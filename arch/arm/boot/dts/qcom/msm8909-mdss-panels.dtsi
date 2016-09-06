@@ -22,14 +22,14 @@
 #include "dsi-panel-hx8394d-480p-video.dtsi"
 #include "dsi-panel-auo-qvga-cmd.dtsi"
 #include "dsi-panel-auo-cx-qvga-cmd.dtsi"
-#include "dsi_panel_edo_rm67160_oled_1p4_video.dtsi"
+#include "dsi_panel_auo_w020_oled_1p4_video.dtsi"
 
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-			qcom,panel-supply-entry@0 {
+		qcom,panel-supply-entry@0 {
 			reg = <0>;
 			qcom,supply-name = "vdd";
 			qcom,supply-min-voltage = <2850000>;
