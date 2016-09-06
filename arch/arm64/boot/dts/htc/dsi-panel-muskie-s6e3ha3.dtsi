@@ -1,0 +1,131 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_s6e3ha3_dualdsi_wqhd_cmd>;
+	/delete-property/qcom,panel-mode-gpio;
+	vci-supply = <&pmcobalt_l22>;
+};
+
+&mdss_dsi1 {
+	qcom,dsi-pref-prim-pan = <&dsi_s6e3ha3_dualdsi_wqhd_cmd>;
+	/delete-property/qcom,panel-mode-gpio;
+	vci-supply = <&pmcobalt_l22>;
+};
+
+&mdss_mdp {
+	dsi_s6e3ha3_dualdsi_wqhd_cmd: htc,mdss_dsi_s6e3ha3_dualdsi_wqhd_cmd {
+		compatible = "htc,mdss_dsi_s6e3ha3_dualdsi_wqhd_cmd";
+		qcom,mdss-dsi-panel-name = "WQHD SAMSUNG S6E3HA3 5.5 command mode panel";
+		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+		qcom,mdss-dsi-panel-framerate = <60>;
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-panel-width = <720>;
+		qcom,mdss-dsi-panel-height = <2560>;
+		qcom,mdss-dsi-h-front-porch = <18>;
+		qcom,mdss-dsi-h-back-porch = <18>;
+		qcom,mdss-dsi-h-pulse-width = <10>;
+		qcom,mdss-dsi-h-sync-skew = <0>;
+		qcom,mdss-dsi-v-back-porch = <10>;
+		qcom,mdss-dsi-v-front-porch = <6>;
+		qcom,mdss-dsi-v-pulse-width = <2>;
+		qcom,mdss-dsi-h-left-border = <0>;
+		qcom,mdss-dsi-h-right-border = <0>;
+		qcom,mdss-dsi-v-top-border = <0>;
+		qcom,mdss-dsi-v-bottom-border = <0>;
+		qcom,mdss-pan-physical-width-dimension  = <68>;
+		qcom,mdss-pan-physical-height-dimension = <122>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
+		qcom,mdss-dsi-underflow-color = <0xff>;
+		qcom,mdss-dsi-border-color = <0>;
+		qcom,mdss-dsi-h-sync-pulse = <0>;
+		qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
+		qcom,mdss-dsi-lane-map = "lane_map_0123";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-panel-broadcast-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+		qcom,mdss-dsi-panel-timings = [D6 38 26 00 68 6E 2A 3C 2C 03 04 00];
+		qcom,mdss-dsi-panel-timings-8996 = [
+			25 20 09 0A 06 03 04 A0
+			25 20 09 0A 06 03 04 A0
+			25 20 09 0A 06 03 04 A0
+			25 20 09 0A 06 03 04 A0
+			25 1F 09 0A 06 03 04 A0
+		];
+		qcom,mdss-dsi-reset-sequence =  <1 2>, <0 1>, <1 10>;
+		qcom,mdss-dsi-t-clk-post = <0x0E>;
+		qcom,mdss-dsi-t-clk-pre = <0x36>;
+		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+		qcom,mdss-dsi-bl-min-level = <1>;
+		qcom,mdss-dsi-bl-max-level = <255>;
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-wr-mem-start = <0x2c>;
+		qcom,mdss-dsi-wr-mem-continue = <0x3c>;
+		qcom,mdss-dsi-te-pin-select = <1>;
+		qcom,mdss-dsi-te-dcs-command = <1>;
+		qcom,mdss-dsi-te-check-enable;
+		qcom,mdss-dsi-te-using-te-pin;
+		qcom,dcs-cmd-by-left;
+		qcom,mdss-dsi-on-command = [
+			05 01 00 00 0A 00 02 11 00 /* sleep out */
+			29 01 00 00 00 00 03 F0 5A 5A /* key unlock */
+			29 01 00 00 00 00 02 C4 03 /* dual control 1 */
+			29 01 00 00 00 00 02 F9 03 /* dual control 2 */
+			29 01 00 00 00 00 14 C2 00 08 D8 D8 00 80 2B 05 08 0E 07 0B 05 0D 0A 15 13 20 1E /* pentile setting */
+			29 01 00 00 00 00 0A F6 42 57 37 00 AA CC D0 00 00 /* ESD refresh setting 1*/
+			29 01 00 00 00 00 02 ED 44 /*ERR_FG ON */
+			29 01 00 00 00 00 03 F0 A5 A5 /* key lock */
+			29 01 00 00 78 00 02 12 00 /* ESD refresh setting 2 */
+			05 01 00 00 00 00 02 35 00 /* TE on */
+			15 01 00 00 00 00 02 53 20 /* brightness control */
+			05 01 00 00 00 00 02 29 00 /* display on */
+		];
+		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+		qcom,mdss-dsi-off-command = [
+			05 01 00 00 23 00 02 28 00
+			05 01 00 00 78 00 02 10 00
+		];
+		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-default-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-lp11-init;
+		qcom,panel-supply-entries = <&dsi_panel_pwr_supply_s6e3ha3>;
+		/*qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";*/
+	};
+        dsi_panel_pwr_supply_s6e3ha3: dsi_panel_pwr_supply_s6e3ha3 {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                qcom,panel-supply-entry@0 {
+                        reg = <0>;
+                        qcom,supply-name = "wqhd-vddio";
+                        qcom,supply-min-voltage = <1880000>;
+                        qcom,supply-max-voltage = <1880000>;
+                        qcom,supply-enable-load = <32000>;
+                        qcom,supply-disable-load = <80>;
+                };
+                 qcom,panel-supply-entry@1 {
+                         reg = <1>;
+                         qcom,supply-name = "vci";
+                         qcom,supply-min-voltage = <2864000>;
+                         qcom,supply-max-voltage = <2864000>;
+                         qcom,supply-enable-load = <100000>;
+                         qcom,supply-disable-load = <100>;
+                };
+
+        };
+};

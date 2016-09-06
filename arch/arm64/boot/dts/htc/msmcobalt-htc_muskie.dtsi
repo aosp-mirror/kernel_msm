@@ -1,1 +1,8 @@
 #include "msmcobalt-htc-common.dtsi"
+#include "dsi-panel-muskie-s6e3ha3.dtsi"
+
+&cci {
+        qcom,camera@1 {
+                /delete-property/ cam_vana-supply;
+        };
+};
