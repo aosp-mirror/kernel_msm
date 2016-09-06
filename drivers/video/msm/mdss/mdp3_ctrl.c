@@ -155,6 +155,7 @@ static void mdp3_dispatch_dma_done(struct work_struct *work)
 		atomic_dec(&session->dma_done_cnt);
 		cnt--;
 	}
+	mdp3_ctrl_notify(session, MDP_NOTIFY_FRAME_CTX_DONE);
 }
 
 static void mdp3_dispatch_clk_off(struct work_struct *work)
@@ -2759,6 +2760,7 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 	mdp3_session->vsync_timer.data = (u32)mdp3_session;
 	mdp3_session->vsync_period = 1000 / mfd->panel_info->mipi.frame_rate;
 	mfd->mdp.private1 = mdp3_session;
+	mfd->wait_for_kickoff = true;
 	init_completion(&mdp3_session->dma_completion);
 	if (intf_type != MDP3_DMA_OUTPUT_SEL_DSI_VIDEO)
 		mdp3_session->wait_for_dma_done = mdp3_wait_for_dma_done;
