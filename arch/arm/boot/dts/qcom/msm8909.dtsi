@@ -127,6 +127,12 @@
 			no-map;
 		};
 
+		pstore_mem: pstore_region@0 {
+			reg = <0x0 0x8d700000 0x0 0x00100000>;
+			compatible = "removed-pstore-pool";
+			no-map;
+		};
+
 		venus_qseecom_mem: venus_qseecom_region@0 {
 			compatible = "shared-dma-pool";
 			reusable;
