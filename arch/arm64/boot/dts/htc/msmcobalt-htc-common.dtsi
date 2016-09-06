@@ -3,6 +3,7 @@
  */
 
 #include "msmcobalt-touch-muskie.dtsi"
+#include "msmcobalt-key-muskie.dtsi"
 
 &i2c_6 {
 	status = "disabled";
