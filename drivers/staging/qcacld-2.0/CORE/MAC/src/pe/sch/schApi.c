@@ -537,7 +537,7 @@ tANI_U32 limSendProbeRspTemplateToHal(tpAniSirGlobal pMac,tpPESession psessionEn
     /* merge extcap IE */
     prb_rsp_frm = &psessionEntry->probeRespFrame;
     if (extcap_present)
-        lim_merge_extcap_struct(&prb_rsp_frm->ExtCap, &extracted_extcap);
+        lim_merge_extcap_struct(&prb_rsp_frm->ExtCap, &extracted_extcap, true);
 
     // That done, pack the Probe Response:
     nStatus = dot11fPackProbeResponse( pMac, &psessionEntry->probeRespFrame, pFrame2Hal + sizeof(tSirMacMgmtHdr),

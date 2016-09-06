@@ -450,7 +450,7 @@ limSendProbeReqMgmtFrame(tpAniSirGlobal pMac,
 
     /* merge the ExtCap struct*/
     if (extracted_ext_cap_flag)
-        lim_merge_extcap_struct(&pr.ExtCap, &extracted_ext_cap);
+        lim_merge_extcap_struct(&pr.ExtCap, &extracted_ext_cap, true);
 
     // That done, pack the Probe Request:
     nStatus = dot11fPackProbeRequest( pMac, &pr, pFrame +
@@ -873,7 +873,7 @@ limSendProbeRspMgmtFrame(tpAniSirGlobal pMac,
     /*merge ExtCap IE*/
     if (extractedExtCapFlag)
     {
-        lim_merge_extcap_struct(&pFrm->ExtCap, &extractedExtCap);
+        lim_merge_extcap_struct(&pFrm->ExtCap, &extractedExtCap, true);
     }
     // That done, pack the Probe Response:
     nStatus = dot11fPackProbeResponse( pMac, pFrm, pFrame + sizeof(tSirMacMgmtHdr),
@@ -1512,7 +1512,7 @@ limSendAssocRspMgmtFrame(tpAniSirGlobal pMac,
     /* merge the ExtCap struct*/
     if (extractedExtCapFlag)
     {
-        lim_merge_extcap_struct(&(frm.ExtCap), &extractedExtCap);
+        lim_merge_extcap_struct(&(frm.ExtCap), &extractedExtCap, true);
     }
     nStatus = dot11fPackAssocResponse( pMac, &frm,
                                        pFrame + sizeof( tSirMacMgmtHdr ),
@@ -2057,6 +2057,11 @@ limSendAssocReqMgmtFrame(tpAniSirGlobal   pMac,
     tDot11fIEExtCap     extractedExtCap;
     tANI_BOOLEAN        extractedExtCapFlag = eANI_BOOLEAN_TRUE;
     tpSirMacMgmtHdr     pMacHdr;
+    tDot11fIEExtCap     ap_extcap;
+    tANI_U8            *ap_extcap_ptr = NULL;
+    tANI_U8            *pIe = NULL;
+    tANI_U32            ieLen = 0;
+    tANI_U32            fixed_param_len = 0;
 
     if(NULL == psessionEntry)
     {
@@ -2375,7 +2380,28 @@ limSendAssocReqMgmtFrame(tpAniSirGlobal   pMac,
     /* merge the ExtCap struct*/
     if (extractedExtCapFlag)
     {
-        lim_merge_extcap_struct(&pFrm->ExtCap, &extractedExtCap);
+        lim_merge_extcap_struct(&pFrm->ExtCap, &extractedExtCap, true);
+    }
+
+    /* Clear the bits in EXTCAP IE if AP not advertise it in beacon */
+    if (pFrm->ExtCap.present && psessionEntry->is_ext_caps_present)
+    {
+        fixed_param_len = DOT11F_FF_TIMESTAMP_LEN +
+                          DOT11F_FF_BEACONINTERVAL_LEN +
+                          DOT11F_FF_CAPABILITIES_LEN;
+        vos_mem_zero((tANI_U8*)&ap_extcap, sizeof(tDot11fIEExtCap));
+        if (psessionEntry->beacon && psessionEntry->bcnLen > fixed_param_len)
+        {
+            pIe = psessionEntry->beacon + fixed_param_len;
+            ieLen = psessionEntry->bcnLen - fixed_param_len;
+
+            /* Extract EXTCAP IE from beacon frame */
+            ap_extcap_ptr = lim_get_ie_ptr(pIe, ieLen, DOT11F_EID_EXTCAP);
+            lim_update_extcap_struct(pMac, ap_extcap_ptr, &ap_extcap);
+
+            /* Clear the bits if AP not advertise it in beacon */
+            lim_merge_extcap_struct(&pFrm->ExtCap, &ap_extcap, false);
+        }
     }
 
     // That done, pack the Assoc Request:

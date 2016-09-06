@@ -490,8 +490,7 @@ tSirRetStatus schSetFixedBeaconFields(tpAniSirGlobal pMac,tpPESession psessionEn
         }
         /* merge extcap IE */
         if (extcap_present)
-            lim_merge_extcap_struct(&pBcn2->ExtCap, &extracted_extcap);
-
+            lim_merge_extcap_struct(&pBcn2->ExtCap, &extracted_extcap, true);
     }
 
     nStatus = dot11fPackBeacon2( pMac, pBcn2,
