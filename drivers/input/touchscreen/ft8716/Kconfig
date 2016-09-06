@@ -1,0 +1,9 @@
+#
+# FT8716 Touchscreen driver configuration
+#
+
+config TOUCHSCREEN_FTS
+        tristate "FTS i2c touchscreen"
+		depends on TOUCHSCREEN_FT8716
+		help
+		This enables support for FT8716 I2C based touchscreens.
