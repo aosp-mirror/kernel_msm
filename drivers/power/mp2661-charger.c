@@ -96,6 +96,8 @@
 #define NTC_EN_MASK_SHIFT                              3
 #define BAT_FET_DIS_MASK                               mp2661_MASK(5, 5)
 #define BAT_FET_DIS_MASK_SHIFT                         5
+#define TMR2X_EN_MASK                                  mp2661_MASK(6, 6)
+#define TMR2X_EN_MASK_SHIFT                            6
 
 /* System Status Register */
 #define SYSTEM_STATUS_REG                              0x07
@@ -926,6 +928,21 @@ static int mp2661_set_batt_fet_disconnect(struct mp2661_chg *chip,
     if (rc < 0)
     {
         pr_err("cannot set batt fet disconnect to %d rc = %d\n", disconnect, rc);
+    }
+    return rc;
+}
+
+static int mp2661_tmr2x_enable(struct mp2661_chg *chip,
+                            bool enable)
+{
+    int rc,i;
+
+    i = enable << TMR2X_EN_MASK_SHIFT;
+    rc = mp2661_masked_write(chip, MISCELLANEOUS_OPER_CTRL_REG,
+                TMR2X_EN_MASK, i);
+    if (rc < 0)
+    {
+        pr_err("cannot set tmr2x enable to %d rc = %d\n", enable, rc);
     }
     return rc;
 }
@@ -1761,6 +1778,13 @@ static int mp2661_hw_init(struct mp2661_chg *chip)
     if (rc)
     {
         pr_err("Couldn't enable ntc rc=%d\n", rc);
+        return rc;
+    }
+
+    rc = mp2661_tmr2x_enable(chip, false);
+    if (rc)
+    {
+        pr_err("Couldn't enable tmr2x rc=%d\n", rc);
         return rc;
     }
 
