@@ -5,6 +5,7 @@
  *
  * Copyright (C) 2012 Alexandra Chin <alexandra.chin@tw.synaptics.com>
  * Copyright (C) 2012 Scott Lin <scott.lin@tw.synaptics.com>
+ * Copyright (C) 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -51,12 +52,24 @@ struct synaptics_dsx_button_map {
 	unsigned char nbuttons;
 	unsigned int *map;
 };
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#define SYN_CFG_BLK_UNIT        (16)
+#define SYN_CONFIG_SIZE         (128 * SYN_CFG_BLK_UNIT)
+
+struct synaptics_rmi4_config {
+	uint32_t sensor_id;
+	uint32_t pr_number;
+	uint16_t length;
+	uint8_t  config[SYN_CONFIG_SIZE];
+};
+#endif
 
 /*
  * struct synaptics_dsx_board_data - DSX board data
  * @x_flip: x flip flag
  * @y_flip: y flip flag
  * @swap_axes: swap axes flag
+ * @resume_in_workqueue: defer resume function to workqueue
  * @irq_gpio: attention interrupt GPIO
  * @irq_on_state: attention interrupt active state
  * @power_gpio: power switch GPIO
@@ -75,15 +88,18 @@ struct synaptics_dsx_button_map {
  * @reset_active_ms: reset active time
  * @byte_delay_us: delay time between two bytes of SPI data
  * @block_delay_us: delay time between two SPI transfers
+ * @addr_delay_us: delay time after sending address word
  * @pwr_reg_name: pointer to name of regulator for power control
  * @bus_reg_name: pointer to name of regulator for bus pullup control
  * @cap_button_map: pointer to 0D button map
  * @vir_button_map: pointer to virtual button map
+ * @resume_in_workqueue: defer resume function to workqueue
  */
 struct synaptics_dsx_board_data {
 	bool x_flip;
 	bool y_flip;
 	bool swap_axes;
+	bool resume_in_workqueue;
 	int irq_gpio;
 	int irq_on_state;
 	int power_gpio;
@@ -102,10 +118,20 @@ struct synaptics_dsx_board_data {
 	unsigned int reset_active_ms;
 	unsigned int byte_delay_us;
 	unsigned int block_delay_us;
+	unsigned int addr_delay_us;
 	const char *pwr_reg_name;
 	const char *bus_reg_name;
 	struct synaptics_dsx_button_map *cap_button_map;
 	struct synaptics_dsx_button_map *vir_button_map;
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+	int switch_gpio;
+	uint8_t update_feature;
+	uint16_t tw_pin_mask;
+	int config_num;
+	struct synaptics_rmi4_config *config_table;
+	uint32_t display_width;
+	uint32_t display_height;
+#endif
 };
 
 #endif
