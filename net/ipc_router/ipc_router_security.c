@@ -82,7 +82,8 @@ void signal_irsc_completion(void)
 int check_permissions(void)
 {
 	int rc = 0;
-	if (!current_euid() || in_egroup_p(AID_NET_RAW))
+	if (!current_euid() || in_egroup_p(AID_NET_RAW) ||
+        capable(CAP_NET_RAW) || capable(CAP_NET_BIND_SERVICE))
 		rc = 1;
 	return rc;
 }
