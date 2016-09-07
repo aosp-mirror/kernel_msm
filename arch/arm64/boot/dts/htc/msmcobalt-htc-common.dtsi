@@ -2,6 +2,7 @@
  * msmcobalt-htc-common: common configs of msmcobalt HTC projects
  */
 
+#include "msmcobalt-touch-muskie.dtsi"
 
 &i2c_6 {
 	status = "disabled";

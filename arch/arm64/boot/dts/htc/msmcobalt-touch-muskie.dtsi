@@ -1,0 +1,176 @@
+/*&soc {
+	touch_fw_update {
+		compatible = "htc,touch_fwu";
+	};
+};*/
+
+&pmcobalt_l6 {
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1900000>;
+	qcom,init-voltage = <1800000>;
+	status = "okay";
+	regulator-boot-on;
+	regulator-always-on;
+};
+
+/*&pmcobalt_l21 {
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+	qcom,init-voltage = <3300000>;
+	status = "okay";
+	regulator-boot-on;
+	regulator-always-on;
+};*/
+
+&pmcobalt_l28 {
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+	qcom,init-voltage = <3300000>;
+	status = "okay";
+	regulator-boot-on;
+	regulator-always-on;
+};
+
+&tlmm {
+	pmx_ts {
+		ts_intr_active:ts_intr_active {
+			mux {
+				pins = "gpio125";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio125";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+		ts_intr_suspend:ts_intr_suspend {
+			mux {
+				pins = "gpio125";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio125";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		ts_rst_active:ts_rst_active {
+			mux {
+				pins = "gpio89";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio89";
+				drive-strength = <2>;
+				bias-disable; /* No PULL */
+				output-high;
+			};
+		};
+		ts_rst_suspend:ts_rst_suspend {
+			mux {
+				pins = "gpio89";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio89";
+				drive-strength = <2>;
+				bias-disable;
+				output-high;
+			};
+		};
+	};
+
+	i2c_5 {
+		i2c_5_active: i2c_5_active {
+			mux {
+				pins = "gpio87", "gpio88";
+				function = "blsp_i2c5";
+			};
+
+			config {
+				pins = "gpio87", "gpio88";
+				drive-strength = <8>;
+				bias-disable;
+			};
+		};
+
+		i2c_5_sleep: i2c_5_sleep {
+			mux {
+				pins = "gpio87", "gpio88";
+				function = "blsp_i2c5";
+			};
+
+			config {
+				pins = "gpio87", "gpio88";
+				drive-strength = <8>;
+				bias-disable;
+			};
+		};
+	};
+};
+
+/ {
+	aliases {
+		i2c5 = &i2c_5;
+	};
+};
+
+&soc {
+	i2c_5: i2c@c179000 { /* BLSP1 QUP5 */
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		reg = <0xC179000 0x600>;
+		interrupt-names = "qup_irq";
+		interrupts = <0 99 0>;
+		dmas = <&dma_blsp1 14 64 0x20000020 0x20>,
+			<&dma_blsp1 15 32 0x20000020 0x20>;
+		dma-names = "tx", "rx";
+		qcom,master-id = <86>;
+		qcom,clk-freq-out = <400000>;
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp1_qup5_i2c_apps_clk>;
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_5_active>;
+		pinctrl-1 = <&i2c_5_sleep>;
+		status = "okay";
+	};
+};
+
+&i2c_5 {
+	/delete-node/ synaptics@20;
+	synaptics_dsx@20 {
+		compatible = "synaptics,dsx-i2c";
+		reg = <0x20>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <125 0x2008>;
+		synaptics,irq-gpio = <&tlmm 125 0x2008>;  /* IRQF_ONESHOT | IRQF_TRIGGER_LOW */
+		synaptics,reset-gpio = <&tlmm 89 0x00>;
+		synaptics,reset-on-state = <0>;
+		synaptics,reset-active-ms = <1>;
+		synaptics,reset-delay-ms = <20>;
+		synaptics,switch-gpio = <&tlmm 80 0x00>;
+		synaptics,update-feature = <0>;
+        synaptics,display-coords = <0 1440 0 2560>;
+		synaptics,tw-pin-mask = <0x3>;
+		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
+		pinctrl-0 = <&ts_rst_active &ts_intr_active>;
+		pinctrl-1 = <&ts_rst_suspend &ts_intr_suspend>;
+
+		config_0 { /* S3708, EVT1 w/o Force */
+			pr_number     = <9999999>;
+			sensor_id = <0x1>;
+			config = [
+			];
+		};
+	};
+};
