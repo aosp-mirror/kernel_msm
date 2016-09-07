@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -197,7 +197,7 @@ struct audio_client *q6asm_get_audio_client(int session_id);
 int q6asm_audio_client_buf_alloc(unsigned int dir/* 1:Out,0:In */,
 				struct audio_client *ac,
 				unsigned int bufsz,
-				unsigned int bufcnt);
+				uint32_t bufcnt);
 int q6asm_audio_client_buf_alloc_contiguous(unsigned int dir
 				/* 1:Out,0:In */,
 				struct audio_client *ac,
