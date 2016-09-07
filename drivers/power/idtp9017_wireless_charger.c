@@ -170,16 +170,25 @@ static void idtp9017_wlc_online_check_work(struct work_struct *work)
 				struct idtp9017_chip, wlc_online_check_work);
 	int present;
 
-	/* after setting present, charger's external_power_changed function
-	 * turn on Wireless Tx through charging_enabled psy's prop. */
+	/*
+	 * When software requests wireless charging be disabled, a gpio is
+	 * driven to the rx chip to prevent it from requesting power from the
+	 * tx chip when it beacons.  Since the rx chip will only be powered up
+	 * briefly during these beacons, it won't be able to notify this driver
+	 * if the tx goes away.  In oder to notice such a change, the gpio must
+	 * be periodically toggled to check if the tx can still deliver power.
+	 * If it can't, the wireless supply is offline.  Otherwise the checks
+	 * continue with a fake online status being reported.
+	 */
+
 	present = idtp9017_wlc_is_present(chip);
 	if (present > 0) {
 		schedule_delayed_work(&chip->wlc_online_check_work,
 			round_jiffies_relative(msecs_to_jiffies(
 			chip->wlc_online_chk_delay_ms)));
 	} else if (!present) {
-		power_supply_set_present(&chip->wlc_psy, 0);
-		return;
+		chip->online = 0;
+		power_supply_changed(&chip->wlc_psy);
 	}
 }
 
