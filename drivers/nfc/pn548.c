@@ -53,7 +53,6 @@ struct pn548_dev {
 	bool                    irq_enabled;
 	spinlock_t              irq_enabled_lock;
 	bool                    powered;
-	struct wake_lock        wake_lock;
 };
 
 #define MAX_BUFFER_SIZE     512
@@ -104,8 +103,6 @@ static irqreturn_t pn548_dev_irq_handler(int irq, void *dev_id)
 
 	/* Wake up waiting readers */
 	wake_up(&pn548_dev->read_wq);
-	if (!wake_lock_active(&pn548_dev->wake_lock))
-		wake_lock(&pn548_dev->wake_lock);
 
 	return IRQ_HANDLED;
 }
@@ -130,7 +127,6 @@ static ssize_t pn548_dev_read(struct file *filp, char __user *buf,
 				"%s: no more interrupt after %dms (%d)!\n",
 			       __func__, NFC_TIMEOUT_MS,
 			       gpio_get_value(pn548_dev->irq_gpio));
-			wake_unlock(&pn548_dev->wake_lock);
 			isFirstPacket = true;
 		}
 	}
@@ -267,7 +263,6 @@ static long pn548_dev_unlocked_ioctl(struct file *filp,
 				msleep(10);
 
 				pn548_disable_irq(pn548_dev);
-				wake_unlock(&pn548_dev->wake_lock);
 			} else {
 				dev_warn(pn548_dev->dev,
 					"%s: NFC is already Off!\n", __func__);
@@ -390,8 +385,6 @@ static int pn548_probe(struct i2c_client *client,
 		dev_err(&client->dev, "%s: misc_register failed\n", __func__);
 		goto err_misc_register;
 	}
-
-	wake_lock_init(&pn548_dev->wake_lock, WAKE_LOCK_SUSPEND, "NFCWAKE");
 
 	/* request irq. the irq is set whenever the chip has data available
 	 * for reading. it is cleared when all data has been read.
