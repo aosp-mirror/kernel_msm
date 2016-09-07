@@ -106,6 +106,7 @@
 			interrupts = <42 8>;            /* gpio42 */
 			pinctrl-names = "default";
 			pinctrl-0 = <&max17055_alert>;
+			qcom,chg-psy-name = "battery";
 			maxim,rsns-microohm = <10000>;		/*Current sense resistance in micro Ohm*/
 			maxim,config-type = <3>;			/*EZ:1 SHORT: 2 FULL: 3 BURN: 4*/
 			maxim,cold-temp = <(-450)>;		/*The driver use negative value of cold-temp*/

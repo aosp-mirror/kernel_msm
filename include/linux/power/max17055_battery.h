@@ -217,6 +217,11 @@ struct max17055_platform_data {
 	int         vmax;	/* in millivolts */
 	int         temp_min;	/* in tenths of degree Celsius */
 	int         temp_max;	/* in tenths of degree Celsius */
+#if CONFIG_HUAWEI_SAWSHARK
+	/* psy */
+	struct power_supply        *chg_psy;
+	const char            *chg_psy_name;
+#endif
 };
 
 #endif /* __MAX17055_BATTERY_H_ */
