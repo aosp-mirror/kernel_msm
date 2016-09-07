@@ -100,8 +100,31 @@ static enum power_supply_property max17055_battery_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_AVG,
 };
 
+#define DEFAULT_TEMP 250
 static int max17055_get_temperature(struct max17055_chip *chip, int *temp)
 {
+#if CONFIG_HUAWEI_SAWSHARK
+	union power_supply_propval ret = {0, };
+
+	if (!chip->pdata->chg_psy && chip->pdata->chg_psy_name)
+	{
+		pr_info("get battery power supply\n");
+		chip->pdata->chg_psy = power_supply_get_by_name((char *)chip->pdata->chg_psy_name);
+	}
+
+	if (chip->pdata->chg_psy)
+	{
+		chip->pdata->chg_psy->get_property(chip->pdata->chg_psy,
+					POWER_SUPPLY_PROP_TEMP, &ret);
+		*temp = ret.intval;
+	}
+	else
+	{
+		*temp = DEFAULT_TEMP;
+	}
+
+	return 0;
+#else
 	int ret;
 	u32 data;
 	struct regmap *map = chip->regmap;
@@ -121,6 +144,7 @@ static int max17055_get_temperature(struct max17055_chip *chip, int *temp)
 	/* Units of LSB = 1 / 256 degree Celsius */
 	*temp = *temp * 10 / 256;
 	return 0;
+#endif
 }
 
 static int max17055_get_battery_health(struct max17055_chip *chip, int *health)
@@ -802,14 +826,23 @@ max17055_get_pdata(struct device *dev)
 	struct device_node *np = dev->of_node;
 	u32 prop;
 	struct max17055_platform_data *pdata;
-
+#if CONFIG_HUAWEI_SAWSHARK
+	int rc;
+#endif
 	if (!np)
 		return dev->platform_data;
 
 	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
 		return NULL;
-
+#if CONFIG_HUAWEI_SAWSHARK
+	rc = of_property_read_string(np, "qcom,chg-psy-name",
+                            &pdata->chg_psy_name);
+	if (rc)
+	{
+		pdata->chg_psy_name = NULL;
+	}
+#endif
 	/*
 	 * Require current sense resistor value to be specified for
 	 * current-sense functionality to be enabled at all.
