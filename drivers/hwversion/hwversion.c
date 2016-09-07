@@ -1,22 +1,15 @@
-/*
-** =============================================================================
-** Copyright (c) 2015 hw Inc.
-** File:
-**     hwversion.c
-**
-** Description:
-**     hwversion
-**
-** This program is free software; you can redistribute it and/or modify
-** it under the terms of the GNU General Public License version 2 and
-** only version 2 as published by the Free Software Foundation.
-**
-** This program is distributed in the hope that it will be useful,
-** but WITHOUT ANY WARRANTY; without even the implied warranty of
-** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-** GNU General Public License for more details.
-** =============================================================================
-*/
+/* Copyright (c) 2016,  HUAWEI TECHNOLOGIES CO., LTD.  All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -28,10 +21,46 @@
 #include <linux/platform_device.h>
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/of_gpio.h>
+#include <soc/qcom/smem.h>
 
+#define HW_VER_PROC             "hw_ver_numb"
+#define PROC_MODE               (0666)
+#define HWVER_SMEM_SIZE         8
 
-#define HW_VER_PROC "hw_ver_numb"
-#define PROC_MODE (0666)
+#define MAX_ADC_RANGE           9
+#define HWERR                  -1
+
+#define BT_MOD_INDEX            0
+#define SIM_ESIM_INDEX          1
+#define GPS_INDEX               2
+#define NFC_INDEX               3
+#define HIGH_LOW_INDEX          4
+#define FREQ_RANGE_INDEX        5
+#define PCB_INDEX               6
+
+#define HWVER1_GPIO_NAME        "hwver-gpio1"
+#define HWVER2_GPIO_NAME        "hwver-gpio2"
+#define HWVER3_GPIO_NAME        "hwver-gpio3"
+#define PCBVER1_GPIO_NAME       "pcbver-gpio1"
+#define PCBVER2_GPIO_NAME       "pcbver-gpio2"
+#define HW_VADC_NAME            "hwver0"
+
+typedef struct
+{
+    int pcbver_gpio1;
+    int pcbver_gpio2;
+    int hwver_gpio1;
+    int hwver_gpio2;
+    int hwver_gpio3;
+    struct qpnp_vadc_chip *vadc;
+    enum qpnp_vadc_channels channel;
+    int adc_range;
+    int pcb1_status;
+    int pcb2_status;
+    int hwver1_status;
+    int hwver2_status;
+    int hwver3_status;
+}hwver_struct;
 
 typedef struct
 {
@@ -54,82 +83,421 @@ static const vol_range g_vol_table[] =
     {1651,1800},
 };
 
-static int hwver_num0 = 0;
-static int pcb_num1 = 0;
-static int pcb_num2 = 0;
+typedef enum
+{
+    BT_VER = 0,
+    MODEM_VER
+}modem_bt_type;
 
+typedef enum
+{
+    SIM_VER = 0,
+    ESIM_VER
+}sim_esim_type;
 
-/**************************************************************************
-FUNCTION   get_hwver_num
+typedef enum
+{
+    UBLOX = 0,
+    QCOM
+}gps_type;
 
-DESCRIPTION :Return hardware version on success, -1 otherwise
+typedef enum
+{
+    PN66T = 0,
+    PN551
+}nfc_type;
 
-**************************************************************************/
-int get_hwver_num(struct qpnp_vadc_chip *vadc, enum qpnp_vadc_channels channel)
+typedef enum
+{
+    LOW = 0,
+    HIGH
+}config_type;
+
+char version[HWVER_SMEM_SIZE] = {0};
+
+static int hw_get_high_low_config(int adc_range)
+{
+    if((adc_range < 0) || (adc_range > MAX_ADC_RANGE))
+    {
+        printk(KERN_ERR "hwver:%s:adc_range is invalid!\n",__func__);
+        return HWERR;
+    }
+    if(adc_range % 2)
+    {
+        return HIGH;
+    }
+    else
+    {
+        return LOW;
+    }
+}
+
+static int hw_get_adc_range(hwver_struct *hardware)
 {
     int rc = 0;
     int i = 0;
     struct qpnp_vadc_result results_ver = {0};
 
-    if(NULL == vadc)
+    if((NULL == hardware) || (NULL == hardware->vadc))
     {
-        printk(KERN_ERR "hwver:get_hwver_num ERROR.channel = %d \n", channel);
-        return -1;
+        printk(KERN_ERR "hwver:%s: hardware or vadc is NULL.\n", __func__);
+        return HWERR;
     }
-    rc = qpnp_vadc_read(vadc, channel, &results_ver);
 
+    rc = qpnp_vadc_read(hardware->vadc, hardware->channel, &results_ver);
     if (rc)
     {
-        printk(KERN_ERR "hwver:Unable to read channel = %d\n", channel);
-        return -1;
+        printk(KERN_ERR "hwver:%s:unable to read channel = %d\n", __func__, hardware->channel);
+        return HWERR;
     }
 
     rc = (results_ver.physical >> 10);  /*uv to mv*/
 
-    for(i = 0;i < ARRAY_SIZE(g_vol_table);i++)
+    for(i = 0; i < ARRAY_SIZE(g_vol_table); i++)
     {
         if((rc < g_vol_table[i].hig_vol) && (rc > g_vol_table[i].low_vol))
+        {
             break;
+        }
     }
 
     if(i >= ARRAY_SIZE(g_vol_table))
     {
-        printk(KERN_ERR "hwver:read rc = %d, error channel = %d\n", rc, channel);
-        return -1;
+        printk(KERN_ERR "hwver:%s:read rc = %d, error channel = %d\n", __func__, rc, hardware->channel);
+        return HWERR;
     }
-    return i;
+    hardware->adc_range = i;
+
+    return 0;
 }
 
-/**************************************************************************
-FUNCTION   hwver_proc_read
+static void hw_set_pcb_version(int pcb_gpio1_status, int pcb_gpio2_status)
+{
+    int val = 0;
+    val |= (pcb_gpio1_status & 0x1) << 1;
+    val |= (pcb_gpio2_status & 0x1);
+    version[PCB_INDEX] = '0' + val;
+}
 
-DESCRIPTION: Transfer hardware version to user
+static int hw_calc_hardware_version(hwver_struct *hardware)
+{
+    modem_bt_type modem_bt = BT_VER;
+    sim_esim_type sim_esim = SIM_VER;
+    gps_type gps = UBLOX;
+    nfc_type nfc = PN66T;
+    config_type high_low = LOW;
+    int val = 0;
 
-**************************************************************************/
+    if(NULL == hardware)
+    {
+        printk(KERN_ERR "hwver:%s:hardware pointer is null!\n", __func__);
+        return HWERR;
+    }
+    if((hardware->adc_range > MAX_ADC_RANGE) || (hardware->adc_range < 0))
+    {
+        printk(KERN_ERR "hwver:%s:adc_range is invalid!\n", __func__);
+        return HWERR;
+    }
+
+    val |= ((hardware->hwver1_status & 0x01) << 2);
+    val |= ((hardware->hwver2_status & 0x01) << 1);
+    val |= (hardware->hwver3_status & 0x01);
+    switch(val)
+    {
+        /*GPIO: 0 0 0*/
+        /*BTMODEM:BT GPS:UBLOX SIMESIM:NONE*/
+        case 0:
+        {
+            modem_bt = BT_VER;
+            gps = UBLOX;
+            /*NFC*/
+            if((hardware->adc_range > 4) && (hardware->adc_range <= MAX_ADC_RANGE))
+            {
+                nfc = PN551;
+            }
+            else
+            {
+                nfc = PN66T;
+            }
+            /*high or low configuration*/
+            high_low = hw_get_high_low_config(hardware->adc_range);
+            break;
+        }
+        /*GPIO: 0 0 1*/
+        /*BTMODEM:MODEM SIMESIM:SIM NFC:PN66T GPS:UBLOX HIGHLOW:default LOW*/
+        case 1:
+        {
+            modem_bt = MODEM_VER;
+            sim_esim = SIM_VER;
+            gps = UBLOX;
+            nfc = PN66T;
+            break;
+        }
+        /*GPIO: 0 1 X*/
+        /*BTMODEM:MODEM SIMESIM:SIM NFC:PN551 GPS:UBLOX HIGHLOW default LOW*/
+        case 2:
+        case 3:
+        {
+            modem_bt = MODEM_VER;
+            sim_esim = SIM_VER;
+            gps = UBLOX;
+            nfc = PN551;
+            break;
+        }
+        /*GPIO: 1 0 0*/
+        /*BTMODEM:MODEM SIMESIM:ESIM NFC:PN551 GPS:QCOM*/
+        case 4:
+        {
+            modem_bt = MODEM_VER;
+            sim_esim = ESIM_VER;
+            /*get high or low config*/
+            high_low = hw_get_high_low_config(hardware->adc_range);
+            gps = QCOM;
+            nfc = PN551;
+            break;
+        }
+        /*GPIO: 1 0 1*/
+        /*BTMODEM:MODEM SIMESIM:ESIM NFC:PN66T GPS:UBLOX*/
+        case 5:
+        {
+            modem_bt = MODEM_VER;
+            sim_esim = ESIM_VER;
+            /*get high or low config*/
+            high_low = hw_get_high_low_config(hardware->adc_range);
+            gps = UBLOX;
+            nfc = PN66T;
+            break;
+        }
+        /*GPIO: 1 1 X*/
+        /*MODEMBT:MODEM SIMESIM:ESIM GPS:UBLOX NFC:PN551*/
+        case 6:
+        case 7:
+        {
+            modem_bt = MODEM_VER;
+            sim_esim = ESIM_VER;
+            /*get high or low config*/
+            high_low = hw_get_high_low_config(hardware->adc_range);
+            gps = UBLOX;
+            nfc = PN551;
+            break;
+        }
+        /*ERROR*/
+        default:
+        {
+            printk(KERN_ERR "hwver:%s:hardware version is invalid!\n", __func__);
+            return HWERR;
+        }
+    }
+
+    version[BT_MOD_INDEX] = '0' + modem_bt;
+    version[SIM_ESIM_INDEX] = '0' + sim_esim;
+    version[GPS_INDEX] = '0' + gps;
+    version[NFC_INDEX] = '0' + nfc;
+    version[HIGH_LOW_INDEX] = '0' + high_low;
+    version[FREQ_RANGE_INDEX] = '0' + hardware->adc_range;
+
+    return 0;
+}
+
+static bool hw_is_gpios_valid(hwver_struct *hardware)
+{
+    bool val = false;
+
+    if(NULL == hardware)
+    {
+        printk(KERN_ERR "hwver:%s:hardware pointer is null\n", __func__);
+        return HWERR;
+    }
+    val = gpio_is_valid(hardware->hwver_gpio1) && gpio_is_valid(hardware->hwver_gpio2) && gpio_is_valid(hardware->hwver_gpio3) && gpio_is_valid(hardware->pcbver_gpio1) && gpio_is_valid(hardware->pcbver_gpio2);
+    if(val)
+    {
+        return true;
+    }
+    return false;
+}
+
+static int hw_set_gpios_direction_input(hwver_struct *hardware)
+{
+    bool val = false;
+
+    val = gpio_direction_input(hardware->pcbver_gpio1) || gpio_direction_input(hardware->pcbver_gpio2) || gpio_direction_input(hardware->hwver_gpio1) || gpio_direction_input(hardware->hwver_gpio2) || gpio_direction_input(hardware->hwver_gpio3);
+    if(val)
+    {
+        return HWERR;
+    }
+    return 0;
+}
+
+static int hw_init(struct platform_device *pdev, hwver_struct *hardware)
+{
+    struct device_node *np  = NULL;
+    struct pinctrl* hwver_pinctrl = NULL;
+    struct pinctrl_state *set_state = NULL;
+    int rc = 0;
+
+    /*get device tree node*/
+    np = pdev->dev.of_node;
+    if (!np)
+    {
+        printk(KERN_ERR "hwver:%s:get device tree node failed!\n", __func__);
+        return HWERR;
+    }
+    /*  VADC get */
+    hardware->vadc = qpnp_get_vadc(&(pdev->dev), HW_VADC_NAME);
+    if (IS_ERR(hardware->vadc))
+    {
+        rc = PTR_ERR(hardware->vadc);
+        if (rc != -EPROBE_DEFER)
+        {
+            printk(KERN_ERR "hwver:%s:vadc property missing\n", __func__);
+            return HWERR;
+        }
+    }
+    /*Get all gpios*/
+    hardware->hwver_gpio1 = of_get_named_gpio(np, HWVER1_GPIO_NAME, 0);
+    hardware->hwver_gpio2 = of_get_named_gpio(np, HWVER2_GPIO_NAME, 0);
+    hardware->hwver_gpio3 = of_get_named_gpio(np, HWVER3_GPIO_NAME, 0);
+    hardware->pcbver_gpio1 = of_get_named_gpio(np, PCBVER1_GPIO_NAME, 0);
+    hardware->pcbver_gpio2 = of_get_named_gpio(np, PCBVER2_GPIO_NAME, 0);
+
+    if(!hw_is_gpios_valid(hardware))
+    {
+        printk(KERN_ERR "hwver:%s:GPIO get failed!\n", __func__);
+        return HWERR;
+    }
+    /*Set GPIO default configs*/
+    hwver_pinctrl = devm_pinctrl_get(&(pdev->dev));
+    if(!hwver_pinctrl)
+    {
+        printk(KERN_ERR "hwver:%s:pinctrl get failed\n", __func__);
+        return HWERR;
+    }
+
+    set_state = pinctrl_lookup_state(hwver_pinctrl, "default");
+    if(!set_state)
+    {
+        printk(KERN_ERR "hwver:%s:can not find pinctrl setstate\n", __func__);
+        return HWERR;
+    }
+    pinctrl_select_state(hwver_pinctrl, set_state);
+
+    hardware->channel = P_MUX4_1_1;
+    return 0;
+}
+
+static int hw_gpio_request_confg_in(hwver_struct *hardware)
+{
+    int rc = 0;
+
+    rc = gpio_request(hardware->pcbver_gpio1, PCBVER1_GPIO_NAME);
+    if(rc)
+    {
+        printk(KERN_ERR "hwver:%s:request GPIO:%d failed\n", __func__, hardware->pcbver_gpio1);
+        goto gpio_request_exit5;
+    }
+
+    rc = gpio_request(hardware->pcbver_gpio2, PCBVER2_GPIO_NAME);
+    if(rc)
+    {
+        printk(KERN_ERR "hwver:%s:request GPIO:%d failed\n", __func__, hardware->pcbver_gpio2);
+        goto gpio_request_exit4;
+    }
+
+    rc = gpio_request(hardware->hwver_gpio1,HWVER1_GPIO_NAME);
+    if(rc)
+    {
+        printk(KERN_ERR "hwver:%s:request GPIO:%d failed\n", __func__, hardware->hwver_gpio1);
+        goto gpio_request_exit3;
+    }
+
+    rc = gpio_request(hardware->hwver_gpio2,HWVER2_GPIO_NAME);
+    if(rc)
+    {
+        printk(KERN_ERR "hwver:%s:request GPIO:%d failed\n", __func__, hardware->hwver_gpio2);
+        goto gpio_request_exit2;
+    }
+
+    rc = gpio_request(hardware->hwver_gpio3,HWVER3_GPIO_NAME);
+    if(rc)
+    {
+        printk(KERN_ERR "hwver:%s:request GPIO:%d failed\n", __func__, hardware->hwver_gpio3);
+        goto gpio_request_exit1;
+    }
+
+    if(hw_set_gpios_direction_input(hardware))
+    {
+        printk(KERN_ERR "hwver:%s:GPIO input_mode set failed\n", __func__);
+        goto gpio_request_exit;
+    }
+    return 0;
+
+gpio_request_exit:
+    gpio_free(hardware->hwver_gpio3);
+gpio_request_exit1:
+    gpio_free(hardware->hwver_gpio2);
+gpio_request_exit2:
+    gpio_free(hardware->hwver_gpio1);
+gpio_request_exit3:
+    gpio_free(hardware->pcbver_gpio2);
+gpio_request_exit4:
+    gpio_free(hardware->pcbver_gpio1);
+gpio_request_exit5:
+    return HWERR;
+}
+
+static void hw_gpio_free(hwver_struct *hardware)
+{
+    gpio_free(hardware->pcbver_gpio1);
+    gpio_free(hardware->pcbver_gpio2);
+    gpio_free(hardware->hwver_gpio1);
+    gpio_free(hardware->hwver_gpio2);
+    gpio_free(hardware->hwver_gpio3);
+}
+
+static int hw_get_gpio_status(hwver_struct *hardware)
+{
+    int rc = 0;
+
+    if(NULL == hardware)
+    {
+        printk(KERN_ERR "hwver:%s:hardware pointer is null\n", __func__);
+        return HWERR;
+    }
+    rc = hw_gpio_request_confg_in(hardware);
+    if(rc)
+    {
+        printk(KERN_ERR "hwver:%s:gpio request fail!\n", __func__);
+        return HWERR;
+    }
+    hardware->pcb1_status = gpio_get_value_cansleep(hardware->pcbver_gpio1);
+    hardware->pcb2_status = gpio_get_value_cansleep(hardware->pcbver_gpio2);
+    hardware->hwver1_status = gpio_get_value_cansleep(hardware->hwver_gpio1);
+    hardware->hwver2_status = gpio_get_value_cansleep(hardware->hwver_gpio2);
+    hardware->hwver3_status = gpio_get_value_cansleep(hardware->hwver_gpio3);
+    hw_gpio_free(hardware);
+
+    return 0;
+}
+
 ssize_t hwver_proc_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
     int ret = 0;
-    char num[3]= {0};
     int len = 0;
-    len = sizeof(num);
+    len = sizeof(version);
 
-    num[0] = '0' + hwver_num0;
-    num[1] = '0' + (( ( pcb_num1 & 0x1 ) << 1 ) | ( pcb_num2 & 0x1 ));
-    num[2] = '\n';
-    if(NULL == ppos || *ppos > len)
+    if((NULL == ppos) || (*ppos > len))
     {
         return 0;
     }
-    if(count > len - *ppos)
+    if(count > (len - *ppos))
     {
         count = len - *ppos;
     }
-
-    ret = copy_to_user(buf, num, count);
-    if(0 != ret)
+    ret = copy_to_user(buf, version, count);
+    if(ret)
     {
-        printk(KERN_ERR"hwver:hwver_proc_read fail.\n");
-        return -1;
+        printk(KERN_ERR"hwver:%s:hwver_proc_read fail.\n", __func__);
+        return HWERR;
     }
 
     *ppos += count;
@@ -143,141 +511,71 @@ static const struct file_operations hwver_proc_fops = {
 static int hwver_probe(struct platform_device *pdev)
 {
     int rc = 0;
-    int pcbver_gpio1 = -1;     /*pcb_ver0 gpio*/
-    int pcbver_gpio2 = -1;     /*pcb_ver1 gpio*/
-    int pcb1_err = 0;
-    int pcb1_status = -1;
-    int pcb2_err = 0;
-    int pcb2_status = -1;
-    struct device_node *np  = NULL;
+    hwver_struct hardware;
     static struct proc_dir_entry *hw_version = NULL;
-    struct qpnp_vadc_chip *g_chip_ver0 = NULL;
-    struct pinctrl* hwver_pinctrl = NULL;
-    struct pinctrl_state *set_state = NULL;
+    char *smem = NULL;
 
-    printk(KERN_ERR "hwver_probe begin...\n");
-
-    /*get device tree node*/
-    np = pdev->dev.of_node;
-    if (!np)
+    smem = (char *) smem_alloc(SMEM_ID_VENDOR2, HWVER_SMEM_SIZE, 0,SMEM_ANY_HOST_FLAG);
+    if(NULL == smem)
     {
-        printk(KERN_ERR "hwver:get device tree node failed!\n ");
-        return -1;
+        printk(KERN_ERR "hwver:%s:alloc share memory fail!\n", __func__);
+        return HWERR;
     }
+    memset(smem, 0, HWVER_SMEM_SIZE);
 
-    /*  VADC get */
-    g_chip_ver0 = qpnp_get_vadc(&(pdev->dev), "hwver0");
-    if (IS_ERR(g_chip_ver0))
+    rc = hw_init(pdev, &hardware);
+    if(rc)
     {
-        rc = PTR_ERR(g_chip_ver0);
-        if (rc != -EPROBE_DEFER)
-        {
-            printk(KERN_ERR "hwver:hwver0 vadc property missing\n");
-            return -1;
-        }
+        printk(KERN_ERR "hwver:%s:hardware init fail!\n", __func__);
+        return HWERR;
     }
 
-    /*get hardware version*/
-    hwver_num0 = get_hwver_num(g_chip_ver0, P_MUX4_1_1);
-    if(0 > hwver_num0)
+    rc = hw_get_adc_range(&hardware);
+    if(rc)
     {
-        printk(KERN_ERR "hwver:P_MUX4_1_1 get error hwver_num0 = %d.\n", hwver_num0);
-        return -1;
-    }
-    printk(KERN_INFO "hwver:hwver0 is %d\n",hwver_num0);
-
-    /*get PCB version GPIOs */
-    pcbver_gpio1 = of_get_named_gpio(np, "pcbver1-gpios", 0);
-    if ( !gpio_is_valid(pcbver_gpio1) )
-    {
-        printk(KERN_ERR "hwver:PCB version GPIO1 get failed!\n ");
-        return -1;
+        printk(KERN_ERR "hwver:%s:get adc_range fail!\n", __func__);
+        return HWERR;
     }
 
-    pcbver_gpio2 = of_get_named_gpio(np, "pcbver2-gpios", 0);
-    if (!gpio_is_valid(pcbver_gpio2))
+    rc = hw_get_gpio_status(&hardware);
+    if(rc)
     {
-        printk(KERN_ERR "hwver:PCB version GPIO2 get failed!\n ");
-        return -1;
+        printk(KERN_ERR "hwver:%s:get gpio status fail!\n", __func__);
+        return HWERR;
     }
 
-    /*set the pinctrl state*/
-    hwver_pinctrl = devm_pinctrl_get(&(pdev->dev));
-    if(!hwver_pinctrl)
+    rc = hw_calc_hardware_version(&hardware);
+    if(rc)
     {
-        printk(KERN_ERR "hwver:pinctrl get failed\n");
-        return -1;
-    }
-    set_state = pinctrl_lookup_state(hwver_pinctrl,"default");
-    if(!set_state)
-    {
-        printk(KERN_ERR "hwver:can not find pinctrl setstate\n");
-        return -1;
-    }
-    pinctrl_select_state(hwver_pinctrl,set_state);
-
-    /*get gpio status*/
-    pcb1_err = gpio_request(pcbver_gpio1,"pcbver1-gpios");
-    if (pcb1_err)
-    {
-        printk(KERN_ERR "hwver:request gpio90 failed\n");
-        return -1;
-    }
-    if ( gpio_direction_input(pcbver_gpio1) )
-    {
-        printk(KERN_ERR "hwver:GPIO input_mode set failed\n");
-        return -1;
-    }
-    pcb1_status = gpio_get_value_cansleep(pcbver_gpio1);
-    if ( pcb1_status != 0 && pcb1_status != 1 )
-    {
-        printk(KERN_ERR "hwver:gpio90 status error\n");
-        return -1;
+        printk(KERN_ERR "hwver:%s:hardware version calculate error!\n", __func__);
+        return HWERR;
     }
 
-    pcb2_err = gpio_request(pcbver_gpio2,"pcbver2-gpios");
-    if (pcb2_err)
-    {
-        printk(KERN_ERR "hwver:request gpio91 failed\n");
-        return -1;
-    }
-    if ( gpio_direction_input(pcbver_gpio2) )
-    {
-        printk(KERN_ERR "hwver:GPIO input_mode set failed\n");
-        return -1;
-    }
-    pcb2_status = gpio_get_value_cansleep(pcbver_gpio2);
-    if ( pcb2_status != 0 && pcb2_status != 1 )
-    {
-        printk(KERN_ERR "hwver:gpio91 status error\n");
-        return -1;
-    }
+    hw_set_pcb_version(hardware.pcb1_status, hardware.pcb2_status);
 
-    pcb_num1 = pcb1_status;
-    pcb_num2 = pcb2_status;
+    memcpy(smem, version, HWVER_SMEM_SIZE);
 
     hw_version = proc_create(HW_VER_PROC, PROC_MODE, NULL, &hwver_proc_fops);
     if(NULL == hw_version)
     {
-        printk(KERN_ERR "hwver:can't creat /proc/%s .\n", HW_VER_PROC);
-        return -1;
+        printk(KERN_ERR "hwver:%s:can't creat /proc/%s .\n", __func__, HW_VER_PROC);
+        return HWERR;
     }
-    printk(KERN_INFO "hwver:PCB version is %d\n",(( ( pcb_num1 & 0x1 ) << 1 ) | ( pcb_num2 & 0x1 )));
 
+    printk(KERN_INFO "hwver:hardware version is %s\n", version);
     return 0;
 }
 
+static struct of_device_id hwver_match_table[] = {
+    {.compatible = "huawei,hwversion"},
+    {},
+};
 
 static int hwver_remove(struct platform_device *pdev)
 {
     remove_proc_entry(HW_VER_PROC, NULL);
     return 0;
 }
-
-static struct of_device_id hwver_match_table[] = {
-    {.compatible = "qcom,hwversion"},
-    {},
-};
 
 static struct platform_driver hwver_driver = {
     .probe  = hwver_probe,
