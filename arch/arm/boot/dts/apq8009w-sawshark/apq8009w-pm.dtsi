@@ -12,16 +12,20 @@
 #include "HB432628EBW-LS-4v4-350mah.dtsi"
 #include "HB432628EBW-DS-4v0-240mah.dtsi"
 &soc {
-    /*ADC for hw version*/
-    qcom,hwversion {
-                compatible = "qcom,hwversion";
-                qcom,hwver0-vadc = <&pm8916_vadc>;/* hwver0 */
-                pcbver1-gpios = <&msm_gpio 90 0>;/* pcbver0*/
-                pcbver2-gpios = <&msm_gpio 91 0>;/* pcbver1*/
-                pinctrl-names = "default","suspend";
-                pinctrl-0 = <&pcb_ver_0_active &pcb_ver_1_active>;
-                pinctrl-1 = <&pcb_ver_0_suspend &pcb_ver_1_suspend>;
-	};
+    /*ADC and GPIOs for hw version*/
+    huawei,hwversion {
+		compatible = "huawei,hwversion";
+		qcom,hwver0-vadc = <&pm8916_vadc>;/* hwver0 */
+		hwver-gpio1 = <&msm_gpio 89 0>; /*SIM/ESIM*/
+		hwver-gpio2 = <&msm_gpio 97 0>; /*PCBA_0*/
+		hwver-gpio3 = <&msm_gpio 93 0>; /*PCBA_1*/
+		pcbver-gpio1 = <&msm_gpio 90 0>;/*PCB_0*/
+		pcbver-gpio2 = <&msm_gpio 91 0>;/*PCB_1*/
+		pinctrl-names = "default","suspend";
+		pinctrl-0 = <&pcb_ver_0_active &pcb_ver_1_active &hw_ver_0_active &hw_ver_1_active &hw_ver_2_active>;
+		pinctrl-1 = <&pcb_ver_0_suspend &pcb_ver_1_suspend &hw_ver_0_suspend &hw_ver_1_suspend &hw_ver_2_suspend>;
+		};
+
     gpio_keys {
                 compatible = "gpio-keys";
                 pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
