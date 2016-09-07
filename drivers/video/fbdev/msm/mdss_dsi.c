@@ -2704,7 +2704,7 @@ static struct device_node *mdss_dsi_find_panel_of_node(
 
 	len = strlen(panel_cfg);
 	ctrl_pdata->panel_data.dsc_cfg_np_name[0] = '\0';
-	if (!len) {
+	if (1) {
 		/* no panel cfg chg, parse dt */
 		pr_debug("%s:%d: no cmd line cfg present\n",
 			 __func__, __LINE__);
@@ -3486,7 +3486,7 @@ static int mdss_dsi_parse_hw_cfg(struct platform_device *pdev, char *pan_cfg)
 
 	if (pan_cfg)
 		cfg_prim = strnstr(pan_cfg, "cfg:", strlen(pan_cfg));
-	if (cfg_prim) {
+	if (0) {
 		cfg_prim += 4;
 
 		cfg_sec = strnchr(cfg_prim, strlen(cfg_prim), ':');
