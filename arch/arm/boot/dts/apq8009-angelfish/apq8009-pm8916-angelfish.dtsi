@@ -14,11 +14,17 @@
 
 / {
 	reserved-memory {
-	ramoops_mem: ramoops_region@8aa00000 {
+		ramoops_mem: ramoops_region@8aa00000 {
 			reg = <0x0 0x8aa00000 0x0 0x100000>;
-	        compatible = "removed-dma-pool";
-	        no-map;
-	    };
+			compatible = "removed-dma-pool";
+			no-map;
+		};
+
+		crash_fb_mem@8ab00000 {
+			reg = <0 0x8ab00000 0 0x100000>;
+			compatible = "removed-dma-pool";
+			no-map;
+		};
 	};
 };
 
