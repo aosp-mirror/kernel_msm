@@ -634,24 +634,27 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 			(mbhc->mbhc_cfg->linein_th != 0)) {
 				mbhc->mbhc_cb->compute_impedance(mbhc,
 						&mbhc->zl, &mbhc->zr);
-			if ((mbhc->zl > mbhc->mbhc_cfg->linein_th &&
-				mbhc->zl < MAX_IMPED) &&
-				(mbhc->zr > mbhc->mbhc_cfg->linein_th &&
-				 mbhc->zr < MAX_IMPED) &&
-				(jack_type == SND_JACK_HEADPHONE)) {
-				jack_type = SND_JACK_LINEOUT;
-				mbhc->current_plug = MBHC_PLUG_TYPE_HIGH_HPH;
-				if (mbhc->hph_status) {
-					mbhc->hph_status &= ~(SND_JACK_HEADSET |
-							SND_JACK_LINEOUT |
-							SND_JACK_UNSUPPORTED);
-					wcd_mbhc_jack_report(mbhc,
-							&mbhc->headset_jack,
-							mbhc->hph_status,
-							WCD_MBHC_JACK_MASK);
+			ret = of_property_read_string(mbhc->codec->card->dev->of_node,"sharp,jack-lineout-report",&lineout_report);
+			if(ret || strcmp(lineout_report, "notsend")){
+				if ((mbhc->zl > mbhc->mbhc_cfg->linein_th &&
+					mbhc->zl < MAX_IMPED) &&
+					(mbhc->zr > mbhc->mbhc_cfg->linein_th &&
+					 mbhc->zr < MAX_IMPED) &&
+					(jack_type == SND_JACK_HEADPHONE)) {
+					jack_type = SND_JACK_LINEOUT;
+					mbhc->current_plug = MBHC_PLUG_TYPE_HIGH_HPH;
+					if (mbhc->hph_status) {
+						mbhc->hph_status &= ~(SND_JACK_HEADSET |
+								SND_JACK_LINEOUT |
+								SND_JACK_UNSUPPORTED);
+						wcd_mbhc_jack_report(mbhc,
+								&mbhc->headset_jack,
+								mbhc->hph_status,
+								WCD_MBHC_JACK_MASK);
+					}
+					pr_debug("%s: Marking jack type as SND_JACK_LINEOUT\n",
+					__func__);
 				}
-				pr_debug("%s: Marking jack type as SND_JACK_LINEOUT\n",
-				__func__);
 			}
 		}
 
