@@ -44,7 +44,6 @@ static struct mutex i2c_suspend_lock;
 static bool selftest_enable;
 static bool selftest_show;
 static struct wake_lock touch_wake_lock;
-static struct wake_lock pm_touch_wake_lock;
 static struct mxt_data *global_mxt_data;
 static struct workqueue_struct	*touch_wq = NULL;
 
@@ -1382,6 +1381,7 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 	int ret;
 	int report_num = 0;
 	int i = 0;
+	struct t_data *tmp;
 	u8 count, num_left;
 
 	/* Read T44 and T5 together */
@@ -1494,14 +1494,15 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 
 	if (data->ts_data.total_num) {
 		data->ts_data.prev_total_num = data->ts_data.total_num;
-		memcpy(data->ts_data.prev_data, data->ts_data.curr_data,
-				sizeof(data->ts_data.curr_data));
+		tmp = data->ts_data.prev_data;
+		data->ts_data.prev_data = data->ts_data.curr_data;
+		data->ts_data.curr_data = tmp;
 	} else {
 		data->ts_data.prev_total_num = 0;
 		memset(data->ts_data.prev_data, 0,
 				sizeof(data->ts_data.prev_data));
 	}
-	memset(data->ts_data.curr_data, 0, sizeof(data->ts_data.curr_data));
+	memset(data->ts_data.curr_data, 0, sizeof(struct t_data) * MXT_MAX_FINGER);
 
 end:
 	if (data->update_input) {
@@ -1568,7 +1569,6 @@ static irqreturn_t touch_irq_handler(int irq, void *dev_id)
 	if (data->pm_state >= PM_SUSPEND) {
 		TOUCH_INFO_MSG("interrupt in suspend[%d]\n", data->pm_state);
 		data->pm_state = PM_SUSPEND_IRQ;
-		wake_lock_timeout(&pm_touch_wake_lock, msecs_to_jiffies(1000));
 		return IRQ_HANDLED;
 	}
 
@@ -4094,6 +4094,18 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		return -ENOMEM;
 	}
 
+	data->ts_data.curr_data = devm_kzalloc(&client->dev,
+		sizeof(struct t_data) * MXT_MAX_FINGER, GFP_KERNEL);
+	if (!data->ts_data.curr_data) {
+		return -ENOMEM;
+	}
+
+	data->ts_data.prev_data = devm_kzalloc(&client->dev,
+		sizeof(struct t_data) * MXT_MAX_FINGER, GFP_KERNEL);
+	if (!data->ts_data.prev_data) {
+		return -ENOMEM;
+	}
+
 	data->object_table = devm_kzalloc(&client->dev,
 			(MXT_OBJECT_NUM_MAX * sizeof(struct mxt_object)),
 			GFP_KERNEL);
@@ -4159,8 +4171,6 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 	wake_lock_init(&touch_wake_lock, WAKE_LOCK_SUSPEND,
 			"touch_wakelock");
-	wake_lock_init(&pm_touch_wake_lock, WAKE_LOCK_SUSPEND,
-			"pm_touch_wakelock");
 
 	error = mxt_probe_regulators(data);
 	if (error)
@@ -4257,7 +4267,6 @@ err_init_t100_input_device:
 err_probe_regulators:
 	mutex_destroy(&i2c_suspend_lock);
 
-	wake_lock_destroy(&pm_touch_wake_lock);
 	wake_lock_destroy(&touch_wake_lock);
 
 	mxt_free_object_table(data);
@@ -4279,7 +4288,6 @@ static int mxt_remove(struct i2c_client *client)
 
 	mutex_destroy(&i2c_suspend_lock);
 
-	wake_lock_destroy(&pm_touch_wake_lock);
 	wake_lock_destroy(&touch_wake_lock);
 	global_mxt_data = NULL;
 

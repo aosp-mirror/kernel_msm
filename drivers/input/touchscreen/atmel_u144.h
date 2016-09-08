@@ -631,8 +631,8 @@ struct touch_data
 	u8		state;
 	u8		palm;
 	u8		prev_palm;
-	struct t_data	curr_data[MXT_MAX_FINGER];
-	struct t_data	prev_data[MXT_MAX_FINGER];
+	struct t_data	*curr_data;
+	struct t_data	*prev_data;
 	struct b_data	curr_button;
 	struct b_data	prev_button;
 };
