@@ -7923,8 +7923,10 @@ static int qseecom_check_whitelist_feature(void)
 		qseecom.whitelist_support = true;
 		ret = 0;
 	} else {
+		qseecom.whitelist_support = false;
 		pr_err("Failed to check whitelist: ret = %d, result = 0x%x\n",
 			ret, resp.result);
+		ret = 0;
 	}
 	kfree(buf);
 	return ret;
