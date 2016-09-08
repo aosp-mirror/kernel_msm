@@ -5179,20 +5179,6 @@ static int wake_affine(struct sched_domain *sd, struct task_struct *p, int sync)
 	return 1;
 }
 
-static inline unsigned long task_util(struct task_struct *p, bool use_pelt)
-{
-
-#ifdef CONFIG_SCHED_WALT
-	if (!walt_disabled && sysctl_sched_use_walt_task_util) {
-		unsigned long demand = p->ravg.demand;
-		return (demand << 10) / walt_ravg_window;
-	}
-#endif
-	if (use_util_est() && !use_pelt)
-		return p->se.avg.util_est;
-	return p->se.avg.util_avg;
-}
-
 unsigned int capacity_margin = 1280; /* ~20% margin */
 
 static inline unsigned long boosted_task_util(struct task_struct *task);
