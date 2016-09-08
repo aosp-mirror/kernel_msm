@@ -405,6 +405,7 @@ long kgsl_ioctl_syncsource_create(struct kgsl_device_private *dev_priv,
 	kref_init(&syncsource->refcount);
 	syncsource->private = private;
 
+	idr_preload(GFP_KERNEL);
 	mutex_lock(&private->process_private_mutex);
 	id = idr_alloc(&private->syncsource_idr, syncsource, 1, 0, GFP_KERNEL);
 	if (id > 0) {
