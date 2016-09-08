@@ -107,16 +107,20 @@ struct spidev_data {
 
 	unsigned char *tx_buf;
 	unsigned int wake_irq;
+	unsigned int wake_display_irq;
 	int wake_irq_gpio;
 	int wakeup_mcu_gpio;
 	int read_sync_gpio;
+	int wake_display_gpio;
 	spidev_work_mode_type work_mode;
+	spidev_wakeup_disp_type wakeup_disp_enable;
 	bool is_suspended;
 	bool pending_irq;
 	spidev_buf_list *idle_buf_head;
 	spidev_buf_list *read_buf_head;
 	struct completion read_compl;
 	struct work_struct wakeup_read_work;
+	struct work_struct wakeup_display_work;
 };
 
 static LIST_HEAD(device_list);
@@ -257,7 +261,7 @@ static int spidev_request_gpio(struct spidev_data	*spidev)
 	spidev->wake_irq_gpio= of_get_named_gpio(np, "mcu_wakeup_ap", 0);
 	if (spidev->wake_irq_gpio < 0)
 	{
-		pr_err("mcu_wakeup_ap:%d.\n", spidev->wake_irq);
+		pr_err("mcu_wakeup_ap:%d.\n", spidev->wake_irq_gpio);
 		return -ENODEV;
 	}
 
@@ -323,6 +327,37 @@ static int spidev_request_gpio(struct spidev_data	*spidev)
 
 	pr_info("gpio_request read_sync_gpio gpio:%d done\n", spidev->read_sync_gpio);
 
+	/*Get MCU Wakeup Display GPIO*/
+	np = of_find_compatible_node(NULL, NULL, "mcu,wakeupdisplay");
+	if (!np)
+	{
+		pr_err("%s: %s node not found\n", __FUNCTION__, "mcu,wakeupdisplay");
+		return -ENODEV;
+	}
+
+	spidev->wake_display_gpio= of_get_named_gpio(np, "mcu_wakeup_display", 0);
+	if (spidev->wake_display_gpio < 0)
+	{
+		pr_err("mcu_wakeup_display:%d.\n", spidev->wake_display_gpio);
+		return -ENODEV;
+	}
+
+	if (gpio_request(spidev->wake_display_gpio, "mcu_wakeup_display") < 0)
+	{
+		pr_err("Failed to request gpio %d for mcu_wakeup_display\n",spidev->wake_display_gpio);
+		return -ENODEV;
+	}
+
+	if (gpio_direction_input(spidev->wake_display_gpio) < 0)
+	{
+		pr_err("Failed to set dir %d for mcu_wakeup_display\n",spidev->wake_display_gpio);
+		return -ENODEV;
+	}
+
+	spidev->wake_display_irq = gpio_to_irq(spidev->wake_display_gpio);
+
+	pr_info("spidev_request_gpio spidev->wake_display_gpio = %u",spidev->wake_display_gpio);
+
 	return 0;
 }
 
@@ -333,6 +368,7 @@ static void spidev_release_gpio(struct spidev_data	*spidev)
 		gpio_free(spidev->wake_irq_gpio);
 		gpio_free(spidev->wakeup_mcu_gpio);
 		gpio_free(spidev->read_sync_gpio);
+		gpio_free(spidev->wake_display_gpio);
 	}
 }
 
@@ -583,6 +619,21 @@ done:
 	return status;
 }
 
+void build_wakeup_display_data_struct(spidev_buf_list *buf_node)
+{
+	static char wakeup_gesture_data[] =
+		{0x12,0x5A,0x00,0x0C,0x00,0x15,0x81,0x01,0x01,0x44,0x02,0x01,0x00,0x03,0x01,0x00,0xAC,0x00};
+
+	if (NULL == buf_node)
+	{
+		return;
+	}
+
+	/*build wakeup gesture data in node*/
+	memcpy(buf_node->buffer, wakeup_gesture_data, sizeof(wakeup_gesture_data));
+	buf_node->read_cnt = sizeof(wakeup_gesture_data);
+}
+
 static void spidev_wakeup_read_work(struct work_struct *work)
 {
 	struct spidev_data *spidev = container_of(work, struct spidev_data, wakeup_read_work);
@@ -638,6 +689,41 @@ static void spidev_wakeup_read_work(struct work_struct *work)
 	mutex_unlock(&spidev->spi_op_lock);
 }
 
+static void spidev_wakeup_display_work(struct work_struct *work)
+{
+	struct spidev_data *spidev = container_of(work, struct spidev_data, wakeup_display_work);
+	spidev_buf_list *spidev_buf_node = NULL;
+
+	if (spidev)
+	{
+	retry:
+		mutex_lock(&spidev->buf_list_lock);
+		if (!list_empty(&spidev->idle_buf_head->list))
+		{
+			/*Get buf note from idle list*/
+			spidev_buf_node = list_entry(spidev->idle_buf_head->list.prev, spidev_buf_list, list);
+
+			build_wakeup_display_data_struct(spidev_buf_node);
+			/*move the buf node to read buf list*/
+			list_move(&spidev_buf_node->list, &spidev->read_buf_head->list);
+			mutex_unlock(&spidev->buf_list_lock);
+			spidev_complete(&spidev->read_compl);
+		}
+		else
+		{
+			/*No Buf in idle list, sleep 2ms and retry*/
+			mutex_unlock(&spidev->buf_list_lock);
+			pr_info("spidev_wakeup_display_work buf list is full wait 2ms\n");
+			msleep(2);
+			goto retry;
+		}
+	}
+	else
+	{
+		pr_err("spidev_wakeup_display_work spidev NULL\n");
+	}
+}
+
 static irqreturn_t spidev_wake_irq(int irq, void *arg)
 {
 	struct spidev_data *spidev = (struct spidev_data *)arg;
@@ -655,6 +741,19 @@ static irqreturn_t spidev_wake_irq(int irq, void *arg)
 	}
 	return IRQ_HANDLED;
 }
+
+static irqreturn_t spidev_wakeup_display_irq(int irq, void *arg)
+{
+	struct spidev_data *spidev = (struct spidev_data *)arg;
+
+	if (spidev && (SPIDEV_WORK_MODE_KERNEL == spidev->work_mode)
+        && (SPIDEV_WAKEUP_DISPLAY_ENALBE == spidev->wakeup_disp_enable))
+	{
+		schedule_work(&spidev->wakeup_display_work);
+	}
+	return IRQ_HANDLED;
+}
+
 
 static long
 spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
@@ -821,6 +920,44 @@ spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			{
 				dev_err(&spi->dev,"Couldn't acquire MCU HOST WAKE UP IRQ reval = %d\n",retval);
 				break;
+			}
+		}
+
+		break;
+
+	case SPI_IOC_WAKEUP_DISPLAY_CTRL:
+		retval = __get_user(tmp, (__u32 __user *)arg);
+		if (retval != 0)
+		{
+			dev_err(&spi->dev, "wakeup display get user data error\n");
+			break;
+		}
+
+		pr_info("spi work mode = %d, spidev->wakeup_display_irq:%d, enable:%d\n",
+			spidev->work_mode, spidev->wake_display_irq, tmp);
+		if (SPIDEV_WORK_MODE_KERNEL == spidev->work_mode)
+		{
+			if (spidev->wakeup_disp_enable == (spidev_wakeup_disp_type)(tmp == 0? 0: 1))
+			{
+				pr_info("wakeup display control is not charged:%d\n",spidev->wakeup_disp_enable);
+			}
+			else
+			{
+				if (SPIDEV_WAKEUP_DISPLAY_ENALBE == (spidev_wakeup_disp_type)(!!tmp))
+				{
+					retval = request_irq(spidev->wake_display_irq, spidev_wakeup_display_irq,
+										IRQF_DISABLED | IRQF_TRIGGER_RISING,
+									"spidev wakeup display irq", spidev);
+					if (retval < 0)
+					{
+						dev_err(&spi->dev,"Couldn't acquire mcu wakeup display IRQ reval = %d\n",retval);
+					}
+				}
+				else
+				{
+					free_irq(spidev->wake_display_irq, spidev);
+				}
+				spidev->wakeup_disp_enable = (spidev_wakeup_disp_type)(!!tmp);
 			}
 		}
 
@@ -1048,6 +1185,13 @@ static int spidev_release(struct inode *inode, struct file *filp)
 	{
 		cancel_work_sync(&spidev->wakeup_read_work);
 		free_irq(spidev->wake_irq, spidev);
+		if (SPIDEV_WAKEUP_DISPLAY_ENALBE == spidev->wakeup_disp_enable)
+		{
+			cancel_work_sync(&spidev->wakeup_display_work);
+			free_irq(spidev->wake_display_irq, spidev);
+			spidev->wakeup_disp_enable = SPIDEV_WAKEUP_DISPLAY_DISABLE;
+		}
+		spidev->work_mode = SPIDEV_WORK_MODE_USER;
 	}
 
 	/* last close? */
@@ -1167,6 +1311,8 @@ static int spidev_probe(struct spi_device *spi)
 
 	INIT_WORK(&spidev->wakeup_read_work,spidev_wakeup_read_work);
 
+	INIT_WORK(&spidev->wakeup_display_work,spidev_wakeup_display_work);
+
 	mutex_unlock(&device_list_lock);
 
 	if (status == 0)
@@ -1193,6 +1339,13 @@ static int spidev_remove(struct spi_device *spi)
 	{
 		cancel_work_sync(&spidev->wakeup_read_work);
 		free_irq(spidev->wake_irq, spidev);
+		if (SPIDEV_WAKEUP_DISPLAY_ENALBE == spidev->wakeup_disp_enable)
+		{
+			cancel_work_sync(&spidev->wakeup_display_work);
+			free_irq(spidev->wake_display_irq, spidev);
+			spidev->wakeup_disp_enable = SPIDEV_WAKEUP_DISPLAY_DISABLE;
+		}
+		spidev->work_mode = SPIDEV_WORK_MODE_USER;
 	}
 	spidev_release_gpio(spidev);
 
@@ -1220,6 +1373,15 @@ static int spidev_suspend(struct spi_device *spi, pm_message_t mesg)
 			dev_err(&spi->dev,"Couldn't enable mcu_host_wake as wakeup interrupt\n");
 		}
 
+		if (SPIDEV_WAKEUP_DISPLAY_ENALBE == spidev->wakeup_disp_enable)
+		{
+			retval = enable_irq_wake(spidev->wake_display_irq);
+			if (retval < 0)
+			{
+				dev_err(&spi->dev,"Couldn't enable mcu wakeup display irq as wakeup interrupt\n");
+			}
+		}
+
 		/*Reset flag to capture pending irq before resume */
 		spidev->pending_irq = false;
 
@@ -1241,6 +1403,15 @@ static int spidev_resume(struct spi_device *spi)
 		if (retval < 0)
 		{
 			dev_err(&spi->dev,"Couldn't disable mcu_host_wake as wakeup interrupt\n");
+		}
+
+		if (SPIDEV_WAKEUP_DISPLAY_ENALBE == spidev->wakeup_disp_enable)
+		{
+			retval = disable_irq_wake(spidev->wake_display_irq);
+			if (retval < 0)
+			{
+				dev_err(&spi->dev,"Couldn't disable mcu wakeup display irq as wakeup interrupt\n");
+			}
 		}
 
 		spidev->is_suspended = false;
