@@ -76,6 +76,16 @@ config ARCH_MSMCOBALT
 	This enables support for the MSMCOBALT chipset. If you do not
 	wish to build a kernel that runs on this chipset, say 'N' here.
 
+config BOARD_MSMCORTEX
+        bool "Enable Support for Qualcomm MSMCOBALT MTP board"
+	depends on ARCH_QCOM
+	select ARCH_MSMCOBALT
+
+config BOARD_MUSKIE
+        bool "Enable Support for Muskie boards"
+	depends on ARCH_QCOM
+	select ARCH_MSMCOBALT
+
 config ARCH_MSMHAMSTER
 	bool "Enable Support for Qualcomm Technologies Inc MSMHAMSTER"
 	depends on ARCH_QCOM

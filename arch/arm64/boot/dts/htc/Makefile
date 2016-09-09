@@ -1,4 +1,4 @@
-dtb-$(CONFIG_ARCH_MSMCOBALT) += \
+dtb-$(CONFIG_BOARD_MUSKIE) += \
 	msmcobalt-htc_muskie-evm.dtb \
 
 always		:= $(dtb-y)
