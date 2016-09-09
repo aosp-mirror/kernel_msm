@@ -499,6 +499,7 @@ static int HX_ON_HAND_SHAKING   =0;//
 #define TOUCH_ACTIVE    0
 #define TOUCH_SLEEP     1
 #define TOUCH_IDLE      2
+static int DisableTouch_flag = 0;
 static int touch_mode;
 void himax_timetelling_detection(int supplymode);
 #endif
