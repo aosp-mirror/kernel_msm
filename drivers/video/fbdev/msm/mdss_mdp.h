@@ -465,6 +465,8 @@ struct mdss_mdp_ctl {
 	u32 vsync_cnt;
 	u32 underrun_cnt;
 
+	atomic_t wait_pp;
+
 	u16 width;
 	u16 height;
 	u16 border_x_off;

@@ -5555,7 +5555,9 @@ int mdss_mdp_display_wait4pingpong(struct mdss_mdp_ctl *ctl, bool use_lock)
 	}
 
 	ATRACE_BEGIN("wait_pingpong");
+	atomic_set(&ctl->wait_pp, 1);
 	ret = ctl->ops.wait_pingpong(ctl, NULL);
+	atomic_set(&ctl->wait_pp, 0);
 	ATRACE_END("wait_pingpong");
 	if (ret)
 		recovery_needed = true;

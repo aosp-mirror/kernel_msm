@@ -3335,6 +3335,18 @@ static ssize_t mdss_mdp_lineptr_set_value(struct device *dev,
 	return count;
 }
 
+static ssize_t mdss_mdp_wait_pp_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
+	int ret;
+
+	ret = scnprintf(buf, PAGE_SIZE, "%d\n", atomic_read(&ctl->wait_pp));
+	return ret;
+}
+
 static ssize_t mdss_mdp_bl_show_event(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -3779,6 +3791,7 @@ static DEVICE_ATTR(vsync_event, S_IRUGO, mdss_mdp_vsync_show_event, NULL);
 static DEVICE_ATTR(lineptr_event, S_IRUGO, mdss_mdp_lineptr_show_event, NULL);
 static DEVICE_ATTR(lineptr_value, S_IRUGO | S_IWUSR | S_IWGRP,
 		mdss_mdp_lineptr_show_value, mdss_mdp_lineptr_set_value);
+static DEVICE_ATTR(wait_pp, S_IRUGO, mdss_mdp_wait_pp_show, NULL);
 static DEVICE_ATTR(ad, S_IRUGO | S_IWUSR | S_IWGRP, mdss_mdp_ad_show,
 	mdss_mdp_ad_store);
 static DEVICE_ATTR(dyn_pu, S_IRUGO | S_IWUSR | S_IWGRP, mdss_mdp_dyn_pu_show,
@@ -3792,6 +3805,7 @@ static struct attribute *mdp_overlay_sysfs_attrs[] = {
 	&dev_attr_vsync_event.attr,
 	&dev_attr_lineptr_event.attr,
 	&dev_attr_lineptr_value.attr,
+	&dev_attr_wait_pp.attr,
 	&dev_attr_ad.attr,
 	&dev_attr_dyn_pu.attr,
 	&dev_attr_msm_misr_en.attr,
