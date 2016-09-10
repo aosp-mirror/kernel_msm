@@ -505,7 +505,7 @@ spidev_write(struct file *filp, const char __user *buf,
 			if (missing == 0)
 			{
 				gpio_direction_output(spidev->wakeup_mcu_gpio, 1);
-				udelay(500);
+				udelay(2000);
 				status = spidev_sync_write_ext(spidev, SPIDEV_KERNEL_MODE_LENGTH);
 				gpio_direction_output(spidev->wakeup_mcu_gpio, 0);
 			}
