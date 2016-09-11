@@ -269,6 +269,9 @@
 	qcom,actuator-type = "lra";
 	qcom,wave-shape = "sine";
 	qcom,vmax-mv = <3596>;
+	qcom,vmax-strong-mv = <3596>;
+	qcom,vmax-light-mv = <1600>;
+	qcom,timeout-strong-threshold = <330>;
 	qcom,brake-pattern = [03 03 03 03];
 };
 
