@@ -135,4 +135,7 @@
 
 &pmi8994_haptics {
 	qcom,vmax-mv = <3132>;
+	qcom,vmax-strong-mv = <3132>;
+	qcom,vmax-light-mv = <2200>;
+	qcom,timeout-strong-threshold = <330>;
 };
