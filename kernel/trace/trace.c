@@ -832,6 +832,7 @@ static struct {
 	{ trace_clock_jiffies,		"uptime",	0 },
 	{ trace_clock,			"perf",		1 },
 	{ ktime_get_mono_fast_ns,	"mono",		1 },
+	{ trace_clock_boot,	        "boot",		1 },
 	ARCH_TRACE_CLOCKS
 };
 

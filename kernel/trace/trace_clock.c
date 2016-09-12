@@ -135,3 +135,17 @@ u64 notrace trace_clock_counter(void)
 {
 	return atomic64_add_return(1, &trace_counter);
 }
+
+/*
+ * trace_clock_boot(): use CLOCK_BOOTTIME for tracing
+ * This should be equivalent to trace_clock_global for most users,
+ * but it has the added advantage of tracking time spent in suspend.
+ */
+u64 notrace trace_clock_boot(void)
+{
+	struct timespec uptime;
+	get_monotonic_boottime(&uptime);
+	return (uptime.tv_sec * 1000000000ull) + uptime.tv_nsec;
+}
+
+EXPORT_SYMBOL_GPL(trace_clock_boot);
