@@ -825,6 +825,14 @@ static int gpio_keys_probe(struct platform_device *pdev)
 		return error;
 	}
 
+	/* Link /sys/keyboard to platform device */
+	error = sysfs_create_link(NULL, &pdev->dev.kobj, "keyboard");
+	if (error) {
+		pr_err("[KEY][ERR]: %s: subsystem_register failed\n", __func__);
+		error = -ENOMEM;
+		goto err_remove_group;
+	}
+
 	error = input_register_device(input);
 	if (error) {
 		dev_err(dev, "Unable to register input device, error: %d\n",
