@@ -183,6 +183,32 @@
 		};
 	};
 
+	/*MCU Senser power*/
+	mcu_senserpower{
+		mcu_senser_power_active:mcu_senser_power_active {
+			mux {
+				pins = "gpio98";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio98";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+		mcu_senser_power_sleep:mcu_senser_power_sleep {
+			mux {
+				pins = "gpio98";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio98";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+	};
+
 	/*BT high speed uart*/
 	bt_uart{
 		bt_uart_data_active:bt_uart_data_active {

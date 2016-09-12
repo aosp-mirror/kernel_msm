@@ -28,6 +28,7 @@
 
 int McuGpioBoot0 = 41;
 int McuGpioReset = 99;
+int McuGpioSenserPower = 98;
 
 /* min reset delay time (ms)*/
 #define MIN_MCU_RESET_TIME 20
@@ -106,6 +107,24 @@ static ssize_t mcu_write_proc_gpio_reset
 	return mcu_write_proc_gpio(McuGpioReset, buffer, count);
 }
 
+static ssize_t mcu_read_proc_gpio_senser_power
+				(struct file *file, char __user *userbuf,
+				size_t bytes, loff_t *off)
+{
+	return 0;
+}
+
+static ssize_t mcu_write_proc_gpio_senser_power
+				(struct file *file, const char __user *buffer,
+				size_t count, loff_t *pos)
+{
+	if (1 > count)
+	{
+		return -EINVAL;
+	}
+
+	return mcu_write_proc_gpio(McuGpioSenserPower, buffer, count);
+}
 
 static const struct file_operations proc_fops_gpio_boot0 = {
 	.owner = THIS_MODULE,
@@ -117,6 +136,12 @@ static const struct file_operations proc_fops_gpio_reset = {
 	.owner = THIS_MODULE,
 	.read = mcu_read_proc_gpio_reset,
 	.write = mcu_write_proc_gpio_reset,
+};
+
+static const struct file_operations proc_fops_gpio_senser_power = {
+	.owner = THIS_MODULE,
+	.read = mcu_read_proc_gpio_senser_power,
+	.write = mcu_write_proc_gpio_senser_power,
 };
 
 static int mcu_gpio_request(void)
@@ -157,6 +182,25 @@ static int mcu_gpio_request(void)
 	else
 		printk(KERN_INFO "%s: gpio_request mcu_reset done\n", __FUNCTION__);
 
+	/*mcu senser power*/
+	np = of_find_compatible_node(NULL, NULL, "mcu,senserpower");
+	if (!np) {
+		printk(KERN_ERR "%s: %s node not found\n", __FUNCTION__, "mcu,senserpower");
+		return -ENODEV;
+	}
+
+	McuGpioSenserPower = of_get_named_gpio(np, "mcu_senserpower", 0);
+	if (McuGpioSenserPower >= 0) {
+		printk(KERN_ERR "%s: SenserPower:%d.\n", __FUNCTION__, McuGpioSenserPower);
+	}
+	if (gpio_request(McuGpioSenserPower, "Senser_Power")) {
+		printk(KERN_ERR "%s: Failed to request gpio %d for mcu_reset\n",
+			__FUNCTION__, McuGpioSenserPower);
+	}
+	else {
+		printk(KERN_INFO "%s: gpio_request Senser_Power done\n", __FUNCTION__);
+	}
+
 	return 0;
 }
 
@@ -190,16 +234,27 @@ static int __init board_mcu_gpio_init(void)
 		goto fail1;
 	}
 
+	/* read/write senser power proc entries */
+	ent = proc_create("gpio_senser_power", 0660, mcu_dir, &proc_fops_gpio_senser_power);
+	if (NULL == ent)
+	{
+		pr_err("Unable to create /proc/mcu/gpio_senser_power entry.\n");
+		retval = -ENOMEM;
+		goto fail2;
+	}
+
 	/*mcu gpio request*/
 	if (mcu_gpio_request())
 	{
 		pr_err( "failed to request mcu gpio\n");
 		retval = -EIO;
-		goto fail2;
+		goto fail3;
 	}
 
 	return 0;
 
+fail3:
+	remove_proc_entry("gpio_senser_power", mcu_dir);
 fail2:
 	remove_proc_entry("gpio_mcu_reset", mcu_dir);
 fail1:
