@@ -812,6 +812,7 @@ spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	u32			tmp;
 	unsigned		n_ioc;
 	struct spi_ioc_transfer	*ioc;
+	spidev_work_mode_type old_work_mode;
 
 	/* Check type and command number */
 	if (_IOC_TYPE(cmd) != SPI_IOC_MAGIC)
@@ -955,9 +956,17 @@ spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 
 		/*Set Spi mode*/
+		old_work_mode = spidev->work_mode;
 		spidev->work_mode = (spidev_work_mode_type)(tmp == 0 ? 0 : 1);
 
 		pr_info("spi work mode = %d spidev->wake_irq:%d\n",spidev->work_mode, spidev->wake_irq);
+
+		if (old_work_mode == spidev->work_mode)
+		{
+			dev_info(&spi->dev, "spi work mode is not changed\n");
+			break;
+		}
+
 		if (spidev->work_mode == SPIDEV_WORK_MODE_KERNEL)
 		{
 			retval = request_irq(spidev->wake_irq, spidev_wake_irq,
@@ -968,6 +977,23 @@ spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				dev_err(&spi->dev,"Couldn't acquire MCU HOST WAKE UP IRQ reval = %d\n",retval);
 				break;
 			}
+		}
+		else if (SPIDEV_WORK_MODE_USER == spidev->work_mode)
+		{
+			dev_err(&spi->dev,"set work mode is user cancel work,free irq \n");
+			cancel_work_sync(&spidev->wakeup_read_work);
+			free_irq(spidev->wake_irq, spidev);
+
+			if (SPIDEV_WAKEUP_DISPLAY_ENALBE == spidev->wakeup_disp_enable)
+			{
+				cancel_work_sync(&spidev->wakeup_display_work);
+				free_irq(spidev->wake_display_irq, spidev);
+				spidev->wakeup_disp_enable = SPIDEV_WAKEUP_DISPLAY_DISABLE;
+			}
+		}
+		else
+		{
+			;
 		}
 
 		break;
@@ -1228,23 +1254,23 @@ static int spidev_release(struct inode *inode, struct file *filp)
 	spidev = filp->private_data;
 	filp->private_data = NULL;
 
-	if (spidev->work_mode == SPIDEV_WORK_MODE_KERNEL)
-	{
-		cancel_work_sync(&spidev->wakeup_read_work);
-		free_irq(spidev->wake_irq, spidev);
-		if (SPIDEV_WAKEUP_DISPLAY_ENALBE == spidev->wakeup_disp_enable)
-		{
-			cancel_work_sync(&spidev->wakeup_display_work);
-			free_irq(spidev->wake_display_irq, spidev);
-			spidev->wakeup_disp_enable = SPIDEV_WAKEUP_DISPLAY_DISABLE;
-		}
-		spidev->work_mode = SPIDEV_WORK_MODE_USER;
-	}
-
 	/* last close? */
 	spidev->users--;
 	if (!spidev->users) {
 		int		dofree;
+
+		if (SPIDEV_WORK_MODE_KERNEL == spidev->work_mode)
+		{
+			cancel_work_sync(&spidev->wakeup_read_work);
+			free_irq(spidev->wake_irq, spidev);
+			if (SPIDEV_WAKEUP_DISPLAY_ENALBE == spidev->wakeup_disp_enable)
+			{
+				cancel_work_sync(&spidev->wakeup_display_work);
+				free_irq(spidev->wake_display_irq, spidev);
+				spidev->wakeup_disp_enable = SPIDEV_WAKEUP_DISPLAY_DISABLE;
+			}
+			spidev->work_mode = SPIDEV_WORK_MODE_USER;
+		}
 
 		kfree(spidev->tx_buffer);
 		spidev->tx_buffer = NULL;

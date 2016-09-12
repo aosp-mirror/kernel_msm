@@ -63,6 +63,14 @@
 		pinctrl-1 = <&mcu_reset_sleep>;
 	};
 
+	mcu,senserpower {
+		compatible = "mcu,senserpower";
+		mcu_senserpower = <&msm_gpio 98 0>;
+		pinctrl-names = "mcu_senser_power_active","mcu_senser_power_sleep";
+		pinctrl-0 = <&mcu_senser_power_active>;
+		pinctrl-1 = <&mcu_senser_power_sleep>;
+	};
+
 	mcu,wakeupmcu {
 		compatible = "mcu,wakeupmcu";
 		ap_wakeup_mcu = <&msm_gpio 49 0>;
