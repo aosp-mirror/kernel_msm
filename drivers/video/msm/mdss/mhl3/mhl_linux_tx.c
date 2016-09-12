@@ -1,7 +1,7 @@
 /*
  * SiI8620 Linux Driver
  *
- * Copyright (C) 2013-2014 Silicon Image, Inc.
+ * Copyright (C) 2013-2014, 2016 Silicon Image, Inc.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -5599,7 +5599,7 @@ static int is_timer_handle_valid(struct mhl_dev_context *dev_context,
 	}
 
 	if (timer != timer_handle) {
-		MHL_TX_DBG_WARN("Invalid timer handle %p received\n",
+		MHL_TX_DBG_WARN("Invalid timer handle %pK received\n",
 				timer_handle);
 		return -EINVAL;
 	}
