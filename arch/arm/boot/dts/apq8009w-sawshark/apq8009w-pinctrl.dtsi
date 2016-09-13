@@ -42,6 +42,7 @@
 	/delete-node/ pmx_i2c_2;
 	/delete-node/ pmx_i2c_4;
 	/delete-node/ trigout_a0;
+	/delete-node/ sdhc2_cd_pin;
 
 	/*Mars configuration begin*/
 	spi1 {
@@ -648,22 +649,22 @@
 	ap_wakeup_bt{
 		ap_wakeup_bt_active:ap_wakeup_bt_active {
 			mux {
-				pins = "gpio77";
+				pins = "gpio38";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio77";
+				pins = "gpio38";
 				drive-strength = <2>;
 				bias-pull-down;
 			};
 		};
 		ap_wakeup_bt_suspend:ap_wakeup_bt_suspend {
 			mux {
-				pins = "gpio77";
+				pins = "gpio38";
 				function = "gpio";
 			};
 			config {
-				pins = "gpio77";
+				pins = "gpio38";
 				drive-strength = <2>;
 				bias-pull-down;
 			};

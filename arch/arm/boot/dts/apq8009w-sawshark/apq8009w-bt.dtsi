@@ -40,8 +40,8 @@
 		vdd-supply = <&pm8916_l9>;
 		vdd-voltage-level = <3100000 3100000>;
 		pinctrl-names = "default","sleep";
-		pinctrl-0 = <&bt_wakeup_ap_active>;
-		pinctrl-1 = <&bt_wakeup_ap_suspend>;
+		pinctrl-0 = <&bt_wakeup_ap_active &ap_wakeup_bt_active>;
+		pinctrl-1 = <&bt_wakeup_ap_suspend &ap_wakeup_bt_suspend>;
 	};
 
 	hserial:serial@78b0000 {
