@@ -599,6 +599,7 @@ handle_edge_irq(unsigned int irq, struct irq_desc *desc)
 	if (!irq_may_run(desc)) {
 		desc->istate |= IRQS_PENDING;
 		mask_ack_irq(desc);
+		handled = true;
 		goto out_unlock;
 	}
 
@@ -609,6 +610,7 @@ handle_edge_irq(unsigned int irq, struct irq_desc *desc)
 	if (irqd_irq_disabled(&desc->irq_data) || !desc->action) {
 		desc->istate |= IRQS_PENDING;
 		mask_ack_irq(desc);
+		handled = true;
 		goto out_unlock;
 	}
 
