@@ -44,7 +44,6 @@ static struct mutex i2c_suspend_lock;
 static bool selftest_enable;
 static bool selftest_show;
 static struct wake_lock touch_wake_lock;
-static struct mxt_data *global_mxt_data;
 static struct workqueue_struct	*touch_wq = NULL;
 
 static unsigned char touched_finger_count = 0;
@@ -89,7 +88,7 @@ static int mxt_command_backup(struct mxt_data *data, u8 value);
 static int mxt_command_reset(struct mxt_data *data, u8 value);
 static void mxt_regulator_disable(struct mxt_data *data);
 static void mxt_regulator_enable(struct mxt_data *data);
-void trigger_usb_state_from_otg(int usb_type);
+static void trigger_usb_state_from_otg(struct mxt_data *data, int usb_type);
 static void mxt_read_fw_version(struct mxt_data *data);
 static int mxt_read_t100_config(struct mxt_data *data);
 static void mxt_external_power_changed(struct power_supply *psy);
@@ -549,7 +548,7 @@ int mxt_get_self_reference_chk(struct mxt_data *data)
 		return 0;
 	}
 
-	object = mxt_get_object(global_mxt_data, MXT_SPT_USERDATA_T38);
+	object = mxt_get_object(data, MXT_SPT_USERDATA_T38);
 	if (!object) {
 		TOUCH_ERR_MSG("Failed to get object\n");
 		return 1;
@@ -671,10 +670,9 @@ int mxt_get_self_reference_chk(struct mxt_data *data)
 	if (err_cnt > 0) {
 		TOUCH_ERR_MSG("Need to Self Cap Re tune!\n");
 
-		if (object) {
-		    mxt_write_reg(global_mxt_data->client,
-				    object->start_address + 2, err_cnt);
-		}
+		if (object)
+			mxt_write_reg(data->client, object->start_address + 2,
+					err_cnt);
 
 		return 1;
 	} else {
@@ -732,17 +730,17 @@ static void mxt_proc_t6_messages(struct mxt_data *data, u8 *msg)
 
 		if (mxt_patchevent_get(PATCH_EVENT_TA)) {
 			TOUCH_DEBUG_MSG("In charging\n");
-			mxt_patch_event(global_mxt_data, CHARGER_PLUGGED);
+			mxt_patch_event(data, CHARGER_PLUGGED);
 			if (mxt_patchevent_get(PATCH_EVENT_IDLE))
-				mxt_patch_event(global_mxt_data, IDLE_IN_CHG);
+				mxt_patch_event(data, IDLE_IN_CHG);
 			else
-				mxt_patch_event(global_mxt_data, ACTIVE_IN_CHG);
+				mxt_patch_event(data, ACTIVE_IN_CHG);
 		} else {
-			mxt_patch_event(global_mxt_data, CHARGER_UNPLUGGED);
+			mxt_patch_event(data, CHARGER_UNPLUGGED);
 			if (mxt_patchevent_get(PATCH_EVENT_IDLE))
-				mxt_patch_event(global_mxt_data, IDLE_IN_NOCHG);
+				mxt_patch_event(data, IDLE_IN_NOCHG);
 			else
-				mxt_patch_event(global_mxt_data, ACTIVE_IN_NOCHG);
+				mxt_patch_event(data, ACTIVE_IN_NOCHG);
 		}
 		TOUCH_DEBUG_MSG("Recover Complete\n");
 	}
@@ -779,11 +777,11 @@ static void mxt_firmware_update_func(struct work_struct *work_firmware_update)
 	}
 
 	if (data->charging_mode) {
-		trigger_usb_state_from_otg(0);
-		trigger_usb_state_from_otg(1);
+		trigger_usb_state_from_otg(data, 0);
+		trigger_usb_state_from_otg(data, 1);
 	} else {
-		trigger_usb_state_from_otg(1);
-		trigger_usb_state_from_otg(0);
+		trigger_usb_state_from_otg(data, 1);
+		trigger_usb_state_from_otg(data, 0);
 	}
 
 	mxt_read_fw_version(data);
@@ -1200,7 +1198,7 @@ static ssize_t mxt_update_patch_store(struct mxt_data *data, const char *buf,
 
 	ret = mxt_patch_init(data, data->patch.patch);
 	if (ret) {
-		TOUCH_ERR_MSG("%s global_mxt_data is NULL \n", __func__);
+		TOUCH_ERR_MSG("%s mxt_data is NULL\n", __func__);
 		goto out;
 	}
 
@@ -1220,10 +1218,8 @@ out:
 	return ret;
 }
 
-void trigger_usb_state_from_otg(int usb_type)
+void trigger_usb_state_from_otg(struct mxt_data *data, int usb_type)
 {
-	struct mxt_data *data = global_mxt_data;
-
 	TOUCH_INFO_MSG("charger: %d\n", usb_type);
 
 	if (!data) {
@@ -2643,15 +2639,15 @@ static ssize_t mxt_self_cap_store(struct mxt_data *data, const char *buf,
 	int value = 0;
 
 	sscanf(buf, "%d", &value);
-	TOUCH_DEBUG_MSG("%s : %d \n", __func__, value);
+	TOUCH_DEBUG_MSG("%s : %d\n", __func__, value);
 	if (value  == 1){
 		data->self_cap = value;
-		TOUCH_DEBUG_MSG(" Noise suppression \n");
-		mxt_patch_event(global_mxt_data,SELF_CAP_OFF_NOISE_SUPPRESSION );
+		TOUCH_DEBUG_MSG(" Noise suppression\n");
+		mxt_patch_event(data, SELF_CAP_OFF_NOISE_SUPPRESSION);
 	} else if (value  == 0){
 		data->self_cap = value;
-		TOUCH_DEBUG_MSG(" Noise recover \n");
-		mxt_patch_event(global_mxt_data,SELF_CAP_ON_NOISE_RECOVER );
+		TOUCH_DEBUG_MSG(" Noise recover\n");
+		mxt_patch_event(data, SELF_CAP_ON_NOISE_RECOVER);
 	} else {
 		TOUCH_DEBUG_MSG(" Do nothing\n");
 	}
@@ -2664,9 +2660,9 @@ static ssize_t mxt_noise_suppression_show(struct mxt_data *data, char *buf)
 
 	data->self_cap = 1;
 	len += snprintf(buf + len, PAGE_SIZE - len, "%d\n", data->self_cap);
-	TOUCH_DEBUG_MSG("%s : %d \n", __func__, data->self_cap);
-	TOUCH_DEBUG_MSG(" Noise suppression \n");
-	mxt_patch_event(global_mxt_data,SELF_CAP_OFF_NOISE_SUPPRESSION );
+	TOUCH_DEBUG_MSG("%s : %d\n", __func__, data->self_cap);
+	TOUCH_DEBUG_MSG(" Noise suppression\n");
+	mxt_patch_event(data, SELF_CAP_OFF_NOISE_SUPPRESSION);
 
 	return len;
 }
@@ -2677,15 +2673,15 @@ static ssize_t mxt_noise_suppression_store(struct mxt_data *data,
 	int value = 0;
 
 	sscanf(buf, "%d", &value);
-	TOUCH_DEBUG_MSG("%s : %d \n", __func__, value);
+	TOUCH_DEBUG_MSG("%s : %d\n", __func__, value);
 	if (value  == 1){
 		data->self_cap = value;
-		TOUCH_DEBUG_MSG(" Noise suppression \n");
-		mxt_patch_event(global_mxt_data,SELF_CAP_OFF_NOISE_SUPPRESSION );
+		TOUCH_DEBUG_MSG(" Noise suppression\n");
+		mxt_patch_event(data, SELF_CAP_OFF_NOISE_SUPPRESSION);
 	} else if (value  == 0){
 		data->self_cap = value;
-		TOUCH_DEBUG_MSG(" Noise recover \n");
-		mxt_patch_event(global_mxt_data,SELF_CAP_ON_NOISE_RECOVER );
+		TOUCH_DEBUG_MSG(" Noise recover\n");
+		mxt_patch_event(data, SELF_CAP_ON_NOISE_RECOVER);
 	} else {
 		TOUCH_DEBUG_MSG(" Do nothing\n");
 	}
@@ -2697,9 +2693,9 @@ static ssize_t mxt_noise_recover_show(struct mxt_data *data, char *buf)
 	int len = 0;
 	data->self_cap = 0;
 	len += snprintf(buf + len, PAGE_SIZE - len, "%d\n", data->self_cap);
-	TOUCH_DEBUG_MSG("%s : %d \n", __func__, data->self_cap);
-	TOUCH_DEBUG_MSG(" Noise suppression recovered \n");
-	mxt_patch_event(global_mxt_data,SELF_CAP_ON_NOISE_RECOVER );
+	TOUCH_DEBUG_MSG("%s : %d\n", __func__, data->self_cap);
+	TOUCH_DEBUG_MSG(" Noise suppression recovered\n");
+	mxt_patch_event(data, SELF_CAP_ON_NOISE_RECOVER);
 	return len;
 }
 
@@ -2710,15 +2706,15 @@ static ssize_t mxt_noise_recover_store(struct mxt_data *data,
 
 	sscanf(buf, "%d", &value);
 	data->self_cap = value;
-	TOUCH_DEBUG_MSG("%s : %d \n", __func__, value);
+	TOUCH_DEBUG_MSG("%s : %d\n", __func__, value);
 	if (value  == 1){
 		data->self_cap = value;
-		TOUCH_DEBUG_MSG(" Noise suppression \n");
-		mxt_patch_event(global_mxt_data,SELF_CAP_OFF_NOISE_SUPPRESSION );
+		TOUCH_DEBUG_MSG(" Noise suppression\n");
+		mxt_patch_event(data, SELF_CAP_OFF_NOISE_SUPPRESSION);
 	} else if (value  == 0){
 		data->self_cap = value;
-		TOUCH_DEBUG_MSG(" Noise recover \n");
-		mxt_patch_event(global_mxt_data,SELF_CAP_ON_NOISE_RECOVER );
+		TOUCH_DEBUG_MSG(" Noise recover\n");
+		mxt_patch_event(data, SELF_CAP_ON_NOISE_RECOVER);
 	} else {
 		TOUCH_DEBUG_MSG(" Do nothing\n");
 	}
@@ -4065,7 +4061,7 @@ static void mxt_external_power_changed(struct power_supply *psy)
 
 	if (online)
 		TOUCH_INFO_MSG("charger detected\n");
-	trigger_usb_state_from_otg(!!online);
+	trigger_usb_state_from_otg(data, !!online);
 }
 
 static int mxt_get_psy_property(struct power_supply *psy,
@@ -4139,7 +4135,6 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	snprintf(data->phys, sizeof(data->phys), "i2c-%u-%04x/input0",
 			client->adapter->nr, client->addr);
 
-	global_mxt_data = data;
 	data->client = client;
 	data->irq = client->irq;
 	data->pdata = pdata;
@@ -4270,7 +4265,6 @@ err_probe_regulators:
 	wake_lock_destroy(&touch_wake_lock);
 
 	mxt_free_object_table(data);
-	global_mxt_data = NULL;
 	return error;
 }
 
@@ -4289,7 +4283,6 @@ static int mxt_remove(struct i2c_client *client)
 	mutex_destroy(&i2c_suspend_lock);
 
 	wake_lock_destroy(&touch_wake_lock);
-	global_mxt_data = NULL;
 
 	return 0;
 }
