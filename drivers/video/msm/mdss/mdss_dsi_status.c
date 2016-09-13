@@ -165,7 +165,7 @@ static int fb_event_callback(struct notifier_block *self,
 			break;
 		case FB_BLANK_VSYNC_SUSPEND:
 		case FB_BLANK_NORMAL:
-			pr_info("%s : ESD thread running\n", __func__);
+			pr_debug("%s : ESD thread running\n", __func__);
 			break;
 		case FB_BLANK_POWERDOWN:
 		case FB_BLANK_HSYNC_SUSPEND:
