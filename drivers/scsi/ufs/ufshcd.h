@@ -918,7 +918,10 @@ struct ufs_hba {
 	enum bkops_status urgent_bkops_lvl;
 	bool is_urgent_bkops_lvl_checked;
 
-	struct rw_semaphore clk_scaling_lock;
+	/* sync b/w diff contexts */
+	struct rw_semaphore lock;
+	struct task_struct *issuing_task;
+	unsigned long shutdown_in_prog;
 	struct rw_semaphore query_lock;
 
 	/* If set, don't gate device ref_clk during clock gating */
@@ -926,6 +929,16 @@ struct ufs_hba {
 
 	int scsi_block_reqs_cnt;
 };
+
+static inline void ufshcd_mark_shutdown_ongoing(struct ufs_hba *hba)
+{
+	set_bit(0, &hba->shutdown_in_prog);
+}
+
+static inline bool ufshcd_is_shutdown_ongoing(struct ufs_hba *hba)
+{
+	return !!(test_bit(0, &hba->shutdown_in_prog));
+}
 
 /* Returns true if clocks can be gated. Otherwise false */
 static inline bool ufshcd_is_clkgating_allowed(struct ufs_hba *hba)
