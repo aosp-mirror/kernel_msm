@@ -1,8 +1,8 @@
 /*
  * MHL3 HID Tunneling implementation
  *
- * Copyright (c) 2013-2014, 2016 Lee Mulcahy <william.mulcahy@siliconimage.com>
- * Copyright (c) 2013-2014, 2016 Silicon Image, Inc
+ * Copyright (c) 2013-2014 Lee Mulcahy <william.mulcahy@siliconimage.com>
+ * Copyright (c) 2013-2014 Silicon Image, Inc
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
