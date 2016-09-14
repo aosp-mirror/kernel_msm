@@ -713,10 +713,12 @@ static int wlan_hdd_request_remain_on_channel( struct wiphy *wiphy,
        return -EBUSY;
     }
 
-    /* When P2P-GO and if we are trying to unload the driver then
-     * wlan driver is keep on receiving the remain on channel command
-     * and which is resulting in crash. So not allowing any remain on
-     * channel requets when Load/Unload is in progress*/
+    if (TRUE == pHddCtx->btCoexModeSet)
+    {
+        VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
+           FL("BTCoex Mode operation in progress"));
+        return -EBUSY;
+    }
     if(hdd_isConnectionInProgress((hdd_context_t *)pAdapter->pHddCtx, NULL,
                                   NULL))
     {
