@@ -2325,7 +2325,20 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 	fwu->initialized = true;
 	fwu->polling_mode = false;
 
-	retval = sysfs_create_bin_file(&rmi4_data->i2c_client->dev.kobj,
+	fwu->ts_info = kzalloc(RMI4_INFO_MAX_LEN, GFP_KERNEL);
+	if (!fwu->ts_info) {
+		dev_err(&rmi4_data->i2c_client->dev, "Not enough memory\n");
+		goto exit_free_ts_info;
+	}
+
+	synaptics_rmi4_update_debug_info();
+
+#ifdef INSIDE_FIRMWARE_UPDATE
+	fwu->fwu_workqueue = create_singlethread_workqueue("fwu_workqueue");
+	INIT_DELAYED_WORK(&fwu->fwu_work, synaptics_rmi4_fwu_work);
+#endif
+
+        retval = sysfs_create_bin_file(&rmi4_data->i2c_client->dev.kobj,
 			&dev_attr_data);
 	if (retval < 0) {
 		dev_err(&rmi4_data->i2c_client->dev,
@@ -2356,19 +2369,6 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 		retval = PTR_ERR(temp);
 		goto exit_remove_attrs;
 	}
-
-	fwu->ts_info = kzalloc(RMI4_INFO_MAX_LEN, GFP_KERNEL);
-	if (!fwu->ts_info) {
-		dev_err(&rmi4_data->i2c_client->dev, "Not enough memory\n");
-		goto exit_free_ts_info;
-	}
-
-	synaptics_rmi4_update_debug_info();
-
-#ifdef INSIDE_FIRMWARE_UPDATE
-	fwu->fwu_workqueue = create_singlethread_workqueue("fwu_workqueue");
-	INIT_DELAYED_WORK(&fwu->fwu_work, synaptics_rmi4_fwu_work);
-#endif
 
 	return 0;
 exit_free_ts_info:
