@@ -1177,56 +1177,9 @@ static int iterm_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	return 0;
 }
 
-static const char * const usb_type_str[] = {
-	"SDP",
-	"UNKNOWN",
-	"DCP",
-	"CDP",
-};
-static int get_usb_supply_type(struct smb23x_chip *chip)
-{
-	int rc;
-	u8 reg, tmp;
-	enum power_supply_type type;
-
-	rc = smb23x_read(chip, CHG_STATUS_C_REG, &reg);
-	if (rc < 0) {
-		pr_err("Read STATUS_C failed, rc=%d\n", rc);
-		return rc;
-	}
-	tmp = reg & APSD_STATUS_BIT;
-
-	if (!tmp) {
-		pr_debug("APSD not completed\n");
-		return POWER_SUPPLY_TYPE_UNKNOWN;
-	}
-
-	tmp = reg & APSD_RESULT_MASK;
-	if (tmp == CDP_TYPE_VAL) {
-		type = POWER_SUPPLY_TYPE_USB_CDP;
-		tmp = 3;
-	} else if (tmp == DCP_TYPE_VAL) {
-		type = POWER_SUPPLY_TYPE_USB_DCP;
-		tmp = 2;
-	} else if (tmp == SDP_TYPE_VAL) {
-		type = POWER_SUPPLY_TYPE_USB;
-		tmp = 0;
-	} else {
-		type = POWER_SUPPLY_TYPE_UNKNOWN;
-		tmp = 1;
-	}
-
-	pr_debug("Charger type %s detected\n", usb_type_str[tmp]);
-
-	return type;
-}
 
 static int handle_usb_insertion(struct smb23x_chip *chip)
 {
-	enum power_supply_type usb_type;
-
-	usb_type = get_usb_supply_type(chip);
-	power_supply_set_supply_type(chip->usb_psy, usb_type);
 	power_supply_set_present(chip->usb_psy, chip->usb_present);
 	power_supply_set_online(chip->usb_psy, true);
 
@@ -2376,7 +2329,7 @@ static int smb23x_suspend(struct device *dev)
 		pr_err("Save irq config failed, rc=%d\n", rc);
 
 	/* enable only important IRQs */
-	rc = smb23x_write(chip, IRQ_CFG_REG_9, BATT_MISSING_IRQ_EN_BIT);
+	rc = smb23x_write(chip, IRQ_CFG_REG_9, BATT_MISSING_IRQ_EN_BIT|INOK_IRQ_EN_BIT);
 	if (rc < 0)
 		pr_err("Set irq_cfg failed, rc = %d\n", rc);
 

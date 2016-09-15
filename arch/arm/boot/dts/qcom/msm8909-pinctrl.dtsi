@@ -273,30 +273,6 @@
 			};
 		};
 
-		smb_int_pin {
-			smb_int_default: smb_int_default {
-				mux {
-					pins = "gpio58";
-					function ="smb1360_int_gpio";
-				};
-				config {
-					pins = "gpio58";
-					drive-strength = <2>;   /* 2 MA */
-					bias-pull-up;           /* PULL UP*/
-				};
-			};
-			smb_int_sleep: smb_int_sleep {
-				mux {
-					pins = "gpio58";
-					function ="smb1360_int_gpio";
-				};
-				config {
-					pins = "gpio58";
-					drive-strength = <2>;   /* 2 MA */
-					bias-pull-up;           /* PULL UP*/
-				};
-			};
-		};
 
 		pmx_sdc1_clk {
 			sdc1_clk_on: sdc1_clk_on {

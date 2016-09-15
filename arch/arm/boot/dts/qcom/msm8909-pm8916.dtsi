@@ -351,7 +351,35 @@
 		qcom,btm-channel-number = <0x68>;
 	};
 };
+&msm_gpio {
+	/* Delete gpio58 configuration */
+	/delete-node/ tpiu_seta_14;
+	/delete-node/ smb_int_pin;
+	smb_int_default: smb_int_default {
+		mux {
+			pins = "gpio49";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio49";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+		};
+	};
 
+	smb_susp_default: smb_susp_default {
+		mux {
+			pins = "gpio58";
+			function ="gpio";
+		};
+		config {
+			pins = "gpio58";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+			output-high;
+		};
+	};
+};
 &i2c_4 {
 	smb23x-lbc@1b {
 		compatible = "qcom,smb231-lbc";
@@ -360,7 +388,7 @@
 		interrupts = <49 2>;
 		qcom,bms-psy-name = "bms";
 		pinctrl-names = "default";
-		pinctrl-0 = <&smb_int_default>;
+		pinctrl-0 = <&smb_int_default &smb_susp_default>;
 		qcom,float-voltage-mv = <4400>;
 		qcom,charging-timeout = <360>;
 		qcom,recharge-thresh-mv = <150>;
@@ -373,6 +401,9 @@
 		qcom,soft-temp-vfloat-comp-mv = <200>;
 		qcom,soft-temp-current-comp-ma = <150>;
 		qcom,chg-inhibit-disabled;
+		qcom,aicl-disabled;
+		qcom,apsd-disabled;
+		qcom,bms-controlled-charging;
 		qcom,thermal-mitigation = <1500 900 500 100>;
 	};
 };
