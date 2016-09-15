@@ -1842,3 +1842,8 @@ static inline u64 irq_time_read(int cpu)
 }
 #endif /* CONFIG_64BIT */
 #endif /* CONFIG_IRQ_TIME_ACCOUNTING */
+
+/*
+ * task_may_not_preempt - check whether a task may not be preemptible soon
+ */
+extern bool task_may_not_preempt(struct task_struct *task, int cpu);
