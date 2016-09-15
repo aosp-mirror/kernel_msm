@@ -2204,13 +2204,39 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 	fwu->initialized = true;
 	fwu->polling_mode = false;
 
+	temp = debugfs_create_file("dump_info", S_IRUSR | S_IWUSR,
+			fwu->rmi4_data->dir, fwu->rmi4_data,
+			&debug_dump_info_fops);
+	if (temp == NULL || IS_ERR(temp)) {
+		dev_err(&rmi4_data->i2c_client->dev,
+			"%s: Failed to create debugfs dump info file\n",
+			__func__);
+		retval = PTR_ERR(temp);
+		goto exit_free_mem;
+	}
+
+	fwu->ts_info = kzalloc(RMI4_INFO_MAX_LEN, GFP_KERNEL);
+	if (!fwu->ts_info) {
+		dev_err(&rmi4_data->i2c_client->dev, "Not enough memory\n");
+		goto exit_free_debugfs;
+	}
+
+	synaptics_rmi4_update_debug_info();
+
+#ifdef INSIDE_FIRMWARE_UPDATE
+	fwu->fwu_workqueue = create_singlethread_workqueue("fwu_workqueue");
+	INIT_DELAYED_WORK(&fwu->fwu_work, synaptics_rmi4_fwu_work);
+	queue_delayed_work(fwu->fwu_workqueue,
+			&fwu->fwu_work,
+			msecs_to_jiffies(1000));
+#endif
 	retval = sysfs_create_bin_file(&rmi4_data->i2c_client->dev.kobj,
 			&dev_attr_data);
 	if (retval < 0) {
 		dev_err(&rmi4_data->i2c_client->dev,
 				"%s: Failed to create sysfs bin file\n",
 				__func__);
-		goto exit_free_mem;
+		goto exit_free_ts_info;
 	}
 
 	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
@@ -2225,36 +2251,8 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 		}
 	}
 
-	temp = debugfs_create_file("dump_info", S_IRUSR | S_IWUSR,
-			fwu->rmi4_data->dir, fwu->rmi4_data,
-			&debug_dump_info_fops);
-	if (temp == NULL || IS_ERR(temp)) {
-		dev_err(&rmi4_data->i2c_client->dev,
-			"%s: Failed to create debugfs dump info file\n",
-			__func__);
-		retval = PTR_ERR(temp);
-		goto exit_remove_attrs;
-	}
-
-	fwu->ts_info = kzalloc(RMI4_INFO_MAX_LEN, GFP_KERNEL);
-	if (!fwu->ts_info) {
-		dev_err(&rmi4_data->i2c_client->dev, "Not enough memory\n");
-		goto exit_free_ts_info;
-	}
-
-	synaptics_rmi4_update_debug_info();
-
-#ifdef INSIDE_FIRMWARE_UPDATE
-	fwu->fwu_workqueue = create_singlethread_workqueue("fwu_workqueue");
-	INIT_DELAYED_WORK(&fwu->fwu_work, synaptics_rmi4_fwu_work);
-	queue_delayed_work(fwu->fwu_workqueue,
-			&fwu->fwu_work,
-			msecs_to_jiffies(1000));
-#endif
-
 	return 0;
-exit_free_ts_info:
-	debugfs_remove(temp);
+
 exit_remove_attrs:
 	for (attr_count--; attr_count >= 0; attr_count--) {
 		sysfs_remove_file(&rmi4_data->input_dev->dev.kobj,
@@ -2263,6 +2261,10 @@ exit_remove_attrs:
 
 	sysfs_remove_bin_file(&rmi4_data->input_dev->dev.kobj, &dev_attr_data);
 
+exit_free_ts_info:
+	kfree(fwu->ts_info);
+exit_free_debugfs:
+	debugfs_remove(temp);
 exit_free_mem:
 	kfree(fwu->fn_ptr);
 
