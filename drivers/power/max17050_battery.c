@@ -279,6 +279,11 @@ static void max17050_init_chip(struct max17050_chip *chip)
 						chip->pdata->vf_fullcap);
 	max17050_write_reg(client, MAX17050_REPSOC, vfsoc);
 
+	/* Disable the ALRT */
+	max17050_write_verify_reg(client, MAX17050_VALRT_TH, 0xff00);
+	max17050_write_verify_reg(client, MAX17050_TALRT_TH, 0xff00);
+	max17050_write_verify_reg(client, MAX17050_SALRT_TH, 0xff00);
+
 	/* Complete initialisation */
 	chip->status = max17050_read_reg(client, MAX17050_STATUS);
 
@@ -633,11 +638,21 @@ static int max17050_get_property(struct power_supply *psy,
 static void max17050_set_soc_thresholds(struct max17050_chip *chip,
 								s16 threshold)
 {
-	s16 soc_now;
+	int soc_now;
 	s16 soc_max;
 	s16 soc_min;
 
+	if (threshold <= 0) {
+		pr_warn("%s: invalid threshold %d\n", __func__, threshold);
+		return;
+	}
+
 	soc_now = max17050_read_reg(chip->client, MAX17050_REPSOC) >> 8;
+	if (soc_now < 0)
+		return;
+
+	if (soc_now > 100)
+		soc_now = 100;
 
 	soc_max = soc_now + threshold;
 	if (soc_max > 100)
