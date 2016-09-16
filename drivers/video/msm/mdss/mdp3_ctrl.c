@@ -149,7 +149,7 @@ static void mdp3_dispatch_dma_done(struct work_struct *work)
 		return;
 
 	cnt = atomic_read(&session->dma_done_cnt);
-
+	MDSS_XLOG(cnt);
 	while (cnt > 0) {
 		mdp3_ctrl_notify(session, MDP_NOTIFY_FRAME_DONE);
 		atomic_dec(&session->dma_done_cnt);
@@ -166,6 +166,7 @@ static void mdp3_dispatch_clk_off(struct work_struct *work)
 	int retry_count = 2;
 
 	pr_debug("%s\n", __func__);
+	MDSS_XLOG(XLOG_FUNC_ENTRY, __LINE__);
 	session = container_of(work, struct mdp3_session_data,
 				clk_off_work);
 	if (!session)
@@ -176,6 +177,7 @@ static void mdp3_dispatch_clk_off(struct work_struct *work)
 		atomic_read(&session->vsync_countdown) > 0) {
 		mutex_unlock(&session->lock);
 		pr_debug("%s: Ignoring clk shut down\n", __func__);
+		MDSS_XLOG(XLOG_FUNC_EXIT, __LINE__);
 		return;
 	}
 
@@ -204,6 +206,7 @@ retry_dma_done:
 	}
 	mdp3_ctrl_vsync_enable(session->mfd, 0);
 	mdp3_ctrl_clk_enable(session->mfd, 0);
+	MDSS_XLOG(XLOG_FUNC_EXIT, __LINE__);
 	mutex_unlock(&session->lock);
 }
 
@@ -211,6 +214,7 @@ void vsync_notify_handler(void *arg)
 {
 	struct mdp3_session_data *session = (struct mdp3_session_data *)arg;
 	session->vsync_time = ktime_get();
+	MDSS_XLOG(ktime_to_ms(session->vsync_time));
 	sysfs_notify_dirent(session->vsync_event_sd);
 }
 
@@ -763,6 +767,7 @@ static int mdp3_ctrl_on(struct msm_fb_data_type *mfd)
 	}
 	mutex_lock(&mdp3_session->lock);
 
+	MDSS_XLOG(XLOG_FUNC_ENTRY, __LINE__, mfd->panel_power_state);
 	panel = mdp3_session->panel;
 	/* make sure DSI host is initialized properly */
 	if (panel) {
@@ -787,6 +792,7 @@ static int mdp3_ctrl_on(struct msm_fb_data_type *mfd)
 
 	if (mdp3_session->status) {
 		pr_debug("fb%d is on already\n", mfd->index);
+		MDSS_XLOG(XLOG_FUNC_EXIT, __LINE__, mfd->panel_power_state);
 		goto end;
 	}
 
@@ -873,6 +879,7 @@ static int mdp3_ctrl_on(struct msm_fb_data_type *mfd)
 		mdp3_session->status = 1;
 
 	mdp3_ctrl_pp_resume(mfd);
+	MDSS_XLOG(XLOG_FUNC_EXIT, __LINE__, mfd->panel_power_state);
 on_error:
 	if (rc || (mdp3_res->idle_pc_enabled &&
 			(mfd->panel_info->type == MIPI_CMD_PANEL))) {
@@ -910,6 +917,8 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 	 */
 	pm_runtime_get_sync(&mdp3_res->pdev->dev);
 
+	MDSS_XLOG(XLOG_FUNC_ENTRY, __LINE__, mdss_fb_is_power_on_ulp(mfd),
+		mfd->panel_power_state);
 	panel = mdp3_session->panel;
 	mutex_lock(&mdp3_session->lock);
 
@@ -1027,8 +1036,11 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 
 	if (mdss_fb_is_power_on_ulp(mfd) &&
 		(mfd->panel.type == MIPI_CMD_PANEL)) {
-		if ((atomic_read(&mfd->kickoff_pending)) ||
-		    (atomic_read(&mfd->commits_pending))) {
+		if (atomic_read(&mfd->kickoff_pending) ||
+		    atomic_read(&mfd->commits_pending)) {
+			MDSS_XLOG(XLOG_FUNC_ENTRY, __LINE__,
+				atomic_read(&mfd->kickoff_pending),
+				atomic_read(&mfd->commits_pending));
 			pr_debug("%s: Ignore MDP3 clocks OFF request in ULP\n", __func__);
 			goto off_error;
 		}
@@ -1056,6 +1068,7 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 		mdp3_ctrl_clk_enable(mdp3_session->mfd, 0);
 	}
 off_error:
+	MDSS_XLOG(XLOG_FUNC_EXIT, __LINE__);
 	mutex_unlock(&mdp3_session->lock);
 	/* Release the last reference to the runtime device */
 	pm_runtime_put(&mdp3_res->pdev->dev);
