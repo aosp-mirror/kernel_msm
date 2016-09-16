@@ -674,6 +674,7 @@ static irqreturn_t max17050_interrupt(int id, void *dev)
 	pr_debug("%s: interrupt occured, ID = %d\n", __func__, id);
 
 	val = max17050_read_reg(client, MAX17050_STATUS);
+	pr_info("%s: STATUS = %04x\n", __func__, val);
 
 	/* Signal userspace when the capacity exceeds the limits */
 	if ((val & STATUS_INTR_SOCMIN_BIT) || (val & STATUS_INTR_SOCMAX_BIT)) {
