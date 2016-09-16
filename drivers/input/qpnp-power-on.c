@@ -220,6 +220,7 @@ struct qpnp_pon {
 	u8			warm_reset_reason2;
 	bool			is_spon;
 	bool			store_hard_reset_reason;
+	bool			report_key;
 };
 
 static struct qpnp_pon *sys_reset_dev;
@@ -795,16 +796,18 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 					cfg->key_code, pon_rt_sts);
 	key_status = pon_rt_sts & pon_rt_bit;
 
-	/* simulate press event in case release event occured
-	 * without a press event
-	 */
-	if (!cfg->old_state && !key_status) {
-		input_report_key(pon->pon_input, cfg->key_code, 1);
+	if (pon->report_key) {
+		/* simulate press event in case release event occured
+		 * without a press event
+		 */
+		if (!cfg->old_state && !key_status) {
+			input_report_key(pon->pon_input, cfg->key_code, 1);
+			input_sync(pon->pon_input);
+		}
+
+		input_report_key(pon->pon_input, cfg->key_code, key_status);
 		input_sync(pon->pon_input);
 	}
-
-	input_report_key(pon->pon_input, cfg->key_code, key_status);
-	input_sync(pon->pon_input);
 
 	cfg->old_state = !!key_status;
 
@@ -940,9 +943,11 @@ static void bark_work_func(struct work_struct *work)
 	}
 
 	if (!(pon_rt_sts & QPNP_PON_RESIN_BARK_N_SET)) {
-		/* report the key event and enable the bark IRQ */
-		input_report_key(pon->pon_input, cfg->key_code, 0);
-		input_sync(pon->pon_input);
+		if (pon->report_key) {
+			/* report the key event and enable the bark IRQ */
+			input_report_key(pon->pon_input, cfg->key_code, 0);
+			input_sync(pon->pon_input);
+		}
 		enable_irq(cfg->bark_irq);
 	} else {
 		/* disable reset */
@@ -984,9 +989,11 @@ static irqreturn_t qpnp_resin_bark_irq(int irq, void *_pon)
 		goto err_exit;
 	}
 
-	/* report the key event */
-	input_report_key(pon->pon_input, cfg->key_code, 1);
-	input_sync(pon->pon_input);
+	if (pon->report_key) {
+		/* report the key event */
+		input_report_key(pon->pon_input, cfg->key_code, 1);
+		input_sync(pon->pon_input);
+	}
 	/* schedule work to check the bark status for key-release */
 	schedule_delayed_work(&pon->bark_work, QPNP_KEY_STATUS_DELAY);
 err_exit:
@@ -2283,6 +2290,13 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	/* config whether store the hard reset reason */
 	pon->store_hard_reset_reason = of_property_read_bool(pdev->dev.of_node,
 					"qcom,store-hard-reset-reason");
+
+	/* config whether to report key events */
+	pon->report_key = of_property_read_bool(pdev->dev.of_node,
+						"qcom,report-key");
+
+	dev_info(&pdev->dev, "qcom,report-key:%s\n",
+		 pon->report_key ? "true" : "false");
 
 	qpnp_pon_debugfs_init(pdev);
 	return 0;
