@@ -41,6 +41,14 @@
 	};
 };
 
+&spmi_bus {
+	qcom,pmcobalt@0 {
+		qcom,power-on@800 {
+			/delete-property/ qcom,report-key;
+		};
+	};
+};
+
 &tlmm {
 	gpio_key {
 		gpio_key_active: gpio_key_active {
