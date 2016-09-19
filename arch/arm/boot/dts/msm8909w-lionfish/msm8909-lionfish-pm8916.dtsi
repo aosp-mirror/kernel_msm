@@ -23,6 +23,11 @@
 	/* remove msm8916 acc/cpr regulator node */
 	/delete-node/ regulator@1946000;
 	/delete-node/ regulator@b018000;
+	i2c@78b8000 {
+	     st-fg@70 {
+		  qcom,pm8916-vadc = <&pm8916_vadc>;
+	     };
+	};
 
 	mem_acc_vreg_corner: regulator@1942130 {
 		compatible = "qcom,mem-acc-regulator";
