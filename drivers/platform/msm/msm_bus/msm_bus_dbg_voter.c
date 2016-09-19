@@ -133,10 +133,11 @@ static ssize_t bus_floor_vote_store_api(struct device *dev,
 		return 0;
 	}
 
-	if (sscanf(buf, "%s %llu", name, &vote_khz) != 2) {
+	if (sscanf(buf, "%9s %llu", name, &vote_khz) != 2) {
 		pr_err("%s:return error", __func__);
 		return -EINVAL;
 	}
+	name[9] = '\0';
 
 	pr_info("%s: name %s vote %llu\n",
 			__func__, name, vote_khz);
