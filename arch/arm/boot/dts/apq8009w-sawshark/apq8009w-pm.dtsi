@@ -86,6 +86,10 @@
 
 			qcom,batt-cc-chg-timer = <5>;
 
+			qcom,step-charging-batt-full-mv = <4200>;
+			qcom,step-charging-current-ma = <280>;
+			qcom,step-charging-delta-voltage-mv = <200>;
+
 			status = "ok";
 		};
 
