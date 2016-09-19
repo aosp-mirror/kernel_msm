@@ -991,14 +991,14 @@ void limFillFTSession(tpAniSirGlobal pMac,
 #ifdef WLAN_FEATURE_11W
    pftSessionEntry->limRmfEnabled = psessionEntry->limRmfEnabled;
 
-   if (psessionEntry->limRmfEnabled) {
-       psessionEntry->pmfComebackTimerInfo.pMac = pMac;
-       psessionEntry->pmfComebackTimerInfo.sessionID =
+   if (pftSessionEntry->limRmfEnabled) {
+       pftSessionEntry->pmfComebackTimerInfo.pMac = pMac;
+       pftSessionEntry->pmfComebackTimerInfo.sessionID =
                                      psessionEntry->smeSessionId;
-       vosStatus = vos_timer_init(&psessionEntry->pmfComebackTimer,
+       vosStatus = vos_timer_init(&pftSessionEntry->pmfComebackTimer,
                                   VOS_TIMER_TYPE_SW,
                                   limPmfComebackTimerCallback,
-                                 (void *)&psessionEntry->pmfComebackTimerInfo);
+                                 (void *)&pftSessionEntry->pmfComebackTimerInfo);
        if (VOS_STATUS_SUCCESS != vosStatus) {
            limLog(pMac, LOGP,
                   FL("cannot init pmf comeback timer."));
