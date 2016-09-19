@@ -1,0 +1,141 @@
+/*
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	tlmm: pinctrl@03400000 {
+		cam_sensor_rear_active: cam_sensor_rear_active {
+			/* RESET, STANDBY */
+			mux {
+				pins = "gpio24";	/*HTC modify */
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio24";	/*HTC modify */
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+				output-low;			/*HTC ADD*/
+			};
+		};
+		cam_sensor_rear_suspend: cam_sensor_rear_suspend{
+			/* RESET, STANDBY */
+			mux {
+				pins = "gpio24";	/*HTC modify */
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio24";	/*HTC modify */
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+				output-low;			/*HTC ADD*/
+			};
+		};
+	};
+};
+
+&cci {
+	qcom,camera@0 {
+		cell-index = <0>;
+		compatible = "qcom,camera";
+		reg = <0x0>;
+		qcom,csiphy-sd-index = <0>;
+		qcom,csid-sd-index = <0>;
+		qcom,mount-angle = <90>;
+		//qcom,led-flash-src = <&led_flash0>;
+		//qcom,actuator-src = <&actuator0>;
+		//qcom,ois-src = <&ois0>;
+		//qcom,eeprom-src = <&eeprom0>;
+		cam_vio-supply = <&pmcobalt_lvs1>;
+		cam_vana-supply = <&pmcobalt_gpios 15 0>;
+		cam_vdig-supply = <&pmcobalt_gpios 20 0>;
+		qcom,cam-vreg-name = "cam_vio", "cam_vana", "cam_vdig";
+		qcom,cam-vreg-min-voltage = <1800000 2850000 1050000>;
+		qcom,cam-vreg-max-voltage = <1800000 2850000 1050000>;
+		qcom,cam-vreg-op-mode = <0 0 0>;
+		qcom,gpio-no-mux = <0>;
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&cam_sensor_mclk0_active
+				 &cam_sensor_rear_active>;
+		pinctrl-1 = <&cam_sensor_mclk0_suspend
+				 &cam_sensor_rear_suspend>;
+		gpios = <&tlmm 13 0>,
+			<&tlmm 24 0>,
+			<&pmcobalt_gpios 20 0>,
+			<&pmcobalt_gpios 15 0>,
+			<&pmcobalt_gpios 19 0>,
+			<&pmcobalt_gpios 12 0>;
+		qcom,gpio-reset = <1>;
+		qcom,gpio-vdig = <2>;
+		qcom,gpio-vana = <3>;
+		qcom,gpio-custom1 = <4>;
+		qcom,gpio-custom2 = <5>;
+		qcom,gpio-req-tbl-num = <0 1 2 3 4 5>;
+		qcom,gpio-req-tbl-flags = <1 0 0 0 0 0>;
+		qcom,gpio-req-tbl-label = "CAMIF_MCLK0",
+					"CAM_RESET0",
+					"CAM_VDIG",
+					"CAM_VANA",
+					"CAM1_A1V8",
+					"CAM_I2C_SEL";
+		qcom,sensor-position = <0>;
+		qcom,sensor-mode = <0>;
+		qcom,cci-master = <0>;
+		status = "ok";
+		clocks = <&clock_mmss clk_mclk0_clk_src>,
+				<&clock_mmss clk_mmss_camss_mclk0_clk>;
+		clock-names = "cam_src_clk", "cam_clk";
+		qcom,clock-rates = <24000000 0>;
+	};
+};
+&pmcobalt_gpios {
+	gpio@cb00 { /* GPIO 12 - CAMERA SENSOR 0 I2C_SEL */
+		qcom,mode = <1>;		/* Output */
+		qcom,pull = <5>;		/* No Pull */
+		qcom,vin-sel = <0>;		/* VIN1 GPIO_LV */
+		qcom,src-sel = <0>;		/* GPIO */
+		qcom,invert = <0>;		/* Invert */
+		qcom,master-en = <1>;		/* Enable GPIO */
+		status = "ok";
+	};
+
+	gpio@ce00 { /* GPIO 15 - CAMERA SENSOR 0 VANA */
+		qcom,mode = <1>;		/* Output */
+		qcom,pull = <5>;		/* No Pull */
+		qcom,vin-sel = <0>;		/* VIN1 GPIO_LV */
+		qcom,src-sel = <0>;		/* GPIO */
+		qcom,invert = <0>;		/* Invert */
+		qcom,master-en = <1>;		/* Enable GPIO */
+		status = "ok";
+	};
+
+	gpio@d200 { /* GPIO 19 - CAMERA SENSOR 0 CAM1_A1V8 */
+		qcom,mode = <1>;		/* Output */
+		qcom,pull = <5>;		/* No Pull */
+		qcom,vin-sel = <0>;		/* VIN1 GPIO_LV */
+		qcom,src-sel = <0>;		/* GPIO */
+		qcom,invert = <0>;		/* Invert */
+		qcom,master-en = <1>;		/* Enable GPIO */
+		status = "ok";
+	};
+
+	gpio@d300 { /* GPIO 20 - CAMERA SENSOR 0 VDIG */
+		qcom,mode = <1>;		/* Output */
+		qcom,pull = <5>;		/* No Pull */
+		qcom,vin-sel = <1>;		/* VIN1 GPIO_MV */
+		qcom,src-sel = <0>;		/* GPIO */
+		qcom,invert = <0>;		/* Invert */
+		qcom,master-en = <1>;		/* Enable GPIO */
+		status = "ok";
+	};
+};

@@ -16,6 +16,7 @@
 #include "../qcom/msmcobalt.dtsi"
 #include "../qcom/msmcobalt-mtp.dtsi"
 #include "msmcobalt-htc_muskie.dtsi"
+#include "msmcobalt-camera-sensor.dtsi"
 
 / {
 	model = "HTC Corporation. MSM cobalt v1 Muskie EVM";
