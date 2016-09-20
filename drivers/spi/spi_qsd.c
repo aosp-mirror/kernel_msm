@@ -2399,7 +2399,6 @@ static int msm_spi_probe(struct platform_device *pdev)
 	master->bus_num        = pdev->id;
 	master->mode_bits      = SPI_SUPPORTED_MODES;
 	master->num_chipselect = SPI_NUM_CHIPSELECTS;
-	master->set_cs	       = msm_spi_set_cs;
 	master->setup          = msm_spi_setup;
 	master->prepare_transfer_hardware = msm_spi_prepare_transfer_hardware;
 	master->transfer_one = msm_spi_transfer_one;
