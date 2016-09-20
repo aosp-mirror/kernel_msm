@@ -37,7 +37,8 @@
 #include "atmel_u144.h"
 #include "atmel_u144_patch.h"
 
-#define MXT_REGISTER_PSY_MS 200
+#define MXT_REGISTER_PSY_MS  200
+#define LDO10_ACTIVE_LOAD_UA 15000
 
 static struct mutex i2c_suspend_lock;
 
@@ -2475,6 +2476,12 @@ static ssize_t mxt_patch_debug_enable_store(struct mxt_data *data,
 	return -EINVAL;
 }
 
+static int reg_set_optimum_mode_check(struct regulator *reg, int load_uA)
+{
+	return (regulator_count_voltages(reg) > 0)?
+		regulator_set_optimum_mode(reg, load_uA) : 0;
+}
+
 static ssize_t mxt_idle_mode_store(struct mxt_data *data,
 		const char *buf, size_t count)
 {
@@ -2495,12 +2502,21 @@ static ssize_t mxt_idle_mode_store(struct mxt_data *data,
 		else
 			mxt_patch_event(data, IDLE_IN_CHG);
 		mxt_patchevent_set(PATCH_EVENT_IDLE);
+
+		ret = reg_set_optimum_mode_check(data->vcc_dig, 0);
+		if (ret < 0)
+			TOUCH_WARN_MSG("Regulator vdd set_opt failed\n");
 	} else {
 		if (!data->charging_mode)
 			mxt_patch_event(data, ACTIVE_IN_NOCHG);
 		else
 			mxt_patch_event(data, ACTIVE_IN_CHG);
 		mxt_patchevent_unset(PATCH_EVENT_IDLE);
+
+		ret = reg_set_optimum_mode_check(data->vcc_dig,
+				LDO10_ACTIVE_LOAD_UA);
+		if (ret < 0)
+			TOUCH_WARN_MSG("Regulator vdd set_opt failed\n");
 	}
 
 	return count;
