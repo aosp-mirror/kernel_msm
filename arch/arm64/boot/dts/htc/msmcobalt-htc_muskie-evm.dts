@@ -21,5 +21,5 @@
 / {
 	model = "HTC Corporation. MSM cobalt v1 Muskie EVM";
 	compatible = "qcom,msmcobalt-mtp", "qcom,msmcobalt", "qcom,mtp";
-	qcom,board-id = <8 0>;
+	qcom,board-id = <0x1D 0>;
 };
