@@ -17,7 +17,7 @@
 
 struct usbpd;
 
-#if IS_ENABLED(CONFIG_USB_PD_POLICY)
+#if IS_ENABLED(CONFIG_USB_PD_POLICY) || IS_ENABLED(CONFIG_USB_PD_ENGINE)
 struct usbpd *usbpd_create(struct device *parent);
 void usbpd_destroy(struct usbpd *pd);
 #else
@@ -58,7 +58,12 @@ enum pd_spec_rev {
 
 /* enable msg and signal to be received by phy */
 #define FRAME_FILTER_EN_SOP		BIT(0)
+#define FRAME_FILTER_EN_SOPI	BIT(1)
+#define FRAME_FILTER_EN_SOPII	BIT(2)
+#define FRAME_FILTER_EN_SOPI_DEBUG	BIT(3)
+#define FRAME_FILTER_EN_SOPII_DEBUG	BIT(4)
 #define FRAME_FILTER_EN_HARD_RESET	BIT(5)
+#define FRAME_FILTER_EN_CABLE_RESET	BIT(6)
 
 struct pd_phy_params {
 	void		(*signal_cb)(struct usbpd *pd, enum pd_sig_type sig);
