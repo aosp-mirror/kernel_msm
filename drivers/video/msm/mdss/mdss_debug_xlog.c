@@ -25,7 +25,7 @@
 #ifdef CONFIG_FB_MSM_MDSS_XLOG_DEBUG
 #define XLOG_DEFAULT_ENABLE 1
 #else
-#define XLOG_DEFAULT_ENABLE 0
+#define XLOG_DEFAULT_ENABLE 1
 #endif
 
 #define XLOG_DEFAULT_PANIC 1
@@ -748,4 +748,8 @@ int mdss_create_xlog_debug(struct mdss_debug_data *mdd)
 		mdss_dbg_xlog.enable_reg_dump);
 
 	return 0;
+}
+
+void xlog_dump_new(void) {
+	MDSS_XLOG_TOUT_HANDLER("mdp");
 }

@@ -202,6 +202,7 @@ retry_dma_done:
 			}
 		}
 	}
+	MDSS_XLOG(0x80);
 	mdp3_ctrl_vsync_enable(session->mfd, 0);
 	mdp3_ctrl_clk_enable(session->mfd, 0);
 	mutex_unlock(&session->lock);
@@ -871,7 +872,6 @@ static int mdp3_ctrl_on(struct msm_fb_data_type *mfd)
 		mdp3_session->esd_recovery = true;
 
 		mdp3_session->status = 1;
-
 	mdp3_ctrl_pp_resume(mfd);
 on_error:
 	if (rc || (mdp3_res->idle_pc_enabled &&
@@ -1027,9 +1027,14 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 
 	if (mdss_fb_is_power_on_ulp(mfd) &&
 		(mfd->panel.type == MIPI_CMD_PANEL)) {
+		MDSS_XLOG(0x40, atomic_read(&mfd->kickoff_pending),
+			atomic_read(&mfd->commits_pending));
 		pr_debug("%s: Disable MDP3 clocks in ULP\n", __func__);
 		if (!mdp3_session->clk_on)
 			mdp3_ctrl_clk_enable(mfd, 1);
+		if ((atomic_read(&mfd->kickoff_pending)) ||
+		    (atomic_read(&mfd->commits_pending)))
+			mdp3_session->wait_for_dma_done(mdp3_session);	
 		/*
 		 * STOP DMA transfer first and signal vsync notification
 		 * Before releasing the resource in ULP state.
@@ -1356,6 +1361,7 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 	}
 
 	mdp3_ctrl_notify(mdp3_session, MDP_NOTIFY_FRAME_BEGIN);
+	MDSS_XLOG(0x800);
 	data = mdp3_bufq_pop(&mdp3_session->bufq_in);
 	if (data) {
 		mdp3_ctrl_reset_countdown(mdp3_session, mfd);
@@ -1387,6 +1393,7 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 		}
 		mdp3_session->dma_active = 1;
 		init_completion(&mdp3_session->dma_completion);
+		MDSS_XLOG(0x400);
 		mdp3_ctrl_notify(mdp3_session, MDP_NOTIFY_FRAME_FLUSHED);
 		mdp3_bufq_push(&mdp3_session->bufq_out, data);
 	}

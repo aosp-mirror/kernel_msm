@@ -107,6 +107,8 @@
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 		qcom,mdss-dsi-reset-sequence = <1 20>, <0 20>, <1 20>;
+		qcom,mdss-dsi-panel-status-check-mode ="te_signal_check";
+		qcom,esd-check-enabled;	
 		/* clk = totlaH * totalV * ppp* 66fps */
 		qcom,mdss-dsi-panel-clockrate = <180905472>;
 	};

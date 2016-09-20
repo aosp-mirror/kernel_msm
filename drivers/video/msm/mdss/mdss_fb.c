@@ -2822,6 +2822,7 @@ static int __mdss_fb_wait_for_fence_sub(struct msm_sync_pt_data *sync_pt_data,
 
 			pr_warn("%s: sync_fence_wait timed out! ",
 					sync_pt_data->fence_name);
+
 			pr_cont("Waiting %ld.%ld more seconds\n",
 				(wait_ms/MSEC_PER_SEC), (wait_ms%MSEC_PER_SEC));
 
@@ -2870,14 +2871,15 @@ void mdss_fb_signal_timeline(struct msm_sync_pt_data *sync_pt_data)
 	if (atomic_add_unless(&sync_pt_data->commit_cnt, -1, 0) &&
 			sync_pt_data->timeline) {
 		sw_sync_timeline_inc(sync_pt_data->timeline, 1);
-		sync_pt_data->timeline_value++;
-
 		pr_debug("%s: buffer signaled! timeline val=%d remaining=%d\n",
 			sync_pt_data->fence_name, sync_pt_data->timeline_value,
 			atomic_read(&sync_pt_data->commit_cnt));
+		MDSS_XLOG(0x40000, sync_pt_data->timeline_value);
+		sync_pt_data->timeline_value++;
 	} else {
 		pr_debug("%s timeline signaled without commits val=%d\n",
 			sync_pt_data->fence_name, sync_pt_data->timeline_value);
+		MDSS_XLOG(0x20000, sync_pt_data->timeline_value);
 	}
 	mutex_unlock(&sync_pt_data->sync_mutex);
 }
@@ -4091,6 +4093,7 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 			break;
 		}
 		sync_pt_data->acq_fen[i] = fence;
+		MDSS_XLOG(0x80000, i);
 	}
 	sync_pt_data->acq_fen_cnt = i;
 	if (ret)
@@ -4471,6 +4474,7 @@ static int __ioctl_wait_idle(struct msm_fb_data_type *mfd, u32 cmd)
 	if (ret && (ret != -ESHUTDOWN))
 		pr_err("wait_idle failed. cmd=0x%x rc=%d\n", cmd, ret);
 
+	MDSS_XLOG(cmd &0xFF);
 	return ret;
 }
 

@@ -1204,6 +1204,7 @@ void mdp3_ppp_wait_for_fence(struct blit_req_list *req)
 
 void mdp3_ppp_signal_timeline(struct blit_req_list *req)
 {
+	MDSS_XLOG(0xE0000, ppp_stat->timeline->value);
 	sw_sync_timeline_inc(ppp_stat->timeline, 1);
 	req->last_rel_fence = req->cur_rel_fence;
 	req->cur_rel_fence = 0;

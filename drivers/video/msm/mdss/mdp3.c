@@ -2868,6 +2868,7 @@ static int mdp3_pm_suspend(struct device *dev)
 {
 	dev_dbg(dev, "Display pm suspend\n");
 
+	MDSS_XLOG(0x8000);
 	return mdp3_suspend_sub();
 }
 
@@ -2884,6 +2885,7 @@ static int mdp3_pm_resume(struct device *dev)
 	pm_runtime_set_suspended(dev);
 	pm_runtime_enable(dev);
 
+	MDSS_XLOG(0x4000);
 	return mdp3_resume_sub();
 }
 #endif
@@ -2893,6 +2895,7 @@ static int mdp3_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	pr_debug("Display suspend\n");
 
+	MDSS_XLOG(0x2000);
 	return mdp3_suspend_sub();
 }
 
@@ -2900,6 +2903,7 @@ static int mdp3_resume(struct platform_device *pdev)
 {
 	pr_debug("Display resume\n");
 
+	MDSS_XLOG(0x1000);
 	return mdp3_resume_sub();
 }
 #else
@@ -2920,6 +2924,7 @@ static int mdp3_runtime_resume(struct device *dev)
 	if (!mdp3_res->idle_pc)
 		device_for_each_child(dev, &device_on, mdss_fb_suspres_panel);
 
+	MDSS_XLOG(0xC000);
 	mdp3_footswitch_ctrl(1);
 
 	return 0;
@@ -2944,6 +2949,7 @@ static int mdp3_runtime_suspend(struct device *dev)
 		return -EBUSY;
 	}
 
+	MDSS_XLOG(0x3000);
 	mdp3_footswitch_ctrl(0);
 
 	/* do not suspend panels when going in to idle power collapse */
