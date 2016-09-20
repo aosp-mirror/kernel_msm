@@ -61,7 +61,9 @@
 #define SPIDEV_BUF_MAX_NODE_N 16
 #define SPIDEV_NON_BLOCK_READ_TIMEOUT (2*HZ)
 #define SPIDEV_READ_DELAY_TIME_US (100)
-#define SPIDEV_READ_MAX_DELAY_TIMES (10)
+#define SPIDEV_READ_MAX_DELAY_TIMES (20)
+#define SPIDEV_WRITE_DELAY_TIME_US (100)
+#define SPIDEV_WRITE_MAX_DELAY_TIMES (20)
 
 static DECLARE_BITMAP(minors, N_SPI_MINORS);
 
@@ -111,6 +113,7 @@ struct spidev_data {
 	int wake_irq_gpio;
 	int wakeup_mcu_gpio;
 	int read_sync_gpio;
+	int write_sync_gpio;
 	int wake_display_gpio;
 	spidev_work_mode_type work_mode;
 	spidev_wakeup_disp_type wakeup_disp_enable;
@@ -308,7 +311,7 @@ static int spidev_request_gpio(struct spidev_data	*spidev)
 	np = of_find_compatible_node(NULL, NULL, "mcu,readsync");
 	if (!np)
 	{
-		pr_err("%s: %s node not found\n", __FUNCTION__, "mcu,wakeupmcu");
+		pr_err("%s: %s node not found\n", __FUNCTION__, "mcu,readsync");
 		return -ENODEV;
 	}
 
@@ -326,6 +329,35 @@ static int spidev_request_gpio(struct spidev_data	*spidev)
 	}
 
 	pr_info("gpio_request read_sync_gpio gpio:%d done\n", spidev->read_sync_gpio);
+
+	/*Get AP Write Sync Gpio*/
+	np = of_find_compatible_node(NULL, NULL, "mcu,writesync");
+	if (!np)
+	{
+		pr_err("%s: %s node not found\n", __FUNCTION__, "mcu,writesync");
+		return -ENODEV;
+	}
+
+	spidev->write_sync_gpio = of_get_named_gpio(np, "ap_write_sync", 0);
+	if (spidev->write_sync_gpio < 0)
+	{
+		pr_err("%s: %s gpio not found:\n", __FUNCTION__, "write_sync_gpio");
+		return -ENODEV;
+	}
+
+	if (gpio_request(spidev->write_sync_gpio, "ap_write_sync"))
+	{
+		pr_err("Failed to request gpio %d for ap_write_sync\n", spidev->write_sync_gpio);
+		return -ENODEV;
+	}
+
+	if (gpio_direction_input(spidev->write_sync_gpio) < 0)
+	{
+		pr_err("Failed to set dir %d for write_sync_gpio\n",spidev->write_sync_gpio);
+		return -ENODEV;
+	}
+
+	pr_info("gpio_request write_sync_gpio gpio:%d done\n", spidev->write_sync_gpio);
 
 	/*Get MCU Wakeup Display GPIO*/
 	np = of_find_compatible_node(NULL, NULL, "mcu,wakeupdisplay");
@@ -368,6 +400,7 @@ static void spidev_release_gpio(struct spidev_data	*spidev)
 		gpio_free(spidev->wake_irq_gpio);
 		gpio_free(spidev->wakeup_mcu_gpio);
 		gpio_free(spidev->read_sync_gpio);
+		gpio_free(spidev->write_sync_gpio);
 		gpio_free(spidev->wake_display_gpio);
 	}
 }
@@ -471,6 +504,7 @@ spidev_write(struct file *filp, const char __user *buf,
 	struct spidev_data	*spidev;
 	ssize_t			status = 0;
 	unsigned long		missing;
+	unsigned int delay_times = 0;
 
 	/* chipselect only toggles at start or end of operation */
 	if (count > bufsiz)
@@ -505,7 +539,20 @@ spidev_write(struct file *filp, const char __user *buf,
 			if (missing == 0)
 			{
 				gpio_direction_output(spidev->wakeup_mcu_gpio, 1);
-				udelay(2000);
+				do
+				{
+					udelay(SPIDEV_WRITE_DELAY_TIME_US);
+					delay_times++;
+					if (SPIDEV_WRITE_MAX_DELAY_TIMES < delay_times)
+					{
+						status = -ETIME;
+						gpio_direction_output(spidev->wakeup_mcu_gpio, 0);
+						mutex_unlock(&spidev->spi_op_lock);
+						pr_err("spidev_write delay times is out of range\n");
+						return status;
+					}
+				}while(gpio_get_value(spidev->write_sync_gpio) != 1);
+
 				status = spidev_sync_write_ext(spidev, SPIDEV_KERNEL_MODE_LENGTH);
 				gpio_direction_output(spidev->wakeup_mcu_gpio, 0);
 			}

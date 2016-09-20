@@ -645,6 +645,32 @@
 		};
 	};
 
+	/*AP write sync: When PU,MCU can RX and AP can TX*/
+	ap_write_sync{
+		ap_write_sync_active:ap_write_sync_active {
+			mux {
+				pins = "gpio14";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio14";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+		ap_write_sync_suspend:ap_write_sync_suspend {
+			mux {
+				pins = "gpio14";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio14";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+	};
+
 	/*the interrupt from AP to wakeup BT */
 	ap_wakeup_bt{
 		ap_wakeup_bt_active:ap_wakeup_bt_active {
