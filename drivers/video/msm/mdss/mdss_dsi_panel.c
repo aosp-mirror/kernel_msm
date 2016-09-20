@@ -394,15 +394,18 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			gpio_set_value((ctrl_pdata->bklt_en_gpio), 0);
 			gpio_free(ctrl_pdata->bklt_en_gpio);
 		}
-		if (gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
-			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
-			gpio_free(ctrl_pdata->disp_en_gpio);
-		}
-		if(ctrl_pdata->ulps_mode)
-			gpio_set_value((ctrl_pdata->rst_gpio), 0);
-		else
+		pr_info("power off the panel!\n");
+		if(ctrl_pdata->ulps_mode){
+			pr_info("Nothing to be done for panel GPIOs in ULPM mode!\n");
+		}else{
 			gpio_set_value((ctrl_pdata->rst_gpio), 1);
-		gpio_free(ctrl_pdata->rst_gpio);
+			if (gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
+				gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
+				gpio_free(ctrl_pdata->disp_en_gpio);
+			}
+			gpio_free(ctrl_pdata->rst_gpio);
+		}
+
 		if (gpio_is_valid(ctrl_pdata->mode_gpio))
 			gpio_free(ctrl_pdata->mode_gpio);
 	}
