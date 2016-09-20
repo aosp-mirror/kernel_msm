@@ -253,7 +253,6 @@ struct himax_ts_data {
     struct wake_lock ts_SMWP_wake_lock;
 #endif
 #ifdef HX_TIME_TELLING
-    int sleepmode;
     int timetellmode;
     struct workqueue_struct *himax_sleepmode_wq;
     struct work_struct sleepmode_work;
@@ -499,9 +498,9 @@ static int HX_ON_HAND_SHAKING   =0;//
 #define TOUCH_ACTIVE    0
 #define TOUCH_SLEEP     1
 #define TOUCH_IDLE      2
-static int DisableTouch_flag = 0;
 static int touch_mode;
 void himax_timetelling_detection(int supplymode);
+extern int DisableTouch_flag;
 #endif
 
 extern int irq_enable_count;

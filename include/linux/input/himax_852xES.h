@@ -250,7 +250,6 @@ struct himax_ts_data {
     struct wake_lock ts_SMWP_wake_lock;
 #endif
 #ifdef HX_TIME_TELLING
-    int sleepmode;
     struct workqueue_struct *himax_sleepmode_wq;
     struct work_struct sleepmode_work;
 #endif
@@ -260,5 +259,6 @@ struct himax_ts_data {
 };
 
 void himax_timetelling_detection(int supplymode);
+int DisableTouch_flag=0;
 
 #endif

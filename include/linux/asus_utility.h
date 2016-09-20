@@ -13,6 +13,5 @@ enum mode_msg{
 		FB_BLANK_ENTER_NON_INTERACTIVE = 0,
 		FB_BLANK_ENTER_INTERACTIVE = 1,
 };
-int node1_status;
 
 #endif

@@ -3743,7 +3743,7 @@ static ssize_t himax_SMWP_write(struct device *dev,
 static int himax_sleepmode_switch(int supplymode)
 {
     uint8_t buf[2] = {0};
-    int ret;
+    int ret, i;
 
     switch (supplymode) {
         case TOUCH_ACTIVE:
@@ -3755,13 +3755,23 @@ static int himax_sleepmode_switch(int supplymode)
             himax_int_enable(private_ts->client->irq, 1, true);
             atomic_set(&private_ts->suspend_mode, 0);
             private_ts->suspended = false;
-            private_ts->sleepmode = 0;
             touch_mode = TOUCH_ACTIVE;
             I("%s: Enable Active mode\n", __func__);
             break;
         case TOUCH_SLEEP:
             //Himax 852xes IC enter sleep mode
             private_ts->suspended = true;
+            if (haspoint) {
+                for (i = 0; i < private_ts->nFinger_support; i++) {
+                    if (point_flag[i] == 1) {
+                        point_flag[i] = 0;
+                        input_mt_slot(private_ts->input_dev, i);
+                        input_mt_report_slot_state(private_ts->input_dev, MT_TOOL_FINGER, 0);
+                    }
+                }
+                input_sync(private_ts->input_dev);
+                haspoint = false;
+            }
             himax_int_enable(private_ts->client->irq, 0, true);
             buf[0] = HX_CMD_TSSOFF;
             ret = i2c_himax_master_write(private_ts->client, buf, 1, DEFAULT_RETRY_CNT);
@@ -3787,7 +3797,6 @@ static int himax_sleepmode_switch(int supplymode)
             }
             atomic_set(&private_ts->suspend_mode, 1);
             private_ts->pre_finger_mask = 0;
-            private_ts->sleepmode = 1;
             private_ts->resumed = false;
             touch_mode = TOUCH_SLEEP;
             I("%s: Enable Sleep mode\n", __func__);
@@ -3817,11 +3826,7 @@ void himax_timetelling_detection(int supplymode)
         //0:off, 1:on
         //I("Time-telling mode = %d\n", supplymode);
         private_ts->timetellmode = supplymode;
-        I("supplymode: %d, DisableTouch_flag: %d", supplymode, DisableTouch_flag);
-        if (DisableTouch_flag!=supplymode) {
-            DisableTouch_flag = private_ts->timetellmode;
-            queue_work(private_ts->himax_sleepmode_wq, &private_ts->sleepmode_work);
-        }
+        queue_work(private_ts->himax_sleepmode_wq, &private_ts->sleepmode_work);
     }
 }
 EXPORT_SYMBOL(himax_timetelling_detection);
@@ -4590,7 +4595,6 @@ static int himax852xes_probe(struct i2c_client *client, const struct i2c_device_
     err = himax_ts_register_interrupt(ts->client);
     if (err)
         goto err_register_interrupt_failed;
-    ts->sleepmode = 0;
     touch_mode = TOUCH_ACTIVE;
     I("Probe complete\n");
     return 0;
@@ -4852,7 +4856,7 @@ static int himax852xes_resume(struct device *dev)
             }
         }
 #endif
-        if (!ts->sleepmode && touch_mode != TOUCH_ACTIVE) {
+        if (!DisableTouch_flag && touch_mode != TOUCH_ACTIVE) {
 #ifdef HX_SMART_WAKEUP
             if (ts->SMWP_enable && touch_mode == TOUCH_IDLE) {
                 //Sense Off
