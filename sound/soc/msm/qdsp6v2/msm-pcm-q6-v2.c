@@ -148,6 +148,13 @@ static void event_handler(uint32_t opcode,
 	case ASM_DATA_EVENT_WRITE_DONE_V2: {
 		pr_debug("ASM_DATA_EVENT_WRITE_DONE_V2\n");
 		pr_debug("Buffer Consumed = 0x%08x\n", *ptrmem);
+
+		if (payload[3]) {
+			pr_err("%s WRITE FAILED w/ err 0x%x\n",
+			       __func__,
+			       payload[3]);
+		}
+
 		prtd->pcm_irq_pos += prtd->pcm_count;
 		if (atomic_read(&prtd->start))
 			snd_pcm_period_elapsed(substream);
