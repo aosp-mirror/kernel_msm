@@ -13,6 +13,11 @@
 #include "dsi-panel-lgd-sw42605-360p-cmd.dtsi"
 #include "dsi-panel-lgd-lg4262-480p-cmd.dtsi"
 
+
+&cont_splash_mem {
+	reg = <0x0 0x83000000 0x0 0x1000>;
+};
+
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
 };
