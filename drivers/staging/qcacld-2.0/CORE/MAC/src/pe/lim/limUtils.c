@@ -2092,9 +2092,10 @@ void limProcessChannelSwitchTimeout(tpAniSirGlobal pMac)
     tANI_U8    channel; // This is received and stored from channelSwitch Action frame
     tANI_U8 isSessionPowerActive = false;
 
-    if((psessionEntry = peFindSessionBySessionId(pMac, pMac->lim.limTimers.gLimChannelSwitchTimer.sessionId))== NULL)
-    {
-        limLog(pMac, LOGP,FL("Session Does not exist for given sessionID"));
+    psessionEntry = peFindSessionBySessionId(pMac,
+                       pMac->lim.limTimers.gLimChannelSwitchTimer.sessionId);
+    if (!psessionEntry) {
+        limLog(pMac, LOGW, FL("Session Does not exist for given sessionID"));
         return;
     }
 
@@ -2102,6 +2103,13 @@ void limProcessChannelSwitchTimeout(tpAniSirGlobal pMac)
         PELOGW(limLog(pMac, LOGW,
                "Channel switch can be done only in STA role, Current Role = %d",
                GET_LIM_SYSTEM_ROLE(psessionEntry));)
+        return;
+    }
+    if (psessionEntry->gLimSpecMgmt.dot11hChanSwState !=
+                                  eLIM_11H_CHANSW_RUNNING) {
+        limLog(pMac, LOGW,
+            FL("Channel switch timer should not have been running in state %d"),
+            psessionEntry->gLimSpecMgmt.dot11hChanSwState);
         return;
     }
 
@@ -2113,7 +2121,6 @@ void limProcessChannelSwitchTimeout(tpAniSirGlobal pMac)
     {
         isSessionPowerActive = limIsSystemInActiveState(pMac);
     }
-
     channel = psessionEntry->gLimChannelSwitch.primaryChannel;
 
     /*
@@ -2173,13 +2180,19 @@ void limProcessChannelSwitchTimeout(tpAniSirGlobal pMac)
             return;
         }
 
-        /* If the channel-list that AP is asking us to switch is invalid,
+        /*
+         * If the channel-list that AP is asking us to switch is invalid,
          * then we cannot switch the channel. Just disassociate from AP.
          * We will find a better AP !!!
          */
-        limTearDownLinkWithAp(pMac,
+        if ((psessionEntry->limMlmState == eLIM_MLM_LINK_ESTABLISHED_STATE) &&
+           (psessionEntry->limSmeState != eLIM_SME_WT_DISASSOC_STATE)&&
+           (psessionEntry->limSmeState != eLIM_SME_WT_DEAUTH_STATE)) {
+              limLog(pMac, LOGE, FL("Invalid channel!! Disconnect.."));
+              limTearDownLinkWithAp(pMac,
                         pMac->lim.limTimers.gLimChannelSwitchTimer.sessionId,
                         eSIR_MAC_UNSPEC_FAILURE_REASON);
+        }
         return;
     }
     limCovertChannelScanType(pMac, psessionEntry->currentOperChannel, false);

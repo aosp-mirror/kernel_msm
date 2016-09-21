@@ -462,11 +462,19 @@ void limHandleHeartBeatFailure(tpAniSirGlobal pMac,tpPESession psessionEntry)
     {
         if (!pMac->sys.gSysEnableLinkMonitorMode)
             return;
+        /* Ignore HB if channel switch is in progress */
+        if (psessionEntry->gLimSpecMgmt.dot11hChanSwState ==
+                          eLIM_11H_CHANSW_RUNNING) {
+           limLog(pMac, LOGE,
+               FL("Ignore Heartbeat failure as Channel switch is in progress"));
+           pMac->pmm.inMissedBeaconScenario = false;
+           return;
+        }
 
         /**
          * Beacon frame not received within heartbeat timeout.
          */
-        PELOGW(limLog(pMac, LOGW, FL("Heartbeat Failure"));)
+        limLog(pMac, LOGW, FL("Heartbeat Failure"));
         pMac->lim.gLimHBfailureCntInLinkEstState++;
 
         /**
