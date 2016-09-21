@@ -144,9 +144,9 @@ static int cyttsp5_check_firmware_version(struct device *dev,
 	fw_ver_img = ld->si->cydata.fw_ver_major << 8;
 	fw_ver_img += ld->si->cydata.fw_ver_minor;
 
-	tp_log_info( "%s: img vers:0x%04X new vers:0x%04X\n", __func__,
+	tp_log_warning( "%s: img vers:0x%04X new vers:0x%04X\n", __func__,
 			fw_ver_img, fw_ver_new);
-	tp_log_info( "%s: Firmware Configuration Version in iC:0x%04X\n",
+	tp_log_warning( "%s: Firmware Configuration Version in iC:0x%04X\n",
 			 __func__,ld->si->cydata.fw_ver_conf);
 
 	if( FW_UPDATE_DIFF == cd->cpdata->fw_update_logic ) {
@@ -173,7 +173,7 @@ static int cyttsp5_check_firmware_version(struct device *dev,
 
 	fw_revctrl_img = ld->si->cydata.revctrl;
 
-	tp_log_info( "%s: img revctrl:0x%04X new revctrl:0x%04X\n",
+	tp_log_warning( "%s: img revctrl:0x%04X new revctrl:0x%04X\n",
 			__func__, fw_revctrl_img, fw_revctrl_new);
 
 	if (FW_UPDATE_DIFF == cd->cpdata->fw_update_logic) {
@@ -191,7 +191,7 @@ static int cyttsp5_check_firmware_version(struct device *dev,
 			return -1;
 		}
 	}
-	tp_log_info( "%s: Image has same version\n", __func__);
+	tp_log_warning( "%s: Image has same version\n", __func__);
 
 	return 0;
 }

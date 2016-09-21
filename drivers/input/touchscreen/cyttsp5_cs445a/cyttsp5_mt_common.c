@@ -229,6 +229,12 @@ static void cyttsp5_mt_gesture_report(struct cyttsp5_core_data *cd)
 				&reprot_gesture_key_value);
 			tp_log_debug("%s:double click detected! gesture_id = 0x%x\n", __func__ , gesture_id);
 			break;
+		case CYTTSP5_GESTURE_SINGLE_CLICK:
+			cyttsp5_check_and_save(cd,
+				GESTURE_SINGLE_CLICK,
+				&reprot_gesture_key_value);
+			tp_log_debug("%s:double click detected! gesture_id = 0x%x\n", __func__ , gesture_id);
+			break;
 		case CYTTSP5_GESTURE_LETTER_C:
 			cyttsp5_check_and_save(cd,
 				GESTURE_LETTER_c,
