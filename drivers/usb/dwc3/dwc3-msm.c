@@ -250,6 +250,7 @@ struct dwc3_msm {
 	int                     redrive_3p0_c2;
 	struct delayed_work	vbus_notify_work;
 	bool			pd_vbus_change;
+	bool xo_vote_for_charger;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -2013,7 +2014,13 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	 */
 	clk_disable_unprepare(mdwc->iface_clk);
 	/* USB PHY no more requires TCXO */
-	clk_disable_unprepare(mdwc->xo_clk);
+	if (!mdwc->xo_vote_for_charger) {
+		clk_disable_unprepare(mdwc->xo_clk);
+		dev_err(mdwc->dev, "%s unvote for TCXO buffer\n", __func__);
+	} else {
+		dev_err(mdwc->dev, "%s xo_vote_for_charger = %d\n",
+		__func__, mdwc->xo_vote_for_charger);
+	}
 
 	/* Perform controller power collapse */
 	if (!mdwc->in_host_mode && (!mdwc->vbus_active ||
@@ -2087,10 +2094,18 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	}
 
 	/* Vote for TCXO while waking up USB HSPHY */
-	ret = clk_prepare_enable(mdwc->xo_clk);
-	if (ret)
-		dev_err(mdwc->dev, "%s failed to vote TCXO buffer%d\n",
-						__func__, ret);
+	if (!mdwc->xo_vote_for_charger) {
+		ret = clk_prepare_enable(mdwc->xo_clk);
+		if (ret)
+			dev_err(mdwc->dev, "%s failed to vote TCXO buffer%d\n",
+				__func__, ret);
+		else
+			dev_err(mdwc->dev, "%s vote for TCXO buffer\n",
+					__func__);
+	} else {
+		dev_err(mdwc->dev, "%s xo_vote_for_charger = %d\n",
+			__func__, mdwc->xo_vote_for_charger);
+	}
 
 	/* Restore controller power collapse */
 	if (mdwc->lpm_flags & MDWC3_POWER_COLLAPSE) {
@@ -2531,6 +2546,33 @@ static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 			/* set default power supply type as USB */
 			psy->type = POWER_SUPPLY_TYPE_USB;
 			break;
+		}
+
+		if (mdwc->chg_type == DWC3_DCP_CHARGER || mdwc->chg_type == DWC3_TYPEC_CHARGER ||
+			mdwc->chg_type == DWC3_PD_CHARGER || mdwc->chg_type == DWC3_PD_DRP_CHARGER ||
+			mdwc->chg_type == DWC3_PROPRIETARY_CHARGER) {
+			if (!mdwc->xo_vote_for_charger) {
+				struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+				if (atomic_read(&dwc->in_lpm)) {
+					int ret;
+					ret = clk_prepare_enable(mdwc->xo_clk);
+					if (ret)
+						dev_err(mdwc->dev, "%s failed to vote TCXO buffer%d\n",
+							__func__, ret);
+					else
+						dev_err(mdwc->dev, "%s TCXO enabled\n", __func__);
+				}
+				mdwc->xo_vote_for_charger = true;
+			}
+		} else {
+			if (mdwc->xo_vote_for_charger) {
+				struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+				if (atomic_read(&dwc->in_lpm)) {
+					clk_disable_unprepare(mdwc->xo_clk);
+					dev_err(mdwc->dev, "%s TCXO disabled\n", __func__);
+				}
+				mdwc->xo_vote_for_charger = false;
+			}
 		}
 
 		if (mdwc->chg_type != DWC3_INVALID_CHARGER)
@@ -3313,6 +3355,7 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	clk_disable_unprepare(mdwc->sleep_clk);
 	clk_disable_unprepare(mdwc->xo_clk);
 	clk_put(mdwc->xo_clk);
+	mdwc->xo_vote_for_charger = false;
 
 	dwc3_msm_config_gdsc(mdwc, 0);
 
