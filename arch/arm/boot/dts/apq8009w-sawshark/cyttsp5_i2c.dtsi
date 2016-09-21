@@ -24,8 +24,8 @@
 			interrupt-parent = <&msm_gpio>;
 			interrupts = <94 0x2008>;
 			cy,adapter_id = "cyttsp5_i2c_adapter";
-			vdd-supply = <&pm8916_l5>;
-			vcc_i2c-supply = <&pm8916_l10>;
+			vdd-supply = <&pm8916_l10>;
+			vcc_i2c-supply = <&pm8916_l5>;
 
 			cy,core {
 				cy,name = "cyttsp5_core";
