@@ -37,7 +37,7 @@ static const ir2e71y_bdicRegSetting_t ir2e71y_bdic_vsn_on_ts2[] = {
 
 static const ir2e71y_bdicRegSetting_t ir2e71y_bdic_vsn_off[] = {
      {BDIC_REG_BANKSEL,             IR2E71Y_BDIC_BANK,   0x00,                       0x00,      0},
-     {BDIC_REG_SYSTEM2,             IR2E71Y_BDIC_RMW,    0x00,                       0x50,   3000}
+     {BDIC_REG_SYSTEM2,             IR2E71Y_BDIC_RMW,    0x40,                       0x50,   3000}
 };
 
 static const ir2e71y_bdicRegSetting_t ir2e71y_bdic_vsp_on[] = {
@@ -49,7 +49,7 @@ static const ir2e71y_bdicRegSetting_t ir2e71y_bdic_vsp_on[] = {
 static const ir2e71y_bdicRegSetting_t ir2e71y_bdic_vsp_off[] = {
      {BDIC_REG_BANKSEL,             IR2E71Y_BDIC_BANK,   0x00,                       0x00,      0},
      {BDIC_REG_SYSTEM2,             IR2E71Y_BDIC_CLR,    0x00,                       0x01,      0},
-     {BDIC_REG_DCDC2_TEST_57,       IR2E71Y_BDIC_STR,    0x00,                       0xFF,   1000}
+     {BDIC_REG_DCDC2_TEST_57,       IR2E71Y_BDIC_STR,    0x80,                       0xFF,   1000}
 };
 
 static const ir2e71y_bdicRegSetting_t ir2e71y_bdic_bkl_on[] = {

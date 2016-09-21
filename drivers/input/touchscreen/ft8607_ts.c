@@ -245,7 +245,7 @@ static void fts_setsleep_proc(struct fts_data *ts, u8 sleep)
 	if(sleep){
 		fts_func_request_sync(ts, FTS_FUNC_REQ_EVEMT_LCD_OFF);
 	}else{
-		fts_func_request_sync(ts, FTS_FUNC_REQ_EVEMT_LCD_ON);
+		fts_func_request_async(ts, FTS_FUNC_REQ_EVEMT_LCD_ON);
 
 		if(ts->boot_fw_update_checked == 0){
 			ts->boot_fw_update_checked = 1;
@@ -1527,6 +1527,9 @@ static void fts_func_boot_fw_update(struct fts_data *ts)
 			int retry = 5;
 			do{
 				ret = fts_fw_update(ts, fw_data, fts_fwsize_builtin(ts));
+				if (ret != 0) {
+					fts_reset(ts);
+				}
 			}while(ret != 0 && (retry-- > 0));
 		}
 	}
