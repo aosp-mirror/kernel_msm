@@ -32,7 +32,7 @@
 #include <dsm/dsm_pub.h>
 #endif/*CONFIG_HUAWEI_DSM*/
 
-int hw_tp_common_debug_mask =1;
+int hw_tp_common_debug_mask =2;
 
 #define CONFIG_HWATCH_POWER
 
@@ -6345,7 +6345,7 @@ static int cyttsp5_power_init(struct device* dev, struct cyttsp5_core_data *pcor
 			return -EINVAL;
 		}
 
-		rc = regulator_set_voltage(cpower->vdd_reg, 2850000,2850000);
+		rc = regulator_set_voltage(cpower->vdd_reg, 2700000,2800000);
 		if (rc < 0) {
 			tp_log_err( "%s %d: vdd regulator set fail, rc=%d\n", __func__,__LINE__,rc);
 			regulator_put(cpower->vdd_reg);
