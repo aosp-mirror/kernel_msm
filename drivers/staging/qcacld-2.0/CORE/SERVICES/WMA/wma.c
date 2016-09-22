@@ -21217,6 +21217,9 @@ static int wma_wow_wakeup_host_event(void *handle, u_int8_t *event,
 	tp_wma_handle wma = (tp_wma_handle) handle;
 	WMI_WOW_WAKEUP_HOST_EVENTID_param_tlvs *param_buf;
 	WOW_EVENT_INFO_fixed_param *wake_info;
+#ifdef FEATURE_WLAN_TDLS
+	WMI_TDLS_PEER_EVENTID_param_tlvs tdls_param;
+#endif
 #ifdef FEATURE_WLAN_SCAN_PNO
 	struct wma_txrx_node *node;
 #endif
@@ -21508,6 +21511,20 @@ static int wma_wow_wakeup_host_event(void *handle, u_int8_t *event,
 			WMA_LOGE(FL("wow_packet_buffer is empty"));
 		}
 		break;
+#ifdef FEATURE_WLAN_TDLS
+	case WOW_REASON_TDLS_CONN_TRACKER_EVENT:
+		if (param_buf->wow_packet_buffer) {
+			WMA_LOGD("Host woken up because of TDLS event");
+			tdls_param.fixed_param =
+					(wmi_tdls_peer_event_fixed_param *)
+				            (param_buf->wow_packet_buffer + 4);
+			wma_tdls_event_handler(handle,
+				(u_int8_t *)&tdls_param, sizeof(tdls_param));
+		} else {
+			WMA_LOGD("No wow_packet_buffer present");
+		}
+		break;
+#endif
 	default:
 		break;
 	}
