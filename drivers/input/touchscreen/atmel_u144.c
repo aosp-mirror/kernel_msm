@@ -729,6 +729,7 @@ static void mxt_proc_t6_messages(struct mxt_data *data, u8 *msg)
 	if (status & MXT_T6_STATUS_RESET && data->suspended) {
 		TOUCH_DEBUG_MSG("RESET Detected. Start Recover\n");
 
+		mutex_lock(&i2c_suspend_lock);
 		if (mxt_patchevent_get(PATCH_EVENT_TA)) {
 			TOUCH_DEBUG_MSG("In charging\n");
 			mxt_patch_event(data, CHARGER_PLUGGED);
@@ -743,6 +744,7 @@ static void mxt_proc_t6_messages(struct mxt_data *data, u8 *msg)
 			else
 				mxt_patch_event(data, ACTIVE_IN_NOCHG);
 		}
+		mutex_unlock(&i2c_suspend_lock);
 		TOUCH_DEBUG_MSG("Recover Complete\n");
 	}
 }
@@ -1261,13 +1263,21 @@ void trigger_usb_state_from_otg(struct mxt_data *data, int usb_type)
 	mutex_lock(&i2c_suspend_lock);
 	if (usb_type == 0) {
 		if (mxt_patchevent_get(PATCH_EVENT_TA)) {
+			if (mxt_patchevent_get(PATCH_EVENT_IDLE))
+				mxt_patch_event(data, ACTIVE_IN_CHG);
 			mxt_patch_event(data, CHARGER_UNPLUGGED);
 			mxt_patchevent_unset(PATCH_EVENT_TA);
+			if (mxt_patchevent_get(PATCH_EVENT_IDLE))
+				mxt_patch_event(data, IDLE_IN_NOCHG);
 		}
 	} else {
 		if (!mxt_patchevent_get(PATCH_EVENT_TA)) {
+			if (mxt_patchevent_get(PATCH_EVENT_IDLE))
+				mxt_patch_event(data, ACTIVE_IN_NOCHG);
 			mxt_patch_event(data, CHARGER_PLUGGED);
 			mxt_patchevent_set(PATCH_EVENT_TA);
+			if (mxt_patchevent_get(PATCH_EVENT_IDLE))
+				mxt_patch_event(data, IDLE_IN_CHG);
 		}
 	}
 	mutex_unlock(&i2c_suspend_lock);
@@ -2497,7 +2507,8 @@ static ssize_t mxt_idle_mode_store(struct mxt_data *data,
 
 	TOUCH_INFO_MSG("idle %d\n", idle);
 
-	if (idle) {
+	mutex_lock(&i2c_suspend_lock);
+	if (idle && !mxt_patchevent_get(PATCH_EVENT_IDLE)) {
 		if (!data->charging_mode)
 			mxt_patch_event(data, IDLE_IN_NOCHG);
 		else
@@ -2507,7 +2518,7 @@ static ssize_t mxt_idle_mode_store(struct mxt_data *data,
 		ret = reg_set_optimum_mode_check(data->vcc_dig, 0);
 		if (ret < 0)
 			TOUCH_WARN_MSG("Regulator vdd set_opt failed\n");
-	} else {
+	} else if (!idle && mxt_patchevent_get(PATCH_EVENT_IDLE)){
 		if (!data->charging_mode)
 			mxt_patch_event(data, ACTIVE_IN_NOCHG);
 		else
@@ -2519,6 +2530,7 @@ static ssize_t mxt_idle_mode_store(struct mxt_data *data,
 		if (ret < 0)
 			TOUCH_WARN_MSG("Regulator vdd set_opt failed\n");
 	}
+	mutex_unlock(&i2c_suspend_lock);
 
 	return count;
 }
