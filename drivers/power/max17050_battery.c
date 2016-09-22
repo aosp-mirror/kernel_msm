@@ -31,6 +31,7 @@
 #include <linux/power_supply.h>
 #include <linux/power/max17050_battery.h>
 #include <linux/of.h>
+#include <linux/debugfs.h>
 
 /* Status register bits */
 #define STATUS_POR_BIT		(1 << 1)
@@ -46,6 +47,9 @@
 /* External battery power supply poll times */
 #define EXT_BATT_FAST_PERIOD	100
 #define EXT_BATT_SLOW_PERIOD	10000
+
+/* Set capacity thresholds to +/- 1% of current capacity */
+#define ALERT_THRESHOLD_SOC	1
 
 /* Modelgauge M3 save/restore values */
 struct max17050_learned_params {
@@ -89,6 +93,10 @@ struct max17050_chip {
 	u16 tte;
 
 	struct max17050_learned_params learned;
+
+	/* debugfs */
+	struct dentry *dent;
+	int fake_capacity;
 };
 
 static int max17050_write_reg(struct i2c_client *client, u8 reg, u16 value)
@@ -593,7 +601,10 @@ static int max17050_get_property(struct power_supply *psy,
 		val->intval = chip->vcell * 625 / 8;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		val->intval = max17050_scale_clamp_soc(chip);
+		if (!chip->fake_capacity)
+			val->intval = max17050_scale_clamp_soc(chip);
+		else
+			val->intval = chip->fake_capacity;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		if (chip->use_ext_temp && chip->ext_battery) {
@@ -683,7 +694,7 @@ static irqreturn_t max17050_interrupt(int id, void *dev)
 			~(STATUS_INTR_SOCMIN_BIT | STATUS_INTR_SOCMAX_BIT));
 
 		/* Reset capacity thresholds */
-		max17050_set_soc_thresholds(chip, 1);
+		max17050_set_soc_thresholds(chip, ALERT_THRESHOLD_SOC);
 
 		power_supply_changed(&chip->battery);
 	}
@@ -711,8 +722,7 @@ static void max17050_complete_init(struct max17050_chip *chip)
 		chip->power_supply_registered = true;
 
 	if (client->irq) {
-		/* Set capacity thresholds to +/- 1% of current capacity */
-		max17050_set_soc_thresholds(chip, 1);
+		max17050_set_soc_thresholds(chip, ALERT_THRESHOLD_SOC);
 
 		/* Enable capacity interrupts */
 		val = max17050_read_reg(client, MAX17050_CONFIG);
@@ -829,6 +839,71 @@ max17050_get_pdata(struct device *dev)
 	return pdata;
 }
 
+static int max17050_debugfs_get_fake_capacity(void *data, u64 *val)
+{
+	struct max17050_chip *chip = data;
+
+	*val = (u64)chip->fake_capacity;
+
+	return 0;
+}
+
+static int max17050_debugfs_set_fake_capacity(void *data, u64 val)
+{
+	struct max17050_chip *chip = data;
+	struct i2c_client *client = chip->client;
+	struct device *dev = &client->dev;
+
+	if (!chip->init_done) {
+		dev_warn(dev, "not yet initialized\n");
+		return -EIO;
+	}
+
+	chip->fake_capacity = (int)val;
+	chip->fake_capacity = max(chip->fake_capacity, 0);
+	chip->fake_capacity = min(chip->fake_capacity, 100);
+
+	if (!client->irq)
+		goto out;
+
+	if (chip->fake_capacity) {
+		/* Disable SOC Alert */
+		max17050_write_verify_reg(client, MAX17050_SALRT_TH, 0xff00);
+	} else {
+		/* Enable SOC Alert */
+		max17050_set_soc_thresholds(chip, ALERT_THRESHOLD_SOC);
+	}
+
+out:
+	power_supply_changed(&chip->battery);
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(max17050_debugfs_fake_capacity_ops,
+		max17050_debugfs_get_fake_capacity,
+		max17050_debugfs_set_fake_capacity,
+		"%llu\n");
+
+static void max17050_create_debugfs_entries(struct max17050_chip *chip)
+{
+	struct dentry *file;
+	struct device *dev = &chip->client->dev;
+
+	chip->dent = debugfs_create_dir("max17050", NULL);
+	if (IS_ERR(chip->dent)) {
+		dev_err(dev, "couldn't create debugfs\n");
+		return;
+	}
+
+	file = debugfs_create_file("fake_capacity", S_IRUSR | S_IWUSR,
+			chip->dent, (void *)chip,
+			&max17050_debugfs_fake_capacity_ops);
+	if (IS_ERR(file)) {
+		dev_err(dev, "couldn't create fake_capacity node\n");
+		return;
+	}
+}
+
 static int max17050_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
@@ -919,6 +994,8 @@ static int max17050_probe(struct i2c_client *client,
 	else
 		max17050_complete_init(chip);
 
+	max17050_create_debugfs_entries(chip);
+
 	pr_info("max17050 probe done\n");
 
 	return ret;
@@ -927,6 +1004,8 @@ static int max17050_probe(struct i2c_client *client,
 static int max17050_remove(struct i2c_client *client)
 {
 	struct max17050_chip *chip = i2c_get_clientdata(client);
+
+	debugfs_remove_recursive(chip->dent);
 
 	device_remove_file(&client->dev, &dev_attr_power_on_reset);
 	device_remove_file(&client->dev, &dev_attr_init_done);
