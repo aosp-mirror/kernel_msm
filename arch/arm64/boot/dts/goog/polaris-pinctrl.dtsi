@@ -13,4 +13,116 @@
 #include "../qcom/msmcobalt-pinctrl.dtsi"
 
 &tlmm {
+	/delete-node/ wcd_gnd_mic_swap;
+	/delete-node/ cdc_reset_ctrl;
+	/delete-node/ spkr_1_sd_n;
+	/delete-node/ spkr_2_sd_n;
+
+	wcd_gnd_mic_swap {
+		wcd_gnd_mic_swap_idle: wcd_gnd_mic_swap_idle {
+			mux {
+				pins = "gpio49";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio49";
+				drive-strength = <2>;
+				bias-pull-down;
+				output-low;
+			};
+		};
+		wcd_gnd_mic_swap_active: wcd_gnd_mic_swap_active {
+			mux {
+				pins = "gpio49";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio49";
+				drive-strength = <2>;
+				bias-disable;
+				output-high;
+			};
+		};
+	};
+
+	cdc_reset_ctrl {
+		cdc_reset_sleep: cdc_reset_sleep {
+			mux {
+				pins = "gpio116";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio116";
+				drive-strength = <16>;
+				bias-disable;
+				output-low;
+			};
+		};
+		cdc_reset_active: cdc_reset_active {
+			mux {
+				pins = "gpio116";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio116";
+				drive-strength = <16>;
+				bias-pull-down;
+				output-high;
+			};
+		};
+	};
+
+	spkr_1_sd_n {
+		spkr_1_sd_n_sleep: spkr_1_sd_n_sleep {
+			mux {
+				pins = "gpio111";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio111";
+				drive-strength = <2>;   /* 2 mA */
+				bias-pull-down;
+				input-enable;
+			};
+		};
+		spkr_1_sd_n_active: spkr_1_sd_n_active {
+			mux {
+				pins = "gpio111";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio111";
+				drive-strength = <16>;   /* 16 mA */
+				bias-disable;
+				output-high;
+			};
+		};
+	};
+
+	spkr_2_sd_n {
+		spkr_2_sd_n_sleep: spkr_2_sd_n_sleep {
+			mux {
+				pins = "gpio112";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio112";
+				drive-strength = <2>;   /* 2 mA */
+				bias-pull-down;
+				input-enable;
+			};
+		};
+		spkr_2_sd_n_active: spkr_2_sd_n_active {
+			mux {
+				pins = "gpio112";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio112";
+				drive-strength = <16>;   /* 16 mA */
+				bias-disable;
+				output-high;
+			};
+		};
+	};
 };
