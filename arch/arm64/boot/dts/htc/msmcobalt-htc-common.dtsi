@@ -64,3 +64,43 @@
 		drive-strength = <8>;
 	};
 };
+
+&tlmm {
+	camera_i2c_switch_ctrl {
+		switch_ctrl_active: switch_ctrl_active {
+			mux {
+				pins = "gpio30";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio30";
+				drive-strength = <2>;
+				output-high;
+			};
+		};
+	};
+};
+
+
+&soc {
+	qcom,msm-ssc-sensors {
+		pinctrl-names = "default";
+		pinctrl-0 = <&switch_ctrl_active>;
+	};
+};
+
+&pmicobalt_gpios {
+	gpio@c100 {
+		reg = <0xc100 0x100>;
+		qcom,pin-num = <2>;
+		status = "okay";
+		qcom,mode = <1>; // Digital output
+		qcom,invert = <1>;
+		qcom,pull = <5>; // No Pull
+		qcom,vin-sel = <0>; // 1.8 V, VIN0
+		qcom,src-sel = <3>;
+		qcom,master-en = <1>; // enable GPIO
+		qcom,out-strength = <2>; // Output strength medium
+	};
+};
