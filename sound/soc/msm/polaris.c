@@ -37,7 +37,7 @@
 #include "../codecs/wcd9335.h"
 #include "../codecs/wsa881x.h"
 
-#define DRV_NAME "msmcobalt-asoc-snd"
+#define DRV_NAME "goog-polaris-asoc-snd"
 
 #define __CHIPSET__ "MSMCOBALT "
 #define MSM_DAILINK_NAME(name) (__CHIPSET__#name)
@@ -2809,8 +2809,8 @@ err_pcm_runtime:
 	return ret;
 }
 
-struct snd_soc_card snd_soc_card_tasha_msm = {
-	.name		= "msmcobalt-tasha-snd-card",
+struct snd_soc_card snd_soc_card_polaris = {
+	.name		= "goog-polaris-snd-card",
 	.late_probe	= msm_snd_card_late_probe,
 };
 
@@ -2951,9 +2951,9 @@ err:
 	return ret;
 }
 
-static const struct of_device_id msmcobalt_asoc_machine_of_match[]  = {
-	{ .compatible = "qcom,msmcobalt-asoc-snd-tasha",
-	  .data = "tasha_codec"},
+static const struct of_device_id goog_polaris_asoc_machine_of_match[]  = {
+	{ .compatible = "goog,polaris-snd",
+	  .data = "polaris_p1_codec"},
 	{},
 };
 
@@ -2966,7 +2966,7 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	const struct of_device_id *match;
 	bool use_wcn_btfm = false;
 
-	match = of_match_node(msmcobalt_asoc_machine_of_match, dev->of_node);
+	match = of_match_node(goog_polaris_asoc_machine_of_match, dev->of_node);
 	if (!match) {
 		dev_err(dev, "%s: No DT match found for sound card\n",
 			__func__);
@@ -2980,8 +2980,8 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		dev_dbg(dev, "%s(): No WCN BTFM support\n", __func__);
 	}
 
-	if (!strcmp(match->data, "tasha_codec")) {
-		card = &snd_soc_card_tasha_msm;
+	if (!strcmp(match->data, "polaris_p1_codec")) {
+		card = &snd_soc_card_polaris;
 		len_1 = ARRAY_SIZE(msm_common_dai_links);
 		len_2 = len_1 + ARRAY_SIZE(msm_tasha_fe_dai_links);
 		len_3 = len_2 + ARRAY_SIZE(msm_common_be_dai_links);
@@ -3305,7 +3305,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	match = of_match_node(msmcobalt_asoc_machine_of_match,
+	match = of_match_node(goog_polaris_asoc_machine_of_match,
 			pdev->dev.of_node);
 	if (!match) {
 		dev_err(&pdev->dev, "%s: no matched codec is found.\n",
@@ -3450,19 +3450,19 @@ static int msm_asoc_machine_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static struct platform_driver msmcobalt_asoc_machine_driver = {
+static struct platform_driver goog_polaris_asoc_machine_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.owner = THIS_MODULE,
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = msmcobalt_asoc_machine_of_match,
+		.of_match_table = goog_polaris_asoc_machine_of_match,
 	},
 	.probe = msm_asoc_machine_probe,
 	.remove = msm_asoc_machine_remove,
 };
-module_platform_driver(msmcobalt_asoc_machine_driver);
+module_platform_driver(goog_polaris_asoc_machine_driver);
 
 MODULE_DESCRIPTION("ALSA SoC msm");
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:" DRV_NAME);
-MODULE_DEVICE_TABLE(of, msmcobalt_asoc_machine_of_match);
+MODULE_DEVICE_TABLE(of, goog_polaris_asoc_machine_of_match);
