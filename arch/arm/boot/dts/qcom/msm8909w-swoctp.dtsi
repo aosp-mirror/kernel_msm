@@ -70,7 +70,7 @@
 };
 
 &i2c_3 {
-	status = "disabled";
+	status = "ok";
 };
 
 /* Charger/FG configuration */

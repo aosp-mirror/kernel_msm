@@ -1305,6 +1305,7 @@
 			<&dma_blsp1 9  32 0x20000020 0x20>;
 		dma-names = "tx", "rx";
 		qcom,master-id = <86>;
+		status = "ok";
 	};
 
 	i2c_1: i2c@78b5000 { /* BLSP1 QUP1 */
