@@ -153,6 +153,7 @@ static void mdp3_dispatch_dma_done(struct work_struct *work)
 	while (cnt > 0) {
 		mdp3_ctrl_notify(session, MDP_NOTIFY_FRAME_DONE);
 		atomic_dec(&session->dma_done_cnt);
+		mdp3_ctrl_notify(session, MDP_NOTIFY_FRAME_CTX_DONE);
 		cnt--;
 	}
 }
@@ -1026,6 +1027,11 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 
 	if (mdss_fb_is_power_on_ulp(mfd) &&
 		(mfd->panel.type == MIPI_CMD_PANEL)) {
+		if ((atomic_read(&mfd->kickoff_pending)) ||
+		    (atomic_read(&mfd->commits_pending))) {
+			pr_debug("%s: Ignore MDP3 clocks OFF request in ULP\n", __func__);
+			goto off_error;
+		}
 		pr_debug("%s: Disable MDP3 clocks in ULP\n", __func__);
 		if (!mdp3_session->clk_on)
 			mdp3_ctrl_clk_enable(mfd, 1);
@@ -2764,6 +2770,7 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 	mdp3_session->vsync_timer.data = (u32)mdp3_session;
 	mdp3_session->vsync_period = 1000 / mfd->panel_info->mipi.frame_rate;
 	mfd->mdp.private1 = mdp3_session;
+	mfd->wait_for_kickoff = true;
 	init_completion(&mdp3_session->dma_completion);
 	if (intf_type != MDP3_DMA_OUTPUT_SEL_DSI_VIDEO)
 		mdp3_session->wait_for_dma_done = mdp3_wait_for_dma_done;
