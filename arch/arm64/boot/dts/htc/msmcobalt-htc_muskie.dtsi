@@ -8,3 +8,10 @@
                 /delete-property/ cam_vana-supply;
         };
 };
+
+&pcie0 {
+	/* WAKE# optional sideband signal not connected */
+	/delete-property/ wake-gpio;
+	/* Remove pcie0_wake_default from pin muxing */
+	pinctrl-0 = <&pcie0_clkreq_default &pcie0_perst_default>;
+};
