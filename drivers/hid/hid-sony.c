@@ -842,6 +842,7 @@ struct sony_sc {
 
 	u8 mac_address[6];
 	u8 worker_initialized;
+	u8 defer_initialization;
 	u8 cable_state;
 	u8 battery_charging;
 	u8 battery_capacity;
@@ -851,6 +852,12 @@ struct sony_sc {
 	u8 led_delay_off[MAX_LEDS];
 	u8 led_count;
 };
+
+static inline void sony_schedule_work(struct sony_sc *sc)
+{
+	if (!sc->defer_initialization)
+		schedule_work(&sc->state_worker);
+}
 
 static u8 *sixaxis_fixup(struct hid_device *hdev, u8 *rdesc,
 			     unsigned int *rsize)
@@ -1078,6 +1085,11 @@ static int sony_raw_event(struct hid_device *hdev, struct hid_report *report,
 			size == 64) || ((sc->quirks & DUALSHOCK4_CONTROLLER_BT)
 			&& rd[0] == 0x11 && size == 78)) {
 		dualshock4_parse_report(sc, rd, size);
+	}
+
+	if (sc->defer_initialization) {
+		sc->defer_initialization = 0;
+		sony_schedule_work(sc);
 	}
 
 	return 0;
@@ -1317,7 +1329,7 @@ static void buzz_set_leds(struct sony_sc *sc)
 static void sony_set_leds(struct sony_sc *sc)
 {
 	if (!(sc->quirks & BUZZ_CONTROLLER))
-		schedule_work(&sc->state_worker);
+		sony_schedule_work(sc);
 	else
 		buzz_set_leds(sc);
 }
@@ -1428,7 +1440,7 @@ static int sony_led_blink_set(struct led_classdev *led, unsigned long *delay_on,
 		new_off != drv_data->led_delay_off[n]) {
 		drv_data->led_delay_on[n] = new_on;
 		drv_data->led_delay_off[n] = new_off;
-		schedule_work(&drv_data->state_worker);
+		sony_schedule_work(drv_data);
 	}
 
 	return 0;
@@ -1700,7 +1712,7 @@ static int sony_play_effect(struct input_dev *dev, void *data,
 	sc->left = effect->u.rumble.strong_magnitude / 256;
 	sc->right = effect->u.rumble.weak_magnitude / 256;
 
-	schedule_work(&sc->state_worker);
+	sony_schedule_work(sc);
 	return 0;
 }
 
@@ -2077,9 +2089,16 @@ static int sony_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		 * the Sixaxis does not want the report_id as part of the data
 		 * packet, so we have to discard buf[0] when sending the actual
 		 * control message, even for numbered reports, humpf!
+		 *
+		 * Additionally, the Sixaxis on USB isn't properly initialized
+		 * until the PS logo button is pressed and as such won't retain
+		 * any state set by an output report, so the initial
+		 * configuration report is deferred until the first input
+		 * report arrives.
 		 */
 		hdev->quirks |= HID_QUIRK_NO_OUTPUT_REPORTS_ON_INTR_EP;
 		hdev->quirks |= HID_QUIRK_SKIP_OUTPUT_REPORT_ID;
+		sc->defer_initialization = 1;
 		ret = sixaxis_set_operational_usb(hdev);
 		sony_init_output_report(sc, sixaxis_send_output_report);
 	} else if (sc->quirks & SIXAXIS_CONTROLLER_BT) {
@@ -2219,8 +2238,10 @@ static int sony_resume(struct hid_device *hdev)
 		 * The Sixaxis and navigation controllers on USB need to be
 		 * reinitialized on resume or they won't behave properly.
 		 */
-		if (sc->quirks & SIXAXIS_CONTROLLER_USB)
+		if (sc->quirks & SIXAXIS_CONTROLLER_USB) {
 			sixaxis_set_operational_usb(sc->hdev);
+			sc->defer_initialization = 1;
+		}
 
 		sony_set_leds(sc);
 	}
