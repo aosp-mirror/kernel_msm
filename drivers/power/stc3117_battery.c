@@ -36,9 +36,11 @@ int STC31xx_AlarmSetVoltageThreshold(int VoltThresh);
 int STC31xx_AlarmSetSOCThreshold(int SOCThresh);
 int STC31xx_RelaxTmrSet(int CurrentThreshold);
 
+unsigned long full_tm_sec = 0;
 int g_asus_batt_soc, g_asus_batt_soc_previous;
 static int therm_power_off = 0;
 static int batt_power_off = 0;
+static bool charge_full = false;
 /*********************************************************************************	*/
 /*				STC311x DEVICE SELECTION											*/
 /*				STC3117 version only												*/
@@ -70,12 +72,12 @@ static int batt_power_off = 0;
 /*	 TO BE ADJUSTED ACCORDING TO BATTERY/APPLICATION CHARACTERISTICS				*/
 /*--------------------------------------------------------------------------------	*/
 
-#define BATT_CHG_VOLTAGE	4350	/* min voltage at the end of the charge (mV)			*/
+#define BATT_CHG_VOLTAGE	4400	/* min voltage at the end of the charge (mV)			*/
 #define BATT_MIN_VOLTAGE	3300	/* nearly empty battery detection level (mV)			*/
 #define MAX_HRSOC			51200	/* 100% in 1/512% units*/
 #define MAX_SOC				1000	 /* 100% in 0.1% units */
 
-#define CHG_MIN_CURRENT		200	 /* min charge current in mA											 */
+#define CHG_MIN_CURRENT		100	 /* min charge current in mA											 */
 #define CHG_END_CURRENT		20	 /* end charge current in mA											 */
 #define APP_MIN_CURRENT		(-5)	/* minimum application current consumption in mA ( <0 !) */
 #define APP_MIN_VOLTAGE		3400	/* application cut-off voltage										*/
@@ -296,6 +298,16 @@ extern bool get_pmic_batt_present(void);
 /* ******************************************************************************** */
 
 static struct i2c_client *sav_client;
+
+static int get_current_time(unsigned long *now_tm_sec)
+{
+	struct timespec tm;
+
+	get_monotonic_boottime(&tm);
+	*now_tm_sec = (unsigned long)tm.tv_sec;
+
+	return 0;
+}
 
 struct stc311x_chip {
 	struct i2c_client		*client;
@@ -1919,6 +1931,7 @@ static void stc311x_work(struct work_struct *work)
 	int DEC=0, RegAddress;
 	u8 HEX=0;
 	u8 reg_debug[128];
+	unsigned long now_tm_sec = 0;
 
 	chip = container_of(work, struct stc311x_chip, work.work);
 
@@ -2005,13 +2018,24 @@ static void stc311x_work(struct work_struct *work)
 		pr_info("[BAT] Adjust SMB231 float voltage to 4.36V\n");
 	}
 
+	if (get_current_time(&now_tm_sec))
+		pr_err("RTC read failed\n");
+
 	switch (get_battery_status(chip)) {
 	case POWER_SUPPLY_STATUS_FULL:
-		if ((g_asus_batt_soc_previous >= 97) && (chip->batt_voltage >= 4350))
+		if ((g_asus_batt_soc_previous >= 97) && (chip->batt_voltage >= 4200))
 			g_asus_batt_soc = 100;
+
+		charge_full = true;
+		full_tm_sec = now_tm_sec;
 		g_asus_batt_soc_previous = g_asus_batt_soc;
 		break;
 	case POWER_SUPPLY_STATUS_DISCHARGING:
+		if ((charge_full == true) && ((now_tm_sec - full_tm_sec) <= 120)) {
+			g_asus_batt_soc = 100;
+			pr_info("Report fake soc, now_tm_sec:%ld, full_tm_sec:%ld\n", now_tm_sec, full_tm_sec);
+		} else
+			charge_full = false;
 		if (g_asus_batt_soc > g_asus_batt_soc_previous) {
 			ASUSEvtlog("batt soc warning! now:%d, prv:%d\n",
 				g_asus_batt_soc, g_asus_batt_soc_previous);
@@ -2034,6 +2058,7 @@ static void stc311x_work(struct work_struct *work)
 			g_asus_batt_soc = 99;
 		}
 		batt_power_off = 0;
+		charge_full = false;
 		g_asus_batt_soc_previous = g_asus_batt_soc;
 		break;
 	default:
