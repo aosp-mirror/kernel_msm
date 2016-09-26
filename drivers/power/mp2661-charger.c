@@ -309,6 +309,7 @@ static enum power_supply_property mp2661_battery_properties[] = {
     POWER_SUPPLY_PROP_VOLTAGE_NOW,
     POWER_SUPPLY_PROP_CURRENT_NOW,
     POWER_SUPPLY_PROP_USB_INPUT_CURRENT,
+    POWER_SUPPLY_PROP_BATTERY_ID,
 };
 
 static int mp2661_get_prop_batt_status(struct mp2661_chg *chip)
@@ -364,6 +365,44 @@ static int mp2661_get_prop_batt_present(struct mp2661_chg *chip)
     }
 
     return 1;
+}
+
+enum {
+    POWER_SUPPLY_BATTERY_ID_UNKNOWN = 0,
+    POWER_SUPPLY_BATTERY_ID_GUANGYU,
+    POWER_SUPPLY_BATTERY_ID_DESAY,
+};
+
+#define BATT_ID_VOL_MIN_UV                    0
+#define BATT_ID_VOL_AVG_UV                    548038
+#define BATT_ID_VOL_MAX_UV                    1600000
+static int mp2661_get_prop_batt_id(struct mp2661_chg *chip)
+{
+    int rc = 0;
+    struct qpnp_vadc_result results;
+    union power_supply_propval ret = {0, };
+
+    rc = qpnp_vadc_read(chip->vadc_dev, LR_MUX2_BAT_ID, &results);
+    if (rc)
+    {
+        pr_debug("Unable to read batt_id rc=%d\n", rc);
+        return POWER_SUPPLY_BATTERY_ID_UNKNOWN;
+    }
+
+    if((results.physical > BATT_ID_VOL_MIN_UV) && (results.physical <= BATT_ID_VOL_AVG_UV))
+    {
+        ret.intval = POWER_SUPPLY_BATTERY_ID_GUANGYU;
+    }
+    else if((results.physical > BATT_ID_VOL_AVG_UV) && (results.physical <= BATT_ID_VOL_MAX_UV))
+    {
+        ret.intval = POWER_SUPPLY_BATTERY_ID_DESAY;
+    }
+    else
+    {
+        ret.intval = POWER_SUPPLY_BATTERY_ID_UNKNOWN;
+    }
+
+    return ret.intval;
 }
 
 static int mp2661_get_prop_charge_type(struct mp2661_chg *chip)
@@ -1179,6 +1218,9 @@ static int mp2661_battery_get_property(struct power_supply *psy,
             break;
         case POWER_SUPPLY_PROP_USB_INPUT_CURRENT:
             val->intval = mp2661_get_usb_input_current(chip);
+            break;
+        case POWER_SUPPLY_PROP_BATTERY_ID:
+            val->intval = mp2661_get_prop_batt_id(chip);
             break;
         default:
             return -EINVAL;
