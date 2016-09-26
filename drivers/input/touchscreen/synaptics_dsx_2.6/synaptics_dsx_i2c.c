@@ -114,46 +114,36 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 		bdata->power_gpio = -1;
 	}
 
-	if (of_property_read_bool(np, "synaptics,power-delay-ms")) {
-		retval = of_property_read_u32(np, "synaptics,power-delay-ms",
-				&value);
-		if (retval < 0)
-			return retval;
-		else
-			bdata->power_delay_ms = value;
-	} else {
-		bdata->power_delay_ms = 0;
-	}
+	retval = of_property_read_u32(np, "synaptics,power-delay-ms",
+			&value);
+	if (retval < 0)
+		bdata->power_delay_ms = 200;
+	else
+		bdata->power_delay_ms = value;
 
-	if (of_property_read_bool(np, "synaptics,reset-gpio")) {
-		bdata->reset_gpio = of_get_named_gpio_flags(np,
-				"synaptics,reset-gpio", 0, NULL);
-		retval = of_property_read_u32(np, "synaptics,reset-on-state",
-				&value);
-		if (retval < 0)
-			return retval;
-		else
-			bdata->reset_on_state = value;
-		retval = of_property_read_u32(np, "synaptics,reset-active-ms",
-				&value);
-		if (retval < 0)
-			return retval;
-		else
-			bdata->reset_active_ms = value;
-	} else {
-		bdata->reset_gpio = -1;
-	}
+	bdata->reset_gpio = of_get_named_gpio_flags(np,
+			"synaptics,reset-gpio", 0, NULL);
 
-	if (of_property_read_bool(np, "synaptics,reset-delay-ms")) {
-		retval = of_property_read_u32(np, "synaptics,reset-delay-ms",
-				&value);
-		if (retval < 0)
-			return retval;
-		else
-			bdata->reset_delay_ms = value;
-	} else {
-		bdata->reset_delay_ms = 0;
-	}
+	retval = of_property_read_u32(np, "synaptics,reset-on-state",
+			&value);
+	if (retval < 0)
+		bdata->reset_on_state = 0;
+	else
+		bdata->reset_on_state = value;
+
+	retval = of_property_read_u32(np, "synaptics,reset-active-ms",
+			&value);
+	if (retval < 0)
+		bdata->reset_active_ms = 20;
+	else
+		bdata->reset_active_ms = value;
+
+	retval = of_property_read_u32(np, "synaptics,reset-delay-ms",
+			&value);
+	if (retval < 0)
+		bdata->reset_delay_ms = 200;
+	else
+		bdata->reset_delay_ms = value;
 
 	if (of_property_read_bool(np, "synaptics,max-y-for-2d")) {
 		retval = of_property_read_u32(np, "synaptics,max-y-for-2d",
