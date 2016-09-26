@@ -27,6 +27,7 @@
 #include "mdp3.h"
 #include "mdp3_ppp.h"
 #include "mdss_smmu.h"
+#include "mdss_dsi.h"
 
 #define VSYNC_EXPIRE_TICK	4
 
@@ -1473,6 +1474,7 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 	struct mdss_panel_info *panel_info;
 	static bool splash_done;
 	struct mdss_panel_data *panel;
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 
 	int rc;
 
@@ -1484,6 +1486,9 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 	mdp3_session = (struct mdp3_session_data *)mfd->mdp.private1;
 	if (!mdp3_session || !mdp3_session->dma)
 		return;
+
+	ctrl = container_of(mdp3_session->panel, struct mdss_dsi_ctrl_pdata,
+				panel_data);
 
 	mutex_lock(&mdp3_res->fs_idle_pc_lock);
 	if (mdp3_session->in_splash_screen ||
@@ -1573,6 +1578,10 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 		mdp3_session->esd_recovery = false;
 	}
 
+	if (ctrl->bklt_off) {
+		if (panel && panel->set_backlight)
+			panel->set_backlight(panel, panel->panel_info.brightness_default);
+	}
 
 pan_error:
 	mutex_unlock(&mdp3_session->lock);
