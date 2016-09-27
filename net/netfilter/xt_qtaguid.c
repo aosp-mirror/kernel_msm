@@ -1919,7 +1919,7 @@ static int qtaguid_ctrl_proc_show(struct seq_file *m, void *v)
 
 	if (sock_tag_entry != SEQ_START_TOKEN) {
 		uid = get_uid_from_tag(sock_tag_entry->tag);
-		CT_DEBUG("qtaguid: proc_read(): sk=%p tag=0x%llx (uid=%u) "
+		CT_DEBUG("qtaguid: proc_read(): sk=%pK tag=0x%llx (uid=%u) "
 			 "pid=%u\n",
 			 sock_tag_entry->sk,
 			 sock_tag_entry->tag,
