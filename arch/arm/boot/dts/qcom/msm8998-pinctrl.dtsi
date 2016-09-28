@@ -188,6 +188,19 @@
 					bias-disable;
 				};
 			};
+
+			i2c_5_bitbang: i2c_5_bitbang {
+				mux {
+					pins = "gpio87", "gpio88";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio87", "gpio88";
+					drive-strength = <8>;
+					bias-disable;
+				};
+			};
 		};
 
 		i2c_6 {

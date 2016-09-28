@@ -32,6 +32,10 @@ Optional property:
 	register. When missing, default to the value given in driver.
  - qcom,fs-clk-div: fs divider value to configure clk-ctl register. When
 	missing, default to the value given in driver.
+ - qcom,i2c-clk : clock GPIO in case SW bit-banging is needed (if HW recovery
+	mechanism fails, SW will bit-bang clock line upto 9 times and sniff
+	data until slave releases the data line)
+ - qcom,i2c-dat : data-line GPIO in case SW bit-banging is needed
 
 Example:
 	aliases {
