@@ -533,12 +533,6 @@
 		qcom,clock-configs = <0x1 0x0 0x0 0x0>;
 		qcom,sw-power-collapse;
 		qcom,slave-side-cp;
-		qcom,dcvs-tbl =
-			<108000 108000 244800 0x00000004>, /* Encoder */
-			<108000 108000 244800 0x0f00000c>; /* Decoder */
-		qcom,dcvs-limit =
-			<8160 30>, /* Encoder */
-			<8160 30>; /* Decoder */
 		qcom,hfi = "venus";
 		qcom,reg-presets = <0xe0020 0x05555556>,
 			<0xe0024 0x05555556>,
@@ -551,7 +545,7 @@
 			<0x9181000 0x1000>;
 		qcom,max-hw-load = <244800>; /* 1080p@30 */
 		qcom,firmware-name = "venus";
-		qcom,allowed-clock-rates = <133330000 266670000 307200000>;
+		qcom,allowed-clock-rates = <307200000 266670000 133330000>;
 		qcom,clock-freq-tbl {
 			qcom,profile-enc {
 				qcom,codec-mask = <0x55555555>;
@@ -630,16 +624,10 @@
 				qcom,profile-dec {
 					qcom,codec-mask = <0xffffffff>;
 					qcom,load-busfreq-tbl =
-						<244800 605000>,   /* 1080p30D   */
-						<216000 540000>,   /* 720p60D    */
-						<194400 484000>,   /* FWVGA120D  */
-						<144000 360000>,   /* VGA120D    */
-						<108000 270000>,   /* 720p30D    */
-						<97200  242000>,   /* FWVGA60D   */
-						<48600  121000>,   /* FWVGA30D   */
-						<72000  180000>,   /* VGA60D     */
-						<36000  90000>,    /* VGA30D     */
-						<18000  45000>,    /* HVGA30D    */
+						<244800 758800>,   /*1080p30D    */
+						<108000 337200>,   /* 720p30D    */
+						<72000  224800>,   /* VGA60D     */
+						<36000  112400>,    /* VGA30D     */
 						<0      0>;
 				};
 			};
@@ -946,27 +934,26 @@
 		reg-names = "hsusb";
 		interrupts = <0 135 0>;
 		interrupt-names = "hsusb";
+		qcom,bam-type = <1>;
 		qcom,usb-bam-num-pipes = <2>;
 		qcom,usb-bam-fifo-baseaddr = <0x08603800>;
 		qcom,ignore-core-reset-ack;
 		qcom,disable-clk-gating;
+		qcom,reset-bam-on-disconnect;
 
 		qcom,pipe0 {
 			label = "hsusb-qdss-in-0";
-			qcom,usb-bam-mem-type = <3>;
-			qcom,bam-type = <1>;
+			qcom,usb-bam-mem-type = <2>;
 			qcom,dir = <1>;
 			qcom,pipe-num = <0>;
-			qcom,peer-bam = <1>;
-			qcom,src-bam-physical-address = <0x884000>;
+			qcom,peer-bam = <0>;
+			qcom,peer-bam-physical-address = <0x884000>;
 			qcom,src-bam-pipe-index = <0>;
-			qcom,dst-bam-physical-address = <0x78c4000>;
 			qcom,dst-bam-pipe-index = <0>;
 			qcom,data-fifo-offset = <0x0>;
 			qcom,data-fifo-size = <0x600>;
 			qcom,descriptor-fifo-offset = <0x600>;
 			qcom,descriptor-fifo-size = <0x200>;
-			qcom,reset-bam-on-connect;
 		};
 	};
 
