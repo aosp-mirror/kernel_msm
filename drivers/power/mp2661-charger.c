@@ -855,8 +855,8 @@ static int mp2661_set_batt_uvlo_threshold(struct mp2661_chg *chip,
     return rc;
 }
 
-#define MP2661_AUTO_RECHARGE_BELOW_FULL_MIN_MV        100
-#define MP2661_AUTO_RECHARGE_BELOW_FULL_MAX_MV        200
+#define MP2661_AUTO_RECHARGE_BELOW_FULL_MIN_MV        150
+#define MP2661_AUTO_RECHARGE_BELOW_FULL_MAX_MV        300
 static int mp2661_set_batt_auto_recharge(struct mp2661_chg *chip,
                             int voltage_below_full)
 {
@@ -1855,7 +1855,7 @@ static int mp2661_hw_init(struct mp2661_chg *chip)
     /* TODO (b/30979364): The ntc temp of mp2661 is 60 and easily cause board to shutdown,
      * So disable ntc temporarily here but we need to re-enable it before product release.
     */
-    rc = mp2661_ntc_enable(chip, false);
+    rc = mp2661_ntc_enable(chip, true);
     if (rc)
     {
         pr_err("Couldn't enable ntc rc=%d\n", rc);
