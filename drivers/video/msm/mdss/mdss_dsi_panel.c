@@ -777,7 +777,7 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 			goto end;
 
 	cmds = &ctrl->post_panel_on_cmds;
-	if (cmds->cmd_cnt) {
+	if ((cmds->cmd_cnt) &&(pinfo->mipi.init_delay)) {
 		msleep(VSYNC_DELAY);	/* wait for a vsync passed */
 		mdss_dsi_panel_cmds_send(ctrl, cmds, CMD_REQ_COMMIT);
 	}
