@@ -16399,7 +16399,7 @@ WDI_ProcessInitScanRsp
         WDI_ASSERT(0);
     }
   }
-  else
+  else if (WDI_STATUS_SUCCESS != wdiStatus)
   {
      WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
                "Error returned WDI_ProcessInitScanRspi:%d BMPS%d",

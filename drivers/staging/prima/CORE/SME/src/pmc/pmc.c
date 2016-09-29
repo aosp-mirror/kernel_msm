@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -663,7 +663,7 @@ tANI_BOOLEAN pmcPowerSaveCheck (tHalHandle hHal)
         {
             if (!checkRoutine(pPowerSaveCheckEntry->checkContext))
             {
-                pmcLog(pMac, LOGE, FL("pmcPowerSaveCheck fail!"));
+                pmcLog(pMac, LOG1, FL("pmcPowerSaveCheck fail!"));
                 bResult = FALSE;
                 break;
             }
@@ -1037,8 +1037,11 @@ void pmcTrafficTimerExpired (tHalHandle hHal)
     }
     else
     {
-        /*Some module voted against Power Save. So timer should be restarted again to retry BMPS */
-        pmcLog(pMac, LOGE, FL("Power Save check failed. Retry BMPS again later"));
+        /*Some module voted against Power Save.
+         * So timer should be restarted again to retry BMPS
+         */
+        pmcLog(pMac, LOGW,
+             FL("Power Save check failed. Retry BMPS again later"));
         //Since hTrafficTimer is a vos_timer now, we need to restart the timer here
         vosStatus = vos_timer_start(&pMac->pmc.hTrafficTimer, pMac->pmc.bmpsConfig.trafficMeasurePeriod);
         if ( !VOS_IS_STATUS_SUCCESS(vosStatus) && (VOS_STATUS_E_ALREADY != vosStatus) )
