@@ -760,7 +760,7 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 
 	current_ma = min(therm_ma, usb_current);
 
-	if (current_ma <= CURRENT_SUSPEND) {
+	if (current_ma == CURRENT_SUSPEND) {
 		/* suspend USB input */
 		rc = smb23x_suspend_usb(chip, CURRENT, true);
 		if (rc)
