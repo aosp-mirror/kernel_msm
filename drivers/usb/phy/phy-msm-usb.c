@@ -3040,7 +3040,22 @@ static void msm_otg_sm_work(struct work_struct *w)
 	case OTG_STATE_B_PERIPHERAL:
 		if (test_bit(B_SESS_VLD, &motg->inputs) &&
 				test_bit(B_FALSE_SDP, &motg->inputs)) {
-			pr_debug("B_FALSE_SDP\n");
+			pr_info("[USB] B_FALSE_SDP\n");
+			//ASUS_BSP+++ "[USB][NA][Spec] Add ASUS charger mode support"
+			cancel_delayed_work_sync(&asus_chg_work);
+			if (!getSoftconnect() || asus_usb_gadget_ctrl) {
+				g_usb_boot = MSM_OTG_USB_BOOT_INIT;
+				usb_gadget_disconnect(otg->gadget);
+				//ASUS_BSP+++ "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+				if(!asus_chg_detect_init.done) {
+					complete(&asus_chg_detect_init);
+					pr_info("[USB] %s: asus_chg_detect_init: complete\n", __func__);
+					msm_otg_dbg_log_event(&motg->phy, "CHARGER DET WAIT COMPLETE", getSoftconnect(), asus_chg_detect_init.done);
+				}
+				asus_usb_gadget_ctrl = false;
+				//ASUS_BSP--- "[USB][NA][Spec] Add wait_for_completeion_timeout to fix boot adb fail"
+			}
+			//ASUS_BSP--- "[USB][NA][Spec] Add ASUS charger mode support"
 			msm_otg_start_peripheral(otg, 0);
 			motg->chg_type = USB_DCP_CHARGER;
 			clear_bit(B_FALSE_SDP, &motg->inputs);
