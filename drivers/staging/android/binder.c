@@ -2077,7 +2077,7 @@ static void binder_transaction(struct binder_proc *proc,
 
 			fp = to_flat_binder_object(hdr);
 			ret = binder_translate_binder(fp, t, thread);
-			 if (ret < 0) {
+			if (ret < 0) {
 				return_error = BR_FAILED_REPLY;
 				goto err_translate_failed;
 			}
@@ -2088,7 +2088,7 @@ static void binder_transaction(struct binder_proc *proc,
 
 			fp = to_flat_binder_object(hdr);
 			ret = binder_translate_handle(fp, t, thread);
-			 if (ret < 0) {
+			if (ret < 0) {
 				return_error = BR_FAILED_REPLY;
 				goto err_translate_failed;
 			}
