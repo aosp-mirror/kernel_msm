@@ -2412,7 +2412,7 @@ static void hdd_ReConfigSuspendDataClearedDuringRoaming(hdd_context_t *pHddCtx)
                 vstatus = hdd_conf_arp_offload(pAdapter, TRUE);
                 if (!VOS_IS_STATUS_SUCCESS(vstatus))
                 {
-                    hddLog(VOS_TRACE_LEVEL_ERROR,
+                    hddLog(VOS_TRACE_LEVEL_INFO,
                         FL("Failed to disable ARPOffload Feature %d"), vstatus);
                 }
             }

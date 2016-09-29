@@ -14914,7 +14914,7 @@ static int __wlan_hdd_cfg80211_sched_scan_stop(struct wiphy *wiphy,
         // Assuming the PNO disable was success.
         // Returning error from here, because we timeout, results
         // in side effect of Wifi (Wifi Setting) not to work.
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
                   FL("Timed out waiting for PNO to be disabled"));
         ret = 0;
     }
