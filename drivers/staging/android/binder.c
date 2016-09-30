@@ -233,6 +233,10 @@ struct binder_device {
 	struct binder_context context;
 };
 
+static struct binder_context global_context = {
+	.binder_context_mgr_uid = INVALID_UID,
+};
+
 struct binder_work {
 	struct list_head entry;
 	enum {
@@ -3457,6 +3461,7 @@ static int binder_open(struct inode *nodp, struct file *filp)
 		return -ENOMEM;
 	get_task_struct(current);
 	proc->tsk = current;
+	proc->context = &global_context;
 	INIT_LIST_HEAD(&proc->todo);
 	init_waitqueue_head(&proc->wait);
 	proc->default_priority = task_nice(current);
