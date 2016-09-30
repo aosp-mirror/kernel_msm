@@ -1,0 +1,42 @@
+/* Copyright (c) 2016,  CYPRESS CO., LTD.  All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+ &soc {
+     i2c@78b9000 {
+        pn547@28 {
+            status="ok";
+            compatible = "nxp,pn547";
+            reg = <0x28>;
+            interrupt-parent = <&msm_gpio>;
+            interrupts = <35 0x2>;
+            nxp,pn5xx-irq = <&msm_gpio 35 0x00>;
+            nxp,pn5xx-ven = <&msm_gpio 34 0x00>;
+            nxp,pn5xx-fw-dwnld = <&msm_gpio 32 0x00>;
+            nxp,pn5xx-ese-pwr = <&msm_gpio 51 0x00>;
+        clocks = <&clock_rpm clk_bb_clk2>;
+        clock-names = "bbclk2";
+        };
+     };
+
+    spi@78ba000 {
+        p61@0 {
+            compatible = "nxp,p61";
+            reg = <0>;
+            spi-max-frequency = <50000000>;
+            spi-cpol;
+            spi-cpha;
+            spi-cs-high;
+            nxp,p61-irq = <&msm_gpio 110 0x00>;
+            nxp,p61-rst = <&msm_gpio 48 0x00>;
+        };
+    };
+};
+

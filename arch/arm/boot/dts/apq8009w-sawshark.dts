@@ -28,7 +28,7 @@
 #include "apq8009w-sawshark/apq8009w-wifi.dtsi"
 #include "apq8009w-sawshark/apq8009w-mcu.dtsi"
 #include "apq8009w-sawshark/apq8009w-sound.dtsi"
-
+#include "apq8009w-sawshark/apq8009w-nfc.dtsi"
 / {
 	model = "Qualcomm Technologies, Inc. APQ8009W-PM8916 MTP";
 	compatible = "qcom,apq8009-mtp", "qcom,apq8009", "qcom,mtp";

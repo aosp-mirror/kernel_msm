@@ -3,6 +3,8 @@
 #
 
 obj-$(CONFIG_NFC_PN544)		+= pn544/
+obj-$(CONFIG_NFC_NXP_PN5XX)	+= pn5xx/
+obj-$(CONFIG_P61_NFC)           += p61/
 obj-$(CONFIG_NFC_MICROREAD)	+= microread/
 obj-$(CONFIG_NFC_PN533)		+= pn533.o
 obj-$(CONFIG_NFC_WILINK)	+= nfcwilink.o
