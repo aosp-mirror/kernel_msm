@@ -202,4 +202,5 @@ source "drivers/gud/Kconfig"
 
 source "drivers/hwmcu/Kconfig"
 
+source "drivers/nfc/Kconfig"
 endmenu
