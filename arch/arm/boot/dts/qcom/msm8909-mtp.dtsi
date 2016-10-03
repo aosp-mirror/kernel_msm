@@ -150,7 +150,8 @@
 			reg = <0x28>;
 			qcom,nq-irq = <&msm_gpio 21 0x00>;
 			qcom,nq-ven = <&msm_gpio 20 0x00>;
-			qcom,nq-firm= <&msm_gpio 45 0x00>;
+			qcom,nq-firm = <&msm_gpio 34 0x00>;
+			qcom,nq-esepwr = <&msm_gpio 31 0x00>;
 			qcom,clk-src = "BBCLK2";
 			interrupt-parent = <&msm_gpio>;
 			interrupts = <21 0>;
@@ -370,6 +371,13 @@
 
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&dsi_auo_400p_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
+	qcom,mdss-dsi-bl-pmic-bank-select = <0>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
 &dsi_auo_cx_qvga_cmd {
