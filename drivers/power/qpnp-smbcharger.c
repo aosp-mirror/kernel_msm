@@ -7329,23 +7329,12 @@ static void smbchg_usb_limit_current_WA_work(struct work_struct *work)
 		pr_err("called before init\n");
 		return;
 	}
-	/* Disable AICL */
-	smbchg_sec_masked_write(the_chip, the_chip->usb_chgpth_base + USB_AICL_CFG,
-			AICL_EN_BIT, 0);
-	pr_smb(PR_INTERRUPT, "AICL disabled\n");
 
 	rc = vote(the_chip->usb_icl_votable, PSY_ICL_VOTER, true, USB_MA_1000);
 	if (rc < 0)
 		pr_err("Couldn't set usb current rc = %d\n", rc);
 	else
 		pr_smb(PR_INTERRUPT, "USB max current changed to 1A\n");
-
-
-	/* Add a delay so that AICL successfully clears */
-	msleep(50);
-	smbchg_sec_masked_write(the_chip, the_chip->usb_chgpth_base + USB_AICL_CFG,
-			AICL_EN_BIT, AICL_EN_BIT);
-	pr_smb(PR_INTERRUPT, "AICL re-enabled\n");
 }
 #endif /* CONFIG_HTC_BATT */
 
