@@ -109,9 +109,11 @@ struct mmc_request {
 	void			(*done)(struct mmc_request *);/* completion function */
 	struct mmc_host		*host;
 	struct mmc_cmdq_req	*cmdq_req;
-	struct request *req;
-	ktime_t io_start;
-	int lat_hist_enabled;
+	struct request          *req;
+	ktime_t			io_start;
+#ifdef CONFIG_BLOCK
+	int			lat_hist_enabled;
+#endif
 };
 
 struct mmc_bus_ops {
