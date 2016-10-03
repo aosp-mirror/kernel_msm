@@ -121,6 +121,11 @@ int wlan_hdd_ftm_start(hdd_context_t *pAdapter);
 #include "wlan_hdd_debugfs.h"
 #include "sapInternal.h"
 
+#define WLAN_ADDR_SIZE  6
+#define PERSIST_MAC_FILE_PATH  "/persist/wifimac.dat"
+#define PERSIST_MAC_FILE_HEAD  "wifiaddr:"
+#define PERSIST_MAC_FILE_MAX_LEN  60
+
 #ifdef MODULE
 #define WLAN_MODULE_NAME  module_name(THIS_MODULE)
 #else
@@ -8937,6 +8942,51 @@ free_hdd_ctx:
    hdd_set_ssr_required (VOS_FALSE);
 }
 
+void wcnss_get_persist_wlan_mac_addr(char *pMac)
+{
+   int result = 0;
+   char buf[PERSIST_MAC_FILE_MAX_LEN];
+   struct file *fp;
+   unsigned int wifi_addr[WLAN_ADDR_SIZE];
+   int i = 0;
+
+   memset(buf, 0, PERSIST_MAC_FILE_MAX_LEN);
+   memset(pMac, 0, WLAN_ADDR_SIZE);
+
+   fp = filp_open(PERSIST_MAC_FILE_PATH, O_RDONLY, 0);
+   if (IS_ERR(fp))
+   {
+      printk("wlan: Openning file %s failed.\n", PERSIST_MAC_FILE_PATH);
+      fp = NULL;
+      return;
+   }
+
+   result = kernel_read(fp, fp->f_pos, buf, PERSIST_MAC_FILE_MAX_LEN);
+   if (result < 0 || !strstr(buf, PERSIST_MAC_FILE_HEAD))
+   {
+      printk("wlan: Contents of %s is invalid.\n", PERSIST_MAC_FILE_PATH);
+   }
+   else
+   {
+      sscanf(buf, "wifiaddr: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
+             &wifi_addr[0], &wifi_addr[1], &wifi_addr[2],
+             &wifi_addr[3], &wifi_addr[4], &wifi_addr[5]);
+      for (i = 0; i < WLAN_ADDR_SIZE; i++)
+      {
+         pMac[i] = wifi_addr[i];
+      }
+      printk("wlan: persist MAC addr: %02x:%02x:%02x:%02x:%02x:%02x\n",
+            pMac[0], pMac[1], pMac[2], pMac[3], pMac[4], pMac[5]);
+      if (pMac[0] % 2 != 0)
+      {
+         printk("wlan: Invalid MAC address.\n");
+         memset(pMac, 0, WLAN_ADDR_SIZE);
+      }
+   }
+
+   filp_close(fp, NULL);
+   return;
+}
 
 /**---------------------------------------------------------------------------
 
@@ -9974,8 +10024,9 @@ int hdd_wlan_startup(struct device *dev )
    }
 
    // Get mac addr from platform driver
-   ret = wcnss_get_wlan_mac_address((char*)&mac_addr.bytes);
+   ret = wcnss_get_wlan_mac_address((char *)&mac_addr.bytes);
 
+   wcnss_get_persist_wlan_mac_addr((char *)&mac_addr.bytes);
    if ((0 == ret) && (!vos_is_macaddr_zero(&mac_addr)))
    {
       /* Store the mac addr for first interface */
