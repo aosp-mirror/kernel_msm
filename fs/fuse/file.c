@@ -1243,15 +1243,6 @@ static ssize_t fuse_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	struct iov_iter i;
 	loff_t endbyte = 0;
 
-	if (ff && ff->rw_lower_file) {
-		/* Update size (EOF optimization) and mode (SUID clearing) */
-		err = fuse_update_attributes(mapping->host, NULL, file, NULL);
-		if (err)
-			return err;
-
-		return fuse_shortcircuit_aio_write(iocb, iov, nr_segs, pos);
-	}
-
 	if (get_fuse_conn(inode)->writeback_cache) {
 		/* Update size (EOF optimization) and mode (SUID clearing) */
 		err = fuse_update_attributes(mapping->host, NULL, file, NULL);
