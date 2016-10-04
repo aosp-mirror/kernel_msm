@@ -26,6 +26,10 @@
 #include <linux/reboot.h>
 #include <linux/switch.h>
 
+/* TODO: define these in device tree */
+#define ADC_VAL_COEFF    10
+#define ADC_CH_ID        LR_MUX1_BATT_THERM
+
 struct rear_tm_data {
 	struct device *dev;
 	struct spmi_device *spmi;
@@ -116,12 +120,11 @@ static ssize_t rear_sysfs_temp_show(struct device *dev,
 	struct qpnp_vadc_result result;
 	struct rear_tm_data *rear_tm = get_rear_tm(dev);
 
-	ret = qpnp_vadc_read(rear_tm->vadc_dev, P_MUX8_1_1, &result);
-	if (!ret) {
-		cur_temp = (int)result.physical;
-	} else {
+	ret = qpnp_vadc_read(rear_tm->vadc_dev, ADC_CH_ID, &result);
+	if (!ret)
+		cur_temp = (int)result.physical / ADC_VAL_COEFF;
+	else
 		pr_warn("Unable to read vbat ret=%d\n", ret);
-	}
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", cur_temp);
 }
@@ -333,7 +336,7 @@ static void rear_tm_notification(enum qpnp_tm_state state, void *ctx)
 	else
 		cur_temp = rear_tm->adc_param.low_temp;
 
-	ret = qpnp_vadc_read(rear_tm->vadc_dev, P_MUX8_1_1, &results);
+	ret = qpnp_vadc_read(rear_tm->vadc_dev, ADC_CH_ID, &results);
 	if (!ret)
 		cur_temp = (int)results.physical;
 	else
@@ -392,7 +395,7 @@ static int rear_tm_notification_init(struct rear_tm_data *rear_tm)
 	rear_tm->adc_param.timer_interval = ADC_MEAS1_INTERVAL_1S;
 	rear_tm->adc_param.btm_ctx = rear_tm;
 	rear_tm->adc_param.threshold_notification = rear_tm_notification;
-	rear_tm->adc_param.channel = P_MUX8_1_1;
+	rear_tm->adc_param.channel = ADC_CH_ID;
 
 	ret = qpnp_adc_tm_channel_measure(rear_tm->adc_tm_dev,
 						&rear_tm->adc_param);
@@ -488,7 +491,7 @@ static int rear_tm_probe(struct spmi_device *spmi)
 		return -ENODEV;
 	}
 
-	ret = qpnp_vadc_read(rear_tm->vadc_dev, P_MUX8_1_1, &results);
+	ret = qpnp_vadc_read(rear_tm->vadc_dev, ADC_CH_ID, &results);
 	if (ret) {
 		pr_err("Unable to read vbat ret=%d\n", ret);
 		return ret;
