@@ -360,13 +360,15 @@ static void rear_tm_notification(enum qpnp_tm_state state, void *ctx)
 		rear_tm->compensated_temp;
 
 	if (state == ADC_TM_WARM_STATE) {
-		rear_tm->adc_param.state_request = ADC_TM_HIGH_LOW_THR_ENABLE;
 		if (i == max_size)
-			rear_tm->adc_param.timer_interval = ADC_MEAS1_INTERVAL_16S;
+			rear_tm->adc_param.state_request = ADC_TM_COOL_THR_ENABLE;
+		else
+			rear_tm->adc_param.state_request = ADC_TM_HIGH_LOW_THR_ENABLE;
 	} else {
-		rear_tm->adc_param.timer_interval = ADC_MEAS1_INTERVAL_1S;
 		if (i == 0)
-			rear_tm->adc_param.state_request = ADC_TM_LOW_THR_ENABLE;
+			rear_tm->adc_param.state_request = ADC_TM_WARM_THR_ENABLE;
+		else
+			rear_tm->adc_param.state_request = ADC_TM_HIGH_LOW_THR_ENABLE;
 	}
 
 	pr_info("next low temp = %d next high temp = %d\n",
@@ -391,7 +393,7 @@ static int rear_tm_notification_init(struct rear_tm_data *rear_tm)
 		rear_tm->compensated_temp;
 	rear_tm->adc_param.high_temp = rear_tm->warm_cfg[0].thresh +
 		rear_tm->compensated_temp;
-	rear_tm->adc_param.state_request = ADC_TM_LOW_THR_ENABLE;
+	rear_tm->adc_param.state_request = ADC_TM_WARM_THR_ENABLE;
 	rear_tm->adc_param.timer_interval = ADC_MEAS1_INTERVAL_1S;
 	rear_tm->adc_param.btm_ctx = rear_tm;
 	rear_tm->adc_param.threshold_notification = rear_tm_notification;
