@@ -1469,6 +1469,7 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 				input_mt_report_slot_state(data->input_dev,
 						MT_TOOL_FINGER, 0);
 			}
+			data->ts_data.curr_data[i].status = FINGER_INACTIVE;
 		} else if (data->palm == false) {
 			input_mt_slot(data->input_dev,
 					data->ts_data.curr_data[i].id);
