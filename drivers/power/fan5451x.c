@@ -115,6 +115,7 @@ struct fan5451x_chip {
 	struct delayed_work rechg_check_work;
 	struct delayed_work wlc_tx_recheck_work;
 	bool rechg_needed;
+	bool embedded_battery;
 };
 
 static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set);
@@ -907,6 +908,10 @@ static int get_prop_batt_present(struct fan5451x_chip *chip)
 {
 	int stat;
 
+	/* just return 1 if embedded battery */
+	if (chip->embedded_battery)
+		return 1;
+
 	stat = fan5451x_read_reg(chip->client, REG_STAT0);
 	if (stat < 0) {
 		pr_err("error to read stat0 ret=%d\n", stat);
@@ -1316,6 +1321,8 @@ static int fan5451x_parse_dt(struct fan5451x_chip *chip)
 	OF_PROP_READ(chip, step_dwn_thr_mv, "step-dwn-thr-mv", ret, 1);
 
 	chip->swap_vbus_vin = of_property_read_bool(np, "swap-vbus-vin");
+	chip->embedded_battery = of_property_read_bool(np,
+			"fcs,embedded-battery");
 
 	return ret;
 }
