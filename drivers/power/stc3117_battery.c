@@ -41,6 +41,8 @@ int g_asus_batt_soc, g_asus_batt_soc_previous;
 static int therm_power_off = 0;
 static int batt_power_off = 0;
 static bool charge_full = false;
+unsigned long chg_tm_sec = 0;
+static bool full_chg_workaround = false;
 /*********************************************************************************	*/
 /*				STC311x DEVICE SELECTION											*/
 /*				STC3117 version only												*/
@@ -287,6 +289,8 @@ int Capacity_Adjust;
 extern int get_lbc_batt_temp(void);
 extern void smb23x_set_float_voltage(u8 reg_val);
 extern bool get_pmic_batt_present(void);
+extern void smb23x_charging_disable_control(bool flag);
+extern void lbc_set_suspend(u8 reg_val);
 /* -------------------------------------------------------------------------------- */
 /*				INTERNAL ANDROID DRIVER PARAMETERS																				*/
 /*	 TO BE ADJUSTED ACCORDING TO BATTERY/APPLICATION CHARACTERISTICS								*/
@@ -1927,7 +1931,7 @@ static void stc311x_work(struct work_struct *work)
 {
 	struct stc311x_chip *chip;
 	GasGauge_DataTypeDef GasGaugeData;
-	int res,Loop;
+	int res,Loop,temp = 0;
 	int DEC=0, RegAddress;
 	u8 HEX=0;
 	u8 reg_debug[128];
@@ -2021,6 +2025,8 @@ static void stc311x_work(struct work_struct *work)
 	if (get_current_time(&now_tm_sec))
 		pr_err("RTC read failed\n");
 
+	temp = get_lbc_batt_temp();
+
 	switch (get_battery_status(chip)) {
 	case POWER_SUPPLY_STATUS_FULL:
 		if ((g_asus_batt_soc_previous >= 97) && (chip->batt_voltage >= 4200))
@@ -2032,12 +2038,15 @@ static void stc311x_work(struct work_struct *work)
 
 		charge_full = true;
 		full_tm_sec = now_tm_sec;
+		chg_tm_sec = now_tm_sec;
+		if (full_chg_workaround == true)
+			full_chg_workaround = false;
 		g_asus_batt_soc_previous = g_asus_batt_soc;
 		break;
 	case POWER_SUPPLY_STATUS_DISCHARGING:
 		if ((charge_full == true) && ((now_tm_sec - full_tm_sec) <= 120)) {
 			g_asus_batt_soc = 100;
-			pr_info("Report fake soc, now_tm_sec:%ld, full_tm_sec:%ld\n", now_tm_sec, full_tm_sec);
+			pr_info("[BAT] Report fake soc, now_tm_sec:%ld, full_tm_sec:%ld\n", now_tm_sec, full_tm_sec);
 		} else
 			charge_full = false;
 		if (g_asus_batt_soc > g_asus_batt_soc_previous) {
@@ -2055,6 +2064,11 @@ static void stc311x_work(struct work_struct *work)
 				kernel_power_off();
 			}
 		}
+		// Update timer for charger to avoid safty timeout
+		chg_tm_sec = now_tm_sec;
+
+		if (full_chg_workaround == true)
+			full_chg_workaround = false;
 		break;
 	case POWER_SUPPLY_STATUS_CHARGING:
 		if (g_asus_batt_soc == 100) {
@@ -2064,6 +2078,34 @@ static void stc311x_work(struct work_struct *work)
 		batt_power_off = 0;
 		charge_full = false;
 		g_asus_batt_soc_previous = g_asus_batt_soc;
+
+		if (g_asus_batt_soc >= 98 && temp <= 510 && full_chg_workaround == false ) { // 3 hours
+			if ((now_tm_sec - chg_tm_sec) >= 10800) {
+				smb23x_charging_disable_control(true);
+				lbc_set_suspend(0x01);
+				pr_info("[BAT] Disable charger in the normal temp\n");
+				full_chg_workaround = true;
+			}
+		} else if (g_asus_batt_soc >= 70 && temp > 510 && full_chg_workaround == false ) {
+			if ((now_tm_sec - chg_tm_sec) >= 10800) { // 3 hours
+				smb23x_charging_disable_control(true);
+				lbc_set_suspend(0x01);
+				pr_info("[BAT] Disable charge in the high temp\n");
+				full_chg_workaround = true;
+			}
+		} else {
+			// Update timer for charger to avoid safty timeout
+			chg_tm_sec = now_tm_sec;
+			if (full_chg_workaround == true && temp > 510 && chip->batt_voltage <= 3950) {
+				smb23x_charging_disable_control(false);
+				full_chg_workaround = false;
+				pr_info("[BAT] smb231 recharge in the high temp\n");
+			} else if (full_chg_workaround == true && temp <= 510 && chip->batt_voltage <= 4250) {
+				smb23x_charging_disable_control(false);
+				full_chg_workaround = false;
+				pr_info("[BAT] smb231 recharge in the normal temp\n");
+			}
+		}
 		break;
 	default:
 		break;

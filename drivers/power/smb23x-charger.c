@@ -743,6 +743,12 @@ static int smb23x_charging_disable(struct smb23x_chip *chip,
 	return rc;
 }
 
+void smb23x_charging_disable_control(bool flag)
+{
+	smb23x_charging_disable(g_smb23x_chip, USER, flag);
+}
+EXPORT_SYMBOL(smb23x_charging_disable_control);
+
 static struct power_supply *get_parallel_psy(struct smb23x_chip *chip)
 {
 	if (chip->parallel_psy)
@@ -1482,7 +1488,7 @@ static int chg_error_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 static int recharge_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_info("BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
-	chip->batt_full = !rt_sts;
+	chip->batt_full = false;
 
 	smb23x_enable_volatile_writes(chip);
 
@@ -2033,6 +2039,7 @@ static enum power_supply_property smb23x_battery_properties[] = {
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
@@ -2246,6 +2253,9 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = smb23x_get_prop_batt_present(chip);
+		break;
+	case POWER_SUPPLY_PROP_TECHNOLOGY:
+		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 		val->intval = smb23x_get_prop_charging_enabled(chip);
