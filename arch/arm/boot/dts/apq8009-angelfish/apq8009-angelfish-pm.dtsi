@@ -199,6 +199,8 @@
 			vinovp = <10500>;    //ovd for wireless
 			vinlim = <4560>;     //uvd for wireless
 			fctmr = <0>;         //fast charge timer off
+
+			fcs,embedded-battery;
 		};
 	};
 

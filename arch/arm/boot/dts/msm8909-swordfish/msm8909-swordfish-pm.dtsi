@@ -200,6 +200,8 @@
 			fctmr = <0>;         //fast charge timer off
 			step-dwn-offset-ma = <50>;
 			step-dwn-thr-mv = <4250>;
+
+			fcs,embedded-battery;
 		};
 	};
 
