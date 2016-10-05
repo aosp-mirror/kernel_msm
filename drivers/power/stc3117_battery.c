@@ -2026,6 +2026,10 @@ static void stc311x_work(struct work_struct *work)
 		if ((g_asus_batt_soc_previous >= 97) && (chip->batt_voltage >= 4200))
 			g_asus_batt_soc = 100;
 
+		// Add deadband function
+		if (chip->batt_current >= -5 && chip->batt_current <= 5)
+			chip->batt_current = 0;
+
 		charge_full = true;
 		full_tm_sec = now_tm_sec;
 		g_asus_batt_soc_previous = g_asus_batt_soc;
