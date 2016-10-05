@@ -3046,7 +3046,7 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 	 */
 	if (((vfe_dev->axi_data.src_info[VFE_PIX_0].active) && ((frame_id <=
 		vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id) ||
-		(frame_id <= vfe_dev->axi_data.src_info[VFE_PIX_0].eof_id))) ||
+		(frame_id <= (vfe_dev->axi_data.src_info[VFE_PIX_0].eof_id + 1)))) ||
 		((!vfe_dev->axi_data.src_info[VFE_PIX_0].active) && (frame_id <=
 		vfe_dev->axi_data.src_info[frame_src].frame_id)) ||
 		stream_info->undelivered_request_cnt >= MAX_BUFFERS_IN_HW) {
