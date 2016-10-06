@@ -58,7 +58,7 @@
 #include "hw_tp_common.h"
 #define CY_FW_FILE_PREFIX	"cyttsp5_fw"
 #define CY_FW_FILE_SUFFIX	".bin"
-#define CY_FW_FILE_NAME		"cyttsp5_fw.bin"
+#define CY_FW_FILE_NAME		"cyttsp5_fw_pid00.bin"
 /* need to reset IC when boot*/
 #define CYTTSP5_DETECT_HW    1
 #define NEW_FPC_VERSION_OF_RIO 4
