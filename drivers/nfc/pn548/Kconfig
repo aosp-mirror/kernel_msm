@@ -1,0 +1,12 @@
+config NFC_PN548
+	tristate "NXP PN548 NFC driver"
+	depends on I2C
+	---help---
+	  NXP PN548 core driver.
+	  This is a driver based on the HCI NFC kernel layers and
+	  will thus not work with NXP libnfc library.
+
+	  To compile this driver as a module, choose m here. The module will
+	  be called pn548.
+	  Say N if unsure.
+

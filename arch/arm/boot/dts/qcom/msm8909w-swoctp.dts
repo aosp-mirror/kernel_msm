@@ -1,0 +1,97 @@
+/*
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+
+#include "msm8909w-swoctp.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. MSM8909W-PM8916 SWOC MTP";
+	compatible = "qcom,msm8909-mtp", "qcom,msm8909", "qcom,mtp";
+	qcom,msm-id =   <245 0>,
+			<258 0>,
+			<275 0>,
+			<300 0>;
+	qcom,board-id= <8 0x109>;
+};
+
+&external_image_mem {
+	reg = <0x0 0x87a00000 0x0 0x0600000>;
+};
+
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x05200000>;
+};
+
+&peripheral_mem {
+	reg = <0x0 0x8d200000 0x0 0x0500000>;
+};
+
+&soc {
+	msm_gpio: pinctrl@1000000 {
+		pmx_rd_nfc_int {
+			pins = "gpio21";
+			qcom,pin-func = <0>;
+			qcom,num-grp-pins = <1>;
+			label = "pmx_nfc_int";
+
+			nfc_int_active: active {
+				drive-strength = <6>;
+				bias-pull-up;
+			};
+
+			nfc_int_suspend: suspend {
+				drive-strength = <6>;
+				bias-pull-up;
+			};
+		};
+		pmx_nfc_reset {
+			pins = "gpio20";
+			qcom,pin-func = <0>;
+			qcom,num-grp-pins = <1>;
+			label = "pmx_nfc_disable";
+
+			nfc_disable_active: active {
+				drive-strength = <6>;
+				bias-pull-up;
+			};
+
+			nfc_disable_suspend: suspend {
+				drive-strength = <6>;
+				bias-disable;
+			};
+		};
+	};
+
+	i2c@78b6000 { /* BLSP1 QUP2 */
+		pn548@28 { // Quanta, Avery Kao, used for NXP's driver id
+			compatible = "nxp,pn548";
+			reg = <0x28>;
+			nxp,nfc_int  = <&msm_gpio 21 0x00>;
+			nxp,nfc_ven  = <&msm_gpio 20 0x00>;
+			nxp,nfc_firm = <&msm_gpio 34 0x00>;
+			qcom,clk-src = "BBCLK2";
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <21 0>;
+			interrupt-names = "nfc_irq";
+			pinctrl-names = "nfc_active","nfc_suspend";
+			pinctrl-0 = <&nfc_int_active &nfc_disable_active>;
+			pinctrl-1 = <&nfc_int_suspend &nfc_disable_suspend>;
+			//nxp,nfc_clk = <&pm8916_gpios 2 0>;
+			//qcom,clk-gpio = <&pm8916_gpios 2 0>;
+			clocks = <&clock_rpm clk_bb_clk2_pin>;
+			//clock-names = "ref_clk";
+			clock-names = "pn548_clk";
+		};
+	};
+};

@@ -1,0 +1,285 @@
+/*
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "msm8909-mtp.dtsi"
+#include "msm8909w-gpu.dtsi"
+#include "msm8909-pm8916.dtsi"
+#include "msm8909-pm8916-mtp.dtsi"
+#include "msm8909w.dtsi"
+#include "msm8909w-memory.dtsi"
+
+&soc {
+	i2c@78b9000 { /* BLSP1 QUP5 */
+		/delete-node/ synaptics@20;
+		/* Quanta BU10SW, Stanley Tsao, 2016.02.22, Porting Elan touch driver eWD1020 { */
+		elan_ktf@15 {
+			compatible = "elan_ktf";
+			reg = <0x15>;
+			elan,name = "elan_ktf";
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <13 0x8>;
+			vdd-supply = <&pm8916_l17>;
+			vcc_i2c-supply = <&pm8916_l6>;
+			/* pins used by touchscreen */
+			pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
+			pinctrl-0 = <&ts_int_active &ts_reset_active>;
+			pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+			pinctrl-2 = <&ts_release>;
+			elan_ktf,reset-gpio = <&msm_gpio 12 0x00>;
+			elan_ktf,irq-gpio =<&msm_gpio 13 0x00>;
+			elan,soft-reset-delay-ms = <150>;
+			elan,fw-vkey-support;
+			elan,num-max-touches = <2>;
+		};
+		/* Quanta BU10SW, Stanley Tsao, 2016.02.22, Porting Elan touch driver eWD1020 } */
+	};
+
+        qcom,msm-ssc-sensors {
+                compatible = "qcom,msm-ssc-sensors";
+        };
+};
+
+&external_image_mem {
+	reg = <0x0 0x87a00000 0x0 0x0600000>;
+};
+
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x05200000>;
+};
+
+&peripheral_mem {
+	reg = <0x0 0x8d200000 0x0 0x0500000>;
+};
+
+/* Quanta BU10SW, Stanley Tsao, 2016.02.22, Add display driver for EverDisplay RM67160 400P CMD mode { */
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_everdisp_rm67160_400_cmd>;
+	qcom,cont-splash-enabled;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};
+/* Quanta BU10SW, Stanley Tsao, 2016.02.22, Add display driver for EverDisplay RM67160 400P CMD mode } */
+
+&blsp1_uart1 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_sleep>;
+};
+
+&blsp1_uart2 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_sleep>;
+
+};
+
+
+&i2c_1 {
+	status = "disabled";
+};
+
+&spi_0 {
+	status = "disabled";
+};
+
+&i2c_3 {
+	status = "disabled";
+};
+
+/* Charger/FG configuration */
+&pm8916_chg {
+	qcom,use-external-charger;
+};
+
+&pm8916_bms {
+	status = "disabled";
+};
+
+&msm_gpio {
+	/* Delete gpio58 configuration */
+	/delete-node/ tpiu_seta_14;
+	/delete-node/ smb_int_pin;
+	smb_int_default: smb_int_default {
+		mux {
+			pins = "gpio49";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio49";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+		};
+	};
+
+	smb_susp_default: smb_susp_default {
+		mux {
+			pins = "gpio58";
+			function ="gpio";
+		};
+		config {
+			pins = "gpio58";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+			output-high;
+		};
+	};
+
+	wpc_stat_default: wpc_stat_default {
+		mux {
+			pins = "gpio22";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio22";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+		};
+	};
+
+	wpc_dock_det_default: wpc_dock_det_default {
+		mux {
+			pins = "gpio69";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio69";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+		};
+	};
+};
+
+&i2c_4 {
+	status = "ok";
+	smb23x-lbc@12 {
+                compatible = "qcom,smb231-lbc";
+                reg = <0x12>;
+                interrupt-parent = <&msm_gpio>;
+                interrupts = <49 2>;
+                pinctrl-names = "default";
+                pinctrl-0 = <&smb_int_default &smb_susp_default>;
+
+                qcom,bms-psy-name = "bms";
+                qcom,float-voltage-mv = <4400>;
+                qcom,system-voltage = <2>; /* 0=>4.3V(default), 1=>5.5V, 2=>VBATT+250mV, 3=>VIN */
+                qcom,charging-timeout = <360>;
+                qcom,recharge-thresh-mv = <80>;
+                qcom,iterm-ma = <50>;
+                qcom,fastchg-ma = <250>;
+                qcom,hot-bat-decidegc = <550>;
+                qcom,warm-bat-decidegc = <450>;
+                qcom,cool-bat-decidegc = <50>;
+                qcom,cold-bat-decidegc = <(-50)>;
+                qcom,soft-temp-vfloat-comp-mv = <200>;
+                qcom,soft-temp-current-comp-ma = <400>;
+                qcom,chg-inhibit-disabled;
+                qcom,apsd-disabled;
+                qcom,thermal-mitigation = <1500 900 500 100>;
+	};
+
+        smb348_otg_vreg: smb348-charger@57 {
+		compatible = "qcom,smb348-charger";
+		reg = <0x57>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <49 2>;
+		pinctrl-names = "default";
+		//pinctrl-0 = <&smb_int_default>;
+		pinctrl-0 = <&smb_int_default &smb_susp_default &wpc_stat_default &wpc_dock_det_default>;
+
+		//qcom,chg-valid-gpio = <&msm_gpio 37 0x00>;
+		qcom,chg-end-gpio = <&msm_gpio 17 0x00>;
+		qcom,wpc-stat-gpio = <&msm_gpio 22 0x00>;
+		qcom,wpc-enable-gpio = <&msm_gpio 26 0x00>;
+		qcom,wpc-dock-detect-gpio = <&msm_gpio 69 0x00>;
+		qcom,float-voltage-mv = <4400>;
+		qcom,recharge-mv = <200>;
+		regulator-name = "smb348_otg_vreg";
+		qcom,thermal-mitigation = <1500 700 600 0>;
+		qcom,fastchg-current-max-ma = <200>;
+		qcom,fastchg-current-mitigation-ma = <100>;
+
+		qcom,disable-apsd;
+		qcom,bms-psy-name = "bms";
+		qcom,bms-controlled-charging;
+		qcom,dc-psy-type = "Wireless";
+		qcom,dc-psy-ma = <500>;
+		//qcom,iterm-disabled;
+		qcom,iterm-ma = <60>;
+		qcom,chg-inhibit-disabled;
+		qcom,skip-usb-suspend-for-fake-battery;
+		/*
+		 * In some of designs, the battery thermistor
+		 * is only connected to the PMIC THERM pin.
+		 * In this condition, we should define 'qcom,using-pmic-therm'.
+		 */
+		qcom,hot-bat-decidegc = <550>;
+		qcom,cold-bat-decidegc = <0>;
+		qcom,bat-present-decidegc = <200>;
+		/*
+		 * Below preperties are used for enable JEITA
+		 */
+		qcom,warm-bat-decidegc = <450>;
+		qcom,cool-bat-decidegc = <100>;
+		qcom,warm-bat-ma = <100>;
+		qcom,cool-bat-ma = <100>;
+		qcom,warm-bat-mv = <4100>;
+		qcom,cool-bat-mv = <4100>;
+		/*
+		 * To enable charger node:
+		 * set status = "ok" and
+		 * add 'qcom,use-external-charger' to pm8909_chg node
+		 */
+		status = "ok";
+	};
+
+	stc3117-204@70 {
+		compatible = "STC,stc3117-fg";
+		reg = <0x70>;
+/*
+		stc,battery_online          = <0>;
+		stc,charger_online          = <0>;    // used in stc311x_get_status()
+		stc,charger_enable          = <0>;    // used in stc311x_get_status()
+		stc,power_supply_register   = <0>;
+		stc,power_supply_unregister = <0>;
+*/
+		stc,Vmode                   = <0>;    /*REG_MODE, BIT_VMODE 1=Voltage mode, 0=mixed mode */
+		stc,Alm_SOC                 = <10>;   /* SOC alm level %*/
+		stc,Alm_Vbat                = <3703>; /* Vbat alm level mV*/
+		stc,CC_cnf                  = <82>;   /* nominal CC_cnf, coming from battery characterisation*/
+		stc,VM_cnf                  = <334>;   /* nominal VM cnf , coming from battery characterisation*/
+		stc,Rint                    = <1037>;  /* nominal internal impedance*/
+		stc,Cnom                    = <450>;  /* nominal capacity in mAh, coming from battery characterisation*/
+		stc,Rsense                  = <10>;   /* sense resistor mOhms*/
+		stc,RelaxCurrent            = <8>;    /* current for relaxation in mA (< C/20) */
+		stc,Adaptive                = <1>;    /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
+			/* Elentec Co Ltd Battery pack - 80 means 8% */
+			/* capacity derating in 0.1%, for temp = 60, 40, 25, 10, 0, -10, -20 */
+		stc,CapDerating = <0 0 0 45 152 498 900>;
+			//OCV curve example for a 4.4V li-ion battery
+			/* OCV curve adjustment */
+		stc,OCVValue    = <3650 3681 3683 3703 3727 3744 3762 3781 3814 3855 3922 3976 4019 4109 4208 4314>;
+			/* SOC Table */
+		stc,SOCValue    = <0 3 6 10 15 20 25 30 35 40 50 60 70 80 90 100>;
+			/*if the application temperature data is preferred than the STC3117 temperature*/
+		stc,ExternalTemperature      = <25>; //Temperature_fn, /*External temperature fonction, return ??? */
+		stc,ForceExternalTemperature = <0>;  /* 1=External temperature, 0=STC3117 temperature */
+
+		status = "ok";
+	};
+
+};
+
+&sdhc_2 {
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
+};
