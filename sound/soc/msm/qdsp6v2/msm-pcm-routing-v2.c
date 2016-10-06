@@ -2270,6 +2270,7 @@ static int msm_routing_ec_ref_rx_put(struct snd_kcontrol *kcontrol,
 	int mux = ucontrol->value.enumerated.item[0];
 	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
 	struct snd_soc_dapm_update *update = NULL;
+  	int valid_port = true;
 
 	mutex_lock(&routing_lock);
 	switch (ucontrol->value.integer.value[0]) {
@@ -2345,7 +2346,12 @@ static int msm_routing_ec_ref_rx_put(struct snd_kcontrol *kcontrol,
 		msm_route_ec_ref_rx = 18;
 		ec_ref_port_id = AFE_PORT_ID_TERTIARY_TDM_TX;
 		break;
+	case 19:
+		msm_route_ec_ref_rx = 19;
+		ec_ref_port_id = AFE_PORT_ID_PRIMARY_PCM_RX;
+		break;
 	default:
+		valid_port = false;
 		msm_route_ec_ref_rx = 0; /* NONE */
 		pr_err("%s EC ref rx %ld not valid\n",
 			__func__, ucontrol->value.integer.value[0]);
@@ -2356,7 +2362,10 @@ static int msm_routing_ec_ref_rx_put(struct snd_kcontrol *kcontrol,
 	pr_debug("%s: msm_route_ec_ref_rx = %d\n",
 	    __func__, msm_route_ec_ref_rx);
 	mutex_unlock(&routing_lock);
-	snd_soc_dapm_mux_update_power(widget->dapm, kcontrol, mux, e, update);
+
+	if (valid_port)
+		snd_soc_dapm_mux_update_power(widget->dapm, kcontrol, mux, e, update);
+
 	return 0;
 }
 
@@ -2365,7 +2374,7 @@ static const char *const ec_ref_rx[] = { "None", "SLIM_RX", "I2S_RX",
 	"TERT_MI2S_TX", "QUAT_MI2S_TX", "SEC_I2S_RX", "PROXY_RX",
 	"SLIM_5_RX", "SLIM_1_TX", "QUAT_TDM_TX_1",
 	"QUAT_TDM_RX_0", "QUAT_TDM_RX_1", "QUAT_TDM_RX_2", "SLIM_6_RX",
-	"TERT_MI2S_RX", "QUAT_MI2S_RX", "TERT_TDM_TX_0"};
+	"TERT_MI2S_RX", "QUAT_MI2S_RX", "TERT_TDM_TX_0", "AUX_PCM_RX"};
 
 static const struct soc_enum msm_route_ec_ref_rx_enum[] = {
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(ec_ref_rx), ec_ref_rx),
