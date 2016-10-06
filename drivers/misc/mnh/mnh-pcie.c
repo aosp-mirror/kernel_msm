@@ -14,16 +14,19 @@
  *
  */
 #define DEBUG
+#include <asm/dma-iommu.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/io.h>
+#include <linux/iommu.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/types.h>
 #include <linux/pci.h>
+#include <linux/platform_device.h>
 #include <linux/interrupt.h>
 #include <linux/mm.h>
 #include <linux/rwsem.h>
@@ -1594,6 +1597,52 @@ free_uboot:
 	return -EIO;
 }
 
+static void setup_smmu(struct pci_dev *pdev)
+{
+	struct dma_iommu_mapping *mapping;
+	int atomic_ctx = 1;
+	int bypass_enable = 1;
+	int ret;
+
+/* Following stolen from msm_11ad.c */
+#define SMMU_BASE	0x10000000 /* Device address range base */
+#define SMMU_SIZE	0x40000000 /* Device address range size */
+
+	mapping = arm_iommu_create_mapping(&platform_bus_type,
+					SMMU_BASE, SMMU_SIZE);
+
+	if (IS_ERR_OR_NULL(mapping)) {
+		ret = PTR_ERR(mapping) ?: -ENODEV;
+		dev_err(&pdev->dev,
+			"Failed to create IOMMU mapping (%d)\n", ret);
+		return;
+	}
+
+	ret = iommu_domain_set_attr(
+		mapping->domain, DOMAIN_ATTR_ATOMIC, &atomic_ctx);
+	if (ret) {
+		dev_err(&pdev->dev,
+			"Set atomic attribute to SMMU failed (%d)\n", ret);
+	}
+
+	ret = iommu_domain_set_attr(mapping->domain,
+				   DOMAIN_ATTR_S1_BYPASS,
+				   &bypass_enable);
+	if (ret) {
+		dev_err(&pdev->dev,
+			"Set bypass attribute to SMMU failed (%d)\n", ret);
+	}
+
+	ret = arm_iommu_attach_device(&pdev->dev, mapping);
+	if (ret) {
+		dev_err(&pdev->dev,
+			"arm_iommu_attach_device failed (%d)\n", ret);
+		return;
+	}
+
+	dev_info(&pdev->dev, "attached to IOMMU\n");
+}
+
 /**
  * mnh_pci_probe - Device Initialization Routine
  *
@@ -1709,6 +1758,8 @@ static int mnh_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	iatu.limit_pcie_address = 0xfff;
 	iatu.base_pcie_address = 0x3ffffff00000000;
 	mnh_set_inbound_iatu(&iatu);
+
+	setup_smmu(pdev);
 
 	/* FW download - this will be moved to separate driver later on */
 	if (mnh_download_firmware() == 0) {
