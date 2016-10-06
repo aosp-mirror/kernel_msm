@@ -120,6 +120,7 @@ intercontrol	Inter Control Group
 invensense	InvenSense Inc.
 isee	ISEE 2007 S.L.
 isil	Intersil
+ite     ITE Tech. Inc.
 jedec	JEDEC Solid State Technology Association
 karo	Ka-Ro electronics GmbH
 keymile	Keymile GmbH
@@ -145,6 +146,7 @@ mosaixtech	Mosaix Technologies, Inc.
 moxa	Moxa
 mpl	MPL AG
 msi	Micro-Star International Co. Ltd.
+mstar	MStar Semiconductor, Inc.
 mti	Imagination Technologies Ltd. (formerly MIPS Technologies Inc.)
 mundoreader	Mundo Reader S.L.
 murata	Murata Manufacturing Co., Ltd.

@@ -756,9 +756,14 @@ static int32_t msm_flash_get_pmic_source_info(
 				"qcom,current",
 				&fctrl->flash_op_current[i]);
 			if (rc < 0) {
-				pr_err("current: read failed\n");
-				of_node_put(flash_src_node);
-				continue;
+				rc = of_property_read_u32(flash_src_node,
+					"qcom,current-ma",
+					&fctrl->flash_op_current[i]);
+				if (rc < 0) {
+					pr_err("current: read failed\n");
+					of_node_put(flash_src_node);
+					continue;
+				}
 			}
 
 			/* Read max-current */
@@ -776,8 +781,13 @@ static int32_t msm_flash_get_pmic_source_info(
 				"qcom,duration",
 				&fctrl->flash_max_duration[i]);
 			if (rc < 0) {
-				pr_err("duration: read failed\n");
-				of_node_put(flash_src_node);
+				rc = of_property_read_u32(flash_src_node,
+					"qcom,duration-ms",
+					&fctrl->flash_max_duration[i]);
+				if (rc < 0) {
+					pr_err("duration: read failed\n");
+					of_node_put(flash_src_node);
+				}
 				/* Non-fatal; this property is optional */
 			}
 
@@ -836,9 +846,14 @@ static int32_t msm_flash_get_pmic_source_info(
 				"qcom,current",
 				&fctrl->torch_op_current[i]);
 			if (rc < 0) {
-				pr_err("current: read failed\n");
-				of_node_put(torch_src_node);
-				continue;
+				rc = of_property_read_u32(torch_src_node,
+					"qcom,current-ma",
+					&fctrl->torch_op_current[i]);
+				if (rc < 0) {
+					pr_err("current: read failed\n");
+					of_node_put(torch_src_node);
+					continue;
+				}
 			}
 
 			/* Read max-current */
@@ -905,6 +920,14 @@ static int32_t msm_flash_get_dt_data(struct device_node *of_node,
 		fctrl->flash_driver_type = FLASH_DRIVER_I2C;
 	}
 
+	/* Read the flash and torch source info from device tree node */
+	rc = msm_flash_get_pmic_source_info(of_node, fctrl);
+	if (rc < 0) {
+		pr_err("%s:%d msm_flash_get_pmic_source_info failed rc %d\n",
+			__func__, __LINE__, rc);
+		return rc;
+	}
+
 	/* Read the gpio information from device tree */
 	rc = msm_sensor_driver_get_gpio_data(
 		&(fctrl->power_info.gpio_conf), of_node);
@@ -919,13 +942,6 @@ static int32_t msm_flash_get_dt_data(struct device_node *of_node,
 	CDBG("%s:%d fctrl->flash_driver_type = %d", __func__, __LINE__,
 		fctrl->flash_driver_type);
 
-	/* Read the flash and torch source info from device tree node */
-	rc = msm_flash_get_pmic_source_info(of_node, fctrl);
-	if (rc < 0) {
-		pr_err("%s:%d msm_flash_get_pmic_source_info failed rc %d\n",
-			__func__, __LINE__, rc);
-		return rc;
-	}
 	return rc;
 }
 

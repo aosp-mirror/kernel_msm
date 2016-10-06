@@ -31,6 +31,8 @@ enum print_reason {
 #define CHG_STATE_VOTER	"CHG_STATE_VOTER"
 #define TYPEC_SRC_VOTER	"TYPEC_SRC_VOTER"
 #define TAPER_END_VOTER	"TAPER_END_VOTER"
+#define FCC_MAX_RESULT	"FCC_MAX_RESULT"
+#define THERMAL_DAEMON	"THERMAL_DAEMON"
 
 enum smb_mode {
 	PARALLEL_MASTER = 0,
@@ -54,6 +56,11 @@ struct smb_chg_param {
 	int		min_u;
 	int		max_u;
 	int		step_u;
+	int		(*get_proc)(struct smb_chg_param *param,
+				    u8 val_raw);
+	int		(*set_proc)(struct smb_chg_param *param,
+				    int val_u,
+				    u8 *val_raw);
 };
 
 struct smb_params {
@@ -62,10 +69,16 @@ struct smb_params {
 	struct smb_chg_param	usb_icl;
 	struct smb_chg_param	icl_stat;
 	struct smb_chg_param	dc_icl;
+	struct smb_chg_param	dc_icl_pt_lv;
+	struct smb_chg_param	dc_icl_pt_hv;
+	struct smb_chg_param	dc_icl_div2_lv;
+	struct smb_chg_param	dc_icl_div2_mid_lv;
+	struct smb_chg_param	dc_icl_div2_mid_hv;
+	struct smb_chg_param	dc_icl_div2_hv;
+	struct smb_chg_param	jeita_cc_comp;
 };
 
 struct parallel_params {
-	struct notifier_block	nb;
 	struct power_supply	*psy;
 	int			*master_percent;
 	int			taper_percent;
@@ -86,7 +99,12 @@ struct smb_charger {
 	/* power supplies */
 	struct power_supply		*batt_psy;
 	struct power_supply		*usb_psy;
+	struct power_supply		*dc_psy;
+	struct power_supply		*bms_psy;
 	struct power_supply_desc	usb_psy_desc;
+
+	/* notifiers */
+	struct notifier_block	nb;
 
 	/* parallel charging */
 	struct parallel_params	pl;
@@ -99,6 +117,7 @@ struct smb_charger {
 	/* votables */
 	struct votable		*usb_suspend_votable;
 	struct votable		*dc_suspend_votable;
+	struct votable		*fcc_max_votable;
 	struct votable		*fcc_votable;
 	struct votable		*fv_votable;
 	struct votable		*usb_icl_votable;
@@ -106,8 +125,10 @@ struct smb_charger {
 	struct votable		*pd_allowed_votable;
 	struct votable		*awake_votable;
 	struct votable		*pl_disable_votable;
+	struct votable		*chg_disable_votable;
 
 	/* work */
+	struct work_struct	bms_update_work;
 	struct work_struct	pl_detect_work;
 	struct delayed_work	hvdcp_detect_work;
 	struct delayed_work	ps_change_timeout_work;
@@ -118,6 +139,12 @@ struct smb_charger {
 	int			voltage_max_uv;
 	bool			pd_active;
 	bool			vbus_present;
+
+	int			system_temp_level;
+	int			thermal_levels;
+	int			*thermal_mitigation;
+
+	int			fake_capacity;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -144,6 +171,7 @@ int smblib_vconn_regulator_is_enabled(struct regulator_dev *rdev);
 
 irqreturn_t smblib_handle_debug(int irq, void *data);
 irqreturn_t smblib_handle_chg_state_change(int irq, void *data);
+irqreturn_t smblib_handle_batt_temp_changed(int irq, void *data);
 irqreturn_t smblib_handle_batt_psy_changed(int irq, void *data);
 irqreturn_t smblib_handle_usb_psy_changed(int irq, void *data);
 irqreturn_t smblib_handle_usb_plugin(int irq, void *data);
@@ -163,7 +191,23 @@ int smblib_get_prop_batt_charge_type(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_batt_health(struct smb_charger *chg,
 				union power_supply_propval *val);
+int smblib_get_prop_system_temp_level(struct smb_charger *chg,
+				union power_supply_propval *val);
+
 int smblib_set_prop_input_suspend(struct smb_charger *chg,
+				const union power_supply_propval *val);
+int smblib_set_prop_batt_capacity(struct smb_charger *chg,
+				const union power_supply_propval *val);
+int smblib_set_prop_system_temp_level(struct smb_charger *chg,
+				const union power_supply_propval *val);
+
+int smblib_get_prop_dc_present(struct smb_charger *chg,
+				union power_supply_propval *val);
+int smblib_get_prop_dc_online(struct smb_charger *chg,
+				union power_supply_propval *val);
+int smblib_get_prop_dc_current_max(struct smb_charger *chg,
+				union power_supply_propval *val);
+int smblib_set_prop_dc_current_max(struct smb_charger *chg,
 				const union power_supply_propval *val);
 
 int smblib_get_prop_usb_present(struct smb_charger *chg,

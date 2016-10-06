@@ -579,7 +579,6 @@ void adreno_cp_callback(struct adreno_device *adreno_dev, int bit)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 
-	kgsl_schedule_work(&device->event_work);
 	adreno_dispatcher_schedule(device);
 }
 
@@ -826,6 +825,8 @@ static struct {
 	 { ADRENO_QUIRK_IOMMU_SYNC, "qcom,gpu-quirk-iommu-sync" },
 	 { ADRENO_QUIRK_CRITICAL_PACKETS, "qcom,gpu-quirk-critical-packets" },
 	 { ADRENO_QUIRK_FAULT_DETECT_MASK, "qcom,gpu-quirk-fault-detect-mask" },
+	 { ADRENO_QUIRK_DISABLE_RB_DP2CLOCKGATING,
+			"qcom,gpu-quirk-dp2clockgating-disable" },
 };
 
 static int adreno_of_get_power(struct adreno_device *adreno_dev,
@@ -872,9 +873,6 @@ static int adreno_of_get_power(struct adreno_device *adreno_dev,
 		timeout = 80;
 
 	device->pwrctrl.interval_timeout = msecs_to_jiffies(timeout);
-
-	device->pwrctrl.strtstp_sleepwake =
-		of_property_read_bool(node, "qcom,strtstp-sleepwake");
 
 	device->pwrctrl.bus_control = of_property_read_bool(node,
 		"qcom,bus-control");
@@ -1130,7 +1128,10 @@ static int adreno_init(struct kgsl_device *device)
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 	int ret;
 
-	kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
+	ret = kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
+	if (ret)
+		return ret;
+
 	/*
 	 * initialization only needs to be done once initially until
 	 * device is shutdown
@@ -1595,6 +1596,8 @@ static int adreno_stop(struct kgsl_device *device)
 
 	adreno_ringbuffer_stop(adreno_dev);
 
+	kgsl_pwrscale_update_stats(device);
+
 	adreno_irqctrl(adreno_dev, 0);
 
 	adreno_ocmem_free(adreno_dev);
@@ -1754,6 +1757,30 @@ static int adreno_getproperty(struct kgsl_device *device,
 			}
 			if (copy_to_user(value, &shadowprop,
 				sizeof(shadowprop))) {
+				status = -EFAULT;
+				break;
+			}
+			status = 0;
+		}
+		break;
+	case KGSL_PROP_DEVICE_QDSS_STM:
+		{
+			struct kgsl_qdss_stm_prop qdssprop = {0};
+			struct kgsl_memdesc *qdss_desc =
+				kgsl_mmu_get_qdss_global_entry(device);
+
+			if (sizebytes != sizeof(qdssprop)) {
+				status = -EINVAL;
+				break;
+			}
+
+			if (qdss_desc) {
+				qdssprop.gpuaddr = qdss_desc->gpuaddr;
+				qdssprop.size = qdss_desc->size;
+			}
+
+			if (copy_to_user(value, &qdssprop,
+						sizeof(qdssprop))) {
 				status = -EFAULT;
 				break;
 			}
@@ -2092,6 +2119,14 @@ bool adreno_hw_isidle(struct adreno_device *adreno_dev)
 {
 	const struct adreno_gpu_core *gpucore = adreno_dev->gpucore;
 	unsigned int reg_rbbm_status;
+
+	if (adreno_is_a540(adreno_dev))
+		/**
+		 * Due to CRC idle throttling GPU
+		 * idle hysteresys can take up to
+		 * 3usec for expire - account for it
+		 */
+		udelay(5);
 
 	adreno_readreg(adreno_dev, ADRENO_REG_RBBM_STATUS,
 		&reg_rbbm_status);

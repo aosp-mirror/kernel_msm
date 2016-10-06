@@ -331,8 +331,8 @@ static ssize_t mdss_fb_get_type(struct device *dev,
 	case WRITEBACK_PANEL:
 		ret = snprintf(buf, PAGE_SIZE, "writeback panel\n");
 		break;
-	case EDP_PANEL:
-		ret = snprintf(buf, PAGE_SIZE, "edp panel\n");
+	case DP_PANEL:
+		ret = snprintf(buf, PAGE_SIZE, "dp panel\n");
 		break;
 	default:
 		ret = snprintf(buf, PAGE_SIZE, "unknown panel\n");
@@ -552,13 +552,19 @@ static ssize_t mdss_fb_get_panel_info(struct device *dev,
 	struct msm_fb_data_type *mfd = fbi->par;
 	struct mdss_panel_info *pinfo = mfd->panel_info;
 	int ret;
+	bool dfps_porch_mode = false;
+
+	if (pinfo->dfps_update == DFPS_IMMEDIATE_PORCH_UPDATE_MODE_HFP ||
+		pinfo->dfps_update == DFPS_IMMEDIATE_PORCH_UPDATE_MODE_VFP)
+		dfps_porch_mode = true;
 
 	ret = scnprintf(buf, PAGE_SIZE,
 			"pu_en=%d\nxstart=%d\nwalign=%d\nystart=%d\nhalign=%d\n"
 			"min_w=%d\nmin_h=%d\nroi_merge=%d\ndyn_fps_en=%d\n"
 			"min_fps=%d\nmax_fps=%d\npanel_name=%s\n"
 			"primary_panel=%d\nis_pluggable=%d\ndisplay_id=%s\n"
-			"is_cec_supported=%d\nis_pingpong_split=%d\n",
+			"is_cec_supported=%d\nis_pingpong_split=%d\n"
+			"dfps_porch_mode=%d\n",
 			pinfo->partial_update_enabled,
 			pinfo->roi_alignment.xstart_pix_align,
 			pinfo->roi_alignment.width_pix_align,
@@ -570,7 +576,8 @@ static ssize_t mdss_fb_get_panel_info(struct device *dev,
 			pinfo->dynamic_fps, pinfo->min_fps, pinfo->max_fps,
 			pinfo->panel_name, pinfo->is_prim_panel,
 			pinfo->is_pluggable, pinfo->display_id,
-			pinfo->is_cec_supported, is_pingpong_split(mfd));
+			pinfo->is_cec_supported, is_pingpong_split(mfd),
+			dfps_porch_mode);
 
 	return ret;
 }
@@ -2055,7 +2062,7 @@ int mdss_fb_alloc_fb_ion_memory(struct msm_fb_data_type *mfd, size_t fb_size)
 		rc = PTR_ERR(vaddr);
 		goto err_unmap;
 	}
-	pr_debug("alloc 0x%zuB vaddr = %p for fb%d\n", fb_size,
+	pr_debug("alloc %zuB vaddr = %pK for fb%d\n", fb_size,
 			vaddr, mfd->index);
 
 	mfd->fbi->screen_base = (char *) vaddr;
@@ -2154,7 +2161,7 @@ static int mdss_fb_fbmem_ion_mmap(struct fb_info *info,
 				vma->vm_page_prot =
 					pgprot_writecombine(vma->vm_page_prot);
 
-			pr_debug("vma=%p, addr=%x len=%ld\n",
+			pr_debug("vma=%pK, addr=%x len=%ld\n",
 					vma, (unsigned int)addr, len);
 			pr_debug("vm_start=%x vm_end=%x vm_page_prot=%ld\n",
 					(unsigned int)vma->vm_start,
@@ -2321,7 +2328,7 @@ static int mdss_fb_alloc_fbmem_iommu(struct msm_fb_data_type *mfd, int dom)
 		return -ERANGE;
 	}
 
-	pr_debug("alloc 0x%zxB @ (%pa phys) (0x%p virt) (%pa iova) for fb%d\n",
+	pr_debug("alloc 0x%zxB @ (%pa phys) (0x%pK virt) (%pa iova) for fb%d\n",
 		 size, &phys, virt, &mfd->iova, mfd->index);
 
 	mfd->fbi->screen_base = virt;
@@ -2609,7 +2616,7 @@ static int mdss_fb_open(struct fb_info *info, int user)
 	}
 
 	mfd->ref_cnt++;
-	pr_debug("mfd refcount:%d file:%p\n", mfd->ref_cnt, info->file);
+	pr_debug("mfd refcount:%d file:%pK\n", mfd->ref_cnt, info->file);
 
 	return 0;
 
@@ -2674,7 +2681,7 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 		pr_warn("file node not found or wrong ref cnt: release all:%d refcnt:%d\n",
 			release_all, mfd->ref_cnt);
 
-	pr_debug("current process=%s pid=%d mfd->ref=%d file:%p\n",
+	pr_debug("current process=%s pid=%d mfd->ref=%d file:%pK\n",
 		task->comm, current->tgid, mfd->ref_cnt, info->file);
 
 	if (!mfd->ref_cnt || release_all) {
@@ -3317,7 +3324,7 @@ static int mdss_fb_pan_display_sub(struct fb_var_screeninfo *var,
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 
 	if (!mfd || !var) {
-		pr_err("Invalid parameters mfd:%p var:%p\n", mfd, var);
+		pr_err("Invalid parameters mfd:%pK var:%pK\n", mfd, var);
 		return -EINVAL;
 	}
 

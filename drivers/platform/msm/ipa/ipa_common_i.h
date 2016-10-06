@@ -17,6 +17,7 @@
 #define _IPA_COMMON_I_H_
 #include <linux/ipc_logging.h>
 #include <linux/ipa.h>
+#include <linux/ipa_uc_offload.h>
 
 #define __FILENAME__ \
 	(strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
@@ -138,6 +139,27 @@ struct ipa_mem_buffer {
 	void *base;
 	dma_addr_t phys_base;
 	u32 size;
+};
+
+#define IPA_MHI_GSI_ER_START 10
+#define IPA_MHI_GSI_ER_END 16
+
+/**
+ * enum ipa3_mhi_burst_mode - MHI channel burst mode state
+ *
+ * Values are according to MHI specification
+ * @IPA_MHI_BURST_MODE_DEFAULT: burst mode enabled for HW channels,
+ * disabled for SW channels
+ * @IPA_MHI_BURST_MODE_RESERVED:
+ * @IPA_MHI_BURST_MODE_DISABLE: Burst mode is disabled for this channel
+ * @IPA_MHI_BURST_MODE_ENABLE: Burst mode is enabled for this channel
+ *
+ */
+enum ipa3_mhi_burst_mode {
+	IPA_MHI_BURST_MODE_DEFAULT,
+	IPA_MHI_BURST_MODE_RESERVED,
+	IPA_MHI_BURST_MODE_DISABLE,
+	IPA_MHI_BURST_MODE_ENABLE,
 };
 
 /**
@@ -324,6 +346,8 @@ int ipa_mhi_handle_ipa_config_req(struct ipa_config_req_msg_v01 *config_req);
 int ipa_mhi_query_ch_info(enum ipa_client_type client,
 		struct gsi_chan_info *ch_info);
 int ipa_mhi_destroy_channel(enum ipa_client_type client);
+int ipa_mhi_is_using_dma(bool *flag);
+const char *ipa_mhi_get_state_str(int state);
 
 /* MHI uC */
 int ipa_uc_mhi_send_dl_ul_sync_info(union IpaHwMhiDlUlSyncCmdData_t *cmd);
@@ -342,6 +366,11 @@ int ipa_uc_state_check(void);
 void ipa_get_holb(int ep_idx, struct ipa_ep_cfg_holb *holb);
 void ipa_set_tag_process_before_gating(bool val);
 bool ipa_has_open_aggr_frame(enum ipa_client_type client);
+int ipa_setup_uc_ntn_pipes(struct ipa_ntn_conn_in_params *in,
+	ipa_notify_cb notify, void *priv, u8 hdr_len,
+	struct ipa_ntn_conn_out_params *outp);
+
+int ipa_tear_down_uc_offload_pipes(int ipa_ep_idx_ul, int ipa_ep_idx_dl);
 
 u8 *ipa_write_64(u64 w, u8 *dest);
 u8 *ipa_write_32(u32 w, u8 *dest);
@@ -349,5 +378,6 @@ u8 *ipa_write_16(u16 hw, u8 *dest);
 u8 *ipa_write_8(u8 b, u8 *dest);
 u8 *ipa_pad_to_64(u8 *dest);
 u8 *ipa_pad_to_32(u8 *dest);
+const char *ipa_get_version_string(enum ipa_hw_type ver);
 
 #endif /* _IPA_COMMON_I_H_ */

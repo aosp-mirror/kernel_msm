@@ -516,7 +516,6 @@ static void usb_cser_disable(struct usb_function *f)
 
 	usb_cser_disconnect(port);
 	usb_ep_disable(port->port_usb.notify);
-	usb_cser_free_req(port->port_usb.notify, port->port_usb.notify_req);
 	port->port_usb.notify->driver_data = NULL;
 }
 
@@ -529,6 +528,14 @@ static int usb_cser_notify(struct f_cdev *port, u8 type, u16 value,
 	const unsigned			len = sizeof(*notify) + length;
 	void				*buf;
 	int				status;
+	unsigned long			flags;
+
+	spin_lock_irqsave(&port->port_lock, flags);
+	if (!port->is_connected) {
+		spin_unlock_irqrestore(&port->port_lock, flags);
+		pr_debug("%s: port disconnected\n", __func__);
+		return -ENODEV;
+	}
 
 	req = port->port_usb.notify_req;
 	port->port_usb.notify_req = NULL;
@@ -544,7 +551,9 @@ static int usb_cser_notify(struct f_cdev *port, u8 type, u16 value,
 	notify->wValue = cpu_to_le16(value);
 	notify->wIndex = cpu_to_le16(port->port_usb.data_id);
 	notify->wLength = cpu_to_le16(length);
+	/* 2 byte data copy */
 	memcpy(buf, data, length);
+	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	status = usb_ep_queue(ep, req, GFP_ATOMIC);
 	if (status < 0) {
@@ -807,7 +816,11 @@ static void cser_free_inst(struct usb_function_instance *fi)
 
 static void usb_cser_unbind(struct usb_configuration *c, struct usb_function *f)
 {
+	struct f_cdev *port = func_to_port(f);
+
 	usb_free_all_descriptors(f);
+	usb_cser_free_req(port->port_usb.notify, port->port_usb.notify_req);
+	port->port_usb.notify_req = NULL;
 }
 
 static int usb_cser_alloc_requests(struct usb_ep *ep, struct list_head *head,

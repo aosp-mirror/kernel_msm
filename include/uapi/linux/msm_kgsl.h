@@ -121,6 +121,11 @@
 #define KGSL_MEMFLAGS_GPUWRITEONLY 0x02000000U
 #define KGSL_MEMFLAGS_FORCE_32BIT 0x100000000ULL
 
+/* Flag for binding all the virt range to single phys data */
+#define KGSL_SPARSE_BIND_MULTIPLE_TO_PHYS 0x400000000ULL
+#define KGSL_SPARSE_BIND 0x1ULL
+#define KGSL_SPARSE_UNBIND 0x2ULL
+
 /* Memory caching hints */
 #define KGSL_CACHEMODE_MASK       0x0C000000U
 #define KGSL_CACHEMODE_SHIFT 26
@@ -131,6 +136,8 @@
 #define KGSL_CACHEMODE_WRITEBACK 3
 
 #define KGSL_MEMFLAGS_USE_CPU_MAP 0x10000000ULL
+#define KGSL_MEMFLAGS_SPARSE_PHYS 0x20000000ULL
+#define KGSL_MEMFLAGS_SPARSE_VIRT 0x40000000ULL
 
 /* Memory types for which allocations are made */
 #define KGSL_MEMTYPE_MASK		0x0000FF00
@@ -308,11 +315,17 @@ enum kgsl_timestamp_type {
 #define KGSL_PROP_GPMU_VERSION		0x16
 #define KGSL_PROP_HIGHEST_BANK_BIT	0x17
 #define KGSL_PROP_DEVICE_BITNESS	0x18
+#define KGSL_PROP_DEVICE_QDSS_STM	0x19
 
 struct kgsl_shadowprop {
 	unsigned long gpuaddr;
 	size_t size;
 	unsigned int flags; /* contains KGSL_FLAGS_ values */
+};
+
+struct kgsl_qdss_stm_prop {
+	uint64_t gpuaddr;
+	uint64_t size;
 };
 
 struct kgsl_version {
@@ -1450,5 +1463,97 @@ struct kgsl_gpuobj_set_info {
 
 #define IOCTL_KGSL_GPUOBJ_SET_INFO \
 	_IOW(KGSL_IOC_TYPE, 0x4C, struct kgsl_gpuobj_set_info)
+
+/**
+ * struct kgsl_sparse_phys_alloc - Argument for IOCTL_KGSL_SPARSE_PHYS_ALLOC
+ * @size: Size in bytes to back
+ * @pagesize: Pagesize alignment required
+ * @flags: Flags for this allocation
+ * @id: Returned ID for this allocation
+ */
+struct kgsl_sparse_phys_alloc {
+	uint64_t size;
+	uint64_t pagesize;
+	uint64_t flags;
+	unsigned int id;
+};
+
+#define IOCTL_KGSL_SPARSE_PHYS_ALLOC \
+	_IOWR(KGSL_IOC_TYPE, 0x50, struct kgsl_sparse_phys_alloc)
+
+/**
+ * struct kgsl_sparse_phys_free - Argument for IOCTL_KGSL_SPARSE_PHYS_FREE
+ * @id: ID to free
+ */
+struct kgsl_sparse_phys_free {
+	unsigned int id;
+};
+
+#define IOCTL_KGSL_SPARSE_PHYS_FREE \
+	_IOW(KGSL_IOC_TYPE, 0x51, struct kgsl_sparse_phys_free)
+
+/**
+ * struct kgsl_sparse_virt_alloc - Argument for IOCTL_KGSL_SPARSE_VIRT_ALLOC
+ * @size: Size in bytes to reserve
+ * @pagesize: Pagesize alignment required
+ * @flags: Flags for this allocation
+ * @id: Returned ID for this allocation
+ * @gpuaddr: Returned GPU address for this allocation
+ */
+struct kgsl_sparse_virt_alloc {
+	uint64_t size;
+	uint64_t pagesize;
+	uint64_t flags;
+	uint64_t gpuaddr;
+	unsigned int id;
+};
+
+#define IOCTL_KGSL_SPARSE_VIRT_ALLOC \
+	_IOWR(KGSL_IOC_TYPE, 0x52, struct kgsl_sparse_virt_alloc)
+
+/**
+ * struct kgsl_sparse_virt_free - Argument for IOCTL_KGSL_SPARSE_VIRT_FREE
+ * @id: ID to free
+ */
+struct kgsl_sparse_virt_free {
+	unsigned int id;
+};
+
+#define IOCTL_KGSL_SPARSE_VIRT_FREE \
+	_IOW(KGSL_IOC_TYPE, 0x53, struct kgsl_sparse_virt_free)
+
+/**
+ * struct kgsl_sparse_binding_object - Argument for kgsl_sparse_bind
+ * @virtoffset: Offset into the virtual ID
+ * @physoffset: Offset into the physical ID (bind only)
+ * @size: Size in bytes to reserve
+ * @flags: Flags for this kgsl_sparse_binding_object
+ * @id: Physical ID to bind (bind only)
+ */
+struct kgsl_sparse_binding_object {
+	uint64_t virtoffset;
+	uint64_t physoffset;
+	uint64_t size;
+	uint64_t flags;
+	unsigned int id;
+};
+
+/**
+ * struct kgsl_sparse_bind - Argument for IOCTL_KGSL_SPARSE_BIND
+ * @list: List of kgsl_sparse_bind_objects to bind/unbind
+ * @id: Virtual ID to bind/unbind
+ * @size: Size of kgsl_sparse_bind_object
+ * @count: Number of elements in list
+ *
+ */
+struct kgsl_sparse_bind {
+	uint64_t __user list;
+	unsigned int id;
+	unsigned int size;
+	unsigned int count;
+};
+
+#define IOCTL_KGSL_SPARSE_BIND \
+	_IOW(KGSL_IOC_TYPE, 0x54, struct kgsl_sparse_bind)
 
 #endif /* _UAPI_MSM_KGSL_H */

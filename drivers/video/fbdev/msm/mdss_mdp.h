@@ -56,7 +56,8 @@
 #define C0_G_Y		0	/* G/luma */
 
 /* wait for at most 2 vsync for lowest refresh rate (24hz) */
-#define KOFF_TIMEOUT msecs_to_jiffies(84)
+#define KOFF_TIMEOUT_MS 84
+#define KOFF_TIMEOUT msecs_to_jiffies(KOFF_TIMEOUT_MS)
 
 #define OVERFETCH_DISABLE_TOP		BIT(0)
 #define OVERFETCH_DISABLE_BOTTOM	BIT(1)
@@ -303,6 +304,11 @@ enum mdp_wb_blk_caps {
 	MDSS_MDP_WB_UBWC = BIT(3),
 };
 
+enum mdss_mdp_avr_mode {
+	MDSS_MDP_AVR_CONTINUOUS = 0,
+	MDSS_MDP_AVR_ONE_SHOT,
+};
+
 /**
  * enum perf_calc_vote_mode - enum to decide if mdss_mdp_get_bw_vote_mode
  *		function needs an extra efficiency factor.
@@ -391,6 +397,7 @@ struct mdss_mdp_ctl_intfs_ops {
 
 	/* to update lineptr, [1..yres] - enable, 0 - disable */
 	int (*update_lineptr)(struct mdss_mdp_ctl *ctl, bool enable);
+	int (*avr_ctrl_fnc)(struct mdss_mdp_ctl *);
 };
 
 struct mdss_mdp_cwb {
@@ -404,6 +411,11 @@ struct mdss_mdp_cwb {
 	struct blocking_notifier_head notifier_head;
 	struct workqueue_struct *cwb_work_queue;
 	struct work_struct cwb_work;
+};
+
+struct mdss_mdp_avr_info {
+	bool avr_enabled;
+	int avr_mode;
 };
 
 struct mdss_mdp_ctl {
@@ -513,6 +525,7 @@ struct mdss_mdp_ctl {
 
 	/* dynamic resolution switch during cont-splash handoff */
 	bool switch_with_handoff;
+	struct mdss_mdp_avr_info avr_info;
 };
 
 struct mdss_mdp_mixer {
@@ -678,6 +691,8 @@ struct mdss_ad_info {
 	bool last_calib_valid;
 	u32 ipc_frame_count;
 	u32 bl_data;
+	u32 bl_min_delta;
+	u32 bl_low_limit;
 	u32 calc_itr;
 	uint32_t bl_lin[AD_BL_LIN_LEN];
 	uint32_t bl_lin_inv[AD_BL_LIN_LEN];
@@ -1733,6 +1748,8 @@ void mdss_mdp_hist_intr_done(u32 isr);
 
 int mdss_mdp_ad_config(struct msm_fb_data_type *mfd,
 				struct mdss_ad_init_cfg *init_cfg);
+int mdss_mdp_ad_bl_config(struct msm_fb_data_type *mfd,
+				struct mdss_ad_bl_cfg *ad_bl_cfg);
 int mdss_mdp_ad_input(struct msm_fb_data_type *mfd,
 				struct mdss_ad_input *input, int wait);
 int mdss_mdp_ad_addr_setup(struct mdss_data_type *mdata, u32 *ad_offsets);

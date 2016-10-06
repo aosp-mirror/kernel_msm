@@ -351,6 +351,9 @@ Required properties:
 Required properties:
 
  - compatible : "qcom,msm-cpe-lsm"
+ - qcom,msm-cpe-lsm-id : lsm afe port ID. CPE lsm driver uses
+   this property to find out the input afe port ID. Currently
+   only supported values are 1 and 3.
 
 * wcd_us_euro_gpio
 
@@ -388,6 +391,13 @@ Required properties:
                                            group configuration.
  - pinctrl-x:                              Defines pinctrl state for each pin
                                            group.
+
+* wcd_dsp_glink
+
+Required properties:
+
+ - compatible :                            "qcom,wcd-dsp-glink"
+
 Example:
 
 	qcom,msm-pcm {
@@ -655,6 +665,11 @@ Example:
 		pinctrl-1 = <&cdc_reset_sleep>;
 	};
 
+	wcd_dsp_glink {
+		compatible = "qcom,wcd-dsp-glink";
+	};
+
+
 * MSM8916 ASoC Machine driver
 
 Required properties:
@@ -721,6 +736,11 @@ Optional Properties:
 - qcom,us-euro-gpios : GPIO on which gnd/mic swap signal is coming.
 
 Example:
+
+	msm_dig_codec: qcom,msm-int-codec {
+		compatible = "qcom,msm_int_core_codec";
+		qcom,dig-cdc-base-addr = <0xc0f0000>;
+	};
 
 	sound {
 		compatible = "qcom,msm8x16-audio-codec";
@@ -1367,12 +1387,12 @@ Example:
 	qcom,mbhc-audio-jack-type = "6-pole-jack";
 		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,
-				<&afe>, <&lsm>, <&routing>, <&cpe>, <&compr>;
+				<&afe>, <&lsm>, <&routing>, <&cpe>, <&compr>, <&cpe3>;
 		asoc-platform-names = "msm-pcm-dsp.0", "msm-pcm-dsp.1", "msm-pcm-dsp.2",
 				"msm-voip-dsp", "msm-pcm-voice", "msm-pcm-loopback",
 				"msm-compress-dsp", "msm-pcm-hostless", "msm-pcm-afe",
 				"msm-lsm-client", "msm-pcm-routing", "msm-cpe-lsm",
-				"msm-compr-dsp";
+				"msm-compr-dsp", "msm-cpe-lsm.3";
 		asoc-cpu = <&dai_pri_auxpcm>, <&dai_sec_auxpcm>, <&dai_hdmi>, <&dai_mi2s>,
 				<&sb_0_rx>, <&sb_0_tx>, <&sb_1_rx>, <&sb_1_tx>,
 				<&sb_2_rx>, <&sb_2_tx>, <&sb_3_rx>, <&sb_3_tx>,
@@ -2138,4 +2158,36 @@ Example:
 		asoc-codec = <&stub_codec>;
 		asoc-codec-names = "msm-stub-codec.1";
 		qcom,wsa-max-devs = <0>;
+	};
+
+* WCD DSP manager driver
+
+Required properties:
+- compatible : "qcom,wcd-dsp-mgr"
+- qcom,wdsp-components : This is phandle list containing the references to the
+			 components of the manager driver. Manager driver will
+			 register to component framework with these phandles.
+- qcom,img-filename : String property to provide the dsp image file name that is
+		     to be read from file system and downloaded to dsp memory
+Optional properties:
+- qcom,wdsp-cmpnt-dev-name : Property that manager driver will parse, but defined
+			     in the child's DT entry that is given to manager driver
+			     with phandle. This property will be used by the manager
+			     driver in case the manager driver cannot match child's
+			     of_node pointer to registered phandle.
+
+Example:
+
+	qcom,wcd-dsp-mgr {
+		compatible = "qcom,wcd-dsp-mgr";
+		qcom,wdsp-components = <&wcd934x_cdc 0>,
+				       <&wcd_spi_0 1>,
+				       <&glink_spi 2>;
+		qcom,img-filename = "cpe_9340";
+	};
+
+Example of child node that would have qcom,wdsp-cmpnt-dev-name property
+
+	wcd934x_cdc: tavil_codec {
+		qcom,wdsp-cmpnt-dev-name = "tavil_codec";
 	};

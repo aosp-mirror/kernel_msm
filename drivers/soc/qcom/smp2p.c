@@ -1,6 +1,6 @@
 /* drivers/soc/qcom/smp2p.c
  *
- * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -214,6 +214,7 @@ static struct smp2p_interrupt_config smp2p_int_cfgs[SMP2P_NUM_PROCS] = {
 	[SMP2P_AUDIO_PROC].name = "lpass",
 	[SMP2P_SENSOR_PROC].name = "dsps",
 	[SMP2P_WIRELESS_PROC].name = "wcnss",
+	[SMP2P_CDSP_PROC].name = "cdsp",
 	[SMP2P_TZ_PROC].name = "tz",
 	[SMP2P_REMOTE_MOCK_PROC].name = "mock",
 };
@@ -332,6 +333,9 @@ static int smp2p_get_smem_item_id(int write_pid, int read_pid)
 		break;
 	case SMP2P_WIRELESS_PROC:
 		ret = SMEM_SMP2P_WIRLESS_BASE + read_pid;
+		break;
+	case SMP2P_CDSP_PROC:
+		ret = SMEM_SMP2P_CDSP_BASE + read_pid;
 		break;
 	case SMP2P_POWER_PROC:
 		ret = SMEM_SMP2P_POWER_BASE + read_pid;
@@ -519,8 +523,8 @@ static void smp2p_find_entry_v1(struct smp2p_smem __iomem *item,
 	char entry_name[SMP2P_MAX_ENTRY_NAME];
 
 	if (!item || !name || !entry_ptr) {
-		SMP2P_ERR("%s: invalid arguments %p, %p, %p\n",
-				__func__, item, name, entry_ptr);
+		SMP2P_ERR("%s: invalid arguments %d %d %d\n",
+				__func__, !item, !name, !entry_ptr);
 		return;
 	}
 

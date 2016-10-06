@@ -20,8 +20,6 @@
 
 #define IPA_LAST_DESC_CNT 0xFFFF
 #define POLLING_INACTIVITY_RX 40
-#define POLLING_MIN_SLEEP_RX 1010
-#define POLLING_MAX_SLEEP_RX 1050
 #define POLLING_INACTIVITY_TX 40
 #define POLLING_MIN_SLEEP_TX 400
 #define POLLING_MAX_SLEEP_TX 500
@@ -41,6 +39,8 @@
 		IPA_REAL_GENERIC_RX_BUFF_SZ(\
 		IPA_GENERIC_RX_BUFF_BASE_SZ) -\
 		IPA_GENERIC_RX_BUFF_BASE_SZ)
+
+#define IPA_RX_BUFF_CLIENT_HEADROOM 256
 
 /* less 1 nominal MTU (1500 bytes) rounded to units of KB */
 #define IPA_ADJUST_AGGR_BYTE_LIMIT(X) (((X) - IPA_MTU)/1000)
@@ -1045,8 +1045,8 @@ static void ipa_handle_rx(struct ipa_sys_context *sys)
 		if (cnt == 0) {
 			inactive_cycles++;
 			trace_idle_sleep_enter(sys->ep->client);
-			usleep_range(POLLING_MIN_SLEEP_RX,
-					POLLING_MAX_SLEEP_RX);
+			usleep_range(ipa_ctx->ipa_rx_min_timeout_usec,
+					ipa_ctx->ipa_rx_max_timeout_usec);
 			trace_idle_sleep_exit(sys->ep->client);
 		} else {
 			inactive_cycles = 0;
@@ -1059,7 +1059,7 @@ static void ipa_handle_rx(struct ipa_sys_context *sys)
 		if (sys->len == 0)
 			break;
 
-	} while (inactive_cycles <= POLLING_INACTIVITY_RX);
+	} while (inactive_cycles <= ipa_ctx->ipa_polling_iteration);
 
 	trace_poll_to_intr(sys->ep->client);
 	ipa_rx_switch_to_intr_mode(sys);
@@ -2290,6 +2290,21 @@ static void ipa_cleanup_rx(struct ipa_sys_context *sys)
 	}
 }
 
+static struct sk_buff *ipa_skb_copy_for_client(struct sk_buff *skb, int len)
+{
+	struct sk_buff *skb2 = NULL;
+
+	skb2 = __dev_alloc_skb(len + IPA_RX_BUFF_CLIENT_HEADROOM, GFP_KERNEL);
+	if (likely(skb2)) {
+		/* Set the data pointer */
+		skb_reserve(skb2, IPA_RX_BUFF_CLIENT_HEADROOM);
+		memcpy(skb2->data, skb->data, len);
+		skb2->len = len;
+		skb_set_tail_pointer(skb2, len);
+	}
+
+	return skb2;
+}
 
 static int ipa_lan_rx_pyld_hdlr(struct sk_buff *skb,
 		struct ipa_sys_context *sys)
@@ -2486,7 +2501,8 @@ begin:
 				sys->drop_packet = true;
 			}
 
-			skb2 = skb_clone(skb, GFP_KERNEL);
+			skb2 = ipa_skb_copy_for_client(skb,
+				status->pkt_len + IPA_PKT_STATUS_SIZE);
 			if (likely(skb2)) {
 				if (skb->len < len + IPA_PKT_STATUS_SIZE) {
 					IPADBG("SPL skb len %d len %d\n",
@@ -2529,7 +2545,7 @@ begin:
 						IPA_PKT_STATUS_SIZE);
 				}
 			} else {
-				IPAERR("fail to clone\n");
+				IPAERR("fail to alloc skb\n");
 				if (skb->len < len) {
 					sys->prev_skb = NULL;
 					sys->len_rem = len - skb->len +
@@ -3126,7 +3142,7 @@ static int ipa_assign_policy_v2(struct ipa_sys_connect_params *in,
 				   ipa_replenish_rx_cache;
 			}
 			sys->rx_pool_sz =
-			   IPA_GENERIC_RX_POOL_SZ;
+			   ipa_ctx->lan_rx_ring_size;
 			in->ipa_ep_cfg.aggr.aggr_byte_limit =
 			   IPA_GENERIC_AGGR_BYTE_LIMIT;
 			in->ipa_ep_cfg.aggr.aggr_pkt_limit =
@@ -3171,7 +3187,7 @@ static int ipa_assign_policy_v2(struct ipa_sys_connect_params *in,
 				   IPA_GENERIC_RX_BUFF_SZ(
 				   ipa_adjust_ra_buff_base_sz(
 					  in->ipa_ep_cfg.aggr.
-					  aggr_byte_limit));
+					  aggr_byte_limit - IPA_HEADROOM));
 				in->ipa_ep_cfg.aggr.
 				   aggr_byte_limit =
 				   sys->rx_buff_sz < in->

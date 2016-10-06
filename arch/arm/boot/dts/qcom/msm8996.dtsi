@@ -781,6 +781,7 @@
 		reg-names = "cc_base";
 		vdd_dig-supply = <&pm8994_s1_corner>;
 		#clock-cells = <1>;
+		#reset-cells = <1>;
 	};
 
 	clock_mmss: qcom,mmsscc@8c0000 {
@@ -807,6 +808,7 @@
 			 <&mdss_dsi1_pll clk_dsi1pll_byte_clk_mux>,
 			<&mdss_hdmi_pll clk_hdmi_vco_clk>;
 		#clock-cells = <1>;
+		#reset-cells = <1>;
 	};
 
 	clock_gpu: qcom,gpucc@8c0000 {
@@ -1001,6 +1003,7 @@
 			qcom,cdc-slim-ifd-elemental-addr = [00 00 A0 01 17 02];
 			qcom,cdc-dmic-sample-rate = <4800000>;
 			qcom,cdc-mad-dmic-rate = <600000>;
+			qcom,cdc-ecpp-dmic-rate = <1200000>;
 			qcom,cdc-dmic-clk-drv-strength = <2>;
 		};
 	};
@@ -2059,11 +2062,9 @@
 	qusb_phy0: qusb@7411000 {
 		compatible = "qcom,qusb2phy";
 		reg = <0x07411000 0x180>,
-			<0x06af8800 0x400>,
 			<0x0007024c 0x4>,
 			<0x00388018 0x4>;
 		reg-names = "qusb_phy_base",
-			"qscratch_base",
 			"tune2_efuse_addr",
 			"ref_clk_addr";
 		vdd-supply = <&pm8994_s2_corner>;
@@ -2096,11 +2097,9 @@
 	qusb_phy1: qusb@7412000 {
 		compatible = "qcom,qusb2phy";
 		reg = <0x07412000 0x180>,
-			<0x076f8800 0x400>,
 			<0x0007024c 0x4>,
 			<0x00388014 0x4>;
 		reg-names = "qusb_phy_base",
-			"qscratch_base",
 			"tune2_efuse_addr",
 			"ref_clk_addr";
 		vdd-supply = <&pm8994_s2_corner>;
@@ -2516,6 +2515,8 @@
 		qcom,use-sw-aes-xts-algo;
 		qcom,use-sw-aes-ccm-algo;
 		qcom,use-sw-ahash-algo;
+		qcom,use-sw-hmac-algo;
+		qcom,use-sw-aead-algo;
 	};
 
 	qcom_cedev: qcedev@660000 {
@@ -3004,13 +3005,14 @@
 		qcom,tasha-mclk-clk-freq = <9600000>;
 		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,
-				<&afe>, <&lsm>, <&routing>, <&cpe>, <&compr>,
-				<&pcmnoirq>;
+				<&afe>, <&lsm>, <&routing>, <&cpe>,
+				<&compr>, <&pcmnoirq>, <&cpe3>;
 		asoc-platform-names = "msm-pcm-dsp.0", "msm-pcm-dsp.1", "msm-pcm-dsp.2",
 				"msm-voip-dsp", "msm-pcm-voice", "msm-pcm-loopback",
 				"msm-compress-dsp", "msm-pcm-hostless", "msm-pcm-afe",
 				"msm-lsm-client", "msm-pcm-routing", "msm-cpe-lsm",
-				"msm-compr-dsp", "msm-pcm-dsp-noirq";
+				"msm-compr-dsp", "msm-pcm-dsp-noirq",
+				"msm-cpe-lsm.3";
 		asoc-cpu = <&dai_pri_auxpcm>, <&dai_sec_auxpcm>, <&dai_hdmi>, <&dai_mi2s>,
 				<&sb_0_rx>, <&sb_0_tx>, <&sb_1_rx>, <&sb_1_tx>,
 				<&sb_2_rx>, <&sb_2_tx>, <&sb_3_rx>, <&sb_3_tx>,
@@ -3122,6 +3124,12 @@
 
 	cpe: qcom,msm-cpe-lsm {
 		compatible = "qcom,msm-cpe-lsm";
+		qcom,msm-cpe-lsm-id = <1>;
+	};
+
+	cpe3: qcom,msm-cpe-lsm@3 {
+		compatible = "qcom,msm-cpe-lsm";
+		qcom,msm-cpe-lsm-id = <3>;
 	};
 
 	qcom,msm-dai-q6 {

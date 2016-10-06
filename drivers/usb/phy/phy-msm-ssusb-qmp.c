@@ -465,6 +465,9 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 		else
 			msm_ssusb_qmp_enable_autonomous(phy, 1);
 
+		/* Make sure above write completed with PHY */
+		wmb();
+
 		clk_disable_unprepare(phy->cfg_ahb_clk);
 		clk_disable_unprepare(phy->aux_clk);
 		clk_disable_unprepare(phy->pipe_clk);
@@ -494,6 +497,10 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 		} else  {
 			msm_ssusb_qmp_enable_autonomous(phy, 0);
 		}
+
+		/* Make sure that above write completed with PHY */
+		wmb();
+
 		phy->in_suspend = false;
 		dev_dbg(uphy->dev, "QMP PHY is resumed\n");
 	}
@@ -547,13 +554,16 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 
 	clk_set_rate(phy->aux_clk, clk_round_rate(phy->aux_clk, ULONG_MAX));
 
-	phy->cfg_ahb_clk = devm_clk_get(dev, "cfg_ahb_clk");
-	if (IS_ERR(phy->cfg_ahb_clk)) {
-		ret = PTR_ERR(phy->cfg_ahb_clk);
-		phy->cfg_ahb_clk = NULL;
-		if (ret != -EPROBE_DEFER)
-			dev_err(dev, "failed to get cfg_ahb_clk\n");
-		goto err;
+	if (of_property_match_string(pdev->dev.of_node,
+				"clock-names", "cfg_ahb_clk") >= 0) {
+		phy->cfg_ahb_clk = devm_clk_get(dev, "cfg_ahb_clk");
+		if (IS_ERR(phy->cfg_ahb_clk)) {
+			ret = PTR_ERR(phy->cfg_ahb_clk);
+			if (ret != -EPROBE_DEFER)
+				dev_err(dev,
+				"failed to get cfg_ahb_clk ret %d\n", ret);
+			goto err;
+		}
 	}
 
 	phy->pipe_clk = devm_clk_get(dev, "pipe_clk");

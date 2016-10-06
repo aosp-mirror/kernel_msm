@@ -25,14 +25,16 @@
 		qcom,firmware-name = "venus";
 		qcom,never-unload-fw;
 		qcom,sw-power-collapse;
+		qcom,debug-timeout;
 		qcom,reg-presets =
-			<0x80124 0x0002000>,
-			<0x80550 0x0000001>,
-			<0x80560 0x2222221>,
-			<0x80568 0x3333331>,
-			<0x80570 0x0000001>,
-			<0x80580 0x2222221>,
-			<0x80588 0x3333331>;
+			<0x80124 0x00000003>,
+			<0x80550 0x01111111>,
+			<0x80560 0x01111111>,
+			<0x80568 0x01111111>,
+			<0x80570 0x01111111>,
+			<0x80580 0x01111111>,
+			<0x80588 0x01111111>,
+			<0xe2010 0x00000000>;
 
 		qcom,imem-size = <524288>; /* 512 kB */
 		qcom,max-hw-load = <2563200>; /* Full 4k @ 60 + 1080p @ 60 */
@@ -64,8 +66,8 @@
 		* corresponding video core frequency.
 		*/
 		qcom,imem-ab-tbl =
-			<100000000  1500000>, /* imem @ svs2 freq 75 Mhz */
-			<186000000 1500000>, /* imem @ svs2 freq 75 Mhz */
+			<100000000 1752000>, /* imem @ svs2 freq 75 Mhz */
+			<186000000 1752000>, /* imem @ svs2 freq 75 Mhz */
 			<360000000 2500000>, /* imem @ svs freq 171 Mhz */
 			<465000000 6000000>; /* imem @ noimal freq 320 Mhz */
 
@@ -95,7 +97,7 @@
 			<&clock_mmss clk_mmss_video_subcore0_clk>,
 			<&clock_mmss clk_mmss_video_subcore1_clk>;
 		qcom,clock-configs = <0x0 0x0 0x0 0x0 0x0 0x0
-				0x1 0x0 0x0 0x0 0x1 0x1>;
+				0x3 0x0 0x2 0x2 0x3 0x3>;
 
 		/* Buses */
 		bus_cnoc {
@@ -232,6 +234,7 @@
 			<&clock_mmss clk_mmss_vmem_maxi_clk>;
 		clock-names = "mnoc_ahb","mnoc_maxi",
 			"ahb", "maxi";
+		clock-config = <0x0 0x0 0x0 0x1>;
 
 		qcom,msm-bus,name = "vmem";
 		qcom,msm-bus,num-cases = <2>;

@@ -214,6 +214,7 @@ static int pil_subsys_init(struct modem_data *drv,
 	drv->subsys_desc.stop_ack_handler = modem_stop_ack_intr_handler;
 	drv->subsys_desc.wdog_bite_handler = modem_wdog_bite_intr_handler;
 
+	drv->q6->desc.modem_ssr = false;
 	drv->subsys = subsys_register(&drv->subsys_desc);
 	if (IS_ERR(drv->subsys)) {
 		ret = PTR_ERR(drv->subsys);
@@ -291,11 +292,13 @@ static int pil_mss_loadable_init(struct modem_data *drv,
 		ret = regulator_set_voltage(q6->vreg, VDD_MSS_UV,
 						MAX_VDD_MSS_UV);
 		if (ret)
-			dev_err(&pdev->dev, "Failed to set vreg voltage.\n");
+			dev_err(&pdev->dev, "Failed to set vreg voltage(rc:%d)\n",
+									ret);
 
 		ret = regulator_set_load(q6->vreg, 100000);
 		if (ret < 0) {
-			dev_err(&pdev->dev, "Failed to set vreg mode.\n");
+			dev_err(&pdev->dev, "Failed to set vreg mode(rc:%d)\n",
+									ret);
 			return ret;
 		}
 	}
@@ -330,7 +333,7 @@ static int pil_mss_loadable_init(struct modem_data *drv,
 	ret = of_property_read_u32(pdev->dev.of_node,
 					"qcom,pas-id", &drv->pas_id);
 	if (ret)
-		dev_warn(&pdev->dev, "Failed to find the pas_id.\n");
+		dev_info(&pdev->dev, "No pas_id found.\n");
 
 	drv->subsys_desc.pil_mss_memsetup =
 	of_property_read_bool(pdev->dev.of_node, "qcom,pil-mss-memsetup");

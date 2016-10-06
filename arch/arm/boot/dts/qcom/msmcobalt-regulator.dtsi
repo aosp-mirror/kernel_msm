@@ -415,7 +415,7 @@
 	rpm-regulator-ldoa25 {
 		status = "okay";
 		pmcobalt_l25: regulator-l25 {
-			regulator-min-microvolt = <3312000>;
+			regulator-min-microvolt = <3104000>;
 			regulator-max-microvolt = <3312000>;
 			status = "okay";
 		};
@@ -424,7 +424,7 @@
 			compatible = "qcom,rpm-smd-regulator";
 			regulator-name = "pmcobalt_l25_pin_ctrl";
 			qcom,set = <3>;
-			regulator-min-microvolt = <3312000>;
+			regulator-min-microvolt = <3104000>;
 			regulator-max-microvolt = <3312000>;
 			/* Force NPM follows HW_EN2 */
 			qcom,init-pin-ctrl-mode = <4>;
@@ -555,7 +555,7 @@
 &soc {
 /* CPR controller regulators */
 	apc0_cpr: cprh-ctrl@179c8000 {
-		compatible = "qcom,cprh-msmcobalt-kbss-regulator";
+		compatible = "qcom,cprh-msmcobalt-v1-kbss-regulator";
 		reg = <0x179c8000 0x4000>, <0x00784000 0x1000>;
 		reg-names = "cpr_ctrl", "fuse_base";
 		clocks = <&clock_gcc clk_gcc_hmss_rbcpr_clk>;
@@ -597,7 +597,7 @@
 			qcom,cpr-up-threshold = <2>;
 			qcom,cpr-down-threshold = <2>;
 
-			apc0_pwrcl_vreg: regulator-pwrcl {
+			apc0_pwrcl_vreg: regulator {
 				regulator-name = "apc0_pwrcl_corner";
 				regulator-min-microvolt = <1>;
 				regulator-max-microvolt = <23>;
@@ -717,7 +717,7 @@
 	};
 
 	apc1_cpr: cprh-ctrl@179c4000{
-		compatible = "qcom,cprh-msmcobalt-kbss-regulator";
+		compatible = "qcom,cprh-msmcobalt-v1-kbss-regulator";
 		reg = <0x179c4000 0x4000>, <0x00784000 0x1000>;
 		reg-names = "cpr_ctrl", "fuse_base";
 		clocks = <&clock_gcc clk_gcc_hmss_rbcpr_clk>;
@@ -759,7 +759,7 @@
 			qcom,cpr-up-threshold = <2>;
 			qcom,cpr-down-threshold = <2>;
 
-			apc1_perfcl_vreg: regulator-pwrcl {
+			apc1_perfcl_vreg: regulator {
 				regulator-name = "apc1_perfcl_corner";
 				regulator-min-microvolt = <1>;
 				regulator-max-microvolt = <26>;
@@ -899,7 +899,7 @@
 	};
 
 	gfx_cpr: cpr4-ctrl@5061000 {
-		compatible = "qcom,cpr4-msmcobalt-mmss-regulator";
+		compatible = "qcom,cpr4-msmcobalt-v1-mmss-regulator";
 		reg = <0x05061000 0x4000>, <0x00784000 0x1000>;
 		reg-names = "cpr_ctrl", "fuse_base";
 		clocks = <&clock_gpu clk_gpucc_rbcpr_clk>,
@@ -944,20 +944,20 @@
 				qcom,cpr-voltage-ceiling =
 					<896000  896000  896000  896000  896000
 					1032000>,
-					<632000  696000  768000  828000  896000
-					1032000>,
-					<632000  696000  768000  828000  896000
-					1032000>,
-					<632000  696000  768000  828000  896000
-					1032000>,
-					<632000  696000  768000  828000  896000
-					1032000>,
-					<632000  696000  768000  828000  896000
-					1032000>,
-					<632000  696000  768000  828000  896000
-					1032000>,
-					<632000  696000  768000  828000  896000
-					1032000>;
+					<672000  740000  800000  868000  976000
+					1100000>,
+					<672000  740000  800000  868000  976000
+					1100000>,
+					<672000  740000  800000  868000  976000
+					1100000>,
+					<672000  740000  800000  868000  976000
+					1100000>,
+					<672000  740000  800000  868000  976000
+					1100000>,
+					<672000  740000  800000  868000  976000
+					1100000>,
+					<672000  740000  800000  868000  976000
+					1100000>;
 
 				qcom,cpr-voltage-floor =
 					<896000  896000  896000  896000  896000

@@ -92,6 +92,13 @@ MODULE_PARM_DESC(cpu_to_affin, "affin usb irq to this cpu");
 #define PIPE3_PHYSTATUS_SW	BIT(3)
 #define PIPE_UTMI_CLK_DIS	BIT(8)
 
+#define HS_PHY_CTRL_REG		(QSCRATCH_REG_OFFSET + 0x10)
+#define UTMI_OTG_VBUS_VALID	BIT(20)
+#define SW_SESSVLD_SEL		BIT(28)
+
+#define SS_PHY_CTRL_REG		(QSCRATCH_REG_OFFSET + 0x30)
+#define LANE0_PWR_PRESENT	BIT(24)
+
 /* GSI related registers */
 #define GSI_TRB_ADDR_BIT_53_MASK	(1 << 21)
 #define GSI_TRB_ADDR_BIT_55_MASK	(1 << 23)
@@ -180,6 +187,7 @@ struct dwc3_msm {
 	u32			bus_perf_client;
 	struct msm_bus_scale_pdata	*bus_scale_table;
 	struct power_supply	*usb_psy;
+	struct work_struct	vbus_draw_work;
 	bool			in_host_mode;
 	unsigned int		tx_fifo_size;
 	bool			vbus_active;
@@ -1588,6 +1596,15 @@ static void dwc3_msm_qscratch_reg_init(struct dwc3_msm *mdwc)
 
 }
 
+static void dwc3_msm_vbus_draw_work(struct work_struct *w)
+{
+	struct dwc3_msm *mdwc = container_of(w, struct dwc3_msm,
+			vbus_draw_work);
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+
+	dwc3_msm_gadget_vbus_draw(mdwc, dwc->vbus_draw);
+}
+
 static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned event)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
@@ -1673,7 +1690,7 @@ static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned event)
 		break;
 	case DWC3_CONTROLLER_SET_CURRENT_DRAW_EVENT:
 		dev_dbg(mdwc->dev, "DWC3_CONTROLLER_SET_CURRENT_DRAW_EVENT received\n");
-		dwc3_msm_gadget_vbus_draw(mdwc, dwc->vbus_draw);
+		schedule_work(&mdwc->vbus_draw_work);
 		break;
 	case DWC3_CONTROLLER_RESTART_USB_SESSION:
 		dev_dbg(mdwc->dev, "DWC3_CONTROLLER_RESTART_USB_SESSION received\n");
@@ -1796,6 +1813,36 @@ static void dwc3_msm_bus_vote_w(struct work_struct *w)
 		dev_err(mdwc->dev, "Failed to reset bus bw vote %d\n", ret);
 }
 
+static void dwc3_set_phy_speed_flags(struct dwc3_msm *mdwc)
+{
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+	int i, num_ports;
+	u32 reg;
+
+	mdwc->hs_phy->flags &= ~(PHY_HSFS_MODE | PHY_LS_MODE);
+	if (mdwc->in_host_mode) {
+		reg = dwc3_msm_read_reg(mdwc->base, USB3_HCSPARAMS1);
+		num_ports = HCS_MAX_PORTS(reg);
+		for (i = 0; i < num_ports; i++) {
+			reg = dwc3_msm_read_reg(mdwc->base,
+					USB3_PORTSC + i*0x10);
+			if (reg & PORT_PE) {
+				if (DEV_HIGHSPEED(reg) || DEV_FULLSPEED(reg))
+					mdwc->hs_phy->flags |= PHY_HSFS_MODE;
+				else if (DEV_LOWSPEED(reg))
+					mdwc->hs_phy->flags |= PHY_LS_MODE;
+			}
+		}
+	} else {
+		if (dwc->gadget.speed == USB_SPEED_HIGH ||
+			dwc->gadget.speed == USB_SPEED_FULL)
+			mdwc->hs_phy->flags |= PHY_HSFS_MODE;
+		else if (dwc->gadget.speed == USB_SPEED_LOW)
+			mdwc->hs_phy->flags |= PHY_LS_MODE;
+	}
+}
+
+
 static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 {
 	int ret, i;
@@ -1869,6 +1916,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	/* disable power event irq, hs and ss phy irq is used as wake up src */
 	disable_irq(mdwc->pwr_event_irq);
 
+	dwc3_set_phy_speed_flags(mdwc);
 	/* Suspend HS PHY */
 	usb_phy_set_suspend(mdwc->hs_phy, 1);
 
@@ -1888,6 +1936,12 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	if (mdwc->bus_aggr_clk)
 		clk_disable_unprepare(mdwc->bus_aggr_clk);
 	clk_disable_unprepare(mdwc->utmi_clk);
+
+	/* Memory core: OFF, Memory periphery: OFF */
+	if (!mdwc->in_host_mode && !mdwc->vbus_active) {
+		clk_set_flags(mdwc->core_clk, CLKFLAG_NORETAIN_MEM);
+		clk_set_flags(mdwc->core_clk, CLKFLAG_NORETAIN_PERIPH);
+	}
 
 	clk_set_rate(mdwc->core_clk, 19200000);
 	clk_disable_unprepare(mdwc->core_clk);
@@ -2018,6 +2072,7 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 		mdwc->lpm_flags &= ~MDWC3_SS_PHY_SUSPEND;
 	}
 
+	mdwc->hs_phy->flags &= ~(PHY_HSFS_MODE | PHY_LS_MODE);
 	/* Resume HS PHY */
 	usb_phy_set_suspend(mdwc->hs_phy, 0);
 
@@ -2299,14 +2354,23 @@ static int dwc3_msm_get_clk_gdsc(struct dwc3_msm *mdwc)
 		return ret;
 	}
 
-	/*
-	 * Get Max supported clk frequency for USB Core CLK and request
-	 * to set the same.
-	 */
-	mdwc->core_clk_rate = clk_round_rate(mdwc->core_clk, LONG_MAX);
+	if (!of_property_read_u32(mdwc->dev->of_node, "qcom,core-clk-rate",
+				(u32 *)&mdwc->core_clk_rate)) {
+		mdwc->core_clk_rate = clk_round_rate(mdwc->core_clk,
+							mdwc->core_clk_rate);
+	} else {
+		/*
+		 * Get Max supported clk frequency for USB Core CLK and request
+		 * to set the same.
+		 */
+		mdwc->core_clk_rate = clk_round_rate(mdwc->core_clk, LONG_MAX);
+	}
+
 	if (IS_ERR_VALUE(mdwc->core_clk_rate)) {
 		dev_err(mdwc->dev, "fail to get core clk max freq.\n");
 	} else {
+		dev_dbg(mdwc->dev, "USB core frequency = %ld\n",
+							mdwc->core_clk_rate);
 		ret = clk_set_rate(mdwc->core_clk, mdwc->core_clk_rate);
 		if (ret)
 			dev_err(mdwc->dev, "fail to set core_clk freq:%d\n",
@@ -2334,11 +2398,18 @@ static int dwc3_msm_get_clk_gdsc(struct dwc3_msm *mdwc)
 	if (IS_ERR(mdwc->bus_aggr_clk))
 		mdwc->bus_aggr_clk = NULL;
 
-	mdwc->cfg_ahb_clk = devm_clk_get(mdwc->dev, "cfg_ahb_clk");
-	if (IS_ERR(mdwc->cfg_ahb_clk)) {
-		dev_err(mdwc->dev, "failed to get cfg_ahb_clk\n");
-		ret = PTR_ERR(mdwc->cfg_ahb_clk);
-		return ret;
+	if (of_property_match_string(mdwc->dev->of_node,
+				"clock-names", "cfg_ahb_clk") >= 0) {
+		mdwc->cfg_ahb_clk = devm_clk_get(mdwc->dev, "cfg_ahb_clk");
+		if (IS_ERR(mdwc->cfg_ahb_clk)) {
+			ret = PTR_ERR(mdwc->cfg_ahb_clk);
+			mdwc->cfg_ahb_clk = NULL;
+			if (ret != -EPROBE_DEFER)
+				dev_err(mdwc->dev,
+					"failed to get cfg_ahb_clk ret %d\n",
+					ret);
+			return ret;
+		}
 	}
 
 	return 0;
@@ -2536,6 +2607,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	INIT_WORK(&mdwc->resume_work, dwc3_resume_work);
 	INIT_WORK(&mdwc->restart_usb_work, dwc3_restart_usb_work);
 	INIT_WORK(&mdwc->bus_vote_w, dwc3_msm_bus_vote_w);
+	INIT_WORK(&mdwc->vbus_draw_work, dwc3_msm_vbus_draw_work);
 	INIT_DELAYED_WORK(&mdwc->sm_work, dwc3_otg_sm_work);
 
 	mdwc->dwc3_wq = alloc_ordered_workqueue("dwc3_wq", 0);
@@ -3051,6 +3123,25 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 	return 0;
 }
 
+static void dwc3_override_vbus_status(struct dwc3_msm *mdwc, bool vbus_present)
+{
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+
+	/* Update OTG VBUS Valid from HSPHY to controller */
+	dwc3_msm_write_readback(mdwc->base, HS_PHY_CTRL_REG,
+		vbus_present ? UTMI_OTG_VBUS_VALID | SW_SESSVLD_SEL :
+		UTMI_OTG_VBUS_VALID,
+		vbus_present ? UTMI_OTG_VBUS_VALID | SW_SESSVLD_SEL : 0);
+
+	/* Update only if Super Speed is supported */
+	if (dwc->maximum_speed == USB_SPEED_SUPER) {
+		/* Update VBUS Valid from SSPHY to controller */
+		dwc3_msm_write_readback(mdwc->base, SS_PHY_CTRL_REG,
+			LANE0_PWR_PRESENT,
+			vbus_present ? LANE0_PWR_PRESENT : 0);
+	}
+}
+
 /**
  * dwc3_otg_start_peripheral -  bind/unbind the peripheral controller.
  *
@@ -3071,6 +3162,7 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 		dev_dbg(mdwc->dev, "%s: turn on gadget %s\n",
 					__func__, dwc->gadget.name);
 
+		dwc3_override_vbus_status(mdwc, true);
 		usb_phy_notify_connect(mdwc->hs_phy, USB_SPEED_HIGH);
 		usb_phy_notify_connect(mdwc->ss_phy, USB_SPEED_SUPER);
 
@@ -3086,6 +3178,7 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 		usb_gadget_vbus_disconnect(&dwc->gadget);
 		usb_phy_notify_disconnect(mdwc->hs_phy, USB_SPEED_HIGH);
 		usb_phy_notify_disconnect(mdwc->ss_phy, USB_SPEED_SUPER);
+		dwc3_override_vbus_status(mdwc, false);
 		dwc3_usb3_phy_suspend(dwc, false);
 	}
 
@@ -3098,7 +3191,8 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 
 static int dwc3_msm_gadget_vbus_draw(struct dwc3_msm *mdwc, unsigned mA)
 {
-	union power_supply_propval pval = {0,};
+	union power_supply_propval pval = {1000 * mA};
+	int ret;
 
 	if (mdwc->charging_disabled)
 		return 0;
@@ -3116,42 +3210,16 @@ static int dwc3_msm_gadget_vbus_draw(struct dwc3_msm *mdwc, unsigned mA)
 
 	dev_info(mdwc->dev, "Avail curr from USB = %u\n", mA);
 
-	if (mdwc->max_power <= 2 && mA > 2) {
-		/* Enable Charging */
-		pval.intval = true;
-		if (power_supply_set_property(mdwc->usb_psy,
-					POWER_SUPPLY_PROP_ONLINE, &pval))
-			goto psy_error;
-		pval.intval = 1000 * mA;
-		if (power_supply_set_property(mdwc->usb_psy,
-					POWER_SUPPLY_PROP_CURRENT_MAX, &pval))
-			goto psy_error;
-	} else if (mdwc->max_power > 0 && (mA == 0 || mA == 2)) {
-		/* Disable charging */
-		pval.intval = false;
-		if (power_supply_set_property(mdwc->usb_psy,
-					POWER_SUPPLY_PROP_ONLINE, &pval))
-			goto psy_error;
-	} else {
-		/* Enable charging */
-		pval.intval = true;
-		if (power_supply_set_property(mdwc->usb_psy,
-					POWER_SUPPLY_PROP_ONLINE, &pval))
-			goto psy_error;
-	}
-
 	/* Set max current limit in uA */
-	pval.intval = 1000 * mA;
-	if (power_supply_set_property(mdwc->usb_psy,
-				POWER_SUPPLY_PROP_CURRENT_MAX, &pval))
-		goto psy_error;
+	ret = power_supply_set_property(mdwc->usb_psy,
+				POWER_SUPPLY_PROP_CURRENT_MAX, &pval);
+	if (ret) {
+		dev_dbg(mdwc->dev, "power supply error when setting property\n");
+		return ret;
+	}
 
 	mdwc->max_power = mA;
 	return 0;
-
-psy_error:
-	dev_dbg(mdwc->dev, "power supply error when setting property\n");
-	return -ENXIO;
 }
 
 

@@ -164,6 +164,20 @@ static struct pll_vote_clk gpll0_ao = {
 
 DEFINE_EXT_CLK(gpll0_out_main, &gpll0.c);
 
+static struct local_vote_clk gcc_mmss_gpll0_clk = {
+	.cbcr_reg = GCC_APCS_CLOCK_BRANCH_ENA_VOTE_1,
+	.vote_reg = GCC_APCS_CLOCK_BRANCH_ENA_VOTE_1,
+	.en_mask = BIT(1),
+	.base = &virt_base,
+	.halt_check = DELAY,
+	.c = {
+		.dbg_name = "gcc_mmss_gpll0_clk",
+		.parent = &gpll0.c,
+		.ops = &clk_ops_vote,
+		CLK_INIT(gcc_mmss_gpll0_clk.c),
+	},
+};
+
 static struct local_vote_clk gcc_mmss_gpll0_div_clk = {
 	.cbcr_reg = GCC_APCS_CLOCK_BRANCH_ENA_VOTE_1,
 	.vote_reg = GCC_APCS_CLOCK_BRANCH_ENA_VOTE_1,
@@ -175,6 +189,34 @@ static struct local_vote_clk gcc_mmss_gpll0_div_clk = {
 		.parent = &gpll0.c,
 		.ops = &clk_ops_vote,
 		CLK_INIT(gcc_mmss_gpll0_div_clk.c),
+	},
+};
+
+static struct local_vote_clk gcc_gpu_gpll0_clk = {
+	.cbcr_reg = GCC_APCS_CLOCK_BRANCH_ENA_VOTE_1,
+	.vote_reg = GCC_APCS_CLOCK_BRANCH_ENA_VOTE_1,
+	.en_mask = BIT(4),
+	.base = &virt_base,
+	.halt_check = DELAY,
+	.c = {
+		.dbg_name = "gcc_gpu_gpll0_clk",
+		.parent = &gpll0.c,
+		.ops = &clk_ops_vote,
+		CLK_INIT(gcc_gpu_gpll0_clk.c),
+	},
+};
+
+static struct local_vote_clk gcc_gpu_gpll0_div_clk = {
+	.cbcr_reg = GCC_APCS_CLOCK_BRANCH_ENA_VOTE_1,
+	.vote_reg = GCC_APCS_CLOCK_BRANCH_ENA_VOTE_1,
+	.en_mask = BIT(3),
+	.base = &virt_base,
+	.halt_check = DELAY,
+	.c = {
+		.dbg_name = "gcc_gpu_gpll0_div_clk",
+		.parent = &gpll0.c,
+		.ops = &clk_ops_vote,
+		CLK_INIT(gcc_gpu_gpll0_div_clk.c),
 	},
 };
 
@@ -2185,61 +2227,6 @@ static struct reset_clk gcc_qusb2phy_sec_reset = {
 	},
 };
 
-static struct branch_clk gcc_usb_phy_cfg_ahb2phy_clk = {
-	.cbcr_reg = GCC_USB_PHY_CFG_AHB2PHY_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "gcc_usb_phy_cfg_ahb2phy_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(gcc_usb_phy_cfg_ahb2phy_clk.c),
-	},
-};
-
-static struct branch_clk gcc_wcss_ahb_s0_clk = {
-	.cbcr_reg = GCC_WCSS_AHB_S0_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "gcc_wcss_ahb_s0_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(gcc_wcss_ahb_s0_clk.c),
-	},
-};
-
-static struct branch_clk gcc_wcss_axi_m_clk = {
-	.cbcr_reg = GCC_WCSS_AXI_M_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "gcc_wcss_axi_m_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(gcc_wcss_axi_m_clk.c),
-	},
-};
-
-static struct branch_clk gcc_wcss_ecahb_clk = {
-	.cbcr_reg = GCC_WCSS_ECAHB_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "gcc_wcss_ecahb_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(gcc_wcss_ecahb_clk.c),
-	},
-};
-
-static struct branch_clk gcc_wcss_shdreg_ahb_clk = {
-	.cbcr_reg = GCC_WCSS_SHDREG_AHB_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "gcc_wcss_shdreg_ahb_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(gcc_wcss_shdreg_ahb_clk.c),
-	},
-};
-
 static struct branch_clk gcc_mss_cfg_ahb_clk = {
 	.cbcr_reg = GCC_MSS_CFG_AHB_CBCR,
 	.has_sibling = 1,
@@ -2381,7 +2368,6 @@ static struct mux_clk gcc_debug_mux = {
 		{ &gcc_usb30_mock_utmi_clk.c, 0x0040 },
 		{ &gcc_usb3_phy_aux_clk.c, 0x0041 },
 		{ &gcc_usb3_phy_pipe_clk.c, 0x0042 },
-		{ &gcc_usb_phy_cfg_ahb2phy_clk.c, 0x0045 },
 		{ &gcc_sdcc2_apps_clk.c, 0x0046 },
 		{ &gcc_sdcc2_ahb_clk.c, 0x0047 },
 		{ &gcc_sdcc4_apps_clk.c, 0x0048 },
@@ -2547,7 +2533,10 @@ static struct clk_lookup msm_clocks_gcc_cobalt[] = {
 	CLK_LIST(gpll0),
 	CLK_LIST(gpll0_ao),
 	CLK_LIST(gpll0_out_main),
+	CLK_LIST(gcc_mmss_gpll0_clk),
 	CLK_LIST(gcc_mmss_gpll0_div_clk),
+	CLK_LIST(gcc_gpu_gpll0_clk),
+	CLK_LIST(gcc_gpu_gpll0_div_clk),
 	CLK_LIST(gpll4),
 	CLK_LIST(gpll4_out_main),
 	CLK_LIST(hmss_ahb_clk_src),
@@ -2688,13 +2677,8 @@ static struct clk_lookup msm_clocks_gcc_cobalt[] = {
 	CLK_LIST(gcc_usb30_sleep_clk),
 	CLK_LIST(gcc_usb3_phy_aux_clk),
 	CLK_LIST(gcc_usb3_phy_pipe_clk),
-	CLK_LIST(gcc_usb_phy_cfg_ahb2phy_clk),
 	CLK_LIST(gcc_prng_ahb_clk),
 	CLK_LIST(gcc_boot_rom_ahb_clk),
-	CLK_LIST(gcc_wcss_ahb_s0_clk),
-	CLK_LIST(gcc_wcss_axi_m_clk),
-	CLK_LIST(gcc_wcss_ecahb_clk),
-	CLK_LIST(gcc_wcss_shdreg_ahb_clk),
 	CLK_LIST(gcc_mss_cfg_ahb_clk),
 	CLK_LIST(gcc_mss_q6_bimc_axi_clk),
 	CLK_LIST(gcc_mss_mnoc_bimc_axi_clk),
@@ -2796,6 +2780,10 @@ static int msm_gcc_cobalt_probe(struct platform_device *pdev)
 				    ARRAY_SIZE(msm_clocks_gcc_cobalt));
 	if (ret)
 		return ret;
+
+	/* Disable the GPLL0 active input to MMSS and GPU via MISC registers */
+	writel_relaxed(0x10003, virt_base + GCC_MMSS_MISC);
+	writel_relaxed(0x10003, virt_base + GCC_GPU_MISC);
 
 	/* Hold an active set vote for the cnoc_periph resource */
 	clk_set_rate(&cnoc_periph_keepalive_a_clk.c, 19200000);

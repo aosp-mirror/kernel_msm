@@ -40,7 +40,8 @@
 #define IPA_TAG_SLEEP_MIN_USEC (1000)
 #define IPA_TAG_SLEEP_MAX_USEC (2000)
 #define IPA_FORCE_CLOSE_TAG_PROCESS_TIMEOUT (10 * HZ)
-#define IPA_BCR_REG_VAL (0x00000001)
+#define IPA_BCR_REG_VAL_v3_0 (0x00000001)
+#define IPA_BCR_REG_VAL_v3_5 (0x0000003B)
 #define IPA_AGGR_GRAN_MIN (1)
 #define IPA_AGGR_GRAN_MAX (32)
 #define IPA_EOT_COAL_GRAN_MIN (1)
@@ -848,14 +849,28 @@ void ipa3_cfg_qsb(void)
 int ipa3_init_hw(void)
 {
 	u32 ipa_version = 0;
+	u32 val;
 
 	/* Read IPA version and make sure we have access to the registers */
 	ipa_version = ipahal_read_reg(IPA_VERSION);
 	if (ipa_version == 0)
 		return -EFAULT;
 
-	/* using old BCR configuration(IPAv2.6)*/
-	ipahal_write_reg(IPA_BCR, IPA_BCR_REG_VAL);
+	switch (ipa3_ctx->ipa_hw_type) {
+	case IPA_HW_v3_0:
+	case IPA_HW_v3_1:
+		val = IPA_BCR_REG_VAL_v3_0;
+		break;
+	case IPA_HW_v3_5:
+	case IPA_HW_v3_5_1:
+		val = IPA_BCR_REG_VAL_v3_5;
+		break;
+	default:
+		IPAERR("unknown HW type in dts\n");
+		return -EFAULT;
+	}
+
+	ipahal_write_reg(IPA_BCR, val);
 
 	ipa3_cfg_qsb();
 
@@ -3029,6 +3044,7 @@ int ipa3_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 	api_ctrl->ipa_disconnect = ipa3_disconnect;
 	api_ctrl->ipa_reset_endpoint = ipa3_reset_endpoint;
 	api_ctrl->ipa_clear_endpoint_delay = ipa3_clear_endpoint_delay;
+	api_ctrl->ipa_disable_endpoint = NULL;
 	api_ctrl->ipa_cfg_ep = ipa3_cfg_ep;
 	api_ctrl->ipa_cfg_ep_nat = ipa3_cfg_ep_nat;
 	api_ctrl->ipa_cfg_ep_hdr = ipa3_cfg_ep_hdr;
@@ -3178,6 +3194,9 @@ int ipa3_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 	api_ctrl->ipa_get_ipc_logbuf_low = ipa3_get_ipc_logbuf_low;
 	api_ctrl->ipa_rx_poll = ipa3_rx_poll;
 	api_ctrl->ipa_recycle_wan_skb = ipa3_recycle_wan_skb;
+	api_ctrl->ipa_setup_uc_ntn_pipes = ipa3_setup_uc_ntn_pipes;
+	api_ctrl->ipa_tear_down_uc_offload_pipes =
+		ipa3_tear_down_uc_offload_pipes;
 
 	return 0;
 }
@@ -3328,6 +3347,12 @@ void ipa3_set_resorce_groups_min_max_limits(void)
 			val.y_max = ipa3_rsrc_dst_grp_config[i][j + 1].max;
 			ipa3_write_rsrc_grp_type_reg(j, i, false, &val);
 		}
+	}
+
+	/* move resource group configuration from HLOS to TZ */
+	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v3_1) {
+		IPAERR("skip configuring ipa_rx_hps_clients from HLOS\n");
+		return;
 	}
 
 	IPADBG("Assign RX_HPS CMDQ rsrc groups min-max limits\n");
@@ -3584,4 +3609,28 @@ int ipa3_load_fws(const struct firmware *firmware)
 	}
 	IPADBG("IPA FWs (GSI FW, HPS and DPS) were loaded\n");
 	return 0;
+}
+
+/**
+ * ipa3_is_msm_device() - Is the running device a MSM or MDM?
+ *  Determine according to IPA version
+ *
+ * Return value: true if MSM, false if MDM
+ *
+ */
+bool ipa3_is_msm_device(void)
+{
+	switch (ipa3_ctx->ipa_hw_type) {
+	case IPA_HW_v3_0:
+	case IPA_HW_v3_5:
+		return false;
+	case IPA_HW_v3_1:
+	case IPA_HW_v3_5_1:
+		return true;
+	default:
+		IPAERR("unknown HW type %d\n", ipa3_ctx->ipa_hw_type);
+		ipa_assert();
+	}
+
+	return false;
 }

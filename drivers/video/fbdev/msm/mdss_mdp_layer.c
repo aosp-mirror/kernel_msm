@@ -114,7 +114,7 @@ static int __dest_scaler_data_setup(struct mdp_destination_scaler_data *ds_data,
 }
 
 static int mdss_mdp_destination_scaler_pre_validate(struct mdss_mdp_ctl *ctl,
-		struct mdp_destination_scaler_data *ds_data)
+		struct mdp_destination_scaler_data *ds_data, int ds_count)
 {
 	struct mdss_data_type *mdata;
 	struct mdss_panel_info *pinfo;
@@ -127,7 +127,7 @@ static int mdss_mdp_destination_scaler_pre_validate(struct mdss_mdp_ctl *ctl,
 	 * when we switch between scaling factor or disabling scaling.
 	 */
 	if (test_bit(MDSS_CAPS_DEST_SCALER, mdata->mdss_caps_map)) {
-		if (ctl->mixer_left) {
+		if (ctl->mixer_left && ctl->mixer_left->ds) {
 			/*
 			 * Any scale update from usermode, we will update the
 			 * mixer width and height with the given LM width and
@@ -137,8 +137,12 @@ static int mdss_mdp_destination_scaler_pre_validate(struct mdss_mdp_ctl *ctl,
 			if ((ds_data->lm_width > get_panel_xres(pinfo)) ||
 				(ds_data->lm_height >  get_panel_yres(pinfo)) ||
 				(ds_data->lm_width == 0) ||
-				(ds_data->lm_height == 0)) {
-				pr_err("Invalid LM width / height setting\n");
+				(ds_data->lm_height == 0) ||
+				(is_dsc_compression(pinfo) &&
+				   !is_lm_configs_dsc_compatible(pinfo,
+				     ds_data->lm_width, ds_data->lm_height))) {
+				pr_err("Invalid left LM {%d,%d} setting\n",
+					ds_data->lm_width, ds_data->lm_height);
 				return -EINVAL;
 			}
 
@@ -149,18 +153,46 @@ static int mdss_mdp_destination_scaler_pre_validate(struct mdss_mdp_ctl *ctl,
 			ctl->mixer_left->height = ds_data->lm_height;
 			pr_debug("Update mixer-left width/height: %dx%d\n",
 					ds_data->lm_width, ds_data->lm_width);
-
 		}
 
-		if (ctl->mixer_right) {
+		if (ctl->mixer_right && ctl->mixer_right->ds) {
+			/*
+			 * Advanced to next ds_data structure from commit if
+			 * there is more than 1 for split display usecase.
+			 */
+			if (ds_count > 1)
+				ds_data++;
+
+			pinfo = &ctl->panel_data->panel_info;
+			if ((ds_data->lm_width > get_panel_xres(pinfo)) ||
+				(ds_data->lm_height >  get_panel_yres(pinfo)) ||
+				(ds_data->lm_width == 0) ||
+				(ds_data->lm_height == 0) ||
+				(is_dsc_compression(pinfo) &&
+				   !is_lm_configs_dsc_compatible(pinfo,
+				     ds_data->lm_width, ds_data->lm_height))) {
+				pr_err("Invalid right LM {%d,%d} setting\n",
+					ds_data->lm_width, ds_data->lm_height);
+				return -EINVAL;
+			}
+
 			/*
 			 * Split display both left and right should have the
 			 * same width and height
 			 */
 			ctl->mixer_right->width  = ds_data->lm_width;
 			ctl->mixer_right->height = ds_data->lm_height;
-			pr_info("Update mixer-right width/height: %dx%d\n",
+			pr_debug("Update mixer-right width/height: %dx%d\n",
 					ds_data->lm_width, ds_data->lm_height);
+
+			if (ctl->mixer_left &&
+					((ctl->mixer_right->width !=
+					  ctl->mixer_left->width) ||
+					 (ctl->mixer_right->height !=
+					  ctl->mixer_left->height))) {
+				pr_err("Mismatch width/heigth in LM for split display\n");
+				return -EINVAL;
+			}
 
 			/*
 			 * For split display, CTL width should be equal to
@@ -264,6 +296,57 @@ static int mdss_mdp_validate_destination_scaler(struct msm_fb_data_type *mfd,
 	return ret;
 }
 
+static int mdss_mdp_avr_validate(struct msm_fb_data_type *mfd,
+				struct mdp_layer_commit_v1 *commit)
+{
+	struct mdss_data_type *mdata = mfd_to_mdata(mfd);
+	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
+	int req = 0;
+	struct mdss_panel_info *pinfo = NULL;
+
+	if (!ctl || !mdata || !commit) {
+		pr_err("Invalid input parameters\n");
+		return -EINVAL;
+	}
+
+	if (!(commit->flags & MDP_COMMIT_AVR_EN))
+		return 0;
+
+	pinfo = &ctl->panel_data->panel_info;
+
+	if (!test_bit(MDSS_CAPS_AVR_SUPPORTED, mdata->mdss_caps_map) ||
+		(pinfo->max_fps == pinfo->min_fps)) {
+		pr_err("AVR not supported\n");
+		return -ENODEV;
+	}
+
+	if (pinfo->dynamic_fps &&
+		!(pinfo->dfps_update == DFPS_IMMEDIATE_PORCH_UPDATE_MODE_HFP ||
+		pinfo->dfps_update == DFPS_IMMEDIATE_PORCH_UPDATE_MODE_VFP)) {
+		pr_err("Dynamic fps and AVR cannot coexists\n");
+		return -EINVAL;
+	}
+
+	if (!ctl->is_video_mode) {
+		pr_err("AVR not supported in command mode\n");
+		return -EINVAL;
+	}
+
+	return req;
+}
+
+static void __update_avr_info(struct mdss_mdp_ctl *ctl,
+			struct mdp_layer_commit_v1 *commit)
+{
+	if (commit->flags & MDP_COMMIT_AVR_EN)
+		ctl->avr_info.avr_enabled = true;
+
+	ctl->avr_info.avr_mode = MDSS_MDP_AVR_CONTINUOUS;
+
+	if (commit->flags & MDP_COMMIT_AVR_ONE_SHOT_MODE)
+		ctl->avr_info.avr_mode = MDSS_MDP_AVR_ONE_SHOT;
+}
+
 /*
  * __layer_needs_src_split() - check needs source split configuration
  * @layer:	input layer
@@ -272,10 +355,7 @@ static int mdss_mdp_validate_destination_scaler(struct msm_fb_data_type *mfd,
  */
 static bool __layer_needs_src_split(struct mdp_input_layer *layer)
 {
-	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
-
-	return (layer->flags & MDP_LAYER_ASYNC) ||
-		mdss_has_quirk(mdata, MDSS_QUIRK_SRC_SPLIT_ALWAYS);
+	return (layer->flags & MDP_LAYER_ASYNC);
 }
 
 static int __async_update_position_check(struct msm_fb_data_type *mfd,
@@ -672,10 +752,6 @@ static int __validate_pipe_priorities(struct mdss_mdp_pipe *left,
 			(left->priority >= right->priority))
 		return -EINVAL;
 
-	if ((left->multirect.num < right->multirect.num) &&
-			(left->priority > right->priority))
-		return -EINVAL;
-
 	return 0;
 }
 
@@ -696,7 +772,7 @@ static int __configure_pipe_params(struct msm_fb_data_type *mfd,
 	mixer = mdss_mdp_mixer_get(mdp5_data->ctl, mixer_mux);
 	pipe->src_fmt = mdss_mdp_get_format_params(layer->buffer.format);
 	if (!pipe->src_fmt || !mixer) {
-		pr_err("invalid layer format:%d or mixer:%p\n",
+		pr_err("invalid layer format:%d or mixer:%pK\n",
 				layer->buffer.format, pipe->mixer_left);
 		ret = -EINVAL;
 		goto end;
@@ -987,7 +1063,6 @@ static struct sync_fence *__create_fence(struct msm_fb_data_type *mfd,
 		goto end;
 	}
 
-	sync_fence_install(sync_fence, *fence_fd);
 end:
 	return sync_fence;
 }
@@ -1060,6 +1135,9 @@ static int __handle_buffer_fences(struct msm_fb_data_type *mfd,
 		ret = PTR_ERR(retire_fence);
 		goto retire_fence_err;
 	}
+
+	sync_fence_install(release_fence, commit->release_fence);
+	sync_fence_install(retire_fence, commit->retire_fence);
 
 	mutex_unlock(&sync_pt_data->sync_mutex);
 	return ret;
@@ -2098,17 +2176,17 @@ static int __validate_layers(struct msm_fb_data_type *mfd,
 	if (test_bit(MDSS_CAPS_DEST_SCALER, mdata->mdss_caps_map) &&
 			commit->dest_scaler &&
 			commit->dest_scaler_cnt) {
+		struct mdp_destination_scaler_data *ds_data =
+			commit->dest_scaler;
+
 		/*
-		 * Find out which DS block to use based on LM assignment
+		 * Find out which DS block to use based on DS commit info
 		 */
-		if ((left_cnt > 0) && (right_cnt > 0) &&
-				(commit->dest_scaler_cnt == 2))
+		if (commit->dest_scaler_cnt == 2)
 			ds_mode = DS_DUAL_MODE;
-		else if ((left_cnt > 0) && (right_cnt == 0) &&
-				(commit->dest_scaler_cnt == 1))
+		else if (ds_data->dest_scaler_ndx == 0)
 			ds_mode = DS_LEFT;
-		else if ((left_cnt == 0) && (right_cnt > 0) &&
-				(commit->dest_scaler_cnt == 1))
+		else if (ds_data->dest_scaler_ndx == 1)
 			ds_mode = DS_RIGHT;
 		else {
 			pr_err("Commit destination scaler count not matching with LM assignment, DS-cnt:%d\n",
@@ -2172,7 +2250,7 @@ validate_exit:
 			}
 		} else {
 			pipe->file = file;
-			pr_debug("file pointer attached with pipe is %p\n",
+			pr_debug("file pointer attached with pipe is %pK\n",
 				file);
 		}
 	}
@@ -2223,12 +2301,12 @@ int mdss_mdp_layer_pre_commit(struct msm_fb_data_type *mfd,
 	struct mdss_overlay_private *mdp5_data;
 	struct mdss_mdp_data *src_data[MDSS_MDP_MAX_SSPP];
 	struct mdss_mdp_validate_info_t *validate_info_list;
+	struct mdss_mdp_ctl *sctl = NULL;
 
 	mdp5_data = mfd_to_mdp5_data(mfd);
 
 	if (!mdp5_data || !mdp5_data->ctl)
 		return -EINVAL;
-
 
 	if (commit->output_layer) {
 		ret = __is_cwb_requested(commit->output_layer->flags);
@@ -2242,6 +2320,18 @@ int mdss_mdp_layer_pre_commit(struct msm_fb_data_type *mfd,
 			}
 		}
 	}
+
+	ret = mdss_mdp_avr_validate(mfd, commit);
+	if (IS_ERR_VALUE(ret)) {
+		pr_err("AVR validate failed\n");
+		return -EINVAL;
+	}
+
+	__update_avr_info(mdp5_data->ctl, commit);
+
+	sctl = mdss_mdp_get_split_ctl(mdp5_data->ctl);
+	if (sctl)
+		__update_avr_info(sctl, commit);
 
 	layer_list = commit->input_layers;
 
@@ -2396,11 +2486,18 @@ int mdss_mdp_layer_atomic_validate(struct msm_fb_data_type *mfd,
 
 	if (commit->dest_scaler && commit->dest_scaler_cnt) {
 		rc = mdss_mdp_destination_scaler_pre_validate(mdp5_data->ctl,
-				commit->dest_scaler);
+				commit->dest_scaler,
+				commit->dest_scaler_cnt);
 		if (IS_ERR_VALUE(rc)) {
 			pr_err("Destination scaler pre-validate failed\n");
 			return -EINVAL;
 		}
+	}
+
+	rc = mdss_mdp_avr_validate(mfd, commit);
+	if (IS_ERR_VALUE(rc)) {
+		pr_err("AVR validate failed\n");
+		return -EINVAL;
 	}
 
 	return __validate_layers(mfd, file, commit);

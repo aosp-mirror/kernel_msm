@@ -51,7 +51,7 @@ struct panel_id {
 #define MIPI_CMD_PANEL		9	/* MIPI */
 #define WRITEBACK_PANEL		10	/* Wifi display */
 #define LVDS_PANEL		11	/* LVDS */
-#define EDP_PANEL		12	/* LVDS */
+#define DP_PANEL		12	/* LVDS */
 
 #define DSC_PPS_LEN		128
 
@@ -61,7 +61,7 @@ static inline const char *mdss_panel2str(u32 panel)
 #define PANEL_NAME(n) [n ## _PANEL] = __stringify(n)
 		PANEL_NAME(MIPI_VIDEO),
 		PANEL_NAME(MIPI_CMD),
-		PANEL_NAME(EDP),
+		PANEL_NAME(DP),
 		PANEL_NAME(HDMI),
 		PANEL_NAME(DTV),
 		PANEL_NAME(WRITEBACK),
@@ -722,6 +722,9 @@ struct mdss_panel_info {
 
 	/* debugfs structure for the panel */
 	struct mdss_panel_debugfs_info *debugfs_info;
+
+	/* stores initial adaptive variable refresh vtotal value */
+	u32 saved_avr_vtotal;
 };
 
 struct mdss_panel_timing {
@@ -811,7 +814,7 @@ static inline u32 mdss_panel_get_framerate(struct mdss_panel_info *panel_info)
 	case MIPI_CMD_PANEL:
 		frame_rate = panel_info->mipi.frame_rate;
 		break;
-	case EDP_PANEL:
+	case DP_PANEL:
 		frame_rate = panel_info->edp.frame_rate;
 		break;
 	case WRITEBACK_PANEL:
@@ -898,6 +901,15 @@ static inline bool is_dsc_compression(struct mdss_panel_info *pinfo)
 		return (pinfo->compression_mode == COMPRESSION_DSC);
 
 	return false;
+}
+
+static inline bool is_lm_configs_dsc_compatible(struct mdss_panel_info *pinfo,
+		u32 width, u32 height)
+{
+	if ((width % pinfo->dsc.slice_width) ||
+		(height % pinfo->dsc.slice_height))
+		return false;
+	return true;
 }
 
 int mdss_register_panel(struct platform_device *pdev,

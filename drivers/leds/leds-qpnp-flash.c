@@ -26,11 +26,12 @@
 #include <linux/regulator/consumer.h>
 #include <linux/workqueue.h>
 #include <linux/power_supply.h>
+#include <linux/leds-qpnp-flash.h>
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/qpnp/qpnp-revid.h>
-#include "leds.h"
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
+#include "leds.h"
 
 #define FLASH_LED_PERIPHERAL_SUBTYPE(base)			(base + 0x05)
 #define FLASH_SAFETY_TIMER(base)				(base + 0x40)
@@ -81,6 +82,7 @@
 #define FLASH_LED_HDRM_SNS_ENABLE_MASK				0x81
 #define	FLASH_MASK_MODULE_CONTRL_MASK				0xE0
 #define FLASH_FOLLOW_OTST2_RB_MASK				0x08
+#define FLASH_PREPARE_OPTIONS_MASK				0x08
 
 #define FLASH_LED_TRIGGER_DEFAULT				"none"
 #define FLASH_LED_HEADROOM_DEFAULT_MV				500
@@ -1152,6 +1154,58 @@ error_regulator_enable:
 		regulator_disable(flash_node->reg_data[i].regs);
 
 	return rc;
+}
+
+int qpnp_flash_led_prepare(struct led_trigger *trig, int options,
+					int *max_current)
+{
+	struct led_classdev *led_cdev = trigger_to_lcdev(trig);
+	struct flash_node_data *flash_node;
+	struct qpnp_flash_led *led;
+	int rc;
+
+	if (!led_cdev) {
+		pr_err("Invalid led_trigger provided\n");
+		return -EINVAL;
+	}
+
+	flash_node = container_of(led_cdev, struct flash_node_data, cdev);
+	led = dev_get_drvdata(&flash_node->pdev->dev);
+
+	if (!(options & FLASH_PREPARE_OPTIONS_MASK)) {
+		dev_err(&led->pdev->dev, "Invalid options %d\n", options);
+		return -EINVAL;
+	}
+
+	if (options & ENABLE_REGULATOR) {
+		rc = flash_regulator_enable(led, flash_node, true);
+		if (rc < 0) {
+			dev_err(&led->pdev->dev,
+				"enable regulator failed, rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	if (options & DISABLE_REGULATOR) {
+		rc = flash_regulator_enable(led, flash_node, false);
+		if (rc < 0) {
+			dev_err(&led->pdev->dev,
+				"disable regulator failed, rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	if (options & QUERY_MAX_CURRENT) {
+		rc = qpnp_flash_led_get_max_avail_current(flash_node, led);
+		if (rc < 0) {
+			dev_err(&led->pdev->dev,
+				"query max current failed, rc=%d\n", rc);
+			return rc;
+		}
+		*max_current = rc;
+	}
+
+	return 0;
 }
 
 static void qpnp_flash_led_work(struct work_struct *work)

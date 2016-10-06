@@ -1606,7 +1606,7 @@ static struct sock *qtaguid_find_sk(const struct sk_buff *skb,
 		 * When in TCP_TIME_WAIT the sk is not a "struct sock" but
 		 * "struct inet_timewait_sock" which is missing fields.
 		 */
-		if (sk->sk_state  == TCP_TIME_WAIT) {
+		if (!sk_fullsock(sk) || sk->sk_state  == TCP_TIME_WAIT) {
 			sock_gen_put(sk);
 			sk = NULL;
 		}
@@ -1689,7 +1689,7 @@ static bool qtaguid_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	/* default: Fall through and do UID releated work */
 	}
 
-	sk = skb->sk;
+	sk = skb_to_full_sk(skb);
 	/*
 	 * When in TCP_TIME_WAIT the sk is not a "struct sock" but
 	 * "struct inet_timewait_sock" which is missing fields.
@@ -1946,7 +1946,7 @@ static int qtaguid_ctrl_proc_show(struct seq_file *m, void *v)
 			);
 		f_count = atomic_long_read(
 			&sock_tag_entry->socket->file->f_count);
-		seq_printf(m, "sock=%p tag=0x%llx (uid=%u) pid=%u "
+		seq_printf(m, "sock=%pK tag=0x%llx (uid=%u) pid=%u "
 			   "f_count=%lu\n",
 			   sock_tag_entry->sk,
 			   sock_tag_entry->tag, uid,

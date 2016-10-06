@@ -63,6 +63,8 @@ struct nqx_dev {
 	bool			nfc_ven_enabled;
 	/* NFC_IRQ state */
 	bool			irq_enabled;
+	/* NFC_IRQ wake-up state */
+	bool			irq_wake_up;
 	spinlock_t		irq_enabled_lock;
 	unsigned int		count_irq;
 	/* Initial CORE RESET notification */
@@ -107,35 +109,13 @@ static void nqx_disable_irq(struct nqx_dev *nqx_dev)
 	spin_unlock_irqrestore(&nqx_dev->irq_enabled_lock, flags);
 }
 
-static void nqx_enable_irq(struct nqx_dev *nqx_dev)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&nqx_dev->irq_enabled_lock, flags);
-	if (!nqx_dev->irq_enabled) {
-		nqx_dev->irq_enabled = true;
-		enable_irq(nqx_dev->client->irq);
-	}
-	spin_unlock_irqrestore(&nqx_dev->irq_enabled_lock, flags);
-}
-
 static irqreturn_t nqx_dev_irq_handler(int irq, void *dev_id)
 {
 	struct nqx_dev *nqx_dev = dev_id;
 	unsigned long flags;
-	int ret;
 
 	if (device_may_wakeup(&nqx_dev->client->dev))
 		pm_wakeup_event(&nqx_dev->client->dev, WAKEUP_SRC_TIMEOUT);
-
-	ret = gpio_get_value(nqx_dev->irq_gpio);
-	if (!ret) {
-#ifdef NFC_KERNEL_BU
-		dev_info(&nqx_dev->client->dev,
-			"nqx nfc : nqx_dev_irq_handler error = %d\n", ret);
-#endif
-		return IRQ_HANDLED;
-	}
 
 	nqx_disable_irq(nqx_dev);
 	spin_lock_irqsave(&nqx_dev->irq_enabled_lock, flags);
@@ -175,15 +155,24 @@ static ssize_t nfc_read(struct file *filp, char __user *buf,
 			ret = -EAGAIN;
 			goto err;
 		}
-		if (!nqx_dev->irq_enabled) {
-			enable_irq(nqx_dev->client->irq);
-			nqx_dev->irq_enabled = true;
+		while (1) {
+			ret = 0;
+			if (!nqx_dev->irq_enabled) {
+				nqx_dev->irq_enabled = true;
+				enable_irq(nqx_dev->client->irq);
+			}
+			if (!gpio_get_value(nqx_dev->irq_gpio)) {
+				ret = wait_event_interruptible(nqx_dev->read_wq,
+					!nqx_dev->irq_enabled);
+			}
+			if (ret)
+				goto err;
+			nqx_disable_irq(nqx_dev);
+
+			if (gpio_get_value(nqx_dev->irq_gpio))
+				break;
+			dev_err_ratelimited(&nqx_dev->client->dev, "gpio is low, no need to read data\n");
 		}
-		ret = wait_event_interruptible(nqx_dev->read_wq,
-				gpio_get_value(nqx_dev->irq_gpio));
-		if (ret)
-			goto err;
-		nqx_disable_irq(nqx_dev);
 	}
 
 	tmp = nqx_dev->kbuf;
@@ -385,6 +374,9 @@ int nfc_ioctl_power_states(struct file *filp, unsigned long arg)
 			} else {
 				dev_dbg(&nqx_dev->client->dev, "keeping en_gpio high\n");
 			}
+		} else {
+			dev_dbg(&nqx_dev->client->dev, "ese_gpio invalid, set en_gpio to low\n");
+			gpio_set_value(nqx_dev->en_gpio, 0);
 		}
 		r = nqx_clock_deselect(nqx_dev);
 		if (r < 0)
@@ -393,7 +385,6 @@ int nfc_ioctl_power_states(struct file *filp, unsigned long arg)
 		/* hardware dependent delay */
 		msleep(100);
 	} else if (arg == 1) {
-		nqx_enable_irq(nqx_dev);
 		dev_dbg(&nqx_dev->client->dev,
 			"gpio_set_value enable: %s: info: %p\n",
 			__func__, nqx_dev);
@@ -791,21 +782,29 @@ static int nqx_probe(struct i2c_client *client,
 		r = gpio_request(platform_data->ese_gpio,
 				"nfc-ese_pwr");
 		if (r) {
+			nqx_dev->ese_gpio = -EINVAL;
 			dev_err(&client->dev,
 				"%s: unable to request nfc ese gpio [%d]\n",
 					__func__, platform_data->ese_gpio);
 			/* ese gpio optional so we should continue */
 		} else {
 			nqx_dev->ese_gpio = platform_data->ese_gpio;
-		}
-		r = gpio_direction_output(platform_data->ese_gpio, 0);
-		if (r) {
-			dev_err(&client->dev,
-			"%s: cannot set direction for nfc ese gpio [%d]\n",
-			__func__, platform_data->ese_gpio);
-			/* ese gpio optional so we should continue */
+			r = gpio_direction_output(platform_data->ese_gpio, 0);
+			if (r) {
+				/*
+				 * free ese gpio and set invalid
+				 * to avoid further use
+				 */
+				gpio_free(platform_data->ese_gpio);
+				nqx_dev->ese_gpio = -EINVAL;
+				dev_err(&client->dev,
+					"%s: cannot set direction for nfc ese gpio [%d]\n",
+					__func__, platform_data->ese_gpio);
+				/* ese gpio optional so we should continue */
+			}
 		}
 	} else {
+		nqx_dev->ese_gpio = -EINVAL;
 		dev_err(&client->dev,
 			"%s: ese gpio not provided\n", __func__);
 		/* ese gpio optional so we should continue */
@@ -835,7 +834,6 @@ static int nqx_probe(struct i2c_client *client,
 	nqx_dev->en_gpio = platform_data->en_gpio;
 	nqx_dev->irq_gpio = platform_data->irq_gpio;
 	nqx_dev->firm_gpio  = platform_data->firm_gpio;
-	nqx_dev->ese_gpio = platform_data->ese_gpio;
 	nqx_dev->clkreq_gpio = platform_data->clkreq_gpio;
 	nqx_dev->pdata = platform_data;
 
@@ -903,6 +901,7 @@ static int nqx_probe(struct i2c_client *client,
 	device_init_wakeup(&client->dev, true);
 	device_set_wakeup_capable(&client->dev, true);
 	i2c_set_clientdata(client, nqx_dev);
+	nqx_dev->irq_wake_up = false;
 
 	dev_err(&client->dev,
 	"%s: probing NFCC NQxxx exited successfully\n",
@@ -923,7 +922,7 @@ err_clkreq_gpio:
 	gpio_free(platform_data->clkreq_gpio);
 err_ese_gpio:
 	/* optional gpio, not sure was configured in probe */
-	if (nqx_dev->ese_gpio)
+	if (nqx_dev->ese_gpio > 0)
 		gpio_free(platform_data->ese_gpio);
 err_firm_gpio:
 	gpio_free(platform_data->firm_gpio);
@@ -964,7 +963,7 @@ static int nqx_remove(struct i2c_client *client)
 	mutex_destroy(&nqx_dev->read_mutex);
 	gpio_free(nqx_dev->clkreq_gpio);
 	/* optional gpio, not sure was configured in probe */
-	if (nqx_dev->ese_gpio)
+	if (nqx_dev->ese_gpio > 0)
 		gpio_free(nqx_dev->ese_gpio);
 	gpio_free(nqx_dev->firm_gpio);
 	gpio_free(nqx_dev->irq_gpio);
@@ -983,17 +982,22 @@ static int nqx_suspend(struct device *device)
 	struct i2c_client *client = to_i2c_client(device);
 	struct nqx_dev *nqx_dev = i2c_get_clientdata(client);
 
-	if (device_may_wakeup(&client->dev) && nqx_dev->irq_enabled)
-		enable_irq_wake(client->irq);
+	if (device_may_wakeup(&client->dev) && nqx_dev->irq_enabled) {
+		if (!enable_irq_wake(client->irq))
+			nqx_dev->irq_wake_up = true;
+	}
 	return 0;
 }
 
 static int nqx_resume(struct device *device)
 {
 	struct i2c_client *client = to_i2c_client(device);
+	struct nqx_dev *nqx_dev = i2c_get_clientdata(client);
 
-	if (device_may_wakeup(&client->dev))
-		disable_irq_wake(client->irq);
+	if (device_may_wakeup(&client->dev) && nqx_dev->irq_wake_up) {
+		if (!disable_irq_wake(client->irq))
+			nqx_dev->irq_wake_up = false;
+	}
 	return 0;
 }
 

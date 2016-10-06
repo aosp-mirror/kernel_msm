@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/ipa_uc_offload.h>
 #include "ipa_api.h"
 
 #define DRV_NAME "ipa"
@@ -368,6 +369,24 @@ int ipa_reset_endpoint(u32 clnt_hdl)
 	return ret;
 }
 EXPORT_SYMBOL(ipa_reset_endpoint);
+
+/**
+* ipa_disable_endpoint() - Disable an endpoint from IPA perspective
+* @clnt_hdl:	[in] IPA client handle
+*
+* Returns:	0 on success, negative on failure
+*
+* Note:		Should not be called from atomic context
+*/
+int ipa_disable_endpoint(u32 clnt_hdl)
+{
+	int ret;
+
+	IPA_API_DISPATCH_RETURN(ipa_disable_endpoint, clnt_hdl);
+
+	return ret;
+}
+EXPORT_SYMBOL(ipa_disable_endpoint);
 
 
 /**
@@ -2514,6 +2533,56 @@ int ipa_stop_gsi_channel(u32 clnt_hdl)
 }
 EXPORT_SYMBOL(ipa_stop_gsi_channel);
 
+/**
+ * ipa_get_version_string() - Get string representation of IPA version
+ * @ver: IPA version
+ *
+ * Return: Constant string representation
+ */
+const char *ipa_get_version_string(enum ipa_hw_type ver)
+{
+	const char *str;
+
+	switch (ver) {
+	case IPA_HW_v1_0:
+		str = "1.0";
+		break;
+	case IPA_HW_v1_1:
+		str = "1.1";
+		break;
+	case IPA_HW_v2_0:
+		str = "2.0";
+		break;
+	case IPA_HW_v2_1:
+		str = "2.1";
+		break;
+	case IPA_HW_v2_5:
+		str = "2.5/2.6";
+		break;
+	case IPA_HW_v2_6L:
+		str = "2.6L";
+		break;
+	case IPA_HW_v3_0:
+		str = "3.0";
+		break;
+	case IPA_HW_v3_1:
+		str = "3.1";
+		break;
+	case IPA_HW_v3_5:
+		str = "3.5";
+		break;
+	case IPA_HW_v3_5_1:
+		str = "3.5.1";
+		break;
+	default:
+		str = "Invalid version";
+		break;
+	}
+
+	return str;
+}
+EXPORT_SYMBOL(ipa_get_version_string);
+
 static struct of_device_id ipa_plat_drv_match[] = {
 	{ .compatible = "qcom,ipa", },
 	{ .compatible = "qcom,ipa-smmu-ap-cb", },
@@ -2563,6 +2632,8 @@ static int ipa_generic_plat_drv_probe(struct platform_device *pdev_p)
 		break;
 	case IPA_HW_v3_0:
 	case IPA_HW_v3_1:
+	case IPA_HW_v3_5:
+	case IPA_HW_v3_5_1:
 		result = ipa3_plat_drv_probe(pdev_p, ipa_api_ctrl,
 			ipa_plat_drv_match);
 		break;
@@ -2802,6 +2873,35 @@ void ipa_recycle_wan_skb(struct sk_buff *skb)
 	IPA_API_DISPATCH(ipa_recycle_wan_skb, skb);
 }
 EXPORT_SYMBOL(ipa_recycle_wan_skb);
+
+/**
+ * ipa_setup_uc_ntn_pipes() - setup uc offload pipes
+ */
+int ipa_setup_uc_ntn_pipes(struct ipa_ntn_conn_in_params *inp,
+		ipa_notify_cb notify, void *priv, u8 hdr_len,
+		struct ipa_ntn_conn_out_params *outp)
+{
+	int ret;
+
+	IPA_API_DISPATCH_RETURN(ipa_setup_uc_ntn_pipes, inp,
+		notify, priv, hdr_len, outp);
+
+	return ret;
+}
+
+/**
+ * ipa_tear_down_uc_offload_pipes() - tear down uc offload pipes
+ */
+int ipa_tear_down_uc_offload_pipes(int ipa_ep_idx_ul,
+		int ipa_ep_idx_dl)
+{
+	int ret;
+
+	IPA_API_DISPATCH_RETURN(ipa_tear_down_uc_offload_pipes, ipa_ep_idx_ul,
+		ipa_ep_idx_dl);
+
+	return ret;
+}
 
 static const struct dev_pm_ops ipa_pm_ops = {
 	.suspend_noirq = ipa_ap_suspend,

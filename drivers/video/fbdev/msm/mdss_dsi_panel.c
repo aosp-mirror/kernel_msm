@@ -354,7 +354,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		}
 
 		if (gpio_is_valid(ctrl_pdata->lcd_mode_sel_gpio)) {
-			bool out;
+			bool out = false;
 
 			if ((pinfo->mode_sel_state == MODE_SEL_SINGLE_PORT) ||
 				(pinfo->mode_sel_state == MODE_GPIO_HIGH))
@@ -389,8 +389,10 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		}
 		gpio_set_value((ctrl_pdata->rst_gpio), 0);
 		gpio_free(ctrl_pdata->rst_gpio);
-		if (gpio_is_valid(ctrl_pdata->lcd_mode_sel_gpio))
+		if (gpio_is_valid(ctrl_pdata->lcd_mode_sel_gpio)) {
+			gpio_set_value(ctrl_pdata->lcd_mode_sel_gpio, 0);
 			gpio_free(ctrl_pdata->lcd_mode_sel_gpio);
+		}
 	}
 
 exit:
@@ -768,7 +770,7 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	pr_debug("%s: ctrl=%p ndx=%d\n", __func__, ctrl, ctrl->ndx);
+	pr_debug("%s: ctrl=%pK ndx=%d\n", __func__, ctrl, ctrl->ndx);
 
 	pinfo = &pdata->panel_info;
 	if (pinfo->dcs_cmd_by_left && ctrl->ndx != DSI_CTRL_LEFT)
@@ -806,7 +808,7 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	pr_debug("%s: ctrl=%p ndx=%d\n", __func__, ctrl, ctrl->ndx);
+	pr_debug("%s: ctrl=%pK ndx=%d\n", __func__, ctrl, ctrl->ndx);
 
 	if (pinfo->dcs_cmd_by_left) {
 		if (ctrl->ndx != DSI_CTRL_LEFT)
@@ -841,7 +843,7 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	pr_debug("%s: ctrl=%p ndx=%d enable=%d\n", __func__, ctrl, ctrl->ndx,
+	pr_debug("%s: ctrl=%pK ndx=%d enable=%d\n", __func__, ctrl, ctrl->ndx,
 		enable);
 
 	/* Any panel specific low power commands/config */
@@ -1967,7 +1969,6 @@ static void mdss_dsi_parse_dfps_config(struct device_node *pan_node,
 			pinfo->dfps_update = DFPS_SUSPEND_RESUME_MODE;
 			pr_debug("default dfps mode: suspend/resume\n");
 		}
-		mdss_dsi_set_refresh_rate_range(pan_node, pinfo);
 	} else {
 		pinfo->dynamic_fps = false;
 		pr_debug("dfps update mode not configured: disable\n");
@@ -2194,7 +2195,7 @@ static int mdss_dsi_panel_timing_from_dt(struct device_node *np,
 
 	if (np->name) {
 		pt->timing.name = kstrdup(np->name, GFP_KERNEL);
-		pr_info("%s: found new timing \"%s\" (%p)\n", __func__,
+		pr_info("%s: found new timing \"%s\" (%pK)\n", __func__,
 				np->name, &pt->timing);
 	}
 
@@ -2528,6 +2529,8 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	mdss_dsi_parse_dfps_config(np, ctrl_pdata);
 
+	mdss_dsi_set_refresh_rate_range(np, pinfo);
+
 	pinfo->is_dba_panel = of_property_read_bool(np,
 			"qcom,dba-panel");
 
@@ -2535,7 +2538,7 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		bridge_chip_name = of_get_property(np,
 			"qcom,bridge-name", &len);
 		if (!bridge_chip_name || len <= 0) {
-			pr_err("%s:%d Unable to read qcom,bridge_name, data=%p,len=%d\n",
+			pr_err("%s:%d Unable to read qcom,bridge_name, data=%pK,len=%d\n",
 				__func__, __LINE__, bridge_chip_name, len);
 			rc = -EINVAL;
 			goto error;
