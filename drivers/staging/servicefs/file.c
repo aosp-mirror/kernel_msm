@@ -884,8 +884,6 @@ static long channel_compat_ioctl(struct file *filp, unsigned int cmd,
 
 	BUG_ON(!c);
 
-	pr_warn("cmd=%08x arg=%08lx", cmd, arg);
-
 	if (_IOC_TYPE(cmd) != 'x')
 		return -ENOTTY;
 
