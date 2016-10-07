@@ -597,7 +597,7 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 			ctx->rdptr_enabled, ctl->roi_bkup.w,
 			ctl->roi_bkup.h);
 
-	pr_debug("%s: intf_num=%d ctx=%p koff_cnt=%d\n", __func__,
+	pr_debug("%s: intf_num=%d ctx=%pK koff_cnt=%d\n", __func__,
 			ctl->intf_num, ctx, atomic_read(&ctx->koff_cnt));
 
 	rc = wait_event_timeout(ctx->pp_waitq,
@@ -1038,7 +1038,7 @@ int mdss_mdp_cmd_start(struct mdss_mdp_ctl *ctl)
 	ctx->recovery.fxn = mdss_mdp_cmd_underflow_recovery;
 	ctx->recovery.data = ctx;
 
-	pr_debug("%s: ctx=%p num=%d mixer=%d\n", __func__,
+	pr_debug("%s: ctx=%pK num=%d mixer=%d\n", __func__,
 				ctx, ctx->pp_num, mixer->num);
 	MDSS_XLOG(ctl->num, atomic_read(&ctx->koff_cnt), ctx->clk_enabled,
 					ctx->rdptr_enabled);
