@@ -170,7 +170,7 @@ static void __print_buf(struct seq_file *s, struct mdss_mdp_data *buf,
 		&buf->p[0].addr, buf->p[0].len);
 
 	if (buf->state != MDP_BUF_STATE_UNUSED)
-		seq_printf(s, "ihdl=0x%p ", buf->p[0].srcp_ihdl);
+		seq_printf(s, "ihdl=0x%pK ", buf->p[0].srcp_ihdl);
 
 	__print_time(tmpbuf, sizeof(tmpbuf), buf->last_alloc);
 	seq_printf(s, "alloc_time=%s ", tmpbuf);
