@@ -73,6 +73,10 @@
 	status = "ok";
 };
 
+&i2c_2 {
+	status = "ok";
+};
+
 /* Charger/FG configuration */
 &pm8916_chg {
 	qcom,use-external-charger;
