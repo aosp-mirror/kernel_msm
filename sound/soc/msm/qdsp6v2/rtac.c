@@ -170,7 +170,7 @@ int rtac_allocate_cal_buffer(uint32_t cal_type)
 		goto done;
 	}
 
-	pr_debug("%s: cal_type %d, paddr 0x%pa, kvaddr 0x%p, map_size 0x%x\n",
+	pr_debug("%s: cal_type %d, paddr 0x%pa, kvaddr 0x%pK, map_size 0x%x\n",
 		__func__, cal_type,
 		&rtac_cal[cal_type].cal_data.paddr,
 		rtac_cal[cal_type].cal_data.kvaddr,
@@ -634,7 +634,7 @@ static int get_voice_index(u32 mode, u32 handle)
 /* ADM APR */
 void rtac_set_adm_handle(void *handle)
 {
-	pr_debug("%s: handle = %p\n", __func__, handle);
+	pr_debug("%s: handle = %pK\n", __func__, handle);
 
 	mutex_lock(&rtac_adm_apr_mutex);
 	rtac_adm_apr_data.apr_handle = handle;
@@ -692,7 +692,7 @@ u32 send_adm_apr(void *buf, u32 opcode)
 
 	if (copy_from_user(&user_buf_size, (void *)buf,
 						sizeof(user_buf_size))) {
-		pr_err("%s: Copy from user failed! buf = 0x%p\n",
+		pr_err("%s: Copy from user failed! buf = 0x%pK\n",
 		       __func__, buf);
 		goto done;
 	}
@@ -898,7 +898,7 @@ u32 send_rtac_asm_apr(void *buf, u32 opcode)
 
 	if (copy_from_user(&user_buf_size, (void *)buf,
 						sizeof(user_buf_size))) {
-		pr_err("%s: Copy from user failed! buf = 0x%p\n",
+		pr_err("%s: Copy from user failed! buf = 0x%pK\n",
 		       __func__, buf);
 		goto done;
 	}
@@ -1125,7 +1125,7 @@ static u32 send_rtac_afe_apr(void *buf, uint32_t opcode)
 
 	if (copy_from_user(&user_afe_buf, (void *)buf,
 		sizeof(struct rtac_afe_user_data))) {
-		pr_err("%s: Copy from user failed! buf = 0x%p\n",
+		pr_err("%s: Copy from user failed! buf = 0x%pK\n",
 		       __func__, buf);
 		goto done;
 	}
@@ -1349,7 +1349,7 @@ u32 send_voice_apr(u32 mode, void *buf, u32 opcode)
 
 	if (copy_from_user(&user_buf_size, (void *)buf,
 						sizeof(user_buf_size))) {
-		pr_err("%s: Copy from user failed! buf = 0x%p\n",
+		pr_err("%s: Copy from user failed! buf = 0x%pK\n",
 		       __func__, buf);
 		goto done;
 	}
