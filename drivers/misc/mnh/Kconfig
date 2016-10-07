@@ -8,6 +8,14 @@ config MNH_PCIE_HOST
     ---help---
       Include support for MNH PCIe Host-side driver
 
+
+config MNH_SM_HOST
+    tristate "MNH Easel State Machine Host-side driver"
+    depends on PCI
+    default "y"
+    ---help---
+      Include support for MNH PM Host-side driver
+
 config MNH_PCIE_MULTIPLE_MSI
     tristate "MNH PCIE Multiple MSI support"
     depends on MNH_PCIE_HOST

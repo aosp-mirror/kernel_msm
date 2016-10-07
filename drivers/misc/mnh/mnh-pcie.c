@@ -66,18 +66,6 @@
 #define IS_NULL(ptr) ((ptr == NULL)?1:0)
 
 
-/* Firmware download address */
-#define HW_MNH_SBL_DOWNLOAD		0x40000000
-#define HW_MNH_SBL_DOWNLOAD_EXE		0x00101000
-#define HW_MNH_UBOOT_DOWNLOAD		0x40020000
-#define HW_MNH_KERNEL_DOWNLOAD		0x40080000
-#define HW_MNH_DT_DOWNLOAD		0x40880000
-#define HW_MNH_RAMDISK_DOWNLOAD		0x40890000
-#define IMG_DOWNLOAD_MAX_SIZE		(2000 * 1024)
-#define FIP_IMG_SBL_SIZE_OFFSET		0x28
-#define FIP_IMG_SBL_ADDR_OFFSET		0x20
-#define FIP_IMG_UBOOT_SIZE_OFFSET	0x50
-#define FIP_IMG_UBOOT_ADDR_OFFSET	0x48
 
 /* mnh_pci_tbl - PCI Device ID Table */
 static const struct pci_device_id mnh_pci_tbl[] = {
@@ -85,12 +73,6 @@ static const struct pci_device_id mnh_pci_tbl[] = {
 	{0, } /* terminate the list */
 };
 
-enum fw_image_state {
-	FW_IMAGE_NONE = 0,
-	FW_IMAGE_DOWNLOADING,
-	FW_IMAGE_DOWNLOAD_SUCCESS,
-	FW_IMAGE_DOWNLOAD_FAIL
-};
 
 MODULE_DEVICE_TABLE(pci, mnh_pci_tbl);
 
@@ -110,9 +92,6 @@ struct mnh_device {
 					1 - ROM/SRAM
 					2 - Peripheral Config */
 	uint32_t	bar_size[BAR_MAX_NUM];
-	enum fw_image_state	image_loaded;
-	const struct firmware *uboot_image;
-	const struct firmware *sbl_image;
 };
 
 static struct mnh_device *mnh_dev;
@@ -1186,14 +1165,6 @@ static irqreturn_t mnh_pci_dma_irq_handler(int irq, void *ptr)
 			mnh_dma_send_cb(i, dir, status);
 		}
 	}
-
-	if (mnh_dev->image_loaded == FW_IMAGE_DOWNLOADING) {
-		if (status == DMA_DONE)
-			mnh_dev->image_loaded = FW_IMAGE_DOWNLOAD_SUCCESS;
-		else if (status == DMA_ABORT)
-			mnh_dev->image_loaded = FW_IMAGE_DOWNLOAD_FAIL;
-	}
-
 	return IRQ_HANDLED;
 }
 
@@ -1292,15 +1263,6 @@ static irqreturn_t mnh_pci_irq_single_handler(int irq, void *ptr)
 					i, dir);
 				mnh_dma_send_cb(i, dir, status);
 			}
-		}
-
-		if (mnh_dev->image_loaded == FW_IMAGE_DOWNLOADING) {
-			if (status == DMA_DONE)
-					mnh_dev->image_loaded =
-					FW_IMAGE_DOWNLOAD_SUCCESS;
-			else if (status == DMA_ABORT)
-				mnh_dev->image_loaded =
-					FW_IMAGE_DOWNLOAD_FAIL;
 		}
 		return IRQ_HANDLED;
 	}
@@ -1470,179 +1432,6 @@ static int mnh_irq_deinit(struct pci_dev *pdev)
 
 }
 
-static int mnh_firmware_waitdownloaded(void)
-{
-	unsigned long timeout = jiffies + msecs_to_jiffies(5000);
-
-	do {
-		if (mnh_dev->image_loaded == FW_IMAGE_DOWNLOAD_SUCCESS) {
-			dev_dbg(&mnh_dev->pdev->dev, "Firmware loaded!\n");
-			return 0;
-		} else if (mnh_dev->image_loaded == FW_IMAGE_DOWNLOAD_FAIL) {
-			dev_err(&mnh_dev->pdev->dev, "Firmware load fail!\n");
-			return -EIO;
-		}
-		msleep(20);
-	} while (time_before(jiffies, timeout));
-
-	dev_err(&mnh_dev->pdev->dev, "Fail to Download Firmware, timeout!!.\n");
-	return -EIO;
-}
-
-int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
-	uint64_t dst_addr)
-{
-	uint32_t *buf = NULL;
-	struct mnh_dma_element_t dma_blk;
-	int err = -EINVAL;
-	size_t sent = 0, size, remaining;
-
-	remaining = fw_size;
-
-	while (remaining > 0) {
-		size = MIN(remaining, IMG_DOWNLOAD_MAX_SIZE);
-
-		buf = (uint32_t *)kmalloc(size, GFP_KERNEL);
-		if (!buf) {
-			dev_err(&mnh_dev->pdev->dev, "Fail to alloc!\n");
-			return -EIO;
-		}
-		memcpy(buf, fw_data + sent, size);
-
-		dma_blk.dst_addr = dst_addr + sent;
-		dma_blk.len = size;
-		dma_blk.src_addr = mnh_map_mem(buf, size, DMA_TO_DEVICE);
-
-		dev_dbg(&mnh_dev->pdev->dev,
-			"FW download - AP(:0x%llx) to EP(:0x%llx), size(%d)\n",
-			dma_blk.src_addr, dma_blk.dst_addr, dma_blk.len);
-
-		mnh_dev->image_loaded = FW_IMAGE_DOWNLOADING;
-		mnh_dma_sblk_start(0, DMA_AP2EP, &dma_blk);
-
-		sent += size;
-		remaining -= size;
-		dev_err(&mnh_dev->pdev->dev,
-			"Sent:%zd, Remaining:%zd\n", sent, remaining);
-
-		err = mnh_firmware_waitdownloaded();
-		mnh_unmap_mem(dma_blk.src_addr, size, DMA_TO_DEVICE);
-		kfree(buf);
-
-		if (err)
-			break;
-	}
-
-	return err;
-
-}
-
-
-static int mnh_download_firmware(void)
-{
-	struct device *dev = &mnh_dev->pdev->dev;
-	const struct firmware *dt_img, *kernel_img, *ram_img;
-	const struct firmware *fip_img;
-	int err;
-	uint32_t size, addr;
-
-	mnh_dev->image_loaded = FW_IMAGE_NONE;
-
-	err = request_firmware(&fip_img, "easel/fip.bin", dev);
-	if (err) {
-		dev_err(dev, "request fip_image failed - %d\n", err);
-		return -EIO;
-	}
-
-	err = request_firmware(&kernel_img, "easel/Image", dev);
-	if (err) {
-		dev_err(dev, "request kernel failed - %d\n", err);
-		goto free_uboot;
-	}
-
-	err = request_firmware(&dt_img, "easel/mnh.dtb", dev);
-	if (err) {
-		dev_err(dev, "request device tree failed - %d\n", err);
-		goto free_kernel;
-	}
-
-	err = request_firmware(&ram_img, "easel/ramdisk.img", dev);
-	if (err) {
-		dev_err(dev, "request ramdisk failed - %d\n", err);
-		goto free_dt;
-	}
-
-	/* DMA trasmfer for SBL */
-	memcpy(&size, (uint8_t *)(fip_img->data + FIP_IMG_SBL_SIZE_OFFSET), 4);
-	memcpy(&addr, (uint8_t *)(fip_img->data + FIP_IMG_SBL_ADDR_OFFSET), 4);
-	dev_dbg(dev, "sbl size :0x%x", size);
-	dev_dbg(dev, "sbl data addr :0x%x", addr);
-
-	dev_err(dev, "DOWNLOADING SBL...size:0x%x\n", size);
-	if (mnh_transfer_firmware(size, fip_img->data + addr,
-			HW_MNH_SBL_DOWNLOAD))
-		goto fail_downloading;
-	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_4, 4,
-		HW_MNH_SBL_DOWNLOAD);
-	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_5, 4,
-		HW_MNH_SBL_DOWNLOAD_EXE);
-	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_6, 4,
-		size);
-
-	/* DMA trasmfer for UBOOT */
-	memcpy(&size,
-		(uint8_t *)(fip_img->data + FIP_IMG_UBOOT_SIZE_OFFSET), 4);
-	memcpy(&addr,
-		(uint8_t *)(fip_img->data + FIP_IMG_UBOOT_ADDR_OFFSET), 4);
-	dev_dbg(dev, "uboot size :0x%x", size);
-	dev_dbg(dev, "uboot data addr:0x%x", addr);
-
-	/* DMA transfer for UBOOT */
-	dev_dbg(dev, "DOWNLOADING UBOOT...size:0x%x\n", size);
-	if (mnh_transfer_firmware(size, fip_img->data + addr,
-			HW_MNH_UBOOT_DOWNLOAD))
-		goto fail_downloading;
-	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_7, 4,
-		HW_MNH_UBOOT_DOWNLOAD);
-
-	/* DMA transfer for device tree */
-	dev_dbg(dev, "DOWNLOADING DT...size:%zd\n", dt_img->size);
-	if (mnh_transfer_firmware(dt_img->size, dt_img->data,
-			HW_MNH_DT_DOWNLOAD))
-		goto fail_downloading;
-
-	/* DMA transfer for ramdisk */
-	dev_dbg(dev, "DOWNLOADING RAMDISK...size:%zd\n", ram_img->size);
-	if (mnh_transfer_firmware(ram_img->size, ram_img->data,
-			HW_MNH_RAMDISK_DOWNLOAD))
-		goto fail_downloading;
-
-	/* DMA transfer for Kernel image */
-	dev_dbg(dev, "DOWNLOADING KERNEL...size:%zd\n", kernel_img->size);
-	if (mnh_transfer_firmware(kernel_img->size, kernel_img->data,
-			HW_MNH_KERNEL_DOWNLOAD))
-		goto fail_downloading;
-
-	release_firmware(fip_img);
-	release_firmware(kernel_img);
-	release_firmware(dt_img);
-	release_firmware(ram_img);
-
-	return 0;
-
-fail_downloading:
-	dev_err(dev, "FW downloading fails\n");
-	mnh_dev->image_loaded = FW_IMAGE_DOWNLOAD_FAIL;
-	release_firmware(ram_img);
-free_dt:
-	release_firmware(dt_img);
-free_kernel:
-	release_firmware(kernel_img);
-free_uboot:
-	release_firmware(fip_img);
-	return -EIO;
-}
-
 static void setup_smmu(struct pci_dev *pdev)
 {
 	struct dma_iommu_mapping *mapping;
@@ -1806,22 +1595,6 @@ static int mnh_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	mnh_set_inbound_iatu(&iatu);
 
 	setup_smmu(pdev);
-
-	/* FW download - this will be moved to separate driver later on */
-	if (mnh_download_firmware() == 0) {
-		/* Magic number setting to notify MNH that PCIE initialization
-		is done on Host side */
-		if (mnh_config_read(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
-			HW_MNH_PCIE_GP_0,
-			sizeof(uint32_t), &magic) == SUCCESS && magic == 0) {
-			mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
-				HW_MNH_PCIE_GP_0,
-				sizeof(uint32_t), INIT_DONE);
-		} else {
-			dev_err(&pdev->dev, "read GP0 register fail or GP0 is not 0:%d",
-				magic);
-		}
-	}
 
 	mnh_pcie_config_read(0, sizeof(uint32_t), &magic);
 	dev_dbg(&pdev->dev, "MNH PCIe initialization successful.\n");
