@@ -114,7 +114,7 @@
 			tm,warm-cfg = <
 				(440) (420) 1
 				(450) (430) 2>;
-			tm,compensated-temp = <0>;
+			tm,compensated-temp = <(-60)>;
 		};
 	};
 };
