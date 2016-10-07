@@ -122,7 +122,7 @@ static ssize_t rear_sysfs_temp_show(struct device *dev,
 
 	ret = qpnp_vadc_read(rear_tm->vadc_dev, ADC_CH_ID, &result);
 	if (!ret)
-		cur_temp = (int)result.physical / ADC_VAL_COEFF;
+		cur_temp = (int)(result.physical - rear_tm->compensated_temp ) / ADC_VAL_COEFF;
 	else
 		pr_warn("Unable to read vbat ret=%d\n", ret);
 
@@ -344,7 +344,7 @@ static void rear_tm_notification(enum qpnp_tm_state state, void *ctx)
 
 	pr_info("state: %s, temp: %d\n",
 			state == ADC_TM_WARM_STATE ? "warm" : "cool",
-			cur_temp - rear_tm->compensated_temp);
+			(cur_temp - rear_tm->compensated_temp) / ADC_VAL_COEFF);
 
 	i = rear_tm_get_level(rear_tm, state);
 	if (state == ADC_TM_WARM_STATE) {
@@ -372,10 +372,10 @@ static void rear_tm_notification(enum qpnp_tm_state state, void *ctx)
 	}
 
 	pr_info("next low temp = %d next high temp = %d\n",
-					(rear_tm->adc_param.low_temp -
-					 rear_tm->compensated_temp),
-					(rear_tm->adc_param.high_temp -
-					 rear_tm->compensated_temp));
+				(rear_tm->adc_param.low_temp -
+				 rear_tm->compensated_temp) / ADC_VAL_COEFF,
+				(rear_tm->adc_param.high_temp -
+				 rear_tm->compensated_temp) / ADC_VAL_COEFF);
 
 	ret = qpnp_adc_tm_channel_measure(rear_tm->adc_tm_dev,
 						&rear_tm->adc_param);
@@ -466,7 +466,6 @@ static int rear_tm_probe(struct spmi_device *spmi)
 {
 	struct rear_tm_data *rear_tm;
 	struct device_node *dev_node = spmi->dev.of_node;
-	struct qpnp_vadc_result results;
 	int ret = 0;
 
 	rear_tm = devm_kzalloc(&spmi->dev,
@@ -492,13 +491,6 @@ static int rear_tm_probe(struct spmi_device *spmi)
 		pr_err("not supported for non OF\n");
 		return -ENODEV;
 	}
-
-	ret = qpnp_vadc_read(rear_tm->vadc_dev, ADC_CH_ID, &results);
-	if (ret) {
-		pr_err("Unable to read vbat ret=%d\n", ret);
-		return ret;
-	}
-	pr_info("rear temp physical: %lld\n", results.physical);
 
 	wakeup_source_init(&rear_tm->ws, "rear_tm_ws");
 
