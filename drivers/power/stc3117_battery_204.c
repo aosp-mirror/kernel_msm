@@ -2183,6 +2183,10 @@ static void stc311x_work(struct work_struct *work)
 	if (res > 0) {
 		/* results available */
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
+		if ((chip->batt_soc != chip->batt_soc_last) && (chip->batt_soc == 0)) {
+			pr_err("Battery soc is %d, notify power_supply\n", chip->batt_soc);
+			power_supply_changed(&chip->battery);
+		}
 		pr_err("last_soc=%d, soc=%d, volt=%d, avg_volt%d\n", chip->batt_soc_last, chip->batt_soc, GasGaugeData.Voltage, BattData.AvgVoltage);
 		if ((GasGaugeData.AvgCurrent < CHG_NOT_CHARGE) && chip->batt_soc > chip->batt_soc_last && GasGaugeData.Voltage < BATT_CHG_VOLTAGE) {
 			chip->batt_soc = chip->batt_soc_last;
