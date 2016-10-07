@@ -316,7 +316,8 @@ struct mdp3_dma {
 			struct fb_cmap *cmap);
 
 	int (*update)(struct mdp3_dma *dma,
-			void *buf, struct mdp3_intf *intf, void *data);
+			void *buf, struct mdp3_intf *intf, int first_commit,
+			void *data);
 
 	int (*update_cursor)(struct mdp3_dma *dma, int x, int y);
 
