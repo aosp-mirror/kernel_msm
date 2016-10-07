@@ -204,7 +204,7 @@ int rtac_allocate_cal_buffer(uint32_t cal_type)
 		goto done;
 	}
 
-	pr_debug("%s: cal_type %d, paddr 0x%pa, kvaddr 0x%p, map_size 0x%x\n",
+	pr_debug("%s: cal_type %d, paddr 0x%pa, kvaddr 0x%pK, map_size 0x%x\n",
 		__func__, cal_type,
 		&rtac_cal[cal_type].cal_data.paddr,
 		rtac_cal[cal_type].cal_data.kvaddr,

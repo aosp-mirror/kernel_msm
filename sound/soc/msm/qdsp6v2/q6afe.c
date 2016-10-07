@@ -100,7 +100,7 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 		return -EINVAL;
 	}
 	if (data->opcode == RESET_EVENTS) {
-		pr_debug("%s: reset event = %d %d apr[%p]\n",
+		pr_debug("%s: reset event = %d %d apr[%pK]\n",
 			__func__,
 			data->reset_event, data->reset_proc, this_afe.apr);
 
@@ -128,7 +128,7 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 		u8 *payload = data->payload;
 		if ((data->payload_size < sizeof(this_afe.calib_data))
 			|| !payload || (data->token >= AFE_MAX_PORTS)) {
-			pr_err("%s: size %d payload %p token %d\n",
+			pr_err("%s: size %d payload %pK token %d\n",
 			__func__, data->payload_size, payload, data->token);
 			return -EINVAL;
 		}
@@ -2252,7 +2252,7 @@ int q6afe_audio_client_buf_alloc_contiguous(unsigned int dir,
 	size_t len;
 
 	if (!(ac) || ((dir != IN) && (dir != OUT))) {
-		pr_err("%s: ac %p dir %d\n", __func__, ac, dir);
+		pr_err("%s: ac %pK dir %d\n", __func__, ac, dir);
 		return -EINVAL;
 	}
 
@@ -2304,7 +2304,7 @@ int q6afe_audio_client_buf_alloc_contiguous(unsigned int dir,
 			buf[cnt].used = dir ^ 1;
 			buf[cnt].size = bufsz;
 			buf[cnt].actual_size = bufsz;
-			pr_debug("%s:  data[%p]phys[%pa][%p]\n", __func__,
+			pr_debug("%s:  data[%pK]phys[%pa][%pK]\n", __func__,
 				   buf[cnt].data,
 				   &buf[cnt].phys,
 				   &buf[cnt].phys);
@@ -2515,7 +2515,7 @@ int q6afe_audio_client_buf_free_contiguous(unsigned int dir,
 	cnt = port->max_buf_cnt - 1;
 
 	if (port->buf[0].data) {
-		pr_debug("%s: data[%p]phys[%pa][%p] , client[%p] handle[%p]\n",
+		pr_debug("%s: data[%pK]phys[%pa][%pK] , client[%pK] handle[%pK]\n",
 			__func__,
 			port->buf[0].data,
 			&port->buf[0].phys,
