@@ -10,6 +10,17 @@
 };
 
 &pcie0 {
+	/* move and resize conf, io, and bars (mem) allocations */
+	reg = <0x1c00000 0x2000>,
+	      <0x1c06000 0x1000>,
+	      <0x1b000000 0xf1d>,
+	      <0x1b000f20 0xa8>,
+	      <0x1b010000 0x20000>,  /* 128KB conf space */
+	      <0x1b030000 0x20000>,  /* 128KB io space */
+	      <0x1b100000 0xf00000>; /* 15M bars space */
+	ranges = <0x01000000 0x0 0x1b030000 0x1b030000 0x0 0x20000>, /* io */
+		 <0x02000000 0x0 0x1b100000 0x1b100000 0x0 0xf00000>; /* bars */
+
 	/* WAKE# optional sideband signal not connected */
 	/delete-property/ wake-gpio;
 	/* Remove pcie0_wake_default from pin muxing */
