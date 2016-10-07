@@ -812,10 +812,10 @@ union sixaxis_output_report_01 {
 	u8 buf[36];
 };
 
-#define DS4_REPORT_0x02_SIZE 37
-#define DS4_REPORT_0x05_SIZE 32
-#define DS4_REPORT_0x11_SIZE 78
-#define DS4_REPORT_0x81_SIZE 7
+#define DS4_FEATURE_REPORT_0x02_SIZE 37
+#define DS4_FEATURE_REPORT_0x81_SIZE 7
+#define DS4_OUTPUT_REPORT_0x05_SIZE 32
+#define DS4_OUTPUT_REPORT_0x11_SIZE 78
 #define SIXAXIS_REPORT_0xF2_SIZE 17
 #define SIXAXIS_REPORT_0xF5_SIZE 8
 
@@ -1220,11 +1220,11 @@ static int dualshock4_set_operational_bt(struct hid_device *hdev)
 	u8 *buf;
 	int ret;
 
-	buf = kmalloc(DS4_REPORT_0x02_SIZE, GFP_KERNEL);
+	buf = kmalloc(DS4_FEATURE_REPORT_0x02_SIZE, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 
-	ret = hid_hw_raw_request(hdev, 0x02, buf, DS4_REPORT_0x02_SIZE,
+	ret = hid_hw_raw_request(hdev, 0x02, buf, DS4_FEATURE_REPORT_0x02_SIZE,
 				HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
 
 	kfree(buf);
@@ -1614,12 +1614,12 @@ static void dualshock4_send_output_report(struct sony_sc *sc)
 	 * 0xD0 - 66hz
 	 */
 	if (sc->quirks & DUALSHOCK4_CONTROLLER_USB) {
-		memset(buf, 0, DS4_REPORT_0x05_SIZE);
+		memset(buf, 0, DS4_OUTPUT_REPORT_0x05_SIZE);
 		buf[0] = 0x05;
 		buf[1] = 0xFF;
 		offset = 4;
 	} else {
-		memset(buf, 0, DS4_REPORT_0x11_SIZE);
+		memset(buf, 0, DS4_OUTPUT_REPORT_0x11_SIZE);
 		buf[0] = 0x11;
 		buf[1] = 0x80;
 		buf[3] = 0x0F;
@@ -1647,9 +1647,9 @@ static void dualshock4_send_output_report(struct sony_sc *sc)
 	buf[offset++] = sc->led_delay_off[3];
 
 	if (sc->quirks & DUALSHOCK4_CONTROLLER_USB)
-		hid_hw_output_report(hdev, buf, DS4_REPORT_0x05_SIZE);
+		hid_hw_output_report(hdev, buf, DS4_OUTPUT_REPORT_0x05_SIZE);
 	else
-		hid_hw_raw_request(hdev, 0x11, buf, DS4_REPORT_0x11_SIZE,
+		hid_hw_raw_request(hdev, 0x11, buf, DS4_OUTPUT_REPORT_0x11_SIZE,
 				HID_OUTPUT_REPORT, HID_REQ_SET_REPORT);
 }
 
@@ -1673,10 +1673,10 @@ static int sony_allocate_output_report(struct sony_sc *sc)
 			kmalloc(sizeof(union sixaxis_output_report_01),
 				GFP_KERNEL);
 	else if (sc->quirks & DUALSHOCK4_CONTROLLER_BT)
-		sc->output_report_dmabuf = kmalloc(DS4_REPORT_0x11_SIZE,
+		sc->output_report_dmabuf = kmalloc(DS4_OUTPUT_REPORT_0x11_SIZE,
 						GFP_KERNEL);
 	else if (sc->quirks & DUALSHOCK4_CONTROLLER_USB)
-		sc->output_report_dmabuf = kmalloc(DS4_REPORT_0x05_SIZE,
+		sc->output_report_dmabuf = kmalloc(DS4_OUTPUT_REPORT_0x05_SIZE,
 						GFP_KERNEL);
 	else
 		return 0;
@@ -1910,7 +1910,7 @@ static int sony_check_add(struct sony_sc *sc)
 			return 0;
 		}
 	} else if (sc->quirks & DUALSHOCK4_CONTROLLER_USB) {
-		buf = kmalloc(DS4_REPORT_0x81_SIZE, GFP_KERNEL);
+		buf = kmalloc(DS4_FEATURE_REPORT_0x81_SIZE, GFP_KERNEL);
 		if (!buf)
 			return -ENOMEM;
 
@@ -1920,10 +1920,10 @@ static int sony_check_add(struct sony_sc *sc)
 		 * offset 1.
 		 */
 		ret = hid_hw_raw_request(sc->hdev, 0x81, buf,
-				DS4_REPORT_0x81_SIZE, HID_FEATURE_REPORT,
+				DS4_FEATURE_REPORT_0x81_SIZE, HID_FEATURE_REPORT,
 				HID_REQ_GET_REPORT);
 
-		if (ret != DS4_REPORT_0x81_SIZE) {
+		if (ret != DS4_FEATURE_REPORT_0x81_SIZE) {
 			hid_err(sc->hdev, "failed to retrieve feature report 0x81 with the DualShock 4 MAC address\n");
 			ret = ret < 0 ? ret : -EINVAL;
 			goto out_free;
