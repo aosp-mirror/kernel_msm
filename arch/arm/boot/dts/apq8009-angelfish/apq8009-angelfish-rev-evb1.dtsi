@@ -23,3 +23,8 @@
 &mdss_dsi0 {
 	vddio-supply = <&pm8916_l15>;
 };
+
+&battery_tm {
+	tm,low-vreg-mv = <4420>;
+	/delete-property/ tm,wlc-config-use;
+};

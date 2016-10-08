@@ -22,6 +22,7 @@
 
 &battery_tm {
 	tm,low-vreg-mv = <4420>;
+	/delete-property/ tm,wlc-config-use;
 };
 
 &mdss_dsi0 {
