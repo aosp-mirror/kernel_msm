@@ -2664,14 +2664,23 @@ int smblib_set_prop_pd_current_max(struct smb_charger *chg,
 int smblib_set_prop_usb_current_max(struct smb_charger *chg,
 				    const union power_supply_propval *val)
 {
-	int rc;
+	int rc = 0;
 	int icl_ua = val->intval;
 
 	if (icl_ua < 0)
 		return -EINVAL;
 
 	/* cancel vote when icl_ua is voted 0 */
-	rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, icl_ua != 0, icl_ua);
+	if (val->intval > USBIN_25MA) {
+		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
+			  true, val->intval);
+	} else if (chg->system_suspend_supported) {
+		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
+				  false, 0);
+	} else {
+		smblib_dbg(chg, PR_MISC, "suspend not supported\n");
+		return rc;
+	}
 
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't vote USB ICL %d, rc=%d\n",
