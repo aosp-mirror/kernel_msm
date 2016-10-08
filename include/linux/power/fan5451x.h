@@ -261,6 +261,7 @@
 #define SAFETY_V				(0x0F << 4)
 
 /* REG_TOPOFF (0x1B) */
+#define TO_BDETDIS				0x08
 #define TOPOFF_TMR				0x07
 
 /* REG_BOOST (0x1C) */

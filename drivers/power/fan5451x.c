@@ -34,10 +34,9 @@
 #include <linux/power/fan5451x.h>
 #include <linux/wakelock.h>
 #include <linux/delay.h>
+#include <linux/alarmtimer.h>
 
 #define FAN5451x_DEV_NAME "fan5451x"
-#define RECHG_CHECK_DELAY_MS      30
-#define RECHG_CHECK_DELAY_FAST_MS 10
 #define WLC_TX_RECHECK_WORK_DELAY_MS  10000
 #define WLC_TX_RECHECK_RETRY_COUNT    6
 #define STEP_OFFSET_MV 200
@@ -75,25 +74,38 @@ struct fan5451x_chip {
 	/* charger param */
 	int vbatmin;
 	int vfloat;
+	int vrechg_hyst;
 	int ibus;
 	int iin;
 	int iochrg;
+	int set_iterm;
 	int iterm;
 	int prechg;
-	int topoff_enable;
 	int vbusovp;
 	int vbuslim;
 	int vinovp;
 	int vinlim;
 	int fctmr;
+	bool suspended;
 	bool swap_vbus_vin;
+	bool support_sw_eoc;
+	bool embedded_battery;
 	struct register_base_t register_base;
-
+	struct wakeup_source ws_recheck;
+	struct wakeup_source ws_cv;
+	struct wakeup_source ws_dev;
+	struct alarm wlc_ctrl_alarm;
+	struct delayed_work wlc_fake_online_set_work;
+	int wlc_fake_online_set_value;
+	int wlc_chg_on_min;
+	int wlc_chg_off_min;
+	int wlc_ctrl_state;
 	/* charger status */
 	int health;
 	bool enable;
 	bool enable_for_thermal;
 	bool enable_for_system;
+	bool ext_vdd_restriction;
 	int usb_present;
 	int wlc_present;
 	bool eoc;
@@ -106,19 +118,16 @@ struct fan5451x_chip {
 	unsigned int ext_batt_health;
 	/* step charging */
 	struct qpnp_adc_tm_btm_param vbat_param;
+	struct qpnp_adc_tm_btm_param vbat_param_rechg;
 	struct qpnp_adc_tm_chip *adc_tm_dev;
 	int ibat_offset_ma;
 	int step_dwn_offset_ma;
 	unsigned int step_dwn_thr_mv;
 	/* wlc fake online */
 	int wlc_fake_online;
-	struct delayed_work rechg_check_work;
 	struct delayed_work wlc_tx_recheck_work;
-	bool rechg_needed;
-	bool embedded_battery;
+	struct delayed_work eoc_check_work;
 };
-
-static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set);
 
 static int fan5451x_read_reg(struct i2c_client *client, u8 reg)
 {
@@ -218,6 +227,80 @@ static int fan5451x_enable(struct fan5451x_chip *chip, int enable)
 	return 0;
 }
 
+static int fan5451x_enable_topoff_timer(struct fan5451x_chip *chip, int enable)
+{
+	static int prev_enable;
+	int ret = 0;
+
+	enable = !!enable;
+
+	if (prev_enable ^ enable) {
+		prev_enable = enable;
+
+		ret = fan5451x_update_reg(chip->client, REG_CON2,
+			enable << CON2_TOEN_SHIFT, CON2_TOEN);
+		if (ret) {
+			pr_err("failed to set topoff enable=%d, ret=%d\n",
+					enable, ret);
+		}
+	}
+
+	return ret;
+}
+
+static int fan5451x_batfet_enable(struct fan5451x_chip *chip, int enable)
+{
+	static int prev_enable;
+	int ret = 0;
+
+	enable = !!enable;
+
+	if (prev_enable ^ enable) {
+		prev_enable = enable;
+
+		ret = fan5451x_update_reg(chip->client, REG_CON3,
+			!enable, CON3_CE);
+		if (ret) {
+			pr_err("failed to set batfet enable=%d, ret=%d\n",
+					enable, ret);
+		} else {
+			pr_info("batfet enable = %d\n", enable);
+		}
+	}
+
+	return ret;
+}
+
+#define ITERM_MIN_MA 25
+#define ITERM_MAX_MA 600
+#define ITERM_STEP1_MA 25
+#define ITERM_STEP2_MA 50
+#define ITERM_STEP_SEPARATE_MA 200
+#define ITERM_STEP2_BASE_IDX 7
+static int fan5451x_set_iterm(struct fan5451x_chip *chip, int ma)
+{
+	u8 reg_val;
+
+	if (ma < ITERM_MIN_MA)
+		ma = ITERM_MIN_MA;
+	else if (ma > ITERM_MAX_MA)
+		ma = ITERM_MAX_MA;
+
+	if (ma <= ITERM_STEP_SEPARATE_MA) {
+		reg_val = (ma - ITERM_MIN_MA) / ITERM_STEP1_MA;
+		chip->iterm = reg_val * ITERM_STEP1_MA + ITERM_MIN_MA;
+	} else {
+		reg_val = (ma - ITERM_STEP_SEPARATE_MA) / ITERM_STEP2_MA;
+		chip->iterm =
+			reg_val * ITERM_STEP2_MA + ITERM_STEP_SEPARATE_MA;
+
+		reg_val += ITERM_STEP2_BASE_IDX;
+	}
+
+	return fan5451x_update_reg(chip->client, REG_IBAT,
+			reg_val << IBAT_ITERM_SHIFT, IBAT_ITERM);
+}
+
 #define VFLOAT_MIN_MV 3300
 #define VFLOAT_MAX_MV 4720
 #define VFLOAT_STEP_MV 10
@@ -235,16 +318,51 @@ static int fan5451x_set_vfloat(struct fan5451x_chip *chip, int mv)
 	return fan5451x_write_reg(chip->client, REG_VFLOAT, reg_val);
 }
 
+static inline void fan5451x_vbat_rechg_measure(struct fan5451x_chip *chip)
+{
+	int rechg_mv = chip->vfloat - chip->vrechg_hyst;
+
+	chip->vbat_param_rechg.state_request = ADC_TM_LOW_THR_ENABLE;
+	chip->vbat_param_rechg.low_thr = rechg_mv * 1000;
+	pr_info("start rechg measure volt = %d\n", rechg_mv);
+	qpnp_adc_tm_channel_measure(chip->adc_tm_dev,
+				&chip->vbat_param_rechg);
+}
+
 static int fan5451x_set_appropriate_vddmax(struct fan5451x_chip *chip)
 {
 	int ret;
+
+	/* charge until only CC phase in case of thermal restrict vddmax,
+	 * otherwise, battery voltage is higher than ext_set_vddmax_mv,
+	 * becuase charger remains to charge if chg_current < term_current. */
+	if (chip->ext_set_vddmax_mv < chip->set_vddmax_mv) {
+		/* thermal regulation case */
+		chip->ext_vdd_restriction = true;
+		if (chip->support_sw_eoc)
+			fan5451x_enable_topoff_timer(chip, 0);
+		else
+			fan5451x_set_iterm(chip, ITERM_MAX_MA);
+	} else {
+		/* normal case */
+		chip->ext_vdd_restriction = false;
+		if (chip->support_sw_eoc)
+			fan5451x_enable_topoff_timer(chip, 1);
+		else
+			fan5451x_set_iterm(chip, chip->iterm);
+	}
 
 	if (chip->ext_set_vddmax_mv)
 		ret = fan5451x_set_vfloat(chip, chip->ext_set_vddmax_mv);
 	else
 		ret = fan5451x_set_vfloat(chip, chip->set_vddmax_mv);
+
 	if (ret)
 		pr_err("Failed to set appropriate vddmax ret=%d\n", ret);
+
+	/* in case of eoc, update rechg_measure */
+	if (chip->eoc)
+		fan5451x_vbat_rechg_measure(chip);
 
 	return ret;
 }
@@ -334,36 +452,6 @@ static int fan5451x_set_vbatmin(struct fan5451x_chip *chip, int ma)
 	chip->vbatmin = reg_val * VBATMIN_STEP_MA + VBATMIN_MIN_MA;
 
 	return fan5451x_update_reg(chip->client, REG_CON0, reg_val, CON0_VBATMIN);
-}
-
-#define ITERM_MIN_MA 25
-#define ITERM_MAX_MA 600
-#define ITERM_STEP1_MA 25
-#define ITERM_STEP2_MA 50
-#define ITERM_STEP_SEPARATE_MA 200
-#define ITERM_STEP2_BASE_IDX 7
-static int fan5451x_set_iterm(struct fan5451x_chip *chip, int ma)
-{
-	u8 reg_val;
-
-	if (ma < ITERM_MIN_MA)
-		ma = ITERM_MIN_MA;
-	else if (ma > ITERM_MAX_MA)
-		ma = ITERM_MAX_MA;
-
-	if (ma <= ITERM_STEP_SEPARATE_MA) {
-		reg_val = (ma - ITERM_MIN_MA) / ITERM_STEP1_MA;
-		chip->iterm = reg_val * ITERM_STEP1_MA + ITERM_MIN_MA;
-	} else {
-		reg_val = (ma - ITERM_STEP_SEPARATE_MA) / ITERM_STEP2_MA;
-		chip->iterm =
-			reg_val * ITERM_STEP2_MA + ITERM_STEP_SEPARATE_MA;
-
-		reg_val += ITERM_STEP2_BASE_IDX;
-	}
-
-	return fan5451x_update_reg(chip->client, REG_IBAT,
-			reg_val << IBAT_ITERM_SHIFT, IBAT_ITERM);
 }
 
 #define PRECHG_MIN_MA 50
@@ -491,6 +579,51 @@ static int fan5451x_set_protection(struct fan5451x_chip *chip,
 	return ret;
 }
 
+#define DEFAULT_TEMP		250
+static int get_prop_batt_temp(struct fan5451x_chip *chip)
+{
+	int ret = 0;
+	struct qpnp_vadc_result results;
+
+	ret = qpnp_vadc_read(chip->vadc_dev, LR_MUX1_BATT_THERM, &results);
+	if (ret) {
+		pr_debug("Unable to read batt temperature ret=%d\n", ret);
+		return DEFAULT_TEMP;
+	}
+
+	pr_debug("get_bat_temp %d, %lld\n", results.adc_code, results.physical);
+
+	return (int)results.physical;
+}
+
+static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set)
+{
+	static int prev_state;
+
+	if (prev_state == set)
+		return;
+
+	prev_state = set;
+
+	if (!chip->wlc_psy)
+		return;
+
+	pr_debug("fake wlc present: %d\n", set);
+
+	if (set) {
+		/* fake state */
+		chip->wlc_fake_online = 1;
+		power_supply_set_charging_enabled(chip->wlc_psy, 0); //WLC TX off
+		disable_irq_wake(chip->client->irq);
+		__pm_relax(&chip->ws_cv);
+	} else {
+		/* normal state */
+		enable_irq_wake(chip->client->irq);
+		power_supply_set_charging_enabled(chip->wlc_psy, 1); //WLC TX on
+		chip->wlc_fake_online = 0;
+	}
+}
+
 static inline void fan5451x_vbat_measure(struct fan5451x_chip *chip)
 {
 	if (chip->step_dwn_offset_ma && chip->step_dwn_thr_mv) {
@@ -504,6 +637,91 @@ static inline void fan5451x_vbat_measure(struct fan5451x_chip *chip)
 						&chip->vbat_param);
 			chip->ibat_offset_ma = 0;
 			fan5451x_set_appropriate_current(chip);
+		}
+	}
+}
+
+enum {
+	WLC_CTRL_STOP,
+	WLC_CTRL_CHARGING,
+	WLC_CTRL_NOTCHARGING,
+};
+
+#define MIN_TO_MS 60000
+#define ALARM_CALLBACK_RESUME_DELAY_MS 1000
+static enum alarmtimer_restart
+fan5451x_wlc_thermal_ctrl_callback(struct alarm *alarm, ktime_t now)
+{
+	struct fan5451x_chip *chip = container_of(alarm, struct fan5451x_chip,
+						wlc_ctrl_alarm);
+	ktime_t kt;
+	enum alarmtimer_restart ret = ALARMTIMER_RESTART;
+	int prev_state = chip->wlc_ctrl_state;
+	unsigned long delay = 0;
+
+	__pm_stay_awake(&chip->ws_dev);
+	if (chip->suspended) {
+		delay = round_jiffies_relative(msecs_to_jiffies(
+					ALARM_CALLBACK_RESUME_DELAY_MS));
+	}
+
+	switch (prev_state) {
+		case WLC_CTRL_CHARGING:
+			kt = ms_to_ktime(chip->wlc_chg_off_min * MIN_TO_MS);
+			alarm_forward_now(alarm, kt);
+			chip->wlc_ctrl_state = WLC_CTRL_NOTCHARGING;
+			/* need to bottom half to handle fan5451x_wlc_fake_online(chip, 1) */
+			chip->wlc_fake_online_set_value = 1;
+			pr_info("WLC stop, on-time= %dmin(%d->%d) restart=%d\n",
+					chip->wlc_chg_on_min, prev_state,
+					chip->wlc_ctrl_state, ret);
+			schedule_delayed_work(&chip->wlc_fake_online_set_work, delay);
+			break;
+		case WLC_CTRL_NOTCHARGING:
+			if (chip->wlc_chg_on_min) {
+				kt = ms_to_ktime(chip->wlc_chg_on_min * MIN_TO_MS);
+				alarm_forward_now(alarm, kt);
+			} else {
+				ret = ALARMTIMER_NORESTART;
+			}
+			chip->wlc_ctrl_state = WLC_CTRL_CHARGING;
+			chip->wlc_fake_online_set_value = 0;
+			pr_info("WLC start, off-time= %dmin(%d->%d) restart=%d\n",
+					chip->wlc_chg_off_min, prev_state,
+					chip->wlc_ctrl_state, ret);
+			schedule_delayed_work(&chip->wlc_fake_online_set_work, delay);
+			break;
+		default:
+			pr_err("unknown state\n");
+			__pm_relax(&chip->ws_dev);
+			return ALARMTIMER_NORESTART;
+	}
+
+	return ret;
+}
+
+static void fan5451x_wlc_thermal_ctrl(struct fan5451x_chip *chip, int control)
+{
+	static int prev_control;
+	ktime_t kt;
+
+	if (chip->wlc_chg_on_min && chip->wlc_chg_off_min) {
+		if (prev_control != control) {
+			pr_info("alarm control control=%d\n", control);
+			switch (control) {
+			case WLC_CTRL_STOP:
+				/* wlc present = 0, EOC */
+				alarm_cancel(&chip->wlc_ctrl_alarm);
+				break;
+			case WLC_CTRL_CHARGING:
+				/* wlc present = 1, rechg */
+				kt = ms_to_ktime(chip->wlc_chg_on_min * MIN_TO_MS);
+				alarm_start_relative(&chip->wlc_ctrl_alarm, kt);
+				break;
+			default:
+				break;
+			}
+			chip->wlc_ctrl_state = prev_control = control;
 		}
 	}
 }
@@ -568,6 +786,7 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 				pr_info("wlc present %d\n", wlc_present);
 				power_supply_set_present(chip->wlc_psy,
 						chip->wlc_present);
+				fan5451x_wlc_thermal_ctrl(chip, chip->wlc_present);
 				if (chip->wlc_present && !chip->enable)
 					fan5451x_wlc_fake_online(chip, 1);
 			}
@@ -578,14 +797,20 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 	if (found && !chip->wlc_fake_online)
 		fan5451x_vbat_measure(chip);
 
+	/* If support_sw_eoc is enabled, EOC means CV phase start. */
 	if (intr[0] & INT0_CHGEND) {
-		pr_info("EOC IRQ\n");
-		fan5451x_wlc_fake_online(chip, 1);
-		chip->rechg_needed = false;
-		chip->eoc = true;
-		schedule_delayed_work(&chip->rechg_check_work,
-				round_jiffies_relative(msecs_to_jiffies(
-				RECHG_CHECK_DELAY_MS)));
+		if (chip->support_sw_eoc && !chip->ext_vdd_restriction) {
+			__pm_stay_awake(&chip->ws_cv);
+			pr_info("CV IRQ\n");
+			schedule_delayed_work(&chip->eoc_check_work, 0);
+		} else {
+			pr_info("EOC IRQ\n");
+			fan5451x_wlc_thermal_ctrl(chip, 0);
+			fan5451x_batfet_enable(chip, 0);
+			fan5451x_wlc_fake_online(chip, 1);
+			chip->eoc = true;
+			fan5451x_vbat_rechg_measure(chip);
+		}
 	} else if (intr[1] & INT1_RCHGN)
 		pr_info("Rechg IRQ\n");
 
@@ -665,12 +890,13 @@ static ssize_t show_chip_param(struct device *dev,
 	return snprintf(buf, INT_MAX,
 		"vbatmin:%d\n"
 		"vfloat:%d\n"
+		"vrechg-hyst:%d\n"
 		"ibus:%d\n"
 		"iin:%d\n"
 		"iochrg:%d\n"
+		"set_iterm:%d\n"
 		"iterm:%d\n"
 		"prechg:%d\n"
-		"topoff-enable:%d\n"
 		"vbusovp:%d\n"
 		"vbuslim:%d\n"
 		"vinovp:%d\n"
@@ -682,17 +908,51 @@ static ssize_t show_chip_param(struct device *dev,
 		"ext_set_vddmax_mv:%d\n"
 		"ext_batt_health:%d\n"
 		"step_dwn_offset_ma:%d\n"
-		"step_dwn_thr_mv:%d\n",
-		chip->vbatmin, chip->vfloat, chip->ibus, chip->iin,
-		chip->iochrg, chip->iterm, chip->prechg, chip->topoff_enable,
+		"step_dwn_thr_mv:%d\n"
+		"wlc_chg_on_min:%d\n"
+		"wlc_chg_off_min:%d\n",
+		chip->vbatmin, chip->vfloat, chip->vrechg_hyst,
+		chip->ibus, chip->iin,
+		chip->iochrg, chip->set_iterm, chip->iterm, chip->prechg,
 		chip->vbusovp, chip->vbuslim, chip->vinovp, chip->vinlim,
 		chip->fctmr, chip->set_ibat_ma, chip->ext_set_ibat_ma,
 		chip->set_vddmax_mv, chip->ext_set_vddmax_mv,
 		chip->ext_batt_health,
-		chip->step_dwn_offset_ma, chip->step_dwn_thr_mv);
+		chip->step_dwn_offset_ma, chip->step_dwn_thr_mv,
+		chip->wlc_chg_on_min, chip->wlc_chg_off_min);
+}
+static DEVICE_ATTR(chip_param, S_IRUGO, show_chip_param, NULL);
+
+static ssize_t show_wlc_thermal_param(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fan5451x_chip *chip = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d,%d\n",
+			chip->wlc_chg_on_min,
+			chip->wlc_chg_off_min);
 }
 
-static DEVICE_ATTR(chip_param, S_IRUGO, show_chip_param, NULL);
+static ssize_t store_wlc_thermal_param(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct fan5451x_chip *chip = dev_get_drvdata(dev);
+	int on, off;
+
+	if (sscanf(buf, "%d,%d", &on, &off) != 2)
+		return -EINVAL;
+
+	chip->wlc_chg_on_min = on;
+	chip->wlc_chg_off_min = off;
+
+	pr_info("param change %d,%d\n",
+			chip->wlc_chg_on_min,
+			chip->wlc_chg_off_min);
+
+	return size;
+}
+static DEVICE_ATTR(wlc_thermal_param, S_IRUGO | S_IWUSR,
+		show_wlc_thermal_param, store_wlc_thermal_param);
 
 static int fan5451x_gpio_init(struct fan5451x_chip *chip)
 {
@@ -730,16 +990,32 @@ static void fan5451x_initialization(struct fan5451x_chip *chip)
 	chip->set_ibat_ma = chip->iochrg;
 	ret |= fan5451x_set_iochrg(chip, chip->iochrg);
 
-	ret |= fan5451x_set_iterm(chip, chip->iterm);
 	ret |= fan5451x_set_prechg(chip, chip->prechg);
 	ret |= fan5451x_set_protection(chip,
 			VBUS, chip->vbusovp, chip->vbuslim);
 	ret |= fan5451x_set_protection(chip,
 			VIN, chip->vinovp, chip->vinlim);
-	ret |= fan5451x_update_reg(chip->client, REG_CON2,
-			!!chip->topoff_enable << CON2_TOEN_SHIFT, CON2_TOEN);
 	ret |= fan5451x_update_reg(chip->client,
 			REG_TIMER, chip->fctmr, TIMER_FCTMR);
+
+	ret |= fan5451x_batfet_enable(chip, 1);
+	/* If iterm is MAX, EOC happends as soon as entering CV phase.
+	 * We set topoff function enabled which can charge after EOC.
+	 * So after EOC irq,
+	 * SW_EOC can check adc value of charging current. */
+	ret |= fan5451x_update_reg(chip->client,
+			REG_CON2, CON2_TE, CON2_TE);
+	chip->set_iterm = chip->iterm;
+	if (chip->support_sw_eoc) {
+		/* TOPOFF TIMER does not expire, SW EOC need to control real EOC */
+		ret |= fan5451x_update_reg(chip->client,
+			REG_TOPOFF, TO_BDETDIS, TO_BDETDIS | TOPOFF_TMR);
+		ret |= fan5451x_set_iterm(chip, ITERM_MAX_MA);
+		fan5451x_enable_topoff_timer(chip, 1);
+	} else {
+		ret |= fan5451x_set_iterm(chip, chip->iterm);
+		fan5451x_enable_topoff_timer(chip, 0);
+	}
 
 	if (ret)
 		pr_err("failed to set initial configuration\n");
@@ -774,6 +1050,7 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 		if (chip->wlc_psy) {
 			chip->wlc_present = fan5451x_wlc_chg_plugged_in(chip);
 			power_supply_set_present(chip->wlc_psy, chip->wlc_present);
+			fan5451x_wlc_thermal_ctrl(chip, chip->wlc_present);
 			pr_info("wlc present %d\n", chip->wlc_present);
 		}
 	}
@@ -783,6 +1060,7 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 		if (!wlc_present) {
 			pr_info("wlc present 0, fake online off\n");
 			chip->eoc = false;
+			fan5451x_wlc_thermal_ctrl(chip, 0);
 			fan5451x_wlc_fake_online(chip, 0);
 			fan5451x_vbat_measure(chip);
 		}
@@ -822,6 +1100,7 @@ static enum power_supply_property msm_batt_power_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
@@ -935,23 +1214,6 @@ static int get_prop_battery_voltage_now(struct fan5451x_chip *chip)
 	return results.physical;
 }
 
-#define DEFAULT_TEMP		250
-static int get_prop_batt_temp(struct fan5451x_chip *chip)
-{
-	int ret = 0;
-	struct qpnp_vadc_result results;
-
-	ret = qpnp_vadc_read(chip->vadc_dev, LR_MUX1_BATT_THERM, &results);
-	if (ret) {
-		pr_debug("Unable to read batt temperature ret=%d\n", ret);
-		return DEFAULT_TEMP;
-	}
-
-	pr_debug("get_bat_temp %d, %lld\n", results.adc_code, results.physical);
-
-	return (int)results.physical;
-}
-
 #define BATT_OVERHEAT_TEMP 550
 #define BATT_COLD_TEMP -100
 static int get_prop_batt_health(struct fan5451x_chip *chip)
@@ -978,9 +1240,6 @@ static int get_prop_capacity(struct fan5451x_chip *chip)
 	if (chip->bms_psy) {
 		chip->bms_psy->get_property(chip->bms_psy,
 				POWER_SUPPLY_PROP_CAPACITY, &ret);
-
-		if (chip->eoc && ret.intval < 100)
-			chip->rechg_needed = true;
 
 		return ret.intval;
 	}
@@ -1043,6 +1302,9 @@ static int fan5451x_batt_power_get_property(struct power_supply *psy,
 	struct fan5451x_chip *chip =
 		container_of(psy, struct fan5451x_chip, batt_psy);
 
+	if (chip->suspended)
+		return -EAGAIN;
+
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
 		val->intval = get_prop_batt_status(chip);
@@ -1064,6 +1326,9 @@ static int fan5451x_batt_power_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		val->intval = get_prop_battery_voltage_now(chip);
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		val->intval = chip->ext_set_vddmax_mv * 1000;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = get_prop_batt_temp(chip);
@@ -1101,6 +1366,9 @@ static void fan5451x_pre_enable(struct fan5451x_chip *chip)
 	chip->enable = chip->enable_for_thermal && chip->enable_for_system;
 	pr_info("enable=%d thermal=%d system=%d\n",
 		chip->enable, chip->enable_for_thermal, chip->enable_for_system);
+
+	if (!chip->enable)
+		fan5451x_wlc_thermal_ctrl(chip, 0);
 
 	/* In eoc case, TX does not turn on until below Rechg voltage */
 	fan5451x_enable(chip, chip->enable);
@@ -1170,65 +1438,25 @@ fan5451x_vbat_notification(enum qpnp_tm_state state, void *ctx)
 					&chip->vbat_param);
 }
 
-static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set)
+static void
+fan5451x_vbat_rechg_notification(enum qpnp_tm_state state, void *ctx)
 {
-	static int prev_state;
-
-	if (prev_state == set)
-		return;
-
-	prev_state = set;
-
-	if (!chip->wlc_psy)
-		return;
-
-	pr_debug("fake wlc present: %d\n", set);
-
-	if (set) {
-		/* fake state */
-		chip->wlc_fake_online = 1;
-		power_supply_set_charging_enabled(chip->wlc_psy, 0); //WLC TX off
-		disable_irq_wake(chip->client->irq);
-	} else {
-		/* normal state */
-		enable_irq_wake(chip->client->irq);
-		power_supply_set_charging_enabled(chip->wlc_psy, 1); //WLC TX on
-		chip->wlc_fake_online = 0;
-	}
-}
-
-#define RECHG_VOLTAGE_OFFSET_MV 150
-#define RECHG_CHECK_CNT 3
-static void fan5451x_rechg_check_work(struct work_struct *work)
-{
-	struct delayed_work *dwork = to_delayed_work(work);
-	struct fan5451x_chip *chip = container_of(dwork,
-				struct fan5451x_chip, rechg_check_work);
-	static int rechg_cnt;
-	unsigned long delay;
+	struct fan5451x_chip *chip = ctx;
 	int volt;
 
-	volt = get_prop_battery_voltage_now(chip);
-	if (volt < (chip->vfloat - RECHG_VOLTAGE_OFFSET_MV) * 1000) {
-		rechg_cnt++;
-		pr_debug("Rechg check cnt(%d/3) volt(%d)\n", rechg_cnt, volt);
-		delay = RECHG_CHECK_DELAY_FAST_MS;
-	} else {
-		rechg_cnt = 0;
-		delay = RECHG_CHECK_DELAY_MS;
-	}
-
-	if (rechg_cnt > RECHG_CHECK_CNT || chip->rechg_needed) {
-		pr_info("Rechg occur!! volt(%d) soc_rechg(%d)\n", volt, chip->rechg_needed);
-		chip->eoc = false;
-		fan5451x_wlc_fake_online(chip, 0);
+	if (state >= ADC_TM_STATE_NUM) {
+		pr_err("invalid notification %d\n", state);
 		return;
 	}
 
-	schedule_delayed_work(&chip->rechg_check_work,
-			round_jiffies_relative(msecs_to_jiffies(delay)));
+	volt = get_prop_battery_voltage_now(chip);
+	pr_info("SW Rechg occur!! volt(%d)\n", volt);
+	chip->eoc = false;
+	fan5451x_batfet_enable(chip, 1);
+	fan5451x_wlc_fake_online(chip, 0);
 }
 
+#define WS_RECHECK_DELAY_MS 6000
 static void
 fan5451x_wlc_tx_recheck_work(struct work_struct *work)
 {
@@ -1257,6 +1485,7 @@ fan5451x_wlc_tx_recheck_work(struct work_struct *work)
 	}
 
 	/* Try the WLC TX re-working by toggling OFF GPIO. */
+	__pm_wakeup_event(&chip->ws_recheck, WS_RECHECK_DELAY_MS);
 	power_supply_set_charging_enabled(chip->wlc_psy, 0);
 	power_supply_set_charging_enabled(chip->wlc_psy, 1);
 	schedule_delayed_work(&chip->wlc_tx_recheck_work,
@@ -1266,6 +1495,77 @@ fan5451x_wlc_tx_recheck_work(struct work_struct *work)
 
 out:
 	cnt = 0;
+}
+
+static void
+fan5451x_wlc_fake_online_set_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct fan5451x_chip *chip = container_of(dwork,
+				struct fan5451x_chip, wlc_fake_online_set_work);
+	int value = chip->wlc_fake_online_set_value;
+
+	pr_info("Run work to set fake_online = %d\n", value);
+	fan5451x_wlc_fake_online(chip, value);
+
+	__pm_relax(&chip->ws_dev);
+}
+
+#define CONSECUTIVE_COUNT	3
+#define EOC_CHECK_DELAY_MS  10000
+static void
+fan5451x_eoc_check_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct fan5451x_chip *chip = container_of(dwork,
+				struct fan5451x_chip, eoc_check_work);
+	static int count;
+	int ibat_ma;
+	int vbat_mv;
+	int rechg_mv = chip->vfloat - chip->vrechg_hyst;
+
+	ibat_ma = get_prop_current_now(chip) / 1000;
+	vbat_mv = get_prop_battery_voltage_now(chip) / 1000;
+	pr_debug("ibat_ma = %d, vbat_mv = %d\n", ibat_ma, vbat_mv);
+
+	if (vbat_mv <= rechg_mv) {
+		pr_info("stop eoc_check_work, discharged battery mv = %d\n", vbat_mv);
+		/* Refresh term enable comparator to get next CV IRQ */
+		fan5451x_update_reg(chip->client, REG_CON2, 0, CON2_TE);
+		msleep(300);
+		fan5451x_update_reg(chip->client, REG_CON2, CON2_TE, CON2_TE);
+		goto stop_eoc;
+	}
+
+	if ((ibat_ma * -1) > chip->set_iterm) {
+		pr_debug("battery current too high\n");
+		count = 0;
+	} else if (ibat_ma > 0) {
+		pr_debug("system demand increased\n");
+		count = 0;
+	} else {
+		if (count >= CONSECUTIVE_COUNT) {
+			pr_info("SW EOC IRQ\n");
+			fan5451x_wlc_thermal_ctrl(chip, 0);
+			fan5451x_batfet_enable(chip, 0);
+			fan5451x_wlc_fake_online(chip, 1);
+			chip->eoc = true;
+			fan5451x_vbat_rechg_measure(chip);
+			goto stop_eoc;
+		} else {
+			count++;
+			pr_debug("EOC count = %d\n", count);
+		}
+	}
+	schedule_delayed_work(&chip->eoc_check_work,
+		round_jiffies_relative(msecs_to_jiffies(
+				EOC_CHECK_DELAY_MS)));
+	return;
+
+stop_eoc:
+	/* initial static var */
+	count = 0;
+	__pm_relax(&chip->ws_cv);
 }
 
 #define OF_PROP_READ(chip, prop, dt_property, retval, optional)	\
@@ -1305,13 +1605,13 @@ static int fan5451x_parse_dt(struct fan5451x_chip *chip)
 	ret = 0;
 	OF_PROP_READ(chip, vbatmin, "vbatmin", ret, 0);
 	OF_PROP_READ(chip, vfloat, "vfloat", ret, 0);
+	OF_PROP_READ(chip, vrechg_hyst, "vrechg-hyst", ret, 0);
 	OF_PROP_READ(chip, ibus, "ibus", ret, 0);
 	OF_PROP_READ(chip, iin, "iin", ret, 0);
 	OF_PROP_READ(chip, iochrg, "iochrg", ret, 0);
 	OF_PROP_READ(chip, iterm, "iterm", ret, 0);
 	OF_PROP_READ(chip, prechg, "prechg", ret, 0);
 	OF_PROP_READ(chip, prechg, "prechg", ret, 0);
-	OF_PROP_READ(chip, topoff_enable, "topoff-enable", ret, 0);
 	OF_PROP_READ(chip, vbusovp, "vbusovp", ret, 0);
 	OF_PROP_READ(chip, vbuslim, "vbuslim", ret, 0);
 	OF_PROP_READ(chip, vinovp, "vinovp", ret, 0);
@@ -1319,10 +1619,13 @@ static int fan5451x_parse_dt(struct fan5451x_chip *chip)
 	OF_PROP_READ(chip, fctmr, "fctmr", ret, 0);
 	OF_PROP_READ(chip, step_dwn_offset_ma, "step-dwn-offset-ma", ret, 1);
 	OF_PROP_READ(chip, step_dwn_thr_mv, "step-dwn-thr-mv", ret, 1);
+	OF_PROP_READ(chip, wlc_chg_on_min, "wlc-chg-on-min", ret, 1);
+	OF_PROP_READ(chip, wlc_chg_off_min, "wlc-chg-off-min", ret, 1);
 
 	chip->swap_vbus_vin = of_property_read_bool(np, "swap-vbus-vin");
 	chip->embedded_battery = of_property_read_bool(np,
 			"fcs,embedded-battery");
+	chip->support_sw_eoc = of_property_read_bool(np, "support-sw-eoc");
 
 	return ret;
 }
@@ -1413,16 +1716,14 @@ static int fan5451x_probe(struct i2c_client *client,
 	/* Save the register address at runtime */
 	fan5451x_init_register_base(chip);
 
-	if (chip->step_dwn_offset_ma && chip->step_dwn_thr_mv) {
-		chip->adc_tm_dev = qpnp_get_adc_tm(&client->dev, "chg");
-		if (IS_ERR(chip->adc_tm_dev)) {
-			ret = PTR_ERR(chip->adc_tm_dev);
-			if (ret != -EPROBE_DEFER)
-				pr_err("adc_tm_dev missing\n");
-			else
-				pr_err("adc_tm_dev not found deferring probe\n");
-			goto err_chip_clear;
-		}
+	chip->adc_tm_dev = qpnp_get_adc_tm(&client->dev, "chg");
+	if (IS_ERR(chip->adc_tm_dev)) {
+		ret = PTR_ERR(chip->adc_tm_dev);
+		if (ret != -EPROBE_DEFER)
+			pr_err("adc_tm_dev missing\n");
+		else
+			pr_err("adc_tm_dev not found deferring probe\n");
+		goto err_chip_clear;
 	}
 
 	ret = fan5451x_gpio_init(chip);
@@ -1451,18 +1752,34 @@ static int fan5451x_probe(struct i2c_client *client,
 		goto err_gpio_free;
 	}
 
-	INIT_DELAYED_WORK(&chip->rechg_check_work,
-			fan5451x_rechg_check_work);
+	wakeup_source_init(&chip->ws_recheck, "fan5451x_ws_recheck");
+	wakeup_source_init(&chip->ws_cv, "fan5451x_ws_cv");
+	wakeup_source_init(&chip->ws_dev, "fan5451x_ws_dev");
+
+	alarm_init(&chip->wlc_ctrl_alarm, ALARM_REALTIME,
+			fan5451x_wlc_thermal_ctrl_callback);
+
+	INIT_DELAYED_WORK(&chip->wlc_fake_online_set_work,
+			fan5451x_wlc_fake_online_set_work);
 	INIT_DELAYED_WORK(&chip->wlc_tx_recheck_work,
 			fan5451x_wlc_tx_recheck_work);
+	INIT_DELAYED_WORK(&chip->eoc_check_work,
+			fan5451x_eoc_check_work);
 
 	if (chip->step_dwn_offset_ma && chip->step_dwn_thr_mv) {
-		chip->vbat_param.timer_interval = ADC_MEAS1_INTERVAL_2S;
+		chip->vbat_param.timer_interval = ADC_MEAS1_INTERVAL_8S;
 		chip->vbat_param.btm_ctx = chip;
 		chip->vbat_param.threshold_notification =
 					fan5451x_vbat_notification;
 		chip->vbat_param.channel = VBAT_SNS;
 	}
+
+	/* for detecting recharging voltage */
+	chip->vbat_param_rechg.timer_interval = ADC_MEAS1_INTERVAL_8S;
+	chip->vbat_param_rechg.btm_ctx = chip;
+	chip->vbat_param_rechg.threshold_notification =
+				fan5451x_vbat_rechg_notification;
+	chip->vbat_param_rechg.channel = VBAT_SNS;
 
 	/* Set initial state */
 	chip->usb_present = fan5451x_usb_chg_plugged_in(chip);
@@ -1488,11 +1805,17 @@ static int fan5451x_probe(struct i2c_client *client,
 	ret = device_create_file(&client->dev, &dev_attr_chip_param);
 	if (ret)
 		goto err_sysfs_chip_param;
+	ret = device_create_file(&client->dev,
+			&dev_attr_wlc_thermal_param);
+	if (ret)
+		goto err_sysfs_wlc_thermal_param;
 
 	pr_info("FAN5451x initialized\n");
 
 	return 0;
 
+err_sysfs_wlc_thermal_param:
+	device_remove_file(&client->dev, &dev_attr_chip_param);
 err_sysfs_chip_param:
 	device_remove_file(&client->dev, &dev_attr_status_register);
 err_sysfs_status_register:
@@ -1517,16 +1840,16 @@ static int fan5451x_remove(struct i2c_client *client)
 	struct fan5451x_chip *chip = i2c_get_clientdata(client);
 
 	cancel_delayed_work_sync(&chip->wlc_tx_recheck_work);
-	cancel_delayed_work_sync(&chip->rechg_check_work);
 	device_remove_file(&client->dev, &dev_attr_addr_register);
 	device_remove_file(&client->dev, &dev_attr_status_register);
 	device_remove_file(&client->dev, &dev_attr_chip_param);
+	device_remove_file(&client->dev, &dev_attr_wlc_thermal_param);
 
 	disable_irq_wake(client->irq);
 	free_irq(client->irq, chip);
 
 	power_supply_unregister(&chip->batt_psy);
-
+	alarm_cancel(&chip->wlc_ctrl_alarm);
 	gpio_free(chip->disable_gpio);
 	gpio_free(chip->stat_gpio);
 
@@ -1554,8 +1877,11 @@ static int fan5451x_pm_prepare(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct fan5451x_chip *chip = i2c_get_clientdata(client);
 
-	if (chip->eoc)
-		cancel_delayed_work_sync(&chip->rechg_check_work);
+	chip->suspended = true;
+
+	/* To avoid calling xfer when system is suspended */
+	if (client->irq)
+		disable_irq(client->irq);
 
 	return 0;
 }
@@ -1565,8 +1891,9 @@ static void fan5451x_pm_complete(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct fan5451x_chip *chip = i2c_get_clientdata(client);
 
-	if (chip->eoc)
-		schedule_delayed_work(&chip->rechg_check_work, 0);
+	chip->suspended = false;
+	if (client->irq)
+		enable_irq(client->irq);
 }
 
 static const struct dev_pm_ops fan5451x_pm_ops = {
