@@ -111,6 +111,7 @@ struct msm_asoc_mach_data {
 	int hph_en1_gpio;
 	int hph_en0_gpio;
 	int us_euro_gpio; /* used by gpio driver API */
+	struct regulator *us_euro_supply;
 	struct device_node *us_euro_gpio_p; /* used by pinctrl API */
 	struct snd_info_entry *codec_root;
 };
@@ -2906,6 +2907,15 @@ static int msm_prepare_us_euro(struct snd_soc_card *card)
 				snd_soc_card_get_drvdata(card);
 	int ret = 0;
 
+	if (pdata->us_euro_supply) {
+		ret = regulator_enable(pdata->us_euro_supply);
+		if (ret) {
+			dev_err(card->dev,
+				"Failed to enable us_euro regulator: %d", ret);
+			return ret;
+		}
+	}
+
 	if (pdata->us_euro_gpio >= 0) {
 		dev_dbg(card->dev, "%s: us_euro gpio request %d", __func__,
 			pdata->us_euro_gpio);
@@ -2914,6 +2924,8 @@ static int msm_prepare_us_euro(struct snd_soc_card *card)
 			dev_err(card->dev,
 				"%s: Failed to request codec US/EURO gpio %d error %d\n",
 				__func__, pdata->us_euro_gpio, ret);
+			if (pdata->us_euro_supply)
+				regulator_disable(pdata->us_euro_supply);
 		}
 	}
 
@@ -3262,6 +3274,40 @@ err_dt:
 	return ret;
 }
 
+static int goog_polaris_card_suspend(struct snd_soc_card *card)
+{
+	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	int ret = 0;
+
+	if (pdata->us_euro_supply) {
+		ret = regulator_disable(pdata->us_euro_supply);
+		if (ret) {
+			dev_err(card->dev,
+				"Failed to disable us_euro regulator: %d", ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static int goog_polaris_card_resume(struct snd_soc_card *card)
+{
+	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	int ret = 0;
+
+	if (pdata->us_euro_supply) {
+		ret = regulator_enable(pdata->us_euro_supply);
+		if (ret) {
+			dev_err(card->dev,
+				"Failed to enable us_euro regulator: %d", ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 static int msm_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card;
@@ -3288,6 +3334,8 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 	card->dev = &pdev->dev;
+	card->suspend_post = goog_polaris_card_suspend;
+	card->resume_pre = goog_polaris_card_resume;
 	platform_set_drvdata(pdev, card);
 	snd_soc_card_set_drvdata(card, pdata);
 
@@ -3408,6 +3456,25 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 		wcd_mbhc_cfg.swap_gnd_mic = msm_swap_gnd_mic;
 	}
 
+	pdata->us_euro_supply = devm_regulator_get_optional(
+						&pdev->dev, "goog,us-euro");
+	ret = PTR_ERR(pdata->us_euro_supply);
+	if (ret == -ENODEV) {
+		pdata->us_euro_supply = NULL;
+	} else if (ret == -EPROBE_DEFER) {
+		dev_dbg(&pdev->dev, "Defer due to goog,us-euro-supply.");
+		goto err;
+	} else if (ret == -ENOENT) {
+		dev_err(&pdev->dev,
+			"Could not find regulator for goog,us-euro.");
+		goto err;
+	} else if (IS_ERR(pdata->us_euro_supply)) {
+		dev_err(&pdev->dev,
+			"Unhandled error %d getting goog,us-euro-supply.",
+			ret);
+		goto err;
+	}
+
 	ret = msm_prepare_us_euro(card);
 	if (ret)
 		dev_info(&pdev->dev, "msm_prepare_us_euro failed (%d)\n",
@@ -3445,6 +3512,12 @@ static int msm_asoc_machine_remove(struct platform_device *pdev)
 	gpio_free(pdata->us_euro_gpio);
 	gpio_free(pdata->hph_en1_gpio);
 	gpio_free(pdata->hph_en0_gpio);
+	if (pdata->us_euro_supply) {
+		if (regulator_is_enabled(pdata->us_euro_supply))
+			regulator_disable(pdata->us_euro_supply);
+		devm_regulator_put(pdata->us_euro_supply);
+		pdata->us_euro_supply = NULL;
+	}
 
 	snd_soc_unregister_card(card);
 	return 0;
