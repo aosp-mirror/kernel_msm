@@ -29,16 +29,28 @@ struct batt_tm_data {
 	struct device *dev;
 	struct qpnp_adc_tm_chip *adc_tm_dev;
 	struct power_supply *batt_psy;
+	struct power_supply *usb_psy;
+	struct power_supply *wlc_psy;
+	struct power_supply psy;
 	struct qpnp_adc_tm_btm_param adc_param;
 	struct tm_ctrl_data *warm_cfg;
 	struct tm_ctrl_data *cool_cfg;
+	struct tm_ctrl_data *warm_cfg_wlc;
+	struct tm_ctrl_data *cool_cfg_wlc;
+	struct wakeup_source ws_noti;
 	bool tm_disabled_in_suspend;
 	unsigned int warm_cfg_size;
 	unsigned int cool_cfg_size;
+	unsigned int warm_cfg_size_wlc;
+	unsigned int cool_cfg_size_wlc;
 	int batt_vreg_mv;
 	int low_batt_vreg_mv;
 	int current_ma;
 	int low_current_ma;
+	int wlc_online;
+	int usb_online;
+	bool is_wlc_param;
+	bool wlc_config_use;
 };
 
 struct tm_ctrl_data {
@@ -86,10 +98,16 @@ static void batt_tm_notification(enum qpnp_tm_state state, void *ctx)
 	int tm_action;
 	int batt_health;
 	union power_supply_propval ret = {0,};
+	struct tm_ctrl_data *warm;
+	struct tm_ctrl_data *cool;
+	unsigned int warm_size;
+	unsigned int cool_size;
 	int rc;
 
+	__pm_stay_awake(&batt_tm->ws_noti);
 	if (state >= ADC_TM_STATE_NUM) {
 		pr_err("invalid notification %d\n", state);
+		__pm_relax(&batt_tm->ws_noti);
 		return;
 	}
 
@@ -100,30 +118,38 @@ static void batt_tm_notification(enum qpnp_tm_state state, void *ctx)
 	pr_debug("temp = %d state = %s\n", temp,
 				state == ADC_TM_WARM_STATE ? "warm" : "cool");
 
-	if (state == ADC_TM_WARM_STATE) {
-		i = batt_tm->warm_cfg_size - 1;
-		while ((batt_tm->adc_param.high_temp !=
-					batt_tm->warm_cfg[i].thr) && (i > 0))
-			i--;
-
-		batt_tm->adc_param.low_temp =
-					batt_tm->warm_cfg[i].next_cool_thr;
-		batt_tm->adc_param.high_temp =
-					batt_tm->warm_cfg[i].next_warm_thr;
-		tm_action = batt_tm->warm_cfg[i].action;
-		batt_health = batt_tm->warm_cfg[i].health;
+	if (batt_tm->wlc_config_use && batt_tm->is_wlc_param) {
+		warm = batt_tm->warm_cfg_wlc;
+		cool = batt_tm->cool_cfg_wlc;
+		warm_size = batt_tm->warm_cfg_size_wlc;
+		cool_size = batt_tm->cool_cfg_size_wlc;
 	} else {
-		i = batt_tm->cool_cfg_size - 1;
-		while ((batt_tm->adc_param.low_temp !=
-					batt_tm->cool_cfg[i].thr) && (i > 0))
+		warm = batt_tm->warm_cfg;
+		cool = batt_tm->cool_cfg;
+		warm_size = batt_tm->warm_cfg_size;
+		cool_size = batt_tm->cool_cfg_size;
+	}
+
+	if (state == ADC_TM_WARM_STATE) {
+		i = warm_size - 1;
+		while ((batt_tm->adc_param.high_temp !=
+					warm[i].thr) && (i > 0))
 			i--;
 
-		batt_tm->adc_param.low_temp =
-					batt_tm->cool_cfg[i].next_cool_thr;
-		batt_tm->adc_param.high_temp =
-					batt_tm->cool_cfg[i].next_warm_thr;
-		tm_action = batt_tm->cool_cfg[i].action;
-		batt_health = batt_tm->cool_cfg[i].health;
+		batt_tm->adc_param.low_temp = warm[i].next_cool_thr;
+		batt_tm->adc_param.high_temp = warm[i].next_warm_thr;
+		tm_action = warm[i].action;
+		batt_health = warm[i].health;
+	} else {
+		i = cool_size - 1;
+		while ((batt_tm->adc_param.low_temp !=
+					cool[i].thr) && (i > 0))
+			i--;
+
+		batt_tm->adc_param.low_temp = cool[i].next_cool_thr;
+		batt_tm->adc_param.high_temp = cool[i].next_warm_thr;
+		tm_action = cool[i].action;
+		batt_health = cool[i].health;
 	}
 
 	power_supply_set_health_state(batt_tm->batt_psy, batt_health);
@@ -160,7 +186,8 @@ static void batt_tm_notification(enum qpnp_tm_state state, void *ctx)
 		break;
 	}
 
-	pr_info("action : %d next low temp = %d next high temp = %d\n",
+	pr_info("[%s] action : %d next low temp = %d next high temp = %d\n",
+					batt_tm->is_wlc_param? "WLC" : "USB",
 					tm_action,
 					batt_tm->adc_param.low_temp,
 					batt_tm->adc_param.high_temp);
@@ -170,9 +197,10 @@ static void batt_tm_notification(enum qpnp_tm_state state, void *ctx)
 	if (rc)
 		pr_err("request adc_tm error\n");
 
+	__pm_relax(&batt_tm->ws_noti);
 }
 
-static int batt_tm_notification_init(struct batt_tm_data *batt_tm)
+static int batt_tm_notification_init_legacy(struct batt_tm_data *batt_tm)
 {
 	int rc;
 
@@ -192,6 +220,47 @@ static int batt_tm_notification_init(struct batt_tm_data *batt_tm)
 						&batt_tm->adc_param);
 	if (rc)
 		pr_err("request adc_tm error %d\n", rc);
+
+	return rc;
+}
+
+static int batt_tm_notification_init(struct batt_tm_data *batt_tm)
+{
+	int rc = 0;
+
+	if (batt_tm->wlc_online || batt_tm->usb_online) {
+		/* Normal setting */
+		power_supply_set_chg_enable(batt_tm->batt_psy, true);
+		power_supply_set_current_limit(batt_tm->batt_psy,
+					batt_tm->current_ma * 1000);
+		power_supply_set_max_voltage(batt_tm->batt_psy,
+					batt_tm->batt_vreg_mv * 1000);
+
+		if (batt_tm->wlc_online) {
+			batt_tm->adc_param.low_temp =
+						batt_tm->warm_cfg_wlc[0].next_cool_thr;
+			batt_tm->adc_param.high_temp =
+						batt_tm->warm_cfg_wlc[0].next_warm_thr;
+			batt_tm->is_wlc_param = true;
+		} else if (batt_tm->usb_online) {
+			batt_tm->adc_param.low_temp =
+						batt_tm->warm_cfg[0].next_cool_thr;
+			batt_tm->adc_param.high_temp =
+						batt_tm->warm_cfg[0].next_warm_thr;
+			batt_tm->is_wlc_param = false;
+		}
+		batt_tm->adc_param.threshold_notification =
+					batt_tm_notification;
+		pr_info("[%s] next low temp = %d next high temp = %d\n",
+					batt_tm->is_wlc_param? "WLC" : "USB",
+					batt_tm->adc_param.low_temp,
+					batt_tm->adc_param.high_temp);
+		rc = qpnp_adc_tm_channel_measure(batt_tm->adc_tm_dev,
+							&batt_tm->adc_param);
+
+		if (rc)
+			pr_err("request adc_tm error %d\n", rc);
+	}
 
 	return rc;
 }
@@ -286,10 +355,106 @@ static int batt_tm_parse_dt(struct device_node *np,
 
 	batt_tm->cool_cfg_size /= sizeof(struct tm_ctrl_data);
 
+	batt_tm->wlc_config_use = of_property_read_bool(np, "tm,wlc-config-use");
+	if (batt_tm->wlc_config_use) {
+		if (!of_get_property(np, "tm,warm-cfg-wlc",
+					&batt_tm->warm_cfg_size_wlc)) {
+			pr_err("failed to get warm_cfg_wlc\n");
+			ret = -EINVAL;
+			goto out;
+		}
+
+		batt_tm->warm_cfg_wlc = devm_kzalloc(batt_tm->dev,
+					batt_tm->warm_cfg_size_wlc, GFP_KERNEL);
+		if (!batt_tm->warm_cfg_wlc) {
+			pr_err("Unable to allocate memory\n");
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		ret = of_property_read_u32_array(np, "tm,warm-cfg-wlc",
+						(u32 *)batt_tm->warm_cfg_wlc,
+						batt_tm->warm_cfg_size_wlc / sizeof(u32));
+		if (ret) {
+			pr_err("failed to get tm,warm-cfg\n");
+			goto out;
+		}
+
+		batt_tm->warm_cfg_size_wlc /= sizeof(struct tm_ctrl_data);
+
+		if (!of_get_property(np, "tm,cool-cfg-wlc",
+				&batt_tm->cool_cfg_size_wlc)) {
+			pr_err("failed to get cool_cfg_wlc\n");
+			ret = -EINVAL;
+			goto out;
+		}
+
+		batt_tm->cool_cfg_wlc = devm_kzalloc(batt_tm->dev,
+					batt_tm->cool_cfg_size_wlc, GFP_KERNEL);
+		if (!batt_tm->cool_cfg_wlc) {
+			pr_err("Unable to allocate memory\n");
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		ret = of_property_read_u32_array(np, "tm,cool-cfg",
+						(u32 *)batt_tm->cool_cfg_wlc,
+						batt_tm->cool_cfg_size_wlc / sizeof(u32));
+		if (ret) {
+			pr_err("failed to get tm,cool-cfg\n");
+			goto out;
+		}
+
+		batt_tm->cool_cfg_size_wlc /= sizeof(struct tm_ctrl_data);
+	}
 out:
 	return ret;
 }
 
+static void batt_tm_external_power_changed(struct power_supply *psy)
+{
+	struct batt_tm_data *batt_tm =
+			container_of(psy, struct batt_tm_data, psy);
+	union power_supply_propval res = {0, };
+	int online_changed = 0;
+
+	batt_tm->wlc_psy->get_property(
+			batt_tm->wlc_psy, POWER_SUPPLY_PROP_ONLINE, &res);
+	if (batt_tm->wlc_online ^ res.intval) {
+		batt_tm->wlc_online = res.intval;
+		online_changed = 1;
+	}
+
+	/* in case of using both cable wlc and usb charger
+	 * If wlc charger is fake_online state,
+	 * usb plugged state will be changed. */
+	if (!batt_tm->wlc_online) {
+		batt_tm->usb_psy->get_property(
+				batt_tm->usb_psy, POWER_SUPPLY_PROP_ONLINE, &res);
+		if (batt_tm->usb_online ^ res.intval) {
+			batt_tm->usb_online = res.intval;
+			online_changed = 1;
+		}
+	}
+
+	if (online_changed) {
+		pr_debug("wlc=%d, usb=%d\n", batt_tm->wlc_online,
+				batt_tm->usb_online);
+		batt_tm_notification_init(batt_tm);
+	}
+}
+
+static int batt_tm_get_psy_property(struct power_supply *psy,
+		enum power_supply_property psp,
+		union power_supply_propval *val)
+{
+	return -EINVAL;
+}
+
+static char *batt_tm_supplied_from[] = {
+	"usb",
+	"wireless",
+};
 
 static int batt_tm_probe(struct platform_device *pdev)
 {
@@ -325,10 +490,51 @@ static int batt_tm_probe(struct platform_device *pdev)
 		goto out;
 	}
 
-	ret = batt_tm_notification_init(batt_tm);
-	if (ret) {
-		pr_err("failed to init adc tm\n");
-		goto out;
+	wakeup_source_init(&batt_tm->ws_noti, "batt_tm_noti");
+
+	if (!batt_tm->wlc_config_use) {
+		ret = batt_tm_notification_init_legacy(batt_tm);
+		if (ret) {
+			pr_err("failed to init adc tm\n");
+			goto out;
+		}
+	} else {
+		batt_tm->usb_psy = power_supply_get_by_name("usb");
+		if (!batt_tm->usb_psy) {
+			pr_err("usb supply not found\n");
+			ret =  -EPROBE_DEFER;
+			goto out;
+		}
+
+		batt_tm->wlc_psy = power_supply_get_by_name("wireless");
+		if (!batt_tm->wlc_psy) {
+			pr_err("wireless supply not found\n");
+			ret =  -EPROBE_DEFER;
+			goto out;
+		}
+
+		/* pre-initialize adc_tm */
+		batt_tm->adc_param.state_request =
+					ADC_TM_HIGH_LOW_THR_ENABLE;
+		batt_tm->adc_param.timer_interval = ADC_MEAS1_INTERVAL_8S;
+		batt_tm->adc_param.btm_ctx = batt_tm;
+		batt_tm->adc_param.channel = LR_MUX1_BATT_THERM;
+
+		/* register psy */
+		batt_tm->psy.name = "batt_tm";
+		batt_tm->psy.type = POWER_SUPPLY_TYPE_UNKNOWN;
+		batt_tm->psy.get_property = batt_tm_get_psy_property;
+		batt_tm->psy.external_power_changed =
+			batt_tm_external_power_changed;
+		batt_tm->psy.of_node = pdev->dev.of_node;
+		batt_tm->psy.supplied_from = batt_tm_supplied_from;
+		batt_tm->psy.num_supplies = ARRAY_SIZE(batt_tm_supplied_from);
+		ret = power_supply_register(batt_tm->dev, &batt_tm->psy);
+		if (ret < 0) {
+			pr_err("fail to register psy ret=%d\n", ret);
+			goto out;
+		}
+		batt_tm_external_power_changed(&batt_tm->psy);
 	}
 
 out:
