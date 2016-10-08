@@ -200,6 +200,9 @@ bool RECOVERY_WPC_DISABLE_FLAG = 0;
 /* } Quanta */
 
 extern char *saved_command_line;
+// Quanta: export fo gauge driver
+bool chg_full_flag = false;
+#define SMB_MAX_SOC 100
 
 enum {
 	USER		= BIT(0),
@@ -254,12 +257,10 @@ struct smb348_charger {
 	bool			irq_waiting;
 	bool			bms_controlled_charging;
 	bool			skip_usb_suspend_for_fake_battery;
-	bool			full_flag;
 	struct mutex		read_write_lock;
 	struct mutex		path_suspend_lock;
 	struct mutex		irq_complete;
 	struct mutex		wpc_chg_complete;
-	struct delayed_work	wpc_chg_full_wq;
 	/* Quanta { 3 mins delay for WPC charge */
 	struct delayed_work wpc_resume_chg_wq;
 	/* } Quanta */
@@ -270,6 +271,7 @@ struct smb348_charger {
 	int			fastchg_current_max_ma;
 #ifdef FEATURE_THERMAL_MITIGATION_ALGO
 	int			fastchg_current_mitigation_ma;
+	int			prop_batt_capacity;
 #endif /* FEATURE_THERMAL_MITIGATION_ALGO */
 	unsigned int		cool_bat_ma;
 	unsigned int		warm_bat_ma;
@@ -1043,8 +1045,8 @@ static int smb348_get_prop_batt_status(struct smb348_charger *chip)
 
 	if ((reg & STATUS_C_CHARGING_MASK) &&
 			!(reg & STATUS_C_CHG_ERR_STATUS_BIT)) {
-		if ((chip->full_flag) && (chip->chip_hw_id >= HW_VER_K)) {
-			chip->full_flag = false;
+		if ((chg_full_flag) && (chip->chip_hw_id >= HW_VER_K)) {
+			chg_full_flag = false;
 		}
 		return POWER_SUPPLY_STATUS_CHARGING;
 	}
@@ -1069,12 +1071,16 @@ static int smb348_get_prop_batt_capacity(struct smb348_charger *chip)
 		chip->bms_psy->get_property(chip->bms_psy,
 				POWER_SUPPLY_PROP_CAPACITY, &ret);
 #ifdef FEATURE_THERMAL_MITIGATION_ALGO
-		pr_err("Get chg end gpio value:%d\n", gpio_get_value(chip->chg_end_gpio));
-		if (ret.intval <= SMB348_SW_RECHG_SOC && gpio_get_value(chip->chg_end_gpio)) {
-			pr_err("SW recharge release\n");
-			gpio_set_value(chip->chg_end_gpio, 0);
+		// 99% recharged check is moved to smb348_get_prop_battery_voltage_now() due to need to check voltage is lower
+		chip->prop_batt_capacity = ret.intval;  // smb348_get_prop_battery_voltage_now() is always called after this func
+
+		// return 100% once charging-end is triggered.
+		if (chg_full_flag) {
+			pr_err("soc=100, chg_end=%d, chg_full_flag=%d\n", gpio_get_value(chip->chg_end_gpio), chg_full_flag);
+			return SMB_MAX_SOC;
 		}
 
+		// if battery capacity is higher than 75%, using 100mA to do CV charging, otherwise using 200mA for CC charging.
 		if (chip->wpc_state) {
 			if (ret.intval >= SMB348_SW_MITIGATION_SOC) {
 				rc = smb348_fastchg_current_set(chip, chip->fastchg_current_mitigation_ma);
@@ -1095,6 +1101,7 @@ static int smb348_get_prop_batt_capacity(struct smb348_charger *chip)
 						"Couldn't set charging current rc = %d\n", rc);
 			}
 		}
+		pr_err("soc=%d, chg_end=%d, chg_full_flag=%d\n", ret.intval, gpio_get_value(chip->chg_end_gpio), chg_full_flag);
 #endif /* FEATURE_THERMAL_MITIGATION_ALGO */
 		return ret.intval;
 	}
@@ -1197,10 +1204,13 @@ smb348_get_prop_battery_voltage_now(struct smb348_charger *chip)
 		chip->bms_psy->get_property(chip->bms_psy,
 		POWER_SUPPLY_PROP_VOLTAGE_NOW, &ret);
 #ifdef FEATURE_THERMAL_MITIGATION_ALGO
-		pr_err("Get chg end gpio value:%d\n", gpio_get_value(chip->chg_end_gpio));
-		if (ret.intval < SMB348_SW_RECHG_VOLTAGE && gpio_get_value(chip->chg_end_gpio)) {
-			pr_err("SW recharge release\n");
-			gpio_set_value(chip->chg_end_gpio, 0);
+		pr_err("chg_end=%d, chg_full_flag=%d\n", gpio_get_value(chip->chg_end_gpio), chg_full_flag);
+		if (chg_full_flag) {
+			if ((chip->prop_batt_capacity <= SMB348_SW_RECHG_SOC && ret.intval < VFLOAT_4350MV) || (ret.intval < SMB348_SW_RECHG_VOLTAGE)) {
+				pr_err("SW recharge is due to batt capacity=%d or voltage=%d lower than %d\n", chip->prop_batt_capacity, ret.intval, SMB348_SW_RECHG_VOLTAGE);
+				gpio_set_value(chip->chg_end_gpio, 0);
+				chg_full_flag = false;
+			}
 		}
 #endif /* FEATURE_THERMAL_MITIGATION_ALGO */
 		return ret.intval;
@@ -1364,7 +1374,7 @@ smb348_batt_property_is_writeable(struct power_supply *psy,
 static int bound_soc(int soc)
 {
 	soc = max(0, soc);
-	soc = min(soc, 100);
+	soc = min(soc, SMB_MAX_SOC);
 	return soc;
 }
 
@@ -1552,12 +1562,10 @@ static int chg_uv(struct smb348_charger *chip, u8 status)
 				__func__, chip->chg_present);
 		if (!chip->wpc_state) {
 			pr_err("TYPE: USB\n");
-			power_supply_set_supply_type(chip->usb_psy,
-							POWER_SUPPLY_TYPE_USB);
+			power_supply_set_supply_type(chip->usb_psy, POWER_SUPPLY_TYPE_USB);
 		} else {
-			pr_err("TYPE: USB_DCP\n");
-			power_supply_set_supply_type(chip->usb_psy,
-							POWER_SUPPLY_TYPE_USB_DCP);
+			pr_err("TYPE: USB DCP\n");
+			power_supply_set_supply_type(chip->usb_psy, POWER_SUPPLY_TYPE_USB_DCP);
 		}
 		power_supply_set_present(chip->usb_psy, chip->chg_present);
 
@@ -1573,7 +1581,6 @@ static int chg_uv(struct smb348_charger *chip, u8 status)
 								rc);
 		}
 	}
-
 
 	if (status != 0) {
 		if (chip->chip_hw_id >= HW_VER_K) {
@@ -1623,33 +1630,33 @@ static int chg_term(struct smb348_charger *chip, u8 status)
 {
 	bool check_dock = 0;
 	/* Pull up the CHG_END gpio to stop blink LED,
-	   And set full_flag. */
+	   And set chg_full_flag. */
 	mutex_lock(&chip->wpc_chg_complete);
 
 	if (chip->chip_hw_id >= HW_VER_K)
 		check_dock = chip->wpc_dock_present;
 	else
 		check_dock = chip->wpc_state;
-	/* full_flag avoid device enter charge <-> charge full loop */
-	if (!chip->full_flag && check_dock) {
-		dev_err(chip->dev, "%s: Charger full\n", __func__);
+	/* chg_full_flag avoid device enter charge <-> charge full loop */
+	if (!chg_full_flag && check_dock) {
+		pr_err("Full-Charged\n");
 		gpio_set_value(chip->chg_end_gpio, 1);
+		chg_full_flag = true;
 #ifndef FEATURE_THERMAL_MITIGATION_ALGO
 		msleep(100);
 		gpio_set_value(chip->chg_end_gpio, 0);
 #endif /* FEATURE_THERMAL_MITIGATION_ALGO */
-		chip->full_flag = 1;
 	}
 	mutex_unlock(&chip->wpc_chg_complete);
 
-	dev_dbg(chip->dev, "%s\n", __func__);
+	pr_err("Full-Charged\n");
 	if (chip->chip_hw_id < HW_VER_K) {
 		if (!chip->iterm_disabled) {
 			chip->batt_full = !!status;
 		}
 	} else {
 		printk("status = %d\n",status);
-		if (chip->full_flag)
+		if (chg_full_flag)
 			chip->batt_full = true;
 	}
 	return 0;
@@ -1675,6 +1682,7 @@ static void smb348_wpc_chg_gpio_clear(struct smb348_charger *chip)
 		if (gpio_get_value(chip->chg_end_gpio)) {
 			pr_err("Clear chg_end_gpio\n");
 			gpio_set_value(chip->chg_end_gpio, 0);
+			chg_full_flag = false;
 		}
 	}
 	if (gpio_is_valid(chip->wpc_enable_gpio)) {
@@ -2171,74 +2179,42 @@ static irqreturn_t smb348_wpc_state_handler(int irq, void *dev_id)
 	struct smb348_charger *chip = dev_id;
 
 	chip->wpc_state = !gpio_get_value(chip->wpc_stat_gpio);
+	pr_err("wpc status pin changed!! chg_end=%d state=%d enable=%d, detect=%d\n", gpio_get_value(chip->chg_end_gpio), chip->wpc_state, gpio_get_value(chip->wpc_enable_gpio), gpio_get_value(chip->wpc_dock_detect_gpio));
 
-	pr_err("smb348_wpc_state_handler detect!! chg_end = %d status = %d enable = %d\n",
-			gpio_get_value(chip->chg_end_gpio), gpio_get_value(chip->wpc_stat_gpio), gpio_get_value(chip->wpc_enable_gpio));
+	if (gpio_get_value(chip->chg_end_gpio) | gpio_get_value(chip->wpc_enable_gpio)) {
+		pr_err("Stop Charging: pc_state=%d,  wpc_dock_present=%d w\n", chip->wpc_state, gpio_get_value(chip->wpc_dock_detect_gpio));
+		return IRQ_HANDLED;
+	} else if (0) {  // toDO
+		// stop charging (not caused by chg_eng or enable pin). Measns remove from dock
+		// toDO: device may be still on dock but 
+		//         1. something wrong in dock or
+		//         2. JEITA protection
 
-	if (chip->chip_hw_id >= HW_VER_K) {
-		if (gpio_get_value(chip->chg_end_gpio) | gpio_get_value(chip->wpc_enable_gpio)) {
-			pr_err("Stop Charging: ");
-			pr_err("wpc_dock_present = %d wpc_state=%d\n", chip->wpc_dock_present, chip->wpc_state);
-			return IRQ_HANDLED;
-
-		}
+		return IRQ_HANDLED;
+	}
+	else {
+		chip->wpc_dock_present = chip->wpc_state;
 	}
 
-	if (chip->wpc_state) {
-		pr_err("wpc present\n");
-		if (chip->chip_hw_id >= HW_VER_K) {
-			chip->wpc_dock_present = !gpio_get_value(chip->wpc_dock_detect_gpio);
-			pr_err("update wpc_dock_present = %d\n", chip->wpc_dock_present);
-		}
-	} else {
-		pr_err("wpc absent\n");
-		if (chip->chip_hw_id >= HW_VER_K)
-			chip->wpc_dock_present = false;
-
-		schedule_delayed_work(&chip->wpc_chg_full_wq,
-					msecs_to_jiffies(WPC_CHG_FULL_MS));
-	}
-
-	pr_err("wpc_dock_present = %d wpc_state=%d\n", chip->wpc_dock_present, chip->wpc_state);
+	pr_err("Updated wpc_dock_present = %d wpc_state=%d\n", chip->wpc_dock_present, chip->wpc_state);
 	schedule_work(&chip->wpc_dock_wq);
-
 	return IRQ_HANDLED;
 }
+
 /* smb348_wpc_dock_handler to monitor dock mode in/out interrupt */
+/* only called by HW rev. K or later */
 static irqreturn_t smb348_wpc_dock_handler(int irq, void *dev_id)
 {
 	struct smb348_charger *chip = dev_id;
-	int status_pin = 0;
-
-	pr_err("smb348_wpc_dock_handler detect!!\n");
-
-	status_pin = gpio_get_value(chip->wpc_stat_gpio);
-	chip->wpc_dock_present = !(gpio_get_value(chip->wpc_dock_detect_gpio) | status_pin);
-
-	if (chip->wpc_dock_present) {
-		pr_err("wpc present\n");
-		chip->wpc_state = true;
-	} else {
-		pr_err("wpc absent\n");
-		chip->wpc_state = false;
-	}
-	pr_err("wpc_dock_present = %d wpc_state=%d\n", chip->wpc_dock_present, chip->wpc_state);
+	// chg eng (L: charging/blink; H: discharging/solid on)
+	// state   (L: charging; H: discharging)
+	// enable  (L: charging; H: discharging)
+	// detect  (L: on-dock;  H: off-dock)
+	chip->wpc_dock_present = !gpio_get_value(chip->wpc_dock_detect_gpio);
+	pr_err("wpc detect pin changed!! chg_end=%d state=%d enable=%d, detect=%d\n",
+			gpio_get_value(chip->chg_end_gpio), !gpio_get_value(chip->wpc_stat_gpio), gpio_get_value(chip->wpc_enable_gpio), chip->wpc_dock_present);
 	schedule_work(&chip->wpc_dock_wq);
-
 	return IRQ_HANDLED;
-}
-
-/* smb348_wpc_charge_full_work to reset full_flag
-   if WPC absent over 2 second */
-static void smb348_wpc_charge_full_work(struct work_struct *work)
-{
-	struct smb348_charger *chip = container_of(work,
-			struct smb348_charger, wpc_chg_full_wq.work);
-
-	if (!chip->wpc_state) {
-		pr_debug("Reset the full_flag\n");
-		chip->full_flag = 0;
-	}
 }
 
 /* Quanta { 3 mins delay for WPC charge */
@@ -2247,8 +2223,8 @@ static void smb348_wpc_resume_to_charge(struct work_struct *work)
 	struct smb348_charger *chip = container_of(work,
 			struct smb348_charger, wpc_resume_chg_wq.work);
 
-	pr_err("[DDDBG] resume charging - chip->full_flag = %d, wpc_state= %d\n",
-			 chip->full_flag, chip->wpc_state);
+	pr_err("[DDDBG] resume charging - chg_full_flag = %d, wpc_state= %d\n",
+			 chg_full_flag, chip->wpc_state);
 	gpio_set_value(chip->wpc_enable_gpio, 0);
 	WPC_CHG_RESUME_ALLOW_GOTA = 1;
 }
@@ -2261,28 +2237,18 @@ static void smb348_wpc_dock_work(struct work_struct *work)
 			struct smb348_charger, wpc_dock_wq);
 
 	state = chip->dock_sdev.state;
-
-	if (chip->chip_hw_id >= HW_VER_K) {
-		pr_err("chip->wpc_dock_present = %d, dock state = %d\n", chip->wpc_dock_present, state);
-		if (chip->wpc_dock_present != state) {
-			switch_set_state(&chip->dock_sdev, chip->wpc_dock_present);
-			power_supply_changed(&chip->dc_psy);
-			pr_err("Dock state changed, dock state %d to %d\n", state, chip->dock_sdev.state);
-		}
-		/* clear the discharge gpio */
-		if (!chip->wpc_dock_present) {
-			smb348_wpc_chg_gpio_clear(chip);
-			chip->chg_present = false;
-			power_supply_set_present(chip->usb_psy, chip->chg_present);
-			power_supply_changed(chip->usb_psy);
-		}
-	} else {
-		pr_debug("chip->wpc_state = %d, dock state = %d\n", chip->wpc_state, state);
-		if (chip->wpc_state != state) {
-			switch_set_state(&chip->dock_sdev, chip->wpc_state);
-			pr_debug("Dock state changed, dock state %d to %d\n", state, chip->dock_sdev.state);
-		}
-
+	pr_err("current dock state = %d, chip->wpc_dock_present = %d\n", state, chip->wpc_dock_present);
+	if (chip->wpc_dock_present != state) {
+		switch_set_state(&chip->dock_sdev, chip->wpc_dock_present);
+		power_supply_changed(&chip->dc_psy);
+		pr_err("Dock state changed - %s\n", chip->dock_sdev.state?"PRESENT":"REMOVED");
+	}
+	/* removed from dock so clear the discharge gpio */
+	if (!chip->wpc_dock_present) {
+		smb348_wpc_chg_gpio_clear(chip);
+		chip->chg_present = false;
+		power_supply_set_present(chip->usb_psy, chip->chg_present);
+		power_supply_changed(chip->usb_psy);
 	}
 }
 
@@ -2306,7 +2272,7 @@ static void smb348_external_power_changed(struct power_supply *psy)
 		current_limit = prop.intval / 1000;
 
 	/* Hardcode 500mA if WPC present */
-	if (chip->wpc_state || chip->chg_present) {
+	if (chip->wpc_state || chip->wpc_dock_present || chip->chg_present) {
 		pr_debug("USB psy current max=%d!! hardcode 500mA\n", current_limit);
 		current_limit = 500;
 	}
@@ -2635,7 +2601,6 @@ static int smb_parse_dt(struct smb348_charger *chip)
 
 	chip->chg_end_gpio = of_get_named_gpio(node,
 				"qcom,chg-end-gpio", 0);
-
 	chip->wpc_stat_gpio = of_get_named_gpio(node,
 				"qcom,wpc-stat-gpio", 0);
 
@@ -2795,6 +2760,8 @@ static int smb_parse_dt(struct smb348_charger *chip)
 					chip->cold_bat_decidegc);
 	pr_debug("hot-bat-degree = %d, bat-present-decidegc = %d\n",
 		chip->hot_bat_decidegc, chip->bat_present_decidegc);
+
+	chip->prop_batt_capacity = SMB_MAX_SOC; // make sure recharging design can only take effect after reading capacity from gauge.
 	return 0;
 }
 
@@ -2978,7 +2945,6 @@ static int smb348_charger_probe(struct i2c_client *client,
 	mutex_init(&chip->read_write_lock);
 	mutex_init(&chip->path_suspend_lock);
 
-	INIT_DELAYED_WORK(&chip->wpc_chg_full_wq, smb348_wpc_charge_full_work);
 	/* Quanta { 3 mins delay for WPC charge */
 	INIT_DELAYED_WORK(&chip->wpc_resume_chg_wq, smb348_wpc_resume_to_charge);
 	/* } Quanta */
@@ -3137,12 +3103,8 @@ static int smb348_charger_probe(struct i2c_client *client,
 				chip->wpc_stat_gpio, rc);
 			goto fail_wpc_stat_gpio;
 		}
-
-		chip->wpc_state = !gpio_get_value(chip->wpc_stat_gpio);
-		if (chip->wpc_state)
-			dev_dbg(&client->dev, "WPC state present\n");
-		else
-			dev_dbg(&client->dev, "WPC state absent\n");
+		chip->wpc_state = !gpio_get_value(chip->wpc_stat_gpio);  // state pin: low,  power transfer is established.
+		dev_err(&client->dev, "WPC status=%d\n", chip->wpc_state);
 	}
 
 	if (chip->chip_hw_id >= HW_VER_K) {
@@ -3155,16 +3117,10 @@ static int smb348_charger_probe(struct i2c_client *client,
 					chip->wpc_dock_detect_gpio, rc);
 				goto fail_wpc_dock_detect_gpio;
 			}
-
-			pr_err("wpc detect value:%d!! stat gpio value:%d\n", gpio_get_value(chip->wpc_dock_detect_gpio), gpio_get_value(chip->wpc_stat_gpio));
-			chip->wpc_dock_present = !(gpio_get_value(chip->wpc_dock_detect_gpio) | gpio_get_value(chip->wpc_stat_gpio));
-			if (chip->wpc_dock_present)
-				dev_dbg(&client->dev, "WPC dock detect present\n");
-			else
-				dev_dbg(&client->dev, "WPC dock detect absent\n");
+			pr_err("detect_pin=%d, stat_pin=%d\n", !gpio_get_value(chip->wpc_dock_detect_gpio), !gpio_get_value(chip->wpc_stat_gpio));
+			chip->wpc_dock_present = !gpio_get_value(chip->wpc_dock_detect_gpio);
 		}
 	}
-
 
 	if (gpio_is_valid(chip->wpc_enable_gpio)) {
 		rc = gpio_request(chip->wpc_enable_gpio, "smb348_wpc_enable");

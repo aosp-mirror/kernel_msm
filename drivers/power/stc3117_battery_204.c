@@ -72,12 +72,13 @@ int STC31xx_RelaxTmrSet(int CurrentThreshold);
 #define MAX_HRSOC		51200	/* 100% in 1/512% units*/
 #define MAX_SOC			1000	/* 100% in 0.1% units */
 /*                                                                                  */
-#define CHG_MIN_CURRENT		90		/* min charge current in mA                       */
-#define CHG_END_CURRENT		20		/* end charge current in mA                       */
-#define CHG_NOT_CHARGE		20		/* current to be consider as not charge in mA     */
-#define APP_MIN_CURRENT		(-5)	/* minimum application current consumption in mA ( <0 !) */
-#define APP_MIN_VOLTAGE		3500	/* application cut-off voltage                    */
-#define TEMP_MIN_ADJ		(-5)	/* minimum temperature for gain adjustment */
+#define CHG_MIN_CURRENT       90		/* min charge current in mA                       */
+#define CHG_END_CURRENT       20		/* end charge current in mA                       */
+#define CHG_NOT_CHARGE        20		/* current to be consider as not charge in mA     */
+#define APP_MIN_CURRENT       (-5)	/* minimum application current consumption in mA ( <0 !) */
+#define APP_MIN_VOLTAGE       3500	/* application cut-off voltage                    */
+#define APP_MIN_VOLTAGE_EMPTY 3000    /* to darin all battery capacity, so we lock batt level at 1% for 3.0V ~ 3.5V(APP_MIN_VOLTAGE) */
+#define TEMP_MIN_ADJ          (-5)	/* minimum temperature for gain adjustment */
 
 #define VMTEMPTABLE		{ 85, 90, 100, 160, 320, 440, 840 }	/* normalized VM_CNF at 60, 40, 25, 10, 0, -10 degreeC, -20 degreeC */
 
@@ -285,7 +286,8 @@ static union {
 
 
 int Capacity_Adjust;
-
+//int chg_end_gpio = 0; /* WPC charging end pin */
+extern bool chg_full_flag;
 
 /* -------------------------------------------------------------------------------- */
 /*        INTERNAL ANDROID DRIVER PARAMETERS                                        */
@@ -1817,7 +1819,7 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 		//early empty compensation
 		value=BattData.AvgVoltage;
 		if (BattData.Voltage < value) value = BattData.Voltage;
-		if (value < (APP_MIN_VOLTAGE + 100) && value > (APP_MIN_VOLTAGE - 500)) {
+		if (value < (APP_MIN_VOLTAGE + 100)) {
 			if (value < APP_MIN_VOLTAGE) {
 				BattData.SOC=0;
 				BattData.LastSOC = BattData.SOC;
@@ -1854,14 +1856,28 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 		else
 			MM_FSM();  /* in mixed mode */
 
+#ifdef DEBUG_SOC
+		pr_err("HRSOC=%d, SOC=%d, chg_full_flag=%d, avg_curr=%d\n", BattData.HRSOC, BattData.SOC, chg_full_flag, BattData.AvgCurrent);
+#endif
 		if (BattData.Vmode==0) {
 			// Lately fully compensation
-			if (BattData.AvgCurrent > 0 && BattData.SOC >= 990 && BattData.SOC < 995 && BattData.AvgCurrent >= (CHG_MIN_CURRENT+10)) {
+			// toDO: 98_to_100_no_current.txt, no charging and soc goes to 100 even hrsoc is
+			// [  736.722530] STC311x: GasGauge_Task: SMB348: HRSOC=50448, SOC=1000, chg_full_flag=0, avg=5
+			if (chg_full_flag) {
+				BattData.SOC = MAX_SOC;
+				STC311x_SetSOC(MAX_HRSOC);
+#ifdef DEBUG_SOC
+				pr_err("Lately fully_100: HRSOC=%d, SOC=%d, chg_full_flag=%d\n", BattData.HRSOC, BattData.SOC, chg_full_flag);
+#endif
+			} else if (BattData.AvgCurrent > 60 && BattData.SOC >= 990 && BattData.SOC < 999) {
 				BattData.SOC = 990;
 				STC311x_SetSOC(99*512);
+#ifdef DEBUG_SOC
+				pr_err("Lately fully_99: HRSOC=%d, SOC=%d, chg_full_flag=%d\n", BattData.HRSOC, BattData.SOC, chg_full_flag);
+#endif
 			}
 			// Lately empty compensation
-			if (BattData.AvgCurrent < 0 && BattData.SOC >= 5 && BattData.SOC < 10 && BattData.Voltage > (APP_MIN_VOLTAGE+5)) {
+			if (BattData.AvgCurrent < 0 && BattData.SOC < 10 && BattData.Voltage > (APP_MIN_VOLTAGE_EMPTY)) {
 				BattData.SOC = 10;
 				STC311x_SetSOC(1*512);
 			}
@@ -1871,6 +1887,9 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 			BattData.SOC = MAX_SOC;
 			STC311x_SetSOC(MAX_HRSOC);
 		}
+#ifdef DEBUG_SOC
+		pr_err("report HRSOC=%d, SOC=%d\n", BattData.HRSOC, BattData.SOC);
+#endif
 		/* -------- APPLICATION RESULTS ------------ */
 
 		/* fill gas gauge data with battery data */
@@ -2183,11 +2202,13 @@ static void stc311x_work(struct work_struct *work)
 	if (res > 0) {
 		/* results available */
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
-		if ((chip->batt_soc != chip->batt_soc_last) && (chip->batt_soc == 0)) {
+		if ((chip->batt_soc != chip->batt_soc_last) && (chip->batt_soc <= 1)) {
 			pr_err("Battery soc is %d, notify power_supply\n", chip->batt_soc);
 			power_supply_changed(&chip->battery);
 		}
+#ifdef DEBUG_SOC
 		pr_err("last_soc=%d, soc=%d, volt=%d, avg_volt%d\n", chip->batt_soc_last, chip->batt_soc, GasGaugeData.Voltage, BattData.AvgVoltage);
+#endif
 		if ((GasGaugeData.AvgCurrent < CHG_NOT_CHARGE) && chip->batt_soc > chip->batt_soc_last && GasGaugeData.Voltage < BATT_CHG_VOLTAGE) {
 			chip->batt_soc = chip->batt_soc_last;
 		} else {
