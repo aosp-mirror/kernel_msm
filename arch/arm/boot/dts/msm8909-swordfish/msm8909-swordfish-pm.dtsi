@@ -198,6 +198,7 @@
 
 			vbatmin = <3000>;    //CC start voltage 3.0V
 			vfloat = <4420>;     //vbatmax
+			vrechg-hyst = <100>; //rechg = vfloat - (vrechg-hyst)
 			ibus = <325>;        //iusb for vbus
 			iin = <325>;         //iusb for wlc
 			iochrg = <250>;      //CC current
@@ -211,8 +212,8 @@
 			fctmr = <0>;         //fast charge timer off
 			step-dwn-offset-ma = <50>;
 			step-dwn-thr-mv = <4250>;
-
 			fcs,embedded-battery;
+			support-sw-eoc;
 		};
 	};
 

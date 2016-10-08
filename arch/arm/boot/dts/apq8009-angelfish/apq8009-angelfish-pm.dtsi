@@ -187,7 +187,8 @@
 			disable-gpio = <&msm_gpio 83 0x00>;
 
 			vbatmin = <3000>;    //CC start voltage 3.0V
-			vfloat = <4400>;     //vbatmax
+			vfloat = <4420>;     //vbatmax
+			vrechg-hyst = <100>; //rechg = vfloat - (vrechg-hyst)
 			ibus = <500>;        //iusb for vbus
 			iin = <325>;         //iusb for wlc
 			iochrg = <200>;      //CC current
@@ -199,8 +200,8 @@
 			vinovp = <10500>;    //ovd for wireless
 			vinlim = <4560>;     //uvd for wireless
 			fctmr = <0>;         //fast charge timer off
-
 			fcs,embedded-battery;
+			support-sw-eoc;
 		};
 	};
 
