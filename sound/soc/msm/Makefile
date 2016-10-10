@@ -33,3 +33,7 @@ obj-$(CONFIG_SND_SOC_INT_CODEC) += snd-soc-int-codec.o
 snd-soc-ext-codec-objs := msmfalcon-external.o msmfalcon-ext-dai-links.o
 obj-$(CONFIG_SND_SOC_EXT_CODEC) += snd-soc-msmfalcon-common.o
 obj-$(CONFIG_SND_SOC_EXT_CODEC) += snd-soc-ext-codec.o
+
+# for POLARIS sound card driver
+snd-soc-goog-polaris-objs := polaris.o
+obj-$(CONFIG_SND_SOC_GOOG_POLARIS) += snd-soc-goog-polaris.o
