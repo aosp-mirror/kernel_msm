@@ -31,6 +31,7 @@
 #include <linux/ipc_router.h>
 #include <linux/ipc_router_xprt.h>
 #include <linux/kref.h>
+#include <linux/timer.h>
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/subsystem_restart.h>
 
@@ -40,6 +41,9 @@
 
 #include "ipc_router_private.h"
 #include "ipc_router_security.h"
+
+/* 3 minutes */
+#define DEBUG_TIMEOUT_DELAY (jiffies + msecs_to_jiffies(300000))
 
 enum {
 	SMEM_LOG = 1U << 0,
@@ -1158,6 +1162,10 @@ static int post_pkt_to_port(struct msm_ipc_port *port_ptr,
 
 	mutex_lock(&port_ptr->port_rx_q_lock_lhc3);
 	__pm_stay_awake(port_ptr->port_rx_ws);
+	if (strstr(port_ptr->rx_ws_name, "sensors.qcom")) {
+		pr_info("%s: ++stay awake\n", port_ptr->rx_ws_name);
+		mod_timer(&port_ptr->debug_timer, DEBUG_TIMEOUT_DELAY);
+	}
 	list_add_tail(&temp_pkt->list, &port_ptr->port_rx_q);
 	wake_up(&port_ptr->port_rx_wait_q);
 	notify = port_ptr->notify;
@@ -1273,6 +1281,11 @@ void msm_ipc_router_add_local_port(struct msm_ipc_port *port_ptr)
 	up_write(&local_ports_lock_lhc2);
 }
 
+static void msm_ipc_router_debug_timer_func(unsigned long data)
+{
+	panic("msm_ipc_router timeouted\n");
+}
+
 /**
  * msm_ipc_router_create_raw_port() - Create an IPC Router port
  * @endpoint: User-space space socket information to be cached.
@@ -1330,6 +1343,9 @@ struct msm_ipc_port *msm_ipc_router_create_raw_port(void *endpoint,
 	msm_ipc_router_add_local_port(port_ptr);
 	if (endpoint)
 		sock_hold(ipc_port_sk(endpoint));
+
+	setup_timer(&port_ptr->debug_timer, msm_ipc_router_debug_timer_func,
+			(unsigned long)NULL);
 	return port_ptr;
 }
 
@@ -3258,8 +3274,13 @@ int msm_ipc_router_read(struct msm_ipc_port *port_ptr,
 		return -ETOOSMALL;
 	}
 	list_del(&pkt->list);
-	if (list_empty(&port_ptr->port_rx_q))
+	if (list_empty(&port_ptr->port_rx_q)) {
 		__pm_relax(port_ptr->port_rx_ws);
+		if (strstr(port_ptr->rx_ws_name, "sensors.qcom")) {
+			pr_info("%s: --relax\n", port_ptr->rx_ws_name);
+			del_timer(&port_ptr->debug_timer);
+		}
+	}
 	*read_pkt = pkt;
 	mutex_unlock(&port_ptr->port_rx_q_lock_lhc3);
 	if (pkt->hdr.control_flag & CONTROL_FLAG_CONFIRM_RX)
