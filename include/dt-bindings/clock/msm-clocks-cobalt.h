@@ -494,10 +494,30 @@
 #define clk_sys_apcsaux_clk_gcc			0xf905e862
 #define clk_xo_ao				0x428c856d
 #define clk_osm_clk_src				0xaabe68c3
+#define clk_cpu_debug_mux			0x3ae8bcb2
 
 /* Audio External Clocks */
 #define clk_audio_ap_clk			0x9b5727cb
 #define clk_audio_pmi_clk			0xcbfe416d
 #define clk_audio_ap_clk2			0x454d1e91
+
+/* GCC block resets */
+#define QUSB2PHY_PRIM_BCR			0
+#define QUSB2PHY_SEC_BCR			1
+#define BLSP1_BCR				2
+#define BLSP2_BCR				3
+#define BOOT_ROM_BCR				4
+#define PRNG_BCR				5
+#define UFS_BCR					6
+#define USB_30_BCR				7
+#define USB3_PHY_BCR				8
+#define USB3PHY_PHY_BCR				9
+#define PCIE_0_PHY_BCR				10
+#define PCIE_PHY_BCR				11
+#define PCIE_PHY_COM_BCR			12
+#define PCIE_PHY_NOCSR_COM_PHY_BCR		13
+
+/* MMSS block resets */
+#define CAMSS_MICRO_BCR				0
 
 #endif

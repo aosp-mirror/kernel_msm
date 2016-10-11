@@ -737,6 +737,7 @@
 		vdd_dig-supply = <&pmcobalt_s1_level>;
 		vdd_dig_ao-supply = <&pmcobalt_s1_level_ao>;
 		#clock-cells = <1>;
+		#reset-cells = <1>;
 	};
 
 	clock_mmss: qcom,mmsscc@c8c0000 {
@@ -760,6 +761,7 @@
 			 <&mdss_dp_pll clk_vco_divided_clk_src_mux>,
 			 <&mdss_hdmi_pll clk_hdmi_vco_clk>;
 		#clock-cells = <1>;
+		#reset-cells = <1>;
 	};
 
 	clock_gpu: qcom,gpucc@5065000 {
@@ -801,13 +803,15 @@
 	};
 
 	clock_cpu: qcom,cpu-clock-cobalt@179c0000 {
-		compatible = "qcom,cpu-clock-osm";
-		reg = <0x179C0000 0x4000>,
+		compatible = "qcom,cpu-clock-osm-msmcobalt-v1";
+		reg = <0x179c0000 0x4000>,
 		      <0x17916000 0x1000>,
 		      <0x17816000 0x1000>,
-		      <0x179D1000 0x1000>;
+		      <0x179d1000 0x1000>,
+		      <0x00784130 0x8>,
+		      <0x1791101c 0x8>;
 		reg-names = "osm", "pwrcl_pll", "perfcl_pll",
-			    "apcs_common";
+			    "apcs_common", "perfcl_efuse", "debug";
 
 		vdd-pwrcl-supply = <&apc0_pwrcl_vreg>;
 		vdd-perfcl-supply = <&apc1_perfcl_vreg>;
@@ -940,10 +944,11 @@
 		reg = <0x162000 0x4>;
 		reg-names = "cc_base";
 		clock-names = "debug_gpu_clk", "debug_gfx_clk",
-				"debug_mmss_clk";
+				"debug_mmss_clk", "debug_cpu_clk";
 		clocks = <&clock_gpu clk_gpucc_gcc_dbg_clk>,
 			 <&clock_gfx clk_gfxcc_dbg_clk>,
-			 <&clock_mmss clk_mmss_debug_mux>;
+			 <&clock_mmss clk_mmss_debug_mux>,
+			 <&clock_cpu clk_cpu_debug_mux>;
 		#clock-cells = <1>;
 	};
 
@@ -1518,7 +1523,7 @@
 		gdsc-vdd-supply = <&gdsc_pcie_0>;
 		vreg-1.8-supply = <&pmcobalt_l2>;
 		vreg-0.9-supply = <&pmcobalt_l1>;
-		vreg-cx-supply = <&pmcobalt_s1_level_ao>;
+		vreg-cx-supply = <&pmcobalt_s1_level>;
 
 		qcom,vreg-1.8-voltage-level = <1200000 1200000 24000>;
 		qcom,vreg-0.9-voltage-level = <880000 880000 24000>;
@@ -1802,6 +1807,10 @@
 				"utmi_clk", "sleep_clk", "xo";
 
 		qcom,core-clk-rate = <120000000>;
+
+		resets = <&clock_gcc USB_30_BCR>;
+		reset-names = "core_reset";
+
 		dwc3@a800000 {
 			compatible = "snps,dwc3";
 			reg = <0x0a800000 0xcd00>;
@@ -1849,15 +1858,18 @@
 
 	qusb_phy0: qusb@c012000 {
 		compatible = "qcom,qusb2phy-v2";
-		reg = <0x0c012000 0x2a8>;
-		reg-names = "qusb_phy_base";
+		reg = <0x0c012000 0x2a8>,
+		      <0x01fcb24c 0x4>;
+		reg-names = "qusb_phy_base",
+				"tcsr_clamp_dig_n_1p8";
 		vdd-supply = <&pmcobalt_l1>;
 		vdda18-supply = <&pmcobalt_l12>;
 		vdda33-supply = <&pmcobalt_l24>;
 		qcom,vdd-voltage-level = <0 880000 880000>;
 		qcom,qusb-phy-init-seq =
 				/* <value reg_offset> */
-					<0x13 0x04
+					<0x80 0x0
+					0x13 0x04
 					0x7c 0x18c
 					0x80 0x2c
 					0x0a 0x184
@@ -1865,10 +1877,11 @@
 		phy_type= "utmi";
 
 		clocks = <&clock_gcc clk_ln_bb_clk1>,
-			 <&clock_gcc clk_gcc_rx1_usb2_clkref_clk>,
-			 <&clock_gcc clk_gcc_qusb2phy_prim_reset>;
+			 <&clock_gcc clk_gcc_rx1_usb2_clkref_clk>;
+		clock-names = "ref_clk_src", "ref_clk";
 
-		clock-names = "ref_clk_src", "ref_clk", "phy_reset";
+		resets = <&clock_gcc QUSB2PHY_PRIM_BCR>;
+		reset-names = "phy_reset";
 	};
 
 	ssphy: ssphy@c010000 {
@@ -2016,13 +2029,15 @@
 
 		clocks = <&clock_gcc clk_gcc_usb3_phy_aux_clk>,
 			 <&clock_gcc clk_gcc_usb3_phy_pipe_clk>,
-			 <&clock_gcc clk_gcc_usb3_phy_reset>,
-			 <&clock_gcc clk_gcc_usb3phy_phy_reset>,
 			 <&clock_gcc clk_ln_bb_clk1>,
 			 <&clock_gcc clk_gcc_usb3_clkref_clk>;
 
-		clock-names = "aux_clk", "pipe_clk", "phy_reset",
-			      "phy_phy_reset", "ref_clk_src", "ref_clk";
+		clock-names = "aux_clk", "pipe_clk", "ref_clk_src",
+				"ref_clk";
+
+		resets = <&clock_gcc USB3_PHY_BCR>,
+			 <&clock_gcc USB3PHY_PHY_BCR>;
+		reset-names = "phy_reset", "phy_phy_reset";
 	};
 
 	usb_audio_qmi_dev {
@@ -2570,7 +2585,12 @@
 		 "iface_clk", "noc_axi_clk", "bus_clk", "maxi_clk";
 
 		qcom,pas-id = <9>;
-		qcom,proxy-timeout-ms = <10000>;
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+			<63 512 0 0>,
+			<63 512 0 304000>;
+		qcom,proxy-timeout-ms = <100>;
 		qcom,firmware-name = "venus";
 		memory-region = <&pil_video_mem>;
 		status = "ok";
@@ -2585,6 +2605,7 @@
 		qcom,pet-time = <10000>;
 		qcom,ipi-ping;
 		qcom,wakeup-enable;
+		qcom,scandump-size = <0x40000>;
 	};
 
 	qcom,spss@1d00000 {
