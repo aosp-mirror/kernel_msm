@@ -160,7 +160,7 @@ static int msm_isp_prepare_isp_buf(struct msm_isp_buf_mgr *buf_mgr,
 		ion_import_dma_buf(buf_mgr->client,
 			qbuf_buf->planes[i].addr);
 		if (IS_ERR_OR_NULL(mapped_info->handle)) {
-			pr_err_ratelimited("%s: null/error ION handle %p\n",
+			pr_err_ratelimited("%s: null/error ION handle %pK\n",
 				__func__, mapped_info->handle);
 			goto ion_map_error;
 		}
