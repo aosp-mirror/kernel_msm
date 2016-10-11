@@ -588,6 +588,7 @@ enum {
 #define EXT4_ENCRYPTION_MODE_AES_256_GCM	2
 #define EXT4_ENCRYPTION_MODE_AES_256_CBC	3
 #define EXT4_ENCRYPTION_MODE_AES_256_CTS	4
+#define EXT4_ENCRYPTION_MODE_PRIVATE		127
 
 #include "ext4_crypto.h"
 
@@ -2251,11 +2252,13 @@ extern struct kmem_cache *ext4_crypt_info_cachep;
 bool ext4_valid_contents_enc_mode(uint32_t mode);
 uint32_t ext4_validate_encryption_key_size(uint32_t mode, uint32_t size);
 extern struct workqueue_struct *ext4_read_workqueue;
-struct ext4_crypto_ctx *ext4_get_crypto_ctx(struct inode *inode);
+struct ext4_crypto_ctx *ext4_get_crypto_ctx(struct inode *inode,
+					    gfp_t gfp_flags);
 void ext4_release_crypto_ctx(struct ext4_crypto_ctx *ctx);
 void ext4_restore_control_page(struct page *data_page);
 struct page *ext4_encrypt(struct inode *inode,
-			  struct page *plaintext_page);
+			  struct page *plaintext_page,
+			  gfp_t gfp_flags);
 int ext4_decrypt(struct page *page);
 int ext4_encrypted_zeroout(struct inode *inode, struct ext4_extent *ex);
 extern const struct dentry_operations ext4_encrypted_d_ops;
@@ -2326,6 +2329,19 @@ int _ext4_get_encryption_info(struct inode *inode);
 #ifdef CONFIG_EXT4_FS_ENCRYPTION
 int ext4_has_encryption_key(struct inode *inode);
 
+static inline struct ext4_crypt_info *ext4_encryption_info(struct inode *inode)
+{
+	return EXT4_I(inode)->i_crypt_info;
+}
+
+static inline int ext4_using_hardware_encryption(struct inode *inode)
+{
+	struct ext4_crypt_info *ci = ext4_encryption_info(inode);
+
+	return S_ISREG(inode->i_mode) && ci &&
+		ci->ci_data_mode == EXT4_ENCRYPTION_MODE_PRIVATE;
+}
+
 static inline int ext4_get_encryption_info(struct inode *inode)
 {
 	struct ext4_crypt_info *ci = EXT4_I(inode)->i_crypt_info;
@@ -2337,11 +2353,6 @@ static inline int ext4_get_encryption_info(struct inode *inode)
 					   (1 << KEY_FLAG_DEAD)))))
 		return _ext4_get_encryption_info(inode);
 	return 0;
-}
-
-static inline struct ext4_crypt_info *ext4_encryption_info(struct inode *inode)
-{
-	return EXT4_I(inode)->i_crypt_info;
 }
 
 #else
@@ -2356,6 +2367,10 @@ static inline int ext4_get_encryption_info(struct inode *inode)
 static inline struct ext4_crypt_info *ext4_encryption_info(struct inode *inode)
 {
 	return NULL;
+}
+static inline int ext4_using_hardware_encryption(struct inode *inode)
+{
+	return 0;
 }
 #endif
 

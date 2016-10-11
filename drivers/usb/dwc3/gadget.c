@@ -539,7 +539,7 @@ static int dwc3_gadget_set_ep_config(struct dwc3 *dwc, struct dwc3_ep *dep,
 		dep->stream_capable = true;
 	}
 
-	if (!usb_endpoint_xfer_control(desc))
+	if (usb_endpoint_xfer_isoc(desc))
 		params.param1 |= DWC3_DEPCFG_XFER_IN_PROGRESS_EN;
 
 	/*
@@ -891,11 +891,19 @@ static void dwc3_prepare_one_trb(struct dwc3_ep *dep,
 			trb->ctrl = DWC3_TRBCTL_ISOCHRONOUS_FIRST;
 		else
 			trb->ctrl = DWC3_TRBCTL_ISOCHRONOUS;
+
+		if (!req->request.no_interrupt && !chain)
+			trb->ctrl |= DWC3_TRB_CTRL_IOC;
 		break;
 
 	case USB_ENDPOINT_XFER_BULK:
 	case USB_ENDPOINT_XFER_INT:
 		trb->ctrl = DWC3_TRBCTL_NORMAL;
+		if (req->request.num_mapped_sgs > 0) {
+			if (!last && !chain &&
+				!req->request.no_interrupt)
+				trb->ctrl |= DWC3_TRB_CTRL_IOC;
+		}
 		break;
 	default:
 		/*
@@ -904,9 +912,6 @@ static void dwc3_prepare_one_trb(struct dwc3_ep *dep,
 		 */
 		BUG();
 	}
-
-	if (!req->request.no_interrupt && !chain)
-		trb->ctrl |= DWC3_TRB_CTRL_IOC;
 
 	if (usb_endpoint_xfer_isoc(dep->endpoint.desc)) {
 		trb->ctrl |= DWC3_TRB_CTRL_ISP_IMI;
@@ -1226,20 +1231,6 @@ static int __dwc3_gadget_ep_queue(struct dwc3_ep *dep, struct dwc3_request *req)
 		return ret;
 
 	list_add_tail(&req->list, &dep->request_list);
-
-	/*
-	 * If there are no pending requests and the endpoint isn't already
-	 * busy, we will just start the request straight away.
-	 *
-	 * This will save one IRQ (XFER_NOT_READY) and possibly make it a
-	 * little bit faster.
-	 */
-	if (!usb_endpoint_xfer_isoc(dep->endpoint.desc) &&
-			!usb_endpoint_xfer_int(dep->endpoint.desc) &&
-			!(dep->flags & DWC3_EP_BUSY)) {
-		ret = __dwc3_gadget_kick_transfer(dep, 0, true);
-		goto out;
-	}
 
 	/*
 	 * There are a few special cases:
@@ -2477,6 +2468,9 @@ static int dwc3_cleanup_done_reqs(struct dwc3 *dwc, struct dwc3_ep *dep,
 		return 1;
 	}
 
+	if ((event->status & DEPEVT_STATUS_IOC) &&
+			(trb->ctrl & DWC3_TRB_CTRL_IOC))
+		return 0;
 	return 1;
 }
 
@@ -2521,14 +2515,6 @@ static void dwc3_endpoint_transfer_complete(struct dwc3 *dwc,
 
 		dwc->u1u2 = 0;
 	}
-
-	if (!usb_endpoint_xfer_isoc(dep->endpoint.desc)) {
-		int ret;
-
-		ret = __dwc3_gadget_kick_transfer(dep, 0, is_xfer_complete);
-		if (!ret || ret == -EBUSY)
-			return;
-	}
 }
 
 static void dwc3_endpoint_interrupt(struct dwc3 *dwc,
@@ -2564,6 +2550,12 @@ static void dwc3_endpoint_interrupt(struct dwc3 *dwc,
 		break;
 	case DWC3_DEPEVT_XFERINPROGRESS:
 		dep->dbg_ep_events.xferinprogress++;
+		if (!usb_endpoint_xfer_isoc(dep->endpoint.desc)) {
+			dev_dbg(dwc->dev, "%s is not an Isochronous endpoint\n",
+					dep->name);
+			return;
+		}
+
 		dwc3_endpoint_transfer_complete(dwc, dep, event);
 		break;
 	case DWC3_DEPEVT_XFERNOTREADY:
@@ -2571,16 +2563,23 @@ static void dwc3_endpoint_interrupt(struct dwc3 *dwc,
 		if (usb_endpoint_xfer_isoc(dep->endpoint.desc)) {
 			dwc3_gadget_start_isoc(dwc, dep, event);
 		} else {
-			int active;
 			int ret;
 
-			active = event->status & DEPEVT_STATUS_TRANSFER_ACTIVE;
-
 			dwc3_trace(trace_dwc3_gadget, "%s: reason %s",
-					dep->name, active ? "Transfer Active"
+					dep->name, event->status &
+					DEPEVT_STATUS_TRANSFER_ACTIVE
+					? "Transfer Active"
 					: "Transfer Not Active");
 
-			ret = __dwc3_gadget_kick_transfer(dep, 0, !active);
+			/*
+			 * If XFERNOTREADY interrupt is received with event
+			 * status as TRANSFER ACTIVE, don't kick next transfer.
+			 * otherwise data stall is seen on that endpoint.
+			 */
+			if (event->status & DEPEVT_STATUS_TRANSFER_ACTIVE)
+				return;
+
+			ret = __dwc3_gadget_kick_transfer(dep, 0, 1);
 			if (!ret || ret == -EBUSY)
 				return;
 

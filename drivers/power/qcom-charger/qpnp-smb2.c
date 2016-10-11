@@ -197,7 +197,7 @@ static struct smb_params v1_params = {
 
 #define STEP_CHARGING_MAX_STEPS	5
 struct smb_dt_props {
-	bool	suspend_input;
+	bool	no_battery;
 	int	fcc_ua;
 	int	usb_icl_ua;
 	int	dc_icl_ua;
@@ -256,8 +256,8 @@ static int smb2_parse_dt(struct smb2 *chip)
 	if (rc < 0)
 		chg->step_chg_enabled = false;
 
-	chip->dt.suspend_input = of_property_read_bool(node,
-				"qcom,suspend-input");
+	chip->dt.no_battery = of_property_read_bool(node,
+						"qcom,batteryless-platform");
 
 	rc = of_property_read_u32(node,
 				"qcom,fcc-max-ua", &chip->dt.fcc_ua);
@@ -279,10 +279,10 @@ static int smb2_parse_dt(struct smb2 *chip)
 	if (rc < 0)
 		chip->dt.dc_icl_ua = -EINVAL;
 
-	rc = of_property_read_u32(node,
-			"qcom,wipower-max-uw", &chip->dt.wipower_max_uw);
+	rc = of_property_read_u32(node, "qcom,wipower-max-uw",
+				&chip->dt.wipower_max_uw);
 	if (rc < 0)
-		chip->dt.wipower_max_uw	= SMB2_DEFAULT_WPWR_UW;
+		chip->dt.wipower_max_uw = -EINVAL;
 
 	if (of_find_property(node, "qcom,thermal-mitigation", &byte_len)) {
 		chg->thermal_mitigation = devm_kzalloc(chg->dev, byte_len,
@@ -588,14 +588,16 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
 	POWER_SUPPLY_PROP_CHARGER_TEMP,
 	POWER_SUPPLY_PROP_CHARGER_TEMP_MAX,
+	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,
 };
 
 static int smb2_batt_get_prop(struct power_supply *psy,
 		enum power_supply_property psp,
 		union power_supply_propval *val)
 {
-	int rc;
-	struct smb_charger *chg = power_supply_get_drvdata(psy);
+	struct smb2 *chip = power_supply_get_drvdata(psy);
+	struct smb_charger *chg = &chip->chg;
+	int rc = 0;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
@@ -624,6 +626,9 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGER_TEMP_MAX:
 		rc = smblib_get_prop_charger_temp_max(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED:
+		rc = smblib_get_prop_input_current_limited(chg, val);
 		break;
 	default:
 		pr_err("batt power supply prop %d not supported\n", psp);
@@ -862,6 +867,9 @@ static int smb2_config_wipower_input_power(struct smb2 *chip, int uw)
 	struct smb_charger *chg = &chip->chg;
 	s64 nw = (s64)uw * 1000;
 
+	if (uw < 0)
+		return 0;
+
 	ua = div_s64(nw, ZIN_ICL_PT_MAX_MV);
 	rc = smblib_set_charge_param(chg, &chg->param.dc_icl_pt_lv, ua);
 	if (rc < 0) {
@@ -912,6 +920,9 @@ static int smb2_init_hw(struct smb2 *chip)
 	struct smb_charger *chg = &chip->chg;
 	int rc;
 
+	if (chip->dt.no_battery)
+		chg->fake_capacity = 50;
+
 	if (chip->dt.fcc_ua < 0)
 		smblib_get_charge_param(chg, &chg->param.fcc, &chip->dt.fcc_ua);
 
@@ -932,9 +943,9 @@ static int smb2_init_hw(struct smb2 *chip)
 	vote(chg->pl_disable_votable,
 		CHG_STATE_VOTER, true, 0);
 	vote(chg->usb_suspend_votable,
-		DEFAULT_VOTER, chip->dt.suspend_input, 0);
+		DEFAULT_VOTER, chip->dt.no_battery, 0);
 	vote(chg->dc_suspend_votable,
-		DEFAULT_VOTER, chip->dt.suspend_input, 0);
+		DEFAULT_VOTER, chip->dt.no_battery, 0);
 	vote(chg->fcc_max_votable,
 		DEFAULT_VOTER, true, chip->dt.fcc_ua);
 	vote(chg->fv_votable,
@@ -1121,7 +1132,7 @@ static struct smb2_irq_info smb2_irqs[] = {
 	{ "wdog-bark",			NULL },
 	{ "aicl-fail",			smblib_handle_debug },
 	{ "aicl-done",			smblib_handle_debug },
-	{ "high-duty-cycle",		smblib_handle_debug },
+	{ "high-duty-cycle",		smblib_handle_high_duty_cycle, true },
 	{ "input-current-limiting",	smblib_handle_debug },
 	{ "temperature-change",		smblib_handle_debug },
 	{ "switcher-power-ok",		smblib_handle_debug },

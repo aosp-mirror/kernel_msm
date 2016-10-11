@@ -127,6 +127,17 @@ config MSM_SPCOM
 	  spcom provides clients/server API, although currently only one client
 	  or server is allowed per logical channel.
 
+config MSM_SPSS_UTILS
+	depends on MSM_PIL
+	bool "Secure Processor Utilities"
+	help
+	  spss-utils driver selects Secure Processor firmware file name.
+	  The firmware file name for test or production is selected based
+	  on a test fuse.
+	  Different file name is used for differnt SPSS HW versions,
+	  because the SPSS firmware size is too small to support multiple
+	  HW versions.
+
 config MSM_SMEM_LOGGING
 	depends on MSM_SMEM
 	bool "MSM Shared Memory Logger"
@@ -704,14 +715,6 @@ config MSM_KERNEL_PROTECT_TEST
           Attempts to write to the kernel text after making the kernel text
           read-only.  This test is FATAL whether it passes or fails!
           Success is signaled by a stage-2 fault.
-
-config MSM_CORE_CTL_HELPER
-	tristate "Core control helper functions for dynamically hotplug CPUs"
-	help
-	  Provide helper functions for core control driver. Core control
-	  driver dynamically hotplugs CPUs from kernel based on current
-	  system load and state. It also supports limiting min and
-	  max online CPUs from userspace.
 
 config QCOM_REMOTEQDSS
 	bool "Allow debug tools to enable events on other processors"

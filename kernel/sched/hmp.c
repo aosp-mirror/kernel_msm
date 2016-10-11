@@ -19,6 +19,7 @@
 #include <linux/syscore_ops.h>
 
 #include "sched.h"
+#include "core_ctl.h"
 
 #include <trace/events/sched.h>
 
@@ -1090,6 +1091,8 @@ int sched_set_boost(int enable)
 	if (!old_refcount && boost_refcount)
 		boost_kick_cpus();
 
+	if (boost_refcount <= 1)
+		core_ctl_set_boost(boost_refcount == 1);
 	trace_sched_set_boost(boost_refcount);
 	spin_unlock_irqrestore(&boost_lock, flags);
 
@@ -2828,10 +2831,10 @@ void set_window_start(struct rq *rq)
 	rq->curr->ravg.mark_start = rq->window_start;
 }
 
-void migrate_sync_cpu(int cpu)
+void migrate_sync_cpu(int cpu, int new_cpu)
 {
 	if (cpu == sync_cpu)
-		sync_cpu = smp_processor_id();
+		sync_cpu = new_cpu;
 }
 
 static void reset_all_task_stats(void)
