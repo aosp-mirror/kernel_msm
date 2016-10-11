@@ -1665,7 +1665,6 @@ static inline int msm_venc_power_save_mode_enable(struct msm_vidc_inst *inst)
 			goto fail_power_mode_set;
 		}
 		inst->flags |= VIDC_LOW_POWER;
-		msm_dcvs_enc_set_power_save_mode(inst, true);
 		dprintk(VIDC_INFO, "Power Save Mode set for inst: %pK\n", inst);
 	}
 
@@ -2198,6 +2197,7 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	case V4L2_CID_MPEG_VIDC_VIDEO_NUM_P_FRAMES:
 	{
 		int num_p, num_b;
+		u32 max_num_b_frames;
 
 		temp_ctrl = TRY_GET_CTRL(V4L2_CID_MPEG_VIDC_VIDEO_NUM_B_FRAMES);
 		num_b = temp_ctrl->val;
@@ -2210,18 +2210,16 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		else if (ctrl->id == V4L2_CID_MPEG_VIDC_VIDEO_NUM_B_FRAMES)
 			num_b = ctrl->val;
 
-		if (num_b) {
-			u32 max_num_b_frames = MAX_NUM_B_FRAMES;
-			property_id = HAL_PARAM_VENC_MAX_NUM_B_FRAMES;
-			pdata = &max_num_b_frames;
-			rc = call_hfi_op(hdev, session_set_property,
-				(void *)inst->session, property_id, pdata);
-			if (rc) {
-				dprintk(VIDC_ERR,
-					"Failed : Setprop MAX_NUM_B_FRAMES %d\n",
-					rc);
-				break;
-			}
+		max_num_b_frames = num_b ? MAX_NUM_B_FRAMES : 0;
+		property_id = HAL_PARAM_VENC_MAX_NUM_B_FRAMES;
+		pdata = &max_num_b_frames;
+		rc = call_hfi_op(hdev, session_set_property,
+			(void *)inst->session, property_id, pdata);
+		if (rc) {
+			dprintk(VIDC_ERR,
+				"Failed : Setprop MAX_NUM_B_FRAMES %d\n",
+				rc);
+			break;
 		}
 
 		property_id = HAL_CONFIG_VENC_INTRA_PERIOD;
@@ -2940,6 +2938,7 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 			break;
 		}
 
+		msm_dcvs_try_enable(inst);
 		msm_comm_scale_clocks_and_bus(inst);
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_H264_VUI_BITSTREAM_RESTRICT:
@@ -3053,8 +3052,6 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		}
 		pdata = &venc_mode;
 
-		msm_dcvs_enc_set_power_save_mode(inst,
-			ctrl->val == V4L2_MPEG_VIDC_VIDEO_PERF_POWER_SAVE);
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_HIER_B_NUM_LAYERS:
 		if (inst->fmts[CAPTURE_PORT]->fourcc != V4L2_PIX_FMT_HEVC) {
