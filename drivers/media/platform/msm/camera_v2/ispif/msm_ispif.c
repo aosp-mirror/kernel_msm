@@ -883,7 +883,7 @@ static int msm_ispif_set_vfe_info(struct ispif_device *ispif,
 {
         if (!vfe_info || (vfe_info->num_vfe <= 0) ||
 	    ((uint32_t)(vfe_info->num_vfe) > VFE_MAX)) {
-		pr_err("Invalid VFE info: %p %d\n", vfe_info,
+		pr_err("Invalid VFE info: %pK %d\n", vfe_info,
 			   (vfe_info ? vfe_info->num_vfe:0));
  		return -EINVAL;
 	}
@@ -918,7 +918,7 @@ static int msm_ispif_init(struct ispif_device *ispif,
 
 	if (ispif->csid_version >= CSID_VERSION_V30) {
 		if (!ispif->clk_mux_mem || !ispif->clk_mux_io) {
-			pr_err("%s csi clk mux mem %p io %p\n", __func__,
+			pr_err("%s csi clk mux mem %pK io %pK\n", __func__,
 				ispif->clk_mux_mem, ispif->clk_mux_io);
 			rc = -ENOMEM;
 			return rc;
