@@ -25,54 +25,102 @@
 #include "smb-lib.h"
 #include "pmic-voter.h"
 
-#define SMB2_DEFAULT_FCC_UA 3000000
-#define SMB2_DEFAULT_FV_UV 4350000
-#define SMB2_DEFAULT_ICL_UA 3000000
+#define SMB2_DEFAULT_WPWR_UW	8000000
 
 static struct smb_params v1_params = {
-	.fcc		= {
+	.fcc			= {
 		.name	= "fast charge current",
 		.reg	= FAST_CHARGE_CURRENT_CFG_REG,
 		.min_u	= 0,
 		.max_u	= 4500000,
 		.step_u	= 25000,
 	},
-	.fv		= {
+	.fv			= {
 		.name	= "float voltage",
 		.reg	= FLOAT_VOLTAGE_CFG_REG,
-		.min_u	= 3487500,
-		.max_u	= 4920000,
-		.step_u	= 7500,
+		.min_u	= 2500000,
+		.max_u	= 5000000,
+		.step_u	= 10000,
 	},
-	.usb_icl	= {
+	.usb_icl		= {
 		.name	= "usb input current limit",
 		.reg	= USBIN_CURRENT_LIMIT_CFG_REG,
 		.min_u	= 0,
-		.max_u	= 4800000,
+		.max_u	= 6000000,
 		.step_u	= 25000,
 	},
-	.icl_stat	= {
+	.icl_stat		= {
 		.name	= "input current limit status",
 		.reg	= ICL_STATUS_REG,
 		.min_u	= 0,
 		.max_u	= 4800000,
 		.step_u	= 25000,
 	},
-	.dc_icl		= {
+	.dc_icl			= {
 		.name	= "dc input current limit",
 		.reg	= DCIN_CURRENT_LIMIT_CFG_REG,
 		.min_u	= 0,
+		.max_u	= 6000000,
+		.step_u	= 25000,
+	},
+	.dc_icl_pt_lv		= {
+		.name	= "dc icl PT <8V",
+		.reg	= ZIN_ICL_PT_REG,
+		.min_u	= 0,
 		.max_u	= 3000000,
+		.step_u	= 25000,
+	},
+	.dc_icl_pt_hv		= {
+		.name	= "dc icl PT >8V",
+		.reg	= ZIN_ICL_PT_HV_REG,
+		.min_u	= 0,
+		.max_u	= 3000000,
+		.step_u	= 25000,
+	},
+	.dc_icl_div2_lv		= {
+		.name	= "dc icl div2 <5.5V",
+		.reg	= ZIN_ICL_LV_REG,
+		.min_u	= 0,
+		.max_u	= 3000000,
+		.step_u	= 25000,
+	},
+	.dc_icl_div2_mid_lv	= {
+		.name	= "dc icl div2 5.5-6.5V",
+		.reg	= ZIN_ICL_MID_LV_REG,
+		.min_u	= 0,
+		.max_u	= 3000000,
+		.step_u	= 25000,
+	},
+	.dc_icl_div2_mid_hv	= {
+		.name	= "dc icl div2 6.5-8.0V",
+		.reg	= ZIN_ICL_MID_HV_REG,
+		.min_u	= 0,
+		.max_u	= 3000000,
+		.step_u	= 25000,
+	},
+	.dc_icl_div2_hv		= {
+		.name	= "dc icl div2 >8.0V",
+		.reg	= ZIN_ICL_HV_REG,
+		.min_u	= 0,
+		.max_u	= 3000000,
+		.step_u	= 25000,
+	},
+	.jeita_cc_comp		= {
+		.name	= "jeita fcc reduction",
+		.reg	= JEITA_CCCOMP_CFG_REG,
+		.min_u	= 0,
+		.max_u	= 1575000,
 		.step_u	= 25000,
 	},
 };
 
 struct smb_dt_props {
-	bool suspend_input;
-	int fcc_ua;
-	int usb_icl_ua;
-	int dc_icl_ua;
-	int fv_uv;
+	bool	suspend_input;
+	int	fcc_ua;
+	int	usb_icl_ua;
+	int	dc_icl_ua;
+	int	fv_uv;
+	int	wipower_max_uw;
 };
 
 struct smb2 {
@@ -95,7 +143,7 @@ static int smb2_parse_dt(struct smb2 *chip)
 {
 	struct smb_charger *chg = &chip->chg;
 	struct device_node *node = chg->dev->of_node;
-	int rc;
+	int rc, byte_len;
 
 	if (!node) {
 		pr_err("device tree node missing\n");
@@ -108,22 +156,46 @@ static int smb2_parse_dt(struct smb2 *chip)
 	rc = of_property_read_u32(node,
 				"qcom,fcc-max-ua", &chip->dt.fcc_ua);
 	if (rc < 0)
-		chip->dt.fcc_ua = SMB2_DEFAULT_FCC_UA;
+		chip->dt.fcc_ua = -EINVAL;
 
 	rc = of_property_read_u32(node,
 				"qcom,fv-max-uv", &chip->dt.fv_uv);
 	if (rc < 0)
-		chip->dt.fv_uv = SMB2_DEFAULT_FV_UV;
+		chip->dt.fv_uv = -EINVAL;
 
 	rc = of_property_read_u32(node,
 				"qcom,usb-icl-ua", &chip->dt.usb_icl_ua);
 	if (rc < 0)
-		chip->dt.usb_icl_ua = SMB2_DEFAULT_ICL_UA;
+		chip->dt.usb_icl_ua = -EINVAL;
 
 	rc = of_property_read_u32(node,
 				"qcom,dc-icl-ua", &chip->dt.dc_icl_ua);
 	if (rc < 0)
-		chip->dt.dc_icl_ua = SMB2_DEFAULT_ICL_UA;
+		chip->dt.dc_icl_ua = -EINVAL;
+
+	rc = of_property_read_u32(node,
+			"qcom,wipower-max-uw", &chip->dt.wipower_max_uw);
+	if (rc < 0)
+		chip->dt.wipower_max_uw	= SMB2_DEFAULT_WPWR_UW;
+
+	if (of_find_property(node, "qcom,thermal-mitigation", &byte_len)) {
+		chg->thermal_mitigation = devm_kzalloc(chg->dev, byte_len,
+			GFP_KERNEL);
+
+		if (chg->thermal_mitigation == NULL)
+			return -ENOMEM;
+
+		chg->thermal_levels = byte_len / sizeof(u32);
+		rc = of_property_read_u32_array(node,
+				"qcom,thermal-mitigation",
+				chg->thermal_mitigation,
+				chg->thermal_levels);
+		if (rc < 0) {
+			dev_err(chg->dev,
+				"Couldn't read threm limits rc = %d\n", rc);
+			return rc;
+		}
+	}
 
 	return 0;
 }
@@ -294,6 +366,105 @@ static int smb2_init_usb_psy(struct smb2 *chip)
 }
 
 /*************************
+ * DC PSY REGISTRATION   *
+ *************************/
+
+static enum power_supply_property smb2_dc_props[] = {
+	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
+};
+
+static int smb2_dc_get_prop(struct power_supply *psy,
+		enum power_supply_property psp,
+		union power_supply_propval *val)
+{
+	struct smb2 *chip = power_supply_get_drvdata(psy);
+	struct smb_charger *chg = &chip->chg;
+	int rc = 0;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_PRESENT:
+		rc = smblib_get_prop_dc_present(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_ONLINE:
+		rc = smblib_get_prop_dc_online(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		rc = smblib_get_prop_dc_current_max(chg, val);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return rc;
+}
+
+static int smb2_dc_set_prop(struct power_supply *psy,
+		enum power_supply_property psp,
+		const union power_supply_propval *val)
+{
+	struct smb2 *chip = power_supply_get_drvdata(psy);
+	struct smb_charger *chg = &chip->chg;
+	int rc = 0;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		rc = smblib_set_prop_dc_current_max(chg, val);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return rc;
+}
+
+static int smb2_dc_prop_is_writeable(struct power_supply *psy,
+		enum power_supply_property psp)
+{
+	int rc;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		rc = 1;
+		break;
+	default:
+		rc = 0;
+		break;
+	}
+
+	return rc;
+}
+
+static const struct power_supply_desc dc_psy_desc = {
+	.name = "dc",
+	.type = POWER_SUPPLY_TYPE_WIPOWER,
+	.properties = smb2_dc_props,
+	.num_properties = ARRAY_SIZE(smb2_dc_props),
+	.get_property = smb2_dc_get_prop,
+	.set_property = smb2_dc_set_prop,
+	.property_is_writeable = smb2_dc_prop_is_writeable,
+};
+
+static int smb2_init_dc_psy(struct smb2 *chip)
+{
+	struct power_supply_config dc_cfg = {};
+	struct smb_charger *chg = &chip->chg;
+
+	dc_cfg.drv_data = chip;
+	dc_cfg.of_node = chg->dev->of_node;
+	chg->dc_psy = devm_power_supply_register(chg->dev,
+						  &dc_psy_desc,
+						  &dc_cfg);
+	if (IS_ERR(chg->dc_psy)) {
+		pr_err("Couldn't register USB power supply\n");
+		return PTR_ERR(chg->dc_psy);
+	}
+
+	return 0;
+}
+
+/*************************
  * BATT PSY REGISTRATION *
  *************************/
 
@@ -304,6 +475,7 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
 };
 
 static int smb2_batt_get_prop(struct power_supply *psy,
@@ -331,9 +503,11 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		smblib_get_prop_batt_capacity(chg, val);
 		break;
+	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
+		smblib_get_prop_system_temp_level(chg, val);
+		break;
 	default:
-		pr_err("batt power supply prop %d not supported\n",
-			psp);
+		pr_err("batt power supply prop %d not supported\n", psp);
 		return -EINVAL;
 	}
 
@@ -344,17 +518,24 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 		enum power_supply_property prop,
 		const union power_supply_propval *val)
 {
+	int rc = 0;
 	struct smb_charger *chg = power_supply_get_drvdata(psy);
 
 	switch (prop) {
 	case POWER_SUPPLY_PROP_INPUT_SUSPEND:
-		smblib_set_prop_input_suspend(chg, val);
+		rc = smblib_set_prop_input_suspend(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
+		rc = smblib_set_prop_system_temp_level(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY:
+		rc = smblib_set_prop_batt_capacity(chg, val);
 		break;
 	default:
-		return -EINVAL;
+		rc = -EINVAL;
 	}
 
-	return 0;
+	return rc;
 }
 
 static int smb2_batt_prop_is_writeable(struct power_supply *psy,
@@ -362,6 +543,8 @@ static int smb2_batt_prop_is_writeable(struct power_supply *psy,
 {
 	switch (psp) {
 	case POWER_SUPPLY_PROP_INPUT_SUSPEND:
+	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
+	case POWER_SUPPLY_PROP_CAPACITY:
 		return 1;
 	default:
 		break;
@@ -486,11 +669,76 @@ static int smb2_init_vconn_regulator(struct smb2 *chip)
 /***************************
  * HARDWARE INITIALIZATION *
  ***************************/
+static int smb2_config_wipower_input_power(struct smb2 *chip, int uw)
+{
+	int rc;
+	int ua;
+	struct smb_charger *chg = &chip->chg;
+	s64 nw = (s64)uw * 1000;
+
+	ua = div_s64(nw, ZIN_ICL_PT_MAX_MV);
+	rc = smblib_set_charge_param(chg, &chg->param.dc_icl_pt_lv, ua);
+	if (rc < 0) {
+		pr_err("Couldn't configure dc_icl_pt_lv rc = %d\n", rc);
+		return rc;
+	}
+
+	ua = div_s64(nw, ZIN_ICL_PT_HV_MAX_MV);
+	rc = smblib_set_charge_param(chg, &chg->param.dc_icl_pt_hv, ua);
+	if (rc < 0) {
+		pr_err("Couldn't configure dc_icl_pt_hv rc = %d\n", rc);
+		return rc;
+	}
+
+	ua = div_s64(nw, ZIN_ICL_LV_MAX_MV);
+	rc = smblib_set_charge_param(chg, &chg->param.dc_icl_div2_lv, ua);
+	if (rc < 0) {
+		pr_err("Couldn't configure dc_icl_div2_lv rc = %d\n", rc);
+		return rc;
+	}
+
+	ua = div_s64(nw, ZIN_ICL_MID_LV_MAX_MV);
+	rc = smblib_set_charge_param(chg, &chg->param.dc_icl_div2_mid_lv, ua);
+	if (rc < 0) {
+		pr_err("Couldn't configure dc_icl_div2_mid_lv rc = %d\n", rc);
+		return rc;
+	}
+
+	ua = div_s64(nw, ZIN_ICL_MID_HV_MAX_MV);
+	rc = smblib_set_charge_param(chg, &chg->param.dc_icl_div2_mid_hv, ua);
+	if (rc < 0) {
+		pr_err("Couldn't configure dc_icl_div2_mid_hv rc = %d\n", rc);
+		return rc;
+	}
+
+	ua = div_s64(nw, ZIN_ICL_HV_MAX_MV);
+	rc = smblib_set_charge_param(chg, &chg->param.dc_icl_div2_hv, ua);
+	if (rc < 0) {
+		pr_err("Couldn't configure dc_icl_div2_hv rc = %d\n", rc);
+		return rc;
+	}
+
+	return 0;
+}
 
 static int smb2_init_hw(struct smb2 *chip)
 {
 	struct smb_charger *chg = &chip->chg;
 	int rc;
+
+	if (chip->dt.fcc_ua < 0)
+		smblib_get_charge_param(chg, &chg->param.fcc, &chip->dt.fcc_ua);
+
+	if (chip->dt.fv_uv < 0)
+		smblib_get_charge_param(chg, &chg->param.fv, &chip->dt.fv_uv);
+
+	if (chip->dt.usb_icl_ua < 0)
+		smblib_get_charge_param(chg, &chg->param.usb_icl,
+					&chip->dt.usb_icl_ua);
+
+	if (chip->dt.dc_icl_ua < 0)
+		smblib_get_charge_param(chg, &chg->param.dc_icl,
+					&chip->dt.dc_icl_ua);
 
 	/* votes must be cast before configuring software control */
 	vote(chg->pl_disable_votable,
@@ -501,7 +749,7 @@ static int smb2_init_hw(struct smb2 *chip)
 		DEFAULT_VOTER, chip->dt.suspend_input, 0);
 	vote(chg->dc_suspend_votable,
 		DEFAULT_VOTER, chip->dt.suspend_input, 0);
-	vote(chg->fcc_votable,
+	vote(chg->fcc_max_votable,
 		DEFAULT_VOTER, true, chip->dt.fcc_ua);
 	vote(chg->fv_votable,
 		DEFAULT_VOTER, true, chip->dt.fv_uv);
@@ -510,17 +758,21 @@ static int smb2_init_hw(struct smb2 *chip)
 	vote(chg->dc_icl_votable,
 		DEFAULT_VOTER, true, chip->dt.dc_icl_ua);
 
-	/* configure charge enable for software control; active high */
+	/*
+	 * Configure charge enable for software control; active high, and end
+	 * the charge cycle while the battery is OV.
+	 */
 	rc = smblib_masked_write(chg, CHGR_CFG2_REG,
-				 CHG_EN_POLARITY_BIT | CHG_EN_SRC_BIT, 0);
+				 CHG_EN_POLARITY_BIT |
+				 CHG_EN_SRC_BIT |
+				 BAT_OV_ECC_BIT, BAT_OV_ECC_BIT);
 	if (rc < 0) {
-		dev_err(chg->dev,
-			"Couldn't configure charge enable source rc=%d\n", rc);
+		dev_err(chg->dev, "Couldn't configure charger rc=%d\n", rc);
 		return rc;
 	}
 
 	/* enable the charging path */
-	rc = smblib_enable_charging(chg, true);
+	rc = vote(chg->chg_disable_votable, DEFAULT_VOTER, false, 0);
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't enable charging rc=%d\n", rc);
 		return rc;
@@ -528,11 +780,10 @@ static int smb2_init_hw(struct smb2 *chip)
 
 	/*
 	 * trigger the usb-typec-change interrupt only when the CC state
-	 * changes, or there was a VBUS error
+	 * changes
 	 */
 	rc = smblib_write(chg, TYPE_C_INTRPT_ENB_REG,
-			    TYPEC_CCSTATE_CHANGE_INT_EN_BIT
-			  | TYPEC_VBUS_ERROR_INT_EN_BIT);
+			  TYPEC_CCSTATE_CHANGE_INT_EN_BIT);
 	if (rc < 0) {
 		dev_err(chg->dev,
 			"Couldn't configure Type-C interrupts rc=%d\n", rc);
@@ -582,6 +833,13 @@ static int smb2_init_hw(struct smb2 *chip)
 		return rc;
 	}
 
+	/* configure wipower watts */
+	rc = smb2_config_wipower_input_power(chip, chip->dt.wipower_max_uw);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't configure wipower rc=%d\n", rc);
+		return rc;
+	}
+
 	return rc;
 }
 
@@ -615,49 +873,49 @@ struct smb2_irq_info {
 
 static struct smb2_irq_info smb2_irqs[] = {
 /* CHARGER IRQs */
-	{ "chg-error",                  smblib_handle_debug },
-	{ "chg-state-change",           smblib_handle_chg_state_change,	true },
-	{ "step-chg-state-change",      smblib_handle_debug },
-	{ "step-chg-soc-update-fail",   smblib_handle_debug },
+	{ "chg-error",			smblib_handle_debug },
+	{ "chg-state-change",		smblib_handle_chg_state_change,	true },
+	{ "step-chg-state-change",	smblib_handle_debug },
+	{ "step-chg-soc-update-fail",	smblib_handle_debug },
 	{ "step-chg-soc-update-request", smblib_handle_debug },
 /* OTG IRQs */
-	{ "otg-fail",                   smblib_handle_debug },
-	{ "otg-overcurrent",            smblib_handle_debug },
-	{ "otg-oc-dis-sw-sts",          smblib_handle_debug },
-	{ "testmode-change-detect",     smblib_handle_debug },
+	{ "otg-fail",			smblib_handle_debug },
+	{ "otg-overcurrent",		smblib_handle_debug },
+	{ "otg-oc-dis-sw-sts",		smblib_handle_debug },
+	{ "testmode-change-detect",	smblib_handle_debug },
 /* BATTERY IRQs */
-	{ "bat-temp",                   smblib_handle_batt_psy_changed },
-	{ "bat-ocp",                    smblib_handle_batt_psy_changed },
-	{ "bat-ov",                     smblib_handle_batt_psy_changed },
-	{ "bat-low",                    smblib_handle_batt_psy_changed },
-	{ "bat-therm-or-id-missing",    smblib_handle_batt_psy_changed },
-	{ "bat-terminal-missing",       smblib_handle_batt_psy_changed },
+	{ "bat-temp",			smblib_handle_batt_temp_changed },
+	{ "bat-ocp",			smblib_handle_batt_psy_changed },
+	{ "bat-ov",			smblib_handle_batt_psy_changed },
+	{ "bat-low",			smblib_handle_batt_psy_changed },
+	{ "bat-therm-or-id-missing",	smblib_handle_batt_psy_changed },
+	{ "bat-terminal-missing",	smblib_handle_batt_psy_changed },
 /* USB INPUT IRQs */
-	{ "usbin-collapse",             smblib_handle_debug },
-	{ "usbin-lt-3p6v",              smblib_handle_debug },
-	{ "usbin-uv",                   smblib_handle_debug },
-	{ "usbin-ov",                   smblib_handle_debug },
-	{ "usbin-plugin",               smblib_handle_usb_plugin,	true },
-	{ "usbin-src-change",           smblib_handle_usb_source_change, true },
-	{ "usbin-icl-change",           smblib_handle_icl_change,	true },
+	{ "usbin-collapse",		smblib_handle_debug },
+	{ "usbin-lt-3p6v",		smblib_handle_debug },
+	{ "usbin-uv",			smblib_handle_debug },
+	{ "usbin-ov",			smblib_handle_debug },
+	{ "usbin-plugin",		smblib_handle_usb_plugin,	true },
+	{ "usbin-src-change",		smblib_handle_usb_source_change, true },
+	{ "usbin-icl-change",		smblib_handle_icl_change,	true },
 	{ "type-c-change",		smblib_handle_usb_typec_change,	true },
 /* DC INPUT IRQs */
-	{ "dcin-collapse",              smblib_handle_debug },
-	{ "dcin-lt-3p6v",               smblib_handle_debug },
-	{ "dcin-uv",                    smblib_handle_debug },
-	{ "dcin-ov",                    smblib_handle_debug },
-	{ "dcin-plugin",                smblib_handle_debug },
-	{ "div2-en-dg",                 smblib_handle_debug },
-	{ "dcin-icl-change",            smblib_handle_debug },
+	{ "dcin-collapse",		smblib_handle_debug },
+	{ "dcin-lt-3p6v",		smblib_handle_debug },
+	{ "dcin-uv",			smblib_handle_debug },
+	{ "dcin-ov",			smblib_handle_debug },
+	{ "dcin-plugin",		smblib_handle_debug },
+	{ "div2-en-dg",			smblib_handle_debug },
+	{ "dcin-icl-change",		smblib_handle_debug },
 /* MISCELLANEOUS IRQs */
-	{ "wdog-snarl",                 NULL },
-	{ "wdog-bark",                  NULL },
-	{ "aicl-fail",                  smblib_handle_debug },
-	{ "aicl-done",                  smblib_handle_debug },
-	{ "high-duty-cycle",            smblib_handle_debug },
-	{ "input-current-limiting",     smblib_handle_debug },
-	{ "temperature-change",         smblib_handle_debug },
-	{ "switcher-power-ok",          smblib_handle_debug },
+	{ "wdog-snarl",			NULL },
+	{ "wdog-bark",			NULL },
+	{ "aicl-fail",			smblib_handle_debug },
+	{ "aicl-done",			smblib_handle_debug },
+	{ "high-duty-cycle",		smblib_handle_debug },
+	{ "input-current-limiting",	smblib_handle_debug },
+	{ "temperature-change",		smblib_handle_debug },
+	{ "switcher-power-ok",		smblib_handle_debug },
 };
 
 static int smb2_get_irq_index_byname(const char *irq_name)
@@ -787,6 +1045,12 @@ static int smb2_probe(struct platform_device *pdev)
 	if (rc < 0) {
 		pr_err("Couldn't initialize vconn regulator rc=%d\n",
 			rc);
+		goto cleanup;
+	}
+
+	rc = smb2_init_dc_psy(chip);
+	if (rc < 0) {
+		pr_err("Couldn't initialize dc psy rc=%d\n", rc);
 		goto cleanup;
 	}
 

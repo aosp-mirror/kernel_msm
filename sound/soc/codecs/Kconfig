@@ -713,6 +713,9 @@ config SND_SOC_UDA134X
 config SND_SOC_UDA1380
         tristate
 
+config SND_SOC_WCD934X_DSD
+        tristate
+
 config SND_SOC_WCD9320
         tristate
 
@@ -729,6 +732,15 @@ config SND_SOC_WCD934X
 	depends on WCD934X_CODEC
 	select SND_SOC_WCD9XXX_V2
 	select AUDIO_EXT_CLK
+	select SND_SOC_WCD_DSP_MGR
+	select SND_SOC_WCD_SPI
+	select SND_SOC_WCD934X_MBHC
+        select SND_SOC_WCD934X_DSD
+
+config SND_SOC_WCD934X_MBHC
+        tristate
+	depends on SND_SOC_WCD934X
+	select SND_SOC_WCD_MBHC
 
 config SND_SOC_WSA881X
         tristate
@@ -738,9 +750,6 @@ config SND_SOC_WSA881X
 config SND_SOC_WSA881X_ANALOG
         tristate
 	select REGMAP_I2C
-
-config SND_SOC_MSM8X16_WCD
-	tristate
 
 config SND_SOC_WCD9XXX
 	tristate
@@ -761,6 +770,13 @@ config AUDIO_EXT_CLK
 config SND_SOC_WCD_MBHC
 	tristate
 	default y if (SND_SOC_MSM8909_WCD=y || SND_SOC_MSM8X16_WCD=y || SND_SOC_WCD9335=y) && SND_SOC_MDMCALIFORNIUM!=y
+
+config SND_SOC_WCD_DSP_MGR
+	tristate
+
+config SND_SOC_WCD_SPI
+	depends on CONFIG_SPI
+	tristate
 
 config SND_SOC_WL1273
 	tristate
@@ -977,4 +993,7 @@ config SND_SOC_MSM_HDMI_CODEC_RX
 	help
 	HDMI audio drivers should be built only if the platform
         supports hdmi panel.
+
+source "sound/soc/codecs/msm8x16/Kconfig"
+
 endmenu

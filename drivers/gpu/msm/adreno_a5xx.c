@@ -437,8 +437,10 @@ static int a5xx_regulator_enable(struct adreno_device *adreno_dev)
 {
 	unsigned int ret;
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-	if (!(adreno_is_a530(adreno_dev) || adreno_is_a540(adreno_dev)))
+	if (!(adreno_is_a530(adreno_dev) || adreno_is_a540(adreno_dev))) {
+		a5xx_hwcg_set(adreno_dev, true);
 		return 0;
+	}
 
 	/*
 	 * Turn on smaller power domain first to reduce voltage droop.
@@ -459,6 +461,15 @@ static int a5xx_regulator_enable(struct adreno_device *adreno_dev)
 		KGSL_PWR_ERR(device, "SPTP GDSC enable failed\n");
 		return ret;
 	}
+
+	/* Disable SP clock */
+	kgsl_regrmw(device, A5XX_GPMU_GPMU_SP_CLOCK_CONTROL,
+		CNTL_IP_CLK_ENABLE, 0);
+	/* Enable hardware clockgating */
+	a5xx_hwcg_set(adreno_dev, true);
+	/* Enable SP clock */
+	kgsl_regrmw(device, A5XX_GPMU_GPMU_SP_CLOCK_CONTROL,
+		CNTL_IP_CLK_ENABLE, 1);
 
 	return 0;
 }
@@ -1836,6 +1847,13 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 			kgsl_regrmw(device, A5XX_PC_DBG_ECO_CNTL, 0, (1 << 8));
 	}
 
+	if (ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_DISABLE_RB_DP2CLOCKGATING)) {
+		/*
+		 * Disable RB sampler datapath DP2 clock gating
+		 * optimization for 1-SP GPU's, by default it is enabled.
+		 */
+		kgsl_regrmw(device, A5XX_RB_DBG_ECO_CNT, 0, (1 << 9));
+	}
 	/* Set the USE_RETENTION_FLOPS chicken bit */
 	kgsl_regwrite(device, A5XX_CP_CHICKEN_DBG, 0x02000000);
 
@@ -1868,8 +1886,6 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 	} else {
 		/* if not in ISDB mode enable ME/PFP split notification */
 		kgsl_regwrite(device, A5XX_RBBM_AHB_CNTL1, 0xA6FFFFFF);
-		/* enable HWCG */
-		a5xx_hwcg_set(adreno_dev, true);
 	}
 
 	kgsl_regwrite(device, A5XX_RBBM_AHB_CNTL2, 0x0000003F);
@@ -2373,17 +2389,25 @@ static int a5xx_microcode_read(struct adreno_device *adreno_dev)
 {
 	int ret;
 
-	ret = _load_firmware(KGSL_DEVICE(adreno_dev),
-			 adreno_dev->gpucore->pm4fw_name, &adreno_dev->pm4,
-			 &adreno_dev->pm4_fw_size, &adreno_dev->pm4_fw_version);
-	if (ret)
-		return ret;
+	if (adreno_dev->pm4.hostptr == NULL) {
+		ret = _load_firmware(KGSL_DEVICE(adreno_dev),
+				 adreno_dev->gpucore->pm4fw_name,
+				 &adreno_dev->pm4,
+				 &adreno_dev->pm4_fw_size,
+				 &adreno_dev->pm4_fw_version);
+		if (ret)
+			return ret;
+	}
 
-	ret = _load_firmware(KGSL_DEVICE(adreno_dev),
-			 adreno_dev->gpucore->pfpfw_name, &adreno_dev->pfp,
-			 &adreno_dev->pfp_fw_size, &adreno_dev->pfp_fw_version);
-	if (ret)
-		return ret;
+	if (adreno_dev->pfp.hostptr == NULL) {
+		ret = _load_firmware(KGSL_DEVICE(adreno_dev),
+				 adreno_dev->gpucore->pfpfw_name,
+				 &adreno_dev->pfp,
+				 &adreno_dev->pfp_fw_size,
+				 &adreno_dev->pfp_fw_version);
+		if (ret)
+			return ret;
+	}
 
 	ret = _load_gpmu_firmware(adreno_dev);
 	if (ret)
@@ -3058,7 +3082,6 @@ static void a5xx_irq_storm_worker(struct work_struct *work)
 	mutex_unlock(&device->mutex);
 
 	/* Reschedule just to make sure everything retires */
-	kgsl_schedule_work(&device->event_work);
 	adreno_dispatcher_schedule(device);
 }
 
@@ -3109,8 +3132,6 @@ static void a5xx_cp_callback(struct adreno_device *adreno_dev, int bit)
 	}
 
 	a5xx_preemption_trigger(adreno_dev);
-
-	kgsl_schedule_work(&device->event_work);
 	adreno_dispatcher_schedule(device);
 }
 

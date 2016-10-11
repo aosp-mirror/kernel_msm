@@ -52,7 +52,7 @@
 
 #define A5XX_CP_CTXRECORD_MAGIC_REF     0x27C4BAFCUL
 /* Size of each CP preemption record */
-#define A5XX_CP_CTXRECORD_SIZE_IN_BYTES     0x100000
+#define A5XX_CP_CTXRECORD_SIZE_IN_BYTES     0x10000
 /* Size of the preemption counter block (in bytes) */
 #define A5XX_CP_CTXRECORD_PREEMPTION_COUNTER_SIZE   (16 * 4)
 
@@ -177,6 +177,9 @@ void a5xx_hwcg_set(struct adreno_device *adreno_dev, bool on);
 
 /* A5XX_GPMU_GPMU_PWR_THRESHOLD */
 #define PWR_THRESHOLD_VALID		0x80000000
+
+/* A5XX_GPMU_GPMU_SP_CLOCK_CONTROL */
+#define CNTL_IP_CLK_ENABLE		BIT(0)
 /* AGC */
 #define AGC_INIT_BASE			A5XX_GPMU_DATA_RAM_BASE
 #define AGC_INIT_MSG_MAGIC		(AGC_INIT_BASE + 5)

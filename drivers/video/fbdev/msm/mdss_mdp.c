@@ -635,7 +635,7 @@ struct reg_bus_client *mdss_reg_bus_vote_client_create(char *client_name)
 	strlcpy(client->name, client_name, MAX_CLIENT_NAME_LEN);
 	client->usecase_ndx = VOTE_INDEX_DISABLE;
 	client->id = id;
-	pr_debug("bus vote client %s created:%p id :%d\n", client_name,
+	pr_debug("bus vote client %s created:%pK id :%d\n", client_name,
 		client, id);
 	id++;
 	list_add(&client->list, &mdss_res->reg_bus_clist);
@@ -649,7 +649,7 @@ void mdss_reg_bus_vote_client_destroy(struct reg_bus_client *client)
 	if (!client) {
 		pr_err("reg bus vote: invalid client handle\n");
 	} else {
-		pr_debug("bus vote client %s destroyed:%p id:%u\n",
+		pr_debug("bus vote client %s destroyed:%pK id:%u\n",
 			client->name, client, client->id);
 		mutex_lock(&mdss_res->reg_bus_lock);
 		list_del_init(&client->list);
@@ -1454,6 +1454,35 @@ end:
 }
 
 /**
+ * mdss_mdp_retention_init() - initialize retention setting
+ * @mdata: pointer to the global mdss data structure.
+ */
+static int mdss_mdp_retention_init(struct mdss_data_type *mdata)
+{
+	struct clk *mdss_axi_clk = mdss_mdp_get_clk(MDSS_CLK_AXI);
+	int rc;
+
+	if (!mdss_axi_clk) {
+		pr_err("failed to get AXI clock\n");
+		return -EINVAL;
+	}
+
+	rc = clk_set_flags(mdss_axi_clk, CLKFLAG_NORETAIN_MEM);
+	if (rc) {
+		pr_err("failed to set AXI no memory retention %d\n", rc);
+		return rc;
+	}
+
+	rc = clk_set_flags(mdss_axi_clk, CLKFLAG_NORETAIN_PERIPH);
+	if (rc) {
+		pr_err("failed to set AXI no periphery retention %d\n", rc);
+		return rc;
+	}
+
+	return rc;
+}
+
+/**
  * mdss_bus_bandwidth_ctrl() -- place bus bandwidth request
  * @enable:	value of enable or disable
  *
@@ -1703,6 +1732,24 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 		pr_debug("unable to get CX reg. rc=%d\n",
 					PTR_RET(mdata->vdd_cx));
 		mdata->vdd_cx = NULL;
+	} else {
+		/* Parse CX voltage settings */
+		ret = of_property_read_u32(mdata->pdev->dev.of_node,
+			"vdd-cx-min-uV", &mdata->vdd_cx_min_uv);
+		if (ret) {
+			pr_err("min uV for vdd-cx not specified. rc=%d\n", ret);
+			return ret;
+		}
+
+		ret = of_property_read_u32(mdata->pdev->dev.of_node,
+			"vdd-cx-max-uV", &mdata->vdd_cx_max_uv);
+		if (ret) {
+			pr_err("max uV for vdd-cx not specified. rc=%d\n", ret);
+			return ret;
+		}
+
+		pr_debug("vdd_cx [min_uV, max_uV] = [%d %d]\n",
+			mdata->vdd_cx_min_uv, mdata->vdd_cx_max_uv);
 	}
 
 	mdata->reg_bus_clt = mdss_reg_bus_vote_client_create("mdp\0");
@@ -1947,9 +1994,9 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 		mdss_mdp_init_default_prefill_factors(mdata);
 		mdss_set_quirk(mdata, MDSS_QUIRK_DSC_RIGHT_ONLY_PU);
 		mdss_set_quirk(mdata, MDSS_QUIRK_DSC_2SLICE_PU_THRPUT);
-		mdss_set_quirk(mdata, MDSS_QUIRK_SRC_SPLIT_ALWAYS);
 		mdata->has_wb_ubwc = true;
 		set_bit(MDSS_CAPS_10_BIT_SUPPORTED, mdata->mdss_caps_map);
+		set_bit(MDSS_CAPS_AVR_SUPPORTED, mdata->mdss_caps_map);
 		break;
 	default:
 		mdata->max_target_zorder = 4; /* excluding base layer */
@@ -2034,7 +2081,7 @@ static u32 mdss_mdp_res_init(struct mdss_data_type *mdata)
 
 	mdata->iclient = msm_ion_client_create(mdata->pdev->name);
 	if (IS_ERR_OR_NULL(mdata->iclient)) {
-		pr_err("msm_ion_client_create() return error (%p)\n",
+		pr_err("msm_ion_client_create() return error (%pK)\n",
 				mdata->iclient);
 		mdata->iclient = NULL;
 	}
@@ -2489,6 +2536,8 @@ ssize_t mdss_mdp_show_capabilities(struct device *dev,
 		SPRINT(" separate_rotator");
 	if (test_bit(MDSS_CAPS_CWB_SUPPORTED, mdata->mdss_caps_map))
 		SPRINT(" concurrent_writeback");
+	if (test_bit(MDSS_CAPS_AVR_SUPPORTED,  mdata->mdss_caps_map))
+		SPRINT(" avr");
 	SPRINT("\n");
 #undef SPRINT
 
@@ -2677,7 +2726,7 @@ static int mdss_mdp_probe(struct platform_device *pdev)
 	if (rc)
 		pr_debug("unable to map MDSS VBIF non-realtime base\n");
 	else
-		pr_debug("MDSS VBIF NRT HW Base addr=%p len=0x%x\n",
+		pr_debug("MDSS VBIF NRT HW Base addr=%pK len=0x%x\n",
 			mdata->vbif_nrt_io.base, mdata->vbif_nrt_io.len);
 
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
@@ -2712,6 +2761,12 @@ static int mdss_mdp_probe(struct platform_device *pdev)
 	rc = mdss_mdp_res_init(mdata);
 	if (rc) {
 		pr_err("unable to initialize mdss mdp resources\n");
+		goto probe_done;
+	}
+
+	rc = mdss_mdp_retention_init(mdata);
+	if (rc) {
+		pr_err("unable to initialize mdss mdp retention\n");
 		goto probe_done;
 	}
 
@@ -3499,7 +3554,7 @@ static int mdss_mdp_cdm_addr_setup(struct mdss_data_type *mdata,
 		head[i].base = (mdata->mdss_io.base) + cdm_offsets[i];
 		atomic_set(&head[i].kref.refcount, 0);
 		mutex_init(&head[i].lock);
-		pr_debug("%s: cdm off (%d) = %p\n", __func__, i, head[i].base);
+		pr_debug("%s: cdm off (%d) = %pK\n", __func__, i, head[i].base);
 	}
 
 	mdata->cdm_off = head;
@@ -3566,7 +3621,7 @@ static int mdss_mdp_dsc_addr_setup(struct mdss_data_type *mdata,
 	for (i = 0; i < len; i++) {
 		head[i].num = i;
 		head[i].base = (mdata->mdss_io.base) + dsc_offsets[i];
-		pr_debug("dsc off (%d) = %p\n", i, head[i].base);
+		pr_debug("dsc off (%d) = %pK\n", i, head[i].base);
 	}
 
 	mdata->dsc_off = head;
@@ -4741,8 +4796,8 @@ static int mdss_mdp_cx_ctrl(struct mdss_data_type *mdata, int enable)
 	if (enable) {
 		rc = regulator_set_voltage(
 				mdata->vdd_cx,
-				RPM_REGULATOR_CORNER_SVS_SOC,
-				RPM_REGULATOR_CORNER_SUPER_TURBO);
+				mdata->vdd_cx_min_uv,
+				mdata->vdd_cx_max_uv);
 		if (rc < 0)
 			goto vreg_set_voltage_fail;
 
@@ -4761,8 +4816,8 @@ static int mdss_mdp_cx_ctrl(struct mdss_data_type *mdata, int enable)
 		}
 		rc = regulator_set_voltage(
 				mdata->vdd_cx,
-				RPM_REGULATOR_CORNER_NONE,
-				RPM_REGULATOR_CORNER_SUPER_TURBO);
+				0,
+				mdata->vdd_cx_max_uv);
 		if (rc < 0)
 			goto vreg_set_voltage_fail;
 	}

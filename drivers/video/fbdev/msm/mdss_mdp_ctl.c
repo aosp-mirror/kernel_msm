@@ -1162,7 +1162,7 @@ int mdss_mdp_perf_calc_pipe(struct mdss_mdp_pipe *pipe,
 	prefill_params.is_hflip = pipe->flags & MDP_FLIP_LR;
 	prefill_params.is_cmd = !mixer->ctl->is_video_mode;
 	prefill_params.pnum = pipe->num;
-	prefill_params.is_bwc = mdss_mdp_is_ubwc_format(pipe->src_fmt);
+	prefill_params.is_ubwc = mdss_mdp_is_ubwc_format(pipe->src_fmt);
 	prefill_params.is_nv12 = mdss_mdp_is_nv12_format(pipe->src_fmt);
 
 	mdss_mdp_get_bw_vote_mode(mixer, mdata->mdp_rev, perf,
@@ -2668,7 +2668,7 @@ int mdss_mdp_ctl_splash_finish(struct mdss_mdp_ctl *ctl, bool handoff)
 {
 	switch (ctl->panel_data->panel_info.type) {
 	case MIPI_VIDEO_PANEL:
-	case EDP_PANEL:
+	case DP_PANEL:
 	case DTV_PANEL:
 		return mdss_mdp_video_reconfigure_splash_done(ctl, handoff);
 	case MIPI_CMD_PANEL:
@@ -3686,7 +3686,7 @@ struct mdss_mdp_ctl *mdss_mdp_ctl_init(struct mdss_panel_data *pdata,
 	ctl->disable_prefill = false;
 
 	switch (pdata->panel_info.type) {
-	case EDP_PANEL:
+	case DP_PANEL:
 		ctl->is_video_mode = true;
 		ctl->intf_num = MDSS_MDP_INTF0;
 		ctl->intf_type = MDSS_INTF_EDP;
@@ -4426,17 +4426,17 @@ void mdss_mdp_set_roi(struct mdss_mdp_ctl *ctl,
 	}
 
 	previous_frame_pu_type = mdss_mdp_get_pu_type(ctl);
-	mdss_mdp_set_mixer_roi(ctl->mixer_left, l_roi);
-	if (ctl->mixer_left)
+	if (ctl->mixer_left) {
+		mdss_mdp_set_mixer_roi(ctl->mixer_left, l_roi);
 		ctl->roi = ctl->mixer_left->roi;
+	}
 
 	if (ctl->mfd->split_mode == MDP_DUAL_LM_DUAL_DISPLAY) {
 		struct mdss_mdp_ctl *sctl = mdss_mdp_get_split_ctl(ctl);
 
-		if (sctl) {
+		if (sctl && sctl->mixer_left) {
 			mdss_mdp_set_mixer_roi(sctl->mixer_left, r_roi);
-			if (sctl->mixer_left)
-				sctl->roi = sctl->mixer_left->roi;
+			sctl->roi = sctl->mixer_left->roi;
 		}
 	} else if (is_dual_lm_single_display(ctl->mfd) && ctl->mixer_right) {
 
@@ -5527,6 +5527,26 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 
 	sctl = mdss_mdp_get_split_ctl(ctl);
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
+
+	if (ctl->ops.avr_ctrl_fnc) {
+		ret = ctl->ops.avr_ctrl_fnc(ctl);
+		if (ret) {
+			pr_err("error configuring avr ctrl registers ctl=%d err=%d\n",
+				ctl->num, ret);
+			mutex_unlock(&ctl->lock);
+			return ret;
+		}
+	}
+
+	if (sctl && sctl->ops.avr_ctrl_fnc) {
+		ret = sctl->ops.avr_ctrl_fnc(sctl);
+		if (ret) {
+			pr_err("error configuring avr ctrl registers sctl=%d err=%d\n",
+				sctl->num, ret);
+			mutex_unlock(&ctl->lock);
+			return ret;
+		}
+	}
 
 	mutex_lock(&ctl->flush_lock);
 

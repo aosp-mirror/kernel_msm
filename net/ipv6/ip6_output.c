@@ -891,8 +891,7 @@ static struct dst_entry *ip6_sk_dst_check(struct sock *sk,
 #ifdef CONFIG_IPV6_SUBTREES
 	    ip6_rt_check(&rt->rt6i_src, &fl6->saddr, np->saddr_cache) ||
 #endif
-	   (!(fl6->flowi6_flags & FLOWI_FLAG_SKIP_NH_OIF) &&
-	      (fl6->flowi6_oif && fl6->flowi6_oif != dst->dev->ifindex))) {
+	    (fl6->flowi6_oif && fl6->flowi6_oif != dst->dev->ifindex)) {
 		dst_release(dst);
 		dst = NULL;
 	}
@@ -1091,8 +1090,8 @@ static inline int ip6_ufo_append_data(struct sock *sk,
 			int getfrag(void *from, char *to, int offset, int len,
 			int odd, struct sk_buff *skb),
 			void *from, int length, int hh_len, int fragheaderlen,
-			int transhdrlen, int mtu, unsigned int flags,
-			const struct flowi6 *fl6)
+			int exthdrlen, int transhdrlen, int mtu,
+			unsigned int flags, const struct flowi6 *fl6)
 
 {
 	struct sk_buff *skb;
@@ -1117,7 +1116,7 @@ static inline int ip6_ufo_append_data(struct sock *sk,
 		skb_put(skb, fragheaderlen + transhdrlen);
 
 		/* initialize network header pointer */
-		skb_reset_network_header(skb);
+		skb_set_network_header(skb, exthdrlen);
 
 		/* initialize protocol header pointer */
 		skb->transport_header = skb->network_header + fragheaderlen;
@@ -1359,7 +1358,7 @@ emsgsize:
 	    (rt->dst.dev->features & NETIF_F_UFO) &&
 	    (sk->sk_type == SOCK_DGRAM) && !udp_get_no_check6_tx(sk)) {
 		err = ip6_ufo_append_data(sk, queue, getfrag, from, length,
-					  hh_len, fragheaderlen,
+					  hh_len, fragheaderlen, exthdrlen,
 					  transhdrlen, mtu, flags, fl6);
 		if (err)
 			goto error;

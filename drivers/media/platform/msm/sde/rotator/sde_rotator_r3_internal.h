@@ -116,6 +116,8 @@ struct sde_hw_rotator_ops {
 	 * @cfg:        Rotator Fetch engine configuration parameters
 	 * @danger_lut: Danger LUT setting
 	 * @safe_lut:   Safe LUT setting
+	 * @dnsc_factor_w: Downscale factor for width
+	 * @dnsc_factor_h: Downscale factor for height
 	 * @flags:      Specific config flag, see SDE_ROT_FLAG_ for details
 	 */
 	void (*setup_rotator_fetchengine)(
@@ -124,6 +126,8 @@ struct sde_hw_rotator_ops {
 			struct sde_hw_rot_sspp_cfg     *cfg,
 			u32                             danger_lut,
 			u32                             safe_lut,
+			u32                             dnsc_factor_w,
+			u32                             dnsc_factor_h,
 			u32                             flags);
 
 	/**
@@ -202,7 +206,7 @@ struct sde_hw_rotator_context {
 	u32    *regdma_wrptr;
 	u32    timestamp;
 	struct completion rot_comp;
-	struct completion regdma_comp;
+	wait_queue_head_t regdma_waitq;
 	struct sde_dbg_buf src_dbgbuf;
 	struct sde_dbg_buf dst_dbgbuf;
 	u32    last_regdma_isr_status;
@@ -253,6 +257,7 @@ struct sde_hw_rotator {
 
 	/* logical interrupt number */
 	int    irq_num;
+	atomic_t irq_enabled;
 
 	/* internal ION memory for SW timestamp */
 	struct ion_client *iclient;
@@ -260,8 +265,6 @@ struct sde_hw_rotator {
 	void *swts_buffer;
 
 	u32    highest_bank;
-	struct completion rot_comp;
-	struct completion regdma_comp;
 
 	spinlock_t rotctx_lock;
 	spinlock_t rotisr_lock;

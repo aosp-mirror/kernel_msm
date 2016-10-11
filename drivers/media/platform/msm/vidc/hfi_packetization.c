@@ -672,6 +672,15 @@ static int get_hfi_extradata_index(enum hal_extradata_id index)
 	case HAL_EXTRADATA_CONTENT_LIGHT_LEVEL_SEI:
 		ret = HFI_PROPERTY_PARAM_VDEC_CONTENT_LIGHT_LEVEL_SEI_EXTRADATA;
 		break;
+	case HAL_EXTRADATA_PQ_INFO:
+		ret = HFI_PROPERTY_PARAM_VENC_OVERRIDE_QP_EXTRADATA;
+		break;
+	case HAL_EXTRADATA_VUI_DISPLAY_INFO:
+		ret = HFI_PROPERTY_PARAM_VUI_DISPLAY_INFO_EXTRADATA;
+		break;
+	case HAL_EXTRADATA_VPX_COLORSPACE:
+		ret = HFI_PROPERTY_PARAM_VDEC_VPX_COLORSPACE_EXTRADATA;
+		break;
 	default:
 		dprintk(VIDC_WARN, "Extradata index not found: %d\n", index);
 		break;
@@ -1456,7 +1465,7 @@ int create_pkt_cmd_session_set_property(
 			break;
 		default:
 			dprintk(VIDC_ERR,
-					"Invalid Rate control setting: %p\n",
+					"Invalid Rate control setting: %pK\n",
 					pdata);
 			break;
 		}
@@ -2116,6 +2125,34 @@ int create_pkt_cmd_session_set_property(
 		pkt->size += sizeof(u32) + sizeof(struct hfi_enable);
 		break;
 	}
+	case HAL_PARAM_VENC_H264_TRANSFORM_8x8:
+	{
+		create_pkt_enable(pkt->rg_property_data,
+			HFI_PROPERTY_PARAM_VENC_H264_8X8_TRANSFORM,
+			((struct hal_enable *)pdata)->enable);
+		pkt->size += sizeof(u32) + sizeof(struct hfi_enable);
+		break;
+	}
+	case HAL_PARAM_VENC_VIDEO_SIGNAL_INFO:
+	{
+		struct hal_video_signal_info *hal = pdata;
+		struct hfi_video_signal_metadata *signal_info =
+			(struct hfi_video_signal_metadata *)
+			&pkt->rg_property_data[1];
+
+		signal_info->enable = true;
+		signal_info->video_format = MSM_VIDC_NTSC;
+		signal_info->video_full_range = hal->full_range;
+		signal_info->color_description = MSM_VIDC_COLOR_DESC_PRESENT;
+		signal_info->color_primaries = hal->color_space;
+		signal_info->transfer_characteristics = hal->transfer_chars;
+		signal_info->matrix_coeffs = hal->matrix_coeffs;
+
+		pkt->rg_property_data[0] =
+			HFI_PROPERTY_PARAM_VENC_VIDEO_SIGNAL_INFO;
+		pkt->size += sizeof(u32) + sizeof(*signal_info);
+		break;
+	}
 	/* FOLLOWING PROPERTIES ARE NOT IMPLEMENTED IN CORE YET */
 	case HAL_CONFIG_BUFFER_REQUIREMENTS:
 	case HAL_CONFIG_PRIORITY:
@@ -2174,7 +2211,7 @@ int create_pkt_ssr_cmd(enum hal_ssr_trigger_type type,
 		struct hfi_cmd_sys_test_ssr_packet *pkt)
 {
 	if (!pkt) {
-		dprintk(VIDC_ERR, "Invalid params, device: %p\n", pkt);
+		dprintk(VIDC_ERR, "Invalid params, device: %pK\n", pkt);
 		return -EINVAL;
 	}
 	pkt->size = sizeof(struct hfi_cmd_sys_test_ssr_packet);
@@ -2187,7 +2224,7 @@ int create_pkt_cmd_sys_image_version(
 		struct hfi_cmd_sys_get_property_packet *pkt)
 {
 	if (!pkt) {
-		dprintk(VIDC_ERR, "%s invalid param :%p\n", __func__, pkt);
+		dprintk(VIDC_ERR, "%s invalid param :%pK\n", __func__, pkt);
 		return -EINVAL;
 	}
 	pkt->size = sizeof(struct hfi_cmd_sys_get_property_packet);

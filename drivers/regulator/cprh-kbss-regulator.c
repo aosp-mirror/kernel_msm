@@ -51,6 +51,9 @@
  * @speed_bin:		Application processor speed bin fuse parameter value for
  *			the given chip
  * @cpr_fusing_rev:	CPR fusing revision fuse parameter value
+ * @force_highest_corner:	Flag indicating that all corners must operate
+ *			at the voltage of the highest corner.  This is
+ *			applicable to MSMCOBALT only.
  *
  * This struct holds the values for all of the fuses read from memory.
  */
@@ -61,6 +64,7 @@ struct cprh_msmcobalt_kbss_fuses {
 	u64	quot_offset[MSMCOBALT_KBSS_FUSE_CORNERS];
 	u64	speed_bin;
 	u64	cpr_fusing_rev;
+	u64	force_highest_corner;
 };
 
 /*
@@ -181,14 +185,32 @@ static const struct cpr3_fuse_param msmcobalt_kbss_speed_bin_param[] = {
 	{},
 };
 
+static const struct cpr3_fuse_param
+msmcobalt_cpr_force_highest_corner_param[] = {
+	{100, 45, 45},
+	{},
+};
+
 /*
  * Open loop voltage fuse reference voltages in microvolts for MSMCOBALT v1
  */
-static const int msmcobalt_kbss_fuse_ref_volt[MSMCOBALT_KBSS_FUSE_CORNERS] = {
+static const int
+msmcobalt_v1_kbss_fuse_ref_volt[MSMCOBALT_KBSS_FUSE_CORNERS] = {
 	696000,
 	768000,
 	896000,
 	1112000,
+};
+
+/*
+ * Open loop voltage fuse reference voltages in microvolts for MSMCOBALT v2
+ */
+static const int
+msmcobalt_v2_kbss_fuse_ref_volt[MSMCOBALT_KBSS_FUSE_CORNERS] = {
+	688000,
+	756000,
+	828000,
+	1056000,
 };
 
 #define MSMCOBALT_KBSS_FUSE_STEP_VOLT		10000
@@ -289,6 +311,18 @@ static int cprh_msmcobalt_kbss_read_fuse_data(struct cpr3_regulator *vreg)
 
 	}
 
+	rc = cpr3_read_fuse_param(base,
+		  msmcobalt_cpr_force_highest_corner_param,
+		  &fuse->force_highest_corner);
+	if (rc) {
+		cpr3_err(vreg, "Unable to read CPR force highest corner fuse, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	if (fuse->force_highest_corner)
+		cpr3_info(vreg, "Fusing requires all operation at the highest corner\n");
+
 	vreg->fuse_combo = fuse->cpr_fusing_rev + 8 * fuse->speed_bin;
 	if (vreg->fuse_combo >= CPRH_MSMCOBALT_KBSS_FUSE_COMBO_COUNT) {
 		cpr3_err(vreg, "invalid CPR fuse combo = %d found\n",
@@ -357,9 +391,10 @@ static int cprh_msmcobalt_kbss_calculate_open_loop_voltages(
 {
 	struct device_node *node = vreg->of_node;
 	struct cprh_msmcobalt_kbss_fuses *fuse = vreg->platform_fuses;
-	int i, j, rc = 0;
+	int i, j, soc_revision, rc = 0;
 	bool allow_interpolation;
 	u64 freq_low, volt_low, freq_high, volt_high;
+	const int *ref_volt;
 	int *fuse_volt;
 	int *fmax_corner;
 
@@ -372,9 +407,17 @@ static int cprh_msmcobalt_kbss_calculate_open_loop_voltages(
 		goto done;
 	}
 
+	soc_revision = vreg->thread->ctrl->soc_revision;
+	if (soc_revision == 1)
+		ref_volt = msmcobalt_v1_kbss_fuse_ref_volt;
+	else if (soc_revision == 2)
+		ref_volt = msmcobalt_v2_kbss_fuse_ref_volt;
+	else
+		ref_volt = msmcobalt_v2_kbss_fuse_ref_volt;
+
 	for (i = 0; i < vreg->fuse_corner_count; i++) {
 		fuse_volt[i] = cpr3_convert_open_loop_voltage_fuse(
-			msmcobalt_kbss_fuse_ref_volt[i],
+			ref_volt[i],
 			MSMCOBALT_KBSS_FUSE_STEP_VOLT, fuse->init_voltage[i],
 			MSMCOBALT_KBSS_VOLTAGE_FUSE_SIZE);
 
@@ -462,6 +505,54 @@ done:
 	kfree(fmax_corner);
 	return rc;
 }
+
+/**
+ * cprh_msmcobalt_partial_binning_override() - override the voltage and quotient
+ *		settings for low corners based upon special partial binning
+ *		fuse values
+ *
+ * @vreg:		Pointer to the CPR3 regulator
+ *
+ * Some parts are not able to operate at low voltages.  The force highest
+ * corner fuse specifies if a given part must operate with voltages
+ * corresponding to the highest corner.
+ *
+ * Return: 0 on success, errno on failure
+ */
+static int cprh_msmcobalt_partial_binning_override(struct cpr3_regulator *vreg)
+{
+	struct cprh_msmcobalt_kbss_fuses *fuse = vreg->platform_fuses;
+	struct cpr3_corner *corner;
+	struct cpr4_sdelta *sdelta;
+	int i;
+	u32 proc_freq;
+
+	if (fuse->force_highest_corner) {
+		cpr3_info(vreg, "overriding CPR parameters for corners 0 to %d with quotients and voltages of corner %d\n",
+			  vreg->corner_count - 2, vreg->corner_count - 1);
+		corner = &vreg->corner[vreg->corner_count - 1];
+		for (i = 0; i < vreg->corner_count - 1; i++) {
+			proc_freq = vreg->corner[i].proc_freq;
+			sdelta = vreg->corner[i].sdelta;
+			if (sdelta) {
+				if (sdelta->table)
+					devm_kfree(vreg->thread->ctrl->dev,
+						   sdelta->table);
+				if (sdelta->boost_table)
+					devm_kfree(vreg->thread->ctrl->dev,
+						   sdelta->boost_table);
+				devm_kfree(vreg->thread->ctrl->dev,
+					   sdelta);
+			}
+			vreg->corner[i] = *corner;
+			vreg->corner[i].proc_freq = proc_freq;
+		}
+
+		return 0;
+	}
+
+	return 0;
+};
 
 /**
  * cprh_kbss_parse_core_count_temp_adj_properties() - load device tree
@@ -1180,6 +1271,13 @@ static int cprh_kbss_init_regulator(struct cpr3_regulator *vreg)
 		return -EINVAL;
 	}
 
+	rc = cprh_msmcobalt_partial_binning_override(vreg);
+	if (rc) {
+		cpr3_err(vreg, "unable to override CPR parameters based on partial binning fuse values, rc=%d\n",
+			 rc);
+		return rc;
+	}
+
 	rc = cprh_kbss_apm_crossover_as_corner(vreg);
 	if (rc) {
 		cpr3_err(vreg, "unable to introduce APM voltage crossover corner, rc=%d\n",
@@ -1366,14 +1464,27 @@ static int cprh_kbss_regulator_resume(struct platform_device *pdev)
 	return cpr3_regulator_resume(ctrl);
 }
 
+/* Data corresponds to the SoC revision */
 static struct of_device_id cprh_regulator_match_table[] = {
-	{ .compatible = "qcom,cprh-msmcobalt-kbss-regulator", },
+	{
+		.compatible =  "qcom,cprh-msmcobalt-v1-kbss-regulator",
+		.data = (void *)(uintptr_t)1
+	},
+	{
+		.compatible = "qcom,cprh-msmcobalt-v2-kbss-regulator",
+		.data = (void *)(uintptr_t)2
+	},
+	{
+		.compatible = "qcom,cprh-msmcobalt-kbss-regulator",
+		.data = (void *)(uintptr_t)2
+	},
 	{}
 };
 
 static int cprh_kbss_regulator_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	const struct of_device_id *match;
 	struct cpr3_controller *ctrl;
 	int rc;
 
@@ -1396,6 +1507,12 @@ static int cprh_kbss_regulator_probe(struct platform_device *pdev)
 			rc);
 		return rc;
 	}
+
+	match = of_match_node(cprh_regulator_match_table, dev->of_node);
+	if (match)
+		ctrl->soc_revision = (uintptr_t)match->data;
+	else
+		cpr3_err(ctrl, "could not find compatible string match\n");
 
 	rc = cpr3_map_fuse_base(ctrl, pdev);
 	if (rc) {

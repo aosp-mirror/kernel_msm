@@ -25,6 +25,7 @@
 
 enum clock_properties {
 	CLOCK_PROP_HAS_SCALING = 1 << 0,
+	CLOCK_PROP_HAS_MEM_RETENTION    = 1 << 1,
 };
 static int msm_vidc_populate_legacy_context_bank(
 			struct msm_vidc_platform_resources *res);
@@ -364,6 +365,7 @@ int msm_vidc_load_u32_table(struct platform_device *pdev,
 
 	return rc;
 }
+EXPORT_SYMBOL(msm_vidc_load_u32_table);
 
 static int msm_vidc_load_platform_version_table(
 		struct msm_vidc_platform_resources *res)
@@ -943,6 +945,11 @@ static int msm_vidc_load_clock_table(
 			vc->has_scaling = false;
 		}
 
+		if (clock_props[c] & CLOCK_PROP_HAS_MEM_RETENTION)
+			vc->has_mem_retention = true;
+		else
+			vc->has_mem_retention = false;
+
 		dprintk(VIDC_DBG, "Found clock %s: scale-able = %s\n", vc->name,
 			vc->count ? "yes" : "no");
 	}
@@ -1103,6 +1110,11 @@ int read_platform_resources_from_dt(
 	res->never_unload_fw = of_property_read_bool(pdev->dev.of_node,
 			"qcom,never-unload-fw");
 
+	res->debug_timeout = of_property_read_bool(pdev->dev.of_node,
+			"qcom,debug-timeout");
+
+	res->debug_timeout |= msm_vidc_debug_timeout;
+
 	of_property_read_u32(pdev->dev.of_node,
 			"qcom,pm-qos-latency-us", &res->pm_qos_latency_us);
 
@@ -1209,7 +1221,7 @@ static int msm_vidc_setup_context_bank(struct context_bank_info *cb,
 
 	dprintk(VIDC_DBG, "Attached %s and created mapping\n", dev_name(dev));
 	dprintk(VIDC_DBG,
-		"Context bank name:%s, buffer_type: %#x, is_secure: %d, address range start: %#x, size: %#x, dev: %p, mapping: %p",
+		"Context bank name:%s, buffer_type: %#x, is_secure: %d, address range start: %#x, size: %#x, dev: %pK, mapping: %pK",
 		cb->name, cb->buffer_type, cb->is_secure, cb->addr_range.start,
 		cb->addr_range.size, cb->dev, cb->mapping);
 
@@ -1233,7 +1245,7 @@ int msm_vidc_smmu_fault_handler(struct iommu_domain *domain,
 	enum vidc_ports port;
 
 	if (!domain || !core) {
-		dprintk(VIDC_ERR, "%s - invalid param %p %p\n",
+		dprintk(VIDC_ERR, "%s - invalid param %pK %pK\n",
 			__func__, domain, core);
 		return -EINVAL;
 	}
@@ -1255,7 +1267,7 @@ int msm_vidc_smmu_fault_handler(struct iommu_domain *domain,
 			!inst->bit_depth ? "8" : "10");
 
 		dprintk(VIDC_ERR,
-			"---Buffer details for inst: %p of type: %d---\n",
+			"---Buffer details for inst: %pK of type: %d---\n",
 			inst, inst->session_type);
 		mutex_lock(&inst->registeredbufs.lock);
 		dprintk(VIDC_ERR, "registered buffer list:\n");

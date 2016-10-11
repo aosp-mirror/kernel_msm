@@ -22,12 +22,25 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/machine.h>
+#include <linux/qpnp/qpnp-revid.h>
 #include "smb-reg.h"
 #include "smb-lib.h"
 #include "pmic-voter.h"
 
 #define SMB138X_DEFAULT_FCC_UA 1000000
 #define SMB138X_DEFAULT_ICL_UA 1500000
+
+/* Registers that are not common to be mentioned in smb-reg.h */
+#define SMB2CHG_MISC_ENG_SDCDC_CFG2	(MISC_BASE + 0xC1)
+#define ENG_SDCDC_SEL_OOB_VTH_BIT	BIT(0)
+
+#define SMB2CHG_MISC_ENG_SDCDC_CFG6	(MISC_BASE + 0xC5)
+#define DEAD_TIME_MASK			GENMASK(7, 4)
+#define HIGH_DEAD_TIME_MASK		GENMASK(7, 4)
+
+enum {
+	OOB_COMP_WA_BIT = BIT(0),
+};
 
 static struct smb_params v1_params = {
 	.fcc		= {
@@ -71,6 +84,7 @@ struct smb138x {
 	struct smb_charger	chg;
 	struct smb_dt_props	dt;
 	struct power_supply	*parallel_psy;
+	u32			wa_flags;
 };
 
 static int __debug_mask;
@@ -259,7 +273,8 @@ static int smb138x_batt_get_prop(struct power_supply *psy,
 				 enum power_supply_property prop,
 				 union power_supply_propval *val)
 {
-	struct smb_charger *chg = power_supply_get_drvdata(psy);
+	struct smb138x *chip = power_supply_get_drvdata(psy);
+	struct smb_charger *chg = &chip->chg;
 	int rc = 0;
 
 	switch (prop) {
@@ -294,16 +309,19 @@ static int smb138x_batt_set_prop(struct power_supply *psy,
 				 enum power_supply_property prop,
 				 const union power_supply_propval *val)
 {
-	struct smb_charger *chg = power_supply_get_drvdata(psy);
+	struct smb138x *chip = power_supply_get_drvdata(psy);
+	struct smb_charger *chg = &chip->chg;
 	int rc = 0;
 
 	switch (prop) {
 	case POWER_SUPPLY_PROP_INPUT_SUSPEND:
 		rc = smblib_set_prop_input_suspend(chg, val);
 		break;
+	case POWER_SUPPLY_PROP_CAPACITY:
+		rc = smblib_set_prop_batt_capacity(chg, val);
+		break;
 	default:
-		pr_err("batt power supply set prop %d not supported\n",
-			prop);
+		pr_err("batt power supply set prop %d not supported\n", prop);
 		return -EINVAL;
 	}
 
@@ -315,6 +333,7 @@ static int smb138x_batt_prop_is_writeable(struct power_supply *psy,
 {
 	switch (prop) {
 	case POWER_SUPPLY_PROP_INPUT_SUSPEND:
+	case POWER_SUPPLY_PROP_CAPACITY:
 		return 1;
 	default:
 		break;
@@ -357,6 +376,8 @@ static int smb138x_init_batt_psy(struct smb138x *chip)
  *****************************/
 
 static enum power_supply_property smb138x_parallel_props[] = {
+	POWER_SUPPLY_PROP_CHARGING_ENABLED,
+	POWER_SUPPLY_PROP_PIN_ENABLED,
 	POWER_SUPPLY_PROP_INPUT_SUSPEND,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
@@ -366,10 +387,24 @@ static int smb138x_parallel_get_prop(struct power_supply *psy,
 				     enum power_supply_property prop,
 				     union power_supply_propval *val)
 {
-	struct smb_charger *chg = power_supply_get_drvdata(psy);
+	struct smb138x *chip = power_supply_get_drvdata(psy);
+	struct smb_charger *chg = &chip->chg;
 	int rc = 0;
+	u8 temp;
 
 	switch (prop) {
+	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
+		rc = smblib_read(chg, BATTERY_CHARGER_STATUS_5_REG,
+				 &temp);
+		if (rc >= 0)
+			val->intval = (bool)(temp & CHARGING_ENABLE_BIT);
+		break;
+	case POWER_SUPPLY_PROP_PIN_ENABLED:
+		rc = smblib_read(chg, BATTERY_CHARGER_STATUS_5_REG,
+				 &temp);
+		if (rc >= 0)
+			val->intval = !(temp & DISABLE_CHARGING_BIT);
+		break;
 	case POWER_SUPPLY_PROP_INPUT_SUSPEND:
 		rc = smblib_get_usb_suspend(chg, &val->intval);
 		break;
@@ -393,7 +428,8 @@ static int smb138x_parallel_set_prop(struct power_supply *psy,
 				     enum power_supply_property prop,
 				     const union power_supply_propval *val)
 {
-	struct smb_charger *chg = power_supply_get_drvdata(psy);
+	struct smb138x *chip = power_supply_get_drvdata(psy);
+	struct smb_charger *chg = &chip->chg;
 	int rc = 0;
 
 	switch (prop) {
@@ -564,7 +600,7 @@ static int smb138x_init_hw(struct smb138x *chip)
 	}
 
 	/* enable the charging path */
-	rc = smblib_enable_charging(chg, true);
+	rc = vote(chg->chg_disable_votable, DEFAULT_VOTER, false, 0);
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't enable charging rc=%d\n", rc);
 		return rc;
@@ -610,7 +646,62 @@ static int smb138x_init_hw(struct smb138x *chip)
 		return rc;
 	}
 
+	if (chip->wa_flags & OOB_COMP_WA_BIT) {
+		rc = smblib_masked_write(chg, SMB2CHG_MISC_ENG_SDCDC_CFG2,
+					ENG_SDCDC_SEL_OOB_VTH_BIT,
+					ENG_SDCDC_SEL_OOB_VTH_BIT);
+		if (rc < 0) {
+			dev_err(chg->dev,
+			"Couldn't configure the oob comp threh rc = %d\n", rc);
+			return rc;
+		}
+
+		rc = smblib_masked_write(chg, SMB2CHG_MISC_ENG_SDCDC_CFG6,
+				DEAD_TIME_MASK, HIGH_DEAD_TIME_MASK);
+		if (rc < 0) {
+			dev_err(chg->dev,
+			"Couldn't configure the sdcdc cfg 6 reg rc = %d\n", rc);
+			return rc;
+		}
+	}
+
 	return rc;
+}
+
+static int smb138x_setup_wa_flags(struct smb138x *chip)
+{
+	struct pmic_revid_data *pmic_rev_id;
+	struct device_node *revid_dev_node;
+
+	revid_dev_node = of_parse_phandle(chip->chg.dev->of_node,
+					"qcom,pmic-revid", 0);
+	if (!revid_dev_node) {
+		pr_err("Missing qcom,pmic-revid property\n");
+		return -EINVAL;
+	}
+
+	pmic_rev_id = get_revid_data(revid_dev_node);
+	if (IS_ERR_OR_NULL(pmic_rev_id)) {
+		/*
+		 * the revid peripheral must be registered, any failure
+		 * here only indicates that the rev-id module has not
+		 * probed yet.
+		 */
+		return -EPROBE_DEFER;
+	}
+
+	switch (pmic_rev_id->pmic_subtype) {
+	case SMB1381_SUBTYPE:
+		if (pmic_rev_id->rev4 < 2) /* SMB1381 rev 1.0 */
+			chip->wa_flags |= OOB_COMP_WA_BIT;
+		break;
+	default:
+		pr_err("PMIC subtype %d not supported\n",
+				pmic_rev_id->pmic_subtype);
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 /****************************
@@ -842,6 +933,25 @@ static int smb138x_slave_probe(struct smb138x *chip)
 		return rc;
 	}
 
+	if (chip->wa_flags & OOB_COMP_WA_BIT) {
+		rc = smblib_masked_write(chg, SMB2CHG_MISC_ENG_SDCDC_CFG2,
+					ENG_SDCDC_SEL_OOB_VTH_BIT,
+					ENG_SDCDC_SEL_OOB_VTH_BIT);
+		if (rc < 0) {
+			dev_err(chg->dev,
+			"Couldn't configure the oob comp threh rc = %d\n", rc);
+			return rc;
+		}
+
+		rc = smblib_masked_write(chg, SMB2CHG_MISC_ENG_SDCDC_CFG6,
+				DEAD_TIME_MASK, HIGH_DEAD_TIME_MASK);
+		if (rc < 0) {
+			dev_err(chg->dev,
+			"Couldn't configure the sdcdc cfg 6 reg rc = %d\n", rc);
+			return rc;
+		}
+	}
+
 	/* suspend usb input */
 	rc = smblib_set_usb_suspend(chg, true);
 	if (rc < 0) {
@@ -857,7 +967,9 @@ static int smb138x_slave_probe(struct smb138x *chip)
 	}
 
 	/* enable the charging path */
-	rc = smblib_enable_charging(chg, true);
+	rc = smblib_masked_write(chg, CHARGING_ENABLE_CMD_REG,
+				 CHARGING_ENABLE_CMD_BIT,
+				 CHARGING_ENABLE_CMD_BIT);
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't enable charging rc=%d\n", rc);
 		return rc;
@@ -920,6 +1032,13 @@ static int smb138x_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, chip);
+
+	rc = smb138x_setup_wa_flags(chip);
+	if (rc < 0) {
+		if (rc != -EPROBE_DEFER)
+			pr_err("Couldn't setup wa flags rc = %d\n", rc);
+		return rc;
+	}
 
 	chip->chg.mode = (enum smb_mode) id->data;
 	switch (chip->chg.mode) {

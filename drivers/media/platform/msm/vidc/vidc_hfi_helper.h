@@ -350,7 +350,7 @@ struct hfi_buffer_info {
 	(HFI_PROPERTY_PARAM_VENC_COMMON_START + 0x01B)
 #define HFI_PROPERTY_PARAM_VENC_LTRMODE		\
 	 (HFI_PROPERTY_PARAM_VENC_COMMON_START + 0x01C)
-#define HFI_PROPERTY_PARAM_VENC_VIDEO_FULL_RANGE	\
+#define HFI_PROPERTY_PARAM_VENC_VIDEO_SIGNAL_INFO	\
 	(HFI_PROPERTY_PARAM_VENC_COMMON_START + 0x01D)
 #define HFI_PROPERTY_PARAM_VENC_H264_VUI_TIMING_INFO	\
 	(HFI_PROPERTY_PARAM_VENC_COMMON_START + 0x01E)
@@ -364,6 +364,8 @@ struct hfi_buffer_info {
 	(HFI_PROPERTY_PARAM_VENC_COMMON_START + 0x022)
 #define HFI_PROPERTY_PARAM_VENC_PRESERVE_TEXT_QUALITY \
 	(HFI_PROPERTY_PARAM_VENC_COMMON_START + 0x023)
+#define HFI_PROPERTY_PARAM_VENC_H264_8X8_TRANSFORM \
+	(HFI_PROPERTY_PARAM_VENC_COMMON_START + 0x025)
 #define HFI_PROPERTY_PARAM_VENC_HIER_P_MAX_NUM_ENH_LAYER	\
 	(HFI_PROPERTY_PARAM_VENC_COMMON_START + 0x026)
 #define HFI_PROPERTY_PARAM_VENC_DISABLE_RC_TIMESTAMP \
@@ -667,6 +669,16 @@ struct hfi_frame_size {
 	u32 buffer_type;
 	u32 width;
 	u32 height;
+};
+
+struct hfi_video_signal_metadata {
+	u32 enable;
+	u32 video_format;
+	u32 video_full_range;
+	u32 color_description;
+	u32 color_primaries;
+	u32 transfer_characteristics;
+	u32 matrix_coeffs;
 };
 
 struct hfi_h264_vui_timing_info {

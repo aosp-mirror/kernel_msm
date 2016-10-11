@@ -89,14 +89,10 @@ Optional Properties:
 - qcom,gpubw-dev:	   a phandle to a device representing bus bandwidth requirements
 			   (see devdw.txt)
 - qcom,idle-timeout:	   This property represents the time in milliseconds for idle timeout.
-- qcom,deep-nap-timeout:   This property represents the time in milliseconds for entering deeper
-			   power state.
 - qcom,no-nap:		   If it exists software clockgating will be disabled at boot time.
 - qcom,chipid:		   If it exists this property is used to replace
 			   the chip identification read from the GPU hardware.
 			   This is used to override faulty hardware readings.
-- qcom,strtstp-sleepwake:  Boolean. Enables use of GPU SLUMBER instead of SLEEP for power savings
-- qcom,gx-retention:  	   Boolean. Enables use of GX rail RETENTION voltage
 - qcom,disable-busy-time-burst:
 				Boolean. Disables the busy time burst to avoid switching
 				of power level for large frames based on the busy time limit.
@@ -138,6 +134,11 @@ Optional Properties:
 				Specify the size of snapshot in bytes. This will override
 				snapshot size defined in the driver code.
 
+- qcom,gpu-qdss-stm:
+				<baseAddr size>
+				baseAddr - base address of the gpu channels in the qdss stm memory region
+				size     - size of the gpu stm region
+
 GPU Quirks:
 - qcom,gpu-quirk-two-pass-use-wfi:
 				Signal the GPU to set Set TWOPASSUSEWFI bit in
@@ -147,6 +148,8 @@ GPU Quirks:
 - qcom,gpu-quirk-fault-detect-mask:
 				Mask out RB1-3 activity signals from HW hang
 				detection logic
+- qcom,gpu-quirk-dp2clockgating-disable:
+				Disable RB sampler data path clock gating optimization
 
 The following properties are optional as collecting data via coresight might
 not be supported for every chipset. The documentation for coresight

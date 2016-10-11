@@ -225,9 +225,9 @@ static struct device_attribute power_supply_attrs[] = {
 	/* Local extensions */
 	POWER_SUPPLY_ATTR(usb_hc),
 	POWER_SUPPLY_ATTR(usb_otg),
-	POWER_SUPPLY_ATTR(charge_enabled),
 	POWER_SUPPLY_ATTR(battery_charging_enabled),
 	POWER_SUPPLY_ATTR(charging_enabled),
+	POWER_SUPPLY_ATTR(pin_enabled),
 	POWER_SUPPLY_ATTR(input_suspend),
 	POWER_SUPPLY_ATTR(input_voltage_regulation),
 	POWER_SUPPLY_ATTR(input_current_max),
@@ -265,6 +265,8 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(typec_power_role),
 	POWER_SUPPLY_ATTR(pd_allowed),
 	POWER_SUPPLY_ATTR(pd_active),
+	POWER_SUPPLY_ATTR(charger_temp),
+	POWER_SUPPLY_ATTR(charger_temp_max),
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_ATTR(charge_counter_ext),
 	/* Properties of type `const char *' */

@@ -20,6 +20,7 @@
 #include "mdss_hdmi_audio.h"
 
 #define MAX_SWITCH_NAME_SIZE        5
+#define HDR_PRIMARIES_COUNT	3
 
 enum hdmi_tx_io_type {
 	HDMI_TX_CORE_IO,
@@ -61,8 +62,33 @@ struct hdmi_tx_pinctrl {
 struct hdmi_tx_ctrl;
 typedef int (*hdmi_tx_evt_handler) (struct hdmi_tx_ctrl *);
 
+/*
+ * struct hdmi_tx_hdr_stream - HDR video stream characteristics
+ * @eotf: Electro-Optical Transfer Function
+ * @display_primaries_x: display primaries data for x-coordinate
+ * @display_primaries_y: display primaries data for y-coordinate
+ * @white_point_x: white point data for x-coordinate
+ * @white_point_y: white point data for y-coordinate
+ * @max_luminance: content maximum luminance
+ * @min_luminance: content minimum luminance
+ * @max_content_light_level: content maximum light level
+ * @max_average_light_level: content average light level
+ */
+struct hdmi_tx_hdr_stream_data {
+	u32 eotf;
+	u32 display_primaries_x[HDR_PRIMARIES_COUNT];
+	u32 display_primaries_y[HDR_PRIMARIES_COUNT];
+	u32 white_point_x;
+	u32 white_point_y;
+	u32 max_luminance;
+	u32 min_luminance;
+	u32 max_content_light_level;
+	u32 max_average_light_level;
+};
+
 struct hdmi_tx_ctrl {
 	struct platform_device *pdev;
+	struct platform_device *ext_pdev;
 	struct hdmi_tx_platform_data pdata;
 	struct mdss_panel_data panel_data;
 	struct mdss_util_intf *mdss_util;
@@ -80,14 +106,16 @@ struct hdmi_tx_ctrl {
 	struct delayed_work hdcp_cb_work;
 	struct work_struct cable_notify_work;
 	struct hdmi_tx_ddc_ctrl ddc_ctrl;
-	struct hdmi_hdcp_ops *hdcp_ops;
+	struct hdcp_ops *hdcp_ops;
 	struct cec_ops hdmi_cec_ops;
 	struct cec_cbs hdmi_cec_cbs;
 	struct hdmi_audio_ops audio_ops;
 	struct hdmi_panel_data panel;
 	struct hdmi_panel_ops panel_ops;
 	struct msm_ext_disp_audio_setup_params audio_params;
+	struct msm_ext_disp_init_data ext_audio_data;
 	struct work_struct fps_work;
+	struct hdmi_tx_hdr_stream_data hdr_data;
 
 	spinlock_t hpd_state_lock;
 

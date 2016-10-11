@@ -36,6 +36,7 @@
 #include "qdsp6v2/msm-pcm-routing-v2.h"
 #include "../codecs/wcd9335.h"
 #include "../codecs/wcd934x/wcd934x.h"
+#include "../codecs/wcd934x/wcd934x-mbhc.h"
 #include "../codecs/wsa881x.h"
 
 #define DRV_NAME "msmcobalt-asoc-snd"
@@ -50,8 +51,12 @@
 #define SAMPLING_RATE_32KHZ     32000
 #define SAMPLING_RATE_44P1KHZ   44100
 #define SAMPLING_RATE_48KHZ     48000
+#define SAMPLING_RATE_88P2KHZ   88200
 #define SAMPLING_RATE_96KHZ     96000
+#define SAMPLING_RATE_176P4KHZ  176400
 #define SAMPLING_RATE_192KHZ    192000
+#define SAMPLING_RATE_352P8KHZ  352800
+#define SAMPLING_RATE_384KHZ    384000
 
 #define WCD9XXX_MBHC_DEF_BUTTONS    8
 #define WCD9XXX_MBHC_DEF_RLOADS     5
@@ -107,6 +112,8 @@ struct msm_asoc_mach_data {
 	int hph_en0_gpio;
 	int us_euro_gpio; /* used by gpio driver API */
 	struct device_node *us_euro_gpio_p; /* used by pinctrl API */
+	struct device_node *hph_en1_gpio_p; /* used by pinctrl API */
+	struct device_node *hph_en0_gpio_p; /* used by pinctrl API */
 	struct snd_info_entry *codec_root;
 };
 
@@ -170,11 +177,12 @@ static const char *const slim_tx_ch_text[] = {"One", "Two", "Three", "Four",
 						"Five", "Six", "Seven",
 						"Eight"};
 static const char *const vi_feed_ch_text[] = {"One", "Two"};
-static char const *bit_format_text[] = {"S16_LE", "S24_LE"};
+static char const *bit_format_text[] = {"S16_LE", "S24_LE", "S24_3LE"};
 static char const *slim_sample_rate_text[] = {"KHZ_8", "KHZ_16",
 					"KHZ_32", "KHZ_44P1", "KHZ_48",
-					"KHZ_96", "KHZ_192"};
-static char const *bt_sco_sample_rate_text[] = {"KHZ_8", "KHZ_16"};
+					"KHZ_88P2", "KHZ_96", "KHZ_176P4",
+					"KHZ_192", "KHZ_352P8", "KHZ_384"};
+static char const *bt_sample_rate_text[] = {"KHZ_8", "KHZ_16", "KHZ_48"};
 static const char *const usb_ch_text[] = {"One", "Two"};
 static char const *ch_text[] = {"Two", "Three", "Four", "Five",
 					"Six", "Seven", "Eight"};
@@ -186,6 +194,7 @@ static char const *hdmi_rx_sample_rate_text[] = {"KHZ_48", "KHZ_96",
 						 "KHZ_192"};
 
 static SOC_ENUM_SINGLE_EXT_DECL(slim_0_rx_chs, slim_rx_ch_text);
+static SOC_ENUM_SINGLE_EXT_DECL(slim_2_rx_chs, slim_rx_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(slim_0_tx_chs, slim_tx_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(slim_1_tx_chs, slim_tx_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(slim_5_rx_chs, slim_rx_ch_text);
@@ -203,10 +212,11 @@ static SOC_ENUM_SINGLE_EXT_DECL(usb_rx_format, bit_format_text);
 static SOC_ENUM_SINGLE_EXT_DECL(usb_tx_format, bit_format_text);
 static SOC_ENUM_SINGLE_EXT_DECL(hdmi_rx_format, bit_format_text);
 static SOC_ENUM_SINGLE_EXT_DECL(slim_0_rx_sample_rate, slim_sample_rate_text);
+static SOC_ENUM_SINGLE_EXT_DECL(slim_2_rx_sample_rate, slim_sample_rate_text);
 static SOC_ENUM_SINGLE_EXT_DECL(slim_0_tx_sample_rate, slim_sample_rate_text);
 static SOC_ENUM_SINGLE_EXT_DECL(slim_5_rx_sample_rate, slim_sample_rate_text);
 static SOC_ENUM_SINGLE_EXT_DECL(slim_6_rx_sample_rate, slim_sample_rate_text);
-static SOC_ENUM_SINGLE_EXT_DECL(bt_sco_sample_rate, bt_sco_sample_rate_text);
+static SOC_ENUM_SINGLE_EXT_DECL(bt_sample_rate, bt_sample_rate_text);
 static SOC_ENUM_SINGLE_EXT_DECL(usb_rx_sample_rate, usb_sample_rate_text);
 static SOC_ENUM_SINGLE_EXT_DECL(usb_tx_sample_rate, usb_sample_rate_text);
 static SOC_ENUM_SINGLE_EXT_DECL(hdmi_rx_sample_rate, hdmi_rx_sample_rate_text);
@@ -220,6 +230,7 @@ static struct msm_asoc_wcd93xx_codec msm_codec_fn;
 static void *adsp_state_notifier;
 
 static void *def_tasha_mbhc_cal(void);
+static void *def_tavil_mbhc_cal(void);
 static int msm_snd_enable_codec_ext_clk(struct snd_soc_codec *codec,
 					int enable, bool dapm);
 static int msm_wsa881x_init(struct snd_soc_component *component);
@@ -244,7 +255,7 @@ static struct wcd_mbhc_config wcd_mbhc_cfg = {
 	.key_code[6] = 0,
 	.key_code[7] = 0,
 	.linein_th = 5000,
-	.moist_cfg = { V_45_MV, I_3P0_UA },
+	.moisture_en = true,
 };
 
 static struct snd_soc_dapm_route wcd_audio_paths[] = {
@@ -274,11 +285,23 @@ static int slim_get_sample_rate_val(int sample_rate)
 	case SAMPLING_RATE_48KHZ:
 		sample_rate_val = 4;
 		break;
-	case SAMPLING_RATE_96KHZ:
+	case SAMPLING_RATE_88P2KHZ:
 		sample_rate_val = 5;
 		break;
-	case SAMPLING_RATE_192KHZ:
+	case SAMPLING_RATE_96KHZ:
 		sample_rate_val = 6;
+		break;
+	case SAMPLING_RATE_176P4KHZ:
+		sample_rate_val = 7;
+		break;
+	case SAMPLING_RATE_192KHZ:
+		sample_rate_val = 8;
+		break;
+	case SAMPLING_RATE_352P8KHZ:
+		sample_rate_val = 9;
+		break;
+	case SAMPLING_RATE_384KHZ:
+		sample_rate_val = 10;
 		break;
 	default:
 		sample_rate_val = 4;
@@ -308,10 +331,22 @@ static int slim_get_sample_rate(int value)
 		sample_rate = SAMPLING_RATE_48KHZ;
 		break;
 	case 5:
-		sample_rate = SAMPLING_RATE_96KHZ;
+		sample_rate = SAMPLING_RATE_88P2KHZ;
 		break;
 	case 6:
+		sample_rate = SAMPLING_RATE_96KHZ;
+		break;
+	case 7:
+		sample_rate = SAMPLING_RATE_176P4KHZ;
+		break;
+	case 8:
 		sample_rate = SAMPLING_RATE_192KHZ;
+		break;
+	case 9:
+		sample_rate = SAMPLING_RATE_352P8KHZ;
+		break;
+	case 10:
+		sample_rate = SAMPLING_RATE_384KHZ;
 		break;
 	default:
 		sample_rate = SAMPLING_RATE_48KHZ;
@@ -325,6 +360,9 @@ static int slim_get_bit_format_val(int bit_format)
 	int val = 0;
 
 	switch (bit_format) {
+	case SNDRV_PCM_FORMAT_S24_3LE:
+		val = 2;
+		break;
 	case SNDRV_PCM_FORMAT_S24_LE:
 		val = 1;
 		break;
@@ -347,6 +385,9 @@ static int slim_get_bit_format(int val)
 	case 1:
 		bit_fmt = SNDRV_PCM_FORMAT_S24_LE;
 		break;
+	case 2:
+		bit_fmt = SNDRV_PCM_FORMAT_S24_3LE;
+		break;
 	default:
 		bit_fmt = SNDRV_PCM_FORMAT_S16_LE;
 		break;
@@ -360,6 +401,8 @@ static int slim_get_port_idx(struct snd_kcontrol *kcontrol)
 
 	if (strnstr(kcontrol->id.name, "SLIM_0_RX", sizeof("SLIM_0_RX")))
 		port_id = SLIM_RX_0;
+	else if (strnstr(kcontrol->id.name, "SLIM_2_RX", sizeof("SLIM_2_RX")))
+		port_id = SLIM_RX_2;
 	else if (strnstr(kcontrol->id.name, "SLIM_5_RX", sizeof("SLIM_5_RX")))
 		port_id = SLIM_RX_5;
 	else if (strnstr(kcontrol->id.name, "SLIM_6_RX", sizeof("SLIM_6_RX")))
@@ -605,28 +648,43 @@ static int msm_vi_feed_tx_ch_put(struct snd_kcontrol *kcontrol,
 	return 1;
 }
 
-static int msm_bt_sco_sample_rate_get(struct snd_kcontrol *kcontrol,
-				      struct snd_ctl_elem_value *ucontrol)
+static int msm_bt_sample_rate_get(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
 {
 	/*
 	 * Slimbus_7_Rx/Tx sample rate values should always be in sync (same)
 	 * when used for BT_SCO use case. Return either Rx or Tx sample rate
 	 * value.
 	 */
-	ucontrol->value.integer.value[0] = slim_rx_cfg[SLIM_RX_7].sample_rate;
+	switch (slim_rx_cfg[SLIM_RX_7].sample_rate) {
+	case SAMPLING_RATE_48KHZ:
+		ucontrol->value.integer.value[0] = 2;
+		break;
+	case SAMPLING_RATE_16KHZ:
+		ucontrol->value.integer.value[0] = 1;
+		break;
+	case SAMPLING_RATE_8KHZ:
+	default:
+		ucontrol->value.integer.value[0] = 0;
+		break;
+	}
 	pr_debug("%s: sample rate = %d", __func__,
 		 slim_rx_cfg[SLIM_RX_7].sample_rate);
 
 	return 0;
 }
 
-static int msm_bt_sco_sample_rate_put(struct snd_kcontrol *kcontrol,
-				      struct snd_ctl_elem_value *ucontrol)
+static int msm_bt_sample_rate_put(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
 {
 	switch (ucontrol->value.integer.value[0]) {
 	case 1:
 		slim_rx_cfg[SLIM_RX_7].sample_rate = SAMPLING_RATE_16KHZ;
 		slim_tx_cfg[SLIM_TX_7].sample_rate = SAMPLING_RATE_16KHZ;
+		break;
+	case 2:
+		slim_rx_cfg[SLIM_RX_7].sample_rate = SAMPLING_RATE_48KHZ;
+		slim_tx_cfg[SLIM_TX_7].sample_rate = SAMPLING_RATE_48KHZ;
 		break;
 	case 0:
 	default:
@@ -749,6 +807,9 @@ static int usb_audio_rx_format_get(struct snd_kcontrol *kcontrol,
 				   struct snd_ctl_elem_value *ucontrol)
 {
 	switch (usb_rx_cfg.bit_format) {
+	case SNDRV_PCM_FORMAT_S24_3LE:
+		ucontrol->value.integer.value[0] = 2;
+		break;
 	case SNDRV_PCM_FORMAT_S24_LE:
 		ucontrol->value.integer.value[0] = 1;
 		break;
@@ -770,6 +831,9 @@ static int usb_audio_rx_format_put(struct snd_kcontrol *kcontrol,
 	int rc = 0;
 
 	switch (ucontrol->value.integer.value[0]) {
+	case 2:
+		usb_rx_cfg.bit_format = SNDRV_PCM_FORMAT_S24_3LE;
+		break;
 	case 1:
 		usb_rx_cfg.bit_format = SNDRV_PCM_FORMAT_S24_LE;
 		break;
@@ -893,6 +957,9 @@ static int usb_audio_tx_format_get(struct snd_kcontrol *kcontrol,
 				   struct snd_ctl_elem_value *ucontrol)
 {
 	switch (usb_tx_cfg.bit_format) {
+	case SNDRV_PCM_FORMAT_S24_3LE:
+		ucontrol->value.integer.value[0] = 2;
+		break;
 	case SNDRV_PCM_FORMAT_S24_LE:
 		ucontrol->value.integer.value[0] = 1;
 		break;
@@ -914,6 +981,9 @@ static int usb_audio_tx_format_put(struct snd_kcontrol *kcontrol,
 	int rc = 0;
 
 	switch (ucontrol->value.integer.value[0]) {
+	case 2:
+		usb_tx_cfg.bit_format = SNDRV_PCM_FORMAT_S24_3LE;
+		break;
 	case 1:
 		usb_tx_cfg.bit_format = SNDRV_PCM_FORMAT_S24_LE;
 		break;
@@ -1058,7 +1128,7 @@ static int proxy_rx_ch_get(struct snd_kcontrol *kcontrol,
 {
 	pr_debug("%s: proxy_rx channels = %d\n",
 		 __func__, proxy_rx_cfg.channels);
-	ucontrol->value.integer.value[0] = proxy_rx_cfg.channels - 1;
+	ucontrol->value.integer.value[0] = proxy_rx_cfg.channels - 2;
 
 	return 0;
 }
@@ -1066,7 +1136,7 @@ static int proxy_rx_ch_get(struct snd_kcontrol *kcontrol,
 static int proxy_rx_ch_put(struct snd_kcontrol *kcontrol,
 			       struct snd_ctl_elem_value *ucontrol)
 {
-	proxy_rx_cfg.channels = ucontrol->value.integer.value[0] + 1;
+	proxy_rx_cfg.channels = ucontrol->value.integer.value[0] + 2;
 	pr_debug("%s: proxy_rx channels = %d\n",
 		 __func__, proxy_rx_cfg.channels);
 
@@ -1075,6 +1145,8 @@ static int proxy_rx_ch_put(struct snd_kcontrol *kcontrol,
 
 static const struct snd_kcontrol_new msm_snd_controls[] = {
 	SOC_ENUM_EXT("SLIM_0_RX Channels", slim_0_rx_chs,
+			msm_slim_rx_ch_get, msm_slim_rx_ch_put),
+	SOC_ENUM_EXT("SLIM_2_RX Channels", slim_2_rx_chs,
 			msm_slim_rx_ch_get, msm_slim_rx_ch_put),
 	SOC_ENUM_EXT("SLIM_0_TX Channels", slim_0_tx_chs,
 			msm_slim_tx_ch_get, msm_slim_tx_ch_put),
@@ -1110,15 +1182,17 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 			hdmi_rx_format_get, hdmi_rx_format_put),
 	SOC_ENUM_EXT("SLIM_0_RX SampleRate", slim_0_rx_sample_rate,
 			slim_rx_sample_rate_get, slim_rx_sample_rate_put),
+	SOC_ENUM_EXT("SLIM_2_RX SampleRate", slim_2_rx_sample_rate,
+			slim_rx_sample_rate_get, slim_rx_sample_rate_put),
 	SOC_ENUM_EXT("SLIM_0_TX SampleRate", slim_0_tx_sample_rate,
 			slim_tx_sample_rate_get, slim_tx_sample_rate_put),
 	SOC_ENUM_EXT("SLIM_5_RX SampleRate", slim_5_rx_sample_rate,
 			slim_rx_sample_rate_get, slim_rx_sample_rate_put),
 	SOC_ENUM_EXT("SLIM_6_RX SampleRate", slim_6_rx_sample_rate,
 			slim_rx_sample_rate_get, slim_rx_sample_rate_put),
-	SOC_ENUM_EXT("BT_SCO SampleRate", bt_sco_sample_rate,
-			msm_bt_sco_sample_rate_get,
-			msm_bt_sco_sample_rate_put),
+	SOC_ENUM_EXT("BT SampleRate", bt_sample_rate,
+			msm_bt_sample_rate_get,
+			msm_bt_sample_rate_put),
 	SOC_ENUM_EXT("USB_AUDIO_RX SampleRate", usb_rx_sample_rate,
 			usb_audio_rx_sample_rate_get,
 			usb_audio_rx_sample_rate_put),
@@ -1213,6 +1287,43 @@ static void param_set_mask(struct snd_pcm_hw_params *p, int n, unsigned bit)
 	}
 }
 
+static int msm_slim_get_ch_from_beid(int32_t be_id)
+{
+	int ch_id = 0;
+
+	switch (be_id) {
+	case MSM_BACKEND_DAI_SLIMBUS_0_RX:
+		ch_id = SLIM_RX_0;
+		break;
+	case MSM_BACKEND_DAI_SLIMBUS_1_RX:
+		ch_id = SLIM_RX_1;
+		break;
+	case MSM_BACKEND_DAI_SLIMBUS_2_RX:
+		ch_id = SLIM_RX_2;
+		break;
+	case MSM_BACKEND_DAI_SLIMBUS_3_RX:
+		ch_id = SLIM_RX_3;
+		break;
+	case MSM_BACKEND_DAI_SLIMBUS_4_RX:
+		ch_id = SLIM_RX_4;
+		break;
+	case MSM_BACKEND_DAI_SLIMBUS_6_RX:
+		ch_id = SLIM_RX_6;
+		break;
+	case MSM_BACKEND_DAI_SLIMBUS_0_TX:
+		ch_id = SLIM_TX_0;
+		break;
+	case MSM_BACKEND_DAI_SLIMBUS_3_TX:
+		ch_id = SLIM_TX_3;
+		break;
+	default:
+		ch_id = SLIM_RX_0;
+		break;
+	}
+
+	return ch_id;
+}
+
 static int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 				  struct snd_pcm_hw_params *params)
 {
@@ -1224,6 +1335,7 @@ static int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	int rc = 0;
 	void *config = NULL;
 	struct snd_soc_codec *codec = NULL;
+	int ch_num;
 
 	pr_debug("%s: format = %d, rate = %d\n",
 		  __func__, params_format(params), params_rate(params));
@@ -1231,21 +1343,24 @@ static int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	switch (dai_link->be_id) {
 	case MSM_BACKEND_DAI_SLIMBUS_0_RX:
 	case MSM_BACKEND_DAI_SLIMBUS_1_RX:
+	case MSM_BACKEND_DAI_SLIMBUS_2_RX:
 	case MSM_BACKEND_DAI_SLIMBUS_3_RX:
 	case MSM_BACKEND_DAI_SLIMBUS_4_RX:
 	case MSM_BACKEND_DAI_SLIMBUS_6_RX:
+		ch_num = msm_slim_get_ch_from_beid(dai_link->be_id);
 		param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
-				slim_rx_cfg[0].bit_format);
-		rate->min = rate->max = slim_rx_cfg[0].sample_rate;
-		channels->min = channels->max = slim_rx_cfg[0].channels;
+				slim_rx_cfg[ch_num].bit_format);
+		rate->min = rate->max = slim_rx_cfg[ch_num].sample_rate;
+		channels->min = channels->max = slim_rx_cfg[ch_num].channels;
 		break;
 
 	case MSM_BACKEND_DAI_SLIMBUS_0_TX:
 	case MSM_BACKEND_DAI_SLIMBUS_3_TX:
+		ch_num = msm_slim_get_ch_from_beid(dai_link->be_id);
 		param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
-				slim_tx_cfg[0].bit_format);
-		rate->min = rate->max = slim_tx_cfg[0].sample_rate;
-		channels->min = channels->max = slim_tx_cfg[0].channels;
+				slim_tx_cfg[ch_num].bit_format);
+		rate->min = rate->max = slim_tx_cfg[ch_num].sample_rate;
+		channels->min = channels->max = slim_tx_cfg[ch_num].channels;
 		break;
 
 	case MSM_BACKEND_DAI_SLIMBUS_1_TX:
@@ -1286,6 +1401,8 @@ static int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 		break;
 
 	case MSM_BACKEND_DAI_SLIMBUS_7_RX:
+		param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
+				slim_rx_cfg[SLIM_RX_7].bit_format);
 		rate->min = rate->max = slim_rx_cfg[SLIM_RX_7].sample_rate;
 		channels->min = channels->max =
 			slim_rx_cfg[SLIM_RX_7].channels;
@@ -1320,15 +1437,11 @@ static int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	case MSM_BACKEND_DAI_HDMI_RX:
 		param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
 				hdmi_rx_cfg.bit_format);
-		if (channels->max < 2)
-			channels->min = channels->max = 2;
 		rate->min = rate->max = hdmi_rx_cfg.sample_rate;
 		channels->min = channels->max = hdmi_rx_cfg.channels;
 		break;
 
 	case MSM_BACKEND_DAI_AFE_PCM_RX:
-		if (channels->max < 2)
-			channels->min = channels->max = 2;
 		channels->min = channels->max = proxy_rx_cfg.channels;
 		rate->min = rate->max = SAMPLING_RATE_48KHZ;
 		break;
@@ -1745,6 +1858,40 @@ static void *def_tasha_mbhc_cal(void)
 	return tasha_wcd_cal;
 }
 
+static void *def_tavil_mbhc_cal(void)
+{
+	void *tavil_wcd_cal;
+	struct wcd_mbhc_btn_detect_cfg *btn_cfg;
+	u16 *btn_high;
+
+	tavil_wcd_cal = kzalloc(WCD_MBHC_CAL_SIZE(WCD_MBHC_DEF_BUTTONS,
+				WCD9XXX_MBHC_DEF_RLOADS), GFP_KERNEL);
+	if (!tavil_wcd_cal)
+		return NULL;
+
+#define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(tavil_wcd_cal)->X) = (Y))
+	S(v_hs_max, 1600);
+#undef S
+#define S(X, Y) ((WCD_MBHC_CAL_BTN_DET_PTR(tavil_wcd_cal)->X) = (Y))
+	S(num_btn, WCD_MBHC_DEF_BUTTONS);
+#undef S
+
+	btn_cfg = WCD_MBHC_CAL_BTN_DET_PTR(tavil_wcd_cal);
+	btn_high = ((void *)&btn_cfg->_v_btn_low) +
+		(sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
+
+	btn_high[0] = 75;
+	btn_high[1] = 150;
+	btn_high[2] = 237;
+	btn_high[3] = 500;
+	btn_high[4] = 500;
+	btn_high[5] = 500;
+	btn_high[6] = 500;
+	btn_high[7] = 500;
+
+	return tavil_wcd_cal;
+}
+
 static int msm_snd_hw_params(struct snd_pcm_substream *substream,
 			     struct snd_pcm_hw_params *params)
 {
@@ -1771,6 +1918,10 @@ static int msm_snd_hw_params(struct snd_pcm_substream *substream,
 			pr_debug("%s: rx_5_ch=%d\n", __func__,
 				  slim_rx_cfg[5].channels);
 			rx_ch_count = slim_rx_cfg[5].channels;
+		} else if (dai_link->be_id == MSM_BACKEND_DAI_SLIMBUS_2_RX) {
+			pr_debug("%s: rx_2_ch=%d\n", __func__,
+				 slim_rx_cfg[2].channels);
+			rx_ch_count = slim_rx_cfg[2].channels;
 		} else if (dai_link->be_id == MSM_BACKEND_DAI_SLIMBUS_6_RX) {
 			pr_debug("%s: rx_6_ch=%d\n", __func__,
 				  slim_rx_cfg[6].channels);
@@ -1972,32 +2123,6 @@ static struct snd_soc_ops msm_slimbus_2_be_ops = {
 
 static struct snd_soc_ops msm_wcn_ops = {
 	.hw_params = msm_wcn_hw_params,
-};
-
-static int msm_get_ll_qos_val(struct snd_pcm_runtime *runtime)
-{
-	int usecs;
-
-	/* take 10% of period time as the deadline */
-	usecs = (100000 / runtime->rate) * runtime->period_size;
-	usecs += ((100000 % runtime->rate) * runtime->period_size) /
-		runtime->rate;
-
-	return usecs;
-}
-
-static int msm_mm5_prepare(struct snd_pcm_substream *substream)
-{
-	if (pm_qos_request_active(&substream->latency_pm_qos_req))
-		pm_qos_remove_request(&substream->latency_pm_qos_req);
-	pm_qos_add_request(&substream->latency_pm_qos_req,
-			   PM_QOS_CPU_DMA_LATENCY,
-			   msm_get_ll_qos_val(substream->runtime));
-	return 0;
-}
-
-static struct snd_soc_ops msm_mm5_ops = {
-	.prepare = msm_mm5_prepare,
 };
 
 /* Digital audio interface glue - connects codec <---> CPU */
@@ -2232,7 +2357,6 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 		/* this dainlink has playback support */
 		.ignore_pmdown_time = 1,
 		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA5,
-		.ops = &msm_mm5_ops,
 	},
 	{
 		.name = "Listen 1 Audio Service",
@@ -2284,10 +2408,10 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA10,
 	},
 	{
-		.name = MSM_DAILINK_NAME(Compr8),
-		.stream_name = "COMPR8",
+		.name = MSM_DAILINK_NAME(ULL_NOIRQ),
+		.stream_name = "MM_NOIRQ",
 		.cpu_dai_name = "MultiMedia8",
-		.platform_name = "msm-compr-dsp",
+		.platform_name = "msm-pcm-dsp-noirq",
 		.dynamic = 1,
 		.dpcm_playback = 1,
 		.dpcm_capture = 1,
@@ -2649,6 +2773,19 @@ static struct snd_soc_dai_link msm_tasha_fe_dai_links[] = {
 };
 
 static struct snd_soc_dai_link msm_tavil_fe_dai_links[] = {
+	{
+		.name = LPASS_BE_SLIMBUS_4_TX,
+		.stream_name = "Slimbus4 Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.16393",
+		.platform_name = "msm-pcm-hostless",
+		.codec_name = "tavil_codec",
+		.codec_dai_name = "tavil_vifeedback",
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_4_TX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ops = &msm_be_ops,
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+	},
 	/* Ultrasound RX DAI Link */
 	{
 		.name = "SLIMBUS_2 Hostless Playback",
@@ -3010,6 +3147,21 @@ static struct snd_soc_dai_link msm_tavil_be_dai_links[] = {
 		.ignore_suspend = 1,
 	},
 	{
+		.name = LPASS_BE_SLIMBUS_2_RX,
+		.stream_name = "Slimbus2 Playback",
+		.cpu_dai_name = "msm-dai-q6-dev.16388",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "tavil_codec",
+		.codec_dai_name = "tavil_rx2",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_2_RX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ops = &msm_be_ops,
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+	},
+	{
 		.name = LPASS_BE_SLIMBUS_3_RX,
 		.stream_name = "Slimbus3 Playback",
 		.cpu_dai_name = "msm-dai-q6-dev.16390",
@@ -3071,6 +3223,22 @@ static struct snd_soc_dai_link msm_tavil_be_dai_links[] = {
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
 	},
+	{
+		.name = LPASS_BE_SLIMBUS_6_RX,
+		.stream_name = "Slimbus6 Playback",
+		.cpu_dai_name = "msm-dai-q6-dev.16396",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "tavil_codec",
+		.codec_dai_name = "tavil_rx4",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_6_RX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ops = &msm_be_ops,
+		/* dai link has playback support */
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+	},
 };
 
 static struct snd_soc_dai_link msm_wcn_be_dai_links[] = {
@@ -3080,7 +3248,11 @@ static struct snd_soc_dai_link msm_wcn_be_dai_links[] = {
 		.cpu_dai_name = "msm-dai-q6-dev.16398",
 		.platform_name = "msm-pcm-routing",
 		.codec_name = "btfmslim_slave",
-		.codec_dai_name = "btfm_bt_sco_slim_rx",
+		/* BT codec driver determines capabilities based on
+		 * dai name, bt codecdai name should always contains
+		 * supported usecase information
+		 */
+		.codec_dai_name = "btfm_bt_sco_a2dp_slim_rx",
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_SLIMBUS_7_RX,
@@ -3194,6 +3366,43 @@ err_pcm_runtime:
 	return ret;
 }
 
+static int msm_snd_card_tavil_late_probe(struct snd_soc_card *card)
+{
+	const char *be_dl_name = LPASS_BE_SLIMBUS_0_RX;
+	struct snd_soc_pcm_runtime *rtd;
+	int ret = 0;
+	void *mbhc_calibration;
+
+	rtd = snd_soc_get_pcm_runtime(card, be_dl_name);
+	if (!rtd) {
+		dev_err(card->dev,
+			"%s: snd_soc_get_pcm_runtime for %s failed!\n",
+			__func__, be_dl_name);
+		ret = -EINVAL;
+		goto err_pcm_runtime;
+	}
+
+	mbhc_calibration = def_tavil_mbhc_cal();
+	if (!mbhc_calibration) {
+		ret = -ENOMEM;
+		goto err_mbhc_cal;
+	}
+	wcd_mbhc_cfg.calibration = mbhc_calibration;
+	ret = tavil_mbhc_hs_detect(rtd->codec, &wcd_mbhc_cfg);
+	if (ret) {
+		dev_err(card->dev, "%s: mbhc hs detect failed, err:%d\n",
+			__func__, ret);
+		goto err_hs_detect;
+	}
+	return 0;
+
+err_hs_detect:
+	kfree(mbhc_calibration);
+err_mbhc_cal:
+err_pcm_runtime:
+	return ret;
+}
+
 struct snd_soc_card snd_soc_card_tasha_msm = {
 	.name		= "msmcobalt-tasha-snd-card",
 	.late_probe	= msm_snd_card_late_probe,
@@ -3201,6 +3410,7 @@ struct snd_soc_card snd_soc_card_tasha_msm = {
 
 struct snd_soc_card snd_soc_card_tavil_msm = {
 	.name		= "msmcobalt-tavil-snd-card",
+	.late_probe	= msm_snd_card_tavil_late_probe,
 };
 
 static int msm_populate_dai_link_component_of_node(
@@ -3899,8 +4109,6 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	spdev = pdev;
-
 	ret = msm_populate_dai_link_component_of_node(card);
 	if (ret) {
 		ret = -EPROBE_DEFER;
@@ -3912,17 +4120,24 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 
 	pdata->hph_en1_gpio = of_get_named_gpio(pdev->dev.of_node,
 						"qcom,hph-en1-gpio", 0);
-	if (pdata->hph_en1_gpio < 0) {
-		dev_dbg(&pdev->dev, "%s: %s property not found %d\n",
-			__func__, "qcom,hph-en1-gpio", pdata->hph_en1_gpio);
+	if (!gpio_is_valid(pdata->hph_en1_gpio))
+		pdata->hph_en1_gpio_p = of_parse_phandle(pdev->dev.of_node,
+					"qcom,hph-en1-gpio", 0);
+	if (!gpio_is_valid(pdata->hph_en1_gpio) && (!pdata->hph_en1_gpio_p)) {
+		dev_dbg(&pdev->dev, "property %s not detected in node %s",
+			"qcom,hph-en1-gpio", pdev->dev.of_node->full_name);
 	}
 
 	pdata->hph_en0_gpio = of_get_named_gpio(pdev->dev.of_node,
 						"qcom,hph-en0-gpio", 0);
-	if (pdata->hph_en0_gpio < 0) {
-		dev_dbg(&pdev->dev, "%s: %s property not found %d\n",
-			__func__, "qcom,hph-en0-gpio", pdata->hph_en0_gpio);
+	if (!gpio_is_valid(pdata->hph_en0_gpio))
+		pdata->hph_en0_gpio_p = of_parse_phandle(pdev->dev.of_node,
+					"qcom,hph-en0-gpio", 0);
+	if (!gpio_is_valid(pdata->hph_en0_gpio) && (!pdata->hph_en0_gpio_p)) {
+		dev_dbg(&pdev->dev, "property %s not detected in node %s",
+			"qcom,hph-en0-gpio", pdev->dev.of_node->full_name);
 	}
+
 	ret = msm_prepare_hifi(card);
 	if (ret)
 		dev_dbg(&pdev->dev, "msm_prepare_hifi failed (%d)\n",
@@ -3938,6 +4153,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 	dev_info(&pdev->dev, "Sound card %s registered\n", card->name);
+	spdev = pdev;
 
 	ret = of_property_read_string(pdev->dev.of_node,
 		"qcom,mbhc-audio-jack-type", &mbhc_audio_jack_type);
@@ -3963,11 +4179,11 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	 */
 	pdata->us_euro_gpio = of_get_named_gpio(pdev->dev.of_node,
 				"qcom,us-euro-gpios", 0);
-	if (pdata->us_euro_gpio < 0)
+	if (!gpio_is_valid(pdata->us_euro_gpio))
 		pdata->us_euro_gpio_p = of_parse_phandle(pdev->dev.of_node,
 					"qcom,us-euro-gpios", 0);
-	if ((pdata->us_euro_gpio < 0) && (!pdata->us_euro_gpio_p)) {
-		dev_info(&pdev->dev, "property %s not detected in node %s",
+	if (!gpio_is_valid(pdata->us_euro_gpio) && (!pdata->us_euro_gpio_p)) {
+		dev_dbg(&pdev->dev, "property %s not detected in node %s",
 			"qcom,us-euro-gpios", pdev->dev.of_node->full_name);
 	} else {
 		dev_dbg(&pdev->dev, "%s detected",
@@ -3977,7 +4193,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 
 	ret = msm_prepare_us_euro(card);
 	if (ret)
-		dev_info(&pdev->dev, "msm_prepare_us_euro failed (%d)\n",
+		dev_dbg(&pdev->dev, "msm_prepare_us_euro failed (%d)\n",
 			ret);
 	return 0;
 err:

@@ -1083,7 +1083,7 @@ struct mdss_mdp_data *mdss_mdp_overlay_buf_alloc(struct msm_fb_data_type *mfd,
 	list_move_tail(&buf->buf_list, &mdp5_data->bufs_used);
 	list_add_tail(&buf->pipe_list, &pipe->buf_queue);
 
-	pr_debug("buffer alloc: %p\n", buf);
+	pr_debug("buffer alloc: %pK\n", buf);
 
 	return buf;
 }
@@ -1137,7 +1137,7 @@ void mdss_mdp_overlay_buf_free(struct msm_fb_data_type *mfd,
 	buf->last_freed = local_clock();
 	buf->state = MDP_BUF_STATE_UNUSED;
 
-	pr_debug("buffer freed: %p\n", buf);
+	pr_debug("buffer freed: %pK\n", buf);
 
 	list_move_tail(&buf->buf_list, &mdp5_data->bufs_pool);
 }
@@ -1514,7 +1514,7 @@ static int __overlay_queue_pipes(struct msm_fb_data_type *mfd)
 		if (buf) {
 			switch (buf->state) {
 			case MDP_BUF_STATE_READY:
-				pr_debug("pnum=%d buf=%p first buffer ready\n",
+				pr_debug("pnum=%d buf=%pK first buffer ready\n",
 						pipe->num, buf);
 				break;
 			case MDP_BUF_STATE_ACTIVE:
@@ -2235,7 +2235,7 @@ static int __mdss_mdp_overlay_release_all(struct msm_fb_data_type *mfd,
 	u32 unset_ndx = 0;
 	int cnt = 0;
 
-	pr_debug("releasing all resources for fb%d file:%p\n",
+	pr_debug("releasing all resources for fb%d file:%pK\n",
 		mfd->index, file);
 
 	mutex_lock(&mdp5_data->ov_lock);
@@ -3407,18 +3407,20 @@ static ssize_t mdss_mdp_misr_store(struct device *dev,
 		req.frame_count = 1;
 	} else {
 		pr_err("misr not supported fo this fb:%d\n", mfd->index);
+		rc = -ENODEV;
+		return rc;
 	}
 
 	if (enable_misr) {
 		mdss_misr_set(mdata, &req , ctl);
 
-		if (is_panel_split(mfd))
+		if ((ctl->intf_type == MDSS_INTF_DSI) && is_panel_split(mfd))
 			mdss_misr_set(mdata, &sreq , ctl);
 
 	} else {
 		mdss_misr_disable(mdata, &req, ctl);
 
-		if (is_panel_split(mfd))
+		if ((ctl->intf_type == MDSS_INTF_DSI) && is_panel_split(mfd))
 			mdss_misr_disable(mdata, &sreq , ctl);
 	}
 
@@ -4109,6 +4111,9 @@ static int mdss_mdp_pp_ioctl(struct msm_fb_data_type *mfd,
 	case mdp_op_ad_cfg:
 		ret = mdss_mdp_ad_config(mfd, &mdp_pp.data.ad_init_cfg);
 		break;
+	case mdp_op_ad_bl_cfg:
+		ret = mdss_mdp_ad_bl_config(mfd, &mdp_pp.data.ad_bl_cfg);
+		break;
 	case mdp_op_ad_input:
 		ret = mdss_mdp_ad_input(mfd, &mdp_pp.data.ad_input, 1);
 		if (ret > 0) {
@@ -4424,16 +4429,20 @@ static int __mdss_overlay_src_split_sort(struct msm_fb_data_type *mfd,
 		__overlay_swap_func);
 
 	for (i = 0; i < num_ovs; i++) {
+		if (ovs[i].z_order >= MDSS_MDP_MAX_STAGE) {
+			pr_err("invalid stage:%u\n", ovs[i].z_order);
+			return -EINVAL;
+		}
 		if (ovs[i].dst_rect.x < left_lm_w) {
 			if (left_lm_zo_cnt[ovs[i].z_order] == 2) {
-				pr_err("more than 2 ov @ stage%d on left lm\n",
+				pr_err("more than 2 ov @ stage%u on left lm\n",
 					ovs[i].z_order);
 				return -EINVAL;
 			}
 			left_lm_zo_cnt[ovs[i].z_order]++;
 		} else {
 			if (right_lm_zo_cnt[ovs[i].z_order] == 2) {
-				pr_err("more than 2 ov @ stage%d on right lm\n",
+				pr_err("more than 2 ov @ stage%u on right lm\n",
 					ovs[i].z_order);
 				return -EINVAL;
 			}

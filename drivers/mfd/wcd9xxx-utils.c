@@ -265,8 +265,17 @@ static u32 wcd9xxx_validate_dmic_sample_rate(struct device *dev,
 			__func__, div_factor, mclk_rate);
 		break;
 	case 6:
-		/* DIV 6 is valid only for 12.288 MCLK */
-		if (mclk_rate != WCD9XXX_MCLK_CLK_12P288MHZ)
+		/*
+		 * DIV 6 is valid for both 9.6MHz and 12.288MHz
+		 * MCLK on Tavil. Older codecs support DIV6 only
+		 * for 12.288MHz MCLK.
+		 */
+		if ((mclk_rate == WCD9XXX_MCLK_CLK_9P6HZ) &&
+		    (of_device_is_compatible(dev->of_node,
+					     "qcom,tavil-slim-pgd")))
+			dev_dbg(dev, "%s: DMIC_DIV = %u, mclk_rate = %u\n",
+				__func__, div_factor, mclk_rate);
+		else if (mclk_rate != WCD9XXX_MCLK_CLK_12P288MHZ)
 			goto undefined_rate;
 		break;
 	default:
@@ -298,6 +307,7 @@ struct wcd9xxx_pdata *wcd9xxx_populate_dt_data(struct device *dev)
 	struct wcd9xxx_pdata *pdata;
 	u32 dmic_sample_rate = WCD9XXX_DMIC_SAMPLE_RATE_UNDEFINED;
 	u32 mad_dmic_sample_rate = WCD9XXX_DMIC_SAMPLE_RATE_UNDEFINED;
+	u32 ecpp_dmic_sample_rate = WCD9XXX_DMIC_SAMPLE_RATE_UNDEFINED;
 	u32 dmic_clk_drive = WCD9XXX_DMIC_CLK_DRIVE_UNDEFINED;
 	u32 prop_val;
 
@@ -357,6 +367,15 @@ struct wcd9xxx_pdata *wcd9xxx_populate_dt_data(struct device *dev)
 							mad_dmic_sample_rate,
 							pdata->mclk_rate,
 							"mad_dmic_rate");
+
+	if (!(wcd9xxx_read_of_property_u32(dev, "qcom,cdc-ecpp-dmic-rate",
+					   &prop_val)))
+		ecpp_dmic_sample_rate = prop_val;
+
+	pdata->ecpp_dmic_sample_rate = wcd9xxx_validate_dmic_sample_rate(dev,
+							ecpp_dmic_sample_rate,
+							pdata->mclk_rate,
+							"ecpp_dmic_rate");
 
 	if (!(of_property_read_u32(dev->of_node,
 				   "qcom,cdc-dmic-clk-drv-strength",

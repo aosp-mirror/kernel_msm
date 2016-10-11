@@ -90,6 +90,8 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8929")
 #define early_machine_is_msmcobalt()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmcobalt")
+#define early_machine_is_apqcobalt()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,apqcobalt")
 #define early_machine_is_msmhamster()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmhamster")
 #define early_machine_is_msmfalcon()	\
@@ -128,6 +130,7 @@
 #define early_machine_is_msm8976() 0
 #define early_machine_is_msm8929()	0
 #define early_machine_is_msmcobalt()	0
+#define early_machine_is_apqcobalt()	0
 #define early_machine_is_msmhamster()	0
 #define early_machine_is_msmfalcon()	0
 #endif
@@ -221,6 +224,7 @@ char *socinfo_get_build_id(void);
 uint32_t socinfo_get_platform_type(void);
 uint32_t socinfo_get_platform_subtype(void);
 uint32_t socinfo_get_platform_version(void);
+uint32_t socinfo_get_serial_number(void);
 enum pmic_model socinfo_get_pmic_model(void);
 uint32_t socinfo_get_pmic_die_revision(void);
 int __init socinfo_init(void) __must_check;

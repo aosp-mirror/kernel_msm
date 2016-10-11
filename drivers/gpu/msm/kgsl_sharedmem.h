@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -71,6 +71,10 @@ int kgsl_allocate_user(struct kgsl_device *device,
 
 void kgsl_get_memory_usage(char *str, size_t len, uint64_t memflags);
 
+int kgsl_sharedmem_page_alloc_user(struct kgsl_memdesc *memdesc,
+				struct kgsl_pagetable *pagetable,
+				uint64_t size);
+
 #define MEMFLAGS(_flags, _mask, _shift) \
 	((unsigned int) (((_flags) & (_mask)) >> (_shift)))
 
@@ -85,6 +89,18 @@ kgsl_memdesc_get_align(const struct kgsl_memdesc *memdesc)
 {
 	return MEMFLAGS(memdesc->flags, KGSL_MEMALIGN_MASK,
 		KGSL_MEMALIGN_SHIFT);
+}
+
+/*
+ * kgsl_memdesc_get_pagesize - Get pagesize based on alignment
+ * @memdesc - the memdesc
+ *
+ * Returns the pagesize based on memdesc alignment
+ */
+static inline int
+kgsl_memdesc_get_pagesize(const struct kgsl_memdesc *memdesc)
+{
+	return (1 << kgsl_memdesc_get_align(memdesc));
 }
 
 /*
@@ -207,12 +223,19 @@ kgsl_memdesc_has_guard_page(const struct kgsl_memdesc *memdesc)
  *
  * Returns guard page size
  */
-static inline int
-kgsl_memdesc_guard_page_size(const struct kgsl_mmu *mmu,
-				const struct kgsl_memdesc *memdesc)
+static inline uint64_t
+kgsl_memdesc_guard_page_size(const struct kgsl_memdesc *memdesc)
 {
-	return kgsl_memdesc_is_secured(memdesc) ? mmu->secure_align_mask + 1 :
-								PAGE_SIZE;
+	if (!kgsl_memdesc_has_guard_page(memdesc))
+		return 0;
+
+	if (kgsl_memdesc_is_secured(memdesc)) {
+		if (memdesc->pagetable != NULL &&
+				memdesc->pagetable->mmu != NULL)
+			return memdesc->pagetable->mmu->secure_align_mask + 1;
+	}
+
+	return PAGE_SIZE;
 }
 
 /*
@@ -237,10 +260,7 @@ kgsl_memdesc_use_cpu_map(const struct kgsl_memdesc *memdesc)
 static inline uint64_t
 kgsl_memdesc_footprint(const struct kgsl_memdesc *memdesc)
 {
-	uint64_t size = memdesc->size;
-	if (kgsl_memdesc_has_guard_page(memdesc))
-		size += SZ_4K;
-	return size;
+	return  memdesc->size + kgsl_memdesc_guard_page_size(memdesc);
 }
 
 /*
@@ -266,7 +286,16 @@ static inline int kgsl_allocate_global(struct kgsl_device *device,
 	memdesc->flags = flags;
 	memdesc->priv = priv;
 
-	ret = kgsl_sharedmem_alloc_contig(device, memdesc, NULL, (size_t) size);
+	if ((memdesc->priv & KGSL_MEMDESC_CONTIG) != 0)
+		ret = kgsl_sharedmem_alloc_contig(device, memdesc, NULL,
+						(size_t) size);
+	else {
+		ret = kgsl_sharedmem_page_alloc_user(memdesc, NULL,
+						(size_t) size);
+		if (ret == 0)
+			kgsl_memdesc_map(memdesc);
+	}
+
 	if (ret == 0)
 		kgsl_mmu_add_global(device, memdesc);
 
@@ -292,5 +321,48 @@ static inline void kgsl_free_global(struct kgsl_device *device,
 
 void kgsl_sharedmem_set_noretry(bool val);
 bool kgsl_sharedmem_get_noretry(void);
+
+/**
+ * kgsl_alloc_sgt_from_pages() - Allocate a sg table
+ *
+ * @memdesc: memory descriptor of the allocation
+ *
+ * Allocate and return pointer to a sg table
+ */
+static inline struct sg_table *kgsl_alloc_sgt_from_pages(
+				struct kgsl_memdesc *m)
+{
+	int ret;
+	struct sg_table *sgt;
+
+	sgt = kmalloc(sizeof(struct sg_table), GFP_KERNEL);
+	if (sgt == NULL)
+		return ERR_PTR(-ENOMEM);
+
+	ret = sg_alloc_table_from_pages(sgt, m->pages, m->page_count, 0,
+					m->size, GFP_KERNEL);
+	if (ret) {
+		kfree(sgt);
+		return ERR_PTR(ret);
+	}
+
+	return sgt;
+}
+
+/**
+ * kgsl_free_sgt() - Free a sg table structure
+ *
+ * @sgt: sg table pointer to be freed
+ *
+ * Free the sg table allocated using sgt and free the
+ * sgt structure itself
+ */
+static inline void kgsl_free_sgt(struct sg_table *sgt)
+{
+	if (sgt != NULL) {
+		sg_free_table(sgt);
+		kfree(sgt);
+	}
+}
 
 #endif /* __KGSL_SHAREDMEM_H */

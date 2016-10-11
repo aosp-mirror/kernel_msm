@@ -11,6 +11,7 @@
  */
 
 #include <linux/ipa_mhi.h>
+#include <linux/ipa_uc_offload.h>
 #include "ipa_common_i.h"
 
 #ifndef _IPA_API_H_
@@ -25,6 +26,8 @@ struct ipa_api_controller {
 	int (*ipa_reset_endpoint)(u32 clnt_hdl);
 
 	int (*ipa_clear_endpoint_delay)(u32 clnt_hdl);
+
+	int (*ipa_disable_endpoint)(u32 clnt_hdl);
 
 	int (*ipa_cfg_ep)(u32 clnt_hdl, const struct ipa_ep_cfg *ipa_ep_cfg);
 
@@ -360,6 +363,12 @@ struct ipa_api_controller {
 
 	void (*ipa_recycle_wan_skb)(struct sk_buff *skb);
 
+	int (*ipa_setup_uc_ntn_pipes)(struct ipa_ntn_conn_in_params *in,
+		ipa_notify_cb notify, void *priv, u8 hdr_len,
+		struct ipa_ntn_conn_out_params *);
+
+	int (*ipa_tear_down_uc_offload_pipes)(int ipa_ep_idx_ul,
+		int ipa_ep_idx_dl);
 };
 
 #ifdef CONFIG_IPA

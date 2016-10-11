@@ -159,6 +159,8 @@ static int init_pitch_v1(struct snd_usb_audio *chip, int iface,
 	unsigned char data[1];
 	int err;
 
+	if (get_iface_desc(alts)->bNumEndpoints < 1)
+		return -EINVAL;
 	ep = get_endpoint(alts, 0)->bEndpointAddress;
 
 	data[0] = 1;
@@ -575,7 +577,7 @@ int snd_usb_enable_audio_stream(struct snd_usb_substream *subs,
 	snd_usb_autoresume(subs->stream->chip);
 	fmt = find_format(subs);
 	if (!fmt) {
-		dev_dbg(&subs->dev->dev,
+		dev_err(&subs->dev->dev,
 		"cannot set format: format = %#x, rate = %d, channels = %d\n",
 			   subs->pcm_format, subs->cur_rate, subs->channels);
 		return -EINVAL;

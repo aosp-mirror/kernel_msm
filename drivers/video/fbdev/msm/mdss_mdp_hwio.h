@@ -688,6 +688,11 @@ enum mdss_mpd_intf_index {
 #define MDSS_MDP_REG_INTF_PROG_LINE_INTR_CONF		0x250
 #define MDSS_MDP_REG_INTF_VBLANK_END_CONF		0x264
 
+#define MDSS_MDP_REG_INTF_AVR_CONTROL			0x270
+#define MDSS_MDP_REG_INTF_AVR_MODE			0x274
+#define MDSS_MDP_REG_INTF_AVR_TRIGGER			0x278
+#define MDSS_MDP_REG_INTF_AVR_VTOTAL			0x27C
+
 #define MDSS_MDP_REG_INTF_FRAME_LINE_COUNT_EN		0x0A8
 #define MDSS_MDP_REG_INTF_FRAME_COUNT			0x0AC
 #define MDSS_MDP_REG_INTF_LINE_COUNT			0x0B0
@@ -813,6 +818,8 @@ enum mdss_mdp_pingpong_index {
 #define MDSS_MDP_REG_CDM_CDWN2_OUT_SIZE                 0x130
 
 #define MDSS_MDP_REG_CDM_HDMI_PACK_OP_MODE              0x200
+
+#define MDSS_MDP_DSPP_DEBUGBUS_STATUS                   0x34C
 
 /* Following offsets are with respect to MDP base */
 #define MDSS_MDP_MDP_OUT_CTL_0                          0x410

@@ -173,7 +173,7 @@
 		synaptics,avdd-current = <20000>;
 		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
 		pinctrl-0 = <&ts_active>;
-		pinctrl-1 = <&ts_suspend>;
+		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
 		synaptics,display-coords = <0 0 1439 2559>;
 		synaptics,panel-coords = <0 0 1439 2559>;
 		synaptics,reset-gpio = <&tlmm 89 0x00>;
@@ -316,6 +316,21 @@
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
+&dsi_sharp_1080_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};
+
+&dsi_jdi_1080_vid {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_no_labibb>;
+	qcom,5v-boost-gpio = <&tlmm 51 0>;
+};
+
 &mdss_hdmi_tx {
 	pinctrl-names = "hdmi_hpd_active", "hdmi_ddc_active", "hdmi_cec_active",
 				"hdmi_active", "hdmi_sleep";
@@ -329,6 +344,15 @@
 			&mdss_hdmi_ddc_active &mdss_hdmi_cec_active>;
 	pinctrl-4 = <&mdss_hdmi_5v_suspend &mdss_hdmi_hpd_suspend
 			&mdss_hdmi_ddc_suspend &mdss_hdmi_cec_suspend>;
+};
+
+&mdss_dp_ctrl {
+	pinctrl-names = "mdss_dp_active", "mdss_dp_sleep";
+	pinctrl-0 = <&mdss_dp_aux_active &mdss_dp_usbplug_cc_active>;
+	pinctrl-1 = <&mdss_dp_aux_suspend &mdss_dp_usbplug_cc_suspend>;
+	qcom,aux-en-gpio = <&tlmm 77 0>;
+	qcom,aux-sel-gpio = <&tlmm 78 0>;
+	qcom,usbplug-cc-gpio = <&tlmm 38 0>;
 };
 
 &pmicobalt_charger {

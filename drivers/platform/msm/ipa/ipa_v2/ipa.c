@@ -65,6 +65,10 @@
 #define IPA2_ACTIVE_CLIENT_LOG_TYPE_RESOURCE 2
 #define IPA2_ACTIVE_CLIENT_LOG_TYPE_SPECIAL 3
 
+#define MAX_POLLING_ITERATION 40
+#define MIN_POLLING_ITERATION 1
+#define ONE_MSEC 1
+
 #define IPA_AGGR_STR_IN_BYTES(str) \
 	(strnlen((str), IPA_AGGR_MAX_STR_LENGTH - 1) + 1)
 
@@ -1524,7 +1528,7 @@ static void ipa_free_buffer(void *user1, int user2)
 	kfree(user1);
 }
 
-static int ipa_q6_pipe_delay(bool zip_pipes)
+int ipa_q6_pipe_delay(bool zip_pipes)
 {
 	u32 reg_val = 0;
 	int client_idx;
@@ -1911,14 +1915,14 @@ int ipa_q6_pre_shutdown_cleanup(void)
 		BUG();
 
 	IPA_ACTIVE_CLIENTS_INC_SPECIAL("Q6");
+
 	/*
-	 * pipe delay and holb discard for ZIP pipes are handled
-	 * in post shutdown callback.
+	 * Do not delay Q6 pipes here. This may result in IPA reading a
+	 * DMA_TASK with lock bit set and then Q6 pipe delay is set. In this
+	 * situation IPA will be remain locked as the DMA_TASK with unlock
+	 * bit will not be read by IPA as pipe delay is enabled. IPA uC will
+	 * wait for pipe to be empty before issuing a BAM pipe reset.
 	 */
-	if (ipa_q6_pipe_delay(false)) {
-		IPAERR("Failed to delay Q6 pipes\n");
-		BUG();
-	}
 
 	if (ipa_q6_monitor_holb_mitigation(false)) {
 		IPAERR("Failed to disable HOLB monitroing on Q6 pipes\n");
@@ -1958,13 +1962,13 @@ int ipa_q6_post_shutdown_cleanup(void)
 	int res;
 
 	/*
-	 * pipe delay and holb discard for ZIP pipes are handled in
-	 * post shutdown.
+	 * Do not delay Q6 pipes here. This may result in IPA reading a
+	 * DMA_TASK with lock bit set and then Q6 pipe delay is set. In this
+	 * situation IPA will be remain locked as the DMA_TASK with unlock
+	 * bit will not be read by IPA as pipe delay is enabled. IPA uC will
+	 * wait for pipe to be empty before issuing a BAM pipe reset.
 	 */
-	if (ipa_q6_pipe_delay(true)) {
-		IPAERR("Failed to delay Q6 ZIP pipes\n");
-		BUG();
-	}
+
 	if (ipa_q6_avoid_holb(true)) {
 		IPAERR("Failed to set HOLB on Q6 ZIP pipes\n");
 		BUG();
@@ -3609,9 +3613,23 @@ static int ipa_init(const struct ipa_plat_drv_res *resource_p,
 	ipa_ctx->ipa_bam_remote_mode = resource_p->ipa_bam_remote_mode;
 	ipa_ctx->modem_cfg_emb_pipe_flt = resource_p->modem_cfg_emb_pipe_flt;
 	ipa_ctx->wan_rx_ring_size = resource_p->wan_rx_ring_size;
+	ipa_ctx->lan_rx_ring_size = resource_p->lan_rx_ring_size;
 	ipa_ctx->skip_uc_pipe_reset = resource_p->skip_uc_pipe_reset;
 	ipa_ctx->use_dma_zone = resource_p->use_dma_zone;
 	ipa_ctx->tethered_flow_control = resource_p->tethered_flow_control;
+
+	/* Setting up IPA RX Polling Timeout Seconds */
+	ipa_rx_timeout_min_max_calc(&ipa_ctx->ipa_rx_min_timeout_usec,
+		&ipa_ctx->ipa_rx_max_timeout_usec,
+		resource_p->ipa_rx_polling_sleep_msec);
+
+	/* Setting up ipa polling iteration */
+	if ((resource_p->ipa_polling_iteration >= MIN_POLLING_ITERATION)
+		&& (resource_p->ipa_polling_iteration <= MAX_POLLING_ITERATION))
+		ipa_ctx->ipa_polling_iteration =
+			resource_p->ipa_polling_iteration;
+	else
+		ipa_ctx->ipa_polling_iteration = MAX_POLLING_ITERATION;
 
 	/* default aggregation parameters */
 	ipa_ctx->aggregation_type = IPA_MBIM_16;
@@ -4035,6 +4053,12 @@ static int ipa_init(const struct ipa_plat_drv_res *resource_p,
 	else
 		IPADBG(":wdi init ok\n");
 
+	result = ipa_ntn_init();
+	if (result)
+		IPAERR(":ntn init failed (%d)\n", -result);
+	else
+		IPADBG(":ntn init ok\n");
+
 	ipa_ctx->q6_proxy_clk_vote_valid = true;
 
 	ipa_register_panic_hdlr();
@@ -4127,6 +4151,7 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 	ipa_drv_res->ipa_bam_remote_mode = false;
 	ipa_drv_res->modem_cfg_emb_pipe_flt = false;
 	ipa_drv_res->wan_rx_ring_size = IPA_GENERIC_RX_POOL_SZ;
+	ipa_drv_res->lan_rx_ring_size = IPA_GENERIC_RX_POOL_SZ;
 
 	smmu_info.disable_htw = of_property_read_bool(pdev->dev.of_node,
 			"qcom,smmu-disable-htw");
@@ -4149,15 +4174,26 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 		IPADBG(": found ipa_drv_res->ipa_hw_mode = %d",
 				ipa_drv_res->ipa_hw_mode);
 
-	/* Get IPA WAN RX pool sizee */
+	/* Get IPA WAN / LAN RX  pool sizes */
 	result = of_property_read_u32(pdev->dev.of_node,
 			"qcom,wan-rx-ring-size",
 			&ipa_drv_res->wan_rx_ring_size);
 	if (result)
-		IPADBG("using default for wan-rx-ring-size\n");
+		IPADBG("using default for wan-rx-ring-size = %u\n",
+				ipa_drv_res->wan_rx_ring_size);
 	else
 		IPADBG(": found ipa_drv_res->wan-rx-ring-size = %u",
 				ipa_drv_res->wan_rx_ring_size);
+
+	result = of_property_read_u32(pdev->dev.of_node,
+			"qcom,lan-rx-ring-size",
+			&ipa_drv_res->lan_rx_ring_size);
+	if (result)
+		IPADBG("using default for lan-rx-ring-size = %u\n",
+				ipa_drv_res->lan_rx_ring_size);
+	else
+		IPADBG(": found ipa_drv_res->lan-rx-ring-size = %u",
+				ipa_drv_res->lan_rx_ring_size);
 
 	ipa_drv_res->use_ipa_teth_bridge =
 			of_property_read_bool(pdev->dev.of_node,
@@ -4267,6 +4303,31 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 			&ipa_drv_res->ee);
 	if (result)
 		ipa_drv_res->ee = 0;
+
+	/* Get IPA RX Polling Timeout Seconds */
+	result = of_property_read_u32(pdev->dev.of_node,
+				"qcom,rx-polling-sleep-ms",
+				&ipa_drv_res->ipa_rx_polling_sleep_msec);
+
+	if (result) {
+		ipa_drv_res->ipa_rx_polling_sleep_msec = ONE_MSEC;
+		IPADBG("using default polling timeout of 1MSec\n");
+	} else {
+		IPADBG(": found ipa_drv_res->ipa_rx_polling_sleep_sec = %d",
+			ipa_drv_res->ipa_rx_polling_sleep_msec);
+	}
+
+	/* Get IPA Polling Iteration */
+	result = of_property_read_u32(pdev->dev.of_node,
+				"qcom,ipa-polling-iteration",
+				&ipa_drv_res->ipa_polling_iteration);
+	if (result) {
+		ipa_drv_res->ipa_polling_iteration = MAX_POLLING_ITERATION;
+		IPADBG("using default polling iteration\n");
+	} else {
+		IPADBG(": found ipa_drv_res->ipa_polling_iteration = %d",
+			ipa_drv_res->ipa_polling_iteration);
+	}
 
 	return 0;
 }
@@ -4392,7 +4453,7 @@ static int ipa_smmu_uc_cb_probe(struct device *dev)
 	cb->dev = dev;
 	cb->mapping = arm_iommu_create_mapping(msm_iommu_get_bus(dev),
 				cb->va_start, cb->va_size);
-	if (IS_ERR(cb->mapping)) {
+	if (IS_ERR_OR_NULL(cb->mapping)) {
 		IPADBG("Fail to create mapping\n");
 		/* assume this failure is because iommu driver is not ready */
 		return -EPROBE_DEFER;
@@ -4495,7 +4556,7 @@ static int ipa_smmu_ap_cb_probe(struct device *dev)
 	cb->mapping = arm_iommu_create_mapping(msm_iommu_get_bus(dev),
 					       cb->va_start,
 					       cb->va_size);
-	if (IS_ERR(cb->mapping)) {
+	if (IS_ERR_OR_NULL(cb->mapping)) {
 		IPADBG("Fail to create mapping\n");
 		/* assume this failure is because iommu driver is not ready */
 		return -EPROBE_DEFER;

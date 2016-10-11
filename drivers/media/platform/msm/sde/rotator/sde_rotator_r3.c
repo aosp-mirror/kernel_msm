@@ -24,6 +24,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/dma-buf.h>
 #include <linux/msm_ion.h>
+#include <linux/clk/msm-clk.h>
 
 #include "sde_rotator_core.h"
 #include "sde_rotator_util.h"
@@ -76,6 +77,262 @@
 
 #define SDE_ROTREG_READ(base, off) \
 	readl_relaxed(base + (off))
+
+static u32 sde_hw_rotator_input_pixfmts[] = {
+	SDE_PIX_FMT_XRGB_8888,
+	SDE_PIX_FMT_ARGB_8888,
+	SDE_PIX_FMT_ABGR_8888,
+	SDE_PIX_FMT_RGBA_8888,
+	SDE_PIX_FMT_BGRA_8888,
+	SDE_PIX_FMT_RGBX_8888,
+	SDE_PIX_FMT_BGRX_8888,
+	SDE_PIX_FMT_XBGR_8888,
+	SDE_PIX_FMT_RGBA_5551,
+	SDE_PIX_FMT_ARGB_1555,
+	SDE_PIX_FMT_ABGR_1555,
+	SDE_PIX_FMT_BGRA_5551,
+	SDE_PIX_FMT_BGRX_5551,
+	SDE_PIX_FMT_RGBX_5551,
+	SDE_PIX_FMT_XBGR_1555,
+	SDE_PIX_FMT_XRGB_1555,
+	SDE_PIX_FMT_ARGB_4444,
+	SDE_PIX_FMT_RGBA_4444,
+	SDE_PIX_FMT_BGRA_4444,
+	SDE_PIX_FMT_ABGR_4444,
+	SDE_PIX_FMT_RGBX_4444,
+	SDE_PIX_FMT_XRGB_4444,
+	SDE_PIX_FMT_BGRX_4444,
+	SDE_PIX_FMT_XBGR_4444,
+	SDE_PIX_FMT_RGB_888,
+	SDE_PIX_FMT_BGR_888,
+	SDE_PIX_FMT_RGB_565,
+	SDE_PIX_FMT_BGR_565,
+	SDE_PIX_FMT_Y_CB_CR_H2V2,
+	SDE_PIX_FMT_Y_CR_CB_H2V2,
+	SDE_PIX_FMT_Y_CR_CB_GH2V2,
+	SDE_PIX_FMT_Y_CBCR_H2V2,
+	SDE_PIX_FMT_Y_CRCB_H2V2,
+	SDE_PIX_FMT_Y_CBCR_H1V2,
+	SDE_PIX_FMT_Y_CRCB_H1V2,
+	SDE_PIX_FMT_Y_CBCR_H2V1,
+	SDE_PIX_FMT_Y_CRCB_H2V1,
+	SDE_PIX_FMT_YCBYCR_H2V1,
+	SDE_PIX_FMT_Y_CBCR_H2V2_VENUS,
+	SDE_PIX_FMT_Y_CRCB_H2V2_VENUS,
+	SDE_PIX_FMT_RGBA_8888_UBWC,
+	SDE_PIX_FMT_RGBX_8888_UBWC,
+	SDE_PIX_FMT_RGB_565_UBWC,
+	SDE_PIX_FMT_Y_CBCR_H2V2_UBWC,
+	SDE_PIX_FMT_RGBA_1010102,
+	SDE_PIX_FMT_RGBX_1010102,
+	SDE_PIX_FMT_ARGB_2101010,
+	SDE_PIX_FMT_XRGB_2101010,
+	SDE_PIX_FMT_BGRA_1010102,
+	SDE_PIX_FMT_BGRX_1010102,
+	SDE_PIX_FMT_ABGR_2101010,
+	SDE_PIX_FMT_XBGR_2101010,
+	SDE_PIX_FMT_RGBA_1010102_UBWC,
+	SDE_PIX_FMT_RGBX_1010102_UBWC,
+	SDE_PIX_FMT_Y_CBCR_H2V2_P010,
+	SDE_PIX_FMT_Y_CBCR_H2V2_TP10,
+	SDE_PIX_FMT_Y_CBCR_H2V2_TP10_UBWC,
+};
+
+static u32 sde_hw_rotator_output_pixfmts[] = {
+	SDE_PIX_FMT_XRGB_8888,
+	SDE_PIX_FMT_ARGB_8888,
+	SDE_PIX_FMT_ABGR_8888,
+	SDE_PIX_FMT_RGBA_8888,
+	SDE_PIX_FMT_BGRA_8888,
+	SDE_PIX_FMT_RGBX_8888,
+	SDE_PIX_FMT_BGRX_8888,
+	SDE_PIX_FMT_XBGR_8888,
+	SDE_PIX_FMT_RGBA_5551,
+	SDE_PIX_FMT_ARGB_1555,
+	SDE_PIX_FMT_ABGR_1555,
+	SDE_PIX_FMT_BGRA_5551,
+	SDE_PIX_FMT_BGRX_5551,
+	SDE_PIX_FMT_RGBX_5551,
+	SDE_PIX_FMT_XBGR_1555,
+	SDE_PIX_FMT_XRGB_1555,
+	SDE_PIX_FMT_ARGB_4444,
+	SDE_PIX_FMT_RGBA_4444,
+	SDE_PIX_FMT_BGRA_4444,
+	SDE_PIX_FMT_ABGR_4444,
+	SDE_PIX_FMT_RGBX_4444,
+	SDE_PIX_FMT_XRGB_4444,
+	SDE_PIX_FMT_BGRX_4444,
+	SDE_PIX_FMT_XBGR_4444,
+	SDE_PIX_FMT_RGB_888,
+	SDE_PIX_FMT_BGR_888,
+	SDE_PIX_FMT_RGB_565,
+	SDE_PIX_FMT_BGR_565,
+	/* SDE_PIX_FMT_Y_CB_CR_H2V2 */
+	/* SDE_PIX_FMT_Y_CR_CB_H2V2 */
+	/* SDE_PIX_FMT_Y_CR_CB_GH2V2 */
+	SDE_PIX_FMT_Y_CBCR_H2V2,
+	SDE_PIX_FMT_Y_CRCB_H2V2,
+	SDE_PIX_FMT_Y_CBCR_H1V2,
+	SDE_PIX_FMT_Y_CRCB_H1V2,
+	SDE_PIX_FMT_Y_CBCR_H2V1,
+	SDE_PIX_FMT_Y_CRCB_H2V1,
+	/* SDE_PIX_FMT_YCBYCR_H2V1 */
+	SDE_PIX_FMT_Y_CBCR_H2V2_VENUS,
+	SDE_PIX_FMT_Y_CRCB_H2V2_VENUS,
+	SDE_PIX_FMT_RGBA_8888_UBWC,
+	SDE_PIX_FMT_RGBX_8888_UBWC,
+	SDE_PIX_FMT_RGB_565_UBWC,
+	SDE_PIX_FMT_Y_CBCR_H2V2_UBWC,
+	SDE_PIX_FMT_RGBA_1010102,
+	SDE_PIX_FMT_RGBX_1010102,
+	/* SDE_PIX_FMT_ARGB_2101010 */
+	/* SDE_PIX_FMT_XRGB_2101010 */
+	SDE_PIX_FMT_BGRA_1010102,
+	SDE_PIX_FMT_BGRX_1010102,
+	/* SDE_PIX_FMT_ABGR_2101010 */
+	/* SDE_PIX_FMT_XBGR_2101010 */
+	SDE_PIX_FMT_RGBA_1010102_UBWC,
+	SDE_PIX_FMT_RGBX_1010102_UBWC,
+	SDE_PIX_FMT_Y_CBCR_H2V2_P010,
+	SDE_PIX_FMT_Y_CBCR_H2V2_TP10,
+	SDE_PIX_FMT_Y_CBCR_H2V2_TP10_UBWC,
+};
+
+/* Invalid software timestamp value for initialization */
+#define SDE_REGDMA_SWTS_INVALID	(~0)
+
+/**
+ * sde_hw_rotator_elapsed_swts - Find difference of 2 software timestamps
+ * @ts_curr: current software timestamp
+ * @ts_prev: previous software timestamp
+ * @return: the amount ts_curr is ahead of ts_prev
+ */
+static int sde_hw_rotator_elapsed_swts(u32 ts_curr, u32 ts_prev)
+{
+	u32 diff = (ts_curr - ts_prev) & SDE_REGDMA_SWTS_MASK;
+
+	return sign_extend32(diff, (SDE_REGDMA_SWTS_SHIFT - 1));
+}
+
+/**
+ * sde_hw_rotator_pending_swts - Check if the given context is still pending
+ * @rot: Pointer to hw rotator
+ * @ctx: Pointer to rotator context
+ * @pswts: Pointer to returned reference software timestamp, optional
+ * @return: true if context has pending requests
+ */
+static int sde_hw_rotator_pending_swts(struct sde_hw_rotator *rot,
+		struct sde_hw_rotator_context *ctx, u32 *pswts)
+{
+	u32 swts;
+	int ts_diff;
+	bool pending;
+
+	if (ctx->last_regdma_timestamp == SDE_REGDMA_SWTS_INVALID)
+		swts = SDE_ROTREG_READ(rot->mdss_base, REGDMA_TIMESTAMP_REG);
+	else
+		swts = ctx->last_regdma_timestamp;
+
+	if (ctx->q_id == ROT_QUEUE_LOW_PRIORITY)
+		swts >>= SDE_REGDMA_SWTS_SHIFT;
+
+	swts &= SDE_REGDMA_SWTS_MASK;
+
+	ts_diff = sde_hw_rotator_elapsed_swts(ctx->timestamp, swts);
+
+	if (pswts)
+		*pswts = swts;
+
+	pending = (ts_diff > 0) ? true : false;
+
+	SDEROT_DBG("ts:0x%x, queue_id:%d, swts:0x%x, pending:%d\n",
+		ctx->timestamp, ctx->q_id, swts, pending);
+	return pending;
+}
+
+/**
+ * sde_hw_rotator_enable_irq - Enable hw rotator interrupt with ref. count
+ *				Also, clear rotator/regdma irq status.
+ * @rot: Pointer to hw rotator
+ */
+static void sde_hw_rotator_enable_irq(struct sde_hw_rotator *rot)
+{
+	SDEROT_DBG("irq_num:%d enabled:%d\n", rot->irq_num,
+		atomic_read(&rot->irq_enabled));
+
+	if (!atomic_read(&rot->irq_enabled)) {
+		if (rot->mode == ROT_REGDMA_OFF)
+			SDE_ROTREG_WRITE(rot->mdss_base, ROTTOP_INTR_CLEAR,
+				ROT_DONE_MASK);
+		else
+			SDE_ROTREG_WRITE(rot->mdss_base,
+				REGDMA_CSR_REGDMA_INT_CLEAR, REGDMA_INT_MASK);
+
+		enable_irq(rot->irq_num);
+	}
+	atomic_inc(&rot->irq_enabled);
+}
+
+/**
+ * sde_hw_rotator_disable_irq - Disable hw rotator interrupt with ref. count
+ *				Also, clear rotator/regdma irq enable masks.
+ * @rot: Pointer to hw rotator
+ */
+static void sde_hw_rotator_disable_irq(struct sde_hw_rotator *rot)
+{
+	SDEROT_DBG("irq_num:%d enabled:%d\n", rot->irq_num,
+		atomic_read(&rot->irq_enabled));
+
+	if (!atomic_read(&rot->irq_enabled)) {
+		SDEROT_ERR("irq %d is already disabled\n", rot->irq_num);
+		return;
+	}
+
+	if (!atomic_dec_return(&rot->irq_enabled)) {
+		if (rot->mode == ROT_REGDMA_OFF)
+			SDE_ROTREG_WRITE(rot->mdss_base, ROTTOP_INTR_EN, 0);
+		else
+			SDE_ROTREG_WRITE(rot->mdss_base,
+				REGDMA_CSR_REGDMA_INT_EN, 0);
+		/* disable irq after last pending irq is handled, if any */
+		synchronize_irq(rot->irq_num);
+		disable_irq_nosync(rot->irq_num);
+	}
+}
+
+/**
+ * sde_hw_rotator_dump_status - Dump hw rotator status on error
+ * @rot: Pointer to hw rotator
+ */
+static void sde_hw_rotator_dump_status(struct sde_hw_rotator *rot)
+{
+	SDEROT_ERR(
+		"op_mode = %x, int_en = %x, int_status = %x\n",
+		SDE_ROTREG_READ(rot->mdss_base,
+			REGDMA_CSR_REGDMA_OP_MODE),
+		SDE_ROTREG_READ(rot->mdss_base,
+			REGDMA_CSR_REGDMA_INT_EN),
+		SDE_ROTREG_READ(rot->mdss_base,
+			REGDMA_CSR_REGDMA_INT_STATUS));
+
+	SDEROT_ERR(
+		"ts = %x, q0_status = %x, q1_status = %x, block_status = %x\n",
+		SDE_ROTREG_READ(rot->mdss_base,
+			REGDMA_TIMESTAMP_REG),
+		SDE_ROTREG_READ(rot->mdss_base,
+			REGDMA_CSR_REGDMA_QUEUE_0_STATUS),
+		SDE_ROTREG_READ(rot->mdss_base,
+			REGDMA_CSR_REGDMA_QUEUE_1_STATUS),
+		SDE_ROTREG_READ(rot->mdss_base,
+			REGDMA_CSR_REGDMA_BLOCK_STATUS));
+
+	SDEROT_ERR(
+		"invalid_cmd_offset = %x, fsm_state = %x\n",
+		SDE_ROTREG_READ(rot->mdss_base,
+			REGDMA_CSR_REGDMA_INVALID_CMD_RAM_OFFSET),
+		SDE_ROTREG_READ(rot->mdss_base,
+			REGDMA_CSR_REGDMA_FSM_STATE));
+}
 
 /**
  * sde_hw_rotator_get_ctx(): Retrieve rotator context from rotator HW based
@@ -177,6 +434,14 @@ static void sde_hw_rotator_setup_timestamp_packet(
 	SDE_REGDMA_BLKWRITE_DATA(wrptr, 0x03020100);
 	SDE_REGDMA_BLKWRITE_DATA(wrptr, 0x80000000);
 	SDE_REGDMA_BLKWRITE_DATA(wrptr, ctx->timestamp);
+	/*
+	 * Must clear secure buffer setting for SW timestamp because
+	 * SW timstamp buffer allocation is always non-secure region.
+	 */
+	if (ctx->is_secure) {
+		SDE_REGDMA_WRITE(wrptr, ROT_SSPP_SRC_ADDR_SW_STATUS, 0);
+		SDE_REGDMA_WRITE(wrptr, ROT_WB_DST_ADDR_SW_STATUS, 0);
+	}
 	SDE_REGDMA_BLKWRITE_INC(wrptr, ROT_WB_DST_FORMAT, 4);
 	SDE_REGDMA_BLKWRITE_DATA(wrptr, 0x000037FF);
 	SDE_REGDMA_BLKWRITE_DATA(wrptr, 0);
@@ -201,16 +466,19 @@ static void sde_hw_rotator_setup_timestamp_packet(
  * @cfg: Fetch configuration
  * @danger_lut: real-time QoS LUT for danger setting (not used)
  * @safe_lut: real-time QoS LUT for safe setting (not used)
+ * @dnsc_factor_w: downscale factor for width
+ * @dnsc_factor_h: downscale factor for height
  * @flags: Control flag
  */
 static void sde_hw_rotator_setup_fetchengine(struct sde_hw_rotator_context *ctx,
 		enum sde_rot_queue_prio queue_id,
 		struct sde_hw_rot_sspp_cfg *cfg, u32 danger_lut, u32 safe_lut,
-		u32 flags)
+		u32 dnsc_factor_w, u32 dnsc_factor_h, u32 flags)
 {
 	struct sde_hw_rotator *rot = ctx->rot;
 	struct sde_mdp_format_params *fmt;
 	struct sde_mdp_data *data;
+	struct sde_rot_data_type *mdata = sde_rot_get_mdata();
 	u32 *wrptr;
 	u32 opmode = 0;
 	u32 chroma_samp = 0;
@@ -329,10 +597,19 @@ static void sde_hw_rotator_setup_fetchengine(struct sde_hw_rotator_context *ctx,
 	SDE_REGDMA_BLKWRITE_DATA(wrptr, opmode);
 
 	/* setup source fetch config, TP10 uses different block size */
-	if (sde_mdp_is_tp10_format(fmt))
-		fetch_blocksize = SDE_ROT_SSPP_FETCH_BLOCKSIZE_96;
-	else
-		fetch_blocksize = SDE_ROT_SSPP_FETCH_BLOCKSIZE_128;
+	if (test_bit(SDE_CAPS_R3_1P5_DOWNSCALE, mdata->sde_caps_map) &&
+			(dnsc_factor_w == 1) && (dnsc_factor_h == 1)) {
+		if (sde_mdp_is_tp10_format(fmt))
+			fetch_blocksize = SDE_ROT_SSPP_FETCH_BLOCKSIZE_144_EXT;
+		else
+			fetch_blocksize = SDE_ROT_SSPP_FETCH_BLOCKSIZE_192_EXT;
+	} else {
+		if (sde_mdp_is_tp10_format(fmt))
+			fetch_blocksize = SDE_ROT_SSPP_FETCH_BLOCKSIZE_96;
+		else
+			fetch_blocksize = SDE_ROT_SSPP_FETCH_BLOCKSIZE_128;
+	}
+
 	SDE_REGDMA_WRITE(wrptr, ROT_SSPP_FETCH_CONFIG,
 			fetch_blocksize |
 			SDE_ROT_SSPP_FETCH_CONFIG_RESET_VALUE |
@@ -342,6 +619,9 @@ static void sde_hw_rotator_setup_fetchengine(struct sde_hw_rotator_context *ctx,
 	if (flags & SDE_ROT_FLAG_SECURE_OVERLAY_SESSION) {
 		SDE_REGDMA_WRITE(wrptr, ROT_SSPP_SRC_ADDR_SW_STATUS, 0xF);
 		ctx->is_secure = true;
+	} else {
+		SDE_REGDMA_WRITE(wrptr, ROT_SSPP_SRC_ADDR_SW_STATUS, 0);
+		ctx->is_secure = false;
 	}
 
 	/* Update command queue write ptr */
@@ -434,6 +714,11 @@ static void sde_hw_rotator_setup_wbengine(struct sde_hw_rotator_context *ctx,
 	SDE_REGDMA_WRITE(wrptr, ROT_WB_OUT_XY,
 			cfg->dst_rect->x | (cfg->dst_rect->y << 16));
 
+	if (flags & SDE_ROT_FLAG_SECURE_OVERLAY_SESSION)
+		SDE_REGDMA_WRITE(wrptr, ROT_WB_DST_ADDR_SW_STATUS, 0x1);
+	else
+		SDE_REGDMA_WRITE(wrptr, ROT_WB_DST_ADDR_SW_STATUS, 0);
+
 	/*
 	 * setup Downscale factor
 	 */
@@ -476,7 +761,7 @@ static u32 sde_hw_rotator_start_no_regdma(struct sde_hw_rotator_context *ctx,
 		SDE_REGDMA_WRITE(wrptr, ROTTOP_INTR_EN, 1);
 		SDE_REGDMA_WRITE(wrptr, ROTTOP_INTR_CLEAR, 1);
 		reinit_completion(&ctx->rot_comp);
-		enable_irq(rot->irq_num);
+		sde_hw_rotator_enable_irq(rot);
 	}
 
 	SDE_REGDMA_WRITE(wrptr, ROTTOP_START_CTRL, 1);
@@ -571,9 +856,6 @@ static u32 sde_hw_rotator_start_regdma(struct sde_hw_rotator_context *ctx,
 	u32  mask = 0;
 
 	wrptr = sde_hw_rotator_get_regdma_segment(ctx);
-
-	if (rot->irq_num >= 0)
-		reinit_completion(&ctx->regdma_comp);
 
 	/*
 	 * Last ROT command must be ROT_START before REGDMA start
@@ -676,7 +958,7 @@ static u32 sde_hw_rotator_wait_done_no_regdma(
 				SDEROT_WARN(
 					"Timeout waiting, but rotator job is done!!\n");
 
-			disable_irq_nosync(rot->irq_num);
+			sde_hw_rotator_disable_irq(rot);
 		}
 		spin_unlock_irqrestore(&rot->rotisr_lock, flags);
 	} else {
@@ -719,13 +1001,15 @@ static u32 sde_hw_rotator_wait_done_regdma(
 	u32 last_isr;
 	u32 last_ts;
 	u32 int_id;
+	u32 swts;
 	u32 sts = 0;
 	unsigned long flags;
 
 	if (rot->irq_num >= 0) {
 		SDEROT_DBG("Wait for REGDMA completion, ctx:%p, ts:%X\n",
 				ctx, ctx->timestamp);
-		rc = wait_for_completion_timeout(&ctx->regdma_comp,
+		rc = wait_event_timeout(ctx->regdma_waitq,
+				!sde_hw_rotator_pending_swts(rot, ctx, &swts),
 				KOFF_TIMEOUT);
 
 		spin_lock_irqsave(&rot->rotisr_lock, flags);
@@ -738,11 +1022,12 @@ static u32 sde_hw_rotator_wait_done_regdma(
 				status, int_id, last_ts);
 
 		if (rc == 0 || (status & REGDMA_INT_ERR_MASK)) {
+			bool pending;
+
+			pending = sde_hw_rotator_pending_swts(rot, ctx, &swts);
 			SDEROT_ERR(
-				"Timeout wait for regdma interrupt status, ts:%X\n",
-				ctx->timestamp);
-			SDEROT_ERR("last_isr:0x%X, last_ts:0x%X, rc=%d\n",
-					last_isr, last_ts, rc);
+				"Timeout wait for regdma interrupt status, ts:0x%X/0x%X pending:%d\n",
+				ctx->timestamp, swts, pending);
 
 			if (status & REGDMA_WATCHDOG_INT)
 				SDEROT_ERR("REGDMA watchdog interrupt\n");
@@ -753,24 +1038,13 @@ static u32 sde_hw_rotator_wait_done_regdma(
 			else if (status & REGDMA_INVALID_CMD)
 				SDEROT_ERR("REGDMA invalid command\n");
 
+			sde_hw_rotator_dump_status(rot);
 			status = ROT_ERROR_BIT;
-		} else if (queue_id == ROT_QUEUE_HIGH_PRIORITY) {
-			/* Got to match exactly with interrupt ID */
-			int_id = REGDMA_QUEUE0_INT0 << int_id;
-
-			SDE_ROTREG_WRITE(rot->mdss_base,
-					REGDMA_CSR_REGDMA_INT_CLEAR,
-					int_id);
-
-			status = 0;
-		} else if (queue_id == ROT_QUEUE_LOW_PRIORITY) {
-			/* Matching interrupt ID */
-			int_id = REGDMA_QUEUE1_INT0 << int_id;
-
-			SDE_ROTREG_WRITE(rot->mdss_base,
-					REGDMA_CSR_REGDMA_INT_CLEAR,
-					int_id);
-
+		} else {
+			if (rc == 1)
+				SDEROT_WARN(
+					"REGDMA done but no irq, ts:0x%X/0x%X\n",
+					ctx->timestamp, swts);
 			status = 0;
 		}
 
@@ -1007,7 +1281,7 @@ static struct sde_rot_hw_resource *sde_hw_rotator_alloc_ext(
 	}
 
 	if (resinfo->rot->irq_num >= 0)
-		enable_irq(resinfo->rot->irq_num);
+		sde_hw_rotator_enable_irq(resinfo->rot);
 
 	SDEROT_DBG("New rotator resource:%p, priority:%d\n",
 			resinfo, wb_id);
@@ -1036,7 +1310,7 @@ static void sde_hw_rotator_free_ext(struct sde_rot_mgr *mgr,
 		hw->pending_count);
 
 	if (resinfo->rot->irq_num >= 0)
-		disable_irq(resinfo->rot->irq_num);
+		sde_hw_rotator_disable_irq(resinfo->rot);
 
 	devm_kfree(&mgr->pdev->dev, resinfo);
 }
@@ -1078,8 +1352,10 @@ static struct sde_hw_rotator_context *sde_hw_rotator_alloc_rotctx(
 		ctx->q_id * SDE_HW_ROT_REGDMA_TOTAL_CTX +
 		sde_hw_rotator_get_regdma_ctxidx(ctx));
 
+	ctx->last_regdma_timestamp = SDE_REGDMA_SWTS_INVALID;
+
 	init_completion(&ctx->rot_comp);
-	init_completion(&ctx->regdma_comp);
+	init_waitqueue_head(&ctx->regdma_waitq);
 
 	/* Store rotator context for lookup purpose */
 	sde_hw_rotator_put_ctx(ctx);
@@ -1179,7 +1455,8 @@ static int sde_hw_rotator_config(struct sde_rot_hw_resource *hw,
 					true : false);
 
 	rot->ops.setup_rotator_fetchengine(ctx, ctx->q_id,
-			&sspp_cfg, danger_lut, safe_lut, flags);
+			&sspp_cfg, danger_lut, safe_lut,
+			entry->dnsc_factor_w, entry->dnsc_factor_h, flags);
 
 	wb_cfg.img_width = item->output.width;
 	wb_cfg.img_height = item->output.height;
@@ -1395,6 +1672,11 @@ static int sde_rotator_hw_rev_init(struct sde_hw_rotator *rot)
 
 	set_bit(SDE_CAPS_R3_WB, mdata->sde_caps_map);
 
+	if (hw_version != SDE_ROT_TYPE_V1_0) {
+		SDEROT_DBG("Supporting 1.5 downscale for SDE Rotator\n");
+		set_bit(SDE_CAPS_R3_1P5_DOWNSCALE,  mdata->sde_caps_map);
+	}
+
 	return 0;
 }
 
@@ -1419,7 +1701,7 @@ static irqreturn_t sde_hw_rotator_rotirq_handler(int irq, void *ptr)
 
 	if (isr & ROT_DONE_MASK) {
 		if (rot->irq_num >= 0)
-			disable_irq_nosync(rot->irq_num);
+			sde_hw_rotator_disable_irq(rot);
 		SDEROT_DBG("Notify rotator complete\n");
 
 		/* Normal rotator only 1 session, no need to lookup */
@@ -1456,6 +1738,8 @@ static irqreturn_t sde_hw_rotator_regdmairq_handler(int irq, void *ptr)
 	u32 q_id;
 
 	isr = SDE_ROTREG_READ(rot->mdss_base, REGDMA_CSR_REGDMA_INT_STATUS);
+	/* acknowledge interrupt before reading latest timestamp */
+	SDE_ROTREG_WRITE(rot->mdss_base, REGDMA_CSR_REGDMA_INT_CLEAR, isr);
 	ts  = SDE_ROTREG_READ(rot->mdss_base, REGDMA_TIMESTAMP_REG);
 
 	SDEROT_DBG("intr_status = %8.8x, sw_TS:%X\n", isr, ts);
@@ -1480,30 +1764,23 @@ static irqreturn_t sde_hw_rotator_regdmairq_handler(int irq, void *ptr)
 		}
 
 		ctx = rot->rotCtx[q_id][ts & SDE_HW_ROT_REGDMA_SEG_MASK];
-		WARN_ON(ctx == NULL);
 
 		/*
 		 * Wake up all waiting context from the current and previous
 		 * SW Timestamp.
 		 */
-		do {
+		while (ctx &&
+			sde_hw_rotator_elapsed_swts(ctx->timestamp, ts) >= 0) {
 			ctx->last_regdma_isr_status = isr;
 			ctx->last_regdma_timestamp  = ts;
 			SDEROT_DBG(
 				"regdma complete: ctx:%p, ts:%X\n", ctx, ts);
-			complete_all(&ctx->regdma_comp);
+			wake_up_all(&ctx->regdma_waitq);
 
 			ts  = (ts - 1) & SDE_REGDMA_SWTS_MASK;
 			ctx = rot->rotCtx[q_id]
 				[ts & SDE_HW_ROT_REGDMA_SEG_MASK];
-		} while (ctx && (ctx->last_regdma_timestamp == 0));
-
-		/*
-		 * Clear corresponding regdma interrupt because it is a level
-		 * interrupt
-		 */
-		SDE_ROTREG_WRITE(rot->mdss_base, REGDMA_CSR_REGDMA_INT_CLEAR,
-				isr);
+		};
 
 		spin_unlock(&rot->rotisr_lock);
 		ret = IRQ_HANDLED;
@@ -1526,15 +1803,12 @@ static irqreturn_t sde_hw_rotator_regdmairq_handler(int irq, void *ptr)
 				if (ctx && ctx->last_regdma_isr_status == 0) {
 					ctx->last_regdma_isr_status = isr;
 					ctx->last_regdma_timestamp  = ts;
-					complete_all(&ctx->regdma_comp);
+					wake_up_all(&ctx->regdma_waitq);
 					SDEROT_DBG("Wakeup rotctx[%d][%d]:%p\n",
 							i, j, ctx);
 				}
 			}
 		}
-
-		SDE_ROTREG_WRITE(rot->mdss_base, REGDMA_CSR_REGDMA_INT_CLEAR,
-				isr);
 
 		spin_unlock(&rot->rotisr_lock);
 		ret = IRQ_HANDLED;
@@ -1555,6 +1829,7 @@ static irqreturn_t sde_hw_rotator_regdmairq_handler(int irq, void *ptr)
 static int sde_hw_rotator_validate_entry(struct sde_rot_mgr *mgr,
 		struct sde_rot_entry *entry)
 {
+	struct sde_rot_data_type *mdata = sde_rot_get_mdata();
 	int ret = 0;
 	u16 src_w, src_h, dst_w, dst_h;
 	struct sde_rotation_item *item = &entry->item;
@@ -1578,7 +1853,7 @@ static int sde_hw_rotator_validate_entry(struct sde_rot_mgr *mgr,
 		if ((src_w % dst_w) || (src_h % dst_h)) {
 			SDEROT_DBG("non integral scale not support\n");
 			ret = -EINVAL;
-			goto dnsc_err;
+			goto dnsc_1p5_check;
 		}
 		entry->dnsc_factor_w = src_w / dst_w;
 		if ((entry->dnsc_factor_w & (entry->dnsc_factor_w - 1)) ||
@@ -1606,6 +1881,32 @@ static int sde_hw_rotator_validate_entry(struct sde_rot_mgr *mgr,
 	if (sde_mdp_is_ubwc_format(fmt)	&& (entry->dnsc_factor_h > 2)) {
 		SDEROT_DBG("downscale with ubwc cannot be more than 2\n");
 		ret = -EINVAL;
+	}
+	goto dnsc_err;
+
+dnsc_1p5_check:
+	/* Check for 1.5 downscale that only applies to V2 HW */
+	if (test_bit(SDE_CAPS_R3_1P5_DOWNSCALE, mdata->sde_caps_map)) {
+		entry->dnsc_factor_w = src_w / dst_w;
+		if ((entry->dnsc_factor_w != 1) ||
+				((dst_w * 3) != (src_w * 2))) {
+			SDEROT_DBG(
+				"No supporting non 1.5 downscale width ratio, src_w:%d, dst_w:%d\n",
+				src_w, dst_w);
+			ret = -EINVAL;
+			goto dnsc_err;
+		}
+
+		entry->dnsc_factor_h = src_h / dst_h;
+		if ((entry->dnsc_factor_h != 1) ||
+				((dst_h * 3) != (src_h * 2))) {
+			SDEROT_DBG(
+				"Not supporting non 1.5 downscale height ratio, src_h:%d, dst_h:%d\n",
+				src_h, dst_h);
+			ret = -EINVAL;
+			goto dnsc_err;
+		}
+		ret = 0;
 	}
 
 dnsc_err:
@@ -1707,6 +2008,52 @@ static ssize_t sde_hw_rotator_show_state(struct sde_rot_mgr *mgr,
 }
 
 /*
+ * sde_hw_rotator_get_pixfmt - get the indexed pixel format
+ * @mgr: Pointer to rotator manager
+ * @index: index of pixel format
+ * @input: true for input port; false for output port
+ */
+static u32 sde_hw_rotator_get_pixfmt(struct sde_rot_mgr *mgr,
+		int index, bool input)
+{
+	if (input) {
+		if (index < ARRAY_SIZE(sde_hw_rotator_input_pixfmts))
+			return sde_hw_rotator_input_pixfmts[index];
+		else
+			return 0;
+	} else {
+		if (index < ARRAY_SIZE(sde_hw_rotator_output_pixfmts))
+			return sde_hw_rotator_output_pixfmts[index];
+		else
+			return 0;
+	}
+}
+
+/*
+ * sde_hw_rotator_is_valid_pixfmt - verify if the given pixel format is valid
+ * @mgr: Pointer to rotator manager
+ * @pixfmt: pixel format to be verified
+ * @input: true for input port; false for output port
+ */
+static int sde_hw_rotator_is_valid_pixfmt(struct sde_rot_mgr *mgr, u32 pixfmt,
+		bool input)
+{
+	int i;
+
+	if (input) {
+		for (i = 0; i < ARRAY_SIZE(sde_hw_rotator_input_pixfmts); i++)
+			if (sde_hw_rotator_input_pixfmts[i] == pixfmt)
+				return true;
+	} else {
+		for (i = 0; i < ARRAY_SIZE(sde_hw_rotator_output_pixfmts); i++)
+			if (sde_hw_rotator_output_pixfmts[i] == pixfmt)
+				return true;
+	}
+
+	return false;
+}
+
+/*
  * sde_hw_rotator_parse_dt - parse r3 specific device tree settings
  * @hw_data: Pointer to rotator hw
  * @dev: Pointer to platform device
@@ -1784,6 +2131,8 @@ int sde_rotator_r3_init(struct sde_rot_mgr *mgr)
 	mgr->ops_hw_show_caps = sde_hw_rotator_show_caps;
 	mgr->ops_hw_show_state = sde_hw_rotator_show_state;
 	mgr->ops_hw_create_debugfs = sde_rotator_r3_create_debugfs;
+	mgr->ops_hw_get_pixfmt = sde_hw_rotator_get_pixfmt;
+	mgr->ops_hw_is_valid_pixfmt = sde_hw_rotator_is_valid_pixfmt;
 
 	ret = sde_hw_rotator_parse_dt(mgr->hw_data, mgr->pdev);
 	if (ret)
@@ -1810,6 +2159,7 @@ int sde_rotator_r3_init(struct sde_rot_mgr *mgr)
 			disable_irq(rot->irq_num);
 		}
 	}
+	atomic_set(&rot->irq_enabled, 0);
 
 	setup_rotator_ops(&rot->ops, rot->mode);
 
@@ -1842,6 +2192,12 @@ int sde_rotator_r3_init(struct sde_rot_mgr *mgr)
 	ret = sde_rotator_hw_rev_init(rot);
 	if (ret)
 		goto error_hw_rev_init;
+
+	/* set rotator CBCR to shutoff memory/periphery on clock off.*/
+	clk_set_flags(mgr->rot_clk[mgr->core_clk_idx].clk,
+			CLKFLAG_NORETAIN_MEM);
+	clk_set_flags(mgr->rot_clk[mgr->core_clk_idx].clk,
+			CLKFLAG_NORETAIN_PERIPH);
 
 	return 0;
 error_hw_rev_init:

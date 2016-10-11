@@ -121,6 +121,8 @@
 #define ADRENO_QUIRK_CRITICAL_PACKETS BIT(2)
 /* Mask out RB1-3 activity signals from HW hang detection logic */
 #define ADRENO_QUIRK_FAULT_DETECT_MASK BIT(3)
+/* Disable RB sampler datapath clock gating optimization */
+#define ADRENO_QUIRK_DISABLE_RB_DP2CLOCKGATING BIT(4)
 
 /* Flags to control command packet settings */
 #define KGSL_CMD_FLAGS_NONE             0
@@ -613,11 +615,13 @@ struct adreno_vbif_platform {
  * struct adreno_vbif_snapshot_registers - Holds an array of vbif registers
  * listed for snapshot dump for a particular core
  * @version: vbif version
+ * @mask: vbif revision mask
  * @registers: vbif registers listed for snapshot dump
  * @count: count of vbif registers listed for snapshot
  */
 struct adreno_vbif_snapshot_registers {
 	const unsigned int version;
+	const unsigned int mask;
 	const unsigned int *registers;
 	const int count;
 };
