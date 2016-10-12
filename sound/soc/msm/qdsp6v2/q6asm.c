@@ -53,8 +53,6 @@
 #define pr_err(fmt, ...) pr_aud_err(fmt, ##__VA_ARGS__)
 //HTC_AUD_END
 
-#define FRAME_NUM   (8)
-
 enum {
 	ASM_TOPOLOGY_CAL = 0,
 	ASM_CUSTOM_TOP_CAL,
@@ -1234,7 +1232,7 @@ err:
 int q6asm_audio_client_buf_alloc(unsigned int dir,
 			struct audio_client *ac,
 			unsigned int bufsz,
-			unsigned int bufcnt)
+			uint32_t bufcnt)
 {
 	int cnt = 0;
 	int rc = 0;
@@ -1260,10 +1258,8 @@ int q6asm_audio_client_buf_alloc(unsigned int dir,
 			pr_debug("%s: buffer already allocated\n", __func__);
 			return 0;
 		}
-                if (bufcnt != FRAME_NUM)
-                        goto fail;
 		mutex_lock(&ac->cmd_lock);
-		if (bufcnt > (LONG_MAX/sizeof(struct audio_buffer))) {
+		if (bufcnt > (U32_MAX/sizeof(struct audio_buffer))) {
 			pr_err("%s: Buffer size overflows", __func__);
 			mutex_unlock(&ac->cmd_lock);
 			goto fail;
