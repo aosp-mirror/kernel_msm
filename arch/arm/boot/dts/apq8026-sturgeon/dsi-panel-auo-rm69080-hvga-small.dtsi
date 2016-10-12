@@ -87,7 +87,9 @@
 		qcom,mdss-dsi-wr-mem-start = <0x2c>;
 		qcom,mdss-dsi-wr-mem-continue = <0x3c>;
 		qcom,mdss-dsi-te-dcs-command = <1>;
-		qcom,mdss-dsi-te-check-enable;
+		/* qcom,mdss-dsi-te-check-enable; */
+		/* clk = (340+40+40+20) * (340+16+16+2) * 24bpp * 66fps */
+		qcom,mdss-dsi-panel-clockrate = <260663040>;
 		qcom,mdss-dsi-te-using-te-pin;
 		qcom,mdss-dsi-panel-timings = [6A 16 0E 00 38 3C 12 18 2A 03 04 00];
 		qcom,mdss-dsi-t-clk-post = <0x3c>;
