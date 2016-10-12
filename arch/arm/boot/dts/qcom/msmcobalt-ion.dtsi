@@ -20,10 +20,5 @@
 			reg = <25>;
 			qcom,ion-heap-type = "SYSTEM";
 		};
-
-		system_contig_heap: qcom,ion-heap@21 {
-			reg = <21>;
-			qcom,ion-heap-type = "SYSTEM_CONTIG";
-		};
 	};
 };
