@@ -1043,8 +1043,11 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 			MDSS_XLOG(XLOG_FUNC_ENTRY, __LINE__,
 				atomic_read(&mfd->kickoff_pending),
 				atomic_read(&mfd->commits_pending));
-			pr_debug("%s: Ignore MDP3 clocks OFF request in ULP\n", __func__);
-			goto off_error;
+			rc = mdp3_session->wait_for_dma_done(mdp3_session);
+			if (atomic_read(&mfd->kickoff_pending) || rc) {
+				pr_info("Ignore MDP3 clocks OFF req in ULP\n");
+				goto off_error;
+			}
 		}
 		pr_debug("%s: Disable MDP3 clocks in ULP\n", __func__);
 		if (!mdp3_session->clk_on)
