@@ -66,7 +66,12 @@
 #define MAX17055_IC_VERSION       0x4000
 #define MAX17201_IC_VERSION       0x4001
 #define MAX17205_IC_VERSION       0x4005
-#define MAX17055_DRIVER_VERSION   0x1010
+#define MAX17055_DRIVER_VERSION   0x1011
+
+#if CONFIG_HUAWEI_SAWSHARK
+#define MAX17055_CAPACITY_CARRY   128
+#define MAX17055_SOCHOLD          0xD3
+#endif
 
 struct max17055_chip {
 	struct i2c_client *client;
@@ -286,7 +291,11 @@ static int max17055_get_property(struct power_supply *psy,
 		if (ret < 0)
 			return ret;
 
+#if CONFIG_HUAWEI_SAWSHARK
+		val->intval = (data + MAX17055_CAPACITY_CARRY) >> 8;
+#else
 		val->intval = data >> 8;
+#endif
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		ret = regmap_read(map, MAX17055_FullCapRep, &data);
@@ -983,6 +992,14 @@ static int max17055_probe(struct i2c_client *client,
 		dev_err(&client->dev, "device version mismatch: %x\n", val);
 		return -EIO;
 	}
+
+#if CONFIG_HUAWEI_SAWSHARK
+	regmap_read(chip->regmap, MAX17055_SOCHOLD, &val);
+	dev_info(&client->dev, "max17055: before disable sochold %04x\n", val);
+	regmap_write(chip->regmap, MAX17055_SOCHOLD, (val & 0xEFFF));
+	regmap_read(chip->regmap, MAX17055_SOCHOLD, &val);
+	dev_info(&client->dev, "max17055: afetr disable sochold %04x\n", val);
+#endif
 
 	chip->battery.name		= "bms";
 	chip->battery.type		= POWER_SUPPLY_TYPE_BATTERY;
