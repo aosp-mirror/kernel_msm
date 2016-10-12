@@ -3119,6 +3119,9 @@ static int smb348_charger_probe(struct i2c_client *client,
 			}
 			pr_err("detect_pin=%d, stat_pin=%d\n", !gpio_get_value(chip->wpc_dock_detect_gpio), !gpio_get_value(chip->wpc_stat_gpio));
 			chip->wpc_dock_present = !gpio_get_value(chip->wpc_dock_detect_gpio);
+			switch_set_state(&chip->dock_sdev, chip->wpc_dock_present);
+			power_supply_changed(&chip->dc_psy);
+			pr_err("Dock state is %s\n", chip->dock_sdev.state?"PRESENT":"REMOVED");
 		}
 	}
 
