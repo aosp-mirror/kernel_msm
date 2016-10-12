@@ -51,6 +51,7 @@
 #define THERM_A_CTRL_REG		0x7
 #define SYSOK_AND_USB3_REG		0x8
 #define OTHER_CTRL_REG			0x9
+#define TEMP_REG			0xB
 #define FAULT_INT_REG			0xC
 #define STATUS_INT_REG			0xD
 
@@ -2496,6 +2497,7 @@ static int force_irq_set(void *data, u64 val)
 DEFINE_SIMPLE_ATTRIBUTE(force_irq_ops, NULL, force_irq_set, "0x%02llx\n");
 #endif
 
+
 #ifdef DEBUG
 static void dump_regs(struct smb348_charger *chip)
 {
@@ -3101,7 +3103,6 @@ static int smb348_charger_probe(struct i2c_client *client,
 		goto fail_regulator_register;
 	}
 #endif
-
 	rc = smb348_hw_init(chip);
 	if (rc) {
 		dev_err(&client->dev,
@@ -3255,6 +3256,15 @@ static int smb348_charger_probe(struct i2c_client *client,
 			pr_err("requesting ADC error %d\n", rc);
 	}
 
+	/* Temperature Monitor addr: 0Bh, bit7:bit6 */
+	if (chip->cold_bat_decidegc == 100)
+		rc = smb348_masked_write(chip, TEMP_REG, 0xC0, 0x00);
+	else if (chip->cold_bat_decidegc == 50)
+		rc = smb348_masked_write(chip, TEMP_REG, 0xC0, 0x40);
+	else if (chip->cold_bat_decidegc == 0)
+		rc = smb348_masked_write(chip, TEMP_REG, 0xC0, 0x80);
+	else if (chip->cold_bat_decidegc == -50)
+		rc = smb348_masked_write(chip, TEMP_REG, 0xC0, 0xC0);
 	smb348_debugfs_init(chip);
 
 	dump_regs(chip);
