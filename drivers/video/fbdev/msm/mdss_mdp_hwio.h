@@ -822,6 +822,7 @@ enum mdss_mdp_pingpong_index {
 #define MDSS_MDP_DSPP_DEBUGBUS_STATUS                   0x34C
 
 /* Following offsets are with respect to MDP base */
+#define MDSS_MDP_HDMI_DP_CORE_SELECT                    0x408
 #define MDSS_MDP_MDP_OUT_CTL_0                          0x410
 #define MDSS_MDP_INTF_CMD_MISR_CTRL		(MDSS_MDP_INTF_MISR_CTRL + 0x8)
 #define MDSS_MDP_INTF_CMD_MISR_SIGNATURE	(MDSS_MDP_INTF_MISR_CTRL + 0xC)
@@ -829,6 +830,7 @@ enum mdss_mdp_pingpong_index {
 #define MMSS_VBIF_CLKON			0x4
 #define MMSS_VBIF_RD_LIM_CONF			0x0B0
 #define MMSS_VBIF_WR_LIM_CONF			0x0C0
+#define MDSS_VBIF_WRITE_GATHER_EN		0x0AC
 
 #define MMSS_VBIF_XIN_HALT_CTRL0	0x200
 #define MMSS_VBIF_XIN_HALT_CTRL1	0x204

@@ -542,12 +542,13 @@
 	};
 
 	qcom,cpu-bwmon {
-		compatible = "qcom,bimc-bwmon3";
+		compatible = "qcom,bimc-bwmon4";
 		reg = <0x01008000 0x300>, <0x01001000 0x200>;
 		reg-names = "base", "global_base";
 		interrupts = <0 183 4>;
 		qcom,mport = <0>;
 		qcom,target-dev = <&cpubw>;
+		qcom,hw-timer-hz = <19200000>;
 	};
 
 	mincpubw: qcom,mincpubw {
@@ -745,6 +746,7 @@
 		reg = <0xc8c0000 0x40000>;
 		reg-names = "cc_base";
 		vdd_dig-supply = <&pmcobalt_s1_level>;
+		vdd_mmsscc_mx-supply = <&pmcobalt_s9_level>;
 		clock-names = "xo", "gpll0", "gpll0_div",
 				"pclk0_src", "pclk1_src",
 				"byte0_src", "byte1_src",
@@ -821,55 +823,55 @@
 		interrupt-names = "pwrcl-irq", "perfcl-irq";
 
 		qcom,pwrcl-speedbin0-v0 =
-			<   300000000 0x0004000f 0x01200020 0x1 >,
-			<   345600000 0x05040012 0x02200020 0x1 >,
-			<   422400000 0x05040016 0x02200020 0x1 >,
-			<   499200000 0x0504001a 0x02200020 0x1 >,
-			<   576000000 0x0504001e 0x03200020 0x1 >,
-			<   633600000 0x05040021 0x03200020 0x1 >,
-			<   710400000 0x05040025 0x03200020 0x1 >,
-			<   806400000 0x0504002a 0x04200020 0x1 >,
-			<   883200000 0x0404002e 0x04250025 0x1 >,
-			<   960000000 0x04040032 0x05280028 0x1 >,
-			<  1036800000 0x04040036 0x052b002b 0x2 >,
-			<  1113600000 0x0404003a 0x052e002e 0x2 >,
-			<  1190400000 0x0404003e 0x06320032 0x2 >,
-			<  1248000000 0x04040041 0x06340034 0x2 >,
-			<  1324800000 0x04040045 0x06370037 0x2 >,
-			<  1401600000 0x04040049 0x073a003a 0x2 >,
-			<  1478400000 0x0404004d 0x073e003e 0x2 >,
-			<  1574400000 0x04040052 0x08420042 0x2 >,
-			<  1651200000 0x04040056 0x08450045 0x2 >,
-			<  1728000000 0x0404005a 0x08480048 0x2 >,
-			<  1804800000 0x0404005e 0x094b004b 0x3 >,
-			<  1881600000 0x04040062 0x094e004e 0x3 >;
+			<   300000000 0x0004000f 0x01200020 0x1 1 >,
+			<   345600000 0x05040012 0x02200020 0x1 2 >,
+			<   422400000 0x05040016 0x02200020 0x1 3 >,
+			<   499200000 0x0504001a 0x02200020 0x1 4 >,
+			<   576000000 0x0504001e 0x03200020 0x1 5 >,
+			<   633600000 0x05040021 0x03200020 0x1 6 >,
+			<   710400000 0x05040025 0x03200020 0x1 7 >,
+			<   806400000 0x0504002a 0x04200020 0x1 8 >,
+			<   883200000 0x0404002e 0x04250025 0x1 9 >,
+			<   960000000 0x04040032 0x05280028 0x1 10 >,
+			<  1036800000 0x04040036 0x052b002b 0x2 11 >,
+			<  1113600000 0x0404003a 0x052e002e 0x2 12 >,
+			<  1190400000 0x0404003e 0x06320032 0x2 13 >,
+			<  1248000000 0x04040041 0x06340034 0x2 14 >,
+			<  1324800000 0x04040045 0x06370037 0x2 15 >,
+			<  1401600000 0x04040049 0x073a003a 0x2 16 >,
+			<  1478400000 0x0404004d 0x073e003e 0x2 17 >,
+			<  1574400000 0x04040052 0x08420042 0x2 18 >,
+			<  1651200000 0x04040056 0x08450045 0x2 19 >,
+			<  1728000000 0x0404005a 0x08480048 0x2 20 >,
+			<  1804800000 0x0404005e 0x094b004b 0x3 21 >,
+			<  1881600000 0x04040062 0x094e004e 0x3 22 >;
 
 		qcom,perfcl-speedbin0-v0 =
-			<   300000000 0x0004000f 0x01200020 0x1 >,
-			<   345600000 0x05040012 0x02200020 0x1 >,
-			<   422400000 0x05040016 0x02200020 0x1 >,
-			<   480000000 0x05040019 0x02200020 0x1 >,
-			<   556800000 0x0504001d 0x03200020 0x1 >,
-			<   633600000 0x05040021 0x03200020 0x1 >,
-			<   710400000 0x05040025 0x03200020 0x1 >,
-			<   787200000 0x05040029 0x04200020 0x1 >,
-			<   844800000 0x0404002c 0x04230023 0x1 >,
-			<   902400000 0x0404002f 0x04260026 0x1 >,
-			<   979200000 0x04040033 0x05290029 0x1 >,
-			<  1056000000 0x04040037 0x052c002c 0x1 >,
-			<  1171200000 0x0404003d 0x06310031 0x2 >,
-			<  1248000000 0x04040041 0x06340034 0x2 >,
-			<  1324800000 0x04040045 0x06370037 0x2 >,
-			<  1401600000 0x04040049 0x073a003a 0x2 >,
-			<  1478400000 0x0404004d 0x073e003e 0x2 >,
-			<  1536000000 0x04040050 0x07400040 0x2 >,
-			<  1632000000 0x04040055 0x08440044 0x2 >,
-			<  1708800000 0x04040059 0x08470047 0x2 >,
-			<  1785600000 0x0404005d 0x094a004a 0x2 >,
-			<  1862400000 0x04040061 0x094e004e 0x2 >,
-			<  1939200000 0x04040065 0x09510051 0x3 >,
-			<  2016000000 0x04040069 0x0a540054 0x3 >,
-			<  2092800000 0x0404006d 0x0a570057 0x3 >;
+			<   300000000 0x0004000f 0x01200020 0x1 1 >,
+			<   345600000 0x05040012 0x02200020 0x1 2 >,
+			<   422400000 0x05040016 0x02200020 0x1 3 >,
+			<   480000000 0x05040019 0x02200020 0x1 4 >,
+			<   556800000 0x0504001d 0x03200020 0x1 5 >,
+			<   633600000 0x05040021 0x03200020 0x1 6 >,
+			<   710400000 0x05040025 0x03200020 0x1 7 >,
+			<   787200000 0x05040029 0x04200020 0x1 8 >,
+			<   844800000 0x0404002c 0x04230023 0x1 9 >,
+			<   902400000 0x0404002f 0x04260026 0x1 10 >,
+			<   979200000 0x04040033 0x05290029 0x1 11 >,
+			<  1056000000 0x04040037 0x052c002c 0x1 12 >,
+			<  1171200000 0x0404003d 0x06310031 0x2 13 >,
+			<  1248000000 0x04040041 0x06340034 0x2 14 >,
+			<  1324800000 0x04040045 0x06370037 0x2 15 >,
+			<  1401600000 0x04040049 0x073a003a 0x2 16 >,
+			<  1478400000 0x0404004d 0x073e003e 0x2 17 >,
+			<  1536000000 0x04040050 0x07400040 0x2 18 >,
+			<  1632000000 0x04040055 0x08440044 0x2 19 >,
+			<  1708800000 0x04040059 0x08470047 0x2 20 >,
+			<  1785600000 0x0404005d 0x094a004a 0x2 21 >,
+			<  1862400000 0x04040061 0x094e004e 0x2 22 >,
+			<  1939200000 0x04040065 0x09510051 0x3 23 >,
+			<  2016000000 0x04040069 0x0a540054 0x3 24 >,
+			<  2092800000 0x0404006d 0x0a570057 0x3 25 >;
 
 		qcom,up-timer =
 			<1000 1000>;
@@ -1401,6 +1403,27 @@
 			qcom,glinkpkt-ch-name = "DATA40_CNTL";
 			qcom,glinkpkt-dev-name = "smdcntl8";
 		};
+
+		qcom,glinkpkt-data1 {
+			qcom,glinkpkt-transport = "smem";
+			qcom,glinkpkt-edge = "mpss";
+			qcom,glinkpkt-ch-name = "DATA1";
+			qcom,glinkpkt-dev-name = "smd7";
+		};
+
+		qcom,glinkpkt-data4 {
+			qcom,glinkpkt-transport = "smem";
+			qcom,glinkpkt-edge = "mpss";
+			qcom,glinkpkt-ch-name = "DATA4";
+			qcom,glinkpkt-dev-name = "smd8";
+		};
+
+		qcom,glinkpkt-data11 {
+			qcom,glinkpkt-transport = "smem";
+			qcom,glinkpkt-edge = "mpss";
+			qcom,glinkpkt-ch-name = "DATA11";
+			qcom,glinkpkt-dev-name = "smd11";
+		};
 	};
 
 	pcie0: qcom,pcie@01c00000 {
@@ -1613,6 +1636,16 @@
 		status = "ok";
 	};
 
+	spss_utils: qcom,spss_utils {
+		compatible = "qcom,spss-utils";
+		/* spss test fuse physical address */
+		qcom,spss-fuse-addr = <0x007841c4 0x4>;
+		qcom,spss-fuse-bit = <27>;
+		qcom,spss-test-firmware-name = "spss";    /* default name */
+		qcom,spss-prod-firmware-name = "spss1p";  /* 8 chars max */
+		status = "ok";
+	};
+
 	sdhc_2: sdhci@c0a4900 {
 		compatible = "qcom,sdhci-msm";
 		reg = <0xc0a4900 0x314>, <0xc0a4000 0x800>;
@@ -1710,7 +1743,7 @@
 			"rx_lane0_sync_clk";
 		clocks =
 			<&clock_gcc clk_gcc_ufs_axi_hw_ctl_clk>,
-			<&clock_gcc clk_gcc_aggre1_ufs_axi_clk>,
+			<&clock_gcc clk_gcc_aggre1_ufs_axi_hw_ctl_clk>,
 			<&clock_gcc clk_gcc_ufs_ahb_clk>,
 			<&clock_gcc clk_gcc_ufs_unipro_core_hw_ctl_clk>,
 			<&clock_gcc clk_gcc_ufs_ice_core_hw_ctl_clk>,
@@ -1768,6 +1801,9 @@
 		qcom,pm-qos-cpu-groups = <0x0F 0xF0>;
 		qcom,pm-qos-cpu-group-latency-us = <70 70>;
 		qcom,pm-qos-default-cpu = <0>;
+
+		resets = <&clock_gcc UFS_BCR>;
+		reset-names = "core_reset";
 
 		status = "disabled";
 	};
@@ -2148,7 +2184,9 @@
 		reg-names = "tsens_physical";
 		interrupts = <0 458 0>, <0 445 0>;
 		interrupt-names = "tsens-upper-lower", "tsens-critical";
-		qcom,sensors = <14>;
+		qcom,client-id = <0 1 2 3 4 7 8 9 10 11 12 13>;
+		qcom,sensor-id = <0 1 2 3 4 7 8 9 10 11 12 13>;
+		qcom,sensors = <12>;
 	};
 
 	tsens1: tsens@10ad000 {
@@ -2187,16 +2225,6 @@
 		sensor_information4: qcom,sensor-information-4 {
 			qcom,sensor-type = "tsens";
 			qcom,sensor-name = "tsens_tz_sensor4";
-			qcom,scaling-factor = <10>;
-		};
-		sensor_information5: qcom,sensor-information-5 {
-			qcom,sensor-type = "tsens";
-			qcom,sensor-name = "tsens_tz_sensor5";
-			qcom,scaling-factor = <10>;
-		};
-		sensor_information6: qcom,sensor-information-6 {
-			qcom,sensor-type = "tsens";
-			qcom,sensor-name = "tsens_tz_sensor6";
 			qcom,scaling-factor = <10>;
 		};
 		sensor_information7: qcom,sensor-information-7 {
@@ -2846,6 +2874,8 @@
 		qcom,msm-bus,num-paths = <1>;
 		qcom,msm-bus,vectors-KBps = <81 10065 0 0>,
 					    <81 10065 0 16000>;
+		qcom,icnss-vadc = <&pmcobalt_vadc>;
+		qcom,icnss-adc_tm = <&pmcobalt_adc_tm>;
 	};
 
 	wil6210: qcom,wil6210 {
