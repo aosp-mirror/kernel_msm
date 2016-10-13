@@ -1062,6 +1062,9 @@ static int smb348_get_prop_batt_present(struct smb348_charger *chip)
 static int smb348_get_prop_batt_capacity(struct smb348_charger *chip)
 {
 	int rc;
+#ifdef FEATURE_THERMAL_MITIGATION_ALGO
+	int reg_current_now;
+#endif /* FEATURE_THERMAL_MITIGATION_ALGO */
 	union power_supply_propval ret = {0, };
 
 	if (chip->fake_battery_soc >= 0)
@@ -1081,20 +1084,28 @@ static int smb348_get_prop_batt_capacity(struct smb348_charger *chip)
 		}
 
 		// if battery capacity is higher than 75%, using 100mA to do CV charging, otherwise using 200mA for CC charging.
+		reg_current_now = smb348_check_fastchg_current_now(chip);
 		if (chip->wpc_state) {
 			if (ret.intval >= SMB348_SW_MITIGATION_SOC) {
-				rc = smb348_fastchg_current_set(chip, chip->fastchg_current_mitigation_ma);
-				if (rc)
-					dev_err(chip->dev,
-						"Couldn't set charging current rc = %d\n", rc);
+				if (reg_current_now != chip->fastchg_current_mitigation_ma) {
+					pr_err("Set to mitigation current(100 mA)\n");
+					rc = smb348_fastchg_current_set(chip, chip->fastchg_current_mitigation_ma);
+					if (rc)
+						dev_err(chip->dev,
+							"Couldn't set charging current rc = %d\n", rc);
+				}
 			} else {
-				rc = smb348_fastchg_current_set(chip, chip->fastchg_current_max_ma);
-				if (rc)
-					dev_err(chip->dev,
-						"Couldn't set charging current rc = %d\n", rc);
+				if (reg_current_now != chip->fastchg_current_max_ma) {
+					pr_err("Set to normal current(200 mA)\n");
+					rc = smb348_fastchg_current_set(chip, chip->fastchg_current_max_ma);
+					if (rc)
+						dev_err(chip->dev,
+							"Couldn't set charging current rc = %d\n", rc);
+				}
 			}
 		} else {
-			if (chip->fastchg_current_mitigation_ma == smb348_check_fastchg_current_now(chip)) {
+			if (chip->fastchg_current_mitigation_ma == reg_current_now) {
+				pr_err("Restore to normal current(200 mA)\n");
 				rc = smb348_fastchg_current_set(chip, chip->fastchg_current_max_ma);
 				if (rc)
 					dev_err(chip->dev,
