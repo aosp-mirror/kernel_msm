@@ -8,14 +8,12 @@
 #include <linux/uio.h>
 #include <linux/wait.h>
 #include <linux/kref.h>
+#include <linux/fs.h>
 
 #include "iov_buffer.h"
 
 struct service {
 	atomic_t             s_count;
-	struct kref          s_ref;
-	struct file *        s_filp;           // does not hold a ref to the file
-
 	struct mutex         s_mutex;          // protects lists and allocators
 
 	struct idr           s_channel_idr;    // channel id allocator
@@ -41,6 +39,7 @@ struct service {
 
 	// TODO(eieio): figure out what to do about forking/execing
 	void __user *        s_context;        // userspace context pointer
+	struct file *        s_filp;           // does not hold a ref to the file
 };
 
 struct channel {
@@ -84,7 +83,6 @@ struct message {
 
 	/* state below may be modified by multiple service threads */
 	struct mutex         m_mutex;          // sync service access
-	int                  m_count;          // xfers in progress
 
 	struct iov_buffer    m_sbuf;           // send buffer vecs
 	struct iov_buffer    m_rbuf;           // receive buffer vecs
@@ -122,12 +120,9 @@ int servicefs_cache_init(void);
 /*
  * Creation, status, and removal of services.
  */
-struct service *get_new_service(void);
-int cancel_service(struct service *svc);
-void remove_service(struct service *svc);
-
-int service_get(struct service *svc);
-void service_put(struct service *svc);
+struct service *service_new(void);
+int service_cancel(struct service *svc);
+void service_free(struct service *svc);
 
 static inline bool __is_service_canceled(struct service *svc)
 {
@@ -137,9 +132,9 @@ static inline bool __is_service_canceled(struct service *svc)
 /*
  * Creation, status, and removal of channels.
  */
-struct channel *get_new_channel(struct service *svc);
-void __cancel_channel(struct channel *c);
-void remove_channel(struct channel *c);
+struct channel *channel_new(struct service *svc);
+void __channel_cancel(struct channel *c);
+void channel_remove(struct channel *c);
 
 static inline bool __is_channel_canceled(struct channel *c)
 {
@@ -149,9 +144,8 @@ static inline bool __is_channel_canceled(struct channel *c)
 /*
  * Status and removal of messages.
  */
-void __complete_message(struct message *msg, int retcode);
-void __cancel_message(struct message *m);
-void cancel_message(struct message *m);
+void __message_complete(struct message *msg, int retcode);
+void __message_cancel(struct message *m);
 
 static inline bool __is_message_completed(struct message *m)
 {
@@ -184,12 +178,12 @@ static inline bool __is_message_detached(struct message *m)
 	return m->m_channel == NULL;
 }
 
-void __cancel_impulse(struct impulse *i);
+void __impulse_cancel(struct impulse *i);
 
 /*
  * Removal of a service's dentry.
  */
-void servicefs_remove(struct dentry *dentry);
+void servicefs_remove_dentry(struct dentry *dentry);
 
 /*
  * Utility to create a new channel and its associated file.

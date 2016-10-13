@@ -14,7 +14,6 @@
 #include <linux/fs.h>
 #include <linux/pagemap.h>
 #include <linux/namei.h>
-#include <linux/servicefs.h>
 #include <linux/slab.h>
 #include <linux/poll.h>
 #include <linux/sched.h>
@@ -106,9 +105,9 @@ static int initial_open(struct inode *inode, struct file *filp)
 		filp->f_op = &service_file_operations;
 		svc->s_filp = filp; // DO NOT take a ref to the file struct.
 	} else {
-		struct channel *c = get_new_channel(svc);
+		struct channel *c = channel_new(svc);
 		if (!c)
-			return -EINVAL; // TODO: propagate error code from get_new_channel()
+			return -EINVAL; // TODO: propagate error code from channel_new()
 
 		filp->private_data = c;
 		filp->f_op = &channel_file_operations;
@@ -144,9 +143,9 @@ static int create_channel_open(struct inode *inode, struct file *filp)
 	pr_debug("count=%d\n", count);
 	BUG_ON(count < 1);
 
-	c = get_new_channel(svc);
+	c = channel_new(svc);
 	if (!c)
-		return -EINVAL; // TODO: propagate error code from get_new_channel()
+		return -EINVAL; // TODO: propagate error code from channel_new()
 
 	filp->private_data = c;
 	filp->f_op = &initial_file_operations;
@@ -389,7 +388,7 @@ static long service_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 		case SERVICEFS_CANCEL_SERVICE:
-			ret = cancel_service(svc);
+			ret = service_cancel(svc);
 			break;
 
 		default:
@@ -604,7 +603,7 @@ static long service_compat_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 		case SERVICEFS_COMPAT_CANCEL_SERVICE:
-			ret = cancel_service(svc);
+			ret = service_cancel(svc);
 			break;
 
 		default:
@@ -722,7 +721,7 @@ static int service_release(struct inode *inode, struct file *filp)
 
 	count = atomic_add_return(-1, &svc->s_count);
 	pr_debug("count=%d\n", count);
-	cancel_service(svc);
+	service_cancel(svc);
 
 	return 0;
 }
@@ -1052,7 +1051,7 @@ static int channel_release(struct inode *inode, struct file *filp)
 		(void) servicefs_msg_sendv_uninterruptible(c, SERVICEFS_OP_UNIX_CLOSE,
 				NULL, 0, NULL, 0, NULL, 0);
 
-	remove_channel(c);
+	channel_remove(c);
 
 	return 0;
 }

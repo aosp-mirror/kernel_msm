@@ -21,7 +21,6 @@
 #include <linux/init.h>
 #include <linux/kobject.h>
 #include <linux/namei.h>
-#include <linux/servicefs.h>
 #include <linux/fsnotify.h>
 #include <linux/string.h>
 #include <linux/seq_file.h>
@@ -33,10 +32,9 @@
 
 #define SERVICEFS_DEFAULT_MODE	0700
 
-static struct vfsmount *servicefs_mount;
-static int servicefs_mount_count;
-static bool servicefs_registered;
-
+/* declared in file.c */
+extern const struct file_operations servicefs_file_operations;
+extern const struct inode_operations servicefs_link_operations;
 extern const struct file_operations initial_file_operations;
 
 static int servicefs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode,
@@ -50,7 +48,7 @@ static int inode_ops_create(struct inode *dir, struct dentry *dentry, umode_t mo
 {
 	struct service *svc;
 
-	svc = get_new_service();
+	svc = service_new();
 	if (!svc)
 		return -ENOMEM;
 
@@ -71,7 +69,7 @@ static const struct inode_operations servicefs_inode_operations = {
 	.unlink         = simple_unlink,
 };
 
-static struct inode *servicefs_get_inode(struct super_block *sb, umode_t mode, dev_t dev,
+static struct inode *servicefs_new_inode(struct super_block *sb, umode_t mode, dev_t dev,
 				       void *data, const struct file_operations *fops)
 
 {
@@ -119,7 +117,7 @@ static int servicefs_mknod(struct inode *dir, struct dentry *dentry,
 	if (dentry->d_inode)
 		return -EEXIST;
 
-	inode = servicefs_get_inode(dir->i_sb, mode, dev, data, fops);
+	inode = servicefs_new_inode(dir->i_sb, mode, dev, data, fops);
 	if (inode) {
 		d_instantiate(dentry, inode);
 		dget(dentry);
@@ -142,12 +140,14 @@ static int servicefs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mod
 	return res;
 }
 
+#if 0
 static int servicefs_link(struct inode *dir, struct dentry *dentry, umode_t mode,
 			void *data, const struct file_operations *fops)
 {
 	mode = (mode & S_IALLUGO) | S_IFLNK;
 	return servicefs_mknod(dir, dentry, mode, 0, data, fops);
 }
+#endif
 
 static int servicefs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 			  void *data, const struct file_operations *fops)
@@ -173,7 +173,7 @@ static void servicefs_destroy_inode(struct inode *inode)
 		BUG_ON(!svc);
 
 		pr_debug("svc=%p\n", svc);
-		service_put(svc);
+		service_free(svc);
 	}
 
 	free_inode_nonrcu(inode);
@@ -362,9 +362,8 @@ error:
 	return err;
 }
 
-static struct dentry *service_mount(struct file_system_type *fs_type,
-			int flags, const char *dev_name,
-			void *data)
+static struct dentry *servicefs_mount(struct file_system_type *fs_type,
+			int flags, const char *dev_name, void *data)
 {
 	return mount_single(fs_type, flags, data, servicefs_fill_super);
 }
@@ -372,170 +371,9 @@ static struct dentry *service_mount(struct file_system_type *fs_type,
 static struct file_system_type service_fs_type = {
 	.owner =	THIS_MODULE,
 	.name =		"servicefs",
-	.mount =	service_mount,
+	.mount =	servicefs_mount,
 	.kill_sb =	kill_litter_super,
 };
-
-static int servicefs_create_by_name(const char *name, mode_t mode,
-				  struct dentry *parent,
-				  struct dentry **dentry,
-				  void *data,
-				  const struct file_operations *fops)
-{
-	int error = 0;
-
-	/* If the parent is not specified, we create it in the root.
-	 * We need the root dentry to do this, which is in the super
-	 * block. A pointer to that is in the struct vfsmount that we
-	 * have around.
-	 */
-	if (!parent)
-		parent = servicefs_mount->mnt_sb->s_root;
-
-	*dentry = NULL;
-	mutex_lock(&parent->d_inode->i_mutex);
-	*dentry = lookup_one_len(name, parent, strlen(name));
-	if (!IS_ERR(*dentry)) {
-		switch (mode & S_IFMT) {
-		case S_IFDIR:
-			error = servicefs_mkdir(parent->d_inode, *dentry, mode,
-					      data, fops);
-			break;
-		case S_IFLNK:
-			error = servicefs_link(parent->d_inode, *dentry, mode,
-					     data, fops);
-			break;
-		default:
-			error = servicefs_create(parent->d_inode, *dentry, mode,
-					       data, fops);
-			break;
-		}
-		dput(*dentry);
-	} else
-		error = PTR_ERR(*dentry);
-	mutex_unlock(&parent->d_inode->i_mutex);
-
-	return error;
-}
-
-/**
- * servicefs_create_file - create a file in the servicefs filesystem
- * @name: a pointer to a string containing the name of the file to create.
- * @mode: the permission that the file should have.
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this paramater is NULL, then the
- *          file will be created in the root of the servicefs filesystem.
- * @data: a pointer to something that the caller will want to get to later
- *        on.  The inode.i_private pointer will point to this value on
- *        the open() call.
- * @fops: a pointer to a struct file_operations that should be used for
- *        this file.
- *
- * This is the basic "create a file" function for servicefs.  It allows for a
- * wide range of flexibility in creating a file, or a directory (if you want
- * to create a directory, the servicefs_create_dir() function is
- * recommended to be used instead.)
- *
- * This function will return a pointer to a dentry if it succeeds.  This
- * pointer must be passed to the servicefs_remove() function when the file is
- * to be removed (no automatic cleanup happens if your module is unloaded,
- * you are responsible here.)  If an error occurs, %NULL will be returned.
- *
- * If servicefs is not enabled in the kernel, the value -%ENODEV will be
- * returned.
- */
-struct dentry *servicefs_create_file(const char *name, mode_t mode,
-				   struct dentry *parent, void *data,
-				   const struct file_operations *fops)
-{
-	struct dentry *dentry = NULL;
-	int error;
-
-	pr_debug("servicefs: creating file '%s'\n",name);
-
-	error = simple_pin_fs(&service_fs_type, &servicefs_mount,
-			      &servicefs_mount_count);
-	if (error)
-		goto exit;
-
-	error = servicefs_create_by_name(name, mode, parent, &dentry,
-				       data, fops);
-	if (error) {
-		dentry = NULL;
-		simple_release_fs(&servicefs_mount, &servicefs_mount_count);
-		goto exit;
-	}
-exit:
-	return dentry;
-}
-EXPORT_SYMBOL_GPL(servicefs_create_file);
-
-/**
- * servicefs_create_dir - create a directory in the servicefs filesystem
- * @name: a pointer to a string containing the name of the directory to
- *        create.
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this paramater is NULL, then the
- *          directory will be created in the root of the servicefs filesystem.
- *
- * This function creates a directory in servicefs with the given name.
- *
- * This function will return a pointer to a dentry if it succeeds.  This
- * pointer must be passed to the servicefs_remove() function when the file is
- * to be removed (no automatic cleanup happens if your module is unloaded,
- * you are responsible here.)  If an error occurs, %NULL will be returned.
- *
- * If servicefs is not enabled in the kernel, the value -%ENODEV will be
- * returned.
- */
-struct dentry *servicefs_create_dir(const char *name, struct dentry *parent)
-{
-	return servicefs_create_file(name,
-				   S_IFDIR | S_IRWXU | S_IRUGO | S_IXUGO,
-				   parent, NULL, NULL);
-}
-EXPORT_SYMBOL_GPL(servicefs_create_dir);
-
-/**
- * servicefs_create_symlink- create a symbolic link in the servicefs filesystem
- * @name: a pointer to a string containing the name of the symbolic link to
- *        create.
- * @parent: a pointer to the parent dentry for this symbolic link.  This
- *          should be a directory dentry if set.  If this paramater is NULL,
- *          then the symbolic link will be created in the root of the servicefs
- *          filesystem.
- * @target: a pointer to a string containing the path to the target of the
- *          symbolic link.
- *
- * This function creates a symbolic link with the given name in servicefs that
- * links to the given target path.
- *
- * This function will return a pointer to a dentry if it succeeds.  This
- * pointer must be passed to the servicefs_remove() function when the symbolic
- * link is to be removed (no automatic cleanup happens if your module is
- * unloaded, you are responsible here.)  If an error occurs, %NULL will be
- * returned.
- *
- * If servicefs is not enabled in the kernel, the value -%ENODEV will be
- * returned.
- */
-struct dentry *servicefs_create_symlink(const char *name, struct dentry *parent,
-				      const char *target)
-{
-	struct dentry *result;
-	char *link;
-
-	link = kstrdup(target, GFP_KERNEL);
-	if (!link)
-		return NULL;
-
-	result = servicefs_create_file(name, S_IFLNK | S_IRWXUGO, parent, link,
-				     NULL);
-	if (!result)
-		kfree(link);
-	return result;
-}
-EXPORT_SYMBOL_GPL(servicefs_create_symlink);
 
 static int __servicefs_remove(struct dentry *dentry, struct dentry *parent)
 {
@@ -551,8 +389,6 @@ static int __servicefs_remove(struct dentry *dentry, struct dentry *parent)
 			case S_IFLNK:
 				kfree(dentry->d_inode->i_private);
 				/* fall through */
-
-			// TODO(eieio): cancel clients and do other cleanup
 			default:
 				simple_unlink(parent->d_inode, dentry);
 				break;
@@ -566,19 +402,10 @@ static int __servicefs_remove(struct dentry *dentry, struct dentry *parent)
 }
 
 /**
- * servicefs_remove - removes a file or directory from the servicefs filesystem
- * @dentry: a pointer to a the dentry of the file or directory to be
- *          removed.
- *
- * This function removes a file or directory in servicefs that was previously
- * created with a call to another servicefs function (like
- * servicefs_create_file() or variants thereof.)
- *
- * This function is required to be called in order for the file to be
- * removed, no automatic cleanup of files will happen when a module is
- * removed, you are responsible here.
+ * servicefs_remove_dentry - removes a dentry from the servicefs filesystem
+ * @dentry: a pointer to a the dentry to be removed.
  */
-void servicefs_remove(struct dentry *dentry)
+void servicefs_remove_dentry(struct dentry *dentry)
 {
 	struct dentry *parent;
 	int ret;
@@ -593,85 +420,9 @@ void servicefs_remove(struct dentry *dentry)
 	mutex_lock(&parent->d_inode->i_mutex);
 	ret = __servicefs_remove(dentry, parent);
 	mutex_unlock(&parent->d_inode->i_mutex);
-	if (!ret)
-		simple_release_fs(&servicefs_mount, &servicefs_mount_count);
 }
-EXPORT_SYMBOL_GPL(servicefs_remove);
 
-/**
- * servicefs_rename - rename a file/directory in the servicefs filesystem
- * @old_dir: a pointer to the parent dentry for the renamed object. This
- *          should be a directory dentry.
- * @old_dentry: dentry of an object to be renamed.
- * @new_dir: a pointer to the parent dentry where the object should be
- *          moved. This should be a directory dentry.
- * @new_name: a pointer to a string containing the target name.
- *
- * This function renames a file/directory in servicefs.  The target must not
- * exist for rename to succeed.
- *
- * This function will return a pointer to old_dentry (which is updated to
- * reflect renaming) if it succeeds. If an error occurs, %NULL will be
- * returned.
- *
- * If servicefs is not enabled in the kernel, the value -%ENODEV will be
- * returned.
- */
-struct dentry *servicefs_rename(struct dentry *old_dir, struct dentry *old_dentry,
-		struct dentry *new_dir, const char *new_name)
-{
-	int error;
-	struct dentry *dentry = NULL, *trap;
-	const char *old_name;
-
-	trap = lock_rename(new_dir, old_dir);
-	/* Source or destination directories don't exist? */
-	if (!old_dir->d_inode || !new_dir->d_inode)
-		goto exit;
-	/* Source does not exist, cyclic rename, or mountpoint? */
-	if (!old_dentry->d_inode || old_dentry == trap ||
-	    d_mountpoint(old_dentry))
-		goto exit;
-	dentry = lookup_one_len(new_name, new_dir, strlen(new_name));
-	/* Lookup failed, cyclic rename or target exists? */
-	if (IS_ERR(dentry) || dentry == trap || dentry->d_inode)
-		goto exit;
-
-	old_name = fsnotify_oldname_init(old_dentry->d_name.name);
-
-	error = simple_rename(old_dir->d_inode, old_dentry, new_dir->d_inode,
-		dentry);
-	if (error) {
-		fsnotify_oldname_free(old_name);
-		goto exit;
-	}
-	d_move(old_dentry, dentry);
-	fsnotify_move(old_dir->d_inode, new_dir->d_inode, old_name,
-		S_ISDIR(old_dentry->d_inode->i_mode),
-		NULL, old_dentry);
-	fsnotify_oldname_free(old_name);
-	unlock_rename(new_dir, old_dir);
-	dput(dentry);
-	return old_dentry;
-exit:
-	if (dentry && !IS_ERR(dentry))
-		dput(dentry);
-	unlock_rename(new_dir, old_dir);
-	return NULL;
-}
-EXPORT_SYMBOL_GPL(servicefs_rename);
-
-/**
- * servicefs_initialized - Tells whether servicefs has been registered
- */
-bool servicefs_initialized(void)
-{
-	return servicefs_registered;
-}
-EXPORT_SYMBOL_GPL(servicefs_initialized);
-
-
-static struct kobject *service_kobj;
+static struct kobject *servicefs_kobj;
 
 static int __init servicefs_init(void)
 {
@@ -681,15 +432,13 @@ static int __init servicefs_init(void)
 	if (retval)
 		return retval;
 
-	service_kobj = kobject_create_and_add("service", kernel_kobj);
-	if (!service_kobj)
+	servicefs_kobj = kobject_create_and_add("servicefs", kernel_kobj);
+	if (!servicefs_kobj)
 		return -EINVAL;
 
 	retval = register_filesystem(&service_fs_type);
 	if (retval)
-		kobject_put(service_kobj);
-	else
-		servicefs_registered = true;
+		kobject_put(servicefs_kobj);
 
 	return retval;
 }

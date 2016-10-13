@@ -14,7 +14,6 @@
 #include <linux/pagemap.h>
 #include <linux/init.h>
 #include <linux/kobject.h>
-#include <linux/servicefs.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -27,11 +26,6 @@
 #include "servicefs_compat_ioctl.h"
 
 #define THIS_SERVICE_FD (-1)
-
-/**
- * service_ref_mutex - protects service struct krefs and cleanup
- */
-static DEFINE_MUTEX(service_ref_mutex);
 
 /**
  * message_cache - cache for message structs.
@@ -85,12 +79,6 @@ void service_poison(struct service *svc)
 #endif
 }
 
-void service_free(struct service *svc)
-{
-	service_poison(svc);
-	kfree(svc);
-}
-
 void channel_poison(struct channel *c)
 {
 #ifdef CONFIG_SERVICEFS_USE_POISON
@@ -117,13 +105,15 @@ void impulse_free(struct impulse *i)
 }
 
 /**
- * service_release_kref - clean up a service that is no longer referenced
- * @ref: pointer to the service's s_ref member
+ * service_free - free an unused service struct
+ * @svc: pointer to the service struct to free
+ *
+ * Performs sanity checks to make sure the service is properly torn down before
+ * freeing its memory.
  */
-static void service_release_kref(struct kref *ref)
+void service_free(struct service *svc)
 {
-	struct service *svc = container_of(ref, struct service, s_ref);
-	pr_debug("releasing service: svc=%p\n", svc);
+	pr_debug("freeing service: svc=%p\n", svc);
 
 	/* make sure everything is already properly cleaned up */
 	BUG_ON(!list_empty(&svc->s_channels));
@@ -137,44 +127,16 @@ static void service_release_kref(struct kref *ref)
 	idr_destroy(&svc->s_channel_idr);
 	idr_destroy(&svc->s_message_idr);
 
-	service_free(svc);
+	service_poison(svc);
+	kfree(svc);
 }
 
 /**
- * service_get - get a reference to a service
- * @svc: pointer to the service to get a reference to
+ * service_new - allocate and initialize a new service
  *
- * Returns 1 if a reference was obtainted, 0 if not.
+ * Returns a pointer to the new service.
  */
-int service_get(struct service *svc)
-{
-	if (!kref_get_unless_zero(&svc->s_ref)) {
-		pr_warn("Failed to get reference to service: svc=%p\n", svc);
-		return 0;
-	} else {
-		return 1;
-	}
-}
-
-/**
- * service_put - drop a reference to a service
- * @svc: pointer to the service to drop the reference to
- */
-void service_put(struct service *svc)
-{
-	if (kref_put_mutex(&svc->s_ref, service_release_kref,
-			&service_ref_mutex)) {
-		mutex_unlock(&service_ref_mutex);
-	}
-}
-
-/**
- * get_new_service - allocate and initialize a new service
- *
- * Returns a pointer to the new service. The caller implicitly receives
- * a reference to the new service.
- */
-struct service *get_new_service(void)
+struct service *service_new(void)
 {
 	struct service *svc = kzalloc(sizeof(struct service), GFP_KERNEL);
 	if (!svc) {
@@ -184,7 +146,6 @@ struct service *get_new_service(void)
 
 	pr_debug("creating new service: svc=%p\n", svc);
 
-	kref_init(&svc->s_ref); // initial ref count is 1
 	mutex_init(&svc->s_mutex);
 
 	idr_init(&svc->s_channel_idr);
@@ -204,7 +165,7 @@ out:
 	return svc;
 }
 
-int cancel_service(struct service *svc)
+int service_cancel(struct service *svc)
 {
 	int ret;
 	struct channel *c, *cn;
@@ -218,22 +179,22 @@ int cancel_service(struct service *svc)
 		svc->s_flags |= SERVICE_FLAGS_CANCELED;
 
 		pr_debug("removing dentry service=%p\n", svc);
-		servicefs_remove(svc->s_filp->f_path.dentry);
+		servicefs_remove_dentry(svc->s_filp->f_path.dentry);
 
 		list_for_each_entry_safe(i, in, &svc->s_impulses, i_impulses_node) {
-			__cancel_impulse(i);
+			__impulse_cancel(i);
 		}
 
 		list_for_each_entry_safe(m, mn, &svc->s_messages, m_messages_node) {
-			__cancel_message(m);
+			__message_cancel(m);
 		}
 
 		list_for_each_entry_safe(m, mn, &svc->s_active, m_messages_node) {
-			__cancel_message(m);
+			__message_cancel(m);
 		}
 
 		list_for_each_entry_safe(c, cn, &svc->s_channels, c_channels_node) {
-			__cancel_channel(c);
+			__channel_cancel(c);
 		}
 
 		wake_up_all(&svc->s_wqreceivers);
@@ -348,22 +309,19 @@ static void free_message_id(struct message *m)
 }
 
 /**
- * get_new_channel - allocates a new channel to a service
+ * channel_new - allocates a new channel to a service
  * @svc: a pointer to the service to allocate the channel for.
  *
  * This function allocates a new channel struct and associates it with the
  * given service. It handles allocating an id for the channel and adding
  * it to the list of open channels.
  */
-struct channel *get_new_channel(struct service *svc)
+struct channel *channel_new(struct service *svc)
 {
 	int ret;
 	struct channel *c = kmalloc(sizeof(struct channel), GFP_KERNEL);
 	if (!c)
 		goto alloc_fail;
-
-	if (!service_get(svc))
-		goto ref_fail;
 
 	c->c_service = svc;
 	c->c_context = NULL;
@@ -389,14 +347,12 @@ alloc_fail:
 
 id_fail:
 	mutex_unlock(&svc->s_mutex);
-	service_put(svc);
-ref_fail:
 	channel_free(c);
 	return NULL;
 }
 
 /**
- * __cancel_channel - cancel a channel and wake up clients
+ * __channel_cancel - cancel a channel and wake up clients
  * @c: pointer to the channel to cancel
  *
  * Puts the channel into canceled state and wakes up any
@@ -407,7 +363,7 @@ ref_fail:
  *
  * Must be called with the service's s_mutex held.
  */
-void __cancel_channel(struct channel *c)
+void __channel_cancel(struct channel *c)
 {
 	struct service *svc = c->c_service;
 	BUG_ON(!svc);
@@ -424,14 +380,14 @@ void __cancel_channel(struct channel *c)
 }
 
 /*
- * remove_channel - remove a channel from a service
+ * channel_remove - remove a channel from a service
  * @c: pointer to the channel to remove from its service
  *
  * This should only be called by client_release() when the
  * file object associated with this channel is being
  * released.
  */
-void remove_channel(struct channel *c)
+void channel_remove(struct channel *c)
 {
 	struct impulse *i, *in;
 	struct message *m, *mn;
@@ -443,12 +399,12 @@ void remove_channel(struct channel *c)
 	mutex_lock(&svc->s_mutex);
 
 	if (!__is_channel_canceled(c))
-		__cancel_channel(c);
+		__channel_cancel(c);
 
 	/* cancel all the pending impulses on this channel */
 	list_for_each_entry_safe(i, in, &svc->s_impulses, i_impulses_node) {
 		if (i->i_channel == c)
-			__cancel_impulse(i);
+			__impulse_cancel(i);
 	}
 
 	/* cancel all the pending messages on this channel */
@@ -456,7 +412,7 @@ void remove_channel(struct channel *c)
 		mutex_lock(&m->m_mutex);
 
 		if (m->m_channel == c)
-			__cancel_message(m);
+			__message_cancel(m);
 
 		mutex_unlock(&m->m_mutex);
 	}
@@ -473,22 +429,21 @@ void remove_channel(struct channel *c)
 
 	mutex_unlock(&svc->s_mutex);
 
-	service_put(svc);
 	channel_free(c);
 }
 
 /**
- * __cancel_message - cancel a pending message
+ * __message_cancel - cancel a pending message
  * @msg: pointer to the message to cancel
  *
  * Completes a message with a return code of -ESHUTDOWN.
  *
  * Must be called with the service's s_mutex held.
  */
-void __cancel_message(struct message *msg)
+void __message_cancel(struct message *msg)
 {
 	pr_debug("msg=%p\n", msg);
-	__complete_message(msg, -ESHUTDOWN);
+	__message_complete(msg, -ESHUTDOWN);
 }
 
 /**
@@ -503,7 +458,7 @@ void __detach_message(struct message *msg)
 	msg->m_channel = NULL;
 }
 
-void __cancel_impulse(struct impulse *impulse)
+void __impulse_cancel(struct impulse *impulse)
 {
 	list_del_init(&impulse->i_impulses_node);
 	impulse_free(impulse);
@@ -647,13 +602,13 @@ void __message_get(struct message *msg)
 }
 
 /**
- * __complete_message - complete a message and wake up the sender
+ * __message_complete - complete a message and wake up the sender
  * @msg: pointer to the message to complete
  * @retcode: the return code to return to the sender
  *
  * Must be called with the service's s_mutex held.
  */
-void __complete_message(struct message *msg, int retcode)
+void __message_complete(struct message *msg, int retcode)
 {
 	/* capture active state before we free the message id */
 	bool active = __is_message_active(msg);
@@ -959,7 +914,7 @@ int servicefs_close_channel(struct service *svc, int cid)
 		goto done;
 	}
 
-	__cancel_channel(c);
+	__channel_cancel(c);
 
 done:
 	mutex_unlock(&svc->s_mutex);
@@ -1023,17 +978,12 @@ int servicefs_msg_recv(struct service *svc,
 	struct servicefs_msg_info_struct info_out;
 	int ret;
 
-	/* grab reference to service before we wait for messages */
-	if (!service_get(svc))
-		return -ESHUTDOWN;
-
 	mutex_lock(&svc->s_mutex);
 
 	do {
 		if (__is_service_canceled(svc)) {
 			pr_debug("canceled_path\n");
 			mutex_unlock(&svc->s_mutex);
-			service_put(svc);
 			return -ESHUTDOWN;
 		}
 
@@ -1047,14 +997,12 @@ int servicefs_msg_recv(struct service *svc,
 		if (signal_pending(current)) {
 			pr_debug("interrupted_path\n");
 			mutex_unlock(&svc->s_mutex);
-			service_put(svc);
 			return -ERESTARTSYS;
 		}
 
 		if (timeout <= 0) {
 			pr_debug("timeout_path\n");
 			mutex_unlock(&svc->s_mutex);
-			service_put(svc);
 			return -ETIMEDOUT;
 		}
 
@@ -1077,7 +1025,6 @@ message_path:
 	if (ret) {
 		pr_debug("error: %d\n", ret);
 		mutex_unlock(&svc->s_mutex);
-		service_put(svc);
 		return ret;
 	}
 
@@ -1114,12 +1061,10 @@ message_path:
 				pid_vnr(task_tgid(current)));
 		mutex_unlock(&msg->m_mutex);
 		message_put(svc, msg);
-		service_put(svc);
 		return -EFAULT;
 	}
 
 	mutex_unlock(&msg->m_mutex);
-	service_put(svc);
 	return 0;
 
 impulse_path:
@@ -1160,11 +1105,9 @@ impulse_path:
 	if (copy_msg_info_to_user(msg_info, &info_out, is_compat)) {
 		pr_debug("Fault transferring msg info: pid=%d\n",
 				pid_vnr(task_tgid(current)));
-		service_put(svc);
 		return -EFAULT;
 	}
 
-	service_put(svc);
 	return 0;
 }
 
@@ -1300,7 +1243,7 @@ int servicefs_msg_reply(struct service *svc, int msgid, ssize_t retcode)
 		goto error;
 	}
 
-	__complete_message(msg, retcode);
+	__message_complete(msg, retcode);
 
 error:
 	mutex_unlock(&svc->s_mutex);
@@ -1353,7 +1296,7 @@ int servicefs_msg_reply_fd(struct service *svc, int msgid, unsigned int pushfd)
 
 	mutex_unlock(&msg->m_mutex);
 
-	__complete_message(msg, newfd);
+	__message_complete(msg, newfd);
 
 	mutex_unlock(&svc->s_mutex);
 	return 0;
@@ -1522,7 +1465,6 @@ ssize_t servicefs_msg_sendv(struct channel *c, int op, const iov *svec,
 	msg->m_op = op;
 	msg->m_channel = c;
 	msg->m_service = svc;
-	msg->m_count = 0;
 	msg->m_completed = false;
 	msg->m_interrupted = false;
 
