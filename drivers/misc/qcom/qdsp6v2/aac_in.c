@@ -425,6 +425,8 @@ static long aac_in_compat_ioctl(struct file *file, unsigned int cmd,
 		struct msm_audio_aac_enc_config cfg;
 		struct msm_audio_aac_enc_config32 cfg_32;
 
+		memset(&cfg_32, 0, sizeof(cfg_32));
+
 		cmd = AUDIO_GET_AAC_ENC_CONFIG;
 		rc = aac_in_ioctl_shared(file, cmd, &cfg);
 		if (rc) {

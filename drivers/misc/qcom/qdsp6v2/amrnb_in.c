@@ -221,6 +221,8 @@ static long amrnb_in_compat_ioctl(struct file *file,
 		struct msm_audio_amrnb_enc_config_v2 *amrnb_config;
 		struct msm_audio_amrnb_enc_config_v2_32 amrnb_config_32;
 
+		memset(&amrnb_config_32, 0, sizeof(amrnb_config_32));
+
 		amrnb_config =
 		(struct msm_audio_amrnb_enc_config_v2 *)audio->enc_cfg;
 		amrnb_config_32.band_mode = amrnb_config->band_mode;

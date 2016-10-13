@@ -224,6 +224,8 @@ static long evrc_in_compat_ioctl(struct file *file,
 		struct msm_audio_evrc_enc_config32 cfg_32;
 		struct msm_audio_evrc_enc_config *enc_cfg;
 
+		memset(&cfg_32, 0, sizeof(cfg_32));
+
 		enc_cfg = audio->enc_cfg;
 		cfg_32.cdma_rate = enc_cfg->cdma_rate;
 		cfg_32.min_bit_rate = enc_cfg->min_bit_rate;
