@@ -155,7 +155,15 @@
 
 	mpp@a200 { /* MPP 3 */
 		/* VREF DAC */
-		status = "disabled";
+		/* status = "disabled"; */
+		qcom,pin-num = <3>;
+		qcom,mode = <4>;		/* A-input */
+		qcom,invert = <0>;		/* No Invert */
+		qcom,output-type = <0>;		/* CMOS */
+		qcom,vin-sel = <3>;		/* PM8926_L6 1.8v */
+		qcom,src-sel = <0>;		/* MPP Constant */
+		qcom,ain-route = <2>;		/* QPNP_PIN_AIN_AMUX_CH6 = 1 */
+		qcom,master-en = <1>;		/* Enable MPP */
 	};
 
 	mpp@a300 { /* MPP 4 */
