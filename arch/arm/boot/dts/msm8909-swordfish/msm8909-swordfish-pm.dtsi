@@ -169,6 +169,7 @@
 			maxim,cycles = <0x0060>;
 			maxim,dpacc = <0x0C80>;
 			maxim,param-version = <0x3>;
+			maxim,dynamic_soc;
 		};
 
 		idtp9017_chg: idtp9017@68 {
