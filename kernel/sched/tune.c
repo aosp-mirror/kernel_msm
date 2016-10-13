@@ -953,6 +953,7 @@ schedtune_init(void)
 	return 0;
 
 nodata:
+	pr_warning("schedtune: disabled!\n");
 	rcu_read_unlock();
 	return -EINVAL;
 }
