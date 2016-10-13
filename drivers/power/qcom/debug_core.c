@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,6 +22,8 @@
 #include "soc/qcom/msm-core.h"
 
 #define MAX_PSTATES 50
+#define NUM_OF_PENTRY 3 /* number of variables for ptable node */
+#define NUM_OF_EENTRY 2 /* number of variables for enable node */
 
 enum arg_offset {
 	CPU_OFFSET,
@@ -131,10 +133,10 @@ static void add_to_ptable(unsigned int *arg)
 	}
 
 	if (node->len < MAX_PSTATES) {
-               node->head[i].freq = freq;
-               node->head[i].power = power;
-               node->len++;
-    }
+		node->head[i].freq = freq;
+		node->head[i].power = power;
+		node->len++;
+	}
 
 	if (node->ptr)
 		node->ptr->len = node->len;
@@ -146,12 +148,13 @@ static int split_ptable_args(char *line, unsigned int *arg, uint32_t n)
 	int i;
 	int ret = 0;
 
-	for (i = 0; line; i++) {
+	for (i = 0; i < n; i++) {
+		if (!line)
+			break;
 		args = strsep(&line, " ");
-		ret = kstrtoull(args, 10, &arg[i]);
-        ret = kstrtouint(args, 10, &arg[i]);
-        if (ret)
-				return ret;
+		ret = kstrtouint(args, 10, &arg[i]);
+		if (ret)
+			return ret;
 	}
 	return ret;
 }
@@ -239,7 +242,7 @@ static ssize_t msm_core_enable_write(struct file *file,
 		goto done;
 	}
 	kbuf[len] = '\0';
-	ret = split_ptable_args(kbuf, arg);
+	ret = split_ptable_args(kbuf, arg, NUM_OF_EENTRY);
 	if (ret)
 		goto done;
 	cpu = arg[CPU_OFFSET];
