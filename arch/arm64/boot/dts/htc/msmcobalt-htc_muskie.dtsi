@@ -1,4 +1,6 @@
 #include "msmcobalt-htc-common.dtsi"
+#include "msmcobalt-htc-regulator.dtsi"
+#include "msmcobalt-htc-pm.dtsi"
 #include "dsi-panel-muskie-s6e3ha3.dtsi"
 
 &cci {
