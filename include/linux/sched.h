@@ -1066,6 +1066,12 @@ struct energy_env {
 	int prf_delta;
 	struct {
 		unsigned int energy;
+		unsigned int capacity;
+		unsigned int utilization;
+
+		int speedup_idx;
+		int delay_idx;
+		int perf_idx;
 	} before, after;
 };
 
