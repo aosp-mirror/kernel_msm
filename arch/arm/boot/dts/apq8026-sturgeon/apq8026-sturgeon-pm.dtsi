@@ -106,6 +106,7 @@
 			qcom,hot-bat-decidegc = <500>;
 			qcom,cold-bat-decidegc = <0>;
 			/delete-property/ qcom,charging-disabled;
+			qcom,weak-charger-detection;
 		};
 		pm8226_bms: qcom,bms {
 			/*if want to enable bms,status = "okay"*/
