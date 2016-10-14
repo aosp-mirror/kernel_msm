@@ -33,6 +33,7 @@
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/power/fan5451x.h>
 #include <linux/wakelock.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/alarmtimer.h>
 
@@ -127,6 +128,9 @@ struct fan5451x_chip {
 	int wlc_fake_online;
 	struct delayed_work wlc_tx_recheck_work;
 	struct delayed_work eoc_check_work;
+	/* retail mode */
+	struct dentry *dent;
+	bool retail_enable;
 };
 
 static int fan5451x_read_reg(struct i2c_client *client, u8 reg)
@@ -304,6 +308,9 @@ static int fan5451x_set_iterm(struct fan5451x_chip *chip, int ma)
 #define VFLOAT_MIN_MV 3300
 #define VFLOAT_MAX_MV 4720
 #define VFLOAT_STEP_MV 10
+#define VFLOAT_MAX_RETAIL 4100
+#define VFLOAT_RECHG_RETAIL 3750
+
 static int fan5451x_set_vfloat(struct fan5451x_chip *chip, int mv)
 {
 	u8 reg_val;
@@ -322,6 +329,9 @@ static inline void fan5451x_vbat_rechg_measure(struct fan5451x_chip *chip)
 {
 	int rechg_mv = chip->vfloat - chip->vrechg_hyst;
 
+	if (chip->retail_enable)
+		rechg_mv = VFLOAT_RECHG_RETAIL;
+
 	chip->vbat_param_rechg.state_request = ADC_TM_LOW_THR_ENABLE;
 	chip->vbat_param_rechg.low_thr = rechg_mv * 1000;
 	pr_info("start rechg measure volt = %d\n", rechg_mv);
@@ -332,11 +342,23 @@ static inline void fan5451x_vbat_rechg_measure(struct fan5451x_chip *chip)
 static int fan5451x_set_appropriate_vddmax(struct fan5451x_chip *chip)
 {
 	int ret;
+	unsigned int vddmax = chip->set_vddmax_mv;
+
+	if (chip->ext_set_vddmax_mv) {
+		if (chip->retail_enable)
+			vddmax = min(chip->ext_set_vddmax_mv,
+					(unsigned int)VFLOAT_MAX_RETAIL);
+		else
+			vddmax = chip->ext_set_vddmax_mv;
+	} else if (chip->retail_enable) {
+			vddmax = min(vddmax,
+					(unsigned int)VFLOAT_MAX_RETAIL);
+	}
 
 	/* charge until only CC phase in case of thermal restrict vddmax,
 	 * otherwise, battery voltage is higher than ext_set_vddmax_mv,
 	 * becuase charger remains to charge if chg_current < term_current. */
-	if (chip->ext_set_vddmax_mv < chip->set_vddmax_mv) {
+	if (vddmax < chip->set_vddmax_mv) {
 		/* thermal regulation case */
 		chip->ext_vdd_restriction = true;
 		if (chip->support_sw_eoc)
@@ -352,10 +374,7 @@ static int fan5451x_set_appropriate_vddmax(struct fan5451x_chip *chip)
 			fan5451x_set_iterm(chip, chip->iterm);
 	}
 
-	if (chip->ext_set_vddmax_mv)
-		ret = fan5451x_set_vfloat(chip, chip->ext_set_vddmax_mv);
-	else
-		ret = fan5451x_set_vfloat(chip, chip->set_vddmax_mv);
+	ret = fan5451x_set_vfloat(chip, vddmax);
 
 	if (ret)
 		pr_err("Failed to set appropriate vddmax ret=%d\n", ret);
@@ -806,7 +825,8 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 			pr_info("EOC IRQ\n");
 			fan5451x_wlc_thermal_ctrl(chip, 0);
 			fan5451x_batfet_enable(chip, 0);
-			fan5451x_wlc_fake_online(chip, 1);
+			if (!chip->retail_enable)
+				fan5451x_wlc_fake_online(chip, 1);
 			chip->eoc = true;
 			fan5451x_vbat_rechg_measure(chip);
 		}
@@ -952,6 +972,55 @@ static ssize_t store_wlc_thermal_param(struct device *dev,
 }
 static DEVICE_ATTR(wlc_thermal_param, S_IRUGO | S_IWUSR,
 		show_wlc_thermal_param, store_wlc_thermal_param);
+
+static int fan5451x_debugfs_get_retail_mode(void *data, u64 *val)
+{
+	struct fan5451x_chip *chip = data;
+
+	*val = (u64)chip->retail_enable;
+
+	return 0;
+}
+
+static int fan5451x_debugfs_set_retail_mode(void *data, u64 val)
+{
+	struct fan5451x_chip *chip = data;
+
+	chip->retail_enable = !!(int)val;
+	pr_info("set retail mode = %d\n", chip->retail_enable);
+
+	fan5451x_update_reg(chip->client, REG_CON2,
+			chip->retail_enable? CON2_RCHGDIS : 0, CON2_RCHGDIS);
+	fan5451x_set_appropriate_vddmax(chip);
+	power_supply_changed(&chip->batt_psy);
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(fan5451x_debugfs_retail_mode_fops,
+		fan5451x_debugfs_get_retail_mode,
+		fan5451x_debugfs_set_retail_mode,
+		 "%llu\n");
+
+static void fan5451x_create_debugfs_entries(
+		struct fan5451x_chip *chip)
+{
+	struct dentry *file;
+
+	chip->dent = debugfs_create_dir("fan5451x", NULL);
+	if (IS_ERR(chip->dent)) {
+		pr_err("fan5451x driver couldn't create debugfs\n");
+		return;
+	}
+
+	file = debugfs_create_file("retail_mode", S_IRUSR | S_IWUSR,
+			chip->dent, (void *)chip,
+			&fan5451x_debugfs_retail_mode_fops);
+	if (IS_ERR(file)) {
+		pr_err("fan5451x couldn't create retail_mode node\n");
+		return;
+	}
+}
 
 static int fan5451x_gpio_init(struct fan5451x_chip *chip)
 {
@@ -1257,7 +1326,6 @@ static int get_prop_capacity(struct fan5451x_chip *chip)
 
 		return ret.intval;
 	}
-
 	pr_debug("No BMS supply registered return %d\n",
 						DEFAULT_CAPACITY);
 
@@ -1467,8 +1535,18 @@ fan5451x_vbat_rechg_notification(enum qpnp_tm_state state, void *ctx)
 	pr_info("SW Rechg occur!! volt(%d)\n", volt);
 	chip->eoc = false;
 	fan5451x_batfet_enable(chip, 1);
-	fan5451x_wlc_fake_online(chip, 0);
-
+	if (!chip->retail_enable)
+		fan5451x_wlc_fake_online(chip, 0);
+	else {
+		/* After raising EOC IRQ, RCHGDIS needs to enable for recharging.
+		 * As soon as setting 0 to RCHGDIS, battery is charged
+		 * due to vbat < vfloat - 150mV. */
+		fan5451x_update_reg(chip->client,
+				REG_CON2, 0, CON2_RCHGDIS);
+		msleep(300);
+		fan5451x_update_reg(chip->client,
+				REG_CON2, CON2_RCHGDIS, CON2_RCHGDIS);
+	}
 	power_supply_changed(&chip->batt_psy);
 }
 
@@ -1827,6 +1905,8 @@ static int fan5451x_probe(struct i2c_client *client,
 	if (ret)
 		goto err_sysfs_wlc_thermal_param;
 
+	fan5451x_create_debugfs_entries(chip);
+
 	pr_info("FAN5451x initialized\n");
 
 	return 0;
@@ -1856,6 +1936,7 @@ static int fan5451x_remove(struct i2c_client *client)
 {
 	struct fan5451x_chip *chip = i2c_get_clientdata(client);
 
+	debugfs_remove_recursive(chip->dent);
 	cancel_delayed_work_sync(&chip->wlc_tx_recheck_work);
 	device_remove_file(&client->dev, &dev_attr_addr_register);
 	device_remove_file(&client->dev, &dev_attr_status_register);
