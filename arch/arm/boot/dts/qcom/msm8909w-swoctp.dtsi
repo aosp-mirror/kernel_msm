@@ -50,6 +50,27 @@
 		};
 	};
 
+	i2c@78b6000 { /* BLSP1 QUP2 */
+		nq@28 {
+			compatible = "qcom,nq-nci";
+			reg = <0x28>;
+			qcom,nq-irq = <&msm_gpio 21 0x00>;
+			qcom,nq-ven = <&msm_gpio 20 0x00>;
+			qcom,nq-firm = <&msm_gpio 34 0x00>;
+			qcom,nq-clkreq = <&pm8916_gpios 2 0>;
+			qcom,nq-esepwr = <&msm_gpio 31 0x00>;
+			qcom,clk-src = "BBCLK2";
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <21 0>;
+			interrupt-names = "nfc_irq";
+			pinctrl-names = "nfc_active","nfc_suspend";
+			pinctrl-0 = <&nfc_int_active &nfc_enable_active>;
+			pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend>;
+			clocks = <&clock_rpm clk_bb_clk2_pin>;
+			clock-names = "ref_clk";
+		};
+	};
+
         qcom,msm-ssc-sensors {
                 compatible = "qcom,msm-ssc-sensors";
         };
