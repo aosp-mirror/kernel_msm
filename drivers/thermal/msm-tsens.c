@@ -22,6 +22,7 @@
 #include <linux/kernel.h>
 #include <linux/io.h>
 #include <linux/slab.h>
+#include <linux/sched.h>
 #include <linux/msm_tsens.h>
 #include <linux/err.h>
 #include <linux/of.h>

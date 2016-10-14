@@ -23,6 +23,7 @@
 #include "mdss_fb.h"
 #include "mdp3_ppp.h"
 #include "mdp3_hwio.h"
+#include "mdss_debug.h"
 
 /* SHIM Q Factor */
 #define PHI_Q_FACTOR          29
@@ -1308,7 +1309,7 @@ int config_ppp_op_mode(struct ppp_blit_op *blit_op)
 	pr_debug("ROI(x %d,y %d,w %d, h %d) ",
 		blit_op->src.roi.x, blit_op->src.roi.y,
 		blit_op->src.roi.width, blit_op->src.roi.height);
-	pr_debug("Addr_P0 %p, Stride S0 %d Addr_P1 %p, Stride S1 %d\n",
+	pr_debug("Addr_P0 %pK, Stride S0 %d Addr_P1 %pK, Stride S1 %d\n",
 		blit_op->src.p0, blit_op->src.stride0,
 		blit_op->src.p1, blit_op->src.stride1);
 
@@ -1320,7 +1321,7 @@ int config_ppp_op_mode(struct ppp_blit_op *blit_op)
 		pr_debug("ROI(x %d,y %d, w  %d, h %d) ",
 			blit_op->bg.roi.x, blit_op->bg.roi.y,
 			blit_op->bg.roi.width, blit_op->bg.roi.height);
-		pr_debug("Addr %p, Stride S0 %d	Addr_P1 %p, Stride S1 %d\n",
+		pr_debug("Addr %pK, Stride S0 %d Addr_P1 %pK, Stride S1 %d\n",
 			blit_op->bg.p0,	blit_op->bg.stride0,
 			blit_op->bg.p1,	blit_op->bg.stride1);
 	}
@@ -1331,12 +1332,16 @@ int config_ppp_op_mode(struct ppp_blit_op *blit_op)
 	pr_debug("ROI(x %d,y %d, w %d, h %d) ",
 		blit_op->dst.roi.x, blit_op->dst.roi.y,
 		blit_op->dst.roi.width, blit_op->dst.roi.height);
-	pr_debug("Addr %p, Stride S0 %d Addr_P1 %p, Stride S1 %d\n",
+	pr_debug("Addr %pK, Stride S0 %d Addr_P1 %pK, Stride S1 %d\n",
 		blit_op->dst.p0, blit_op->dst.stride0,
 		blit_op->dst.p1, blit_op->dst.stride1);
 
 	PPP_WRITEL(ppp_operation_reg, MDP3_PPP_OP_MODE);
 	mb();
+	MDSS_XLOG(ppp_operation_reg, blit_op->src.roi.x, blit_op->src.roi.y,
+		blit_op->src.roi.width, blit_op->src.roi.height);
+	 MDSS_XLOG(blit_op->dst.roi.x, blit_op->dst.roi.y,
+		blit_op->dst.roi.width, blit_op->dst.roi.height);
 	return 0;
 }
 

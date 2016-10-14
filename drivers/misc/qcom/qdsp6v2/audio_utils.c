@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,6 +23,15 @@
 #include <linux/compat.h>
 #include <asm/ioctls.h>
 #include "audio_utils.h"
+
+/*
+ * Define maximum buffer size. Below values are chosen considering the higher
+ * values used among all native drivers.
+ */
+#define MAX_FRAME_SIZE	1536
+#define MAX_FRAMES	5
+#define META_SIZE	(sizeof(struct meta_out_dsp))
+#define MAX_BUFFER_SIZE	(1 + ((MAX_FRAME_SIZE + META_SIZE) * MAX_FRAMES))
 
 static int audio_in_pause(struct q6audio_in  *audio)
 {
@@ -329,6 +338,10 @@ long audio_in_ioctl(struct file *file,
 			rc = -EINVAL;
 			break;
 		}
+		if (cfg.buffer_size > MAX_BUFFER_SIZE) {
+			rc = -EINVAL;
+			break;
+		}
 		audio->str_cfg.buffer_size = cfg.buffer_size;
 		audio->str_cfg.buffer_count = cfg.buffer_count;
 		if (audio->opened) {
@@ -588,6 +601,7 @@ long audio_in_compat_ioctl(struct file *file,
 	}
 	case AUDIO_GET_CONFIG_32: {
 		struct msm_audio_config32 cfg_32;
+		memset(&cfg_32, 0, sizeof(cfg_32));
 		cfg_32.buffer_size = audio->pcm_cfg.buffer_size;
 		cfg_32.buffer_count = audio->pcm_cfg.buffer_count;
 		cfg_32.channel_count = audio->pcm_cfg.channel_count;
@@ -743,7 +757,7 @@ ssize_t audio_in_read(struct file *file,
 			count -= bytes_to_copy;
 			buf += bytes_to_copy;
 		} else {
-			pr_err("%s:session id %d: short read data[%p] bytesavail[%d]bytesrequest[%zd]\n",
+			pr_err("%s:session id %d: short read data[%pK] bytesavail[%d]bytesrequest[%zd]\n",
 				__func__,
 				audio->ac->session,
 				data, size, count);
@@ -882,7 +896,7 @@ ssize_t audio_in_write(struct file *file,
 		buf += xfer;
 	}
 	mutex_unlock(&audio->write_lock);
-	pr_debug("%s:session id %d: eos_condition 0x%x buf[0x%p] start[0x%p]\n",
+	pr_debug("%s:session id %d: eos_condition 0x%x buf[0x%pK] start[0x%pK]\n",
 				__func__, audio->ac->session,
 				nflags, buf, start);
 	if (nflags & AUD_EOS_SET) {

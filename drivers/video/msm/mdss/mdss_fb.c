@@ -598,8 +598,8 @@ static ssize_t mdss_fb_force_panel_dead(struct device *dev,
 		return len;
 	}
 
-	if (sscanf(buf, "%d", &pdata->panel_info.panel_force_dead) != 1)
-		pr_err("sccanf buf error!\n");
+	if (kstrtouint(buf, 0, &pdata->panel_info.panel_force_dead))
+		pr_err("kstrtouint buf error!\n");
 
 	return len;
 }
@@ -712,8 +712,8 @@ static ssize_t mdss_fb_change_dfps_mode(struct device *dev,
 	}
 	pinfo = &pdata->panel_info;
 
-	if (sscanf(buf, "%d", &dfps_mode) != 1) {
-		pr_err("sccanf buf error!\n");
+	if (kstrtouint(buf, 0, &dfps_mode)) {
+		pr_err("kstrtouint buf error!\n");
 		return len;
 	}
 
@@ -1274,6 +1274,7 @@ static int mdss_fb_remove(struct platform_device *pdev)
 		return -EINVAL;
 
 	mdss_fb_unregister_input_handler(mfd);
+	mdss_panel_debugfs_cleanup(mfd->panel_info);
 
 	if (mdss_fb_suspend_sub(mfd))
 		pr_err("msm_fb_remove: can't stop the device %d\n",
@@ -2060,7 +2061,7 @@ int mdss_fb_alloc_fb_ion_memory(struct msm_fb_data_type *mfd, size_t fb_size)
 		rc = PTR_ERR(vaddr);
 		goto err_unmap;
 	}
-	pr_debug("alloc 0x%zuB vaddr = %p for fb%d\n", fb_size,
+	pr_debug("alloc 0x%zuB vaddr = %pK for fb%d\n", fb_size,
 			vaddr, mfd->index);
 
 	mfd->fbi->screen_base = (char *) vaddr;
@@ -2159,7 +2160,7 @@ static int mdss_fb_fbmem_ion_mmap(struct fb_info *info,
 				vma->vm_page_prot =
 					pgprot_writecombine(vma->vm_page_prot);
 
-			pr_debug("vma=%p, addr=%x len=%ld\n",
+			pr_debug("vma=%pK, addr=%x len=%ld\n",
 					vma, (unsigned int)addr, len);
 			pr_debug("vm_start=%x vm_end=%x vm_page_prot=%ld\n",
 					(unsigned int)vma->vm_start,
@@ -2326,7 +2327,7 @@ static int mdss_fb_alloc_fbmem_iommu(struct msm_fb_data_type *mfd, int dom)
 		return -ERANGE;
 	}
 
-	pr_debug("alloc 0x%zxB @ (%pa phys) (0x%p virt) (%pa iova) for fb%d\n",
+	pr_debug("alloc 0x%zxB @ (%pa phys) (0x%pK virt) (%pa iova) for fb%d\n",
 		 size, &phys, virt, &mfd->iova, mfd->index);
 
 	mfd->fbi->screen_base = virt;
@@ -2614,7 +2615,7 @@ static int mdss_fb_open(struct fb_info *info, int user)
 	}
 
 	mfd->ref_cnt++;
-	pr_debug("mfd refcount:%d file:%p\n", mfd->ref_cnt, info->file);
+	pr_debug("mfd refcount:%d file:%pK\n", mfd->ref_cnt, info->file);
 
 	return 0;
 
@@ -2679,7 +2680,7 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 		pr_warn("file node not found or wrong ref cnt: release all:%d refcnt:%d\n",
 			release_all, mfd->ref_cnt);
 
-	pr_debug("current process=%s pid=%d mfd->ref=%d file:%p\n",
+	pr_debug("current process=%s pid=%d mfd->ref=%d file:%pK\n",
 		task->comm, current->tgid, mfd->ref_cnt, info->file);
 
 	if (!mfd->ref_cnt || release_all) {
@@ -2803,9 +2804,12 @@ static int __mdss_fb_wait_for_fence_sub(struct msm_sync_pt_data *sync_pt_data,
 
 			pr_warn("%s: sync_fence_wait timed out! ",
 					sync_pt_data->fence_name);
+			pr_warn("%s: sync_fence_wait timed out! ",
+					fences[i]->name);
 			pr_cont("Waiting %ld.%ld more seconds\n",
 				(wait_ms/MSEC_PER_SEC), (wait_ms%MSEC_PER_SEC));
-
+			MDSS_XLOG(sync_pt_data->timeline_value);
+			MDSS_XLOG_TOUT_HANDLER("mdp");
 			ret = sync_fence_wait(fences[i], wait_ms);
 
 			if (ret == -ETIME)
@@ -2851,6 +2855,7 @@ void mdss_fb_signal_timeline(struct msm_sync_pt_data *sync_pt_data)
 	if (atomic_add_unless(&sync_pt_data->commit_cnt, -1, 0) &&
 			sync_pt_data->timeline) {
 		sw_sync_timeline_inc(sync_pt_data->timeline, 1);
+		MDSS_XLOG(sync_pt_data->timeline_value);
 		sync_pt_data->timeline_value++;
 
 		pr_debug("%s: buffer signaled! timeline val=%d remaining=%d\n",
@@ -4080,6 +4085,10 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 	val = sync_pt_data->timeline_value + sync_pt_data->threshold +
 			atomic_read(&sync_pt_data->commit_cnt);
 
+	MDSS_XLOG(sync_pt_data->timeline_value, val,
+		atomic_read(&sync_pt_data->commit_cnt));
+	pr_debug("%s: fence CTL%d Commit_cnt%d\n", sync_pt_data->fence_name,
+		sync_pt_data->timeline_value,  atomic_read(&sync_pt_data->commit_cnt));
 	/* Set release fence */
 	rel_fence = mdss_fb_sync_get_fence(sync_pt_data->timeline,
 			sync_pt_data->fence_name, val);
@@ -4273,7 +4282,7 @@ static int mdss_fb_atomic_commit_ioctl(struct fb_info *info,
 			ret = copy_from_user(scale, layer->scale,
 					sizeof(struct mdp_scale_data));
 			if (ret) {
-				pr_err("layer list copy from user failed, scale = %p\n",
+				pr_err("layer list copy from user failed, scale = %pK\n",
 						layer->scale);
 				kfree(scale);
 				scale = NULL;
@@ -4424,6 +4433,7 @@ static int __ioctl_wait_idle(struct msm_fb_data_type *mfd, u32 cmd)
 {
 	int ret = 0;
 
+#ifndef TARGET_HW_MDSS_MDP3
 	if (mfd->wait_for_kickoff &&
 		((cmd == MSMFB_OVERLAY_PREPARE) ||
 		(cmd == MSMFB_BUFFER_SYNC) ||
@@ -4436,7 +4446,16 @@ static int __ioctl_wait_idle(struct msm_fb_data_type *mfd, u32 cmd)
 		(cmd == MSMFB_OVERLAY_SET))) {
 		ret = mdss_fb_wait_for_kickoff(mfd);
 	}
-
+#else
+	if ((cmd != MSMFB_VSYNC_CTRL) &&
+		(cmd != MSMFB_OVERLAY_VSYNC_CTRL) &&
+		(cmd != MSMFB_ASYNC_BLIT) &&
+		(cmd != MSMFB_BLIT) &&
+		(cmd != MSMFB_NOTIFY_UPDATE) &&
+		(cmd != MSMFB_OVERLAY_PREPARE)) {
+		ret = mdss_fb_wait_for_kickoff(mfd);
+	}
+#endif
 	if (ret && (ret != -ESHUTDOWN))
 		pr_err("wait_idle failed. cmd=0x%x rc=%d\n", cmd, ret);
 

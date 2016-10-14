@@ -442,12 +442,16 @@ static int mdp3_clk_update(u32 clk_idx, u32 enable)
 			mdp3_res->clock_ref_count[clk_idx]--;
 			return ret;
 		}
+		if (clk_idx == MDP3_CLK_MDP_CORE)
+			MDSS_XLOG(enable);
 		ret = clk_enable(clk);
 		if (ret)
 			pr_err("%s: clock enable failed %d\n", __func__,
 					clk_idx);
 	} else if (count == 0) {
 		pr_debug("clk=%d disable\n", clk_idx);
+		if (clk_idx == MDP3_CLK_MDP_CORE)
+			MDSS_XLOG(enable);
 		clk_disable(clk);
 		clk_unprepare(clk);
 		ret = 0;
@@ -1135,7 +1139,7 @@ static int mdp3_res_init(void)
 
 	mdp3_res->ion_client = msm_ion_client_create(mdp3_res->pdev->name);
 	if (IS_ERR_OR_NULL(mdp3_res->ion_client)) {
-		pr_err("msm_ion_client_create() return error (%p)\n",
+		pr_err("msm_ion_client_create() return error (%pK)\n",
 				mdp3_res->ion_client);
 		mdp3_res->ion_client = NULL;
 		return -EINVAL;
@@ -1565,7 +1569,7 @@ void mdp3_unmap_iommu(struct ion_client *client, struct ion_handle *handle)
 	mutex_lock(&mdp3_res->iommu_lock);
 	meta = mdp3_iommu_meta_lookup(table);
 	if (!meta) {
-		WARN(1, "%s: buffer was never mapped for %p\n", __func__,
+		WARN(1, "%s: buffer was never mapped for %pK\n", __func__,
 				handle);
 		mutex_unlock(&mdp3_res->iommu_lock);
 		return;
@@ -1591,7 +1595,7 @@ static void mdp3_iommu_meta_add(struct mdp3_iommu_meta *meta)
 		} else if (meta->table > entry->table) {
 			p = &(*p)->rb_right;
 		} else {
-			pr_err("%s: handle %p already exists\n", __func__,
+			pr_err("%s: handle %pK already exists\n", __func__,
 				entry->handle);
 			BUG();
 		}
@@ -1654,7 +1658,7 @@ static int mdp3_iommu_map_iommu(struct mdp3_iommu_meta *meta,
 	ret = iommu_map_range(domain, meta->iova_addr + padding,
 			table->sgl, size, prot);
 	if (ret) {
-		pr_err("%s: could not map %pa in domain %p\n",
+		pr_err("%s: could not map %pa in domain %pK\n",
 			__func__, &meta->iova_addr, domain);
 			unmap_size = padding;
 		goto out2;
@@ -1777,12 +1781,12 @@ int mdp3_self_map_iommu(struct ion_client *client, struct ion_handle *handle,
 		}
 	} else {
 		if (iommu_meta->flags != iommu_flags) {
-			pr_err("%s: hndl %p already mapped with diff flag\n",
+			pr_err("%s: hndl %pK already mapped with diff flag\n",
 				__func__, handle);
 			ret = -EINVAL;
 			goto out_unlock;
 		} else if (iommu_meta->mapped_size != iova_length) {
-			pr_err("%s: hndl %p already mapped with diff len\n",
+			pr_err("%s: hndl %pK already mapped with diff len\n",
 				__func__, handle);
 			ret = -EINVAL;
 			goto out_unlock;
@@ -1816,7 +1820,7 @@ int mdp3_put_img(struct mdp3_img_data *data, int client)
 		fdput(data->srcp_f);
 		memset(&data->srcp_f, 0, sizeof(struct fd));
 	} else if (!IS_ERR_OR_NULL(data->srcp_dma_buf)) {
-		pr_debug("ion hdl = %p buf=0x%pa\n", data->srcp_dma_buf,
+		pr_debug("ion hdl = %pK buf=0x%pa\n", data->srcp_dma_buf,
 							&data->addr);
 		if (!iclient) {
 			pr_err("invalid ion client\n");
@@ -1919,7 +1923,7 @@ done:
 		data->addr += img->offset;
 		data->len -= img->offset;
 
-		pr_debug("mem=%d ihdl=%p buf=0x%pa len=0x%lx\n",
+		pr_debug("mem=%d ihdl=%pK buf=0x%pa len=0x%lx\n",
 			img->memory_id, data->srcp_dma_buf,
 			&data->addr, data->len);
 
@@ -2629,15 +2633,18 @@ int mdp3_footswitch_ctrl(int enable)
 	int rc = 0;
 	int active_cnt = 0;
 
+	mutex_lock(&mdp3_res->fs_idle_pc_lock);
+	MDSS_XLOG(enable);
 	if (!mdp3_res->fs_ena && enable) {
 		rc = regulator_enable(mdp3_res->fs);
 		if (rc) {
 			pr_err("mdp footswitch ctrl enable failed\n");
+			mutex_unlock(&mdp3_res->fs_idle_pc_lock);
 			return -EINVAL;
 		}
-			pr_debug("mdp footswitch ctrl enable success\n");
+		pr_debug("mdp footswitch ctrl enable success\n");
 		mdp3_enable_regulator(true);
-			mdp3_res->fs_ena = true;
+		mdp3_res->fs_ena = true;
 	} else if (!enable && mdp3_res->fs_ena) {
 		active_cnt = atomic_read(&mdp3_res->active_intf_cnt);
 		if (active_cnt != 0) {
@@ -2653,13 +2660,16 @@ int mdp3_footswitch_ctrl(int enable)
 		rc = regulator_disable(mdp3_res->fs);
 		if (rc) {
 			pr_err("mdp footswitch ctrl disable failed\n");
+			mutex_unlock(&mdp3_res->fs_idle_pc_lock);
 			return -EINVAL;
 		}
 			mdp3_res->fs_ena = false;
+		pr_debug("mdp3 footswitch ctrl disable configured\n");
 	} else {
 		pr_debug("mdp3 footswitch ctrl already configured\n");
 	}
 
+	mutex_unlock(&mdp3_res->fs_idle_pc_lock);
 	return rc;
 }
 
@@ -2681,7 +2691,7 @@ int mdp3_panel_get_intf_status(u32 disp_num, u32 intf_type)
 	rc = (status == 0x180000) || (status == 0x080000);
 
 	/* For Video mode panel do not disable clock */
-	if (status == 0x80000) {
+	if (!(status == 0x180000)) {
 		if (mdp3_clk_enable(0, 0))
 			pr_err("fail to turn off MDP core clks\n");
 	}
@@ -2723,6 +2733,7 @@ static int mdp3_probe(struct platform_device *pdev)
 	pdev->id = 0;
 	mdp3_res->pdev = pdev;
 	mutex_init(&mdp3_res->res_mutex);
+	mutex_init(&mdp3_res->fs_idle_pc_lock);
 	spin_lock_init(&mdp3_res->irq_lock);
 	platform_set_drvdata(pdev, mdp3_res);
 	atomic_set(&mdp3_res->active_intf_cnt, 0);
@@ -2860,7 +2871,7 @@ static  int mdp3_resume_sub(void)
 static int mdp3_pm_suspend(struct device *dev)
 {
 	dev_dbg(dev, "Display pm suspend\n");
-
+	MDSS_XLOG(XLOG_FUNC_ENTRY);
 	return mdp3_suspend_sub();
 }
 
@@ -2877,6 +2888,7 @@ static int mdp3_pm_resume(struct device *dev)
 	pm_runtime_set_suspended(dev);
 	pm_runtime_enable(dev);
 
+	MDSS_XLOG(XLOG_FUNC_ENTRY);
 	return mdp3_resume_sub();
 }
 #endif
@@ -2886,6 +2898,7 @@ static int mdp3_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	pr_debug("Display suspend\n");
 
+	MDSS_XLOG(XLOG_FUNC_ENTRY);
 	return mdp3_suspend_sub();
 }
 
@@ -2893,6 +2906,7 @@ static int mdp3_resume(struct platform_device *pdev)
 {
 	pr_debug("Display resume\n");
 
+	MDSS_XLOG(XLOG_FUNC_ENTRY);
 	return mdp3_resume_sub();
 }
 #else
@@ -2913,6 +2927,7 @@ static int mdp3_runtime_resume(struct device *dev)
 	if (!mdp3_res->idle_pc)
 		device_for_each_child(dev, &device_on, mdss_fb_suspres_panel);
 
+	MDSS_XLOG(XLOG_FUNC_ENTRY);
 	mdp3_footswitch_ctrl(1);
 
 	return 0;
@@ -2937,6 +2952,7 @@ static int mdp3_runtime_suspend(struct device *dev)
 		return -EBUSY;
 	}
 
+	MDSS_XLOG(XLOG_FUNC_ENTRY);
 	mdp3_footswitch_ctrl(0);
 
 	/* do not suspend panels when going in to idle power collapse */
