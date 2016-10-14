@@ -1038,6 +1038,11 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 
 	if (mdss_fb_is_power_on_ulp(mfd) &&
 		(mfd->panel.type == MIPI_CMD_PANEL)) {
+
+		pr_debug("%s: Disable MDP3 clocks in ULP\n", __func__);
+		if (!mdp3_session->clk_on)
+			mdp3_ctrl_clk_enable(mfd, 1);
+
 		if (atomic_read(&mfd->kickoff_pending) ||
 		    atomic_read(&mfd->commits_pending)) {
 			MDSS_XLOG(XLOG_FUNC_ENTRY, __LINE__,
@@ -1049,9 +1054,6 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 				goto off_error;
 			}
 		}
-		pr_debug("%s: Disable MDP3 clocks in ULP\n", __func__);
-		if (!mdp3_session->clk_on)
-			mdp3_ctrl_clk_enable(mfd, 1);
 		/*
 		 * STOP DMA transfer first and signal vsync notification
 		 * Before releasing the resource in ULP state.
