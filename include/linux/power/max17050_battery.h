@@ -117,8 +117,10 @@ enum max17050_register {
 struct max17050_platform_data {
 	bool enable_current_sense;
 	bool ext_batt_psy;
+	bool dynamic_soc;
 	u16 empty_soc;
 	u16 full_soc;
+	u16 dyn_full_soc;
 
 	/*
 	 * R_sns in micro-ohms.

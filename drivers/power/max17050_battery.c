@@ -70,6 +70,8 @@ struct max17050_chip {
 	struct i2c_client *client;
 	struct power_supply battery;
 	struct power_supply *ext_battery;
+	struct power_supply *usb_psy;
+	struct power_supply *wlc_psy;
 	bool power_supply_registered;
 	struct max17050_platform_data *pdata;
 	struct work_struct work;
@@ -97,6 +99,8 @@ struct max17050_chip {
 	/* debugfs */
 	struct dentry *dent;
 	int fake_capacity;
+	int backup_capacity;
+	int charge_status;
 };
 
 static int max17050_write_reg(struct i2c_client *client, u8 reg, u16 value)
@@ -528,12 +532,43 @@ static void max17050_update(struct max17050_chip *chip)
 	chip->next_update_time.tv_sec++;
 }
 
+static int max17050_dynamic_clamp_soc(struct max17050_chip *chip)
+{
+	struct i2c_client *client = chip->client;
+	struct max17050_platform_data *pdata = chip->pdata;
+	int dyn_soc;
+
+	if (pdata->dyn_full_soc <= pdata->empty_soc) {
+		dev_err(&client->dev, "%s: Invalid soc range for scaling\n",
+				__func__);
+		return chip->repsoc >> 8;
+	}
+
+	/*
+	 * Scale repsoc to the range between dyn_full_soc and empty_soc. Use an
+	 * additional 3 bits of repsoc (0.125% units) for more accuracy.
+	 */
+	dyn_soc = chip->repsoc >> 5;
+	dyn_soc = (dyn_soc - pdata->empty_soc * 8) * 100 /
+		((pdata->dyn_full_soc - pdata->empty_soc) * 8);
+
+	if (dyn_soc > 100)
+		dyn_soc = 100;
+	else if (dyn_soc < 0)
+		dyn_soc = 0;
+
+	return dyn_soc;
+}
+
 static int max17050_scale_clamp_soc(struct max17050_chip *chip)
 {
+	struct i2c_client *client = chip->client;
+	struct max17050_platform_data *pdata = chip->pdata;
 	int adj_soc;
 
-	if (chip->pdata->full_soc <= chip->pdata->empty_soc) {
-		pr_err("%s: Invalid soc range for scaling\n", __func__);
+	if (pdata->full_soc <= pdata->empty_soc) {
+		dev_err(&client->dev, "%s: Invalid soc range for scaling\n",
+				__func__);
 		return chip->repsoc >> 8;
 	}
 
@@ -542,8 +577,8 @@ static int max17050_scale_clamp_soc(struct max17050_chip *chip)
 	 * additional 3 bits of repsoc (0.125% units) for more accuracy.
 	 */
 	adj_soc = chip->repsoc >> 5;
-	adj_soc = (adj_soc - chip->pdata->empty_soc * 8) * 100 /
-			((chip->pdata->full_soc - chip->pdata->empty_soc) * 8);
+	adj_soc = (adj_soc - pdata->empty_soc * 8) * 100 /
+			((pdata->full_soc - pdata->empty_soc) * 8);
 
 	if (adj_soc > 100)
 		adj_soc = 100;
@@ -551,6 +586,93 @@ static int max17050_scale_clamp_soc(struct max17050_chip *chip)
 		adj_soc = 0;
 
 	return adj_soc;
+}
+
+enum charging_status {
+	CHARGER_EOC = 1,
+	CHARGER_CONNECT,
+	CHARGER_DISCONECT
+};
+
+static void max17050_set_dynamic_soc_param(struct max17050_chip *chip,
+		int status)
+{
+	struct i2c_client *client = chip->client;
+	struct max17050_platform_data *pdata = chip->pdata;
+
+	dev_info(&client->dev, "Charge Event status: %d->%d\n",
+			chip->charge_status, status);
+
+	switch (status) {
+	case CHARGER_EOC:
+		pdata->dyn_full_soc = pdata->full_soc;
+		chip->backup_capacity = 0;
+		break;
+	case CHARGER_DISCONECT:
+		if (chip->charge_status == CHARGER_EOC) {
+			pdata->dyn_full_soc =
+				(pdata->full_soc -
+				 (100 - max17050_scale_clamp_soc(chip)));
+		}
+		/* pass through */
+	case CHARGER_CONNECT:
+		if (!chip->backup_capacity)
+			chip->backup_capacity =
+				max17050_dynamic_clamp_soc(chip);
+		break;
+	default:
+		break;
+	}
+
+	if (status)
+		chip->charge_status = status;
+}
+
+
+static int adjust_soc(struct max17050_chip *chip)
+{
+	int soc = 0;
+	int dyn_soc = 0;
+	int adj_soc = 0;
+
+	dyn_soc = max17050_dynamic_clamp_soc(chip);
+	adj_soc = max17050_scale_clamp_soc(chip);
+
+	switch (chip->charge_status) {
+	case CHARGER_EOC:
+		soc = 100;
+		break;
+	case CHARGER_CONNECT:
+		if (adj_soc >= chip->backup_capacity) {
+			soc = adj_soc;
+			chip->pdata->dyn_full_soc = chip->pdata->full_soc;
+			chip->backup_capacity = 0;
+		} else {
+			soc = chip->backup_capacity;
+		}
+		break;
+	case CHARGER_DISCONECT:
+		if ((dyn_soc <= chip->backup_capacity)
+				|| (chip->backup_capacity == 0)) {
+			soc = dyn_soc;
+			chip->backup_capacity = 0;
+		} else {
+			soc = chip->backup_capacity;
+		}
+		break;
+	default:
+		adj_soc = max17050_scale_clamp_soc(chip);
+		soc = adj_soc;
+		break;
+	}
+	pr_debug("charge status: %d, soc : %d, repsoc : %04x,"
+			"backup_capacity : %d, dyn_full_soc : %04x,"
+			"adj_soc : %d, dyn_soc : %d\n",
+			chip->charge_status, soc, chip->repsoc,
+			chip->backup_capacity, chip->pdata->dyn_full_soc,
+			adj_soc, dyn_soc);
+
+	return soc;
 }
 
 static enum power_supply_property max17050_battery_props[] = {
@@ -601,8 +723,12 @@ static int max17050_get_property(struct power_supply *psy,
 		val->intval = chip->vcell * 625 / 8;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		if (!chip->fake_capacity)
-			val->intval = max17050_scale_clamp_soc(chip);
+		if (!chip->fake_capacity) {
+			if(chip->pdata->dynamic_soc)
+				val->intval = adjust_soc(chip);
+			else
+				val->intval = max17050_scale_clamp_soc(chip);
+		}
 		else
 			val->intval = chip->fake_capacity;
 		break;
@@ -773,6 +899,7 @@ max17050_get_pdata(struct device *dev)
 	}
 
 	pdata->ext_batt_psy = of_property_read_bool(np, "maxim,ext_batt_psy");
+	pdata->dynamic_soc = of_property_read_bool(np, "maxim,dynamic_soc");
 
 	if (of_property_read_u32(np, "maxim,relaxcfg", &prop) == 0)
 		pdata->relaxcfg = prop;
@@ -904,6 +1031,67 @@ static void max17050_create_debugfs_entries(struct max17050_chip *chip)
 	}
 }
 
+static void max17050_external_power_changed(struct power_supply *psy)
+{
+	struct max17050_chip *chip =
+		container_of(psy, struct max17050_chip, battery);
+	struct i2c_client *client = chip->client;
+	union power_supply_propval res = {0, };
+	static int prev_online = 0;
+	static bool need_recal = true;
+	int online = 0;
+
+	if (!chip->usb_psy)
+		chip->usb_psy = power_supply_get_by_name("usb");
+
+	if (!chip->wlc_psy)
+		chip->wlc_psy = power_supply_get_by_name("wireless");
+
+	if (!chip->ext_battery)
+		chip->ext_battery = power_supply_get_by_name("battery");
+
+	if (!chip->usb_psy && !chip->wlc_psy) {
+		dev_dbg(&client->dev, "%s: No power supply\n", __func__);
+		return;
+	}
+
+	/* Check battery EOC state */
+	if (chip->ext_battery) {
+		chip->ext_battery->get_property(chip->ext_battery,
+				POWER_SUPPLY_PROP_STATUS, &res);
+		if (res.intval == POWER_SUPPLY_STATUS_FULL) {
+			if (need_recal) {
+				max17050_set_dynamic_soc_param(chip,
+						CHARGER_EOC);
+				need_recal = false;
+			}
+		} else {
+			need_recal = true;
+		}
+	}
+
+	/* Check charger plug-in state */
+	if (chip->usb_psy) {
+		chip->usb_psy->get_property(
+			chip->usb_psy, POWER_SUPPLY_PROP_ONLINE, &res);
+		online |= res.intval;
+	}
+
+	if (chip->wlc_psy) {
+		chip->wlc_psy->get_property(
+			chip->wlc_psy, POWER_SUPPLY_PROP_ONLINE, &res);
+		online |= res.intval;
+	}
+
+	if (prev_online ^ online) {
+		prev_online = online;
+		if (online)
+			max17050_set_dynamic_soc_param(chip, CHARGER_CONNECT);
+		else
+			max17050_set_dynamic_soc_param(chip, CHARGER_DISCONECT);
+	}
+}
+
 static int max17050_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
@@ -945,6 +1133,8 @@ static int max17050_probe(struct i2c_client *client,
 	chip->battery.get_property = max17050_get_property;
 	chip->battery.properties = max17050_battery_props;
 	chip->battery.num_properties = ARRAY_SIZE(max17050_battery_props);
+	chip->battery.external_power_changed =
+		max17050_external_power_changed;
 	chip->battery.supplied_to = pm_batt_supplied_to;
 	chip->battery.num_supplicants =
 		ARRAY_SIZE(pm_batt_supplied_to);
@@ -975,7 +1165,14 @@ static int max17050_probe(struct i2c_client *client,
 	}
 
 	INIT_WORK(&chip->work, max17050_init_worker);
+
 	mutex_init(&chip->mutex);
+
+	if (chip->pdata->dynamic_soc) {
+		chip->pdata->dyn_full_soc = chip->pdata->full_soc;
+		chip->backup_capacity = 0;
+		chip->charge_status = 0;
+	}
 
 	/*
 	 * If the version of custom parameters is changed, the init chip
