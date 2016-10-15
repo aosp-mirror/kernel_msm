@@ -757,7 +757,6 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 
 	if (intr[0] & chip->register_base.int0_vbusint) {
 		usb_present = fan5451x_usb_chg_plugged_in(chip);
-
 		if (chip->usb_present ^ usb_present) {
 			chip->usb_present = usb_present;
 			pr_info("usb present %d\n", usb_present);
@@ -1040,13 +1039,16 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 		container_of(psy, struct fan5451x_chip, batt_psy);
 	union power_supply_propval ret = {0,};
 	int current_ma;
-	int wlc_present;
+	int wlc_online;
+	int usb_present, wlc_present;
 
 	if (!chip->bms_psy)
 		chip->bms_psy = power_supply_get_by_name("bms");
 
 	if (!chip->wlc_psy) {
 		chip->wlc_psy = power_supply_get_by_name("wireless");
+		/* in case of cable booting without any IRQ,
+		 * this code sets initial wlc present to wlc psy. */
 		if (chip->wlc_psy) {
 			chip->wlc_present = fan5451x_wlc_chg_plugged_in(chip);
 			power_supply_set_present(chip->wlc_psy, chip->wlc_present);
@@ -1055,18 +1057,20 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 		}
 	}
 
+	usb_present = fan5451x_usb_chg_plugged_in(chip);
+	wlc_present = fan5451x_wlc_chg_plugged_in(chip);
+
 	if (chip->wlc_fake_online) {
-		wlc_present = power_supply_get_online(chip->wlc_psy);
-		if (!wlc_present) {
+		wlc_online = power_supply_get_online(chip->wlc_psy);
+		if (!wlc_online) {
 			pr_info("wlc present 0, fake online off\n");
-			chip->eoc = false;
 			fan5451x_wlc_thermal_ctrl(chip, 0);
 			fan5451x_wlc_fake_online(chip, 0);
 			fan5451x_vbat_measure(chip);
 		}
 	}
 
-	if (fan5451x_usb_chg_plugged_in(chip)) {
+	if (usb_present) {
 		chip->usb_psy->get_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_CURRENT_MAX, &ret);
 		current_ma = ret.intval / 1000;
@@ -1083,8 +1087,12 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 			fan5451x_set_ibus(chip, current_ma);
 	}
 
-	if (fan5451x_wlc_chg_plugged_in(chip))
+	if (wlc_present)
 		fan5451x_set_iin(chip, chip->iin);
+
+	/* Cable removed */
+	if (!usb_present && !wlc_present && !chip->wlc_fake_online)
+		chip->eoc = false;
 
 skip_current_config:
 	power_supply_changed(&chip->batt_psy);
@@ -1140,15 +1148,21 @@ static int get_prop_batt_status(struct fan5451x_chip *chip)
 		return POWER_SUPPLY_STATUS_UNKNOWN;
 	}
 
+	/* remain FULL state instead of DISCHARGING state
+	 * after WLC Rx Off on raising EOC. */
+	if ((stat[1] & STAT1_CHGCMP || chip->eoc) &&
+			!chip->ext_vdd_restriction)
+		return POWER_SUPPLY_STATUS_FULL;
+
 	if (!(stat[0] & (chip->register_base.stat0_vinpwr |
 			chip->register_base.stat0_vbuspwr)))
 		return POWER_SUPPLY_STATUS_DISCHARGING;
 
-	if (stat[0] & STAT0_STAT)
+	/* During battery charging until EOC, STAT is 1.
+	 * But STAT is 0 on TOPOFF charging after EOC.
+	 * Instead of STAT, TOCHG is 1. */
+	if (stat[0] & STAT0_STAT || stat[1] & STAT1_TOCHG)
 		return POWER_SUPPLY_STATUS_CHARGING;
-
-	if (stat[1] & STAT1_CHGCMP)
-		return POWER_SUPPLY_STATUS_FULL;
 
 	return POWER_SUPPLY_STATUS_NOT_CHARGING;
 }
@@ -1454,6 +1468,8 @@ fan5451x_vbat_rechg_notification(enum qpnp_tm_state state, void *ctx)
 	chip->eoc = false;
 	fan5451x_batfet_enable(chip, 1);
 	fan5451x_wlc_fake_online(chip, 0);
+
+	power_supply_changed(&chip->batt_psy);
 }
 
 #define WS_RECHECK_DELAY_MS 6000
@@ -1551,6 +1567,7 @@ fan5451x_eoc_check_work(struct work_struct *work)
 			fan5451x_wlc_fake_online(chip, 1);
 			chip->eoc = true;
 			fan5451x_vbat_rechg_measure(chip);
+			power_supply_changed(&chip->batt_psy);
 			goto stop_eoc;
 		} else {
 			count++;
