@@ -38,6 +38,22 @@ void servicefs_fd_install(struct task_struct *task, unsigned int fd,
 }
 
 /*
+ * copied from put_unused_fd
+ */
+void servicefs_put_unused_fd(struct task_struct *task, unsigned int fd)
+{
+	struct fdtable *fdt;
+	struct files_struct *files = task->files;
+
+	spin_lock(&files->file_lock);
+	fdt = files_fdtable(files);
+	__clear_bit(fd, fdt->open_fds);
+	if (fd < files->next_fd)
+		files->next_fd = fd;
+	spin_unlock(&files->file_lock);
+}
+
+/*
  * copied from fget
  */
 struct file *servicefs_fget(struct task_struct *task, unsigned int fd)

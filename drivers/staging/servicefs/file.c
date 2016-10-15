@@ -17,9 +17,9 @@
 #include <linux/slab.h>
 #include <linux/poll.h>
 #include <linux/sched.h>
+#include <uapi/linux/servicefs.h>
 
 #include "servicefs_private.h"
-#include "servicefs_ioctl.h"
 #include "servicefs_compat_ioctl.h"
 
 static int initial_open(struct inode *inode, struct file *filp);
@@ -112,9 +112,13 @@ static int initial_open(struct inode *inode, struct file *filp)
 		filp->private_data = c;
 		filp->f_op = &channel_file_operations;
 
-		if (svc->s_flags & SERVICE_FLAGS_OPEN_NOTIFY)
-			return servicefs_msg_sendv_uninterruptible(c, SERVICEFS_OP_UNIX_OPEN,
-					NULL, 0, NULL, 0, NULL, 0);
+		/*
+		 * TODO: Remove this last uninterruptible sleep by addressing the two
+		 * conditions where either the open message has been received or it
+		 * hasn't.
+		 */
+		return servicefs_msg_sendv_uninterruptible(c, SERVICEFS_OP_UNIX_OPEN,
+				NULL, 0, NULL, 0, NULL, 0);
 	}
 
 	return 0;
@@ -202,8 +206,8 @@ static long service_ioctl(struct file *filp, unsigned int cmd,
 	int ret;
 	struct service *svc = filp->private_data;
 	void __user *ubuf = (void __user *) arg;
-	iov iovstack[UIO_FASTIOV];
-	iov *vec = iovstack;
+	struct iovec iovstack[UIO_FASTIOV];
+	struct iovec *vec = iovstack;
 
 	BUG_ON(svc == NULL);
 
@@ -410,8 +414,8 @@ static long service_compat_ioctl(struct file *filp, unsigned int cmd,
 	int ret;
 	struct service *svc = filp->private_data;
 	void __user *ubuf = compat_ptr(arg);
-	iov iovstack[UIO_FASTIOV];
-	iov *vec = iovstack;
+	struct iovec iovstack[UIO_FASTIOV];
+	struct iovec *vec = iovstack;
 
 	BUG_ON(svc == NULL);
 
@@ -744,10 +748,10 @@ static long channel_ioctl(struct file *filp, unsigned int cmd,
 	int ret;
 	struct channel *c = filp->private_data;
 	void __user *ubuf = (void __user *) arg;
-	iov siovstack[UIO_FASTIOV];
-	iov riovstack[UIO_FASTIOV];
-	iov *svec = siovstack;
-	iov *rvec = riovstack;
+	struct iovec siovstack[UIO_FASTIOV];
+	struct iovec riovstack[UIO_FASTIOV];
+	struct iovec *svec = siovstack;
+	struct iovec *rvec = riovstack;
 	int fdstack[UIO_FASTIOV];
 	int *fds = fdstack;
 
@@ -874,10 +878,10 @@ static long channel_compat_ioctl(struct file *filp, unsigned int cmd,
 	int ret;
 	struct channel *c = filp->private_data;
 	void __user *ubuf = compat_ptr(arg);
-	iov siovstack[UIO_FASTIOV];
-	iov riovstack[UIO_FASTIOV];
-	iov *svec = siovstack;
-	iov *rvec = riovstack;
+	struct iovec siovstack[UIO_FASTIOV];
+	struct iovec riovstack[UIO_FASTIOV];
+	struct iovec *svec = siovstack;
+	struct iovec *rvec = riovstack;
 	int fdstack[UIO_FASTIOV];
 	int *fds = fdstack;
 
@@ -1025,7 +1029,7 @@ static unsigned int channel_poll(struct file *filp, poll_table *wait)
 	mutex_lock(&svc->s_mutex);
 
 	poll_wait(filp, &c->c_waitqueue, wait);
-	mask = c->c_events;
+	mask = atomic_read(&c->c_events);
 
 	mutex_unlock(&svc->s_mutex);
 
@@ -1046,11 +1050,6 @@ static int channel_release(struct inode *inode, struct file *filp)
 	count = atomic_add_return(-1, &svc->s_count);
 	pr_debug("count=%d\n", count);
 
-	/* TODO(eieio): consider putting this on a work queue. */
-	if (svc->s_flags & SERVICE_FLAGS_CLOSE_NOTIFY)
-		(void) servicefs_msg_sendv_uninterruptible(c, SERVICEFS_OP_UNIX_CLOSE,
-				NULL, 0, NULL, 0, NULL, 0);
-
 	channel_remove(c);
 
 	return 0;
@@ -1059,7 +1058,7 @@ static int channel_release(struct inode *inode, struct file *filp)
 static ssize_t channel_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
 {
 	ssize_t ret;
-	const iov rvec[1] = {
+	const struct iovec rvec[1] = {
 		{ .iov_base = buf, .iov_len = len },
 	};
 	struct channel *c = filp->private_data;
@@ -1075,7 +1074,7 @@ static ssize_t channel_read(struct file *filp, char __user *buf, size_t len, lof
 static ssize_t channel_write(struct file *filp, const char __user *buf, size_t len, loff_t *ppos)
 {
 	ssize_t ret;
-	const iov svec[1] = {
+	const struct iovec svec[1] = {
 		{ .iov_base = (char __user *) buf, .iov_len = len },
 	};
 	struct channel *c = filp->private_data;
@@ -1087,36 +1086,3 @@ static ssize_t channel_write(struct file *filp, const char __user *buf, size_t l
 			svec, 1, NULL, 0, NULL, 0);
 	return ret;
 }
-
-static ssize_t default_read_file(struct file *file, char __user *buf,
-				 size_t count, loff_t *ppos)
-{
-	return 0;
-}
-
-static ssize_t default_write_file(struct file *file, const char __user *buf,
-				   size_t count, loff_t *ppos)
-{
-	return count;
-}
-
-static int default_open(struct inode *inode, struct file *file)
-{
-	if (inode->i_private)
-		file->private_data = inode->i_private;
-
-	return 0;
-}
-
-const struct file_operations servicefs_file_operations = {
-	.read =		default_read_file,
-	.write =	default_write_file,
-	.open =		default_open,
-	.llseek =	noop_llseek,
-};
-
-const struct inode_operations servicefs_link_operations = {
-	.readlink       = generic_readlink,
-	.follow_link    = simple_follow_link,
-};
-

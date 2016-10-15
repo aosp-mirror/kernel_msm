@@ -4,9 +4,6 @@
 #include <linux/types.h>
 #include <linux/uio.h>
 
-typedef struct iovec iov;
-typedef struct kvec kiov;
-
 typedef enum iov_buffer_type {
 	IOV_BUFFER_TYPE_USER = 0,
 	IOV_BUFFER_TYPE_KERNEL,
@@ -14,16 +11,16 @@ typedef enum iov_buffer_type {
 
 struct iov_buffer {
 	union {
-		const iov *      i_uvec;
-		const kiov *     i_kvec;
+		const struct iovec * i_uvec;
+		const struct kvec *  i_kvec;
 	};
-	size_t               i_cnt;
-	size_t               i_len;
+	size_t                   i_cnt;
+	size_t                   i_len;
 
-	size_t               i_vec_idx;
-	size_t               i_vec_off;
-	size_t               i_off;
-	iov_buffer_type_e    i_type;
+	size_t                   i_vec_idx;
+	size_t                   i_vec_off;
+	size_t                   i_off;
+	iov_buffer_type_e        i_type;
 };
 
 static inline size_t kiov_length(const struct kvec *iov, unsigned long nr_segs)
@@ -37,8 +34,8 @@ static inline size_t kiov_length(const struct kvec *iov, unsigned long nr_segs)
 	return ret;
 }
 
-static inline void iov_buffer_uinit(struct iov_buffer *buf, const iov *vec,
-		size_t cnt)
+static inline void iov_buffer_uinit(struct iov_buffer *buf,
+		const struct iovec *vec, size_t cnt)
 {
 	buf->i_uvec = vec;
 	buf->i_cnt = cnt;
@@ -49,8 +46,8 @@ static inline void iov_buffer_uinit(struct iov_buffer *buf, const iov *vec,
 	buf->i_type = IOV_BUFFER_TYPE_USER;
 }
 
-static inline void iov_buffer_kinit(struct iov_buffer *buf, const kiov *vec,
-		size_t cnt)
+static inline void iov_buffer_kinit(struct iov_buffer *buf,
+		const struct kvec *vec, size_t cnt)
 {
 	buf->i_kvec = vec;
 	buf->i_cnt = cnt;
@@ -96,7 +93,7 @@ static inline size_t iov_buffer_advance(struct iov_buffer *buf, size_t bytes)
 	size_t off = buf->i_vec_off;
 
 	if (buf->i_type == IOV_BUFFER_TYPE_USER) {
-		const iov *iov = &buf->i_uvec[buf->i_vec_idx];
+		const struct iovec *iov = &buf->i_uvec[buf->i_vec_idx];
 
 		while (bytes && buf->i_off < buf->i_len) {
 			d = min(bytes, iov->iov_len - off);
@@ -115,7 +112,7 @@ static inline size_t iov_buffer_advance(struct iov_buffer *buf, size_t bytes)
 		buf->i_vec_off = off;
 		buf->i_vec_idx = iov - buf->i_uvec;
 	} else {
-		const kiov *iov = &buf->i_kvec[buf->i_vec_idx];
+		const struct kvec *iov = &buf->i_kvec[buf->i_vec_idx];
 
 		while (bytes && buf->i_off < buf->i_len) {
 			d = min(bytes, iov->iov_len - off);

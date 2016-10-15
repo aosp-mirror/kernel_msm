@@ -49,7 +49,7 @@ struct vm_transfer {
  * in the segment. It is up to the caller to ensure that the offset is
  * within the segment.
  */
-static unsigned long pages_per_iov(const iov *vec, size_t offset)
+static unsigned long pages_per_iov(const struct iovec *vec, size_t offset)
 {
 	unsigned long base = (unsigned long) vec->iov_base + offset;
 	unsigned long len = vec->iov_len - offset;

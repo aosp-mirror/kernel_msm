@@ -20,88 +20,190 @@
 #include <linux/poison.h>
 #include <linux/poll.h>
 #include <linux/namei.h>
+#include <linux/atomic.h>
+#include <uapi/linux/servicefs.h>
 
 #include "servicefs_private.h"
-#include "servicefs_ioctl.h"
 #include "servicefs_compat_ioctl.h"
+
+/*
+ * Lock ordering rules:
+ *  1. s_mutex
+ *  2. s_channel_lock OR m_mutex (never held together)
+ *
+ * The mutex s_mutex protects most members of struct service, except for the
+ * channel list and channel id sweeper. This lock orders access to the message
+ * queue and service context pointer.
+ *
+ * The mutex s_channel_lock protects the channel list, channel id sweeper, and
+ * orders writes to per-channel context pointers. Reads from per-channel context
+ * pointers are not synchronized with respect to writes and should be
+ * synchronized in userspace in multithreaded services. This is deemed
+ * acceptable becuase changing context pointers requires userspace
+ * synchronization between setting the pointer and receiving messages,
+ * regardless of whether the kernel synchronizes reads and updates internally.
+ *
+ * The mutex m_mutex protects most per-message members of struct message. This
+ * lock serializes access to the message payload iovecs and pending fd list.
+ * This lock also ensures that message APIs are serialized with respect to
+ * service tear down.
+ */
 
 #define THIS_SERVICE_FD (-1)
 
 /**
- * message_cache - cache for message structs.
+ * servicefs_atomic_update_mask - update a mask in an atomic variable
+ * @v: pointer to atomic variable to update
+ * @clr: bits to clear in the atomic variable
+ * @set: bits to set in the atomic variable
+ *
+ * Atomically updates the bits in an atomic variable by first clearing
+ * the bits given by |clr| and then setting the bits given by |set|.
+ *
+ * Returns the previous value of the mask.
  */
-static struct kmem_cache *message_cache;
+static inline int servicefs_atomic_update_mask(atomic_t *v, int clr, int set)
+{
+	int c, old;
+
+	c = atomic_read(v);
+	while ((old = atomic_cmpxchg(v, c, (c & ~clr) | set)) != c)
+		c = old;
+
+	return old;
+}
+
+#define servicefs_atomic_mask_set(v, set) \
+	servicefs_atomic_update_mask((v), 0, (set))
+
+#define servicefs_atomic_mask_clear(v, clr) \
+	servicefs_atomic_update_mask((v), (clr), 0)
+
+static inline bool is_close_message(struct message *m)
+{
+	return m->m_task == NULL && m->m_op == SERVICEFS_OP_UNIX_CLOSE;
+}
 
 /**
- * impulse_cache - cache for impulse structs.
+ * servicefs_service_cache - cache for service structs.
  */
-static struct kmem_cache *impulse_cache;
+static struct kmem_cache *servicefs_service_cache;
+
+/**
+ * servicefs_channel_cache - cache for channel structs.
+ */
+static struct kmem_cache *servicefs_channel_cache;
+
+/**
+ * servicefs_message_cache - cache for message structs.
+ */
+static struct kmem_cache *servicefs_message_cache;
+
+/**
+ * servicefs_impulse_cache - cache for impulse structs.
+ */
+static struct kmem_cache *servicefs_impulse_cache;
+
+/**
+ * servicefs_pending_fd_cache - cache for pending_fd structs.
+ */
+static struct kmem_cache *servicefs_pending_fd_cache;
 
 int servicefs_cache_init(void)
 {
-	unsigned long flags = SLAB_HWCACHE_ALIGN;
+	unsigned long flags = 0;
 #ifdef CONFIG_SERVICEFS_USE_POISON
 	flags |= SLAB_POISON;
 #endif
 
-	message_cache = KMEM_CACHE(message, flags);
-	if (!message_cache)
+	servicefs_service_cache = KMEM_CACHE(service, flags);
+	if (!servicefs_service_cache)
 		goto error;
 
-	impulse_cache = KMEM_CACHE(impulse, flags);
-	if (!impulse_cache)
+	servicefs_channel_cache = KMEM_CACHE(channel, flags);
+	if (!servicefs_channel_cache)
+		goto error;
+
+	servicefs_message_cache = KMEM_CACHE(message, flags);
+	if (!servicefs_message_cache)
+		goto error;
+
+	servicefs_impulse_cache = KMEM_CACHE(impulse, flags);
+	if (!servicefs_impulse_cache)
+		goto error;
+
+	servicefs_pending_fd_cache = KMEM_CACHE(pending_fd, flags);
+	if (!servicefs_pending_fd_cache)
 		goto error;
 
 	return 0;
 
 error:
-	if (message_cache) {
-		kmem_cache_destroy(message_cache);
-		message_cache = NULL;
+	if (servicefs_service_cache) {
+		kmem_cache_destroy(servicefs_service_cache);
+		servicefs_service_cache = NULL;
 	}
-	if (impulse_cache) {
-		kmem_cache_destroy(impulse_cache);
-		impulse_cache = NULL;
+	if (servicefs_channel_cache) {
+		kmem_cache_destroy(servicefs_channel_cache);
+		servicefs_channel_cache = NULL;
+	}
+	if (servicefs_message_cache) {
+		kmem_cache_destroy(servicefs_message_cache);
+		servicefs_message_cache = NULL;
+	}
+	if (servicefs_impulse_cache) {
+		kmem_cache_destroy(servicefs_impulse_cache);
+		servicefs_impulse_cache = NULL;
+	}
+	if (servicefs_pending_fd_cache) {
+		kmem_cache_destroy(servicefs_pending_fd_cache);
+		servicefs_pending_fd_cache = NULL;
 	}
 
 	return -ENOMEM;
 }
 
-void __message_get(struct message *msg);
-void __detach_message(struct message *msg);
+/*
+ * Forward declarations.
+ */
+static struct message *message_new(struct service *svc, struct channel *c,
+		int op, const struct iovec *svec, size_t scnt,
+		const struct iovec *rvec, size_t rcnt, const int *fds, size_t fdcnt,
+		struct task_struct *task);
+static void __message_get(struct message *msg);
+static void __message_put(struct message *msg);
+static void __message_cancel(struct message *msg);
+static void __message_complete(struct message *msg, int retcode);
+static void __impulse_cancel(struct impulse *impulse);
+static void channel_put(struct channel *c);
+static bool channel_cancel(struct channel *c);
 
-void service_poison(struct service *svc)
+static void channel_free(struct channel *c)
 {
-#ifdef CONFIG_SERVICEFS_USE_POISON
-	unsigned char *end = ((unsigned char *) svc) + sizeof(*svc) - 1;
-	memset(svc, POISON_FREE, sizeof(*svc) - 1);
-	*end = POISON_END;
-#endif
+	kmem_cache_free(servicefs_channel_cache, c);
 }
 
-void channel_poison(struct channel *c)
+static void message_free(struct message *m)
 {
-#ifdef CONFIG_SERVICEFS_USE_POISON
-	unsigned char *end = ((unsigned char *) c) + sizeof(*c) - 1;
-	memset(c, POISON_FREE, sizeof(*c) - 1);
-	*end = POISON_END;
-#endif
+	pr_debug("free: msg=%p m_op=%d cid=%d\n", m, m->m_op, m->m_channel->c_id);
+
+	if (m->m_task)
+		put_task_struct(m->m_task);
+	channel_put(m->m_channel);
+	kmem_cache_free(servicefs_message_cache, m);
 }
 
-void channel_free(struct channel *c)
+static void impulse_free(struct impulse *i)
 {
-	channel_poison(c);
-	kfree(c);
+	pr_debug("i=%p cid=%d\n", i, i->i_channel->c_id);
+
+	channel_put(i->i_channel);
+	kmem_cache_free(servicefs_impulse_cache, i);
 }
 
-void message_free(struct message *m)
+static void pending_fd_free(struct pending_fd *pfd)
 {
-	kmem_cache_free(message_cache, m);
-}
-
-void impulse_free(struct impulse *i)
-{
-	kmem_cache_free(impulse_cache, i);
+	kmem_cache_free(servicefs_pending_fd_cache, pfd);
 }
 
 /**
@@ -116,10 +218,8 @@ void service_free(struct service *svc)
 	pr_debug("freeing service: svc=%p\n", svc);
 
 	/* make sure everything is already properly cleaned up */
-	BUG_ON(!list_empty(&svc->s_channels));
 	BUG_ON(!list_empty(&svc->s_impulses));
 	BUG_ON(!list_empty(&svc->s_messages));
-	BUG_ON(!list_empty(&svc->s_active));
 	BUG_ON(waitqueue_active(&svc->s_wqreceivers));
 	BUG_ON(waitqueue_active(&svc->s_wqselect));
 
@@ -127,8 +227,7 @@ void service_free(struct service *svc)
 	idr_destroy(&svc->s_channel_idr);
 	idr_destroy(&svc->s_message_idr);
 
-	service_poison(svc);
-	kfree(svc);
+	kmem_cache_free(servicefs_service_cache, svc);
 }
 
 /**
@@ -138,7 +237,7 @@ void service_free(struct service *svc)
  */
 struct service *service_new(void)
 {
-	struct service *svc = kzalloc(sizeof(struct service), GFP_KERNEL);
+	struct service *svc = kmem_cache_alloc(servicefs_service_cache, GFP_KERNEL);
 	if (!svc) {
 		pr_err("failed to allocate service struct\n");
 		goto out;
@@ -146,20 +245,27 @@ struct service *service_new(void)
 
 	pr_debug("creating new service: svc=%p\n", svc);
 
+	svc->s_count = (atomic_t) ATOMIC_INIT(0);
+
 	mutex_init(&svc->s_mutex);
+	mutex_init(&svc->s_channel_lock);
 
-	idr_init(&svc->s_channel_idr);
 	idr_init(&svc->s_message_idr);
+	idr_init(&svc->s_channel_idr);
 
-	INIT_LIST_HEAD(&svc->s_channels);
+	svc->s_message_start = 0;
+	svc->s_channel_start = 0;
+
 	INIT_LIST_HEAD(&svc->s_impulses);
 	INIT_LIST_HEAD(&svc->s_messages);
-	INIT_LIST_HEAD(&svc->s_active);
 
 	init_waitqueue_head(&svc->s_wqreceivers);
 	init_waitqueue_head(&svc->s_wqselect);
 
-	svc->s_flags = SERVICE_FLAGS_DEFAULT;
+	svc->s_flags = (atomic_t) ATOMIC_INIT(SERVICE_FLAGS_DEFAULT);
+
+	svc->s_context = NULL;
+	svc->s_filp = NULL;
 
 out:
 	return svc;
@@ -168,34 +274,38 @@ out:
 int service_cancel(struct service *svc)
 {
 	int ret;
-	struct channel *c, *cn;
+	struct channel *c;
 	struct impulse *i, *in;
 	struct message *m, *mn;
+	int cid, mid;
+	int previous_mask;
 
-	mutex_lock(&svc->s_mutex);
+	previous_mask = servicefs_atomic_mask_set(&svc->s_flags,
+			SERVICE_FLAGS_CANCELED);
 
-	if (!__is_service_canceled(svc)) {
+	if ((previous_mask & SERVICE_FLAGS_CANCELED) == 0) {
 		pr_debug("canceling service=%p\n", svc);
-		svc->s_flags |= SERVICE_FLAGS_CANCELED;
 
 		pr_debug("removing dentry service=%p\n", svc);
 		servicefs_remove_dentry(svc->s_filp->f_path.dentry);
 
+		mutex_lock(&svc->s_mutex);
 		list_for_each_entry_safe(i, in, &svc->s_impulses, i_impulses_node) {
 			__impulse_cancel(i);
 		}
-
 		list_for_each_entry_safe(m, mn, &svc->s_messages, m_messages_node) {
 			__message_cancel(m);
 		}
-
-		list_for_each_entry_safe(m, mn, &svc->s_active, m_messages_node) {
+		idr_for_each_entry(&svc->s_message_idr, m, mid) {
 			__message_cancel(m);
 		}
+		mutex_unlock(&svc->s_mutex);
 
-		list_for_each_entry_safe(c, cn, &svc->s_channels, c_channels_node) {
-			__channel_cancel(c);
+		mutex_lock(&svc->s_channel_lock);
+		idr_for_each_entry(&svc->s_channel_idr, c, cid) {
+			channel_cancel(c);
 		}
+		mutex_unlock(&svc->s_channel_lock);
 
 		wake_up_all(&svc->s_wqreceivers);
 		wake_up_poll(&svc->s_wqselect, POLLHUP | POLLFREE);
@@ -205,8 +315,6 @@ int service_cancel(struct service *svc)
 		pr_debug("already canceled service=%p\n", svc);
 		ret = -ESHUTDOWN;
 	}
-
-	mutex_unlock(&svc->s_mutex);
 
 	return ret;
 }
@@ -221,8 +329,6 @@ int service_cancel(struct service *svc)
  *
  * The c_service member of the channel struct must be set to the associated
  * service pointer prior to calling this function.
- *
- * This function must be called with the service's s_mutex held.
  */
 static int alloc_channel_id(struct channel *c)
 {
@@ -230,32 +336,33 @@ static int alloc_channel_id(struct channel *c)
 	struct service *svc = c->c_service;
 	BUG_ON(svc == NULL);
 
-	lockdep_assert_held(&svc->s_mutex);
+	mutex_lock(&svc->s_channel_lock);
 
 	ret = idr_alloc(&svc->s_channel_idr, c, svc->s_channel_start, -1, GFP_KERNEL);
-	if (ret < 0)
+	if (ret < 0) {
+		mutex_unlock(&svc->s_channel_lock);
 		return ret;
-	else
+	} else {
 		svc->s_channel_start = (svc->s_channel_start + 1) & 0x7fffffff;
+	}
 
 	c->c_id = ret;
+	mutex_unlock(&svc->s_channel_lock);
 	return 0;
 }
 
 /**
  * free_channel_id - free the channel id for a channel
  * @c: a pointer to the channel to free the id for.
- *
- * This function must be called with service's s_mutex held.
  */
 static void free_channel_id(struct channel *c)
 {
 	struct service *svc = c->c_service;
 	BUG_ON(svc == NULL);
 
-	lockdep_assert_held(&svc->s_mutex);
-
+	mutex_lock(&svc->s_channel_lock);
 	idr_remove(&svc->s_channel_idr, c->c_id);
+	mutex_unlock(&svc->s_channel_lock);
 }
 
 /**
@@ -319,40 +426,50 @@ static void free_message_id(struct message *m)
 struct channel *channel_new(struct service *svc)
 {
 	int ret;
-	struct channel *c = kmalloc(sizeof(struct channel), GFP_KERNEL);
+	struct channel *c = kmem_cache_alloc(servicefs_channel_cache, GFP_KERNEL);
 	if (!c)
-		goto alloc_fail;
+		return NULL;
 
+	kref_init(&c->c_ref);
 	c->c_service = svc;
 	c->c_context = NULL;
-	c->c_flags = 0;
-
-	c->c_events = 0;
+	c->c_flags = (atomic_t) ATOMIC_INIT(0);
+	c->c_events = (atomic_t) ATOMIC_INIT(0);
 	init_waitqueue_head(&c->c_waitqueue);
 
-	mutex_lock(&svc->s_mutex);
-
 	ret = alloc_channel_id(c);
-	if (ret)
-		goto id_fail;
+	if (ret) {
+		channel_free(c);
+		return NULL;
+	} else {
+		pr_debug("added channel id=%d to service=%p\n", c->c_id, svc);
+		return c;
+	}
+}
 
-	list_add_tail(&c->c_channels_node, &svc->s_channels);
+static void channel_release_kref(struct kref *ref)
+{
+	struct channel *c = container_of(ref, struct channel, c_ref);
 
-	mutex_unlock(&svc->s_mutex);
+	pr_debug("c=%p c_id=%d\n", c, c->c_id);
 
-	pr_debug("added channel id=%d to service=%p\n", c->c_id, svc);
-
-alloc_fail:
-	return c;
-
-id_fail:
-	mutex_unlock(&svc->s_mutex);
+	free_channel_id(c);
+	BUG_ON(waitqueue_active(&c->c_waitqueue));
 	channel_free(c);
-	return NULL;
+}
+
+static void channel_put(struct channel *c)
+{
+	kref_put(&c->c_ref, channel_release_kref);
+}
+
+static bool channel_get(struct channel *c)
+{
+	return !!kref_get_unless_zero(&c->c_ref);
 }
 
 /**
- * __channel_cancel - cancel a channel and wake up clients
+ * channel_cancel - cancel a channel and wake up clients
  * @c: pointer to the channel to cancel
  *
  * Puts the channel into canceled state and wakes up any
@@ -361,22 +478,25 @@ id_fail:
  * client event set, and is used to signal that the file
  * descriptor is in a canceled state.
  *
- * Must be called with the service's s_mutex held.
+ * Returns true if this call canceled the channel, false if the
+ * channel was already canceled.
  */
-void __channel_cancel(struct channel *c)
+static bool channel_cancel(struct channel *c)
 {
+	int previous_mask;
 	struct service *svc = c->c_service;
 	BUG_ON(!svc);
 
-	lockdep_assert_held(&svc->s_mutex);
+	previous_mask = servicefs_atomic_mask_set(&c->c_flags,
+			CHANNEL_FLAGS_CANCELED);
 
-	list_del_init(&c->c_channels_node);
-	free_channel_id(c);
-
-	c->c_flags |= CHANNEL_FLAGS_CANCELED;
-	c->c_events |= POLLHUP | POLLFREE;
-
-	wake_up_poll(&c->c_waitqueue, POLLHUP | POLLFREE);
+	if ((previous_mask & CHANNEL_FLAGS_CANCELED) == 0) {
+		servicefs_atomic_mask_set(&c->c_events, POLLHUP | POLLFREE);
+		wake_up_poll(&c->c_waitqueue, POLLHUP | POLLFREE);
+		return true;
+	} else {
+		return false;
+	}
 }
 
 /*
@@ -389,47 +509,47 @@ void __channel_cancel(struct channel *c)
  */
 void channel_remove(struct channel *c)
 {
-	struct impulse *i, *in;
-	struct message *m, *mn;
 	struct service *svc = c->c_service;
-	BUG_ON(svc == NULL);
+	BUG_ON(!svc);
 
-	pr_debug("removing channel id=%d from service=%p\n", c->c_id, svc);
+	pr_debug("removing channel id=%d from service=%p\n", c->c_id, c->c_service);
 
-	mutex_lock(&svc->s_mutex);
+	if (channel_cancel(c)) {
+		/*
+		 * Generate a special close message to signal to the service that the
+		 * channel has closed. This message is only sent if the channel is not
+		 * already canceled by the service explicitly closing it or the service
+		 * shutting down.
+		 */
+		struct message *msg = message_new(svc, c, SERVICEFS_OP_UNIX_CLOSE,
+				NULL, 0, NULL, 0, NULL, 0, NULL);
+		if (!msg) {
+			pr_err("Failed to allocate close message!\n");
+			goto done;
+		}
 
-	if (!__is_channel_canceled(c))
-		__channel_cancel(c);
+		/* Enqueue the close message unless the service is canceled. */
+		mutex_lock(&svc->s_mutex);
 
-	/* cancel all the pending impulses on this channel */
-	list_for_each_entry_safe(i, in, &svc->s_impulses, i_impulses_node) {
-		if (i->i_channel == c)
-			__impulse_cancel(i);
+		if (is_service_canceled(svc)) {
+			pr_debug("cid=%d service_canceled=%d\n", c->c_id,
+					is_service_canceled(svc));
+			__message_put(msg);
+		} else {
+			list_add_tail(&msg->m_messages_node, &svc->s_messages);
+
+			if (waitqueue_active(&svc->s_wqreceivers))
+				wake_up(&svc->s_wqreceivers);
+			else
+				wake_up_poll(&svc->s_wqselect, POLLIN | POLLRDNORM);
+		}
+
+		mutex_unlock(&svc->s_mutex);
 	}
 
-	/* cancel all the pending messages on this channel */
-	list_for_each_entry_safe(m, mn, &svc->s_messages, m_messages_node) {
-		mutex_lock(&m->m_mutex);
-
-		if (m->m_channel == c)
-			__message_cancel(m);
-
-		mutex_unlock(&m->m_mutex);
-	}
-
-	/* detach all the active messages from this channel */
-	list_for_each_entry_safe(m, mn, &svc->s_active, m_messages_node) {
-		mutex_lock(&m->m_mutex);
-
-		if (m->m_channel == c)
-			__detach_message(m);
-
-		mutex_unlock(&m->m_mutex);
-	}
-
-	mutex_unlock(&svc->s_mutex);
-
-	channel_free(c);
+done:
+	/* Drop the channel ref. The close message maintains its own ref. */
+	channel_put(c);
 }
 
 /**
@@ -440,36 +560,80 @@ void channel_remove(struct channel *c)
  *
  * Must be called with the service's s_mutex held.
  */
-void __message_cancel(struct message *msg)
+static void __message_cancel(struct message *msg)
 {
 	pr_debug("msg=%p\n", msg);
 	__message_complete(msg, -ESHUTDOWN);
 }
 
-/**
- * __detach_message - detaches a message from its channel
- * @msg: pointer to the message to detach
- *
- * Must be called with the message's m_mutex held.
- */
-void __detach_message(struct message *msg)
-{
-	pr_debug("msg=%p\n", msg);
-	msg->m_channel = NULL;
-}
-
-void __impulse_cancel(struct impulse *impulse)
+static void __impulse_cancel(struct impulse *impulse)
 {
 	list_del_init(&impulse->i_impulses_node);
 	impulse_free(impulse);
 }
 
-struct channel *__lookup_channel(struct service *svc, int cid)
+static struct channel *__lookup_channel(struct service *svc, int cid)
 {
 	return idr_find(&svc->s_channel_idr, cid);
 }
 
-struct message *__lookup_message(struct service *svc, int mid)
+static struct message *message_new(struct service *svc, struct channel *c,
+		int op, const struct iovec *svec, size_t scnt,
+		const struct iovec *rvec, size_t rcnt, const int *fds, size_t fdcnt,
+		struct task_struct *task)
+{
+	kuid_t kuid;
+	kgid_t kgid;
+	struct message *msg = kmem_cache_alloc(
+			servicefs_message_cache, GFP_KERNEL);
+	if (!msg)
+		return NULL;
+
+	INIT_LIST_HEAD(&msg->m_messages_node);
+	INIT_LIST_HEAD(&msg->m_pending_fds);
+	kref_init(&msg->m_ref);
+	mutex_init(&msg->m_mutex);
+
+	msg->m_id = MESSAGE_NO_ID;
+	msg->m_op = op;
+	msg->m_service = svc;
+	msg->m_flags = (atomic_t) ATOMIC_INIT(MESSAGE_FLAGS_PENDING);
+
+	init_waitqueue_head(&msg->m_waitqueue);
+
+	/*
+	 * Get a ref to the channel. This ref is dropped when the message is freed.
+	 */
+	channel_get(c);
+	msg->m_channel = c;
+	msg->m_priority = task ? task_nice(task) : -1;
+	msg->m_status = 0;
+
+	iov_buffer_uinit(&msg->m_sbuf, svec, scnt);
+	iov_buffer_uinit(&msg->m_rbuf, rvec, rcnt);
+
+	msg->m_fds = fds;
+	msg->m_fdcnt = fdcnt;
+
+	/*
+	 * Get a ref to the task and stash the task struct for later use. The task
+	 * struct ref is dropped when the message is freed.
+	 */
+	if (task)
+		get_task_struct(task);
+	msg->m_task = task;
+
+	/* Credentials always come from the current task. */
+	current_euid_egid(&kuid, &kgid);
+	msg->m_euid = __kuid_val(kuid);
+	msg->m_egid = __kgid_val(kgid);
+	msg->m_pid = pid_vnr(task_tgid(current));
+	msg->m_tid = pid_vnr(task_pid(current));
+
+	return msg;
+}
+
+static struct message *__lookup_message(struct service *svc, int mid)
 {
 	return idr_find(&svc->s_message_idr, mid);
 }
@@ -486,7 +650,7 @@ struct message *__lookup_message(struct service *svc, int mid)
  * This function properly interlocks the release of svc->s_mutex with
  * the acquisition of the message's m_mutex.
  */
-struct message *lookup_and_lock_message(struct service *svc, int mid,
+static struct message *lookup_and_lock_message(struct service *svc, int mid,
 		bool check_interrupted)
 {
 	struct message *msg;
@@ -501,7 +665,7 @@ struct message *lookup_and_lock_message(struct service *svc, int mid,
 
 	mutex_lock(&msg->m_mutex);
 
-	if (check_interrupted && __is_message_interrupted(msg)) {
+	if (check_interrupted && is_message_interrupted(msg)) {
 		mutex_unlock(&msg->m_mutex);
 		mutex_unlock(&svc->s_mutex);
 		return ERR_PTR(-EINTR);
@@ -512,13 +676,13 @@ struct message *lookup_and_lock_message(struct service *svc, int mid,
 	return msg;
 }
 
-struct message *__peek_message(struct service *svc)
+static struct message *__peek_message(struct service *svc)
 {
 	lockdep_assert_held(&svc->s_mutex);
 	return list_first_entry_or_null(&svc->s_messages, struct message, m_messages_node);
 }
 
-int __activate_message(struct message *msg)
+static int __activate_message(struct message *msg)
 {
 	int ret;
 	struct service *svc = msg->m_service;
@@ -531,9 +695,10 @@ int __activate_message(struct message *msg)
 		goto error;
 
 	list_del_init(&msg->m_messages_node);
-	list_add_tail(&msg->m_messages_node, &svc->s_active);
 
-	__message_get(msg);
+	/* If the message is a close message inherit the ref. */
+	if (!is_close_message(msg))
+		__message_get(msg);
 
 error:
 	return ret;
@@ -559,15 +724,11 @@ static void message_release_kref(struct kref *ref)
 {
 	struct message *msg = container_of(ref, struct message, m_ref);
 
-	pr_debug("msg=%p m_id=%d m_completed=%d m_interrupted=%d "
-			"m_status=%zu\n", msg, msg->m_id, msg->m_completed,
-			msg->m_interrupted, msg->m_status);
+	pr_debug("release: msg=%p m_id=%d m_op=%d m_flags=0x%x m_status=%zd\n", msg,
+			msg->m_id, msg->m_op, atomic_read(&msg->m_flags), msg->m_status);
 
 	/* remove the message in case it's queued */
 	list_del_init(&msg->m_messages_node);
-	free_message_id(msg);
-
-	put_task_struct(msg->m_task);
 	message_free(msg);
 }
 
@@ -577,18 +738,17 @@ static void message_release_kref(struct kref *ref)
  *
  * Must be called with the service's s_mutex held.
  */
-void __message_put(struct message *msg)
+static void __message_put(struct message *msg)
 {
 	kref_put(&msg->m_ref, message_release_kref);
 }
 
-void message_put(struct service *svc, struct message *msg)
+static void message_put(struct service *svc, struct message *msg)
 {
 	mutex_lock(&svc->s_mutex);
 	__message_put(msg);
 	mutex_unlock(&svc->s_mutex);
 }
-
 
 /**
  * __message_get - get a reference to a message
@@ -596,9 +756,9 @@ void message_put(struct service *svc, struct message *msg)
  *
  * Must be called with the service's s_mutex held.
  */
-void __message_get(struct message *msg)
+static void __message_get(struct message *msg)
 {
-	kref_get(&msg->m_ref);
+	BUG_ON(!kref_get_unless_zero(&msg->m_ref));
 }
 
 /**
@@ -608,24 +768,44 @@ void __message_get(struct message *msg)
  *
  * Must be called with the service's s_mutex held.
  */
-void __message_complete(struct message *msg, int retcode)
+static void __message_complete(struct message *msg, int retcode)
 {
-	/* capture active state before we free the message id */
-	bool active = __is_message_active(msg);
+	struct pending_fd *pfd, *pfdn;
 
-	list_del_init(&msg->m_messages_node);
+	/*
+	 * An active message has a ref taken by msg_recv and similarly a close
+	 * message is created with a ref isn't owned by the sender. In both cases
+	 * this ref must be dropped when we are done here.
+	 */
+	bool drop_ref = is_message_active(msg) || is_close_message(msg);
+
 	free_message_id(msg);
+	list_del_init(&msg->m_messages_node);
 
 	mutex_lock(&msg->m_mutex);
 
+	/* Install pending fds or roll back fd allocation depending on retcode. */
+	list_for_each_entry_safe(pfd, pfdn,
+			&msg->m_pending_fds, p_pending_fds_node) {
+		if (retcode >= 0) {
+			servicefs_fd_install(msg->m_task, pfd->p_fd, pfd->p_filp);
+		} else {
+			servicefs_put_unused_fd(msg->m_task, pfd->p_fd);
+			fput(pfd->p_filp);
+		}
+
+		list_del(&pfd->p_pending_fds_node);
+		pending_fd_free(pfd);
+	}
+
 	msg->m_status = retcode;
-	msg->m_completed = true;
+	servicefs_atomic_mask_set(&msg->m_flags, MESSAGE_FLAGS_COMPLETED);
 
 	mutex_unlock(&msg->m_mutex);
 
 	wake_up(&msg->m_waitqueue);
 
-	if (active)
+	if (drop_ref)
 		__message_put(msg);
 }
 
@@ -783,7 +963,7 @@ int servicefs_check_channel(struct service *svc, int svcfd, int msgid,
 		goto error;
 	}
 
-	if (index < 0 || index >= msg->m_fdcnt) {
+	if (is_close_message(msg) || index < 0 || index >= msg->m_fdcnt) {
 		mutex_unlock(&msg->m_mutex);
 		ret = -EINVAL;
 		goto error;
@@ -829,6 +1009,7 @@ error:
 int servicefs_push_channel(struct service *svc, int svcfd, int msgid,
 		int flags, int __user *cid, void __user *ctx, bool is_compat)
 {
+	struct pending_fd *pfd;
 	struct message *msg;
 	struct channel *c;
 	struct file *file, *svc_file, *put_file;
@@ -863,6 +1044,11 @@ int servicefs_push_channel(struct service *svc, int svcfd, int msgid,
 		goto error_unlocked;
 	}
 
+	if (is_close_message(msg)) {
+		fd = -EINVAL;
+		goto error_locked;
+	}
+
 	/* msg is valid and msg->m_mutex is locked at this point */
 	fd = servicefs_get_unused_fd_flags(msg->m_task, flags);
 	if (unlikely(fd < 0))
@@ -870,7 +1056,7 @@ int servicefs_push_channel(struct service *svc, int svcfd, int msgid,
 
 	file = servicefs_create_channel(svc_file, flags);
 	if (IS_ERR(file)) {
-		put_unused_fd(fd);
+		servicefs_put_unused_fd(msg->m_task, fd);
 		fd = PTR_ERR(file);
 		goto error_locked;
 	}
@@ -880,16 +1066,30 @@ int servicefs_push_channel(struct service *svc, int svcfd, int msgid,
 
 	c->c_context = ctx;
 
+	pfd = kmem_cache_alloc(servicefs_pending_fd_cache, GFP_KERNEL);
+	if (!pfd) {
+		fput(file);
+		servicefs_put_unused_fd(msg->m_task, fd);
+		fd = -ENOMEM;
+		goto error_locked;
+	}
+
 	/* write the new channel id to the user, if cid is not NULL */
 	if (cid && __put_user_cid(c->c_id, cid, is_compat)) {
-		put_unused_fd(fd);
+		fput(file);
+		pending_fd_free(pfd);
+		servicefs_put_unused_fd(msg->m_task, fd);
 		fd = -EFAULT;
 		goto error_locked;
 	}
 
 	/* no more failures can occur, complete the channel setup */
 	servicefs_complete_channel_setup(file);
-	servicefs_fd_install(msg->m_task, fd, file);
+
+	/* Add the pending fd to the message. */
+	pfd->p_fd = fd;
+	pfd->p_filp = file;
+	list_add_tail(&pfd->p_pending_fds_node, &msg->m_pending_fds);
 
 error_locked:
 	mutex_unlock(&msg->m_mutex);
@@ -906,7 +1106,7 @@ int servicefs_close_channel(struct service *svc, int cid)
 
 	pr_debug("cid=%d\n", cid);
 
-	mutex_lock(&svc->s_mutex);
+	mutex_lock(&svc->s_channel_lock);
 
 	c = __lookup_channel(svc, cid);
 	if (!c) {
@@ -914,10 +1114,10 @@ int servicefs_close_channel(struct service *svc, int cid)
 		goto done;
 	}
 
-	__channel_cancel(c);
+	channel_cancel(c);
 
 done:
-	mutex_unlock(&svc->s_mutex);
+	mutex_unlock(&svc->s_channel_lock);
 	return ret;
 }
 
@@ -938,7 +1138,7 @@ int servicefs_set_channel_context(struct service *svc, int cid,
 
 	pr_debug("cid=%d ctx=%p\n", cid, ctx);
 
-	mutex_lock(&svc->s_mutex);
+	mutex_lock(&svc->s_channel_lock);
 
 	c = __lookup_channel(svc, cid);
 	if (!c) {
@@ -949,7 +1149,7 @@ int servicefs_set_channel_context(struct service *svc, int cid,
 	c->c_context = ctx;
 
 done:
-	mutex_unlock(&svc->s_mutex);
+	mutex_unlock(&svc->s_channel_lock);
 	return ret;
 }
 
@@ -957,11 +1157,9 @@ static inline bool is_message_pending(struct service *svc)
 {
 	bool pending;
 
-	mutex_lock(&svc->s_mutex);
-	pending = __is_service_canceled(svc)
-			|| !list_empty(&svc->s_impulses)
-			|| !list_empty(&svc->s_messages);
-	mutex_unlock(&svc->s_mutex);
+	pending = is_service_canceled(svc)
+			|| !list_empty_careful(&svc->s_impulses)
+			|| !list_empty_careful(&svc->s_messages);
 
 	return pending;
 }
@@ -981,7 +1179,7 @@ int servicefs_msg_recv(struct service *svc,
 	mutex_lock(&svc->s_mutex);
 
 	do {
-		if (__is_service_canceled(svc)) {
+		if (is_service_canceled(svc)) {
 			pr_debug("canceled_path\n");
 			mutex_unlock(&svc->s_mutex);
 			return -ESHUTDOWN;
@@ -1030,8 +1228,8 @@ message_path:
 
 	/* grab the service/channel context and channel id before releasing s_mutex */
 	s_context = svc->s_context;
-	c_context = msg->m_channel ? msg->m_channel->c_context : NULL;
-	c_id = msg->m_channel ? msg->m_channel->c_id : -1;
+	c_context = msg->m_channel->c_context;
+	c_id = msg->m_channel->c_id;
 
 	mutex_lock(&msg->m_mutex);
 	mutex_unlock(&svc->s_mutex);
@@ -1074,8 +1272,8 @@ impulse_path:
 
 	/* grab the service/channel context and channel id before releasing s_mutex */
 	s_context = svc->s_context;
-	c_context = impulse->i_channel ? impulse->i_channel->c_context : NULL;
-	c_id = impulse->i_channel ? impulse->i_channel->c_id : -1;
+	c_context = impulse->i_channel->c_context;
+	c_id = impulse->i_channel->c_id;
 
 	mutex_unlock(&svc->s_mutex);
 
@@ -1111,8 +1309,8 @@ impulse_path:
 	return 0;
 }
 
-ssize_t servicefs_msg_readv(struct service *svc, int msgid, const iov *vec,
-		size_t cnt)
+ssize_t servicefs_msg_readv(struct service *svc, int msgid,
+		const struct iovec *vec, size_t cnt)
 {
 	struct message *msg;
 	ssize_t ret;
@@ -1123,23 +1321,9 @@ ssize_t servicefs_msg_readv(struct service *svc, int msgid, const iov *vec,
 
 	pr_debug("svc=%p msgid=%d length=%zu\n", svc, msgid, buf.i_len);
 
-	mutex_lock(&svc->s_mutex);
-
-	msg = __lookup_message(svc, msgid);
-	if (!msg) {
-		ret = -ENOENT;
-		goto error;
-	}
-
-	mutex_lock(&msg->m_mutex); // nesting: first s_mutex then m_mutex
-
-	if (__is_message_interrupted(msg)) {
-		mutex_unlock(&msg->m_mutex);
-		ret = -EINTR;
-		goto error;
-	}
-
-	mutex_unlock(&svc->s_mutex); // allow other threads into the service
+	msg = lookup_and_lock_message(svc, msgid, true);
+	if (IS_ERR(msg))
+		return PTR_ERR(msg);
 
 	ret = vm_transfer_from_remote(&msg->m_sbuf, &buf, msg->m_task,
 			&remote_fault);
@@ -1154,14 +1338,10 @@ ssize_t servicefs_msg_readv(struct service *svc, int msgid, const iov *vec,
 		ret = -EACCES;
 
 	return ret;
-
-error:
-	mutex_unlock(&svc->s_mutex);
-	return ret;
 }
 
-ssize_t servicefs_msg_writev(struct service *svc, int msgid, const iov *vec,
-		size_t cnt)
+ssize_t servicefs_msg_writev(struct service *svc, int msgid,
+		const struct iovec *vec, size_t cnt)
 {
 	struct message *msg;
 	ssize_t ret;
@@ -1172,23 +1352,9 @@ ssize_t servicefs_msg_writev(struct service *svc, int msgid, const iov *vec,
 
 	pr_debug("svc=%p msgid=%d length=%zu\n", svc, msgid, buf.i_len);
 
-	mutex_lock(&svc->s_mutex);
-
-	msg = __lookup_message(svc, msgid);
-	if (!msg) {
-		ret = -ENOENT;
-		goto error;
-	}
-
-	mutex_lock(&msg->m_mutex); // nesting: first s_mutex then m_mutex
-
-	if (__is_message_interrupted(msg)) {
-		mutex_unlock(&msg->m_mutex);
-		ret = -EINTR;
-		goto error;
-	}
-
-	mutex_unlock(&svc->s_mutex); // allow other threads into the service
+	msg = lookup_and_lock_message(svc, msgid, true);
+	if (IS_ERR(msg))
+		return PTR_ERR(msg);
 
 	ret = vm_transfer_to_remote(&msg->m_rbuf, &buf, msg->m_task,
 			&remote_fault);
@@ -1202,10 +1368,6 @@ ssize_t servicefs_msg_writev(struct service *svc, int msgid, const iov *vec,
 	if (ret == -EFAULT && remote_fault)
 		ret = -EACCES;
 
-	return ret;
-
-error:
-	mutex_unlock(&svc->s_mutex);
 	return ret;
 }
 
@@ -1229,7 +1391,7 @@ int servicefs_msg_reply(struct service *svc, int msgid, ssize_t retcode)
 	pr_debug("svc=%p msgid=%d retcode=%zd\n", svc, msgid, retcode);
 
 	/*
-	 * make sure the return code is in the valid range [-MAX_ERRNO, MAX_INT].
+	 * Make sure the return code is in the valid range [-MAX_ERRNO, MAX_INT].
 	 * TODO: block special return values, such as ERESTARTSYS.
 	 */
 	if (retcode < -MAX_ERRNO)
@@ -1269,12 +1431,15 @@ int servicefs_msg_reply_fd(struct service *svc, int msgid, unsigned int pushfd)
 
 	mutex_lock(&msg->m_mutex);
 
-	if (__is_message_interrupted(msg)) {
+	if (is_message_interrupted(msg)) {
 		mutex_unlock(&msg->m_mutex);
 		__message_put(msg);
 		ret = -EINTR;
 		goto error_svc_unlock;
 	}
+
+	if (is_close_message(msg))
+		goto close_message;
 
 	filp = fget(pushfd);
 	if (!filp) {
@@ -1294,6 +1459,7 @@ int servicefs_msg_reply_fd(struct service *svc, int msgid, unsigned int pushfd)
 
 	servicefs_fd_install(msg->m_task, newfd, filp);
 
+close_message:
 	mutex_unlock(&msg->m_mutex);
 
 	__message_complete(msg, newfd);
@@ -1311,31 +1477,26 @@ error_svc_unlock:
 int servicefs_msg_push_fd(struct service *svc, int msgid, unsigned int pushfd)
 {
 	struct message *msg;
+	struct pending_fd *pfd;
 	int ret = 0;
 	int newfd;
 	struct file *filp;
 
 	pr_debug("svc=%p msgid=%d pushfd=%u\n", svc, msgid, pushfd);
 
-	mutex_lock(&svc->s_mutex);
+	msg = lookup_and_lock_message(svc, msgid, true);
+	if (IS_ERR(msg))
+		return PTR_ERR(msg);
 
-	msg = __lookup_message(svc, msgid);
-	if (!msg) {
-		ret = -ENOENT;
-		goto error_svc_unlock;
-	}
-
-	mutex_lock(&msg->m_mutex);
-
-	if (__is_message_interrupted(msg)) {
-		ret = -EINTR;
-		goto error_msg_unlock;
+	if (is_close_message(msg)) {
+		ret = -EINVAL;
+		goto error;
 	}
 
 	filp = fget(pushfd);
 	if (!filp) {
 		ret = -EINVAL;
-		goto error_msg_unlock;
+		goto error;
 	}
 
 	// TODO: add selinux check for FD__USE and other relevant checks
@@ -1345,16 +1506,26 @@ int servicefs_msg_push_fd(struct service *svc, int msgid, unsigned int pushfd)
 	if (newfd < 0) {
 		fput(filp);
 		ret = newfd;
-		goto error_msg_unlock;
+		goto error;
 	}
 
-	servicefs_fd_install(msg->m_task, newfd, filp);
+	pfd = kmem_cache_alloc(servicefs_pending_fd_cache, GFP_KERNEL);
+	if (!pfd) {
+		fput(filp);
+		servicefs_put_unused_fd(msg->m_task, newfd);
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	/* Add the pending fd to the message. */
+	pfd->p_fd = newfd;
+	pfd->p_filp = filp;
+	list_add_tail(&pfd->p_pending_fds_node, &msg->m_pending_fds);
+
 	ret = newfd;
 
-error_msg_unlock:
+error:
 	mutex_unlock(&msg->m_mutex);
-error_svc_unlock:
-	mutex_unlock(&svc->s_mutex);
 	return ret;
 }
 
@@ -1368,31 +1539,20 @@ int servicefs_msg_get_fd(struct service *svc, int msgid, unsigned int index)
 
 	pr_debug("svc=%p msgid=%d index=%u\n", svc, msgid, index);
 
-	mutex_lock(&svc->s_mutex);
+	msg = lookup_and_lock_message(svc, msgid, true);
+	if (IS_ERR(msg))
+		return PTR_ERR(msg);
 
-	msg = __lookup_message(svc, msgid);
-	if (!msg) {
-		ret = -ENOENT;
-		goto error_svc_unlock;
-	}
-
-	mutex_lock(&msg->m_mutex);
-
-	if (__is_message_interrupted(msg)) {
-		ret = -EINTR;
-		goto error_msg_unlock;
-	}
-
-	if (index >= msg->m_fdcnt) {
+	if (is_close_message(msg) || index >= msg->m_fdcnt) {
 		ret = -EINVAL;
-		goto error_msg_unlock;
+		goto error;
 	}
 	getfd = msg->m_fds[index];
 
 	filp = servicefs_fget(msg->m_task, getfd);
 	if (!filp) {
 		ret = -EBADF;
-		goto error_msg_unlock;
+		goto error;
 	}
 
 	// TODO: add selinux check for FD__USE and other relevant checks
@@ -1402,16 +1562,14 @@ int servicefs_msg_get_fd(struct service *svc, int msgid, unsigned int index)
 	if (newfd < 0) {
 		fput(filp);
 		ret = newfd;
-		goto error_msg_unlock;
+		goto error;
 	}
 
 	servicefs_fd_install(current, newfd, filp);
 	ret = newfd;
 
-error_msg_unlock:
+error:
 	mutex_unlock(&msg->m_mutex);
-error_svc_unlock:
-	mutex_unlock(&svc->s_mutex);
 	return ret;
 }
 
@@ -1421,7 +1579,7 @@ int servicefs_mod_channel_events(struct service *svc, int cid,
 	int ret = 0;
 	struct channel *c;
 
-	mutex_lock(&svc->s_mutex);
+	mutex_lock(&svc->s_channel_lock);
 
 	c = __lookup_channel(svc, cid);
 	if (!c) {
@@ -1429,77 +1587,30 @@ int servicefs_mod_channel_events(struct service *svc, int cid,
 		goto done;
 	}
 
-	c->c_events &= ~clr; // clear first
-	c->c_events |= set; // then set, so set bits always take effect
-
-	wake_up_poll(&c->c_waitqueue, c->c_events);
+	servicefs_atomic_update_mask(&c->c_events, clr, set);
+	wake_up_poll(&c->c_waitqueue, (long) atomic_read(&c->c_events));
 
 done:
-	mutex_unlock(&svc->s_mutex);
+	mutex_unlock(&svc->s_channel_lock);
 	return ret;
 
 }
 
-ssize_t servicefs_msg_sendv(struct channel *c, int op, const iov *svec,
-		size_t scnt, const iov *rvec, size_t rcnt,
+ssize_t servicefs_msg_sendv(struct channel *c, int op,
+		const struct iovec *svec, size_t scnt,
+		const struct iovec *rvec, size_t rcnt,
 		const int *fds, size_t fdcnt, long task_state)
 {
 	struct message *msg;
 	struct service *svc;
-	kuid_t kuid;
-	kgid_t kgid;
 	int ret;
 
 	svc = c->c_service;
 	BUG_ON(!svc);
 
-	msg = kmem_cache_alloc(message_cache, GFP_KERNEL);
+	msg = message_new(svc, c, op, svec, scnt, rvec, rcnt, fds, fdcnt, current);
 	if (!msg)
 		return -ENOMEM;
-
-	INIT_LIST_HEAD(&msg->m_messages_node);
-	kref_init(&msg->m_ref); // implicit reference
-	mutex_init(&msg->m_mutex);
-
-	msg->m_id = MESSAGE_NO_ID;
-	msg->m_op = op;
-	msg->m_channel = c;
-	msg->m_service = svc;
-	msg->m_completed = false;
-	msg->m_interrupted = false;
-
-	init_waitqueue_head(&msg->m_waitqueue);
-
-	msg->m_priority = task_nice(current);
-	msg->m_status = 0;
-
-	iov_buffer_uinit(&msg->m_sbuf, svec, scnt);
-	iov_buffer_uinit(&msg->m_rbuf, rvec, rcnt);
-
-	msg->m_fds = fds;
-	msg->m_fdcnt = fdcnt;
-
-	/*
-	 * Get a ref to the current task and stash the task struct for later use.
-	 * The task struct ref is dropped by the message kref release function
-	 * when the last ref to the message is dropped.
-	 */
-	get_task_struct(current);
-	msg->m_task = current;
-
-	/* Grab the euid/egid of the sending process. */
-	current_euid_egid(&kuid, &kgid);
-	msg->m_euid = __kuid_val(kuid);
-	msg->m_egid = __kgid_val(kgid);
-
-	/*
-	 * Record the thread and process ids now in case the process or thread
-	 * dies before the message description is received. This behavior is
-	 * required to properly identify channels closed during process
-	 * termination.
-	 */
-	msg->m_pid = pid_vnr(task_tgid(msg->m_task));
-	msg->m_tid = pid_vnr(task_pid(msg->m_task));
 
 	pr_debug("msg=%p op=%d scnt=%zu slen=%zu rcnt=%zu rlen=%zu fdcnt=%zu\n",
 			msg, op, msg->m_sbuf.i_cnt, msg->m_sbuf.i_len,
@@ -1507,15 +1618,9 @@ ssize_t servicefs_msg_sendv(struct channel *c, int op, const iov *svec,
 
 	mutex_lock(&svc->s_mutex);
 
-	/*
-	 * Messages can't be sent after a channel has shutdown, but channels
-	 * remain until the last reference to their open file description is
-	 * closed. Make sure we don't queue any messages after the channel
-	 * is shutdown.
-	 */
-	if (__is_channel_canceled(c) || __is_service_canceled(svc)) {
+	if (is_channel_canceled(c) || is_service_canceled(svc)) {
 		pr_debug("cid=%d channel_canceled=%d service_canceled=%d\n",
-				c->c_id, __is_channel_canceled(c), __is_service_canceled(svc));
+				c->c_id, is_channel_canceled(c), is_service_canceled(svc));
 		__message_put(msg);
 		mutex_unlock(&svc->s_mutex);
 		return -ESHUTDOWN;
@@ -1542,8 +1647,8 @@ ssize_t servicefs_msg_sendv(struct channel *c, int op, const iov *svec,
 
 	mutex_lock(&msg->m_mutex);
 
-	if (!msg->m_completed) {
-		msg->m_interrupted = true;
+	if (!is_message_completed(msg)) {
+		servicefs_atomic_mask_set(&msg->m_flags, MESSAGE_FLAGS_INTERRUPTED);
 		msg->m_status = -EINTR;
 	}
 
@@ -1572,15 +1677,24 @@ int servicefs_msg_send_impulse(struct channel *c, int op,
 	if (len > sizeof(impulse->i_data))
 		return -EINVAL;
 
-	impulse = kmem_cache_alloc(impulse_cache, GFP_KERNEL);
+	impulse = kmem_cache_alloc(servicefs_impulse_cache, GFP_KERNEL);
 	if (!impulse)
 		return -ENOMEM;
 
 	INIT_LIST_HEAD(&impulse->i_impulses_node);
 	impulse->i_op = op;
-	impulse->i_channel = c;
 	impulse->i_service = svc;
 	impulse->i_len = len;
+
+	/*
+	 * The impulse holds a ref to the channel. The channel file object also
+	 * holds a ref to the channel, which is guaranteed to be maintained for
+	 * the duration of this function because the ioctl holds a ref to the
+	 * channel file object. The channel can be canceled however, which is
+	 * handled below.
+	 */
+	channel_get(c);
+	impulse->i_channel = c;
 
 	current_euid_egid(&kuid, &kgid);
 	impulse->i_euid = __kuid_val(kuid);
@@ -1598,17 +1712,11 @@ int servicefs_msg_send_impulse(struct channel *c, int op,
 
 	mutex_lock(&svc->s_mutex);
 
-	/*
-	 * Messages can't be sent after a channel has shutdown, but channels
-	 * remain until the last reference to their open file description is
-	 * closed. Make sure we don't queue any messages after the channel
-	 * is shutdown.
-	 */
-	if (__is_channel_canceled(c) || __is_service_canceled(svc)) {
+	if (is_channel_canceled(c) || is_service_canceled(svc)) {
 		pr_debug("cid=%d channel_canceled=%d service_canceled=%d\n",
-				c->c_id, __is_channel_canceled(c), __is_service_canceled(svc));
-		impulse_free(impulse);
+				c->c_id, is_channel_canceled(c), is_service_canceled(svc));
 		mutex_unlock(&svc->s_mutex);
+		impulse_free(impulse);
 		return -ESHUTDOWN;
 	}
 

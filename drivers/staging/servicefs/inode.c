@@ -33,8 +33,6 @@
 #define SERVICEFS_DEFAULT_MODE	0700
 
 /* declared in file.c */
-extern const struct file_operations servicefs_file_operations;
-extern const struct inode_operations servicefs_link_operations;
 extern const struct file_operations initial_file_operations;
 
 static int servicefs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode,
@@ -86,11 +84,6 @@ static struct inode *servicefs_new_inode(struct super_block *sb, umode_t mode, d
 			init_special_inode(inode, mode, dev);
 			break;
 		case S_IFREG:
-			inode->i_fop = fops ? fops : &servicefs_file_operations;
-			inode->i_private = data;
-			break;
-		case S_IFLNK:
-			inode->i_op = &servicefs_link_operations;
 			inode->i_fop = fops;
 			inode->i_private = data;
 			break;
@@ -141,15 +134,6 @@ static int servicefs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mod
 	}
 	return res;
 }
-
-#if 0
-static int servicefs_link(struct inode *dir, struct dentry *dentry, umode_t mode,
-			void *data, const struct file_operations *fops)
-{
-	mode = (mode & S_IALLUGO) | S_IFLNK;
-	return servicefs_mknod(dir, dentry, mode, 0, data, fops);
-}
-#endif
 
 static int servicefs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 			  void *data, const struct file_operations *fops)
