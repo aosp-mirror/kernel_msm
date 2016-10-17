@@ -808,12 +808,6 @@ power_off:
 	rc = regulator_disable(data->vcc_i2c);
 	if (rc) {
 		dev_err(&data->client->dev, "Regulator vcc_i2c disable failed rc=%d\n", rc);
-		//rc = regulator_enable(data->vdd);
-		 gpio_direction_output(data->pdata->power_gpio, 1);
-		if (rc) {
-			dev_err(&data->client->dev,
-				"Regulator vdd enable failed rc=%d\n", rc);
-		}
 	}
 
 	return rc;
@@ -1932,12 +1926,13 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	struct dentry *temp;
 	u8 reg_value=0;
 	u8 reg_addr;
+	u8 reg_mod =-1;
 	int err, len;
 	char fw_version[64];
 
 	if(lcm_id != 1)
 		return -1;
-      
+
 	if (client->dev.of_node) {
 		pdata = devm_kzalloc(&client->dev,
 			sizeof(struct fts_ts_platform_data), GFP_KERNEL);
@@ -2103,16 +2098,18 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	reg_addr = FTS_REG_ID;
 	err = fts_i2c_read(client, &reg_addr, 1, &reg_value, 1);
 	if (err < 0) {
-		dev_err(&client->dev, "version read failed");
+		dev_err(&client->dev, "version vaule =%d read failed",reg_value);
+		goto pwr_deinit;
 	}
 
 	dev_info(&client->dev, "Device ID = 0x%x\n", reg_value);
 
-	if ((pdata->family_id != reg_value) && (!pdata->ignore_id_check)) {
-		  dev_err(&client->dev, "%s:Unsupported controller\n", __func__);
-		   goto free_gpio;
+	reg_addr =FTS_REG_0x00;
+	err = fts_i2c_read(client, &reg_addr, 1, &reg_mod, 1);
+	if (err < 0) {
+		dev_err(&client->dev, "0x00 = %d read failed",reg_mod);
+		 goto pwr_deinit;
 	}
-	      
 
 	data->family_id = pdata->family_id;
 
@@ -2333,14 +2330,6 @@ irq_free:
 	free_irq(client->irq, data);
 #endif
 
-free_gpio:
-	if (gpio_is_valid(pdata->power_gpio))
-		  gpio_free(pdata->power_gpio);
-	if (gpio_is_valid(pdata->reset_gpio))
-		gpio_free(pdata->reset_gpio);
-	if (gpio_is_valid(pdata->irq_gpio))
-		gpio_free(pdata->irq_gpio);
-
 err_gpio_req:
 	#ifdef MSM_NEW_VER
 	if (data->ts_pinctrl) {
@@ -2355,16 +2344,18 @@ err_gpio_req:
 		}
 	}
 	#endif
-
+pwr_deinit:
 	if (pdata->power_on)
 		pdata->power_on(false);
 	else
 		fts_power_on(data, false);
-pwr_deinit:
-	if (pdata->power_init)
-		pdata->power_init(false);
-	else
-		fts_power_init(data, false);
+free_gpio:
+	if (gpio_is_valid(pdata->power_gpio))
+		  gpio_free(pdata->power_gpio);
+	if (gpio_is_valid(pdata->reset_gpio))
+		gpio_free(pdata->reset_gpio);
+	if (gpio_is_valid(pdata->irq_gpio))
+		gpio_free(pdata->irq_gpio);
 unreg_inputdev:
 	input_unregister_device(input_dev);
 	input_dev = NULL;

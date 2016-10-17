@@ -96,6 +96,7 @@
 #define FTS_FW_NAME_MAX_LEN	50
 
 #define FTS_REG_ID		0xA3
+#define FTS_REG_0x00      0x00
 #define FTS_REG_FW_VER		0xA6
 #define FTS_REG_FW_VENDOR_ID	0xA8
 #define FTS_REG_POINT_RATE					0x88
@@ -255,7 +256,7 @@ struct fts_psensor_platform_data {
 #define FTS_APK_DEBUG
 #define FTS_SYSFS_DEBUG
 #define FTS_CTL_IIC
-#define FTS_AUTO_UPGRADE
+//#define FTS_AUTO_UPGRADE
 extern struct fts_Upgrade_Info fts_updateinfo_curr;
 extern struct i2c_client *fts_i2c_client;
 extern struct fts_ts_data *fts_wq_data;

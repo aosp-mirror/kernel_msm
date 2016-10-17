@@ -473,7 +473,7 @@ void fts_get_upgrade_array(void)
 
 	if(i >= sizeof(fts_updateinfo)/sizeof(struct fts_Upgrade_Info))
 	{
-		memcpy(&fts_updateinfo_curr, &fts_updateinfo[14], sizeof(struct fts_Upgrade_Info));
+		memcpy(&fts_updateinfo_curr, &fts_updateinfo[11], sizeof(struct fts_Upgrade_Info));
 	}
 }
 
