@@ -11,6 +11,7 @@
  */
 
 #include <linux/device.h>
+#include <linux/ipc_logging.h>
 #include <linux/regmap.h>
 #include <linux/iio/consumer.h>
 #include <linux/power_supply.h>
@@ -20,13 +21,18 @@
 #include "smb-reg.h"
 #include "pmic-voter.h"
 
+static void *smblib_ipc_log;
 #define smblib_dbg(chg, reason, fmt, ...)			\
 	do {							\
+		ipc_log_string(smblib_ipc_log, "%s: %s: " fmt,	\
+			       dev_name(chg->dev),		\
+			       __func__, ##__VA_ARGS__);	\
 		if (*chg->debug_mask & (reason))		\
 			dev_info(chg->dev, fmt, ##__VA_ARGS__);	\
 		else						\
 			dev_dbg(chg->dev, fmt, ##__VA_ARGS__);	\
 	} while (0)
+#define NUM_LOG_PAGES 10
 
 static bool is_secure(struct smb_charger *chg, int addr)
 {
@@ -2221,6 +2227,10 @@ static void smblib_iio_deinit(struct smb_charger *chg)
 int smblib_init(struct smb_charger *chg)
 {
 	int rc = 0;
+
+	if (!smblib_ipc_log)
+		smblib_ipc_log = ipc_log_context_create(NUM_LOG_PAGES,
+							"smblib", 0);
 
 	mutex_init(&chg->write_lock);
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
