@@ -235,6 +235,7 @@ struct binder_device {
 
 static struct binder_context global_context = {
 	.binder_context_mgr_uid = INVALID_UID,
+	.name = "binder",
 };
 
 struct binder_work {
