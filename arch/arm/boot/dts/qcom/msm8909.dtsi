@@ -460,6 +460,16 @@
 			qcom,sensor-type = "adc";
 			qcom,sensor-name = "xo_therm_buf";
 		};
+
+		sensor_information10: qcom,sensor-information-10 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "mpp2_adc";
+		};
+
+		sensor_information11: qcom,sensor-information-11 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "mpp4_adc";
+		};
 	};
 
 	mitigation_profile0: qcom,limit_info-0 {
