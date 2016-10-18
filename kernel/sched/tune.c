@@ -898,12 +898,11 @@ schedtune_css_free(struct cgroup_subsys_state *css)
 struct cgroup_subsys schedtune_cgrp_subsys = {
 	.css_alloc	= schedtune_css_alloc,
 	.css_free	= schedtune_css_free,
-	.allow_attach   = schedtune_allow_attach,
+	.allow_attach	= schedtune_allow_attach,
 	.can_attach     = schedtune_can_attach,
 	.cancel_attach  = schedtune_cancel_attach,
 	.legacy_cftypes	= files,
 	.early_init	= 1,
-	.allow_attach	= subsys_cgroup_allow_attach,
 	.attach		= schedtune_attach,
 };
 
