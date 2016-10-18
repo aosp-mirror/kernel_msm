@@ -71,11 +71,15 @@ int STC31xx_RelaxTmrSet(int CurrentThreshold);
 #define BATT_MIN_VOLTAGE	3600	/* nearly empty battery detection level (mV)      */
 #define MAX_HRSOC		51200	/* 100% in 1/512% units*/
 #define MAX_SOC			1000	/* 100% in 0.1% units */
+#define FIRST_EEC_SOC		50
+#define SECOND_EEC_SOC		30
+#define THIRD_EEC_SOC		10
 /*                                                                                  */
 #define CHG_MIN_CURRENT       90		/* min charge current in mA                       */
 #define CHG_END_CURRENT       20		/* end charge current in mA                       */
 #define CHG_NOT_CHARGE        20		/* current to be consider as not charge in mA     */
 #define APP_MIN_CURRENT       (-5)	/* minimum application current consumption in mA ( <0 !) */
+#define OFFSET_CURRENT        (-3)
 #define APP_MIN_VOLTAGE       3500	/* application cut-off voltage                    */
 #define APP_MIN_VOLTAGE_EMPTY 3000    /* to darin all battery capacity, so we lock batt level at 1% for 3.0V ~ 3.5V(APP_MIN_VOLTAGE) */
 #define TEMP_MIN_ADJ          (-5)	/* minimum temperature for gain adjustment */
@@ -182,6 +186,15 @@ int STC31xx_RelaxTmrSet(int CurrentThreshold);
 static const int TempTable[NTEMP] = {60, 40, 25, 10, 0, -10, -20} ;   /* temperature table from 60 degreeC to -20 degreeC (descending order!) */
 static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 
+/* Dynamic early empty 3% voltage mapping */
+static int deec_3_voltage_lvl[] = {
+	3510, 3453, 3338, 3181,
+};
+
+/* Dynamic early empty 1% voltage mapping */
+static int deec_1_voltage_lvl[] = {
+	3310, 3270, 3178, 3082,
+};
 /* Private variables ---------------------------------------------------------*/
 
 /* structure of the STC311x battery monitoring parameters */
@@ -1068,6 +1081,7 @@ static int STC311x_ReadBatteryData(STC311x_BattDataTypeDef *BattData)
 	if (value >= 0x2000)
 		value -= 0x4000;  /* convert to signed value */
 	BattData->Current = conv(value, BattData->CurrentFactor);  /* result in mA */
+	BattData->Current += OFFSET_CURRENT;  /* result in mA */
 
 	/* voltage */
 	value = (data[9]<<8) + data[8];
@@ -1705,6 +1719,61 @@ static void show_ram_regs_debug(void)
 }
 #endif /* CONFIG_ENABLE_STC311X_DUMPREG */
 
+int Dynamic_Early_Empty(int SOC, int voltage, int avg_current, int eec_voltage) {
+
+	int rc = 0;
+	int level = 0;
+	int deec_3_array_num = 0;
+	int deec_1_array_num = 0;
+
+	pr_err("Dynamic early empty compensation, SOC=%d, voltage=%d, avg_current=%d, eec_voltage=%d\n", SOC, voltage, avg_current, eec_voltage);
+	if (avg_current >= -50 && avg_current < 0) {
+		//Compensate from enter % to 3%
+		pr_err("Case 0 compensation\n");
+		level = 0;
+	} else if (avg_current >= -150 && avg_current < -50) {
+		//Compensate from enter % to 3%
+		pr_err("Case 1 compensation\n");
+		level = 1;
+	} else if (avg_current >= -300 && avg_current < -150) {
+		//Compensate from enter % to 3%
+		pr_err("Case 2 compensation\n");
+		level = 2;
+	} else if (avg_current < -300) {
+		//Compensate from enter % to 3%
+		pr_err("Case 3 compensation\n");
+		level = 3;
+	} else {
+		pr_err("Case 4 compensation\n");
+		rc = SOC;
+		return rc;
+	}
+
+	deec_3_array_num = sizeof(deec_3_voltage_lvl) / sizeof(deec_3_voltage_lvl[0]);
+	deec_1_array_num = sizeof(deec_1_voltage_lvl) / sizeof(deec_1_voltage_lvl[0]);
+	pr_err("Level %d compensation\n", level);
+	if ((level < 0) | (level >= deec_3_array_num) | (level >= deec_1_array_num)) {
+		pr_err("Level out of range\n");
+		return SOC;
+	}
+
+	if (voltage > deec_3_voltage_lvl[level]) {
+		if (SOC < SECOND_EEC_SOC) {
+			pr_err("SOC less 3 percentage, keep current SOC\n");
+			return SOC;
+		}
+		pr_err("Case %d-1 compensation\n", level);
+		rc = SECOND_EEC_SOC + (SOC - SECOND_EEC_SOC) * (voltage - deec_3_voltage_lvl[level]) / (eec_voltage - deec_3_voltage_lvl[level]);
+	} else if (voltage > deec_1_voltage_lvl[level] && voltage <= deec_3_voltage_lvl[level]) {
+		pr_err("Case %d-2 compensation\n", level);
+		rc = THIRD_EEC_SOC + (SECOND_EEC_SOC - THIRD_EEC_SOC) * (voltage - deec_1_voltage_lvl[level]) / (deec_3_voltage_lvl[level] - deec_1_voltage_lvl[level]);
+	} else {
+		pr_err("Case %d-3 compensation\n", level);
+		rc = THIRD_EEC_SOC;
+	}
+	return rc;
+}
+
 /*******************************************************************************
 * Function Name  : GasGauge_Task
 * Description    : Periodic Gas Gauge task, to be called e.g. every 5 sec.
@@ -1820,11 +1889,20 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 		value=BattData.AvgVoltage;
 		if (BattData.Voltage < value) value = BattData.Voltage;
 		if (value < (APP_MIN_VOLTAGE + 100)) {
-			if (value < APP_MIN_VOLTAGE) {
+			// Voltage drop below 3000 mV, then 0% and shutdown
+			if (value < APP_MIN_VOLTAGE_EMPTY) {
 				BattData.SOC=0;
+				//hardcode HRSOC to gauge reg.
+				STC311x_SetSOC(0);
 				BattData.LastSOC = BattData.SOC;
 			} else {
-				BattData.SOC = BattData.SOC * (value - APP_MIN_VOLTAGE) / 100;
+				//Legacy early empty compensation
+				//BattData.SOC = BattData.SOC * (value - APP_MIN_VOLTAGE) / 100;
+
+				//Use avg current to do dynamic early empty compensation
+				BattData.SOC = Dynamic_Early_Empty(BattData.SOC, value, BattData.AvgCurrent, APP_MIN_VOLTAGE+100);
+
+				//Avoid SOC rebounce
 				if (BattData.LastSOC == -1 || BattData.SOC < BattData.LastSOC) {
 					BattData.LastSOC = BattData.SOC;
 				} else {
@@ -1869,7 +1947,7 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 #ifdef DEBUG_SOC
 				pr_err("Lately fully_100: HRSOC=%d, SOC=%d, chg_full_flag=%d\n", BattData.HRSOC, BattData.SOC, chg_full_flag);
 #endif
-			} else if (BattData.AvgCurrent > 60 && BattData.SOC >= 990 && BattData.SOC < 999) {
+			} else if (BattData.AvgCurrent > 50 && BattData.SOC >= 990 && BattData.SOC < 999) {
 				BattData.SOC = 990;
 				STC311x_SetSOC(99*512);
 #ifdef DEBUG_SOC
