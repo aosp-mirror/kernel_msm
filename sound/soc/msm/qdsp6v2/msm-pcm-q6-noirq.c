@@ -778,8 +778,12 @@ static int msm_pcm_probe(struct platform_device *pdev)
 
 		rc = of_property_read_string(pdev->dev.of_node,
 			"qcom,latency-level", &latency_level);
-		if (!rc && !strcmp(latency_level, "ultra"))
-			perf_mode = ULTRA_LOW_LATENCY_PCM_MODE;
+		if (!rc) {
+			if (!strcmp(latency_level, "ultra"))
+				perf_mode = ULTRA_LOW_LATENCY_PCM_MODE;
+			else if (!strcmp(latency_level, "ull-pp"))
+				perf_mode = ULL_POST_PROCESSING_PCM_MODE;
+		}
 	}
 
 	pdata = devm_kzalloc(&pdev->dev,
