@@ -4400,6 +4400,7 @@ reset:
 		if (rc < 0) {
 			tp_log_err( "%s: Error on launch app r=%d\n",
 				__func__, rc);
+
 			RETRY_OR_EXIT(retry--, reset, exit);
 		}
 		rc = cyttsp5_get_hid_descriptor_(cd, &cd->hid_desc);
@@ -4470,7 +4471,9 @@ static int cyttsp5_core_wake_(struct cyttsp5_core_data *cd)
 	cd->sleep_state = SS_SLEEP_OFF;
 	mutex_unlock(&cd->system_lock);
 
-	cyttsp5_start_wd_timer(cd);
+	/*if FW is incorrect don't start the watch dog just wait FW upgrade complete*/
+	if(cd->fw_status)
+		cyttsp5_start_wd_timer(cd);
 	return rc;
 }
 
@@ -4808,9 +4811,13 @@ reset:
 	if (rc < 0) {
 		tp_log_err( "%s: Error on launch app r=%d\n",
 			__func__, rc);
+
+		if(cd->response_buf[5] == 2)
+			cd->fw_status = false;
+
 		RETRY_OR_EXIT(retry--, reset, exit);
 	}
-
+	cd->fw_status = true;
 	tp_log_info("%s: start to get hid descriptor again.\n", __func__);
 	rc = cyttsp5_get_hid_descriptor_(cd, &cd->hid_desc);
 	if (rc < 0) {
@@ -4894,8 +4901,8 @@ reset:
 exit:
 	if (!rc)
 		cd->startup_retry_count = 0;
-
-	cyttsp5_start_wd_timer(cd);
+	if(cd->fw_status)
+		cyttsp5_start_wd_timer(cd);
 
 	if (!detected){
 		tp_log_err("%s: detect failed, detected = %d\n",__func__, detected);
@@ -6654,6 +6661,8 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 	tp_log_info("%s mmi_test_support = %d\n", __func__, cd->mmi_test_support);
 	/* Set Panel ID to Not Enabled */
 	cd->panel_id = PANEL_ID_NOT_ENABLED;
+
+	cd->fw_status = true;
 
 	dev_set_drvdata(dev, cd);
 	cyttsp5_add_core(dev);
