@@ -1510,6 +1510,7 @@ static void cyttsp5_fw_and_config_upgrade(
 	struct cyttsp5_loader_data *ld = container_of(fw_and_config_upgrade,
 			struct cyttsp5_loader_data, fw_and_config_upgrade);
 	struct device *dev = ld->dev;
+	struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
 	int retVal = 0;
 
 	ld->si = cmd->request_sysinfo(dev);
@@ -1533,6 +1534,7 @@ static void cyttsp5_fw_and_config_upgrade(
 #ifdef CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_BINARY_FW_UPGRADE
 	retVal = upgrade_firmware_from_builtin(dev);
 	if (!retVal) {
+		cd->fw_status = true;
 		tp_log_warning("%s %d:firmware have upgraded\n", __func__, __LINE__);
 	} else {
 		tp_log_warning("%s %d:firmware haven't upgraded, rc = %d\n", __func__, __LINE__, retVal);
