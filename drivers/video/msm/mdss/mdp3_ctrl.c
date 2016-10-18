@@ -900,6 +900,7 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 {
 	int rc = 0;
 	bool intf_stopped = true;
+	bool clk_off = false;
 	struct mdp3_session_data *mdp3_session;
 	struct mdss_panel_data *panel;
 
@@ -1040,9 +1041,10 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 		(mfd->panel.type == MIPI_CMD_PANEL)) {
 
 		pr_debug("%s: Disable MDP3 clocks in ULP\n", __func__);
-		if (!mdp3_session->clk_on)
+		if (!mdp3_session->clk_on) {
 			mdp3_ctrl_clk_enable(mfd, 1);
-
+			clk_off = true;
+		}
 		if (atomic_read(&mfd->kickoff_pending) ||
 		    atomic_read(&mfd->commits_pending)) {
 			MDSS_XLOG(XLOG_FUNC_ENTRY, __LINE__,
@@ -1051,6 +1053,8 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 			rc = mdp3_session->wait_for_dma_done(mdp3_session);
 			if (atomic_read(&mfd->kickoff_pending) || rc) {
 				pr_info("Ignore MDP3 clocks OFF req in ULP\n");
+				if(clk_off)
+					mdp3_ctrl_clk_enable(mfd, 0);
 				goto off_error;
 			}
 		}
