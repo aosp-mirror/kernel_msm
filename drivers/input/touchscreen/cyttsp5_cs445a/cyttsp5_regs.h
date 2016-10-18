@@ -951,6 +951,7 @@ struct cyttsp5_core_data {
 	bool wake_initiated_by_device;
 	bool wait_until_wake;
 	bool transient_state;
+	bool fw_status;/*identify the FW status in device*/
 	u8 panel_id;
 	int suspend_resume_flag;
 #if NEED_SUSPEND_NOTIFIER
