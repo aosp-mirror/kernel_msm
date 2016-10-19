@@ -91,6 +91,9 @@ static void release_ese_lock(p61_access_state_t  p61_current_state);
 int get_ese_lock(p61_access_state_t  p61_current_state, int timeout);
 static void p61_get_access_state(struct pn5xx_dev*, p61_access_state_t*);
 
+static long  pn5xx_dev_ioctl(struct file *filp, unsigned int cmd,
+                unsigned long arg);
+
 /**********************************************************
  * Interrupt control and handler
  **********************************************************/
@@ -459,6 +462,16 @@ static int pn5xx_dev_release(struct inode *inode, struct file *filp)
     return 0;
 }
 
+long  pn5xx_dev_ioctl_byp61(unsigned int cmd,
+                unsigned long arg)
+{
+    struct file tmp;
+    memset(&tmp, 0, sizeof(tmp));
+    pr_info("%s, cmd=%d, arg=%lu\n", __func__, cmd, arg);
+    tmp.private_data = pn5xx_dev;
+    return pn5xx_dev_ioctl(&tmp,cmd,arg);
+}
+
 long  pn5xx_dev_ioctl(struct file *filp, unsigned int cmd,
                 unsigned long arg)
 {
@@ -748,7 +761,7 @@ long  pn5xx_dev_ioctl(struct file *filp, unsigned int cmd,
     return 0;
 }
 
-EXPORT_SYMBOL(pn5xx_dev_ioctl);
+EXPORT_SYMBOL(pn5xx_dev_ioctl_byp61);
 int get_ese_lock(p61_access_state_t  p61_current_state, int timeout)
 {
     unsigned long tempJ = msecs_to_jiffies(timeout);

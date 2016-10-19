@@ -49,7 +49,7 @@
 #include "p61.h"
 #include "../pn5xx/pn5xx_i2c.h"
 
-extern long  pn5xx_dev_ioctl(struct file *filp, unsigned int cmd,
+extern long  pn5xx_dev_ioctl_byp61(unsigned int cmd,
         unsigned long arg);
 
 #define DRAGON_P61 1
@@ -232,17 +232,18 @@ static long p61_dev_ioctl(struct file *filp, unsigned int cmd,
         break;
     case P61_SET_SPM_PWR:
         P61_DBG_MSG(KERN_ALERT " P61_SET_SPM_PWR: enter");
-        ret = pn5xx_dev_ioctl(filp, P61_SET_SPI_PWR, arg);
+        ret = pn5xx_dev_ioctl_byp61(P61_SET_SPI_PWR, arg);
+
         P61_DBG_MSG(KERN_ALERT " P61_SET_SPM_PWR: exit");
     break;
     case P61_GET_SPM_STATUS:
         P61_DBG_MSG(KERN_ALERT " P61_GET_SPM_STATUS: enter");
-        ret = pn5xx_dev_ioctl(filp, P61_GET_PWR_STATUS, arg);
+        ret = pn5xx_dev_ioctl_byp61(P61_GET_PWR_STATUS, arg);
         P61_DBG_MSG(KERN_ALERT " P61_GET_SPM_STATUS: exit");
     break;
     case P61_GET_ESE_ACCESS:
         P61_DBG_MSG(KERN_ALERT " P61_GET_ESE_ACCESS: enter");
-        ret = pn5xx_dev_ioctl(filp, PN5XX_GET_ESE_ACCESS, arg);
+        ret = pn5xx_dev_ioctl_byp61(PN5XX_GET_ESE_ACCESS, arg);
         P61_DBG_MSG(KERN_ALERT " P61_GET_ESE_ACCESS ret: %d exit",ret);
     break;
     default:
@@ -489,20 +490,26 @@ static ssize_t p61_dev_read(struct file *filp, char *buf, size_t count,
         ret = -EIO;
         goto fail;
     }
+    usleep_range(1000,1500);
 
     total_count += 2;
     /* Get the data length */
     count = rx_buffer[2];
     P61_DBG_MSG(KERN_INFO"Data Lenth = %d", count);
     /* Read the availabe data along with one byte LRC */
-    ret = spi_read(p61_dev->spi, (void *)&rx_buffer[3], (count+1));
+    ret = spi_read(p61_dev->spi, (void *)&rx_buffer[3], count);
     if (ret < 0)
     {
         P61_ERR_MSG("spi_read failed \n");
         ret = -EIO;
         goto fail;
     }
-    total_count = (total_count + (count+1));
+    total_count += count;
+
+    usleep_range(1000,1500);
+    ret = spi_read(p61_dev->spi, (void *)&rx_buffer[total_count], 1);
+    total_count += 1;
+
     P61_DBG_MSG(KERN_INFO"total_count = %d", total_count);
 
     if (copy_to_user(buf, &rx_buffer[0], total_count))
