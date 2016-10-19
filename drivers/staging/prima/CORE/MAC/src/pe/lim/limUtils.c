@@ -5716,9 +5716,12 @@ limProcessAddBaInd(tpAniSirGlobal pMac, tpSirMsgQ limMsg)
             if((eBA_DISABLE == pSta->tcCfg[tid].fUseBATx) &&
                  (pBaCandidate->baInfo[tid].fBaEnable))
             {
-                limLog(pMac, LOGE, FL("BA setup for staId = %d, TID: %d, SSN: %d"),
-                        pSta->staIndex, tid, pBaCandidate->baInfo[tid].startingSeqNum);
-                limPostMlmAddBAReq(pMac, pSta, tid, pBaCandidate->baInfo[tid].startingSeqNum,psessionEntry);  
+                limLog(pMac, LOG1,
+                        FL("BA setup for staId = %d, TID: %d, SSN: %d"),
+                        pSta->staIndex, tid,
+                        pBaCandidate->baInfo[tid].startingSeqNum);
+                limPostMlmAddBAReq(pMac, pSta, tid,
+                        pBaCandidate->baInfo[tid].startingSeqNum,psessionEntry);
             }
         }
     }
