@@ -1990,7 +1990,8 @@ static void mdss_mdp_ctl_restore_sub(struct mdss_mdp_ctl *ctl)
 	temp |= (ctl->intf_type << ((ctl->intf_num - MDSS_MDP_INTF0) * 8));
 	writel_relaxed(temp, ctl->mdata->mdp_base +
 		MDSS_MDP_REG_DISP_INTF_SEL);
-	mdss_mdp_pp_resume(ctl, ctl->mixer_left->num);
+	if (ctl->mfd)
+		mdss_mdp_pp_resume(ctl, ctl->mixer_left->num);
 }
 
 /*
