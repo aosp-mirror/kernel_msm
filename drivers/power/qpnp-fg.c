@@ -5294,21 +5294,20 @@ static irqreturn_t fg_empty_soc_irq_handler(int irq, void *_chip)
 
 #ifdef CONFIG_HTC_BATT
 	/* Clear critical shutdown count after 30secs */
-	if (!delayed_work_pending(&the_chip->clear_empty_soc_irq_counter))
-		schedule_delayed_work(&the_chip->clear_empty_soc_irq_counter,
+	if (!delayed_work_pending(&chip->clear_empty_soc_irq_counter))
+		schedule_delayed_work(&chip->clear_empty_soc_irq_counter,
 				CLEAR_EMPTY_SOC_IRQ_COUNTER_MS);
 
 	if (g_empty_soc_irq_count < CRITICAL_SHUTDOWN_COUNT
-			&& fg_is_batt_empty(the_chip))
+			&& fg_is_batt_empty(chip))
 		g_empty_soc_irq_count++;
 
 	pr_info("triggered=0x%x, vbatt=%dmV, irq_count:%d, is_batt_empty=%d\n",
-		soc_rt_sts, get_sram_prop_now(the_chip, FG_DATA_VOLTAGE) / 1000,
-		g_empty_soc_irq_count, fg_is_batt_empty(the_chip));
-
+		soc_rt_sts, get_sram_prop_now(chip, FG_DATA_VOLTAGE) / 1000,
+		g_empty_soc_irq_count, fg_is_batt_empty(chip));
 	if (g_empty_soc_irq_count >= CRITICAL_SHUTDOWN_COUNT)
 		htc_battery_info_update(POWER_SUPPLY_PROP_CRITICAL_SHUTDOWN,
-			get_sram_prop_now(the_chip, FG_DATA_VOLTAGE) / 1000);
+			get_sram_prop_now(chip, FG_DATA_VOLTAGE) / 1000);
 
 	rearm_empty_soc_irq();
 #endif /* CONFIG_HTC_BATT */
