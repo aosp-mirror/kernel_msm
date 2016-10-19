@@ -4725,7 +4725,6 @@ const struct i2c_device_id *id)
 		dev_err(&client->dev,
 				"Request elan irq gpio failed\n");
 	gpio_direction_input(private_ts->intr_gpio);
-	gpio_free(private_ts->intr_gpio);
 
 	fw_err = elan_ktf_ts_setup(client);
     /* Quanta BU10SW, Stanley Tsao, 2015.12.14, Hello packet is 0, return ENODEV { */
@@ -5012,6 +5011,8 @@ static int elan_ktf_ts_remove(struct i2c_client *client)
 	//unregister_early_suspend(&ts->early_suspend);
 	free_irq(client->irq, ts);
 
+	gpio_free(private_ts->intr_gpio);
+
     /* Quanta BU10SW, Stanley Tsao, 2015.12.03, Add VDD, VDDIO control function { */
     elan_ktf_power_on(ts, false);
     elan_ktf_power_init(ts, false);
@@ -5100,12 +5101,7 @@ static int elan_ktf_ts_suspend(struct i2c_client *client, pm_message_t mesg)
     #endif
     /* Quanta, BU10SW, Stanley Tsao, 2015.12.22, enable pinctrl usage for msm8909 } */
 
-	err = gpio_request(private_ts->intr_gpio, "elan_ktf_irq_gpio");
-	if (err)
-		dev_err(&client->dev,
-				"Request elan irq gpio failed\n");
 	gpio_direction_input(private_ts->intr_gpio);
-	gpio_free(private_ts->intr_gpio);
 	return 0;
 }
 
