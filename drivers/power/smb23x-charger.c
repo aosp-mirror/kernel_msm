@@ -1324,23 +1324,35 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 
 void adc_notification_set_cool_current(int level)
 {
+	int type;
+	type = g_smb23x_chip->usb_psy->type;
+
 	if (g_smb23x_chip) {
 		if (level == 1) { // JEITA_enbale_cool
-			lbc_set_suspend(0x01);
+			if (type == POWER_SUPPLY_TYPE_USB_DCP || type == POWER_SUPPLY_TYPE_USB_CDP)
+				lbc_set_suspend(0x01);
 			g_smb23x_chip->batt_cool = true;
 			smb23x_enable_volatile_writes(g_smb23x_chip);
-			smb23x_masked_write(g_smb23x_chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
-			smb23x_masked_write(g_smb23x_chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x01);
+			if (type != POWER_SUPPLY_TYPE_UNKNOWN) {
+				smb23x_masked_write(g_smb23x_chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
+				smb23x_masked_write(g_smb23x_chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x01);
+			}
 			pr_info("JEITA_enbale_cool!\n");
 		} if (level == 2) { // JEITA_enable_cooler
-			lbc_set_suspend(0x01);
+			if (type == POWER_SUPPLY_TYPE_USB_DCP || type == POWER_SUPPLY_TYPE_USB_CDP)
+				lbc_set_suspend(0x01);
 			g_smb23x_chip->batt_cool = true;
 			smb23x_enable_volatile_writes(g_smb23x_chip);
-			smb23x_masked_write(g_smb23x_chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
-			smb23x_masked_write(g_smb23x_chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x00);
+			if (type != POWER_SUPPLY_TYPE_UNKNOWN) {
+				smb23x_masked_write(g_smb23x_chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
+				smb23x_masked_write(g_smb23x_chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x00);
+			}
 			pr_info("JEITA_enable_cooler!\n");
 		} else if (level == 0) { // JEITA_disable_cool
-			lbc_set_suspend(0x00);
+			if (type == POWER_SUPPLY_TYPE_USB_DCP || type == POWER_SUPPLY_TYPE_USB_CDP) {
+				lbc_set_suspend(0x00);
+				smb23x_masked_write(g_smb23x_chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x07);
+			}
 			g_smb23x_chip->batt_cool = false;
 			smb23x_enable_volatile_writes(g_smb23x_chip);
 			smb23x_masked_write(g_smb23x_chip, CFG_REG_5, AICL_EN_BIT, 0);
@@ -1358,25 +1370,35 @@ EXPORT_SYMBOL(adc_notification_set_cool_current);
 
 void adc_notification_set_warm_current(int level)
 {
+	int type;
+	type = g_smb23x_chip->usb_psy->type;
+
 	if (g_smb23x_chip) {
 		if (level == 1) { // JEITA_enbale_warm
-			lbc_set_suspend(0x00);
+			if (type == POWER_SUPPLY_TYPE_USB_DCP || type == POWER_SUPPLY_TYPE_USB_CDP)
+				lbc_set_suspend(0x00);
 			g_smb23x_chip->batt_warm = true;
 			smb23x_enable_volatile_writes(g_smb23x_chip);
 			smb23x_masked_write(g_smb23x_chip, CFG_REG_3, FLOAT_VOLTAGE_MASK, 0x17);
-			smb23x_masked_write(g_smb23x_chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
-			smb23x_masked_write(g_smb23x_chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x07);
+			if (type != POWER_SUPPLY_TYPE_UNKNOWN) {
+				smb23x_masked_write(g_smb23x_chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
+				smb23x_masked_write(g_smb23x_chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x07);
+			}
 			pr_info("JEITA_enbale_warm!\n");
 		} else if (level == 2) { // JEITA_enable_warmer
-			lbc_set_suspend(0x01);
+			if (type == POWER_SUPPLY_TYPE_USB_DCP || type == POWER_SUPPLY_TYPE_USB_CDP)
+				lbc_set_suspend(0x01);
 			g_smb23x_chip->batt_warm = true;
 			smb23x_enable_volatile_writes(g_smb23x_chip);
 			smb23x_masked_write(g_smb23x_chip, CFG_REG_3, FLOAT_VOLTAGE_MASK, 0x0F);
-			smb23x_masked_write(g_smb23x_chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
-			smb23x_masked_write(g_smb23x_chip, CFG_REG_2, FASTCHG_CURR_MASK, 0);
+			if (type != POWER_SUPPLY_TYPE_UNKNOWN) {
+				smb23x_masked_write(g_smb23x_chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
+				smb23x_masked_write(g_smb23x_chip, CFG_REG_2, FASTCHG_CURR_MASK, 0);
+			}
 			pr_info("JEITA_enable_warmer!\n");
 		} else { // JEITA_disable_warm
-			lbc_set_suspend(0x00);
+			if (type == POWER_SUPPLY_TYPE_USB_DCP || type == POWER_SUPPLY_TYPE_USB_CDP)
+				lbc_set_suspend(0x00);
 			g_smb23x_chip->batt_warm = false;
 			smb23x_enable_volatile_writes(g_smb23x_chip);
 			smb23x_masked_write(g_smb23x_chip, CFG_REG_3, FLOAT_VOLTAGE_MASK, 0x17);
@@ -1607,9 +1629,11 @@ static int aicl_done_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
 	if (chip->parallel_charging && rt_sts == 0x10 && chip->parallel_count <= 4) {
-		smb23x_enable_volatile_writes(chip);
-		smb23x_stay_awake(&chip->smb23x_ws, WAKEUP_SRC_PARALLEL);
-		schedule_delayed_work(&chip->parallel_work, msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+		if (!chip->batt_warm && !chip->batt_cool) {
+			smb23x_enable_volatile_writes(chip);
+			smb23x_stay_awake(&chip->smb23x_ws, WAKEUP_SRC_PARALLEL);
+			schedule_delayed_work(&chip->parallel_work, msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+		}
 	}
 	return 0;
 }
