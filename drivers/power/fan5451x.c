@@ -110,6 +110,7 @@ struct fan5451x_chip {
 	int usb_present;
 	int wlc_present;
 	bool eoc;
+	int fet_disabled;
 	/* battery temp scenario */
 	int prev_ibus_ma;
 	unsigned int set_ibat_ma;
@@ -133,11 +134,17 @@ struct fan5451x_chip {
 	bool retail_enable;
 };
 
+enum {
+	CHARGE = BIT(0),
+	CABLE = BIT(1)
+};
+
 static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set);
 static enum alarmtimer_restart fan5451x_wlc_thermal_ctrl_callback(
 		struct alarm *alarm, ktime_t now);
 static void fan5451x_wlc_thermal_ctrl(struct fan5451x_chip *chip, int control);
-static int fan5451x_batfet_enable(struct fan5451x_chip *chip, int enable);
+static int fan5451x_batfet_enable(struct fan5451x_chip *chip, int reason,
+		int enable);
 
 static int fan5451x_read_reg(struct i2c_client *client, u8 reg)
 {
@@ -258,26 +265,30 @@ static int fan5451x_enable_topoff_timer(struct fan5451x_chip *chip, int enable)
 	return ret;
 }
 
-static int fan5451x_batfet_enable(struct fan5451x_chip *chip, int enable)
+static int fan5451x_batfet_enable(struct fan5451x_chip *chip,
+		int reason, int enable)
 {
-	static int prev_enable;
+	int disabled = chip->fet_disabled;
 	int ret = 0;
 
-	enable = !!enable;
+	pr_debug("reason=%d requested_enable=%d disabled_status=%d\n",
+					reason, enable, disabled);
+	if (enable)
+		disabled &= ~reason;
+	else
+		disabled |= reason;
 
-	if (prev_enable ^ enable) {
-		prev_enable = enable;
+	if (!!chip->fet_disabled == !!disabled)
+		goto out;
 
-		ret = fan5451x_update_reg(chip->client, REG_CON3,
-			!enable, CON3_CE);
-		if (ret) {
-			pr_err("failed to set batfet enable=%d, ret=%d\n",
-					enable, ret);
-		} else {
-			pr_info("batfet enable = %d\n", enable);
-		}
-	}
+	pr_info("batfet reason=%d enable=%d\n", reason, enable);
+	/* Active low */
+	ret = fan5451x_update_reg(chip->client, REG_CON3, !enable, CON3_CE);
+	if (ret)
+		pr_err("failed to set batfet!\n");
 
+out:
+	chip->fet_disabled = disabled;
 	return ret;
 }
 
@@ -391,7 +402,7 @@ static int fan5451x_set_appropriate_vddmax(struct fan5451x_chip *chip)
 		if (cv & MNT0_CV) {
 			pr_info("thermal SW EOC IRQ\n");
 			fan5451x_wlc_thermal_ctrl(chip, 0);
-			fan5451x_batfet_enable(chip, 0);
+			fan5451x_batfet_enable(chip, CHARGE, 0);
 			if (!chip->retail_enable)
 				fan5451x_wlc_fake_online(chip, 1);
 			chip->eoc = true;
@@ -651,6 +662,8 @@ static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set)
 		/* fake state */
 		chip->wlc_fake_online = 1;
 		power_supply_set_charging_enabled(chip->wlc_psy, 0); //WLC TX off
+		if (!chip->usb_present)
+			fan5451x_batfet_enable(chip, CABLE, 0);
 		disable_irq_wake(chip->client->irq);
 		__pm_relax(&chip->ws_cv);
 	} else {
@@ -830,8 +843,13 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 		}
 	}
 
-	if (found && !chip->wlc_fake_online)
+	if (found && !chip->wlc_fake_online) {
 		fan5451x_vbat_measure(chip);
+		if (chip->usb_present || chip->wlc_present)
+			fan5451x_batfet_enable(chip, CABLE, 1);
+		else
+			fan5451x_batfet_enable(chip, CABLE, 0);
+	}
 
 	/* If support_sw_eoc is enabled, EOC means CV phase start. */
 	if (intr[0] & INT0_CHGEND) {
@@ -842,7 +860,7 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 		} else {
 			pr_info("EOC IRQ\n");
 			fan5451x_wlc_thermal_ctrl(chip, 0);
-			fan5451x_batfet_enable(chip, 0);
+			fan5451x_batfet_enable(chip, CHARGE, 0);
 			if (!chip->retail_enable)
 				fan5451x_wlc_fake_online(chip, 1);
 			chip->eoc = true;
@@ -1084,7 +1102,7 @@ static void fan5451x_initialization(struct fan5451x_chip *chip)
 	ret |= fan5451x_update_reg(chip->client,
 			REG_TIMER, chip->fctmr, TIMER_FCTMR);
 
-	ret |= fan5451x_batfet_enable(chip, 1);
+	ret |= fan5451x_batfet_enable(chip, CABLE, 0);
 	/* If iterm is MAX, EOC happends as soon as entering CV phase.
 	 * We set topoff function enabled which can charge after EOC.
 	 * So after EOC irq,
@@ -1141,6 +1159,8 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 			power_supply_set_present(chip->wlc_psy, chip->wlc_present);
 			fan5451x_wlc_thermal_ctrl(chip, chip->wlc_present);
 			pr_info("wlc present %d\n", chip->wlc_present);
+			if (chip->wlc_present)
+				fan5451x_set_iin(chip, chip->iin);
 		}
 	}
 
@@ -1153,7 +1173,6 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 			pr_info("wlc present 0, fake online off\n");
 			fan5451x_wlc_thermal_ctrl(chip, 0);
 			fan5451x_wlc_fake_online(chip, 0);
-			fan5451x_vbat_measure(chip);
 		}
 	}
 
@@ -1174,12 +1193,13 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 			fan5451x_set_ibus(chip, current_ma);
 	}
 
-	if (wlc_present)
-		fan5451x_set_iin(chip, chip->iin);
-
 	/* Cable removed */
-	if (!usb_present && !wlc_present && !chip->wlc_fake_online)
+	if (!usb_present && !wlc_present && !chip->wlc_fake_online) {
 		chip->eoc = false;
+		fan5451x_vbat_measure(chip);
+		fan5451x_batfet_enable(chip, CABLE, 0);
+		fan5451x_batfet_enable(chip, CHARGE, 1);
+	}
 
 skip_current_config:
 	power_supply_changed(&chip->batt_psy);
@@ -1552,7 +1572,7 @@ fan5451x_vbat_rechg_notification(enum qpnp_tm_state state, void *ctx)
 	volt = get_prop_battery_voltage_now(chip);
 	pr_info("SW Rechg occur!! volt(%d)\n", volt);
 	chip->eoc = false;
-	fan5451x_batfet_enable(chip, 1);
+	fan5451x_batfet_enable(chip, CHARGE, 1);
 	if (!chip->retail_enable)
 		fan5451x_wlc_fake_online(chip, 0);
 	else {
@@ -1659,7 +1679,7 @@ fan5451x_eoc_check_work(struct work_struct *work)
 		if (count >= CONSECUTIVE_COUNT) {
 			pr_info("SW EOC IRQ\n");
 			fan5451x_wlc_thermal_ctrl(chip, 0);
-			fan5451x_batfet_enable(chip, 0);
+			fan5451x_batfet_enable(chip, CHARGE, 0);
 			fan5451x_wlc_fake_online(chip, 1);
 			chip->eoc = true;
 			fan5451x_vbat_rechg_measure(chip);
@@ -1900,6 +1920,8 @@ static int fan5451x_probe(struct i2c_client *client,
 	chip->wlc_present = fan5451x_wlc_chg_plugged_in(chip);
 	fan5451x_enable(chip, 1);
 	fan5451x_vbat_measure(chip);
+	if (chip->usb_present || chip->wlc_present)
+		fan5451x_batfet_enable(chip, CABLE, 1);
 
 	ret = request_threaded_irq(client->irq, NULL, fan5451x_irq_thread,
 			IRQF_TRIGGER_LOW | IRQF_ONESHOT, "fan5451x_irq", chip);
