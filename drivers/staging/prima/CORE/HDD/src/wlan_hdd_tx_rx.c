@@ -2833,7 +2833,7 @@ void hdd_tx_rx_pkt_cnt_stat_timer_handler( void *phddctx)
      */
     if ((pHddCtx->isTdlsScanCoexistence == FALSE) && (pHddCtx->issplitscan_enabled))
     {
-       VOS_TRACE( VOS_MODULE_ID_HDD_DATA, VOS_TRACE_LEVEL_ERROR,
+       VOS_TRACE( VOS_MODULE_ID_HDD_DATA, VOS_TRACE_LEVEL_INFO,
                         "%s: Disable split scan", __func__);
        pHddCtx->issplitscan_enabled = FALSE;
        sme_enable_disable_split_scan(

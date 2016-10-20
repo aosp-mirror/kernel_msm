@@ -17720,7 +17720,7 @@ WDI_ProcessLLStatsSetRsp
 {
   WDI_LLStatsSetRspCb   wdiLLStatsSetRspCb;
 
-  WPAL_TRACE( eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
+  WPAL_TRACE( eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
               "%s: Enter ", __func__);
   /*-------------------------------------------------------------------------
     Sanity check
@@ -17761,7 +17761,7 @@ WDI_ProcessLLStatsGetRsp
      WDI_ASSERT(0);
      return WDI_STATUS_E_FAILURE;
   }
-  WPAL_TRACE( eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
+  WPAL_TRACE( eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
               "%s: Enter ", __func__);
 
   wdiLLStatsGetRspCb = (WDI_LLStatsGetRspCb)pWDICtx->pfncRspCB;
@@ -17792,7 +17792,7 @@ WDI_ProcessLLStatsClearRsp
      return WDI_STATUS_E_FAILURE;
   }
 
-  WPAL_TRACE( eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
+  WPAL_TRACE( eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
               "%s: CLEAR RESPONSE CALL BACK", __func__);
   wdiLLStatsClearRspCb = (WDI_LLStatsClearRspCb)pWDICtx->pfncRspCB;
 
@@ -20493,7 +20493,7 @@ WDI_ProcessKeepAliveRsp
    eHalStatus           halStatus;
    WDI_KeepAliveCb      wdiKeepAliveCb;
    /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-   WPAL_TRACE( eWLAN_MODULE_DAL_CTRL,  eWLAN_PAL_TRACE_LEVEL_ERROR,
+   WPAL_TRACE( eWLAN_MODULE_DAL_CTRL,  eWLAN_PAL_TRACE_LEVEL_INFO,
                "Received WDI_ProcessKeepAliveRsp Callback from HAL");
 
 
