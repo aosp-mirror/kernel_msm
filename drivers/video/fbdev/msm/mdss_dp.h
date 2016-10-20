@@ -368,7 +368,7 @@ struct mdss_dp_drv_pdata {
 	int dp_on_cnt;
 	int dp_off_cnt;
 
-	u32 pixel_rate;
+	u32 pixel_rate; /* KHz */
 	u32 aux_rate;
 	char link_rate;	/* X 27000000 for real rate */
 	char lane_cnt;
@@ -399,6 +399,7 @@ struct mdss_dp_drv_pdata {
 	struct completion train_comp;
 	struct completion idle_comp;
 	struct completion video_comp;
+	struct completion audio_comp;
 	struct mutex aux_mutex;
 	struct mutex train_mutex;
 	struct mutex pd_msg_mutex;
@@ -423,10 +424,11 @@ struct mdss_dp_drv_pdata {
 	char delay_start;
 	u32 bpp;
 	struct dp_statistic dp_stat;
+	bool wait_for_audio_comp;
 
 	/* event */
 	struct workqueue_struct *workq;
-	struct delayed_work dwork;
+	struct work_struct work;
 	u32 current_event;
 	spinlock_t event_lock;
 	spinlock_t lock;

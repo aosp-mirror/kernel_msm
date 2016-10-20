@@ -896,20 +896,24 @@ struct adm_cmd_connect_afe_port_v5 {
 #define AFE_PORT_ID_TERTIARY_MI2S_TX        0x1005
 #define AFE_PORT_ID_QUATERNARY_MI2S_RX      0x1006
 #define AFE_PORT_ID_QUATERNARY_MI2S_TX      0x1007
-#define AUDIO_PORT_ID_I2S_RX				0x1008
+#define AUDIO_PORT_ID_I2S_RX                0x1008
 #define AFE_PORT_ID_DIGITAL_MIC_TX          0x1009
 #define AFE_PORT_ID_PRIMARY_PCM_RX          0x100A
 #define AFE_PORT_ID_PRIMARY_PCM_TX          0x100B
 #define AFE_PORT_ID_SECONDARY_PCM_RX        0x100C
 #define AFE_PORT_ID_SECONDARY_PCM_TX        0x100D
 #define AFE_PORT_ID_MULTICHAN_HDMI_RX       0x100E
-#define AFE_PORT_ID_SECONDARY_MI2S_RX_SD1	0x1010
-#define AFE_PORT_ID_QUINARY_MI2S_RX		0x1016
-#define AFE_PORT_ID_QUINARY_MI2S_TX		0x1017
+#define AFE_PORT_ID_SECONDARY_MI2S_RX_SD1   0x1010
+#define AFE_PORT_ID_TERTIARY_PCM_RX         0x1012
+#define AFE_PORT_ID_TERTIARY_PCM_TX         0x1013
+#define AFE_PORT_ID_QUATERNARY_PCM_RX       0x1014
+#define AFE_PORT_ID_QUATERNARY_PCM_TX       0x1015
+#define AFE_PORT_ID_QUINARY_MI2S_RX         0x1016
+#define AFE_PORT_ID_QUINARY_MI2S_TX         0x1017
 /* ID of the senary MI2S Rx port. */
-#define AFE_PORT_ID_SENARY_MI2S_RX		0x1018
+#define AFE_PORT_ID_SENARY_MI2S_RX          0x1018
 /* ID of the senary MI2S Tx port. */
-#define AFE_PORT_ID_SENARY_MI2S_TX		0x1019
+#define AFE_PORT_ID_SENARY_MI2S_TX          0x1019
 #define AFE_PORT_ID_SPDIF_RX                0x5000
 #define  AFE_PORT_ID_RT_PROXY_PORT_001_RX   0x2000
 #define  AFE_PORT_ID_RT_PROXY_PORT_001_TX   0x2001
@@ -2939,7 +2943,7 @@ struct asm_aac_enc_cfg_v2_t {
 	 * number of channels at the input.
 	 * The number of channels must not change during encoding.
 	 */
-	uint32_t     channel_cfg;
+	uint16_t     channel_cfg;
 
 	/*
 	 * Number of samples per second.
@@ -3674,6 +3678,8 @@ struct asm_softvolume_params {
 
 #define ASM_MEDIA_FMT_MULTI_CHANNEL_PCM_V3 0x00010DDC
 
+#define ASM_MEDIA_FMT_MULTI_CHANNEL_PCM_V4 0x0001320C
+
 #define ASM_MEDIA_FMT_EVRCB_FS 0x00010BEF
 
 #define ASM_MEDIA_FMT_EVRCWB_FS 0x00010BF0
@@ -3776,6 +3782,56 @@ struct asm_multi_channel_pcm_fmt_blk_v3 {
  */
 } __packed;
 
+struct asm_multi_channel_pcm_fmt_blk_v4 {
+	uint16_t                num_channels;
+/*
+ * Number of channels
+ * Supported values: 1 to 8
+ */
+
+	uint16_t                bits_per_sample;
+/*
+ * Number of bits per sample per channel
+ * Supported values: 16, 24, 32
+ */
+
+	uint32_t                sample_rate;
+/*
+ * Number of samples per second
+ * Supported values: 2000 to 48000, 96000,192000 Hz
+ */
+
+	uint16_t                is_signed;
+/* Flag that indicates that PCM samples are signed (1) */
+
+	uint16_t                sample_word_size;
+/*
+ * Size in bits of the word that holds a sample of a channel.
+ * Supported values: 12,24,32
+ */
+
+	uint8_t                 channel_mapping[8];
+/*
+ * Each element, i, in the array describes channel i inside the buffer where
+ * 0 <= i < num_channels. Unused channels are set to 0.
+ */
+	uint16_t                endianness;
+/*
+ * Flag to indicate the endianness of the pcm sample
+ * Supported values: 0 - Little endian (all other formats)
+ *                   1 - Big endian (AIFF)
+ */
+	uint16_t                mode;
+/*
+ * Mode to provide additional info about the pcm input data.
+ * Supported values: 0 - Default QFs (Q15 for 16b, Q23 for packed 24b,
+ *                       Q31 for unpacked 24b or 32b)
+ *                  15 - for 16 bit
+ *                  23 - for 24b packed or 8.24 format
+ *                  31 - for 24b unpacked or 32bit
+ */
+} __packed;
+
 /*
  * Payload of the multichannel PCM configuration parameters in
  * the ASM_MEDIA_FMT_MULTI_CHANNEL_PCM_V3 media format.
@@ -3784,6 +3840,16 @@ struct asm_multi_channel_pcm_fmt_blk_param_v3 {
 	struct apr_hdr hdr;
 	struct asm_data_cmd_media_fmt_update_v2 fmt_blk;
 	struct asm_multi_channel_pcm_fmt_blk_v3 param;
+} __packed;
+
+/*
+ * Payload of the multichannel PCM configuration parameters in
+ * the ASM_MEDIA_FMT_MULTI_CHANNEL_PCM_V4 media format.
+ */
+struct asm_multi_channel_pcm_fmt_blk_param_v4 {
+	struct apr_hdr hdr;
+	struct asm_data_cmd_media_fmt_update_v2 fmt_blk;
+	struct asm_multi_channel_pcm_fmt_blk_v4 param;
 } __packed;
 
 struct asm_stream_cmd_set_encdec_param {
@@ -3821,6 +3887,79 @@ struct asm_dec_ddp_endp_param_v2 {
 	int endp_param_value;
 } __packed;
 
+/*
+ * Payload of the multichannel PCM encoder configuration parameters in
+ * the ASM_MEDIA_FMT_MULTI_CHANNEL_PCM_V4 media format.
+ */
+
+struct asm_multi_channel_pcm_enc_cfg_v4 {
+	struct apr_hdr hdr;
+	struct asm_stream_cmd_set_encdec_param encdec;
+	struct asm_enc_cfg_blk_param_v2 encblk;
+	uint16_t num_channels;
+	/*
+	 * Number of PCM channels.
+	 * @values
+	 * - 0 -- Native mode
+	 * - 1 -- 8 channels
+	 * Native mode indicates that encoding must be performed with the number
+	 * of channels at the input.
+	 */
+	uint16_t  bits_per_sample;
+	/*
+	 * Number of bits per sample per channel.
+	 * @values 16, 24
+	 */
+	uint32_t  sample_rate;
+	/*
+	 * Number of samples per second.
+	 * @values 0, 8000 to 48000 Hz
+	 * A value of 0 indicates the native sampling rate. Encoding is
+	 * performed at the input sampling rate.
+	 */
+	uint16_t  is_signed;
+	/*
+	 * Flag that indicates the PCM samples are signed (1). Currently, only
+	 * signed PCM samples are supported.
+	 */
+	uint16_t    sample_word_size;
+	/*
+	 * The size in bits of the word that holds a sample of a channel.
+	 * @values 16, 24, 32
+	 * 16-bit samples are always placed in 16-bit words:
+	 * sample_word_size = 1.
+	 * 24-bit samples can be placed in 32-bit words or in consecutive
+	 * 24-bit words.
+	 * - If sample_word_size = 32, 24-bit samples are placed in the
+	 * most significant 24 bits of a 32-bit word.
+	 * - If sample_word_size = 24, 24-bit samples are placed in
+	 * 24-bit words. @tablebulletend
+	 */
+	uint8_t   channel_mapping[8];
+	/*
+	 * Channel mapping array expected at the encoder output.
+	 *  Channel[i] mapping describes channel i inside the buffer, where
+	 *  0 @le i < num_channels. All valid used channels must be present at
+	 *  the beginning of the array.
+	 * If Native mode is set for the channels, this field is ignored.
+	 * @values See Section @xref{dox:PcmChannelDefs}
+	 */
+	uint16_t                endianness;
+	/*
+	 * Flag to indicate the endianness of the pcm sample
+	 * Supported values: 0 - Little endian (all other formats)
+	 *                   1 - Big endian (AIFF)
+	 */
+	uint16_t                mode;
+	/*
+	 * Mode to provide additional info about the pcm input data.
+	 * Supported values: 0 - Default QFs (Q15 for 16b, Q23 for packed 24b,
+	 *                       Q31 for unpacked 24b or 32b)
+	 *                  15 - for 16 bit
+	 *                  23 - for 24b packed or 8.24 format
+	 *                  31 - for 24b unpacked or 32bit
+	 */
+} __packed;
 
 /*
  * Payload of the multichannel PCM encoder configuration parameters in

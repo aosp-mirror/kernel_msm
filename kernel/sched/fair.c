@@ -2590,6 +2590,7 @@ static u32 __compute_runnable_contrib(u64 n)
 #define SBC_FLAG_COST_CSTATE_PREV_CPU_TIE_BREAKER	0x80
 #define SBC_FLAG_CSTATE_LOAD				0x100
 #define SBC_FLAG_BEST_SIBLING				0x200
+#define SBC_FLAG_WAKER_CPU				0x400
 
 /* Cluster selection flag */
 #define SBC_FLAG_COLOC_CLUSTER				0x10000
@@ -3060,6 +3061,15 @@ wake_to_waker_cluster(struct cpu_select_env *env)
 	       task_load(env->p) < sched_small_wakee_task_load;
 }
 
+static inline bool
+bias_to_waker_cpu(struct task_struct *p, int cpu)
+{
+	return sysctl_sched_prefer_sync_wakee_to_waker &&
+	       cpu_rq(cpu)->nr_running == 1 &&
+	       cpumask_test_cpu(cpu, tsk_cpus_allowed(p)) &&
+	       cpu_active(cpu) && !cpu_isolated(cpu);
+}
+
 static inline int
 cluster_allowed(struct task_struct *p, struct sched_cluster *cluster)
 {
@@ -3080,6 +3090,7 @@ static int select_best_cpu(struct task_struct *p, int target, int reason,
 	struct cluster_cpu_stats stats;
 	struct related_thread_group *grp;
 	unsigned int sbc_flag = 0;
+	int cpu = raw_smp_processor_id();
 
 	struct cpu_select_env env = {
 		.p			= p,
@@ -3111,14 +3122,20 @@ static int select_best_cpu(struct task_struct *p, int target, int reason,
 		else
 			env.rtg = grp;
 	} else {
-		cluster = cpu_rq(smp_processor_id())->cluster;
-		if (wake_to_waker_cluster(&env) &&
-		    cluster_allowed(p, cluster)) {
-			env.need_waker_cluster = 1;
-			bitmap_zero(env.candidate_list, NR_CPUS);
-			__set_bit(cluster->id, env.candidate_list);
-			env.sbc_best_cluster_flag = SBC_FLAG_WAKER_CLUSTER;
-
+		cluster = cpu_rq(cpu)->cluster;
+		if (wake_to_waker_cluster(&env)) {
+			if (bias_to_waker_cpu(p, cpu)) {
+				target = cpu;
+				sbc_flag = SBC_FLAG_WAKER_CLUSTER |
+					   SBC_FLAG_WAKER_CPU;
+				goto out;
+			} else if (cluster_allowed(p, cluster)) {
+				env.need_waker_cluster = 1;
+				bitmap_zero(env.candidate_list, NR_CPUS);
+				__set_bit(cluster->id, env.candidate_list);
+				env.sbc_best_cluster_flag =
+							SBC_FLAG_WAKER_CLUSTER;
+			}
 		} else if (bias_to_prev_cpu(&env, &stats)) {
 			sbc_flag = SBC_FLAG_PREV_CPU;
 			goto out;
@@ -7203,6 +7220,10 @@ static inline void init_sd_lb_stats(struct sd_lb_stats *sds)
 			.avg_load = 0UL,
 			.sum_nr_running = 0,
 			.group_type = group_other,
+#ifdef CONFIG_SCHED_HMP
+			.sum_nr_big_tasks = 0UL,
+			.group_cpu_load = 0ULL,
+#endif
 		},
 	};
 }
@@ -7229,9 +7250,7 @@ bail_inter_cluster_balance(struct lb_env *env, struct sd_lb_stats *sds)
 	local_pwr_cost = cpu_max_power_cost(local_cpu);
 	busiest_pwr_cost = cpu_max_power_cost(busiest_cpu);
 
-	if (local_capacity < busiest_capacity ||
-			(local_capacity == busiest_capacity &&
-			local_pwr_cost <= busiest_pwr_cost))
+	if (local_pwr_cost <= busiest_pwr_cost)
 		return 0;
 
 	if (local_capacity > busiest_capacity &&
@@ -8868,9 +8887,6 @@ static inline int find_new_hmp_ilb(int type)
 		for_each_cpu_and(ilb, nohz.idle_cpus_mask,
 						sched_domain_span(sd)) {
 			if (idle_cpu(ilb) && (type != NOHZ_KICK_RESTRICT ||
-					(hmp_capable() &&
-					 cpu_max_possible_capacity(ilb) <=
-					cpu_max_possible_capacity(call_cpu)) ||
 					cpu_max_power_cost(ilb) <=
 					cpu_max_power_cost(call_cpu))) {
 				rcu_read_unlock();
@@ -9224,8 +9240,7 @@ static inline int _nohz_kick_needed_hmp(struct rq *rq, int cpu, int *type)
 	if (!sysctl_sched_restrict_cluster_spill || sched_boost())
 		return 1;
 
-	if (hmp_capable() && cpu_max_possible_capacity(cpu) ==
-			max_possible_capacity)
+	if (cpu_max_power_cost(cpu) == max_power_cost)
 		return 1;
 
 	rcu_read_lock();

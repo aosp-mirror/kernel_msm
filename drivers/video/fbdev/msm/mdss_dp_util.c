@@ -32,6 +32,29 @@
 #define AUDIO_FREQ_48		48000
 #define DP_AUDIO_FREQ_COUNT	3
 
+enum mdss_dp_pin_assignment {
+	PIN_ASSIGNMENT_A,
+	PIN_ASSIGNMENT_B,
+	PIN_ASSIGNMENT_C,
+	PIN_ASSIGNMENT_D,
+	PIN_ASSIGNMENT_E,
+	PIN_ASSIGNMENT_F,
+	PIN_ASSIGNMENT_MAX,
+};
+
+static const char *mdss_dp_pin_name(u8 pin)
+{
+	switch (pin) {
+	case PIN_ASSIGNMENT_A: return "PIN_ASSIGNMENT_A";
+	case PIN_ASSIGNMENT_B: return "PIN_ASSIGNMENT_B";
+	case PIN_ASSIGNMENT_C: return "PIN_ASSIGNMENT_C";
+	case PIN_ASSIGNMENT_D: return "PIN_ASSIGNMENT_D";
+	case PIN_ASSIGNMENT_E: return "PIN_ASSIGNMENT_E";
+	case PIN_ASSIGNMENT_F: return "PIN_ASSIGNMENT_F";
+	default: return "UNKNOWN";
+	}
+}
+
 static const uint32_t naud_value[DP_AUDIO_FREQ_COUNT][DP_AUDIO_FREQ_COUNT] = {
 	{ 10125, 16875, 33750 },
 	{ 5625, 9375, 18750 },
@@ -141,6 +164,18 @@ void mdss_dp_aux_reset(struct dss_io_data *ctrl_io)
 	udelay(1000);
 	aux_ctrl &= ~BIT(1);
 	writel_relaxed(aux_ctrl, ctrl_io->base + DP_AUX_CTRL);
+}
+
+/* reset DP controller */
+void mdss_dp_ctrl_reset(struct dss_io_data *ctrl_io)
+{
+	u32 sw_reset = readl_relaxed(ctrl_io->base + DP_SW_RESET);
+
+	sw_reset |= BIT(0);
+	writel_relaxed(sw_reset, ctrl_io->base + DP_SW_RESET);
+	udelay(1000);
+	sw_reset &= ~BIT(0);
+	writel_relaxed(sw_reset, ctrl_io->base + DP_SW_RESET);
 }
 
 /* reset DP Mainlink */
@@ -284,13 +319,47 @@ void mdss_dp_sw_mvid_nvid(struct dss_io_data *ctrl_io)
 	writel_relaxed(0x3c, ctrl_io->base + DP_SOFTWARE_NVID);
 }
 
-void mdss_dp_setup_tr_unit(struct dss_io_data *ctrl_io)
+void mdss_dp_setup_tr_unit(struct dss_io_data *ctrl_io, u8 link_rate,
+				u8 ln_cnt, u32 res)
 {
-	/* Current Tr unit configuration supports only 1080p */
+	u32 dp_tu = 0x0;
+	u32 valid_boundary = 0x0;
+	u32 valid_boundary2 = 0x0;
+	struct dp_vc_tu_mapping_table const *tu_entry = tu_table;
+
 	writel_relaxed(0x21, ctrl_io->base + DP_MISC1_MISC0);
-	writel_relaxed(0x0f0016, ctrl_io->base + DP_VALID_BOUNDARY);
-	writel_relaxed(0x1f, ctrl_io->base + DP_TU);
-	writel_relaxed(0x0, ctrl_io->base + DP_VALID_BOUNDARY_2);
+
+	for (; tu_entry != tu_table + ARRAY_SIZE(tu_table); ++tu_entry) {
+		if ((tu_entry->vic == res) &&
+			(tu_entry->lanes == ln_cnt) &&
+			(tu_entry->lrate == link_rate))
+		break;
+	}
+
+	if (tu_entry == tu_table + ARRAY_SIZE(tu_table)) {
+		pr_err("requested ln_cnt=%d, lrate=0x%x not supported\n",
+				ln_cnt, link_rate);
+		return;
+	}
+
+	dp_tu |= tu_entry->tu_size_minus1;
+	valid_boundary |= tu_entry->valid_boundary_link;
+	valid_boundary |= (tu_entry->delay_start_link << 16);
+
+	valid_boundary2 |= (tu_entry->valid_lower_boundary_link << 1);
+	valid_boundary2 |= (tu_entry->upper_boundary_count << 16);
+	valid_boundary2 |= (tu_entry->lower_boundary_count << 20);
+
+	if (tu_entry->boundary_moderation_en)
+		valid_boundary2 |= BIT(0);
+
+	writel_relaxed(valid_boundary, ctrl_io->base + DP_VALID_BOUNDARY);
+	writel_relaxed(dp_tu, ctrl_io->base + DP_TU);
+	writel_relaxed(valid_boundary2, ctrl_io->base + DP_VALID_BOUNDARY_2);
+
+	pr_debug("valid_boundary=0x%x, valid_boundary2=0x%x\n",
+				valid_boundary, valid_boundary2);
+	pr_debug("dp_tu=0x%x\n", dp_tu);
 }
 
 void mdss_dp_ctrl_lane_mapping(struct dss_io_data *ctrl_io,
@@ -431,14 +500,39 @@ void mdss_dp_usbpd_ext_dp_status(struct usbpd_dp_status *dp_status)
 
 u32 mdss_dp_usbpd_gen_config_pkt(struct mdss_dp_drv_pdata *dp)
 {
+	u8 pin_cfg, pin;
 	u32 config = 0;
 
-	config |= (dp->alt_mode.dp_cap.dlink_pin_config << 8);
+	pin_cfg = dp->alt_mode.dp_cap.dlink_pin_config;
+
+	for (pin = PIN_ASSIGNMENT_A; pin < PIN_ASSIGNMENT_MAX; pin++) {
+		if (pin_cfg & BIT(pin))
+			break;
+	}
+
+	if (pin == PIN_ASSIGNMENT_MAX)
+		pin = PIN_ASSIGNMENT_C;
+
+	pr_debug("pin assignment: %s\n", mdss_dp_pin_name(pin));
+
+	config |= BIT(pin) << 8;
+
 	config |= (0x1 << 2); /* configure for DPv1.3 */
 	config |= 0x2; /* Configuring for UFP_D */
 
 	pr_debug("DP config = 0x%x\n", config);
 	return config;
+}
+
+void mdss_dp_phy_share_lane_config(struct dss_io_data *phy_io,
+					u8 orientation, u8 ln_cnt)
+{
+	u32 info = 0x0;
+
+	info |= (ln_cnt & 0x0F);
+	info |= ((orientation & 0x0F) << 4);
+	pr_debug("Shared Info = 0x%x\n", info);
+	writel_relaxed(info, phy_io->base + DP_PHY_SPARE0);
 }
 
 void mdss_dp_config_audio_acr_ctrl(struct dss_io_data *ctrl_io, char link_rate)

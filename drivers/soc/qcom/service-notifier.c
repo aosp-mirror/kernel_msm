@@ -114,6 +114,7 @@ struct qmi_client_info {
 };
 static LIST_HEAD(qmi_client_list);
 static DEFINE_MUTEX(qmi_list_lock);
+static DEFINE_MUTEX(qmi_client_release_lock);
 
 static DEFINE_MUTEX(notif_add_lock);
 
@@ -417,9 +418,11 @@ static void root_service_service_exit(struct qmi_client_info *data,
 	 * Destroy client handle and try connecting when
 	 * service comes up again.
 	 */
+	mutex_lock(&qmi_client_release_lock);
 	data->service_connected = false;
 	qmi_handle_destroy(data->clnt_handle);
 	data->clnt_handle = NULL;
+	mutex_unlock(&qmi_client_release_lock);
 }
 
 static void root_service_exit_work(struct work_struct *work)
@@ -459,7 +462,7 @@ static int ssr_event_notify(struct notifier_block *this,
 					struct qmi_client_info, ssr_notifier);
 	struct notif_data *notif = data;
 	switch (code) {
-	case	SUBSYS_BEFORE_SHUTDOWN:
+	case	SUBSYS_AFTER_SHUTDOWN:
 		pr_debug("Root PD DOWN(SSR notification), crashed?%d\n",
 						notif->crashed);
 		if (notif->crashed)

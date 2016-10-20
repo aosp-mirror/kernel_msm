@@ -419,7 +419,6 @@ int afe_get_port_type(u16 port_id)
 
 	switch (port_id) {
 	case PRIMARY_I2S_RX:
-	case AFE_PORT_ID_PRIMARY_PCM_RX:
 	case SECONDARY_I2S_RX:
 	case MI2S_RX:
 	case HDMI_RX:
@@ -446,8 +445,11 @@ int afe_get_port_type(u16 port_id)
 	case AFE_PORT_ID_SECONDARY_MI2S_RX_SD1:
 	case AFE_PORT_ID_TERTIARY_MI2S_RX:
 	case AFE_PORT_ID_QUATERNARY_MI2S_RX:
-	case AFE_PORT_ID_SECONDARY_PCM_RX:
 	case AFE_PORT_ID_QUINARY_MI2S_RX:
+	case AFE_PORT_ID_PRIMARY_PCM_RX:
+	case AFE_PORT_ID_SECONDARY_PCM_RX:
+	case AFE_PORT_ID_TERTIARY_PCM_RX:
+	case AFE_PORT_ID_QUATERNARY_PCM_RX:
 	case AFE_PORT_ID_PRIMARY_TDM_RX:
 	case AFE_PORT_ID_PRIMARY_TDM_RX_1:
 	case AFE_PORT_ID_PRIMARY_TDM_RX_2:
@@ -485,7 +487,6 @@ int afe_get_port_type(u16 port_id)
 		break;
 
 	case PRIMARY_I2S_TX:
-	case AFE_PORT_ID_PRIMARY_PCM_TX:
 	case SECONDARY_I2S_TX:
 	case MI2S_TX:
 	case DIGI_MIC_TX:
@@ -507,9 +508,12 @@ int afe_get_port_type(u16 port_id)
 	case AFE_PORT_ID_SECONDARY_MI2S_TX:
 	case AFE_PORT_ID_TERTIARY_MI2S_TX:
 	case AFE_PORT_ID_QUATERNARY_MI2S_TX:
-	case AFE_PORT_ID_SECONDARY_PCM_TX:
 	case AFE_PORT_ID_QUINARY_MI2S_TX:
 	case AFE_PORT_ID_SENARY_MI2S_TX:
+	case AFE_PORT_ID_PRIMARY_PCM_TX:
+	case AFE_PORT_ID_SECONDARY_PCM_TX:
+	case AFE_PORT_ID_TERTIARY_PCM_TX:
+	case AFE_PORT_ID_QUATERNARY_PCM_TX:
 	case AFE_PORT_ID_PRIMARY_TDM_TX:
 	case AFE_PORT_ID_PRIMARY_TDM_TX_1:
 	case AFE_PORT_ID_PRIMARY_TDM_TX_2:
@@ -617,8 +621,12 @@ int afe_sizeof_cfg_cmd(u16 port_id)
 	case AFE_PORT_ID_PRIMARY_PCM_TX:
 	case AFE_PORT_ID_SECONDARY_PCM_RX:
 	case AFE_PORT_ID_SECONDARY_PCM_TX:
+	case AFE_PORT_ID_TERTIARY_PCM_RX:
+	case AFE_PORT_ID_TERTIARY_PCM_TX:
+	case AFE_PORT_ID_QUATERNARY_PCM_RX:
+	case AFE_PORT_ID_QUATERNARY_PCM_TX:
 	default:
-		pr_err("%s: default case 0x%x\n", __func__, port_id);
+		pr_debug("%s: default case 0x%x\n", __func__, port_id);
 		ret_size = SIZEOF_CFG_CMD(afe_param_id_pcm_cfg);
 		break;
 	}
@@ -2637,8 +2645,9 @@ exit:
 }
 
 static int q6afe_send_enc_config(u16 port_id,
-			union afe_enc_config_data *cfg, u32 format,
-			union afe_port_config afe_config, u16 afe_in_channels)
+				 union afe_enc_config_data *cfg, u32 format,
+				 union afe_port_config afe_config,
+				 u16 afe_in_channels, u16 afe_in_bit_width)
 {
 	struct afe_audioif_config_command config;
 	int index;
@@ -2720,8 +2729,13 @@ static int q6afe_send_enc_config(u16 port_id,
 	config.pdata.param_id = AFE_PARAM_ID_PORT_MEDIA_TYPE;
 	config.port.media_type.minor_version = AFE_API_VERSION_PORT_MEDIA_TYPE;
 	config.port.media_type.sample_rate = afe_config.slim_sch.sample_rate;
-	config.port.media_type.bit_width = afe_config.slim_sch.bit_width;
-	if (afe_in_channels != 0)
+	if (afe_in_bit_width)
+		config.port.media_type.bit_width = afe_in_bit_width;
+	else
+		config.port.media_type.bit_width =
+					afe_config.slim_sch.bit_width;
+
+	if (afe_in_channels)
 		config.port.media_type.num_channels = afe_in_channels;
 	else
 		config.port.media_type.num_channels =
@@ -2741,8 +2755,8 @@ exit:
 }
 
 static int __afe_port_start(u16 port_id, union afe_port_config *afe_config,
-			   u32 rate,  u16 afe_in_channels,
-			   union afe_enc_config_data *cfg, u32 enc_format)
+			    u32 rate, u16 afe_in_channels, u16 afe_in_bit_width,
+			    union afe_enc_config_data *cfg, u32 enc_format)
 {
 	struct afe_audioif_config_command config;
 	int ret = 0;
@@ -2876,6 +2890,10 @@ static int __afe_port_start(u16 port_id, union afe_port_config *afe_config,
 	case AFE_PORT_ID_PRIMARY_PCM_TX:
 	case AFE_PORT_ID_SECONDARY_PCM_RX:
 	case AFE_PORT_ID_SECONDARY_PCM_TX:
+	case AFE_PORT_ID_TERTIARY_PCM_RX:
+	case AFE_PORT_ID_TERTIARY_PCM_TX:
+	case AFE_PORT_ID_QUATERNARY_PCM_RX:
+	case AFE_PORT_ID_QUATERNARY_PCM_TX:
 		cfg_type = AFE_PARAM_ID_PCM_CONFIG;
 		break;
 	case PRIMARY_I2S_RX:
@@ -2977,7 +2995,8 @@ static int __afe_port_start(u16 port_id, union afe_port_config *afe_config,
 		pr_debug("%s: Found AFE encoder support for SLIMBUS enc_format = %d\n",
 					__func__, enc_format);
 		ret = q6afe_send_enc_config(port_id, cfg, enc_format,
-					*afe_config, afe_in_channels);
+					    *afe_config, afe_in_channels,
+					    afe_in_bit_width);
 		if (ret) {
 			pr_err("%s: AFE encoder config for port 0x%x failed %d\n",
 				__func__, port_id, ret);
@@ -3031,7 +3050,7 @@ int afe_port_start(u16 port_id, union afe_port_config *afe_config,
 		   u32 rate)
 {
 	return __afe_port_start(port_id, afe_config, rate,
-				0, NULL, ASM_MEDIA_FMT_NONE);
+				0, 0, NULL, ASM_MEDIA_FMT_NONE);
 }
 EXPORT_SYMBOL(afe_port_start);
 
@@ -3049,12 +3068,12 @@ EXPORT_SYMBOL(afe_port_start);
  * Returns 0 on success or error value on port start failure.
  */
 int afe_port_start_v2(u16 port_id, union afe_port_config *afe_config,
-		      u32 rate, u16 afe_in_channels,
+		      u32 rate, u16 afe_in_channels, u16 afe_in_bit_width,
 		      struct afe_enc_config *enc_cfg)
 {
 	return __afe_port_start(port_id, afe_config, rate,
-				afe_in_channels, &enc_cfg->data,
-				enc_cfg->format);
+				afe_in_channels, afe_in_bit_width,
+				&enc_cfg->data, enc_cfg->format);
 }
 EXPORT_SYMBOL(afe_port_start_v2);
 
@@ -3071,6 +3090,14 @@ int afe_get_port_index(u16 port_id)
 		return IDX_AFE_PORT_ID_SECONDARY_PCM_RX;
 	case AFE_PORT_ID_SECONDARY_PCM_TX:
 		return IDX_AFE_PORT_ID_SECONDARY_PCM_TX;
+	case AFE_PORT_ID_TERTIARY_PCM_RX:
+		return IDX_AFE_PORT_ID_TERTIARY_PCM_RX;
+	case AFE_PORT_ID_TERTIARY_PCM_TX:
+		return IDX_AFE_PORT_ID_TERTIARY_PCM_TX;
+	case AFE_PORT_ID_QUATERNARY_PCM_RX:
+		return IDX_AFE_PORT_ID_QUATERNARY_PCM_RX;
+	case AFE_PORT_ID_QUATERNARY_PCM_TX:
+		return IDX_AFE_PORT_ID_QUATERNARY_PCM_TX;
 	case SECONDARY_I2S_RX: return IDX_SECONDARY_I2S_RX;
 	case SECONDARY_I2S_TX: return IDX_SECONDARY_I2S_TX;
 	case MI2S_RX: return IDX_MI2S_RX;
@@ -3340,6 +3367,10 @@ int afe_open(u16 port_id,
 	case AFE_PORT_ID_PRIMARY_PCM_TX:
 	case AFE_PORT_ID_SECONDARY_PCM_RX:
 	case AFE_PORT_ID_SECONDARY_PCM_TX:
+	case AFE_PORT_ID_TERTIARY_PCM_RX:
+	case AFE_PORT_ID_TERTIARY_PCM_TX:
+	case AFE_PORT_ID_QUATERNARY_PCM_RX:
+	case AFE_PORT_ID_QUATERNARY_PCM_TX:
 		cfg_type = AFE_PARAM_ID_PCM_CONFIG;
 		break;
 	case SECONDARY_I2S_RX:
@@ -4008,6 +4039,14 @@ int afe_cmd_memory_map(phys_addr_t dma_addr_p, u32 dma_buf_sz)
 			return ret;
 		}
 		rtac_set_afe_handle(this_afe.apr);
+	}
+	if (dma_buf_sz % SZ_4K != 0) {
+		/*
+		 * The memory allocated by msm_audio_ion_alloc is always 4kB
+		 * aligned, ADSP expects the size to be 4kB aligned as well
+		 * so re-adjusts the  buffer size before passing to ADSP.
+		 */
+		dma_buf_sz = PAGE_ALIGN(dma_buf_sz);
 	}
 
 	cmd_size = sizeof(struct afe_service_cmd_shared_mem_map_regions) \
@@ -4809,6 +4848,10 @@ int afe_validate_port(u16 port_id)
 	case AFE_PORT_ID_PRIMARY_PCM_TX:
 	case AFE_PORT_ID_SECONDARY_PCM_RX:
 	case AFE_PORT_ID_SECONDARY_PCM_TX:
+	case AFE_PORT_ID_TERTIARY_PCM_RX:
+	case AFE_PORT_ID_TERTIARY_PCM_TX:
+	case AFE_PORT_ID_QUATERNARY_PCM_RX:
+	case AFE_PORT_ID_QUATERNARY_PCM_TX:
 	case SECONDARY_I2S_RX:
 	case SECONDARY_I2S_TX:
 	case MI2S_RX:

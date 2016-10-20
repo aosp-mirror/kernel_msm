@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013, 2016, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -16,6 +16,7 @@
 #include <linux/err.h>
 #include <linux/bug.h>
 #include <linux/export.h>
+#include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/delay.h>
 #include <linux/regmap.h>
@@ -58,6 +59,57 @@ static int clk_rcg2_is_enabled(struct clk_hw *hw)
 		return ret;
 
 	return (cmd & CMD_ROOT_OFF) == 0;
+}
+
+static int clk_rcg_set_force_enable(struct clk_hw *hw)
+{
+	struct clk_rcg2 *rcg = to_clk_rcg2(hw);
+	const char *name = clk_hw_get_name(hw);
+	int ret = 0, count;
+
+	/* force enable RCG */
+	ret = regmap_update_bits(rcg->clkr.regmap, rcg->cmd_rcgr + CMD_REG,
+				 CMD_ROOT_EN, CMD_ROOT_EN);
+	if (ret)
+		return ret;
+
+	/* wait for RCG to turn ON */
+	for (count = 500; count > 0; count--) {
+		ret = clk_rcg2_is_enabled(hw);
+		if (ret) {
+			ret = 0;
+			break;
+		}
+		udelay(1);
+	}
+	if (!count)
+		pr_err("%s: RCG did not turn on after force enable\n", name);
+
+	return ret;
+}
+
+static int clk_rcg2_enable(struct clk_hw *hw)
+{
+	int ret = 0;
+	struct clk_rcg2 *rcg = to_clk_rcg2(hw);
+
+	if (rcg->flags & FORCE_ENABLE_RCGR)
+		ret = clk_rcg_set_force_enable(hw);
+
+	return ret;
+}
+
+static void clk_rcg2_disable(struct clk_hw *hw)
+{
+	struct clk_rcg2 *rcg = to_clk_rcg2(hw);
+
+	if (rcg->flags & FORCE_ENABLE_RCGR) {
+		/* force disable RCG - clear CMD_ROOT_EN bit */
+		regmap_update_bits(rcg->clkr.regmap,
+			rcg->cmd_rcgr + CMD_REG, CMD_ROOT_EN, 0);
+		/* Add a delay to disable the RCG */
+		udelay(100);
+	}
 }
 
 static u8 clk_rcg2_get_parent(struct clk_hw *hw)
@@ -290,6 +342,8 @@ static int clk_rcg2_set_rate_and_parent(struct clk_hw *hw,
 }
 
 const struct clk_ops clk_rcg2_ops = {
+	.enable = clk_rcg2_enable,
+	.disable = clk_rcg2_disable,
 	.is_enabled = clk_rcg2_is_enabled,
 	.get_parent = clk_rcg2_get_parent,
 	.set_parent = clk_rcg2_set_parent,
@@ -801,6 +855,8 @@ static int clk_gfx3d_set_rate(struct clk_hw *hw, unsigned long rate,
 }
 
 const struct clk_ops clk_gfx3d_ops = {
+	.enable = clk_rcg2_enable,
+	.disable = clk_rcg2_disable,
 	.is_enabled = clk_rcg2_is_enabled,
 	.get_parent = clk_rcg2_get_parent,
 	.set_parent = clk_rcg2_set_parent,
@@ -810,3 +866,81 @@ const struct clk_ops clk_gfx3d_ops = {
 	.determine_rate = clk_gfx3d_determine_rate,
 };
 EXPORT_SYMBOL_GPL(clk_gfx3d_ops);
+
+static int clk_gfx3d_src_determine_rate(struct clk_hw *hw,
+				    struct clk_rate_request *req)
+{
+	struct clk_rcg2 *rcg = to_clk_rcg2(hw);
+	struct clk_rate_request parent_req = { };
+	struct clk_hw *p1, *p3, *xo, *curr_p;
+	const struct freq_tbl *f;
+	int ret;
+
+	xo = clk_hw_get_parent_by_index(hw, 0);
+	if (req->rate == clk_hw_get_rate(xo)) {
+		req->best_parent_hw = xo;
+		req->best_parent_rate = req->rate;
+		return 0;
+	}
+
+	f = qcom_find_freq(rcg->freq_tbl, req->rate);
+	if (!f || (req->rate != f->freq))
+		return -EINVAL;
+
+	/* Indexes of source from the parent map */
+	p1 = clk_hw_get_parent_by_index(hw, 1);
+	p3 = clk_hw_get_parent_by_index(hw, 2);
+
+	curr_p = clk_hw_get_parent(hw);
+	parent_req.rate = f->src_freq;
+
+	if (curr_p == xo || curr_p == p3)
+		req->best_parent_hw = p1;
+	else if (curr_p == p1)
+		req->best_parent_hw = p3;
+
+	parent_req.best_parent_hw = req->best_parent_hw;
+
+	ret = __clk_determine_rate(req->best_parent_hw, &parent_req);
+	if (ret)
+		return ret;
+
+	req->best_parent_rate = parent_req.rate;
+
+	return 0;
+}
+
+static int clk_gfx3d_src_set_rate_and_parent(struct clk_hw *hw,
+		unsigned long rate, unsigned long parent_rate, u8 index)
+{
+	struct clk_rcg2 *rcg = to_clk_rcg2(hw);
+	const struct freq_tbl *f;
+	u32 cfg;
+	int ret;
+
+	cfg = rcg->parent_map[index].cfg << CFG_SRC_SEL_SHIFT;
+
+	f = qcom_find_freq(rcg->freq_tbl, rate);
+	if (!f)
+		return -EINVAL;
+
+	/* Update the RCG-DIV */
+	cfg |= f->pre_div << CFG_SRC_DIV_SHIFT;
+
+	ret = regmap_write(rcg->clkr.regmap, rcg->cmd_rcgr + CFG_REG, cfg);
+	if (ret)
+		return ret;
+
+	return update_config(rcg);
+}
+
+const struct clk_ops clk_gfx3d_src_ops = {
+	.is_enabled = clk_rcg2_is_enabled,
+	.get_parent = clk_rcg2_get_parent,
+	.set_parent = clk_rcg2_set_parent,
+	.recalc_rate = clk_rcg2_recalc_rate,
+	.set_rate = clk_gfx3d_set_rate,
+	.set_rate_and_parent = clk_gfx3d_src_set_rate_and_parent,
+	.determine_rate = clk_gfx3d_src_determine_rate,
+};
+EXPORT_SYMBOL_GPL(clk_gfx3d_src_ops);

@@ -45,6 +45,18 @@
 #define VDDA_UA_ON_LOAD		100000	/* uA units */
 #define VDDA_UA_OFF_LOAD	100		/* uA units */
 
+#define DEFAULT_VIDEO_RESOLUTION HDMI_VFRMT_640x480p60_4_3
+static u32 supported_modes[] = {
+	HDMI_VFRMT_640x480p60_4_3,
+	HDMI_VFRMT_720x480p60_4_3, HDMI_VFRMT_720x480p60_16_9,
+	HDMI_VFRMT_1280x720p60_16_9,
+	HDMI_VFRMT_1920x1080p60_16_9,
+	HDMI_VFRMT_3840x2160p24_16_9, HDMI_VFRMT_3840x2160p30_16_9,
+	HDMI_VFRMT_3840x2160p60_16_9,
+	HDMI_VFRMT_4096x2160p24_256_135, HDMI_VFRMT_4096x2160p30_256_135,
+	HDMI_VFRMT_4096x2160p60_256_135, HDMI_EVFRMT_4096x2160p24_16_9
+};
+
 static void mdss_dp_put_dt_clk_data(struct device *dev,
 	struct dss_module_power *module_power)
 {
@@ -789,16 +801,33 @@ void mdss_dp_config_ctrl(struct mdss_dp_drv_pdata *dp)
 
 	cap = &dp->dpcd;
 
-	data = dp->lane_cnt - 1;
-	data <<= 4;
+	data |= (2 << 13); /* Default-> LSCLK DIV: 1/4 LCLK  */
+
+	/* Color Format */
+	switch (dp->panel_data.panel_info.out_format) {
+	case MDP_Y_CBCR_H2V2:
+		data |= (1 << 11); /* YUV420 */
+		break;
+	case MDP_Y_CBCR_H2V1:
+		data |= (2 << 11); /* YUV422 */
+		break;
+	default:
+		data |= (0 << 11); /* RGB */
+		break;
+	}
+
+	/* Scrambler reset enable */
+	if (cap->scrambler_reset)
+		data |= (1 << 10);
+
+	if (dp->edid.color_depth != 6)
+		data |= 0x100;	/* Default: 8 bits */
+
+	/* Num of Lanes */
+	data |= ((dp->lane_cnt - 1) << 4);
 
 	if (cap->enhanced_frame)
 		data |= 0x40;
-
-	if (dp->edid.color_depth == 8) {
-		/* 0 == 6 bits, 1 == 8 bits */
-		data |= 0x100;	/* bit 8 */
-	}
 
 	if (!timing->interlaced)	/* progressive */
 		data |= 0x04;
@@ -863,6 +892,8 @@ static int dp_audio_info_setup(struct platform_device *pdev,
 	mdss_dp_set_safe_to_exit_level(&dp_ctrl->ctrl_io, dp_ctrl->lane_cnt);
 	mdss_dp_audio_enable(&dp_ctrl->ctrl_io, true);
 
+	dp_ctrl->wait_for_audio_comp = true;
+
 	return rc;
 } /* dp_audio_info_setup */
 
@@ -885,6 +916,17 @@ static int dp_get_audio_edid_blk(struct platform_device *pdev,
 	return rc;
 } /* dp_get_audio_edid_blk */
 
+static void dp_audio_codec_teardown_done(struct platform_device *pdev)
+{
+	struct mdss_dp_drv_pdata *dp = platform_get_drvdata(pdev);
+
+	if (!dp)
+		pr_err("invalid input\n");
+
+	pr_debug("audio codec teardown done\n");
+	complete_all(&dp->audio_comp);
+}
+
 static int mdss_dp_init_ext_disp(struct mdss_dp_drv_pdata *dp)
 {
 	int ret = 0;
@@ -906,6 +948,8 @@ static int mdss_dp_init_ext_disp(struct mdss_dp_drv_pdata *dp)
 		dp_get_audio_edid_blk;
 	dp->ext_audio_data.codec_ops.cable_status =
 		dp_get_cable_status;
+	dp->ext_audio_data.codec_ops.teardown_done =
+		dp_audio_codec_teardown_done;
 
 	if (!dp->pdev->dev.of_node) {
 		pr_err("%s cannot find dp dev.of_node\n", __func__);
@@ -936,8 +980,6 @@ end:
 	return ret;
 }
 
-#define DEFAULT_VIDEO_RESOLUTION HDMI_VFRMT_640x480p60_4_3
-
 static int dp_init_panel_info(struct mdss_dp_drv_pdata *dp_drv, u32 vic)
 {
 	struct mdss_panel_info *pinfo;
@@ -949,7 +991,6 @@ static int dp_init_panel_info(struct mdss_dp_drv_pdata *dp_drv, u32 vic)
 		return -EINVAL;
 	}
 
-	dp_drv->ds_data.ds_registered = false;
 	ret = hdmi_get_supported_mode(&timing, &dp_drv->ds_data, vic);
 	pinfo = &dp_drv->panel_data.panel_info;
 
@@ -981,12 +1022,21 @@ static int dp_init_panel_info(struct mdss_dp_drv_pdata *dp_drv, u32 vic)
 	pinfo->lcdc.hsync_skew = 0;
 	pinfo->is_pluggable = true;
 
+	dp_drv->bpp = pinfo->bpp;
+
 	pr_debug("update res. vic= %d, pclk_rate = %llu\n",
 				dp_drv->vic, pinfo->clk_rate);
 
 	return 0;
 } /* dp_init_panel_info */
 
+static inline void mdss_dp_set_audio_switch_node(
+	struct mdss_dp_drv_pdata *dp, int val)
+{
+	if (dp && dp->ext_audio_data.intf_ops.notify)
+		dp->ext_audio_data.intf_ops.notify(dp->ext_pdev,
+				val);
+}
 
 int mdss_dp_on(struct mdss_panel_data *pdata)
 {
@@ -1054,14 +1104,19 @@ int mdss_dp_on(struct mdss_panel_data *pdata)
 			goto exit;
 		}
 
+		mdss_dp_phy_share_lane_config(&dp_drv->phy_io,
+				orientation, dp_drv->dpcd.max_lane_count);
+
 		pr_debug("link_rate = 0x%x\n", dp_drv->link_rate);
 
 		dp_drv->power_data[DP_CTRL_PM].clk_config[0].rate =
-				dp_drv->link_rate * DP_LINK_RATE_MULTIPLIER;
+			((dp_drv->link_rate * DP_LINK_RATE_MULTIPLIER) /
+			1000); /* KHz */
 
 		dp_drv->pixel_rate = dp_drv->panel_data.panel_info.clk_rate;
 		dp_drv->power_data[DP_CTRL_PM].clk_config[3].rate =
-							dp_drv->pixel_rate;
+						(dp_drv->pixel_rate /
+						1000); /* KHz */
 
 		ret = mdss_dp_clk_ctrl(dp_drv, DP_CTRL_PM, true);
 		if (ret) {
@@ -1094,6 +1149,7 @@ int mdss_dp_on(struct mdss_panel_data *pdata)
 		pr_debug("mainlink ready\n");
 
 	dp_drv->power_on = true;
+	mdss_dp_set_audio_switch_node(dp_drv, true);
 	pr_debug("End-\n");
 
 exit:
@@ -1117,13 +1173,14 @@ int mdss_dp_off(struct mdss_panel_data *pdata)
 	mutex_lock(&dp_drv->train_mutex);
 
 	reinit_completion(&dp_drv->idle_comp);
-
-	mdss_dp_state_ctrl(&dp_drv->ctrl_io, 0);
+	mdss_dp_state_ctrl(&dp_drv->ctrl_io, ST_PUSH_IDLE);
 
 	if (dp_drv->link_clks_on)
 		mdss_dp_mainlink_ctrl(&dp_drv->ctrl_io, false);
 
 	mdss_dp_aux_ctrl(&dp_drv->ctrl_io, false);
+
+	mdss_dp_audio_enable(&dp_drv->ctrl_io, false);
 
 	mdss_dp_irq_disable(dp_drv);
 
@@ -1145,14 +1202,6 @@ int mdss_dp_off(struct mdss_panel_data *pdata)
 	return 0;
 }
 
-static inline void mdss_dp_set_audio_switch_node(
-	struct mdss_dp_drv_pdata *dp, int val)
-{
-	if (dp && dp->ext_audio_data.intf_ops.notify)
-		dp->ext_audio_data.intf_ops.notify(dp->ext_pdev,
-				val);
-}
-
 static void mdss_dp_send_cable_notification(
 	struct mdss_dp_drv_pdata *dp, int val)
 {
@@ -1167,6 +1216,38 @@ static void mdss_dp_send_cable_notification(
 				dp->ext_audio_data.type, val);
 }
 
+static void mdss_dp_audio_codec_wait(struct mdss_dp_drv_pdata *dp)
+{
+	const int audio_completion_timeout_ms = HZ * 3;
+	int ret = 0;
+
+	if (!dp->wait_for_audio_comp)
+		return;
+
+	reinit_completion(&dp->audio_comp);
+	ret = wait_for_completion_timeout(&dp->audio_comp,
+			audio_completion_timeout_ms);
+	if (ret <= 0)
+		pr_warn("audio codec teardown timed out\n");
+
+	dp->wait_for_audio_comp = false;
+}
+
+static void mdss_dp_notify_clients(struct mdss_dp_drv_pdata *dp, bool enable)
+{
+	if (enable) {
+		mdss_dp_send_cable_notification(dp, enable);
+	} else {
+		mdss_dp_set_audio_switch_node(dp, enable);
+		mdss_dp_audio_codec_wait(dp);
+		mdss_dp_send_cable_notification(dp, enable);
+	}
+
+	pr_debug("notify state %s done\n",
+			enable ? "ENABLE" : "DISABLE");
+}
+
+
 static int mdss_dp_edid_init(struct mdss_panel_data *pdata)
 {
 	struct mdss_dp_drv_pdata *dp_drv = NULL;
@@ -1180,6 +1261,10 @@ static int mdss_dp_edid_init(struct mdss_panel_data *pdata)
 
 	dp_drv = container_of(pdata, struct mdss_dp_drv_pdata,
 			panel_data);
+
+	dp_drv->ds_data.ds_registered = true;
+	dp_drv->ds_data.modes_num = ARRAY_SIZE(supported_modes);
+	dp_drv->ds_data.modes = supported_modes;
 
 	dp_drv->max_pclk_khz = DP_MAX_PIXEL_CLK_KHZ;
 	edid_init_data.kobj = dp_drv->kobj;
@@ -1234,14 +1319,18 @@ static int mdss_dp_host_init(struct mdss_panel_data *pdata)
 
 	mdss_dp_aux_init(dp_drv);
 
+	mdss_dp_phy_initialize(dp_drv);
+	mdss_dp_ctrl_reset(&dp_drv->ctrl_io);
 	mdss_dp_phy_reset(&dp_drv->ctrl_io);
 	mdss_dp_aux_reset(&dp_drv->ctrl_io);
-	mdss_dp_phy_initialize(dp_drv);
 	mdss_dp_aux_ctrl(&dp_drv->ctrl_io, true);
 
 	pr_debug("Ctrl_hw_rev =0x%x, phy hw_rev =0x%x\n",
 	       mdss_dp_get_ctrl_hw_version(&dp_drv->ctrl_io),
 	       mdss_dp_get_phy_hw_version(&dp_drv->phy_io));
+
+	pr_debug("plug Orientation = %d\n",
+			usbpd_get_plug_orientation(dp_drv->pd));
 
 	mdss_dp_phy_aux_setup(&dp_drv->phy_io);
 
@@ -1262,8 +1351,7 @@ static int mdss_dp_host_init(struct mdss_panel_data *pdata)
 		goto edid_error;
 	}
 
-	mdss_dp_send_cable_notification(dp_drv, true);
-	mdss_dp_set_audio_switch_node(dp_drv, true);
+	mdss_dp_notify_clients(dp_drv, true);
 	dp_drv->dp_initialized = true;
 
 	return ret;
@@ -1395,6 +1483,8 @@ static int mdss_dp_hdcp_init(struct mdss_panel_data *pdata)
 		rc = -EINVAL;
 		goto error;
 	}
+
+	dp_drv->panel_data.panel_info.hdcp_1x_data = dp_drv->hdcp_data;
 
 	pr_debug("HDCP 1.3 initialized\n");
 
@@ -1698,16 +1788,15 @@ static void mdss_dp_do_link_train(struct mdss_dp_drv_pdata *dp)
 static void mdss_dp_event_work(struct work_struct *work)
 {
 	struct mdss_dp_drv_pdata *dp = NULL;
-	struct delayed_work *dw = to_delayed_work(work);
 	unsigned long flag;
-	u32 todo = 0, dp_config_pkt[2];
+	u32 todo = 0, config;
 
-	if (!dw) {
+	if (!work) {
 		pr_err("invalid work structure\n");
 		return;
 	}
 
-	dp = container_of(dw, struct mdss_dp_drv_pdata, dwork);
+	dp = container_of(work, struct mdss_dp_drv_pdata, work);
 
 	spin_lock_irqsave(&dp->event_lock, flag);
 	todo = dp->current_event;
@@ -1752,11 +1841,9 @@ static void mdss_dp_event_work(struct work_struct *work)
 			SVDM_CMD_TYPE_INITIATOR, 0x1, 0x0, 0x0);
 		break;
 	case EV_USBPD_DP_CONFIGURE:
-		dp_config_pkt[0] = SVDM_HDR(USB_C_DP_SID, VDM_VERSION, 0x1,
-			SVDM_CMD_TYPE_INITIATOR, DP_VDM_CONFIGURE);
-		dp_config_pkt[1] = mdss_dp_usbpd_gen_config_pkt(dp);
+		config = mdss_dp_usbpd_gen_config_pkt(dp);
 		usbpd_send_svdm(dp->pd, USB_C_DP_SID, DP_VDM_CONFIGURE,
-			SVDM_CMD_TYPE_INITIATOR, 0x1, dp_config_pkt, 0x2);
+			SVDM_CMD_TYPE_INITIATOR, 0x1, &config, 0x1);
 		break;
 	default:
 		pr_err("Unknown event:%d\n", todo);
@@ -1767,8 +1854,7 @@ static void dp_send_events(struct mdss_dp_drv_pdata *dp, u32 events)
 {
 	spin_lock(&dp->event_lock);
 	dp->current_event = events;
-	queue_delayed_work(dp->workq,
-				&dp->dwork, HZ);
+	queue_work(dp->workq, &dp->work);
 	spin_unlock(&dp->event_lock);
 }
 
@@ -1776,7 +1862,7 @@ irqreturn_t dp_isr(int irq, void *ptr)
 {
 	struct mdss_dp_drv_pdata *dp = (struct mdss_dp_drv_pdata *)ptr;
 	unsigned char *base = dp->base;
-	u32 isr1, isr2, mask1, mask2;
+	u32 isr1, isr2, mask1;
 	u32 ack;
 
 	spin_lock(&dp->lock);
@@ -1784,13 +1870,11 @@ irqreturn_t dp_isr(int irq, void *ptr)
 	isr2 = dp_read(base + DP_INTR_STATUS2);
 
 	mask1 = isr1 & dp->mask1;
-	mask2 = isr2 & dp->mask2;
 
 	isr1 &= ~mask1;	/* remove masks bit */
-	isr2 &= ~mask2;
 
-	pr_debug("isr=%x mask=%x isr2=%x mask2=%x\n",
-			isr1, mask1, isr2, mask2);
+	pr_debug("isr=%x mask=%x isr2=%x\n",
+			isr1, mask1, isr2);
 
 	ack = isr1 & EDP_INTR_STATUS1;
 	ack <<= 1;	/* ack bits */
@@ -1799,7 +1883,7 @@ irqreturn_t dp_isr(int irq, void *ptr)
 
 	ack = isr2 & EDP_INTR_STATUS2;
 	ack <<= 1;	/* ack bits */
-	ack |= mask2;
+	ack |= isr2;
 	dp_write(base + DP_INTR_STATUS2, ack);
 	spin_unlock(&dp->lock);
 
@@ -1846,7 +1930,7 @@ static int mdss_dp_event_setup(struct mdss_dp_drv_pdata *dp)
 		return -EPERM;
 	}
 
-	INIT_DELAYED_WORK(&dp->dwork, mdss_dp_event_work);
+	INIT_WORK(&dp->work, mdss_dp_event_work);
 	return 0;
 }
 
@@ -1881,8 +1965,7 @@ static void usbpd_disconnect_callback(struct usbpd_svid_handler *hdlr)
 	mutex_lock(&dp_drv->pd_msg_mutex);
 	dp_drv->cable_connected = false;
 	mutex_unlock(&dp_drv->pd_msg_mutex);
-	mdss_dp_send_cable_notification(dp_drv, false);
-	mdss_dp_set_audio_switch_node(dp_drv, false);
+	mdss_dp_notify_clients(dp_drv, false);
 }
 
 static void usbpd_response_callback(struct usbpd_svid_handler *hdlr, u8 cmd,
@@ -1966,8 +2049,7 @@ static void usbpd_response_callback(struct usbpd_svid_handler *hdlr, u8 cmd,
 		}
 		break;
 	case DP_VDM_CONFIGURE:
-		if ((dp_drv->cable_connected == true)
-				|| (cmd_type == SVDM_CMD_TYPE_RESP_ACK)) {
+		if (cmd_type == SVDM_CMD_TYPE_RESP_ACK) {
 			dp_drv->alt_mode.current_state = DP_CONFIGURE_DONE;
 			pr_debug("config USBPD to DP done\n");
 			mdss_dp_host_init(&dp_drv->panel_data);
@@ -2133,6 +2215,8 @@ static int mdss_dp_probe(struct platform_device *pdev)
 	mdss_dp_device_register(dp_drv);
 
 	dp_drv->inited = true;
+	dp_drv->wait_for_audio_comp = false;
+	init_completion(&dp_drv->audio_comp);
 
 	pr_debug("done\n");
 

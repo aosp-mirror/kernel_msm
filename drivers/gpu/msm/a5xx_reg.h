@@ -640,6 +640,7 @@
 
 /* UCHE registers */
 #define A5XX_UCHE_ADDR_MODE_CNTL            0xE80
+#define A5XX_UCHE_MODE_CNTL                 0xE81
 #define A5XX_UCHE_WRITE_THRU_BASE_LO        0xE87
 #define A5XX_UCHE_WRITE_THRU_BASE_HI        0xE88
 #define A5XX_UCHE_TRAP_BASE_LO              0xE89
@@ -787,6 +788,9 @@
 
 /* COUNTABLE FOR TSE PERFCOUNTER */
 #define A5XX_TSE_INPUT_PRIM_NUM            0x6
+
+/* COUNTABLE FOR RBBM PERFCOUNTER */
+#define A5XX_RBBM_ALWAYS_COUNT		0x0
 
 /* GPMU POWER COUNTERS */
 #define A5XX_SP_POWER_COUNTER_0_LO		0xA840

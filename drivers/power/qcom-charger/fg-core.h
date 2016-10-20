@@ -54,6 +54,8 @@
 					CHARS_PER_ITEM) + 1)		\
 
 #define FG_SRAM_ADDRESS_MAX		255
+#define BUCKET_COUNT			8
+#define BUCKET_SOC_PCT			(256 / BUCKET_COUNT)
 
 /* Debug flag definitions */
 enum fg_debug_flag {
@@ -114,6 +116,7 @@ enum fg_sram_param_id {
 	FG_SRAM_VOLTAGE_PRED,
 	FG_SRAM_OCV,
 	FG_SRAM_RSLOW,
+	FG_SRAM_ALG_FLAGS,
 	/* Entries below here are configurable during initialization */
 	FG_SRAM_CUTOFF_VOLT,
 	FG_SRAM_EMPTY_VOLT,
@@ -143,6 +146,23 @@ struct fg_sram_param {
 		int val);
 };
 
+enum fg_alg_flag_id {
+	ALG_FLAG_SOC_LT_OTG_MIN = 0,
+	ALG_FLAG_SOC_LT_RECHARGE,
+	ALG_FLAG_IBATT_LT_ITERM,
+	ALG_FLAG_IBATT_GT_HPM,
+	ALG_FLAG_IBATT_GT_UPM,
+	ALG_FLAG_VBATT_LT_RECHARGE,
+	ALG_FLAG_VBATT_GT_VFLOAT,
+	ALG_FLAG_MAX,
+};
+
+struct fg_alg_flag {
+	char	*name;
+	u8	bit;
+	bool	invalid;
+};
+
 /* DT parameters for FG device */
 struct fg_dt_props {
 	int	cutoff_volt_mv;
@@ -168,6 +188,15 @@ struct fg_batt_props {
 	int		batt_id_kohm;
 };
 
+struct fg_cyc_ctr_data {
+	bool		en;
+	bool		started[BUCKET_COUNT];
+	u16		count[BUCKET_COUNT];
+	u8		last_soc[BUCKET_COUNT];
+	int		id;
+	struct mutex	lock;
+};
+
 struct fg_irq_info {
 	const char		*name;
 	const irq_handler_t	handler;
@@ -179,7 +208,7 @@ struct fg_chip {
 	struct device		*dev;
 	struct pmic_revid_data	*pmic_rev_id;
 	struct regmap		*regmap;
-	struct dentry		*dentry;
+	struct dentry		*dfs_root;
 	struct power_supply	*fg_psy;
 	struct power_supply	*batt_psy;
 	struct iio_channel	*batt_id_chan;
@@ -191,6 +220,7 @@ struct fg_chip {
 	char			*batt_profile;
 	struct fg_dt_props	dt;
 	struct fg_batt_props	bp;
+	struct fg_cyc_ctr_data	cyc_ctr;
 	struct notifier_block	nb;
 	struct mutex		bus_lock;
 	struct mutex		sram_rw_lock;
@@ -198,6 +228,8 @@ struct fg_chip {
 	u32			batt_info_base;
 	u32			mem_if_base;
 	int			nom_cap_uah;
+	int			status;
+	int			prev_status;
 	bool			batt_id_avail;
 	bool			profile_loaded;
 	bool			battery_missing;
@@ -205,6 +237,8 @@ struct fg_chip {
 	struct completion	soc_ready;
 	struct delayed_work	profile_load_work;
 	struct work_struct	status_change_work;
+	struct work_struct	cycle_count_work;
+	struct fg_alg_flag	*alg_flags;
 };
 
 /* Debugfs data structures are below */
@@ -249,7 +283,8 @@ extern int fg_read(struct fg_chip *chip, int addr, u8 *val, int len);
 extern int fg_write(struct fg_chip *chip, int addr, u8 *val, int len);
 extern int fg_masked_write(struct fg_chip *chip, int addr, u8 mask, u8 val);
 extern int fg_ima_init(struct fg_chip *chip);
-extern int fg_sram_debugfs_create(struct fg_chip *chip);
+extern int fg_debugfs_create(struct fg_chip *chip);
 extern void fill_string(char *str, size_t str_len, u8 *buf, int buf_len);
 extern int64_t twos_compliment_extend(int64_t val, int s_bit_pos);
+extern s64 fg_float_decode(u16 val);
 #endif

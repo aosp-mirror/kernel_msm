@@ -1950,6 +1950,9 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 		pdata->panel_info.is_lpm_mode = false;
 	}
 
+	if (pdata->panel_disable_mode)
+		mdss_mdp_enable_panel_disable_mode(mfd, false);
+
 	return mdss_fb_blank_sub(blank_mode, info, mfd->op_enable);
 }
 
@@ -4663,6 +4666,9 @@ static int mdss_fb_mode_switch(struct msm_fb_data_type *mfd, u32 mode)
 
 	if (!mfd || !mfd->panel_info)
 		return -EINVAL;
+
+	/* make sure that we are idle while switching */
+	mdss_fb_wait_for_kickoff(mfd);
 
 	pinfo = mfd->panel_info;
 	if (pinfo->mipi.dms_mode == DYNAMIC_MODE_SWITCH_SUSPEND_RESUME) {

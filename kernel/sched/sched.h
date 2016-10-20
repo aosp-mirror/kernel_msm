@@ -1039,6 +1039,7 @@ extern unsigned int min_capacity;
 extern unsigned int max_load_scale_factor;
 extern unsigned int max_possible_capacity;
 extern unsigned int min_max_possible_capacity;
+extern unsigned int max_power_cost;
 extern unsigned int sched_upmigrate;
 extern unsigned int sched_downmigrate;
 extern unsigned int sched_init_task_load_windows;
@@ -1398,6 +1399,8 @@ extern u64 cpu_upmigrate_discourage_read_u64(struct cgroup_subsys_state *css,
 					struct cftype *cft);
 extern int cpu_upmigrate_discourage_write_u64(struct cgroup_subsys_state *css,
 				struct cftype *cft, u64 upmigrate_discourage);
+extern void sched_hmp_parse_dt(void);
+extern void init_sched_hmp_boost_policy(void);
 
 #else	/* CONFIG_SCHED_HMP */
 
@@ -1425,6 +1428,7 @@ static inline void clear_hmp_request(int cpu) { }
 static inline void mark_task_starting(struct task_struct *p) { }
 static inline void set_window_start(struct rq *rq) { }
 static inline void migrate_sync_cpu(int cpu, int new_cpu) {}
+static inline void init_clusters(void) {}
 static inline void update_cluster_topology(void) { }
 static inline void set_task_last_wake(struct task_struct *p, u64 wallclock) { }
 static inline void set_task_last_switch_out(struct task_struct *p,
@@ -1587,6 +1591,8 @@ static inline void post_big_task_count_change(void) { }
 static inline void set_hmp_defaults(void) { }
 
 static inline void clear_reserved(int cpu) { }
+static inline void sched_hmp_parse_dt(void) {}
+static inline  void init_sched_hmp_boost_policy(void) {}
 
 #define trace_sched_cpu_load(...)
 #define trace_sched_cpu_load_lb(...)

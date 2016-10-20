@@ -933,6 +933,9 @@ static struct of_device_id tsens_match[] = {
 	{	.compatible = "qcom,msmfalcon-tsens",
 		.data = (void *)TSENS_CALIB_FUSE_MAP_NONE,
 	},
+	{	.compatible = "qcom,msmtriton-tsens",
+		.data = (void *)TSENS_CALIB_FUSE_MAP_NONE,
+	},
 	{}
 };
 
@@ -1383,7 +1386,7 @@ static int msm_tsens_get_temp(int sensor_client_id, int *temp)
 	}
 
 	if ((!tmdev->prev_reading_avail) && !tmdev->tsens_valid_status_check) {
-		while (!((readl_relaxed(trdy_addr)) & TSENS_TRDY_MASK))
+		while (!((readl_relaxed_no_log(trdy_addr)) & TSENS_TRDY_MASK))
 			usleep_range(TSENS_TRDY_RDY_MIN_TIME,
 				TSENS_TRDY_RDY_MAX_TIME);
 		tmdev->prev_reading_avail = true;
@@ -1394,7 +1397,7 @@ static int msm_tsens_get_temp(int sensor_client_id, int *temp)
 	else
 		last_temp_mask = TSENS_SN_STATUS_TEMP_MASK;
 
-	code = readl_relaxed(sensor_addr +
+	code = readl_relaxed_no_log(sensor_addr +
 			(sensor_hw_num << TSENS_STATUS_ADDR_OFFSET));
 	last_temp = code & last_temp_mask;
 
@@ -1406,14 +1409,14 @@ static int msm_tsens_get_temp(int sensor_client_id, int *temp)
 		if (code & valid_status_mask)
 			last_temp_valid = true;
 		else {
-			code = readl_relaxed(sensor_addr +
+			code = readl_relaxed_no_log(sensor_addr +
 				(sensor_hw_num << TSENS_STATUS_ADDR_OFFSET));
 			last_temp2 = code & last_temp_mask;
 			if (code & valid_status_mask) {
 				last_temp = last_temp2;
 				last_temp2_valid = true;
 			} else {
-				code = readl_relaxed(sensor_addr +
+				code = readl_relaxed_no_log(sensor_addr +
 					(sensor_hw_num <<
 					TSENS_STATUS_ADDR_OFFSET));
 				last_temp3 = code & last_temp_mask;
@@ -5435,7 +5438,8 @@ static int get_device_tree_data(struct platform_device *pdev,
 		tmdev->tsens_type = TSENS_TYPE3;
 	else if (!strcmp(id->compatible, "qcom,msmtitanium-tsens") ||
 		(!strcmp(id->compatible, "qcom,msmfalcon-tsens") ||
-		(!strcmp(id->compatible, "qcom,msmhamster-tsens")))) {
+		(!strcmp(id->compatible, "qcom,msmtriton-tsens") ||
+		(!strcmp(id->compatible, "qcom,msmhamster-tsens"))))) {
 		tmdev->tsens_type = TSENS_TYPE3;
 		tsens_poll_check = 0;
 	} else if (!strcmp(id->compatible, "qcom,msm8952-tsens") ||
@@ -5457,7 +5461,8 @@ static int get_device_tree_data(struct platform_device *pdev,
 		(!strcmp(id->compatible, "qcom,msmtitanium-tsens")) ||
 		(!strcmp(id->compatible, "qcom,msmcobalt-tsens")) ||
 		(!strcmp(id->compatible, "qcom,msmfalcon-tsens") ||
-		(!strcmp(id->compatible, "qcom,msmhamster-tsens"))))
+		(!strcmp(id->compatible, "qcom,msmtriton-tsens") ||
+		(!strcmp(id->compatible, "qcom,msmhamster-tsens")))))
 			tmdev->tsens_valid_status_check = true;
 	}
 
@@ -5473,7 +5478,8 @@ static int get_device_tree_data(struct platform_device *pdev,
 		(!strcmp(id->compatible, "qcom,msmcobalt-tsens")) ||
 		(!strcmp(id->compatible, "qcom,msmhamster-tsens")) ||
 		(!strcmp(id->compatible, "qcom,msmfalcon-tsens") ||
-		(!strcmp(id->compatible, "qcom,msmtitanium-tsens")))) {
+		(!strcmp(id->compatible, "qcom,msmtriton-tsens") ||
+		(!strcmp(id->compatible, "qcom,msmtitanium-tsens"))))) {
 		tmdev->tsens_critical_irq =
 				platform_get_irq_byname(pdev,
 						"tsens-critical");

@@ -130,6 +130,9 @@ static int one_hundred = 100;
 #ifdef CONFIG_PRINTK
 static int ten_thousand = 10000;
 #endif
+#ifdef CONFIG_SCHED_HMP
+static int one_thousand = 1000;
+#endif
 
 /* this is needed for the proc_doulongvec_minmax of vm_dirty_bytes */
 static unsigned long dirty_bytes_min = 2 * PAGE_SIZE;
@@ -336,6 +339,8 @@ static struct ctl_table kern_table[] = {
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
 	},
 	{
 		.procname	= "sched_spill_nr_run",
@@ -351,6 +356,8 @@ static struct ctl_table kern_table[] = {
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
 	},
 	{
 		.procname	= "sched_downmigrate",
@@ -358,6 +365,8 @@ static struct ctl_table kern_table[] = {
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
 	},
 	{
 		.procname	= "sched_init_task_load",
@@ -365,6 +374,8 @@ static struct ctl_table kern_table[] = {
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
 	},
 	{
 		.procname	= "sched_select_prev_cpu_us",
@@ -372,6 +383,7 @@ static struct ctl_table kern_table[] = {
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler   = sched_hmp_proc_update_handler,
+		.extra1		= &zero,
 	},
 	{
 		.procname       = "sched_enable_colocation",
@@ -397,6 +409,8 @@ static struct ctl_table kern_table[] = {
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler   = sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
 	},
 	{
 		.procname	= "sched_big_waker_task_load",
@@ -404,6 +418,17 @@ static struct ctl_table kern_table[] = {
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler   = sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
+	},
+	{
+		.procname	= "sched_prefer_sync_wakee_to_waker",
+		.data		= &sysctl_sched_prefer_sync_wakee_to_waker,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &zero,
+		.extra2		= &one,
 	},
 	{
 		.procname       = "sched_enable_thread_grouping",
@@ -440,6 +465,13 @@ static struct ctl_table kern_table[] = {
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= sched_hmp_proc_update_handler,
+		.extra1		= &zero,
+		/*
+		 * Special handling for sched_freq_aggregate_threshold_pct
+		 * which can be greater than 100. Use 1000 as an upper bound
+		 * value which works for all practical use cases.
+		 */
+		.extra2		= &one_thousand,
 	},
 	{
 		.procname	= "sched_boost",
@@ -597,6 +629,17 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= &one,
+	},
+#endif
+#ifdef CONFIG_SCHED_TUNE
+	{
+		.procname	= "sched_cfs_boost",
+		.data		= &sysctl_sched_cfs_boost,
+		.maxlen		= sizeof(sysctl_sched_cfs_boost),
+		.mode		= 0644,
+		.proc_handler	= &sysctl_sched_cfs_boost_handler,
+		.extra1		= &zero,
+		.extra2		= &one_hundred,
 	},
 #endif
 #ifdef CONFIG_PROVE_LOCKING

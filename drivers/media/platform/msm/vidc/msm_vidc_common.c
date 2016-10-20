@@ -1737,19 +1737,6 @@ static struct vb2_buffer *get_vb_from_device_addr(struct buf_queue *bufq,
 	return vb;
 }
 
-static void msm_vidc_try_suspend(struct msm_vidc_inst *inst)
-{
-	bool batch_mode;
-
-	batch_mode = msm_comm_g_ctrl_for_id(inst, V4L2_CID_VIDC_QBUF_MODE)
-		== V4L2_VIDC_QBUF_BATCHED;
-	if (batch_mode) {
-		dprintk(VIDC_DBG,
-			"Trying to suspend Venus after finishing Batch\n");
-		msm_comm_suspend(inst->core->id);
-	}
-}
-
 static void handle_ebd(enum hal_command_response cmd, void *data)
 {
 	struct msm_vidc_cb_data_done *response = data;
@@ -1820,8 +1807,6 @@ static void handle_ebd(enum hal_command_response cmd, void *data)
 		mutex_unlock(&inst->bufq[OUTPUT_PORT].lock);
 		msm_vidc_debugfs_update(inst, MSM_VIDC_DEBUGFS_EVENT_EBD);
 	}
-
-	msm_vidc_try_suspend(inst);
 
 	put_inst(inst);
 }
@@ -2121,7 +2106,6 @@ static void handle_fbd(enum hal_command_response cmd, void *data)
 		msm_vidc_debugfs_update(inst, MSM_VIDC_DEBUGFS_EVENT_FBD);
 	}
 
-	msm_vidc_try_suspend(inst);
 err_handle_fbd:
 	put_inst(inst);
 }
@@ -4808,9 +4792,20 @@ int msm_vidc_trigger_ssr(struct msm_vidc_core *core,
 		return -EINVAL;
 	}
 	hdev = core->device;
-	if (core->state == VIDC_CORE_INIT_DONE)
+	if (core->state == VIDC_CORE_INIT_DONE) {
+		/*
+		 * In current implementation user-initiated SSR triggers
+		 * a fatal error from hardware. However, there is no way
+		 * to know if fatal error is due to SSR or not. Handle
+		 * user SSR as non-fatal.
+		 */
+		mutex_lock(&core->lock);
+		core->resources.debug_timeout = false;
+		mutex_unlock(&core->lock);
 		rc = call_hfi_op(hdev, core_trigger_ssr,
 				hdev->hfi_device_data, type);
+	}
+
 	return rc;
 }
 
