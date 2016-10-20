@@ -8431,7 +8431,8 @@ static int __iw_set_keepalive_params(struct net_device *dev,
        copied individually. */
        memcpy(&keepaliveRequest, pRequest, wrqu->data.length);
 
-       hddLog(VOS_TRACE_LEVEL_ERROR, "set Keep: TP before SME %d", keepaliveRequest.timePeriod);
+       hddLog(VOS_TRACE_LEVEL_INFO, "set Keep: TP before SME %d",
+                                     keepaliveRequest.timePeriod);
 
     if (eHAL_STATUS_SUCCESS != sme_SetKeepAlive(WLAN_HDD_GET_HAL_CTX(pAdapter),
                                         pAdapter->sessionId, &keepaliveRequest))

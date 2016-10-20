@@ -1859,7 +1859,7 @@ static int __wlan_hdd_cfg80211_ll_stats_get(struct wiphy *wiphy,
 
     if (!pAdapter->isLinkLayerStatsSet)
     {
-        hddLog(VOS_TRACE_LEVEL_FATAL,
+        hddLog(VOS_TRACE_LEVEL_ERROR,
                "%s: isLinkLayerStatsSet : %d",
                __func__, pAdapter->isLinkLayerStatsSet);
         return -EINVAL;
