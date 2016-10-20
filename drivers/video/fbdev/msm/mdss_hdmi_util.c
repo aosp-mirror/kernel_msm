@@ -33,6 +33,74 @@ enum trigger_mode {
 	TRIGGER_READ
 };
 
+int hdmi_panel_get_vic(struct mdss_panel_info *pinfo,
+		struct hdmi_util_ds_data *ds_data)
+{
+	int new_vic = -1;
+	u32 h_total, v_total;
+	struct msm_hdmi_mode_timing_info timing;
+
+	if (!pinfo) {
+		pr_err("invalid panel data\n");
+		return -EINVAL;
+	}
+
+	if (pinfo->vic) {
+		struct msm_hdmi_mode_timing_info info = {0};
+		u32 ret = hdmi_get_supported_mode(&info, ds_data, pinfo->vic);
+		u32 supported = info.supported;
+
+		if (!ret && supported) {
+			new_vic = pinfo->vic;
+		} else {
+			pr_err("invalid or not supported vic %d\n",
+				pinfo->vic);
+			return -EPERM;
+		}
+	} else {
+		timing.active_h      = pinfo->xres;
+		timing.back_porch_h  = pinfo->lcdc.h_back_porch;
+		timing.front_porch_h = pinfo->lcdc.h_front_porch;
+		timing.pulse_width_h = pinfo->lcdc.h_pulse_width;
+
+		h_total = timing.active_h + timing.back_porch_h +
+			timing.front_porch_h + timing.pulse_width_h;
+
+		pr_debug("ah=%d bph=%d fph=%d pwh=%d ht=%d\n",
+			timing.active_h, timing.back_porch_h,
+			timing.front_porch_h, timing.pulse_width_h,
+			h_total);
+
+		timing.active_v      = pinfo->yres;
+		timing.back_porch_v  = pinfo->lcdc.v_back_porch;
+		timing.front_porch_v = pinfo->lcdc.v_front_porch;
+		timing.pulse_width_v = pinfo->lcdc.v_pulse_width;
+
+		v_total = timing.active_v + timing.back_porch_v +
+			timing.front_porch_v + timing.pulse_width_v;
+
+		pr_debug("av=%d bpv=%d fpv=%d pwv=%d vt=%d\n",
+			timing.active_v, timing.back_porch_v,
+			timing.front_porch_v, timing.pulse_width_v, v_total);
+
+		timing.pixel_freq = ((unsigned long int)pinfo->clk_rate / 1000);
+		if (h_total && v_total) {
+			timing.refresh_rate = ((timing.pixel_freq * 1000) /
+				(h_total * v_total)) * 1000;
+		} else {
+			pr_err("cannot cal refresh rate\n");
+			return -EPERM;
+		}
+
+		pr_debug("pixel_freq=%d refresh_rate=%d\n",
+			timing.pixel_freq, timing.refresh_rate);
+
+		new_vic = hdmi_get_video_id_code(&timing, ds_data);
+	}
+
+	return new_vic;
+}
+
 int hdmi_utils_get_timeout_in_hysnc(struct msm_hdmi_mode_timing_info *timing,
 	u32 timeout_ms)
 {
@@ -492,7 +560,7 @@ int msm_hdmi_get_timing_info(
 int hdmi_get_supported_mode(struct msm_hdmi_mode_timing_info *info,
 	struct hdmi_util_ds_data *ds_data, u32 mode)
 {
-	int ret;
+	int ret, i = 0;
 
 	if (!info)
 		return -EINVAL;
@@ -502,9 +570,23 @@ int hdmi_get_supported_mode(struct msm_hdmi_mode_timing_info *info,
 
 	ret = msm_hdmi_get_timing_info(info, mode);
 
-	if (!ret && ds_data && ds_data->ds_registered && ds_data->ds_max_clk) {
-		if (info->pixel_freq > ds_data->ds_max_clk)
-			info->supported = false;
+	if (!ret && ds_data && ds_data->ds_registered) {
+		if (ds_data->ds_max_clk) {
+			if (info->pixel_freq > ds_data->ds_max_clk)
+				info->supported = false;
+		}
+
+		if (ds_data->modes_num) {
+			u32 *modes = ds_data->modes;
+
+			for (i = 0; i < ds_data->modes_num; i++) {
+				if (info->video_format == *modes++)
+					break;
+			}
+
+			if (i == ds_data->modes_num)
+				info->supported = false;
+		}
 	}
 
 	return ret;

@@ -352,14 +352,18 @@
 			"mmss_fd_ahb_clk",
 			"mmss_camss_cpp_axi_clk",
 			"mmss_camss_cpp_vbif_ahb_clk";
-		qcom,clock-rates = <0 0 0 0 0 0 200000000 0 0 0 0>;
+		qcom,clock-rates =
+			<0 0 0 0 0 0 404000000 0 0 0 0>,
+			<0 0 0 0 0 0 100000000 0 0 0 0>,
+			<0 0 0 0 0 0 404000000 0 0 0 0>,
+			<0 0 0 0 0 0 404000000 0 0 0 0>;
 		qcom,msm-bus,name = "msm_camera_fd";
 		qcom,msm-bus,num-cases = <4>;
 		qcom,msm-bus,num-paths = <1>;
 		qcom,msm-bus,vectors-KBps = <106 512 0 0>,
-			<106 512 13000000 13000000>,
-			<106 512 45000000 45000000>,
-			<106 512 90000000 90000000>;
+			<106 512 1625 0>,
+			<106 512 2995 0>,
+			<106 512 7200 0>;
 		qcom,fd-vbif-reg-settings = <0x20 0x10000000 0x30000000>,
 			<0x24 0x10000000 0x30000000>,
 			<0x28 0x10000000 0x30000000>,
@@ -387,6 +391,7 @@
 			<&clock_mmss clk_mmss_mnoc_ahb_clk>,
 			<&clock_mmss clk_mmss_camss_ahb_clk>,
 			<&clock_mmss clk_mmss_camss_top_ahb_clk>,
+			<&clock_mmss clk_cpp_clk_src>,
 			<&clock_mmss clk_mmss_camss_cpp_clk>,
 			<&clock_mmss clk_mmss_camss_cpp_ahb_clk>,
 			<&clock_mmss clk_mmss_camss_cpp_axi_clk>,
@@ -396,10 +401,11 @@
 		clock-names = "mmssnoc_axi_clk",
 			"mnoc_ahb_clk",
 			"camss_ahb_clk", "camss_top_ahb_clk",
+			"cpp_src_clk",
 			"cpp_core_clk", "camss_cpp_ahb_clk",
 			"camss_cpp_axi_clk", "micro_iface_clk",
 			"mmss_smmu_axi_clk", "cpp_vbif_ahb_clk";
-		qcom,clock-rates = <0 0 0 0 200000000 0 0 0 0 0>;
+		qcom,clock-rates = <0 0 0 0 200000000 200000000 0 0 0 0 0>;
 		qcom,min-clock-rate = <200000000>;
 		qcom,bus-master = <1>;
 		qcom,vbif-qos-setting = <0x20 0x10000000>,
@@ -414,6 +420,8 @@
 			<106 512 0 0>,
 			<106 512 0 0>;
 		qcom,msm-bus-vector-dyn-vote;
+		resets = <&clock_mmss CAMSS_MICRO_BCR>;
+		reset-names = "micro_iface_reset";
 		qcom,cpp-fw-payload-info {
 			qcom,stripe-base = <790>;
 			qcom,plane-base = <715>;

@@ -917,7 +917,7 @@ int wsa881x_set_channel_map(struct snd_soc_codec *codec, u8 *port, u8 num_port,
 	if (!port || !ch_mask || !ch_rate ||
 		(num_port > WSA881X_MAX_SWR_PORTS)) {
 		dev_err(codec->dev,
-			"%s: Invalid port=%p, ch_mask=%p, ch_rate=%p\n",
+			"%s: Invalid port=%pK, ch_mask=%pK, ch_rate=%pK\n",
 			__func__, port, ch_mask, ch_rate);
 		return -EINVAL;
 	}
@@ -1043,7 +1043,6 @@ static int wsa881x_probe(struct snd_soc_codec *codec)
 		"%s.%x", "wsatz", (u8)dev->addr);
 	wsa881x->bg_cnt = 0;
 	wsa881x->clk_cnt = 0;
-	wsa881x->state = WSA881X_DEV_UP;
 	wsa881x->tz_pdata.codec = codec;
 	wsa881x->tz_pdata.wsa_temp_reg_read = wsa881x_temp_reg_read;
 	wsa881x_init_thermal(&wsa881x->tz_pdata);
@@ -1229,6 +1228,7 @@ static int wsa881x_swr_probe(struct swr_device *pdev)
 			goto err;
 	}
 	wsa881x_gpio_ctrl(wsa881x, true);
+	wsa881x->state = WSA881X_DEV_UP;
 
 	if (!debugfs_wsa881x_dent) {
 		dbgwsa881x = wsa881x;
@@ -1305,7 +1305,8 @@ static int wsa881x_swr_down(struct swr_device *pdev)
 		dev_err(&pdev->dev, "%s: wsa881x is NULL\n", __func__);
 		return -EINVAL;
 	}
-	cancel_delayed_work_sync(&wsa881x->ocp_ctl_work);
+	if (delayed_work_pending(&wsa881x->ocp_ctl_work))
+		cancel_delayed_work_sync(&wsa881x->ocp_ctl_work);
 	ret = wsa881x_gpio_ctrl(wsa881x, false);
 	if (ret)
 		dev_err(&pdev->dev, "%s: Failed to disable gpio\n", __func__);

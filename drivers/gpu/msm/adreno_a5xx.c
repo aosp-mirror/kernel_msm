@@ -14,6 +14,7 @@
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/scm.h>
 #include <linux/pm_opp.h>
+#include <linux/clk/msm-clk.h>
 
 #include "adreno.h"
 #include "a5xx_reg.h"
@@ -439,7 +440,11 @@ static int a5xx_regulator_enable(struct adreno_device *adreno_dev)
 	unsigned int ret;
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	if (!(adreno_is_a530(adreno_dev) || adreno_is_a540(adreno_dev))) {
+		/* Halt the sp_input_clk at HM level */
+		kgsl_regwrite(device, A5XX_RBBM_CLOCK_CNTL, 0x00000055);
 		a5xx_hwcg_set(adreno_dev, true);
+		/* Turn on sp_input_clk at HM level */
+		kgsl_regrmw(device, A5XX_RBBM_CLOCK_CNTL, 3, 0);
 		return 0;
 	}
 
@@ -1627,6 +1632,21 @@ static void a5xx_pwrlevel_change_settings(struct adreno_device *adreno_dev,
 	}
 }
 
+static void a5xx_clk_set_options(struct adreno_device *adreno_dev,
+	const char *name, struct clk *clk)
+{
+	if (adreno_is_a540(adreno_dev)) {
+		if (!strcmp(name, "mem_iface_clk"))
+			clk_set_flags(clk, CLKFLAG_NORETAIN_PERIPH);
+			clk_set_flags(clk, CLKFLAG_NORETAIN_MEM);
+		if (!strcmp(name, "core_clk")) {
+			clk_set_flags(clk, CLKFLAG_NORETAIN_PERIPH);
+			clk_set_flags(clk, CLKFLAG_NORETAIN_MEM);
+		}
+	}
+}
+
+
 static void a5xx_enable_64bit(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
@@ -1855,6 +1875,11 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 		 */
 		kgsl_regrmw(device, A5XX_RB_DBG_ECO_CNT, 0, (1 << 9));
 	}
+	/*
+	 * Disable UCHE global filter as SP can invalidate/flush
+	 * independently
+	 */
+	kgsl_regwrite(device, A5XX_UCHE_MODE_CNTL, BIT(29));
 	/* Set the USE_RETENTION_FLOPS chicken bit */
 	kgsl_regwrite(device, A5XX_CP_CHICKEN_DBG, 0x02000000);
 
@@ -2127,9 +2152,11 @@ static int _me_init_ucode_workarounds(struct adreno_device *adreno_dev)
 	case ADRENO_REV_A540:
 		/*
 		 * WFI after every direct-render 3D mode draw and
-		 * WFI after every 2D Mode 3 draw.
+		 * WFI after every 2D Mode 3 draw. This is needed
+		 * only on a540v1.
 		 */
-		return 0x0000000A;
+		if (adreno_is_a540v1(adreno_dev))
+			return 0x0000000A;
 	default:
 		return 0x00000000; /* No ucode workarounds enabled */
 	}
@@ -3516,4 +3543,5 @@ struct adreno_gpudev adreno_a5xx_gpudev = {
 	.preemption_schedule = a5xx_preemption_schedule,
 	.enable_64bit = a5xx_enable_64bit,
 	.pre_reset =  a5xx_pre_reset,
+	.clk_set_options = a5xx_clk_set_options,
 };

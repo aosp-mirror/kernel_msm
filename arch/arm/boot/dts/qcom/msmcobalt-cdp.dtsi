@@ -31,9 +31,9 @@
 
 		qca,bt-vdd-io-current-level = <1>; /* LPM/PFM */
 		qca,bt-vdd-xtal-current-level = <1>; /* LPM/PFM */
-		qca,bt-vdd-core-current-level = <0>; /* LPM/PFM */
-		qca,bt-vdd-pa-current-level = <0>; /* LPM/PFM */
-		qca,bt-vdd-ldo-current-level = <0>; /* LPM/PFM */
+		qca,bt-vdd-core-current-level = <1>; /* LPM/PFM */
+		qca,bt-vdd-pa-current-level = <1>; /* LPM/PFM */
+		qca,bt-vdd-ldo-current-level = <1>; /* LPM/PFM */
 	};
 };
 
@@ -395,6 +395,13 @@
 	qcom,5v-boost-gpio = <&tlmm 51 0>;
 };
 
+&dsi_dual_sharp_1080_120hz_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};
+
 &mdss_hdmi_tx {
 	pinctrl-names = "hdmi_hpd_active", "hdmi_ddc_active", "hdmi_cec_active",
 				"hdmi_active", "hdmi_sleep";
@@ -534,10 +541,6 @@
 };
 
 &soc {
-	sound-9335 {
-		qcom,wcn-btfm;
-	};
-
 	gpio_keys {
 		compatible = "gpio-keys";
 		input-name = "gpio-keys";

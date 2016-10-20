@@ -123,6 +123,9 @@ static int dwc3_init_usb_phys(struct dwc3 *dwc)
 		return ret;
 	}
 
+	if (dwc->maximum_speed == USB_SPEED_HIGH)
+		goto generic_phy_init;
+
 	ret = usb_phy_init(dwc->usb3_phy);
 	if (ret == -EBUSY) {
 		/*
@@ -135,6 +138,8 @@ static int dwc3_init_usb_phys(struct dwc3 *dwc)
 				__func__, ret);
 		return ret;
 	}
+
+generic_phy_init:
 	ret = phy_init(dwc->usb2_generic_phy);
 	if (ret < 0)
 		return ret;
@@ -155,10 +160,13 @@ static int dwc3_init_usb_phys(struct dwc3 *dwc)
 static int dwc3_core_reset(struct dwc3 *dwc)
 {
 	int		ret;
+	u32	reg;
 
 	/* Reset PHYs */
 	usb_phy_reset(dwc->usb2_phy);
-	usb_phy_reset(dwc->usb3_phy);
+
+	if (dwc->maximum_speed == USB_SPEED_SUPER)
+		usb_phy_reset(dwc->usb3_phy);
 
 	/* Initialize PHYs */
 	ret = dwc3_init_usb_phys(dwc);
@@ -167,6 +175,10 @@ static int dwc3_core_reset(struct dwc3 *dwc)
 				__func__, ret);
 		return ret;
 	}
+
+	reg = dwc3_readl(dwc->regs, DWC3_GUSB3PIPECTL(0));
+	reg &= ~DWC3_GUSB3PIPECTL_DELAYP1TRANS;
+	dwc3_writel(dwc->regs, DWC3_GUSB3PIPECTL(0), reg);
 
 	dwc3_notify_event(dwc, DWC3_CONTROLLER_RESET_EVENT);
 

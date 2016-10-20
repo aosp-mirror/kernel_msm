@@ -17,6 +17,7 @@
 #include <linux/cpufreq.h>
 #include <linux/list_sort.h>
 #include <linux/syscore_ops.h>
+#include <linux/of.h>
 
 #include "sched.h"
 #include "core_ctl.h"
@@ -225,6 +226,52 @@ fail:
 	return ret;
 }
 
+/*
+ * It is possible that CPUs of the same micro architecture can have slight
+ * difference in the efficiency due to other factors like cache size. The
+ * BOOST_ON_BIG policy may not be optimial for such systems. The required
+ * boost policy can be specified via device tree to handle this.
+ */
+static int __read_mostly sched_boost_policy = SCHED_BOOST_NONE;
+
+/*
+ * This should be called after clusters are populated and
+ * the respective efficiency values are initialized.
+ */
+void init_sched_hmp_boost_policy(void)
+{
+	/*
+	 * Initialize the boost type here if it is not passed from
+	 * device tree.
+	 */
+	if (sched_boost_policy == SCHED_BOOST_NONE) {
+		if (max_possible_efficiency != min_possible_efficiency)
+			sched_boost_policy = SCHED_BOOST_ON_BIG;
+		else
+			sched_boost_policy = SCHED_BOOST_ON_ALL;
+	}
+}
+
+void sched_hmp_parse_dt(void)
+{
+	struct device_node *sn;
+	const char *boost_policy;
+
+	if (!sched_enable_hmp)
+		return;
+
+	sn = of_find_node_by_path("/sched-hmp");
+	if (!sn)
+		return;
+
+	if (!of_property_read_string(sn, "boost-policy", &boost_policy)) {
+		if (!strcmp(boost_policy, "boost-on-big"))
+			sched_boost_policy = SCHED_BOOST_ON_BIG;
+		else if (!strcmp(boost_policy, "boost-on-all"))
+			sched_boost_policy = SCHED_BOOST_ON_ALL;
+	}
+}
+
 unsigned int max_possible_efficiency = 1;
 unsigned int min_possible_efficiency = UINT_MAX;
 
@@ -357,6 +404,8 @@ DECLARE_BITMAP(all_cluster_ids, NR_CPUS);
 struct sched_cluster *sched_cluster[NR_CPUS];
 int num_clusters;
 
+unsigned int max_power_cost = 1;
+
 struct sched_cluster init_cluster = {
 	.list			=	LIST_HEAD_INIT(init_cluster.list),
 	.id			=	0,
@@ -466,6 +515,7 @@ static void sort_clusters(void)
 {
 	struct sched_cluster *cluster;
 	struct list_head new_head;
+	unsigned int tmp_max = 1;
 
 	INIT_LIST_HEAD(&new_head);
 
@@ -474,7 +524,11 @@ static void sort_clusters(void)
 							       max_task_load());
 		cluster->min_power_cost = power_cost(cluster_first_cpu(cluster),
 							       0);
+
+		if (cluster->max_power_cost > tmp_max)
+			tmp_max = cluster->max_power_cost;
 	}
+	max_power_cost = tmp_max;
 
 	move_list(&new_head, &cluster_head, true);
 
@@ -890,6 +944,13 @@ unsigned int __read_mostly sched_spill_load;
 unsigned int __read_mostly sysctl_sched_spill_load_pct = 100;
 
 /*
+ * Prefer the waker CPU for sync wakee task, if the CPU has only 1 runnable
+ * task. This eliminates the LPM exit latency associated with the idle
+ * CPUs in the waker cluster.
+ */
+unsigned int __read_mostly sysctl_sched_prefer_sync_wakee_to_waker;
+
+/*
  * Tasks whose bandwidth consumption on a cpu is more than
  * sched_upmigrate are considered "big" tasks. Big tasks will be
  * considered for "up" migration, i.e migrating to a cpu with better
@@ -1155,12 +1216,9 @@ int task_load_will_fit(struct task_struct *p, u64 task_load, int cpu,
 
 enum sched_boost_type sched_boost_type(void)
 {
-	if (sched_boost()) {
-		if (min_possible_efficiency != max_possible_efficiency)
-			return SCHED_BOOST_ON_BIG;
-		else
-			return SCHED_BOOST_ON_ALL;
-	}
+	if (sched_boost())
+		return sched_boost_policy;
+
 	return SCHED_BOOST_NONE;
 }
 
@@ -1502,28 +1560,10 @@ int sched_hmp_proc_update_handler(struct ctl_table *table, int write,
 	if (write && (old_val == *data))
 		goto done;
 
-	/*
-	 * Special handling for sched_freq_aggregate_threshold_pct
-	 * which can be greater than 100. Use 1000 as an upper bound
-	 * value which works for all practical use cases.
-	 */
-	if (data == &sysctl_sched_freq_aggregate_threshold_pct) {
-		if (*data > 1000) {
-			*data = old_val;
-			ret = -EINVAL;
-			goto done;
-		}
-	} else if (data != &sysctl_sched_select_prev_cpu_us) {
-		/*
-		 * all tunables other than sched_select_prev_cpu_us are
-		 * in percentage.
-		 */
-		if (sysctl_sched_downmigrate_pct >
-		    sysctl_sched_upmigrate_pct || *data > 100) {
-			*data = old_val;
-			ret = -EINVAL;
-			goto done;
-		}
+	if (sysctl_sched_downmigrate_pct > sysctl_sched_upmigrate_pct) {
+		*data = old_val;
+		ret = -EINVAL;
+		goto done;
 	}
 
 	/*
@@ -2701,7 +2741,8 @@ static void update_task_demand(struct task_struct *p, struct rq *rq,
 void update_task_ravg(struct task_struct *p, struct rq *rq, int event,
 						u64 wallclock, u64 irqtime)
 {
-	if (!rq->window_start || sched_disable_window_stats)
+	if (!rq->window_start || sched_disable_window_stats ||
+	    p->ravg.mark_start == wallclock)
 		return;
 
 	lockdep_assert_held(&rq->lock);

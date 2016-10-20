@@ -242,6 +242,12 @@ static void *usbpd_ipc_log;
 static int min_sink_current = 900;
 module_param(min_sink_current, int, S_IRUSR | S_IWUSR);
 
+static bool ss_host;
+module_param(ss_host, bool, S_IRUSR | S_IWUSR);
+
+static bool ss_dev = true;
+module_param(ss_dev, bool, S_IRUSR | S_IWUSR);
+
 static const u32 default_src_caps[] = { 0x36019096 };	/* VSafe5V @ 1.5A */
 
 static const u32 default_snk_caps[] = { 0x2601905A,	/* 5V @ 900mA */
@@ -318,6 +324,7 @@ static const unsigned int usbpd_extcon_cable[] = {
 	EXTCON_USB,
 	EXTCON_USB_HOST,
 	EXTCON_USB_CC,
+	EXTCON_USB_SPEED,
 	EXTCON_NONE,
 };
 
@@ -685,6 +692,10 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 						SVDM_CMD_TYPE_INITIATOR, 0,
 						NULL, 0);
 
+			extcon_set_cable_state_(pd->extcon, EXTCON_USB_CC,
+					is_cable_flipped(pd));
+			extcon_set_cable_state_(pd->extcon, EXTCON_USB_SPEED,
+					ss_host);
 			extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST, 1);
 		}
 
@@ -754,6 +765,8 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 				extcon_set_cable_state_(pd->extcon,
 						EXTCON_USB_CC,
 						is_cable_flipped(pd));
+				extcon_set_cable_state_(pd->extcon,
+						EXTCON_USB_SPEED, ss_dev);
 				extcon_set_cable_state_(pd->extcon,
 						EXTCON_USB, 1);
 			}
@@ -852,6 +865,8 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 			pd->current_dr = DR_UFP;
 			extcon_set_cable_state_(pd->extcon, EXTCON_USB_CC,
 					is_cable_flipped(pd));
+			extcon_set_cable_state_(pd->extcon, EXTCON_USB_SPEED,
+					ss_dev);
 			extcon_set_cable_state_(pd->extcon, EXTCON_USB, 1);
 			pd_phy_update_roles(pd->current_dr, pd->current_pr);
 		}
@@ -925,7 +940,8 @@ int usbpd_send_vdm(struct usbpd *pd, u32 vdm_hdr, const u32 *vdos, int num_vdos)
 		return -ENOMEM;
 
 	vdm_tx->data[0] = vdm_hdr;
-	memcpy(&vdm_tx->data[1], vdos, num_vdos * sizeof(u32));
+	if (vdos && num_vdos)
+		memcpy(&vdm_tx->data[1], vdos, num_vdos * sizeof(u32));
 	vdm_tx->size = num_vdos + 1; /* include the header */
 
 	/* VDM will get sent in PE_SRC/SNK_READY state handling */
@@ -1193,12 +1209,14 @@ static void dr_swap(struct usbpd *pd)
 		extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST, 0);
 		extcon_set_cable_state_(pd->extcon, EXTCON_USB_CC,
 				is_cable_flipped(pd));
+		extcon_set_cable_state_(pd->extcon, EXTCON_USB_SPEED, ss_dev);
 		extcon_set_cable_state_(pd->extcon, EXTCON_USB, 1);
 		pd->current_dr = DR_UFP;
 	} else if (pd->current_dr == DR_UFP) {
 		extcon_set_cable_state_(pd->extcon, EXTCON_USB, 0);
 		extcon_set_cable_state_(pd->extcon, EXTCON_USB_CC,
 				is_cable_flipped(pd));
+		extcon_set_cable_state_(pd->extcon, EXTCON_USB_SPEED, ss_host);
 		extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST, 1);
 		pd->current_dr = DR_DFP;
 
@@ -1250,6 +1268,8 @@ static void usbpd_sm(struct work_struct *w)
 		pd->caps_count = 0;
 		pd->hard_reset_count = 0;
 		pd->src_cap_id = 0;
+		pd->requested_voltage = 0;
+		pd->requested_current = 0;
 		memset(&pd->received_pdos, 0, sizeof(pd->received_pdos));
 
 		val.intval = 0;
@@ -1343,6 +1363,8 @@ static void usbpd_sm(struct work_struct *w)
 				/* Likely not PD-capable, start host now */
 				extcon_set_cable_state_(pd->extcon,
 					EXTCON_USB_CC, is_cable_flipped(pd));
+				extcon_set_cable_state_(pd->extcon,
+						EXTCON_USB_SPEED, ss_host);
 				extcon_set_cable_state_(pd->extcon,
 						EXTCON_USB_HOST, 1);
 			} else if (pd->caps_count >= PD_CAPS_COUNT) {
@@ -1747,6 +1769,20 @@ static void usbpd_sm(struct work_struct *w)
 	pd->rx_msg_type = pd->rx_msg_len = 0;
 }
 
+static inline const char *src_current(enum power_supply_typec_mode typec_mode)
+{
+	switch (typec_mode) {
+	case POWER_SUPPLY_TYPEC_SOURCE_DEFAULT:
+		return "default";
+	case POWER_SUPPLY_TYPEC_SOURCE_MEDIUM:
+		return "medium - 1.5A";
+	case POWER_SUPPLY_TYPEC_SOURCE_HIGH:
+		return "high - 3.0A";
+	default:
+		return "";
+	}
+}
+
 static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 {
 	struct usbpd *pd = container_of(nb, struct usbpd, psy_nb);
@@ -1847,7 +1883,8 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 	case POWER_SUPPLY_TYPEC_SOURCE_DEFAULT:
 	case POWER_SUPPLY_TYPEC_SOURCE_MEDIUM:
 	case POWER_SUPPLY_TYPEC_SOURCE_HIGH:
-		usbpd_info(&pd->dev, "Type-C Source connected\n");
+		usbpd_info(&pd->dev, "Type-C Source (%s) connected\n",
+				src_current(typec_mode));
 		if (pd->current_pr != PR_SINK) {
 			pd->current_pr = PR_SINK;
 			queue_work(pd->wq, &pd->sm_work);
@@ -1857,7 +1894,9 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 	/* Source states */
 	case POWER_SUPPLY_TYPEC_SINK_POWERED_CABLE:
 	case POWER_SUPPLY_TYPEC_SINK:
-		usbpd_info(&pd->dev, "Type-C Sink connected\n");
+		usbpd_info(&pd->dev, "Type-C Sink%s connected\n",
+				typec_mode == POWER_SUPPLY_TYPEC_SINK ?
+					"" : " (powered)");
 		if (pd->current_pr != PR_SRC) {
 			pd->current_pr = PR_SRC;
 			queue_work(pd->wq, &pd->sm_work);
@@ -2228,12 +2267,15 @@ struct usbpd *devm_usbpd_get_by_phandle(struct device *dev, const char *phandle)
 	struct platform_device *pdev;
 	struct device *pd_dev;
 
+	if (!usbpd_class.p) /* usbpd_init() not yet called */
+		return ERR_PTR(-EAGAIN);
+
 	if (!dev->of_node)
-		return ERR_PTR(-ENODEV);
+		return ERR_PTR(-EINVAL);
 
 	pd_np = of_parse_phandle(dev->of_node, phandle, 0);
 	if (!pd_np)
-		return ERR_PTR(-ENODEV);
+		return ERR_PTR(-ENXIO);
 
 	pdev = of_find_device_by_node(pd_np);
 	if (!pdev)
@@ -2243,7 +2285,8 @@ struct usbpd *devm_usbpd_get_by_phandle(struct device *dev, const char *phandle)
 			match_usbpd_device);
 	if (!pd_dev) {
 		platform_device_put(pdev);
-		return ERR_PTR(-ENODEV);
+		/* device was found but maybe hadn't probed yet, so defer */
+		return ERR_PTR(-EPROBE_DEFER);
 	}
 
 	ptr = devres_alloc(devm_usbpd_put, sizeof(*ptr), GFP_KERNEL);
@@ -2255,7 +2298,7 @@ struct usbpd *devm_usbpd_get_by_phandle(struct device *dev, const char *phandle)
 
 	pd = dev_get_drvdata(pd_dev);
 	if (!pd)
-		return ERR_PTR(-ENODEV);
+		return ERR_PTR(-EPROBE_DEFER);
 
 	*ptr = pd;
 	devres_add(dev, ptr);

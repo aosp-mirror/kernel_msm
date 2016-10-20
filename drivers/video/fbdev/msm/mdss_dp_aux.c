@@ -230,7 +230,9 @@ static int dp_aux_write_cmds(struct mdss_dp_drv_pdata *ep,
 
 int dp_aux_write(void *ep, struct edp_cmd *cmd)
 {
-	return dp_aux_write_cmds(ep, cmd);
+	int rc = dp_aux_write_cmds(ep, cmd);
+
+	return rc < 0 ? -EINVAL : 0;
 }
 
 static int dp_aux_read_cmds(struct mdss_dp_drv_pdata *ep,
@@ -291,7 +293,9 @@ static int dp_aux_read_cmds(struct mdss_dp_drv_pdata *ep,
 
 int dp_aux_read(void *ep, struct edp_cmd *cmds)
 {
-	return dp_aux_read_cmds(ep, cmds);
+	int rc = dp_aux_read_cmds(ep, cmds);
+
+	return rc  < 0 ? -EINVAL : 0;
 }
 
 void dp_aux_native_handler(struct mdss_dp_drv_pdata *ep, u32 isr)
@@ -370,7 +374,19 @@ static int dp_aux_read_buf(struct mdss_dp_drv_pdata *ep, u32 addr,
 /*
  * edid standard header bytes
  */
-static char edid_hdr[8] = {0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00};
+static u8 edid_hdr[8] = {0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00};
+
+static bool dp_edid_is_valid_header(u8 *buf)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(edid_hdr); i++) {
+		if (buf[i] != edid_hdr[i])
+			return false;
+	}
+
+	return true;
+}
 
 int dp_edid_buf_error(char *buf, int len)
 {
@@ -389,11 +405,6 @@ int dp_edid_buf_error(char *buf, int len)
 
 	if (csum != 0) {
 		pr_err("Error: csum=%x\n", csum);
-		return -EINVAL;
-	}
-
-	if (strncmp(buf, edid_hdr, strlen(edid_hdr))) {
-		pr_err("Error: header\n");
 		return -EINVAL;
 	}
 
@@ -506,11 +517,20 @@ char mdss_dp_gen_link_clk(struct mdss_panel_info *pinfo, char lane_cnt)
 
 	pr_debug("clk_rate=%llu, bpp= %d, lane_cnt=%d\n",
 	       pinfo->clk_rate, pinfo->bpp, lane_cnt);
-	min_link_rate = (pinfo->clk_rate * 10) /
-		(lane_cnt * encoding_factx10);
-	min_link_rate = (min_link_rate * pinfo->bpp)
-				/ (DP_LINK_RATE_MULTIPLIER);
+
+	/*
+	 * The max pixel clock supported is 675Mhz. The
+	 * current calculations below will make sure
+	 * the min_link_rate is within 32 bit limits.
+	 * Any changes in the section of code should
+	 * consider this limitation.
+	 */
+	min_link_rate = pinfo->clk_rate
+			/ (lane_cnt * encoding_factx10);
 	min_link_rate /= ln_to_link_ratio;
+	min_link_rate = (min_link_rate * pinfo->bpp);
+	min_link_rate = (u32)div_u64(min_link_rate * 10,
+					DP_LINK_RATE_MULTIPLIER);
 
 	pr_debug("min_link_rate = %d\n", min_link_rate);
 
@@ -695,10 +715,11 @@ static int dp_aux_chan_ready(struct mdss_dp_drv_pdata *ep)
 
 int mdss_dp_edid_read(struct mdss_dp_drv_pdata *dp)
 {
-	struct edp_buf *rp;
-	int cnt, rlen;
-	int ret = 0;
-	int blk_num = 0;
+	struct edp_buf *rp = &dp->rxp;
+	int rlen, ret = 0;
+	int edid_blk = 0, blk_num = 0, retries = 10;
+	bool edid_parsing_done = false;
+	const u8 cea_tag = 0x02;
 
 	ret = dp_aux_chan_ready(dp);
 	if (ret) {
@@ -706,70 +727,56 @@ int mdss_dp_edid_read(struct mdss_dp_drv_pdata *dp)
 		return ret;
 	}
 
-	for (cnt = 5; cnt; cnt--) {
-		rlen = dp_aux_read_buf
-			(dp, EDID_START_ADDRESS, EDID_BLOCK_SIZE, 1);
-		if (rlen > 0) {
-			pr_debug("cnt=%d, block=%d, rlen=%d\n",
-					cnt, blk_num, rlen);
-
-			rp = &dp->rxp;
-			if (!dp_edid_buf_error(rp->data, rp->len))
-				break;
+	do {
+		rlen = dp_aux_read_buf(dp, EDID_START_ADDRESS +
+				(blk_num * EDID_BLOCK_SIZE),
+				EDID_BLOCK_SIZE, 1);
+		if (rlen != EDID_BLOCK_SIZE) {
+			pr_err("Read failed. rlen=%d\n", rlen);
+			continue;
 		}
-	}
 
-	if ((cnt <= 0) && (rlen != EDID_BLOCK_SIZE)) {
-		pr_err("Read failed. rlen=%d\n", rlen);
-		return -EINVAL;
-	}
+		pr_debug("blk_num=%d, rlen=%d\n", blk_num, rlen);
 
-	rp = &dp->rxp;
+		if (dp_edid_is_valid_header(rp->data)) {
+			if (dp_edid_buf_error(rp->data, rp->len))
+				continue;
 
-	dp_extract_edid_manufacturer(&dp->edid, rp->data);
-	dp_extract_edid_product(&dp->edid, rp->data);
-	dp_extract_edid_version(&dp->edid, rp->data);
-	dp_extract_edid_ext_block_cnt(&dp->edid, rp->data);
-	dp_extract_edid_video_support(&dp->edid, rp->data);
-	dp_extract_edid_feature(&dp->edid, rp->data);
-	dp_extract_edid_detailed_timing_description(&dp->edid, rp->data);
-	/* for the first block initialize the edid buffer size */
-	dp->edid_buf_size = 0;
+			if (edid_parsing_done) {
+				blk_num++;
+				continue;
+			}
 
-	pr_debug("edid extension = %d\n",
-			dp->edid.ext_block_cnt);
+			dp_extract_edid_manufacturer(&dp->edid, rp->data);
+			dp_extract_edid_product(&dp->edid, rp->data);
+			dp_extract_edid_version(&dp->edid, rp->data);
+			dp_extract_edid_ext_block_cnt(&dp->edid, rp->data);
+			dp_extract_edid_video_support(&dp->edid, rp->data);
+			dp_extract_edid_feature(&dp->edid, rp->data);
+			dp_extract_edid_detailed_timing_description(&dp->edid,
+				rp->data);
 
-	memcpy(dp->edid_buf, rp->data, EDID_BLOCK_SIZE);
-	dp->edid_buf_size += EDID_BLOCK_SIZE;
+			edid_parsing_done = true;
+		} else {
+			edid_blk++;
+			blk_num++;
 
-	if (!dp->edid.ext_block_cnt)
-		return 0;
+			/* fix dongle byte shift issue */
+			if (edid_blk == 1 && rp->data[0] != cea_tag) {
+				u8 tmp[EDID_BLOCK_SIZE - 1];
 
-	for (blk_num = 1; blk_num <= dp->edid.ext_block_cnt;
-			blk_num++) {
-		for (cnt = 5; cnt; cnt--) {
-			rlen = dp_aux_read_buf
-				(dp, EDID_START_ADDRESS +
-				 (blk_num * EDID_BLOCK_SIZE),
-				 EDID_BLOCK_SIZE, 1);
-			if (rlen > 0) {
-				pr_debug("cnt=%d, blk_num=%d, rlen=%d\n",
-						cnt, blk_num, rlen);
-				rp = &dp->rxp;
-				if (!dp_edid_buf_error(rp->data, rp->len))
-					break;
+				memcpy(tmp, rp->data, EDID_BLOCK_SIZE - 1);
+				rp->data[0] = cea_tag;
+				memcpy(rp->data + 1, tmp, EDID_BLOCK_SIZE - 1);
 			}
 		}
 
-		if ((cnt <= 0) && (rlen != EDID_BLOCK_SIZE)) {
-			pr_err("Read failed. rlen=%d\n", rlen);
-			return -EINVAL;
-		}
+		memcpy(dp->edid_buf + (edid_blk * EDID_BLOCK_SIZE),
+			rp->data, EDID_BLOCK_SIZE);
 
-		memcpy(dp->edid_buf + (blk_num * EDID_BLOCK_SIZE),
-					rp->data, EDID_BLOCK_SIZE);
-		dp->edid_buf_size += EDID_BLOCK_SIZE;
-	}
+		if (edid_blk == dp->edid.ext_block_cnt)
+			return 0;
+	} while (retries--);
 
 	return 0;
 }
@@ -1109,17 +1116,17 @@ static void dp_host_train_set(struct mdss_dp_drv_pdata *ep, int train)
 }
 
 char vm_pre_emphasis[4][4] = {
-	{0x00, 0x06, 0x09, 0x0C},	/* pe0, 0 db */
-	{0x00, 0x06, 0x09, 0xFF},	/* pe1, 3.5 db */
-	{0x03, 0x06, 0xFF, 0xFF},	/* pe2, 6.0 db */
-	{0x03, 0xFF, 0xFF, 0xFF}	/* pe3, 9.5 db */
+	{0x00, 0x09, 0x11, 0x0C},	/* pe0, 0 db */
+	{0x00, 0x0A, 0x10, 0xFF},	/* pe1, 3.5 db */
+	{0x00, 0x0C, 0xFF, 0xFF},	/* pe2, 6.0 db */
+	{0x00, 0xFF, 0xFF, 0xFF}	/* pe3, 9.5 db */
 };
 
 /* voltage swing, 0.2v and 1.0v are not support */
 char vm_voltage_swing[4][4] = {
-	{0x0a, 0x18, 0x1A, 0x1E}, /* sw0, 0.4v  */
-	{0x07, 0x1A, 0x1E, 0xFF}, /* sw1, 0.6 v */
-	{0x1A, 0x1E, 0xFF, 0xFF}, /* sw1, 0.8 v */
+	{0x07, 0x0f, 0x12, 0x1E}, /* sw0, 0.4v  */
+	{0x11, 0x1D, 0x1F, 0xFF}, /* sw1, 0.6 v */
+	{0x18, 0x1F, 0xFF, 0xFF}, /* sw1, 0.8 v */
 	{0x1E, 0xFF, 0xFF, 0xFF}  /* sw1, 1.2 v, optional */
 };
 
@@ -1207,7 +1214,7 @@ static int dp_start_link_train_1(struct mdss_dp_drv_pdata *ep)
 
 static int dp_start_link_train_2(struct mdss_dp_drv_pdata *ep)
 {
-	int tries;
+	int tries = 0;
 	int ret = 0;
 	int usleep_time;
 	char pattern;
@@ -1219,12 +1226,12 @@ static int dp_start_link_train_2(struct mdss_dp_drv_pdata *ep)
 	else
 		pattern = 0x02;
 
-	dp_host_train_set(ep, pattern); /* train_2 */
-	dp_voltage_pre_emphasise_set(ep);
 	dp_train_pattern_set_write(ep, pattern | 0x20);/* train_2 */
 
-	tries = 0;
-	while (1) {
+	do  {
+		dp_voltage_pre_emphasise_set(ep);
+		dp_host_train_set(ep, pattern);
+
 		usleep_time = ep->dpcd.training_read_interval;
 		usleep_range(usleep_time, usleep_time);
 
@@ -1236,14 +1243,13 @@ static int dp_start_link_train_2(struct mdss_dp_drv_pdata *ep)
 		}
 
 		tries++;
-		if (tries > 5) {
+		if (tries > 4) {
 			ret = -1;
 			break;
 		}
 
 		dp_sink_train_set_adjust(ep);
-		dp_voltage_pre_emphasise_set(ep);
-	}
+	} while (1);
 
 	return ret;
 }
@@ -1315,7 +1321,6 @@ static void dp_clear_training_pattern(struct mdss_dp_drv_pdata *ep)
 int mdss_dp_link_train(struct mdss_dp_drv_pdata *dp)
 {
 	int ret = 0;
-	int usleep_time;
 
 	ret = dp_aux_chan_ready(dp);
 	if (ret) {
@@ -1336,8 +1341,6 @@ train_start:
 
 	mdss_dp_state_ctrl(&dp->ctrl_io, 0);
 	dp_clear_training_pattern(dp);
-	usleep_time = dp->dpcd.training_read_interval;
-	usleep_range(usleep_time, usleep_time);
 
 	ret = dp_start_link_train_1(dp);
 	if (ret < 0) {
@@ -1352,8 +1355,6 @@ train_start:
 
 	pr_debug("Training 1 completed successfully\n");
 
-	mdss_dp_state_ctrl(&dp->ctrl_io, 0);
-	dp_clear_training_pattern(dp);
 	ret = dp_start_link_train_2(dp);
 	if (ret < 0) {
 		if (dp_link_rate_down_shift(dp) == 0) {
@@ -1371,7 +1372,8 @@ train_start:
 clear:
 	dp_clear_training_pattern(dp);
 	if (ret != -1) {
-		mdss_dp_setup_tr_unit(&dp->ctrl_io);
+		mdss_dp_setup_tr_unit(&dp->ctrl_io, dp->link_rate,
+					dp->lane_cnt, dp->vic);
 		mdss_dp_state_ctrl(&dp->ctrl_io, ST_SEND_VIDEO);
 		pr_debug("State_ctrl set to SEND_VIDEO\n");
 	}

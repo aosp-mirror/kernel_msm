@@ -183,6 +183,10 @@ enum {
 	IDX_AFE_PORT_ID_USB_TX,
 	/* IDX 124 */
 	IDX_DISPLAY_PORT_RX,
+	IDX_AFE_PORT_ID_TERTIARY_PCM_RX,
+	IDX_AFE_PORT_ID_TERTIARY_PCM_TX,
+	IDX_AFE_PORT_ID_QUATERNARY_PCM_RX,
+	IDX_AFE_PORT_ID_QUATERNARY_PCM_TX,
 	AFE_MAX_PORTS
 };
 
@@ -277,7 +281,7 @@ void afe_set_cal_mode(u16 port_id, enum afe_cal_mode afe_cal_mode);
 int afe_port_start(u16 port_id, union afe_port_config *afe_config,
 	u32 rate);
 int afe_port_start_v2(u16 port_id, union afe_port_config *afe_config,
-		      u32 rate, u16 afe_in_channels,
+		      u32 rate, u16 afe_in_channels, u16 afe_in_bit_width,
 		      struct afe_enc_config *enc_config);
 int afe_spk_prot_feed_back_cfg(int src_port, int dst_port,
 	int l_ch, int r_ch, u32 enable);
