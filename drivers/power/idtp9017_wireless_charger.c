@@ -24,6 +24,7 @@
 #include <linux/pm.h>
 #include <linux/power_supply.h>
 #include <linux/power/idtp9017_wireless_charger.h>
+#include <linux/debugfs.h>
 
 #define WLC_GET_INFO_DELAY_MS     (10*1000)
 #define WLC_SET_ENV_INTERVAL_MS   (10*1000)
@@ -31,7 +32,7 @@
 #define WLC_CHECK_STATUS_DELAY_MS  500
 #define WLC_ONLINE_CHK_DELAY_MS   (10*1000)
 #define WLC_TX_OFF_LATENCY         3
-#define WLC_ACTIVE_CHECK_COUNT     20
+#define WLC_ACTIVE_CHECK_COUNT     10
 #define WLC_ACTIVE_CHECK_SLEEP_MS  200
 
 struct idtp9017_chip {
@@ -63,6 +64,7 @@ struct idtp9017_chip {
 	bool wlc_enabled;
 	struct delayed_work wlc_online_check_work;
 	int wlc_online_chk_delay_ms;
+	struct dentry *dent;
 };
 
 /* OFF PIN should be control from HIGH to LOW with 3sec latency.
@@ -82,13 +84,15 @@ static void idtp9017_wlc_enable(struct idtp9017_chip *chip, bool enable)
 	if (!gpio_is_valid(chip->wlc_off_gpio))
 		return;
 
-	mutex_lock(&chip->wlc_lock);
-	if (chip->wlc_enabled == enable) {
-		mutex_unlock(&chip->wlc_lock);
+	if (chip->wlc_enabled == enable)
 		return;
-	}
 
 	chip->wlc_enabled = enable;
+
+	/* It will be queued if required later */
+	cancel_delayed_work_sync(&chip->wlc_online_check_work);
+
+	mutex_lock(&chip->wlc_lock);
 	if (enable) {
 		get_monotonic_boottime(&now);
 		/* checking if LOW control has 3sec latency from the time of
@@ -150,9 +154,9 @@ static int idtp9017_wlc_is_present(struct idtp9017_chip *chip)
 			gpio_set_value(chip->wlc_off_gpio, 0);
 		for (i = 0; i < WLC_ACTIVE_CHECK_COUNT; i++) {
 			present = !gpio_get_value(chip->wlc_enable_gpio);
-			msleep(WLC_ACTIVE_CHECK_SLEEP_MS);
 			if (present)
 				break;
+			msleep(WLC_ACTIVE_CHECK_SLEEP_MS);
 		}
 		/* marking the time of OFF PIN HIGH control */
 		idtp9017_update_time(chip);
@@ -1132,6 +1136,56 @@ static irqreturn_t idtp9017_irq_thread(int irq, void *handle)
 	return IRQ_HANDLED;
 }
 
+static int idtp9017_debugfs_check_online(void *data, u64 val)
+{
+	struct idtp9017_chip *chip = data;
+	int req = (int)val;
+
+	if (!req)
+		return 0;
+
+	if (!chip->online || chip->wlc_enabled)
+		return 0;
+
+	dev_info(chip->dev, "request TX check: req=%d\n", req);
+
+	if ((req >> 1)) {
+		/* set the offline immediately */
+		chip->online = 0;
+		power_supply_changed(&chip->wlc_psy);
+		cancel_delayed_work_sync(&chip->wlc_online_check_work);
+		return 0;
+	}
+
+	/* run it as soon as possible, but not immediately */
+	mod_delayed_work(system_wq, &chip->wlc_online_check_work, 1);
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(idtp9017_debugfs_check_online_ops, NULL,
+		idtp9017_debugfs_check_online, "%llu\n");
+
+static void idtp9017_create_debugfs_entries(struct idtp9017_chip *chip)
+{
+	struct dentry *file;
+	struct device *dev = &chip->client->dev;
+
+	chip->dent = debugfs_create_dir("idtp9017", NULL);
+	if (IS_ERR(chip->dent)) {
+		dev_err(dev, "couldn't create debugfs\n");
+		return;
+	}
+
+	file = debugfs_create_file("check_online", S_IWUSR,
+			chip->dent, (void *)chip,
+			&idtp9017_debugfs_check_online_ops);
+	if (IS_ERR(file)) {
+		dev_err(dev, "couldn't create check_online node\n");
+		return;
+	}
+}
+
 static int idtp9017_parse_dt(struct device_node *dev_node,
 		struct idtp9017_chip *chip)
 {
@@ -1261,6 +1315,17 @@ static int idtp9017_init_gpio(struct idtp9017_chip *chip)
 	return 0;
 }
 
+static bool is_bootmode_charger;
+static int __init get_androidboot_mode(char *str)
+{
+	if (!strncasecmp(str, "charger", 7)) {
+		is_bootmode_charger = true;
+	}
+
+	return 1;
+}
+__setup("androidboot.mode=", get_androidboot_mode);
+
 static int idtp9017_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
 {
@@ -1335,21 +1400,34 @@ static int idtp9017_probe(struct i2c_client *client,
 		"idtp9017_irq", chip);
 	if (ret) {
 		dev_err(&client->dev, "failed to reqeust IRQ\n");
-		return ret;
+		goto err_request_irq;
 	}
 	enable_irq_wake(client->irq);
 
+	idtp9017_create_debugfs_entries(chip);
+
+	dev_info(&client->dev, "bootmode charger = %d\n",
+			is_bootmode_charger);
 	dev_info(&client->dev, "IDTP9017 probed\n");
 
 	return 0;
+
+err_request_irq:
+	power_supply_unregister(&chip->wlc_psy);
+
+	return ret;
 }
 
 static void idtp9017_resume(struct device *dev)
 {
 	struct idtp9017_chip *chip = dev_get_drvdata(dev);
+	unsigned long delay;
+
+	delay = is_bootmode_charger? 0 : round_jiffies_relative(
+			msecs_to_jiffies(chip->wlc_online_chk_delay_ms));
 
 	if (!chip->psy_chg_en)
-		schedule_delayed_work(&chip->wlc_online_check_work, 0);
+		schedule_delayed_work(&chip->wlc_online_check_work, delay);
 
 	if (chip->wlc_enabled && chip->wlc_chg_en)
 		schedule_delayed_work(&chip->wlc_status_work,
@@ -1377,6 +1455,11 @@ static const struct dev_pm_ops idtp9017_pm_ops = {
 
 static int idtp9017_remove(struct i2c_client *client)
 {
+	struct idtp9017_chip *chip = i2c_get_clientdata(client);
+
+	debugfs_remove_recursive(chip->dent);
+	power_supply_unregister(&chip->wlc_psy);
+
 	return 0;
 }
 
