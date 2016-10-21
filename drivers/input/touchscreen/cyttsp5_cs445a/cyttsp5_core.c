@@ -6286,6 +6286,24 @@ error:
 	return rc;
 }
 
+static int cyttsp5_pinctrl_init(struct cyttsp5_core_data *cd)
+{
+	cd->pin_info.pinctrl = devm_pinctrl_get(cd->dev);
+	if (IS_ERR_OR_NULL(cd->pin_info.pinctrl)) {
+		tp_log_err("%s: failed to get pinctrl\n", __func__);
+		return -EINVAL;
+	}
+
+	cd->pin_info.gpio_state_default = pinctrl_lookup_state(cd->pin_info.pinctrl,
+												"tp_int_default");
+	if (IS_ERR_OR_NULL(cd->pin_info.gpio_state_default)){
+		tp_log_warning("%s: can not get default pinstate\n", __func__);
+		return -EINVAL;
+		}
+
+	return 0;
+}
+
 static int cyttsp5_setup_irq_gpio(struct cyttsp5_core_data *cd)
 {
 	struct device *dev = cd->dev;
@@ -6695,12 +6713,22 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 	/* Setup watchdog timer */
 	setup_timer(&cd->watchdog_timer, cyttsp5_watchdog_timer, (unsigned long)cd);
 
+	tp_log_info("%s %d:cyttsp5_core_probe pinctrl init.\n", __func__, __LINE__);
+	rc = cyttsp5_pinctrl_init(cd);
+	if(rc < 0)
+		tp_log_err("%s: cyttsp5_core_probe pinctrl init fail!\n",__func__);
+
 	tp_log_info("%s %d:cyttsp5_core_probe setup irq.\n", __func__, __LINE__);
 	rc = cyttsp5_setup_irq_gpio(cd);
 	if (rc < 0) {
 		tp_log_err("%s: Error, could not setup IRQ\n", __func__);
 		goto error_setup_irq;
 	}
+
+	rc = pinctrl_select_state(cd->pin_info.pinctrl,
+				cd->pin_info.gpio_state_default);
+	if(rc)
+		tp_log_err("%s: select pinctrl state fail\n",__func__);
 
 	tp_log_info("%s: add sysfs interfaces\n", __func__);
 	rc = add_sysfs_interfaces(dev);
