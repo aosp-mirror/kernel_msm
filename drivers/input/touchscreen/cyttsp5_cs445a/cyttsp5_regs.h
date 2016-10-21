@@ -800,6 +800,11 @@ enum cyttsp5_initialize_baselines_sensing_mode {
 	CY_IB_SM_BALANCED = 8,
 };
 
+struct cyttsp5_pinctrl_info {
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *gpio_state_default;
+};
+
 struct cyttsp5_core_nonhid_cmd {
 	int (*start_bl)(struct device *dev, int protect);
 	int (*suspend_scanning)(struct device *dev, int protect);
@@ -928,6 +933,8 @@ struct cyttsp5_core_data {
 	struct cyttsp5_platform_data *pdata;
 	struct cyttsp5_core_platform_data *cpdata;
 	const struct cyttsp5_bus_ops *bus_ops;
+	/*pinctrl*/
+	struct cyttsp5_pinctrl_info pin_info;
 	wait_queue_head_t wait_q;
 	enum cyttsp5_sleep_state sleep_state;
 	enum cyttsp5_startup_state startup_state;
