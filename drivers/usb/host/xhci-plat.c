@@ -206,6 +206,8 @@ static int xhci_plat_remove(struct platform_device *dev)
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
 
 	pm_runtime_disable(&dev->dev);
+	pm_runtime_barrier(&dev->dev);
+	pm_runtime_set_suspended(&dev->dev);
 
 	usb_remove_hcd(xhci->shared_hcd);
 	usb_put_hcd(xhci->shared_hcd);
