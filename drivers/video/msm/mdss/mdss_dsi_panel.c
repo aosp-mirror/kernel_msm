@@ -195,18 +195,21 @@ static struct dsi_cmd_desc backlight_cmd = {
 	{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(led_pwm1)},
 	led_pwm1
 };
+static int mdss_dsi_panel_boost_config(struct mdss_panel_data *pdata,
+	int enable);
 
 static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 {
 	struct dcs_cmd_req cmdreq;
 	struct mdss_panel_info *pinfo;
+	struct mdss_panel_data *pdata;
 
 	pinfo = &(ctrl->panel_data.panel_info);
 	if (pinfo->dcs_cmd_by_left) {
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			return;
 	}
-
+	pdata = &ctrl->panel_data;
 	pr_debug("%s: level=%d\n", __func__, level);
 
 	led_pwm1[1] = (unsigned char)level;
@@ -219,6 +222,18 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	cmdreq.cb = NULL;
 
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+
+	if(255 == level){
+		pr_err("%s: open boost mode\n", __func__);
+		mdss_dsi_panel_boost_config(pdata, 1);
+	 }
+	else if (255 == pinfo->bl_pre){
+		pr_err("%s: close boost mode\n", __func__);
+		mdss_dsi_panel_boost_config(pdata, 0);
+	}
+
+	pinfo->bl_pre = level;
+
 }
 
 static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
