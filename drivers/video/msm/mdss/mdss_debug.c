@@ -731,7 +731,7 @@ void mdss_dump_reg(const char *name, char __iomem *base, int len, bool dump_in_m
 				iterator = iterator->next;
 			iterator->next = dump_info;
 		}
-		pr_info("start_address:%p end_address:%p\n", dump_addr,
+		pr_info("start_address:%pK end_address:%pK\n", dump_addr,
 			dump_addr + dump_info->len);
 
 		mutex_unlock(&reg_dump_info_mutex);
@@ -744,7 +744,7 @@ void mdss_dump_reg(const char *name, char __iomem *base, int len, bool dump_in_m
 		x8 = readl_relaxed(addr+0x8);
 		xc = readl_relaxed(addr+0xc);
 		if (!dump_in_memory) {
-			pr_info("%p : %08x %08x %08x %08x\n", addr, x0, x4, x8, xc);
+			pr_info("%pK : %08x %08x %08x %08x\n", addr, x0, x4, x8, xc);
 		} else {
 			dump_addr[i*4] = x0;
 			dump_addr[i*4 + 1] = x4;
@@ -895,7 +895,7 @@ static void mdss_dump_mdp_debug_bus(bool dump_in_memory)
 				iterator = iterator->next;
 			iterator->next = dump_info;
 		}
-		pr_info("mdp debug bus dump start_address:%p end_address:%p\n",
+		pr_info("mdp debug bus dump start_address:%pK end_address:%pK\n",
 			dump_addr, dump_addr + dump_info->len);
 
 		mutex_unlock(&reg_dump_info_mutex);
@@ -1074,7 +1074,7 @@ static void mdss_dump_dsi_debug_bus(bool dump_in_memory, const char *name,
 				iterator = iterator->next;
 			iterator->next = dump_info;
 		}
-		pr_info("%s debug bus dump start_address:%p end_address:%p\n",
+		pr_info("%s debug bus dump start_address:%pK end_address:%pK\n",
 			name, dump_addr, dump_addr + dump_info->len);
 
 		mutex_unlock(&reg_dump_info_mutex);
@@ -1246,7 +1246,7 @@ int mdss_misr_set(struct mdss_data_type *mdata,
 	bool use_mdp_up_misr = false;
 
 	if (!mdata || !req || !ctl) {
-		pr_err("Invalid input params: mdata = %p req = %p ctl = %p",
+		pr_err("Invalid input params: mdata = %pK req = %pK ctl = %pK",
 			mdata, req, ctl);
 		return -EINVAL;
 	}

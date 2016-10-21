@@ -866,7 +866,7 @@ static void cpp_load_fw(struct cpp_device *cpp_dev, char *fw_name_bin)
 		rc = request_firmware(&fw, fw_name_bin, dev);
 		if (rc) {
 			dev_err(dev,
-				"Fail to loc blob %s from dev %p, Error: %d\n",
+				"Fail to loc blob %s from dev %pK, Error: %d\n",
 				fw_name_bin, dev, rc);
 		}
 		if (NULL != fw)
@@ -959,7 +959,7 @@ static int cpp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 		return -ENODEV;
 	}
 
-	CPP_DBG("open %d %p\n", i, &fh->vfh);
+	CPP_DBG("open %d %pK\n", i, &fh->vfh);
 	cpp_dev->cpp_open_cnt++;
 	if (cpp_dev->cpp_open_cnt == 1) {
 		rc = cpp_init_hardware(cpp_dev);
@@ -986,7 +986,7 @@ static int cpp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	struct msm_device_queue *eventData_q = NULL;
 
 	if (!cpp_dev) {
-		pr_err("failed: cpp_dev %p\n", cpp_dev);
+		pr_err("failed: cpp_dev %pK\n", cpp_dev);
 		return -EINVAL;
 	}
 
@@ -1184,7 +1184,7 @@ static void msm_cpp_do_timeout_work(struct work_struct *work)
 	pr_err("cpp_timer_callback called. (jiffies=%lu)\n",
 		jiffies);
 	if (!work) {
-		pr_err("Invalid work:%p\n", work);
+		pr_err("Invalid work:%pK\n", work);
 		return;
 	}
 	if (!atomic_read(&cpp_timer.used)) {
@@ -1508,22 +1508,60 @@ ERROR1:
 	return rc;
 }
 
+static int msm_cpp_validate_input(unsigned int cmd, void *arg,
+	struct msm_camera_v4l2_ioctl_t **ioctl_ptr)
+{
+	switch (cmd) {
+	case MSM_SD_SHUTDOWN:
+		break;
+	default: {
+		if (ioctl_ptr == NULL) {
+			pr_err("Wrong ioctl_ptr for cmd %u\n", cmd);
+			return -EINVAL;
+		}
+
+		*ioctl_ptr = arg;
+		if ((*ioctl_ptr == NULL) ||
+			(*ioctl_ptr)->ioctl_ptr == NULL) {
+			pr_err("Error invalid ioctl argument cmd %u", cmd);
+			return -EINVAL;
+		}
+		break;
+	}
+	}
+	return 0;
+}
+
 long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 			unsigned int cmd, void *arg)
 {
-	struct cpp_device *cpp_dev = v4l2_get_subdevdata(sd);
-	struct msm_camera_v4l2_ioctl_t *ioctl_ptr = arg;
+	struct cpp_device *cpp_dev = NULL;
+	struct msm_camera_v4l2_ioctl_t *ioctl_ptr = NULL;
 	int rc = 0;
 
-	if ((ioctl_ptr == NULL) || (ioctl_ptr->ioctl_ptr == NULL)){
-		pr_err("ioctl_ptr is null\n");
+	if (sd == NULL) {
+		pr_err("sd %pK\n", sd);
 		return -EINVAL;
 	}
+	cpp_dev = v4l2_get_subdevdata(sd);
 	if (cpp_dev == NULL) {
 		pr_err("cpp_dev is null\n");
 		return -EINVAL;
 	}
+
+	if (_IOC_DIR(cmd) == _IOC_NONE) {
+		pr_err("Invalid ioctl/subdev cmd %u", cmd);
+		return -EINVAL;
+	}
+
+	rc = msm_cpp_validate_input(cmd, arg, &ioctl_ptr);
+	if (rc != 0) {
+		pr_err("input validation failed\n");
+		return rc;
+	}
+
 	mutex_lock(&cpp_dev->mutex);
+
 	CPP_DBG("E cmd: 0x%x\n", cmd);
 	switch (cmd) {
 	case VIDIOC_MSM_CPP_GET_HW_INFO: {

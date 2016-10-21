@@ -1303,7 +1303,7 @@ static int mdss_fb_alloc_fb_ion_memory(struct msm_fb_data_type *mfd,
 		goto fb_mmap_failed;
 	}
 
-	pr_info("alloc 0x%xB vaddr = %p (%pa iova) for fb%d\n", fb_size, vaddr,
+	pr_info("alloc 0x%xB vaddr = %pK (%pa iova) for fb%d\n", fb_size, vaddr,
 			&mfd->iova, mfd->index);
 
 	mfd->fbi->screen_base = (char *) vaddr;
@@ -1393,7 +1393,7 @@ static int mdss_fb_fbmem_ion_mmap(struct fb_info *info,
 
 			__mdss_fb_set_page_protection(vma, mfd);
 
-			pr_debug("vma=%p, addr=%x len=%ld",
+			pr_debug("vma=%pK, addr=%x len=%ld",
 					vma, (unsigned int)addr, len);
 			pr_cont("vm_start=%x vm_end=%x vm_page_prot=%ld\n",
 					(unsigned int)vma->vm_start,
