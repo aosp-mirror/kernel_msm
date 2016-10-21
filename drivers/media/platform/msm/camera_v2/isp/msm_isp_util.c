@@ -263,14 +263,14 @@ static int msm_isp_get_max_clk_rate(struct vfe_device *vfe_dev, long *rate)
 	long          round_rate = 0;
 
 	if (!vfe_dev || !rate) {
-		pr_err("%s:%d failed: vfe_dev %p rate %p\n", __func__, __LINE__,
+		pr_err("%s:%d failed: vfe_dev %pK rate %pK\n", __func__, __LINE__,
 			vfe_dev, rate);
 		return -EINVAL;
 	}
 
 	*rate = 0;
 	if (!vfe_dev->hw_info) {
-		pr_err("%s:%d failed: vfe_dev->hw_info %p\n", __func__,
+		pr_err("%s:%d failed: vfe_dev->hw_info %pK\n", __func__,
 			__LINE__, vfe_dev->hw_info);
 		return -EINVAL;
 	}
@@ -489,13 +489,13 @@ static int msm_isp_send_hw_cmd(struct vfe_device *vfe_dev,
 	uint32_t *cfg_data, uint32_t cmd_len)
 {
 	if (!vfe_dev || !reg_cfg_cmd) {
-		pr_err("%s:%d failed: vfe_dev %p reg_cfg_cmd %p\n", __func__,
+		pr_err("%s:%d failed: vfe_dev %pK reg_cfg_cmd %pK\n", __func__,
 			__LINE__, vfe_dev, reg_cfg_cmd);
 		return -EINVAL;
 	}
 	if ((reg_cfg_cmd->cmd_type != VFE_CFG_MASK) &&
 		(!cfg_data || !cmd_len)) {
-		pr_err("%s:%d failed: cmd type %d cfg_data %p cmd_len %d\n",
+		pr_err("%s:%d failed: cmd type %d cfg_data %pK cmd_len %d\n",
 			__func__, __LINE__, reg_cfg_cmd->cmd_type, cfg_data,
 			cmd_len);
 		return -EINVAL;
@@ -817,7 +817,7 @@ int msm_isp_proc_cmd_list(struct vfe_device *vfe_dev, void *arg)
 	struct msm_vfe_cfg_cmd_list cmd, cmd_next;
 
 	if (!vfe_dev || !arg) {
-		pr_err("%s:%d failed: vfe_dev %p arg %p", __func__, __LINE__,
+		pr_err("%s:%d failed: vfe_dev %pK arg %pK", __func__, __LINE__,
 			vfe_dev, arg);
 		return -EINVAL;
 	}
@@ -1209,17 +1209,17 @@ static int msm_vfe_iommu_fault_handler(struct iommu_domain *domain,
 	if (token) {
 		vfe_dev = (struct vfe_device *)token;
 		if (!vfe_dev->buf_mgr || !vfe_dev->buf_mgr->ops) {
-			pr_err("%s:%d] buf_mgr %p\n", __func__,
+			pr_err("%s:%d] buf_mgr %pK\n", __func__,
 				__LINE__, vfe_dev->buf_mgr);
 			goto end;
 		}
 		if (!vfe_dev->buf_mgr->pagefault_debug) {
-			pr_err("%s:%d] vfe_dev %p id %d\n", __func__,
+			pr_err("%s:%d] vfe_dev %pK id %d\n", __func__,
 				__LINE__, vfe_dev, vfe_dev->pdev->id);
 			vfe_dev->buf_mgr->ops->buf_mgr_debug(vfe_dev->buf_mgr);
 		}
 	} else {
-		ISP_DBG("%s:%d] no token received: %p\n",
+		ISP_DBG("%s:%d] no token received: %pK\n",
 			__func__, __LINE__, token);
 		goto end;
 	}

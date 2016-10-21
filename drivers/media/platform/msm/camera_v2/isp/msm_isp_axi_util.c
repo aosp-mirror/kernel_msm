@@ -1145,7 +1145,7 @@ void msm_camera_io_dump_2(void __iomem *addr, int size)
 	int i;
 	u32 *p = (u32 *) addr;
 	u32 data;
-	ISP_DBG("%s: %p %d\n", __func__, addr, size);
+	ISP_DBG("%s: %pK %d\n", __func__, addr, size);
 	line_str[0] = '\0';
 	p_str = line_str;
 	for (i = 0; i < size/4; i++) {

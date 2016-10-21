@@ -137,7 +137,7 @@ void ocm_core_open(void)
 	if (q6core_lcl.core_handle_q == NULL)
 		q6core_lcl.core_handle_q = apr_register("ADSP", "CORE",
 					aprv2_core_fn_q, 0xFFFFFFFF, NULL);
-	pr_debug("%s: Open_q %p\n", __func__, q6core_lcl.core_handle_q);
+	pr_debug("%s: Open_q %pK\n", __func__, q6core_lcl.core_handle_q);
 	if (q6core_lcl.core_handle_q == NULL)
 		pr_err("%s: Unable to register CORE\n", __func__);
 }

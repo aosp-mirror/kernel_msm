@@ -79,7 +79,7 @@ static int msm_csiphy_lane_config(struct csiphy_device *csiphy_dev,
 			val |= csiphy_params->csid_core;
 		}
 		msm_camera_io_w(val, csiphy_dev->clk_mux_base);
-		CDBG("%s clk mux addr %p val 0x%x\n", __func__,
+		CDBG("%s clk mux addr %pK val 0x%x\n", __func__,
 			csiphy_dev->clk_mux_base, val);
 		mb();
 	}
@@ -215,7 +215,7 @@ static int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 			ARRAY_SIZE(csiphy_clk_info), 1);
 	} else if (CSIPHY_VERSION >= CSIPHY_VERSION_V30) {
 		if (!csiphy_dev->clk_mux_mem || !csiphy_dev->clk_mux_io) {
-			pr_err("%s clk mux mem %p io %p\n", __func__,
+			pr_err("%s clk mux mem %pK io %pK\n", __func__,
 				csiphy_dev->clk_mux_mem,
 				csiphy_dev->clk_mux_io);
 			rc = -ENOMEM;
@@ -314,7 +314,7 @@ static int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 			ARRAY_SIZE(csiphy_clk_info), 1);
 	} else if (CSIPHY_VERSION >= CSIPHY_VERSION_V30) {
 		if (!csiphy_dev->clk_mux_mem || !csiphy_dev->clk_mux_io) {
-			pr_err("%s clk mux mem %p io %p\n", __func__,
+			pr_err("%s clk mux mem %pK io %pK\n", __func__,
 				csiphy_dev->clk_mux_mem,
 				csiphy_dev->clk_mux_io);
 			rc = -ENOMEM;
@@ -393,7 +393,7 @@ static int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg)
 				MIPI_CSIPHY_LNn_CFG2_ADDR + 0x40*i);
 	} else {
 		if (!csi_lane_params) {
-			pr_err("%s:%d failed: csi_lane_params %p\n", __func__,
+			pr_err("%s:%d failed: csi_lane_params %pK\n", __func__,
 				__LINE__, csi_lane_params);
 			return -EINVAL;
 		}
@@ -476,7 +476,7 @@ static int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg)
 				MIPI_CSIPHY_LNn_CFG2_ADDR + 0x40*i);
 	} else {
 		if (!csi_lane_params) {
-			pr_err("%s:%d failed: csi_lane_params %p\n", __func__,
+			pr_err("%s:%d failed: csi_lane_params %pK\n", __func__,
 				__LINE__, csi_lane_params);
 			return -EINVAL;
 		}
