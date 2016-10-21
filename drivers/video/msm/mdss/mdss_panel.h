@@ -668,6 +668,7 @@ struct mdss_panel_info {
 
 	/* debugfs structure for the panel */
 	struct mdss_panel_debugfs_info *debugfs_info;
+	u32 bl_pre;
 };
 
 struct mdss_panel_timing {
