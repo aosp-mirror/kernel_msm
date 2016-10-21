@@ -18,9 +18,8 @@
 		cyttsp5@1c {
 			compatible = "cy,cyttsp5_i2c_adapter";
 			reg = <0x1c>;
-			pinctrl-names = "int_default","int_sleep";
-			pinctrl-0 = <&ts_int_active>;
-			pinctrl-1 = <&ts_int_suspend>;
+			pinctrl-names = "tp_int_default";
+			pinctrl-0 = <&ts_int_default &ts_reset_default>;
 			interrupt-parent = <&msm_gpio>;
 			interrupts = <94 0x2008>;
 			cy,adapter_id = "cyttsp5_i2c_adapter";
