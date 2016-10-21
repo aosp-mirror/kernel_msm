@@ -145,8 +145,6 @@ struct msm_ipc_port {
 	unsigned long num_tx_bytes;
 	unsigned long num_rx_bytes;
 	void *priv;
-
-	struct timer_list debug_timer;
 };
 
 #ifdef CONFIG_IPC_ROUTER
