@@ -570,6 +570,8 @@ int audio_aio_release(struct inode *inode, struct file *file)
 	struct q6audio_aio *audio = file->private_data;
 	pr_debug("%s[%p]\n", __func__, audio);
 	mutex_lock(&audio->lock);
+	mutex_lock(&audio->read_lock);
+	mutex_lock(&audio->write_lock);
 	audio->wflush = 1;
 	if (audio->wakelock_voted &&
 		(audio->audio_ws_mgr != NULL) &&
@@ -595,6 +597,8 @@ int audio_aio_release(struct inode *inode, struct file *file)
 	wake_up(&audio->event_wait);
 	audio_aio_reset_event_queue(audio);
 	q6asm_audio_client_free(audio->ac);
+	mutex_unlock(&audio->write_lock);
+	mutex_unlock(&audio->read_lock);
 	mutex_unlock(&audio->lock);
 	mutex_destroy(&audio->lock);
 	mutex_destroy(&audio->read_lock);
@@ -1732,6 +1736,8 @@ static long audio_aio_ioctl(struct file *file, unsigned int cmd,
 		struct msm_audio_ion_info info;
 		pr_debug("%s[%p]:AUDIO_REGISTER_ION\n", __func__, audio);
 		mutex_lock(&audio->lock);
+		mutex_lock(&audio->read_lock);
+		mutex_lock(&audio->write_lock);
 		if (copy_from_user(&info, (void *)arg, sizeof(info))) {
 			pr_err(
 				"%s: copy_from_user for AUDIO_REGISTER_ION failed\n",
@@ -1740,12 +1746,16 @@ static long audio_aio_ioctl(struct file *file, unsigned int cmd,
 		} else {
 			rc = audio_aio_ion_add(audio, &info);
 		}
+		mutex_unlock(&audio->write_lock);
+		mutex_unlock(&audio->read_lock);
 		mutex_unlock(&audio->lock);
 		break;
 	}
 	case AUDIO_DEREGISTER_ION: {
 		struct msm_audio_ion_info info;
 		mutex_lock(&audio->lock);
+		mutex_lock(&audio->read_lock);
+		mutex_lock(&audio->write_lock);
 		pr_debug("%s[%p]:AUDIO_DEREGISTER_ION\n", __func__, audio);
 		if (copy_from_user(&info, (void *)arg, sizeof(info))) {
 			pr_err(
@@ -1755,6 +1765,8 @@ static long audio_aio_ioctl(struct file *file, unsigned int cmd,
 		} else {
 			rc = audio_aio_ion_remove(audio, &info);
 		}
+		mutex_unlock(&audio->write_lock);
+		mutex_unlock(&audio->read_lock);
 		mutex_unlock(&audio->lock);
 		break;
 	}
@@ -2050,6 +2062,8 @@ static long audio_aio_compat_ioctl(struct file *file, unsigned int cmd,
 		struct msm_audio_ion_info info;
 		pr_debug("%s[%p]:AUDIO_REGISTER_ION\n", __func__, audio);
 		mutex_lock(&audio->lock);
+		mutex_lock(&audio->read_lock);
+		mutex_lock(&audio->write_lock);
 		if (copy_from_user(&info_32, (void *)arg, sizeof(info_32))) {
 			pr_err("%s: copy_from_user for AUDIO_REGISTER_ION_32 failed\n",
 				__func__);
@@ -2059,6 +2073,8 @@ static long audio_aio_compat_ioctl(struct file *file, unsigned int cmd,
 			info.vaddr = compat_ptr(info_32.vaddr);
 			rc = audio_aio_ion_add(audio, &info);
 		}
+		mutex_unlock(&audio->write_lock);
+		mutex_unlock(&audio->read_lock);
 		mutex_unlock(&audio->lock);
 		break;
 	}
@@ -2066,6 +2082,8 @@ static long audio_aio_compat_ioctl(struct file *file, unsigned int cmd,
 		struct msm_audio_ion_info32 info_32;
 		struct msm_audio_ion_info info;
 		mutex_lock(&audio->lock);
+		mutex_lock(&audio->read_lock);
+		mutex_lock(&audio->write_lock);
 		pr_debug("%s[%p]:AUDIO_DEREGISTER_ION\n", __func__, audio);
 		if (copy_from_user(&info_32, (void *)arg, sizeof(info_32))) {
 			pr_err("%s: copy_from_user for	AUDIO_DEREGISTER_ION_32 failed\n",
@@ -2076,6 +2094,8 @@ static long audio_aio_compat_ioctl(struct file *file, unsigned int cmd,
 			info.vaddr = compat_ptr(info_32.vaddr);
 			rc = audio_aio_ion_remove(audio, &info);
 		}
+		mutex_unlock(&audio->write_lock);
+		mutex_unlock(&audio->read_lock);
 		mutex_unlock(&audio->lock);
 		break;
 	}
