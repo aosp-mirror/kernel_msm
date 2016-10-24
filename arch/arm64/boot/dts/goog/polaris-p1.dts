@@ -476,20 +476,6 @@
 		pinctrl-1 = <&cdc_reset_sleep>;
 	};
 
-	wsa_spkr_sd1: msm_cdc_pinctrl@111 {
-		compatible = "qcom,msm-cdc-pinctrl";
-		pinctrl-names = "aud_active", "aud_sleep";
-		pinctrl-0 = <&spkr_1_sd_n_active>;
-		pinctrl-1 = <&spkr_1_sd_n_sleep>;
-	};
-
-	wsa_spkr_sd2: msm_cdc_pinctrl@112 {
-		compatible = "qcom,msm-cdc-pinctrl";
-		pinctrl-names = "aud_active", "aud_sleep";
-		pinctrl-0 = <&spkr_2_sd_n_active>;
-		pinctrl-1 = <&spkr_2_sd_n_sleep>;
-	};
-
 	wcd_us_euro_gpio: msm_cdc_pinctrl@49 {
 		compatible = "qcom,msm-cdc-pinctrl";
 		pinctrl-names = "aud_active", "aud_sleep";
