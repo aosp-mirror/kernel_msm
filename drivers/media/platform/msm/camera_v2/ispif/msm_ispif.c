@@ -880,7 +880,7 @@ static int msm_ispif_start_frame_boundary(struct ispif_device *ispif,
 	return rc;
 }
 
-static int msm_ispif_restart_frame_boundary(struct ispif_device *ispif,
+static int msm_ispif_reconfig(struct ispif_device *ispif,
 	struct msm_ispif_param_data *params)
 {
 	int rc = 0;
@@ -890,13 +890,11 @@ static int msm_ispif_restart_frame_boundary(struct ispif_device *ispif,
 		rc = msm_ispif_reset(ispif);
 	if (!rc)
 		rc = msm_ispif_config(ispif, params);
-	if (!rc)
-		rc = msm_ispif_start_frame_boundary(ispif, params);
 
 	if (!rc)
-		pr_info("ISPIF restart Successful\n");
+		pr_info("ISPIF reconfig Successful\n");
 	else
-		pr_info("ISPIF restart Failed\n");
+		pr_info("ISPIF reconfig Failed\n");
 
 	return rc;
 }
@@ -1264,8 +1262,8 @@ static long msm_ispif_cmd(struct v4l2_subdev *sd, void *arg)
 		rc = msm_ispif_start_frame_boundary(ispif, &pcdata->params);
 		msm_ispif_io_dump_reg(ispif);
 		break;
-	case ISPIF_RESTART_FRAME_BOUNDARY:
-		rc = msm_ispif_restart_frame_boundary(ispif, &pcdata->params);
+	case ISPIF_RECONFIG:
+		rc = msm_ispif_reconfig(ispif, &pcdata->params);
 		msm_ispif_io_dump_reg(ispif);
 		break;
 
