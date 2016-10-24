@@ -133,6 +133,12 @@ struct fan5451x_chip {
 	bool retail_enable;
 };
 
+static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set);
+static enum alarmtimer_restart fan5451x_wlc_thermal_ctrl_callback(
+		struct alarm *alarm, ktime_t now);
+static void fan5451x_wlc_thermal_ctrl(struct fan5451x_chip *chip, int control);
+static int fan5451x_batfet_enable(struct fan5451x_chip *chip, int enable);
+
 static int fan5451x_read_reg(struct i2c_client *client, u8 reg)
 {
 	int ret;
@@ -342,6 +348,7 @@ static inline void fan5451x_vbat_rechg_measure(struct fan5451x_chip *chip)
 static int fan5451x_set_appropriate_vddmax(struct fan5451x_chip *chip)
 {
 	int ret;
+	int cv;
 	unsigned int vddmax = chip->set_vddmax_mv;
 
 	if (chip->ext_set_vddmax_mv) {
@@ -379,6 +386,17 @@ static int fan5451x_set_appropriate_vddmax(struct fan5451x_chip *chip)
 	if (ret)
 		pr_err("Failed to set appropriate vddmax ret=%d\n", ret);
 
+	if (chip->ext_vdd_restriction) {
+		cv = fan5451x_read_reg(chip->client, REG_MNT0);
+		if (cv & MNT0_CV) {
+			pr_info("thermal SW EOC IRQ\n");
+			fan5451x_wlc_thermal_ctrl(chip, 0);
+			fan5451x_batfet_enable(chip, 0);
+			if (!chip->retail_enable)
+				fan5451x_wlc_fake_online(chip, 1);
+			chip->eoc = true;
+		}
+	}
 	/* in case of eoc, update rechg_measure */
 	if (chip->eoc)
 		fan5451x_vbat_rechg_measure(chip);
