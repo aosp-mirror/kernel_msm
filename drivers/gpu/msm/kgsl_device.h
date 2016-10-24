@@ -498,6 +498,7 @@ struct kgsl_process_private {
 	} stats[KGSL_MEM_ENTRY_MAX];
 
 	struct idr syncsource_idr;
+	spinlock_t syncsource_lock;
 };
 
 /**
