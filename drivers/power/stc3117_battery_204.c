@@ -24,6 +24,8 @@
 
 #define GG_VERSION "1.00a"
 #define CONFIG_ENABLE_STC311X_DUMPREG
+//#define STC3117_AGING_FEATURE
+//#define STC3117_AGING_VOLTAGE_FEATURE
 /*Function declaration*/
 int STC31xx_SetPowerSavingMode(void);
 int STC31xx_StopPowerSavingMode(void);
@@ -82,6 +84,9 @@ int STC31xx_RelaxTmrSet(int CurrentThreshold);
 #define OFFSET_CURRENT        (-3)
 #define APP_MIN_VOLTAGE       3500	/* application cut-off voltage                    */
 #define APP_MIN_VOLTAGE_EMPTY 3000    /* to darin all battery capacity, so we lock batt level at 1% for 3.0V ~ 3.5V(APP_MIN_VOLTAGE) */
+#if defined(STC3117_AGING_VOLTAGE_FEATURE)
+#define AGING_CHECK_VOLTAGE   3571	/* aging check point voltage                    */
+#endif /* STC3117_AGING_VOLTAGE_FEATURE */
 #define TEMP_MIN_ADJ          (-5)	/* minimum temperature for gain adjustment */
 
 #define VMTEMPTABLE		{ 85, 90, 100, 160, 320, 440, 840 }	/* normalized VM_CNF at 60, 40, 25, 10, 0, -10 degreeC, -20 degreeC */
@@ -188,13 +193,33 @@ static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 
 /* Dynamic early empty 3% voltage mapping */
 static int deec_3_voltage_lvl[] = {
-	3510, 3453, 3338, 3181,
+	3493, 3490, 3481, 3469, 3448, 3422, 3396, 3368, 3302, 3250,
 };
 
 /* Dynamic early empty 1% voltage mapping */
 static int deec_1_voltage_lvl[] = {
-	3310, 3270, 3178, 3082,
+	3313, 3309, 3300, 3288, 3270, 3249, 3231, 3208, 3162, 3130,
 };
+
+#if defined(STC3117_AGING_VOLTAGE_FEATURE)
+static bool aging_trigger_flag = false;
+
+/* Defined three percentage level at 3.6V with difference current loading*/
+static int aging_comparsion_tbl[] = {
+	45,	/* 4.5% when current <= 30mA*/
+	48,	/* 4.8% when current > 30mA && <=50 */
+	52,	/* 5.2% when current > 50mA && <=100 */
+	64,	/* 6.4% when current > 100mA && <=150 */
+	88,	/* 8.8% when current > 150mA && <= 200mA*/
+	122	/* 12.2% when current > 200mA && <= 250mA*/
+};
+#endif /* STC3117_AGING_VOLTAGE_FEATURE */
+
+#if defined(STC3117_AGING_FEATURE)
+static int aging_counter;
+static int battery_capacity_aging_level;
+#endif /* STC3117_AGING_FEATURE */
+
 /* Private variables ---------------------------------------------------------*/
 
 /* structure of the STC311x battery monitoring parameters */
@@ -334,6 +359,10 @@ struct stc311x_chip {
 	int batt_current;
 	/* Temperature */
 	int batt_temp;
+#if defined(STC3117_AGING_FEATURE)
+	/* Charge cycle */
+	int batt_charge_cycle;
+#endif /* STC3117_AGING_FEATURE */
 	/* State Of Charge */
 	int status;
 };
@@ -359,6 +388,11 @@ static int stc311x_get_property(struct power_supply *psy,
 		case POWER_SUPPLY_PROP_ONLINE:
 			val->intval = chip->online;
 			break;
+#if defined(STC3117_AGING_FEATURE)
+		case POWER_SUPPLY_PROP_CYCLE_COUNT:
+			val->intval = chip->batt_charge_cycle;
+			break;
+#endif /* STC3117_AGING_FEATURE */
 		case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 			val->intval = chip->batt_voltage * 1000;  /* in uV */
 			break;
@@ -769,6 +803,13 @@ static void create_debugfs_entries(struct stc311x_chip *chip)
 			chip->debug_root, chip,  &poke_poke_debug_ops);
 	if (!ent)
 		pr_err("failed to create data debug file\n");
+
+#if defined(STC3117_AGING_FEATURE)
+	ent = debugfs_create_u32("cycle_counter", S_IFREG | S_IWUSR | S_IRUGO,
+			chip->debug_root, &aging_counter);
+	if (!ent)
+		pr_err("failed to create data debug file\n");
+#endif /* STC3117_AGING_FEATURE */
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1007,6 +1048,35 @@ static int STC311x_SaveCnf(void)
 }
 #endif
 
+#if defined(STC3117_AGING_FEATURE) || defined(STC3117_AGING_VOLTAGE_FEATURE)
+static int STC311x_SaveCCCnf(void)
+{
+	int reg_mode;
+
+	/* mode register*/
+	reg_mode = BattData.STC_Status & 0xff;
+
+	reg_mode &= ~STC311x_GG_RUN;  /*   set GG_RUN=0 before changing algo parameters */
+	STC31xx_WriteByte(STC311x_REG_MODE, reg_mode);
+
+	STC31xx_ReadByte(STC311x_REG_ID);
+
+	STC31xx_WriteWord(STC311x_REG_CC_CNF,GG_Ram.reg.CC_cnf);
+
+	if (BattData.Vmode) {
+		STC31xx_WriteByte(STC311x_REG_MODE,0x19);  /*   set GG_RUN=1, voltage mode, alm enabled */
+	} else {
+		STC31xx_WriteByte(STC311x_REG_MODE,0x18);  /*   set GG_RUN=1, mixed mode, alm enabled */
+		if (BattData.GG_Mode == CC_MODE)
+			STC31xx_WriteByte(STC311x_REG_MODE,0x38);  /*   force CC mode */
+		else
+			STC31xx_WriteByte(STC311x_REG_MODE,0x58);  /*   force VM mode */
+	}
+
+	return(0);
+}
+#endif /* STC3117_AGING_FEATURE || STC3117_AGING_VOLTAGE_FEATURE */
+
 static int STC311x_SaveVMCnf(void)
 {
 	int reg_mode;
@@ -1023,8 +1093,7 @@ static int STC311x_SaveVMCnf(void)
 
 	if (BattData.Vmode) {
 		STC31xx_WriteByte(STC311x_REG_MODE,0x19);  /*   set GG_RUN=1, voltage mode, alm enabled */
-	}
-	else {
+	} else {
 		STC31xx_WriteByte(STC311x_REG_MODE,0x18);  /*   set GG_RUN=1, mixed mode, alm enabled */
 		if (BattData.GG_Mode == CC_MODE)
 			STC31xx_WriteByte(STC311x_REG_MODE,0x38);  /*   force CC mode */
@@ -1354,6 +1423,39 @@ static void VM_FSM(void)
 		CompensateVM(BattData.AvgTemperature);
 	}
 }
+
+#if defined(STC3117_AGING_VOLTAGE_FEATURE)
+static void CompensateVolCCCnf(int cc_cnf_offset)
+{
+	pr_err("[Alan] 1. BattData.CC_cnf=%d\n", BattData.CC_cnf);
+	pr_err("[Alan] 1. GG_Ram.reg.CC_cnf=%d\n", GG_Ram.reg.CC_cnf);
+	pr_err("[Alan] aging trigger, update the cc_cnf %d + (%d)\n", GG_Ram.reg.CC_cnf, cc_cnf_offset);
+	GG_Ram.reg.CC_cnf += cc_cnf_offset;
+	STC311x_SaveCCCnf();  /* save new CC cnf values to STC311x */
+	pr_err("[Alan] 2. BattData.CC_cnf=%d\n", BattData.CC_cnf);
+	pr_err("[Alan] 2. GG_Ram.reg.CC_cnf=%d\n", GG_Ram.reg.CC_cnf);
+}
+#endif /* STC3117_AGING_VOLTAGE_FEATURE */
+
+#if defined(STC3117_AGING_FEATURE)
+static void CompensateCCCnf(int battery_capacity_aging_level)
+{
+	int aging_cc_cnf = 0;
+	pr_err("[Alan] 1. BattData.CC_cnf=%d\n", BattData.CC_cnf);
+	pr_err("[Alan] 1. GG_Ram.reg.CC_cnf=%d\n", GG_Ram.reg.CC_cnf);
+	aging_cc_cnf = (BattData.CC_cnf * battery_capacity_aging_level) / 100;
+	//GG_Ram.reg.CC_cnf = (BattData.CC_cnf * battery_capacity_aging_level) / 100;
+	if (GG_Ram.reg.CC_cnf != aging_cc_cnf) {
+		pr_err("[Alan] aging trigger, update the cc_cnf from %d to %d\n", GG_Ram.reg.CC_cnf, aging_cc_cnf);
+		GG_Ram.reg.CC_cnf = aging_cc_cnf;
+		STC311x_SaveCCCnf();  /* save new CC cnf values to STC311x */
+	} else {
+		pr_err("[Alan] cc_cnf is the same value, no need to update\n");
+	}
+	pr_err("[Alan] 2. BattData.CC_cnf=%d\n", BattData.CC_cnf);
+	pr_err("[Alan] 2. GG_Ram.reg.CC_cnf=%d\n", GG_Ram.reg.CC_cnf);
+}
+#endif /* STC3117_AGING_FEATURE */
 
 /*******************************************************************************
 * Function Name  : Reset_FSM_GG
@@ -1719,6 +1821,47 @@ static void show_ram_regs_debug(void)
 }
 #endif /* CONFIG_ENABLE_STC311X_DUMPREG */
 
+#if defined(STC3117_AGING_VOLTAGE_FEATURE)
+static void voltage_aging_compensation(int SOC, int avg_current) {
+
+	int level = 0;
+	int aging_comparsion_array_num = 0;
+
+	pr_err("Voltage aging compensation, avg_current=%d\n", avg_current);
+	if (avg_current >= -30 && avg_current < 0) {
+		level = 0;
+	} else if (avg_current >= -50 && avg_current < -30) {
+		level = 1;
+	} else if (avg_current >= -100 && avg_current < -50) {
+		level = 2;
+	} else if (avg_current >= -150 && avg_current < -100) {
+		level = 3;
+	} else if (avg_current >= -200 && avg_current < -150) {
+		level = 4;
+	} else if (avg_current >= -250 && avg_current < -200) {
+		level = 5;
+	} else {
+		pr_err("Other case, no need to aging\n");
+		return;
+	}
+
+	aging_comparsion_array_num = sizeof(aging_comparsion_tbl) / sizeof(aging_comparsion_tbl[0]);
+	pr_debug("Level %d aging compensation\n", level);
+	if ((level < 0) | (level >= aging_comparsion_array_num)) {
+		pr_err("Aging level out of range\n");
+		return;
+	}
+
+	if (SOC > aging_comparsion_tbl[level]+20) {
+		CompensateVolCCCnf(-1);
+	} else if (SOC < aging_comparsion_tbl[level]-20) {
+		CompensateVolCCCnf(1);
+	} else {
+		return;
+	}
+}
+#endif /* STC3117_AGING_VOLTAGE_FEATURE */
+
 int Dynamic_Early_Empty(int SOC, int voltage, int avg_current, int eec_voltage) {
 
 	int rc = 0;
@@ -1726,32 +1869,39 @@ int Dynamic_Early_Empty(int SOC, int voltage, int avg_current, int eec_voltage) 
 	int deec_3_array_num = 0;
 	int deec_1_array_num = 0;
 
-	pr_err("Dynamic early empty compensation, SOC=%d, voltage=%d, avg_current=%d, eec_voltage=%d\n", SOC, voltage, avg_current, eec_voltage);
-	if (avg_current >= -50 && avg_current < 0) {
-		//Compensate from enter % to 3%
-		pr_err("Case 0 compensation\n");
+	pr_debug("Dynamic early empty compensation, SOC=%d, voltage=%d, avg_current=%d, eec_voltage=%d\n", SOC, voltage, avg_current, eec_voltage);
+
+	if (avg_current >= -15 && avg_current < 0) {
 		level = 0;
-	} else if (avg_current >= -150 && avg_current < -50) {
-		//Compensate from enter % to 3%
-		pr_err("Case 1 compensation\n");
+	} else if (avg_current >= -30 && avg_current < -15) {
 		level = 1;
-	} else if (avg_current >= -300 && avg_current < -150) {
-		//Compensate from enter % to 3%
-		pr_err("Case 2 compensation\n");
+	} else if (avg_current >= -50 && avg_current < -30) {
 		level = 2;
-	} else if (avg_current < -300) {
-		//Compensate from enter % to 3%
-		pr_err("Case 3 compensation\n");
+	} else if (avg_current >= -100 && avg_current < -50) {
 		level = 3;
+	} else if (avg_current >= -150 && avg_current < -100) {
+		level = 4;
+	} else if (avg_current >= -200 && avg_current < -150) {
+		level = 5;
+	} else if (avg_current >= -250 && avg_current < -200) {
+		level = 6;
+	} else if (avg_current >= -300 && avg_current < -250) {
+		level = 7;
+	} else if (avg_current >= -500 && avg_current < -300) {
+		level = 8;
+	} else if (avg_current < -500) {
+		level = 9;
 	} else {
-		pr_err("Case 4 compensation\n");
+		pr_debug("Don't do dynamic early empty compensation\n");
 		rc = SOC;
 		return rc;
 	}
 
+	pr_debug("Case %d compensation\n", level);
+
+	// Dynamic early empty range check
 	deec_3_array_num = sizeof(deec_3_voltage_lvl) / sizeof(deec_3_voltage_lvl[0]);
 	deec_1_array_num = sizeof(deec_1_voltage_lvl) / sizeof(deec_1_voltage_lvl[0]);
-	pr_err("Level %d compensation\n", level);
 	if ((level < 0) | (level >= deec_3_array_num) | (level >= deec_1_array_num)) {
 		pr_err("Level out of range\n");
 		return SOC;
@@ -1762,15 +1912,16 @@ int Dynamic_Early_Empty(int SOC, int voltage, int avg_current, int eec_voltage) 
 			pr_err("SOC less 3 percentage, keep current SOC\n");
 			return SOC;
 		}
-		pr_err("Case %d-1 compensation\n", level);
+		pr_debug("Case %d-1 compensation\n", level);
 		rc = SECOND_EEC_SOC + (SOC - SECOND_EEC_SOC) * (voltage - deec_3_voltage_lvl[level]) / (eec_voltage - deec_3_voltage_lvl[level]);
 	} else if (voltage > deec_1_voltage_lvl[level] && voltage <= deec_3_voltage_lvl[level]) {
-		pr_err("Case %d-2 compensation\n", level);
+		pr_debug("Case %d-2 compensation\n", level);
 		rc = THIRD_EEC_SOC + (SECOND_EEC_SOC - THIRD_EEC_SOC) * (voltage - deec_1_voltage_lvl[level]) / (deec_3_voltage_lvl[level] - deec_1_voltage_lvl[level]);
 	} else {
-		pr_err("Case %d-3 compensation\n", level);
+		pr_debug("Case %d-3 compensation\n", level);
 		rc = THIRD_EEC_SOC;
 	}
+
 	return rc;
 }
 
@@ -1882,12 +2033,28 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 		}
 
 		SOC_correction (GG);
+
+#if defined(STC3117_AGING_FEATURE)
+		CompensateCCCnf(battery_capacity_aging_level);
+#endif /* STC3117_AGING_FEATURE */
+
 		/* SOC derating with temperature */
 		BattData.SOC = CompensateSOC(BattData.SOC,BattData.Temperature);
 
 		//early empty compensation
 		value=BattData.AvgVoltage;
 		if (BattData.Voltage < value) value = BattData.Voltage;
+#if defined(STC3117_AGING_VOLTAGE_FEATURE)
+		if (value <= (AGING_CHECK_VOLTAGE + 5) && value >= (AGING_CHECK_VOLTAGE - 5)) {
+			if (aging_trigger_flag) {
+				//do aging comarsion
+				voltage_aging_compensation(BattData.AvgCurrent, BattData.SOC);
+				//if (BattData.AvgCurrent < 0 && BattData.AvgCurrent >= -50)
+				aging_trigger_flag = false;
+			}
+
+		}
+#endif /* STC3117_AGING_VOLTAGE_FEATURE */
 		if (value < (APP_MIN_VOLTAGE + 100)) {
 			// Voltage drop below 3000 mV, then 0% and shutdown
 			if (value < APP_MIN_VOLTAGE_EMPTY) {
@@ -1944,6 +2111,9 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 			if (chg_full_flag) {
 				BattData.SOC = MAX_SOC;
 				STC311x_SetSOC(MAX_HRSOC);
+#if defined(STC3117_AGING_VOLTAGE_FEATURE)
+				aging_trigger_flag = true;
+#endif /* STC3117_AGING_VOLTAGE_FEATURE */
 #ifdef DEBUG_SOC
 				pr_err("Lately fully_100: HRSOC=%d, SOC=%d, chg_full_flag=%d\n", BattData.HRSOC, BattData.SOC, chg_full_flag);
 #endif
@@ -1959,6 +2129,12 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 				BattData.SOC = 10;
 				STC311x_SetSOC(1*512);
 			}
+#if defined(STC3117_AGING_VOLTAGE_FEATURE)
+			if (BattData.AvgCurrent > CHG_NOT_CHARGE && BattData.SOC <= 980) {
+				pr_err("[Alan] Charing now, reset aging_trigger_flag\n");
+				aging_trigger_flag = false;
+			}
+#endif /* STC3117_AGING_VOLTAGE_FEATURE */
 		}
 
 		if (BattData.HRSOC > MAX_HRSOC) {
@@ -2280,20 +2456,33 @@ static void stc311x_work(struct work_struct *work)
 	if (res > 0) {
 		/* results available */
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
-		if ((chip->batt_soc != chip->batt_soc_last) && (chip->batt_soc <= 1)) {
+		if ((chip->batt_soc != chip->batt_soc_last) && (chip->batt_soc <= 3)) {
 			pr_err("Battery soc is %d, notify power_supply\n", chip->batt_soc);
 			power_supply_changed(&chip->battery);
 		}
 #ifdef DEBUG_SOC
-		pr_err("last_soc=%d, soc=%d, volt=%d, avg_volt%d\n", chip->batt_soc_last, chip->batt_soc, GasGaugeData.Voltage, BattData.AvgVoltage);
+		pr_err("last_soc=%d, soc=%d, volt=%d, avg_volt=%d\n", chip->batt_soc_last, chip->batt_soc, GasGaugeData.Voltage, BattData.AvgVoltage);
 #endif
 		if ((GasGaugeData.AvgCurrent < CHG_NOT_CHARGE) && chip->batt_soc > chip->batt_soc_last && GasGaugeData.Voltage < BATT_CHG_VOLTAGE) {
 			chip->batt_soc = chip->batt_soc_last;
 		} else {
+#if defined(STC3117_AGING_FEATURE)
+			pr_err("Before aging calculate, aging_counter=%d\n", aging_counter);
+			if ((GasGaugeData.AvgCurrent > CHG_NOT_CHARGE && chip->batt_soc > chip->batt_soc_last)) {
+				aging_counter += (chip->batt_soc - chip->batt_soc_last);//counter++
+			}
+			pr_err("after aging calculate, aging_counter=%d\n", aging_counter);
+			battery_capacity_aging_level = 100 - ((aging_counter / 100) * 20 / 500);
+			pr_err("battery_capacity_aging_level=%d\n", battery_capacity_aging_level);
+#endif /* STC3117_AGING_FEATURE */
 			chip->batt_soc_last = chip->batt_soc;
 		}
+
 		chip->batt_voltage = GasGaugeData.Voltage;
 		chip->batt_current = GasGaugeData.Current;
+#if defined(STC3117_AGING_FEATURE)
+		chip->batt_charge_cycle = aging_counter / 100;
+#endif /* STC3117_AGING_FEATURE */
 		chip->batt_temp = GasGaugeData.Temperature;
 	} else if(res == -1) {
 		chip->batt_voltage = GasGaugeData.Voltage;
@@ -2310,6 +2499,9 @@ static void stc311x_work(struct work_struct *work)
 static enum power_supply_property stc311x_battery_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_ONLINE,
+#if defined(STC3117_AGING_FEATURE)
+	POWER_SUPPLY_PROP_CYCLE_COUNT,
+#endif /* STC3117_AGING_FEATURE */
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
