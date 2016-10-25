@@ -33,7 +33,7 @@ struct service {
 	atomic_t             s_flags;
 
 	// TODO(eieio): figure out what to do about forking/execing
-	void __user *        s_context;        // userspace context pointer
+	__u64                s_context;        // userspace context pointer
 	struct file *        s_filp;           // does not hold a ref to the file
 };
 
@@ -51,7 +51,7 @@ struct channel {
 	atomic_t             c_flags;
 
 	// TODO(eieio): figure out what to do about forking/execing
-	void __user *        c_context;
+	__u64                c_context;
 };
 
 struct message {
@@ -70,7 +70,6 @@ struct message {
 	gid_t                m_egid;           // sender egid
 	wait_queue_head_t    m_waitqueue;      // wait queue for sender
 
-	struct service *     m_service;
 	struct channel *     m_channel;
 
 	int                  m_op;
@@ -86,7 +85,7 @@ struct message {
 	struct iov_buffer    m_sbuf;           // send buffer vecs
 	struct iov_buffer    m_rbuf;           // receive buffer vecs
 
-	const int *          m_fds;
+	const __s32 *        m_fds;
 	size_t               m_fdcnt;
 
 	ssize_t              m_status;         // return code
@@ -108,12 +107,11 @@ struct impulse {
 	uid_t                i_euid;           // sender euid
 	gid_t                i_egid;           // sender egid
 
-	struct service *     i_service;
 	struct channel *     i_channel;
 
 	int                  i_op;
 	long                 i_data[4];
-	size_t               i_len;
+	uint8_t              i_len;
 };
 
 /*
@@ -189,17 +187,15 @@ struct service *servicefs_get_service_from_file(struct file *filp);
 struct servicefs_msg_info_struct;
 
 int servicefs_push_channel(struct service *svc, int svcfd, int msgid,
-		int flags, int __user *cid, void __user *ctx, bool is_compat);
+		int flags, __s32 __user *cid, __u64 ctx);
 int servicefs_close_channel(struct service *svc, int cid);
 int servicefs_check_channel(struct service *svc, int svcfd, int msgid,
-		int index, int __user *cid, void __user **ctx, bool is_compat);
+		int index, __s32 __user *cid, __u64 __user *ctx);
 
-int servicefs_set_service_context(struct service *svc, void __user *ctx);
-int servicefs_set_channel_context(struct service *svc,
-		int cid, void __user *ctx);
+int servicefs_set_service_context(struct service *svc, __u64 ctx);
+int servicefs_set_channel_context(struct service *svc, int cid, __u64 ctx);
 int servicefs_msg_recv(struct service *svc,
-		struct servicefs_msg_info_struct __user *msg_info, long timeout,
-		bool is_compat);
+		struct servicefs_msg_info_struct __user *msg_info, long timeout);
 ssize_t servicefs_msg_readv(struct service *svc, int msgid,
 		const struct iovec *vec, size_t cnt);
 ssize_t servicefs_msg_writev(struct service *svc, int msgid,
@@ -220,7 +216,7 @@ int servicefs_msg_get_fd(struct service *svc, int msgid, unsigned int index);
 ssize_t servicefs_msg_sendv(struct channel *c, int op,
 		const struct iovec *svec, size_t scnt,
 		const struct iovec *rvec, size_t rcnt,
-		const int *fds, size_t fdcnt, long task_state);
+		const __s32 *fds, size_t fdcnt, long task_state);
 int servicefs_msg_send_impulse(struct channel *c, int op,
 		void __user *buf, size_t len);
 
@@ -228,7 +224,7 @@ static inline ssize_t servicefs_msg_sendv_interruptible(
 		struct channel *c, int op,
 		const struct iovec *svec, size_t scnt,
 		const struct iovec *rvec, size_t rcnt,
-		const int *fds, size_t fdcnt)
+		const __s32 *fds, size_t fdcnt)
 {
 	return servicefs_msg_sendv(c, op, svec, scnt, rvec, rcnt, fds, fdcnt,
 			TASK_INTERRUPTIBLE);
@@ -238,11 +234,12 @@ static inline ssize_t servicefs_msg_sendv_uninterruptible(
 		struct channel *c, int op,
 		const struct iovec *svec, size_t scnt,
 		const struct iovec *rvec, size_t rcnt,
-		const int *fds, size_t fdcnt)
+		const __s32 *fds, size_t fdcnt)
 {
 	return servicefs_msg_sendv(c, op, svec, scnt, rvec, rcnt, fds, fdcnt,
 			TASK_UNINTERRUPTIBLE);
 }
+
 /*
  * Data transfer utilities for moving data between address spaces.
  */

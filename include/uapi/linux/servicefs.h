@@ -1,112 +1,105 @@
 #ifndef _SERVICEFS_IOCTL_H
 #define _SERVICEFS_IOCTL_H
 
-#ifdef __KERNEL__
-#include <linux/ioctl.h>
 #include <linux/types.h>
-#include <linux/uio.h>
-#include <linux/file.h>
-#else
-#include <sys/ioctl.h>
-#include <sys/uio.h>
-#endif
 
 struct servicefs_set_channel_context_struct {
-	int    cid;
-	void * ctx;
+	__s32         cid; // int
+	__aligned_u64 ctx; // void *
 };
 
 struct servicefs_msg_sendv_struct {
-	int                  op;
-	const struct iovec * svec;
-	size_t               scnt;
-	const struct iovec * rvec;
-	size_t               rcnt;
-	const int *          fds;
-	size_t               fdcnt;
+	__s32         op;    // int
+	__aligned_u64 svec;  // const struct iovec *
+	__aligned_u64 scnt;  // size_t
+	__aligned_u64 rvec;  // const struct iovec *
+	__aligned_u64 rcnt;  // size_t
+	__aligned_u64 fds;   // int *
+	__aligned_u64 fdcnt; // size_t
 };
 
 struct servicefs_msg_info_struct {
-	int      pid;
-	int      tid;
-	int      cid;
-	int      mid;
-	int      euid;
-	int      egid;
-	void *   service_private;
-	void *   channel_private;
-	int      op;
-	int      flags;
-	size_t   send_len;
-	size_t   recv_len;
-	size_t   fd_count;
-	uint64_t impulse[4];
+	__s32         pid;             // int
+	__s32         tid;             // int
+	__s32         cid;             // int
+	__s32         mid;             // int
+	__s32         euid;            // int
+	__s32         egid;            // int
+	__s32         op;              // int32_t
+	__u32         flags;           // uint32_t
+	__aligned_u64 service_private; // void *
+	__aligned_u64 channel_private; // void *
+	__aligned_u64 send_len;        // size_t
+	__aligned_u64 recv_len;        // size_t
+	__aligned_u64 fd_count;        // size_t
+	__aligned_u64 impulse[4];      // uint64_t
 };
 
 struct servicefs_msg_rwvec_struct {
-	int                  msgid;
-	const struct iovec * vec;
-	size_t               len;
+	__s32         msgid; // int
+	__aligned_u64 vec;   // const struct iovec *
+	__aligned_u64 len;   // size_t
 };
 
 struct servicefs_msg_seek_struct {
-	int  msgid;
-	long offset;
-	int  whence;
+	__s32         msgid;  // int
+	__s32         whence; // int
+	__aligned_u64 offset; // size_t
 };
 
 struct servicefs_msg_busv_struct {
-	int    dst_msgid;
-	long   dst_offset;
-	int    src_msgid;
-	long   src_offset;
-	size_t len;
+	__s32         dst_msgid;  // int
+	__s32         src_msgid;  // int
+	__aligned_u64 dst_offset; // size_t
+	__aligned_u64 src_offset; // size_t
+	__aligned_u64 len;        // size_t
 };
 
 struct servicefs_msg_reply_struct {
-	int msgid;
-	int retcode;
+	__s32         msgid;   // int
+	__s32         retcode; // int
 };
 
 struct servicefs_msg_send_impulse_struct {
-	int    op;
-	void * buf;
-	size_t len;
+	__s32         op;  // int
+	__aligned_u64 buf; // const void *
+	__aligned_u64 len; // size_t
 };
 
 struct servicefs_mod_channel_events_struct {
-	int cid;
-	int clr;
-	int set;
+	__s32         cid;     // int
+	__u32         clr;     // uint32_t
+	__u32         set;     // uint32_t
+	__u32         padding; // none
 };
 
 struct servicefs_msg_push_fd_struct {
-	int          msgid;
-	unsigned int pushfd;
+	__s32         msgid;  // int
+	__u32         pushfd; // unsigned int
 };
 
 struct servicefs_msg_get_fd_struct {
-	int          msgid;
-	unsigned int index;
+	__s32         msgid; // int
+	__u32         index; // unsigned int
 };
 
 struct servicefs_push_channel_struct {
-	int    svcfd;
-	int    msgid;
-	int    flags;
-	int *  cid;
-	void * ctx;
+	__s32         svcfd; // int
+	__s32         msgid; // int
+	__s32         flags; // int
+	__aligned_u64 cid;   // int *
+	__aligned_u64 ctx;   // void *
 };
 
 struct servicefs_check_channel_struct {
-	int    svcfd;
-	int    msgid;
-	int    index;
-	int *  cid;
-	void * ctx;
+	__s32         svcfd; // int
+	__s32         msgid; // int
+	__s32         index; // int
+	__aligned_u64 cid;   // int *
+	__aligned_u64 ctx;   // void *
 };
 
-#define SERVICEFS_SET_SERVICE_CONTEXT       _IOW ('x',  0, void *)
+#define SERVICEFS_SET_SERVICE_CONTEXT       _IOW ('x',  0, __u64)
 #define SERVICEFS_SET_CHANNEL_CONTEXT       _IOW ('x',  1, struct servicefs_set_channel_context_struct)
 #define SERVICEFS_MSG_SENDV                 _IOWR('x',  2, struct servicefs_msg_sendv_struct)
 #define SERVICEFS_MSG_RECV                  _IOR ('x',  3, struct servicefs_msg_info_struct)
@@ -121,7 +114,7 @@ struct servicefs_check_channel_struct {
 #define SERVICEFS_MSG_PUSH_FD               _IOW ('x', 12, struct servicefs_msg_push_fd_struct)
 #define SERVICEFS_MSG_GET_FD                _IOW ('x', 13, struct servicefs_msg_get_fd_struct)
 #define SERVICEFS_PUSH_CHANNEL              _IOWR('x', 14, struct servicefs_push_channel_struct)
-#define SERVICEFS_CLOSE_CHANNEL             _IOW ('x', 15, int)
+#define SERVICEFS_CLOSE_CHANNEL             _IOW ('x', 15, __s32)
 #define SERVICEFS_CHECK_CHANNEL             _IOWR('x', 16, struct servicefs_check_channel_struct)
 #define SERVICEFS_CANCEL_SERVICE            _IO  ('x', 17)
 
