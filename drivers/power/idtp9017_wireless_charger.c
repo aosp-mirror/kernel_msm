@@ -90,7 +90,8 @@ static void idtp9017_wlc_enable(struct idtp9017_chip *chip, bool enable)
 	chip->wlc_enabled = enable;
 
 	/* It will be queued if required later */
-	cancel_delayed_work_sync(&chip->wlc_online_check_work);
+	if (!enable)
+		cancel_delayed_work_sync(&chip->wlc_online_check_work);
 
 	mutex_lock(&chip->wlc_lock);
 	if (enable) {
