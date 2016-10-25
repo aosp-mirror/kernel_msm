@@ -141,8 +141,6 @@ struct ffs_data {
 	struct usb_request		*ep0req;		/* P: mutex */
 	struct completion		ep0req_completion;	/* P: mutex */
 	int				ep0req_status;		/* P: mutex */
-	struct completion		epin_completion;
-	struct completion		epout_completion;
 
 	/* reference counter */
 	atomic_t			ref;
@@ -323,6 +321,7 @@ struct ffs_epfile {
 	struct mutex			mutex;
 	wait_queue_head_t		wait;
 	atomic_t			error;
+	struct completion		done;
 
 	struct ffs_data			*ffs;
 	struct ffs_ep			*ep;	/* P: ffs->eps_lock */
@@ -772,7 +771,6 @@ static ssize_t ffs_epfile_io(struct file *file,
 {
 	struct ffs_epfile *epfile = file->private_data;
 	struct ffs_ep *ep;
-	struct ffs_data *ffs = epfile->ffs;
 	char *data = NULL;
 	ssize_t ret;
 	int halt;
@@ -880,14 +878,9 @@ first_try:
 		req->complete = ffs_epfile_io_complete;
 		req->buf      = data;
 		req->length   = buffer_len;
+		INIT_COMPLETION(epfile->done);
+		req->context  = done = &epfile->done;
 
-		if (read) {
-			INIT_COMPLETION(ffs->epout_completion);
-			req->context  = done = &ffs->epout_completion;
-		} else {
-			INIT_COMPLETION(ffs->epin_completion);
-			req->context  = done = &ffs->epin_completion;
-		}
 		ret = usb_ep_queue(ep->ep, req, GFP_ATOMIC);
 
 		spin_unlock_irq(&epfile->ffs->eps_lock);
@@ -917,12 +910,12 @@ first_try:
 			spin_unlock_irq(&epfile->ffs->eps_lock);
 			if (read && ret > 0) {
 				if (len != MAX_BUF_LEN && ret < len)
-					pr_err("less data(%zd) recieved than intended length(%zu)\n",
+					pr_debug("less data(%zd) recieved than intended length(%zu)\n",
 								ret, len);
-				if (ret > len) {
-					ret = -EOVERFLOW;
+				if (ret > buffer_len) {
 					pr_err("More data(%zd) recieved than intended length(%zu)\n",
 								ret, len);
+					ret = -EOVERFLOW;
 				} else if (unlikely(copy_to_user(
 							buf, data, ret))) {
 					pr_err("Fail to copy to user len:%zd\n",
@@ -1425,8 +1418,6 @@ static struct ffs_data *ffs_data_new(void)
 	spin_lock_init(&ffs->eps_lock);
 	init_waitqueue_head(&ffs->ev.waitq);
 	init_completion(&ffs->ep0req_completion);
-	init_completion(&ffs->epout_completion);
-	init_completion(&ffs->epin_completion);
 
 	/* XXX REVISIT need to update it in some places, or do we? */
 	ffs->ev.can_stall = 1;
@@ -1558,6 +1549,7 @@ static int ffs_epfiles_create(struct ffs_data *ffs)
 		mutex_init(&epfile->mutex);
 		init_waitqueue_head(&epfile->wait);
 		sprintf(epfiles->name, "ep%u",  i);
+		init_completion(&epfile->done);
 		if (!unlikely(ffs_sb_create_file(ffs->sb, epfiles->name, epfile,
 						 &ffs_epfile_operations,
 						 &epfile->dentry))) {
