@@ -97,6 +97,8 @@ static const char longname[] = "Gadget Android";
 #define MIDI_BUFFER_SIZE    256
 #define MIDI_QUEUE_LENGTH   32
 
+static struct android_usb_function *supported_functions[];
+
 struct android_usb_function {
 	char *name;
 	void *config;
@@ -529,14 +531,23 @@ struct functionfs_config {
 	struct android_dev *dev;
 };
 
-static int ffs_function_init(struct android_usb_function *f,
-			     struct usb_composite_dev *cdev)
+static int ffs_function_init_register(struct android_usb_function *f,
+				 struct usb_composite_dev *cdev)
 {
 	f->config = kzalloc(sizeof(struct functionfs_config), GFP_KERNEL);
 	if (!f->config)
 		return -ENOMEM;
 
 	return functionfs_init();
+}
+
+static int ffs_function_init(struct android_usb_function *f,
+				 struct usb_composite_dev *cdev)
+{
+	f->config = kzalloc(sizeof(struct functionfs_config), GFP_KERNEL);
+	if (!f->config)
+		return -ENOMEM;
+	return 0;
 }
 
 static void ffs_function_cleanup(struct android_usb_function *f)
@@ -623,34 +634,64 @@ static struct device_attribute *ffs_function_attributes[] = {
 	NULL
 };
 
-static struct android_usb_function ffs_function = {
-	.name		= "ffs",
-	.init		= ffs_function_init,
-	.enable		= ffs_function_enable,
-	.disable	= ffs_function_disable,
-	.cleanup	= ffs_function_cleanup,
-	.bind_config	= ffs_function_bind_config,
-	.attributes	= ffs_function_attributes,
+/*
+ * WARNING: when increasing the number of ffs functions, always add the
+ * corresponding number of elements to supported_functions[]
+ */
+#define MAX_FFS_FUNCTIONS 5
+struct android_usb_function ffs_functions[MAX_FFS_FUNCTIONS] = {
+	/*
+	 * Pointers to functionfs functions. This allows a variable number
+	 * of functions to be controlled with a single define.
+	 */
+	[0] = (struct android_usb_function) {
+		/* The first function registers the device and filesystem */
+		.name		= "ffs",
+		.init		= ffs_function_init_register,
+		.enable		= ffs_function_enable,
+		.disable	= ffs_function_disable,
+		.cleanup	= ffs_function_cleanup,
+		.bind_config	= ffs_function_bind_config,
+		.attributes	= ffs_function_attributes,
+	},
+	[1 ... MAX_FFS_FUNCTIONS - 1] = (struct android_usb_function) {
+		.name		= "ffs",
+		.init		= ffs_function_init,
+		.enable		= ffs_function_enable,
+		.disable	= ffs_function_disable,
+		.cleanup	= ffs_function_cleanup,
+		.bind_config	= ffs_function_bind_config,
+		.attributes	= NULL,
+	},
 };
 
 static int functionfs_ready_callback(struct ffs_data *ffs)
 {
-	struct android_dev *dev = ffs_function.android_dev;
-	struct functionfs_config *config = ffs_function.config;
+	struct android_usb_function *ffs_function = NULL;
+	struct android_dev *dev = NULL;
+	struct functionfs_config *config;
+	int i;
 	int ret = 0;
 
-	/* dev is null in case ADB is not in the composition */
-	if (dev) {
-		mutex_lock(&dev->mutex);
-		ret = functionfs_bind(ffs, dev->cdev);
-		if (ret) {
-			mutex_unlock(&dev->mutex);
-			return ret;
+	for (i = 0; i < MAX_FFS_FUNCTIONS; i++) {
+		/* Get a container for the function that has been enabled */
+		config = supported_functions[i]->config;
+		if (config && !config->opened) {
+			ffs_function = supported_functions[i];
+			dev = ffs_function->android_dev;
+			break;
 		}
-	} else {
-		/* android ffs_func requires daemon to start only after enable*/
-		pr_debug("start adbd only in ADB composition\n");
+	}
+	if (unlikely(ffs_function == NULL || dev == NULL)) {
+		pr_err("Attempted to callback a function that was not registered!\n");
 		return -ENODEV;
+	}
+
+	mutex_lock(&dev->mutex);
+	ret = functionfs_bind(ffs, dev->cdev);
+	if (ret) {
+		mutex_unlock(&dev->mutex);
+		return ret;
 	}
 
 	config->data = ffs;
@@ -668,8 +709,24 @@ static int functionfs_ready_callback(struct ffs_data *ffs)
 
 static void functionfs_closed_callback(struct ffs_data *ffs)
 {
-	struct android_dev *dev = ffs_function.android_dev;
-	struct functionfs_config *config = ffs_function.config;
+	struct android_usb_function *ffs_function = NULL;
+	struct android_dev *dev = NULL;
+	struct functionfs_config *config;
+	int i;
+	for (i = 0; i < MAX_FFS_FUNCTIONS; i++) {
+		config = supported_functions[i]->config;
+		if (config && config->data == ffs) {
+			ffs_function = supported_functions[i];
+			dev = ffs_function->android_dev;
+			break;
+		}
+	}
+
+	if (unlikely(ffs_function == NULL)) {
+		/* Should never happen since opening the function would fail */
+		pr_err("No function found for closed callback!\n");
+		return;
+	}
 
 	/*
 	 * In case new composition is without ADB or ADB got disabled by the
@@ -679,13 +736,14 @@ static void functionfs_closed_callback(struct ffs_data *ffs)
 		dev = config->dev;
 
 	/* fatal-error: It should never happen */
-	if (!dev)
+	if (!dev) {
 		pr_err("adb_closed_callback: config->dev is NULL");
+		return;
+	}
 
-	if (dev)
-		mutex_lock(&dev->mutex);
+	mutex_lock(&dev->mutex);
 
-	if (config->enabled && dev)
+	if (config->enabled)
 		android_disable(dev);
 
 	config->dev = NULL;
@@ -695,8 +753,7 @@ static void functionfs_closed_callback(struct ffs_data *ffs)
 
 	functionfs_unbind(ffs);
 
-	if (dev)
-		mutex_unlock(&dev->mutex);
+	mutex_unlock(&dev->mutex);
 }
 
 static void *functionfs_acquire_dev_callback(const char *dev_name)
@@ -2852,7 +2909,11 @@ static struct android_usb_function midi_function = {
 };
 
 static struct android_usb_function *supported_functions[] = {
-	&ffs_function,
+	&ffs_functions[0],
+	&ffs_functions[1],
+	&ffs_functions[2],
+	&ffs_functions[3],
+	&ffs_functions[4],
 	&mbim_function,
 	&ecm_qc_function,
 #ifdef CONFIG_SND_PCM
@@ -2928,14 +2989,17 @@ static int android_init_functions(struct android_usb_function **functions,
 			err = -ENOMEM;
 			goto err_out;
 		}
-		f->dev = device_create(android_class, dev->dev,
-				MKDEV(0, index), f, f->dev_name);
-		if (IS_ERR(f->dev)) {
-			pr_err("%s: Failed to create dev %s", __func__,
-							f->dev_name);
-			err = PTR_ERR(f->dev);
-			f->dev = NULL;
-			goto err_create;
+
+		if (f->attributes) {
+			f->dev = device_create(android_class, dev->dev,
+					MKDEV(0, index), f, f->dev_name);
+			if (IS_ERR(f->dev)) {
+				pr_err("%s: Failed to create dev %s", __func__,
+								f->dev_name);
+				err = PTR_ERR(f->dev);
+				f->dev = NULL;
+				goto err_create;
+			}
 		}
 
 		if (f->init) {
@@ -2948,6 +3012,8 @@ static int android_init_functions(struct android_usb_function **functions,
 		}
 
 		attrs = f->attributes;
+		if (!attrs)
+			continue;
 		if (attrs) {
 			while ((attr = *attrs++) && !err)
 				err = device_create_file(f->dev, attr);
@@ -3034,7 +3100,7 @@ static inline void check_streaming_func(struct usb_gadget *gadget,
 }
 static int android_enable_function(struct android_dev *dev,
 				   struct android_configuration *conf,
-				   char *name)
+				   char *name, char *alias)
 {
 	struct android_usb_function **functions = dev->functions;
 	struct android_usb_function *f;
@@ -3044,32 +3110,53 @@ static int android_enable_function(struct android_dev *dev,
 
 	while ((f = *functions++)) {
 		if (!strcmp(name, f->name)) {
-			if (f->android_dev && f->android_dev != dev)
+			if (f->android_dev && f->android_dev != dev) {
 				pr_err("%s is enabled in other device\n",
 					f->name);
-			else {
-				f_holder = kzalloc(sizeof(*f_holder),
-						GFP_KERNEL);
-				if (!f_holder) {
-					pr_err("Failed to alloc f_holder\n");
-					return -ENOMEM;
-				}
-
-				f->android_dev = dev;
-				f_holder->f = f;
-				list_add_tail(&f_holder->enabled_list,
-					      &conf->enabled_functions);
-				pr_debug("func:%s is enabled.\n", f->name);
-				/*
-				 * compare enable function with streaming func
-				 * list and based on the same request streaming.
-				 */
-				check_streaming_func(gadget, pdata, f->name);
-
-				return 0;
+				continue;
 			}
+			/* Each ffs function gets its own container */
+			if (!f->config)
+				pr_err("function not initialized!");
+
+			/* If this is a ffs function that has been configured,
+			 * make sure we connect the correct functions. */
+			if (!strcmp(name, "ffs")) {
+				struct ffs_data *data =
+						((struct functionfs_config *)
+						f->config)->data;
+				if (data && strcmp(data->dev_name, alias))
+					continue;
+			}
+
+			if (f->android_dev && !strcmp(f->name, "ffs"))
+				continue;
+			f_holder = kzalloc(sizeof(*f_holder),
+					GFP_KERNEL);
+			if (unlikely(!f_holder)) {
+				pr_err("Failed to alloc f_holder\n");
+				return -ENOMEM;
+			}
+
+			f->android_dev = dev;
+			f_holder->f = f;
+			list_add_tail(&f_holder->enabled_list,
+				      &conf->enabled_functions);
+			pr_debug("func:%s is enabled.\n", f->name);
+			/*
+			 * compare enable function with streaming func
+			 * list and based on the same request streaming.
+			 */
+			check_streaming_func(gadget, pdata, f->name);
+
+			return 0;
 		}
 	}
+	if (!strcmp(name, "ffs"))
+		pr_err("No more than %d ffs functions can exist at once.\n",
+				MAX_FFS_FUNCTIONS);
+	else
+		pr_err("Function %s not found in supported functions\n", name);
 	return -EINVAL;
 }
 
@@ -3216,9 +3303,8 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 			}
 
 			if (is_ffs) {
-				if (ffs_enabled)
-					continue;
-				err = android_enable_function(dev, conf, "ffs");
+				err = android_enable_function(
+					dev, conf, "ffs", name);
 				if (err)
 					pr_err("android_usb: Cannot enable ffs (%d)",
 									err);
@@ -3231,7 +3317,7 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 				!strcmp(strim(rndis_transports), "BAM2BAM_IPA"))
 				name = "rndis_qc";
 
-			err = android_enable_function(dev, conf, name);
+			err = android_enable_function(dev, conf, name, NULL);
 			if (err)
 				pr_err("android_usb: Cannot enable '%s' (%d)",
 							name, err);
