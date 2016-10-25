@@ -79,26 +79,6 @@ static void update_curr_idle(struct rq *rq)
 {
 }
 
-#ifdef CONFIG_SCHED_HMP
-
-static void
-inc_hmp_sched_stats_idle(struct rq *rq, struct task_struct *p)
-{
-}
-
-static void
-dec_hmp_sched_stats_idle(struct rq *rq, struct task_struct *p)
-{
-}
-
-static void
-fixup_hmp_sched_stats_idle(struct rq *rq, struct task_struct *p,
-			   u32 new_task_load, u32 new_pred_demand)
-{
-}
-
-#endif
-
 /*
  * Simple, special scheduling class for the per-CPU idle tasks:
  */
@@ -127,9 +107,4 @@ const struct sched_class idle_sched_class = {
 	.prio_changed		= prio_changed_idle,
 	.switched_to		= switched_to_idle,
 	.update_curr		= update_curr_idle,
-#ifdef CONFIG_SCHED_HMP
-	.inc_hmp_sched_stats	= inc_hmp_sched_stats_idle,
-	.dec_hmp_sched_stats	= dec_hmp_sched_stats_idle,
-	.fixup_hmp_sched_stats	= fixup_hmp_sched_stats_idle,
-#endif
 };

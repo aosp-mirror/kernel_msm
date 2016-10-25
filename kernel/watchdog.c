@@ -235,27 +235,13 @@ static void __touch_watchdog(void)
 	__this_cpu_write(watchdog_touch_ts, get_timestamp());
 }
 
-/**
- * touch_softlockup_watchdog_sched - touch watchdog on scheduler stalls
- *
- * Call when the scheduler may have stalled for legitimate reasons
- * preventing the watchdog task from executing - e.g. the scheduler
- * entering idle state.  This should only be used for scheduler events.
- * Use touch_softlockup_watchdog() for everything else.
- */
-void touch_softlockup_watchdog_sched(void)
+void touch_softlockup_watchdog(void)
 {
 	/*
 	 * Preemption can be enabled.  It doesn't matter which CPU's timestamp
 	 * gets zeroed here, so use the raw_ operation.
 	 */
 	raw_cpu_write(watchdog_touch_ts, 0);
-}
-
-void touch_softlockup_watchdog(void)
-{
-	touch_softlockup_watchdog_sched();
-	wq_watchdog_touch(raw_smp_processor_id());
 }
 EXPORT_SYMBOL(touch_softlockup_watchdog);
 
