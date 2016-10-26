@@ -41,6 +41,7 @@ struct idtp9017_chip {
 	int wlc_enable_gpio;
 	int wlc_full_chg_gpio;
 	int wlc_off_gpio;
+	int tx_detect_gpio;
 	int set_out_voltage;
 	int set_limit_current_ma;
 	int x_axis;
@@ -123,9 +124,11 @@ static void idtp9017_wlc_enable(struct idtp9017_chip *chip, bool enable)
 		disable_irq(chip->client->irq);
 		idtp9017_update_time(chip);
 		gpio_set_value(chip->wlc_off_gpio, 1);
-		schedule_delayed_work(&chip->wlc_online_check_work,
+		if (!gpio_is_valid(chip->tx_detect_gpio)) {
+			schedule_delayed_work(&chip->wlc_online_check_work,
 				round_jiffies_relative(
 				msecs_to_jiffies(chip->wlc_online_chk_delay_ms)));
+		}
 	}
 	dev_info(chip->dev, "WLC TX enable: %d\n", chip->psy_chg_en);
 	mutex_unlock(&chip->wlc_lock);
@@ -191,6 +194,8 @@ static void idtp9017_wlc_online_check_work(struct work_struct *work)
 				struct idtp9017_chip, wlc_online_check_work);
 	int ret;
 
+	if (gpio_is_valid(chip->tx_detect_gpio))
+		return;
 	/*
 	 * When software requests wireless charging be disabled, a gpio is
 	 * driven to the rx chip to prevent it from requesting power from the
@@ -283,7 +288,8 @@ static int pm_power_set_property_wireless(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PRESENT:
 	case POWER_SUPPLY_PROP_ONLINE:
-		chip->online = val->intval;
+		if (!gpio_is_valid(chip->tx_detect_gpio))
+			chip->online = val->intval;
 		break;
 	case POWER_SUPPLY_PROP_TYPE:
 		psy->type = val->intval;
@@ -1161,6 +1167,20 @@ static irqreturn_t idtp9017_irq_thread(int irq, void *handle)
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t tx_detect_irq_thread(int irq, void *handle)
+{
+	struct idtp9017_chip *chip = (struct idtp9017_chip *)handle;
+	int gpio;
+
+	gpio = gpio_get_value(chip->tx_detect_gpio);
+	chip->online = !gpio;
+
+	dev_info(chip->dev, "%s: tx detect gpio = %d\n", __func__, gpio);
+	power_supply_changed(&chip->wlc_psy);
+
+	return IRQ_HANDLED;
+}
+
 static int idtp9017_debugfs_check_online(void *data, u64 val)
 {
 	struct idtp9017_chip *chip = data;
@@ -1243,6 +1263,11 @@ static int idtp9017_parse_dt(struct device_node *dev_node,
 	}
 	dev_info(dev, "Get wlc-off-gpio: %d\n",
 				chip->wlc_off_gpio);
+
+	chip->tx_detect_gpio = of_get_named_gpio(dev_node,
+			"idt,tx-detect-gpio", 0);
+	dev_info(dev, "Get tx_detect_gpio: %d\n",
+				chip->tx_detect_gpio);
 
 	ret = of_property_read_u32(dev_node,
 			"idt,mode-depth", &chip->mode_depth);
@@ -1337,6 +1362,15 @@ static int idtp9017_init_gpio(struct idtp9017_chip *chip)
 		return ret;
 	}
 
+	if (gpio_is_valid(chip->tx_detect_gpio)) {
+		ret = devm_gpio_request_one(chip->dev,
+				chip->tx_detect_gpio, GPIOF_DIR_IN,
+				"tx_detect_gpio");
+		if (ret < 0) {
+			dev_err(chip->dev, "Fail to request tx_detect_gpio\n");
+			return ret;
+		}
+	}
 	return 0;
 }
 
@@ -1429,6 +1463,27 @@ static int idtp9017_probe(struct i2c_client *client,
 	}
 	enable_irq_wake(client->irq);
 
+	if (gpio_is_valid(chip->tx_detect_gpio)) {
+		int irq = gpio_to_irq(chip->tx_detect_gpio);
+		if (irq < 0) {
+			dev_err(&client->dev, "Invalid IRQ\n");
+			goto err_request_irq;
+		}
+		ret = devm_request_threaded_irq(&client->dev,
+			irq, NULL, tx_detect_irq_thread,
+			IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
+			IRQF_ONESHOT,
+			"wlc_tx_irq", chip);
+		if (ret) {
+			dev_err(&client->dev,
+				"failed to reqeust tx detect IRQ\n");
+			goto err_request_irq;
+		}
+		enable_irq_wake(irq);
+		/* Update initial state */
+		tx_detect_irq_thread(irq, (void *)chip);
+	}
+
 	idtp9017_create_debugfs_entries(chip);
 
 	dev_info(&client->dev, "bootmode charger = %d\n",
@@ -1451,7 +1506,7 @@ static void idtp9017_resume(struct device *dev)
 	delay = is_bootmode_charger? 0 : round_jiffies_relative(
 			msecs_to_jiffies(chip->wlc_online_chk_delay_ms));
 
-	if (!chip->psy_chg_en)
+	if (!gpio_is_valid(chip->tx_detect_gpio) && !chip->psy_chg_en)
 		schedule_delayed_work(&chip->wlc_online_check_work, delay);
 
 	if (chip->wlc_enabled && chip->wlc_chg_en)
@@ -1464,7 +1519,7 @@ static int idtp9017_suspend(struct device *dev)
 {
 	struct idtp9017_chip *chip = dev_get_drvdata(dev);
 
-	if (!chip->psy_chg_en)
+	if (!gpio_is_valid(chip->tx_detect_gpio) && !chip->psy_chg_en)
 		cancel_delayed_work_sync(&chip->wlc_online_check_work);
 
 	if (chip->wlc_enabled && chip->wlc_chg_en)
