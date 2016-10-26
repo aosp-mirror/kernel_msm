@@ -71,7 +71,7 @@ static void AXC_Charging_State_handle(AXI_Charging_State *state,AXE_Charger_Even
     AXA_Charging_State  *_this=
         container_of(state, AXA_Charging_State, miParent);
 
-    printk("%s,event=%d\n", __FUNCTION__,event);
+    pr_debug("%s,event=%d\n", __FUNCTION__,event);
 
     switch(event)
     {
