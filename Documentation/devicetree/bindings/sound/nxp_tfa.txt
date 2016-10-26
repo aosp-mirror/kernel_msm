@@ -1,0 +1,26 @@
+TFA I2C audio CODEC
+
+Required properties:
+
+ - compatible : "nxp,tfa98xx" or "nxp,tfa9890" or "nxp,tfa9888"
+		or "nxp,tfa9891" for NXP TFA98xx
+
+ - reg : slave address
+ - reset-gpio : GPIO output high active
+ - upper-spk : Define for upper speaker
+
+Example:
+
+i2c@c1b5000 {
+	nxp_tfa98xx_amp@34 {
+		compatible = "nxp,tfa98xx";
+		reg = <0x34>;
+		reset-gpio = <&pmcobalt_gpios 6 0x1>;
+		upper-spk;
+	};
+	nxp_tfa98xx_amp@35 {
+		compatible = "nxp,tfa98xx";
+		reg = <0x35>;
+		reset-gpio = <&pmcobalt_gpios 7 0x1>;
+	};
+};
