@@ -1,0 +1,59 @@
+&pm8005_gpios {
+	gpio@c000 {
+		reg = <0xc000 0x100>;
+		qcom,pin-num = <1>;
+		qcom,mode = <1>;	/* Digital output */
+		qcom,output-type = <0>;	/* CMOS logic */
+		qcom,,vin-sel = <2>;	/* S4 1.8V */
+		qcom,src-sel = <0>;	/* Constant */
+		qcom,master-en = <1>;	/* Enable GPIO  */
+		qcom,invert = <1>;	/* output high */
+		status = "okay";
+	};
+};
+
+&soc {
+	sound-9335 {
+		qcom,msm-mbhc-hphl-swh = <1>; /* for NO Audio Jack */
+		qcom,msm-mbhc-gnd-swh = <1>; /* for NO Audio Jack */
+		qcom,wsa-max-devs = <0>; /* No wsa device */
+		/delete-property/ qcom,wsa-devs;
+	};
+/* nxp config for right left spk */
+	i2c@c1b5000 { /* i2c_7 */
+		nxp_tfa98xx_amp@34 {
+			compatible = "nxp,tfa98xx";
+			reg = <0x34>;
+			reset-gpio = <&pmcobalt_gpios 6 0x1>;
+			upper-spk; /* left */
+		};
+
+		nxp_tfa98xx_amp@35 {
+			compatible = "nxp,tfa98xx";
+			reg = <0x35>;
+			reset-gpio = <&pmcobalt_gpios 7 0x1>;
+		};
+	};
+
+	qcom,msm-dai-mi2s {
+		dai_mi2s3: qcom,msm-dai-q6-mi2s-quat {
+			qcom,msm-mi2s-rx-lines = <2>; /* SD1 (1 << 1) */
+			qcom,msm-mi2s-tx-lines = <1>; /* SD0 (0 << 0) */
+			qcom,msm-mi2s-slave = <0>;
+			pinctrl-names = "default", "sleep";
+			pinctrl-0 = <&quat_mi2s_active
+				     &quat_mi2s_sd0_active
+				     &quat_mi2s_sd1_active>;
+			pinctrl-1 = <&quat_mi2s_sleep
+				     &quat_mi2s_sd0_sleep
+				     &quat_mi2s_sd1_sleep>;
+		};
+	};
+};
+
+&slim_aud {
+	tasha_codec {
+		/delete-node/ swr_master;
+	};
+};
+
