@@ -157,4 +157,9 @@ config SND_SOC_MSMCOBALT
 	 the machine driver and the corresponding
 	 DAI-links
 
+config SND_SOC_TFA98XX
+	bool "TFA NXP SPK Amp support"
+	depends on I2C
+	default n
+
 endmenu
