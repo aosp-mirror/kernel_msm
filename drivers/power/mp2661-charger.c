@@ -31,6 +31,7 @@
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/kthread.h>
 #include <linux/sched.h>
+#include <linux/wakelock.h>
 
 /* Mask/Bit helpers */
 #define _mp2661_MASK(BITS, POS) \
@@ -145,7 +146,9 @@ struct mp2661_chg {
     struct power_supply        *bms_psy;
     const char            *bms_psy_name;
 
+    struct workqueue_struct   *charger_int_work_queue;
     struct work_struct        process_interrupt_work;
+    struct wake_lock          chg_wake_lock;
 
     /* adc_tm parameters */
     struct qpnp_vadc_chip    *vadc_dev;
@@ -1275,8 +1278,16 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
     if (chip->usb_present != usb_present)
     {
         chip->usb_present = usb_present;
-        pr_info("usb_present = %d\n", chip->usb_present);
+        if(chip->usb_present)
+        {
+            wake_lock(&chip->chg_wake_lock);
+        }
+        else
+        {
+            wake_unlock(&chip->chg_wake_lock);
+        }
 
+        pr_info("usb_present = %d\n", chip->usb_present);
         power_supply_set_present(chip->usb_psy, chip->usb_present);
         pr_info("usb psy changed\n");
         power_supply_changed(chip->usb_psy);
@@ -1287,7 +1298,7 @@ static irqreturn_t mp2661_chg_stat_handler(int irq, void *dev_id)
 {
     struct mp2661_chg *chip = dev_id;
 
-    schedule_work(&chip->process_interrupt_work);
+    queue_work(chip->charger_int_work_queue, &chip->process_interrupt_work);
 
     return IRQ_HANDLED;
 }
@@ -2275,6 +2286,15 @@ static int mp2661_charger_probe(struct i2c_client *client,
         return rc;
     }
 
+    wake_lock_init(&chip->chg_wake_lock, WAKE_LOCK_SUSPEND, "chg_wake_lock");
+
+    /* create single work queue to deal with charger interrupt work */
+    chip->charger_int_work_queue = create_singlethread_workqueue("charger_int_work");
+    if (!chip->charger_int_work_queue)
+    {
+        pr_err("can not create charger_int_work_queue\n");
+        return -ENOMEM;
+    }
     INIT_WORK(&chip->process_interrupt_work, mp2661_process_interrupt_work);
 
     /* stat irq configuration */
