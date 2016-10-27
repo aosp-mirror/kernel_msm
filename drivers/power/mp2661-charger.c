@@ -2127,6 +2127,16 @@ static void mp2661_adjust_batt_charging_current_and_voltage(
     }
     else
     {
+        if((chip->batt_temp_status != BAT_TEMP_STATUS_NORMAL_STATE4)
+            && (chip->batt_full_now_mv != chip->batt_full_mv))
+        {
+            rc = mp2661_set_batt_full_voltage(chip, chip->batt_full_mv);
+            if(rc)
+            {
+                pr_err("Couldn't set charge full voltage rc = %d\n", rc);
+            }
+        }
+
         count = 0;
         step_charging_flag = false;
     }
