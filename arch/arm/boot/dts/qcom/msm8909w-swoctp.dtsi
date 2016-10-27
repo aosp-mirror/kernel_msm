@@ -222,7 +222,7 @@
 		 * In this condition, we should define 'qcom,using-pmic-therm'.
 		 */
 		qcom,hot-bat-decidegc = <550>;
-		qcom,cold-bat-decidegc = <0>;
+		qcom,cold-bat-decidegc = <(-50)>;
 		qcom,bat-present-decidegc = <200>;
 		/*
 		 * Below preperties are used for enable JEITA

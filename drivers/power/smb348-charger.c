@@ -1169,7 +1169,10 @@ static int smb348_get_prop_batt_health(struct smb348_charger *chip)
 #define DEFAULT_BATT_WARM_TEMP	450
 #define DEFAULT_BATT_NORM_TEMP	250
 #define DEFAULT_BATT_COOL_TEMP	150
-#define DEFAULT_BATT_COLD_TEMP	50
+#define DEFAULT_BATT_COLD_TEMP	0
+
+#define DEFAULT_BATT_UPPER_TEMP	580
+#define DEFAULT_BATT_LOWER_TEMP	20
 static int smb348_get_prop_batt_temp(struct smb348_charger *chip)
 {
 	union power_supply_propval ret = {0, };
@@ -1177,7 +1180,7 @@ static int smb348_get_prop_batt_temp(struct smb348_charger *chip)
 	if (chip->bms_psy) {
 		chip->bms_psy->get_property(chip->bms_psy,
 		POWER_SUPPLY_PROP_TEMP, &ret);
-		pr_err("Gauge temp:%d\n", ret.intval);
+		pr_debug("Gauge temp:%d\n", ret.intval);
 		if (chip->wpc_state) {
 			if (ret.intval >= 500) {
 				pr_err("Temp too high, wpc disable\n");
@@ -1194,8 +1197,14 @@ static int smb348_get_prop_batt_temp(struct smb348_charger *chip)
 		}
 	}
 
-	if (chip->batt_hot)
+	if (chip->batt_hot) {
+		if (chip->bms_psy)
+			pr_err("Battery hot irq trigger, gauge temp:%d\n", ret.intval);
+		else
+			pr_err("Battery hot irq trigger\n");
+
 		return DEFAULT_BATT_HOT_TEMP;
+	}
 	if (chip->batt_warm)
 		return DEFAULT_BATT_WARM_TEMP;
 	if (chip->batt_cold)
@@ -1203,7 +1212,22 @@ static int smb348_get_prop_batt_temp(struct smb348_charger *chip)
 	if (chip->batt_cool)
 		return DEFAULT_BATT_COOL_TEMP;
 
-	return DEFAULT_BATT_NORM_TEMP;
+	if (chip->bms_psy) {
+		if (ret.intval >= DEFAULT_BATT_UPPER_TEMP) {
+			pr_err("*** Temp close shutdown point, but didn't receive batt hot irq ***\n");
+			pr_err("*** Keep current temp(%d) to 58\n", ret.intval);
+			return DEFAULT_BATT_UPPER_TEMP;
+		} else if (ret.intval <= DEFAULT_BATT_LOWER_TEMP) {
+			pr_err("*** Temp close cold point, but didn't receive batt cold irq ***\n");
+			pr_err("*** Keep current temp(%d) to 2\n", ret.intval);
+			return DEFAULT_BATT_LOWER_TEMP;
+		} else {
+			return ret.intval;
+		}
+	} else {
+		pr_err("No bms power supply, report normal temp\n");
+		return DEFAULT_BATT_NORM_TEMP;
+	}
 }
 
 static int
@@ -2258,6 +2282,9 @@ static void smb348_wpc_dock_work(struct work_struct *work)
 	if (!chip->wpc_dock_present) {
 		smb348_wpc_chg_gpio_clear(chip);
 		chip->chg_present = false;
+		if (chip->batt_full) {
+			chip->batt_full = false;
+		}
 		power_supply_set_present(chip->usb_psy, chip->chg_present);
 		power_supply_changed(chip->usb_psy);
 	}
