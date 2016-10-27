@@ -21,6 +21,43 @@
 	vci-supply = <&pmcobalt_l22>;
 };
 
+&pmcobalt_l14 {
+       regulator-min-microvolt = <1800000>;
+       regulator-max-microvolt = <1800000>;
+};
+
+&pmcobalt_l22 {
+       regulator-min-microvolt = <3000000>;
+       regulator-max-microvolt = <3000000>;
+};
+
+&tlmm {
+	pmx_mdss: pmx_mdss {
+		mdss_dsi_active: mdss_dsi_active {
+			mux {
+				pins = "gpio94";
+				function = "gpio";
+			};
+				config {
+				pins = "gpio94";
+				drive-strength = <8>; /* 8 mA */
+				bias-disable = <0>; /* no pull */
+			};
+		};
+		mdss_dsi_suspend: mdss_dsi_suspend {
+			mux {
+				pins = "gpio94";
+				function = "gpio";
+			};
+				config {
+				pins = "gpio94";
+				drive-strength = <2>; /* 2 mA */
+				bias-pull-down; /* pull down */
+			};
+		};
+	};
+};
+
 &mdss_mdp {
 	dsi_s6e3ha3_dualdsi_wqhd_cmd: htc,mdss_dsi_s6e3ha3_dualdsi_wqhd_cmd {
 		compatible = "htc,mdss_dsi_s6e3ha3_dualdsi_wqhd_cmd";
@@ -59,13 +96,6 @@
 		qcom,mdss-dsi-lane-2-state;
 		qcom,mdss-dsi-lane-3-state;
 		qcom,mdss-dsi-panel-timings = [D6 38 26 00 68 6E 2A 3C 2C 03 04 00];
-		qcom,mdss-dsi-panel-timings-8996 = [
-			25 20 09 0A 06 03 04 A0
-			25 20 09 0A 06 03 04 A0
-			25 20 09 0A 06 03 04 A0
-			25 20 09 0A 06 03 04 A0
-			25 1F 09 0A 06 03 04 A0
-		];
 		qcom,mdss-dsi-reset-sequence =  <1 2>, <0 1>, <1 10>;
 		qcom,mdss-dsi-t-clk-post = <0x0E>;
 		qcom,mdss-dsi-t-clk-pre = <0x36>;
@@ -102,6 +132,7 @@
 		];
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-default-command-state = "dsi_hs_mode";
+		qcom,cont-splash-enabled;
 		qcom,mdss-dsi-lp11-init;
 		qcom,panel-supply-entries = <&dsi_panel_pwr_supply_s6e3ha3>;
 		/*qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";*/
@@ -109,22 +140,27 @@
         dsi_panel_pwr_supply_s6e3ha3: dsi_panel_pwr_supply_s6e3ha3 {
                 #address-cells = <1>;
                 #size-cells = <0>;
-
                 qcom,panel-supply-entry@0 {
-                        reg = <0>;
-                        qcom,supply-name = "wqhd-vddio";
-                        qcom,supply-min-voltage = <1880000>;
-                        qcom,supply-max-voltage = <1880000>;
-                        qcom,supply-enable-load = <32000>;
-                        qcom,supply-disable-load = <80>;
+			reg = <0>;
+			qcom,supply-name = "wqhd-vddio";
+			qcom,supply-min-voltage = <1800000>;
+			qcom,supply-max-voltage = <1800000>;
+			qcom,supply-enable-load = <62000>;
+			qcom,supply-disable-load = <80>;
+			qcom,supply-pre-on-sleep = <0>;
+			qcom,supply-post-on-sleep = <10>;
+			qcom,supply-pre-off-sleep = <10>;
+			qcom,supply-post-off-sleep = <1>;
                 };
                  qcom,panel-supply-entry@1 {
-                         reg = <1>;
-                         qcom,supply-name = "vci";
-                         qcom,supply-min-voltage = <2864000>;
-                         qcom,supply-max-voltage = <2864000>;
-                         qcom,supply-enable-load = <100000>;
-                         qcom,supply-disable-load = <100>;
+			reg = <1>;
+			qcom,supply-name = "vci";
+			qcom,supply-min-voltage = <3000000>;
+			qcom,supply-max-voltage = <3000000>;
+			qcom,supply-enable-load = <100000>;
+			qcom,supply-disable-load = <100>;
+			qcom,supply-pre-on-sleep = <10>;
+			qcom,supply-post-on-sleep = <1>;
                 };
 
         };
