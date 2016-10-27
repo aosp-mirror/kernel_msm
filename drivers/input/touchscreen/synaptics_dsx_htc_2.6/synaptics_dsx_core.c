@@ -2857,6 +2857,35 @@ exit:
 	return retval;
 }
 
+static int synaptics_rmi4_f12_configure_lpwg(
+		struct synaptics_rmi4_data *rmi4_data,
+		const struct synaptics_rmi4_fn *fhandler)
+{
+	int retval;
+	struct synaptics_rmi4_f12_ctrl_27 ctrl_27 = {
+		.double_tap_enable = 1,
+		.lpwg_report_rate = 20,
+		.false_activation_threshold = 3,
+		.maximum_active_duration = 12,
+		.timer_1_duration = 15,
+		.maximum_active_duration_timeout = 10,
+	};
+	const struct synaptics_rmi4_f12_extra_data *extra_data =
+		(const struct synaptics_rmi4_f12_extra_data *)fhandler->extra;
+
+	retval = synaptics_rmi4_reg_write(rmi4_data,
+		fhandler->full_addr.ctrl_base +
+			extra_data->ctrl27_offset,
+		ctrl_27.data,
+		sizeof(ctrl_27.data));
+	if (retval < 0)
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to change lpwg settings\n",
+				__func__);
+
+	return retval;
+}
+
 static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		struct synaptics_rmi4_fn *fhandler,
 		struct synaptics_rmi4_fn_desc *fd,
@@ -2884,7 +2913,6 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 	struct synaptics_rmi4_f12_ctrl_8 *ctrl_8 = NULL;
 	struct synaptics_rmi4_f12_ctrl_18 *ctrl_18 = NULL;
 	struct synaptics_rmi4_f12_ctrl_23 *ctrl_23 = NULL;
-	struct synaptics_rmi4_f12_ctrl_27 *ctrl_27 = NULL;
 	struct synaptics_rmi4_f12_ctrl_31 *ctrl_31 = NULL;
 	struct synaptics_rmi4_f12_ctrl_58 *ctrl_58 = NULL;
 	const struct synaptics_dsx_board_data *bdata =
@@ -2942,15 +2970,6 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 	if (!ctrl_23) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to alloc mem for ctrl_23\n",
-				__func__);
-		retval = -ENOMEM;
-		goto exit;
-	}
-
-	ctrl_27 = kzalloc(sizeof(*ctrl_27), GFP_KERNEL);
-	if (!ctrl_27) {
-		dev_err(rmi4_data->pdev->dev.parent,
-				"%s: Failed to alloc mem for ctrl_27\n",
 				__func__);
 		retval = -ENOMEM;
 		goto exit;
@@ -3289,6 +3308,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 	rmi4_data->f12_wakeup_gesture = query_5->ctrl27_is_present;
 	if (rmi4_data->f12_wakeup_gesture) {
 		extra_data->ctrl20_offset = ctrl_20_offset;
+		extra_data->ctrl27_offset = ctrl_27_offset;
 		extra_data->data4_offset = query_8->data0_is_present +
 				query_8->data1_is_present +
 				query_8->data2_is_present +
@@ -3337,23 +3357,9 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		printk("[TP]%s:Wakeup Gesture range (%d,%d) -> (%d,%d)\n", __func__,
 				double_tap[0], double_tap[1], double_tap[2], double_tap[3]);
 
-		ctrl_27->double_tap_enable = 1;
-		ctrl_27->lpwg_report_rate = 20;
-		ctrl_27->false_activation_threshold = 3;
-		ctrl_27->maximum_active_duration = 12;
-		ctrl_27->timer_1_duration = 15;
-		ctrl_27->maximum_active_duration_timeout = 10;
-
-		retval = synaptics_rmi4_reg_write(rmi4_data,
-				fhandler->full_addr.ctrl_base + ctrl_27_offset,
-				ctrl_27->data,
-				sizeof(ctrl_27->data));
-		if (retval < 0) {
-			dev_err(rmi4_data->pdev->dev.parent,
-					"%s: Failed to change lpwg settings\n",
-					__func__);
+		retval = synaptics_rmi4_f12_configure_lpwg(rmi4_data, fhandler);
+		if (retval < 0)
 			return retval;
-		}
 	}
 
 	synaptics_rmi4_set_intr_mask(fhandler, fd, intr_count);
@@ -3395,7 +3401,6 @@ exit:
 	kfree(query_8);
 	kfree(ctrl_8);
 	kfree(ctrl_23);
-	kfree(ctrl_27);
 	kfree(ctrl_31);
 	kfree(ctrl_58);
 
@@ -4979,6 +4984,7 @@ static int synaptics_rmi4_reinit_device(struct synaptics_rmi4_data *rmi4_data)
 		list_for_each_entry(fhandler, &rmi->support_fn_list, link) {
 			if (fhandler->fn_number == SYNAPTICS_RMI4_F12) {
 				synaptics_rmi4_f12_set_enables(rmi4_data, 0);
+				synaptics_rmi4_f12_configure_lpwg(rmi4_data, fhandler);
 				break;
 			}
 		}
