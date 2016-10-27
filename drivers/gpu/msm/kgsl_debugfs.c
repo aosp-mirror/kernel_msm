@@ -132,6 +132,8 @@ static int print_mem_entry(int id, void *ptr, void *data)
 	char flags[8];
 	char usage[16];
 	struct kgsl_memdesc *m = &entry->memdesc;
+	unsigned int usermem_type = kgsl_memdesc_usermem_type(m);
+	int egl_surface_count = 0, egl_image_count = 0;
 
 	flags[0] = kgsl_memdesc_is_global(m) ?  'g' : '-';
 	flags[1] = '-';
@@ -144,12 +146,17 @@ static int print_mem_entry(int id, void *ptr, void *data)
 
 	kgsl_get_memory_usage(usage, sizeof(usage), m->flags);
 
-	seq_printf(s, "%pK %pK %16llu %5d %8s %10s %16s %5d %16llu",
+	if (usermem_type == KGSL_MEM_ENTRY_ION)
+		kgsl_get_egl_counts(entry, &egl_surface_count,
+						&egl_image_count);
+
+	seq_printf(s, "%pK %pK %16llu %5d %8s %10s %16s %5d %16llu %6d %6d",
 			(uint64_t *)(uintptr_t) m->gpuaddr,
 			(unsigned long *) m->useraddr,
 			m->size, entry->id, flags,
-			memtype_str(kgsl_memdesc_usermem_type(m)),
-			usage, m->sgt->nents, m->mapsize);
+			memtype_str(usermem_type),
+			usage, (m->sgt ? m->sgt->nents : 0), m->mapsize,
+			egl_surface_count, egl_image_count);
 
 	if (entry->metadata[0] != 0)
 		seq_printf(s, " %s", entry->metadata);
@@ -163,9 +170,9 @@ static int process_mem_print(struct seq_file *s, void *unused)
 {
 	struct kgsl_process_private *private = s->private;
 
-	seq_printf(s, "%16s %16s %16s %5s %8s %10s %16s %5s %16s\n",
+	seq_printf(s, "%16s %16s %16s %5s %8s %10s %16s %5s %16s %6s %6s\n",
 		   "gpuaddr", "useraddr", "size", "id", "flags", "type",
-		   "usage", "sglen", "mapsize");
+		   "usage", "sglen", "mapsize", "eglsrf", "eglimg");
 
 	spin_lock(&private->mem_lock);
 	idr_for_each(&private->mem_idr, print_mem_entry, s);
