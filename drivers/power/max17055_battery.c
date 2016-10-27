@@ -66,7 +66,7 @@
 #define MAX17055_IC_VERSION       0x4000
 #define MAX17201_IC_VERSION       0x4001
 #define MAX17205_IC_VERSION       0x4005
-#define MAX17055_DRIVER_VERSION   0x1012
+#define MAX17055_DRIVER_VERSION   0x1013
 
 #if CONFIG_HUAWEI_SAWSHARK
 #define MAX17055_CAPACITY_CARRY   128
@@ -620,6 +620,9 @@ static void max17055_update_model_regs(struct max17055_chip *chip)
 	struct max17055_config_data *config = chip->pdata->config_data;
 	struct regmap *map = chip->regmap;
 	u32 vfSoc;
+	int ret = 0;
+	int retries = 3;
+	u32 read_value = -1;
 
 	max17055_write_verify_reg(map, MAX17055_DesignCap, config->design_cap);
 	max17055_write_verify_reg(map, MAX17055_IChgTerm, config->ichgt_term);
@@ -628,6 +631,30 @@ static void max17055_update_model_regs(struct max17055_chip *chip)
 	max17055_write_custom_regs(chip);
 
 	max17055_write_verify_reg(map, MAX17055_RepCap, config->rep_cap);
+
+	mdelay(5);
+	regmap_read(map, MAX17055_RepCap, &read_value);
+	if(config->rep_cap != read_value)
+	{
+		dev_info(&chip->client->dev, "write MAX17055_RepCap error, retry three times!\n");
+		do
+		{
+			ret = regmap_write(map, MAX17055_RepCap, config->rep_cap);
+			mdelay(5);
+			regmap_read(map, MAX17055_RepCap, &read_value);
+			if (config->rep_cap != read_value)
+			{
+				ret = -EIO;
+				retries--;
+			}
+		} while ((retries > 0) && (config->rep_cap != read_value));
+
+		if (ret < 0)
+		{
+			dev_info(&chip->client->dev, "rewrite MAX17055_RepCap, three times error!\n");
+		}
+	}
+
 	/* Update VFSOC */
 	regmap_read(map, MAX17055_VFSOC, &vfSoc);
 	regmap_write(map, MAX17055_Command, VFSOC0_UNLOCK);
