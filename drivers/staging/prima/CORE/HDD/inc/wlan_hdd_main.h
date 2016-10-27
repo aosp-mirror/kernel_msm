@@ -211,7 +211,7 @@
 #ifdef FEATURE_WLAN_SCAN_PNO
 #define HDD_PNO_SCAN_TIMERS_SET_ONE      1
 /* value should not be greater than PNO_MAX_SCAN_TIMERS */
-#define HDD_PNO_SCAN_TIMERS_SET_MULTIPLE 6
+#define HDD_PNO_SCAN_TIMERS_SET_MULTIPLE 3
 #define WLAN_WAIT_TIME_PNO  2000
 #endif
 
