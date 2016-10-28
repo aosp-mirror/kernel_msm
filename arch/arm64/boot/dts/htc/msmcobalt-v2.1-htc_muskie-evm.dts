@@ -13,11 +13,11 @@
 
 /dts-v1/;
 
-#include "../qcom/msmcobalt.dtsi"
+#include "../qcom/msmcobalt-v2.1.dtsi"
 #include "msmcobalt-htc_muskie-evm.dtsi"
 
 / {
-	model = "HTC Corporation. MSM cobalt v1 Muskie EVM";
+	model = "HTC Corporation. MSM cobalt v2.1 Muskie EVM";
 	compatible = "qcom,msmcobalt-mtp", "qcom,msmcobalt", "qcom,mtp";
 	qcom,board-id = <0x1D 0>;
 };
