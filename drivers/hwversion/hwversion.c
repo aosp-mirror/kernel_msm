@@ -55,11 +55,11 @@ typedef struct
     struct qpnp_vadc_chip *vadc;
     enum qpnp_vadc_channels channel;
     int adc_range;
-    int pcb1_status;
-    int pcb2_status;
-    int hwver1_status;
-    int hwver2_status;
-    int hwver3_status;
+    unsigned int pcb1_status;
+    unsigned int pcb2_status;
+    unsigned int hwver1_status;
+    unsigned int hwver2_status;
+    unsigned int hwver3_status;
 }hwver_struct;
 
 typedef struct
@@ -379,7 +379,12 @@ static int hw_init(struct platform_device *pdev, hwver_struct *hardware)
         printk(KERN_ERR "hwver:%s:can not find pinctrl setstate\n", __func__);
         return HWERR;
     }
-    pinctrl_select_state(hwver_pinctrl, set_state);
+    rc = pinctrl_select_state(hwver_pinctrl, set_state);
+    if(rc != 0)
+    {
+        printk(KERN_ERR "hwver:%s:can not select pinctrl setstate\n", __func__);
+        return HWERR;
+    }
 
     hardware->channel = P_MUX4_1_1;
     return 0;
@@ -469,11 +474,11 @@ static int hw_get_gpio_status(hwver_struct *hardware)
         printk(KERN_ERR "hwver:%s:gpio request fail!\n", __func__);
         return HWERR;
     }
-    hardware->pcb1_status = gpio_get_value_cansleep(hardware->pcbver_gpio1);
-    hardware->pcb2_status = gpio_get_value_cansleep(hardware->pcbver_gpio2);
-    hardware->hwver1_status = gpio_get_value_cansleep(hardware->hwver_gpio1);
-    hardware->hwver2_status = gpio_get_value_cansleep(hardware->hwver_gpio2);
-    hardware->hwver3_status = gpio_get_value_cansleep(hardware->hwver_gpio3);
+    hardware->pcb1_status = (unsigned int)gpio_get_value_cansleep(hardware->pcbver_gpio1);
+    hardware->pcb2_status = (unsigned int)gpio_get_value_cansleep(hardware->pcbver_gpio2);
+    hardware->hwver1_status = (unsigned int)gpio_get_value_cansleep(hardware->hwver_gpio1);
+    hardware->hwver2_status = (unsigned int)gpio_get_value_cansleep(hardware->hwver_gpio2);
+    hardware->hwver3_status = (unsigned int)gpio_get_value_cansleep(hardware->hwver_gpio3);
     hw_gpio_free(hardware);
 
     return 0;
