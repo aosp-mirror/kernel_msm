@@ -2193,7 +2193,7 @@ void smb23x_delaywork_init_register(struct work_struct *work)
 {
 	int rc;
 
-	if (g_chip->charger_plugin == 0xFF) {
+	if (g_chip->charger_plugin == 0) {
 		rc = smb23x_enable_volatile_writes(g_chip);
 		g_chip->charger_plugin = (rc < 0) ? 0 : 1;
 	}
@@ -2734,6 +2734,7 @@ static char *batt_supplied_to[] = {
 static int smb23x_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
+	u8 reg;
 	int rc;
 	struct power_supply *usb_psy;
 	struct smb23x_chip *chip;
@@ -2783,11 +2784,8 @@ static int smb23x_probe(struct i2c_client *client,
 	}
 	init_timer(&chip->timer_init_register);
 	chip->timer_init_register.function = smb23x_timer_init_register;
-	chip->timer_init_register.expires = jiffies + 10*HZ;
-	add_timer(&chip->timer_init_register);
 
 	//Init variable
-	chip->charger_plugin = 0xFF;
 	chip->last_temp = DEFAULT_BATT_TEMP;
 	chip->index_soft_temp_comp_mv = NORMAL;
 
@@ -2857,6 +2855,14 @@ static int smb23x_probe(struct i2c_client *client,
 		pr_err("Register power_supply failed, rc = %d\n", rc);
 		goto destroy_mutex;
 	}
+	//Init charger state flag
+	if (smb23x_read(chip, I2C_COMM_CFG_REG, &reg) < 0)
+		chip->charger_plugin = 0;
+	else
+		chip->charger_plugin = 1;
+	del_timer(&chip->timer_init_register);
+	chip->timer_init_register.expires = jiffies + 5*HZ;
+	add_timer(&chip->timer_init_register);
 
 #ifdef QTI_SMB231
 	chip->resume_completed = true;
