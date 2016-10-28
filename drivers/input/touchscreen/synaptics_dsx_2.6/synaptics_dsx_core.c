@@ -69,7 +69,6 @@
 #define REPORT_2D_Z
 #define REPORT_2D_W
 
-#define F11_PALM_MODE
 #define F12_DATA_15_WORKAROUND
 
 #define IGNORE_FN_INIT_FAILURE
@@ -132,9 +131,6 @@ static int read_time_count = 0;
 static volatile int suspend_flag = 0;
 extern char *syna_file_name;
 extern unsigned char get_config_id_addr;
-#ifdef F11_PALM_MODE
-static unsigned char f11_data_28_value[0];
-#endif
 u32 syna_abs_x_max;
 u32 syna_abs_y_max;
 
@@ -918,38 +914,7 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	if (retval < 0)
 		return 0;
 
-#ifdef F11_PALM_MODE
-	retval = synaptics_rmi4_reg_read(rmi4_data,
-			rmi4_data->f11_data_28_addr,
-			f11_data_28_value,
-			1);
-	if (retval < 0)
-		return 0;
-#endif
-
 	mutex_lock(&(rmi4_data->rmi4_report_mutex));
-
-#ifdef F11_PALM_MODE
-	if (f11_data_28_value[0] & 0x02) {
-		syn_ts->palm_status = true;
-		dev_info(rmi4_data->pdev->dev.parent,
-		"%s: palm mode\n", __func__);
-
-		input_report_key(rmi4_data->input_dev, KEY_SLEEP, 1);
-		input_sync(rmi4_data->input_dev);
-
-		if (((finger_status_reg[0] & 0x03) == 0x01) || ((finger_status_reg[0] & 0x0c) == 0x04))
-			synaptics_rmi4_free_fingers(rmi4_data);
-
-		goto exit;
-	} else {
-		if (syn_ts->palm_status) {
-			syn_ts->palm_status = false;
-			input_report_key(rmi4_data->input_dev, KEY_SLEEP, 0);
-			input_sync(rmi4_data->input_dev);
-		}
-	}
-#endif
 
 	for (finger = 0; finger < fingers_supported; finger++) {
 		reg_index = finger / 4;
@@ -2042,12 +2007,8 @@ static int synaptics_rmi4_f11_init(struct synaptics_rmi4_data *rmi4_data,
 
 	/* data 28 */
 	if (query_0_5.has_bending_correction ||
-			query_0_5.has_large_object_suppression) {
-#ifdef F11_PALM_MODE
-		rmi4_data->f11_data_28_addr = fhandler->full_addr.data_base + offset;
-#endif
+			query_0_5.has_large_object_suppression)
 		offset += 1;
-	}
 
 	/* data 29 30 31 */
 	if (query_0_5.has_query_9 && query_9.has_pen_hover_discrimination)
@@ -3219,11 +3180,6 @@ static void synaptics_rmi4_set_params(struct synaptics_rmi4_data *rmi4_data)
 		input_set_capability(rmi4_data->input_dev, EV_KEY, KEY_WAKEUP);
 	}
 
-#ifdef F11_PALM_MODE
-	set_bit(KEY_SLEEP, rmi4_data->input_dev->keybit);
-	input_set_capability(rmi4_data->input_dev, EV_KEY, KEY_SLEEP);
-#endif
-
 	return;
 }
 
@@ -4264,7 +4220,6 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 	rmi4_data->suspend = false;
 	rmi4_data->irq_enabled = false;
 	rmi4_data->fingers_on_2d = false;
-	rmi4_data->palm_status = false;
 
 	rmi4_data->reset_device = synaptics_rmi4_reset_device;
 	rmi4_data->irq_enable = synaptics_rmi4_irq_enable;
