@@ -129,6 +129,7 @@
 #include <linux/of_gpio.h>
 /* Quanta BU10SW, Stanley Tsao, 2015.12.01, Add DT parsing function } */
 
+#include <linux/qpnp/qpnp-vibrator.h>
 
 
 
@@ -4242,6 +4243,7 @@ static void elan_ktf_ts_report_data(struct i2c_client *client, uint8_t *buf)
     case PALM_DETECTION_PKT:
         input_report_key(idev, KEY_SLEEP, 1);
         input_sync(idev);
+        vibrator_enable(50);
         input_report_key(idev, KEY_SLEEP, 0);
         input_sync(idev);
         break;
