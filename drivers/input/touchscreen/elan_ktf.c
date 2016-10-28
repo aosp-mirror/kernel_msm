@@ -161,7 +161,7 @@
 #define PALM_DETECTION_PKT 0xBA
 #endif
 
-static const int NEWEST_FW_VER = 0xb010;
+static const int NEWEST_FW_VER = 0xb012;
 
 /* Common for quanta gestures */
 #if defined(FEATURE_QUANTA_GESTURE_TO_BOOTLOADER) || defined(FEATURE_QUANTA_GESTURE_TO_RECOVERY)
@@ -578,7 +578,7 @@ static unsigned char firmware[52800];
 
 /*The newest firmware, if update must be changed here*/
 static uint8_t file_fw_data[] = {
-	#include "fw_data_eWD1000_XU1_B010.i"
+	#include "fw_data_eWD1000_XU1_B012.i"
 };
 
 
