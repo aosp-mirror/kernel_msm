@@ -216,6 +216,52 @@ responder_rsp:
 }
 
 /**
+ * lim_ndp_delete_peer_by_addr() - Delete NAN data peer, given addr and vdev_id
+ * @mac_ctx: handle to mac context
+ * @vdev_id: vdev_id on which peer was added
+ * @peer_ndi_mac_addr: mac addr of peer
+ * This function deletes a peer if there was NDP_Confirm with REJECT
+ *
+ * Return: None
+ */
+void lim_ndp_delete_peer_by_addr(tpAniSirGlobal mac_ctx, uint8_t vdev_id,
+				 v_MACADDR_t peer_ndi_mac_addr)
+{
+	tpPESession session;
+	tpDphHashNode sta_ds;
+	uint16_t peer_idx;
+
+	limLog(mac_ctx, LOG1,
+		FL("deleting peer: "MAC_ADDRESS_STR" confirm rejected"),
+		MAC_ADDR_ARRAY(peer_ndi_mac_addr.bytes));
+
+	session = pe_find_session_by_sme_session_id(mac_ctx, vdev_id);
+	if (!session || (session->bssType != eSIR_NDI_MODE)) {
+		limLog(mac_ctx, LOGE,
+			FL("PE session is NULL or non-NDI for sme session %d"),
+			vdev_id);
+		return;
+	}
+
+	sta_ds = dphLookupHashEntry(mac_ctx, peer_ndi_mac_addr.bytes,
+				    &peer_idx, &session->dph.dphHashTable);
+	if (!sta_ds) {
+		limLog(mac_ctx, LOGE, FL("Unknown NDI Peer"));
+		return;
+	}
+	if (sta_ds->staType != STA_ENTRY_NDI_PEER) {
+		limLog(mac_ctx, LOGE, FL("Non-NDI Peer ignored"));
+		return;
+	}
+	/*
+	 * Call limDelSta() with response required set true. Hence DphHashEntry
+	 * will be deleted after receiving that response.
+	 */
+
+	limDelSta(mac_ctx, sta_ds, true, session);
+}
+
+/**
  * lim_ndp_delete_peers() - Delete NAN data peers
  * @mac_ctx: handle to mac context
  * @ndp_map: NDP instance/peer map
@@ -419,11 +465,28 @@ VOS_STATUS lim_handle_ndp_event_message(tpAniSirGlobal mac_ctx, tpSirMsgQ msg)
 	VOS_STATUS status = VOS_STATUS_SUCCESS;
 
 	switch (msg->type) {
-	case SIR_HAL_NDP_CONFIRM:
+	case SIR_HAL_NDP_CONFIRM: {
+		struct ndp_confirm_event *ndp_confirm = msg->bodyptr;
+		if (ndp_confirm->rsp_code != NDP_RESPONSE_ACCEPT &&
+			ndp_confirm->num_active_ndps_on_peer == 0) {
+			/*
+			 * This peer was created at ndp_indication but
+			 * ndp_confirm failed, so it needs to be deleted
+			 */
+			limLog(mac_ctx, LOGE,
+				FL("NDP confirm with reject and no active ndp sessions. deleting peer: "MAC_ADDRESS_STR" on vdev_id: %d"),
+				MAC_ADDR_ARRAY(
+					ndp_confirm->peer_ndi_mac_addr.bytes),
+				ndp_confirm->vdev_id);
+			lim_ndp_delete_peer_by_addr(mac_ctx,
+						ndp_confirm->vdev_id,
+						ndp_confirm->peer_ndi_mac_addr);
+		}
 		lim_send_ndp_event_to_sme(mac_ctx, eWNI_SME_NDP_CONFIRM_IND,
-				msg->bodyptr, sizeof(struct ndp_confirm_event),
+				msg->bodyptr, sizeof(*ndp_confirm),
 				msg->bodyval);
 		break;
+	}
 	case SIR_HAL_NDP_INITIATOR_RSP:
 		lim_send_ndp_event_to_sme(mac_ctx, eWNI_SME_NDP_INITIATOR_RSP,
 				msg->bodyptr, sizeof(struct ndp_initiator_rsp),

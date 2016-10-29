@@ -1196,7 +1196,7 @@ static void hdd_ndp_confirm_ind_handler(hdd_adapter_t *adapter,
 		hddLog(LOGE,
 			FL("can't find addr: %pM in vdev_id: %d, peer table."),
 			&ndp_confirm->peer_ndi_mac_addr, adapter->sessionId);
-	else
+	else if (ndp_confirm->rsp_code == NDP_RESPONSE_ACCEPT)
 		ndp_ctx->active_ndp_sessions[idx]++;
 
 	data_len = (3 * sizeof(uint32_t)) + VOS_MAC_ADDR_SIZE + IFNAMSIZ +
@@ -1239,10 +1239,11 @@ static void hdd_ndp_confirm_ind_handler(hdd_adapter_t *adapter,
 		goto ndp_confirm_nla_failed;
 
 	cfg80211_vendor_event(vendor_event, GFP_KERNEL);
-	hddLog(LOG1, FL("NDP confim sent, ndp instance id: %d, peer addr: %pM, ndp_cfg: %d, rsp_code: %d"),
+	hddLog(LOG1, FL("NDP confim sent, ndp instance id: %d, peer addr: %pM, ndp_cfg: %d, rsp_code: %d, reason_code: %d"),
 		ndp_confirm->ndp_instance_id,
 		ndp_confirm->peer_ndi_mac_addr.bytes,
-		ndp_qos_config, ndp_confirm->rsp_code);
+		ndp_qos_config, ndp_confirm->rsp_code,
+		ndp_confirm->reason_code);
 
 	hddLog(LOG1, FL("NDP confim, ndp app info dump"));
 	VOS_TRACE_HEX_DUMP(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_DEBUG,
