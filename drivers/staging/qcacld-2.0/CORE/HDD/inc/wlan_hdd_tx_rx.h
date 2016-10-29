@@ -196,6 +196,8 @@ extern v_BOOL_t hdd_IsEAPOLPacket( vos_pkt_t *pVosPacket );
 VOS_STATUS hdd_get_peer_sta_id(hdd_station_ctx_t *sta_ctx,
                                v_MACADDR_t *peer_mac_addr, uint8_t *sta_id);
 
+int hdd_get_peer_idx(hdd_station_ctx_t *sta_ctx, v_MACADDR_t *addr);
+
 /**============================================================================
   @brief hdd_flush_ibss_tx_queues() -
                     Flush tx queues in IBSS mode

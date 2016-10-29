@@ -736,6 +736,29 @@ VOS_STATUS hdd_get_peer_sta_id(hdd_station_ctx_t *sta_ctx,
 }
 
 /**
+ * hdd_get_peer_idx() - Get the idx for given address in peer table
+ * @sta_ctx: pointer to HDD Station Context
+ * @addr: pointer to Peer Mac address
+ *
+ * Return: index when success else INVALID_PEER_IDX
+ */
+int hdd_get_peer_idx(hdd_station_ctx_t *sta_ctx, v_MACADDR_t *addr)
+{
+	uint8_t idx;
+
+	for (idx = 0; idx < HDD_MAX_NUM_IBSS_STA; idx++) {
+		if (sta_ctx->conn_info.staId[idx] == 0)
+			continue;
+		if (!vos_mem_compare(&sta_ctx->conn_info.peerMacAddress[idx],
+				addr, sizeof(v_MACADDR_t)))
+			continue;
+		return idx;
+	}
+
+	return INVALID_PEER_IDX;
+}
+
+/**
  * wlan_display_tx_timeout_stats() - HDD tx timeout stats display handler
  * @adapter: hdd adapter
  *

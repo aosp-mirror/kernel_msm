@@ -2438,6 +2438,9 @@ bool hdd_save_peer(hdd_station_ctx_t *sta_ctx, uint8_t sta_id,
 
 	for (idx = 0; idx < HDD_MAX_NUM_IBSS_STA; idx++) {
 		if (0 == sta_ctx->conn_info.staId[idx]) {
+			hddLog(VOS_TRACE_LEVEL_DEBUG,
+			       FL("adding peer: %pM, sta_id: %d, at idx: %d"),
+			       peer_mac_addr, sta_id, idx);
 			sta_ctx->conn_info.staId[idx] = sta_id;
 			vos_copy_macaddr(
 				&sta_ctx->conn_info.peerMacAddress[idx],
@@ -5450,4 +5453,3 @@ int iw_get_ap_address(struct net_device *dev, struct iw_request_info *info,
 
 	return ret;
 }
-

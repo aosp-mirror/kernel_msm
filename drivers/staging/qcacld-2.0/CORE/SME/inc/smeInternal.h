@@ -100,6 +100,7 @@ typedef enum eSmeCommandType
     eSmeCommandNoAUpdate,
     eSmeCommandNdpInitiatorRequest,
     eSmeCommandNdpResponderRequest,
+    eSmeCommandNdpDataEndInitiatorRequest,
 } eSmeCommandType;
 
 

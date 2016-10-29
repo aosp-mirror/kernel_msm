@@ -6310,6 +6310,7 @@ limProcessSmeReqMessages(tpAniSirGlobal pMac, tpSirMsgQ pMsg)
             break;
         case eWNI_SME_NDP_INITIATOR_REQ:
         case eWNI_SME_NDP_RESPONDER_REQ:
+        case eWNI_SME_NDP_END_REQ:
             lim_handle_ndp_request_message(pMac, pMsg);
             break;
         case eWNI_SME_REGISTER_P2P_ACK_CB:

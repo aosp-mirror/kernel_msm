@@ -49,6 +49,8 @@
 /* Timeout in ms for peer info request completion */
 #define IBSS_PEER_INFO_REQ_TIMOEUT 1000
 
+#define INVALID_PEER_IDX -1
+
 /**
  * enum eConnectionState - connection state values at HDD
  * @eConnectionState_NotConnected: Not associated in Infra or participating in
