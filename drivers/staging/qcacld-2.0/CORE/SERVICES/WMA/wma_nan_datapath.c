@@ -602,31 +602,12 @@ static int wma_ndp_confirm_event_handler(void *handle, uint8_t *event_info,
 	WMI_MAC_ADDR_TO_CHAR_ARRAY(&fixed_params->peer_ndi_mac_addr,
 				   ndp_confirm->peer_ndi_mac_addr.bytes);
 
-	vos_mem_copy(&ndp_confirm->ndp_config, event->ndp_cfg,
-		     fixed_params->ndp_cfg_len);
-
-	ndp_confirm->ndp_config.ndp_cfg_len = fixed_params->ndp_cfg_len;
 	ndp_confirm->ndp_info.ndp_app_info_len = fixed_params->ndp_app_info_len;
-
-	if (ndp_confirm->ndp_config.ndp_cfg_len) {
-		ndp_confirm->ndp_config.ndp_cfg =
-			vos_mem_malloc(ndp_confirm->ndp_config.ndp_cfg_len);
-		if (NULL == ndp_confirm->ndp_config.ndp_cfg) {
-			WMA_LOGE(FL("malloc failed"));
-			vos_mem_free(ndp_confirm);
-			return VOS_STATUS_E_NOMEM;
-		}
-		vos_mem_copy(ndp_confirm->ndp_config.ndp_cfg,
-			     event->ndp_cfg,
-			     ndp_confirm->ndp_config.ndp_cfg_len);
-	}
-
 	if (ndp_confirm->ndp_info.ndp_app_info_len) {
 		ndp_confirm->ndp_info.ndp_app_info =
 				vos_mem_malloc(fixed_params->ndp_app_info_len);
 		if (NULL == ndp_confirm->ndp_info.ndp_app_info) {
 			WMA_LOGE(FL("malloc failed"));
-			vos_mem_free(ndp_confirm->ndp_config.ndp_cfg);
 			vos_mem_free(ndp_confirm);
 			return VOS_STATUS_E_NOMEM;
 		}
@@ -641,7 +622,6 @@ static int wma_ndp_confirm_event_handler(void *handle, uint8_t *event_info,
 	status = vos_mq_post_message(VOS_MODULE_ID_PE, &msg);
 	if (!VOS_IS_STATUS_SUCCESS(status)) {
 		WMA_LOGE(FL("fail to post SIR_HAL_NDP_CONFIRM msg to PE"));
-		vos_mem_free(ndp_confirm->ndp_config.ndp_cfg);
 		vos_mem_free(ndp_confirm->ndp_info.ndp_app_info);
 		vos_mem_free(ndp_confirm);
 	}
