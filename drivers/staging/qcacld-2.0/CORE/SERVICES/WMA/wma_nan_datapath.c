@@ -55,18 +55,18 @@ VOS_STATUS wma_handle_ndp_initiator_req(tp_wma_handle wma_handle, void *req)
 
 	if (NULL == ndp_req) {
 		WMA_LOGE(FL("Invalid ndp_req."));
-		goto send_ndi_initiator_fail;
+		goto send_ndp_initiator_fail;
 	}
 	vdev_id = ndp_req->vdev_id;
 	vdev = wma_find_vdev_by_id(wma_handle, vdev_id);
 	if (!vdev) {
 		WMA_LOGE(FL("vdev not found for vdev id %d."), vdev_id);
-		goto send_ndi_initiator_fail;
+		goto send_ndp_initiator_fail;
 	}
 
 	if (!WMA_IS_VDEV_IN_NDI_MODE(wma_handle->interfaces, vdev_id)) {
 		WMA_LOGE(FL("vdev :%d, not in NDI mode"), vdev_id);
-		goto send_ndi_initiator_fail;
+		goto send_ndp_initiator_fail;
 	}
 
 	/*
@@ -81,7 +81,7 @@ VOS_STATUS wma_handle_ndp_initiator_req(tp_wma_handle wma_handle, void *req)
 	buf = wmi_buf_alloc(wma_handle->wmi_handle, len);
 	if (!buf) {
 		WMA_LOGE(FL("wmi_buf_alloc failed"));
-		goto send_ndi_initiator_fail;
+		goto send_ndp_initiator_fail;
 	}
 	cmd = (wmi_ndp_initiator_req_fixed_param *) wmi_buf_data(buf);
 	WMITLV_SET_HDR(&cmd->tlv_header,
@@ -140,12 +140,12 @@ VOS_STATUS wma_handle_ndp_initiator_req(tp_wma_handle wma_handle, void *req)
 		WMA_LOGE(FL("WMI_NDP_INITIATOR_REQ_CMDID failed, ret: %d"),
 			ret);
 		wmi_buf_free(buf);
-		goto send_ndi_initiator_fail;
+		goto send_ndp_initiator_fail;
 	}
 
 	return VOS_STATUS_SUCCESS;
 
-send_ndi_initiator_fail:
+send_ndp_initiator_fail:
 	status = VOS_STATUS_E_FAILURE;
 	if (ndp_req) {
 		rsp = vos_mem_malloc(sizeof(*rsp));
@@ -158,7 +158,8 @@ send_ndi_initiator_fail:
 			rsp->vdev_id = ndp_req->vdev_id;
 			rsp->transaction_id = ndp_req->transaction_id;
 			rsp->ndp_instance_id = ndp_req->service_instance_id;
-			rsp->status = NDP_CMD_RSP_STATUS_ERROR;
+			rsp->status = NDP_RSP_STATUS_ERROR;
+			rsp->reason = NDP_DATA_INITIATOR_REQ_FAILED;
 		}
 	} else {
 		/* unblock SME queue, but do not send rsp to HDD */
@@ -249,12 +250,12 @@ VOS_STATUS wma_handle_ndp_responder_req(tp_wma_handle wma_handle,
 	vdev = wma_find_vdev_by_id(wma_handle, vdev_id);
 	if (!vdev) {
 		WMA_LOGE(FL("vdev not found for vdev id %d."), vdev_id);
-		goto send_ndi_responder_fail;
+		goto send_ndp_responder_fail;
 	}
 
 	if (!WMA_IS_VDEV_IN_NDI_MODE(wma_handle->interfaces, vdev_id)) {
 		WMA_LOGE(FL("vdev :$%d, not in NDI mode"), vdev_id);
-		goto send_ndi_responder_fail;
+		goto send_ndp_responder_fail;
 	}
 
 	/*
@@ -269,7 +270,7 @@ VOS_STATUS wma_handle_ndp_responder_req(tp_wma_handle wma_handle,
 	buf = wmi_buf_alloc(wma_handle->wmi_handle, len);
 	if (!buf) {
 		WMA_LOGE(FL("wmi_buf_alloc failed"));
-		goto send_ndi_responder_fail;
+		goto send_ndp_responder_fail;
 	}
 	cmd = (wmi_ndp_responder_req_fixed_param *) wmi_buf_data(buf);
 	WMITLV_SET_HDR(&cmd->tlv_header,
@@ -315,14 +316,15 @@ VOS_STATUS wma_handle_ndp_responder_req(tp_wma_handle wma_handle,
 		WMA_LOGE(FL("WMI_NDP_RESPONDER_REQ_CMDID failed, ret: %d"),
 			ret);
 		wmi_buf_free(buf);
-		goto send_ndi_responder_fail;
+		goto send_ndp_responder_fail;
 	}
 	return VOS_STATUS_SUCCESS;
-send_ndi_responder_fail:
+send_ndp_responder_fail:
 	vos_mem_zero(&rsp, sizeof(rsp));
 	rsp.vdev_id = req_params->vdev_id;
 	rsp.transaction_id = req_params->transaction_id;
-	rsp.status = VOS_STATUS_E_FAILURE;
+	rsp.status = NDP_RSP_STATUS_ERROR;
+	rsp.reason = NDP_DATA_RESPONDER_REQ_FAILED;
 	wma_send_ndp_responder_rsp(&rsp);
 	return VOS_STATUS_E_FAILURE;
 }
@@ -401,7 +403,8 @@ send_ndp_end_fail:
 			pe_msg.bodyval = true;
 		} else {
 			vos_mem_zero(end_rsp, sizeof(*end_rsp));
-			end_rsp->status = NDP_CMD_RSP_STATUS_ERROR;
+			end_rsp->status = NDP_RSP_STATUS_ERROR;
+			end_rsp->reason = NDP_END_FAILED;
 			end_rsp->transaction_id = req->transaction_id;
 			pe_msg.bodyptr = end_rsp;
 		}
@@ -685,6 +688,7 @@ static int wma_ndp_end_response_event_handler(void *handle,
 		if (end_rsp->num_peers == 0) {
 			WMA_LOGE(FL("num_peers in NDP rsp should not be 0."));
 			end_rsp->status = NDP_CMD_RSP_STATUS_ERROR;
+			end_rsp->reason = NDP_END_FAILED;
 			goto send_ndp_end_rsp;
 		}
 		/* copy per peer response to return path buffer */
@@ -828,6 +832,7 @@ static int wma_ndp_initiator_rsp_event_handler(void *handle,
 	rsp->transaction_id = fixed_params->transaction_id;
 	rsp->ndp_instance_id = fixed_params->ndp_instance_id;
 	rsp->status = fixed_params->rsp_status;
+	rsp->reason = fixed_params->reason_code;
 
 	pe_msg.type = SIR_HAL_NDP_INITIATOR_RSP;
 	pe_msg.bodyptr = rsp;

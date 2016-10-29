@@ -749,7 +749,7 @@ static void hdd_ndp_iface_create_rsp_handler(hdd_adapter_t *adapter,
 	struct nan_datapath_ctx *ndp_ctx = WLAN_HDD_GET_NDP_CTX_PTR(adapter);
 	bool create_fail = false;
 	uint8_t create_transaction_id = 0;
-	uint8_t create_status = 0;
+	uint32_t create_status = 0;
 
 	ENTER();
 
@@ -807,7 +807,8 @@ static void hdd_ndp_iface_create_rsp_handler(hdd_adapter_t *adapter,
 
 	/* Status return value */
 	if (nla_put_u32(vendor_event,
-			QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE, 0xA5)) {
+			QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE,
+			ndi_rsp->reason)) {
 		hddLog(LOGE, FL("VENDOR_ATTR_NDP_DRV_RETURN_VALUE put fail"));
 		goto nla_put_failure;
 	}
@@ -821,7 +822,8 @@ static void hdd_ndp_iface_create_rsp_handler(hdd_adapter_t *adapter,
 	hddLog(LOG2, FL("status code: %d, value: %d"),
 		QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_TYPE, create_status);
 	hddLog(LOG2, FL("Return value: %d, value: %d"),
-		QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE, 0xA5);
+		QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE,
+		ndi_rsp->reason);
 
 	cfg80211_vendor_event(vendor_event, GFP_KERNEL);
 
@@ -864,6 +866,7 @@ static void hdd_ndp_iface_delete_rsp_handler(hdd_adapter_t *adapter,
 {
 	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 	struct ndi_delete_rsp *ndi_rsp = rsp_params;
+	struct nan_datapath_ctx *ndp_ctx;
 
 	if (wlan_hdd_validate_context(hdd_ctx))
 		return;
@@ -873,12 +876,16 @@ static void hdd_ndp_iface_delete_rsp_handler(hdd_adapter_t *adapter,
 		return;
 	}
 
-	if (ndi_rsp->status == VOS_STATUS_SUCCESS)
+	if (ndi_rsp->status == NDP_RSP_STATUS_SUCCESS)
 		hddLog(LOGE, FL("NDI BSS successfully stopped"));
 	else
 		hddLog(LOGE,
 			FL("NDI BSS stop failed with reason %d"),
 			ndi_rsp->reason);
+
+	ndp_ctx = WLAN_HDD_GET_NDP_CTX_PTR(adapter);
+	ndp_ctx->ndi_delete_rsp_reason = ndi_rsp->reason;
+	ndp_ctx->ndi_delete_rsp_status = ndi_rsp->status;
 
 	wlan_hdd_netif_queue_control(adapter,
 		WLAN_STOP_ALL_NETIF_QUEUE_N_CARRIER,
@@ -957,14 +964,16 @@ void hdd_ndp_session_end_handler(hdd_adapter_t *adapter)
 
 	/* Status code */
 	if (nla_put_u32(vendor_event,
-			QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_TYPE, 0x0)) {
+			QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_TYPE,
+			ndp_ctx->ndi_delete_rsp_status)) {
 		hddLog(LOGE, FL("VENDOR_ATTR_NDP_DRV_RETURN_TYPE put fail"));
 		goto failure;
 	}
 
 	/* Status return value */
 	if (nla_put_u32(vendor_event,
-			QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE, 0x0)) {
+			QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE,
+			ndp_ctx->ndi_delete_rsp_reason)) {
 		hddLog(LOGE, FL("VENDOR_ATTR_NDP_DRV_RETURN_VALUE put fail"));
 		goto failure;
 	}
@@ -977,9 +986,10 @@ void hdd_ndp_session_end_handler(hdd_adapter_t *adapter)
 		ndp_ctx->ndp_delete_transaction_id);
 	hddLog(LOG2, FL("status code: %d, value: %d"),
 		QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_TYPE,
-		true);
+		ndp_ctx->ndi_delete_rsp_status);
 	hddLog(LOG2, FL("Return value: %d, value: %d"),
-		QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE, 0x5A);
+		QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE,
+		ndp_ctx->ndi_delete_rsp_reason);
 
 	ndp_ctx->ndp_delete_transaction_id = 0;
 	ndp_ctx->state = NAN_DATA_NDI_DELETED_STATE;
@@ -1036,22 +1046,22 @@ static void hdd_ndp_initiator_rsp_handler(hdd_adapter_t *adapter,
 			rsp->transaction_id))
 		goto ndp_initiator_rsp_nla_failed;
 
-	if (nla_put_u16(vendor_event,
-			QCA_WLAN_VENDOR_ATTR_NDP_INSTANCE_ID,
+	if (nla_put_u16(vendor_event, QCA_WLAN_VENDOR_ATTR_NDP_INSTANCE_ID,
 			rsp->ndp_instance_id))
 		goto ndp_initiator_rsp_nla_failed;
 
 	if (nla_put_u32(vendor_event, QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_TYPE,
-		rsp->status))
+			rsp->status))
 		goto ndp_initiator_rsp_nla_failed;
 
 	if (nla_put_u32(vendor_event, QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE,
-		0))
+			rsp->reason))
 		goto ndp_initiator_rsp_nla_failed;
 
 	hddLog(LOG1,
-	       FL("NDP Initiator rsp sent, tid:%d, instance id:%d, status:%d"),
-	       rsp->transaction_id, rsp->ndp_instance_id, rsp->status);
+	       FL("NDP Initiator rsp sent, tid:%d, instance id:%d, status:%d, reason: %d"),
+	       rsp->transaction_id, rsp->ndp_instance_id, rsp->status,
+	       rsp->reason);
 	cfg80211_vendor_event(vendor_event, GFP_KERNEL);
 	EXIT();
 	return;
@@ -1185,9 +1195,11 @@ static void hdd_ndp_confirm_ind_handler(hdd_adapter_t *adapter,
 	else if (ndp_confirm->rsp_code == NDP_RESPONSE_ACCEPT)
 		ndp_ctx->active_ndp_sessions[idx]++;
 
-	data_len = (3 * sizeof(uint32_t)) + VOS_MAC_ADDR_SIZE + IFNAMSIZ +
-			sizeof(uint16_t) + NLMSG_HDRLEN + (7 * NLA_HDRLEN) +
-			ndp_confirm->ndp_info.ndp_app_info_len;
+	data_len = (4 * sizeof(uint32_t)) + VOS_MAC_ADDR_SIZE + IFNAMSIZ +
+			NLMSG_HDRLEN + (6 * NLA_HDRLEN);
+
+	if (ndp_confirm->ndp_info.ndp_app_info_len)
+		data_len += NLA_HDRLEN + ndp_confirm->ndp_info.ndp_app_info_len;
 
 	vendor_event = cfg80211_vendor_event_alloc(hdd_ctx->wiphy, NULL,
 				data_len, QCA_NL80211_VENDOR_SUBCMD_NDP_INDEX,
@@ -1214,14 +1226,19 @@ static void hdd_ndp_confirm_ind_handler(hdd_adapter_t *adapter,
 		goto ndp_confirm_nla_failed;
 
 	if (ndp_confirm->ndp_info.ndp_app_info_len && nla_put(vendor_event,
-				QCA_WLAN_VENDOR_ATTR_NDP_APP_INFO,
-				ndp_confirm->ndp_info.ndp_app_info_len,
-				ndp_confirm->ndp_info.ndp_app_info))
+			QCA_WLAN_VENDOR_ATTR_NDP_APP_INFO,
+			ndp_confirm->ndp_info.ndp_app_info_len,
+			ndp_confirm->ndp_info.ndp_app_info))
 		goto ndp_confirm_nla_failed;
 
 	if (nla_put_u32(vendor_event,
 			QCA_WLAN_VENDOR_ATTR_NDP_RESPONSE_CODE,
 			ndp_confirm->rsp_code))
+		goto ndp_confirm_nla_failed;
+
+	if (nla_put_u32(vendor_event,
+			QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE,
+			ndp_confirm->reason_code))
 		goto ndp_confirm_nla_failed;
 
 	cfg80211_vendor_event(vendor_event, GFP_KERNEL);
@@ -1657,11 +1674,11 @@ void hdd_ndp_event_handler(hdd_adapter_t *adapter,
 {
 	if (roam_status == eCSR_ROAM_NDP_STATUS_UPDATE) {
 		switch (roam_result) {
-		case eCSR_ROAM_RESULT_NDP_CREATE_RSP:
+		case eCSR_ROAM_RESULT_NDI_CREATE_RSP:
 			hdd_ndp_iface_create_rsp_handler(adapter,
 				&roam_info->ndp.ndi_create_params);
 			break;
-		case eCSR_ROAM_RESULT_NDP_DELETE_RSP:
+		case eCSR_ROAM_RESULT_NDI_DELETE_RSP:
 			hdd_ndp_iface_delete_rsp_handler(adapter,
 				&roam_info->ndp.ndi_delete_params);
 			break;
