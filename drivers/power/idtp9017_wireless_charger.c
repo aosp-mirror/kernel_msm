@@ -26,12 +26,12 @@
 #include <linux/power/idtp9017_wireless_charger.h>
 #include <linux/debugfs.h>
 
-#define WLC_GET_INFO_DELAY_MS     (10*1000)
-#define WLC_SET_ENV_INTERVAL_MS   (10*1000)
+#define WLC_GET_INFO_DELAY_MS      10000
+#define WLC_SET_ENV_INTERVAL_MS    10000
 #define WLC_SET_ENV_DELAY_MS       500
 #define WLC_CHECK_STATUS_DELAY_MS  500
-#define WLC_ONLINE_CHK_DELAY_MS   (10*1000)
-#define WLC_TX_OFF_LATENCY         3
+#define WLC_ONLINE_CHK_DELAY_MS    10000
+#define WLC_TX_OFF_LATENCY_MS      3000
 #define WLC_ACTIVE_CHECK_COUNT     10
 #define WLC_ACTIVE_CHECK_SLEEP_MS  200
 
@@ -74,7 +74,11 @@ struct idtp9017_chip {
 static inline void idtp9017_update_time(struct idtp9017_chip *chip)
 {
 	get_monotonic_boottime(&chip->next_time);
-	chip->next_time.tv_sec += WLC_TX_OFF_LATENCY;
+	chip->next_time.tv_sec += (WLC_TX_OFF_LATENCY_MS / 1000);
+}
+
+static inline int timespec_to_ms(struct timespec *ts) {
+	return (int)(div_s64(timespec_to_ns(ts), 1000000));
 }
 
 static void idtp9017_wlc_enable(struct idtp9017_chip *chip, bool enable)
@@ -84,23 +88,25 @@ static void idtp9017_wlc_enable(struct idtp9017_chip *chip, bool enable)
 	if (!gpio_is_valid(chip->wlc_off_gpio))
 		return;
 
-	if (chip->wlc_enabled == enable)
-		return;
+	mutex_lock(&chip->wlc_lock);
 
+	if (chip->wlc_enabled == enable) {
+		mutex_unlock(&chip->wlc_lock);
+		return;
+	}
 	chip->wlc_enabled = enable;
 
-	/* It will be queued if required later */
-	if (!enable)
-		cancel_delayed_work_sync(&chip->wlc_online_check_work);
-
-	mutex_lock(&chip->wlc_lock);
 	if (enable) {
 		get_monotonic_boottime(&now);
 		/* checking if LOW control has 3sec latency from the time of
 		 * OFF control.If not, should do 3sec sleep.
 		 */
-		if (timespec_compare(&now, &chip->next_time) < 0)
-			msleep(WLC_TX_OFF_LATENCY * 1000);
+		if (timespec_compare(&now, &chip->next_time) < 0) {
+			struct timespec ts =
+				timespec_sub(chip->next_time, now);
+			int ms = timespec_to_ms(&ts);
+			msleep(ms);
+		}
 
 		enable_irq(chip->client->irq);
 		enable_irq_wake(chip->client->irq);
@@ -109,6 +115,7 @@ static void idtp9017_wlc_enable(struct idtp9017_chip *chip, bool enable)
 		 * after wireless active
 		 */
 	} else {
+		cancel_delayed_work(&chip->wlc_online_check_work);
 		cancel_delayed_work_sync(&chip->set_env_work);
 		cancel_delayed_work_sync(&chip->wlc_status_work);
 		 /* marking the time of OFF PIN HIGH control */
@@ -150,20 +157,29 @@ static int idtp9017_wlc_is_present(struct idtp9017_chip *chip)
 	 * the workqueue. But in abnormal IRQ storm case that having
 	 * a lot of suspend and resume call, below logic is able to
 	 * run within 3sec. */
-	if (timespec_compare(&now, &chip->next_time) >= 0) {
-		if (wlc_disabled)
-			gpio_set_value(chip->wlc_off_gpio, 0);
-		for (i = 0; i < WLC_ACTIVE_CHECK_COUNT; i++) {
-			present = !gpio_get_value(chip->wlc_enable_gpio);
-			if (present)
-				break;
-			msleep(WLC_ACTIVE_CHECK_SLEEP_MS);
+	if (wlc_disabled) {
+		if (timespec_compare(&now, &chip->next_time) < 0) {
+			struct timespec ts =
+				timespec_sub(chip->next_time, now);
+			present = timespec_to_ms(&ts);
+			if (present > 1)
+				goto out;
 		}
+		gpio_set_value(chip->wlc_off_gpio, 0);
+	}
+	for (i = 0; i < WLC_ACTIVE_CHECK_COUNT; i++) {
+		present = !gpio_get_value(chip->wlc_enable_gpio);
+		if (present)
+			break;
+		msleep(WLC_ACTIVE_CHECK_SLEEP_MS);
+	}
+	if (wlc_disabled) {
 		/* marking the time of OFF PIN HIGH control */
 		idtp9017_update_time(chip);
-		if (wlc_disabled)
-			gpio_set_value(chip->wlc_off_gpio, 1);
+		gpio_set_value(chip->wlc_off_gpio, 1);
 	}
+
+out:
 	mutex_unlock(&chip->wlc_lock);
 	return present;
 }
@@ -173,7 +189,7 @@ static void idtp9017_wlc_online_check_work(struct work_struct *work)
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct idtp9017_chip *chip = container_of(dwork,
 				struct idtp9017_chip, wlc_online_check_work);
-	int present;
+	int ret;
 
 	/*
 	 * When software requests wireless charging be disabled, a gpio is
@@ -185,16 +201,24 @@ static void idtp9017_wlc_online_check_work(struct work_struct *work)
 	 * If it can't, the wireless supply is offline.  Otherwise the checks
 	 * continue with a fake online status being reported.
 	 */
-
-	present = idtp9017_wlc_is_present(chip);
-	if (present > 0) {
-		schedule_delayed_work(&chip->wlc_online_check_work,
-			round_jiffies_relative(msecs_to_jiffies(
-			chip->wlc_online_chk_delay_ms)));
-	} else if (!present) {
+	ret = idtp9017_wlc_is_present(chip);
+	if (ret < 0) {
+		/* No device so nothing to do */
+		return;
+	} else if (ret == 0) {
+		/* Detected that device is off from cradle */
 		chip->online = 0;
 		power_supply_changed(&chip->wlc_psy);
+		return;
+	} else if (ret == 1 && chip->wlc_enabled) {
+		/* Do not need to do the online check in normal charging */
+		return;
 	}
+	/* Do the online check if in fake online or defered the online check
+	 * due to the trial of TX ON within 3 secs */
+	schedule_delayed_work(&chip->wlc_online_check_work,
+		round_jiffies_relative(msecs_to_jiffies(
+		(ret > 1)? ret : chip->wlc_online_chk_delay_ms)));
 }
 
 static enum power_supply_property pm_power_props_wireless[] = {
@@ -1145,7 +1169,7 @@ static int idtp9017_debugfs_check_online(void *data, u64 val)
 	if (!req)
 		return 0;
 
-	if (!chip->online || chip->wlc_enabled)
+	if (!chip->online)
 		return 0;
 
 	dev_info(chip->dev, "request TX check: req=%d\n", req);
