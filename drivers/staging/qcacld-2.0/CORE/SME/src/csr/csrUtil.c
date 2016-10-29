@@ -636,6 +636,23 @@ tANI_BOOLEAN csrIsAnySessionInConnectState( tpAniSirGlobal pMac )
     return ( fRc );
 }
 
+/**
+ * csr_is_ndi_started() - function to check if NDI is started
+ * @mac_ctx: handle to mac context
+ * @session_id: session identifier
+ *
+ * returns: true if NDI is started, false otherwise
+ */
+bool csr_is_ndi_started(tpAniSirGlobal mac_ctx, uint32_t session_id)
+{
+	tCsrRoamSession *session = CSR_GET_SESSION(mac_ctx, session_id);
+
+	if (!session)
+		return false;
+
+	return (eCSR_CONNECT_STATE_TYPE_NDI_STARTED == session->connectState);
+}
+
 tANI_S8 csrGetInfraSessionId( tpAniSirGlobal pMac )
 {
     tANI_U8 i;

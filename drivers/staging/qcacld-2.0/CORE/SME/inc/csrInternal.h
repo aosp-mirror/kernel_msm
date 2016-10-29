@@ -1293,6 +1293,7 @@ eHalStatus csrIsBTAMPAllowed( tpAniSirGlobal pMac, tANI_U32 chnId );
 tANI_BOOLEAN csrIsValidMcConcurrentSession(tpAniSirGlobal pMac, tANI_U32 sessionId,
                                                   tSirBssDescription *pBssDesc);
 tANI_BOOLEAN csrIsConnStateConnectedInfraAp( tpAniSirGlobal pMac, tANI_U32 sessionId );
+bool csr_is_ndi_started(tpAniSirGlobal mac_ctx, uint32_t session_id);
 /*----------------------------------------------------------------------------
   \fn csrRoamRegisterLinkQualityIndCallback
 
