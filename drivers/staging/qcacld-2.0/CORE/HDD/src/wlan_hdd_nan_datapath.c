@@ -58,6 +58,8 @@ qca_wlan_vendor_ndp_policy[QCA_WLAN_VENDOR_ATTR_NDP_PARAMS_MAX + 1] = {
 					.len = VOS_MAC_ADDR_SIZE },
 	[QCA_WLAN_VENDOR_ATTR_NDP_INSTANCE_ID_ARRAY] = { .type = NLA_BINARY,
 					.len = NDP_NUM_INSTANCE_ID },
+	[QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_TYPE] = { .type = NLA_U32 },
+	[QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE] = { .type = NLA_U32 },
 };
 
 /**
@@ -736,6 +738,13 @@ static int hdd_ndp_end_req_handler(hdd_context_t *hdd_ctx, struct nlattr **tb)
  * The function is expected to send a response back to the user space
  * even if the creation of BSS has failed
  *
+ * Following vendor event is sent to cfg80211:
+ * QCA_WLAN_VENDOR_ATTR_NDP_SUBCMD =
+ *         QCA_WLAN_VENDOR_ATTR_NDP_INTERFACE_CREATE (4 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID (2 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_TYPE (4 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE (4 bytes)
+ *
  * Return: none
  */
 static void hdd_ndp_iface_create_rsp_handler(hdd_adapter_t *adapter,
@@ -744,8 +753,8 @@ static void hdd_ndp_iface_create_rsp_handler(hdd_adapter_t *adapter,
 	struct sk_buff *vendor_event;
 	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 	struct ndi_create_rsp *ndi_rsp = (struct ndi_create_rsp *)rsp_params;
-	uint32_t data_len = (2 * sizeof(uint32_t)) + sizeof(uint16_t) +
-				NLMSG_HDRLEN + (3 * NLA_HDRLEN);
+	uint32_t data_len = (3 * sizeof(uint32_t)) + sizeof(uint16_t) +
+				NLMSG_HDRLEN + (4 * NLA_HDRLEN);
 	struct nan_datapath_ctx *ndp_ctx = WLAN_HDD_GET_NDP_CTX_PTR(adapter);
 	bool create_fail = false;
 	uint8_t create_transaction_id = 0;
@@ -898,6 +907,13 @@ static void hdd_ndp_iface_delete_rsp_handler(hdd_adapter_t *adapter,
  * hdd_ndp_session_end_handler() - NDI session termination handler
  * @adapter: pointer to adapter context
  *
+ * Following vendor event is sent to cfg80211:
+ * QCA_WLAN_VENDOR_ATTR_NDP_SUBCMD =
+ *         QCA_WLAN_VENDOR_ATTR_NDP_INTERFACE_DELETE (4 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID (2 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_TYPE (4 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE (4 bytes)
+ *
  * Return: none
  */
 void hdd_ndp_session_end_handler(hdd_adapter_t *adapter)
@@ -905,8 +921,8 @@ void hdd_ndp_session_end_handler(hdd_adapter_t *adapter)
 	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 	struct sk_buff *vendor_event;
 	struct nan_datapath_ctx *ndp_ctx;
-	uint32_t data_len = sizeof(uint32_t) * 2 + sizeof(uint16_t) +
-				NLA_HDRLEN * 3 + NLMSG_HDRLEN;
+	uint32_t data_len = sizeof(uint32_t) * 3 + sizeof(uint16_t) +
+				NLA_HDRLEN * 4 + NLMSG_HDRLEN;
 
 	ENTER();
 
@@ -1009,6 +1025,14 @@ failure:
  * @adapter: pointer to adapter context
  * @rsp_params: response parameters
  *
+ * Following vendor event is sent to cfg80211:
+ * QCA_WLAN_VENDOR_ATTR_NDP_SUBCMD =
+ *         QCA_WLAN_VENDOR_ATTR_NDP_INITIATOR_RESPONSE (4 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID (2 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_INSTANCE_ID (4 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_TYPE (4 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE (4 bytes)
+ *
  * Return: none
  */
 static void hdd_ndp_initiator_rsp_handler(hdd_adapter_t *adapter,
@@ -1017,7 +1041,7 @@ static void hdd_ndp_initiator_rsp_handler(hdd_adapter_t *adapter,
 	struct sk_buff *vendor_event;
 	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 	struct ndp_initiator_rsp *rsp = rsp_params;
-	uint32_t data_len = (3 * sizeof(uint32_t)) + (2 * sizeof(uint16_t)) +
+	uint32_t data_len = (4 * sizeof(uint32_t)) + (1 * sizeof(uint16_t)) +
 				NLMSG_HDRLEN + (5 * NLA_HDRLEN);
 
 	ENTER();
@@ -1046,7 +1070,7 @@ static void hdd_ndp_initiator_rsp_handler(hdd_adapter_t *adapter,
 			rsp->transaction_id))
 		goto ndp_initiator_rsp_nla_failed;
 
-	if (nla_put_u16(vendor_event, QCA_WLAN_VENDOR_ATTR_NDP_INSTANCE_ID,
+	if (nla_put_u32(vendor_event, QCA_WLAN_VENDOR_ATTR_NDP_INSTANCE_ID,
 			rsp->ndp_instance_id))
 		goto ndp_initiator_rsp_nla_failed;
 
@@ -1163,6 +1187,16 @@ static void hdd_ndp_peer_departed_ind_handler(hdd_adapter_t *adapter,
  * @adapter: pointer to adapter context
  * @ind_params: indication parameters
  *
+ * Following vendor event is sent to cfg80211:
+ * QCA_WLAN_VENDOR_ATTR_NDP_SUBCMD =
+ *         QCA_WLAN_VENDOR_ATTR_NDP_CONFIRM_IND (4 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_INSTANCE_ID (4 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_NDI_MAC_ADDR (6 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_IFACE_STR (IFNAMSIZ)
+ * QCA_WLAN_VENDOR_ATTR_NDP_APP_INFO (ndp_app_info_len size)
+ * QCA_WLAN_VENDOR_ATTR_NDP_RESPONSE_CODE (4 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_RETURN_VALUE (4 bytes)
+ *
  * Return: none
  */
 static void hdd_ndp_confirm_ind_handler(hdd_adapter_t *adapter,
@@ -1267,7 +1301,7 @@ ndp_confirm_nla_failed:
  *
  * Following vendor event is sent to cfg80211:
  * QCA_WLAN_VENDOR_ATTR_NDP_SUBCMD =
- * QCA_WLAN_VENDOR_ATTR_NDP_REQUEST_IND (4 bytes)
+ *         QCA_WLAN_VENDOR_ATTR_NDP_REQUEST_IND (4 bytes)
  * QCA_WLAN_VENDOR_ATTR_NDP_IFACE_STR (IFNAMSIZ)
  * QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_INSTANCE_ID (2 bytes)
  * QCA_WLAN_VENDOR_ATTR_NDP_NDI_MAC_ADDR (6 bytes)
@@ -1330,9 +1364,9 @@ static void hdd_ndp_indication_handler(hdd_adapter_t *adapter,
 		return;
 	}
 
-	data_len = 3 * sizeof(uint32_t) + 2 * sizeof(uint16_t) +
+	data_len = 3 * sizeof(uint32_t) + sizeof(uint16_t) +
 		2 * VOS_MAC_ADDR_SIZE + IFNAMSIZ +
-		event->ndp_info.ndp_app_info_len + 9 * NLA_HDRLEN +
+		event->ndp_info.ndp_app_info_len + 8 * NLA_HDRLEN +
 		NLMSG_HDRLEN;
 
 	/* notify response to the upper layer */
@@ -1403,7 +1437,7 @@ ndp_indication_nla_failed:
  *
  * Following vendor event is sent to cfg80211:
  * QCA_WLAN_VENDOR_ATTR_NDP_SUBCMD =
- * QCA_WLAN_VENDOR_ATTR_NDP_RESPONDER_RESPONSE (4 bytes)
+ *         QCA_WLAN_VENDOR_ATTR_NDP_RESPONDER_RESPONSE (4 bytes)
  * QCA_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID (2 bytes)
  * QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_TYPE (4 bytes)
  * QCA_WLAN_VENDOR_ATTR_NDP_RESPONSE_CODE (4 bytes)
@@ -1477,8 +1511,9 @@ ndp_responder_rsp_nla_failed:
  *
  * Following vendor event is sent to cfg80211:
  * QCA_WLAN_VENDOR_ATTR_NDP_SUBCMD =
+ *         QCA_WLAN_VENDOR_ATTR_NDP_END_RESPONSE (4 bytes)
  * QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_TYPE (4 bytes)
- * QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VELUE (4 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE (4 bytes)
  * QCA_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID (2 bytes)
  *
  * Return: none
@@ -1574,8 +1609,9 @@ ndp_end_rsp_nla_failed:
  * @ind_params: indication parameters
  *
  * Following vendor event is sent to cfg80211:
- * QCA_WLAN_VENDOR_ATTR_NDP_SUBCMD = QCA_WLAN_VENDOR_ATTR_NDP_END_IND (4 bytes)
- * QCA_WLAN_VENDOR_ATTR_NDP_INSTANCE_ID_ARRAY (4 * NUM_INSTANCE_ID bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_SUBCMD =
+ *         QCA_WLAN_VENDOR_ATTR_NDP_END_IND (4 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_INSTANCE_ID_ARRAY (4 * no. of NDP instances)
  *
  * Return: none
  */
@@ -1626,7 +1662,7 @@ static void hdd_ndp_end_ind_handler(hdd_adapter_t *adapter,
 			end_ind->ndp_map[i].num_active_ndp_sessions;
 	}
 
-	data_len = (sizeof(uint32_t)) + NLMSG_HDRLEN + (2 * NLA_HDRLEN) +
+	data_len = NLMSG_HDRLEN + (2 * NLA_HDRLEN) +
 			end_ind->num_ndp_ids * sizeof(*ndp_instance_array);
 
 	vendor_event = cfg80211_vendor_event_alloc(hdd_ctx->wiphy, NULL,
