@@ -693,6 +693,27 @@ void sme_ndp_msg_processor(tpAniSirGlobal mac_ctx, vos_msg_t *msg)
 				cmd->u.data_end_req->num_ndp_instances;
 		break;
 	}
+	case eWNI_SME_NDP_END_IND:
+		result = eCSR_ROAM_RESULT_NDP_END_IND;
+		roam_info.ndp.ndp_end_ind_params = msg->bodyptr;
+		/*
+		 * NDP_END_IND is independent of session, but session_id is
+		 * needed for csrRoamCallCallback(). Set it to vdev_id of first
+		 * entry which is a valid session. vdev_id is likely to be same
+		 * for all.
+		 */
+		session_id =
+			roam_info.ndp.ndp_end_ind_params->ndp_map[0].vdev_id;
+		break;
+	case eWNI_SME_NDP_PEER_DEPARTED_IND:
+		result = eCSR_ROAM_RESULT_NDP_PEER_DEPARTED_IND;
+		/* copy msg from msg body to roam info passed to callback */
+		vos_mem_copy(&roam_info.ndp.ndp_peer_ind_params,
+			msg->bodyptr,
+			sizeof(roam_info.ndp.ndp_peer_ind_params));
+		session_id =
+			((struct sme_ndp_peer_ind *)msg->bodyptr)->session_id;
+		break;
 	default:
 		smsLog(mac_ctx, LOGE, FL("Unhandled NDP rsp"));
 		vos_mem_free(msg->bodyptr);
@@ -738,6 +759,8 @@ void sme_ndp_msg_processor(tpAniSirGlobal mac_ctx, vos_msg_t *msg)
 			vos_mem_free(cmd->u.data_end_req);
 			cmd->u.data_end_req = NULL;
 		}
+		break;
+	case eWNI_SME_NDP_END_IND:
 		break;
 	default:
 		break;

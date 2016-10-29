@@ -898,8 +898,15 @@ static void hdd_connRemoveConnectInfo(hdd_station_ctx_t *pHddStaCtx)
 
    vos_mem_zero( &pHddStaCtx->conn_info.SSID, sizeof( tCsrSSIDInfo ) );
 }
-/* TODO Revisit this function. and data path */
-static VOS_STATUS hdd_roamDeregisterSTA( hdd_adapter_t *pAdapter, tANI_U8 staId )
+
+/**
+ * hdd_roamDeregisterSTA() - Deregister STA from data path
+ * @pAdapter - HDD context
+ * @staId - Station ID
+ *
+ * Return: 0 or VOS_STATUS error code
+ */
+VOS_STATUS hdd_roamDeregisterSTA(hdd_adapter_t *pAdapter, tANI_U8 staId)
 {
     VOS_STATUS vosStatus;
     hdd_station_ctx_t *pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
@@ -2449,6 +2456,27 @@ bool hdd_save_peer(hdd_station_ctx_t *sta_ctx, uint8_t sta_id,
 		}
 	}
 	return false;
+}
+
+/**
+ * hdd_delete_peer() - removes peer from hdd station context peer table
+ * @sta_ctx: pointer to hdd station context
+ * @sta_id: station ID
+ *
+ * Return: none
+ */
+void hdd_delete_peer(hdd_station_ctx_t *sta_ctx, uint8_t sta_id)
+{
+	int i;
+
+	for (i = 0; i < HDD_MAX_NUM_IBSS_STA; i++) {
+		if (sta_id == sta_ctx->conn_info.staId[i]) {
+			sta_ctx->conn_info.staId[i] = 0;
+			return;
+		}
+	}
+
+	hddLog(LOGE, FL("sta_id %d is not present in peer table"), sta_id);
 }
 
 /**============================================================================

@@ -176,4 +176,9 @@ VOS_STATUS hdd_roamRegisterSTA(hdd_adapter_t *adapter, tCsrRoamInfo *roam_info,
 
 bool hdd_save_peer(hdd_station_ctx_t *sta_ctx, uint8_t sta_id,
 		   v_MACADDR_t *peer_mac_addr);
+void hdd_delete_peer(hdd_station_ctx_t *sta_ctx, uint8_t sta_id);
+
+int hdd_get_peer_idx(hdd_station_ctx_t *sta_ctx, v_MACADDR_t *addr);
+VOS_STATUS hdd_roamDeregisterSTA(hdd_adapter_t *adapter, uint8_t sta_id);
+
 #endif

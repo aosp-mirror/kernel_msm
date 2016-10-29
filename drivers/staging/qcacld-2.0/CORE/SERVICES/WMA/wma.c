@@ -17903,6 +17903,8 @@ static void wma_delete_sta(tp_wma_handle wma, tpDeleteStaParams del_sta)
 		WMA_LOGD("%s: to delete sta for IBSS mode", __func__);
 	}
 #endif
+	if (del_sta->staType == STA_ENTRY_NDI_PEER)
+		oper_mode = BSS_OPERATIONAL_MODE_NDI;
 
 	switch (oper_mode) {
 	case BSS_OPERATIONAL_MODE_STA:
@@ -17914,6 +17916,9 @@ static void wma_delete_sta(tp_wma_handle wma, tpDeleteStaParams del_sta)
 #endif
 	case BSS_OPERATIONAL_MODE_AP:
 		wma_delete_sta_req_ap_mode(wma, del_sta);
+		break;
+	case BSS_OPERATIONAL_MODE_NDI:
+		wma_delete_sta_req_ndi_mode(wma, del_sta);
 		break;
 	}
 
