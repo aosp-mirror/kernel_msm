@@ -7269,6 +7269,7 @@ struct ndp_app_info {
  struct ndi_create_rsp {
 	uint32_t status;
 	uint32_t reason;
+	uint8_t sta_id;
 };
 
 /**
