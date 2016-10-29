@@ -429,8 +429,9 @@ static void hdd_get_transmit_sta_id(hdd_adapter_t *adapter,
 				"Received MC/BC packet for transmission");
 			mcbc_addr = true;
 		} else {
-		}	hddLog(LOGE,
+			hddLog(LOGE,
 				"UC frame with invalid destination address");
+		}
 	}
 
 	if (adapter->device_mode == WLAN_HDD_IBSS) {
