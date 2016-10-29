@@ -9797,55 +9797,59 @@ int wlan_hdd_setIPv6Filter(hdd_context_t *pHddCtx, tANI_U8 filterType,
     return 0;
 }
 
+/**
+ * wlan_hdd_set_mc_addr_list() - Set multicast address list
+ * @pAdapter: Adapter context
+ * @set: flag to notify set/clear action on the multicast addr
+ *
+ * Returns: None
+ */
 void wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, v_U8_t set)
 {
     v_U8_t i;
     tpSirRcvFltMcAddrList pMulticastAddrs = NULL;
-    tHalHandle hHal = NULL;
+    tHalHandle hHal;
     hdd_context_t* pHddCtx = (hdd_context_t*)pAdapter->pHddCtx;
+    hdd_station_ctx_t *sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 
-    if (NULL == pHddCtx)
-    {
-        hddLog(VOS_TRACE_LEVEL_ERROR, FL("HDD CTX is NULL"));
+    ENTER();
+
+    if (wlan_hdd_validate_context(pHddCtx))
         return;
-    }
 
     hHal = pHddCtx->hHal;
 
-    if (NULL == hHal)
-    {
+    if (NULL == hHal) {
         hddLog(VOS_TRACE_LEVEL_ERROR, FL("HAL Handle is NULL"));
         return;
     }
 
-    /* Check if INI is enabled or not, other wise just return
-     */
-    if (pHddCtx->cfg_ini->fEnableMCAddrList)
-    {
+    if (!sta_ctx) {
+        hddLog(LOGE, "sta_ctx is NULL");
+        return;
+    }
+
+    if (pHddCtx->cfg_ini->fEnableMCAddrList) {
         pMulticastAddrs = vos_mem_malloc(sizeof(tSirRcvFltMcAddrList));
-        if (NULL == pMulticastAddrs)
-        {
+        if (NULL == pMulticastAddrs) {
             hddLog(VOS_TRACE_LEVEL_ERROR, FL("Could not allocate Memory"));
             return;
         }
         vos_mem_zero(pMulticastAddrs, sizeof(tSirRcvFltMcAddrList));
         pMulticastAddrs->action = set;
 
-        if (set)
-        {
-            /* Following pre-conditions should be satisfied before we
-             * configure the MC address list.
-             */
-            if (((pAdapter->device_mode == WLAN_HDD_INFRA_STATION) ||
-               (pAdapter->device_mode == WLAN_HDD_P2P_CLIENT))
-               && pAdapter->mc_addr_list.mc_cnt
-               && (eConnectionState_Associated ==
-               (WLAN_HDD_GET_STATION_CTX_PTR(pAdapter))->conn_info.connState))
-            {
+        if (set) {
+            if (pAdapter->mc_addr_list.mc_cnt &&
+                     (((pAdapter->device_mode == WLAN_HDD_INFRA_STATION ||
+                       pAdapter->device_mode == WLAN_HDD_P2P_CLIENT) &&
+                       hdd_connIsConnected(sta_ctx)) ||
+                     (WLAN_HDD_IS_NDI(pAdapter) &&
+                       WLAN_HDD_IS_NDI_CONNECTED(pAdapter)))) {
+
                 pMulticastAddrs->ulMulticastAddrCnt =
                                  pAdapter->mc_addr_list.mc_cnt;
-                for (i = 0; i < pAdapter->mc_addr_list.mc_cnt; i++)
-                {
+
+                for (i = 0; i < pAdapter->mc_addr_list.mc_cnt; i++) {
                     memcpy(pMulticastAddrs->multicastAddr[i],
                            &pAdapter->mc_addr_list.addr[i * ETH_ALEN],
                            ETH_ALEN);
@@ -9858,19 +9862,15 @@ void wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, v_U8_t set)
                 /* Set multicast filter */
                 sme_8023MulticastList(hHal, pAdapter->sessionId,
                                       pMulticastAddrs);
-            }
-            else {
+            } else {
                 hddLog(VOS_TRACE_LEVEL_INFO,
                        FL("MC address list not sent to FW, cnt: %d"),
                         pAdapter->mc_addr_list.mc_cnt);
             }
-        }
-        else
-        {
+        } else {
             /* Need to clear only if it was previously configured
              */
-            if (pAdapter->mc_addr_list.isFilterApplied)
-            {
+            if (pAdapter->mc_addr_list.isFilterApplied) {
                 pMulticastAddrs->ulMulticastAddrCnt =
                                  pAdapter->mc_addr_list.mc_cnt;
                 i = 0;
@@ -9897,12 +9897,12 @@ void wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, v_U8_t set)
 
         pAdapter->mc_addr_list.isFilterApplied = set ? TRUE : FALSE;
         vos_mem_free(pMulticastAddrs);
-    }
-    else
-    {
+    } else {
         hddLog(VOS_TRACE_LEVEL_INFO,
                 FL("gMCAddrListEnable is not enabled in INI"));
     }
+
+    EXIT();
     return;
 }
 
