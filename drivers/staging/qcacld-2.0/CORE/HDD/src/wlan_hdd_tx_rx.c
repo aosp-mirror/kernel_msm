@@ -428,9 +428,6 @@ static void hdd_get_transmit_sta_id(hdd_adapter_t *adapter,
 			hddLog(LOG1,
 				"Received MC/BC packet for transmission");
 			mcbc_addr = true;
-		} else {
-			hddLog(LOGE,
-				"UC frame with invalid destination address");
 		}
 	}
 
