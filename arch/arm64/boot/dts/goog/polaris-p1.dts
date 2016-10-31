@@ -50,10 +50,25 @@
 
 		qca,bt-vdd-io-current-level = <1>; /* LPM/PFM */
 		qca,bt-vdd-xtal-current-level = <1>; /* LPM/PFM */
-		qca,bt-vdd-core-current-level = <0>; /* LPM/PFM */
-		qca,bt-vdd-pa-current-level = <0>; /* LPM/PFM */
-		qca,bt-vdd-ldo-current-level = <0>; /* LPM/PFM */
+		qca,bt-vdd-core-current-level = <1>; /* LPM/PFM */
+		qca,bt-vdd-pa-current-level = <1>; /* LPM/PFM */
+		qca,bt-vdd-ldo-current-level = <1>; /* LPM/PFM */
 	};
+};
+
+&qusb_phy0 {
+	qcom,qusb-phy-host-init-seq =
+		/* value reg_offsets> */
+		<0x63 0x210
+		0x13 0x04
+		0x7c 0x18c
+		0x80 0x2c
+		0x0a 0x184
+		0x8c 0x21c
+		0x05 0x23c
+		0x03 0x240
+		0xff 0x218
+		0x62 0x210>;
 };
 
 &blsp1_uart3_hs {
@@ -177,6 +192,15 @@
 	};
 };
 
+&mdss_dp_ctrl {
+	pinctrl-names = "mdss_dp_active", "mdss_dp_sleep";
+	pinctrl-0 = <&mdss_dp_aux_active &mdss_dp_usbplug_cc_active>;
+	pinctrl-1 = <&mdss_dp_aux_suspend &mdss_dp_usbplug_cc_suspend>;
+	qcom,aux-en-gpio = <&tlmm 77 0>;
+	qcom,aux-sel-gpio = <&tlmm 78 0>;
+	qcom,usbplug-cc-gpio = <&tlmm 38 0>;
+};
+
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
 };
@@ -271,10 +295,6 @@
 			&mdss_hdmi_ddc_suspend &mdss_hdmi_cec_suspend>;
 };
 
-&pmicobalt_charger {
-	qcom,suspend-input;
-};
-
 &pmicobalt_haptics {
 	status = "okay";
 };
@@ -283,7 +303,7 @@
 	chan@83 {
 		label = "vph_pwr";
 		reg = <0x83>;
-		qcom,decimation = <0>;
+		qcom,decimation = <2>;
 		qcom,pre-div-channel-scaling = <1>;
 		qcom,calibration-type = "absolute";
 		qcom,scale-function = <0>;
@@ -294,7 +314,7 @@
 	chan@85 {
 		label = "vcoin";
 		reg = <0x85>;
-		qcom,decimation = <0>;
+		qcom,decimation = <2>;
 		qcom,pre-div-channel-scaling = <1>;
 		qcom,calibration-type = "absolute";
 		qcom,scale-function = <0>;
@@ -305,7 +325,7 @@
 	chan@4c {
 		label = "xo_therm";
 		reg = <0x4c>;
-		qcom,decimation = <0>;
+		qcom,decimation = <2>;
 		qcom,pre-div-channel-scaling = <0>;
 		qcom,calibration-type = "ratiometric";
 		qcom,scale-function = <4>;
@@ -316,7 +336,7 @@
 	chan@4d {
 		label = "msm_therm";
 		reg = <0x4d>;
-		qcom,decimation = <0>;
+		qcom,decimation = <2>;
 		qcom,pre-div-channel-scaling = <0>;
 		qcom,calibration-type = "ratiometric";
 		qcom,scale-function = <2>;
@@ -327,7 +347,7 @@
 	chan@51 {
 		label = "quiet_therm";
 		reg = <0x51>;
-		qcom,decimation = <0>;
+		qcom,decimation = <2>;
 		qcom,pre-div-channel-scaling = <0>;
 		qcom,calibration-type = "ratiometric";
 		qcom,scale-function = <2>;
@@ -482,6 +502,14 @@
 
 &slim_aud {
 	/delete-node/ tavil_codec;
+};
+
+/{
+	mtp_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <15>;
+		#include "../qcom/fg-gen3-batterydata-itech-3000mah.dtsi"
+		#include "../qcom/fg-gen3-batterydata-ascent-3450mah.dtsi"
+	};
 };
 
 &rpm_bus {
