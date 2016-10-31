@@ -3373,7 +3373,6 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		pdata->codec_root = entry;
 		tasha_codec_info_create_codec_entry(pdata->codec_root, codec);
 	}
-done:
 	codec_reg_done = true;
 	return 0;
 
