@@ -64,6 +64,7 @@
 
 #define MAX17055_VMAX_TOLERANCE   50			/* 50 mV */
 #define MAX17055_IC_VERSION       0x4000
+#define MAX17055_IC_VERSION_1     0x4010
 #define MAX17201_IC_VERSION       0x4001
 #define MAX17205_IC_VERSION       0x4005
 #define MAX17055_DRIVER_VERSION   0x1013
@@ -103,6 +104,7 @@ static enum power_supply_property max17055_battery_props[] = {
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CURRENT_AVG,
+	POWER_SUPPLY_PROP_DEVICE_NAME,
 };
 
 #define DEFAULT_TEMP 250
@@ -376,6 +378,15 @@ static int max17055_get_property(struct power_supply *psy,
 		} else {
 			return -EINVAL;
 		}
+		break;
+	case POWER_SUPPLY_PROP_DEVICE_NAME:
+		ret = regmap_read(map, MAX17055_DevName, &data);
+		if (ret < 0)
+		{
+			return ret;
+		}
+
+		val->intval = data;
 		break;
 	default:
 		return -EINVAL;
@@ -1003,7 +1014,8 @@ static int max17055_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, chip);
 
 	regmap_read(chip->regmap, MAX17055_DevName, &val);
-	if (val == MAX17055_IC_VERSION) {
+	if ((val == MAX17055_IC_VERSION)
+		|| (val == MAX17055_IC_VERSION_1)) {
 		dev_info(&client->dev, "chip type max17055 detected\n");
 		chip->chip_type = MAXIM_DEVICE_TYPE_MAX17055;
 	}
