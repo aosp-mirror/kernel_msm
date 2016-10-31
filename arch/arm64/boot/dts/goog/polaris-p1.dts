@@ -383,9 +383,9 @@
 
 &soc {
 	/delete-node/ msm_cdc_pinctrl@64;
-	/delete-node/ msm_cdc_pinctrl@65;
-	/delete-node/ msm_cdc_pinctrl@66;
 	/delete-node/ msm_cdc_pinctrl@75;
+	/delete-node/ sound-tavil;
+	/delete-node/ qcom,wcd-dsp-mgr;
 
 	gpio_keys {
 		compatible = "gpio-keys";
@@ -433,7 +433,6 @@
 	sound-9335 {
 		compatible = "goog,polaris-snd";
 		qcom,model = "goog-polaris-snd-card";
-		qcom,wcn-btfm;
 
 		qcom,audio-routing =
 			"AIF4 VI", "MCLK",
@@ -461,9 +460,6 @@
 			"SpkrLeft IN", "SPK1 OUT",
 			"SpkrRight IN", "SPK2 OUT";
 
-		asoc-codec = <&stub_codec>;
-		asoc-codec-names = "msm-stub-codec.1";
-
 		qcom,msm-mbhc-hphl-swh = <1>;
 		qcom,msm-mbhc-gnd-swh = <1>;
 		goog,us-euro-supply = <&pmcobalt_l28>;
@@ -482,6 +478,10 @@
 		pinctrl-0 = <&wcd_gnd_mic_swap_active>;
 		pinctrl-1 = <&wcd_gnd_mic_swap_idle>;
 	};
+};
+
+&slim_aud {
+	/delete-node/ tavil_codec;
 };
 
 &rpm_bus {
