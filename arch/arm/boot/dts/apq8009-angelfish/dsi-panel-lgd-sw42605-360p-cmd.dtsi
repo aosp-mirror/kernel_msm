@@ -44,10 +44,16 @@
 		qcom,mdss-dsi-on-command = [
 			39 01 00 00 00 00 05 2A 00 00 01 67  /* Column Address Setting */
 			39 01 00 00 00 00 05 2B 00 00 01 67  /* Page Address Setting */
-			15 01 00 00 00 00 02 53 20 			 /* Display Control */
-			15 01 00 00 00 00 02 55 00 			 /* Write Power Save */
-			15 01 00 00 00 00 02 36 00  		 /* Memory Access Control */
-			05 01 00 00 78 00 01 11  /* Sleep Out */
+			15 01 00 00 00 00 02 53 20           /* Display Control */
+			15 01 00 00 00 00 02 55 00           /* Write Power Save */
+			15 01 00 00 00 00 02 36 00           /* Memory Access Control */
+			05 01 00 00 78 00 01 11              /* Sleep Out */
+			15 01 00 00 01 00 02 B0 AC           /* Manufacturer Command Protection */
+			39 01 00 00 0A 00 14 DA
+			44 65 33 33 03 44
+			52 55 46 47 07 43
+			12 33 33 03 02 11
+			02
 			15 01 00 00 00 00 02 35 00 /* TE On */
 			];
 		qcom,mdss-dsi-post-panel-on-command = [
