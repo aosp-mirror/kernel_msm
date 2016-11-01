@@ -623,7 +623,7 @@ void hdd_conf_hostoffload(hdd_adapter_t *pAdapter, v_BOOL_t fenable)
 
                     if (!VOS_IS_STATUS_SUCCESS(vstatus))
                     {
-                        hddLog(VOS_TRACE_LEVEL_ERROR,
+                        hddLog(VOS_TRACE_LEVEL_INFO,
                                 "Failed to enable ARPOFfloadFeature %d",
                                 vstatus);
                     }
