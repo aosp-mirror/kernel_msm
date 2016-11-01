@@ -23,6 +23,7 @@
 #include <linux/debugfs.h>
 #include <linux/pm_wakeup.h>
 #include <linux/spinlock.h>
+#include <linux/wakelock.h>
 
 static bool is_fake_battery = false;
 module_param(is_fake_battery, bool, 0644);
@@ -66,6 +67,16 @@ struct smb23x_chip {
 	int				cfg_safety_time;
 
 	int				*cfg_thermal_mitigation;
+	int				hot_batt_p;
+	int				cold_batt_p;
+	int				low_temp_threshold;
+	int				high_temp_threshold;
+	int				cfg_warm_comp_mv;
+	int				cfg_cool_comp_mv;
+	int				cfg_warm_comp_ma;
+	int				cfg_cool_comp_ma;
+	struct wake_lock	charger_wake_lock;
+	struct wake_lock	charger_valid_lock;
 
 	/* status */
 	bool				batt_present;
@@ -99,9 +110,11 @@ struct smb23x_chip {
 	struct mutex			chg_disable_lock;
 	struct mutex			usb_suspend_lock;
 	struct mutex			icl_set_lock;
+	struct mutex			jeita_configure_lock;
 	struct dentry			*debug_root;
 	struct delayed_work		irq_polling_work;
 	struct smb23x_wakeup_source	smb23x_ws;
+	struct delayed_work		temp_control_work;
 };
 
 static int usbin_current_ma_table[] = {
@@ -188,7 +201,7 @@ static int hot_bat_decidegc_table[] = {
 
 
 #define MIN_FLOAT_MV	3480
-#define MAX_FLOAT_MV	4720
+#define MAX_FLOAT_MV	4400
 #define FLOAT_STEP_MV	40
 
 #define _SMB_MASK(BITS, POS) \
@@ -220,6 +233,7 @@ static int hot_bat_decidegc_table[] = {
 #define SAFETY_TIMER_MASK	SMB_MASK(4, 3)
 #define SAFETY_TIMER_OFFSET	3
 #define SAFETY_TIMER_DISABLE	SMB_MASK(4, 3)
+#define SYSTEM_VOLTAGE_MASK	SMB_MASK(1, 0)
 
 #define CFG_REG_5		0x05
 #define BAT_THERM_DIS_BIT	BIT(7)
@@ -586,6 +600,36 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 	if (rc < 0)
 		chip->cfg_hot_bat_decidegc = -EINVAL;
 
+	rc = of_property_read_u32(node,"zte,batt-hot-percentage",
+		&chip->hot_batt_p);
+	if (rc < 0)
+			chip->hot_batt_p = -EINVAL;
+
+	rc = of_property_read_u32(node,"zte,batt-cold-percentage",
+		&chip->cold_batt_p);
+	if (rc < 0)
+			chip->cold_batt_p = -EINVAL;
+
+	rc = of_property_read_u32(node,"zte,soft-warm-current-comp-ma",
+		&chip->cfg_warm_comp_ma);
+	if (rc < 0)
+			chip->cfg_warm_comp_ma = -EINVAL;
+
+	rc = of_property_read_u32(node,"zte,soft-cool-current-comp-ma",
+		&chip->cfg_cool_comp_ma);
+	if (rc < 0)
+			chip->cfg_cool_comp_ma = -EINVAL;
+
+	rc = of_property_read_u32(node,"zte,soft-warm-vfloat-comp-mv",
+		&chip->cfg_warm_comp_mv);
+	if (rc < 0)
+			chip->cfg_warm_comp_mv = -EINVAL;
+
+	rc = of_property_read_u32(node,"zte,soft-cool-vfloat-comp-mv",
+		&chip->cfg_cool_comp_mv);
+	if (rc < 0)
+			chip->cfg_cool_comp_mv = -EINVAL;
+
 	rc = of_property_read_u32(node, "qcom,soft-temp-vfloat-comp-mv",
 					&chip->cfg_temp_comp_mv);
 	if (rc < 0)
@@ -813,11 +857,14 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 
 	return rc;
 }
+extern void set_batt_hot_cold_threshold(unsigned int vbatt_hot_threshold,
+	unsigned int vbatt_cold_threshold);
 
 static int smb23x_hw_init(struct smb23x_chip *chip)
 {
 	int rc, i = 0;
 	u8 tmp;
+	set_batt_hot_cold_threshold(chip->hot_batt_p, chip->cold_batt_p);
 
 	rc = smb23x_enable_volatile_writes(chip);
 	if (rc < 0) {
@@ -1056,6 +1103,15 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 		}
 	}
 
+	/*System voltage config*/
+	rc = smb23x_masked_write(chip, CFG_REG_4,
+			SYSTEM_VOLTAGE_MASK,
+			2);
+	if (rc < 0) {
+		pr_err("Set System Voltage failed, rc=%d\n", rc);
+		return rc;
+	}
+
 	/*
 	 * Disable the STAT pin output, to make the pin keep at open drain
 	 * state and detect the IRQ on the falling edge
@@ -1208,11 +1264,16 @@ static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 	pr_debug("chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present, usb_present);
+	if (chip->usb_present ^ usb_present) {
+		wake_lock_timeout(&chip->charger_wake_lock, 5 * HZ);
+	}
 
 	if (usb_present && !chip->usb_present) {
+		wake_lock(&chip->charger_valid_lock);
 		chip->usb_present = usb_present;
 		handle_usb_insertion(chip);
 	} else if (!usb_present && chip->usb_present) {
+		wake_unlock(&chip->charger_valid_lock);
 		chip->usb_present = usb_present;
 		handle_usb_removal(chip);
 	}
@@ -1518,6 +1579,8 @@ static int smb23x_determine_initial_status(struct smb23x_chip *chip)
 		power_supply_set_present(chip->usb_psy, chip->usb_present);
 		reconfig_upon_unplug(chip);
 	}
+	chip->high_temp_threshold = chip->cfg_warm_bat_decidegc;
+	chip->low_temp_threshold = chip->cfg_cool_bat_decidegc;
 
 	return rc;
 }
@@ -2198,7 +2261,275 @@ static void smb23x_irq_polling_wa_check(struct smb23x_chip *chip)
 
 	pr_debug("use polling: %d\n", !(reg & UNPLUG_RELOAD_DIS_BIT));
 }
+#define MIN_IBAT_MA		100
+#define MAX_IBAT_MA		500
+int set_ibat(struct smb23x_chip *chip, int ma)
+{
+	int rc,i;
 
+	if(ma < MIN_IBAT_MA){
+		ma = MIN_IBAT_MA;
+		pr_err("bad battery charge current ma =%d asked to set\n",ma);
+	}else if(ma > MAX_IBAT_MA){
+		ma = MAX_IBAT_MA;
+		pr_err("bad battery charge current ma =%d asked to set\n",ma);
+	}
+	/* fastchg current setting */
+	i = find_closest_in_ascendant_list(
+		ma, fastchg_current_ma_table,
+		ARRAY_SIZE(fastchg_current_ma_table));
+
+	rc = smb23x_masked_write(chip, CFG_REG_2,
+			FASTCHG_CURR_MASK, i);
+	if (rc < 0) {
+		pr_err("Set fastchg current failed, rc=%d\n", rc);
+		return rc;
+	}
+
+	pr_debug("ibat current set to = %d\n", fastchg_current_ma_table[i]);
+
+	return 0;
+}
+
+void smb23x_set_appropriate_ibat(struct smb23x_chip *chip)
+{
+	int chg_current = chip->cfg_fastchg_ma;
+	pr_debug("chip->batt_cool:%d,chip->batt_warm:%d,chip->cfg_cool_comp_ma:%d,chip->cfg_warm_comp_ma:%d,chip->cfg_fastchg_ma:%d\n",
+		chip->batt_cool,chip->batt_warm,chip->cfg_cool_comp_ma,chip->cfg_warm_comp_ma,chip->cfg_fastchg_ma);
+	if (chip->batt_cool){
+		chg_current = min(chg_current, chip->cfg_cool_comp_ma);
+	}
+	if (chip->batt_warm)
+	{
+		chg_current = min(chg_current, chip->cfg_warm_comp_ma);
+	}
+	pr_debug("setting %d mA\n", chg_current);
+
+	set_ibat(chip, chg_current);
+}
+
+static int smb23x_float_voltage_set(struct smb23x_chip *chip, int vfloat_mv)
+{
+	u8 temp;
+	int rc;
+	pr_debug("set vfloat_mv:%d\n",vfloat_mv);
+	if ((vfloat_mv < MIN_FLOAT_MV) || (vfloat_mv > MAX_FLOAT_MV)) {
+		pr_err("bad float voltage mv =%d asked to set\n",
+					vfloat_mv);
+		return -EINVAL;
+	}
+
+	temp = (vfloat_mv - MIN_FLOAT_MV) / FLOAT_STEP_MV;
+	rc = smb23x_masked_write(chip, CFG_REG_3,
+			FLOAT_VOLTAGE_MASK, temp);
+	if (rc < 0) {
+		pr_err("Set float voltage failed, rc=%d\n", rc);
+		return rc;
+	}
+
+	return rc;
+}
+
+static void smb23x_set_appropriate_float_voltage(struct smb23x_chip *chip)
+{
+	pr_debug("is_cold=%d is_cool=%d is_warm=%d cool_bat_mv=%dmv warm_bat_mv=%dmv vfloat_mv=%dmv warm_resume_delta_mv=mv resume_delta_mv=%dmv\n",
+			chip->batt_cold,
+			chip->batt_cool,
+			chip->batt_warm,
+			chip->cfg_cool_comp_mv,
+			chip->cfg_warm_comp_mv,
+			chip->cfg_vfloat_mv,
+			//chip->warm_resume_delta_mv,
+			chip->cfg_resume_delta_mv
+			);
+	if (chip->batt_cool)
+	{
+		smb23x_float_voltage_set(chip, chip->cfg_cool_comp_mv);
+	}
+	else if (chip->batt_warm)
+	{
+		smb23x_float_voltage_set(chip, chip->cfg_warm_comp_mv);
+	}
+	else
+	{
+		smb23x_float_voltage_set(chip, chip->cfg_vfloat_mv);
+	}
+}
+
+#define SMB_HOT_TEMP_DEFAULT        500
+#define SMB_COLD_TEMP_DEFAULT       0
+#define SMB_WARM_TEMP_DEFAULT       450
+#define SMB_COOL_TEMP_DEFAULT       100
+#define HYSTERISIS_DECIDEGC         20
+#define MAX_TEMP                    800
+#define MIN_TEMP                   -300
+enum {
+	SMB_TM_HIGHER_STATE,
+	SMB_TM_LOWER_STATE,
+	SMB_TM_NORMAL_STATE,
+};
+
+static void smb23x_temp_control_func(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct smb23x_chip *chip = container_of(dwork, struct smb23x_chip, temp_control_work);
+	bool bat_warm = false, bat_cool = false, bat_hot = false,bat_cold = false;
+	int state = SMB_TM_NORMAL_STATE;
+	int temp=0;
+	if (!chip->resume_completed) {
+		pr_err("smb23x_temp_control_func launched before device-resume, schedule to 2s later\n");
+		schedule_delayed_work(&chip->temp_control_work,round_jiffies_relative(msecs_to_jiffies(2000)));
+		return;
+	}
+	temp = smb23x_get_prop_batt_temp(chip);
+
+	if (temp > MAX_TEMP)
+		temp = MAX_TEMP;
+	if (temp < MIN_TEMP)
+		temp = MIN_TEMP;
+
+	if (temp > chip->high_temp_threshold)
+		state = SMB_TM_HIGHER_STATE;
+	else if (temp < chip->low_temp_threshold)
+		state = SMB_TM_LOWER_STATE;
+	else
+		state = SMB_TM_NORMAL_STATE;
+
+	mutex_lock(&chip->jeita_configure_lock);
+	if (state == SMB_TM_HIGHER_STATE) {
+		pr_debug("SMB_TM_HIGHER_STATE");
+		if(chip->batt_hot == false && chip->batt_warm == false && chip->batt_cool == false && chip->batt_cold == true)
+		{
+			bat_hot = false;
+			bat_warm = false;
+			bat_cool = true;
+			bat_cold = false;
+			chip->low_temp_threshold = chip->cfg_cold_bat_decidegc;
+			chip->high_temp_threshold = chip->cfg_cool_bat_decidegc + HYSTERISIS_DECIDEGC;
+		}
+		else if(chip->batt_hot == false && chip->batt_warm == false && chip->batt_cool == true && chip->batt_cold == false)
+		{
+			bat_hot = false;
+			bat_warm = false;
+			bat_cool = false;
+			bat_cold = false;
+			chip->low_temp_threshold = chip->cfg_cool_bat_decidegc;
+			chip->high_temp_threshold = chip->cfg_warm_bat_decidegc;
+		}
+		else if(chip->batt_hot == false && chip->batt_warm == false && chip->batt_cool == false && chip->batt_cold == false)
+		{
+			bat_hot = false;
+			bat_warm = true;
+			bat_cool = false;
+			bat_cold = false;
+			chip->low_temp_threshold =chip->cfg_warm_bat_decidegc - HYSTERISIS_DECIDEGC;
+			chip->high_temp_threshold = chip->cfg_hot_bat_decidegc;
+		}
+		else if(chip->batt_hot == false && chip->batt_warm == true && chip->batt_cool == false && chip->batt_cold == false)
+		{
+			bat_hot = true;
+			bat_warm = false;
+			bat_cool = false;
+			bat_cold = false;
+			chip->low_temp_threshold = chip->cfg_hot_bat_decidegc - HYSTERISIS_DECIDEGC;
+			chip->high_temp_threshold = MAX_TEMP;
+		}
+	} else if (state == SMB_TM_LOWER_STATE){
+		pr_debug("SMB_TM_LOWER_STATE");
+		if(chip->batt_hot == false && chip->batt_warm == false && chip->batt_cool == true && chip->batt_cold == false)
+		{
+			bat_hot = false;
+			bat_warm = false;
+			bat_cool = false;
+			bat_cold = true;
+			chip->low_temp_threshold = MIN_TEMP;
+			chip->high_temp_threshold = chip->cfg_cold_bat_decidegc + HYSTERISIS_DECIDEGC;
+		}
+		else if(chip->batt_hot == false && chip->batt_warm == false && chip->batt_cool == false && chip->batt_cold == false)
+		{
+			bat_hot = false;
+			bat_warm = false;
+			bat_cool = true;
+			bat_cold = false;
+			chip->low_temp_threshold = chip->cfg_cold_bat_decidegc;
+			chip->high_temp_threshold = chip->cfg_cool_bat_decidegc + HYSTERISIS_DECIDEGC;
+		}
+		else if(chip->batt_hot == false && chip->batt_warm == true && chip->batt_cool == false && chip->batt_cold == false)
+		{
+			bat_hot = false;
+			bat_warm = false;
+			bat_cool = false;
+			bat_cold = false;
+			chip->low_temp_threshold =chip->cfg_cool_bat_decidegc;
+			chip->high_temp_threshold = chip->cfg_warm_bat_decidegc ;
+		}
+		else if(chip->batt_hot == true && chip->batt_warm == false && chip->batt_cool == false && chip->batt_cold == false)
+		{
+			bat_hot = false;
+			bat_warm = true;
+			bat_cool = false;
+			bat_cold = false;
+			chip->low_temp_threshold = chip->cfg_warm_bat_decidegc - HYSTERISIS_DECIDEGC;
+			chip->high_temp_threshold = chip->cfg_hot_bat_decidegc;
+		}
+	} else {
+		pr_debug("SMB_TM_NORMAL_STATE");
+		goto check_again;
+	}
+
+	pr_debug("temp = %d bat_cold = %d,bat_cool = %d,bat_warm = %d, bat_hot = %d\n",temp,bat_cold,bat_cool,bat_warm,bat_hot);
+
+	if (chip->batt_warm ^ bat_warm || chip->batt_cool ^ bat_cool) {
+		chip->batt_warm = bat_warm;
+		chip->batt_cool = bat_cool;
+		pr_debug("battery warm/cool, temp = %d bat_cold = %d,bat_cool = %d,bat_warm = %d, bat_hot = %d\n",temp,bat_cold,bat_cool,bat_warm,bat_hot);
+		/**
+		 * set appropriate voltages and currents.
+		 *
+		 * (TODO)Note that when the battery is hot or cold, the charger
+		 * driver will not resume with SoC. Only vbatdet is used to
+		 * determine resume of charging.
+		 */
+
+		/* NOTE(by ZTE JZN):
+		*  if vbatt>warm_bat_mv and charging is enabled, battery will discharging and iusb=0 ;
+		*  if vbatt>warm_bat_mv and charging is disabled, iusb will be the currnt source and ibat=0 .
+		*  so, there is a bug in the below codes:if vbatt>warm_bat_mv,battery will discharging and iusb=0
+		*/
+		smb23x_set_appropriate_usb_current(chip);
+		smb23x_set_appropriate_ibat(chip);
+		smb23x_set_appropriate_float_voltage(chip);
+		power_supply_changed(&chip->batt_psy);
+	}
+	/**
+	  * Hot/cool Temp Procedure(ZTE)
+	  *
+	  * add for stop charging when hot/cool temp,
+	  * only called when status changed
+	  */
+
+	if (chip->batt_hot ^ bat_hot  || chip->batt_cold ^ bat_cold) {
+		chip->batt_hot = bat_hot;
+		chip->batt_cold = bat_cold;
+		pr_debug("battery hot/cool, temp = %d bat_cold = %d,bat_cool = %d,bat_warm = %d, bat_hot = %d\n",temp,bat_cold,bat_cool,bat_warm,bat_hot);
+		if (chip->batt_hot || chip->batt_cold) {
+			/* disable charging */
+			smb23x_charging_disable(chip, THERMAL, true);
+		} else {
+			/* enable charging */
+			smb23x_charging_disable(chip, THERMAL, false);
+		}
+		power_supply_changed(&chip->batt_psy);
+	}
+check_again:
+	mutex_unlock(&chip->jeita_configure_lock);
+
+	pr_debug("bat_is_warm %d,bat_cold = %d, bat_is_cool %d bat_is_hot %d, low = %d, high = %d\n",
+			chip->batt_warm,chip->batt_cold, chip->batt_cool, chip->batt_hot,
+			chip->low_temp_threshold, chip->high_temp_threshold);
+
+	schedule_delayed_work(&chip->temp_control_work,round_jiffies_relative(msecs_to_jiffies(2000)));
+}
 static int smb23x_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
@@ -2227,8 +2558,12 @@ static int smb23x_probe(struct i2c_client *client,
 	mutex_init(&chip->chg_disable_lock);
 	mutex_init(&chip->usb_suspend_lock);
 	mutex_init(&chip->icl_set_lock);
+	mutex_init(&chip->jeita_configure_lock);
 	smb23x_wakeup_src_init(chip);
+	wake_lock_init(&chip->charger_wake_lock, WAKE_LOCK_SUSPEND, "zte_chg_event");
+	wake_lock_init(&chip->charger_valid_lock, WAKE_LOCK_SUSPEND, "zte_chg_valid");
 	INIT_DELAYED_WORK(&chip->irq_polling_work, smb23x_irq_polling_work_fn);
+	INIT_DELAYED_WORK(&chip->temp_control_work, smb23x_temp_control_func);
 
 	rc = smb23x_parse_dt(chip);
 	if (rc < 0) {
@@ -2308,6 +2643,7 @@ static int smb23x_probe(struct i2c_client *client,
 	}
 
 	create_debugfs_entries(chip);
+	schedule_delayed_work(&chip->temp_control_work, 0);
 
 	pr_info("SMB23x successfully probed batt=%d usb = %d\n",
 			smb23x_get_prop_batt_present(chip), chip->usb_present);
@@ -2346,6 +2682,7 @@ static int smb23x_suspend(struct device *dev)
 	mutex_lock(&chip->irq_complete);
 	chip->resume_completed = false;
 	mutex_unlock(&chip->irq_complete);
+	cancel_delayed_work_sync(&chip->temp_control_work);
 
 	return 0;
 }
@@ -2382,6 +2719,7 @@ static int smb23x_resume(struct device *dev)
 	} else {
 		mutex_unlock(&chip->irq_complete);
 	}
+	schedule_delayed_work(&chip->temp_control_work, 0);
 
 	return 0;
 }
@@ -2389,6 +2727,7 @@ static int smb23x_resume(struct device *dev)
 static int smb23x_remove(struct i2c_client *client)
 {
 	struct smb23x_chip *chip = i2c_get_clientdata(client);
+	cancel_delayed_work_sync(&chip->temp_control_work);
 
 	power_supply_unregister(&chip->batt_psy);
 	wakeup_source_trash(&chip->smb23x_ws.source);
@@ -2397,6 +2736,7 @@ static int smb23x_remove(struct i2c_client *client)
 	mutex_destroy(&chip->chg_disable_lock);
 	mutex_destroy(&chip->usb_suspend_lock);
 	mutex_destroy(&chip->icl_set_lock);
+	mutex_destroy(&chip->jeita_configure_lock);
 
 	return 0;
 }

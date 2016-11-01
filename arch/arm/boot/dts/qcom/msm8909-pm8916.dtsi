@@ -421,6 +421,12 @@
 		qcom,warm-bat-decidegc = <450>;
 		qcom,cool-bat-decidegc = <100>;
 		qcom,cold-bat-decidegc = <0>;
+		zte,batt-cold-percentage = <80>;
+		zte,batt-hot-percentage = <25>;
+		zte,soft-warm-current-comp-ma = <250>;
+		zte,soft-cool-current-comp-ma = <100>;
+		zte,soft-warm-vfloat-comp-mv = <4150>;
+		zte,soft-cool-vfloat-comp-mv = <4250>;
 		qcom,soft-temp-vfloat-comp-mv = <200>;
 		qcom,soft-temp-current-comp-ma = <150>;
 		qcom,chg-inhibit-disabled;
