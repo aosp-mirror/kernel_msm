@@ -22,7 +22,6 @@
 #include <linux/pagemap.h>
 #include <linux/export.h>
 #include <linux/hid.h>
-#include <linux/vmalloc.h>
 #include <asm/unaligned.h>
 
 #include <linux/usb/composite.h>
@@ -836,7 +835,7 @@ first_try:
 
 		/* Allocate & copy */
 		if (!halt && !data) {
-			data = vmalloc(buffer_len);
+			data = kzalloc(buffer_len, GFP_KERNEL);
 			if (unlikely(!data))
 				return -ENOMEM;
 
@@ -917,8 +916,8 @@ first_try:
 					pr_err("More data(%zd) recieved than intended length(%zu)\n",
 								ret, len);
 					ret = -EOVERFLOW;
-				} else if (unlikely(copy_to_user(buf, data,
-						max_t((size_t) ret, len)))) {
+				} else if (unlikely(copy_to_user(
+							buf, data, ret))) {
 					pr_err("Fail to copy to user len:%zd\n",
 									ret);
 					ret = -EFAULT;
@@ -929,7 +928,7 @@ first_try:
 
 	mutex_unlock(&epfile->mutex);
 error:
-	vfree(data);
+	kfree(data);
 	if (ret < 0 && ret != -ERESTARTSYS)
 		pr_err_ratelimited("%s(): Error: returning %zd value\n",
 							__func__, ret);
