@@ -131,28 +131,8 @@
 };
 
 &pmcobalt_gpios {
-	/* GPIO 5 for Home Key */
-	gpio@c400 {
-		status = "okay";
-		qcom,mode = <0>;
-		qcom,pull = <0>;
-		qcom,vin-sel = <0>;
-		qcom,src-sel = <0>;
-		qcom,out-strength = <1>;
-	};
-
 	/* GPIO 6 for Vol+ Key */
 	gpio@c500 {
-		status = "okay";
-		qcom,mode = <0>;
-		qcom,pull = <0>;
-		qcom,vin-sel = <0>;
-		qcom,src-sel = <0>;
-		qcom,out-strength = <1>;
-	};
-
-	/* GPIO 7 for Snapshot Key */
-	gpio@c600 {
 		status = "okay";
 		qcom,mode = <0>;
 		qcom,pull = <0>;
@@ -178,15 +158,6 @@
 		qcom,vin-sel = <0>;
 		qcom,out-strength = <1>;
 		qcom,src-sel = <3>;
-		qcom,master-en = <1>;
-		status = "okay";
-	};
-
-	/* GPIO 21 (NFC_CLK_REQ) */
-	gpio@d400 {
-		qcom,mode = <0>;
-		qcom,vin-sel = <1>;
-		qcom,src-sel = <0>;
 		qcom,master-en = <1>;
 		status = "okay";
 	};
@@ -412,30 +383,11 @@
 		input-name = "gpio-keys";
 		status = "okay";
 
-		home {
-			label = "home";
-			gpios = <&pmcobalt_gpios 5 0x1>;
-			linux,input-type = <1>;
-			linux,code = <102>;
-			gpio-key,wakeup;
-			debounce-interval = <15>;
-
-		};
-
 		vol_up {
 			label = "volume_up";
 			gpios = <&pmcobalt_gpios 6 0x1>;
 			linux,input-type = <1>;
 			linux,code = <115>;
-			gpio-key,wakeup;
-			debounce-interval = <15>;
-		};
-
-		cam_snapshot {
-			label = "cam_snapshot";
-			gpios = <&pmcobalt_gpios 7 0x1>;
-			linux,input-type = <1>;
-			linux,code = <766>;
 			gpio-key,wakeup;
 			debounce-interval = <15>;
 		};
