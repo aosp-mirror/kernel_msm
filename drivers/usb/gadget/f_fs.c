@@ -918,7 +918,7 @@ first_try:
 								ret, len);
 					ret = -EOVERFLOW;
 				} else if (unlikely(copy_to_user(buf, data,
-						max_t((size_t) ret, len)))) {
+						max_t(size_t, ret, len)))) {
 					pr_err("Fail to copy to user len:%zd\n",
 									ret);
 					ret = -EFAULT;
