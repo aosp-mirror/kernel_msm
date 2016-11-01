@@ -217,6 +217,7 @@ static bool quanta_gesture_checkpoint
 
 static int  quanta_gesture_to_recovery = 0x00;
 static bool is_quanta_gesture_to_rcvr_enabled = true;
+static bool is_enalbe_vib = true;
 
 /* Pre-defined gesture points */
 static struct quanta_gesture_point_3 toRecovery = {
@@ -4243,7 +4244,11 @@ static void elan_ktf_ts_report_data(struct i2c_client *client, uint8_t *buf)
     case PALM_DETECTION_PKT:
         input_report_key(idev, KEY_SLEEP, 1);
         input_sync(idev);
-        vibrator_enable(50);
+        if(is_enalbe_vib) {
+                printk(KERN_INFO "vibrator_enable\n");
+                is_enalbe_vib = false;
+                vibrator_enable(50);
+        }
         input_report_key(idev, KEY_SLEEP, 0);
         input_sync(idev);
         break;
@@ -4293,6 +4298,7 @@ static irqreturn_t elan_ktf_ts_irq_handler(int irq, void *dev_id)
 	}
 #endif
 	//printk("[elan_debug] %2x,%2x,%2x,%2x,%2x,%2x,%2x,%2x ....., %2x\n",buf[0],buf[1],buf[2],buf[3],buf[4],buf[5],buf[6],buf[7],buf[17]);
+	printk(KERN_DEBUG "[elan_debug] %2x,%2x,%2x,%2x,%2x,%2x,%2x,%2x .....\n",buf[0],buf[1],buf[2],buf[3],buf[4],buf[5],buf[6],buf[7]);
 
 #ifndef ELAN_BUFFER_MODE
 	elan_ktf_ts_report_data(ts->client, buf);
@@ -4452,19 +4458,24 @@ unsigned long event, void *data)
 	pm_message_t pmMsg;
 	struct elan_ktf_ts_data *elan_dev_data =
 	container_of(self, struct elan_ktf_ts_data, fb_notif);
-	printk("%s fb notifier callback\n",__func__);
+	is_enalbe_vib = false;
+
+	printk("%s fb notifier callback event = %ld\n", __func__, event);
 	if (evdata && evdata->data && elan_dev_data && private_ts->client) {
 		if (event == FB_EVENT_BLANK) {
 			blank = evdata->data;
+
 			if (*blank == FB_BLANK_UNBLANK)
 			{
 				printk("resume\n");
+				printk(KERN_INFO "set is_enable_vib to true\n");
+				is_enalbe_vib = true;
 				elan_ktf_ts_resume(private_ts->client);
 			}
 			else if (*blank == FB_BLANK_POWERDOWN)
 			{
 				printk("suspend\n");
-				pmMsg.event=PM_EVENT_SUSPEND;
+				pmMsg.event = PM_EVENT_SUSPEND;
 				elan_ktf_ts_suspend(private_ts->client, pmMsg);
 			}
 		}
