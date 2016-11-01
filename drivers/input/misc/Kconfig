@@ -752,4 +752,6 @@ config PAJ9124U1
 	help
 	  Enable support for Pixart PAJ9124U1 Optical Track Sensor
 
+source "drivers/input/misc/ots_pat9125/Kconfig"
+
 endif

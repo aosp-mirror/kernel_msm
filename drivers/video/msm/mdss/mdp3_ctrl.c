@@ -1039,14 +1039,31 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 
 	if (mdss_fb_is_power_on_ulp(mfd) &&
 		(mfd->panel.type == MIPI_CMD_PANEL)) {
-		MDSS_XLOG(0x40, atomic_read(&mfd->kickoff_pending),
-			atomic_read(&mfd->commits_pending));
-		pr_debug("%s: Disable MDP3 clocks in ULP\n", __func__);
+
+		pr_debug("Disable MDP3 clocks in ULP\n");
+		/*
+		 * Wait if DAM transfer in progress
+		 * else go ahead and turn off MDP clocks.
+		 */
+		if ( atomic_read(&mfd->kickoff_pending) ||
+		     atomic_read(&mfd->commits_pending)) {
+			rc = wait_event_timeout(mfd->kickoff_wait_q,
+				(!atomic_read(&mfd->kickoff_pending)),
+				msecs_to_jiffies(WAIT_DISP_OP_TIMEOUT));
+
+			if(!rc) {
+				pr_info("Wait for kickoff time out in ULP\n");
+				MDSS_XLOG(atomic_read(&mfd->kickoff_pending),
+					atomic_read(&mdp3_session->vsync_countdown),
+					rc);
+			}
+		}
+
+		/*
+		 * Enable MDP clk before DMA stop to handle cases where
+		 * ULP request is followd by dispatch clock off*/
 		if (!mdp3_session->clk_on)
 			mdp3_ctrl_clk_enable(mfd, 1);
-		if ((atomic_read(&mfd->kickoff_pending)) ||
-		    (atomic_read(&mfd->commits_pending)))
-			mdp3_session->wait_for_dma_done(mdp3_session);
 		/*
 		 * STOP DMA transfer first and signal vsync notification
 		 * Before releasing the resource in ULP state.
