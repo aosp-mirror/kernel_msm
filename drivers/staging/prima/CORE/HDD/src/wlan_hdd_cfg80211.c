@@ -1710,7 +1710,7 @@ static int __wlan_hdd_cfg80211_ll_stats_set(struct wiphy *wiphy,
     if ( (TRUE != pHddCtx->cfg_ini->fEnableLLStats) ||
          (TRUE != sme_IsFeatureSupportedByFW(LINK_LAYER_STATS_MEAS)))
     {
-        hddLog(VOS_TRACE_LEVEL_ERROR,
+        hddLog(VOS_TRACE_LEVEL_WARN,
                FL("Link Layer Statistics not supported by Firmware"));
         return -EINVAL;
     }
