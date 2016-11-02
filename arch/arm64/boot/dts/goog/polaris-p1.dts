@@ -252,6 +252,10 @@
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
+&mdss_hdmi_tx {
+	status = "disabled";
+};
+
 &pmicobalt_haptics {
 	status = "okay";
 };
@@ -470,4 +474,30 @@
 			status = "okay";
 		};
 	};
+};
+
+&i2c_2 {
+	/* DA7219 Audio Codec */
+	/* System crashes when this is enabled. */
+	status = "disabled";
+};
+
+&i2c_5 {
+	/* Display controller. */
+	status = "disabled";
+};
+
+&i2c_6 {
+	/* Thermal sensors. */
+	status = "disabled";
+};
+
+&i2c_7 {
+	/* "A00" battery connector, SMB1380 charger. */
+	status = "disabled";
+};
+
+&spi_4 {
+	/* SPI */
+	status = "disabled";
 };
