@@ -1088,7 +1088,7 @@ static int smb348_get_prop_batt_capacity(struct smb348_charger *chip)
 		if (chip->wpc_state) {
 			if (ret.intval >= SMB348_SW_MITIGATION_SOC) {
 				if (reg_current_now != chip->fastchg_current_mitigation_ma) {
-					pr_err("Set to mitigation current(100 mA)\n");
+					pr_err("Set to mitigation current(%d mA)\n", chip->fastchg_current_mitigation_ma);
 					rc = smb348_fastchg_current_set(chip, chip->fastchg_current_mitigation_ma);
 					if (rc)
 						dev_err(chip->dev,
@@ -1096,7 +1096,7 @@ static int smb348_get_prop_batt_capacity(struct smb348_charger *chip)
 				}
 			} else {
 				if (reg_current_now != chip->fastchg_current_max_ma) {
-					pr_err("Set to normal current(200 mA)\n");
+					pr_err("Set to normal current(%d mA)\n", chip->fastchg_current_max_ma);
 					rc = smb348_fastchg_current_set(chip, chip->fastchg_current_max_ma);
 					if (rc)
 						dev_err(chip->dev,
@@ -1242,9 +1242,17 @@ smb348_get_prop_battery_voltage_now(struct smb348_charger *chip)
 		pr_err("chg_end=%d, chg_full_flag=%d\n", gpio_get_value(chip->chg_end_gpio), chg_full_flag);
 		if (chg_full_flag) {
 			if ((chip->prop_batt_capacity <= SMB348_SW_RECHG_SOC && ret.intval < VFLOAT_4350MV) || (ret.intval < SMB348_SW_RECHG_VOLTAGE)) {
-				pr_err("SW recharge is due to batt capacity=%d or voltage=%d lower than %d\n", chip->prop_batt_capacity, ret.intval, SMB348_SW_RECHG_VOLTAGE);
-				gpio_set_value(chip->chg_end_gpio, 0);
-				chg_full_flag = false;
+				u8 reg;
+				int rc;
+				rc = smb348_read_reg(chip, IRQ_C_REG, &reg);
+				/* Check the charge full status bit(REG 37h, bit(0)) has been clear */
+				if (!(reg & IRQ_C_TERM_BIT)) {
+					pr_err("SW recharge is due to batt capacity=%d or voltage=%d lower than %d\n", chip->prop_batt_capacity, ret.intval, SMB348_SW_RECHG_VOLTAGE);
+					gpio_set_value(chip->chg_end_gpio, 0);
+					chg_full_flag = false;
+				} else {
+					pr_err("Cannot release CHG_END, rc = %d and reg = 0x%02x\n", rc, reg);
+				}
 			}
 		}
 #endif /* FEATURE_THERMAL_MITIGATION_ALGO */
