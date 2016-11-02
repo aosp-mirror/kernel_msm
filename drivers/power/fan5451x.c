@@ -40,6 +40,7 @@
 #define FAN5451x_DEV_NAME "fan5451x"
 #define WLC_TX_RECHECK_WORK_DELAY_MS  10000
 #define WLC_TX_RECHECK_RETRY_COUNT    6
+#define WLC_SET_PRESENT_DELAY_MS      1200
 #define STEP_OFFSET_MV 200
 #define IIN_MIN_MA 325
 #define IIN_MAX_MA 2000
@@ -95,6 +96,7 @@ struct fan5451x_chip {
 	struct wakeup_source ws_recheck;
 	struct wakeup_source ws_cv;
 	struct wakeup_source ws_dev;
+	struct wakeup_source ws_wlc_present;
 	struct alarm wlc_ctrl_alarm;
 	struct delayed_work wlc_fake_online_set_work;
 	int wlc_fake_online_set_value;
@@ -129,6 +131,7 @@ struct fan5451x_chip {
 	int wlc_fake_online;
 	struct delayed_work wlc_tx_recheck_work;
 	struct delayed_work eoc_check_work;
+	struct delayed_work wlc_present_work;
 	/* retail mode */
 	struct dentry *dent;
 	bool retail_enable;
@@ -775,6 +778,30 @@ static void fan5451x_wlc_thermal_ctrl(struct fan5451x_chip *chip, int control)
 	}
 }
 
+static inline void fan5451x_set_wlc_present(struct fan5451x_chip *chip)
+{
+	pr_info("wlc present %d\n", chip->wlc_present);
+	if (chip->wlc_present) {
+		flush_delayed_work(&chip->wlc_present_work);
+
+		fan5451x_set_iin(chip, chip->iin);
+		power_supply_set_present(chip->wlc_psy,
+				chip->wlc_present);
+		fan5451x_wlc_thermal_ctrl(chip, chip->wlc_present);
+		if (!chip->enable)
+			fan5451x_wlc_fake_online(chip, 1);
+	} else {
+		int queue;
+		pr_info("defer the setting wlc present to %d\n",
+			chip->wlc_present);
+		queue = schedule_delayed_work(&chip->wlc_present_work,
+				round_jiffies_relative(msecs_to_jiffies(
+					WLC_SET_PRESENT_DELAY_MS)));
+		if (queue)
+			__pm_stay_awake(&chip->ws_wlc_present);
+	}
+}
+
 static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 {
 	u8 intr[3];
@@ -828,16 +855,8 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 
 		if (chip->wlc_present ^ wlc_present) {
 			chip->wlc_present = wlc_present;
-			if (chip->wlc_psy && !chip->wlc_fake_online) {
-				if (chip->wlc_present)
-					fan5451x_set_iin(chip, chip->iin);
-				pr_info("wlc present %d\n", wlc_present);
-				power_supply_set_present(chip->wlc_psy,
-						chip->wlc_present);
-				fan5451x_wlc_thermal_ctrl(chip, chip->wlc_present);
-				if (chip->wlc_present && !chip->enable)
-					fan5451x_wlc_fake_online(chip, 1);
-			}
+			if (chip->wlc_psy && !chip->wlc_fake_online)
+				fan5451x_set_wlc_present(chip);
 			found = true;
 		}
 	}
@@ -1170,6 +1189,7 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 		wlc_online = power_supply_get_online(chip->wlc_psy);
 		if (!wlc_online) {
 			pr_info("wlc present 0, fake online off\n");
+			power_supply_changed(&chip->batt_psy);
 			fan5451x_wlc_thermal_ctrl(chip, 0);
 			fan5451x_wlc_fake_online(chip, 0);
 		}
@@ -1705,6 +1725,22 @@ stop_eoc:
 	__pm_relax(&chip->ws_cv);
 }
 
+static void
+fan5451x_wlc_present_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct fan5451x_chip *chip = container_of(dwork,
+				struct fan5451x_chip, wlc_present_work);
+
+	if (!chip->wlc_present) {
+		pr_info("Deferred present set done\n");
+		power_supply_set_present(chip->wlc_psy, chip->wlc_present);
+		fan5451x_wlc_thermal_ctrl(chip, chip->wlc_present);
+	}
+
+	__pm_relax(&chip->ws_wlc_present);
+}
+
 #define OF_PROP_READ(chip, prop, dt_property, retval, optional)	\
 do { \
 	if (retval) \
@@ -1892,6 +1928,7 @@ static int fan5451x_probe(struct i2c_client *client,
 	wakeup_source_init(&chip->ws_recheck, "fan5451x_ws_recheck");
 	wakeup_source_init(&chip->ws_cv, "fan5451x_ws_cv");
 	wakeup_source_init(&chip->ws_dev, "fan5451x_ws_dev");
+	wakeup_source_init(&chip->ws_wlc_present, "fan5451x_ws_wlc_present");
 
 	alarm_init(&chip->wlc_ctrl_alarm, ALARM_REALTIME,
 			fan5451x_wlc_thermal_ctrl_callback);
@@ -1902,6 +1939,8 @@ static int fan5451x_probe(struct i2c_client *client,
 			fan5451x_wlc_tx_recheck_work);
 	INIT_DELAYED_WORK(&chip->eoc_check_work,
 			fan5451x_eoc_check_work);
+	INIT_DELAYED_WORK(&chip->wlc_present_work,
+			fan5451x_wlc_present_work);
 
 	if (chip->step_dwn_offset_ma && chip->step_dwn_thr_mv) {
 		chip->vbat_param.timer_interval = ADC_MEAS1_INTERVAL_8S;
@@ -1981,6 +2020,7 @@ static int fan5451x_remove(struct i2c_client *client)
 	struct fan5451x_chip *chip = i2c_get_clientdata(client);
 
 	debugfs_remove_recursive(chip->dent);
+	cancel_delayed_work_sync(&chip->wlc_present_work);
 	cancel_delayed_work_sync(&chip->wlc_tx_recheck_work);
 	device_remove_file(&client->dev, &dev_attr_addr_register);
 	device_remove_file(&client->dev, &dev_attr_status_register);
