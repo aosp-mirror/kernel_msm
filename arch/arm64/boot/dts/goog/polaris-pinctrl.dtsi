@@ -157,7 +157,7 @@
 		mdss_te0_active: mdss_te0_active {
 			mux {
 				pins = "gpio97";
-				function = "mdp_vsync_a";
+				function = "mdp_vsync_b";
 			};
 			config {
 				pins = "gpio97";
@@ -169,7 +169,7 @@
 		mdss_te0_suspend: mdss_te0_suspend {
 			mux {
 				pins = "gpio97";
-				function = "mdp_vsync_a";
+				function = "mdp_vsync_b";
 			};
 			config {
 				pins = "gpio97";
