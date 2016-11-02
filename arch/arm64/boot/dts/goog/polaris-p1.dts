@@ -201,6 +201,11 @@
 	qcom,panel-mode-gpio = <&tlmm 91 0>;
 };
 
+&labibb {
+	status = "ok";
+	qpnp,qpnp-labibb-mode = "lcd";
+};
+
 &dsi_dual_nt35597_video {
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
 	qcom,mdss-dsi-bl-min-level = <1>;
