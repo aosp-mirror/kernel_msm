@@ -231,4 +231,30 @@
 			};
 		};
 	};
+
+	external_trigger_active: external_trigger_active {
+		mux {
+			pins = "gpio117";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio117";
+			drive-strength = <8>; /* 8 mA */
+			bias-pull-up;  /* pull up */
+			output-low;
+		};
+	};
+
+	external_trigger_suspend: external_trigger_suspend {
+		mux {
+			pins = "gpio117";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio117";
+			drive-strength = <2>; /* 2 mA */
+			bias-disable;  /* no pull */
+		};
+	};
+
 };

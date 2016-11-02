@@ -368,6 +368,9 @@
 		compatible = "gpio-keys";
 		input-name = "gpio-keys";
 		status = "okay";
+		pinctrl-names = "tlmm_gpio_key_active", "tlmm_gpio_key_suspend";
+		pinctrl-0 = <&external_trigger_active>;
+		pinctrl-1 = <&external_trigger_suspend>;
 
 		vol_up {
 			label = "volume_up";
@@ -385,6 +388,14 @@
 			linux,code = <528>;
 			gpio-key,wakeup;
 			debounce-interval = <15>;
+		};
+
+		external_trigger: external_trigger {
+			label = "external_trigger";
+			gpios = <&tlmm 117 GPIO_ACTIVE_LOW>;
+			linux,input-type = <1>;
+			linux,code = <KEY_FN_F5>;
+			debounce-interval = <0>;
 		};
 	};
 
