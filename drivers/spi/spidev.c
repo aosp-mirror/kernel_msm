@@ -41,6 +41,8 @@
 #include <linux/uaccess.h>
 #include <linux/of_gpio.h>
 #include <linux/delay.h>
+#include <linux/wakelock.h>
+
 
 /*
  * This supports access to SPI devices using normal userspace I/O calls.
@@ -64,6 +66,9 @@
 #define SPIDEV_READ_MAX_DELAY_TIMES (20)
 #define SPIDEV_WRITE_DELAY_TIME_US (100)
 #define SPIDEV_WRITE_MAX_DELAY_TIMES (20)
+
+/* MCU wake ap timeout */
+#define DATA_TRANSFER_INTERVAL (1*HZ)
 
 static DECLARE_BITMAP(minors, N_SPI_MINORS);
 
@@ -124,6 +129,7 @@ struct spidev_data {
 	struct completion read_compl;
 	struct work_struct wakeup_read_work;
 	struct work_struct wakeup_display_work;
+	struct wake_lock wake_lock;
 };
 
 static LIST_HEAD(device_list);
@@ -718,6 +724,7 @@ static void spidev_wakeup_read_work(struct work_struct *work)
 			list_move_tail(&spidev_buf_node->list, &spidev->read_buf_head->list);
 			mutex_unlock(&spidev->buf_list_lock);
 			spidev_complete(&spidev->read_compl);
+			wake_lock_timeout(&spidev->wake_lock, DATA_TRANSFER_INTERVAL);
 		}
 		else
 		{
@@ -755,6 +762,7 @@ static void spidev_wakeup_display_work(struct work_struct *work)
 			list_move(&spidev_buf_node->list, &spidev->read_buf_head->list);
 			mutex_unlock(&spidev->buf_list_lock);
 			spidev_complete(&spidev->read_compl);
+			wake_lock_timeout(&spidev->wake_lock, DATA_TRANSFER_INTERVAL);
 		}
 		else
 		{
@@ -1388,6 +1396,8 @@ static int spidev_probe(struct spi_device *spi)
 
 	mutex_unlock(&device_list_lock);
 
+	wake_lock_init(&spidev->wake_lock, WAKE_LOCK_SUSPEND, "mcu_commu");
+
 	if (status == 0)
 		spi_set_drvdata(spi, spidev);
 	else
@@ -1404,6 +1414,8 @@ static int spidev_remove(struct spi_device *spi)
 	spin_lock_irq(&spidev->spi_lock);
 	spidev->spi = NULL;
 	spin_unlock_irq(&spidev->spi_lock);
+
+	wake_lock_destroy(&spidev->wake_lock);
 
 	/* prevent new opens */
 	mutex_lock(&device_list_lock);
