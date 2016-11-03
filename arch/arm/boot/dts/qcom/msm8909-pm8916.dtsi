@@ -296,6 +296,7 @@
 		qcom,scale-function = <1>;
 		qcom,hw-settle-time = <0xb>;
 		qcom,fast-avg-setup = <0>;
+		qcom,vadc-thermal-node;
 	};
 
 	chan@31 {
