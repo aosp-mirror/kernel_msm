@@ -24,6 +24,9 @@
 #include <linux/pm_wakeup.h>
 #include <linux/spinlock.h>
 
+static bool is_fake_battery = false;
+module_param(is_fake_battery, bool, 0644);
+
 struct smb23x_wakeup_source {
 	struct wakeup_source source;
 	unsigned long enabled_bitmap;
@@ -1710,6 +1713,9 @@ static int smb23x_get_prop_batt_capacity(struct smb23x_chip *chip)
 {
 	union power_supply_propval ret = {0, };
 
+	if (is_fake_battery)
+		return DEFAULT_BATT_CAPACITY;
+
 	if (chip->fake_battery_soc != -EINVAL)
 		return chip->fake_battery_soc;
 
@@ -1726,6 +1732,9 @@ static int smb23x_get_prop_batt_capacity(struct smb23x_chip *chip)
 static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 {
 	union power_supply_propval ret = {0, };
+
+	if (is_fake_battery)
+		return DEFAULT_BATT_TEMP;
 
 	if (chip->bms_psy) {
 		chip->bms_psy->get_property(chip->bms_psy,
