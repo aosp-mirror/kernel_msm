@@ -601,6 +601,9 @@ unsigned long dma_alloc_from_contiguous(struct device *dev, int count,
 	if (!count)
 		return 0;
 
+	if (count > cma->count)
+		return 0;
+
 	mask = (1 << align) - 1;
 
 
