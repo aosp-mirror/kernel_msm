@@ -452,8 +452,6 @@ struct mxt_platform_data {
 	const char *extra_fw_name_gf2;
 	unsigned int lcd_x;
 	unsigned int lcd_y;
-	int global_access_pixel;
-	u8 use_mfts;
 	u8 fw_ver[3];
 	u8 product[10];
 	unsigned int ref_reg_weight_val;
@@ -750,7 +748,6 @@ struct mxt_data {
 	struct delayed_work work_firmware_update;
 	struct delayed_work work_register_psy;
 	u8 work_deepsleep_enabled;
-	u8 mfts_enable;
 	/*Charger mode in patch*/
 	u8 charging_mode;
 	u8 palm;

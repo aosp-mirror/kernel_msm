@@ -1250,11 +1250,6 @@ void trigger_usb_state_from_otg(struct mxt_data *data, int usb_type)
 		return;
 	}
 
-	if (data->mfts_enable && data->pdata->use_mfts) {
-		TOUCH_INFO_MSG("MFTS : Not support USB trigger \n");
-		return;
-	}
-
 	wake_lock_timeout(&touch_wake_lock, msecs_to_jiffies(2000));
 
 	if (mutex_is_locked(&i2c_suspend_lock))
@@ -2581,30 +2576,6 @@ static ssize_t mxt_power_control_store(struct mxt_data *data, const char *buf,
 
 }
 
-static ssize_t mxt_global_access_pixel_show(struct mxt_data *data, char *buf)
-{
-	ssize_t len = 0;
-
-	len += snprintf(buf + len, PAGE_SIZE - len,
-			"%d\n", data->pdata->global_access_pixel);
-
-	return len;
-}
-
-static ssize_t mxt_global_access_pixel_store(struct mxt_data *data,
-		const char *buf, size_t count)
-{
-	int value = 0;
-
-	sscanf(buf, "%d", &value);
-
-	TOUCH_DEBUG_MSG("%s = %d \n", __func__, value);
-
-	data->pdata->global_access_pixel = value;
-
-	return count;
-}
-
 static ssize_t mxt_force_rebase_show(struct mxt_data *data, char *buf)
 {
 	ssize_t len = 0;
@@ -2617,35 +2588,6 @@ static ssize_t mxt_force_rebase_show(struct mxt_data *data, char *buf)
 	mxt_t6_command(data, MXT_COMMAND_CALIBRATE, 1, false);
 
 	return len;
-}
-
-static ssize_t mxt_mfts_enable_show(struct mxt_data *data, char *buf)
-{
-	ssize_t len = 0;
-
-	len += snprintf(buf + len, PAGE_SIZE - len, "%d\n", data->mfts_enable);
-
-	return len;
-}
-
-static ssize_t mxt_mfts_enable_store(struct mxt_data *data, const char *buf,
-		size_t count)
-{
-	int value = 0;
-
-	sscanf(buf, "%d", &value);
-
-	TOUCH_INFO_MSG("%s = %d \n", __func__, value);
-
-	data->mfts_enable = value;
-
-	/* Touch IC Reset for Initial configration. */
-	mxt_soft_reset(data);
-
-	/* Calibrate for Active touch IC */
-	mxt_t6_command(data, MXT_COMMAND_CALIBRATE, 1, false);
-
-	return count;
 }
 
 static ssize_t mxt_show_self_ref(struct mxt_data *data, char *buf)
@@ -2764,9 +2706,7 @@ static MXT_TOUCH_ATTR(update_patch, S_IWUSR, NULL, mxt_update_patch_store);
 static MXT_TOUCH_ATTR(update_fw, S_IWUSR, NULL, mxt_update_fw_store);
 static MXT_TOUCH_ATTR(check_fw, S_IWUSR, NULL, mxt_check_fw_store);
 static MXT_TOUCH_ATTR(power_control, S_IRUGO | S_IWUSR, mxt_power_control_show, mxt_power_control_store);
-static MXT_TOUCH_ATTR(global_access_pixel, S_IWUSR | S_IRUSR, mxt_global_access_pixel_show, mxt_global_access_pixel_store);
 static MXT_TOUCH_ATTR(rebase, S_IWUSR | S_IRUGO, mxt_force_rebase_show, NULL);
-static MXT_TOUCH_ATTR(mfts, S_IWUSR | S_IRUSR, mxt_mfts_enable_show, mxt_mfts_enable_store);
 static MXT_TOUCH_ATTR(self_ref_check, S_IRUGO | S_IWUSR, mxt_show_self_ref, NULL);
 static MXT_TOUCH_ATTR(self_cap, S_IWUSR | S_IRUGO, mxt_self_cap_show, mxt_self_cap_store);
 static MXT_TOUCH_ATTR(noise_suppression, S_IWUSR | S_IRUGO, mxt_noise_suppression_show, mxt_noise_suppression_store);
@@ -2788,9 +2728,7 @@ static struct attribute *mxt_touch_attribute_list[] = {
 	&mxt_touch_attr_update_fw.attr,
 	&mxt_touch_attr_check_fw.attr,
 	&mxt_touch_attr_power_control.attr,
-	&mxt_touch_attr_global_access_pixel.attr,
 	&mxt_touch_attr_rebase.attr,
-	&mxt_touch_attr_mfts.attr,
 	&mxt_touch_attr_self_ref_check.attr,
 	&mxt_touch_attr_self_cap.attr,
 	&mxt_touch_attr_noise_suppression.attr,
@@ -2973,26 +2911,6 @@ static int mxt_parse_dt(struct device *dev, struct mxt_platform_data *pdata)
 				pdata->ref_reg_weight_val);
 	}
 
-	rc = of_property_read_u32(node, "atmel,global_access_pixel",
-			&temp_val);
-	if (rc) {
-		TOUCH_ERR_MSG("DT : Unable to read global_access_pixel - set as 0\n");
-		pdata->global_access_pixel = 0;
-	} else {
-		pdata->global_access_pixel = temp_val;
-		TOUCH_DEBUG_MSG("DT : global_access_pixel = %d \n",
-				pdata->global_access_pixel);
-	}
-
-	rc = of_property_read_u32(node, "atmel,use_mfts",  &temp_val);
-	if (rc) {
-		TOUCH_ERR_MSG("DT : Unable to read use_mfts - set as false \n" );
-		pdata->use_mfts = 0;
-	} else {
-		pdata->use_mfts = temp_val;
-		TOUCH_DEBUG_MSG("DT : use_mfts = %d \n",pdata->use_mfts);
-	}
-
 	rc = of_property_read_u32(node, "atmel,lcd_x", &temp_val);
 	if (rc) {
 		TOUCH_ERR_MSG( "DT : Unable to read lcd_x\n");
@@ -3125,36 +3043,6 @@ static int mxt_read_t100_config(struct mxt_data *data)
 	TOUCH_INFO_MSG("T100 Touchscreen size X%uY%u\n",
 			data->max_x, data->max_y);
 
-	if (data->input_dev) {
-		struct input_dev *input_dev = data->input_dev;
-
-		/* For multi touch */
-		input_mt_init_slots(input_dev, data->num_touchids, 0);
-
-		input_set_abs_params(input_dev, ABS_MT_TRACKING_ID, 0,
-				data->pdata->numtouch, 0, 0);
-		input_set_abs_params(input_dev, ABS_MT_WIDTH_MAJOR, 0,
-				MXT_MAX_AREA, 0, 0);
-		input_set_abs_params(input_dev, ABS_MT_WIDTH_MINOR, 0,
-				MXT_MAX_AREA, 0, 0);
-		input_set_abs_params(input_dev, ABS_MT_POSITION_X, 0,
-				data->max_x, 0, 0);
-		input_set_abs_params(input_dev, ABS_MT_POSITION_Y, 0,
-				data->max_y, 0, 0);
-
-		if (data->t100_aux_area)
-			input_set_abs_params(input_dev,
-				ABS_MT_TOUCH_MAJOR, 0, MXT_MAX_AREA, 0, 0);
-
-		if (data->t100_aux_ampl)
-			input_set_abs_params(input_dev,
-				ABS_MT_PRESSURE, 0, 255, 0, 0);
-
-		if (data->t100_aux_vect)
-			input_set_abs_params(input_dev,
-				ABS_MT_ORIENTATION, 0, 255, 0, 0);
-	}
-
 	return 0;
 }
 
@@ -3186,7 +3074,7 @@ int mxt_initialize_t100_input_device(struct mxt_data *data)
 	__set_bit(KEY_SLEEP, input_dev->keybit);
 
 	/* For multi touch */
-	input_mt_init_slots(input_dev, data->num_touchids, 0);
+	input_mt_init_slots(input_dev, data->pdata->numtouch, 0);
 
 	input_set_abs_params(input_dev, ABS_MT_TRACKING_ID, 0,
 			data->pdata->numtouch, 0, 0);
@@ -3195,9 +3083,9 @@ int mxt_initialize_t100_input_device(struct mxt_data *data)
 	input_set_abs_params(input_dev, ABS_MT_WIDTH_MINOR, 0,
 			MXT_MAX_AREA, 0, 0);
 	input_set_abs_params(input_dev, ABS_MT_POSITION_X, 0,
-			data->max_x, 0, 0);
+			data->pdata->lcd_x, 0, 0);
 	input_set_abs_params(input_dev, ABS_MT_POSITION_Y, 0,
-			data->max_y, 0, 0);
+			data->pdata->lcd_y, 0, 0);
 
 	if (data->t100_aux_area)
 		input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR, 0,
