@@ -1,4 +1,5 @@
 KASAN_SANITIZE_scm.o := n
+KCOV_INSTRUMENT_scm.o	:= n
 
 CFLAGS_scm.o :=$(call as-instr,.arch_extension sec,-DREQUIRES_SEC=1)
 
