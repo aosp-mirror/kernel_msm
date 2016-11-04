@@ -22,6 +22,7 @@
 #include "dsi-panel-hx8394d-480p-video.dtsi"
 #include "dsi-panel-auo-qvga-cmd.dtsi"
 #include "dsi-panel-auo-cx-qvga-cmd.dtsi"
+#include "dsi-panel-auo-400p-cmd.dtsi"
 #include "dsi_panel_auo_w020_oled_1p4_video.dtsi"
 
 &soc {

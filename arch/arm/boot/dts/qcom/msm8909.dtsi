@@ -138,7 +138,7 @@
 			reusable;
 			alloc-ranges = <0x0 0x80000000 0x0 0x10000000>;
 			alignment = <0 0x400000>;
-			size = <0 0x0600000>;
+			size = <0 0x0800000>;
 		};
 
 		audio_mem: audio_region@0 {
@@ -1325,6 +1325,7 @@
 			<&dma_blsp1 9  32 0x20000020 0x20>;
 		dma-names = "tx", "rx";
 		qcom,master-id = <86>;
+		status = "ok";
 	};
 
 	i2c_1: i2c@78b5000 { /* BLSP1 QUP1 */
@@ -1704,9 +1705,9 @@
 		qcom,ce-opp-freq = <100000000>;
 	};
 
-	qcom_seecom: qseecom@87a00000 {
+	qcom_seecom: qseecom@87b00000 {
 		compatible = "qcom,qseecom";
-		reg = <0x87a00000 0x200000>;
+		reg = <0x87b00000 0x100000>;
 		reg-names = "secapp-region";
 		qcom,disk-encrypt-pipe-pair = <2>;
 		qcom,hlos-ce-hw-instance = <0>;
