@@ -9004,6 +9004,14 @@ static int __hdd_open(struct net_device *dev)
             WLAN_CONTROL_PATH);
    }
 
+   /* Enable carrier and transmit queues for NDI */
+   if (WLAN_HDD_IS_NDI(pAdapter)) {
+       hddLog(LOG1, FL("Enabling Tx Queues"));
+       wlan_hdd_netif_queue_control(pAdapter,
+            WLAN_START_ALL_NETIF_QUEUE_N_CARRIER,
+            WLAN_CONTROL_PATH);
+   }
+
    return 0;
 }
 
@@ -9096,7 +9104,7 @@ static int hdd_mon_open(struct net_device *dev)
  *
  * For module, when all the interfaces are down, enter low power mode.
  */
-static inline void wlan_hdd_stop_enter_lowpower(hdd_context_t *hdd_ctx)
+void wlan_hdd_stop_enter_lowpower(hdd_context_t *hdd_ctx)
 {
 	hddLog(VOS_TRACE_LEVEL_INFO,
 			"%s: All Interfaces are Down entering standby",
@@ -9215,7 +9223,7 @@ static int kickstart_driver(bool load, bool mode_change)
  * For static driver, when all the interfaces are down, enter low power mode by
  * bringing down WLAN hardware.
  */
-static inline void wlan_hdd_stop_enter_lowpower(hdd_context_t *hdd_ctx)
+void wlan_hdd_stop_enter_lowpower(hdd_context_t *hdd_ctx)
 {
 	bool ready;
 
@@ -9310,6 +9318,17 @@ static int __hdd_stop(struct net_device *dev)
    hddLog(LOG1, FL("Disabling queues"));
    wlan_hdd_netif_queue_control(pAdapter, WLAN_NETIF_TX_DISABLE_N_CARRIER,
                          WLAN_CONTROL_PATH);
+
+   /*
+    * NAN data interface is different in some sense. The traffic on NDI is
+    * bursty in nature and depends on the need to transfer. The service layer
+    * may down the interface after the usage and up again when required.
+    * In some sense, the NDI is expected to be available (like SAP) iface
+    * until NDI delete request is issued by the service layer.
+    * Skip BSS termination and adapter deletion for NAN Data interface (NDI).
+    */
+    if (WLAN_HDD_IS_NDI(pAdapter))
+       return 0;
 
    /* The interface is marked as down for outside world (aka kernel)
     * But the driver is pretty much alive inside. The driver needs to

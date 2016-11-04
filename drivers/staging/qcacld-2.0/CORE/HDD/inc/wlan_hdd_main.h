@@ -2170,4 +2170,5 @@ static inline void wlan_hdd_restart_sap(hdd_adapter_t *ap_adapter)
 
 void hdd_sap_restart_handle(struct work_struct *work);
 
+void wlan_hdd_stop_enter_lowpower(hdd_context_t *hdd_ctx);
 #endif    // end #if !defined( WLAN_HDD_MAIN_H )

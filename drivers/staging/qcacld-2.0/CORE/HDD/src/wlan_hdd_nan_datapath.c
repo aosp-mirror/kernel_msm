@@ -954,6 +954,9 @@ void hdd_ndp_session_end_handler(hdd_adapter_t *adapter)
 	struct nan_datapath_ctx *ndp_ctx;
 	uint32_t data_len = sizeof(uint32_t) * 3 + sizeof(uint16_t) +
 				NLA_HDRLEN * 4 + NLMSG_HDRLEN;
+	VOS_STATUS status;
+	bool can_enter_standby = true;
+	hdd_adapter_list_node_t *adapter_node, *next;
 
 	ENTER();
 
@@ -1042,6 +1045,24 @@ void hdd_ndp_session_end_handler(hdd_adapter_t *adapter)
 	ndp_ctx->state = NAN_DATA_NDI_DELETED_STATE;
 
 	cfg80211_vendor_event(vendor_event, GFP_KERNEL);
+
+	/*
+	 * It is possible that deleted NDI was the last active interface.
+	 * We should let the device enter lower power mode
+	 */
+	status = hdd_get_front_adapter(hdd_ctx, &adapter_node);
+	while ((NULL != adapter_node) && (VOS_STATUS_SUCCESS == status)) {
+		if (test_bit(DEVICE_IFACE_OPENED,
+				&adapter_node->pAdapter->event_flags)) {
+			can_enter_standby = false;
+			break;
+		}
+		status = hdd_get_next_adapter(hdd_ctx, adapter_node, &next);
+		adapter_node = next;
+	}
+
+	if (can_enter_standby)
+		wlan_hdd_stop_enter_lowpower(hdd_ctx);
 
 	EXIT();
 	return;
