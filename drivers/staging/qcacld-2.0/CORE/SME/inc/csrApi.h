@@ -310,6 +310,10 @@ typedef struct tagCsrScanRequest
     eCsrRequestType requestType;    //11d scan or full scan
     tANI_BOOLEAN p2pSearch;
     tANI_BOOLEAN skipDfsChnlInP2pSearch;
+
+    uint32_t enable_scan_randomization;
+    uint8_t mac_addr[VOS_MAC_ADDR_SIZE];
+    uint8_t mac_addr_mask[VOS_MAC_ADDR_SIZE];
 }tCsrScanRequest;
 
 typedef struct tagCsrBGScanRequest
