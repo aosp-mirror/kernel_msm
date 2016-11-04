@@ -94,6 +94,7 @@
 #include "hif.h"
 #include "pld_common.h"
 #endif
+#include "wlan_hdd_lro.h"
 
 #define HDD_FINISH_ULA_TIME_OUT         800
 #define HDD_SET_MCBC_FILTERS_TO_FW      1
@@ -432,7 +433,7 @@ static const hdd_freq_chan_map_t freq_chan_map[] = {
 /* Private ioctls and their sub-ioctls */
 #define WLAN_PRIV_SET_TWO_INT_GET_NONE   (SIOCIWFIRSTPRIV + 28)
 #define WE_SET_SMPS_PARAM    1
-#ifdef DEBUG
+#ifdef WLAN_DEBUG
 #define WE_SET_FW_CRASH_INJECT    2
 #endif
 #define WE_DUMP_DP_TRACE_LEVEL    3
@@ -720,6 +721,9 @@ void hdd_wlan_dump_stats(hdd_adapter_t *adapter, int value)
 	case WLAN_HIF_STATS:
 		hdd_display_hif_stats();
 		break;
+	case WLAN_LRO_STATS:
+		hdd_lro_display_stats(hdd_ctx);
+		break;
 	default:
 		ol_txrx_display_stats(value);
 		break;
@@ -745,7 +749,7 @@ void hdd_wlan_get_version(hdd_context_t *hdd_ctx, union iwreq_data *wrqu,
 	tSirVersionString wcnss_sw_version;
 	const char *swversion;
 	const char *hwversion;
-	uint32_t msp_id = 0, mspid = 0, siid = 0, crmid = 0;
+	uint32_t msp_id = 0, mspid = 0, siid = 0, crmid = 0, sub_id = 0;
 
 	if (!hdd_ctx) {
 		hdd_err("Invalid context, HDD context is null");
@@ -760,19 +764,21 @@ void hdd_wlan_get_version(hdd_context_t *hdd_ctx, union iwreq_data *wrqu,
 	mspid = (hdd_ctx->target_fw_version & 0xf000000) >> 24;
 	siid = (hdd_ctx->target_fw_version & 0xf00000) >> 20;
 	crmid = hdd_ctx->target_fw_version & 0x7fff;
+	sub_id = (hdd_ctx->target_fw_vers_ext & 0xf0000000) >> 28;
 
 	hwversion = hdd_ctx->target_hw_name;
 
 	if (wrqu && extra) {
 		wrqu->data.length =
 			scnprintf(extra, WE_MAX_STR_LEN,
-				  "Host SW:%s, FW:%d.%d.%d.%d, HW:%s",
+				  "Host SW:%s, FW:%d.%d.%d.%d.%d, HW:%s",
 				  QWLAN_VERSIONSTR,
-				  msp_id, mspid, siid, crmid, hwversion);
+				  msp_id, mspid, siid, crmid,
+				  sub_id, hwversion);
 	} else {
-		pr_info("Host SW:%s, FW:%d.%d.%d.%d, HW:%s\n",
+		pr_info("Host SW:%s, FW:%d.%d.%d.%d.%d, HW:%s\n",
 			QWLAN_VERSIONSTR,
-			msp_id, mspid, siid, crmid, hwversion);
+			msp_id, mspid, siid, crmid, sub_id, hwversion);
 	}
 error:
 	return;
@@ -810,7 +816,8 @@ hdd_wlan_get_ibss_mac_addr_from_staid(hdd_adapter_t *pAdapter,
  * Return: QDF_STATUS_STATUS if the peer was found and displayed,
  * otherwise an appropriate QDF_STATUS_E_* failure code.
  */
-QDF_STATUS hdd_wlan_get_ibss_peer_info(hdd_adapter_t *pAdapter, uint8_t staIdx)
+static QDF_STATUS hdd_wlan_get_ibss_peer_info(hdd_adapter_t *pAdapter,
+					      uint8_t staIdx)
 {
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
 	tHalHandle hHal = WLAN_HDD_GET_HAL_CTX(pAdapter);
@@ -859,7 +866,7 @@ QDF_STATUS hdd_wlan_get_ibss_peer_info(hdd_adapter_t *pAdapter, uint8_t staIdx)
  * Return: QDF_STATUS_STATUS if the peer information was retrieved and
  * displayed, otherwise an appropriate QDF_STATUS_E_* failure code.
  */
-QDF_STATUS hdd_wlan_get_ibss_peer_info_all(hdd_adapter_t *pAdapter)
+static QDF_STATUS hdd_wlan_get_ibss_peer_info_all(hdd_adapter_t *pAdapter)
 {
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
 	tHalHandle hHal = WLAN_HDD_GET_HAL_CTX(pAdapter);
@@ -1558,7 +1565,7 @@ int wlan_hdd_get_link_speed(hdd_adapter_t *sta_adapter, uint32_t *link_speed)
  *
  * Return: None
  */
-void hdd_statistics_cb(void *pStats, void *pContext)
+static void hdd_statistics_cb(void *pStats, void *pContext)
 {
 	hdd_adapter_t *pAdapter = (hdd_adapter_t *) pContext;
 	hdd_stats_t *pStatsCache = NULL;
@@ -1956,7 +1963,7 @@ static int __iw_set_commit(struct net_device *dev, struct iw_request_info *info,
  *
  * Return: 0 on success, error number otherwise
  */
-int iw_set_commit(struct net_device *dev, struct iw_request_info *info,
+static int iw_set_commit(struct net_device *dev, struct iw_request_info *info,
 		  union iwreq_data *wrqu, char *extra)
 {
 	int ret;
@@ -3308,8 +3315,8 @@ static int iw_set_frag_threshold(struct net_device *dev,
  * Return: 0 on success, non-zero on error
  */
 static int __iw_get_power_mode(struct net_device *dev,
-			     struct iw_request_info *info,
-			     union iwreq_data *wrqu, char *extra)
+			       struct iw_request_info *info,
+			       union iwreq_data *wrqu, char *extra)
 {
 	hdd_adapter_t *adapter;
 	hdd_context_t *hdd_ctx;
@@ -3335,9 +3342,9 @@ static int __iw_get_power_mode(struct net_device *dev,
  *
  * Return: 0 on success, error number otherwise
  */
-int iw_get_power_mode(struct net_device *dev,
-		      struct iw_request_info *info,
-		      union iwreq_data *wrqu, char *extra)
+static int iw_get_power_mode(struct net_device *dev,
+			     struct iw_request_info *info,
+			     union iwreq_data *wrqu, char *extra)
 {
 	int ret;
 
@@ -3358,8 +3365,8 @@ int iw_get_power_mode(struct net_device *dev,
  * Return: 0 on success, non-zero on error
  */
 static int __iw_set_power_mode(struct net_device *dev,
-			     struct iw_request_info *info,
-			     union iwreq_data *wrqu, char *extra)
+			       struct iw_request_info *info,
+			       union iwreq_data *wrqu, char *extra)
 {
 	hdd_adapter_t *adapter;
 	hdd_context_t *hdd_ctx;
@@ -3385,9 +3392,9 @@ static int __iw_set_power_mode(struct net_device *dev,
  *
  * Return: 0 on success, error number otherwise
  */
-int iw_set_power_mode(struct net_device *dev,
-		      struct iw_request_info *info,
-		      union iwreq_data *wrqu, char *extra)
+static int iw_set_power_mode(struct net_device *dev,
+			     struct iw_request_info *info,
+			     union iwreq_data *wrqu, char *extra)
 {
 	int ret;
 
@@ -4575,7 +4582,7 @@ static int __iw_set_retry(struct net_device *dev, struct iw_request_info *info,
 			if (sme_cfg_set_int (hHal, WNI_CFG_SHORT_RETRY_LIMIT,
 						wrqu->retry.value) !=
 					QDF_STATUS_SUCCESS) {
-				hdd_err("failed to set ini parameter, WNI_CFG_LONG_RETRY_LIMIT");
+				hdd_err("failed to set ini parameter, WNI_CFG_SHORT_RETRY_LIMIT");
 				return -EIO;
 			}
 		}
@@ -4652,7 +4659,7 @@ static int __iw_get_retry(struct net_device *dev, struct iw_request_info *info,
 
 		if (sme_cfg_get_int(hHal, WNI_CFG_SHORT_RETRY_LIMIT, &retry) !=
 		    QDF_STATUS_SUCCESS) {
-			hdd_warn("failed to get ini parameter, WNI_CFG_LONG_RETRY_LIMIT");
+			hdd_warn("failed to get ini parameter, WNI_CFG_SHORT_RETRY_LIMIT");
 			return -EIO;
 		}
 
@@ -8067,6 +8074,7 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
 					HW_MODE_SS_0x0, HW_MODE_BW_NONE,
 					HW_MODE_DBS_NONE,
 					HW_MODE_AGILE_DFS_NONE,
+					HW_MODE_SBS_NONE,
 					SIR_UPDATE_REASON_UT);
 		} else if (apps_args[0] == 1) {
 			hdd_err("set hw mode for dual mac");
@@ -8077,6 +8085,7 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
 					HW_MODE_SS_1x1, HW_MODE_40_MHZ,
 					HW_MODE_DBS,
 					HW_MODE_AGILE_DFS_NONE,
+					HW_MODE_SBS_NONE,
 					SIR_UPDATE_REASON_UT);
 		}
 	}
@@ -9289,8 +9298,8 @@ static int iw_get_statistics(struct net_device *dev,
 
 /*Max Len for PNO notification*/
 #define MAX_PNO_NOTIFY_LEN 100
-void found_pref_network_cb(void *callbackContext,
-			   tSirPrefNetworkFoundInd *pPrefNetworkFoundInd)
+static void found_pref_network_cb(void *callbackContext,
+				  tSirPrefNetworkFoundInd *pPrefNetworkFoundInd)
 {
 	hdd_adapter_t *pAdapter = (hdd_adapter_t *) callbackContext;
 	union iwreq_data wrqu;
@@ -9333,13 +9342,12 @@ void found_pref_network_cb(void *callbackContext,
  * for each network:
  *    <ssid_len> <ssid> <authentication> <encryption>
  *    <ch_num> <channel_list optional> <bcast_type> <rssi_threshold>
- * <number of scan timers>
- * for each timer:
- *    <scan_time> <scan_repeat>
+ * <scan_time (seconds)>
+ * <scan_repeat_count (0 means indefinite)>
  * <suspend mode>
  *
  * e.g:
- * 1 2 4 test 0 0 3 1 6 11 2 40 5 test2 4 4 6 1 2 3 4 5 6 1 0 2 5 2 300 0 1
+ * 1 2 4 test 0 0 3 1 6 11 2 40 5 test2 4 4 6 1 2 3 4 5 6 1 0 5 2 1
  *
  * this translates into:
  * -----------------------------
@@ -9355,10 +9363,8 @@ void found_pref_network_cb(void *callbackContext,
  *   search on 6 channels 1, 2, 3, 4, 5 and 6
  *   bcast type is non-bcast (directed probe will be sent)
  *   and must not meet any RSSI threshold
- * 2 scan timers:
  *   scan every 5 seconds 2 times
- *   then scan every 300 seconds until stopped
- * enable on suspend
+ *   enable on suspend
  */
 static int __iw_set_pno(struct net_device *dev,
 			struct iw_request_info *info,
@@ -9523,6 +9529,17 @@ static int __iw_set_pno(struct net_device *dev,
 		/* Advance to next network */
 		ptr += offset;
 	} /* For ucNetworkCount */
+
+	request.fast_scan_period = 0;
+	if (sscanf(ptr, "%u %n", &(request.fast_scan_period), &offset) > 0) {
+		request.fast_scan_period *= MSEC_PER_SEC;
+		ptr += offset;
+	}
+
+	request.fast_scan_max_cycles = 0;
+	if (sscanf(ptr, "%hhu %n", &(request.fast_scan_max_cycles),
+		   &offset) > 0)
+		ptr += offset;
 
 	params = sscanf(ptr, "%hhu %n", &(mode), &offset);
 
@@ -9807,7 +9824,7 @@ static int __iw_set_two_ints_getnone(struct net_device *dev,
 					      | value[2],
 					  VDEV_CMD);
 		break;
-#ifdef DEBUG
+#ifdef WLAN_DEBUG
 	case WE_SET_FW_CRASH_INJECT:
 		hdd_err("WE_SET_FW_CRASH_INJECT: %d %d",
 		       value[1], value[2]);
@@ -11076,7 +11093,7 @@ static const struct iw_priv_args we_private_args[] = {
 	 IW_PRIV_TYPE_BYTE | sizeof(struct dot11p_channel_sched),
 	 0, "set_dot11p" }
 	,
-#ifdef DEBUG
+#ifdef WLAN_DEBUG
 	{WE_SET_FW_CRASH_INJECT,
 	 IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 2,
 	 0, "crash_inject"}
@@ -11136,7 +11153,7 @@ const struct iw_handler_def we_handler_def = {
  *
  * Returns: none
  */
-int hdd_set_wext(hdd_adapter_t *pAdapter)
+static int hdd_set_wext(hdd_adapter_t *pAdapter)
 {
 	hdd_wext_state_t *pwextBuf = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
 	hdd_station_ctx_t *pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
