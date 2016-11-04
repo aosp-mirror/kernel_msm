@@ -23,6 +23,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/power_supply.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
 #include <linux/string_helpers.h>
@@ -38,6 +39,7 @@
 			pr_debug(fmt, ##__VA_ARGS__);	\
 	} while (0)
 
+/* Awake votable reasons */
 #define SRAM_READ	"fg_sram_read"
 #define SRAM_WRITE	"fg_sram_write"
 #define PROFILE_LOAD	"fg_profile_load"
@@ -54,8 +56,13 @@
 					CHARS_PER_ITEM) + 1)		\
 
 #define FG_SRAM_ADDRESS_MAX		255
+#define PROFILE_LEN			224
+#define PROFILE_COMP_LEN		148
 #define BUCKET_COUNT			8
 #define BUCKET_SOC_PCT			(256 / BUCKET_COUNT)
+
+#define KI_COEFF_MAX			62200
+#define KI_COEFF_SOC_LEVELS		3
 
 /* Debug flag definitions */
 enum fg_debug_flag {
@@ -66,6 +73,7 @@ enum fg_debug_flag {
 	FG_SRAM_READ		= BIT(4), /* Show SRAM reads */
 	FG_BUS_WRITE		= BIT(5), /* Show REGMAP writes */
 	FG_BUS_READ		= BIT(6), /* Show REGMAP reads */
+	FG_CAP_LEARN		= BIT(7), /* Show capacity learning */
 };
 
 /* SRAM access */
@@ -110,17 +118,29 @@ enum {
 	DELTA_SOC_IRQ_WA = BIT(0),
 };
 
-/* SRAM parameters */
+/*
+ * List of FG_SRAM parameters. Please add a parameter only if it is an entry
+ * that will be used either to configure an entity (e.g. termination current)
+ * which might need some encoding (or) it is an entry that will be read from
+ * SRAM and decoded (e.g. CC_SOC_SW) for SW to use at various places. For
+ * generic read/writes to SRAM registers, please use fg_sram_read/write APIs
+ * directly without adding an entry here.
+ */
 enum fg_sram_param_id {
 	FG_SRAM_BATT_SOC = 0,
 	FG_SRAM_VOLTAGE_PRED,
 	FG_SRAM_OCV,
 	FG_SRAM_RSLOW,
 	FG_SRAM_ALG_FLAGS,
+	FG_SRAM_CC_SOC,
+	FG_SRAM_CC_SOC_SW,
+	FG_SRAM_ACT_BATT_CAP,
 	/* Entries below here are configurable during initialization */
 	FG_SRAM_CUTOFF_VOLT,
 	FG_SRAM_EMPTY_VOLT,
 	FG_SRAM_VBATT_LOW,
+	FG_SRAM_FLOAT_VOLT,
+	FG_SRAM_VBATT_FULL,
 	FG_SRAM_ESR_TIMER_DISCHG_MAX,
 	FG_SRAM_ESR_TIMER_DISCHG_INIT,
 	FG_SRAM_ESR_TIMER_CHG_MAX,
@@ -129,6 +149,8 @@ enum fg_sram_param_id {
 	FG_SRAM_CHG_TERM_CURR,
 	FG_SRAM_DELTA_SOC_THR,
 	FG_SRAM_RECHARGE_SOC_THR,
+	FG_SRAM_KI_COEFF_MED_DISCHG,
+	FG_SRAM_KI_COEFF_HI_DISCHG,
 	FG_SRAM_MAX,
 };
 
@@ -165,6 +187,8 @@ struct fg_alg_flag {
 
 /* DT parameters for FG device */
 struct fg_dt_props {
+	bool	force_load_profile;
+	bool	hold_soc_while_full;
 	int	cutoff_volt_mv;
 	int	empty_volt_mv;
 	int	vbatt_low_thr_mv;
@@ -177,6 +201,18 @@ struct fg_dt_props {
 	int	esr_timer_charging;
 	int	esr_timer_awake;
 	int	esr_timer_asleep;
+	int	cl_start_soc;
+	int	cl_max_temp;
+	int	cl_min_temp;
+	int	cl_max_cap_inc;
+	int	cl_max_cap_dec;
+	int	cl_max_cap_limit;
+	int	cl_min_cap_limit;
+	int	jeita_hyst_temp;
+	int	batt_temp_delta;
+	int	ki_coeff_soc[KI_COEFF_SOC_LEVELS];
+	int	ki_coeff_med_dischg[KI_COEFF_SOC_LEVELS];
+	int	ki_coeff_hi_dischg[KI_COEFF_SOC_LEVELS];
 };
 
 /* parameters from battery profile */
@@ -184,6 +220,7 @@ struct fg_batt_props {
 	const char	*batt_type_str;
 	char		*batt_profile;
 	int		float_volt_uv;
+	int		vbatt_full_mv;
 	int		fastchg_curr_ma;
 	int		batt_id_kohm;
 };
@@ -197,11 +234,21 @@ struct fg_cyc_ctr_data {
 	struct mutex	lock;
 };
 
+struct fg_cap_learning {
+	bool		active;
+	int		init_cc_soc_sw;
+	int64_t		nom_cap_uah;
+	int64_t		init_cc_uah;
+	int64_t		final_cc_uah;
+	int64_t		learned_cc_uah;
+	struct mutex	lock;
+};
+
 struct fg_irq_info {
 	const char		*name;
 	const irq_handler_t	handler;
-	int			irq;
 	bool			wakeable;
+	int			irq;
 };
 
 struct fg_chip {
@@ -211,34 +258,44 @@ struct fg_chip {
 	struct dentry		*dfs_root;
 	struct power_supply	*fg_psy;
 	struct power_supply	*batt_psy;
+	struct power_supply	*usb_psy;
+	struct power_supply	*dc_psy;
 	struct iio_channel	*batt_id_chan;
 	struct fg_memif		*sram;
 	struct fg_irq_info	*irqs;
 	struct votable		*awake_votable;
 	struct fg_sram_param	*sp;
+	struct fg_alg_flag	*alg_flags;
 	int			*debug_mask;
-	char			*batt_profile;
+	char			batt_profile[PROFILE_LEN];
 	struct fg_dt_props	dt;
 	struct fg_batt_props	bp;
 	struct fg_cyc_ctr_data	cyc_ctr;
 	struct notifier_block	nb;
+	struct fg_cap_learning  cl;
 	struct mutex		bus_lock;
 	struct mutex		sram_rw_lock;
 	u32			batt_soc_base;
 	u32			batt_info_base;
 	u32			mem_if_base;
-	int			nom_cap_uah;
+	int			batt_id;
 	int			status;
-	int			prev_status;
-	bool			batt_id_avail;
+	int			charge_done;
+	int			last_soc;
+	int			last_batt_temp;
+	int			health;
+	bool			profile_available;
 	bool			profile_loaded;
 	bool			battery_missing;
+	bool			fg_restarting;
+	bool			charge_full;
+	bool			recharge_soc_adjusted;
+	bool			ki_coeff_dischg_en;
 	struct completion	soc_update;
 	struct completion	soc_ready;
 	struct delayed_work	profile_load_work;
 	struct work_struct	status_change_work;
 	struct work_struct	cycle_count_work;
-	struct fg_alg_flag	*alg_flags;
 };
 
 /* Debugfs data structures are below */
@@ -287,4 +344,5 @@ extern int fg_debugfs_create(struct fg_chip *chip);
 extern void fill_string(char *str, size_t str_len, u8 *buf, int buf_len);
 extern int64_t twos_compliment_extend(int64_t val, int s_bit_pos);
 extern s64 fg_float_decode(u16 val);
+extern bool is_input_present(struct fg_chip *chip);
 #endif

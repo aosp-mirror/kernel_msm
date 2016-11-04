@@ -87,7 +87,8 @@ First Level Node - FG Gen3 device
 	Value type: <u32>
 	Definition: Percentage of monotonic SOC increase upon which the delta
 		    SOC interrupt will be triggered. If this property is not
-		    specified, then the default value will be 1.
+		    specified, then the default value will be 1. Possible
+		    values are in the range of 0 to 12.
 
 - qcom,fg-recharge-soc-thr
 	Usage:      optional
@@ -145,6 +146,112 @@ First Level Node - FG Gen3 device
 	Value type: <bool>
 	Definition: Enables the cycle counter feature.
 
+- qcom,fg-force-load-profile
+	Usage:      optional
+	Value type: <bool>
+	Definition: If set, battery profile will be force loaded if the profile
+		    loaded earlier by bootloader doesn't match with the profile
+		    available in the device tree.
+
+- qcom,cl-start-capacity
+	Usage:      optional
+	Value type: <u32>
+	Definition: Battery SOC threshold to start the capacity learning.
+		    If this is not specified, then the default value used
+		    will be 15.
+
+- qcom,cl-min-temp
+	Usage:      optional
+	Value type: <u32>
+	Definition: Lower limit of battery temperature to start the capacity
+		    learning. If this is not specified, then the default value
+		    used will be 150. Unit is in decidegC.
+
+- qcom,cl-max-temp
+	Usage:      optional
+	Value type: <u32>
+	Definition: Upper limit of battery temperature to start the capacity
+		    learning. If this is not specified, then the default value
+		    used will be 450 (45C). Unit is in decidegC.
+
+- qcom,cl-max-increment
+	Usage:      optional
+	Value type: <u32>
+	Definition: Maximum capacity increment allowed per capacity learning
+		    cycle. If this is not specified, then the default value
+		    used will be 5 (0.5%). Unit is in decipercentage.
+
+- qcom,cl-max-decrement
+	Usage:      optional
+	Value type: <u32>
+	Definition: Maximum capacity decrement allowed per capacity learning
+		    cycle. If this is not specified, then the default value
+		    used will be 100 (10%). Unit is in decipercentage.
+
+- qcom,cl-min-limit
+	Usage:      optional
+	Value type: <u32>
+	Definition: Minimum limit that the capacity cannot go below in a
+		    capacity learning cycle. If this is not specified, then
+		    the default value is 0. Unit is in decipercentage.
+
+- qcom,cl-max-limit
+	Usage:      optional
+	Value type: <u32>
+	Definition: Maximum limit that the capacity cannot go above in a
+		    capacity learning cycle. If this is not specified, then
+		    the default value is 0. Unit is in decipercentage.
+
+- qcom,fg-jeita-hyst-temp
+	Usage:      optional
+	Value type: <u32>
+	Definition: Hysteresis applied to Jeita temperature comparison.
+		    Possible values are:
+			0 - No hysteresis
+			1,2,3 - Value in Celsius.
+
+- qcom,fg-batt-temp-delta
+	Usage:      optional
+	Value type: <u32>
+	Definition: Battery temperature delta interrupt threshold. Possible
+		    values are: 2, 4, 6 and 10. Unit is in Kelvin.
+
+- qcom,hold-soc-while-full:
+	Usage:      optional
+	Value type: <bool>
+	Definition: A boolean property that when defined holds SOC at 100% when
+		    the battery is full.
+
+- qcom,ki-coeff-soc-dischg:
+	Usage:      optional
+	Value type: <prop-encoded-array>
+	Definition: Array of monotonic SOC threshold values to change the ki
+		    coefficient for medium discharge current during discharge.
+		    This should be defined in the ascending order and in the
+		    range of 0-100. Array limit is set to 3.
+
+- qcom,ki-coeff-med-dischg:
+	Usage:      optional
+	Value type: <prop-encoded-array>
+	Definition: Array of ki coefficient values for medium discharge current
+		    during discharge. These values will be applied when the
+		    monotonic SOC goes below the SOC threshold specified under
+		    qcom,ki-coeff-soc-dischg. Array limit is set to 3. This
+		    property should be specified if qcom,ki-coeff-soc-dischg
+		    is specified to make it fully functional. Value has no
+		    unit. Allowed range is 0 to 62200 in micro units.
+
+- qcom,ki-coeff-hi-dischg:
+	Usage:      optional
+	Value type: <prop-encoded-array>
+	Definition: Array of ki coefficient values for high discharge current
+		    during discharge. These values will be applied when the
+		    monotonic SOC goes below the SOC threshold specified under
+		    qcom,ki-coeff-soc-dischg. Array limit is set to 3. This
+		    property should be specified if qcom,ki-coeff-soc-dischg
+		    is specified to make it fully functional. Value has no
+		    unit. Allowed range is 0 to 62200 in micro units.
+
 ==========================================================
 Second Level Nodes - Peripherals managed by FG Gen3 driver
 ==========================================================
@@ -175,6 +282,9 @@ pmicobalt_fg: qpnp,fg {
 	qcom,pmic-revid = <&pmicobalt_revid>;
 	io-channels = <&pmicobalt_rradc 3>;
 	io-channel-names = "rradc_batt_id";
+	qcom,ki-coeff-soc-dischg = <30 60 90>;
+	qcom,ki-coeff-med-dischg = <800 1000 1400>;
+	qcom,ki-coeff-hi-dischg = <1200 1500 2100>;
 	status = "okay";
 
 	qcom,fg-batt-soc@4000 {

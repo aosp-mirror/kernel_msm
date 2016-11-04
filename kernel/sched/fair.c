@@ -2619,7 +2619,7 @@ struct cluster_cpu_stats {
 	int best_idle_cpu, least_loaded_cpu;
 	int best_capacity_cpu, best_cpu, best_sibling_cpu;
 	int min_cost, best_sibling_cpu_cost;
-	int best_cpu_cstate;
+	int best_cpu_wakeup_latency;
 	u64 min_load, best_load, best_sibling_cpu_load;
 	s64 highest_spare_capacity;
 };
@@ -2827,19 +2827,19 @@ next_best_cluster(struct sched_cluster *cluster, struct cpu_select_env *env,
 static void __update_cluster_stats(int cpu, struct cluster_cpu_stats *stats,
 				   struct cpu_select_env *env, int cpu_cost)
 {
-	int cpu_cstate;
+	int wakeup_latency;
 	int prev_cpu = env->prev_cpu;
 
-	cpu_cstate = cpu_rq(cpu)->cstate;
+	wakeup_latency = cpu_rq(cpu)->wakeup_latency;
 
 	if (env->need_idle) {
 		stats->min_cost = cpu_cost;
 		if (idle_cpu(cpu)) {
-			if (cpu_cstate < stats->best_cpu_cstate ||
-				(cpu_cstate == stats->best_cpu_cstate &&
-							cpu == prev_cpu)) {
+			if (wakeup_latency < stats->best_cpu_wakeup_latency ||
+			    (wakeup_latency == stats->best_cpu_wakeup_latency &&
+			     cpu == prev_cpu)) {
 				stats->best_idle_cpu = cpu;
-				stats->best_cpu_cstate = cpu_cstate;
+				stats->best_cpu_wakeup_latency = wakeup_latency;
 			}
 		} else {
 			if (env->cpu_load < stats->min_load ||
@@ -2855,7 +2855,7 @@ static void __update_cluster_stats(int cpu, struct cluster_cpu_stats *stats,
 
 	if (cpu_cost < stats->min_cost)  {
 		stats->min_cost = cpu_cost;
-		stats->best_cpu_cstate = cpu_cstate;
+		stats->best_cpu_wakeup_latency = wakeup_latency;
 		stats->best_load = env->cpu_load;
 		stats->best_cpu = cpu;
 		env->sbc_best_flag = SBC_FLAG_CPU_COST;
@@ -2864,11 +2864,11 @@ static void __update_cluster_stats(int cpu, struct cluster_cpu_stats *stats,
 
 	/* CPU cost is the same. Start breaking the tie by C-state */
 
-	if (cpu_cstate > stats->best_cpu_cstate)
+	if (wakeup_latency > stats->best_cpu_wakeup_latency)
 		return;
 
-	if (cpu_cstate < stats->best_cpu_cstate) {
-		stats->best_cpu_cstate = cpu_cstate;
+	if (wakeup_latency < stats->best_cpu_wakeup_latency) {
+		stats->best_cpu_wakeup_latency = wakeup_latency;
 		stats->best_load = env->cpu_load;
 		stats->best_cpu = cpu;
 		env->sbc_best_flag = SBC_FLAG_COST_CSTATE_TIE_BREAKER;
@@ -2883,8 +2883,8 @@ static void __update_cluster_stats(int cpu, struct cluster_cpu_stats *stats,
 	}
 
 	if (stats->best_cpu != prev_cpu &&
-	    ((cpu_cstate == 0 && env->cpu_load < stats->best_load) ||
-	    (cpu_cstate > 0 && env->cpu_load > stats->best_load))) {
+	    ((wakeup_latency == 0 && env->cpu_load < stats->best_load) ||
+	    (wakeup_latency > 0 && env->cpu_load > stats->best_load))) {
 		stats->best_load = env->cpu_load;
 		stats->best_cpu = cpu;
 		env->sbc_best_flag = SBC_FLAG_CSTATE_LOAD;
@@ -2979,7 +2979,7 @@ static inline void init_cluster_cpu_stats(struct cluster_cpu_stats *stats)
 	stats->min_load	= stats->best_sibling_cpu_load = ULLONG_MAX;
 	stats->highest_spare_capacity = 0;
 	stats->least_loaded_cpu = -1;
-	stats->best_cpu_cstate = INT_MAX;
+	stats->best_cpu_wakeup_latency = INT_MAX;
 	/* No need to initialize stats->best_load */
 }
 
@@ -3056,7 +3056,8 @@ bias_to_prev_cpu(struct cpu_select_env *env, struct cluster_cpu_stats *stats)
 static inline bool
 wake_to_waker_cluster(struct cpu_select_env *env)
 {
-	return !env->need_idle && !env->reason && env->sync &&
+	return env->boost_type == SCHED_BOOST_NONE &&
+	       !env->need_idle && !env->reason && env->sync &&
 	       task_load(current) > sched_big_waker_task_load &&
 	       task_load(env->p) < sched_small_wakee_task_load;
 }
@@ -3189,8 +3190,8 @@ retry:
 		}
 	}
 	p->last_cpu_selected_ts = sched_ktime_clock();
-	sbc_flag |= env.sbc_best_cluster_flag;
 out:
+	sbc_flag |= env.sbc_best_cluster_flag;
 	rcu_read_unlock();
 	trace_sched_task_load(p, sched_boost(), env.reason, env.sync,
 					env.need_idle, sbc_flag, target);
@@ -9653,11 +9654,8 @@ void free_fair_sched_group(struct task_group *tg)
 	for_each_possible_cpu(i) {
 		if (tg->cfs_rq)
 			kfree(tg->cfs_rq[i]);
-		if (tg->se) {
-			if (tg->se[i])
-				remove_entity_load_avg(tg->se[i]);
+		if (tg->se)
 			kfree(tg->se[i]);
-		}
 	}
 
 	kfree(tg->cfs_rq);
@@ -9705,21 +9703,29 @@ err:
 	return 0;
 }
 
-void unregister_fair_sched_group(struct task_group *tg, int cpu)
+void unregister_fair_sched_group(struct task_group *tg)
 {
-	struct rq *rq = cpu_rq(cpu);
 	unsigned long flags;
+	struct rq *rq;
+	int cpu;
 
-	/*
-	* Only empty task groups can be destroyed; so we can speculatively
-	* check on_list without danger of it being re-added.
-	*/
-	if (!tg->cfs_rq[cpu]->on_list)
-		return;
+	for_each_possible_cpu(cpu) {
+		if (tg->se[cpu])
+			remove_entity_load_avg(tg->se[cpu]);
 
-	raw_spin_lock_irqsave(&rq->lock, flags);
-	list_del_leaf_cfs_rq(tg->cfs_rq[cpu]);
-	raw_spin_unlock_irqrestore(&rq->lock, flags);
+		/*
+		 * Only empty task groups can be destroyed; so we can speculatively
+		 * check on_list without danger of it being re-added.
+		 */
+		if (!tg->cfs_rq[cpu]->on_list)
+			continue;
+
+		rq = cpu_rq(cpu);
+
+		raw_spin_lock_irqsave(&rq->lock, flags);
+		list_del_leaf_cfs_rq(tg->cfs_rq[cpu]);
+		raw_spin_unlock_irqrestore(&rq->lock, flags);
+	}
 }
 
 void init_tg_cfs_entry(struct task_group *tg, struct cfs_rq *cfs_rq,
@@ -9801,7 +9807,7 @@ int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 	return 1;
 }
 
-void unregister_fair_sched_group(struct task_group *tg, int cpu) { }
+void unregister_fair_sched_group(struct task_group *tg) { }
 
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 

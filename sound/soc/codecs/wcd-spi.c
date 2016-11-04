@@ -80,7 +80,9 @@
 /* Word sizes and min/max lengths */
 #define WCD_SPI_WORD_BYTE_CNT (4)
 #define WCD_SPI_RW_MULTI_MIN_LEN (16)
-#define WCD_SPI_RW_MULTI_MAX_LEN (64 * 1024)
+
+/* Max size is closest multiple of 16 less than 64Kbytes */
+#define WCD_SPI_RW_MULTI_MAX_LEN ((64 * 1024) - 16)
 
 /* Alignment requirements */
 #define WCD_SPI_RW_MIN_ALIGN    WCD_SPI_WORD_BYTE_CNT
@@ -103,6 +105,12 @@
 		 __func__, __stringify_1(lock));      \
 	mutex_unlock(&lock);                         \
 }
+
+struct wcd_spi_debug_data {
+	struct dentry *dir;
+	u32 addr;
+	u32 size;
+};
 
 struct wcd_spi_priv {
 	struct spi_device *spi;
@@ -133,6 +141,9 @@ struct wcd_spi_priv {
 
 	struct device *m_dev;
 	struct wdsp_mgr_ops *m_ops;
+
+	/* Debugfs related information */
+	struct wcd_spi_debug_data debug_data;
 };
 
 enum xfer_request {
@@ -319,7 +330,7 @@ static int wcd_spi_transfer_split(struct spi_device *spi,
 	u32 addr = data_msg->remote_addr;
 	u8 *data = data_msg->data;
 	int remain_size = data_msg->len;
-	int to_xfer, loop_cnt, ret;
+	int to_xfer, loop_cnt, ret = 0;
 
 	/* Perform single writes until multi word alignment is met */
 	loop_cnt = 1;
@@ -631,14 +642,21 @@ static int wcd_spi_init(struct spi_device *spi)
 	if (IS_ERR_VALUE(ret))
 		goto err_wr_en;
 
+	/*
+	 * In case spi_init is called after component deinit,
+	 * it is possible hardware register state is also reset.
+	 * Sync the regcache here so hardware state is updated
+	 * to reflect the cache.
+	 */
+	regcache_sync(wcd_spi->regmap);
+
 	regmap_write(wcd_spi->regmap, WCD_SPI_SLAVE_CONFIG,
 		     0x0F3D0800);
 
-	/* Write the MTU to 64K */
+	/* Write the MTU to max allowed size */
 	regmap_update_bits(wcd_spi->regmap,
 			   WCD_SPI_SLAVE_TRNS_LEN,
-			   0xFFFF0000,
-			   (WCD_SPI_RW_MULTI_MAX_LEN / 4) << 16);
+			   0xFFFF0000, 0xFFFF0000);
 err_wr_en:
 	wcd_spi_clk_ctrl(spi, WCD_SPI_CLK_DISABLE,
 			 WCD_SPI_CLK_FLAG_IMMEDIATE);
@@ -837,7 +855,7 @@ static int wdsp_spi_event_handler(struct device *dev, void *priv_data,
 				  void *data)
 {
 	struct spi_device *spi = to_spi_device(dev);
-	int ret;
+	int ret = 0;
 
 	dev_dbg(&spi->dev, "%s: event type %d\n",
 		__func__, event);
@@ -1004,20 +1022,81 @@ static const struct file_operations state_fops = {
 	.release = single_release,
 };
 
+static ssize_t wcd_spi_debugfs_mem_read(struct file *file, char __user *ubuf,
+					size_t count, loff_t *ppos)
+{
+	struct spi_device *spi = file->private_data;
+	struct wcd_spi_priv *wcd_spi = spi_get_drvdata(spi);
+	struct wcd_spi_debug_data *dbg_data = &wcd_spi->debug_data;
+	struct wcd_spi_msg msg;
+	ssize_t buf_size, read_count = 0;
+	char *buf;
+	int ret;
+
+	if (*ppos < 0 || !count)
+		return -EINVAL;
+
+	if (dbg_data->size == 0 || dbg_data->addr == 0) {
+		dev_err(&spi->dev,
+			"%s: Invalid request, size = %u, addr = 0x%x\n",
+			__func__, dbg_data->size, dbg_data->addr);
+		return 0;
+	}
+
+	buf_size = count < dbg_data->size ? count : dbg_data->size;
+	buf = kzalloc(buf_size, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	msg.data = buf;
+	msg.remote_addr = dbg_data->addr;
+	msg.len = buf_size;
+	msg.flags = 0;
+
+	ret = wcd_spi_data_read(spi, &msg);
+	if (IS_ERR_VALUE(ret)) {
+		dev_err(&spi->dev,
+			"%s: Failed to read %zu bytes from addr 0x%x\n",
+			__func__, buf_size, msg.remote_addr);
+		goto done;
+	}
+
+	read_count = simple_read_from_buffer(ubuf, count, ppos, buf, buf_size);
+
+done:
+	kfree(buf);
+	if (ret < 0)
+		return ret;
+	else
+		return read_count;
+}
+
+static const struct file_operations mem_read_fops = {
+	.open = simple_open,
+	.read = wcd_spi_debugfs_mem_read,
+};
+
 static int wcd_spi_debugfs_init(struct spi_device *spi)
 {
+	struct wcd_spi_priv *wcd_spi = spi_get_drvdata(spi);
+	struct wcd_spi_debug_data *dbg_data = &wcd_spi->debug_data;
 	int rc = 0;
-	struct dentry *dir;
 
-	dir = debugfs_create_dir("wcd_spi", NULL);
-	if (IS_ERR_OR_NULL(dir)) {
-		dir = NULL;
+	dbg_data->dir = debugfs_create_dir("wcd_spi", NULL);
+	if (IS_ERR_OR_NULL(dbg_data->dir)) {
+		dbg_data->dir = NULL;
 		rc = -ENODEV;
 		goto done;
 	}
 
-	debugfs_create_file("state", 0444, dir, spi, &state_fops);
+	debugfs_create_file("state", 0444, dbg_data->dir, spi, &state_fops);
+	debugfs_create_u32("addr", S_IRUGO | S_IWUSR, dbg_data->dir,
+			   &dbg_data->addr);
+	debugfs_create_u32("size", S_IRUGO | S_IWUSR, dbg_data->dir,
+			   &dbg_data->size);
 
+	debugfs_create_file("mem_read", S_IRUGO, dbg_data->dir,
+			    spi, &mem_read_fops);
 done:
 	return rc;
 }
@@ -1093,46 +1172,12 @@ static struct regmap_config wcd_spi_regmap_cfg = {
 static int wdsp_spi_init(struct device *dev, void *priv_data)
 {
 	struct spi_device *spi = to_spi_device(dev);
-	struct wcd_spi_priv *wcd_spi = spi_get_drvdata(spi);
 	int ret;
 
-	wcd_spi->reg_bytes = DIV_ROUND_UP(wcd_spi_regmap_cfg.reg_bits, 8);
-	wcd_spi->val_bytes = DIV_ROUND_UP(wcd_spi_regmap_cfg.val_bits, 8);
-
-	wcd_spi->regmap = devm_regmap_init(&spi->dev, &wcd_spi_regmap_bus,
-					   &spi->dev, &wcd_spi_regmap_cfg);
-	if (IS_ERR(wcd_spi->regmap)) {
-		ret = PTR_ERR(wcd_spi->regmap);
-		dev_err(&spi->dev, "%s: Failed to allocate regmap, err = %d\n",
-			__func__, ret);
-		goto err_regmap;
-	}
-
-	if (wcd_spi_debugfs_init(spi))
-		dev_err(&spi->dev, "%s: Failed debugfs init\n", __func__);
-
-	spi_message_init(&wcd_spi->msg1);
-	spi_message_add_tail(&wcd_spi->xfer1, &wcd_spi->msg1);
-
-	spi_message_init(&wcd_spi->msg2);
-	spi_message_add_tail(&wcd_spi->xfer2[0], &wcd_spi->msg2);
-	spi_message_add_tail(&wcd_spi->xfer2[1], &wcd_spi->msg2);
-
 	ret = wcd_spi_init(spi);
-	if (IS_ERR_VALUE(ret)) {
+	if (IS_ERR_VALUE(ret))
 		dev_err(&spi->dev, "%s: Init failed, err = %d\n",
 			__func__, ret);
-		goto err_init;
-	}
-
-	return 0;
-
-err_init:
-	spi_transfer_del(&wcd_spi->xfer1);
-	spi_transfer_del(&wcd_spi->xfer2[0]);
-	spi_transfer_del(&wcd_spi->xfer2[1]);
-
-err_regmap:
 	return ret;
 }
 
@@ -1141,9 +1186,11 @@ static int wdsp_spi_deinit(struct device *dev, void *priv_data)
 	struct spi_device *spi = to_spi_device(dev);
 	struct wcd_spi_priv *wcd_spi = spi_get_drvdata(spi);
 
-	spi_transfer_del(&wcd_spi->xfer1);
-	spi_transfer_del(&wcd_spi->xfer2[0]);
-	spi_transfer_del(&wcd_spi->xfer2[1]);
+	/*
+	 * Deinit means the hardware is reset. Mark the cache
+	 * as dirty here, so init will sync the cache
+	 */
+	regcache_mark_dirty(wcd_spi->regmap);
 
 	return 0;
 }
@@ -1170,9 +1217,34 @@ static int wcd_spi_component_bind(struct device *dev,
 		ret = wcd_spi->m_ops->register_cmpnt_ops(master, dev,
 							 wcd_spi,
 							 &wdsp_spi_ops);
-	if (ret)
+	if (ret) {
 		dev_err(dev, "%s: register_cmpnt_ops failed, err = %d\n",
 			__func__, ret);
+		goto done;
+	}
+
+	wcd_spi->reg_bytes = DIV_ROUND_UP(wcd_spi_regmap_cfg.reg_bits, 8);
+	wcd_spi->val_bytes = DIV_ROUND_UP(wcd_spi_regmap_cfg.val_bits, 8);
+
+	wcd_spi->regmap = devm_regmap_init(&spi->dev, &wcd_spi_regmap_bus,
+					   &spi->dev, &wcd_spi_regmap_cfg);
+	if (IS_ERR(wcd_spi->regmap)) {
+		ret = PTR_ERR(wcd_spi->regmap);
+		dev_err(&spi->dev, "%s: Failed to allocate regmap, err = %d\n",
+			__func__, ret);
+		goto done;
+	}
+
+	if (wcd_spi_debugfs_init(spi))
+		dev_err(&spi->dev, "%s: Failed debugfs init\n", __func__);
+
+	spi_message_init(&wcd_spi->msg1);
+	spi_message_add_tail(&wcd_spi->xfer1, &wcd_spi->msg1);
+
+	spi_message_init(&wcd_spi->msg2);
+	spi_message_add_tail(&wcd_spi->xfer2[0], &wcd_spi->msg2);
+	spi_message_add_tail(&wcd_spi->xfer2[1], &wcd_spi->msg2);
+done:
 	return ret;
 }
 
@@ -1185,6 +1257,10 @@ static void wcd_spi_component_unbind(struct device *dev,
 
 	wcd_spi->m_dev = NULL;
 	wcd_spi->m_ops = NULL;
+
+	spi_transfer_del(&wcd_spi->xfer1);
+	spi_transfer_del(&wcd_spi->xfer2[0]);
+	spi_transfer_del(&wcd_spi->xfer2[1]);
 }
 
 static const struct component_ops wcd_spi_component_ops = {

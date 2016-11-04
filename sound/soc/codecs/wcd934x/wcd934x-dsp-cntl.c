@@ -46,6 +46,11 @@
 	mutex_unlock(&lock);                          \
 }
 
+enum wcd_mem_type {
+	WCD_MEM_TYPE_ALWAYS_ON,
+	WCD_MEM_TYPE_SWITCHABLE,
+};
+
 struct wcd_cntl_attribute {
 	struct attribute attr;
 	ssize_t (*show)(struct wcd_dsp_cntl *cntl, char *buf);
@@ -469,7 +474,8 @@ static void wcd_cntl_cpar_ctrl(struct wcd_dsp_cntl *cntl,
 		snd_soc_write(codec, WCD934X_CPE_SS_CPAR_CTL, 0x00);
 }
 
-static int wcd_cntl_enable_memory(struct wcd_dsp_cntl *cntl)
+static int wcd_cntl_enable_memory(struct wcd_dsp_cntl *cntl,
+				  enum wcd_mem_type mem_type)
 {
 	struct snd_soc_codec *codec = cntl->codec;
 	struct wcd9xxx *wcd9xxx = dev_get_drvdata(codec->dev->parent);
@@ -477,74 +483,115 @@ static int wcd_cntl_enable_memory(struct wcd_dsp_cntl *cntl)
 	u8 status;
 	int ret = 0;
 
-	snd_soc_update_bits(codec, WCD934X_CPE_SS_SOC_SW_COLLAPSE_CTL,
-			    0x04, 0x00);
-	snd_soc_update_bits(codec, WCD934X_TEST_DEBUG_MEM_CTRL,
-			    0x80, 0x80);
-	snd_soc_update_bits(codec, WCD934X_CPE_SS_SOC_SW_COLLAPSE_CTL,
-			    0x01, 0x01);
 
-	do {
-		loop_cnt++;
-		/* Time to enable the power domain for memory */
-		usleep_range(100, 150);
-		status = snd_soc_read(codec,
-				      WCD934X_CPE_SS_SOC_SW_COLLAPSE_CTL);
-	} while ((status & 0x02) != 0x02 &&
-		 loop_cnt != WCD_MEM_ENABLE_MAX_RETRIES);
+	switch (mem_type) {
 
-	if ((status & 0x02) != 0x02) {
-		dev_err(cntl->codec->dev,
-			"%s: power domain not enabled, status = 0x%02x\n",
-			__func__, status);
-		ret = -EIO;
-		goto done;
+	case WCD_MEM_TYPE_ALWAYS_ON:
+
+		/* 512KB of always on region */
+		wcd9xxx_slim_write_repeat(wcd9xxx,
+				WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_0,
+				ARRAY_SIZE(mem_enable_values),
+				mem_enable_values);
+		wcd9xxx_slim_write_repeat(wcd9xxx,
+				WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_1,
+				ARRAY_SIZE(mem_enable_values),
+				mem_enable_values);
+		break;
+
+	case WCD_MEM_TYPE_SWITCHABLE:
+
+		snd_soc_update_bits(codec, WCD934X_CPE_SS_SOC_SW_COLLAPSE_CTL,
+				    0x04, 0x00);
+		snd_soc_update_bits(codec, WCD934X_TEST_DEBUG_MEM_CTRL,
+				    0x80, 0x80);
+		snd_soc_update_bits(codec, WCD934X_CPE_SS_SOC_SW_COLLAPSE_CTL,
+				    0x01, 0x01);
+		do {
+			loop_cnt++;
+			/* Time to enable the power domain for memory */
+			usleep_range(100, 150);
+			status = snd_soc_read(codec,
+					WCD934X_CPE_SS_SOC_SW_COLLAPSE_CTL);
+		} while ((status & 0x02) != 0x02 &&
+			  loop_cnt != WCD_MEM_ENABLE_MAX_RETRIES);
+
+		if ((status & 0x02) != 0x02) {
+			dev_err(cntl->codec->dev,
+				"%s: power domain not enabled, status = 0x%02x\n",
+				__func__, status);
+			ret = -EIO;
+			goto done;
+		}
+
+		/* Rest of the memory */
+		wcd9xxx_slim_write_repeat(wcd9xxx,
+				WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_2,
+				ARRAY_SIZE(mem_enable_values),
+				mem_enable_values);
+		wcd9xxx_slim_write_repeat(wcd9xxx,
+				WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_3,
+				ARRAY_SIZE(mem_enable_values),
+				mem_enable_values);
+
+		snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_DRAM1_SHUTDOWN,
+			      0x05);
+		break;
+
+	default:
+		dev_err(cntl->codec->dev, "%s: Invalid mem_type %d\n",
+			__func__, mem_type);
+		ret = -EINVAL;
+		break;
 	}
-
-	/* 512KB of always on region */
-	wcd9xxx_slim_write_repeat(wcd9xxx,
-				  WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_0,
-				  ARRAY_SIZE(mem_enable_values),
-				  mem_enable_values);
-	wcd9xxx_slim_write_repeat(wcd9xxx,
-				  WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_1,
-				  ARRAY_SIZE(mem_enable_values),
-				  mem_enable_values);
-
-	snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_DRAM1_SHUTDOWN, 0x05);
-
-	/* Rest of the memory */
-	wcd9xxx_slim_write_repeat(wcd9xxx,
-				  WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_2,
-				  ARRAY_SIZE(mem_enable_values),
-				  mem_enable_values);
-	wcd9xxx_slim_write_repeat(wcd9xxx,
-				  WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_3,
-				  ARRAY_SIZE(mem_enable_values),
-				  mem_enable_values);
-
-	snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_SYSMEM_DEEPSLP_0, 0x05);
 done:
+	/* Make sure Deep sleep of memories is enabled for all banks */
+	snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_SYSMEM_DEEPSLP_0, 0xFF);
+	snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_SYSMEM_DEEPSLP_1, 0x0F);
+
 	return ret;
 }
 
-static void wcd_cntl_disable_memory(struct wcd_dsp_cntl *cntl)
+static void wcd_cntl_disable_memory(struct wcd_dsp_cntl *cntl,
+				    enum wcd_mem_type mem_type)
 {
 	struct snd_soc_codec *codec = cntl->codec;
+	u8 val;
+
+	switch (mem_type) {
+	case WCD_MEM_TYPE_ALWAYS_ON:
+		snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_1,
+			      0xFF);
+		snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_0,
+			      0xFF);
+		break;
+	case WCD_MEM_TYPE_SWITCHABLE:
+		snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_3,
+			      0xFF);
+		snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_2,
+			      0xFF);
+		snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_DRAM1_SHUTDOWN,
+			      0x07);
+
+		snd_soc_update_bits(codec, WCD934X_CPE_SS_SOC_SW_COLLAPSE_CTL,
+				    0x01, 0x00);
+		val = snd_soc_read(codec, WCD934X_CPE_SS_SOC_SW_COLLAPSE_CTL);
+		if (val & 0x02)
+			dev_err(codec->dev,
+				"%s: Disable switchable failed, val = 0x%02x",
+				__func__, val);
+
+		snd_soc_update_bits(codec, WCD934X_TEST_DEBUG_MEM_CTRL,
+				    0x80, 0x00);
+		break;
+	default:
+		dev_err(cntl->codec->dev, "%s: Invalid mem_type %d\n",
+			__func__, mem_type);
+		break;
+	}
 
 	snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_SYSMEM_DEEPSLP_0, 0xFF);
-	snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_3, 0xFF);
-	snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_2, 0xFF);
-	snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_DRAM1_SHUTDOWN, 0x07);
-	snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_1, 0xFF);
-	snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_SYSMEM_SHUTDOWN_0, 0xFF);
-
-	snd_soc_update_bits(codec, WCD934X_CPE_SS_SOC_SW_COLLAPSE_CTL,
-			    0x01, 0x00);
-	snd_soc_update_bits(codec, WCD934X_TEST_DEBUG_MEM_CTRL,
-			    0x80, 0x00);
-	snd_soc_update_bits(codec, WCD934X_CPE_SS_SOC_SW_COLLAPSE_CTL,
-			    0x04, 0x04);
+	snd_soc_write(codec, WCD934X_CPE_SS_PWR_CPE_SYSMEM_DEEPSLP_1, 0x0F);
 }
 
 static void wcd_cntl_do_shutdown(struct wcd_dsp_cntl *cntl)
@@ -646,9 +693,9 @@ static irqreturn_t wcd_cntl_ipc_irq(int irq, void *data)
 	complete(&cntl->boot_complete);
 
 	if (cntl->m_dev && cntl->m_ops &&
-	    cntl->m_ops->intr_handler)
-		ret = cntl->m_ops->intr_handler(cntl->m_dev, WDSP_IPC1_INTR,
-						NULL);
+	    cntl->m_ops->signal_handler)
+		ret = cntl->m_ops->signal_handler(cntl->m_dev, WDSP_IPC1_INTR,
+						  NULL);
 	else
 		ret = -EINVAL;
 
@@ -663,7 +710,7 @@ static irqreturn_t wcd_cntl_err_irq(int irq, void *data)
 {
 	struct wcd_dsp_cntl *cntl = data;
 	struct snd_soc_codec *codec = cntl->codec;
-	struct wdsp_err_intr_arg arg;
+	struct wdsp_err_signal_arg arg;
 	u16 status = 0;
 	u8 reg_val;
 	int ret = 0;
@@ -678,19 +725,19 @@ static irqreturn_t wcd_cntl_err_irq(int irq, void *data)
 		__func__, status);
 
 	if ((status & cntl->irqs.fatal_irqs) &&
-	    (cntl->m_dev && cntl->m_ops && cntl->m_ops->intr_handler)) {
+	    (cntl->m_dev && cntl->m_ops && cntl->m_ops->signal_handler)) {
 		arg.mem_dumps_enabled = cntl->ramdump_enable;
 		arg.remote_start_addr = WCD_934X_RAMDUMP_START_ADDR;
 		arg.dump_size = WCD_934X_RAMDUMP_SIZE;
-		ret = cntl->m_ops->intr_handler(cntl->m_dev, WDSP_ERR_INTR,
-						&arg);
+		ret = cntl->m_ops->signal_handler(cntl->m_dev, WDSP_ERR_INTR,
+						  &arg);
 		if (IS_ERR_VALUE(ret))
 			dev_err(cntl->codec->dev,
 				"%s: Failed to handle fatal irq 0x%x\n",
 				__func__, status & cntl->irqs.fatal_irqs);
 		wcd_cntl_change_online_state(cntl, 0);
 	} else {
-		dev_err(cntl->codec->dev, "%s: Invalid intr_handler\n",
+		dev_err(cntl->codec->dev, "%s: Invalid signal_handler\n",
 			__func__);
 	}
 
@@ -740,7 +787,9 @@ static int wcd_control_handler(struct device *dev, void *priv_data,
 		wcd_cntl_cpar_ctrl(cntl, true);
 
 		if (event == WDSP_EVENT_PRE_DLOAD_CODE)
-			wcd_cntl_enable_memory(cntl);
+			wcd_cntl_enable_memory(cntl, WCD_MEM_TYPE_ALWAYS_ON);
+		else if (event == WDSP_EVENT_PRE_DLOAD_DATA)
+			wcd_cntl_enable_memory(cntl, WCD_MEM_TYPE_SWITCHABLE);
 		break;
 
 	case WDSP_EVENT_DO_BOOT:
@@ -755,6 +804,7 @@ static int wcd_control_handler(struct device *dev, void *priv_data,
 	case WDSP_EVENT_DO_SHUTDOWN:
 
 		wcd_cntl_do_shutdown(cntl);
+		wcd_cntl_disable_memory(cntl, WCD_MEM_TYPE_SWITCHABLE);
 		break;
 
 	default:
@@ -833,8 +883,7 @@ static int wcd_control_init(struct device *dev, void *priv_data)
 	struct snd_soc_codec *codec = cntl->codec;
 	struct wcd9xxx *wcd9xxx = dev_get_drvdata(codec->dev->parent);
 	struct wcd9xxx_core_resource *core_res = &wcd9xxx->core_res;
-	char wcd_cntl_dir_name[WCD_CNTL_DIR_NAME_LEN_MAX];
-	int ret, ret1;
+	int ret;
 	bool err_irq_requested = false;
 
 	ret = wcd9xxx_request_irq(core_res,
@@ -876,25 +925,8 @@ static int wcd_control_init(struct device *dev, void *priv_data)
 	}
 	wcd_cntl_cpar_ctrl(cntl, true);
 
-	snprintf(wcd_cntl_dir_name, WCD_CNTL_DIR_NAME_LEN_MAX,
-		 "%s%d", "wdsp", cntl->dsp_instance);
-	wcd_cntl_debugfs_init(wcd_cntl_dir_name, cntl);
-	ret = wcd_cntl_sysfs_init(wcd_cntl_dir_name, cntl);
-	if (IS_ERR_VALUE(ret)) {
-		dev_err(codec->dev,
-			"%s: Failed to init sysfs %d\n",
-			__func__, ret);
-		goto err_sysfs_init;
-	}
-
 	return 0;
 
-err_sysfs_init:
-	wcd_cntl_cpar_ctrl(cntl, false);
-	ret1 = wcd_cntl_clocks_disable(cntl);
-	if (IS_ERR_VALUE(ret1))
-		dev_err(codec->dev, "%s: Failed to disable clocks, err = %d\n",
-			__func__, ret1);
 err_clk_enable:
 	/* Mask all error interrupts */
 	snd_soc_write(codec, WCD934X_CPE_SS_SS_ERROR_INT_MASK_0A, 0xFF);
@@ -915,12 +947,6 @@ static int wcd_control_deinit(struct device *dev, void *priv_data)
 	struct snd_soc_codec *codec = cntl->codec;
 	struct wcd9xxx *wcd9xxx = dev_get_drvdata(codec->dev->parent);
 	struct wcd9xxx_core_resource *core_res = &wcd9xxx->core_res;
-
-	/* Remove the sysfs entries */
-	wcd_cntl_sysfs_remove(cntl);
-
-	/* Remove the debugfs entries */
-	wcd_cntl_debugfs_remove(cntl);
 
 	wcd_cntl_clocks_disable(cntl);
 	wcd_cntl_cpar_ctrl(cntl, false);
@@ -951,6 +977,7 @@ static int wcd_ctrl_component_bind(struct device *dev,
 	struct snd_card *card;
 	struct snd_info_entry *entry;
 	char proc_name[WCD_PROCFS_ENTRY_MAX_LEN];
+	char wcd_cntl_dir_name[WCD_CNTL_DIR_NAME_LEN_MAX];
 	int ret = 0;
 
 	if (!dev || !master || !data) {
@@ -981,6 +1008,17 @@ static int wcd_ctrl_component_bind(struct device *dev,
 			__func__, ret);
 		goto done;
 	}
+
+	snprintf(wcd_cntl_dir_name, WCD_CNTL_DIR_NAME_LEN_MAX,
+		 "%s%d", "wdsp", cntl->dsp_instance);
+	ret = wcd_cntl_sysfs_init(wcd_cntl_dir_name, cntl);
+	if (IS_ERR_VALUE(ret)) {
+		dev_err(dev, "%s: sysfs_init failed, err = %d\n",
+			__func__, ret);
+		goto done;
+	}
+
+	wcd_cntl_debugfs_init(wcd_cntl_dir_name, cntl);
 
 	codec = cntl->codec;
 	card = codec->component.card->snd_card;
@@ -1032,12 +1070,73 @@ static void wcd_ctrl_component_unbind(struct device *dev,
 
 	cntl->m_dev = NULL;
 	cntl->m_ops = NULL;
+
+	/* Remove the sysfs entries */
+	wcd_cntl_sysfs_remove(cntl);
+
+	/* Remove the debugfs entries */
+	wcd_cntl_debugfs_remove(cntl);
+
 }
 
 static const struct component_ops wcd_ctrl_component_ops = {
 	.bind = wcd_ctrl_component_bind,
 	.unbind = wcd_ctrl_component_unbind,
 };
+
+/*
+ * wcd_dsp_ssr_event: handle the SSR event raised by caller.
+ * @cntl: Handle to the wcd_dsp_cntl structure
+ * @event: The SSR event to be handled
+ *
+ * Notifies the manager driver about the SSR event.
+ * Returns 0 on success and negative error code on error.
+ */
+int wcd_dsp_ssr_event(struct wcd_dsp_cntl *cntl, enum cdc_ssr_event event)
+{
+	int ret = 0;
+
+	if (!cntl) {
+		pr_err("%s: Invalid handle to control\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!cntl->m_dev || !cntl->m_ops || !cntl->m_ops->signal_handler) {
+		dev_err(cntl->codec->dev,
+			"%s: Invalid signal_handler callback\n", __func__);
+		return -EINVAL;
+	}
+
+	switch (event) {
+	case WCD_CDC_DOWN_EVENT:
+		ret = cntl->m_ops->signal_handler(cntl->m_dev,
+						  WDSP_CDC_DOWN_SIGNAL,
+						  NULL);
+		if (IS_ERR_VALUE(ret))
+			dev_err(cntl->codec->dev,
+				"%s: WDSP_CDC_DOWN_SIGNAL failed, err = %d\n",
+				__func__, ret);
+		wcd_cntl_change_online_state(cntl, 0);
+		break;
+	case WCD_CDC_UP_EVENT:
+		ret = cntl->m_ops->signal_handler(cntl->m_dev,
+						  WDSP_CDC_UP_SIGNAL,
+						  NULL);
+		if (IS_ERR_VALUE(ret))
+			dev_err(cntl->codec->dev,
+				"%s: WDSP_CDC_UP_SIGNAL failed, err = %d\n",
+				__func__, ret);
+		break;
+	default:
+		dev_err(cntl->codec->dev, "%s: Invalid event %d\n",
+			__func__, event);
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(wcd_dsp_ssr_event);
 
 /*
  * wcd_dsp_cntl_init: Initialize the wcd-dsp control
@@ -1136,7 +1235,8 @@ void wcd_dsp_cntl_deinit(struct wcd_dsp_cntl **cntl)
 	 * irrespective of DSP was booted up or not.
 	 */
 	wcd_cntl_do_shutdown(control);
-	wcd_cntl_disable_memory(control);
+	wcd_cntl_disable_memory(control, WCD_MEM_TYPE_SWITCHABLE);
+	wcd_cntl_disable_memory(control, WCD_MEM_TYPE_ALWAYS_ON);
 
 	component_del(codec->dev, &wcd_ctrl_component_ops);
 

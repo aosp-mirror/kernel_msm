@@ -26,6 +26,25 @@
 
 &clock_cpu {
 	compatible = "qcom,cpu-clock-osm-msmcobalt-v2";
+	reg = <0x179c0000 0x4000>,
+	      <0x17916000 0x1000>,
+	      <0x17816000 0x1000>,
+	      <0x179d1000 0x1000>,
+	      <0x17914800 0x800>,
+	      <0x17814800 0x800>,
+	      <0x00784130 0x8>,
+	      <0x1791101c 0x8>;
+	reg-names = "osm", "pwrcl_pll", "perfcl_pll",
+		    "apcs_common", "pwrcl_acd", "perfcl_acd",
+		    "perfcl_efuse", "debug";
+
+	qcom,acdtd-val = <0x00009611 0x00009611>;
+	qcom,acdcr-val = <0x002b5ffd 0x002b5ffd>;
+	qcom,acdsscr-val = <0x00000501 0x00000501>;
+	qcom,acdextint0-val = <0x2cf9ae8 0x2cf9ae8>;
+	qcom,acdextint1-val = <0x2cf9afc 0x2cf9afc>;
+	qcom,acdautoxfer-val = <0x00000015 0x00000015>;
+
 	/delete-property/ qcom,llm-sw-overr;
 	qcom,pwrcl-speedbin0-v0 =
 		<   300000000 0x0004000f 0x01200020 0x1 1 >,
@@ -227,9 +246,20 @@
 	qcom,max-bandwidth-per-pipe-kbps = <4700000>;
 };
 
+&pmcobalt_s10 {
+	regulator-min-microvolt = <568000>;
+	regulator-max-microvolt = <1056000>;
+};
+
+&pmcobalt_s13 {
+	regulator-min-microvolt = <568000>;
+	regulator-max-microvolt = <1056000>;
+};
+
 &apc0_cpr {
 	compatible = "qcom,cprh-msmcobalt-v2-kbss-regulator";
 	qcom,cpr-corner-switch-delay-time = <1042>;
+	qcom,cpr-aging-ref-voltage = <1056000>;
 };
 
 &apc0_pwrcl_vreg {
@@ -315,18 +345,18 @@
 		1900800000>;
 
 	qcom,cpr-ro-scaling-factor =
-		<4001 4019 3747 3758 3564 3480 2336
-		 2247 3442 3147 2136 4156 4028 3030
-		 3727 3198>,
-		<4001 4019 3747 3758 3564 3480 2336
-		 2247 3442 3147 2136 4156 4028 3030
-		 3727 3198>,
-		<3704 3601 3465 3567 3356 3473 2686
-		 2773 3049 2932 2235 3816 3800 3097
-		 2966 2808>,
-		<2974 3092 3288 3329 2905 3096 3119
-		 3225 2865 3140 2892 3592 3408 3576
-		 1559 1392>;
+		<2595 2794 2577 2762 2471 2674 2199
+		 2553 3189 3255 3192 2962 3054 2982
+		 2042 2945>,
+		<2595 2794 2577 2762 2471 2674 2199
+		 2553 3189 3255 3192 2962 3054 2982
+		 2042 2945>,
+		<2391 2550 2483 2638 2382 2564 2259
+		 2555 2766 3041 2988 2935 2873 2688
+		 2013 2784>,
+		<2066 2153 2300 2434 2220 2386 2288
+		 2465 2028 2511 2487 2734 2554 2117
+		 1892 2377>;
 
 	qcom,cpr-open-loop-voltage-fuse-adjustment =
 		/* Speed bin 0 */
@@ -371,11 +401,16 @@
 	qcom,allow-voltage-interpolation;
 	qcom,allow-quotient-interpolation;
 	qcom,cpr-scaled-open-loop-voltage-as-ceiling;
+
+	qcom,cpr-aging-ref-corner = <22 22>;
+	qcom,cpr-aging-ro-scaling-factor = <2950>;
+	qcom,allow-aging-voltage-adjustment = <0>;
 };
 
 &apc1_cpr {
 	compatible = "qcom,cprh-msmcobalt-v2-kbss-regulator";
 	qcom,cpr-corner-switch-delay-time = <1042>;
+	qcom,cpr-aging-ref-voltage = <1056000>;
 };
 
 &apc1_perfcl_vreg {
@@ -471,18 +506,18 @@
 		2112000000 2208000000>;
 
 	qcom,cpr-ro-scaling-factor =
-		<4001 4019 3747 3758 3564 3480 2336
-		 2247 3442 3147 2136 4156 4028 3030
-		 3727 3190>,
-		<4001 4019 3747 3758 3564 3480 2336
-		 2247 3442 3147 2136 4156 4028 3030
-		 3727 3198>,
-		<3704 3601 3465 3567 3356 3473 2686
-		 2773 3049 2932 2235 3816 3800 3097
-		 2966 2808>,
-		<2974 3092 3288 3329 2905 3096 3119
-		 3225 2865 3140 2892 3592 3408 3576
-		 1559 1392>;
+		<2857 3057 2828 2952 2699 2798 2446
+		 2631 2629 2578 2244 3344 3289 3137
+		 3164 2655>,
+		<2857 3057 2828 2952 2699 2798 2446
+		 2631 2629 2578 2244 3344 3289 3137
+		 3164 2655>,
+		<2603 2755 2676 2777 2573 2685 2465
+		 2610 2312 2423 2243 3104 3022 3036
+		 2740 2303>,
+		<1901 2016 2096 2228 2034 2161 2077
+		 2188 1565 1870 1925 2235 2205 2413
+		 1762 1478>;
 
 	qcom,cpr-open-loop-voltage-fuse-adjustment =
 		/* Speed bin 0 */
@@ -527,6 +562,10 @@
 	qcom,allow-voltage-interpolation;
 	qcom,allow-quotient-interpolation;
 	qcom,cpr-scaled-open-loop-voltage-as-ceiling;
+
+	qcom,cpr-aging-ref-corner = <30 26>;
+	qcom,cpr-aging-ro-scaling-factor = <2950>;
+	qcom,allow-aging-voltage-adjustment = <0>;
 };
 
 &pm8005_s1 {
@@ -649,12 +688,11 @@
 	qcom,load-freq-tbl =
 		/* Encoders */
 		<1105920 533000000 0x55555555>, /* 4kx2304@30 */ /*TURBO*/
-		< 979200 444000000 0x55555555>, /* 1080p@120,1440p@60,
+		<1036800 444000000 0x55555555>, /* 720p@240, 1080p@120,1440p@60,
 						 * UHD@30 */ /*NOMINAL*/
-		< 939700 355200000 0x55555555>, /* 4kx2304@24 */ /*SVSL1*/
-		< 489600 269330000 0x55555555>, /* 1080p@60, 2560x1440@30 */
-						/* SVS */
-		< 432000 200000000 0x55555555>, /* 720p@120, 1080p@30 */
+		< 829440 355200000 0x55555555>, /* UHD/4096x2160@30 SVSL1 */
+		< 489600 269330000 0x55555555>, /* 1080p@60, 720p@120 SVS */
+		< 345600 200000000 0x55555555>, /* 2560x1440@24, 1080p@30 */
 						/* SVS2 */
 
 		/* Decoders */
@@ -665,7 +703,7 @@
 		<1675472 355200000 0xffffffff>, /* 4kx2304@44 */ /*SVSL1*/
 		<1105920 269330000 0xffffffff>, /* UHD/4k2304@30, 1080p@120 */
 						/* SVS */
-		< 864000 200000000 0xffffffff>; /* 720p@240, 1080p@60 */
+		< 829440 200000000 0xffffffff>; /* 720p@120, 1080p@60 */
 						/* SVS2 */
 
 	qcom,imem-ab-tbl =
@@ -681,16 +719,28 @@
 		<1728000 1728000 2211840 0x3f00000c>,
 		/* Encoder */
 		/* Load > Nominal, Nominal <-> Turbo Eg. 4kx2304@30 */
-		<972000 972000 1105920 0x04000004>,
+		<1036800 1036800 1105920 0x04000004>,
 		/* Load > SVSL1, SVSL1<-> Nominal Eg. 3840x2160@30 */
-		<939700 939700  972000 0x04000004>,
+		< 829440  829440 1036800 0x04000004>,
 		/* Load > SVS , SVS <-> SVSL1 Eg. 4kx2304@24 */
-		<489600  489600  939700 0x04000004>;
+		< 489600  489600  829440 0x04000004>;
 
 	qcom,dcvs-limit = /* Min Frame size, Min MBs/sec */
 		<32400 30>, /* Encoder 3840x2160@30 */
 		<32400 60>; /* Decoder 3840x2160@60 */
 
+};
+
+&soc {
+	/* Gold L2 SAW */
+	qcom,spm@178120000 {
+		qcom,saw2-avs-limit = <0x4200420>;
+	};
+
+	/* Silver L2 SAW */
+	qcom,spm@179120000 {
+		qcom,saw2-avs-limit = <0x4200420>;
+	};
 };
 
 /* GPU overrides */

@@ -3424,6 +3424,7 @@ int mdss_mdp_cwb_setup(struct mdss_mdp_ctl *ctl)
 	mutex_lock(&cwb->queue_lock);
 	cwb_data = list_first_entry_or_null(&cwb->data_queue,
 			struct mdss_mdp_wb_data, next);
+	__list_del_entry(&cwb_data->next);
 	mutex_unlock(&cwb->queue_lock);
 	if (cwb_data == NULL) {
 		pr_err("no output buffer for cwb\n");
@@ -3453,14 +3454,14 @@ int mdss_mdp_cwb_setup(struct mdss_mdp_ctl *ctl)
 		sctl->opmode |= MDSS_MDP_CTL_OP_WFD_MODE;
 
 	/* Select CWB data point */
-	data_point = (cwb->layer->flags & MDP_COMMIT_CWB_DSPP) ? 0x4 : 0;
+	data_point = (cwb->layer.flags & MDP_COMMIT_CWB_DSPP) ? 0x4 : 0;
 	writel_relaxed(data_point, mdata->mdp_base + mdata->ppb_ctl[2]);
 	if (sctl)
 		writel_relaxed(data_point + 1,
 				mdata->mdp_base + mdata->ppb_ctl[3]);
 
-	/* Flush WB */
-	ctl->flush_bits |= BIT(16);
+	/* Flush WB and CTL */
+	ctl->flush_bits |= BIT(16) | BIT(17);
 
 	opmode = mdss_mdp_ctl_read(ctl, MDSS_MDP_REG_CTL_TOP) | ctl->opmode;
 	mdss_mdp_ctl_write(ctl, MDSS_MDP_REG_CTL_TOP, opmode);
@@ -3469,6 +3470,10 @@ int mdss_mdp_cwb_setup(struct mdss_mdp_ctl *ctl)
 			sctl->opmode;
 		mdss_mdp_ctl_write(sctl, MDSS_MDP_REG_CTL_TOP, opmode);
 	}
+
+	/* Increase commit count to signal CWB release fence */
+	atomic_inc(&cwb->cwb_sync_pt_data.commit_cnt);
+
 	goto cwb_setup_done;
 
 cwb_setup_fail:
@@ -3503,7 +3508,9 @@ int mdss_mdp_ctl_setup(struct mdss_mdp_ctl *ctl)
 	if (is_dest_scaling_enable(ctl->mixer_left)) {
 		width = get_ds_input_width(ctl->mixer_left);
 		height = get_ds_input_height(ctl->mixer_left);
-		if (ctl->panel_data->next && is_pingpong_split(ctl->mfd))
+		if (is_dual_lm_single_display(ctl->mfd) ||
+				(ctl->panel_data->next &&
+				 is_pingpong_split(ctl->mfd)))
 			width *= 2;
 	} else {
 		width = get_panel_width(ctl);
@@ -3543,9 +3550,13 @@ int mdss_mdp_ctl_setup(struct mdss_mdp_ctl *ctl)
 	}
 
 	if (split_fb) {
-		width = ctl->mfd->split_fb_left;
-		width += (pinfo->lcdc.border_left +
-				pinfo->lcdc.border_right);
+		if (is_dest_scaling_enable(ctl->mixer_left)) {
+			width = get_ds_input_width(ctl->mixer_left);
+		} else {
+			width = ctl->mfd->split_fb_left;
+			width += (pinfo->lcdc.border_left +
+					pinfo->lcdc.border_right);
+		}
 	} else if (width > max_mixer_width) {
 		width /= 2;
 	}
@@ -3571,8 +3582,12 @@ int mdss_mdp_ctl_setup(struct mdss_mdp_ctl *ctl)
 		return 0;
 	}
 
-	if (split_fb)
-		width = ctl->mfd->split_fb_right;
+	if (split_fb) {
+		if (is_dest_scaling_enable(ctl->mixer_left))
+			width = get_ds_input_width(ctl->mixer_left);
+		else
+			width = ctl->mfd->split_fb_right;
+	}
 
 	if (width < ctl->width) {
 		if (ctl->mixer_right == NULL) {
@@ -4033,6 +4048,7 @@ static void mdss_mdp_ctl_restore_sub(struct mdss_mdp_ctl *ctl)
 	if (ctl->mfd && ctl->panel_data) {
 		ctl->mfd->ipc_resume = true;
 		mdss_mdp_pp_resume(ctl->mfd);
+		mdss_mdp_pp_dest_scaler_resume(ctl);
 
 		if (is_dsc_compression(&ctl->panel_data->panel_info)) {
 			/*
