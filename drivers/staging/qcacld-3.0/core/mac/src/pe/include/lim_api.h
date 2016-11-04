@@ -122,6 +122,18 @@ tSirRetStatus pe_start(tpAniSirGlobal pMac);
 void pe_stop(tpAniSirGlobal pMac);
 tSirRetStatus pe_post_msg_api(tpAniSirGlobal pMac, tSirMsgQ *pMsg);
 tSirRetStatus peProcessMsg(tpAniSirGlobal pMac, tSirMsgQ *limMsg);
+
+/**
+ * pe_register_callbacks_with_wma() - register SME and PE callback functions to
+ * WMA.
+ * @pMac: mac global ctx
+ * @ready_req: Ready request parameters, containing callback pointers
+ *
+ * Return: None
+ */
+void pe_register_callbacks_with_wma(tpAniSirGlobal pMac,
+				    tSirSmeReadyReq *ready_req);
+
 /**
  * Function to cleanup LIM state.
  * This called upon reset/persona change etc
@@ -136,7 +148,6 @@ uint32_t lim_post_msg_high_priority(tpAniSirGlobal mac, tSirMsgQ *msg);
  * and dispatch to various sub modules within LIM module.
  */
 extern void lim_message_processor(tpAniSirGlobal, tpSirMsgQ);
-extern void lim_process_messages(tpAniSirGlobal, tpSirMsgQ);      /* DT test alt deferred 2 */
 /**
  * Function to check the LIM state if system is in Scan/Learn state.
  */
@@ -165,6 +176,23 @@ extern void lim_trigger_sta_deletion(tpAniSirGlobal pMac, tpDphHashNode pStaDs,
 extern void lim_send_sme_tdls_del_sta_ind(tpAniSirGlobal pMac, tpDphHashNode pStaDs,
 					  tpPESession psessionEntry,
 					  uint16_t reasonCode);
+/**
+ * lim_set_tdls_flags() - update tdls flags based on newer STA connection
+ * information
+ * @roam_sync_ind_ptr: pointer to roam offload structure
+ * @ft_session_ptr: pointer to PE session
+ *
+ * Set TDLS flags as per new STA connection capabilities.
+ *
+ * Return: None
+ */
+void lim_set_tdls_flags(roam_offload_synch_ind *roam_sync_ind_ptr,
+		   tpPESession ft_session_ptr);
+#else
+static inline void lim_set_tdls_flags(roam_offload_synch_ind *roam_sync_ind_ptr,
+		   tpPESession ft_session_ptr)
+{
+}
 #endif
 
 /* / Function that checks for change in AP's capabilties on STA */

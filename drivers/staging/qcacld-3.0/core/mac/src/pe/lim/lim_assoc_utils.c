@@ -1214,10 +1214,10 @@ lim_decide_ap_protection_on_delete(tpAniSirGlobal mac_ctx,
  *
  * Return: None
  */
-void lim_decide_short_preamble(tpAniSirGlobal mac_ctx,
-			       tpDphHashNode sta_ds,
-			       tpUpdateBeaconParams beacon_params,
-			       tpPESession session_entry)
+static void lim_decide_short_preamble(tpAniSirGlobal mac_ctx,
+				      tpDphHashNode sta_ds,
+				      tpUpdateBeaconParams beacon_params,
+				      tpPESession session_entry)
 {
 	uint32_t i;
 
@@ -1270,7 +1270,7 @@ void lim_decide_short_preamble(tpAniSirGlobal mac_ctx,
  *        the BSS.
  * Return: None
  */
-void
+static void
 lim_decide_short_slot(tpAniSirGlobal mac_ctx, tpDphHashNode sta_ds,
 		      tpUpdateBeaconParams beacon_params,
 		      tpPESession session_entry)
@@ -3191,6 +3191,31 @@ lim_check_and_announce_join_success(tpAniSirGlobal mac_ctx,
 		session_entry->defaultAuthFailureTimeout = 0;
 	}
 
+
+	/*
+	 * Check if MBO Association disallowed subattr is present and post
+	 * failure status to LIM if present
+	 */
+	if (!session_entry->ignore_assoc_disallowed &&
+			beacon_probe_rsp->assoc_disallowed) {
+		lim_log(mac_ctx, LOGW,
+				FL("Connection fails due to assoc disallowed reason(%d):%pM PESessionID %d"),
+				beacon_probe_rsp->assoc_disallowed_reason,
+				session_entry->bssId,
+				session_entry->peSessionId);
+		mlm_join_cnf.resultCode = eSIR_SME_ASSOC_REFUSED;
+		mlm_join_cnf.protStatusCode = eSIR_MAC_UNSPEC_FAILURE_STATUS;
+		session_entry->limMlmState = eLIM_MLM_IDLE_STATE;
+		mlm_join_cnf.sessionId = session_entry->peSessionId;
+		if (session_entry->pLimMlmJoinReq) {
+			qdf_mem_free(session_entry->pLimMlmJoinReq);
+			session_entry->pLimMlmJoinReq = NULL;
+		}
+		lim_post_sme_message(mac_ctx, LIM_MLM_JOIN_CNF,
+				(uint32_t *) &mlm_join_cnf);
+		return;
+	}
+
 	/* Update Beacon Interval at CFG database */
 
 	if (beacon_probe_rsp->HTCaps.present)
@@ -3403,7 +3428,7 @@ lim_del_bss(tpAniSirGlobal pMac, tpDphHashNode pStaDs, uint16_t bssIdx,
  *
  * Return : void
  */
-void lim_update_vhtcaps_assoc_resp(tpAniSirGlobal mac_ctx,
+static void lim_update_vhtcaps_assoc_resp(tpAniSirGlobal mac_ctx,
 		tpAddBssParams pAddBssParams,
 		tDot11fIEVHTCaps *vht_caps, tpPESession psessionEntry)
 {
@@ -3466,7 +3491,7 @@ void lim_update_vhtcaps_assoc_resp(tpAniSirGlobal mac_ctx,
  *
  * Return : void
  */
-void lim_update_vht_oper_assoc_resp(tpAniSirGlobal mac_ctx,
+static void lim_update_vht_oper_assoc_resp(tpAniSirGlobal mac_ctx,
 		tpAddBssParams pAddBssParams,
 		tDot11fIEVHTOperation *vht_oper, tpPESession psessionEntry)
 {

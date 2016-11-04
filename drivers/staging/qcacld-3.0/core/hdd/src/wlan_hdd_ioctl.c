@@ -549,7 +549,7 @@ hdd_cfg80211_get_ibss_peer_info(hdd_adapter_t *adapter, uint8_t staIdx)
 }
 
 /* Function header is left blank intentionally */
-QDF_STATUS
+static QDF_STATUS
 hdd_parse_get_ibss_peer_info(uint8_t *pValue, struct qdf_mac_addr *pPeerMacAddr)
 {
 	uint8_t *inPtr = pValue;
@@ -870,12 +870,6 @@ void hdd_wma_send_fastreassoc_cmd(int sessionId, const tSirMacAddr bssid,
 		hdd_err("Not able to post ROAM_INVOKE_CMD message to WMA");
 	}
 }
-#else
-void hdd_wma_send_fastreassoc_cmd(int sessionId, const tSirMacAddr bssid,
-				  int channel)
-{
-}
-
 #endif
 
 /**
@@ -1071,16 +1065,15 @@ static int hdd_parse_reassoc(hdd_adapter_t *adapter, const char *command)
 static int
 hdd_sendactionframe(hdd_adapter_t *adapter, const uint8_t *bssid,
 		    const uint8_t channel, const uint8_t dwell_time,
-		    const uint8_t payload_len, const uint8_t *payload)
+		    const int payload_len, const uint8_t *payload)
 {
 	struct ieee80211_channel chan;
-	uint8_t frame_len;
+	int frame_len, ret = 0;
 	uint8_t *frame;
 	struct ieee80211_hdr_3addr *hdr;
 	u64 cookie;
 	hdd_station_ctx_t *pHddStaCtx;
 	hdd_context_t *hdd_ctx;
-	int ret = 0;
 	tpSirMacVendorSpecificFrameHdr pVendorSpecific =
 		(tpSirMacVendorSpecificFrameHdr) payload;
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0))
@@ -1259,29 +1252,42 @@ hdd_parse_sendactionframe_v1(hdd_adapter_t *adapter, const char *command)
  * Return: 0 for success non-zero for failure
  */
 static int
-hdd_parse_sendactionframe_v2(hdd_adapter_t *adapter, const char *command)
+hdd_parse_sendactionframe_v2(hdd_adapter_t *adapter,
+			     const char *command, int total_len)
 {
 	struct android_wifi_af_params *params;
 	tSirMacAddr bssid;
 	int ret;
 
-	/* params are large so keep off the stack */
-	params = kmalloc(sizeof(*params), GFP_KERNEL);
-	if (!params)
-		return -ENOMEM;
-
 	/* The params are located after "SENDACTIONFRAME " */
-	memcpy(params, command + 16, sizeof(*params));
+	total_len -= 16;
+	params = (struct android_wifi_af_params *)(command + 16);
 
-	if (!mac_pton(params->bssid, (u8 *) &bssid)) {
-		hdd_err("MAC address parsing failed");
-		ret = -EINVAL;
-	} else {
-		ret = hdd_sendactionframe(adapter, bssid, params->channel,
-					  params->dwell_time, params->len,
-					  params->data);
+	if (params->len <= 0 || params->len > ANDROID_WIFI_ACTION_FRAME_SIZE ||
+		(params->len > total_len)) {
+		hdd_err("Invalid payload length: %d", params->len);
+		return -EINVAL;
 	}
-	kfree(params);
+
+	if (!mac_pton(params->bssid, (u8 *)&bssid)) {
+		hdd_err("MAC address parsing failed");
+		return -EINVAL;
+	}
+
+	if (params->channel < 0 ||
+	    params->channel > WNI_CFG_CURRENT_CHANNEL_STAMAX) {
+		hdd_err("Invalid channel: %d", params->channel);
+		return -EINVAL;
+	}
+
+	if (params->dwell_time < 0) {
+		hdd_err("Invalid dwell_time: %d", params->dwell_time);
+		return -EINVAL;
+	}
+
+	ret = hdd_sendactionframe(adapter, bssid, params->channel,
+				params->dwell_time, params->len, params->data);
+
 	return ret;
 }
 
@@ -1300,7 +1306,8 @@ hdd_parse_sendactionframe_v2(hdd_adapter_t *adapter, const char *command)
  * Return: 0 for success non-zero for failure
  */
 static int
-hdd_parse_sendactionframe(hdd_adapter_t *adapter, const char *command)
+hdd_parse_sendactionframe(hdd_adapter_t *adapter, const char *command,
+			  int total_len)
 {
 	int ret;
 
@@ -1317,11 +1324,18 @@ hdd_parse_sendactionframe(hdd_adapter_t *adapter, const char *command)
 	 * SENDACTIONFRAME xx:xx:xx:xx:xx:xx*
 	 *           111111111122222222223333
 	 * 0123456789012345678901234567890123
+	 * For both the commands, a valid command must have atleast
+	 * first 34 length of data.
 	 */
+	if (total_len < 34) {
+		hdd_err("Invalid command (total_len=%d)", total_len);
+		return -EINVAL;
+	}
+
 	if (command[33]) {
 		ret = hdd_parse_sendactionframe_v1(adapter, command);
 	} else {
-		ret = hdd_parse_sendactionframe_v2(adapter, command);
+		ret = hdd_parse_sendactionframe_v2(adapter, command, total_len);
 	}
 
 	return ret;
@@ -1627,7 +1641,7 @@ hdd_parse_set_roam_scan_channels(hdd_adapter_t *adapter, const char *command)
  *
  * Return: 0 for success non-zero for failure
  */
-QDF_STATUS hdd_parse_plm_cmd(uint8_t *pValue, tSirPlmReq *pPlmRequest)
+static QDF_STATUS hdd_parse_plm_cmd(uint8_t *pValue, tSirPlmReq *pPlmRequest)
 {
 	uint8_t *cmdPtr = NULL;
 	int count, content = 0, ret = 0;
@@ -1863,8 +1877,9 @@ QDF_STATUS hdd_parse_plm_cmd(uint8_t *pValue, tSirPlmReq *pPlmRequest)
 		if (content < 0)
 			return QDF_STATUS_E_FAILURE;
 
+		content = QDF_MIN(content, WNI_CFG_VALID_CHANNEL_LIST_LEN);
 		pPlmRequest->plmNumCh = content;
-		hdd_debug("numch %d", pPlmRequest->plmNumCh);
+		hdd_debug("numch: %d", pPlmRequest->plmNumCh);
 
 		/* Channel numbers */
 		for (count = 0; count < pPlmRequest->plmNumCh; count++) {
@@ -1883,10 +1898,8 @@ QDF_STATUS hdd_parse_plm_cmd(uint8_t *pValue, tSirPlmReq *pPlmRequest)
 				return QDF_STATUS_E_FAILURE;
 
 			ret = kstrtos32(buf, 10, &content);
-			if (ret < 0)
-				return QDF_STATUS_E_FAILURE;
-
-			if (content <= 0)
+			if (ret < 0 || content <= 0 ||
+			    content > WNI_CFG_CURRENT_CHANNEL_STAMAX)
 				return QDF_STATUS_E_FAILURE;
 
 			pPlmRequest->plmChList[count] = content;
@@ -2620,7 +2633,8 @@ static int hdd_parse_ese_beacon_req(uint8_t *pValue,
 					tCsrEseBeaconReq *pEseBcnReq)
 {
 	uint8_t *inPtr = pValue;
-	int tempInt = 0;
+	uint8_t input = 0;
+	uint32_t tempInt = 0;
 	int j = 0, i = 0, v = 0;
 	char buf[32];
 
@@ -2642,19 +2656,19 @@ static int hdd_parse_ese_beacon_req(uint8_t *pValue,
 	if ('\0' == *inPtr)
 		return -EINVAL;
 
-	/* get the first argument ie measurement token */
+	/* Getting the first argument ie Number of IE fields */
 	v = sscanf(inPtr, "%31s ", buf);
 	if (1 != v)
 		return -EINVAL;
 
-	v = kstrtos32(buf, 10, &tempInt);
+	v = kstrtou8(buf, 10, &input);
 	if (v < 0)
 		return -EINVAL;
 
-	pEseBcnReq->numBcnReqIe = tempInt;
+	input = QDF_MIN(input, SIR_ESE_MAX_MEAS_IE_REQS);
+	pEseBcnReq->numBcnReqIe = input;
 
-	hdd_info("Number of Bcn Req Ie fields(%d)",
-		  pEseBcnReq->numBcnReqIe);
+	hdd_info("Number of Bcn Req Ie fields: %d", pEseBcnReq->numBcnReqIe);
 
 	for (j = 0; j < (pEseBcnReq->numBcnReqIe); j++) {
 		for (i = 0; i < 4; i++) {
@@ -2683,14 +2697,14 @@ static int hdd_parse_ese_beacon_req(uint8_t *pValue,
 			if (1 != v)
 				return -EINVAL;
 
-			v = kstrtos32(buf, 10, &tempInt);
+			v = kstrtou32(buf, 10, &tempInt);
 			if (v < 0)
 				return -EINVAL;
 
 			switch (i) {
 			case 0: /* Measurement token */
-				if (tempInt <= 0) {
-					hdd_err("Invalid Measurement Token(%d)",
+				if (!tempInt) {
+					hdd_err("Invalid Measurement Token: %u",
 						  tempInt);
 					return -EINVAL;
 				}
@@ -2699,10 +2713,10 @@ static int hdd_parse_ese_beacon_req(uint8_t *pValue,
 				break;
 
 			case 1: /* Channel number */
-				if ((tempInt <= 0) ||
+				if (!tempInt ||
 				    (tempInt >
 				     WNI_CFG_CURRENT_CHANNEL_STAMAX)) {
-					hdd_err("Invalid Channel Number(%d)",
+					hdd_err("Invalid Channel Number: %u",
 						  tempInt);
 					return -EINVAL;
 				}
@@ -2712,7 +2726,7 @@ static int hdd_parse_ese_beacon_req(uint8_t *pValue,
 			case 2: /* Scan mode */
 				if ((tempInt < eSIR_PASSIVE_SCAN)
 				    || (tempInt > eSIR_BEACON_TABLE)) {
-					hdd_err("Invalid Scan Mode(%d) Expected{0|1|2}",
+					hdd_err("Invalid Scan Mode: %u Expected{0|1|2}",
 						  tempInt);
 					return -EINVAL;
 				}
@@ -2720,13 +2734,12 @@ static int hdd_parse_ese_beacon_req(uint8_t *pValue,
 				break;
 
 			case 3: /* Measurement duration */
-				if (((tempInt <= 0)
+				if ((!tempInt
 				     && (pEseBcnReq->bcnReq[j].scanMode !=
 					 eSIR_BEACON_TABLE)) ||
-				    ((tempInt < 0) &&
-				     (pEseBcnReq->bcnReq[j].scanMode ==
-						eSIR_BEACON_TABLE))) {
-					hdd_err("Invalid Measurement Duration(%d)",
+				    (pEseBcnReq->bcnReq[j].scanMode ==
+						eSIR_BEACON_TABLE)) {
+					hdd_err("Invalid Measurement Duration: %u",
 						  tempInt);
 					return -EINVAL;
 				}
@@ -2738,7 +2751,7 @@ static int hdd_parse_ese_beacon_req(uint8_t *pValue,
 	}
 
 	for (j = 0; j < pEseBcnReq->numBcnReqIe; j++) {
-		hdd_info("Index(%d) Measurement Token(%u) Channel(%u) Scan Mode(%u) Measurement Duration(%u)",
+		hdd_info("Index: %d Measurement Token: %u Channel: %u Scan Mode: %u Measurement Duration: %u",
 			  j,
 			  pEseBcnReq->bcnReq[j].measurementToken,
 			  pEseBcnReq->bcnReq[j].channel,
@@ -3709,7 +3722,8 @@ static int drv_cmd_send_action_frame(hdd_adapter_t *adapter,
 				     uint8_t command_len,
 				     hdd_priv_data_t *priv_data)
 {
-	return hdd_parse_sendactionframe(adapter, command);
+	return hdd_parse_sendactionframe(adapter, command,
+					 priv_data->total_len);
 }
 
 static int drv_cmd_get_roam_scan_channel_min_time(hdd_adapter_t *adapter,
@@ -5551,6 +5565,127 @@ static int drv_cmd_ccx_beacon_req(hdd_adapter_t *adapter,
 exit:
 	return ret;
 }
+
+/**
+ * drv_cmd_ccx_plm_req() - Set ESE PLM request
+ * @adapter:     Pointer to the HDD adapter
+ * @hdd_ctx:     Pointer to the HDD context
+ * @command:     Driver command string
+ * @command_len: Driver command string length
+ * @priv_data:   Private data coming with the driver command. Unused here
+ *
+ * This function handles driver command that sets the ESE PLM request
+ *
+ * Return: 0 on success; negative errno otherwise
+ */
+static int drv_cmd_ccx_plm_req(hdd_adapter_t *adapter,
+			       hdd_context_t *hdd_ctx,
+			       uint8_t *command,
+			       uint8_t command_len,
+			       hdd_priv_data_t *priv_data)
+{
+	int ret = 0;
+	uint8_t *value = command;
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	tpSirPlmReq pPlmRequest = NULL;
+
+	pPlmRequest = qdf_mem_malloc(sizeof(tSirPlmReq));
+	if (NULL == pPlmRequest) {
+		ret = -ENOMEM;
+		goto exit;
+	}
+
+	status = hdd_parse_plm_cmd(value, pPlmRequest);
+	if (QDF_STATUS_SUCCESS != status) {
+		qdf_mem_free(pPlmRequest);
+		pPlmRequest = NULL;
+		ret = -EINVAL;
+		goto exit;
+	}
+	pPlmRequest->sessionId = adapter->sessionId;
+
+	status = sme_set_plm_request(hdd_ctx->hHal, pPlmRequest);
+	if (QDF_STATUS_SUCCESS != status) {
+		qdf_mem_free(pPlmRequest);
+		pPlmRequest = NULL;
+		ret = -EINVAL;
+		goto exit;
+	}
+
+exit:
+	return ret;
+}
+
+/**
+ * drv_cmd_set_ccx_mode() - Set ESE mode
+ * @adapter:     Pointer to the HDD adapter
+ * @hdd_ctx:     Pointer to the HDD context
+ * @command:     Driver command string
+ * @command_len: Driver command string length
+ * @priv_data:   Private data coming with the driver command. Unused here
+ *
+ * This function handles driver command that sets ESE mode
+ *
+ * Return: 0 on success; negative errno otherwise
+ */
+static int drv_cmd_set_ccx_mode(hdd_adapter_t *adapter,
+				hdd_context_t *hdd_ctx,
+				uint8_t *command,
+				uint8_t command_len,
+				hdd_priv_data_t *priv_data)
+{
+	int ret = 0;
+	uint8_t *value = command;
+	uint8_t eseMode = CFG_ESE_FEATURE_ENABLED_DEFAULT;
+
+	/*
+	 * Check if the features OKC/ESE/11R are supported simultaneously,
+	 * then this operation is not permitted (return FAILURE)
+	 */
+	if (sme_get_is_ese_feature_enabled(hdd_ctx->hHal) &&
+	    hdd_is_okc_mode_enabled(hdd_ctx) &&
+	    sme_get_is_ft_feature_enabled(hdd_ctx->hHal)) {
+		hdd_warn("OKC/ESE/11R are supported simultaneously hence this operation is not permitted!");
+		ret = -EPERM;
+		goto exit;
+	}
+
+	/* Move pointer to ahead of SETCCXMODE<delimiter> */
+	value = value + command_len + 1;
+
+	/* Convert the value from ascii to integer */
+	ret = kstrtou8(value, 10, &eseMode);
+	if (ret < 0) {
+		/*
+		 * If the input value is greater than max value of datatype,
+		 * then also kstrtou8 fails
+		 */
+		hdd_err("kstrtou8 failed range [%d - %d]",
+			  CFG_ESE_FEATURE_ENABLED_MIN,
+			  CFG_ESE_FEATURE_ENABLED_MAX);
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	if ((eseMode < CFG_ESE_FEATURE_ENABLED_MIN) ||
+	    (eseMode > CFG_ESE_FEATURE_ENABLED_MAX)) {
+		hdd_err("Ese mode value %d is out of range (Min: %d Max: %d)",
+			  eseMode,
+			  CFG_ESE_FEATURE_ENABLED_MIN,
+			  CFG_ESE_FEATURE_ENABLED_MAX);
+		ret = -EINVAL;
+		goto exit;
+	}
+	hdd_info("Received Command to change ese mode = %d", eseMode);
+
+	hdd_ctx->config->isEseIniFeatureEnabled = eseMode;
+	sme_update_is_ese_feature_enabled(hdd_ctx->hHal,
+					  adapter->sessionId,
+					  eseMode);
+
+exit:
+	return ret;
+}
 #endif /* FEATURE_WLAN_ESE */
 
 static int drv_cmd_set_mc_rate(hdd_adapter_t *adapter,
@@ -6314,7 +6449,7 @@ static int hdd_set_rx_filter(hdd_adapter_t *adapter, bool action,
 			uint8_t pattern)
 {
 	int ret;
-	uint8_t i;
+	uint8_t i, j;
 	tHalHandle handle;
 	tSirRcvFltMcAddrList *filter;
 	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
@@ -6352,19 +6487,21 @@ static int hdd_set_rx_filter(hdd_adapter_t *adapter, bool action,
 			return -ENOMEM;
 		}
 		filter->action = action;
-		for (i = 0; i < adapter->mc_addr_list.mc_cnt; i++) {
+		for (i = 0, j = 0; i < adapter->mc_addr_list.mc_cnt; i++) {
 			if (!memcmp(adapter->mc_addr_list.addr[i],
 				&pattern, 1)) {
-				memcpy(filter->multicastAddr[i].bytes,
+				memcpy(filter->multicastAddr[j].bytes,
 					adapter->mc_addr_list.addr[i],
 					sizeof(adapter->mc_addr_list.addr[i]));
-				filter->ulMulticastAddrCnt++;
+
 				hdd_info("%s RX filter : addr ="
 				    MAC_ADDRESS_STR,
 				    action ? "setting" : "clearing",
-				    MAC_ADDR_ARRAY(filter->multicastAddr[i].bytes));
+				    MAC_ADDR_ARRAY(filter->multicastAddr[j].bytes));
+				j++;
 			}
 		}
+		filter->ulMulticastAddrCnt = j;
 		/* Set rx filter */
 		sme_8023_multicast_list(handle, adapter->sessionId, filter);
 		qdf_mem_free(filter);
@@ -6639,8 +6776,7 @@ static int drv_cmd_set_antenna_mode(hdd_adapter_t *adapter,
 
 	/* Check TDLS status and update antenna mode */
 	if ((QDF_STA_MODE == adapter->device_mode) &&
-	    cds_is_sta_active_connection_exists() &&
-	    (hdd_ctx->connected_peer_count > 0)) {
+	    cds_is_sta_active_connection_exists()) {
 		ret = wlan_hdd_tdls_antenna_switch(hdd_ctx, adapter,
 						   mode);
 		if (0 != ret)
@@ -7037,7 +7173,9 @@ static const hdd_drv_cmd_t hdd_drv_cmds[] = {
 	{"SETCCXROAMSCANCHANNELS",    drv_cmd_set_ccx_roam_scan_channels},
 	{"GETTSMSTATS",               drv_cmd_get_tsm_stats},
 	{"SETCCKMIE",                 drv_cmd_set_cckm_ie},
-	{"CCXBEACONREQ",  drv_cmd_ccx_beacon_req},
+	{"CCXBEACONREQ",	      drv_cmd_ccx_beacon_req},
+	{"CCXPLMREQ",                 drv_cmd_ccx_plm_req},
+	{"SETCCXMODE",                drv_cmd_set_ccx_mode},
 #endif /* FEATURE_WLAN_ESE */
 	{"SETMCRATE",                 drv_cmd_set_mc_rate},
 	{"MAXTXPOWER",                drv_cmd_max_tx_power},
