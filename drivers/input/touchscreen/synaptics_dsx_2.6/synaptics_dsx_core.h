@@ -359,6 +359,7 @@ struct synaptics_rmi4_data {
 	unsigned short f01_cmd_base_addr;
 	unsigned short f01_ctrl_base_addr;
 	unsigned short f01_data_base_addr;
+	unsigned short f11_data_28_addr;
 	unsigned int firmware_id;
 	int irq;
 	int sensor_max_x;
@@ -378,6 +379,7 @@ struct synaptics_rmi4_data {
 	bool stylus_enable;
 	bool eraser_enable;
 	bool external_afe_buttons;
+	bool palm_status;
 	int (*reset_device)(struct synaptics_rmi4_data *rmi4_data,
 			bool rebuild);
 	int (*irq_enable)(struct synaptics_rmi4_data *rmi4_data, bool enable,

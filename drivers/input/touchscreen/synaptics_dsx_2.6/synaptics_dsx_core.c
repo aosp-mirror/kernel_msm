@@ -69,6 +69,7 @@
 #define REPORT_2D_Z
 #define REPORT_2D_W
 
+#define F11_PALM_MODE
 #define F12_DATA_15_WORKAROUND
 
 #define IGNORE_FN_INIT_FAILURE
@@ -126,11 +127,15 @@ extern struct i2c_client *global_client;
 
 static bool syna_regulator_enable_flag = false;
 static bool syna_wake_gesture_flag = false;
+static bool syna_has_finger;
 static int touch_module;
 static int read_time_count = 0;
 static volatile int suspend_flag = 0;
 extern char *syna_file_name;
 extern unsigned char get_config_id_addr;
+#ifdef F11_PALM_MODE
+static unsigned char f11_data_28_value[0];
+#endif
 u32 syna_abs_x_max;
 u32 syna_abs_y_max;
 
@@ -866,6 +871,7 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	unsigned char finger_status;
 	unsigned char finger_status_reg[3];
 	unsigned char detected_gestures;
+	unsigned char ii;
 	unsigned short data_addr;
 	unsigned short data_offset;
 	int x;
@@ -914,7 +920,57 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	if (retval < 0)
 		return 0;
 
+#ifdef F11_PALM_MODE
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f11_data_28_addr,
+			f11_data_28_value,
+			1);
+	if (retval < 0)
+		return 0;
+#endif
+
 	mutex_lock(&(rmi4_data->rmi4_report_mutex));
+
+#ifdef F11_PALM_MODE
+	if (f11_data_28_value[0] & 0x02) {
+		syn_ts->palm_status = true;
+		dev_info(rmi4_data->pdev->dev.parent,
+		"%s: palm mode\n", __func__);
+
+		input_report_key(rmi4_data->input_dev, KEY_SLEEP, 1);
+		input_sync(rmi4_data->input_dev);
+
+		/*free all fingers*/
+		if (syna_has_finger) {
+#ifdef TYPE_B_PROTOCOL
+			for (ii = 0; ii < rmi4_data->num_of_fingers; ii++) {
+				input_mt_slot(rmi4_data->input_dev, ii);
+				input_mt_report_slot_state(rmi4_data->input_dev,
+						MT_TOOL_FINGER, 0);
+			}
+#endif
+			input_report_key(rmi4_data->input_dev,
+					BTN_TOUCH, 0);
+			input_report_key(rmi4_data->input_dev,
+					BTN_TOOL_FINGER, 0);
+#ifndef TYPE_B_PROTOCOL
+			input_mt_sync(rmi4_data->input_dev);
+#endif
+			input_sync(rmi4_data->input_dev);
+
+			syna_has_finger = false;
+			rmi4_data->fingers_on_2d = false;
+		}
+
+		goto exit;
+	} else {
+		if (syn_ts->palm_status) {
+			syn_ts->palm_status = false;
+			input_report_key(rmi4_data->input_dev, KEY_SLEEP, 0);
+			input_sync(rmi4_data->input_dev);
+		}
+	}
+#endif
 
 	for (finger = 0; finger < fingers_supported; finger++) {
 		reg_index = finger / 4;
@@ -996,6 +1052,8 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	}
 
 	if (touch_count == 0) {
+		syna_has_finger = false;
+
 		input_report_key(rmi4_data->input_dev,
 				BTN_TOUCH, 0);
 		input_report_key(rmi4_data->input_dev,
@@ -1003,7 +1061,8 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 #ifndef TYPE_B_PROTOCOL
 		input_mt_sync(rmi4_data->input_dev);
 #endif
-	}
+	} else
+		syna_has_finger = true;
 
 	input_sync(rmi4_data->input_dev);
 
@@ -2007,8 +2066,13 @@ static int synaptics_rmi4_f11_init(struct synaptics_rmi4_data *rmi4_data,
 
 	/* data 28 */
 	if (query_0_5.has_bending_correction ||
-			query_0_5.has_large_object_suppression)
+			query_0_5.has_large_object_suppression) {
+#ifdef F11_PALM_MODE
+		rmi4_data->f11_data_28_addr =
+			fhandler->full_addr.data_base + offset;
+#endif
 		offset += 1;
+	}
 
 	/* data 29 30 31 */
 	if (query_0_5.has_query_9 && query_9.has_pen_hover_discrimination)
@@ -3180,6 +3244,11 @@ static void synaptics_rmi4_set_params(struct synaptics_rmi4_data *rmi4_data)
 		input_set_capability(rmi4_data->input_dev, EV_KEY, KEY_WAKEUP);
 	}
 
+#ifdef F11_PALM_MODE
+	set_bit(KEY_SLEEP, rmi4_data->input_dev->keybit);
+	input_set_capability(rmi4_data->input_dev, EV_KEY, KEY_SLEEP);
+#endif
+
 	return;
 }
 
@@ -4220,6 +4289,7 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 	rmi4_data->suspend = false;
 	rmi4_data->irq_enabled = false;
 	rmi4_data->fingers_on_2d = false;
+	rmi4_data->palm_status = false;
 
 	rmi4_data->reset_device = synaptics_rmi4_reset_device;
 	rmi4_data->irq_enable = synaptics_rmi4_irq_enable;
