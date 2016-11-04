@@ -1498,10 +1498,14 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 
 		/* M-PHY RMMI interface clocks can be turned off */
 		ufs_qcom_phy_disable_iface_clk(host->generic_phy);
-		if (!ufs_qcom_is_link_active(hba)) {
-			if (!is_gating_context)
-				/* turn off UFS local PHY ref_clk */
-				ufs_qcom_phy_disable_ref_clk(host->generic_phy);
+		/*
+		 * If auto hibern8 is supported then the link will already
+		 * be in hibern8 state and the ref clock can be gated.
+		 */
+		if (ufshcd_is_auto_hibern8_supported(hba) ||
+		    !ufs_qcom_is_link_active(hba)) {
+			/* turn off UFS local PHY ref_clk */
+			ufs_qcom_phy_disable_ref_clk(host->generic_phy);
 			/* disable device ref_clk */
 			ufs_qcom_dev_ref_clk_ctrl(host, false);
 		}
@@ -1955,13 +1959,6 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	/* Make a two way bind between the qcom host and the hba */
 	host->hba = hba;
 	ufshcd_set_variant(hba, host);
-
-	/*
-	 * voting/devoting device ref_clk source is time consuming hence
-	 * skip devoting it during aggressive clock gating. This clock
-	 * will still be gated off during runtime suspend.
-	 */
-	hba->no_ref_clk_gating = true;
 
 	err = ufs_qcom_ice_get_dev(host);
 	if (err == -EPROBE_DEFER) {
@@ -2570,16 +2567,19 @@ static void ufs_qcom_print_unipro_testbus(struct ufs_hba *hba)
 	kfree(testbus);
 }
 
-static void ufs_qcom_dump_dbg_regs(struct ufs_hba *hba)
+static void ufs_qcom_dump_dbg_regs(struct ufs_hba *hba, bool no_sleep)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct phy *phy = host->generic_phy;
 
 	ufs_qcom_dump_regs(hba, REG_UFS_SYS1CLK_1US, 16,
 			"HCI Vendor Specific Registers ");
+	ufs_qcom_print_hw_debug_reg_all(hba, NULL, ufs_qcom_dump_regs_wrapper);
+
+	if (no_sleep)
+		return;
 
 	/* sleep a bit intermittently as we are dumping too much data */
-	ufs_qcom_print_hw_debug_reg_all(hba, NULL, ufs_qcom_dump_regs_wrapper);
 	usleep_range(1000, 1100);
 	ufs_qcom_testbus_read(hba);
 	usleep_range(1000, 1100);

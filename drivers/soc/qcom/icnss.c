@@ -107,6 +107,18 @@ module_param(qmi_timeout, ulong, 0600);
 #define WCSS_CLK_CTL_WCSS_CSS_GDSCR_HW_CONTROL			BIT(1)
 #define WCSS_CLK_CTL_WCSS_CSS_GDSCR_PWR_ON			BIT(31)
 
+#define WCSS_CLK_CTL_NOC_CMD_RCGR_OFFSET			0x1D1030
+#define WCSS_CLK_CTL_NOC_CMD_RCGR_UPDATE			BIT(0)
+
+#define WCSS_CLK_CTL_NOC_CFG_RCGR_OFFSET			0x1D1034
+#define WCSS_CLK_CTL_NOC_CFG_RCGR_SRC_SEL			GENMASK(10, 8)
+
+#define WCSS_CLK_CTL_REF_CMD_RCGR_OFFSET			0x1D602C
+#define WCSS_CLK_CTL_REF_CMD_RCGR_UPDATE			BIT(0)
+
+#define WCSS_CLK_CTL_REF_CFG_RCGR_OFFSET			0x1D6030
+#define WCSS_CLK_CTL_REF_CFG_RCGR_SRC_SEL			GENMASK(10, 8)
+
 /*
  * Registers: WCSS_HM_A_WIFI_APB_3_A_WCMN_MAC_WCMN_REG
  * Base Address: 0x18AF0000
@@ -1084,7 +1096,7 @@ static void icnss_hw_io_reset(struct icnss_priv *priv, bool on)
 	}
 }
 
-int icnss_hw_reset_wlan_ss_power_down(struct icnss_priv *priv)
+static int icnss_hw_reset_wlan_ss_power_down(struct icnss_priv *priv)
 {
 	u32 rdata;
 
@@ -1116,7 +1128,7 @@ int icnss_hw_reset_wlan_ss_power_down(struct icnss_priv *priv)
 	return 0;
 }
 
-int icnss_hw_reset_common_ss_power_down(struct icnss_priv *priv)
+static int icnss_hw_reset_common_ss_power_down(struct icnss_priv *priv)
 {
 	u32 rdata;
 
@@ -1161,7 +1173,7 @@ int icnss_hw_reset_common_ss_power_down(struct icnss_priv *priv)
 
 }
 
-int icnss_hw_reset_wlan_rfactrl_power_down(struct icnss_priv *priv)
+static int icnss_hw_reset_wlan_rfactrl_power_down(struct icnss_priv *priv)
 {
 	u32 rdata;
 
@@ -1191,7 +1203,7 @@ int icnss_hw_reset_wlan_rfactrl_power_down(struct icnss_priv *priv)
 	return 0;
 }
 
-void icnss_hw_wsi_cmd_error_recovery(struct icnss_priv *priv)
+static void icnss_hw_wsi_cmd_error_recovery(struct icnss_priv *priv)
 {
 	icnss_pr_dbg("RESET: WSI CMD Error recovery, state: 0x%lx\n",
 		     priv->state);
@@ -1215,7 +1227,7 @@ void icnss_hw_wsi_cmd_error_recovery(struct icnss_priv *priv)
 				 PMM_WSI_CMD_SW_BUS_SYNC, 0);
 }
 
-u32 icnss_hw_rf_register_read_command(struct icnss_priv *priv, u32 addr)
+static u32 icnss_hw_rf_register_read_command(struct icnss_priv *priv, u32 addr)
 {
 	u32 rdata = 0;
 	int ret;
@@ -1264,7 +1276,7 @@ u32 icnss_hw_rf_register_read_command(struct icnss_priv *priv, u32 addr)
 	return rdata;
 }
 
-int icnss_hw_reset_rf_reset_cmd(struct icnss_priv *priv)
+static int icnss_hw_reset_rf_reset_cmd(struct icnss_priv *priv)
 {
 	u32 rdata;
 	int ret;
@@ -1318,7 +1330,30 @@ int icnss_hw_reset_rf_reset_cmd(struct icnss_priv *priv)
 	return 0;
 }
 
-int icnss_hw_reset_xo_disable_cmd(struct icnss_priv *priv)
+static int icnss_hw_reset_switch_to_cxo(struct icnss_priv *priv)
+{
+	icnss_pr_dbg("RESET: Switch to CXO, state: 0x%lx\n", priv->state);
+
+	icnss_hw_write_reg_field(priv->mem_base_va,
+				 WCSS_CLK_CTL_NOC_CFG_RCGR_OFFSET,
+				 WCSS_CLK_CTL_NOC_CFG_RCGR_SRC_SEL, 0);
+
+	icnss_hw_write_reg_field(priv->mem_base_va,
+				 WCSS_CLK_CTL_NOC_CMD_RCGR_OFFSET,
+				 WCSS_CLK_CTL_NOC_CMD_RCGR_UPDATE, 1);
+
+	icnss_hw_write_reg_field(priv->mem_base_va,
+				 WCSS_CLK_CTL_REF_CFG_RCGR_OFFSET,
+				 WCSS_CLK_CTL_REF_CFG_RCGR_SRC_SEL, 0);
+
+	icnss_hw_write_reg_field(priv->mem_base_va,
+				 WCSS_CLK_CTL_REF_CMD_RCGR_OFFSET,
+				 WCSS_CLK_CTL_REF_CMD_RCGR_UPDATE, 1);
+
+	return 0;
+}
+
+static int icnss_hw_reset_xo_disable_cmd(struct icnss_priv *priv)
 {
 	int ret;
 
@@ -1366,7 +1401,7 @@ int icnss_hw_reset_xo_disable_cmd(struct icnss_priv *priv)
 	return 0;
 }
 
-int icnss_hw_reset(struct icnss_priv *priv)
+static int icnss_hw_reset(struct icnss_priv *priv)
 {
 	u32 rdata;
 	u32 rdata1;
@@ -1423,6 +1458,8 @@ int icnss_hw_reset(struct icnss_priv *priv)
 	icnss_hw_reset_wlan_rfactrl_power_down(priv);
 
 	icnss_hw_reset_rf_reset_cmd(priv);
+
+	icnss_hw_reset_switch_to_cxo(priv);
 
 	icnss_hw_reset_xo_disable_cmd(priv);
 
@@ -2377,6 +2414,7 @@ static int icnss_call_driver_probe(struct icnss_priv *priv)
 
 out:
 	icnss_hw_power_off(priv);
+	penv->ops = NULL;
 	return ret;
 }
 
@@ -2479,6 +2517,7 @@ static int icnss_driver_event_register_driver(void *data)
 
 power_off:
 	icnss_hw_power_off(penv);
+	penv->ops = NULL;
 out:
 	return ret;
 }
@@ -2947,7 +2986,7 @@ int icnss_register_driver(struct icnss_driver_ops *ops)
 	ret = icnss_driver_event_post(ICNSS_DRIVER_EVENT_REGISTER_DRIVER,
 				      ICNSS_EVENT_SYNC, ops);
 
-	if (ret == -ERESTARTSYS)
+	if (ret == -EINTR)
 		ret = 0;
 
 out:
@@ -3410,7 +3449,6 @@ EXPORT_SYMBOL(icnss_socinfo_get_serial_number);
 static int icnss_smmu_init(struct icnss_priv *priv)
 {
 	struct dma_iommu_mapping *mapping;
-	int disable_htw = 1;
 	int atomic_ctx = 1;
 	int s1_bypass = 1;
 	int ret = 0;
@@ -3424,15 +3462,6 @@ static int icnss_smmu_init(struct icnss_priv *priv)
 		icnss_pr_err("Create mapping failed, err = %d\n", ret);
 		ret = PTR_ERR(mapping);
 		goto map_fail;
-	}
-
-	ret = iommu_domain_set_attr(mapping->domain,
-				    DOMAIN_ATTR_COHERENT_HTW_DISABLE,
-				    &disable_htw);
-	if (ret < 0) {
-		icnss_pr_err("Set disable_htw attribute failed, err = %d\n",
-			     ret);
-		goto set_attr_fail;
 	}
 
 	ret = iommu_domain_set_attr(mapping->domain,

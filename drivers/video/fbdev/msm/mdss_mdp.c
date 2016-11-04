@@ -1975,7 +1975,7 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 	case MDSS_MDP_HW_REV_300:
 	case MDSS_MDP_HW_REV_301:
 		mdata->max_target_zorder = 7; /* excluding base layer */
-		mdata->max_cursor_size = 384;
+		mdata->max_cursor_size = 512;
 		mdata->per_pipe_ib_factor.numer = 8;
 		mdata->per_pipe_ib_factor.denom = 5;
 		mdata->apply_post_scale_bytes = false;
@@ -1987,6 +1987,8 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 
 		set_bit(MDSS_QOS_PER_PIPE_IB, mdata->mdss_qos_map);
 		set_bit(MDSS_QOS_REMAPPER, mdata->mdss_qos_map);
+		set_bit(MDSS_QOS_TS_PREFILL, mdata->mdss_qos_map);
+		set_bit(MDSS_QOS_WB_QOS, mdata->mdss_qos_map);
 		set_bit(MDSS_QOS_OVERHEAD_FACTOR, mdata->mdss_qos_map);
 		set_bit(MDSS_QOS_CDP, mdata->mdss_qos_map); /* cdp supported */
 		mdata->enable_cdp = false; /* disable cdp */

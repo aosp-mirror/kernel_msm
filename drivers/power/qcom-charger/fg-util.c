@@ -29,6 +29,43 @@ static struct fg_dbgfs dbgfs_data = {
 	},
 };
 
+static bool is_usb_present(struct fg_chip *chip)
+{
+	union power_supply_propval pval = {0, };
+
+	if (!chip->usb_psy)
+		chip->usb_psy = power_supply_get_by_name("usb");
+
+	if (chip->usb_psy)
+		power_supply_get_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_PRESENT, &pval);
+	else
+		return false;
+
+	return pval.intval != 0;
+}
+
+static bool is_dc_present(struct fg_chip *chip)
+{
+	union power_supply_propval pval = {0, };
+
+	if (!chip->dc_psy)
+		chip->dc_psy = power_supply_get_by_name("dc");
+
+	if (chip->dc_psy)
+		power_supply_get_property(chip->dc_psy,
+				POWER_SUPPLY_PROP_PRESENT, &pval);
+	else
+		return false;
+
+	return pval.intval != 0;
+}
+
+bool is_input_present(struct fg_chip *chip)
+{
+	return is_usb_present(chip) || is_dc_present(chip);
+}
+
 #define EXPONENT_SHIFT		11
 #define EXPONENT_OFFSET		-9
 #define MANTISSA_SIGN_BIT	10
@@ -83,6 +120,9 @@ int fg_sram_write(struct fg_chip *chip, u16 address, u8 offset,
 	if (!chip)
 		return -ENXIO;
 
+	if (chip->battery_missing)
+		return -ENODATA;
+
 	if (!fg_sram_address_valid(address, len))
 		return -EFAULT;
 
@@ -95,6 +135,7 @@ int fg_sram_write(struct fg_chip *chip, u16 address, u8 offset,
 		 * This interrupt need to be enabled only when it is
 		 * required. It will be kept disabled other times.
 		 */
+		reinit_completion(&chip->soc_update);
 		enable_irq(chip->irqs[SOC_UPDATE_IRQ].irq);
 		atomic_access = true;
 	} else {
@@ -146,6 +187,9 @@ int fg_sram_read(struct fg_chip *chip, u16 address, u8 offset,
 
 	if (!chip)
 		return -ENXIO;
+
+	if (chip->battery_missing)
+		return -ENODATA;
 
 	if (!fg_sram_address_valid(address, len))
 		return -EFAULT;
@@ -577,6 +621,17 @@ static ssize_t fg_sram_dfs_reg_write(struct file *file, const char __user *buf,
 	/* Parse the data in the buffer.  It should be a string of numbers */
 	while ((pos < count) &&
 		sscanf(kbuf + pos, "%i%n", &data, &bytes_read) == 1) {
+		/*
+		 * We shouldn't be receiving a string of characters that
+		 * exceeds a size of 5 to keep this functionally correct.
+		 * Also, we should make sure that pos never gets overflowed
+		 * beyond the limit.
+		 */
+		if (bytes_read > 5 || bytes_read > INT_MAX - pos) {
+			cnt = 0;
+			ret = -EINVAL;
+			break;
+		}
 		pos += bytes_read;
 		values[cnt++] = data & 0xff;
 	}

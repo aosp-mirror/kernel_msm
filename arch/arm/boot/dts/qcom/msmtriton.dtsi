@@ -16,6 +16,7 @@
 #include <dt-bindings/clock/qcom,mmcc-msmfalcon.h>
 #include <dt-bindings/clock/qcom,rpmcc.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/regulator/qcom,rpm-smd-regulator.h>
 
 / {
 	model = "Qualcomm Technologies, Inc. MSMTRITON";
@@ -176,6 +177,14 @@
 			reg = <0x0 0x92a00000 0x0 0x1e00000>;
 		};
 
+		venus_fw_mem: venus_fw_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x0 0x80000000 0x0 0x20000000>;
+			reusable;
+			alignment = <0x0 0x400000>;
+			size = <0x0 0x800000>;
+		};
+
 		adsp_mem: adsp_region {
 			compatible = "shared-dma-pool";
 			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
@@ -325,9 +334,8 @@
 		};
 	};
 
-	clock_rpmcc: qcom,dummycc {
-		compatible = "qcom,dummycc";
-		clock-output-names = "rpmcc_clocks";
+	clock_rpmcc: qcom,rpmcc {
+		compatible = "qcom,rpmcc-msmfalcon", "qcom,rpmcc";
 		#clock-cells = <1>;
 	};
 
@@ -519,4 +527,163 @@
 		qcom,xprt-version = <1>;
 		qcom,fragmented-data;
 	};
+
+	qcom,icnss@18800000 {
+		status = "disabled";
+		compatible = "qcom,icnss";
+		reg = <0x18800000 0x800000>,
+		      <0x10ac000 0x20>;
+		reg-names = "membase", "mpm_config";
+		interrupts = <0 413 0>,   /* CE0 */
+			     <0 414 0>,   /* CE1 */
+			     <0 415 0>,   /* CE2 */
+			     <0 416 0>,   /* CE3 */
+			     <0 417 0>,   /* CE4 */
+			     <0 418 0>,   /* CE5 */
+			     <0 420 0>,   /* CE6 */
+			     <0 421 0>,   /* CE7 */
+			     <0 422 0>,   /* CE8 */
+			     <0 423 0>,   /* CE9 */
+			     <0 424 0>,   /* CE10 */
+			     <0 425 0>;   /* CE11 */
+		qcom,wlan-msa-memory = <0x100000>;
+	};
+
+	qcom,lpass@15700000 {
+		compatible = "qcom,pil-tz-generic";
+		reg = <0x15700000 0x00100>;
+		interrupts = <0 162 1>;
+
+		vdd_cx-supply = <&pmfalcon_s3b_level>;
+		qcom,proxy-reg-names = "vdd_cx";
+		qcom,vdd_cx-uV-uA = <RPM_SMD_REGULATOR_LEVEL_TURBO 100000>;
+
+		clocks = <&clock_rpmcc CXO_PIL_LPASS_CLK>;
+		clock-names = "xo";
+		qcom,proxy-clock-names = "xo";
+
+		qcom,pas-id = <1>;
+		qcom,proxy-timeout-ms = <10000>;
+		qcom,smem-id = <423>;
+		qcom,sysmon-id = <1>;
+		qcom,ssctl-instance-id = <0x14>;
+		qcom,firmware-name = "adsp";
+		memory-region = <&adsp_fw_mem>;
+
+		/* GPIO inputs from lpass */
+		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_2_in 0 0>;
+		qcom,gpio-proxy-unvote = <&smp2pgpio_ssr_smp2p_2_in 2 0>;
+		qcom,gpio-err-ready = <&smp2pgpio_ssr_smp2p_2_in 1 0>;
+		qcom,gpio-stop-ack = <&smp2pgpio_ssr_smp2p_2_in 3 0>;
+
+		/* GPIO output to lpass */
+		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_2_out 0 0>;
+		status = "ok";
+	};
+
+	qcom,venus@cce0000 {
+		compatible = "qcom,pil-tz-generic";
+		reg = <0xcce0000 0x4000>;
+
+		vdd-supply = <&gdsc_venus>;
+		qcom,proxy-reg-names = "vdd";
+
+		clocks = <&clock_mmss MMSS_VIDEO_CORE_CLK>,
+			<&clock_mmss MMSS_VIDEO_AHB_CLK>,
+			<&clock_mmss MMSS_VIDEO_AXI_CLK>;
+		clock-names = "core_clk","iface_clk",
+			"bus_clk";
+		qcom,proxy-clock-names = "core_clk",
+			"iface_clk","bus_clk";
+
+		qcom,msm-bus,name = "pil-venus";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<63 512 0 0>,
+				<63 512 0 304000>;
+
+		qcom,pas-id = <9>;
+		qcom,proxy-timeout-ms = <100>;
+		qcom,firmware-name = "venus";
+		memory-region = <&venus_fw_mem>;
+		status = "ok";
+	};
+};
+
+#include "msmtriton-ion.dtsi"
+#include "msmfalcon-regulator.dtsi"
+#include "msm-gdsc-falcon.dtsi"
+
+&gdsc_usb30 {
+	clock-names = "core_clk";
+	clocks = <&clock_gcc GCC_USB30_MASTER_CLK>;
+	status = "ok";
+};
+
+&gdsc_ufs {
+	status = "ok";
+};
+
+&gdsc_bimc_smmu {
+	clock-names = "bus_clk";
+	clocks = <&clock_mmss MMSS_BIMC_SMMU_AXI_CLK>;
+	proxy-supply = <&gdsc_bimc_smmu>;
+	qcom,proxy-consumer-enable;
+	status = "ok";
+};
+
+&gdsc_hlos1_vote_lpass_adsp {
+	status = "ok";
+};
+
+&gdsc_venus {
+	status = "ok";
+};
+
+&gdsc_venus_core0 {
+	qcom,support-hw-trigger;
+	status = "ok";
+};
+
+&gdsc_camss_top {
+	status = "ok";
+};
+
+&gdsc_vfe0 {
+	parent-supply = <&gdsc_camss_top>;
+	status = "ok";
+};
+
+&gdsc_vfe1 {
+	parent-supply = <&gdsc_camss_top>;
+	status = "ok";
+};
+
+&gdsc_cpp {
+	parent-supply = <&gdsc_camss_top>;
+	status = "ok";
+};
+
+&gdsc_mdss {
+	clock-names = "bus_clk", "rot_clk";
+	clocks = <&clock_mmss MMSS_MDSS_AXI_CLK>,
+		 <&clock_mmss MMSS_MDSS_ROT_CLK>;
+	proxy-supply = <&gdsc_mdss>;
+	qcom,proxy-consumer-enable;
+	status = "ok";
+};
+
+&gdsc_gpu_gx {
+	clock-names = "bimc_core_clk", "core_clk", "core_root_clk";
+	clocks = <&clock_gcc GCC_GPU_BIMC_GFX_CLK>,
+		 <&clock_gfx GPUCC_GFX3D_CLK>,
+		 <&clock_gfx GFX3D_CLK_SRC>;
+	qcom,force-enable-root-clk;
+	parent-supply = <&gfx_vreg_corner>;
+	status = "ok";
+};
+
+&gdsc_gpu_cx {
+	status = "ok";
 };
