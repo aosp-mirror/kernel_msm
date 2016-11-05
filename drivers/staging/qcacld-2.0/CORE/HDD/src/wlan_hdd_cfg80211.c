@@ -1559,6 +1559,49 @@ wlan_hdd_cfg80211_get_supported_features(struct wiphy *wiphy,
 }
 
 /**
+ * wlan_hdd_fill_whitelist_ie_attrs - fill the white list members
+ * @ie_whitelist: enables whitelist
+ * @probe_req_ie_bitmap: bitmap to be filled
+ * @num_vendor_oui: pointer to no of ouis
+ * @voui: pointer to ouis to be filled
+ * @pHddCtx: pointer to hdd ctx
+ *
+ * This function fills the ie bitmap and vendor oui fields with the
+ * corresponding values present in cfg_ini and PHddCtx
+ *
+ * Return:   Return none
+ */
+static void wlan_hdd_fill_whitelist_ie_attrs(bool *ie_whitelist,
+					     uint32_t *probe_req_ie_bitmap,
+					     uint32_t *num_vendor_oui,
+					     struct vendor_oui *voui,
+					     hdd_context_t *pHddCtx)
+{
+	uint32_t i = 0;
+
+	*ie_whitelist = true;
+	probe_req_ie_bitmap[0] = pHddCtx->cfg_ini->probe_req_ie_bitmap_0;
+	probe_req_ie_bitmap[1] = pHddCtx->cfg_ini->probe_req_ie_bitmap_1;
+	probe_req_ie_bitmap[2] = pHddCtx->cfg_ini->probe_req_ie_bitmap_2;
+	probe_req_ie_bitmap[3] = pHddCtx->cfg_ini->probe_req_ie_bitmap_3;
+	probe_req_ie_bitmap[4] = pHddCtx->cfg_ini->probe_req_ie_bitmap_4;
+	probe_req_ie_bitmap[5] = pHddCtx->cfg_ini->probe_req_ie_bitmap_5;
+	probe_req_ie_bitmap[6] = pHddCtx->cfg_ini->probe_req_ie_bitmap_6;
+	probe_req_ie_bitmap[7] = pHddCtx->cfg_ini->probe_req_ie_bitmap_7;
+
+	*num_vendor_oui = 0;
+
+	if ((pHddCtx->no_of_probe_req_ouis != 0) && (voui != NULL)) {
+		*num_vendor_oui = pHddCtx->no_of_probe_req_ouis;
+		for (i = 0; i < pHddCtx->no_of_probe_req_ouis; i++) {
+			voui[i].oui_type = pHddCtx->probe_req_voui[i].oui_type;
+			voui[i].oui_subtype =
+					pHddCtx->probe_req_voui[i].oui_subtype;
+		}
+	}
+}
+
+/**
  * __wlan_hdd_cfg80211_set_scanning_mac_oui() - set scan MAC
  * @wiphy:   pointer to wireless wiphy structure.
  * @wdev:    pointer to wireless_dev structure.
@@ -1606,12 +1649,16 @@ __wlan_hdd_cfg80211_set_scanning_mac_oui(struct wiphy *wiphy,
         return -EINVAL;
     }
 
-    pReqMsg = vos_mem_malloc(sizeof(*pReqMsg));
+    pReqMsg = vos_mem_malloc(sizeof(*pReqMsg) +
+                    (pHddCtx->no_of_probe_req_ouis) *
+                    (sizeof(struct vendor_oui)));
     if (!pReqMsg) {
         hddLog(LOGE, FL("vos_mem_malloc failed"));
         return -ENOMEM;
     }
-    vos_mem_zero(pReqMsg, sizeof(*pReqMsg));
+    vos_mem_zero(pReqMsg, sizeof(*pReqMsg) +
+                    (pHddCtx->no_of_probe_req_ouis) *
+                    (sizeof(struct vendor_oui)));
 
     /* Parse and fetch oui */
     if (!tb[QCA_WLAN_VENDOR_ATTR_SET_SCANNING_MAC_OUI]) {
@@ -1628,7 +1675,15 @@ __wlan_hdd_cfg80211_set_scanning_mac_oui(struct wiphy *wiphy,
     pReqMsg->enb_probe_req_sno_randomization = 1;
 
     hddLog(LOG1, FL("Oui (%02x:%02x:%02x), vdev_id = %d"), pReqMsg->oui[0],
-                    pReqMsg->oui[1], pReqMsg->oui[2], pReqMsg->vdev_id);
+                     pReqMsg->oui[1], pReqMsg->oui[2], pReqMsg->vdev_id);
+
+    if (pHddCtx->cfg_ini->probe_req_ie_whitelist)
+         wlan_hdd_fill_whitelist_ie_attrs(&pReqMsg->ie_whitelist,
+                                      pReqMsg->probe_req_ie_bitmap,
+                                      &pReqMsg->num_vendor_oui,
+                                      (struct vendor_oui *)((uint8_t *)pReqMsg +
+                                      sizeof(*pReqMsg)),
+                                      pHddCtx);
 
     status = sme_SetScanningMacOui(pHddCtx->hHal, pReqMsg);
     if (!HAL_STATUS_SUCCESS(status)) {
@@ -16571,6 +16626,25 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
     wlan_hdd_update_scan_rand_attrs((void *)&scanRequest, (void *)request,
                                     WLAN_HDD_HOST_SCAN);
 
+    if (pHddCtx->no_of_probe_req_ouis != 0) {
+        scanRequest.voui = (struct vendor_oui *)vos_mem_malloc(
+                                              pHddCtx->no_of_probe_req_ouis *
+                                              sizeof(struct vendor_oui));
+        if (!scanRequest.voui) {
+            hddLog(LOGE, FL("Not enough memory for voui"));
+            scanRequest.num_vendor_oui = 0;
+            status = -ENOMEM;
+            goto free_mem;
+        }
+    }
+
+    if (pHddCtx->cfg_ini->probe_req_ie_whitelist)
+        wlan_hdd_fill_whitelist_ie_attrs(&scanRequest.ie_whitelist,
+                                         scanRequest.probe_req_ie_bitmap,
+                                         &scanRequest.num_vendor_oui,
+                                         scanRequest.voui,
+                                         pHddCtx);
+
     vos_runtime_pm_prevent_suspend(pHddCtx->runtime_context.scan);
     status = sme_ScanRequest( WLAN_HDD_GET_HAL_CTX(pAdapter),
                               pAdapter->sessionId, &scanRequest, &scanId,
@@ -16611,6 +16685,9 @@ free_mem:
 
     if( channelList )
       vos_mem_free( channelList );
+
+    if(scanRequest.voui)
+        vos_mem_free(scanRequest.voui);
 
     EXIT();
     return status;
@@ -20329,7 +20406,9 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
         return -ENOTSUPP;
     }
 
-    pPnoRequest = (tpSirPNOScanReq) vos_mem_malloc(sizeof (tSirPNOScanReq));
+    pPnoRequest = (tpSirPNOScanReq) vos_mem_malloc(sizeof(tSirPNOScanReq) +
+                                    (pHddCtx->no_of_probe_req_ouis) *
+                                    (sizeof(struct vendor_oui)));
     if (NULL == pPnoRequest)
     {
         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_FATAL,
@@ -20337,7 +20416,9 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
         return -ENOMEM;
     }
 
-    memset(pPnoRequest, 0, sizeof (tSirPNOScanReq));
+    memset(pPnoRequest, 0, sizeof (tSirPNOScanReq) +
+                           (pHddCtx->no_of_probe_req_ouis) *
+                           (sizeof(struct vendor_oui)));
     pPnoRequest->enable = 1; /*Enable PNO */
     pPnoRequest->ucNetworksCount = request->n_match_sets;
     if ((!pPnoRequest->ucNetworksCount ) ||
@@ -20506,6 +20587,15 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
 
     wlan_hdd_update_scan_rand_attrs((void *)pPnoRequest, (void *)request,
                                     WLAN_HDD_PNO_SCAN);
+
+    if (pHddCtx->cfg_ini->probe_req_ie_whitelist)
+        wlan_hdd_fill_whitelist_ie_attrs(&pPnoRequest->ie_whitelist,
+                                         pPnoRequest->probe_req_ie_bitmap,
+                                         &pPnoRequest->num_vendor_oui,
+                                         (struct vendor_oui *)(
+                                         (uint8_t *)pPnoRequest +
+                                         sizeof(*pPnoRequest)),
+                                         pHddCtx);
 
     status = sme_SetPreferredNetworkList(WLAN_HDD_GET_HAL_CTX(pAdapter),
                               pPnoRequest, pAdapter->sessionId,

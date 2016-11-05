@@ -12942,6 +12942,7 @@ free_hdd_ctx:
    }
 
    wlan_hdd_deinit_tx_rx_histogram(pHddCtx);
+   hdd_free_probe_req_ouis(pHddCtx);
    wiphy_unregister(wiphy) ;
    wlan_hdd_cfg80211_deinit(wiphy);
    wiphy_free(wiphy) ;
@@ -14279,6 +14280,27 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
       goto err_config;
    }
 
+   if (pHddCtx->cfg_ini->probe_req_ie_whitelist)
+   {
+      if (hdd_validate_prb_req_ie_bitmap(pHddCtx))
+      {
+         /* parse ini string probe req oui */
+         status = hdd_parse_probe_req_ouis(pHddCtx);
+         if (VOS_STATUS_SUCCESS != status)
+         {
+            hddLog(LOGE, FL("Error parsing probe req ouis - Ignoring them"
+                            " disabling white list"));
+            pHddCtx->cfg_ini->probe_req_ie_whitelist = false;
+         }
+      }
+      else
+      {
+         hddLog(LOGE, FL("invalid probe req ie bitmap and ouis,"
+                         " disabling white list"));
+         pHddCtx->cfg_ini->probe_req_ie_whitelist = false;
+      }
+   }
+
    ((VosContextType*)pVosContext)->pHIFContext = hif_sc;
 
    /* store target type and target version info in hdd ctx */
@@ -15226,8 +15248,10 @@ err_histogram:
 
 err_free_hdd_context:
    /* wiphy_free() will free the HDD context so remove global reference */
-   if (pVosContext)
+   if (pVosContext) {
+      hdd_free_probe_req_ouis(pHddCtx);
       ((VosContextType*)(pVosContext))->pHDDContext = NULL;
+   }
 
    wiphy_free(wiphy) ;
    //kfree(wdev) ;

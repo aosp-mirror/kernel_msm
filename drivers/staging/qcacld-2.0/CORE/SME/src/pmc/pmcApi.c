@@ -2854,14 +2854,17 @@ eHalStatus pmcSetPreferredNetworkList
         return eHAL_STATUS_FAILURE;
     }
 
-    pRequestBuf = vos_mem_malloc(sizeof(tSirPNOScanReq));
+    pRequestBuf = vos_mem_malloc(sizeof(tSirPNOScanReq) +
+                  (pRequest->num_vendor_oui) *
+                  (sizeof(struct vendor_oui)));
     if (NULL == pRequestBuf)
     {
         VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: Not able to allocate memory for PNO request", __func__);
         return eHAL_STATUS_FAILED_ALLOC;
     }
 
-    vos_mem_copy(pRequestBuf, pRequest, sizeof(tSirPNOScanReq));
+    vos_mem_copy(pRequestBuf, pRequest, sizeof(tSirPNOScanReq) +
+                 (pRequest->num_vendor_oui) * (sizeof(struct vendor_oui)));
 
     /*Must translate the mode first*/
     ucDot11Mode = (tANI_U8) csrTranslateToWNICfgDot11Mode(pMac,
