@@ -42,7 +42,7 @@ qca_wlan_vendor_ndp_policy[QCA_WLAN_VENDOR_ATTR_NDP_PARAMS_MAX + 1] = {
 	[QCA_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID] = { .type = NLA_U16 },
 	[QCA_WLAN_VENDOR_ATTR_NDP_IFACE_STR] = { .type = NLA_STRING,
 					.len = IFNAMSIZ },
-	[QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_INSTANCE_ID] = { .type = NLA_U16 },
+	[QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_INSTANCE_ID] = { .type = NLA_U32 },
 	[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL] = { .type = NLA_U32 },
 	[QCA_WLAN_VENDOR_ATTR_NDP_PEER_DISCOVERY_MAC_ADDR] = {
 						.type = NLA_BINARY,
@@ -529,7 +529,7 @@ static int hdd_ndp_initiator_req_handler(hdd_context_t *hdd_ctx,
 		return -EINVAL;
 	}
 	req.service_instance_id =
-		nla_get_u16(tb[QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_INSTANCE_ID]);
+		nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_INSTANCE_ID]);
 
 	vos_mem_copy(req.self_ndi_mac_addr.bytes,
 		     adapter->macAddressCurrent.bytes, VOS_MAC_ADDR_SIZE);
@@ -1350,7 +1350,7 @@ ndp_confirm_nla_failed:
  * QCA_WLAN_VENDOR_ATTR_NDP_SUBCMD =
  *         QCA_WLAN_VENDOR_ATTR_NDP_REQUEST_IND (4 bytes)
  * QCA_WLAN_VENDOR_ATTR_NDP_IFACE_STR (IFNAMSIZ)
- * QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_INSTANCE_ID (2 bytes)
+ * QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_INSTANCE_ID (4 bytes)
  * QCA_WLAN_VENDOR_ATTR_NDP_NDI_MAC_ADDR (6 bytes)
  * QCA_WLAN_VENDOR_ATTR_NDP_PEER_DISCOVERY_MAC_ADDR (6 bytes)
  * QCA_WLAN_VENDOR_ATTR_NDP_INSTANCE_ID (4 bytes)
@@ -1411,10 +1411,9 @@ static void hdd_ndp_indication_handler(hdd_adapter_t *adapter,
 		return;
 	}
 
-	data_len = 3 * sizeof(uint32_t) + sizeof(uint16_t) +
-		2 * VOS_MAC_ADDR_SIZE + IFNAMSIZ +
-		event->ndp_info.ndp_app_info_len + 8 * NLA_HDRLEN +
-		NLMSG_HDRLEN;
+	data_len = (4 * sizeof(uint32_t)) + (2 * VOS_MAC_ADDR_SIZE) + IFNAMSIZ +
+			event->ndp_info.ndp_app_info_len + (8 * NLA_HDRLEN) +
+			NLMSG_HDRLEN;
 
 	/* notify response to the upper layer */
 	vendor_event = cfg80211_vendor_event_alloc(hdd_ctx->wiphy,
@@ -1434,7 +1433,7 @@ static void hdd_ndp_indication_handler(hdd_adapter_t *adapter,
 	   IFNAMSIZ, adapter->dev->name))
 		goto ndp_indication_nla_failed;
 
-	if (nla_put_u16(vendor_event,
+	if (nla_put_u32(vendor_event,
 	   QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_INSTANCE_ID,
 	   event->service_instance_id))
 		goto ndp_indication_nla_failed;
