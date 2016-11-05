@@ -87,14 +87,6 @@ eHalStatus sme_ndp_responder_req_handler(tHalHandle hal,
 /* NaN indication response handler */
 VOS_STATUS sme_ndp_end_req_handler(tHalHandle hal, struct ndp_end_req *req);
 
-/* NaN schedule update request handler */
-VOS_STATUS sme_ndp_sched_req_handler(uint32_t session_id,
-				struct ndp_schedule_update_req *req_params);
-
-/* Function to handle NDP messages from lower layers */
-void sme_ndp_message_processor(tpAniSirGlobal mac_ctx, uint16_t msg_type,
-				void *msg);
-
 /* Start NDI BSS */
 VOS_STATUS csr_roam_start_ndi(tpAniSirGlobal mac_ctx, uint32_t session_id,
 			      tCsrRoamProfile *profile);
@@ -124,6 +116,24 @@ void csr_release_ndp_responder_req(tpAniSirGlobal mac_ctx, tSmeCmd *cmd);
 void csr_release_ndp_data_end_req(tpAniSirGlobal mac_ctx, tSmeCmd *cmd);
 
 #else
+
+/* NAN initiator request handler */
+static inline eHalStatus sme_ndp_initiator_req_handler(tHalHandle hal,
+					 void *req_params) {
+	return eHAL_STATUS_SUCCESS;
+}
+
+
+/* NAN responder request handler */
+static inline eHalStatus sme_ndp_responder_req_handler(tHalHandle hal,
+					 void *req_params) {
+	return eHAL_STATUS_SUCCESS;
+}
+
+/* NAN indication response handler */
+static inline VOS_STATUS sme_ndp_end_req_handler(tHalHandle hal, void *req) {
+	return VOS_STATUS_SUCCESS;
+}
 
 /* Start NDI BSS */
 static inline VOS_STATUS csr_roam_start_ndi(tpAniSirGlobal mac_ctx,
