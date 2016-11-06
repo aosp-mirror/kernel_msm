@@ -63,6 +63,7 @@ struct wiphy;
 
 #define TDLS_MGMT_VERSION2 1
 #define CFG80211_BSSID_HINT_BACKPORT 1
+#define CFG80211_SCAN_RANDOM_MAC_ADDR 1
 
 /*
  * wireless hardware capability structures
