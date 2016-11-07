@@ -2527,6 +2527,32 @@ static struct clk_branch hlos1_vote_lpass_adsp_smmu_clk = {
 	},
 };
 
+static struct clk_branch hlos1_vote_turing_adsp_smmu_clk = {
+	.halt_reg = 0x7d048,
+	.halt_check = BRANCH_HALT_NO_CHECK_ON_DISABLE,
+	.clkr = {
+		.enable_reg = 0x7d048,
+		.enable_mask = BIT(0),
+		.hw.init = &(struct clk_init_data){
+			.name = "hlos1_vote_turing_adsp_smmu_clk",
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
+static struct clk_branch hlos2_vote_turing_adsp_smmu_clk = {
+	.halt_reg = 0x7e048,
+	.halt_check = BRANCH_HALT_NO_CHECK_ON_DISABLE,
+	.clkr = {
+		.enable_reg = 0x7e048,
+		.enable_mask = BIT(0),
+		.hw.init = &(struct clk_init_data){
+			.name = "hlos2_vote_turing_adsp_smmu_clk",
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
 static struct clk_fixed_factor gcc_ce1_ahb_m_clk = {
 	.hw.init = &(struct clk_init_data){
 		.name = "gcc_ce1_ahb_m_clk",
@@ -2683,6 +2709,10 @@ static struct clk_regmap *gcc_falcon_clocks[] = {
 	[GCC_UFS_ICE_CORE_HW_CTL_CLK] = &gcc_ufs_ice_core_hw_ctl_clk.clkr,
 	[GCC_UFS_PHY_AUX_HW_CTL_CLK] = &gcc_ufs_phy_aux_hw_ctl_clk.clkr,
 	[GCC_UFS_UNIPRO_CORE_HW_CTL_CLK] = &gcc_ufs_unipro_core_hw_ctl_clk.clkr,
+	[HLOS1_VOTE_TURING_ADSP_SMMU_CLK] =
+					&hlos1_vote_turing_adsp_smmu_clk.clkr,
+	[HLOS2_VOTE_TURING_ADSP_SMMU_CLK] =
+					&hlos2_vote_turing_adsp_smmu_clk.clkr,
 };
 
 static const struct qcom_reset_map gcc_falcon_resets[] = {
@@ -2709,6 +2739,8 @@ static const struct qcom_cc_desc gcc_falcon_desc = {
 	.config = &gcc_falcon_regmap_config,
 	.clks = gcc_falcon_clocks,
 	.num_clks = ARRAY_SIZE(gcc_falcon_clocks),
+	.hwclks = gcc_msmfalcon_hws,
+	.num_hwclks = ARRAY_SIZE(gcc_msmfalcon_hws),
 	.resets = gcc_falcon_resets,
 	.num_resets = ARRAY_SIZE(gcc_falcon_resets),
 };
@@ -2734,13 +2766,6 @@ static int gcc_falcon_probe(struct platform_device *pdev)
 	 * turned off by hardware during certain apps low power modes.
 	 */
 	regmap_update_bits(regmap, 0x52008, BIT(21), BIT(21));
-
-	/* register hardware clocks */
-	for (i = 0; i < ARRAY_SIZE(gcc_msmfalcon_hws); i++) {
-		clk = devm_clk_register(&pdev->dev, gcc_msmfalcon_hws[i]);
-		if (IS_ERR(clk))
-			return PTR_ERR(clk);
-	}
 
 	vdd_dig.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_dig");
 	if (IS_ERR(vdd_dig.regulator[0])) {

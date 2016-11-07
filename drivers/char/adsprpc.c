@@ -163,6 +163,7 @@ struct fastrpc_smmu {
 	int enabled;
 	int faults;
 	int secure;
+	int coherent;
 };
 
 struct fastrpc_session_ctx {
@@ -1129,6 +1130,8 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx)
 	for (oix = 0; oix < inbufs + outbufs; ++oix) {
 		int i = ctx->overps[oix]->raix;
 		struct fastrpc_mmap *map = ctx->maps[i];
+		if (ctx->fl->sctx->smmu.coherent)
+			continue;
 		if (map && map->uncached)
 			continue;
 		if (rpra[i].buf.len && ctx->overps[oix]->mstart)
@@ -1141,7 +1144,8 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx)
 		rpra[inh + i].buf.len = ctx->lpra[inh + i].buf.len;
 		rpra[inh + i].h = ctx->lpra[inh + i].h;
 	}
-	dmac_flush_range((char *)rpra, (char *)rpra + ctx->used);
+	if (!ctx->fl->sctx->smmu.coherent)
+		dmac_flush_range((char *)rpra, (char *)rpra + ctx->used);
  bail:
 	return err;
 }
@@ -1372,13 +1376,15 @@ static int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,
 			goto bail;
 	}
 
-	inv_args_pre(ctx);
-	if (FASTRPC_MODE_SERIAL == mode)
-		inv_args(ctx);
+	if (!fl->sctx->smmu.coherent) {
+		inv_args_pre(ctx);
+		if (mode == FASTRPC_MODE_SERIAL)
+			inv_args(ctx);
+	}
 	VERIFY(err, 0 == fastrpc_invoke_send(ctx, kernel, invoke->handle));
 	if (err)
 		goto bail;
-	if (FASTRPC_MODE_PARALLEL == mode)
+	if (mode == FASTRPC_MODE_PARALLEL && !fl->sctx->smmu.coherent)
 		inv_args(ctx);
  wait:
 	if (kernel)
@@ -2275,7 +2281,6 @@ static int fastrpc_cb_probe(struct device *dev)
 	const char *name;
 	unsigned int start = 0x80000000;
 	int err = 0, i;
-	int disable_htw = 1;
 	int secure_vmid = VMID_CP_PIXEL;
 
 	VERIFY(err, 0 != (name = of_get_property(dev->of_node, "label", NULL)));
@@ -2302,6 +2307,8 @@ static int fastrpc_cb_probe(struct device *dev)
 	sess = &chan->session[chan->sesscount];
 	sess->smmu.cb = iommuspec.args[0];
 	sess->used = 0;
+	sess->smmu.coherent = of_property_read_bool(dev->of_node,
+						"dma-coherent");
 	sess->smmu.secure = of_property_read_bool(dev->of_node,
 						"qcom,secure-context-bank");
 	if (sess->smmu.secure)
@@ -2311,9 +2318,6 @@ static int fastrpc_cb_probe(struct device *dev)
 						start, 0x7fffffff)));
 	if (err)
 		goto bail;
-	iommu_domain_set_attr(sess->smmu.mapping->domain,
-				DOMAIN_ATTR_COHERENT_HTW_DISABLE,
-				&disable_htw);
 	iommu_set_fault_handler(sess->smmu.mapping->domain,
 				fastrpc_smmu_fault_handler, sess);
 	if (sess->smmu.secure)
@@ -2341,7 +2345,6 @@ static int fastrpc_cb_legacy_probe(struct device *dev)
 	unsigned int *range = 0, range_size = 0;
 	unsigned int *sids = 0, sids_size = 0;
 	int err = 0, ret = 0, i;
-	int disable_htw = 1;
 
 	VERIFY(err, 0 != (domains_child_node = of_get_child_by_name(
 			dev->of_node,
@@ -2395,9 +2398,6 @@ static int fastrpc_cb_legacy_probe(struct device *dev)
 				range[0], range[1])));
 	if (err)
 		goto bail;
-	iommu_domain_set_attr(first_sess->smmu.mapping->domain,
-			DOMAIN_ATTR_COHERENT_HTW_DISABLE,
-			&disable_htw);
 	VERIFY(err, !arm_iommu_attach_device(first_sess->dev,
 					first_sess->smmu.mapping));
 	if (err)

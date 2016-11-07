@@ -462,7 +462,7 @@ static int ssr_event_notify(struct notifier_block *this,
 					struct qmi_client_info, ssr_notifier);
 	struct notif_data *notif = data;
 	switch (code) {
-	case	SUBSYS_AFTER_SHUTDOWN:
+	case	SUBSYS_BEFORE_SHUTDOWN:
 		pr_debug("Root PD DOWN(SSR notification), crashed?%d\n",
 						notif->crashed);
 		if (notif->crashed)
@@ -605,8 +605,8 @@ void *service_notif_register_notifier(const char *service_path, int instance_id,
 	if (!service_path || !instance_id || !nb)
 		return ERR_PTR(-EINVAL);
 
-	service_notif = _find_service_info(service_path);
 	mutex_lock(&notif_add_lock);
+	service_notif = _find_service_info(service_path);
 	if (!service_notif) {
 		service_notif = (struct service_notif_info *)add_service_notif(
 								service_path,

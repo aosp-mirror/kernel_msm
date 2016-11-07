@@ -3180,8 +3180,10 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	 * Send speaker configuration only for WSA8810.
 	 * Defalut configuration is for WSA8815.
 	 */
+	pr_debug("%s: Number of aux devices: %d\n",
+		__func__, rtd->card->num_aux_devs);
 	if (!strcmp(dev_name(codec_dai->dev), "tavil_codec")) {
-		if (rtd_aux && rtd_aux->component)
+		if (rtd->card->num_aux_devs && rtd_aux && rtd_aux->component)
 			if (!strcmp(rtd_aux->component->name, WSA8810_NAME_1) ||
 			    !strcmp(rtd_aux->component->name, WSA8810_NAME_2)) {
 				tavil_set_spkr_mode(rtd->codec, SPKR_MODE_1);
@@ -3200,7 +3202,7 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		pdata->codec_root = entry;
 		tavil_codec_info_create_codec_entry(pdata->codec_root, codec);
 	} else {
-		if (rtd_aux && rtd_aux->component)
+		if (rtd->card->num_aux_devs && rtd_aux && rtd_aux->component)
 			if (!strcmp(rtd_aux->component->name, WSA8810_NAME_1) ||
 			    !strcmp(rtd_aux->component->name, WSA8810_NAME_2)) {
 				tasha_set_spkr_mode(rtd->codec, SPKR_MODE_1);
@@ -5109,6 +5111,21 @@ static struct snd_soc_dai_link msm_tavil_be_dai_links[] = {
 		.ops = &msm_be_ops,
 		/* dai link has playback support */
 		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+	},
+	/* MAD BE */
+	{
+		.name = LPASS_BE_SLIMBUS_5_TX,
+		.stream_name = "Slimbus5 Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.16395",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "tavil_codec",
+		.codec_dai_name = "tavil_mad1",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_5_TX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ops = &msm_be_ops,
 		.ignore_suspend = 1,
 	},
 	{

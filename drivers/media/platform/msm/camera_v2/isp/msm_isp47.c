@@ -30,10 +30,13 @@
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
 
 #define VFE47_8996V1_VERSION   0x70000000
+#define VFE48_SDM660_VERSION   0x80000003
 
 #define VFE47_BURST_LEN 3
+#define VFE48_SDM660_BURST_LEN 4
 #define VFE47_FETCH_BURST_LEN 3
 #define VFE47_STATS_BURST_LEN 3
+#define VFE48_SDM660_STATS_BURST_LEN 4
 #define VFE47_UB_SIZE_VFE0 2048
 #define VFE47_UB_SIZE_VFE1 1536
 #define VFE47_UB_STATS_SIZE 144
@@ -248,13 +251,31 @@ static enum cam_ahb_clk_vote msm_isp47_get_cam_clk_vote(
 	return 0;
 }
 
-static int msm_isp47_ahb_clk_cfg(struct vfe_device *vfe_dev,
+int msm_isp47_ahb_clk_cfg(struct vfe_device *vfe_dev,
 			struct msm_isp_ahb_clk_cfg *ahb_cfg)
 {
 	int rc = 0;
 	enum cam_ahb_clk_vote vote;
+	enum cam_ahb_clk_vote src_clk_vote;
+	struct msm_isp_clk_rates clk_rates;
 
-	vote = msm_isp47_get_cam_clk_vote(ahb_cfg->vote);
+	if (ahb_cfg)
+		vote = msm_isp47_get_cam_clk_vote(ahb_cfg->vote);
+	else
+		vote = CAM_AHB_SVS_VOTE;
+
+	vfe_dev->hw_info->vfe_ops.platform_ops.get_clk_rates(vfe_dev,
+							&clk_rates);
+	if (vfe_dev->msm_isp_vfe_clk_rate <= clk_rates.svs_rate)
+		src_clk_vote = CAM_AHB_SVS_VOTE;
+	else if (vfe_dev->msm_isp_vfe_clk_rate <= clk_rates.nominal_rate)
+		src_clk_vote = CAM_AHB_NOMINAL_VOTE;
+	else
+		src_clk_vote = CAM_AHB_TURBO_VOTE;
+
+	/* vote for higher of the user requested or src clock matched vote */
+	if (vote < src_clk_vote)
+		vote = src_clk_vote;
 
 	if (vote && vfe_dev->ahb_vote != vote) {
 		rc = cam_config_ahb_clk(NULL, 0,
@@ -341,12 +362,12 @@ void msm_vfe47_release_hardware(struct vfe_device *vfe_dev)
 	else
 		id = CAM_AHB_CLIENT_VFE1;
 
+	vfe_dev->hw_info->vfe_ops.platform_ops.set_clk_rate(vfe_dev, &rate);
+
 	if (cam_config_ahb_clk(NULL, 0, id, CAM_AHB_SUSPEND_VOTE) < 0)
 		pr_err("%s: failed to vote for AHB\n", __func__);
 
 	vfe_dev->ahb_vote = CAM_AHB_SUSPEND_VOTE;
-
-	vfe_dev->hw_info->vfe_ops.platform_ops.set_clk_rate(vfe_dev, &rate);
 
 	vfe_dev->hw_info->vfe_ops.platform_ops.enable_clks(
 							vfe_dev, 0);
@@ -1486,7 +1507,7 @@ void msm_vfe47_axi_cfg_wm_reg(
 {
 	uint32_t val;
 	int vfe_idx = msm_isp_get_vfe_idx_for_stream(vfe_dev, stream_info);
-	uint32_t wm_base;
+	uint32_t wm_base, burst_len;
 
 	wm_base = VFE47_WM_BASE(stream_info->wm[vfe_idx][plane_idx]);
 	val = msm_camera_io_r(vfe_dev->vfe_base + wm_base + 0x14);
@@ -1504,7 +1525,11 @@ void msm_vfe47_axi_cfg_wm_reg(
 			output_height - 1);
 		msm_camera_io_w(val, vfe_dev->vfe_base + wm_base + 0x1C);
 		/* WR_BUFFER_CFG */
-		val = VFE47_BURST_LEN |
+		if (vfe_dev->vfe_hw_version == VFE48_SDM660_VERSION)
+			burst_len = VFE48_SDM660_BURST_LEN;
+		else
+			burst_len = VFE47_BURST_LEN;
+		val = burst_len |
 			(stream_info->plane_cfg[vfe_idx][plane_idx].
 							output_height - 1) <<
 			2 |
@@ -2037,7 +2062,7 @@ void msm_vfe47_stats_cfg_wm_reg(
 	stats_base = VFE47_STATS_BASE(stats_idx);
 
 	/* WR_ADDR_CFG */
-	msm_camera_io_w(stream_info->framedrop_period << 2,
+	msm_camera_io_w((stream_info->framedrop_period - 1) << 2,
 		vfe_dev->vfe_base + stats_base + 0x10);
 	/* WR_IRQ_FRAMEDROP_PATTERN */
 	msm_camera_io_w(stream_info->framedrop_pattern,
@@ -2071,7 +2096,7 @@ void msm_vfe47_stats_clear_wm_reg(
 void msm_vfe47_stats_cfg_ub(struct vfe_device *vfe_dev)
 {
 	int i;
-	uint32_t ub_offset = 0;
+	uint32_t ub_offset = 0, stats_burst_len;
 	uint32_t ub_size[VFE47_NUM_STATS_TYPE] = {
 		16, /* MSM_ISP_STATS_HDR_BE */
 		16, /* MSM_ISP_STATS_BG */
@@ -2090,9 +2115,14 @@ void msm_vfe47_stats_cfg_ub(struct vfe_device *vfe_dev)
 	else
 		pr_err("%s: incorrect VFE device\n", __func__);
 
+	if (vfe_dev->vfe_hw_version == VFE48_SDM660_VERSION)
+		stats_burst_len = VFE48_SDM660_STATS_BURST_LEN;
+	else
+		stats_burst_len = VFE47_STATS_BURST_LEN;
+
 	for (i = 0; i < VFE47_NUM_STATS_TYPE; i++) {
 		ub_offset -= ub_size[i];
-		msm_camera_io_w(VFE47_STATS_BURST_LEN << 30 |
+		msm_camera_io_w(stats_burst_len << 30 |
 			ub_offset << 16 | (ub_size[i] - 1),
 			vfe_dev->vfe_base + VFE47_STATS_BASE(i) + 0x14);
 	}
@@ -2369,6 +2399,9 @@ int msm_vfe47_set_clk_rate(struct vfe_device *vfe_dev, long *rate)
 		return rc;
 	*rate = clk_round_rate(vfe_dev->vfe_clk[clk_idx], *rate);
 	vfe_dev->msm_isp_vfe_clk_rate = *rate;
+
+	if (vfe_dev->hw_info->vfe_ops.core_ops.ahb_clk_cfg)
+		vfe_dev->hw_info->vfe_ops.core_ops.ahb_clk_cfg(vfe_dev, NULL);
 	return 0;
 }
 

@@ -1265,13 +1265,21 @@
 		qcom,firmware-name = "ipa_fws";
 	};
 
-	qcom,chd {
+	qcom,chd_silver {
 		compatible = "qcom,core-hang-detect";
+		label = "silver";
 		qcom,threshold-arr = <0x179880b0 0x179980b0
-		0x179a80b0 0x179b80b0 0x178880b0 0x178980b0
-		0x178a80b0 0x178b80b0>;
+		0x179a80b0 0x179b80b0>;
 		qcom,config-arr = <0x179880b8 0x179980b8
-		0x179a80b8 0x179b80b8 0x178880b8 0x178980b8
+		0x179a80b8 0x179b80b8>;
+	};
+
+	qcom,chd_gold {
+		compatible = "qcom,core-hang-detect";
+		label = "gold";
+		qcom,threshold-arr = <0x178880b0 0x178980b0
+		0x178a80b0 0x178b80b0>;
+		qcom,config-arr = <0x178880b8 0x178980b8
 		0x178a80b8 0x178b80b8>;
 	};
 
@@ -1322,41 +1330,49 @@
 			label = "adsprpc-smd";
 			iommus = <&lpass_q6_smmu 2>;
 			qcom,secure-context-bank;
+			dma-coherent;
 		};
 		qcom,msm_fastrpc_compute_cb1 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "adsprpc-smd";
 			iommus = <&lpass_q6_smmu 8>;
+			dma-coherent;
 		};
 		qcom,msm_fastrpc_compute_cb2 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "adsprpc-smd";
 			iommus = <&lpass_q6_smmu 9>;
+			dma-coherent;
 		};
 		qcom,msm_fastrpc_compute_cb3 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "adsprpc-smd";
 			iommus = <&lpass_q6_smmu 10>;
+			dma-coherent;
 		};
 		qcom,msm_fastrpc_compute_cb4 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "adsprpc-smd";
 			iommus = <&lpass_q6_smmu 11>;
+			dma-coherent;
 		};
 		qcom,msm_fastrpc_compute_cb6 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "adsprpc-smd";
 			iommus = <&lpass_q6_smmu 5>;
+			dma-coherent;
 		};
 		qcom,msm_fastrpc_compute_cb7 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "adsprpc-smd";
 			iommus = <&lpass_q6_smmu 6>;
+			dma-coherent;
 		};
 		qcom,msm_fastrpc_compute_cb8 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "adsprpc-smd";
 			iommus = <&lpass_q6_smmu 7>;
+			dma-coherent;
 		};
 	};
 
@@ -2822,6 +2838,11 @@
 		mem_dump_table@10 {
 			compatible = "qcom,msm-imem-mem_dump_table";
 			reg = <0x10 8>;
+		};
+
+		dload_type@18 {
+			compatible = "qcom,msm-imem-dload-type";
+			reg = <0x18 4>;
 		};
 
 		restart_reason@65c {
