@@ -5735,8 +5735,6 @@ static int energy_aware_wake_cpu(struct task_struct *p, int target, int sync)
 		int tmp_target = find_best_target(p, boosted, prefer_idle);
 		if (tmp_target >= 0) {
 			target_cpu = tmp_target;
-			if ((boosted || prefer_idle) && idle_cpu(target_cpu))
-				return target_cpu;
 		}
 	}
 
