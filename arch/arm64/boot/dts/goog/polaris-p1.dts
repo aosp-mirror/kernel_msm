@@ -558,7 +558,31 @@
 
 &i2c_6 {
 	/* Thermal sensors. */
-	status = "disabled";
+	status = "okay";
+
+	tmp108@48 {
+		/* U32 - Near MSM8998 */
+		compatible = "ti,tmp108";
+		reg = <0x48>;
+	};
+
+	tmp108@49 {
+		/* U33 - Near PM8998 */
+		compatible = "ti,tmp108";
+		reg = <0x49>;
+	};
+
+	tmp108@4a {
+		/* U34 - Near PMI8998 */
+		compatible = "ti,tmp108";
+		reg = <0x4a>;
+	};
+
+	tmp108@4b {
+		/* U35 - Near UFS */
+		compatible = "ti,tmp108";
+		reg = <0x4b>;
+	};
 };
 
 &i2c_7 {
