@@ -2309,6 +2309,12 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = smb23x_get_prop_batt_temp(chip);
 		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
+		val->intval = chip->reg_addr;
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
+		val->intval = val->intval;
+		break;
 default:
 		return (-EINVAL);
 	}
@@ -2856,13 +2862,15 @@ static int smb23x_probe(struct i2c_client *client,
 		goto destroy_mutex;
 	}
 	//Init charger state flag
+	chip->charger_plugin = 1;
 	if (smb23x_read(chip, I2C_COMM_CFG_REG, &reg) < 0)
 		chip->charger_plugin = 0;
-	else
+	else {
 		chip->charger_plugin = 1;
-	del_timer(&chip->timer_init_register);
-	chip->timer_init_register.expires = jiffies + 5*HZ;
-	add_timer(&chip->timer_init_register);
+		del_timer(&chip->timer_init_register);
+		chip->timer_init_register.expires = jiffies + HZ;
+		add_timer(&chip->timer_init_register);
+	}
 
 #ifdef QTI_SMB231
 	chip->resume_completed = true;
