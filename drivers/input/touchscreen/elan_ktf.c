@@ -162,7 +162,7 @@
 #define PALM_DETECTION_PKT 0xBA
 #endif
 
-static const int NEWEST_FW_VER = 0xb012;
+static const int NEWEST_FW_VER = 0xb013;
 
 /* Common for quanta gestures */
 #if defined(FEATURE_QUANTA_GESTURE_TO_BOOTLOADER) || defined(FEATURE_QUANTA_GESTURE_TO_RECOVERY)
@@ -483,13 +483,13 @@ static uint8_t gesture_map_table[QUANTA_GESTURE__NUM_GESTURES] =
 #define PAGERETRY  30
 #define IAPRESTART 5
 
-//#define ESD_CHECK
+#define ESD_CHECK
 #if defined( ESD_CHECK )
   static int    have_interrupts = 0;
   static struct workqueue_struct *esd_wq = NULL;
   static struct delayed_work      esd_work;
-  static unsigned long  delay = 2*HZ;
-
+  static unsigned long  delay = 3*HZ;
+  static int    suspend_ESD = 0;
 //declare function
   static void elan_touch_esd_func(struct work_struct *work);
 #endif
@@ -580,7 +580,7 @@ static unsigned char firmware[52800];
 
 /*The newest firmware, if update must be changed here*/
 static uint8_t file_fw_data[] = {
-	#include "fw_data_eWD1000_XU1_B012.i"
+	#include "fw_data_eWD1000_XU1_B013.i"
 };
 
 
@@ -4298,7 +4298,6 @@ static irqreturn_t elan_ktf_ts_irq_handler(int irq, void *dev_id)
 	}
 #endif
 	//printk("[elan_debug] %2x,%2x,%2x,%2x,%2x,%2x,%2x,%2x ....., %2x\n",buf[0],buf[1],buf[2],buf[3],buf[4],buf[5],buf[6],buf[7],buf[17]);
-	printk(KERN_DEBUG "[elan_debug] %2x,%2x,%2x,%2x,%2x,%2x,%2x,%2x .....\n",buf[0],buf[1],buf[2],buf[3],buf[4],buf[5],buf[6],buf[7]);
 
 #ifndef ELAN_BUFFER_MODE
 	elan_ktf_ts_report_data(ts->client, buf);
@@ -4489,9 +4488,9 @@ unsigned long event, void *data)
 static void elan_touch_esd_func(struct work_struct *work)
 {
 
-  touch_debug(DEBUG_INFO, "[elan esd] %s: enter.......\n", __FUNCTION__);  /* elan_dlx */
+  //touch_debug(DEBUG_INFO, "[elan esd] %s: enter.......\n", __FUNCTION__);  /* elan_dlx */
 
-  if( (have_interrupts == 1) || (work_lock == 1) )
+  if( (have_interrupts == 1) || (work_lock == 1) || (suspend_ESD == 1))
   {
     touch_debug(DEBUG_INFO, "[elan esd] : had interrup not need check\n");
   }
@@ -5103,6 +5102,9 @@ static int elan_ktf_ts_suspend(struct i2c_client *client, pm_message_t mesg)
 		rc = elan_ktf_ts_set_power_state(client, PWR_STATE_IDLE);
 	}
 
+#if defined( ESD_CHECK )
+	suspend_ESD = 1;
+#endif
     /* Quanta, BU10SW, Stanley Tsao, 2015.12.22, enable pinctrl usage for msm8909 { */
     #ifdef MSM_NEW_VER
 	if (data->ts_pinctrl) {
@@ -5162,6 +5164,10 @@ static int elan_ktf_ts_resume(struct i2c_client *client)
 		} while (--retry);
 
 	}
+
+#if defined( ESD_CHECK )
+	suspend_ESD = 0;
+#endif
 
     /* Quanta, BU10SW, Stanley Tsao, 2015.12.22, enable pinctrl usage for msm8909 { */    
     #ifdef MSM_NEW_VER
