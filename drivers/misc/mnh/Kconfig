@@ -1,0 +1,9 @@
+#
+# MNH PCIE Host driver configuration
+#
+config MNH_PCIE_HOST
+    tristate "MNH PCIe Host-side driver"
+    depends on PCI
+    default "y"
+    ---help---
+      Include support for MNH PCIe Host-side driver
