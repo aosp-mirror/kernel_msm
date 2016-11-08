@@ -1045,6 +1045,7 @@ static int armv8pmu_request_irq(struct arm_pmu *cpu_pmu, irq_handler_t handler)
 
 		on_each_cpu(armpmu_enable_percpu_irq, &irq, 1);
 		cpu_pmu->percpu_irq_requested = true;
+		cpu_pmu->percpu_irq = irq;
 	} else {
 		for (i = 0; i < irqs; ++i) {
 			err = 0;
@@ -1342,7 +1343,7 @@ static int __cpuinit cpu_pmu_notify(struct notifier_block *b,
 	switch (action & ~CPU_TASKS_FROZEN) {
 	case CPU_DOWN_PREPARE:
 		if (pmu->percpu_irq_requested) {
-			int irq = platform_get_irq(pmu->plat_device, 0);
+			int irq = pmu->percpu_irq;
 			smp_call_function_single(cpu,
 				armpmu_disable_percpu_irq, &irq, 1);
 		}
@@ -1353,7 +1354,7 @@ static int __cpuinit cpu_pmu_notify(struct notifier_block *b,
 		if (pmu->reset)
 			pmu->reset(pmu);
 		if (pmu->percpu_irq_requested) {
-			int irq = platform_get_irq(pmu->plat_device, 0);
+			int irq = pmu->percpu_irq;
 			smp_call_function_single(cpu,
 				armpmu_enable_percpu_irq, &irq, 1);
 		}
