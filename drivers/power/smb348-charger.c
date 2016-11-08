@@ -452,24 +452,6 @@ static int smb348_enable_volatile_writes(struct smb348_charger *chip)
 	return rc;
 }
 
-static int smb348_check_fastchg_current_now(struct smb348_charger *chip)
-{
-	int rc;
-	u8 reg, temp;
-
-	rc = smb348_read_reg(chip, CHG_CURRENT_CTRL_REG, &reg);
-	if (rc) {
-		dev_err(chip->dev,
-			"Couldn't read CTRL_REG rc=%d, reg=%2x\n",
-							rc, CHG_CURRENT_CTRL_REG);
-		return rc;
-	}
-
-	temp = reg >> SMB348_FAST_CHG_SHIFT;
-
-	return fast_chg_current[temp];
-}
-
 static XU1_HW_VER smb348_check_hw_id(void)
 {
 	char *pos = NULL;
@@ -1061,10 +1043,6 @@ static int smb348_get_prop_batt_present(struct smb348_charger *chip)
 
 static int smb348_get_prop_batt_capacity(struct smb348_charger *chip)
 {
-	int rc;
-#ifdef FEATURE_THERMAL_MITIGATION_ALGO
-	int reg_current_now;
-#endif /* FEATURE_THERMAL_MITIGATION_ALGO */
 	union power_supply_propval ret = {0, };
 
 	if (chip->fake_battery_soc >= 0)
@@ -1083,35 +1061,6 @@ static int smb348_get_prop_batt_capacity(struct smb348_charger *chip)
 			return SMB_MAX_SOC;
 		}
 
-		// if battery capacity is higher than 75%, using 100mA to do CV charging, otherwise using 200mA for CC charging.
-		reg_current_now = smb348_check_fastchg_current_now(chip);
-		if (chip->wpc_state) {
-			if (ret.intval >= SMB348_SW_MITIGATION_SOC) {
-				if (reg_current_now != chip->fastchg_current_mitigation_ma) {
-					pr_err("Set to mitigation current(%d mA)\n", chip->fastchg_current_mitigation_ma);
-					rc = smb348_fastchg_current_set(chip, chip->fastchg_current_mitigation_ma);
-					if (rc)
-						dev_err(chip->dev,
-							"Couldn't set charging current rc = %d\n", rc);
-				}
-			} else {
-				if (reg_current_now != chip->fastchg_current_max_ma) {
-					pr_err("Set to normal current(%d mA)\n", chip->fastchg_current_max_ma);
-					rc = smb348_fastchg_current_set(chip, chip->fastchg_current_max_ma);
-					if (rc)
-						dev_err(chip->dev,
-							"Couldn't set charging current rc = %d\n", rc);
-				}
-			}
-		} else {
-			if (chip->fastchg_current_mitigation_ma == reg_current_now) {
-				pr_err("Restore to normal current(200 mA)\n");
-				rc = smb348_fastchg_current_set(chip, chip->fastchg_current_max_ma);
-				if (rc)
-					dev_err(chip->dev,
-						"Couldn't set charging current rc = %d\n", rc);
-			}
-		}
 		pr_err("soc=%d, chg_end=%d, chg_full_flag=%d\n", ret.intval, gpio_get_value(chip->chg_end_gpio), chg_full_flag);
 #endif /* FEATURE_THERMAL_MITIGATION_ALGO */
 		return ret.intval;
