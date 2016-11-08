@@ -2571,6 +2571,15 @@ static int msm_mclk_event(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+static int msm_handset_mic_event(struct snd_soc_dapm_widget *w,
+				 struct snd_kcontrol *k, int event)
+{
+	if (SND_SOC_DAPM_EVENT_ON(event))
+		usleep_range(10000, 10000);
+
+	return 0;
+}
+
 static const struct snd_soc_dapm_widget msm_dapm_widgets[] = {
 
 	SND_SOC_DAPM_SUPPLY("MCLK",  SND_SOC_NOPM, 0, 0,
@@ -2584,7 +2593,7 @@ static const struct snd_soc_dapm_widget msm_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("Lineout_3 amp", NULL),
 	SND_SOC_DAPM_SPK("Lineout_2 amp", NULL),
 	SND_SOC_DAPM_SPK("Lineout_4 amp", NULL),
-	SND_SOC_DAPM_MIC("Handset Mic", NULL),
+	SND_SOC_DAPM_MIC("Handset Mic", msm_handset_mic_event),
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("ANCRight Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("ANCLeft Headset Mic", NULL),
