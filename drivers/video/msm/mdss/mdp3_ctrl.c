@@ -2845,7 +2845,6 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 	if (rc)
 		pr_warn("problem creating link to mdp sysfs\n");
 
-	mfd->mdp_sync_pt_data.async_wait_fences = true;
 	/* Enable PM runtime */
 	pm_runtime_set_suspended(&mdp3_res->pdev->dev);
 	pm_runtime_enable(&mdp3_res->pdev->dev);
