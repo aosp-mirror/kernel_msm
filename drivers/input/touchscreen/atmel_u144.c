@@ -1501,9 +1501,10 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 	} else {
 		data->ts_data.prev_total_num = 0;
 		memset(data->ts_data.prev_data, 0,
-				sizeof(data->ts_data.prev_data));
+				sizeof(struct t_data) * data->pdata->numtouch);
 	}
-	memset(data->ts_data.curr_data, 0, sizeof(struct t_data) * MXT_MAX_FINGER);
+	memset(data->ts_data.curr_data, 0,
+			sizeof(struct t_data) * data->pdata->numtouch);
 
 end:
 	if (data->update_input) {
@@ -2788,8 +2789,10 @@ static void mxt_reset_slots(struct mxt_data *data)
 	input_sync(input_dev);
 	TOUCH_INFO_MSG("Release all event \n");
 
-	memset(data->ts_data.prev_data, 0x0, sizeof(data->ts_data.prev_data));
-	memset(data->ts_data.curr_data, 0x0, sizeof(data->ts_data.curr_data));
+	memset(data->ts_data.prev_data, 0x0,
+			sizeof(struct t_data) * data->pdata->numtouch);
+	memset(data->ts_data.curr_data, 0x0,
+			sizeof(struct t_data) * data->pdata->numtouch);
 	touched_finger_count = 0;
 	data->button_lock = false;
 	data->palm = false;
@@ -2888,10 +2891,13 @@ static int mxt_parse_dt(struct device *dev, struct mxt_platform_data *pdata)
 	rc = of_property_read_u32(node, "atmel,numtouch", &temp_val);
 	if (rc) {
 		TOUCH_ERR_MSG("DT : Unable to read numtouch\n");
+		pdata->numtouch = MXT_MAX_FINGER;
 	} else {
 		pdata->numtouch = temp_val;
-		TOUCH_DEBUG_MSG("DT : numtouch = %d\n", pdata->numtouch);
 	}
+	if (pdata->numtouch > MXT_MAX_FINGER)
+		pdata->numtouch = MXT_MAX_FINGER;
+	TOUCH_DEBUG_MSG("DT : numtouch = %d\n", pdata->numtouch);
 
 	rc = of_property_read_string(node, "atmel,fw_name",  &pdata->fw_name);
 	if (rc) {
@@ -4005,18 +4011,6 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		return -ENOMEM;
 	}
 
-	data->ts_data.curr_data = devm_kzalloc(&client->dev,
-		sizeof(struct t_data) * MXT_MAX_FINGER, GFP_KERNEL);
-	if (!data->ts_data.curr_data) {
-		return -ENOMEM;
-	}
-
-	data->ts_data.prev_data = devm_kzalloc(&client->dev,
-		sizeof(struct t_data) * MXT_MAX_FINGER, GFP_KERNEL);
-	if (!data->ts_data.prev_data) {
-		return -ENOMEM;
-	}
-
 	data->object_table = devm_kzalloc(&client->dev,
 			(MXT_OBJECT_NUM_MAX * sizeof(struct mxt_object)),
 			GFP_KERNEL);
@@ -4040,6 +4034,20 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	} else {
 		TOUCH_ERR_MSG("OF support required\n");
 		return -ENODEV;
+	}
+
+	data->ts_data.curr_data = devm_kzalloc(&client->dev,
+		sizeof(struct t_data) * pdata->numtouch, GFP_KERNEL);
+	if (!data->ts_data.curr_data) {
+		TOUCH_ERR_MSG("No memory for ts_data.curr_data\n");
+		return -ENOMEM;
+	}
+
+	data->ts_data.prev_data = devm_kzalloc(&client->dev,
+		sizeof(struct t_data) * pdata->numtouch, GFP_KERNEL);
+	if (!data->ts_data.prev_data) {
+		TOUCH_ERR_MSG("No memory for ts_data.prev_data\n");
+		return -ENOMEM;
 	}
 
 	if (!pdata->fw_name) {
