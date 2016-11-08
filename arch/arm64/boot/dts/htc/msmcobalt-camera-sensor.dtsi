@@ -44,7 +44,50 @@
 	};
 };
 
+&soc {
+	/delete-node/ qcom,camera-flash@0;
+	/delete-node/ qcom,camera-flash@1;
+};
+
 &cci {
+	/delete-node/ qcom,camera@1;
+	/delete-node/ qcom,camera@2;
+        /delete-node/ qcom,actuator@1;
+        /delete-node/ qcom,eeprom@0;
+        /delete-node/ qcom,eeprom@1;
+        /delete-node/ qcom,eeprom@2;
+};
+
+&cci {
+	actuator0: qcom,actuator@0 {
+		cell-index = <0>;
+		reg = <0x0>;
+		compatible = "qcom,actuator";
+		qcom,cci-master = <0>;
+		/delete-property/ gpios;
+		/delete-property/ qcom,gpio-vaf;
+		/delete-property/ qcom,gpio-req-tbl-num;
+		/delete-property/ qcom,gpio-req-tbl-flags;
+		/delete-property/ qcom,gpio-req-tbl-label;
+		/delete-property/ pinctrl-names;
+		/delete-property/ pinctrl-0;
+		/delete-property/ pinctrl-1;
+	};
+	ois0: qcom,ois@0 {
+		cell-index = <0>;
+		reg = <0x0>;
+		compatible = "qcom,ois";
+		qcom,cci-master = <0>;
+		/delete-property/ gpios;
+		/delete-property/ qcom,gpio-vaf;
+		/delete-property/ qcom,gpio-req-tbl-num;
+		/delete-property/ qcom,gpio-req-tbl-flags;
+		/delete-property/ qcom,gpio-req-tbl-label;
+		/delete-property/ pinctrl-names;
+		/delete-property/ pinctrl-0;
+		/delete-property/ pinctrl-1;
+		status = "ok";
+	};
 	qcom,camera@0 {
 		cell-index = <0>;
 		compatible = "qcom,camera";
@@ -52,17 +95,18 @@
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
 		qcom,mount-angle = <90>;
-		//qcom,led-flash-src = <&led_flash0>;
-		//qcom,actuator-src = <&actuator0>;
-		//qcom,ois-src = <&ois0>;
-		//qcom,eeprom-src = <&eeprom0>;
+		/delete-property/ qcom,led-flash-src;
+		/delete-property/ qcom,actuator-src;
+		qcom,ois-src = <&ois0>;
+		/delete-property/ qcom,eeprom-src;
 		cam_vio-supply = <&pmcobalt_lvs1>;
 		cam_vana-supply = <&pmcobalt_gpios 15 0>;
 		cam_vdig-supply = <&pmcobalt_gpios 20 0>;
-		qcom,cam-vreg-name = "cam_vio", "cam_vana", "cam_vdig";
-		qcom,cam-vreg-min-voltage = <1800000 2850000 1050000>;
-		qcom,cam-vreg-max-voltage = <1800000 2850000 1050000>;
-		qcom,cam-vreg-op-mode = <0 0 0>;
+		cam_vaf-supply = <&pmcobalt_l19>;
+		qcom,cam-vreg-name = "cam_vio", "cam_vana", "cam_vdig", "cam_vaf";
+		qcom,cam-vreg-min-voltage = <1800000 2850000 1050000 2850000>;
+		qcom,cam-vreg-max-voltage = <1800000 2850000 1050000 2850000>;
+		qcom,cam-vreg-op-mode = <0 0 0 0>;
 		qcom,gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk0_active
@@ -98,6 +142,19 @@
 		qcom,clock-rates = <24000000 0>;
 	};
 };
+
+&pmcobalt_gpios {
+	gpio@c800 {
+		/delete-property/ qcom,mode;
+		/delete-property/ qcom,pull;
+		/delete-property/ qcom,vin-sel;
+		/delete-property/ qcom,src-sel;
+		/delete-property/ qcom,invert;
+		/delete-property/ qcom,master-en;
+		status = "disabled";
+	};
+};
+
 &pmcobalt_gpios {
 	gpio@cb00 { /* GPIO 12 - CAMERA SENSOR 0 I2C_SEL */
 		qcom,mode = <1>;		/* Output */

@@ -3,12 +3,6 @@
 #include "msmcobalt-htc-pm.dtsi"
 #include "dsi-panel-muskie-s6e3ha3.dtsi"
 
-&cci {
-        qcom,camera@1 {
-                /delete-property/ cam_vana-supply;
-        };
-};
-
 &pcie0 {
 	/* move and resize conf, io, and bars (mem) allocations */
 	reg = <0x1c00000 0x2000>,

@@ -13,3 +13,8 @@
 /*
  * msmcobalt-htc-regulator: common regulator config of HTC projects
  */
+
+&pmcobalt_l19 {
+       regulator-min-microvolt = <2850000>;
+       regulator-max-microvolt = <3008000>;
+};
