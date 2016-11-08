@@ -47,6 +47,7 @@ struct idr {
 	spinlock_t		lock;
 	int			id_free_cnt;
 	struct idr_layer	*id_free;
+	bool			no_rcu_free;
 };
 
 #define IDR_INIT(name)							\

@@ -30,6 +30,7 @@
 #include <linux/idr.h>
 #include <linux/spinlock.h>
 #include <linux/percpu.h>
+#include <linux/compiler.h>
 
 #define MAX_IDR_SHIFT		(sizeof(int) * 8 - 1)
 #define MAX_IDR_BIT		(1U << MAX_IDR_SHIFT)
@@ -146,7 +147,10 @@ static inline void free_layer(struct idr *idr, struct idr_layer *p)
 {
 	if (idr->hint == p)
 		RCU_INIT_POINTER(idr->hint, NULL);
-	call_rcu(&p->rcu_head, idr_layer_rcu_free);
+	if (unlikely(idr->no_rcu_free))
+		kmem_cache_free(idr_layer_cache, p);
+	else
+		call_rcu(&p->rcu_head, idr_layer_rcu_free);
 }
 
 /* only called when idp->lock is held */
