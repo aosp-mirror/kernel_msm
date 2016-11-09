@@ -729,7 +729,6 @@ static void mxt_proc_t6_messages(struct mxt_data *data, u8 *msg)
 	if (status & MXT_T6_STATUS_RESET && data->suspended) {
 		TOUCH_DEBUG_MSG("RESET Detected. Start Recover\n");
 
-		mutex_lock(&i2c_suspend_lock);
 		if (mxt_patchevent_get(PATCH_EVENT_TA)) {
 			TOUCH_DEBUG_MSG("In charging\n");
 			mxt_patch_event(data, CHARGER_PLUGGED);
@@ -744,7 +743,6 @@ static void mxt_proc_t6_messages(struct mxt_data *data, u8 *msg)
 			else
 				mxt_patch_event(data, ACTIVE_IN_NOCHG);
 		}
-		mutex_unlock(&i2c_suspend_lock);
 		TOUCH_DEBUG_MSG("Recover Complete\n");
 	}
 }
