@@ -33,6 +33,7 @@
 #include <linux/of_gpio.h>
 #include <linux/cdev.h>
 #include <linux/platform_device.h>
+#include <linux/rtc.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/socinfo.h>
@@ -228,10 +229,13 @@ static ssize_t crash_count_show(struct device *dev,
 static ssize_t crash_reason_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	if(is_ramdump_enabled(to_subsys(dev)))
-		return snprintf(buf, PAGE_SIZE, "%s\n", to_subsys(dev)->desc->last_crash_reason);
+	return snprintf(buf, PAGE_SIZE, "%s\n", to_subsys(dev)->desc->last_crash_reason);
+}
 
-	return snprintf(buf, PAGE_SIZE, "\n");
+static ssize_t crash_timestamp_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%s\n", to_subsys(dev)->desc->last_crash_timestamp);
 }
 
 static ssize_t
@@ -359,6 +363,7 @@ static struct device_attribute subsys_attrs[] = {
 	__ATTR_RO(state),
 	__ATTR_RO(crash_count),
 	__ATTR_RO(crash_reason),
+	__ATTR_RO(crash_timestamp),
 	__ATTR(restart_level, 0644, restart_level_show, restart_level_store),
 	__ATTR(firmware_name, 0644, firmware_name_show, firmware_name_store),
 	__ATTR(system_debug, 0644, system_debug_show, system_debug_store),
@@ -629,11 +634,21 @@ static int wait_for_err_ready(struct subsys_device *subsys)
 static void subsystem_shutdown(struct subsys_device *dev, void *data)
 {
 	const char *name = dev->desc->name;
+	char *timestamp = dev->desc->last_crash_timestamp;
+	struct timespec ts_rtc;
+	struct rtc_time tm;
 
 	pr_info("[%p]: Shutting down %s\n", current, name);
 	if (dev->desc->shutdown(dev->desc, true) < 0)
 		panic("subsys-restart: [%p]: Failed to shutdown %s!",
 			current, name);
+
+	/* record crash time */
+	getnstimeofday(&ts_rtc);
+	rtc_time_to_tm(ts_rtc.tv_sec - (sys_tz.tz_minuteswest * 60), &tm);
+	snprintf(timestamp, MAX_CRASH_TIMESTAMP_LEN, "%d-%02d-%02d_%02d-%02d-%02d",
+		tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+
 	dev->crash_count++;
 	subsys_set_state(dev, SUBSYS_OFFLINE);
 	disable_all_irqs(dev);
