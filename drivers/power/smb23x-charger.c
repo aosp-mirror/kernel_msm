@@ -75,6 +75,7 @@ struct smb23x_chip {
 	int				cfg_cool_comp_mv;
 	int				cfg_warm_comp_ma;
 	int				cfg_cool_comp_ma;
+	int				tm_state;
 	struct wake_lock	charger_wake_lock;
 	struct wake_lock	charger_valid_lock;
 
@@ -376,6 +377,20 @@ enum {
 
 enum {
 	WRKRND_IRQ_POLLING = BIT(0),
+};
+
+enum {
+	SMB_TM_HIGHER_STATE,
+	SMB_TM_LOWER_STATE,
+	SMB_TM_NORMAL_STATE,
+};
+
+enum {
+	SMB_TEMP_COLD_STATE,
+	SMB_TEMP_COOL_STATE,
+	SMB_TEMP_NORMAL_STATE,
+	SMB_TEMP_WARM_STATE,
+	SMB_TEMP_HOT_STATE,
 };
 
 static irqreturn_t smb23x_stat_handler(int irq, void *dev_id);
@@ -857,8 +872,53 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 
 	return rc;
 }
+
 extern void set_batt_hot_cold_threshold(unsigned int vbatt_hot_threshold,
 	unsigned int vbatt_cold_threshold);
+
+#define DEFAULT_BATT_VOLTAGE	4000
+static int smb23x_get_prop_batt_voltage(struct smb23x_chip *chip)
+{
+	union power_supply_propval ret = {0, };
+
+	if (chip->bms_psy) {
+		chip->bms_psy->get_property(chip->bms_psy,
+				POWER_SUPPLY_PROP_VOLTAGE_NOW, &ret);
+		return ret.intval/1000;
+	}
+
+	return DEFAULT_BATT_VOLTAGE;
+}
+
+#define SYSTEM_VOLTAGE_RESET_GATE	4050
+static void smb23x_system_voltage_set(struct smb23x_chip *chip)
+{
+	int rc, batt_voltage, value;
+	u8 tmp;
+
+	batt_voltage = smb23x_get_prop_batt_voltage(chip);
+	if (batt_voltage > SYSTEM_VOLTAGE_RESET_GATE)
+		value = 2;
+	else
+		value = 0;
+
+	rc = smb23x_read(chip, CFG_REG_4, &tmp);
+	if (rc < 0) {
+		pr_err("read CFG_REG_4 failed, rc=%d\n", rc);
+		return;
+	}
+	pr_debug("batt_voltage:%d, value:%d, tmp:%d\n", batt_voltage, value, tmp&0x03);
+	tmp = tmp & 0x03;
+	if (tmp != value) {
+		rc = smb23x_masked_write(chip, CFG_REG_4,
+			SYSTEM_VOLTAGE_MASK,
+			value);
+		if (rc < 0) {
+			pr_err("Set System Voltage failed, rc=%d\n", rc);
+			return;
+		}
+	}
+}
 
 static int smb23x_hw_init(struct smb23x_chip *chip)
 {
@@ -1104,13 +1164,7 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 	}
 
 	/*System voltage config*/
-	rc = smb23x_masked_write(chip, CFG_REG_4,
-			SYSTEM_VOLTAGE_MASK,
-			2);
-	if (rc < 0) {
-		pr_err("Set System Voltage failed, rc=%d\n", rc);
-		return rc;
-	}
+	smb23x_system_voltage_set(chip);
 
 	/*
 	 * Disable the STAT pin output, to make the pin keep at open drain
@@ -1581,6 +1635,7 @@ static int smb23x_determine_initial_status(struct smb23x_chip *chip)
 	}
 	chip->high_temp_threshold = chip->cfg_warm_bat_decidegc;
 	chip->low_temp_threshold = chip->cfg_cool_bat_decidegc;
+	chip->tm_state = SMB_TEMP_NORMAL_STATE;
 
 	return rc;
 }
@@ -1680,6 +1735,7 @@ static enum power_supply_property smb23x_battery_properties[] = {
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 };
 
 static int smb23x_get_prop_batt_health(struct smb23x_chip *chip)
@@ -1873,6 +1929,9 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = smb23x_get_prop_batt_temp(chip);
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		val->intval = smb23x_get_prop_batt_voltage(chip);
 		break;
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
 		val->intval = chip->therm_lvl_sel;
@@ -2339,7 +2398,6 @@ static void smb23x_set_appropriate_float_voltage(struct smb23x_chip *chip)
 			chip->cfg_cool_comp_mv,
 			chip->cfg_warm_comp_mv,
 			chip->cfg_vfloat_mv,
-			//chip->warm_resume_delta_mv,
 			chip->cfg_resume_delta_mv
 			);
 	if (chip->batt_cool)
@@ -2363,26 +2421,90 @@ static void smb23x_set_appropriate_float_voltage(struct smb23x_chip *chip)
 #define HYSTERISIS_DECIDEGC         20
 #define MAX_TEMP                    800
 #define MIN_TEMP                   -300
-enum {
-	SMB_TM_HIGHER_STATE,
-	SMB_TM_LOWER_STATE,
-	SMB_TM_NORMAL_STATE,
-};
+
+/*
+ * smb23x_charge_current_limit
+ * set appropriate voltages and currents.
+ *
+ * (TODO)Note that when the battery is hot or cold, the charger
+ * driver will not resume with SoC. Only vbatdet is used to
+ * determine resume of charging.
+ */
+
+/* NOTE(by ZTE JZN):
+*  if vbatt>warm_bat_mv and charging is enabled, battery will discharging and iusb=0 ;
+*  if vbatt>warm_bat_mv and charging is disabled, iusb will be the currnt source and ibat=0 .
+*  so, there is a bug in the below codes:if vbatt>warm_bat_mv,battery will discharging and iusb=0
+*/
+static void smb23x_charge_current_limit(struct smb23x_chip *chip)
+{
+	smb23x_set_appropriate_usb_current(chip);
+	smb23x_set_appropriate_ibat(chip);
+	smb23x_set_appropriate_float_voltage(chip);
+	smb23x_charging_disable(chip, THERMAL, false);
+	power_supply_changed(&chip->batt_psy);
+
+}
+static void smb23x_update_temp_state(struct smb23x_chip *chip)
+{
+	chip->batt_hot = (chip->tm_state == SMB_TEMP_HOT_STATE) ? true : false;
+	chip->batt_warm = (chip->tm_state == SMB_TEMP_WARM_STATE) ? true : false;
+	chip->batt_cool = (chip->tm_state == SMB_TEMP_COOL_STATE) ? true : false;
+	chip->batt_cold = (chip->tm_state == SMB_TEMP_COLD_STATE) ? true : false;
+}
+static void smb23x_temp_state_changed(struct smb23x_chip *chip)
+{
+	smb23x_update_temp_state(chip);
+
+	switch (chip->tm_state) {
+	case(SMB_TEMP_COLD_STATE):
+		chip->low_temp_threshold = MIN_TEMP;
+		chip->high_temp_threshold = chip->cfg_cold_bat_decidegc + HYSTERISIS_DECIDEGC;
+		smb23x_charging_disable(chip, THERMAL, true);
+		power_supply_changed(&chip->batt_psy);
+		break;
+	case(SMB_TEMP_COOL_STATE):
+		chip->low_temp_threshold = chip->cfg_cold_bat_decidegc;
+		chip->high_temp_threshold = chip->cfg_cool_bat_decidegc + HYSTERISIS_DECIDEGC;
+		smb23x_charge_current_limit(chip);
+		break;
+	case(SMB_TEMP_NORMAL_STATE):
+		chip->low_temp_threshold = chip->cfg_cool_bat_decidegc;
+		chip->high_temp_threshold = chip->cfg_warm_bat_decidegc;
+		smb23x_charge_current_limit(chip);
+		break;
+	case(SMB_TEMP_WARM_STATE):
+		chip->low_temp_threshold = chip->cfg_warm_bat_decidegc - HYSTERISIS_DECIDEGC;
+		chip->high_temp_threshold = chip->cfg_hot_bat_decidegc;
+		smb23x_charge_current_limit(chip);
+		break;
+	case(SMB_TEMP_HOT_STATE):
+		chip->low_temp_threshold = chip->cfg_hot_bat_decidegc - HYSTERISIS_DECIDEGC;
+		chip->high_temp_threshold = MAX_TEMP;
+		smb23x_charging_disable(chip, THERMAL, true);
+		power_supply_changed(&chip->batt_psy);
+		break;
+	default:
+		break;
+	}
+}
 
 static void smb23x_temp_control_func(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct smb23x_chip *chip = container_of(dwork, struct smb23x_chip, temp_control_work);
-	bool bat_warm = false, bat_cool = false, bat_hot = false,bat_cold = false;
 	int state = SMB_TM_NORMAL_STATE;
 	int temp=0;
+
+	smb23x_system_voltage_set(chip);
+
 	if (!chip->resume_completed) {
 		pr_err("smb23x_temp_control_func launched before device-resume, schedule to 2s later\n");
 		schedule_delayed_work(&chip->temp_control_work,round_jiffies_relative(msecs_to_jiffies(2000)));
 		return;
 	}
-	temp = smb23x_get_prop_batt_temp(chip);
 
+	temp = smb23x_get_prop_batt_temp(chip);
 	if (temp > MAX_TEMP)
 		temp = MAX_TEMP;
 	if (temp < MIN_TEMP)
@@ -2396,130 +2518,42 @@ static void smb23x_temp_control_func(struct work_struct *work)
 		state = SMB_TM_NORMAL_STATE;
 
 	mutex_lock(&chip->jeita_configure_lock);
+
 	if (state == SMB_TM_HIGHER_STATE) {
-		pr_debug("SMB_TM_HIGHER_STATE");
-		if(chip->batt_hot == false && chip->batt_warm == false && chip->batt_cool == false && chip->batt_cold == true)
-		{
-			bat_hot = false;
-			bat_warm = false;
-			bat_cool = true;
-			bat_cold = false;
-			chip->low_temp_threshold = chip->cfg_cold_bat_decidegc;
-			chip->high_temp_threshold = chip->cfg_cool_bat_decidegc + HYSTERISIS_DECIDEGC;
+		switch (chip->tm_state) {
+		case(SMB_TEMP_COLD_STATE):
+			chip->tm_state = SMB_TEMP_COOL_STATE;
+			break;
+		case(SMB_TEMP_COOL_STATE):
+			chip->tm_state = SMB_TEMP_NORMAL_STATE;
+			break;
+		case(SMB_TEMP_NORMAL_STATE):
+			chip->tm_state = SMB_TEMP_WARM_STATE;
+			break;
+		case(SMB_TEMP_WARM_STATE):
+			chip->tm_state = SMB_TEMP_HOT_STATE;
+			break;
 		}
-		else if(chip->batt_hot == false && chip->batt_warm == false && chip->batt_cool == true && chip->batt_cold == false)
-		{
-			bat_hot = false;
-			bat_warm = false;
-			bat_cool = false;
-			bat_cold = false;
-			chip->low_temp_threshold = chip->cfg_cool_bat_decidegc;
-			chip->high_temp_threshold = chip->cfg_warm_bat_decidegc;
+		smb23x_temp_state_changed(chip);
+	} else if (state == SMB_TM_LOWER_STATE) {
+		switch (chip->tm_state) {
+		case(SMB_TEMP_COOL_STATE):
+			chip->tm_state = SMB_TEMP_COLD_STATE;
+			break;
+		case(SMB_TEMP_NORMAL_STATE):
+			chip->tm_state = SMB_TEMP_COOL_STATE;
+			break;
+		case(SMB_TEMP_WARM_STATE):
+			chip->tm_state = SMB_TEMP_NORMAL_STATE;
+			break;
+		case(SMB_TEMP_HOT_STATE):
+			chip->tm_state = SMB_TEMP_WARM_STATE;
+			break;
 		}
-		else if(chip->batt_hot == false && chip->batt_warm == false && chip->batt_cool == false && chip->batt_cold == false)
-		{
-			bat_hot = false;
-			bat_warm = true;
-			bat_cool = false;
-			bat_cold = false;
-			chip->low_temp_threshold =chip->cfg_warm_bat_decidegc - HYSTERISIS_DECIDEGC;
-			chip->high_temp_threshold = chip->cfg_hot_bat_decidegc;
-		}
-		else if(chip->batt_hot == false && chip->batt_warm == true && chip->batt_cool == false && chip->batt_cold == false)
-		{
-			bat_hot = true;
-			bat_warm = false;
-			bat_cool = false;
-			bat_cold = false;
-			chip->low_temp_threshold = chip->cfg_hot_bat_decidegc - HYSTERISIS_DECIDEGC;
-			chip->high_temp_threshold = MAX_TEMP;
-		}
-	} else if (state == SMB_TM_LOWER_STATE){
-		pr_debug("SMB_TM_LOWER_STATE");
-		if(chip->batt_hot == false && chip->batt_warm == false && chip->batt_cool == true && chip->batt_cold == false)
-		{
-			bat_hot = false;
-			bat_warm = false;
-			bat_cool = false;
-			bat_cold = true;
-			chip->low_temp_threshold = MIN_TEMP;
-			chip->high_temp_threshold = chip->cfg_cold_bat_decidegc + HYSTERISIS_DECIDEGC;
-		}
-		else if(chip->batt_hot == false && chip->batt_warm == false && chip->batt_cool == false && chip->batt_cold == false)
-		{
-			bat_hot = false;
-			bat_warm = false;
-			bat_cool = true;
-			bat_cold = false;
-			chip->low_temp_threshold = chip->cfg_cold_bat_decidegc;
-			chip->high_temp_threshold = chip->cfg_cool_bat_decidegc + HYSTERISIS_DECIDEGC;
-		}
-		else if(chip->batt_hot == false && chip->batt_warm == true && chip->batt_cool == false && chip->batt_cold == false)
-		{
-			bat_hot = false;
-			bat_warm = false;
-			bat_cool = false;
-			bat_cold = false;
-			chip->low_temp_threshold =chip->cfg_cool_bat_decidegc;
-			chip->high_temp_threshold = chip->cfg_warm_bat_decidegc ;
-		}
-		else if(chip->batt_hot == true && chip->batt_warm == false && chip->batt_cool == false && chip->batt_cold == false)
-		{
-			bat_hot = false;
-			bat_warm = true;
-			bat_cool = false;
-			bat_cold = false;
-			chip->low_temp_threshold = chip->cfg_warm_bat_decidegc - HYSTERISIS_DECIDEGC;
-			chip->high_temp_threshold = chip->cfg_hot_bat_decidegc;
-		}
+		smb23x_temp_state_changed(chip);
 	} else {
 		pr_debug("SMB_TM_NORMAL_STATE");
 		goto check_again;
-	}
-
-	pr_debug("temp = %d bat_cold = %d,bat_cool = %d,bat_warm = %d, bat_hot = %d\n",temp,bat_cold,bat_cool,bat_warm,bat_hot);
-
-	if (chip->batt_warm ^ bat_warm || chip->batt_cool ^ bat_cool) {
-		chip->batt_warm = bat_warm;
-		chip->batt_cool = bat_cool;
-		pr_debug("battery warm/cool, temp = %d bat_cold = %d,bat_cool = %d,bat_warm = %d, bat_hot = %d\n",temp,bat_cold,bat_cool,bat_warm,bat_hot);
-		/**
-		 * set appropriate voltages and currents.
-		 *
-		 * (TODO)Note that when the battery is hot or cold, the charger
-		 * driver will not resume with SoC. Only vbatdet is used to
-		 * determine resume of charging.
-		 */
-
-		/* NOTE(by ZTE JZN):
-		*  if vbatt>warm_bat_mv and charging is enabled, battery will discharging and iusb=0 ;
-		*  if vbatt>warm_bat_mv and charging is disabled, iusb will be the currnt source and ibat=0 .
-		*  so, there is a bug in the below codes:if vbatt>warm_bat_mv,battery will discharging and iusb=0
-		*/
-		smb23x_set_appropriate_usb_current(chip);
-		smb23x_set_appropriate_ibat(chip);
-		smb23x_set_appropriate_float_voltage(chip);
-		power_supply_changed(&chip->batt_psy);
-	}
-	/**
-	  * Hot/cool Temp Procedure(ZTE)
-	  *
-	  * add for stop charging when hot/cool temp,
-	  * only called when status changed
-	  */
-
-	if (chip->batt_hot ^ bat_hot  || chip->batt_cold ^ bat_cold) {
-		chip->batt_hot = bat_hot;
-		chip->batt_cold = bat_cold;
-		pr_debug("battery hot/cool, temp = %d bat_cold = %d,bat_cool = %d,bat_warm = %d, bat_hot = %d\n",temp,bat_cold,bat_cool,bat_warm,bat_hot);
-		if (chip->batt_hot || chip->batt_cold) {
-			/* disable charging */
-			smb23x_charging_disable(chip, THERMAL, true);
-		} else {
-			/* enable charging */
-			smb23x_charging_disable(chip, THERMAL, false);
-		}
-		power_supply_changed(&chip->batt_psy);
 	}
 check_again:
 	mutex_unlock(&chip->jeita_configure_lock);

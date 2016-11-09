@@ -1179,6 +1179,7 @@ static int read_and_update_ocv(struct qpnp_bms_chip *chip, int batt_temp,
 	return 0;
 }
 
+#define DEFAULT_BATT_VOLTAGE (3800*1000)
 static int get_battery_voltage(struct qpnp_bms_chip *chip, int *result_uv)
 {
 	int rc;
@@ -2216,6 +2217,7 @@ static enum power_supply_property bms_power_props[] = {
 	POWER_SUPPLY_PROP_BATTERY_TYPE,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 };
 
 static int
@@ -2293,6 +2295,12 @@ static int qpnp_vm_bms_power_get_property(struct power_supply *psy,
 			val->intval = chip->charge_cycles;
 		else
 			val->intval = -EINVAL;
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		rc = get_battery_voltage(chip, &value);
+		if (rc)
+			value = DEFAULT_BATT_VOLTAGE;
+		val->intval = value;
 		break;
 	default:
 		return -EINVAL;
