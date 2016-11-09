@@ -4492,11 +4492,12 @@ static void elan_touch_esd_func(struct work_struct *work)
 
   if( (have_interrupts == 1) || (work_lock == 1) || (suspend_ESD == 1))
   {
-    touch_debug(DEBUG_INFO, "[elan esd] : had interrup not need check\n");
+    /* touch_debug(DEBUG_INFO, "[elan esd] : had interrupt not need check\n"); */
   }
   else
   {
 	/* Reset TP, if touch controller no any response  */
+	touch_debug(DEBUG_INFO, "[elan esd] : touch controller no any response, reset TP\n");
 	elan_ktf_ts_hw_reset();
   }
 
