@@ -4503,7 +4503,7 @@ static void elan_touch_esd_func(struct work_struct *work)
 
   have_interrupts = 0;
   queue_delayed_work( esd_wq, &esd_work, delay );
-  touch_debug(DEBUG_INFO, "[elan esd] %s: exit.......\n", __FUNCTION__ );  /* elan_dlx */
+ /* touch_debug(DEBUG_INFO, "[elan esd] %s: exit.......\n", __FUNCTION__ );*/  /* elan_dlx */
 }
 #endif
 
