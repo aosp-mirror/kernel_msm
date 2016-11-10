@@ -5216,6 +5216,7 @@ struct ext_scan_capabilities_response
 	uint32_t    max_number_epno_networks;
 	uint32_t    max_number_epno_networks_by_ssid;
 	uint32_t    max_number_of_white_listed_ssid;
+	uint32_t    max_number_of_black_listed_bssid;
 };
 
 
