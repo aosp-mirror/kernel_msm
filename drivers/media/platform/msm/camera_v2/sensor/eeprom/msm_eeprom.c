@@ -328,6 +328,8 @@ static int eeprom_parse_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 	int rc =  0, i, j;
 	uint8_t *memptr;
 	struct msm_eeprom_mem_map_t *eeprom_map;
+	struct msm_camera_i2c_seq_reg_array *reg_setting;
+	uint32_t reg_data_32;
 
 	e_ctrl->cal_data.mapdata = NULL;
 	e_ctrl->cal_data.num_data = msm_get_read_mem_size(eeprom_map_array);
@@ -358,14 +360,46 @@ static int eeprom_parse_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 		for (i = 0; i < eeprom_map->memory_map_size; i++) {
 			switch (eeprom_map->mem_settings[i].i2c_operation) {
 			case MSM_CAM_WRITE: {
-				e_ctrl->i2c_client.addr_type =
-					eeprom_map->mem_settings[i].addr_type;
-				rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(
-					&(e_ctrl->i2c_client),
-					eeprom_map->mem_settings[i].reg_addr,
-					eeprom_map->mem_settings[i].reg_data,
-					eeprom_map->mem_settings[i].data_type);
-				msleep(eeprom_map->mem_settings[i].delay);
+				if(eeprom_map->mem_settings[i].data_type == MSM_CAMERA_I2C_DWORD_DATA){
+					reg_setting = kzalloc(sizeof(struct msm_camera_i2c_seq_reg_array), GFP_KERNEL);
+					if (!reg_setting)
+						return -ENOMEM;
+					e_ctrl->i2c_client.addr_type = eeprom_map->mem_settings[i].addr_type;
+
+					CDBG("MSM_CAMERA_I2C_DWORD_DATA :E\n");
+					CDBG("addr = %x, reg_data = %d", eeprom_map->mem_settings[i].reg_addr, eeprom_map->mem_settings[i].reg_data);
+					reg_data_32 = eeprom_map->mem_settings[i].reg_data;
+					CDBG("reg_data_32 = %d\n", reg_data_32);
+
+					reg_setting->reg_addr = eeprom_map->mem_settings[i].reg_addr;
+					CDBG("addr = %x", reg_setting->reg_addr);
+
+					reg_setting->reg_data[0] = (uint8_t)((reg_data_32 & 0xFF000000) >> 24);
+					reg_setting->reg_data[1] = (uint8_t)((reg_data_32 & 0x00FF0000) >> 16);
+					reg_setting->reg_data[2] = (uint8_t)((reg_data_32 & 0x0000FF00) >> 8);
+					reg_setting->reg_data[3] = (uint8_t)(reg_data_32 & 0x000000FF);
+					reg_setting->reg_data_size = 4;
+					CDBG("%x %x %x %x \n", reg_setting->reg_data[0], reg_setting->reg_data[1],
+						reg_setting->reg_data[2], reg_setting->reg_data[3]);
+
+					rc = e_ctrl->i2c_client.i2c_func_tbl->
+						i2c_write_seq(&(e_ctrl->i2c_client),
+						reg_setting->reg_addr,
+						reg_setting->reg_data,
+						reg_setting->reg_data_size);
+
+					kfree(reg_setting);
+					reg_setting = NULL;
+				}else{
+					e_ctrl->i2c_client.addr_type =
+						eeprom_map->mem_settings[i].addr_type;
+					rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(
+						&(e_ctrl->i2c_client),
+						eeprom_map->mem_settings[i].reg_addr,
+						eeprom_map->mem_settings[i].reg_data,
+						eeprom_map->mem_settings[i].data_type);
+					msleep(eeprom_map->mem_settings[i].delay);
+				}
 				if (rc < 0) {
 					pr_err("%s: page write failed\n",
 						__func__);
