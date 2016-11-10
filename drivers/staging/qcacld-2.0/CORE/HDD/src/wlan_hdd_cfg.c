@@ -4603,6 +4603,21 @@ REG_TABLE_ENTRY g_registry_table[] =
                 CFG_ACTIVE_MODE_OFFLOAD_DEFAULT,
                 CFG_ACTIVE_MODE_OFFLOAD_MIN,
                 CFG_ACTIVE_MODE_OFFLOAD_MAX),
+
+   REG_VARIABLE(CFG_MAX_SCHED_SCAN_PLAN_INT_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, max_sched_scan_plan_interval,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_MAX_SCHED_SCAN_PLAN_INT_DEFAULT,
+                CFG_MAX_SCHED_SCAN_PLAN_INT_MIN,
+                CFG_MAX_SCHED_SCAN_PLAN_INT_MAX),
+
+   REG_VARIABLE(CFG_MAX_SCHED_SCAN_PLAN_ITRNS_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, max_sched_scan_plan_iterations,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_MAX_SCHED_SCAN_PLAN_ITRNS_DEFAULT,
+                CFG_MAX_SCHED_SCAN_PLAN_ITRNS_MIN,
+                CFG_MAX_SCHED_SCAN_PLAN_ITRNS_MAX),
+
 };
 
 

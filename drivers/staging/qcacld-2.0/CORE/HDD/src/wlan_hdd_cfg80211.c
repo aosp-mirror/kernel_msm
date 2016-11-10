@@ -129,6 +129,13 @@
 
 #define WLAN_HDD_TGT_NOISE_FLOOR_DBM      (-96)
 
+/*
+ * max_sched_scan_plans defined to 2 for
+ * (1)fast scan
+ * (2)slow scan
+ */
+#define MAX_SCHED_SCAN_PLANS 2
+
 /* For IBSS, enable obss, fromllb, overlapOBSS & overlapFromllb protection
    check. The bit map is defined in:
 
@@ -11488,6 +11495,33 @@ struct wiphy *wlan_hdd_cfg80211_wiphy_alloc(int priv_size)
     return wiphy;
 }
 
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(4,4,0)) || \
+    defined (CFG80211_MULTI_SCAN_PLAN_BACKPORT)
+/**
+ * hdd_config_sched_scan_plans_to_wiphy() - configure sched scan plans to wiphy
+ * @wiphy: pointer to wiphy
+ * @config: pointer to config
+ *
+ * Return: None
+ */
+static void hdd_config_sched_scan_plans_to_wiphy(struct wiphy *wiphy,
+						 hdd_config_t *config)
+{
+	wiphy->max_sched_scan_plans = MAX_SCHED_SCAN_PLANS;
+	if (config->max_sched_scan_plan_interval)
+		wiphy->max_sched_scan_plan_interval =
+			config->max_sched_scan_plan_interval;
+	if (config->max_sched_scan_plan_iterations)
+		wiphy->max_sched_scan_plan_iterations =
+			config->max_sched_scan_plan_iterations;
+}
+#else
+static void hdd_config_sched_scan_plans_to_wiphy(struct wiphy *wiphy,
+						 hdd_config_t *config)
+{
+}
+#endif
+
 /*
  * FUNCTION: wlan_hdd_cfg80211_init
  * This function is called by hdd_wlan_startup()
@@ -11732,6 +11766,8 @@ int wlan_hdd_cfg80211_init(struct device *dev,
 #ifdef CHANNEL_SWITCH_SUPPORTED
     wiphy->flags |= WIPHY_FLAG_HAS_CHANNEL_SWITCH;
 #endif
+
+    hdd_config_sched_scan_plans_to_wiphy(wiphy, pCfg);
 
     EXIT();
     return 0;
@@ -21136,6 +21172,47 @@ static eHalStatus wlan_hdd_is_pno_allowed(hdd_adapter_t *adapter)
 		return eHAL_STATUS_FAILURE;
 
 }
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)) || \
+    defined (CFG80211_MULTI_SCAN_PLAN_BACKPORT)
+/**
+ * hdd_config_sched_scan_plan() - configures the sched scan plans
+ *	from the framework.
+ * @pno_req: pointer to PNO scan request
+ * @request: pointer to scan request from framework
+ *
+ * Return: None
+ */
+static void hdd_config_sched_scan_plan(tpSirPNOScanReq pno_req,
+				struct cfg80211_sched_scan_request *request,
+				hdd_context_t *hdd_ctx)
+{
+	pno_req->fast_scan_period =
+		request->scan_plans[0].interval * MSEC_PER_SEC;
+	pno_req->fast_scan_max_cycles = request->scan_plans[0].iterations;
+	pno_req->slow_scan_period =
+		request->scan_plans[1].interval * MSEC_PER_SEC;
+	hddLog(LOGE, "Base scan interval: %d sec, scan cycles: %d, slow scan interval %d",
+		request->scan_plans[0].interval,
+		request->scan_plans[0].iterations,
+		request->scan_plans[1].interval);
+
+}
+#else
+static void hdd_config_sched_scan_plan(tpSirPNOScanReq pno_req,
+				struct cfg80211_sched_scan_request *request,
+				hdd_context_t *hdd_ctx)
+{
+	pno_req->fast_scan_period = request->interval;
+	pno_req->fast_scan_max_cycles =
+		hdd_ctx->cfg_ini->configPNOScanTimerRepeatValue;
+	pno_req->slow_scan_period =
+		hdd_ctx->cfg_ini->pno_slow_scan_multiplier *
+		pno_req->fast_scan_period;
+	hddLog(LOGE, "Base scan interval: %d sec PNOScanTimerRepeatValue: %d",
+		    (request->interval / 1000),
+		    hdd_ctx->cfg_ini->configPNOScanTimerRepeatValue);
+}
+#endif
 
 /*
  * FUNCTION: __wlan_hdd_cfg80211_sched_scan_start
@@ -21373,22 +21450,7 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
                 pPnoRequest->us5GProbeTemplateLen);
     }
 
-    /*
-     * Driver gets only one time interval which is hard coded in
-     * supplicant for 10000ms. Taking power consumption into account
-     * firmware after gPNOScanTimerRepeatValue times fast_scan_period switches
-     * slow_scan_period. This is less frequent scans and firmware shall be
-     * in slow_scan_period mode until next PNO Start.
-     */
-    pPnoRequest->fast_scan_period = request->interval;
-    pPnoRequest->fast_scan_max_cycles =
-                              pHddCtx->cfg_ini->configPNOScanTimerRepeatValue;
-    pPnoRequest->slow_scan_period = pHddCtx->cfg_ini->pno_slow_scan_multiplier *
-                                        pPnoRequest->fast_scan_period;
-
-    hddLog(LOG1, "Base scan interval: %d sec PNOScanTimerRepeatValue: %d",
-           (request->interval / 1000),
-            pHddCtx->cfg_ini->configPNOScanTimerRepeatValue);
+    hdd_config_sched_scan_plan(pPnoRequest, request, pHddCtx);
 
     pPnoRequest->modePNO = SIR_PNO_MODE_IMMEDIATE;
 
