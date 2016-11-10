@@ -582,7 +582,13 @@ struct functionfs_config {
 	struct usb_function *func;
 	struct usb_function_instance *fi;
 	struct ffs_data *data;
+	struct android_usb_function *android_func;
+	struct list_head list_item;
 };
+
+#define MAX_FFS_FUNCTIONS 5
+static struct list_head ffs_configs;
+static struct mutex ffs_configs_lock;
 
 static int functionfs_ready_callback(struct ffs_data *ffs);
 static void functionfs_closed_callback(struct ffs_data *ffs);
@@ -590,34 +596,60 @@ static void functionfs_closed_callback(struct ffs_data *ffs);
 static int ffs_function_init(struct android_usb_function *f,
 			     struct usb_composite_dev *cdev)
 {
+	int i;
 	struct functionfs_config *config;
+	struct functionfs_config *next;
 	struct f_fs_opts *opts;
+	struct android_usb_function *nf;
 
-	f->config = kzalloc(sizeof(struct functionfs_config), GFP_KERNEL);
-	if (!f->config)
-		return -ENOMEM;
+	INIT_LIST_HEAD(&ffs_configs);
+	mutex_init(&ffs_configs_lock);
 
-	config = f->config;
+	for (i = 0; i < MAX_FFS_FUNCTIONS; i++) {
+		nf = kmalloc(sizeof(struct android_usb_function), GFP_KERNEL);
+		config = kzalloc(sizeof(struct functionfs_config), GFP_KERNEL);
+		if (!nf || !config) {
+			kfree(nf);
+			kfree(config);
+			list_for_each_entry_safe(config, next,
+					&ffs_configs, list_item) {
+				list_del(&config->list_item);
+				usb_put_function_instance(config->fi);
+				kfree(config->android_func);
+				kfree(config);
+			}
+			return -ENOMEM;
+		}
 
-	config->fi = usb_get_function_instance("ffs");
-	if (IS_ERR(config->fi))
-		return PTR_ERR(config->fi);
+		memcpy(nf, f, sizeof(struct android_usb_function));
+		nf->config = config;
+		config->android_func = nf;
 
-	opts = to_f_fs_opts(config->fi);
-	opts->dev->ffs_ready_callback = functionfs_ready_callback;
-	opts->dev->ffs_closed_callback = functionfs_closed_callback;
-	opts->no_configfs = true;
+		config->fi = usb_get_function_instance("ffs");
+		if (IS_ERR(config->fi))
+			return PTR_ERR(config->fi);
 
-	return ffs_single_dev(opts->dev);
+		opts = to_f_fs_opts(config->fi);
+		opts->dev->ffs_ready_callback = functionfs_ready_callback;
+		opts->dev->ffs_closed_callback = functionfs_closed_callback;
+		opts->no_configfs = true;
+
+		list_add_tail(&config->list_item, &ffs_configs);
+	}
+	return 0;
 }
 
 static void ffs_function_cleanup(struct android_usb_function *f)
 {
-	struct functionfs_config *config = f->config;
-	if (config)
-		usb_put_function_instance(config->fi);
+	struct functionfs_config *config;
+	struct functionfs_config *next;
 
-	kfree(f->config);
+	list_for_each_entry_safe(config, next, &ffs_configs, list_item) {
+		list_del(&config->list_item);
+		usb_put_function_instance(config->fi);
+		kfree(config->android_func);
+		kfree(config);
+	}
 }
 
 static void ffs_function_enable(struct android_usb_function *f)
@@ -688,6 +720,10 @@ ffs_aliases_store(struct device *pdev, struct device_attribute *attr,
 {
 	struct android_dev *dev;
 	char buff[256];
+	char *aliases;
+	struct functionfs_config *config;
+	struct f_fs_opts *opts;
+	struct list_head *config_ptr;
 
 	dev = list_first_entry(&android_dev_list, struct android_dev,
 					list_item);
@@ -699,8 +735,36 @@ ffs_aliases_store(struct device *pdev, struct device_attribute *attr,
 	}
 
 	strlcpy(buff, buf, sizeof(buff));
-	strlcpy(dev->ffs_aliases, strim(buff), sizeof(dev->ffs_aliases));
+	aliases = strim(buff);
+	strlcpy(dev->ffs_aliases, aliases, sizeof(dev->ffs_aliases));
 
+	/* Free old aliases */
+	mutex_lock(&ffs_configs_lock);
+	list_for_each_entry(config, &ffs_configs, list_item) {
+		opts = to_f_fs_opts(config->fi);
+		kfree(opts->dev->name);
+		opts->dev->name = NULL;
+	}
+	config_ptr = ffs_configs.next;
+	while (aliases) {
+		char *alias = strsep(&aliases, ",");
+
+		if (!alias)
+			break;
+		if (config_ptr == &ffs_configs) {
+			pr_err("Too many ffs functions, max is %d\n",
+					MAX_FFS_FUNCTIONS);
+			return -EOVERFLOW;
+		}
+
+		config = list_entry(config_ptr,
+				struct functionfs_config, list_item);
+
+		config->fi->set_inst_name(config->fi, alias);
+		config_ptr = config_ptr->next;
+	}
+
+	mutex_unlock(&ffs_configs_lock);
 	mutex_unlock(&dev->mutex);
 
 	return size;
@@ -725,27 +789,61 @@ static struct android_usb_function ffs_function = {
 
 static int functionfs_ready_callback(struct ffs_data *ffs)
 {
-	struct android_dev *dev = ffs_function.android_dev;
-	struct functionfs_config *config = ffs_function.config;
+	struct android_dev *dev;
+	struct functionfs_config *config = NULL;
+	struct functionfs_config *cur;
+	struct f_fs_opts *opts;
 
-	if (!dev)
+	mutex_lock(&ffs_configs_lock);
+	list_for_each_entry(cur, &ffs_configs, list_item) {
+		opts = to_f_fs_opts(cur->fi);
+		if (opts->dev->ffs_data == ffs) {
+			config = cur;
+			break;
+		}
+	}
+	if (!config) {
+		pr_err("ffs function %s could not be found!\n",
+				ffs->dev_name);
+		mutex_unlock(&ffs_configs_lock);
 		return -ENODEV;
+	}
 
-	mutex_lock(&dev->mutex);
+	dev = config->android_func->android_dev;
+
+	if (dev)
+		mutex_lock(&dev->mutex);
 	config->data = ffs;
 	config->opened = true;
 
 	if (config->enabled && dev)
 		android_enable(dev);
 
-	mutex_unlock(&dev->mutex);
+	mutex_unlock(&ffs_configs_lock);
+	if (dev)
+		mutex_unlock(&dev->mutex);
 	return 0;
 }
 
 static void functionfs_closed_callback(struct ffs_data *ffs)
 {
-	struct android_dev *dev = ffs_function.android_dev;
-	struct functionfs_config *config = ffs_function.config;
+	struct android_dev *dev;
+	struct functionfs_config *config = NULL;
+	struct functionfs_config *cur;
+
+	mutex_lock(&ffs_configs_lock);
+	list_for_each_entry(cur, &ffs_configs, list_item) {
+		if (cur->data == ffs) {
+			config = cur;
+			break;
+		}
+	}
+	if (!config) {
+		pr_err("ffs closed callback failed %s!\n", ffs->dev_name);
+		mutex_unlock(&ffs_configs_lock);
+		return;
+	}
+	dev = config->android_func->android_dev;
 
 	if (dev)
 		mutex_lock(&dev->mutex);
@@ -761,6 +859,7 @@ static void functionfs_closed_callback(struct ffs_data *ffs)
 		config->func = NULL;
 	}
 
+	mutex_unlock(&ffs_configs_lock);
 	if (dev)
 		mutex_unlock(&dev->mutex);
 
@@ -3324,6 +3423,55 @@ static int android_enable_function(struct android_dev *dev,
 	return -EINVAL;
 }
 
+static int android_enable_ffs_function(struct android_dev *dev,
+				   struct android_configuration *conf,
+				   char *alias)
+{
+	struct functionfs_config *config;
+	struct f_fs_opts *opts;
+	struct android_usb_function *match = NULL;
+	struct android_usb_function_holder *f_holder;
+
+	mutex_lock(&ffs_configs_lock);
+	list_for_each_entry(config, &ffs_configs, list_item) {
+		opts = to_f_fs_opts(config->fi);
+		if (opts->dev->name && !strcmp(opts->dev->name, alias)) {
+			match = config->android_func;
+			break;
+		}
+	}
+	if (!match) {
+		pr_err("ffs function %s was never aliased\n", alias);
+		mutex_unlock(&ffs_configs_lock);
+		return -ENODEV;
+	}
+	/* Function has already been enabled. */
+	if (match->android_dev) {
+		pr_err("ffs function %s already enabled\n", alias);
+		mutex_unlock(&ffs_configs_lock);
+		return -EBUSY;
+	}
+	if (!opts->dev->ffs_data) {
+		pr_err("ffs function %s was never mounted\n", alias);
+		mutex_unlock(&ffs_configs_lock);
+		return -ENODEV;
+	}
+
+
+	f_holder = kzalloc(sizeof(*f_holder), GFP_KERNEL);
+	if (!f_holder) {
+		mutex_unlock(&ffs_configs_lock);
+		return -ENOMEM;
+	}
+
+	match->android_dev = dev;
+	f_holder->f = match;
+	list_add_tail(&f_holder->enabled_list, &conf->enabled_functions);
+	mutex_unlock(&ffs_configs_lock);
+	pr_debug("ffs func:%s is enabled.\n", alias);
+	return 0;
+}
+
 #include "htc_attr.c"
 /*-------------------------------------------------------------------------*/
 /* /sys/class/android_usb/android%d/ interface */
@@ -3472,9 +3620,8 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 			}
 
 			if (is_ffs) {
-				if (ffs_enabled)
-					continue;
-				err = android_enable_function(dev, conf, "ffs");
+				err = android_enable_ffs_function(dev,
+						conf, name);
 				if (err)
 					pr_err("android_usb: Cannot enable ffs (%d)",
 									err);
