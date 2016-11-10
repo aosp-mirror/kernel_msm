@@ -885,25 +885,16 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 
 			spin_unlock_irq(&epfile->ffs->eps_lock);
 		} else {
-			struct completion *done;
+			DECLARE_COMPLETION_ONSTACK(done);
 
 			req = ep->req;
 			req->buf      = data;
 			req->length   = data_len;
+
+			req->context  = &done;
 			req->complete = ffs_epfile_io_complete;
 			ret	      = 0;
 
-			if (io_data->read) {
-				reinit_completion(
-						&epfile->ffs->epout_completion);
-				done = &epfile->ffs->epout_completion;
-				req->context  = done;
-			} else {
-				reinit_completion(
-						&epfile->ffs->epin_completion);
-				done = &epfile->ffs->epin_completion;
-				req->context  = done;
-			}
 
 			/* Don't queue another read if previous is still busy */
 			if (!(io_data->read && ep->is_busy)) {
@@ -916,7 +907,7 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 			if (unlikely(ret < 0)) {
 				ret = -EIO;
 			} else if (unlikely(
-				   wait_for_completion_interruptible(done))) {
+				   wait_for_completion_interruptible(&done))) {
 				spin_lock_irq(&epfile->ffs->eps_lock);
 				/*
 				 * While we were acquiring lock endpoint got
@@ -950,10 +941,10 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 				if (io_data->read && ret > 0) {
 					if (io_data->len != MAX_BUF_LEN &&
 							ret < io_data->len)
-						pr_err("less data(%zd) recieved than intended length(%zu)\n",
+						pr_debug("less data(%zd) received than intended length(%zu)\n",
 							ret, io_data->len);
 					else if (ret > io_data->len)
-						pr_err("More data(%zd) recieved than intended length(%zu)\n",
+						pr_err("More data(%zd) received than intended length(%zu)\n",
 							ret, io_data->len);
 
 					ret = min_t(size_t, ret, io_data->len);
@@ -1441,7 +1432,7 @@ ffs_fs_mount(struct file_system_type *t, int flags,
 	};
 	struct dentry *rv;
 	int ret;
-	void *ffs_dev;
+	struct ffs_dev *ffs_dev;
 	struct ffs_data	*ffs;
 
 	ENTER();
@@ -1467,6 +1458,7 @@ ffs_fs_mount(struct file_system_type *t, int flags,
 		return ERR_CAST(ffs_dev);
 	}
 	ffs->private_data = ffs_dev;
+	ffs_dev->ffs_data = ffs;
 	data.ffs_data = ffs;
 
 	rv = mount_nodev(t, flags, &data, ffs_sb_fill);
@@ -1589,8 +1581,6 @@ static struct ffs_data *ffs_data_new(void)
 	spin_lock_init(&ffs->eps_lock);
 	init_waitqueue_head(&ffs->ev.waitq);
 	init_completion(&ffs->ep0req_completion);
-	init_completion(&ffs->epout_completion);
-	init_completion(&ffs->epin_completion);
 
 	/* XXX REVISIT need to update it in some places, or do we? */
 	ffs->ev.can_stall = 1;
