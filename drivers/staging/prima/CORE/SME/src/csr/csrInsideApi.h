@@ -111,6 +111,8 @@
 #define CSR_JOIN_RETRY_TIMEOUT_PERIOD        ( 1 *  PAL_TIMER_TO_SEC_UNIT )  // 1 second
 #endif
 
+#define CSR_DISABLE_SCAN_DURING_SCO          100 //100 milliseconds
+
 typedef enum 
 {
     eCsrNextScanNothing,
