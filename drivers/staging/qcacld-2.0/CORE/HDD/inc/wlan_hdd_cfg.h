@@ -3878,6 +3878,56 @@ enum dot11p_mode {
 #define CFG_MAX_SCHED_SCAN_PLAN_ITRNS_MAX        (100)
 #define CFG_MAX_SCHED_SCAN_PLAN_ITRNS_DEFAULT    (10)
 
+/*
+ * 5G preference parameters for boosting RSSI
+ * enable_band_specific_pref: Enable preference for 5G from INI.
+ * raise_rssi_thresh_5g: A_band_boost_threshold above which 5 GHz is favored.
+ * raise_factor_5g : Factor by which 5GHz RSSI is boosted.
+ * max_raise_rssi_5g: Maximum boost that can be applied to 5GHz RSSI.
+ */
+
+#define CFG_ENABLE_5G_BAND_PREF_NAME             "enable_5g_band_pref"
+#define CFG_ENABLE_5G_BAND_PREF_MIN              (0)
+#define CFG_ENABLE_5G_BAND_PREF_MAX              (1)
+#define CFG_ENABLE_5G_BAND_PREF_DEFAULT          (0)
+
+#define CFG_5G_RSSI_BOOST_THRESHOLD_NAME         "5g_rssi_boost_threshold"
+#define CFG_5G_RSSI_BOOST_THRESHOLD_MIN          (-55)
+#define CFG_5G_RSSI_BOOST_THRESHOLD_MAX          (-70)
+#define CFG_5G_RSSI_BOOST_THRESHOLD_DEFAULT      (-60)
+
+#define CFG_5G_RSSI_BOOST_FACTOR_NAME            "5g_rssi_boost_factor"
+#define CFG_5G_RSSI_BOOST_FACTOR_MIN             (0)
+#define CFG_5G_RSSI_BOOST_FACTOR_MAX             (2)
+#define CFG_5G_RSSI_BOOST_FACTOR_DEFAULT         (1)
+
+#define CFG_5G_MAX_RSSI_BOOST_NAME               "5g_max_rssi_boost"
+#define CFG_5G_MAX_RSSI_BOOST_MIN                (0)
+#define CFG_5G_MAX_RSSI_BOOST_MAX                (20)
+#define CFG_5G_MAX_RSSI_BOOST_DEFAULT            (10)
+
+/*
+ * 5G preference parameters for penalizing RSSI
+ * drop_rssi_thresh_5g: threshold below which 5 GHz is not favored.
+ * drop_factor_5g : Factor by which a weak 5GHz RSSI is penalized.
+ * max_drop_rssi_5g: Maximum penalty that can be applied to 5GHz RSSI.
+ */
+
+#define CFG_5G_RSSI_PENALIZE_THRESHOLD_NAME      "5g_rssi_penalize_threshold"
+#define CFG_5G_RSSI_PENALIZE_THRESHOLD_MIN       (-65)
+#define CFG_5G_RSSI_PENALIZE_THRESHOLD_MAX       (-80)
+#define CFG_5G_RSSI_PENALIZE_THRESHOLD_DEFAULT   (-70)
+
+#define CFG_5G_RSSI_PENALIZE_FACTOR_NAME         "5g_rssi_penalize_factor"
+#define CFG_5G_RSSI_PENALIZE_FACTOR_MIN          (0)
+#define CFG_5G_RSSI_PENALIZE_FACTOR_MAX          (2)
+#define CFG_5G_RSSI_PENALIZE_FACTOR_DEFAULT      (1)
+
+#define CFG_5G_MAX_RSSI_PENALIZE_NAME            "5g_max_rssi_penalize"
+#define CFG_5G_MAX_RSSI_PENALIZE_MIN             (0)
+#define CFG_5G_MAX_RSSI_PENALIZE_MAX             (20)
+#define CFG_5G_MAX_RSSI_PENALIZE_DEFAULT         (10)
+
 /*---------------------------------------------------------------------------
   Type declarations
   -------------------------------------------------------------------------*/
@@ -4643,6 +4693,15 @@ struct hdd_config {
    bool                        active_mode_offload;
    uint32_t                    max_sched_scan_plan_interval;
    uint32_t                    max_sched_scan_plan_iterations;
+   /* 5G preference parameters for boosting RSSI */
+   bool                        enable_5g_band_pref;
+   int8_t                      rssi_boost_threshold_5g;
+   uint8_t                     rssi_boost_factor_5g;
+   uint8_t                     max_rssi_boost_5g;
+  /* 5G preference parameters for dropping RSSI*/
+   int8_t                      rssi_penalize_threshold_5g;
+   uint8_t                     rssi_penalize_factor_5g;
+   uint8_t                     max_rssi_penalize_5g;
 };
 
 typedef struct hdd_config hdd_config_t;

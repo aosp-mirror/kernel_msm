@@ -14434,6 +14434,7 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
 #ifdef QCA_ARP_SPOOFING_WAR
    adf_os_device_t adf_ctx;
 #endif
+   struct sme_5g_band_pref_params band_pref_params;
 
    ENTER();
 
@@ -15396,6 +15397,22 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
        if (eHAL_STATUS_SUCCESS != hal_status)
            hddLog(LOGE, FL("Failed to disable Chan Avoidance Indcation"));
    }
+   if (pHddCtx->cfg_ini->enable_5g_band_pref) {
+        band_pref_params.rssi_boost_threshold_5g =
+                                  pHddCtx->cfg_ini->rssi_boost_threshold_5g;
+        band_pref_params.rssi_boost_factor_5g =
+                                  pHddCtx->cfg_ini->rssi_boost_factor_5g;
+        band_pref_params.max_rssi_boost_5g =
+                                  pHddCtx->cfg_ini->max_rssi_boost_5g;
+        band_pref_params.rssi_penalize_threshold_5g =
+                                  pHddCtx->cfg_ini->rssi_penalize_threshold_5g;
+        band_pref_params.rssi_penalize_factor_5g =
+                                  pHddCtx->cfg_ini->rssi_penalize_factor_5g;
+        band_pref_params.max_rssi_penalize_5g =
+                                  pHddCtx->cfg_ini->max_rssi_penalize_5g;
+        sme_set_5g_band_pref(pHddCtx->hHal, &band_pref_params);
+   }
+
    wlan_comp.status = 0;
    complete(&wlan_comp.wlan_start_comp);
    goto success;

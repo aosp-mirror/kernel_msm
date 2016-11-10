@@ -4618,6 +4618,54 @@ REG_TABLE_ENTRY g_registry_table[] =
                 CFG_MAX_SCHED_SCAN_PLAN_ITRNS_MIN,
                 CFG_MAX_SCHED_SCAN_PLAN_ITRNS_MAX),
 
+   REG_VARIABLE(CFG_ENABLE_5G_BAND_PREF_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, enable_5g_band_pref,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_ENABLE_5G_BAND_PREF_DEFAULT,
+                CFG_ENABLE_5G_BAND_PREF_MIN,
+                CFG_ENABLE_5G_BAND_PREF_MAX),
+
+   REG_VARIABLE(CFG_5G_RSSI_BOOST_THRESHOLD_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, rssi_boost_threshold_5g,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_5G_RSSI_BOOST_THRESHOLD_DEFAULT,
+                CFG_5G_RSSI_BOOST_THRESHOLD_MIN,
+                CFG_5G_RSSI_BOOST_THRESHOLD_MAX),
+
+   REG_VARIABLE(CFG_5G_RSSI_BOOST_FACTOR_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, rssi_boost_factor_5g,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_5G_RSSI_BOOST_FACTOR_DEFAULT,
+                CFG_5G_RSSI_BOOST_FACTOR_MIN,
+                CFG_5G_RSSI_BOOST_FACTOR_MAX),
+
+   REG_VARIABLE(CFG_5G_MAX_RSSI_BOOST_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, max_rssi_boost_5g,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_5G_MAX_RSSI_BOOST_DEFAULT,
+                CFG_5G_MAX_RSSI_BOOST_MIN,
+                CFG_5G_MAX_RSSI_BOOST_MAX),
+
+   REG_VARIABLE(CFG_5G_RSSI_PENALIZE_THRESHOLD_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, rssi_penalize_threshold_5g,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_5G_RSSI_PENALIZE_THRESHOLD_DEFAULT,
+                CFG_5G_RSSI_PENALIZE_THRESHOLD_MIN,
+                CFG_5G_RSSI_PENALIZE_THRESHOLD_MAX),
+
+   REG_VARIABLE(CFG_5G_RSSI_PENALIZE_FACTOR_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, rssi_penalize_factor_5g,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_5G_RSSI_PENALIZE_FACTOR_DEFAULT,
+                CFG_5G_RSSI_PENALIZE_FACTOR_MIN,
+                CFG_5G_RSSI_PENALIZE_FACTOR_MAX),
+
+   REG_VARIABLE(CFG_5G_MAX_RSSI_PENALIZE_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, max_rssi_penalize_5g,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_5G_MAX_RSSI_PENALIZE_DEFAULT,
+                CFG_5G_MAX_RSSI_PENALIZE_MIN,
+                CFG_5G_MAX_RSSI_PENALIZE_MAX),
 };
 
 

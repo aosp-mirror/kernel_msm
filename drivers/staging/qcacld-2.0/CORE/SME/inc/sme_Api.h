@@ -266,6 +266,24 @@ struct sme_oem_capability {
 	uint32_t reserved2;
 };
 
+/*
+ * struct sme_5g_pref_params : 5G preference params to be read from ini
+ * @rssi_boost_threshold_5g: RSSI threshold above which 5 GHz is favored
+ * @rssi_boost_factor_5g: Factor by which 5GHz RSSI is boosted
+ * @max_rssi_boost_5g: Maximum boost that can be applied to 5GHz RSSI
+ * @rssi_penalize_threshold_5g: RSSI threshold below which 5G is not favored
+ * @rssi_penalize_factor_5g: Factor by which 5GHz RSSI is penalized
+ * @max_rssi_penalize_5g: Maximum penalty that can be applied to 5G RSSI
+ */
+struct sme_5g_band_pref_params {
+	int8_t      rssi_boost_threshold_5g;
+	uint8_t     rssi_boost_factor_5g;
+	uint8_t     max_rssi_boost_5g;
+	int8_t      rssi_penalize_threshold_5g;
+	uint8_t     rssi_penalize_factor_5g;
+	uint8_t     max_rssi_penalize_5g;
+};
+
 /*-------------------------------------------------------------------------
   Function declarations and documentation
   ------------------------------------------------------------------------*/
@@ -4578,4 +4596,7 @@ eHalStatus sme_remove_bssid_from_scan_list(tHalHandle hal,
 eHalStatus sme_register_p2p_ack_ind_callback(tHalHandle hal,
                                        sir_p2p_ack_ind_callback callback);
 void sme_set_allowed_action_frames(tHalHandle hal, uint32_t bitmap0);
+void sme_set_5g_band_pref(tHalHandle hal_handle,
+                                struct sme_5g_band_pref_params *pref_params);
+
 #endif //#if !defined( __SME_API_H )
