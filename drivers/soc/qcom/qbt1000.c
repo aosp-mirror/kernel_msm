@@ -83,6 +83,7 @@ struct qbt1000_drvdata {
 	uint32_t	ssc_subsys_id;
 	uint32_t	ssc_spi_port;
 	uint32_t	ssc_spi_port_slave_index;
+	struct qseecom_handle *app_handle;
 };
 
 /**
@@ -106,7 +107,8 @@ static int get_cmd_rsp_buffers(struct qseecom_handle *hdl,
 	*cmd_len = ALIGN(*cmd_len, 64);
 	*rsp_len = ALIGN(*rsp_len, 64);
 
-	if ((*rsp_len + *cmd_len) > g_app_buf_size)
+	if (((uint64_t)*rsp_len + (uint64_t)*cmd_len)
+	  > (uint64_t)g_app_buf_size)
 		return -ENOMEM;
 
 	*cmd = hdl->sbuf;
@@ -786,8 +788,20 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			goto end;
 		}
 
+		if (drvdata->app_handle) {
+			dev_err(drvdata->dev, "%s: LOAD app already loaded, unloading first\n",
+				__func__);
+			rc = qseecom_shutdown_app(&drvdata->app_handle);
+			if (rc != 0) {
+				dev_err(drvdata->dev, "%s: LOAD current app failed to shutdown\n",
+					  __func__);
+				goto end;
+			}
+		}
+
 		/* start the TZ app */
-		rc = qseecom_start_app(&app_handle, app.name, app.size);
+		rc = qseecom_start_app(&drvdata->app_handle,
+				app.name, app.size);
 		if (rc == 0) {
 			g_app_buf_size = app.size;
 		} else {
@@ -796,7 +810,9 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			goto end;
 		}
 
-		/* copy the app handle to user */
+		/* copy a fake app handle to user */
+		app_handle = drvdata->app_handle ?
+			(struct qseecom_handle *)123456 : 0;
 		rc = copy_to_user((void __user *)app.app_handle, &app_handle,
 			sizeof(*app.app_handle));
 
@@ -813,7 +829,7 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 	case QBT1000_UNLOAD_APP:
 	{
 		struct qbt1000_app app;
-		struct qseecom_handle *app_handle;
+		struct qseecom_handle *app_handle = 0;
 
 		if (copy_from_user(&app, priv_arg,
 			sizeof(app)) != 0) {
@@ -843,14 +859,14 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 		}
 
 		/* if the app hasn't been loaded already, return err */
-		if (!app_handle) {
+		if (!drvdata->app_handle) {
 			dev_err(drvdata->dev, "%s: App not loaded\n",
 				__func__);
 			rc = -EINVAL;
 			goto end;
 		}
 
-		rc = qseecom_shutdown_app(&app_handle);
+		rc = qseecom_shutdown_app(&drvdata->app_handle);
 		if (rc != 0) {
 			dev_err(drvdata->dev, "%s: App failed to shutdown\n",
 				__func__);
@@ -891,7 +907,7 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 		}
 
 		/* if the app hasn't been loaded already, return err */
-		if (!tzcmd.app_handle) {
+		if (!drvdata->app_handle) {
 			dev_err(drvdata->dev, "%s: App not loaded\n",
 				__func__);
 			rc = -EINVAL;
@@ -901,7 +917,7 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 		/* init command and response buffers and align lengths */
 		aligned_cmd_len = tzcmd.req_buf_len;
 		aligned_rsp_len = tzcmd.rsp_buf_len;
-		rc = get_cmd_rsp_buffers(tzcmd.app_handle,
+		rc = get_cmd_rsp_buffers(drvdata->app_handle,
 			(void **)&aligned_cmd,
 			&aligned_cmd_len,
 			(void **)&aligned_rsp,
@@ -926,7 +942,7 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 		}
 
 		/* send cmd to TZ */
-		rc = qseecom_send_command(tzcmd.app_handle,
+		rc = qseecom_send_command(drvdata->app_handle,
 			aligned_cmd,
 			aligned_cmd_len,
 			aligned_rsp,
