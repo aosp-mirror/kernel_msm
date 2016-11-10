@@ -2711,7 +2711,7 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	 * "physically contiguous and 64-byte (cache line) aligned".
 	 */
 	xhci->dcbaa = dma_alloc_coherent(dev, sizeof(*xhci->dcbaa), &dma,
-			GFP_KERNEL);
+			flags);
 	if (!xhci->dcbaa)
 		goto fail;
 	memset(xhci->dcbaa, 0, sizeof *(xhci->dcbaa));
