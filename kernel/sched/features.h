@@ -97,4 +97,4 @@ SCHED_FEAT(UTIL_EST, false)
  * trade off between energy consumption and performance impact when comparing
  * previous and next candidate CPUs.
  */
-SCHED_FEAT(ENERGY_FILTER, false)
+SCHED_FEAT(ENERGY_FILTER, true)
