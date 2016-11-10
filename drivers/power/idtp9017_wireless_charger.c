@@ -1506,7 +1506,7 @@ static void idtp9017_resume(struct device *dev)
 	delay = is_bootmode_charger? 0 : round_jiffies_relative(
 			msecs_to_jiffies(chip->wlc_online_chk_delay_ms));
 
-	if (!gpio_is_valid(chip->tx_detect_gpio) && !chip->psy_chg_en)
+	if (!gpio_is_valid(chip->tx_detect_gpio) && chip->online)
 		schedule_delayed_work(&chip->wlc_online_check_work, delay);
 
 	if (chip->wlc_enabled && chip->wlc_chg_en)
@@ -1519,7 +1519,7 @@ static int idtp9017_suspend(struct device *dev)
 {
 	struct idtp9017_chip *chip = dev_get_drvdata(dev);
 
-	if (!gpio_is_valid(chip->tx_detect_gpio) && !chip->psy_chg_en)
+	if (!gpio_is_valid(chip->tx_detect_gpio))
 		cancel_delayed_work_sync(&chip->wlc_online_check_work);
 
 	if (chip->wlc_enabled && chip->wlc_chg_en)
