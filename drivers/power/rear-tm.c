@@ -262,17 +262,44 @@ static ssize_t rear_param_attr_store(struct device *dev,
 	return count;
 }
 
+static ssize_t compensated_temp_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct rear_tm_data *rear_tm = get_rear_tm(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+			rear_tm->compensated_temp);
+}
+
+static ssize_t compensated_temp_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct rear_tm_data *rear_tm = get_rear_tm(dev);
+	int temp;
+
+	if (kstrtoint(buf, 0, &temp)) {
+		pr_err("invalid value\n");
+		return -EINVAL;
+	}
+
+	rear_tm->compensated_temp = temp;
+	pr_info("compensated_temp = %d\n", rear_tm->compensated_temp);
+
+	rear_tm_notification_init(rear_tm);
+	return count;
+}
+
 static DEVICE_ATTR(call_alert, S_IRUGO | S_IWUSR,
 		rear_param_attr_show, rear_param_attr_store);
 static DEVICE_ATTR(call_dropped, S_IRUGO | S_IWUSR,
 		rear_param_attr_show, rear_param_attr_store);
-static DEVICE_ATTR(poweroff, S_IRUGO | S_IWUSR,
-		rear_param_attr_show, rear_param_attr_store);
+static DEVICE_ATTR(compensated_temp, S_IRUGO | S_IWUSR,
+		compensated_temp_show, compensated_temp_store);
 
 static struct attribute *rear_tm_param_attributes[] = {
 	&dev_attr_call_alert.attr,
 	&dev_attr_call_dropped.attr,
-	&dev_attr_poweroff.attr,
+	&dev_attr_compensated_temp.attr,
 	NULL,
 };
 
@@ -389,6 +416,10 @@ static int rear_tm_notification_init(struct rear_tm_data *rear_tm)
 {
 	int ret;
 
+	/* We want the initial state to be normal */
+	rear_tm->thermalstate = REAR_NORMAL;
+	switch_set_state(&rear_tm->sdev, REAR_NORMAL);
+
 	rear_tm->adc_param.low_temp = rear_tm->warm_cfg[0].thresh_clr +
 		rear_tm->compensated_temp;
 	rear_tm->adc_param.high_temp = rear_tm->warm_cfg[0].thresh +
@@ -500,9 +531,6 @@ static int rear_tm_probe(struct spmi_device *spmi)
 		pr_err("failed to register switch device\n");
 		goto err_switch_dev_register;
 	}
-
-	/* We want the initial state to be normal */
-	switch_set_state(&rear_tm->sdev, REAR_NORMAL);
 
 	ret = rear_tm_notification_init(rear_tm);
 	if (ret) {
