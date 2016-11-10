@@ -244,14 +244,14 @@ __limExtScanForwardBcnProbeRsp(tpAniSirGlobal pmac, uint8_t *rx_pkt_info,
 	tSirMsgQ                     mmh_msg;
 	tpSirMacMgmtHdr              hdr;
 
-	result = vos_mem_malloc(sizeof(*result) + ie_len);
+	result = vos_mem_malloc(sizeof(*result) + ie_len + ie_len);
 	if (NULL == result) {
 		limLog(pmac, LOGE, FL("Memory allocation failed"));
 		return;
 	}
 	hdr = WDA_GET_RX_MAC_HEADER(rx_pkt_info);
 	body = WDA_GET_RX_MPDU_DATA(rx_pkt_info);
-	vos_mem_zero(result, sizeof(*result) + ie_len);
+	vos_mem_zero(result, sizeof(*result) + ie_len + ie_len);
 
 	/* Received frame does not have request id, hence set 0 */
 	result->requestId = 0;
@@ -274,6 +274,9 @@ __limExtScanForwardBcnProbeRsp(tpAniSirGlobal pmac, uint8_t *rx_pkt_info,
 	/* Copy IE fields */
 	vos_mem_copy((uint8_t *) &result->ap.ieData,
 			body + SIR_MAC_B_PR_SSID_OFFSET, ie_len);
+
+	limCollectBssDescription(pmac, &result->bss_description,
+			frame, rx_pkt_info, eANI_BOOLEAN_FALSE);
 
 	mmh_msg.type = msg_type;
 	mmh_msg.bodyptr = result;

@@ -5347,6 +5347,7 @@ struct extscan_cached_scan_results
  * @moreData: 0 - for last fragment
  *             1 - still more fragment(s) coming
  * @ap: bssid info
+ * @bss_description: BSS description
  *
  * Reported when each probe response is received, if reportEvents
  * enabled in tSirWifiScanCmdReqParams
@@ -5356,6 +5357,7 @@ typedef struct
 	uint32_t            requestId;
 	bool                moreData;
 	tSirWifiScanResult  ap;
+	tSirBssDescription bss_description;
 } tSirWifiFullScanResultEvent, *tpSirWifiFullScanResultEvent;
 
 /**
