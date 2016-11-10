@@ -2989,3 +2989,11 @@ inline void vos_pkt_stats_to_logger_thread(void *pl_hdr, void *pkt_dump,
 
 	wlan_pkt_stats_to_logger_thread(pl_hdr, pkt_dump, data);
 }
+
+v_U64_t vos_get_monotonic_boottime_ns(void)
+{
+	struct timespec ts;
+
+	ktime_get_ts(&ts);
+	return timespec_to_ns(&ts);
+}
