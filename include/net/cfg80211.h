@@ -71,6 +71,7 @@ struct wiphy;
 #define CFG80211_ABORT_SCAN 1
 #define CFG80211_INFORM_BSS_FRAME_DATA 1
 #define CFG80211_SCAN_RANDOM_MAC_ADDR 1
+#define CFG80211_MULTI_SCAN_PLAN_BACKPORT 1
 
 /*
  * wireless hardware capability structures
