@@ -9251,6 +9251,7 @@ wl_notify_gscan_event(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 			} else
 				err = -ENOMEM;
 			break;
+#ifdef DHD_ANQPO_SUPPORT
 		case WLC_E_PFN_NET_FOUND:
 			ptr = dhd_dev_process_anqpo_result(ndev, data, event, &len);
 			if (ptr) {
@@ -9260,6 +9261,7 @@ wl_notify_gscan_event(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 			} else
 				err = -ENOMEM;
 			break;
+#endif /* DHD_ANQPO_SUPPORT */
 		default:
 			WL_ERR(("Unknown event %d\n", event));
 			break;
@@ -9805,7 +9807,9 @@ static void wl_init_event_handler(struct bcm_cfg80211 *cfg)
 	cfg->evt_handler[WLC_E_PFN_BSSID_NET_FOUND] = wl_notify_gscan_event;
 	cfg->evt_handler[WLC_E_PFN_BSSID_NET_LOST] = wl_notify_gscan_event;
 	cfg->evt_handler[WLC_E_PFN_SSID_EXT] = wl_notify_gscan_event;
+#ifdef DHD_ANQPO_SUPPORT
 	cfg->evt_handler[WLC_E_GAS_FRAGMENT_RX] = wl_notify_gscan_event;
+#endif /* DHD_ANQPO_SUPPORT */
 	cfg->evt_handler[WLC_E_ROAM_EXP_EVENT] = wl_handle_roam_exp_event;
 #endif /* GSCAN_SUPPORT */
 	cfg->evt_handler[WLC_E_RSSI_LQM] = wl_handle_rssi_monitor_event;
