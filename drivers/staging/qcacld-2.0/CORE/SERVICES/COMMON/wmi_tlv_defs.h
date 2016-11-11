@@ -752,6 +752,9 @@ typedef enum {
     WMITLV_TAG_STRUC_wmi_rx_aggr_failure_info,
     WMITLV_TAG_STRUC_wmi_vdev_encrypt_decrypt_data_req_cmd_fixed_param,
     WMITLV_TAG_STRUC_wmi_vdev_encrypt_decrypt_data_resp_event_fixed_param,
+    WMITLV_TAG_STRUC_wmi_pdev_band_to_mac,
+    WMITLV_TAG_STRUC_wmi_tbtt_offset_info,
+    WMITLV_TAG_STRUC_wmi_tbtt_offset_ext_event_fixed_param,
 } WMITLV_TAG_ID;
 
 /*
