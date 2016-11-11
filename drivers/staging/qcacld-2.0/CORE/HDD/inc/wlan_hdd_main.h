@@ -248,6 +248,8 @@
 
 typedef v_U8_t tWlanHddMacAddr[HDD_MAC_ADDR_LEN];
 
+#define MAX_PROBE_REQ_OUIS 16
+
 /*
  * Generic asynchronous request/response support
  *
@@ -1805,6 +1807,9 @@ struct hdd_context_s
     unsigned int last_scan_bug_report_timestamp;
     bool driver_being_stopped; /* Track if DRIVER STOP cmd is sent */
     uint8_t max_mc_addr_list;
+
+    uint32_t no_of_probe_req_ouis;
+    struct vendor_oui *probe_req_voui;
 };
 
 /*---------------------------------------------------------------------------
