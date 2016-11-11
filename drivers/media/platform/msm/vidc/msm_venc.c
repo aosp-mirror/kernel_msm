@@ -1634,13 +1634,13 @@ static inline int msm_venc_power_save_mode_enable(struct msm_vidc_inst *inst)
 				(void *)inst->session, prop_id, pdata);
 		if (rc) {
 			dprintk(VIDC_ERR,
-				"%s: Failed to set power save mode for inst: %p\n",
+				"%s: Failed to set power save mode for inst: %pK\n",
 				__func__, inst);
 			goto fail_power_mode_set;
 		}
 		inst->flags |= VIDC_LOW_POWER;
 		msm_dcvs_enc_set_power_save_mode(inst, true);
-		dprintk(VIDC_INFO, "Power Save Mode set for inst: %p\n", inst);
+		dprintk(VIDC_INFO, "Power Save Mode set for inst: %pK\n", inst);
 	}
 
 fail_power_mode_set:
@@ -1703,7 +1703,7 @@ static int msm_venc_start_streaming(struct vb2_queue *q, unsigned int count)
 		return -EINVAL;
 	}
 	inst = q->drv_priv;
-	dprintk(VIDC_DBG, "Streamon called on: %d capability for inst: %p\n",
+	dprintk(VIDC_DBG, "Streamon called on: %d capability for inst: %pK\n",
 		q->type, inst);
 	switch (q->type) {
 	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
@@ -1721,7 +1721,7 @@ static int msm_venc_start_streaming(struct vb2_queue *q, unsigned int count)
 	}
 	if (rc) {
 		dprintk(VIDC_ERR,
-			"Streamon failed on: %d capability for inst: %p\n",
+			"Streamon failed on: %d capability for inst: %pK\n",
 			q->type, inst);
 		goto stream_start_failed;
 	}
@@ -3379,7 +3379,7 @@ int msm_venc_enum_fmt(struct msm_vidc_inst *inst, struct v4l2_fmtdesc *f)
 	int rc = 0;
 	if (!inst || !f) {
 		dprintk(VIDC_ERR,
-			"Invalid input, inst = %pK, f = %p\n", inst, f);
+			"Invalid input, inst = %pK, f = %pK\n", inst, f);
 		return -EINVAL;
 	}
 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {

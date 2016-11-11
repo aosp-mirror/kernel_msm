@@ -107,7 +107,7 @@ static int get_device_address(struct smem_client *smem_client,
 		}
 		if (table->sgl) {
 			dprintk(VIDC_DBG,
-				"%s: CB : %s, DMA buf: %p, device: %p, attach: %p, table: %p, table sgl: %p, rc: %d, dma_address: %pa\n",
+				"%s: CB : %s, DMA buf: %pK, device: %pK, attach: %pK, table: %pK, table sgl: %pK, rc: %d, dma_address: %pa\n",
 				__func__, cb->name, buf, cb->dev, attach,
 				table, table->sgl, rc,
 				&table->sgl->dma_address);
@@ -137,7 +137,7 @@ static int get_device_address(struct smem_client *smem_client,
 		}
 	}
 
-	dprintk(VIDC_DBG, "mapped ion handle %p to %pa\n", hndl, iova);
+	dprintk(VIDC_DBG, "mapped ion handle %pK to %pa\n", hndl, iova);
 	return 0;
 mem_map_sg_failed:
 	dma_buf_unmap_attachment(attach, table, DMA_BIDIRECTIONAL);
@@ -175,7 +175,7 @@ static void put_device_address(struct smem_client *smem_client,
 	}
 	if (is_iommu_present(smem_client->res)) {
 		dprintk(VIDC_DBG,
-			"Calling dma_unmap_sg - device: %p, address: %pa, buf: %p, table: %p, attach: %p\n",
+			"Calling dma_unmap_sg - device: %pK, address: %pa, buf: %pK, table: %pK, attach: %pK\n",
 			mapping_info->dev,
 			&mapping_info->table->sgl->dma_address,
 			mapping_info->buf, mapping_info->table,
@@ -204,7 +204,7 @@ static int ion_user_to_kernel(struct smem_client *client, int fd, u32 offset,
 	unsigned long ion_flags = 0;
 
 	hndl = ion_import_dma_buf(client->clnt, fd);
-	dprintk(VIDC_DBG, "%s ion handle: %p\n", __func__, hndl);
+	dprintk(VIDC_DBG, "%s ion handle: %pK\n", __func__, hndl);
 	if (IS_ERR_OR_NULL(hndl)) {
 		dprintk(VIDC_ERR, "Failed to get handle: %pK, %d, %d, %pK\n",
 				client, fd, offset, hndl);
@@ -242,7 +242,7 @@ static int ion_user_to_kernel(struct smem_client *client, int fd, u32 offset,
 		goto fail_device_address;
 	}
 	dprintk(VIDC_DBG,
-		"%s: ion_handle = %pK, fd = %d, device_addr = %pa, size = %zx, kvaddr = %p, buffer_type = %d, flags = %#lx\n",
+		"%s: ion_handle = %pK, fd = %d, device_addr = %pa, size = %zx, kvaddr = %pK, buffer_type = %d, flags = %#lx\n",
 		__func__, mem->smem_priv, fd, &mem->device_addr, mem->size,
 		mem->kvaddr, mem->buffer_type, mem->flags);
 	return rc;
@@ -408,7 +408,7 @@ static void free_ion_mem(struct smem_client *client, struct msm_smem *mem)
 				(u32)mem->buffer_type, -1, mem->size, -1,
 				mem->flags, -1);
 		dprintk(VIDC_DBG,
-			"%s: Freeing handle %p, client: %p\n",
+			"%s: Freeing handle %pK, client: %pK\n",
 			__func__, mem->smem_priv, client->clnt);
 		ion_free(client->clnt, mem->smem_priv);
 		trace_msm_smem_buffer_ion_op_end("FREE", (u32)mem->buffer_type,
@@ -667,7 +667,7 @@ struct context_bank_info *msm_smem_get_context_bank(void *clt,
 				cb->buffer_type & buffer_type) {
 			match = cb;
 			dprintk(VIDC_DBG,
-				"context bank found for CB : %s, device: %p mapping: %p\n",
+				"context bank found for CB : %s, device: %pK mapping: %pK\n",
 				match->name, match->dev, match->mapping);
 			break;
 		}

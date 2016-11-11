@@ -3636,7 +3636,7 @@ int msm_comm_qbuf(struct msm_vidc_inst *inst, struct vb2_buffer *vb)
 	defer = defer ?: batch_mode && (!output_count || !capture_count);
 
 	if (defer) {
-		dprintk(VIDC_DBG, "Deferring queue of %p\n", vb);
+		dprintk(VIDC_DBG, "Deferring queue of %pK\n", vb);
 		return 0;
 	}
 
@@ -3844,7 +3844,7 @@ int msm_comm_try_get_prop(struct msm_vidc_inst *inst, enum hal_property ptype,
 		 */
 
 		dprintk(VIDC_ERR,
-			"In Wrong state to call Buf Req: Inst %p or Core %p\n",
+			"In Wrong state to call Buf Req: Inst %pK or Core %pK\n",
 				inst, inst->core);
 		rc = -EAGAIN;
 		mutex_unlock(&inst->sync_lock);
@@ -5055,7 +5055,7 @@ int msm_vidc_comm_s_parm(struct msm_vidc_inst *inst, struct v4l2_streamparm *a)
 		fps = fps - 1;
 
 	if (inst->prop.fps != fps) {
-		dprintk(VIDC_PROF, "reported fps changed for %p: %d->%d\n",
+		dprintk(VIDC_PROF, "reported fps changed for %pK: %d->%d\n",
 				inst, inst->prop.fps, fps);
 		inst->prop.fps = fps;
 		frame_rate.frame_rate = inst->prop.fps * BIT(16);

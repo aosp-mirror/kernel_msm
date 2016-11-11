@@ -1946,7 +1946,7 @@ static int msm_vdec_start_streaming(struct vb2_queue *q, unsigned int count)
 		return -EINVAL;
 	}
 	hdev = inst->core->device;
-	dprintk(VIDC_DBG, "Streamon called on: %d capability for inst: %p\n",
+	dprintk(VIDC_DBG, "Streamon called on: %d capability for inst: %pK\n",
 		q->type, inst);
 	switch (q->type) {
 	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
@@ -1964,7 +1964,7 @@ static int msm_vdec_start_streaming(struct vb2_queue *q, unsigned int count)
 	}
 	if (rc) {
 		dprintk(VIDC_ERR,
-			"Streamon failed on: %d capability for inst: %p\n",
+			"Streamon failed on: %d capability for inst: %pK\n",
 			q->type, inst);
 		goto stream_start_failed;
 	}

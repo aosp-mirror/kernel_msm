@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,11 +19,7 @@
 #include <media/msmb_ispif.h>
 #include "msm_sd.h"
 
-/* Maximum number of voltage supply for ispif and vfe */
-#define ISPIF_VDD_INFO_MAX 2
-#define ISPIF_VFE_VDD_INFO_MAX 2
-
-#define ISPIF_CLK_INFO_MAX 27
+#define ISPIF_CLK_INFO_MAX 24
 
 struct ispif_irq_status {
 	uint32_t ispifIrqStatus0;
@@ -64,20 +60,10 @@ struct ispif_device {
 	enum msm_ispif_state_t ispif_state;
 	struct msm_ispif_vfe_info vfe_info;
 	struct clk *ahb_clk[ISPIF_CLK_INFO_MAX];
-	struct clk *clk[ISPIF_CLK_INFO_MAX];
 	struct completion reset_complete[VFE_MAX];
-	atomic_t reset_trig[VFE_MAX];
 	uint32_t hw_num_isps;
 	uint32_t num_ahb_clk;
-	uint32_t num_clk;
 	uint32_t clk_idx;
 	uint32_t ispif_sof_debug;
-	uint32_t ispif_rdi0_debug;
-	uint32_t ispif_rdi1_debug;
-	uint32_t ispif_rdi2_debug;
-	struct regulator *ispif_vdd[ISPIF_VDD_INFO_MAX];
-	int ispif_vdd_count;
-	struct regulator *vfe_vdd[ISPIF_VFE_VDD_INFO_MAX];
-	int vfe_vdd_count;
 };
 #endif
