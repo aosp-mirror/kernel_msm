@@ -13853,6 +13853,13 @@ typedef struct {
 /* source values: */
 #define WMI_SET_VDEV_IE_SOURCE_HOST     0x0
 
+/* band values: */
+typedef enum {
+    WMI_SET_VDEV_IE_BAND_ALL = 0,
+    WMI_SET_VDEV_IE_BAND_2_4GHZ,
+    WMI_SET_VDEV_IE_BAND_5GHZ,
+} wmi_set_vdev_ie_band;
+
 typedef struct {
     /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_vdev_set_ie_cmd_fixed_param */
     A_UINT32 tlv_header;
@@ -13863,6 +13870,8 @@ typedef struct {
     A_UINT32 ie_len;
     /** source of this command */
     A_UINT32 ie_source; /* see WMI_SET_VDEV_IE_SOURCE_ defs */
+    /** band for this IE - se wmi_set_vdev_ie_band enum */
+    A_UINT32 band;
    /**
     * Following this structure is the TLV byte stream of ie data of length ie_buf_len:
     * A_UINT8 ie_data[]; */
