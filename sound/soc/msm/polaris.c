@@ -37,6 +37,8 @@
 #include "qdsp6v2/msm-pcm-routing-v2.h"
 #include "../codecs/wcd9335.h"
 #include "../codecs/wsa881x.h"
+#include "../codecs/da7219.h"
+#include "../codecs/da7219-aad.h"
 
 #define DRV_NAME "goog-polaris-asoc-snd"
 
@@ -165,6 +167,7 @@ struct msm_asoc_mach_data {
 	struct device_node *hph_en1_gpio_p; /* used by pinctrl API */
 	struct device_node *hph_en0_gpio_p; /* used by pinctrl API */
 	struct snd_info_entry *codec_root;
+	struct snd_soc_jack da7219_jack;
 };
 
 struct msm_asoc_wcd93xx_codec {
@@ -3216,6 +3219,37 @@ static int msm_wcn_init(struct snd_soc_pcm_runtime *rtd)
 					   tx_ch, ARRAY_SIZE(rx_ch), rx_ch);
 }
 
+static int da7219_init(struct snd_soc_pcm_runtime *rtd)
+{
+	int ret;
+	struct snd_soc_codec *codec = rtd->codec;
+	struct msm_asoc_mach_data *pdata =
+				snd_soc_card_get_drvdata(rtd->card);
+	struct snd_soc_jack *jack = &pdata->da7219_jack;
+
+	/*
+	 * Headset buttons map to the google Reference headset.
+	 * These can be configured by userspace.
+	 */
+	ret = snd_soc_card_jack_new(rtd->card, "Headset Jack",
+			SND_JACK_HEADSET | SND_JACK_BTN_0 | SND_JACK_BTN_1 |
+			SND_JACK_BTN_2 | SND_JACK_BTN_3 | SND_JACK_LINEOUT,
+			jack, NULL, 0);
+	if (ret) {
+		dev_err(rtd->dev,
+			"DA7219 Headset Jack creation failed: %d\n", ret);
+		return ret;
+	}
+
+	snd_jack_set_key(jack->jack, SND_JACK_BTN_0, KEY_MEDIA);
+	snd_jack_set_key(jack->jack, SND_JACK_BTN_1, KEY_VOLUMEUP);
+	snd_jack_set_key(jack->jack, SND_JACK_BTN_2, KEY_VOLUMEDOWN);
+	snd_jack_set_key(jack->jack, SND_JACK_BTN_3, KEY_VOICECOMMAND);
+	da7219_aad_jack_det(codec, jack);
+
+	return 0;
+}
+
 static void *def_tasha_mbhc_cal(void)
 {
 	void *tasha_wcd_cal;
@@ -3748,9 +3782,55 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 	mutex_unlock(&mi2s_intf_conf[index].lock);
 }
 
+static int da7219_mi2s_snd_hw_params(struct snd_pcm_substream *substream,
+				     struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	int sample_rate = params->rate_num / params->rate_den;
+	int mclk_rate = Q6AFE_LPASS_IBIT_CLK_12_P288_MHZ;
+	int ret;
+
+	/* For a 48KHz family sample rate, use a 12.288MHz MCLK.
+	 * For a 44.1KHz family sample rate, use a 11.2896MHz clock.
+	 * See http://www.dialog-semiconductor.com/products/da7219 for more
+	 * information.
+	 */
+	switch (sample_rate) {
+	case SAMPLING_RATE_8KHZ:
+	case SAMPLING_RATE_16KHZ:
+	case SAMPLING_RATE_32KHZ:
+	case SAMPLING_RATE_48KHZ:
+	case SAMPLING_RATE_96KHZ:
+		break;
+	case SAMPLING_RATE_44P1KHZ:
+		mclk_rate = Q6AFE_LPASS_IBIT_CLK_11_P2896_MHZ;
+		break;
+	case SAMPLING_RATE_192KHZ:
+	default:
+		dev_err(rtd->dev, "unsupported sample rate: %d", sample_rate);
+		return -EINVAL;
+	}
+
+	/* Update the MCLK for the new stream frequency. */
+	ret = snd_soc_dai_set_sysclk(rtd->codec_dai, DA7219_CLKSRC_MCLK,
+				     mclk_rate, SND_SOC_CLOCK_IN);
+	if (ret)
+		return ret;
+
+	/* Make sure that the PLL configuration is updated based on the (new?)
+	 * MCLK rate. */
+	return snd_soc_dai_set_pll(rtd->codec_dai, 0, DA7219_SYSCLK_MCLK, 0, 0);
+}
+
 static struct snd_soc_ops msm_mi2s_be_ops = {
 	.startup = msm_mi2s_snd_startup,
 	.shutdown = msm_mi2s_snd_shutdown,
+};
+
+static struct snd_soc_ops da7219_mi2s_be_ops = {
+	.startup = msm_mi2s_snd_startup,
+	.shutdown = msm_mi2s_snd_shutdown,
+	.hw_params = da7219_mi2s_snd_hw_params,
 };
 
 static struct snd_soc_ops msm_aux_pcm_be_ops = {
@@ -4996,29 +5076,34 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Secondary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.1",
 		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-rx",
+		.codec_name = "da7219",
+		.codec_dai_name = "da7219-hifi",
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_SECONDARY_MI2S_RX,
 		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
+		.ops = &da7219_mi2s_be_ops,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
+		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
+			SND_SOC_DAIFMT_CBS_CFS,
+		.init = &da7219_init,
 	},
 	{
 		.name = LPASS_BE_SEC_MI2S_TX,
 		.stream_name = "Secondary MI2S Capture",
 		.cpu_dai_name = "msm-dai-q6-mi2s.1",
 		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-tx",
+		.codec_name = "da7219",
+		.codec_dai_name = "da7219-hifi",
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.be_id = MSM_BACKEND_DAI_SECONDARY_MI2S_TX,
 		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
+		.ops = &da7219_mi2s_be_ops,
 		.ignore_suspend = 1,
+		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
+			SND_SOC_DAIFMT_CBS_CFS,
 	},
 	{
 		.name = LPASS_BE_TERT_MI2S_RX,
@@ -5832,6 +5917,11 @@ static int goog_polaris_card_resume(struct snd_soc_card *card)
 	return 0;
 }
 
+static const struct snd_soc_dapm_widget goog_polaris_dapm_widgets[] = {
+	SND_SOC_DAPM_HP("DA7219 Headphone Jack", NULL),
+	SND_SOC_DAPM_MIC("DA7219 Headset Mic", NULL),
+};
+
 static int msm_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card;
@@ -5860,6 +5950,8 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	card->dev = &pdev->dev;
 	card->suspend_post = goog_polaris_card_suspend;
 	card->resume_pre = goog_polaris_card_resume;
+	card->dapm_widgets = goog_polaris_dapm_widgets,
+	card->num_dapm_widgets = ARRAY_SIZE(goog_polaris_dapm_widgets),
 	platform_set_drvdata(pdev, card);
 	snd_soc_card_set_drvdata(card, pdata);
 

@@ -257,6 +257,7 @@ config SND_SOC_GOOG_POLARIS
 	select SND_HWDEP
         select DTS_EAGLE
 	select SND_SOC_DA7219
+	select MSM_Q6_MI2S_MCLK
 	help
 	 To add support for SoC audio on Google
          Polaris.
