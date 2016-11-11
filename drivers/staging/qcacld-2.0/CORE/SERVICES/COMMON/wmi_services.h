@@ -260,6 +260,8 @@ typedef enum {
      */
     WMI_SERVICE_FLASH_RDWR_SUPPORT = 110,
 
+    WMI_SERVICE_WLAN_STATS_REPORT=111, /* support WLAN stats report */
+
 
     /***** ADD NEW SERVICES HERE UNTIL ALL VALUES UP TO 128 ARE USED *****/
 
