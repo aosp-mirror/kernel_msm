@@ -257,4 +257,19 @@
 		};
 	};
 
+	da7219_interrupt {
+		da7219_interrupt_default: da7219_interrupt_default {
+			mux {
+				pins = "gpio132";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio132";
+				drive-strength = <2>; /* 2 mA */
+				bias-pull-up; /* pull up */
+				input-enable;
+			};
+		};
+	};
 };

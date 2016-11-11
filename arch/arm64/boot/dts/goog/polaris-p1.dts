@@ -404,15 +404,21 @@
 	};
 
 	sound-9335 {
+		/delete-property/ qcom,msm-mbhc-hphl-swh;
+		/delete-property/ qcom,msm-mbhc-gnd-swh;
+		/delete-property/ qcom,us-euro-gpios;
+
 		compatible = "goog,polaris-snd";
 		qcom,model = "goog-polaris-snd-card";
 
+		qcom,mbhc-audio-jack-type = "none";
+
 		qcom,audio-routing =
-			"AIF4 VI", "MCLK",
-			"RX_BIAS", "MCLK",
-			"MADINPUT", "MCLK",
-			"AMIC2", "MIC BIAS2",
-			"MIC BIAS2", "Headset Mic",
+			"DA7219 Headphone Jack", "HPL",
+			"DA7219 Headphone Jack", "HPR",
+			"Playback", "SEC_MI2S_RX",
+			"MIC", "DA7219 Headset Mic",
+			"SEC_MI2S_TX", "Capture",
 			"AMIC5", "MIC BIAS3",
 			"AMIC6", "MIC BIAS3",
 			"MIC BIAS3", "Loopback Input",
@@ -433,9 +439,10 @@
 			"SpkrLeft IN", "SPK1 OUT",
 			"SpkrRight IN", "SPK2 OUT";
 
-		qcom,msm-mbhc-hphl-swh = <1>;
-		qcom,msm-mbhc-gnd-swh = <1>;
-		goog,us-euro-supply = <&pmcobalt_l28>;
+		asoc-codec = <&stub_codec>, <&ext_disp_audio_codec>, <&headset>;
+		asoc-codec-names = "msm-stub-codec.1",
+				   "msm-ext-disp-audio-codec-rx",
+				   "da7219";
 	};
 
 	wcd_rst_gpio: msm_cdc_pinctrl@116 {
@@ -451,10 +458,25 @@
 		pinctrl-0 = <&wcd_gnd_mic_swap_active>;
 		pinctrl-1 = <&wcd_gnd_mic_swap_idle>;
 	};
+
+	mi2s_mclk: mi2s_mclk {
+		compatible = "qcom,q6-mi2s-mclk";
+		#clock-cells = <1>;
+	};
 };
 
 &slim_aud {
 	/delete-node/ tavil_codec;
+};
+
+&dai_mi2s1 { /* qcom,msm-dai-q6-mi2s-sec */
+	qcom,msm-mi2s-tx-lines = <1>;
+	qcom,msm-mi2s-rx-lines = <2>;
+	pinctrl-names = "default", "idle";
+	pinctrl-0 = <&sec_mi2s_mclk_active &sec_mi2s_active
+		     &sec_mi2s_sd0_active &sec_mi2s_sd1_active>;
+	pinctrl-1 = <&sec_mi2s_mclk_sleep &sec_mi2s_sleep
+		     &sec_mi2s_sd0_sleep &sec_mi2s_sd1_sleep>;
 };
 
 /{
@@ -478,8 +500,45 @@
 
 &i2c_2 {
 	/* DA7219 Audio Codec */
-	/* System crashes when this is enabled. */
-	status = "disabled";
+	status = "okay";
+
+	headset: da7219@1a {
+		compatible = "dlg,da7219";
+		reg = <0x1a>;
+
+		interrupt-parent = <&tlmm>;
+		interrupt-names = "irq";
+		interrupts = <132 IRQ_TYPE_LEVEL_LOW>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&da7219_interrupt_default>;
+
+		VDD-supply = <&pmcobalt_s4>;
+		VDDIO-supply = <&pmcobalt_s4>;
+		VDDMIC-supply = <&pmcobalt_l18>;
+
+		dlg,micbias-lvl = <2600>;
+		dlg,mic-amp-in-sel = "diff";
+
+		clocks = <&mi2s_mclk clk_sec_mi2s_mclk>;
+		clock-names = "mclk";
+
+		da7219_aad {
+			dlg,btn-cfg = <50>;
+			dlg,mic-det-thr = <500>;
+			dlg,jack-ins-deb = <20>;
+			dlg,jack-det-rate = "32ms_64ms";
+			dlg,jack-rem-deb = <1>;
+
+			dlg,a-d-btn-thr = <0xa>;
+			dlg,d-b-btn-thr = <0x16>;
+			dlg,b-c-btn-thr = <0x21>;
+			dlg,c-mic-btn-thr = <0x3E>;
+
+			dlg,btn-avg = <4>;
+			dlg,adc-1bit-rpt = <1>;
+		};
+	};
 };
 
 &i2c_5 {
