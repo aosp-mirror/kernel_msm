@@ -2557,6 +2557,10 @@ typedef struct {
 
 /** always do passive scan on passive channels */
 #define WMI_SCAN_FLAG_STRICT_PASSIVE_ON_PCHN 0x10000
+/** set HALF (10MHz) rate support */
+#define WMI_SCAN_FLAG_HALF_RATE_SUPPORT      0x20000
+/** set Quarter (5MHz) rate support */
+#define WMI_SCAN_FLAG_QUARTER_RATE_SUPPORT   0x40000
 
 /** for adaptive scan mode using 3 bits (21 - 23 bits) */
 #define WMI_SCAN_DWELL_MODE_MASK 0x00E00000
