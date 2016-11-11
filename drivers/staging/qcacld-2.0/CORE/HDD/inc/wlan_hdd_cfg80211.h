@@ -2005,4 +2005,18 @@ static inline void wlan_hdd_cfg80211_indicate_disconnect(struct net_device *dev,
 				GFP_KERNEL);
 }
 #endif
+
+/**
+ * enum wlan_hdd_scan_type - type of scan
+ * @WLAN_HDD_HOST_SCAN: refers to scan request from cfg80211_ops "scan"
+ * @WLAN_HDD_PNO_SCAN: refers to scan request is from "sched_scan_start"
+ *
+ * driver uses this enum to identify source of scan
+ *
+ */
+enum wlan_hdd_scan_type {
+	WLAN_HDD_HOST_SCAN,
+	WLAN_HDD_PNO_SCAN,
+};
+
 #endif

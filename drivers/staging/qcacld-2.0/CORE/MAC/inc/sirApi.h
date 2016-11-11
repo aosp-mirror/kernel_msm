@@ -933,6 +933,10 @@ typedef struct sSirSmeScanReq
     tANI_U16             uIEFieldLen;
     tANI_U16             uIEFieldOffset;
 
+    uint32_t enable_scan_randomization;
+    uint8_t mac_addr[VOS_MAC_ADDR_SIZE];
+    uint8_t mac_addr_mask[VOS_MAC_ADDR_SIZE];
+
     //channelList MUST be the last field of this structure
     tSirChannelList channelList;
     /*-----------------------------
@@ -3745,6 +3749,11 @@ typedef struct sSirPNOScanReq {
 	uint8_t         p24GProbeTemplate[SIR_PNO_MAX_PB_REQ_SIZE];
 	uint16_t        us5GProbeTemplateLen;
 	uint8_t         p5GProbeTemplate[SIR_PNO_MAX_PB_REQ_SIZE];
+
+	/* mac address randomization attributes */
+	uint32_t enable_pno_scan_randomization;
+	uint8_t mac_addr[VOS_MAC_ADDR_SIZE];
+	uint8_t mac_addr_mask[VOS_MAC_ADDR_SIZE];
 } tSirPNOScanReq, *tpSirPNOScanReq;
 
 typedef struct sSirSetRSSIFilterReq
@@ -4470,6 +4479,11 @@ typedef struct sSirScanOffloadReq {
     tSirP2pScanType p2pScanType;
     tANI_U16 uIEFieldLen;
     tANI_U16 uIEFieldOffset;
+
+    uint32_t enable_scan_randomization;
+    uint8_t mac_addr[VOS_MAC_ADDR_SIZE];
+    uint8_t mac_addr_mask[VOS_MAC_ADDR_SIZE];
+
     tSirChannelList channelList;
     /*-----------------------------
       sSirScanOffloadReq....
@@ -5751,6 +5765,8 @@ typedef struct
 typedef struct
 {
     tANI_U8 oui[WIFI_SCANNING_MAC_OUI_LENGTH];
+    uint32_t vdev_id;
+    bool enb_probe_req_sno_randomization;
 } tSirScanMacOui, *tpSirScanMacOui;
 
 enum {
