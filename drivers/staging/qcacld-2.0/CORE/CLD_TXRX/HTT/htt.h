@@ -3256,8 +3256,8 @@ enum htt_srng_ring_id {
  * of each descriptor before pushing into the ring.
  * 0: updates ring_id(default)
  * 1: ring_id updating disabled */
-#define HTT_SRING_SETUP_RING_MISC_CFG_RING_ID_DISABLE_M         0x01
-#define HTT_SRING_SETUP_RING_MISC_CFG_RING_ID_DISABLE_S         0
+#define HTT_SRING_SETUP_RING_MISC_DATA_RING_ID_DISABLE_M         0x01
+#define HTT_SRING_SETUP_RING_MISC_DATA_RING_ID_DISABLE_S         0
 #define HTT_SRING_SETUP_RING_MISC_DATA_RING_ID_DISABLE_GET(_var) \
     (((_var) & HTT_SRING_SETUP_RING_MISC_DATA_RING_ID_DISABLE_M) >> \
     HTT_SRING_SETUP_RING_MISC_DATA_RING_ID_DISABLE_S)
@@ -3271,8 +3271,8 @@ enum htt_srng_ring_id {
  * of each descriptor before pushing into the ring.
  * 0: updates Loopcnt(default)
  * 1: Loopcnt updating disabled */
-#define HTT_SRING_SETUP_RING_MISC_CFG_RING_LOOPCOUNT_DISABLE_M  0x02
-#define HTT_SRING_SETUP_RING_MISC_CFG_RING_LOOPCOUNT_DISABLE_S  1
+#define HTT_SRING_SETUP_RING_MISC_DATA_LOOPCOUNT_DISABLE_M  0x02
+#define HTT_SRING_SETUP_RING_MISC_DATA_LOOPCOUNT_DISABLE_S  1
 #define HTT_SRING_SETUP_RING_MISC_DATA_LOOPCOUNT_DISABLE_GET(_var) \
     (((_var) & HTT_SRING_SETUP_RING_MISC_DATA_LOOPCOUNT_DISABLE_M) >> \
     HTT_SRING_SETUP_RING_MISC_DATA_LOOPCOUNT_DISABLE_S)
@@ -3284,8 +3284,8 @@ enum htt_srng_ring_id {
 
 /* Secured access enable/disable bit. SRNG drives value of this register bit
  * into security_id port of GXI/AXI. */
-#define HTT_SRING_SETUP_RING_MISC_CFG_RING_SECURITY_M           0x04
-#define HTT_SRING_SETUP_RING_MISC_CFG_RING_SECURITY_S           2
+#define HTT_SRING_SETUP_RING_MISC_DATA_SECURITY_M           0x04
+#define HTT_SRING_SETUP_RING_MISC_DATA_SECURITY_S           2
 #define HTT_SRING_SETUP_RING_MISC_DATA_SECURITY_GET(_var) \
     (((_var) & HTT_SRING_SETUP_RING_MISC_DATA_SECURITY_M) >> \
     HTT_SRING_SETUP_RING_MISC_DATA_SECURITY_S)
@@ -3297,8 +3297,8 @@ enum htt_srng_ring_id {
 
 /* During MSI write operation, SRNG drives value of this register bit into
  * swap bit of GXI/AXI. */
-#define HTT_SRING_SETUP_RING_MISC_CFG_RING_MSI_SWAP_M           0x08
-#define HTT_SRING_SETUP_RING_MISC_CFG_RING_MSI_SWAP_S           3
+#define HTT_SRING_SETUP_RING_MISC_DATA_MSI_SWAP_M           0x08
+#define HTT_SRING_SETUP_RING_MISC_DATA_MSI_SWAP_S           3
 #define HTT_SRING_SETUP_RING_MISC_DATA_MSI_SWAP_GET(_var) \
     (((_var) & HTT_SRING_SETUP_RING_MISC_DATA_MSI_SWAP_M) >> \
     HTT_SRING_SETUP_RING_MISC_DATA_MSI_SWAP_S)
@@ -3310,8 +3310,8 @@ enum htt_srng_ring_id {
 
 /* During Pointer write operation, SRNG drives value of this register bit into
  * swap bit of GXI/AXI. */
-#define HTT_SRING_SETUP_RING_MISC_CFG_RING_HOST_FW_SWAP_M       0x10
-#define HTT_SRING_SETUP_RING_MISC_CFG_RING_HOST_FW_SWAP_S       4
+#define HTT_SRING_SETUP_RING_MISC_DATA_HOST_FW_SWAP_M       0x10
+#define HTT_SRING_SETUP_RING_MISC_DATA_HOST_FW_SWAP_S       4
 #define HTT_SRING_SETUP_RING_MISC_DATA_HOST_FW_SWAP_GET(_var) \
     (((_var) & HTT_SRING_SETUP_RING_MISC_DATA_HOST_FW_SWAP_M) >> \
     HTT_SRING_SETUP_RING_MISC_DATA_HOST_FW_SWAP_S)
@@ -3323,10 +3323,8 @@ enum htt_srng_ring_id {
 
 /* During any data or TLV write operation, SRNG drives value of this register
  * bit into swap bit of GXI/AXI. */
-#define HTT_SRING_SETUP_RING_MISC_CFG_RING_TLV_SWAP_M           0x20
-#define HTT_SRING_SETUP_RING_MISC_CFG_RING_TLV_SWAP_S           5
-#define HTT_SRING_SETUP_RING_MISC_CFG_RESERVED1                 0x40
-#define HTT_SRING_SETUP_RING_MISC_CFG_RESERVED2                 0x80
+#define HTT_SRING_SETUP_RING_MISC_DATA_TLV_SWAP_M           0x20
+#define HTT_SRING_SETUP_RING_MISC_DATA_TLV_SWAP_S           5
 #define HTT_SRING_SETUP_RING_MISC_DATA_TLV_SWAP_GET(_var)    \
     (((_var) & HTT_SRING_SETUP_RING_MISC_DATA_TLV_SWAP_M) >> \
     HTT_SRING_SETUP_RING_MISC_DATA_TLV_SWAP_S)
@@ -3335,6 +3333,9 @@ enum htt_srng_ring_id {
         HTT_CHECK_SET_VAL(HTT_SRING_SETUP_RING_MISC_DATA_TLV_SWAP, _val); \
         ((_var) |= ((_val) << HTT_SRING_SETUP_RING_MISC_DATA_TLV_SWAP_S)); \
     } while (0)
+
+#define HTT_SRING_SETUP_RING_MISC_CFG_RESERVED1                 0x40
+#define HTT_SRING_SETUP_RING_MISC_CFG_RESERVED2                 0x80
 
 #define HTT_SRING_SETUP_INTR_BATCH_COUNTER_TH_M    0x00007fff
 #define HTT_SRING_SETUP_INTR_BATCH_COUNTER_TH_S    0
