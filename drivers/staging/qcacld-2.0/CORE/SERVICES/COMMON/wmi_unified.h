@@ -16022,12 +16022,31 @@ typedef struct {
 } wmi_ani_ofdm_event_fixed_param;
 
 typedef enum wmi_coex_config_type {
-    WMI_COEX_CONFIG_PAGE_P2P_TDM = 1, /* config interval (arg1 BT, arg2 WLAN) for P2P + PAGE */
-    WMI_COEX_CONFIG_PAGE_STA_TDM = 2, /* config interval (arg1 BT, arg2 WLAN) for STA + PAGE */
-    WMI_COEX_CONFIG_PAGE_SAP_TDM = 3, /* config interval (arg1 BT, arg2 WLAN) for SAP + PAGE */
-    WMI_COEX_CONFIG_DURING_WLAN_CONN = 4, /* config during WLAN connection */
-    WMI_COEX_CONFIG_BTC_ENABLE = 5, /* config to enable/disable BTC */
-    WMI_COEX_CONFIG_COEX_DBG = 6, /* config of COEX debug setting */
+    /* config interval (arg1 BT, arg2 WLAN) for P2P + PAGE */
+    WMI_COEX_CONFIG_PAGE_P2P_TDM        =  1,
+    /* config interval (arg1 BT, arg2 WLAN) for STA + PAGE */
+    WMI_COEX_CONFIG_PAGE_STA_TDM        =  2,
+    /* config interval (arg1 BT, arg2 WLAN) for SAP + PAGE */
+    WMI_COEX_CONFIG_PAGE_SAP_TDM        =  3,
+    /* config during WLAN connection */
+    WMI_COEX_CONFIG_DURING_WLAN_CONN    =  4,
+    /* config to enable/disable BTC */
+    WMI_COEX_CONFIG_BTC_ENABLE          =  5,
+    /* config of COEX debug setting */
+    WMI_COEX_CONFIG_COEX_DBG            =  6,
+    /* config interval (ms units) (arg1 BT, arg2 WLAN) for P2P + STA + PAGE */
+    WMI_COEX_CONFIG_PAGE_P2P_STA_TDM    =  7,
+    /* config interval (ms units) (arg1 BT, arg2 WLAN) for P2P + INQUIRY */
+    WMI_COEX_CONFIG_INQUIRY_P2P_TDM     =  8,
+    /* config interval (ms units) (arg1 BT, arg2 WLAN) for STA + INQUIRY */
+    WMI_COEX_CONFIG_INQUIRY_STA_TDM     =  9,
+    /* config interval (ms units) (arg1 BT, arg2 WLAN) for SAP + INQUIRY */
+    WMI_COEX_CONFIG_INQUIRY_SAP_TDM     = 10,
+    /*
+     * config interval (ms units) (arg1 BT, arg2 WLAN) for P2P + STA +
+     * INQUIRY
+     */
+    WMI_COEX_CONFIG_INQUIRY_P2P_STA_TDM = 11,
 } WMI_COEX_CONFIG_TYPE;
 
 typedef struct {
