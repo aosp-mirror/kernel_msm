@@ -4908,7 +4908,11 @@ typedef struct
  */
 typedef struct
 {
-    A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_peer_signal_stats */
+    /**
+     * TLV tag and len; tag equals
+     * WMITLV_TAG_STRUC_wmi_peer_signal_stats_thresh
+     */
+    A_UINT32 tlv_header;
     A_UINT32 per_ant_snr; /* units = dB */
     A_UINT32 nf; /* units = dBm */
 } wmi_peer_signal_stats_thresh;
@@ -15851,6 +15855,14 @@ typedef enum {
     WLAN_5G_CAPABILITY = 0x2,
 } WLAN_BAND_CAPABILITY;
 
+typedef enum wmi_hw_mode_config_type {
+	WMI_HW_MODE_SINGLE      = 0,
+	WMI_HW_MODE_DBS         = 1,
+	WMI_HW_MODE_SBS_PASSIVE = 2,
+	WMI_HW_MODE_SBS         = 3,
+	WMI_HW_MODE_DBS_SBS     = 4,
+} WMI_HW_MODE_CONFIG_TYPE;
+
 #define WMI_SUPPORT_11B_GET(flags) WMI_GET_BITS(flags, 0, 1)
 #define WMI_SUPPORT_11B_SET(flags, value) WMI_SET_BITS(flags, 0, 1, value)
 
@@ -15869,6 +15881,9 @@ typedef enum {
 #define WMI_SUPPORT_11AX_GET(flags) WMI_GET_BITS(flags, 5, 1)
 #define WMI_SUPPORT_11AX_SET(flags, value) WMI_SET_BITS(flags, 5, 1, value)
 
+#define WMI_MAX_MUBFEE_GET(flags) WMI_GET_BITS(flags, 28, 4)
+#define WMI_MAX_MUBFEE_SET(flags, value) WMI_SET_BITS(flags, 28, 4, value)
+
 typedef struct {
     A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_WMI_MAC_PHY_CAPABILITIES */
     /* hw_mode_id - identify a particular set of HW characteristics, as specified
@@ -15881,7 +15896,7 @@ typedef struct {
     A_UINT32 pdev_id;
     /* phy id. Starts with 0 */
     A_UINT32 phy_id;
-    /* supported modulations */
+    /* supported modulations and number of MU beamformees */
     union {
         struct {
             A_UINT32 supports_11b:1,
@@ -15889,7 +15904,12 @@ typedef struct {
                      supports_11a:1,
                      supports_11n:1,
                      supports_11ac:1,
-                     supports_11ax:1;
+                     supports_11ax:1,
+
+                     unused:22,
+
+                     /* max MU beamformees supported per MAC */
+                     max_mubfee:4;
         };
         A_UINT32 supported_flags;
     };
@@ -15953,6 +15973,12 @@ typedef struct {
      * one for each active PHY for current HW mode identified by hw_mode_id. For example for
      * DBS/SBS mode there will be 2 WMI_MAC_PHY_CAPABILITIES TLVs and for single MAC modes it
      * will be 1 WMI_MAC_PHY_CAPABILITIES TLVs */
+    /**
+     * hw_mode_config_type
+     * Identify a particular type of HW mode such as SBS, DBS etc.
+     * Refer to WMI_HW_MODE_CONFIG_TYPE values.
+     */
+    A_UINT32 hw_mode_config_type;
 } WMI_HW_MODE_CAPABILITIES;
 
 typedef struct {
