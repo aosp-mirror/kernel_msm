@@ -24,7 +24,6 @@
 #include <asm/cacheflush.h>
 #include <asm/alternative.h>
 #include <asm/cpufeature.h>
-#include <asm/insn.h>
 #include <linux/stop_machine.h>
 
 extern struct alt_instr __alt_instructions[], __alt_instructions_end[];
@@ -32,21 +31,21 @@ extern struct alt_instr __alt_instructions[], __alt_instructions_end[];
 static int __apply_alternatives(void *dummy)
 {
 	struct alt_instr *alt;
-	u32 *origptr, *replptr, *endptr;
+	u8 *origptr, *replptr;
 
 	for (alt = __alt_instructions; alt < __alt_instructions_end; alt++) {
 		if (!cpus_have_cap(alt->cpufeature))
 			continue;
 
-		BUG_ON(alt->alt_len != alt->orig_len);
+		BUG_ON(alt->alt_len > alt->orig_len);
 
 		pr_info_once("patching kernel code\n");
 
-		origptr = (void *)&alt->orig_offset + alt->orig_offset;
-		endptr = (void *)origptr + alt->orig_len;
-		replptr = (void *)&alt->alt_offset + alt->alt_offset;
-		for (; origptr < endptr; origptr++, replptr++)
-			BUG_ON(aarch64_insn_patch_text_nosync(origptr, *replptr));
+		origptr = (u8 *)&alt->orig_offset + alt->orig_offset;
+		replptr = (u8 *)&alt->alt_offset + alt->alt_offset;
+		memcpy(origptr, replptr, alt->alt_len);
+		flush_icache_range((uintptr_t)origptr,
+				   (uintptr_t)(origptr + alt->alt_len));
 	}
 
 	return 0;
