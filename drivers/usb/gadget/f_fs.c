@@ -333,6 +333,9 @@ struct ffs_epfile {
 	unsigned char			isoc;	/* P: ffs->eps_lock */
 
 	unsigned char			_pad;
+
+	unsigned long			buf_len;
+	char				*buffer;
 };
 
 static int  __must_check ffs_epfiles_create(struct ffs_data *ffs);
@@ -773,7 +776,7 @@ static ssize_t ffs_epfile_io(struct file *file,
 	char *data = NULL;
 	ssize_t ret;
 	int halt;
-	int buffer_len = 0;
+	size_t buffer_len = 0;
 
 	pr_debug("%s: len %zu, read %d\n", __func__, len, read);
 
@@ -834,7 +837,10 @@ first_try:
 
 		/* Allocate & copy */
 		if (!halt && !data) {
-			data = kzalloc(buffer_len, GFP_KERNEL);
+
+			data = buffer_len > epfile->buf_len ?
+				kzalloc(buffer_len, GFP_KERNEL) :
+				epfile->buffer;
 			if (unlikely(!data))
 				return -ENOMEM;
 
@@ -926,7 +932,8 @@ first_try:
 
 	mutex_unlock(&epfile->mutex);
 error:
-	kfree(data);
+	if (buffer_len > epfile->buf_len)
+		kfree(data);
 	if (ret < 0 && ret != -ERESTARTSYS)
 		pr_err_ratelimited("%s(): Error: returning %zd value\n",
 							__func__, ret);
@@ -993,7 +1000,7 @@ static long ffs_epfile_ioctl(struct file *file, unsigned code,
 		return -ENODEV;
 
 	spin_lock_irq(&epfile->ffs->eps_lock);
-	if (likely(epfile->ep)) {
+	if (epfile->ep) {
 		switch (code) {
 		case FUNCTIONFS_FIFO_STATUS:
 			ret = usb_ep_fifo_status(epfile->ep->ep);
@@ -1031,11 +1038,28 @@ static long ffs_epfile_ioctl(struct file *file, unsigned code,
 				ret = -EFAULT;
 			return ret;
 		}
+		case FUNCTIONFS_ENDPOINT_ALLOC:
+			kfree(epfile->buffer);
+			epfile->buffer = NULL;
+			epfile->buf_len = value;
+			if (epfile->buf_len) {
+				epfile->buffer = kzalloc(epfile->buf_len,
+						GFP_KERNEL);
+				if (!epfile->buffer)
+					ret = -ENOMEM;
+			}
+			break;
 		default:
 			ret = -ENOTTY;
 		}
 	} else {
-		ret = -ENODEV;
+		switch (code) {
+		case FUNCTIONFS_ENDPOINT_ALLOC:
+			epfile->buf_len = value;
+			break;
+		default:
+			ret = -ENODEV;
+		}
 	}
 	spin_unlock_irq(&epfile->ffs->eps_lock);
 
@@ -1663,6 +1687,8 @@ static void ffs_func_eps_disable(struct ffs_function *func)
 		if (likely(ep->ep))
 			usb_ep_disable(ep->ep);
 		epfile->ep = NULL;
+		kfree(epfile->buffer);
+		epfile->buffer = NULL;
 
 		++ep;
 		++epfile;
@@ -1699,6 +1725,14 @@ static int ffs_func_eps_enable(struct ffs_function *func)
 
 		ep->ep->driver_data = ep;
 		ep->ep->desc = ds;
+		if (epfile->buf_len) {
+			epfile->buffer = kzalloc(epfile->buf_len,
+					GFP_KERNEL);
+			if (!epfile->buffer) {
+				ret = -ENOMEM;
+				break;
+			}
+		}
 		ret = usb_ep_enable(ep->ep);
 		if (likely(!ret)) {
 			epfile->ep = ep;
