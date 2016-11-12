@@ -249,6 +249,9 @@ static int hot_bat_decidegc_table[] = {
 #define CFG_REG_6		0x06
 #define CHG_INHIBIT_THRESH_MASK	SMB_MASK(7, 6)
 #define INHIBIT_THRESH_OFFSET	6
+#define CHG_SYSTEM_VOLTAGE_THRESHOLD_MASK	SMB_MASK(5, 4)
+#define CHG_SYSTEM_VOLTAGE_THRESHOLD__OFFSET 4
+
 #define BMD_ALGO_MASK		SMB_MASK(1, 0)
 #define BMD_ALGO_THERM_IO	SMB_MASK(1, 0)
 
@@ -893,30 +896,22 @@ static int smb23x_get_prop_batt_voltage(struct smb23x_chip *chip)
 #define SYSTEM_VOLTAGE_RESET_GATE	4050
 static void smb23x_system_voltage_set(struct smb23x_chip *chip)
 {
-	int rc, batt_voltage, value;
-	u8 tmp;
+	int rc;
 
-	batt_voltage = smb23x_get_prop_batt_voltage(chip);
-	if (batt_voltage > SYSTEM_VOLTAGE_RESET_GATE)
-		value = 2;
-	else
-		value = 0;
-
-	rc = smb23x_read(chip, CFG_REG_4, &tmp);
+	rc = smb23x_masked_write(chip, CFG_REG_4,
+		SYSTEM_VOLTAGE_MASK,
+		2);
 	if (rc < 0) {
-		pr_err("read CFG_REG_4 failed, rc=%d\n", rc);
+		pr_err("Set System Voltage failed, rc=%d\n", rc);
 		return;
 	}
-	pr_debug("batt_voltage:%d, value:%d, tmp:%d\n", batt_voltage, value, tmp&0x03);
-	tmp = tmp & 0x03;
-	if (tmp != value) {
-		rc = smb23x_masked_write(chip, CFG_REG_4,
-			SYSTEM_VOLTAGE_MASK,
-			value);
-		if (rc < 0) {
-			pr_err("Set System Voltage failed, rc=%d\n", rc);
-			return;
-		}
+
+	rc = smb23x_masked_write(chip, CFG_REG_6,
+		CHG_SYSTEM_VOLTAGE_THRESHOLD_MASK,
+		2 << CHG_SYSTEM_VOLTAGE_THRESHOLD__OFFSET);
+	if (rc < 0) {
+		pr_err("Set System Voltage threshold failed, rc=%d\n", rc);
+		return;
 	}
 }
 

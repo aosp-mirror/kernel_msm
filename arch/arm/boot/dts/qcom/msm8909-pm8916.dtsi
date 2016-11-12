@@ -430,7 +430,6 @@
 		qcom,soft-temp-vfloat-comp-mv = <200>;
 		qcom,soft-temp-current-comp-ma = <150>;
 		qcom,chg-inhibit-disabled;
-		qcom,aicl-disabled;
 		qcom,apsd-disabled;
 		qcom,bms-controlled-charging;
 		qcom,thermal-mitigation = <1500 900 500 100>;
