@@ -1,6 +1,5 @@
 /*
- * Fuel gauge driver for Maxim 17055 / 17201 / 17205
- *	Note that Maxim 17201 and 17205 have OTP on the chip.
+ * Fuel gauge driver for Maxim 17055
  *
  * Copyright (C) 2016 Maxim Integrated
  * Bo Yang <Bo.Yang@maximintegrated.com>
@@ -36,49 +35,52 @@
 #include <linux/regmap.h>
 
 /* Status register bits */
-#define STATUS_POR_BIT            (1 << 1)
-#define STATUS_BST_BIT            (1 << 3)
-#define STATUS_SOCI_BIT           (1 << 7)
-#define STATUS_VMN_BIT            (1 << 8)
-#define STATUS_TMN_BIT            (1 << 9)
-#define STATUS_SMN_BIT            (1 << 10)
-#define STATUS_BI_BIT             (1 << 11)
-#define STATUS_VMX_BIT            (1 << 12)
-#define STATUS_TMX_BIT            (1 << 13)
-#define STATUS_SMX_BIT            (1 << 14)
-#define STATUS_BR_BIT             (1 << 15)
+#define STATUS_POR_BIT             (1 << 1)
+#define STATUS_BST_BIT             (1 << 3)
+#define STATUS_SOCI_BIT            (1 << 7)
+#define STATUS_VMN_BIT             (1 << 8)
+#define STATUS_TMN_BIT             (1 << 9)
+#define STATUS_SMN_BIT             (1 << 10)
+#define STATUS_BI_BIT              (1 << 11)
+#define STATUS_VMX_BIT             (1 << 12)
+#define STATUS_TMX_BIT             (1 << 13)
+#define STATUS_SMX_BIT             (1 << 14)
+#define STATUS_BR_BIT              (1 << 15)
 
-#define STATUS2_HIB_BIT           (1 << 1)
+#define STATUS2_HIB_BIT            (1 << 1)
 
-#define CONFIG2_POR_CMD_BIT       (1 << 0)
-#define CONFIG2_LDMDL_BIT         (1 << 5)
+#define CONFIG2_POR_CMD_BIT        (1 << 0)
+#define CONFIG2_LDMDL_BIT          (1 << 5)
 
-#define HIBCFG_ENHIB_BIT          (1 << 15)
+#define HIBCFG_ENHIB_BIT           (1 << 15)
 
-#define VFSOC0_LOCK               0x0000
-#define VFSOC0_UNLOCK             0x0080
-#define MODEL_UNLOCK1             0X0059
-#define MODEL_UNLOCK2             0X00C4
-#define MODEL_LOCK1               0X0000
-#define MODEL_LOCK2               0X0000
+#define VFSOC0_LOCK                0x0000
+#define VFSOC0_UNLOCK              0x0080
+#define MODEL_UNLOCK1              0X0059
+#define MODEL_UNLOCK2              0X00C4
+#define MODEL_LOCK1                0X0000
+#define MODEL_LOCK2                0X0000
 
-#define MAX17055_VMAX_TOLERANCE   50			/* 50 mV */
-#define MAX17055_IC_VERSION       0x4000
-#define MAX17055_IC_VERSION_1     0x4010
-#define MAX17201_IC_VERSION       0x4001
-#define MAX17205_IC_VERSION       0x4005
-#define MAX17055_DRIVER_VERSION   0x1013
+#define MAX17055_VMAX_TOLERANCE    50			/* 50 mV */
+#define MAX17055_IC_VERSION_A      0x4000
+#define MAX17055_IC_VERSION_B      0x4010
+#define MAX17055_DRIVER_VERSION    0x101e
 
 #if CONFIG_HUAWEI_SAWSHARK
-#define MAX17055_CAPACITY_CARRY   128
-#define MAX17055_SOCHOLD          0xD3
+#define MAX17055_CAPACITY_CARRY    128
+#define MAX17055_SOCHOLD           0xD3
 #endif
+
+const static u16 dPaccVals[2][2] = {
+	{0x0159, 0x0190},
+	{0x0ac7, 0x0c80}
+};
 
 struct max17055_chip {
 	struct i2c_client *client;
 	struct regmap *regmap;
 	struct power_supply battery;
-	enum max170xx_chip_type chip_type;
+	enum max17055_chip_type chip_type;
 	struct max17055_platform_data *pdata;
 	struct work_struct work;
 	int    init_complete;
@@ -282,7 +284,7 @@ static int max17055_get_property(struct power_supply *psy,
 		val->intval = data * 625 / 8;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
-		ret = regmap_read(map, MAX17055_OCVInternal, &data);
+		ret = regmap_read(map, MAX17055_VFOCV, &data);
 		if (ret < 0)
 			return ret;
 
@@ -468,7 +470,6 @@ static int max17055_wait_on_bits(struct regmap *map, u8 reg, u16 bits)
 		regmap_read(map, reg, &data);
 	}while((wait > 0) && (data & bits));
 
-
 	pr_info("max17055 wait %d, reg 0x%02x val 0x%04x\n", wait, reg, data);
 
 	return wait;
@@ -482,6 +483,28 @@ static int max17055_write_verify_reg(struct regmap *map, u8 reg, u32 value)
 
 	do {
 		ret = regmap_write(map, reg, value);
+		regmap_read(map, reg, &read_value);
+		if (read_value != value) {
+			ret = -EIO;
+			retries--;
+		}
+	} while (retries && read_value != value);
+
+	if (ret < 0)
+		pr_err("%s: reg 0x%02x err %d\n", __func__, reg, ret);
+
+	return ret;
+}
+
+static int max17055_write_volatile_reg(struct regmap *map, u8 reg, u32 value)
+{
+	int retries = 8;
+	int ret;
+	u32 read_value;
+
+	do {
+		ret = regmap_write(map, reg, value);
+		mdelay(5);
 		regmap_read(map, reg, &read_value);
 		if (read_value != value) {
 			ret = -EIO;
@@ -630,41 +653,17 @@ static void max17055_update_model_regs(struct max17055_chip *chip)
 {
 	struct max17055_config_data *config = chip->pdata->config_data;
 	struct regmap *map = chip->regmap;
-	u32 vfSoc;
-	int ret = 0;
-	int retries = 3;
-	u32 read_value = -1;
+	u32 vfSoc, dq_acc = config->design_cap / 16;
 
 	max17055_write_verify_reg(map, MAX17055_DesignCap, config->design_cap);
+	max17055_write_verify_reg(map, MAX17055_dQacc, dq_acc);
+	max17055_write_verify_reg(map, MAX17055_dPacc, dPaccVals[1][1]);
 	max17055_write_verify_reg(map, MAX17055_IChgTerm, config->ichgt_term);
 	max17055_write_verify_reg(map, MAX17055_VEmpty, config->vempty);
 
 	max17055_write_custom_regs(chip);
 
-	max17055_write_verify_reg(map, MAX17055_RepCap, config->rep_cap);
-
-	mdelay(5);
-	regmap_read(map, MAX17055_RepCap, &read_value);
-	if(config->rep_cap != read_value)
-	{
-		dev_info(&chip->client->dev, "write MAX17055_RepCap error, retry three times!\n");
-		do
-		{
-			ret = regmap_write(map, MAX17055_RepCap, config->rep_cap);
-			mdelay(5);
-			regmap_read(map, MAX17055_RepCap, &read_value);
-			if (config->rep_cap != read_value)
-			{
-				ret = -EIO;
-				retries--;
-			}
-		} while ((retries > 0) && (config->rep_cap != read_value));
-
-		if (ret < 0)
-		{
-			dev_info(&chip->client->dev, "rewrite MAX17055_RepCap, three times error!\n");
-		}
-	}
+	max17055_write_volatile_reg(map, MAX17055_RepCap, 0);
 
 	/* Update VFSOC */
 	regmap_read(map, MAX17055_VFSOC, &vfSoc);
@@ -677,19 +676,6 @@ static void max17055_update_model_regs(struct max17055_chip *chip)
 
 	/* LearnCfg is optional */
 	max17055_override_por(map, MAX17055_LearnCfg, config->learn_cfg);
-}
-
-static void max17055_load_new_params(struct max17055_chip *chip)
-{
-	struct max17055_config_data *config = chip->pdata->config_data;
-	struct regmap *map = chip->regmap;
-	u32 dq_acc;
-
-	/* Write dQ_acc to 200% of Capacity and dP_acc to 200% */
-
-	dq_acc = config->design_cap / 16;
-	max17055_write_verify_reg(map, MAX17055_dPacc, 0x0C80);
-	max17055_write_verify_reg(map, MAX17055_dQacc, dq_acc);
 }
 
 /*
@@ -706,11 +692,12 @@ static inline void max17055_override_por_values(struct max17055_chip *chip)
 	max17055_override_por(map, MAx17055_TOff, config->toff);
 	max17055_override_por(map, MAX17055_CGain, config->cgain);
 	max17055_override_por(map, MAX17055_COff, config->coff);
-	max17055_override_por(map, MAX17055_Curve, config->curve);
+	max17055_override_por(map, MAX17055_TCurve, config->tcurve);
 
+	max17055_override_por(map, MAX17055_IAlrtTh, config->ialrt_thresh);
 	max17055_override_por(map, MAX17055_VAlrtTh, config->valrt_thresh);
 	max17055_override_por(map, MAX17055_TAlrtTh, config->talrt_thresh);
-	max17055_override_por(map, MAX17055_SAlrtTh, config->soc_alrt_thresh);
+	max17055_override_por(map, MAX17055_SAlrtTh, config->salrt_thresh);
 	max17055_override_por(map, MAX17055_Config, config->config);
 	max17055_override_por(map, MAX17055_Config2, config->config2);
 	max17055_override_por(map, MAX17055_ShdnTimer, config->shdntimer);
@@ -734,15 +721,20 @@ static void max17055_config_simple(struct max17055_chip *chip, bool with_ini)
 {
 	struct regmap *map = chip->regmap;
 	struct max17055_config_data *config = chip->pdata->config_data;
+	int dQacc_shrink = with_ini ? 16 : 128;
+	bool bat_4v275 = !!(config->model_cfg & 0x400);
 
-	max17055_write_verify_reg(map, MAX17055_RepCap, config->rep_cap);
-	//max17055_write_verify_reg(map, MAX17055_RepCap, 0);
+	if (MAXIM_DEVICE_TYPE_MAX17055A == chip->chip_type)
+		max17055_write_volatile_reg(map, MAX17055_RepCap, 0);
+
 	max17055_write_verify_reg(map, MAX17055_DesignCap, config->design_cap);
+	max17055_write_verify_reg(map, MAX17055_dQacc, config->design_cap / dQacc_shrink);
 	max17055_write_verify_reg(map, MAX17055_IChgTerm, config->ichgt_term);
 	max17055_write_verify_reg(map, MAX17055_VEmpty, config->vempty);
 
 	/* LearnCfg is optional */
 	max17055_override_por(map, MAX17055_LearnCfg, config->learn_cfg);
+	max17055_write_verify_reg(map, MAX17055_dPacc, dPaccVals[with_ini][bat_4v275]);
 	regmap_write(map, MAX17055_ModelCfg, config->model_cfg);
 
 	/*waiting for model loading to be complete*/
@@ -798,12 +790,10 @@ static int max17055_init_chip(struct max17055_chip *chip)
 
 		max17055_wait_on_bits(map, MAX17055_Config2, CONFIG2_LDMDL_BIT);
 
-		/* load new params */
-		max17055_load_new_params(chip);
 		break;
 
 	default: /* Do nothing */
-		max17055_config_simple(chip, false);
+
 		break;
 	}
 
@@ -991,6 +981,7 @@ static int max17055_probe(struct i2c_client *client,
 	int i;
 	u32 val, driver_version;
 
+
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_WORD_DATA))
 		return -EIO;
 
@@ -1014,18 +1005,13 @@ static int max17055_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, chip);
 
 	regmap_read(chip->regmap, MAX17055_DevName, &val);
-	if ((val == MAX17055_IC_VERSION)
-		|| (val == MAX17055_IC_VERSION_1)) {
-		dev_info(&client->dev, "chip type max17055 detected\n");
-		chip->chip_type = MAXIM_DEVICE_TYPE_MAX17055;
+	if (val == MAX17055_IC_VERSION_A) {
+		dev_info(&client->dev, "chip type max17055A detected\n");
+		chip->chip_type = MAXIM_DEVICE_TYPE_MAX17055A;
 	}
-	else if (val == MAX17201_IC_VERSION){
-		dev_info(&client->dev, "chip type max17201 detected\n");
-		chip->chip_type = MAXIM_DEVICE_TYPE_MAX17201;
-	}
-	else if (val == MAX17205_IC_VERSION){
-		dev_info(&client->dev, "chip type max17201 detected\n");
-		chip->chip_type = MAXIM_DEVICE_TYPE_MAX17205;
+	else if (val == MAX17055_IC_VERSION_B){
+		dev_info(&client->dev, "chip type max17055B detected\n");
+		chip->chip_type = MAXIM_DEVICE_TYPE_MAX17055B;
 	}
 	else {
 		dev_err(&client->dev, "device version mismatch: %x\n", val);
@@ -1174,7 +1160,7 @@ MODULE_DEVICE_TABLE(of, max17055_dt_match);
 #endif
 
 static const struct i2c_device_id max17055_id[] = {
-	{ "max17055", MAXIM_DEVICE_TYPE_MAX17055 },
+	{ "max17055", MAXIM_DEVICE_TYPE_MAX17055A },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, max17055_id);
