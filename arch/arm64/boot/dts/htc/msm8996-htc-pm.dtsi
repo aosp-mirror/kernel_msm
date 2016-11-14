@@ -52,14 +52,4 @@
 	reg = <0x290000 0x4>;
 	reg-names = "rpm_data_base";
 	};
-
-	cpu_fuse@70134 {
-		compatible = "qcom,cpucx-8996";
-		reg = <0x70134 0x4>;
-	};
-
-	cpu_fuse@70148 {
-		compatible = "qcom,cpumx-8996";
-		reg = <0x70148 0x4>;
-	};
 };
