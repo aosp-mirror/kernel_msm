@@ -360,6 +360,22 @@ static struct synaptics_rmi4_fwu_handle *fwu;
 DECLARE_COMPLETION(fwu_dsx_remove_complete);
 DEFINE_MUTEX(dsx_fwu_sysfs_mutex);
 
+/* Check offset + size <= bound.  1 if in bounds, 0 otherwise. */
+static int in_bounds(unsigned long offset,
+		     unsigned long size,
+		     unsigned long bound)
+{
+	if (offset > bound || size > bound) {
+		pr_err("%s: %lu or %lu > %lu\n", __func__, offset, size, bound);
+		return 0;
+	}
+	if (offset > (bound - size)) {
+		pr_err("%s: %lu > %lu - %lu\n", __func__, offset, size, bound);
+		return 0;
+	}
+	return 1;
+}
+
 static unsigned int extract_uint_le(const unsigned char *ptr)
 {
 	return (unsigned int)ptr[0] +
@@ -368,10 +384,17 @@ static unsigned int extract_uint_le(const unsigned char *ptr)
 			(unsigned int)ptr[3] * 0x1000000;
 }
 
-static void parse_header(struct image_header_data *header,
-		const unsigned char *fw_image)
+static int parse_header(struct image_header_data *header,
+		const unsigned char *fw_image,
+		const unsigned long fw_image_len)
 {
 	struct image_header *data = (struct image_header *)fw_image;
+	if (fw_image_len < sizeof(*data)) {
+		dev_err(fwu->rmi4_data->pdev->dev.parent,
+				"%s: update too small\n",
+				__func__);
+		return -EINVAL;
+	}
 
 	header->checksum = extract_uint_le(data->checksum);
 
@@ -391,7 +414,7 @@ static void parse_header(struct image_header_data *header,
 	if (header->contains_firmware_id)
 		header->firmware_id = extract_uint_le(data->firmware_id);
 
-	return;
+	return 0;
 }
 
 static int fwu_read_f01_device_status(struct f01_device_status *status)
@@ -1260,9 +1283,29 @@ static int fwu_start_write_config(void)
 	/* Jump to the config area if given a packrat image */
 	if ((fwu->config_area == UI_CONFIG_AREA) &&
 			(fwu->config_size != fwu->image_size)) {
-		parse_header(&header, fwu->ext_data_source);
+		if (parse_header(&header,
+				 fwu->ext_data_source,
+				 fwu->image_size)) {
+			return -EINVAL;
+		}
 
 		if (header.config_size) {
+			if (!in_bounds(FW_IMAGE_OFFSET,
+				       header.firmware_size,
+				       fwu->image_size)) {
+				dev_err(rmi4_data->pdev->dev.parent,
+						"%s: Firmware out of bounds\n",
+						__func__);
+				return -EINVAL;
+			}
+			if (!in_bounds(FW_IMAGE_OFFSET + header.firmware_size,
+				       header.config_size,
+				       fwu->image_size)) {
+				dev_err(rmi4_data->pdev->dev.parent,
+						"%s: Config out of bounds\n",
+						__func__);
+				return -EINVAL;
+			}
 			fwu->config_data = fwu->ext_data_source +
 					FW_IMAGE_OFFSET +
 					header.firmware_size;
@@ -1439,6 +1482,7 @@ static int fwu_start_reflash(void)
 	struct image_header_data header;
 	struct f01_device_status f01_device_status;
 	const unsigned char *fw_image;
+	unsigned long fw_image_len = 0;
 	const struct firmware *fw_entry = NULL;
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
 
@@ -1455,6 +1499,7 @@ static int fwu_start_reflash(void)
 
 	if (fwu->ext_data_source) {
 		fw_image = fwu->ext_data_source;
+		fw_image_len = fwu->image_size;
 	} else {
 		dev_dbg(rmi4_data->pdev->dev.parent,
 				"%s: Requesting firmware image %s\n",
@@ -1475,13 +1520,20 @@ static int fwu_start_reflash(void)
 				__func__, fw_entry->size);
 
 		fw_image = fw_entry->data;
+		fw_image_len = fw_entry->size;
 	}
 
-	parse_header(&header, fw_image);
+	if (parse_header(&header, fw_image, fw_image_len)) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: couldn't parse header\n",
+				__func__);
+		retval = -EINVAL;
+		goto exit;
+	}
 
 	if (fwu->bl_version != header.bootloader_version) {
 		dev_err(rmi4_data->pdev->dev.parent,
-				"%s: Bootloader version mismatch\n",
+				"%s: bootloader version mismatch\n",
 				__func__);
 		retval = -EINVAL;
 		goto exit;
@@ -1517,9 +1569,26 @@ static int fwu_start_reflash(void)
 		}
 	}
 
-	if (header.firmware_size)
+	if (header.firmware_size) {
+		if (!in_bounds(FW_IMAGE_OFFSET,
+			       header.firmware_size,
+			       fw_image_len)) {
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s: Firmware out of bounds\n",
+					__func__);
+			return -EINVAL;
+		}
 		fwu->firmware_data = fw_image + FW_IMAGE_OFFSET;
+	}
 	if (header.config_size) {
+		if (!in_bounds(FW_IMAGE_OFFSET + header.firmware_size,
+			       header.config_size,
+			       fw_image_len)) {
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s: Config out of bounds\n",
+					__func__);
+			return -EINVAL;
+		}
 		fwu->config_data = fw_image + FW_IMAGE_OFFSET +
 				header.firmware_size;
 	}
