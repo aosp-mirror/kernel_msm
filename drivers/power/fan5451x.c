@@ -665,7 +665,6 @@ static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set)
 		if (!chip->usb_present)
 			fan5451x_batfet_enable(chip, CABLE, 0);
 		disable_irq_wake(chip->client->irq);
-		__pm_relax(&chip->ws_cv);
 	} else {
 		/* normal state */
 		enable_irq_wake(chip->client->irq);
@@ -1659,6 +1658,11 @@ fan5451x_eoc_check_work(struct work_struct *work)
 	ibat_ma = get_prop_current_now(chip) / 1000;
 	vbat_mv = get_prop_battery_voltage_now(chip) / 1000;
 	pr_debug("ibat_ma = %d, vbat_mv = %d\n", ibat_ma, vbat_mv);
+
+	if (!chip->usb_present && !chip->wlc_present) {
+		pr_info("stop eoc_check_work, cable unplug\n");
+		goto stop_eoc;
+	}
 
 	if (vbat_mv <= rechg_mv) {
 		pr_info("stop eoc_check_work, discharged battery mv = %d\n", vbat_mv);
