@@ -1,6 +1,5 @@
 /*
- * Fuel gauge driver for Maxim 17055 / 17201 / 17205
- *  Note that Maxim 17201 and 17205 have OTP on the chip.
+ * Fuel gauge driver for Maxim 17055
  *
  * Copyright (C) 2016 Maxim Integrated
  * Bo Yang <Bo.Yang@maximintegrated.com>
@@ -112,36 +111,33 @@ enum max17055_register {
 	MAX17055_Power 		= 0xB1,
 
 	MAX17055_AvgPower 	= 0xB3,
+	MAX17055_IAlrtTh	= 0xB4,
 
-	MAX17055_Curve 		= 0xB9,
+	MAX17055_TCurve 	= 0xB9,
 
 	MAX17055_HibCfg 	= 0xBA,
 	MAX17055_Config2 	= 0xBB,
 
 	MAX17055_ModelCfg	= 0xDB,
 
-	MAX17055_OCV			= 0xEE,
-
-	MAX17055_OCVInternal	= 0xFB,
+	MAX17055_VFOCV		= 0xFB,
 
 	MAX17055_VFSOC			= 0xFF,
 };
 
-enum max170xx_chip_type {
+enum max17055_chip_type {
 	MAXIM_DEVICE_TYPE_UNKNOWN	= 0,
-	MAXIM_DEVICE_TYPE_MAX17055,
-	MAXIM_DEVICE_TYPE_MAX17201,
-	MAXIM_DEVICE_TYPE_MAX17205,
+	MAXIM_DEVICE_TYPE_MAX17055A,
+	MAXIM_DEVICE_TYPE_MAX17055B,
 
 	MAXIM_DEVICE_TYPE_NUM
 };
 
-enum max170xx_config_type {
+enum max17055_config_type {
 	MODELGAUGE_CONFIG_TYPE_UNKNOWN	= 0,
 	MODELGAUGE_CONFIG_TYPE_EZ,
 	MODELGAUGE_CONFIG_TYPE_SHORT,
-	MODELGAUGE_CONFIG_TYPE_FULL,
-	MODELGAUGE_CONFIG_TYPE_BURN
+	MODELGAUGE_CONFIG_TYPE_FULL
 };
 
 /*
@@ -158,13 +154,15 @@ struct max17055_config_data {
 	/* A/D measurement */
 	u16	tgain;		/* 0x2C */
 	u16	toff;		/* 0x2D */
+	u16 tcurve;		/* 0xB9 */
 	u16	cgain;		/* 0x2E */
 	u16	coff;		/* 0x2F */
 
 	/* Alert / Status */
+	u16 ialrt_thresh;		/* 0xB4 */
 	u16	valrt_thresh;		/* 0x01 */
 	u16	talrt_thresh;		/* 0x02 */
-	u16	soc_alrt_thresh;	/* 0x03 */
+	u16	salrt_thresh;		/* 0x03 */
 	u16	config;				/* 0x1D */
 	u16 config2;			/* 0xBB */
 	u16	shdntimer;			/* 0x3F */
@@ -193,7 +191,6 @@ struct max17055_config_data {
 	u16	qrtbl10;	/* 0x22 */
 	u16	qrtbl20;	/* 0x32 */
 	u16	qrtbl30;	/* 0x42 */
-	u16 curve;		/* 0xB9 */
 
 	/* Model Data */
 	u16	cell_char_tbl[MAX17055_CHARACTERIZATION_DATA_SIZE];
