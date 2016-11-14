@@ -517,11 +517,9 @@ static u32 Get_min_mx(void) {
 	return lookup_val;
 }
 
-extern u64* htc_target_quot[2];
-extern int htc_target_quot_len;
 static int c_show(struct seq_file *m, void *v)
 {
-	int i, j, size;
+	int i, j;
 
 	seq_printf(m, "Processor\t: %s rev %d (%s)\n",
 		cpu_name, read_cpuid_id() & 15, ELF_PLATFORM);
@@ -575,16 +573,6 @@ static int c_show(struct seq_file *m, void *v)
 		seq_printf(m, "CPU part\t: 0x%03x\n", MIDR_PARTNUM(midr));
 		seq_printf(m, "CPU revision\t: %d\n\n", MIDR_REVISION(midr));
 	}
-
-	size = sizeof(htc_target_quot)/sizeof(u64);
-	seq_printf(m, "CPU param\t: ");
-	for (i = 0; i < size; i++) {
-		if(htc_target_quot[i]) {
-			for(j = 0; j < htc_target_quot_len; j++)
-				seq_printf(m, "%lld ", htc_target_quot[i][j]);
-		}
-	}
-	seq_printf(m, "\n");
 
 	if (!arch_read_hardware_id)
 		seq_printf(m, "Hardware\t: %s\n", machine_name);
