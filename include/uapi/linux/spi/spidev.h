@@ -120,8 +120,7 @@ typedef enum
 	SPIDEV_WAKEUP_DISPLAY_DISABLE = 0,
 	SPIDEV_WAKEUP_DISPLAY_ENALBE = 1,
 }spidev_wakeup_disp_type;
-
-#define SPIDEV_KERNEL_MODE_LENGTH 256
+#define SPIDEV_KERNEL_MODE_LENGTH 128
 
 /* not all platforms use <asm-generic/ioctl.h> or _IOC_TYPECHECK() ... */
 #define SPI_MSGSIZE(N) \
