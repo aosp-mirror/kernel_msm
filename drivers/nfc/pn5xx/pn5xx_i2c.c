@@ -45,7 +45,8 @@
 #include <linux/sched.h>
 #include <linux/signal.h>
 #include <linux/clk.h>
-
+#include <linux/wakelock.h>
+#define DATA_TRANSFER_INTERVAL (1*HZ)
 #define SIG_NFC 44
 #define MAX_BUFFER_SIZE    512
 
@@ -83,6 +84,7 @@ struct pn5xx_dev    {
     bool            irq_enabled;
     spinlock_t        irq_enabled_lock;
     long                nfc_service_pid; /*used to signal the nfc the nfc service */
+	struct wake_lock    wake_lock;
 };
 
 static struct pn5xx_dev *pn5xx_dev;
@@ -381,7 +383,7 @@ static ssize_t pn5xx_dev_read(struct file *filp, char __user *buf,
     /* pn5xx seems to be slow in handling I2C read requests
      * so add 1ms delay after recv operation */
     udelay(1000);
-
+    wake_lock_timeout(&pn5xx_dev->wake_lock, DATA_TRANSFER_INTERVAL);
     if (ret < 0) {
         pr_err("%s: i2c_master_recv returned %d\n", __func__, ret);
         return ret;
@@ -1028,7 +1030,7 @@ static int pn5xx_probe(struct i2c_client *client,
     pn5xx_dev->vbat_reg = pdata->vbat_reg;
     pn5xx_dev->pmuvcc_reg = pdata->vbat_reg;
     pn5xx_dev->sevdd_reg = pdata->sevdd_reg;
-
+	wake_lock_init(&pn5xx_dev->wake_lock, WAKE_LOCK_SUSPEND,"pn5xx");
     pn5xx_dev->client   = client;
 
    //songyanfei
@@ -1169,7 +1171,7 @@ static int pn5xx_remove(struct i2c_client *client)
     regulator_put(pn5xx_dev->vbat_reg);
     regulator_put(pn5xx_dev->pmuvcc_reg);
     regulator_put(pn5xx_dev->sevdd_reg);
-
+    wake_lock_destroy(&pn5xx_dev->wake_lock);
     kfree(pn5xx_dev);
 
     return 0;
