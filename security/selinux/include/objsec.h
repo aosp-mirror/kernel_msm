@@ -38,7 +38,8 @@ struct task_security_struct {
 
 enum label_initialized {
 	LABEL_INVALID,		/* invalid or not initialized */
-	LABEL_INITIALIZED	/* initialized */
+	LABEL_INITIALIZED,	/* initialized */
+	LABEL_PENDING
 };
 
 struct inode_security_struct {
@@ -52,7 +53,7 @@ struct inode_security_struct {
 	u16 sclass;		/* security class of this object */
 	unsigned char initialized;	/* initialization flag */
 	void *pfk_data;			/* Per-File-Key data from ecryptfs */
-	struct mutex lock;
+	spinlock_t lock;
 };
 
 struct file_security_struct {
