@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -469,7 +469,8 @@ limProcessAssocRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tANI_U8 sub
     }
     if(pAssocRsp->ExtCap.present)
     {
-        limLog(pMac, LOGE, FL("Filling tdls prohibited in session entry"));
+        limLog(pMac, LOG1,
+            FL("Filling tdls prohibited in session entry"));
         psessionEntry->tdlsChanSwitProhibited =
                        pAssocRsp->ExtCap.TDLSChanSwitProhibited ;
     }

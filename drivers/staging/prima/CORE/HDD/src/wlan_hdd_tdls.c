@@ -995,9 +995,10 @@ int wlan_hdd_sta_tdls_init(hdd_adapter_t *pAdapter)
 
     if (test_bit(TDLS_INIT_DONE, &pAdapter->event_flags))
     {
-        VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                "%s: TDLS INIT DONE set to 1, no point in re-init", __func__);
-        return -EALREADY;
+        hddLog(LOG1,
+                FL("TDLS INIT DONE set to 1, no point in re-init"));
+        /* Return success as TDLS is already initialized */
+        return 0;
     }
 
     if ((FALSE == pHddCtx->cfg_ini->fEnableTDLSSupport) ||
@@ -2287,7 +2288,7 @@ void wlan_hdd_tdls_connection_callback(hdd_adapter_t *pAdapter)
     if (0 != wlan_hdd_sta_tdls_init(pAdapter))
     {
         mutex_unlock(&pHddCtx->tdls_lock);
-        hddLog(VOS_TRACE_LEVEL_ERROR,"%s: wlan_hdd_sta_tdls_init failed",__func__);
+        hddLog(LOGE, FL("wlan_hdd_sta_tdls_init failed"));
         return;
     }
 
