@@ -158,6 +158,14 @@
 #define BUFFER_PKT		0x63
 #define BUFFER55_PKT		0x66
 
+#define FEATURE_CHECK_TRUE_INTERRUPT
+
+#ifdef FEATURE_CHECK_TRUE_INTERRUPT
+static int touchINT_cnt = 0;
+static int IamAlive_PKT_INT_cnt = 0;
+#endif
+
+
 #ifdef FEATURE_PALM_DETECTION
 #define PALM_DETECTION_PKT 0xBA
 #endif
@@ -655,6 +663,7 @@ struct elan_ktf_ts_data {
     #endif
     /* Quanta, BU10SW, Stanley Tsao, 2015.12.22, enable pinctrl usage for msm8909 { */
     uint power_mode;
+	int irq;
 
 };
 
@@ -3247,6 +3256,16 @@ struct device_attribute *attr, char *buf)
 	(ts->power_mode == POWER_MODE_NORMAL) ? "Normal" : "Idle");
 }
 
+#ifdef FEATURE_CHECK_TRUE_INTERRUPT
+static ssize_t show_int_count(struct device *dev,
+struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "touchCNT =%d, 78intCNT = %d\n", touchINT_cnt, IamAlive_PKT_INT_cnt);
+}
+#endif
+
+
+
 static ssize_t show_goto_idle_mode(struct device *dev,
 struct device_attribute *attr, char *buf)
 {
@@ -3346,6 +3365,11 @@ static DEVICE_ATTR(gestr_bld_ctl, 0660, show_gestr_bld_ctl, store_gestr_bld_ctl)
 static DEVICE_ATTR(gestr_rcvr_ctl, 0660, show_gestr_rcvr_ctl, store_gestr_rcvr_ctl);
 #endif
 
+#ifdef FEATURE_CHECK_TRUE_INTERRUPT
+static DEVICE_ATTR(intCnt, S_IRUGO, show_int_count, NULL);
+#endif
+
+
 static struct attribute *elan_attributes[] = {
 	//&dev_attr_debug_mesg.attr,
 	&dev_attr_gpio_int.attr,
@@ -3373,6 +3397,9 @@ static struct attribute *elan_attributes[] = {
 	#endif
     #ifdef FEATURE_QUANTA_GESTURE_TO_RECOVERY
     &dev_attr_gestr_rcvr_ctl.attr,
+    #endif
+    #ifdef FEATURE_CHECK_TRUE_INTERRUPT
+    &dev_attr_intCnt.attr,
     #endif
 	NULL
 };
@@ -4044,6 +4071,9 @@ static void elan_ktf_ts_report_data(struct i2c_client *client, uint8_t *buf)
 		break;
     case IDLE_MODE_PKT:
         ts->power_mode = POWER_MODE_IDLE;
+		#ifdef FEATURE_CHECK_TRUE_INTERRUPT
+		touchINT_cnt = 0;
+		#endif
 		break;
     /* Quanta BU10SW, Stanley Tsao, 2015.12.09, For customized gesture events { */
     #ifdef FEATURE_QUANTA_GESTURE_CUSTOMIZATION
@@ -4239,6 +4269,9 @@ static void elan_ktf_ts_report_data(struct i2c_client *client, uint8_t *buf)
         break;
     case IDLE_MODE_PKT:
         ts->power_mode = POWER_MODE_IDLE;
+		#ifdef FEATURE_CHECK_TRUE_INTERRUPT
+		touchINT_cnt = 0;
+		#endif
         break;
     #ifdef FEATURE_PALM_DETECTION
     case PALM_DETECTION_PKT:
@@ -4296,6 +4329,16 @@ static irqreturn_t elan_ktf_ts_irq_handler(int irq, void *dev_id)
 		printk("[elan] Received the packet Error.\n");
 		return IRQ_HANDLED;
 	}
+    #ifdef FEATURE_CHECK_TRUE_INTERRUPT
+    if(buf[0] == IamAlive_PKT)
+    {
+        IamAlive_PKT_INT_cnt +=1;
+    }
+	else
+	{
+		touchINT_cnt +=1;
+	}
+    #endif
 #endif
 	//printk("[elan_debug] %2x,%2x,%2x,%2x,%2x,%2x,%2x,%2x ....., %2x\n",buf[0],buf[1],buf[2],buf[3],buf[4],buf[5],buf[6],buf[7],buf[17]);
 
@@ -4335,7 +4378,7 @@ static int elan_ktf_ts_register_interrupt(struct i2c_client *client)
 	struct elan_ktf_ts_data *ts = i2c_get_clientdata(client);
 	int err = 0;
 
-	err = request_threaded_irq(client->irq, NULL, elan_ktf_ts_irq_handler,
+	err = request_threaded_irq(ts->irq, NULL, elan_ktf_ts_irq_handler,
 	IRQF_TRIGGER_LOW /*| IRQF_TRIGGER_FALLING*/ | IRQF_ONESHOT,
 	client->name, ts);
 	if (err) {
@@ -4690,6 +4733,7 @@ const struct i2c_device_id *id)
 	}
     #endif
     ts->intr_gpio = pdata->intr_gpio;
+	ts->irq = gpio_to_irq(pdata->intr_gpio);
     /*Quanta BU10SW, Stanley Tsao, 2015.12.03, Remove old code { */
 
     /* Quanta BU10SW, Stalney Tsao, 2015.12.25, set reset pin from device tree { */
@@ -5095,8 +5139,15 @@ static int elan_ktf_ts_suspend(struct i2c_client *client, pm_message_t mesg)
     int err;
     #endif
     /* Quanta, BU10SW, Stanley Tsao, 2015.12.22, enable pinctrl usage for msm8909 } */
+
     
 	int rc = 0;
+
+    #ifdef FEATURE_CHECK_TRUE_INTERRUPT
+    touchINT_cnt = 0;
+    IamAlive_PKT_INT_cnt = 0;
+    #endif
+
 	if(power_lock==0) /* The power_lock can be removed when firmware upgrade procedure will not be enter into suspend mode.  */
 	{
 		printk(KERN_INFO "[elan] %s: enter\n", __func__);
@@ -5118,6 +5169,7 @@ static int elan_ktf_ts_suspend(struct i2c_client *client, pm_message_t mesg)
     /* Quanta, BU10SW, Stanley Tsao, 2015.12.22, enable pinctrl usage for msm8909 } */
 
 	gpio_direction_input(private_ts->intr_gpio);
+	enable_irq_wake(private_ts->irq);
 	return 0;
 }
 
