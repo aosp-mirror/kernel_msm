@@ -3369,23 +3369,31 @@ err_free_mem:
 static int mxt_flash_fw(struct mxt_data *data)
 {
 	struct mxt_fw_info *fw_info = &data->fw_info;
-	const u8 *fw_data = fw_info->fw_raw_data;
+	u8 *fw_data = 0;
 	u32 fw_size = fw_info->fw_len;
 	unsigned int frame_size = 0;
 	unsigned int frame = 0;
 	unsigned int pos = 0;
 	int ret = 0;
 
+	fw_data = kmalloc(fw_size, GFP_KERNEL);
 	if (!fw_data) {
 		TOUCH_ERR_MSG("%s firmware data is Null\n", __func__);
 		return -ENOMEM;
 	}
 
+	if (!fw_info->fw_raw_data) {
+		TOUCH_ERR_MSG("%s fw_raw_data is Null\n", __func__);
+		goto out;
+	}
+
+	memcpy(fw_data, fw_info->fw_raw_data, fw_size);
+
 	/* T1664 use 0x26 bootloader addr */
 	ret = mxt_lookup_bootloader_address(data, 1);
 	if (ret) {
 		TOUCH_ERR_MSG("Failed to lookup bootloader address\n");
-		return ret;
+		goto out;
 	}
 
 	reinit_completion(&data->bl_completion);
@@ -3445,6 +3453,7 @@ static int mxt_flash_fw(struct mxt_data *data)
 	msleep(MXT_FW_RESET_TIME);
 
 out:
+	kfree(fw_data);
 	return ret;
 }
 
