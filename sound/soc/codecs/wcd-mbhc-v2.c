@@ -885,14 +885,14 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 		}
 
 		if (mbhc->micbias_enable) {
-			if (mbhc->mbhc_cb->mbhc_micbias_control)
-				mbhc->mbhc_cb->mbhc_micbias_control(
-						mbhc->codec, MIC_BIAS_2,
-						MICB_DISABLE);
 			if (mbhc->mbhc_cb->mbhc_micb_ctrl_thr_mic)
 				mbhc->mbhc_cb->mbhc_micb_ctrl_thr_mic(
 						mbhc->codec,
 						MIC_BIAS_2, false);
+			if (mbhc->mbhc_cb->mbhc_micbias_control)
+				mbhc->mbhc_cb->mbhc_micbias_control(
+						mbhc->codec, MIC_BIAS_2,
+						MICB_DISABLE);
 			if (mbhc->mbhc_cb->set_micbias_value) {
 				mbhc->mbhc_cb->set_micbias_value(mbhc->codec);
 				WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_MICB_CTRL, 0);
@@ -923,14 +923,14 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 		    (mbhc->hph_status && mbhc->hph_status != jack_type)) {
 
 			if (mbhc->micbias_enable && (mbhc->current_plug != MBHC_PLUG_TYPE_HIGH_HPH)) { //HTC_AUD
-				if (mbhc->mbhc_cb->mbhc_micbias_control)
-					mbhc->mbhc_cb->mbhc_micbias_control(
-						mbhc->codec, MIC_BIAS_2,
-						MICB_DISABLE);
 				if (mbhc->mbhc_cb->mbhc_micb_ctrl_thr_mic)
 					mbhc->mbhc_cb->mbhc_micb_ctrl_thr_mic(
 						mbhc->codec,
 						MIC_BIAS_2, false);
+				if (mbhc->mbhc_cb->mbhc_micbias_control)
+					mbhc->mbhc_cb->mbhc_micbias_control(
+						mbhc->codec, MIC_BIAS_2,
+						MICB_DISABLE);
 				if (mbhc->mbhc_cb->set_micbias_value) {
 					mbhc->mbhc_cb->set_micbias_value(
 							mbhc->codec);
@@ -1584,6 +1584,10 @@ correct_plug_type:
 				hs_comp_res = 0;
 				spl_hs = true;
 				mbhc->micbias_enable = true;
+				/* Increase vote on micbias */
+				mbhc->mbhc_cb->mbhc_micbias_control(codec,
+								MIC_BIAS_2,
+								MICB_ENABLE);
 			}
 		}
 
@@ -1727,8 +1731,7 @@ enable_supply:
 	else
 		wcd_enable_mbhc_supply(mbhc, plug_type);
 exit:
-	if (mbhc->mbhc_cb->mbhc_micbias_control &&
-	    !mbhc->micbias_enable)
+	if (mbhc->mbhc_cb->mbhc_micbias_control)
 		mbhc->mbhc_cb->mbhc_micbias_control(codec, MIC_BIAS_2,
 						    MICB_DISABLE);
 	if (mbhc->mbhc_cb->micbias_enable_status) {
