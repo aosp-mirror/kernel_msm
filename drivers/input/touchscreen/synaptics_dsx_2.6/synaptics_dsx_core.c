@@ -861,6 +861,53 @@ static ssize_t synaptics_rmi4_virtual_key_map_show(struct kobject *kobj,
 	return count;
 }
 
+static void synaptics_rmi4_virtual_abs_report(struct synaptics_rmi4_data *rmi4_data)
+{
+	int x = 200;
+	int y = 200;
+	int wx = 4;
+	int wy = 3;
+
+	dev_info(rmi4_data->pdev->dev.parent,
+			"%s: report virtual abs\n", __func__);
+#ifdef TYPE_B_PROTOCOL
+	input_mt_slot(rmi4_data->input_dev, 0);
+	input_mt_report_slot_state(rmi4_data->input_dev,
+			MT_TOOL_FINGER, 1);
+#endif
+	input_report_key(rmi4_data->input_dev,
+			BTN_TOUCH, 1);
+	input_report_key(rmi4_data->input_dev,
+			BTN_TOOL_FINGER, 1);
+	input_report_abs(rmi4_data->input_dev,
+			ABS_MT_POSITION_X, x);
+	input_report_abs(rmi4_data->input_dev,
+			ABS_MT_POSITION_Y, y);
+#ifdef REPORT_2D_W
+	input_report_abs(rmi4_data->input_dev,
+			ABS_MT_TOUCH_MAJOR, max(wx, wy));
+	input_report_abs(rmi4_data->input_dev,
+			ABS_MT_TOUCH_MINOR, min(wx, wy));
+#endif
+#ifndef TYPE_B_PROTOCOL
+	input_mt_sync(rmi4_data->input_dev);
+#endif
+
+	usleep_range(5000, 5500);
+	syna_has_finger = false;
+	pre_finger = 0;
+
+	input_report_key(rmi4_data->input_dev,
+			BTN_TOUCH, 0);
+	input_report_key(rmi4_data->input_dev,
+			BTN_TOOL_FINGER, 0);
+#ifndef TYPE_B_PROTOCOL
+	input_mt_sync(rmi4_data->input_dev);
+#endif
+
+	input_sync(rmi4_data->input_dev);
+}
+
 static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 		struct synaptics_rmi4_fn *fhandler)
 {
@@ -947,12 +994,8 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 
 	if (work_status && !has_finger && !pre_finger &&
 		!palm_status && !syn_ts->palm_status) {
-		dev_info(rmi4_data->pdev->dev.parent,
-			"%s: report KEY_POWER\n", __func__);
-		input_report_key(rmi4_data->input_dev, KEY_POWER, 1);
-		input_sync(rmi4_data->input_dev);
-		input_report_key(rmi4_data->input_dev, KEY_POWER, 0);
-		input_sync(rmi4_data->input_dev);
+
+		synaptics_rmi4_virtual_abs_report(rmi4_data);
 		work_status = 0;
 		return 0;
 	}
@@ -4762,7 +4805,6 @@ static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
 		unsigned long event, void *data)
 {
 	int *transition;
-	int retval;
 	unsigned char doze_time = 3;
 	struct fb_event *evdata = data;
 	struct synaptics_rmi4_data *rmi4_data =
@@ -4774,10 +4816,11 @@ static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
 		if (event == FB_EVENT_BLANK) {
 			transition = evdata->data;
 			if (*transition == FB_BLANK_POWERDOWN) {
-				queue_work(syna_rmi4_resume_wq, &syna_rmi4_suspend_work);
-				rmi4_data->fb_ready = false;
-				suspend_flag = 0;
-				retval = wait_event_interruptible_timeout(suspend_wait, suspend_flag, HZ);
+				work_status = 2;
+				dev_info(rmi4_data->pdev->dev.parent,
+					"%s: do not suspend, work_status = %d\n",
+					__func__, work_status);
+				synaptics_rmi4_doze_interval(rmi4_data, doze_time);
 			} else if (*transition == FB_BLANK_UNBLANK) {
 				queue_work(syna_rmi4_resume_wq, &syna_rmi4_resume_work);
 				rmi4_data->fb_ready = true;
