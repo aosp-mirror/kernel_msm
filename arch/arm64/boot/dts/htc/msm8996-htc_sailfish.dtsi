@@ -54,7 +54,7 @@
         qcom,fg-iterm-ma = <277>;
         qcom,fg-chg-iterm-ma = <50>;
         qcom,fg-cc-cv-threshold-mv = <4390>;
-        qcom,ext-sense-type = <1>;
+	qcom,ext-sense-type;
         qcom,cold-hot-jeita-hysteresis = <20 30>;
         qcom,fg-cutoff-voltage-mv = <3250>;
         qcom,irq-volt-empty-mv = <3050>;

@@ -7088,7 +7088,8 @@ out:
 #define DEFAULT_EVALUATION_CURRENT_MA	1000
 static int fg_of_init(struct fg_chip *chip)
 {
-	int rc = 0, sense_type, len = 0;
+	int rc = 0, len = 0;
+	bool sense_type;
 	const char *data;
 	struct device_node *node = chip->spmi->dev.of_node;
 	u32 temp[2] = {0};
@@ -7199,7 +7200,8 @@ static int fg_of_init(struct fg_chip *chip)
 					"qcom,ext-sense-type");
 	if (rc == 0) {
 		if (fg_sense_type < 0)
-			fg_sense_type = sense_type;
+			fg_sense_type = sense_type ?
+				EXTERNAL_CURRENT_SENSE : INTERNAL_CURRENT_SENSE;
 
 		if (fg_debug_mask & FG_STATUS) {
 			if (fg_sense_type == INTERNAL_CURRENT_SENSE)
