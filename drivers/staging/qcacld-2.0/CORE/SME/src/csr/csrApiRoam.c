@@ -11043,6 +11043,8 @@ void csrRoamCheckForLinkStatusChange( tpAniSirGlobal pMac, tSirSmeRsp *pSirMsg )
                                    "command failed(%d) PeerMac "MAC_ADDRESS_STR,
                                    pRsp->statusCode, MAC_ADDR_ARRAY(pRsp->peerMacAddr));
                         }
+                        roamInfo.is11rAssoc = csrRoamIs11rAssoc(pMac,
+                                                                  sessionId);
                         csrRoamCallCallback(pMac, sessionId, &roamInfo, pCommand->u.setKeyCmd.roamId,
                                             eCSR_ROAM_SET_KEY_COMPLETE, result);
                         // Indicate SME_QOS that the SET_KEY is completed, so that SME_QOS
