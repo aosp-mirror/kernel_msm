@@ -159,6 +159,7 @@ struct msm_asoc_mach_data {
 	int hph_en1_gpio;
 	int hph_en0_gpio;
 	int us_euro_gpio; /* used by gpio driver API */
+	int wcd_mbhc_enabled;
 	struct regulator *us_euro_supply;
 	struct device_node *us_euro_gpio_p; /* used by pinctrl API */
 	struct device_node *hph_en1_gpio_p; /* used by pinctrl API */
@@ -3129,7 +3130,8 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 				    tx_ch, ARRAY_SIZE(rx_ch), rx_ch);
 
 	msm_codec_fn.get_afe_config_fn = tasha_get_afe_config;
-	msm_codec_fn.mbhc_hs_detect_exit = tasha_mbhc_hs_detect_exit;
+	if (pdata->wcd_mbhc_enabled)
+		msm_codec_fn.mbhc_hs_detect_exit = tasha_mbhc_hs_detect_exit;
 
 	ret = msm_adsp_power_up_config(codec);
 	if (ret) {
@@ -3196,7 +3198,6 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		pdata->codec_root = entry;
 		tasha_codec_info_create_codec_entry(pdata->codec_root, codec);
 	}
-done:
 	codec_reg_done = true;
 	return 0;
 
@@ -5222,6 +5223,10 @@ static int msm_snd_card_late_probe(struct snd_soc_card *card)
 	struct snd_soc_pcm_runtime *rtd;
 	int ret = 0;
 	void *mbhc_calibration;
+	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+
+	if (!pdata->wcd_mbhc_enabled)
+		return 0;
 
 	rtd = snd_soc_get_pcm_runtime(card, be_dl_name);
 	if (!rtd) {
@@ -5945,6 +5950,8 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "Sound card %s registered\n", card->name);
 	spdev = pdev;
 
+	/* By default we are using the WCD headset jack. */
+	pdata->wcd_mbhc_enabled = 1;
 	ret = of_property_read_string(pdev->dev.of_node,
 		"qcom,mbhc-audio-jack-type", &mbhc_audio_jack_type);
 	if (ret) {
@@ -5953,14 +5960,18 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 			pdev->dev.of_node->full_name);
 		dev_dbg(&pdev->dev, "Jack type properties set to default");
 	} else {
-		if (!strcmp(mbhc_audio_jack_type, "4-pole-jack"))
+		if (!strcmp(mbhc_audio_jack_type, "4-pole-jack")) {
 			dev_dbg(&pdev->dev, "This hardware has 4 pole jack");
-		else if (!strcmp(mbhc_audio_jack_type, "5-pole-jack"))
+		} else if (!strcmp(mbhc_audio_jack_type, "5-pole-jack")) {
 			dev_dbg(&pdev->dev, "This hardware has 5 pole jack");
-		else if (!strcmp(mbhc_audio_jack_type, "6-pole-jack"))
+		} else if (!strcmp(mbhc_audio_jack_type, "6-pole-jack")) {
 			dev_dbg(&pdev->dev, "This hardware has 6 pole jack");
-		else
+		} else if (!strcmp(mbhc_audio_jack_type, "none")) {
+			dev_dbg(&pdev->dev, "No WCD headset jack.");
+			pdata->wcd_mbhc_enabled = 0;
+		} else {
 			dev_dbg(&pdev->dev, "Unknown value, set to default");
+		}
 	}
 	/*
 	 * Parse US-Euro gpio info from DT. Report no error if us-euro
