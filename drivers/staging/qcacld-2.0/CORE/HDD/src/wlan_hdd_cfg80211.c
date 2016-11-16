@@ -3521,6 +3521,7 @@ static int hdd_extscan_start_fill_bucket_channel_spec(
 	int rem1, rem2;
 	eHalStatus status;
 	uint8_t bktIndex, j, numChannels, total_channels = 0;
+	uint32_t expected_buckets;
 	uint32_t chanList[WNI_CFG_VALID_CHANNEL_LIST_LEN] = {0};
 
 	uint32_t min_dwell_time_active_bucket =
@@ -3532,7 +3533,6 @@ static int hdd_extscan_start_fill_bucket_channel_spec(
 	uint32_t max_dwell_time_passive_bucket =
 		pHddCtx->cfg_ini->extscan_passive_max_chn_time;
 
-	bktIndex = 0;
 	pReqMsg->min_dwell_time_active =
 		pReqMsg->max_dwell_time_active =
 			pHddCtx->cfg_ini->extscan_active_max_chn_time;
@@ -3540,10 +3540,19 @@ static int hdd_extscan_start_fill_bucket_channel_spec(
 	pReqMsg->min_dwell_time_passive =
 		pReqMsg->max_dwell_time_passive =
 			pHddCtx->cfg_ini->extscan_passive_max_chn_time;
+
+	expected_buckets = pReqMsg->numBuckets;
 	pReqMsg->numBuckets = 0;
+	bktIndex = 0;
 
 	nla_for_each_nested(buckets,
 			tb[QCA_WLAN_VENDOR_ATTR_EXTSCAN_BUCKET_SPEC], rem1) {
+
+		if (bktIndex >= expected_buckets) {
+			hddLog(LOGW, FL("ignoring excess buckets"));
+			break;
+		}
+
 		if (nla_parse(bucket,
 			QCA_WLAN_VENDOR_ATTR_EXTSCAN_SUBCMD_CONFIG_PARAM_MAX,
 			nla_data(buckets), nla_len(buckets), NULL)) {
@@ -4045,8 +4054,10 @@ static int __wlan_hdd_cfg80211_extscan_start(struct wiphy *wiphy,
 		hddLog(LOGW,
 			FL("Exceeded MAX number of buckets: %d"),
 			WLAN_EXTSCAN_MAX_BUCKETS);
+		num_buckets = WLAN_EXTSCAN_MAX_BUCKETS;
 	}
 	hddLog(LOG1, FL("Input: Number of Buckets %d"), num_buckets);
+	pReqMsg->numBuckets = num_buckets;
 
 	/* This is optional attribute, if not present set it to 0 */
 	if (!tb[PARAM_CONFIG_FLAGS])
