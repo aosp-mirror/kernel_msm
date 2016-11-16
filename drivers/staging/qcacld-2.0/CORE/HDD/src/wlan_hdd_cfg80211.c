@@ -19783,6 +19783,11 @@ static int __wlan_hdd_cfg80211_get_station(struct wiphy *wiphy,
     if (true == pHddStaCtx->hdd_ReassocScenario) {
         hddLog(LOG1,
                FL("Roaming is in progress, cannot continue with this request"));
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0))
+    sinfo->filled |= STATION_INFO_SIGNAL;
+#else
+    sinfo->filled |= BIT(NL80211_STA_INFO_SIGNAL);
+#endif
         sinfo->signal = pAdapter->rssi;
         return 0;
     }
