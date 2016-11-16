@@ -13483,11 +13483,17 @@ static int tasha_post_reset_cb(struct wcd9xxx *wcd9xxx)
 	/* Initialize MBHC module */
 	ret = wcd_mbhc_init(&tasha->mbhc, codec, &mbhc_cb, &intr_ids,
 		      wcd_mbhc_registers, TASHA_ZDET_SUPPORTED);
-	if (ret)
-		dev_err(codec->dev, "%s: mbhc initialization failed\n",
-			__func__);
-	else
+	if (ret) {
+		/* -ENODEV is returned when qcom,mbhc-audio-jack-type is
+		 * 'none'. */
+		if (ret != -ENODEV) {
+			dev_err(codec->dev,
+				"%s: mbhc initialization failed\n",
+				__func__);
+		}
+	} else {
 		tasha_mbhc_hs_detect(codec, tasha->mbhc.mbhc_cfg);
+	}
 
 	tasha_cleanup_irqs(tasha);
 	ret = tasha_setup_irqs(tasha);
@@ -13618,7 +13624,8 @@ static int tasha_codec_probe(struct snd_soc_codec *codec)
 	}
 	ret = wcd_mbhc_init(&tasha->mbhc, codec, &mbhc_cb, &intr_ids,
 		      wcd_mbhc_registers, TASHA_ZDET_SUPPORTED);
-	if (ret) {
+	/* -ENODEV is returned when qcom,mbhc-audio-jack-type is 'none'. */
+	if (ret && ret != -ENODEV) {
 		pr_err("%s: mbhc initialization failed\n", __func__);
 		goto err_hwdep;
 	}

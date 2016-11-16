@@ -2376,8 +2376,19 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 	struct snd_soc_card *card = codec->component.card;
 	const char *hph_switch = "qcom,msm-mbhc-hphl-swh";
 	const char *gnd_switch = "qcom,msm-mbhc-gnd-swh";
+	const char *jack_type_property = "qcom,mbhc-audio-jack-type";
+	const char *jack_type = NULL;
 
 	pr_debug("%s: enter\n", __func__);
+
+	ret = of_property_read_string(card->dev->of_node, jack_type_property,
+				      &jack_type);
+	if (!ret) {
+		if (!strcmp(jack_type, "none")) {
+			dev_info(card->dev, "WCD MBHC disabled.");
+			return -ENODEV;
+		}
+	}
 
 	ret = of_property_read_u32(card->dev->of_node, hph_switch, &hph_swh);
 	if (ret) {
