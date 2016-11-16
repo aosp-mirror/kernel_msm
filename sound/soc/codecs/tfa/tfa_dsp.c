@@ -105,8 +105,8 @@ int tfa_get_calibration_info(Tfa98xx_handle_t handle, int channel)
 static void tfa_set_query_info(int dev_idx)
 {
 
-	if (dev_idx > MAX_HANDLES) {
-		_ASSERT(dev_idx > MAX_HANDLES);
+	if (dev_idx >= MAX_HANDLES) {
+		_ASSERT(dev_idx >= MAX_HANDLES);
 		return;
 	}
 
