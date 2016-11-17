@@ -104,7 +104,7 @@ static int stmvl6180_stop(struct stmvl6180_data *data);
 static void stmvl6180_read_calibration_file(void)
 {
 	struct file *f;
-	char buf[8];
+	char buf[8] = {0};
 	mm_segment_t fs;
 	int i, is_sign = 0;
 
@@ -208,7 +208,7 @@ static void stmvl6180_read_calibration_file(void)
 static void stmvl6180_write_offset_calibration_file(void)
 {
 	struct file *f;
-	char buf[8];
+	char buf[8] = {0};
 	mm_segment_t fs;
 
 	f = filp_open("/persist/calibration/offset", O_RDWR|O_CREAT, 0644);
@@ -230,7 +230,7 @@ static void stmvl6180_write_offset_calibration_file(void)
 static void stmvl6180_write_xtalk_calibration_file(void)
 {
 	struct file *f;
-	char buf[8];
+	char buf[8] = {0};
 	mm_segment_t fs;
 
 	f = filp_open("/persist/calibration/xtalk", O_RDWR|O_CREAT, 0644);
