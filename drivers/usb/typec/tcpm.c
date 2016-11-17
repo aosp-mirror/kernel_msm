@@ -304,11 +304,11 @@ struct pd_rx_event {
 
 #define tcpm_try_snk(port) \
 	((port)->try_snk_count == 0 && \
-	(port)->tcpc->config->default_role == TYPEC_SINK)
+	(port)->tcpc->config->try_snk)
 
 #define tcpm_try_src(port) \
 	((port)->try_src_count == 0 && \
-	(port)->tcpc->config->default_role == TYPEC_SOURCE)
+	(port)->tcpc->config->try_src)
 
 #define tcpm_default_state(port) \
 	((port)->tcpc->config->default_role == TYPEC_SOURCE ? \
