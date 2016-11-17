@@ -1912,7 +1912,7 @@ void scheduler_ipi(void)
 	/*
 	 * Check if someone kicked us for doing the nohz idle load balance.
 	 */
-	if (unlikely(got_nohz_idle_kick())) {
+	if (unlikely(got_nohz_idle_kick()) && !cpu_isolated(cpu)) {
 		this_rq()->idle_balance = 1;
 		raise_softirq_irqoff(SCHED_SOFTIRQ);
 	}
@@ -2273,6 +2273,14 @@ void sched_exit(struct task_struct *p)
 	kfree(p->ravg.curr_window_cpu);
 	kfree(p->ravg.prev_window_cpu);
 
+	/*
+	 * update_task_ravg() can be called for exiting tasks. While the
+	 * function itself ensures correct behavior, the corresponding
+	 * trace event requires that these pointers be NULL.
+	 */
+	p->ravg.curr_window_cpu = NULL;
+	p->ravg.prev_window_cpu = NULL;
+
 	enqueue_task(rq, p, 0);
 	clear_ed_task(p, rq);
 	task_rq_unlock(rq, p, &flags);
@@ -2564,8 +2572,8 @@ void wake_up_new_task(struct task_struct *p)
 	unsigned long flags;
 	struct rq *rq;
 
-	raw_spin_lock_irqsave(&p->pi_lock, flags);
 	add_new_task_to_grp(p);
+	raw_spin_lock_irqsave(&p->pi_lock, flags);
 	/* Initialize new task's runnable average */
 	init_entity_runnable_average(&p->se);
 #ifdef CONFIG_SMP
@@ -5562,7 +5570,6 @@ static void set_rq_offline(struct rq *rq);
 
 int do_isolation_work_cpu_stop(void *data)
 {
-	unsigned long flags;
 	unsigned int cpu = smp_processor_id();
 	struct rq *rq = cpu_rq(cpu);
 
@@ -5570,23 +5577,35 @@ int do_isolation_work_cpu_stop(void *data)
 
 	irq_migrate_all_off_this_cpu();
 
-	sched_ttwu_pending();
-	/* Update our root-domain */
-	raw_spin_lock_irqsave(&rq->lock, flags);
+	local_irq_disable();
 
+	sched_ttwu_pending();
+
+	raw_spin_lock(&rq->lock);
+
+	/*
+	 * Temporarily mark the rq as offline. This will allow us to
+	 * move tasks off the CPU.
+	 */
 	if (rq->rd) {
 		BUG_ON(!cpumask_test_cpu(cpu, rq->rd->span));
 		set_rq_offline(rq);
 	}
 
 	migrate_tasks(rq, false);
-	raw_spin_unlock_irqrestore(&rq->lock, flags);
+
+	if (rq->rd)
+		set_rq_online(rq);
+	raw_spin_unlock(&rq->lock);
 
 	/*
 	 * We might have been in tickless state. Clear NOHZ flags to avoid
 	 * us being kicked for helping out with balancing
 	 */
 	nohz_balance_clear_nohz_mask(cpu);
+
+	clear_hmp_request(cpu);
+	local_irq_enable();
 	return 0;
 }
 
@@ -5685,6 +5704,22 @@ int sched_isolate_cpu(int cpu)
 	if (++cpu_isolation_vote[cpu] > 1)
 		goto out;
 
+	/*
+	 * There is a race between watchdog being enabled by hotplug and
+	 * core isolation disabling the watchdog. When a CPU is hotplugged in
+	 * and the hotplug lock has been released the watchdog thread might
+	 * not have run yet to enable the watchdog.
+	 * We have to wait for the watchdog to be enabled before proceeding.
+	 */
+	if (!watchdog_configured(cpu)) {
+		msleep(20);
+		if (!watchdog_configured(cpu)) {
+			--cpu_isolation_vote[cpu];
+			ret_code = -EBUSY;
+			goto out;
+		}
+	}
+
 	set_cpu_isolated(cpu, true);
 	cpumask_clear_cpu(cpu, &avail_cpus);
 
@@ -5695,7 +5730,6 @@ int sched_isolate_cpu(int cpu)
 	migrate_sync_cpu(cpu, cpumask_first(&avail_cpus));
 	stop_cpus(cpumask_of(cpu), do_isolation_work_cpu_stop, 0);
 
-	clear_hmp_request(cpu);
 	calc_load_migrate(rq);
 	update_max_interval();
 	sched_update_group_capacities(cpu);
@@ -5737,10 +5771,6 @@ int sched_unisolate_cpu_unlocked(int cpu)
 
 		raw_spin_lock_irqsave(&rq->lock, flags);
 		rq->age_stamp = sched_clock_cpu(cpu);
-		if (rq->rd) {
-			BUG_ON(!cpumask_test_cpu(cpu, rq->rd->span));
-			set_rq_online(rq);
-		}
 		raw_spin_unlock_irqrestore(&rq->lock, flags);
 	}
 

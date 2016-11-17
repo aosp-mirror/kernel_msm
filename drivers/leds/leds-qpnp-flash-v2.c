@@ -58,6 +58,7 @@
 #define	FLASH_LED_HDRM_VOL_MASK			GENMASK(7, 4)
 #define	FLASH_LED_CURRENT_MASK			GENMASK(6, 0)
 #define	FLASH_LED_ENABLE_MASK			GENMASK(2, 0)
+#define	FLASH_HW_STROBE_MASK			GENMASK(2, 0)
 #define	FLASH_LED_SAFETY_TMR_MASK		GENMASK(7, 0)
 #define	FLASH_LED_INT_RT_STS_MASK		GENMASK(7, 0)
 #define	FLASH_LED_ISC_WARMUP_DELAY_MASK		GENMASK(1, 0)
@@ -72,7 +73,7 @@
 #define	FLASH_LED_THERMAL_THRSH_MASK		GENMASK(2, 0)
 #define	FLASH_LED_THERMAL_OTST_MASK		GENMASK(2, 0)
 #define	FLASH_LED_MOD_CTRL_MASK			BIT(7)
-#define	FLASH_LED_HW_SW_STROBE_SEL_MASK		BIT(2)
+#define	FLASH_LED_HW_SW_STROBE_SEL_BIT		BIT(2)
 #define	FLASH_LED_VPH_DROOP_FAULT_MASK		BIT(4)
 #define	FLASH_LED_LMH_MITIGATION_EN_MASK	BIT(0)
 #define	FLASH_LED_CHGR_MITIGATION_EN_MASK	BIT(4)
@@ -82,6 +83,8 @@
 #define	VPH_DROOP_THRESH_MV_TO_VAL(val_mv)	((val_mv / 100) - 25)
 #define	VPH_DROOP_THRESH_VAL_TO_UV(val)		((val + 25) * 100000)
 #define	MITIGATION_THRSH_MA_TO_VAL(val_ma)	(val_ma / 100)
+#define	CURRENT_MA_TO_REG_VAL(curr_ma, ires_ua)	((curr_ma * 1000) / ires_ua - 1)
+#define	SAFETY_TMR_TO_REG_VAL(duration_ms)	((duration_ms / 10) - 1)
 
 #define	FLASH_LED_ISC_WARMUP_DELAY_SHIFT	6
 #define	FLASH_LED_WARMUP_DELAY_DEFAULT		2
@@ -97,8 +100,6 @@
 #define	FLASH_LED_VLED_MAX_DEFAULT_UV		3500000
 #define	FLASH_LED_IBATT_OCP_THRESH_DEFAULT_UA	4500000
 #define	FLASH_LED_RPARA_DEFAULT_UOHM		0
-#define	FLASH_LED_SAFETY_TMR_VAL_OFFSET		1
-#define	FLASH_LED_SAFETY_TMR_VAL_DIVISOR	10
 #define	FLASH_LED_SAFETY_TMR_ENABLE		BIT(7)
 #define	FLASH_LED_LMH_LEVEL_DEFAULT		0
 #define	FLASH_LED_LMH_MITIGATION_ENABLE		1
@@ -738,7 +739,8 @@ static void qpnp_flash_led_node_set(struct flash_node_data *fnode, int value)
 	prgm_current_ma = min(prgm_current_ma, fnode->max_current);
 	fnode->current_ma = prgm_current_ma;
 	fnode->cdev.brightness = prgm_current_ma;
-	fnode->current_reg_val = prgm_current_ma * 1000 / fnode->ires_ua + 1;
+	fnode->current_reg_val = CURRENT_MA_TO_REG_VAL(prgm_current_ma,
+					fnode->ires_ua);
 	fnode->led_on = prgm_current_ma != 0;
 }
 
@@ -810,7 +812,7 @@ static int qpnp_flash_led_switch_disable(struct flash_switch_data *snode)
 			}
 		}
 
-		if (led->fnode[i].trigger & FLASH_LED_HW_SW_STROBE_SEL_MASK) {
+		if (led->fnode[i].trigger & FLASH_LED_HW_SW_STROBE_SEL_BIT) {
 			rc = qpnp_flash_led_hw_strobe_enable(&led->fnode[i],
 					led->pdata->hw_strobe_option, false);
 			if (rc < 0) {
@@ -830,7 +832,7 @@ static int qpnp_flash_led_switch_set(struct flash_switch_data *snode, bool on)
 {
 	struct qpnp_flash_led *led = dev_get_drvdata(&snode->pdev->dev);
 	int rc, i, addr_offset;
-	u8 val;
+	u8 val, mask;
 
 	if (snode->enabled == on) {
 		dev_warn(&led->pdev->dev, "Switch node is already %s!\n",
@@ -868,9 +870,13 @@ static int qpnp_flash_led_switch_set(struct flash_switch_data *snode, bool on)
 			continue;
 
 		addr_offset = led->fnode[i].id;
+		if (led->fnode[i].trigger & FLASH_LED_HW_SW_STROBE_SEL_BIT)
+			mask = FLASH_HW_STROBE_MASK;
+		else
+			mask = FLASH_LED_HW_SW_STROBE_SEL_BIT;
 		rc = qpnp_flash_led_masked_write(led,
 			FLASH_LED_REG_STROBE_CTRL(led->base + addr_offset),
-			FLASH_LED_ENABLE_MASK, led->fnode[i].trigger);
+			mask, led->fnode[i].trigger);
 		if (rc < 0)
 			return rc;
 
@@ -898,7 +904,7 @@ static int qpnp_flash_led_switch_set(struct flash_switch_data *snode, bool on)
 			}
 		}
 
-		if (led->fnode[i].trigger & FLASH_LED_HW_SW_STROBE_SEL_MASK) {
+		if (led->fnode[i].trigger & FLASH_LED_HW_SW_STROBE_SEL_BIT) {
 			rc = qpnp_flash_led_hw_strobe_enable(&led->fnode[i],
 					led->pdata->hw_strobe_option, true);
 			if (rc < 0) {
@@ -1341,9 +1347,7 @@ static int qpnp_flash_led_parse_each_led_dt(struct qpnp_flash_led *led,
 	fnode->duration = FLASH_LED_SAFETY_TMR_DISABLED;
 	rc = of_property_read_u32(node, "qcom,duration-ms", &val);
 	if (!rc) {
-		fnode->duration = (u8)(((val -
-					FLASH_LED_SAFETY_TMR_VAL_OFFSET) /
-					FLASH_LED_SAFETY_TMR_VAL_DIVISOR) |
+		fnode->duration = (u8)(SAFETY_TMR_TO_REG_VAL(val) |
 					FLASH_LED_SAFETY_TMR_ENABLE);
 	} else if (rc == -EINVAL) {
 		if (fnode->type == FLASH_LED_TYPE_FLASH) {
@@ -1390,7 +1394,7 @@ static int qpnp_flash_led_parse_each_led_dt(struct qpnp_flash_led *led,
 	}
 	fnode->trigger = (strobe_sel << 2) | (edge_trigger << 1) | active_high;
 
-	if (fnode->trigger & FLASH_LED_HW_SW_STROBE_SEL_MASK) {
+	if (fnode->trigger & FLASH_LED_HW_SW_STROBE_SEL_BIT) {
 		if (of_find_property(node, "qcom,hw-strobe-gpio", NULL)) {
 			fnode->hw_strobe_gpio = of_get_named_gpio(node,
 						"qcom,hw-strobe-gpio", 0);
