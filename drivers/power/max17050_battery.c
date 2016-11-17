@@ -293,7 +293,7 @@ static void max17050_init_chip(struct max17050_chip *chip)
 
 	/* Disable the ALRT */
 	max17050_write_verify_reg(client, MAX17050_VALRT_TH, 0xff00);
-	max17050_write_verify_reg(client, MAX17050_TALRT_TH, 0xff00);
+	max17050_write_verify_reg(client, MAX17050_TALRT_TH, 0x7f80);
 	max17050_write_verify_reg(client, MAX17050_SALRT_TH, 0xff00);
 
 	/* Complete initialisation */
