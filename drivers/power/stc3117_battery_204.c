@@ -324,8 +324,8 @@ static union {
 
 
 int Capacity_Adjust;
-//int chg_end_gpio = 0; /* WPC charging end pin */
 extern bool chg_full_flag;
+extern bool force_full_flag;
 
 /* -------------------------------------------------------------------------------- */
 /*        INTERNAL ANDROID DRIVER PARAMETERS                                        */
@@ -2108,9 +2108,10 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 			// Lately fully compensation
 			// toDO: 98_to_100_no_current.txt, no charging and soc goes to 100 even hrsoc is
 			// [  736.722530] STC311x: GasGauge_Task: SMB348: HRSOC=50448, SOC=1000, chg_full_flag=0, avg=5
-			if (chg_full_flag) {
+			if (force_full_flag) {
 				BattData.SOC = MAX_SOC;
 				STC311x_SetSOC(MAX_HRSOC);
+				force_full_flag = false;
 #if defined(STC3117_AGING_VOLTAGE_FEATURE)
 				aging_trigger_flag = true;
 #endif /* STC3117_AGING_VOLTAGE_FEATURE */

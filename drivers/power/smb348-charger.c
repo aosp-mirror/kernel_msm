@@ -202,6 +202,8 @@ bool RECOVERY_WPC_DISABLE_FLAG = 0;
 extern char *saved_command_line;
 // Quanta: export fo gauge driver
 bool chg_full_flag = false;
+bool force_full_flag = false;
+bool recharge_flag = false;
 #define SMB_MAX_SOC 100
 
 enum {
@@ -272,6 +274,7 @@ struct smb348_charger {
 #ifdef FEATURE_THERMAL_MITIGATION_ALGO
 	int			fastchg_current_mitigation_ma;
 	int			prop_batt_capacity;
+	int			prop_batt_temp;
 #endif /* FEATURE_THERMAL_MITIGATION_ALGO */
 	unsigned int		cool_bat_ma;
 	unsigned int		warm_bat_ma;
@@ -1029,6 +1032,7 @@ static int smb348_get_prop_batt_status(struct smb348_charger *chip)
 			!(reg & STATUS_C_CHG_ERR_STATUS_BIT)) {
 		if ((chg_full_flag) && (chip->chip_hw_id >= HW_VER_K)) {
 			chg_full_flag = false;
+			force_full_flag = false;
 		}
 		return POWER_SUPPLY_STATUS_CHARGING;
 	}
@@ -1056,12 +1060,12 @@ static int smb348_get_prop_batt_capacity(struct smb348_charger *chip)
 		chip->prop_batt_capacity = ret.intval;  // smb348_get_prop_battery_voltage_now() is always called after this func
 
 		// return 100% once charging-end is triggered.
-		if (chg_full_flag) {
-			pr_err("soc=100, chg_end=%d, chg_full_flag=%d\n", gpio_get_value(chip->chg_end_gpio), chg_full_flag);
+		if (chg_full_flag || recharge_flag) {
+			pr_err("soc=100, chg_end=%d, chg_full_flag=%d, recharge_flag=%d\n", gpio_get_value(chip->chg_end_gpio), chg_full_flag, recharge_flag);
 			return SMB_MAX_SOC;
 		}
 
-		pr_err("soc=%d, chg_end=%d, chg_full_flag=%d\n", ret.intval, gpio_get_value(chip->chg_end_gpio), chg_full_flag);
+		pr_err("soc=%d, chg_end=%d, chg_full_flag=%d, recharge_flag=%d\n", ret.intval, gpio_get_value(chip->chg_end_gpio), chg_full_flag, recharge_flag);
 #endif /* FEATURE_THERMAL_MITIGATION_ALGO */
 		return ret.intval;
 	}
@@ -1130,6 +1134,7 @@ static int smb348_get_prop_batt_temp(struct smb348_charger *chip)
 		chip->bms_psy->get_property(chip->bms_psy,
 		POWER_SUPPLY_PROP_TEMP, &ret);
 		pr_debug("Gauge temp:%d\n", ret.intval);
+		chip->prop_batt_temp = ret.intval;  // Use variable to keep current temperature
 		if (chip->wpc_state) {
 			if (ret.intval >= 500) {
 				pr_err("Temp too high, wpc disable\n");
@@ -1190,7 +1195,13 @@ smb348_get_prop_battery_voltage_now(struct smb348_charger *chip)
 #ifdef FEATURE_THERMAL_MITIGATION_ALGO
 		pr_err("chg_end=%d, chg_full_flag=%d\n", gpio_get_value(chip->chg_end_gpio), chg_full_flag);
 		if (chg_full_flag) {
-			if ((chip->prop_batt_capacity <= SMB348_SW_RECHG_SOC && ret.intval < VFLOAT_4350MV) || (ret.intval < SMB348_SW_RECHG_VOLTAGE)) {
+			/*******************Release CHG_END critera:*********************
+			 *	1. SOC		<= 99%					*
+			 *	2. voltage	< 4330 mV				*
+			 * If temperature lower than 10 degree C, only check SOC <= 99	*
+			 ****************************************************************/
+			if ((chip->prop_batt_capacity <= SMB348_SW_RECHG_SOC && ret.intval < 4350000) ||
+				(ret.intval < SMB348_SW_RECHG_VOLTAGE && chip->prop_batt_temp > 100 )) {
 				u8 reg;
 				int rc;
 				rc = smb348_read_reg(chip, IRQ_C_REG, &reg);
@@ -1199,6 +1210,8 @@ smb348_get_prop_battery_voltage_now(struct smb348_charger *chip)
 					pr_err("SW recharge is due to batt capacity=%d or voltage=%d lower than %d\n", chip->prop_batt_capacity, ret.intval, SMB348_SW_RECHG_VOLTAGE);
 					gpio_set_value(chip->chg_end_gpio, 0);
 					chg_full_flag = false;
+					force_full_flag = false;
+					recharge_flag = true;
 				} else {
 					pr_err("Cannot release CHG_END, rc = %d and reg = 0x%02x\n", rc, reg);
 				}
@@ -1634,6 +1647,8 @@ static int chg_term(struct smb348_charger *chip, u8 status)
 		pr_err("Full-Charged\n");
 		gpio_set_value(chip->chg_end_gpio, 1);
 		chg_full_flag = true;
+		force_full_flag = true;
+		recharge_flag = false;
 #ifndef FEATURE_THERMAL_MITIGATION_ALGO
 		msleep(100);
 		gpio_set_value(chip->chg_end_gpio, 0);
@@ -1675,6 +1690,7 @@ static void smb348_wpc_chg_gpio_clear(struct smb348_charger *chip)
 			pr_err("Clear chg_end_gpio\n");
 			gpio_set_value(chip->chg_end_gpio, 0);
 			chg_full_flag = false;
+			force_full_flag = false;
 		}
 	}
 	if (gpio_is_valid(chip->wpc_enable_gpio)) {
@@ -2238,6 +2254,7 @@ static void smb348_wpc_dock_work(struct work_struct *work)
 	/* removed from dock so clear the discharge gpio */
 	if (!chip->wpc_dock_present) {
 		smb348_wpc_chg_gpio_clear(chip);
+		recharge_flag = false;
 		chip->chg_present = false;
 		if (chip->batt_full) {
 			chip->batt_full = false;
