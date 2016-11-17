@@ -1976,6 +1976,52 @@ int smblib_set_prop_usb_voltage_max(struct smb_charger *chg,
 	return rc;
 }
 
+int smblib_set_prop_pd_cc_override(struct smb_charger *chg,
+				   const union power_supply_propval *val)
+{
+	int rc = 0;
+	u8 stat = 0;
+	bool orientation;
+	bool cc_override = val->intval;
+
+	/*
+	 * VCONN_EN_ORIENTATION_BIT controls whether to use CC1 or CC2 line
+	 * when TYPEC_SPARE_CFG_BIT (CC pin selection s/w override) is set
+	 * or when VCONN_EN_VALUE_BIT is set.
+	 */
+	rc = smblib_read(chg, TYPE_C_STATUS_4_REG, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read TYPE_C_STATUS_4 rc=%d\n", rc);
+		return rc;
+	}
+
+	if (cc_override) {
+		orientation = stat & CC_ORIENTATION_BIT;
+		rc = smblib_masked_write(chg,
+					 TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
+					 VCONN_EN_ORIENTATION_BIT,
+					 orientation ?
+						0 : VCONN_EN_ORIENTATION_BIT);
+		if (rc < 0) {
+			smblib_err(chg,
+				   "Couldn't enable vconn on CC line rc=%d\n",
+				   rc);
+			return rc;
+		}
+	}
+
+	rc = smblib_masked_write(chg, TAPER_TIMER_SEL_CFG_REG,
+				 TYPEC_SPARE_CFG_BIT,
+				 cc_override ? TYPEC_SPARE_CFG_BIT : 0);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't change cc_out ctrl to %s rc=%d\n",
+			   cc_override ? "SW" : "HW", rc);
+		return rc;
+	}
+
+	return rc;
+}
+
 int smblib_set_prop_pd_active(struct smb_charger *chg,
 			      const union power_supply_propval *val)
 {

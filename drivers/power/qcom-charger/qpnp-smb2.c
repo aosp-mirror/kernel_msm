@@ -487,6 +487,9 @@ static int smb2_usb_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_PD_USB_SUSPEND_SUPPORTED:
 		chg->system_suspend_supported = val->intval;
 		break;
+	case POWER_SUPPLY_PROP_PD_CC_OVERRIDE:
+		rc = smblib_set_prop_pd_cc_override(chg, val);
+		break;
 	default:
 		pr_err("set prop %d is not supported\n", psp);
 		rc = -EINVAL;

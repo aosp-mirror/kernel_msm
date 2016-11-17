@@ -350,6 +350,8 @@ int smblib_set_prop_typec_power_role(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_pd_active(struct smb_charger *chg,
 				const union power_supply_propval *val);
+int smblib_set_prop_pd_cc_override(struct smb_charger *chg,
+				const union power_supply_propval *val);
 int smblib_set_prop_pd_in_hard_reset(struct smb_charger *chg,
 				const union power_supply_propval *val);
 

@@ -539,6 +539,7 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 
 static int tcpm_set_pd_rx(struct tcpc_dev *dev, bool on)
 {
+	union power_supply_propval val = {0};
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
 	int ret = 0;
 
@@ -555,13 +556,25 @@ static int tcpm_set_pd_rx(struct tcpc_dev *dev, bool on)
 				      on ? "open" : "close", ret);
 			return ret;
 		}
+		val.intval = 1;
 	} else {
 		/* pd_phy_close() has no return value. */
 		pd_phy_close();
+		val.intval = 0;
 	}
 
 	pd->pdphy_open = on;
 	pd_engine_log(pd, "%s pd_phy", on ? "open" : "close");
+
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_PD_CC_OVERRIDE,
+					&val);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set CC_OVERRIDE to %s, ret=%d",
+			      on ? "true" : "false",
+			      ret);
+		return ret;
+	}
 
 	return 0;
 }
