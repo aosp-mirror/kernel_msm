@@ -22,6 +22,7 @@
 #include <linux/mmc/pm.h>
 
 #define MMC_AUTOSUSPEND_DELAY_MS	3000
+int mmc_cache_ctrl(struct mmc_host *host, u8 enable);
 
 struct mmc_ios {
 	unsigned int	clock;			/* clock rate */
@@ -410,6 +411,7 @@ struct mmc_host {
 	u32			caps2;		/* More host capabilities */
 
 #define MMC_CAP2_BOOTPART_NOACC	(1 << 0)	/* Boot partition no access */
+#define MMC_CAP2_CACHE_CTRL	(1 << 1)        /* Allow cache control */
 #define MMC_CAP2_FULL_PWR_CYCLE	(1 << 2)	/* Can do full power cycle */
 #define MMC_CAP2_HS200_1_8V_SDR	(1 << 5)        /* can support */
 #define MMC_CAP2_HS200_1_2V_SDR	(1 << 6)        /* can support */
