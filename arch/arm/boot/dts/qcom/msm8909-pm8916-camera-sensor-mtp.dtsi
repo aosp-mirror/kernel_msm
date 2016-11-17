@@ -14,11 +14,11 @@
 &soc {
 };
 
-&i2c_3 {
+&i2c_2 {
 	status = "ok";
 };
 
-&i2c_3 {
+&i2c_2 {
 	qcom,camera@1 {
 		cell-index = <1>;
 		compatible = "qcom,camera";

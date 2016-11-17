@@ -45,6 +45,8 @@ static void mdp3_ctrl_pp_resume(struct msm_fb_data_type *mfd);
 static int mdp3_ctrl_reset(struct msm_fb_data_type *mfd);
 static int mdp3_ctrl_get_pack_pattern(u32 imgType);
 
+int mdp3_wait_for_dma_done(struct mdp3_session_data *session);
+
 u32 mdp_lut_inverse16[MDP_LUT_SIZE] = {
 0, 65536, 32768, 21845, 16384, 13107, 10923, 9362, 8192, 7282, 6554, 5958,
 5461, 5041, 4681, 4369, 4096, 3855, 3641, 3449, 3277, 3121, 2979, 2849, 2731,
@@ -1036,15 +1038,29 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 
 	if (mdss_fb_is_power_on_ulp(mfd) &&
 		(mfd->panel.type == MIPI_CMD_PANEL)) {
-		if (atomic_read(&mfd->kickoff_pending) ||
-		    atomic_read(&mfd->commits_pending)) {
-			MDSS_XLOG(XLOG_FUNC_ENTRY, __LINE__,
-				atomic_read(&mfd->kickoff_pending),
-				atomic_read(&mfd->commits_pending));
-			pr_debug("%s: Ignore MDP3 clocks OFF request in ULP\n", __func__);
-			goto off_error;
+
+		pr_debug("Disable MDP3 clocks in ULP\n");
+		/*
+		 * Wait if DAM transfer in progress
+		 * else go ahead and turn off MDP clocks.
+		 */
+		if ( atomic_read(&mfd->kickoff_pending) ||
+		     atomic_read(&mfd->commits_pending)) {
+			rc = wait_event_timeout(mfd->kickoff_wait_q,
+				(!atomic_read(&mfd->kickoff_pending)),
+				msecs_to_jiffies(WAIT_DISP_OP_TIMEOUT));
+
+			if(!rc) {
+				pr_info("Wait for kickoff time out in ULP\n");
+				MDSS_XLOG(atomic_read(&mfd->kickoff_pending),
+					atomic_read(&mdp3_session->vsync_countdown),
+					rc);
+			}
 		}
-		pr_debug("%s: Disable MDP3 clocks in ULP\n", __func__);
+
+		/*
+		 * Enable MDP clk before DMA stop to handle cases where
+		 * ULP request is followd by dispatch clock off*/
 		if (!mdp3_session->clk_on)
 			mdp3_ctrl_clk_enable(mfd, 1);
 		/*
@@ -1386,11 +1402,14 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 			panel->panel_info.roi.h = mdp3_session->dma->roi.h;
 			rc = mdp3_session->dma->update(mdp3_session->dma,
 					(void *)(int)data->addr,
-					mdp3_session->intf, (void *)panel);
+					mdp3_session->intf,
+					mdp3_session->first_commit,
+					(void *)panel);
 		} else {
 			rc = mdp3_session->dma->update(mdp3_session->dma,
 					(void *)(int)data->addr,
-					mdp3_session->intf, NULL);
+					mdp3_session->intf,
+					mdp3_session->first_commit, NULL);
 		}
 		/* This is for the previous frame */
 		if (rc < 0) {
@@ -1401,6 +1420,8 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 						MDP3_DMA_OUTPUT_SEL_DSI_VIDEO) {
 				mdp3_ctrl_notify(mdp3_session,
 					MDP_NOTIFY_FRAME_DONE);
+				mdp3_ctrl_notify(mdp3_session,
+					MDP_NOTIFY_FRAME_CTX_DONE);
 			}
 		}
 		mdp3_session->dma_active = 1;
@@ -1418,11 +1439,11 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 
 	if (mdp3_session->first_commit) {
 		/*wait to ensure frame is sent to panel*/
-		if (panel_info->mipi.init_delay)
-			msleep(((1000 / panel_info->mipi.frame_rate) + 1) *
-					panel_info->mipi.init_delay);
-		else
-			msleep(1000 / panel_info->mipi.frame_rate);
+		rc = mdp3_wait_for_dma_done(mdp3_session);
+
+		if(rc)
+			msleep((1000 / panel_info->mipi.frame_rate) + 1);
+
 		mdp3_session->first_commit = false;
 		if (panel)
 			rc |= panel->event_handler(panel,
@@ -1539,8 +1560,8 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 				goto pan_error;
 		}
 		rc = mdp3_session->dma->update(mdp3_session->dma,
-				(void *)(int)(mfd->iova + offset),
-				mdp3_session->intf, NULL);
+				(void *)(int)(mfd->iova + offset), mdp3_session->intf,
+				mdp3_session->first_commit, NULL);
 		/* This is for the previous frame */
 		if (rc < 0) {
 			mdp3_ctrl_notify(mdp3_session,
@@ -1550,6 +1571,8 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 				MDP3_DMA_OUTPUT_SEL_DSI_VIDEO) {
 				mdp3_ctrl_notify(mdp3_session,
 					MDP_NOTIFY_FRAME_DONE);
+				mdp3_ctrl_notify(mdp3_session,
+					MDP_NOTIFY_FRAME_CTX_DONE);
 			}
 		}
 		mdp3_session->dma_active = 1;

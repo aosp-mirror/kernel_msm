@@ -258,8 +258,6 @@ static void sdhci_dumpregs(struct sdhci_host *host)
 	sdhci_dump_state(host);
 	pr_info(DRIVER_NAME ": ===========================================\n");
 	sdhci_dump_irq_buffer(host);
-	if (host->slot_no == 1)
-		BUG_ON(1);
 }
 
 /*****************************************************************************\
