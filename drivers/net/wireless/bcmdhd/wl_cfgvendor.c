@@ -510,23 +510,113 @@ static int wl_cfgvendor_enable_full_scan_result(struct wiphy *wiphy,
 	return err;
 }
 
-static int wl_cfgvendor_set_scan_cfg(struct wiphy *wiphy,
-	struct wireless_dev *wdev, const void  *data, int len)
+static int
+wl_cfgvendor_set_scan_cfg_bucket(const struct nlattr *prev,
+				 gscan_scan_params_t *scan_param, int num)
+{
+	struct dhd_pno_gscan_channel_bucket  *ch_bucket;
+	int k = 0;
+	int type, err = 0, rem;
+	const struct nlattr *cur, *next;
+
+	nla_for_each_nested(cur, prev, rem) {
+		type = nla_type(cur);
+		ch_bucket = scan_param->channel_bucket;
+		switch (type) {
+		case GSCAN_ATTRIBUTE_BUCKET_ID:
+			break;
+		case GSCAN_ATTRIBUTE_BUCKET_PERIOD:
+			if (nla_len(cur) != sizeof(uint32)) {
+				err = -EINVAL;
+				goto exit;
+			}
+
+			ch_bucket[num].bucket_freq_multiple =
+				nla_get_u32(cur) / MSEC_PER_SEC;
+			break;
+		case GSCAN_ATTRIBUTE_BUCKET_NUM_CHANNELS:
+			if (nla_len(cur) != sizeof(uint32)) {
+				err = -EINVAL;
+				goto exit;
+			}
+			ch_bucket[num].num_channels = nla_get_u32(cur);
+			if (ch_bucket[num].num_channels >
+				GSCAN_MAX_CHANNELS_IN_BUCKET) {
+				WL_ERR(("channel range:%d,bucket:%d\n",
+					ch_bucket[num].num_channels,
+					num));
+				err = -EINVAL;
+				goto exit;
+			}
+			break;
+		case GSCAN_ATTRIBUTE_BUCKET_CHANNELS:
+			nla_for_each_nested(next, cur, rem) {
+				if (k >= GSCAN_MAX_CHANNELS_IN_BUCKET)
+					break;
+				if (nla_len(next) != sizeof(uint32)) {
+					err = -EINVAL;
+					goto exit;
+				}
+				ch_bucket[num].chan_list[k] = nla_get_u32(next);
+				k++;
+			}
+			break;
+		case GSCAN_ATTRIBUTE_BUCKETS_BAND:
+			if (nla_len(cur) != sizeof(uint32)) {
+				err = -EINVAL;
+				goto exit;
+			}
+			ch_bucket[num].band = (uint16)nla_get_u32(cur);
+			break;
+		case GSCAN_ATTRIBUTE_REPORT_EVENTS:
+			if (nla_len(cur) != sizeof(uint32)) {
+				err = -EINVAL;
+				goto exit;
+			}
+			ch_bucket[num].report_flag = (uint8)nla_get_u32(cur);
+			break;
+		case GSCAN_ATTRIBUTE_BUCKET_STEP_COUNT:
+			if (nla_len(cur) != sizeof(uint32)) {
+				err = -EINVAL;
+				goto exit;
+			}
+			ch_bucket[num].repeat = (uint16)nla_get_u32(cur);
+			break;
+		case GSCAN_ATTRIBUTE_BUCKET_MAX_PERIOD:
+			if (nla_len(cur) != sizeof(uint32)) {
+				err = -EINVAL;
+				goto exit;
+			}
+			ch_bucket[num].bucket_max_multiple =
+				nla_get_u32(cur) / MSEC_PER_SEC;
+			break;
+		default:
+			WL_ERR(("unknown attr type:%d\n", type));
+			err = -EINVAL;
+			goto exit;
+		}
+	}
+
+exit:
+	return err;
+}
+
+static int
+wl_cfgvendor_set_scan_cfg(struct wiphy *wiphy, struct wireless_dev *wdev,
+			  const void  *data, int len)
 {
 	int err = 0;
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	gscan_scan_params_t *scan_param;
 	int j = 0;
-	int type, tmp, tmp1, tmp2, k = 0;
-	const struct nlattr *iter, *iter1, *iter2;
-	struct dhd_pno_gscan_channel_bucket  *ch_bucket;
+	int type, tmp;
+	const struct nlattr *iter;
 
 	scan_param = kzalloc(sizeof(gscan_scan_params_t), GFP_KERNEL);
 	if (!scan_param) {
 		WL_ERR(("Could not set GSCAN scan cfg, mem alloc failure\n"));
 		err = -EINVAL;
 		return err;
-
 	}
 
 	scan_param->scan_fr = PNO_SCAN_MIN_FW_SEC;
@@ -537,77 +627,61 @@ static int wl_cfgvendor_set_scan_cfg(struct wiphy *wiphy,
 			break;
 
 		switch (type) {
-			case GSCAN_ATTRIBUTE_BASE_PERIOD:
-				scan_param->scan_fr = nla_get_u32(iter)/1000;
-				break;
-			case GSCAN_ATTRIBUTE_NUM_BUCKETS:
-				scan_param->nchannel_buckets = nla_get_u32(iter);
-				break;
-			case GSCAN_ATTRIBUTE_CH_BUCKET_1:
-			case GSCAN_ATTRIBUTE_CH_BUCKET_2:
-			case GSCAN_ATTRIBUTE_CH_BUCKET_3:
-			case GSCAN_ATTRIBUTE_CH_BUCKET_4:
-			case GSCAN_ATTRIBUTE_CH_BUCKET_5:
-			case GSCAN_ATTRIBUTE_CH_BUCKET_6:
-			case GSCAN_ATTRIBUTE_CH_BUCKET_7:
-				nla_for_each_nested(iter1, iter, tmp1) {
-					type = nla_type(iter1);
-					ch_bucket =
-					scan_param->channel_bucket;
+		case GSCAN_ATTRIBUTE_BASE_PERIOD:
+			if (nla_len(iter) != sizeof(uint32)) {
+				err = -EINVAL;
+				goto exit;
+			}
+			scan_param->scan_fr = nla_get_u32(iter) / MSEC_PER_SEC;
+			break;
+		case GSCAN_ATTRIBUTE_NUM_BUCKETS:
+			if (nla_len(iter) != sizeof(uint32)) {
+				err = -EINVAL;
+				goto exit;
+			}
+			scan_param->nchannel_buckets = nla_get_u32(iter);
+			if (scan_param->nchannel_buckets >=
+			    GSCAN_MAX_CH_BUCKETS) {
+				WL_ERR(("ncha_buck out of range %d\n",
+					scan_param->nchannel_buckets));
+				err = -EINVAL;
+				goto exit;
+			}
+			break;
+		case GSCAN_ATTRIBUTE_CH_BUCKET_1:
+		case GSCAN_ATTRIBUTE_CH_BUCKET_2:
+		case GSCAN_ATTRIBUTE_CH_BUCKET_3:
+		case GSCAN_ATTRIBUTE_CH_BUCKET_4:
+		case GSCAN_ATTRIBUTE_CH_BUCKET_5:
+		case GSCAN_ATTRIBUTE_CH_BUCKET_6:
+		case GSCAN_ATTRIBUTE_CH_BUCKET_7:
+			err = wl_cfgvendor_set_scan_cfg_bucket(iter,
+							       scan_param, j);
+			if (err < 0) {
+				WL_ERR(("set_scan_cfg_buck error:%d\n", err));
+				goto exit;
+			}
 
-					switch (type) {
-						case GSCAN_ATTRIBUTE_BUCKET_ID:
-						break;
-						case GSCAN_ATTRIBUTE_BUCKET_PERIOD:
-							ch_bucket[j].bucket_freq_multiple =
-							    nla_get_u32(iter1)/1000;
-							break;
-						case GSCAN_ATTRIBUTE_BUCKET_NUM_CHANNELS:
-							ch_bucket[j].num_channels =
-							     nla_get_u32(iter1);
-							break;
-						case GSCAN_ATTRIBUTE_BUCKET_CHANNELS:
-							nla_for_each_nested(iter2, iter1, tmp2) {
-								if (k >= GSCAN_MAX_CHANNELS_IN_BUCKET)
-									break;
-								ch_bucket[j].chan_list[k] =
-								     nla_get_u32(iter2);
-								k++;
-							}
-							k = 0;
-							break;
-						case GSCAN_ATTRIBUTE_BUCKETS_BAND:
-							ch_bucket[j].band = (uint16)
-							     nla_get_u32(iter1);
-							break;
-						case GSCAN_ATTRIBUTE_REPORT_EVENTS:
-							ch_bucket[j].report_flag = (uint8)
-							     nla_get_u32(iter1);
-							break;
-						case GSCAN_ATTRIBUTE_BUCKET_STEP_COUNT:
-							ch_bucket[j].repeat = (uint16)
-							     nla_get_u32(iter1);
-							break;
-						case GSCAN_ATTRIBUTE_BUCKET_MAX_PERIOD:
-							ch_bucket[j].bucket_max_multiple =
-							     nla_get_u32(iter1)/1000;
-							break;
-					}
-				}
-				j++;
-				break;
+			j++;
+			break;
+		default:
+			WL_ERR(("Unknown attr type %d\n", type));
+			err = -EINVAL;
+			goto exit;
 		}
 	}
 
-	if (dhd_dev_pno_set_cfg_gscan(bcmcfg_to_prmry_ndev(cfg),
-	     DHD_PNO_SCAN_CFG_ID, scan_param, FALSE) < 0) {
-		WL_ERR(("Could not set GSCAN scan cfg\n"));
+	err = dhd_dev_pno_set_cfg_gscan(bcmcfg_to_prmry_ndev(cfg),
+					DHD_PNO_SCAN_CFG_ID, scan_param, FALSE);
+
+	if (err < 0) {
+		WL_ERR(("Could not set GSCAN scan cfg error %d\n", err));
 		err = -EINVAL;
 	}
 
+exit:
 	kfree(scan_param);
 	return err;
-
 }
 
 static int wl_cfgvendor_hotlist_cfg(struct wiphy *wiphy,
@@ -617,14 +691,22 @@ static int wl_cfgvendor_hotlist_cfg(struct wiphy *wiphy,
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	gscan_hotlist_scan_params_t *hotlist_params;
 	int tmp, tmp1, tmp2, type, j = 0, dummy;
-	const struct nlattr *outer, *inner, *iter;
-	bool flush = FALSE;
+	const struct nlattr *outer, *inner = NULL, *iter;
+	uint8 flush = 0;
 	struct bssid_t *pbssid;
 
-	hotlist_params = (gscan_hotlist_scan_params_t *)kzalloc(len, GFP_KERNEL);
+	if (len < sizeof(*hotlist_params) || len >= WLC_IOCTL_MAXLEN) {
+		WL_ERR(("buffer length :%d wrong - bail out.\n", len));
+		return -EINVAL;
+	}
+
+	hotlist_params = kzalloc(sizeof(*hotlist_params)
+		+ (sizeof(struct bssid_t) * (PFN_SWC_MAX_NUM_APS - 1)),
+		GFP_KERNEL);
+
 	if (!hotlist_params) {
 		WL_ERR(("Cannot Malloc mem to parse config commands size - %d bytes \n", len));
-		return -1;
+		return -ENOMEM;
 	}
 
 	hotlist_params->lost_ap_window = GSCAN_LOST_AP_WINDOW_DEFAULT;
@@ -632,37 +714,78 @@ static int wl_cfgvendor_hotlist_cfg(struct wiphy *wiphy,
 	nla_for_each_attr(iter, data, len, tmp2) {
 		type = nla_type(iter);
 		switch (type) {
-			case GSCAN_ATTRIBUTE_HOTLIST_BSSIDS:
-				pbssid = hotlist_params->bssid;
-				nla_for_each_nested(outer, iter, tmp) {
-					nla_for_each_nested(inner, outer, tmp1) {
-						type = nla_type(inner);
+		case GSCAN_ATTRIBUTE_HOTLIST_BSSIDS:
+			pbssid = hotlist_params->bssid;
+			nla_for_each_nested(outer, iter, tmp) {
+				nla_for_each_nested(inner, outer, tmp1) {
+					type = nla_type(inner);
 
-						switch (type) {
-							case GSCAN_ATTRIBUTE_BSSID:
-								memcpy(&(pbssid[j].macaddr),
-								  nla_data(inner), ETHER_ADDR_LEN);
-								break;
-							case GSCAN_ATTRIBUTE_RSSI_LOW:
-								pbssid[j].rssi_reporting_threshold =
-								         (int8) nla_get_u8(inner);
-								break;
-							case GSCAN_ATTRIBUTE_RSSI_HIGH:
-								dummy = (int8) nla_get_u8(inner);
-								break;
+					switch (type) {
+					case GSCAN_ATTRIBUTE_BSSID:
+						if (nla_len(inner) != sizeof(pbssid[j].macaddr)) {
+							WL_DBG(("type:%d length:%d not matching.\n",
+								type, nla_len(inner)));
+							err = -EINVAL;
+							goto exit;
 						}
+						memcpy(
+							&pbssid[j].macaddr,
+							nla_data(inner),
+							sizeof(pbssid[j].macaddr));
+						break;
+					case GSCAN_ATTRIBUTE_RSSI_LOW:
+						if (nla_len(inner) != sizeof(uint8)) {
+							WL_DBG(("type:%d length:%d not matching.\n",
+								type, nla_len(inner)));
+							err = -EINVAL;
+							goto exit;
+						}
+						pbssid[j].rssi_reporting_threshold =
+								(int8)nla_get_u8(inner);
+						break;
+					case GSCAN_ATTRIBUTE_RSSI_HIGH:
+						if (nla_len(inner) != sizeof(uint8)) {
+							WL_DBG(("type:%d length:%d not matching.\n",
+								type, nla_len(inner)));
+							err = -EINVAL;
+							goto exit;
+						}
+						dummy = (int8)nla_get_u8(inner);
+						break;
 					}
-					j++;
+				}
+				if (++j > PFN_SWC_MAX_NUM_APS) {
+					WL_DBG(("nbssid:%d exeed limit.\n",
+						hotlist_params->nbssid));
+					err = -EINVAL;
+					goto exit;
 				}
 				hotlist_params->nbssid = j;
-				break;
-			case GSCAN_ATTRIBUTE_HOTLIST_FLUSH:
-				flush = (bool) nla_get_u8(iter);
-				break;
-			case GSCAN_ATTRIBUTE_LOST_AP_SAMPLE_SIZE:
-				hotlist_params->lost_ap_window = nla_get_u32(iter);
-				break;
 			}
+			break;
+		case GSCAN_ATTRIBUTE_HOTLIST_FLUSH:
+			if (nla_len(iter) != sizeof(uint8)) {
+				WL_DBG(("type:%d length:%d not matching.\n",
+					type, nla_len(inner)));
+				err = -EINVAL;
+				goto exit;
+			}
+			flush = nla_get_u8(iter);
+			break;
+		case GSCAN_ATTRIBUTE_LOST_AP_SAMPLE_SIZE:
+			if (nla_len(iter) != sizeof(uint32)) {
+				WL_DBG(("type:%d length:%d not matching.\n",
+					type, nla_len(inner)));
+				err = -EINVAL;
+				goto exit;
+			}
+			hotlist_params->lost_ap_window = (uint16)nla_get_u32(iter);
+			break;
+		default:
+			WL_DBG(("Unknown type %d\n", type));
+			err = -EINVAL;
+			goto exit;
+		}
 
 	}
 
@@ -816,10 +939,13 @@ exit:
 	return err;
 }
 
+#ifdef DHD_ANQPO_SUPPORT
 static int wl_cfgvendor_gscan_anqpo_config(struct wiphy *wiphy,
 	struct wireless_dev *wdev, const void  *data, int len)
 {
-	int err = BCME_ERROR, rem, type, hs_list_size = 0, malloc_size, i = 0, j, k, num_oi, oi_len;
+	int err = BCME_ERROR, rem, type, malloc_size, i = 0;
+	uint32 hs_list_size = 0;
+	int j, k, num_oi, oi_len;
 	wifi_passpoint_network *hs_list = NULL, *src_hs;
 	wl_anqpo_pfn_hs_list_t *anqpo_hs_list;
 	wl_anqpo_pfn_hs_t *dst_hs;
@@ -830,52 +956,100 @@ static int wl_cfgvendor_gscan_anqpo_config(struct wiphy *wiphy,
 	char *rcid;
 
 	nla_for_each_attr(iter, data, len, rem) {
-		type = nla_type(iter);
-		switch (type) {
-			case GSCAN_ATTRIBUTE_ANQPO_HS_LIST:
-				if (hs_list_size > 0) {
-					hs_list = kmalloc(hs_list_size*sizeof(wifi_passpoint_network), GFP_KERNEL);
-					if (hs_list == NULL) {
-						WL_ERR(("failed to allocate hs_list\n"));
-						return -ENOMEM;
-					}
-				}
-				nla_for_each_nested(outer, iter, tmp) {
-					nla_for_each_nested(inner, outer, tmp1) {
-						type = nla_type(inner);
-
-						switch (type) {
-							case GSCAN_ATTRIBUTE_ANQPO_HS_NETWORK_ID:
-								hs_list[i].id = nla_get_u32(inner);
-								WL_ERR(("%s: net id: %d\n", __func__, hs_list[i].id));
-								break;
-							case GSCAN_ATTRIBUTE_ANQPO_HS_NAI_REALM:
-								memcpy(hs_list[i].realm,
-								  nla_data(inner), 256);
-								WL_ERR(("%s: realm: %s\n", __func__, hs_list[i].realm));
-								break;
-							case GSCAN_ATTRIBUTE_ANQPO_HS_ROAM_CONSORTIUM_ID:
-								memcpy(hs_list[i].roamingConsortiumIds,
-								  nla_data(inner), 128);
-								break;
-							case GSCAN_ATTRIBUTE_ANQPO_HS_PLMN:
-								memcpy(hs_list[i].plmn,
-								  nla_data(inner), 3);
-								WL_ERR(("%s: plmn: %c %c %c\n", __func__, hs_list[i].plmn[0], hs_list[i].plmn[1], hs_list[i].plmn[2]));
-								break;
-						}
-					}
-					i++;
-				}
-				break;
-			case GSCAN_ATTRIBUTE_ANQPO_HS_LIST_SIZE:
-				hs_list_size = nla_get_u32(iter);
-				WL_ERR(("%s: ANQPO: %d\n", __func__, hs_list_size));
-				break;
-			default:
-				WL_ERR(("Unknown type: %d\n", type));
-				return err;
+	type = nla_type(iter);
+	switch (type) {
+	case GSCAN_ATTRIBUTE_ANQPO_HS_LIST:
+		if (hs_list) {
+			err = -EINVAL;
+			goto exit;
 		}
+		if (hs_list_size > GSCAN_ANQPO_MAX_HS_LIST_SIZE) {
+			err = -EINVAL;
+			goto exit;
+		}
+		if (hs_list_size > 0) {
+			hs_list = kzalloc(hs_list_size *
+				sizeof(wifi_passpoint_network), GFP_KERNEL);
+			if (!hs_list) {
+				WL_ERR(("failed to allocate hs_list\n"));
+				return -ENOMEM;
+			}
+		}
+		nla_for_each_nested(outer, iter, tmp) {
+			if (i == hs_list_size)
+				break;
+			nla_for_each_nested(inner, outer, tmp1) {
+			type = nla_type(inner);
+
+			switch (type) {
+			case GSCAN_ATTRIBUTE_ANQPO_HS_NETWORK_ID:
+				if (nla_len(inner) != sizeof(hs_list[i].id)) {
+					err = -EINVAL;
+					goto exit;
+				}
+				hs_list[i].id = nla_get_u32(inner);
+				WL_DBG(("%s: net id: %d\n",
+					__func__, hs_list[i].id));
+				break;
+			case GSCAN_ATTRIBUTE_ANQPO_HS_NAI_REALM:
+				if (nla_len(inner) !=
+					sizeof(hs_list[i].realm)) {
+					err = -EINVAL;
+					goto exit;
+				}
+				memcpy(hs_list[i].realm, nla_data(inner),
+				       sizeof(hs_list[i].realm));
+				WL_DBG(("%s: realm: %s\n",
+					__func__, hs_list[i].realm));
+				break;
+			case GSCAN_ATTRIBUTE_ANQPO_HS_ROAM_CONSORTIUM_ID:
+				if (nla_len(inner) != sizeof(hs_list[i].
+					roamingConsortiumIds)) {
+					err = -EINVAL;
+					goto exit;
+				}
+				memcpy(hs_list[i].roamingConsortiumIds,
+				       nla_data(inner),
+				       sizeof(hs_list[i].roamingConsortiumIds));
+				break;
+			case GSCAN_ATTRIBUTE_ANQPO_HS_PLMN:
+				if (nla_len(inner) != sizeof(hs_list[i].plmn)) {
+					err = -EINVAL;
+					goto exit;
+				}
+				memcpy(hs_list[i].plmn,
+				       nla_data(inner),
+				       sizeof(hs_list[i].plmn));
+				WL_DBG(("%s: plmn: %c %c %c\n",
+					__func__, hs_list[i].plmn[0],
+					hs_list[i].plmn[1],
+					hs_list[i].plmn[2]));
+				break;
+			}
+			}
+			i++;
+		}
+		break;
+	case GSCAN_ATTRIBUTE_ANQPO_HS_LIST_SIZE:
+		if (nla_len(iter) != sizeof(hs_list_size)) {
+			err = -EINVAL;
+			goto exit;
+		}
+		hs_list_size = nla_get_u32(iter);
+		if ((hs_list_size == 0) ||
+		    (hs_list_size > GSCAN_ANQPO_MAX_HS_LIST_SIZE)) {
+			WL_ERR(("%s: ANQPO: %d\n", __func__, hs_list_size));
+			err = -EINVAL;
+			goto exit;
+		}
+		WL_DBG(("%s: ANQPO: %d\n", __func__, hs_list_size));
+		break;
+	default:
+		WL_ERR(("Unknown type: %d\n", type));
+		err = -EINVAL;
+		goto exit;
+	}
+
 	}
 
 	malloc_size = OFFSETOF(wl_anqpo_pfn_hs_list_t, hs) +
@@ -923,7 +1097,7 @@ exit:
 	kfree(hs_list);
 	return err;
 }
-
+#endif /* DHD_ANQPO_SUPPORT */
 static int wl_cfgvendor_set_batch_scan_cfg(struct wiphy *wiphy,
 	struct wireless_dev *wdev, const void  *data, int len)
 {
@@ -1463,13 +1637,18 @@ wl_cfgvendor_rtt_set_config(struct wiphy *wiphy, struct wireless_dev *wdev,
 	}
 
 	memset(&rtt_param, 0, sizeof(rtt_param));
+	if (len <= 0) {
+		err = BCME_ERROR;
+		goto exit;
+	}
 	nla_for_each_attr(iter, data, len, rem) {
 		type = nla_type(iter);
 		switch (type) {
 		case RTT_ATTRIBUTE_TARGET_CNT:
 			target_cnt = nla_get_u8(iter);
-			if (rtt_param.rtt_target_cnt > RTT_MAX_TARGET_CNT) {
-				WL_ERR(("exceed max target count : %d\n",
+			if ((target_cnt <= 0) ||
+			    (target_cnt > RTT_MAX_TARGET_CNT)) {
+				WL_ERR(("target_cnt is not valid: %d",
 					target_cnt));
 				err = BCME_RANGE;
 				goto exit;
@@ -1483,6 +1662,13 @@ wl_cfgvendor_rtt_set_config(struct wiphy *wiphy, struct wireless_dev *wdev,
 			}
 			break;
 		case RTT_ATTRIBUTE_TARGET_INFO:
+			/* Added this variable for safe check to avoid crash
+			 * incase the caller did not respect the order
+			 */
+			if (!rtt_param.target_info) {
+				err = BCME_NOMEM;
+				goto exit;
+			}
 			rtt_target = rtt_param.target_info;
 			nla_for_each_nested(iter1, iter, rem1) {
 				nla_for_each_nested(iter2, iter1, rem2) {
@@ -1603,6 +1789,7 @@ wl_cfgvendor_rtt_set_config(struct wiphy *wiphy, struct wireless_dev *wdev,
 exit:
 	/* free the target info list */
 	kfree(rtt_param.target_info);
+	rtt_param.target_info = NULL;
 	return err;
 }
 
@@ -1611,46 +1798,63 @@ wl_cfgvendor_rtt_cancel_config(struct wiphy *wiphy, struct wireless_dev *wdev,
 	const void *data, int len)
 {
 	int err = 0, rem, type, target_cnt = 0;
-	int target_cnt_chk = 0;
+	int target_idx = 0;
 	const struct nlattr *iter;
-	struct ether_addr *mac_list = NULL, *mac_addr = NULL;
+	struct ether_addr *mac_list = NULL;
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 
+	if (len <= 0) {
+		err = -EINVAL;
+		goto exit;
+	}
 	nla_for_each_attr(iter, data, len, rem) {
 		type = nla_type(iter);
 		switch (type) {
 		case RTT_ATTRIBUTE_TARGET_CNT:
 			if (mac_list != NULL) {
 				WL_ERR(("mac_list is not NULL\n"));
+				err = -EINVAL;
 				goto exit;
 			}
 			target_cnt = nla_get_u8(iter);
-			if (target_cnt > 0) {
+			if ((target_cnt > 0) &&
+			    (target_cnt < RTT_MAX_TARGET_CNT)) {
 				mac_list = (struct ether_addr *)kzalloc(target_cnt * ETHER_ADDR_LEN,
 					GFP_KERNEL);
 				if (mac_list == NULL) {
 					WL_ERR(("failed to allocate mem for mac list\n"));
+					err = -EINVAL;
 					goto exit;
 				}
-				mac_addr = &mac_list[0];
 			} else {
 				/* cancel the current whole RTT process */
 				goto cancel;
 			}
 			break;
 		case RTT_ATTRIBUTE_TARGET_MAC:
-			if (mac_addr) {
-				memcpy(mac_addr++, nla_data(iter), ETHER_ADDR_LEN);
-				target_cnt_chk++;
-				if (target_cnt_chk > target_cnt) {
-					WL_ERR(("over target count\n"));
-					goto exit;
-				}
-				break;
-			} else {
-				WL_ERR(("mac_list is NULL\n"));
+			if (!mac_list) {
+				err = -EINVAL;
 				goto exit;
 			}
+
+			if (target_idx >= target_cnt) {
+				err = -EINVAL;
+				goto exit;
+			}
+
+			if (nla_len(iter) != ETHER_ADDR_LEN) {
+				err = -EINVAL;
+				goto exit;
+			}
+
+			memcpy(&mac_list[target_idx], nla_data(iter),
+			       ETHER_ADDR_LEN);
+			target_idx++;
+			break;
+
+		default:
+			err = -EINVAL;
+			goto exit;
 		}
 	}
 cancel:
@@ -2569,12 +2773,33 @@ wl_cfgvendor_apf_set_filter(struct wiphy *wiphy,
 	int ret, tmp, type;
 	gfp_t kflags;
 
-	/* assumption: length attribute must come first */
+	if (len <= 0) {
+		WL_ERR((" Invalid len : %d\n", len));
+		ret = -EINVAL;
+		goto exit;
+	}
 	nla_for_each_attr(iter, data, len, tmp) {
 		type = nla_type(iter);
 		switch (type) {
 			case APF_ATTRIBUTE_PROGRAM_LEN:
-				program_len = nla_get_u32(iter);
+				/* check if the iter is valid and program
+				 * length is not already initialized.
+				 */
+				if (nla_len(iter) == sizeof(uint32) &&
+				   !program_len) {
+					program_len = nla_get_u32(iter);
+				} else {
+					ret = -EINVAL;
+					goto exit;
+				}
+
+				if (program_len >
+					WL_APF_PROGRAM_MAX_SIZE) {
+					WL_ERR(("program len is more "));
+					WL_ERR(("than expected len\n"));
+					ret = -EINVAL;
+					goto exit;
+				}
 				if (unlikely(!program_len)) {
 					WL_ERR(("zero program length\n"));
 					ret = -EINVAL;
@@ -2587,6 +2812,12 @@ wl_cfgvendor_apf_set_filter(struct wiphy *wiphy,
 					ret = -EINVAL;
 					goto exit;
 				}
+				if (nla_len(iter) != program_len) {
+					WL_ERR(("program_len is not same\n"));
+					ret = -EINVAL;
+					goto exit;
+				}
+
 				kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
 				program = kzalloc(program_len, kflags);
 				if (unlikely(!program)) {
@@ -2885,6 +3116,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds [] = {
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wl_cfgvendor_set_bssid_blacklist
 	},
+#ifdef DHD_ANQPO_SUPPORT
 	{
 		{
 			.vendor_id = OUI_GOOGLE,
@@ -2893,6 +3125,7 @@ static const struct wiphy_vendor_command wl_vendor_cmds [] = {
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wl_cfgvendor_gscan_anqpo_config
 	},
+#endif /* DHD_ANQPO_SUPPORT */
 #endif /* GSCAN_SUPPORT */
 	{
 		{
@@ -3053,7 +3286,9 @@ static const struct  nl80211_vendor_cmd_info wl_vendor_events [] = {
 		{ OUI_GOOGLE, GOOGLE_SCAN_EPNO_EVENT },
 		{ OUI_GOOGLE, GOOGLE_DEBUG_RING_EVENT },
 		{ OUI_GOOGLE, GOOGLE_FW_DUMP_EVENT },
+#ifdef DHD_ANQPO_SUPPORT
 		{ OUI_GOOGLE, GOOGLE_PNO_HOTSPOT_FOUND_EVENT },
+#endif /* DHD_ANQPO_SUPPORT */
 		{ OUI_GOOGLE, GOOGLE_RSSI_MONITOR_EVENT },
 		{ OUI_GOOGLE, GOOGLE_MKEEP_ALIVE_EVENT }
 };
