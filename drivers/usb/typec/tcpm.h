@@ -68,6 +68,9 @@ struct tcpc_config {
 	enum typec_port_type type;
 	enum typec_role default_role;
 
+	bool try_snk;
+	bool try_src;
+
 	struct typec_altmode *alt_modes;
 };
 

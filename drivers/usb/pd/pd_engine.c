@@ -855,6 +855,8 @@ static const struct tcpc_config pd_tcpc_config = {
 	.operating_snk_mw = 2500,
 	.type = TYPEC_PORT_DRP,
 	.default_role = TYPEC_SINK,
+	.try_snk = false,
+	.try_src = false,
 	.alt_modes = NULL,
 };
 
