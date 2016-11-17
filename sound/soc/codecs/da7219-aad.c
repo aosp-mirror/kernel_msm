@@ -593,7 +593,8 @@ static struct da7219_aad_pdata *da7219_aad_fw_to_pdata(struct snd_soc_codec *cod
 	const char *fw_str;
 	u32 fw_val32;
 
-	aad_np = of_find_node_by_name(dev->of_node, "da7219_aad");
+	aad_np = (struct fwnode_handle *)of_find_node_by_name(
+						dev->of_node, "da7219_aad");
 	if (!aad_np)
 		return NULL;
 
