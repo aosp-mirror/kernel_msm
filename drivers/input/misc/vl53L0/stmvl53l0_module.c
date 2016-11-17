@@ -2483,6 +2483,8 @@ static int stmvl53l0_ioctl_handler(struct file *file,
                 if (!data->enable_ps_sensor)
                     stmvl53l0_start(data, 3, NORMAL_MODE);
 
+                memset(&RangingMeasurementData, 0, sizeof(RangingMeasurementData));
+
                 for (i = 0; i < RANGE_MEASUREMENT_TIMES;)
                 {
                     Status = papi_func_tbl->PerformSingleRangingMeasurement(vl53l0_dev, &RangingMeasurementData);
