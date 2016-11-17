@@ -103,28 +103,30 @@ dtb-$(CONFIG_ARCH_MSM8996) += msm8996-v2-pmi8994-cdp.dtb \
 	apq8096-v3-pmi8996-dragonboard.dtb
 
 dtb-$(CONFIG_BOARD_MSMCORTEX) += msmcobalt-sim.dtb \
-        msmcobalt-rumi.dtb \
-        msmcobalt-cdp.dtb \
-        msmcobalt-mtp.dtb \
-        msmcobalt-qrd.dtb \
-        msmcobalt-v2-sim.dtb \
-        msmcobalt-v2-rumi.dtb \
-        msmcobalt-v2-mtp.dtb \
-        msmcobalt-v2-cdp.dtb \
-        msmcobalt-v2-qrd.dtb \
-        msmcobalt-qrd-skuk.dtb \
-        msmcobalt-qrd-vr1.dtb \
-        apqcobalt-mtp.dtb \
-        apqcobalt-cdp.dtb \
-        apqcobalt-v2-mtp.dtb \
-        apqcobalt-v2-cdp.dtb \
-        apqcobalt-v2-qrd.dtb \
-        msmcobalt-v2.1-mtp.dtb \
-        msmcobalt-v2.1-cdp.dtb \
-        msmcobalt-v2.1-qrd.dtb \
-        apqcobalt-v2.1-mtp.dtb \
-        apqcobalt-v2.1-cdp.dtb \
-        apqcobalt-v2.1-qrd.dtb
+	msmcobalt-rumi.dtb \
+	msmcobalt-cdp.dtb \
+	msmcobalt-mtp.dtb \
+	msmcobalt-qrd.dtb \
+	msmcobalt-v2-sim.dtb \
+	msmcobalt-v2-rumi.dtb \
+	msmcobalt-v2-mtp.dtb \
+	msmcobalt-v2-cdp.dtb \
+	msmcobalt-v2-qrd.dtb \
+	msmcobalt-qrd-skuk.dtb \
+	msmcobalt-v2-qrd-skuk.dtb \
+	msmcobalt-qrd-vr1.dtb \
+	msmcobalt-v2-qrd-vr1.dtb \
+	apqcobalt-mtp.dtb \
+	apqcobalt-cdp.dtb \
+	apqcobalt-v2-mtp.dtb \
+	apqcobalt-v2-cdp.dtb \
+	apqcobalt-v2-qrd.dtb \
+	msmcobalt-v2.1-mtp.dtb \
+	msmcobalt-v2.1-cdp.dtb \
+	msmcobalt-v2.1-qrd.dtb \
+	apqcobalt-v2.1-mtp.dtb \
+	apqcobalt-v2.1-cdp.dtb \
+	apqcobalt-v2.1-qrd.dtb
 
 dtb-$(CONFIG_ARCH_MSMHAMSTER) += msmhamster-rumi.dtb
 

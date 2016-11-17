@@ -870,9 +870,39 @@ static int tavil_get_hph_type(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int tavil_hph_impedance_get(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	uint32_t zl, zr;
+	bool hphr;
+	struct soc_multi_mixer_control *mc;
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct wcd934x_mbhc *wcd934x_mbhc = tavil_soc_get_mbhc(codec);
+
+	if (!wcd934x_mbhc) {
+		dev_err(codec->dev, "%s: mbhc not initialized!\n", __func__);
+		return -EINVAL;
+	}
+
+	mc = (struct soc_multi_mixer_control *)(kcontrol->private_value);
+	hphr = mc->shift;
+	wcd_mbhc_get_impedance(&wcd934x_mbhc->wcd_mbhc, &zl, &zr);
+	dev_dbg(codec->dev, "%s: zl=%u(ohms), zr=%u(ohms)\n", __func__, zl, zr);
+	ucontrol->value.integer.value[0] = hphr ? zr : zl;
+
+	return 0;
+}
+
 static const struct snd_kcontrol_new hph_type_detect_controls[] = {
 	SOC_SINGLE_EXT("HPH Type", 0, 0, UINT_MAX, 0,
 		       tavil_get_hph_type, NULL),
+};
+
+static const struct snd_kcontrol_new impedance_detect_controls[] = {
+	SOC_SINGLE_EXT("HPHL Impedance", 0, 0, UINT_MAX, 0,
+		       tavil_hph_impedance_get, NULL),
+	SOC_SINGLE_EXT("HPHR Impedance", 0, 1, UINT_MAX, 0,
+		       tavil_hph_impedance_get, NULL),
 };
 
 /*
@@ -910,6 +940,37 @@ void tavil_mbhc_hs_detect_exit(struct snd_soc_codec *codec)
 	wcd_mbhc_stop(&wcd934x_mbhc->wcd_mbhc);
 }
 EXPORT_SYMBOL(tavil_mbhc_hs_detect_exit);
+
+/*
+ * tavil_mbhc_post_ssr_init: initialize mbhc for tavil post subsystem restart
+ * @mbhc: poniter to wcd934x_mbhc structure
+ * @codec: handle to snd_soc_codec *
+ *
+ * return 0 if mbhc_init is success or error code in case of failure
+ */
+int tavil_mbhc_post_ssr_init(struct wcd934x_mbhc *mbhc,
+			     struct snd_soc_codec *codec)
+{
+	int ret;
+
+	if (!mbhc || !codec)
+		return -EINVAL;
+
+	wcd_mbhc_deinit(&mbhc->wcd_mbhc);
+	ret = wcd_mbhc_init(&mbhc->wcd_mbhc, codec, &mbhc_cb, &intr_ids,
+			    wcd_mbhc_registers, TAVIL_ZDET_SUPPORTED);
+	if (ret) {
+		dev_err(codec->dev, "%s: mbhc initialization failed\n",
+			__func__);
+		goto done;
+	}
+	snd_soc_update_bits(codec, WCD934X_MBHC_NEW_CTL_1, 0x04, 0x04);
+	snd_soc_update_bits(codec, WCD934X_MBHC_CTL_BCS, 0x01, 0x01);
+
+done:
+	return ret;
+}
+EXPORT_SYMBOL(tavil_mbhc_post_ssr_init);
 
 /*
  * tavil_mbhc_init: initialize mbhc for tavil
@@ -954,13 +1015,14 @@ int tavil_mbhc_init(struct wcd934x_mbhc **mbhc, struct snd_soc_codec *codec,
 				0;
 	}
 
+	(*mbhc) = wcd934x_mbhc;
+	snd_soc_add_codec_controls(codec, impedance_detect_controls,
+				   ARRAY_SIZE(impedance_detect_controls));
 	snd_soc_add_codec_controls(codec, hph_type_detect_controls,
 				   ARRAY_SIZE(hph_type_detect_controls));
 
 	snd_soc_update_bits(codec, WCD934X_MBHC_NEW_CTL_1, 0x04, 0x04);
 	snd_soc_update_bits(codec, WCD934X_MBHC_CTL_BCS, 0x01, 0x01);
-
-	(*mbhc) = wcd934x_mbhc;
 
 	return 0;
 err:
@@ -977,7 +1039,9 @@ void tavil_mbhc_deinit(struct snd_soc_codec *codec)
 {
 	struct wcd934x_mbhc *wcd934x_mbhc = tavil_soc_get_mbhc(codec);
 
-	if (!wcd934x_mbhc)
+	if (wcd934x_mbhc) {
+		wcd_mbhc_deinit(&wcd934x_mbhc->wcd_mbhc);
 		devm_kfree(codec->dev, wcd934x_mbhc);
+	}
 }
 EXPORT_SYMBOL(tavil_mbhc_deinit);

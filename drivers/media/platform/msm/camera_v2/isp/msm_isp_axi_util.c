@@ -14,6 +14,7 @@
 #include <asm/div64.h>
 #include "msm_isp_util.h"
 #include "msm_isp_axi_util.h"
+#include "msm_isp48.h"
 
 #define HANDLE_TO_IDX(handle) (handle & 0xFF)
 #define ISP_SOF_DEBUG_COUNT 0
@@ -1060,7 +1061,7 @@ void msm_isp_start_avtimer(void)
 	avcs_core_disable_power_collapse(1);
 }
 
-static inline void msm_isp_get_avtimer_ts(
+void msm_isp_get_avtimer_ts(
 		struct msm_isp_timestamp *time_stamp)
 {
 	int rc = 0;
@@ -1088,7 +1089,7 @@ void msm_isp_start_avtimer(void)
 	pr_err("AV Timer is not supported\n");
 }
 
-static inline void msm_isp_get_avtimer_ts(
+void msm_isp_get_avtimer_ts(
 		struct msm_isp_timestamp *time_stamp)
 {
 	pr_err_ratelimited("%s: Error: AVTimer driver not available\n",
@@ -2017,22 +2018,25 @@ static void msm_isp_input_disable(struct vfe_device *vfe_dev)
 		if (i != VFE_PIX_0 || ext_read)
 			continue;
 		/* halt camif */
-		if (total_stream_count == 0)
+		if (total_stream_count == 0) {
 			vfe_dev->hw_info->vfe_ops.core_ops.
 				update_camif_state(vfe_dev,
 				DISABLE_CAMIF_IMMEDIATELY);
-		else
+		 } else {
 			vfe_dev->hw_info->vfe_ops.core_ops.
 				update_camif_state(vfe_dev, DISABLE_CAMIF);
+		}
 	}
-
 	/* halt and reset hardware if all streams are disabled */
 	if (total_stream_count == 0) {
 		vfe_dev->hw_info->vfe_ops.axi_ops.halt(vfe_dev, 1);
+		msm_isp_flush_tasklet(vfe_dev);
 		vfe_dev->hw_info->vfe_ops.core_ops.reset_hw(vfe_dev, 0, 1);
-		vfe_dev->hw_info->vfe_ops.core_ops.init_hw_reg(vfe_dev);
-
+		if (msm_vfe_is_vfe48(vfe_dev))
+			vfe_dev->hw_info->vfe_ops.core_ops.reset_hw(vfe_dev,
+								0, 1);
 	}
+
 }
 
 /**
@@ -2282,7 +2286,7 @@ int msm_isp_axi_reset(struct vfe_device *vfe_dev,
 		update_vfes[vfe_dev->pdev->id] = vfe_dev;
 	}
 
-	msm_isp_get_timestamp(&timestamp);
+	msm_isp_get_timestamp(&timestamp, vfe_dev);
 
 	for (k = 0; k < MAX_VFE; k++) {
 		vfe_dev = update_vfes[k];
@@ -2700,8 +2704,8 @@ static int __msm_isp_check_stream_state(struct msm_vfe_axi_stream *stream_info,
 }
 
 
-static void __msm_isp_stop_axi_streams(struct msm_vfe_axi_stream **streams,
-				int num_streams, int cmd_type)
+static void __msm_isp_stop_axi_streams(struct vfe_device *vfe_dev,
+	struct msm_vfe_axi_stream **streams, int num_streams, int cmd_type)
 {
 	int i;
 	struct msm_vfe_axi_shared_data *axi_data;
@@ -2712,11 +2716,24 @@ static void __msm_isp_stop_axi_streams(struct msm_vfe_axi_stream **streams,
 	unsigned long flags;
 	uint32_t intf;
 	int rc;
-	struct vfe_device *vfe_dev;
 	struct vfe_device *update_vfes[MAX_VFE] = {0, 0};
 	int k;
 
-	msm_isp_get_timestamp(&timestamp);
+	msm_isp_get_timestamp(&timestamp, vfe_dev);
+
+	for (i = 0; i < num_streams; i++) {
+		stream_info = streams[i];
+		msm_isp_update_intf_stream_cnt(stream_info, 0);
+		for (k = 0; k < stream_info->num_isp; k++) {
+			vfe_dev = stream_info->vfe_dev[k];
+			update_vfes[vfe_dev->pdev->id] = vfe_dev;
+		}
+	}
+	for (k = 0; k < MAX_VFE; k++) {
+		if (!update_vfes[k])
+			continue;
+		msm_isp_input_disable(update_vfes[k]);
+	}
 
 	for (i = 0; i < num_streams; i++) {
 		stream_info = streams[i];
@@ -2744,12 +2761,10 @@ static void __msm_isp_stop_axi_streams(struct msm_vfe_axi_stream **streams,
 			else
 				vfe_dev->hw_info->vfe_ops.axi_ops.
 				clear_wm_irq_mask(vfe_dev, stream_info);
-			update_vfes[vfe_dev->pdev->id] = vfe_dev;
 		}
 		init_completion(&stream_info->inactive_comp);
 		stream_info->state = STOP_PENDING;
 		spin_unlock_irqrestore(&stream_info->lock, flags);
-		msm_isp_update_intf_stream_cnt(stream_info, 0);
 	}
 
 	for (k = 0; k < MAX_VFE; k++) {
@@ -2844,7 +2859,6 @@ static void __msm_isp_stop_axi_streams(struct msm_vfe_axi_stream **streams,
 		if (!update_vfes[k])
 			continue;
 		msm_isp_update_stream_bandwidth(update_vfes[k]);
-		msm_isp_input_disable(update_vfes[k]);
 	}
 
 	for (i = 0; i < num_streams; i++) {
@@ -2881,7 +2895,7 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev_ioctl,
 	if (stream_cfg_cmd->num_streams > MAX_NUM_STREAM)
 		return -EINVAL;
 
-	msm_isp_get_timestamp(&timestamp);
+	msm_isp_get_timestamp(&timestamp, vfe_dev_ioctl);
 
 	for (i = 0; i < stream_cfg_cmd->num_streams; i++) {
 		if (stream_cfg_cmd->stream_handle[i] == 0)
@@ -3005,7 +3019,7 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev_ioctl,
 
 	return 0;
 error:
-	__msm_isp_stop_axi_streams(streams, num_streams,
+	__msm_isp_stop_axi_streams(vfe_dev_ioctl, streams, num_streams,
 				STOP_STREAM);
 
 	return rc;
@@ -3043,7 +3057,7 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev_ioctl,
 		}
 		streams[num_streams++] = stream_info;
 	}
-	__msm_isp_stop_axi_streams(streams, num_streams,
+	__msm_isp_stop_axi_streams(vfe_dev_ioctl, streams, num_streams,
 				stream_cfg_cmd->cmd);
 
 	return rc;
@@ -3172,7 +3186,7 @@ static int msm_isp_return_empty_buffer(struct vfe_device *vfe_dev,
 		return rc;
 	}
 
-	msm_isp_get_timestamp(&timestamp);
+	msm_isp_get_timestamp(&timestamp, vfe_dev);
 	buf->buf_debug.put_state[buf->buf_debug.put_state_last] =
 		MSM_ISP_BUFFER_STATE_DROP_REG;
 	buf->buf_debug.put_state_last ^= 1;
@@ -3576,7 +3590,7 @@ int msm_isp_update_axi_stream(struct vfe_device *vfe_dev, void *arg)
 			stream_info = msm_isp_get_stream_common_data(vfe_dev,
 				HANDLE_TO_IDX(update_info->stream_handle));
 			stream_info->buf_divert = 0;
-			msm_isp_get_timestamp(&timestamp);
+			msm_isp_get_timestamp(&timestamp, vfe_dev);
 			frame_id = vfe_dev->axi_data.src_info[
 				SRC_TO_INTF(stream_info->stream_src)].frame_id;
 			/* set ping pong address to scratch before flush */
@@ -3778,8 +3792,9 @@ void msm_isp_process_axi_irq_stream(struct vfe_device *vfe_dev,
 			(~(pingpong_status >>
 			stream_info->wm[vfe_idx][i]) & 0x1)) {
 			spin_unlock_irqrestore(&stream_info->lock, flags);
-			pr_err("%s: Write master ping pong mismatch. Status: 0x%x\n",
-				__func__, pingpong_status);
+			pr_err("%s: Write master ping pong mismatch. Status: 0x%x %x\n",
+				__func__, pingpong_status,
+				stream_info->stream_src);
 			msm_isp_halt_send_error(vfe_dev,
 					ISP_EVENT_PING_PONG_MISMATCH);
 			return;
