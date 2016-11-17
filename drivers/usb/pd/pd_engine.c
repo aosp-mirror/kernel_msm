@@ -687,6 +687,8 @@ static void pd_transmit_handler(struct work_struct *work)
 		signal = false;
 		break;
 	default:
+		pd_engine_log(pd, "unknown pd tx type");
+		kfree(pd_tx_work);
 		return;
 	}
 	/*
@@ -703,7 +705,6 @@ static void pd_transmit_handler(struct work_struct *work)
 		status = TCPC_TX_FAILED;
 
 	tcpm_pd_transmit_complete(pd->tcpm_port, status);
-	kfree(pd_tx_work);
 
 	if (signal)
 		pd_engine_log(pd, "pd tx type [%s], pdphy ret [%d], status [%s]",
@@ -713,6 +714,8 @@ static void pd_transmit_handler(struct work_struct *work)
 		pd_engine_log(pd, "pd tx header [%#x], type [%s], pdphy ret [%d], status [%s]",
 			      msg->header, tcpm_transmit_type_name[type],
 			      ret, tcpm_transmit_status_name[status]);
+
+	kfree(pd_tx_work);
 }
 
 static int tcpm_pd_transmit(struct tcpc_dev *dev, enum tcpm_transmit_type type,
