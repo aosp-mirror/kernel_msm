@@ -51,6 +51,7 @@
 #include <asm/uaccess.h>
 
 #include "queue.h"
+#include "ffu.h"
 
 MODULE_ALIAS("mmc:block");
 #ifdef MODULE_PARAM_PREFIX
@@ -674,6 +675,18 @@ static int mmc_blk_ioctl_cmd(struct block_device *bdev,
 	mrq.cmd = &cmd;
 
 	mmc_get_card(card);
+
+	/*emmc ffu*/
+	if (cmd.opcode == MMC_FFU_DOWNLOAD_OP){
+		pr_err("MMC_FFU_DOWNLOAD start...");
+		err = mmc_ffu_download(card, &cmd, idata->buf,idata->buf_bytes);
+		pr_err("MMC_FFU_DOWNLOAD end...");
+		goto cmd_rel_host;}
+	if (cmd.opcode == MMC_FFU_INSTALL_OP){
+		pr_err("MMC_FFU_INSTALL start...");
+		err = mmc_ffu_install(card);
+		pr_err("MMC_FFU_INSTALL end...");
+		goto cmd_rel_host;}
 
 	if (mmc_card_cmdq(card)) {
 		err = mmc_cmdq_halt_on_empty_queue(card->host);
