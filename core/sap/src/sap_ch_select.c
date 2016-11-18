@@ -574,9 +574,6 @@ static bool sap_chan_sel_init(tHalHandle halHandle,
 		return eSAP_FALSE;
 	}
 
-	qdf_mem_zero(pSpectCh,
-		     (pSpectInfoParams->numSpectChans) * sizeof(*pSpectCh));
-
 	/* Initialize the pointers in the DfsParams to the allocated memory */
 	pSpectInfoParams->pSpectCh = pSpectCh;
 
@@ -711,6 +708,8 @@ static uint32_t sapweight_rssi_count(int8_t rssi, uint16_t count)
  * @pSpectCh:     Channel Information
  * @offset:       Channel Offset
  * @sap_24g:      Channel is in 2.4G or 5G
+ * @spectch_start: the start of spect ch array
+ * @spectch_end: the end of spect ch array
  *
  * sap_update_rssi_bsscount updates bss count and rssi effect based
  * on the channel offset.
@@ -719,13 +718,16 @@ static uint32_t sapweight_rssi_count(int8_t rssi, uint16_t count)
  */
 
 static void sap_update_rssi_bsscount(tSapSpectChInfo *pSpectCh, int32_t offset,
-				     bool sap_24g)
+	bool sap_24g, tSapSpectChInfo *spectch_start,
+	tSapSpectChInfo *spectch_end)
 {
 	tSapSpectChInfo *pExtSpectCh = NULL;
 	int32_t rssi, rsssi_effect;
 
 	pExtSpectCh = (pSpectCh + offset);
-	if (pExtSpectCh != NULL) {
+	if (pExtSpectCh != NULL &&
+	    pExtSpectCh >= spectch_start &&
+	    pExtSpectCh < spectch_end) {
 		++pExtSpectCh->bssCount;
 		switch (offset) {
 		case -1:
@@ -835,6 +837,8 @@ static void sap_upd_chan_spec_params(tSirProbeRespBeacon *pBeaconStruct,
  * @spect_ch:     Channel Information
  * @offset:       Channel Offset
  * @num_ch:       no.of channels
+ * @spectch_start: the start of spect ch array
+ * @spectch_end: the end of spect ch array
  *
  * sap_update_rssi_bsscount_vht_5G updates bss count and rssi effect based
  * on the channel offset.
@@ -844,7 +848,9 @@ static void sap_upd_chan_spec_params(tSirProbeRespBeacon *pBeaconStruct,
 
 static void sap_update_rssi_bsscount_vht_5G(tSapSpectChInfo *spect_ch,
 					    int32_t offset,
-					    uint16_t num_ch)
+					    uint16_t num_ch,
+					    tSapSpectChInfo *spectch_start,
+					    tSapSpectChInfo *spectch_end)
 {
 	int32_t ch_offset;
 	uint16_t i, cnt;
@@ -859,7 +865,8 @@ static void sap_update_rssi_bsscount_vht_5G(tSapSpectChInfo *spect_ch,
 		ch_offset = offset + i;
 		if (ch_offset == 0)
 			continue;
-		sap_update_rssi_bsscount(spect_ch, ch_offset, false);
+		sap_update_rssi_bsscount(spect_ch, ch_offset, false,
+			spectch_start, spectch_end);
 	}
 }
 /**
@@ -871,6 +878,8 @@ static void sap_update_rssi_bsscount_vht_5G(tSapSpectChInfo *spect_ch,
  * @sec_chan_offset: Secondary Channel Offset
  * @center_freq:     Central frequency for the given channel.
  * @channel_id:      channel_id
+ * @spectch_start: the start of spect ch array
+ * @spectch_end: the end of spect ch array
  *
  * sap_interference_rssi_count_5G considers the Adjacent channel rssi
  * and data count(here number of BSS observed)
@@ -883,7 +892,9 @@ static void sap_interference_rssi_count_5G(tSapSpectChInfo *spect_ch,
 					   uint16_t sec_chan_offset,
 					   uint16_t center_freq,
 					   uint16_t center_freq_2,
-					   uint8_t channel_id)
+					   uint8_t channel_id,
+					   tSapSpectChInfo *spectch_start,
+					   tSapSpectChInfo *spectch_end)
 {
 	uint16_t num_ch;
 	int32_t offset = 0;
@@ -909,12 +920,14 @@ static void sap_interference_rssi_count_5G(tSapSpectChInfo *spect_ch,
 		switch (sec_chan_offset) {
 		/* Above the Primary Channel */
 		case PHY_DOUBLE_CHANNEL_LOW_PRIMARY:
-			sap_update_rssi_bsscount(spect_ch, 1, false);
+			sap_update_rssi_bsscount(spect_ch, 1, false,
+				spectch_start, spectch_end);
 			return;
 
 		/* Below the Primary channel */
 		case PHY_DOUBLE_CHANNEL_HIGH_PRIMARY:
-			sap_update_rssi_bsscount(spect_ch, -1, false);
+			sap_update_rssi_bsscount(spect_ch, -1, false,
+				spectch_start, spectch_end);
 			return;
 		}
 		return;
@@ -952,7 +965,8 @@ static void sap_interference_rssi_count_5G(tSapSpectChInfo *spect_ch,
 	default:
 		return;
 	}
-	sap_update_rssi_bsscount_vht_5G(spect_ch, offset, num_ch);
+	sap_update_rssi_bsscount_vht_5G(spect_ch, offset, num_ch,
+		spectch_start, spectch_end);
 }
 
 /**
@@ -960,6 +974,8 @@ static void sap_interference_rssi_count_5G(tSapSpectChInfo *spect_ch,
  *                                 considers the Adjacent channel rssi
  *                                 and data count(here number of BSS observed)
  * @spect_ch    Channel Information
+ * @spectch_start: the start of spect ch array
+ * @spectch_end: the end of spect ch array
  *
  * sap_interference_rssi_count considers the Adjacent channel rssi
  * and data count(here number of BSS observed)
@@ -967,7 +983,9 @@ static void sap_interference_rssi_count_5G(tSapSpectChInfo *spect_ch,
  * Return: None.
  */
 
-static void sap_interference_rssi_count(tSapSpectChInfo *spect_ch)
+static void sap_interference_rssi_count(tSapSpectChInfo *spect_ch,
+	tSapSpectChInfo *spectch_start,
+	tSapSpectChInfo *spectch_end)
 {
 	if (NULL == spect_ch) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
@@ -977,35 +995,57 @@ static void sap_interference_rssi_count(tSapSpectChInfo *spect_ch)
 
 	switch (spect_ch->chNum) {
 	case CHANNEL_1:
-		sap_update_rssi_bsscount(spect_ch, 1, true);
-		sap_update_rssi_bsscount(spect_ch, 2, true);
-		sap_update_rssi_bsscount(spect_ch, 3, true);
-		sap_update_rssi_bsscount(spect_ch, 4, true);
+		sap_update_rssi_bsscount(spect_ch, 1, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 2, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 3, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 4, true,
+			spectch_start, spectch_end);
 		break;
 
 	case CHANNEL_2:
-		sap_update_rssi_bsscount(spect_ch, -1, true);
-		sap_update_rssi_bsscount(spect_ch, 1, true);
-		sap_update_rssi_bsscount(spect_ch, 2, true);
-		sap_update_rssi_bsscount(spect_ch, 3, true);
-		sap_update_rssi_bsscount(spect_ch, 4, true);
+		sap_update_rssi_bsscount(spect_ch, -1, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 1, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 2, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 3, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 4, true,
+			spectch_start, spectch_end);
 		break;
 	case CHANNEL_3:
-		sap_update_rssi_bsscount(spect_ch, -2, true);
-		sap_update_rssi_bsscount(spect_ch, -1, true);
-		sap_update_rssi_bsscount(spect_ch, 1, true);
-		sap_update_rssi_bsscount(spect_ch, 2, true);
-		sap_update_rssi_bsscount(spect_ch, 3, true);
-		sap_update_rssi_bsscount(spect_ch, 4, true);
+		sap_update_rssi_bsscount(spect_ch, -2, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -1, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 1, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 2, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 3, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 4, true,
+			spectch_start, spectch_end);
 		break;
 	case CHANNEL_4:
-		sap_update_rssi_bsscount(spect_ch, -3, true);
-		sap_update_rssi_bsscount(spect_ch, -2, true);
-		sap_update_rssi_bsscount(spect_ch, -1, true);
-		sap_update_rssi_bsscount(spect_ch, 1, true);
-		sap_update_rssi_bsscount(spect_ch, 2, true);
-		sap_update_rssi_bsscount(spect_ch, 3, true);
-		sap_update_rssi_bsscount(spect_ch, 4, true);
+		sap_update_rssi_bsscount(spect_ch, -3, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -2, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -1, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 1, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 2, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 3, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 4, true,
+			spectch_start, spectch_end);
 		break;
 
 	case CHANNEL_5:
@@ -1014,48 +1054,78 @@ static void sap_interference_rssi_count(tSapSpectChInfo *spect_ch)
 	case CHANNEL_8:
 	case CHANNEL_9:
 	case CHANNEL_10:
-		sap_update_rssi_bsscount(spect_ch, -4, true);
-		sap_update_rssi_bsscount(spect_ch, -3, true);
-		sap_update_rssi_bsscount(spect_ch, -2, true);
-		sap_update_rssi_bsscount(spect_ch, -1, true);
-		sap_update_rssi_bsscount(spect_ch, 1, true);
-		sap_update_rssi_bsscount(spect_ch, 2, true);
-		sap_update_rssi_bsscount(spect_ch, 3, true);
-		sap_update_rssi_bsscount(spect_ch, 4, true);
+		sap_update_rssi_bsscount(spect_ch, -4, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -3, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -2, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -1, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 1, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 2, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 3, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 4, true,
+			spectch_start, spectch_end);
 		break;
 
 	case CHANNEL_11:
-		sap_update_rssi_bsscount(spect_ch, -4, true);
-		sap_update_rssi_bsscount(spect_ch, -3, true);
-		sap_update_rssi_bsscount(spect_ch, -2, true);
-		sap_update_rssi_bsscount(spect_ch, -1, true);
-		sap_update_rssi_bsscount(spect_ch, 1, true);
-		sap_update_rssi_bsscount(spect_ch, 2, true);
-		sap_update_rssi_bsscount(spect_ch, 3, true);
+		sap_update_rssi_bsscount(spect_ch, -4, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -3, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -2, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -1, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 1, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 2, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 3, true,
+			spectch_start, spectch_end);
 		break;
 
 	case CHANNEL_12:
-		sap_update_rssi_bsscount(spect_ch, -4, true);
-		sap_update_rssi_bsscount(spect_ch, -3, true);
-		sap_update_rssi_bsscount(spect_ch, -2, true);
-		sap_update_rssi_bsscount(spect_ch, -1, true);
-		sap_update_rssi_bsscount(spect_ch, 1, true);
-		sap_update_rssi_bsscount(spect_ch, 2, true);
+		sap_update_rssi_bsscount(spect_ch, -4, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -3, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -2, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -1, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 1, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 2, true,
+			spectch_start, spectch_end);
 		break;
 
 	case CHANNEL_13:
-		sap_update_rssi_bsscount(spect_ch, -4, true);
-		sap_update_rssi_bsscount(spect_ch, -3, true);
-		sap_update_rssi_bsscount(spect_ch, -2, true);
-		sap_update_rssi_bsscount(spect_ch, -1, true);
-		sap_update_rssi_bsscount(spect_ch, 1, true);
+		sap_update_rssi_bsscount(spect_ch, -4, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -3, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -2, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -1, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, 1, true,
+			spectch_start, spectch_end);
 		break;
 
 	case CHANNEL_14:
-		sap_update_rssi_bsscount(spect_ch, -4, true);
-		sap_update_rssi_bsscount(spect_ch, -3, true);
-		sap_update_rssi_bsscount(spect_ch, -2, true);
-		sap_update_rssi_bsscount(spect_ch, -1, true);
+		sap_update_rssi_bsscount(spect_ch, -4, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -3, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -2, true,
+			spectch_start, spectch_end);
+		sap_update_rssi_bsscount(spect_ch, -1, true,
+			spectch_start, spectch_end);
 		break;
 
 	default:
@@ -1117,6 +1187,9 @@ static void sap_compute_spect_weight(tSapChSelSpectInfo *pSpectInfoParams,
 	uint32_t ieLen = 0;
 	tSirProbeRespBeacon *pBeaconStruct;
 	tpAniSirGlobal pMac = (tpAniSirGlobal) halHandle;
+	tSapSpectChInfo *spectch_start = pSpectInfoParams->pSpectCh;
+	tSapSpectChInfo *spectch_end = pSpectInfoParams->pSpectCh +
+		pSpectInfoParams->numSpectChans;
 
 	pBeaconStruct = qdf_mem_malloc(sizeof(tSirProbeRespBeacon));
 	if (NULL == pBeaconStruct) {
@@ -1194,11 +1267,14 @@ static void sap_compute_spect_weight(tSapChSelSpectInfo *pSpectInfoParams,
 					    secondaryChannelOffset,
 					    centerFreq,
 					    centerFreq_2,
-					    channel_id);
+					    channel_id,
+					    spectch_start,
+					    spectch_end);
 					break;
 
 				case eCSR_DOT11_MODE_11g:
-					sap_interference_rssi_count(pSpectCh);
+					sap_interference_rssi_count(pSpectCh,
+						spectch_start, spectch_end);
 					break;
 
 				case eCSR_DOT11_MODE_abg:
@@ -1207,8 +1283,11 @@ static void sap_compute_spect_weight(tSapChSelSpectInfo *pSpectInfoParams,
 					    secondaryChannelOffset,
 					    centerFreq,
 					    centerFreq_2,
-					    channel_id);
-					sap_interference_rssi_count(pSpectCh);
+					    channel_id,
+					    spectch_start,
+					    spectch_end);
+					sap_interference_rssi_count(pSpectCh,
+						spectch_start, spectch_end);
 					break;
 				}
 
@@ -1882,6 +1961,7 @@ static bool sap_filter_over_lap_ch(ptSapContext pSapCtx, uint16_t chNum)
 	return eSAP_FALSE;
 }
 
+#ifdef FEATURE_WLAN_CH_AVOID
 /**
  * sap_select_channel_no_scan_result() - select SAP channel when no scan results
  * are available.
@@ -1890,26 +1970,17 @@ static bool sap_filter_over_lap_ch(ptSapContext pSapCtx, uint16_t chNum)
  * Returns: channel number if success, 0 otherwise
  */
 static uint8_t sap_select_channel_no_scan_result(tHalHandle hal,
-						ptSapContext sap_ctx)
+						 ptSapContext sap_ctx)
 {
-	uint32_t start_ch_num, end_ch_num;
-#ifdef FEATURE_WLAN_CH_AVOID
 	enum channel_state ch_type;
 	uint8_t i, first_safe_ch_in_range = SAP_CHANNEL_NOT_SELECTED;
-#endif
 	uint32_t dfs_master_cap_enabled;
-	start_ch_num = sap_ctx->acs_cfg->start_ch;
-	end_ch_num = sap_ctx->acs_cfg->end_ch;
+	uint32_t start_ch_num = sap_ctx->acs_cfg->start_ch;
+	uint32_t end_ch_num = sap_ctx->acs_cfg->end_ch;
 
 	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
 		  FL("start - end: %d - %d"), start_ch_num, end_ch_num);
 
-#ifndef FEATURE_WLAN_CH_AVOID
-	sap_ctx->acs_cfg->pri_ch = start_ch_num;
-	sap_ctx->acs_cfg->ht_sec_ch = 0;
-	/* pick the first channel in configured range */
-	return start_ch_num;
-#else
 	sme_cfg_get_int(hal, WNI_CFG_DFS_MASTER_ENABLED,
 				&dfs_master_cap_enabled);
 
@@ -1965,8 +2036,25 @@ static uint8_t sap_select_channel_no_scan_result(tHalHandle hal,
 
 	/* if no channel selected return SAP_CHANNEL_NOT_SELECTED */
 	return first_safe_ch_in_range;
-#endif /* !FEATURE_WLAN_CH_AVOID */
 }
+#else
+static uint8_t sap_select_channel_no_scan_result(tHalHandle hal,
+						 ptSapContext sap_ctx)
+{
+	uint32_t start_ch_num = sap_ctx->acs_cfg->start_ch;
+
+	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
+		  FL("start - end: %d - %d"),
+		  start_ch_num,
+		  sap_ctx->acs_cfg->end_ch);
+
+	sap_ctx->acs_cfg->pri_ch = start_ch_num;
+	sap_ctx->acs_cfg->ht_sec_ch = 0;
+
+	/* pick the first channel in configured range */
+	return start_ch_num;
+}
+#endif /* FEATURE_WLAN_CH_AVOID */
 
 /**
  * sap_select_channel() - select SAP channel

@@ -284,7 +284,6 @@ QDF_STATUS sme_ft_send_update_key_ind(tHalHandle hal, uint32_t session_id,
 	if (NULL == msg)
 		return QDF_STATUS_E_NOMEM;
 
-	qdf_mem_set(msg, msglen, 0);
 	msg->messageType = eWNI_SME_FT_UPDATE_KEY;
 	msg->length = msglen;
 
@@ -302,7 +301,7 @@ QDF_STATUS sme_ft_send_update_key_ind(tHalHandle hal, uint32_t session_id,
 	keymaterial->key[0].paeRole = ftkey_info->paeRole;
 	keymaterial->key[0].keyLength = ftkey_info->keyLength;
 
-	if (ftkey_info->keyLength && ftkey_info->Key) {
+	if (ftkey_info->keyLength) {
 		qdf_mem_copy(&keymaterial->key[0].key, ftkey_info->Key,
 				ftkey_info->keyLength);
 		if (ftkey_info->keyLength == 16) {

@@ -352,7 +352,6 @@ static QDF_STATUS init_sme_cmd_list(tpAniSirGlobal pMac)
 	}
 
 	status = QDF_STATUS_SUCCESS;
-	qdf_mem_set(pMac->sme.pSmeCmdBufAddr, sme_cmd_ptr_ary_sz, 0);
 	for (cmd_idx = 0; cmd_idx < pMac->sme.totalSmeCmd; cmd_idx++) {
 		/*
 		 * Since total size of all commands together can be huge chunk
@@ -1018,6 +1017,15 @@ sme_process_cmd:
 			  pCommand->command);
 		csr_ll_unlock(&pMac->sme.smeCmdActiveList);
 		status = csr_tdls_process_cmd(pMac, pCommand);
+		if (!QDF_IS_STATUS_SUCCESS(status)) {
+			if (csr_ll_remove_entry(&pMac->sme.smeCmdActiveList,
+						&pCommand->Link,
+						LL_ACCESS_LOCK)) {
+				qdf_mem_zero(&pCommand->u.tdlsCmd,
+					     sizeof(tTdlsCmd));
+				csr_release_command(pMac, pCommand);
+			}
+		}
 		break;
 #endif
 	case e_sme_command_set_hw_mode:
@@ -2249,7 +2257,6 @@ QDF_STATUS sme_set_ese_beacon_request(tHalHandle hHal, const uint8_t sessionId,
 	pSmeRrmContext->eseBcnReqInProgress = true;
 
 	sms_log(pMac, LOGE, "Sending Beacon Report Req to SME");
-	qdf_mem_zero(pSmeBcnReportReq, sizeof(tSirBeaconReportReqInd));
 
 	pSmeBcnReportReq->messageType = eWNI_SME_BEACON_REPORT_REQ_IND;
 	pSmeBcnReportReq->length = sizeof(tSirBeaconReportReqInd);
@@ -3507,7 +3514,6 @@ QDF_STATUS sme_get_ap_channel_from_scan_cache(tHalHandle hal_handle,
 				FL("scan_filter mem alloc failed"));
 		return QDF_STATUS_E_FAILURE;
 	} else {
-		qdf_mem_set(scan_filter, sizeof(tCsrScanResultFilter), 0);
 		qdf_mem_set(&first_ap_profile, sizeof(tSirBssDescription), 0);
 
 		if (NULL == profile) {
@@ -6566,8 +6572,10 @@ QDF_STATUS sme_set_preferred_network_list(tHalHandle hHal,
 			 sessionId, request->ucNetworksCount));
 	status = sme_acquire_global_lock(&pMac->sme);
 	if (QDF_IS_STATUS_SUCCESS(status)) {
-		sme_set_ps_preferred_network_list(hHal, request, sessionId,
-				callback_routine, callback_context);
+		status = sme_set_ps_preferred_network_list(hHal, request,
+							   sessionId,
+							   callback_routine,
+							   callback_context);
 		sme_release_global_lock(&pMac->sme);
 	}
 
@@ -6662,7 +6670,6 @@ QDF_STATUS sme_register_p2p_ack_ind_callback(tHalHandle hal,
 		sme_release_global_lock(&mac_ctx->sme);
 		return QDF_STATUS_E_NOMEM;
 		}
-		qdf_mem_zero(msg, sizeof(*msg));
 		msg->message_type = eWNI_SME_REGISTER_P2P_ACK_CB;
 		msg->length = sizeof(*msg);
 
@@ -6704,7 +6711,6 @@ QDF_STATUS sme_register_mgmt_frame_ind_callback(tHalHandle hal,
 			sme_release_global_lock(&mac_ctx->sme);
 			return QDF_STATUS_E_NOMEM;
 		}
-		qdf_mem_set(msg, sizeof(*msg), 0);
 		msg->message_type = eWNI_SME_REGISTER_MGMT_FRAME_CB;
 		msg->length          = sizeof(*msg);
 
@@ -6762,7 +6768,6 @@ QDF_STATUS sme_register_mgmt_frame(tHalHandle hHal, uint8_t sessionId,
 		if (NULL == pMsg)
 			status = QDF_STATUS_E_NOMEM;
 		else {
-			qdf_mem_set(pMsg, len, 0);
 			pMsg->messageType = eWNI_SME_REGISTER_MGMT_FRAME_REQ;
 			pMsg->length = len;
 			pMsg->sessionId = sessionId;
@@ -6824,7 +6829,6 @@ QDF_STATUS sme_deregister_mgmt_frame(tHalHandle hHal, uint8_t sessionId,
 		if (NULL == pMsg)
 			status = QDF_STATUS_E_NOMEM;
 		else {
-			qdf_mem_set(pMsg, len, 0);
 			pMsg->messageType = eWNI_SME_REGISTER_MGMT_FRAME_REQ;
 			pMsg->length = len;
 			pMsg->registerFrame = false;
@@ -7835,48 +7839,45 @@ sme_handle_generic_change_country_code(tpAniSirGlobal mac_ctx,
 {
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	v_REGDOMAIN_t reg_domain_id = 0;
-	bool supplicant_priority =
+	bool user_ctry_priority =
 		mac_ctx->roam.configParam.fSupplicantCountryCodeHasPriority;
 	tAniGenericChangeCountryCodeReq *msg = pMsgBuf;
 
 	sms_log(mac_ctx, LOG1, FL(" called"));
 
-	/* Set the country code given by userspace when 11dOriginal is false
-	 * when 11doriginal is True,is_11d_country =0 and
-	 * fSupplicantCountryCodeHasPriority = 0, then revert the country code,
-	 * and return failure
-	 */
-	if (mac_ctx->roam.configParam.Is11dSupportEnabledOriginal == true
-	    && !mac_ctx->is_11d_hint && !supplicant_priority) {
-		sms_log(mac_ctx, LOGW,
-			FL("Incorrect country req, nullify this"));
+	if (!mac_ctx->is_11d_hint) {
+		if (user_ctry_priority)
+			mac_ctx->roam.configParam.Is11dSupportEnabled = false;
+		else {
+			if (mac_ctx->roam.configParam.Is11dSupportEnabled &&
+			    mac_ctx->scan.countryCode11d[0] != 0) {
 
-		/* we have got a request for a country that should not have been
-		 * added since the STA is associated; nullify this request. If
-		 * both countryCode11d[0] and countryCode11d[1] are zero, revert
-		 * it to World domain to avoid from causing cfg80211 call trace.
-		 */
-		if ((mac_ctx->scan.countryCode11d[0] == 0)
-		    && (mac_ctx->scan.countryCode11d[1] == 0))
-			status = csr_get_regulatory_domain_for_country(mac_ctx,
-					"00", (v_REGDOMAIN_t *) &reg_domain_id,
-					SOURCE_11D);
-		else
-			status = csr_get_regulatory_domain_for_country(mac_ctx,
+				sms_log(mac_ctx, LOGW,
+					FL("restore 11d"));
+
+				status = csr_get_regulatory_domain_for_country(
+					mac_ctx,
 					mac_ctx->scan.countryCode11d,
-					(v_REGDOMAIN_t *) &reg_domain_id,
+					&reg_domain_id,
 					SOURCE_11D);
 
-		return QDF_STATUS_E_FAILURE;
+				return QDF_STATUS_E_FAILURE;
+			}
+		}
+	} else {
+		/* if kernel gets invalid country code; it
+		 *  resets the country code to world
+		 */
+		if (('0' != msg->countryCode[0]) ||
+		    ('0' != msg->countryCode[1]))
+			qdf_mem_copy(mac_ctx->scan.countryCode11d,
+				     msg->countryCode,
+				     WNI_CFG_COUNTRY_CODE_LEN);
+		mac_ctx->is_11d_hint = false;
 	}
 
-	/* if Supplicant country code has priority, disable 11d */
-	if (supplicant_priority && !mac_ctx->is_11d_hint)
-		mac_ctx->roam.configParam.Is11dSupportEnabled = false;
-
-	qdf_mem_copy(mac_ctx->scan.countryCode11d, msg->countryCode,
-		     WNI_CFG_COUNTRY_CODE_LEN);
-	qdf_mem_copy(mac_ctx->scan.countryCodeCurrent, msg->countryCode,
+	qdf_mem_copy(mac_ctx->scan.countryCodeCurrent,
+		     msg->countryCode,
 		     WNI_CFG_COUNTRY_CODE_LEN);
 
 	/* get the channels based on new cc */
@@ -7886,21 +7887,19 @@ sme_handle_generic_change_country_code(tpAniSirGlobal mac_ctx,
 		sms_log(mac_ctx, LOGE, FL("fail to get Channels"));
 		return status;
 	}
+
 	/* reset info based on new cc, and we are done */
 	csr_apply_channel_power_info_wrapper(mac_ctx);
 
-	/* Country code  Changed, Purge Only scan result
-	 * which does not have channel number belong to 11d
-	 * channel list
-	 */
 	csr_scan_filter_results(mac_ctx);
-	/* Do active scans after the country is set by User hints or
+
+	/* scans after the country is set by User hints or
 	 * Country IE
 	 */
 	mac_ctx->scan.curScanType = eSIR_ACTIVE_SCAN;
-	mac_ctx->is_11d_hint = false;
 
 	sme_disconnect_connected_sessions(mac_ctx);
+
 	sms_log(mac_ctx, LOG1, FL(" returned"));
 	return QDF_STATUS_SUCCESS;
 }
@@ -10407,7 +10406,6 @@ QDF_STATUS sme_update_tdls_peer_state(tHalHandle hHal,
 		return QDF_STATUS_E_NOMEM;
 	}
 
-	qdf_mem_zero(pTdlsPeerStateParams, sizeof(*pTdlsPeerStateParams));
 	qdf_mem_copy(&pTdlsPeerStateParams->peerMacAddr,
 			&peerStateParams->peerMacAddr, sizeof(tSirMacAddr));
 	pTdlsPeerStateParams->vdevId = peerStateParams->vdevId;
@@ -10551,7 +10549,6 @@ QDF_STATUS sme_send_tdls_chan_switch_req(tHalHandle hal,
 		sme_release_global_lock(&mac->sme);
 		return QDF_STATUS_E_FAILURE;
 	}
-	qdf_mem_zero(chan_switch_params, sizeof(*chan_switch_params));
 
 	switch (ch_switch_params->tdls_off_ch_mode) {
 	case ENABLE_CHANSWITCH:
@@ -11623,7 +11620,6 @@ QDF_STATUS sme_dcc_clear_stats(tHalHandle hHal, uint32_t vdev_id,
 		goto end;
 	}
 
-	qdf_mem_zero(request, sizeof(*request));
 	request->vdev_id = vdev_id;
 	request->dcc_stats_bitmap = dcc_stats_bitmap;
 
@@ -12035,33 +12031,6 @@ QDF_STATUS sme_set_ht2040_mode(tHalHandle hHal, uint8_t sessionId,
 	return status;
 }
 
-/* ---------------------------------------------------------------------------
-
-    \fn sme_set_phy_cb_mode24_g
-
-    \brief Changes PHY channel bonding mode
-
-    \param hHal - The handle returned by mac_open.
-
-    \param cbMode new channel bonding mode which is to set
-
-    \return QDF_STATUS  SUCCESS.
-
-   -------------------------------------------------------------------------------*/
-QDF_STATUS sme_set_phy_cb_mode24_g(tHalHandle hHal, ePhyChanBondState phyCBMode)
-{
-	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
-
-	if (NULL == pMac) {
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-			  "%s: invalid context", __func__);
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	pMac->roam.configParam.channelBondingMode24GHz = phyCBMode;
-
-	return QDF_STATUS_SUCCESS;
-}
 #endif
 
 /*
@@ -12245,7 +12214,6 @@ QDF_STATUS sme_update_access_policy_vendor_ie(tHalHandle hal,
 		return QDF_STATUS_E_FAILURE;
 	}
 
-	qdf_mem_set(msg, msg_len, 0);
 	msg->msg_type = (uint16_t)eWNI_SME_UPDATE_ACCESS_POLICY_VENDOR_IE;
 	msg->length = (uint16_t)msg_len;
 
@@ -12260,6 +12228,140 @@ QDF_STATUS sme_update_access_policy_vendor_ie(tHalHandle hal,
 	status = cds_send_mb_message_to_mac(msg);
 
 	return status;
+}
+
+/**
+ * sme_update_short_retry_limit_threshold() - update short frame retry limit TH
+ * @hal: Handle returned by mac_open
+ * @session_id: Session ID on which short frame retry limit needs to be
+ * updated to FW
+ * @short_limit_count_th: Retry count TH to retry short frame.
+ *
+ * This function is used to configure count to retry short frame.
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_update_short_retry_limit_threshold(tHalHandle hal_handle,
+		struct sme_short_retry_limit *short_retry_limit_th)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal_handle);
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	struct sme_short_retry_limit *srl;
+	cds_msg_t msg;
+
+	srl = qdf_mem_malloc(sizeof(*srl));
+	if (NULL == srl) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			"%s: fail to alloc short retry limit", __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+	sms_log(mac_ctx, LOG1, FL("session_id %d short retry limit count: %d"),
+		short_retry_limit_th->session_id,
+		short_retry_limit_th->short_retry_limit);
+
+	srl->session_id = short_retry_limit_th->session_id;
+	srl->short_retry_limit = short_retry_limit_th->short_retry_limit;
+
+	qdf_mem_zero(&msg, sizeof(msg));
+	msg.type = SIR_HAL_SHORT_RETRY_LIMIT_CNT;
+	msg.reserved = 0;
+	msg.bodyptr = srl;
+	status = cds_mq_post_message(QDF_MODULE_ID_WMA, &msg);
+	if (status != QDF_STATUS_SUCCESS) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			FL("Not able to post short retry limit count to WDA"));
+			qdf_mem_free(srl);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return status;
+}
+
+/**
+ * sme_update_long_retry_limit_threshold() - update long retry limit TH
+ * @hal: Handle returned by mac_open
+ * @session_id: Session ID on which long frames retry TH needs to be updated
+ * to FW
+ * @long_limit_count_th: Retry count to retry long frame.
+ *
+ * This function is used to configure TH to retry long frame.
+ *
+ * Return: QDF_STATUS
+*/
+QDF_STATUS sme_update_long_retry_limit_threshold(tHalHandle hal_handle,
+		struct sme_long_retry_limit  *long_retry_limit_th)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal_handle);
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	struct sme_long_retry_limit *lrl;
+	cds_msg_t msg;
+
+	lrl = qdf_mem_malloc(sizeof(*lrl));
+	if (NULL == lrl) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+		"%s: fail to alloc long retry limit", __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+	sms_log(mac_ctx, LOG1, FL("session_id %d long retry limit count: %d"),
+		long_retry_limit_th->session_id,
+		long_retry_limit_th->long_retry_limit);
+
+	lrl->session_id = long_retry_limit_th->session_id;
+	lrl->long_retry_limit = long_retry_limit_th->long_retry_limit;
+
+	qdf_mem_zero(&msg, sizeof(msg));
+	msg.type = SIR_HAL_LONG_RETRY_LIMIT_CNT;
+	msg.reserved = 0;
+	msg.bodyptr = lrl;
+	status = cds_mq_post_message(QDF_MODULE_ID_WMA, &msg);
+
+	if (status != QDF_STATUS_SUCCESS) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			FL("Not able to post long retry limit count to WDA"));
+		qdf_mem_free(lrl);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return status;
+}
+
+/**
+ * sme_update_sta_inactivity_timeout(): Update sta_inactivity_timeout to FW
+ * @hal: Handle returned by mac_open
+ * @session_id: Session ID on which sta_inactivity_timeout needs
+ * to be updated to FW
+ * @sta_inactivity_timeout: sta inactivity timeout.
+ *
+ * If a station does not send anything in sta_inactivity_timeout seconds, an
+ * empty data frame is sent to it in order to verify whether it is
+ * still in range. If this frame is not ACKed, the station will be
+ * disassociated and then deauthenticated.
+ *
+ * Return: QDF_STATUS_SUCCESS or non-zero on failure.
+*/
+QDF_STATUS sme_update_sta_inactivity_timeout(tHalHandle hal_handle,
+		 struct sme_sta_inactivity_timeout  *sta_inactivity_timer)
+{
+	struct sme_sta_inactivity_timeout *inactivity_time;
+	void *wma_handle;
+
+	wma_handle = cds_get_context(QDF_MODULE_ID_WMA);
+	inactivity_time = qdf_mem_malloc(sizeof(*inactivity_time));
+	if (NULL == inactivity_time) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			"%s: fail to alloc inactivity_time", __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_INFO,
+			FL("sta_inactivity_timeout: %d"),
+			sta_inactivity_timer->sta_inactivity_timeout);
+	inactivity_time->session_id = sta_inactivity_timer->session_id;
+	inactivity_time->sta_inactivity_timeout =
+		sta_inactivity_timer->sta_inactivity_timeout;
+
+	wma_update_sta_inactivity_timeout(wma_handle,
+				inactivity_time);
+	return QDF_STATUS_SUCCESS;
 }
 
 /**
@@ -12697,8 +12799,6 @@ QDF_STATUS sme_init_thermal_info(tHalHandle hHal, tSmeThermalParams thermalParam
 		return QDF_STATUS_E_NOMEM;
 	}
 
-	qdf_mem_zero((void *)pWmaParam, sizeof(t_thermal_mgmt));
-
 	pWmaParam->thermalMgmtEnabled = thermalParam.smeThermalMgmtEnabled;
 	pWmaParam->throttlePeriod = thermalParam.smeThrottlePeriod;
 
@@ -12881,8 +12981,6 @@ QDF_STATUS sme_ap_disable_intra_bss_fwd(tHalHandle hHal, uint8_t sessionId,
 		return QDF_STATUS_E_NOMEM;
 	}
 
-	qdf_mem_zero(pSapDisableIntraFwd, sizeof(tDisableIntraBssFwd));
-
 	pSapDisableIntraFwd->sessionId = sessionId;
 	pSapDisableIntraFwd->disableintrabssfwd = disablefwd;
 
@@ -12967,8 +13065,6 @@ QDF_STATUS sme_stats_ext_request(uint8_t session_id, tpStatsExtRequestReq input)
 	if (data == NULL) {
 		return QDF_STATUS_E_NOMEM;
 	}
-
-	qdf_mem_zero(data, data_len);
 	data->vdev_id = session_id;
 	data->request_data_len = input->request_data_len;
 	if (input->request_data_len) {
@@ -13705,7 +13801,6 @@ QDF_STATUS sme_set_epno_list(tHalHandle hal,
 		return QDF_STATUS_E_NOMEM;
 	}
 
-	qdf_mem_zero(req_msg, len);
 	req_msg->num_networks = input->num_networks;
 	req_msg->request_id = input->request_id;
 	req_msg->session_id = input->session_id;
@@ -13785,7 +13880,6 @@ QDF_STATUS sme_set_passpoint_list(tHalHandle hal,
 		return QDF_STATUS_E_NOMEM;
 	}
 
-	qdf_mem_zero(req_msg, len);
 	req_msg->num_networks = input->num_networks;
 	req_msg->request_id = input->request_id;
 	req_msg->session_id = input->session_id;
@@ -13849,7 +13943,6 @@ QDF_STATUS sme_reset_passpoint_list(tHalHandle hal,
 		return QDF_STATUS_E_NOMEM;
 	}
 
-	qdf_mem_zero(req_msg, sizeof(*req_msg));
 	req_msg->request_id = input->request_id;
 	req_msg->session_id = input->session_id;
 
@@ -14699,7 +14792,6 @@ QDF_STATUS sme_configure_modulated_dtim(tHalHandle h_hal, uint8_t session_id,
 
 	if (QDF_STATUS_SUCCESS == status) {
 
-		qdf_mem_zero((void *)iwcmd, sizeof(*iwcmd));
 		iwcmd->param_value = modulated_dtim;
 		iwcmd->param_vdev_id = session_id;
 		iwcmd->param_id = GEN_PARAM_MODULATED_DTIM;
@@ -14753,13 +14845,12 @@ QDF_STATUS sme_wifi_start_logger(tHalHandle hal,
 		return QDF_STATUS_E_NOMEM;
 	}
 
-	qdf_mem_zero(req_msg, len);
-
 	req_msg->verbose_level = start_log.verbose_level;
 	req_msg->is_iwpriv_command = start_log.is_iwpriv_command;
 	req_msg->ring_id = start_log.ring_id;
 	req_msg->ini_triggered = start_log.ini_triggered;
 	req_msg->user_triggered = start_log.user_triggered;
+	req_msg->size = start_log.size;
 
 	status = sme_acquire_global_lock(&mac->sme);
 	if (status != QDF_STATUS_SUCCESS) {
@@ -15260,8 +15351,6 @@ QDF_STATUS sme_pdev_set_pcl(tHalHandle hal,
 		sms_log(mac, LOGE, FL("qdf_mem_malloc failed"));
 		return QDF_STATUS_E_NOMEM;
 	}
-
-	qdf_mem_zero(req_msg, len);
 
 	for (i = 0; i < msg.pcl_len; i++) {
 		req_msg->pcl_list[i] =  msg.pcl_list[i];
@@ -16061,7 +16150,6 @@ void sme_send_disassoc_req_frame(tHalHandle hal, uint8_t session_id,
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status))
 		return;
 
-	qdf_mem_set(msg, sizeof(struct sme_send_disassoc_frm_req), 0);
 	msg->msg_type = (uint16_t) eWNI_SME_SEND_DISASSOC_FRAME;
 
 	msg->length = (uint16_t) sizeof(struct sme_send_disassoc_frm_req);
@@ -16669,6 +16757,7 @@ QDF_STATUS sme_set_default_scan_ie(tHalHandle hal, uint16_t session_id,
 	return status;
 }
 
+#ifdef WLAN_FEATURE_DISA
 /**
  * sme_encrypt_decrypt_msg() - handles encrypt/decrypt mesaage
  * @hal: HAL handle
@@ -16799,6 +16888,7 @@ QDF_STATUS sme_encrypt_decrypt_msg_deregister_callback(tHalHandle h_hal)
 	}
 	return status;
 }
+#endif
 
 QDF_STATUS sme_set_cts2self_for_p2p_go(tHalHandle hal_handle)
 {
@@ -16818,4 +16908,50 @@ QDF_STATUS sme_set_cts2self_for_p2p_go(tHalHandle hal_handle)
 		return QDF_STATUS_E_FAILURE;
 	}
 	return QDF_STATUS_SUCCESS;
+}
+/**
+ * sme_update_tx_fail_cnt_threshold() - update tx fail count Threshold
+ * @hal: Handle returned by mac_open
+ * @session_id: Session ID on which tx fail count needs to be updated to FW
+ * @tx_fail_count: Count for tx fail threshold after which FW will disconnect
+ *
+ * This function is used to set tx fail count threshold to firmware.
+ * firmware will issue disocnnect with peer device once this threshold is
+ * reached.
+ *
+ * Return: Return QDF_STATUS, otherwise appropriate failure code
+ */
+QDF_STATUS sme_update_tx_fail_cnt_threshold(tHalHandle hal_handle,
+				uint8_t session_id, uint32_t tx_fail_count)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal_handle);
+	QDF_STATUS status = QDF_STATUS_E_FAILURE;
+	struct sme_tx_fail_cnt_threshold *tx_fail_cnt;
+	cds_msg_t msg;
+
+	tx_fail_cnt = qdf_mem_malloc(sizeof(*tx_fail_cnt));
+	if (NULL == tx_fail_cnt) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			"%s: fail to alloc filter_param", __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+	sms_log(mac_ctx, LOG1,
+			FL("session_id %d tx_fail_count: %d"),
+			session_id, tx_fail_count);
+	tx_fail_cnt->session_id = session_id;
+	tx_fail_cnt->tx_fail_cnt_threshold = tx_fail_count;
+
+	qdf_mem_zero(&msg, sizeof(cds_msg_t));
+	msg.type = SIR_HAL_UPDATE_TX_FAIL_CNT_TH;
+	msg.reserved = 0;
+	msg.bodyptr = tx_fail_cnt;
+	status = cds_mq_post_message(QDF_MODULE_ID_WMA, &msg);
+
+	if (!QDF_IS_STATUS_SUCCESS(status)) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				FL("Not able to post Tx fail count message to WDA"));
+		qdf_mem_free(tx_fail_cnt);
+	}
+
+	return status;
 }

@@ -351,15 +351,10 @@ static int wlan_hdd_probe(struct device *dev, void *bdev, const hif_bus_id *bid,
 	*/
 	hdd_request_pm_qos(dev, DISABLE_KRAIT_IDLE_PS_VAL);
 
-	if (reinit) {
+	if (reinit)
 		cds_set_recovery_in_progress(true);
-	} else {
-		ret = hdd_init();
-
-		if (ret)
-			goto out;
+	else
 		cds_set_load_in_progress(true);
-	}
 
 	hdd_init_qdf_ctx(dev, bdev, bus_type, (const struct hif_bus_id *)bid);
 
@@ -390,8 +385,6 @@ err_hdd_deinit:
 		cds_set_recovery_in_progress(false);
 	else
 		cds_set_load_in_progress(false);
-	hdd_deinit();
-out:
 	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_DRIVER_INIT);
 	hdd_remove_pm_qos(dev);
 	return ret;
@@ -430,8 +423,6 @@ static void wlan_hdd_remove(struct device *dev)
 	} else {
 		__hdd_wlan_exit();
 	}
-
-	hdd_deinit();
 
 	pr_info("%s: Driver De-initialized\n", WLAN_MODULE_NAME);
 }
@@ -659,8 +650,13 @@ static int __wlan_hdd_bus_resume(void)
 {
 	hdd_context_t *hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 	void *hif_ctx;
-	int status = wlan_hdd_validate_context(hdd_ctx);
+	int status;
+	QDF_STATUS qdf_status;
 
+	if (cds_is_driver_recovering())
+		return 0;
+
+	status = wlan_hdd_validate_context(hdd_ctx);
 	if (status)
 		return status;
 
@@ -674,15 +670,28 @@ static int __wlan_hdd_bus_resume(void)
 		return -EINVAL;
 
 	status = hif_bus_resume(hif_ctx);
-	QDF_BUG(!status);
+	if (status)
+		goto out;
 
 	status = wma_bus_resume();
-	QDF_BUG(!status);
+	if (status)
+		goto out;
 
-	status = ol_txrx_bus_resume();
-	QDF_BUG(!status);
+	qdf_status = ol_txrx_bus_resume();
+	status = qdf_status_to_os_return(qdf_status);
+	if (status)
+		goto out;
 
 	hdd_info("resume done");
+
+	return 0;
+
+out:
+	if (cds_is_driver_recovering())
+		return 0;
+
+	QDF_BUG(false);
+
 	return status;
 }
 
@@ -710,8 +719,12 @@ static int __wlan_hdd_bus_resume_noirq(void)
 {
 	hdd_context_t *hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 	void *hif_ctx;
-	int status = wlan_hdd_validate_context(hdd_ctx);
+	int status;
 
+	if (cds_is_driver_recovering())
+		return 0;
+
+	status = wlan_hdd_validate_context(hdd_ctx);
 	if (status) {
 		hdd_err("Invalid HDD context: %d", status);
 		return status;

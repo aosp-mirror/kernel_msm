@@ -1,4 +1,4 @@
-/*
+				/*
  * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
@@ -183,7 +183,6 @@
 #define WMA_IPV6_PROTO_GET_MIN_LEN        21
 #define WMA_IPV6_PKT_INFO_GET_MIN_LEN     62
 #define WMA_ICMPV6_SUBTYPE_GET_MIN_LEN    55
-
 /**
  * ds_mode: distribution system mode
  * @IEEE80211_NO_DS: NO DS at either side
@@ -253,15 +252,15 @@ enum ds_mode {
 #define WMA_TARGET_REQ_TYPE_VDEV_DEL   0x3
 
 #define WMA_PEER_ASSOC_CNF_START 0x01
-#define WMA_PEER_ASSOC_TIMEOUT (3000) /* 3 seconds */
+#define WMA_PEER_ASSOC_TIMEOUT (6000) /* 6 seconds */
 
 #define WMA_DELETE_STA_RSP_START 0x02
 #define WMA_DELETE_STA_TIMEOUT (6000) /* 6 seconds */
 
 #define WMA_DEL_P2P_SELF_STA_RSP_START 0x03
 
-#define WMA_VDEV_START_REQUEST_TIMEOUT (3000)   /* 3 seconds */
-#define WMA_VDEV_STOP_REQUEST_TIMEOUT  (3000)   /* 3 seconds */
+#define WMA_VDEV_START_REQUEST_TIMEOUT (6000)   /* 6 seconds */
+#define WMA_VDEV_STOP_REQUEST_TIMEOUT  (6000)   /* 6 seconds */
 
 #define WMA_TGT_INVALID_SNR 0x127
 
@@ -388,6 +387,7 @@ enum ds_mode {
 #define WMA_NEXT_20MHZ_START_CH_DIFF 4
 
 #define WMA_DEFAULT_HW_MODE_INDEX 0xFFFF
+#define TWO_THIRD (2/3)
 
 /**
  * WMA hardware mode list bit-mask definitions.
@@ -493,7 +493,7 @@ typedef struct probeTime_dwellTime {
 
 static const t_probeTime_dwellTime
 	probe_time_dwell_time_map[WMA_DWELL_TIME_PROBE_TIME_MAP_SIZE] = {
-	{28, 0},                /* 0 SSID */
+	{28, 11},               /* 0 SSID */
 	{28, 20},               /* 1 SSID */
 	{28, 20},               /* 2 SSID */
 	{28, 20},               /* 3 SSID */
@@ -510,6 +510,9 @@ typedef void (*txFailIndCallback)(uint8_t *peer_mac, uint8_t seqNo);
 typedef void (*encrypt_decrypt_cb)(struct sir_encrypt_decrypt_rsp_params
 		*encrypt_decrypt_rsp_params);
 
+
+typedef void (*tp_wma_packetdump_cb)(qdf_nbuf_t netbuf,
+			uint8_t status, uint8_t vdev_id, uint8_t type);
 
 /**
  * enum t_wma_drv_type - wma driver type
@@ -1058,7 +1061,6 @@ struct wma_txrx_node {
 	int8_t max_tx_power;
 	uint32_t nwType;
 	void *staKeyParams;
-	bool ps_enabled;
 	uint32_t dtim_policy;
 	uint32_t peer_count;
 	bool roam_synch_in_progress;
@@ -1191,6 +1193,7 @@ struct wmi_desc_t {
 	pWMAAckFnTxComp  ota_post_proc_cb;
 	qdf_nbuf_t	 nbuf;
 	uint32_t	 desc_id;
+	uint8_t vdev_id;
 };
 
 /**
@@ -1601,7 +1604,11 @@ typedef struct {
 	bool nan_datapath_enabled;
 	QDF_STATUS (*pe_ndp_event_handler)(tpAniSirGlobal mac_ctx,
 					   cds_msg_t *msg);
+	bool fw_timeout_crash;
 	bool sub_20_support;
+	tp_wma_packetdump_cb wma_mgmt_tx_packetdump_cb;
+	tp_wma_packetdump_cb wma_mgmt_rx_packetdump_cb;
+	tSirLLStatsResults *link_stats_results;
 } t_wma_handle, *tp_wma_handle;
 
 /**
@@ -2189,7 +2196,6 @@ void ieee80211_mark_dfs(struct ieee80211com *ic,
 			struct dfs_ieee80211_channel *ichan);
 int wma_dfs_indicate_radar(struct ieee80211com *ic,
 			   struct dfs_ieee80211_channel *ichan);
-uint16_t dfs_usenol(struct ieee80211com *ic);
 
 QDF_STATUS wma_trigger_uapsd_params(tp_wma_handle wma_handle, uint32_t vdev_id,
 				    tp_wma_trigger_uapsd_params
@@ -2324,3 +2330,9 @@ QDF_STATUS wma_start_oem_data_req(tp_wma_handle wma_handle,
 
 QDF_STATUS wma_enable_disable_caevent_ind(tp_wma_handle wma_handle,
 				uint8_t val);
+void wma_register_packetdump_callback(
+		tp_wma_packetdump_cb wma_mgmt_tx_packetdump_cb,
+		tp_wma_packetdump_cb wma_mgmt_rx_packetdump_cb);
+void wma_deregister_packetdump_callback(void);
+void wma_update_sta_inactivity_timeout(tp_wma_handle wma,
+		struct sme_sta_inactivity_timeout  *sta_inactivity_timer);

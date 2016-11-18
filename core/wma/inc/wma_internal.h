@@ -597,6 +597,8 @@ int32_t wma_find_vdev_by_type(tp_wma_handle wma, int32_t type);
 void wma_set_vdev_intrabss_fwd(tp_wma_handle wma_handle,
 				      tpDisableIntraBssFwd pdis_intra_fwd);
 
+void wma_delete_bss_ho_fail(tp_wma_handle wma, tpDeleteBssParams params);
+
 /*
  * wma_mgmt.c functions declarations
  */
@@ -1169,13 +1171,6 @@ struct dfs_ieee80211_channel *wma_dfs_configure_channel(
 						*req);
 void wma_set_sap_keepalive(tp_wma_handle wma, uint8_t vdev_id);
 
-#ifdef REMOVE_PKT_LOG
-static inline void wma_set_wifi_start_packet_stats(void *wma_handle,
-		struct sir_wifi_start_log *start_log)
-{
-	return;
-}
-#endif
 int wma_rssi_breached_event_handler(void *handle,
 				u_int8_t  *cmd_param_info, u_int32_t len);
 #ifdef WLAN_FEATURE_MEMDUMP
@@ -1214,7 +1209,15 @@ QDF_STATUS wma_process_hal_pwr_dbg_cmd(WMA_HANDLE handle,
 				       struct sir_mac_pwr_dbg_cmd *
 				       sir_pwr_dbg_params);
 
+#ifdef WLAN_FEATURE_DISA
 int wma_encrypt_decrypt_msg_handler(void *handle, uint8_t *data,
 			uint32_t data_len);
+#else
+static inline int wma_encrypt_decrypt_msg_handler(void *handle, uint8_t *data,
+			uint32_t data_len)
+{
+	return 0;
+}
+#endif
 
 #endif

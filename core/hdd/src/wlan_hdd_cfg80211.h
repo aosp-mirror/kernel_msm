@@ -289,6 +289,9 @@ typedef enum {
  *     indicated through an event using the same sub command through
  *     @QCA_WLAN_VENDOR_ATTR_SAP_CONDITIONAL_CHAN_SWITCH_STATUS. Attributes are
  *     listed in qca_wlan_vendor_attr_sap_conditional_chan_switch
+ * @QCA_NL80211_VENDOR_SUBCMD_CONFIGURE_TDLS: Configure the TDLS behavior
+ *	in the host driver. The different TDLS configurations are defined
+ *	by the attributes in enum qca_wlan_vendor_attr_tdls_configuration.
  */
 
 enum qca_nl80211_vendor_subcmds {
@@ -432,6 +435,9 @@ enum qca_nl80211_vendor_subcmds {
 
 	/* Encrypt/Decrypt command */
 	QCA_NL80211_VENDOR_SUBCMD_ENCRYPTION_TEST = 137,
+
+	/* Configure the TDLS mode from user space */
+	QCA_NL80211_VENDOR_SUBCMD_CONFIGURE_TDLS = 143,
 };
 
 /**
@@ -1646,6 +1652,14 @@ enum qca_wlan_vendor_attr_ll_stats_results {
 	/* Unsigned 32bit value to indicate ll stats result type */
 	QCA_WLAN_VENDOR_ATTR_LL_STATS_TYPE,
 
+	/* Unsigned 32bit value */
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_RADIO_NUM_TX_LEVELS,
+
+	/* Unsigned 32bit value
+	 * Number of msecs the radio spent in transmitting for each power level
+	 */
+	QCA_WLAN_VENDOR_ATTR_LL_STATS_RADIO_TX_TIME_PER_LEVEL,
+
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_LL_STATS_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_LL_STATS_MAX =
@@ -2231,6 +2245,9 @@ enum qca_wlan_vendor_attr_sap_conditional_chan_switch {
 #define WIFI_FEATURE_LOGGER             0x20000  /* WiFi Logger */
 #define WIFI_FEATURE_HAL_EPNO           0x40000  /* WiFi PNO enhanced */
 #define WIFI_FEATURE_RSSI_MONITOR       0x80000  /* RSSI Monitor */
+#define WIFI_FEATURE_MKEEP_ALIVE        0x100000  /* WiFi mkeep_alive */
+#define WIFI_FEATURE_CONFIG_NDO         0x200000  /* ND offload configure */
+#define WIFI_FEATURE_TX_TRANSMIT_POWER  0x400000  /* Tx transmit power levels */
 
 /**
  * enum wifi_logger_supported_features - values for supported logger features
@@ -2325,6 +2342,13 @@ enum qca_wlan_vendor_acs_hw_mode {
 	QCA_ACS_MODE_IEEE80211ANY,
 };
 
+#define CFG_NON_AGG_RETRY_MAX                  (31)
+#define CFG_AGG_RETRY_MAX                      (31)
+#define CFG_MGMT_RETRY_MAX                     (31)
+#define CFG_CTRL_RETRY_MAX                     (31)
+#define CFG_PROPAGATION_DELAY_MAX              (63)
+#define CFG_AGG_RETRY_MIN                      (5)
+
 /**
  * enum qca_access_policy - access control policy
  *
@@ -2370,6 +2394,13 @@ enum qca_ignore_assoc_disallowed {
  *      Tx aggregation size (8-bit unsigned value)
  * @QCA_WLAN_VENDOR_ATTR_CONFIG_RX_MPDU_AGGREGATION:
  *       Rx aggregation size (8-bit unsigned value)
+ * @QCA_WLAN_VENDOR_ATTR_CONFIG_NON_AGG_RETRY:
+ *                                   Non aggregrate/11g sw retry threshold
+ * @QCA_WLAN_VENDOR_ATTR_CONFIG_AGG_RETRY: aggregrate sw retry threshold
+ * @QCA_WLAN_VENDOR_ATTR_CONFIG_MGMT_RETRY: management frame sw retry threshold
+ * @QCA_WLAN_VENDOR_ATTR_CONFIG_CTRL_RETRY: control frame sw retry threshold
+ * @QCA_WLAN_VENDOR_ATTR_CONFIG_PROPAGATION_DELAY:
+ *			     propagation delay for 2G/5G band (units in us)
  * @QCA_WLAN_VENDOR_ATTR_CONFIG_SCAN_DEFAULT_IES: Update the default scan IEs
  * @QCA_WLAN_VENDOR_ATTR_CONFIG_GENERIC_COMMAND:
  *                         Unsigned 32-bit value attribute for generic commands
@@ -2391,6 +2422,9 @@ enum qca_ignore_assoc_disallowed {
  *                                      power save config to turn off/on qpower
  * @QCA_WLAN_VENDOR_ATTR_CONFIG_IGNORE_ASSOC_DISALLOWED: Ignore Assoc Disallowed
  *                                                       [MBO]
+ * @QCA_WLAN_VENDOR_ATTR_CONFIG_TX_FAIL_COUNT: Unsigned 32-bit value to
+ * configure the number of unicast TX fail packet count.
+ * The peer is disconnected once this threshold is reached.
  * @QCA_WLAN_VENDOR_ATTR_CONFIG_LAST: last config
  * @QCA_WLAN_VENDOR_ATTR_CONFIG_MAX: max config
  */
@@ -2405,6 +2439,22 @@ enum qca_wlan_vendor_config {
 
 	QCA_WLAN_VENDOR_ATTR_CONFIG_TX_MPDU_AGGREGATION,
 	QCA_WLAN_VENDOR_ATTR_CONFIG_RX_MPDU_AGGREGATION,
+
+	/* 8-bit unsigned value to configure the Non aggregrate/11g sw
+	 * retry threshold (0 disable, 31 max). */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_NON_AGG_RETRY,
+	/* 8-bit unsigned value to configure the aggregrate sw
+	 * retry threshold (0 disable, 31 max). */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_AGG_RETRY,
+	/* 8-bit unsigned value to configure the MGMT frame
+	 * retry threshold (0 disable, 31 max). */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_MGMT_RETRY,
+	/* 8-bit unsigned value to configure the CTRL frame
+	 * retry threshold (0 disable, 31 max). */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_CTRL_RETRY,
+	/* 8-bit unsigned value to configure the propagation delay for
+	 * 2G/5G band (0~63, units in us) */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_PROPAGATION_DELAY,
 
 	/* Attribute used to set scan default IEs to the driver.
 	*
@@ -2446,6 +2496,7 @@ enum qca_wlan_vendor_config {
 	/* Unsigned 8-bit, for setting qpower dynamically */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_QPOWER = 25,
 	QCA_WLAN_VENDOR_ATTR_CONFIG_IGNORE_ASSOC_DISALLOWED = 26,
+	QCA_WLAN_VENDOR_ATTR_CONFIG_TX_FAIL_COUNT,
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_LAST,
 	QCA_WLAN_VENDOR_ATTR_CONFIG_MAX =
@@ -2995,6 +3046,95 @@ enum qca_wlan_vendor_attr_encryption_test {
 		QCA_WLAN_VENDOR_ATTR_ENCRYPTION_TEST_AFTER_LAST - 1
 };
 
+/**
+ * enum qca_wlan_vendor_attr_tdls_configuration - Attributes for
+ * @QCA_NL80211_VENDOR_SUBCMD_CONFIGURE_TDLS configuration to the host driver.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_TRIGGER_MODE: Configure the TDLS trigger
+ *	mode in the host driver. enum qca_wlan_vendor_tdls_trigger_mode
+ *	represents the different TDLS trigger modes.
+ * @QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_TX_STATS_PERIOD: Duration (u32) within
+ *	which QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_TX_THRESHOLD number
+ *	of packets shall meet the criteria for implicit TDLS setup.
+ * @QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_TX_THRESHOLD: Number (u32) of Tx/Rx
+ *	packets within a duration.
+ *	QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_TX_STATS_PERIOD to initiate
+ *	a TDLS setup.
+ * @QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_DISCOVERY_PERIOD: Time (u32) to inititate
+ *	a TDLS Discovery to the Peer.
+ * @QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_MAX_DISCOVERY_ATTEMPT: Max number (u32) of
+ *	discovery attempts to know the TDLS capability of the peer. A peer is
+ *	marked as TDLS not capable if there is no response for all the attempts.
+ * @QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_IDLE_TIMEOUT: Represents a duration (u32)
+ *	within which QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_IDLE_PACKET_THRESHOLD
+ *	number of TX / RX frames meet the criteria for TDLS teardown.
+ * @QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_IDLE_PACKET_THRESHOLD: Minumum number
+ *	(u32) of Tx/Rx packets within a duration
+ *	CA_WLAN_VENDOR_ATTR_TDLS_CONFIG_IDLE_TIMEOUT to tear down a TDLS link
+ * @QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_SETUP_RSSI_THRESHOLD: Threshold
+ *	corresponding to the RSSI of the peer below which a TDLS
+ *	setup is triggered.
+ * @QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_TEARDOWN_RSSI_THRESHOLD: Threshold
+ *	corresponding to the RSSI of the peer above which
+ *	a TDLS teardown is triggered.
+ */
+enum qca_wlan_vendor_attr_tdls_configuration {
+	QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_TRIGGER_MODE = 1,
+
+	/* Attributes configuring the TDLS Implicit Trigger */
+	QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_TX_STATS_PERIOD = 2,
+	QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_TX_THRESHOLD = 3,
+	QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_DISCOVERY_PERIOD = 4,
+	QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_MAX_DISCOVERY_ATTEMPT = 5,
+	QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_IDLE_TIMEOUT = 6,
+	QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_IDLE_PACKET_THRESHOLD = 7,
+	QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_SETUP_RSSI_THRESHOLD = 8,
+	QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_TEARDOWN_RSSI_THRESHOLD = 9,
+
+	/* keep last */
+	QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_MAX =
+		QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_AFTER_LAST - 1
+};
+
+/**
+ * enum qca_wlan_vendor_tdls_trigger_mode: Represents the TDLS trigger mode in
+ *	the driver.
+ *
+ * The following are the different values for
+ * QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_TRIGGER_MODE.
+ *
+ * @QCA_WLAN_VENDOR_TDLS_TRIGGER_MODE_EXPLICIT: The trigger to
+ *	initiate/teardown the TDLS connection to a respective peer comes
+ *	 from the user space. wpa_supplicant provides the commands
+ *	TDLS_SETUP, TDLS_TEARDOWN, TDLS_DISCOVER to do this.
+ * @QCA_WLAN_VENDOR_TDLS_TRIGGER_MODE_IMPLICIT: Host driver triggers this TDLS
+ *	setup/teardown to the eligible peer once the configured criteria
+ *	(such as TX/RX threshold, RSSI) is met. The attributes
+ *	in QCA_WLAN_VENDOR_ATTR_TDLS_CONFIG_IMPLICIT_PARAMS correspond to
+ *	the different configuration criteria for the TDLS trigger from the
+ *	host driver.
+ * @QCA_WLAN_VENDOR_TDLS_TRIGGER_MODE_EXTERNAL: Enables the driver to trigger
+ *	the TDLS setup / teardown through the implicit mode, only to the
+ *	configured MAC addresses(wpa_supplicant, with tdls_external_control = 1,
+ *	configures the MAC address through TDLS_SETUP/TDLS_TEARDOWN commands).
+ *	External mode works on top of the implicit mode, thus the host Driver
+ *	is expected to be configured in TDLS Implicit mode too to operate in
+ *	External mode. Configuring External mode alone without Implicit
+ *	mode is invalid.
+ *
+ * All the above implementations work as expected only when the host driver
+ * advertises the capability WPA_DRIVER_FLAGS_TDLS_EXTERNAL_SETUP -
+ * representing that the TDLS message exchange is not internal to the host
+ * driver, but depends on wpa_supplicant to do the message exchange.
+ */
+enum qca_wlan_vendor_tdls_trigger_mode {
+	QCA_WLAN_VENDOR_TDLS_TRIGGER_MODE_EXPLICIT = 1 << 0,
+	QCA_WLAN_VENDOR_TDLS_TRIGGER_MODE_IMPLICIT = 1 << 1,
+	QCA_WLAN_VENDOR_TDLS_TRIGGER_MODE_EXTERNAL = 1 << 2,
+};
+
 struct cfg80211_bss *wlan_hdd_cfg80211_update_bss_db(hdd_adapter_t *pAdapter,
 						tCsrRoamInfo *pRoamInfo);
 
@@ -3194,4 +3334,13 @@ static inline void wlan_hdd_cfg80211_indicate_disconnect(struct net_device *dev,
 #endif
 struct cfg80211_bss *wlan_hdd_cfg80211_inform_bss_frame(hdd_adapter_t *pAdapter,
 						tSirBssDescription *bss_desc);
+
+/*
+ * As of 4.7, ieee80211_band is removed; add shims so we can reference
+ * nl80211_band instead
+  */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0))
+#define NUM_NL80211_BANDS ((enum nl80211_band)IEEE80211_NUM_BANDS)
+#endif
+
 #endif
