@@ -1121,6 +1121,8 @@ static int mnh_dma_init(void)
 	return 0;
 }
 
+#ifdef CONFIG_MNH_PCIE_MULTIPLE_MSI
+
 /**
  * mnh_pci_dma_irq_handler - MNH PCIE DMA interrupt handler
  * @irq: Linux interrupt number
@@ -1232,7 +1234,7 @@ static irqreturn_t mnh_pci_irq_handler(int irq, void *ptr)
 
 	return IRQ_HANDLED;
 }
-
+#endif
 /**
  * mnh_pci_irq_single_handler - MNH PCIE interrupt handler for single MSI
  * @irq: Linux interrupt number
@@ -1336,6 +1338,8 @@ static irqreturn_t mnh_pci_irq_single_handler(int irq, void *ptr)
  */
 static int mnh_irq_init(struct pci_dev *pdev)
 {
+
+#ifdef CONFIG_MNH_PCIE_MULTIPLE_MSI
 	int err, vector, i;
 	uint32_t msinum = MSI_DMA_WRITE + 1;
 
@@ -1406,6 +1410,31 @@ free_irq:
 
 	for (--i; i >= MSI_GENERIC_START; i--)
 		free_irq(pdev->irq + i, mnh_dev);
+
+#else
+	int err;
+
+	err = pci_enable_msi(pdev);
+	if (err) {
+		dev_err(&pdev->dev, "fail to allocate msi\n");
+		return 0;
+	}
+
+	err = request_threaded_irq(pdev->irq, NULL,
+		mnh_pci_irq_single_handler,
+		IRQF_SHARED | IRQF_ONESHOT,
+		MODULE_NAME, mnh_dev);
+
+	if (err) {
+		dev_err(&pdev->dev, "fail to req msi %d: err:%d\n",
+			pdev->irq, err);
+		goto error;
+	}
+
+	return 1;
+
+#endif
+
 error:
 	dev_err(&pdev->dev, "Error setting up irq\n");
 	pci_disable_msi(pdev);

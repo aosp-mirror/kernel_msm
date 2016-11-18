@@ -7,3 +7,10 @@ config MNH_PCIE_HOST
     default "y"
     ---help---
       Include support for MNH PCIe Host-side driver
+
+config MNH_PCIE_MULTIPLE_MSI
+    tristate "MNH PCIE Multiple MSI support"
+    depends on MNH_PCIE_HOST
+    default "n"
+    ---help---
+       Include support for multiple MSIs in MNH PCIe Host driver
