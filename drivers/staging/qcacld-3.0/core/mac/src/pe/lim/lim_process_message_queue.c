@@ -446,6 +446,7 @@ uint8_t static def_msg_decision(tpAniSirGlobal pMac, tpSirMsgQ limMsg)
 	    && !pMac->lim.gLimSystemInScanLearnMode) {
 		if ((limMsg->type != WMA_ADD_BSS_RSP)
 		    && (limMsg->type != WMA_DELETE_BSS_RSP)
+		    && (limMsg->type != WMA_DELETE_BSS_HO_FAIL_RSP)
 		    && (limMsg->type != WMA_ADD_STA_RSP)
 		    && (limMsg->type != WMA_DELETE_STA_RSP)
 		    && (limMsg->type != WMA_SET_BSSKEY_RSP)
@@ -521,7 +522,6 @@ __lim_pno_match_fwd_bcn_probepsp(tpAniSirGlobal pmac, uint8_t *rx_pkt_info,
 	}
 	hdr = WMA_GET_RX_MAC_HEADER(rx_pkt_info);
 	body = WMA_GET_RX_MPDU_DATA(rx_pkt_info);
-	qdf_mem_zero(result, sizeof(*result) + ie_len);
 
 	/* Received frame does not have request id, hence set 0 */
 	result->request_id = 0;
@@ -574,7 +574,6 @@ __lim_ext_scan_forward_bcn_probe_rsp(tpAniSirGlobal pmac, uint8_t *rx_pkt_info,
 	}
 	hdr = WMA_GET_RX_MAC_HEADER(rx_pkt_info);
 	body = WMA_GET_RX_MPDU_DATA(rx_pkt_info);
-	qdf_mem_zero(result, sizeof(*result) + ie_len);
 
 	/* Received frame does not have request id, hence set 0 */
 	result->requestId = 0;
@@ -1765,6 +1764,7 @@ static void lim_process_messages(tpAniSirGlobal mac_ctx, tpSirMsgQ msg)
 		lim_process_mlm_del_sta_rsp(mac_ctx, msg);
 		break;
 	case WMA_DELETE_BSS_RSP:
+	case WMA_DELETE_BSS_HO_FAIL_RSP:
 		lim_handle_delete_bss_rsp(mac_ctx, msg);
 		break;
 	case WMA_CSA_OFFLOAD_EVENT:

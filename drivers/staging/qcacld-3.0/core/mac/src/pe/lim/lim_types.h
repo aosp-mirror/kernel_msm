@@ -369,11 +369,20 @@ typedef struct sLimMlmPurgeStaInd {
 	uint8_t sessionId;
 } tLimMlmPurgeStaInd, *tpLimMlmPurgeStaInd;
 
+/**
+ * struct sLimMlmSetKeysCnf - set key confirmation parameters
+ * @peer_macaddr: peer mac address
+ * @resultCode: Result of set key operation
+ * @aid: association id
+ * @sessionId: PE session id
+ * @key_len_nonzero: Keys are non-zero length
+ */
 typedef struct sLimMlmSetKeysCnf {
 	struct qdf_mac_addr peer_macaddr;
 	uint16_t resultCode;
 	uint16_t aid;
 	uint8_t sessionId;
+	bool key_len_nonzero;
 } tLimMlmSetKeysCnf, *tpLimMlmSetKeysCnf;
 
 typedef struct sLimMlmResetReq {
@@ -500,6 +509,9 @@ tSirRetStatus lim_send_channel_switch_mgmt_frame(tpAniSirGlobal, tSirMacAddr,
 tSirRetStatus lim_send_extended_chan_switch_action_frame(tpAniSirGlobal mac_ctx,
 	tSirMacAddr peer, uint8_t mode, uint8_t new_op_class,
 	uint8_t new_channel, uint8_t count, tpPESession session_entry);
+tSirRetStatus lim_p2p_oper_chan_change_confirm_action_frame(
+	tpAniSirGlobal mac_ctx, tSirMacAddr peer,
+	tpPESession session_entry);
 
 tSirRetStatus lim_send_vht_opmode_notification_frame(tpAniSirGlobal pMac,
 						     tSirMacAddr peer, uint8_t nMode,

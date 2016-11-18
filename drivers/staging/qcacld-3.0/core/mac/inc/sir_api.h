@@ -724,8 +724,8 @@ typedef struct sSirBssDescription {
 	/* used only in scan case. */
 	uint8_t channelIdSelf;
 	uint8_t sSirBssDescriptionRsvd[3];
-	/* base on a tick count. It is a time stamp, not a relative time. */
-	uint32_t nReceivedTime;
+	/* Based on system time, not a relative time. */
+	uint64_t received_time;
 	uint32_t parentTSF;
 	uint32_t startTSF[2];
 	uint8_t mdiePresent;
@@ -1390,6 +1390,7 @@ typedef struct sSirSmeDisassocReq {
 	/* This flag tells LIM whether to send the disassoc OTA or not */
 	/* This will be set in while handing off from one AP to other */
 	uint8_t doNotSendOverTheAir;
+	bool process_ho_fail;
 } qdf_packed tSirSmeDisassocReq, *tpSirSmeDisassocReq;
 
 /* / Definition for Tkip countermeasures request */
@@ -3226,6 +3227,7 @@ typedef struct {
  * @is_iwpriv_command: Set 1 for iwpriv command
  * @ini_triggered: triggered using ini
  * @user_triggered: triggered by user
+ * @size: pktlog buffer size
  */
 struct sir_wifi_start_log {
 	uint32_t ring_id;
@@ -3233,6 +3235,7 @@ struct sir_wifi_start_log {
 	uint32_t is_iwpriv_command;
 	bool ini_triggered;
 	uint8_t user_triggered;
+	int size;
 };
 
 
@@ -4992,6 +4995,7 @@ typedef struct {
 	uint32_t ccaBusyTime;
 } tSirWifiChannelStats, *tpSirWifiChannelStats;
 
+#define MAX_TPC_LEVELS 64
 /* radio statistics */
 typedef struct {
 	/* wifi radio (if multiple radio supported) */
@@ -5030,10 +5034,19 @@ typedef struct {
 	 * (32 bits number accruing over time)
 	 */
 	uint32_t onTimeHs20;
+
+	/* tx time (in milliseconds) per TPC level (0.5 dBm) */
+	uint32_t total_num_tx_power_levels;
+	uint32_t *tx_time_per_power_level;
+
 	/* number of channels */
 	uint32_t numChannels;
+
+	/* tx time (in milliseconds) per TPC level (0.5 dBm) */
+	uint32_t tx_time_per_tpc[MAX_TPC_LEVELS];
+
 	/* channel statistics tSirWifiChannelStats */
-	tSirWifiChannelStats channels[0];
+	tSirWifiChannelStats *channels;
 } tSirWifiRadioStat, *tpSirWifiRadioStat;
 
 /* per rate statistics */
@@ -5225,6 +5238,7 @@ typedef struct {
 	uint8_t ifaceId;
 	uint32_t rspId;
 	uint32_t moreResultToFollow;
+	uint32_t nr_received;
 	union {
 		uint32_t num_peers;
 		uint32_t num_radio;
@@ -6584,4 +6598,46 @@ struct sir_encrypt_decrypt_rsp_params {
 	uint8_t *data;
 };
 
+/**
+ * struct sme_tx_fail_cnt_threshold - tx failure count for disconnect to fw
+ * @session_id: Session id
+ * @tx_fail_cnt_threshold: Tx failure count to do disconnect
+ */
+struct sme_tx_fail_cnt_threshold {
+	uint8_t session_id;
+	uint32_t tx_fail_cnt_threshold;
+};
+
+/**
+ * struct sme_short_retry_limit - transmission retry limit for short frames.
+ * @session_id: Session id
+ * @short_retry_limit: tranmission retry limit for short frame.
+ *
+ */
+struct sme_short_retry_limit {
+	uint8_t session_id;
+	uint32_t short_retry_limit;
+};
+
+/**
+ * struct sme_long_retry_limit - tranmission retry limit for long frames
+ * @session_id: Session id
+ * @short_retry_limit: tranmission retry limit for long frames.
+ *
+ */
+struct sme_long_retry_limit {
+	uint8_t session_id;
+	uint32_t long_retry_limit;
+};
+
+/**
+ * struct sme_sta_inactivity_timeout - set sta_inactivity_timeout
+ * @session_id: session Id.
+ * @sta_inactivity_timeout: Timeout to disconnect STA after there
+ * is no activity.
+ */
+struct sme_sta_inactivity_timeout {
+	uint8_t session_id;
+	uint32_t sta_inactivity_timeout;
+};
 #endif /* __SIR_API_H */

@@ -469,6 +469,12 @@ void lim_handle_ft_pre_auth_rsp(tpAniSirGlobal pMac, tSirRetStatus status,
 			     sizeof(psessionEntry->htConfig));
 		pftSessionEntry->limSmeState = eLIM_SME_WT_REASSOC_STATE;
 
+		if (IS_5G_CH(psessionEntry->ftPEContext.pFTPreAuthReq->
+			preAuthchannelNum))
+			pftSessionEntry->vdev_nss = pMac->vdev_type_nss_5g.sta;
+		else
+			pftSessionEntry->vdev_nss = pMac->vdev_type_nss_2g.sta;
+
 		lim_log(pMac, LOG1, FL("created session (%p) with id = %d"),
 			pftSessionEntry, pftSessionEntry->peSessionId);
 
@@ -597,7 +603,6 @@ void lim_post_ft_pre_auth_rsp(tpAniSirGlobal mac_ctx,
 		QDF_ASSERT(ft_pre_auth_rsp != NULL);
 		return;
 	}
-	qdf_mem_zero(ft_pre_auth_rsp, rsp_len);
 
 	lim_log(mac_ctx, LOG1, FL("Auth Rsp = %p"), ft_pre_auth_rsp);
 	if (session) {
@@ -678,8 +683,6 @@ QDF_STATUS lim_send_preauth_scan_offload(tpAniSirGlobal mac_ctx,
 			FL("Memory allocation failed for pScanOffloadReq"));
 		return QDF_STATUS_E_NOMEM;
 	}
-
-	qdf_mem_zero(scan_offload_req, sizeof(tSirScanOffloadReq));
 
 	msg.type = WMA_START_SCAN_OFFLOAD_REQ;
 	msg.bodyptr = scan_offload_req;

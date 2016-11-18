@@ -315,7 +315,6 @@ static QDF_STATUS hdd_green_ap_attach(struct hdd_context_s *hdd_ctx)
 		goto error;
 	}
 
-	qdf_mem_zero(green_ap, sizeof(*green_ap));
 	green_ap->ps_state = GREEN_AP_PS_OFF_STATE;
 	green_ap->ps_event = 0;
 	green_ap->num_nodes = 0;
@@ -400,6 +399,11 @@ void hdd_green_ap_start_bss(struct hdd_context_s *hdd_ctx)
 {
 	struct hdd_config *cfg = hdd_ctx->config;
 
+	if (!hdd_ctx->green_ap_ctx) {
+		hdd_err("Green AP is not enabled. green_ap_ctx = NULL");
+		goto exit;
+	}
+
 	/* check if the firmware and ini are both enabled the egap,
 	 * and also the feature_flag enable, then we enable the egap
 	 */
@@ -421,8 +425,12 @@ void hdd_green_ap_start_bss(struct hdd_context_s *hdd_ctx)
 		 */
 	}
 
-	if (!(QDF_STA_MASK & hdd_ctx->concurrency_mode) &&
-	    cfg->enable2x2 && cfg->enableGreenAP) {
+	if ((hdd_ctx->concurrency_mode & QDF_SAP_MASK) &&
+			!(hdd_ctx->concurrency_mode & (QDF_SAP_MASK)) &&
+			cfg->enable2x2 && cfg->enableGreenAP) {
+		hdd_notice("Green AP enabled - sta_con: %d, 2x2: %d, GAP: %d",
+			QDF_STA_MASK & hdd_ctx->concurrency_mode,
+			cfg->enable2x2, cfg->enableGreenAP);
 		hdd_green_ap_mc(hdd_ctx, GREEN_AP_PS_START_EVENT);
 	} else {
 		hdd_green_ap_mc(hdd_ctx, GREEN_AP_PS_STOP_EVENT);

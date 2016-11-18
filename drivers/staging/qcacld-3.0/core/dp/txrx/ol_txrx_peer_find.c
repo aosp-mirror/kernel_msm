@@ -310,15 +310,6 @@ static int ol_txrx_peer_find_map_attach(struct ol_txrx_pdev_t *pdev)
 	if (!pdev->peer_id_to_obj_map)
 		return 1;       /* failure */
 
-	/*
-	 * The peer_id_to_obj_map doesn't really need to be initialized,
-	 * since elements are only used after they have been individually
-	 * initialized.
-	 * However, it is convenient for debugging to have all elements
-	 * that are not in use set to 0.
-	 */
-	qdf_mem_set(pdev->peer_id_to_obj_map, peer_map_size, 0);
-
 	return 0;               /* success */
 }
 
@@ -411,7 +402,7 @@ static inline void ol_txrx_peer_find_add_id(struct ol_txrx_pdev_t *pdev,
 
 	qdf_spin_unlock(&pdev->peer_map_unmap_lock);
 
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_HIGH,
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
 	   "%s: peer %p ID %d peer_id[%d] peer_id_ref_cnt %d peer->ref_cnt %d",
 	   __func__, peer, peer_id, i,
 	   qdf_atomic_read(&pdev->

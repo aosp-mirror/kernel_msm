@@ -582,7 +582,7 @@ typedef enum {
 #define CFG_INFRA_STA_KEEP_ALIVE_PERIOD_NAME          "gStaKeepAlivePeriod"
 #define CFG_INFRA_STA_KEEP_ALIVE_PERIOD_MIN           (0)
 #define CFG_INFRA_STA_KEEP_ALIVE_PERIOD_MAX           (65535)
-#define CFG_INFRA_STA_KEEP_ALIVE_PERIOD_DEFAULT       (0)
+#define CFG_INFRA_STA_KEEP_ALIVE_PERIOD_DEFAULT       (30)
 
 /* WMM configuration */
 #define CFG_QOS_WMM_MODE_NAME                             "WmmIsEnabled"
@@ -3471,6 +3471,21 @@ enum dot11p_mode {
 #define CFG_TGT_GTX_USR_CFG_DEFAULT (32)
 
 /*
+ * This parameter will avoid updating ap_sta_inactivity from hostapd.conf
+ * file. If a station does not send anything in ap_max_inactivity seconds, an
+ * empty data frame is sent to it in order to verify whether it is
+ * still in range. If this frame is not ACKed, the station will be
+ * disassociated and then deauthenticated. This feature is used to
+ * clear station table of old entries when the STAs move out of the
+ * range.
+ * Default : Disable
+ */
+#define CFG_SAP_MAX_INACTIVITY_OVERRIDE_NAME     "gSapMaxInactivityOverride"
+#define CFG_SAP_MAX_INACTIVITY_OVERRIDE_MIN      (0)
+#define CFG_SAP_MAX_INACTIVITY_OVERRIDE_MAX      (1)
+#define CFG_SAP_MAX_INACTIVITY_OVERRIDE_DEFAULT  (0)
+
+/*
  * This parameter determines that which defered method will be use in rx path
  * If no bits are set then rx path processing will happen in tasklet context.
  * Bit 0: rx_thread enable
@@ -3575,6 +3590,13 @@ enum dot11p_mode {
 #define CFG_OPTIMIZE_CA_EVENT_DISABLE    (0)
 #define CFG_OPTIMIZE_CA_EVENT_ENABLE     (1)
 #define CFG_OPTIMIZE_CA_EVENT_DEFAULT    (0)
+
+/* Trigger BUG ON when firmware fails to send response */
+#define CFG_CRASH_FW_TIMEOUT_NAME       "fw_timeout_crash"
+#define CFG_CRASH_FW_TIMEOUT_DISABLE    (0)
+#define CFG_CRASH_FW_TIMEOUT_ENABLE     (1)
+#define CFG_CRASH_FW_TIMEOUT_DEFAULT    (0)
+
 
 /*---------------------------------------------------------------------------
    Type declarations
@@ -4245,6 +4267,8 @@ struct hdd_config {
 	uint32_t tx_aggregation_size;
 	uint32_t rx_aggregation_size;
 	bool sta_prefer_80MHz_over_160MHz;
+	uint8_t sap_max_inactivity_override;
+	bool fw_timeout_crash;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))
