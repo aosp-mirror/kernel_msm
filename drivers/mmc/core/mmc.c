@@ -195,7 +195,7 @@ static int mmc_decode_csd(struct mmc_card *card)
 /*
  * Read extended CSD.
  */
-static int mmc_get_ext_csd(struct mmc_card *card, u8 **new_ext_csd)
+int mmc_get_ext_csd(struct mmc_card *card, u8 **new_ext_csd)
 {
 	int err;
 	u8 *ext_csd;
@@ -250,6 +250,7 @@ static int mmc_get_ext_csd(struct mmc_card *card, u8 **new_ext_csd)
 
 	return err;
 }
+EXPORT_SYMBOL(mmc_get_ext_csd);
 
 static void mmc_select_card_type(struct mmc_card *card)
 {
