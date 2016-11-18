@@ -35,6 +35,21 @@
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
+#define ACL_CMD_CNT  4
+static unsigned char acl1[] = {0xfe, 0x06};	/* DTYPE_DCS_WRITE */
+static unsigned char acl2[] = {0xac, 0x02};	/* DTYPE_DCS_WRITE */
+static unsigned char acl3[] = {0xfe, 0x00};	/* DTYPE_DCS_WRITE */
+static unsigned char acl4[] = {0x55, 0x01};	/* DTYPE_DCS_WRITE */
+
+
+/* set ACL enable */
+static struct dsi_cmd_desc set_acl_addr_cmd[] = {
+	{{DTYPE_DCS_WRITE1, 0, 0, 0, 1, sizeof(acl1)}, acl1},
+	{{DTYPE_DCS_WRITE1, 0, 0, 0, 1, sizeof(acl2)}, acl2},
+	{{DTYPE_DCS_WRITE1, 0, 0, 0, 1, sizeof(acl3)}, acl3},
+	{{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(acl4)}, acl4},
+};
+
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	if (ctrl->pwm_pmi)
@@ -188,6 +203,55 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 	cmdreq.cb = NULL;
 
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+}
+
+
+static int mdss_dsi_panel_acl_dcs(struct mdss_panel_data *pdata, int enable)
+{
+	struct dcs_cmd_req cmdreq = { 0 };
+	struct mdss_panel_info *pinfo = NULL ;
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+
+	if ( NULL == pdata )
+	{
+		pr_err("%s: Invalid input data\n", __func__);
+		return -1;
+	}
+
+	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+						panel_data);
+	if ( NULL == ctrl )
+	{
+		pr_err("%s: ctrl data error\n", __func__);
+		return -1;
+	}
+
+	pinfo = &pdata->panel_info;
+	if ( NULL == pinfo )
+	{
+		pr_err("%s: panel info error", __func__);
+		return -1;
+	}
+
+	if (pinfo->dcs_cmd_by_left) {
+		if (ctrl->ndx != DSI_CTRL_LEFT)
+			return -1;
+	}
+	pr_err("%s: acl=%d\n", __func__, enable);
+
+	acl4[1] = enable;
+
+	cmdreq.cmds = set_acl_addr_cmd;
+	cmdreq.cmds_cnt = ACL_CMD_CNT;
+	cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
+	cmdreq.rlen = 0;
+	cmdreq.cb = NULL;
+
+	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+
+	ctrl->acl_enable = true;
+
+	return 0;
 }
 
 static char led_pwm1[2] = {0x51, 0x0};	/* DTYPE_DCS_WRITE1 */
@@ -978,6 +1042,10 @@ static int mdss_dsi_panel_boost_config(struct mdss_panel_data *pdata,
 
 		if(ctrl->boost_off_cmds.cmd_cnt){
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->boost_off_cmds, CMD_REQ_COMMIT);}
+	}
+
+	if(!ctrl->acl_enable){
+		mdss_dsi_panel_acl_dcs(pdata, 1);
 	}
 
 	return 0;
@@ -2660,9 +2728,11 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
 	ctrl_pdata->panel_data.set_idle = mdss_dsi_panel_set_idle_mode;
 	ctrl_pdata->panel_data.get_idle = mdss_dsi_panel_get_idle_mode;
+	ctrl_pdata->set_acl = mdss_dsi_panel_acl_dcs;
 
 	ctrl_pdata->idle = 0;
 	ctrl_pdata->ulps_mode = 0;
+	ctrl_pdata->acl_enable = false;
 	INIT_WORK(&ctrl_pdata->idle_on_work, idle_on_work);
 	wake_lock_init(&ctrl_pdata->idle_on_wakelock, WAKE_LOCK_SUSPEND,
                         "IDLE_ON_WAKELOCK");

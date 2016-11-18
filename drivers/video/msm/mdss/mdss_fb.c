@@ -77,6 +77,8 @@
 #define BLANK_FLAG_ULP	FB_BLANK_NORMAL
 #endif
 
+#define BUFF_LEN   10
+
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
 
@@ -906,6 +908,51 @@ static ssize_t mdss_fb_set_boost_mode(struct device *dev,
 	return count;
 }
 
+static ssize_t mdss_fb_set_acl_mode(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	struct mdss_panel_data *pdata = NULL;
+	int rc = 0;
+	int acl_enable = 0;
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+
+	pdata = dev_get_platdata(&mfd->pdev->dev);
+	if ( NULL == pdata )
+	{
+		rc = -1;
+		pr_err("%s pdata failed. rc=%d\n", __func__,rc);
+		return rc;
+	}
+
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+	if ( NULL == ctrl_pdata )
+	{
+		rc = -1;
+		pr_err("%s ctrl_pdate failed. rc=%d\n",__func__, rc);
+		return rc;
+	}
+
+	rc = kstrtoint(buf, BUFF_LEN , &acl_enable);
+	if (rc)
+	{
+		pr_err("kstrtoint failed. rc=%d\n", rc);
+		return rc;
+	}
+
+	pr_err("acl_mode = %d\n", acl_enable);
+
+	if ( 0 == mfd->index )
+	{
+		if (ctrl_pdata && ctrl_pdata->set_acl)
+			ctrl_pdata->set_acl(pdata, acl_enable);
+	}
+
+	return count;
+}
+
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -927,8 +974,7 @@ static DEVICE_ATTR(display_mode, S_IRUGO | S_IWUSR | S_IWGRP, mdss_fb_get_displa
 static DEVICE_ATTR(panel_signature, S_IRUGO | S_IWUSR | S_IWGRP, mdss_fb_get_panel_signature, NULL);
 static DEVICE_ATTR(ulps_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL, mdss_fb_set_ulps_mode);
 static DEVICE_ATTR(boost_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL, mdss_fb_set_boost_mode);
-
-
+static DEVICE_ATTR(acl_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL, mdss_fb_set_acl_mode);
 
 static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
@@ -946,6 +992,7 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_panel_signature.attr,
 	&dev_attr_ulps_mode.attr,
 	&dev_attr_boost_mode.attr,
+	&dev_attr_acl_mode.attr,
 	NULL,
 };
 
