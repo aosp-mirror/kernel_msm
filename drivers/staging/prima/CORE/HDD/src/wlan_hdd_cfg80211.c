@@ -10751,9 +10751,18 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
      */
     if (hdd_isConnectionInProgress(pHddCtx))
     {
-        hddLog(VOS_TRACE_LEVEL_ERROR, "%s: Scan not allowed", __func__);
+        hddLog(VOS_TRACE_LEVEL_ERROR, FL("Scan not allowed"));
+        if (SCAN_ABORT_THRESHOLD < pHddCtx->con_scan_abort_cnt) {
+            VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                    FL("Triggering SSR, SSR status = %d"), status);
+            vos_wlanRestart();
+        }
+        else
+            pHddCtx->con_scan_abort_cnt++;
+
         return -EBUSY;
     }
+    pHddCtx->con_scan_abort_cnt = 0;
 
     vos_mem_zero( &scanRequest, sizeof(scanRequest));
 

@@ -1324,7 +1324,7 @@ VOS_STATUS vos_nv_open(void)
        vos_mem_free(pnvData);
     }
 
-    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
         "INFO: NV version = %d is loaded, driver supports NV version = %d",
         gnvEFSTable->halnv.fields.nvVersion, WLAN_NV_VERSION);
 
@@ -1344,7 +1344,7 @@ VOS_STATUS vos_nv_open(void)
            else if ((WLAN_NV_VERSION == NV_VERSION_CH144_CONFIG) &&
                     (((VosContextType*)(pVosContext))->nvVersion == E_NV_V2))
            {
-               VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+               VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
                    "INFO: Driver supports NV3 CH144 by default, "
                    "NV2 is currently loaded, NV2 will be used.");
            }
