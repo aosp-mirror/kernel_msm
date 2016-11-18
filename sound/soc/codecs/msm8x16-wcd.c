@@ -80,6 +80,8 @@
  */
 #define ADSP_STATE_READY_TIMEOUT_MS 50
 
+static bool current_ext_spk_pa_state = false;
+
 #define HPHL_PA_DISABLE (0x01 << 1)
 #define HPHR_PA_DISABLE (0x01 << 2)
 #define EAR_PA_DISABLE (0x01 << 3)
@@ -2066,6 +2068,43 @@ static int msm8x16_wcd_pa_gain_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int msm8x16_wcd_ext_spk_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+
+	if (current_ext_spk_pa_state == false) {
+		ucontrol->value.integer.value[0] = 0;
+	} else if (current_ext_spk_pa_state == true) {
+		ucontrol->value.integer.value[0] = 1;
+	} else {
+		dev_err(codec->dev, "%s: ERROR: Unsupported Speaker ext = %d\n", __func__, current_ext_spk_pa_state);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int msm8x16_wcd_ext_spk_set(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		if (gpio_is_valid(ext_spk_pa_gpio)) {
+			gpio_direction_output(ext_spk_pa_gpio, 0);
+			current_ext_spk_pa_state = false;
+		}
+		break;
+	case 1:
+		if (gpio_is_valid(ext_spk_pa_gpio)) {
+			gpio_direction_output(ext_spk_pa_gpio, 1);
+			current_ext_spk_pa_state = true;
+		}
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
 
 static int msm8x16_wcd_boost_option_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
@@ -2368,6 +2407,12 @@ static const struct soc_enum msm8x16_wcd_loopback_mode_ctl_enum[] = {
 		SOC_ENUM_SINGLE_EXT(2, msm8x16_wcd_loopback_mode_ctrl_text),
 };
 
+static const char * const msm8x16_wcd_ext_spk_ctrl_text[] = {
+		"DISABLE", "ENABLE"};
+static const struct soc_enum msm8x16_wcd_ext_spk_ctl_enum[] = {
+		SOC_ENUM_SINGLE_EXT(2, msm8x16_wcd_ext_spk_ctrl_text),
+};
+
 static const char * const msm8x16_wcd_ear_pa_boost_ctrl_text[] = {
 		"DISABLE", "ENABLE"};
 static const struct soc_enum msm8x16_wcd_ear_pa_boost_ctl_enum[] = {
@@ -2428,6 +2473,9 @@ static const struct snd_kcontrol_new msm8x16_wcd_snd_controls[] = {
 
 	SOC_ENUM_EXT("EAR PA Gain", msm8x16_wcd_ear_pa_gain_enum[0],
 		msm8x16_wcd_pa_gain_get, msm8x16_wcd_pa_gain_put),
+
+	SOC_ENUM_EXT("Speaker Ext", msm8x16_wcd_ext_spk_ctl_enum[0],
+		msm8x16_wcd_ext_spk_get, msm8x16_wcd_ext_spk_set),
 
 	SOC_ENUM_EXT("Ext Spk Boost", msm8x16_wcd_ext_spk_boost_ctl_enum[0],
 		msm8x16_wcd_ext_spk_boost_get, msm8x16_wcd_ext_spk_boost_set),
@@ -5533,6 +5581,7 @@ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
 			, GFP_KERNEL);
 	if (!msm8x16_wcd_priv->fw_data) {
 		iounmap(msm8x16_wcd->dig_base);
+		cancel_delayed_work_sync(&msm8x16_wcd_priv->work);
 		kfree(msm8x16_wcd_priv);
 		return -ENOMEM;
 	}

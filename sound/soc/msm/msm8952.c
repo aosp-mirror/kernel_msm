@@ -57,6 +57,8 @@ enum btsco_rates {
 	RATE_16KHZ_ID,
 };
 
+int ext_spk_pa_gpio = -1;
+
 static int msm8952_auxpcm_rate = 8000;
 static int msm_btsco_rate = BTSCO_RATE_8KHZ;
 static int msm_btsco_ch = 1;
@@ -2842,6 +2844,22 @@ static struct snd_soc_card *msm8952_populate_sndcard_dailinks(
 	return card;
 }
 
+static int msm8952_ext_spk_pa_init(struct platform_device *pdev)
+{
+	int ret = 0;
+
+	ext_spk_pa_gpio = of_get_named_gpio(pdev->dev.of_node, "qcom,ext-spk-amp-gpio", 0);
+	if (gpio_is_valid(ext_spk_pa_gpio)) {
+		ret = gpio_request(ext_spk_pa_gpio, "ext_spk_amp_gpio");
+		if (ret) {
+			pr_err("%s: gpio_request failed for ext_spk_amp_gpio.\n", __func__);
+			return -EINVAL;
+		}
+		gpio_direction_output(ext_spk_pa_gpio, 0);
+	}
+	return 0;
+}
+
 static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card;
@@ -3050,6 +3068,8 @@ parse_mclk_freq:
 		goto err;
 	}
 
+	/*init spk boost*/
+	msm8952_ext_spk_pa_init(pdev);
 	ret = is_ext_spk_gpio_support(pdev, pdata);
 	if (ret < 0)
 		pr_err("%s:  doesn't support external speaker pa\n",
@@ -3164,6 +3184,9 @@ static int msm8952_asoc_machine_remove(struct platform_device *pdev)
 	struct msm8916_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 	int i;
 
+
+	if (gpio_is_valid(ext_spk_pa_gpio))
+		gpio_free(ext_spk_pa_gpio);
 	if (pdata->vaddr_gpio_mux_spkr_ctl)
 		iounmap(pdata->vaddr_gpio_mux_spkr_ctl);
 	if (pdata->vaddr_gpio_mux_mic_ctl)
