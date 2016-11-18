@@ -91,6 +91,10 @@
 	};
 };
 
+&ssc_sensors {
+	qcom,firmware-name = "slpi";
+};
+
 &pmicobalt_gpios {
 	gpio@c100 {
 		reg = <0xc100 0x100>;
