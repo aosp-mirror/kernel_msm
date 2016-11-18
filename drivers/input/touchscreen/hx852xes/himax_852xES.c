@@ -59,6 +59,8 @@ static struct himax_config *config_selected = NULL;
 static int iref_number = 11;
 static bool iref_found = false;
 
+struct mutex hxtp_mutex;
+
 #ifdef CONFIG_FB
 static int fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
 #endif
@@ -3745,6 +3747,7 @@ static int himax_sleepmode_switch(int supplymode)
     uint8_t buf[2] = {0};
     int ret, i;
 
+    mutex_lock(&hxtp_mutex);
     switch (supplymode) {
         case TOUCH_ACTIVE:
             //Himax 852xes IC enter active mode
@@ -3804,6 +3807,7 @@ static int himax_sleepmode_switch(int supplymode)
         default:
             I("supplymode not in case\n");
     }
+    mutex_unlock(&hxtp_mutex);
     return 0;
 }
 
@@ -4435,6 +4439,7 @@ static int himax852xes_probe(struct i2c_client *client, const struct i2c_device_
     i2c_set_clientdata(client, ts);
     ts->client = client;
     ts->dev = &client->dev;
+    mutex_init(&hxtp_mutex);
 #if 0
     /* Remove this since this will cause request_firmware fail.
        Thie line has no use to touch function. */
@@ -4714,102 +4719,104 @@ static int himax852xes_suspend(struct device *dev)
     if (fw_update_processing) {
         I("FW updating, reject suspend\n");
         return 0;
-    } else {
-        ts = dev_get_drvdata(dev);
-        if (ts->suspended) {
-            I("Already suspended. Skip\n");
-            return 0;
-        } else {
-            ts->suspended = true;
-            I("%s: enter\n", __func__);
-        }
-#ifdef HX_TP_PROC_FLASH_DUMP
-        if (getFlashDumpGoing()) {
-            I("[himax] %s: Flash dump is going, reject suspend\n", __func__);
-            return 0;
-        }
-#endif
-#ifdef HX_TP_PROC_HITOUCH
-        if (hitouch_is_connect) {
-            I("[himax] %s: Hitouch connect, reject suspend\n", __func__);
-            return 0;
-        }
-#endif
-#ifdef HX_CHIP_STATUS_MONITOR
-        if (HX_ON_HAND_SHAKING) { //chip on hand shaking,wait hand shaking
-            for (t = 0; t < 100; t++) {
-                if (HX_ON_HAND_SHAKING == 0) { //chip on hand shaking end
-                    I("%s:HX_ON_HAND_SHAKING OK check %d times\n", __func__, t);
-                    break;
-                } else
-                    msleep(1);
-            }
-            if (t == 100) {
-                E("%s:HX_ON_HAND_SHAKING timeout reject suspend\n", __func__);
-                return 0;
-            }
-        }
-#endif
-        if (haspoint) {
-            for (i = 0; i < ts->nFinger_support; i++) {
-                if (point_flag[i] == 1) {
-                    point_flag[i] = 0;
-                    input_mt_slot(ts->input_dev, i);
-                    input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
-                }
-            }
-            input_sync(ts->input_dev);
-            haspoint = false;
-        }
-#ifdef HX_SMART_WAKEUP
-        if (ts->SMWP_enable && touch_mode == TOUCH_ACTIVE) {
-            atomic_set(&ts->suspend_mode, 1);
-            ts->pre_finger_mask = 0;
-            FAKE_POWER_KEY_SEND = false;
-            buf[0] = 0x8F;
-            buf[1] = 0x20;
-            ret = i2c_himax_master_write(ts->client, buf, 2, DEFAULT_RETRY_CNT);
-            if (ret < 0) {
-                E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
-            }
-            touch_mode = TOUCH_IDLE;
-            ts->resumed = false;
-            I("%s: Enable IDLE mode\n", __func__);
-            return 0;
-        }
-#endif
-        himax_int_enable(ts->client->irq, 0, true);
-#ifdef HX_CHIP_STATUS_MONITOR
-        HX_CHIP_POLLING_COUNT = 0;
-        cancel_delayed_work_sync(&ts->himax_chip_monitor);
-#endif
-        //Himax 852xes IC enter sleep mode
-        buf[0] = HX_CMD_TSSOFF;
-        ret = i2c_himax_master_write(ts->client, buf, 1, DEFAULT_RETRY_CNT);
-        if (ret < 0) {
-            E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
-        }
-        msleep(40);
-        buf[0] = HX_CMD_TSSLPIN;
-        ret = i2c_himax_master_write(ts->client, buf, 1, DEFAULT_RETRY_CNT);
-        if (ret < 0) {
-            E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
-        }
-        touch_mode = TOUCH_SLEEP;
-        I("%s: Enable SLEEP mode\n", __func__);
-        if (!ts->use_irq) {
-            ret = cancel_work_sync(&ts->work);
-            if (ret)
-                himax_int_enable(ts->client->irq, 1, true);
-        }
-        //ts->first_pressed = 0;
-        atomic_set(&ts->suspend_mode, 1);
-        ts->pre_finger_mask = 0;
-        if (ts->pdata->powerOff3V3 && ts->pdata->power)
-            ts->pdata->power(0);
-        ts->resumed = false;
+    }
+    ts = dev_get_drvdata(dev);
+    if (ts->suspended) {
+        I("Already suspended. Skip\n");
         return 0;
     }
+    ts->suspended = true;
+    I("%s: enter\n", __func__);
+
+#ifdef HX_TP_PROC_FLASH_DUMP
+    if (getFlashDumpGoing()) {
+        I("[himax] %s: Flash dump is going, reject suspend\n", __func__);
+        return 0;
+    }
+#endif
+#ifdef HX_TP_PROC_HITOUCH
+    if (hitouch_is_connect) {
+        I("[himax] %s: Hitouch connect, reject suspend\n", __func__);
+        return 0;
+    }
+#endif
+#ifdef HX_CHIP_STATUS_MONITOR
+    if (HX_ON_HAND_SHAKING) { //chip on hand shaking,wait hand shaking
+        for (t = 0; t < 100; t++) {
+            if (HX_ON_HAND_SHAKING == 0) { //chip on hand shaking end
+                I("%s:HX_ON_HAND_SHAKING OK check %d times\n", __func__, t);
+                break;
+            } else
+                msleep(1);
+        }
+        if (t == 100) {
+            E("%s:HX_ON_HAND_SHAKING timeout reject suspend\n", __func__);
+            return 0;
+        }
+    }
+#endif
+    if (haspoint) {
+        for (i = 0; i < ts->nFinger_support; i++) {
+            if (point_flag[i] == 1) {
+                point_flag[i] = 0;
+                input_mt_slot(ts->input_dev, i);
+                input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
+            }
+        }
+        input_sync(ts->input_dev);
+        haspoint = false;
+    }
+    mutex_lock(&hxtp_mutex);
+#ifdef HX_SMART_WAKEUP
+    if (ts->SMWP_enable && touch_mode == TOUCH_ACTIVE) {
+        atomic_set(&ts->suspend_mode, 1);
+        ts->pre_finger_mask = 0;
+        FAKE_POWER_KEY_SEND = false;
+        buf[0] = 0x8F;
+        buf[1] = 0x20;
+        ret = i2c_himax_master_write(ts->client, buf, 2, DEFAULT_RETRY_CNT);
+        if (ret < 0) {
+            E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
+        }
+        touch_mode = TOUCH_IDLE;
+        ts->resumed = false;
+        I("%s: Enable IDLE mode\n", __func__);
+        mutex_unlock(&hxtp_mutex);
+        return 0;
+    }
+#endif
+    himax_int_enable(ts->client->irq, 0, true);
+#ifdef HX_CHIP_STATUS_MONITOR
+    HX_CHIP_POLLING_COUNT = 0;
+    cancel_delayed_work_sync(&ts->himax_chip_monitor);
+#endif
+    //Himax 852xes IC enter sleep mode
+    buf[0] = HX_CMD_TSSOFF;
+    ret = i2c_himax_master_write(ts->client, buf, 1, DEFAULT_RETRY_CNT);
+    if (ret < 0) {
+        E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
+    }
+    msleep(40);
+    buf[0] = HX_CMD_TSSLPIN;
+    ret = i2c_himax_master_write(ts->client, buf, 1, DEFAULT_RETRY_CNT);
+    if (ret < 0) {
+        E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
+    }
+    touch_mode = TOUCH_SLEEP;
+    I("%s: Enable SLEEP mode\n", __func__);
+    if (!ts->use_irq) {
+        ret = cancel_work_sync(&ts->work);
+        if (ret)
+            himax_int_enable(ts->client->irq, 1, true);
+    }
+    //ts->first_pressed = 0;
+    atomic_set(&ts->suspend_mode, 1);
+    ts->pre_finger_mask = 0;
+    if (ts->pdata->powerOff3V3 && ts->pdata->power)
+        ts->pdata->power(0);
+    ts->resumed = false;
+    mutex_unlock(&hxtp_mutex);
+    return 0;
 }
 
 static int himax852xes_resume(struct device *dev)
@@ -4829,71 +4836,74 @@ static int himax852xes_resume(struct device *dev)
     if (fw_update_processing) {
         I("FW updating, reject resume\n");
         return 0;
-    } else {
-        ts = dev_get_drvdata(dev);
-        if (ts->resumed) {
-            I("Already resumed. Skip\n");
-            return 0;
-        } else {
-            ts->resumed = true;
-            I("%s: enter\n", __func__);
-        }
+    }
+    if (DisableTouch_flag) {
+        I("In Time-telling mode, skip resume\n");
+        return 0;
+    }
+    ts = dev_get_drvdata(dev);
+    if (ts->resumed) {
+        I("Already resumed. Skip\n");
+        return 0;
+    }
+    ts->resumed = true;
+    I("%s: enter\n", __func__);
 
-        if (ts->pdata->powerOff3V3 && ts->pdata->power)
-            ts->pdata->power(1);
+    if (ts->pdata->powerOff3V3 && ts->pdata->power)
+        ts->pdata->power(1);
 #ifdef HX_CHIP_STATUS_MONITOR
-        if (HX_ON_HAND_SHAKING) { //chip on hand shaking,wait hand shaking
-            for (t = 0; t < 100; t++) {
-                if (HX_ON_HAND_SHAKING == 0) { //chip on hand shaking end
-                    I("%s: HX_ON_HAND_SHAKING OK check %d times.\n", __func__, t);
-                    break;
-                } else
-                    msleep(1);
-            }
-            if (t == 100) {
-                E("%s: HX_ON_HAND_SHAKING timeout reject resume.\n", __func__);
-                return 0;
-            }
+    if (HX_ON_HAND_SHAKING) { //chip on hand shaking,wait hand shaking
+        for (t = 0; t < 100; t++) {
+            if (HX_ON_HAND_SHAKING == 0) { //chip on hand shaking end
+                I("%s: HX_ON_HAND_SHAKING OK check %d times.\n", __func__, t);
+                break;
+            } else
+                msleep(1);
         }
-#endif
-        if (!DisableTouch_flag && touch_mode != TOUCH_ACTIVE) {
-#ifdef HX_SMART_WAKEUP
-            if (ts->SMWP_enable && touch_mode == TOUCH_IDLE) {
-                //Sense Off
-                i2c_himax_write_command(ts->client, HX_CMD_TSSOFF, DEFAULT_RETRY_CNT);
-                msleep(40);
-                //Sleep in
-                i2c_himax_write_command(ts->client, HX_CMD_TSSLPIN, DEFAULT_RETRY_CNT);
-                buf[0] = 0x8F;
-                buf[1] = 0x00;
-                ret = i2c_himax_master_write(ts->client, buf, 2, DEFAULT_RETRY_CNT);
-                if (ret < 0) {
-                    E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
-                }
-                msleep(50);
-                //I("%s: Leave IDLE mode\n", __func__);
-            }
-#endif
-            //Sense On
-            i2c_himax_write_command(ts->client, HX_CMD_TSSON, DEFAULT_RETRY_CNT);
-            msleep(30);
-            i2c_himax_write_command(ts->client, HX_CMD_TSSLPOUT, DEFAULT_RETRY_CNT);
-            atomic_set(&ts->suspend_mode, 0);
-            if (touch_mode == TOUCH_SLEEP)
-                himax_int_enable(ts->client->irq, 1, true);
-#ifdef HX_CHIP_STATUS_MONITOR
-            HX_CHIP_POLLING_COUNT = 0;
-            queue_delayed_work(ts->himax_chip_monitor_wq, &ts->himax_chip_monitor, HX_POLLING_TIMER * HZ); //for ESD solution
-#endif
-            touch_mode = TOUCH_ACTIVE;
-            ts->suspended = false;
-            I("%s: Enable ACTIVE mode\n", __func__);
-            return 0;
-        } else {
-            I("In Time-telling mode or already in Active mode, skip resume\n");
+        if (t == 100) {
+            E("%s: HX_ON_HAND_SHAKING timeout reject resume.\n", __func__);
             return 0;
         }
     }
+#endif
+    if (touch_mode != TOUCH_ACTIVE) {
+        mutex_lock(&hxtp_mutex);
+#ifdef HX_SMART_WAKEUP
+        if (ts->SMWP_enable && touch_mode == TOUCH_IDLE) {
+            //Sense Off
+            i2c_himax_write_command(ts->client, HX_CMD_TSSOFF, DEFAULT_RETRY_CNT);
+            msleep(40);
+            //Sleep in
+            i2c_himax_write_command(ts->client, HX_CMD_TSSLPIN, DEFAULT_RETRY_CNT);
+            buf[0] = 0x8F;
+            buf[1] = 0x00;
+            ret = i2c_himax_master_write(ts->client, buf, 2, DEFAULT_RETRY_CNT);
+            if (ret < 0) {
+                E("[himax] %s: I2C access failed addr = 0x%x\n", __func__, ts->client->addr);
+            }
+            msleep(50);
+            //I("%s: Leave IDLE mode\n", __func__);
+        }
+#endif
+        //Sense On
+        i2c_himax_write_command(ts->client, HX_CMD_TSSON, DEFAULT_RETRY_CNT);
+        msleep(30);
+        i2c_himax_write_command(ts->client, HX_CMD_TSSLPOUT, DEFAULT_RETRY_CNT);
+        atomic_set(&ts->suspend_mode, 0);
+        if (touch_mode == TOUCH_SLEEP)
+            himax_int_enable(ts->client->irq, 1, true);
+        mutex_unlock(&hxtp_mutex);
+#ifdef HX_CHIP_STATUS_MONITOR
+        HX_CHIP_POLLING_COUNT = 0;
+        queue_delayed_work(ts->himax_chip_monitor_wq, &ts->himax_chip_monitor, HX_POLLING_TIMER * HZ); //for ESD solution
+#endif
+        touch_mode = TOUCH_ACTIVE;
+        ts->suspended = false;
+        I("%s: Enable ACTIVE mode\n", __func__);
+    } else {
+        I("Already in Active mode, skip resume\n");
+    }
+    return 0;
 }
 
 #ifdef CONFIG_FB
