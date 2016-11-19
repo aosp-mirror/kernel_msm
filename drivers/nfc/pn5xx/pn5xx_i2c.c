@@ -46,7 +46,7 @@
 #include <linux/signal.h>
 #include <linux/clk.h>
 #include <linux/wakelock.h>
-#define DATA_TRANSFER_INTERVAL (1*HZ)
+#define DATA_TRANSFER_INTERVAL (2*HZ)
 #define SIG_NFC 44
 #define MAX_BUFFER_SIZE    512
 
@@ -84,7 +84,8 @@ struct pn5xx_dev    {
     bool            irq_enabled;
     spinlock_t        irq_enabled_lock;
     long                nfc_service_pid; /*used to signal the nfc the nfc service */
-	struct wake_lock    wake_lock;
+    struct wake_lock    wake_lock;
+    struct clk         *clk;
 };
 
 static struct pn5xx_dev *pn5xx_dev;
@@ -119,9 +120,33 @@ static irqreturn_t pn5xx_dev_irq_handler(int irq, void *dev_id)
 
     /* Wake up waiting readers */
     wake_up(&pn5xx_dev->read_wq);
-
+    wake_lock_timeout(&pn5xx_dev->wake_lock, DATA_TRANSFER_INTERVAL);
     return IRQ_HANDLED;
 }
+
+static int pn5xx_suspend(struct i2c_client *client, pm_message_t mesg)
+{
+    struct pn5xx_dev *pn5xx_dev;
+    pr_info("%s\n", __func__);
+    pn5xx_dev = i2c_get_clientdata(client);
+    clk_disable_unprepare(pn5xx_dev->clk);
+    pr_info("%s: turn off bbclk2 \n", __func__);
+    return 0;
+}
+
+static int pn5xx_resume(struct i2c_client *client)
+{
+    struct pn5xx_dev *pn5xx_dev;
+    int rc = 0;
+    pr_info("%s\n", __func__);
+    pn5xx_dev = i2c_get_clientdata(client);
+    rc = clk_prepare_enable(pn5xx_dev->clk);
+    if (rc) {
+        pr_err("%s: Could not turn on bbclk2 [%d]\n", __func__, rc);
+    }
+    return rc;
+}
+
 
 /**********************************************************
  * private functions
@@ -383,7 +408,6 @@ static ssize_t pn5xx_dev_read(struct file *filp, char __user *buf,
     /* pn5xx seems to be slow in handling I2C read requests
      * so add 1ms delay after recv operation */
     udelay(1000);
-    wake_lock_timeout(&pn5xx_dev->wake_lock, DATA_TRANSFER_INTERVAL);
     if (ret < 0) {
         pr_err("%s: i2c_master_recv returned %d\n", __func__, ret);
         return ret;
@@ -1030,7 +1054,7 @@ static int pn5xx_probe(struct i2c_client *client,
     pn5xx_dev->vbat_reg = pdata->vbat_reg;
     pn5xx_dev->pmuvcc_reg = pdata->vbat_reg;
     pn5xx_dev->sevdd_reg = pdata->sevdd_reg;
-	wake_lock_init(&pn5xx_dev->wake_lock, WAKE_LOCK_SUSPEND,"pn5xx");
+    wake_lock_init(&pn5xx_dev->wake_lock, WAKE_LOCK_SUSPEND,"pn5xx");
     pn5xx_dev->client   = client;
 
    //songyanfei
@@ -1047,6 +1071,8 @@ static int pn5xx_probe(struct i2c_client *client,
             __func__);
         goto err_exit;
     }
+
+    pn5xx_dev->clk = nfc_clk;
 
     /* finish configuring the I/O */
     ret = gpio_direction_input(pn5xx_dev->irq_gpio);
@@ -1129,6 +1155,10 @@ err_misc_register:
 err_exit:
     if (gpio_is_valid(pdata->clkreq_gpio))
         gpio_free(pdata->clkreq_gpio);
+    if(nfc_clk)
+    {
+        clk_put(nfc_clk);
+    }
 err_ese_pwr:
     gpio_free(pdata->ese_pwr_gpio);
 err_clkreq:
@@ -1162,7 +1192,10 @@ static int pn5xx_remove(struct i2c_client *client)
     pn5xx_dev->p61_current_state = P61_STATE_INVALID;
     pn5xx_dev->nfc_ven_enabled = false;
     pn5xx_dev->spi_ven_enabled = false;
-
+    if(pn5xx_dev->clk)
+    {
+        clk_put(pn5xx_dev->clk);
+    }
     if (gpio_is_valid(pn5xx_dev->firm_gpio))
         gpio_free(pn5xx_dev->firm_gpio);
     if (gpio_is_valid(pn5xx_dev->clkreq_gpio))
@@ -1208,6 +1241,8 @@ static struct i2c_driver pn5xx_driver = {
         .name    = "pn544",
         .of_match_table = pn5xx_dt_match,
     },
+    .suspend = pn5xx_suspend,
+    .resume = pn5xx_resume,
 };
 
 /*
