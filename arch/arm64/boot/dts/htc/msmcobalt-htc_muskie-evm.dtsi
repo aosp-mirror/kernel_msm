@@ -14,6 +14,7 @@
 #include "../qcom/msmcobalt-mtp.dtsi"
 #include "msmcobalt-htc_muskie.dtsi"
 #include "msmcobalt-camera-sensor.dtsi"
+#include "msmcobalt-htc-easel.dtsi"
 
 &i2c_9 {
 	tca6418_i2c: tca6418-i2c@34 {

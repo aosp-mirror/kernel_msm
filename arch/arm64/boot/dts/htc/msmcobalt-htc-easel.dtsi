@@ -1,0 +1,58 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&tlmm {
+	esl_pmic {
+		/* PON */
+		esl_pmic_default: esl_pmic_default {
+			mux {
+				pins = "gpio25", "gpio26", "gpio27";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio25", "gpio26", "gpio27";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+	};
+};
+
+&i2c_7 {
+	/*
+	 * TODO: production silicon will be at address 0x8 and undetermined i2c
+	 * bus. Right now, the Easel I2C is on i2c7 and 0x8 conflicts with the
+	 * smb chip. So, moving the address to 0xa just for prototyping.
+	 */
+	bcm15602@a {
+		compatible = "brcm,bcm15602";
+		reg = <0xa>;
+
+		//interrupt-parent = <&tlmm>;
+		//interrupts = <123 0x2>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&esl_pmic_default>;
+
+		bcm,pon-gpio = <&tlmm 25 0x00>;
+		bcm,resetb-gpio = <&tlmm 26 0x00>;
+		bcm,intb-gpio = <&tlmm 27 0x00>;
+
+		bcm15602_gpio: gpio {
+			compatible = "brcm,bcm15602-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+		};
+	};
+};
+
