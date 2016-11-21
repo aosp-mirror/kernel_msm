@@ -534,7 +534,32 @@ unlock:
 
 static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 {
-	return 0;
+	union power_supply_propval val = {0};
+	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
+	int ret = 0;
+
+	val.intval = mv * 1000;
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_VOLTAGE_MAX,
+					&val);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set voltage to %d, ret=%d",
+			      mv, ret);
+		return ret;
+	}
+
+	val.intval = max_ma * 1000;
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_PD_CURRENT_MAX,
+					&val);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set pd current max to %d, ret=%d",
+			      max_ma, ret);
+		return ret;
+	}
+
+	pd_engine_log(pd, "max_ma := %d, mv := %d", max_ma, mv);
+	return ret;
 }
 
 static int tcpm_set_pd_rx(struct tcpc_dev *dev, bool on)
