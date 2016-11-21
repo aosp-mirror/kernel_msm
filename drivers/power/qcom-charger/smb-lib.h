@@ -196,6 +196,7 @@ struct smb_charger {
 	/* cached status */
 	int			voltage_min_uv;
 	int			voltage_max_uv;
+	int			current_max_ua;
 	int			pd_active;
 	bool			system_suspend_supported;
 
