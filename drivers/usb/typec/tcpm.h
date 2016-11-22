@@ -122,6 +122,8 @@ struct tcpc_dev {
 				  enum typec_cc_status cc);
 	int (*pd_transmit)(struct tcpc_dev *dev, enum tcpm_transmit_type type,
 			   const struct pd_message *msg);
+	int (*set_usb_data_role)(struct tcpc_dev *dev, bool attached,
+			     enum typec_data_role data);
 	struct tcpc_mux_dev *mux;
 };
 

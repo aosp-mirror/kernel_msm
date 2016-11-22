@@ -663,6 +663,11 @@ static int tcpm_set_roles(struct tcpm_port *port, enum typec_role role,
 	ret = port->tcpc->set_pd_header(port->tcpc, role, data);
 	if (ret < 0)
 		return ret;
+	ret = port->tcpc->set_usb_data_role(port->tcpc,
+					    !tcpm_port_is_disconnected(port),
+					    data);
+	if (ret < 0)
+		return ret;
 
 	port->con.pwr_role = role;
 	port->con.data_role = data;
@@ -1914,6 +1919,7 @@ static void tcpm_detach(struct tcpm_port *port)
 	if (tcpm_port_is_disconnected(port))
 		port->hard_reset_count = 0;
 
+	port->tcpc->set_usb_data_role(port->tcpc, false, port->con.data_role);
 	tcpm_reset_port(port);
 }
 
