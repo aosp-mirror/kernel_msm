@@ -1859,6 +1859,21 @@ int smblib_get_prop_pd_allowed(struct smb_charger *chg,
 	return 0;
 }
 
+int smblib_get_prop_pd_apsd_done(struct smb_charger *chg,
+				 union power_supply_propval *val)
+{
+	int rc;
+	u8 stat;
+
+	rc = smblib_read(chg, APSD_STATUS_REG, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Counldn't read APSD_STATUS_REG rc=%d\n", rc);
+		return rc;
+	}
+	val->intval = stat & APSD_DTC_STATUS_DONE_BIT;
+	return 0;
+}
+
 int smblib_get_prop_input_current_settled(struct smb_charger *chg,
 					  union power_supply_propval *val)
 {
