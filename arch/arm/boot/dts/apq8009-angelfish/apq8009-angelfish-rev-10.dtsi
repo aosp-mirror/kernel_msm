@@ -20,7 +20,3 @@
 	swap-vbus-vin;
 	iin = <150>;
 };
-
-&idtp9017_chg {
-	idt,tx-detect-gpio = <&msm_gpio 90 0>;
-};
