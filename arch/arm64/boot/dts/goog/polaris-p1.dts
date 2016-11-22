@@ -15,13 +15,13 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 
-#include "../qcom/msmcobalt.dtsi"
+#include "../qcom/msmcobalt-v2.1.dtsi"
 #include "../qcom/msmcobalt-camera-sensor-cdp.dtsi"
 
 #include "polaris-pinctrl.dtsi"
 
 / {
-	model = "Google, Inc. Polaris P1";
+	model = "Google, Inc. Polaris P1.1";
 	/* compatible = "goog,polaris", "goog,polaris-p1"; */
 	goog,board-revision = "polaris-p1";
 
