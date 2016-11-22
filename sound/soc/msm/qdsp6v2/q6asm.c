@@ -1639,7 +1639,7 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 	asm_token.token = data->token;
 	if (q6asm_get_flag_from_token(&asm_token, ASM_CMD_NO_WAIT_OFFSET)) {
 		pr_debug("%s: No wait command opcode[0x%x] cmd_opcode:%x\n",
-			 __func__, data->opcode, payload[0]);
+			 __func__, data->opcode, payload ? payload[0] : 0);
 		wakeup_flag = 0;
 	}
 
