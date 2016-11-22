@@ -301,7 +301,6 @@ int32_t msm_camera_qup_i2c_write_table(struct msm_camera_i2c_client *client,
 		}
 		retry = 0;
 		reg_setting++;
-		msleep(1);
 	}
 	if (write_setting->delay > 20)
 		msleep(write_setting->delay);
