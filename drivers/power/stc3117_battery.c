@@ -304,7 +304,7 @@ static union {
 	unsigned char db[RAM_SIZE];  /* last byte holds the CRC */
 	struct {
 		short int TstWord;     /* 0-1 */
-		short int HRSOC;       /* 2-3 SOC backup */
+		unsigned short int HRSOC;       /* 2-3 SOC backup */
 		short int CC_cnf;      /* 4-5 current CC_cnf */
 		short int VM_cnf;      /* 6-7 current VM_cnf */
 		char SOC;              /* 8 SOC for trace (in %) */
@@ -1784,7 +1784,7 @@ void stc311x_debug_info(void)
 			i, (SOCTAB[i]/2), i+1, (SOCTAB[i+1]/2), i+2, (SOCTAB[i+2]/2), i+3, (SOCTAB[i+3]/2));
 	}
 
-	pr_err("end: mode = 0x%x, ctrl = 0x%x, CMONIT_COUNT = %d, SOC = %d, voltage = %d, OCV = %d \n",data[0], data[1], data[22], data_soc, data_voltage, data_ocv);
+	pr_err("mode=0x%x, ctrl=0x%x, CMONIT_COUNT=%d, SOC=%d, voltage=%d, OCV=%d \n",data[0], data[1], data[22], data_soc, data_voltage, data_ocv);
 }
 
 static void STC311x_Rewrite_OCV(void)
@@ -2033,6 +2033,11 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 			}
 		}
 
+		//Set max SOC to fix SOC > 100
+		if (BattData.HRSOC > (MAX_HRSOC+512)) {
+			BattData.SOC = MAX_SOC;
+			STC311x_SetSOC(MAX_HRSOC+512);
+		}
 
 		/* -------- APPLICATION RESULTS ------------ */
 
