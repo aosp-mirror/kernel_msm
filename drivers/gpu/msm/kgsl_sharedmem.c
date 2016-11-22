@@ -14,6 +14,7 @@
 #include <linux/export.h>
 #include <linux/vmalloc.h>
 #include <asm/cacheflush.h>
+#include <asm/uaccess.h>
 #include <linux/slab.h>
 #include <linux/kmemleak.h>
 #include <linux/highmem.h>
@@ -605,6 +606,9 @@ int kgsl_cache_range_op(struct kgsl_memdesc *memdesc, uint64_t offset,
 	 * are not aligned to the cacheline size correctly.
 	 */
 
+	if (!memdesc->hostptr)
+		uaccess_enable_not_uao();
+
 	switch (_fixup_cache_range_op(op)) {
 	case KGSL_CACHE_OP_FLUSH:
 		dmac_flush_range(addr, addr + (size_t) size);
@@ -616,6 +620,9 @@ int kgsl_cache_range_op(struct kgsl_memdesc *memdesc, uint64_t offset,
 		dmac_inv_range(addr, addr + (size_t) size);
 		break;
 	}
+
+	if (!memdesc->hostptr)
+		uaccess_disable_not_uao();
 
 	return 0;
 }
