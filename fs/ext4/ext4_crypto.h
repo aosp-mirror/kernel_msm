@@ -68,6 +68,13 @@ struct ext4_encryption_context {
 #define EXT4_KEY_DESC_PREFIX "ext4:"
 #define EXT4_KEY_DESC_PREFIX_SIZE 5
 
+/* This is passed in from userspace into the kernel keyring */
+struct ext4_encryption_key {
+	__u32 mode;
+	char raw[EXT4_MAX_KEY_SIZE];
+	__u32 size;
+} __attribute__((__packed__));
+
 struct ext4_crypt_info {
 	char		ci_data_mode;
 	char		ci_filename_mode;

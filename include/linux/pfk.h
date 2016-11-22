@@ -22,11 +22,14 @@ struct ice_crypto_setting;
 #define PFK_AES_256_XTS_KEY_SIZE 64
 #define PFK_MAX_KEY_SIZE 64
 
-/* This is passed in from userspace into the kernel keyring */
-struct ext4_encryption_key {
-        __u32 mode;
-        char raw[PFK_MAX_KEY_SIZE];
-        __u32 size;
+/*
+ * This is passed in from userspace into the kernel keyring
+ * TODO(skaramov): This is a layering violation, solution tracked by b/30252720.
+ */
+struct pfk_encryption_key {
+	__u32 mode;
+	char raw[PFK_MAX_KEY_SIZE];
+	__u32 size;
 } __attribute__((__packed__));
 
 bool pfk_is_ready(void);
