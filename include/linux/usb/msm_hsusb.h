@@ -532,6 +532,7 @@ struct msm_otg {
 	char (buf[DEBUG_MAX_MSG])[DEBUG_MSG_LEN];   /* buffer */
 	u32 max_nominal_system_clk_rate;
 	unsigned int vbus_state;
+	struct delayed_work invalid_chg_work;
 };
 
 struct ci13xxx_platform_data {

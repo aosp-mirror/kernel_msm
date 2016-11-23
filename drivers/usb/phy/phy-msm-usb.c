@@ -1794,6 +1794,7 @@ static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 	motg->cur_power = mA;
 }
 
+static int skip_invalid_chg_work = 0;
 static int msm_otg_set_power(struct usb_phy *phy, unsigned mA)
 {
 	struct msm_otg *motg = container_of(phy, struct msm_otg, phy);
@@ -1805,8 +1806,11 @@ static int msm_otg_set_power(struct usb_phy *phy, unsigned mA)
 	 * IDEV_CHG can be drawn irrespective of suspend/un-configured
 	 * states when CDP/ACA is connected.
 	 */
-	if (motg->chg_type == USB_SDP_CHARGER)
+	if (motg->chg_type == USB_SDP_CHARGER) {
+		pr_info("usb %s mA:%d\n",__func__,mA);
+		skip_invalid_chg_work = 1;
 		msm_otg_notify_charger(motg, mA);
+	}
 
 	return 0;
 }
@@ -2417,6 +2421,8 @@ static void msm_chg_detect_work(struct work_struct *w)
 		vout = msm_chg_check_primary_det(motg);
 		line_state = readl_relaxed(USB_PORTSC) & PORTSC_LS;
 		dm_vlgc = line_state & PORTSC_LS_DM;
+		dev_info(phy->dev, "vout:%d, line_state:%d, dm_vlgc:%d\n",
+			vout, line_state, dm_vlgc);
 		if (vout && !dm_vlgc) { /* VDAT_REF < DM < VLGC */
 			if (line_state) { /* DP > VLGC */
 				motg->chg_type = USB_PROPRIETARY_CHARGER;
@@ -2428,6 +2434,8 @@ static void msm_chg_detect_work(struct work_struct *w)
 				motg->chg_state = USB_CHG_STATE_PRIMARY_DONE;
 			}
 		} else { /* DM < VDAT_REF || DM > VLGC */
+			dev_info(phy->dev, "line_state:%d, dcd:%d\n",
+				line_state, dcd);
 			if (line_state) /* DP > VLGC or/and DM > VLGC */
 				motg->chg_type = USB_PROPRIETARY_CHARGER;
 			else if (!dcd && floated_charger_enable)
@@ -2482,6 +2490,17 @@ static void msm_chg_detect_work(struct work_struct *w)
 
 	msm_otg_dbg_log_event(phy, "CHG WORK: QUEUE", motg->chg_type, delay);
 	queue_delayed_work(motg->otg_wq, &motg->chg_work, delay);
+}
+
+static void msm_invalid_chg_work(struct work_struct *w)
+{
+	struct msm_otg *motg = container_of(w, struct msm_otg, invalid_chg_work.work);
+	if(skip_invalid_chg_work){
+		skip_invalid_chg_work = 0;
+		return;
+		}
+	printk(KERN_ERR "usb schedule %s\n",__func__);
+	msm_otg_notify_charger(motg, 501); //501mA, to differ from SDP
 }
 
 #define VBUS_INIT_TIMEOUT	msecs_to_jiffies(5000)
@@ -2646,7 +2665,8 @@ static void msm_otg_sm_work(struct work_struct *w)
 	pr_debug("%s work\n", usb_otg_state_string(otg->phy->state));
 	msm_otg_dbg_log_event(&motg->phy, "SM WORK:",
 			otg->phy->state, motg->inputs);
-
+	pr_info("otg_state:%d, input:0x%lx, chg_state:%d, chg_type:%d\n",
+		otg->phy->state, motg->inputs, motg->chg_state, motg->chg_type);
 	/* Just resume h/w if reqd, pm_count is handled based on state/inputs */
 	if (motg->resume_pending) {
 		pm_runtime_get_sync(otg->phy->dev);
@@ -2731,6 +2751,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 						OTG_STATE_B_PERIPHERAL;
 					mod_timer(&motg->chg_check_timer,
 							CHG_RECHECK_DELAY);
+					schedule_delayed_work(&motg->invalid_chg_work, 5*HZ);
 					break;
 				default:
 					break;
@@ -2758,6 +2779,8 @@ static void msm_otg_sm_work(struct work_struct *w)
 			}
 
 			dcp = (motg->chg_type == USB_DCP_CHARGER);
+			cancel_delayed_work_sync(&motg->invalid_chg_work);
+			skip_invalid_chg_work = 0;
 			motg->chg_state = USB_CHG_STATE_UNDEFINED;
 			motg->chg_type = USB_INVALID_CHARGER;
 			msm_otg_notify_charger(motg, 0);
@@ -3414,6 +3437,7 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 		break;
 	/* Process PMIC notification in PRESENT prop */
 	case POWER_SUPPLY_PROP_PRESENT:
+		pr_info("POWER_SUPPLY_PROP_PRESENT : %d\n", val->intval);
 		msm_otg_set_vbus_state(val->intval);
 		break;
 	/* The ONLINE property reflects if usb has enumerated */
@@ -4525,6 +4549,7 @@ static int msm_otg_probe(struct platform_device *pdev)
 	INIT_WORK(&motg->sm_work, msm_otg_sm_work);
 	INIT_DELAYED_WORK(&motg->chg_work, msm_chg_detect_work);
 	INIT_DELAYED_WORK(&motg->id_status_work, msm_id_status_w);
+	INIT_DELAYED_WORK(&motg->invalid_chg_work, msm_invalid_chg_work);
 	setup_timer(&motg->chg_check_timer, msm_otg_chg_check_timer_func,
 				(unsigned long) motg);
 	motg->otg_wq = alloc_ordered_workqueue("k_otg", 0);
@@ -4855,6 +4880,8 @@ static int msm_otg_remove(struct platform_device *pdev)
 	msm_otg_debugfs_cleanup();
 	cancel_delayed_work_sync(&motg->chg_work);
 	cancel_delayed_work_sync(&motg->id_status_work);
+	cancel_delayed_work_sync(&motg->invalid_chg_work);
+	skip_invalid_chg_work = 0;
 	cancel_work_sync(&motg->sm_work);
 	destroy_workqueue(motg->otg_wq);
 
