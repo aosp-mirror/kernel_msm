@@ -275,12 +275,12 @@
 #define QWLAN_HAL_CFG_OPTIMIZE_CA_EVENT                      217
 #define QWLAN_HAL_CFG_BAR_WAKEUP_HOST_DISABLE                219
 #define QWLAN_HAL_CFG_SAR_BOFFSET_CORRECTION_ENABLE          220
+#define QWLAN_HAL_CFG_DISABLE_SCAN_DURING_SCO                224
 
-#define QWLAN_HAL_CFG_MAX_PARAMS                             220
-
+#define QWLAN_HAL_CFG_MAX_PARAMS                             225
 
 /* Total number of Integer CFGs. This is used while allocating the memory for TLV */
-#define QWLAN_HAL_CFG_INTEGER_PARAM                     220
+#define QWLAN_HAL_CFG_INTEGER_PARAM                     225
 
 /*-------------------------------------------------------------------------
   Configuration Parameter min, max, defaults
