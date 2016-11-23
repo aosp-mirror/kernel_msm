@@ -3901,6 +3901,13 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 					__func__, __LINE__);
 	}
 
+	ctrl_pdata->disp_avdden_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+		"qcom,platform-avdden-gpio", 0);
+
+	if (!gpio_is_valid(ctrl_pdata->disp_avdden_gpio))
+		pr_err("%s:%d, AVDDEN gpio not specified\n",
+						__func__, __LINE__);
+
 	ctrl_pdata->disp_te_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 		"qcom,platform-te-gpio", 0);
 
