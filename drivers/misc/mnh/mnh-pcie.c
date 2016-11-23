@@ -1514,27 +1514,27 @@ static int mnh_download_firmware(void)
 
 	mnh_dev->image_loaded = FW_IMAGE_NONE;
 
-	err = request_firmware(&fip_img, "mnh/fip.bin", dev);
+	err = request_firmware(&fip_img, "easel/fip.bin", dev);
 	if (err) {
 		dev_err(dev, "request fip_image failed - %d\n", err);
 		return -EIO;
 	}
 
-	err = request_firmware(&kernel_img, "mnh/Image", dev);
+	err = request_firmware(&kernel_img, "easel/Image", dev);
 	if (err) {
 		dev_err(dev, "request kernel failed - %d\n", err);
 		goto free_uboot;
 	}
 
-	err = request_firmware(&dt_img, "mnh/mnh.dtb", dev);
+	err = request_firmware(&dt_img, "easel/mnh.dtb", dev);
 	if (err) {
-		dev_err(dev, "request kernel failed - %d\n", err);
+		dev_err(dev, "request device tree failed - %d\n", err);
 		goto free_kernel;
 	}
 
-	err = request_firmware(&ram_img, "mnh/ramdisk.img", dev);
+	err = request_firmware(&ram_img, "easel/ramdisk.img", dev);
 	if (err) {
-		dev_err(dev, "request kernel failed - %d\n", err);
+		dev_err(dev, "request ramdisk failed - %d\n", err);
 		goto free_dt;
 	}
 
