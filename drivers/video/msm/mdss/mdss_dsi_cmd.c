@@ -25,6 +25,8 @@
 #include "mdss_dsi.h"
 #include "mdss_smmu.h"
 
+#define Enable_low_bit_ambient 0
+
 /*
  * mipi dsi buf mechanism
  */
@@ -684,6 +686,141 @@ static struct dsi_cmd_desc dsi_tear_on_cmd = {
 static char set_tear_off[2] = {0x34, 0x00};
 static struct dsi_cmd_desc dsi_tear_off_cmd = {
 	{DTYPE_DCS_WRITE, 1, 0, 0, 0, sizeof(set_tear_off)}, set_tear_off};
+#if Enable_low_bit_ambient
+static char set_ucs[2] = {0xfe, 0x00};
+static struct dsi_cmd_desc dsi_ucs_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_ucs)}, set_ucs};
+
+static char set_3bit_pre[2] = {0xfe, 0x01};
+static struct dsi_cmd_desc dsi_3bit_pre_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_3bit_pre)}, set_3bit_pre};
+
+static char set_3bit_on[2] = {0x2a, 0x23};
+static struct dsi_cmd_desc dsi_3bit_on_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_3bit_on)}, set_3bit_on};
+
+static char set_3bit_off[2] = {0x2a, 0x03};
+static struct dsi_cmd_desc dsi_3bit_off_cmd = {
+       {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_3bit_off)}, set_3bit_off};
+#endif
+static char set_idle_mode[2] = {0x39, 0x00};
+static struct dsi_cmd_desc dsi_into_idle_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_idle_mode)}, set_idle_mode};
+
+static char set_non_idle_mode[2] = {0x38, 0x00};
+static struct dsi_cmd_desc dsi_exit_idle_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_non_idle_mode)}, set_non_idle_mode};
+
+// Set Brightness boost mode
+static char set_brightness_mode_start[2] = {0xfe, 0x05};
+static struct dsi_cmd_desc dsi_brightness_mode_start_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_brightness_mode_start)}, set_brightness_mode_start};
+
+static char set_brightness_mode_1[2] = {0xc0, 0x01};
+static struct dsi_cmd_desc dsi_brightness_mode_1_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_brightness_mode_1)}, set_brightness_mode_1};
+
+static char set_brightness_mode_2[2] = {0xc1, 0x17};
+static struct dsi_cmd_desc dsi_brightness_mode_2_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_brightness_mode_2)}, set_brightness_mode_2};
+
+static char set_brightness_mode_exit_1[2] = {0xc0, 0x05};
+static struct dsi_cmd_desc dsi_brightness_mode_exit_1_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_brightness_mode_exit_1)}, set_brightness_mode_exit_1};
+
+static char set_brightness_mode_exit_2[2] = {0xc1, 0x12};
+static struct dsi_cmd_desc dsi_brightness_mode_exit_2_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_brightness_mode_exit_2)}, set_brightness_mode_exit_2};
+
+static char set_brightness_mode_done[2] = {0xfe, 0x00};
+static struct dsi_cmd_desc dsi_brightness_mode_done_cmd = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_brightness_mode_done)}, set_brightness_mode_done};
+
+void mdss_dsi_send_cmd(struct mdss_dsi_ctrl_pdata *ctrl, struct dsi_cmd_desc *cmd)
+{
+	struct dcs_cmd_req cmdreq;
+
+	cmdreq.cmds = cmd;
+	cmdreq.cmds_cnt = 1;
+	cmdreq.flags = CMD_REQ_COMMIT;
+	cmdreq.rlen = 0;
+	cmdreq.cb = NULL;
+	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+}
+
+void mdss_dsi_brightness_boost_enable(struct mdss_dsi_ctrl_pdata *ctrl, int brightness)
+{
+	struct mdss_panel_info *pinfo;
+	static bool is_brightness_boost_mode = false;
+
+	pinfo = &(ctrl->panel_data.panel_info);
+	if (pinfo->dcs_cmd_by_left && ctrl->ndx != DSI_CTRL_LEFT)
+		return;
+
+	if ((brightness == pinfo->brightness_max) && (is_brightness_boost_mode == false))
+	{
+		is_brightness_boost_mode = true;
+
+		pr_debug("[Debug] Brightness boost mode enable!!!, brightness:%d\n", brightness);
+
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_start_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_1_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_2_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_done_cmd);
+	}
+
+	if ((brightness != pinfo->brightness_max) && (is_brightness_boost_mode == true))
+	{
+		is_brightness_boost_mode = false;
+
+		pr_debug("[Debug] Brightness boost mode disable!!!brightness:%d\n", brightness);
+
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_start_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_exit_1_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_exit_2_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_brightness_mode_done_cmd);
+	}
+	else
+		pr_debug("[Debug] Skip brightness boost command, is_brightness_boost_mode: %d, brightness:%d \n",is_brightness_boost_mode, brightness);
+}
+
+void mdss_dsi_3bit_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
+{
+	struct mdss_panel_info *pinfo;
+	static bool is_3bit_mode = false;
+
+	pinfo = &(ctrl->panel_data.panel_info);
+	if (pinfo->dcs_cmd_by_left && ctrl->ndx != DSI_CTRL_LEFT)
+		return;
+
+	if(enable && is_3bit_mode == false)
+	{
+		is_3bit_mode = true;
+
+		pr_debug("[Debug] set 3-bit color mode enable\n");
+                #if Enable_low_bit_ambient
+		mdss_dsi_send_cmd(ctrl, &dsi_3bit_pre_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_3bit_on_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_ucs_cmd);
+                #endif
+		mdss_dsi_send_cmd(ctrl, &dsi_into_idle_cmd);
+	}
+	else if((!enable) && (is_3bit_mode == true))
+	{
+		is_3bit_mode = false;
+
+		pr_debug("[Debug] set 3-bit color mode disable\n");
+                #if Enable_low_bit_ambient
+		mdss_dsi_send_cmd(ctrl, &dsi_3bit_pre_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_3bit_off_cmd);
+		mdss_dsi_send_cmd(ctrl, &dsi_ucs_cmd);
+                #endif
+		mdss_dsi_send_cmd(ctrl, &dsi_exit_idle_cmd);
+	}
+	else
+		pr_debug("[Debug] skip LCM 3-bit mode command, is_3bit_mode: %d, enable:%d \n",is_3bit_mode, enable);
+
+}
 
 void mdss_dsi_set_tear_on(struct mdss_dsi_ctrl_pdata *ctrl)
 {
