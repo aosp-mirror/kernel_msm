@@ -333,6 +333,18 @@ u64 notrace ktime_get_mono_fast_ns(void)
 }
 EXPORT_SYMBOL_GPL(ktime_get_mono_fast_ns);
 
+/*
+ * NMI safe and fast access to boot clock. We can't do tk_core seqcount reads
+ * here as this will livelock in NMI context so we sacrifice accuracy for
+ * safety. Worst case we may miss an update to tk->offs_boot.
+ */
+u64 notrace ktime_get_boot_fast_ns(void)
+{
+	struct timekeeper *tk = &tk_core.timekeeper;
+	return (ktime_get_mono_fast_ns() + ktime_to_ns(tk->offs_boot));
+}
+EXPORT_SYMBOL_GPL(ktime_get_boot_fast_ns);
+
 #ifdef CONFIG_GENERIC_TIME_VSYSCALL_OLD
 
 static inline void update_vsyscall(struct timekeeper *tk)
