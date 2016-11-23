@@ -1443,19 +1443,19 @@ static int shrink(struct shrinker *shrinker, struct shrink_control *sc)
 	unsigned long r;
 	unsigned long nr_to_scan = sc->nr_to_scan;
 
-	if (sc->gfp_mask & __GFP_IO)
-		dm_bufio_lock(c);
-	else if (!dm_bufio_trylock(c))
-		return !nr_to_scan ? 0 : -1;
+	if (nr_to_scan) {
+		if (sc->gfp_mask & __GFP_IO)
+			dm_bufio_lock(c);
+		else if (!dm_bufio_trylock(c))
+			return -1;
 
-	if (nr_to_scan)
 		__scan(c, nr_to_scan, sc);
+		dm_bufio_unlock(c);
+	}
 
-	r = c->n_buffers[LIST_CLEAN] + c->n_buffers[LIST_DIRTY];
+	r = ACCESS_ONCE(c->n_buffers[LIST_CLEAN]) + ACCESS_ONCE(c->n_buffers[LIST_DIRTY]);
 	if (r > INT_MAX)
 		r = INT_MAX;
-
-	dm_bufio_unlock(c);
 
 	return r;
 }
