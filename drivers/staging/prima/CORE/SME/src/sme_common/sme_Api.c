@@ -2956,6 +2956,7 @@ eHalStatus sme_ScanRequest(tHalHandle hHal, tANI_U8 sessionId, tCsrScanRequest *
 
     if (pMac->isCoexScoIndSet && pMac->scan.disable_scan_during_sco &&
         csrIsConnStateDisconnected(pMac, sessionId)) {
+        csrScanFlushResult(pMac);
         pMac->scan.disable_scan_during_sco_timer_info.callback = callback;
         pMac->scan.disable_scan_during_sco_timer_info.dev = pContext;
         pMac->scan.disable_scan_during_sco_timer_info.scan_id= *pScanRequestID;
