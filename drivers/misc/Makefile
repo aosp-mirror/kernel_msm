@@ -67,3 +67,4 @@ obj-$(CONFIG_QPNP_MISC) 	+= qpnp-misc.o
 obj-y                 += mnh/
 obj-$(CONFIG_GOOGLE_EASEL)   += google-easel.o
 google-easel-objs               += google-easel-comm.o google-easel-comm-dma.o google-easel-comm-hw.o
+obj-$(CONFIG_FPR_FPC)  += fpr_FingerprintCard/
