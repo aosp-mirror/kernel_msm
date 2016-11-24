@@ -62,6 +62,7 @@
 #ifndef CONFIG_OF
 #define CONFIG_OF
 #endif
+#define NFC_TRY_NUM (3)
 
 struct pn5xx_dev    {
     wait_queue_head_t    read_wq;
@@ -86,6 +87,7 @@ struct pn5xx_dev    {
     long                nfc_service_pid; /*used to signal the nfc the nfc service */
     struct wake_lock    wake_lock;
     struct clk         *clk;
+    bool                clk_enabled;
 };
 
 static struct pn5xx_dev *pn5xx_dev;
@@ -112,6 +114,42 @@ static void pn5xx_disable_irq(struct pn5xx_dev *pn5xx_dev)
     spin_unlock_irqrestore(&pn5xx_dev->irq_enabled_lock, flags);
 }
 
+static int pn5xx_clock_enable(struct pn5xx_dev *pn5xx_dev)
+{
+    int ret = 0;
+    if (NULL == pn5xx_dev->clk)
+    {
+        return -1;
+    }
+    if (false == pn5xx_dev->clk_enabled)
+    {
+        ret = clk_prepare_enable(pn5xx_dev->clk);
+        if (ret)
+        {
+            return -1;
+        }
+        pn5xx_dev->clk_enabled = true;
+    }
+    return ret;
+}
+
+
+static int pn5xx_clock_disable(struct pn5xx_dev *pn5xx_dev)
+{
+    int r = -1;
+    if (pn5xx_dev->clk != NULL)
+    {
+        if (pn5xx_dev->clk_enabled)
+        {
+            clk_disable_unprepare(pn5xx_dev->clk);
+            pn5xx_dev->clk_enabled = false;
+        }
+        return 0;
+    }
+    return r;
+}
+
+
 static irqreturn_t pn5xx_dev_irq_handler(int irq, void *dev_id)
 {
     struct pn5xx_dev *pn5xx_dev = dev_id;
@@ -129,22 +167,13 @@ static int pn5xx_suspend(struct i2c_client *client, pm_message_t mesg)
     struct pn5xx_dev *pn5xx_dev;
     pr_info("%s\n", __func__);
     pn5xx_dev = i2c_get_clientdata(client);
-    clk_disable_unprepare(pn5xx_dev->clk);
-    pr_info("%s: turn off bbclk2 \n", __func__);
+    pn5xx_clock_disable(pn5xx_dev);
     return 0;
 }
 
 static int pn5xx_resume(struct i2c_client *client)
 {
-    struct pn5xx_dev *pn5xx_dev;
-    int rc = 0;
-    pr_info("%s\n", __func__);
-    pn5xx_dev = i2c_get_clientdata(client);
-    rc = clk_prepare_enable(pn5xx_dev->clk);
-    if (rc) {
-        pr_err("%s: Could not turn on bbclk2 [%d]\n", __func__, rc);
-    }
-    return rc;
+    return 0;
 }
 
 
@@ -279,6 +308,12 @@ static int pn5xx_enable(struct pn5xx_dev *dev, int mode)
             gpio_set_value(dev->ven_gpio, 1);
             msleep(100);
         }
+        r = pn5xx_clock_enable(dev);
+        if (r < 0)
+        {
+            dev_err(&dev->client->dev, "unable to enable clock\n");
+        }
+        msleep(20);
     }
     else if (MODE_FW == mode) {
         if (current_state & (P61_STATE_SPI|P61_STATE_SPI_PRIO))
@@ -329,6 +364,7 @@ enable_exit0:
 static void pn5xx_disable(struct pn5xx_dev *dev)
 {
     /* power off */
+    int ret = 0;
     pr_info("%s power off\n", __func__);
     if (gpio_is_valid(dev->firm_gpio))
     {
@@ -345,7 +381,13 @@ static void pn5xx_disable(struct pn5xx_dev *dev)
         gpio_set_value(dev->ven_gpio, 0);
         msleep(100);
     }
-
+    ret = pn5xx_clock_disable(dev);
+    if (ret < 0)
+    {
+        dev_err(&dev->client->dev, "unable to disable clock\n");
+    }
+    /* hardware dependent delay */
+    msleep(100);
     if(dev->sevdd_reg) regulator_disable(dev->sevdd_reg);
     if(dev->pmuvcc_reg) regulator_disable(dev->pmuvcc_reg);
     if(dev->vbat_reg) regulator_disable(dev->vbat_reg);
@@ -361,11 +403,14 @@ static ssize_t pn5xx_dev_read(struct file *filp, char __user *buf,
 {
     struct pn5xx_dev *pn5xx_dev = filp->private_data;
     char tmp[MAX_BUFFER_SIZE];
-    int ret;
+    int ret = 0;
+    int retry = 0;
+    bool isSuccess = false;
 
     if (count > MAX_BUFFER_SIZE)
+    {
         count = MAX_BUFFER_SIZE;
-
+    }
     pr_debug("%s : reading %zu bytes.\n", __func__, count);
 
     mutex_lock(&pn5xx_dev->read_mutex);
@@ -399,9 +444,27 @@ static ssize_t pn5xx_dev_read(struct file *filp, char __user *buf,
             pr_warning("%s: spurious interrupt detected\n", __func__);
         }
     }
-
-    /* Read data */
-    ret = i2c_master_recv(pn5xx_dev->client, tmp, count);
+    /* Read data, we have 3 chances */
+    for (retry = 0; retry < NFC_TRY_NUM; retry++)
+    {
+        ret = i2c_master_recv(pn5xx_dev->client, tmp, (int)count);
+        if (ret == (int)count)
+        {
+            isSuccess = true;
+            break;
+        }
+        else
+        {
+            pr_info("%s : read data try =%d returned %d\n", __func__, retry, ret);
+            msleep(1);
+            continue;
+        }
+    }
+    if (false == isSuccess)
+    {
+        pr_err("%s : i2c_master_recv returned %d\n", __func__, ret);
+        ret = -EIO;
+    }
 
     mutex_unlock(&pn5xx_dev->read_mutex);
 
@@ -434,11 +497,15 @@ static ssize_t pn5xx_dev_write(struct file *filp, const char __user *buf,
     struct pn5xx_dev  *pn5xx_dev;
     char tmp[MAX_BUFFER_SIZE];
     int ret;
+    int retry = 0;
+    bool isSuccess = false;
 
     pn5xx_dev = filp->private_data;
 
     if (count > MAX_BUFFER_SIZE)
+    {
         count = MAX_BUFFER_SIZE;
+    }
 
     if (copy_from_user(tmp, buf, count)) {
         pr_err("%s : failed to copy from user space\n", __func__);
@@ -446,9 +513,29 @@ static ssize_t pn5xx_dev_write(struct file *filp, const char __user *buf,
     }
 
     pr_debug("%s : writing %zu bytes.\n", __func__, count);
-    /* Write data */
-    ret = i2c_master_send(pn5xx_dev->client, tmp, count);
-    if (ret != count) {
+
+    /* Write data, we have 3 chances */
+    for (retry = 0; retry < NFC_TRY_NUM; retry++)
+    {
+        ret = i2c_master_send(pn5xx_dev->client, tmp, (int)count);
+        if (ret == (int)count)
+        {
+            isSuccess = true;
+            break;
+        }
+        else
+        {
+            if (retry > 0)
+            {
+                pr_info("%s : send data try =%d returned %d\n", __func__, retry, ret);
+            }
+            msleep(1);
+            continue;
+         }
+    }
+
+    if (false == isSuccess)
+    {
         pr_err("%s : i2c_master_send returned %d\n", __func__, ret);
         ret = -EIO;
     }
@@ -950,8 +1037,6 @@ static int pn5xx_probe(struct i2c_client *client,
     int ret;
     struct pn5xx_i2c_platform_data *pdata;  // gpio values, from board file or DT
     struct pn5xx_i2c_platform_data tmp_pdata;
-//    struct pn5xx_dev *pn5xx_dev;            // internal device specific data
-    struct clk              *nfc_clk;    /* clock */
 
     pr_info("%s\n", __func__);
 
@@ -1056,23 +1141,14 @@ static int pn5xx_probe(struct i2c_client *client,
     pn5xx_dev->sevdd_reg = pdata->sevdd_reg;
     wake_lock_init(&pn5xx_dev->wake_lock, WAKE_LOCK_SUSPEND,"pn5xx");
     pn5xx_dev->client   = client;
+    pn5xx_dev->clk_enabled = false;
 
-   //songyanfei
-    nfc_clk = clk_get(&client->dev, "bbclk2");
-    if (IS_ERR(nfc_clk)) {
+    pn5xx_dev->clk = clk_get(&client->dev, "bbclk2");
+    if (IS_ERR(pn5xx_dev->clk)) {
         dev_err(&client->dev, "%s: unable to get clk\n", __func__);
-        ret = PTR_ERR(nfc_clk);
+        ret = PTR_ERR(pn5xx_dev->clk);
         goto err_exit;
     }
-
-    ret = clk_prepare_enable(nfc_clk);
-    if (ret) {
-        dev_err(&client->dev, "%s: unable to enable clk\n",
-            __func__);
-        goto err_exit;
-    }
-
-    pn5xx_dev->clk = nfc_clk;
 
     /* finish configuring the I/O */
     ret = gpio_direction_input(pn5xx_dev->irq_gpio);
@@ -1103,7 +1179,7 @@ static int pn5xx_probe(struct i2c_client *client,
     }
 
     if (gpio_is_valid(pn5xx_dev->clkreq_gpio)) {
-        ret = gpio_direction_output(pn5xx_dev->clkreq_gpio, 0);
+        ret = gpio_direction_input(pn5xx_dev->clkreq_gpio);
         if (ret < 0) {
             pr_err("%s : not able to set clkreq_gpio as output\n",
                    __func__);
@@ -1139,6 +1215,7 @@ static int pn5xx_probe(struct i2c_client *client,
         dev_err(&client->dev, "request_irq failed\n");
         goto err_request_irq_failed;
     }
+    enable_irq_wake(client->irq);
     pn5xx_disable_irq(pn5xx_dev);
 
 
@@ -1155,9 +1232,9 @@ err_misc_register:
 err_exit:
     if (gpio_is_valid(pdata->clkreq_gpio))
         gpio_free(pdata->clkreq_gpio);
-    if(nfc_clk)
+    if(pn5xx_dev->clk)
     {
-        clk_put(nfc_clk);
+        clk_put(pn5xx_dev->clk);
     }
 err_ese_pwr:
     gpio_free(pdata->ese_pwr_gpio);
