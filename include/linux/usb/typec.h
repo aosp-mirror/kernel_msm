@@ -110,13 +110,13 @@ struct typec_altmode {
 
 #define to_altmode(d) container_of(d, struct typec_altmode, dev)
 
-struct typec_port *typec_altmode2port(struct typec_altmode *);
+struct typec_port *typec_altmode2port(struct typec_altmode *alt);
 
 void typec_altmode_update_active(struct typec_altmode *alt, int mode,
 				 bool active);
 
-int typec_register_altmodes(struct device *, struct typec_altmode *);
-void typec_unregister_altmodes(struct device *);
+int typec_register_altmodes(struct device *dev, struct typec_altmode *alt);
+void typec_unregister_altmodes(struct device *dev);
 
 /*
  * struct typec_plug - USB Type-C Cable Plug
@@ -179,6 +179,7 @@ struct typec_partner {
  * struct typec_capability - USB Type-C Port Capabilities
  * @role: DFP (Host-only), UFP (Device-only) or DRP (Dual Role)
  * @usb_pd: USB Power Delivery support
+ * @prefer_role: Initial role preference
  * @accessory: Supported Accessory Modes (NULL terminated array)
  * @alt_modes: Alternate Modes the connector supports (NULL terminated)
  * @try_role: Set data role preference for DRP port
@@ -192,6 +193,7 @@ struct typec_partner {
 struct typec_capability {
 	enum typec_port_type	type;
 	unsigned int		usb_pd:1;
+	int			prefer_role;
 	enum typec_accessory	*accessory;
 	struct typec_altmode	*alt_modes;
 
@@ -244,9 +246,9 @@ void typec_disconnect(struct typec_port *port);
 
 /* Callbacks from driver */
 
-void typec_set_data_role(struct typec_port *, enum typec_data_role);
-void typec_set_pwr_role(struct typec_port *, enum typec_role);
-void typec_set_vconn_role(struct typec_port *, enum typec_role);
-void typec_set_pwr_opmode(struct typec_port *, enum typec_pwr_opmode);
+void typec_set_data_role(struct typec_port *port, enum typec_data_role role);
+void typec_set_pwr_role(struct typec_port *port, enum typec_role role);
+void typec_set_vconn_role(struct typec_port *port, enum typec_role role);
+void typec_set_pwr_opmode(struct typec_port *port, enum typec_pwr_opmode mode);
 
 #endif /* __LINUX_USB_TYPEC_H */

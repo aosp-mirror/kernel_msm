@@ -66,6 +66,13 @@ failure. The un-registration of the port happens with the following API:
 
 void typec_unregister_port(struct typec_port *port);
 
+When registering the ports, the prefer_role member in struct typec_capability
+deservers special notice. If the port that is being registered does not have
+initial role preference, which means the port does not execute Try.SNK or
+Try.SRC by default, the member must have value TYPEC_NO_PREFERRED_ROLE.
+Otherwise if the port executes Try.SNK by default the member must have value
+TYPEC_DEVICE and with Try.SRC the value must be TYPEC_HOST.
+
 
 * Notifications
 
