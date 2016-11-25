@@ -18,7 +18,7 @@
 #include "swift-er_msm8909-pm8916.dtsi"
 #include "swift-er_msm8909-pm8916-mtp.dtsi"
 #include "swift-er_msm8909w.dtsi"
-#include "apq8009w-memory.dtsi"
+#include "swift-er_apq8009w-memory.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. APQ8009W-PM8916 MTP SWIFT ER";

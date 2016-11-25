@@ -1694,6 +1694,27 @@
 		qcom,ce-opp-freq = <100000000>;
 	};
 
+	cpu0_slp_sts: cpu-sleep-status@b088008 {
+		reg = <0xb088008 0x100>;
+		qcom,sleep-status-mask= <0x80000>;
+	};
+
+	cpu1_slp_sts: cpu-sleep-status@b098008 {
+		reg = <0xb098008 0x100>;
+		qcom,sleep-status-mask= <0x80000>;
+	};
+
+	cpu2_slp_sts: cpu-sleep-status@b0a8008 {
+		reg = <0xb0a8008 0x100>;
+		qcom,sleep-status-mask= <0x80000>;
+	};
+
+	cpu3_slp_sts: cpu-sleep-status@b0b8008 {
+		reg = <0xb0b8008 0x100>;
+		qcom,sleep-status-mask= <0x80000>;
+	};
+};
+
 &gdsc_mdss {
 	clock-names = "core_clk", "bus_clk";
 	clocks = <&clock_gcc clk_gcc_mdss_mdp_clk>,

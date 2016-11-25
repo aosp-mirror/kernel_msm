@@ -193,8 +193,7 @@ dtb-$(CONFIG_ARCH_MSM8909) += swift-evb2_apq8009w-wtp.dtb \
 	swift-sr_apq8009w-wtp.dtb \
 	swift-sr-ori_apq8009w-wtp.dtb \
 	swift-er_apq8009w-wtp.dtb \
-	swift-pr_apq8009w-wtp.dtb \
-	phoenix-sr_msm8909w-wtp.dtb
+	swift-pr_apq8009w-wtp.dtb
 
 ifeq ($(CONFIG_ARM64),y)
 always          := $(dtb-y)

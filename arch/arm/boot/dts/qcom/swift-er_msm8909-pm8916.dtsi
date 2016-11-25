@@ -342,4 +342,4 @@
 	};
 };
 
-#include "swift-er_msm8909-pm8916-pm.dtsi"
+#include "msm8909-pm8916-pm.dtsi"
