@@ -103,9 +103,9 @@ static struct wcd_mbhc_config mbhc_cfg = {
 	.swap_gnd_mic = NULL,
 	.hs_ext_micbias = false,
 	.key_code[0] = KEY_MEDIA,
-	.key_code[1] = KEY_VOICECOMMAND,
-	.key_code[2] = KEY_VOLUMEUP,
-	.key_code[3] = KEY_VOLUMEDOWN,
+	.key_code[1] = KEY_VOLUMEUP,
+	.key_code[2] = KEY_VOLUMEDOWN,
+	.key_code[3] = 0,
 	.key_code[4] = 0,
 	.key_code[5] = 0,
 	.key_code[6] = 0,
@@ -1558,12 +1558,12 @@ static void *def_msm8952_wcd_mbhc_cal(void)
 	 */
 	btn_low[0] = 75;
 	btn_high[0] = 75;
-	btn_low[1] = 80;
-	btn_high[1] = 80;
-	btn_low[2] = 200;
-	btn_high[2] = 200;
-	btn_low[3] = 350;
-	btn_high[3] = 350;
+	btn_low[1] = 225;
+	btn_high[1] = 237;
+	btn_low[2] = 450;
+	btn_high[2] = 450;
+	btn_low[3] = 470;
+	btn_high[3] = 470;
 	btn_low[4] = 500;
 	btn_high[4] = 500;
 
