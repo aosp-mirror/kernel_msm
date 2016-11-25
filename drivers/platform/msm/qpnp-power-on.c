@@ -29,6 +29,8 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/qpnp/power-on.h>
+#include <linux/power_supply.h>
+#include <linux/timer.h>
 
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
@@ -154,6 +156,9 @@
 
 #define QPNP_POFF_REASON_UVLO			13
 
+#define PON_INT_RT_STS  0x810
+#define CBLPWR_ON       0x04
+
 enum qpnp_pon_version {
 	QPNP_PON_GEN1_V1,
 	QPNP_PON_GEN1_V2,
@@ -218,8 +223,12 @@ struct qpnp_pon {
 	u8			warm_reset_reason2;
 	bool			is_spon;
 	bool			store_hard_reset_reason;
+	struct timer_list       cblpwr_timer;
+	struct delayed_work     cblpwr_delay_work;
+	struct workqueue_struct *cblpwr_workqueue;
 };
 
+static struct qpnp_pon *g_pon;
 static struct qpnp_pon *sys_reset_dev;
 static DEFINE_SPINLOCK(spon_list_slock);
 static LIST_HEAD(spon_dev_list);
@@ -297,6 +306,16 @@ static const char * const qpnp_poff_reason[] = {
  */
 static int warm_boot;
 module_param(warm_boot, int, 0);
+
+static int vbus = 0;
+
+struct delayed_work smb231_update;
+struct delayed_work smb231_update_ahead;
+struct mutex smb231_work_lock;
+
+static int qpnp_pon_CBLPWR_input_dispatch(struct qpnp_pon *pon, u32 pon_type);
+static void smb231_update_work(struct work_struct *work);
+static void smb231_update_ahead_work(struct work_struct *work);
 
 static int
 qpnp_pon_masked_write(struct qpnp_pon *pon, u16 addr, u8 mask, u8 val)
@@ -846,14 +865,118 @@ static irqreturn_t qpnp_kpdpwr_resin_bark_irq(int irq, void *_pon)
 
 static irqreturn_t qpnp_cblpwr_irq(int irq, void *_pon)
 {
-	int rc;
-	struct qpnp_pon *pon = _pon;
+    struct qpnp_pon *pon = _pon;
 
-	rc = qpnp_pon_input_dispatch(pon, PON_CBLPWR);
-	if (rc)
-		dev_err(&pon->spmi->dev, "Unable to send input event\n");
 
-	return IRQ_HANDLED;
+    pm_stay_awake(&pon->spmi->dev);
+
+    cancel_delayed_work(&smb231_update);
+    cancel_delayed_work(&smb231_update_ahead);
+
+    schedule_delayed_work(&smb231_update_ahead, 11);
+
+    return IRQ_HANDLED;
+}
+
+static int qpnp_pon_CBLPWR_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
+{
+    int rc = 0;
+    u8 pon_rt_sts = 0, pon_rt_bit = 0;
+    u32 key_status = 0;
+
+    struct qpnp_pon_config *cfg = NULL;
+
+
+    cfg = qpnp_get_cfg(pon, pon_type);
+    if (!cfg)
+        return (-EINVAL);
+
+    rc = spmi_ext_register_readl(pon->spmi->ctrl, pon->spmi->sid, QPNP_PON_RT_STS(pon), &pon_rt_sts, 1);
+    if (rc)
+    {
+        dev_err(&pon->spmi->dev, "Unable to read PON RT status\n");
+        return rc;
+    }
+
+    pon_rt_bit = QPNP_PON_CBLPWR_N_SET;
+
+    key_status = pon_rt_sts & pon_rt_bit;
+    pr_debug("PMIC input: PON_CBLPWR key_status=%d\n", key_status);
+
+    vbus = (key_status == 4)? 1 : 0;
+
+
+    return 0;
+}
+
+static void smb231_update_ahead_work(struct work_struct *work)
+{
+    struct qpnp_pon *pon = sys_reset_dev;
+    struct power_supply *charger_psy = NULL;
+
+    union power_supply_propval data = {1, };
+
+    int rc = 0;
+
+
+    mutex_lock(&smb231_work_lock);
+    pr_info("[CEI] smb231_update_ahead_work+++\n");
+
+    rc = qpnp_pon_CBLPWR_input_dispatch(pon, PON_CBLPWR);
+    if (rc)
+        dev_err(&pon->spmi->dev, "Unable to send input event\n");
+
+    charger_psy = power_supply_get_by_name("battery");
+    if (charger_psy)
+    {
+        if(vbus != 1)
+        {
+            charger_psy->set_property(charger_psy, POWER_SUPPLY_PROP_CHARGE_ENABLED, &data);
+        }
+    }
+
+    schedule_delayed_work(&smb231_update, 90);
+
+    mutex_unlock(&smb231_work_lock);
+
+
+    return;
+}
+
+static void smb231_update_work(struct work_struct *work)
+{
+    struct qpnp_pon *pon = sys_reset_dev;
+    struct power_supply *usb_psy = NULL;
+
+    int rc = 0;
+
+
+    mutex_lock(&smb231_work_lock);
+    pr_info("[CEI] smb231_update_work+++\n");
+
+    rc = qpnp_pon_CBLPWR_input_dispatch(pon, PON_CBLPWR);
+    if (rc)
+        dev_err(&pon->spmi->dev, "Unable to send input event\n");
+
+
+    usb_psy = power_supply_get_by_name("usb");
+    if (usb_psy == NULL)
+    {
+        pr_err("Can't find usb device\n");
+    }
+    else
+    {
+        power_supply_set_present(usb_psy, vbus);
+
+        pr_info("Set usb present: %d\n", vbus);
+    }
+
+    pm_relax(&pon->spmi->dev);
+
+    mutex_unlock(&smb231_work_lock);
+
+
+    return;
 }
 
 static void print_pon_reg(struct qpnp_pon *pon, u16 offset)
@@ -1164,6 +1287,8 @@ qpnp_pon_request_irqs(struct qpnp_pon *pon, struct qpnp_pon_config *cfg)
 							cfg->state_irq);
 			return rc;
 		}
+		//Wake up system to notify charger state change
+		enable_irq_wake(cfg->state_irq);
 		break;
 	case PON_KPDPWR_RESIN:
 		if (cfg->use_bark) {
@@ -1927,6 +2052,52 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 	return 0;
 }
 
+void qpnp_pon_delay_work(unsigned long dev)
+{
+	queue_delayed_work(g_pon->cblpwr_workqueue, &g_pon->cblpwr_delay_work, 0);
+}
+
+void qpnp_pon_timer_trigger_usb(struct work_struct *work)
+{
+	int rc;
+	struct power_supply *usb_psy;
+	u8 cblpwr = 0;
+
+	pr_err("qpnp_pon_timer_trigger_usb: re-trigger usb detection \n");
+	rc = spmi_ext_register_readl(g_pon->spmi->ctrl, g_pon->spmi->sid, 0x810,
+							&cblpwr, 1);
+
+	pr_debug("PON_INT_RT_STS: %d \n", cblpwr);
+	cblpwr = ((cblpwr & 0x04) >> 2);
+
+	if (cblpwr) {
+		usb_psy = power_supply_get_by_name("usb");
+		if (usb_psy == NULL) {
+			pr_err("qpnp_pon_timer_trigger_usb can't find usb device \n");
+			return;
+		}
+		else {
+			pr_err("qpnp_pon_timer_trigger_usb: set usb present \n");
+			power_supply_set_present(usb_psy, cblpwr);
+		}
+
+		rc = qpnp_pon_input_dispatch(g_pon, PON_CBLPWR);
+		if (rc)
+			dev_err(&g_pon->spmi->dev, "Unable to send input event\n");
+	}
+}
+
+void qpnp_pon_init_timer(void)
+{
+	//init timer
+	init_timer(&g_pon->cblpwr_timer);
+	g_pon->cblpwr_timer.function = qpnp_pon_delay_work;
+
+	//10 sec
+	g_pon->cblpwr_timer.expires = jiffies + 10*HZ;
+	add_timer(&g_pon->cblpwr_timer);
+}
+
 static int qpnp_pon_probe(struct spmi_device *spmi)
 {
 	struct qpnp_pon *pon;
@@ -1940,6 +2111,8 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 	const char *s3_src;
 	u8 s3_src_reg;
 	unsigned long flags;
+	struct power_supply *usb_psy;
+	u8 cblpwr = 0;
 
 	pon = devm_kzalloc(&spmi->dev, sizeof(struct qpnp_pon),
 							GFP_KERNEL);
@@ -2176,6 +2349,11 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 
 	INIT_DELAYED_WORK(&pon->bark_work, bark_work_func);
 
+	INIT_DELAYED_WORK(&smb231_update, smb231_update_work);
+	INIT_DELAYED_WORK(&smb231_update_ahead, smb231_update_ahead_work);
+
+	mutex_init(&smb231_work_lock);
+
 	/* register the PON configurations */
 	rc = qpnp_pon_config_init(pon);
 	if (rc) {
@@ -2271,6 +2449,37 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 					"qcom,store-hard-reset-reason");
 
 	qpnp_pon_debugfs_init(spmi);
+
+	//re-detect the cbl_pwr pin status
+	rc = spmi_ext_register_readl(pon->spmi->ctrl, pon->spmi->sid, PON_INT_RT_STS, &cblpwr, 1);
+
+	pr_debug("PON_INT_RT_STS: %d \n", cblpwr);
+	cblpwr = ((cblpwr & CBLPWR_ON) >> 2);
+
+	if (cblpwr)
+	{
+		pr_debug("probe: re-trigger usb detect \n");
+		usb_psy = power_supply_get_by_name("usb");
+		if (usb_psy == NULL) {
+			pr_err("qpnp_pon_probe can't find usb device \n");
+
+			//if usb is still not ready, init timer and delay 10 sec to re-trigger usb
+			g_pon = pon;
+			INIT_DELAYED_WORK(&g_pon->cblpwr_delay_work, qpnp_pon_timer_trigger_usb);
+			g_pon->cblpwr_workqueue = create_singlethread_workqueue("qpnp-pon-cblpwr-work");
+
+			if (g_pon->cblpwr_workqueue == NULL)
+				pr_err("%s: failed to create qpnp-pon-cblpwr work queue\n", __func__);
+
+			qpnp_pon_init_timer();
+		}
+		else
+			power_supply_set_present(usb_psy, cblpwr);
+
+		rc = qpnp_pon_input_dispatch(pon, PON_CBLPWR);
+		if (rc)
+			dev_err(&pon->spmi->dev, "Unable to send input event\n");
+	}
 	return 0;
 }
 
