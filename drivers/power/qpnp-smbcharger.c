@@ -274,6 +274,7 @@ struct smbchg_chip {
 	u32				vchg_adc_channel;
 	struct qpnp_vadc_chip		*vchg_vadc_dev;
 #ifdef CONFIG_HTC_BATT
+	struct work_struct		clean_tcc_WA;
 	struct work_struct		usb_aicl_limit_current;
 	struct delayed_work		usb_limit_max_current;
 	struct delayed_work		rerun_apsd_work;
@@ -7024,8 +7025,10 @@ static irqreturn_t batt_warm_handler(int irq, void *_chip)
 #ifdef CONFIG_HTC_BATT
 	if (chip->batt_warm)
 		set_property_on_fg(chip, POWER_SUPPLY_PROP_WARM_TEMP, TEMP_WARM_TO_NORMAL);
-	else
+	else {
 		set_property_on_fg(chip, POWER_SUPPLY_PROP_WARM_TEMP, TEMP_NORMAL_TO_WARM);
+		schedule_work(&chip->clean_tcc_WA);
+	}
 #endif /* CONFIG_HTC_BATT */
 	return IRQ_HANDLED;
 }
@@ -7111,6 +7114,51 @@ static irqreturn_t chg_error_handler(int irq, void *_chip)
 }
 
 #ifdef CONFIG_HTC_BATT
+#define DISCHARGE_WINDOW_MS	200
+#define VFLOAT_COMP_WARM	0x10	// 0x10F4[5:0] - 0x10 = 4.1V
+#define VFLOAT_VOTLAGE_UV	4400000
+static void smbchg_clean_tcc_WA_work(struct work_struct *work)
+{
+	int level = 0;
+	int vbat_uv = 0;
+	u8 reg = 0;
+	int rc;
+
+	if(!the_chip) {
+		pr_err("called before init\n");
+		return;
+	}
+
+	level = htc_battery_level_adjust();
+	vbat_uv = get_prop_batt_voltage_now(the_chip);
+
+	/* Only execute WA while below conditions are all true */
+	/* Condition#1: Cable inserted */
+	if (the_chip->usb_supply_type == POWER_SUPPLY_TYPE_UNKNOWN) {
+		pr_smb(PR_STATUS, "Skip, no cable inserted.\n");
+		return;
+	}
+
+	/* Condition#2: VFLOAT COMP level not at WARM (4.1V) */
+	if (the_chip->float_voltage_comp == VFLOAT_COMP_WARM) {
+		pr_smb(PR_STATUS, "Skip, float_voltage_comp == %d.\n",
+				VFLOAT_COMP_WARM);
+		return;
+	}
+
+	/* Condition#3: TCC (0x1010 BIT7) is raised */
+	rc = smbchg_read(the_chip, &reg, the_chip->chgr_base + RT_STS, 1);
+	if (rc < 0) {
+		dev_err(the_chip->dev, "Unable to read RT_STS rc = %d\n", rc);
+		return;
+	}
+	if (reg & BAT_TCC_REACHED_BIT) {
+		pr_smb(PR_STATUS, "Reset batfet to clear incorrect TCC\n");
+		pmi8996_charger_reset_batfet(the_chip);
+	}
+	return;
+}
+
 static void smbchg_usb_limit_current_WA_work(struct work_struct *work)
 {
 	int rc = 0;
@@ -9540,6 +9588,8 @@ int pmi8994_set_float_voltage_comp (int vfloat_comp)
 
 	pr_smb(PR_STATUS, "set vfloat comp = %d\n",vfloat_comp);
 	rc = smbchg_float_voltage_comp_set(the_chip, vfloat_comp);
+	the_chip->float_voltage_comp = vfloat_comp;
+
 	if (rc) {
 		pr_err("Unable to set float_voltage_comp rc=%d\n", rc);
 		return -EINVAL;
@@ -10142,6 +10192,7 @@ static int smbchg_probe(struct spmi_device *spmi)
 	INIT_DELAYED_WORK(&chip->vfloat_adjust_work, smbchg_vfloat_adjust_work);
 	INIT_DELAYED_WORK(&chip->hvdcp_det_work, smbchg_hvdcp_det_work);
 #ifdef CONFIG_HTC_BATT
+	INIT_WORK(&chip->clean_tcc_WA, smbchg_clean_tcc_WA_work);
 	INIT_WORK(&chip->usb_aicl_limit_current, smbchg_usb_limit_current_WA_work);
 	INIT_DELAYED_WORK(&chip->usb_limit_max_current, smbchg_usb_limit_max_current_work);
 	INIT_DELAYED_WORK(&chip->rerun_apsd_work, smbchg_rerun_apsd_worker);
