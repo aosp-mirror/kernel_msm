@@ -962,15 +962,6 @@ static void smb23x_parallel_work(struct work_struct *work)
 
 		smb23x_enable_volatile_writes(chip);
 
-		// Set input current limit value follow register setting
-		smb23x_masked_write(chip, CMD_REG_1, USBAC_MODE_BIT, 0x01);
-
-		// Set system voltage to VBATT tracking(VBATT + 250mV)
-		smb23x_masked_write(chip, CFG_REG_4, SYSTEM_VOLTAGE_MASK, 0x2);
-
-		// Set system voltage threshold for initiating charge current deduction
-		smb23x_masked_write(chip, CFG_REG_6, CHG_CHARGE_SYS_VOLT_MASK, 0x20);
-
 		if (type == POWER_SUPPLY_TYPE_USB_DCP) {
 			// Set SMB231 input current limit to 300mA
 			smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
@@ -2827,6 +2818,17 @@ static int smb23x_probe(struct i2c_client *client,
 
 	g_smb23x_chip = chip;
 	smb23x_enable_volatile_writes(chip);
+
+	// Set input current limit value follow register setting
+	smb23x_masked_write(chip, CMD_REG_1, USBAC_MODE_BIT, 0x01);
+
+	// Set system voltage to VBATT tracking(VBATT + 250mV)
+	smb23x_masked_write(chip, CFG_REG_4, SYSTEM_VOLTAGE_MASK, 0x2);
+
+	// Set system voltage threshold for initiating charge current deduction
+	smb23x_masked_write(chip, CFG_REG_6, CHG_CHARGE_SYS_VOLT_MASK, 0x20);
+
+	// Set ICHG to 100mA
 	smb23x_masked_write(chip, CFG_REG_3, FASTCHG_CURR_SOFT_COMP, 0);
 
 	// Disable smb231 soft temp behavior
@@ -2839,6 +2841,8 @@ static int smb23x_probe(struct i2c_client *client,
 
 	// Disable battery over-voltage behavior
 	smb23x_masked_write(chip, CFG_REG_2, BATT_OV_SHUTDOWN_BIT, 0);
+
+	lbc_set_suspend(0x01);
 
 	chip->parallel_count = 0;
 
