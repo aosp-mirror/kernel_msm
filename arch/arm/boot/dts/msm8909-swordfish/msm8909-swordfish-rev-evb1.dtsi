@@ -35,7 +35,7 @@
 };
 
 &battery_tm {
-	tm,batt-vreg-mv = <4425>;
+	tm,batt-vreg-mv = <4400>;
 	tm,current-ma = <540>;
 	/delete-property/ tm,wlc-config-use;
 };

@@ -21,7 +21,7 @@
 #include "msm8909-swordfish-paj9124u1.dtsi"
 
 &battery_tm {
-	tm,low-vreg-mv = <4420>;
+	tm,low-vreg-mv = <4400>;
 	/delete-property/ tm,wlc-config-use;
 };
 

@@ -199,7 +199,7 @@
 			disable-gpio = <&msm_gpio 83 0x00>;
 
 			vbatmin = <3000>;    //CC start voltage 3.0V
-			vfloat = <4420>;     //vbatmax
+			vfloat = <4400>;     //vbatmax
 			vrechg-hyst = <100>; //rechg = vfloat - (vrechg-hyst)
 			ibus = <325>;        //iusb for vbus
 			iin = <325>;         //iusb for wlc
@@ -223,7 +223,7 @@
 		compatible = "battery_tm";
 		status = "ok";
 		qcom,batt-tm-adc_tm = <&pm8916_adc_tm>;
-		tm,batt-vreg-mv = <4420>;
+		tm,batt-vreg-mv = <4400>;
 		tm,current-ma = <250>;
 		tm,low-vreg-mv = <4100>;
 		tm,low-current-ma = <200>;
