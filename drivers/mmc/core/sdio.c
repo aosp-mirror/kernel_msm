@@ -1036,10 +1036,9 @@ static int mmc_sdio_pre_suspend(struct mmc_host *host)
  */
 static int mmc_sdio_suspend(struct mmc_host *host)
 {
+	mmc_claim_host(host);
 	if (mmc_card_keep_power(host) && mmc_card_wake_sdio_irq(host)) {
-		mmc_claim_host(host);
 		sdio_disable_wide(host->card);
-		mmc_release_host(host);
 	}
 
 	if (!mmc_card_keep_power(host))
@@ -1047,6 +1046,7 @@ static int mmc_sdio_suspend(struct mmc_host *host)
 	else if (host->ios.clock)
 		mmc_gate_clock(host);
 
+	mmc_release_host(host);
 	return 0;
 }
 
