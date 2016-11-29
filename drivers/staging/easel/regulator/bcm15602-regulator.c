@@ -44,7 +44,11 @@ static int bcm15602_regulator_enable_time(struct regulator_dev *rdev);
 static const struct mfd_cell bcm15602_devs[] = {
 	{
 		.name = "bcm15602-gpio",
-		.of_compatible = "bcm,bcm15602-gpio",
+		.of_compatible = "brcm,bcm15602-gpio",
+	},
+	{
+		.name = "bcm15602-thermal",
+		.of_compatible = "brcm,bcm15602-thermal",
 	},
 };
 
@@ -282,6 +286,43 @@ int bcm15602_update_bits(struct bcm15602_chip *ddata, u8 addr,
 #endif
 }
 EXPORT_SYMBOL_GPL(bcm15602_update_bits);
+
+int bcm15602_read_adc_slot(struct bcm15602_chip *ddata,
+			   int slot_num, u16 *slot_data)
+{
+	u16 reading_mask;
+	u8 byte;
+
+	reading_mask = 1 << slot_num;
+
+	spin_lock_irq(&ddata->lock);
+
+	/*
+	 * set the reading mask so the adc does not update the slot data while
+	 * we are performing a read
+	 */
+	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGL,
+			    reading_mask & 0xFF);
+	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGH,
+			    (reading_mask >> 8) & 0xF);
+
+	bcm15602_read_byte(ddata, BCM15602_REG_ADC_SLOTDATA0 + slot_num,
+			   &byte);
+	*slot_data = (byte << 2);
+	bcm15602_read_byte(ddata,
+			   BCM15602_REG_ADC_SLOTDATA3_0_LSB + (slot_num / 4),
+			   &byte);
+	*slot_data |= (byte >> (slot_num % 4)) & 0x3;
+
+	/* unset the reading mask */
+	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGL, 0);
+	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGH, 0);
+
+	spin_unlock_irq(&ddata->lock);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(bcm15602_read_adc_slot);
 
 /* reset the watchdog timer */
 static void bcm15602_clear_wdt(struct bcm15602_chip *ddata)

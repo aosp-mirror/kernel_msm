@@ -63,42 +63,6 @@ static const struct attribute_group bcm15602_attr_group = {
 	.attrs = bcm15602_attrs,
 };
 
-static int bcm15602_read_adc_slot(struct bcm15602_chip *ddata,
-				  int slot_num, u16 *slot_data)
-{
-	u16 reading_mask;
-	u8 byte;
-
-	reading_mask = 1 << slot_num;
-
-	spin_lock_irq(&ddata->lock);
-
-	/*
-	 * set the reading mask so the adc does not update the slot data while
-	 * we are performing a read
-	 */
-	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGL,
-			    reading_mask & 0xFF);
-	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGH,
-			    (reading_mask >> 8) & 0xF);
-
-	bcm15602_read_byte(ddata, BCM15602_REG_ADC_SLOTDATA0 + slot_num,
-			   &byte);
-	*slot_data = (byte << 2);
-	bcm15602_read_byte(ddata,
-			   BCM15602_REG_ADC_SLOTDATA3_0_LSB + (slot_num / 4),
-			   &byte);
-	*slot_data |= (byte >> (slot_num % 4)) & 0x3;
-
-	/* unset the reading mask */
-	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGL, 0);
-	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGH, 0);
-
-	spin_unlock_irq(&ddata->lock);
-
-	return 0;
-}
-
 static int bcm15602_get_asr_curr(struct bcm15602_chip *ddata, int *asr_curr)
 {
 	u16 mstr_curr_slot_data, slv_curr_slot_data;

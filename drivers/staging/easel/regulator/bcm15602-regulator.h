@@ -337,6 +337,8 @@ int bcm15602_read_byte(struct bcm15602_chip *ddata, u8 addr, u8 *data);
 int bcm15602_write_byte(struct bcm15602_chip *ddata, u8 addr, u8 data);
 int bcm15602_update_bits(struct bcm15602_chip *ddata, u8 addr,
 			 unsigned int mask, u8 data);
+int bcm15602_read_adc_slot(struct bcm15602_chip *ddata,
+			   int slot_num, u16 *slot_data);
 
 void bcm15602_config_sysfs(struct device *dev);
 
