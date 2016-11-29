@@ -20,3 +20,73 @@
 	swap-vbus-vin;
 	iin = <150>;
 };
+
+&dsi_lgd_sw42605_cmd {
+	qcom,mdss-dsi-on-command = [
+		39 01 00 00 00 00 05 2A 00 00 01 67  /* Column Address Setting */
+		39 01 00 00 00 00 05 2B 00 00 01 67  /* Page Address Setting */
+		15 01 00 00 00 00 02 53 20           /* Display Control */
+		15 01 00 00 00 00 02 55 00           /* Write Power Save */
+		15 01 00 00 00 00 02 36 00           /* Memory Access Control */
+		05 01 00 00 78 00 01 11              /* Sleep Out */
+		15 01 00 00 01 00 02 B0 AC           /* Manufacturer Command Protection */
+		39 01 00 00 0A 00 0A D8
+		7E 0F 84 84 03 80
+		80 6F 20
+		39 01 00 00 0A 00 14 DA
+		44 65 33 33 03 44
+		52 55 46 47 07 43
+		12 33 33 03 02 11
+		02
+		15 01 00 00 00 00 02 35 00 /* TE On */
+		];
+	qcom,mdss-dsi-off-command = [
+		39 01 00 00 00 00 35 DB
+		01 1B 08 18 33 FF
+		FF 11 3F 3F 3F 22
+		9E 03 84 80 6F 20
+		00 17 1A 7F 0F 55
+		20 E0 0B 44 15 44
+		15 00 4D 00 32 00
+		01 00 4D 00 32 00
+		01 90 00 10 00 00
+		00 00 00 00  /* PSM */
+		05 01 00 00 78 00 01 38  /* Idle Mode Off */
+		05 01 00 00 00 00 01 28  /* Display Off */
+		05 01 00 00 6E 00 01 10  /* Sleep In */
+		];
+	qcom,mdss-dsi-idle-on-command = [
+		39 01 00 00 00 00 02 53 20     /* Display Control */
+		39 01 00 00 00 00 03 61 32 00  /* Write Display Brightness in PSM */
+		39 01 00 00 00 00 02 63 A0     /* Write Control Display in PSM */
+		15 01 00 00 01 00 02 B0 AC     /* Manufacturer Command Protection */
+		39 01 00 00 00 00 35 DB
+		01 1B 08 18 33 FF
+		FF 11 3F 3F 3F 22
+		9E 03 84 80 6F 20
+		00 17 1A 7F 0F 00
+		20 E0 0B 44 15 44
+		15 00 4D 00 32 00
+		01 00 4D 00 32 00
+		01 90 00 10 00 00
+		00 00 00 00  /* PSM */
+		05 01 00 00 00 00 01 39  /* Idle Mode On */
+		];
+	qcom,mdss-dsi-idle-off-command = [
+		39 01 00 00 00 00 03 61 32 00   /* Write Display Brightness in PSM */
+		39 01 00 00 00 00 02 63 A0      /* Write Control Display in PSM */
+		15 01 00 00 01 00 02 B0 AC      /* Manufacturer Command Protection */
+		39 01 00 00 00 00 35 DB
+		01 1B 08 18 33 FF
+		FF 11 3F 3F 3F 22
+		9E 03 84 80 6F 20
+		00 17 1A 7F 0F 55
+		20 E0 0B 44 15 44
+		15 00 4D 00 32 00
+		01 00 4D 00 32 00
+		01 90 00 10 00 00
+		00 00 00 00  /* PSM */
+		05 01 00 00 00 00 01 38  /* Idle Mode Off */
+		05 01 00 00 00 00 01 34  /* TE Off */
+		];
+};
