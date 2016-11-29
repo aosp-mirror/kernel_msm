@@ -112,6 +112,7 @@ struct fan5451x_chip {
 	int usb_present;
 	int wlc_present;
 	bool eoc;
+	bool full;
 	int fet_disabled;
 	/* battery temp scenario */
 	int prev_ibus_ma;
@@ -1215,6 +1216,7 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 	/* Cable removed */
 	if (!usb_present && !wlc_present && !chip->wlc_fake_online) {
 		chip->eoc = false;
+		chip->full = false;
 		fan5451x_vbat_measure(chip);
 		fan5451x_batfet_enable(chip, CABLE, 0);
 		fan5451x_batfet_enable(chip, CHARGE, 1);
@@ -1276,8 +1278,7 @@ static int get_prop_batt_status(struct fan5451x_chip *chip)
 
 	/* remain FULL state instead of DISCHARGING state
 	 * after WLC Rx Off on raising EOC. */
-	if ((stat[1] & STAT1_CHGCMP || chip->eoc) &&
-			!chip->ext_vdd_restriction)
+	if (stat[1] & STAT1_CHGCMP || chip->full)
 		return POWER_SUPPLY_STATUS_FULL;
 
 	if (!(stat[0] & (chip->register_base.stat0_vinpwr |
@@ -1591,6 +1592,7 @@ fan5451x_vbat_rechg_notification(enum qpnp_tm_state state, void *ctx)
 	volt = get_prop_battery_voltage_now(chip);
 	pr_info("SW Rechg occur!! volt(%d)\n", volt);
 	chip->eoc = false;
+	chip->full = false;
 	fan5451x_batfet_enable(chip, CHARGE, 1);
 	if (!chip->retail_enable)
 		fan5451x_wlc_fake_online(chip, 0);
@@ -1706,6 +1708,7 @@ fan5451x_eoc_check_work(struct work_struct *work)
 			fan5451x_batfet_enable(chip, CHARGE, 0);
 			fan5451x_wlc_fake_online(chip, 1);
 			chip->eoc = true;
+			chip->full = true;
 			fan5451x_vbat_rechg_measure(chip);
 			power_supply_changed(&chip->batt_psy);
 			goto stop_eoc;
