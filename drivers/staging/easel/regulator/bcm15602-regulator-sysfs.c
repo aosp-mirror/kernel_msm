@@ -65,48 +65,48 @@ static const struct attribute_group bcm15602_attr_group = {
 
 static int bcm15602_get_asr_curr(struct bcm15602_chip *ddata, int *asr_curr)
 {
-	u16 mstr_curr_slot_data, slv_curr_slot_data;
+	u16 mstr_curr_chan_data, slv_curr_chan_data;
 
-	bcm15602_read_adc_slot(ddata, BCM15602_HK_ASR_MSTR_CURR_OVERI,
-			       &mstr_curr_slot_data);
-	bcm15602_read_adc_slot(ddata, BCM15602_HK_ASR_SLV_CURR_OVERI,
-			       &slv_curr_slot_data);
+	bcm15602_read_adc_chan(ddata, BCM15602_ADC_ASR_MSTR_CURR,
+			       &mstr_curr_chan_data);
+	bcm15602_read_adc_chan(ddata, BCM15602_ADC_ASR_SLV_CURR,
+			       &slv_curr_chan_data);
 
-	*asr_curr = (mstr_curr_slot_data * BCM15602_ADC_SCALE_ASR_CURR / 1023) +
-		(slv_curr_slot_data * BCM15602_ADC_SCALE_ASR_CURR / 1023);
+	*asr_curr = (mstr_curr_chan_data * BCM15602_ADC_SCALE_ASR_CURR / 1023) +
+		(slv_curr_chan_data * BCM15602_ADC_SCALE_ASR_CURR / 1023);
 
 	return 0;
 }
 
 static int bcm15602_get_sdsr_curr(struct bcm15602_chip *ddata, int *sdsr_curr)
 {
-	u16 slot_data;
+	u16 chan_data;
 
-	bcm15602_read_adc_slot(ddata, BCM15602_HK_SDSR_CURR_OVERI, &slot_data);
+	bcm15602_read_adc_chan(ddata, BCM15602_ADC_SDSR_CURR, &chan_data);
 
-	*sdsr_curr = slot_data * BCM15602_ADC_SCALE_SDSR_CURR / 1023;
+	*sdsr_curr = chan_data * BCM15602_ADC_SCALE_SDSR_CURR / 1023;
 
 	return 0;
 }
 
 static int bcm15602_get_sdldo_curr(struct bcm15602_chip *ddata, int *sdldo_curr)
 {
-	u16 slot_data;
+	u16 chan_data;
 
-	bcm15602_read_adc_slot(ddata, BCM15602_HK_SDLDO_CURR_OVERI, &slot_data);
+	bcm15602_read_adc_chan(ddata, BCM15602_ADC_SDLDO_CURR, &chan_data);
 
-	*sdldo_curr = slot_data * BCM15602_ADC_SCALE_SDLDO_CURR / 1023;
+	*sdldo_curr = chan_data * BCM15602_ADC_SCALE_SDLDO_CURR / 1023;
 
 	return 0;
 }
 
 static int bcm15602_get_ioldo_curr(struct bcm15602_chip *ddata, int *ioldo_curr)
 {
-	u16 slot_data;
+	u16 chan_data;
 
-	bcm15602_read_adc_slot(ddata, BCM15602_HK_IOLDO_CURR_OVERI, &slot_data);
+	bcm15602_read_adc_chan(ddata, BCM15602_ADC_IOLDO_CURR, &chan_data);
 
-	*ioldo_curr = slot_data * BCM15602_ADC_SCALE_IOLDO_CURR / 1023;
+	*ioldo_curr = chan_data * BCM15602_ADC_SCALE_IOLDO_CURR / 1023;
 
 	return 0;
 }
@@ -164,12 +164,12 @@ static ssize_t bcm15602_attr_show_vbat(struct device *dev,
 				       char *data)
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
-	u16 slot_data;
+	u16 chan_data;
 
-	bcm15602_read_adc_slot(ddata, BCM15602_HK_VBAT_UNDERV0, &slot_data);
+	bcm15602_read_adc_chan(ddata, BCM15602_ADC_VBAT, &chan_data);
 
 	return snprintf(data, PAGE_SIZE, "%d\n",
-			slot_data * BCM15602_ADC_SCALE_VBAT / 1023);
+			chan_data * BCM15602_ADC_SCALE_VBAT / 1023);
 }
 
 static ssize_t bcm15602_attr_show_temperature(struct device *dev,
@@ -177,11 +177,11 @@ static ssize_t bcm15602_attr_show_temperature(struct device *dev,
 					      char *data)
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
-	u16 slot_data;
+	u16 chan_data;
 
-	bcm15602_read_adc_slot(ddata, BCM15602_HK_PTAT_OVERT, &slot_data);
+	bcm15602_read_adc_chan(ddata, BCM15602_ADC_PTAT, &chan_data);
 
-	return snprintf(data, PAGE_SIZE, "%d\n", PTAT_CODE_TO_TEMP(slot_data));
+	return snprintf(data, PAGE_SIZE, "%d\n", PTAT_CODE_TO_TEMP(chan_data));
 }
 
 static ssize_t bcm15602_attr_show_total_power(struct device *dev,

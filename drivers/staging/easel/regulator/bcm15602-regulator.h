@@ -95,8 +95,8 @@
 #define BCM15602_REG_LDO_LDO_TEST_CTRL1               0x7a
 #define BCM15602_REG_ADC_MAN_CTRL                     0x80
 #define BCM15602_REG_ADC_MAN_CONV_CHNUM               0x81
-#define BCM15602_REG_ADC_ADC_MAN_RESULT_L             0x82
-#define BCM15602_REG_ADC_ADC_MAN_RESULT_H             0x83
+#define BCM15602_REG_ADC_MAN_RESULT_L                 0x82
+#define BCM15602_REG_ADC_MAN_RESULT_H                 0x83
 #define BCM15602_REG_ADC_DIE_TEMP_TRIM                0x84
 #define BCM15602_REG_ADC_ISNS_RTRIM                   0x85
 #define BCM15602_REG_ADC_ADC_OFFSET_TRIM              0x86
@@ -294,9 +294,11 @@ struct bcm15602_chip {
 	struct regmap *regmap;
 	struct regulator_dev **rdevs;
 	struct bcm15602_platform_data *pdata;
-	/* lock used to prevent race condition with ADC accesses */
-	spinlock_t lock;
 	u16 hk_status;
+
+	/* lock used to prevent race condition with ADC accesses */
+	spinlock_t adc_lock;
+
 #ifdef PREPRODUCTION
 	u8 pseudo_regmap[256];
 #endif
@@ -337,8 +339,10 @@ int bcm15602_read_byte(struct bcm15602_chip *ddata, u8 addr, u8 *data);
 int bcm15602_write_byte(struct bcm15602_chip *ddata, u8 addr, u8 data);
 int bcm15602_update_bits(struct bcm15602_chip *ddata, u8 addr,
 			 unsigned int mask, u8 data);
-int bcm15602_read_adc_slot(struct bcm15602_chip *ddata,
-			   int slot_num, u16 *slot_data);
+int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
+			   int chan_num, u16 *chan_data);
+int bcm15602_read_hk_slot(struct bcm15602_chip *ddata,
+			  int slot_num, u16 *slot_data);
 
 void bcm15602_config_sysfs(struct device *dev);
 

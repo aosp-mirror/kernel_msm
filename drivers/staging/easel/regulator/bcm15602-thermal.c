@@ -37,11 +37,14 @@ static int bcm15602_thermal_get_temp(struct thermal_zone_device *tz_dev,
 {
 	struct bcm15602_thermal *bcm15602_thermal = tz_dev->devdata;
 	struct bcm15602_chip *bcm15602 = bcm15602_thermal->bcm15602;
-	u16 slot_data = 0;
+	u16 chan_data = 0;
+	int ret;
 
-	bcm15602_read_adc_slot(bcm15602, BCM15602_HK_PTAT_OVERT, &slot_data);
+	ret = bcm15602_read_adc_chan(bcm15602, BCM15602_ADC_PTAT, &chan_data);
+	if (ret)
+		return -EAGAIN;
 
-	*temp = PTAT_CODE_TO_TEMP(slot_data);
+	*temp = PTAT_CODE_TO_TEMP(chan_data);
 	return 0;
 }
 

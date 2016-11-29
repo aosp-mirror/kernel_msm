@@ -287,15 +287,61 @@ int bcm15602_update_bits(struct bcm15602_chip *ddata, u8 addr,
 }
 EXPORT_SYMBOL_GPL(bcm15602_update_bits);
 
-int bcm15602_read_adc_slot(struct bcm15602_chip *ddata,
-			   int slot_num, u16 *slot_data)
+/* defines the number of poll retries for  ADC conversion completion */
+#define BCM15602_ADC_CONV_RETRY_CNT 10
+
+int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
+			   int chan_num, u16 *chan_data)
+{
+	u8 byte;
+	int retry_cnt = 0;
+	int ret = 0;
+
+	spin_lock_irq(&ddata->adc_lock);
+
+	/* enable the ADC clock */
+	bcm15602_write_byte(ddata, BCM15602_REG_ADC_MAN_CTRL, 0x1);
+
+	/* write the channel number to trigger the conversion */
+	bcm15602_write_byte(ddata, BCM15602_REG_ADC_MAN_CONV_CHNUM, chan_num);
+
+	/* poll on ADC manual conversion busy bit */
+	do {
+		if (++retry_cnt == BCM15602_ADC_CONV_RETRY_CNT) {
+			dev_err(ddata->dev, "%s: ADC conversion timed out\n",
+				__func__);
+			*chan_data = 0;
+			ret = -ETIMEDOUT;
+			goto finish;
+		}
+
+		bcm15602_read_byte(ddata, BCM15602_REG_ADC_MAN_RESULT_H, &byte);
+	} while (byte & 0x80);
+
+	/* read and format the conversion result */
+	*chan_data = (byte & 0x7F) << 3;
+	bcm15602_read_byte(ddata, BCM15602_REG_ADC_MAN_RESULT_L, &byte);
+	*chan_data |= byte & 0x7;
+
+finish:
+	/* disable the ADC clock */
+	bcm15602_write_byte(ddata, BCM15602_REG_ADC_MAN_CTRL, 0x0);
+
+	spin_unlock_irq(&ddata->adc_lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(bcm15602_read_adc_chan);
+
+int bcm15602_read_hk_slot(struct bcm15602_chip *ddata,
+			  int slot_num, u16 *slot_data)
 {
 	u16 reading_mask;
 	u8 byte;
 
 	reading_mask = 1 << slot_num;
 
-	spin_lock_irq(&ddata->lock);
+	spin_lock_irq(&ddata->adc_lock);
 
 	/*
 	 * set the reading mask so the adc does not update the slot data while
@@ -318,11 +364,11 @@ int bcm15602_read_adc_slot(struct bcm15602_chip *ddata,
 	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGL, 0);
 	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGH, 0);
 
-	spin_unlock_irq(&ddata->lock);
+	spin_unlock_irq(&ddata->adc_lock);
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(bcm15602_read_adc_slot);
+EXPORT_SYMBOL_GPL(bcm15602_read_hk_slot);
 
 /* reset the watchdog timer */
 static void bcm15602_clear_wdt(struct bcm15602_chip *ddata)
@@ -879,7 +925,8 @@ static int bcm15602_probe(struct i2c_client *client,
 	/* initialize chip structure */
 	ddata->dev = dev;
 	ddata->pdata = pdata;
-	spin_lock_init(&ddata->lock);
+
+	spin_lock_init(&ddata->adc_lock);
 
 	/* initialize regmap */
 	ddata->regmap = devm_regmap_init_i2c(client, &bcm15602_regmap_config);
