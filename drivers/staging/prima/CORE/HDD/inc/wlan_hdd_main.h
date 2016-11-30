@@ -63,6 +63,22 @@
 #endif
 #include "wlan_hdd_cfg80211.h"
 
+typedef struct
+{
+    char name[32];
+    char value[32];
+}WLAN_ASUS_NV;
+
+typedef struct
+{
+    int MacAddress[VOS_MAC_ADDRESS_LEN];
+}WLAN_ASUS_MAC;
+
+#define WLAN_ASUS_NV_FILE_LINK   "wlan/prima/wifi.nv"
+#define WLAN_ASUS_NV_FILE        "/factory/wifi.nv"
+#define WLAN_ASUS_NV_MAXITEMS    6
+
+
 /*--------------------------------------------------------------------------- 
   Preprocessor definitions and constants
   -------------------------------------------------------------------------*/

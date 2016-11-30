@@ -498,6 +498,14 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
       event.u.qual.level = VOS_MIN ((descriptor->rssi + descriptor->sinr), 0);
    }
    
+   //ASUS_BSP+++ "add for the RSSI (value = 0) issue"
+   //hddLog(1, "[wlan]: event.u.qual.level=%d.\n", (event.u.qual.level));
+   if( event.u.qual.level == 0 ) {
+       hddLog(1, "[wlan]: event.u.qual.level, (0 -> -99).\n");
+       event.u.qual.level = (-99);
+   }
+   //ASUS_BSP--- "add for the RSSI (value = 0) issue"
+
    event.u.qual.updated = IW_QUAL_ALL_UPDATED;
 
    current_event = iwe_stream_add_event(scanInfo->info,current_event,

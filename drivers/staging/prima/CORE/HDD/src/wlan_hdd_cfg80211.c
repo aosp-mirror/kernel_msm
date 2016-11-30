@@ -10004,6 +10004,12 @@ wlan_hdd_cfg80211_inform_bss_frame( hdd_adapter_t *pAdapter,
     hddLog(VOS_TRACE_LEVEL_INFO, "%s: BSSID:" MAC_ADDRESS_STR " Channel:%d"
           " RSSI:%d", __func__, MAC_ADDR_ARRAY(mgmt->bssid),
                       vos_freq_to_chan(chan->center_freq), (int)(rssi/100));
+    //ASUS_BSP+++ "add for the RSSI (value = 0) issue"
+    if( rssi == 0 ) {
+        hddLog(1, "[wlan]: wlan_hdd_cfg80211_inform_bss_frame, rssi (0 -> -9900).\n");
+        rssi = (-9900);
+    }
+    //ASUS_BSP--- "add for the RSSI (value = 0) issue"
 
     bss_status = cfg80211_inform_bss_frame(wiphy, chan, mgmt,
             frame_len, rssi, GFP_KERNEL);
@@ -12506,6 +12512,8 @@ static int __wlan_hdd_cfg80211_disconnect( struct wiphy *wiphy,
     hddLog(VOS_TRACE_LEVEL_INFO, "%s: device_mode = %s(%d)",
            __func__, hdd_device_modetoString(pAdapter->device_mode),
                                              pAdapter->device_mode);
+
+    pr_info("wlan: Disconnect called with reason code %d\n",reason);
 
     hddLog(VOS_TRACE_LEVEL_INFO, "%s: Disconnect called with reason code %d",
             __func__, reason);
