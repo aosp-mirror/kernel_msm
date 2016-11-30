@@ -600,6 +600,9 @@ static void max17050_set_dynamic_soc_param(struct max17050_chip *chip,
 	struct i2c_client *client = chip->client;
 	struct max17050_platform_data *pdata = chip->pdata;
 
+	if (chip->charge_status == status)
+		return;
+
 	dev_info(&client->dev, "Charge Event status: %d->%d\n",
 			chip->charge_status, status);
 
@@ -1038,7 +1041,7 @@ static void max17050_external_power_changed(struct power_supply *psy)
 	struct i2c_client *client = chip->client;
 	union power_supply_propval res = {0, };
 	static int prev_online = 0;
-	static bool need_recal = true;
+	static bool saved_full = false;
 	int online = 0;
 
 	if (!chip->usb_psy)
@@ -1055,21 +1058,6 @@ static void max17050_external_power_changed(struct power_supply *psy)
 		return;
 	}
 
-	/* Check battery EOC state */
-	if (chip->ext_battery) {
-		chip->ext_battery->get_property(chip->ext_battery,
-				POWER_SUPPLY_PROP_STATUS, &res);
-		if (res.intval == POWER_SUPPLY_STATUS_FULL) {
-			if (need_recal) {
-				max17050_set_dynamic_soc_param(chip,
-						CHARGER_EOC);
-				need_recal = false;
-			}
-		} else {
-			need_recal = true;
-		}
-	}
-
 	/* Check charger plug-in state */
 	if (chip->usb_psy) {
 		chip->usb_psy->get_property(
@@ -1083,6 +1071,26 @@ static void max17050_external_power_changed(struct power_supply *psy)
 		online |= res.intval;
 	}
 
+	/* Check battery full status */
+	if (chip->ext_battery) {
+		chip->ext_battery->get_property(chip->ext_battery,
+				POWER_SUPPLY_PROP_STATUS, &res);
+		if (res.intval == POWER_SUPPLY_STATUS_FULL) {
+			if (!saved_full && online) {
+				max17050_set_dynamic_soc_param(chip,
+						CHARGER_EOC);
+				saved_full = true;
+			}
+		} else {
+			/* battery could be discharged although charger has connected.
+			 * in case that battery status is not full, dynamic soc status should be changed. */
+			if (saved_full)
+				max17050_set_dynamic_soc_param(chip, CHARGER_DISCONECT);
+			saved_full = false;
+		}
+	}
+
+	/* Check cable plugged status */
 	if (prev_online ^ online) {
 		prev_online = online;
 		if (online)
