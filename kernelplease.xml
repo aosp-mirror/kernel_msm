@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<kernel>
-  <!-- Please upload dorado kernel. -->
-  <bool name="dorado_kernel_is_here">false</bool>
-  <!-- Delete this file after uploading kernel. -->
-  <bool name="delete_me">true</bool>
-</kernel>
