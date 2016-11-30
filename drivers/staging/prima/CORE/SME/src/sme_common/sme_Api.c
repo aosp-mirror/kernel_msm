@@ -8794,7 +8794,7 @@ eHalStatus sme_NetBiosPacketSetFilter(void)
     vos_msg_t               msg;
     v_U8_t   idx=0;
 
-    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "[wlan] NetBios filter set %s", __func__);
+    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO, "[wlan] NetBios filter set %s", __func__);
 
     allocSize = sizeof(tSirRcvPktFilterCfgType);
     
@@ -8922,7 +8922,7 @@ eHalStatus sme_NetBiosClearFilter(void)
     tpSirRcvFltPktClearParam pRequestBuf;
     vos_msg_t               msg;
   
-    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "[wlan] NetBios filter clear %s", __func__);
+    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO, "[wlan] NetBios filter clear %s", __func__);
 
     pRequestBuf = vos_mem_malloc(sizeof(tSirRcvFltPktClearParam));
     if (NULL == pRequestBuf)
@@ -8959,7 +8959,7 @@ eHalStatus sme_ShareportPacketSetFilter(void)
     vos_msg_t               msg;
     v_U8_t   idx=0;
 
-    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "[wlan] shareport filter set %s", __func__);
+    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO, "[wlan] shareport filter set %s", __func__);
 
     allocSize = sizeof(tSirRcvPktFilterCfgType);
     
@@ -9088,7 +9088,7 @@ eHalStatus sme_ShareportClearFilter(void)
     tpSirRcvFltPktClearParam pRequestBuf;
     vos_msg_t               msg;
   
-    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "[wlan] shareport filter clear %s", __func__);
+    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO, "[wlan] shareport filter clear %s", __func__);
 
     pRequestBuf = vos_mem_malloc(sizeof(tSirRcvFltPktClearParam));
     if (NULL == pRequestBuf)

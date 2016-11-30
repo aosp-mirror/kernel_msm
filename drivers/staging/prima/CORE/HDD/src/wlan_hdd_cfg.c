@@ -3622,11 +3622,11 @@ VOS_STATUS hdd_parse_config_nv(hdd_context_t* pHddCtx)
         buffer = line;
     }
 
-    hddLog(1,"[wlan]: -------------------------");
+    printk("[wlan]: -------------------------\n");
     for( i=0; i<WLAN_ASUS_NV_MAXITEMS; i++ ) {
-        hddLog(1,"[wlan]: %s=%s", g_WlanAsusNv[i].name, g_WlanAsusNv[i].value);
+        printk("[wlan]: %s=%s", g_WlanAsusNv[i].name, g_WlanAsusNv[i].value);
     }
-    hddLog(1,"[wlan]: -------------------------");
+    printk("[wlan]: -------------------------\n");
 
     for( i=0; i<4; i++ ){
         if( strlen(g_WlanAsusNv[i].value) == 12 ) {
