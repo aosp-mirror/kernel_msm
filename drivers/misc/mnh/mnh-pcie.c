@@ -553,8 +553,16 @@ int mnh_dma_abort(uint8_t chan, enum mnh_dma_chan_dir_t dir)
 {
 	uint32_t data;
 	uint8_t len = sizeof(data);
+	struct mnh_dma_state_info_t state;
 
 	dev_dbg(&mnh_dev->pdev->dev, "DMA ABORT: DIR:%d CH:%d\n", dir, chan);
+
+	mnh_dma_get_status(chan, dir, &state);
+	if(state.status != DMA_CHAN_RUNNING) {
+		dev_dbg(&mnh_dev->pdev->dev, "CH not running! - %d\n",
+		state.status);
+		return -EINVAL;
+	}
 
 	/* update doorbell register */
 	if (dir == DMA_EP2AP) { /* write */
