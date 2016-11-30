@@ -64,11 +64,13 @@
 #define MAX17055_VMAX_TOLERANCE    50			/* 50 mV */
 #define MAX17055_IC_VERSION_A      0x4000
 #define MAX17055_IC_VERSION_B      0x4010
-#define MAX17055_DRIVER_VERSION    0x101e
+#define MAX17055_DRIVER_VERSION    0x101f
 
 #if CONFIG_HUAWEI_SAWSHARK
-#define MAX17055_CAPACITY_CARRY    128
-#define MAX17055_SOCHOLD           0xD3
+#define MAX17055_CAPACITY_CARRY              127
+#define MAX17055_CAPACITY_CARRY_THRESHOLD    1
+#define MAX17055_SOCHOLD                     0xD3
+#define SOCHOLD_ENHOLD_BIT                   (1 << 12)
 #endif
 
 const static u16 dPaccVals[2][2] = {
@@ -85,6 +87,10 @@ struct max17055_chip {
 	struct work_struct work;
 	int    init_complete;
 };
+
+#if CONFIG_HUAWEI_SAWSHARK
+struct max17055_chip *global_max17055 = NULL;
+#endif
 
 static enum power_supply_property max17055_battery_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
@@ -109,7 +115,9 @@ static enum power_supply_property max17055_battery_props[] = {
 	POWER_SUPPLY_PROP_DEVICE_NAME,
 };
 
+#if CONFIG_HUAWEI_SAWSHARK
 #define DEFAULT_TEMP 250
+#endif
 static int max17055_get_temperature(struct max17055_chip *chip, int *temp)
 {
 #if CONFIG_HUAWEI_SAWSHARK
@@ -212,6 +220,42 @@ health_error:
 	return ret;
 }
 
+#if CONFIG_HUAWEI_SAWSHARK
+int max17055_global_get_real_capacity(void)
+{
+	struct regmap *map = global_max17055->regmap;
+	int ret = -1;
+	u32 data = -1;
+	u32 cur_soc = 0;
+
+	if (!global_max17055)
+	{
+		pr_err("max17055 chip can not register\n");
+		return -1;
+	}
+
+	ret = regmap_read(map, MAX17055_RepSOC, &data);
+	if (ret < 0)
+	{
+		return ret;
+	}
+
+	/* rounding if capacity is greater or equal to 1 */
+	cur_soc = (data >> 8);
+	if (cur_soc >= MAX17055_CAPACITY_CARRY_THRESHOLD)
+	{
+		return ((data + MAX17055_CAPACITY_CARRY) >> 8);
+	}
+	else
+	{
+		return (data >> 8);
+	}
+}
+
+extern bool mp2661_global_get_repeat_charging_detect_flag(void);
+#define DEFAULT_BATT_AUTO_RECHARGE_CAPACITY   100
+#endif
+
 static int max17055_get_property(struct power_supply *psy,
 				enum power_supply_property psp,
 				union power_supply_propval *val)
@@ -221,6 +265,9 @@ static int max17055_get_property(struct power_supply *psy,
 	struct regmap *map = chip->regmap;
 	int ret;
 	u32 data;
+#if CONFIG_HUAWEI_SAWSHARK
+	u32 cur_soc = 0;
+#endif
 
 	if (!chip->init_complete)
 		return -EAGAIN;
@@ -296,7 +343,24 @@ static int max17055_get_property(struct power_supply *psy,
 			return ret;
 
 #if CONFIG_HUAWEI_SAWSHARK
-		val->intval = (data + MAX17055_CAPACITY_CARRY) >> 8;
+		if (mp2661_global_get_repeat_charging_detect_flag())
+		{
+			/* report 100% if repeat charging detect flag is true */
+			val->intval = DEFAULT_BATT_AUTO_RECHARGE_CAPACITY;
+		}
+		else
+		{
+			/* rounding if capacity is greater or equal to 1 */
+			cur_soc = (data >> 8);
+			if (cur_soc >= MAX17055_CAPACITY_CARRY_THRESHOLD)
+			{
+				val->intval = ((data + MAX17055_CAPACITY_CARRY) >> 8);
+			}
+			else
+			{
+				val->intval = (data >> 8);
+			}
+		}
 #else
 		val->intval = data >> 8;
 #endif
@@ -396,6 +460,11 @@ static int max17055_get_property(struct power_supply *psy,
 	return 0;
 }
 
+#if CONFIG_HUAWEI_SAWSHARK
+#define SOC_MAX    100
+#define SOC_MIN    0
+static int max17055_write_verify_reg(struct regmap *map, u8 reg, u32 value);
+#endif
 static int max17055_set_property(struct power_supply *psy,
 				enum power_supply_property psp,
 				const union power_supply_propval *val)
@@ -408,6 +477,22 @@ static int max17055_set_property(struct power_supply *psy,
 	int8_t temp;
 
 	switch (psp) {
+#if CONFIG_HUAWEI_SAWSHARK
+	case POWER_SUPPLY_PROP_CAPACITY:
+		/* update fullcaprep to repcap */
+		if ((val->intval <= SOC_MAX) && (val->intval >= SOC_MIN))
+		{
+			ret = regmap_read(map, MAX17055_RepCap, &data);
+			if (ret < 0)
+			{
+				return ret;
+			}
+
+			max17055_write_verify_reg(map, MAX17055_FullCapRep, data);
+			power_supply_changed(&chip->battery);
+		}
+		break;
+#endif
 	case POWER_SUPPLY_PROP_TEMP_ALERT_MIN:
 		ret = regmap_read(map, MAX17055_TAlrtTh, &data);
 		if (ret < 0)
@@ -449,6 +534,9 @@ static int max17055_property_is_writeable(struct power_supply *psy,
 	int ret;
 
 	switch (psp) {
+#if CONFIG_HUAWEI_SAWSHARK
+	case POWER_SUPPLY_PROP_CAPACITY:
+#endif
 	case POWER_SUPPLY_PROP_TEMP_ALERT_MIN:
 	case POWER_SUPPLY_PROP_TEMP_ALERT_MAX:
 		ret = 1;
@@ -1019,11 +1107,8 @@ static int max17055_probe(struct i2c_client *client,
 	}
 
 #if CONFIG_HUAWEI_SAWSHARK
-	regmap_read(chip->regmap, MAX17055_SOCHOLD, &val);
-	dev_info(&client->dev, "max17055: before disable sochold %04x\n", val);
-	regmap_write(chip->regmap, MAX17055_SOCHOLD, (val & 0xEFFF));
-	regmap_read(chip->regmap, MAX17055_SOCHOLD, &val);
-	dev_info(&client->dev, "max17055: afetr disable sochold %04x\n", val);
+	/* Enable Sochold */
+	regmap_update_bits(chip->regmap, MAX17055_SOCHOLD, SOCHOLD_ENHOLD_BIT, SOCHOLD_ENHOLD_BIT);
 #endif
 
 	chip->battery.name		= "bms";
@@ -1084,13 +1169,15 @@ static int max17055_probe(struct i2c_client *client,
 		schedule_work(&chip->work);
 	}
 	else if (MAX17055_DRIVER_VERSION != driver_version) {
-		/*Clear current firmware in use*/
-		regmap_update_bits(chip->regmap, MAX17055_Config2, CONFIG2_POR_CMD_BIT, CONFIG2_POR_CMD_BIT);
 		schedule_work(&chip->work);
 	}
 	else {
 		chip->init_complete = 1;
 	}
+
+#if CONFIG_HUAWEI_SAWSHARK
+	global_max17055 = chip;
+#endif
 
 	ret = device_create_file(&client->dev, &max17055_data_logging_attr);
 	if (ret) {
