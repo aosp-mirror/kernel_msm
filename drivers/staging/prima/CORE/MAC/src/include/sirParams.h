@@ -57,11 +57,6 @@ typedef enum
 {
     PHY_SINGLE_CHANNEL_CENTERED     = 0,        // 20MHz IF bandwidth centered on IF carrier
     PHY_DOUBLE_CHANNEL_LOW_PRIMARY  = 1,        // 40MHz IF bandwidth with lower 20MHz supporting the primary channel
-
-    // ASUS_BSP_WIFI +++ Add for wifitest: channel bonding HT40
-    PHY_DOUBLE_CHANNEL_CENTERED 	= 2,		// 40MHz IF bandwidth centered on IF carrier
-    // ASUS_BSP_WIFI --- Add for wifitest: channel bonding HT40
-
     PHY_DOUBLE_CHANNEL_HIGH_PRIMARY = 3,        // 40MHz IF bandwidth with higher 20MHz supporting the primary channel
 #ifdef WLAN_FEATURE_11AC
     PHY_QUADRUPLE_CHANNEL_20MHZ_LOW_40MHZ_CENTERED = 4, //20/40MHZ offset LOW 40/80MHZ offset CENTERED

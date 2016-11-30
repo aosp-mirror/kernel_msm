@@ -2571,7 +2571,6 @@ tMgmtFrmDropReason limIsPktCandidateForDrop(tpAniSirGlobal pMac, tANI_U8 *pRxPac
         if(pMac->pmm.inMissedBeaconScenario)
         {
             MTRACE(macTrace(pMac, TRACE_CODE_INFO_LOG, 0, eLOG_NODROP_MISSED_BEACON_SCENARIO));
-            pr_info("wlan: Do not drop beacon and probe response - Missed beacon sceanrio\n");
             return eMGMT_DROP_NO_DROP;
         }
         if (limIsSystemInScanState(pMac))

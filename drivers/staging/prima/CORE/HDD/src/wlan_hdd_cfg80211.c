@@ -1859,7 +1859,7 @@ static int __wlan_hdd_cfg80211_ll_stats_get(struct wiphy *wiphy,
 
     if (!pAdapter->isLinkLayerStatsSet)
     {
-        hddLog(VOS_TRACE_LEVEL_FATAL,
+        hddLog(VOS_TRACE_LEVEL_ERROR,
                "%s: isLinkLayerStatsSet : %d",
                __func__, pAdapter->isLinkLayerStatsSet);
         return -EINVAL;
@@ -10004,12 +10004,6 @@ wlan_hdd_cfg80211_inform_bss_frame( hdd_adapter_t *pAdapter,
     hddLog(VOS_TRACE_LEVEL_INFO, "%s: BSSID:" MAC_ADDRESS_STR " Channel:%d"
           " RSSI:%d", __func__, MAC_ADDR_ARRAY(mgmt->bssid),
                       vos_freq_to_chan(chan->center_freq), (int)(rssi/100));
-    //ASUS_BSP+++ "add for the RSSI (value = 0) issue"
-    if( rssi == 0 ) {
-        hddLog(1, "[wlan]: wlan_hdd_cfg80211_inform_bss_frame, rssi (0 -> -9900).\n");
-        rssi = (-9900);
-    }
-    //ASUS_BSP--- "add for the RSSI (value = 0) issue"
 
     bss_status = cfg80211_inform_bss_frame(wiphy, chan, mgmt,
             frame_len, rssi, GFP_KERNEL);
@@ -10371,6 +10365,13 @@ static eHalStatus hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
         goto allow_suspend;
     }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
+    if (!(pAdapter->dev->flags & IFF_UP))
+    {
+        hddLog(VOS_TRACE_LEVEL_ERROR, FL("Interface is down"));
+        goto allow_suspend;
+    }
+#endif
     pScanInfo = &pHddCtx->scan_info;
 
     hddLog(VOS_TRACE_LEVEL_INFO,
@@ -10483,7 +10484,9 @@ static eHalStatus hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
     {
          aborted = true;
     }
+
     cfg80211_scan_done(req, aborted);
+
     complete(&pScanInfo->abortscan_event_var);
 
     if ((pHddCtx->cfg_ini->enableMacSpoofing == MAC_ADDR_SPOOFING_FW_HOST_ENABLE
@@ -10748,9 +10751,18 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
      */
     if (hdd_isConnectionInProgress(pHddCtx))
     {
-        hddLog(VOS_TRACE_LEVEL_ERROR, "%s: Scan not allowed", __func__);
+        hddLog(VOS_TRACE_LEVEL_ERROR, FL("Scan not allowed"));
+        if (SCAN_ABORT_THRESHOLD < pHddCtx->con_scan_abort_cnt) {
+            VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                    FL("Triggering SSR, SSR status = %d"), status);
+            vos_wlanRestart();
+        }
+        else
+            pHddCtx->con_scan_abort_cnt++;
+
         return -EBUSY;
     }
+    pHddCtx->con_scan_abort_cnt = 0;
 
     vos_mem_zero( &scanRequest, sizeof(scanRequest));
 
@@ -12494,8 +12506,6 @@ static int __wlan_hdd_cfg80211_disconnect( struct wiphy *wiphy,
     hddLog(VOS_TRACE_LEVEL_INFO, "%s: device_mode = %s(%d)",
            __func__, hdd_device_modetoString(pAdapter->device_mode),
                                              pAdapter->device_mode);
-
-    pr_info("wlan: Disconnect called with reason code %d\n",reason);
 
     hddLog(VOS_TRACE_LEVEL_INFO, "%s: Disconnect called with reason code %d",
             __func__, reason);
@@ -14724,10 +14734,8 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
     else
         pnoRequest.scanTimers.ucScanTimersCount =
                                                HDD_PNO_SCAN_TIMERS_SET_MULTIPLE;
-//ASUS_BSP+++ "Update PNO scan interval to 300s"
-//    tempInterval = (request->interval)/1000;
-    tempInterval = 300;
-//ASUS_BSP--- "Update PNO scan interval to 300s"
+
+    tempInterval = (request->interval)/1000;
     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
               "Base scan interval = %d PNOScanTimerRepeatValue = %d",
               tempInterval, pHddCtx->cfg_ini->configPNOScanTimerRepeatValue);
@@ -14906,7 +14914,7 @@ static int __wlan_hdd_cfg80211_sched_scan_stop(struct wiphy *wiphy,
         // Assuming the PNO disable was success.
         // Returning error from here, because we timeout, results
         // in side effect of Wifi (Wifi Setting) not to work.
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
                   FL("Timed out waiting for PNO to be disabled"));
         ret = 0;
     }

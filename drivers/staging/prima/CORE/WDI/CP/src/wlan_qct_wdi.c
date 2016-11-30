@@ -16399,7 +16399,7 @@ WDI_ProcessInitScanRsp
         WDI_ASSERT(0);
     }
   }
-  else
+  else if (WDI_STATUS_SUCCESS != wdiStatus)
   {
      WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
                "Error returned WDI_ProcessInitScanRspi:%d BMPS%d",
@@ -17720,7 +17720,7 @@ WDI_ProcessLLStatsSetRsp
 {
   WDI_LLStatsSetRspCb   wdiLLStatsSetRspCb;
 
-  WPAL_TRACE( eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
+  WPAL_TRACE( eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
               "%s: Enter ", __func__);
   /*-------------------------------------------------------------------------
     Sanity check
@@ -17761,7 +17761,7 @@ WDI_ProcessLLStatsGetRsp
      WDI_ASSERT(0);
      return WDI_STATUS_E_FAILURE;
   }
-  WPAL_TRACE( eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
+  WPAL_TRACE( eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
               "%s: Enter ", __func__);
 
   wdiLLStatsGetRspCb = (WDI_LLStatsGetRspCb)pWDICtx->pfncRspCB;
@@ -17792,7 +17792,7 @@ WDI_ProcessLLStatsClearRsp
      return WDI_STATUS_E_FAILURE;
   }
 
-  WPAL_TRACE( eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
+  WPAL_TRACE( eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
               "%s: CLEAR RESPONSE CALL BACK", __func__);
   wdiLLStatsClearRspCb = (WDI_LLStatsClearRspCb)pWDICtx->pfncRspCB;
 
@@ -20493,7 +20493,7 @@ WDI_ProcessKeepAliveRsp
    eHalStatus           halStatus;
    WDI_KeepAliveCb      wdiKeepAliveCb;
    /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-   WPAL_TRACE( eWLAN_MODULE_DAL_CTRL,  eWLAN_PAL_TRACE_LEVEL_ERROR,
+   WPAL_TRACE( eWLAN_MODULE_DAL_CTRL,  eWLAN_PAL_TRACE_LEVEL_INFO,
                "Received WDI_ProcessKeepAliveRsp Callback from HAL");
 
 
@@ -27566,7 +27566,7 @@ WDI_ProcessReceiveFilterSetFilterReq
            return WDI_STATUS_E_FAILURE;
         }
 
-        WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
+        WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
                    "UsData Off %d UsSend %d cfg %p",usDataOffset,
                    usSendSize,pSessRcvPktFilterCfg);
        
@@ -27577,10 +27577,10 @@ WDI_ProcessReceiveFilterSetFilterReq
 
         pSessRcvPktFilterCfg->bssIdx = pBSSSes->ucBSSIdx;
 
-        WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
+        WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
                    "Out: FID %d FT %d",pSessRcvPktFilterCfg->filterId,
                    pSessRcvPktFilterCfg->filterType);
-        WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
+        WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
                    "NParams %d CT %d",pSessRcvPktFilterCfg->numParams, 
                    pSessRcvPktFilterCfg->coleasceTime);
        
@@ -27602,17 +27602,17 @@ WDI_ProcessReceiveFilterSetFilterReq
                          &pwdiSetRcvPktFilterReqInfo->wdiPktFilterCfg.paramsData[i].dataMask,
                          8);
        
-           WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
+           WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
                 "Out:Proto %d Comp Flag %d",
                 pSessRcvPktFilterCfg->paramsData[i].protocolLayer,
                 pSessRcvPktFilterCfg->paramsData[i].cmpFlag);
 
-           WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
+           WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
                 "Data Offset %d Data Len %d",
                 pSessRcvPktFilterCfg->paramsData[i].dataOffset,
                 pSessRcvPktFilterCfg->paramsData[i].dataLength);
        
-           WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
+           WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
                 "CData: %d:%d:%d:%d:%d:%d",
                 pSessRcvPktFilterCfg->paramsData[i].compareData[0],
                 pSessRcvPktFilterCfg->paramsData[i].compareData[1],
@@ -27621,7 +27621,7 @@ WDI_ProcessReceiveFilterSetFilterReq
                 pSessRcvPktFilterCfg->paramsData[i].compareData[4],
                 pSessRcvPktFilterCfg->paramsData[i].compareData[5]);
        
-           WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
+           WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
                 "MData: %d:%d:%d:%d:%d:%d",
                 pSessRcvPktFilterCfg->paramsData[i].dataMask[0],
                 pSessRcvPktFilterCfg->paramsData[i].dataMask[1],

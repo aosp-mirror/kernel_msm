@@ -121,10 +121,6 @@ int wlan_hdd_ftm_start(hdd_context_t *pAdapter);
 #include "wlan_hdd_debugfs.h"
 #include "sapInternal.h"
 
-//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-#include <linux/asusdebug.h>
-//ASUS_BSP--- "for /data/log/ASUSEvtlog"
-
 #ifdef MODULE
 #define WLAN_MODULE_NAME  module_name(THIS_MODULE)
 #else
@@ -203,9 +199,6 @@ static vos_wake_lock_t wlan_wake_lock;
 /* set when SSR is needed after unload */
 static e_hdd_ssr_required isSsrRequired = HDD_SSR_NOT_REQUIRED;
 
-/*--------------------------------------------------------------------------------*/
-extern WLAN_ASUS_MAC g_WlanAsusMac[];
-/*--------------------------------------------------------------------------------*/
 //internal function declaration
 static VOS_STATUS wlan_hdd_framework_restart(hdd_context_t *pHddCtx);
 static void wlan_hdd_restart_init(hdd_context_t *pHddCtx);
@@ -3984,14 +3977,12 @@ static int hdd_driver_command(hdd_adapter_t *pAdapter,
        }
        else if (strncmp(command, "SCAN-ACTIVE", 11) == 0)
        {
-           VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                              FL("making default scan to ACTIVE"));
+           hddLog(LOG1, FL("making default scan to ACTIVE"));
            pHddCtx->scan_info.scan_mode = eSIR_ACTIVE_SCAN;
        }
        else if (strncmp(command, "SCAN-PASSIVE", 12) == 0)
        {
-           VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                              FL("making default scan to PASSIVE"));
+           hddLog(LOG1, FL("making default scan to PASSIVE"));
            pHddCtx->scan_info.scan_mode = eSIR_PASSIVE_SCAN;
        }
        else if (strncmp(command, "GETDWELLTIME", 12) == 0)
@@ -4741,7 +4732,7 @@ static VOS_STATUS hdd_parse_ese_beacon_req(tANI_U8 *pValue,
     v = sscanf(inPtr, "%31s ", buf);
     if (1 != v) return -EINVAL;
 
-    v = kstrtou8(buf, 10, &input);
+    v = kstrtos8(buf, 10, &input);
     if ( v < 0) return -EINVAL;
 
     input = VOS_MIN(input, SIR_ESE_MAX_MEAS_IE_REQS);
@@ -4774,10 +4765,10 @@ static VOS_STATUS hdd_parse_ese_beacon_req(tANI_U8 *pValue,
             switch (i)
             {
                 case 0:  /* Measurement token */
-                if (!tempInt) {
+                if (!tempInt)
                 {
                    VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                             "Invalid Measurement Token: %d", tempInt);
+                             "Invalid Measurement Token: %u", tempInt);
                    return -EINVAL;
                 }
                 pEseBcnReq->bcnReq[j].measurementToken = tempInt;
@@ -4788,7 +4779,7 @@ static VOS_STATUS hdd_parse_ese_beacon_req(tANI_U8 *pValue,
                     (tempInt > WNI_CFG_CURRENT_CHANNEL_STAMAX))
                 {
                    VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                             "Invalid Channel Number: %d", tempInt);
+                             "Invalid Channel Number: %u", tempInt);
                    return -EINVAL;
                 }
                 pEseBcnReq->bcnReq[j].channel = tempInt;
@@ -4798,7 +4789,7 @@ static VOS_STATUS hdd_parse_ese_beacon_req(tANI_U8 *pValue,
                 if ((tempInt < eSIR_PASSIVE_SCAN) || (tempInt > eSIR_BEACON_TABLE))
                 {
                    VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                             "Invalid Scan Mode: %d Expected{0|1|2}", tempInt);
+                             "Invalid Scan Mode(%u) Expected{0|1|2}", tempInt);
                    return -EINVAL;
                 }
                 pEseBcnReq->bcnReq[j].scanMode= tempInt;
@@ -4806,10 +4797,10 @@ static VOS_STATUS hdd_parse_ese_beacon_req(tANI_U8 *pValue,
 
                 case 3:  /* Measurement duration */
                 if (((!tempInt) && (pEseBcnReq->bcnReq[j].scanMode != eSIR_BEACON_TABLE)) ||
-                    ((pEseBcnReq->bcnReq[j].scanMode == eSIR_BEACON_TABLE))) {
+                    ((pEseBcnReq->bcnReq[j].scanMode == eSIR_BEACON_TABLE)))
                 {
                    VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                             "Invalid Measurement Duration: %d", tempInt);
+                             "Invalid Measurement Duration: %u", tempInt);
                    return -EINVAL;
                 }
                 pEseBcnReq->bcnReq[j].measurementDuration = tempInt;
@@ -5955,14 +5946,16 @@ VOS_STATUS hdd_request_firmware(char *pfileName,v_VOID_t *pCtx,v_VOID_t **ppfw_d
        status = request_firmware(&pHddCtx->nv, pfileName, pHddCtx->parent_dev);
 
        if(status || !pHddCtx->nv || !pHddCtx->nv->data) {
-           hddLog(1, "[wlan]: %s: nv %s download failed.", __func__, pfileName);
+           hddLog(VOS_TRACE_LEVEL_FATAL, "%s: nv %s download failed",
+                  __func__, pfileName);
            retval = VOS_STATUS_E_FAILURE;
        }
 
        else {
          *ppfw_data = (v_VOID_t *)pHddCtx->nv->data;
          *pSize = pHddCtx->nv->size;
-          printk("[wlan]: (%s), size=%d.", pfileName, *pSize);
+          hddLog(VOS_TRACE_LEVEL_INFO, "%s: nv file size = %d",
+                 __func__, *pSize);
        }
    }
 
@@ -6699,12 +6692,10 @@ void hdd_set_pwrparams(hdd_context_t *pHddCtx)
            {
                powerRequest.uDTIMPeriod = pHddCtx->cfg_ini->enableModulatedDTIM;
                powerRequest.uListenInterval = pHddCtx->hdd_actual_LI_value;
-	       printk("[wlan]: enableModulatedDTIM, (%d, %d).\n", ((int)(powerRequest.uDTIMPeriod)), ((int)(powerRequest.uListenInterval)));
            }
            else
            {
                powerRequest.uListenInterval = pHddCtx->cfg_ini->enableDynamicDTIM;
-	       printk("[wlan]: enableDynamicDTIM, (%d).\n", ((int)(powerRequest.uListenInterval)));
            }
 
            /* Update ignoreDTIM and ListedInterval in CFG to remain at the DTIM
@@ -6932,8 +6923,7 @@ hdd_adapter_t* hdd_open_adapter( hdd_context_t *pHddCtx, tANI_U8 session_type,
    VOS_STATUS status = VOS_STATUS_E_FAILURE;
    VOS_STATUS exitbmpsStatus;
 
-//   hddLog(VOS_TRACE_LEVEL_INFO_HIGH, "%s iface =%s type = %d",__func__,iface_name,session_type);
-   hddLog(1, "[wlan]: iface=%s, type=%d.",iface_name, session_type);
+   hddLog(VOS_TRACE_LEVEL_INFO_HIGH, "%s iface =%s type = %d",__func__,iface_name,session_type);
 
    if(macAddr == NULL)
    {
@@ -7419,8 +7409,7 @@ VOS_STATUS hdd_stop_adapter( hdd_context_t *pHddCtx, hdd_adapter_t *pAdapter,
          }
          else if(pScanInfo != NULL && pHddCtx->scan_info.mScanPending)
          {
-            hdd_abort_mac_scan(pHddCtx, pScanInfo->sessionId,
-                               eCSR_SCAN_ABORT_DEFAULT);
+            wlan_hdd_scan_abort(pAdapter);
          }
        if ((pAdapter->device_mode != WLAN_HDD_INFRA_STATION) &&
                    (pAdapter->device_mode != WLAN_HDD_IBSS))
@@ -7873,7 +7862,6 @@ void hdd_dump_concurrency_info(hdd_context_t *pHddCtx)
    v_U8_t staChannel = 0, p2pChannel = 0, apChannel = 0;
    const char *p2pMode = "DEV";
    const char *ccMode = "Standalone";
-   int n;
 
    status =  hdd_get_front_adapter ( pHddCtx, &pAdapterNode );
    while ( NULL != pAdapterNode && VOS_STATUS_SUCCESS == status )
@@ -7921,14 +7909,14 @@ void hdd_dump_concurrency_info(hdd_context_t *pHddCtx)
    if (staChannel > 0 && (apChannel > 0 || p2pChannel > 0)) {
        ccMode = (p2pChannel==staChannel||apChannel==staChannel) ? "SCC" : "MCC";
    }
-   n = pr_info("wlan(%d) " MAC_ADDRESS_STR " %s",
+   hddLog(VOS_TRACE_LEVEL_ERROR, "wlan(%d) " MAC_ADDRESS_STR " %s",
                 staChannel, MAC_ADDR_ARRAY(staBssid), ccMode);
    if (p2pChannel > 0) {
-       n +=  pr_info("p2p-%s(%d) " MAC_ADDRESS_STR,
+       hddLog(VOS_TRACE_LEVEL_ERROR, "p2p-%s(%d) " MAC_ADDRESS_STR,
                      p2pMode, p2pChannel, MAC_ADDR_ARRAY(p2pBssid));
    }
    if (apChannel > 0) {
-       n += pr_info("AP(%d) " MAC_ADDRESS_STR,
+       hddLog(VOS_TRACE_LEVEL_ERROR, "AP(%d) " MAC_ADDRESS_STR,
                      apChannel, MAC_ADDR_ARRAY(apBssid));
    }
 
@@ -9638,7 +9626,7 @@ static void hdd_dp_util_send_rps_ind(hdd_context_t  *hdd_ctxt)
 
 int hdd_wlan_startup(struct device *dev )
 {
-   VOS_STATUS status, nv_parse_status;
+   VOS_STATUS status;
    hdd_adapter_t *pAdapter = NULL;
    hdd_adapter_t *pP2pAdapter = NULL;
    hdd_context_t *pHddCtx = NULL;
@@ -9651,7 +9639,6 @@ int hdd_wlan_startup(struct device *dev )
    int ret;
    struct wiphy *wiphy;
    v_MACADDR_t mac_addr;
-   int i = 0, j = 0;
 
    ENTER();
    /*
@@ -9701,6 +9688,7 @@ int hdd_wlan_startup(struct device *dev )
    ((VosContextType*)(pVosContext))->pHDDContext = (v_VOID_t*)pHddCtx;
 
    pHddCtx->parent_dev = dev;
+   pHddCtx->con_scan_abort_cnt = 0;
 
    init_completion(&pHddCtx->full_pwr_comp_var);
    init_completion(&pHddCtx->standby_comp_var);
@@ -9739,11 +9727,6 @@ int hdd_wlan_startup(struct device *dev )
    /* By default Strict Regulatory For FCC should be false */
 
    pHddCtx->nEnableStrictRegulatoryForFCC = FALSE;
-   /*--------------------------------------------------*/
-   // Read and parse the asus nv file
-   nv_parse_status = hdd_parse_config_nv(pHddCtx);
-   /*--------------------------------------------------*/
-
    // Load all config first as TL config is needed during vos_open
    pHddCtx->cfg_ini = (hdd_config_t*) kmalloc(sizeof(hdd_config_t), GFP_KERNEL);
    if(pHddCtx->cfg_ini == NULL)
@@ -10016,7 +9999,6 @@ int hdd_wlan_startup(struct device *dev )
       // Apply the NV to cfg.dat
       /* Prima Update MAC address only at here */
 #ifdef WLAN_AUTOGEN_MACADDR_FEATURE
-#if 0
       /* There was not a valid set of MAC Addresses in NV.  See if the
          default addresses were modified by the cfg.ini settings.  If so,
          we'll use them, but if not, we'll autogenerate a set of MAC
@@ -10043,31 +10025,6 @@ int hdd_wlan_startup(struct device *dev )
                    MAC_ADDR_ARRAY(pHddCtx->cfg_ini->intfMacAddr[0].bytes));
          }
       }
-#else
-      static const v_MACADDR_t default_address[] = { {{0x00, 0x0A, 0xF5, 0x89, 0x89, 0xFF}},
-                                                 {{0x00, 0x0A, 0xF5, 0x89, 0x89, 0xFE}},
-                                                 {{0x00, 0x0A, 0xF5, 0x89, 0x89, 0xFD}},
-                                                 {{0x00, 0x0A, 0xF5, 0x89, 0x89, 0xFC}}, };
-
-      /*----------------------------------------------------------------------*/
-      if( VOS_STATUS_SUCCESS == nv_parse_status ) {
-          for( i=0; i<4; i++ ){
-              for( j=0; j<VOS_MAC_ADDRESS_LEN; j++ ){
-                  pHddCtx->cfg_ini->intfMacAddr[i].bytes[j] = (v_BYTE_t)(g_WlanAsusMac[i].MacAddress[j]);
-              }
-          }
-          hddLog(1, "[wlan]: copy g_WlanAsusMac to intfMacAddr.");
-      }
-      /*----------------------------------------------------------------------*/
-
-      if( 0 != memcmp(&default_address[0], &pHddCtx->cfg_ini->intfMacAddr[0], sizeof(v_MACADDR_t)) ) {
-          if( 0 == memcmp(&default_address[1], &pHddCtx->cfg_ini->intfMacAddr[1], sizeof(v_MACADDR_t)) ) {
-              memcpy(&pHddCtx->cfg_ini->intfMacAddr[1], &pHddCtx->cfg_ini->intfMacAddr[0], sizeof(v_MACADDR_t));
-              pHddCtx->cfg_ini->intfMacAddr[1].bytes[0] |= 0x02; /*set locally administered addresses*/
-              hddLog(1, "[wlan]: set 2nd-MAC locally administered addresses.");
-          }
-      }
-#endif
       else
 #endif //WLAN_AUTOGEN_MACADDR_FEATURE
       {
@@ -10093,16 +10050,6 @@ int hdd_wlan_startup(struct device *dev )
          hddLog(VOS_TRACE_LEVEL_ERROR,"%s: Failed to set MAC Address. "
                 "HALStatus is %08d [x%08x]",__func__, halStatus, halStatus );
          goto err_vosclose;
-      }
-
-      for( i=0; i<4; i++ ){
-          hddLog(1, "[wlan]: intfMacAddr[%d]=[%02X:%02X:%02X:%02X:%02X:%02X].", i,
-                          pHddCtx->cfg_ini->intfMacAddr[i].bytes[0],
-                          pHddCtx->cfg_ini->intfMacAddr[i].bytes[1],
-                          pHddCtx->cfg_ini->intfMacAddr[i].bytes[2],
-                          pHddCtx->cfg_ini->intfMacAddr[i].bytes[3],
-                          pHddCtx->cfg_ini->intfMacAddr[i].bytes[4],
-                          pHddCtx->cfg_ini->intfMacAddr[i].bytes[5] );
       }
    }
 
@@ -10636,10 +10583,6 @@ static int hdd_driver_init( void)
    wlan_logging_sock_init_svc();
 #endif
 
-   //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-   ASUSEvtlog("[wlan]: hdd_driver_init +.\n");
-   //ASUS_BSP--- "for /data/log/ASUSEvtlog"
-
    ENTER();
 
    vos_wake_lock_init(&wlan_wake_lock, "wlan");
@@ -10739,9 +10682,6 @@ static int hdd_driver_init( void)
 #endif
 
       pr_err("%s: driver load failure\n", WLAN_MODULE_NAME);
-      //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-      ASUSEvtlog("[wlan]: driver load failure.\n");
-      //ASUS_BSP--- "for /data/log/ASUSEvtlog"
    }
    else
    {
@@ -10749,16 +10689,9 @@ static int hdd_driver_init( void)
       send_btc_nlink_msg(WLAN_MODULE_UP_IND, 0);
 
       pr_info("%s: driver loaded\n", WLAN_MODULE_NAME);
-      //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-      ASUSEvtlog("[wlan]: driver loaded.\n");
-      //ASUS_BSP--- "for /data/log/ASUSEvtlog"
    }
 
    EXIT();
-
-   //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-   ASUSEvtlog("[wlan]: hdd_driver_init -.\n");
-   //ASUS_BSP--- "for /data/log/ASUSEvtlog"
 
    return ret_status;
 }
@@ -10808,9 +10741,6 @@ static void hdd_driver_exit(void)
    unsigned long rc = 0;
 
    pr_info("%s: unloading driver v%s\n", WLAN_MODULE_NAME, QWLAN_VERSIONSTR);
-   //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-   ASUSEvtlog("[wlan]: hdd_driver_exit +.\n");
-   //ASUS_BSP--- "for /data/log/ASUSEvtlog"
 
    //Get the global vos context
    pVosContext = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
@@ -10909,10 +10839,6 @@ done:
    vos_wake_lock_destroy(&wlan_wake_lock);
 
    pr_info("%s: driver unloaded\n", WLAN_MODULE_NAME);
-   //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-   ASUSEvtlog("[wlan]: driver unloaded.\n");
-   ASUSEvtlog("[wlan]: hdd_driver_exit -.\n");
-   //ASUS_BSP--- "for /data/log/ASUSEvtlog"
 }
 
 /**---------------------------------------------------------------------------

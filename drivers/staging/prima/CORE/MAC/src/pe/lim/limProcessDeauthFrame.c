@@ -135,7 +135,6 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
     // Get reasonCode from Deauthentication frame body
     reasonCode = sirReadU16(pBody); 
 
-    printk("wlan: received Deauth frame (mlm state = %s) with reason code %d", limMlmStateStr(pMac->lim.gLimMlmState), reasonCode);
     PELOGE(limLog(pMac, LOGE,
         FL("Received Deauth frame for Addr: "MAC_ADDRESS_STR" (mlm state = %s,"
         " sme state = %d systemrole  = %d) with reason code %d from "
@@ -143,11 +142,6 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
         limMlmStateStr(psessionEntry->limMlmState), psessionEntry->limSmeState,
         psessionEntry->limSystemRole, reasonCode,
         MAC_ADDR_ARRAY(pHdr->sa));)
-      
-    printk("[wlan]: received Deauth frame (mlm state = %s) with reason code %d from (%02X:%02X:%02X:%02X:%02X:%02X).\n", 
-          limMlmStateStr(pMac->lim.gLimMlmState), reasonCode, 
-          pHdr->sa[0], pHdr->sa[1], pHdr->sa[2], pHdr->sa[3], pHdr->sa[4], pHdr->sa[5]);
-    
       
     if (limCheckDisassocDeauthAckPending(pMac, (tANI_U8*)pHdr->sa))
     {
