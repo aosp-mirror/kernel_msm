@@ -285,6 +285,7 @@ limProcessProbeRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession 
 
             if (!LIM_IS_CONNECTION_ACTIVE(psessionEntry))
             {
+                pr_info("wlan: Received Probe Resp from AP. So it is alive!!\n");
                 limLog(pMac, LOGW,
                     FL("Received Probe Resp from AP. So it is alive!!"));
 

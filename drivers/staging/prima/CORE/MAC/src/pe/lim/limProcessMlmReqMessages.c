@@ -2157,6 +2157,11 @@ limProcessMlmPostJoinSuspendLink(tpAniSirGlobal pMac, eHalStatus status, tANI_U3
     //assign appropriate sessionId to the timer object
     pMac->lim.limTimers.gLimJoinFailureTimer.sessionId = psessionEntry->peSessionId;
 
+    //ASUS_BSP+++
+    pr_info("wlan: gLimJoinFailureTimer (%d --> 2000).\n", (int)(pMac->lim.limTimers.gLimJoinFailureTimer.initScheduleTimeInMsecs));
+    pMac->lim.limTimers.gLimJoinFailureTimer.initScheduleTimeInMsecs = 2000;
+    //ASUS_BSP---
+
     linkState = ((psessionEntry->limSystemRole == eLIM_BT_AMP_STA_ROLE) ? eSIR_LINK_BTAMP_PREASSOC_STATE : eSIR_LINK_PREASSOC_STATE);
     limLog(pMac, LOG1, FL("[limProcessMlmJoinReq]: linkState:%d"),linkState);
 
@@ -2483,6 +2488,12 @@ limProcessMlmAuthReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         /* assign appropriate sessionId to the timer object */
         pMac->lim.limTimers.gLimPeriodicAuthRetryTimer.sessionId = sessionId;
         limDeactivateAndChangeTimer(pMac, eLIM_AUTH_RETRY_TIMER);
+ 
+        //ASUS_BSP+++
+        pr_info("wlan: gLimAuthFailureTimer (%d --> 2000).\n", (int)(pMac->lim.limTimers.gLimAuthFailureTimer.initScheduleTimeInMsecs));
+        pMac->lim.limTimers.gLimAuthFailureTimer.initScheduleTimeInMsecs = 2000;
+        //ASUS_BSP---
+        
         // Activate Auth failure timer
         MTRACE(macTrace(pMac, TRACE_CODE_TIMER_ACTIVATE, psessionEntry->peSessionId, eLIM_AUTH_FAIL_TIMER));
         if (tx_timer_activate(&pMac->lim.limTimers.gLimAuthFailureTimer)
@@ -4184,6 +4195,7 @@ limProcessJoinFailureTimeout(tpAniSirGlobal pMac)
         PELOGE(limLog(pMac, LOGE,  FL(" Join Failure Timeout occurred for session %d with BSS "),
                                         psessionEntry->peSessionId);
                                         limPrintMacAddr(pMac, psessionEntry->bssId, LOGE);)
+        pr_info("wlan: Join Failure Timeout occurred.\n");
 
         mlmJoinCnf.resultCode = eSIR_SME_JOIN_TIMEOUT_RESULT_CODE;
         mlmJoinCnf.protStatusCode = eSIR_MAC_UNSPEC_FAILURE_STATUS;

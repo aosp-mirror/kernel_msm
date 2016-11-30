@@ -124,6 +124,8 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
     // Get reasonCode from Disassociation frame body
     reasonCode = sirReadU16(pBody);
 
+
+    printk("wlan: Received Disassoc frame (mlm state %d sme state %d), with reason code %d", psessionEntry->limMlmState, psessionEntry->limSmeState, reasonCode);
     limLog(pMac, LOGE,
         FL("Received Disassoc frame for Addr: "MAC_ADDRESS_STR
         "(mlm state=%s, sme state=%d),"
