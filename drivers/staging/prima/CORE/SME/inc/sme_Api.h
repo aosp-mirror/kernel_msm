@@ -2483,6 +2483,16 @@ eHalStatus sme_GetFilterMatchCount(tHalHandle hHal,
 eHalStatus sme_ReceiveFilterClearFilter(tHalHandle hHal,
                                         tpSirRcvFltPktClearParam pRcvFltPktClearParam,
                                         tANI_U8  sessionId);
+
+//ASUS_BSP+++ set/clear NetBios packet filter
+eHalStatus sme_NetBiosPacketSetFilter(void);
+eHalStatus sme_NetBiosClearFilter(void);
+//ASUS_BSP--- set/clear NetBios packet filter
+//ASUS_BSP+++ set/clear shareport packet filter
+eHalStatus sme_ShareportPacketSetFilter(void);
+eHalStatus sme_ShareportClearFilter(void);
+//ASUS_BSP--- set/clear shareport packet filter
+
 #endif // WLAN_FEATURE_PACKET_FILTERING
 /* ---------------------------------------------------------------------------
 
