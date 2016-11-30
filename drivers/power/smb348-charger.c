@@ -1055,13 +1055,19 @@ static int smb348_get_prop_batt_capacity(struct smb348_charger *chip)
 	if (chip->bms_psy) {
 		chip->bms_psy->get_property(chip->bms_psy,
 				POWER_SUPPLY_PROP_CAPACITY, &ret);
+		/* Avoid battery report negative value of capacity. if happened, report 0%. */
+		if (ret.intval < 0) {
+			pr_err("BMS capacity is mess, ret.intval=%d\n", ret.intval);
+			chip->prop_batt_capacity = 0;
+			return 0;
+		}
 #ifdef FEATURE_THERMAL_MITIGATION_ALGO
 		// 99% recharged check is moved to smb348_get_prop_battery_voltage_now() due to need to check voltage is lower
 		chip->prop_batt_capacity = ret.intval;  // smb348_get_prop_battery_voltage_now() is always called after this func
 
 		// return 100% once charging-end is triggered.
 		if (chg_full_flag || recharge_flag) {
-			pr_err("soc=100, chg_end=%d, chg_full_flag=%d, recharge_flag=%d\n", gpio_get_value(chip->chg_end_gpio), chg_full_flag, recharge_flag);
+			pr_err("bms soc=%d, chg_end=%d, chg_full_flag=%d, recharge_flag=%d\n", ret.intval, gpio_get_value(chip->chg_end_gpio), chg_full_flag, recharge_flag);
 			return SMB_MAX_SOC;
 		}
 
@@ -2190,7 +2196,7 @@ static irqreturn_t smb348_wpc_state_handler(int irq, void *dev_id)
 	pr_err("wpc status pin changed!! chg_end=%d state=%d enable=%d, detect=%d\n", gpio_get_value(chip->chg_end_gpio), chip->wpc_state, gpio_get_value(chip->wpc_enable_gpio), gpio_get_value(chip->wpc_dock_detect_gpio));
 
 	if (gpio_get_value(chip->chg_end_gpio) | gpio_get_value(chip->wpc_enable_gpio)) {
-		pr_err("Stop Charging: pc_state=%d,  wpc_dock_present=%d w\n", chip->wpc_state, gpio_get_value(chip->wpc_dock_detect_gpio));
+		pr_err("Stop Charging: wpc_state=%d,  wpc_dock_present=%d\n", chip->wpc_state, gpio_get_value(chip->wpc_dock_detect_gpio));
 		return IRQ_HANDLED;
 	} else if (0) {  // toDO
 		// stop charging (not caused by chg_eng or enable pin). Measns remove from dock
