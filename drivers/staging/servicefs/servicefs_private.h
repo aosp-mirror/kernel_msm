@@ -4,6 +4,7 @@
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
+#include <linux/rwlock.h>
 #include <linux/idr.h>
 #include <linux/uio.h>
 #include <linux/wait.h>
@@ -15,21 +16,25 @@
 struct service {
 	atomic_t             s_count;
 
-	struct mutex         s_mutex;          // protects message lists and id allocator
+	rwlock_t             s_message_lock;   // protects message lists and id allocator
+	struct semaphore     s_queue_messages;
+
 	struct idr           s_message_idr;    // message id allocator
 	int                  s_message_start;
 	struct list_head     s_impulses;       // pending async messages
 	struct list_head     s_messages;       // pending sync messages (blocked client threads)
 
-	struct mutex         s_channel_lock;   // protects channel id allocator
+	rwlock_t             s_channel_lock;   // protects channel id allocator
 	struct idr           s_channel_idr;    // channel id allocator
 	int                  s_channel_start;
 
-	wait_queue_head_t    s_wqreceivers;    // wait queue for message receive
 	wait_queue_head_t    s_wqselect;       // wait queue for poll/select
 
-#define SERVICE_FLAGS_CANCELED             (1<<0)
 #define SERVICE_FLAGS_DEFAULT              (0)
+#define SERVICE_FLAGS_CANCELED             (1<<0)
+#define SERVICE_FLAGS_COUNTER_OFFSET       (1)
+#define SERVICE_FLAGS_COUNTER              (1<<SERVICE_FLAGS_COUNTER_OFFSET)
+	// bit 0 is canceled bit; bits 31-1 are the thread counter
 	atomic_t             s_flags;
 
 	// TODO(eieio): figure out what to do about forking/execing
@@ -74,9 +79,11 @@ struct message {
 
 	int                  m_op;
 
-#define MESSAGE_FLAGS_PENDING              (0)
-#define MESSAGE_FLAGS_COMPLETED            (1<<0)
-#define MESSAGE_FLAGS_INTERRUPTED          (1<<1)
+#define MESSAGE_FLAGS_PENDING_RECEIVE      (0)
+#define MESSAGE_FLAGS_PENDING_REPLY        (1<<0)
+#define MESSAGE_FLAGS_COMPLETED            (1<<1)
+#define MESSAGE_FLAGS_INTERRUPTED          (1<<2)
+#define MESSAGE_FLAGS_CANCELED             (1<<3)
 	atomic_t             m_flags;
 
 	/* state below may be modified by multiple service threads */
@@ -155,9 +162,14 @@ static inline bool is_message_interrupted(struct message *m)
 	return !!(atomic_read(&m->m_flags) & MESSAGE_FLAGS_INTERRUPTED);
 }
 
-static inline bool is_message_active(struct message *m)
+static inline bool is_message_canceled(struct message *m)
 {
-	return m->m_id != MESSAGE_NO_ID;
+	return !!(atomic_read(&m->m_flags) & MESSAGE_FLAGS_CANCELED);
+}
+
+static inline bool is_message_pending_reply(struct message *m)
+{
+	return !!(atomic_read(&m->m_flags) & MESSAGE_FLAGS_PENDING_REPLY);
 }
 
 /*

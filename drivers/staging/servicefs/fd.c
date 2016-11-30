@@ -45,6 +45,9 @@ void servicefs_put_unused_fd(struct task_struct *task, unsigned int fd)
 	struct fdtable *fdt;
 	struct files_struct *files = task->files;
 
+	if (!files)
+		return;
+
 	spin_lock(&files->file_lock);
 	fdt = files_fdtable(files);
 	__clear_bit(fd, fdt->open_fds);
@@ -60,6 +63,9 @@ struct file *servicefs_fget(struct task_struct *task, unsigned int fd)
 {
 	struct file *file;
 	struct files_struct *files = task->files;
+
+	if (!files)
+		return NULL;
 
 	rcu_read_lock();
 	file = fcheck_files(files, fd);

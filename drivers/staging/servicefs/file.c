@@ -482,14 +482,14 @@ static unsigned int service_poll(struct file *filp, poll_table *wait)
 	struct service *svc = filp->private_data;
 	BUG_ON(svc == NULL);
 
-	mutex_lock(&svc->s_mutex);
-
 	poll_wait(filp, &svc->s_wqselect, wait);
+
+	read_lock(&svc->s_message_lock);
 
 	if (!list_empty(&svc->s_impulses) || !list_empty(&svc->s_messages))
 		mask = POLLIN | POLLRDNORM;
 
-	mutex_unlock(&svc->s_mutex);
+	read_unlock(&svc->s_message_lock);
 
 	pr_debug("svc=%p mask=%x\n", svc, mask);
 	return mask;
@@ -696,13 +696,8 @@ static unsigned int channel_poll(struct file *filp, poll_table *wait)
 	svc = c->c_service;
 	BUG_ON(!svc);
 
-	// TODO(eieio): consider adding a mutex to the channel for better perf
-	mutex_lock(&svc->s_mutex);
-
 	poll_wait(filp, &c->c_waitqueue, wait);
 	mask = atomic_read(&c->c_events);
-
-	mutex_unlock(&svc->s_mutex);
 
 	pr_debug("mask=%08x\n", mask);
 	return mask;
