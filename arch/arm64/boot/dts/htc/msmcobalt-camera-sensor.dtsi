@@ -44,18 +44,49 @@
 	};
 };
 
+&soc {
+	/delete-node/ qcom,camera-flash@0;
+	/delete-node/ qcom,camera-flash@1;
+};
+
 &cci {
-	actuator0: qcom,actuator@0 {
+	/delete-node/ qcom,camera@1;
+	/delete-node/ qcom,camera@2;
+	/delete-node/ qcom,actuator@1;
+	/delete-node/ qcom,eeprom@0;
+	/delete-node/ qcom,eeprom@1;
+	/delete-node/ qcom,eeprom@2;
+};
+
+&cci {
+	actuator10: qcom,actuator@10 {
 		cell-index = <0>;
 		reg = <0x0>;
 		compatible = "qcom,actuator";
 		qcom,cci-master = <0>;
+		/delete-property/ gpios;
+		/delete-property/ qcom,gpio-vaf;
+		/delete-property/ qcom,gpio-req-tbl-num;
+		/delete-property/ qcom,gpio-req-tbl-flags;
+		/delete-property/ qcom,gpio-req-tbl-label;
+		/delete-property/ pinctrl-names;
+		/delete-property/ pinctrl-0;
+		/delete-property/ pinctrl-1;
 	};
-	ois0: qcom,ois@0 {
+	ois10: qcom,ois@10 {
 		cell-index = <0>;
 		reg = <0x0>;
 		compatible = "qcom,ois";
 		qcom,cci-master = <0>;
+		/delete-property/ gpios;
+		/delete-property/ qcom,gpio-vaf;
+		/delete-property/ qcom,gpio-req-tbl-num;
+		/delete-property/ qcom,gpio-req-tbl-flags;
+		/delete-property/ qcom,gpio-req-tbl-label;
+		/delete-property/ pinctrl-names;
+		/delete-property/ pinctrl-0;
+		/delete-property/ pinctrl-1;
+		status = "ok";
 	};
 	eeprom0: qcom,eeprom@0 {
 		cell-index = <0>;
@@ -111,9 +142,9 @@
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
 		qcom,mount-angle = <90>;
-		//qcom,led-flash-src = <&led_flash0>;
-		qcom,actuator-src = <&actuator0>;
-		qcom,ois-src = <&ois0>;
+		/delete-property/ qcom,led-flash-src;
+		qcom,actuator-src = <&actuator10>;
+		qcom,ois-src = <&ois10>;
 		qcom,eeprom-src = <&eeprom0>;
 		cam_vio-supply = <&pmcobalt_lvs1>;
 		cam_vana-supply = <&pmcobalt_gpios 15 0>;
