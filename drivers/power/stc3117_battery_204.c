@@ -1975,6 +1975,7 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 		if(BattData.ConvCounter > 0) {
 			GG->Voltage=BattData.Voltage;
 			GG->SOC=(BattData.HRSOC*10+256)/512;
+			pr_err("BATD or UVLO, voltage:%d, SOC:%d\n", GG->Voltage, GG->SOC);
 		}
 
 		/* BATD or UVLO detected */
@@ -2428,6 +2429,9 @@ static void stc311x_work(struct work_struct *work)
 	GasGauge_DataTypeDef GasGaugeData;
 	int res,Loop;
 
+	/* Initial GasGaugeData structure */
+	memset(&GasGaugeData, 0, sizeof(GasGauge_DataTypeDef));
+
 	chip = container_of(work, struct stc311x_chip, work.work);
 
 	sav_client = chip->client;
@@ -2461,6 +2465,15 @@ static void stc311x_work(struct work_struct *work)
 			pr_err("Battery soc is %d, notify power_supply\n", chip->batt_soc);
 			power_supply_changed(&chip->battery);
 		}
+
+#if 0
+		/* This code is try to send power supply change to avoid watch deep sleep	*/
+		/* so that the GasGauge_Task() late to keep capacity on 99%.			*/
+		if ((chip->batt_soc == 99) && (GasGaugeData.AvgCurrent > CHG_NOT_CHARGE)) {
+			pr_err("Battery soc is %d, notify power_supply\n", chip->batt_soc);
+			power_supply_changed(&chip->battery);
+		}
+#endif
 #ifdef DEBUG_SOC
 		pr_err("last_soc=%d, soc=%d, volt=%d, avg_volt=%d\n", chip->batt_soc_last, chip->batt_soc, GasGaugeData.Voltage, BattData.AvgVoltage);
 #endif
@@ -2632,6 +2645,9 @@ static int stc311x_probe(struct i2c_client *client,
 	int ret,res,Loop;
 
 	GasGauge_DataTypeDef GasGaugeData;
+
+	/* Initial GasGaugeData structure */
+	memset(&GasGaugeData, 0, sizeof(GasGauge_DataTypeDef));
 
 	/*First check the functionality supported by the host*/
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_READ_I2C_BLOCK))
