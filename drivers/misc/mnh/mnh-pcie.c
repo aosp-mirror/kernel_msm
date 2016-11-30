@@ -698,12 +698,14 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry *sg,
 	sgl->mypage = kcalloc(p_num, sizeof(struct page *), GFP_KERNEL);
 	if (!sgl->mypage) {
 		sgl->n_num = 0;
+		sgl->length = 0;
 		return -EINVAL;
 	}
 	sgl->sc_list = kcalloc(p_num, sizeof(struct scatterlist), GFP_KERNEL);
 	if (!sgl->sc_list) {
 		kfree(sgl->mypage);
 		sgl->n_num = 0;
+		sgl->length = 0;
 		return -EINVAL;
 	}
 
@@ -714,10 +716,7 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry *sg,
 	up_read(&current->mm->mmap_sem);
 	if (n_num < 0) {
 		dev_err(&mnh_dev->pdev->dev, "fail to get user_pages\n");
-		kfree(sgl->mypage);
-		kfree(sgl->sc_list);
-		sgl->n_num = 0;
-		return -EINVAL;
+		goto free_mem;
 	}
 	if (n_num < maxsg) {
 		sg_init_table(sgl->sc_list, n_num);
@@ -763,26 +762,32 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry *sg,
 #endif
 			} else {
 				dev_err(&mnh_dev->pdev->dev, "maxsg exceeded\n");
-				dma_unmap_sg(&mnh_dev->pdev->dev,
-					sgl->sc_list, n_num, DMA_BIDIRECTIONAL);
-				page_cache_release(*(sgl->mypage));
-				kfree(sgl->mypage);
-				kfree(sgl->sc_list);
-				return -EINVAL;
+				goto unmap_sg;
 			}
-
 		}
 		sg[u].paddr = 0x0;
-		dev_dbg(&mnh_dev->pdev->dev, "SGL with %d entries\n", i);
+		dev_dbg(&mnh_dev->pdev->dev, "SGL with %d/%d entries\n", u, i);
 	} else {
 		dev_err(&mnh_dev->pdev->dev, "maxsg exceeded\n");
-		page_cache_release(*(sgl->mypage));
-		kfree(sgl->mypage);
-		kfree(sgl->sc_list);
-		return -EINVAL;
+		goto release_page;
 	}
 	sgl->n_num = n_num;
+	sgl->length = u;
+
 	return 0;
+
+unmap_sg:
+	dma_unmap_sg(&mnh_dev->pdev->dev,
+		sgl->sc_list, n_num, DMA_BIDIRECTIONAL);
+release_page:
+	page_cache_release(*(sgl->mypage));
+free_mem:
+	kfree(sgl->mypage);
+	kfree(sgl->sc_list);
+	sgl->n_num = 0;
+	sgl->length = 0;
+
+	return -EINVAL;
 }
 EXPORT_SYMBOL(mnh_sg_build);
 
