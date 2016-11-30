@@ -1138,15 +1138,12 @@ static int tfa98xx_set_profile(struct snd_kcontrol *kcontrol,
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct tfa98xx *tfa98xx = snd_soc_codec_get_drvdata(codec);
 
-	/* HTC_AUD_START - Not using internal clk for profile switching */
-/*	unsigned int base_addr_inten = TFA_FAM(tfa98xx->handle,INTENVDDS) >> 8;
- *	int ready = 0;
- *	int err;
- */
-	/* HTC_AUD_END */
+	unsigned int base_addr_inten = TFA_FAM(tfa98xx->handle, INTENVDDS) >> 8;
 	int profile_count = tfa98xx_mixer_profiles;
 	int profile = tfa98xx_mixer_profile;
 	int new_profile = ucontrol->value.integer.value[0];
+	int err;
+	int ready = 0;
 	int prof_idx;
 
 	if (no_start != 0)
@@ -1176,13 +1173,49 @@ static int tfa98xx_set_profile(struct snd_kcontrol *kcontrol,
 	tfa98xx_vsteps[0] = tfa98xx_prof_vsteps[prof_idx];
 	tfa98xx_vsteps[1] = tfa98xx_prof_vsteps[prof_idx];
 
-	/* HTC_AUD_START -use queue rather could tfa98xx_tfa_start directly */
-	if (tfa98xx->dsp_init != TFA98XX_DSP_INIT_STOPPED) {
-		cancel_delayed_work_sync(&tfa98xx->init_work);
-		pr_info("switch tfa profile [%d]\n", prof_idx);
-		queue_delayed_work(tfa98xx->tfa98xx_wq, &tfa98xx->init_work, 0);
+	/*
+	 * Don't call tfa_start() on TFA1 if there is no clock.
+	 * For TFA2 is able to load the profile without clock.
+	 */
+
+	mutex_lock(&tfa98xx->dsp_lock);
+	tfa98xx_open(tfa98xx->handle);
+	tfa98xx_dsp_system_stable(tfa98xx->handle, &ready);
+	tfa98xx_close(tfa98xx->handle);
+
+	/* Enable internal clk (osc1m) to switch profile */
+	if (tfa98xx_dev_family(tfa98xx->handle) == 2 && ready == 0) {
+		/* Disable interrupts (Enabled again in the wrapper function: tfa98xx_tfa_start) */
+		regmap_write(tfa98xx->regmap, base_addr_inten + 1, 0);
+		/* Set polarity to high */
+		TFA_SET_BF(tfa98xx->handle, IPOMWSRC, 1);
+
+		TFA_SET_BF(tfa98xx->handle, RST, 1);
+		TFA_SET_BF_VOLATILE(tfa98xx->handle, SBSL, 0);
+		TFA_SET_BF(tfa98xx->handle, AMPC, 0);
+		TFA_SET_BF(tfa98xx->handle, AMPE, 0);
+		TFA_SET_BF(tfa98xx->handle, REFCKSEL, 1);
+		ready = 1;
 	}
-	/* HTC_AUD_END */
+
+	if (ready) {
+		/* Also re-enables the interrupts */
+		err = tfa98xx_tfa_start(tfa98xx, prof_idx, tfa98xx_vsteps);
+		if (err) {
+			pr_info("Write profile error: %d\n", err);
+		} else {
+			pr_debug("Changed to profile %d (vstep = %d)\n", prof_idx,
+				tfa98xx_vsteps[0]);
+		}
+	}
+
+	if (tfa98xx_dev_family(tfa98xx->handle) == 2) {
+		/* Set back to external clock */
+		TFA_SET_BF(tfa98xx->handle, REFCKSEL, 0);
+		TFA_SET_BF_VOLATILE(tfa98xx->handle, SBSL, 1);
+	}
+
+	mutex_unlock(&tfa98xx->dsp_lock);
 
 	/* Flag DSP as invalidated as the profile change may invalidate the
 	 * current DSP configuration. That way, further stream start can
@@ -2373,8 +2406,6 @@ static void tfa98xx_dsp_init(struct tfa98xx *tfa98xx)
 				ret,
 				tfa98xx->init_count, manstate);
 			reschedule = true;
-			/* HTC_AUDIO: reset if setting fail */
-			tfa_reset();
 		} else {
 			/* HTC_AUD_START - Print success info */
 			do_gettimeofday(&end);
@@ -2573,6 +2604,10 @@ static void tfa98xx_shutdown(struct snd_pcm_substream *substream,
 	struct snd_soc_codec *codec = dai->codec;
 	struct tfa98xx *tfa98xx = snd_soc_codec_get_drvdata(codec);
 
+	cancel_delayed_work_sync(&tfa98xx->init_work);
+
+	if (tfa98xx->dsp_fw_state != TFA98XX_DSP_FW_OK)
+		return;
 	mutex_lock(&tfa98xx->dsp_lock);
 	tfa_stop();
 	pr_info("%s: tfa_stop\n", __func__);
