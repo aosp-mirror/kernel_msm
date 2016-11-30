@@ -197,9 +197,11 @@ struct mp2661_chg {
     int                step_charging_delta_voltage_mv;
     int                batt_full_now_mv;
     int                batt_charging_current_now_ma;
+    bool               repeat_charging_detect_flag;
 };
 
 struct mp2661_chg  *global_mp2661 = NULL;
+extern int max17055_global_get_real_capacity(void);
 
 #define RETRY_COUNT 5
 int retry_sleep_ms[RETRY_COUNT] = {
@@ -331,11 +333,13 @@ static int mp2661_get_prop_batt_status(struct mp2661_chg *chip)
     chgr_sts = (reg & CHG_STAT_MASK) >> CHG_STAT_SHIFT;
     pr_debug("system status reg = %x\n", chgr_sts);
 
-    if(CHG_STAT_NOT_CHARGING == chgr_sts)
+    if ((CHG_STAT_NOT_CHARGING == chgr_sts)
+        && (!chip->repeat_charging_detect_flag))
     {
         status = POWER_SUPPLY_STATUS_DISCHARGING;
     }
-    else if(CHG_STAT_CHARGE_DONE == chgr_sts)
+    else if ((CHG_STAT_CHARGE_DONE == chgr_sts)
+            || chip->repeat_charging_detect_flag)
     {
         status = POWER_SUPPLY_STATUS_FULL;
     }
@@ -1226,6 +1230,8 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
 {
     int status, usb_present;
     struct mp2661_chg *chip = container_of(work, struct mp2661_chg, process_interrupt_work);
+    int rc = -1;
+    int capacity = -1;
 
     /* check charging status */
     status = mp2661_get_prop_batt_status(chip);
@@ -1236,6 +1242,15 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
         if(POWER_SUPPLY_STATUS_FULL == status)
         {
             pr_info("battery is full\n");
+            /* set repeat_charging_detect_flag to true and disable charge when charge terminate due to batt full */
+            chip->repeat_charging_detect_flag = true;
+
+            rc = mp2661_set_charging_enable(chip, false);
+            if (rc)
+            {
+                pr_err("Couldn't set charging disable rc=%d\n", rc);
+            }
+
             if (!chip->bms_psy && chip->bms_psy_name)
             {
                 pr_info("get bms power supply\n");
@@ -1264,6 +1279,30 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
         }
         else
         {
+            capacity = max17055_global_get_real_capacity();
+            if (chip->repeat_charging_detect_flag)
+            {
+                /* set fullcap to repcap when charger is not present and auto recharge is true */
+                const union power_supply_propval ret = {capacity,};
+
+                pr_info("update fullcap when remove charger!\n");
+                if ((chip->bms_psy) && (chip->bms_psy->set_property))
+                {
+                    chip->bms_psy->set_property(chip->bms_psy, POWER_SUPPLY_PROP_CAPACITY,
+                                            &ret);
+                }
+
+                /* enable charge when remove and install charger */
+                pr_info("enable charge when remove charger!\n");
+                rc = mp2661_set_charging_enable(chip, true);
+                if (rc)
+                {
+                    pr_err("Couldn't set charging enable rc=%d\n", rc);
+                }
+
+                chip->repeat_charging_detect_flag = false;
+            }
+
             wake_unlock(&chip->chg_wake_lock);
         }
 
@@ -1453,6 +1492,16 @@ static int mp2661_parse_dt(struct mp2661_chg *chip)
         chip->step_charging_delta_voltage_mv = -EINVAL;
     }
 
+
+    if (of_property_read_bool(node, "qcom,repeat-charging-detect-flag"))
+    {
+        chip->repeat_charging_detect_flag = true;
+    }
+    else
+    {
+        chip->repeat_charging_detect_flag = false;
+    }
+
     pr_info("bms-psy-name = %s, using-pmic-therm = %d\n",
                 chip->bms_psy_name, chip->using_pmic_therm);
     pr_info("cold-batt-decidegc = %d, normal-state1-batt-decidegc = %d,\
@@ -1483,6 +1532,8 @@ static int mp2661_parse_dt(struct mp2661_chg *chip)
     pr_info("qcom,step-charging-batt-full-mv = %d\n", chip->step_charging_batt_full_mv);
     pr_info("qcom,step-charging-current-ma = %d\n", chip->step_charging_current_ma);
     pr_info("qcom,step-charging-delta-voltage-mv = %d\n", chip->step_charging_delta_voltage_mv);
+    pr_info("qcom,repeat-charging-detect-flag = %d\n", chip->repeat_charging_detect_flag);
+
     return 0;
 }
 
@@ -1740,6 +1791,17 @@ static void mp2661_initialize_batt_temp_status(struct mp2661_chg *chip)
 
     chip->last_temp = temp;
     pr_info("temp = %d,chip->batt_temp_status = %d\n", temp, chip->batt_temp_status);
+}
+
+bool mp2661_global_get_repeat_charging_detect_flag(void)
+{
+    if (!global_mp2661)
+    {
+        pr_err("mp2661 chip can not register\n");
+        return false;
+    }
+
+    return global_mp2661->repeat_charging_detect_flag;
 }
 
 static int mp2661_hw_init(struct mp2661_chg *chip)
@@ -2126,6 +2188,7 @@ static void mp2661_adjust_batt_charging_current_and_voltage(
 #define MONITOR_TEMP_DELTA            10
 #define AP_MASK_RX_GPIO_TEMP          450
 #define AP_MASK_RX_GPIO_TEMP_DELTA    30
+#define RECHARGE_CAPACITY_THRESHOLD   95
 extern void idtp9220_ap_mask_rxint_enable(bool enable);
 static __ref int mp2661_monitor_kthread(void *arg)
 {
@@ -2133,6 +2196,8 @@ static __ref int mp2661_monitor_kthread(void *arg)
     int last_batt_temp_status;
     struct mp2661_chg *chip = (struct mp2661_chg *)arg;
     struct sched_param param = {.sched_priority = MAX_RT_PRIO - 1};
+    int capacity = -1;
+    int rc = -1;
 
     sched_setscheduler(current, SCHED_FIFO, &param);
     pr_info("enter mp2661 monitor thread\n");
@@ -2172,6 +2237,21 @@ static __ref int mp2661_monitor_kthread(void *arg)
         }
 
         mp2661_adjust_batt_charging_current_and_voltage(chip);
+
+        /* check recharge according to battery capacity */
+        capacity = max17055_global_get_real_capacity();
+        pr_debug("gauge real capacity is %d\n", capacity);
+        if ((capacity <= RECHARGE_CAPACITY_THRESHOLD)
+           && chip->repeat_charging_detect_flag
+           && chip->usb_present)
+        {
+            pr_info("capacity is %d not above %d, recharge\n", capacity, RECHARGE_CAPACITY_THRESHOLD);
+            rc = mp2661_set_charging_enable(chip, true);
+            if (rc)
+            {
+                pr_err("Couldn't set charging enable rc=%d\n", rc);
+            }
+        }
 
         if(down_timeout(&chip->monitor_temp_sem, msecs_to_jiffies(MONITOR_WORK_DELAY_MS)))
         {
