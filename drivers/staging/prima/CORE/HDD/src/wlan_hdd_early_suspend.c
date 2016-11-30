@@ -1329,6 +1329,12 @@ static void hdd_conf_suspend_ind(hdd_context_t* pHddCtx,
          * configuring.
          */
         wlan_hdd_set_mc_addr_list(pAdapter, TRUE);
+//ASUS_BSP+++ set/clear NetBios packet filter
+        halStatus = sme_NetBiosPacketSetFilter();
+//ASUS_BSP--- set/clear NetBios packet filter
+//ASUS_BSP+++ set/clear shareport packet filter
+        halStatus = sme_ShareportPacketSetFilter();
+//ASUS_BSP--- set/clear shareport packet filter
 #endif
 
         if( (pHddCtx->cfg_ini->fEnableMCAddrList) && WDA_IS_MCAST_FLT_ENABLE_IN_FW)
@@ -1415,6 +1421,13 @@ static void hdd_conf_resume_ind(hdd_adapter_t *pAdapter)
      * clear it when we resume.
      */
     wlan_hdd_set_mc_addr_list(pAdapter, FALSE);
+//ASUS_BSP+++ set/clear NetBios packet filter
+    halStatus = sme_NetBiosClearFilter();
+//ASUS_BSP--- set/clear NetBios packet filter
+//ASUS_BSP+++ set/clear shareport packet filter
+    halStatus = sme_ShareportClearFilter();
+//ASUS_BSP--- set/clear shareport packet filter
+
 #endif
 }
 

@@ -108,6 +108,11 @@ v_U8_t ccpRSNOui08[ HDD_RSN_OUI_SIZE ] = { 0x00, 0x0F, 0xAC, 0x05 };
 
 #define BEACON_FRAME_IES_OFFSET 12
 
+//ASUS_BSP+++ set/clear NetBios packet filter
+tSirMacAddr wlan_selfMacAddr;
+tSirMacAddr wlan_bssId; 
+//ASUS_BSP--- set/clear NetBios packet filter
+
 #ifdef WLAN_FEATURE_11W
 void hdd_indicateUnprotMgmtFrame(hdd_adapter_t *pAdapter,
                             tANI_U32 nFrameLength,
@@ -623,6 +628,9 @@ static void hdd_SendAssociationEvent(struct net_device *dev,tCsrRoamInfo *pCsrRo
     int we_event;
     char *msg;
     int type = -1;
+//ASUS_BSP+++ set/clear NetBios/shareport packet filter
+    eHalStatus halStatus = eHAL_STATUS_SUCCESS;
+//ASUS_BSP--- set/clear NetBios/shareport packet filter
 
 #if defined (WLAN_FEATURE_VOWIFI_11R)
     // Added to find the auth type on the fly at run time
@@ -671,6 +679,16 @@ static void hdd_SendAssociationEvent(struct net_device *dev,tCsrRoamInfo *pCsrRo
                 MAC_ADDRESS_STR,
                 MAC_ADDR_ARRAY(pAdapter->macAddressCurrent.bytes),
                 MAC_ADDR_ARRAY(wrqu.ap_addr.sa_data));
+
+//ASUS_BSP+++ set/clear NetBios packet filter
+        vos_mem_copy( wlan_selfMacAddr, pAdapter->macAddressCurrent.bytes, sizeof(tSirMacAddr));
+        vos_mem_copy( wlan_bssId, wrqu.ap_addr.sa_data, sizeof(tSirMacAddr));
+//ASUS_BSP--- set/clear NetBios packet filter
+//ASUS_BSP+++ set/clear NetBios/shareport packet filter
+        halStatus = sme_NetBiosClearFilter();
+        halStatus = sme_ShareportClearFilter();
+//ASUS_BSP--- set/clear NetBios/shareport packet filter
+
         hdd_SendUpdateBeaconIEsEvent(pAdapter, pCsrRoamInfo);
 
         /* Send IWEVASSOCRESPIE Event if WLAN_FEATURE_CIQ_METRICS is Enabled Or
@@ -3333,6 +3351,12 @@ eHalStatus hdd_smeRoamCallback( void *pContext, tCsrRoamInfo *pRoamInfo, tANI_U3
                  * successful connection.
                  */
                 wlan_hdd_set_mc_addr_list(pAdapter, FALSE);
+//ASUS_BSP+++ set/clear NetBios packet filter
+                halStatus = sme_NetBiosClearFilter();
+//ASUS_BSP--- set/clear NetBios packet filter
+//ASUS_BSP+++ set/clear shareport packet filter
+                halStatus = sme_ShareportClearFilter();
+//ASUS_BSP--- set/clear shareport packet filter
 #endif
             }
             break;

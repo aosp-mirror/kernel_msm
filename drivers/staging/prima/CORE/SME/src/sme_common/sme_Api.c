@@ -111,6 +111,11 @@ eHalStatus sme_HandlePreChannelSwitchInd(tHalHandle hHal);
 
 eHalStatus sme_HandlePostChannelSwitchInd(tHalHandle hHal);
 
+//ASUS_BSP+++ set/clear NetBios packet filter
+extern tSirMacAddr wlan_selfMacAddr;
+extern tSirMacAddr wlan_bssId; 
+//ASUS_BSP--- set/clear NetBios packet filter
+
 #ifdef FEATURE_WLAN_LFR
 tANI_BOOLEAN csrIsScanAllowed(tpAniSirGlobal pMac);
 #endif
@@ -6888,9 +6893,9 @@ eHalStatus sme_PurgeCmdList(tHalHandle hHal, tANI_U8 sessionId)
 
     \param pAPWPSIES - pointer to a caller allocated object of tSirAPWPSIEs
 
-    \return eHalStatus  SUCCESS 
+    \return eHalStatus ? SUCCESS ?
 
-                         FAILURE or RESOURCES  The API finished and failed.
+                         FAILURE or RESOURCES ? The API finished and failed.
 
   -------------------------------------------------------------------------------*/
 eHalStatus sme_RoamUpdateAPWPSIE(tHalHandle hHal, tANI_U8 sessionId, tSirAPWPSIEs *pAPWPSIES)
@@ -6919,9 +6924,9 @@ eHalStatus sme_RoamUpdateAPWPSIE(tHalHandle hHal, tANI_U8 sessionId, tSirAPWPSIE
 
     \param pAPSirRSNie - pointer to a caller allocated object of tSirRSNie with WPS/RSN IEs
 
-    \return eHalStatus  SUCCESS 
+    \return eHalStatus ? SUCCESS ?
 
-                         FAILURE or RESOURCES  The API finished and failed.
+                         FAILURE or RESOURCES ? The API finished and failed.
 
   -------------------------------------------------------------------------------*/
 eHalStatus sme_RoamUpdateAPWPARSNIEs(tHalHandle hHal, tANI_U8 sessionId, tSirRSNie * pAPSirRSNie)
@@ -8780,6 +8785,338 @@ eHalStatus sme_ReceiveFilterSetFilter(tHalHandle hHal, tpSirRcvPktFilterCfgType 
 
     return eHAL_STATUS_SUCCESS;
 }
+
+//ASUS_BSP+++ set/clear NetBios packet filter
+eHalStatus sme_NetBiosPacketSetFilter(void)
+{
+    tpSirRcvPktFilterCfgType    pRequestBuf;
+    v_SINT_t                allocSize;
+    vos_msg_t               msg;
+    v_U8_t   idx=0;
+
+    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "[wlan] NetBios filter set %s", __func__);
+
+    allocSize = sizeof(tSirRcvPktFilterCfgType);
+    
+    pRequestBuf = vos_mem_malloc(allocSize);
+
+    if (NULL == pRequestBuf)
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: Not able to "
+            "allocate memory for Netbios Packet Set Filter request", __func__);
+        return eHAL_STATUS_FAILED_ALLOC;
+    }
+
+    pRequestBuf->filterId = 5;
+    pRequestBuf->numFieldParams = 4;
+    pRequestBuf->coalesceTime = 0;
+    pRequestBuf->filterType = 1;
+
+    vos_mem_copy( pRequestBuf->selfMacAddr, wlan_selfMacAddr, sizeof(tSirMacAddr));
+    vos_mem_copy( pRequestBuf->bssId, wlan_bssId, sizeof(tSirMacAddr));
+/*
+    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "NetBiosPacketSetFilter : "
+           "FT %d FID %d ", 
+           pRequestBuf->filterType, pRequestBuf->filterId);    
+
+    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "NetBiosPacketSetFilter : "
+           "params %d CT %d", 
+           pRequestBuf->numFieldParams, pRequestBuf->coalesceTime);    
+*/
+    //Param 0
+    pRequestBuf->paramsData[0].protocolLayer = 1;
+    pRequestBuf->paramsData[0].cmpFlag = 5;
+    pRequestBuf->paramsData[0].dataOffset = 0;
+    pRequestBuf->paramsData[0].dataLength = 1;
+    for (idx=0; idx<8; idx++) {
+        pRequestBuf->paramsData[0].compareData[idx] = 0;
+        pRequestBuf->paramsData[0].dataMask[idx] = 0;
+    }
+    pRequestBuf->paramsData[0].compareData[0] = 1;
+
+    //Param 1
+    pRequestBuf->paramsData[1].protocolLayer = 2;
+    pRequestBuf->paramsData[1].cmpFlag = 3;
+    pRequestBuf->paramsData[1].dataOffset = 6;
+    pRequestBuf->paramsData[1].dataLength = 2;
+    for (idx=0; idx<8; idx++) {
+        pRequestBuf->paramsData[1].compareData[idx] = 0;
+        pRequestBuf->paramsData[1].dataMask[idx] = 0;
+    }
+    pRequestBuf->paramsData[1].compareData[0] = 8;
+
+    //Param 2
+    pRequestBuf->paramsData[2].protocolLayer = 3;
+    pRequestBuf->paramsData[2].cmpFlag = 3;
+    pRequestBuf->paramsData[2].dataOffset = 9;
+    pRequestBuf->paramsData[2].dataLength = 1;
+    for (idx=0; idx<8; idx++) {
+        pRequestBuf->paramsData[2].compareData[idx] = 0;
+        pRequestBuf->paramsData[2].dataMask[idx] = 0;
+    }
+    pRequestBuf->paramsData[2].compareData[0] = 17;
+
+    //Param 3
+    pRequestBuf->paramsData[3].protocolLayer = 3;
+    pRequestBuf->paramsData[3].cmpFlag = 3;
+    pRequestBuf->paramsData[3].dataOffset = 22;
+    pRequestBuf->paramsData[3].dataLength = 2;
+    for (idx=0; idx<8; idx++) {
+        pRequestBuf->paramsData[3].compareData[idx] = 0;
+        pRequestBuf->paramsData[3].dataMask[idx] = 0;
+    }
+    pRequestBuf->paramsData[3].compareData[1] = 137;
+
+    // debug purpose
+/*
+    for (idx=0; idx<pRequestBuf->numFieldParams; idx++)
+    {
+
+      VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+           "Proto %d Comp Flag %d ",
+           pRequestBuf->paramsData[idx].protocolLayer,
+           pRequestBuf->paramsData[idx].cmpFlag);
+
+      VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+           "Data Offset %d Data Len %d",
+           pRequestBuf->paramsData[idx].dataOffset,
+           pRequestBuf->paramsData[idx].dataLength);
+
+      VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+          "CData: %d:%d:%d:%d:%d:%d",
+           pRequestBuf->paramsData[idx].compareData[0],
+           pRequestBuf->paramsData[idx].compareData[1], 
+           pRequestBuf->paramsData[idx].compareData[2],
+           pRequestBuf->paramsData[idx].compareData[3],
+           pRequestBuf->paramsData[idx].compareData[4],
+           pRequestBuf->paramsData[idx].compareData[5]);
+
+      VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, 
+           "MData: %d:%d:%d:%d:%d:%d",
+           pRequestBuf->paramsData[idx].dataMask[0],
+           pRequestBuf->paramsData[idx].dataMask[1], 
+           pRequestBuf->paramsData[idx].dataMask[2],
+           pRequestBuf->paramsData[idx].dataMask[3],
+           pRequestBuf->paramsData[idx].dataMask[4],
+           pRequestBuf->paramsData[idx].dataMask[5]);
+
+    }
+*/
+    msg.type = WDA_RECEIVE_FILTER_SET_FILTER_REQ;
+    msg.reserved = 0;
+    msg.bodyptr = pRequestBuf;
+
+    if(VOS_STATUS_SUCCESS != vos_mq_post_message(VOS_MODULE_ID_WDA, &msg))
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: Not able to post "
+            "WDA_RECEIVE_FILTER_SET_FILTER message to WDA", __func__);
+        vos_mem_free(pRequestBuf);
+        return eHAL_STATUS_FAILURE;
+    }
+
+    return eHAL_STATUS_SUCCESS;
+}
+
+eHalStatus sme_NetBiosClearFilter(void)
+{
+    tpSirRcvFltPktClearParam pRequestBuf;
+    vos_msg_t               msg;
+  
+    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "[wlan] NetBios filter clear %s", __func__);
+
+    pRequestBuf = vos_mem_malloc(sizeof(tSirRcvFltPktClearParam));
+    if (NULL == pRequestBuf)
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+            "%s: Not able to allocate memory for NetBios Filter "
+            "Clear Filter request", __func__);
+        return eHAL_STATUS_FAILED_ALLOC;
+    }
+
+    pRequestBuf->filterId = 5;
+    vos_mem_copy( pRequestBuf->selfMacAddr, wlan_selfMacAddr, sizeof(tSirMacAddr));
+    vos_mem_copy( pRequestBuf->bssId, wlan_bssId, sizeof(tSirMacAddr));
+
+    msg.type = WDA_RECEIVE_FILTER_CLEAR_FILTER_REQ;
+    msg.reserved = 0;
+    msg.bodyptr = pRequestBuf;
+    if(VOS_STATUS_SUCCESS != vos_mq_post_message(VOS_MODULE_ID_WDA, &msg))
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: Not able to post "
+            "WDA_RECEIVE_FILTER_CLEAR_FILTER message to WDA", __func__);
+        vos_mem_free(pRequestBuf);
+        return eHAL_STATUS_FAILURE;
+    }
+
+    return eHAL_STATUS_SUCCESS;
+}
+//ASUS_BSP--- set/clear NetBios packet filter
+//ASUS_BSP+++ set/clear shareport packet filter
+eHalStatus sme_ShareportPacketSetFilter(void)
+{
+    tpSirRcvPktFilterCfgType    pRequestBuf;
+    v_SINT_t                allocSize;
+    vos_msg_t               msg;
+    v_U8_t   idx=0;
+
+    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "[wlan] shareport filter set %s", __func__);
+
+    allocSize = sizeof(tSirRcvPktFilterCfgType);
+    
+    pRequestBuf = vos_mem_malloc(allocSize);
+
+    if (NULL == pRequestBuf)
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: Not able to "
+            "allocate memory for shareport Packet Set Filter request", __func__);
+        return eHAL_STATUS_FAILED_ALLOC;
+    }
+
+    pRequestBuf->filterId = 6;
+    pRequestBuf->numFieldParams = 4;
+    pRequestBuf->coalesceTime = 0;
+    pRequestBuf->filterType = 1;
+
+    vos_mem_copy( pRequestBuf->selfMacAddr, wlan_selfMacAddr, sizeof(tSirMacAddr));
+    vos_mem_copy( pRequestBuf->bssId, wlan_bssId, sizeof(tSirMacAddr));
+/*
+    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "ShareportPacketSetFilter : "
+           "FT %d FID %d ", 
+           pRequestBuf->filterType, pRequestBuf->filterId);    
+
+    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "ShareportPacketSetFilter : "
+           "params %d CT %d", 
+           pRequestBuf->numFieldParams, pRequestBuf->coalesceTime);    
+*/
+    //Param 0
+    pRequestBuf->paramsData[0].protocolLayer = 1;
+    pRequestBuf->paramsData[0].cmpFlag = 5;
+    pRequestBuf->paramsData[0].dataOffset = 0;
+    pRequestBuf->paramsData[0].dataLength = 1;
+    for (idx=0; idx<8; idx++) {
+        pRequestBuf->paramsData[0].compareData[idx] = 0;
+        pRequestBuf->paramsData[0].dataMask[idx] = 0;
+    }
+    pRequestBuf->paramsData[0].compareData[0] = 1;
+
+    //Param 1
+    pRequestBuf->paramsData[1].protocolLayer = 2;
+    pRequestBuf->paramsData[1].cmpFlag = 3;
+    pRequestBuf->paramsData[1].dataOffset = 6;
+    pRequestBuf->paramsData[1].dataLength = 2;
+    for (idx=0; idx<8; idx++) {
+        pRequestBuf->paramsData[1].compareData[idx] = 0;
+        pRequestBuf->paramsData[1].dataMask[idx] = 0;
+    }
+    pRequestBuf->paramsData[1].compareData[0] = 8;
+
+    //Param 2
+    pRequestBuf->paramsData[2].protocolLayer = 3;
+    pRequestBuf->paramsData[2].cmpFlag = 3;
+    pRequestBuf->paramsData[2].dataOffset = 9;
+    pRequestBuf->paramsData[2].dataLength = 1;
+    for (idx=0; idx<8; idx++) {
+        pRequestBuf->paramsData[2].compareData[idx] = 0;
+        pRequestBuf->paramsData[2].dataMask[idx] = 0;
+    }
+    pRequestBuf->paramsData[2].compareData[0] = 17;
+
+    //Param 3
+    pRequestBuf->paramsData[3].protocolLayer = 3;
+    pRequestBuf->paramsData[3].cmpFlag = 3;
+    pRequestBuf->paramsData[3].dataOffset = 22;
+    pRequestBuf->paramsData[3].dataLength = 2;
+    for (idx=0; idx<8; idx++) {
+        pRequestBuf->paramsData[3].compareData[idx] = 0;
+        pRequestBuf->paramsData[3].dataMask[idx] = 0;
+    }
+    pRequestBuf->paramsData[3].compareData[0] = 36;
+    pRequestBuf->paramsData[3].compareData[1] = 87;
+
+    // debug purpose
+/*
+    for (idx=0; idx<pRequestBuf->numFieldParams; idx++)
+    {
+
+      VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+           "Proto %d Comp Flag %d ",
+           pRequestBuf->paramsData[idx].protocolLayer,
+           pRequestBuf->paramsData[idx].cmpFlag);
+
+      VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+           "Data Offset %d Data Len %d",
+           pRequestBuf->paramsData[idx].dataOffset,
+           pRequestBuf->paramsData[idx].dataLength);
+
+      VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+          "CData: %d:%d:%d:%d:%d:%d",
+           pRequestBuf->paramsData[idx].compareData[0],
+           pRequestBuf->paramsData[idx].compareData[1], 
+           pRequestBuf->paramsData[idx].compareData[2],
+           pRequestBuf->paramsData[idx].compareData[3],
+           pRequestBuf->paramsData[idx].compareData[4],
+           pRequestBuf->paramsData[idx].compareData[5]);
+
+      VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, 
+           "MData: %d:%d:%d:%d:%d:%d",
+           pRequestBuf->paramsData[idx].dataMask[0],
+           pRequestBuf->paramsData[idx].dataMask[1], 
+           pRequestBuf->paramsData[idx].dataMask[2],
+           pRequestBuf->paramsData[idx].dataMask[3],
+           pRequestBuf->paramsData[idx].dataMask[4],
+           pRequestBuf->paramsData[idx].dataMask[5]);
+
+    }
+*/
+    msg.type = WDA_RECEIVE_FILTER_SET_FILTER_REQ;
+    msg.reserved = 0;
+    msg.bodyptr = pRequestBuf;
+
+    if(VOS_STATUS_SUCCESS != vos_mq_post_message(VOS_MODULE_ID_WDA, &msg))
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: Not able to post "
+            "WDA_RECEIVE_FILTER_SET_FILTER message to WDA", __func__);
+        vos_mem_free(pRequestBuf);
+        return eHAL_STATUS_FAILURE;
+    }
+
+    return eHAL_STATUS_SUCCESS;
+}
+
+eHalStatus sme_ShareportClearFilter(void)
+{
+    tpSirRcvFltPktClearParam pRequestBuf;
+    vos_msg_t               msg;
+  
+    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "[wlan] shareport filter clear %s", __func__);
+
+    pRequestBuf = vos_mem_malloc(sizeof(tSirRcvFltPktClearParam));
+    if (NULL == pRequestBuf)
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+            "%s: Not able to allocate memory for shareport Filter "
+            "Clear Filter request", __func__);
+        return eHAL_STATUS_FAILED_ALLOC;
+    }
+
+    pRequestBuf->filterId = 6;
+    vos_mem_copy( pRequestBuf->selfMacAddr, wlan_selfMacAddr, sizeof(tSirMacAddr));
+    vos_mem_copy( pRequestBuf->bssId, wlan_bssId, sizeof(tSirMacAddr));
+
+    msg.type = WDA_RECEIVE_FILTER_CLEAR_FILTER_REQ;
+    msg.reserved = 0;
+    msg.bodyptr = pRequestBuf;
+    if(VOS_STATUS_SUCCESS != vos_mq_post_message(VOS_MODULE_ID_WDA, &msg))
+    {
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: Not able to post "
+            "WDA_RECEIVE_FILTER_CLEAR_FILTER message to WDA", __func__);
+        vos_mem_free(pRequestBuf);
+        return eHAL_STATUS_FAILURE;
+    }
+
+    return eHAL_STATUS_SUCCESS;
+}
+//ASUS_BSP--- set/clear shareport packet filter
 
 eHalStatus sme_GetFilterMatchCount(tHalHandle hHal,
                                    FilterMatchCountCallback callbackRoutine,
