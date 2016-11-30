@@ -121,6 +121,10 @@ int wlan_hdd_ftm_start(hdd_context_t *pAdapter);
 #include "wlan_hdd_debugfs.h"
 #include "sapInternal.h"
 
+//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+#include <linux/asusdebug.h>
+//ASUS_BSP--- "for /data/log/ASUSEvtlog"
+
 #ifdef MODULE
 #define WLAN_MODULE_NAME  module_name(THIS_MODULE)
 #else
@@ -10631,6 +10635,10 @@ static int hdd_driver_init( void)
    wlan_logging_sock_init_svc();
 #endif
 
+   //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+   ASUSEvtlog("[wlan]: hdd_driver_init +.\n");
+   //ASUS_BSP--- "for /data/log/ASUSEvtlog"
+
    ENTER();
 
    vos_wake_lock_init(&wlan_wake_lock, "wlan");
@@ -10730,6 +10738,9 @@ static int hdd_driver_init( void)
 #endif
 
       pr_err("%s: driver load failure\n", WLAN_MODULE_NAME);
+      //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+      ASUSEvtlog("[wlan]: driver load failure.\n");
+      //ASUS_BSP--- "for /data/log/ASUSEvtlog"
    }
    else
    {
@@ -10737,9 +10748,16 @@ static int hdd_driver_init( void)
       send_btc_nlink_msg(WLAN_MODULE_UP_IND, 0);
 
       pr_info("%s: driver loaded\n", WLAN_MODULE_NAME);
+      //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+      ASUSEvtlog("[wlan]: driver loaded.\n");
+      //ASUS_BSP--- "for /data/log/ASUSEvtlog"
    }
 
    EXIT();
+
+   //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+   ASUSEvtlog("[wlan]: hdd_driver_init -.\n");
+   //ASUS_BSP--- "for /data/log/ASUSEvtlog"
 
    return ret_status;
 }
@@ -10789,6 +10807,9 @@ static void hdd_driver_exit(void)
    unsigned long rc = 0;
 
    pr_info("%s: unloading driver v%s\n", WLAN_MODULE_NAME, QWLAN_VERSIONSTR);
+   //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+   ASUSEvtlog("[wlan]: hdd_driver_exit +.\n");
+   //ASUS_BSP--- "for /data/log/ASUSEvtlog"
 
    //Get the global vos context
    pVosContext = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
@@ -10887,6 +10908,10 @@ done:
    vos_wake_lock_destroy(&wlan_wake_lock);
 
    pr_info("%s: driver unloaded\n", WLAN_MODULE_NAME);
+   //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+   ASUSEvtlog("[wlan]: driver unloaded.\n");
+   ASUSEvtlog("[wlan]: hdd_driver_exit -.\n");
+   //ASUS_BSP--- "for /data/log/ASUSEvtlog"
 }
 
 /**---------------------------------------------------------------------------
