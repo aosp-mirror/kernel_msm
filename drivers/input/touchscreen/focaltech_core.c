@@ -138,7 +138,7 @@ unsigned int suspend_resume_recovery_count = 0;
 unsigned int plam_recovery_count = 0;
 
 bool ts_pwr_disabled = false;
-// for DLW1 hwid
+
 static int phase_hwid = 2;
 extern char *saved_command_line;
 
@@ -146,7 +146,6 @@ struct irq_desc *fts_irq_desc = NULL;
 
 u8 buf_touch_data[30*POINT_READ_BUF] = { 0 };
 
-// Only for DLW1
 int LCM_SIZE_X = 390 ;
 int LCM_SIZE_Y = 390 ;
 
@@ -2535,12 +2534,16 @@ int fts_get_hwid(void)
 {
 	char* ptr;
 	ptr = strstr(saved_command_line, "androidboot.HardwareIO=");
-	ptr += strlen("androidboot.HardwareIO=");
-	phase_hwid = simple_strtol(ptr, NULL, 16);
+	if (ptr != NULL) {
+		ptr += strlen("androidboot.HardwareIO=");
+		phase_hwid = simple_strtol(ptr, NULL, 16);
 
-	phase_hwid = (phase_hwid >> 5) & 0x7;
+		phase_hwid = (phase_hwid >> 5) & 0x7;
 
-	//pr_err("[fts]Get HW ID = %d\n", phase_hwid);
+		//pr_err("[fts]Get HW ID = %d\n", phase_hwid);
+	} else {
+		phase_hwid = 2;
+	}
 
 	return phase_hwid;
 }
