@@ -1748,15 +1748,32 @@ VOS_STATUS vos_fatal_event_logs_req( uint32_t is_fatal,
     VOS_STATUS vosStatus;
     eHalStatus status;
     VosContextType *vos_context;
+    hdd_context_t *pHddCtx = NULL;
 
     vos_context = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
     if (!vos_context)
     {
         VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
             "%s: vos context is Invalid", __func__);
-        return eHAL_STATUS_FAILURE;
+        return VOS_STATUS_E_FAILURE;
+        //return eHAL_STATUS_FAILURE;
     }
 
+    // ASUS_patch_add
+    /* Get the HDD context */
+    pHddCtx = (hdd_context_t *)vos_get_context(VOS_MODULE_ID_HDD, vos_context );
+    if(!pHddCtx) {
+        hddLog(VOS_TRACE_LEVEL_FATAL, "%s: HDD context is Null", __func__);
+        return VOS_STATUS_E_FAILURE;
+    }
+
+    if(!pHddCtx->cfg_ini->wlanLoggingEnable)
+    {
+        VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
+            "%s: Wlan logging not enabled", __func__);
+        return VOS_STATUS_E_FAILURE;
+    }
+    // ASUS_patch_end
 
     if (vos_is_log_report_in_progress() == true)
     {
@@ -3073,4 +3090,34 @@ void vos_probe_threads(void)
           FL("Unable to post SYS_MSG_ID_RX_THR_PROBE message to RX thread"));
     }
 }
+
+// ASUS_patch_add
+bool vos_is_wlan_logging_enabled(void)
+{
+    v_CONTEXT_t vos_ctx = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
+    hdd_context_t *hdd_ctx;
+
+    if(!vos_ctx)
+    {
+       hddLog(VOS_TRACE_LEVEL_FATAL,"%s: Global VOS context is Null", __func__);
+       return false;
+    }
+
+    hdd_ctx = vos_get_context(VOS_MODULE_ID_HDD, vos_ctx);
+
+    if(!hdd_ctx)
+    {
+       hddLog(VOS_TRACE_LEVEL_FATAL,"%s: HDD context is Null", __func__);
+       return false;
+    }
+
+    if (!hdd_ctx->cfg_ini->wlanLoggingEnable)
+    {
+       hddLog(VOS_TRACE_LEVEL_FATAL,"%s: Logging framework not enabled!", __func__);
+       return false;
+    }
+
+    return true;
+}
+// ASUS_patch_end
 

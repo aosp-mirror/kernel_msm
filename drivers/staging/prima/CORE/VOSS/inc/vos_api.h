@@ -437,4 +437,7 @@ v_BOOL_t vos_isUnloadInProgress(void);
 v_BOOL_t vos_isLoadUnloadInProgress(void);
 
 void vos_probe_threads(void);
+// ASUS_patch_add
+bool vos_is_wlan_logging_enabled(void);
+// ASUS_patch_end
 #endif // if !defined __VOS_NVITEM_H

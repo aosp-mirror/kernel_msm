@@ -1211,7 +1211,9 @@ int wlan_queue_logpkt_for_app(vos_pkt_t *pPacket, uint32 pkt_type)
 
 void wlan_process_done_indication(uint8 type, uint32 reason_code)
 {
-    if ((type == WLAN_QXDM_LOGGING) && (wlan_is_log_report_in_progress() == TRUE))
+    // ASUS_patch_add
+    //if ((type == WLAN_QXDM_LOGGING) && (wlan_is_log_report_in_progress() == TRUE))
+    if ((type == WLAN_QXDM_LOGGING) && vos_is_wlan_logging_enabled() && (wlan_is_log_report_in_progress() == TRUE))
     {
         pr_info("%s: Setting LOGGER_FATAL_EVENT\n", __func__);
         set_bit(LOGGER_FATAL_EVENT_POST, &gwlan_logging.event_flag);
