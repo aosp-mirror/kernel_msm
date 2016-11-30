@@ -51,8 +51,6 @@ static struct mutex app_dma_mutex;
 static DECLARE_COMPLETION(app_dma_done);
 /* Status of last DMA transfer */
 static enum mnh_dma_trans_status_t app_dma_status;
-/* Current app DMA transfer is multi-block?  Else single-block. */
-static bool app_dma_ismblk;
 
 /* MNH BAR4 window size (and addressing granularity) 4MB */
 #define MNH_BAR4_MASK ((4 * 1024 * 1024) - 1)
@@ -407,7 +405,7 @@ void *easelcomm_hw_build_scatterlist(
 		return NULL;
 	}
 
-	n_ents_used = local_sg_info->n_num;
+	n_ents_used = local_sg_info->length;
 	*scatterlist_size = sizeof(struct mnh_sg_entry) * n_ents_used;
 	return sg_ents;
 }
