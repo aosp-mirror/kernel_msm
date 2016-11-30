@@ -463,6 +463,16 @@
 		compatible = "qcom,q6-mi2s-mclk";
 		#clock-cells = <1>;
 	};
+
+	ramoops {
+		compatible = "ramoops";
+		status = "ok";
+		console-size = <0 0x00080000>;
+		pmsg-size = <0 0x00040000>;
+		record-size = <0 0x00008000>;
+		ftrace-size = <0 0x00020000>;
+		memory-region = <&ramoops_mem>;
+	};
 };
 
 &slim_aud {
@@ -559,4 +569,14 @@
 &spi_4 {
 	/* SPI */
 	status = "disabled";
+};
+
+/ {
+	reserved-memory {
+		ramoops_mem: ramoops_region@0 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x88f00000 0 0x00100000>;
+		};
+    };
 };
