@@ -53,6 +53,11 @@
 			gpio-controller;
 			#gpio-cells = <2>;
 		};
+
+		bcm15602_thermal: sensor {
+			compatible = "brcm,bcm15602-thermal";
+			#thermal-sensor-cells = <0>;
+		};
 	};
 };
 
