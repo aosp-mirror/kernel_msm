@@ -925,6 +925,7 @@ static int bcm15602_probe(struct i2c_client *client,
 	/* initialize chip structure */
 	ddata->dev = dev;
 	ddata->pdata = pdata;
+	dev->platform_data = pdata;
 
 	spin_lock_init(&ddata->adc_lock);
 
@@ -986,7 +987,8 @@ static int bcm15602_suspend(struct device *dev)
 	struct bcm15602_platform_data *pdata;
 
 	pdata = dev_get_platdata(dev);
-	enable_irq_wake(pdata->intb_irq);
+	if (pdata)
+		enable_irq_wake(pdata->intb_irq);
 	return 0;
 }
 
@@ -995,7 +997,8 @@ static int bcm15602_resume(struct device *dev)
 	struct bcm15602_platform_data *pdata;
 
 	pdata = dev_get_platdata(dev);
-	disable_irq_wake(pdata->intb_irq);
+	if (pdata)
+		disable_irq_wake(pdata->intb_irq);
 	return 0;
 }
 
