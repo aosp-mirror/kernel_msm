@@ -383,7 +383,7 @@ static struct stc311x_platform_data stc3117_data = {
 	/* nominal VM cnf , coming from battery characterisation*/
 	.VM_cnf = 301,
 	/* nominal internal impedance*/
-	.Rint = 670,
+	.Rint = 970,
 	/* nominal capacity in mAh, coming from battery characterisation*/
 	.Cnom = 300,
 	.Rsense = 10, /* sense resistor mOhms*/
@@ -391,13 +391,13 @@ static struct stc311x_platform_data stc3117_data = {
 	.Adaptive = 1, /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 
 	/* Elentec Co Ltd Battery pack - 80 means 8% */
-        .CapDerating[6] = 0,            /* capacity derating in 0.1%, for temp = -20 degC */
-        .CapDerating[5] = 0,            /* capacity derating in 0.1%, for temp = -10 degC */
-        .CapDerating[4] = 0,             /* capacity derating in 0.1%, for temp = 0 degC */
-        .CapDerating[3] = 0,             /* capacity derating in 0.1%, for temp = 10 degC */
-        .CapDerating[2] = 0,              /* capacity derating in 0.1%, for temp = 25 degC */
-        .CapDerating[1] = 0,           /* capacity derating in 0.1%, for temp = 40 degC */
-        .CapDerating[0] = 0,           /* capacity derating in 0.1%, for temp = 60 degC */
+        .CapDerating[6] = 800,          /* capacity derating in 0.1%, for temp = -20 degC */
+        .CapDerating[5] = 330,          /* capacity derating in 0.1%, for temp = -10 degC */
+        .CapDerating[4] = 77,           /* capacity derating in 0.1%, for temp = 0 degC */
+        .CapDerating[3] = 25,           /* capacity derating in 0.1%, for temp = 10 degC */
+        .CapDerating[2] = 0,            /* capacity derating in 0.1%, for temp = 25 degC */
+        .CapDerating[1] = 0,            /* capacity derating in 0.1%, for temp = 40 degC */
+        .CapDerating[0] = 0,            /* capacity derating in 0.1%, for temp = 60 degC */
 
 	/*OCV curve example for a 4.35V li-ion battery*/
         .OCVValue[15] = 4227,             /* OCV curve value */
