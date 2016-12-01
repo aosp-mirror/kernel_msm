@@ -93,6 +93,7 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 #include "walt.h"
+#include "tune.h"
 
 void start_bandwidth_timer(struct hrtimer *period_timer, ktime_t period)
 {
@@ -2846,7 +2847,7 @@ unsigned long sum_capacity_reqs(unsigned long cfs_cap,
 
 static void sched_freq_tick_pelt(int cpu)
 {
-	unsigned long cpu_utilization = cpu_util(cpu, UTIL_EST);
+	unsigned long cpu_utilization = boosted_cpu_util(cpu);
 	unsigned long capacity_curr = capacity_curr_of(cpu);
 	struct sched_capacity_reqs *scr;
 
@@ -2869,19 +2870,12 @@ static void sched_freq_tick_pelt(int cpu)
 #ifdef CONFIG_SCHED_WALT
 static void sched_freq_tick_walt(int cpu)
 {
-	unsigned long cpu_utilization = cpu_util(cpu, UTIL_EST);
+	unsigned long cpu_utilization = boosted_cpu_util(cpu);
 	unsigned long capacity_curr = capacity_curr_of(cpu);
 
 	if (walt_disabled || !sysctl_sched_use_walt_cpu_util)
 		return sched_freq_tick_pelt(cpu);
 
-	/*
-	 * Add a margin to the WALT utilization.
-	 * NOTE: WALT tracks a single CPU signal for all the scheduling
-	 * classes, thus this margin is going to be added to the DL class as
-	 * well, which is something we do not do in sched_freq_tick_pelt case.
-	 */
-	cpu_utilization = add_capacity_margin(cpu_utilization);
 	if (cpu_utilization <= capacity_curr)
 		return;
 

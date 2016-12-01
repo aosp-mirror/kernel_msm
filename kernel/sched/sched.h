@@ -1539,28 +1539,32 @@ static inline void set_cfs_cpu_capacity(int cpu, bool request,
 {
 	struct sched_capacity_reqs *scr = &per_cpu(cpu_sched_capacity_reqs, cpu);
 
-	if (scr->cfs != capacity) {
-		scr->cfs = capacity;
-		update_cpu_capacity_request(cpu, request);
-	}
+	if (scr->cfs == capacity)
+		return;
+	scr->cfs = capacity;
+	update_cpu_capacity_request(cpu, request);
 }
 
 static inline void set_rt_cpu_capacity(int cpu, bool request,
 				       unsigned long capacity)
 {
-	if (per_cpu(cpu_sched_capacity_reqs, cpu).rt != capacity) {
-		per_cpu(cpu_sched_capacity_reqs, cpu).rt = capacity;
-		update_cpu_capacity_request(cpu, request);
-	}
+	struct sched_capacity_reqs *scr = &per_cpu(cpu_sched_capacity_reqs, cpu);
+
+	if (scr->rt == capacity)
+		return;
+	scr->rt = capacity;
+	update_cpu_capacity_request(cpu, request);
 }
 
 static inline void set_dl_cpu_capacity(int cpu, bool request,
 				       unsigned long capacity)
 {
-	if (per_cpu(cpu_sched_capacity_reqs, cpu).dl != capacity) {
-		per_cpu(cpu_sched_capacity_reqs, cpu).dl = capacity;
-		update_cpu_capacity_request(cpu, request);
-	}
+	struct sched_capacity_reqs *scr = &per_cpu(cpu_sched_capacity_reqs, cpu);
+
+	if (scr->dl == capacity)
+		return;
+	scr->dl = capacity;
+	update_cpu_capacity_request(cpu, request);
 }
 #else
 static inline bool sched_freq(void) { return false; }
