@@ -1407,7 +1407,7 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 		ioctl.inv.pra = ra;
 		ioctl.fds = fds;
 		VERIFY(err, !(err = fastrpc_internal_invoke(fl,
-			FASTRPC_MODE_PARALLEL, 1, &ioctl)));
+			FASTRPC_MODE_PARALLEL, 0, &ioctl)));
 		if (err)
 			goto bail;
 	} else {
