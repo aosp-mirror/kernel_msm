@@ -425,6 +425,8 @@ Optional properties:
 					in floating state(not LP00 or LP11) to turn on this property. Software
 					turns off PHY pmic power supply, phy ldo and DSI Lane ldo during
 					idle screen (footswitch control off) when this property is enabled.
+- htc,mdss-dsi-bl-dim-check:		Specifies the dim backlight level supported by the panel.
+					Must be over 0.
 [[Optional config sub-nodes]]		These subnodes provide different configurations for a given same panel.
 					Default configuration can be chosen by specifying phandle of the
 					selected subnode in the qcom,config-select.
