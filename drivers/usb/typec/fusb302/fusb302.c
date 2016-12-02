@@ -721,10 +721,23 @@ static int tcpm_set_vbus(struct tcpc_dev *dev, bool on, bool charge)
 		if (chip->uc && chip->uc->pd_vbus_ctrl) {
 			ret = chip->uc->pd_vbus_ctrl(on, true);
 		} else {
-			if (on)
-				ret = regulator_enable(chip->vbus);
-			else
-				ret = regulator_disable(chip->vbus);
+			fusb302_log("no pd_vbus_ctrl\n");
+			if (!chip->vbus) {
+				chip->vbus = devm_regulator_get(chip->dev,
+								"vbus");
+				if (IS_ERR(chip->vbus)) {
+					ret = PTR_ERR(chip->vbus);
+					fusb302_log("cannot get vbus, ret=%d\n",
+						    ret);
+				}
+			}
+
+			if (chip->vbus) {
+				if (on)
+					ret = regulator_enable(chip->vbus);
+				else
+					ret = regulator_disable(chip->vbus);
+			}
 		}
 		if (ret < 0) {
 			fusb302_log("cannot %s vbus regulator, ret=%d\n",
@@ -773,13 +786,27 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 			sink_current = USB_TYPEC_CURRENT_3_0_A;
 		if (chip->utc)
 			chip->utc->sink_current = sink_current;
-		ret = chip->batt_psy->set_property(chip->batt_psy,
-				POWER_SUPPLY_PROP_TYPEC_SINK_CURRENT,
-				(const union power_supply_propval *)
-						&sink_current);
-		if (ret < 0) {
-			fusb302_log("cannot set battery sink current, ret=%d\n",
-				    ret);
+
+		if (!chip->batt_psy) {
+			chip->batt_psy = power_supply_get_by_name("battery");
+			if (IS_ERR(chip->batt_psy)) {
+				ret = PTR_ERR(chip->batt_psy);
+				fusb302_log(
+					"cannot get battery power supply, ret=%d\n",
+					ret);
+			}
+		}
+
+		if (chip->batt_psy) {
+			ret = chip->batt_psy->set_property(chip->batt_psy,
+					POWER_SUPPLY_PROP_TYPEC_SINK_CURRENT,
+					(const union power_supply_propval *)
+							&sink_current);
+			if (ret < 0) {
+				fusb302_log(
+					"cannot set battery sink current, ret=%d\n",
+					ret);
+			}
 		}
 	}
 
@@ -838,6 +865,27 @@ static int fusb302_pd_set_interrupts(struct fusb302_chip *chip, bool on)
 	return ret;
 }
 
+void fusb302_notify_uc_data_role(struct fusb302_chip *chip,
+				 enum typec_data_role value)
+{
+	int notify_retry_count = 0;
+
+	fusb302_log("notify_uc_data_role of %d\n", value);
+
+	do {
+		if (chip->uc != NULL &&
+		    chip->uc->notify_attached_source != NULL) {
+			chip->uc->notify_attached_source(chip->uc, value);
+			break;
+		}
+
+		fusb302_log("notify uc data role error, retry_count = %d\n",
+			    notify_retry_count);
+		notify_retry_count++;
+		msleep(5000);
+	} while (notify_retry_count <= 3);
+}
+
 static int tcpm_set_pd_rx(struct tcpc_dev *dev, bool on)
 {
 	struct fusb302_chip *chip = container_of(dev, struct fusb302_chip,
@@ -893,6 +941,8 @@ static int tcpm_set_roles(struct tcpc_dev *dev, bool attached,
 	u8 switches1_mask = FUSB_REG_SWITCHES1_POWERROLE |
 			    FUSB_REG_SWITCHES1_DATAROLE;
 	u8 switches1_data = 0x00;
+
+	fusb302_notify_uc_data_role(chip, data);
 
 	mutex_lock(&chip->lock);
 	if (pwr == TYPEC_SOURCE)
@@ -1197,17 +1247,14 @@ static int init_regulators(struct fusb302_chip *chip)
 		goto disable_vdd;
 	}
 
+	/* If vbus regulator is not ready, skip here and get it when used.*/
 	chip->vbus = devm_regulator_get(chip->dev, "vbus");
 	if (IS_ERR(chip->vbus)) {
-		ret = PTR_ERR(chip->vbus);
 		fusb302_log("cannot get vbus, ret=%d\n", ret);
-		goto disable_switch_vdd;
+		chip->vbus = NULL;
 	}
 	return ret;
 
-disable_switch_vdd:
-	regulator_set_optimum_mode(chip->switch_vdd, 0);
-	regulator_disable(chip->switch_vdd);
 disable_vdd:
 	regulator_set_optimum_mode(chip->vdd, 0);
 	regulator_disable(chip->vdd);
@@ -1712,11 +1759,12 @@ static int fusb302_probe(struct i2c_client *client,
 	chip->dev = &client->dev;
 	mutex_init(&chip->lock);
 
+	/* If batt_psy is not ready in probe, skip here and get it when used. */
 	chip->batt_psy = power_supply_get_by_name("battery");
 	if (IS_ERR(chip->batt_psy)) {
 		ret = PTR_ERR(chip->batt_psy);
 		fusb302_log("cannot get battery power supply, ret=%d\n", ret);
-		return ret;
+		chip->batt_psy = NULL;
 	}
 
 	chip->wq = create_singlethread_workqueue(dev_name(chip->dev));

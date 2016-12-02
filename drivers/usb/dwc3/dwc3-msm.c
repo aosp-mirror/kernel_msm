@@ -3197,6 +3197,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev,
 				"%s:usb_controller_register usb failed\n",
 					__func__);
+		goto put_psupply;
 	}
 
 	ret = of_platform_populate(node, NULL, NULL, &pdev->dev);
