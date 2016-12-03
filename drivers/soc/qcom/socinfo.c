@@ -566,6 +566,49 @@ static struct socinfo_v0_1 dummy_socinfo = {
 	.version = 1,
 };
 
+static int board_ver_id = -1;
+void socinfo_set_board_ver_id(int val)
+{
+	board_ver_id = val;
+}
+
+int socinfo_get_board_ver_id(void)
+{
+	return board_ver_id;
+}
+EXPORT_SYMBOL(socinfo_get_board_ver_id);
+
+#define SOCINFO_CMDLINE_BOARD_VER_ID "androidboot.board_ver_id="
+#define BOARD_VER_ID_0 "0"
+#define BOARD_VER_ID_1 "1"
+#define BOARD_VER_ID_2 "2"
+#define BOARD_VER_ID_3 "3"
+
+enum board_ver_id {
+	BOOT_VER_0 = 0,
+	BOOT_VER_1 = 1,
+	BOOT_VER_2 = 2,
+	BOOT_VER_3 = 3,
+};
+
+static int __init board_ver_id_init(char *ver)
+{
+	int board_id = BOOT_VER_1;
+
+	if (!strncmp(ver, BOARD_VER_ID_0, strlen(BOARD_VER_ID_0)))
+		board_id = BOOT_VER_0;
+	else if (!strncmp(ver, BOARD_VER_ID_1, strlen(BOARD_VER_ID_1)))
+		board_id = BOOT_VER_1;
+	else if (!strncmp(ver, BOARD_VER_ID_2, strlen(BOARD_VER_ID_2)))
+		board_id = BOOT_VER_2;
+	else if (!strncmp(ver, BOARD_VER_ID_3, strlen(BOARD_VER_ID_3)))
+		board_id = BOOT_VER_3;
+
+	socinfo_set_board_ver_id(board_id);
+	return 0;
+}
+__setup(SOCINFO_CMDLINE_BOARD_VER_ID, board_ver_id_init);
+
 uint32_t socinfo_get_id(void)
 {
 	return (socinfo) ? socinfo->v0_1.id : 0;

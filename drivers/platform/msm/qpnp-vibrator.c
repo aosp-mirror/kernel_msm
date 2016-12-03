@@ -21,6 +21,7 @@
 #include <linux/qpnp/pwm.h>
 #include <linux/err.h>
 #include "../../staging/android/timed_output.h"
+#include <soc/qcom/socinfo.h>
 
 #define QPNP_VIB_VTG_CTL(base)		(base + 0x41)
 #define QPNP_VIB_EN_CTL(base)		(base + 0x46)
@@ -262,8 +263,12 @@ static int qpnp_vib_parse_dt(struct qpnp_vib *vib)
 	}
 
 	vib->vtg_level = QPNP_VIB_DEFAULT_VTG_LVL;
-	rc = of_property_read_u32(spmi->dev.of_node,
-			"qcom,vib-vtg-level-mV", &temp_val);
+	if (socinfo_get_board_ver_id() == 1)
+		rc = of_property_read_u32(spmi->dev.of_node,
+			"qcom,vib-vtg-level-mV-2700", &temp_val);
+	else
+		rc = of_property_read_u32(spmi->dev.of_node,
+				"qcom,vib-vtg-level-mV", &temp_val);
 	if (!rc) {
 		vib->vtg_level = temp_val;
 	} else if (rc != -EINVAL) {

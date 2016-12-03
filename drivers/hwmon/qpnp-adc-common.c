@@ -1430,7 +1430,7 @@ int32_t qpnp_adc_scale_batt_therm(struct qpnp_vadc_chip *chip,
 
 	if(batt_hot_threshold == 35 && batt_cold_threshold == 70)
 	{
-		printk("set battery thermal adc scale, adcmap_btm_threshold_0_45\n");
+		pr_debug("set battery thermal adc scale, adcmap_btm_threshold_0_45\n");
 		return qpnp_adc_map_temp_voltage(
 				adcmap_btm_threshold_0_45,
 				ARRAY_SIZE(adcmap_btm_threshold_0_45),
@@ -1439,7 +1439,7 @@ int32_t qpnp_adc_scale_batt_therm(struct qpnp_vadc_chip *chip,
 	}
 	else if(batt_hot_threshold == 25 && batt_cold_threshold == 80)
 	{
-		printk("set battery thermal adc scale, adcmap_btm_threshold_0_60\n");
+		pr_debug("set battery thermal adc scale, adcmap_btm_threshold_0_60\n");
 		return qpnp_adc_map_temp_voltage(
 				adcmap_btm_threshold_0_60,
 				ARRAY_SIZE(adcmap_btm_threshold_0_60),
@@ -1447,7 +1447,7 @@ int32_t qpnp_adc_scale_batt_therm(struct qpnp_vadc_chip *chip,
 				&adc_chan_result->physical);
 	}
 	else {
-		printk("[default]set battery thermal adc scale, adcmap_btm_threshold_0_60\n");
+		pr_debug("[default]set battery thermal adc scale, adcmap_btm_threshold_0_60\n");
 		return qpnp_adc_map_temp_voltage(
 			adcmap_btm_threshold,
 			ARRAY_SIZE(adcmap_btm_threshold),

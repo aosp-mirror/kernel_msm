@@ -37,6 +37,8 @@
 #include <linux/batterydata-interface.h>
 #include <linux/qpnp/qpnp-revid.h>
 #include <uapi/linux/vm_bms.h>
+#include <soc/qcom/socinfo.h>
+
 
 #define _BMS_MASK(BITS, POS) \
 	((unsigned char)(((1 << (BITS)) - 1) << (POS)))
@@ -3794,6 +3796,11 @@ static int qpnp_vm_bms_probe(struct spmi_device *spmi)
 	struct qpnp_bms_chip *chip;
 	struct device_node *revid_dev_node;
 	int rc, vbatt = 0;
+
+	if (socinfo_get_board_ver_id() != 0) {
+		pr_info("board is :%d, return derectly!\n", socinfo_get_board_ver_id());
+		return -EINVAL;
+	}
 
 	chip = devm_kzalloc(&spmi->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip) {

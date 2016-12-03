@@ -236,5 +236,6 @@ uint32_t socinfo_get_platform_version(void);
 enum pmic_model socinfo_get_pmic_model(void);
 uint32_t socinfo_get_pmic_die_revision(void);
 int __init socinfo_init(void) __must_check;
+int socinfo_get_board_ver_id(void);
 
 #endif

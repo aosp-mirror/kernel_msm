@@ -402,6 +402,18 @@
 			output-high;
 		};
 	};
+
+	max17055_alert: max17055_alert {
+		mux {
+			pins = "gpio92";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio92";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+		};
+	};
 };
 &i2c_4 {
 	smb23x-lbc@1b {
@@ -409,13 +421,13 @@
 		reg = <0x12>;
 		interrupt-parent = <&msm_gpio>;
 		interrupts = <49 2>;
-		qcom,bms-psy-name = "bms";
+		qcom,bms-psy-name = "max17055_bms";
 		pinctrl-names = "default";
 		pinctrl-0 = <&smb_int_default &smb_susp_default>;
 		qcom,float-voltage-mv = <4400>;
 		qcom,charging-timeout = <360>;
-		qcom,recharge-thresh-mv = <150>;
-		qcom,iterm-ma = <50>;
+		qcom,recharge-thresh-mv = <80>;
+		qcom,iterm-ma = <20>;
 		qcom,fastchg-ma = <500>;
 		qcom,hot-bat-decidegc = <500>;
 		qcom,warm-bat-decidegc = <450>;
@@ -431,8 +443,39 @@
 		qcom,soft-temp-current-comp-ma = <150>;
 		qcom,chg-inhibit-disabled;
 		qcom,apsd-disabled;
-		qcom,bms-controlled-charging;
 		qcom,thermal-mitigation = <1500 900 500 100>;
+		qcom,smb23x-vadc = <&pm8916_vadc>;
+	};
+	max17055@36 {
+		status = "okay";
+		compatible = "maxim,max17055";
+		reg = <0x36>;
+
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <92 2>;			/* gpio92 */
+		pinctrl-names = "default";
+		pinctrl-0 = <&max17055_alert>;
+
+		maxim,rsns-microohm = <10000>;	/*Current sense resistance in micro Ohm*/
+		maxim,config-type = <3>;		/*EZ:1 SHORT: 2 FULL: 3*/
+		maxim,cold-temp = <(-450)>;		/*Temp is scaled by 10 to reserve more precise*/
+		maxim,over-heat-temp = <1000>;	/*Temp is scaled by 10 to reserve more precise*/
+		maxim,dead-volt = <2800>;		/*Dead voltage in millivolts*/
+		maxim,over-volt = <4500>;		/*Over voltage in millivolts*/
+		maxim,enable-por-init;			/*Comment out this line to ignore the configuration data*/
+		maxim,config-data = /bits/ 16 <
+			0x0000 0x0000 0x0000 0x0000 0x0000		/* A/D measurement */
+			0x0000 0x0000 0x0000 0x0000 0x0000 0x00d8 0xe000	/* Alert / Status */
+			0x0000 0x0000 0x040c 0x00c0 0x0000 0xaa64 0x8400	/* App data */
+			0x0000 0x4412 0x0000 0x0000 0x0000 0x860b		/* Configs */
+			0x0049 0x343f 0x5400 0x2483 0x0c86 0x0a07		/* Cell Data */
+			0x7d00 0xaad0 0xb7b0 0xb9a0 0xbc50 0xbda0 0xbe80 0xbfb0		/* Model Data Begin*/
+			0xc210 0xc360 0xc690 0xc9b0 0xcc50 0xceb0 0xd530 0xdb40
+			0x0020 0x0180 0x1730 0x0d00 0x19e0 0x13c0 0x12f0 0x0f80
+			0x0a50 0x08f0 0x06f0 0x07f0 0x0890 0x06e0 0x05f0 0x05f0
+			0x0100 0x0100 0x0100 0x0100 0x0100 0x0100 0x0100 0x0100
+			0x0100 0x0100 0x0100 0x0100 0x0100 0x0100 0x0100 0x0100		/* Model Data End*/
+		>;
 	};
 };
 
