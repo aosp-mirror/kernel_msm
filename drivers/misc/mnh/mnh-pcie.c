@@ -780,7 +780,8 @@ unmap_sg:
 	dma_unmap_sg(&mnh_dev->pdev->dev,
 		sgl->sc_list, n_num, DMA_BIDIRECTIONAL);
 release_page:
-	page_cache_release(*(sgl->mypage));
+	for (i = 0; i < sgl->n_num; i++)
+		page_cache_release(*(sgl->mypage + i));
 free_mem:
 	kfree(sgl->mypage);
 	kfree(sgl->sc_list);
@@ -799,9 +800,12 @@ EXPORT_SYMBOL(mnh_sg_build);
  */
 int mnh_sg_destroy(struct mnh_sg_list *sgl)
 {
+	int i;
+
 	dma_unmap_sg(&mnh_dev->pdev->dev, sgl->sc_list,
 			sgl->n_num, DMA_BIDIRECTIONAL);
-	page_cache_release(*(sgl->mypage));
+	for (i = 0; i < sgl->n_num; i++)
+		page_cache_release(*(sgl->mypage + i));
 	kfree(sgl->mypage);
 	kfree(sgl->sc_list);
 	sgl->n_num = 0;
