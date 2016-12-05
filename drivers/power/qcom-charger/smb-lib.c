@@ -1550,7 +1550,7 @@ int smblib_get_prop_dc_current_max(struct smb_charger *chg,
 }
 
 /*******************
- * USB PSY SETTERS *
+ * DC PSY SETTERS *
  * *****************/
 
 int smblib_set_prop_dc_current_max(struct smb_charger *chg,
@@ -1955,6 +1955,25 @@ int smblib_set_prop_usb_current_max(struct smb_charger *chg,
 	if (rc < 0)
 		smblib_err(chg, "Couldn't rerun icl votable election, rc=%d\n",
 			   rc);
+	return rc;
+}
+
+#define FSW_2MHZ		2000
+#define FSW_800KHZ_RESET	800
+int smblib_set_prop_boost_current(struct smb_charger *chg,
+				    const union power_supply_propval *val)
+{
+	int rc = 0;
+
+	rc = smblib_set_charge_param(chg, &chg->param.freq_boost,
+				val->intval <= chg->boost_threshold_ua ?
+				FSW_2MHZ : FSW_800KHZ_RESET);
+	if (rc < 0) {
+		dev_err(chg->dev, "Error in setting freq_boost rc=%d\n", rc);
+		return rc;
+	}
+
+	chg->boost_current_ua = val->intval;
 	return rc;
 }
 
@@ -2872,6 +2891,12 @@ static void typec_sink_insertion(struct smb_charger *chg)
 			false, 0);
 }
 
+static void typec_sink_removal(struct smb_charger *chg)
+{
+	smblib_set_charge_param(chg, &chg->param.freq_boost, FSW_800KHZ_RESET);
+	chg->boost_current_ua = 0;
+}
+
 static void smblib_handle_typec_removal(struct smb_charger *chg)
 {
 	vote(chg->pd_disallowed_votable_indirect, CC_DETACHED_VOTER, true, 0);
@@ -2891,6 +2916,7 @@ static void smblib_handle_typec_removal(struct smb_charger *chg)
 	vote(chg->apsd_disable_votable, PD_HARD_RESET_VOTER, false, 0);
 
 	typec_source_removal(chg);
+	typec_sink_removal(chg);
 
 	smblib_update_usb_type(chg);
 }
@@ -2908,6 +2934,7 @@ static void smblib_handle_typec_insertion(struct smb_charger *chg,
 		typec_sink_insertion(chg);
 	} else {
 		typec_source_insertion(chg);
+		typec_sink_removal(chg);
 	}
 
 	vote(chg->pd_disallowed_votable_indirect, LEGACY_CABLE_VOTER,
