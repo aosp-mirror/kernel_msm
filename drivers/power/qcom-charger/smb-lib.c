@@ -1950,20 +1950,20 @@ int smblib_set_prop_typec_power_role(struct smb_charger *chg,
 				     const union power_supply_propval *val)
 {
 	int rc = 0;
-	u8 power_role;
+	u8 reg;
 
 	switch (val->intval) {
 	case POWER_SUPPLY_TYPEC_PR_NONE:
-		power_role = TYPEC_DISABLE_CMD_BIT;
+		reg = TYPEC_DISABLE_CMD_BIT;
 		break;
 	case POWER_SUPPLY_TYPEC_PR_DUAL:
-		power_role = 0;
+		reg = 0;
 		break;
 	case POWER_SUPPLY_TYPEC_PR_SINK:
-		power_role = UFP_EN_CMD_BIT;
+		reg = UFP_EN_CMD_BIT | EXIT_SNK_BASED_ON_CC_BIT;
 		break;
 	case POWER_SUPPLY_TYPEC_PR_SOURCE:
-		power_role = DFP_EN_CMD_BIT;
+		reg = DFP_EN_CMD_BIT;
 		break;
 	default:
 		smblib_err(chg, "power role %d not supported\n", val->intval);
@@ -1971,10 +1971,12 @@ int smblib_set_prop_typec_power_role(struct smb_charger *chg,
 	}
 
 	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
-				 TYPEC_POWER_ROLE_CMD_MASK, power_role);
+				 TYPEC_POWER_ROLE_CMD_MASK |
+				 EXIT_SNK_BASED_ON_CC_BIT,
+				 reg);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't write 0x%02x to TYPE_C_INTRPT_ENB_SOFTWARE_CTRL rc=%d\n",
-			power_role, rc);
+			reg, rc);
 		return rc;
 	}
 
