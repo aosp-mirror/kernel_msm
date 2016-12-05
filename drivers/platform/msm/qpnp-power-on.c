@@ -2004,6 +2004,66 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 	return 0;
 }
 
+static int qpnp_read_wrapper(struct qpnp_pon *pon, u8 *val,
+					u16 base, int count)
+{
+	int rc;
+	struct spmi_device *spmi = pon->spmi;
+
+	rc = spmi_ext_register_readl(spmi->ctrl, spmi->sid, base, val, count);
+	if (rc)
+		pr_err("SPMI read failed rc=%d\n", rc);
+
+	return rc;
+}
+
+static int qpnp_write_wrapper(struct qpnp_pon *pon, u8 *val,
+			u16 base, int count)
+{
+	int rc;
+	struct spmi_device *spmi = pon->spmi;
+
+	rc = spmi_ext_register_writel(spmi->ctrl, spmi->sid, base, val, count);
+	if (rc)
+		pr_err("SPMI write failed rc=%d\n", rc);
+
+	return rc;
+}
+
+static int qpnp_masked_write_base(struct qpnp_pon *pon, u16 addr,
+							u8 mask, u8 val)
+{
+	int rc;
+	u8 reg;
+
+	rc = qpnp_read_wrapper(pon, &reg, addr, 1);
+	if (rc) {
+		pr_err("read failed addr = %03X, rc = %d\n", addr, rc);
+		return rc;
+	}
+	reg &= ~mask;
+	reg |= val & mask;
+	rc = qpnp_write_wrapper(pon, &reg, addr, 1);
+	if (rc)
+		pr_err("write failed addr = %03X, val = %02x, mask = %02x, reg = %02x, rc = %d\n",
+					addr, val, mask, reg, rc);
+
+	return rc;
+}
+
+#define PON_TRIGGER_EN_ADDRESS 0x880
+#define CBLPWR_MASK BIT(6)
+int set_cblpwr_pon_disable(void)
+{
+	int rc;
+
+	rc = qpnp_masked_write_base(sys_reset_dev, PON_TRIGGER_EN_ADDRESS, CBLPWR_MASK, 0);
+	if (rc)
+		pr_err("Unable to disable cblpwr rc=%d\n", rc);
+
+	return rc;
+}
+
 static int qpnp_pon_probe(struct spmi_device *spmi)
 {
 	struct qpnp_pon *pon;

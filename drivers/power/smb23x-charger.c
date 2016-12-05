@@ -1114,7 +1114,22 @@ static bool smb23x_recharge_now(struct smb23x_chip *chip)
 		return false;
 }
 
+static bool smb23x_check_charge_term(struct smb23x_chip *chip, int current_now)
+{
+	int  capacity, fullcap, repcap;
+
+	fullcap = smb23x_get_fullcap(chip);
+	repcap = smb23x_get_repcap(chip);
+	capacity = smb23x_get_prop_batt_real_capacity(chip);
+	pr_info("fullcap:%d, repcap:%d, capacity:%d\n", fullcap, repcap, capacity);
+	if ((current_now <= 0) && (abs(current_now) < (chip->cfg_iterm_ma + 10)))
+		if ((capacity >= RECHARGE_CAPACITY) && (fullcap == repcap))
+			return true;
+	return false;
+}
+
 #define CONSECUTIVE_COUNT	5
+
 static void smb23x_check_fullcharged_state(struct smb23x_chip *chip)
 {
 	int  current_now, capacity;
@@ -1143,7 +1158,7 @@ static void smb23x_check_fullcharged_state(struct smb23x_chip *chip)
 	} else if (current_now > 0) {
 		pr_info("Charging but system demand increased\n");
 		count = 0;
-	} else if (((current_now * -1) > (chip->cfg_iterm_ma + 10)) || (capacity < FULL_CAPACITY)) {
+	} else if (!smb23x_check_charge_term(chip, current_now)) {
 		pr_info("Not at EOC, current_now=%d,capacity:%d\n", current_now, capacity);
 		count = 0;
 	} else {
@@ -2193,7 +2208,30 @@ exit:
 	return POWER_SUPPLY_CHARGE_TYPE_UNKNOWN;
 }
 
+extern int set_cblpwr_pon_disable(void);
+static int  set_cblpwr_pon = 1;
+static int smb23x_cblpwr_pon_disable(const char *val, struct kernel_param *kp)
+{
+	int ret;
+
+	ret = param_set_int(val, kp);
+	if (ret) {
+		pr_err("error setting value %d\n", ret);
+		return ret;
+	}
+	if (set_cblpwr_pon == 0) {
+		set_cblpwr_pon_disable();
+		pr_info("set_cblpwr_pon_disable\n");
+	}
+
+	return ret;
+}
+module_param_call(set_cblpwr_pon, smb23x_cblpwr_pon_disable, param_get_uint,
+					&set_cblpwr_pon, 0644);
+
 #define DEFAULT_BATT_TEMP	250
+#define HOT_TEMP 600
+
 static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip, int *batt_temp)
 {
 	int rc;
@@ -2210,6 +2248,9 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip, int *batt_temp)
 			result.physical, result.measurement);
 
 	*batt_temp = (int)result.physical;
+
+	if (*batt_temp > HOT_TEMP)
+		set_cblpwr_pon_disable();
 
 	return 0;
 }
@@ -3003,6 +3044,7 @@ check_again:
 		period = TEMP_DETECT_WORK_DELAY_2S;
 	schedule_delayed_work(&chip->temp_control_work, round_jiffies_relative(msecs_to_jiffies(period)));
 }
+
 
 
 static int smb23x_probe(struct i2c_client *client,

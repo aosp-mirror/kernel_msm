@@ -1218,20 +1218,6 @@ static int get_battery_status(struct qpnp_bms_chip *chip)
 	return POWER_SUPPLY_STATUS_UNKNOWN;
 }
 
-#define PON_TRIGGER_EN_ADDRESS 0x880
-#define CBLPWR_MASK BIT(6)
-static int set_cblpwr_pon_disable(struct qpnp_bms_chip *chip)
-{
-	int rc;
-	rc = qpnp_masked_write_base(chip, PON_TRIGGER_EN_ADDRESS,
-					CBLPWR_MASK, 0);
-	if (rc)
-		pr_err("Unable to disable cblpwr rc=%d\n", rc);
-
-	return rc;
-}
-
-#define HOT_TEMP 600
 static int get_batt_therm(struct qpnp_bms_chip *chip, int *batt_temp)
 {
 	int rc;
@@ -1248,9 +1234,6 @@ static int get_batt_therm(struct qpnp_bms_chip *chip, int *batt_temp)
 			result.physical, result.measurement);
 
 	*batt_temp = (int)result.physical;
-
-	if (*batt_temp > HOT_TEMP)
-		set_cblpwr_pon_disable(chip);
 
 	return 0;
 }
