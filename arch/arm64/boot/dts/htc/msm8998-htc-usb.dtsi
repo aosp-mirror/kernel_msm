@@ -1,0 +1,56 @@
+/*
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&pmi8998_gpios {
+	gpio@c800 { /* GPIO 9 - TUSB1044 VCC */
+		qcom,mode = <1>;		/* Output */
+		qcom,output-type = <0>;
+		qcom,invert = <1>;		/* Invert */
+		qcom,vin-sel = <0>;		/* VIN1 GPIO_LV */
+		qcom,src-sel = <0>;		/* GPIO */
+		qcom,out-strength = <1>;        /* High drive strength */
+		qcom,master-en = <1>;		/* Enable GPIO */
+		status = "okay";
+	};
+};
+
+&i2c_9 {
+	tusb1044_i2c: tusb1044-i2c@44 {
+		compatible = "ti,tusb1044-i2c";
+		reg = <0x44>;
+		pinctrl-names = "pin_active", "pin_sleep";
+		pinctrl-0 = <&tusb1044_1v8_active>;
+		pinctrl-1 = <&tusb1044_1v8_sleep>;
+	};
+};
+
+&tca6418 {
+	tusb1044_pinctrl {
+		tusb1044_1v8_active: tusb1044_1v8_active {
+			config {
+				pins = "gpio12";
+				bias-disable;
+				output-high;
+			};
+		};
+
+		tusb1044_1v8_sleep: tusb1044_1v8_sleep {
+			config {
+				pins = "gpio12";
+				bias-disable;
+				output-low;
+			};
+		};
+
+	};
+};

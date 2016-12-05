@@ -32,3 +32,5 @@
 		i2c-client = <&tca6418_i2c>;
 	 };
 };
+
+#include "msm8998-htc-usb.dtsi"
