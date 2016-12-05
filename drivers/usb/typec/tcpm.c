@@ -1836,13 +1836,15 @@ static void tcpm_typec_connect(struct tcpm_port *port)
 
 static int tcpm_src_attach(struct tcpm_port *port)
 {
+	enum typec_cc_polarity polarity =
+				port->cc2 == TYPEC_CC_RD ? TYPEC_POLARITY_CC2
+							 : TYPEC_POLARITY_CC1;
 	int ret;
 
 	if (port->attached)
 		return 0;
 
-	ret = tcpm_set_polarity(port, port->cc2 == TYPEC_CC_RD ?
-				TYPEC_POLARITY_CC2 : TYPEC_POLARITY_CC1);
+	ret = tcpm_set_polarity(port, polarity);
 	if (ret < 0)
 		return ret;
 
@@ -1854,9 +1856,17 @@ static int tcpm_src_attach(struct tcpm_port *port)
 	if (ret < 0)
 		goto out_disable_mux;
 
-	ret = tcpm_set_vconn(port, true);
-	if (ret < 0)
-		goto out_disable_pd;
+	/*
+	 * USB Type-C specification, version 1.2,
+	 * chapter 4.5.2.2.8.1 (Attached.SRC Requirements)
+	 * Enable VCONN only if the non-RD port is set to RA.
+	 */
+	if ((polarity == TYPEC_POLARITY_CC1 && port->cc2 == TYPEC_CC_RA) ||
+	    (polarity == TYPEC_POLARITY_CC2 && port->cc1 == TYPEC_CC_RA)) {
+		ret = tcpm_set_vconn(port, true);
+		if (ret < 0)
+			goto out_disable_pd;
+	}
 
 	ret = tcpm_set_vbus(port, true);
 	if (ret < 0)
