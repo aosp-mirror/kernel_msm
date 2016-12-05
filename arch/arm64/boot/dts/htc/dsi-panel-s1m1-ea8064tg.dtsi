@@ -137,5 +137,6 @@
 		qcom,mdss-dsi-lp11-init;
 		qcom,esd-check-enabled;
 		qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";
+		htc,mdss-dsi-bl-dim-check = <30>;
 	};
 };
