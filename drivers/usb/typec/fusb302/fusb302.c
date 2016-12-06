@@ -101,6 +101,7 @@ struct fusb302_chip {
 	struct regulator *vdd;
 	struct regulator *switch_vdd;
 	struct regulator *vbus;
+	struct regulator *vconn;
 
 	struct pinctrl *gpio_pinctrl;
 	int gpio_int_n;
@@ -682,6 +683,7 @@ static int tcpm_set_vconn(struct tcpc_dev *dev, bool on)
 	struct fusb302_chip *chip = container_of(dev, struct fusb302_chip,
 						 tcpc_dev);
 	int ret = 0;
+	struct pinctrl_state *set_state;
 	u8 switches0_data = 0x00;
 	u8 switches0_mask = FUSB_REG_SWITCHES0_VCONN_CC1 |
 			    FUSB_REG_SWITCHES0_VCONN_CC2;
@@ -691,11 +693,45 @@ static int tcpm_set_vconn(struct tcpc_dev *dev, bool on)
 		fusb302_log("vconn is already %s\n", on ? "On" : "Off");
 		goto done;
 	}
+
+	if (!chip->vconn) {
+		chip->vconn = devm_regulator_get(chip->dev, "V_USB_boost");
+		if (IS_ERR(chip->vconn)) {
+			fusb302_log("still unable to get vconn regulator\n");
+			ret = -ENODEV;
+			goto done;
+		}
+	}
+
 	if (on) {
+		ret = regulator_enable(chip->vconn);
+		if (ret) {
+			fusb302_log("Unable to enable vconn regulator\n");
+			goto done;
+		}
 		switches0_data = (chip->cc_polarity == TYPEC_POLARITY_CC1) ?
 				 FUSB_REG_SWITCHES0_VCONN_CC2 :
 				 FUSB_REG_SWITCHES0_VCONN_CC1;
+	} else {
+		ret = regulator_disable(chip->vconn);
+		if (ret) {
+			fusb302_log("Unable to disable vconn regulator\n");
+			goto done;
+		}
 	}
+
+	if (chip->gpio_pinctrl) {
+		set_state = pinctrl_lookup_state(chip->gpio_pinctrl,
+						 on ? "vconn_enable" :
+						      "vconn_disable");
+		if (IS_ERR(set_state)) {
+			fusb302_log("cannot get pinctrl vconn_control state\n");
+			ret = -ENODEV;
+			goto done;
+		}
+		pinctrl_select_state(chip->gpio_pinctrl, set_state);
+	}
+
 	ret = fusb302_i2c_mask_write(chip, FUSB_REG_SWITCHES0,
 				     switches0_mask, switches0_data);
 	if (ret < 0)
