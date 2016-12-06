@@ -239,7 +239,14 @@ static const enum typec_cc_status cc_status[][2] = {
 		= {TYPEC_CC_OPEN, TYPEC_CC_OPEN},
 	[POWER_SUPPLY_TYPEC_SINK]
 		= {TYPEC_CC_RD, TYPEC_CC_OPEN},
-	/* XXX: fill in other type c modes. */
+	[POWER_SUPPLY_TYPEC_SINK_POWERED_CABLE]
+		= {TYPEC_CC_RD, TYPEC_CC_RA},
+	[POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY]
+		= {TYPEC_CC_RD, TYPEC_CC_RD},
+	[POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER]
+		= {TYPEC_CC_RA, TYPEC_CC_RA},
+	[POWER_SUPPLY_TYPEC_POWERED_CABLE_ONLY]
+		= {TYPEC_CC_RA, TYPEC_CC_OPEN},
 };
 
 static const char * const typec_cc_status_name[] = {
