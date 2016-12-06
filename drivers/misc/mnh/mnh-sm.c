@@ -34,6 +34,7 @@
 
 #include "mnh-pcie.h"
 #include "hw-mnh-regs.h"
+#include "mnh-sm.h"
 
 #define MAX_STR_COPY 32
 #define SUCCESS 0
@@ -72,7 +73,6 @@ static dev_t dev_num;
 static struct class *mclass;
 static struct device *mdevice;
 static struct mnh_sm_device *mnh_sm_dev;
-
 
 static ssize_t mnh_sm_poweron_show(struct device *dev,
 			     struct device_attribute *attr,
@@ -332,34 +332,20 @@ free_uboot:
 	return -EIO;
 }
 
-static ssize_t mnh_sm_flash_show(struct device *dev,
+static ssize_t mnh_sm_download_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
 {
     ssize_t strlen = 0;
-    uint32_t  magic;
 
-    printk("MNH PM mnh_pm_flash_show...\n");
+    printk("MNH PM mnh_pm_download_show...\n");
 
-    if (mnh_download_firmware() == 0) {
-        /* Magic number setting to notify MNH that PCIE initialization
-	is done on Host side */
-	if (mnh_config_read(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
-	                    HW_MNH_PCIE_GP_0,
-			    sizeof(uint32_t), &magic) == SUCCESS && magic == 0)
-        {
-	    mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
-	                     HW_MNH_PCIE_GP_0,
-	                     sizeof(uint32_t), INIT_DONE);
-	} else {
-	    printk("Read GP0 register fail or GP0 is not 0:%d",
-	            magic);
-	}
-    }
+    mnh_sm_download();
+
     return strlen;
 }
 
-static ssize_t mnh_sm_flash_store(struct device *dev,
+static ssize_t mnh_sm_download_store(struct device *dev,
 			      struct device_attribute *attr,
 			      const char *buf,
 			      size_t count)
@@ -367,8 +353,8 @@ static ssize_t mnh_sm_flash_store(struct device *dev,
     return -EINVAL;
 }
 
-static DEVICE_ATTR(flash, S_IWUSR | S_IRUGO,
-		mnh_sm_flash_show, mnh_sm_flash_store);
+static DEVICE_ATTR(download, S_IWUSR | S_IRUGO,
+		mnh_sm_download_show, mnh_sm_download_store);
 
 
 static ssize_t mnh_sm_suspend_show(struct device *dev,
@@ -432,7 +418,7 @@ static DEVICE_ATTR(reset, S_IRUGO | S_IWUSR | S_IWGRP,
 static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_poweron.attr,
 	&dev_attr_poweroff.attr,
-	&dev_attr_flash.attr,
+	&dev_attr_download.attr,
 	&dev_attr_suspend.attr,
 	&dev_attr_resume.attr,
 	&dev_attr_reset.attr,
@@ -443,6 +429,107 @@ static struct attribute_group mnh_sm_group = {
 	.name = "mnh_sm",
 	.attrs = mnh_sm_dev_attributes
 };
+
+/*******************************************************************************
+ *
+ *	APIs
+ *
+ ******************************************************************************/
+
+
+/**
+ * API to initialize Power and clocks to MNH, MIPI, DDR, DDR training,
+ * and PCIE.
+ * @param[in] Structure argument to configure each boot component.
+ *            This structure will be populated within the kernel module.
+ * @return 0 if success or -EINVAL or -EFATAL on failure
+ */
+int mnh_sm_poweron( struct mnh_sm_configuration* mnh_sm_boot_args )
+{
+    return 0;
+}
+EXPORT_SYMBOL(mnh_sm_poweron);
+
+/**
+ * API to obtain the state of monette hill.
+ * @return the power states of mnh(ex: On, Off, Active, Suspend, Bypass).
+ * 	MNH_HW_INIT - MNH is on, Kernel not executing, and before FW download.
+ * 	MNH_HW_OFF - MNH is powered off
+ * 	MNH_HW_ACTIVE: MNH is on and flashed. Kernel is running.
+ * 	MNH_HW_SUSPEND_SELF_REFRESH: DDR is self refreshing.
+ *                                   All other components are off.
+ * 	MNH_HW_SUSPEND_HIBERNATE: Hibernation image stored in AP RAM
+ *                           	  over PCIe outbound and MNH is powered down.
+ */
+int mnh_sm_get_state(void)
+{
+    return 0;
+}
+EXPORT_SYMBOL(mnh_sm_get_state);
+
+/**
+ * API to power monette hill.
+ * @return 0 if success or -EINVAL or -EFATAL on failure
+ */
+int mnh_sm_poweroff(void)
+{
+    return 0;
+}
+EXPORT_SYMBOL(mnh_sm_poweroff);
+
+/**
+ * API to download the binary images(SBL, UBoot, Kernel, Ramdisk) for mnh.
+ * The location of the binaries will be located in the AP file system.
+ * @return 0 if success or -EINVAL or -EFATAL on failure
+ */
+int mnh_sm_download(void)
+{
+    uint32_t  magic;
+
+    if (mnh_download_firmware() == 0) {
+        /* Magic number setting to notify MNH that PCIE initialization
+	is done on Host side */
+	if (mnh_config_read(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
+	                    HW_MNH_PCIE_GP_0,
+			    sizeof(uint32_t), &magic) == SUCCESS && magic == 0)
+        {
+	    mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
+	                     HW_MNH_PCIE_GP_0,
+	                     sizeof(uint32_t), INIT_DONE);
+	} else {
+	    printk("Read GP0 register fail or GP0 is not 0:%d",
+	            magic);
+	}
+    }
+    return 0;
+}
+
+EXPORT_SYMBOL(mnh_sm_download);
+
+/**
+ * API to put MNH in suspend state.  In suspend mode the DDR will be isolated
+ * and put in self refresh while the CPU is powered down.
+ * @return 0 if success or -EINVAL or -EFATAL on failure
+ */
+int mnh_sm_suspend(void)
+{
+    return 0;
+}
+EXPORT_SYMBOL(mnh_sm_suspend);
+
+/**
+ * API to put MNH into active state.
+ * The resume call flow should be similar to normal bootflow except for DDR
+ * initializations. Since the binaries are already saved on the DDR while MNH
+ * is in suspend, ESM will not need to download the binaries again during
+ * resume.
+ * @return 0 if success or -EINVAL or -EFATAL on failure
+ */
+int mnh_sm_resume(void)
+{
+    return 0;
+}
+EXPORT_SYMBOL(mnh_sm_resume);
 
 static int __exit mnh_sm_exit(void)
 {
