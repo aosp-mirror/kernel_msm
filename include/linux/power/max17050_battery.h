@@ -31,6 +31,14 @@
 /* Number of words in model characterisation data */
 #define MODEL_SIZE			48
 
+/* saved data by kernel itself
+ * header     1 byte
+ * soc        1 byte
+ * dyn_soc    1 byte
+ * time stamp 4 bytes
+ */
+#define EXT_STORAGE_SIZE       7
+
 enum max17050_register {
 	MAX17050_STATUS		= 0X00,
 	MAX17050_VALRT_TH	= 0X01,
@@ -157,6 +165,10 @@ struct max17050_platform_data {
 
 	/* model characterisation data */
 	u16 model[MODEL_SIZE];
+
+	/* saved data by kernel itself */
+	bool use_ext_bms_storage;
+	u16 ext_storage_offsets[EXT_STORAGE_SIZE];
 };
 
 #endif /* __MAX17050_BATTERY_H_ */

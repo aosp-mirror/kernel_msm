@@ -32,6 +32,9 @@
 #include <linux/power/max17050_battery.h>
 #include <linux/of.h>
 #include <linux/debugfs.h>
+#include <linux/of_platform.h>
+#include <linux/msm_spmi.h>
+#include <linux/rtc.h>
 
 /* Status register bits */
 #define STATUS_POR_BIT		(1 << 1)
@@ -50,6 +53,17 @@
 
 /* Set capacity thresholds to +/- 1% of current capacity */
 #define ALERT_THRESHOLD_SOC	1
+
+/* Save and Restore dyn_soc information */
+#define DYNMIC_RESTORE_MIN_SOC 20
+#define RESTORE_TIME_SEC       3600
+#define NORMAL_HEADER_DATA     0xAD
+#define ABNORMAL_HEADER_DATA   0xFF
+/* index of the external stroage offsets */
+#define ES_OFF_HEAD            0
+#define ES_OFF_SOC             1
+#define ES_OFF_DYN             2
+#define ES_OFF_STAMP           3
 
 /* Modelgauge M3 save/restore values */
 struct max17050_learned_params {
@@ -95,6 +109,9 @@ struct max17050_chip {
 	u16 tte;
 
 	struct max17050_learned_params learned;
+
+	/* saved data by kernel itself */
+	struct spmi_controller *spmi_ctrl;
 
 	/* debugfs */
 	struct dentry *dent;
@@ -669,7 +686,7 @@ static int adjust_soc(struct max17050_chip *chip)
 		break;
 	}
 	pr_debug("charge status: %d, soc : %d, repsoc : %04x,"
-			"backup_capacity : %d, dyn_full_soc : %04x,"
+			"backup_capacity : %d, dyn_full_soc : %d,"
 			"adj_soc : %d, dyn_soc : %d\n",
 			chip->charge_status, soc, chip->repsoc,
 			chip->backup_capacity, chip->pdata->dyn_full_soc,
@@ -831,6 +848,194 @@ static irqreturn_t max17050_interrupt(int id, void *dev)
 	return IRQ_HANDLED;
 }
 
+static int max17050_get_current_time(struct rtc_time *tm)
+{
+	struct rtc_device *rtc;
+	int rc;
+
+	rtc = rtc_class_open(CONFIG_RTC_HCTOSYS_DEVICE);
+	if (rtc == NULL) {
+		pr_err("%s: unable to open rtc device (%s)\n",
+			__func__, CONFIG_RTC_HCTOSYS_DEVICE);
+		return -EINVAL;
+	}
+
+	rc = rtc_read_time(rtc, tm);
+	if (rc) {
+		pr_err("Error reading rtc device (%s) : %d\n",
+			CONFIG_RTC_HCTOSYS_DEVICE, rc);
+		goto close_time;
+	}
+
+	rc = rtc_valid_tm(tm);
+	if (rc) {
+		pr_err("Invalid RTC time (%s): %d\n",
+			CONFIG_RTC_HCTOSYS_DEVICE, rc);
+		goto close_time;
+	}
+
+close_time:
+	rtc_class_close(rtc);
+	return rc;
+}
+
+static void max17050_restore_dynsoc(struct max17050_chip *chip)
+{
+	struct rtc_time tmrestore;
+	struct rtc_time tmcurrent;
+	unsigned long ts_restore;
+	unsigned long ts_current;
+	u8 soc, dyn_full_soc;
+	u8 header;
+	int rc;
+	u16 *offsets = chip->pdata->ext_storage_offsets;
+
+	if (!chip->pdata->use_ext_bms_storage) {
+		pr_warn("External BMS storage not supported\n");
+		return;
+	}
+
+	if (!chip->spmi_ctrl) {
+		pr_err("%s: fail to get spmi handle\n", __func__);
+		return;
+	}
+
+	rc = spmi_ext_register_readl(chip->spmi_ctrl, 0,
+			offsets[ES_OFF_HEAD], (u8 *)&header, 1);
+	if (rc) {
+		pr_err("%s: fail to read header rc = %d\n", __func__, rc);
+		return;
+	} else if (header != NORMAL_HEADER_DATA) {
+		pr_info("%s: Don't need to restore dyn_soc\n", __func__);
+		return;
+	}
+
+	rc = spmi_ext_register_readl(chip->spmi_ctrl, 0,
+			offsets[ES_OFF_SOC], (u8 *)&soc, 1);
+	if (rc) {
+		pr_err("%s: fail to read soc rc = %d\n", __func__, rc);
+		return;
+	}
+
+	rc = spmi_ext_register_readl(chip->spmi_ctrl, 0,
+			offsets[ES_OFF_DYN], (u8 *)&dyn_full_soc, 1);
+	if (rc) {
+		pr_err("%s: fail to read dyn_full_soc rc = %d\n", __func__, rc);
+		return;
+	}
+
+	rc = spmi_ext_register_readl(chip->spmi_ctrl, 0,
+			offsets[ES_OFF_STAMP], (u8 *)&ts_restore, 4);
+	if (rc) {
+		pr_err("%s: fail to read time rc = %d\n", __func__, rc);
+		return;
+	}
+
+	rc = max17050_get_current_time(&tmcurrent);
+	if (rc) {
+		pr_err("%s: fail to read rtc time rc = %d\n", __func__, rc);
+		return;
+	}
+
+	rtc_tm_to_time(&tmcurrent, &ts_current);
+	pr_info("%s: now %d-%d-%d %d:%d:%d\n", __func__,
+			tmcurrent.tm_year + 1900,
+			tmcurrent.tm_mon + 1, tmcurrent.tm_mday,
+			tmcurrent.tm_hour, tmcurrent.tm_min, tmcurrent.tm_sec);
+
+	rtc_time_to_tm(ts_restore, &tmrestore);
+	pr_info("%s: old %d-%d-%d %d:%d:%d\n", __func__,
+			tmrestore.tm_year + 1900,
+			tmrestore.tm_mon + 1, tmrestore.tm_mday,
+			tmrestore.tm_hour, tmrestore.tm_min, tmrestore.tm_sec);
+
+	if ((ts_current - ts_restore) <= RESTORE_TIME_SEC) {
+		int adj_soc;
+		/* force update repsoc
+		 * because this func is called before registering bms psy. */
+		chip->repsoc = max17050_read_reg(chip->client, MAX17050_REPSOC);
+		adj_soc = max17050_scale_clamp_soc(chip);
+		pr_info("%s: old [soc=%d, full_soc=%d] now soc=%d\n",
+				__func__, soc, dyn_full_soc, adj_soc);
+
+		if (adj_soc >= DYNMIC_RESTORE_MIN_SOC) {
+			if (soc == 100) {
+				chip->pdata->dyn_full_soc = (chip->pdata->full_soc -
+						(100 - adj_soc)) - 1;
+			} else
+				chip->pdata->dyn_full_soc = dyn_full_soc;
+
+			if (chip->pdata->dyn_full_soc < chip->pdata->full_soc) {
+				pr_info("%s: Apply dyn_full_soc=%d\n", __func__,
+						chip->pdata->dyn_full_soc);
+				max17050_set_dynamic_soc_param(chip, CHARGER_DISCONECT);
+			}
+		}
+	}
+}
+
+static void max17050_save_dynsoc(struct max17050_chip *chip)
+{
+	struct rtc_time tmcurrent;
+	unsigned long ts_current;
+	int rc;
+	u8 soc, dyn_full_soc, header;
+	u16 *offsets = chip->pdata->ext_storage_offsets;
+
+	if (!chip->pdata->use_ext_bms_storage) {
+		pr_warn("External BMS storage not supported\n");
+		return;
+	}
+
+	if (!chip->spmi_ctrl) {
+		pr_err("%s: fail to get spmi handle\n", __func__);
+		return;
+	}
+
+	soc = (u8)adjust_soc(chip);
+	dyn_full_soc = (u8)chip->pdata->dyn_full_soc;
+	pr_debug("%s: Save soc = %d, dyn_full_soc = %d\n",
+			__func__, soc, dyn_full_soc);
+
+	rc = spmi_ext_register_writel(chip->spmi_ctrl, 0,
+			offsets[ES_OFF_SOC], &soc, 1);
+	if (rc < 0) {
+		pr_err("%s: fail to write soc rc = %d\n", __func__, rc);
+		goto out;
+	}
+
+	rc = spmi_ext_register_writel(chip->spmi_ctrl, 0,
+			offsets[ES_OFF_DYN], &dyn_full_soc, 1);
+	if (rc < 0) {
+		pr_err("%s: fail to write full_soc rc = %d\n", __func__, rc);
+		goto out;
+	}
+
+	rc = max17050_get_current_time(&tmcurrent);
+	if (rc) {
+		pr_err("%s: fail to read rtc time rc = %d\n", __func__, rc);
+		goto out;
+	}
+
+	rtc_tm_to_time(&tmcurrent, &ts_current);
+	pr_debug("%s: now %d-%d-%d %d:%d:%d\n", __func__,
+			tmcurrent.tm_year + 1900,
+			tmcurrent.tm_mon + 1, tmcurrent.tm_mday,
+			tmcurrent.tm_hour, tmcurrent.tm_min, tmcurrent.tm_sec);
+
+	rc = spmi_ext_register_writel(chip->spmi_ctrl, 0,
+			offsets[ES_OFF_STAMP], (u8 *)&ts_current, 4);
+	if (rc < 0) {
+		pr_err("%s: fail to write time rc = %d\n", __func__, rc);
+		goto out;
+	}
+
+out:
+	header = (rc < 0)? ABNORMAL_HEADER_DATA : NORMAL_HEADER_DATA;
+	spmi_ext_register_writel(chip->spmi_ctrl, 0,
+			offsets[ES_OFF_HEAD], &header, 1);
+}
+
 static void max17050_complete_init(struct max17050_chip *chip)
 {
 	struct i2c_client *client = chip->client;
@@ -844,6 +1049,9 @@ static void max17050_complete_init(struct max17050_chip *chip)
 
 	if (device_create_file(&client->dev, &dev_attr_power_on_reset))
 		dev_err(&client->dev, "device_create_file failed");
+
+	if (chip->pdata->dynamic_soc)
+		max17050_restore_dynsoc(chip);
 
 	if (power_supply_register(&client->dev, &chip->battery))
 		dev_err(&client->dev, "failed: power supply register");
@@ -903,6 +1111,21 @@ max17050_get_pdata(struct device *dev)
 
 	pdata->ext_batt_psy = of_property_read_bool(np, "maxim,ext_batt_psy");
 	pdata->dynamic_soc = of_property_read_bool(np, "maxim,dynamic_soc");
+	pdata->use_ext_bms_storage = of_property_read_bool(np,
+			"maxim,use-external-bms-storage");
+	if (pdata->use_ext_bms_storage) {
+		len = of_property_count_elems_of_size(np,
+				"maxim,bms-storage-offsets", sizeof(u16));
+		if (EXT_STORAGE_SIZE != len) {
+			dev_err(dev, "Invalid ext storage size(%d)\n", len);
+			return NULL;
+		}
+		if (of_property_read_u16_array(np, "maxim,bms-storage-offsets",
+				pdata->ext_storage_offsets, EXT_STORAGE_SIZE)) {
+			dev_err(dev, "Invalid ext storage\n");
+			return NULL;
+		}
+	}
 
 	if (of_property_read_u32(np, "maxim,relaxcfg", &prop) == 0)
 		pdata->relaxcfg = prop;
@@ -1100,6 +1323,28 @@ static void max17050_external_power_changed(struct power_supply *psy)
 	}
 }
 
+static int max17050_parse_spmi_handle(struct max17050_chip *chip)
+{
+	struct device_node *np = chip->client->dev.of_node;
+	struct platform_device *pdev;
+
+	np = of_parse_phandle(np, "spmi_handle", 0);
+	if (!np) {
+		pr_err("%s: can't find spmi_handle\n", __func__);
+		return -EINVAL;
+	}
+
+	pdev = of_find_device_by_node(np);
+	if (!pdev) {
+		pr_err("%s: can't find pdev of spmi_handle\n", __func__);
+		return -ENODEV;
+	}
+
+	chip->spmi_ctrl = platform_get_drvdata(pdev);
+
+	return 0;
+}
+
 static int max17050_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
@@ -1180,6 +1425,7 @@ static int max17050_probe(struct i2c_client *client,
 		chip->pdata->dyn_full_soc = chip->pdata->full_soc;
 		chip->backup_capacity = 0;
 		chip->charge_status = 0;
+		max17050_parse_spmi_handle(chip);
 	}
 
 	/*
@@ -1226,6 +1472,14 @@ static int max17050_remove(struct i2c_client *client)
 	devm_kfree(&client->dev, chip);
 
 	return 0;
+}
+
+static void max17050_shutdown(struct i2c_client *client)
+{
+	struct max17050_chip *chip = i2c_get_clientdata(client);
+
+	if (chip->pdata->dynamic_soc)
+		max17050_save_dynsoc(chip);
 }
 
 static int max17050_pm_prepare(struct device *dev)
@@ -1286,6 +1540,7 @@ static struct i2c_driver max17050_i2c_driver = {
 		.pm = &max17050_pm_ops,
 	},
 	.probe = max17050_probe,
+	.shutdown = max17050_shutdown,
 	.remove = max17050_remove,
 	.id_table = max17050_id,
 };
