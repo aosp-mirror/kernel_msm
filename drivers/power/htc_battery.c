@@ -24,6 +24,7 @@
 #include <linux/notifier.h>
 #include <linux/fb.h>
 #endif /* CONFIG_FB */
+#include <linux/leds.h>
 
 static struct htc_battery_info htc_batt_info;
 static struct htc_battery_timer htc_batt_timer;
@@ -1125,6 +1126,21 @@ int htc_batt_schedule_batt_info_update(void)
                 queue_work(htc_batt_timer.batt_wq, &htc_batt_timer.batt_work);
         }
         return 0;
+}
+
+void htc_battery_backlight_dim_mode_check(bool status)
+{
+	int rc = 0;
+
+	if (status) {
+		rc = pmi8996_charger_batfet_switch(true);
+		if (rc < 0)
+			BATT_ERR("Unable to set batfet switch true, rc = %d\n", rc);
+	} else {
+		rc = pmi8996_charger_batfet_switch(false);
+		if (rc < 0)
+			BATT_ERR("Unable to set batfet switch false, rc = %d\n", rc);
+	}
 }
 
 #if defined(CONFIG_FB)
