@@ -150,7 +150,6 @@ config SND_SOC_MSM8996
 	select SND_SOC_MSM_HDMI_CODEC_RX
 	select QTI_PP
 	select SND_SOC_CPE
-	select MSM_ULTRASOUND
 	select SND_HWDEP
 	help
 	 To add support for SoC audio on MSM8996.
