@@ -129,6 +129,12 @@
 			interrupts = <58 2>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&fuel_int_default>;
+			spmi_handle = <&spmi_bus>;
+
+			maxim,use-external-bms-storage;
+			maxim,bms-storage-offsets = /bits/ 16 <
+				0x40b0 0x40b1 0x40b2 0x40b3
+				0x40b4 0x40b5 0x40b6>;
 
 			maxim,rsns-microohm = <10000>;
 			maxim,ext_batt_psy;
