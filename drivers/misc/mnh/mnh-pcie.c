@@ -1339,24 +1339,12 @@ static int mnh_irq_init(struct pci_dev *pdev)
 	int err, vector, i;
 	uint32_t msinum = MSI_DMA_WRITE + 1;
 
-        /*
-         * Force single MSI, multiple  MSIs not supported in MSM8998.
-         * b/31716267 .
-         */
-#if 1 /* force single MSI */
-	vector = pci_enable_msi_range(pdev, 1, 1);
-	if (vector < 1)
-		dev_err(&pdev->dev, "failed to enable MSI, err:%d\n",
-			vector);
-#else
 	vector = pci_enable_msi_range(pdev, 1, msinum);
 	dev_err(&pdev->dev, "vector :%d , msi_num:%d, irq:%d\n",
 		vector, msinum, pdev->irq);
-	if (vector < msinum)
+	if (vector < msinum) {
 		dev_err(&pdev->dev, "failed to enable MSI range :%d, err:%d\n",
 			msinum, vector);
-#endif
-	if (vector < msinum) {
 		if (vector >= 1) {
 			/* Fall back to 1 MSI */
 			err = request_threaded_irq(pdev->irq, NULL,
