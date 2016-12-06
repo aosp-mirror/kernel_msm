@@ -287,6 +287,8 @@
 };
 
 &pm8916_pon {
+	qcom,external-vibrator = <&haptics>;
+	qcom,longkey-warn-time = <6000>;
 	qcom,pon_1 {
 		qcom,s1-timer = <6720>;
 		qcom,s2-timer = <2000>;
