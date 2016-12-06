@@ -53,6 +53,8 @@ struct drv2625_platform_data {
 };
 
 struct drv2625_data {
+	/* to_dev should be first because it is referenced by power_on */
+	struct timed_output_dev to_dev;
 	struct drv2625_platform_data msPlatData;
 	unsigned char mnDeviceID;
 	struct device *dev;
@@ -67,7 +69,6 @@ struct drv2625_data {
 	struct hrtimer timer;
 	struct mutex lock;
 	struct work_struct vibrator_work;
-	struct timed_output_dev to_dev;
 	struct regulator *vdd_reg;
 	struct dentry *dent;
 };
