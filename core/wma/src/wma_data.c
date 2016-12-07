@@ -781,7 +781,7 @@ void wma_set_bss_rate_flags(struct wma_txrx_node *iface,
  */
 int32_t wmi_unified_send_txbf(tp_wma_handle wma, tpAddStaParams params)
 {
-	wmi_vdev_txbf_en txbf_en;
+	wmi_vdev_txbf_en txbf_en = {0};
 
 	/* This is set when Other partner is Bformer
 	 * and we are capable bformee(enabled both in ini and fw)
@@ -789,7 +789,6 @@ int32_t wmi_unified_send_txbf(tp_wma_handle wma, tpAddStaParams params)
 	txbf_en.sutxbfee = params->vhtTxBFCapable;
 	txbf_en.mutxbfee = params->vhtTxMUBformeeCapable;
 	txbf_en.sutxbfer = params->enable_su_tx_bformer;
-	txbf_en.mutxbfer = 0;
 
 	/* When MU TxBfee is set, SU TxBfee must be set by default */
 	if (txbf_en.mutxbfee)
@@ -1166,10 +1165,10 @@ void wma_set_linkstate(tp_wma_handle wma, tpLinkStateParams params)
 {
 	ol_txrx_pdev_handle pdev;
 	ol_txrx_vdev_handle vdev;
-	ol_txrx_peer_handle peer;
-	uint8_t vdev_id, peer_id;
+	uint8_t vdev_id;
 	bool roam_synch_in_progress = false;
 	QDF_STATUS status;
+	struct wma_target_req *msg;
 
 	params->status = true;
 	WMA_LOGD("%s: state %d selfmac %pM", __func__,
@@ -1216,16 +1215,28 @@ void wma_set_linkstate(tp_wma_handle wma, tpLinkStateParams params)
 		ol_txrx_vdev_pause(wma->interfaces[vdev_id].handle,
 				   OL_TXQ_PAUSE_REASON_VDEV_STOP);
 		wma->interfaces[vdev_id].pause_bitmap |= (1 << PAUSE_TYPE_HOST);
-		if (wmi_unified_vdev_stop_send(wma->wmi_handle, vdev_id)) {
-			WMA_LOGP("%s: %d Failed to send vdev stop",
-				 __func__, __LINE__);
+
+		msg = wma_fill_vdev_req(wma, vdev_id,
+				WMA_SET_LINK_STATE,
+				WMA_TARGET_REQ_TYPE_VDEV_STOP, params,
+				WMA_VDEV_STOP_REQUEST_TIMEOUT);
+		if (!msg) {
+			WMA_LOGP(FL("Failed to fill vdev request for vdev_id %d"),
+				 vdev_id);
+			status = QDF_STATUS_E_NOMEM;
 		}
-		peer = ol_txrx_find_peer_by_addr(pdev, params->bssid, &peer_id);
-		if (peer) {
-			WMA_LOGP("%s: Deleting peer %pM vdev id %d",
-				 __func__, params->bssid, vdev_id);
-			wma_remove_peer(wma, params->bssid, vdev_id, peer,
-					roam_synch_in_progress);
+		if (wmi_unified_vdev_stop_send(wma->wmi_handle, vdev_id)) {
+			WMA_LOGP("%s: %d Failed to send vdev stop vdev %d",
+				 __func__, __LINE__, vdev_id);
+		} else {
+			WMA_LOGP("%s: %d vdev stop sent vdev %d",
+				 __func__, __LINE__, vdev_id);
+			/*
+			 * Remove peer, Vdev down and sending set link
+			 * response will be handled in vdev stop response
+			 * handler
+			 */
+			return;
 		}
 	}
 out:
@@ -2831,7 +2842,6 @@ QDF_STATUS wma_tx_packet(void *wma_context, void *tx_frame, uint16_t frmLen,
 			status = QDF_STATUS_E_FAILURE;
 		} else {
 			mgmt_param.desc_id = wmi_desc->desc_id;
-			wmi_desc->vdev_id = vdev_id;
 			status = wmi_mgmt_unified_cmd_send(
 					wma_handle->wmi_handle,
 					&mgmt_param);
