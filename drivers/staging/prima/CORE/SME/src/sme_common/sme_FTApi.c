@@ -216,12 +216,7 @@ eHalStatus sme_FTSendUpdateKeyInd(tHalHandle hHal, tCsrRoamSetKey * pFTKeyInfo)
     tAniEdType edType;
     tpAniSirGlobal pMac = PMAC_STRUCT( hHal );
 #if defined WLAN_FEATURE_VOWIFI_11R_DEBUG
-    int i = 0;
-
     smsLog(pMac, LOG1, FL("keyLength %d"), pFTKeyInfo->keyLength);
-
-    for (i=0; i<pFTKeyInfo->keyLength; i++)
-      smsLog(pMac, LOG1, FL("%02x"), pFTKeyInfo->Key[i]);
 #endif
 
     msgLen = sizeof(tSirFTUpdateKeyInfo);
@@ -262,23 +257,7 @@ eHalStatus sme_FTSendUpdateKeyInd(tHalHandle hHal, tCsrRoamSetKey * pFTKeyInfo)
     keymaterial->key[ 0 ].keyLength = pFTKeyInfo->keyLength;
 
     if ( pFTKeyInfo->keyLength && pFTKeyInfo->Key )
-    {
         vos_mem_copy(&keymaterial->key[ 0 ].key, pFTKeyInfo->Key, pFTKeyInfo->keyLength);
-        if(pFTKeyInfo->keyLength == 16)
-        {
-          smsLog(pMac, LOG1, "SME Set Update Ind keyIdx (%d) encType(%d) key = "
-          "%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X",
-          pMsg->keyMaterial.key[0].keyId, (tAniEdType)pMsg->keyMaterial.edType,
-          pMsg->keyMaterial.key[0].key[0], pMsg->keyMaterial.key[0].key[1],
-          pMsg->keyMaterial.key[0].key[2], pMsg->keyMaterial.key[0].key[3],
-          pMsg->keyMaterial.key[0].key[4], pMsg->keyMaterial.key[0].key[5],
-          pMsg->keyMaterial.key[0].key[6], pMsg->keyMaterial.key[0].key[7],
-          pMsg->keyMaterial.key[0].key[8], pMsg->keyMaterial.key[0].key[9],
-          pMsg->keyMaterial.key[0].key[10], pMsg->keyMaterial.key[0].key[11],
-          pMsg->keyMaterial.key[0].key[12], pMsg->keyMaterial.key[0].key[13],
-          pMsg->keyMaterial.key[0].key[14], pMsg->keyMaterial.key[0].key[15]);
-        }
-    }
 
     vos_mem_copy( &pMsg->bssId[ 0 ],
                   &pFTKeyInfo->peerMac[ 0 ],
