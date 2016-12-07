@@ -249,6 +249,22 @@
 		clock-frequency = <19200000>;
 	};
 
+	dma_blsp1: qcom,sps-dma@0xc144000{ /* BLSP1 */
+		#dma-cells = <4>;
+		compatible = "qcom,sps-dma";
+		reg = <0xc144000 0x1F000>;
+		interrupts = <0 238 0>;
+		qcom,summing-threshold = <0x10>;
+	};
+
+	dma_blsp2: qcom,sps-dma@0xc184000{ /* BLSP2 */
+		#dma-cells = <4>;
+		compatible = "qcom,sps-dma";
+		reg = <0xc184000 0x1F000>;
+		interrupts = <0 239 0>;
+		qcom,summing-threshold = <0x10>;
+	};
+
 	spmi_bus: qcom,spmi@800f000 {
 		compatible = "qcom,spmi-pmic-arb";
 		reg = <0x800f000 0x1000>,
@@ -287,6 +303,32 @@
 		qcom,pipe-attr-ee;
 	};
 
+	qcom,memshare {
+		compatible = "qcom,memshare";
+
+		qcom,client_1 {
+			compatible = "qcom,memshare-peripheral";
+			qcom,peripheral-size = <0x200000>;
+			qcom,client-id = <0>;
+			qcom,allocate-boot-time;
+			label = "modem";
+		};
+
+		qcom,client_2 {
+			compatible = "qcom,memshare-peripheral";
+			qcom,peripheral-size = <0x300000>;
+			qcom,client-id = <2>;
+			label = "modem";
+		};
+
+		mem_client_3_size: qcom,client_3 {
+			compatible = "qcom,memshare-peripheral";
+			qcom,peripheral-size = <0x0>;
+			qcom,client-id = <1>;
+			label = "modem";
+		};
+	};
+
 	tsens: tsens@10ad000 {
 		compatible = "qcom,msmfalcon-tsens";
 		reg = <0x10ad000 0x2000>,
@@ -317,6 +359,31 @@
 		clocks = <&clock_gcc GCC_BLSP2_UART2_APPS_CLK>,
 			 <&clock_gcc GCC_BLSP2_AHB_CLK>;
 		clock-names = "core", "iface";
+	};
+
+	slim_aud: slim@151c0000 {
+		cell-index = <1>;
+		compatible = "qcom,slim-ngd";
+		reg = <0x151c0000 0x2c000>,
+			<0x15180000 0x2e000>;
+		reg-names = "slimbus_physical", "slimbus_bam_physical";
+		interrupts = <0 163 0>, <0 164 0>;
+		interrupt-names = "slimbus_irq", "slimbus_bam_irq";
+		qcom,apps-ch-pipes = <0x7e0000>;
+		qcom,ea-pc = <0x260>;
+		status = "disabled";
+	};
+
+	slim_qca: slim@15240000 {
+		cell-index = <3>;
+		compatible = "qcom,slim-ngd";
+		reg = <0x15240000 0x2c000>,
+			<0x15200000 0x24000>;
+		reg-names = "slimbus_physical", "slimbus_bam_physical";
+		interrupts = <0 291 0>, <0 292 0>;
+		interrupt-names = "slimbus_irq", "slimbus_bam_irq";
+		qcom,apps-ch-pipes = <0x1800>;
+		status = "disabled";
 	};
 
 	timer@17920000 {
@@ -384,8 +451,10 @@
 	};
 
 	clock_gcc: clock-controller@100000 {
-		compatible = "qcom,dummycc";
-		clock-output-names = "gcc_clocks";
+		compatible = "qcom,gcc-msmfalcon";
+		reg = <0x100000 0x94000>;
+		vdd_dig-supply = <&pm2falcon_s3_level>;
+		vdd_dig_ao-supply = <&pm2falcon_s3_level_ao>;
 		#clock-cells = <1>;
 		#reset-cells = <1>;
 	};
@@ -696,7 +765,7 @@
 		reg = <0x15700000 0x00100>;
 		interrupts = <0 162 1>;
 
-		vdd_cx-supply = <&pmfalcon_s3b_level>;
+		vdd_cx-supply = <&pm2falcon_s3_level>;
 		qcom,proxy-reg-names = "vdd_cx";
 		qcom,vdd_cx-uV-uA = <RPM_SMD_REGULATOR_LEVEL_TURBO 100000>;
 
@@ -728,7 +797,7 @@
 		reg = <0x1a300000 0x00100>;
 		interrupts = <0 518 1>;
 
-		vdd_cx-supply = <&pmfalcon_s3b_level>;
+		vdd_cx-supply = <&pm2falcon_s3_level>;
 		qcom,proxy-reg-names = "vdd_cx";
 		qcom,vdd_cx-uV-uA = <RPM_SMD_REGULATOR_LEVEL_TURBO 100000>;
 
@@ -783,9 +852,9 @@
 					 "mnoc_axi_clk";
 
 		interrupts = <0 448 1>;
-		vdd_cx-supply = <&pmfalcon_s3b_level>;
+		vdd_cx-supply = <&pm2falcon_s3_level>;
 		vdd_cx-voltage = <RPM_SMD_REGULATOR_LEVEL_TURBO>;
-		vdd_mx-supply = <&pmfalcon_s5b_level>;
+		vdd_mx-supply = <&pm2falcon_s5_level>;
 		vdd_mx-uV = <RPM_SMD_REGULATOR_LEVEL_TURBO>;
 		qcom,firmware-name = "modem";
 		qcom,pil-self-auth;
@@ -807,10 +876,42 @@
 		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_1_out 0 0>;
 		status = "ok";
 	};
+
+	qcom,msm-imem@146bf000 {
+		compatible = "qcom,msm-imem";
+		reg = <0x146bf000 0x1000>;
+		ranges = <0x0 0x146bf000 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		pil@94c {
+			compatible = "qcom,msm-imem-pil";
+			reg = <0x94c 200>;
+		};
+	};
+
+	qcom,ghd {
+		compatible = "qcom,gladiator-hang-detect";
+		qcom,threshold-arr = <0x179d141c 0x179d1420
+				      0x179d1424 0x179d1428
+				      0x179d142c 0x179d1430>;
+		qcom,config-reg = <0x179d1434>;
+	};
+
+	qcom,msm-gladiator-v2@17900000 {
+		compatible = "qcom,msm-gladiator-v2";
+		reg = <0x17900000 0xe000>;
+		reg-names = "gladiator_base";
+		interrupts = <0 22 0>;
+		clock-names = "atb_clk";
+		clocks = <&clock_rpmcc RPM_QDSS_CLK>;
+	};
 };
 
 #include "msmfalcon-ion.dtsi"
 #include "msmfalcon-bus.dtsi"
+#include "msm-pmfalcon-rpm-regulator.dtsi"
+#include "msm-pm2falcon-rpm-regulator.dtsi"
 #include "msmfalcon-regulator.dtsi"
 #include "msm-gdsc-falcon.dtsi"
 
@@ -899,4 +1000,5 @@
 #include "msm-pm2falcon.dtsi"
 #include "msm-arm-smmu-falcon.dtsi"
 #include "msm-arm-smmu-impl-defs-falcon.dtsi"
+#include "msmfalcon-common.dtsi"
 #include "msmfalcon-blsp.dtsi"

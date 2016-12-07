@@ -196,6 +196,8 @@ static void a5xx_platform_setup(struct adreno_device *adreno_dev)
 		/* A510 has 3 XIN ports in VBIF */
 		gpudev->vbif_xin_halt_ctrl0_mask =
 				A510_VBIF_XIN_HALT_CTRL0_MASK;
+	} else if (adreno_is_a540(adreno_dev)) {
+		gpudev->snapshot_data->sect_sizes->cp_merciu = 1024;
 	}
 
 	/* Calculate SP local and private mem addresses */
@@ -252,7 +254,7 @@ static int a5xx_critical_packet_construct(struct adreno_device *adreno_dev)
 		return ret;
 
 	ret = kgsl_allocate_user(&adreno_dev->dev, &crit_pkts_refbuf0,
-					NULL, PAGE_SIZE, KGSL_MEMFLAGS_SECURE);
+		PAGE_SIZE, KGSL_MEMFLAGS_SECURE);
 	if (ret)
 		return ret;
 
@@ -429,6 +431,43 @@ static int _poll_gdsc_status(struct adreno_device *adreno_dev,
 	return 0;
 }
 
+static void a5xx_restore_isense_regs(struct adreno_device *adreno_dev)
+{
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	unsigned int reg, i, ramp = GPMU_ISENSE_SAVE;
+	static unsigned int isense_regs[6] = {0xFFFF}, isense_reg_addr[] = {
+		A5XX_GPU_CS_DECIMAL_ALIGN,
+		A5XX_GPU_CS_SENSOR_PARAM_CORE_1,
+		A5XX_GPU_CS_SENSOR_PARAM_CORE_2,
+		A5XX_GPU_CS_SW_OV_FUSE_EN,
+		A5XX_GPU_CS_ENDPOINT_CALIBRATION_DONE,
+		A5XX_GPMU_TEMP_SENSOR_CONFIG};
+
+	if (!adreno_is_a540(adreno_dev))
+		return;
+
+	/* read signature */
+	kgsl_regread(device, ramp++, &reg);
+
+	if (reg == 0xBABEFACE) {
+		/* store memory locations in buffer */
+		for (i = 0; i < ARRAY_SIZE(isense_regs); i++)
+			kgsl_regread(device, ramp + i, isense_regs + i);
+
+		/* clear signature */
+		kgsl_regwrite(device, GPMU_ISENSE_SAVE, 0x0);
+	}
+
+	/* if we never stored memory locations - do nothing */
+	if (isense_regs[0] == 0xFFFF)
+		return;
+
+	/* restore registers from memory */
+	for (i = 0; i < ARRAY_SIZE(isense_reg_addr); i++)
+		kgsl_regwrite(device, isense_reg_addr[i], isense_regs[i]);
+
+}
+
 /*
  * a5xx_regulator_enable() - Enable any necessary HW regulators
  * @adreno_dev: The adreno device pointer
@@ -478,6 +517,7 @@ static int a5xx_regulator_enable(struct adreno_device *adreno_dev)
 	kgsl_regrmw(device, A5XX_GPMU_GPMU_SP_CLOCK_CONTROL,
 		CNTL_IP_CLK_ENABLE, 1);
 
+	a5xx_restore_isense_regs(adreno_dev);
 	return 0;
 }
 
@@ -1534,12 +1574,12 @@ static void a5xx_clk_set_options(struct adreno_device *adreno_dev,
 	const char *name, struct clk *clk)
 {
 	if (adreno_is_a540(adreno_dev)) {
-		if (!strcmp(name, "mem_iface_clk"))
+		if (!strcmp(name, "mem_iface_clk")) {
 			clk_set_flags(clk, CLKFLAG_NORETAIN_PERIPH);
 			clk_set_flags(clk, CLKFLAG_NORETAIN_MEM);
-		if (!strcmp(name, "core_clk")) {
-			clk_set_flags(clk, CLKFLAG_NORETAIN_PERIPH);
-			clk_set_flags(clk, CLKFLAG_NORETAIN_MEM);
+		} else if (!strcmp(name, "core_clk")) {
+			clk_set_flags(clk, CLKFLAG_RETAIN_PERIPH);
+			clk_set_flags(clk, CLKFLAG_RETAIN_MEM);
 		}
 	}
 }
@@ -1781,11 +1821,11 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 		set_bit(ADRENO_DEVICE_HANG_INTR, &adreno_dev->priv);
 		gpudev->irq->mask |= (1 << A5XX_INT_MISC_HANG_DETECT);
 		/*
-		 * Set hang detection threshold to 1 million cycles
-		 * (0xFFFF*16)
+		 * Set hang detection threshold to 4 million cycles
+		 * (0x3FFFF*16)
 		 */
 		kgsl_regwrite(device, A5XX_RBBM_INTERFACE_HANG_INT_CNTL,
-					  (1 << 30) | 0xFFFF);
+					  (1 << 30) | 0x3FFFF);
 	}
 
 
@@ -1942,6 +1982,16 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 					bit);
 		}
 
+	}
+
+	/*
+	 * VPC corner case with local memory load kill leads to corrupt
+	 * internal state. Normal Disable does not work for all a5x chips.
+	 * So do the following setting to disable it.
+	 */
+	if (ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_DISABLE_LMLOADKILL)) {
+		kgsl_regrmw(device, A5XX_VPC_DBG_ECO_CNTL, 0, 0x1 << 23);
+		kgsl_regrmw(device, A5XX_HLSQ_DBG_ECO_CNTL, 0x1 << 18, 0);
 	}
 
 	a5xx_preemption_start(adreno_dev);

@@ -321,7 +321,7 @@
 			qcom,pmic-revid = <&pmicobalt_revid>;
 			io-channels = <&pmicobalt_rradc 0>;
 			io-channel-names = "rradc_batt_id";
-			qcom,fg-esr-timer-awake = <64>;
+			qcom,fg-esr-timer-awake = <96>;
 			qcom,fg-esr-timer-asleep = <256>;
 			qcom,cycle-counter-en;
 			status = "okay";
@@ -334,7 +334,8 @@
 					     <0x2 0x40 0x2 IRQ_TYPE_EDGE_BOTH>,
 					     <0x2 0x40 0x3 IRQ_TYPE_EDGE_BOTH>,
 					     <0x2 0x40 0x4 IRQ_TYPE_EDGE_BOTH>,
-					     <0x2 0x40 0x5 IRQ_TYPE_EDGE_BOTH>,
+					     <0x2 0x40 0x5
+							IRQ_TYPE_EDGE_RISING>,
 					     <0x2 0x40 0x6 IRQ_TYPE_EDGE_BOTH>,
 					     <0x2 0x40 0x7 IRQ_TYPE_EDGE_BOTH>;
 				interrupt-names = "soc-update",
@@ -554,6 +555,9 @@
 				regulator-min-microvolt = <4600000>;
 				regulator-max-microvolt = <6000000>;
 
+				interrupts = <0x3 0xde 0x0
+						IRQ_TYPE_EDGE_RISING>;
+				interrupt-names = "lab-vreg-ok";
 				qcom,qpnp-lab-min-voltage = <4600000>;
 				qcom,qpnp-lab-step-size = <100000>;
 				qcom,qpnp-lab-slew-rate = <5000>;
@@ -568,13 +572,13 @@
 				qcom,qpnp-lab-pull-down-enable;
 				qcom,qpnp-lab-switching-clock-frequency =
 									<1600>;
-				qcom,qpnp-lab-limit-maximum-current = <800>;
+				qcom,qpnp-lab-limit-maximum-current = <1600>;
 				qcom,qpnp-lab-limit-max-current-enable;
 				qcom,qpnp-lab-ps-threshold = <20>;
 				qcom,qpnp-lab-ps-enable;
 				qcom,qpnp-lab-nfet-size = <100>;
 				qcom,qpnp-lab-pfet-size = <100>;
-				qcom,qpnp-lab-max-precharge-time = <300>;
+				qcom,qpnp-lab-max-precharge-time = <500>;
 			};
 		};
 
@@ -594,7 +598,7 @@
 			linux,name = "wled";
 			linux,default-trigger = "bkl-trigger";
 			qcom,fdbk-output = "auto";
-			qcom,vref-mv = <350>;
+			qcom,vref-uv = <127500>;
 			qcom,switch-freq-khz = <800>;
 			qcom,ovp-mv = <29600>;
 			qcom,ilim-ma = <970>;
@@ -609,6 +613,7 @@
 			qcom,led-strings-list = [00 01 02 03];
 			qcom,en-ext-pfet-sc-pro;
 			qcom,pmic-revid = <&pmicobalt_revid>;
+			qcom,loop-auto-gm-en;
 		};
 
 		pmicobalt_haptics: qcom,haptic@c000 {
@@ -653,6 +658,7 @@
 			qcom,thermal-derate-en;
 			qcom,thermal-derate-current = <200 500 1000>;
 			qcom,isc-delay = <192>;
+			qcom,pmic-revid = <&pmicobalt_revid>;
 
 			pmicobalt_flash0: qcom,flash_0 {
 				label = "flash";
@@ -740,10 +746,6 @@
 				qcom,led-name = "led:switch_0";
 				qcom,led-mask = <3>;
 				qcom,default-led-trigger = "switch0_trigger";
-				reg0 {
-					regulator-name = "pmicobalt_bob";
-					max-voltage-uv = <3600000>;
-				};
 			};
 
 			pmicobalt_switch1: qcom,led_switch_1 {
@@ -751,10 +753,6 @@
 				qcom,led-name = "led:switch_1";
 				qcom,led-mask = <4>;
 				qcom,default-led-trigger = "switch1_trigger";
-				reg0 {
-					regulator-name = "pmicobalt_bob";
-					max-voltage-uv = <3600000>;
-				};
 			};
 		};
 	};
