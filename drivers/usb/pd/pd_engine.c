@@ -621,52 +621,6 @@ static int tcpm_set_pd_rx(struct tcpc_dev *dev, bool on)
 	return 0;
 }
 
-enum power_role typec_role_pdphy_pr[] = {
-	[TYPEC_SINK]		= PR_SINK,
-	[TYPEC_SOURCE]		= PR_SRC,
-};
-
-static const char * const pdphy_pr_name[] = {
-	[PR_SINK]		= "PR_SINK",
-	[PR_SRC]		= "PR_SRC",
-};
-
-enum data_role typec_data_role_pdphy_dr[] = {
-	[TYPEC_DEVICE]		= DR_UFP,
-	[TYPEC_HOST]		= DR_DFP,
-};
-
-static const char * const pdphy_dr_name[] = {
-	[DR_UFP]		= "DR_UFP",
-	[DR_DFP]		= "DR_DFP",
-};
-
-static int tcpm_set_pd_header(struct tcpc_dev *dev, enum typec_role role,
-			      enum typec_data_role data)
-{
-	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
-	enum power_role pdphy_pr;
-	enum data_role pdphy_dr;
-	int ret = 0;
-
-	pdphy_pr = typec_role_pdphy_pr[role];
-	pdphy_dr = typec_data_role_pdphy_dr[data];
-	ret = pd_phy_update_roles(pdphy_dr, pdphy_pr);
-	if (ret < 0) {
-		pd_engine_log(pd, "unable to set pd_phy_header: %s, %s, ret=%d",
-			      pdphy_pr_name[pdphy_pr],
-			      pdphy_dr_name[pdphy_dr],
-			      ret);
-		return ret;
-	}
-
-	pd_engine_log(pd, "set pd_phy_header: %s, %s",
-		      pdphy_pr_name[pdphy_pr],
-		      pdphy_dr_name[pdphy_dr]);
-
-	return 0;
-}
-
 static int get_data_len(__le16 header)
 {
 	int ret;
@@ -844,16 +798,59 @@ unlock:
 	return ret;
 }
 
-#define EXTCON_USB_SUPER_SPEED	true
-static int tcpm_set_usb_data_role(struct tcpc_dev *dev, bool attached,
-				  enum typec_data_role data)
+enum power_role typec_role_pdphy_pr[] = {
+	[TYPEC_SINK]		= PR_SINK,
+	[TYPEC_SOURCE]		= PR_SRC,
+};
+
+static const char * const pdphy_pr_name[] = {
+	[PR_SINK]		= "PR_SINK",
+	[PR_SRC]		= "PR_SRC",
+};
+
+enum data_role typec_data_role_pdphy_dr[] = {
+	[TYPEC_DEVICE]		= DR_UFP,
+	[TYPEC_HOST]		= DR_DFP,
+};
+
+static const char * const pdphy_dr_name[] = {
+	[DR_UFP]		= "DR_UFP",
+	[DR_DFP]		= "DR_DFP",
+};
+
+static int set_pd_header(struct usbpd *pd, enum typec_role role,
+			 enum typec_data_role data)
 {
-	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
+	enum power_role pdphy_pr;
+	enum data_role pdphy_dr;
+	int ret = 0;
+
+	pdphy_pr = typec_role_pdphy_pr[role];
+	pdphy_dr = typec_data_role_pdphy_dr[data];
+	ret = pd_phy_update_roles(pdphy_dr, pdphy_pr);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set pd_phy_header: %s, %s, ret=%d",
+			      pdphy_pr_name[pdphy_pr],
+			      pdphy_dr_name[pdphy_dr],
+			      ret);
+		return ret;
+	}
+
+	pd_engine_log(pd, "set pd_phy_header: %s, %s",
+		      pdphy_pr_name[pdphy_pr],
+		      pdphy_dr_name[pdphy_dr]);
+
+	return 0;
+}
+
+#define EXTCON_USB_SUPER_SPEED	true
+static int set_usb_data_role(struct usbpd *pd, bool attached,
+			     enum typec_data_role data)
+{
 	int ret;
 	union power_supply_propval val = {0};
 	bool apsd_done;
 
-	mutex_lock(&pd->lock);
 	pd->extcon_usb_cc = pd->is_cable_flipped;
 	pd->extcon_usb_ss = EXTCON_USB_SUPER_SPEED;
 
@@ -873,7 +870,7 @@ static int tcpm_set_usb_data_role(struct tcpc_dev *dev, bool attached,
 					&val);
 	if (ret < 0) {
 		pd_engine_log(pd, "Unable to read APSD_DONE, ret=%d", ret);
-		goto unlock;
+		return ret;
 	}
 
 	if (val.intval == 0)
@@ -891,12 +888,31 @@ static int tcpm_set_usb_data_role(struct tcpc_dev *dev, bool attached,
 			      "APSD already done, update usb data role now");
 		ret = update_usb_data_role(pd);
 		if (ret < 0)
-			goto unlock;
+			return ret;
 		pd->pending_update_usb_data = false;
 	}
+
+	return ret;
+}
+
+
+static int tcpm_set_roles(struct tcpc_dev *dev, bool attached,
+			  enum typec_role role, enum typec_data_role data)
+{
+	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
+	int ret;
+
+	mutex_lock(&pd->lock);
+
+	ret = set_pd_header(pd, role, data);
+	if (ret < 0)
+		goto unlock;
+
+	ret = set_usb_data_role(pd, attached, data);
+
 unlock:
 	mutex_unlock(&pd->lock);
-	return 0;
+	return ret;
 }
 
 static void pd_phy_signal_rx(struct usbpd *pd, enum pd_sig_type type)
@@ -983,10 +999,10 @@ static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
 	pd_tcpc_dev->set_vbus = tcpm_set_vbus;
 	pd_tcpc_dev->set_current_limit = tcpm_set_current_limit;
 	pd_tcpc_dev->set_pd_rx = tcpm_set_pd_rx;
-	pd_tcpc_dev->set_pd_header = tcpm_set_pd_header;
+	pd_tcpc_dev->set_roles = tcpm_set_roles;
+	pd_tcpc_dev->try_role = NULL;
 	pd_tcpc_dev->pd_transmit = tcpm_pd_transmit;
 	pd_tcpc_dev->start_drp_toggling = tcpm_start_drp_toggling;
-	pd_tcpc_dev->set_usb_data_role = tcpm_set_usb_data_role;
 	pd_tcpc_dev->mux = NULL;
 }
 
