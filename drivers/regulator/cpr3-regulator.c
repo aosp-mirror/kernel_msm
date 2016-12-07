@@ -2920,7 +2920,7 @@ static int _cpr3_regulator_update_ctrl_state(struct cpr3_controller *ctrl)
 	struct cpr4_sdelta *sdelta;
 	bool valid = false;
 	bool thread_valid;
-	int i, j, rc, new_volt, vdd_volt, dynamic_floor_volt, last_corner_volt;
+	int i, j, rc, new_volt, vdd_volt, dynamic_floor_volt, last_corner_volt = 0;
 	u32 reg_last_measurement = 0, sdelta_size;
 	int *sdelta_table, *boost_table;
 
@@ -3323,8 +3323,8 @@ static int cpr3_regulator_measure_aging(struct cpr3_controller *ctrl,
 {
 	u32 mask, reg, result, quot_min, quot_max, sel_min, sel_max;
 	u32 quot_min_scaled, quot_max_scaled;
-	u32 gcnt, gcnt_ref, gcnt0_restore, gcnt1_restore, irq_restore;
-	u32 cont_dly_restore, up_down_dly_restore;
+	u32 gcnt, gcnt_ref, gcnt0_restore = 0, gcnt1_restore = 0, irq_restore = 0;
+	u32 cont_dly_restore = 0, up_down_dly_restore = 0;
 	int quot_delta, quot_delta_scaled, quot_delta_scaled_sum;
 	int *quot_delta_results;
 	int rc, rc2, i, aging_measurement_count, filtered_count;
@@ -3340,7 +3340,8 @@ static int cpr3_regulator_measure_aging(struct cpr3_controller *ctrl,
 		if (rc) {
 			cpr3_err(ctrl, "failed to clear CPR4 configuration,rc=%d\n",
 				rc);
-			goto cleanup;
+			kfree(quot_delta_results);
+			return -EIO;
 		}
 	}
 
@@ -3681,7 +3682,7 @@ static int cpr3_regulator_aging_adjust(struct cpr3_controller *ctrl)
 	struct cpr3_corner *corner;
 	int *restore_current_corner;
 	bool *restore_vreg_enabled;
-	int i, j, id, rc, rc2, vreg_count, aging_volt, max_aging_volt;
+	int i, j, id, rc, rc2, vreg_count, aging_volt, max_aging_volt = 0;
 	u32 reg;
 
 	if (!ctrl->aging_required || !ctrl->cpr_enabled

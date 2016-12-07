@@ -302,14 +302,13 @@ int ipa2_mhi_resume_channels_internal(enum ipa_client_type client,
 		bool LPTransitionRejected, bool brstmode_enabled,
 		union __packed gsi_channel_scratch ch_scratch, u8 index)
 {
-	int i;
 	int res;
 
 	IPA_MHI_FUNC_ENTRY();
 	res = ipa_uc_mhi_resume_channel(index, LPTransitionRejected);
 	if (res) {
 		IPA_MHI_ERR("failed to suspend channel %d error %d\n",
-			i, res);
+			index, res);
 		return res;
 	}
 

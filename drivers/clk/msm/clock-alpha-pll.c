@@ -594,7 +594,7 @@ static int alpha_pll_set_rate(struct clk *c, unsigned long rate)
 {
 	struct alpha_pll_clk *pll = to_alpha_pll_clk(c);
 	struct alpha_pll_masks *masks = pll->masks;
-	unsigned long flags, freq_hz;
+	unsigned long flags = 0, freq_hz;
 	u32 regval, l_val;
 	int vco_val;
 	u64 a_val;

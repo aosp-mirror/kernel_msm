@@ -438,6 +438,7 @@ static int hdmi_hdcp_authentication_part1(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 
 	/* Wait for HDCP keys to be checked and validated */
 	timeout_count = 100;
+	link0_status = DSS_REG_R(io, HDMI_HDCP_LINK0_STATUS);
 	keys_state = (link0_status >> 28) & 0x7;
 	while ((keys_state != HDCP_KEYS_STATE_VALID) &&
 		--timeout_count) {
@@ -1675,4 +1676,3 @@ struct hdmi_hdcp_ops *hdmi_hdcp_start(void *input)
 {
 	return ((struct hdmi_hdcp_ctrl *)input)->ops;
 }
-

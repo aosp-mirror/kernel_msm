@@ -1712,7 +1712,7 @@ int mdss_mode_switch(struct msm_fb_data_type *mfd, u32 mode)
 	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 	struct mdss_mdp_ctl *sctl;
-	int rc;
+	int rc = 0;
 
 	pr_debug("fb%d switch to mode=%x\n", mfd->index, mode);
 	ATRACE_FUNC();
@@ -1792,6 +1792,10 @@ int mdss_mode_switch(struct msm_fb_data_type *mfd, u32 mode)
 	} else if (mode == MIPI_VIDEO_PANEL) {
 		if (ctl->ops.wait_pingpong)
 			rc = ctl->ops.wait_pingpong(ctl, NULL);
+		if (rc) {
+			pr_err("wait for pp failed\n");
+			return rc;
+                }
 		mdss_mdp_update_panel_info(mfd, 0, 0);
 		mdss_mdp_switch_to_vid_mode(ctl, 1);
 		mdss_mdp_ctl_stop(ctl, MDSS_PANEL_POWER_OFF);

@@ -1228,7 +1228,8 @@ static int nanohub_kthread(void *arg)
 			if (curr_ts.tv_sec - first_err_ts.tv_sec > ERR_RESET_TIME_SEC
 				&& data->err_cnt > ERR_RESET_COUNT) {
 				dev_info(sensor_dev, "hard reset due to consistent error\n");
-				if (nanohub_hw_reset(data)) {
+				ret = nanohub_hw_reset(data);
+				if (ret) {
 					dev_info(sensor_dev,
 						"%s: failed to reset nanohub: ret=%d\n",
 						__func__, ret);

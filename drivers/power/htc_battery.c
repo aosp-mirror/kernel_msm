@@ -1997,6 +1997,7 @@ void htc_stats_update(int category, unsigned long chg_time, unsigned long dischg
     {
         case HTC_STATS_CATEGORY_ALL: category_ptr = &g_htc_stats_category_all; break;
         case HTC_STATS_CATEGORY_FULL_LOW: category_ptr = &g_htc_stats_category_full_low; break;
+	default: return;
     }
 
     category_ptr->sample_count += 1;
@@ -2006,11 +2007,12 @@ void htc_stats_update(int category, unsigned long chg_time, unsigned long dischg
 
 const char* htc_stats_category2str(int category)
 {
-    const char* ret;
+    const char* ret = NULL;
     switch (category)
     {
         case HTC_STATS_CATEGORY_ALL: ret = "all"; break;
         case HTC_STATS_CATEGORY_FULL_LOW: ret = "full_low"; break;
+	default: return ret;
     }
     return ret;
 }
@@ -2024,6 +2026,7 @@ void htc_stats_calculate_statistics_data(int category, unsigned long chg_time, u
     switch (category) {
         case HTC_STATS_CATEGORY_ALL: category_ptr = &g_htc_stats_category_all; break;
         case HTC_STATS_CATEGORY_FULL_LOW: category_ptr = &g_htc_stats_category_full_low; break;
+        default: return;
     }
 
     if (htc_stats_is_valid(category, chg_time, dischg_time, unplug_level, plug_level))

@@ -1465,7 +1465,7 @@ static int cnss_smmu_init(struct device *dev)
 	struct dma_iommu_mapping *mapping;
 	int disable_htw = 1;
 	int atomic_ctx = 1;
-	int ret;
+	int ret = 0;
 
 	mapping = arm_iommu_create_mapping(&platform_bus_type,
 					   penv->smmu_iova_start,

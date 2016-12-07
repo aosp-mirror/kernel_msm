@@ -846,7 +846,7 @@ static int kryo_regulator_retention_init(struct kryo_regulator *kvreg,
 		return rc;
 	}
 
-	return rc;
+	return 0;
 }
 
 static int kryo_regulator_lpm_prepare(struct kryo_regulator *kvreg)

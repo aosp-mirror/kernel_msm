@@ -769,7 +769,7 @@ static int glink_ssr_probe(struct platform_device *pdev)
 	struct device_node *phandle_node;
 	struct restart_notifier_block *nb;
 	struct subsys_info *ss_info;
-	struct subsys_info_leaf *ss_info_leaf;
+	struct subsys_info_leaf *ss_info_leaf = NULL;
 	struct glink_link_info *link_info;
 	char *key;
 	const char *edge;

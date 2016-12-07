@@ -97,7 +97,7 @@ static void set_optimum_cluster_residency(struct lpm_cluster *cluster,
 		bool probe_time)
 {
 	int i, j;
-	bool mode_avail;
+	bool mode_avail = false;
 
 	for (i = 0; i < cluster->nlevels; i++) {
 		struct power_params *pwr = &cluster->levels[i].pwr;

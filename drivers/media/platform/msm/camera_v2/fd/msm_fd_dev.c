@@ -335,12 +335,12 @@ static struct vb2_mem_ops msm_fd_vb2_mem_ops = {
 static int msm_fd_vbif_error_handler(void *handle, uint32_t error)
 {
 	struct fd_ctx *ctx;
-	struct msm_fd_device *fd;
+	struct msm_fd_device *fd = NULL;
 	struct msm_fd_buffer *active_buf;
 	int ret;
 
 	if (NULL == handle) {
-		dev_err(fd->dev, "FD Ctx is null, Cannot recover\n");
+		pr_err("FD Ctx is null, Cannot recover\n");
 		return 0;
 	}
 	ctx = (struct fd_ctx *)handle;

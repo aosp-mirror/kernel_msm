@@ -484,11 +484,17 @@ static int swrm_read(struct swr_master *master, u8 dev_num, u16 reg_addr,
 		return -EINVAL;
 	}
 
-	if (dev_num)
+	if (dev_num) {
 		ret = swrm_cmd_fifo_rd_cmd(swrm, &val, dev_num, 0, reg_addr,
 					   len);
-	else
+		if (ret < 0) {
+			dev_err(&master->dev, "%s: failed, err:%d\n",
+				__func__, ret);
+			return ret;
+		}
+	} else {
 		val = swrm->read(swrm->handle, reg_addr);
+	}
 
 	*reg_val = (u8)val;
 	pm_runtime_mark_last_busy(&swrm->pdev->dev);
