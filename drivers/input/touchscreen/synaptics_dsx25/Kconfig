@@ -59,6 +59,16 @@ config TOUCHSCREEN_SYNAPTICS_DSX25_FW_UPDATE
 	  To compile this driver as a module, choose M here: the
 	  module will be called synaptics_dsx_fw_update.
 
+config TOUCHSCREEN_SYNAPTICS_DSX25_FW_UPDATE_SYSFS
+	bool "Synaptics DSX firmware update sysfs attributes"
+	depends on TOUCHSCREEN_SYNAPTICS_DSX25_FW_UPDATE
+	help
+	  Say Y here to enable support for sysfs attributes for
+	  performing firmware update in a development environment.
+	  This does not affect the core or other subsystem attributes.
+
+	  If unsure, say N.
+
 config TOUCHSCREEN_SYNAPTICS_DSX25_ACTIVE_PEN
 	tristate "Synaptics DSX active pen module"
 	depends on TOUCHSCREEN_SYNAPTICS25_DSX_CORE
