@@ -72,6 +72,17 @@ config TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_v21
 	  To compile this driver as a module, choose M here: the
 	  module will be called synaptics_dsx_fw_update.
 
+config TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_v21
+	bool "Synaptics DSX firmware update extra sysfs attributes"
+	depends on TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_v21
+	help
+	  Say Y here to enable support for extra sysfs attributes
+	  supporting firmware update in a development environment.
+	  This does not affect the core or other subsystem attributes.
+
+	  If unsure, say N.
+
+
 config TOUCHSCREEN_SYNAPTICS_DSX_PROXIMITY_v21
 	tristate "Synaptics DSX touchscreen proximity module"
 	depends on TOUCHSCREEN_SYNAPTICS_DSX_CORE_v21
