@@ -20,6 +20,42 @@
 	model = "Qualcomm Technologies, Inc. MSM FALCON RUMI";
 	compatible = "qcom,msmfalcon-rumi", "qcom,msmfalcon", "qcom,rumi";
 	qcom,board-id = <15 0>;
+
+	chosen {
+		bootargs = "lpm_levels.sleep_disabled=1";
+	};
+};
+
+&usb3 {
+	/delete-property/ USB3_GDSC-supply;
+	dwc3@a800000 {
+		maximum-speed = "high-speed";
+	};
+};
+
+&ssphy {
+	compatible =  "usb-nop-xceiv";
+};
+
+&qusb_phy0 {
+	reg = <0x0a928000 0x8000>,
+		<0x0a8f8800 0x400>,
+		<0x0a920000 0x100>;
+		reg-names = "qusb_phy_base",
+			"qscratch_base",
+			"emu_phy_base";
+		qcom,emulation;
+		qcom,qusb-phy-init-seq = <0x19 0x1404
+					0x20 0x1414
+					0x79 0x1410
+					0x00 0x1418
+					0x99 0x1404
+					0x04 0x1408
+					0xd9 0x1404>;
+		qcom,emu-dcm-reset-seq = <0x100000 0x20
+					0x0 0x20
+					0x1a0 0x20
+					0x5 0x14>;
 };
 
 &uartblsp1dm1 {
@@ -30,12 +66,12 @@
 
 &sdhc_1 {
 	/* device core power supply */
-	vdd-supply = <&pmfalcon_l4b>;
+	vdd-supply = <&pm2falcon_l4>;
 	qcom,vdd-voltage-level = <2950000 2950000>;
 	qcom,vdd-current-level = <200 570000>;
 
 	/* device communication power supply */
-	vdd-io-supply = <&pmfalcon_l8a>;
+	vdd-io-supply = <&pmfalcon_l8>;
 	qcom,vdd-io-always-on;
 	qcom,vdd-io-lpm-sup;
 	qcom,vdd-io-voltage-level = <1800000 1800000>;
@@ -52,4 +88,9 @@
 	qcom,bus-speed-mode = "HS400_1p8v", "HS200_1p8v", "DDR_1p8v";
 
 	status = "ok";
+};
+
+&clock_gcc {
+	compatible = "qcom,dummycc";
+	clock-output-names = "gcc_clocks";
 };

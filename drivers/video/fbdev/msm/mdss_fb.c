@@ -233,9 +233,11 @@ static int mdss_fb_notify_update(struct msm_fb_data_type *mfd,
 		}
 	} else if (notify == NOTIFY_UPDATE_STOP) {
 		mutex_lock(&mfd->update.lock);
-		if (mfd->update.init_done)
+		if (mfd->update.init_done) {
+			mutex_unlock(&mfd->update.lock);
+			mutex_lock(&mfd->no_update.lock);
 			reinit_completion(&mfd->no_update.comp);
-		else {
+		} else {
 			mutex_unlock(&mfd->update.lock);
 			pr_err("notify update stop called without init\n");
 			return -EINVAL;
@@ -564,7 +566,7 @@ static ssize_t mdss_fb_get_panel_info(struct device *dev,
 			"min_fps=%d\nmax_fps=%d\npanel_name=%s\n"
 			"primary_panel=%d\nis_pluggable=%d\ndisplay_id=%s\n"
 			"is_cec_supported=%d\nis_pingpong_split=%d\n"
-			"dfps_porch_mode=%d\n",
+			"dfps_porch_mode=%d\npu_roi_cnt=%d\ndual_dsi=%d",
 			pinfo->partial_update_enabled,
 			pinfo->roi_alignment.xstart_pix_align,
 			pinfo->roi_alignment.width_pix_align,
@@ -577,7 +579,8 @@ static ssize_t mdss_fb_get_panel_info(struct device *dev,
 			pinfo->panel_name, pinfo->is_prim_panel,
 			pinfo->is_pluggable, pinfo->display_id,
 			pinfo->is_cec_supported, is_pingpong_split(mfd),
-			dfps_porch_mode);
+			dfps_porch_mode, pinfo->partial_update_enabled,
+			is_panel_split(mfd));
 
 	return ret;
 }
@@ -3282,6 +3285,7 @@ int mdss_fb_atomic_commit(struct fb_info *info,
 	mfd->msm_fb_backup.atomic_commit = true;
 	mfd->msm_fb_backup.disp_commit.l_roi =  commit_v1->left_roi;
 	mfd->msm_fb_backup.disp_commit.r_roi =  commit_v1->right_roi;
+	mfd->msm_fb_backup.disp_commit.flags =  commit_v1->flags;
 
 	mutex_lock(&mfd->mdp_sync_pt_data.sync_mutex);
 	atomic_inc(&mfd->mdp_sync_pt_data.commit_cnt);

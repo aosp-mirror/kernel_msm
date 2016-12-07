@@ -13,6 +13,7 @@
 #include <dt-bindings/interrupt-controller/irq.h>
 #include "msmcobalt-pinctrl.dtsi"
 #include "msmcobalt-audio.dtsi"
+#include "msmcobalt-camera-sensor-skuk.dtsi"
 
 &blsp1_uart3_hs {
 	status = "ok";
@@ -184,7 +185,7 @@
 
 &labibb {
 	status = "ok";
-	qpnp,qpnp-labibb-mode = "lcd";
+	qcom,qpnp-labibb-mode = "lcd";
 };
 
 &dsi_dual_jdi_a407_cmd {
@@ -192,4 +193,20 @@
 	qcom,mdss-dsi-bl-min-level = <1>;
 	qcom,mdss-dsi-bl-max-level = <4095>;
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};
+
+/{
+	qrd_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <15>;
+
+		#include "batterydata-qrd-skuk-4v4-3000mah.dtsi"
+	};
+};
+
+&pmicobalt_fg {
+	qcom,battery-data = <&qrd_batterydata>;
+};
+
+&pmicobalt_haptics {
+	status = "okay";
 };

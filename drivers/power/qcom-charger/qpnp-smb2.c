@@ -225,6 +225,7 @@ struct smb_dt_props {
 	s32	step_cc_delta[STEP_CHARGING_MAX_STEPS];
 	struct	device_node *revid_dev_node;
 	int	float_option;
+	int	chg_inhibit_thr_mv;
 	bool	hvdcp_disable;
 };
 
@@ -334,6 +335,14 @@ static int smb2_parse_dt(struct smb2 *chip)
 
 	chip->dt.hvdcp_disable = of_property_read_bool(node,
 						"qcom,hvdcp-disable");
+
+	of_property_read_u32(node, "qcom,chg-inhibit-threshold-mv",
+				&chip->dt.chg_inhibit_thr_mv);
+	if ((chip->dt.chg_inhibit_thr_mv < 0 ||
+		chip->dt.chg_inhibit_thr_mv > 300)) {
+		pr_err("qcom,chg-inhibit-threshold-mv is incorrect\n");
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -1047,6 +1056,7 @@ static int smb2_init_hw(struct smb2 *chip)
 {
 	struct smb_charger *chg = &chip->chg;
 	int rc;
+	u8 stat;
 
 	if (chip->dt.no_battery)
 		chg->fake_capacity = 50;
@@ -1066,6 +1076,22 @@ static int smb2_init_hw(struct smb2 *chip)
 					&chip->dt.dc_icl_ua);
 
 	chg->otg_cl_ua = chip->dt.otg_cl_ua;
+	chg->dcp_icl_ua = chip->dt.usb_icl_ua;
+
+	rc = smblib_read(chg, APSD_RESULT_STATUS_REG, &stat);
+	if (rc < 0) {
+		pr_err("Couldn't read APSD_RESULT_STATUS rc=%d\n", rc);
+		return rc;
+	}
+
+	/* clear the ICL override if it is set */
+	if (stat & ICL_OVERRIDE_LATCH_BIT) {
+		rc = smblib_write(chg, CMD_APSD_REG, ICL_OVERRIDE_BIT);
+		if (rc < 0) {
+			pr_err("Couldn't disable ICL override rc=%d\n", rc);
+			return rc;
+		}
+	}
 
 	/* votes must be cast before configuring software control */
 	vote(chg->pl_disable_votable,
@@ -1083,7 +1109,7 @@ static int smb2_init_hw(struct smb2 *chip)
 	vote(chg->fv_votable,
 		DEFAULT_VOTER, true, chip->dt.fv_uv);
 	vote(chg->usb_icl_votable,
-		DEFAULT_VOTER, true, chip->dt.usb_icl_ua);
+		DCP_VOTER, true, chip->dt.usb_icl_ua);
 	vote(chg->dc_icl_votable,
 		DEFAULT_VOTER, true, chip->dt.dc_icl_ua);
 	vote(chg->hvdcp_disable_votable, DEFAULT_VOTER,
@@ -1169,6 +1195,22 @@ static int smb2_init_hw(struct smb2 *chip)
 		return rc;
 	}
 
+	/* increase VCONN softstart */
+	rc = smblib_masked_write(chg, TYPE_C_CFG_2_REG,
+			VCONN_SOFTSTART_CFG_MASK, VCONN_SOFTSTART_CFG_MASK);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't increase VCONN softstart rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	/* disable try.SINK mode */
+	rc = smblib_masked_write(chg, TYPE_C_CFG_3_REG, EN_TRYSINK_MODE_BIT, 0);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't set TRYSINK_MODE rc=%d\n", rc);
+		return rc;
+	}
+
 	rc = smblib_masked_write(chg, QNOVO_PT_ENABLE_CMD_REG,
 			QNOVO_PT_ENABLE_CMD_BIT, QNOVO_PT_ENABLE_CMD_BIT);
 	if (rc < 0) {
@@ -1191,13 +1233,12 @@ static int smb2_init_hw(struct smb2 *chip)
 		return rc;
 	}
 
-	/* configure PMI stat output to enable and disable parallel charging */
+	/* disable SW STAT override */
 	rc = smblib_masked_write(chg, STAT_CFG_REG,
-			STAT_PARALLEL_CFG_BIT | STAT_SW_OVERRIDE_CFG_BIT,
-			STAT_PARALLEL_CFG_BIT);
+				 STAT_SW_OVERRIDE_CFG_BIT, 0);
 	if (rc < 0) {
-		dev_err(chg->dev,
-			"Couldn't configure signal for parallel rc=%d\n", rc);
+		dev_err(chg->dev, "Couldn't disable SW STAT override rc=%d\n",
+			rc);
 		return rc;
 	}
 
@@ -1230,6 +1271,47 @@ static int smb2_init_hw(struct smb2 *chip)
 		return rc;
 	}
 
+	switch (chip->dt.chg_inhibit_thr_mv) {
+	case 50:
+		rc = smblib_masked_write(chg, CHARGE_INHIBIT_THRESHOLD_CFG_REG,
+				CHARGE_INHIBIT_THRESHOLD_MASK,
+				CHARGE_INHIBIT_THRESHOLD_50MV);
+		break;
+	case 100:
+		rc = smblib_masked_write(chg, CHARGE_INHIBIT_THRESHOLD_CFG_REG,
+				CHARGE_INHIBIT_THRESHOLD_MASK,
+				CHARGE_INHIBIT_THRESHOLD_100MV);
+		break;
+	case 200:
+		rc = smblib_masked_write(chg, CHARGE_INHIBIT_THRESHOLD_CFG_REG,
+				CHARGE_INHIBIT_THRESHOLD_MASK,
+				CHARGE_INHIBIT_THRESHOLD_200MV);
+		break;
+	case 300:
+		rc = smblib_masked_write(chg, CHARGE_INHIBIT_THRESHOLD_CFG_REG,
+				CHARGE_INHIBIT_THRESHOLD_MASK,
+				CHARGE_INHIBIT_THRESHOLD_300MV);
+		break;
+	case 0:
+		rc = smblib_masked_write(chg, CHGR_CFG2_REG,
+				CHARGER_INHIBIT_BIT, 0);
+	default:
+		break;
+	}
+
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't configure charge inhibit threshold rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	rc = smblib_validate_initial_typec_legacy_status(chg);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't validate typec legacy status rc=%d\n",
+			rc);
+		return rc;
+	}
+
 	return rc;
 }
 
@@ -1258,8 +1340,11 @@ static int smb2_setup_wa_flags(struct smb2 *chip)
 
 	switch (pmic_rev_id->pmic_subtype) {
 	case PMICOBALT_SUBTYPE:
+		chip->chg.wa_flags |= BOOST_BACK_WA;
 		if (pmic_rev_id->rev4 == PMICOBALT_V1P1_REV4) /* PMI rev 1.1 */
 			chg->wa_flags |= QC_CHARGER_DETECTION_WA_BIT;
+		if (pmic_rev_id->rev4 == PMICOBALT_V2P0_REV4) /* PMI rev 2.0 */
+			chg->wa_flags |= TYPEC_CC2_REMOVAL_WA_BIT;
 		break;
 	default:
 		pr_err("PMIC subtype %d not supported\n",
@@ -1468,7 +1553,8 @@ static struct smb2_irq_info smb2_irqs[] = {
 	},
 	{
 		.name		= "switcher-power-ok",
-		.handler	= smblib_handle_debug,
+		.handler	= smblib_handle_switcher_power_ok,
+		.storm_data	= {true, 1000, 3},
 	},
 };
 
@@ -1763,6 +1849,16 @@ static int smb2_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static void smb2_shutdown(struct platform_device *pdev)
+{
+	struct smb2 *chip = platform_get_drvdata(pdev);
+	struct smb_charger *chg = &chip->chg;
+
+	smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
+		HVDCP_AUTONOMOUS_MODE_EN_CFG_BIT, 0);
+	smblib_write(chg, CMD_HVDCP_2_REG, FORCE_5V_BIT);
+}
+
 static const struct of_device_id match_table[] = {
 	{ .compatible = "qcom,qpnp-smb2", },
 	{ },
@@ -1776,6 +1872,7 @@ static struct platform_driver smb2_driver = {
 	},
 	.probe		= smb2_probe,
 	.remove		= smb2_remove,
+	.shutdown	= smb2_shutdown,
 };
 module_platform_driver(smb2_driver);
 

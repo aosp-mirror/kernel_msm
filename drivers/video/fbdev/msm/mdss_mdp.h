@@ -564,6 +564,8 @@ struct mdss_mdp_mixer {
 	bool valid_roi;
 	bool roi_changed;
 	struct mdss_rect roi;
+	bool dsc_enabled;
+	bool dsc_merge_enabled;
 
 	u8 cursor_enabled;
 	u16 cursor_hotx;
@@ -828,6 +830,9 @@ struct mdss_mdp_pipe {
 	struct mdss_rect dst;
 	struct mdss_mdp_format_params *src_fmt;
 	struct mdss_mdp_plane_sizes src_planes;
+
+	/* flag to re-store roi in case of pu dual-roi validation error */
+	bool restore_roi;
 
 	/* compression ratio from the source format */
 	struct mult_factor comp_ratio;
@@ -1864,7 +1869,7 @@ void mdss_mdp_intersect_rect(struct mdss_rect *res_rect,
 	const struct mdss_rect *sci_rect);
 void mdss_mdp_crop_rect(struct mdss_rect *src_rect,
 	struct mdss_rect *dst_rect,
-	const struct mdss_rect *sci_rect);
+	const struct mdss_rect *sci_rect, bool normalize);
 void rect_copy_mdss_to_mdp(struct mdp_rect *user, struct mdss_rect *kernel);
 void rect_copy_mdp_to_mdss(struct mdp_rect *user, struct mdss_rect *kernel);
 bool mdss_rect_overlap_check(struct mdss_rect *rect1, struct mdss_rect *rect2);

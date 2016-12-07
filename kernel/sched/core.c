@@ -2269,17 +2269,7 @@ void sched_exit(struct task_struct *p)
 	reset_task_stats(p);
 	p->ravg.mark_start = wallclock;
 	p->ravg.sum_history[0] = EXITING_TASK_MARKER;
-
-	kfree(p->ravg.curr_window_cpu);
-	kfree(p->ravg.prev_window_cpu);
-
-	/*
-	 * update_task_ravg() can be called for exiting tasks. While the
-	 * function itself ensures correct behavior, the corresponding
-	 * trace event requires that these pointers be NULL.
-	 */
-	p->ravg.curr_window_cpu = NULL;
-	p->ravg.prev_window_cpu = NULL;
+	free_task_load_ptrs(p);
 
 	enqueue_task(rq, p, 0);
 	clear_ed_task(p, rq);
@@ -2384,10 +2374,12 @@ int sysctl_numa_balancing(struct ctl_table *table, int write,
 int sched_fork(unsigned long clone_flags, struct task_struct *p)
 {
 	unsigned long flags;
-	int cpu = get_cpu();
+	int cpu;
+
+	init_new_task_load(p, false);
+	cpu = get_cpu();
 
 	__sched_fork(clone_flags, p);
-	init_new_task_load(p, false);
 	/*
 	 * We mark the process as running here. This guarantees that
 	 * nobody will actually run it, and a signal or other external
@@ -5505,7 +5497,7 @@ static void migrate_tasks(struct rq *dead_rq, bool migrate_pinned_tasks)
 		 */
 		if ((migrate_pinned_tasks && rq->nr_running == 1) ||
 		   (!migrate_pinned_tasks &&
-		    rq->nr_running == num_pinned_kthreads))
+		    rq->nr_running <= num_pinned_kthreads))
 			break;
 
 		/*
@@ -5541,8 +5533,12 @@ static void migrate_tasks(struct rq *dead_rq, bool migrate_pinned_tasks)
 		 * Since we're inside stop-machine, _nothing_ should have
 		 * changed the task, WARN if weird stuff happened, because in
 		 * that case the above rq->lock drop is a fail too.
+		 * However, during cpu isolation the load balancer might have
+		 * interferred since we don't stop all CPUs. Ignore warning for
+		 * this case.
 		 */
-		if (WARN_ON(task_rq(next) != rq || !task_on_rq_queued(next))) {
+		if (task_rq(next) != rq || !task_on_rq_queued(next)) {
+			WARN_ON(migrate_pinned_tasks);
 			raw_spin_unlock(&next->pi_lock);
 			continue;
 		}
@@ -5686,7 +5682,7 @@ int sched_isolate_cpu(int cpu)
 	if (trace_sched_isolate_enabled())
 		start_time = sched_clock();
 
-	lock_device_hotplug();
+	cpu_maps_update_begin();
 
 	cpumask_andnot(&avail_cpus, cpu_online_mask, cpu_isolated_mask);
 
@@ -5735,7 +5731,7 @@ int sched_isolate_cpu(int cpu)
 	sched_update_group_capacities(cpu);
 
 out:
-	unlock_device_hotplug();
+	cpu_maps_update_done();
 	trace_sched_isolate(cpu, cpumask_bits(cpu_isolated_mask)[0],
 			    start_time, 1);
 	return ret_code;
@@ -5755,8 +5751,6 @@ int sched_unisolate_cpu_unlocked(int cpu)
 
 	if (trace_sched_isolate_enabled())
 		start_time = sched_clock();
-
-	lock_device_hotplug_assert();
 
 	if (!cpu_isolation_vote[cpu]) {
 		ret_code = -EINVAL;
@@ -5796,9 +5790,9 @@ int sched_unisolate_cpu(int cpu)
 {
 	int ret_code;
 
-	lock_device_hotplug();
+	cpu_maps_update_begin();
 	ret_code = sched_unisolate_cpu_unlocked(cpu);
-	unlock_device_hotplug();
+	cpu_maps_update_done();
 	return ret_code;
 }
 
@@ -7850,7 +7844,6 @@ void __init sched_init_smp(void)
 	hotcpu_notifier(cpuset_cpu_inactive, CPU_PRI_CPUSET_INACTIVE);
 
 	update_cluster_topology();
-	init_sched_hmp_boost_policy();
 
 	init_hrtick();
 
@@ -7899,7 +7892,7 @@ void __init sched_init(void)
 
 	BUG_ON(num_possible_cpus() > BITS_PER_LONG);
 
-	sched_hmp_parse_dt();
+	sched_boost_parse_dt();
 	init_clusters();
 
 #ifdef CONFIG_FAIR_GROUP_SCHED

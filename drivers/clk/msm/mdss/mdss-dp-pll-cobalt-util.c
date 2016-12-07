@@ -275,7 +275,7 @@ int dp_config_vco_rate(struct dp_pll_vco_clk *vco, unsigned long rate)
 		MDSS_PLL_REG_W(dp_res->pll_base,
 			QSERDES_COM_DIV_FRAC_START2_MODE0, 0x00);
 		MDSS_PLL_REG_W(dp_res->pll_base,
-			QSERDES_COM_DIV_FRAC_START3_MODE0, 0xa0);
+			QSERDES_COM_DIV_FRAC_START3_MODE0, 0x0a);
 		MDSS_PLL_REG_W(dp_res->pll_base,
 			QSERDES_COM_CMN_CONFIG, 0x12);
 		MDSS_PLL_REG_W(dp_res->pll_base,
@@ -733,7 +733,7 @@ unsigned long dp_vco_get_rate(struct clk *c)
 {
 	struct dp_pll_vco_clk *vco = mdss_dp_to_vco_clk(c);
 	int rc;
-	u32 div, hsclk_div, link2xclk_div;
+	u32 div, hsclk_div, link2xclk_div = 0;
 	u64 vco_rate;
 	struct mdss_pll_resources *pll = vco->priv;
 
