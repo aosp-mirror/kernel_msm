@@ -138,6 +138,7 @@ static int fwu_do_reflash(void);
 
 static int fwu_recovery_check_status(void);
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 static ssize_t fwu_sysfs_show_image(struct file *data_file,
 		struct kobject *kobj, struct bin_attribute *attributes,
 		char *buf, loff_t pos, size_t count);
@@ -190,6 +191,7 @@ static ssize_t fwu_sysfs_guest_code_block_count_show(struct device *dev,
 
 static ssize_t fwu_sysfs_write_guest_code_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
+#endif
 
 enum f34_version {
 	F34_V0 = 0,
@@ -706,6 +708,7 @@ struct synaptics_rmi4_fwu_handle {
 #endif
 };
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 static struct bin_attribute dev_attr_data = {
 	.attr = {
 		.name = "data",
@@ -763,11 +766,15 @@ static struct device_attribute attrs[] = {
 			synaptics_rmi4_show_error,
 			fwu_sysfs_write_guest_code_store),
 };
+#endif
 
 static struct synaptics_rmi4_fwu_handle *fwu;
 
 DECLARE_COMPLETION(fwu_remove_complete);
+
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 DEFINE_MUTEX(fwu_sysfs_mutex);
+#endif
 
 /* Check offset + size <= bound.  true if in bounds, false otherwise. */
 static bool in_bounds(unsigned long offset, unsigned long size,
@@ -921,6 +928,7 @@ static int fwu_f51_force_data_init(void)
 }
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 static int fwu_allocate_read_config_buf(unsigned int count)
 {
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
@@ -940,6 +948,7 @@ static int fwu_allocate_read_config_buf(unsigned int count)
 
 	return 0;
 }
+#endif
 
 static void fwu_compare_partition_tables(void)
 {
@@ -2469,6 +2478,7 @@ static int fwu_write_f34_blocks(unsigned char *block_ptr,
 	return retval;
 }
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 static int fwu_read_f34_v7_blocks(unsigned short block_cnt,
 		unsigned char command)
 {
@@ -2622,6 +2632,7 @@ static int fwu_read_f34_blocks(unsigned short block_cnt, unsigned char cmd)
 
 	return retval;
 }
+#endif
 
 static int fwu_get_image_firmware_id(unsigned int *fw_id)
 {
@@ -2643,7 +2654,7 @@ static int fwu_get_image_firmware_id(unsigned int *fw_id)
 		}
 
 		strptr += 2;
-		firmware_id = kzalloc(MAX_FIRMWARE_ID_LEN, GFP_KERNEL);
+		firmware_id = kzalloc(MAX_FIRMWARE_ID_LEN + 1, GFP_KERNEL);
 		if (!firmware_id) {
 			dev_err(rmi4_data->pdev->dev.parent,
 					"%s: Failed to alloc mem for firmware_id\n",
@@ -3028,6 +3039,7 @@ static int fwu_check_ui_configuration_size(void)
 	return 0;
 }
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 static int fwu_check_dp_configuration_size(void)
 {
 	unsigned short block_count;
@@ -3061,6 +3073,7 @@ static int fwu_check_pm_configuration_size(void)
 
 	return 0;
 }
+#endif
 
 #ifndef SYNA_SIMPLE_UPDATE
 static int fwu_check_bl_configuration_size(void)
@@ -3081,6 +3094,7 @@ static int fwu_check_bl_configuration_size(void)
 }
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 static int fwu_check_guest_code_size(void)
 {
 	unsigned short block_count;
@@ -3096,6 +3110,7 @@ static int fwu_check_guest_code_size(void)
 
 	return 0;
 }
+#endif
 
 static int fwu_erase_configuration(void)
 {
@@ -3195,6 +3210,7 @@ static int fwu_erase_utility_parameter(void)
 }
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 static int fwu_erase_guest_code(void)
 {
 	int retval;
@@ -3218,6 +3234,7 @@ static int fwu_erase_guest_code(void)
 
 	return 0;
 }
+#endif
 
 static int fwu_erase_all(void)
 {
@@ -3271,7 +3288,7 @@ static int fwu_erase_all(void)
 
 #ifndef SYNA_SIMPLE_UPDATE
 	if (fwu->flash_properties.has_disp_config &&
-			fwu->img.contains_disp_config) {		
+			fwu->img.contains_disp_config) {
 		fwu->config_area = DP_CONFIG_AREA;
 		retval = fwu_erase_configuration();
 		if (retval < 0)
@@ -3420,6 +3437,7 @@ static int fwu_write_ui_configuration(void)
 	return fwu_write_configuration();
 }
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 static int fwu_write_dp_configuration(void)
 {
 	fwu->config_area = DP_CONFIG_AREA;
@@ -3439,6 +3457,7 @@ static int fwu_write_pm_configuration(void)
 
 	return fwu_write_configuration();
 }
+#endif
 
 #ifndef SYNA_SIMPLE_UPDATE
 static int fwu_write_flash_configuration(void)
@@ -3472,6 +3491,7 @@ static int fwu_write_flash_configuration(void)
 }
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 static int fwu_write_guest_code(void)
 {
 	int retval;
@@ -3486,6 +3506,7 @@ static int fwu_write_guest_code(void)
 
 	return 0;
 }
+#endif
 
 static int fwu_write_lockdown(void)
 {
@@ -3994,6 +4015,7 @@ static int fwu_do_reflash(void)
 	return retval;
 }
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 static int fwu_do_read_config(void)
 {
 	int retval;
@@ -4072,6 +4094,7 @@ exit:
 
 	return retval;
 }
+#endif
 
 static int fwu_do_lockdown_v7(void)
 {
@@ -4208,6 +4231,7 @@ static int fwu_do_restore_f51_cal_data(void)
 }
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 static int fwu_start_write_guest_code(void)
 {
 	int retval;
@@ -4413,6 +4437,7 @@ exit:
 
 	return retval;
 }
+#endif
 
 static const char *fwu_get_tp_img(struct synaptics_rmi4_data *rmi4_data)
 {
@@ -4512,6 +4537,7 @@ static int fwu_start_reflash(void)
 				"%s: Firmware image size = %d\n",
 				__func__, (unsigned int)fw_entry->size);
 		fwu->image = fw_entry->data;
+		fwu->image_size = fw_entry->size;
 	}
 
 	retval = fwu_parse_image_info();
@@ -4731,6 +4757,7 @@ static int fwu_recovery_check_status(void)
 	return 0;
 }
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 static int fwu_recovery_erase_completion(void)
 {
 	int retval;
@@ -5005,6 +5032,7 @@ exit:
 
 	return retval;
 }
+#endif
 
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 static int fwu_do_write_config(uint8_t *config_data)
@@ -5259,8 +5287,10 @@ static void fwu_startup_fw_update_work(struct work_struct *work)
 	}
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 	/* Prevent sysfs operations during initial update. */
 	mutex_lock(&fwu_sysfs_mutex);
+#endif
 
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	wake_lock(&fwu->fwu_wake_lock);
@@ -5276,11 +5306,14 @@ static void fwu_startup_fw_update_work(struct work_struct *work)
 #else
 	synaptics_fw_updater(NULL);
 #endif
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 	mutex_unlock(&fwu_sysfs_mutex);
+#endif
 	return;
 }
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 static ssize_t fwu_sysfs_show_image(struct file *data_file,
 		struct kobject *kobj, struct bin_attribute *attributes,
 		char *buf, loff_t pos, size_t count)
@@ -5714,6 +5747,7 @@ write_guest_code_store_exit:
 	mutex_unlock(&fwu_sysfs_mutex);
 	return retval;
 }
+#endif
 
 static void synaptics_rmi4_fwu_attn(struct synaptics_rmi4_data *rmi4_data,
 		unsigned char intr_mask)
@@ -5730,7 +5764,9 @@ static void synaptics_rmi4_fwu_attn(struct synaptics_rmi4_data *rmi4_data,
 static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 {
 	int retval;
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 	unsigned char attr_count;
+#endif
 	struct pdt_properties pdt_props;
 
 	if (fwu) {
@@ -5798,6 +5834,7 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 	fwu->do_lockdown = DO_LOCKDOWN;
 	fwu->initialized = true;
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 	retval = sysfs_create_bin_file(&rmi4_data->input_dev->dev.kobj,
 			&dev_attr_data);
 	if (retval < 0) {
@@ -5818,6 +5855,7 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 			goto exit_remove_attrs;
 		}
 	}
+#endif
 
 #ifdef DO_STARTUP_FW_UPDATE
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
@@ -5840,13 +5878,19 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 
 	return 0;
 
+#if defined(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC) || \
+	defined(F51_DISCRETE_FORCE)
 exit_remove_attrs:
+#endif
+
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC_v26
 	for (attr_count--; attr_count >= 0; attr_count--) {
 		sysfs_remove_file(&rmi4_data->input_dev->dev.kobj,
 				&attrs[attr_count].attr);
 	}
 
 	sysfs_remove_bin_file(&rmi4_data->input_dev->dev.kobj, &dev_attr_data);
+#endif
 
 exit_free_mem:
 	kfree(fwu->image_name);
@@ -5861,8 +5905,9 @@ exit:
 
 static void synaptics_rmi4_fwu_remove(struct synaptics_rmi4_data *rmi4_data)
 {
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 	unsigned char attr_count;
-
+#endif
 	if (!fwu)
 		goto exit;
 
@@ -5875,12 +5920,14 @@ static void synaptics_rmi4_fwu_remove(struct synaptics_rmi4_data *rmi4_data)
 #endif
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS_HTC
 	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
 		sysfs_remove_file(&rmi4_data->input_dev->dev.kobj,
 				&attrs[attr_count].attr);
 	}
 
 	sysfs_remove_bin_file(&rmi4_data->input_dev->dev.kobj, &dev_attr_data);
+#endif
 
 #ifdef F51_DISCRETE_FORCE
 	kfree(fwu->cal_data);
