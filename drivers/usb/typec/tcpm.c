@@ -652,6 +652,12 @@ static enum typec_cc_status tcpm_rp_cc(struct tcpm_port *port)
 	return TYPEC_CC_RP_DEF;
 }
 
+static int tcpm_set_attached_state(struct tcpm_port *port, bool attached)
+{
+	return port->tcpc->set_roles(port->tcpc, attached, port->con.pwr_role,
+				     port->con.data_role);
+}
+
 static int tcpm_set_roles(struct tcpm_port *port, bool attached,
 			  enum typec_role role, enum typec_data_role data)
 {
@@ -1919,7 +1925,7 @@ static void tcpm_reset_port(struct tcpm_port *port)
 	tcpm_init_vconn(port);
 	tcpm_set_current_limit(port, 0, 0);
 	tcpm_set_polarity(port, TYPEC_POLARITY_CC1);
-	tcpm_set_roles(port, false, port->con.pwr_role, port->con.data_role);
+	tcpm_set_attached_state(port, false);
 }
 
 static void tcpm_detach(struct tcpm_port *port)
@@ -2439,6 +2445,7 @@ static void run_state_machine(struct tcpm_port *port)
 		 * Similar, dual-mode ports in source mode should transition
 		 * to PE_SNK_Transition_to_default.
 		 */
+		tcpm_set_attached_state(port, true);
 		tcpm_set_state(port, SNK_STARTUP, 0);
 		break;
 
