@@ -2772,12 +2772,9 @@ static int __mdss_fb_wait_for_fence_sub(struct msm_sync_pt_data *sync_pt_data,
 
 			pr_warn("%s: sync_fence_wait timed out! ",
 					sync_pt_data->fence_name);
-			pr_warn("%s: sync_fence_wait timed out! ",
-					fences[i]->name);
 			pr_cont("Waiting %ld.%ld more seconds\n",
 				(wait_ms/MSEC_PER_SEC), (wait_ms%MSEC_PER_SEC));
-			MDSS_XLOG(sync_pt_data->timeline_value);
-			MDSS_XLOG_TOUT_HANDLER("mdp");
+
 			ret = sync_fence_wait(fences[i], wait_ms);
 
 			if (ret == -ETIME)
@@ -2823,7 +2820,6 @@ void mdss_fb_signal_timeline(struct msm_sync_pt_data *sync_pt_data)
 	if (atomic_add_unless(&sync_pt_data->commit_cnt, -1, 0) &&
 			sync_pt_data->timeline) {
 		sw_sync_timeline_inc(sync_pt_data->timeline, 1);
-		MDSS_XLOG(sync_pt_data->timeline_value);
 		sync_pt_data->timeline_value++;
 
 		pr_debug("%s: buffer signaled! timeline val=%d remaining=%d\n",
@@ -4053,10 +4049,6 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 	val = sync_pt_data->timeline_value + sync_pt_data->threshold +
 			atomic_read(&sync_pt_data->commit_cnt);
 
-	MDSS_XLOG(sync_pt_data->timeline_value, val,
-		atomic_read(&sync_pt_data->commit_cnt));
-	pr_debug("%s: fence CTL%d Commit_cnt%d\n", sync_pt_data->fence_name,
-		sync_pt_data->timeline_value,  atomic_read(&sync_pt_data->commit_cnt));
 	/* Set release fence */
 	rel_fence = mdss_fb_sync_get_fence(sync_pt_data->timeline,
 			sync_pt_data->fence_name, val);
@@ -4401,7 +4393,6 @@ static int __ioctl_wait_idle(struct msm_fb_data_type *mfd, u32 cmd)
 {
 	int ret = 0;
 
-#ifndef TARGET_HW_MDSS_MDP3
 	if (mfd->wait_for_kickoff &&
 		((cmd == MSMFB_OVERLAY_PREPARE) ||
 		(cmd == MSMFB_BUFFER_SYNC) ||
@@ -4414,16 +4405,7 @@ static int __ioctl_wait_idle(struct msm_fb_data_type *mfd, u32 cmd)
 		(cmd == MSMFB_OVERLAY_SET))) {
 		ret = mdss_fb_wait_for_kickoff(mfd);
 	}
-#else
-	if ((cmd != MSMFB_VSYNC_CTRL) &&
-		(cmd != MSMFB_OVERLAY_VSYNC_CTRL) &&
-		(cmd != MSMFB_ASYNC_BLIT) &&
-		(cmd != MSMFB_BLIT) &&
-		(cmd != MSMFB_NOTIFY_UPDATE) &&
-		(cmd != MSMFB_OVERLAY_PREPARE)) {
-		ret = mdss_fb_wait_for_kickoff(mfd);
-	}
-#endif
+
 	if (ret && (ret != -ESHUTDOWN))
 		pr_err("wait_idle failed. cmd=0x%x rc=%d\n", cmd, ret);
 
