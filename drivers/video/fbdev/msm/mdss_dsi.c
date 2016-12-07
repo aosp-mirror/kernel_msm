@@ -1473,13 +1473,13 @@ static int mdss_dsi_pinctrl_set_state(
 		return PTR_ERR(ctrl_pdata->pin_res.pinctrl);
 
 	pinfo = &ctrl_pdata->panel_data.panel_info;
-	if ((mdss_dsi_is_right_ctrl(ctrl_pdata) &&
+	/* if ((mdss_dsi_is_right_ctrl(ctrl_pdata) &&
 		mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data)) ||
 			pinfo->is_dba_panel) {
 		pr_debug("%s:%d, right ctrl pinctrl config not needed\n",
 			__func__, __LINE__);
 		return 0;
-	}
+	} */
 
 	pin_state = active ? ctrl_pdata->pin_res.gpio_state_active
 				: ctrl_pdata->pin_res.gpio_state_suspend;

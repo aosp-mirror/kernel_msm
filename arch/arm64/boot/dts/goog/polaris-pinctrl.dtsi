@@ -129,24 +129,24 @@
 	pmx_mdss0: pmx_mdss0 {
 		mdss_dsi0_active: mdss_dsi0_active {
 			mux {
-				pins = "gpio93", "gpio89", "gpio90";
+				pins = "gpio93";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio93", "gpio89", "gpio90";
+				pins = "gpio93";
 				drive-strength = <8>; /* 8 mA */
 				bias-disable = <0>; /* no pull */
 			};
 		};
 		mdss_dsi0_suspend: mdss_dsi0_suspend {
 			mux {
-				pins = "gpio93", "gpio89", "gpio90";
+				pins = "gpio93";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio93", "gpio89", "gpio90";
+				pins = "gpio93";
 				drive-strength = <2>; /* 2 mA */
 				bias-pull-down; /* pull down */
 			};
@@ -182,24 +182,24 @@
 	pmx_mdss1: pmx_mdss1 {
 		mdss_dsi1_active: mdss_dsi1_active {
 			mux {
-				pins = "gpio94", "gpio91", "gpio92";
+				pins = "gpio94";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio94", "gpio91", "gpio92";
+				pins = "gpio94";
 				drive-strength = <8>; /* 8 mA */
 				bias-disable = <0>; /* no pull */
 			};
 		};
 		mdss_dsi1_suspend: mdss_dsi1_suspend {
 			mux {
-				pins = "gpio94", "gpio91", "gpio92";
+				pins = "gpio94";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio94", "gpio91", "gpio92";
+				pins = "gpio94";
 				drive-strength = <2>; /* 2 mA */
 				bias-pull-down; /* pull down */
 			};
