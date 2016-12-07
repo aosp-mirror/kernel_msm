@@ -327,7 +327,8 @@ struct psy_changed_event {
 static void psy_changed_handler(struct work_struct *work)
 {
 	struct psy_changed_event *event = container_of(work,
-			struct psy_changed_event, work);
+						       struct psy_changed_event,
+						       work);
 	struct usbpd *pd = event->pd;
 	bool vbus_present;
 	enum typec_cc_status cc1;
@@ -423,6 +424,7 @@ static void psy_changed_handler(struct work_struct *work)
 		pd->pending_update_usb_data = false;
 	}
 unlock:
+	kfree(event);
 	mutex_unlock(&pd->lock);
 }
 
@@ -894,7 +896,6 @@ static int set_usb_data_role(struct usbpd *pd, bool attached,
 
 	return ret;
 }
-
 
 static int tcpm_set_roles(struct tcpc_dev *dev, bool attached,
 			  enum typec_role role, enum typec_data_role data)
