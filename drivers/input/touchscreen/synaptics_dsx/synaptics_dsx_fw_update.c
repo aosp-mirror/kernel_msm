@@ -89,6 +89,7 @@
 #define MIN_SLEEP_TIME_US 50
 #define MAX_SLEEP_TIME_US 100
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS
 static ssize_t fwu_sysfs_show_image(struct file *data_file,
 		struct kobject *kobj, struct bin_attribute *attributes,
 		char *buf, loff_t pos, size_t count);
@@ -144,6 +145,7 @@ static ssize_t fwu_sysfs_config_id_show(struct device *dev,
 
 static ssize_t fwu_sysfs_package_id_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+#endif
 
 enum bl_version {
 	V5 = 5,
@@ -283,6 +285,7 @@ struct synaptics_rmi4_fwu_handle {
 	struct synaptics_rmi4_data *rmi4_data;
 };
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS
 static struct bin_attribute dev_attr_data = {
 	.attr = {
 		.name = "data",
@@ -341,11 +344,14 @@ static struct device_attribute attrs[] = {
 			fwu_sysfs_package_id_show,
 			synaptics_rmi4_store_error),
 };
+#endif
 
 static struct synaptics_rmi4_fwu_handle *fwu;
 
 DECLARE_COMPLETION(fwu_dsx_remove_complete);
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS
 DEFINE_MUTEX(dsx_fwu_sysfs_mutex);
+#endif
 
 /* Check offset + size <= bound.  1 if in bounds, 0 otherwise. */
 static int in_bounds(unsigned long offset,
@@ -1167,6 +1173,7 @@ write_config:
 	return retval;
 }
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS
 static int fwu_start_write_config(void)
 {
 	int retval;
@@ -1362,6 +1369,7 @@ exit:
 
 	return retval;
 }
+#endif
 
 static int fwu_do_lockdown(void)
 {
@@ -1578,6 +1586,7 @@ int synaptics_dsx_fw_updater(unsigned char *fw_data)
 }
 EXPORT_SYMBOL(synaptics_dsx_fw_updater);
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS
 static ssize_t fwu_sysfs_show_image(struct file *data_file,
 		struct kobject *kobj, struct bin_attribute *attributes,
 		char *buf, loff_t pos, size_t count)
@@ -1970,6 +1979,7 @@ static ssize_t fwu_sysfs_package_id_show(struct device *dev,
 			(package_id[1] << 8) | package_id[0],
 			(package_id[3] << 8) | package_id[2]);
 }
+#endif
 
 static void synaptics_rmi4_fwu_attn(struct synaptics_rmi4_data *rmi4_data,
 		unsigned char intr_mask)
@@ -1986,7 +1996,9 @@ static void synaptics_rmi4_fwu_attn(struct synaptics_rmi4_data *rmi4_data,
 static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 {
 	int retval;
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS
 	unsigned char attr_count;
+#endif
 	struct pdt_properties pdt_props;
 
 	fwu = kzalloc(sizeof(*fwu), GFP_KERNEL);
@@ -2043,6 +2055,7 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 	fwu->do_lockdown = DO_LOCKDOWN;
 	fwu->initialized = true;
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS
 	retval = sysfs_create_bin_file(&rmi4_data->input_dev->dev.kobj,
 			&dev_attr_data);
 	if (retval < 0) {
@@ -2063,9 +2076,10 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 			goto exit_remove_attrs;
 		}
 	}
-
+#endif
 	return 0;
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS
 exit_remove_attrs:
 	for (attr_count--; attr_count >= 0; attr_count--) {
 		sysfs_remove_file(&rmi4_data->input_dev->dev.kobj,
@@ -2073,6 +2087,7 @@ exit_remove_attrs:
 	}
 
 	sysfs_remove_bin_file(&rmi4_data->input_dev->dev.kobj, &dev_attr_data);
+#endif
 
 exit_free_fwu:
 	kfree(fwu);
@@ -2084,17 +2099,20 @@ exit:
 
 static void synaptics_rmi4_fwu_remove(struct synaptics_rmi4_data *rmi4_data)
 {
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS
 	unsigned char attr_count;
-
+#endif
 	if (!fwu)
 		goto exit;
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_SYSFS
 	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
 		sysfs_remove_file(&rmi4_data->input_dev->dev.kobj,
 				&attrs[attr_count].attr);
 	}
 
 	sysfs_remove_bin_file(&rmi4_data->input_dev->dev.kobj, &dev_attr_data);
+#endif
 
 	kfree(fwu->read_config_buf);
 	kfree(fwu);
