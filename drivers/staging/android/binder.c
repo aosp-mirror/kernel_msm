@@ -999,7 +999,7 @@ static int binder_dec_node(struct binder_node *node, int strong, int internal)
 
 
 static struct binder_ref *binder_get_ref(struct binder_proc *proc,
-					 uint32_t desc, bool need_strong_ref)
+					 uint32_t desc)
 {
 	struct rb_node *n = proc->refs_by_desc.rb_node;
 	struct binder_ref *ref;
@@ -1007,16 +1007,12 @@ static struct binder_ref *binder_get_ref(struct binder_proc *proc,
 	while (n) {
 		ref = rb_entry(n, struct binder_ref, rb_node_desc);
 
-		if (desc < ref->desc) {
+		if (desc < ref->desc)
 			n = n->rb_left;
-		} else if (desc > ref->desc) {
+		else if (desc > ref->desc)
 			n = n->rb_right;
-		} else if (need_strong_ref && !ref->strong) {
-			binder_user_error("tried to use weak ref as strong ref\n");
-			return NULL;
-		} else {
+		else
 			return ref;
-		}
 	}
 	return NULL;
 }
@@ -1286,8 +1282,8 @@ static void binder_transaction_buffer_release(struct binder_proc *proc,
 		} break;
 		case BINDER_TYPE_HANDLE:
 		case BINDER_TYPE_WEAK_HANDLE: {
-			struct binder_ref *ref = binder_get_ref(proc, fp->handle,
-						fp->type == BINDER_TYPE_HANDLE);
+			struct binder_ref *ref = binder_get_ref(proc, fp->handle);
+
 			if (ref == NULL) {
 				pr_err("transaction release %d bad handle %d\n",
 				 debug_id, fp->handle);
@@ -1380,7 +1376,8 @@ static void binder_transaction(struct binder_proc *proc,
 	} else {
 		if (tr->target.handle) {
 			struct binder_ref *ref;
-			ref = binder_get_ref(proc, tr->target.handle, true);
+
+			ref = binder_get_ref(proc, tr->target.handle);
 			if (ref == NULL) {
 				binder_user_error("%d:%d got transaction to invalid handle\n",
 					proc->pid, thread->pid);
@@ -1575,9 +1572,7 @@ static void binder_transaction(struct binder_proc *proc,
 				fp->type = BINDER_TYPE_HANDLE;
 			else
 				fp->type = BINDER_TYPE_WEAK_HANDLE;
-			fp->binder = 0;
 			fp->handle = ref->desc;
-			fp->cookie = 0;
 			binder_inc_ref(ref, fp->type == BINDER_TYPE_HANDLE,
 				       &thread->todo);
 
@@ -1589,8 +1584,8 @@ static void binder_transaction(struct binder_proc *proc,
 		} break;
 		case BINDER_TYPE_HANDLE:
 		case BINDER_TYPE_WEAK_HANDLE: {
-			struct binder_ref *ref = binder_get_ref(proc, fp->handle,
-						fp->type == BINDER_TYPE_HANDLE);
+			struct binder_ref *ref = binder_get_ref(proc, fp->handle);
+
 			if (ref == NULL) {
 				binder_user_error("%d:%d got transaction with invalid handle, %d\n",
 						proc->pid,
@@ -1623,9 +1618,7 @@ static void binder_transaction(struct binder_proc *proc,
 					return_error = BR_FAILED_REPLY;
 					goto err_binder_get_ref_for_node_failed;
 				}
-				fp->binder = 0;
 				fp->handle = new_ref->desc;
-				fp->cookie = 0;
 				binder_inc_ref(new_ref, fp->type == BINDER_TYPE_HANDLE, NULL);
 				trace_binder_transaction_ref_to_ref(t, ref,
 								    new_ref);
@@ -1677,7 +1670,6 @@ static void binder_transaction(struct binder_proc *proc,
 			binder_debug(BINDER_DEBUG_TRANSACTION,
 				     "        fd %d -> %d\n", fp->handle, target_fd);
 			/* TODO: fput? */
-			fp->binder = 0;
 			fp->handle = target_fd;
 		} break;
 
@@ -1800,9 +1792,7 @@ static int binder_thread_write(struct binder_proc *proc,
 						ref->desc);
 				}
 			} else
-				ref = binder_get_ref(proc, target,
-						     cmd == BC_ACQUIRE ||
-						     cmd == BC_RELEASE);
+				ref = binder_get_ref(proc, target);
 			if (ref == NULL) {
 				binder_user_error("%d:%d refcount change on invalid ref %d\n",
 					proc->pid, thread->pid, target);
@@ -1998,7 +1988,7 @@ static int binder_thread_write(struct binder_proc *proc,
 			if (get_user(cookie, (binder_uintptr_t __user *)ptr))
 				return -EFAULT;
 			ptr += sizeof(binder_uintptr_t);
-			ref = binder_get_ref(proc, target, false);
+			ref = binder_get_ref(proc, target);
 			if (ref == NULL) {
 				binder_user_error("%d:%d %s invalid ref %d\n",
 					proc->pid, thread->pid,
@@ -3357,7 +3347,7 @@ static void print_binder_node(struct seq_file *m, struct binder_node *node)
 
 static void print_binder_ref(struct seq_file *m, struct binder_ref *ref)
 {
-	seq_printf(m, "  ref %d: desc %d %snode %d s %d w %d d %pK\n",
+	seq_printf(m, "  ref %d: desc %d %snode %d s %d w %d d %p\n",
 		   ref->debug_id, ref->desc, ref->node->proc ? "" : "dead ",
 		   ref->node->debug_id, ref->strong, ref->weak, ref->death);
 }
