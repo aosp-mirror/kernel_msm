@@ -18,6 +18,7 @@
 #include <linux/interrupt.h>
 
 #define MAX_SSR_REASON_LEN  81U
+#define MAX_CRASH_TIMESTAMP_LEN  30U
 
 struct subsys_device;
 
@@ -88,6 +89,7 @@ struct subsys_desc {
 	bool system_debug;
 	const char *edge;
 	char last_crash_reason[MAX_SSR_REASON_LEN];
+	char last_crash_timestamp[MAX_CRASH_TIMESTAMP_LEN];
 };
 
 /**
@@ -106,6 +108,8 @@ struct notif_data {
 	bool no_auth;
 	struct platform_device *pdev;
 };
+
+extern struct timezone sys_tz;
 
 #if defined(CONFIG_MSM_SUBSYSTEM_RESTART)
 
