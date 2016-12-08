@@ -482,6 +482,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 				gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
 				gpio_free(ctrl_pdata->disp_en_gpio);
 			}
+			mdelay(15);    /*15ms delay for pull reset pin low*/
 			gpio_free(ctrl_pdata->rst_gpio);
 		}
 
