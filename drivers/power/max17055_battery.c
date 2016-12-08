@@ -90,6 +90,7 @@ struct max17055_chip {
 
 #if CONFIG_HUAWEI_SAWSHARK
 struct max17055_chip *global_max17055 = NULL;
+#define CONFIG_TEX_BIT             (1 << 8)
 #endif
 
 static enum power_supply_property max17055_battery_props[] = {
@@ -493,6 +494,11 @@ static int max17055_set_property(struct power_supply *psy,
 			power_supply_changed(&chip->battery);
 		}
 		break;
+	case POWER_SUPPLY_PROP_TEMP:
+		regmap_update_bits(map, MAX17055_Config, CONFIG_TEX_BIT, CONFIG_TEX_BIT);
+		data = ((val->intval * 256) / 10);
+		max17055_write_verify_reg(map, MAX17055_Temp, data);
+		break;
 #endif
 	case POWER_SUPPLY_PROP_TEMP_ALERT_MIN:
 		ret = regmap_read(map, MAX17055_TAlrtTh, &data);
@@ -537,6 +543,7 @@ static int max17055_property_is_writeable(struct power_supply *psy,
 	switch (psp) {
 #if CONFIG_HUAWEI_SAWSHARK
 	case POWER_SUPPLY_PROP_CAPACITY:
+	case POWER_SUPPLY_PROP_TEMP:
 #endif
 	case POWER_SUPPLY_PROP_TEMP_ALERT_MIN:
 	case POWER_SUPPLY_PROP_TEMP_ALERT_MAX:
@@ -1206,11 +1213,26 @@ static int max17055_remove(struct i2c_client *client)
 	return 0;
 }
 
+#if CONFIG_HUAWEI_SAWSHARK
+static void max17055_shutdown(struct i2c_client *client)
+{
+	struct max17055_chip *chip = i2c_get_clientdata(client);
+
+	pr_info("max17055 shutdown\n");
+	/* Switch to use internal temprature when the AP goes to shutdown */
+	regmap_update_bits(chip->regmap, MAX17055_Config, CONFIG_TEX_BIT, 0);
+}
+#endif
+
 #ifdef CONFIG_PM_SLEEP
 static int max17055_suspend(struct device *dev)
 {
 	struct max17055_chip *chip = dev_get_drvdata(dev);
-
+#if CONFIG_HUAWEI_SAWSHARK
+	pr_info("max17055 suspend\n");
+	/* Switch to use internal temprature when the AP goes to sleep */
+	regmap_update_bits(chip->regmap, MAX17055_Config, CONFIG_TEX_BIT, 0);
+#endif
 	/*
 	 * disable the irq and enable irq_wake
 	 * capability to the interrupt line.
@@ -1262,6 +1284,9 @@ static struct i2c_driver max17055_i2c_driver = {
 	.probe		= max17055_probe,
 	.remove		= max17055_remove,
 	.id_table	= max17055_id,
+#if CONFIG_HUAWEI_SAWSHARK
+	.shutdown	= max17055_shutdown,
+#endif
 };
 module_i2c_driver(max17055_i2c_driver);
 
