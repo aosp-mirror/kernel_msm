@@ -154,10 +154,10 @@ typedef struct {
 } hif_irq_history;
 
 #define HIF_IRQ_HISTORY_MAX 1024
-adf_os_atomic_t g_hif_irq_history_idx = 0;
+adf_os_atomic_t g_hif_irq_history_idx;
 hif_irq_history hif_irq_history_buffer[HIF_IRQ_HISTORY_MAX];
 
-void hif_irq_record(hif_irq_type type, struct hif_pci_softc *sc)
+static void hif_irq_record(hif_irq_type type, struct hif_pci_softc *sc)
 {
 	struct HIF_CE_state *hif_state = (struct HIF_CE_state *)sc->hif_device;
 	A_target_id_t targid = hif_state->targid;
@@ -192,8 +192,21 @@ out:
 	hif_irq_history_buffer[record_index].time = adf_get_boottime();
 
 }
+
+/**
+ * hif_irq_record_index_init() - initialize the hif irq index
+ *
+ * initialize the hif irq record index.
+ * Return: none
+ */
+static void hif_irq_record_index_init(void)
+{
+	adf_os_atomic_init(&g_hif_irq_history_idx);
+}
+
 #else
-void hif_irq_record(hif_irq_type type, struct hif_pci_softc *sc) {};
+static void hif_irq_record(hif_irq_type type, struct hif_pci_softc *sc) {};
+static void hif_irq_record_index_init(void) {};
 #endif
 
 #ifndef REMOVE_PKT_LOG
@@ -1738,6 +1751,7 @@ again:
 #endif
     adf_os_atomic_init(&sc->ce_suspend);
     adf_os_atomic_init(&sc->pci_link_suspended);
+    hif_irq_record_index_init();
     init_waitqueue_head(&ol_sc->sc_osdev->event_queue);
 
     ret = hif_init_adf_ctx(ol_sc);
