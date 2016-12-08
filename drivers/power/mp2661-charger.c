@@ -2198,6 +2198,7 @@ static __ref int mp2661_monitor_kthread(void *arg)
     struct sched_param param = {.sched_priority = MAX_RT_PRIO - 1};
     int capacity = -1;
     int rc = -1;
+    union power_supply_propval ret = {0, };
 
     sched_setscheduler(current, SCHED_FIFO, &param);
     pr_info("enter mp2661 monitor thread\n");
@@ -2211,6 +2212,15 @@ static __ref int mp2661_monitor_kthread(void *arg)
         if(abs(temp - chip->last_temp) >= MONITOR_TEMP_DELTA)
         {
             pr_err("temp = %d, last_temp = %d\n", temp, chip->last_temp);
+
+            /* update max17055 temp per Degrees Celsius when ap is awake */
+            ret.intval = temp;
+            pr_info("set bms temp to %d\n", temp);
+            if ((chip->bms_psy) && (chip->bms_psy->set_property))
+            {
+                chip->bms_psy->set_property(chip->bms_psy, POWER_SUPPLY_PROP_TEMP,
+                                            &ret);
+            }
 
             last_batt_temp_status = chip->batt_temp_status;
 
