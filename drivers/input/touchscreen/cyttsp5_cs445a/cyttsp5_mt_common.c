@@ -22,6 +22,8 @@
  */
 
 #include "cyttsp5_regs.h"
+#include <linux/input/mt.h>
+
 
 #define MT_PARAM_SIGNAL(md, sig_ost) PARAM_SIGNAL(md->pdata->frmwrk, sig_ost)
 #define MT_PARAM_MIN(md, sig_ost) PARAM_MIN(md->pdata->frmwrk, sig_ost)
@@ -266,11 +268,14 @@ static void cyttsp5_mt_gesture_report(struct cyttsp5_core_data *cd)
 	}
 
 	/*Gesture detected, report the event.*/
-	if (0 != reprot_gesture_key_value) {
+	if (KEY_WAKEUP == reprot_gesture_key_value) {
 		tp_log_warning("%s:reprot_gesture_key_value = %d\n", __func__, reprot_gesture_key_value);
-		input_report_key(cd->md.input, reprot_gesture_key_value, 1);
+
+		input_mt_slot(cd->md.input, 0);
+		input_mt_report_slot_state(cd->md.input, MT_TOOL_FINGER, 1);
 		input_sync(cd->md.input);
-		input_report_key(cd->md.input, reprot_gesture_key_value, 0);
+		input_mt_slot(cd->md.input, 0);
+		input_mt_report_slot_state(cd->md.input, MT_TOOL_FINGER, 0);
 		input_sync(cd->md.input);
 	}
 
