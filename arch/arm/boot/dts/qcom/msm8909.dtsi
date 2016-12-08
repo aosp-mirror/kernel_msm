@@ -1161,6 +1161,11 @@
 			compatible = "qcom,msm-imem-restart_reason";
 			reg = <0x65c 4>;
 		};
+
+		panel_log_lk@c0 {
+			compatible = "qcom,msm-imem-panel_log_lk";
+			reg = <0xc0 8>;
+		};
 	};
 
 	qcom,mpm2-sleep-counter@4a3000 {

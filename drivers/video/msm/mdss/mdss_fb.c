@@ -82,6 +82,8 @@
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
 
+static void *panel_lk_addr = NULL;
+
 static u32 mdss_fb_pseudo_palette[16] = {
 	0x00000000, 0xffffffff, 0xffffffff, 0xffffffff,
 	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
@@ -878,6 +880,24 @@ static ssize_t mdss_fb_set_ulps_mode(struct device *dev,
 	return count;
 }
 
+static ssize_t mdss_fb_get_lk_info(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	uint32_t read_val = 0;
+	int ret = 0;
+
+	if(panel_lk_addr){
+		read_val = __raw_readl(panel_lk_addr);
+		pr_err("The read value is 0x%02x",read_val);
+	}
+	else
+		pr_err("There is no error info\n");
+
+	ret = scnprintf(buf, PAGE_SIZE, "0x%02x\n",read_val);
+
+	return ret;
+}
+
 static ssize_t mdss_fb_set_boost_mode(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -973,7 +993,7 @@ static DEVICE_ATTR(idle_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL, mdss_fb_set_idl
 static DEVICE_ATTR(display_mode, S_IRUGO | S_IWUSR | S_IWGRP, mdss_fb_get_display_mode, NULL);
 static DEVICE_ATTR(panel_signature, S_IRUGO | S_IWUSR | S_IWGRP, mdss_fb_get_panel_signature, NULL);
 static DEVICE_ATTR(ulps_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL, mdss_fb_set_ulps_mode);
-static DEVICE_ATTR(boost_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL, mdss_fb_set_boost_mode);
+static DEVICE_ATTR(boost_mode, S_IRUGO | S_IWUSR | S_IWGRP, mdss_fb_get_lk_info, mdss_fb_set_boost_mode);
 static DEVICE_ATTR(acl_mode, S_IRUGO | S_IWUSR | S_IWGRP, NULL, mdss_fb_set_acl_mode);
 
 static struct attribute *mdss_fb_attrs[] = {
@@ -1252,6 +1272,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	struct mdss_panel_data *pdata;
 	struct fb_info *fbi;
 	int rc;
+	struct device_node *np;
 
 	if (fbi_list_index >= MAX_FBI_LIST)
 		return -ENOMEM;
@@ -1409,6 +1430,18 @@ static int mdss_fb_probe(struct platform_device *pdev)
 			pr_err("failed to register input handler\n");
 
 	INIT_DELAYED_WORK(&mfd->idle_notify_work, __mdss_fb_idle_notify_work);
+
+	np = of_find_compatible_node(NULL, NULL,
+				"qcom,msm-imem-panel_log_lk");
+
+	if (!np) {
+		pr_err("unable to find panel_lk_addr\n");
+	} else {
+		panel_lk_addr = of_iomap(np, 0);
+		if (!panel_lk_addr) {
+			pr_err("unable to map panel_lk_addr\n");
+		}
+	}
 
 	return rc;
 }
