@@ -780,6 +780,7 @@
 /* Power up/down Delays */
 #define DA7219_SETTLING_DELAY	40
 #define DA7219_MIN_GAIN_DELAY	30
+#define DA7219_MIXIN_PGA_DELAY	70
 
 enum da7219_clk_src {
 	DA7219_CLKSRC_MCLK = 0,

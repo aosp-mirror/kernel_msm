@@ -766,6 +766,20 @@ static const struct snd_kcontrol_new da7219_st_out_filtr_mix_controls[] = {
  * DAPM Events
  */
 
+static int da7219_mixin_pga_event(struct snd_soc_dapm_widget *w,
+				  struct snd_kcontrol *kcontrol, int event)
+{
+	switch (event) {
+	case SND_SOC_DAPM_POST_PMU:
+		msleep(DA7219_MIXIN_PGA_DELAY);
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
 static int da7219_dai_event(struct snd_soc_dapm_widget *w,
 			    struct snd_kcontrol *kcontrol, int event)
 {
@@ -920,9 +934,10 @@ static const struct snd_soc_dapm_widget da7219_dapm_widgets[] = {
 	SND_SOC_DAPM_PGA("Mic PGA", DA7219_MIC_1_CTRL,
 			 DA7219_MIC_1_AMP_EN_SHIFT, DA7219_NO_INVERT,
 			 NULL, 0),
-	SND_SOC_DAPM_PGA("Mixin PGA", DA7219_MIXIN_L_CTRL,
-			 DA7219_MIXIN_L_AMP_EN_SHIFT, DA7219_NO_INVERT,
-			 NULL, 0),
+	SND_SOC_DAPM_PGA_E("Mixin PGA", DA7219_MIXIN_L_CTRL,
+			   DA7219_MIXIN_L_AMP_EN_SHIFT, DA7219_NO_INVERT,
+			   NULL, 0, da7219_mixin_pga_event,
+			   SND_SOC_DAPM_POST_PMU),
 
 	/* Input Filters */
 	SND_SOC_DAPM_ADC("ADC", NULL, DA7219_ADC_L_CTRL, DA7219_ADC_L_EN_SHIFT,
