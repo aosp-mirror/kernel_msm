@@ -416,9 +416,9 @@
 		qcom,audio-routing =
 			"DA7219 Headphone Jack", "HPL",
 			"DA7219 Headphone Jack", "HPR",
-			"Playback", "SEC_MI2S_RX",
+			"Playback", "Secondary MI2S Playback",
 			"MIC", "DA7219 Headset Mic",
-			"SEC_MI2S_TX", "Capture",
+			"Secondary MI2S Capture", "Capture",
 			"AMIC5", "MIC BIAS3",
 			"AMIC6", "MIC BIAS3",
 			"MIC BIAS3", "Loopback Input",
