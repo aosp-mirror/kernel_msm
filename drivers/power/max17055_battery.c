@@ -490,6 +490,7 @@ static int max17055_set_property(struct power_supply *psy,
 			}
 
 			max17055_write_verify_reg(map, MAX17055_FullCapRep, data);
+			max17055_write_verify_reg(map, MAX17055_RepSOC, (SOC_MAX << 8));
 			power_supply_changed(&chip->battery);
 		}
 		break;
