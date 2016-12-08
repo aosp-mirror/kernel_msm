@@ -454,7 +454,7 @@ uint32_t lim_get_max_rate_flags(tpAniSirGlobal mac_ctx, tpDphHashNode sta_ds);
 
 #ifdef WLAN_FEATURE_11AC
 tANI_BOOLEAN limCheckVHTOpModeChange( tpAniSirGlobal pMac, tpPESession psessionEntry,
-                                      tANI_U8 chanWidth, tANI_U8 staId, tANI_U8 *peerMac);
+                                      tANI_U8 chanWidth, tANI_U8 chanMode, tANI_U8 staId, tANI_U8 *peerMac);
 tANI_BOOLEAN limSetNssChange( tpAniSirGlobal pMac, tpPESession psessionEntry,
                               tANI_U8 rxNss, tANI_U8 staId, tANI_U8 *peerMac);
 tANI_BOOLEAN limCheckMembershipUserPosition( tpAniSirGlobal pMac, tpPESession psessionEntry,

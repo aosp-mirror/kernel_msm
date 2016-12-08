@@ -23878,11 +23878,34 @@ static void wma_finish_scan_req(tp_wma_handle wma_handle,
 static void wma_process_update_opmode(tp_wma_handle wma_handle,
                                 tUpdateVHTOpMode *update_vht_opmode)
 {
-        WMA_LOGD("%s: opMode = %d", __func__, update_vht_opmode->opMode);
+	struct wma_txrx_node *iface;
+	WLAN_PHY_MODE  chanMode;
+	wmi_channel_width chanwidth;
 
-        wma_set_peer_param(wma_handle, update_vht_opmode->peer_mac,
-                           WMI_PEER_CHWIDTH, update_vht_opmode->opMode,
-                           update_vht_opmode->smesessionId);
+	iface = &wma_handle->interfaces[update_vht_opmode->smesessionId];
+	if (update_vht_opmode->chanMode == MODE_MAX)
+		chanMode = iface->chanmode;
+	else
+		chanMode = update_vht_opmode->chanMode;
+
+	WMA_LOGD("%s: opMode = %d, chanMode = %d",
+		__func__, update_vht_opmode->opMode, chanMode);
+
+	chanwidth = chanmode_to_chanwidth(chanMode);
+	if (chanwidth < update_vht_opmode->opMode) {
+		WMA_LOGE("%s: stop changing chanwidth from %d to %d,",
+			__func__,
+			chanwidth, update_vht_opmode->opMode);
+	} else {
+		iface->chanmode = chanMode;
+		wma_set_peer_param(wma_handle, update_vht_opmode->peer_mac,
+				WMI_PEER_PHYMODE, chanMode,
+				update_vht_opmode->smesessionId);
+
+		wma_set_peer_param(wma_handle, update_vht_opmode->peer_mac,
+				WMI_PEER_CHWIDTH, update_vht_opmode->opMode,
+				update_vht_opmode->smesessionId);
+	}
 }
 
 static void wma_process_update_rx_nss(tp_wma_handle wma_handle,
