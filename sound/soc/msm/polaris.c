@@ -130,7 +130,7 @@ struct mi2s_aux_pcm_common_conf {
 
 struct mi2s_conf {
 	struct mutex lock;
-	u32 ref_cnt;
+	int clock_owner_stream;
 	u32 msm_is_mi2s_master;
 };
 
@@ -3635,33 +3635,32 @@ static u32 get_mi2s_bits_per_sample(u32 bit_format)
 	return bit_per_sample;
 }
 
-static void update_mi2s_clk_val(int dai_id, int stream)
+static void update_mi2s_clk_val(int dai_id, int stream, u32 bit_format)
 {
-	u32 bit_per_sample;
+	u32 bit_per_sample = get_mi2s_bits_per_sample(bit_format);
 
-	if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		bit_per_sample =
-		    get_mi2s_bits_per_sample(mi2s_rx_cfg[dai_id].bit_format);
+	if (stream == SNDRV_PCM_STREAM_PLAYBACK)
 		mi2s_clk[dai_id].clk_freq_in_hz =
-		    mi2s_rx_cfg[dai_id].sample_rate * 2 * bit_per_sample;
-	} else {
-		bit_per_sample =
-		    get_mi2s_bits_per_sample(mi2s_tx_cfg[dai_id].bit_format);
+		    mi2s_rx_cfg[dai_id].sample_rate *
+		    mi2s_rx_cfg[dai_id].channels * bit_per_sample;
+	else
 		mi2s_clk[dai_id].clk_freq_in_hz =
-		    mi2s_tx_cfg[dai_id].sample_rate * 2 * bit_per_sample;
-	}
+		    mi2s_tx_cfg[dai_id].sample_rate *
+		    mi2s_tx_cfg[dai_id].channels * bit_per_sample;
 
 	if (!mi2s_intf_conf[dai_id].msm_is_mi2s_master)
 		mi2s_clk[dai_id].clk_freq_in_hz = 0;
 }
 
-static int msm_mi2s_set_sclk(struct snd_pcm_substream *substream, bool enable)
+static int msm_mi2s_set_sclk(struct snd_pcm_substream *substream,
+			     struct snd_pcm_hw_params *params)
 {
 	int ret = 0;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	int port_id = 0;
 	int index = cpu_dai->id;
+	snd_pcm_format_t format;
 
 	port_id = msm_get_port_id(rtd->dai_link->be_id);
 	if (IS_ERR_VALUE(port_id)) {
@@ -3670,14 +3669,21 @@ static int msm_mi2s_set_sclk(struct snd_pcm_substream *substream, bool enable)
 		goto done;
 	}
 
-	if (enable) {
-		update_mi2s_clk_val(index, substream->stream);
-		dev_dbg(rtd->card->dev, "%s: clock rate %ul\n", __func__,
+	if (params) {
+		format = params_format(params);
+		mi2s_clk[index].enable = 1;
+		update_mi2s_clk_val(index, substream->stream, format);
+		dev_dbg(rtd->card->dev,
+			"%s: format: %u, width: %d, clock rate %ul\n",
+			__func__, format,
+			snd_pcm_format_physical_width(format),
 			mi2s_clk[index].clk_freq_in_hz);
 	}
+	else {
+		mi2s_clk[index].enable = 0;
+	}
 
-	mi2s_clk[index].enable = enable;
-	ret = afe_set_lpass_clock_v2(port_id,
+ 	ret = afe_set_lpass_clock_v2(port_id,
 				     &mi2s_clk[index]);
 	if (ret < 0) {
 		dev_err(rtd->card->dev,
@@ -3716,14 +3722,8 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 	 * that the same clock won't be enable twice.
 	 */
 	mutex_lock(&mi2s_intf_conf[index].lock);
-	if (++mi2s_intf_conf[index].ref_cnt == 1) {
-		ret = msm_mi2s_set_sclk(substream, true);
-		if (IS_ERR_VALUE(ret)) {
-			dev_err(rtd->card->dev,
-				"%s: afe lpass clock failed to enable MI2S clock, err:%d\n",
-				__func__, ret);
-			goto clean_up;
-		}
+	if (mi2s_intf_conf[index].clock_owner_stream == -1) {
+		mi2s_intf_conf[index].clock_owner_stream = substream->stream;
 		if (mi2s_auxpcm_conf[index].pcm_i2s_sel_vt_addr != NULL) {
 			mutex_lock(&mi2s_auxpcm_conf[index].lock);
 			iowrite32(0,
@@ -3734,7 +3734,7 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 				"%s lpaif_muxsel_virt_addr is NULL for dai %d\n",
 				__func__, index);
 			ret = -EINVAL;
-			goto clk_off;
+			goto clean_up;
 		}
 		/* Check if msm needs to provide the clock to the interface */
 		if (!mi2s_intf_conf[index].msm_is_mi2s_master)
@@ -3743,17 +3743,45 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 		if (IS_ERR_VALUE(ret)) {
 			pr_err("%s: set fmt cpu dai failed for MI2S (%d), err:%d\n",
 				__func__, index, ret);
-			goto clk_off;
+			goto clean_up;
 		}
 	}
-clk_off:
-	if (IS_ERR_VALUE(ret))
-		msm_mi2s_set_sclk(substream, false);
 clean_up:
 	if (IS_ERR_VALUE(ret))
-		mi2s_intf_conf[index].ref_cnt--;
+		mi2s_intf_conf[index].clock_owner_stream = -1;
 	mutex_unlock(&mi2s_intf_conf[index].lock);
 done:
+	return ret;
+}
+
+static int msm_mi2s_snd_hw_params(struct snd_pcm_substream *substream,
+				  struct snd_pcm_hw_params *params)
+{
+	int ret = 0;
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	int index = cpu_dai->id;
+
+	dev_dbg(rtd->card->dev,
+		"%s: substream = %s  stream = %d, dai name %s, dai ID %d\n",
+		__func__, substream->name, substream->stream,
+		cpu_dai->name, cpu_dai->id);
+
+	/*
+	 * Mutex protection in case the same MI2S
+	 * interface using for both TX and RX  so
+	 * that the same clock won't be enable twice.
+	 */
+	mutex_lock(&mi2s_intf_conf[index].lock);
+	if (mi2s_intf_conf[index].clock_owner_stream == substream->stream) {
+		ret = msm_mi2s_set_sclk(substream, params);
+		if (IS_ERR_VALUE(ret)) {
+			dev_err(rtd->card->dev,
+				"%s: afe lpass clock failed to enable MI2S clock, err:%d\n",
+				__func__, ret);
+		}
+	}
+	mutex_unlock(&mi2s_intf_conf[index].lock);
 	return ret;
 }
 
@@ -3771,12 +3799,12 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 	}
 
 	mutex_lock(&mi2s_intf_conf[index].lock);
-	if (--mi2s_intf_conf[index].ref_cnt == 0) {
-		ret = msm_mi2s_set_sclk(substream, false);
+	if (mi2s_intf_conf[index].clock_owner_stream == substream->stream) {
+		mi2s_intf_conf[index].clock_owner_stream = -1;
+		ret = msm_mi2s_set_sclk(substream, NULL);
 		if (ret < 0) {
 			pr_err("%s:clock disable failed for MI2S (%d); ret=%d\n",
 				__func__, index, ret);
-			mi2s_intf_conf[index].ref_cnt++;
 		}
 	}
 	mutex_unlock(&mi2s_intf_conf[index].lock);
@@ -3789,6 +3817,11 @@ static int da7219_mi2s_snd_hw_params(struct snd_pcm_substream *substream,
 	int sample_rate = params->rate_num / params->rate_den;
 	int mclk_rate = Q6AFE_LPASS_IBIT_CLK_12_P288_MHZ;
 	int ret;
+
+	/* First setup the bit clock. */
+	ret = msm_mi2s_snd_hw_params(substream, params);
+	if (ret)
+		return ret;
 
 	/* For a 48KHz family sample rate, use a 12.288MHz MCLK.
 	 * For a 44.1KHz family sample rate, use a 11.2896MHz clock.
@@ -3825,6 +3858,7 @@ static int da7219_mi2s_snd_hw_params(struct snd_pcm_substream *substream,
 static struct snd_soc_ops msm_mi2s_be_ops = {
 	.startup = msm_mi2s_snd_startup,
 	.shutdown = msm_mi2s_snd_shutdown,
+	.hw_params = msm_mi2s_snd_hw_params,
 };
 
 static struct snd_soc_ops da7219_mi2s_be_ops = {
@@ -5836,7 +5870,7 @@ static void i2s_auxpcm_init(struct platform_device *pdev)
 
 	for (count = 0; count < MI2S_MAX; count++) {
 		mutex_init(&mi2s_intf_conf[count].lock);
-		mi2s_intf_conf[count].ref_cnt = 0;
+		mi2s_intf_conf[count].clock_owner_stream = -1;
 	}
 
 	for (count = 0; count < AUX_PCM_MAX; count++) {
