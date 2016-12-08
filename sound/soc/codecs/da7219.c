@@ -1489,7 +1489,8 @@ static const struct snd_soc_dai_ops da7219_dai_ops = {
 };
 
 #define DA7219_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
-			SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
+			SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S24_3LE |\
+			SNDRV_PCM_FMTBIT_S32_LE)
 
 static struct snd_soc_dai_driver da7219_dai = {
 	.name = "da7219-hifi",
