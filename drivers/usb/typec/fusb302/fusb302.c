@@ -675,7 +675,40 @@ static int tcpm_get_cc(struct tcpc_dev *dev, enum typec_cc_status *cc1,
 static int tcpm_set_polarity(struct tcpc_dev *dev,
 			     enum typec_cc_polarity polarity)
 {
-	return 0;
+	struct fusb302_chip *chip = container_of(dev, struct fusb302_chip,
+						 tcpc_dev);
+	int ret = 0;
+	struct pinctrl_state *set_state;
+
+	mutex_lock(&chip->lock);
+
+	fusb302_log("polarity := %d\n", polarity);
+
+	if (!chip->gpio_pinctrl) {
+		fusb302_log("gpio_pinctrl is not avalible\n");
+		ret = -EFAULT;
+		goto done;
+	}
+
+	set_state = pinctrl_lookup_state(chip->gpio_pinctrl,
+					 polarity ? "usb3_switch_sel_1" :
+						    "usb3_switch_sel_0");
+	if (IS_ERR(set_state)) {
+		ret = PTR_ERR(set_state);
+		fusb302_log(
+			"cannot get fusb302 gpio_pinctrl usb3_switch_sel_%d state, ret=%d\n",
+			polarity,
+			ret);
+		goto done;
+	}
+
+	ret = pinctrl_select_state(chip->gpio_pinctrl, set_state);
+	if (ret < 0)
+		fusb302_log("cannot select state, ret=%d\n", ret);
+done:
+	mutex_unlock(&chip->lock);
+
+	return ret;
 }
 
 static int tcpm_set_vconn(struct tcpc_dev *dev, bool on)
