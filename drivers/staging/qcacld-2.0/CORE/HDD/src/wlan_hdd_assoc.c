@@ -4014,7 +4014,7 @@ hdd_smeRoamCallback(void *pContext, tCsrRoamInfo *pRoamInfo, tANI_U32 roamId,
                 }
 
                 halStatus = hdd_RoamSetKeyCompleteHandler( pAdapter, pRoamInfo, roamId, roamStatus, roamResult );
-                if ((eCSR_ROAM_RESULT_AUTHENTICATED == roamResult) ||
+                if ((eCSR_ROAM_RESULT_NONE == roamResult) ||
                     (pRoamInfo && pRoamInfo->is11rAssoc)) {
                     pHddStaCtx->hdd_ReassocScenario = VOS_FALSE;
                     hddLog(LOG1,
