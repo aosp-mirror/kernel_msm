@@ -10787,10 +10787,10 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
         {
             pHddCtx->last_scan_reject_session_id = curr_session_id;
             pHddCtx->last_scan_reject_reason = curr_reason;
-            pHddCtx->last_scan_reject_timestamp = vos_timer_get_system_time();
+            pHddCtx->last_scan_reject_timestamp = jiffies_to_msecs(jiffies);
         }
         else {
-            if ((vos_timer_get_system_time() -
+            if ((jiffies_to_msecs(jiffies) -
                  pHddCtx->last_scan_reject_timestamp) >=
                 SCAN_REJECT_THRESHOLD_TIME)
             {
