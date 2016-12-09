@@ -253,6 +253,10 @@ struct service *service_new(void)
 	idr_init(&svc->s_message_idr);
 	idr_init(&svc->s_channel_idr);
 
+	// Disable RCU free.
+	svc->s_message_idr.no_rcu_free = true;
+	svc->s_channel_idr.no_rcu_free = true;
+
 	svc->s_message_start = 0;
 	svc->s_channel_start = 0;
 
