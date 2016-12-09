@@ -2237,6 +2237,11 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip, int *batt_temp)
 	int rc;
 	struct qpnp_vadc_result result;
 
+	if (is_fake_battery) {
+		*batt_temp = DEFAULT_BATT_TEMP;
+		return 0;
+	}
+
 	rc = qpnp_vadc_read(chip->vadc_dev, LR_MUX1_BATT_THERM, &result);
 	if (rc) {
 		pr_err("error reading adc channel = %d, rc = %d\n",
