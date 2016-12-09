@@ -154,47 +154,59 @@ typedef struct {
 } hif_irq_history;
 
 #define HIF_IRQ_HISTORY_MAX 1024
-A_UINT32 g_hif_irq_history_idx = 0;
+adf_os_atomic_t g_hif_irq_history_idx;
 hif_irq_history hif_irq_history_buffer[HIF_IRQ_HISTORY_MAX];
 
-void hif_irq_record(hif_irq_type type, struct hif_pci_softc *sc)
+static void hif_irq_record(hif_irq_type type, struct hif_pci_softc *sc)
 {
 	struct HIF_CE_state *hif_state = (struct HIF_CE_state *)sc->hif_device;
 	A_target_id_t targid = hif_state->targid;
 
-	if (HIF_IRQ_HISTORY_MAX <= g_hif_irq_history_idx)
-		g_hif_irq_history_idx = 0;
+	int record_index = get_next_record_index(
+			&g_hif_irq_history_idx, HIF_IRQ_HISTORY_MAX);
 
 	if (HIFTargetSleepStateAdjust(hif_state->targid, FALSE, TRUE) < 0) {
-		adf_os_mem_zero(&hif_irq_history_buffer[g_hif_irq_history_idx],
+		adf_os_mem_zero(&hif_irq_history_buffer[record_index],
 				sizeof(hif_irq_history));
 		goto out;
 	}
 
-	hif_irq_history_buffer[g_hif_irq_history_idx].irq_summary =
+	hif_irq_history_buffer[record_index].irq_summary =
 			CE_INTERRUPT_SUMMARY(targid);
-	hif_irq_history_buffer[g_hif_irq_history_idx].fw_indicator =
+	hif_irq_history_buffer[record_index].fw_indicator =
 			A_TARGET_READ(targid, hif_state->fw_indicator_address);
-	hif_irq_history_buffer[g_hif_irq_history_idx].irq_enable =
+	hif_irq_history_buffer[record_index].irq_enable =
 			A_PCI_READ32(sc->mem + SOC_CORE_BASE_ADDRESS +
 				PCIE_INTR_ENABLE_ADDRESS);
-	hif_irq_history_buffer[g_hif_irq_history_idx].irq_cause =
+	hif_irq_history_buffer[record_index].irq_cause =
 			A_PCI_READ32(sc->mem + SOC_CORE_BASE_ADDRESS +
 				PCIE_INTR_CAUSE_ADDRESS);
-	hif_irq_history_buffer[g_hif_irq_history_idx].irq_clear =
+	hif_irq_history_buffer[record_index].irq_clear =
 			A_PCI_READ32(sc->mem + SOC_CORE_BASE_ADDRESS +
 				PCIE_INTR_CLR_ADDRESS);
 
 	HIFTargetSleepStateAdjust(hif_state->targid, TRUE, FALSE);
 
 out:
-	hif_irq_history_buffer[g_hif_irq_history_idx].type = type;
-	hif_irq_history_buffer[g_hif_irq_history_idx].time = adf_get_boottime();
+	hif_irq_history_buffer[record_index].type = type;
+	hif_irq_history_buffer[record_index].time = adf_get_boottime();
 
-	g_hif_irq_history_idx++;
 }
+
+/**
+ * hif_irq_record_index_init() - initialize the hif irq index
+ *
+ * initialize the hif irq record index.
+ * Return: none
+ */
+static void hif_irq_record_index_init(void)
+{
+	adf_os_atomic_init(&g_hif_irq_history_idx);
+}
+
 #else
-void hif_irq_record(hif_irq_type type, struct hif_pci_softc *sc) {};
+static void hif_irq_record(hif_irq_type type, struct hif_pci_softc *sc) {};
+static void hif_irq_record_index_init(void) {};
 #endif
 
 #ifndef REMOVE_PKT_LOG
@@ -1739,6 +1751,7 @@ again:
 #endif
     adf_os_atomic_init(&sc->ce_suspend);
     adf_os_atomic_init(&sc->pci_link_suspended);
+    hif_irq_record_index_init();
     init_waitqueue_head(&ol_sc->sc_osdev->event_queue);
 
     ret = hif_init_adf_ctx(ol_sc);

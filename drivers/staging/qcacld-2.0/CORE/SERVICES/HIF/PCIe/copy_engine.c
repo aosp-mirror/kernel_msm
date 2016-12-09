@@ -103,7 +103,7 @@ static void CE_init_ce_desc_event_log(int ce_id, int size);
  * trying to access the array, full locking of the recording process would
  * be needed to have sane logging.
  */
-static int get_next_record_index(adf_os_atomic_t *table_index, int array_size)
+int get_next_record_index(adf_os_atomic_t *table_index, int array_size)
 {
 	int record_index = adf_os_atomic_inc_return(table_index);
 	if (record_index == array_size)
