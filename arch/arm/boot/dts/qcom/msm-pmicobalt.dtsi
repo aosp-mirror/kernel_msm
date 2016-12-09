@@ -596,8 +596,8 @@
 			qcom,fdbk-output = "auto";
 			qcom,vref-mv = <350>;
 			qcom,switch-freq-khz = <800>;
-			qcom,ovp-mv = <29500>;
-			qcom,ilim-ma = <980>;
+			qcom,ovp-mv = <29600>;
+			qcom,ilim-ma = <970>;
 			qcom,boost-duty-ns = <26>;
 			qcom,mod-freq-khz = <9600>;
 			qcom,dim-mode = "hybrid";
@@ -608,6 +608,7 @@
 			qcom,en-phase-stag;
 			qcom,led-strings-list = [00 01 02 03];
 			qcom,en-ext-pfet-sc-pro;
+			qcom,pmic-revid = <&pmicobalt_revid>;
 		};
 
 		pmicobalt_haptics: qcom,haptic@c000 {
@@ -740,7 +741,7 @@
 				qcom,led-mask = <3>;
 				qcom,default-led-trigger = "switch0_trigger";
 				reg0 {
-					regulator-name = "pmcobalt_bob";
+					regulator-name = "pmicobalt_bob";
 					max-voltage-uv = <3600000>;
 				};
 			};
@@ -751,7 +752,7 @@
 				qcom,led-mask = <4>;
 				qcom,default-led-trigger = "switch1_trigger";
 				reg0 {
-					regulator-name = "pmcobalt_bob";
+					regulator-name = "pmicobalt_bob";
 					max-voltage-uv = <3600000>;
 				};
 			};

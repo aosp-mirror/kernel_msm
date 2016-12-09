@@ -506,8 +506,7 @@ static int fg_get_cc_soc_sw(struct fg_chip *chip, int *val)
 #define BATT_TEMP_DENR		1
 static int fg_get_battery_temp(struct fg_chip *chip, int *val)
 {
-	int rc = 0;
-	u16 temp = 0;
+	int rc = 0, temp;
 	u8 buf[2];
 
 	rc = fg_read(chip, BATT_INFO_BATT_TEMP_LSB(chip), buf, 2);
@@ -656,11 +655,35 @@ static int fg_get_msoc_raw(struct fg_chip *chip, int *val)
 	return 0;
 }
 
+#define DEBUG_BATT_ID_KOHMS	7
+static bool is_debug_batt_id(struct fg_chip *chip)
+{
+	int batt_id_delta = 0;
+
+	if (!chip->batt_id_kohms)
+		return false;
+
+	batt_id_delta = abs(chip->batt_id_kohms - DEBUG_BATT_ID_KOHMS);
+	if (batt_id_delta <= 1) {
+		fg_dbg(chip, FG_POWER_SUPPLY, "Debug battery id: %dKohms\n",
+			chip->batt_id_kohms);
+		return true;
+	}
+
+	return false;
+}
+
 #define FULL_CAPACITY	100
 #define FULL_SOC_RAW	255
+#define DEBUG_BATT_SOC	67
 static int fg_get_prop_capacity(struct fg_chip *chip, int *val)
 {
 	int rc, msoc;
+
+	if (is_debug_batt_id(chip)) {
+		*val = DEBUG_BATT_SOC;
+		return 0;
+	}
 
 	if (chip->charge_full) {
 		*val = FULL_CAPACITY;
@@ -726,7 +749,7 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 	}
 
 	batt_id /= 1000;
-	chip->batt_id = batt_id;
+	chip->batt_id_kohms = batt_id;
 	batt_node = of_find_node_by_name(node, "qcom,battery-data");
 	if (!batt_node) {
 		pr_err("Batterydata not available\n");
@@ -925,10 +948,11 @@ static int fg_load_learned_cap_from_sram(struct fg_chip *chip)
 	}
 
 	chip->cl.learned_cc_uah = act_cap_mah * 1000;
-	if (chip->cl.learned_cc_uah == 0)
-		chip->cl.learned_cc_uah = chip->cl.nom_cap_uah;
 
 	if (chip->cl.learned_cc_uah != chip->cl.nom_cap_uah) {
+		if (chip->cl.learned_cc_uah == 0)
+			chip->cl.learned_cc_uah = chip->cl.nom_cap_uah;
+
 		delta_cc_uah = abs(chip->cl.learned_cc_uah -
 					chip->cl.nom_cap_uah);
 		pct_nom_cap_uah = div64_s64((int64_t)chip->cl.nom_cap_uah *
@@ -2612,7 +2636,7 @@ static int fg_parse_dt(struct fg_chip *chip)
 	rc = fg_get_batt_profile(chip);
 	if (rc < 0)
 		pr_warn("profile for batt_id=%dKOhms not found..using OTP, rc:%d\n",
-			chip->batt_id, rc);
+			chip->batt_id_kohms, rc);
 
 	/* Read all the optional properties below */
 	rc = of_property_read_u32(node, "qcom,fg-cutoff-voltage", &temp);
