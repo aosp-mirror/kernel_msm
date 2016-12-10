@@ -443,7 +443,7 @@
 		qcom,soft-temp-current-comp-ma = <150>;
 		qcom,chg-inhibit-disabled;
 		qcom,apsd-disabled;
-		qcom,thermal-mitigation = <1500 900 500 100>;
+		qcom,thermal-mitigation = <1000 500 300 100>;
 		qcom,smb23x-vadc = <&pm8916_vadc>;
 	};
 	max17055@36 {
@@ -460,12 +460,12 @@
 		maxim,config-type = <3>;		/*EZ:1 SHORT: 2 FULL: 3*/
 		maxim,cold-temp = <(-450)>;		/*Temp is scaled by 10 to reserve more precise*/
 		maxim,over-heat-temp = <1000>;	/*Temp is scaled by 10 to reserve more precise*/
-		maxim,dead-volt = <2800>;		/*Dead voltage in millivolts*/
+		maxim,dead-volt = <3000>;		/*Dead voltage in millivolts*/
 		maxim,over-volt = <4500>;		/*Over voltage in millivolts*/
 		maxim,enable-por-init;			/*Comment out this line to ignore the configuration data*/
 		maxim,config-data = /bits/ 16 <
-			0x0000 0x0000 0x0000 0x0000 0x0000		/* A/D measurement */
-			0x0000 0x0000 0x0000 0x0000 0x0000 0x00d8 0xe000	/* Alert / Status */
+			0x0000 0x0000 0x0000 0x03D7 0x0000		/* A/D measurement */
+			0x0FB5 0xE196 0x0000 0x0000 0x2214 0x00d8 0xe000	/* Alert / Status */
 			0x0000 0x0000 0x040c 0x00c0 0x0000 0xaa64 0x8400	/* App data */
 			0x0000 0x4412 0x0000 0x0000 0x0000 0x860b		/* Configs */
 			0x0049 0x343f 0x5400 0x2483 0x0c86 0x0a07		/* Cell Data */

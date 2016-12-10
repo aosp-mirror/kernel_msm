@@ -2280,7 +2280,7 @@ static int smb23x_system_temp_level_set(struct smb23x_chip *chip, int lvl_sel)
 
 	mutex_lock(&chip->icl_set_lock);
 	chip->therm_lvl_sel = lvl_sel;
-
+	pr_info("chip->therm_lvl_sel:%d\n", chip->therm_lvl_sel);
 	rc = smb23x_set_appropriate_usb_current(chip);
 	if (rc)
 		pr_err("Couldn't set USB current rc = %d\n", rc);
@@ -2453,7 +2453,7 @@ static void smb23x_external_power_changed(struct power_supply *psy)
 		pr_err("Get CURRENT_MAX from usb failed, rc=%d\n", rc);
 	else
 		icl = prop.intval / 1000;
-	pr_debug("current_limit = %d\n", icl);
+	pr_info("current_limit = %d\n", icl);
 
 	if (chip->usb_psy_ma != icl) {
 		mutex_lock(&chip->icl_set_lock);

@@ -20,6 +20,7 @@
  *
  * This driver is based on max17042_battery.c
  */
+#define pr_fmt(fmt) "MAX17055:%s: " fmt, __func__
 
 #include <linux/init.h>
 #include <linux/module.h>
@@ -36,7 +37,9 @@
 
 /* Status register bits */
 #define STATUS_POR_BIT			(1 << 1)
+#define STATUS_IMIN_BIT			(1 << 2)
 #define STATUS_BST_BIT			(1 << 3)
+#define STATUS_IMAX_BIT			(1 << 6)
 #define STATUS_SOCI_BIT			(1 << 7)
 #define STATUS_VMN_BIT			(1 << 8)
 #define STATUS_TMN_BIT			(1 << 9)
@@ -63,6 +66,7 @@
 #define MODEL_LOCK2		0X0000
 
 #define MAX17055_VMAX_TOLERANCE		50			/* 50 mV */
+#define MAX17055_SOC_ROUND_THD		0x5000		/* 80% */
 #define MAX17055_IC_VERSION_A		0x4000
 #define MAX17055_IC_VERSION_B		0x4010
 #define MAX17055_DRIVER_VERSION		0x1018
@@ -266,9 +270,10 @@ static int max17055_get_property(struct power_supply *psy,
 		if (ret < 0)
 			return ret;
 
-		val->intval = data >> 8;
-		if ((data & 0xf0) > 0)
-			val->intval = val->intval + 1;
+		if (data > MAX17055_SOC_ROUND_THD)
+			val->intval = (data + 0x7f) >> 8;
+		else
+			val->intval = data >> 8;
 
 		if (val->intval > 100)
 			val->intval = 100;
@@ -781,6 +786,10 @@ static irqreturn_t max17055_thread_handler(int id, void *dev)
 {
 	struct max17055_chip *chip = dev;
 	u32 val = 0;
+	static int max_current_alert_num = 0;
+	static int min_current_alert_num = 0;
+	static int max_voltage_alert_num = 0;
+	static int min_voltage_alert_num = 0;
 
 	regmap_read(chip->regmap, MAX17055_Status, &val);
 	if (val) {
@@ -793,8 +802,26 @@ static irqreturn_t max17055_thread_handler(int id, void *dev)
 		if (val & STATUS_BI_BIT)
 			dev_info(&chip->client->dev, "Battery inserted\n");
 
-		if (val & STATUS_BR_BIT)
-			dev_info(&chip->client->dev, "Battery removed\n");
+		if (val & STATUS_IMIN_BIT) {
+			min_current_alert_num++;
+			dev_info(&chip->client->dev, "current below min set,times:%d\n", min_current_alert_num);
+		}
+
+		if (val & STATUS_IMAX_BIT) {
+			max_current_alert_num++;
+			dev_info(&chip->client->dev, "current above max set\n");
+		}
+
+		if (val & STATUS_VMN_BIT) {
+			min_voltage_alert_num++;
+			dev_info(&chip->client->dev, "Voltage below min set,times:%d\n", min_voltage_alert_num);
+		}
+
+		if (val & STATUS_VMX_BIT) {
+			max_voltage_alert_num++;
+			dev_info(&chip->client->dev, "Voltage above max set number is:%d\n", max_voltage_alert_num);
+		}
+
 
 		/*Clear the alert bits*/
 		regmap_update_bits(chip->regmap, MAX17055_Status, STATUS_BST_BIT | STATUS_SOCI_BIT
