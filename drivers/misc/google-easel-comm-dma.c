@@ -586,6 +586,11 @@ int easelcomm_receive_dma(
 	if (!msg_metadata->msg->desc.dma_buf_size)
 		goto out;
 
+	if (!access_ok(VERIFY_WRITE, buf_desc->buf, buf_desc->buf_size)) {
+		ret = -EFAULT;
+		goto out;
+	}
+
 	dma_dir = easelcomm_is_client() ?
 		EASELCOMM_DMA_DIR_TO_CLIENT : EASELCOMM_DMA_DIR_TO_SERVER;
 
@@ -657,6 +662,11 @@ int easelcomm_send_dma(
 			buf_desc->buf_size, buf_desc->message_id,
 			msg_metadata->msg->desc.dma_buf_size);
 		ret = -EINVAL;
+		goto out;
+	}
+
+	if (!access_ok(VERIFY_READ, buf_desc->buf, buf_desc->buf_size)) {
+		ret = -EFAULT;
 		goto out;
 	}
 
