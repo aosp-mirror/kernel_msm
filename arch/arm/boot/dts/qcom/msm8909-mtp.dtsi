@@ -355,18 +355,36 @@
 	pmx_mdss {
 		mdss_dsi_active: mdss_dsi_active {
 			mux {
-				pins = "gpio25", "gpio37";
+				pins = "gpio37";
 			};
 			config {
-				pins = "gpio25", "gpio37";
+				pins = "gpio37";
 			};
 		};
 		mdss_dsi_suspend: mdss_dsi_suspend {
 			mux {
-				pins = "gpio25", "gpio37";
+				pins = "gpio37";
 			};
 			config {
-				pins = "gpio25", "gpio37";
+				pins = "gpio37";
+			};
+		};
+	};
+	pmx_mdss_rst {
+		mdss_dsi_rst_active: mdss_dsi_rst_active {
+			mux {
+				pins = "gpio25";
+			};
+			config {
+				pins = "gpio25";
+			};
+		};
+		mdss_dsi_rst_suspend: mdss_dsi_rst_suspend {
+			mux {
+				pins = "gpio25";
+			};
+			config {
+				pins = "gpio25";
 			};
 		};
 	};
@@ -394,8 +412,8 @@
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_auo_w020_1p4_vid>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
-	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
-	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active &mdss_dsi_rst_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend &mdss_dsi_rst_suspend>;
 
 	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
 	qcom,platform-bklight-en-gpio = <&msm_gpio 37 0>;
