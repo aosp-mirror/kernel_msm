@@ -2076,7 +2076,7 @@ void PolicySinkWaitCaps(void)
     }
 }
 
-extern u8 platform_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], int *device_max_ma);
+extern FSC_S32 platform_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], int *device_max_ma);
 
 void PolicySinkEvaluateCaps(void)
 {

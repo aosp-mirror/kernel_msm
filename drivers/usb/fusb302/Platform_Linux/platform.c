@@ -384,7 +384,7 @@ void platform_notify_attached_source(int value)
 		dual_role_instance_changed(chip->fusb_instance);
 }
 
-u8 platform_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], int *device_max_ma)
+FSC_S32 platform_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], int *device_max_ma)
 {
     return fusb_battery_select_source_capability(obj_cnt, pd_data, device_max_ma);
 }

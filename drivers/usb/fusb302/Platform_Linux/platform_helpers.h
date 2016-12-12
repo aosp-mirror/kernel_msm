@@ -71,7 +71,7 @@ FSC_BOOL fusb_GPIO_Get_IntN(void);
 ********************************************************************************/
 FSC_BOOL fusb_Power_Vconn(FSC_BOOL set);
 
-u8 fusb_battery_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], int *device_max_ma);
+FSC_S32 fusb_battery_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], int *device_max_ma);
 
 
 #ifdef FSC_DEBUG
