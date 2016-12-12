@@ -1278,8 +1278,11 @@ static int get_prop_batt_status(struct fan5451x_chip *chip)
 
 	/* remain FULL state instead of DISCHARGING state
 	 * after WLC Rx Off on raising EOC. */
-	if (stat[1] & STAT1_CHGCMP || chip->full)
+	if (chip->full)
 		return POWER_SUPPLY_STATUS_FULL;
+
+	if (chip->eoc || !chip->enable)
+		return POWER_SUPPLY_STATUS_NOT_CHARGING;
 
 	if (!(stat[0] & (chip->register_base.stat0_vinpwr |
 			chip->register_base.stat0_vbuspwr)))
