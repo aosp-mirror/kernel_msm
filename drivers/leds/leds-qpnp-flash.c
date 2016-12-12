@@ -390,15 +390,16 @@ static ssize_t qpnp_flash_led_max_current_show(struct device *dev,
 	flash_node = container_of(led_cdev, struct flash_node_data, cdev);
 	led = dev_get_drvdata(&flash_node->spmi_dev->dev);
 
-	if (led->pdata->power_detect_en) {
-		max_curr_avail_ma =
-			qpnp_flash_led_get_max_avail_current(flash_node, led);
+	if (!led->pdata->power_detect_en)
+		return -EINVAL;
 
-		if (max_curr_avail_ma < 0)
-			return -EINVAL;
-		else
-			max_curr_avail_ma = (int)flash_node->max_current;
-	}
+        max_curr_avail_ma =
+		qpnp_flash_led_get_max_avail_current(flash_node, led);
+
+	if (max_curr_avail_ma < 0)
+		return -EINVAL;
+	else
+		max_curr_avail_ma = (int)flash_node->max_current;
 
 	return snprintf(buf, PAGE_SIZE, "%u\n", max_curr_avail_ma);
 }

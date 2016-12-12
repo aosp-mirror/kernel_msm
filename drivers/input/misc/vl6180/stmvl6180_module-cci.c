@@ -119,11 +119,11 @@ static int stmvl6180_get_dt_data(struct device *dev, struct cci_data *data)
 				vl6180_errmsg("failed %d\n", __LINE__);
 				return rc;
 			}
-		}
-		vl6180_dbgmsg("vreg-name: %s min_volt: %d max_volt: %d",
+			vl6180_dbgmsg("vreg-name: %s min_volt: %d max_volt: %d",
 					vreg_cfg->cam_vreg->reg_name,
 					vreg_cfg->cam_vreg->min_voltage,
 					vreg_cfg->cam_vreg->max_voltage);
+		}
 
 		data->en_gpio = of_get_named_gpio(of_node,
 						"stmvl6180,ldaf-en-gpio",0);
