@@ -230,16 +230,17 @@ hif_pci_interrupt_handler(int irq, void *arg)
     struct hif_pci_softc *sc = (struct hif_pci_softc *) arg;
     struct HIF_CE_state *hif_state = (struct HIF_CE_state *)sc->hif_device;
     volatile int tmp;
+    unsigned long flags = 0;
 
     if (sc->hif_init_done == TRUE) {
-        adf_os_spin_lock_irqsave(&hif_state->suspend_lock);
+        spin_lock_irqsave(&hif_state->suspend_lock, flags);
     }
 
     if (LEGACY_INTERRUPTS(sc)) {
 
         if (sc->hif_init_done == TRUE) {
             if (Q_TARGET_ACCESS_BEGIN(hif_state->targid) < 0) {
-                adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
+                spin_unlock_irqrestore(&hif_state->suspend_lock, flags);
                 return IRQ_HANDLED;
             }
 
@@ -262,7 +263,7 @@ hif_pci_interrupt_handler(int irq, void *arg)
 
         if (sc->hif_init_done == TRUE) {
             if (Q_TARGET_ACCESS_END(hif_state->targid) < 0) {
-                adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
+                spin_unlock_irqrestore(&hif_state->suspend_lock, flags);
                 return IRQ_HANDLED;
             }
         }
@@ -275,7 +276,7 @@ hif_pci_interrupt_handler(int irq, void *arg)
 
     if (sc->hif_init_done == TRUE) {
         hif_irq_record(HIF_IRQ_END, sc);
-        adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
+        spin_unlock_irqrestore(&hif_state->suspend_lock, flags);
     }
     return IRQ_HANDLED;
 }
@@ -782,6 +783,7 @@ wlan_tasklet(unsigned long data)
     struct HIF_CE_state *hif_state = (struct HIF_CE_state *)sc->hif_device;
     volatile int tmp;
     bool hif_init_done = sc->hif_init_done;
+    unsigned long flags = 0;
 
     if (hif_init_done == FALSE) {
          goto irq_handled;
@@ -824,7 +826,7 @@ irq_handled:
      * while this tasklet is running
      */
     if (hif_init_done == TRUE)
-        adf_os_spin_lock_irqsave(&hif_state->suspend_lock);
+        spin_lock_irqsave(&hif_state->suspend_lock, flags);
 
     if (LEGACY_INTERRUPTS(sc) && (sc->ol_sc->target_status !=
                                   OL_TRGET_STATUS_RESET) &&
@@ -832,7 +834,7 @@ irq_handled:
 
         if (hif_init_done == TRUE) {
             if(HIFTargetSleepStateAdjust(hif_state->targid, FALSE, TRUE) < 0) {
-                adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
+                spin_unlock_irqrestore(&hif_state->suspend_lock, flags);
                 return;
             }
         }
@@ -846,7 +848,7 @@ irq_handled:
         if (hif_init_done == TRUE) {
              HIF_fw_interrupt_handler(sc->irq_event, sc);
              if(HIFTargetSleepStateAdjust(hif_state->targid, TRUE, FALSE) < 0) {
-                   adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
+                   spin_unlock_irqrestore(&hif_state->suspend_lock, flags);
                    return;
                }
         }
@@ -854,7 +856,7 @@ irq_handled:
 
     if (hif_init_done == TRUE) {
         hif_irq_record(HIF_TASKLET_END, sc);
-        adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
+        spin_unlock_irqrestore(&hif_state->suspend_lock, flags);
     }
 
     adf_os_atomic_set(&sc->ce_suspend, 1);
@@ -2463,6 +2465,7 @@ void hif_pci_shutdown(struct pci_dev *pdev)
     struct hif_pci_softc *sc;
     struct ol_softc *scn;
     struct HIF_CE_state *hif_state;
+    unsigned long flags;
 
     sc = pci_get_drvdata(pdev);
     /* Attach did not succeed, all resources have been
@@ -2487,10 +2490,10 @@ void hif_pci_shutdown(struct pci_dev *pdev)
     scn = sc->ol_sc;
 
     hif_disable_isr(scn);
-    adf_os_spin_lock_irqsave(&hif_state->suspend_lock);
+    spin_lock_irqsave(&hif_state->suspend_lock, flags);
     if (!adf_os_atomic_read(&sc->pci_link_suspended))
         hif_pci_device_reset(sc);
-    adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
+    spin_unlock_irqrestore(&hif_state->suspend_lock, flags);
 
 #ifndef REMOVE_PKT_LOG
     if (vos_get_conparam() != VOS_FTM_MODE &&
@@ -2576,11 +2579,12 @@ static void hif_dump_crash_debug_info(struct hif_pci_softc *sc)
 	struct HIF_CE_state *hif_state = (struct HIF_CE_state *)sc->hif_device;
 	struct ol_softc *scn = sc->ol_sc;
 	int ret;
+	unsigned long flags;
 
 	if (!hif_state)
 		return;
 
-	adf_os_spin_lock_irqsave(&hif_state->suspend_lock);
+	spin_lock_irqsave(&hif_state->suspend_lock, flags);
 	hif_irq_record(HIF_CRASH, sc);
 	hif_dump_soc_and_ce_registers(sc);
 
@@ -2594,7 +2598,7 @@ static void hif_dump_crash_debug_info(struct hif_pci_softc *sc)
 
 	pr_info("%s: RAM dump collecting completed!\n", __func__);
 out:
-	adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
+	spin_unlock_irqrestore(&hif_state->suspend_lock, flags);
 }
 
 void hif_pci_crash_shutdown(struct pci_dev *pdev)
@@ -2655,6 +2659,7 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
     v_VOID_t * temp_module;
     u32 tmp;
     int ret = -EBUSY;
+    unsigned long flags;
 
     hif_irq_record(HIF_SUSPEND_START, sc);
 
@@ -2740,7 +2745,7 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
         goto out;
 
     /* Acquire lock to access shared register */
-    adf_os_spin_lock_irqsave(&hif_state->suspend_lock);
+    spin_lock_irqsave(&hif_state->suspend_lock, flags);
     A_PCI_WRITE32(sc->mem+(SOC_CORE_BASE_ADDRESS | PCIE_INTR_ENABLE_ADDRESS), 0);
     A_PCI_WRITE32(sc->mem+(SOC_CORE_BASE_ADDRESS | PCIE_INTR_CLR_ADDRESS),
                   PCIE_INTR_FIRMWARE_MASK | PCIE_INTR_CE_MASK_ALL);
@@ -2755,14 +2760,14 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
 
     /* Put ROME to sleep */
     if (HIFTargetSleepStateAdjust(targid, TRUE, FALSE) < 0) {
-        adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
+        spin_unlock_irqrestore(&hif_state->suspend_lock, flags);
         goto out;
     }
     /* Stop the HIF Sleep Timer */
     HIFCancelDeferredTargetSleep(sc->hif_device);
 
     adf_os_atomic_set(&sc->pci_link_suspended, 1);
-    adf_os_spin_unlock_irqrestore(&hif_state->suspend_lock);
+    spin_unlock_irqrestore(&hif_state->suspend_lock, flags);
 
     /* Keep PCIe bus driver's shadow memory intact */
     vos_pcie_shadow_control(pdev, FALSE);

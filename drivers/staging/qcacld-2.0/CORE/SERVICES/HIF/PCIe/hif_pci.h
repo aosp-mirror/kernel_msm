@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -100,8 +100,8 @@ struct HIF_CE_state {
     struct hif_pci_softc *sc;
     A_BOOL started;
 
-    adf_os_spinlock_t keep_awake_lock;
-    adf_os_spinlock_t suspend_lock;
+    spinlock_t keep_awake_lock;
+    spinlock_t suspend_lock;
     unsigned int keep_awake_count;
     A_BOOL verified_awake;
     A_BOOL fake_sleep;
