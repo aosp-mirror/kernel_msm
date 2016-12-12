@@ -139,7 +139,7 @@ int mdp3_ctrl_notify(struct mdp3_session_data *ses, int event)
 	return blocking_notifier_call_chain(&ses->notifier_head, event, ses);
 }
 
-static void mdp3_dispatch_dma_done(struct kthread_work *work)
+static void mdp3_dispatch_dma_done(struct work_struct *work)
 {
 	struct mdp3_session_data *session;
 	int cnt = 0;
@@ -224,7 +224,7 @@ void dma_done_notify_handler(void *arg)
 {
 	struct mdp3_session_data *session = (struct mdp3_session_data *)arg;
 	atomic_inc(&session->dma_done_cnt);
-	queue_kthread_work(&session->worker, &session->dma_done_work);
+	schedule_work(&session->dma_done_work);
 	complete_all(&session->dma_completion);
 }
 
@@ -2740,7 +2740,6 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 	u32 intf_type = MDP3_DMA_OUTPUT_SEL_DSI_VIDEO;
 	int rc;
 	int splash_mismatch = 0;
-	struct sched_param sched = { .sched_priority = 16 };
 
 	pr_info("mdp3_ctrl_init\n");
 	rc = mdp3_parse_dt_splash(mfd);
@@ -2764,21 +2763,7 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 	}
 	mutex_init(&mdp3_session->lock);
 	INIT_WORK(&mdp3_session->clk_off_work, mdp3_dispatch_clk_off);
-
-	init_kthread_worker(&mdp3_session->worker);
-	init_kthread_work(&mdp3_session->dma_done_work, mdp3_dispatch_dma_done);
-
-	mdp3_session->thread = kthread_run(kthread_worker_fn, &mdp3_session->worker,
-					   "mdp3_dispatch_dma_done");
-
-	if (IS_ERR(mdp3_session->thread)) {
-		pr_err("Can't initialize mdp3_dispatch_dma_done thread\n");
-		rc = -ENODEV;
-		goto init_done;
-	}
-
-	sched_setscheduler(mdp3_session->thread, SCHED_FIFO, &sched);
-
+	INIT_WORK(&mdp3_session->dma_done_work, mdp3_dispatch_dma_done);
 	atomic_set(&mdp3_session->vsync_countdown, 0);
 	mutex_init(&mdp3_session->histo_lock);
 	mdp3_session->dma = mdp3_get_dma_pipe(MDP3_DMA_CAP_ALL);

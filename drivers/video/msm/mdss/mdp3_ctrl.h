@@ -18,7 +18,6 @@
 #include <linux/mutex.h>
 #include <linux/completion.h>
 #include <linux/timer.h>
-#include <linux/kthread.h>
 
 #include "mdp3.h"
 #include "mdp3_dma.h"
@@ -52,11 +51,7 @@ struct mdp3_session_data {
 	struct mdp3_buffer_queue bufq_in;
 	struct mdp3_buffer_queue bufq_out;
 	struct work_struct clk_off_work;
-
-	struct kthread_work dma_done_work;
-	struct kthread_worker worker;
-	struct task_struct *thread;
-
+	struct work_struct dma_done_work;
 	atomic_t dma_done_cnt;
 	int histo_status;
 	struct mutex histo_lock;
