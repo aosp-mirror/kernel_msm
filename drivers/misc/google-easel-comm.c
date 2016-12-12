@@ -1468,24 +1468,6 @@ out:
 }
 
 /*
- * Client sends LINK_INIT command to tell server client command channel ready.
- */
-static int easelcomm_send_cmd_link_init(void)
-{
-	struct easelcomm_service *service =
-		&easelcomm_service[EASELCOMM_SERVICE_SYSCTRL];
-	int ret;
-
-	ret = easelcomm_start_cmd(
-		service, EASELCOMM_CMD_LINK_INIT, 0);
-	if (ret)
-		return ret;
-	dev_dbg(easelcomm_miscdev.this_device, "send cmd LINK_INIT\n");
-	ret = easelcomm_send_cmd(service);
-	return ret;
-}
-
-/*
  * Client calls this in kworker context upon receipt of BOOTSTRAP_READY IRQ
  * from server.	 Call MNH host driver to setup iATU mappings for the command
  * channels and send LINK_INIT.
