@@ -976,6 +976,11 @@ static int bcm15602_probe(struct i2c_client *client,
 	}
 	bcm15602_regulator_register(ddata);
 
+#ifdef PREPRODUCTION
+	/* initialize the chip now */
+	bcm15602_chip_init(ddata);
+#endif
+
 	return mfd_add_devices(dev, -1, bcm15602_devs,
 			       ARRAY_SIZE(bcm15602_devs),
 			       NULL, 0, NULL);
