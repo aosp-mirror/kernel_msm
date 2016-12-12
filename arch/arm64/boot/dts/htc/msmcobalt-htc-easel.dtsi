@@ -10,6 +10,8 @@
  * GNU General Public License for more details.
  */
 
+#include <dt-bindings/interrupt-controller/irq.h>
+
 &tlmm {
 	esl_pmic {
 		/* PON */
@@ -38,15 +40,16 @@
 		compatible = "brcm,bcm15602";
 		reg = <0xa>;
 
-		//interrupt-parent = <&tlmm>;
-		//interrupts = <123 0x2>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <26 IRQ_TYPE_EDGE_FALLING>;
+		interrupt-names = "bcm15602_intb";
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&esl_pmic_default>;
 
 		bcm,pon-gpio = <&tlmm 25 0x00>;
-		bcm,resetb-gpio = <&tlmm 26 0x00>;
-		bcm,intb-gpio = <&tlmm 27 0x00>;
+		bcm,intb-gpio = <&tlmm 26 0x00>;
+		bcm,resetb-gpio = <&tlmm 27 0x00>;
 
 		bcm15602_gpio: gpio {
 			compatible = "brcm,bcm15602-gpio";
