@@ -299,9 +299,7 @@ static void find_metadata_offset(struct fec_header *fec,
 		struct block_device *bdev, u64 *metadata_offset)
 {
 	u64 device_size;
-
 	device_size = i_size_read(bdev->bd_inode);
-
 	if (le32_to_cpu(fec->magic) == FEC_MAGIC)
 		*metadata_offset = le64_to_cpu(fec->inp_size) -
 					VERITY_METADATA_SIZE;
@@ -618,7 +616,7 @@ static int android_verity_ctr(struct dm_target *ti, unsigned argc, char **argv)
 	u32 data_block_size;
 	unsigned int major, minor,
 	no_of_args = VERITY_TABLE_ARGS + 2 + VERITY_TABLE_OPT_FEC_ARGS;
-	struct fec_header fec;
+	struct fec_header uninitialized_var(fec);
 	struct fec_ecc_metadata uninitialized_var(ecc);
 	char buf[FEC_ARG_LENGTH], *buf_ptr;
 	unsigned long long tmpll;

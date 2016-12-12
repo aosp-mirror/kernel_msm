@@ -817,11 +817,12 @@ static int wl_cfgvendor_epno_cfg(struct wiphy *wiphy,
 	const struct nlattr *outer, *inner, *iter;
 	uint32 cnt_ssid = 0;
 	wl_pfn_ssid_params_t params;
-	bool flush = FALSE;
+	bool flush = FALSE, found = false;
 
 	memset(&params, 0, sizeof(wl_pfn_ssid_params_t));
 	nla_for_each_attr(iter, data, len, tmp2) {
 		type = nla_type(iter);
+		found = true;
 		switch (type) {
 			case GSCAN_ATTRIBUTE_EPNO_SSID_LIST:
 				nla_for_each_nested(outer, iter, tmp) {
@@ -919,6 +920,11 @@ static int wl_cfgvendor_epno_cfg(struct wiphy *wiphy,
 			}
 
 	}
+
+	if (!found) {
+		return -EINVAL;
+	}
+
 	if (cnt_ssid != num) {
 		WL_ERR(("%s: num_ssid %d does not match ssids sent %d\n", __FUNCTION__,
 		     num, cnt_ssid));
@@ -2482,8 +2488,8 @@ static int __wl_cfgvendor_dbg_get_pkt_fates(struct wiphy *wiphy,
 	dhd_pub_t *dhd_pub = cfg->pub;
 	struct sk_buff *skb = NULL;
     const struct nlattr *iter;
-	void __user *user_buf;
-	uint16 req_count, resp_count;
+	void __user *user_buf = NULL;
+	uint16 req_count = 0, resp_count;
     int ret, tmp, type, mem_needed;
 
     nla_for_each_attr(iter, data, len, tmp) {
@@ -2853,19 +2859,27 @@ static int wl_cfgvendor_configure_nd_offload(struct wiphy *wiphy,
 	const struct nlattr *iter;
 	int ret = BCME_OK, rem, type;
 	u8 enable;
+	bool found = false;
 
 	nla_for_each_attr(iter, data, len, rem) {
 		type = nla_type(iter);
 		switch (type) {
 			case ANDR_WIFI_ATTRIBUTE_ND_OFFLOAD_VALUE:
 				enable = nla_get_u8(iter);
-				break;
+                                found = true;
+                                break;
 			default:
 				WL_ERR(("Unknown type: %d\n", type));
 				ret = BCME_BADARG;
 				goto exit;
 		}
 	}
+
+        if (!found) {
+            WL_ERR(("nla doesn't fit into remaining bytes\n"));
+            ret = BCME_BADARG;
+            goto exit;
+        }
 
 	ret = dhd_dev_ndo_cfg(bcmcfg_to_prmry_ndev(cfg), enable);
 	if (ret < 0) {

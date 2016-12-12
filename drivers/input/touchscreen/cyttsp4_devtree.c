@@ -1001,7 +1001,7 @@ static struct cyttsp4_core_platform_data *create_and_get_core_pdata(struct
 {
 	struct cyttsp4_core_platform_data *pdata;
 	u32 value;
-	int rc;
+	int rc = -EINVAL;
 	int i;
 
 	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
@@ -1228,4 +1228,3 @@ module_exit(cyttsp4_devtree_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Cypress Semiconductor");
-

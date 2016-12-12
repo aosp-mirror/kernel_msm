@@ -987,6 +987,8 @@ void sanity_check_clock_tree(u32 muxval, struct mux_clk *mux)
 		case AUX_CLK_SEL:
 			rate = sys_apcsaux_clk.c.rate;
 		break;
+		default:
+			return;
 		};
 	break;
 	case PLL0_EARLY_SEL:
@@ -997,6 +999,8 @@ void sanity_check_clock_tree(u32 muxval, struct mux_clk *mux)
 		rate = readl_relaxed(base + C0_PLLA_L_VAL);
 		rate *= xo_ao.c.rate;
 	break;
+	default:
+		return;
 	};
 
 	/* One regulator */
@@ -1556,7 +1560,7 @@ static void populate_opp_table(struct platform_device *pdev)
 	struct platform_device *apc0_dev, *apc1_dev;
 	struct device_node *apc0_node, *apc1_node;
 	unsigned long apc0_fmax, apc1_fmax;
-	int cpu, a53_cpu, a57_cpu;
+	int cpu, a53_cpu = 0, a57_cpu = 0;
 
 	apc0_node = of_parse_phandle(pdev->dev.of_node, "vdd-a53-supply", 0);
 	apc1_node = of_parse_phandle(pdev->dev.of_node, "vdd-a57-supply", 0);
@@ -1957,7 +1961,6 @@ static int cpu_clock_8994_driver_probe(struct platform_device *pdev)
 	u64 pte_efuse;
 	char a57speedbinstr[] = "qcom,a57-speedbinXX-vXX";
 	char a53speedbinstr[] = "qcom,a53-speedbinXX-vXX";
-
 	v2 = msm8994_v2 | msm8992;
 
 	a53_pll0_main.c.flags = CLKFLAG_NO_RATE_CACHE;
@@ -1984,7 +1987,7 @@ static int cpu_clock_8994_driver_probe(struct platform_device *pdev)
 
 		snprintf(a53speedbinstr, ARRAY_SIZE(a53speedbinstr),
 			"qcom,a53-speedbin%d-v%d", a53speedbin, pvs_ver);
-	} else if (v2)
+	} else
 		pte_efuse = readl_relaxed(vbases[EFUSE_BASE]);
 
 	snprintf(a53speedbinstr, ARRAY_SIZE(a53speedbinstr),

@@ -814,8 +814,9 @@ static inline int max98925_rate_value(int rate, int clock, u8 *value,
 		}
 	}
 
-	pr_debug("%s: sample rate is %d, returning %d\n", __func__,
-		rate_table[i].rate, *value);
+	if (!ret)
+		pr_debug("%s: sample rate is %d, returning %d\n", __func__,
+			rate_table[i].rate, *value);
 
 	return ret;
 }

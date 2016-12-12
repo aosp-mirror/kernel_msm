@@ -398,6 +398,8 @@ static ssize_t qpnp_flash_led_max_current_show(struct device *dev,
 			return -EINVAL;
 		else
 			max_curr_avail_ma = (int)flash_node->max_current;
+	} else {
+		return -EINVAL;
 	}
 
 	return snprintf(buf, PAGE_SIZE, "%u\n", max_curr_avail_ma);
