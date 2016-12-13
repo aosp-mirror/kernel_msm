@@ -212,8 +212,8 @@
 #define BCM15602_HK_NUM_SLOTS             10
 
 /* macros for PTAT-to-temperature conversion */
-#define TEMP_TO_PTAT_CODE(X)  ((X + 273160) / 481)
-#define PTAT_CODE_TO_TEMP(X)  (X * 481 - 273160)
+#define TEMP_TO_PTAT_CODE(X)  ((X + 273150) / 563)
+#define PTAT_CODE_TO_TEMP(X)  (X * 563 - 273150)
 
 /* threshold for housekeeping slots */
 #define BCM15602_HK_TH_ASR_MSTR_CURR   \
