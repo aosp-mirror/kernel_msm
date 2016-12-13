@@ -69,6 +69,7 @@
 
 /* MCU wake ap timeout */
 #define DATA_TRANSFER_INTERVAL (1*HZ)
+#define WAKEUP_DISPLAY_INTERVAL (1*HZ)
 
 static DECLARE_BITMAP(minors, N_SPI_MINORS);
 
@@ -130,6 +131,7 @@ struct spidev_data {
 	struct work_struct wakeup_read_work;
 	struct work_struct wakeup_display_work;
 	struct wake_lock wake_lock;
+	struct wake_lock wake_display_lock;
 };
 
 static LIST_HEAD(device_list);
@@ -488,6 +490,11 @@ spidev_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 			}
 
 			list_move_tail(&spidev_buf_node->list, &spidev->idle_buf_head->list);
+
+			if (list_empty(&spidev->read_buf_head->list))
+			{
+				wake_unlock(&spidev->wake_lock);
+			}
 		}
 		else
 		{
@@ -750,6 +757,7 @@ static void spidev_wakeup_display_work(struct work_struct *work)
 
 	if (spidev)
 	{
+	    wake_lock_timeout(&spidev->wake_display_lock, WAKEUP_DISPLAY_INTERVAL);
 	retry:
 		mutex_lock(&spidev->buf_list_lock);
 		if (!list_empty(&spidev->idle_buf_head->list))
@@ -1398,6 +1406,8 @@ static int spidev_probe(struct spi_device *spi)
 
 	wake_lock_init(&spidev->wake_lock, WAKE_LOCK_SUSPEND, "mcu_commu");
 
+	wake_lock_init(&spidev->wake_display_lock, WAKE_LOCK_SUSPEND, "mcu_display");
+
 	if (status == 0)
 		spi_set_drvdata(spi, spidev);
 	else
@@ -1416,6 +1426,7 @@ static int spidev_remove(struct spi_device *spi)
 	spin_unlock_irq(&spidev->spi_lock);
 
 	wake_lock_destroy(&spidev->wake_lock);
+	wake_lock_destroy(&spidev->wake_display_lock);
 
 	/* prevent new opens */
 	mutex_lock(&device_list_lock);
