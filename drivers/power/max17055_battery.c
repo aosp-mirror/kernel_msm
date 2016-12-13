@@ -69,7 +69,7 @@
 #define MAX17055_SOC_ROUND_THD		0x5000		/* 80% */
 #define MAX17055_IC_VERSION_A		0x4000
 #define MAX17055_IC_VERSION_B		0x4010
-#define MAX17055_DRIVER_VERSION		0x1018
+#define MAX17055_DRIVER_VERSION		0x1019
 
 struct max17055_chip {
 	struct i2c_client *client;
