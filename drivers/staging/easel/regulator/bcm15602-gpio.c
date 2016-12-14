@@ -78,7 +78,7 @@ static void bcm15602_gpio_set(struct gpio_chip *gpio_chip, unsigned offset,
 	struct bcm15602_chip *bcm15602 = bcm15602_gpio->bcm15602;
 
 	bcm15602_update_bits(bcm15602, BCM15602_REG_SYS_GPIO_OUT_CTRL,
-			     (1 << offset), value);
+			     (1 << offset), ((value ? 1 : 0) << offset));
 }
 
 static int bcm15602_gpio_direction_output(struct gpio_chip *gpio_chip,
@@ -146,3 +146,6 @@ static struct platform_driver bcm15602_gpio_driver = {
 };
 module_platform_driver(bcm15602_gpio_driver);
 
+MODULE_AUTHOR("Trevor Bunker <trevorbunker@google.com>");
+MODULE_DESCRIPTION("BCM15602 GPIO Driver");
+MODULE_LICENSE("GPL");

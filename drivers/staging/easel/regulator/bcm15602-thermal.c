@@ -42,7 +42,7 @@ static int bcm15602_thermal_get_temp(struct thermal_zone_device *tz_dev,
 
 	ret = bcm15602_read_adc_chan(bcm15602, BCM15602_ADC_PTAT, &chan_data);
 	if (ret)
-		return -EAGAIN;
+		return ret;
 
 	*temp = PTAT_CODE_TO_TEMP(chan_data);
 	return 0;
@@ -117,3 +117,6 @@ static struct platform_driver bcm15602_thermal_driver = {
 };
 module_platform_driver(bcm15602_thermal_driver);
 
+MODULE_AUTHOR("Trevor Bunker <trevorbunker@google.com>");
+MODULE_DESCRIPTION("BCM15602 Thermal Sensor Driver");
+MODULE_LICENSE("GPL");

@@ -287,17 +287,19 @@ int bcm15602_update_bits(struct bcm15602_chip *ddata, u8 addr,
 }
 EXPORT_SYMBOL_GPL(bcm15602_update_bits);
 
-/* defines the number of poll retries for  ADC conversion completion */
-#define BCM15602_ADC_CONV_RETRY_CNT 10
+/* defines the timeout in jiffies for ADC conversion completion */
+#define BCM15602_ADC_CONV_TIMEOUT  msecs_to_jiffies(25)
 
 int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
 			   int chan_num, u16 *chan_data)
 {
 	u8 byte;
-	int retry_cnt = 0;
 	int ret = 0;
+	int timeout;
 
-	spin_lock_irq(&ddata->adc_lock);
+	/* serialize manual adc conversions */
+	if (test_and_set_bit(0, &ddata->adc_conv_busy))
+		return -EAGAIN;
 
 	/* enable the ADC clock */
 	bcm15602_write_byte(ddata, BCM15602_REG_ADC_MAN_CTRL, 0x1);
@@ -305,20 +307,18 @@ int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
 	/* write the channel number to trigger the conversion */
 	bcm15602_write_byte(ddata, BCM15602_REG_ADC_MAN_CONV_CHNUM, chan_num);
 
-	/* poll on ADC manual conversion busy bit */
-	do {
-		if (++retry_cnt == BCM15602_ADC_CONV_RETRY_CNT) {
-			dev_err(ddata->dev, "%s: ADC conversion timed out\n",
-				__func__);
-			*chan_data = 0;
-			ret = -ETIMEDOUT;
-			goto finish;
-		}
-
-		bcm15602_read_byte(ddata, BCM15602_REG_ADC_MAN_RESULT_H, &byte);
-	} while (byte & 0x80);
+	/* wait for completion signaled by interrupt */
+	reinit_completion(&ddata->adc_conv_complete);
+	timeout = wait_for_completion_timeout(&ddata->adc_conv_complete,
+					  BCM15602_ADC_CONV_TIMEOUT);
+	if (timeout <= 0) {
+		ret = (timeout == 0) ? -ETIMEDOUT : timeout;
+		dev_err(ddata->dev, "ADC converstion failed (%d)\n", ret);
+		goto finish;
+	}
 
 	/* read and format the conversion result */
+	bcm15602_read_byte(ddata, BCM15602_REG_ADC_MAN_RESULT_H, &byte);
 	*chan_data = (byte & 0x7F) << 3;
 	bcm15602_read_byte(ddata, BCM15602_REG_ADC_MAN_RESULT_L, &byte);
 	*chan_data |= byte & 0x7;
@@ -327,7 +327,8 @@ finish:
 	/* disable the ADC clock */
 	bcm15602_write_byte(ddata, BCM15602_REG_ADC_MAN_CTRL, 0x0);
 
-	spin_unlock_irq(&ddata->adc_lock);
+	/* release adc conversion */
+	clear_bit(0, &ddata->adc_conv_busy);
 
 	return ret;
 }
@@ -341,7 +342,9 @@ int bcm15602_read_hk_slot(struct bcm15602_chip *ddata,
 
 	reading_mask = 1 << slot_num;
 
-	spin_lock_irq(&ddata->adc_lock);
+	/* serialize reads to the hk slots */
+	if (test_and_set_bit(0, &ddata->hk_read_busy))
+		return -EAGAIN;
 
 	/*
 	 * set the reading mask so the adc does not update the slot data while
@@ -364,7 +367,8 @@ int bcm15602_read_hk_slot(struct bcm15602_chip *ddata,
 	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGL, 0);
 	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGH, 0);
 
-	spin_unlock_irq(&ddata->adc_lock);
+	/* release hk read */
+	clear_bit(0, &ddata->hk_read_busy);
 
 	return 0;
 }
@@ -375,7 +379,7 @@ static void bcm15602_clear_wdt(struct bcm15602_chip *ddata)
 {
 	struct device *dev = ddata->dev;
 
-	dev_dbg(dev, "%s: reset wdt\n", __func__);
+	dev_dbg(dev, "clearing watchdog timer alarm\n");
 
 	bcm15602_write_byte(ddata, BCM15602_REG_WDT_WDTCTRL2, 0x1E);
 }
@@ -425,11 +429,10 @@ static void bcm15602_print_id(struct bcm15602_chip *ddata)
 
 	if (!ret)
 		dev_info(dev,
-			 "%s: PMIC ID: 0x%02x%02x, Rev: 0x%02x, GID: 0x%02x\n",
-			 __func__, id_msb, id_lsb, rev, gid);
+			 "PMIC ID: 0x%02x%02x, Rev: 0x%02x, GID: 0x%02x\n",
+			 id_msb, id_lsb, rev, gid);
 	else
-		dev_err(dev, "%s: Could not read PMIC ID registers\n",
-			__func__);
+		dev_err(dev, "Could not read PMIC ID\n");
 }
 
 /* print the power state machine status register */
@@ -445,17 +448,38 @@ static void bcm15602_print_psm_status(struct bcm15602_chip *ddata)
 		dev_err(dev, "%s: PSM Status: 0x%02x\n", __func__, byte);
 }
 
+#define BCM15602_PSM_ENV_THERM_SHDWN_BIT         0x20
+#define BCM15602_PSM_ENV_SWCMD_EMSHDWN_BIT       0x10
+#define BCM15602_PSM_ENV_SWCMD_SHDWN_BIT         0x08
+#define BCM15602_PSM_ENV_WDTEXP_SHDWN            0x04
+#define BCM15602_PSM_ENV_TOOHOT_SHDWN            0x02
+#define BCM15602_PSM_ENV_VBATUVB_FALL_SHDWN_BIT  0x01
+
 /* print the shutdown event register */
 static void bcm15602_print_psm_event(struct bcm15602_chip *ddata)
 {
 	struct device *dev = ddata->dev;
+	char buffer[80];
 	u8 byte;
 	int ret;
 
 	ret = bcm15602_read_byte(ddata, BCM15602_REG_PSM_PSM_ENV, &byte);
 
-	if (!ret)
-		dev_info(dev, "%s: PSM Event: 0x%02x\n", __func__, byte);
+	if (!ret) {
+		if (byte & BCM15602_PSM_ENV_THERM_SHDWN_BIT)
+			strncpy(buffer, "downstream thermal trip", 80);
+		else if (byte & BCM15602_PSM_ENV_SWCMD_EMSHDWN_BIT)
+			strncpy(buffer, "software emergency shutdown", 80);
+		else if (byte & BCM15602_PSM_ENV_SWCMD_SHDWN_BIT)
+			strncpy(buffer, "software shutdown", 80);
+		else if (byte & BCM15602_PSM_ENV_WDTEXP_SHDWN)
+			strncpy(buffer, "watchdog timer expiration", 80);
+		else if (byte & BCM15602_PSM_ENV_TOOHOT_SHDWN)
+			strncpy(buffer, "over temperature", 80);
+		else if (byte & BCM15602_PSM_ENV_VBATUVB_FALL_SHDWN_BIT)
+			strncpy(buffer, "supply under voltage", 80);
+		dev_info(dev, "Last reboot reason: %s\n", buffer);
+	}
 }
 
 /* handle an interrupt flag */
@@ -464,6 +488,7 @@ static int bcm15602_handle_int(struct bcm15602_chip *ddata,
 {
 	struct device *dev = ddata->dev;
 
+	dev_dbg(dev, "Handling flag %d\n", flag_num);
 	switch (flag_num) {
 	case BCM15602_INT_ASR_OVERI:
 		NOTIFY(BCM15602_ID_ASR, REGULATOR_EVENT_OVER_CURRENT);
@@ -506,8 +531,11 @@ static int bcm15602_handle_int(struct bcm15602_chip *ddata,
 		break;
 
 	case BCM15602_INT_ADC_CONV_DONE:
+		complete(&ddata->adc_conv_complete);
+		break;
+
 	case BCM15602_INT_OTP_ECC_FAULT:
-		dev_err(dev, "%s: Unexpected flag %d\n", __func__, flag_num);
+		dev_dbg(dev, "Ignoring interrupt flag %d\n", flag_num);
 		break;
 
 	case BCM15602_INT_WDT_ALARM:
@@ -536,18 +564,15 @@ static int bcm15602_handle_int(struct bcm15602_chip *ddata,
 /* find pending interrupt flags */
 static int bcm15602_check_int_flags(struct bcm15602_chip *ddata)
 {
-	struct device *dev = ddata->dev;
 	u8 flags[4], flag_mask, flag_clr_mask;
 	unsigned int first_bit, flag_num;
 	int ret;
 	int i;
 
 	/* read interrupt status flags */
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < 4; i++)
 		bcm15602_read_byte(ddata, BCM15602_REG_INT_INTFLAG1 + i,
 				   flags + i);
-		dev_dbg(dev, "%s: INTFLAG%1d: 0x%02x\n", __func__, i, flags[i]);
-	}
 
 	/* iterate through each interrupt */
 	for (i = 0; i < 4; i++) {
@@ -556,8 +581,8 @@ static int bcm15602_check_int_flags(struct bcm15602_chip *ddata)
 		while (flags[i]) {
 			/* find first set interrupt flag */
 			first_bit = ffs(flags[i]);
-			flag_mask = 1 << first_bit;
-			flag_num = (i * 8) + first_bit;
+			flag_mask = 1 << (first_bit - 1);
+			flag_num = (i * 8) + (first_bit - 1);
 
 			/* handle interrupt */
 			ret = bcm15602_handle_int(ddata, flag_num);
@@ -567,11 +592,10 @@ static int bcm15602_check_int_flags(struct bcm15602_chip *ddata)
 		}
 
 		/* clear handled interrupts */
-		if (flag_clr_mask) {
+		if (flag_clr_mask)
 			bcm15602_write_byte(ddata,
 					    BCM15602_REG_INT_INTFLAG1 + i,
 					    flag_clr_mask);
-		}
 	}
 
 	return 0;
@@ -797,7 +821,7 @@ static struct bcm15602_platform_data *bcm15602_get_platform_data_from_dt
 		return ERR_PTR(-ENOMEM);
 
 	pdata->pon_gpio = of_get_named_gpio(np, "bcm,pon-gpio", 0);
-	pdata->resetb_gpio = of_get_named_gpio(np, "bcm,pon-gpio", 0);
+	pdata->resetb_gpio = of_get_named_gpio(np, "bcm,resetb-gpio", 0);
 	pdata->intb_gpio = of_get_named_gpio(np, "bcm,intb-gpio", 0);
 	pdata->resetb_irq = gpio_to_irq(pdata->resetb_gpio);
 	pdata->intb_irq = gpio_to_irq(pdata->intb_gpio);
@@ -869,17 +893,24 @@ static void bcm15602_config_adc(struct bcm15602_chip *ddata)
 /* enable all of the interrupts */
 static void bcm15602_config_ints(struct bcm15602_chip *ddata)
 {
+	/* clear any pending interrupts */
+	bcm15602_write_byte(ddata, BCM15602_REG_INT_INTFLAG1, 0x1F);
+	bcm15602_write_byte(ddata, BCM15602_REG_INT_INTFLAG2, 0x1B);
+	bcm15602_write_byte(ddata, BCM15602_REG_INT_INTFLAG3, 0x03);
+	bcm15602_write_byte(ddata, BCM15602_REG_INT_INTFLAG4, 0x1F);
+
+	/* enable interrupts we care about */
 	bcm15602_write_byte(ddata, BCM15602_REG_INT_INTEN1, 0x1F);
 	bcm15602_write_byte(ddata, BCM15602_REG_INT_INTEN2, 0x1B);
-	bcm15602_write_byte(ddata, BCM15602_REG_INT_INTEN3, 0x03);
+	bcm15602_write_byte(ddata, BCM15602_REG_INT_INTEN3, 0x02);
 	bcm15602_write_byte(ddata, BCM15602_REG_INT_INTEN4, 0x1F);
 }
 
 /* enable the watchdog timer and reset the count */
 static void bcm15602_config_wdt(struct bcm15602_chip *ddata)
 {
-	bcm15602_write_byte(ddata, BCM15602_REG_WDT_WDTCTRL2, 0x1E);
 	bcm15602_write_byte(ddata, BCM15602_REG_WDT_WDTCTRL1, 0x01);
+	bcm15602_write_byte(ddata, BCM15602_REG_WDT_WDTCTRL2, 0x1E);
 }
 
 /* initialize the chip */
@@ -929,7 +960,8 @@ static int bcm15602_probe(struct i2c_client *client,
 	ddata->pdata = pdata;
 	dev->platform_data = pdata;
 
-	spin_lock_init(&ddata->adc_lock);
+	/* initialize completions */
+	init_completion(&ddata->adc_conv_complete);
 
 	/* initialize regmap */
 	ddata->regmap = devm_regmap_init_i2c(client, &bcm15602_regmap_config);
@@ -964,6 +996,11 @@ static int bcm15602_probe(struct i2c_client *client,
 	/* disable intb_irq until chip interrupts are programmed */
 	disable_irq(pdata->intb_irq);
 
+#ifdef PREPRODUCTION
+	/* initialize the chip now */
+	bcm15602_chip_init(ddata);
+#endif
+
 	/* initialize and register device regulators */
 	ddata->rdevs =
 		devm_kzalloc(dev,
@@ -977,11 +1014,6 @@ static int bcm15602_probe(struct i2c_client *client,
 		return -ENOMEM;
 	}
 	bcm15602_regulator_register(ddata);
-
-#ifdef PREPRODUCTION
-	/* initialize the chip now */
-	bcm15602_chip_init(ddata);
-#endif
 
 	return mfd_add_devices(dev, -1, bcm15602_devs,
 			       ARRAY_SIZE(bcm15602_devs),

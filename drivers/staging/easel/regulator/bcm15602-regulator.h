@@ -296,8 +296,12 @@ struct bcm15602_chip {
 	struct bcm15602_platform_data *pdata;
 	u16 hk_status;
 
-	/* lock used to prevent race condition with ADC accesses */
-	spinlock_t adc_lock;
+	/* volatiles used for serialization */
+	volatile unsigned long adc_conv_busy;
+	volatile unsigned long hk_read_busy;
+
+	/* completion used for signaling end of adc conversion */
+	struct completion adc_conv_complete;
 
 #ifdef PREPRODUCTION
 	u8 pseudo_regmap[256];
