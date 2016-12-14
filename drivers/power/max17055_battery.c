@@ -107,7 +107,164 @@ const static u16 dPaccVals[2][2] = {
 	{ 0x0159, 0x0190 },
 	{ 0x0ac7, 0x0c80 }
 };
+static int max17055_registers_dump(struct max17055_chip *chip)
+{
+	int ret;
+	u32 regdata[20];
+	u32 data;
+	struct regmap *map = chip->regmap;
 
+	ret = regmap_read(map, MAX17055_RepSOC, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_RepSOC);
+		return ret;
+	}
+	regdata[0] = data;
+
+	ret = regmap_read(map, MAX17055_Temp, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_Temp);
+		return ret;
+	}
+	regdata[1] = data;
+
+	ret = regmap_read(map, MAX17055_VCell, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_VCell);
+		return ret;
+	}
+	regdata[2] = data;
+
+	ret = regmap_read(map, MAX17055_Current, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_Current);
+		return ret;
+	}
+	regdata[3] = data;
+
+	ret = regmap_read(map, MAX17055_VFSOC, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_VFSOC);
+		return ret;
+	}
+	regdata[4] = data;
+
+	ret = regmap_read(map, 0x0c, &data);
+	if (ret < 0) {
+		pr_err("can not read register 0x0c\n");
+		return ret;
+	}
+	regdata[5] = data;
+
+	ret = regmap_read(map, MAX17055_FullCapRep, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_FullCapRep);
+		return ret;
+	}
+	regdata[6] = data;
+
+	ret = regmap_read(map, MAX17055_dQacc, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_dQacc);
+		return ret;
+	}
+	regdata[7] = data;
+
+	ret = regmap_read(map, MAX17055_dPacc, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_dPacc);
+		return ret;
+	}
+	regdata[8] = data;
+
+	ret = regmap_read(map, MAX17055_QRTbl10, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_QRTbl10);
+		return ret;
+	}
+	regdata[9] = data;
+
+	ret = regmap_read(map, MAX17055_IChgTerm, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_IChgTerm);
+		return ret;
+	}
+	regdata[10] = data;
+
+	ret = regmap_read(map, MAX17055_MixCap, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_MixCap);
+		return ret;
+	}
+	regdata[11] = data;
+
+	ret = regmap_read(map, MAX17055_LearnCfg, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_LearnCfg);
+		return ret;
+	}
+	regdata[12] = data;
+
+	ret = regmap_read(map, 0xfc, &data);
+	if (ret < 0) {
+		pr_err("can not read register 0xfc\n");
+		return ret;
+	}
+	regdata[13] = data;
+
+	ret = regmap_read(map, MAX17055_TempCo, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_TempCo);
+		return ret;
+	}
+	regdata[14] = data;
+
+	ret = regmap_read(map, MAX17055_QH, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_QH);
+		return ret;
+	}
+	regdata[15] = data;
+
+	ret = regmap_read(map, MAX17055_VFOCV, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_VFOCV);
+		return ret;
+	}
+	regdata[16] = data;
+
+	ret = regmap_read(map, MAX17055_Cycles, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_Cycles);
+		return ret;
+	}
+	regdata[17] = data;
+
+	ret = regmap_read(map, MAX17055_VEmpty, &data);
+	if (ret < 0) {
+		pr_err("can not read register %x\n", MAX17055_VEmpty);
+		return ret;
+	}
+	regdata[18] = data;
+
+	ret = regmap_read(map, 0xbe, &data);
+	if (ret < 0) {
+		pr_err("can not read register 0xbe\n");
+		return ret;
+	}
+	regdata[19] = data;
+
+	pr_info("0x06:%x, 0x08:%x, 0x09:%x, 0x0A:%x, 0xFF:%x\n",
+		regdata[0], regdata[1], regdata[2], regdata[3], regdata[4]);
+	pr_info("0x0C:%x, 0x10:%x, 0x45:%x, 0x46:%x, 0x22:%x\n",
+		regdata[5], regdata[6], regdata[7], regdata[8], regdata[9]);
+	pr_info("0x1E:%x, 0x0F:%x, 0x28:%x, 0xFC:%x, 0x39:%x\n",
+		regdata[10], regdata[11], regdata[12], regdata[13], regdata[14]);
+	pr_info("0x4D:%x, 0xFB:%x, 0x17:%x, 0x3A:%x, 0xBE:%x\n",
+		regdata[15], regdata[16], regdata[17], regdata[18], regdata[19]);
+
+	return ret;
+}
 static int max17055_get_temperature(struct max17055_chip *chip, int *temp)
 {
 	int ret;
@@ -791,6 +948,7 @@ static irqreturn_t max17055_thread_handler(int id, void *dev)
 	static int max_voltage_alert_num = 0;
 	static int min_voltage_alert_num = 0;
 
+	max17055_registers_dump(chip);
 	regmap_read(chip->regmap, MAX17055_Status, &val);
 	if (val) {
 		if (val & STATUS_BST_BIT)
@@ -1068,6 +1226,7 @@ static int max17055_probe(struct i2c_client *client,
 			dev_err(&client->dev, "failed: data logging sysfs register\n");
 			return ret;
 	}
+	max17055_registers_dump(chip);
 	pr_info("max17055_probe success\n");
 	return 0;
 }
