@@ -47,6 +47,8 @@
 #include <wmi_unified.h>
 
 #define FW_MODULE_LOG_LEVEL_STRING_LENGTH  (255)
+#define TX_SCHED_WRR_PARAM_STRING_LENGTH   (50)
+#define TX_SCHED_WRR_PARAMS_NUM            (5)
 
 #define CFG_ENABLE_RX_THREAD		(1 << 0)
 #define CFG_ENABLE_RPS			(1 << 1)
@@ -122,6 +124,12 @@
 #define CFG_ENABLE_PS_MIN                      (0)
 #define CFG_ENABLE_PS_MAX                      (1)
 #define CFG_ENABLE_PS_DEFAULT                  (1)
+
+/* Auto BMPS timer value in sec */
+#define CFG_AUTO_PS_ENABLE_TIMER_NAME          "gAutoBmpsTimerValue"
+#define CFG_AUTO_PS_ENABLE_TIMER_MIN           (0)
+#define CFG_AUTO_PS_ENABLE_TIMER_MAX           (120)
+#define CFG_AUTO_PS_ENABLE_TIMER_DEFAULT       (0)
 
 #define CFG_BMPS_MINIMUM_LI_NAME               "gBmpsMinListenInterval"
 #define CFG_BMPS_MINIMUM_LI_MIN                (1)
@@ -3318,6 +3326,42 @@ enum dot11p_mode {
 #define CFG_EDCA_BE_AIFS_VALUE_DEFAULT    (3)
 
 /*
+ * This key is mapping to VO defined in data path module through
+ * OL_TX_SCHED_WRR_ADV_CAT_CFG_SPEC. The user can tune the
+ * WRR TX sched parameters such as skip, credit, limit, credit, disc for VO.
+ * e.g., gEnableTxSchedWrrVO = 10, 9, 8, 1, 8
+ */
+#define CFG_ENABLE_TX_SCHED_WRR_VO          "gEnableTxSchedWrrVO"
+#define CFG_ENABLE_TX_SCHED_WRR_VO_DEFAULT  ""
+
+/*
+ * This key is mapping to VI defined in data path module through
+ * OL_TX_SCHED_WRR_ADV_CAT_CFG_SPEC. The user can tune the
+ * WRR TX sched parameters such as skip, credit, limit, credit, disc for VI.
+ * e.g., gEnableTxSchedWrrVI = 10, 9, 8, 1, 8
+ */
+#define CFG_ENABLE_TX_SCHED_WRR_VI          "gEnableTxSchedWrrVI"
+#define CFG_ENABLE_TX_SCHED_WRR_VI_DEFAULT  ""
+
+/*
+ * This key is mapping to BE defined in data path module through
+ * OL_TX_SCHED_WRR_ADV_CAT_CFG_SPEC. The user can tune the
+ * WRR TX sched parameters such as skip, credit, limit, credit, disc for BE.
+ * e.g., gEnableTxSchedWrrBE = 10, 9, 8, 1, 8
+ */
+#define CFG_ENABLE_TX_SCHED_WRR_BE          "gEnableTxSchedWrrBE"
+#define CFG_ENABLE_TX_SCHED_WRR_BE_DEFAULT  ""
+
+/*
+ * This key is mapping to BK defined in data path module through
+ * OL_TX_SCHED_WRR_ADV_CAT_CFG_SPEC. The user can tune the
+ * WRR TX sched parameters such as skip, credit, limit, credit, disc for BK.
+ * e.g., gEnableTxSchedWrrBK = 10, 9, 8, 1, 8
+ */
+#define CFG_ENABLE_TX_SCHED_WRR_BK          "gEnableTxSchedWrrBK"
+#define CFG_ENABLE_TX_SCHED_WRR_BK_DEFAULT  ""
+
+/*
  * Enable/disable DPTRACE
  * Enabling this might have performace impact.
  */
@@ -3565,6 +3609,17 @@ enum dot11p_mode {
 #define CFG_SAP_FORCE_11N_FOR_11AC_DEFAULT (0)
 
 /*
+ * sap tx leakage threshold
+ * customer can set this value from 100 to 1000 which means
+ * sap tx leakage threshold is -10db to -100db
+ */
+#define CFG_SAP_TX_LEAKAGE_THRESHOLD_NAME    "gsap_tx_leakage_threshold"
+#define CFG_SAP_TX_LEAKAGE_THRESHOLD_MIN     (100)
+#define CFG_SAP_TX_LEAKAGE_THRESHOLD_MAX     (1000)
+#define CFG_SAP_TX_LEAKAGE_THRESHOLD_DEFAULT (310)
+
+
+/*
  * Enable filtering of replayed multicast packets
  * In a typical infrastructure setup, it is quite normal to receive
  * replayed multicast packets. These packets may cause more harm than
@@ -3597,6 +3652,11 @@ enum dot11p_mode {
 #define CFG_CRASH_FW_TIMEOUT_ENABLE     (1)
 #define CFG_CRASH_FW_TIMEOUT_DEFAULT    (0)
 
+/* Hold wakelock for unicast RX packets for the specified duration  */
+#define CFG_RX_WAKELOCK_TIMEOUT_NAME     "rx_wakelock_timeout"
+#define CFG_RX_WAKELOCK_TIMEOUT_DEFAULT  (50)
+#define CFG_RX_WAKELOCK_TIMEOUT_MIN      (0)
+#define CFG_RX_WAKELOCK_TIMEOUT_MAX      (100)
 
 /*---------------------------------------------------------------------------
    Type declarations
@@ -3618,6 +3678,7 @@ struct hdd_config {
 	char PowerUsageControl[4];
 	bool fIsImpsEnabled;
 	bool is_ps_enabled;
+	uint32_t auto_bmps_timer_val;
 	uint32_t nBmpsModListenInterval;
 	uint32_t nBmpsMaxListenInterval;
 	uint32_t nBmpsMinListenInterval;
@@ -4234,6 +4295,16 @@ struct hdd_config {
 	uint32_t edca_vi_aifs;
 	uint32_t edca_bk_aifs;
 	uint32_t edca_be_aifs;
+
+	/* Tuning TX sched parameters for VO (skip credit limit credit disc) */
+	uint8_t  tx_sched_wrr_vo[TX_SCHED_WRR_PARAM_STRING_LENGTH];
+	/* Tuning TX sched parameters for VI (skip credit limit credit disc) */
+	uint8_t  tx_sched_wrr_vi[TX_SCHED_WRR_PARAM_STRING_LENGTH];
+	/* Tuning TX sched parameters for BE (skip credit limit credit disc) */
+	uint8_t  tx_sched_wrr_be[TX_SCHED_WRR_PARAM_STRING_LENGTH];
+	/* Tuning TX sched parameters for BK (skip credit limit credit disc) */
+	uint8_t  tx_sched_wrr_bk[TX_SCHED_WRR_PARAM_STRING_LENGTH];
+
 	bool enable_fatal_event;
 	bool bpf_enabled;
 	bool enable_dp_trace;
@@ -4259,6 +4330,7 @@ struct hdd_config {
 	bool indoor_channel_support;
 	/* parameter to force sap into 11n */
 	bool sap_force_11n_for_11ac;
+	uint16_t sap_tx_leakage_threshold;
 	bool multicast_replay_filter;
 	/* parameter for indicating sifs burst duration to fw */
 	uint8_t sifs_burst_duration;
@@ -4269,6 +4341,7 @@ struct hdd_config {
 	bool sta_prefer_80MHz_over_160MHz;
 	uint8_t sap_max_inactivity_override;
 	bool fw_timeout_crash;
+	uint32_t rx_wakelock_timeout;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))

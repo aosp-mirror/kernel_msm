@@ -81,11 +81,11 @@ static void sme_ps_fill_uapsd_req_params(tpAniSirGlobal mac_ctx,
 	struct ps_params *ps_param = &ps_global_info->ps_params[session_id];
 
 	uapsd_delivery_mask =
-		ps_param->uapsd_per_ac_bit_mask |
+		ps_param->uapsd_per_ac_bit_mask &
 		ps_param->uapsd_per_ac_delivery_enable_mask;
 
 	uapsd_trigger_mask =
-		ps_param->uapsd_per_ac_bit_mask |
+		ps_param->uapsd_per_ac_bit_mask &
 		ps_param->uapsd_per_ac_trigger_enable_mask;
 
 	uapsdParams->bkDeliveryEnabled =
@@ -1000,6 +1000,11 @@ QDF_STATUS sme_ps_enable_auto_ps_timer(tHalHandle hal_ctx,
 	struct ps_global_info *ps_global_info = &mac_ctx->sme.ps_global_info;
 	struct ps_params *ps_param = &ps_global_info->ps_params[session_id];
 	QDF_STATUS qdf_status;
+
+	if (!ps_global_info->auto_bmps_timer_val) {
+		sms_log(mac_ctx, LOGE, FL("auto_ps_timer is disabled in INI"));
+		return QDF_STATUS_SUCCESS;
+	}
 
 	sms_log(mac_ctx, LOGE, FL("Start auto_ps_timer for %d ms"),
 		timeout);

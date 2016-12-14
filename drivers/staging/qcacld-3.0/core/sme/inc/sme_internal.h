@@ -183,6 +183,12 @@ typedef struct tagSmeStruct {
 	void (*pLinkLayerStatsIndCallback)(void *callbackContext,
 			int indType, void *pRsp);
 #endif /* WLAN_FEATURE_LINK_LAYER_STATS */
+
+#ifdef WLAN_POWER_DEBUGFS
+	void *power_debug_stats_context;
+	void (*power_stats_resp_callback)(struct power_stats_response *rsp,
+						void *callback_context);
+#endif
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
 	void (*pAutoShutdownNotificationCb)(void);
 #endif
@@ -246,6 +252,8 @@ typedef struct tagSmeStruct {
 	sme_send_oem_data_rsp_msg oem_data_rsp_callback;
 	void (*encrypt_decrypt_cb)(void *,
 			struct sir_encrypt_decrypt_rsp_params *);
+	void (*lost_link_info_cb)(void *context,
+			struct sir_lost_link_info *lost_link_info);
 } tSmeStruct, *tpSmeStruct;
 
 #endif /* #if !defined( __SMEINTERNAL_H ) */

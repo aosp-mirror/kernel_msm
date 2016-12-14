@@ -708,6 +708,7 @@ typedef struct sSapDfsInfo {
 	 * channel switch is disabled.
 	 */
 	uint8_t disable_dfs_ch_switch;
+	uint16_t tx_leakage_threshold;
 } tSapDfsInfo;
 
 typedef struct tagSapCtxList {
@@ -964,7 +965,13 @@ QDF_STATUS wlansap_acs_chselect(void *pvos_gctx,
 		tpWLAN_SAPEventCB pacs_event_callback,
 		tsap_Config_t *pconfig,
 		void *pusr_context);
+
 uint32_t wlansap_get_chan_width(void *cds_ctx);
+
+QDF_STATUS wlansap_set_tx_leakage_threshold(tHalHandle hal,
+			uint16_t tx_leakage_threshold);
+
+QDF_STATUS wlansap_set_invalid_session(void *cds_ctx);
 
 #ifdef __cplusplus
 }
