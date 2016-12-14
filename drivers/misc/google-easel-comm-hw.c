@@ -280,6 +280,7 @@ static int easelcomm_hw_ap_dma_callback(
 /* AP/client PCIe ready, EP enumerated, can now use MNH host driver. */
 static int easelcomm_hw_ap_pcie_ready(void)
 {
+	uint64_t temp_rb_base_val;
 	int ret;
 
 	local_cmdchan_cpu_addr = mnh_alloc_coherent(
@@ -294,9 +295,13 @@ static int easelcomm_hw_ap_pcie_ready(void)
 		&easelcomm_hw_ap_dma_callback);
 	WARN_ON(ret);
 	/*
-	 * TODO: Easel is already booted, need to poll whether it already sent
-	 * bootstrap done MSI.
+	 * Easel is booting in parallel, poll whether it already sent
+	 * bootstrap done MSI with ringbuffer base setup, prior to us being
+	 * ready to handle the IRQ.
 	 */
+	ret = mnh_get_rb_base(&temp_rb_base_val);
+	if (!WARN_ON(ret) && temp_rb_base_val)
+		schedule_work(&server_cmdchan_ready);
 	return ret;
 }
 
