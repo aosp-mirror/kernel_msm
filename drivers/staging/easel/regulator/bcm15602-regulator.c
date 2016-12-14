@@ -263,6 +263,25 @@ int bcm15602_read_byte(struct bcm15602_chip *ddata, u8 addr, u8 *data)
 }
 EXPORT_SYMBOL_GPL(bcm15602_read_byte);
 
+int bcm15602_read_bytes(struct bcm15602_chip *ddata, u8 addr, u8 *data,
+		       size_t count)
+{
+#ifdef PREPRODUCTION
+	memcpy(data, &ddata->pseudo_regmap[addr], count);
+#else
+	int ret;
+
+	ret = regmap_bulk_read(ddata->regmap, addr, data, count);
+	if (ret < 0) {
+		dev_err(ddata->dev, "failed to read addr 0x%.2x (%d)\n", addr,
+			ret);
+		return ret;
+	}
+#endif
+	return 0;
+}
+EXPORT_SYMBOL_GPL(bcm15602_read_bytes);
+
 int bcm15602_write_byte(struct bcm15602_chip *ddata, u8 addr, u8 data)
 {
 #ifdef PREPRODUCTION
@@ -273,6 +292,18 @@ int bcm15602_write_byte(struct bcm15602_chip *ddata, u8 addr, u8 data)
 #endif
 }
 EXPORT_SYMBOL_GPL(bcm15602_write_byte);
+
+int bcm15602_write_bytes(struct bcm15602_chip *ddata, u8 addr, u8 *data,
+			 size_t count)
+{
+#ifdef PREPRODUCTION
+	memcpy(&ddata->pseudo_regmap[addr], data, count);
+	return 0;
+#else
+	return regmap_bulk_write(ddata->regmap, addr, data, count);
+#endif
+}
+EXPORT_SYMBOL_GPL(bcm15602_write_bytes);
 
 int bcm15602_update_bits(struct bcm15602_chip *ddata, u8 addr,
 			 unsigned int mask, u8 data)
@@ -293,7 +324,7 @@ EXPORT_SYMBOL_GPL(bcm15602_update_bits);
 int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
 			   int chan_num, u16 *chan_data)
 {
-	u8 byte;
+	u8 bytes[2];
 	int ret = 0;
 	int timeout;
 
@@ -301,11 +332,11 @@ int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
 	if (test_and_set_bit(0, &ddata->adc_conv_busy))
 		return -EAGAIN;
 
-	/* enable the ADC clock */
-	bcm15602_write_byte(ddata, BCM15602_REG_ADC_MAN_CTRL, 0x1);
-
-	/* write the channel number to trigger the conversion */
-	bcm15602_write_byte(ddata, BCM15602_REG_ADC_MAN_CONV_CHNUM, chan_num);
+	/* enable the ADC clock and write the channel number to trigger
+	 * the conversion */
+	bytes[0] = 0x1;
+	bytes[1] = chan_num;
+	bcm15602_write_bytes(ddata, BCM15602_REG_ADC_MAN_CTRL, bytes, 2);
 
 	/* wait for completion signaled by interrupt */
 	reinit_completion(&ddata->adc_conv_complete);
@@ -318,10 +349,8 @@ int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
 	}
 
 	/* read and format the conversion result */
-	bcm15602_read_byte(ddata, BCM15602_REG_ADC_MAN_RESULT_H, &byte);
-	*chan_data = (byte & 0x7F) << 3;
-	bcm15602_read_byte(ddata, BCM15602_REG_ADC_MAN_RESULT_L, &byte);
-	*chan_data |= byte & 0x7;
+	bcm15602_read_bytes(ddata, BCM15602_REG_ADC_MAN_RESULT_L, bytes, 2);
+	*chan_data = ((bytes[1] & 0x7F) << 3) | (bytes[0] & 0x7);
 
 finish:
 	/* disable the ADC clock */
@@ -337,10 +366,9 @@ EXPORT_SYMBOL_GPL(bcm15602_read_adc_chan);
 int bcm15602_read_hk_slot(struct bcm15602_chip *ddata,
 			  int slot_num, u16 *slot_data)
 {
-	u16 reading_mask;
+	u8 reading_mask[2];
+	u8 zeros[2] = {0, 0};
 	u8 byte;
-
-	reading_mask = 1 << slot_num;
 
 	/* serialize reads to the hk slots */
 	if (test_and_set_bit(0, &ddata->hk_read_busy))
@@ -350,10 +378,10 @@ int bcm15602_read_hk_slot(struct bcm15602_chip *ddata,
 	 * set the reading mask so the adc does not update the slot data while
 	 * we are performing a read
 	 */
-	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGL,
-			    reading_mask & 0xFF);
-	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGH,
-			    (reading_mask >> 8) & 0xF);
+	reading_mask[0] = (1 << slot_num) & 0xFF;
+	reading_mask[1] = ((1 << slot_num) >> 8) & 0xF;
+	bcm15602_write_bytes(ddata, BCM15602_REG_ADC_SLOTDATA_READINGL,
+			     reading_mask, 2);
 
 	bcm15602_read_byte(ddata, BCM15602_REG_ADC_SLOTDATA0 + slot_num,
 			   &byte);
@@ -364,8 +392,8 @@ int bcm15602_read_hk_slot(struct bcm15602_chip *ddata,
 	*slot_data |= (byte >> (slot_num % 4)) & 0x3;
 
 	/* unset the reading mask */
-	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGL, 0);
-	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTDATA_READINGH, 0);
+	bcm15602_write_bytes(ddata, BCM15602_REG_ADC_SLOTDATA_READINGL,
+			     zeros, 2);
 
 	/* release hk read */
 	clear_bit(0, &ddata->hk_read_busy);
@@ -392,20 +420,15 @@ static int bcm15602_handle_hk_int(struct bcm15602_chip *ddata)
 {
 	struct device *dev = ddata->dev;
 	u16 status;
-	u8 byte;
+	u8 bytes[2];
 
 	/* read interrupt status flags */
-	bcm15602_read_byte(ddata, BCM15602_REG_ADC_SLOTSTAL, &byte);
-	status = byte;
-	bcm15602_read_byte(ddata, BCM15602_REG_ADC_SLOTSTAH, &byte);
-	status |= (byte & 0x3) << 8;
+	bcm15602_read_bytes(ddata, BCM15602_REG_ADC_SLOTSTAL, bytes, 2);
+	status = ((bytes[1] & 0x3) << 8) | bytes[0];
 	dev_dbg(dev, "%s: ADC_SLOTSTA: 0x%04x\n", __func__, status);
 
 	/* clear handled interrupts */
-	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTSTAL,
-			    status & 0xFF);
-	bcm15602_write_byte(ddata, BCM15602_REG_ADC_SLOTSTAH,
-			    (status >> 8) & 0x3);
+	bcm15602_write_bytes(ddata, BCM15602_REG_ADC_SLOTSTAL, bytes, 2);
 
 	ddata->hk_status = status;
 
@@ -419,18 +442,15 @@ static int bcm15602_handle_hk_int(struct bcm15602_chip *ddata)
 static void bcm15602_print_id(struct bcm15602_chip *ddata)
 {
 	struct device *dev = ddata->dev;
-	u8 id_lsb, id_msb, rev, gid;
+	u8 bytes[4];
 	int ret;
 
-	ret = bcm15602_read_byte(ddata, BCM15602_REG_SYS_PMIC_ID_LSB, &id_lsb);
-	ret |= bcm15602_read_byte(ddata, BCM15602_REG_SYS_PMIC_ID_MSB, &id_msb);
-	ret |= bcm15602_read_byte(ddata, BCM15602_REG_SYS_PMIC_REV, &rev);
-	ret |= bcm15602_read_byte(ddata, BCM15602_REG_SYS_PMIC_GID, &gid);
+	ret = bcm15602_read_bytes(ddata, BCM15602_REG_SYS_PMIC_ID_LSB, bytes, 4);
 
 	if (!ret)
 		dev_info(dev,
 			 "PMIC ID: 0x%02x%02x, Rev: 0x%02x, GID: 0x%02x\n",
-			 id_msb, id_lsb, rev, gid);
+			 bytes[1], bytes[0], bytes[2], bytes[3]);
 	else
 		dev_err(dev, "Could not read PMIC ID\n");
 }
@@ -564,19 +584,17 @@ static int bcm15602_handle_int(struct bcm15602_chip *ddata,
 /* find pending interrupt flags */
 static int bcm15602_check_int_flags(struct bcm15602_chip *ddata)
 {
-	u8 flags[4], flag_mask, flag_clr_mask;
+	u8 flags[4], flag_mask, flag_clr_mask[4];
 	unsigned int first_bit, flag_num;
 	int ret;
 	int i;
 
 	/* read interrupt status flags */
-	for (i = 0; i < 4; i++)
-		bcm15602_read_byte(ddata, BCM15602_REG_INT_INTFLAG1 + i,
-				   flags + i);
+	bcm15602_read_bytes(ddata, BCM15602_REG_INT_INTFLAG1, flags, 4);
 
 	/* iterate through each interrupt */
 	for (i = 0; i < 4; i++) {
-		flag_clr_mask = 0;
+		flag_clr_mask[i] = 0;
 
 		while (flags[i]) {
 			/* find first set interrupt flag */
@@ -588,15 +606,15 @@ static int bcm15602_check_int_flags(struct bcm15602_chip *ddata)
 			ret = bcm15602_handle_int(ddata, flag_num);
 
 			flags[i] &= ~flag_mask;
-			flag_clr_mask |=  flag_mask;
+			flag_clr_mask[i] |=  flag_mask;
 		}
+	}
 
 		/* clear handled interrupts */
-		if (flag_clr_mask)
-			bcm15602_write_byte(ddata,
-					    BCM15602_REG_INT_INTFLAG1 + i,
-					    flag_clr_mask);
-	}
+	bcm15602_write_bytes(ddata,
+			     BCM15602_REG_INT_INTFLAG1,
+			     flag_clr_mask,
+			     4);
 
 	return 0;
 }
