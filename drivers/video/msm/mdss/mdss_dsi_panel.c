@@ -2553,6 +2553,9 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-max-level", &tmp);
 	pinfo->bl_max = (!rc ? tmp : 255);
 	ctrl_pdata->bklt_max = pinfo->bl_max;
+	rc = of_property_read_u32(np, "htc,mdss-dsi-bl-dim-check", &tmp);
+	pinfo->bl_dim_check = (!rc ? tmp : 0);
+	pinfo->bl_dim_status = false;
 
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-interleave-mode", &tmp);
 	pinfo->mipi.interleave_mode = (!rc ? tmp : 0);

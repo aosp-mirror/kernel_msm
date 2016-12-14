@@ -274,6 +274,7 @@ struct smbchg_chip {
 	u32				vchg_adc_channel;
 	struct qpnp_vadc_chip		*vchg_vadc_dev;
 #ifdef CONFIG_HTC_BATT
+	struct work_struct		clean_tcc_WA;
 	struct work_struct		usb_aicl_limit_current;
 	struct delayed_work		usb_limit_max_current;
 	struct delayed_work		rerun_apsd_work;
@@ -309,6 +310,7 @@ struct smbchg_chip {
 #define SKIP_HARD_LIMIT_CHECK_VBAT_MV	3900
 static struct smbchg_chip *the_chip;
 static bool g_is_batt_full_eoc_stop = false;
+static bool g_batfet_keep_close_wa = false;
 static void handle_usb_insertion(struct smbchg_chip *chip);
 
 
@@ -1365,6 +1367,147 @@ bool pmi8996_is_booting_stage(void)
 		return true;
 	else
 		return false;
+}
+
+#define I_TERM_BIT			BIT(3)
+#define CHGR_CFG2			0xFC
+static int smbchg_charging_en(struct smbchg_chip *chip, bool en);
+static int pmi8996_charger_reset_batfet(struct smbchg_chip *chip)
+{
+	int rc = 0;
+
+	/* Force open/close batfet to keep charging battery */
+	rc = smbchg_charging_en(chip, false);
+	if (rc < 0) {
+		dev_err(chip->dev,
+			"Couldn't disable charging: rc = %d\n", rc);
+		return rc;
+	}
+
+	/* delay for charging-disable to take affect */
+	msleep(200);
+
+	rc = smbchg_charging_en(chip, true);
+	if (rc < 0) {
+		dev_err(chip->dev,
+			"Couldn't enable charging: rc = %d\n", rc);
+		return rc;
+	}
+
+	return rc;
+}
+
+static int pmi8996_charger_termination_control(bool enable)
+{
+	int rc = 0;
+	struct smbchg_chip *chip = the_chip;
+
+	if (!the_chip) {
+		pr_err("called before init\n");
+		return -ENODEV;
+	}
+
+	if (enable) {
+		/* Enable charger termination mechanism*/
+		rc = smbchg_sec_masked_write(chip, chip->chgr_base + CHGR_CFG2,
+			I_TERM_BIT, 0);
+		if (rc < 0) {
+			dev_err(chip->dev,
+				"Couldn't set I_TERM_BIT rc=%d\n", rc);
+			return rc;
+		}
+	} else {
+		/* Disable charger termination mechanism*/
+		rc = smbchg_sec_masked_write(chip, chip->chgr_base + CHGR_CFG2,
+			I_TERM_BIT, I_TERM_BIT);
+		if (rc < 0) {
+			dev_err(chip->dev,
+				"Couldn't set I_TERM_BIT rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	return rc;
+}
+
+#define HOT_BAT_HARD_BIT	BIT(0)
+#define COLD_BAT_HARD_BIT	BIT(2)
+int pmi8996_charger_batfet_switch(bool enable)
+{
+	int rc = 0;
+	u8 chgr_rt_reg = 0, batif_rt_reg = 0;
+	struct smbchg_chip *chip = the_chip;
+
+	if (!the_chip) {
+		pr_err("called before init\n");
+		return -ENODEV;
+	}
+
+	if (g_batfet_keep_close_wa == enable) {
+		pr_smb(PR_STATUS, "Batfet WA %d->%d, do nothing\n",
+			g_batfet_keep_close_wa, enable);
+		return 0;
+	}
+
+	rc = smbchg_read(chip, &batif_rt_reg, chip->bat_if_base + RT_STS, 1);
+	if (rc < 0) {
+		dev_err(chip->dev, "Unable to read batif_RT_STS rc = %d\n", rc);
+		return rc;
+	}
+
+	if ((batif_rt_reg & HOT_BAT_HARD_BIT) ||
+	    (batif_rt_reg & COLD_BAT_HARD_BIT)) {
+		pr_smb(PR_STATUS,
+		       "Not enable WA due to batt is_hot=%d, is_cold=%d\n",
+		       chip->batt_hot, chip->batt_cold);
+		return 0;
+	}
+
+	rc = smbchg_read(chip, &chgr_rt_reg, chip->chgr_base + RT_STS, 1);
+	if (rc < 0) {
+		dev_err(chip->dev, "Unable to read chgr_RT_STS rc = %d\n", rc);
+		return rc;
+	}
+
+	pr_smb(PR_STATUS, "Batfet WA %d->%d, chgr_RT_STS=0x%X, batif_RT_STS=0x%X\n",
+	       g_batfet_keep_close_wa, enable, chgr_rt_reg, batif_rt_reg);
+
+	if (enable) {
+		/* Disable charger termination mechanism */
+		rc = pmi8996_charger_termination_control(false);
+		if (rc < 0) {
+			dev_err(chip->dev,
+				"unable to set charger termination control to false rc=%d\n",
+				rc);
+			return rc;
+		}
+		if (chgr_rt_reg & BAT_TCC_REACHED_BIT) {
+			rc = pmi8996_charger_reset_batfet(chip);
+			if (rc < 0) {
+				dev_err(chip->dev,
+					"unable to reset batfet rc=%d\n", rc);
+				return rc;
+			}
+		}
+	} else {
+		/* Enable charger termination mechanism */
+		rc = pmi8996_charger_termination_control(true);
+		if (rc < 0) {
+			dev_err(chip->dev,
+				"unable to set charger terminaltion to true rc=%d\n",
+				rc);
+			return rc;
+		}
+		rc = pmi8996_charger_reset_batfet(chip);
+		if (rc < 0) {
+			dev_err(chip->dev,
+				"unable to reset batfet rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	g_batfet_keep_close_wa = enable;
+	return rc;
 }
 #endif /* CONFIG_HTC_BATT */
 
@@ -7024,8 +7167,10 @@ static irqreturn_t batt_warm_handler(int irq, void *_chip)
 #ifdef CONFIG_HTC_BATT
 	if (chip->batt_warm)
 		set_property_on_fg(chip, POWER_SUPPLY_PROP_WARM_TEMP, TEMP_WARM_TO_NORMAL);
-	else
+	else {
 		set_property_on_fg(chip, POWER_SUPPLY_PROP_WARM_TEMP, TEMP_NORMAL_TO_WARM);
+		schedule_work(&chip->clean_tcc_WA);
+	}
 #endif /* CONFIG_HTC_BATT */
 	return IRQ_HANDLED;
 }
@@ -7111,6 +7256,51 @@ static irqreturn_t chg_error_handler(int irq, void *_chip)
 }
 
 #ifdef CONFIG_HTC_BATT
+#define DISCHARGE_WINDOW_MS	200
+#define VFLOAT_COMP_WARM	0x10	// 0x10F4[5:0] - 0x10 = 4.1V
+#define VFLOAT_VOTLAGE_UV	4400000
+static void smbchg_clean_tcc_WA_work(struct work_struct *work)
+{
+	int level = 0;
+	int vbat_uv = 0;
+	u8 reg = 0;
+	int rc;
+
+	if(!the_chip) {
+		pr_err("called before init\n");
+		return;
+	}
+
+	level = htc_battery_level_adjust();
+	vbat_uv = get_prop_batt_voltage_now(the_chip);
+
+	/* Only execute WA while below conditions are all true */
+	/* Condition#1: Cable inserted */
+	if (the_chip->usb_supply_type == POWER_SUPPLY_TYPE_UNKNOWN) {
+		pr_smb(PR_STATUS, "Skip, no cable inserted.\n");
+		return;
+	}
+
+	/* Condition#2: VFLOAT COMP level not at WARM (4.1V) */
+	if (the_chip->float_voltage_comp == VFLOAT_COMP_WARM) {
+		pr_smb(PR_STATUS, "Skip, float_voltage_comp == %d.\n",
+				VFLOAT_COMP_WARM);
+		return;
+	}
+
+	/* Condition#3: TCC (0x1010 BIT7) is raised */
+	rc = smbchg_read(the_chip, &reg, the_chip->chgr_base + RT_STS, 1);
+	if (rc < 0) {
+		dev_err(the_chip->dev, "Unable to read RT_STS rc = %d\n", rc);
+		return;
+	}
+	if (reg & BAT_TCC_REACHED_BIT) {
+		pr_smb(PR_STATUS, "Reset batfet to clear incorrect TCC\n");
+		pmi8996_charger_reset_batfet(the_chip);
+	}
+	return;
+}
+
 static void smbchg_usb_limit_current_WA_work(struct work_struct *work)
 {
 	int rc = 0;
@@ -9540,6 +9730,8 @@ int pmi8994_set_float_voltage_comp (int vfloat_comp)
 
 	pr_smb(PR_STATUS, "set vfloat comp = %d\n",vfloat_comp);
 	rc = smbchg_float_voltage_comp_set(the_chip, vfloat_comp);
+	the_chip->float_voltage_comp = vfloat_comp;
+
 	if (rc) {
 		pr_err("Unable to set float_voltage_comp rc=%d\n", rc);
 		return -EINVAL;
@@ -9788,10 +9980,10 @@ int charger_dump_all(void)
 	printk(KERN_INFO "[BATT][SMBCHG] "
 		"0x1010=%02x,0x1210=%02x,0x1242=%02x,0x1310=%02x,0x1340=%02x,0x1608=%02x,0x1610=%02x,"
 		"cc=%duAh,warm_temp=%d,cool_temp=%d,pmic=rev%d.%d,sink_current=%d,pd_chgr=%d,"
-		"wake_reason=%d,smb_curr=%dmA\n",
+		"wake_reason=%d,smb_curr=%dmA,batfet_wa=%d\n",
 		chgr_rt_sts,bat_if_rt_sts,bat_if_cmd,chgpth_rt_sts,chgpth_cmd,pmic_chg_type,misc_rt_sts,
 		cc_uah,warm_temp,cool_temp,pmic_revid_rev4,pmic_revid_rev3,sink_current,(int)pd_charger,
-		wake_reason,smb_current);
+		wake_reason,smb_current,g_batfet_keep_close_wa);
 
 	smbchg_dump_reg();
 
@@ -10142,6 +10334,7 @@ static int smbchg_probe(struct spmi_device *spmi)
 	INIT_DELAYED_WORK(&chip->vfloat_adjust_work, smbchg_vfloat_adjust_work);
 	INIT_DELAYED_WORK(&chip->hvdcp_det_work, smbchg_hvdcp_det_work);
 #ifdef CONFIG_HTC_BATT
+	INIT_WORK(&chip->clean_tcc_WA, smbchg_clean_tcc_WA_work);
 	INIT_WORK(&chip->usb_aicl_limit_current, smbchg_usb_limit_current_WA_work);
 	INIT_DELAYED_WORK(&chip->usb_limit_max_current, smbchg_usb_limit_max_current_work);
 	INIT_DELAYED_WORK(&chip->rerun_apsd_work, smbchg_rerun_apsd_worker);

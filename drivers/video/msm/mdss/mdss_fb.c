@@ -48,6 +48,7 @@
 #include <linux/file.h>
 #include <linux/kthread.h>
 #include <linux/dma-buf.h>
+#include <linux/power/htc_battery.h>
 #include "mdss_fb.h"
 #include "mdss_mdp_splash_logo.h"
 #define CREATE_TRACE_POINTS
@@ -272,6 +273,26 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 
 	if (value > mfd->panel_info->brightness_max)
 		value = mfd->panel_info->brightness_max;
+
+	/* Check if the current bl is in dim level or not,
+	   except bl = zero */
+	if (mfd->panel_info->bl_dim_check) {
+		bool dim_status = false;
+
+		if ((value > 0) && (value <= mfd->panel_info->bl_dim_check)) {
+			dim_status = true;
+		} else {
+			dim_status = false;
+		}
+
+		if (mfd->panel_info->bl_dim_status != dim_status) {
+			mfd->panel_info->bl_dim_status = dim_status;
+			/* bl_dim_status = true :  dim level
+			   bl_dim_stauts = false : 0 or over dim */
+			htc_battery_backlight_dim_mode_check(mfd->panel_info->bl_dim_status);
+			pr_info("bl_dim_status =%d\n", mfd->panel_info->bl_dim_status);
+		}
+	}
 
 	/* This maps android backlight level 0 to 255 into
 	   driver backlight level 0 to bl_max with rounding */

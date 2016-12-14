@@ -398,6 +398,7 @@ int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *ma
 bool htc_battery_is_pd_detected(void);
 int htc_battery_get_pd_current(void);
 int htc_battery_get_pd_vbus(int *vbus);
+void htc_battery_backlight_dim_mode_check(bool status);
 
 /* Implement on QCT driver */
 int request_charger_status(enum htc_charger_request mode, void *ret_buf);
@@ -425,4 +426,5 @@ void pmi8996_set_dcp_default(void);
 bool pmi8996_is_booting_stage(void);
 bool htc_battery_get_discharging_reason(void);
 bool get_ima_error_status(void);
+int pmi8996_charger_batfet_switch(bool enable);
 #endif /* __HTC_BATTERY_H__ */
