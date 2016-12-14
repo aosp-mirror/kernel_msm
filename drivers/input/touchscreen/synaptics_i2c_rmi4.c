@@ -4257,11 +4257,8 @@ err_free_gpios:
 	if (gpio_is_valid(rmi4_data->board->irq_gpio))
 		gpio_free(rmi4_data->board->irq_gpio);
 pinctrl_sleep:
-	if (rmi4_data->ts_pinctrl) {
-		retval = synpatics_rmi4_pinctrl_select(rmi4_data, false);
-		if (retval < 0)
-			pr_err("Cannot get idle pinctrl state\n");
-	}
+	if (rmi4_data->ts_pinctrl)
+		synpatics_rmi4_pinctrl_select(rmi4_data, false);
 err_gpio_config:
 	synaptics_rmi4_power_on(rmi4_data, false);
 err_power_device:
@@ -4292,7 +4289,6 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 	struct synaptics_rmi4_fn *next_fhandler;
 	struct synaptics_rmi4_data *rmi4_data = i2c_get_clientdata(client);
 	struct synaptics_rmi4_device_info *rmi;
-	int retval;
 
 	device_init_wakeup(&client->dev, 0);
 
@@ -4335,11 +4331,8 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 	if (gpio_is_valid(rmi4_data->board->irq_gpio))
 		gpio_free(rmi4_data->board->irq_gpio);
 
-	if (rmi4_data->ts_pinctrl) {
-		retval = synpatics_rmi4_pinctrl_select(rmi4_data, false);
-		if (retval < 0)
-			pr_err("Cannot get idle pinctrl state\n");
-	}
+	if (rmi4_data->ts_pinctrl)
+		synpatics_rmi4_pinctrl_select(rmi4_data, false);
 
 	synaptics_rmi4_power_on(rmi4_data, false);
 	synaptics_rmi4_regulator_configure(rmi4_data, false);
