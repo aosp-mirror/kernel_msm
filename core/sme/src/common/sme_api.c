@@ -3068,6 +3068,12 @@ QDF_STATUS sme_process_msg(tHalHandle hHal, cds_msg_t *pMsg)
 	case eWNI_SME_NDP_PEER_DEPARTED_IND:
 		sme_ndp_msg_processor(pMac, pMsg);
 		break;
+	case eWNI_SME_LOST_LINK_INFO_IND:
+		if (pMac->sme.lost_link_info_cb)
+			pMac->sme.lost_link_info_cb(pMac->hHdd,
+				(struct sir_lost_link_info *)pMsg->bodyptr);
+		qdf_mem_free(pMsg->bodyptr);
+		break;
 	default:
 
 		if ((pMsg->type >= eWNI_SME_MSG_TYPES_BEGIN)
@@ -7655,6 +7661,12 @@ QDF_STATUS sme_get_cfg_valid_channels(tHalHandle hHal, uint8_t *aValidChannels,
 	return status;
 }
 
+void sme_set_cc_src(tHalHandle hHal, enum country_src cc_src)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hHal);
+
+	mac_ctx->reg_hint_src = cc_src;
+}
 /* ---------------------------------------------------------------------------
 
     \fn sme_handle_change_country_code
@@ -7810,23 +7822,25 @@ sme_handle_generic_change_country_code(tpAniSirGlobal mac_ctx,
 
 	sms_log(mac_ctx, LOG1, FL(" called"));
 
-	if (!mac_ctx->is_11d_hint) {
-		if (user_ctry_priority)
-			mac_ctx->roam.configParam.Is11dSupportEnabled = false;
-		else {
-			if (mac_ctx->roam.configParam.Is11dSupportEnabled &&
-			    mac_ctx->scan.countryCode11d[0] != 0) {
+	if (SOURCE_11D != mac_ctx->reg_hint_src) {
+		if (SOURCE_DRIVER != mac_ctx->reg_hint_src) {
+			if (user_ctry_priority)
+				mac_ctx->roam.configParam.Is11dSupportEnabled =
+					false;
+			else {
+				if (mac_ctx->roam.configParam.Is11dSupportEnabled &&
+				    mac_ctx->scan.countryCode11d[0] != 0) {
 
-				sms_log(mac_ctx, LOGW,
-					FL("restore 11d"));
+					sms_log(mac_ctx, LOGW,
+						FL("restore 11d"));
 
-				status = csr_get_regulatory_domain_for_country(
-					mac_ctx,
-					mac_ctx->scan.countryCode11d,
-					&reg_domain_id,
-					SOURCE_11D);
-
-				return QDF_STATUS_E_FAILURE;
+					status = csr_get_regulatory_domain_for_country(
+						mac_ctx,
+						mac_ctx->scan.countryCode11d,
+						&reg_domain_id,
+						SOURCE_11D);
+					return QDF_STATUS_E_FAILURE;
+				}
 			}
 		}
 	} else {
@@ -7838,7 +7852,6 @@ sme_handle_generic_change_country_code(tpAniSirGlobal mac_ctx,
 			qdf_mem_copy(mac_ctx->scan.countryCode11d,
 				     msg->countryCode,
 				     WNI_CFG_COUNTRY_CODE_LEN);
-		mac_ctx->is_11d_hint = false;
 	}
 
 	qdf_mem_copy(mac_ctx->scan.countryCodeCurrent,
@@ -7862,6 +7875,8 @@ sme_handle_generic_change_country_code(tpAniSirGlobal mac_ctx,
 	 * Country IE
 	 */
 	mac_ctx->scan.curScanType = eSIR_ACTIVE_SCAN;
+
+	mac_ctx->reg_hint_src = SOURCE_UNKNOWN;
 
 	sme_disconnect_connected_sessions(mac_ctx);
 
@@ -11280,7 +11295,8 @@ static struct sir_ocb_config *sme_copy_sir_ocb_config(
 		src->channel_count * sizeof(*src->channels) +
 		src->schedule_size * sizeof(*src->schedule) +
 		src->dcc_ndl_chan_list_len +
-		src->dcc_ndl_active_state_list_len;
+		src->dcc_ndl_active_state_list_len +
+		src->def_tx_param_size;
 
 	dst = qdf_mem_malloc(length);
 	if (!dst)
@@ -11307,6 +11323,12 @@ static struct sir_ocb_config *sme_copy_sir_ocb_config(
 	qdf_mem_copy(dst->dcc_ndl_active_state_list,
 		     src->dcc_ndl_active_state_list,
 		     src->dcc_ndl_active_state_list_len);
+	cursor += src->dcc_ndl_active_state_list_len;
+	if (src->def_tx_param && src->def_tx_param_size) {
+		dst->def_tx_param = cursor;
+		qdf_mem_copy(dst->def_tx_param, src->def_tx_param,
+			src->def_tx_param_size);
+	}
 	return dst;
 }
 
@@ -13286,28 +13308,6 @@ QDF_STATUS sme_update_add_ie(tHalHandle hHal,
 	return status;
 }
 
-/* ---------------------------------------------------------------------------
-    \fn sme_sta_in_middle_of_roaming
-    \brief  This function returns true if STA is in the middle of roaming state
-    \param  hHal - HAL handle for device
-    \param  sessionId - Session Identifier
-   \- return true or false
-    -------------------------------------------------------------------------*/
-bool sme_sta_in_middle_of_roaming(tHalHandle hHal, uint8_t sessionId)
-{
-	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
-	QDF_STATUS status = QDF_STATUS_SUCCESS;
-	bool ret = false;
-
-	status = sme_acquire_global_lock(&pMac->sme);
-	if (QDF_IS_STATUS_SUCCESS(status)) {
-		ret = csr_neighbor_middle_of_roaming(hHal, sessionId);
-		sme_release_global_lock(&pMac->sme);
-	}
-	return ret;
-}
-
-
 /**
  * sme_update_dsc_pto_up_mapping()
  * @hHal: HAL context
@@ -14332,6 +14332,46 @@ QDF_STATUS sme_reset_link_layer_stats_ind_cb(tHalHandle h_hal)
 
 
 #endif /* WLAN_FEATURE_LINK_LAYER_STATS */
+
+#ifdef WLAN_POWER_DEBUGFS
+/**
+ * sme_power_debug_stats_req() - SME API to collect Power debug stats
+ * @callback_fn: Pointer to the callback function for Power stats event
+ * @power_stats_context: Pointer to context
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_power_debug_stats_req(tHalHandle hal, void (*callback_fn)
+				(struct power_stats_response *response,
+				void *context), void *power_stats_context)
+{
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+	cds_msg_t msg;
+
+	status = sme_acquire_global_lock(&mac_ctx->sme);
+	if (QDF_IS_STATUS_SUCCESS(status)) {
+		if (!callback_fn) {
+			sms_log(mac_ctx, LOGE,
+				FL("Indication callback did not registered"));
+			sme_release_global_lock(&mac_ctx->sme);
+			return QDF_STATUS_E_FAILURE;
+		}
+
+		mac_ctx->sme.power_debug_stats_context = power_stats_context;
+		mac_ctx->sme.power_stats_resp_callback = callback_fn;
+		msg.bodyptr = NULL;
+		msg.type = WMA_POWER_DEBUG_STATS_REQ;
+		status = cds_mq_post_message(QDF_MODULE_ID_WMA, &msg);
+		if (!QDF_IS_STATUS_SUCCESS(status)) {
+			sms_log(mac_ctx, LOGE,
+				FL("not able to post WDA_POWER_DEBUG_STATS_REQ"));
+		}
+		sme_release_global_lock(&mac_ctx->sme);
+	}
+	return status;
+}
+#endif
 
 /**
  * sme_fw_mem_dump_register_cb() - Register fw memory dump callback
@@ -17019,6 +17059,24 @@ QDF_STATUS sme_update_tx_fail_cnt_threshold(tHalHandle hal_handle,
 				FL("Not able to post Tx fail count message to WDA"));
 		qdf_mem_free(tx_fail_cnt);
 	}
+	return status;
+}
 
+QDF_STATUS sme_set_lost_link_info_cb(tHalHandle hal,
+				void (*cb)(void *, struct sir_lost_link_info *))
+{
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	tpAniSirGlobal mac = PMAC_STRUCT(hal);
+
+	status = sme_acquire_global_lock(&mac->sme);
+	if (QDF_IS_STATUS_SUCCESS(status)) {
+		mac->sme.lost_link_info_cb = cb;
+		sme_release_global_lock(&mac->sme);
+		sms_log(mac, LOG1, FL("set lost link info callback"));
+	} else {
+		sms_log(mac, LOGE,
+			FL("sme_acquire_global_lock error status %d"),
+			status);
+	}
 	return status;
 }

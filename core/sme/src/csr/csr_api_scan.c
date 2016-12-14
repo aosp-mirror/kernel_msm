@@ -377,14 +377,20 @@ csr_issue_11d_scan(tpAniSirGlobal mac_ctx, tSmeCmd *scan_cmd,
 	QDF_STATUS status;
 	tSmeCmd *scan_11d_cmd = NULL;
 	tCsrScanRequest tmp_rq;
-	tCsrChannelInfo *pChnInfo = &tmp_rq.ChannelInfo;
-	uint32_t numChn = mac_ctx->scan.base_channels.numChannels;
+	tCsrChannelInfo *chn_info = &tmp_rq.ChannelInfo;
+	uint32_t num_chn = mac_ctx->scan.base_channels.numChannels;
 	tCsrRoamSession *csr_session = CSR_GET_SESSION(mac_ctx, session_id);
 
 	if (csr_session == NULL) {
 		sms_log(mac_ctx, LOGE, FL("session %d not found"),
 			session_id);
 		QDF_ASSERT(0);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	if (num_chn > WNI_CFG_VALID_CHANNEL_LIST_LEN) {
+		sms_log(mac_ctx, LOGE, FL("invalid number of channels: %d"),
+			num_chn);
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -404,15 +410,15 @@ csr_issue_11d_scan(tpAniSirGlobal mac_ctx, tSmeCmd *scan_cmd,
 	}
 
 	qdf_mem_set(&scan_11d_cmd->u.scanCmd, sizeof(tScanCmd), 0);
-	pChnInfo->ChannelList = qdf_mem_malloc(numChn);
-	if (NULL == pChnInfo->ChannelList) {
+	chn_info->ChannelList = qdf_mem_malloc(num_chn);
+	if (NULL == chn_info->ChannelList) {
 		sms_log(mac_ctx, LOGE, FL("Failed to allocate memory"));
 		return QDF_STATUS_E_NOMEM;
 	}
-	qdf_mem_copy(pChnInfo->ChannelList,
-		     mac_ctx->scan.base_channels.channelList, numChn);
+	qdf_mem_copy(chn_info->ChannelList,
+		     mac_ctx->scan.base_channels.channelList, num_chn);
 
-	pChnInfo->numOfChannels = (uint8_t) numChn;
+	chn_info->numOfChannels = (uint8_t) num_chn;
 	scan_11d_cmd->command = eSmeCommandScan;
 	scan_11d_cmd->u.scanCmd.callback = mac_ctx->scan.callback11dScanDone;
 	scan_11d_cmd->u.scanCmd.pContext = NULL;
@@ -422,7 +428,7 @@ csr_issue_11d_scan(tpAniSirGlobal mac_ctx, tSmeCmd *scan_cmd,
 
 	status = qdf_mc_timer_init(&scan_cmd->u.scanCmd.csr_scan_timer,
 			QDF_TIMER_TYPE_SW,
-			csr_scan_active_list_timeout_handle, &scan_11d_cmd);
+			csr_scan_active_list_timeout_handle, scan_11d_cmd);
 
 	if (csr_is11d_supported(mac_ctx)) {
 		tmp_rq.bcnRptReqScan = scan_req->bcnRptReqScan;
@@ -457,8 +463,8 @@ csr_issue_11d_scan(tpAniSirGlobal mac_ctx, tSmeCmd *scan_cmd,
 	status = csr_scan_copy_request(mac_ctx,
 			&scan_11d_cmd->u.scanCmd.u.scanRequest, &tmp_rq);
 	/* Free the channel list */
-	qdf_mem_free(pChnInfo->ChannelList);
-	pChnInfo->ChannelList = NULL;
+	qdf_mem_free(chn_info->ChannelList);
+	chn_info->ChannelList = NULL;
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		sms_log(mac_ctx, LOGE, FL("csr_scan_copy_request failed"));
 		return QDF_STATUS_E_FAILURE;
@@ -809,7 +815,7 @@ csr_update_lost_link1_cmd(tpAniSirGlobal mac_ctx, tSmeCmd *cmd,
 	wma_get_scan_id(&cmd->u.scanCmd.scanID);
 	status = qdf_mc_timer_init(&cmd->u.scanCmd.csr_scan_timer,
 			QDF_TIMER_TYPE_SW,
-			csr_scan_active_list_timeout_handle, &cmd);
+			csr_scan_active_list_timeout_handle, cmd);
 	cmd->u.scanCmd.u.scanRequest.scan_id =
 		cmd->u.scanCmd.scanID;
 
@@ -981,7 +987,7 @@ csr_update_lost_link2_cmd(tpAniSirGlobal mac_ctx, tSmeCmd *cmd,
 		return QDF_STATUS_SUCCESS;
 	status = qdf_mc_timer_init(&cmd->u.scanCmd.csr_scan_timer,
 			QDF_TIMER_TYPE_SW,
-			csr_scan_active_list_timeout_handle, &cmd);
+			csr_scan_active_list_timeout_handle, cmd);
 	scan_fltr = qdf_mem_malloc(sizeof(tCsrScanResultFilter));
 	if (NULL == scan_fltr)
 		return QDF_STATUS_E_NOMEM;
@@ -1116,7 +1122,7 @@ csr_scan_request_lost_link3(tpAniSirGlobal mac_ctx, uint32_t session_id)
 		wma_get_scan_id(&cmd->u.scanCmd.scanID);
 		status = qdf_mc_timer_init(&cmd->u.scanCmd.csr_scan_timer,
 			QDF_TIMER_TYPE_SW,
-			csr_scan_active_list_timeout_handle, &cmd);
+			csr_scan_active_list_timeout_handle, cmd);
 		cmd->u.scanCmd.u.scanRequest.scan_id =
 			cmd->u.scanCmd.scanID;
 		qdf_set_macaddr_broadcast(&cmd->u.scanCmd.u.scanRequest.bssid);
@@ -2528,8 +2534,7 @@ static void csr_check_n_save_wsc_ie(tpAniSirGlobal pMac,
 	if ((pNewBssDescr->fProbeRsp != pOldBssDescr->fProbeRsp) &&
 	    (0 == pNewBssDescr->WscIeLen)) {
 		idx = 0;
-		len = pOldBssDescr->length - sizeof(tSirBssDescription) +
-		      sizeof(uint16_t) + sizeof(uint32_t) -
+		len = GET_IE_LEN_IN_BSS(pOldBssDescr->length) -
 		      DOT11F_IE_WSCPROBERES_MIN_LEN - 2;
 		pbIe = (uint8_t *) pOldBssDescr->ieFields;
 		/* Save WPS IE if it exists */
@@ -2913,7 +2918,7 @@ csr_remove_from_tmp_list(tpAniSirGlobal mac_ctx,
 		local_ie = (tDot11fBeaconIEs *)(bss_dscp->Result.pvIes);
 		status = csr_get_parsed_bss_description_ies(mac_ctx,
 				&bss_dscp->Result.BssDescriptor, &local_ie);
-		if (!(local_ie || QDF_IS_STATUS_SUCCESS(status))) {
+		if (!local_ie || !QDF_IS_STATUS_SUCCESS(status)) {
 			sms_log(mac_ctx, LOGE, FL("Cannot pared IEs"));
 			csr_free_scan_result_entry(mac_ctx, bss_dscp);
 			continue;
@@ -3708,7 +3713,7 @@ bool csr_learn_11dcountry_information(tpAniSirGlobal pMac,
 		goto free_ie;
 	}
 
-	pMac->is_11d_hint = true;
+	pMac->reg_hint_src = SOURCE_11D;
 	status = csr_get_regulatory_domain_for_country(pMac,
 				pCountryCodeSelected, &domainId, SOURCE_11D);
 	if (status != QDF_STATUS_SUCCESS) {
@@ -4172,7 +4177,7 @@ QDF_STATUS csr_get_active_scan_entry(tpAniSirGlobal mac_ctx,
 	}
 	localentry = csr_ll_peek_head(&mac_ctx->sme.smeScanCmdActiveList,
 			LL_ACCESS_NOLOCK);
-	do {
+	 while (localentry) {
 		cmd = GET_BASE_ADDR(localentry, tSmeCmd, Link);
 		if (cmd->command == eSmeCommandScan)
 			cmd_scan_id = cmd->u.scanCmd.u.scanRequest.scan_id;
@@ -4187,7 +4192,7 @@ QDF_STATUS csr_get_active_scan_entry(tpAniSirGlobal mac_ctx,
 		}
 		localentry = csr_ll_next(&mac_ctx->sme.smeScanCmdActiveList,
 				localentry, LL_ACCESS_NOLOCK);
-	} while (localentry);
+	}
 	csr_ll_unlock(&mac_ctx->sme.smeScanCmdActiveList);
 	return status;
 }
@@ -6247,7 +6252,7 @@ QDF_STATUS csr_scan_for_ssid(tpAniSirGlobal mac_ctx, uint32_t session_id,
 			sizeof(tCsrScanRequest), 0);
 	status = qdf_mc_timer_init(&scan_cmd->u.scanCmd.csr_scan_timer,
 			QDF_TIMER_TYPE_SW,
-			csr_scan_active_list_timeout_handle, &scan_cmd);
+			csr_scan_active_list_timeout_handle, scan_cmd);
 	scan_req = &scan_cmd->u.scanCmd.u.scanRequest;
 	scan_req->scanType = eSIR_ACTIVE_SCAN;
 	scan_req->BSSType = profile->BSSType;
@@ -6981,8 +6986,8 @@ QDF_STATUS csr_scan_save_preferred_network_found(tpAniSirGlobal pMac,
 	 * Length of BSS desription is without length of length itself and
 	 * length of pointer that holds the next BSS description
 	 */
-	pBssDescr->length = (uint16_t) (sizeof(tSirBssDescription) -
-		sizeof(uint16_t) - sizeof(uint32_t) + uLen);
+	pBssDescr->length = (uint16_t)(offsetof(tSirBssDescription, ieFields[0])
+					- sizeof(pBssDescr->length) + uLen);
 	if (parsed_frm->dsParamsPresent)
 		pBssDescr->channelId = parsed_frm->channelNumber;
 	else if (parsed_frm->HTInfo.present)

@@ -682,14 +682,6 @@ lim_send_del_sta_cnf(tpAniSirGlobal pMac, struct qdf_mac_addr sta_dsaddr,
 		}
 
 		psessionEntry->limAID = 0;
-
-	} else if (
-		(mlmStaContext.cleanupTrigger ==
-			eLIM_LINK_MONITORING_DISASSOC) ||
-		(mlmStaContext.cleanupTrigger ==
-			eLIM_LINK_MONITORING_DEAUTH)) {
-		/* only for non-STA cases PE/SME is serialized */
-		return;
 	}
 
 	if ((mlmStaContext.cleanupTrigger ==
@@ -1893,7 +1885,13 @@ tSirRetStatus lim_populate_matching_rate_set(tpAniSirGlobal mac_ctx,
 		temp_rate_set2.numRates = 0;
 	}
 
-	if ((temp_rate_set.numRates + temp_rate_set2.numRates) > 12) {
+	/*
+	 * absolute sum of both num_rates should be less than 12. following
+	 * 16-bit sum avoids false codition where 8-bit arthematic overflow
+	 * might have caused total sum to be less than 12
+	 */
+	if (((uint16_t)temp_rate_set.numRates +
+		(uint16_t)temp_rate_set2.numRates) > 12) {
 		lim_log(mac_ctx, LOGE, FL("more than 12 rates in CFG"));
 		return eSIR_FAILURE;
 	}

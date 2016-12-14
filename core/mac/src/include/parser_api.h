@@ -680,7 +680,7 @@ populate_dot11f_qos_caps_ap(tpAniSirGlobal pMac,
 			tpPESession psessionEntry);
 
 void
-populate_dot11f_qos_caps_station(tpAniSirGlobal pMac,
+populate_dot11f_qos_caps_station(tpAniSirGlobal pMac, tpPESession session,
 				tDot11fIEQOSCapsStation *pDot11f);
 
 tSirRetStatus
@@ -914,6 +914,8 @@ void populate_dot11f_assoc_rsp_rates(tpAniSirGlobal pMac,
 				uint16_t *_11bRates, uint16_t *_11aRates);
 
 int find_ie_location(tpAniSirGlobal pMac, tpSirRSNie pRsnIe, uint8_t EID);
+
+void lim_log_vht_cap(tpAniSirGlobal pMac, tDot11fIEVHTCaps *pDot11f);
 
 tSirRetStatus
 populate_dot11f_vht_caps(tpAniSirGlobal pMac, tpPESession psessionEntry,
