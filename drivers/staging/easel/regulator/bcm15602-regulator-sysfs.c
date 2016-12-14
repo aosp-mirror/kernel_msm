@@ -63,6 +63,7 @@ static const struct attribute_group bcm15602_attr_group = {
 	.attrs = bcm15602_attrs,
 };
 
+/* asr_curr is in uA */
 static int bcm15602_get_asr_curr(struct bcm15602_chip *ddata, int *asr_curr)
 {
 	u16 mstr_curr_chan_data, slv_curr_chan_data;
@@ -72,41 +73,44 @@ static int bcm15602_get_asr_curr(struct bcm15602_chip *ddata, int *asr_curr)
 	bcm15602_read_adc_chan(ddata, BCM15602_ADC_ASR_SLV_CURR,
 			       &slv_curr_chan_data);
 
-	*asr_curr = (mstr_curr_chan_data * BCM15602_ADC_SCALE_ASR_CURR / 1023) +
-		(slv_curr_chan_data * BCM15602_ADC_SCALE_ASR_CURR / 1023);
+	*asr_curr = (mstr_curr_chan_data * BCM15602_ADC_SCALE_ASR_CURR) +
+		(slv_curr_chan_data * BCM15602_ADC_SCALE_ASR_CURR);
 
 	return 0;
 }
 
+/* sdsr_curr is in uA */
 static int bcm15602_get_sdsr_curr(struct bcm15602_chip *ddata, int *sdsr_curr)
 {
 	u16 chan_data;
 
 	bcm15602_read_adc_chan(ddata, BCM15602_ADC_SDSR_CURR, &chan_data);
 
-	*sdsr_curr = chan_data * BCM15602_ADC_SCALE_SDSR_CURR / 1023;
+	*sdsr_curr = chan_data * BCM15602_ADC_SCALE_SDSR_CURR;
 
 	return 0;
 }
 
+/* sdldo_curr is in uA */
 static int bcm15602_get_sdldo_curr(struct bcm15602_chip *ddata, int *sdldo_curr)
 {
 	u16 chan_data;
 
 	bcm15602_read_adc_chan(ddata, BCM15602_ADC_SDLDO_CURR, &chan_data);
 
-	*sdldo_curr = chan_data * BCM15602_ADC_SCALE_SDLDO_CURR / 1023;
+	*sdldo_curr = chan_data * BCM15602_ADC_SCALE_SDLDO_CURR;
 
 	return 0;
 }
 
+/* ioldo_curr is in uA */
 static int bcm15602_get_ioldo_curr(struct bcm15602_chip *ddata, int *ioldo_curr)
 {
 	u16 chan_data;
 
 	bcm15602_read_adc_chan(ddata, BCM15602_ADC_IOLDO_CURR, &chan_data);
 
-	*ioldo_curr = chan_data * BCM15602_ADC_SCALE_IOLDO_CURR / 1023;
+	*ioldo_curr = chan_data * BCM15602_ADC_SCALE_IOLDO_CURR;
 
 	return 0;
 }
@@ -169,7 +173,7 @@ static ssize_t bcm15602_attr_show_vbat(struct device *dev,
 	bcm15602_read_adc_chan(ddata, BCM15602_ADC_VBAT, &chan_data);
 
 	return snprintf(data, PAGE_SIZE, "%d\n",
-			chan_data * BCM15602_ADC_SCALE_VBAT / 1023);
+			chan_data * BCM15602_ADC_SCALE_VBAT);
 }
 
 static ssize_t bcm15602_attr_show_temperature(struct device *dev,
@@ -184,6 +188,7 @@ static ssize_t bcm15602_attr_show_temperature(struct device *dev,
 	return snprintf(data, PAGE_SIZE, "%d\n", PTAT_CODE_TO_TEMP(chan_data));
 }
 
+/* shows power in mW */
 static ssize_t bcm15602_attr_show_total_power(struct device *dev,
 					      struct device_attribute *mattr,
 					      char *data)
