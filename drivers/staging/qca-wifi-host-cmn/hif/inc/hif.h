@@ -108,13 +108,15 @@ struct CE_state;
 
 /* NOTE: "napi->scale" can be changed,
    but this does not change the number of buckets */
-#define QCA_NAPI_NUM_BUCKETS (QCA_NAPI_BUDGET / QCA_NAPI_DEF_SCALE)
+#define QCA_NAPI_NUM_BUCKETS 4
 struct qca_napi_stat {
 	uint32_t napi_schedules;
 	uint32_t napi_polls;
 	uint32_t napi_completes;
 	uint32_t napi_workdone;
 	uint32_t napi_budget_uses[QCA_NAPI_NUM_BUCKETS];
+	uint32_t time_limit_reached;
+	uint32_t rxpkt_thresh_reached;
 };
 
 /**
@@ -127,11 +129,15 @@ struct qca_napi_stat {
 struct qca_napi_info {
 	struct net_device    netdev; /* dummy net_dev */
 	void 		     *hif_ctx;
-	struct napi_struct   napi;    /* one NAPI Instance per CE in phase I */
+	struct napi_struct   napi;
 	uint8_t              scale;   /* currently same on all instances */
 	uint8_t              id;
 	int                  irq;
 	struct qca_napi_stat stats[NR_CPUS];
+	/* will only be present for data rx CE's */
+	void (*lro_flush_cb)(void *);
+	void                 *lro_ctx;
+	qdf_spinlock_t lro_unloading_lock;
 };
 
 /**
@@ -177,7 +183,6 @@ struct qca_napi_cpu {
  *
  * A variable of this type will be stored in hif module context.
  */
-
 struct qca_napi_data {
 	spinlock_t           lock;
 	uint32_t             state;
@@ -189,6 +194,7 @@ struct qca_napi_data {
 	struct qca_napi_cpu  napi_cpu[NR_CPUS];
 	int                  lilcl_head, bigcl_head;
 	enum qca_napi_tput_state napi_mode;
+	struct notifier_block hnc_cpu_notifier;
 };
 
 /**
@@ -219,6 +225,7 @@ struct hif_target_info {
 	uint32_t target_type;
 	uint32_t target_revision;
 	uint32_t soc_version;
+	char *hw_name;
 };
 
 struct hif_opaque_softc {
@@ -632,8 +639,10 @@ void hif_crash_shutdown(struct hif_opaque_softc *hif_ctx);
 void hif_get_hw_info(struct hif_opaque_softc *scn, u32 *version, u32 *revision,
 		     const char **target_name);
 void hif_lro_flush_cb_register(struct hif_opaque_softc *scn,
-			       void (handler)(void *), void *data);
-void hif_lro_flush_cb_deregister(struct hif_opaque_softc *scn);
+			       void (lro_flush_handler)(void *),
+			       void *(lro_init_handler)(void));
+void hif_lro_flush_cb_deregister(struct hif_opaque_softc *scn,
+				 void (lro_deinit_cb)(void *));
 bool hif_needs_bmi(struct hif_opaque_softc *scn);
 enum qdf_bus_type hif_get_bus_type(struct hif_opaque_softc *hif_hdl);
 struct hif_target_info *hif_get_target_info_handle(struct hif_opaque_softc *
@@ -668,6 +677,7 @@ void hif_set_bundle_mode(struct hif_opaque_softc *scn, bool enabled,
 				int rx_bundle_cnt);
 int hif_bus_reset_resume(struct hif_opaque_softc *scn);
 
+void *hif_get_lro_info(int ctx_id, struct hif_opaque_softc *hif_hdl);
 #ifdef WLAN_SUSPEND_RESUME_TEST
 typedef void (*hif_fake_resume_callback)(uint32_t val);
 void hif_fake_apps_suspend(struct hif_opaque_softc *hif_ctx,

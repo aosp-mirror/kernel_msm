@@ -46,6 +46,7 @@
 #include "hif_debug.h"
 #include "mp_dev.h"
 #include "ce_api.h"
+#include "hif_napi.h"
 
 void hif_dump(struct hif_opaque_softc *hif_ctx, uint8_t cmd_id, bool start)
 {
@@ -299,6 +300,11 @@ static const struct qwlan_hw qwlan_hw_list[] = {
 		.id = WCN3990_v2,
 		.subid = 0x0,
 		.name = "WCN3990_V2",
+	},
+	{
+		.id = WCN3990_v2_1,
+		.subid = 0x0,
+		.name = "WCN3990_V2.1",
 	}
 };
 
@@ -312,6 +318,9 @@ static const char *hif_get_hw_name(struct hif_target_info *info)
 {
 	int i;
 
+	if (info->hw_name)
+		return info->hw_name;
+
 	for (i = 0; i < ARRAY_SIZE(qwlan_hw_list); i++) {
 		if (info->target_version == qwlan_hw_list[i].id &&
 		    info->target_revision == qwlan_hw_list[i].subid) {
@@ -319,7 +328,16 @@ static const char *hif_get_hw_name(struct hif_target_info *info)
 		}
 	}
 
-	return "Unknown Device";
+	info->hw_name = qdf_mem_malloc(64);
+	if (!info->hw_name)
+		return "Unknown Device (nomem)";
+
+	i = qdf_snprint(info->hw_name, 64, "HW_VERSION=%x.",
+			info->target_version);
+	if (i < 0)
+		return "Unknown Device (snprintf failure)";
+	else
+		return info->hw_name;
 }
 
 /**
@@ -413,6 +431,12 @@ void hif_close(struct hif_opaque_softc *hif_ctx)
 	if (scn->athdiag_procfs_inited) {
 		athdiag_procfs_remove();
 		scn->athdiag_procfs_inited = false;
+	}
+
+	if (scn->target_info.hw_name) {
+		char *hw_name = scn->target_info.hw_name;
+		scn->target_info.hw_name = "ErrUnloading";
+		qdf_mem_free(hw_name);
 	}
 
 	hif_bus_close(scn);
@@ -763,20 +787,70 @@ struct hif_target_info *hif_get_target_info_handle(
  * Return: void
  */
 void hif_lro_flush_cb_register(struct hif_opaque_softc *scn,
-			       void (handler)(void *), void *data)
+			       void (lro_flush_handler)(void *),
+			       void *(lro_init_handler)(void))
 {
-	ce_lro_flush_cb_register(scn, handler, data);
+	if (hif_napi_enabled(scn, -1))
+		hif_napi_lro_flush_cb_register(scn, lro_flush_handler,
+					       lro_init_handler);
+	else
+		ce_lro_flush_cb_register(scn, lro_flush_handler,
+					lro_init_handler);
+}
+
+/**
+ * hif_get_lro_info - Returns LRO instance for instance ID
+ * @ctx_id: LRO instance ID
+ * @hif_hdl: HIF Context
+ *
+ * Return: Pointer to LRO instance.
+ */
+void *hif_get_lro_info(int ctx_id, struct hif_opaque_softc *hif_hdl)
+{
+	void *data;
+
+	if (hif_napi_enabled(hif_hdl, -1))
+		data = hif_napi_get_lro_info(hif_hdl, ctx_id);
+	else
+		data = hif_ce_get_lro_ctx(hif_hdl, ctx_id);
+
+	return data;
+}
+
+/**
+ * hif_get_rx_ctx_id - Returns LRO instance ID based on underlying LRO instance
+ * @ctx_id: LRO context ID
+ * @hif_hdl: HIF Context
+ *
+ * Return: LRO instance ID
+ */
+int hif_get_rx_ctx_id(int ctx_id, struct hif_opaque_softc *hif_hdl)
+{
+	if (hif_napi_enabled(hif_hdl, -1))
+		return NAPI_PIPE2ID(ctx_id);
+	else
+		return ctx_id;
 }
 
 /**
  * hif_lro_flush_cb_deregister - API to deregister for LRO Flush Callbacks
- * @scn: HIF Context
+ * @hif_hdl: HIF Context
+ * @lro_deinit_cb: LRO deinit callback
  *
  * Return: void
  */
-void hif_lro_flush_cb_deregister(struct hif_opaque_softc *scn)
+void hif_lro_flush_cb_deregister(struct hif_opaque_softc *hif_hdl,
+				 void (lro_deinit_cb)(void *))
 {
-	ce_lro_flush_cb_deregister(scn);
+	if (hif_napi_enabled(hif_hdl, -1))
+		hif_napi_lro_flush_cb_deregister(hif_hdl, lro_deinit_cb);
+	else
+		ce_lro_flush_cb_deregister(hif_hdl, lro_deinit_cb);
+}
+#else /* !defined(FEATURE_LRO) */
+int hif_get_rx_ctx_id(int ctx_id, struct hif_opaque_softc *hif_hdl)
+{
+	return 0;
 }
 #endif
 
