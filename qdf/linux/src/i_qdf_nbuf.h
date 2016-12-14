@@ -124,6 +124,7 @@ typedef union {
  * @tx.trace.vdev_id     : vdev (for protocol trace)
  * @tx.ipa.owned   : packet owned by IPA
  * @tx.ipa.priv    : private data, used by IPA
+ * @tx.desc_id     : tx desc id, used to sync between host and fw
  */
 struct qdf_nbuf_cb {
 	/* common */
@@ -137,7 +138,8 @@ struct qdf_nbuf_cb {
 				tcp_pure_ack:1,
 				ipv6_proto:1,
 				ip_offset:7,
-				tcp_offset:7;
+				tcp_offset:7,
+				rx_ctx_id:4;
 			uint32_t tcp_udp_chksum:16,
 				tcp_win:16;
 			uint32_t tcp_seq_num;
@@ -196,7 +198,8 @@ struct qdf_nbuf_cb {
 						uint32_t owned:1,
 							priv:31;
 					} ipa; /* 4 */
-				} mcl;/* 12 bytes*/
+					uint16_t desc_id; /* 2 bytes */
+				} mcl;/* 14 bytes*/
 			} dev;
 		} tx; /* 40 bytes */
 	} u;
@@ -214,6 +217,8 @@ struct qdf_nbuf_cb {
 
 #define QDF_NBUF_CB_RX_LRO_ELIGIBLE(skb) \
 	(((struct qdf_nbuf_cb *)((skb)->cb))->u.rx.lro_eligible)
+#define QDF_NBUF_CB_RX_CTX_ID(skb) \
+	(((struct qdf_nbuf_cb *)((skb)->cb))->u.rx.rx_ctx_id)
 #define QDF_NBUF_CB_RX_TCP_PROTO(skb) \
 	(((struct qdf_nbuf_cb *)((skb)->cb))->u.rx.tcp_proto)
 #define QDF_NBUF_CB_RX_TCP_PURE_ACK(skb) \
@@ -297,6 +302,8 @@ struct qdf_nbuf_cb {
 	(((struct qdf_nbuf_cb *)((skb)->cb))->u.tx.dev.mcl.ipa.owned)
 #define QDF_NBUF_CB_TX_IPA_PRIV(skb) \
 	(((struct qdf_nbuf_cb *)((skb)->cb))->u.tx.dev.mcl.ipa.priv)
+#define QDF_NBUF_CB_TX_DESC_ID(skb) \
+	(((struct qdf_nbuf_cb *)((skb)->cb))->u.tx.dev.mcl.desc_id)
 #define QDF_NBUF_CB_TX_FTYPE(skb) \
 	(((struct qdf_nbuf_cb *)((skb)->cb))->u.tx.dev.win.ftype)
 #define QDF_NBUF_CB_TX_SUBMIT_TS(skb) \
