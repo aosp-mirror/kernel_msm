@@ -438,6 +438,7 @@ int diagfwd_peripheral_init(void)
 			fwd_info->read_bytes = 0;
 			fwd_info->write_bytes = 0;
 			spin_lock_init(&fwd_info->buf_lock);
+			spin_lock_init(&fwd_info->write_buf_lock);
 			mutex_init(&fwd_info->data_mutex);
 		}
 	}
@@ -453,6 +454,7 @@ int diagfwd_peripheral_init(void)
 			fwd_info->read_bytes = 0;
 			fwd_info->write_bytes = 0;
 			spin_lock_init(&fwd_info->buf_lock);
+			spin_lock_init(&fwd_info->write_buf_lock);
 			mutex_init(&fwd_info->data_mutex);
 			/*
 			 * This state shouldn't be set for Control channels
@@ -651,9 +653,9 @@ void diagfwd_close_transport(uint8_t transport, uint8_t peripheral)
 		break;
 	default:
 		return;
-
 	}
 
+	mutex_lock(&driver->diagfwd_channel_mutex);
 	fwd_info = &early_init_info[transport][peripheral];
 	if (fwd_info->p_ops && fwd_info->p_ops->close)
 		fwd_info->p_ops->close(fwd_info->ctxt);
@@ -677,6 +679,7 @@ void diagfwd_close_transport(uint8_t transport, uint8_t peripheral)
 		diagfwd_late_open(dest_info);
 	diagfwd_cntl_open(dest_info);
 	init_fn(peripheral);
+	mutex_unlock(&driver->diagfwd_channel_mutex);
 	diagfwd_queue_read(&peripheral_info[TYPE_DATA][peripheral]);
 	diagfwd_queue_read(&peripheral_info[TYPE_CMD][peripheral]);
 }
@@ -685,16 +688,19 @@ void *diagfwd_request_write_buf(struct diagfwd_info *fwd_info)
 {
 	void *buf = NULL;
 	int index;
+	unsigned long flags;
 
+	spin_lock_irqsave(&fwd_info->write_buf_lock, flags);
 	for (index = 0 ; index < NUM_WRITE_BUFFERS; index++) {
 		if (!atomic_read(&(fwd_info->buf_ptr[index]->in_busy))) {
+			atomic_set(&(fwd_info->buf_ptr[index]->in_busy), 1);
 			buf = fwd_info->buf_ptr[index]->data;
 			if (!buf)
 				return NULL;
-			atomic_set(&(fwd_info->buf_ptr[index]->in_busy), 1);
 			break;
 		}
 	}
+	spin_unlock_irqrestore(&fwd_info->write_buf_lock, flags);
 	return buf;
 }
 
@@ -759,7 +765,6 @@ int diagfwd_write(uint8_t peripheral, uint8_t type, void *buf, int len)
 
 static void __diag_fwd_open(struct diagfwd_info *fwd_info)
 {
-	int i;
 	if (!fwd_info)
 		return;
 
@@ -774,10 +779,7 @@ static void __diag_fwd_open(struct diagfwd_info *fwd_info)
 
 	if (fwd_info->p_ops && fwd_info->p_ops->open)
 		fwd_info->p_ops->open(fwd_info->ctxt);
-	for (i = 0; i < NUM_WRITE_BUFFERS; i++) {
-		if (fwd_info->buf_ptr[i])
-			atomic_set(&fwd_info->buf_ptr[i]->in_busy, 0);
-	}
+
 	diagfwd_queue_read(fwd_info);
 }
 
@@ -838,6 +840,7 @@ void diagfwd_close(uint8_t peripheral, uint8_t type)
 
 int diagfwd_channel_open(struct diagfwd_info *fwd_info)
 {
+	int i;
 	if (!fwd_info)
 		return -EIO;
 
@@ -858,6 +861,10 @@ int diagfwd_channel_open(struct diagfwd_info *fwd_info)
 	diagfwd_write_buffers_init(fwd_info);
 	if (fwd_info && fwd_info->c_ops && fwd_info->c_ops->open)
 		fwd_info->c_ops->open(fwd_info);
+	for (i = 0; i < NUM_WRITE_BUFFERS; i++) {
+		if (fwd_info->buf_ptr[i])
+			atomic_set(&fwd_info->buf_ptr[i]->in_busy, 0);
+	}
 	diagfwd_queue_read(fwd_info);
 	DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "p: %d t: %d considered opened\n",
 		 fwd_info->peripheral, fwd_info->type);
@@ -872,6 +879,7 @@ int diagfwd_channel_open(struct diagfwd_info *fwd_info)
 
 int diagfwd_channel_close(struct diagfwd_info *fwd_info)
 {
+	int i;
 	if (!fwd_info)
 		return -EIO;
 
@@ -884,6 +892,10 @@ int diagfwd_channel_close(struct diagfwd_info *fwd_info)
 	if (fwd_info->buf_2 && fwd_info->buf_2->data)
 		atomic_set(&fwd_info->buf_2->in_busy, 0);
 
+	for (i = 0; i < NUM_WRITE_BUFFERS; i++) {
+		if (fwd_info->buf_ptr[i])
+			atomic_set(&fwd_info->buf_ptr[i]->in_busy, 1);
+	}
 	DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "p: %d t: %d considered closed\n",
 		 fwd_info->peripheral, fwd_info->type);
 
@@ -939,10 +951,11 @@ int diagfwd_write_buffer_done(struct diagfwd_info *fwd_info, const void *ptr)
 
 	int found = 0;
 	int index = 0;
+	unsigned long flags;
 
 	if (!fwd_info || !ptr)
 		return found;
-
+	spin_lock_irqsave(&fwd_info->write_buf_lock, flags);
 	for (index = 0; index < NUM_WRITE_BUFFERS; index++) {
 		if (fwd_info->buf_ptr[index]->data == ptr) {
 			atomic_set(&fwd_info->buf_ptr[index]->in_busy, 0);
@@ -950,6 +963,7 @@ int diagfwd_write_buffer_done(struct diagfwd_info *fwd_info, const void *ptr)
 			break;
 		}
 	}
+	spin_unlock_irqrestore(&fwd_info->write_buf_lock, flags);
 	return found;
 }
 
@@ -1196,7 +1210,7 @@ void diagfwd_write_buffers_init(struct diagfwd_info *fwd_info)
 		return;
 	}
 
-	spin_lock_irqsave(&fwd_info->buf_lock, flags);
+	spin_lock_irqsave(&fwd_info->write_buf_lock, flags);
 	for (i = 0; i < NUM_WRITE_BUFFERS; i++) {
 		if (!fwd_info->buf_ptr[i])
 			fwd_info->buf_ptr[i] =
@@ -1214,11 +1228,11 @@ void diagfwd_write_buffers_init(struct diagfwd_info *fwd_info)
 			kmemleak_not_leak(fwd_info->buf_ptr[i]->data);
 		}
 	}
-	spin_unlock_irqrestore(&fwd_info->buf_lock, flags);
+	spin_unlock_irqrestore(&fwd_info->write_buf_lock, flags);
 	return;
 
 err:
-	spin_unlock_irqrestore(&fwd_info->buf_lock, flags);
+	spin_unlock_irqrestore(&fwd_info->write_buf_lock, flags);
 	pr_err("diag:unable to allocate write buffers\n");
 	diagfwd_write_buffers_exit(fwd_info);
 
@@ -1232,7 +1246,7 @@ static void diagfwd_write_buffers_exit(struct diagfwd_info *fwd_info)
 	if (!fwd_info)
 		return;
 
-	spin_lock_irqsave(&fwd_info->buf_lock, flags);
+	spin_lock_irqsave(&fwd_info->write_buf_lock, flags);
 	for (i = 0; i < NUM_WRITE_BUFFERS; i++) {
 		if (fwd_info->buf_ptr[i]) {
 			kfree(fwd_info->buf_ptr[i]->data);
@@ -1241,5 +1255,5 @@ static void diagfwd_write_buffers_exit(struct diagfwd_info *fwd_info)
 			fwd_info->buf_ptr[i] = NULL;
 		}
 	}
-	spin_unlock_irqrestore(&fwd_info->buf_lock, flags);
+	spin_unlock_irqrestore(&fwd_info->write_buf_lock, flags);
 }

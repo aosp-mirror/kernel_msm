@@ -9,8 +9,8 @@ Properties:
 - compatible
 	Usage:      required
 	Value type: <string>
-	Definition: must be "qcom,cpu-clock-osm-msmcobalt-v1" or
-		    "qcom,cpu-clock-osm-msmcobalt-v2".
+	Definition: must be "qcom,cpu-clock-osm-msm8998-v1" or
+		    "qcom,cpu-clock-osm-msm8998-v2".
 
 - reg
 	Usage:      required
@@ -289,6 +289,16 @@ Properties:
 		    values per performance mode with a total of 4 tuples
 		    corresponding to each supported performance mode.
 
+- qcom,perfcl-apcs-mem-acc-threshold-voltage
+	Usage:      optional
+	Value type: <u32>
+	Definition: Specifies the highest MEM ACC threshold voltage in
+		    microvolts for the Performance cluster.  This voltage is
+		    used to determine which MEM ACC setting is used for the
+		    highest frequencies.  If specified, the voltage must match
+		    the MEM ACC threshold voltage specified for the
+		    corresponding CPRh device.
+
 - qcom,red-fsm-en
 	Usage:      optional
 	Value type: <empty>
@@ -342,8 +352,8 @@ Properties:
 
 Example:
 
-	clock_cpu: qcom,cpu-clock-cobalt@179c0000 {
-		compatible = "qcom,cpu-clock-osm-msmcobalt-v1";
+	clock_cpu: qcom,cpu-clock-8998@179c0000 {
+		compatible = "qcom,cpu-clock-osm-msm8998-v1";
 		reg = <0x179C0000 0x4000>,
 		      <0x17916000 0x1000>,
 		      <0x17816000 0x1000>,

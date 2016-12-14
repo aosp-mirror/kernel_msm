@@ -717,7 +717,7 @@ static void ffs_user_copy_worker(struct work_struct *work)
 	if (io_data->read && ret > 0) {
 		use_mm(io_data->mm);
 		ret = copy_to_iter(io_data->buf, ret, &io_data->data);
-		if (iov_iter_count(&io_data->data))
+		if (ret != io_data->req->actual && iov_iter_count(&io_data->data))
 			ret = -EFAULT;
 		unuse_mm(io_data->mm);
 	}
@@ -760,8 +760,8 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 	ssize_t ret, data_len = -EINVAL;
 	int halt;
 
-	ffs_log("enter: epfile name %s epfile err %d", epfile->name,
-		atomic_read(&epfile->error));
+	ffs_log("enter: epfile name %s epfile err %d (%s)", epfile->name,
+		atomic_read(&epfile->error), io_data->read ? "READ" : "WRITE");
 
 	smp_mb__before_atomic();
 	if (atomic_read(&epfile->error))
@@ -778,6 +778,12 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 	if (!ep) {
 		if (file->f_flags & O_NONBLOCK) {
 			ret = -EAGAIN;
+			goto error;
+		}
+
+		/* Don't wait on write if device is offline */
+		if (!io_data->read) {
+			ret = -EINTR;
 			goto error;
 		}
 
