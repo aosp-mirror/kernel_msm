@@ -10,25 +10,30 @@
  * GNU General Public License for more details.
  */
 
+/*
+ * msm8998-htc-pm.dtsi: common pm config of HTC projects
+ */
 
-#include "../qcom/msmcobalt-mtp.dtsi"
-#include "msmcobalt-htc_muskie.dtsi"
-#include "msmcobalt-camera-sensor.dtsi"
-#include "msmcobalt-htc-easel.dtsi"
+&spmi_bus {
+	qcom,pm8998@0 {
+		qcom,power-on@800 {
+			qcom,pon_1 {
+				qcom,pon-type = <0>;
+				qcom,pull-up = <1>;
+				linux,code = <116>;
+				qcom,support-reset = <1>;
+				qcom,s1-timer = <10256>;
+				qcom,s2-timer = <2000>;
+				qcom,s2-type = <8>;
+			};
 
-&i2c_9 {
-	tca6418_i2c: tca6418-i2c@34 {
-		compatible = "ti,tca6418-i2c";
-		reg = <0x34>;
-		pinctrl = <&tca6418>;
+			qcom,pon_2 {
+				qcom,support-reset = <0>;
+			};
+
+			qcom,pon_3 {
+				qcom,support-reset = <0>;
+                        };
+                };
 	};
-};
-
-&soc {
-	tca6418: tca6418-pinctrl {
-		compatible = "ti,tca6418-pinctrl";
-		#gpio-cells = <2>;
-		label = "tca6418-gpio";
-		i2c-client = <&tca6418_i2c>;
-	 };
 };

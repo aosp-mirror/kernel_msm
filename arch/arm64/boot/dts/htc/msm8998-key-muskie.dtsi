@@ -42,7 +42,7 @@
 };
 
 &spmi_bus {
-	qcom,pmcobalt@0 {
+	qcom,pm8998@0 {
 		qcom,power-on@800 {
 			/delete-property/ qcom,report-key;
 		};

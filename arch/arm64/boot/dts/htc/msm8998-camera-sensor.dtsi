@@ -92,10 +92,10 @@
 		cell-index = <0>;
 		compatible = "qcom,eeprom";
 		reg = <0x0>;
-		cam_vio-supply = <&pmcobalt_lvs1>;
-		cam_vana-supply = <&pmcobalt_gpios 15 0>;
-		cam_vdig-supply = <&pmcobalt_gpios 20 0>;
-		cam_vaf-supply = <&pmcobalt_l19>;
+		cam_vio-supply = <&pm8998_lvs1>;
+		cam_vana-supply = <&pm8998_gpios 15 0>;
+		cam_vdig-supply = <&pm8998_gpios 20 0>;
+		cam_vaf-supply = <&pm8998_l19>;
 		qcom,cam-vreg-name = "cam_vio", "cam_vana", "cam_vdig", "cam_vaf";
 		qcom,cam-vreg-min-voltage = <1800000 2850000 1050000 2850000>;
 		qcom,cam-vreg-max-voltage = <1800000 2850000 1050000 2850000>;
@@ -108,10 +108,10 @@
 				 &cam_sensor_rear_suspend>;
 		gpios = <&tlmm 13 0>,
 			<&tlmm 24 0>,
-			<&pmcobalt_gpios 20 0>,
-			<&pmcobalt_gpios 15 0>,
-			<&pmcobalt_gpios 19 0>,
-			<&pmcobalt_gpios 12 0>;
+			<&pm8998_gpios 20 0>,
+			<&pm8998_gpios 15 0>,
+			<&pm8998_gpios 19 0>,
+			<&pm8998_gpios 12 0>;
 		qcom,gpio-reset = <1>;
 		qcom,gpio-vdig = <2>;
 		qcom,gpio-vana = <3>;
@@ -146,10 +146,10 @@
 		qcom,actuator-src = <&actuator10>;
 		qcom,ois-src = <&ois10>;
 		qcom,eeprom-src = <&eeprom0>;
-		cam_vio-supply = <&pmcobalt_lvs1>;
-		cam_vana-supply = <&pmcobalt_gpios 15 0>;
-		cam_vdig-supply = <&pmcobalt_gpios 20 0>;
-		cam_vaf-supply = <&pmcobalt_l19>;
+		cam_vio-supply = <&pm8998_lvs1>;
+		cam_vana-supply = <&pm8998_gpios 15 0>;
+		cam_vdig-supply = <&pm8998_gpios 20 0>;
+		cam_vaf-supply = <&pm8998_l19>;
 		qcom,cam-vreg-name = "cam_vio", "cam_vana", "cam_vdig", "cam_vaf";
 		qcom,cam-vreg-min-voltage = <1800000 2850000 1050000 2850000>;
 		qcom,cam-vreg-max-voltage = <1800000 2850000 1050000 2850000>;
@@ -162,10 +162,10 @@
 				 &cam_sensor_rear_suspend>;
 		gpios = <&tlmm 13 0>,
 			<&tlmm 24 0>,
-			<&pmcobalt_gpios 20 0>,
-			<&pmcobalt_gpios 15 0>,
-			<&pmcobalt_gpios 19 0>,
-			<&pmcobalt_gpios 12 0>;
+			<&pm8998_gpios 20 0>,
+			<&pm8998_gpios 15 0>,
+			<&pm8998_gpios 19 0>,
+			<&pm8998_gpios 12 0>;
 		qcom,gpio-reset = <1>;
 		qcom,gpio-vdig = <2>;
 		qcom,gpio-vana = <3>;
@@ -189,7 +189,7 @@
 		qcom,clock-rates = <24000000 0>;
 	};
 };
-&pmcobalt_gpios {
+&pm8998_gpios {
 	gpio@cb00 { /* GPIO 12 - CAMERA SENSOR 0 I2C_SEL */
 		qcom,mode = <1>;		/* Output */
 		qcom,pull = <5>;		/* No Pull */

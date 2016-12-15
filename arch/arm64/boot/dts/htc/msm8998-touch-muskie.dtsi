@@ -4,7 +4,7 @@
 	};
 };*/
 
-&pmcobalt_l6 {
+&pm8998_l6 {
 	regulator-min-microvolt = <1800000>;
 	regulator-max-microvolt = <1900000>;
 	qcom,init-voltage = <1800000>;
@@ -13,7 +13,7 @@
 	regulator-always-on;
 };
 
-/*&pmcobalt_l21 {
+/*&pm8998_l21 {
 	regulator-min-microvolt = <3300000>;
 	regulator-max-microvolt = <3300000>;
 	qcom,init-voltage = <3300000>;
@@ -22,7 +22,7 @@
 	regulator-always-on;
 };*/
 
-&pmcobalt_l28 {
+&pm8998_l28 {
 	regulator-min-microvolt = <3300000>;
 	regulator-max-microvolt = <3300000>;
 	qcom,init-voltage = <3300000>;

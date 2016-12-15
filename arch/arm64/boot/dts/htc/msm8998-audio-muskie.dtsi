@@ -53,14 +53,14 @@
 		nxp_tfa98xx_amp@34 {
 			compatible = "nxp,tfa98xx";
 			reg = <0x34>;
-			reset-gpio = <&pmcobalt_gpios 6 0x1>;
+			reset-gpio = <&pm8998_gpios 6 0x1>;
 			upper-spk; /* left */
 		};
 
 		nxp_tfa98xx_amp@35 {
 			compatible = "nxp,tfa98xx";
 			reg = <0x35>;
-			reset-gpio = <&pmcobalt_gpios 7 0x1>;
+			reset-gpio = <&pm8998_gpios 7 0x1>;
 		};
 	};
 

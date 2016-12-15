@@ -10,30 +10,14 @@
  * GNU General Public License for more details.
  */
 
-/*
- * msmcobalt-htc-pm.dtsi: common pm config of HTC projects
- */
 
-&spmi_bus {
-	qcom,pmcobalt@0 {
-		qcom,power-on@800 {
-			qcom,pon_1 {
-				qcom,pon-type = <0>;
-				qcom,pull-up = <1>;
-				linux,code = <116>;
-				qcom,support-reset = <1>;
-				qcom,s1-timer = <10256>;
-				qcom,s2-timer = <2000>;
-				qcom,s2-type = <8>;
-			};
+/dts-v1/;
 
-			qcom,pon_2 {
-				qcom,support-reset = <0>;
-			};
+#include "../qcom/msm8998-v2.1.dtsi"
+#include "msm8998-htc_muskie-evm.dtsi"
 
-			qcom,pon_3 {
-				qcom,support-reset = <0>;
-                        };
-                };
-	};
+/ {
+	model = "HTC Corporation. MSM 8998 v2.1 Muskie EVM";
+	compatible = "qcom,msm8998-mtp", "qcom,msm8998", "qcom,mtp";
+	qcom,board-id = <0x1D 0>;
 };

@@ -1,6 +1,6 @@
-#include "msmcobalt-htc-common.dtsi"
-#include "msmcobalt-htc-regulator.dtsi"
-#include "msmcobalt-htc-pm.dtsi"
+#include "msm8998-htc-common.dtsi"
+#include "msm8998-htc-regulator.dtsi"
+#include "msm8998-htc-pm.dtsi"
 #include "dsi-panel-muskie-s6e3ha3.dtsi"
 
 &pcie0 {

@@ -12,21 +12,21 @@
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_s6e3ha3_dualdsi_wqhd_cmd>;
 	/delete-property/qcom,panel-mode-gpio;
-	vci-supply = <&pmcobalt_l22>;
+	vci-supply = <&pm8998_l22>;
 };
 
 &mdss_dsi1 {
 	qcom,dsi-pref-prim-pan = <&dsi_s6e3ha3_dualdsi_wqhd_cmd>;
 	/delete-property/qcom,panel-mode-gpio;
-	vci-supply = <&pmcobalt_l22>;
+	vci-supply = <&pm8998_l22>;
 };
 
-&pmcobalt_l14 {
+&pm8998_l14 {
        regulator-min-microvolt = <1800000>;
        regulator-max-microvolt = <1800000>;
 };
 
-&pmcobalt_l22 {
+&pm8998_l22 {
        regulator-min-microvolt = <3000000>;
        regulator-max-microvolt = <3000000>;
 };

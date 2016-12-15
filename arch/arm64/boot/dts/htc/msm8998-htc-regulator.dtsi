@@ -10,14 +10,11 @@
  * GNU General Public License for more details.
  */
 
+/*
+ * msm8998-htc-regulator: common regulator config of HTC projects
+ */
 
-/dts-v1/;
-
-#include "../qcom/msmcobalt.dtsi"
-#include "msmcobalt-htc_muskie-evm.dtsi"
-
-/ {
-	model = "HTC Corporation. MSM cobalt v1 Muskie EVM";
-	compatible = "qcom,msmcobalt-mtp", "qcom,msmcobalt", "qcom,mtp";
-	qcom,board-id = <0x1D 0>;
+&pm8998_l19 {
+       regulator-min-microvolt = <2850000>;
+       regulator-max-microvolt = <3008000>;
 };

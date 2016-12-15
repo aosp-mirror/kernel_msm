@@ -11,7 +11,7 @@
  */
 
 /*
- * msmcobalt-htc-fingerprint-muskie: fingerprint config
+ * msm8998-htc-fingerprint-muskie: fingerprint config
  */
 
 &tlmm {

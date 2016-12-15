@@ -11,13 +11,24 @@
  */
 
 
-/dts-v1/;
+#include "../qcom/msm8998-mtp.dtsi"
+#include "msm8998-htc_muskie.dtsi"
+#include "msm8998-camera-sensor.dtsi"
+#include "msm8998-htc-easel.dtsi"
 
-#include "../qcom/msmcobalt-v2.1.dtsi"
-#include "msmcobalt-htc_muskie-evm.dtsi"
+&i2c_9 {
+	tca6418_i2c: tca6418-i2c@34 {
+		compatible = "ti,tca6418-i2c";
+		reg = <0x34>;
+		pinctrl = <&tca6418>;
+	};
+};
 
-/ {
-	model = "HTC Corporation. MSM cobalt v2.1 Muskie EVM";
-	compatible = "qcom,msmcobalt-mtp", "qcom,msmcobalt", "qcom,mtp";
-	qcom,board-id = <0x1D 0>;
+&soc {
+	tca6418: tca6418-pinctrl {
+		compatible = "ti,tca6418-pinctrl";
+		#gpio-cells = <2>;
+		label = "tca6418-gpio";
+		i2c-client = <&tca6418_i2c>;
+	 };
 };

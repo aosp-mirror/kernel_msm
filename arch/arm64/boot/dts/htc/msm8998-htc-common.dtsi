@@ -1,11 +1,11 @@
 /*
- * msmcobalt-htc-common: common configs of msmcobalt HTC projects
+ * msm8998-htc-common: common configs of msm8998 HTC projects
  */
 
-#include "msmcobalt-touch-muskie.dtsi"
-#include "msmcobalt-key-muskie.dtsi"
-#include "msmcobalt-audio-muskie.dtsi"
-#include "msmcobalt-htc-fingerprint-muskie.dtsi"
+#include "msm8998-touch-muskie.dtsi"
+#include "msm8998-key-muskie.dtsi"
+#include "msm8998-audio-muskie.dtsi"
+#include "msm8998-htc-fingerprint-muskie.dtsi"
 
 &i2c_6 {
 	status = "disabled";
@@ -96,7 +96,7 @@
 	qcom,firmware-name = "slpi";
 };
 
-&pmicobalt_gpios {
+&pmi8998_gpios {
 	gpio@c100 {
 		reg = <0xc100 0x100>;
 		qcom,pin-num = <2>;
