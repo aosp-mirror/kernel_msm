@@ -10,6 +10,7 @@
  * Revision:
  *   2016.11.30 1.00a: Origin - 10 level dynamic early empty compensation
  *   2016.12.13 1.00b: 27 level deec and dynamic entry point for deec.
+ *   2016.12.15 1.00c: Avoid SOC deep drop when heavy to light loading.
  */
 #define pr_fmt(fmt) "STC311x: %s: " fmt, __func__
 
@@ -25,7 +26,7 @@
 #include <linux/slab.h>
 #include <linux/debugfs.h>
 
-#define GG_VERSION "1.00b"
+#define GG_VERSION "1.00c"
 #define CONFIG_ENABLE_STC311X_DUMPREG
 //#define STC3117_AGING_FEATURE
 //#define STC3117_AGING_VOLTAGE_FEATURE
@@ -1872,7 +1873,7 @@ static void voltage_aging_compensation(int SOC, int avg_current) {
 }
 #endif /* STC3117_AGING_VOLTAGE_FEATURE */
 
-int Dynamic_Early_Empty(int SOC, int voltage, int avg_current, int eec_voltage) {
+int Dynamic_Early_Empty(int SOC, int voltage, int current_vol, int avg_current, int eec_voltage) {
 
 	int rc = 0;
 	int level = 0;
@@ -1964,6 +1965,15 @@ int Dynamic_Early_Empty(int SOC, int voltage, int avg_current, int eec_voltage) 
 	} else {
 		pr_debug("Case %d-3 compensation\n", level);
 		rc = THIRD_EEC_SOC;
+	}
+
+	/* if current voltage higher than average voltage, means transfer to light loading.  *
+	 * Meanwhile the SOC drop exceed 5% is abnormal case because the Avg vol and current *
+	 * decouple trend.                                                                   */
+	if (current_vol > (voltage + 20) && (SOC - rc) > 50) {
+		pr_err("DEEC result exceed 5 percent and current voltage(%d) great than avg voltage(%d) 20mA up, then bypass this DEEC data. SOC=%d rc=%d\n",
+			current_vol, voltage, SOC, rc);
+		rc = SOC;
 	}
 
 	return rc;
@@ -2116,17 +2126,17 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 					//Use avg current to do dynamic early empty compensation
 					pr_err("Dynamic early empty, AvgCurrent:%d AvgVoltage:%d entry point:%d\n",
 						BattData.AvgCurrent, value, DEEC_BASE_VOLTAGE_1);
-					BattData.SOC = Dynamic_Early_Empty(BattData.SOC, value, BattData.AvgCurrent, DEEC_BASE_VOLTAGE_1);
+					BattData.SOC = Dynamic_Early_Empty(BattData.SOC, value, BattData.Voltage, BattData.AvgCurrent, DEEC_BASE_VOLTAGE_1);
 				} else if (BattData.AvgCurrent < -475 && BattData.AvgCurrent >= -775 && value < DEEC_BASE_VOLTAGE_2) {
 					//Use avg current to do dynamic early empty compensation
 					pr_err("Dynamic early empty, AvgCurrent:%d AvgVoltage:%d entry point:%d\n",
 						BattData.AvgCurrent, value, DEEC_BASE_VOLTAGE_2);
-					BattData.SOC = Dynamic_Early_Empty(BattData.SOC, value, BattData.AvgCurrent, DEEC_BASE_VOLTAGE_2);
+					BattData.SOC = Dynamic_Early_Empty(BattData.SOC, value, BattData.Voltage, BattData.AvgCurrent, DEEC_BASE_VOLTAGE_2);
 				} else if (BattData.AvgCurrent < -775 && value < DEEC_BASE_VOLTAGE_3 ) {
 					//Use avg current to do dynamic early empty compensation
 					pr_err("Dynamic early empty, AvgCurrent:%d AvgVoltage:%d entry point:%d\n",
 						BattData.AvgCurrent, value, DEEC_BASE_VOLTAGE_3);
-					BattData.SOC = Dynamic_Early_Empty(BattData.SOC, value, BattData.AvgCurrent, DEEC_BASE_VOLTAGE_3);
+					BattData.SOC = Dynamic_Early_Empty(BattData.SOC, value, BattData.Voltage, BattData.AvgCurrent, DEEC_BASE_VOLTAGE_3);
 				} else {
 					pr_err("Dynamic early empty, AvgCurrent:%d AvgVoltage:%d\n",
 						BattData.AvgCurrent, value);
