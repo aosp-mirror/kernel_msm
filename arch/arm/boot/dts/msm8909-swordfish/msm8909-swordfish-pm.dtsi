@@ -139,7 +139,7 @@
 			maxim,rsns-microohm = <10000>;
 			maxim,ext_batt_psy;
 			maxim,full-soc = <95>;
-			maxim,empty-soc = <1>;
+			maxim,empty-soc = <0>;
 
 			maxim,model = [A0 00 B6 E0 B8 80 BA 40
 					BC A0 BD 70 BE 50 BF 90
@@ -158,11 +158,11 @@
 			maxim,filtercfg = <0x87A4>;
 			maxim,relaxcfg = <0x506B>;
 			maxim,learncfg = <0x2602>;
-			maxim,fullsocthr = <0x5F00>;
+			maxim,fullsocthr = <0x6100>;
 			maxim,iavg_empty = <0x0272>;
 			maxim,rcomp0 = <0x0037>;
 			maxim,tempco = <0x2344>;
-			maxim,ichgterm = <0x0140>;
+			maxim,ichgterm = <0x00A0>;
 			maxim,tgain = <0xE932>;
 			maxim,toff = <0x2381>;
 			maxim,vempty = <0xA05F>;
@@ -170,11 +170,11 @@
 			maxim,qrtable10 = <0x1680>;
 			maxim,qrtable20 = <0x1000>;
 			maxim,qrtable30 = <0x0B04>;
-			maxim,capacity = <0x030F>;
-			maxim,vf_fullcap = <0x030F>;
+			maxim,capacity = <0x0340>;
+			maxim,vf_fullcap = <0x0340>;
 			maxim,cycles = <0x0060>;
 			maxim,dpacc = <0x0C80>;
-			maxim,param-version = <0x3>;
+			maxim,param-version = <0x4>;
 			maxim,dynamic_soc;
 		};
 
