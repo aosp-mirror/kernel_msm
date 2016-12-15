@@ -1070,7 +1070,7 @@ static const struct regmap_config max17055_regmap_config = {
 	.val_format_endian = REGMAP_ENDIAN_NATIVE,
 };
 
-#define VALUE_MAX_LENGTH (20)
+#define VALUE_MAX_LENGTH (25)
 
 static ssize_t max17055_data_logging_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
@@ -1081,20 +1081,21 @@ static ssize_t max17055_data_logging_store(struct device *dev,
 static ssize_t max17055_data_logging_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 		struct max17055_chip *chip = dev_get_drvdata(dev);
-		struct timespec now;
+		struct tm tm;
 		u32 reg, data;
 		ssize_t total = 0, size;
 
 		/* Logging time */
-		now = current_kernel_time();
-		size = snprintf(buf, VALUE_MAX_LENGTH, "%li ", now.tv_sec);
+		time_to_tm(get_seconds(), 0, &tm);
+		size = snprintf(buf, VALUE_MAX_LENGTH, "%02d/%02d/%04li-%02d:%02d:%02d ", tm.tm_mon+1, tm.tm_mday,
+			tm.tm_year+1900, tm.tm_hour, tm.tm_min, tm.tm_sec);
 		buf += size;
 		total += size;
 
 		/* Logging registers */
 		for (reg = MAX17055_Status; reg <= MAX17055_VFSOC; reg++) {
 			regmap_read(chip->regmap, reg, &data);
-			size = snprintf(buf, VALUE_MAX_LENGTH, "%04x ", data);
+			size = snprintf(buf, VALUE_MAX_LENGTH, "%04xh ", data);
 
 			buf += size;
 			total += size;
