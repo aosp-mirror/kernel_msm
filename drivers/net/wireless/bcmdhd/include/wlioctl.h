@@ -6678,6 +6678,34 @@ typedef struct wl_roam_prof_band {
 	wl_roam_prof_t roam_prof[WL_MAX_ROAM_PROF_BRACKETS];
 } wl_roam_prof_band_t;
 
+#ifdef FILTER_IE
+#define WL_FILTER_IE_VERSION 1
+#define WL_FILTER_IE_IOV_HDR_SIZE OFFSETOF(wl_filter_ie_iov_t, tlvs)
+enum wl_filter_ie_options {
+	WL_FILTER_IE_CLEAR = 0,  	 		/* allow the element id in the packet.It can be used only in suboption */
+	WL_FILTER_IE_SET = 1,     	 		/* filter the element id from the packet.It can be used only in suboption */
+	WL_FILTER_IE_LIST= 2,      	 		/* list the element ID's.It can be only set as option */
+	WL_FILTER_IE_CLEAR_ALL= 3,   		/* clear all the element ID's.It can be only set as option */
+	WL_FILTER_IE_CHECK_SUB_OPTION = 4   /* check for suboptions.It can be set only as option */
+};
+
+typedef struct wl_filter_ie_tlv {
+    uint16 id;
+    uint16 len;    /* sub option length + pattern length */
+    uint8 data[1]; /* sub option + pattern for matching (like, OUI, type, sub type, extended element id, etc) */
+} wl_filter_ie_tlv_t;
+
+typedef struct wl_filter_ie_iov {
+	uint16 version;  			/* Structure version */
+	uint16 len;  				/* Total length of the structure */
+	uint16 fixed_length;    	/* Total length of fixed fields */
+	uint8 option;				/* Filter action - check for sub option, list, clearall*/
+	uint8 pad[1];           	/* Align to 4 bytes */
+	uint32 pktflag;  			/* frame type */
+	wl_filter_ie_tlv_t tlvs[0]; /* variable data (zero in case of options like list ,clearall) */
+} wl_filter_ie_iov_t;
+#endif /* FILTER_IE */
+
 /* no default structure packing */
 #include <packed_section_end.h>
 

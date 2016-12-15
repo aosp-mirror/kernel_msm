@@ -173,7 +173,18 @@ static u32 vendor_oui = CONFIG_DHD_SET_RANDOM_MAC_VAL;
 
 /* Maximum STA per radio */
 #define DHD_MAX_STA     32
-
+#define FILE_BLOCK_READ_SIZE 256
+/* [FIX ME] Path define can be moved to Kconfig. Currently defined here */
+#define FILTER_IE_PATH "/etc/wifi/filter_ie"
+#define FILTER_IE_BUFSZ 1024 /* ioc buffsize for FILTER_IE */
+#define NULL_CHECK(p, s, err)  \
+			do { \
+				if (!(p)) { \
+					printf("NULL POINTER (%s) : %s\n", __FUNCTION__, (s)); \
+					err = BCME_ERROR; \
+					return err; \
+				} \
+			} while (0)
 
 const uint8 wme_fifo2ac[] = { 0, 1, 2, 3, 1, 1 };
 const uint8 prio2fifo[8] = { 1, 0, 0, 1, 2, 2, 3, 3 };
@@ -5570,6 +5581,9 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	eventmsgs_ext_t *eventmask_msg;
 	char iov_buf[WLC_IOCTL_SMLEN];
 	int ret2 = 0;
+#if defined FILTER_IE
+	uint8 ie_buf[FILE_BLOCK_READ_SIZE];
+#endif
 #if defined(CUSTOM_AMPDU_BA_WSIZE)
 	uint32 ampdu_ba_wsize = 0;
 #endif
@@ -6288,6 +6302,13 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 		}
 	}
 #endif
+
+#ifdef FILTER_IE
+	ret = dhd_read_from_file(dhd, ie_buf, FILE_BLOCK_READ_SIZE);
+	if (ret < 0) {
+		DHD_ERROR(("%s failed to read IEs from file\n", __FUNCTION__));
+	}
+#endif /* FILTER_IE */
 
 #ifdef WL11U
 	dhd_interworking_enable(dhd);
@@ -8019,6 +8040,11 @@ int dhd_dev_get_feature_set(struct net_device *dev)
 #ifdef NDO_CONFIG_SUPPORT
 	feature_set |= WIFI_FEATURE_CONFIG_NDO;
 #endif /* NDO_CONFIG_SUPPORT */
+#ifdef FILTER_IE
+	if (FW_SUPPORTED(dhd, fie)) {
+		feature_set |= WIFI_FEATURE_FILTER_IE;
+	}
+#endif /* FILTER_IE */
 	return feature_set;
 }
 
@@ -9659,6 +9685,42 @@ exit:
 }
 #endif /* DHD_DEBUG */
 
+#ifdef FILTER_IE
+int dhd_read_from_file(dhd_pub_t *dhd, uint8 *buf, int size)
+{
+	int ret = 0, nread = 0, fd;
+	mm_segment_t old_fs;
+	NULL_CHECK(dhd, "dhd is NULL", ret);
+	NULL_CHECK(buf, "buf is NULL", ret);
+
+	/* change to KERNEL_DS address limit */
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	/* open file to read */
+	fd = sys_open(FILTER_IE_PATH, O_RDONLY, 0);
+	if (fd < 0) {
+		ret = BCME_ERROR;
+		goto exit;
+	}
+
+	if ((nread = sys_read(fd, buf, size)) > 0) {
+		buf[nread - 1] = '\0';
+		if ((ret = dhd_parse_filter_ie(dhd, buf)) < 0) { 
+			DHD_ERROR(("error: failed to parse filter ie\n"));
+		}
+	} else {
+		DHD_ERROR(("error: zero length file.failed to read\n"));
+		ret = BCME_ERROR;
+	}
+	sys_close(fd);
+
+exit:
+	set_fs(old_fs);
+	return ret;
+}
+#endif /* FILTER_IE */
+
 int dhd_os_wake_lock_timeout(dhd_pub_t *pub)
 {
 	dhd_info_t *dhd = (dhd_info_t *)(pub->info);
@@ -10973,3 +11035,217 @@ dhd_linux_get_primary_netdev(dhd_pub_t *dhdp)
 	else
 		return NULL;
 }
+
+#if defined FILTER_IE
+int dhd_get_filter_ie_count(dhd_pub_t *dhdp, uint8* buf)
+{
+	uint8* pstr = buf;
+	int element_count = 0;
+
+	if (buf == NULL) {
+		return BCME_ERROR;
+	}
+
+	while (*pstr != '\0') {
+		if (*pstr == '\n') {
+			element_count++;
+		}
+		pstr++;
+	}
+	/*
+	 * New line character must not be present after last line.
+	 * To count last line
+	 */
+	element_count++;
+
+	return element_count;
+}
+
+int dhd_parse_oui(dhd_pub_t *dhd, uint8 *inbuf, uint8 *oui, int len)
+{
+	uint8 i, j, msb, lsb, oui_len = 0;
+	/*
+	 * OUI can vary from 3 bytes to 5 bytes.
+	 * While reading from file as ascii input it can
+	 * take maximum size of 14 bytes and minumum size of
+	 * 8 bytes including ":"
+	 * Example 5byte OUI <AB:DE:BE:CD:FA>
+	 * Example 3byte OUI <AB:DC:EF>
+	 */
+
+	if ((inbuf == NULL) || (len < 8) || (len > 14 )) {
+		DHD_ERROR(("error: failed to parse OUI \n"));
+		return BCME_ERROR;
+	}
+
+	for (j = 0, i = 0; i < len; i += 3, ++j) {
+		if (!bcm_isxdigit(inbuf[i]) || !bcm_isxdigit(inbuf[i + 1])) {
+			DHD_ERROR(("error: invalid OUI format \n"));
+			return BCME_ERROR;
+		}
+		msb = inbuf[i] > '9' ? bcm_toupper(inbuf[i]) - 'A' + 10 : inbuf[i] - '0';
+		lsb = inbuf[i + 1] > '9' ? bcm_toupper(inbuf[i + 1]) - 'A' + 10 : inbuf[i + 1] - '0';
+		oui[j] = (msb << 4) | lsb;
+	}
+	/* Size of oui.It can vary from 3/4/5 */
+	oui_len = j;
+
+	return oui_len;
+}
+
+int dhd_check_valid_ie(dhd_pub_t *dhdp, uint8* buf, int len)
+{
+	int i = 0;
+
+	while (i < len) {
+		if (!bcm_isdigit(buf[i])) {
+			DHD_ERROR(("error: non digit value found in filter_ie \n"));
+			return BCME_ERROR;
+		}
+		i++;
+	}
+	if (bcm_atoi((char*)buf) > 255) {
+		DHD_ERROR(("error: element id cannot be greater than 255 \n"));
+		return BCME_ERROR;
+	}
+
+	return BCME_OK;
+}
+
+int dhd_parse_filter_ie(dhd_pub_t *dhd, uint8 *buf)
+{
+	int element_count = 0, i = 0, oui_size = 0, ret = 0;
+	uint16 kflags, bufsize, buf_space_left, id = 0, len = 0;
+	uint16 filter_iovsize, all_tlvsize;
+	wl_filter_ie_tlv_t *p_ie_tlv = NULL;
+	wl_filter_ie_iov_t *p_filter_iov = (wl_filter_ie_iov_t *) NULL;
+	char *token = NULL, *ele_token = NULL, *oui_token = NULL, *type = NULL;
+	uint8 data[20];
+
+	element_count = dhd_get_filter_ie_count(dhd, buf);
+	DHD_INFO(("total element count %d \n", element_count));
+	kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
+	/* Calculate the whole buffer size */
+	filter_iovsize = sizeof(wl_filter_ie_iov_t) + FILTER_IE_BUFSZ;
+	p_filter_iov = kzalloc(filter_iovsize, kflags);
+
+	if (p_filter_iov == NULL) {
+		DHD_ERROR(("error: failed to allocate %d bytes of memory\n", filter_iovsize));
+		return BCME_ERROR;
+	}
+
+	/* setup filter iovar header */
+	p_filter_iov->version = WL_FILTER_IE_VERSION;
+	p_filter_iov->len = filter_iovsize;
+	p_filter_iov->fixed_length = p_filter_iov->len - FILTER_IE_BUFSZ;
+	p_filter_iov->pktflag = FC_PROBE_REQ;
+	p_filter_iov->option = WL_FILTER_IE_CHECK_SUB_OPTION;
+	/* setup TLVs */
+	bufsize = filter_iovsize - WL_FILTER_IE_IOV_HDR_SIZE; /* adjust available size for TLVs */
+	p_ie_tlv = &p_filter_iov->tlvs[0];
+	buf_space_left = bufsize;
+
+	while ((i < element_count) && (buf != NULL)) {
+		len = 0;
+		/* token contains one line of input data */
+		token = bcmstrtok((char**)&buf, "\n", NULL);
+		if (token == NULL) {
+			break;
+		}
+		if ((ele_token = bcmstrstr(token, ",")) == NULL) {
+		/* only element id is present */
+			if (dhd_check_valid_ie(dhd, token, strlen(token)) == BCME_ERROR) {
+				DHD_ERROR(("error: Invalid element id \n"));
+				ret = BCME_ERROR;
+				goto exit;
+			}
+			id = bcm_atoi((char*)token);
+			data[len++] = WL_FILTER_IE_SET;
+		} else {
+			/* oui is present */
+			ele_token = bcmstrtok(&token, ",", NULL);
+			if ((ele_token == NULL) || (dhd_check_valid_ie(dhd, ele_token,
+				strlen(ele_token)) == BCME_ERROR)) {
+				DHD_ERROR(("error: Invalid element id \n"));
+				ret = BCME_ERROR;
+				goto exit;
+			}
+			id =  bcm_atoi((char*)ele_token);
+			data[len++] = WL_FILTER_IE_SET;
+			if ((oui_token = bcmstrstr(token, ",")) == NULL) {
+				oui_size = dhd_parse_oui(dhd, token, &(data[len]), strlen(token));
+				if (oui_size == BCME_ERROR) {
+					DHD_ERROR(("error: Invalid OUI \n"));
+					ret = BCME_ERROR;
+					goto exit;
+				}
+				len += oui_size;
+			} else {
+				/* type is present */
+				oui_token = bcmstrtok(&token, ",", NULL);
+				if ((oui_token == NULL) || ((oui_size = dhd_parse_oui(dhd, oui_token,
+					&(data[len]), strlen(oui_token))) == BCME_ERROR)) {
+					DHD_ERROR(("error: Invalid OUI \n"));
+					ret = BCME_ERROR;
+					goto exit;
+				}
+				len += oui_size;
+				if ((type = bcmstrstr(token, ",")) == NULL) {
+					if (dhd_check_valid_ie(dhd, token, strlen(token)) == BCME_ERROR) {
+						DHD_ERROR(("error: Invalid type \n"));
+						ret = BCME_ERROR;
+						goto exit;
+					}
+					data[len++] = bcm_atoi((char*)token);
+				} else {
+					/* subtype is present */
+					type = bcmstrtok(&token, ",", NULL);
+					if ((type == NULL) || (dhd_check_valid_ie(dhd, type,
+						strlen(type)) == BCME_ERROR)) {
+						DHD_ERROR(("error: Invalid type \n"));
+						ret = BCME_ERROR;
+						goto exit;
+					}
+					data[len++] = bcm_atoi((char*)type);
+					/* subtype is last element */
+					if ((token == NULL) || (*token == '\0') ||
+						(dhd_check_valid_ie(dhd, token, strlen(token)) == BCME_ERROR)) {
+						DHD_ERROR(("error: Invalid subtype \n"));
+						ret = BCME_ERROR;
+						goto exit;
+					}
+					data[len++] = bcm_atoi((char*)token);
+				}
+			}
+		}
+		ret = bcm_pack_xtlv_entry((uint8 **)&p_ie_tlv,
+			&buf_space_left, id, len, data, BCM_XTLV_OPTION_ALIGN32);
+		if (ret != BCME_OK) {
+			DHD_ERROR(("%s : bcm_pack_xtlv_entry() failed ,"
+				"status=%d\n", __FUNCTION__, ret));
+			kfree(p_filter_iov);
+			return ret;
+		}
+		i++;
+	}
+	if (i == 0) {
+	/* file is empty or first line is blank */
+		DHD_ERROR(("error: filter_ie file is empty or first line is blank \n"));
+		kfree(p_filter_iov);
+		return BCME_ERROR;
+	}
+	/* update the iov header, set len to include all TLVs + header */
+	all_tlvsize = (bufsize - buf_space_left);
+	p_filter_iov->len = htol16(all_tlvsize + WL_FILTER_IE_IOV_HDR_SIZE);
+	ret = dhd_iovar(dhd, 0, "filter_ie", (void *)p_filter_iov, p_filter_iov->len, 1);
+	if (ret != BCME_OK) {
+		DHD_ERROR(("error: IOVAR failed, status=%d\n", ret));
+	}
+exit:
+	/* clean up */
+	kfree(p_filter_iov);
+	return ret;
+}
+#endif /* FILTER_IE */
+
+
