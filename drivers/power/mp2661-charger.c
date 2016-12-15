@@ -51,7 +51,8 @@
 
 /*Power-On Configuration register*/
 #define POWER_ON_CFG_REG                               0x1
-#define CHG_ENABLE_BIT                                 BIT(3)
+#define CHG_ENABLE_MASK                                mp2661_MASK(3, 3)
+#define CHG_ENABLE_MASK_SHIFT                          3
 #define UVLO_THRESHOLD_MASK                            mp2661_MASK(2, 0)
 #define UVLO_THRESHOLD_MASK_SHIFT                      0
 
@@ -63,7 +64,7 @@
 /*Discharge/termination  current limit register*/
 #define DISCHG_TERM_CURRENT_REG                        0x3
 #define DISCHG_CURRENT_MASK                            mp2661_MASK(6, 3)
-#define DISCHG_CURRENT_MASK_SHIT                       3
+#define DISCHG_CURRENT_MASK_SHIFT                      3
 #define TRCIKE_PCB_OTP_DISABLE_MASK                    mp2661_MASK(2, 2)
 #define TRCIKE_PCB_OTP_DISABLE_MASK_SHIFT              2
 #define TRCIKE_CHARGING_CURRENT_MASK                   mp2661_MASK(1, 0)
@@ -72,7 +73,7 @@
 /*Charge Voltage Control Register*/
 #define CHG_VOLTAGE_CTRL_REG                           0x4
 #define FULL_CHG_VOLTAGE_MASK                          mp2661_MASK(7, 2)
-#define FULL_CHG_VOLTAGE_MASK_SHIF                     2
+#define FULL_CHG_VOLTAGE_MASK_SHIFT                    2
 #define TRICKLE_CHARGE_THESHOLD_MASK                   mp2661_MASK(1, 1)
 #define TRICKLE_CHARGE_THESHOLD_MASK_SHIFT             1
 #define BATTERY_RECHARGE_THRESHOLD_MASK                mp2661_MASK(0, 0)
@@ -300,6 +301,77 @@ out:
     return rc;
 }
 
+static bool mp2661_reg_and_write_is_equal(struct mp2661_chg *chip, int reg,
+                        u8 mask, u8 val)
+{
+    s32 rc = -1;
+    u8 tmp_value = 0;
+    u8 read_value = 0;
+
+    rc = mp2661_read(chip, reg, &read_value);
+    if (rc < 0)
+    {
+        return false;
+    }
+
+    /* compare val and reg */
+    tmp_value = (read_value & mask);
+    if (val == tmp_value)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+static int mp2661_masked_write_verify(struct mp2661_chg *chip, int reg,
+                        u8 mask, u8 val)
+{
+    s32 rc = -1;
+    bool ret = false;
+    int retries = 3;
+
+    /* compare default value */
+    ret = mp2661_reg_and_write_is_equal(chip, reg,
+                mask, val);
+    if (ret)
+    {
+        return 0;
+    }
+
+    /* retry three times when consistent */
+    do
+    {
+        rc = mp2661_masked_write(chip, reg,
+                mask, val);
+        if (rc < 0)
+        {
+            /* I2C busy, write fail */
+            return -EBUSY;
+        }
+
+        ret = mp2661_reg_and_write_is_equal(chip, reg,
+                mask, val);
+        if (ret)
+        {
+            return 0;
+        }
+        else
+        {
+            rc = -EAGAIN;
+            retries--;
+        }
+    }while (retries > 0);
+
+    if (retries <= 0)
+    {
+        pr_err("retry three times failed: reg=%02x, rc=%d\n", reg, rc);
+    }
+
+    return rc;
+}
 
 static enum power_supply_property mp2661_battery_properties[] = {
     POWER_SUPPLY_PROP_STATUS,
@@ -567,8 +639,8 @@ static int mp2661_set_batt_full_voltage(struct mp2661_chg *chip,
     }
 
     i = (voltage - MP2661_FULL_VOLTAGE_MIN_MV) / MP2661_FULL_VOLTAGE_STEP_MV;
-    i = i << FULL_CHG_VOLTAGE_MASK_SHIF;
-    rc = mp2661_masked_write(chip, CHG_VOLTAGE_CTRL_REG,
+    i = i << FULL_CHG_VOLTAGE_MASK_SHIFT;
+    rc = mp2661_masked_write_verify(chip, CHG_VOLTAGE_CTRL_REG,
             FULL_CHG_VOLTAGE_MASK, i);
     if (rc < 0)
     {
@@ -578,6 +650,7 @@ static int mp2661_set_batt_full_voltage(struct mp2661_chg *chip,
     {
         chip->batt_full_now_mv = voltage;
     }
+
     return rc;
 }
 
@@ -619,12 +692,13 @@ static int mp2661_set_usb_input_current(struct mp2661_chg *chip,
     }
 
     i = i << INPUT_SOURCE_CURRENT_LIMIT_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, INPUT_SOURCE_CTRL_REG,
+    rc = mp2661_masked_write_verify(chip, INPUT_SOURCE_CTRL_REG,
             INPUT_SOURCE_CURRENT_LIMIT_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set usb input current to %dma rc = %d\n", current_limit, rc);
     }
+
     return rc;
 }
 
@@ -683,12 +757,13 @@ static int mp2661_set_usb_input_voltage_regulation(struct mp2661_chg *chip,
 
     i = (voltage - MP2661_USB_INPUT_VOLTAGE_MIN_MV) / MP2661_USB_INPUT_VOLTAGE_STEP_MV;
     i = i << INPUT_SOURCE_VOLTAGE_LIMIT_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, INPUT_SOURCE_CTRL_REG,
+    rc = mp2661_masked_write_verify(chip, INPUT_SOURCE_CTRL_REG,
             INPUT_SOURCE_VOLTAGE_LIMIT_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set usb input voltage regulation to %dmv rc = %d\n", voltage, rc);
     }
+
     return rc;
 }
 
@@ -710,7 +785,7 @@ static int mp2661_set_batt_charging_current(struct mp2661_chg *chip,
 
     i = (current_ma - MP2661_BATT_CHARGING_MIN_MA) / MP2661_BATT_CHARGING_STEP_MA;
     i = i << BATT_CHARGING_CURRENT_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, CHG_CURRENT_CTRL_REG,
+    rc = mp2661_masked_write_verify(chip, CHG_CURRENT_CTRL_REG,
             BATT_CHARGING_CURRENT_MASK, i);
     if (rc < 0)
     {
@@ -720,6 +795,7 @@ static int mp2661_set_batt_charging_current(struct mp2661_chg *chip,
     {
         chip->batt_charging_current_now_ma = current_ma;
     }
+
     return rc;
 }
 
@@ -747,12 +823,13 @@ static int mp2661_set_pcb_otp_disable(struct mp2661_chg *chip,
     int rc, i;
 
     i = disable << TRCIKE_PCB_OTP_DISABLE_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, DISCHG_TERM_CURRENT_REG,
+    rc = mp2661_masked_write_verify(chip, DISCHG_TERM_CURRENT_REG,
             TRCIKE_PCB_OTP_DISABLE_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set pcb otp disable to %d rc = %d\n", disable, rc);
     }
+
     return rc;
 }
 
@@ -774,12 +851,13 @@ static int mp2661_set_batt_trickle_charging_current(struct mp2661_chg *chip,
 
     i = (current_limit - MP2661_TRICKLE_CHARGING_MIN_MA) / MP2661_TRICKE_CHARGING_STEP_MA;
     i = i << TRCIKE_CHARGING_CURRENT_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, DISCHG_TERM_CURRENT_REG,
+    rc = mp2661_masked_write_verify(chip, DISCHG_TERM_CURRENT_REG,
             TRCIKE_CHARGING_CURRENT_MASK, i);
     if (rc < 0)
     {
-        pr_err("cannotset batt trickle chargint current to %dma rc = %d\n", current_limit, rc);
+        pr_err("cannot set batt trickle chargint current to %dma rc = %d\n", current_limit, rc);
     }
+
     return rc;
 }
 
@@ -806,12 +884,13 @@ static int mp2661_set_batt_trickle_to_cc_threshold(struct mp2661_chg *chip,
     }
 
     i = i << TRICKLE_CHARGE_THESHOLD_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, CHG_VOLTAGE_CTRL_REG,
+    rc = mp2661_masked_write_verify(chip, CHG_VOLTAGE_CTRL_REG,
             TRICKLE_CHARGE_THESHOLD_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set batt trickle to cc threshold to %dmv rc = %d\n", voltage, rc);
     }
+
     return rc;
 }
 
@@ -833,12 +912,13 @@ static int mp2661_set_batt_uvlo_threshold(struct mp2661_chg *chip,
 
     i = (voltage - MP2661_UVLO_THRESHOLD_MIN_MV) / MP2661_UVLO_THRESHOLD_STEP_MV;
     i = i << UVLO_THRESHOLD_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, POWER_ON_CFG_REG,
+    rc = mp2661_masked_write_verify(chip, POWER_ON_CFG_REG,
             UVLO_THRESHOLD_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set batt uvlo threshold to %dmv rc = %d\n", voltage, rc);
     }
+
     return rc;
 }
 
@@ -865,12 +945,13 @@ static int mp2661_set_batt_auto_recharge(struct mp2661_chg *chip,
     }
 
     i = i << BATTERY_RECHARGE_THRESHOLD_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, CHG_VOLTAGE_CTRL_REG,
+    rc = mp2661_masked_write_verify(chip, CHG_VOLTAGE_CTRL_REG,
                 BATTERY_RECHARGE_THRESHOLD_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set batt auto recharge below full to %dmv rc = %d\n", voltage_below_full, rc);
     }
+
     return rc;
 }
 
@@ -891,13 +972,14 @@ static int mp2661_set_batt_discharging_current(struct mp2661_chg *chip,
     }
 
     i = (current_limit - MP2661_BATT_DISCHARGE_MIN_MA) / MP2661_BATT_DISCHARGE_CURRENT_STEP_MA;
-    i = i << DISCHG_CURRENT_MASK_SHIT;
-    rc = mp2661_masked_write(chip, DISCHG_TERM_CURRENT_REG,
+    i = i << DISCHG_CURRENT_MASK_SHIFT;
+    rc = mp2661_masked_write_verify(chip, DISCHG_TERM_CURRENT_REG,
             DISCHG_CURRENT_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set batt discharging current to %dma rc = %d\n", current_limit, rc);
     }
+
     return rc;
 }
 
@@ -919,12 +1001,13 @@ static int mp2661_set_thermal_regulation_threshold(struct mp2661_chg *chip,
 
     i = (temp - MP2661_THERMAL_TEMP_MIN) / MP2661_THERMAL_TEMP_STEP;
     i = i << THERMAL_REGULATION_THRESHOLD_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, MISCELLANEOUS_OPER_CTRL_REG,
+    rc = mp2661_masked_write_verify(chip, MISCELLANEOUS_OPER_CTRL_REG,
             THERMAL_REGULATION_THRESHOLD_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set thermal regulation threshold to %d, rc = %d\n", temp, rc);
     }
+
     return rc;
 }
 
@@ -934,12 +1017,13 @@ static int mp2661_en_bf_enable(struct mp2661_chg *chip,
     int rc,i;
 
     i = enable << TERMINATION_EN_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, CHG_TERMINATION_TIMER_CTRL_REG,
+    rc = mp2661_masked_write_verify(chip, CHG_TERMINATION_TIMER_CTRL_REG,
             TERMINATION_EN_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set bf enable to %d rc = %d\n", enable, rc);
     }
+
     return rc;
 }
 
@@ -949,12 +1033,13 @@ static int mp2661_set_ldo_fet_disconnect(struct mp2661_chg *chip,
     int rc,i;
 
     i = disconnect << EN_HIZ_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, INPUT_SOURCE_CTRL_REG,
+    rc = mp2661_masked_write_verify(chip, INPUT_SOURCE_CTRL_REG,
             EN_HIZ_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set ldo fet disconnect to %d rc = %d\n", disconnect, rc);
     }
+
     return rc;
 }
 
@@ -964,12 +1049,13 @@ static int mp2661_set_batt_fet_disconnect(struct mp2661_chg *chip,
     int rc,i;
 
     i = disconnect << BAT_FET_DIS_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, MISCELLANEOUS_OPER_CTRL_REG,
+    rc = mp2661_masked_write_verify(chip, MISCELLANEOUS_OPER_CTRL_REG,
             BAT_FET_DIS_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set batt fet disconnect to %d rc = %d\n", disconnect, rc);
     }
+
     return rc;
 }
 
@@ -979,12 +1065,13 @@ static int mp2661_tmr2x_enable(struct mp2661_chg *chip,
     int rc,i;
 
     i = enable << TMR2X_EN_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, MISCELLANEOUS_OPER_CTRL_REG,
+    rc = mp2661_masked_write_verify(chip, MISCELLANEOUS_OPER_CTRL_REG,
                 TMR2X_EN_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set tmr2x enable to %d rc = %d\n", enable, rc);
     }
+
     return rc;
 }
 
@@ -994,12 +1081,13 @@ static int mp2661_ntc_enable(struct mp2661_chg *chip,
     int rc,i;
 
     i = enable << NTC_EN_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, MISCELLANEOUS_OPER_CTRL_REG,
+    rc = mp2661_masked_write_verify(chip, MISCELLANEOUS_OPER_CTRL_REG,
                 NTC_EN_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set ntc enable to %d rc = %d\n", enable, rc);
     }
+
     return rc;
 }
 
@@ -1021,12 +1109,13 @@ static int mp2661_set_i2c_watchdog_timer(struct mp2661_chg *chip,
 
     i = time / MP2661_I2C_WATCHDOG_TIMER_STEP_SEC;
     i = i << I2C_WATCHDOG_TIMER_LIMIT_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, CHG_TERMINATION_TIMER_CTRL_REG,
+    rc = mp2661_masked_write_verify(chip, CHG_TERMINATION_TIMER_CTRL_REG,
             I2C_WATCHDOG_TIMER_LIMIT_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set i2c watchdog timer to %ds rc = %d\n", time, rc);
     }
+
     return rc;
 }
 
@@ -1036,12 +1125,13 @@ static int mp2661_safety_timer_enable(struct mp2661_chg *chip,
     int rc,i;
 
     i = enable << SAFETY_TIMER_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, CHG_TERMINATION_TIMER_CTRL_REG,
+    rc = mp2661_masked_write_verify(chip, CHG_TERMINATION_TIMER_CTRL_REG,
             SAFETY_TIMER_MASK, i);
     if (rc < 0)
     {
         pr_err("cannot set safety timer enable to %d rc = %d\n", enable, rc);
     }
+
     return rc;
 }
 
@@ -1077,24 +1167,26 @@ static int mp2661_set_cc_chg_timer(struct mp2661_chg *chip,
     }
 
     i = i << CC_CHG_TIMER_MASK_SHIFT;
-    rc = mp2661_masked_write(chip, CHG_TERMINATION_TIMER_CTRL_REG,
+    rc = mp2661_masked_write_verify(chip, CHG_TERMINATION_TIMER_CTRL_REG,
             CC_CHG_TIMER_MASK, i);
     if (rc < 0)
     {
-        pr_err("cannot set cc chg timer rc = %d\n", rc);
+        pr_err("cannot set cc chg timer to %dh rc = %d\n", time_limit, rc);
     }
+
     return rc;
 }
 
 static int mp2661_set_charging_enable(struct mp2661_chg *chip, bool enable)
 {
-    int rc;
+    int rc,i;
 
-    rc = mp2661_masked_write(chip, POWER_ON_CFG_REG,
-                CHG_ENABLE_BIT, enable ? 0 : CHG_ENABLE_BIT);
+    i = enable ? 0 : (1 << CHG_ENABLE_MASK_SHIFT);
+    rc = mp2661_masked_write_verify(chip, POWER_ON_CFG_REG,
+                CHG_ENABLE_MASK, i);
     if (rc < 0)
     {
-        pr_err("Couldn't set CHG_ENABLE_BIT enable = %d rc = %d\n",    enable, rc);
+        pr_err("Couldn't set chg enable = %d rc = %d\n", enable, rc);
         return rc;
     }
 
@@ -1114,7 +1206,7 @@ static int mp2661_is_charging_enable(struct mp2661_chg *chip)
         return rc;
     }
 
-    return (reg & CHG_ENABLE_BIT) ? 0 : 1;
+    return (reg & CHG_ENABLE_MASK) ? 0 : 1;
 }
 
 static int mp2661_is_chg_plugged_in(struct mp2661_chg *chip)
