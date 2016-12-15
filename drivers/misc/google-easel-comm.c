@@ -25,6 +25,8 @@
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/notifier.h>
+#include <linux/reboot.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
@@ -66,6 +68,8 @@ struct easelcomm_user_state {
 	/* Which Easel service is registered for this fd, or NULL if none */
 	struct easelcomm_service *service;
 };
+
+static bool easelcomm_up; /* is easelcomm up and running? */
 
 static int easelcomm_open(struct inode *inode, struct file *file);
 static int easelcomm_release(struct inode *inode, struct file *file);
@@ -429,6 +433,31 @@ static void easelcomm_flush_local_service(struct easelcomm_service *service)
 }
 
 /*
+ * Shutdown easelcomm communications.  async is true if emergency shutdown (on
+ * panic), don't wait for sync from other side.
+ */
+static void easelcomm_stop(bool async)
+{
+	int i;
+
+	if (!easelcomm_up)
+		return;
+
+	/* Set local shutdown flag, disallow further activity */
+	easelcomm_up = false;
+
+	for (i = 0; i < EASELCOMM_SERVICE_COUNT; i++) {
+		struct easelcomm_service *service = &easelcomm_service[i];
+
+		easelcomm_flush_local_service(service);
+	}
+
+	if (!async) {
+		/* TODO: Send link shutdown command, wait for remote ACK */
+	}
+}
+
+/*
  * Handle SEND_MSG command from remote.  Add a remote message, link a reply
  * to original message and wakeup waiter.
  */
@@ -518,6 +547,7 @@ static void easelcomm_cmd_channel_remote_set_ready(void)
 	/* mark channel initialized, wakeup waiters. */
 	channel->initialized = true;
 	complete_all(&channel->init_state_changed);
+	easelcomm_up = true;
 	mutex_unlock(&channel->mutex);
 }
 
@@ -800,8 +830,12 @@ EXPORT_SYMBOL(easelcomm_cmd_channel_wrap_handler);
 /* Device file open.  Allocate a user state structure. */
 static int easelcomm_open(struct inode *inode, struct file *file)
 {
-	struct easelcomm_user_state *user_state =
-		kzalloc(sizeof(struct easelcomm_user_state), GFP_KERNEL);
+	struct easelcomm_user_state *user_state;
+
+	if (!easelcomm_up)
+		return -ENODEV;
+
+	user_state = kzalloc(sizeof(struct easelcomm_user_state), GFP_KERNEL);
 	if (!user_state)
 		return -ENOMEM;
 	file->private_data = user_state;
@@ -845,7 +879,8 @@ static int easelcomm_release(struct inode *inode, struct file *file)
 			dev_dbg(easelcomm_miscdev.this_device,
 				"svc %u release\n", service->service_id);
 
-			easelcomm_initiate_service_shutdown(service);
+			if (easelcomm_up)
+				easelcomm_initiate_service_shutdown(service);
 			spin_lock(&service->lock);
 			service->user = NULL;
 			spin_unlock(&service->lock);
@@ -1556,6 +1591,9 @@ static long easelcomm_ioctl_common(
 	if (WARN_ON(!user_state))
 		return -EINVAL;
 
+	if (!easelcomm_up)
+		return -ESHUTDOWN;
+
 	/* REGISTER is the only ioctl that doesn't need a service registered. */
 	if (cmd == EASELCOMM_IOC_REGISTER)
 		return easelcomm_register(user_state, (unsigned int) arg);
@@ -1701,6 +1739,18 @@ int easelcomm_init_pcie_ready(void *local_cmdchan_buffer)
 }
 EXPORT_SYMBOL(easelcomm_init_pcie_ready);
 
+static int easelcomm_notify_sys(
+	struct notifier_block *this, unsigned long code, void *unused)
+{
+	if (code == SYS_RESTART || code == SYS_HALT || code == SYS_POWER_OFF)
+		easelcomm_stop(false);
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block easelcomm_notifier = {
+	.notifier_call	= easelcomm_notify_sys,
+};
+
 static int __init easelcomm_init(void)
 {
 	int ret;
@@ -1733,29 +1783,18 @@ static int __init easelcomm_init(void)
 
 	easelcomm_hw_init();
 
-	/*
-	 * TODO-LATER: register reboot notifier that flushes/aborts and
-	 * prevents creating new requests.
-	 */
+	/* Shut down easelcomm on reboot */
+	ret = register_reboot_notifier(&easelcomm_notifier);
+	if (ret)
+		dev_warn(easelcomm_miscdev.this_device,
+			"register reboot notifier failed\n");
 
 	return 0;
 }
 
 static void __exit easelcomm_exit(void)
 {
-	int i;
-
-	/* TODO: Grab mutex for remote channel, disallow further messages */
-	/* TODO: Set local shutdown flag, disallow further activity */
-
-	for (i = 0; i < EASELCOMM_SERVICE_COUNT; i++) {
-		struct easelcomm_service *service = &easelcomm_service[i];
-
-		easelcomm_flush_local_service(service);
-	}
-
-	/* TODO-LATER: Send link shutdown command, wait for remote ACK */
-
+	easelcomm_stop(false);
 	kfree(cmd_channel_local.buffer);
 	misc_deregister(&easelcomm_miscdev);
 }
