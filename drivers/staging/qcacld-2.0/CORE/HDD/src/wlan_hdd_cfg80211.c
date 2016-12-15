@@ -16264,6 +16264,7 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
     hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR( dev );
     hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX( pAdapter );
     hdd_wext_state_t *pwextBuf = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
+    hdd_station_ctx_t *station_ctx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
     hdd_config_t *cfg_param = NULL;
     tCsrScanRequest scanRequest;
     tANI_U8 *channelList = NULL, i;
@@ -16626,24 +16627,26 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
     wlan_hdd_update_scan_rand_attrs((void *)&scanRequest, (void *)request,
                                     WLAN_HDD_HOST_SCAN);
 
-    if (pHddCtx->no_of_probe_req_ouis != 0) {
-        scanRequest.voui = (struct vendor_oui *)vos_mem_malloc(
+    if (!hdd_connIsConnected(station_ctx)) {
+        if (pHddCtx->no_of_probe_req_ouis != 0) {
+            scanRequest.voui = (struct vendor_oui *)vos_mem_malloc(
                                               pHddCtx->no_of_probe_req_ouis *
                                               sizeof(struct vendor_oui));
-        if (!scanRequest.voui) {
-            hddLog(LOGE, FL("Not enough memory for voui"));
-            scanRequest.num_vendor_oui = 0;
-            status = -ENOMEM;
-            goto free_mem;
+            if (!scanRequest.voui) {
+                hddLog(LOGE, FL("Not enough memory for voui"));
+                scanRequest.num_vendor_oui = 0;
+                status = -ENOMEM;
+                goto free_mem;
+            }
         }
-    }
 
-    if (pHddCtx->cfg_ini->probe_req_ie_whitelist)
-        wlan_hdd_fill_whitelist_ie_attrs(&scanRequest.ie_whitelist,
-                                         scanRequest.probe_req_ie_bitmap,
-                                         &scanRequest.num_vendor_oui,
-                                         scanRequest.voui,
-                                         pHddCtx);
+        if (pHddCtx->cfg_ini->probe_req_ie_whitelist)
+            wlan_hdd_fill_whitelist_ie_attrs(&scanRequest.ie_whitelist,
+                                             scanRequest.probe_req_ie_bitmap,
+                                             &scanRequest.num_vendor_oui,
+                                             scanRequest.voui,
+                                             pHddCtx);
+    }
 
     vos_runtime_pm_prevent_suspend(pHddCtx->runtime_context.scan);
     status = sme_ScanRequest( WLAN_HDD_GET_HAL_CTX(pAdapter),
@@ -20345,6 +20348,7 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
     hdd_scaninfo_t *pScanInfo = &pAdapter->scan_info;
     hdd_config_t *config = NULL;
     v_U32_t num_ignore_dfs_ch = 0;
+    hdd_station_ctx_t *station_ctx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 
     ENTER();
 
@@ -20406,9 +20410,13 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
         return -ENOTSUPP;
     }
 
-    pPnoRequest = (tpSirPNOScanReq) vos_mem_malloc(sizeof(tSirPNOScanReq) +
+    if (!hdd_connIsConnected(station_ctx))
+        pPnoRequest = (tpSirPNOScanReq) vos_mem_malloc(sizeof(tSirPNOScanReq) +
                                     (pHddCtx->no_of_probe_req_ouis) *
                                     (sizeof(struct vendor_oui)));
+    else
+        pPnoRequest = (tpSirPNOScanReq) vos_mem_malloc(sizeof(tSirPNOScanReq));
+
     if (NULL == pPnoRequest)
     {
         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_FATAL,
@@ -20588,7 +20596,8 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
     wlan_hdd_update_scan_rand_attrs((void *)pPnoRequest, (void *)request,
                                     WLAN_HDD_PNO_SCAN);
 
-    if (pHddCtx->cfg_ini->probe_req_ie_whitelist)
+    if (pHddCtx->cfg_ini->probe_req_ie_whitelist &&
+        !hdd_connIsConnected(station_ctx))
         wlan_hdd_fill_whitelist_ie_attrs(&pPnoRequest->ie_whitelist,
                                          pPnoRequest->probe_req_ie_bitmap,
                                          &pPnoRequest->num_vendor_oui,
