@@ -56,6 +56,8 @@
 #define PRIORITY_QUEUE (QUEUE_0)
 #define SYNC_QUEUE (QUEUE_1)
 
+struct mutex g_cci_mutex;
+
 static struct v4l2_subdev *g_cci_subdev;
 
 static void msm_cci_dump_registers(struct cci_device *cci_dev,
@@ -1584,6 +1586,7 @@ static int32_t msm_cci_config(struct v4l2_subdev *sd,
 	int32_t rc = 0;
 	CDBG("%s line %d cmd %d\n", __func__, __LINE__,
 		cci_ctrl->cmd);
+	mutex_lock(&g_cci_mutex);
 	switch (cci_ctrl->cmd) {
 	case MSM_CCI_INIT:
 		rc = msm_cci_init(sd, cci_ctrl);
@@ -1612,6 +1615,7 @@ static int32_t msm_cci_config(struct v4l2_subdev *sd,
 	}
 	CDBG("%s line %d rc %d\n", __func__, __LINE__, rc);
 	cci_ctrl->status = rc;
+	mutex_unlock(&g_cci_mutex);
 	return rc;
 }
 
@@ -2038,6 +2042,7 @@ static int msm_cci_probe(struct platform_device *pdev)
 	msm_cci_init_clk_params(new_cci_dev);
 	msm_cci_init_gpio_params(new_cci_dev);
 
+	mutex_init(&g_cci_mutex);
 	rc = msm_camera_get_dt_vreg_data(new_cci_dev->pdev->dev.of_node,
 		&(new_cci_dev->cci_vreg), &(new_cci_dev->regulator_count));
 	if (rc < 0) {

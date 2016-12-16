@@ -371,6 +371,7 @@ enum msm_ois_cfg_type_t {
 	CFG_OIS_POWERUP,
 	CFG_OIS_CONTROL,
 	CFG_OIS_I2C_WRITE_SEQ_TABLE,
+	CFG_OIS_I2C_READ_SEQ_TABLE,
 };
 
 enum msm_ois_cfg_download_type_t {
@@ -481,8 +482,21 @@ struct msm_ois_slave_info {
 	uint32_t i2c_addr;
 	struct msm_ois_opcode opcode;
 };
+
+struct ois_position {
+	uint8_t data0;
+	uint8_t data1;
+	uint8_t data2;
+	uint8_t data3;
+	uint8_t data4;
+	uint8_t data5;
+	uint8_t data6;
+	uint8_t data7;
+};
+
 struct msm_ois_cfg_data {
 	int cfgtype;
+	struct ois_position pos;
 	union {
 		struct msm_ois_set_info_t set_info;
 		struct msm_camera_i2c_seq_reg_setting *settings;

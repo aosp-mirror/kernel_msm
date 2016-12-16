@@ -27,6 +27,14 @@ DEFINE_MSM_MUTEX(msm_ois_mutex);
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
 #endif
 
+/* Decide read witch address from OIS.
+ * Only can read one address each time.
+ * Default address : 0xE001
+ */
+static bool read_E003;
+static bool read_E005;
+static bool read_E007;
+
 static struct v4l2_file_operations msm_ois_v4l2_subdev_fops;
 static int32_t msm_ois_power_up(struct msm_ois_ctrl_t *o_ctrl);
 static int32_t msm_ois_power_down(struct msm_ois_ctrl_t *o_ctrl);
@@ -402,7 +410,6 @@ static int32_t msm_ois_control(struct msm_ois_ctrl_t *o_ctrl,
 	return rc;
 }
 
-
 static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 	void __user *argp)
 {
@@ -480,6 +487,50 @@ static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 			&conf_array);
 		kfree(reg_setting);
 		break;
+	}
+	case CFG_OIS_I2C_READ_SEQ_TABLE:{
+		short read_addr = 0xE001;
+		int read_cnt = 6;
+		uint8_t buf[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+		if (read_E003) {
+			read_addr = 0xE003;
+			read_cnt = 8;
+		}
+		if (read_E005) {
+			read_addr = 0xE005;
+			read_cnt = 8;
+		}
+		if (read_E007) {
+			read_addr = 0xE007;
+			read_cnt = 6;
+		}
+
+		rc = o_ctrl->i2c_client.i2c_func_tbl->
+			i2c_read_seq(&o_ctrl->i2c_client, read_addr,
+				     &buf[0], read_cnt);
+		if (rc != 0)
+			pr_err("[OISDBG] %s : i2c_read_seq fail.\n", __func__);
+		else {
+			if (read_cnt == 6) {
+				cdata->pos.data0 = buf[0];
+				cdata->pos.data1 = buf[1];
+				cdata->pos.data2 = buf[2];
+				cdata->pos.data3 = buf[3];
+				cdata->pos.data4 = buf[4];
+				cdata->pos.data5 = buf[5];
+			} else {
+				cdata->pos.data0 = buf[0];
+				cdata->pos.data1 = buf[1];
+				cdata->pos.data2 = buf[2];
+				cdata->pos.data3 = buf[3];
+				cdata->pos.data4 = buf[4];
+				cdata->pos.data5 = buf[5];
+				cdata->pos.data6 = buf[6];
+				cdata->pos.data7 = buf[7];
+			}
+		}
+	break;
 	}
 	default:
 		break;
@@ -814,6 +865,9 @@ static long msm_ois_subdev_do_ioctl(
 			ois_data.cfgtype = u32->cfgtype;
 			ois_data.cfg.settings = &settings;
 			parg = &ois_data;
+			break;
+		case CFG_OIS_I2C_READ_SEQ_TABLE:
+			/* Do nothing */
 			break;
 		default:
 			parg = &ois_data;
