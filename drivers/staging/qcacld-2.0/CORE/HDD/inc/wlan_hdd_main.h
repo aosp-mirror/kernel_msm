@@ -2052,6 +2052,52 @@ static inline void hdd_init_ll_stats_ctx(hdd_context_t *hdd_ctx)
 }
 #endif /* WLAN_FEATURE_LINK_LAYER_STATS */
 
+#ifdef FEATURE_WLAN_LFR
+static inline bool hdd_driver_roaming_supported(hdd_context_t *hdd_ctx)
+{
+	return hdd_ctx->cfg_ini->isFastRoamIniFeatureEnabled;
+}
+#else
+static inline bool hdd_driver_roaming_supported(hdd_context_t *hdd_ctx)
+{
+	return false;
+}
+#endif
+
+#ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
+static inline bool hdd_firmware_roaming_supported(hdd_context_t *hdd_ctx)
+{
+	return hdd_ctx->cfg_ini->isRoamOffloadScanEnabled;
+}
+#else
+static inline bool hdd_firmware_roaming_supported(hdd_context_t *hdd_ctx)
+{
+	return false;
+}
+#endif
+
+static inline bool hdd_roaming_supported(hdd_context_t *hdd_ctx)
+{
+	bool val;
+
+	val = hdd_driver_roaming_supported(hdd_ctx) ||
+		hdd_firmware_roaming_supported(hdd_ctx);
+
+	return val;
+}
+
+#ifdef CFG80211_SCAN_RANDOM_MAC_ADDR
+static inline bool hdd_scan_random_mac_addr_supported(void)
+{
+	return true;
+}
+#else
+static inline bool hdd_scan_random_mac_addr_supported(void)
+{
+	return false;
+}
+#endif
+
 void hdd_get_fw_version(hdd_context_t *hdd_ctx,
 			uint32_t *major_spid, uint32_t *minor_spid,
 			uint32_t *siid, uint32_t *crmid);
