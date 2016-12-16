@@ -69,7 +69,11 @@ struct easelcomm_user_state {
 	struct easelcomm_service *service;
 };
 
+/* max delay in msec waiting for remote to ack link shutdown */
+#define LINK_SHUTDOWN_ACK_TIMEOUT 500
 static bool easelcomm_up; /* is easelcomm up and running? */
+/* used to wait for remote peer to ack link shutdown */
+static DECLARE_COMPLETION(easelcomm_link_peer_shutdown);
 
 static int easelcomm_open(struct inode *inode, struct file *file);
 static int easelcomm_release(struct inode *inode, struct file *file);
@@ -433,28 +437,72 @@ static void easelcomm_flush_local_service(struct easelcomm_service *service)
 }
 
 /*
- * Shutdown easelcomm communications.  async is true if emergency shutdown (on
- * panic), don't wait for sync from other side.
+ * Shutdown easelcomm local activity, mark link down.
  */
-static void easelcomm_stop(bool async)
+static void easelcomm_stop_local(void)
 {
 	int i;
 
 	if (!easelcomm_up)
 		return;
 
+	dev_dbg(easelcomm_miscdev.this_device, "stopping\n");
 	/* Set local shutdown flag, disallow further activity */
 	easelcomm_up = false;
 
 	for (i = 0; i < EASELCOMM_SERVICE_COUNT; i++) {
 		struct easelcomm_service *service = &easelcomm_service[i];
-
 		easelcomm_flush_local_service(service);
 	}
+}
 
+/*
+ * Shutdown easelcomm communications.  async is true if emergency shutdown (on
+ * panic), don't wait for sync from other side.
+ */
+static void easelcomm_stop(bool async)
+{
+	int ret;
+
+	if (!easelcomm_up)
+		return;
+
+	easelcomm_send_cmd_noargs(
+		&easelcomm_service[EASELCOMM_SERVICE_SYSCTRL],
+		EASELCOMM_CMD_LINK_SHUTDOWN);
 	if (!async) {
-		/* TODO: Send link shutdown command, wait for remote ACK */
+		ret = wait_for_completion_interruptible_timeout(
+			&easelcomm_link_peer_shutdown,
+			msecs_to_jiffies(LINK_SHUTDOWN_ACK_TIMEOUT));
+		if (ret <= 0)
+			dev_warn(easelcomm_miscdev.this_device,
+				"error or timeout on peer link shutdown ack\n");
 	}
+	easelcomm_stop_local();
+}
+
+/*
+ * LINK_SHUTDOWN command received from remote, stop local side and send
+ * ACK_SHUTDOWN back to remote.
+ */
+static void easelcomm_handle_cmd_link_shutdown(void)
+{
+	dev_dbg(easelcomm_miscdev.this_device,
+		"recv cmd LINK_SHUTDOWN\n");
+	easelcomm_stop_local();
+	dev_dbg(easelcomm_miscdev.this_device,
+		"send cmd ACK_SHUTDOWN\n");
+	easelcomm_send_cmd_noargs(
+		&easelcomm_service[EASELCOMM_SERVICE_SYSCTRL],
+		EASELCOMM_CMD_ACK_SHUTDOWN);
+}
+
+/* ACK_SHUTDOWN command received from remote, wakeup waiter. */
+static void easelcomm_handle_cmd_ack_shutdown(void)
+{
+	dev_dbg(easelcomm_miscdev.this_device,
+		"recv cmd ACK_SHUTDOWN\n");
+	complete(&easelcomm_link_peer_shutdown);
 }
 
 /*
@@ -698,6 +746,12 @@ static void easelcomm_handle_command(struct easelcomm_cmd_header *cmdhdr)
 		break;
 	case EASELCOMM_CMD_CLOSE_SERVICE:
 		easelcomm_handle_cmd_close_service(service);
+		break;
+	case EASELCOMM_CMD_LINK_SHUTDOWN:
+		easelcomm_handle_cmd_link_shutdown();
+		break;
+	case EASELCOMM_CMD_ACK_SHUTDOWN:
+		easelcomm_handle_cmd_ack_shutdown();
 		break;
 	default:
 		dev_err(easelcomm_miscdev.this_device,
