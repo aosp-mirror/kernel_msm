@@ -799,6 +799,9 @@ static void max17050_set_soc_thresholds(struct max17050_chip *chip,
 	s16 soc_max;
 	s16 soc_min;
 
+	if (chip->fake_capacity)
+		return;
+
 	if (threshold <= 0) {
 		pr_warn("%s: invalid threshold %d\n", __func__, threshold);
 		return;
