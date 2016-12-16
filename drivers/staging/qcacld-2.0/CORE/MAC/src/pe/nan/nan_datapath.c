@@ -131,8 +131,9 @@ static VOS_STATUS lim_handle_ndp_indication_event(tpAniSirGlobal mac_ctx,
 	VOS_STATUS status = VOS_STATUS_SUCCESS;
 
 	limLog(mac_ctx, LOG1,
-		FL("role: %d, vdev: %d, peer_mac_addr "MAC_ADDRESS_STR),
-		ndp_ind->role, ndp_ind->vdev_id,
+		FL("role: %d, vdev: %d, csid: %d, peer_mac_addr "
+			MAC_ADDRESS_STR),
+		ndp_ind->role, ndp_ind->vdev_id, ndp_ind->ncs_sk_type,
 		MAC_ADDR_ARRAY(ndp_ind->peer_mac_addr.bytes));
 
 	if ((ndp_ind->role == NDP_ROLE_INITIATOR) ||
