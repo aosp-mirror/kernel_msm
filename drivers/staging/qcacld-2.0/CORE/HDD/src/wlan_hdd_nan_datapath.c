@@ -61,6 +61,7 @@ qca_wlan_vendor_ndp_policy[QCA_WLAN_VENDOR_ATTR_NDP_PARAMS_MAX + 1] = {
 	[QCA_WLAN_VENDOR_ATTR_NDP_DRV_RESPONSE_STATUS_TYPE] = { .type =
 								NLA_U32 },
 	[QCA_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE] = { .type = NLA_U32 },
+	[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_CONFIG] = { .type = NLA_U32 },
 };
 
 /**
@@ -518,12 +519,13 @@ static int hdd_ndp_initiator_req_handler(hdd_context_t *hdd_ctx,
 	req.transaction_id =
 		nla_get_u16(tb[QCA_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID]);
 
-	if (!tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL]) {
-		hddLog(LOGE, FL("NDP channel is unavailable"));
-		return -EINVAL;
-	}
-	req.channel =
-		nla_get_u16(tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL]);
+	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL])
+		req.channel =
+			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL]);
+
+	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_CONFIG])
+		req.channel_cfg =
+			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_CONFIG]);
 
 	if (!tb[QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_INSTANCE_ID]) {
 		hddLog(LOGE, FL("NDP service instance ID is unavailable"));

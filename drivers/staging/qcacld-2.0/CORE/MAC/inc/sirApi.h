@@ -7288,6 +7288,7 @@ struct ndp_app_info {
  * @transaction_id: unique identifier
  * @vdev_id: session id of the interface over which ndp is being created
  * @channel: suggested channel for ndp creation
+ * @channel_cfg: channel config, 0=no channel, 1=optional, 2=mandatory
  * @service_instance_id: Service identifier
  * @peer_discovery_mac_addr: Peer's discovery mac address
  * @self_ndi_mac_addr: self NDI mac address
@@ -7299,6 +7300,7 @@ struct ndp_initiator_req {
 	uint32_t transaction_id;
 	uint32_t vdev_id;
 	uint32_t channel;
+	uint32_t channel_cfg;
 	uint32_t service_instance_id;
 	v_MACADDR_t peer_discovery_mac_addr;
 	v_MACADDR_t self_ndi_mac_addr;
