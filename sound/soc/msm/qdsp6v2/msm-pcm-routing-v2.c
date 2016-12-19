@@ -116,6 +116,7 @@ static const char *const external_pa_text[] = {"disable", "enable"};
 static const struct soc_enum msm_external_pa_enum[] = {
        SOC_ENUM_SINGLE_EXT(2, external_pa_text),
 };
+extern int msm_function_mi2s;
 
 static int msm_routing_send_device_pp_params(int port_id,  int copp_idx);
 
@@ -8732,6 +8733,13 @@ static int msm_pcm_routing_prepare(struct snd_pcm_substream *substream)
 					app_type_cfg[app_type_idx].bit_width;
 			} else
 				sample_rate = bedai->sample_rate;
+
+			if (msm_function_mi2s &&
+				bedai->port_id == AFE_PORT_ID_TERTIARY_MI2S_TX) {
+				pr_debug("set sample_rate 8000 for TERTIARY_MI2S_TX in %s\n", __func__);
+				sample_rate = 8000;
+			}
+
 			channels = bedai->channel;
 			acdb_dev_id =
 			fe_dai_app_type_cfg[i][session_type].acdb_dev_id;
