@@ -867,7 +867,8 @@ static uint16_t msm_ispif_get_right_cids_mask_from_cfg(
 	int i;
 	uint16_t cids_mask = 0;
 
-	BUG_ON(!entry);
+	if (WARN_ON(!entry))
+		return cids_mask;
 
 	for (i = 0; i < num_cids && i < MAX_CID_CH_PARAM_ENTRY; i++) {
 		if (entry->cids[i] < CID_MAX)
@@ -1467,11 +1468,12 @@ static int msm_ispif_reconfig_3d_output(struct ispif_device *ispif,
 {
 	uint32_t reg_data;
 
-	BUG_ON(!ispif);
+	if (WARN_ON(!ispif))
+		return -EINVAL;
 
 	if (!((vfe_id == VFE0) ||  (vfe_id == VFE1))) {
 		pr_err("%s;%d Cannot reconfigure 3D mode for VFE%d", __func__,
-				__LINE__ , vfe_id);
+				__LINE__, vfe_id);
 		return -EINVAL;
 	}
 	pr_info("%s;%d Reconfiguring 3D mode for VFE%d", __func__, __LINE__,
@@ -1822,8 +1824,9 @@ static long msm_ispif_cmd(struct v4l2_subdev *sd, void *arg)
 	int i;
 	struct msm_ispif_param_data_ext params;
 
-	BUG_ON(!sd);
-	BUG_ON(!pcdata);
+	if (WARN_ON(!sd) || WARN_ON(!pcdata))
+		return -EINVAL;
+
 	mutex_lock(&ispif->mutex);
 	switch (pcdata->cfg_type) {
 	case ISPIF_ENABLE_REG_DUMP:
