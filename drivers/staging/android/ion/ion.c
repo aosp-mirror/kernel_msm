@@ -1101,7 +1101,7 @@ static void ion_vm_open(struct vm_area_struct *vma)
 	mutex_lock(&buffer->lock);
 	list_add(&vma_list->list, &buffer->vmas);
 	mutex_unlock(&buffer->lock);
-	pr_debug("%s: adding %p\n", __func__, vma);
+	pr_debug("%s: adding %pK\n", __func__, vma);
 }
 
 static void ion_vm_close(struct vm_area_struct *vma)
@@ -1116,7 +1116,7 @@ static void ion_vm_close(struct vm_area_struct *vma)
 			continue;
 		list_del(&vma_list->list);
 		kfree(vma_list);
-		pr_debug("%s: deleting %p\n", __func__, vma);
+		pr_debug("%s: deleting %pK\n", __func__, vma);
 		break;
 	}
 	mutex_unlock(&buffer->lock);
@@ -1891,11 +1891,11 @@ void __init ion_reserve(struct ion_platform_data *data)
 			int ret = memblock_reserve(data->heaps[i].base,
 					       data->heaps[i].size);
 			if (ret)
-				pr_err("memblock reserve of %zx@%pa failed\n",
+				pr_err("memblock reserve of %zx@%pK failed\n",
 				       data->heaps[i].size,
 				       &data->heaps[i].base);
 		}
-		pr_info("%s: %s reserved base %pa size %zu\n", __func__,
+		pr_info("%s: %s reserved base %pK size %zu\n", __func__,
 			data->heaps[i].name,
 			&data->heaps[i].base,
 			data->heaps[i].size);
