@@ -3526,7 +3526,7 @@ static int synaptics_rmi4_enable_reg(struct synaptics_rmi4_data *rmi4_data,
 	return 0;
 
 disable_pwr_reg:
-	if (rmi4_data->pwr_reg)
+	/*if (rmi4_data->pwr_reg)
 		retval = regulator_disable(rmi4_data->pwr_reg);
 	if (retval < 0)
 		dev_err(rmi4_data->pdev->dev.parent,
@@ -3535,10 +3535,10 @@ disable_pwr_reg:
 	else
 		dev_dbg(rmi4_data->pdev->dev.parent,
 			"%s: disable regulator of pwr_reg\n",
-			__func__);
+			__func__);*/
 
 disable_bus_reg:
-	if (rmi4_data->bus_reg)
+	/*if (rmi4_data->bus_reg)
 		regulator_disable(rmi4_data->bus_reg);
 	if(retval < 0)
 		dev_err(rmi4_data->pdev->dev.parent,
@@ -3549,7 +3549,7 @@ disable_bus_reg:
 			"%s: disable regulator of bus_reg\n",
 			__func__);
 
-	syna_regulator_enable_flag = false;
+	syna_regulator_enable_flag = false;*/
 
 exit:
 	return retval;
