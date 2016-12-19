@@ -4489,6 +4489,8 @@ static bool is_usbin_uv_high(struct smbchg_chip *chip)
 	return reg &= USBIN_UV_BIT;
 }
 
+#define DEFAULT_DCP_VBUS_VOLT   5000000
+#define DEFAULT_HVDCP_VBUS_VOLT 9000000
 #define HVDCP_NOTIFY_MS		2500
 static void handle_usb_insertion(struct smbchg_chip *chip)
 {
@@ -4510,6 +4512,11 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 				chip->usb_present);
 		power_supply_set_present(chip->usb_psy, chip->usb_present);
 	}
+
+	rc = power_supply_set_voltage_limit(chip->usb_psy,
+			chip->usb_present ? DEFAULT_DCP_VBUS_VOLT : 0);
+	if (rc < 0)
+		dev_err(chip->dev, "Couldn't set Volt of psy rc\n");
 
 	/* Notify the USB psy if OV condition is not present */
 	if (!chip->usb_ov_det) {
@@ -5369,6 +5376,7 @@ static void smbchg_hvdcp_det_work(struct work_struct *work)
 				struct smbchg_chip,
 				hvdcp_det_work.work);
 	int rc, i;
+	int vbus_volt = DEFAULT_DCP_VBUS_VOLT;
 
 	if (is_hvdcp_present(chip)) {
 		if (!chip->hvdcp3_supported) {
@@ -5383,14 +5391,23 @@ static void smbchg_hvdcp_det_work(struct work_struct *work)
 					/* wait 60ms for pulse to take effect */
 					msleep(60);
 				}
+			vbus_volt = DEFAULT_DCP_VBUS_VOLT + 200000 * (i + 1);
 			} else if (chip->wa_flags & SMBCHG_HVDCP_9V_EN_WA) {
 				/* force HVDCP 2.0 */
 				rc = force_9v_hvdcp(chip);
 				if (rc)
 					pr_err("could not force 9V HVDCP continuing rc=%d\n",
 							rc);
+				else
+					vbus_volt = DEFAULT_HVDCP_VBUS_VOLT;
 			}
 		}
+
+		rc = power_supply_set_voltage_limit(chip->usb_psy, vbus_volt);
+		if (rc)
+			pr_smb(PR_STATUS,
+				"usb psy does not allow updating VOLT_MAX\n");
+
 		pr_smb(PR_MISC, "setting usb psy type = %d\n",
 				POWER_SUPPLY_TYPE_USB_HVDCP);
 		smbchg_change_usb_supply_type(chip,
