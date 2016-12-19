@@ -86,6 +86,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_MAX9867 if I2C
 	select SND_SOC_MAX98925 if I2C
 	select SND_SOC_MAX98926 if I2C
+	select SND_SOC_MAX98927 if I2C
 	select SND_SOC_MAX9850 if I2C
 	select SND_SOC_MAX9860 if I2C
 	select SND_SOC_MAX9768 if I2C
@@ -571,6 +572,9 @@ config SND_SOC_MAX98925
        tristate
 
 config SND_SOC_MAX98926
+	tristate
+
+config SND_SOC_MAX98927
 	tristate
 
 config SND_SOC_MAX9850
