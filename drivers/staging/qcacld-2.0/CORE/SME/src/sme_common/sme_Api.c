@@ -15898,52 +15898,6 @@ eHalStatus sme_ResetBssHotlist (tHalHandle hHal,
     return status;
 }
 
-/**
- * sme_set_ssid_hotlist() - Set the SSID hotlist
- * @hal: SME handle
- * @request: set ssid hotlist request
- *
- * Return: eHalStatus
- */
-eHalStatus
-sme_set_ssid_hotlist(tHalHandle hal,
-		     struct sir_set_ssid_hotlist_request *request)
-{
-	eHalStatus status;
-	VOS_STATUS vstatus;
-	tpAniSirGlobal mac = PMAC_STRUCT(hal);
-	vos_msg_t vos_message;
-	struct sir_set_ssid_hotlist_request *set_req;
-
-	set_req = vos_mem_malloc(sizeof(*set_req));
-	if (!set_req) {
-		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
-			  "%s: Not able to allocate memory for WDA_EXTSCAN_SET_SSID_HOTLIST_REQ",
-			  __func__);
-		return eHAL_STATUS_FAILURE;
-	}
-
-	*set_req = *request;
-	status = sme_AcquireGlobalLock(&mac->sme);
-	if (eHAL_STATUS_SUCCESS == status) {
-		/* Serialize the req through MC thread */
-		vos_message.bodyptr = set_req;
-		vos_message.type    = WDA_EXTSCAN_SET_SSID_HOTLIST_REQ;
-		vstatus = vos_mq_post_message(VOS_MQ_ID_WDA, &vos_message);
-		sme_ReleaseGlobalLock(&mac->sme);
-		if (!VOS_IS_STATUS_SUCCESS(vstatus)) {
-			vos_mem_free(set_req);
-			status = eHAL_STATUS_FAILURE;
-		}
-	} else {
-		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
-			  "%s: sme_AcquireGlobalLock error", __func__);
-		vos_mem_free(set_req);
-		status = eHAL_STATUS_FAILURE;
-	}
-	return status;
-}
-
 /* ---------------------------------------------------------------------------
     \fn sme_SetSignificantChange
     \brief  SME API to set significant change
