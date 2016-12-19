@@ -1321,7 +1321,6 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 	if (rc)
 		return rc;
 #endif //QTI_SMB231
-	smb23x_masked_write(chip, CFG_REG_5, BAT_THERM_DIS_BIT, BAT_THERM_DIS_BIT);
 	return rc;
 }
 
