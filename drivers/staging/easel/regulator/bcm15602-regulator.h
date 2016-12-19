@@ -293,6 +293,10 @@ struct bcm15602_chip {
 	struct regulator_dev **rdevs;
 	struct bcm15602_platform_data *pdata;
 	u16 hk_status;
+	bool wdt_enabled;
+
+	/* counter for enabled regulators */
+	atomic_t reg_enabled_cnt;
 
 	/* volatiles used for serialization */
 	volatile unsigned long adc_conv_busy;

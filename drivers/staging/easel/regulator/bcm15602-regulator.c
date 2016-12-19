@@ -40,6 +40,8 @@ static int bcm15602_regulator_enable(struct regulator_dev *rdev);
 static int bcm15602_regulator_disable(struct regulator_dev *rdev);
 static int bcm15602_regulator_is_enabled(struct regulator_dev *rdev);
 static int bcm15602_regulator_enable_time(struct regulator_dev *rdev);
+static void bcm15602_enable_wdt(struct bcm15602_chip *ddata);
+static void bcm15602_disable_wdt(struct bcm15602_chip *ddata);
 
 static const struct mfd_cell bcm15602_devs[] = {
 	{
@@ -479,7 +481,7 @@ static void bcm15602_print_psm_status(struct bcm15602_chip *ddata)
 static void bcm15602_print_psm_event(struct bcm15602_chip *ddata)
 {
 	struct device *dev = ddata->dev;
-	char buffer[80];
+	char buffer[80] = "normal";
 	u8 byte;
 	int ret;
 
@@ -735,23 +737,39 @@ static int bcm15602_regulator_enable(struct regulator_dev *rdev)
 {
 	struct bcm15602_chip *ddata = rdev_get_drvdata(rdev);
 	enum bcm15602_regulator_ids rid = rdev_get_id(rdev);
+	int ret;
 
 	switch (rid) {
 	case BCM15602_ID_SDLDO:
-		return bcm15602_update_bits(ddata,
-			BCM15602_REG_LDO_SDLDO_ENCTRL, 0x1, 0x1);
+		ret = bcm15602_update_bits(ddata,
+					   BCM15602_REG_LDO_SDLDO_ENCTRL,
+					   0x1, 0x1);
+		break;
 	case BCM15602_ID_IOLDO:
-		return bcm15602_update_bits(ddata,
-			BCM15602_REG_LDO_IOLDO_ENCTRL, 0x1, 0x1);
+		ret = bcm15602_update_bits(ddata,
+					   BCM15602_REG_LDO_IOLDO_ENCTRL,
+					   0x1, 0x1);
+		break;
 	case BCM15602_ID_ASR:
-		return bcm15602_update_bits(ddata,
-			BCM15602_REG_BUCK_ASR_CTRL0, 0x1, 0x1);
+		ret = bcm15602_update_bits(ddata,
+					   BCM15602_REG_BUCK_ASR_CTRL0,
+					   0x1, 0x1);
+		break;
 	case BCM15602_ID_SDSR:
-		return bcm15602_update_bits(ddata,
-			BCM15602_REG_BUCK_SDSR_CTRL0, 0x1, 0x1);
+		ret = bcm15602_update_bits(ddata,
+					   BCM15602_REG_BUCK_SDSR_CTRL0,
+					   0x1, 0x1);
+		break;
 	default:
 		return -EINVAL;
 	}
+
+	if (!ret) {
+		atomic_inc(&ddata->reg_enabled_cnt);
+		bcm15602_enable_wdt(ddata);
+	}
+
+	return ret;
 }
 
 /* disable the regulator */
@@ -759,23 +777,41 @@ static int bcm15602_regulator_disable(struct regulator_dev *rdev)
 {
 	struct bcm15602_chip *ddata = rdev_get_drvdata(rdev);
 	enum bcm15602_regulator_ids rid = rdev_get_id(rdev);
+	int ret;
+	bool cnt_is_zero;
 
 	switch (rid) {
 	case BCM15602_ID_SDLDO:
-		return bcm15602_update_bits(ddata,
-			BCM15602_REG_LDO_SDLDO_ENCTRL, 0x1, 0x0);
+		ret = bcm15602_update_bits(ddata,
+					   BCM15602_REG_LDO_SDLDO_ENCTRL,
+					   0x1, 0x0);
+		break;
 	case BCM15602_ID_IOLDO:
-		return bcm15602_update_bits(ddata,
-			BCM15602_REG_LDO_IOLDO_ENCTRL, 0x1, 0x0);
+		ret = bcm15602_update_bits(ddata,
+					   BCM15602_REG_LDO_IOLDO_ENCTRL,
+					   0x1, 0x0);
+		break;
 	case BCM15602_ID_ASR:
-		return bcm15602_update_bits(ddata,
-			BCM15602_REG_BUCK_ASR_CTRL0, 0x1, 0x0);
+		ret = bcm15602_update_bits(ddata,
+					   BCM15602_REG_BUCK_ASR_CTRL0,
+					   0x1, 0x0);
+		break;
 	case BCM15602_ID_SDSR:
-		return bcm15602_update_bits(ddata,
-			BCM15602_REG_BUCK_SDSR_CTRL0, 0x1, 0x0);
+		ret = bcm15602_update_bits(ddata,
+					   BCM15602_REG_BUCK_SDSR_CTRL0,
+					   0x1, 0x0);
+		break;
 	default:
 		return -EINVAL;
 	}
+
+	if (!ret) {
+		cnt_is_zero = atomic_dec_and_test(&ddata->reg_enabled_cnt);
+		if (cnt_is_zero)
+			bcm15602_disable_wdt(ddata);
+	}
+
+	return ret;
 }
 
 /* get regulator enable status */
@@ -925,10 +961,22 @@ static void bcm15602_config_ints(struct bcm15602_chip *ddata)
 }
 
 /* enable the watchdog timer and reset the count */
-static void bcm15602_config_wdt(struct bcm15602_chip *ddata)
+static void bcm15602_enable_wdt(struct bcm15602_chip *ddata)
 {
-	bcm15602_write_byte(ddata, BCM15602_REG_WDT_WDTCTRL1, 0x01);
-	bcm15602_write_byte(ddata, BCM15602_REG_WDT_WDTCTRL2, 0x1E);
+	if (!ddata->wdt_enabled) {
+		bcm15602_write_byte(ddata, BCM15602_REG_WDT_WDTCTRL1, 0x01);
+		bcm15602_write_byte(ddata, BCM15602_REG_WDT_WDTCTRL2, 0x1E);
+		ddata->wdt_enabled = true;
+	}
+}
+
+/* disable the watchdog timer */
+static void bcm15602_disable_wdt(struct bcm15602_chip *ddata)
+{
+	if (ddata->wdt_enabled) {
+		bcm15602_write_byte(ddata, BCM15602_REG_WDT_WDTCTRL1, 0x00);
+		ddata->wdt_enabled = false;
+	}
 }
 
 /* initialize the chip */
@@ -941,7 +989,6 @@ static int bcm15602_chip_init(struct bcm15602_chip *ddata)
 
 	bcm15602_config_adc(ddata);
 	bcm15602_config_ints(ddata);
-	bcm15602_config_wdt(ddata);
 
 	enable_irq(pdata->intb_irq);
 
