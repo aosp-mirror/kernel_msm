@@ -90,6 +90,9 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&switch_ctrl_active>;
 	};
+	htc_radio_smem {
+	    compatible = "htc,htc_radio_smem";
+	};
 };
 
 &ssc_sensors {

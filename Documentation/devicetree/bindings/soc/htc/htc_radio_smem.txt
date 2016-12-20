@@ -1,0 +1,14 @@
+htc_radio_smem (HTC Radio Shared Memory) Driver
+
+The htc_radio_smem driver is used to notify with modem subsystem about
+hardware and software information via SMD channel.
+
+Required properties:
+
+- compatible: name of the component used for driver matching, should be
+              "htc,htc_radio_smem"
+
+Example:
+    htc_radio_smem {
+	compatible = "htc,htc_radio_smem";
+    };
