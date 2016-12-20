@@ -95,6 +95,8 @@
 #include "wlan_qct_wda.h"
 #include "wlan_nv.h"
 #include "wlan_hdd_dev_pwr.h"
+#include "qwlan_version.h"
+
 
 #define g_mode_rates_size (12)
 #define a_mode_rates_size (8)
@@ -5224,6 +5226,120 @@ static int wlan_hdd_cfg80211_firmware_roaming(struct wiphy *wiphy,
     return ret;
 }
 
+static const struct
+nla_policy
+qca_wlan_vendor_get_wifi_info_policy[
+         QCA_WLAN_VENDOR_ATTR_WIFI_INFO_GET_MAX +1] = {
+    [QCA_WLAN_VENDOR_ATTR_WIFI_INFO_DRIVER_VERSION] = {.type = NLA_U8 },
+    [QCA_WLAN_VENDOR_ATTR_WIFI_INFO_FIRMWARE_VERSION] = {.type = NLA_U8 },
+};
+
+
+/**
+ * __wlan_hdd_cfg80211_get_wifi_info() - Get the wifi driver related info
+ * @wiphy:   pointer to wireless wiphy structure.
+ * @wdev:    pointer to wireless_dev structure.
+ * @data:    Pointer to the data to be passed via vendor interface
+ * @data_len:Length of the data to be passed
+ *
+ * This is called when wlan driver needs to send wifi driver related info
+ * (driver/fw version) to the user space application upon request.
+ *
+ * Return:   Return the Success or Failure code.
+ */
+static int __wlan_hdd_cfg80211_get_wifi_info(struct wiphy *wiphy,
+                                  struct wireless_dev *wdev,
+                              const void *data, int data_len)
+{
+    hdd_context_t *hdd_ctx = wiphy_priv(wiphy);
+    struct nlattr *tb_vendor[QCA_WLAN_VENDOR_ATTR_WIFI_INFO_GET_MAX + 1];
+    tSirVersionString version;
+    uint32 version_len;
+    uint8 attr;
+    int status;
+    struct sk_buff *reply_skb = NULL;
+
+    if (VOS_FTM_MODE == hdd_get_conparam()) {
+        hddLog(LOGE, FL("Command not allowed in FTM mode"));
+        return -EINVAL;
+    }
+
+    status = wlan_hdd_validate_context(hdd_ctx);
+    if (0 != status) {
+        hddLog(LOGE, FL("HDD context is not valid"));
+        return -EINVAL;
+    }
+
+    if (nla_parse(tb_vendor, QCA_WLAN_VENDOR_ATTR_WIFI_INFO_GET_MAX, data,
+        data_len, qca_wlan_vendor_get_wifi_info_policy)) {
+        hddLog(LOGE, FL("WIFI_INFO_GET NL CMD parsing failed"));
+        return -EINVAL;
+    }
+
+    if (tb_vendor[QCA_WLAN_VENDOR_ATTR_WIFI_INFO_DRIVER_VERSION]) {
+        hddLog(LOG1, FL("Rcvd req for Driver version Driver version is %s"),
+                                                          QWLAN_VERSIONSTR);
+        strlcpy(version, QWLAN_VERSIONSTR, sizeof(version));
+        attr = QCA_WLAN_VENDOR_ATTR_WIFI_INFO_DRIVER_VERSION;
+    } else if (tb_vendor[QCA_WLAN_VENDOR_ATTR_WIFI_INFO_FIRMWARE_VERSION]) {
+        hddLog(LOG1, FL("Rcvd req for FW version FW version is %s"),
+                                               hdd_ctx->fw_Version);
+        strlcpy(version, hdd_ctx->fw_Version, sizeof(version));
+        attr = QCA_WLAN_VENDOR_ATTR_WIFI_INFO_FIRMWARE_VERSION;
+    } else {
+        hddLog(LOGE, FL("Invalid attribute in get wifi info request"));
+        return -EINVAL;
+    }
+
+    version_len = strlen(version);
+    reply_skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy,
+    version_len + NLA_HDRLEN + NLMSG_HDRLEN);
+    if (!reply_skb) {
+        hddLog(LOGE, FL("cfg80211_vendor_cmd_alloc_reply_skb failed"));
+        return -ENOMEM;
+    }
+
+    if (nla_put(reply_skb, attr, version_len, version)) {
+        hddLog(LOGE, FL("nla put fail"));
+        kfree_skb(reply_skb);
+        return -EINVAL;
+    }
+
+    return cfg80211_vendor_cmd_reply(reply_skb);
+}
+
+/**
+ * __wlan_hdd_cfg80211_get_wifi_info() - Get the wifi driver related info
+ * @wiphy:   pointer to wireless wiphy structure.
+ * @wdev:    pointer to wireless_dev structure.
+ * @data:    Pointer to the data to be passed via vendor interface
+ * @data_len:Length of the data to be passed
+ * @data_len: Length of the data received
+ *
+ * This function is used to enable or disable the collection of packet
+ * statistics from the firmware
+ *
+ * Return: 0 on success and errno on failure
+ */
+
+static int
+wlan_hdd_cfg80211_get_wifi_info(struct wiphy *wiphy,
+                                  struct wireless_dev *wdev,
+                              const void *data, int data_len)
+
+
+{
+    int ret = 0;
+
+    vos_ssr_protect(__func__);
+    ret = __wlan_hdd_cfg80211_get_wifi_info(wiphy,
+          wdev, data, data_len);
+    vos_ssr_unprotect(__func__);
+
+    return ret;
+}
+
+
 /**
  * __wlan_hdd_cfg80211_setband() - set band
  * @wiphy: Pointer to wireless phy
@@ -5478,6 +5594,14 @@ const struct wiphy_vendor_command hdd_wiphy_vendor_commands[] =
             WIPHY_VENDOR_CMD_NEED_NETDEV |
             WIPHY_VENDOR_CMD_NEED_RUNNING,
         .doit = wlan_hdd_cfg80211_setband
+    },
+    {
+        .info.vendor_id = QCA_NL80211_VENDOR_ID,
+        .info.subcmd = QCA_NL80211_VENDOR_SUBCMD_GET_WIFI_INFO,
+        .flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+                 WIPHY_VENDOR_CMD_NEED_NETDEV|
+                  WIPHY_VENDOR_CMD_NEED_RUNNING,
+        .doit = wlan_hdd_cfg80211_get_wifi_info
     }
 };
 
@@ -5587,6 +5711,12 @@ struct nl80211_vendor_cmd_info wlan_hdd_cfg80211_vendor_events[] =
         .vendor_id = QCA_NL80211_VENDOR_ID,
         .subcmd = QCA_NL80211_VENDOR_SUBCMD_NAN
     },
+
+    {
+        .vendor_id = QCA_NL80211_VENDOR_ID,
+        .subcmd = QCA_NL80211_VENDOR_SUBCMD_GET_WIFI_INFO,
+    }
+
 
 };
 
