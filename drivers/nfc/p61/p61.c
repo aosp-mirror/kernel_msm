@@ -149,10 +149,27 @@ static int p61_dev_open(struct inode *inode, struct file *filp) {
     filp->private_data = p61_dev;
     P61_DBG_MSG(
             "%s : Major No: %d, Minor No: %d\n", __func__, imajor(inode), iminor(inode));
-
+    if(NULL != p61_dev)
+    {
+        gpio_set_value(p61_dev->rst_gpio, 1);
+    }
     return 0;
 }
 
+static int p61_dev_release(struct inode *inode, struct file *filp)
+{
+    struct p61_dev
+    *p61_dev = container_of(filp->private_data,
+            struct p61_dev,
+            p61_device);
+
+    pr_info("%s : closing %d,%d\n", __func__, imajor(inode), iminor(inode));
+    if(NULL != p61_dev)
+    {
+        gpio_set_value(p61_dev->rst_gpio, 0);
+    }
+    return 0;
+}
 /**
  * \ingroup spi_driver
  * \brief To configure the P61_SET_PWR/P61_SET_DBG/P61_SET_POLL
@@ -608,8 +625,8 @@ static int p61_hw_setup(struct p61_spi_platform_data *platform_data,
         goto fail_gpio;
     }
 
-    /*soft reset gpio is set to default high*/
-    ret = gpio_direction_output(platform_data->rst_gpio,1);
+    /*soft reset gpio is set to default low,open to 1,release to 0,to save battery power*/
+    ret = gpio_direction_output(platform_data->rst_gpio,0);
     if (ret < 0)
     {
         P61_ERR_MSG("gpio rst request failed gpio = 0x%x\n", platform_data->rst_gpio);
@@ -672,6 +689,7 @@ static const struct file_operations p61_dev_fops = {
         .write = p61_dev_write,
         .open = p61_dev_open,
         .unlocked_ioctl = p61_dev_ioctl,
+        .release  = p61_dev_release,
 };
 #if DRAGON_P61
 static int p61_parse_dt(struct device *dev,
