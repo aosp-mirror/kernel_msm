@@ -1466,6 +1466,7 @@ struct hdd_context_s
     struct mutex   wmmLock;
     v_BOOL_t mgmt_frame_logging;
     v_BOOL_t isSetBandByNL;
+    v_U8_t fw_Version[SIR_VERSION_STRING_LEN];
 #ifdef WLAN_FEATURE_LINK_LAYER_STATS
     struct hdd_ll_stats_context ll_stats_context;
 #endif /* End of WLAN_FEATURE_LINK_LAYER_STATS */

@@ -164,6 +164,8 @@ enum qca_nl80211_vendor_subcmds {
     QCA_NL80211_VENDOR_SUBCMD_NO_DFS_FLAG = 40,
     /* Get Concurrency Matrix */
     QCA_NL80211_VENDOR_SUBCMD_GET_CONCURRENCY_MATRIX = 42,
+    /* Get Wifi Specific Info */
+    QCA_NL80211_VENDOR_SUBCMD_GET_WIFI_INFO = 61,
     QCA_NL80211_VENDOR_SUBCMD_SETBAND = 105,
 };
 
@@ -847,6 +849,20 @@ enum qca_wlan_vendor_attr_set_scanning_mac_oui{
     QCA_WLAN_VENDOR_ATTR_SET_SCANNING_MAC_OUI_AFTER_LAST,
     QCA_WLAN_VENDOR_ATTR_SET_SCANNING_MAC_OUI_MAX =
         QCA_WLAN_VENDOR_ATTR_SET_SCANNING_MAC_OUI_AFTER_LAST - 1,
+};
+
+/* NL attributes for data used by
+ * QCA_NL80211_VENDOR_SUBCMD_GET_WIFI_INFO sub command.
+ */
+enum qca_wlan_vendor_attr_get_wifi_info {
+    QCA_WLAN_VENDOR_ATTR_WIFI_INFO_GET_INVALID = 0,
+    QCA_WLAN_VENDOR_ATTR_WIFI_INFO_DRIVER_VERSION     = 1,
+    QCA_WLAN_VENDOR_ATTR_WIFI_INFO_FIRMWARE_VERSION   = 2,
+
+    /* keep last */
+    QCA_WLAN_VENDOR_ATTR_WIFI_INFO_GET_AFTER_LAST,
+    QCA_WLAN_VENDOR_ATTR_WIFI_INFO_GET_MAX  =
+        QCA_WLAN_VENDOR_ATTR_WIFI_INFO_GET_AFTER_LAST - 1,
 };
 
 enum qca_wlan_vendor_attr_get_supported_features {
