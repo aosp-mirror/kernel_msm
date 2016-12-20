@@ -205,7 +205,7 @@ static noinline void key_gc_unused_keys(struct list_head *keys)
 		if (key->type->destroy)
 			key->type->destroy(key);
 
-		key_user_put(key->user);
+                key_user_put(key->user);
 
 		kfree(key->description);
 

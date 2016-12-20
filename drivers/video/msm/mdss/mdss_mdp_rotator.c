@@ -241,7 +241,7 @@ static int mdss_mdp_rotator_queue_sub(struct mdss_mdp_rotator_session *rot,
 {
 	struct mdss_mdp_pipe *rot_pipe = NULL;
 	struct mdss_mdp_ctl *orig_ctl, *rot_ctl;
-	int ret;
+	int ret, rc;
 
 	if (!rot || !rot->ref_cnt)
 		return -ENOENT;
@@ -283,15 +283,23 @@ static int mdss_mdp_rotator_queue_sub(struct mdss_mdp_rotator_session *rot,
 		}
 	}
 
+	rc = mdss_iommu_ctrl(1);
+	if (IS_ERR_VALUE(rc)) {
+		pr_err("IOMMU attach failed\n");
+		ret = -ENOENT;
+		goto error;
+	}
+
 	ret = mdss_mdp_pipe_queue_data(rot_pipe, src_data);
 	if (ret) {
 		pr_err("unable to queue rot data\n");
+		mdss_iommu_ctrl(0);
 		goto error;
 	}
 	ATRACE_BEGIN("rotator_kickoff");
 	ret = mdss_mdp_rotator_kickoff(rot_ctl, rot, dst_data);
 	ATRACE_END("rotator_kickoff");
-
+	mdss_iommu_ctrl(0);
 	return ret;
 error:
 	if (orig_ctl->shared_lock)
@@ -307,7 +315,6 @@ static void mdss_mdp_rotator_commit_wq_handler(struct work_struct *work)
 	rot = container_of(work, struct mdss_mdp_rotator_session, commit_work);
 
 	mutex_lock(&rotator_lock);
-
 	ret = mdss_mdp_rotator_queue_helper(rot);
 	if (ret)
 		pr_err("rotator queue failed\n");
@@ -318,7 +325,6 @@ static void mdss_mdp_rotator_commit_wq_handler(struct work_struct *work)
 	} else {
 		pr_err("rot_sync_pt_data is NULL\n");
 	}
-
 	mutex_unlock(&rotator_lock);
 }
 

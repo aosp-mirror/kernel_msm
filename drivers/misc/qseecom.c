@@ -314,6 +314,10 @@ static int __qseecom_set_sb_memory(struct qseecom_registered_listener_list *svc,
 	}
 	/* Populate the structure for sending scm call to load image */
 	svc->sb_virt = (char *) ion_map_kernel(qseecom.ion_clnt, svc->ihandle);
+	if (IS_ERR_OR_NULL(svc->sb_virt)) {
+		pr_err("ION memory mapping for listener shared buffer failed\n");
+		return -ENOMEM;
+	}
 	svc->sb_phys = (phys_addr_t)pa;
 
 	req.qsee_cmd_id = QSEOS_REGISTER_LISTENER;
@@ -757,6 +761,10 @@ static int qseecom_set_client_mem_param(struct qseecom_dev_handle *data,
 	/* Populate the structure for sending scm call to load image */
 	data->client.sb_virt = (char *) ion_map_kernel(qseecom.ion_clnt,
 							data->client.ihandle);
+	if (IS_ERR_OR_NULL(data->client.sb_virt)) {
+		pr_err("ION memory mapping for client shared buf failed\n");
+		return -ENOMEM;
+	}
 	data->client.sb_phys = (phys_addr_t)pa;
 	data->client.sb_length = req.sb_len;
 	data->client.user_virt_sb_base = (uintptr_t)req.virt_sb_base;
@@ -925,6 +933,7 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 	struct qseecom_command_scm_resp resp;
 	struct qseecom_check_app_ireq req;
 	struct qseecom_load_app_ireq load_req;
+	bool first_time = false;
 
 	/* Copy the relevant information needed for loading the image */
 	if (copy_from_user(&load_img_req,
@@ -971,6 +980,7 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 		&qseecom.registered_app_list_lock, flags);
 		ret = 0;
 	} else {
+		first_time = true;
 		pr_warn("App (%s) does'nt exist, loading apps for first time\n",
 			(char *)(load_img_req.img_name));
 		/* Get the handle of the shared fd */
@@ -1071,8 +1081,15 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 	load_img_req.app_id = app_id;
 	if (copy_to_user(argp, &load_img_req, sizeof(load_img_req))) {
 		pr_err("copy_to_user failed\n");
-		kzfree(entry);
 		ret = -EFAULT;
+		if (first_time == true) {
+			spin_lock_irqsave(
+				&qseecom.registered_app_list_lock, flags);
+			list_del(&entry->list);
+			spin_unlock_irqrestore(
+				&qseecom.registered_app_list_lock, flags);
+			kzfree(entry);
+		}
 	}
 
 loadapp_err:
@@ -2493,6 +2510,11 @@ int qseecom_start_app(struct qseecom_handle **handle,
 	/* Populate the structure for sending scm call to load image */
 	data->client.sb_virt = (char *) ion_map_kernel(qseecom.ion_clnt,
 							data->client.ihandle);
+	if (IS_ERR_OR_NULL(data->client.sb_virt)) {
+		pr_err("ION memory mapping for client shared buf failed\n");
+		ret = -ENOMEM;
+		goto err;
+	}
 	data->client.user_virt_sb_base = (uintptr_t)data->client.sb_virt;
 	data->client.sb_phys = (phys_addr_t)pa;
 	(*handle)->dev = (void *)data;
@@ -4700,7 +4722,9 @@ static int qseecom_release(struct inode *inode, struct file *file)
 			ret = qseecom_unregister_listener(data);
 			break;
 		case QSEECOM_CLIENT_APP:
+			mutex_lock(&app_access_lock);
 			ret = qseecom_unload_app(data, true);
+			mutex_unlock(&app_access_lock);
 			break;
 		case QSEECOM_SECURE_SERVICE:
 		case QSEECOM_GENERIC:

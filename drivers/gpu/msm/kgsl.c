@@ -885,7 +885,8 @@ static struct kgsl_process_private *kgsl_process_private_new(void)
 
 	private->pid = task_tgid_nr(current);
 	spin_lock_init(&private->mem_lock);
-	mutex_init(&private->process_private_mutex);
+	spin_lock_init(&private->syncsource_lock);
+	
 	/* Add the newly created process struct obj to the process list */
 	list_add(&private->list, &kgsl_driver.process_list);
 done:
@@ -910,7 +911,6 @@ kgsl_get_process_private(struct kgsl_device *device)
 	if (!private)
 		return NULL;
 
-	mutex_lock(&private->process_private_mutex);
 
 	if (test_bit(KGSL_PROCESS_INIT, &private->priv))
 		goto done;
@@ -940,11 +940,9 @@ kgsl_get_process_private(struct kgsl_device *device)
 	set_bit(KGSL_PROCESS_INIT, &private->priv);
 
 done:
-	mutex_unlock(&private->process_private_mutex);
 	return private;
 
 error:
-	mutex_unlock(&private->process_private_mutex);
 	kgsl_process_private_put(private);
 	return NULL;
 }
@@ -988,7 +986,9 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 
 	next = 0;
 	while (1) {
+		spin_lock(&private->syncsource_lock);
 		syncsource = idr_get_next(&private->syncsource_idr, &next);
+		spin_unlock(&private->syncsource_lock);
 
 		if (syncsource == NULL)
 			break;
