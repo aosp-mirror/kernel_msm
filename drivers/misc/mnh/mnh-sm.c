@@ -227,7 +227,11 @@ int mnh_download_firmware(void)
 	mnh_sm_dev->image_loaded = FW_IMAGE_NONE;
 
 	/* Register DMA callback */
-	mnh_reg_irq_callback(0, 0, dma_callback);
+	err = mnh_reg_irq_callback(0, 0, dma_callback);
+	if (err) {
+		dev_err(mdevice, "register irq callback failed - %d\n", err);
+		return err;
+	}
 
 	err = request_firmware(&fip_img, "mnh/fip.bin", mdevice);
 	if (err) {

@@ -374,6 +374,9 @@ EXPORT_SYMBOL(mnh_send_irq);
  */
 int mnh_reg_irq_callback(irq_cb_t msg_cb, irq_cb_t vm_cb, irq_dma_cb_t dma_cb)
 {
+	if (!mnh_dev)
+		return -ENODEV;
+
 	mnh_dev->msg_cb = msg_cb;
 	mnh_dev->vm_cb = vm_cb;
 	mnh_dev->dma_cb = dma_cb;
