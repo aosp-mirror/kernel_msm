@@ -18,8 +18,6 @@
 #define __MNH_PLL_H__
 
 #include <linux/types.h>
-#include <linux/delay.h>
-#include <linux/device.h>
 
 #define MNH_NUM_FSPS 4
 

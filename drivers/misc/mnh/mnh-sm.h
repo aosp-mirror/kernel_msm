@@ -26,18 +26,18 @@
  *            This structure will be populated within the kernel module.
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
-int mnh_sm_poweron( struct mnh_sm_configuration* mnh_sm_boot_args );
+int mnh_sm_poweron(struct mnh_sm_configuration *mnh_sm_boot_args);
 
 /**
  * API to obtain the state of monette hill.
  * @return the power states of mnh(ex: On, Off, Active, Suspend, Bypass).
- * 	MNH_HW_INIT - MNH is on, Kernel not executing, and before FW download.
- * 	MNH_HW_OFF - MNH is powered off
- * 	MNH_HW_ACTIVE: MNH is on and flashed. Kernel is running.
- * 	MNH_HW_SUSPEND_SELF_REFRESH: DDR is self refreshing.
+ *      MNH_HW_INIT - MNH is on, Kernel not executing, and before FW download.
+ *      MNH_HW_OFF - MNH is powered off
+ *      MNH_HW_ACTIVE: MNH is on and flashed. Kernel is running.
+ *      MNH_HW_SUSPEND_SELF_REFRESH: DDR is self refreshing.
  *                                   All other components are off.
- * 	MNH_HW_SUSPEND_HIBERNATE: Hibernation image stored in AP RAM
- *                           	  over PCIe outbound and MNH is powered down.
+ *      MNH_HW_SUSPEND_HIBERNATE: Hibernation image stored in AP RAM
+ *                                over PCIe outbound and MNH is powered down.
  */
 int mnh_sm_get_state(void);
 

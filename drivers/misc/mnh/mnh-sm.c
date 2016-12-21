@@ -17,7 +17,6 @@
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/module.h>
-#include <linux/printk.h>
 #include <linux/kobject.h>
 #include <linux/sysfs.h>
 #include <linux/init.h>
@@ -78,13 +77,14 @@ static ssize_t mnh_sm_poweron_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
 {
-    ssize_t strlen = 0;
-    int gpio_value = 0;
-    printk("Entering mnh_sm_poweron_show...\n");
-    gpio_request(MNH_POWER_ON_GPIO, "MNH PWRON");
-    gpio_value = gpio_export(MNH_POWER_ON_GPIO,true);
-    gpio_direction_output(MNH_POWER_ON_GPIO, 1);
-    return strlen;
+	ssize_t strlen = 0;
+	int gpio_value = 0;
+
+	dev_info(mdevice, "Entering mnh_sm_poweron_show...\n");
+	gpio_request(MNH_POWER_ON_GPIO, "MNH PWRON");
+	gpio_value = gpio_export(MNH_POWER_ON_GPIO, true);
+	gpio_direction_output(MNH_POWER_ON_GPIO, 1);
+	return strlen;
 }
 
 static ssize_t mnh_sm_poweron_store(struct device *dev,
@@ -92,28 +92,28 @@ static ssize_t mnh_sm_poweron_store(struct device *dev,
 			      const char *buf,
 			      size_t count)
 {
-    printk("Entering mnh_sm_poweron_store...\n");
-    gpio_set_value(MNH_POWER_ON_GPIO,1);
-    return -EINVAL;
+	dev_info(mdevice, "Entering mnh_sm_poweron_store...\n");
+	gpio_set_value(MNH_POWER_ON_GPIO, 1);
+	return -EINVAL;
 }
 
-static DEVICE_ATTR(poweron, S_IWUSR | S_IRUGO,
+static DEVICE_ATTR(poweron, S_IWUSR | S_IRUSR | S_IRGRP,
 		mnh_sm_poweron_show, mnh_sm_poweron_store);
 
 static ssize_t mnh_sm_poweroff_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
 {
-    ssize_t strlen = 0;
-    int gpio_value = 0;
+	ssize_t strlen = 0;
+	int gpio_value = 0;
 
-    printk("Entering mnh_sm_poweroff_show...\n");
-    gpio_request(MNH_POWER_ON_GPIO, "MNH PWRON");
-    gpio_value = gpio_export(MNH_POWER_ON_GPIO,true);
-    gpio_direction_output(MNH_POWER_ON_GPIO, 1);
-    printk("MNH_POWER_ON_GPIO = %d", gpio_value);
+	dev_info(mdevice, "Entering mnh_sm_poweroff_show...\n");
+	gpio_request(MNH_POWER_ON_GPIO, "MNH PWRON");
+	gpio_value = gpio_export(MNH_POWER_ON_GPIO, true);
+	gpio_direction_output(MNH_POWER_ON_GPIO, 1);
+	dev_info(mdevice, "MNH_POWER_ON_GPIO = %d", gpio_value);
 
-    return strlen;
+	return strlen;
 }
 
 static ssize_t mnh_sm_poweroff_store(struct device *dev,
@@ -121,35 +121,34 @@ static ssize_t mnh_sm_poweroff_store(struct device *dev,
 			      const char *buf,
 			      size_t count)
 {
-    printk("Entering mnh_sm_poweroff_store...\n");
+	dev_info(mdevice, "Entering mnh_sm_poweroff_store...\n");
 
-    gpio_set_value(MNH_POWER_ON_GPIO,0);
-    return -EINVAL;
+	gpio_set_value(MNH_POWER_ON_GPIO, 0);
+	return count;
 }
 
-static DEVICE_ATTR(poweroff, S_IWUSR | S_IRUGO,
+static DEVICE_ATTR(poweroff, S_IWUSR | S_IRUSR | S_IRGRP,
 		mnh_sm_poweroff_show, mnh_sm_poweroff_store);
 
 static int dma_callback(uint8_t chan, enum mnh_dma_chan_dir_t dir,
 		enum mnh_dma_trans_status_t status)
 {
-	printk("DMA_CALLBACK: ch:%d, dir:%s, status:%s\n",
-		chan, (dir == DMA_AP2EP)?"READ(AP2EP)":"WRITE(EP2AP)",
-		(status == DMA_DONE)?"DONE":"ABORT");
+	dev_info(mdevice, "DMA_CALLBACK: ch:%d, dir:%s, status:%s\n",
+		 chan, (dir == DMA_AP2EP)?"READ(AP2EP)":"WRITE(EP2AP)",
+		 (status == DMA_DONE)?"DONE":"ABORT");
 
 
-	if ( chan == MNH_PCIE_CHAN_0 && dir == DMA_AP2EP )
-	{
+	if (chan == MNH_PCIE_CHAN_0 && dir == DMA_AP2EP) {
 		if (mnh_sm_dev->image_loaded == FW_IMAGE_DOWNLOADING) {
 			if (status == DMA_DONE)
-				mnh_sm_dev->image_loaded = FW_IMAGE_DOWNLOAD_SUCCESS;
+				mnh_sm_dev->image_loaded =
+				    FW_IMAGE_DOWNLOAD_SUCCESS;
 			else if (status == DMA_ABORT)
-				mnh_sm_dev->image_loaded = FW_IMAGE_DOWNLOAD_FAIL;
+				mnh_sm_dev->image_loaded =
+				    FW_IMAGE_DOWNLOAD_FAIL;
 		}
-	}
-	else
-	{
-		printk("DMA_CALLBACK: incorrect channel and direction");
+	} else {
+		dev_err(mdevice, "DMA_CALLBACK: incorrect channel and direction");
 		return -EINVAL;
 	}
 
@@ -162,16 +161,16 @@ static int mnh_firmware_waitdownloaded(void)
 
 	do {
 		if (mnh_sm_dev->image_loaded == FW_IMAGE_DOWNLOAD_SUCCESS) {
-			printk("Firmware loaded!\n");
+			dev_info(mdevice, "Firmware loaded!\n");
 			return 0;
 		} else if (mnh_sm_dev->image_loaded == FW_IMAGE_DOWNLOAD_FAIL) {
-			printk("Firmware load fail!\n");
+			dev_err(mdevice, "Firmware load fail!\n");
 			return -EIO;
 		}
 		msleep(20);
 	} while (time_before(jiffies, timeout));
 
-	printk("Fail to Download Firmware, timeout!!.\n");
+	dev_err(mdevice, "Fail to Download Firmware, timeout!!\n");
 	return -EIO;
 }
 
@@ -188,26 +187,24 @@ int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
 	while (remaining > 0) {
 		size = MIN(remaining, IMG_DOWNLOAD_MAX_SIZE);
 
-		buf = (uint32_t *)kmalloc(size, GFP_KERNEL);
-		if (!buf) {
-			printk("Fail to alloc!\n");
+		buf = devm_kmalloc(mdevice, size, GFP_KERNEL);
+		if (!buf)
 			return -EIO;
-		}
 		memcpy(buf, fw_data + sent, size);
 
 		dma_blk.dst_addr = dst_addr + sent;
 		dma_blk.len = size;
 		dma_blk.src_addr = virt_to_phys(buf);
 
-		printk("FW download - AP(:0x%llx) to EP(:0x%llx), size(%d)\n",
-			dma_blk.src_addr, dma_blk.dst_addr, dma_blk.len);
+		dev_info(mdevice, "FW download - AP(:0x%llx) to EP(:0x%llx), size(%d)\n",
+			 dma_blk.src_addr, dma_blk.dst_addr, dma_blk.len);
 
 		mnh_sm_dev->image_loaded = FW_IMAGE_DOWNLOADING;
 		mnh_dma_sblk_start(MNH_PCIE_CHAN_0, DMA_AP2EP, &dma_blk);
 
 		sent += size;
 		remaining -= size;
-		printk("Sent:%zd, Remaining:%zd\n", sent, remaining);
+		dev_info(mdevice, "Sent:%zd, Remaining:%zd\n", sent, remaining);
 
 		err = mnh_firmware_waitdownloaded();
 		kfree(buf);
@@ -234,35 +231,35 @@ int mnh_download_firmware(void)
 
 	err = request_firmware(&fip_img, "mnh/fip.bin", mdevice);
 	if (err) {
-		printk("request fip_image failed - %d\n", err);
+		dev_err(mdevice, "request fip_image failed - %d\n", err);
 		return -EIO;
 	}
 
 	err = request_firmware(&kernel_img, "mnh/Image", mdevice);
 	if (err) {
-		printk("request kernel failed - %d\n", err);
+		dev_err(mdevice, "request kernel failed - %d\n", err);
 		goto free_uboot;
 	}
 
 	err = request_firmware(&dt_img, "mnh/mnh.dtb", mdevice);
 	if (err) {
-		printk("request kernel failed - %d\n", err);
+		dev_err(mdevice, "request kernel failed - %d\n", err);
 		goto free_kernel;
 	}
 
 	err = request_firmware(&ram_img, "mnh/ramdisk.img", mdevice);
 	if (err) {
-		printk("request kernel failed - %d\n", err);
+		dev_err(mdevice, "request kernel failed - %d\n", err);
 		goto free_dt;
 	}
 
 	/* DMA transfer for SBL */
 	memcpy(&size, (uint8_t *)(fip_img->data + FIP_IMG_SBL_SIZE_OFFSET), 4);
 	memcpy(&addr, (uint8_t *)(fip_img->data + FIP_IMG_SBL_ADDR_OFFSET), 4);
-	printk("sbl size :0x%x", size);
-	printk("sbl data addr :0x%x", addr);
+	dev_info(mdevice, "sbl size :0x%x", size);
+	dev_info(mdevice, "sbl data addr :0x%x", addr);
 
-	printk("DOWNLOADING SBL...size:0x%x\n", size);
+	dev_info(mdevice, "DOWNLOADING SBL...size:0x%x\n", size);
 	if (mnh_transfer_firmware(size, fip_img->data + addr,
 			HW_MNH_SBL_DOWNLOAD))
 		goto fail_downloading;
@@ -278,11 +275,11 @@ int mnh_download_firmware(void)
 		(uint8_t *)(fip_img->data + FIP_IMG_UBOOT_SIZE_OFFSET), 4);
 	memcpy(&addr,
 		(uint8_t *)(fip_img->data + FIP_IMG_UBOOT_ADDR_OFFSET), 4);
-	printk("uboot size :0x%x", size);
-	printk("uboot data addr:0x%x", addr);
+	dev_info(mdevice, "uboot size :0x%x", size);
+	dev_info(mdevice, "uboot data addr:0x%x", addr);
 
 	/* DMA transfer for UBOOT */
-	printk("DOWNLOADING UBOOT...size:0x%x\n", size);
+	dev_info(mdevice, "DOWNLOADING UBOOT...size:0x%x\n", size);
 	if (mnh_transfer_firmware(size, fip_img->data + addr,
 			HW_MNH_UBOOT_DOWNLOAD))
 		goto fail_downloading;
@@ -290,19 +287,19 @@ int mnh_download_firmware(void)
 		HW_MNH_UBOOT_DOWNLOAD);
 
 	/* DMA transfer for device tree */
-	printk("DOWNLOADING DT...size:%zd\n", dt_img->size);
+	dev_info(mdevice, "DOWNLOADING DT...size:%zd\n", dt_img->size);
 	if (mnh_transfer_firmware(dt_img->size, dt_img->data,
 			HW_MNH_DT_DOWNLOAD))
 		goto fail_downloading;
 
 	/* DMA transfer for ramdisk */
-	printk("DOWNLOADING RAMDISK...size:%zd\n", ram_img->size);
+	dev_info(mdevice, "DOWNLOADING RAMDISK...size:%zd\n", ram_img->size);
 	if (mnh_transfer_firmware(ram_img->size, ram_img->data,
 			HW_MNH_RAMDISK_DOWNLOAD))
 		goto fail_downloading;
 
 	/* DMA transfer for Kernel image */
-	printk("DOWNLOADING KERNEL...size:%zd\n", kernel_img->size);
+	dev_info(mdevice, "DOWNLOADING KERNEL...size:%zd\n", kernel_img->size);
 	if (mnh_transfer_firmware(kernel_img->size, kernel_img->data,
 			HW_MNH_KERNEL_DOWNLOAD))
 		goto fail_downloading;
@@ -313,11 +310,11 @@ int mnh_download_firmware(void)
 	release_firmware(ram_img);
 
 	/* Unregister DMA callback */
-        mnh_reg_irq_callback(NULL, NULL, NULL);
+	mnh_reg_irq_callback(NULL, NULL, NULL);
 	return 0;
 
 fail_downloading:
-	printk("FW downloading fails\n");
+	dev_err(mdevice, "FW downloading fails\n");
 	mnh_sm_dev->image_loaded = FW_IMAGE_DOWNLOAD_FAIL;
 	release_firmware(ram_img);
 free_dt:
@@ -328,7 +325,7 @@ free_uboot:
 	release_firmware(fip_img);
 
 	/* Unregister DMA callback */
-        mnh_reg_irq_callback(NULL, NULL, NULL);
+	mnh_reg_irq_callback(NULL, NULL, NULL);
 	return -EIO;
 }
 
@@ -336,13 +333,13 @@ static ssize_t mnh_sm_download_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
 {
-    ssize_t strlen = 0;
+	ssize_t strlen = 0;
 
-    printk("MNH PM mnh_pm_download_show...\n");
+	dev_info(mdevice, "MNH PM mnh_pm_download_show...\n");
 
-    mnh_sm_download();
+	mnh_sm_download();
 
-    return strlen;
+	return strlen;
 }
 
 static ssize_t mnh_sm_download_store(struct device *dev,
@@ -350,10 +347,10 @@ static ssize_t mnh_sm_download_store(struct device *dev,
 			      const char *buf,
 			      size_t count)
 {
-    return -EINVAL;
+	return -EINVAL;
 }
 
-static DEVICE_ATTR(download, S_IWUSR | S_IRUGO,
+static DEVICE_ATTR(download, S_IWUSR | S_IRUSR | S_IRGRP,
 		mnh_sm_download_show, mnh_sm_download_store);
 
 
@@ -361,8 +358,8 @@ static ssize_t mnh_sm_suspend_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
 {
-    ssize_t strlen = 0;
-    return strlen;
+	ssize_t strlen = 0;
+	return strlen;
 }
 
 static ssize_t mnh_sm_suspend_store(struct device *dev,
@@ -370,7 +367,7 @@ static ssize_t mnh_sm_suspend_store(struct device *dev,
 			      const char *buf,
 			      size_t count)
 {
-    return -EINVAL;
+	return -EINVAL;
 }
 
 static DEVICE_ATTR(suspend, S_IWUSR | S_IRUGO,
@@ -380,8 +377,8 @@ static ssize_t mnh_sm_resume_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
 {
-    ssize_t strlen = 0;
-    return strlen;
+	ssize_t strlen = 0;
+	return strlen;
 }
 
 static ssize_t mnh_sm_resume_store(struct device *dev,
@@ -389,7 +386,7 @@ static ssize_t mnh_sm_resume_store(struct device *dev,
 			      const char *buf,
 			      size_t count)
 {
-    return -EINVAL;
+	return -EINVAL;
 }
 
 static DEVICE_ATTR(resume, S_IRUGO | S_IWUSR | S_IWGRP,
@@ -399,8 +396,8 @@ static ssize_t mnh_sm_reset_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
 {
-    ssize_t strlen = 0;
-    return strlen;
+	ssize_t strlen = 0;
+	return strlen;
 }
 
 static ssize_t mnh_sm_reset_store(struct device *dev,
@@ -408,7 +405,7 @@ static ssize_t mnh_sm_reset_store(struct device *dev,
 			      const char *buf,
 			      size_t count)
 {
-    return -EINVAL;
+	return -EINVAL;
 }
 
 static DEVICE_ATTR(reset, S_IRUGO | S_IWUSR | S_IWGRP,
@@ -444,26 +441,26 @@ static struct attribute_group mnh_sm_group = {
  *            This structure will be populated within the kernel module.
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
-int mnh_sm_poweron( struct mnh_sm_configuration* mnh_sm_boot_args )
+int mnh_sm_poweron(struct mnh_sm_configuration *mnh_sm_boot_args)
 {
-    return 0;
+	return 0;
 }
 EXPORT_SYMBOL(mnh_sm_poweron);
 
 /**
  * API to obtain the state of monette hill.
  * @return the power states of mnh(ex: On, Off, Active, Suspend, Bypass).
- * 	MNH_HW_INIT - MNH is on, Kernel not executing, and before FW download.
- * 	MNH_HW_OFF - MNH is powered off
- * 	MNH_HW_ACTIVE: MNH is on and flashed. Kernel is running.
- * 	MNH_HW_SUSPEND_SELF_REFRESH: DDR is self refreshing.
+ *      MNH_HW_INIT - MNH is on, Kernel not executing, and before FW download.
+ *      MNH_HW_OFF - MNH is powered off
+ *      MNH_HW_ACTIVE: MNH is on and flashed. Kernel is running.
+ *      MNH_HW_SUSPEND_SELF_REFRESH: DDR is self refreshing.
  *                                   All other components are off.
- * 	MNH_HW_SUSPEND_HIBERNATE: Hibernation image stored in AP RAM
- *                           	  over PCIe outbound and MNH is powered down.
+ *      MNH_HW_SUSPEND_HIBERNATE: Hibernation image stored in AP RAM
+ *                                over PCIe outbound and MNH is powered down.
  */
 int mnh_sm_get_state(void)
 {
-    return 0;
+	return 0;
 }
 EXPORT_SYMBOL(mnh_sm_get_state);
 
@@ -473,7 +470,7 @@ EXPORT_SYMBOL(mnh_sm_get_state);
  */
 int mnh_sm_poweroff(void)
 {
-    return 0;
+	return 0;
 }
 EXPORT_SYMBOL(mnh_sm_poweroff);
 
@@ -484,26 +481,26 @@ EXPORT_SYMBOL(mnh_sm_poweroff);
  */
 int mnh_sm_download(void)
 {
-    uint32_t  magic;
+	uint32_t  magic;
 
-    if (mnh_download_firmware() == 0) {
-        /* Magic number setting to notify MNH that PCIE initialization
-	is done on Host side */
-	if (mnh_config_read(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
-	                    HW_MNH_PCIE_GP_0,
-			    sizeof(uint32_t), &magic) == SUCCESS && magic == 0)
-        {
-	    mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
-	                     HW_MNH_PCIE_GP_0,
-	                     sizeof(uint32_t), INIT_DONE);
-	} else {
-	    printk("Read GP0 register fail or GP0 is not 0:%d",
-	            magic);
+	if (mnh_download_firmware() == 0) {
+		/* Magic number setting to notify MNH that PCIE initialization
+		 * is done on Host side
+		 */
+		if (mnh_config_read(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
+				    HW_MNH_PCIE_GP_0,
+				    sizeof(uint32_t), &magic) == SUCCESS &&
+				    magic == 0) {
+			mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
+					 HW_MNH_PCIE_GP_0,
+					 sizeof(uint32_t), INIT_DONE);
+		} else {
+			dev_err(mdevice, "Read GP0 register fail or GP0 is not 0:%d",
+				magic);
+		}
 	}
-    }
-    return 0;
+	return 0;
 }
-
 EXPORT_SYMBOL(mnh_sm_download);
 
 /**
@@ -513,7 +510,7 @@ EXPORT_SYMBOL(mnh_sm_download);
  */
 int mnh_sm_suspend(void)
 {
-    return 0;
+	return 0;
 }
 EXPORT_SYMBOL(mnh_sm_suspend);
 
@@ -527,40 +524,30 @@ EXPORT_SYMBOL(mnh_sm_suspend);
  */
 int mnh_sm_resume(void)
 {
-    return 0;
+	return 0;
 }
 EXPORT_SYMBOL(mnh_sm_resume);
 
-static int __exit mnh_sm_exit(void)
+static void __exit mnh_sm_exit(void)
 {
-	pr_debug("MNHPM Un-initializing\n");
+	dev_dbg(mdevice, "MNHPM Un-initializing\n");
 	sysfs_remove_group(kernel_kobj, &mnh_sm_group);
 	cdev_del(mcdev);
 	unregister_chrdev_region(dev_num, 1);
 	device_destroy(mclass, MKDEV(MAJOR(dev_num), 0));
 	class_destroy(mclass);
-        gpio_free(MNH_POWER_ON_GPIO);
-
-	return 0;
+	gpio_free(MNH_POWER_ON_GPIO);
 }
 
 static int __init mnh_sm_init(void)
 {
 	int error = 0;
 
-	pr_debug("MNH SM initializing...\n");
-
-	mnh_sm_dev = kzalloc(sizeof(struct mnh_sm_device), GFP_KERNEL);
-
-	if (mnh_sm_dev == NULL) {
-		printk("Fail to alloc mnh_sm_dev");
-		return error;
-	}
+	dev_dbg(mdevice, "MNH SM initializing...\n");
 
 	error = alloc_chrdev_region(&dev_num, 0, 1, DEVICE_NAME);
-	if (error < 0) {
+	if (error < 0)
 		return error;
-	}
 
 	mcdev = cdev_alloc();
 	mcdev->owner = THIS_MODULE;
@@ -588,17 +575,31 @@ static int __init mnh_sm_init(void)
 		return error;
 	}
 
-	pr_debug("char driver %s added", DEVICE_NAME);
+	mnh_sm_dev = devm_kzalloc(mdevice, sizeof(struct mnh_sm_device),
+				  GFP_KERNEL);
+
+	if (mnh_sm_dev == NULL) {
+		error = -ENOMEM;
+		goto fail;
+	}
+
+	dev_dbg(mdevice, "char driver %s added", DEVICE_NAME);
 
 	error = sysfs_create_group(kernel_kobj, &mnh_sm_group);
 	if (error)
-		pr_debug("failed to create /sys/kernel/mnh_sm\n");
-
-
-	printk("MNH SM initialized successfully\n");
+		dev_err(mdevice, "failed to create /sys/kernel/mnh_sm\n");
+	else
+		dev_info(mdevice, "MNH SM initialized successfully\n");
 
 	return error;
 
+fail:
+	device_destroy(mclass, MKDEV(MAJOR(dev_num), 0));
+	class_destroy(mclass);
+	unregister_chrdev_region(dev_num, 1);
+	cdev_del(mcdev);
+
+	return error;
 }
 
 

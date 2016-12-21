@@ -129,15 +129,6 @@ enum mnh_msi_msg_t {
 	MSI_MAX = 31
 };
 
-/** Firmware download image state */
-
-enum fw_image_state {
-        FW_IMAGE_NONE = 0,
-        FW_IMAGE_DOWNLOADING,
-        FW_IMAGE_DOWNLOAD_SUCCESS,
-        FW_IMAGE_DOWNLOAD_FAIL
-};
-
 /** Vendor message between AP to MNH */
 struct mnh_pcie_vm {
 	u32 vm;  /**< vendor defined message */

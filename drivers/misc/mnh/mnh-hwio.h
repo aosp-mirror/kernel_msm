@@ -27,15 +27,17 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef __INTEL_HWIO_H_
-#define __INTEL_HWIO_H_
+#ifndef __MNH_HWIO_H_
+#define __MNH_HWIO_H_
 
 #include "mnh-pcie.h"
 
 static inline uint32_t mnh_reg_read(uint32_t addr)
 {
 	uint32_t data = 0;
+
 	mnh_config_read(addr, 4, &data);
+
 	return data;
 }
 
@@ -44,35 +46,47 @@ static inline void mnh_reg_write(uint32_t addr, uint32_t value)
 	mnh_config_write(addr, 4, value);
 }
 
-#define HW_IN(bAddr, mod, reg)        mnh_reg_read(HWIO_##mod##_##reg##_ADDR(bAddr, 0))
-#define HW_INx(bAddr, mod, reg, inst)  mnh_reg_read(HWIO_##mod##_##reg##_ADDR(bAddr, inst))
-#define HW_PRTx(bAddr, mod, reg, inst) printk(#mod" "#reg" "#inst" %p\n", \
-					      HWIO_##mod##_##reg##_ADDR(bAddr, inst))
+#define HW_IN(bAddr, mod, reg) \
+	mnh_reg_read(HWIO_##mod##_##reg##_ADDR(bAddr, 0))
+#define HW_INx(bAddr, mod, reg, inst) \
+	mnh_reg_read(HWIO_##mod##_##reg##_ADDR(bAddr, inst))
+#define HW_PRTx(bAddr, mod, reg, inst) \
+	printk(#mod" "#reg" "#inst" %p\n", \
+		HWIO_##mod##_##reg##_ADDR(bAddr, inst))
 
-#define HW_INf(bAddr, mod, reg, fld)                                       \
-  ((mnh_reg_read(HWIO_##mod##_##reg##_ADDR(bAddr, 0)) & HWIO_##mod##_##reg##_##fld##_FLDMASK) >> \
-   HWIO_##mod##_##reg##_##fld##_FLDSHFT)
-#define HW_INxf(bAddr, mod, reg, inst, fld)					\
-  ((mnh_reg_read(HWIO_##mod##_##reg##_ADDR(bAddr, inst)) & HWIO_##mod##_##reg##_##fld##_FLDMASK) >> \
-   HWIO_##mod##_##reg##_##fld##_FLDSHFT)
+#define HW_INf(bAddr, mod, reg, fld) \
+	((mnh_reg_read(HWIO_##mod##_##reg##_ADDR(bAddr, 0)) & \
+	  HWIO_##mod##_##reg##_##fld##_FLDMASK) >> \
+	 HWIO_##mod##_##reg##_##fld##_FLDSHFT)
+#define HW_INxf(bAddr, mod, reg, inst, fld) \
+	((mnh_reg_read(HWIO_##mod##_##reg##_ADDR(bAddr, inst)) & \
+	  HWIO_##mod##_##reg##_##fld##_FLDMASK) >> \
+	 HWIO_##mod##_##reg##_##fld##_FLDSHFT)
 
-#define HW_OUT(bAddr, mod, reg, val)       mnh_reg_write(HWIO_##mod##_##reg##_ADDR(bAddr, 0), val)
-#define HW_PRT(bAddr, mod, reg)       printk(#mod" "#reg" %p\n",	\
-					     HWIO_##mod##_##reg##_ADDR(bAddr, 0))
+#define HW_OUT(bAddr, mod, reg, val) \
+	mnh_reg_write(HWIO_##mod##_##reg##_ADDR(bAddr, 0), val)
+#define HW_PRT(bAddr, mod, reg) \
+	printk(#mod" "#reg" %p\n", \
+	       HWIO_##mod##_##reg##_ADDR(bAddr, 0))
 
-#define HW_OUTx(bAddr, mod, reg, inst, val) mnh_reg_write(HWIO_##mod##_##reg##_ADDR(bAddr, inst), val)
+#define HW_OUTx(bAddr, mod, reg, inst, val) \
+	mnh_reg_write(HWIO_##mod##_##reg##_ADDR(bAddr, inst), val)
 
-#define HW_OUTf(bAddr, mod, reg, fld, val)			\
-mnh_reg_write(							\
-	      HWIO_##mod##_##reg##_ADDR(bAddr, 0),			\
-	      (mnh_reg_read(HWIO_##mod##_##reg##_ADDR(bAddr, 0)) & ~HWIO_##mod##_##reg##_##fld##_FLDMASK) | \
-	      ((val << HWIO_##mod##_##reg##_##fld##_FLDSHFT) & HWIO_##mod##_##reg##_##fld##_FLDMASK))
+#define HW_OUTf(bAddr, mod, reg, fld, val) \
+	mnh_reg_write( \
+		       HWIO_##mod##_##reg##_ADDR(bAddr, 0), \
+		       (mnh_reg_read(HWIO_##mod##_##reg##_ADDR(bAddr, 0)) & \
+			~HWIO_##mod##_##reg##_##fld##_FLDMASK) | \
+		       ((val << HWIO_##mod##_##reg##_##fld##_FLDSHFT) & \
+			HWIO_##mod##_##reg##_##fld##_FLDMASK))
 
-#define HW_OUTxf(bAddr, mod, reg, inst, fld, val)                            \
-mnh_reg_write(							\
-	      HWIO_##mod##_##reg##_ADDR(bAddr, inst),			\
-	      (mnh_reg_read(HWIO_##mod##_##reg##_ADDR(bAddr, inst)) & ~HWIO_##mod##_##reg##_##fld##_FLDMASK) | \
-	      ((val << HWIO_##mod##_##reg##_##fld##_FLDSHFT) & HWIO_##mod##_##reg##_##fld##_FLDMASK))
+#define HW_OUTxf(bAddr, mod, reg, inst, fld, val) \
+	mnh_reg_write( \
+		       HWIO_##mod##_##reg##_ADDR(bAddr, inst), \
+		       (mnh_reg_read(HWIO_##mod##_##reg##_ADDR(bAddr, inst)) & \
+			~HWIO_##mod##_##reg##_##fld##_FLDMASK) | \
+		       ((val << HWIO_##mod##_##reg##_##fld##_FLDSHFT) & \
+			HWIO_##mod##_##reg##_##fld##_FLDMASK))
 
 /* some useful base addresses */
 #define HWIO_SCU_BASE_ADDR			(0x04003000)
@@ -80,4 +94,4 @@ mnh_reg_write(							\
 #define MNH_DRAM_PI_BASE_ADDR			(0x04009000)
 #define MNH_DRAM_PHY_BASE_ADDR			(0x0400A000)
 
-#endif /* __INTEL_HWIO_H_ */
+#endif /* __MNH_HWIO_H_ */

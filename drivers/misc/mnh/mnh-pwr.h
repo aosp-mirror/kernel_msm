@@ -36,7 +36,9 @@ enum mnh_pwr_state {
 	MNH_PWR_S4 = 4
 };
 
-int mnh_pwr_set_state(struct device *dev, const struct mnh_pwr_controls *gpios, enum mnh_pwr_state system_state);
+int mnh_pwr_set_state(struct device *dev,
+		      const struct mnh_pwr_controls *gpios,
+		      enum mnh_pwr_state system_state);
 enum mnh_pwr_state mnh_pwr_get_state(struct device *dev);
 
 #endif /* __MNH_PWR_H__ */

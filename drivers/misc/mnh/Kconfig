@@ -14,7 +14,10 @@ config MNH_SM_HOST
     depends on PCI
     default "y"
     ---help---
-      Include support for MNH PM Host-side driver
+      Include support for MNH State Machine Host-side driver. This driver
+      controls the power-on and power-down sequences including firmware
+      download. The state manager is controlled by a userspace service
+      to control state transitions.
 
 config MNH_PCIE_MULTIPLE_MSI
     tristate "MNH PCIE Multiple MSI support"

@@ -13,10 +13,17 @@
  * more details.
  *
  */
- 
+
 #ifndef __MNH_SM_CONFIG
 #define __MNH_SM_CONFIG
 
+/** Firmware download image state */
+enum fw_image_state {
+	FW_IMAGE_NONE = 0,
+	FW_IMAGE_DOWNLOADING,
+	FW_IMAGE_DOWNLOAD_SUCCESS,
+	FW_IMAGE_DOWNLOAD_FAIL
+};
 
 struct mnh_sm_register_write_rep {
 	u16 address;
@@ -33,7 +40,6 @@ struct mnh_sm_register_read_rep {
 };
 
 struct mnh_sm_power_seq_entity {
-	// enum mnh_sm_pwr_ent_type type;
 	char ent_name[12];
 	int ent_number;
 	u16 address;

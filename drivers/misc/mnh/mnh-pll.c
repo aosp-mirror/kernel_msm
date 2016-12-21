@@ -14,6 +14,8 @@
 *
 */
 
+#include <linux/delay.h>
+
 #include "mnh-hwio.h"
 #include "mnh-hwio-scu.h"
 #include "mnh-pll.h"
@@ -99,10 +101,10 @@ static int mnh_pll_set_fsp_freq(int fsp, int freq)
 
 	const struct mnh_fsp_setting freqs[] = {
 		/*
-		sw_ctrl, sys200,
-		fbdiv, pcie_axi_clk_div,
-		axi_fab_clk_div, lpddr4_refclk_div;
-		*/
+		 * sw_ctrl, sys200,
+		 * fbdiv, pcie_axi_clk_div,
+		 * axi_fab_clk_div, lpddr4_refclk_div;
+		 */
 		{ 0, 1, 125, 0, 0, 0 }, /* BOOT */
 		{ 0, 0, 125, 2, 2, 2 }, /*  200   800 */
 		{ 0, 0, 125, 4, 3, 3 }, /*  300  1200 */
@@ -115,16 +117,22 @@ static int mnh_pll_set_fsp_freq(int fsp, int freq)
 		mnh_pll_is_valid_fsp(fsp)) {
 		fsp_val = MNH_FSP_INx(fsp) & ~fsp_mask;
 		fsp_val |=
-			MNH_FSP_SHFT(SW_CTRL,		 freqs[freq].sw_ctrl) |
-			MNH_FSP_SHFT(SYS200_MODE,	 freqs[freq].sys200) |
-			MNH_FSP_SHFT(PCIE_AXI_CLK_DIV,	 freqs[freq].pcie_axi_clk_div) |
-			MNH_FSP_SHFT(AXI_FABRIC_CLK_DIV, freqs[freq].axi_fab_clk_div) |
-			MNH_FSP_SHFT(LPDDR4_REFCLK_DIV,	 freqs[freq].lpddr4_refclk_div) |
-			MNH_FSP_SHFT(FBDIV,		 freqs[freq].fbdiv);
+			MNH_FSP_SHFT(SW_CTRL,
+				     freqs[freq].sw_ctrl) |
+			MNH_FSP_SHFT(SYS200_MODE,
+				     freqs[freq].sys200) |
+			MNH_FSP_SHFT(PCIE_AXI_CLK_DIV,
+				     freqs[freq].pcie_axi_clk_div) |
+			MNH_FSP_SHFT(AXI_FABRIC_CLK_DIV,
+				     freqs[freq].axi_fab_clk_div) |
+			MNH_FSP_SHFT(LPDDR4_REFCLK_DIV,
+				     freqs[freq].lpddr4_refclk_div) |
+			MNH_FSP_SHFT(FBDIV,
+				     freqs[freq].fbdiv);
 		MNH_FSP_OUTx(fsp, fsp_val);
 		return 0;
 	} else {
-		return -1;
+		return -EINVAL;
 	}
 }
 
@@ -137,6 +145,7 @@ int mnh_pll_lpddr4_is_locked(void)
 int mnh_pll_lpddr4_boot_settings(int freq0, int freq1, int freq2, int freq3)
 {
 	int ret = 0;
+
 	if (mnh_pll_is_valid_lpddr4_freq(freq0) &&
 		mnh_pll_is_valid_lpddr4_freq(freq1) &&
 		mnh_pll_is_valid_lpddr4_freq(freq2) &&
