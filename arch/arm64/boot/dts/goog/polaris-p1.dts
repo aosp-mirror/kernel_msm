@@ -19,6 +19,7 @@
 #include "../qcom/msmcobalt-camera-sensor-cdp.dtsi"
 
 #include "dsi-panel-jdi-synaptics-r63450.dtsi"
+#include "dsi-panel-jdi-novatek-nt36860.dtsi"
 #include "polaris-pinctrl.dtsi"
 
 / {
@@ -183,7 +184,7 @@
 };
 
 &mdss_dsi0 {
-	qcom,dsi-pref-prim-pan = <&dsi_jdi_synaptics_r63450>;
+	qcom,dsi-pref-prim-pan = <&dsi_jdi_novatek_nt36860>; /* for synaptic panel use &dsi_jdi_synaptics_r63450 */
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi0_active &mdss_te0_active>;
 	pinctrl-1 = <&mdss_dsi0_suspend &mdss_te0_suspend>;
@@ -192,7 +193,7 @@
 };
 
 &mdss_dsi1 {
-	qcom,dsi-pref-prim-pan = <&dsi_jdi_synaptics_r63450>;
+	qcom,dsi-pref-prim-pan = <&dsi_jdi_novatek_nt36860>; /* for synaptic panel use &dsi_jdi_synaptics_r63450 */
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi1_active &mdss_te1_active>;
 	pinctrl-1 = <&mdss_dsi1_suspend &mdss_te1_suspend>;
@@ -206,6 +207,13 @@
 };
 
 &dsi_jdi_synaptics_r63450 {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <2400>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};
+
+&dsi_jdi_novatek_nt36860 {
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
 	qcom,mdss-dsi-bl-min-level = <1>;
 	qcom,mdss-dsi-bl-max-level = <2400>;
