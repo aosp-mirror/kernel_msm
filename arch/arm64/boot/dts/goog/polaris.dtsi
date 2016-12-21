@@ -10,28 +10,12 @@
  * GNU General Public License for more details.
  */
 
-/dts-v1/;
-
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
-
-#include "../qcom/msmcobalt-v2.1.dtsi"
-#include "../qcom/msmcobalt-camera-sensor-cdp.dtsi"
 
 #include "dsi-panel-jdi-synaptics-r63450.dtsi"
 #include "dsi-panel-jdi-novatek-nt36860.dtsi"
 #include "polaris-pinctrl.dtsi"
-
-/ {
-	model = "Google, Inc. Polaris P1.1";
-	/* compatible = "goog,polaris", "goog,polaris-p1"; */
-	goog,board-revision = "polaris-p1";
-
-	/* TODO(muirj): Remove once the boot-loader can select based
-	 * on the above information only. */
-	compatible = "qcom,msmcobalt-cdp", "qcom,msmcobalt", "qcom,cdp";
-	qcom,board-id = <1 0>;
-};
 
 / {
 	bluetooth: bt_wcn3990 {
