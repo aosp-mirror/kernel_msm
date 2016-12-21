@@ -95,7 +95,6 @@ struct mnh_device {
 };
 
 static struct mnh_device *mnh_dev;
-static hotplug_cb_t mnh_hotplug_cb;
 
 static void mnh_check_pci_resources(struct pci_dev *dev, int bar);
 static uint32_t mnh_check_iatu_bar2(uint32_t offset);
@@ -384,17 +383,6 @@ int mnh_reg_irq_callback(irq_cb_t msg_cb, irq_cb_t vm_cb, irq_dma_cb_t dma_cb)
 	return 0;
 }
 EXPORT_SYMBOL(mnh_reg_irq_callback);
-
-/** API to register hotplug callback to receive MNH up/down notifications
- * @param[in] hotplug_cb  handler for hotplug in/out events
- * @return 0
- */
-int mnh_reg_hotplug_callback(hotplug_cb_t hotplug_cb)
-{
-	mnh_hotplug_cb = hotplug_cb;
-	return 0;
-}
-EXPORT_SYMBOL(mnh_reg_hotplug_callback);
 
 /**
  * API to send Vendor specific message from AP to MNH
@@ -1602,9 +1590,6 @@ static int mnh_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	mnh_pcie_config_read(0, sizeof(uint32_t), &magic);
 	dev_dbg(&pdev->dev, "MNH PCIe initialization successful.\n");
 
-	if (mnh_hotplug_cb)
-		mnh_hotplug_cb(MNH_HOTPLUG_IN);
-
 	return 0;
 
 unmap_bar:
@@ -1637,9 +1622,6 @@ end:
 static void mnh_pci_remove(struct pci_dev *pdev)
 {
 	struct mnh_device *dev;
-
-	if (mnh_hotplug_cb)
-		mnh_hotplug_cb(MNH_HOTPLUG_OUT);
 
 	dev = pci_get_drvdata(pdev);
 	if (!dev) {

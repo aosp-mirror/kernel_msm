@@ -19,6 +19,12 @@
 
 #include "mnh-sm-config.h"
 
+/** API to register hotplug callback to receive MNH up/down notifications
+ * @param[in] hotplug_cb  handler for hotplug in/out events
+ * @return 0
+ */
+int mnh_sm_reg_hotplug_callback(hotplug_cb_t hotplug_cb);
+
 /**
  * API to initialize Power and clocks to MNH, MIPI, DDR, DDR training,
  * and PCIE.

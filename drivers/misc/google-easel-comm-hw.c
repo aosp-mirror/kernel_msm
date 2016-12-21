@@ -20,6 +20,7 @@
 #include <linux/mnh_pcie_ep.h>
 #else
 #include "mnh/mnh-pcie.h"
+#include "mnh/mnh-sm.h"
 #include "mnh/hw-mnh-regs.h"
 #endif
 
@@ -325,7 +326,7 @@ int easelcomm_hw_init(void)
 {
 	int ret;
 
-	ret = mnh_reg_hotplug_callback(&easelcomm_hw_ap_hotplug_callback);
+	ret = mnh_sm_reg_hotplug_callback(&easelcomm_hw_ap_hotplug_callback);
 	if (WARN_ON(ret))
 		return ret;
 

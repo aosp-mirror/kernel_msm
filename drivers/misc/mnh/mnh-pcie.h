@@ -299,12 +299,6 @@ int mnh_send_irq(enum mnh_irq_msg_t irq);
  */
 int mnh_reg_irq_callback(irq_cb_t msg_cb, irq_cb_t vm_cb, irq_dma_cb_t dma_cb);
 
-/** API to register hotplug callback to receive MNH up/down notifications
- * @param[in] hotplug_cb  handler for hotplug in/out events
- * @return 0
- */
-int mnh_reg_hotplug_callback(hotplug_cb_t hotplug_cb);
-
 /**
  * API to send Vendor specific message from AP to MNH
  * @param[in] msg  Vendor message to be sent include msg_id

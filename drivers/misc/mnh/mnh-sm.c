@@ -72,6 +72,7 @@ static dev_t dev_num;
 static struct class *mclass;
 static struct device *mdevice;
 static struct mnh_sm_device *mnh_sm_dev;
+static hotplug_cb_t mnh_hotplug_cb;
 
 static ssize_t mnh_sm_poweron_show(struct device *dev,
 			     struct device_attribute *attr,
@@ -323,6 +324,10 @@ int mnh_download_firmware(void)
 
 	/* Unregister DMA callback */
 	mnh_reg_irq_callback(NULL, NULL, NULL);
+
+	if (mnh_hotplug_cb)
+		mnh_hotplug_cb(MNH_HOTPLUG_IN);
+
 	return 0;
 
 fail_downloading:
@@ -445,6 +450,16 @@ static struct attribute_group mnh_sm_group = {
  *
  ******************************************************************************/
 
+/** API to register hotplug callback to receive MNH up/down notifications
+ * @param[in] hotplug_cb  handler for hotplug in/out events
+ * @return 0
+ */
+int mnh_sm_reg_hotplug_callback(hotplug_cb_t hotplug_cb)
+{
+	mnh_hotplug_cb = hotplug_cb;
+	return 0;
+}
+EXPORT_SYMBOL(mnh_sm_reg_hotplug_callback);
 
 /**
  * API to initialize Power and clocks to MNH, MIPI, DDR, DDR training,
