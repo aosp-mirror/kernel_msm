@@ -187,14 +187,21 @@ int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
 	while (remaining > 0) {
 		size = MIN(remaining, IMG_DOWNLOAD_MAX_SIZE);
 
-		buf = devm_kmalloc(mdevice, size, GFP_KERNEL);
+		buf = kmalloc(size, GFP_KERNEL);
 		if (!buf)
-			return -EIO;
+			return -ENOMEM;
 		memcpy(buf, fw_data + sent, size);
 
 		dma_blk.dst_addr = dst_addr + sent;
 		dma_blk.len = size;
-		dma_blk.src_addr = virt_to_phys(buf);
+		dma_blk.src_addr = mnh_map_mem(buf, size, DMA_TO_DEVICE);
+
+		if (!dma_blk.src_addr) {
+			dev_err(mdevice,
+				"Could not map dma buffer for FW download\n");
+			kfree(buf);
+			return -ENOMEM;
+		}
 
 		dev_info(mdevice, "FW download - AP(:0x%llx) to EP(:0x%llx), size(%d)\n",
 			 dma_blk.src_addr, dma_blk.dst_addr, dma_blk.len);
@@ -207,6 +214,7 @@ int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
 		dev_info(mdevice, "Sent:%zd, Remaining:%zd\n", sent, remaining);
 
 		err = mnh_firmware_waitdownloaded();
+		mnh_unmap_mem(dma_blk.src_addr, size, DMA_TO_DEVICE);
 		kfree(buf);
 
 		if (err)
@@ -233,25 +241,25 @@ int mnh_download_firmware(void)
 		return err;
 	}
 
-	err = request_firmware(&fip_img, "mnh/fip.bin", mdevice);
+	err = request_firmware(&fip_img, "easel/fip.bin", mdevice);
 	if (err) {
 		dev_err(mdevice, "request fip_image failed - %d\n", err);
 		return -EIO;
 	}
 
-	err = request_firmware(&kernel_img, "mnh/Image", mdevice);
+	err = request_firmware(&kernel_img, "easel/Image", mdevice);
 	if (err) {
 		dev_err(mdevice, "request kernel failed - %d\n", err);
 		goto free_uboot;
 	}
 
-	err = request_firmware(&dt_img, "mnh/mnh.dtb", mdevice);
+	err = request_firmware(&dt_img, "easel/mnh.dtb", mdevice);
 	if (err) {
 		dev_err(mdevice, "request kernel failed - %d\n", err);
 		goto free_kernel;
 	}
 
-	err = request_firmware(&ram_img, "mnh/ramdisk.img", mdevice);
+	err = request_firmware(&ram_img, "easel/ramdisk.img", mdevice);
 	if (err) {
 		dev_err(mdevice, "request kernel failed - %d\n", err);
 		goto free_dt;
