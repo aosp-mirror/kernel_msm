@@ -1339,7 +1339,7 @@ static void msm8x16_wcd_boost_on(struct snd_soc_codec *codec)
 
 	if ((dest & MASK_MSB_BIT) == 0) {
 		pr_err("LDO7 not enabled return!\n");
-		return;
+		//return; /* workaround for Boost disabling prevention */
 	}
 	ret = spmi_ext_register_readl(wcd->spmi->ctrl, PMIC_SLAVE_ID_0,
 						PMIC_MBG_OK, &dest, 1);
