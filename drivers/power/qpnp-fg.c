@@ -3310,7 +3310,7 @@ static void battery_age_work(struct work_struct *work)
 	estimate_battery_age(chip, &chip->actual_cap_uah);
 }
 
-static int fg_get_coulomb_count(struct fg_chip *chip);
+static int fg_get_current_cc(struct fg_chip *chip);
 
 static enum power_supply_property fg_power_props[] = {
 	POWER_SUPPLY_PROP_CAPACITY,
@@ -3442,7 +3442,7 @@ static int fg_power_get_property(struct power_supply *psy,
 		val->intval = !!chip->profile_loaded;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-		val->intval = fg_get_coulomb_count(chip);
+		val->intval = fg_get_current_cc(chip);
 		break;
 	default:
 		return -EINVAL;
@@ -3663,6 +3663,26 @@ static int fg_get_cc_soc(struct fg_chip *chip, int *cc_soc)
 		*cc_soc = magnitude;
 
 	return 0;
+}
+
+static int fg_get_current_cc(struct fg_chip *chip)
+{
+       int cc_soc, rc;
+
+       if (!(chip->wa_flag & USE_CC_SOC_REG))
+               return chip->learning_data.cc_uah;
+
+       if (!chip->learning_data.learned_cc_uah)
+               return -EINVAL;
+
+       rc = fg_get_cc_soc(chip, &cc_soc);
+       if (rc < 0) {
+               pr_err("Failed to get cc_soc, rc=%d\n", rc);
+               return rc;
+       }
+
+       return DIV_ROUND_CLOSEST(cc_soc * chip->learning_data.learned_cc_uah,
+               FULL_PERCENT_28BIT);
 }
 
 #define BATT_MISSING_STS BIT(6)
@@ -4043,17 +4063,6 @@ static int fg_cap_learning_check(struct fg_chip *chip)
 fail:
 	mutex_unlock(&chip->learning_data.learning_lock);
 	return rc;
-}
-
-static int fg_get_coulomb_count(struct fg_chip *chip)
-{
-	int cc_pc_val;
-
-	if (fg_get_cc_soc(chip, &cc_pc_val))
-		return 0;
-
-	return div64_s64(chip->batt_capacity_mah * (int64_t) cc_pc_val,
-			 FULL_PERCENT_28BIT / 1000);
 }
 
 static bool is_usb_present(struct fg_chip *chip)
@@ -4502,7 +4511,7 @@ static int fg_power_set_property(struct power_supply *psy,
 		chip->safety_timer_expired = val->intval;
 		schedule_work(&chip->status_change_work);
 		break;
-	case POWER_SUPPLY_PROP_HI_POWER:
+        case POWER_SUPPLY_PROP_HI_POWER:
 		if (chip->wa_flag & BCL_HI_POWER_FOR_CHGLED_WA) {
 			chip->bcl_lpm_disabled = !!val->intval;
 			schedule_work(&chip->bcl_hi_power_work);
@@ -8238,7 +8247,7 @@ static int fg_hw_init(struct fg_chip *chip)
 		/* Setup workaround flag based on PMIC type */
 		if (fg_sense_type == INTERNAL_CURRENT_SENSE)
 			chip->wa_flag |= IADC_GAIN_COMP_WA;
-		if (chip->pmic_revision[REVID_DIG_MAJOR] > 1)
+		if (chip->pmic_revision[REVID_DIG_MAJOR] >= 1)
 			chip->wa_flag |= USE_CC_SOC_REG;
 
 		break;
