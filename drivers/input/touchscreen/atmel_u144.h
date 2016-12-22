@@ -24,8 +24,6 @@
 
 #define MXT_TOUCH_NAME		"mxt_touch"
 
-#define CONFIG_TOUCHSCREEN_MSG_INFO_PRINT
-
 #define MXT_FW_MAGIC		0x4D3C2B1A
 
 #define REF_OFFSET_VALUE	16384

@@ -1038,19 +1038,12 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 		else if ((status & MXT_T100_STATUS_MASK) == MXT_T100_MOVE)
 			data->ts_data.curr_data[id].status = FINGER_MOVED;
 
+#ifdef MXT_TOUCHSCREEN_MSG_INFO_PRINT
 		if ((status & MXT_T100_STATUS_MASK) == MXT_T100_PRESS)
-#ifdef CONFIG_TOUCHSCREEN_MSG_INFO_PRINT
 			TOUCH_DEBUG_MSG("touch_pressed    <%d> :"
 				" x[%4d] y[%4d] A[%3d] P[%3d]"
 				" WM[%3d] Wm[%3d]\n",
 				id, x, y, area, amplitude,
-				data->ts_data.curr_data[id].touch_major,
-				data->ts_data.curr_data[id].touch_minor);
-#else
-			TOUCH_INFO_MSG("touch_pressed    <%d> :"
-				" x[***] y[***] A[%3d] P[%3d]"
-				" WM[%3d] Wm[%3d]\n",
-				id, area, amplitude,
 				data->ts_data.curr_data[id].touch_major,
 				data->ts_data.curr_data[id].touch_minor);
 #endif
@@ -1058,11 +1051,9 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 		/* Touch Release */
 		data->ts_data.curr_data[id].id = id;
 		data->ts_data.curr_data[id].status = FINGER_RELEASED;
-#ifdef CONFIG_TOUCHSCREEN_MSG_INFO_PRINT
+#ifdef MXT_TOUCHSCREEN_MSG_INFO_PRINT
 		TOUCH_DEBUG_MSG("touch_release    <%d> : x[%4d] y[%4d]\n",
 				id, x, y);
-#else
-		TOUCH_INFO_MSG("touch_release    <%d> : x[***] y[***]\n", id);
 #endif
 	}
 
