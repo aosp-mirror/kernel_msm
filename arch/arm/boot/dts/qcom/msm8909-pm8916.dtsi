@@ -442,7 +442,6 @@
 		qcom,soft-temp-vfloat-comp-mv = <200>;
 		qcom,soft-temp-current-comp-ma = <150>;
 		qcom,chg-inhibit-disabled;
-		qcom,apsd-disabled;
 		qcom,thermal-mitigation = <1000 500 300 100>;
 		qcom,smb23x-vadc = <&pm8916_vadc>;
 	};
@@ -455,7 +454,6 @@
 		interrupts = <92 2>;			/* gpio92 */
 		pinctrl-names = "default";
 		pinctrl-0 = <&max17055_alert>;
-
 		maxim,rsns-microohm = <10000>;	/*Current sense resistance in micro Ohm*/
 		maxim,config-type = <3>;		/*EZ:1 SHORT: 2 FULL: 3*/
 		maxim,cold-temp = <(-450)>;		/*Temp is scaled by 10 to reserve more precise*/
