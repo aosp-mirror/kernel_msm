@@ -18,19 +18,19 @@
 		"pri_i2s",
 		"quat_i2s";
 	qcom,pinctrl-names =
-		"pri_i2s_sus",
+		"all_off",
 		"pri_i2s_act",
 		"cdc_lines_quat_ext_act",
-		"cdc_lines_quat_ext_sus";
+		"pri_i2s_cdc_lines_quat_ext_act";
 	pinctrl-names =
-		"pri_i2s_sus",
+		"all_off",
 		"pri_i2s_act",
 		"cdc_lines_quat_ext_act",
-		"cdc_lines_quat_ext_sus";
-	pinctrl-0 = <&cdc_pdm_lines_sus>;
-	pinctrl-1 = <&cdc_pdm_lines_act>;
-	pinctrl-2 = <&cdc_ext_tlmm_act>;
-	pinctrl-3 = <&cdc_ext_tlmm_sus>;
+		"pri_i2s_cdc_lines_quat_ext_act";
+	pinctrl-0 = <&cdc_pdm_lines_sus &cdc_ext_tlmm_sus>;
+	pinctrl-1 = <&cdc_pdm_lines_act &cdc_ext_tlmm_sus>;
+	pinctrl-2 = <&cdc_pdm_lines_sus &cdc_ext_tlmm_act>;
+	pinctrl-3 = <&cdc_pdm_lines_act &cdc_ext_tlmm_act>;
 	/delete-property/ qcom,cdc-us-euro-gpios;
 };
 &soc{
