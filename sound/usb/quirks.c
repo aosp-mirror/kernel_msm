@@ -140,6 +140,7 @@ static int create_fixed_stream_quirk(struct snd_usb_audio *chip,
 	}
 	INIT_LIST_HEAD(&fp->list);
 	if (fp->nr_rates > MAX_NR_RATES) {
+		list_del(&fp->list);
 		kfree(fp);
 		return -EINVAL;
 	}
@@ -147,6 +148,7 @@ static int create_fixed_stream_quirk(struct snd_usb_audio *chip,
 		rate_table = kmemdup(fp->rate_table,
 				     sizeof(int) * fp->nr_rates, GFP_KERNEL);
 		if (!rate_table) {
+			list_del(&fp->list);
 			kfree(fp);
 			return -ENOMEM;
 		}
@@ -157,13 +159,14 @@ static int create_fixed_stream_quirk(struct snd_usb_audio *chip,
 		? SNDRV_PCM_STREAM_CAPTURE : SNDRV_PCM_STREAM_PLAYBACK;
 	err = snd_usb_add_audio_stream(chip, stream, fp);
 	if (err < 0) {
-		list_del(&fp->list); /* unlink for avoiding double-free */
+		list_del(&fp->list);
 		kfree(fp);
 		kfree(rate_table);
 		return err;
 	}
 	if (fp->iface != get_iface_desc(&iface->altsetting[0])->bInterfaceNumber ||
 	    fp->altset_idx >= iface->num_altsetting) {
+		list_del(&fp->list);
 		kfree(fp);
 		kfree(rate_table);
 		return -EINVAL;
