@@ -232,10 +232,11 @@ void vsync_count_down(void *arg)
 {
 	struct mdp3_session_data *session = (struct mdp3_session_data *)arg;
 	/* We are counting down to turn off clocks */
-	if (atomic_read(&session->vsync_countdown) > 0)
+	if (atomic_read(&session->vsync_countdown) > 0) {
 		atomic_dec(&session->vsync_countdown);
-	if (atomic_read(&session->vsync_countdown) == 0)
-		schedule_work(&session->clk_off_work);
+		if (atomic_read(&session->vsync_countdown) == 0)
+			schedule_work(&session->clk_off_work);
+	}
 }
 
 void mdp3_ctrl_reset_countdown(struct mdp3_session_data *session,
@@ -1039,21 +1040,30 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 	if (mdss_fb_is_power_on_ulp(mfd) &&
 		(mfd->panel.type == MIPI_CMD_PANEL)) {
 
-		pr_debug("%s: Disable MDP3 clocks in ULP\n", __func__);
-		if (!mdp3_session->clk_on)
-			mdp3_ctrl_clk_enable(mfd, 1);
+		pr_debug("Disable MDP3 clocks in ULP\n");
+		/*
+		 * Wait if DAM transfer in progress
+		 * else go ahead and turn off MDP clocks.
+		 */
+		if ( atomic_read(&mfd->kickoff_pending) ||
+		     atomic_read(&mfd->commits_pending)) {
+			rc = wait_event_timeout(mfd->kickoff_wait_q,
+				(!atomic_read(&mfd->kickoff_pending)),
+				msecs_to_jiffies(WAIT_DISP_OP_TIMEOUT));
 
-		if (atomic_read(&mfd->kickoff_pending) ||
-		    atomic_read(&mfd->commits_pending)) {
-			MDSS_XLOG(XLOG_FUNC_ENTRY, __LINE__,
-				atomic_read(&mfd->kickoff_pending),
-				atomic_read(&mfd->commits_pending));
-			rc = mdp3_session->wait_for_dma_done(mdp3_session);
-			if (atomic_read(&mfd->kickoff_pending) || rc) {
-				pr_info("Ignore MDP3 clocks OFF req in ULP\n");
-				goto off_error;
+			if(!rc) {
+				pr_info("Wait for kickoff time out in ULP\n");
+				MDSS_XLOG(atomic_read(&mfd->kickoff_pending),
+					atomic_read(&mdp3_session->vsync_countdown),
+					rc);
 			}
 		}
+
+		/*
+		 * Enable MDP clk before DMA stop to handle cases where
+		 * ULP request is followd by dispatch clock off*/
+		if (!mdp3_session->clk_on)
+			mdp3_ctrl_clk_enable(mfd, 1);
 		/*
 		 * STOP DMA transfer first and signal vsync notification
 		 * Before releasing the resource in ULP state.
@@ -1328,6 +1338,7 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 	int rc = 0;
 	static bool splash_done;
 	struct mdss_panel_data *panel;
+	int prev_bl;
 
 	if (!mfd || !mfd->mdp.private1)
 		return -EINVAL;
@@ -1339,6 +1350,32 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 
 	if (mdp3_bufq_count(&mdp3_session->bufq_in) == 0) {
 		pr_debug("no buffer in queue yet\n");
+		return -EPERM;
+	}
+
+	panel = mdp3_session->panel;
+	mutex_lock(&mdp3_res->fs_idle_pc_lock);
+	if (mdp3_session->in_splash_screen ||
+		mdp3_res->idle_pc) {
+		pr_debug("%s: reset- in_splash = %d, idle_pc = %d", __func__,
+			mdp3_session->in_splash_screen, mdp3_res->idle_pc);
+		rc = mdp3_ctrl_reset(mfd);
+		if (rc) {
+			pr_err("fail to reset display\n");
+			mutex_unlock(&mdp3_res->fs_idle_pc_lock);
+			return -EINVAL;
+		}
+		if ((mdp3_session->dma->roi.x || mdp3_session->dma->roi.y) &&
+			panel_info->partial_update_enabled)
+			mdp3_session->dma->update_src_cfg = true;
+	}
+	mutex_unlock(&mdp3_res->fs_idle_pc_lock);
+
+	mutex_lock(&mdp3_session->lock);
+
+	if (!mdp3_session->status) {
+		pr_err("%s, display off!\n", __func__);
+		mutex_unlock(&mdp3_session->lock);
 		return -EPERM;
 	}
 
@@ -1355,29 +1392,6 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 				mdp3_session->dma->roi.y,
 				mdp3_session->dma->roi.w,
 				mdp3_session->dma->roi.h);
-	}
-
-	panel = mdp3_session->panel;
-	mutex_lock(&mdp3_res->fs_idle_pc_lock);
-	if (mdp3_session->in_splash_screen ||
-		mdp3_res->idle_pc) {
-		pr_debug("%s: reset- in_splash = %d, idle_pc = %d", __func__,
-			mdp3_session->in_splash_screen, mdp3_res->idle_pc);
-		rc = mdp3_ctrl_reset(mfd);
-		if (rc) {
-			pr_err("fail to reset display\n");
-			mutex_unlock(&mdp3_res->fs_idle_pc_lock);
-			return -EINVAL;
-		}
-	}
-	mutex_unlock(&mdp3_res->fs_idle_pc_lock);
-
-	mutex_lock(&mdp3_session->lock);
-
-	if (!mdp3_session->status) {
-		pr_err("%s, display off!\n", __func__);
-		mutex_unlock(&mdp3_session->lock);
-		return -EPERM;
 	}
 
 	mdp3_ctrl_notify(mdp3_session, MDP_NOTIFY_FRAME_BEGIN);
@@ -1442,11 +1456,17 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 	}
 
 	mdp3_session->vsync_before_commit = 0;
+	prev_bl = mfd->bl_level;
 	if (!splash_done || mdp3_session->esd_recovery == true) {
-		if (panel && panel->set_backlight)
-			panel->set_backlight(panel, panel->panel_info.bl_max);
+		if (panel && panel->set_backlight) {
+			if (mdp3_session->esd_recovery == true && prev_bl > 0)
+				panel->set_backlight(panel, prev_bl);
+			else
+				panel->set_backlight(panel, panel->panel_info.bl_max);
+		}
 		splash_done = true;
 		mdp3_session->esd_recovery = false;
+
 	}
 
 	/* start vsync tick countdown for cmd mode if vsync isn't enabled */
