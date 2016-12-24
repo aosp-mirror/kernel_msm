@@ -89,6 +89,8 @@
 			qcom,step-charging-batt-full-mv = <4200>;
 			qcom,step-charging-current-ma = <280>;
 			qcom,step-charging-delta-voltage-mv = <200>;
+			qcom,stmr-expiration-count = <0>;
+			qcom,batt-temp-in-normal-state1-count = <0>;
 
 			status = "ok";
 		};

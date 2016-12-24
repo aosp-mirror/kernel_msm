@@ -108,7 +108,10 @@
 #define CHAG_IN_VALID_IRQ                              BIT(1)
 
 /* Fault Register */
-#define FAULT_REG                                     0x08
+#define FAULT_REG                                      0x08
+#define STMR_FAULT_MASK                                mp2661_MASK(2, 2)
+#define STMR_FAULT_MASK_SHIFT                          2
+#define STMR_FAULT                                     1
 
 enum {
     CHG_STAT_NOT_CHARGING =0,
@@ -199,6 +202,8 @@ struct mp2661_chg {
     int                batt_full_now_mv;
     int                batt_charging_current_now_ma;
     bool               repeat_charging_detect_flag;
+    int                stmr_expiration_count;
+    int                batt_temp_in_normal_state1_count;
 };
 
 struct mp2661_chg  *global_mp2661 = NULL;
@@ -1318,10 +1323,13 @@ static void mp2661_external_power_changed(struct power_supply *psy)
     }
 }
 
+#define STMR_EXPIRATION_COUNT_MAX              3
+#define BATT_TEMP_IN_NORMAL_STATE1_COUNT_MAX   9
 static void mp2661_process_interrupt_work(struct work_struct *work)
 {
     int status, usb_present;
     struct mp2661_chg *chip = container_of(work, struct mp2661_chg, process_interrupt_work);
+    u8 reg = 0;
     int rc = -1;
     int capacity = -1;
 
@@ -1342,6 +1350,10 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
             {
                 pr_err("Couldn't set charging disable rc=%d\n", rc);
             }
+
+            pr_info("clear stmr count when batt full!");
+            chip->stmr_expiration_count = 0;
+            chip->batt_temp_in_normal_state1_count = 0;
 
             if (!chip->bms_psy && chip->bms_psy_name)
             {
@@ -1395,6 +1407,15 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
                 chip->repeat_charging_detect_flag = false;
             }
 
+            pr_info("clear stmr count and enable charge when remove charger!");
+            chip->stmr_expiration_count = 0;
+            chip->batt_temp_in_normal_state1_count = 0;
+            rc = mp2661_set_charging_enable(chip, true);
+            if (rc)
+            {
+                pr_err("Couldn't set charging enable rc=%d\n", rc);
+            }
+
             wake_unlock(&chip->chg_wake_lock);
         }
 
@@ -1402,6 +1423,55 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
         power_supply_set_present(chip->usb_psy, chip->usb_present);
         pr_info("usb psy changed\n");
         power_supply_changed(chip->usb_psy);
+    }
+
+    /* check safetytimer expiration */
+    rc = mp2661_read(chip, FAULT_REG, &reg);
+    if (rc < 0)
+    {
+        pr_err("Couldn't read fault reg rc = %d\n", rc);
+    }
+
+    reg = (reg & STMR_FAULT_MASK) >> STMR_FAULT_MASK_SHIFT;
+    if (STMR_FAULT == reg)
+    {
+        pr_info("stmr expiration!\n");
+        chip->stmr_expiration_count++;
+        if (chip->stmr_expiration_count < STMR_EXPIRATION_COUNT_MAX)
+        {
+            pr_info("stmr expiration count is %d less than %d!\n", chip->stmr_expiration_count, STMR_EXPIRATION_COUNT_MAX);
+            if ((BAT_TEMP_STATUS_NORMAL_STATE1 == chip->batt_temp_status)
+                     || (chip->batt_temp_in_normal_state1_count >= BATT_TEMP_IN_NORMAL_STATE1_COUNT_MAX))
+            {
+                pr_info("re-enable charge when batt temp is in 0~10 or not full!\n");
+                rc = mp2661_set_charging_enable(chip, false);
+                if (rc)
+                {
+                    pr_err("Couldn't set charging disable rc=%d\n", rc);
+                }
+
+                mdelay(200);
+
+                rc = mp2661_set_charging_enable(chip, true);
+                if (rc)
+                {
+                    pr_err("Couldn't set charging enable rc=%d\n", rc);
+                }
+
+                /* clear stmr expiration flag */
+                rc = mp2661_read(chip, FAULT_REG, &reg);
+                if (rc < 0)
+                {
+                    pr_err("Couldn't read fault reg rc = %d\n", rc);
+                }
+
+                chip->batt_temp_in_normal_state1_count = 0;
+            }
+        }
+        else
+        {
+            pr_info("stmr disable charge when expiration count is %d greater or equal to %d!\n", chip->stmr_expiration_count, STMR_EXPIRATION_COUNT_MAX);
+        }
     }
  }
 
@@ -1594,6 +1664,20 @@ static int mp2661_parse_dt(struct mp2661_chg *chip)
         chip->repeat_charging_detect_flag = false;
     }
 
+    rc = of_property_read_u32(node, "qcom,stmr-expiration-count",
+                            &chip->stmr_expiration_count);
+    if (rc < 0)
+    {
+        chip->stmr_expiration_count = -EINVAL;
+    }
+
+    rc = of_property_read_u32(node, "qcom,batt-temp-in-normal-state1-count",
+                            &chip->batt_temp_in_normal_state1_count);
+    if (rc < 0)
+    {
+        chip->batt_temp_in_normal_state1_count = -EINVAL;
+    }
+
     pr_info("bms-psy-name = %s, using-pmic-therm = %d\n",
                 chip->bms_psy_name, chip->using_pmic_therm);
     pr_info("cold-batt-decidegc = %d, normal-state1-batt-decidegc = %d,\
@@ -1625,6 +1709,8 @@ static int mp2661_parse_dt(struct mp2661_chg *chip)
     pr_info("qcom,step-charging-current-ma = %d\n", chip->step_charging_current_ma);
     pr_info("qcom,step-charging-delta-voltage-mv = %d\n", chip->step_charging_delta_voltage_mv);
     pr_info("qcom,repeat-charging-detect-flag = %d\n", chip->repeat_charging_detect_flag);
+    pr_info("qcom,stmr-expiration-count = %d\n", chip->stmr_expiration_count);
+    pr_info("qcom,batt-temp-in-normal-state1-count = %d\n", chip->batt_temp_in_normal_state1_count);
 
     return 0;
 }
@@ -2281,6 +2367,8 @@ static void mp2661_adjust_batt_charging_current_and_voltage(
 #define AP_MASK_RX_GPIO_TEMP          450
 #define AP_MASK_RX_GPIO_TEMP_DELTA    30
 #define RECHARGE_CAPACITY_THRESHOLD   95
+#define TEMP_IN_STATE1_CHECK_CYCLES   60
+
 extern void idtp9220_ap_mask_rxint_enable(bool enable);
 static __ref int mp2661_monitor_kthread(void *arg)
 {
@@ -2291,6 +2379,7 @@ static __ref int mp2661_monitor_kthread(void *arg)
     int capacity = -1;
     int rc = -1;
     union power_supply_propval ret = {0, };
+    u16 cycle_count = 0;
 
     sched_setscheduler(current, SCHED_FIFO, &param);
     pr_info("enter mp2661 monitor thread\n");
@@ -2354,6 +2443,18 @@ static __ref int mp2661_monitor_kthread(void *arg)
                 pr_err("Couldn't set charging enable rc=%d\n", rc);
             }
         }
+
+        if (0 == (cycle_count % TEMP_IN_STATE1_CHECK_CYCLES))
+        {
+            if ((BAT_TEMP_STATUS_NORMAL_STATE1 == chip->batt_temp_status)
+                && (POWER_SUPPLY_STATUS_CHARGING == chip->charging_status))
+            {
+                chip->batt_temp_in_normal_state1_count++;
+            }
+
+            cycle_count = 0;
+        }
+        cycle_count++;
 
         if(down_timeout(&chip->monitor_temp_sem, msecs_to_jiffies(MONITOR_WORK_DELAY_MS)))
         {
