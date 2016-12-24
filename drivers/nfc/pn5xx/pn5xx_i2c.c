@@ -471,6 +471,10 @@ static ssize_t pn5xx_dev_read(struct file *filp, char __user *buf,
     /* pn5xx seems to be slow in handling I2C read requests
      * so add 1ms delay after recv operation */
     udelay(1000);
+    if(0 != wake_lock_active(&pn5xx_dev->wake_lock))
+    {
+        wake_unlock(&pn5xx_dev->wake_lock);
+    }
     if (ret < 0) {
         pr_err("%s: i2c_master_recv returned %d\n", __func__, ret);
         return ret;
