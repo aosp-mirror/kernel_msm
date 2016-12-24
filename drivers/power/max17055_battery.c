@@ -79,6 +79,7 @@ struct max17055_chip {
 	struct max17055_platform_data *pdata;
 	struct work_struct work;
 	int    init_complete;
+	struct delayed_work register_dump_work;
 };
 
 static enum power_supply_property max17055_battery_props[] = {
@@ -265,6 +266,15 @@ static int max17055_registers_dump(struct max17055_chip *chip)
 
 	return ret;
 }
+
+static void max17055_dump_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct max17055_chip *chip = container_of(dwork, struct max17055_chip, register_dump_work);
+
+	max17055_registers_dump(chip);
+}
+
 static int max17055_get_temperature(struct max17055_chip *chip, int *temp)
 {
 	int ret;
@@ -636,7 +646,7 @@ static int max17055_write_volatile_reg(struct regmap *map, u8 reg, u32 value)
 
 	do {
 		ret = regmap_write(map, reg, value);
-		msleep(5);
+		mdelay(5);
 		regmap_read(map, reg, &read_value);
 		if (read_value != value) {
 			ret = -EIO;
@@ -948,7 +958,7 @@ static irqreturn_t max17055_thread_handler(int id, void *dev)
 	static int max_voltage_alert_num = 0;
 	static int min_voltage_alert_num = 0;
 
-	max17055_registers_dump(chip);
+	schedule_delayed_work(&chip->register_dump_work, round_jiffies_relative(msecs_to_jiffies(30)));
 	regmap_read(chip->regmap, MAX17055_Status, &val);
 	if (val) {
 		if (val & STATUS_BST_BIT)
@@ -1213,6 +1223,7 @@ static int max17055_probe(struct i2c_client *client,
 	}
 
 	INIT_WORK(&chip->work, max17055_init_worker);
+	INIT_DELAYED_WORK(&chip->register_dump_work, max17055_dump_work);
 
 	regmap_read(chip->regmap, MAX17055_UserMem1, &driver_version);
 	if (val & STATUS_POR_BIT)
@@ -1227,7 +1238,7 @@ static int max17055_probe(struct i2c_client *client,
 			dev_err(&client->dev, "failed: data logging sysfs register\n");
 			return ret;
 	}
-	max17055_registers_dump(chip);
+	schedule_delayed_work(&chip->register_dump_work, round_jiffies_relative(msecs_to_jiffies(10)));
 	pr_info("max17055_probe success\n");
 	return 0;
 }

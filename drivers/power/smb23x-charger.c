@@ -921,7 +921,7 @@ static int smb23x_get_prop_batt_voltage_avg(struct smb23x_chip *chip)
 	return DEFAULT_BATT_VOLTAGE;
 }
 
-#define DEFAULT_BATT_CAPACITY	50
+#define DEFAULT_BATT_CAPACITY	60
 static int smb23x_get_prop_batt_capacity(struct smb23x_chip *chip)
 {
 	union power_supply_propval ret = {0, };
