@@ -16627,7 +16627,8 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
     wlan_hdd_update_scan_rand_attrs((void *)&scanRequest, (void *)request,
                                     WLAN_HDD_HOST_SCAN);
 
-    if (!hdd_connIsConnected(station_ctx)) {
+    if (!hdd_connIsConnected(station_ctx) &&
+        (pHddCtx->cfg_ini->probe_req_ie_whitelist)) {
         if (pHddCtx->no_of_probe_req_ouis != 0) {
             scanRequest.voui = (struct vendor_oui *)vos_mem_malloc(
                                               pHddCtx->no_of_probe_req_ouis *
@@ -16640,12 +16641,11 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
             }
         }
 
-        if (pHddCtx->cfg_ini->probe_req_ie_whitelist)
-            wlan_hdd_fill_whitelist_ie_attrs(&scanRequest.ie_whitelist,
-                                             scanRequest.probe_req_ie_bitmap,
-                                             &scanRequest.num_vendor_oui,
-                                             scanRequest.voui,
-                                             pHddCtx);
+        wlan_hdd_fill_whitelist_ie_attrs(&scanRequest.ie_whitelist,
+                                         scanRequest.probe_req_ie_bitmap,
+                                         &scanRequest.num_vendor_oui,
+                                         scanRequest.voui,
+                                         pHddCtx);
     }
 
     vos_runtime_pm_prevent_suspend(pHddCtx->runtime_context.scan);
@@ -20410,7 +20410,8 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
         return -ENOTSUPP;
     }
 
-    if (!hdd_connIsConnected(station_ctx))
+    if (!hdd_connIsConnected(station_ctx) &&
+        pHddCtx->cfg_ini->probe_req_ie_whitelist)
         pPnoRequest = (tpSirPNOScanReq) vos_mem_malloc(sizeof(tSirPNOScanReq) +
                                     (pHddCtx->no_of_probe_req_ouis) *
                                     (sizeof(struct vendor_oui)));
@@ -20424,9 +20425,14 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
         return -ENOMEM;
     }
 
-    memset(pPnoRequest, 0, sizeof (tSirPNOScanReq) +
-                           (pHddCtx->no_of_probe_req_ouis) *
-                           (sizeof(struct vendor_oui)));
+    if (!hdd_connIsConnected(station_ctx) &&
+        pHddCtx->cfg_ini->probe_req_ie_whitelist)
+        memset(pPnoRequest, 0, sizeof (tSirPNOScanReq) +
+               (pHddCtx->no_of_probe_req_ouis) *
+               (sizeof(struct vendor_oui)));
+    else
+        memset(pPnoRequest, 0, sizeof (tSirPNOScanReq));
+
     pPnoRequest->enable = 1; /*Enable PNO */
     pPnoRequest->ucNetworksCount = request->n_match_sets;
     if ((!pPnoRequest->ucNetworksCount ) ||
