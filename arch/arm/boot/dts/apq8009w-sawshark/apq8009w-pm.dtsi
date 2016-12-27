@@ -91,6 +91,9 @@
 			qcom,step-charging-delta-voltage-mv = <200>;
 			qcom,stmr-expiration-count = <0>;
 			qcom,batt-temp-in-normal-state1-count = <0>;
+			qcom,batt-cv-chg-current-delta-ma = <170>;
+			qcom,batt-cv-chg-current-ma = <263>;
+			qcom,repeat-charging-detect-threshold-mv = <4350>;
 
 			status = "ok";
 		};
