@@ -505,15 +505,14 @@ static int try_rerun_apsd_for_hvdcp(struct smb_charger *chg)
 
 static const struct apsd_result *smblib_update_usb_type(struct smb_charger *chg)
 {
-	const struct apsd_result *apsd_result;
+	const struct apsd_result *apsd_result = smblib_get_apsd_result(chg);
 
 	/* if PD is active, APSD is disabled so won't have a valid result */
 	if (chg->pd_active) {
 		chg->usb_psy_desc.type = POWER_SUPPLY_TYPE_USB_PD;
-		return 0;
+		return apsd_result;
 	}
 
-	apsd_result = smblib_get_apsd_result(chg);
 	chg->usb_psy_desc.type = apsd_result->pst;
 	return apsd_result;
 }
@@ -2453,12 +2452,9 @@ irqreturn_t smblib_handle_usb_plugin(int irq, void *data)
 					rc);
 		}
 	} else {
-		if (chg->wa_flags & BOOST_BACK_WA) {
+		if (chg->wa_flags & BOOST_BACK_WA)
 			vote(chg->usb_suspend_votable,
 						BOOST_BACK_VOTER, false, 0);
-			vote(chg->dc_suspend_votable,
-						BOOST_BACK_VOTER, false, 0);
-		}
 
 		if (chg->dpdm_reg && regulator_is_enabled(chg->dpdm_reg)) {
 			smblib_dbg(chg, PR_MISC, "disabling DPDM regulator\n");
@@ -2866,39 +2862,39 @@ irqreturn_t smblib_handle_usb_typec_change(int irq, void *data)
 	struct smb_irq_data *irq_data = data;
 	struct smb_charger *chg = irq_data->parent_data;
 	int rc;
-	u8 stat;
+	u8 stat4, stat5;
 	bool debounce_done, sink_attached, legacy_cable;
 
 	/* WA - not when PD hard_reset WIP on cc2 in sink mode */
 	if (chg->cc2_sink_detach_flag == CC2_SINK_STD)
 		return IRQ_HANDLED;
 
-	rc = smblib_read(chg, TYPE_C_STATUS_4_REG, &stat);
+	rc = smblib_read(chg, TYPE_C_STATUS_4_REG, &stat4);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't read TYPE_C_STATUS_4 rc=%d\n", rc);
 		return IRQ_HANDLED;
 	}
-	smblib_dbg(chg, PR_REGISTER, "TYPE_C_STATUS_4 = 0x%02x\n", stat);
-	debounce_done = (bool)(stat & TYPEC_DEBOUNCE_DONE_STATUS_BIT);
-	sink_attached = (bool)(stat & UFP_DFP_MODE_STATUS_BIT);
 
-	rc = smblib_read(chg, TYPE_C_STATUS_5_REG, &stat);
+	rc = smblib_read(chg, TYPE_C_STATUS_5_REG, &stat5);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't read TYPE_C_STATUS_5 rc=%d\n", rc);
 		return IRQ_HANDLED;
 	}
-	smblib_dbg(chg, PR_REGISTER, "TYPE_C_STATUS_5 = 0x%02x\n", stat);
-	legacy_cable = (bool)(stat & TYPEC_LEGACY_CABLE_STATUS_BIT);
+
+	debounce_done = (bool)(stat4 & TYPEC_DEBOUNCE_DONE_STATUS_BIT);
+	sink_attached = (bool)(stat4 & UFP_DFP_MODE_STATUS_BIT);
+	legacy_cable = (bool)(stat5 & TYPEC_LEGACY_CABLE_STATUS_BIT);
 
 	smblib_handle_typec_debounce_done(chg,
 			debounce_done, sink_attached, legacy_cable);
 
-	power_supply_changed(chg->usb_psy);
-
-	if (stat & TYPEC_VBUS_ERROR_STATUS_BIT)
+	if (stat4 & TYPEC_VBUS_ERROR_STATUS_BIT)
 		smblib_dbg(chg, PR_INTERRUPT, "IRQ: %s vbus-error\n",
 			   irq_data->name);
 
+	power_supply_changed(chg->usb_psy);
+	smblib_dbg(chg, PR_REGISTER, "TYPE_C_STATUS_4 = 0x%02x\n", stat4);
+	smblib_dbg(chg, PR_REGISTER, "TYPE_C_STATUS_5 = 0x%02x\n", stat5);
 	return IRQ_HANDLED;
 }
 
@@ -2942,14 +2938,12 @@ irqreturn_t smblib_handle_switcher_power_ok(int irq, void *data)
 				get_effective_result(chg->usb_suspend_votable))
 		return IRQ_HANDLED;
 
-	if ((stat & USE_DCIN_BIT) &&
-				get_effective_result(chg->dc_suspend_votable))
+	if (stat & USE_DCIN_BIT)
 		return IRQ_HANDLED;
 
 	if (is_storming(&irq_data->storm_data)) {
-		smblib_dbg(chg, PR_MISC, "reverse boost detected; suspending input\n");
+		smblib_err(chg, "Reverse boost detected: suspending input\n");
 		vote(chg->usb_suspend_votable, BOOST_BACK_VOTER, true, 0);
-		vote(chg->dc_suspend_votable, BOOST_BACK_VOTER, true, 0);
 	}
 
 	return IRQ_HANDLED;

@@ -45,12 +45,6 @@
 	/delete-property/qcom,switch-source;
 };
 
-&eeprom0 {
-	/delete-property/cam_vio-supply;
-	/delete-property/cam_vana-supply;
-	/delete-property/cam_vdig-supply;
-	/delete-property/gpios;
-};
 
 &eeprom1 {
 	/delete-property/cam_vio-supply;
@@ -66,7 +60,6 @@
 };
 
 &cci {
-	/delete-node/qcom,camera@0;
 	/delete-node/qcom,camera@1;
 	/delete-node/qcom,camera@2;
 
@@ -199,9 +192,7 @@
 };
 
 &gfx_cpr {
-	reg =	<0x05061000 0x4000>,
-		    <0x00784000 0x1000>;
-	reg-names = "cpr_ctrl", "fuse_base";
+	status = "disabled";
 
 	/* disable aging and closed-loop */
 	/delete-property/vdd-supply;
@@ -212,6 +203,8 @@
 };
 
 &gfx_vreg {
+	status = "disabled";
+
 	/delete-property/qcom,cpr-aging-max-voltage-adjustment;
 	/delete-property/qcom,cpr-aging-ref-corner;
 	/delete-property/qcom,cpr-aging-ro-scaling-factor;
@@ -220,16 +213,9 @@
 };
 
 &soc {
-	/delete-node/qcom,csid@ca30000;
-	/delete-node/qcom,csid@ca30400;
-	/delete-node/qcom,csid@ca30800;
-	/delete-node/qcom,csid@ca30c00;
 	/delete-node/gpio_keys;
-	/delete-node/qcom,lpass@17300000;
-	/delete-node/qcom,mss@4080000;
 	/delete-node/qcom,bcl;
 	/delete-node/qcom,msm-thermal;
-	/delete-node/qcom,ssc@5c00000;
 	/delete-node/qcom,spss@1d00000;
 	/delete-node/qcom,wil6210;
 	/delete-node/qcom,rpm-smd;
@@ -263,21 +249,6 @@
 
 #include "msm-pmfalcon.dtsi"
 #include "msm-pm2falcon.dtsi"
+#include "msm-pmfalcon-rpm-regulator.dtsi"
+#include "msm-pm2falcon-rpm-regulator.dtsi"
 #include "msmfalcon-regulator.dtsi"
-
-/* dummy LCDB regulator nodes */
-&soc {
-	lcdb_ldo_vreg: regulator-vdisp-vreg {
-		compatible = "qcom,stub-regulator";
-		regulator-name = "lcdb_ldo";
-		regulator-min-microvolt = <4000000>;
-		regulator-max-microvolt = <6000000>;
-	};
-
-	lcdb_ncp_vreg: regulator-vdisn-vreg {
-		compatible = "qcom,stub-regulator";
-		regulator-name = "lcdb_ncp";
-		regulator-min-microvolt = <4000000>;
-		regulator-max-microvolt = <6000000>;
-	};
-};

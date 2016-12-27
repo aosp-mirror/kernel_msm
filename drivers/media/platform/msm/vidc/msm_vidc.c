@@ -318,6 +318,10 @@ err_invalid_input:
 static inline void populate_buf_info(struct buffer_info *binfo,
 			struct v4l2_buffer *b, u32 i)
 {
+	if (i >= VIDEO_MAX_PLANES) {
+		dprintk(VIDC_ERR, "%s: Invalid input\n", __func__);
+		return;
+	}
 	binfo->type = b->type;
 	binfo->fd[i] = b->m.planes[i].reserved[0];
 	binfo->buff_off[i] = b->m.planes[i].reserved[1];
@@ -685,7 +689,11 @@ int msm_vidc_prepare_buf(void *instance, struct v4l2_buffer *b)
 {
 	struct msm_vidc_inst *inst = instance;
 
-	if (!inst || !b || !valid_v4l2_buffer(b, inst))
+	if (!inst || !inst->core || !b || !valid_v4l2_buffer(b, inst))
+		return -EINVAL;
+
+	if (inst->state == MSM_VIDC_CORE_INVALID ||
+		inst->core->state == VIDC_CORE_INVALID)
 		return -EINVAL;
 
 	if (is_dynamic_output_buffer_mode(b, inst))
@@ -807,7 +815,11 @@ int msm_vidc_qbuf(void *instance, struct v4l2_buffer *b)
 	int rc = 0;
 	int i;
 
-	if (!inst || !b || !valid_v4l2_buffer(b, inst))
+	if (!inst || !inst->core || !b || !valid_v4l2_buffer(b, inst))
+		return -EINVAL;
+
+	if (inst->state == MSM_VIDC_CORE_INVALID ||
+		inst->core->state == VIDC_CORE_INVALID)
 		return -EINVAL;
 
 	rc = map_and_register_buf(inst, b);

@@ -112,6 +112,8 @@
 #define EMPTY_VOLT_v2_OFFSET		3
 #define VBATT_LOW_v2_WORD		16
 #define VBATT_LOW_v2_OFFSET		0
+#define RECHARGE_VBATT_THR_v2_WORD	16
+#define RECHARGE_VBATT_THR_v2_OFFSET	1
 #define FLOAT_VOLT_v2_WORD		16
 #define FLOAT_VOLT_v2_OFFSET		2
 
@@ -236,6 +238,9 @@ static struct fg_sram_param pmi8998_v2_sram_params[] = {
 	PARAM(RECHARGE_SOC_THR, RECHARGE_SOC_THR_v2_WORD,
 		RECHARGE_SOC_THR_v2_OFFSET, 1, 256, 100, 0, fg_encode_default,
 		NULL),
+	PARAM(RECHARGE_VBATT_THR, RECHARGE_VBATT_THR_v2_WORD,
+		RECHARGE_VBATT_THR_v2_OFFSET, 1, 1000, 15625, -2000,
+		fg_encode_voltage, NULL),
 	PARAM(ESR_TIMER_DISCHG_MAX, ESR_TIMER_DISCHG_MAX_WORD,
 		ESR_TIMER_DISCHG_MAX_OFFSET, 2, 1, 1, 0, fg_encode_default,
 		NULL),
@@ -545,7 +550,7 @@ static int fg_get_battery_esr(struct fg_chip *chip, int *val)
 		return rc;
 	}
 
-	if (chip->pmic_rev_id->rev4 < PMI8998_V2P0_REV4)
+	if (chip->wa_flags & PMI8998_V1_REV_WA)
 		temp = ((buf[0] & ESR_MSB_MASK) << 8) |
 			(buf[1] & ESR_LSB_MASK);
 	else
@@ -592,7 +597,7 @@ static int fg_get_battery_current(struct fg_chip *chip, int *val)
 		return rc;
 	}
 
-	if (chip->pmic_rev_id->rev4 < PMI8998_V2P0_REV4)
+	if (chip->wa_flags & PMI8998_V1_REV_WA)
 		temp = buf[0] << 8 | buf[1];
 	else
 		temp = buf[1] << 8 | buf[0];
@@ -619,7 +624,7 @@ static int fg_get_battery_voltage(struct fg_chip *chip, int *val)
 		return rc;
 	}
 
-	if (chip->pmic_rev_id->rev4 < PMI8998_V2P0_REV4)
+	if (chip->wa_flags & PMI8998_V1_REV_WA)
 		temp = buf[0] << 8 | buf[1];
 	else
 		temp = buf[1] << 8 | buf[0];
@@ -819,10 +824,10 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 		chip->bp.float_volt_uv = -EINVAL;
 	}
 
-	rc = of_property_read_u32(profile_node, "qcom,nom-batt-capacity-mah",
+	rc = of_property_read_u32(profile_node, "qcom,fastchg-current-ma",
 			&chip->bp.fastchg_curr_ma);
 	if (rc < 0) {
-		pr_err("battery nominal capacity unavailable, rc:%d\n", rc);
+		pr_err("battery fastchg current unavailable, rc:%d\n", rc);
 		chip->bp.fastchg_curr_ma = -EINVAL;
 	}
 
@@ -2395,9 +2400,9 @@ static int fg_hw_init(struct fg_chip *chip)
 		return rc;
 	}
 
-	/* This SRAM register is only present in v2.0 */
-	if (chip->pmic_rev_id->rev4 == PMI8998_V2P0_REV4 &&
-		chip->bp.float_volt_uv > 0) {
+	/* This SRAM register is only present in v2.0 and above */
+	if (!(chip->wa_flags & PMI8998_V1_REV_WA) &&
+					chip->bp.float_volt_uv > 0) {
 		fg_encode(chip->sp, FG_SRAM_FLOAT_VOLT,
 			chip->bp.float_volt_uv / 1000, buf);
 		rc = fg_sram_write(chip, chip->sp[FG_SRAM_FLOAT_VOLT].addr_word,
@@ -2472,6 +2477,23 @@ static int fg_hw_init(struct fg_chip *chip)
 		rc = fg_set_recharge_soc(chip, chip->dt.recharge_soc_thr);
 		if (rc < 0) {
 			pr_err("Error in setting recharge_soc, rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	/* This configuration is available only for pmicobalt v2.0 and above */
+	if (!(chip->wa_flags & PMI8998_V1_REV_WA) &&
+			chip->dt.recharge_volt_thr_mv > 0) {
+		fg_encode(chip->sp, FG_SRAM_RECHARGE_VBATT_THR,
+			chip->dt.recharge_volt_thr_mv, buf);
+		rc = fg_sram_write(chip,
+				chip->sp[FG_SRAM_RECHARGE_VBATT_THR].addr_word,
+				chip->sp[FG_SRAM_RECHARGE_VBATT_THR].addr_byte,
+				buf, chip->sp[FG_SRAM_RECHARGE_VBATT_THR].len,
+				FG_IMA_DEFAULT);
+		if (rc < 0) {
+			pr_err("Error in writing recharge_vbatt_thr, rc=%d\n",
+				rc);
 			return rc;
 		}
 	}
@@ -2935,6 +2957,7 @@ static int fg_parse_ki_coefficients(struct fg_chip *chip)
 
 #define DEFAULT_CUTOFF_VOLT_MV		3200
 #define DEFAULT_EMPTY_VOLT_MV		2800
+#define DEFAULT_RECHARGE_VOLT_MV	4250
 #define DEFAULT_CHG_TERM_CURR_MA	100
 #define DEFAULT_SYS_TERM_CURR_MA	-125
 #define DEFAULT_DELTA_SOC_THR		1
@@ -2990,12 +3013,17 @@ static int fg_parse_dt(struct fg_chip *chip)
 		if (chip->pmic_rev_id->rev4 < PMI8998_V2P0_REV4) {
 			chip->sp = pmi8998_v1_sram_params;
 			chip->alg_flags = pmi8998_v1_alg_flags;
+			chip->wa_flags |= PMI8998_V1_REV_WA;
 		} else if (chip->pmic_rev_id->rev4 == PMI8998_V2P0_REV4) {
 			chip->sp = pmi8998_v2_sram_params;
 			chip->alg_flags = pmi8998_v2_alg_flags;
 		} else {
 			return -EINVAL;
 		}
+		break;
+	case PMFALCON_SUBTYPE:
+		chip->sp = pmi8998_v2_sram_params;
+		chip->alg_flags = pmi8998_v2_alg_flags;
 		break;
 	default:
 		return -EINVAL;
@@ -3095,6 +3123,12 @@ static int fg_parse_dt(struct fg_chip *chip)
 		chip->dt.recharge_soc_thr = DEFAULT_RECHARGE_SOC_THR;
 	else
 		chip->dt.recharge_soc_thr = temp;
+
+	rc = of_property_read_u32(node, "qcom,fg-recharge-voltage", &temp);
+	if (rc < 0)
+		chip->dt.recharge_volt_thr_mv = DEFAULT_RECHARGE_VOLT_MV;
+	else
+		chip->dt.recharge_volt_thr_mv = temp;
 
 	rc = of_property_read_u32(node, "qcom,fg-rsense-sel", &temp);
 	if (rc < 0)

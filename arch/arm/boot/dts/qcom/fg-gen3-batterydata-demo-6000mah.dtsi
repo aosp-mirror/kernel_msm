@@ -10,51 +10,51 @@
  * GNU General Public License for more details.
  */
 
-qcom,qrd_msm8998_skuk_3000mah {
-	qcom,max-voltage-uv = <4400000>;
-	qcom,nom-batt-capacity-mah = <3000>;
-	qcom,batt-id-kohm = <68>;
-	qcom,battery-beta = <3380>;
-	qcom,battery-type = "qrd_msm8998_skuk_300mah";
-	qcom,checksum = <0x0F19>;
+qcom,demo_6000mah {
+	qcom,max-voltage-uv = <4350000>;
+	qcom,fg-cc-cv-threshold-mv = <4340>;
+	qcom,fastchg-current-ma = <6000>;
+	qcom,batt-id-kohm = <75>;
+	qcom,battery-beta = <3435>;
+	qcom,battery-type = "Demo_battery_6000mah";
 	qcom,fg-profile-data = [
-		 6F 1F B2 05
-		 6E 0A A3 FC
-		 8C 1D DB FD
-		 C2 12 AE 1D
-		 7E 18 00 23
-		 8D 45 B4 52
+		 2C 1F 3F FC
+		 E9 03 A1 FD
+		 58 1D FD F5
+		 27 12 2C 14
+		 3F 18 FF 22
+		 9B 45 A3 52
 		 55 00 00 00
-		 0F 00 00 00
-		 00 00 92 C5
-		 95 CD A0 CA
-		 1F 00 0C 00
-		 56 F2 C3 EC
-		 7B 06 27 F3
-		 02 01 FF 12
-		 1C DA 21 3A
-		 1C 09 40 40
-		 07 00 05 00
-		 AC 1F B4 05
-		 57 0A EF FC
-		 6A 1D 2E 00
-		 12 0B BA 14
-		 40 19 DC 22
-		 79 45 03 53
-		 53 00 00 00
 		 0E 00 00 00
-		 00 00 05 CC
-		 3A BB 24 CA
-		 1C 00 00 00
-		 56 F2 C3 EC
-		 A6 06 A2 F2
-		 96 06 C7 01
-		 8B EA CF 1A
-		 BA 33 08 33
+		 00 00 1C AC
+		 F7 CD 71 B5
+		 1A 00 0C 00
+		 3C EB 54 E4
+		 EC 05 7F FA
+		 76 05 F5 02
+		 CA F3 82 3A
+		 2A 09 40 40
+		 07 00 05 00
+		 58 1F 42 06
+		 85 03 35 F4
+		 4D 1D 37 F2
+		 23 0A 79 15
+		 B7 18 32 23
+		 26 45 72 53
+		 55 00 00 00
+		 0D 00 00 00
+		 00 00 13 CC
+		 03 00 98 BD
+		 16 00 00 00
+		 3C EB 54 E4
+		 9F FC A3 F3
+		 0F FC DF FA
+		 FF E5 A9 23
+		 CB 33 08 33
 		 07 10 00 00
-		 3A 0C 66 46
-		 1C 00 19 00
-		 98 01 0A FA
+		 81 0D 99 45
+		 16 00 19 00
+		 75 01 0A FA
 		 FF 00 00 00
 		 00 00 00 00
 		 00 00 00 00

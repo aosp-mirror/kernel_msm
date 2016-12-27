@@ -214,7 +214,6 @@ static struct smb_params v1_params = {
 
 #define STEP_CHARGING_MAX_STEPS	5
 struct smb_dt_props {
-	bool	no_battery;
 	int	fcc_ua;
 	int	usb_icl_ua;
 	int	otg_cl_ua;
@@ -226,7 +225,9 @@ struct smb_dt_props {
 	struct	device_node *revid_dev_node;
 	int	float_option;
 	int	chg_inhibit_thr_mv;
+	bool	no_battery;
 	bool	hvdcp_disable;
+	bool	auto_recharge_soc;
 };
 
 struct smb2 {
@@ -344,6 +345,8 @@ static int smb2_parse_dt(struct smb2 *chip)
 		return -EINVAL;
 	}
 
+	chip->dt.auto_recharge_soc = of_property_read_bool(node,
+						"qcom,auto-recharge-soc");
 	return 0;
 }
 
@@ -1169,12 +1172,14 @@ static int smb2_init_hw(struct smb2 *chip)
 		return rc;
 	}
 
-	/* disable Type-C factory mode */
+	/*
+	 * disable Type-C factory mode and stay in Attached.SRC state when VCONN
+	 * over-current happens
+	 */
 	rc = smblib_masked_write(chg, TYPE_C_CFG_REG,
-				 FACTORY_MODE_DETECTION_EN_BIT, 0);
+			FACTORY_MODE_DETECTION_EN_BIT | VCONN_OC_CFG_BIT, 0);
 	if (rc < 0) {
-		dev_err(chg->dev,
-			"Couldn't disable Type-C factory mode rc=%d\n", rc);
+		dev_err(chg->dev, "Couldn't configure Type-C rc=%d\n", rc);
 		return rc;
 	}
 
@@ -1295,6 +1300,28 @@ static int smb2_init_hw(struct smb2 *chip)
 		return rc;
 	}
 
+	if (chip->dt.auto_recharge_soc) {
+		rc = smblib_masked_write(chg, FG_UPDATE_CFG_2_SEL_REG,
+				SOC_LT_CHG_RECHARGE_THRESH_SEL_BIT |
+				VBT_LT_CHG_RECHARGE_THRESH_SEL_BIT,
+				VBT_LT_CHG_RECHARGE_THRESH_SEL_BIT);
+		if (rc < 0) {
+			dev_err(chg->dev, "Couldn't configure FG_UPDATE_CFG2_SEL_REG rc=%d\n",
+				rc);
+			return rc;
+		}
+	} else {
+		rc = smblib_masked_write(chg, FG_UPDATE_CFG_2_SEL_REG,
+				SOC_LT_CHG_RECHARGE_THRESH_SEL_BIT |
+				VBT_LT_CHG_RECHARGE_THRESH_SEL_BIT,
+				SOC_LT_CHG_RECHARGE_THRESH_SEL_BIT);
+		if (rc < 0) {
+			dev_err(chg->dev, "Couldn't configure FG_UPDATE_CFG2_SEL_REG rc=%d\n",
+				rc);
+			return rc;
+		}
+	}
+
 	return rc;
 }
 
@@ -1328,6 +1355,9 @@ static int smb2_setup_wa_flags(struct smb2 *chip)
 			chg->wa_flags |= QC_CHARGER_DETECTION_WA_BIT;
 		if (pmic_rev_id->rev4 == PMI8998_V2P0_REV4) /* PMI rev 2.0 */
 			chg->wa_flags |= TYPEC_CC2_REMOVAL_WA_BIT;
+		break;
+	case PMFALCON_SUBTYPE:
+		chip->chg.wa_flags |= BOOST_BACK_WA;
 		break;
 	default:
 		pr_err("PMIC subtype %d not supported\n",
@@ -1837,8 +1867,13 @@ static void smb2_shutdown(struct platform_device *pdev)
 	struct smb2 *chip = platform_get_drvdata(pdev);
 	struct smb_charger *chg = &chip->chg;
 
+	/* configure power role for UFP */
+	smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
+				TYPEC_POWER_ROLE_CMD_MASK, UFP_EN_CMD_BIT);
+
+	/* force HVDCP to 5V */
 	smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
-		HVDCP_AUTONOMOUS_MODE_EN_CFG_BIT, 0);
+				HVDCP_AUTONOMOUS_MODE_EN_CFG_BIT, 0);
 	smblib_write(chg, CMD_HVDCP_2_REG, FORCE_5V_BIT);
 }
 
