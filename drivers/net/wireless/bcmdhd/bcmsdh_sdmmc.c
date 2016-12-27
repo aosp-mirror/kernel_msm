@@ -1420,6 +1420,7 @@ sdioh_stop(sdioh_info_t *sd)
 		unregister interrupt with SDIO stack to stop the
 		polling
 	*/
+	int ret = -1;
 	if (sd->func[0]) {
 #if !defined(OOB_INTR_ONLY)
 		sdio_claim_host(sd->func[0]);
@@ -1434,6 +1435,11 @@ sdioh_stop(sdioh_info_t *sd)
 #endif
 		bcmsdh_oob_intr_set(sd->bcmsdh, FALSE);
 #endif /* !defined(OOB_INTR_ONLY) */
+
+		if ((ret = mmc_power_save_host(sd->func[0]->card->host))) {
+			sd_err(("%s Failed, error = %d\n", __FUNCTION__, ret));
+			return ret;
+		}
 	}
 	else
 		sd_err(("%s Failed\n", __FUNCTION__));
