@@ -35,8 +35,8 @@
 
 #define F(f, s, h, m, n) { (f), (s), (2 * (h) - 1), (m), (n) }
 
-static DEFINE_VDD_REGULATORS(vdd_dig, VDD_DIG_NUM, 1, vdd_corner, NULL);
-static DEFINE_VDD_REGULATORS(vdd_dig_ao, VDD_DIG_NUM, 1, vdd_corner, NULL);
+static DEFINE_VDD_REGULATORS(vdd_dig, VDD_DIG_NUM, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_dig_ao, VDD_DIG_NUM, 1, vdd_corner);
 
 enum {
 	P_CORE_BI_PLL_TEST_SE,
@@ -705,6 +705,7 @@ static const struct freq_tbl ftbl_hmss_ahb_clk_src[] = {
 	F(19200000, P_XO, 1, 0, 0),
 	F(37500000, P_GPLL0_OUT_MAIN, 16, 0, 0),
 	F(75000000, P_GPLL0_OUT_MAIN, 8, 0, 0),
+	F(100000000, P_GPLL0_OUT_MAIN, 6, 0, 0),
 	{ }
 };
 
@@ -820,7 +821,7 @@ static const struct freq_tbl ftbl_qspi_ser_clk_src[] = {
 	F(19200000, P_XO, 1, 0, 0),
 	F(80200000, P_PLL1_EARLY_DIV_CLK_SRC, 5, 0, 0),
 	F(160400000, P_GPLL1_OUT_MAIN, 5, 0, 0),
-	F(320800000, P_GPLL1_OUT_MAIN, 2.5, 0, 0),
+	F(267333333, P_GPLL1_OUT_MAIN, 3, 0, 0),
 	{ }
 };
 
@@ -838,7 +839,7 @@ static struct clk_rcg2 qspi_ser_clk_src = {
 		VDD_DIG_FMAX_MAP3(
 				LOWER, 80200000,
 				LOW, 160400000,
-				NOMINAL, 320800000),
+				NOMINAL, 267333333),
 	},
 };
 
@@ -876,6 +877,7 @@ static const struct freq_tbl ftbl_sdcc1_ice_core_clk_src[] = {
 	F(75000000, P_PLL0_EARLY_DIV_CLK_SRC, 4, 0, 0),
 	F(150000000, P_GPLL0_OUT_MAIN, 4, 0, 0),
 	F(200000000, P_GPLL0_OUT_MAIN, 3, 0, 0),
+	F(300000000, P_GPLL0_OUT_MAIN, 2, 0, 0),
 	{ }
 };
 
@@ -905,6 +907,7 @@ static const struct freq_tbl ftbl_sdcc2_apps_clk_src[] = {
 	F(50000000, P_PLL0_EARLY_DIV_CLK_SRC, 6, 0, 0),
 	F(100000000, P_GPLL0_OUT_MAIN, 6, 0, 0),
 	F(192000000, P_GPLL4_OUT_MAIN, 8, 0, 0),
+	F(200000000, P_GPLL0_OUT_MAIN, 3, 0, 0),
 	{ }
 };
 
@@ -929,6 +932,7 @@ static struct clk_rcg2 sdcc2_apps_clk_src = {
 static const struct freq_tbl ftbl_ufs_axi_clk_src[] = {
 	F(50000000, P_PLL0_EARLY_DIV_CLK_SRC, 6, 0, 0),
 	F(100000000, P_GPLL0_OUT_MAIN, 6, 0, 0),
+	F(150000000, P_GPLL0_OUT_MAIN, 4, 0, 0),
 	F(200000000, P_GPLL0_OUT_MAIN, 3, 0, 0),
 	F(240000000, P_GPLL0_OUT_MAIN, 2.5, 0, 0),
 	{ }
@@ -1045,12 +1049,18 @@ static struct clk_rcg2 usb20_master_clk_src = {
 	},
 };
 
+static const struct freq_tbl ftbl_usb20_mock_utmi_clk_src[] = {
+	F(19200000, P_XO, 1, 0, 0),
+	F(60000000, P_GPLL0_OUT_MAIN, 10, 0, 0),
+	{ }
+};
+
 static struct clk_rcg2 usb20_mock_utmi_clk_src = {
 	.cmd_rcgr = 0x2f024,
 	.mnd_width = 0,
 	.hid_width = 5,
 	.parent_map = gcc_parent_map_0,
-	.freq_tbl = ftbl_hmss_rbcpr_clk_src,
+	.freq_tbl = ftbl_usb20_mock_utmi_clk_src,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "usb20_mock_utmi_clk_src",
 		.parent_names = gcc_parent_names_0,
@@ -2201,7 +2211,7 @@ static struct clk_branch gcc_ufs_axi_hw_ctl_clk = {
 			},
 			.num_parents = 1,
 			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_hw_ctl_ops,
+			.ops = &clk_branch2_ops,
 		},
 	},
 };
@@ -2249,7 +2259,7 @@ static struct clk_branch gcc_ufs_ice_core_hw_ctl_clk = {
 			},
 			.num_parents = 1,
 			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_hw_ctl_ops,
+			.ops = &clk_branch2_ops,
 		},
 	},
 };
@@ -2284,7 +2294,7 @@ static struct clk_branch gcc_ufs_phy_aux_hw_ctl_clk = {
 			},
 			.num_parents = 1,
 			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_hw_ctl_ops,
+			.ops = &clk_branch2_ops,
 		},
 	},
 };
@@ -2355,7 +2365,7 @@ static struct clk_branch gcc_ufs_unipro_core_hw_ctl_clk = {
 			},
 			.num_parents = 1,
 			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_hw_ctl_ops,
+			.ops = &clk_branch2_ops,
 		},
 	},
 };
@@ -2753,9 +2763,8 @@ MODULE_DEVICE_TABLE(of, gcc_falcon_match_table);
 
 static int gcc_falcon_probe(struct platform_device *pdev)
 {
-	int ret = 0, i;
+	int ret = 0;
 	struct regmap *regmap;
-	struct clk *clk;
 
 	regmap = qcom_cc_map(pdev, &gcc_falcon_desc);
 	if (IS_ERR(regmap))

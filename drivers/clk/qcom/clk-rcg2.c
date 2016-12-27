@@ -20,6 +20,7 @@
 #include <linux/clk-provider.h>
 #include <linux/delay.h>
 #include <linux/regmap.h>
+#include <linux/rational.h>
 #include <linux/math64.h>
 
 #include <asm/div64.h>
@@ -232,9 +233,10 @@ static int _freq_tbl_determine_rate(struct clk_hw *hw,
 		const struct freq_tbl *f, struct clk_rate_request *req)
 {
 	unsigned long clk_flags, rate = req->rate;
+	struct clk_rate_request parent_req = { };
 	struct clk_hw *p;
 	struct clk_rcg2 *rcg = to_clk_rcg2(hw);
-	int index;
+	int index, ret = 0;
 
 	f = qcom_find_freq(f, rate);
 	if (!f)
@@ -264,6 +266,21 @@ static int _freq_tbl_determine_rate(struct clk_hw *hw,
 	req->best_parent_hw = p;
 	req->best_parent_rate = rate;
 	req->rate = f->freq;
+
+	if (f->src_freq != FIXED_FREQ_SRC) {
+		rate = parent_req.rate = f->src_freq;
+		parent_req.best_parent_hw = p;
+		ret = __clk_determine_rate(p, &parent_req);
+		if (ret)
+			return ret;
+
+		ret = clk_set_rate(p->clk, parent_req.rate);
+		if (ret) {
+			pr_err("Failed set rate(%lu) on parent for non-fixed source\n",
+							parent_req.rate);
+			return ret;
+		}
+	}
 
 	return 0;
 }
@@ -317,6 +334,53 @@ static int clk_rcg2_configure(struct clk_rcg2 *rcg, const struct freq_tbl *f)
 	return update_config(rcg);
 }
 
+static void clk_rcg2_list_registers(struct seq_file *f, struct clk_hw *hw)
+{
+	struct clk_rcg2 *rcg = to_clk_rcg2(hw);
+	int i = 0, size = 0, val;
+
+	static struct clk_register_data data[] = {
+		{"CMD_RCGR", 0x0},
+		{"CFG_RCGR", 0x4},
+	};
+
+	static struct clk_register_data data1[] = {
+		{"CMD_RCGR", 0x0},
+		{"CFG_RCGR", 0x4},
+		{"M_VAL", 0x8},
+		{"N_VAL", 0xC},
+		{"D_VAL", 0x10},
+	};
+
+	if (rcg->mnd_width) {
+		size = ARRAY_SIZE(data1);
+		for (i = 0; i < size; i++) {
+			regmap_read(rcg->clkr.regmap, (rcg->cmd_rcgr +
+					data1[i].offset), &val);
+			seq_printf(f, "%20s: 0x%.8x\n",	data1[i].name, val);
+		}
+	} else {
+		size = ARRAY_SIZE(data);
+		for (i = 0; i < size; i++) {
+			regmap_read(rcg->clkr.regmap, (rcg->cmd_rcgr +
+				data[i].offset), &val);
+			seq_printf(f, "%20s: 0x%.8x\n",	data[i].name, val);
+		}
+	}
+}
+
+/* Return the nth supported frequency for a given clock. */
+static long clk_rcg2_list_rate(struct clk_hw *hw, unsigned n,
+		unsigned long fmax)
+{
+	struct clk_rcg2 *rcg = to_clk_rcg2(hw);
+
+	if (!rcg->freq_tbl)
+		return -ENXIO;
+
+	return (rcg->freq_tbl + n)->freq;
+}
+
 static int __clk_rcg2_set_rate(struct clk_hw *hw, unsigned long rate)
 {
 	struct clk_rcg2 *rcg = to_clk_rcg2(hw);
@@ -351,6 +415,8 @@ const struct clk_ops clk_rcg2_ops = {
 	.determine_rate = clk_rcg2_determine_rate,
 	.set_rate = clk_rcg2_set_rate,
 	.set_rate_and_parent = clk_rcg2_set_rate_and_parent,
+	.list_rate = clk_rcg2_list_rate,
+	.list_registers = clk_rcg2_list_registers,
 };
 EXPORT_SYMBOL_GPL(clk_rcg2_ops);
 
@@ -557,6 +623,7 @@ const struct clk_ops clk_edp_pixel_ops = {
 	.set_rate = clk_edp_pixel_set_rate,
 	.set_rate_and_parent = clk_edp_pixel_set_rate_and_parent,
 	.determine_rate = clk_edp_pixel_determine_rate,
+	.list_registers = clk_rcg2_list_registers,
 };
 EXPORT_SYMBOL_GPL(clk_edp_pixel_ops);
 
@@ -615,6 +682,7 @@ const struct clk_ops clk_byte_ops = {
 	.set_rate = clk_byte_set_rate,
 	.set_rate_and_parent = clk_byte_set_rate_and_parent,
 	.determine_rate = clk_byte_determine_rate,
+	.list_registers = clk_rcg2_list_registers,
 };
 EXPORT_SYMBOL_GPL(clk_byte_ops);
 
@@ -685,6 +753,7 @@ const struct clk_ops clk_byte2_ops = {
 	.set_rate = clk_byte2_set_rate,
 	.set_rate_and_parent = clk_byte2_set_rate_and_parent,
 	.determine_rate = clk_byte2_determine_rate,
+	.list_registers = clk_rcg2_list_registers,
 };
 EXPORT_SYMBOL_GPL(clk_byte2_ops);
 
@@ -775,8 +844,69 @@ const struct clk_ops clk_pixel_ops = {
 	.set_rate = clk_pixel_set_rate,
 	.set_rate_and_parent = clk_pixel_set_rate_and_parent,
 	.determine_rate = clk_pixel_determine_rate,
+	.list_registers = clk_rcg2_list_registers,
 };
 EXPORT_SYMBOL_GPL(clk_pixel_ops);
+
+static int clk_dp_set_rate(struct clk_hw *hw, unsigned long rate,
+			unsigned long parent_rate)
+{
+	struct clk_rcg2 *rcg = to_clk_rcg2(hw);
+	struct freq_tbl f = { 0 };
+	unsigned long src_rate;
+	unsigned long num, den;
+	u32 mask = BIT(rcg->hid_width) - 1;
+	u32 hid_div;
+
+	src_rate = clk_get_rate(clk_hw_get_parent(hw)->clk);
+	if (src_rate <= 0) {
+		pr_err("Invalid RCG parent rate\n");
+		return -EINVAL;
+	}
+
+	rational_best_approximation(src_rate, rate,
+			(unsigned long)(1 << 16) - 1,
+			(unsigned long)(1 << 16) - 1, &den, &num);
+
+	if (!num || !den) {
+		pr_err("Invalid MN values derived for requested rate %lu\n",
+							rate);
+		return -EINVAL;
+	}
+
+	regmap_read(rcg->clkr.regmap, rcg->cmd_rcgr + CFG_REG, &hid_div);
+	f.pre_div = hid_div;
+	f.pre_div >>= CFG_SRC_DIV_SHIFT;
+	f.pre_div &= mask;
+
+	if (num == den) {
+		f.m = 0;
+		f.n = 0;
+	} else {
+		f.m = num;
+		f.n = den;
+	}
+
+	return clk_rcg2_configure(rcg, &f);
+}
+
+static int clk_dp_set_rate_and_parent(struct clk_hw *hw, unsigned long rate,
+		unsigned long parent_rate, u8 index)
+{
+	return clk_dp_set_rate(hw, rate, parent_rate);
+}
+
+const struct clk_ops clk_dp_ops = {
+	.is_enabled = clk_rcg2_is_enabled,
+	.get_parent = clk_rcg2_get_parent,
+	.set_parent = clk_rcg2_set_parent,
+	.recalc_rate = clk_rcg2_recalc_rate,
+	.set_rate = clk_dp_set_rate,
+	.set_rate_and_parent = clk_dp_set_rate_and_parent,
+	.determine_rate = clk_pixel_determine_rate,
+	.list_registers = clk_rcg2_list_registers,
+};
+EXPORT_SYMBOL_GPL(clk_dp_ops);
 
 static int clk_gfx3d_determine_rate(struct clk_hw *hw,
 				    struct clk_rate_request *req)
@@ -864,6 +994,7 @@ const struct clk_ops clk_gfx3d_ops = {
 	.set_rate = clk_gfx3d_set_rate,
 	.set_rate_and_parent = clk_gfx3d_set_rate_and_parent,
 	.determine_rate = clk_gfx3d_determine_rate,
+	.list_registers = clk_rcg2_list_registers,
 };
 EXPORT_SYMBOL_GPL(clk_gfx3d_ops);
 
@@ -944,5 +1075,7 @@ const struct clk_ops clk_gfx3d_src_ops = {
 	.set_rate = clk_gfx3d_set_rate,
 	.set_rate_and_parent = clk_gfx3d_src_set_rate_and_parent,
 	.determine_rate = clk_gfx3d_src_determine_rate,
+	.list_rate = clk_rcg2_list_rate,
+	.list_registers = clk_rcg2_list_registers,
 };
 EXPORT_SYMBOL_GPL(clk_gfx3d_src_ops);

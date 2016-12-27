@@ -36,7 +36,7 @@
 
 struct msm_vidc_drv *vidc_driver;
 
-uint32_t msm_vidc_pwr_collapse_delay = 2000;
+uint32_t msm_vidc_pwr_collapse_delay = 3000;
 
 static inline struct msm_vidc_inst *get_vidc_inst(struct file *filp, void *fh)
 {
@@ -137,12 +137,6 @@ int msm_v4l2_reqbufs(struct file *file, void *fh,
 				struct v4l2_requestbuffers *b)
 {
 	struct msm_vidc_inst *vidc_inst = get_vidc_inst(file, fh);
-	int rc = 0;
-	if (!b->count)
-		rc = msm_vidc_release_buffers(vidc_inst, b->type);
-	if (rc)
-		dprintk(VIDC_WARN,
-			"Failed in %s for release output buffers\n", __func__);
 	return msm_vidc_reqbufs((void *)vidc_inst, b);
 }
 

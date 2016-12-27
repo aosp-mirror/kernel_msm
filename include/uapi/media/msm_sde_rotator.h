@@ -88,7 +88,7 @@ struct msm_sde_rotator_fence {
 
 /*
  * This control Id indicates this context is associated with the
- * secure camera
+ * secure camera.
  */
 #define V4L2_CID_SDE_ROTATOR_SECURE_CAMERA	(V4L2_CID_USER_BASE + 0x2000)
 

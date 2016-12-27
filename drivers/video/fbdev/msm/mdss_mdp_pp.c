@@ -2190,7 +2190,7 @@ static int pp_hist_setup(u32 *op, u32 block, struct mdss_mdp_mixer *mix,
 	if (hist_info->col_en)
 		mdss_mdp_hist_irq_set_mask(intr_mask << hist_info->intr_shift);
 	/*
-	 * Starting from msmcobalt, the histogram enable bit has been moved
+	 * Starting from msm8998, the histogram enable bit has been moved
 	 * from DSPP opmode register to PA_HIST opmode register, hence we need
 	 * to update the histogram enable bit differently based on mdss version.
 	 * If HIST pp_set_config is defined, we will enable or disable the
@@ -2519,7 +2519,9 @@ static int pp_dspp_setup(u32 disp_num, struct mdss_mdp_mixer *mixer)
 					DSPP);
 	}
 
-	pp_dspp_opmode_config(ctl, dspp_num, pp_sts, mdata->mdp_rev, &opmode);
+	if (pp_sts != NULL)
+		pp_dspp_opmode_config(ctl, dspp_num, pp_sts, mdata->mdp_rev,
+					&opmode);
 
 	if (ad_hw) {
 		mutex_lock(&ad->lock);
@@ -2906,7 +2908,7 @@ int mdss_mdp_pp_resume(struct msm_fb_data_type *mfd)
 			mfd->index);
 		return 0;
 	} else if (ret || !ad) {
-		pr_err("Failed to get ad info: ret = %d, ad = 0x%p.\n",
+		pr_err("Failed to get ad info: ret = %d, ad = 0x%pK\n",
 			ret, ad);
 		return ret;
 	}
@@ -3250,7 +3252,7 @@ static int pp_ad_calc_bl(struct msm_fb_data_type *mfd, int bl_in, int *bl_out,
 			mfd->index);
 		return 0;
 	} else if (ret || !ad) {
-		pr_err("Failed to get ad info: ret = %d, ad = 0x%p.\n",
+		pr_err("Failed to get ad info: ret = %d, ad = 0x%pK\n",
 			ret, ad);
 		return ret;
 	}
@@ -5754,7 +5756,7 @@ static int pp_ad_invalidate_input(struct msm_fb_data_type *mfd)
 			mfd->index);
 		return 0;
 	} else if (ret || !ad) {
-		pr_err("Failed to get ad info: ret = %d, ad = 0x%p.\n",
+		pr_err("Failed to get ad info: ret = %d, ad = 0x%pK\n",
 			ret, ad);
 		return ret;
 	}
@@ -5789,7 +5791,7 @@ int mdss_mdp_ad_config(struct msm_fb_data_type *mfd,
 			mfd->index);
 		return ret;
 	} else if (ret || !ad) {
-		pr_err("Failed to get ad info: ret = %d, ad = 0x%p.\n",
+		pr_err("Failed to get ad info: ret = %d, ad = 0x%pK\n",
 			ret, ad);
 		return ret;
 	}
@@ -5929,7 +5931,7 @@ int mdss_mdp_ad_input(struct msm_fb_data_type *mfd,
 			mfd->index);
 		return ret;
 	} else if (ret || !ad) {
-		pr_err("Failed to get ad info: ret = %d, ad = 0x%p.\n",
+		pr_err("Failed to get ad info: ret = %d, ad = 0x%pK\n",
 			ret, ad);
 		return ret;
 	}
@@ -6298,7 +6300,7 @@ static int mdss_mdp_ad_ipc_reset(struct msm_fb_data_type *mfd)
 			mfd->index);
 		return 0;
 	} else if (ret || !ad) {
-		pr_err("Failed to get ad info: ret = %d, ad = 0x%p.\n",
+		pr_err("Failed to get ad info: ret = %d, ad = 0x%pK\n",
 			ret, ad);
 		return ret;
 	}
@@ -6339,7 +6341,7 @@ static int mdss_mdp_ad_setup(struct msm_fb_data_type *mfd)
 			mfd->index);
 		return 0;
 	} else if (ret || !ad) {
-		pr_err("Failed to get ad info: ret = %d, ad = 0x%p.\n",
+		pr_err("Failed to get ad info: ret = %d, ad = 0x%pK\n",
 			ret, ad);
 		return ret;
 	}
@@ -6984,9 +6986,6 @@ static int is_valid_calib_addr(void *addr, u32 operation)
 	int ret = 0;
 	char __iomem *ptr = addr;
 	char __iomem *mixer_base = mdss_res->mixer_intf->base;
-	char __iomem *rgb_base   = mdss_res->rgb_pipes->base;
-	char __iomem *dma_base   = mdss_res->dma_pipes->base;
-	char __iomem *vig_base   = mdss_res->vig_pipes->base;
 	char __iomem *ctl_base   = mdss_res->ctl_off->base;
 	char __iomem *dspp_base  = mdss_res->mixer_intf->dspp_base;
 
@@ -7018,17 +7017,20 @@ static int is_valid_calib_addr(void *addr, u32 operation)
 			if (ret)
 				goto valid_addr;
 		}
-		if (ptr >= vig_base) {
+		if (mdss_res->vig_pipes &&
+		    ptr >= mdss_res->vig_pipes->base) {
 			ret = is_valid_calib_vig_addr(ptr);
 			if (ret)
 				goto valid_addr;
 		}
-		if (ptr >= rgb_base) {
+		if (mdss_res->rgb_pipes &&
+		    ptr >= mdss_res->rgb_pipes->base) {
 			ret = is_valid_calib_rgb_addr(ptr);
 			if (ret)
 				goto valid_addr;
 		}
-		if (ptr >= dma_base) {
+		if (mdss_res->dma_pipes &&
+		    ptr >= mdss_res->dma_pipes->base) {
 			ret = is_valid_calib_dma_addr(ptr);
 			if (ret)
 				goto valid_addr;

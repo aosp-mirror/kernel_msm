@@ -250,7 +250,8 @@ static int clk_smd_rpm_set_rate_sleep(struct clk_smd_rpm *r,
 static void to_active_sleep(struct clk_smd_rpm *r, unsigned long rate,
 			    unsigned long *active, unsigned long *sleep)
 {
-	*active = rate;
+	/* Convert the rate (hz) to khz */
+	*active = DIV_ROUND_UP(rate, 1000);
 
 	/*
 	 * Active-only clocks don't care what the rate is during sleep. So,
@@ -533,9 +534,9 @@ DEFINE_CLK_SMD_RPM(msm8996, ipa_clk, ipa_a_clk, QCOM_SMD_RPM_IPA_CLK, 0);
 DEFINE_CLK_SMD_RPM(msm8996, ce1_clk, ce1_a_clk, QCOM_SMD_RPM_CE_CLK, 0);
 DEFINE_CLK_SMD_RPM_BRANCH(msm8996, cxo, cxo_a, QCOM_SMD_RPM_MISC_CLK, 0, 19200000);
 DEFINE_CLK_SMD_RPM_BRANCH(msm8996, aggre1_noc_clk, aggre1_noc_a_clk,
-			  QCOM_SMD_RPM_AGGR_CLK, 0, 1000);
-DEFINE_CLK_SMD_RPM_BRANCH(msm8996, aggre2_noc_clk, aggre2_noc_a_clk,
 			  QCOM_SMD_RPM_AGGR_CLK, 1, 1000);
+DEFINE_CLK_SMD_RPM_BRANCH(msm8996, aggre2_noc_clk, aggre2_noc_a_clk,
+			  QCOM_SMD_RPM_AGGR_CLK, 2, 1000);
 DEFINE_CLK_SMD_RPM_QDSS(msm8996, qdss_clk, qdss_a_clk, QCOM_SMD_RPM_MISC_CLK, 1);
 DEFINE_CLK_SMD_RPM_XO_BUFFER(msm8996, bb_clk1, bb_clk1_a, 1);
 DEFINE_CLK_SMD_RPM_XO_BUFFER(msm8996, bb_clk2, bb_clk2_a, 2);
@@ -544,7 +545,7 @@ DEFINE_CLK_SMD_RPM_XO_BUFFER(msm8996, rf_clk2, rf_clk2_a, 5);
 DEFINE_CLK_SMD_RPM_XO_BUFFER(msm8996, ln_bb_clk, ln_bb_a_clk, 8);
 DEFINE_CLK_SMD_RPM_XO_BUFFER(msm8996, div_clk1, div_clk1_ao, 0xb);
 DEFINE_CLK_SMD_RPM_XO_BUFFER(msm8996, div_clk2, div_clk2_ao, 0xc);
-DEFINE_CLK_SMD_RPM_XO_BUFFER(msm8996, div_clk3, div_clk3_ao, 0xc);
+DEFINE_CLK_SMD_RPM_XO_BUFFER(msm8996, div_clk3, div_clk3_ao, 0xd);
 DEFINE_CLK_SMD_RPM_XO_BUFFER_PINCTRL(msm8996, bb_clk1_pin, bb_clk1_a_pin, 1);
 DEFINE_CLK_SMD_RPM_XO_BUFFER_PINCTRL(msm8996, bb_clk2_pin, bb_clk2_a_pin, 2);
 DEFINE_CLK_SMD_RPM_XO_BUFFER_PINCTRL(msm8996, rf_clk1_pin, rf_clk1_a_pin, 4);
@@ -613,13 +614,13 @@ DEFINE_CLK_SMD_RPM(msmfalcon, aggre2_noc_clk, aggre2_noc_a_clk,
 						QCOM_SMD_RPM_AGGR_CLK, 2);
 DEFINE_CLK_SMD_RPM_QDSS(msmfalcon, qdss_clk, qdss_a_clk,
 						QCOM_SMD_RPM_MISC_CLK, 1);
-DEFINE_CLK_SMD_RPM_XO_BUFFER(msmfalcon, rf_clk2, rf_clk2_ao, 5);
+DEFINE_CLK_SMD_RPM_XO_BUFFER(msmfalcon, rf_clk1, rf_clk1_ao, 4);
 DEFINE_CLK_SMD_RPM_XO_BUFFER(msmfalcon, div_clk1, div_clk1_ao, 0xb);
 DEFINE_CLK_SMD_RPM_XO_BUFFER(msmfalcon, ln_bb_clk1, ln_bb_clk1_ao, 0x1);
 DEFINE_CLK_SMD_RPM_XO_BUFFER(msmfalcon, ln_bb_clk2, ln_bb_clk2_ao, 0x2);
 DEFINE_CLK_SMD_RPM_XO_BUFFER(msmfalcon, ln_bb_clk3, ln_bb_clk3_ao, 0x3);
 
-DEFINE_CLK_SMD_RPM_XO_BUFFER_PINCTRL(msmfalcon, rf_clk2_pin, rf_clk2_a_pin, 5);
+DEFINE_CLK_SMD_RPM_XO_BUFFER_PINCTRL(msmfalcon, rf_clk1_pin, rf_clk1_ao_pin, 4);
 DEFINE_CLK_SMD_RPM_XO_BUFFER_PINCTRL(msmfalcon, ln_bb_clk1_pin,
 							ln_bb_clk1_pin_ao, 0x1);
 DEFINE_CLK_SMD_RPM_XO_BUFFER_PINCTRL(msmfalcon, ln_bb_clk2_pin,
@@ -656,8 +657,10 @@ static struct clk_hw *msmfalcon_clks[] = {
 	[RPM_BIMC_A_CLK]	= &msmfalcon_bimc_a_clk.hw,
 	[RPM_QDSS_CLK]		= &msmfalcon_qdss_clk.hw,
 	[RPM_QDSS_A_CLK]	= &msmfalcon_qdss_a_clk.hw,
-	[RPM_RF_CLK2_PIN]	= &msmfalcon_rf_clk2_pin.hw,
-	[RPM_RF_CLK2_A_PIN]	= &msmfalcon_rf_clk2_a_pin.hw,
+	[RPM_RF_CLK1]		= &msmfalcon_rf_clk1.hw,
+	[RPM_RF_CLK1_A]		= &msmfalcon_rf_clk1_ao.hw,
+	[RPM_RF_CLK1_PIN]	= &msmfalcon_rf_clk1_pin.hw,
+	[RPM_RF_CLK1_A_PIN]	= &msmfalcon_rf_clk1_ao_pin.hw,
 	[RPM_AGGR2_NOC_CLK]	= &msmfalcon_aggre2_noc_clk.hw,
 	[RPM_AGGR2_NOC_A_CLK]	= &msmfalcon_aggre2_noc_a_clk.hw,
 	[RPM_CNOC_CLK]		= &msmfalcon_cnoc_clk.hw,

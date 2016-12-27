@@ -641,7 +641,8 @@ static void sde_hw_rotator_setup_fetchengine(struct sde_hw_rotator_context *ctx,
 			((rot->highest_bank & 0x3) << 18));
 
 	/* setup source buffer plane security status */
-	if (flags & SDE_ROT_FLAG_SECURE_OVERLAY_SESSION) {
+	if (flags & (SDE_ROT_FLAG_SECURE_OVERLAY_SESSION |
+			SDE_ROT_FLAG_SECURE_CAMERA_SESSION)) {
 		SDE_REGDMA_WRITE(wrptr, ROT_SSPP_SRC_ADDR_SW_STATUS, 0xF);
 		ctx->is_secure = true;
 	} else {
@@ -739,7 +740,8 @@ static void sde_hw_rotator_setup_wbengine(struct sde_hw_rotator_context *ctx,
 	SDE_REGDMA_WRITE(wrptr, ROT_WB_OUT_XY,
 			cfg->dst_rect->x | (cfg->dst_rect->y << 16));
 
-	if (flags & SDE_ROT_FLAG_SECURE_OVERLAY_SESSION)
+	if (flags & (SDE_ROT_FLAG_SECURE_OVERLAY_SESSION |
+			SDE_ROT_FLAG_SECURE_CAMERA_SESSION))
 		SDE_REGDMA_WRITE(wrptr, ROT_WB_DST_ADDR_SW_STATUS, 0x1);
 	else
 		SDE_REGDMA_WRITE(wrptr, ROT_WB_DST_ADDR_SW_STATUS, 0);
@@ -1131,14 +1133,10 @@ static int sde_hw_rotator_swts_create(struct sde_hw_rotator *rot)
 	int rc = 0;
 	struct ion_handle *handle;
 	struct sde_mdp_img_data *data;
+	struct sde_rot_data_type *mdata = sde_rot_get_mdata();
 	u32 bufsize = sizeof(int) * SDE_HW_ROT_REGDMA_TOTAL_CTX * 2;
 
-	rot->iclient = msm_ion_client_create(rot->pdev->name);
-	if (IS_ERR_OR_NULL(rot->iclient)) {
-		SDEROT_ERR("msm_ion_client_create() return error (%p)\n",
-				rot->iclient);
-		return -EINVAL;
-	}
+	rot->iclient = mdata->iclient;
 
 	handle = ion_alloc(rot->iclient, bufsize, SZ_4K,
 			ION_HEAP(ION_SYSTEM_HEAP_ID), 0);
@@ -1502,7 +1500,8 @@ static void sde_hw_rotator_free_rotctx(struct sde_hw_rotator *rot,
 		ctx->q_id, ctx->timestamp,
 		atomic_read(&ctx->hwres->num_active));
 
-	rot->rotCtx[ctx->q_id][sde_hw_rotator_get_regdma_ctxidx(ctx)] = NULL;
+	/* Clear rotator context from lookup purpose */
+	sde_hw_rotator_clr_ctx(ctx);
 
 	devm_kfree(&rot->pdev->dev, ctx);
 }
@@ -1563,6 +1562,9 @@ static int sde_hw_rotator_config(struct sde_rot_hw_resource *hw,
 			SDE_ROT_FLAG_DEINTERLACE : 0;
 	flags |= (item->flags & SDE_ROTATION_SECURE) ?
 			SDE_ROT_FLAG_SECURE_OVERLAY_SESSION : 0;
+	flags |= (item->flags & SDE_ROTATION_SECURE_CAMERA) ?
+			SDE_ROT_FLAG_SECURE_CAMERA_SESSION : 0;
+
 
 	sspp_cfg.img_width = item->input.width;
 	sspp_cfg.img_height = item->input.height;
@@ -1807,13 +1809,14 @@ static int sde_rotator_hw_rev_init(struct sde_hw_rotator *rot)
 		set_bit(SDE_CAPS_R3_1P5_DOWNSCALE,  mdata->sde_caps_map);
 	}
 
+	set_bit(SDE_CAPS_SEC_ATTACH_DETACH_SMMU, mdata->sde_caps_map);
+
 	mdata->nrt_vbif_dbg_bus = nrt_vbif_dbg_bus_r3;
 	mdata->nrt_vbif_dbg_bus_size =
 			ARRAY_SIZE(nrt_vbif_dbg_bus_r3);
 
 	mdata->regdump = sde_rot_r3_regdump;
 	mdata->regdump_size = ARRAY_SIZE(sde_rot_r3_regdump);
-
 	SDE_ROTREG_WRITE(rot->mdss_base, REGDMA_TIMESTAMP_REG, 0);
 	return 0;
 }
@@ -2012,15 +2015,18 @@ static int sde_hw_rotator_validate_entry(struct sde_rot_mgr *mgr,
 		}
 	}
 
-	fmt = sde_get_format_params(item->output.format);
-	/* Tiled format downscale support not applied to AYUV tiled */
-	if (sde_mdp_is_tilea5x_format(fmt) && (entry->dnsc_factor_h > 4)) {
-		SDEROT_DBG("max downscale for tiled format is 4\n");
+	fmt = sde_get_format_params(item->input.format);
+	/*
+	 * Rotator downscale support max 4 times for UBWC format and
+	 * max 2 times for TP10/TP10_UBWC format
+	 */
+	if (sde_mdp_is_ubwc_format(fmt) && (entry->dnsc_factor_h > 4)) {
+		SDEROT_DBG("max downscale for UBWC format is 4\n");
 		ret = -EINVAL;
 		goto dnsc_err;
 	}
-	if (sde_mdp_is_ubwc_format(fmt)	&& (entry->dnsc_factor_h > 2)) {
-		SDEROT_DBG("downscale with ubwc cannot be more than 2\n");
+	if (sde_mdp_is_tp10_format(fmt) && (entry->dnsc_factor_h > 2)) {
+		SDEROT_DBG("downscale with TP10 cannot be more than 2\n");
 		ret = -EINVAL;
 	}
 	goto dnsc_err;
@@ -2075,6 +2081,7 @@ static ssize_t sde_hw_rotator_show_caps(struct sde_rot_mgr *mgr,
 		struct device_attribute *attr, char *buf, ssize_t len)
 {
 	struct sde_hw_rotator *hw_data;
+	struct sde_rot_data_type *mdata = sde_rot_get_mdata();
 	int cnt = 0;
 
 	if (!mgr || !buf)
@@ -2086,6 +2093,10 @@ static ssize_t sde_hw_rotator_show_caps(struct sde_rot_mgr *mgr,
 		(cnt += scnprintf(buf + cnt, len - cnt, fmt, ##__VA_ARGS__))
 
 	/* insert capabilities here */
+	if (test_bit(SDE_CAPS_R3_1P5_DOWNSCALE, mdata->sde_caps_map))
+		SPRINT("min_downscale=1.5\n");
+	else
+		SPRINT("min_downscale=2.0\n");
 
 #undef SPRINT
 	return cnt;

@@ -1114,6 +1114,7 @@ static void mdss_mdp_init_pipe_params(struct mdss_mdp_pipe *pipe)
 	pipe->is_right_blend = false;
 	pipe->src_split_req = false;
 	pipe->bwc_mode = 0;
+	pipe->restore_roi = false;
 
 	pipe->mfd = NULL;
 	pipe->mixer_left = pipe->mixer_right = NULL;
@@ -1340,10 +1341,11 @@ static struct mdss_mdp_pipe *__pipe_lookup(struct mdss_mdp_pipe *pipe_list,
 		bool (*cmp)(struct mdss_mdp_pipe *, void *), void *data)
 {
 	struct mdss_mdp_pipe *pipe;
-	int i, j;
+	int i, j, max_rects;
 
 	for (i = 0, pipe = pipe_list; i < count; i++) {
-		for (j = 0; j < pipe->multirect.max_rects; j++, pipe++)
+		max_rects = pipe->multirect.max_rects;
+		for (j = 0; j < max_rects; j++, pipe++)
 			if ((rect_num == pipe->multirect.num) &&
 					cmp(pipe, data))
 				return pipe;
@@ -2001,7 +2003,7 @@ static int mdss_mdp_image_setup(struct mdss_mdp_pipe *pipe,
 			dst.x -= left_lm_w_from_mfd(pipe->mfd);
 		}
 
-		mdss_mdp_crop_rect(&src, &dst, &roi);
+		mdss_mdp_crop_rect(&src, &dst, &roi, true);
 
 		if (mdata->has_src_split && is_right_mixer) {
 			/*
@@ -2329,7 +2331,7 @@ static int mdss_mdp_pipe_solidfill_setup(struct mdss_mdp_pipe *pipe)
 
 	/* support ARGB color format only */
 	unpack = (C3_ALPHA << 24) | (C2_R_Cr << 16) |
-		(C1_B_Cb << 8) | (C0_G_Y << 0);
+		(C0_G_Y << 8) | (C1_B_Cb << 0);
 	if (pipe->scaler.enable)
 		opmode |= (1 << 31);
 
@@ -2598,7 +2600,8 @@ static int mdss_mdp_set_ts_pipe(struct mdss_mdp_pipe *pipe)
 	__get_ordered_rects(pipe, &low_pipe, &high_pipe);
 
 	ts_count_low  = __get_ts_count(low_pipe, mixer, true);
-	ts_count_high = __get_ts_count(high_pipe, mixer, false);
+	if (high_pipe != NULL)
+		ts_count_high = __get_ts_count(high_pipe, mixer, false);
 	ts_bytes = __get_ts_bytes(pipe, mixer);
 
 	if (low_pipe->multirect.num == MDSS_MDP_PIPE_RECT0) {
@@ -2701,8 +2704,8 @@ int mdss_mdp_pipe_queue_data(struct mdss_mdp_pipe *pipe,
 		if (ret) {
 			pr_err("pipe pp setup error for pnum=%d\n", pipe->num);
 
-			MDSS_XLOG(pipe->num, pipe->mixer_left->num,
-				pipe->play_cnt, 0xbad);
+			MDSS_XLOG(pipe->num, pipe->multirect.num,
+				pipe->mixer_left->num, pipe->play_cnt, 0xbad);
 
 			goto done;
 		}
@@ -2713,13 +2716,14 @@ int mdss_mdp_pipe_queue_data(struct mdss_mdp_pipe *pipe,
 		pipe->params_changed = 0;
 		mdss_mdp_pipe_solidfill_setup(pipe);
 
-		MDSS_XLOG(pipe->num, pipe->mixer_left->num, pipe->play_cnt,
-			0x111);
+		MDSS_XLOG(pipe->num, pipe->multirect.num, pipe->mixer_left->num,
+			pipe->play_cnt, 0x111);
 
 		goto update_nobuf;
 	}
 
-	MDSS_XLOG(pipe->num, pipe->mixer_left->num, pipe->play_cnt, 0x222);
+	MDSS_XLOG(pipe->num, pipe->multirect.num, pipe->mixer_left->num,
+		pipe->play_cnt, 0x222);
 
 	if (params_changed) {
 		pipe->params_changed = 0;

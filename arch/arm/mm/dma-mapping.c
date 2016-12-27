@@ -807,6 +807,7 @@ static void arm_dma_unremap(struct device *dev, void *remapped_addr,
 	unsigned int flags = VM_ARM_DMA_CONSISTENT | VM_USERMAP;
 	struct vm_struct *area;
 
+	size = PAGE_ALIGN(size);
 	remapped_addr = (void *)((unsigned long)remapped_addr & PAGE_MASK);
 
 	area = find_vm_area(remapped_addr);
@@ -1818,7 +1819,7 @@ void arm_iommu_unmap_sg(struct device *dev, struct scatterlist *sg, int nents,
 	total_length = PAGE_ALIGN((iova & ~PAGE_MASK) + total_length);
 	iova &= PAGE_MASK;
 
-	iommu_unmap_range(mapping->domain, iova, total_length);
+	iommu_unmap(mapping->domain, iova, total_length);
 	__free_iova(mapping, iova, total_length);
 }
 
@@ -1930,9 +1931,6 @@ static void arm_coherent_iommu_unmap_page(struct device *dev, dma_addr_t handle,
 	int offset = handle & ~PAGE_MASK;
 	int len = PAGE_ALIGN(size + offset);
 
-	if (!iova)
-		return;
-
 	iommu_unmap(mapping->domain, iova, len);
 	__free_iova(mapping, iova, len);
 }
@@ -1956,9 +1954,6 @@ static void arm_iommu_unmap_page(struct device *dev, dma_addr_t handle,
 	int offset = handle & ~PAGE_MASK;
 	int len = PAGE_ALIGN(size + offset);
 
-	if (!iova)
-		return;
-
 	if (!dma_get_attr(DMA_ATTR_SKIP_CPU_SYNC, attrs))
 		__dma_page_dev_to_cpu(page, offset, size, dir);
 
@@ -1974,9 +1969,6 @@ static void arm_iommu_sync_single_for_cpu(struct device *dev,
 	struct page *page = phys_to_page(iommu_iova_to_phys(mapping->domain, iova));
 	unsigned int offset = handle & ~PAGE_MASK;
 
-	if (!iova)
-		return;
-
 	__dma_page_dev_to_cpu(page, offset, size, dir);
 }
 
@@ -1987,9 +1979,6 @@ static void arm_iommu_sync_single_for_device(struct device *dev,
 	dma_addr_t iova = handle & PAGE_MASK;
 	struct page *page = phys_to_page(iommu_iova_to_phys(mapping->domain, iova));
 	unsigned int offset = handle & ~PAGE_MASK;
-
-	if (!iova)
-		return;
 
 	__dma_page_cpu_to_dev(page, offset, size, dir);
 }

@@ -233,9 +233,11 @@ static int mdss_fb_notify_update(struct msm_fb_data_type *mfd,
 		}
 	} else if (notify == NOTIFY_UPDATE_STOP) {
 		mutex_lock(&mfd->update.lock);
-		if (mfd->update.init_done)
+		if (mfd->update.init_done) {
+			mutex_unlock(&mfd->update.lock);
+			mutex_lock(&mfd->no_update.lock);
 			reinit_completion(&mfd->no_update.comp);
-		else {
+		} else {
 			mutex_unlock(&mfd->update.lock);
 			pr_err("notify update stop called without init\n");
 			return -EINVAL;
@@ -564,7 +566,7 @@ static ssize_t mdss_fb_get_panel_info(struct device *dev,
 			"min_fps=%d\nmax_fps=%d\npanel_name=%s\n"
 			"primary_panel=%d\nis_pluggable=%d\ndisplay_id=%s\n"
 			"is_cec_supported=%d\nis_pingpong_split=%d\n"
-			"dfps_porch_mode=%d\n",
+			"dfps_porch_mode=%d\npu_roi_cnt=%d\ndual_dsi=%d",
 			pinfo->partial_update_enabled,
 			pinfo->roi_alignment.xstart_pix_align,
 			pinfo->roi_alignment.width_pix_align,
@@ -577,7 +579,8 @@ static ssize_t mdss_fb_get_panel_info(struct device *dev,
 			pinfo->panel_name, pinfo->is_prim_panel,
 			pinfo->is_pluggable, pinfo->display_id,
 			pinfo->is_cec_supported, is_pingpong_split(mfd),
-			dfps_porch_mode);
+			dfps_porch_mode, pinfo->partial_update_enabled,
+			is_panel_split(mfd));
 
 	return ret;
 }
@@ -1131,10 +1134,10 @@ static int mdss_fb_probe(struct platform_device *pdev)
 		mfd->bl_level = 0;
 
 	mfd->bl_scale = 1024;
-	mfd->bl_min_lvl = 30;
 	mfd->ad_bl_level = 0;
 	mfd->fb_imgType = MDP_RGBA_8888;
 	mfd->calib_mode_bl = 0;
+	mfd->unset_bl_level = U32_MAX;
 
 	mfd->pdev = pdev;
 
@@ -1508,27 +1511,22 @@ static void mdss_fb_scale_bl(struct msm_fb_data_type *mfd, u32 *bl_lvl)
 	u32 temp = *bl_lvl;
 
 	pr_debug("input = %d, scale = %d\n", temp, mfd->bl_scale);
-	if (temp >= mfd->bl_min_lvl) {
-		if (temp > mfd->panel_info->bl_max) {
-			pr_warn("%s: invalid bl level\n",
+	if (temp > mfd->panel_info->bl_max) {
+		pr_warn("%s: invalid bl level\n",
 				__func__);
-			temp = mfd->panel_info->bl_max;
-		}
-		if (mfd->bl_scale > 1024) {
-			pr_warn("%s: invalid bl scale\n",
-				__func__);
-			mfd->bl_scale = 1024;
-		}
-		/*
-		 * bl_scale is the numerator of
-		 * scaling fraction (x/1024)
-		 */
-		temp = (temp * mfd->bl_scale) / 1024;
-
-		/*if less than minimum level, use min level*/
-		if (temp < mfd->bl_min_lvl)
-			temp = mfd->bl_min_lvl;
+		temp = mfd->panel_info->bl_max;
 	}
+	if (mfd->bl_scale > 1024) {
+		pr_warn("%s: invalid bl scale\n",
+				__func__);
+		mfd->bl_scale = 1024;
+	}
+	/*
+	 * bl_scale is the numerator of
+	 * scaling fraction (x/1024)
+	 */
+	temp = (temp * mfd->bl_scale) / 1024;
+
 	pr_debug("output = %d\n", temp);
 
 	(*bl_lvl) = temp;
@@ -1550,7 +1548,7 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	} else if (mdss_fb_is_power_on(mfd) && mfd->panel_info->panel_dead) {
 		mfd->unset_bl_level = mfd->bl_level;
 	} else {
-		mfd->unset_bl_level = 0;
+		mfd->unset_bl_level = U32_MAX;
 	}
 
 	pdata = dev_get_platdata(&mfd->pdev->dev);
@@ -1594,7 +1592,7 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 	u32 temp;
 	bool bl_notify = false;
 
-	if (!mfd->unset_bl_level)
+	if (mfd->unset_bl_level == U32_MAX)
 		return;
 	mutex_lock(&mfd->bl_lock);
 	if (!mfd->allow_bl_update) {
@@ -1805,7 +1803,8 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
 			 */
 			if (IS_CALIB_MODE_BL(mfd))
 				mdss_fb_set_backlight(mfd, mfd->calib_mode_bl);
-			else if (!mfd->panel_info->mipi.post_init_delay)
+			else if ((!mfd->panel_info->mipi.post_init_delay) &&
+				(mfd->unset_bl_level != U32_MAX))
 				mdss_fb_set_backlight(mfd, mfd->unset_bl_level);
 
 			/*
@@ -3282,6 +3281,7 @@ int mdss_fb_atomic_commit(struct fb_info *info,
 	mfd->msm_fb_backup.atomic_commit = true;
 	mfd->msm_fb_backup.disp_commit.l_roi =  commit_v1->left_roi;
 	mfd->msm_fb_backup.disp_commit.r_roi =  commit_v1->right_roi;
+	mfd->msm_fb_backup.disp_commit.flags =  commit_v1->flags;
 
 	mutex_lock(&mfd->mdp_sync_pt_data.sync_mutex);
 	atomic_inc(&mfd->mdp_sync_pt_data.commit_cnt);

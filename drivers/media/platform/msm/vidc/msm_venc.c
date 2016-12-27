@@ -185,6 +185,13 @@ static const char *const timestamp_mode[] = {
 	"Ignore",
 };
 
+static const char *const iframe_sizes[] = {
+	"Default",
+	"Medium",
+	"Huge",
+	"Unlimited"
+};
+
 static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 	{
 		.id = V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD,
@@ -1281,6 +1288,20 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.step = 1,
 		.qmenu = NULL,
 	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_TYPE,
+		.name = "Bounds of I-frame size",
+		.type = V4L2_CTRL_TYPE_MENU,
+		.minimum = V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_DEFAULT,
+		.maximum = V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_UNLIMITED,
+		.default_value = V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_DEFAULT,
+		.menu_skip_mask = ~(
+			(1 << V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_DEFAULT) |
+			(1 << V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_MEDIUM) |
+			(1 << V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_HUGE) |
+			(1 << V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_UNLIMITED)),
+		.qmenu = iframe_sizes,
+	},
 
 };
 
@@ -1815,10 +1836,50 @@ static void msm_venc_buf_queue(struct vb2_buffer *vb)
 		dprintk(VIDC_ERR, "Failed to queue buffer: %d\n", rc);
 }
 
+static void msm_venc_buf_cleanup(struct vb2_buffer *vb)
+{
+	int rc = 0;
+	struct buf_queue *q = NULL;
+	struct msm_vidc_inst *inst = NULL;
+
+	if (!vb) {
+		dprintk(VIDC_ERR, "%s : Invalid vb pointer %pK",
+			__func__, vb);
+		return;
+	}
+
+	inst = vb2_get_drv_priv(vb->vb2_queue);
+	if (!inst) {
+		dprintk(VIDC_ERR, "%s : Invalid inst pointer",
+			__func__);
+		return;
+	}
+
+	q = msm_comm_get_vb2q(inst, vb->type);
+	if (!q) {
+		dprintk(VIDC_ERR,
+			"%s : Failed to find buffer queue for type = %d\n",
+				__func__, vb->type);
+		return;
+	}
+
+	if (q->vb2_bufq.streaming) {
+		dprintk(VIDC_DBG, "%d PORT is streaming\n",
+			vb->type);
+		return;
+	}
+
+	rc = msm_vidc_release_buffers(inst, vb->type);
+	if (rc)
+		dprintk(VIDC_ERR, "%s : Failed to release buffers : %d\n",
+			__func__, rc);
+}
+
 static const struct vb2_ops msm_venc_vb2q_ops = {
 	.queue_setup = msm_venc_queue_setup,
 	.start_streaming = msm_venc_start_streaming,
 	.buf_queue = msm_venc_buf_queue,
+	.buf_cleanup = msm_venc_buf_cleanup,
 	.stop_streaming = msm_venc_stop_streaming,
 };
 
@@ -2117,6 +2178,19 @@ static inline int venc_v4l2_to_hal(int id, int value)
 		default:
 			goto unknown_value;
 		}
+	case V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_TYPE:
+		switch (value) {
+		case V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_DEFAULT:
+			return HAL_IFRAMESIZE_TYPE_DEFAULT;
+		case V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_MEDIUM:
+			return HAL_IFRAMESIZE_TYPE_MEDIUM;
+		case V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_HUGE:
+			return HAL_IFRAMESIZE_TYPE_HUGE;
+		case V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_UNLIMITED:
+			return HAL_IFRAMESIZE_TYPE_UNLIMITED;
+		default:
+			goto unknown_value;
+		}
 	}
 
 unknown_value:
@@ -2159,6 +2233,7 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	int frameqp = 0;
 	int pic_order_cnt = 0;
 	struct hal_video_signal_info signal_info = {0};
+	enum hal_iframesize_type iframesize_type = HAL_IFRAMESIZE_TYPE_DEFAULT;
 
 	if (!inst || !inst->core || !inst->core->device) {
 		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
@@ -2940,7 +3015,10 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	case V4L2_CID_MPEG_VIDC_SET_PERF_LEVEL:
 		switch (ctrl->val) {
 		case V4L2_CID_MPEG_VIDC_PERF_LEVEL_NOMINAL:
-			inst->flags &= ~VIDC_TURBO;
+			if (inst->flags & VIDC_TURBO) {
+				inst->flags &= ~VIDC_TURBO;
+				msm_dcvs_init_load(inst);
+			}
 			break;
 		case V4L2_CID_MPEG_VIDC_PERF_LEVEL_TURBO:
 			inst->flags |= VIDC_TURBO;
@@ -3128,8 +3206,25 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		 */
 		enable.enable = !(ctrl->val);
 		pdata = &enable;
+		switch (ctrl->val) {
+		case V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE:
+			inst->flags &= ~VIDC_REALTIME;
+			break;
+		case V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_ENABLE:
+			inst->flags |= VIDC_REALTIME;
+			break;
+		default:
+			dprintk(VIDC_WARN,
+				"inst(%pK) invalid priority ctrl value %#x\n",
+				inst, ctrl->val);
+			break;
+		}
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_OPERATING_RATE:
+		dprintk(VIDC_DBG,
+			"inst(%pK) operating rate changed from %d to %d\n",
+			inst, inst->operating_rate >> 16, ctrl->val >> 16);
+		inst->operating_rate = ctrl->val;
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_VENC_BITRATE_TYPE:
 	{
@@ -3238,6 +3333,13 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 			break;
 		}
 		pdata = &enable;
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_TYPE:
+		property_id = HAL_PARAM_VENC_IFRAMESIZE_TYPE;
+		iframesize_type = venc_v4l2_to_hal(
+				V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_TYPE,
+				ctrl->val);
+		pdata = &iframesize_type;
 		break;
 	default:
 		dprintk(VIDC_ERR, "Unsupported index: %x\n", ctrl->id);
@@ -3513,6 +3615,7 @@ int msm_venc_inst_init(struct msm_vidc_inst *inst)
 	inst->buffer_mode_set[CAPTURE_PORT] = HAL_BUFFER_MODE_STATIC;
 	inst->prop.fps = DEFAULT_FPS;
 	inst->capability.pixelprocess_capabilities = 0;
+	inst->operating_rate = 0;
 	memcpy(&inst->fmts[CAPTURE_PORT], &venc_formats[4],
 			sizeof(struct msm_vidc_format));
 	memcpy(&inst->fmts[OUTPUT_PORT], &venc_formats[0],

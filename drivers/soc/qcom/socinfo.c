@@ -42,8 +42,8 @@
 #define SMEM_IMAGE_VERSION_NAME_SIZE 75
 #define SMEM_IMAGE_VERSION_VARIANT_SIZE 20
 #define SMEM_IMAGE_VERSION_VARIANT_OFFSET 75
-#define SMEM_IMAGE_VERSION_OEM_SIZE 32
-#define SMEM_IMAGE_VERSION_OEM_OFFSET 96
+#define SMEM_IMAGE_VERSION_OEM_SIZE 33
+#define SMEM_IMAGE_VERSION_OEM_OFFSET 95
 #define SMEM_IMAGE_VERSION_PARTITION_APPS 10
 
 enum {
@@ -529,8 +529,8 @@ static struct msm_soc_info cpu_of_id[] = {
 	[271] = {MSM_CPU_8929, "APQ8029"},
 
 	/* Cobalt IDs */
-	[292] = {MSM_CPU_COBALT, "MSMCOBALT"},
-	[319] = {MSM_CPU_COBALT, "APQCOBALT"},
+	[292] = {MSM_CPU_8998, "MSM8998"},
+	[319] = {MSM_CPU_8998, "APQ8998"},
 
 	/* Hamster ID */
 	[306] = {MSM_CPU_HAMSTER, "MSMHAMSTER"},
@@ -974,7 +974,7 @@ msm_get_image_crm_version(struct device *dev,
 	}
 	string_address += current_image * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
 	string_address += SMEM_IMAGE_VERSION_OEM_OFFSET;
-	return snprintf(buf, SMEM_IMAGE_VERSION_OEM_SIZE, "%-.32s\n",
+	return snprintf(buf, SMEM_IMAGE_VERSION_OEM_SIZE, "%-.33s\n",
 			string_address);
 }
 
@@ -995,7 +995,7 @@ msm_set_image_crm_version(struct device *dev,
 	}
 	store_address += current_image * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
 	store_address += SMEM_IMAGE_VERSION_OEM_OFFSET;
-	snprintf(store_address, SMEM_IMAGE_VERSION_OEM_SIZE, "%-.32s", buf);
+	snprintf(store_address, SMEM_IMAGE_VERSION_OEM_SIZE, "%-.33s", buf);
 	return count;
 }
 
@@ -1049,7 +1049,8 @@ msm_get_images(struct device *dev,
 				image_address);
 		pos += snprintf(buf + pos, PAGE_SIZE - pos, "\tVariant:\t%-.20s\n",
 				image_address + SMEM_IMAGE_VERSION_VARIANT_OFFSET);
-		pos += snprintf(buf + pos, PAGE_SIZE - pos, "\tVersion:\t%-.32s\n\n",
+		pos += snprintf(buf + pos, PAGE_SIZE - pos,
+				"\tVersion:\t%-.33s\n",
 				image_address + SMEM_IMAGE_VERSION_OEM_OFFSET);
 
 		image_address += SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
@@ -1198,9 +1199,9 @@ static void * __init setup_dummy_socinfo(void)
 		dummy_socinfo.id = 268;
 		strlcpy(dummy_socinfo.build_id, "msm8929 - ",
 			sizeof(dummy_socinfo.build_id));
-	} else if (early_machine_is_msmcobalt()) {
+	} else if (early_machine_is_msm8998()) {
 		dummy_socinfo.id = 292;
-		strlcpy(dummy_socinfo.build_id, "msmcobalt - ",
+		strlcpy(dummy_socinfo.build_id, "msm8998 - ",
 			sizeof(dummy_socinfo.build_id));
 	} else if (early_machine_is_msmhamster()) {
 		dummy_socinfo.id = 306;
@@ -1214,9 +1215,9 @@ static void * __init setup_dummy_socinfo(void)
 		dummy_socinfo.id = 318;
 		strlcpy(dummy_socinfo.build_id, "msmtriton - ",
 			sizeof(dummy_socinfo.build_id));
-	} else if (early_machine_is_apqcobalt()) {
+	} else if (early_machine_is_apq8998()) {
 		dummy_socinfo.id = 319;
-		strlcpy(dummy_socinfo.build_id, "apqcobalt - ",
+		strlcpy(dummy_socinfo.build_id, "apq8998 - ",
 			sizeof(dummy_socinfo.build_id));
 	}
 

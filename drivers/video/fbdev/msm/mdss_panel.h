@@ -137,6 +137,25 @@ enum {
 	SIM_HW_TE_MODE,
 };
 
+
+/*
+ * enum partial_update_mode - Different modes for partial update feature
+ *
+ * @PU_NOT_SUPPORTED:	Feature is not supported on target.
+ * @PU_SINGLE_ROI:	Default mode, only one ROI is triggered to the
+ *                              panel(one on each DSI in case of split dsi)
+ * @PU_DUAL_ROI:	Support for sending two roi's that are clubbed
+ *                              together as one big single ROI. This is only
+ *                              supported on certain panels that have this
+ *                              capability in their DDIC.
+ *
+ */
+enum {
+	PU_NOT_SUPPORTED = 0,
+	PU_SINGLE_ROI,
+	PU_DUAL_ROI,
+};
+
 struct mdss_rect {
 	u16 x;
 	u16 y;
@@ -236,6 +255,8 @@ struct mdss_intf_recovery {
  *				Argument provided is new panel timing.
  * @MDSS_EVENT_DEEP_COLOR: Set deep color.
  *				Argument provided is bits per pixel (8/10/12)
+ * @MDSS_EVENT_UPDATE_PANEL_PPM: update pixel clock by input PPM.
+ *				Argument provided is parts per million.
  */
 enum mdss_intf_events {
 	MDSS_EVENT_RESET = 1,
@@ -268,6 +289,7 @@ enum mdss_intf_events {
 	MDSS_EVENT_PANEL_TIMING_SWITCH,
 	MDSS_EVENT_DEEP_COLOR,
 	MDSS_EVENT_DISABLE_PANEL,
+	MDSS_EVENT_UPDATE_PANEL_PPM,
 	MDSS_EVENT_MAX,
 };
 
@@ -518,7 +540,10 @@ struct dynamic_fps_data {
  * @DFPS_IMMEDIATE_PORCH_UPDATE_MODE_VFP: update fps using vertical timings
  * @DFPS_IMMEDIATE_PORCH_UPDATE_MODE_HFP: update fps using horizontal timings
  * @DFPS_IMMEDIATE_MULTI_UPDATE_MODE_CLK_HFP: update fps using both horizontal
- *    timings and clock.
+ *  timings and clock.
+ * @DFPS_IMMEDIATE_MULTI_MODE_HFP_CALC_CLK: update fps using both
+ *  horizontal timings, clock need to be caculate base on new clock and
+ *  porches.
  * @DFPS_MODE_MAX: defines maximum limit of supported modes.
  */
 enum dynamic_fps_update {
@@ -527,6 +552,7 @@ enum dynamic_fps_update {
 	DFPS_IMMEDIATE_PORCH_UPDATE_MODE_VFP,
 	DFPS_IMMEDIATE_PORCH_UPDATE_MODE_HFP,
 	DFPS_IMMEDIATE_MULTI_UPDATE_MODE_CLK_HFP,
+	DFPS_IMMEDIATE_MULTI_MODE_HFP_CALC_CLK,
 	DFPS_MODE_MAX
 };
 
@@ -664,6 +690,50 @@ struct mdss_panel_roi_alignment {
 	u32 min_height;
 };
 
+
+/*
+ * Nomeclature used to represent partial ROI in case of
+ * dual roi when the panel supports it. Region marked (XXX) is
+ * the extended roi to align with the second roi since LM output
+ * has to be rectangle.
+ *
+ * For single ROI, only the first ROI will be used in the struct.
+ * DSI driver will merge it based on the partial_update_roi_merge
+ * property.
+ *
+ * -------------------------------
+ * |   DSI0       |    DSI1      |
+ * -------------------------------
+ * |              |              |
+ * |              |              |
+ * |     =========|=======----+  |
+ * |     |        |      |XXXX|  |
+ * |     |   First| Roi  |XXXX|  |
+ * |     |        |      |XXXX|  |
+ * |     =========|=======----+  |
+ * |              |              |
+ * |              |              |
+ * |              |              |
+ * |     +----=================  |
+ * |     |XXXX|   |           |  |
+ * |     |XXXX| Second Roi    |  |
+ * |     |XXXX|   |           |  |
+ * |     +----====|============  |
+ * |              |              |
+ * |              |              |
+ * |              |              |
+ * |              |              |
+ * |              |              |
+ * ------------------------------
+ *
+ */
+
+struct mdss_dsi_dual_pu_roi {
+	struct mdss_rect first_roi;
+	struct mdss_rect second_roi;
+	bool enabled;
+};
+
 struct mdss_panel_info {
 	u32 xres;
 	u32 yres;
@@ -689,6 +759,7 @@ struct mdss_panel_info {
 	u32 vic; /* video identification code */
 	u32 deep_color;
 	struct mdss_rect roi;
+	struct mdss_dsi_dual_pu_roi dual_roi;
 	int pwm_pmic_gpio;
 	int pwm_lpg_chan;
 	int pwm_period;
@@ -697,6 +768,7 @@ struct mdss_panel_info {
 	bool ulps_suspend_enabled;
 	bool panel_ack_disabled;
 	bool esd_check_enabled;
+	bool allow_phy_power_off;
 	char dfps_update;
 	/* new requested fps before it is updated in hw */
 	int new_fps;
@@ -723,8 +795,8 @@ struct mdss_panel_info {
 
 	u32 cont_splash_enabled;
 	bool esd_rdy;
-	bool partial_update_supported; /* value from dts if pu is supported */
-	bool partial_update_enabled; /* is pu currently allowed */
+	u32 partial_update_supported; /* value from dts if pu is supported */
+	u32 partial_update_enabled; /* is pu currently allowed */
 	u32 dcs_cmd_by_left;
 	u32 partial_update_roi_merge;
 	struct ion_handle *splash_ihdl;
@@ -910,7 +982,9 @@ static inline u32 mdss_panel_get_framerate(struct mdss_panel_info *panel_info)
 		break;
 	case DTV_PANEL:
 		if (panel_info->dynamic_fps) {
-			frame_rate = panel_info->lcdc.frame_rate;
+			frame_rate = panel_info->lcdc.frame_rate / 1000;
+			if (panel_info->lcdc.frame_rate % 1000)
+				frame_rate += 1;
 			break;
 		}
 	default:
@@ -997,6 +1071,27 @@ static inline bool is_lm_configs_dsc_compatible(struct mdss_panel_info *pinfo,
 	if ((width % pinfo->dsc.slice_width) ||
 		(height % pinfo->dsc.slice_height))
 		return false;
+	return true;
+}
+
+static inline bool is_valid_pu_dual_roi(struct mdss_panel_info *pinfo,
+		struct mdss_rect *first_roi, struct mdss_rect *second_roi)
+{
+	if ((first_roi->x != second_roi->x) || (first_roi->w != second_roi->w)
+		|| (first_roi->y > second_roi->y)
+		|| ((first_roi->y + first_roi->h) > second_roi->y)
+		|| (is_dsc_compression(pinfo) &&
+			!is_lm_configs_dsc_compatible(pinfo,
+				first_roi->w, first_roi->h) &&
+			!is_lm_configs_dsc_compatible(pinfo,
+				second_roi->w, second_roi->h))) {
+		pr_err("Invalid multiple PU ROIs, roi0:{%d,%d,%d,%d}, roi1{%d,%d,%d,%d}\n",
+				first_roi->x, first_roi->y, first_roi->w,
+				first_roi->h, second_roi->x, second_roi->y,
+				second_roi->w, second_roi->h);
+		return false;
+	}
+
 	return true;
 }
 

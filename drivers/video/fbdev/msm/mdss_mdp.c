@@ -1139,12 +1139,31 @@ static int mdss_mdp_clk_update(u32 clk_idx, u32 enable)
 {
 	int ret = -ENODEV;
 	struct clk *clk = mdss_mdp_get_clk(clk_idx);
+	struct mdss_data_type *mdata = mdss_res;
 
 	if (clk) {
 		pr_debug("clk=%d en=%d\n", clk_idx, enable);
 		if (enable) {
 			if (clk_idx == MDSS_CLK_MDP_VSYNC)
 				clk_set_rate(clk, 19200000);
+			if (mdss_has_quirk(mdata, MDSS_QUIRK_MDP_CLK_SET_RATE)
+					&& (clk_idx == MDSS_CLK_MDP_CORE)) {
+
+				if (WARN_ON(!mdata->mdp_clk_rate)) {
+					/*
+					 * rate should have been set in probe
+					 * or during clk scaling; but if this
+					 * is not the case, set max clk rate.
+					 */
+					pr_warn("set max mdp clk rate:%u\n",
+						mdata->max_mdp_clk_rate);
+					mdss_mdp_set_clk_rate(
+						mdata->max_mdp_clk_rate, true);
+				} else {
+					clk_set_rate(clk, mdata->mdp_clk_rate);
+				}
+			}
+
 			ret = clk_prepare_enable(clk);
 		} else {
 			clk_disable_unprepare(clk);
@@ -1172,7 +1191,7 @@ int mdss_mdp_vsync_clk_enable(int enable, bool locked)
 	return ret;
 }
 
-void mdss_mdp_set_clk_rate(unsigned long rate)
+void mdss_mdp_set_clk_rate(unsigned long rate, bool locked)
 {
 	struct mdss_data_type *mdata = mdss_res;
 	unsigned long clk_rate;
@@ -1182,7 +1201,9 @@ void mdss_mdp_set_clk_rate(unsigned long rate)
 	min_clk_rate = max(rate, mdata->perf_tune.min_mdp_clk);
 
 	if (clk) {
-		mutex_lock(&mdp_clk_lock);
+
+		if (!locked)
+			mutex_lock(&mdp_clk_lock);
 		if (min_clk_rate < mdata->max_mdp_clk_rate)
 			clk_rate = clk_round_rate(clk, min_clk_rate);
 		else
@@ -1190,12 +1211,15 @@ void mdss_mdp_set_clk_rate(unsigned long rate)
 		if (IS_ERR_VALUE(clk_rate)) {
 			pr_err("unable to round rate err=%ld\n", clk_rate);
 		} else if (clk_rate != clk_get_rate(clk)) {
+
+			mdata->mdp_clk_rate = clk_rate;
 			if (IS_ERR_VALUE(clk_set_rate(clk, clk_rate)))
 				pr_err("clk_set_rate failed\n");
 			else
 				pr_debug("mdp clk rate=%lu\n", clk_rate);
 		}
-		mutex_unlock(&mdp_clk_lock);
+		if (!locked)
+			mutex_unlock(&mdp_clk_lock);
 	} else {
 		pr_err("mdp src clk not setup properly\n");
 	}
@@ -1779,7 +1803,7 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 	mdss_mdp_irq_clk_register(mdata, "mnoc_clk", MDSS_CLK_MNOC_AHB);
 
 	/* Setting the default clock rate to the max supported.*/
-	mdss_mdp_set_clk_rate(mdata->max_mdp_clk_rate);
+	mdss_mdp_set_clk_rate(mdata->max_mdp_clk_rate, false);
 	pr_debug("mdp clk rate=%ld\n",
 		mdss_mdp_get_clk_rate(MDSS_CLK_MDP_CORE, false));
 
@@ -1816,8 +1840,10 @@ static int mdss_mdp_debug_init(struct platform_device *pdev,
 	mdss_debug_register_dump_range(pdev, dbg_blk, "qcom,regs-dump-mdp",
 		"qcom,regs-dump-names-mdp", "qcom,regs-dump-xin-id-mdp");
 
-	mdss_debug_register_io("vbif", &mdata->vbif_io, NULL);
-	mdss_debug_register_io("vbif_nrt", &mdata->vbif_nrt_io, NULL);
+	if (mdata->vbif_io.base)
+		mdss_debug_register_io("vbif", &mdata->vbif_io, NULL);
+	if (mdata->vbif_nrt_io.base)
+		mdss_debug_register_io("vbif_nrt", &mdata->vbif_nrt_io, NULL);
 
 	return 0;
 }
@@ -2020,6 +2046,7 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 		mdss_set_quirk(mdata, MDSS_QUIRK_DSC_RIGHT_ONLY_PU);
 		mdss_set_quirk(mdata, MDSS_QUIRK_DSC_2SLICE_PU_THRPUT);
 		mdss_set_quirk(mdata, MDSS_QUIRK_MMSS_GDSC_COLLAPSE);
+		mdss_set_quirk(mdata, MDSS_QUIRK_MDP_CLK_SET_RATE);
 		mdata->has_wb_ubwc = true;
 		set_bit(MDSS_CAPS_10_BIT_SUPPORTED, mdata->mdss_caps_map);
 		set_bit(MDSS_CAPS_AVR_SUPPORTED, mdata->mdss_caps_map);
@@ -2409,12 +2436,12 @@ static void __update_sspp_info(struct mdss_mdp_pipe *pipe,
 #define SPRINT(fmt, ...) \
 		(*cnt += scnprintf(buf + *cnt, len - *cnt, fmt, ##__VA_ARGS__))
 
-	for (i = 0; i < pipe_cnt; i++) {
+	for (i = 0; i < pipe_cnt && pipe; i++) {
 		SPRINT("pipe_num:%d pipe_type:%s pipe_ndx:%d rects:%d pipe_is_handoff:%d display_id:%d ",
 			pipe->num, type, pipe->ndx, pipe->multirect.max_rects,
 			pipe->is_handed_off, mdss_mdp_get_display_id(pipe));
 		SPRINT("fmts_supported:");
-		for (j = 0; j < num_bytes && pipe; j++)
+		for (j = 0; j < num_bytes; j++)
 			SPRINT("%d,", pipe->supported_formats[j]);
 		SPRINT("\n");
 		pipe += pipe->multirect.max_rects;
@@ -3391,15 +3418,18 @@ static int mdss_mdp_parse_dt_pipe(struct platform_device *pdev)
 	mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-pipe-sw-reset-off",
 		&sw_reset_offset, 1);
 	if (sw_reset_offset) {
-		mdss_mdp_parse_dt_pipe_sw_reset(pdev, sw_reset_offset,
-			"qcom,mdss-pipe-vig-sw-reset-map", mdata->vig_pipes,
-			mdata->nvig_pipes);
-		mdss_mdp_parse_dt_pipe_sw_reset(pdev, sw_reset_offset,
-			"qcom,mdss-pipe-rgb-sw-reset-map", mdata->rgb_pipes,
-			mdata->nrgb_pipes);
-		mdss_mdp_parse_dt_pipe_sw_reset(pdev, sw_reset_offset,
-			"qcom,mdss-pipe-dma-sw-reset-map", mdata->dma_pipes,
-			mdata->ndma_pipes);
+		if (mdata->vig_pipes)
+			mdss_mdp_parse_dt_pipe_sw_reset(pdev, sw_reset_offset,
+				"qcom,mdss-pipe-vig-sw-reset-map",
+				mdata->vig_pipes, mdata->nvig_pipes);
+		if (mdata->rgb_pipes)
+			mdss_mdp_parse_dt_pipe_sw_reset(pdev, sw_reset_offset,
+				"qcom,mdss-pipe-rgb-sw-reset-map",
+				mdata->rgb_pipes, mdata->nrgb_pipes);
+		if (mdata->dma_pipes)
+			mdss_mdp_parse_dt_pipe_sw_reset(pdev, sw_reset_offset,
+				"qcom,mdss-pipe-dma-sw-reset-map",
+				mdata->dma_pipes, mdata->ndma_pipes);
 	}
 
 	mdata->has_panic_ctrl = of_property_read_bool(pdev->dev.of_node,
@@ -3584,6 +3614,7 @@ static int mdss_mdp_cdm_addr_setup(struct mdss_data_type *mdata,
 		head[i].base = (mdata->mdss_io.base) + cdm_offsets[i];
 		atomic_set(&head[i].kref.refcount, 0);
 		mutex_init(&head[i].lock);
+		init_completion(&head[i].free_comp);
 		pr_debug("%s: cdm off (%d) = %pK\n", __func__, i, head[i].base);
 	}
 

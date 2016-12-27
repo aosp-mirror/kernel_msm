@@ -32,6 +32,7 @@
 #define CLK_SET_RATE_NO_REPARENT BIT(7) /* don't re-parent on rate change */
 #define CLK_GET_ACCURACY_NOCACHE BIT(8) /* do not use the cached clk accuracy */
 #define CLK_RECALC_NEW_RATES	BIT(9) /* recalc rates after notifications */
+#define CLK_IS_CRITICAL		BIT(11) /* do not gate, ever */
 
 struct clk;
 struct clk_hw;
@@ -177,6 +178,14 @@ struct clk_rate_request {
  * @set_flags: Set custom flags which deals with hardware specifics. Returns 0
  *	       on success, -EEROR otherwise.
  *
+ * @list_registers: Queries the hardware to get the current register contents.
+ *		    This callback is optional and required clocks could
+ *		    add this callback.
+ *
+ * @list_rate:  Return the nth supported frequency for a given clock which is
+ *		below rate_max on success and -ENXIO in case of no frequency
+ *		table.
+ *
  * The clk_enable/clk_disable and clk_prepare/clk_unprepare pairs allow
  * implementations to split any work between atomic (enable) and sleepable
  * (prepare) contexts.  If enabling a clock requires code that might sleep,
@@ -217,6 +226,10 @@ struct clk_ops {
 	void		(*init)(struct clk_hw *hw);
 	int		(*debug_init)(struct clk_hw *hw, struct dentry *dentry);
 	int		(*set_flags)(struct clk_hw *hw, unsigned flags);
+	void		(*list_registers)(struct seq_file *f,
+							struct clk_hw *hw);
+	long		(*list_rate)(struct clk_hw *hw, unsigned n,
+							unsigned long rate_max);
 };
 
 /**
@@ -256,6 +269,8 @@ struct regulator;
 		regulator
  * @level_votes: array of votes for each level
  * @num_levels: specifies the size of level_votes array
+ * @skip_handoff: do not vote for the max possible voltage during init
+ * @use_max_uV: use INT_MAX for max_uV when calling regulator_set_voltage
  * @cur_level: the currently set voltage level
  * @lock: lock to protect this struct
  */
@@ -267,6 +282,8 @@ struct clk_vdd_class {
 	int *vdd_uv;
 	int *level_votes;
 	int num_levels;
+	bool skip_handoff;
+	bool use_max_uV;
 	unsigned long cur_level;
 	struct mutex lock;
 };
@@ -775,7 +792,8 @@ int of_clk_get_parent_count(struct device_node *np);
 int of_clk_parent_fill(struct device_node *np, const char **parents,
 		       unsigned int size);
 const char *of_clk_get_parent_name(struct device_node *np, int index);
-
+int of_clk_detect_critical(struct device_node *np, int index,
+			    unsigned long *flags);
 void of_clk_init(const struct of_device_id *matches);
 
 #else /* !CONFIG_OF */
@@ -813,6 +831,13 @@ static inline const char *of_clk_get_parent_name(struct device_node *np,
 {
 	return NULL;
 }
+
+static inline int of_clk_detect_critical(struct device_node *np, int index,
+					  unsigned long *flags)
+{
+	return 0;
+}
+
 #define of_clk_init(matches) \
 	{ while (0); }
 #endif /* CONFIG_OF */

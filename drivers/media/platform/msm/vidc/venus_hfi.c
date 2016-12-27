@@ -75,7 +75,7 @@ const struct msm_vidc_gov_data DEFAULT_BUS_VOTE = {
 	.imem_size = 0,
 };
 
-const int max_packets = 250;
+const int max_packets = 1000;
 
 static void venus_hfi_pm_handler(struct work_struct *work);
 static DECLARE_DELAYED_WORK(venus_hfi_pm_work, venus_hfi_pm_handler);
@@ -933,8 +933,6 @@ static int __core_set_resource(struct venus_hfi_device *device,
 err_create_pkt:
 	return rc;
 }
-
-static DECLARE_COMPLETION(release_resources_done);
 
 static int __alloc_imem(struct venus_hfi_device *device, unsigned long size)
 {
@@ -1963,6 +1961,8 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 	q_tbl_hdr = (struct hfi_queue_table_header *)
 			dev->iface_q_table.align_virtual_addr;
 	q_tbl_hdr->qtbl_version = 0;
+	q_tbl_hdr->device_addr = (void *)dev;
+	strlcpy(q_tbl_hdr->name, "msm_v4l2_vidc", sizeof(q_tbl_hdr->name));
 	q_tbl_hdr->qtbl_size = VIDC_IFACEQ_TABLE_SIZE;
 	q_tbl_hdr->qtbl_qhdr0_offset = sizeof(struct hfi_queue_table_header);
 	q_tbl_hdr->qtbl_qhdr_size = sizeof(struct hfi_queue_header);
@@ -2169,8 +2169,6 @@ static int venus_hfi_core_init(void *device)
 
 	dev = device;
 	mutex_lock(&dev->lock);
-
-	init_completion(&release_resources_done);
 
 	rc = __load_fw(dev);
 	if (rc) {
@@ -3407,10 +3405,12 @@ static int __response_handler(struct venus_hfi_device *device)
 
 	packets = device->response_pkt;
 
-	raw_packet = kzalloc(VIDC_IFACEQ_VAR_HUGE_PKT_SIZE, GFP_TEMPORARY);
+	raw_packet = device->raw_packet;
+
 	if (!raw_packet || !packets) {
-		dprintk(VIDC_ERR, "%s: Failed to allocate memory\n",  __func__);
-		kfree(raw_packet);
+		dprintk(VIDC_ERR,
+			"%s: Invalid args : Res packet = %p, Raw packet = %p\n",
+			__func__, packets, raw_packet);
 		return 0;
 	}
 
@@ -3456,7 +3456,6 @@ static int __response_handler(struct venus_hfi_device *device)
 			break;
 		case HAL_SYS_RELEASE_RESOURCE_DONE:
 			dprintk(VIDC_DBG, "Received SYS_RELEASE_RESOURCE\n");
-			complete(&release_resources_done);
 			break;
 		case HAL_SYS_INIT_DONE:
 			dprintk(VIDC_DBG, "Received SYS_INIT_DONE\n");
@@ -3566,7 +3565,6 @@ static int __response_handler(struct venus_hfi_device *device)
 exit:
 	__flush_debug_queue(device, raw_packet);
 
-	kfree(raw_packet);
 	return packet_count;
 }
 
@@ -3575,6 +3573,7 @@ static void venus_hfi_core_work_handler(struct work_struct *work)
 	struct venus_hfi_device *device = list_first_entry(
 		&hal_ctxt.dev_head, struct venus_hfi_device, list);
 	int num_responses = 0, i = 0;
+	u32 intr_status;
 
 	mutex_lock(&device->lock);
 
@@ -3600,10 +3599,9 @@ static void venus_hfi_core_work_handler(struct work_struct *work)
 	num_responses = __response_handler(device);
 
 err_no_work:
-	/* We need re-enable the irq which was disabled in ISR handler */
-	if (!(device->intr_status & VIDC_WRAPPER_INTR_STATUS_A2HWD_BMSK))
-		enable_irq(device->hal_data->irq);
 
+	/* Keep the interrupt status before releasing device lock */
+	intr_status = device->intr_status;
 	mutex_unlock(&device->lock);
 
 	/*
@@ -3617,6 +3615,10 @@ err_no_work:
 
 		device->callback(r->response_type, &r->response);
 	}
+
+	/* We need re-enable the irq which was disabled in ISR handler */
+	if (!(intr_status & VIDC_WRAPPER_INTR_STATUS_A2HWD_BMSK))
+		enable_irq(device->hal_data->irq);
 
 	/*
 	 * XXX: Don't add any code beyond here.  Reacquiring locks after release
@@ -3760,8 +3762,8 @@ static inline void __disable_unprepare_clks(struct venus_hfi_device *device)
 		return;
 	}
 
-	venus_hfi_for_each_clock(device, cl) {
-		 usleep_range(100, 500);
+	venus_hfi_for_each_clock_reverse(device, cl) {
+		usleep_range(100, 500);
 		dprintk(VIDC_DBG, "Clock: %s disable and unprepare\n",
 				cl->name);
 		clk_disable_unprepare(cl->clk);
@@ -3771,7 +3773,7 @@ static inline void __disable_unprepare_clks(struct venus_hfi_device *device)
 static inline int __prepare_enable_clks(struct venus_hfi_device *device)
 {
 	struct clock_info *cl = NULL, *cl_fail = NULL;
-	int rc = 0;
+	int rc = 0, c = 0;
 	if (!device) {
 		dprintk(VIDC_ERR, "Invalid params: %pK\n", device);
 		return -EINVAL;
@@ -3809,6 +3811,7 @@ static inline int __prepare_enable_clks(struct venus_hfi_device *device)
 			goto fail_clk_enable;
 		}
 
+		c++;
 		dprintk(VIDC_DBG, "Clock: %s prepared and enabled\n", cl->name);
 	}
 
@@ -3817,9 +3820,7 @@ static inline int __prepare_enable_clks(struct venus_hfi_device *device)
 	return rc;
 
 fail_clk_enable:
-	venus_hfi_for_each_clock(device, cl) {
-		if (cl_fail == cl)
-			break;
+	venus_hfi_for_each_clock_reverse_continue(device, cl, c) {
 		usleep_range(100, 500);
 		dprintk(VIDC_ERR, "Clock: %s disable and unprepare\n",
 			cl->name);
@@ -4547,9 +4548,16 @@ static struct venus_hfi_device *__add_device(u32 device_id,
 	}
 
 	hdevice->response_pkt = kmalloc_array(max_packets,
-				sizeof(*hdevice->response_pkt), GFP_TEMPORARY);
+				sizeof(*hdevice->response_pkt), GFP_KERNEL);
 	if (!hdevice->response_pkt) {
 		dprintk(VIDC_ERR, "failed to allocate response_pkt\n");
+		goto err_cleanup;
+	}
+
+	hdevice->raw_packet =
+		kzalloc(VIDC_IFACEQ_VAR_HUGE_PKT_SIZE, GFP_TEMPORARY);
+	if (!hdevice->raw_packet) {
+		dprintk(VIDC_ERR, "failed to allocate raw packet\n");
 		goto err_cleanup;
 	}
 
@@ -4590,6 +4598,7 @@ err_cleanup:
 	if (hdevice->vidc_workq)
 		destroy_workqueue(hdevice->vidc_workq);
 	kfree(hdevice->response_pkt);
+	kfree(hdevice->raw_packet);
 	kfree(hdevice);
 exit:
 	return NULL;
@@ -4631,6 +4640,7 @@ void venus_hfi_delete_device(void *device)
 			iounmap(dev->hal_data->register_base);
 			kfree(close->hal_data);
 			kfree(close->response_pkt);
+			kfree(close->raw_packet);
 			kfree(close);
 			break;
 		}

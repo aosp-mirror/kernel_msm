@@ -450,6 +450,10 @@ int ipa_get_clients_from_rm_resource(
 	case IPA_RM_RESOURCE_MHI_CONS:
 		clients->names[i++] = IPA_CLIENT_MHI_CONS;
 		break;
+	case IPA_RM_RESOURCE_ODU_ADAPT_CONS:
+		clients->names[i++] = IPA_CLIENT_ODU_EMB_CONS;
+		clients->names[i++] = IPA_CLIENT_ODU_TETH_CONS;
+		break;
 	case IPA_RM_RESOURCE_USB_PROD:
 		clients->names[i++] = IPA_CLIENT_USB_PROD;
 		break;
@@ -459,6 +463,8 @@ int ipa_get_clients_from_rm_resource(
 	case IPA_RM_RESOURCE_MHI_PROD:
 		clients->names[i++] = IPA_CLIENT_MHI_PROD;
 		break;
+	case IPA_RM_RESOURCE_ODU_ADAPT_PROD:
+		clients->names[i++] = IPA_CLIENT_ODU_PROD;
 	default:
 		break;
 	}
@@ -490,13 +496,15 @@ bool ipa_should_pipe_be_suspended(enum ipa_client_type client)
 	if (ep->keep_ipa_awake)
 		return false;
 
-	if (client == IPA_CLIENT_USB_CONS   ||
-	    client == IPA_CLIENT_MHI_CONS   ||
-	    client == IPA_CLIENT_HSIC1_CONS ||
-	    client == IPA_CLIENT_WLAN1_CONS ||
-	    client == IPA_CLIENT_WLAN2_CONS ||
-	    client == IPA_CLIENT_WLAN3_CONS ||
-	    client == IPA_CLIENT_WLAN4_CONS)
+	if (client == IPA_CLIENT_USB_CONS     ||
+	    client == IPA_CLIENT_MHI_CONS     ||
+	    client == IPA_CLIENT_HSIC1_CONS   ||
+	    client == IPA_CLIENT_WLAN1_CONS   ||
+	    client == IPA_CLIENT_WLAN2_CONS   ||
+	    client == IPA_CLIENT_WLAN3_CONS   ||
+	    client == IPA_CLIENT_WLAN4_CONS   ||
+	    client == IPA_CLIENT_ODU_EMB_CONS ||
+	    client == IPA_CLIENT_ODU_TETH_CONS)
 		return true;
 
 	return false;
@@ -5102,6 +5110,7 @@ int ipa2_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 	api_ctrl->ipa_setup_uc_ntn_pipes = ipa2_setup_uc_ntn_pipes;
 	api_ctrl->ipa_tear_down_uc_offload_pipes =
 		ipa2_tear_down_uc_offload_pipes;
+	api_ctrl->ipa_get_pdev = ipa2_get_pdev;
 
 	return 0;
 }
@@ -5180,4 +5189,18 @@ void ipa_suspend_apps_pipes(bool suspend)
 				ep->sys->sps_callback(&notify);
 		}
 	}
+}
+
+/**
+ * ipa2_get_pdev() - return a pointer to IPA dev struct
+ *
+ * Return value: a pointer to IPA dev struct
+ *
+ */
+struct device *ipa2_get_pdev(void)
+{
+	if (!ipa_ctx)
+		return NULL;
+
+	return ipa_ctx->pdev;
 }

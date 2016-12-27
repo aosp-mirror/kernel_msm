@@ -123,6 +123,8 @@
 #define ADRENO_QUIRK_FAULT_DETECT_MASK BIT(3)
 /* Disable RB sampler datapath clock gating optimization */
 #define ADRENO_QUIRK_DISABLE_RB_DP2CLOCKGATING BIT(4)
+/* Disable local memory(LM) feature to avoid corner case error */
+#define ADRENO_QUIRK_DISABLE_LMLOADKILL BIT(5)
 
 /* Flags to control command packet settings */
 #define KGSL_CMD_FLAGS_NONE             0
@@ -168,6 +170,7 @@ enum adreno_gpurev {
 	ADRENO_REV_A505 = 505,
 	ADRENO_REV_A506 = 506,
 	ADRENO_REV_A510 = 510,
+	ADRENO_REV_A512 = 512,
 	ADRENO_REV_A530 = 530,
 	ADRENO_REV_A540 = 540,
 };
@@ -673,11 +676,13 @@ ssize_t adreno_coresight_store_register(struct device *dev,
  * @registers - Array of GPU specific registers to configure trace bus output
  * @count - Number of registers in the array
  * @groups - Pointer to an attribute list of control files
+ * @atid - The unique ATID value of the coresight device
  */
 struct adreno_coresight {
 	struct adreno_coresight_register *registers;
 	unsigned int count;
 	const struct attribute_group **groups;
+	unsigned int atid;
 };
 
 
@@ -996,6 +1001,7 @@ static inline int adreno_is_a5xx(struct adreno_device *adreno_dev)
 ADRENO_TARGET(a505, ADRENO_REV_A505)
 ADRENO_TARGET(a506, ADRENO_REV_A506)
 ADRENO_TARGET(a510, ADRENO_REV_A510)
+ADRENO_TARGET(a512, ADRENO_REV_A512)
 ADRENO_TARGET(a530, ADRENO_REV_A530)
 ADRENO_TARGET(a540, ADRENO_REV_A540)
 

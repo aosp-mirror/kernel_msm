@@ -318,6 +318,10 @@ err_invalid_input:
 static inline void populate_buf_info(struct buffer_info *binfo,
 			struct v4l2_buffer *b, u32 i)
 {
+	if (i >= VIDEO_MAX_PLANES) {
+		dprintk(VIDC_ERR, "%s: Invalid input\n", __func__);
+		return;
+	}
 	binfo->type = b->type;
 	binfo->fd[i] = b->m.planes[i].reserved[0];
 	binfo->buff_off[i] = b->m.planes[i].reserved[1];
@@ -652,10 +656,6 @@ int output_buffer_cache_invalidate(struct msm_vidc_inst *inst,
 		return -EINVAL;
 	}
 
-	if (binfo->type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
-		return 0;
-
-
 	for (i = 0; i < binfo->num_planes; i++) {
 		if (binfo->handle[i]) {
 			rc = msm_comm_smem_cache_operations(inst,
@@ -689,7 +689,11 @@ int msm_vidc_prepare_buf(void *instance, struct v4l2_buffer *b)
 {
 	struct msm_vidc_inst *inst = instance;
 
-	if (!inst || !b || !valid_v4l2_buffer(b, inst))
+	if (!inst || !inst->core || !b || !valid_v4l2_buffer(b, inst))
+		return -EINVAL;
+
+	if (inst->state == MSM_VIDC_CORE_INVALID ||
+		inst->core->state == VIDC_CORE_INVALID)
 		return -EINVAL;
 
 	if (is_dynamic_output_buffer_mode(b, inst))
@@ -811,7 +815,11 @@ int msm_vidc_qbuf(void *instance, struct v4l2_buffer *b)
 	int rc = 0;
 	int i;
 
-	if (!inst || !b || !valid_v4l2_buffer(b, inst))
+	if (!inst || !inst->core || !b || !valid_v4l2_buffer(b, inst))
+		return -EINVAL;
+
+	if (inst->state == MSM_VIDC_CORE_INVALID ||
+		inst->core->state == VIDC_CORE_INVALID)
 		return -EINVAL;
 
 	rc = map_and_register_buf(inst, b);
@@ -1324,11 +1332,6 @@ int msm_vidc_destroy(struct msm_vidc_inst *inst)
 
 	msm_comm_ctrl_deinit(inst);
 
-	mutex_destroy(&inst->sync_lock);
-	mutex_destroy(&inst->bufq[CAPTURE_PORT].lock);
-	mutex_destroy(&inst->bufq[OUTPUT_PORT].lock);
-	mutex_destroy(&inst->lock);
-
 	DEINIT_MSM_VIDC_LIST(&inst->pendingq);
 	DEINIT_MSM_VIDC_LIST(&inst->scratchbufs);
 	DEINIT_MSM_VIDC_LIST(&inst->persistbufs);
@@ -1341,6 +1344,11 @@ int msm_vidc_destroy(struct msm_vidc_inst *inst)
 
 	for (i = 0; i < MAX_PORT_NUM; i++)
 		vb2_queue_release(&inst->bufq[i].vb2_bufq);
+
+	mutex_destroy(&inst->sync_lock);
+	mutex_destroy(&inst->bufq[CAPTURE_PORT].lock);
+	mutex_destroy(&inst->bufq[OUTPUT_PORT].lock);
+	mutex_destroy(&inst->lock);
 
 	pr_info(VIDC_DBG_TAG "Closed video instance: %pK\n",
 			VIDC_MSG_PRIO2STRING(VIDC_INFO), inst);

@@ -70,6 +70,8 @@ static const char *iommu_debug_attr_to_string(enum iommu_attr attr)
 		return "DOMAIN_ATTR_S1_BYPASS";
 	case DOMAIN_ATTR_FAST:
 		return "DOMAIN_ATTR_FAST";
+	case DOMAIN_ATTR_EARLY_MAP:
+		return "DOMAIN_ATTR_EARLY_MAP";
 	default:
 		return "Unknown attr!";
 	}
@@ -452,13 +454,13 @@ static inline void iommu_debug_destroy_tracking(void) { }
 #ifdef CONFIG_64BIT
 
 #define kstrtoux kstrtou64
-#define kstrtox_from_user kstrtoll_from_user
+#define kstrtox_from_user kstrtoull_from_user
 #define kstrtosize_t kstrtoul
 
 #else
 
 #define kstrtoux kstrtou32
-#define kstrtox_from_user kstrtoint_from_user
+#define kstrtox_from_user kstrtouint_from_user
 #define kstrtosize_t kstrtouint
 
 #endif

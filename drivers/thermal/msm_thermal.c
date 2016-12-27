@@ -60,6 +60,7 @@
 #define MSM_LIMITS_NODE_DCVS		0x44435653
 #define MSM_LIMITS_SUB_FN_GENERAL	0x47454E00
 #define MSM_LIMITS_SUB_FN_CRNT		0x43524E54
+#define MSM_LIMITS_SUB_FN_REL		0x52454C00
 #define MSM_LIMITS_DOMAIN_MAX		0x444D4158
 #define MSM_LIMITS_DOMAIN_MIN		0x444D494E
 #define MSM_LIMITS_CLUSTER_0		0x6370302D
@@ -1055,6 +1056,11 @@ static int msm_lmh_dcvs_update(int cpu)
 					MSM_LIMITS_DOMAIN_MIN, min_freq);
 	if (ret)
 		return ret;
+	/*
+	 * Notify LMH dcvs driver about the new software limit. This will
+	 * trigger LMH DCVS driver polling for the mitigated frequency.
+	 */
+	msm_lmh_dcvsh_sw_notify(cpu);
 
 	return ret;
 }
@@ -1674,7 +1680,20 @@ static int msm_thermal_lmh_dcvs_init(struct platform_device *pdev)
 	 */
 	devm_clk_put(&pdev->dev, osm_clk);
 
-	/* Enable the CRNT algorithm. Again, we dont care if this fails */
+	/* Enable the CRNT and Reliability algorithm. Again, we dont
+	 * care if this fails
+	 */
+	ret = msm_lmh_dcvs_write(MSM_LIMITS_CLUSTER_0,
+				MSM_LIMITS_SUB_FN_REL,
+				MSM_LIMITS_ALGO_MODE_ENABLE, 1);
+	if (ret)
+		pr_err("Unable to enable REL algo for cluster0\n");
+	ret = msm_lmh_dcvs_write(MSM_LIMITS_CLUSTER_1,
+				MSM_LIMITS_SUB_FN_REL,
+				MSM_LIMITS_ALGO_MODE_ENABLE, 1);
+	if (ret)
+		pr_err("Unable to enable REL algo for cluster1\n");
+
 	ret = msm_lmh_dcvs_write(MSM_LIMITS_CLUSTER_0,
 				MSM_LIMITS_SUB_FN_CRNT,
 				MSM_LIMITS_ALGO_MODE_ENABLE, 1);

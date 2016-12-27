@@ -1552,6 +1552,12 @@ int mmc_cmdq_halt(struct mmc_host *host, bool halt)
 {
 	int err = 0;
 
+	if (mmc_host_cq_disable(host)) {
+		pr_debug("%s: %s: CQE is already disabled\n",
+				mmc_hostname(host), __func__);
+		return 0;
+	}
+
 	if ((halt && mmc_host_halt(host)) ||
 			(!halt && !mmc_host_halt(host))) {
 		pr_debug("%s: %s: CQE is already %s\n", mmc_hostname(host),
@@ -1970,7 +1976,7 @@ void mmc_set_data_timeout(struct mmc_data *data, const struct mmc_card *card)
 	/*
 	 * Some cards require longer data read timeout than indicated in CSD.
 	 * Address this by setting the read timeout to a "reasonably high"
-	 * value. For the cards tested, 300ms has proven enough. If necessary,
+	 * value. For the cards tested, 600ms has proven enough. If necessary,
 	 * this value can be increased if other problematic cards require this.
 	 * Certain Hynix 5.x cards giving read timeout even with 300ms.
 	 * Increasing further to max value (4s).

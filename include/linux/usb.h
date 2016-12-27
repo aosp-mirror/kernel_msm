@@ -395,6 +395,15 @@ struct usb_bus {
 	struct mon_bus *mon_bus;	/* non-null when associated */
 	int monitored;			/* non-zero when monitored */
 #endif
+	unsigned skip_resume:1;		/* All USB devices are brought into full
+					 * power state after system resume. It
+					 * is desirable for some buses to keep
+					 * their devices in suspend state even
+					 * after system resume. The devices
+					 * are resumed later when a remote
+					 * wakeup is detected or an interface
+					 * driver starts I/O.
+					 */
 };
 
 struct usb_dev_state;
@@ -1079,7 +1088,7 @@ struct usbdrv_wrap {
  *	for interfaces bound to this driver.
  * @soft_unbind: if set to 1, the USB core will not kill URBs and disable
  *	endpoints before calling the driver's disconnect method.
- * @disable_hub_initiated_lpm: if set to 0, the USB core will not allow hubs
+ * @disable_hub_initiated_lpm: if set to 1, the USB core will not allow hubs
  *	to initiate lower power link state transitions when an idle timeout
  *	occurs.  Device-initiated USB 3.0 link PM will still be allowed.
  *
