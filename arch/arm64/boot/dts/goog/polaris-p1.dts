@@ -12,8 +12,8 @@
 
 /dts-v1/;
 
-#include "../qcom/msmcobalt-v2.1.dtsi"
-#include "../qcom/msmcobalt-camera-sensor-cdp.dtsi"
+#include "../qcom/msm8998-v2.1.dtsi"
+#include "../qcom/msm8998-camera-sensor-cdp.dtsi"
 
 / {
 	model = "Google, Inc. Polaris P1.1";
@@ -22,7 +22,7 @@
 
 	/* TODO(muirj): Remove once the boot-loader can select based
 	 * on the above information only. */
-	compatible = "qcom,msmcobalt-cdp", "qcom,msmcobalt", "qcom,cdp";
+	compatible = "qcom,msm8998-cdp", "qcom,msm8998", "qcom,cdp";
 	qcom,board-id = <1 0>;
 };
 

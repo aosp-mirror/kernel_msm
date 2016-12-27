@@ -20,12 +20,12 @@
 / {
 	bluetooth: bt_wcn3990 {
 		compatible = "qca,wcn3990";
-		qca,bt-vdd-io-supply = <&pmcobalt_s3>;
-		qca,bt-vdd-xtal-supply = <&pmcobalt_s5>;
-		qca,bt-vdd-core-supply = <&pmcobalt_l7_pin_ctrl>;
-		qca,bt-vdd-pa-supply = <&pmcobalt_l17_pin_ctrl>;
-		qca,bt-vdd-ldo-supply = <&pmcobalt_l25_pin_ctrl>;
-		qca,bt-chip-pwd-supply = <&pmicobalt_bob_pin1>;
+		qca,bt-vdd-io-supply = <&pm8998_s3>;
+		qca,bt-vdd-xtal-supply = <&pm8998_s5>;
+		qca,bt-vdd-core-supply = <&pm8998_l7_pin_ctrl>;
+		qca,bt-vdd-pa-supply = <&pm8998_l17_pin_ctrl>;
+		qca,bt-vdd-ldo-supply = <&pm8998_l25_pin_ctrl>;
+		qca,bt-chip-pwd-supply = <&pmi8998_bob_pin1>;
 
 		qca,bt-vdd-io-voltage-level = <1352000 1352000>;
 		qca,bt-vdd-xtal-voltage-level = <2040000 2040000>;
@@ -62,9 +62,9 @@
 };
 
 &ufsphy1 {
-	vdda-phy-supply = <&pmcobalt_l1>;
-	vdda-pll-supply = <&pmcobalt_l2>;
-	vddp-ref-clk-supply = <&pmcobalt_l26>;
+	vdda-phy-supply = <&pm8998_l1>;
+	vdda-pll-supply = <&pm8998_l2>;
+	vddp-ref-clk-supply = <&pm8998_l26>;
 	vdda-phy-max-microamp = <51400>;
 	vdda-pll-max-microamp = <14600>;
 	vddp-ref-clk-max-microamp = <100>;
@@ -75,9 +75,9 @@
 &ufs1 {
 	vdd-hba-supply = <&gdsc_ufs>;
 	vdd-hba-fixed-regulator;
-	vcc-supply = <&pmcobalt_l20>;
-	vccq-supply = <&pmcobalt_l26>;
-	vccq2-supply = <&pmcobalt_s4>;
+	vcc-supply = <&pm8998_l20>;
+	vccq-supply = <&pm8998_l26>;
+	vccq2-supply = <&pm8998_s4>;
 	vcc-max-microamp = <750000>;
 	vccq-max-microamp = <560000>;
 	vccq2-max-microamp = <750000>;
@@ -89,11 +89,11 @@
 };
 
 &sdhc_2 {
-	vdd-supply = <&pmcobalt_l21>;
+	vdd-supply = <&pm8998_l21>;
 	qcom,vdd-voltage-level = <2950000 2960000>;
 	qcom,vdd-current-level = <200 800000>;
 
-	vdd-io-supply = <&pmcobalt_l13>;
+	vdd-io-supply = <&pm8998_l13>;
 	qcom,vdd-io-voltage-level = <1808000 2960000>;
 	qcom,vdd-io-current-level = <200 22000>;
 
@@ -116,7 +116,7 @@
 	pinctrl-0 = <&uart_console_active>;
 };
 
-&pmcobalt_gpios {
+&pm8998_gpios {
 	/* GPIO 6 for Vol+ Key */
 	gpio@c500 {
 		status = "okay";
@@ -254,11 +254,11 @@
 	status = "disabled";
 };
 
-&pmicobalt_haptics {
+&pmi8998_haptics {
 	status = "okay";
 };
 
-&pmcobalt_vadc {
+&pm8998_vadc {
 	chan@83 {
 		label = "vph_pwr";
 		reg = <0x83>;
@@ -315,7 +315,7 @@
 	};
 };
 
-&pmcobalt_adc_tm {
+&pm8998_adc_tm {
 	chan@83 {
 		label = "vph_pwr";
 		reg = <0x83>;
@@ -376,7 +376,7 @@
 
 		vol_up {
 			label = "volume_up";
-			gpios = <&pmcobalt_gpios 6 0x1>;
+			gpios = <&pm8998_gpios 6 0x1>;
 			linux,input-type = <1>;
 			linux,code = <115>;
 			gpio-key,wakeup;
@@ -385,7 +385,7 @@
 
 		cam_focus {
 			label = "cam_focus";
-			gpios = <&pmcobalt_gpios 8 0x1>;
+			gpios = <&pm8998_gpios 8 0x1>;
 			linux,input-type = <1>;
 			linux,code = <528>;
 			gpio-key,wakeup;
@@ -498,7 +498,7 @@
 &rpm_bus {
 	rpm-regulator-ldoa28 {
 		status = "okay";
-		pmcobalt_l28: regulator-l28 {
+		pm8998_l28: regulator-l28 {
 			regulator-min-microvolt = <3312000>;
 			regulator-max-microvolt = <3312000>;
 			status = "okay";
@@ -521,9 +521,9 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&da7219_interrupt_default>;
 
-		VDD-supply = <&pmcobalt_s4>;
-		VDDIO-supply = <&pmcobalt_s4>;
-		VDDMIC-supply = <&pmcobalt_l18>;
+		VDD-supply = <&pm8998_s4>;
+		VDDIO-supply = <&pm8998_s4>;
+		VDDMIC-supply = <&pm8998_l18>;
 
 		dlg,micbias-lvl = <2600>;
 		dlg,mic-amp-in-sel = "diff";
@@ -606,6 +606,6 @@
 /* Set to batteryless to avoid system shutdown when unplugging USB cable */
 /* TODO(ericyz): remove this section once we bring up battery/charger, and
  * users switch to use battery instead of DC power supply. */
-&pmicobalt_charger {
+&pmi8998_charger {
         qcom,batteryless-platform;
 };
