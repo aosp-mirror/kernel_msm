@@ -73,6 +73,7 @@ static struct class *mclass;
 static struct device *mdevice;
 static struct mnh_sm_device *mnh_sm_dev;
 static hotplug_cb_t mnh_hotplug_cb;
+static int mnh_sm_uboot;
 
 static ssize_t mnh_sm_poweron_show(struct device *dev,
 			     struct device_attribute *attr,
@@ -296,8 +297,6 @@ int mnh_download_firmware(void)
 	if (mnh_transfer_firmware(size, fip_img->data + addr,
 			HW_MNH_UBOOT_DOWNLOAD))
 		goto fail_downloading;
-	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_7, 4,
-		HW_MNH_UBOOT_DOWNLOAD);
 
 	/* DMA transfer for device tree */
 	dev_info(mdevice, "DOWNLOADING DT...size:%zd\n", dt_img->size);
@@ -316,6 +315,20 @@ int mnh_download_firmware(void)
 	if (mnh_transfer_firmware(kernel_img->size, kernel_img->data,
 			HW_MNH_KERNEL_DOWNLOAD))
 		goto fail_downloading;
+
+	/* PC */
+	if (mnh_sm_uboot)
+		mnh_config_write(
+			HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_7, 4,
+			HW_MNH_UBOOT_DOWNLOAD);
+	else
+		mnh_config_write(
+			HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_7, 4,
+			HW_MNH_KERNEL_DOWNLOAD);
+
+	/* sbl needs this for its own operation and arg0 for kernel */
+	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_3, 4,
+			 HW_MNH_DT_DOWNLOAD);
 
 	release_firmware(fip_img);
 	release_firmware(kernel_img);
