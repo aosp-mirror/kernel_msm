@@ -892,6 +892,10 @@ static struct android_usb_function acm_function = {
 #define MAX_XPORT_STR_LEN 50
 static char rmnet_transports[MAX_XPORT_STR_LEN];
 
+/* init rmnet transports, 1/5 */
+static char rmnet_transports_init[MAX_XPORT_STR_LEN];
+/* end */
+
 /*rmnet transport name string - "rmnet_hsic[,rmnet_hsusb]" */
 static char rmnet_xport_names[MAX_XPORT_STR_LEN];
 
@@ -928,7 +932,15 @@ static int rmnet_function_bind_config(struct android_usb_function *f,
 	static int rmnet_initialized, ports;
 
 	if (!rmnet_initialized) {
-		strlcpy(buf, rmnet_transports, sizeof(buf));
+		rmnet_initialized = 1;
+		/* init rmnet transports, 2/5 */
+		if (rmnet_transports_init[0]) {
+			strlcpy(buf, rmnet_transports_init, sizeof(buf));
+			pr_info("rmnet: Init transports %s\n", rmnet_transports_init);
+		} else
+			strlcpy(buf, rmnet_transports, sizeof(buf));
+		/* end */
+
 		b = strim(buf);
 
 		strlcpy(xport_name_buf, rmnet_xport_names,
@@ -962,6 +974,19 @@ static int rmnet_function_bind_config(struct android_usb_function *f,
 		}
 		rmnet_initialized = 1;
 	}
+
+	/* init rmnet transports, 3/5 */
+	strlcpy(buf, rmnet_transports, sizeof(buf));
+	ports = 0;
+	b = strim(buf);
+	while (b) {
+		ctrl_name = strsep(&b, ",");
+		data_name = strsep(&b, ",");
+		if (ctrl_name && data_name) {
+			ports++;
+		}
+	}
+	/* end */
 
 	for (i = 0; i < ports; i++) {
 		err = frmnet_bind_config(c, i);
@@ -1020,9 +1045,25 @@ static struct device_attribute dev_attr_rmnet_xport_names =
 				rmnet_xport_names_show,
 				rmnet_xport_names_store);
 
+/* init rmnet transports, 4/5 */
+static ssize_t rmnet_transports_init_store(
+		struct device *device, struct device_attribute *attr,
+		const char *buff, size_t size)
+{
+	strlcpy(rmnet_transports_init, buff, sizeof(rmnet_transports_init));
+	return size;
+}
+
+static struct device_attribute dev_attr_rmnet_transports_init =
+				__ATTR(rmnet_transports_init, S_IWUSR,
+				NULL,
+				rmnet_transports_init_store);
+/* end */
+
 static struct device_attribute *rmnet_function_attributes[] = {
 					&dev_attr_rmnet_transports,
 					&dev_attr_rmnet_xport_names,
+					&dev_attr_rmnet_transports_init, /* init rmnet transports, 5/5 */
 					NULL };
 
 static struct android_usb_function rmnet_function = {
@@ -1816,12 +1857,34 @@ static struct device_attribute dev_attr_serial_xport_names =
 				serial_xport_names_show,
 				serial_xport_names_store);
 
+/*
+ * The number of serial ports can be updated during function switching, but
+ * transports types cannot be re-initialized, config fixed serial transports in
+ * init.qcom.usb.rc, 1/4
+ */
+static char serial_transports_init[32];
+static ssize_t transports_init_store(
+		struct device *device, struct device_attribute *attr,
+		const char *buff, size_t size)
+{
+	strlcpy(serial_transports_init, buff, sizeof(serial_transports_init));
+
+	return size;
+}
+
+static struct device_attribute dev_attr_transports_init =
+				__ATTR(transports_init, S_IWUSR,
+				NULL,
+				transports_init_store);
+/* end */
+
 static struct device_attribute *serial_function_attributes[] = {
 					&dev_attr_transports,
 					&dev_attr_serial_xport_names,
 					&dev_attr_is_connected_flag,
 					&dev_attr_dun_w_softap_enable,
 					&dev_attr_dun_w_softap_active,
+					&dev_attr_transports_init, /* init serial transports, 2/4 */
 					NULL };
 
 static int serial_function_init(struct android_usb_function *f,
@@ -1860,7 +1923,12 @@ static int serial_function_bind_config(struct android_usb_function *f,
 	int err = -1, i, ports = 0;
 	static int serial_initialized;
 	struct serial_function_config *config = f->config;
-	strlcpy(buf, serial_transports, sizeof(buf));
+	/* init serial transports, 3/4*/
+	if (!serial_initialized && serial_transports_init[0])
+		strlcpy(buf, serial_transports_init, sizeof(buf));
+	else
+		strlcpy(buf, serial_transports, sizeof(buf));
+	/* end */
 	b = strim(buf);
 
 	strlcpy(xport_name_buf, serial_xport_names, sizeof(xport_name_buf));
@@ -1889,6 +1957,19 @@ static int serial_function_bind_config(struct android_usb_function *f,
 			}
 		}
 	}
+
+	/* init serial transports, 4/4 */
+	strlcpy(buf, serial_transports, sizeof(buf));
+	ports = 0;
+	b = strim(buf);
+
+	while (b) {
+		name = strsep(&b, ",");
+		if (name) {
+			ports++;
+		}
+	}
+	/* end */
 
 	/* limit the serial ports init only for boot ports */
 	if (ports > config->instances_on)
