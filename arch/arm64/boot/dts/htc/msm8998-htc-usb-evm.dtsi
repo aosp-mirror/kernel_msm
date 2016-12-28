@@ -54,3 +54,36 @@
 
 	};
 };
+
+&soc {
+	tps61099 {
+		compatible = "ti,tps61099";
+		pinctrl-names = "tps61099_active", "tps61099_sleep";
+		pinctrl-0 = <&tps61099_active>;
+		pinctrl-1 = <&tps61099_sleep>;
+
+		tps61099_vbus: ti,tps61099 {
+			regulator-name = "tps61099-vbus";
+		};
+	};
+};
+
+&tca6418 {
+	tps61099_pinctrl {
+		tps61099_active: tps61099_active {
+			config {
+				pins = "gpio0";
+				bias-disable;
+				output-high;
+			};
+		};
+
+		tps61099_sleep: tps61099_sleep {
+			config {
+				pins = "gpio0";
+				bias-disable;
+				output-low;
+			};
+		};
+	};
+};
