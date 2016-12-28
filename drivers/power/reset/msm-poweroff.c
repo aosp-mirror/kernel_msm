@@ -62,6 +62,8 @@ static void scm_disable_sdi(void);
 static int download_mode = 1;
 static struct kobject dload_kobj;
 
+static int in_wdog_bark = 0;
+
 #ifdef CONFIG_MSM_DLOAD_MODE
 #define EDL_MODE_PROP "qcom,msm-imem-emergency_download_mode"
 #define DL_MODE_PROP "qcom,msm-imem-download_mode"
@@ -259,6 +261,25 @@ static void halt_spmi_pmic_arbiter(void)
 	}
 }
 
+void set_restart_reason(uint32_t reason)
+{
+	switch (reason) {
+	case PON_RESTART_REASON_WATCHDOG:
+	case 0x7766550C:
+		qpnp_pon_set_restart_reason(PON_RESTART_REASON_WATCHDOG);
+		     __raw_writel(0x7766550C, restart_reason);
+		in_wdog_bark = true;
+		break;
+	case PON_RESTART_REASON_PANIC:
+	case 0x7766550B:
+		qpnp_pon_set_restart_reason(PON_RESTART_REASON_PANIC);
+			__raw_writel(0x7766550B, restart_reason);
+		break;
+	}
+}
+EXPORT_SYMBOL(set_restart_reason);
+
+
 static void msm_restart_prepare(const char *cmd)
 {
 	bool need_warm_reset = false;
@@ -285,10 +306,8 @@ static void msm_restart_prepare(const char *cmd)
 				(cmd != NULL && cmd[0] != '\0'));
 	}
 
-	if (in_panic) {
-		qpnp_pon_set_restart_reason(
-			PON_RESTART_REASON_PANIC);
-		__raw_writel(0x7766550B, restart_reason);
+	if (in_panic && !in_wdog_bark) {
+		set_restart_reason(PON_RESTART_REASON_PANIC);
 	}
 
 	/* Hard reset the PMIC unless memory contents must be maintained. */
