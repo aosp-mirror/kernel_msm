@@ -11,6 +11,7 @@
  *   2016.11.30 1.00a: Origin - 10 level dynamic early empty compensation
  *   2016.12.13 1.00b: 27 level deec and dynamic entry point for deec.
  *   2016.12.15 1.00c: Avoid SOC deep drop when heavy to light loading.
+ *   2016.12.27 1.01a: Fine tune each loading for deec and voltage aging feature.
  */
 #define pr_fmt(fmt) "STC311x: %s: " fmt, __func__
 
@@ -26,7 +27,7 @@
 #include <linux/slab.h>
 #include <linux/debugfs.h>
 
-#define GG_VERSION "1.00c"
+#define GG_VERSION "1.01a"
 #define CONFIG_ENABLE_STC311X_DUMPREG
 //#define STC3117_AGING_FEATURE
 //#define STC3117_AGING_VOLTAGE_FEATURE
@@ -88,9 +89,6 @@ int STC31xx_RelaxTmrSet(int CurrentThreshold);
 #define OFFSET_CURRENT        (-3)
 #define APP_MIN_VOLTAGE       3500	/* application cut-off voltage                    */
 #define APP_MIN_VOLTAGE_EMPTY 3000	/* to darin all battery capacity, so we lock batt level at 1% for 3.0V ~ 3.5V(APP_MIN_VOLTAGE) */
-#define DEEC_BASE_VOLTAGE_1   3600	/* dynamic early empty voltage level 1            */
-#define DEEC_BASE_VOLTAGE_2   3286	/* dynamic early empty voltage level 2            */
-#define DEEC_BASE_VOLTAGE_3   3239	/* dynamic early empty voltage level 3            */
 #if defined(STC3117_AGING_VOLTAGE_FEATURE)
 #define AGING_CHECK_VOLTAGE   3571	/* aging check point voltage                    */
 #endif /* STC3117_AGING_VOLTAGE_FEATURE */
@@ -198,31 +196,43 @@ int STC31xx_RelaxTmrSet(int CurrentThreshold);
 static const int TempTable[NTEMP] = {60, 40, 25, 10, 0, -10, -20} ;   /* temperature table from 60 degreeC to -20 degreeC (descending order!) */
 static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 
+/* Dynamic early empty 7% voltage mapping */
+static int deec_7_voltage_lvl[] = {
+	3655, 3660, 3648, 3625, 3594, 3554, 3523, 3495, 3486,
+	3462, 3448, 3420, 3367, 3347, 3325, 3303, 3290, 3281,
+	3254, 3226, 3220, 3228, 3232, 3236, 3236, 3234, 3230,
+};
+
 /* Dynamic early empty 3% voltage mapping */
 static int deec_3_voltage_lvl[] = {
-	3463, 3474, 3460, 3445, 3416, 3390, 3372, 3354, 3341,
-	3307, 3283, 3265, 3243, 3228, 3217, 3220, 3210, 3213,
-	3200, 3180, 3171, 3158, 3120, 3090, 3081, 3073, 3078,
+	3493, 3498, 3493, 3481, 3462, 3429, 3402, 3377, 3369,
+	3350, 3335, 3312, 3266, 3248, 3227, 3208, 3197, 3187,
+	3157, 3128, 3125, 3134, 3139, 3143, 3145, 3140, 3139,
 };
 
 /* Dynamic early empty 1% voltage mapping */
 static int deec_1_voltage_lvl[] = {
-	3269, 3298, 3285, 3272, 3251, 3231, 3216, 3202, 3194,
-	3167, 3152, 3139, 3126, 3116, 3107, 3110, 3100, 3099,
-	3090, 3080, 3080, 3073, 3054, 3036, 3029, 3025, 3029,
+	3307, 3311, 3306, 3295, 3281, 3259, 3242, 3223, 3218,
+	3205, 3192, 3176, 3141, 3132, 3119, 3105, 3098, 3093,
+	3073, 3054, 3055, 3060, 3063, 3067, 3070, 3062, 3065,
+};
+
+/* Bypass 3 secs heavy loading drop */
+static int three_secs_voltage_filter_tbl[] = {
+	0, 0, 0, 5, 11, 18, 24, 30, 33,
+	33, 39, 45, 50, 56, 61, 67, 57, 62,
+	67, 72, 77, 75, 65, 70, 65, 70, 62,
 };
 
 #if defined(STC3117_AGING_VOLTAGE_FEATURE)
 static bool aging_trigger_flag = false;
 
-/* Defined three percentage level at 3.6V with difference current loading*/
+/* Defined three percentage level at 3.571V with difference current loading*/
 static int aging_comparsion_tbl[] = {
-	45,	/* 4.5% when current <= 30mA*/
-	48,	/* 4.8% when current > 30mA && <=50 */
-	52,	/* 5.2% when current > 50mA && <=100 */
-	64,	/* 6.4% when current > 100mA && <=150 */
-	88,	/* 8.8% when current > 150mA && <= 200mA*/
-	122	/* 12.2% when current > 200mA && <= 250mA*/
+	45,	/* 4.5% when current <= 100mA*/
+	58,	/* 5.8% when current > 100mA && <=150 */
+	83,	/* 8.3% when current > 150mA && <= 200mA*/
+	116	/* 11.6% when current > 200mA && <= 250mA*/
 };
 #endif /* STC3117_AGING_VOLTAGE_FEATURE */
 
@@ -1838,19 +1848,15 @@ static void voltage_aging_compensation(int SOC, int avg_current) {
 	int level = 0;
 	int aging_comparsion_array_num = 0;
 
-	pr_err("Voltage aging compensation, avg_current=%d\n", avg_current);
-	if (avg_current >= -30 && avg_current < 0) {
+	pr_debug("Voltage aging compensation, avg_current=%d\n", avg_current);
+	if (avg_current >= -100 && avg_current < 0) {
 		level = 0;
-	} else if (avg_current >= -50 && avg_current < -30) {
-		level = 1;
-	} else if (avg_current >= -100 && avg_current < -50) {
-		level = 2;
 	} else if (avg_current >= -150 && avg_current < -100) {
-		level = 3;
+		level = 1;
 	} else if (avg_current >= -200 && avg_current < -150) {
-		level = 4;
+		level = 2;
 	} else if (avg_current >= -250 && avg_current < -200) {
-		level = 5;
+		level = 3;
 	} else {
 		pr_err("Other case, no need to aging\n");
 		return;
@@ -1868,76 +1874,77 @@ static void voltage_aging_compensation(int SOC, int avg_current) {
 	} else if (SOC < aging_comparsion_tbl[level]-20) {
 		CompensateVolCCCnf(1);
 	} else {
+		pr_err("Voltage aging in range, no need to do compensation\n");
 		return;
 	}
 }
 #endif /* STC3117_AGING_VOLTAGE_FEATURE */
 
-int Dynamic_Early_Empty(int SOC, int voltage, int current_vol, int avg_current, int eec_voltage) {
+int Dynamic_Early_Empty(int SOC, int voltage, int current_vol, int avg_current) {
 
 	int rc = 0;
 	int level = 0;
 	int deec_3_array_num = 0;
 	int deec_1_array_num = 0;
 
-	pr_debug("Dynamic early empty compensation, SOC=%d, voltage=%d, avg_current=%d, eec_voltage=%d\n", SOC, voltage, avg_current, eec_voltage);
+	pr_debug("Dynamic early empty compensation, SOC=%d, voltage=%d, avg_current=%d\n", SOC, voltage, avg_current);
 
-	if (avg_current >= -15 && avg_current < 0) {
+	if (avg_current >= -15 && avg_current < 0 && voltage < deec_7_voltage_lvl[0]) {
 		level = 0;
-	} else if (avg_current >= -30 && avg_current < -15) {
+	} else if (avg_current >= -30 && avg_current < -15 && voltage < deec_7_voltage_lvl[1]) {
 		level = 1;
-	} else if (avg_current >= -50 && avg_current < -30) {
+	} else if (avg_current >= -50 && avg_current < -30 && voltage < deec_7_voltage_lvl[2]) {
 		level = 2;
-	} else if (avg_current >= -100 && avg_current < -50) {
+	} else if (avg_current >= -100 && avg_current < -50 && voltage < deec_7_voltage_lvl[3]) {
 		level = 3;
-	} else if (avg_current >= -150 && avg_current < -100) {
+	} else if (avg_current >= -150 && avg_current < -100 && voltage < deec_7_voltage_lvl[4]) {
 		level = 4;
-	} else if (avg_current >= -200 && avg_current < -150) {
+	} else if (avg_current >= -200 && avg_current < -150 && voltage < deec_7_voltage_lvl[5]) {
 		level = 5;
-	} else if (avg_current >= -250 && avg_current < -200) {
+	} else if (avg_current >= -250 && avg_current < -200 && voltage < deec_7_voltage_lvl[6]) {
 		level = 6;
-	} else if (avg_current >= -300 && avg_current < -250) {
+	} else if (avg_current >= -300 && avg_current < -250 && voltage < deec_7_voltage_lvl[7]) {
 		level = 7;
-	} else if (avg_current >= -325 && avg_current < -300) {
+	} else if (avg_current >= -325 && avg_current < -300 && voltage < deec_7_voltage_lvl[8]) {
 		level = 8;
-	} else if (avg_current >= -375 && avg_current < -325) {
+	} else if (avg_current >= -375 && avg_current < -325 && voltage < deec_7_voltage_lvl[9]) {
 		level = 9;
-	} else if (avg_current >= -425 && avg_current < -375) {
+	} else if (avg_current >= -425 && avg_current < -375 && voltage < deec_7_voltage_lvl[10]) {
 		level = 10;
-	} else if (avg_current >= -475 && avg_current < -425) {
+	} else if (avg_current >= -475 && avg_current < -425 && voltage < deec_7_voltage_lvl[11]) {
 		level = 11;
-	} else if (avg_current >= -525 && avg_current < -475) {
+	} else if (avg_current >= -525 && avg_current < -475 && voltage < deec_7_voltage_lvl[12]) {
 		level = 12;
-	} else if (avg_current >= -575 && avg_current < -525) {
+	} else if (avg_current >= -575 && avg_current < -525 && voltage < deec_7_voltage_lvl[13]) {
 		level = 13;
-	} else if (avg_current >= -625 && avg_current < -575) {
+	} else if (avg_current >= -625 && avg_current < -575 && voltage < deec_7_voltage_lvl[14]) {
 		level = 14;
-	} else if (avg_current >= -675 && avg_current < -625) {
+	} else if (avg_current >= -675 && avg_current < -625 && voltage < deec_7_voltage_lvl[15]) {
 		level = 15;
-	} else if (avg_current >= -725 && avg_current < -675) {
+	} else if (avg_current >= -725 && avg_current < -675 && voltage < deec_7_voltage_lvl[16]) {
 		level = 16;
-	} else if (avg_current >= -775 && avg_current < -725) {
+	} else if (avg_current >= -775 && avg_current < -725 && voltage < deec_7_voltage_lvl[17]) {
 		level = 17;
-	} else if (avg_current >= -825 && avg_current < -775) {
+	} else if (avg_current >= -825 && avg_current < -775 && voltage < deec_7_voltage_lvl[18]) {
 		level = 18;
-	} else if (avg_current >= -875 && avg_current < -825) {
+	} else if (avg_current >= -875 && avg_current < -825 && voltage < deec_7_voltage_lvl[19]) {
 		level = 19;
-	} else if (avg_current >= -925 && avg_current < -875) {
+	} else if (avg_current >= -925 && avg_current < -875 && voltage < deec_7_voltage_lvl[20]) {
 		level = 20;
-	} else if (avg_current >= -975 && avg_current < -925) {
+	} else if (avg_current >= -975 && avg_current < -925 && voltage < deec_7_voltage_lvl[21]) {
 		level = 21;
-	} else if (avg_current >= -1025 && avg_current < -975) {
+	} else if (avg_current >= -1025 && avg_current < -975 && voltage < deec_7_voltage_lvl[22]) {
 		level = 22;
-	} else if (avg_current >= -1075 && avg_current < -1025) {
+	} else if (avg_current >= -1075 && avg_current < -1025 && voltage < deec_7_voltage_lvl[23]) {
 		level = 23;
-	} else if (avg_current >= -1125 && avg_current < -1075) {
+	} else if (avg_current >= -1125 && avg_current < -1075 && voltage < deec_7_voltage_lvl[24]) {
 		level = 24;
-	} else if (avg_current >= -1175 && avg_current < -1125) {
+	} else if (avg_current >= -1175 && avg_current < -1125 && voltage < deec_7_voltage_lvl[25]) {
 		level = 25;
-	} else if (avg_current < -1175) {
+	} else if (avg_current < -1175 && voltage < deec_7_voltage_lvl[26]) {
 		level = 26;
 	} else {
-		pr_debug("Don't do dynamic early empty compensation\n");
+		pr_err("Don't do dynamic early empty compensation\n");
 		rc = SOC;
 		return rc;
 	}
@@ -1958,7 +1965,7 @@ int Dynamic_Early_Empty(int SOC, int voltage, int current_vol, int avg_current, 
 			return SOC;
 		}
 		pr_debug("Case %d-1 compensation\n", level);
-		rc = SECOND_EEC_SOC + (SOC - SECOND_EEC_SOC) * (voltage - deec_3_voltage_lvl[level]) / (eec_voltage - deec_3_voltage_lvl[level]);
+		rc = SECOND_EEC_SOC + (SOC - SECOND_EEC_SOC) * (voltage - deec_3_voltage_lvl[level]) / (deec_7_voltage_lvl[level] - deec_3_voltage_lvl[level]);
 	} else if (voltage > deec_1_voltage_lvl[level] && voltage <= deec_3_voltage_lvl[level]) {
 		pr_debug("Case %d-2 compensation\n", level);
 		rc = THIRD_EEC_SOC + (SECOND_EEC_SOC - THIRD_EEC_SOC) * (voltage - deec_1_voltage_lvl[level]) / (deec_3_voltage_lvl[level] - deec_1_voltage_lvl[level]);
@@ -1971,8 +1978,15 @@ int Dynamic_Early_Empty(int SOC, int voltage, int current_vol, int avg_current, 
 	 * Meanwhile the SOC drop exceed 5% is abnormal case because the Avg vol and current *
 	 * decouple trend.                                                                   */
 	if (current_vol > (voltage + 20) && (SOC - rc) > 50) {
-		pr_err("DEEC result exceed 5 percent and current voltage(%d) great than avg voltage(%d) 20mA up, then bypass this DEEC data. SOC=%d rc=%d\n",
+		pr_err("DEEC result exceed 5 percent and current voltage(%d) great than avg voltage(%d) 20mV up, then bypass this DEEC data. SOC=%d rc=%d\n",
 			current_vol, voltage, SOC, rc);
+		rc = SOC;
+	}
+
+	/* Use 3 secs voltage offset to bypass the heavy loading. */
+	if (level >= 3 && current_vol < voltage - three_secs_voltage_filter_tbl[level] ) {
+		pr_err("Current voltage(%d) less than avg voltage(%d) (%d)mV up, then hold real SOC. SOC=%d rc=%d\n",
+			current_vol, voltage, three_secs_voltage_filter_tbl[level], SOC, rc);
 		rc = SOC;
 	}
 
@@ -2100,7 +2114,9 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 		value=BattData.AvgVoltage;
 		if (BattData.Voltage < value) value = BattData.Voltage;
 #if defined(STC3117_AGING_VOLTAGE_FEATURE)
+		pr_debug("[Alan] aging voltage enter check:%d, aging_trigger_flag:%d, GG_Ram.reg.CC_cnf=%d\n", value, aging_trigger_flag, GG_Ram.reg.CC_cnf);
 		if (value <= (AGING_CHECK_VOLTAGE + 5) && value >= (AGING_CHECK_VOLTAGE - 5)) {
+			pr_err("[Alan] aging enter check:%d\n", aging_trigger_flag);
 			if (aging_trigger_flag) {
 				//do aging comarsion
 				voltage_aging_compensation(BattData.AvgCurrent, BattData.SOC);
@@ -2110,7 +2126,7 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 
 		}
 #endif /* STC3117_AGING_VOLTAGE_FEATURE */
-		if (value < (APP_MIN_VOLTAGE + 100)) {
+		if (value < (APP_MIN_VOLTAGE + 160)) {
 			// Voltage drop below 3000 mV, then 0% and shutdown
 			if (value < APP_MIN_VOLTAGE_EMPTY) {
 				BattData.SOC=0;
@@ -2122,26 +2138,7 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 				//BattData.SOC = BattData.SOC * (value - APP_MIN_VOLTAGE) / 100;
 
 				/* Use current loading choose voltage baseline */
-				if (BattData.AvgCurrent < 0 && BattData.AvgCurrent >= -475 && value < DEEC_BASE_VOLTAGE_1) {
-					//Use avg current to do dynamic early empty compensation
-					pr_err("Dynamic early empty, AvgCurrent:%d AvgVoltage:%d entry point:%d\n",
-						BattData.AvgCurrent, value, DEEC_BASE_VOLTAGE_1);
-					BattData.SOC = Dynamic_Early_Empty(BattData.SOC, value, BattData.Voltage, BattData.AvgCurrent, DEEC_BASE_VOLTAGE_1);
-				} else if (BattData.AvgCurrent < -475 && BattData.AvgCurrent >= -775 && value < DEEC_BASE_VOLTAGE_2) {
-					//Use avg current to do dynamic early empty compensation
-					pr_err("Dynamic early empty, AvgCurrent:%d AvgVoltage:%d entry point:%d\n",
-						BattData.AvgCurrent, value, DEEC_BASE_VOLTAGE_2);
-					BattData.SOC = Dynamic_Early_Empty(BattData.SOC, value, BattData.Voltage, BattData.AvgCurrent, DEEC_BASE_VOLTAGE_2);
-				} else if (BattData.AvgCurrent < -775 && value < DEEC_BASE_VOLTAGE_3 ) {
-					//Use avg current to do dynamic early empty compensation
-					pr_err("Dynamic early empty, AvgCurrent:%d AvgVoltage:%d entry point:%d\n",
-						BattData.AvgCurrent, value, DEEC_BASE_VOLTAGE_3);
-					BattData.SOC = Dynamic_Early_Empty(BattData.SOC, value, BattData.Voltage, BattData.AvgCurrent, DEEC_BASE_VOLTAGE_3);
-				} else {
-					pr_err("Dynamic early empty, AvgCurrent:%d AvgVoltage:%d\n",
-						BattData.AvgCurrent, value);
-					pr_debug("Keep CC mode, don't enter deec.\n");
-				}
+				BattData.SOC = Dynamic_Early_Empty(BattData.SOC, value, BattData.Voltage, BattData.AvgCurrent);
 
 				//Avoid SOC rebounce
 				if (BattData.LastSOC == -1 || BattData.SOC < BattData.LastSOC) {
@@ -2187,6 +2184,7 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 				STC311x_SetSOC(MAX_HRSOC);
 				force_full_flag = false;
 #if defined(STC3117_AGING_VOLTAGE_FEATURE)
+				pr_debug("[Alan] Full Charge, aging_trigger_flag set true\n");
 				aging_trigger_flag = true;
 #endif /* STC3117_AGING_VOLTAGE_FEATURE */
 #ifdef DEBUG_SOC
@@ -2206,7 +2204,7 @@ int GasGauge_Task(GasGauge_DataTypeDef *GG)
 			}
 #if defined(STC3117_AGING_VOLTAGE_FEATURE)
 			if (BattData.AvgCurrent > CHG_NOT_CHARGE && BattData.SOC <= 980) {
-				pr_err("[Alan] Charing now, reset aging_trigger_flag\n");
+				pr_debug("[Alan] Charging now, reset aging_trigger_flag\n");
 				aging_trigger_flag = false;
 			}
 #endif /* STC3117_AGING_VOLTAGE_FEATURE */
