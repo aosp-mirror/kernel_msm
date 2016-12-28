@@ -250,7 +250,7 @@ static noinline int i2cdev_ioctl_rdrw(struct i2c_client *client,
 
 	/* Put an arbitrary limit on the number of messages that can
 	 * be sent at once */
-	if (rdwr_arg.nmsgs > I2C_RDRW_IOCTL_MAX_MSGS)
+	if (rdwr_arg.nmsgs > I2C_RDRW_IOCTL_MAX_MSGS || rdwr_arg.nmsgs <= 0)
 		return -EINVAL;
 
 	rdwr_pa = memdup_user(rdwr_arg.msgs,
