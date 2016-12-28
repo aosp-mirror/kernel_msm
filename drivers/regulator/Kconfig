@@ -664,6 +664,12 @@ config REGULATOR_TPS6105X
 	  It is a single boost converter primarily for white LEDs and
 	  audio amplifiers.
 
+config REGULATOR_TPS61099
+	bool "TI TPS61099 Power regulators"
+	default n
+	help
+	  This driver supports TPS61099 voltage regulator chips.
+
 config REGULATOR_TPS62360
 	tristate "TI TPS6236x Power Regulator"
 	depends on I2C
