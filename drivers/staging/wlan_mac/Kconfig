@@ -1,0 +1,8 @@
+#
+# htc set wlan mac
+#
+config HTC_WLAN_NV
+	bool "Read MAC from mfg partition"
+	default n
+	help
+	  Say Y here if you want the HTC WLAN NV features
