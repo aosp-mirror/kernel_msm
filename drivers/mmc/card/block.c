@@ -37,7 +37,6 @@
 #include <linux/compat.h>
 #include <linux/pm_runtime.h>
 #include <linux/ioprio.h>
-#include <linux/timer.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/mmc.h>
@@ -100,10 +99,6 @@ static DEFINE_MUTEX(block_mutex);
  * or bootarg options.
  */
 static int perdev_minors = CONFIG_MMC_BLOCK_MINORS;
-
-static bool rpmb_ioctl_throttling = false;
-static bool rpmb_tmr_triggered = false;
-static struct timer_list rpmb_ioctl_rst_timer;
 
 /*
  * We've only got one major, so number of mmcblk devices is
@@ -809,13 +804,6 @@ out:
 	return ERR_PTR(err);
 }
 
-static int rpmb_ioctl_rst_flag(void)
-{
-	pr_err("%s: reset rpmb_ioctl_throttling\n", __func__);
-	rpmb_ioctl_throttling = false;
-	return 0;
-}
-
 static int mmc_blk_ioctl_rpmb_cmd(struct block_device *bdev,
 	struct mmc_ioc_rpmb __user *ic_ptr)
 {
@@ -831,9 +819,6 @@ static int mmc_blk_ioctl_rpmb_cmd(struct block_device *bdev,
 
 	/* The caller must have CAP_SYS_RAWIO */
 	if (!capable(CAP_SYS_RAWIO))
-		return -EPERM;
-
-	if (rpmb_ioctl_throttling)
 		return -EPERM;
 
 	md = mmc_blk_get(bdev->bd_disk);
@@ -852,19 +837,6 @@ static int mmc_blk_ioctl_rpmb_cmd(struct block_device *bdev,
 	card = md->queue.card;
 	if (IS_ERR(card)) {
 		err = PTR_ERR(card);
-		goto idata_free;
-	}
-
-	if(idata->data[1]->buf_bytes == 12800 && !rpmb_tmr_triggered){
-		pr_err("%s: kick off rpmb throttling timer\n", __func__);
-		rpmb_ioctl_throttling = true;
-		init_timer(&rpmb_ioctl_rst_timer);
-		rpmb_ioctl_rst_timer.function = (void *)rpmb_ioctl_rst_flag;
-		rpmb_ioctl_rst_timer.data = ((unsigned long) 0);
-		rpmb_ioctl_rst_timer.expires = jiffies + 180*HZ;
-		add_timer(&rpmb_ioctl_rst_timer);
-		rpmb_tmr_triggered = true;
-		err = -EPERM;
 		goto idata_free;
 	}
 
