@@ -1984,6 +1984,10 @@ static int gsi_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 
 	atomic_set(&gsi->connected, 1);
 
+	/* send 0 len pkt to qti to notify state change */
+	if (gsi->prot_id == IPA_USB_DIAG)
+		gsi_ctrl_send_cpkt_tomodem(gsi, NULL, 0);
+
 	return 0;
 
 notify_ep_disable:
@@ -2241,7 +2245,7 @@ skip_string_id_alloc:
 		if (!ep)
 			goto fail;
 		gsi->d_port.in_ep = ep;
-		msm_ep_config(gsi->d_port.in_ep);
+		msm_ep_config(gsi->d_port.in_ep, NULL, GFP_KERNEL);
 		ep->driver_data = cdev;	/* claim */
 	}
 
@@ -2251,7 +2255,7 @@ skip_string_id_alloc:
 		if (!ep)
 			goto fail;
 		gsi->d_port.out_ep = ep;
-		msm_ep_config(gsi->d_port.out_ep);
+		msm_ep_config(gsi->d_port.out_ep, NULL, GFP_KERNEL);
 		ep->driver_data = cdev;	/* claim */
 	}
 

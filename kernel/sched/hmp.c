@@ -641,14 +641,18 @@ void clear_hmp_request(int cpu)
 	clear_boost_kick(cpu);
 	clear_reserved(cpu);
 	if (rq->push_task) {
+		struct task_struct *push_task = NULL;
+
 		raw_spin_lock_irqsave(&rq->lock, flags);
 		if (rq->push_task) {
 			clear_reserved(rq->push_cpu);
-			put_task_struct(rq->push_task);
+			push_task = rq->push_task;
 			rq->push_task = NULL;
 		}
 		rq->active_balance = 0;
 		raw_spin_unlock_irqrestore(&rq->lock, flags);
+		if (push_task)
+			put_task_struct(push_task);
 	}
 }
 
@@ -784,11 +788,12 @@ __read_mostly unsigned int sched_major_task_runtime = 10000000;
 
 static unsigned int sync_cpu;
 
-static LIST_HEAD(related_thread_groups);
+struct related_thread_group *related_thread_groups[MAX_NUM_CGROUP_COLOC_ID];
+static LIST_HEAD(active_related_thread_groups);
 static DEFINE_RWLOCK(related_thread_group_lock);
 
 #define for_each_related_thread_group(grp) \
-	list_for_each_entry(grp, &related_thread_groups, list)
+	list_for_each_entry(grp, &active_related_thread_groups, list)
 
 /*
  * Task load is categorized into buckets for the purpose of top task tracking.
@@ -1767,20 +1772,20 @@ static int send_notification(struct rq *rq, int check_pred, int check_groups)
 		if (freq_required < cur_freq + sysctl_sched_pred_alert_freq)
 			return 0;
 	} else {
-		read_lock(&related_thread_group_lock);
+		read_lock_irqsave(&related_thread_group_lock, flags);
 		/*
 		 * Protect from concurrent update of rq->prev_runnable_sum and
 		 * group cpu load
 		 */
-		raw_spin_lock_irqsave(&rq->lock, flags);
+		raw_spin_lock(&rq->lock);
 		if (check_groups)
 			_group_load_in_cpu(cpu_of(rq), &group_load, NULL);
 
 		new_load = rq->prev_runnable_sum + group_load;
 		new_load = freq_policy_load(rq, new_load);
 
-		raw_spin_unlock_irqrestore(&rq->lock, flags);
-		read_unlock(&related_thread_group_lock);
+		raw_spin_unlock(&rq->lock);
+		read_unlock_irqrestore(&related_thread_group_lock, flags);
 
 		cur_freq = load_to_freq(rq, rq->old_busy_time);
 		freq_required = load_to_freq(rq, new_load);
@@ -3052,7 +3057,7 @@ void reset_all_window_stats(u64 window_start, unsigned int window_size)
 
 	read_unlock(&tasklist_lock);
 
-	list_for_each_entry(grp, &related_thread_groups, list) {
+	list_for_each_entry(grp, &active_related_thread_groups, list) {
 		int j;
 
 		for_each_possible_cpu(j) {
@@ -3202,14 +3207,16 @@ void sched_get_cpus_busy(struct sched_load *busy,
 	if (unlikely(cpus == 0))
 		return;
 
+	local_irq_save(flags);
+
+	read_lock(&related_thread_group_lock);
+
 	/*
 	 * This function could be called in timer context, and the
 	 * current task may have been executing for a long time. Ensure
 	 * that the window stats are current by doing an update.
 	 */
-	read_lock(&related_thread_group_lock);
 
-	local_irq_save(flags);
 	for_each_cpu(cpu, query_cpus)
 		raw_spin_lock(&cpu_rq(cpu)->lock);
 
@@ -3309,9 +3316,10 @@ skip_early:
 
 	for_each_cpu(cpu, query_cpus)
 		raw_spin_unlock(&(cpu_rq(cpu))->lock);
-	local_irq_restore(flags);
 
 	read_unlock(&related_thread_group_lock);
+
+	local_irq_restore(flags);
 
 	i = 0;
 	for_each_cpu(cpu, query_cpus) {
@@ -3965,47 +3973,54 @@ _group_cpu_time(struct related_thread_group *grp, int cpu)
 	return grp ? per_cpu_ptr(grp->cpu_time, cpu) : NULL;
 }
 
-struct related_thread_group *alloc_related_thread_group(int group_id)
+static inline struct related_thread_group*
+lookup_related_thread_group(unsigned int group_id)
 {
-	struct related_thread_group *grp;
-
-	grp = kzalloc(sizeof(*grp), GFP_ATOMIC);
-	if (!grp)
-		return ERR_PTR(-ENOMEM);
-
-	if (alloc_group_cputime(grp)) {
-		kfree(grp);
-		return ERR_PTR(-ENOMEM);
-	}
-
-	grp->id = group_id;
-	INIT_LIST_HEAD(&grp->tasks);
-	INIT_LIST_HEAD(&grp->list);
-	raw_spin_lock_init(&grp->lock);
-
-	return grp;
+	return related_thread_groups[group_id];
 }
 
-struct related_thread_group *lookup_related_thread_group(unsigned int group_id)
+int alloc_related_thread_groups(void)
 {
+	int i, ret;
 	struct related_thread_group *grp;
 
-	list_for_each_entry(grp, &related_thread_groups, list) {
-		if (grp->id == group_id)
-			return grp;
+	/* groupd_id = 0 is invalid as it's special id to remove group. */
+	for (i = 1; i < MAX_NUM_CGROUP_COLOC_ID; i++) {
+		grp = kzalloc(sizeof(*grp), GFP_NOWAIT);
+		if (!grp) {
+			ret = -ENOMEM;
+			goto err;
+		}
+
+		if (alloc_group_cputime(grp)) {
+			kfree(grp);
+			ret = -ENOMEM;
+			goto err;
+		}
+
+		grp->id = i;
+		INIT_LIST_HEAD(&grp->tasks);
+		INIT_LIST_HEAD(&grp->list);
+		raw_spin_lock_init(&grp->lock);
+
+		related_thread_groups[i] = grp;
 	}
 
-	return NULL;
-}
+	return 0;
 
-/* See comments before preferred_cluster() */
-static void free_related_thread_group(struct rcu_head *rcu)
-{
-	struct related_thread_group *grp = container_of(rcu, struct
-			related_thread_group, rcu);
+err:
+	for (i = 1; i < MAX_NUM_CGROUP_COLOC_ID; i++) {
+		grp = lookup_related_thread_group(i);
+		if (grp) {
+			free_group_cputime(grp);
+			kfree(grp);
+			related_thread_groups[i] = NULL;
+		} else {
+			break;
+		}
+	}
 
-	free_group_cputime(grp);
-	kfree(grp);
+	return ret;
 }
 
 static void remove_task_from_group(struct task_struct *p)
@@ -4030,10 +4045,12 @@ static void remove_task_from_group(struct task_struct *p)
 	raw_spin_unlock(&grp->lock);
 
 	/* Reserved groups cannot be destroyed */
-	if (empty_group && grp->id != DEFAULT_CGROUP_COLOC_ID) {
-		list_del(&grp->list);
-		call_rcu(&grp->rcu, free_related_thread_group);
-	}
+	if (empty_group && grp->id != DEFAULT_CGROUP_COLOC_ID)
+		 /*
+		  * We test whether grp->list is attached with list_empty()
+		  * hence re-init the list after deletion.
+		  */
+		list_del_init(&grp->list);
 }
 
 static int
@@ -4105,6 +4122,63 @@ void add_new_task_to_grp(struct task_struct *new)
 	write_unlock_irqrestore(&related_thread_group_lock, flags);
 }
 
+static int __sched_set_group_id(struct task_struct *p, unsigned int group_id)
+{
+	int rc = 0;
+	unsigned long flags;
+	struct related_thread_group *grp = NULL;
+
+	if (group_id >= MAX_NUM_CGROUP_COLOC_ID)
+		return -EINVAL;
+
+	raw_spin_lock_irqsave(&p->pi_lock, flags);
+	write_lock(&related_thread_group_lock);
+
+	/* Switching from one group to another directly is not permitted */
+	if ((current != p && p->flags & PF_EXITING) ||
+			(!p->grp && !group_id) ||
+			(p->grp && group_id))
+		goto done;
+
+	if (!group_id) {
+		remove_task_from_group(p);
+		goto done;
+	}
+
+	grp = lookup_related_thread_group(group_id);
+	if (list_empty(&grp->list))
+		list_add(&grp->list, &active_related_thread_groups);
+
+	rc = add_task_to_group(p, grp);
+done:
+	write_unlock(&related_thread_group_lock);
+	raw_spin_unlock_irqrestore(&p->pi_lock, flags);
+
+	return rc;
+}
+
+int sched_set_group_id(struct task_struct *p, unsigned int group_id)
+{
+	/* DEFAULT_CGROUP_COLOC_ID is a reserved id */
+	if (group_id == DEFAULT_CGROUP_COLOC_ID)
+		return -EINVAL;
+
+	return __sched_set_group_id(p, group_id);
+}
+
+unsigned int sched_get_group_id(struct task_struct *p)
+{
+	unsigned int group_id;
+	struct related_thread_group *grp;
+
+	rcu_read_lock();
+	grp = task_related_thread_group(p);
+	group_id = grp ? grp->id : 0;
+	rcu_read_unlock();
+
+	return group_id;
+}
+
 #if defined(CONFIG_SCHED_TUNE) && defined(CONFIG_CGROUP_SCHEDTUNE)
 /*
  * We create a default colocation group at boot. There is no need to
@@ -4123,14 +4197,9 @@ static int __init create_default_coloc_group(void)
 	struct related_thread_group *grp = NULL;
 	unsigned long flags;
 
-	grp = alloc_related_thread_group(DEFAULT_CGROUP_COLOC_ID);
-	if (IS_ERR(grp)) {
-		WARN_ON(1);
-		return -ENOMEM;
-	}
-
+	grp = lookup_related_thread_group(DEFAULT_CGROUP_COLOC_ID);
 	write_lock_irqsave(&related_thread_group_lock, flags);
-	list_add(&grp->list, &related_thread_groups);
+	list_add(&grp->list, &active_related_thread_groups);
 	write_unlock_irqrestore(&related_thread_group_lock, flags);
 
 	update_freq_aggregate_threshold(MAX_FREQ_AGGR_THRESH);
@@ -4142,66 +4211,9 @@ int sync_cgroup_colocation(struct task_struct *p, bool insert)
 {
 	unsigned int grp_id = insert ? DEFAULT_CGROUP_COLOC_ID : 0;
 
-	return sched_set_group_id(p, grp_id);
+	return __sched_set_group_id(p, grp_id);
 }
 #endif
-
-int sched_set_group_id(struct task_struct *p, unsigned int group_id)
-{
-	int rc = 0;
-	unsigned long flags;
-	struct related_thread_group *grp = NULL;
-
-	raw_spin_lock_irqsave(&p->pi_lock, flags);
-	write_lock(&related_thread_group_lock);
-
-	/* Switching from one group to another directly is not permitted */
-	if ((current != p && p->flags & PF_EXITING) ||
-			(!p->grp && !group_id) ||
-			(p->grp && group_id))
-		goto done;
-
-	if (!group_id) {
-		remove_task_from_group(p);
-		goto done;
-	}
-
-	grp = lookup_related_thread_group(group_id);
-	if (!grp) {
-		/* This is a reserved id */
-		if (group_id == DEFAULT_CGROUP_COLOC_ID) {
-			rc = -EINVAL;
-			goto done;
-		}
-
-		grp = alloc_related_thread_group(group_id);
-		if (IS_ERR(grp)) {
-			rc = -ENOMEM;
-			goto done;
-		}
-
-		list_add(&grp->list, &related_thread_groups);
-	}
-
-	rc = add_task_to_group(p, grp);
-done:
-	write_unlock(&related_thread_group_lock);
-	raw_spin_unlock_irqrestore(&p->pi_lock, flags);
-	return rc;
-}
-
-unsigned int sched_get_group_id(struct task_struct *p)
-{
-	unsigned int group_id;
-	struct related_thread_group *grp;
-
-	rcu_read_lock();
-	grp = task_related_thread_group(p);
-	group_id = grp ? grp->id : 0;
-	rcu_read_unlock();
-
-	return group_id;
-}
 
 static void update_cpu_cluster_capacity(const cpumask_t *cpus)
 {

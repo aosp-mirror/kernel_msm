@@ -12,6 +12,35 @@
 
 #include <dt-bindings/interrupt-controller/irq.h>
 #include "msm8998-v2.1-interposer-msmfalcon.dtsi"
+#include "msm8998-camera-sensor-mtp.dtsi"
+
+/ {
+	bluetooth: bt_wcn3990 {
+		status = "disabled";
+		compatible = "qca,wcn3990";
+		qca,bt-vdd-io-supply = <&pmfalcon_l13>;
+		qca,bt-vdd-xtal-supply = <&pmfalcon_l9>;
+		qca,bt-vdd-core-supply = <&pmfalcon_l9>;
+		qca,bt-vdd-pa-supply = <&pmfalcon_l6>;
+		qca,bt-vdd-ldo-supply = <&pmfalcon_l19>;
+		qca,bt-chip-pwd-supply = <&pm2falcon_bob_pin1>;
+		clocks = <&clock_gcc clk_rf_clk2>;
+		clock-names = "rf_clk2";
+
+		qca,bt-vdd-io-voltage-level = <1800000 1800000>;
+		qca,bt-vdd-xtal-voltage-level = <1800000 1800000>;
+		qca,bt-vdd-core-voltage-level = <1800000 1800000>;
+		qca,bt-vdd-pa-voltage-level = <1304000 1304000>;
+		qca,bt-vdd-ldo-voltage-level = <3312000 3312000>;
+		qca,bt-chip-pwd-voltage-level = <3600000 3600000>;
+
+		qca,bt-vdd-io-current-level = <1>; /* LPM/PFM */
+		qca,bt-vdd-xtal-current-level = <1>; /* LPM/PFM */
+		qca,bt-vdd-core-current-level = <1>; /* LPM/PFM */
+		qca,bt-vdd-pa-current-level = <1>; /* LPM/PFM */
+		qca,bt-vdd-ldo-current-level = <1>; /* LPM/PFM */
+	};
+};
 
 &uartblsp2dm1 {
 	status = "ok";
@@ -21,8 +50,10 @@
 
 &ufsphy1 {
 	vdda-phy-supply = <&pm2falcon_l1>;
-	vdda-pll-supply = <&pmfalcon_l10>;
-	vddp-ref-clk-supply = <&pmfalcon_l8>;
+	vdda-pll-supply = <&pmfalcon_l1>;
+	vddp-ref-clk-supply = <&pmfalcon_l1>;
+	vdda-phy-max-uv = <925000>;
+	vdda-phy-min-uv = <800000>;
 	vdda-phy-max-microamp = <51400>;
 	vdda-pll-max-microamp = <14600>;
 	vddp-ref-clk-max-microamp = <100>;
@@ -34,11 +65,9 @@
 	vdd-hba-supply = <&gdsc_ufs>;
 	vdd-hba-fixed-regulator;
 	vcc-supply = <&pm2falcon_l4>;
-	vccq-supply = <&pmfalcon_l8>;
 	vccq2-supply = <&pmfalcon_l8>;
-	vcc-max-microamp = <750000>;
-	vccq-max-microamp = <560000>;
-	vccq2-max-microamp = <750000>;
+	vcc-max-microamp = <500000>;
+	vccq2-max-microamp = <600000>;
 	status = "ok";
 };
 
@@ -71,10 +100,12 @@
 };
 
 &sdhc_2 {
-	qcom,vdd-voltage-level = <2950000 2960000>;
+	vdd-supply = <&pm2falcon_l5>;
+	qcom,vdd-voltage-level = <2950000 2950000>;
 	qcom,vdd-current-level = <200 800000>;
 
-	qcom,vdd-io-voltage-level = <1808000 2960000>;
+	vdd-io-supply = <&pm2falcon_l2>;
+	qcom,vdd-io-voltage-level = <1800000 2950000>;
 	qcom,vdd-io-current-level = <200 22000>;
 
 	pinctrl-names = "active", "sleep";

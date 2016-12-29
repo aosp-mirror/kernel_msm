@@ -287,6 +287,8 @@ struct msm_vfe_hardware_info vfe48_hw_info = {
 			.restart = msm_vfe47_axi_restart,
 			.update_cgc_override =
 				msm_vfe47_axi_update_cgc_override,
+			.ub_reg_offset = msm_vfe47_ub_reg_offset,
+			.get_ub_size = msm_vfe47_get_ub_size,
 		},
 		.core_ops = {
 			.reg_update = msm_vfe47_reg_update,
@@ -309,6 +311,10 @@ struct msm_vfe_hardware_info vfe48_hw_info = {
 			.is_module_cfg_lock_needed =
 				msm_vfe47_is_module_cfg_lock_needed,
 			.ahb_clk_cfg = msm_isp47_ahb_clk_cfg,
+			.start_fetch_eng_multi_pass =
+				msm_vfe47_start_fetch_engine_multi_pass,
+			.set_halt_restart_mask =
+				msm_vfe47_set_halt_restart_mask,
 		},
 		.stats_ops = {
 			.get_stats_idx = msm_vfe47_get_stats_idx,

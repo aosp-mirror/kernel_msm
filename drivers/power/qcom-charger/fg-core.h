@@ -151,6 +151,7 @@ enum fg_sram_param_id {
 	FG_SRAM_CHG_TERM_CURR,
 	FG_SRAM_DELTA_SOC_THR,
 	FG_SRAM_RECHARGE_SOC_THR,
+	FG_SRAM_RECHARGE_VBATT_THR,
 	FG_SRAM_KI_COEFF_MED_DISCHG,
 	FG_SRAM_KI_COEFF_HI_DISCHG,
 	FG_SRAM_MAX,
@@ -187,6 +188,10 @@ struct fg_alg_flag {
 	bool	invalid;
 };
 
+enum wa_flags {
+	PMI8998_V1_REV_WA = BIT(0),
+};
+
 /* DT parameters for FG device */
 struct fg_dt_props {
 	bool	force_load_profile;
@@ -198,6 +203,7 @@ struct fg_dt_props {
 	int	sys_term_curr_ma;
 	int	delta_soc_thr;
 	int	recharge_soc_thr;
+	int	recharge_volt_thr_mv;
 	int	rsense_sel;
 	int	jeita_thresholds[NUM_JEITA_LEVELS];
 	int	esr_timer_charging;
@@ -304,6 +310,7 @@ struct fg_chip {
 	u32			batt_soc_base;
 	u32			batt_info_base;
 	u32			mem_if_base;
+	u32			wa_flags;
 	int			batt_id_kohms;
 	int			charge_status;
 	int			prev_charge_status;

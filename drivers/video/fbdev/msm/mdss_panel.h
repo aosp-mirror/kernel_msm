@@ -255,6 +255,8 @@ struct mdss_intf_recovery {
  *				Argument provided is new panel timing.
  * @MDSS_EVENT_DEEP_COLOR: Set deep color.
  *				Argument provided is bits per pixel (8/10/12)
+ * @MDSS_EVENT_UPDATE_PANEL_PPM: update pixel clock by input PPM.
+ *				Argument provided is parts per million.
  */
 enum mdss_intf_events {
 	MDSS_EVENT_RESET = 1,
@@ -287,6 +289,7 @@ enum mdss_intf_events {
 	MDSS_EVENT_PANEL_TIMING_SWITCH,
 	MDSS_EVENT_DEEP_COLOR,
 	MDSS_EVENT_DISABLE_PANEL,
+	MDSS_EVENT_UPDATE_PANEL_PPM,
 	MDSS_EVENT_MAX,
 };
 
@@ -537,7 +540,10 @@ struct dynamic_fps_data {
  * @DFPS_IMMEDIATE_PORCH_UPDATE_MODE_VFP: update fps using vertical timings
  * @DFPS_IMMEDIATE_PORCH_UPDATE_MODE_HFP: update fps using horizontal timings
  * @DFPS_IMMEDIATE_MULTI_UPDATE_MODE_CLK_HFP: update fps using both horizontal
- *    timings and clock.
+ *  timings and clock.
+ * @DFPS_IMMEDIATE_MULTI_MODE_HFP_CALC_CLK: update fps using both
+ *  horizontal timings, clock need to be caculate base on new clock and
+ *  porches.
  * @DFPS_MODE_MAX: defines maximum limit of supported modes.
  */
 enum dynamic_fps_update {
@@ -546,6 +552,7 @@ enum dynamic_fps_update {
 	DFPS_IMMEDIATE_PORCH_UPDATE_MODE_VFP,
 	DFPS_IMMEDIATE_PORCH_UPDATE_MODE_HFP,
 	DFPS_IMMEDIATE_MULTI_UPDATE_MODE_CLK_HFP,
+	DFPS_IMMEDIATE_MULTI_MODE_HFP_CALC_CLK,
 	DFPS_MODE_MAX
 };
 
@@ -761,6 +768,7 @@ struct mdss_panel_info {
 	bool ulps_suspend_enabled;
 	bool panel_ack_disabled;
 	bool esd_check_enabled;
+	bool allow_phy_power_off;
 	char dfps_update;
 	/* new requested fps before it is updated in hw */
 	int new_fps;
@@ -974,7 +982,9 @@ static inline u32 mdss_panel_get_framerate(struct mdss_panel_info *panel_info)
 		break;
 	case DTV_PANEL:
 		if (panel_info->dynamic_fps) {
-			frame_rate = panel_info->lcdc.frame_rate;
+			frame_rate = panel_info->lcdc.frame_rate / 1000;
+			if (panel_info->lcdc.frame_rate % 1000)
+				frame_rate += 1;
 			break;
 		}
 	default:
