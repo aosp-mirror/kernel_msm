@@ -268,6 +268,7 @@ static noinline int i2cdev_ioctl_rdrw(struct i2c_client *client,
 	for (i = 0; i < rdwr_arg.nmsgs; i++) {
 		/* Limit the size of the message to a sane amount */
 		if (rdwr_pa[i].len > 8192) {
+			rdwr_pa[i].buf = NULL;
 			res = -EINVAL;
 			break;
 		}
@@ -304,8 +305,11 @@ static noinline int i2cdev_ioctl_rdrw(struct i2c_client *client,
 	}
 	if (res < 0) {
 		int j;
-		for (j = 0; j < i; ++j)
-			kfree(rdwr_pa[j].buf);
+		for (j = 0; j <= i; ++j){
+			if( !IS_ERR_OR_NULL(rdwr_pa[j].buf) )
+				kfree(rdwr_pa[j].buf);
+		}
+
 		kfree(data_ptrs);
 		kfree(rdwr_pa);
 		return res;
