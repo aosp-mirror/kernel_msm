@@ -37,6 +37,7 @@
 #include <linux/compat.h>
 #include <linux/pm_runtime.h>
 #include <linux/ioprio.h>
+#include <linux/timer.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/mmc.h>
@@ -100,6 +101,10 @@ static DEFINE_MUTEX(block_mutex);
  */
 static int perdev_minors = CONFIG_MMC_BLOCK_MINORS;
 
+static bool rpmb_ioctl_throttling = false;
+static bool rpmb_tmr_triggered = false;
+static struct timer_list rpmb_ioctl_rst_timer;
+
 /*
  * We've only got one major, so number of mmcblk devices is
  * limited to 256 / number of minors per device.
@@ -135,6 +140,7 @@ struct mmc_blk_data {
 #define MMC_BLK_DISCARD		BIT(2)
 #define MMC_BLK_SECDISCARD	BIT(3)
 #define MMC_BLK_FLUSH		BIT(4)
+#define MMC_BLK_PARTSWITCH	BIT(5)
 
 	/*
 	 * Only set in main mmc_blk_data associated
@@ -803,6 +809,13 @@ out:
 	return ERR_PTR(err);
 }
 
+static int rpmb_ioctl_rst_flag(void)
+{
+	pr_err("%s: reset rpmb_ioctl_throttling\n", __func__);
+	rpmb_ioctl_throttling = false;
+	return 0;
+}
+
 static int mmc_blk_ioctl_rpmb_cmd(struct block_device *bdev,
 	struct mmc_ioc_rpmb __user *ic_ptr)
 {
@@ -818,6 +831,9 @@ static int mmc_blk_ioctl_rpmb_cmd(struct block_device *bdev,
 
 	/* The caller must have CAP_SYS_RAWIO */
 	if (!capable(CAP_SYS_RAWIO))
+		return -EPERM;
+
+	if (rpmb_ioctl_throttling)
 		return -EPERM;
 
 	md = mmc_blk_get(bdev->bd_disk);
@@ -836,6 +852,19 @@ static int mmc_blk_ioctl_rpmb_cmd(struct block_device *bdev,
 	card = md->queue.card;
 	if (IS_ERR(card)) {
 		err = PTR_ERR(card);
+		goto idata_free;
+	}
+
+	if(idata->data[1]->buf_bytes == 12800 && !rpmb_tmr_triggered){
+		pr_err("%s: kick off rpmb throttling timer\n", __func__);
+		rpmb_ioctl_throttling = true;
+		init_timer(&rpmb_ioctl_rst_timer);
+		rpmb_ioctl_rst_timer.function = (void *)rpmb_ioctl_rst_flag;
+		rpmb_ioctl_rst_timer.data = ((unsigned long) 0);
+		rpmb_ioctl_rst_timer.expires = jiffies + 180*HZ;
+		add_timer(&rpmb_ioctl_rst_timer);
+		rpmb_tmr_triggered = true;
+		err = -EPERM;
 		goto idata_free;
 	}
 
@@ -1076,8 +1105,13 @@ static inline int mmc_blk_part_switch(struct mmc_card *card,
 		ret = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 				 EXT_CSD_PART_CONFIG, part_config,
 				 card->ext_csd.part_time);
-		if (ret)
+
+		if (ret) {
+			pr_err("%s: mmc_blk_part_switch failure, %d -> %d\n",
+				mmc_hostname(card->host), main_md->part_curr,
+					md->part_type);
 			return ret;
+		}
 
 		card->ext_csd.part_config = part_config;
 		card->part_curr = md->part_type;
@@ -3560,6 +3594,7 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 	struct mmc_host *host = card->host;
 	unsigned long flags;
 	unsigned int cmd_flags = req ? req->cmd_flags : 0;
+	int err;
 
 	if (req && !mq->mqrq_prev->req) {
 		/* claim host only for the first request */
@@ -3577,7 +3612,17 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 	}
 
 	ret = mmc_blk_part_switch(card, md);
+
 	if (ret) {
+		err = mmc_blk_reset(md, card->host, MMC_BLK_PARTSWITCH);
+		if (!err) {
+			pr_err("%s: mmc_blk_reset(MMC_BLK_PARTSWITCH) succeeded.\n",
+					mmc_hostname(host));
+			mmc_blk_reset_success(md, MMC_BLK_PARTSWITCH);
+		} else
+			pr_err("%s: mmc_blk_reset(MMC_BLK_PARTSWITCH) failed.\n",
+				mmc_hostname(host));
+
 		if (req) {
 			blk_end_request_all(req, -EIO);
 		}
