@@ -87,3 +87,7 @@
 		};
 	};
 };
+
+&pmi8998_charger {
+	external-vbus-supply = <&tps61099_vbus>;
+};
