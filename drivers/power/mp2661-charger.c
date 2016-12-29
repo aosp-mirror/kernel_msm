@@ -34,90 +34,90 @@
 #include <linux/wakelock.h>
 
 /* Mask/Bit helpers */
-#define _mp2661_MASK(BITS, POS) \
+#define _MP2661_MASK(BITS, POS) \
     ((unsigned char)(((1 << (BITS)) - 1) << (POS)))
-#define mp2661_MASK(LEFT_BIT_POS, RIGHT_BIT_POS) \
-        _mp2661_MASK((LEFT_BIT_POS) - (RIGHT_BIT_POS) + 1, \
+#define MP2661_MASK(LEFT_BIT_POS, RIGHT_BIT_POS) \
+        _MP2661_MASK((LEFT_BIT_POS) - (RIGHT_BIT_POS) + 1, \
                 (RIGHT_BIT_POS))
 
 /*Input Source Control Register*/
 #define INPUT_SOURCE_CTRL_REG                          0x0
-#define EN_HIZ_MASK                                    mp2661_MASK(7, 7)
+#define EN_HIZ_MASK                                    MP2661_MASK(7, 7)
 #define EN_HIZ_MASK_SHIFT                              7
-#define INPUT_SOURCE_VOLTAGE_LIMIT_MASK                mp2661_MASK(6, 3)
+#define INPUT_SOURCE_VOLTAGE_LIMIT_MASK                MP2661_MASK(6, 3)
 #define INPUT_SOURCE_VOLTAGE_LIMIT_MASK_SHIFT          3
-#define INPUT_SOURCE_CURRENT_LIMIT_MASK                mp2661_MASK(2, 0)
+#define INPUT_SOURCE_CURRENT_LIMIT_MASK                MP2661_MASK(2, 0)
 #define INPUT_SOURCE_CURRENT_LIMIT_MASK_SHIFT          0
 
 /*Power-On Configuration register*/
 #define POWER_ON_CFG_REG                               0x1
-#define CHG_ENABLE_MASK                                mp2661_MASK(3, 3)
+#define CHG_ENABLE_MASK                                MP2661_MASK(3, 3)
 #define CHG_ENABLE_MASK_SHIFT                          3
-#define UVLO_THRESHOLD_MASK                            mp2661_MASK(2, 0)
+#define UVLO_THRESHOLD_MASK                            MP2661_MASK(2, 0)
 #define UVLO_THRESHOLD_MASK_SHIFT                      0
 
 /* Config/Control register */
 #define CHG_CURRENT_CTRL_REG                           0x2
-#define BATT_CHARGING_CURRENT_MASK                     mp2661_MASK(4, 0)
+#define BATT_CHARGING_CURRENT_MASK                     MP2661_MASK(4, 0)
 #define BATT_CHARGING_CURRENT_MASK_SHIFT               0
 
 /*Discharge/termination  current limit register*/
 #define DISCHG_TERM_CURRENT_REG                        0x3
-#define DISCHG_CURRENT_MASK                            mp2661_MASK(6, 3)
+#define DISCHG_CURRENT_MASK                            MP2661_MASK(6, 3)
 #define DISCHG_CURRENT_MASK_SHIFT                      3
-#define TRCIKE_PCB_OTP_DISABLE_MASK                    mp2661_MASK(2, 2)
+#define TRCIKE_PCB_OTP_DISABLE_MASK                    MP2661_MASK(2, 2)
 #define TRCIKE_PCB_OTP_DISABLE_MASK_SHIFT              2
-#define TRCIKE_CHARGING_CURRENT_MASK                   mp2661_MASK(1, 0)
+#define TRCIKE_CHARGING_CURRENT_MASK                   MP2661_MASK(1, 0)
 #define TRCIKE_CHARGING_CURRENT_MASK_SHIFT             0
 
 /*Charge Voltage Control Register*/
 #define CHG_VOLTAGE_CTRL_REG                           0x4
-#define FULL_CHG_VOLTAGE_MASK                          mp2661_MASK(7, 2)
+#define FULL_CHG_VOLTAGE_MASK                          MP2661_MASK(7, 2)
 #define FULL_CHG_VOLTAGE_MASK_SHIFT                    2
-#define TRICKLE_CHARGE_THESHOLD_MASK                   mp2661_MASK(1, 1)
+#define TRICKLE_CHARGE_THESHOLD_MASK                   MP2661_MASK(1, 1)
 #define TRICKLE_CHARGE_THESHOLD_MASK_SHIFT             1
-#define BATTERY_RECHARGE_THRESHOLD_MASK                mp2661_MASK(0, 0)
+#define BATTERY_RECHARGE_THRESHOLD_MASK                MP2661_MASK(0, 0)
 #define BATTERY_RECHARGE_THRESHOLD_MASK_SHIFT          0
 
 /*Charge Termination/Timer Control Register */
 #define CHG_TERMINATION_TIMER_CTRL_REG                 0x5
-#define TERMINATION_EN_MASK                            mp2661_MASK(6, 6)
+#define TERMINATION_EN_MASK                            MP2661_MASK(6, 6)
 #define TERMINATION_EN_MASK_SHIFT                      6
-#define I2C_WATCHDOG_TIMER_LIMIT_MASK                  mp2661_MASK(5, 4)
+#define I2C_WATCHDOG_TIMER_LIMIT_MASK                  MP2661_MASK(5, 4)
 #define I2C_WATCHDOG_TIMER_LIMIT_MASK_SHIFT            4
-#define SAFETY_TIMER_MASK                              mp2661_MASK(3, 3)
+#define SAFETY_TIMER_MASK                              MP2661_MASK(3, 3)
 #define SAFETY_TIMER_MASK_SHIFT                        3
-#define CC_CHG_TIMER_MASK                              mp2661_MASK(2, 1)
+#define CC_CHG_TIMER_MASK                              MP2661_MASK(2, 1)
 #define CC_CHG_TIMER_MASK_SHIFT                        1
 
 /*Miscellaneous Operation Control Register*/
 #define MISCELLANEOUS_OPER_CTRL_REG                    0x6
-#define THERMAL_REGULATION_THRESHOLD_MASK              mp2661_MASK(1, 0)
+#define THERMAL_REGULATION_THRESHOLD_MASK              MP2661_MASK(1, 0)
 #define THERMAL_REGULATION_THRESHOLD_MASK_SHIFT        0
-#define NTC_EN_MASK                                    mp2661_MASK(3, 3)
+#define NTC_EN_MASK                                    MP2661_MASK(3, 3)
 #define NTC_EN_MASK_SHIFT                              3
-#define BAT_FET_DIS_MASK                               mp2661_MASK(5, 5)
+#define BAT_FET_DIS_MASK                               MP2661_MASK(5, 5)
 #define BAT_FET_DIS_MASK_SHIFT                         5
-#define TMR2X_EN_MASK                                  mp2661_MASK(6, 6)
+#define TMR2X_EN_MASK                                  MP2661_MASK(6, 6)
 #define TMR2X_EN_MASK_SHIFT                            6
 
 /* System Status Register */
 #define SYSTEM_STATUS_REG                              0x07
-#define CHG_STAT_MASK                                  mp2661_MASK(4, 3)
+#define CHG_STAT_MASK                                  MP2661_MASK(4, 3)
 #define CHG_STAT_SHIFT                                 3
 #define CHAG_IN_VALID_IRQ                              BIT(1)
 
 /* Fault Register */
 #define FAULT_REG                                      0x08
-#define WATCHDOG_FAULT_MASK                            mp2661_MASK(6, 6)
+#define WATCHDOG_FAULT_MASK                            MP2661_MASK(6, 6)
 #define WATCHDOG_FAULT_MASK_SHIFT                      6
-#define VIN_FAULT_MASK                                 mp2661_MASK(5, 5)
+#define VIN_FAULT_MASK                                 MP2661_MASK(5, 5)
 #define VIN_FAULT_MASK_SHIFT                           5
-#define THEM_SD_MASK                                   mp2661_MASK(4, 4)
+#define THEM_SD_MASK                                   MP2661_MASK(4, 4)
 #define THEM_SD_MASK_SHIFT                             4
-#define BAT_FAULT_MASK                                 mp2661_MASK(3, 3)
+#define BAT_FAULT_MASK                                 MP2661_MASK(3, 3)
 #define BAT_FAULT_MASK_SHIFT                           3
-#define STMR_FAULT_MASK                                mp2661_MASK(2, 2)
+#define STMR_FAULT_MASK                                MP2661_MASK(2, 2)
 #define STMR_FAULT_MASK_SHIFT                          2
 #define STMR_FAULT                                     1
 #define FAULT_FLAG                                     1
@@ -144,79 +144,73 @@ static char *pm_batt_supplied_to[] = {
 };
 
 struct mp2661_chg {
-    struct i2c_client        *client;
-    struct device            *dev;
-    struct mutex            read_write_lock;
+    struct i2c_client          *client;
+    struct device              *dev;
+    struct mutex               read_write_lock;
 
-    bool                usb_present;
-    int                 charging_status;
-    int                fake_battery_soc;
-    struct dentry            *debug_root;
+    bool                       usb_present;
+    int                        charging_status;
+    int                        fake_battery_soc;
+    struct dentry              *debug_root;
 
     /* psy */
     struct power_supply        *usb_psy;
     struct power_supply        batt_psy;
     struct power_supply        *bms_psy;
-    const char            *bms_psy_name;
+    const char                 *bms_psy_name;
 
-    struct workqueue_struct   *charger_int_work_queue;
-    struct work_struct        process_interrupt_work;
-    struct wake_lock          chg_wake_lock;
+    struct workqueue_struct    *charger_int_work_queue;
+    struct work_struct         process_interrupt_work;
+    struct wake_lock           chg_wake_lock;
 
     /* adc_tm parameters */
-    struct qpnp_vadc_chip    *vadc_dev;
+    struct qpnp_vadc_chip      *vadc_dev;
     struct qpnp_adc_tm_chip    *adc_tm_dev;
-#if 0
-    struct qpnp_adc_tm_btm_param    adc_param;
-#endif
 
-    bool               using_pmic_therm;
+    bool                       using_pmic_therm;
     /* batt temp states decidegc */
-    int                cold_batt_decidegc;
-    int                normal_state1_batt_decidegc;
-    int                normal_state2_batt_decidegc;
-    int                normal_state3_batt_decidegc;
-    int                hot_batt_decidegc;
+    int                        cold_batt_decidegc;
+    int                        normal_state1_batt_decidegc;
+    int                        normal_state2_batt_decidegc;
+    int                        normal_state3_batt_decidegc;
+    int                        hot_batt_decidegc;
 
     /* charge parameters */
-    int                batt_full_mv;
-    int                batt_full_terminate_ma;
-    int                usb_input_ma;
-    int                usb_input_regulation_mv;
-    int                batt_charging_ma_max;
-    int                batt_temp_status;
-    int                batt_chaging_ma_mitigation[BAT_TEMP_STATUS_MAX];
-    int                batt_trickle_charging_ma;
-    int                batt_trickle_to_cc_theshold_mv;
-    int                batt_uvlo_theshold_mv;
-    int                batt_auto_recharge_delta_mv;
-    int                batt_discharging_ma;
-    int                thermal_regulation_threshold;
-    int                batt_cc_chg_timer;
+    int                        batt_full_mv;
+    int                        batt_full_terminate_ma;
+    int                        usb_input_ma;
+    int                        usb_input_regulation_mv;
+    int                        batt_charging_ma_max;
+    int                        batt_temp_status;
+    int                        batt_chaging_ma_mitigation[BAT_TEMP_STATUS_MAX];
+    int                        batt_trickle_charging_ma;
+    int                        batt_trickle_to_cc_theshold_mv;
+    int                        batt_uvlo_theshold_mv;
+    int                        batt_auto_recharge_delta_mv;
+    int                        batt_discharging_ma;
+    int                        thermal_regulation_threshold;
+    int                        batt_cc_chg_timer;
 
     /* monitor temp task */
-    struct task_struct       *monitor_temp_task;
-    struct semaphore         monitor_temp_sem;
-    struct timespec          resume_time;
-    struct timespec          last_monitor_time;
-    int                      last_temp;
-
-    /* ap mask rx int gpio */
-    bool                     ap_mask_rx_int_gpio;
+    struct task_struct         *monitor_temp_task;
+    struct semaphore           monitor_temp_sem;
+    struct timespec            resume_time;
+    struct timespec            last_monitor_time;
+    int                        last_temp;
 
     /* step charging */
-    int                step_charging_batt_full_mv;
-    int                step_charging_current_ma;
-    int                step_charging_delta_voltage_mv;
-    int                batt_full_now_mv;
-    int                batt_charging_current_now_ma;
-    bool               repeat_charging_detect_flag;
-    int                stmr_expiration_count;
-    int                batt_temp_in_normal_state1_count;
-    int                batt_cv_chg_current_delta_ma;
-    int                batt_cv_chg_current_ma;
-    int                repeat_charging_detect_threshold_mv;
-    bool               enable_charging_flag;
+    int                        step_charging_batt_full_mv;
+    int                        step_charging_current_ma;
+    int                        step_charging_delta_voltage_mv;
+    int                        batt_full_now_mv;
+    int                        batt_charging_current_now_ma;
+    bool                       repeat_charging_detect_flag;
+    int                        stmr_expiration_count;
+    int                        batt_temp_in_normal_state1_count;
+    int                        batt_cv_chg_current_delta_ma;
+    int                        batt_cv_chg_current_ma;
+    int                        repeat_charging_detect_threshold_mv;
+    bool                       enable_charging_flag;
 };
 
 struct mp2661_chg  *global_mp2661 = NULL;
@@ -441,7 +435,7 @@ static int mp2661_get_prop_batt_status(struct mp2661_chg *chip)
     return status;
 }
 
-#define BATT_ID_VOLTAGE_REFERENCE_UV            1800000
+#define BATT_ID_VOLTAGE_REFERENCE_UV              1800000
 #define BATT_ID_VOLTAGE_REFERENCE_DELTA_UV        50000
 static int mp2661_get_prop_batt_present(struct mp2661_chg *chip)
 {
@@ -568,7 +562,7 @@ static int mp2661_get_prop_batt_temp(struct mp2661_chg *chip)
         return DEFAULT_TEMP;
     }
     pr_debug("get_batt_temp %d, %lld\n",
-        results.adc_code, results.physical);
+                        results.adc_code, results.physical);
 
     return (int)results.physical;
 }
@@ -585,7 +579,7 @@ static int mp2661_get_prop_ambient_temp(struct mp2661_chg *chip)
         return DEFAULT_TEMP;
     }
     pr_debug("get_ambient_temp %d, %lld\n",
-        results.adc_code, results.physical);
+                        results.adc_code, results.physical);
 
     return (int)results.physical;
 }
@@ -664,7 +658,7 @@ static int mp2661_get_prop_current_avg(struct mp2661_chg *chip)
     return 0;
 }
 
-#define MP2661_FULL_VOLTAGE_STEP_MV        15
+#define MP2661_FULL_VOLTAGE_STEP_MV       15
 #define MP2661_FULL_VOLTAGE_MIN_MV        3600
 #define MP2661_FULL_VOLTAGE_MAX_MV        4545
 static int mp2661_set_batt_full_voltage(struct mp2661_chg *chip,
@@ -686,7 +680,8 @@ static int mp2661_set_batt_full_voltage(struct mp2661_chg *chip,
             FULL_CHG_VOLTAGE_MASK, i);
     if (rc < 0)
     {
-        pr_err("cannot set batt full voltage to %dmv rc = %d\n", voltage, rc);
+        pr_err("cannot set batt full voltage to %dmv rc = %d\n",
+                        voltage, rc);
     }
     else
     {
@@ -716,7 +711,7 @@ static int mp2661_set_usb_input_current(struct mp2661_chg *chip,
         (current_limit > MP2661_USB_INPUT_CURRENT_MAX_MA))
     {
         pr_err( "bad usb input current mA=%d asked to set\n",
-                            current_limit);
+                        current_limit);
         return -EINVAL;
     }
 
@@ -738,7 +733,8 @@ static int mp2661_set_usb_input_current(struct mp2661_chg *chip,
             INPUT_SOURCE_CURRENT_LIMIT_MASK, i);
     if (rc < 0)
     {
-        pr_err("cannot set usb input current to %dma rc = %d\n", current_limit, rc);
+        pr_err("cannot set usb input current to %dma rc = %d\n",
+                        current_limit, rc);
     }
 
     return rc;
@@ -775,13 +771,13 @@ static int mp2661_get_usb_input_current(struct mp2661_chg *chip)
         return rc;
     }
 
-    reg = (reg >> INPUT_SOURCE_CURRENT_LIMIT_MASK_SHIFT) & INPUT_SOURCE_CURRENT_LIMIT_MASK;
+    reg = (reg & INPUT_SOURCE_CURRENT_LIMIT_MASK) >> INPUT_SOURCE_CURRENT_LIMIT_MASK_SHIFT;
     ret.intval =  usb_input_current_limit[reg];
 
     return ret.intval;
 }
 
-#define MP2661_USB_INPUT_VOLTAGE_STEP_MV    80
+#define MP2661_USB_INPUT_VOLTAGE_STEP_MV       80
 #define MP2661_USB_INPUT_VOLTAGE_MAX_MV        5080
 #define MP2661_USB_INPUT_VOLTAGE_MIN_MV        3880
 static int mp2661_set_usb_input_voltage_regulation(struct mp2661_chg *chip,
@@ -793,7 +789,7 @@ static int mp2661_set_usb_input_voltage_regulation(struct mp2661_chg *chip,
         (voltage > MP2661_USB_INPUT_VOLTAGE_MAX_MV))
     {
         pr_err( "bad input current mA=%d asked to set\n",
-                                voltage);
+                        voltage);
         return -EINVAL;
     }
 
@@ -803,13 +799,14 @@ static int mp2661_set_usb_input_voltage_regulation(struct mp2661_chg *chip,
             INPUT_SOURCE_VOLTAGE_LIMIT_MASK, i);
     if (rc < 0)
     {
-        pr_err("cannot set usb input voltage regulation to %dmv rc = %d\n", voltage, rc);
+        pr_err("cannot set usb input voltage regulation to %dmv rc = %d\n",
+                        voltage, rc);
     }
 
     return rc;
 }
 
-#define MP2661_BATT_CHARGING_STEP_MA      17
+#define MP2661_BATT_CHARGING_STEP_MA       17
 #define MP2661_BATT_CHARGING_MIN_MA        8
 #define MP2661_BATT_CHARGING_MAX_MA        535
 static int mp2661_set_batt_charging_current(struct mp2661_chg *chip,
@@ -821,7 +818,7 @@ static int mp2661_set_batt_charging_current(struct mp2661_chg *chip,
         (current_ma > MP2661_BATT_CHARGING_MAX_MA))
     {
         pr_err( "bad bat charging current mA=%d asked to set\n",
-                            current_ma);
+                        current_ma);
         return -EINVAL;
     }
 
@@ -831,7 +828,8 @@ static int mp2661_set_batt_charging_current(struct mp2661_chg *chip,
             BATT_CHARGING_CURRENT_MASK, i);
     if (rc < 0)
     {
-        pr_err("cannot set batt charging current to %dma rc = %d\n", current_ma, rc);
+        pr_err("cannot set batt charging current to %dma rc = %d\n",
+                        current_ma, rc);
     }
     else
     {
@@ -855,7 +853,7 @@ static void mp2661_set_appropriate_batt_charging_current(
     rc = mp2661_set_batt_charging_current(chip, current_max);
     if (rc)
     {
-        pr_err("Couldn't set batt appopriate batt charging current rc = %d\n", rc);
+        pr_err("Couldn't set batt appopriate charging current rc = %d\n", rc);
     }
 }
 
@@ -887,7 +885,7 @@ static int mp2661_set_batt_trickle_charging_current(struct mp2661_chg *chip,
         (current_limit > MP2661_TRICKLE_CHARGING_MAX_MA))
     {
         pr_err( "bad trickle charging current limit mA=%d asked to set\n",
-                            current_limit);
+                        current_limit);
         return -EINVAL;
     }
 
@@ -897,7 +895,8 @@ static int mp2661_set_batt_trickle_charging_current(struct mp2661_chg *chip,
             TRCIKE_CHARGING_CURRENT_MASK, i);
     if (rc < 0)
     {
-        pr_err("cannot set batt trickle chargint current to %dma rc = %d\n", current_limit, rc);
+        pr_err("cannot set batt trickle charging current to %dma rc = %d\n",
+                        current_limit, rc);
     }
 
     return rc;
@@ -921,7 +920,7 @@ static int mp2661_set_batt_trickle_to_cc_threshold(struct mp2661_chg *chip,
     else
     {
         pr_err( "bad batt trickle to cc mv=%d asked to set\n",
-                                voltage);
+                        voltage);
         return -EINVAL;
     }
 
@@ -930,13 +929,14 @@ static int mp2661_set_batt_trickle_to_cc_threshold(struct mp2661_chg *chip,
             TRICKLE_CHARGE_THESHOLD_MASK, i);
     if (rc < 0)
     {
-        pr_err("cannot set batt trickle to cc threshold to %dmv rc = %d\n", voltage, rc);
+        pr_err("cannot set batt trickle to cc threshold to %dmv rc = %d\n",
+                        voltage, rc);
     }
 
     return rc;
 }
 
-#define MP2661_UVLO_THRESHOLD_STEP_MV        100
+#define MP2661_UVLO_THRESHOLD_STEP_MV       100
 #define MP2661_UVLO_THRESHOLD_MIN_MV        2400
 #define MP2661_UVLO_THRESHOLD_MAX_MV        3100
 static int mp2661_set_batt_uvlo_threshold(struct mp2661_chg *chip,
@@ -948,7 +948,7 @@ static int mp2661_set_batt_uvlo_threshold(struct mp2661_chg *chip,
         (voltage > MP2661_UVLO_THRESHOLD_MAX_MV))
     {
         pr_err( "bad batt uvlo threshold mv=%d asked to set\n",
-                            voltage);
+                        voltage);
         return -EINVAL;
     }
 
@@ -982,7 +982,7 @@ static int mp2661_set_batt_auto_recharge(struct mp2661_chg *chip,
     else
     {
         pr_err( "bad auto recharge current below full mv=%d asked to set\n",
-                                    voltage_below_full);
+                        voltage_below_full);
         return -EINVAL;
     }
 
@@ -991,15 +991,16 @@ static int mp2661_set_batt_auto_recharge(struct mp2661_chg *chip,
                 BATTERY_RECHARGE_THRESHOLD_MASK, i);
     if (rc < 0)
     {
-        pr_err("cannot set batt auto recharge below full to %dmv rc = %d\n", voltage_below_full, rc);
+        pr_err("cannot set batt auto recharge below full to %dmv rc = %d\n",
+                        voltage_below_full, rc);
     }
 
     return rc;
 }
 
 #define MP2661_BATT_DISCHARGE_CURRENT_STEP_MA  200
-#define MP2661_BATT_DISCHARGE_MIN_MA        200
-#define MP2661_BATT_DISCHARGE_MAX_MA        3200
+#define MP2661_BATT_DISCHARGE_MIN_MA           200
+#define MP2661_BATT_DISCHARGE_MAX_MA           3200
 static int mp2661_set_batt_discharging_current(struct mp2661_chg *chip,
                             int current_limit)
 {
@@ -1009,7 +1010,7 @@ static int mp2661_set_batt_discharging_current(struct mp2661_chg *chip,
         (current_limit > MP2661_BATT_DISCHARGE_MAX_MA))
     {
         pr_err( "bad batt dischargge current limit ma=%d asked to set\n",
-                            current_limit);
+                        current_limit);
         return -EINVAL;
     }
 
@@ -1037,7 +1038,7 @@ static int mp2661_set_thermal_regulation_threshold(struct mp2661_chg *chip,
         (temp > MP2661_THERMAL_TEMP_MAX))
     {
         pr_err("bad input temp = %d asked to set\n",
-                                temp);
+                        temp);
         return -EINVAL;
     }
 
@@ -1047,7 +1048,8 @@ static int mp2661_set_thermal_regulation_threshold(struct mp2661_chg *chip,
             THERMAL_REGULATION_THRESHOLD_MASK, i);
     if (rc < 0)
     {
-        pr_err("cannot set thermal regulation threshold to %d, rc = %d\n", temp, rc);
+        pr_err("cannot set thermal regulation threshold to %d, rc = %d\n",
+                        temp, rc);
     }
 
     return rc;
@@ -1079,7 +1081,8 @@ static int mp2661_set_ldo_fet_disconnect(struct mp2661_chg *chip,
             EN_HIZ_MASK, i);
     if (rc < 0)
     {
-        pr_err("cannot set ldo fet disconnect to %d rc = %d\n", disconnect, rc);
+        pr_err("cannot set ldo fet disconnect to %d rc = %d\n",
+                        disconnect, rc);
     }
 
     return rc;
@@ -1095,7 +1098,8 @@ static int mp2661_set_batt_fet_disconnect(struct mp2661_chg *chip,
             BAT_FET_DIS_MASK, i);
     if (rc < 0)
     {
-        pr_err("cannot set batt fet disconnect to %d rc = %d\n", disconnect, rc);
+        pr_err("cannot set batt fet disconnect to %d rc = %d\n",
+                        disconnect, rc);
     }
 
     return rc;
@@ -1134,8 +1138,8 @@ static int mp2661_ntc_enable(struct mp2661_chg *chip,
 }
 
 #define MP2661_I2C_WATCHDOG_TIMER_STEP_SEC    40
-#define MP2661_I2C_WATCHDOG_TIMER_MIN_SEC    0
-#define MP2661_I2C_WATCHDOG_TIMER_MAX_SEC    160
+#define MP2661_I2C_WATCHDOG_TIMER_MIN_SEC     0
+#define MP2661_I2C_WATCHDOG_TIMER_MAX_SEC     160
 static int mp2661_set_i2c_watchdog_timer(struct mp2661_chg *chip,
                             int time)
 {
@@ -1145,7 +1149,7 @@ static int mp2661_set_i2c_watchdog_timer(struct mp2661_chg *chip,
         (time < MP2661_I2C_WATCHDOG_TIMER_MIN_SEC))
     {
         pr_err("bad i2c watchdog timer sec=%d asked to set\n",
-                                time);
+                        time);
         return -EINVAL;
     }
 
@@ -1155,7 +1159,8 @@ static int mp2661_set_i2c_watchdog_timer(struct mp2661_chg *chip,
             I2C_WATCHDOG_TIMER_LIMIT_MASK, i);
     if (rc < 0)
     {
-        pr_err("cannot set i2c watchdog timer to %ds rc = %d\n", time, rc);
+        pr_err("cannot set i2c watchdog timer to %ds rc = %d\n",
+                        time, rc);
     }
 
     return rc;
@@ -1171,7 +1176,8 @@ static int mp2661_safety_timer_enable(struct mp2661_chg *chip,
             SAFETY_TIMER_MASK, i);
     if (rc < 0)
     {
-        pr_err("cannot set safety timer enable to %d rc = %d\n", enable, rc);
+        pr_err("cannot set safety timer enable to %d rc = %d\n",
+                        enable, rc);
     }
 
     return rc;
@@ -1189,7 +1195,7 @@ static int mp2661_set_cc_chg_timer(struct mp2661_chg *chip,
         (time_limit > cc_chg_timer[3]))
     {
         pr_err( "bad cc chg timer hours=%d asked to set\n",
-                            time_limit);
+                        time_limit);
         return -EINVAL;
     }
 
@@ -1375,12 +1381,15 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
     status = mp2661_get_prop_batt_status(chip);
     if(chip->charging_status != status)
     {
-        pr_debug("charing status change from %d to %d\n", chip->charging_status, status);
+        pr_debug("charing status change from %d to %d\n",
+                        chip->charging_status, status);
         chip->charging_status = status;
         if(POWER_SUPPLY_STATUS_FULL == status)
         {
             pr_info("battery is full\n");
-            /* set repeat_charging_detect_flag to true and disable charge when charge terminate due to batt full */
+            /* set repeat_charging_detect_flag to true and disable charge
+             * when charge terminate due to batt full.
+             */
             vbatt_mv = mp2661_get_prop_battery_voltage_now(chip) / 1000;
             if (vbatt_mv >= chip->repeat_charging_detect_threshold_mv)
             {
@@ -1483,7 +1492,8 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
         chip->stmr_expiration_count++;
         if (chip->stmr_expiration_count < STMR_EXPIRATION_COUNT_MAX)
         {
-            pr_info("stmr expiration count is %d less than %d!\n", chip->stmr_expiration_count, STMR_EXPIRATION_COUNT_MAX);
+            pr_info("stmr expiration count is %d less than %d!\n",
+                        chip->stmr_expiration_count, STMR_EXPIRATION_COUNT_MAX);
             if ((BAT_TEMP_STATUS_NORMAL_STATE1 == chip->batt_temp_status)
                      || (chip->batt_temp_in_normal_state1_count >= BATT_TEMP_IN_NORMAL_STATE1_COUNT_MAX))
             {
@@ -1514,7 +1524,8 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
         }
         else
         {
-            pr_info("stmr disable charge when expiration count is %d greater or equal to %d!\n", chip->stmr_expiration_count, STMR_EXPIRATION_COUNT_MAX);
+            pr_info("stmr disable charge when expiration count is %d greater or equal to %d!\n",
+                        chip->stmr_expiration_count, STMR_EXPIRATION_COUNT_MAX);
         }
     }
 
@@ -1579,17 +1590,17 @@ static int mp2661_parse_dt(struct mp2661_chg *chip)
     }
 
     chip->using_pmic_therm = of_property_read_bool(node,
-                        "qcom,using-pmic-therm");
+                            "qcom,using-pmic-therm");
 
     rc = of_property_read_u32(node, "qcom,cold-batt-decidegc",
-                        &chip->cold_batt_decidegc);
+                            &chip->cold_batt_decidegc);
     if (rc)
     {
         chip->cold_batt_decidegc = -EINVAL;
     }
 
     rc = of_property_read_u32(node, "qcom,normal-state1-batt-decidegc",
-                        &chip->normal_state1_batt_decidegc);
+                            &chip->normal_state1_batt_decidegc);
     if (rc < 0)
     {
         chip->cold_batt_decidegc = -EINVAL;
@@ -1603,14 +1614,14 @@ static int mp2661_parse_dt(struct mp2661_chg *chip)
     }
 
     rc = of_property_read_u32(node, "qcom,normal-state3-batt-decidegc",
-                        &chip->normal_state3_batt_decidegc);
+                            &chip->normal_state3_batt_decidegc);
     if (rc < 0)
     {
         chip->normal_state3_batt_decidegc = -EINVAL;
     }
 
     rc = of_property_read_u32(node, "qcom,hot-batt-decidegc",
-                        &chip->hot_batt_decidegc);
+                            &chip->hot_batt_decidegc);
     if (rc < 0)
     {
         chip->hot_batt_decidegc = -EINVAL;
@@ -1652,8 +1663,8 @@ static int mp2661_parse_dt(struct mp2661_chg *chip)
     }
 
     rc = of_property_read_u32_array(node,
-            "qcom,batt-charging-ma-mitigation",
-            chip->batt_chaging_ma_mitigation, BAT_TEMP_STATUS_MAX);
+                            "qcom,batt-charging-ma-mitigation",
+                            chip->batt_chaging_ma_mitigation, BAT_TEMP_STATUS_MAX);
     if (rc)
     {
         pr_err("Couldn't read batt-charging-ma-mitigation limits rc = %d\n", rc);
@@ -1784,7 +1795,7 @@ static int mp2661_parse_dt(struct mp2661_chg *chip)
     }
 
     pr_info("bms-psy-name = %s, using-pmic-therm = %d\n",
-                chip->bms_psy_name, chip->using_pmic_therm);
+            chip->bms_psy_name, chip->using_pmic_therm);
     pr_info("cold-batt-decidegc = %d, normal-state1-batt-decidegc = %d,\
             normal-state2-batt-decidegc = %d, normal-state3-batt-decidegc = %d,\
             hot-batt-decidegc = %d\n",
@@ -1792,23 +1803,23 @@ static int mp2661_parse_dt(struct mp2661_chg *chip)
             chip->normal_state2_batt_decidegc, chip->normal_state3_batt_decidegc,
             chip->hot_batt_decidegc);
     pr_info("batt-full-mv = %d, batt-full-terminate-ma = %d\n",
-        chip->batt_full_mv, chip->batt_full_terminate_ma);
+            chip->batt_full_mv, chip->batt_full_terminate_ma);
     pr_info("usb-input-ma = %d, usb-input-regulation-mv = %d\n",
-        chip->usb_input_ma, chip->usb_input_regulation_mv);
+            chip->usb_input_ma, chip->usb_input_regulation_mv);
     pr_info("batt-charging-ma-max = %d, batt-charging-ma-mitigation = <%d %d %d %d %d %d>\n",
-        chip->batt_charging_ma_max,
-        chip->batt_chaging_ma_mitigation[BAT_TEMP_STATUS_COLD],
-        chip->batt_chaging_ma_mitigation[BAT_TEMP_STATUS_NORMAL_STATE1],
-        chip->batt_chaging_ma_mitigation[BAT_TEMP_STATUS_NORMAL_STATE2],
-        chip->batt_chaging_ma_mitigation[BAT_TEMP_STATUS_NORMAL_STATE3],
-        chip->batt_chaging_ma_mitigation[BAT_TEMP_STATUS_NORMAL_STATE4],
-        chip->batt_chaging_ma_mitigation[BAT_TEMP_STATUS_HOT]);
+            chip->batt_charging_ma_max,
+            chip->batt_chaging_ma_mitigation[BAT_TEMP_STATUS_COLD],
+            chip->batt_chaging_ma_mitigation[BAT_TEMP_STATUS_NORMAL_STATE1],
+            chip->batt_chaging_ma_mitigation[BAT_TEMP_STATUS_NORMAL_STATE2],
+            chip->batt_chaging_ma_mitigation[BAT_TEMP_STATUS_NORMAL_STATE3],
+            chip->batt_chaging_ma_mitigation[BAT_TEMP_STATUS_NORMAL_STATE4],
+            chip->batt_chaging_ma_mitigation[BAT_TEMP_STATUS_HOT]);
     pr_info("batt-trickle-charging-ma = %d, batt-trickle-to-cc-theshold-mv = %d\n",
-        chip->batt_trickle_charging_ma, chip->batt_trickle_to_cc_theshold_mv);
+            chip->batt_trickle_charging_ma, chip->batt_trickle_to_cc_theshold_mv);
     pr_info("batt-uvlo-theshold-mv = %d, batt-auto-recharge-delta-mv = %d\n",
-        chip->batt_uvlo_theshold_mv, chip->batt_auto_recharge_delta_mv);
+            chip->batt_uvlo_theshold_mv, chip->batt_auto_recharge_delta_mv);
     pr_info("batt-discharging-ma = %d, thermal-regulation-threshold = %d\n",
-        chip->batt_discharging_ma, chip->thermal_regulation_threshold);
+            chip->batt_discharging_ma, chip->thermal_regulation_threshold);
     pr_info("qcom,batt-cc-chg-timer = %d\n", chip->batt_cc_chg_timer);
     pr_info("qcom,step-charging-batt-full-mv = %d\n", chip->step_charging_batt_full_mv);
     pr_info("qcom,step-charging-current-ma = %d\n", chip->step_charging_current_ma);
@@ -1887,165 +1898,12 @@ static int create_debugfs_entries(struct mp2661_chg *chip)
         if (!ent || IS_ERR(ent))
         {
             rc = PTR_ERR(ent);
-            pr_err(    "Couldn't create cnfg debug file rc = %d\n", rc);
+            pr_err("Couldn't create debug file rc = %d\n", rc);
         }
     }
 
     return 0;
 }
-
-#if 0
-#define HYSTERESIS_DECIDEGC 20
-static void mp2661_chg_adc_notification(enum qpnp_tm_state state, void *ctx)
-{
-    struct mp2661_chg *chip = ctx;
-    int cur_batt_temp_status = 0;
-    int temp = 0;
-
-    if (state >= ADC_TM_STATE_NUM)
-    {
-        pr_err("invallid state parameter %d\n", state);
-        return;
-    }
-
-    temp = mp2661_get_prop_batt_temp(chip);
-    pr_info("temp = %d state = %s\n", temp,
-                state == ADC_TM_WARM_STATE ? "hot" : "cold");
-
-    if (ADC_TM_WARM_STATE == state)
-    {
-        if (temp >= chip->hot_batt_decidegc)
-        {
-            cur_batt_temp_status = BAT_TEMP_STATUS_HOT;
-
-            chip->adc_param.low_temp =
-                chip->hot_batt_decidegc - HYSTERESIS_DECIDEGC;
-            chip->adc_param.state_request =
-                ADC_TM_COOL_THR_ENABLE;
-        }
-        else if (temp >= chip->normal_state3_batt_decidegc)
-        {
-            cur_batt_temp_status = BAT_TEMP_STATUS_NORMAL_STATE4;
-
-            chip->adc_param.low_temp =
-                chip->normal_state3_batt_decidegc - HYSTERESIS_DECIDEGC;
-            chip->adc_param.high_temp =
-                chip->hot_batt_decidegc;
-        }
-        else if (temp >= chip->normal_state2_batt_decidegc)
-        {
-            cur_batt_temp_status = BAT_TEMP_STATUS_NORMAL_STATE3;
-
-            chip->adc_param.low_temp =
-                chip->normal_state2_batt_decidegc - HYSTERESIS_DECIDEGC;
-            chip->adc_param.high_temp =
-                chip->normal_state3_batt_decidegc;
-        }
-        else if (temp >= chip->normal_state1_batt_decidegc)
-        {
-            cur_batt_temp_status = BAT_TEMP_STATUS_NORMAL_STATE2;
-
-            chip->adc_param.low_temp =
-                chip->normal_state1_batt_decidegc - HYSTERESIS_DECIDEGC;
-            chip->adc_param.high_temp =
-                chip->normal_state2_batt_decidegc;
-        }
-        else if (temp >= chip->cold_batt_decidegc)
-        {
-            cur_batt_temp_status = BAT_TEMP_STATUS_NORMAL_STATE1;
-
-            chip->adc_param.low_temp =
-                chip->cold_batt_decidegc - HYSTERESIS_DECIDEGC;
-            chip->adc_param.high_temp =
-                        chip->normal_state1_batt_decidegc;
-            chip->adc_param.state_request =
-                    ADC_TM_HIGH_LOW_THR_ENABLE;
-        }
-    }
-    else
-    {
-        if (temp <= chip->hot_batt_decidegc)
-        {
-            cur_batt_temp_status = BAT_TEMP_STATUS_NORMAL_STATE4;
-
-            chip->adc_param.high_temp =
-                            chip->hot_batt_decidegc + HYSTERESIS_DECIDEGC;
-            chip->adc_param.low_temp =
-                    chip->normal_state3_batt_decidegc;
-            chip->adc_param.state_request =
-                    ADC_TM_HIGH_LOW_THR_ENABLE;
-        }
-        else if (temp <= chip->normal_state3_batt_decidegc)
-        {
-            cur_batt_temp_status = BAT_TEMP_STATUS_NORMAL_STATE3;
-
-            chip->adc_param.high_temp =
-                chip->normal_state3_batt_decidegc + HYSTERESIS_DECIDEGC;
-            chip->adc_param.low_temp =
-                chip->normal_state2_batt_decidegc;
-            chip->adc_param.state_request =
-                ADC_TM_HIGH_LOW_THR_ENABLE;
-        }
-        else if (temp <= chip->normal_state2_batt_decidegc)
-        {
-            cur_batt_temp_status = BAT_TEMP_STATUS_NORMAL_STATE2;
-
-            chip->adc_param.high_temp =
-                chip->normal_state2_batt_decidegc + HYSTERESIS_DECIDEGC;
-            chip->adc_param.low_temp =
-                chip->normal_state1_batt_decidegc;
-            chip->adc_param.state_request =
-                ADC_TM_HIGH_LOW_THR_ENABLE;
-        }
-        else if (temp <= chip->normal_state1_batt_decidegc)
-        {
-            cur_batt_temp_status = BAT_TEMP_STATUS_NORMAL_STATE1;
-
-            chip->adc_param.high_temp =
-                chip->normal_state1_batt_decidegc + HYSTERESIS_DECIDEGC;
-            chip->adc_param.low_temp =
-                chip->cold_batt_decidegc;
-            chip->adc_param.state_request =
-                ADC_TM_HIGH_LOW_THR_ENABLE;
-        }
-        else if (temp <= chip->cold_batt_decidegc)
-        {
-            cur_batt_temp_status = BAT_TEMP_STATUS_COLD;
-
-            chip->adc_param.high_temp =
-                chip->cold_batt_decidegc + HYSTERESIS_DECIDEGC;
-            chip->adc_param.low_temp =
-                chip->cold_batt_decidegc;
-            chip->adc_param.state_request =
-                ADC_TM_HIGH_LOW_THR_ENABLE;
-        }
-    }
-
-    if (cur_batt_temp_status ^ chip->batt_temp_status)
-    {
-        if (BAT_TEMP_STATUS_HOT == cur_batt_temp_status
-            || BAT_TEMP_STATUS_COLD == cur_batt_temp_status)
-        {
-            mp2661_set_charging_enable(chip, false);
-        }
-        else
-        {
-            mp2661_set_charging_enable(chip, true);
-            mp2661_set_appropriate_batt_charging_current(chip);
-        }
-        chip->batt_temp_status = cur_batt_temp_status;
-    }
-
-    pr_info("batt_temp_status = %d, low = %d deciDegC, high = %d deciDegC\n",
-        chip->batt_temp_status,
-        chip->adc_param.low_temp, chip->adc_param.high_temp);
-
-    if (qpnp_adc_tm_channel_measure(chip->adc_tm_dev, &chip->adc_param))
-    {
-        pr_err("request ADC error\n");
-    }
-}
-#endif
 
 static void mp2661_initialize_batt_temp_status(struct mp2661_chg *chip)
 {
@@ -2098,7 +1956,7 @@ static int mp2661_hw_init(struct mp2661_chg *chip)
     rc = mp2661_set_batt_full_voltage(chip, chip->batt_full_mv);
     if (rc)
     {
-        pr_err("Couldn't set charge full voltage rc = %d\n", rc);
+        pr_err("Couldn't set batt full voltage rc = %d\n", rc);
     }
 
     rc = mp2661_set_batt_full_terminate_current(chip, chip->batt_full_terminate_ma);
@@ -2192,9 +2050,6 @@ static int mp2661_hw_init(struct mp2661_chg *chip)
         return rc;
     }
 
-    /* TODO (b/30979364): The ntc temp of mp2661 is 60 and easily cause board to shutdown,
-     * So disable ntc temporarily here but we need to re-enable it before product release.
-    */
     rc = mp2661_ntc_enable(chip, true);
     if (rc)
     {
@@ -2209,7 +2064,7 @@ static int mp2661_hw_init(struct mp2661_chg *chip)
         return rc;
     }
 
-    /*disable watchdog_timer*/
+    /* disable watchdog timer */
     rc = mp2661_set_i2c_watchdog_timer(chip, false);
     if (rc)
     {
@@ -2249,67 +2104,7 @@ static int mp2661_hw_init(struct mp2661_chg *chip)
     return 0;
 }
 
-#if 0
-static void mp2661_initialize_qpnp_adc_tm_btm(struct mp2661_chg *chip)
-{
-    int rc;
-
-    if (BAT_TEMP_STATUS_HOT == chip->batt_temp_status)
-    {
-        chip->adc_param.low_temp = chip->hot_batt_decidegc;
-        chip->adc_param.state_request =
-            ADC_TM_LOW_THR_ENABLE;
-    }
-    else if (BAT_TEMP_STATUS_NORMAL_STATE4 == chip->batt_temp_status)
-    {
-        chip->adc_param.low_temp = chip->normal_state3_batt_decidegc;
-        chip->adc_param.high_temp = chip->hot_batt_decidegc;
-        chip->adc_param.state_request =
-                    ADC_TM_HIGH_LOW_THR_ENABLE;
-    }
-    else if (BAT_TEMP_STATUS_NORMAL_STATE3 == chip->batt_temp_status)
-    {
-        chip->adc_param.low_temp = chip->normal_state2_batt_decidegc;
-        chip->adc_param.high_temp = chip->normal_state3_batt_decidegc;
-        chip->adc_param.state_request =
-                    ADC_TM_HIGH_LOW_THR_ENABLE;
-    }
-    else if (BAT_TEMP_STATUS_NORMAL_STATE2 == chip->batt_temp_status)
-    {
-        chip->adc_param.low_temp = chip->normal_state1_batt_decidegc;
-        chip->adc_param.high_temp = chip->normal_state2_batt_decidegc;
-        chip->adc_param.state_request =
-                    ADC_TM_HIGH_LOW_THR_ENABLE;
-    }
-    else if (BAT_TEMP_STATUS_NORMAL_STATE1 == chip->batt_temp_status)
-    {
-        chip->adc_param.low_temp = chip->cold_batt_decidegc;
-        chip->adc_param.high_temp = chip->normal_state1_batt_decidegc;
-        chip->adc_param.state_request =
-                    ADC_TM_HIGH_LOW_THR_ENABLE;
-    }
-    else if (BAT_TEMP_STATUS_COLD == chip->batt_temp_status)
-    {
-        chip->adc_param.high_temp = chip->normal_state1_batt_decidegc;
-        chip->adc_param.state_request = ADC_TM_HIGH_THR_ENABLE;
-    }
-
-    chip->adc_param.timer_interval = ADC_MEAS2_INTERVAL_1S;
-    chip->adc_param.btm_ctx = chip;
-    chip->adc_param.threshold_notification =
-            mp2661_chg_adc_notification;
-    chip->adc_param.channel = P_MUX2_1_1;
-
-    rc = qpnp_adc_tm_channel_measure(chip->adc_tm_dev,
-                            &chip->adc_param);
-    if (rc)
-    {
-        pr_err("requesting ADC error %d\n", rc);
-    }
-}
-#endif
-
-/*writable properties*/
+/* writeable properties */
 static int mp2661_batt_property_is_writeable(struct power_supply *psy,
                 enum power_supply_property psp)
 {
@@ -2341,7 +2136,7 @@ static void mp2661_check_and_update_charging_voltage_current(struct mp2661_chg *
         rc = mp2661_set_batt_full_voltage(chip, full_voltage_mv);
         if (rc)
         {
-            pr_err("Couldn't set charge full voltage rc = %d\n", rc);
+            pr_err("Couldn't set batt full voltage rc = %d\n", rc);
         }
     }
 
@@ -2506,12 +2301,9 @@ static void mp2661_adjust_batt_charging_current_and_voltage(
 
 #define MONITOR_WORK_DELAY_MS         10000
 #define MONITOR_TEMP_DELTA            10
-#define AP_MASK_RX_GPIO_TEMP          450
-#define AP_MASK_RX_GPIO_TEMP_DELTA    30
 #define RECHARGE_CAPACITY_THRESHOLD   95
 #define TEMP_IN_STATE1_CHECK_CYCLES   60
 
-extern void idtp9220_ap_mask_rxint_enable(bool enable);
 static __ref int mp2661_monitor_kthread(void *arg)
 {
     int temp;
@@ -2578,7 +2370,8 @@ static __ref int mp2661_monitor_kthread(void *arg)
            && chip->repeat_charging_detect_flag
            && chip->usb_present)
         {
-            pr_info("capacity is %d not above %d, recharge\n", capacity, RECHARGE_CAPACITY_THRESHOLD);
+            pr_info("capacity is %d not above %d, recharge\n",
+                        capacity, RECHARGE_CAPACITY_THRESHOLD);
             rc = mp2661_set_charging_enable(chip, true);
             if (rc)
             {
@@ -2655,23 +2448,6 @@ static int mp2661_charger_probe(struct i2c_client *client,
         return rc;
     }
 
-#if 0
-    /* using adc_tm for implementing pmic therm */
-    if (chip->using_pmic_therm)
-    {
-        chip->adc_tm_dev = qpnp_get_adc_tm(chip->dev, "chg");
-        if (IS_ERR(chip->adc_tm_dev))
-        {
-            rc = PTR_ERR(chip->adc_tm_dev);
-            if (rc != -EPROBE_DEFER)
-            {
-                pr_err("adc_tm property missing\n");
-            }
-            return rc;
-        }
-    }
-#endif
-
     mp2661_initialize_batt_temp_status(chip);
 
     rc = mp2661_hw_init(chip);
@@ -2722,19 +2498,11 @@ static int mp2661_charger_probe(struct i2c_client *client,
                 "mp2661_chg_stat_irq", chip);
         if (rc < 0)
         {
-            pr_err(    "request_irq for irq=%d  failed rc = %d\n", client->irq, rc);
+            pr_err("request_irq for irq=%d failed rc = %d\n", client->irq, rc);
             goto unregister_batt_psy;
         }
         enable_irq_wake(client->irq);
     }
-
-#if 0
-    if (chip->using_pmic_therm)
-    {
-        mp2661_initialize_qpnp_adc_tm_btm(chip);
-    }
-#endif
-
 
     create_debugfs_entries(chip);
 
@@ -2788,7 +2556,7 @@ static int mp2661_resume(struct device *dev)
      struct i2c_client *client = to_i2c_client(dev);
      struct mp2661_chg *chip = i2c_get_clientdata(client);
 
-     if(!chip->usb_present && !chip->ap_mask_rx_int_gpio)
+     if(!chip->usb_present)
      {
          return 0;
      }
@@ -2796,7 +2564,7 @@ static int mp2661_resume(struct device *dev)
      get_monotonic_boottime(&chip->resume_time);
      pr_info("mp2661 resume_time = %ld, last_monitor_time =%ld\n",
             chip->resume_time.tv_sec, chip->last_monitor_time.tv_sec);
-     if( (chip->resume_time.tv_sec - chip->last_monitor_time.tv_sec) >
+     if((chip->resume_time.tv_sec - chip->last_monitor_time.tv_sec) >
              MONITOR_WORK_DELAY_MS / 1000)
      {
           up(&chip->monitor_temp_sem);
