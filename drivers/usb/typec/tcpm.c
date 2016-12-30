@@ -326,6 +326,8 @@ static enum tcpm_state tcpm_default_state(struct tcpm_port *port)
 	return SRC_UNATTACHED;
 }
 
+extern bool IsPRSwap;
+
 static inline
 struct tcpm_port *typec_cap_to_tcpm(const struct typec_capability *cap)
 {
@@ -2144,6 +2146,7 @@ static void run_state_machine(struct tcpm_port *port)
 		port->caps_count = 0;
 		port->message_id = 0;
 		port->explicit_contract = false;
+		IsPRSwap = false;
 		tcpm_set_state(port, SRC_SEND_CAPABILITIES, 0);
 		break;
 	case SRC_SEND_CAPABILITIES:
@@ -2303,6 +2306,7 @@ static void run_state_machine(struct tcpm_port *port)
 		port->pwr_opmode = TYPEC_PWR_MODE_USB;
 		port->message_id = 0;
 		port->explicit_contract = false;
+		IsPRSwap = false;
 		tcpm_set_state(port, SNK_DISCOVERY, 0);
 		break;
 	case SNK_DISCOVERY:
@@ -2515,6 +2519,7 @@ static void run_state_machine(struct tcpm_port *port)
 	/* PR_Swap states */
 	case PR_SWAP_ACCEPT:
 		tcpm_pd_send_control(port, PD_CTRL_ACCEPT);
+		IsPRSwap = true;
 		tcpm_set_state(port, PR_SWAP_START, 0);
 		break;
 	case PR_SWAP_SEND:
@@ -2524,6 +2529,7 @@ static void run_state_machine(struct tcpm_port *port)
 		break;
 	case PR_SWAP_SEND_TIMEOUT:
 		tcpm_swap_complete(port, -ETIMEDOUT);
+		IsPRSwap = false;
 		tcpm_set_state(port, ready_state(port), 0);
 		break;
 	case PR_SWAP_START:
@@ -2605,6 +2611,7 @@ static void run_state_machine(struct tcpm_port *port)
 	case PR_SWAP_CANCEL:
 	case VCONN_SWAP_CANCEL:
 		tcpm_swap_complete(port, port->swap_status);
+		IsPRSwap = false;
 		if (port->pwr_role == TYPEC_SOURCE)
 			tcpm_set_state(port, SRC_READY, 0);
 		else

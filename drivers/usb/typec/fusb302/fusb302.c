@@ -1011,6 +1011,9 @@ static int tcpm_set_roles(struct tcpc_dev *dev, bool attached,
 			    FUSB_REG_SWITCHES1_DATAROLE;
 	u8 switches1_data = 0x00;
 
+	if (!attached)
+		data = TYPEC_DEVICE;
+
 	fusb302_notify_uc_data_role(chip, data);
 
 	mutex_lock(&chip->lock);
@@ -1018,6 +1021,10 @@ static int tcpm_set_roles(struct tcpc_dev *dev, bool attached,
 		switches1_data |= FUSB_REG_SWITCHES1_POWERROLE;
 	if (data == TYPEC_HOST)
 		switches1_data |= FUSB_REG_SWITCHES1_DATAROLE;
+
+	PolicyIsSource = (pwr == TYPEC_SOURCE) ? true : false;
+	PolicyIsDFP = (data == TYPEC_HOST) ? true : false;
+
 	ret = fusb302_i2c_mask_write(chip, FUSB_REG_SWITCHES1,
 				     switches1_mask, switches1_data);
 	if (ret < 0) {
@@ -1135,6 +1142,12 @@ static int tcpm_pd_transmit(struct tcpc_dev *dev, enum tcpm_transmit_type type,
 	mutex_lock(&chip->lock);
 	switch (type) {
 	case TCPC_TX_SOP:
+		/*
+		 * add 10ms delay because of source cap send before partner
+		 * enter wait cap state.
+		 */
+		if (pd_header_type_le(msg->header) == PD_DATA_SOURCE_CAP)
+			msleep(10);
 		ret = fusb302_pd_send_message(chip, msg);
 		if (ret < 0)
 			fusb302_log("cannot send PD message, ret=%d\n", ret);
@@ -1217,11 +1230,13 @@ done:
 	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
 
 static const u32 src_pdo[] = {
-	PDO_FIXED(5000, 400, PDO_FIXED_FLAGS),
+	PDO_FIXED(5000, 900, PDO_FIXED_FLAGS),
 };
 
 static const u32 snk_pdo[] = {
-	PDO_FIXED(5000, 400, PDO_FIXED_FLAGS),
+	PDO_FIXED(5000, 3000, PDO_FIXED_FLAGS),
+	PDO_FIXED(9000, 2000, PDO_FIXED_FLAGS),
+	PDO_BATT(4000, 10000, 18000),
 };
 
 static const struct tcpc_config fusb302_tcpc_config = {
