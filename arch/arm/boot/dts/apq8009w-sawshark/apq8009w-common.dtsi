@@ -29,7 +29,14 @@
 	/delete-node/ blsp1_uart2;
 	/delete-node/ i2c@78b6000;
 	/delete-node/ i2c@78b8000;
+
+	android_usb@086000c8 {
+		compatible = "qcom,android-usb";
+		qcom,supported-func = "ffs","diag","serial","mtp","rmnet";
+	};
 };
+
+
 &i2c_1 {
 	status = "ok";
 };
