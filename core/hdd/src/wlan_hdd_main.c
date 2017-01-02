@@ -4881,6 +4881,8 @@ static void hdd_context_destroy(hdd_context_t *hdd_ctx)
 
 	hdd_context_deinit(hdd_ctx);
 
+	hdd_free_probe_req_ouis(hdd_ctx);
+
 	qdf_mem_free(hdd_ctx->config);
 	hdd_ctx->config = NULL;
 
@@ -6760,6 +6762,21 @@ static hdd_context_t *hdd_context_create(struct device *dev)
 		goto err_free_config;
 	}
 
+	if (hdd_ctx->config->probe_req_ie_whitelist) {
+		if (hdd_validate_prb_req_ie_bitmap(hdd_ctx)) {
+			/* parse ini string probe req oui */
+			if (hdd_parse_probe_req_ouis(hdd_ctx)) {
+				hdd_err("Error parsing probe req ouis");
+				hdd_err("disable probe req ie whitelisting");
+				hdd_ctx->config->probe_req_ie_whitelist = false;
+			}
+		} else {
+			hdd_err("invalid probe req ie bitmap and ouis");
+			hdd_err("disable probe req ie whitelisting");
+			hdd_ctx->config->probe_req_ie_whitelist = false;
+		}
+	}
+
 	hdd_notice("Setting configuredMcastBcastFilter: %d",
 		   hdd_ctx->config->mcastBcastFilterSetting);
 
@@ -6822,6 +6839,7 @@ err_free_config:
 	qdf_mem_free(hdd_ctx->config);
 
 err_free_hdd_context:
+	hdd_free_probe_req_ouis(hdd_ctx);
 	wiphy_free(hdd_ctx->wiphy);
 
 err_out:

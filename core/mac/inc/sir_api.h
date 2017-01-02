@@ -909,6 +909,13 @@ typedef struct sSirSmeScanReq {
 	uint8_t mac_addr[QDF_MAC_ADDR_SIZE];
 	uint8_t mac_addr_mask[QDF_MAC_ADDR_SIZE];
 
+	/* probe req ie whitelisting attrs */
+	bool ie_whitelist;
+	uint32_t probe_req_ie_bitmap[PROBE_REQ_BITMAP_LEN];
+	uint32_t num_vendor_oui;
+	uint32_t oui_field_len;
+	uint32_t oui_field_offset;
+
 	/* channelList MUST be the last field of this structure */
 	tSirChannelList channelList;
 	/*-----------------------------
@@ -927,7 +934,10 @@ typedef struct sSirSmeScanReq {
 	   ----------------------------- <--+
 	   ... variable size uIEFiled
 	   up to uIEFieldLen (can be 0)
-	   -----------------------------*/
+	   -----------------------------
+	   ... variable size upto num_vendor_oui
+	   struct vendor_oui voui;
+	   -----------------------------------*/
 } tSirSmeScanReq, *tpSirSmeScanReq;
 
 typedef struct sSirSmeScanAbortReq {
@@ -2953,6 +2963,12 @@ typedef struct sSirPNOScanReq {
 	bool enable_pno_scan_randomization;
 	uint8_t mac_addr[QDF_MAC_ADDR_SIZE];
 	uint8_t mac_addr_mask[QDF_MAC_ADDR_SIZE];
+
+	/* probe req ie whitelisting attrs */
+	bool ie_whitelist;
+	uint32_t probe_req_ie_bitmap[PROBE_REQ_BITMAP_LEN];
+	uint32_t num_vendor_oui;
+	/* followed by one or more struct vendor_oui */
 } tSirPNOScanReq, *tpSirPNOScanReq;
 
 /* Preferred Network Found Indication */
@@ -3786,6 +3802,13 @@ typedef struct sSirScanOffloadReq {
 	uint8_t mac_addr[QDF_MAC_ADDR_SIZE];
 	uint8_t mac_addr_mask[QDF_MAC_ADDR_SIZE];
 
+	/* probe req ie whitelisting attrs */
+	bool ie_whitelist;
+	uint32_t probe_req_ie_bitmap[PROBE_REQ_BITMAP_LEN];
+	uint32_t num_vendor_oui;
+	uint32_t oui_field_len;
+	uint32_t oui_field_offset;
+
 	tSirChannelList channelList;
 	/*-----------------------------
 	  sSirScanOffloadReq....
@@ -3803,7 +3826,10 @@ typedef struct sSirScanOffloadReq {
 	  ----------------------------- <--+
 	  ... variable size uIEField
 	  up to uIEFieldLen (can be 0)
-	  -----------------------------*/
+	  -----------------------------
+	  ... variable size upto num_vendor_oui
+	  struct vendor_oui voui;
+	  ------------------------*/
 } tSirScanOffloadReq, *tpSirScanOffloadReq;
 
 /**
@@ -4946,6 +4972,11 @@ typedef struct {
 	uint8_t oui[WIFI_SCANNING_MAC_OUI_LENGTH];
 	uint32_t vdev_id;
 	bool enb_probe_req_sno_randomization;
+	/* probe req ie whitelisting attrs */
+	bool ie_whitelist;
+	uint32_t probe_req_ie_bitmap[PROBE_REQ_BITMAP_LEN];
+	uint32_t num_vendor_oui;
+	/* Followed by 0 or more struct vendor_oui */
 } tSirScanMacOui, *tpSirScanMacOui;
 
 enum {
