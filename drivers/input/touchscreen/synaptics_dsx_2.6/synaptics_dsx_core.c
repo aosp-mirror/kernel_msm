@@ -138,6 +138,9 @@ static unsigned char f11_data_28_value[0];
 #endif
 u32 syna_abs_x_max;
 u32 syna_abs_y_max;
+static int work_status;
+static int environment_mode;
+static int pre_finger;
 
 char *syn_fwfile_table[SYN_MOUDLE_NUM_MAX] =
 {
@@ -879,8 +882,14 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	int wx;
 	int wy;
 	int temp;
+	int palm_status = 0;
+	int has_finger;
+
 	struct synaptics_rmi4_f11_data_1_5 data;
 	struct synaptics_rmi4_f11_extra_data *extra_data;
+
+	environment_mode = work_status;
+	pre_finger = syna_has_finger;
 
 	/*
 	 * The number of finger status registers is determined by the
@@ -927,7 +936,26 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			1);
 	if (retval < 0)
 		return 0;
+	palm_status = f11_data_28_value[0] & 0x02;
 #endif
+
+	if ((finger_status_reg[0] == 0)	&&
+		((finger_status_reg[1] & 0x03) == 0))
+		has_finger = 0;
+	else
+		has_finger = 1;
+
+	if (work_status && !palm_status &&
+		!has_finger && !pre_finger) {
+		dev_info(rmi4_data->pdev->dev.parent,
+			"%s: report KEY_POWER\n", __func__);
+		input_report_key(rmi4_data->input_dev, KEY_POWER, 1);
+		input_sync(rmi4_data->input_dev);
+		input_report_key(rmi4_data->input_dev, KEY_POWER, 0);
+		input_sync(rmi4_data->input_dev);
+		work_status = 0;
+		return 0;
+	}
 
 	mutex_lock(&(rmi4_data->rmi4_report_mutex));
 
@@ -1041,7 +1069,7 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			input_mt_sync(rmi4_data->input_dev);
 #endif
 
-			dev_dbg(rmi4_data->pdev->dev.parent,
+			dev_info(rmi4_data->pdev->dev.parent,
 					"%s: Finger %d: status = 0x%02x, x = %d, y = %d, wx = %d, wy = %d\n",
 					__func__, finger,
 					finger_status,
@@ -1053,6 +1081,7 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 
 	if (touch_count == 0) {
 		syna_has_finger = false;
+		pre_finger = 0;
 
 		input_report_key(rmi4_data->input_dev,
 				BTN_TOUCH, 0);
@@ -1061,8 +1090,10 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 #ifndef TYPE_B_PROTOCOL
 		input_mt_sync(rmi4_data->input_dev);
 #endif
-	} else
+	} else {
 		syna_has_finger = true;
+		pre_finger = 1;
+	}
 
 	input_sync(rmi4_data->input_dev);
 
@@ -4710,12 +4741,29 @@ static void synaptics_rmi4_wakeup_gesture(struct synaptics_rmi4_data *rmi4_data,
 	return;
 }
 
+static int synaptics_rmi4_doze_interval(struct synaptics_rmi4_data *rmi4_data, unsigned char time)
+{
+	int retval;
+	unsigned char doze_inerval;
+
+	doze_inerval = time;
+	retval = synaptics_rmi4_reg_write(rmi4_data,
+			rmi4_data->f01_ctrl_base_addr + 2,
+			&doze_inerval,
+			sizeof(doze_inerval));
+	if (retval < 0)
+		return retval;
+
+	return 0;
+}
+
 #ifdef CONFIG_FB
 static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
 		unsigned long event, void *data)
 {
 	int *transition;
 	int retval;
+	unsigned char doze_time = 3;
 	struct fb_event *evdata = data;
 	struct synaptics_rmi4_data *rmi4_data =
 			container_of(self, struct synaptics_rmi4_data,
@@ -4733,6 +4781,13 @@ static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
 			} else if (*transition == FB_BLANK_UNBLANK) {
 				queue_work(syna_rmi4_resume_wq, &syna_rmi4_resume_work);
 				rmi4_data->fb_ready = true;
+				work_status = 0;
+			} else if (*transition == FB_BLANK_VSYNC_SUSPEND) {
+				work_status = 1;
+				dev_info(rmi4_data->pdev->dev.parent,
+					"%s: environment mode, work_status = %d\n",
+					__func__, work_status);
+				synaptics_rmi4_doze_interval(rmi4_data, doze_time);
 			}
 		}
 	}
@@ -4877,7 +4932,7 @@ exit:
 	suspend_flag = 1;
 	wake_up_interruptible(&suspend_wait);
 
-	dev_dbg(rmi4_data->pdev->dev.parent,
+	dev_info(rmi4_data->pdev->dev.parent,
 			"%s: enter suspend mode!\n",
 			__func__);
 
@@ -4886,6 +4941,7 @@ exit:
 
 static void synaptics_rmi4_resume(struct work_struct *work)
 {
+	unsigned char doze_time = 2;
 #ifdef FB_READY_RESET
 	int retval;
 #endif
@@ -4893,6 +4949,7 @@ static void synaptics_rmi4_resume(struct work_struct *work)
 	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
 
 	if (rmi4_data->stay_awake || !rmi4_data->suspend){
+		synaptics_rmi4_doze_interval(rmi4_data, doze_time);
 		dev_dbg(rmi4_data->pdev->dev.parent,
 			"%s: do nothing and end!\n",
 			__func__);
@@ -4932,8 +4989,10 @@ exit:
 	}
 	mutex_unlock(&exp_data.mutex);
 
+	synaptics_rmi4_doze_interval(rmi4_data, doze_time);
+
 	rmi4_data->suspend = false;
-	dev_dbg(rmi4_data->pdev->dev.parent,
+	dev_info(rmi4_data->pdev->dev.parent,
 			"%s: resume from suspend mode!\n",
 			__func__);
 
