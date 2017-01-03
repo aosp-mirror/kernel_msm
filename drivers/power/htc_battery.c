@@ -2326,6 +2326,7 @@ module_param_named(
 #define PD_LIMIT_VBUS_MV 5000
 #define PD_LIMIT_CURRENT_MA 3000
 #define MESG_MAX_LENGTH 300
+#define PD_MAX_POWER 18000000	/* 18W = 9V * 2A */
 int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *max_mA)
 {
 	int i = 0;
@@ -2347,6 +2348,11 @@ int htc_battery_pd_charger_support(int size, struct htc_pd_data pd_data, int *ma
 		pd_vbus_vol = pd_data.pd_list[i][0];
 		pd_ma = pd_data.pd_list[i][1];
 		pd_power = pd_vbus_vol * pd_ma;
+
+		if (pd_power > PD_MAX_POWER) {
+			pd_power = PD_MAX_POWER;
+			pd_ma = pd_power / pd_vbus_vol;
+		}
 
 		if (pd_vbus_vol > PD_MAX_VBUS) {
 			pr_debug("[BATT][PD] Voltage %dV > %dV, skip to prevent OVP\n",

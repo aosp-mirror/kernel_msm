@@ -2160,11 +2160,9 @@ void PolicySinkEvaluateCaps(void)
             SinkRequest.FVRDO.CapabilityMismatch = FALSE;                       // There can't be a capabilities mismatch
         else                                                                    // Otherwise...
         {
-            if (SelVoltage * ReqCurrent < SinkRequestMaxPower)                  // If the max power available is less than the max power requested...
+            if (SelVoltage * ReqCurrent != SinkRequestMaxPower)
             {
                 SinkRequest.FVRDO.CapabilityMismatch = TRUE;                    // flag the source that we need more power
-                SinkRequest.FVRDO.MinMaxCurrent = objCurrent;                     // Set operating power to max available
-                SinkRequest.FVRDO.OpCurrent =  objCurrent;   
             }
             else                                                                // Otherwise...
             {
