@@ -945,8 +945,8 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	else
 		has_finger = 1;
 
-	if (work_status && !palm_status &&
-		!has_finger && !pre_finger) {
+	if (work_status && !has_finger && !pre_finger &&
+		!palm_status && !syn_ts->palm_status) {
 		dev_info(rmi4_data->pdev->dev.parent,
 			"%s: report KEY_POWER\n", __func__);
 		input_report_key(rmi4_data->input_dev, KEY_POWER, 1);
