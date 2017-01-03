@@ -51,7 +51,7 @@
 		qcom,mdss-dsi-bllp-power-mode;
 		qcom,mdss-dsi-lane-0-state;
 		qcom,mdss-dsi-panel-timings = [
-			5D 12 0C 00 34 36 10 16 0F 03 04 a0
+			5D 12 0C 00 34 36 10 1a 0F 03 04 a0
 		];
 
 		qcom,mdss-dsi-te-pin-select = <1>;
