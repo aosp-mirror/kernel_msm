@@ -1437,6 +1437,11 @@ static int msm_routing_ext_ec_put(struct snd_kcontrol *kcontrol,
 		__func__, msm_route_ext_ec_ref,
 		ucontrol->value.integer.value[0]);
 
+	if (mux >= e->max) {
+		pr_err("%s: Invalid mux value %d\n", __func__, mux);
+		return -EINVAL;
+	}
+
 	mutex_lock(&routing_lock);
 	switch (ucontrol->value.integer.value[0]) {
 	case EC_PORT_ID_PRIMARY_MI2S_TX:
