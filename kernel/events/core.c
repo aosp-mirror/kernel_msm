@@ -914,6 +914,78 @@ static void put_ctx(struct perf_event_context *ctx)
 	}
 }
 
+
+/*
+ * Because of perf_event::ctx migration in sys_perf_event_open::move_group and
+ * perf_pmu_migrate_context() we need some magic.
+ *
+ * Those places that change perf_event::ctx will hold both
+ * perf_event_ctx::mutex of the 'old' and 'new' ctx value.
+ *
+ * Lock ordering is by mutex address. There is one other site where
+ * perf_event_context::mutex nests and that is put_event(). But remember that
+ * that is a parent<->child context relation, and migration does not affect
+ * children, therefore these two orderings should not interact.
+ *
+ * The change in perf_event::ctx does not affect children (as claimed above)
+ * because the sys_perf_event_open() case will install a new event and break
+ * the ctx parent<->child relation, and perf_pmu_migrate_context() is only
+ * concerned with cpuctx and that doesn't have children.
+ *
+ * The places that change perf_event::ctx will issue:
+ *
+ * perf_remove_from_context();
+ * synchronize_rcu();
+ * perf_install_in_context();
+ *
+ * to affect the change. The remove_from_context() + synchronize_rcu() should
+ * quiesce the event, after which we can install it in the new location. This
+ * means that only external vectors (perf_fops, prctl) can perturb the event
+ * while in transit. Therefore all such accessors should also acquire
+ * perf_event_context::mutex to serialize against this.
+ *
+ * However; because event->ctx can change while we're waiting to acquire
+ * ctx->mutex we must be careful and use the below perf_event_ctx_lock()
+ * function.
+ *
+ * Lock order:
+ * task_struct::perf_event_mutex
+ * perf_event_context::mutex
+ * perf_event_context::lock
+ * perf_event::child_mutex;
+ * perf_event::mmap_mutex
+ * mmap_sem
+ */
+static struct perf_event_context *perf_event_ctx_lock(struct perf_event *event)
+{
+	struct perf_event_context *ctx;
+
+again:
+	rcu_read_lock();
+	ctx = ACCESS_ONCE(event->ctx);
+	if (!atomic_inc_not_zero(&ctx->refcount)) {
+		rcu_read_unlock();
+		goto again;
+	}
+	rcu_read_unlock();
+	mutex_lock(&ctx->mutex);
+	if (event->ctx != ctx) {
+	mutex_unlock(&ctx->mutex);
+	put_ctx(ctx);
+	goto again;
+	}
+
+	return ctx;
+}
+
+static void perf_event_ctx_unlock(struct perf_event *event,
+	struct perf_event_context *ctx)
+{
+	mutex_unlock(&ctx->mutex);
+	put_ctx(ctx);
+}
+
+
 /*
  * Because of perf_event::ctx migration in sys_perf_event_open::move_group and
  * perf_pmu_migrate_context() we need some magic.
@@ -3724,7 +3796,7 @@ u64 perf_event_read_value(struct perf_event *event, u64 *enabled, u64 *running)
 EXPORT_SYMBOL_GPL(perf_event_read_value);
 
 static int perf_event_read_group(struct perf_event *event,
-				   u64 read_format, char __user *buf)
+				u64 read_format, char __user *buf)
 {
 	struct perf_event *leader = event->group_leader, *sub;
 	struct perf_event_context *ctx = leader->ctx;
@@ -4124,7 +4196,6 @@ int perf_event_task_enable(void)
 		perf_event_ctx_unlock(event, ctx);
 	}
 	mutex_unlock(&current->perf_event_mutex);
-
 	return 0;
 }
 
@@ -7546,6 +7617,15 @@ SYSCALL_DEFINE5(perf_event_open,
 		if (flags & PERF_FLAG_FD_NO_GROUP)
 			group_leader = NULL;
 	}
+	/*
+	* Take the group_leader's group_leader_mutex before observing
+	* anything in the group leader that leads to changes in ctx,
+	* many of which may be changing on another thread.
+	* In particular, we want to take this lock before deciding
+	* whether we need to move_group.
+	*/
+	if (group_leader)
+		mutex_lock(&group_leader->group_leader_mutex);
 
 	/*
 	 * Take the group_leader's group_leader_mutex before observing
@@ -7714,7 +7794,7 @@ SYSCALL_DEFINE5(perf_event_open,
 		 */
 		perf_event__state_init(group_leader);
 		list_for_each_entry(sibling, &group_leader->sibling_list,
-				    group_entry) {
+				group_entry) {
 			perf_remove_from_context(sibling, false);
 			perf_event__state_init(sibling);
 			put_ctx(gctx);
@@ -7735,7 +7815,7 @@ SYSCALL_DEFINE5(perf_event_open,
 		perf_install_in_context(ctx, group_leader, group_leader->cpu);
 		get_ctx(ctx);
 		list_for_each_entry(sibling, &group_leader->sibling_list,
-				    group_entry) {
+			group_entry) {
 			perf_install_in_context(ctx, sibling, sibling->cpu);
 			get_ctx(ctx);
 		}
