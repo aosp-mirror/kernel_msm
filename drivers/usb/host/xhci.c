@@ -121,10 +121,10 @@ int xhci_halt(struct xhci_hcd *xhci)
 
 	xhci->cmd_ring_state = CMD_RING_STATE_STOPPED;
 
-	if (timer_pending(&xhci->cmd_timer)) {
+	if (delayed_work_pending(&xhci->cmd_timer)) {
 		xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 				"Cleanup command queue");
-		del_timer(&xhci->cmd_timer);
+		cancel_delayed_work(&xhci->cmd_timer);
 		xhci_cleanup_command_queue(xhci);
 	}
 
