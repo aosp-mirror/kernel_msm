@@ -167,7 +167,11 @@ static int pn5xx_suspend(struct i2c_client *client, pm_message_t mesg)
     struct pn5xx_dev *pn5xx_dev;
     pr_info("%s\n", __func__);
     pn5xx_dev = i2c_get_clientdata(client);
-    pn5xx_clock_disable(pn5xx_dev);
+    if(!gpio_get_value(pn5xx_dev->clkreq_gpio))
+    {
+        pr_info("%s,  clkreq_gpio is 0 \n", __func__);
+        pn5xx_clock_disable(pn5xx_dev);
+    }
     return 0;
 }
 
