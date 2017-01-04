@@ -1225,6 +1225,8 @@ static int dwc3_probe(struct platform_device *pdev)
 		dwc->is_drd = true;
 	}
 
+	dwc->auto_vbus_src_sel = false;
+
 	/* Adjust Frame Length */
 	dwc3_frame_length_adjustment(dwc, fladj);
 

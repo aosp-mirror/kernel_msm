@@ -945,6 +945,8 @@ struct dwc3 {
 	struct dentry		*root;
 	struct debugfs_regset32	*regset;
 
+	bool			auto_vbus_src_sel;
+
 	u8			test_mode;
 	u8			test_mode_nr;
 	u8			lpm_nyet_threshold;

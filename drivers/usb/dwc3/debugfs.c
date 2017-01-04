@@ -1256,6 +1256,13 @@ int dwc3_debugfs_init(struct dwc3 *dwc)
 		}
 	}
 
+	file = debugfs_create_bool("auto_vbus_src_sel", S_IRUGO | S_IWUSR, root,
+				   &dwc->auto_vbus_src_sel);
+	if (!file) {
+		ret = -ENOMEM;
+		goto err1;
+	}
+
 	file = debugfs_create_file("trbs", S_IRUGO | S_IWUSR, root,
 			dwc, &dwc3_ep_trb_list_fops);
 	if (!file) {

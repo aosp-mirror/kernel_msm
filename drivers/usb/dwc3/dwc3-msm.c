@@ -3044,6 +3044,36 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static bool dwc3_is_root_hub_direct_child(struct usb_device *udev,
+					  struct dwc3 *dwc)
+{
+	return udev->parent &&
+	       !udev->parent->parent &&
+	       udev->dev.parent->parent == &dwc->xhci->dev;
+}
+
+#define USE_EXTERNAL_VBUS_THRESHOLD_MA 600
+static bool dwc3_use_external_vbus_booster(struct usb_device *udev,
+					   struct dwc3 *dwc)
+{
+	unsigned max_power;
+
+	if (!udev->actconfig)
+		return false;
+
+	if (udev->speed >= USB_SPEED_SUPER)
+		max_power = udev->actconfig->desc.bMaxPower * 8;
+	else
+		max_power = udev->actconfig->desc.bMaxPower * 2;
+
+	if (dwc3_is_root_hub_direct_child(udev, dwc) &&
+	    udev->descriptor.bDeviceClass != USB_CLASS_HUB &&
+	    max_power < USE_EXTERNAL_VBUS_THRESHOLD_MA)
+		return true;
+
+	return false;
+}
+
 static int dwc3_msm_host_notifier(struct notifier_block *nb,
 	unsigned long event, void *ptr)
 {
@@ -3067,8 +3097,7 @@ static int dwc3_msm_host_notifier(struct notifier_block *nb,
 	 * i.e. dwc -> xhci -> root_hub -> udev
 	 * root_hub's udev->parent==NULL, so traverse struct device hierarchy
 	 */
-	if (udev->parent && !udev->parent->parent &&
-			udev->dev.parent->parent == &dwc->xhci->dev) {
+	if (dwc3_is_root_hub_direct_child(udev, dwc)) {
 		if (event == USB_DEVICE_ADD && udev->actconfig) {
 			if (udev->speed >= USB_SPEED_SUPER)
 				max_power = udev->actconfig->desc.bMaxPower * 8;
@@ -3086,6 +3115,19 @@ static int dwc3_msm_host_notifier(struct notifier_block *nb,
 			power_supply_set_property(mdwc->usb_psy,
 					POWER_SUPPLY_PROP_BOOST_CURRENT, &pval);
 		}
+	}
+
+	if (dwc->auto_vbus_src_sel) {
+		if (event == USB_DEVICE_ADD &&
+		    dwc3_use_external_vbus_booster(udev, dwc))
+			pval.intval = 1;
+		else
+			pval.intval = 0;
+
+		power_supply_set_property(
+				mdwc->usb_psy,
+				POWER_SUPPLY_PROP_USE_EXTERNAL_VBUS_OUTPUT,
+				&pval);
 	}
 
 	return NOTIFY_DONE;
