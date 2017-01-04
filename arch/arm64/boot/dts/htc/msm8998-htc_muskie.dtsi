@@ -2,6 +2,7 @@
 #include "msm8998-htc-regulator.dtsi"
 #include "msm8998-htc-pm.dtsi"
 #include "dsi-panel-muskie-s6e3ha3.dtsi"
+#include "msm8998-htc-nfc.dtsi"
 
 &pcie0 {
 	/* move and resize conf, io, and bars (mem) allocations */

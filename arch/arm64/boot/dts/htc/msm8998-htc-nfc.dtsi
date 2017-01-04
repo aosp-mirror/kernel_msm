@@ -1,0 +1,58 @@
+&i2c_6 {
+	/delete-node/ nq@28;
+};
+
+&i2c_8 { /* BLSP8 (NFC) */
+	qcom,nack-as-normal = <0x28>;
+	nq@28 {
+	compatible = "qcom,nq-nci";
+	reg = <0x28>;
+	interrupts = <92 0x4>;
+	interrupt-parent = <&tlmm>;
+	interrupt-names = "nfc_irq";
+	clock-names = "ref_clk";
+	qcom,clk-src = "BBCLK3";
+	clocks = <&clock_gcc clk_ln_bb_clk3_pin>;
+	qcom,nq-irq = <&tlmm 92 0x00>;
+	qcom,nq-ven = <&tlmm 12 0x00>;
+	qcom,nq-firm = <&pmi8998_gpios 5 0x00>;
+	qcom,nq-clkreq = <&pm8998_gpios 21 0x00>;
+	qcom,nq-esepwr = <&tlmm 116 0x00>;
+	pinctrl-names = "nfc_active", "nfc_suspend";
+	pinctrl-0 = <&nfc_int_active &nfc_enable_active>;
+	pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend>;
+	};
+};
+
+&pm8998_gpios {
+	/* GPIO 21 (NFC_CLK_REQ) */
+	gpio@d400 {
+		qcom,mode = <0>; /* Input */
+		qcom,vin-sel = <1>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+};
+
+
+&pmi8998_gpios {
+	gpio@c400 {  /*GPIO_5 NFC FW_DL*/
+		qcom,mode = <1>;                /* Output */
+		qcom,pull = <4>;                /* Pulldown 10uA */
+		qcom,vin-sel = <0>;             /* VIN1 GPIO_LV */
+		qcom,src-sel = <0>;             /* GPIO */
+		qcom,invert = <0>;              /* Invert 0 INVERT_DISABLE*/
+		qcom,master-en = <1>;           /* Enable GPIO */
+		status = "ok";
+	};
+	gpio@c700 {  /*GPIO_8 NFC_WAKEUP Not configured in driver yet nq-nci-htc.c*/
+		qcom,mode = <1>;                /* Output */
+		qcom,pull = <4>;                /* Pulldown 10uA */
+		qcom,vin-sel = <0>;             /* VIN1 GPIO_LV */
+		qcom,src-sel = <0>;             /* GPIO */
+		qcom,invert = <0>;              /* Invert 0 INVERT_DISABLE */
+		qcom,master-en = <1>;           /* Enable GPIO */
+		status = "ok";
+	};
+};
