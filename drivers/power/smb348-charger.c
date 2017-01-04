@@ -199,6 +199,8 @@ bool WPC_CHG_RESUME_ALLOW_GOTA = 1;
 bool RECOVERY_WPC_DISABLE_FLAG = 0;
 /* } Quanta */
 
+#define RECHG_RESUME_REAL_SOC_MS	5000
+
 extern char *saved_command_line;
 // Quanta: export fo gauge driver
 bool chg_full_flag = false;
@@ -266,6 +268,7 @@ struct smb348_charger {
 	/* Quanta { 3 mins delay for WPC charge */
 	struct delayed_work wpc_resume_chg_wq;
 	/* } Quanta */
+	struct delayed_work resume_real_soc_wq;
 	struct work_struct	wpc_dock_wq;
 	u8			irq_cfg_mask[2];
 	int			irq_gpio;
@@ -1695,7 +1698,6 @@ static void smb348_wpc_chg_gpio_clear(struct smb348_charger *chip)
 		if (gpio_get_value(chip->chg_end_gpio)) {
 			pr_err("Clear chg_end_gpio\n");
 			gpio_set_value(chip->chg_end_gpio, 0);
-			chg_full_flag = false;
 			force_full_flag = false;
 		}
 	}
@@ -2244,6 +2246,17 @@ static void smb348_wpc_resume_to_charge(struct work_struct *work)
 }
 /* } Quanta */
 
+/* Quanta 5 secs delay for real soc report */
+static void smb348_resume_to_real_soc(struct work_struct *work)
+{
+	/* Release recharge and charge full flags */
+	if (recharge_flag)
+		recharge_flag = false;
+	if (chg_full_flag)
+		chg_full_flag = false;
+}
+/* Quanta */
+
 static void smb348_wpc_dock_work(struct work_struct *work)
 {
 	int state = 0;
@@ -2260,7 +2273,8 @@ static void smb348_wpc_dock_work(struct work_struct *work)
 	/* removed from dock so clear the discharge gpio */
 	if (!chip->wpc_dock_present) {
 		smb348_wpc_chg_gpio_clear(chip);
-		recharge_flag = false;
+		/* This delay work to avoid show non full capacity in 5 secs */
+		schedule_delayed_work(&chip->resume_real_soc_wq, msecs_to_jiffies(RECHG_RESUME_REAL_SOC_MS));
 		chip->chg_present = false;
 		if (chip->batt_full) {
 			chip->batt_full = false;
@@ -2966,6 +2980,7 @@ static int smb348_charger_probe(struct i2c_client *client,
 	/* Quanta { 3 mins delay for WPC charge */
 	INIT_DELAYED_WORK(&chip->wpc_resume_chg_wq, smb348_wpc_resume_to_charge);
 	/* } Quanta */
+	INIT_DELAYED_WORK(&chip->resume_real_soc_wq, smb348_resume_to_real_soc);
 	INIT_WORK(&chip->wpc_dock_wq, smb348_wpc_dock_work);
 
 	if (of_find_property(chip->dev->of_node, "qcom,chg-vadc", NULL)) {
