@@ -40,10 +40,7 @@
 #ifdef DHD_WMF
 #include <dhd_wmf_linux.h>
 #endif
-/* Linux wireless extension support */
-#if defined(WL_WIRELESS_EXT)
-#include <wl_iw.h>
-#endif /* defined(WL_WIRELESS_EXT) */
+
 #if defined(CONFIG_HAS_EARLYSUSPEND) && defined(DHD_USE_EARLYSUSPEND)
 #include <linux/earlysuspend.h>
 #endif /* defined(CONFIG_HAS_EARLYSUSPEND) && defined(DHD_USE_EARLYSUSPEND) */
