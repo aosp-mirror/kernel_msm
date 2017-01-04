@@ -2210,7 +2210,7 @@ static int mdp3_is_display_on(struct mdss_panel_data *pdata)
 
 	mdp3_res->splash_mem_addr = MDP3_REG_READ(MDP3_REG_DMA_P_IBUF_ADDR);
 	
-	if (pdata->panel_info.type == MIPI_CMD_PANEL) {
+	if ((pdata->panel_info.type == MIPI_CMD_PANEL) ||(!rc)) {
 		if (mdp3_clk_enable(0, 0))
 			pr_err("fail to turn off MDP core clks\n");
 	}
