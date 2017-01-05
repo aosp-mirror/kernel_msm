@@ -32,9 +32,6 @@
  *
  */
 
-/* denote that this file does not allow legacy hddLog */
-#define HDD_DISALLOW_LEGACY_HDDLOG 1
-
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -2339,6 +2336,7 @@ __wlan_hdd_cfg80211_set_ext_roam_params(struct wiphy *wiphy,
 	struct nlattr *tb2[QCA_WLAN_VENDOR_ATTR_ROAMING_PARAM_MAX + 1];
 	int rem, i;
 	uint32_t buf_len = 0;
+	uint32_t count;
 	int ret;
 
 	ENTER_DEV(dev);
@@ -2509,14 +2507,24 @@ __wlan_hdd_cfg80211_set_ext_roam_params(struct wiphy *wiphy,
 			hdd_err("attr num of preferred bssid failed");
 			goto fail;
 		}
-		roam_params.num_bssid_favored = nla_get_u32(
+		count = nla_get_u32(
 			tb[QCA_WLAN_VENDOR_ATTR_ROAMING_PARAM_SET_LAZY_ROAM_NUM_BSSID]);
-		hdd_debug("Num of Preferred BSSID (%d)",
-			roam_params.num_bssid_favored);
+		if (count > MAX_BSSID_FAVORED) {
+			hdd_err("Preferred BSSID count %u exceeds max %u",
+				count, MAX_BSSID_FAVORED);
+			goto fail;
+		}
+		hdd_debug("Num of Preferred BSSID (%d)", count);
 		i = 0;
 		nla_for_each_nested(curr_attr,
 			tb[QCA_WLAN_VENDOR_ATTR_ROAMING_PARAM_SET_BSSID_PREFS],
 			rem) {
+
+			if (i == count) {
+				hdd_warn("Ignoring excess Preferred BSSID");
+				break;
+			}
+
 			if (nla_parse(tb2,
 				QCA_WLAN_VENDOR_ATTR_ROAMING_PARAM_MAX,
 				nla_data(curr_attr), nla_len(curr_attr),
@@ -2545,6 +2553,10 @@ __wlan_hdd_cfg80211_set_ext_roam_params(struct wiphy *wiphy,
 				roam_params.bssid_favored_factor[i]);
 			i++;
 		}
+		if (i < count)
+			hdd_warn("Num Preferred BSSID %u less than expected %u",
+				 i, count);
+		roam_params.num_bssid_favored = i;
 		sme_update_roam_params(pHddCtx->hHal, session_id,
 			roam_params, REASON_ROAM_SET_FAVORED_BSSID);
 		break;
@@ -2554,14 +2566,24 @@ __wlan_hdd_cfg80211_set_ext_roam_params(struct wiphy *wiphy,
 			hdd_err("attr num of blacklist bssid failed");
 			goto fail;
 		}
-		roam_params.num_bssid_avoid_list = nla_get_u32(
+		count = nla_get_u32(
 			tb[QCA_WLAN_VENDOR_ATTR_ROAMING_PARAM_SET_BSSID_PARAMS_NUM_BSSID]);
-		hdd_debug("Num of blacklist BSSID (%d)",
-			roam_params.num_bssid_avoid_list);
+		if (count > MAX_BSSID_AVOID_LIST) {
+			hdd_err("Blacklist BSSID count %u exceeds max %u",
+				count, MAX_BSSID_AVOID_LIST);
+			goto fail;
+		}
+		hdd_debug("Num of blacklist BSSID (%d)", count);
 		i = 0;
 		nla_for_each_nested(curr_attr,
 			tb[QCA_WLAN_VENDOR_ATTR_ROAMING_PARAM_SET_BSSID_PARAMS],
 			rem) {
+
+			if (i == count) {
+				hdd_warn("Ignoring excess Blacklist BSSID");
+				break;
+			}
+
 			if (nla_parse(tb2,
 				QCA_WLAN_VENDOR_ATTR_ROAMING_PARAM_MAX,
 				nla_data(curr_attr), nla_len(curr_attr),
@@ -2582,6 +2604,10 @@ __wlan_hdd_cfg80211_set_ext_roam_params(struct wiphy *wiphy,
 				roam_params.bssid_avoid_list[i].bytes));
 			i++;
 		}
+		if (i < count)
+			hdd_warn("Num Blacklist BSSID %u less than expected %u",
+				 i, count);
+		roam_params.num_bssid_avoid_list = i;
 		sme_update_roam_params(pHddCtx->hHal, session_id,
 			roam_params, REASON_ROAM_SET_BLACKLIST_BSSID);
 		break;
@@ -3770,7 +3796,7 @@ wlan_hdd_cfg80211_get_logger_supp_feature(struct wiphy *wiphy,
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 /**
  * wlan_hdd_send_roam_auth_event() - Send the roamed and authorized event
- * @hdd_ctx_ptr: pointer to HDD Context.
+ * @adapter: Pointer to adapter struct
  * @bssid: pointer to bssid of roamed AP.
  * @req_rsn_ie: Pointer to request RSN IE
  * @req_rsn_len: Length of the request RSN IE
@@ -3795,10 +3821,11 @@ wlan_hdd_cfg80211_get_logger_supp_feature(struct wiphy *wiphy,
  *
  * Return: Return the Success or Failure code.
  */
-int wlan_hdd_send_roam_auth_event(hdd_context_t *hdd_ctx_ptr, uint8_t *bssid,
+int wlan_hdd_send_roam_auth_event(hdd_adapter_t *adapter, uint8_t *bssid,
 		uint8_t *req_rsn_ie, uint32_t req_rsn_len, uint8_t *rsp_rsn_ie,
 		uint32_t rsp_rsn_len, tCsrRoamInfo *roam_info_ptr)
 {
+	hdd_context_t *hdd_ctx_ptr = WLAN_HDD_GET_CTX(adapter);
 	struct sk_buff *skb = NULL;
 	eCsrAuthType auth_type;
 	ENTER();
@@ -3811,7 +3838,7 @@ int wlan_hdd_send_roam_auth_event(hdd_context_t *hdd_ctx_ptr, uint8_t *bssid,
 		return 0;
 
 	skb = cfg80211_vendor_event_alloc(hdd_ctx_ptr->wiphy,
-			NULL,
+			&(adapter->wdev),
 			ETH_ALEN + req_rsn_len + rsp_rsn_len +
 			sizeof(uint8_t) + SIR_REPLAY_CTR_LEN +
 			SIR_KCK_KEY_LEN + SIR_KCK_KEY_LEN +
@@ -7905,6 +7932,276 @@ static int wlan_hdd_cfg80211_setband(struct wiphy *wiphy,
 	return ret;
 }
 
+/**
+ * wlan_hdd_cfg80211_sar_convert_limit_set() - Convert limit set value
+ * @nl80211_value:    Vendor command attribute value
+ * @wmi_value:        Pointer to return converted WMI return value
+ *
+ * Convert NL80211 vendor command value for SAR limit set to WMI value
+ * Return: 0 on success, -1 on invalid value
+ */
+static int wlan_hdd_cfg80211_sar_convert_limit_set(u32 nl80211_value,
+						   u32 *wmi_value)
+{
+	int ret = 0;
+
+	switch (nl80211_value) {
+	case QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_NONE:
+		*wmi_value = WMI_SAR_FEATURE_OFF;
+		break;
+	case QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF0:
+		*wmi_value = WMI_SAR_FEATURE_ON_SET_0;
+		break;
+	case QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF1:
+		*wmi_value = WMI_SAR_FEATURE_ON_SET_1;
+		break;
+	case QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF2:
+		*wmi_value = WMI_SAR_FEATURE_ON_SET_2;
+		break;
+	case QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF3:
+		*wmi_value = WMI_SAR_FEATURE_ON_SET_3;
+		break;
+	case QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF4:
+		*wmi_value = WMI_SAR_FEATURE_ON_SET_4;
+		break;
+	case QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_USER:
+		*wmi_value = WMI_SAR_FEATURE_ON_USER_DEFINED;
+		break;
+	default:
+		ret = -1;
+	}
+	return ret;
+}
+
+/**
+ * wlan_hdd_cfg80211_sar_convert_band() - Convert WLAN band value
+ * @nl80211_value:    Vendor command attribute value
+ * @wmi_value:        Pointer to return converted WMI return value
+ *
+ * Convert NL80211 vendor command value for SAR BAND to WMI value
+ * Return: 0 on success, -1 on invalid value
+ */
+static int wlan_hdd_cfg80211_sar_convert_band(u32 nl80211_value, u32 *wmi_value)
+{
+	int ret = 0;
+
+	switch (nl80211_value) {
+	case NL80211_BAND_2GHZ:
+		*wmi_value = WMI_SAR_2G_ID;
+		break;
+	case NL80211_BAND_5GHZ:
+		*wmi_value = WMI_SAR_5G_ID;
+		break;
+	default:
+		ret = -1;
+	}
+	return ret;
+}
+
+/**
+ * wlan_hdd_cfg80211_sar_convert_modulation() - Convert WLAN modulation value
+ * @nl80211_value:    Vendor command attribute value
+ * @wmi_value:        Pointer to return converted WMI return value
+ *
+ * Convert NL80211 vendor command value for SAR Modulation to WMI value
+ * Return: 0 on success, -1 on invalid value
+ */
+static int wlan_hdd_cfg80211_sar_convert_modulation(u32 nl80211_value,
+						    u32 *wmi_value)
+{
+	int ret = 0;
+
+	switch (nl80211_value) {
+	case QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION_CCK:
+		*wmi_value = WMI_SAR_MOD_CCK;
+		break;
+	case QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION_OFDM:
+		*wmi_value = WMI_SAR_MOD_OFDM;
+		break;
+	default:
+		ret = -1;
+	}
+	return ret;
+}
+
+
+/**
+ * __wlan_hdd_set_sar_power_limits() - Set SAR power limits
+ * @wiphy: Pointer to wireless phy
+ * @wdev: Pointer to wireless device
+ * @data: Pointer to data
+ * @data_len: Length of @data
+ *
+ * This function is used to setup Specific Absorption Rate limit specs.
+ *
+ * Return: 0 on success, negative errno on failure
+ */
+static int __wlan_hdd_set_sar_power_limits(struct wiphy *wiphy,
+					   struct wireless_dev *wdev,
+					   const void *data, int data_len)
+{
+	hdd_context_t *hdd_ctx = wiphy_priv(wiphy);
+	struct nlattr *sar_spec[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_MAX + 1],
+		      *tb[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_MAX + 1],
+		      *sar_spec_list;
+	struct sar_limit_cmd_params sar_limit_cmd = {0};
+	int ret = -EINVAL, i = 0, rem = 0;
+
+	ENTER();
+
+	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
+		hdd_err("Command not allowed in FTM mode");
+		return -EPERM;
+	}
+
+	if (wlan_hdd_validate_context(hdd_ctx))
+		return -EINVAL;
+
+	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_MAX,
+		      data, data_len, NULL)) {
+		hdd_err("Invalid SAR attributes");
+		return -EINVAL;
+	}
+
+	/* Vendor command manadates all SAR Specs in single call */
+	sar_limit_cmd.commit_limits = 1;
+	sar_limit_cmd.sar_enable = WMI_SAR_FEATURE_NO_CHANGE;
+	if (tb[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SAR_ENABLE]) {
+		if (wlan_hdd_cfg80211_sar_convert_limit_set(nla_get_u32(
+				tb[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SAR_ENABLE]),
+				&sar_limit_cmd.sar_enable) < 0) {
+			hdd_err("Invalid SAR Enable attr");
+			goto fail;
+		}
+	}
+	hdd_info("attr sar sar_enable %d", sar_limit_cmd.sar_enable);
+
+	if (tb[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_NUM_SPECS]) {
+		sar_limit_cmd.num_limit_rows = nla_get_u32(
+			tb[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_NUM_SPECS]);
+		hdd_info("attr sar num_limit_rows %d",
+			sar_limit_cmd.num_limit_rows);
+	}
+	if (sar_limit_cmd.num_limit_rows > MAX_SAR_LIMIT_ROWS_SUPPORTED) {
+		hdd_err("SAR Spec list exceed supported size");
+		goto fail;
+	}
+	if (sar_limit_cmd.num_limit_rows == 0)
+		goto send_sar_limits;
+	sar_limit_cmd.sar_limit_row_list = qdf_mem_malloc(sizeof(
+						struct sar_limit_cmd_row) *
+						sar_limit_cmd.num_limit_rows);
+	if (!sar_limit_cmd.sar_limit_row_list) {
+		ret = -ENOMEM;
+		goto fail;
+	}
+	if (!tb[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC]) {
+		hdd_err("Invalid SAR SPECs list");
+		goto fail;
+	}
+
+	nla_for_each_nested(sar_spec_list,
+			    tb[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC], rem) {
+		if (i == sar_limit_cmd.num_limit_rows) {
+			hdd_warn("SAR Cmd has excess SPECs in list");
+			break;
+		}
+
+		if (nla_parse(sar_spec, QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_MAX,
+			      nla_data(sar_spec_list), nla_len(sar_spec_list),
+			      NULL)) {
+			hdd_err("nla_parse failed for SAR Spec list");
+			goto fail;
+		}
+		sar_limit_cmd.sar_limit_row_list[i].validity_bitmap = 0;
+		if (sar_spec[
+			    QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_POWER_LIMIT]) {
+			sar_limit_cmd.sar_limit_row_list[i].limit_value =
+				nla_get_u32(sar_spec[
+				QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_POWER_LIMIT]);
+		} else {
+			hdd_err("SAR Spec does not have power limit value");
+			goto fail;
+		}
+
+		if (sar_spec[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_BAND]) {
+			if (wlan_hdd_cfg80211_sar_convert_band(nla_get_u32(
+					sar_spec[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_BAND]),
+					&sar_limit_cmd.sar_limit_row_list[i].band_id)
+					< 0) {
+				hdd_err("Invalid SAR Band attr");
+				goto fail;
+			}
+			sar_limit_cmd.sar_limit_row_list[i].validity_bitmap |=
+						WMI_SAR_BAND_ID_VALID_MASK;
+		}
+		if (sar_spec[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_CHAIN]) {
+			sar_limit_cmd.sar_limit_row_list[i].chain_id =
+				nla_get_u32(sar_spec[
+				QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_CHAIN]);
+			sar_limit_cmd.sar_limit_row_list[i].validity_bitmap |=
+						WMI_SAR_CHAIN_ID_VALID_MASK;
+		}
+		if (sar_spec[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION]) {
+			if (wlan_hdd_cfg80211_sar_convert_modulation(nla_get_u32(
+					sar_spec[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION]),
+					&sar_limit_cmd.sar_limit_row_list[i].mod_id)
+					< 0) {
+				hdd_err("Invalid SAR Modulation attr");
+				goto fail;
+			}
+			sar_limit_cmd.sar_limit_row_list[i].validity_bitmap |=
+						WMI_SAR_MOD_ID_VALID_MASK;
+		}
+		hdd_info("Spec_ID: %d, Band: %d Chain: %d Mod: %d POW_Limit: %d Validity_Bitmap: %d",
+			 i, sar_limit_cmd.sar_limit_row_list[i].band_id,
+			 sar_limit_cmd.sar_limit_row_list[i].chain_id,
+			 sar_limit_cmd.sar_limit_row_list[i].mod_id,
+			 sar_limit_cmd.sar_limit_row_list[i].limit_value,
+			 sar_limit_cmd.sar_limit_row_list[i].validity_bitmap);
+		i++;
+	}
+
+	if (i < sar_limit_cmd.num_limit_rows) {
+		hdd_warn("SAR Cmd has less SPECs in list");
+		sar_limit_cmd.num_limit_rows = i;
+	}
+
+send_sar_limits:
+	if (sme_set_sar_power_limits(hdd_ctx->hHal, &sar_limit_cmd) ==
+							QDF_STATUS_SUCCESS)
+		ret = 0;
+fail:
+	qdf_mem_free(sar_limit_cmd.sar_limit_row_list);
+	return ret;
+}
+
+/**
+ * wlan_hdd_cfg80211_set_sar_power_limits() - Set SAR power limits
+ * @wiphy: Pointer to wireless phy
+ * @wdev: Pointer to wireless device
+ * @data: Pointer to data
+ * @data_len: Length of @data
+ *
+ * Wrapper function of __wlan_hdd_cfg80211_set_sar_power_limits()
+ *
+ * Return: 0 on success, negative errno on failure
+ */
+static int wlan_hdd_cfg80211_set_sar_power_limits(struct wiphy *wiphy,
+						  struct wireless_dev *wdev,
+						  const void *data,
+						  int data_len)
+{
+	int ret;
+
+	cds_ssr_protect(__func__);
+	ret = __wlan_hdd_set_sar_power_limits(wiphy, wdev, data,
+					      data_len);
+	cds_ssr_unprotect(__func__);
+
+	return ret;
+}
+
 static const struct
 nla_policy qca_wlan_vendor_attr[QCA_WLAN_VENDOR_ATTR_MAX+1] = {
 	[QCA_WLAN_VENDOR_ATTR_ROAMING_POLICY] = {.type = NLA_U32},
@@ -7960,11 +8257,18 @@ static int __wlan_hdd_cfg80211_set_fast_roaming(struct wiphy *wiphy,
 
 	is_fast_roam_enabled = nla_get_u32(
 				tb[QCA_WLAN_VENDOR_ATTR_ROAMING_POLICY]);
-	hdd_notice("isFastRoamEnabled %d", is_fast_roam_enabled);
+	hdd_notice("isFastRoamEnabled %d fast_roaming_allowed %d",
+		   is_fast_roam_enabled, adapter->fast_roaming_allowed);
 
+	if (!adapter->fast_roaming_allowed) {
+		hdd_err("fast roaming not allowed on %s interface",
+			adapter->dev->name);
+		return -EINVAL;
+	}
 	/* Update roaming */
 	ret = sme_config_fast_roaming(hdd_ctx->hHal, adapter->sessionId,
-					is_fast_roam_enabled);
+				      (is_fast_roam_enabled &&
+				       adapter->fast_roaming_allowed));
 	if (ret)
 		hdd_err("sme_config_fast_roaming failed");
 	EXIT();
@@ -8613,8 +8917,15 @@ const struct wiphy_vendor_command hdd_wiphy_vendor_commands[] = {
 			 WIPHY_VENDOR_CMD_NEED_NETDEV |
 			 WIPHY_VENDOR_CMD_NEED_RUNNING,
 		.doit = wlan_hdd_cfg80211_configure_tdls_mode
-	}
+	},
 #endif
+	{
+		.info.vendor_id = QCA_NL80211_VENDOR_ID,
+		.info.subcmd = QCA_NL80211_VENDOR_SUBCMD_SET_SAR_LIMITS,
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_RUNNING,
+		.doit = wlan_hdd_cfg80211_set_sar_power_limits
+	},
 };
 
 /**
@@ -11432,7 +11743,7 @@ static int wlan_hdd_cfg80211_connect_start(hdd_adapter_t *pAdapter,
 		qdf_mem_copy((void *)(pRoamProfile->SSIDs.SSIDList->SSID.ssId),
 			     ssid, ssid_len);
 
-		pRoamProfile->do_not_roam = false;
+		pRoamProfile->do_not_roam = !pAdapter->fast_roaming_allowed;
 		if (bssid) {
 			pRoamProfile->BSSIDs.numOfBSSIDs = 1;
 			pRoamProfile->do_not_roam = true;
@@ -12557,8 +12868,6 @@ static int __wlan_hdd_cfg80211_connect(struct wiphy *wiphy,
 	if (true == wlan_hdd_reassoc_bssid_hint(pAdapter, req, &status))
 		return status;
 
-	wlan_hdd_disable_roaming(pAdapter);
-
 	/* Try disconnecting if already in connected state */
 	status = wlan_hdd_try_disconnect(pAdapter);
 	if (0 > status) {
@@ -13625,8 +13934,9 @@ int __wlan_hdd_cfg80211_del_station(struct wiphy *wiphy,
 						isDeauthInProgress = true;
 						qdf_status =
 							qdf_wait_single_event(
-								&hapd_state->qdf_sta_disassoc_event,
-								1000);
+							 &hapd_state->
+							 qdf_sta_disassoc_event,
+							 SME_CMD_TIMEOUT_VALUE);
 						if (!QDF_IS_STATUS_SUCCESS(
 								qdf_status))
 							hdd_err("Deauth wait time expired");
@@ -13689,8 +13999,9 @@ int __wlan_hdd_cfg80211_del_station(struct wiphy *wiphy,
 				return -ENOENT;
 			} else {
 				qdf_status = qdf_wait_single_event(
-							&hapd_state->qdf_sta_disassoc_event,
-							1000);
+						&hapd_state->
+						qdf_sta_disassoc_event,
+						SME_CMD_TIMEOUT_VALUE);
 				if (!QDF_IS_STATUS_SUCCESS(qdf_status))
 					hdd_err("Deauth wait time expired");
 			}
