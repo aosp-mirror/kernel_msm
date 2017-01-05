@@ -8117,8 +8117,10 @@ VOS_STATUS hdd_parse_probe_req_ouis(hdd_context_t* pHddCtx)
  */
 void hdd_free_probe_req_ouis(hdd_context_t* pHddCtx)
 {
-	if (!pHddCtx->probe_req_voui)
+	if (pHddCtx->probe_req_voui) {
 		vos_mem_free(pHddCtx->probe_req_voui);
+		pHddCtx->probe_req_voui = NULL;
+	}
 
 	pHddCtx->no_of_probe_req_ouis = 0;
 }
