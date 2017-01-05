@@ -526,6 +526,7 @@ static void wlan_hdd_remain_on_chan_timeout(void *data)
 			pRemainChanCtx->scan_id);
 	}
 
+	hdd_restart_tdls_source_timer(hdd_ctx, eTDLS_SUPPORT_ENABLED);
 	qdf_runtime_pm_allow_suspend(hdd_ctx->runtime_context.roc);
 	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_ROC);
 }
@@ -611,9 +612,8 @@ static int wlan_hdd_execute_remain_on_channel(hdd_adapter_t *pAdapter,
 			mutex_lock(&cfgState->remain_on_chan_ctx_lock);
 			pAdapter->is_roc_inprogress = false;
 			pRemainChanCtx = cfgState->remain_on_chan_ctx;
-			hddLog(LOG1,
-				FL("Freeing ROC ctx cfgState->remain_on_chan_ctx=%p"),
-				cfgState->remain_on_chan_ctx);
+			hdd_info("Freeing ROC ctx cfgState->remain_on_chan_ctx=%p",
+				 cfgState->remain_on_chan_ctx);
 			if (pRemainChanCtx) {
 				if (qdf_mc_timer_destroy(
 					&pRemainChanCtx->
@@ -653,9 +653,8 @@ static int wlan_hdd_execute_remain_on_channel(hdd_adapter_t *pAdapter,
 			mutex_lock(&cfgState->remain_on_chan_ctx_lock);
 			pAdapter->is_roc_inprogress = false;
 			pRemainChanCtx = cfgState->remain_on_chan_ctx;
-			hddLog(LOG1,
-				FL("Freeing ROC ctx cfgState->remain_on_chan_ctx=%p"),
-				cfgState->remain_on_chan_ctx);
+			hdd_info("Freeing ROC ctx cfgState->remain_on_chan_ctx=%p",
+				 cfgState->remain_on_chan_ctx);
 			if (pRemainChanCtx) {
 				if (qdf_mc_timer_destroy(
 					&pRemainChanCtx->
@@ -687,6 +686,7 @@ static int wlan_hdd_execute_remain_on_channel(hdd_adapter_t *pAdapter,
 		}
 
 	}
+	hdd_restart_tdls_source_timer(pHddCtx, eTDLS_SUPPORT_DISABLED);
 	return 0;
 }
 
@@ -1455,8 +1455,8 @@ static int __wlan_hdd_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 					 WLAN_HDD_INVITATION_RESP)
 					wait = wait + ACTION_FRAME_ACK_WAIT;
 
-				hddLog(LOG1, FL("Extending the wait time %d for actionFrmType=%d"),
-						wait, actionFrmType);
+				hdd_info("Extending the wait time %d for actionFrmType=%d",
+					 wait, actionFrmType);
 
 				if (qdf_mc_timer_stop(&cfgState->
 						remain_on_chan_ctx->
@@ -1753,12 +1753,12 @@ void hdd_send_action_cnf_cb(uint32_t session_id, bool tx_completed)
 
 	adapter = hdd_get_adapter_by_sme_session_id(hdd_ctx, session_id);
 	if (NULL == adapter) {
-		hddLog(LOGE, FL("adapter not found"));
+		hdd_err("adapter not found");
 		return;
 	}
 
 	if (WLAN_HDD_ADAPTER_MAGIC != adapter->magic) {
-		hddLog(LOGE, FL("adapter has invalid magic"));
+		hdd_err("adapter has invalid magic");
 		return;
 	}
 

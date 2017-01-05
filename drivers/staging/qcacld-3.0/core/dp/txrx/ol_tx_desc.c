@@ -92,8 +92,6 @@ static inline void ol_tx_desc_reset_timestamp(struct ol_tx_desc_t *tx_desc)
 }
 #endif
 
-#ifdef CONFIG_HL_SUPPORT
-
 /**
  * ol_tx_desc_vdev_update() - vedv assign.
  * @tx_desc: tx descriptor pointer
@@ -107,15 +105,6 @@ ol_tx_desc_vdev_update(struct ol_tx_desc_t *tx_desc,
 {
 	tx_desc->vdev = vdev;
 }
-#else
-
-static inline void
-ol_tx_desc_vdev_update(struct ol_tx_desc_t *tx_desc,
-		       struct ol_txrx_vdev_t *vdev)
-{
-	return;
-}
-#endif
 
 #ifdef CONFIG_PER_VDEV_TX_DESC_POOL
 
@@ -223,6 +212,7 @@ struct ol_tx_desc_t *ol_tx_desc_alloc(struct ol_txrx_pdev_t *pdev,
 			}
 			ol_tx_desc_sanity_checks(pdev, tx_desc);
 			ol_tx_desc_compute_delay(tx_desc);
+			ol_tx_desc_vdev_update(tx_desc, vdev);
 			qdf_atomic_inc(&tx_desc->ref_cnt);
 		} else {
 			pool->pkt_drop_no_desc++;
@@ -400,15 +390,6 @@ void ol_tx_desc_free(struct ol_txrx_pdev_t *pdev, struct ol_tx_desc_t *tx_desc)
 }
 #endif
 
-void
-dump_pkt(qdf_nbuf_t nbuf, qdf_dma_addr_t nbuf_paddr, int len)
-{
-	qdf_print("%s: Pkt: VA 0x%p PA 0x%llx len %d\n", __func__,
-		  qdf_nbuf_data(nbuf), (long long unsigned int)nbuf_paddr, len);
-	print_hex_dump(KERN_DEBUG, "Pkt:   ", DUMP_PREFIX_ADDRESS, 16, 4,
-		       qdf_nbuf_data(nbuf), len, true);
-}
-
 const uint32_t htt_to_ce_pkt_type[] = {
 	[htt_pkt_type_raw] = tx_pkt_type_raw,
 	[htt_pkt_type_native_wifi] = tx_pkt_type_native_wifi,
@@ -567,7 +548,7 @@ struct ol_tx_desc_t *ol_tx_desc_ll(struct ol_txrx_pdev_t *pdev,
 			qdf_print("%s:%d: htt_fdesc=%p frag=%d frag_vaddr=0x%p frag_paddr=0x%llx len=%zu\n",
 				  __func__, __LINE__, tx_desc->htt_frag_desc,
 				  i-1, frag_vaddr, frag_paddr, frag_len);
-			dump_pkt(netbuf, frag_paddr, 64);
+			ol_txrx_dump_pkt(netbuf, frag_paddr, 64);
 #endif /* HELIUMPLUS_DEBUG */
 #else /* ! defined(HELIUMPLUSPADDR64) */
 			htt_tx_desc_frag(pdev->htt_pdev, tx_desc->htt_tx_desc, i - 1,

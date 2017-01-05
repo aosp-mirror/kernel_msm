@@ -76,6 +76,7 @@
 #include "cdp_txrx_flow_ctrl_v2.h"
 #include "pld_common.h"
 #include "wlan_hdd_driver_ops.h"
+#include <wlan_logging_sock_svc.h>
 
 /* Preprocessor definitions and constants */
 #define HDD_SSR_BRING_UP_TIME 30000
@@ -1460,6 +1461,10 @@ QDF_STATUS hdd_wlan_shutdown(void)
 	}
 
 	cds_clear_concurrent_session_count();
+
+	hdd_info("Invoking packetdump deregistration API");
+	wlan_deregister_txrx_packetdump();
+
 	hdd_cleanup_scan_queue(pHddCtx);
 	hdd_ipa_uc_ssr_deinit();
 	hdd_reset_all_adapters(pHddCtx);
@@ -1489,6 +1494,8 @@ QDF_STATUS hdd_wlan_shutdown(void)
 		hdd_err("Failed to close CDS Scheduler");
 		QDF_ASSERT(false);
 	}
+
+	qdf_mc_timer_stop(&pHddCtx->tdls_source_timer);
 
 	hdd_bus_bandwidth_destroy(pHddCtx);
 
@@ -1999,14 +2006,14 @@ next_adapter:
 	}
 
 	/* Suspend MC thread */
-	set_bit(MC_SUSPEND_EVENT_MASK, &cds_sched_context->mcEventFlag);
+	set_bit(MC_SUSPEND_EVENT, &cds_sched_context->mcEventFlag);
 	wake_up_interruptible(&cds_sched_context->mcWaitQueue);
 
 	/* Wait for suspend confirmation from MC thread */
 	rc = wait_for_completion_timeout(&pHddCtx->mc_sus_event_var,
 		msecs_to_jiffies(WLAN_WAIT_TIME_MCTHREAD_SUSPEND));
 	if (!rc) {
-		clear_bit(MC_SUSPEND_EVENT_MASK,
+		clear_bit(MC_SUSPEND_EVENT,
 			  &cds_sched_context->mcEventFlag);
 		hdd_err("Failed to stop mc thread");
 		goto resume_tx;
@@ -2016,14 +2023,14 @@ next_adapter:
 
 #ifdef QCA_CONFIG_SMP
 	/* Suspend tlshim rx thread */
-	set_bit(RX_SUSPEND_EVENT_MASK, &cds_sched_context->ol_rx_event_flag);
+	set_bit(RX_SUSPEND_EVENT, &cds_sched_context->ol_rx_event_flag);
 	wake_up_interruptible(&cds_sched_context->ol_rx_wait_queue);
 	rc = wait_for_completion_timeout(&cds_sched_context->
 					 ol_suspend_rx_event,
 					 msecs_to_jiffies
 						 (RX_TLSHIM_SUSPEND_TIMEOUT));
 	if (!rc) {
-		clear_bit(RX_SUSPEND_EVENT_MASK,
+		clear_bit(RX_SUSPEND_EVENT,
 			  &cds_sched_context->ol_rx_event_flag);
 		hdd_err("Failed to stop tl_shim rx thread");
 		goto resume_all;
