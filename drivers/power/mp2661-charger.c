@@ -122,6 +122,8 @@
 #define STMR_FAULT                                     1
 #define FAULT_FLAG                                     1
 
+extern bool get_global_max17055_intialized_flag(void);
+
 enum {
     CHG_STAT_NOT_CHARGING =0,
     CHG_STAT_TRICKE_CHARGE,
@@ -1935,7 +1937,7 @@ static void mp2661_initialize_batt_temp_status(struct mp2661_chg *chip)
     }
 
     chip->last_temp = temp;
-    pr_info("temp = %d,chip->batt_temp_status = %d\n", temp, chip->batt_temp_status);
+    pr_debug("temp = %d,chip->batt_temp_status = %d\n", temp, chip->batt_temp_status);
 }
 
 bool mp2661_global_get_repeat_charging_detect_flag(void)
@@ -2322,15 +2324,15 @@ static __ref int mp2661_monitor_kthread(void *arg)
     {
         get_monotonic_boottime(&chip->last_monitor_time);
         temp = mp2661_get_prop_batt_temp(chip);
-        pr_info("temp = %d\n",temp);
+        pr_debug("temp = %d\n",temp);
 
         if(abs(temp - chip->last_temp) >= MONITOR_TEMP_DELTA)
         {
-            pr_err("temp = %d, last_temp = %d\n", temp, chip->last_temp);
+            pr_debug("temp = %d, last_temp = %d\n", temp, chip->last_temp);
 
             /* update max17055 temp per Degrees Celsius when ap is awake */
             ret.intval = temp;
-            pr_info("set bms temp to %d\n", temp);
+            pr_debug("set bms temp to %d\n", temp);
             if ((chip->bms_psy) && (chip->bms_psy->set_property))
             {
                 chip->bms_psy->set_property(chip->bms_psy, POWER_SUPPLY_PROP_TEMP,
@@ -2411,6 +2413,13 @@ static int mp2661_charger_probe(struct i2c_client *client,
     if (!usb_psy)
     {
         pr_err("USB psy not found; deferring probe\n");
+        return -EPROBE_DEFER;
+    }
+
+    rc = get_global_max17055_intialized_flag();
+    if (!rc)
+    {
+        pr_err("bms psy not found; deferring probe\n");
         return -EPROBE_DEFER;
     }
 
