@@ -122,6 +122,7 @@
 #define STMR_FAULT                                     1
 #define FAULT_FLAG                                     1
 
+#define RECHARGE_CAPACITY_THRESHOLD                    95
 extern bool get_global_max17055_intialized_flag(void);
 
 enum {
@@ -1393,7 +1394,9 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
              * when charge terminate due to batt full.
              */
             vbatt_mv = mp2661_get_prop_battery_voltage_now(chip) / 1000;
-            if (vbatt_mv >= chip->repeat_charging_detect_threshold_mv)
+            capacity = max17055_global_get_real_capacity();
+            if ((vbatt_mv >= chip->repeat_charging_detect_threshold_mv)
+                    && (capacity > RECHARGE_CAPACITY_THRESHOLD))
             {
                 chip->repeat_charging_detect_flag = true;
                 rc = mp2661_set_charging_enable(chip, false);
@@ -2303,7 +2306,6 @@ static void mp2661_adjust_batt_charging_current_and_voltage(
 
 #define MONITOR_WORK_DELAY_MS         10000
 #define MONITOR_TEMP_DELTA            10
-#define RECHARGE_CAPACITY_THRESHOLD   95
 #define TEMP_IN_STATE1_CHECK_CYCLES   60
 
 static __ref int mp2661_monitor_kthread(void *arg)
