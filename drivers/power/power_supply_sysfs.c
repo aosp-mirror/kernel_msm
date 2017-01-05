@@ -82,6 +82,21 @@ static ssize_t power_supply_show_property(struct device *dev,
 
 	if (off == POWER_SUPPLY_PROP_TYPE) {
 		value.intval = psy->type;
+#if CONFIG_HUAWEI_SAWSHARK
+		/*The usb probe interface sets charger type to USB and healthd will detect the charger type.
+		 *If the type is unknown, healthd indicates that there is no charger driver registered and display
+		 *charger parameters wrongly, for example, chg type is empty.
+		 *The issue happens as follows:
+		 *1), when usb is connected, the watch is booting and the type is USB.
+		 *2), before the starting of healthd, disconnect the usb and the type is unknown.
+		 *So set charger type to USB when usb is disconnected.
+		 */
+		if ((!strncmp(psy->name, "usb", strlen(psy->name)))
+			&& (POWER_SUPPLY_TYPE_UNKNOWN == value.intval))
+		{
+			value.intval = POWER_SUPPLY_TYPE_USB;
+		}
+#endif
 	} else {
 		ret = psy->get_property(psy, off, &value);
 
