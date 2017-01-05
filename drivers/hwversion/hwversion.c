@@ -22,6 +22,7 @@
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/of_gpio.h>
 #include <soc/qcom/smem.h>
+#include <linux/pinctrl/consumer.h>
 
 #define HW_VER_PROC             "hw_ver_numb"
 #define PROC_MODE               (0666)
