@@ -255,7 +255,7 @@ QDF_STATUS send_vdev_start_cmd_tlv(wmi_unified_t wmi_handle,
 	else if (req->is_quarter_rate)
 		WMI_SET_CHANNEL_FLAG(chan, WMI_CHAN_FLAG_QUARTER_RATE);
 
-	if (req->is_dfs && req->flag_dfs) {
+	if (req->is_dfs) {
 		WMI_SET_CHANNEL_FLAG(chan, req->flag_dfs);
 		cmd->disable_hw_ack = req->dis_hw_ack;
 	}
@@ -296,11 +296,11 @@ QDF_STATUS send_vdev_start_cmd_tlv(wmi_unified_t wmi_handle,
 	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_STRUC,
 		       cmd->num_noa_descriptors *
 		       sizeof(wmi_p2p_noa_descriptor));
-	WMI_LOGA("%s: vdev_id %d freq %d chanmode %d ch_info: 0x%x is_dfs %d "
+	WMI_LOGA("\n%s: vdev_id %d freq %d chanmode %d is_dfs %d "
 		"beacon interval %d dtim %d center_chan %d center_freq2 %d "
 		"reg_info_1: 0x%x reg_info_2: 0x%x, req->max_txpow: 0x%x "
 		"Tx SS %d, Rx SS %d",
-		__func__, req->vdev_id, chan->mhz, req->chan_mode, chan->info,
+		__func__, req->vdev_id, chan->mhz, req->chan_mode,
 		req->is_dfs, req->beacon_intval, cmd->dtim_period,
 		chan->band_center_freq1, chan->band_center_freq2,
 		chan->reg_info_1, chan->reg_info_2, req->max_txpow,
@@ -3712,88 +3712,6 @@ QDF_STATUS send_setup_install_key_cmd_tlv(wmi_unified_t wmi_handle,
 		wmi_buf_free(buf);
 
 	return status;
-}
-
-/**
- * send_sar_limit_cmd_tlv() - send sar limit cmd to fw
- * @wmi_handle: wmi handle
- * @params: sar limit params
- *
- * Return: QDF_STATUS_SUCCESS for success or error code
- */
-static QDF_STATUS send_sar_limit_cmd_tlv(wmi_unified_t wmi_handle,
-		struct sar_limit_cmd_params *sar_limit_params)
-{
-	wmi_buf_t buf;
-	QDF_STATUS qdf_status;
-	wmi_sar_limits_cmd_fixed_param *cmd;
-	int i;
-	uint8_t *buf_ptr;
-	wmi_sar_limit_cmd_row *wmi_sar_rows_list;
-	struct sar_limit_cmd_row *sar_rows_list;
-	uint32_t len = sizeof(*cmd) + WMI_TLV_HDR_SIZE;
-
-	len += sizeof(wmi_sar_limit_cmd_row) * sar_limit_params->num_limit_rows;
-	buf = wmi_buf_alloc(wmi_handle, len);
-	if (!buf) {
-		WMI_LOGE("Failed to allocate memory");
-		qdf_status = QDF_STATUS_E_NOMEM;
-		goto end;
-	}
-
-	buf_ptr = (uint8_t *) wmi_buf_data(buf);
-	cmd = (wmi_sar_limits_cmd_fixed_param *) buf_ptr;
-	WMITLV_SET_HDR(&cmd->tlv_header,
-		       WMITLV_TAG_STRUC_wmi_sar_limits_cmd_fixed_param,
-		       WMITLV_GET_STRUCT_TLVLEN
-		       (wmi_sar_limits_cmd_fixed_param));
-	cmd->sar_enable = sar_limit_params->sar_enable;
-	cmd->commit_limits = sar_limit_params->commit_limits;
-	cmd->num_limit_rows = sar_limit_params->num_limit_rows;
-
-	WMI_LOGD("no of sar rows = %d, len = %d",
-		 sar_limit_params->num_limit_rows, len);
-	buf_ptr += sizeof(*cmd);
-	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_STRUC,
-		       sizeof(wmi_sar_limit_cmd_row) *
-			       sar_limit_params->num_limit_rows);
-	if (cmd->num_limit_rows == 0)
-		goto send_sar_limits;
-
-	wmi_sar_rows_list = (wmi_sar_limit_cmd_row *)
-			(buf_ptr + WMI_TLV_HDR_SIZE);
-	sar_rows_list = sar_limit_params->sar_limit_row_list;
-
-	for (i = 0; i < sar_limit_params->num_limit_rows; i++) {
-		WMITLV_SET_HDR(&wmi_sar_rows_list->tlv_header,
-			       WMITLV_TAG_STRUC_wmi_sar_limit_cmd_row,
-			       WMITLV_GET_STRUCT_TLVLEN(wmi_sar_limit_cmd_row));
-		wmi_sar_rows_list->band_id = sar_rows_list->band_id;
-		wmi_sar_rows_list->chain_id = sar_rows_list->chain_id;
-		wmi_sar_rows_list->mod_id = sar_rows_list->mod_id;
-		wmi_sar_rows_list->limit_value = sar_rows_list->limit_value;
-		wmi_sar_rows_list->validity_bitmap =
-						sar_rows_list->validity_bitmap;
-		WMI_LOGD("row %d, band_id = %d, chain_id = %d, mod_id = %d, limit_value = %d, validity_bitmap = %d",
-			 i, wmi_sar_rows_list->band_id,
-			 wmi_sar_rows_list->chain_id,
-			 wmi_sar_rows_list->mod_id,
-			 wmi_sar_rows_list->limit_value,
-			 wmi_sar_rows_list->validity_bitmap);
-		sar_rows_list++;
-		wmi_sar_rows_list++;
-	}
-send_sar_limits:
-	qdf_status = wmi_unified_cmd_send(wmi_handle, buf, len,
-				      WMI_SAR_LIMITS_CMDID);
-
-	if (QDF_IS_STATUS_ERROR(qdf_status)) {
-		WMI_LOGE("Failed to send WMI_SAR_LIMITS_CMDID");
-		wmi_buf_free(buf);
-	}
-
-end:
-	return qdf_status;
 }
 
 /**
@@ -12461,7 +12379,6 @@ struct wmi_ops tlv_ops =  {
 	.send_power_dbg_cmd = send_power_dbg_cmd_tlv,
 	.send_encrypt_decrypt_send_cmd =
 				send_encrypt_decrypt_send_cmd_tlv,
-	.send_sar_limit_cmd = send_sar_limit_cmd_tlv,
 };
 
 #ifdef WMI_TLV_AND_NON_TLV_SUPPORT
