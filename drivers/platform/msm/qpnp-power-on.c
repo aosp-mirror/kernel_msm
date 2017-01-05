@@ -29,6 +29,8 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/qpnp/power-on.h>
+#include <linux/power_supply.h>
+#include <linux/timer.h>
 
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
@@ -154,6 +156,9 @@
 
 #define QPNP_POFF_REASON_UVLO			13
 
+#define PON_INT_RT_STS	 0x810
+#define CBLPWR_ON		 0x04
+
 enum qpnp_pon_version {
 	QPNP_PON_GEN1_V1,
 	QPNP_PON_GEN1_V2,
@@ -218,8 +223,12 @@ struct qpnp_pon {
 	u8			warm_reset_reason2;
 	bool			is_spon;
 	bool			store_hard_reset_reason;
+	struct timer_list cblpwr_timer;
+	struct delayed_work cblpwr_delay_work;
+	struct workqueue_struct    *cblpwr_workqueue;
 };
 
+static struct qpnp_pon *g_pon;
 static struct qpnp_pon *sys_reset_dev;
 static DEFINE_SPINLOCK(spon_list_slock);
 static LIST_HEAD(spon_dev_list);
@@ -848,6 +857,17 @@ static irqreturn_t qpnp_cblpwr_irq(int irq, void *_pon)
 {
 	int rc;
 	struct qpnp_pon *pon = _pon;
+	int vbus;
+	struct power_supply *usb_psy;
+
+	usb_psy = power_supply_get_by_name("usb");
+	if (usb_psy == NULL)
+		pr_err("qpnp_cblpwr_irq can't find usb device \n");
+	else {
+		vbus = !!irq_read_line(irq);
+		power_supply_set_present(usb_psy, vbus);
+		pr_err("qpnp_cblpwr_irq set usb present: %d \n", vbus);
+	}
 
 	rc = qpnp_pon_input_dispatch(pon, PON_CBLPWR);
 	if (rc)
@@ -1927,6 +1947,52 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 	return 0;
 }
 
+void qpnp_pon_delay_work(unsigned long dev)
+{
+	queue_delayed_work(g_pon->cblpwr_workqueue, &g_pon->cblpwr_delay_work, 0);
+}
+
+void qpnp_pon_timer_trigger_usb(struct work_struct *work)
+{
+	int rc;
+	struct power_supply *usb_psy;
+	u8 cblpwr = 0;
+
+	pr_err("qpnp_pon_timer_trigger_usb: re-trigger usb detection \n");
+	rc = spmi_ext_register_readl(g_pon->spmi->ctrl, g_pon->spmi->sid, 0x810,
+							&cblpwr, 1);
+
+	pr_debug("PON_INT_RT_STS: %d \n", cblpwr);
+	cblpwr = ((cblpwr & 0x04) >> 2);
+
+	if (cblpwr) {
+		usb_psy = power_supply_get_by_name("usb");
+		if (usb_psy == NULL) {
+			pr_err("qpnp_pon_timer_trigger_usb can't find usb device \n");
+			return;
+		}
+		else {
+			pr_err("qpnp_pon_timer_trigger_usb: set usb present \n");
+			power_supply_set_present(usb_psy, cblpwr);
+		}
+
+		rc = qpnp_pon_input_dispatch(g_pon, PON_CBLPWR);
+		if (rc)
+			dev_err(&g_pon->spmi->dev, "Unable to send input event\n");
+	}
+}
+
+void qpnp_pon_init_timer(void)
+{
+	//init timer
+	init_timer(&g_pon->cblpwr_timer);
+	g_pon->cblpwr_timer.function = qpnp_pon_delay_work;
+
+	//10 sec
+	g_pon->cblpwr_timer.expires = jiffies + 10*HZ;
+	add_timer(&g_pon->cblpwr_timer);
+}
+
 static int qpnp_pon_probe(struct spmi_device *spmi)
 {
 	struct qpnp_pon *pon;
@@ -1940,6 +2006,8 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 	const char *s3_src;
 	u8 s3_src_reg;
 	unsigned long flags;
+	struct power_supply *usb_psy;
+	u8 cblpwr = 0;
 
 	pon = devm_kzalloc(&spmi->dev, sizeof(struct qpnp_pon),
 							GFP_KERNEL);
@@ -2271,6 +2339,37 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 					"qcom,store-hard-reset-reason");
 
 	qpnp_pon_debugfs_init(spmi);
+
+	//re-detect the cbl_pwr pin status
+	rc = spmi_ext_register_readl(pon->spmi->ctrl, pon->spmi->sid, PON_INT_RT_STS, &cblpwr, 1);
+
+	pr_debug("PON_INT_RT_STS: %d \n", cblpwr);
+	cblpwr = ((cblpwr & CBLPWR_ON) >> 2);
+
+	if (cblpwr)
+	{
+		pr_debug("probe: re-trigger usb detect \n");
+		usb_psy = power_supply_get_by_name("usb");
+		if (usb_psy == NULL) {
+			pr_err("qpnp_pon_probe can't find usb device \n");
+
+			//if usb is still not ready, init timer and delay 10 sec to re-trigger usb
+			g_pon = pon;
+			INIT_DELAYED_WORK(&g_pon->cblpwr_delay_work, qpnp_pon_timer_trigger_usb);
+			g_pon->cblpwr_workqueue = create_singlethread_workqueue("qpnp-pon-cblpwr-work");
+
+			if (g_pon->cblpwr_workqueue == NULL)
+				pr_err("%s: failed to create qpnp-pon-cblpwr work queue\n", __func__);
+
+			qpnp_pon_init_timer();
+		}
+		else
+			power_supply_set_present(usb_psy, cblpwr);
+
+		rc = qpnp_pon_input_dispatch(pon, PON_CBLPWR);
+		if (rc)
+			dev_err(&pon->spmi->dev, "Unable to send input event\n");
+	}
 	return 0;
 }
 
