@@ -935,7 +935,7 @@ static void smb231_update_ahead_work(struct work_struct *work)
         }
     }
 
-    schedule_delayed_work(&smb231_update, 90);
+    schedule_delayed_work(&smb231_update, 239);
 
     mutex_unlock(&smb231_work_lock);
 
