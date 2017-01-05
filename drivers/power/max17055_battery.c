@@ -73,13 +73,46 @@
 #define MAX17055_CAPACITY_CARRY_THRESHOLD    1
 #define MAX17055_SOCHOLD                     0xD3
 #define SOCHOLD_ENHOLD_BIT                   (1 << 12)
+#define MAX17055_EMPTY_SOC_HOLD              0x0c
+#define MAX17055_EMPTY_SOC_HOLD_MASK         0x1f
+#define MAX17055_CONVGCFG_GUANGYU            0x4b41
+#define MAX17055_CONVGCFG_DESAY              0x4bc1
 #define MAX17055_BATT_ID_GUANGYU             0x01
+#define MAX17055_BATT_ID_DESAY               0x02
+#define MAX17055_MISCCFG_VFSOC               0x03
+#define MAX17055_MISCCFG_REPSOC              0x00
+#define MAX17055_MISCCFG_SACFG_MASK          0x03
+#define MAX17055_ULPM_SOC                    6
 extern int get_global_batt_id(void);
 static bool g_max17055_initialized = false;
 bool get_global_max17055_intialized_flag(void)
 {
 	return g_max17055_initialized;
 }
+
+typedef struct
+{
+	int high_vol;
+	int low_vol;
+}ulpm_vol;
+static const ulpm_vol guangyu_ulpm_vol_table[] =
+{
+	{3590000,	3550000},
+	{3550000,	3480000},
+	{3480000,	3390000},
+	{3390000,	3330000},
+	{3330000,	3200000},
+	{3200000,	0},
+};
+static const ulpm_vol desay_ulpm_vol_table[] =
+{
+	{3650000,	3610000},
+	{3610000,	3550000},
+	{3550000,	3460000},
+	{3460000,	3380000},
+	{3380000,	3200000},
+	{3200000,	0},
+};
 #endif
 
 const static u16 dPaccVals[2][2] = {
@@ -304,6 +337,7 @@ static int max17055_get_property(struct power_supply *psy,
 	u32 data;
 #if CONFIG_HUAWEI_SAWSHARK
 	u32 cur_soc = 0;
+	union power_supply_propval pval = {0, };
 #endif
 
 	if (!chip->init_complete)
@@ -398,6 +432,95 @@ static int max17055_get_property(struct power_supply *psy,
 			else
 			{
 				val->intval = (data >> 8);
+			}
+
+			/* smooth soc for ulpm */
+			(&chip->battery)->get_property(&chip->battery,
+					POWER_SUPPLY_PROP_CURRENT_NOW, &pval);
+			if ((val->intval <= MAX17055_ULPM_SOC)
+				&& (pval.intval < 0))
+			{
+				/* soc alerts are generated based on VFSOC */
+				regmap_update_bits(map, MAX17055_MiscCfg, MAX17055_MISCCFG_SACFG_MASK, MAX17055_MISCCFG_VFSOC);
+
+				ret = get_global_batt_id();
+				if (MAX17055_BATT_ID_GUANGYU == ret)
+				{
+					pr_debug("max17055: batt id is guangyu\n");
+					(&chip->battery)->get_property(&chip->battery,
+							POWER_SUPPLY_PROP_VOLTAGE_OCV, &pval);
+					pr_debug("max17055: ocv is %d\n", pval.intval);
+					if ((pval.intval <= guangyu_ulpm_vol_table[0].high_vol)
+						&& (pval.intval > guangyu_ulpm_vol_table[0].low_vol))
+					{
+						val->intval = 5;	/* soc is 5% */
+					}
+					else if ((pval.intval <= guangyu_ulpm_vol_table[1].high_vol)
+						&& (pval.intval > guangyu_ulpm_vol_table[1].low_vol))
+					{
+						val->intval = 4;	/* soc is 4% */
+					}
+					else if ((pval.intval <= guangyu_ulpm_vol_table[2].high_vol)
+						&& (pval.intval > guangyu_ulpm_vol_table[2].low_vol))
+					{
+						val->intval = 3;	/* soc is 3% */
+					}
+					else if ((pval.intval <= guangyu_ulpm_vol_table[3].high_vol)
+						&& (pval.intval > guangyu_ulpm_vol_table[3].low_vol))
+					{
+						val->intval = 2;	/* soc is 2% */
+					}
+					else if ((pval.intval <= guangyu_ulpm_vol_table[4].high_vol)
+						&& (pval.intval > guangyu_ulpm_vol_table[4].low_vol))
+					{
+						val->intval = 1;	/* soc is 1% */
+					}
+					else if (pval.intval <= guangyu_ulpm_vol_table[5].high_vol)
+					{
+						val->intval = 0;	/* soc is 0% */
+					}
+				}
+				else if (MAX17055_BATT_ID_DESAY == ret)
+				{
+					pr_debug("max17055: batt id is desay\n");
+					(&chip->battery)->get_property(&chip->battery,
+							POWER_SUPPLY_PROP_VOLTAGE_OCV, &pval);
+					pr_debug("max17055: ocv is %d\n", pval.intval);
+					if ((pval.intval <= desay_ulpm_vol_table[0].high_vol)
+						&& (pval.intval > desay_ulpm_vol_table[0].low_vol))
+					{
+						val->intval = 5;	/* soc is 5% */
+					}
+					else if ((pval.intval <= desay_ulpm_vol_table[1].high_vol)
+						&& (pval.intval > desay_ulpm_vol_table[1].low_vol))
+					{
+						val->intval = 4;	/* soc is 4% */
+					}
+					else if ((pval.intval <= desay_ulpm_vol_table[2].high_vol)
+						&& (pval.intval > desay_ulpm_vol_table[2].low_vol))
+					{
+						val->intval = 3;	/* soc is 3% */
+					}
+					else if ((pval.intval <= desay_ulpm_vol_table[3].high_vol)
+						&& (pval.intval > desay_ulpm_vol_table[3].low_vol))
+					{
+						val->intval = 2;	/* soc is 2% */
+					}
+					else if ((pval.intval <= desay_ulpm_vol_table[4].high_vol)
+						&& (pval.intval > desay_ulpm_vol_table[4].low_vol))
+					{
+						val->intval = 1;	/* soc is 1% */
+					}
+					else if (pval.intval <= desay_ulpm_vol_table[5].high_vol)
+					{
+						val->intval = 0;	/* soc is 0% */
+					}
+				}
+			}
+			else
+			{
+				/* soc alerts are generated based on REPSOC */
+				regmap_update_bits(map, MAX17055_MiscCfg, MAX17055_MISCCFG_SACFG_MASK, MAX17055_MISCCFG_REPSOC);
 			}
 		}
 #else
@@ -1171,8 +1294,23 @@ static int max17055_probe(struct i2c_client *client,
 	}
 
 #if CONFIG_HUAWEI_SAWSHARK
-	/* Enable Sochold */
+	/* Config EmptySochold */
+	regmap_update_bits(chip->regmap, MAX17055_SOCHOLD, MAX17055_EMPTY_SOC_HOLD_MASK, MAX17055_EMPTY_SOC_HOLD);
+	/* Enable 99% Sochold */
 	regmap_update_bits(chip->regmap, MAX17055_SOCHOLD, SOCHOLD_ENHOLD_BIT, SOCHOLD_ENHOLD_BIT);
+	/* converge to empty */
+	ret = get_global_batt_id();
+	if (MAX17055_BATT_ID_GUANGYU == ret)
+	{
+		regmap_update_bits(chip->regmap, MAX17055_ConvgCfg, U16_MAX, MAX17055_CONVGCFG_GUANGYU);
+	}
+	else if (MAX17055_BATT_ID_DESAY == ret)
+	{
+		regmap_update_bits(chip->regmap, MAX17055_ConvgCfg, U16_MAX, MAX17055_CONVGCFG_DESAY);
+	}
+
+	/* soc alerts are generated based on REPSOC */
+	regmap_update_bits(chip->regmap, MAX17055_MiscCfg, MAX17055_MISCCFG_SACFG_MASK, MAX17055_MISCCFG_REPSOC);
 #endif
 
 	chip->battery.name		= "bms";
