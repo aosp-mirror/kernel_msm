@@ -62,9 +62,17 @@
 #include "sme_nan_datapath.h"
 #include "csr_api.h"
 
+extern tSirRetStatus u_mac_post_ctrl_msg(void *pSirGlobal, tSirMbMsg *pMb);
+
 #define LOG_SIZE 256
 
 static tSelfRecoveryStats g_self_recovery_stats;
+/* TxMB Functions */
+extern QDF_STATUS pmc_prepare_command(tpAniSirGlobal pMac, uint32_t sessionId,
+				      eSmeCommandType cmdType, void *pvParam,
+				      uint32_t size, tSmeCmd **ppCmd);
+extern void pmc_release_command(tpAniSirGlobal pMac, tSmeCmd *pCommand);
+extern void qos_release_command(tpAniSirGlobal pMac, tSmeCmd *pCommand);
 
 static QDF_STATUS init_sme_cmd_list(tpAniSirGlobal pMac);
 static void sme_abort_command(tpAniSirGlobal pMac, tSmeCmd *pCommand,
@@ -385,7 +393,7 @@ static QDF_STATUS init_sme_cmd_list(tpAniSirGlobal pMac)
 			pMac->sme.smeCmdActiveList.cmdTimeoutTimer = NULL;
 		} else {
 			pMac->sme.smeCmdActiveList.cmdTimeoutDuration =
-				SME_ACTIVE_LIST_CMD_TIMEOUT_VALUE;
+				CSR_ACTIVE_LIST_CMD_TIMEOUT_VALUE;
 		}
 	}
 
@@ -8992,8 +9000,8 @@ QDF_STATUS sme_config_fast_roaming(tHalHandle hal, uint8_t session_id,
 		return  QDF_STATUS_E_FAILURE;
 	}
 
-	if (session && session->pCurRoamProfile)
-		session->pCurRoamProfile->do_not_roam = !is_fast_roam_enabled;
+	if (is_fast_roam_enabled && session && session->pCurRoamProfile)
+		session->pCurRoamProfile->do_not_roam = false;
 
 	status = csr_neighbor_roam_update_fast_roaming_enabled(mac_ctx,
 					 session_id, is_fast_roam_enabled);
@@ -16856,21 +16864,6 @@ QDF_STATUS sme_set_default_scan_ie(tHalHandle hal, uint16_t session_id,
 	return status;
 }
 
-QDF_STATUS sme_set_sar_power_limits(tHalHandle hal,
-				    struct sar_limit_cmd_params *sar_limit_cmd)
-{
-	void *wma_handle;
-
-	wma_handle = cds_get_context(QDF_MODULE_ID_WMA);
-	if (!wma_handle) {
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-				"wma handle is NULL");
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	return wma_set_sar_limit(wma_handle, sar_limit_cmd);
-}
-
 #ifdef WLAN_FEATURE_DISA
 /**
  * sme_encrypt_decrypt_msg() - handles encrypt/decrypt mesaage
@@ -17023,7 +17016,6 @@ QDF_STATUS sme_set_cts2self_for_p2p_go(tHalHandle hal_handle)
 	}
 	return QDF_STATUS_SUCCESS;
 }
-
 /**
  * sme_update_tx_fail_cnt_threshold() - update tx fail count Threshold
  * @hal: Handle returned by mac_open
@@ -17088,96 +17080,3 @@ QDF_STATUS sme_set_lost_link_info_cb(tHalHandle hal,
 	}
 	return status;
 }
-
-#ifdef WLAN_FEATURE_WOW_PULSE
-/**
- * sme_set_wow_pulse() - set wow pulse info
- * @wow_pulse_set_info: wow_pulse_mode structure pointer
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS sme_set_wow_pulse(struct wow_pulse_mode *wow_pulse_set_info)
-{
-	cds_msg_t message;
-	QDF_STATUS status;
-	struct wow_pulse_mode *wow_pulse_set_cmd;
-
-	if (!wow_pulse_set_info) {
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-			"%s: invalid wow_pulse_set_info pointer", __func__);
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	wow_pulse_set_cmd = qdf_mem_malloc(sizeof(*wow_pulse_set_cmd));
-	if (NULL == wow_pulse_set_cmd) {
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-			"%s: fail to alloc wow_pulse_set_cmd", __func__);
-		return QDF_STATUS_E_NOMEM;
-	}
-
-	*wow_pulse_set_cmd = *wow_pulse_set_info;
-
-	message.type = WMA_SET_WOW_PULSE_CMD;
-	message.bodyptr = wow_pulse_set_cmd;
-
-	status = cds_mq_post_message(QDF_MODULE_ID_WMA,
-					&message);
-	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-			"%s: Not able to post msg to WDA!",
-			__func__);
-		qdf_mem_free(wow_pulse_set_cmd);
-		status = QDF_STATUS_E_FAILURE;
-	}
-
-	return status;
-}
-#endif
-
-#ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
-/**
- * sme_set_udp_resp_offload() - set udp response payload.
- * @pudp_resp_cmd: specific udp and response udp payload struct pointer
- *
- * This function set specific udp and response udp payload info
- * including enable dest_port,udp_payload, resp_payload.
- *
- * Return: Return QDF_STATUS.
- */
-QDF_STATUS sme_set_udp_resp_offload(struct udp_resp_offload *pudp_resp_cmd)
-{
-	cds_msg_t message;
-	QDF_STATUS status;
-	struct udp_resp_offload *udp_resp_cmd;
-
-	if (!pudp_resp_cmd) {
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-				"%s: invalid pudp_resp_cmd pointer", __func__);
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	udp_resp_cmd = qdf_mem_malloc(sizeof(*udp_resp_cmd));
-	if (NULL == udp_resp_cmd) {
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-				"%s: fail to alloc sudp_cmd", __func__);
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	*udp_resp_cmd = *pudp_resp_cmd;
-
-	message.type = WDA_SET_UDP_RESP_OFFLOAD;
-	message.bodyptr = udp_resp_cmd;
-
-	status = cds_mq_post_message(QDF_MODULE_ID_WMA,
-					&message);
-	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-				"%s: Not able to post msg to WDA!",
-				__func__);
-		qdf_mem_free(udp_resp_cmd);
-		status = QDF_STATUS_E_FAILURE;
-	}
-
-	return status;
-}
-#endif

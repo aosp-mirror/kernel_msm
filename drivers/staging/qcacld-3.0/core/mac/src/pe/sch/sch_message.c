@@ -189,6 +189,7 @@ void sch_process_message(tpAniSirGlobal pMac, tpSirMsgQ pSchMsg)
 		case WNI_CFG_EDCA_WME_ACVI:
 		case WNI_CFG_EDCA_WME_ACVO:
 			if (LIM_IS_AP_ROLE(psessionEntry)) {
+				psessionEntry->gLimEdcaParamSetCount++;
 				sch_qos_update_broadcast(pMac, psessionEntry);
 			}
 			break;
@@ -297,9 +298,9 @@ sch_get_params(tpAniSirGlobal pMac,
  * @mac_ctx:          mac global context
  * @session:       pesession entry
  *
- * Return: true if wmm param updated, false if wmm param not updated
+ * Return: void
  */
-static bool
+static void
 broadcast_wmm_of_concurrent_sta_session(tpAniSirGlobal mac_ctx,
 					tpPESession session)
 {
@@ -326,13 +327,7 @@ broadcast_wmm_of_concurrent_sta_session(tpAniSirGlobal mac_ctx,
 	}
 
 	if (concurrent_session == NULL)
-		return false;
-
-	if (!qdf_mem_cmp(session->gLimEdcaParamsBC,
-	   concurrent_session->gLimEdcaParams,
-	   sizeof(concurrent_session->gLimEdcaParams)))
-		return false;
-
+		return;
 	/*
 	 * Once atleast one concurrent session on same channel is found and WMM
 	 * broadcast params for current SoftAP/GO session updated, return
@@ -356,7 +351,6 @@ broadcast_wmm_of_concurrent_sta_session(tpAniSirGlobal mac_ctx,
 		       session->gLimEdcaParamsBC[j].cw.max,
 		       session->gLimEdcaParamsBC[j].txoplimit);)
 	}
-	return true;
 }
 
 void sch_qos_update_broadcast(tpAniSirGlobal pMac, tpPESession psessionEntry)
@@ -365,7 +359,6 @@ void sch_qos_update_broadcast(tpAniSirGlobal pMac, tpPESession psessionEntry)
 	uint32_t cwminidx, cwmaxidx, txopidx;
 	uint32_t phyMode;
 	uint8_t i;
-	bool updated = false;
 
 	if (sch_get_params(pMac, params, false) != eSIR_SUCCESS) {
 		PELOGE(sch_log(pMac, LOGE, FL("QosUpdateBroadcast: failed"));)
@@ -391,36 +384,16 @@ void sch_qos_update_broadcast(tpAniSirGlobal pMac, tpPESession psessionEntry)
 	}
 
 	for (i = 0; i < MAX_NUM_AC; i++) {
-		if (psessionEntry->gLimEdcaParamsBC[i].aci.acm !=
-			(uint8_t) params[i][WNI_CFG_EDCA_PROFILE_ACM_IDX]) {
-			psessionEntry->gLimEdcaParamsBC[i].aci.acm =
+		psessionEntry->gLimEdcaParamsBC[i].aci.acm =
 			(uint8_t) params[i][WNI_CFG_EDCA_PROFILE_ACM_IDX];
-			updated = true;
-		}
-		if (psessionEntry->gLimEdcaParamsBC[i].aci.aifsn !=
-			(uint8_t) params[i][WNI_CFG_EDCA_PROFILE_AIFSN_IDX]) {
-			psessionEntry->gLimEdcaParamsBC[i].aci.aifsn =
+		psessionEntry->gLimEdcaParamsBC[i].aci.aifsn =
 			(uint8_t) params[i][WNI_CFG_EDCA_PROFILE_AIFSN_IDX];
-			updated = true;
-		}
-		if (psessionEntry->gLimEdcaParamsBC[i].cw.min !=
-			convert_cw(GET_CW(&params[i][cwminidx]))) {
-			psessionEntry->gLimEdcaParamsBC[i].cw.min =
+		psessionEntry->gLimEdcaParamsBC[i].cw.min =
 			convert_cw(GET_CW(&params[i][cwminidx]));
-			updated = true;
-		}
-		if (psessionEntry->gLimEdcaParamsBC[i].cw.max !=
-			convert_cw(GET_CW(&params[i][cwmaxidx]))) {
-			psessionEntry->gLimEdcaParamsBC[i].cw.max =
+		psessionEntry->gLimEdcaParamsBC[i].cw.max =
 			convert_cw(GET_CW(&params[i][cwmaxidx]));
-			updated = true;
-		}
-		if (psessionEntry->gLimEdcaParamsBC[i].txoplimit !=
-			(uint16_t) params[i][txopidx]) {
-			psessionEntry->gLimEdcaParamsBC[i].txoplimit =
+		psessionEntry->gLimEdcaParamsBC[i].txoplimit =
 			(uint16_t) params[i][txopidx];
-			updated = true;
-		}
 
 		PELOG1(sch_log
 			       (pMac, LOG1,
@@ -435,10 +408,7 @@ void sch_qos_update_broadcast(tpAniSirGlobal pMac, tpPESession psessionEntry)
 	}
 
 	/* If there exists a concurrent STA-AP session, use its WMM params to broadcast in beacons. WFA Wifi Direct test plan 6.1.14 requirement */
-	if (broadcast_wmm_of_concurrent_sta_session(pMac, psessionEntry))
-		updated = true;
-	if (updated)
-		psessionEntry->gLimEdcaParamSetCount++;
+	broadcast_wmm_of_concurrent_sta_session(pMac, psessionEntry);
 
 	if (sch_set_fixed_beacon_fields(pMac, psessionEntry) != eSIR_SUCCESS)
 		PELOGE(sch_log(pMac, LOGE, "Unable to set beacon fields!");)
@@ -597,6 +567,7 @@ void sch_edca_profile_update(tpAniSirGlobal pMac, tpPESession psessionEntry)
 	if (LIM_IS_AP_ROLE(psessionEntry) ||
 	    LIM_IS_IBSS_ROLE(psessionEntry)) {
 		sch_qos_update_local(pMac, psessionEntry);
+		psessionEntry->gLimEdcaParamSetCount++;
 		sch_qos_update_broadcast(pMac, psessionEntry);
 	}
 }

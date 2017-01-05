@@ -188,9 +188,9 @@ struct ol_tx_desc_t {
 	 * This field is filled in with the ol_tx_frm_type enum.
 	 */
 	uint8_t pkt_type;
-
+#if defined(CONFIG_HL_SUPPORT)
 	struct ol_txrx_vdev_t *vdev;
-
+#endif
 	void *txq;
 
 #ifdef QCA_SUPPORT_SW_TXRX_ENCAP
@@ -667,10 +667,6 @@ struct ol_txrx_pdev_t {
 			void *ctxt;
 		} callbacks[OL_TXRX_MGMT_NUM_TYPES];
 	} tx_mgmt;
-
-	/* packetdump callback functions */
-	tp_ol_packetdump_cb ol_tx_packetdump_cb;
-	tp_ol_packetdump_cb ol_rx_packetdump_cb;
 
 	struct {
 		uint16_t pool_size;
@@ -1228,7 +1224,6 @@ struct ol_txrx_peer_t {
 	qdf_time_t last_assoc_rcvd;
 	qdf_time_t last_disassoc_rcvd;
 	qdf_time_t last_deauth_rcvd;
-	qdf_atomic_t fw_create_pending;
 };
 
 enum ol_rx_err_type {

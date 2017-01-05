@@ -422,8 +422,13 @@ QDF_STATUS cds_open(void)
 		goto err_wma_close;
 	}
 	bmi_target_ready(scn, gp_cds_context->cfg_ctx);
-
 	/* Now proceed to open the MAC */
+
+	/* UMA is supported in hardware for performing the
+	 * frame translation 802.11 <-> 802.3
+	 */
+	cds_cfg->frame_xln_reqd = 1;
+
 	sirStatus =
 		mac_open(&(gp_cds_context->pMACContext),
 			gp_cds_context->pHDDContext, cds_cfg);
@@ -457,6 +462,8 @@ QDF_STATUS cds_open(void)
 		QDF_ASSERT(0);
 		goto err_sme_close;
 	}
+
+	gp_cds_context->ol_txrx_update_mac_id = ol_txrx_update_mac_id;
 
 	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_INFO_HIGH,
 		  "%s: CDS successfully Opened", __func__);
@@ -1472,7 +1479,7 @@ QDF_STATUS cds_mq_post_message_by_priority(CDS_MQ_ID msgQueueId,
 	else
 		cds_mq_put(pTargetMq, pMsgWrapper);
 
-	set_bit(MC_POST_EVENT, &gp_cds_context->qdf_sched.mcEventFlag);
+	set_bit(MC_POST_EVENT_MASK, &gp_cds_context->qdf_sched.mcEventFlag);
 	wake_up_interruptible(&gp_cds_context->qdf_sched.mcWaitQueue);
 
 	return QDF_STATUS_SUCCESS;
@@ -1658,7 +1665,7 @@ bool cds_is_packet_log_enabled(void)
  * Return: none
  */
 
-static void cds_config_recovery_work(qdf_device_t qdf_ctx)
+void cds_config_recovery_work(qdf_device_t qdf_ctx)
 {
 	if (cds_is_driver_recovering()) {
 		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
@@ -2439,50 +2446,4 @@ inline void cds_pkt_stats_to_logger_thread(void *pl_hdr, void *pkt_dump,
 		return;
 
 	wlan_pkt_stats_to_logger_thread(pl_hdr, pkt_dump, data);
-}
-
-/**
- * cds_register_dp_cb() - Register datapath callbacks with CDS
- * @dp_cbs: pointer to cds_dp_cbacks structure
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS cds_register_dp_cb(struct cds_dp_cbacks *dp_cbs)
-{
-	p_cds_contextType cds_ctx;
-
-	cds_ctx = cds_get_global_context();
-	if (!cds_ctx) {
-		cds_err("Invalid CDS context");
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	cds_ctx->ol_txrx_update_mac_id_cb = dp_cbs->ol_txrx_update_mac_id_cb;
-	cds_ctx->hdd_en_lro_in_cc_cb = dp_cbs->hdd_en_lro_in_cc_cb;
-	cds_ctx->hdd_disable_lro_in_cc_cb = dp_cbs->hdd_disble_lro_in_cc_cb;
-	return QDF_STATUS_SUCCESS;
-}
-
-/**
- * cds_deregister_dp_cb() - Deregister datapath callbacks with CDS
- * @dp_cbs: pointer to cds_dp_cbacks structure
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS cds_deregister_dp_cb(void)
-
-{
-	p_cds_contextType cds_ctx;
-
-	cds_ctx = cds_get_global_context();
-	if (!cds_ctx) {
-		cds_err("Invalid CDS context");
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	cds_ctx->ol_txrx_update_mac_id_cb = NULL;
-	cds_ctx->hdd_en_lro_in_cc_cb = NULL;
-	cds_ctx->hdd_disable_lro_in_cc_cb = NULL;
-
-	return QDF_STATUS_SUCCESS;
 }

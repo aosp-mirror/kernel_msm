@@ -686,8 +686,6 @@ ol_tx_classify_mgmt(
 			 * frame to vdev queue.
 			 */
 			if (peer) {
-				int rcnt;
-
 				qdf_mem_copy(
 					&local_mac_addr_aligned.raw[0],
 					dest_addr, OL_TXRX_MAC_ADDR_LEN);
@@ -695,11 +693,13 @@ ol_tx_classify_mgmt(
 				if (ol_txrx_peer_find_mac_addr_cmp(
 							mac_addr,
 							&peer->mac_addr) != 0) {
-					rcnt = ol_txrx_peer_unref_delete(peer);
+					qdf_atomic_dec(&peer->ref_cnt);
 					QDF_TRACE(QDF_MODULE_ID_TXRX,
 						 QDF_TRACE_LEVEL_INFO_HIGH,
 						 "%s: peer %p peer->ref_cnt %d",
-						 __func__, peer, rcnt);
+						 __func__, peer,
+						 qdf_atomic_read
+							(&peer->ref_cnt));
 					peer = NULL;
 				}
 			}

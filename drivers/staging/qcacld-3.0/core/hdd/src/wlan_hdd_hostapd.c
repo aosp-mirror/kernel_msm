@@ -31,6 +31,9 @@
  * WLAN Host Device Driver implementation
  */
 
+/* denote that this file does not allow legacy hddLog */
+#define HDD_DISALLOW_LEGACY_HDDLOG 1
+
 /* Include Files */
 
 #include <linux/version.h>
@@ -234,25 +237,16 @@ void hdd_sap_context_destroy(hdd_context_t *hdd_ctx)
 static int __hdd_hostapd_open(struct net_device *dev)
 {
 	hdd_adapter_t *pAdapter = netdev_priv(dev);
-	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(pAdapter);
-	int ret;
 
 	ENTER_DEV(dev);
 
 	MTRACE(qdf_trace(QDF_MODULE_ID_HDD,
 			 TRACE_CODE_HDD_HOSTAPD_OPEN_REQUEST, NO_SESSION, 0));
 
-	ret = wlan_hdd_validate_context(hdd_ctx);
-	if (ret)
-		return ret;
-	/*
-	 * Check statemachine state and also stop iface change timer if running
-	 */
-	ret = hdd_wlan_start_modules(hdd_ctx, pAdapter, false);
-
-	if (ret) {
-		hdd_err("Failed to start WLAN modules return");
-		return ret;
+	if (cds_is_load_or_unload_in_progress()) {
+		hdd_err("Driver load/unload in progress, ignore, state: 0x%x",
+			cds_get_driver_state());
+		goto done;
 	}
 
 	set_bit(DEVICE_IFACE_OPENED, &pAdapter->event_flags);
@@ -261,6 +255,7 @@ static int __hdd_hostapd_open(struct net_device *dev)
 	wlan_hdd_netif_queue_control(pAdapter,
 				   WLAN_START_ALL_NETIF_QUEUE_N_CARRIER,
 				   WLAN_CONTROL_PATH);
+done:
 	EXIT();
 	return 0;
 }
@@ -3112,14 +3107,12 @@ static __iw_softap_setparam(struct net_device *dev,
 			hdd_ipa_uc_stat_request(pHostapdAdapter, set_value);
 			break;
 		case 3:
-			hdd_ipa_uc_rt_debug_host_dump(hdd_ctx);
-			break;
-		case 4:
-			hdd_ipa_dump_info(hdd_ctx);
+			hdd_ipa_uc_rt_debug_host_dump(
+					WLAN_HDD_GET_CTX(pHostapdAdapter));
 			break;
 		default:
 			/* place holder for stats clean up
-			 * Stats clean not implemented yet on FW and IPA
+			 * Stats clean not implemented yet on firmware and ipa
 			 */
 			break;
 		}
@@ -4774,8 +4767,8 @@ __iw_softap_stopbss(struct net_device *dev,
 		if (QDF_IS_STATUS_SUCCESS(status)) {
 			qdf_status =
 				qdf_wait_single_event(&pHostapdState->
-					qdf_stop_bss_event,
-					SME_CMD_TIMEOUT_VALUE);
+						      qdf_stop_bss_event,
+						      10000);
 
 			if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 				hdd_err("wait for single_event failed!!");
@@ -7067,85 +7060,6 @@ setup_acs_overrides:
 	return 0;
 }
 
-#ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
-/**
- * wlan_hdd_set_udp_resp_offload() - get specific udp and response udp info from
- * ini file
- * @padapter: hdd adapter pointer
- * @enable: enable or disable the specific udp and response behaviour
- *
- * This function reads specific udp and response udp related info from ini file,
- * these configurations will be sent to fw through wmi.
- *
- * Return: 0 on success, otherwise error value
- */
-static int wlan_hdd_set_udp_resp_offload(hdd_adapter_t *padapter, bool enable)
-{
-	hdd_context_t *phddctx = WLAN_HDD_GET_CTX(padapter);
-	struct hdd_config *pcfg_ini = phddctx->config;
-	struct udp_resp_offload udp_resp_cmd_info;
-	QDF_STATUS status;
-	uint8_t udp_payload_filter_len;
-	uint8_t udp_response_payload_len;
-
-	hdd_info("udp_resp_offload enable flag is %d", enable);
-
-	/* prepare the request to send to SME */
-	if ((enable == true) &&
-	    (pcfg_ini->udp_resp_offload_support)) {
-		if (pcfg_ini->response_payload[0] != '\0') {
-			udp_resp_cmd_info.vdev_id = padapter->sessionId;
-			udp_resp_cmd_info.enable = 1;
-			udp_resp_cmd_info.dest_port =
-					pcfg_ini->dest_port;
-
-			udp_payload_filter_len =
-				strlen(pcfg_ini->payload_filter);
-			hdd_info("payload_filter[%s]",
-				pcfg_ini->payload_filter);
-			udp_response_payload_len =
-				strlen(pcfg_ini->response_payload);
-			hdd_info("response_payload[%s]",
-				pcfg_ini->response_payload);
-
-			qdf_mem_copy(udp_resp_cmd_info.udp_payload_filter,
-					pcfg_ini->payload_filter,
-					udp_payload_filter_len + 1);
-
-			qdf_mem_copy(udp_resp_cmd_info.udp_response_payload,
-					pcfg_ini->response_payload,
-					udp_response_payload_len + 1);
-
-			status = sme_set_udp_resp_offload(&udp_resp_cmd_info);
-			if (QDF_STATUS_E_FAILURE == status) {
-				hdd_err("sme_set_udp_resp_offload failure!");
-				return -EIO;
-			}
-			hdd_info("sme_set_udp_resp_offload success!");
-		}
-	} else {
-		udp_resp_cmd_info.vdev_id = padapter->sessionId;
-		udp_resp_cmd_info.enable = 0;
-		udp_resp_cmd_info.dest_port = 0;
-		udp_resp_cmd_info.udp_payload_filter[0] = '\0';
-		udp_resp_cmd_info.udp_response_payload[0] = '\0';
-		status = sme_set_udp_resp_offload(&udp_resp_cmd_info);
-		if (QDF_STATUS_E_FAILURE == status) {
-			hdd_err("sme_set_udp_resp_offload failure!");
-			return -EIO;
-		}
-		hdd_info("sme_set_udp_resp_offload success!");
-	}
-	return 0;
-}
-#else
-static inline int wlan_hdd_set_udp_resp_offload(hdd_adapter_t *padapter,
-				bool enable)
-{
-	return 0;
-}
-#endif
-
 /**
  * wlan_hdd_cfg80211_start_bss() - start bss
  * @pHostapdAdapter: Pointer to hostapd adapter
@@ -7702,8 +7616,7 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 
 	hdd_notice("Waiting for Scan to complete(auto mode) and BSS to start");
 
-	qdf_status = qdf_wait_single_event(&pHostapdState->qdf_event,
-						SME_CMD_TIMEOUT_VALUE);
+	qdf_status = qdf_wait_single_event(&pHostapdState->qdf_event, 10000);
 
 	wlansap_reset_sap_config_add_ie(pConfig, eUPDATE_IE_ALL);
 
@@ -7879,8 +7792,8 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 		if (QDF_IS_STATUS_SUCCESS(status)) {
 			qdf_status =
 				qdf_wait_single_event(&pHostapdState->
-					qdf_stop_bss_event,
-					SME_CMD_TIMEOUT_VALUE);
+						      qdf_stop_bss_event,
+						      10000);
 
 			if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 				hdd_err("HDD qdf wait for single_event failed!!");
@@ -8193,13 +8106,6 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 				params->inactivity_timeout;
 			sme_update_sta_inactivity_timeout(WLAN_HDD_GET_HAL_CTX
 					(pAdapter), sta_inactivity_timer);
-		}
-
-		if (status == 0) {
-			if (0 !=
-				wlan_hdd_set_udp_resp_offload(pAdapter, true))
-				hdd_notice("set udp resp cmd failed %d",
-								status);
 		}
 	}
 

@@ -1758,6 +1758,5 @@ static inline void csr_roam_fill_tdls_info(tpAniSirGlobal mac_ctx, tCsrRoamInfo 
 				tpSirSmeJoinRsp join_rsp)
 {}
 #endif
-void csr_packetdump_timer_stop(void);
 
 #endif

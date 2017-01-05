@@ -166,6 +166,9 @@
 
 #define WLAN_CHIP_VERSION   "WCNSS"
 
+#ifndef HDD_DISALLOW_LEGACY_HDDLOG
+#define hddLog(level, args ...) QDF_TRACE(QDF_MODULE_ID_HDD, level, ## args)
+#endif
 #define hdd_log(level, args...) QDF_TRACE(QDF_MODULE_ID_HDD, level, ## args)
 #define hdd_logfl(level, format, args...) hdd_log(level, FL(format), ## args)
 
@@ -260,6 +263,8 @@
 #define NET_NAME_UNKNOWN	0
 #endif
 
+#define BSS_WAIT_TIMEOUT 10000
+
 #define PRE_CAC_SSID "pre_cac_ssid"
 
 /* session ID invalid */
@@ -335,6 +340,8 @@ extern spinlock_t hdd_context_lock;
  *				received over 100ms intervals
  * @interval_rx:	# of rx packets received in the last 100ms interval
  * @interval_tx:	# of tx packets received in the last 100ms interval
+ * @total_rx:		# of total rx packets received on interface
+ * @total_tx:		# of total tx packets received on interface
  * @next_vote_level:	pld_bus_width_type voting level (high or low)
  *			determined on the basis of total tx and rx packets
  *			received in the last 100ms interval
@@ -344,19 +351,18 @@ extern spinlock_t hdd_context_lock;
  * @next_tx_level:	pld_bus_width_type voting level (high or low)
  *			determined on the basis of tx packets received in the
  *			last 100ms interval
- * @qtime		timestamp when the record is added
  *
- * The structure keeps track of throughput requirements of wlan driver.
- * An entry is added if either of next_vote_level, next_rx_level or
- * next_tx_level changes. An entry is not added for every 100ms interval.
+ * The structure keeps track of throughput requirements of wlan driver in 100ms
+ * intervals for later analysis.
  */
 struct hdd_tx_rx_histogram {
 	uint64_t interval_rx;
 	uint64_t interval_tx;
+	uint64_t total_rx;
+	uint64_t total_tx;
 	uint32_t next_vote_level;
 	uint32_t next_rx_level;
 	uint32_t next_tx_level;
-	uint64_t qtime;
 };
 
 typedef struct hdd_tx_rx_stats_s {
@@ -1114,6 +1120,7 @@ struct hdd_adapter_s {
 	struct hdd_netif_queue_history
 		 queue_oper_history[WLAN_HDD_MAX_HISTORY_ENTRY];
 	struct hdd_netif_queue_stats queue_oper_stats[WLAN_REASON_TYPE_MAX];
+	struct hdd_lro_s lro_info;
 	ol_txrx_tx_fp tx_fn;
 	/* debugfs entry */
 	struct dentry *debugfs_phy;
@@ -1124,8 +1131,6 @@ struct hdd_adapter_s {
 	uint8_t pre_cac_chan;
 	struct hdd_connect_pm_context connect_rpm_ctx;
 	struct power_stats_response *chip_power_stats;
-
-	bool fast_roaming_allowed;
 };
 
 #define WLAN_HDD_GET_STATION_CTX_PTR(pAdapter) (&(pAdapter)->sessionCtx.station)
@@ -1568,11 +1573,6 @@ struct hdd_context_s {
 	uint32_t suspend_fail_stats[SUSPEND_FAIL_MAX_COUNT];
 	struct hdd_runtime_pm_context runtime_context;
 	bool roaming_in_progress;
-	/* bit map to set/reset TDLS by different sources */
-	unsigned long tdls_source_bitmap;
-	/* tdls source timer to enable/disable TDLS on p2p listen */
-	qdf_mc_timer_t tdls_source_timer;
-	qdf_atomic_t disable_lro_in_concurrency;
 };
 
 /*---------------------------------------------------------------------------
@@ -1855,12 +1855,7 @@ static inline int hdd_process_pktlog_command(hdd_context_t *hdd_ctx,
 static inline void hdd_set_tso_flags(hdd_context_t *hdd_ctx,
 	 struct net_device *wlan_dev)
 {
-	if (hdd_ctx->config->tso_enable &&
-	    hdd_ctx->config->enable_ip_tcp_udp_checksum_offload) {
-	    /*
-	     * We want to enable TSO only if IP/UDP/TCP TX checksum flag is
-	     * enabled.
-	     */
+	if (hdd_ctx->config->tso_enable) {
 		hdd_info("TSO Enabled");
 		wlan_dev->features |=
 			 NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM |

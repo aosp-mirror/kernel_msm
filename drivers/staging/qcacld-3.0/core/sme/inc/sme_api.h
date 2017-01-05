@@ -80,9 +80,6 @@
 #define ROAM_CONFIG_TO_SME_CONFIG 2
 
 #define NUM_OF_BANDS 2
-
-#define SME_ACTIVE_LIST_CMD_TIMEOUT_VALUE (30*1000)
-#define SME_CMD_TIMEOUT_VALUE (SME_ACTIVE_LIST_CMD_TIMEOUT_VALUE + 1000)
 /*--------------------------------------------------------------------------
   Type declarations
   ------------------------------------------------------------------------*/
@@ -1358,36 +1355,11 @@ QDF_STATUS sme_update_sta_inactivity_timeout(tHalHandle hal_handle,
  */
 QDF_STATUS sme_set_lost_link_info_cb(tHalHandle hal,
 		void (*cb)(void *, struct sir_lost_link_info *));
-
 #ifdef WLAN_POWER_DEBUGFS
 QDF_STATUS sme_power_debug_stats_req(tHalHandle hal, void (*callback_fn)
 				(struct  power_stats_response *response,
 				void *context), void *power_stats_context);
 #endif
-/**
- * sme_set_sar_power_limits() - set sar limits
- * @hal: HAL handle
- * @sar_limit_cmd: struct to send sar limit cmd.
- *
- * Return: QDF_STATUS enumeration.
- */
-QDF_STATUS sme_set_sar_power_limits(tHalHandle hal,
-				    struct sar_limit_cmd_params *sar_limit_cmd);
+
 void sme_set_cc_src(tHalHandle hal_handle, enum country_src);
-
-
-#ifdef WLAN_FEATURE_WOW_PULSE
-QDF_STATUS sme_set_wow_pulse(struct wow_pulse_mode *wow_pulse_set_info);
-#endif
-
-#ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
-QDF_STATUS sme_set_udp_resp_offload(struct udp_resp_offload *pudp_resp_cmd);
-#else
-static inline QDF_STATUS sme_set_udp_resp_offload(struct udp_resp_offload
-							*pudp_resp_cmd)
-{
-	return QDF_STATUS_E_FAILURE;
-}
-#endif
-
 #endif /* #if !defined( __SME_API_H ) */

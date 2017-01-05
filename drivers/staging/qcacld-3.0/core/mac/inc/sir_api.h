@@ -115,8 +115,6 @@ typedef uint8_t tSirVersionString[SIR_VERSION_STRING_LEN];
 	(QOS_MAP_LEN_MIN + 2 * QOS_MAP_MAX_EX)
 #define NUM_CHAINS_MAX  2
 
-#define MAX_LEN_UDP_RESP_OFFLOAD 128
-
 /**
  * enum sir_conn_update_reason: Reason for conc connection update
  * @SIR_UPDATE_REASON_SET_OPER_CHAN: Set probable operating channel
@@ -952,35 +950,6 @@ struct oem_data_rsp {
 #endif /* FEATURE_OEM_DATA_SUPPORT */
 
 #ifdef FEATURE_WLAN_ESE
-typedef struct ese_wmm_tspec_ie {
-	uint16_t         traffic_type:1;
-	uint16_t                 tsid:4;
-	uint16_t            direction:2;
-	uint16_t        access_policy:2;
-	uint16_t          aggregation:1;
-	uint16_t                  psb:1;
-	uint16_t        user_priority:3;
-	uint16_t       tsinfo_ack_pol:2;
-	uint8_t          tsinfo_rsvd:7;
-	uint8_t      burst_size_defn:1;
-	uint16_t                 size:15;
-	uint16_t                fixed:1;
-	uint16_t            max_msdu_size;
-	uint32_t            min_service_int;
-	uint32_t            max_service_int;
-	uint32_t            inactivity_int;
-	uint32_t            suspension_int;
-	uint32_t            service_start_time;
-	uint32_t            min_data_rate;
-	uint32_t            mean_data_rate;
-	uint32_t            peak_data_rate;
-	uint32_t            burst_size;
-	uint32_t            delay_bound;
-	uint32_t            min_phy_rate;
-	uint16_t            surplus_bw_allowance;
-	uint16_t            medium_time;
-} qdf_packed ese_wmm_tspec_ie;
-
 typedef struct sTspecInfo {
 	uint8_t valid;
 	tSirMacTspecIE tspec;
@@ -3131,7 +3100,6 @@ typedef struct sSirRoamOffloadScanRsp {
    Packet Filtering Parameters
    ---------------------------------------------------------------------------*/
 #define    SIR_MAX_FILTER_TEST_DATA_LEN       8
-#define    SIR_MAX_FILTER_TEST_DATA_OFFSET  200
 #define    SIR_MAX_NUM_MULTICAST_ADDRESS    240
 #define    SIR_MAX_NUM_FILTERS               20
 #define    SIR_MAX_NUM_TESTS_PER_FILTER      10
@@ -6735,40 +6703,5 @@ struct sme_long_retry_limit {
 struct sme_sta_inactivity_timeout {
 	uint8_t session_id;
 	uint32_t sta_inactivity_timeout;
-};
-
-/*
- * struct wow_pulse_mode - WoW Pulse set cmd struct
- * @wow_pulse_enable: enable or disable this feature
- * @wow_pulse_pin: GPIO PIN for Pulse
- * @wow_pulse_interval_low: Pulse interval low
- * @wow_pulse_interval_high: Pulse interval high
- *
- * SME uses this structure to configure wow pulse info
- * and send it to WMA
- */
-struct wow_pulse_mode {
-	bool                       wow_pulse_enable;
-	uint8_t                    wow_pulse_pin;
-	uint16_t                   wow_pulse_interval_high;
-	uint16_t                   wow_pulse_interval_low;
-};
-
-/*
- * struct udp_resp_offload - the basic info structure
- * @vdev_id: vdev id
- * @dest_port: specific UDP dest port
- * @udp_payload_filter: specific UDP payload filter
- * @udp_response_payload: response UDP oayload
- *
- * driver use this structure to configure fw specific
- * udp offload filter and response udp info
- */
-struct udp_resp_offload {
-	uint32_t   vdev_id;
-	uint32_t   enable;
-	uint32_t   dest_port;
-	char       udp_payload_filter[MAX_LEN_UDP_RESP_OFFLOAD];
-	char       udp_response_payload[MAX_LEN_UDP_RESP_OFFLOAD];
 };
 #endif /* __SIR_API_H */

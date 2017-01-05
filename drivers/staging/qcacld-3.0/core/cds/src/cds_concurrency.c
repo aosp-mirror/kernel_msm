@@ -2162,8 +2162,8 @@ static void cds_update_conc_list(uint32_t conn_index,
 	conc_connection_list[conn_index].in_use = in_use;
 
 	cds_dump_connection_status_info();
-	if (cds_ctx->ol_txrx_update_mac_id_cb)
-		cds_ctx->ol_txrx_update_mac_id_cb(vdev_id, mac);
+	if (cds_ctx->ol_txrx_update_mac_id)
+		cds_ctx->ol_txrx_update_mac_id(vdev_id, mac);
 
 }
 
@@ -3494,7 +3494,6 @@ void cds_set_tdls_ct_mode(hdd_context_t *hdd_ctx)
 	}
 
 	if (eTDLS_SUPPORT_DISABLED == hdd_ctx->tdls_mode ||
-	    eTDLS_SUPPORT_NOT_ENABLED == hdd_ctx->tdls_mode ||
 	    (!hdd_ctx->config->fEnableTDLSImplicitTrigger)) {
 		state = false;
 		goto set_state;
@@ -3790,22 +3789,6 @@ void cds_incr_active_session(enum tQDF_ADAPTER_MODE mode,
 		qdf_mutex_acquire(&cds_ctx->qdf_conc_list_lock);
 	}
 
-	/**
-	 * Disable LRO if P2P or IBSS or SAP connection has come up or
-	 * there are more than one STA connections
-	 */
-	if ((cds_mode_specific_connection_count(CDS_STA_MODE, NULL) > 1) ||
-	    (cds_mode_specific_connection_count(CDS_SAP_MODE, NULL) > 0) ||
-	    (cds_mode_specific_connection_count(CDS_P2P_CLIENT_MODE, NULL) >
-									0) ||
-	    (cds_mode_specific_connection_count(CDS_P2P_GO_MODE, NULL) > 0) ||
-	    (cds_mode_specific_connection_count(CDS_IBSS_MODE, NULL) > 0)) {
-		if (cds_ctx->hdd_disable_lro_in_cc_cb != NULL)
-			cds_ctx->hdd_disable_lro_in_cc_cb(hdd_ctx);
-		else
-			cds_warn("hdd_disable_lro_in_cc_cb NULL!");
-	};
-
 	/* set tdls connection tracker state */
 	cds_set_tdls_ct_mode(hdd_ctx);
 	cds_dump_current_concurrency();
@@ -4005,13 +3988,6 @@ void cds_decr_active_session(enum tQDF_ADAPTER_MODE mode,
 				  uint8_t session_id)
 {
 	hdd_context_t *hdd_ctx;
-	cds_context_type *cds_ctx;
-
-	cds_ctx = cds_get_context(QDF_MODULE_ID_QDF);
-	if (!cds_ctx) {
-		cds_err("Invalid CDS Context");
-		return;
-	}
 
 	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 	if (!hdd_ctx) {
@@ -4036,19 +4012,6 @@ void cds_decr_active_session(enum tQDF_ADAPTER_MODE mode,
 		mode, hdd_ctx->no_of_active_sessions[mode]);
 
 	cds_decr_connection_count(session_id);
-
-	/* Enable LRO if there no concurrency */
-	if ((cds_mode_specific_connection_count(CDS_STA_MODE, NULL) == 1) &&
-	    (cds_mode_specific_connection_count(CDS_SAP_MODE, NULL) == 0) &&
-	    (cds_mode_specific_connection_count(CDS_P2P_CLIENT_MODE, NULL) ==
-									0) &&
-	    (cds_mode_specific_connection_count(CDS_P2P_GO_MODE, NULL) == 0) &&
-	    (cds_mode_specific_connection_count(CDS_IBSS_MODE, NULL) == 0)) {
-		if (cds_ctx->hdd_en_lro_in_cc_cb != NULL)
-			cds_ctx->hdd_en_lro_in_cc_cb(hdd_ctx);
-		else
-			cds_warn("hdd_enable_lro_in_concurrency NULL!");
-	};
 
 	/* set tdls connection tracker state */
 	cds_set_tdls_ct_mode(hdd_ctx);
@@ -4630,23 +4593,22 @@ QDF_STATUS cds_get_connection_channels(uint8_t *channels,
 			if (skip_dfs_channel && CDS_IS_DFS_CH(
 				    conc_connection_list[conn_index].chan)) {
 				conn_index++;
-			} else if (*index < weight_len) {
+			} else {
 				channels[num_channels++] =
 					conc_connection_list[conn_index++].chan;
-				pcl_weight[(*index)++] = weight1;
-			} else {
-				conn_index++;
+				if (*index < weight_len)
+					pcl_weight[(*index)++] = weight1;
 			}
 		}
 		*len = num_channels;
 	} else if (CDS_PCL_ORDER_24G_THEN_5G == order) {
 		while (CONC_CONNECTION_LIST_VALID_INDEX(conn_index)) {
 			if (CDS_IS_CHANNEL_24GHZ(
-				    conc_connection_list[conn_index].chan)
-				&& (*index < weight_len)) {
+				    conc_connection_list[conn_index].chan)) {
 				channels[num_channels++] =
 					conc_connection_list[conn_index++].chan;
-				pcl_weight[(*index)++] = weight1;
+				if (*index < weight_len)
+					pcl_weight[(*index)++] = weight1;
 			} else {
 				conn_index++;
 			}
@@ -4657,11 +4619,11 @@ QDF_STATUS cds_get_connection_channels(uint8_t *channels,
 				    conc_connection_list[conn_index].chan)) {
 				conn_index++;
 			} else if (CDS_IS_CHANNEL_5GHZ(
-				    conc_connection_list[conn_index].chan)
-				&& (*index < weight_len)) {
+				    conc_connection_list[conn_index].chan)) {
 				channels[num_channels++] =
 					conc_connection_list[conn_index++].chan;
-				pcl_weight[(*index)++] = weight2;
+				if (*index < weight_len)
+					pcl_weight[(*index)++] = weight2;
 			} else {
 				conn_index++;
 			}
@@ -4673,11 +4635,11 @@ QDF_STATUS cds_get_connection_channels(uint8_t *channels,
 				conc_connection_list[conn_index].chan)) {
 				conn_index++;
 			} else if (CDS_IS_CHANNEL_5GHZ(
-				    conc_connection_list[conn_index].chan)
-				&& (*index < weight_len)) {
+				    conc_connection_list[conn_index].chan)) {
 				channels[num_channels++] =
 					conc_connection_list[conn_index++].chan;
-				pcl_weight[(*index)++] = weight1;
+				if (*index < weight_len)
+					pcl_weight[(*index)++] = weight1;
 			} else {
 				conn_index++;
 			}
@@ -4685,11 +4647,11 @@ QDF_STATUS cds_get_connection_channels(uint8_t *channels,
 		conn_index = 0;
 		while (CONC_CONNECTION_LIST_VALID_INDEX(conn_index)) {
 			if (CDS_IS_CHANNEL_24GHZ(
-				    conc_connection_list[conn_index].chan)
-				&& (*index < weight_len)) {
+				    conc_connection_list[conn_index].chan)) {
 				channels[num_channels++] =
 					conc_connection_list[conn_index++].chan;
-				pcl_weight[(*index)++] = weight2;
+				if (*index < weight_len)
+					pcl_weight[(*index)++] = weight2;
 
 			} else {
 				conn_index++;
@@ -4808,7 +4770,7 @@ static QDF_STATUS cds_get_channel_list(enum cds_pcl_type pcl,
 				       uint32_t weight_len)
 {
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
-	uint32_t num_channels = 0;
+	uint32_t num_channels = WNI_CFG_VALID_CHANNEL_LIST_LEN;
 	uint32_t chan_index = 0, chan_index_24 = 0, chan_index_5 = 0;
 	uint8_t channel_list[QDF_MAX_NUM_CHAN] = {0};
 	uint8_t channel_list_24[QDF_MAX_NUM_CHAN] = {0};
@@ -4923,20 +4885,18 @@ static QDF_STATUS cds_get_channel_list(enum cds_pcl_type pcl,
 	 */
 	switch (pcl) {
 	case CDS_24G:
-		chan_index_24 = QDF_MIN(chan_index_24, weight_len);
 		qdf_mem_copy(pcl_channels, channel_list_24,
 			chan_index_24);
 		*len = chan_index_24;
-		for (i = 0; i < *len; i++)
+		for (i = 0; ((i < *len) && (i < weight_len)); i++)
 			pcl_weights[i] = WEIGHT_OF_GROUP1_PCL_CHANNELS;
 		status = QDF_STATUS_SUCCESS;
 		break;
 	case CDS_5G:
-		chan_index_5 = QDF_MIN(chan_index_5, weight_len);
 		qdf_mem_copy(pcl_channels, channel_list_5,
 			chan_index_5);
 		*len = chan_index_5;
-		for (i = 0; i < *len; i++)
+		for (i = 0; ((i < *len) && (i < weight_len)); i++)
 			pcl_weights[i] = WEIGHT_OF_GROUP1_PCL_CHANNELS;
 		status = QDF_STATUS_SUCCESS;
 		break;
@@ -4958,12 +4918,10 @@ static QDF_STATUS cds_get_channel_list(enum cds_pcl_type pcl,
 			CDS_PCL_GROUP_ID1_ID2);
 		qdf_mem_copy(pcl_channels, channel_list, num_channels);
 		*len = num_channels;
-		chan_index_24 = QDF_MIN((num_channels + chan_index_24),
-					weight_len) - num_channels;
 		qdf_mem_copy(&pcl_channels[num_channels],
 			channel_list_24, chan_index_24);
 		*len += chan_index_24;
-		for (j = 0; j < chan_index_24; i++, j++)
+		for (j = 0; ((j < chan_index_24) && (i < weight_len)); i++, j++)
 			pcl_weights[i] = WEIGHT_OF_GROUP2_PCL_CHANNELS;
 
 		status = QDF_STATUS_SUCCESS;
@@ -4977,22 +4935,19 @@ static QDF_STATUS cds_get_channel_list(enum cds_pcl_type pcl,
 		qdf_mem_copy(pcl_channels, channel_list,
 			num_channels);
 		*len = num_channels;
-		chan_index_5 = QDF_MIN((num_channels + chan_index_5),
-					weight_len) - num_channels;
 		qdf_mem_copy(&pcl_channels[num_channels],
 			channel_list_5, chan_index_5);
 		*len += chan_index_5;
-		for (j = 0; j < chan_index_5; i++, j++)
+		for (j = 0; ((j < chan_index_5) && (i < weight_len)); i++, j++)
 			pcl_weights[i] = WEIGHT_OF_GROUP2_PCL_CHANNELS;
 		status = QDF_STATUS_SUCCESS;
 		break;
 	case CDS_24G_SCC_CH:
 	case CDS_24G_MCC_CH:
-		chan_index_24 = QDF_MIN(chan_index_24, weight_len);
 		qdf_mem_copy(pcl_channels, channel_list_24,
 			chan_index_24);
 		*len = chan_index_24;
-		for (i = 0; i < chan_index_24; i++)
+		for (i = 0; ((i < chan_index_24) && (i < weight_len)); i++)
 			pcl_weights[i] = WEIGHT_OF_GROUP1_PCL_CHANNELS;
 		cds_get_connection_channels(
 			channel_list, &num_channels, CDS_PCL_ORDER_NONE,
@@ -5005,11 +4960,10 @@ static QDF_STATUS cds_get_channel_list(enum cds_pcl_type pcl,
 		break;
 	case CDS_5G_SCC_CH:
 	case CDS_5G_MCC_CH:
-		chan_index_5 = QDF_MIN(chan_index_5, weight_len);
 		qdf_mem_copy(pcl_channels, channel_list_5,
 			chan_index_5);
 		*len = chan_index_5;
-		for (i = 0; i < chan_index_5; i++)
+		for (i = 0; ((i < chan_index_5) && (i < weight_len)); i++)
 			pcl_weights[i] = WEIGHT_OF_GROUP1_PCL_CHANNELS;
 		cds_get_connection_channels(
 			channel_list, &num_channels, CDS_PCL_ORDER_NONE,
@@ -5046,12 +5000,10 @@ static QDF_STATUS cds_get_channel_list(enum cds_pcl_type pcl,
 			CDS_PCL_GROUP_ID1_ID2);
 		qdf_mem_copy(pcl_channels, channel_list, num_channels);
 		*len = num_channels;
-		chan_index_24 = QDF_MIN((num_channels + chan_index_24),
-					weight_len) - num_channels;
 		qdf_mem_copy(&pcl_channels[num_channels],
 			channel_list_24, chan_index_24);
 		*len += chan_index_24;
-		for (j = 0; j < chan_index_24; i++, j++)
+		for (j = 0; ((j < chan_index_24) && (i < weight_len)); i++, j++)
 			pcl_weights[i] = WEIGHT_OF_GROUP3_PCL_CHANNELS;
 		status = QDF_STATUS_SUCCESS;
 		break;
@@ -5062,12 +5014,10 @@ static QDF_STATUS cds_get_channel_list(enum cds_pcl_type pcl,
 			CDS_PCL_GROUP_ID1_ID2);
 		qdf_mem_copy(pcl_channels, channel_list, num_channels);
 		*len = num_channels;
-		chan_index_5 = QDF_MIN((num_channels + chan_index_5),
-					weight_len) - num_channels;
 		qdf_mem_copy(&pcl_channels[num_channels],
 			channel_list_5, chan_index_5);
 		*len += chan_index_5;
-		for (j = 0; j < chan_index_5; i++, j++)
+		for (j = 0; ((j < chan_index_5) && (i < weight_len)); i++, j++)
 			pcl_weights[i] = WEIGHT_OF_GROUP3_PCL_CHANNELS;
 		status = QDF_STATUS_SUCCESS;
 		break;
@@ -5078,12 +5028,10 @@ static QDF_STATUS cds_get_channel_list(enum cds_pcl_type pcl,
 			CDS_PCL_GROUP_ID1_ID2);
 		qdf_mem_copy(pcl_channels, channel_list, num_channels);
 		*len = num_channels;
-		chan_index_24 = QDF_MIN((num_channels + chan_index_24),
-					weight_len) - num_channels;
 		qdf_mem_copy(&pcl_channels[num_channels],
 			channel_list_24, chan_index_24);
 		*len += chan_index_24;
-		for (j = 0; j < chan_index_24; i++, j++)
+		for (j = 0; ((j < chan_index_24) && (i < weight_len)); i++, j++)
 			pcl_weights[i] = WEIGHT_OF_GROUP3_PCL_CHANNELS;
 		status = QDF_STATUS_SUCCESS;
 		break;
@@ -5094,12 +5042,10 @@ static QDF_STATUS cds_get_channel_list(enum cds_pcl_type pcl,
 			CDS_PCL_GROUP_ID1_ID2);
 		qdf_mem_copy(pcl_channels, channel_list, num_channels);
 		*len = num_channels;
-		chan_index_5 = QDF_MIN((num_channels + chan_index_5),
-					weight_len) - num_channels;
 		qdf_mem_copy(&pcl_channels[num_channels],
 			channel_list_5, chan_index_5);
 		*len += chan_index_5;
-		for (j = 0; j < chan_index_5; i++, j++)
+		for (j = 0; ((j < chan_index_5) && (i < weight_len)); i++, j++)
 			pcl_weights[i] = WEIGHT_OF_GROUP3_PCL_CHANNELS;
 		status = QDF_STATUS_SUCCESS;
 		break;
@@ -7871,8 +7817,8 @@ void cds_restart_sap(hdd_adapter_t *ap_adapter)
 		if (QDF_STATUS_SUCCESS == wlansap_stop_bss(sap_ctx)) {
 			qdf_status =
 				qdf_wait_single_event(&hostapd_state->
-					qdf_stop_bss_event,
-					SME_CMD_TIMEOUT_VALUE);
+						qdf_stop_bss_event,
+						BSS_WAIT_TIMEOUT);
 
 			if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 				cds_err("SAP Stop Failed");
@@ -7904,7 +7850,7 @@ void cds_restart_sap(hdd_adapter_t *ap_adapter)
 		cds_info("Waiting for SAP to start");
 		qdf_status =
 			qdf_wait_single_event(&hostapd_state->qdf_event,
-					SME_CMD_TIMEOUT_VALUE);
+					BSS_WAIT_TIMEOUT);
 		wlansap_reset_sap_config_add_ie(sap_config,
 				eUPDATE_IE_ALL);
 		if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {

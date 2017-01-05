@@ -132,52 +132,41 @@ void csr_neighbor_roam_send_lfr_metric_event(
 }
 #endif
 
-/**
- * csr_neighbor_roam_update_fast_roaming_enabled() - update roaming capability
- *
- * @mac_ctx: Global MAC context
- * @session_id: Session
- * @fast_roam_enabled: Is fast roaming enabled on this device?
- *                     This capability can be changed dynamically.
- *
- * Return: None
- */
-QDF_STATUS csr_neighbor_roam_update_fast_roaming_enabled(tpAniSirGlobal mac_ctx,
-						uint8_t session_id,
-						const bool fast_roam_enabled)
+QDF_STATUS
+csr_neighbor_roam_update_fast_roaming_enabled(tpAniSirGlobal pMac,
+					      uint8_t sessionId,
+					      const bool fastRoamEnabled)
 {
 	QDF_STATUS qdf_status = QDF_STATUS_SUCCESS;
-	tpCsrNeighborRoamControlInfo neighbor_roam_info =
-		&mac_ctx->roam.neighborRoamInfo[session_id];
-	tCsrRoamSession *session = CSR_GET_SESSION(mac_ctx, session_id);
+	tpCsrNeighborRoamControlInfo pNeighborRoamInfo =
+		&pMac->roam.neighborRoamInfo[sessionId];
 
-	switch (neighbor_roam_info->neighborRoamState) {
+	switch (pNeighborRoamInfo->neighborRoamState) {
 	case eCSR_NEIGHBOR_ROAM_STATE_CONNECTED:
-		if (fast_roam_enabled) {
-			csr_roam_offload_scan(mac_ctx, session_id,
+		if (true == fastRoamEnabled) {
+			csr_roam_offload_scan(pMac, sessionId,
 					      ROAM_SCAN_OFFLOAD_START,
 					      REASON_CONNECT);
 		} else {
-			csr_roam_offload_scan(mac_ctx, session_id,
+			csr_roam_offload_scan(pMac, sessionId,
 					      ROAM_SCAN_OFFLOAD_STOP,
 					      REASON_DISCONNECTED);
 		}
 	break;
 	case eCSR_NEIGHBOR_ROAM_STATE_INIT:
-		NEIGHBOR_ROAM_DEBUG(mac_ctx, LOG2,
-				    FL
-				    ("Currently in INIT state, Nothing to do"));
+		NEIGHBOR_ROAM_DEBUG(pMac, LOG2,
+				FL
+				("Currently in INIT state, Nothing to do"));
 		break;
 	default:
-		NEIGHBOR_ROAM_DEBUG(mac_ctx, LOGE,
-				    FL
-				    ("Unexpected state %s, returning failure"),
-				    mac_trace_get_neighbour_roam_state
-				    (neighbor_roam_info->neighborRoamState));
+		NEIGHBOR_ROAM_DEBUG(pMac, LOGE,
+				FL
+				("Unexpected state %s, returning failure"),
+				mac_trace_get_neighbour_roam_state
+				(pNeighborRoamInfo->neighborRoamState));
 		qdf_status = QDF_STATUS_E_FAILURE;
 		break;
 	}
-	session->fast_roam_enabled = fast_roam_enabled;
 	return qdf_status;
 }
 QDF_STATUS csr_neighbor_roam_update_config(tpAniSirGlobal mac_ctx,
