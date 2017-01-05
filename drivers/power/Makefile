@@ -67,6 +67,7 @@ obj-$(CONFIG_SMB1360_CHARGER_FG) += smb1360-charger-fg.o
 obj-$(CONFIG_SMB358_CHARGER)	+= smb358-charger.o
 obj-$(CONFIG_SMB23X_CHARGER)	+= smb23x-charger.o
 obj-$(CONFIG_BATTERY_BQ28400)	+= bq28400_battery.o
+obj-$(CONFIG_BATTERY_ID)	+= batteryid.o
 obj-$(CONFIG_MP2661_CHARGER)	+= mp2661-charger.o
 obj-$(CONFIG_IDTP9220_RECEIVER)	+= idtp9220-receiver.o
 obj-$(CONFIG_MAX17055_BMS)       += max17055_battery.o

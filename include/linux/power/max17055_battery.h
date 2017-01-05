@@ -95,6 +95,7 @@ enum max17055_register {
 	MAX17055_dPacc		= 0x46,
 
 	MAX17055_VFSOC0		= 0x48,
+	MAX17055_ConvgCfg	= 0x49,
 
 	MAX17055_QH0		= 0x4C,
 	MAX17055_QH			= 0x4D,
@@ -176,13 +177,14 @@ struct max17055_config_data {
 	u16	vempty;				/* 0x3A */
 	u16 model_cfg; 			/* 0xDB */
 
-	/* config */
+	/* Config */
 	u16	at_rate;	/* 0x04 */
 	u16	learn_cfg;	/* 0x28 */
 	u16	filter_cfg;	/* 0x29 */
 	u16	relax_cfg;	/* 0x2A */
 	u16	misc_cfg;	/* 0x2B */
 	u16 hib_cfg;	/* 0xBA */
+	u16 convg_cfg;  /* 0x49 */
 
 	/* Cell Data */
 	u16	rcomp0;		/* 0x38 */
@@ -191,6 +193,12 @@ struct max17055_config_data {
 	u16	qrtbl10;	/* 0x22 */
 	u16	qrtbl20;	/* 0x32 */
 	u16	qrtbl30;	/* 0x42 */
+
+	/* Temp Config */
+	u16 qrtbl00n10;
+	u16 qrtbl10n10;
+	u16 qrtbl00n20;
+	u16 qrtbl10n20;
 
 	/* Model Data */
 	u16	cell_char_tbl[MAX17055_CHARACTERIZATION_DATA_SIZE];

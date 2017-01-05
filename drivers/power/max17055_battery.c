@@ -36,7 +36,9 @@
 
 /* Status register bits */
 #define STATUS_POR_BIT             (1 << 1)
+#define STATUS_IMN_BIT             (1 << 2)
 #define STATUS_BST_BIT             (1 << 3)
+#define STATUS_IMX_BIT             (1 << 6)
 #define STATUS_SOCI_BIT            (1 << 7)
 #define STATUS_VMN_BIT             (1 << 8)
 #define STATUS_TMN_BIT             (1 << 9)
@@ -64,13 +66,20 @@
 #define MAX17055_VMAX_TOLERANCE    50			/* 50 mV */
 #define MAX17055_IC_VERSION_A      0x4000
 #define MAX17055_IC_VERSION_B      0x4010
-#define MAX17055_DRIVER_VERSION    0x101f
+#define MAX17055_DRIVER_VERSION    0x1020
 
 #if CONFIG_HUAWEI_SAWSHARK
 #define MAX17055_CAPACITY_CARRY              127
 #define MAX17055_CAPACITY_CARRY_THRESHOLD    1
 #define MAX17055_SOCHOLD                     0xD3
 #define SOCHOLD_ENHOLD_BIT                   (1 << 12)
+#define MAX17055_BATT_ID_GUANGYU             0x01
+extern int get_global_batt_id(void);
+static bool g_max17055_initialized = false;
+bool get_global_max17055_intialized_flag(void)
+{
+	return g_max17055_initialized;
+}
 #endif
 
 const static u16 dPaccVals[2][2] = {
@@ -221,6 +230,33 @@ health_error:
 	return ret;
 }
 
+static int max17055_update_temp_config(struct max17055_chip *chip)
+{
+	struct max17055_config_data *config = chip->pdata->config_data;
+	struct regmap *map = chip->regmap;
+	int ret = 0, temp;
+
+	ret = max17055_get_temperature(chip, &temp);
+	if (0 == ret){
+		if (temp > -50) {
+			ret |= regmap_update_bits(map, MAX17055_QRTbl00, U16_MAX, config->qrtbl00);
+			ret |= regmap_update_bits(map, MAX17055_QRTbl10, U16_MAX, config->qrtbl10);
+		}
+		else if ((temp > -150) &&
+			(config->qrtbl00n10 || config->qrtbl10n10)) {
+			ret |= regmap_update_bits(map, MAX17055_QRTbl00, U16_MAX, config->qrtbl00n10);
+			ret |= regmap_update_bits(map, MAX17055_QRTbl10, U16_MAX, config->qrtbl10n10);
+		}
+		else if ((temp <= -150) &&
+			(config->qrtbl00n20 || config->qrtbl10n20)) {
+			ret |= regmap_update_bits(map, MAX17055_QRTbl00, U16_MAX, config->qrtbl00n20);
+			ret |= regmap_update_bits(map, MAX17055_QRTbl10, U16_MAX, config->qrtbl10n20);
+		}
+	}
+
+	return ret;
+}
+
 #if CONFIG_HUAWEI_SAWSHARK
 int max17055_global_get_real_capacity(void)
 {
@@ -272,6 +308,8 @@ static int max17055_get_property(struct power_supply *psy,
 
 	if (!chip->init_complete)
 		return -EAGAIN;
+
+	max17055_update_temp_config(chip);
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PRESENT:
@@ -756,6 +794,8 @@ static void max17055_update_model_regs(struct max17055_chip *chip)
 	max17055_write_verify_reg(map, MAX17055_dPacc, dPaccVals[1][1]);
 	max17055_write_verify_reg(map, MAX17055_IChgTerm, config->ichgt_term);
 	max17055_write_verify_reg(map, MAX17055_VEmpty, config->vempty);
+	/* LearnCfg is optional */
+	max17055_override_por(map, MAX17055_LearnCfg, config->learn_cfg);
 
 	max17055_write_custom_regs(chip);
 
@@ -769,9 +809,6 @@ static void max17055_update_model_regs(struct max17055_chip *chip)
 
 	max17055_write_verify_reg(map, MAX17055_FullCapRep, config->design_cap);
 	max17055_write_verify_reg(map, MAX17055_FullCapNom, config->design_cap);
-
-	/* LearnCfg is optional */
-	max17055_override_por(map, MAX17055_LearnCfg, config->learn_cfg);
 }
 
 /*
@@ -803,6 +840,7 @@ static inline void max17055_override_por_values(struct max17055_chip *chip)
 	max17055_override_por(map, MAX17055_RelaxCfg, config->relax_cfg);
 	max17055_override_por(map, MAX17055_MiscCfg, config->misc_cfg);
 	max17055_override_por(map, MAX17055_HibCfg, config->hib_cfg);
+	max17055_override_por(map, MAX17055_ConvgCfg, config->convg_cfg);
 
 	max17055_override_por(map, MAX17055_FullSocThr, config->full_soc_thresh);
 	max17055_override_por(map, MAX17055_IAvgEmpty, config->iavg_empty);
@@ -1006,6 +1044,17 @@ max17055_get_pdata(struct device *dev)
 			(u16 *)pdata->config_data, sizeof(*(pdata->config_data))/sizeof(u16));
 	}
 
+	/* Over write the primary configuration */
+	if (MAX17055_BATT_ID_GUANGYU == get_global_batt_id()) {
+		pr_info("max17055 overwrite the primary configuration if batt is guangyu");
+		pdata->config_data->qrtbl00n10 	= 0x2380;
+		pdata->config_data->qrtbl10n10 	= 0x0000;
+		pdata->config_data->qrtbl00n20 	= 0x3b80;
+		pdata->config_data->qrtbl10n20 	= 0x0000;
+		pdata->config_data->convg_cfg 	= 0x2341;
+		pdata->config_data->filter_cfg 	= 0xce84;
+	}
+
 	return pdata;
 }
 #else
@@ -1023,7 +1072,7 @@ static const struct regmap_config max17055_regmap_config = {
 	.val_format_endian = REGMAP_ENDIAN_NATIVE,
 };
 
-#define VALUE_MAX_LENGTH (20)
+#define VALUE_MAX_LENGTH (25)
 
 static ssize_t max17055_data_logging_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
@@ -1035,20 +1084,21 @@ static ssize_t max17055_data_logging_show(struct device *dev,
                         struct device_attribute *attr, char *buf)
 {
         struct max17055_chip *chip = dev_get_drvdata(dev);
-		struct timespec now;
+		struct tm tm;
 		u32 reg, data;
 		ssize_t total = 0, size;
 
 		/* Logging time */
-		now = current_kernel_time();;
-		size = snprintf(buf, VALUE_MAX_LENGTH, "%li ", now.tv_sec);
+		time_to_tm(get_seconds(), 0, &tm);
+		size = snprintf(buf, VALUE_MAX_LENGTH, "%02d/%02d/%04li-%02d:%02d:%02d ", tm.tm_mon+1, tm.tm_mday,
+			tm.tm_year+1900, tm.tm_hour, tm.tm_min, tm.tm_sec);
 		buf += size;
 		total += size;
 
 		/* Logging registers */
 		for (reg = MAX17055_Status; reg <= MAX17055_VFSOC; reg++){
 			regmap_read(chip->regmap, reg, &data);
-			size = snprintf(buf, VALUE_MAX_LENGTH, "%04x ", data);
+			size = snprintf(buf, VALUE_MAX_LENGTH, "%04xh ", data);
 
 			buf += size;
 			total += size;
@@ -1080,7 +1130,13 @@ static int max17055_probe(struct i2c_client *client,
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_WORD_DATA))
 		return -EIO;
-
+#if CONFIG_HUAWEI_SAWSHARK
+	ret = get_global_batt_id();
+	if (ret < 0)
+	{
+		return -EPROBE_DEFER;
+	}
+#endif
 	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
 		return -ENOMEM;
@@ -1185,6 +1241,7 @@ static int max17055_probe(struct i2c_client *client,
 
 #if CONFIG_HUAWEI_SAWSHARK
 	global_max17055 = chip;
+	g_max17055_initialized = true;
 #endif
 
 	ret = device_create_file(&client->dev, &max17055_data_logging_attr);
