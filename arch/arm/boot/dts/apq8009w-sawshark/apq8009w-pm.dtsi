@@ -83,7 +83,7 @@
 			qcom,batt-trickle-charging-ma = <6>;
 			qcom,batt-trickle-to-cc-theshold-mv = <3000>;
 
-			qcom,batt-uvlo-theshold-mv = <2800>;
+			qcom,batt-uvlo-theshold-mv = <2500>;
 			qcom,batt-auto-recharge-delta-mv = <150>;
 
 			qcom,batt-discharging-ma = <2400>;
