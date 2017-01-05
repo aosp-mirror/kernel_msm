@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -2814,9 +2814,12 @@ __hif_pci_resume(struct pci_dev *pdev, bool runtime_pm)
 
         if (retry > MAX_REG_READ_RETRIES) {
             pr_err("%s: PCIe link is possible down!\n", __func__);
-            print_config_soc_reg(sc);
-            VOS_ASSERT(0);
-            break;
+            if (vos_is_logp_in_progress(VOS_MODULE_ID_HIF, NULL))
+                return 0;
+            sc->recovery = true;
+            vos_set_logp_in_progress(VOS_MODULE_ID_VOSS, TRUE);
+            vos_wlan_pci_link_down();
+            goto out;
         }
 
         A_MDELAY(1);
