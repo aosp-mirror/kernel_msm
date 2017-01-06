@@ -41,7 +41,6 @@
 #include <linux/interrupt.h>
 #ifdef HELIUMPLUS
 #include <soc/qcom/irq-helper.h>
-#include <linux/sched/core_ctl.h>
 #include <pld_snoc.h>
 #endif
 #include <linux/pm.h>
@@ -1516,8 +1515,6 @@ int hif_napi_cpu_blacklist(uint8_t flags, enum qca_blacklist_op op)
 		rc = irq_blacklist_on();
 		NAPI_DEBUG("blacklist_on() returns %d", rc);
 
-		rc = core_ctl_set_boost(true);
-		NAPI_DEBUG("boost_on() returns %d - refcnt=%d", rc, ref_count);
 		break;
 
 	case BLACKLIST_OFF:
@@ -1525,9 +1522,6 @@ int hif_napi_cpu_blacklist(uint8_t flags, enum qca_blacklist_op op)
 			rc = irq_blacklist_off();
 			NAPI_DEBUG("blacklist_off() returns %d", rc);
 
-			rc = core_ctl_set_boost(false);
-			NAPI_DEBUG("boost_off() returns %d - refcnt=%d",
-				   rc, ref_count);
 			ref_count--;
 		}
 		break;

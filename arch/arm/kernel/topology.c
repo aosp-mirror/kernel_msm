@@ -466,7 +466,8 @@ topology_populated:
 
 static inline int cpu_corepower_flags(void)
 {
-	return SD_SHARE_PKG_RESOURCES  | SD_SHARE_POWERDOMAIN;
+	return SD_SHARE_PKG_RESOURCES  | SD_SHARE_POWERDOMAIN | \
+	       SD_SHARE_CAP_STATES;
 }
 
 static struct sched_domain_topology_level arm_topology[] = {
@@ -519,9 +520,6 @@ void __init init_cpu_topology(void)
 		reset_cpu_topology();
 		reset_cpu_capacity();
 	}
-
-	for_each_possible_cpu(cpu)
-		update_siblings_masks(cpu);
 
 	/* Set scheduler topology descriptor */
 	set_sched_topology(arm_topology);
