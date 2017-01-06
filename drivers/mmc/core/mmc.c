@@ -2727,11 +2727,11 @@ int mmc_attach_mmc(struct mmc_host *host)
 	/* Set correct bus mode for MMC before attempting attach */
 	if (!mmc_host_is_spi(host))
 		mmc_set_bus_mode(host, MMC_BUSMODE_OPENDRAIN);
-
+#if 0	//Remove send CMD1 to skip attach eMMC
 	err = mmc_send_op_cond(host, 0, &ocr);
 	if (err)
 		return err;
-
+#endif
 	mmc_attach_bus(host, &mmc_ops);
 	if (host->ocr_avail_mmc)
 		host->ocr_avail = host->ocr_avail_mmc;
@@ -2744,9 +2744,11 @@ int mmc_attach_mmc(struct mmc_host *host)
 		if (err)
 			goto err;
 	}
-
+#if 0	// skip to switch SDIO voltage
 	rocr = mmc_select_voltage(host, ocr);
-
+#else
+	rocr = 0x80; // set eMMC voltage
+#endif
 	/*
 	 * Can we support the voltage of the card?
 	 */
