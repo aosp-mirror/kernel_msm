@@ -894,6 +894,7 @@ static int mmc_blk_ioctl_rpmb_cmd(struct block_device *bdev,
 
 			/* data.flags must already be set before doing this. */
 			mmc_set_data_timeout(&data, card);
+			udelay(1000);
 
 			/*
 			 * Allow overriding the timeout_ns for empirical tuning.

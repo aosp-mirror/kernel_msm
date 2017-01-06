@@ -875,7 +875,6 @@ static u8 sdhci_calc_timeout(struct sdhci_host *host, struct mmc_command *cmd)
 	 */
 	if (host->quirks & SDHCI_QUIRK_BROKEN_TIMEOUT_VAL){
 		pr_debug("SDHCI_QUIRK_BROKEN_TIMEOUT_VAL return 0xF\n");
-		udelay(1000);
 		return 0xF;
 	}
 
