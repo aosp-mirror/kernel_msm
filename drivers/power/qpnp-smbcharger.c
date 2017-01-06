@@ -1498,11 +1498,13 @@ int pmi8996_charger_batfet_switch(bool enable)
 				rc);
 			return rc;
 		}
-		rc = pmi8996_charger_reset_batfet(chip);
-		if (rc < 0) {
-			dev_err(chip->dev,
-				"unable to reset batfet rc=%d\n", rc);
-			return rc;
+		if (chgr_rt_reg & BAT_TCC_REACHED_BIT) {
+			rc = pmi8996_charger_reset_batfet(chip);
+			if (rc < 0) {
+				dev_err(chip->dev,
+					"unable to reset batfet rc=%d\n", rc);
+				return rc;
+			}
 		}
 	}
 
