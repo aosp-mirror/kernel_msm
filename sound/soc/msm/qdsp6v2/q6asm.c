@@ -6808,7 +6808,7 @@ int q6asm_send_cal(struct audio_client *ac)
 		goto free;
 	}
 	rc = wait_event_timeout(ac->cmd_wait,
-				(atomic_read(&ac->cmd_state) <= 0), 5 * HZ);
+				(atomic_read(&ac->cmd_state) >= 0), 5 * HZ);
 	if (!rc) {
 		pr_err("%s: timeout, audio audstrm cal send\n", __func__);
 		rc = -ETIMEDOUT;
