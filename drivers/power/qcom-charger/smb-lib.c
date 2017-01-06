@@ -778,19 +778,21 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 					 USBIN_MODE_CHG_BIT);
 		break;
 	case POWER_SUPPLY_TYPE_USB:
-		if (usb_icl_ua < USBIN_25MA)
+		if (usb_icl_ua < USBIN_25MA) {
 			icl_options = 0;
-		else if (usb_icl_ua == USBIN_100MA)
+		} else if (usb_icl_ua == USBIN_100MA) {
 			icl_options = 0;
-		else if (usb_icl_ua == USBIN_150MA)
+		} else if (usb_icl_ua == USBIN_150MA) {
 			icl_options = CFG_USB3P0_SEL_BIT;
-		else if (usb_icl_ua == USBIN_500MA)
+		} else if (usb_icl_ua == USBIN_500MA) {
 			icl_options = USB51_MODE_BIT;
-		else if (usb_icl_ua == USBIN_900MA)
+		} else if (usb_icl_ua == USBIN_900MA) {
 			icl_options = CFG_USB3P0_SEL_BIT | USB51_MODE_BIT;
-		else
+		} else {
+			icl_options = 0;
 			smblib_err(chg, "ICL %duA isn't supported for SDP\n",
 				   icl_ua);
+                }
 		chg->current_max_ua = usb_icl_ua >= 0 ? usb_icl_ua : 0;
 		rc = smblib_masked_write(chg, USBIN_ICL_OPTIONS_REG,
 					 CFG_USB3P0_SEL_BIT | USB51_MODE_BIT |

@@ -653,6 +653,8 @@ static int bcm15602_regulator_get_voltage(struct regulator_dev *rdev)
 			vbase = 1695000;
 			vstep = 15000;
 			break;
+		default: // make compiler happy
+			return -EINVAL;
 		}
 		bcm15602_read_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL,
 				   &reg_data);

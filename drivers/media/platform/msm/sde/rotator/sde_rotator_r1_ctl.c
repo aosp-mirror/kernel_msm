@@ -133,7 +133,7 @@ struct sde_mdp_mixer *sde_mdp_mixer_get(struct sde_mdp_ctl *ctl, int mux)
 
 int sde_mdp_get_pipe_flush_bits(struct sde_mdp_pipe *pipe)
 {
-	u32 flush_bits;
+	u32 flush_bits = 0;
 
 	if (pipe->type == SDE_MDP_PIPE_TYPE_DMA)
 		flush_bits |= BIT(pipe->num) << 5;
@@ -167,7 +167,7 @@ int sde_mdp_mixer_pipe_update(struct sde_mdp_pipe *pipe,
 
 int sde_mdp_display_wait4comp(struct sde_mdp_ctl *ctl)
 {
-	int ret;
+	int ret = 0;
 
 	if (!ctl) {
 		SDEROT_ERR("invalid ctl\n");

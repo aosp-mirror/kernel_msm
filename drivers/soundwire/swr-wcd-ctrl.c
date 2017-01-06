@@ -521,6 +521,8 @@ static int swrm_read(struct swr_master *master, u8 dev_num, u16 reg_addr,
 					   len);
 	else
 		val = swrm->read(swrm->handle, reg_addr);
+	if (ret)
+		return ret;
 
 	*reg_val = (u8)val;
 	pm_runtime_mark_last_busy(&swrm->pdev->dev);

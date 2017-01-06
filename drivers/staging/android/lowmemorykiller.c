@@ -151,12 +151,13 @@ static int lmk_vmpressure_notifier(struct notifier_block *nb,
 	if (!enable_adaptive_lmk)
 		return 0;
 
-	if (pressure >= 95) {
-		other_file = global_page_state(NR_FILE_PAGES) + zcache_pages() -
+	other_file = global_page_state(NR_FILE_PAGES) + zcache_pages() -
 			global_page_state(NR_SHMEM) -
 			total_swapcache_pages();
-		other_free = global_page_state(NR_FREE_PAGES);
 
+        other_free = global_page_state(NR_FREE_PAGES);
+
+	if (pressure >= 95) {
 		atomic_set(&shift_adj, 1);
 		trace_almk_vmpressure(pressure, other_free, other_file);
 	} else if (pressure >= 90) {
@@ -164,12 +165,6 @@ static int lmk_vmpressure_notifier(struct notifier_block *nb,
 			array_size = lowmem_adj_size;
 		if (lowmem_minfree_size < array_size)
 			array_size = lowmem_minfree_size;
-
-		other_file = global_page_state(NR_FILE_PAGES) + zcache_pages() -
-			global_page_state(NR_SHMEM) -
-			total_swapcache_pages();
-
-		other_free = global_page_state(NR_FREE_PAGES);
 
 		if ((other_free < lowmem_minfree[array_size - 1]) &&
 		    (other_file < vmpressure_file_min)) {
@@ -664,4 +659,3 @@ module_param_array_named(minfree, lowmem_minfree, uint, &lowmem_minfree_size,
 			 S_IRUGO | S_IWUSR);
 module_param_named(debug_level, lowmem_debug_level, uint, S_IRUGO | S_IWUSR);
 module_param_named(lmk_fast_run, lmk_fast_run, int, S_IRUGO | S_IWUSR);
-

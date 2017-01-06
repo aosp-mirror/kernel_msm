@@ -702,6 +702,7 @@ static long bt_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			if (!ret)
 				pwr_state = pwr_cntrl;
 		} else {
+			ret = 0;
 			BT_PWR_ERR("BT chip state is already :%d no change d\n"
 				, pwr_state);
 		}

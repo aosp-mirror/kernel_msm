@@ -1108,10 +1108,9 @@ static int msm_isp_start_stats_stream(struct vfe_device *vfe_dev_ioctl,
 			comp_stats_mask[stream_info->composite_flag-1] |=
 				1 << idx;
 
-		ISP_DBG("%s: stats_mask %x %x active streams %d\n",
+		ISP_DBG("%s: stats_mask %x %x\n",
 			__func__, comp_stats_mask[0],
-			comp_stats_mask[1],
-			stats_data->num_active_stream);
+			comp_stats_mask[1]);
 		streams[num_stream++] = stream_info;
 	}
 

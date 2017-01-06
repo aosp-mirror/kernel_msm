@@ -5011,6 +5011,8 @@ static int tasha_codec_enable_spline_src(struct snd_soc_codec *codec,
 		rx_path_ctl_reg = WCD9335_CDC_RX6_RX_PATH_CTL;
 		spl_src = SPLINE_SRC3;
 		break;
+	default:
+		return -EINVAL;
 	};
 
 	src_users = &tasha->spl_src_users[spl_src];

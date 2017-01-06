@@ -1777,7 +1777,7 @@ dealloc_chan_fail:
 int ipa3_xdci_suspend(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 	bool should_force_clear, u32 qmi_req_id, bool is_dpl)
 {
-	struct ipa3_ep_context *ul_ep, *dl_ep;
+	struct ipa3_ep_context *ul_ep = NULL, *dl_ep;
 	int result = -EFAULT;
 	u32 source_pipe_bitmask = 0;
 	bool dl_data_pending = true;
@@ -1809,7 +1809,7 @@ int ipa3_xdci_suspend(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 	if (result)
 		goto disable_clk_and_exit;
 
-	if (!is_dpl) {
+	if (ul_ep) {
 		result = ipa3_get_gsi_chan_info(&ul_gsi_chan_info,
 			ul_ep->gsi_chan_hdl);
 		if (result)
@@ -1827,7 +1827,7 @@ int ipa3_xdci_suspend(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 			break;
 		}
 		dl_data_pending = false;
-		if (!is_dpl) {
+		if (ul_ep) {
 			result = ipa3_is_xdci_channel_empty(ul_ep, &is_empty);
 			if (result)
 				goto disable_clk_and_exit;
@@ -1871,7 +1871,7 @@ int ipa3_xdci_suspend(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 	}
 
 	/* STOP UL channel */
-	if (!is_dpl) {
+	if (ul_ep) {
 		source_pipe_bitmask = 1 << ipa3_get_ep_mapping(ul_ep->client);
 		result = ipa3_stop_ul_chan_with_data_drain(qmi_req_id,
 			source_pipe_bitmask, should_force_clear, ul_clnt_hdl);

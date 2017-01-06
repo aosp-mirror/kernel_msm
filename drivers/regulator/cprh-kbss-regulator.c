@@ -1311,7 +1311,7 @@ static int cprh_kbss_init_regulator(struct cpr3_regulator *vreg)
 static int cprh_kbss_init_aging(struct cpr3_controller *ctrl)
 {
 	struct cprh_msm8998_kbss_fuses *fuse = NULL;
-	struct cpr3_regulator *vreg;
+	struct cpr3_regulator *vreg = NULL;
 	u32 aging_ro_scale;
 	int i, j, rc;
 
