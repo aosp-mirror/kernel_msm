@@ -66,7 +66,7 @@
 #define MAX17055_VMAX_TOLERANCE    50			/* 50 mV */
 #define MAX17055_IC_VERSION_A      0x4000
 #define MAX17055_IC_VERSION_B      0x4010
-#define MAX17055_DRIVER_VERSION    0x1020
+#define MAX17055_DRIVER_VERSION    0x1021
 
 #if CONFIG_HUAWEI_SAWSHARK
 #define MAX17055_CAPACITY_CARRY              127
@@ -891,6 +891,16 @@ static int max17055_verify_model_lock(struct max17055_chip *chip)
 	return ret;
 }
 
+static void max17055_write_ec_regs(struct max17055_chip *chip)
+{
+	struct max17055_config_data *config = chip->pdata->config_data;
+	struct regmap *map = chip->regmap;
+
+	/* In the INI file QTable20 and QTable30 are optional */
+	max17055_override_por(map, MAX17055_QRTbl20, config->qrtbl20);
+	max17055_override_por(map, MAX17055_QRTbl30, config->qrtbl30);
+}
+
 static void  max17055_write_custom_regs(struct max17055_chip *chip)
 {
 	struct max17055_config_data *config = chip->pdata->config_data;
@@ -900,10 +910,6 @@ static void  max17055_write_custom_regs(struct max17055_chip *chip)
 	max17055_write_verify_reg(map, MAX17055_TempCo,	config->tcompc0);
 	max17055_write_verify_reg(map, MAX17055_QRTbl00, config->qrtbl00);
 	max17055_write_verify_reg(map, MAX17055_QRTbl10, config->qrtbl10);
-
-	/* In the INI file QTable20 and QTable30 are optional */
-	max17055_override_por(map, MAX17055_QRTbl20, config->qrtbl20);
-	max17055_override_por(map, MAX17055_QRTbl30, config->qrtbl30);
 }
 
 static void max17055_update_model_regs(struct max17055_chip *chip)
@@ -917,8 +923,6 @@ static void max17055_update_model_regs(struct max17055_chip *chip)
 	max17055_write_verify_reg(map, MAX17055_dPacc, dPaccVals[1][1]);
 	max17055_write_verify_reg(map, MAX17055_IChgTerm, config->ichgt_term);
 	max17055_write_verify_reg(map, MAX17055_VEmpty, config->vempty);
-	/* LearnCfg is optional */
-	max17055_override_por(map, MAX17055_LearnCfg, config->learn_cfg);
 
 	max17055_write_custom_regs(chip);
 
@@ -932,6 +936,10 @@ static void max17055_update_model_regs(struct max17055_chip *chip)
 
 	max17055_write_verify_reg(map, MAX17055_FullCapRep, config->design_cap);
 	max17055_write_verify_reg(map, MAX17055_FullCapNom, config->design_cap);
+
+	/* LearnCfg is optional */
+	if (config->learn_cfg)
+		max17055_write_verify_reg(map, MAX17055_LearnCfg, config->learn_cfg);
 }
 
 /*
@@ -990,15 +998,19 @@ static void max17055_config_simple(struct max17055_chip *chip, bool with_ini)
 	max17055_write_verify_reg(map, MAX17055_VEmpty, config->vempty);
 
 	/* LearnCfg is optional */
-	max17055_override_por(map, MAX17055_LearnCfg, config->learn_cfg);
+	if (config->learn_cfg)
+		max17055_write_verify_reg(map, MAX17055_LearnCfg, config->learn_cfg);
+
 	max17055_write_verify_reg(map, MAX17055_dPacc, dPaccVals[with_ini][bat_4v275]);
 	regmap_write(map, MAX17055_ModelCfg, config->model_cfg);
 
 	/*waiting for model loading to be complete*/
 	max17055_wait_on_bits(map, MAX17055_ModelCfg, 0x8000);
 
-	if (with_ini)
+	if (with_ini) {
 		max17055_write_custom_regs(chip);
+		max17055_write_ec_regs(chip);
+	}
 }
 
 static int max17055_init_chip(struct max17055_chip *chip)
@@ -1046,6 +1058,7 @@ static int max17055_init_chip(struct max17055_chip *chip)
 		regmap_update_bits(map, MAX17055_Config2, CONFIG2_LDMDL_BIT, CONFIG2_LDMDL_BIT);
 
 		max17055_wait_on_bits(map, MAX17055_Config2, CONFIG2_LDMDL_BIT);
+		max17055_write_ec_regs(chip);
 
 		break;
 
