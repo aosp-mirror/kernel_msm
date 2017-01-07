@@ -5562,8 +5562,6 @@ static inline int find_best_target(struct task_struct *p, bool boosted, bool pre
 
 		for_each_cpu_and(i, tsk_cpus_allowed(p), sched_group_cpus(sg)) {
 			unsigned long cur_capacity;
-			struct rq *rq;
-			int idle_idx;
 
 			if (!cpu_online(i))
 				continue;
@@ -5600,8 +5598,6 @@ static inline int find_best_target(struct task_struct *p, bool boosted, bool pre
 			}
 
 			cur_capacity = capacity_curr_of(i);
-			rq = cpu_rq(i);
-			idle_idx = idle_get_state_idx(rq);
 
 			if (new_util < cur_capacity) {
 				if (cpu_rq(i)->nr_running) {
@@ -5615,6 +5611,8 @@ static inline int find_best_target(struct task_struct *p, bool boosted, bool pre
 						target_cpu = i;
 					}
 				} else if (!prefer_idle) {
+					int idle_idx = idle_get_state_idx(cpu_rq(i));
+
 					if (best_idle_cpu < 0 ||
 						(sysctl_sched_cstate_aware &&
 							best_idle_cstate > idle_idx)) {
