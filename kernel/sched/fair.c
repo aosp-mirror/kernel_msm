@@ -5534,7 +5534,7 @@ static int start_cpu(bool boosted)
 static inline int find_best_target(struct task_struct *p, bool boosted, bool prefer_idle)
 {
 	int target_cpu = -1;
-	int target_util = 0;
+	unsigned long target_util = prefer_idle ? ULONG_MAX : 0;
 	unsigned long backup_capacity = ULONG_MAX;
 	int best_idle_cpu = -1;
 	int best_idle_cstate = INT_MAX;
@@ -5605,24 +5605,14 @@ static inline int find_best_target(struct task_struct *p, bool boosted, bool pre
 
 			if (new_util < cur_capacity) {
 				if (cpu_rq(i)->nr_running) {
-					if (!prefer_idle) {
-						/* Find a target cpu with highest
-						 * utilization.
-						 */
-						if (target_util == 0 ||
-							target_util < new_util) {
-							target_cpu = i;
-							target_util = new_util;
-						}
-					} else {
-						/* Find a target cpu with lowest
-						 * utilization.
-						 */
-						if (target_util == 0 ||
-							target_util > new_util) {
-							target_cpu = i;
-							target_util = new_util;
-						}
+					/*
+					 * Find a target cpu with the lowest/highest
+					 * utilization if prefer_idle/!prefer_idle.
+					 */
+					if ((prefer_idle && target_util > new_util) ||
+					    (!prefer_idle && target_util < new_util)) {
+						target_util = new_util;
+						target_cpu = i;
 					}
 				} else if (!prefer_idle) {
 					if (best_idle_cpu < 0 ||
