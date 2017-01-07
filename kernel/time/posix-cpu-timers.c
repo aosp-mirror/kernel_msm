@@ -1202,11 +1202,12 @@ void set_process_cpu_timer(struct task_struct *tsk, unsigned int clock_idx,
 			   cputime_t *newval, cputime_t *oldval)
 {
 	unsigned long long now;
+        int ret;
 
 	WARN_ON_ONCE(clock_idx == CPUCLOCK_SCHED);
-	cpu_timer_sample_group(clock_idx, tsk, &now);
+	ret = cpu_timer_sample_group(clock_idx, tsk, &now);
 
-	if (oldval) {
+	if (!ret && oldval) {
 		/*
 		 * We are setting itimer. The *oldval is absolute and we update
 		 * it to be relative, *newval argument is relative and we update

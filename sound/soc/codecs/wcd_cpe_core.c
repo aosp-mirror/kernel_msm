@@ -3588,6 +3588,7 @@ static int wcd_cpe_lsm_lab_control(
 	struct cpe_param_data *param_d = &lab_enable->param;
 	struct cpe_lsm_ids ids;
 
+	memset(&cpe_lab_enable, 0, sizeof (cpe_lab_enable));
 	pr_debug("%s: enter payload_size = %d Enable %d\n",
 		 __func__, pld_size, enable);
 

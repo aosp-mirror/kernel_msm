@@ -1133,7 +1133,7 @@ static long ffs_epfile_ioctl(struct file *file, unsigned code,
 			     unsigned long value)
 {
 	struct ffs_epfile *epfile = file->private_data;
-	int ret;
+	int ret = 0;
 
 	ENTER();
 
