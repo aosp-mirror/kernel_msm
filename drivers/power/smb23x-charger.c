@@ -1830,8 +1830,11 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 		chip->batt_full = false;
 		chip->batt_warm_full = false;
 		chip->batt_real_full = false;
+		wake_unlock(&chip->charger_valid_lock);
+	} else if (usb_present && !chip->usb_present) {
+		pr_info("Charger insert!\n");
+		wake_lock(&chip->charger_valid_lock);
 	}
-
 	chip->usb_present = usb_present;
 	reconfig_upon_unplug(chip);
 	power_supply_set_present(chip->usb_psy, usb_present);

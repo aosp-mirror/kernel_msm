@@ -442,6 +442,7 @@
 		qcom,soft-temp-vfloat-comp-mv = <200>;
 		qcom,soft-temp-current-comp-ma = <150>;
 		qcom,chg-inhibit-disabled;
+		qcom,apsd-disabled;
 		qcom,thermal-mitigation = <1000 500 300 100>;
 		qcom,smb23x-vadc = <&pm8916_vadc>;
 	};
