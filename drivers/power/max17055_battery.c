@@ -37,9 +37,9 @@
 
 /* Status register bits */
 #define STATUS_POR_BIT			(1 << 1)
-#define STATUS_IMIN_BIT			(1 << 2)
+#define STATUS_IMN_BIT			(1 << 2)
 #define STATUS_BST_BIT			(1 << 3)
-#define STATUS_IMAX_BIT			(1 << 6)
+#define STATUS_IMX_BIT			(1 << 6)
 #define STATUS_SOCI_BIT			(1 << 7)
 #define STATUS_VMN_BIT			(1 << 8)
 #define STATUS_TMN_BIT			(1 << 9)
@@ -69,7 +69,8 @@
 #define MAX17055_SOC_ROUND_THD		0x5000		/* 80% */
 #define MAX17055_IC_VERSION_A		0x4000
 #define MAX17055_IC_VERSION_B		0x4010
-#define MAX17055_DRIVER_VERSION		0x1019
+#define MAX17055_DRIVER_VERSION		0x1058
+#define MAX17055_BATT_ID_ATL		(0x01)
 
 struct max17055_chip {
 	struct i2c_client *client;
@@ -354,6 +355,31 @@ health_error:
 	return ret;
 }
 
+static int max17055_update_temp_config(struct max17055_chip *chip)
+{
+	struct max17055_config_data *config = chip->pdata->config_data;
+	struct regmap *map = chip->regmap;
+	int ret = 0, temp;
+
+	ret = max17055_get_temperature(chip, &temp);
+	if (ret == 0) {
+		if (temp > -50) {
+			ret |= regmap_update_bits(map, MAX17055_QRTbl00, U16_MAX, config->qrtbl00);
+			ret |= regmap_update_bits(map, MAX17055_QRTbl10, U16_MAX, config->qrtbl10);
+		} else if ((temp > -150) &&
+			(config->qrtbl00n10 || config->qrtbl10n10)) {
+			ret |= regmap_update_bits(map, MAX17055_QRTbl00, U16_MAX, config->qrtbl00n10);
+			ret |= regmap_update_bits(map, MAX17055_QRTbl10, U16_MAX, config->qrtbl10n10);
+		} else if ((temp <= -150) &&
+			(config->qrtbl00n20 || config->qrtbl10n20)) {
+			ret |= regmap_update_bits(map, MAX17055_QRTbl00, U16_MAX, config->qrtbl00n20);
+			ret |= regmap_update_bits(map, MAX17055_QRTbl10, U16_MAX, config->qrtbl10n20);
+		}
+	}
+
+	return ret;
+}
+
 static int max17055_get_property(struct power_supply *psy,
 				enum power_supply_property psp,
 				union power_supply_propval *val)
@@ -366,6 +392,8 @@ static int max17055_get_property(struct power_supply *psy,
 
 	if (!chip->init_complete)
 		return -EAGAIN;
+
+	max17055_update_temp_config(chip);
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PRESENT:
@@ -776,6 +804,16 @@ static int max17055_verify_model_lock(struct max17055_chip *chip)
 	return ret;
 }
 
+static void  max17055_write_ec_regs(struct max17055_chip *chip)
+{
+	struct max17055_config_data *config = chip->pdata->config_data;
+	struct regmap *map = chip->regmap;
+
+	/* In the INI file QTable20 and QTable30 are optional */
+	max17055_override_por(map, MAX17055_QRTbl20, config->qrtbl20);
+	max17055_override_por(map, MAX17055_QRTbl30, config->qrtbl30);
+}
+
 static void  max17055_write_custom_regs(struct max17055_chip *chip)
 {
 	struct max17055_config_data *config = chip->pdata->config_data;
@@ -785,10 +823,6 @@ static void  max17055_write_custom_regs(struct max17055_chip *chip)
 	max17055_write_verify_reg(map, MAX17055_TempCo,	config->tcompc0);
 	max17055_write_verify_reg(map, MAX17055_QRTbl00, config->qrtbl00);
 	max17055_write_verify_reg(map, MAX17055_QRTbl10, config->qrtbl10);
-
-	/* In the INI file QTable20 and QTable30 are optional */
-	max17055_override_por(map, MAX17055_QRTbl20, config->qrtbl20);
-	max17055_override_por(map, MAX17055_QRTbl30, config->qrtbl30);
 }
 
 static void max17055_update_model_regs(struct max17055_chip *chip)
@@ -816,7 +850,8 @@ static void max17055_update_model_regs(struct max17055_chip *chip)
 	max17055_write_verify_reg(map, MAX17055_FullCapNom, config->design_cap);
 
 	/* LearnCfg is optional */
-	max17055_override_por(map, MAX17055_LearnCfg, config->learn_cfg);
+	if (config->learn_cfg)
+		max17055_write_verify_reg(map, MAX17055_LearnCfg, config->learn_cfg);
 }
 
 /*
@@ -848,6 +883,7 @@ static inline void max17055_override_por_values(struct max17055_chip *chip)
 	max17055_override_por(map, MAX17055_RelaxCfg, config->relax_cfg);
 	max17055_override_por(map, MAX17055_MiscCfg, config->misc_cfg);
 	max17055_override_por(map, MAX17055_HibCfg, config->hib_cfg);
+	max17055_override_por(map, MAX17055_ConvgCfg, config->convg_cfg);
 
 	max17055_override_por(map, MAX17055_FullSocThr, config->full_soc_thresh);
 	max17055_override_por(map, MAX17055_IAvgEmpty, config->iavg_empty);
@@ -874,15 +910,19 @@ static void max17055_config_simple(struct max17055_chip *chip, bool with_ini)
 	max17055_write_verify_reg(map, MAX17055_VEmpty, config->vempty);
 
 	/* LearnCfg is optional */
-	max17055_override_por(map, MAX17055_LearnCfg, config->learn_cfg);
+	if (config->learn_cfg)
+		max17055_write_verify_reg(map, MAX17055_LearnCfg, config->learn_cfg);
+
 	max17055_write_verify_reg(map, MAX17055_dPacc, dPaccVals[with_ini][bat_4v275]);
 	regmap_write(map, MAX17055_ModelCfg, config->model_cfg);
 
 	/*waiting for model loading to be complete*/
 	max17055_wait_on_bits(map, MAX17055_ModelCfg, 0x8000);
 
-	if (with_ini)
+	if (with_ini) {
 		max17055_write_custom_regs(chip);
+		max17055_write_ec_regs(chip);
+	}
 }
 
 static int max17055_init_chip(struct max17055_chip *chip)
@@ -930,6 +970,7 @@ static int max17055_init_chip(struct max17055_chip *chip)
 		regmap_update_bits(map, MAX17055_Config2, CONFIG2_LDMDL_BIT, CONFIG2_LDMDL_BIT);
 
 		max17055_wait_on_bits(map, MAX17055_Config2, CONFIG2_LDMDL_BIT);
+		max17055_write_ec_regs(chip);
 
 		break;
 
@@ -970,12 +1011,12 @@ static irqreturn_t max17055_thread_handler(int id, void *dev)
 		if (val & STATUS_BI_BIT)
 			dev_info(&chip->client->dev, "Battery inserted\n");
 
-		if (val & STATUS_IMIN_BIT) {
+		if (val & STATUS_IMN_BIT) {
 			min_current_alert_num++;
 			dev_info(&chip->client->dev, "current below min set,times:%d\n", min_current_alert_num);
 		}
 
-		if (val & STATUS_IMAX_BIT) {
+		if (val & STATUS_IMX_BIT) {
 			max_current_alert_num++;
 			dev_info(&chip->client->dev, "current above max set\n");
 		}
@@ -1014,6 +1055,11 @@ static void max17055_init_worker(struct work_struct *work)
 	}
 
 	chip->init_complete = 1;
+}
+
+static int max17055_get_battid(void)
+{
+	return 0;
 }
 
 #ifdef CONFIG_OF
@@ -1063,6 +1109,16 @@ max17055_get_pdata(struct device *dev)
 			pr_info("%03d [%04x]\n", i, ((u16 *)pdata->config_data)[i]);*/
 	}
 
+	/* Over write the primary configuration */
+	if (max17055_get_battid() == MAX17055_BATT_ID_ATL) {
+		pdata->config_data->qrtbl00n10 = 0x2380;
+		pdata->config_data->qrtbl10n10 = 0x0000;
+		pdata->config_data->qrtbl00n20 = 0x3b80;
+		pdata->config_data->qrtbl10n20 = 0x0000;
+		pdata->config_data->convg_cfg = 0x2341;
+		pdata->config_data->filter_cfg = 0xce84;
+	}
+
 	return pdata;
 }
 #else
@@ -1097,8 +1153,8 @@ static ssize_t max17055_data_logging_show(struct device *dev, struct device_attr
 
 		/* Logging time */
 		time_to_tm(get_seconds(), 0, &tm);
-		size = snprintf(buf, VALUE_MAX_LENGTH, "%02d/%02d/%04li-%02d:%02d:%02d ", tm.tm_mon+1, tm.tm_mday,
-			tm.tm_year+1900, tm.tm_hour, tm.tm_min, tm.tm_sec);
+		size = snprintf(buf, VALUE_MAX_LENGTH, "%02d/%02d/%04li-%02d:%02d:%02d ",
+				tm.tm_mon+1, tm.tm_mday, tm.tm_year+1900, tm.tm_hour, tm.tm_min, tm.tm_sec);
 		buf += size;
 		total += size;
 
