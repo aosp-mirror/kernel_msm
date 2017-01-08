@@ -95,6 +95,10 @@
 	};
 };
 
+&apc_vreg_corner {
+	qcom,cpr-voltage-floor = <1050000 1125000 1155000>;
+};
+
 &spi_0 {
 	cs-gpios = <&msm_gpio 10 0x00>;
 };

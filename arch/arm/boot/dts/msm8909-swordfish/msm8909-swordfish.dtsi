@@ -11,6 +11,9 @@
  */
 
 #include "../qcom/msm8909.dtsi"
+#include "../qcom/msm8909w-gpu.dtsi"
+#include "../qcom/msm8909-pm8916.dtsi"
+#include "../qcom/msm8909w.dtsi"
 #include "msm8909-swordfish-pinctrl.dtsi"
 #include "msm8909-swordfish-input.dtsi"
 #include "msm8909-swordfish-regulator.dtsi"
@@ -124,6 +127,10 @@
 	qcom,bam_dmux@4044000 {
 		qcom,no-cpu-affinity;
 	};
+};
+
+&apc_vreg_corner {
+	qcom,cpr-voltage-floor = <1050000 1125000 1155000>;
 };
 
 &spi_0 {
