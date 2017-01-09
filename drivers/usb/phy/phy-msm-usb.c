@@ -2727,7 +2727,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 				case USB_SDP_CHARGER:
 					pm_runtime_get_sync(otg->phy->dev);
 					msm_otg_start_peripheral(otg, 1);
-					msm_otg_notify_charger(motg, IUNIT);
+					msm_otg_notify_charger(motg, IUNIT); 
 					otg->phy->state =
 						OTG_STATE_B_PERIPHERAL;
 					mod_timer(&motg->chg_check_timer,
@@ -3423,7 +3423,7 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_ONLINE:
 		pr_info("[phy-msm-usb] set_property: online = %d \n", val->intval);
 		motg->online = val->intval;
-
+		
 		if (usb_online ^ val->intval) {
 			usb_online = val->intval;
 			data.intval = val->intval;

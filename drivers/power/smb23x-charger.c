@@ -103,6 +103,9 @@ struct smb23x_chip {
 	struct smb23x_wakeup_source	smb23x_ws;
 
 	/* extend */
+	int				cfg_cool_temp_comp_mv;
+	int				index_soft_temp_comp_mv;
+	int				last_temp;
 	int				cfg_en_active;
 	int				sys_voltage;
 	int				sys_vthreshold;
@@ -173,33 +176,33 @@ static int inhibit_mv_table[] = {
 	385,
 	512,
 };
-
+/* R1 = 9.1K, R2 = 0K, RT = 10K, Beta = 3435 */
 static int cold_bat_decidegc_table[] = {
-	100,
-	50,
+	110,
+	60,
 	0,
 	-50,
 };
 
 static int cool_bat_decidegc_table[] = {
-	150,
-	100,
-	50,
+	170,
+	110,
+	60,
 	0,
 };
 
 static int warm_bat_decidegc_table[] = {
-	400,
 	450,
 	500,
-	550,
+	560,
+	610,
 };
 
 static int hot_bat_decidegc_table[] = {
-	500,
-	550,
-	600,
-	650,
+	560,
+	610,
+	670,
+	730,
 };
 
 
@@ -387,13 +390,19 @@ enum {
 
 enum {
 	WRKRND_IRQ_POLLING = BIT(0),
-	WRKRND_USB_SUSPEND = BIT(1),
+};
+
+enum {
+	NORMAL = 0,
+	LOW,
+	HIGH,
 };
 
 #ifdef QTI_SMB231
 static irqreturn_t smb23x_stat_handler(int irq, void *dev_id);
 #else
 static int smb23x_get_prop_batt_capacity(struct smb23x_chip *chip);
+static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip);
 #endif
 
 #define MAX_RW_RETRIES		3
@@ -690,6 +699,11 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 	if (rc < 0)
 		chip->prechg_current_ma = -EINVAL;
 
+	rc = of_property_read_u32(node, "cei,cool-temp-vfloat-comp-mv",
+					&chip->cfg_cool_temp_comp_mv);
+	if (rc < 0)
+		chip->cfg_cool_temp_comp_mv = -EINVAL;
+
 	return 0;
 }
 
@@ -834,15 +848,11 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 	current_ma = min(therm_ma, usb_current);
 
 	if (current_ma <= CURRENT_SUSPEND) {
-		if (chip->workaround_flags & WRKRND_USB_SUSPEND) {
-			current_ma = CURRENT_100_MA;
-		} else {
-			/* suspend USB input */
-			rc = smb23x_suspend_usb(chip, CURRENT, true);
-			if (rc)
-				pr_err("Suspend USB failed, rc=%d\n", rc);
-			return rc;
-		}
+		/* suspend USB input */
+		rc = smb23x_suspend_usb(chip, CURRENT, true);
+		if (rc)
+			pr_err("Suspend USB failed, rc=%d\n", rc);
+		return rc;
 	}
 
 	if (current_ma <= CURRENT_100_MA) {
@@ -878,15 +888,12 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 		pr_err("Set ICL failed\n, rc=%d\n", rc);
 		return rc;
 	}
-	pr_debug("ICL set to = %d\n",
-			usbin_current_ma_table[tmp >> USBIN_ICL_OFFSET]);
+	pr_debug("ICL set to = %d\n", usbin_current_ma_table[tmp]);
 
-	if (!(chip->workaround_flags & WRKRND_USB_SUSPEND)) {
-		/* un-suspend USB input */
-		rc = smb23x_suspend_usb(chip, CURRENT, false);
-		if (rc < 0)
-			pr_err("Un-suspend USB failed, rc=%d\n", rc);
-	}
+	/* un-suspend USB input */
+	rc = smb23x_suspend_usb(chip, CURRENT, false);
+	if (rc < 0)
+		pr_err("Un-suspend USB failed, rc=%d\n", rc);
 
 	return rc;
 }
@@ -913,6 +920,61 @@ static int smb23x_charging_enable(struct smb23x_chip *chip, int enable)
 	}
 	mutex_unlock(&chip->chg_disable_lock);
 	return rc;
+}
+
+static int smb23x_vfloat_compensation(struct smb23x_chip *chip, int temp_comp_mv)
+{
+	int rc = 0, i = 0;
+	u8 tmp;
+
+	if (temp_comp_mv != -EINVAL) {
+		i = find_closest_in_ascendant_list(
+			temp_comp_mv, vfloat_compensation_mv_table,
+			ARRAY_SIZE(vfloat_compensation_mv_table));
+		tmp = i << VFLOAT_COMP_OFFSET;
+		rc = smb23x_masked_write(chip, CFG_REG_5, VFLOAT_COMP_MASK, tmp);
+	}
+
+	return rc;
+}
+
+//Change thermal setting by battery temperature
+static int check_charger_thermal_state(struct smb23x_chip *chip, int batt_temp)
+{
+	int rc;
+
+	if (chip->charger_plugin == 0)
+		return (-EINVAL);
+
+	if ((HIGH != chip->index_soft_temp_comp_mv) && (batt_temp > 350)) {
+		rc = smb23x_enable_volatile_writes(chip);
+		if (rc < 0) {
+			pr_err("Enable volatile writes failed, rc=%d\n", rc);
+			return rc;
+		}
+
+		rc = smb23x_vfloat_compensation(chip, chip->cfg_temp_comp_mv);
+		if (rc < 0) {
+			pr_err("Set VFLOAT_COMP failed, rc=%d\n", rc);
+			return rc;
+		}
+		chip->index_soft_temp_comp_mv = HIGH;
+	} else if ((LOW != chip->index_soft_temp_comp_mv) && (batt_temp < 250)) {
+		rc = smb23x_enable_volatile_writes(chip);
+		if (rc < 0) {
+			pr_err("Enable volatile writes failed, rc=%d\n", rc);
+			return rc;
+		}
+
+		rc = smb23x_vfloat_compensation(chip, chip->cfg_cool_temp_comp_mv);
+		if (rc < 0) {
+			pr_err("Set VFLOAT_COMP failed, rc=%d\n", rc);
+			return rc;
+		}
+		chip->index_soft_temp_comp_mv = LOW;
+	}
+
+	return 0;
 }
 #endif
 
@@ -1083,17 +1145,20 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 	}
 
 	/* float voltage and fastchg current compensation for soft JEITA */
-	if (chip->cfg_temp_comp_mv != -EINVAL) {
-		i = find_closest_in_ascendant_list(
-			chip->cfg_temp_comp_mv, vfloat_compensation_mv_table,
-			ARRAY_SIZE(vfloat_compensation_mv_table));
-		tmp = i << VFLOAT_COMP_OFFSET;
-		rc = smb23x_masked_write(chip, CFG_REG_5,
-				VFLOAT_COMP_MASK, tmp);
+	if ((300 > chip->last_temp) && (chip->cfg_cool_temp_comp_mv != -EINVAL)) {
+		rc = smb23x_vfloat_compensation(chip, chip->cfg_cool_temp_comp_mv);
 		if (rc < 0) {
 			pr_err("Set VFLOAT_COMP failed, rc=%d\n", rc);
 			return rc;
 		}
+		chip->index_soft_temp_comp_mv = LOW;
+	} else {
+		rc = smb23x_vfloat_compensation(chip, chip->cfg_temp_comp_mv);
+		if (rc < 0) {
+			pr_err("Set VFLOAT_COMP failed, rc=%d\n", rc);
+			return rc;
+		}
+		chip->index_soft_temp_comp_mv = HIGH;
 	}
 	if (chip->cfg_temp_comp_ma != -EINVAL) {
 		i = find_closest_in_ascendant_list(
@@ -1256,7 +1321,6 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 	if (rc)
 		return rc;
 #endif //QTI_SMB231
-	smb23x_masked_write(chip, CFG_REG_5, BAT_THERM_DIS_BIT, BAT_THERM_DIS_BIT);
 	return rc;
 }
 
@@ -1519,13 +1583,11 @@ static void reconfig_upon_unplug(struct smb23x_chip *chip)
 			mutex_lock(&chip->usb_suspend_lock);
 			reason = chip->usb_suspended_status;
 			mutex_unlock(&chip->usb_suspend_lock);
-			if (!(chip->workaround_flags & WRKRND_USB_SUSPEND)) {
-				rc = smb23x_suspend_usb(chip, reason,
-						!!reason ? true : false);
-				if (rc < 0)
-					pr_err("%suspend USB failed\n",
-						!!reason ? "S" : "Un-s");
-			}
+			rc = smb23x_suspend_usb(chip, reason,
+					!!reason ? true : false);
+			if (rc < 0)
+				pr_err("%suspend USB failed\n",
+					!!reason ? "S" : "Un-s");
 		}
 	}
 }
@@ -2033,6 +2095,11 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 	if (chip->bms_psy) {
 		chip->bms_psy->get_property(chip->bms_psy,
 				POWER_SUPPLY_PROP_TEMP, &ret);
+
+		if (chip->cfg_cool_temp_comp_mv != -EINVAL)
+			check_charger_thermal_state(chip, ret.intval);
+		chip->last_temp = ret.intval;
+
 		return ret.intval;
 	}
 
@@ -2125,7 +2192,7 @@ void smb23x_delaywork_init_register(struct work_struct *work)
 {
 	int rc;
 
-	if (g_chip->charger_plugin == 0xFF) {
+	if (g_chip->charger_plugin == 0) {
 		rc = smb23x_enable_volatile_writes(g_chip);
 		g_chip->charger_plugin = (rc < 0) ? 0 : 1;
 	}
@@ -2241,6 +2308,12 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = smb23x_get_prop_batt_temp(chip);
 		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
+		val->intval = chip->reg_addr;
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
+		val->intval = val->intval;
+		break;
 default:
 		return (-EINVAL);
 	}
@@ -2317,10 +2390,11 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 		del_timer(&chip->timer_print_register);
 		if (chip->charger_plugin) {
 			chip->timer_init_register.expires = jiffies + HZ;
-			add_timer(&chip->timer_init_register);
+			add_timer(&chip->timer_init_register); 
 		}
 		pr_info("Charger plug, state=%d\n", chip->charger_plugin);
-		power_supply_changed(g_chip->usb_psy);
+		power_supply_changed(chip->usb_psy);
+		power_supply_set_present(chip->usb_psy, chip->charger_plugin);
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 		smb23x_charging_enable(chip, val->intval);
@@ -2666,6 +2740,7 @@ static char *batt_supplied_to[] = {
 static int smb23x_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
+	u8 reg;
 	int rc;
 	struct power_supply *usb_psy;
 	struct smb23x_chip *chip;
@@ -2699,9 +2774,6 @@ static int smb23x_probe(struct i2c_client *client,
 	mutex_init(&chip->chg_disable_lock);
 #endif
 
-	/* enable the USB_SUSPEND always */
-	chip->workaround_flags |= WRKRND_USB_SUSPEND;
-
 	rc = smb23x_parse_dt(chip);
 	if (rc < 0) {
 		pr_err("Parse DT nodes failed!\n");
@@ -2718,11 +2790,10 @@ static int smb23x_probe(struct i2c_client *client,
 	}
 	init_timer(&chip->timer_init_register);
 	chip->timer_init_register.function = smb23x_timer_init_register;
-	chip->timer_init_register.expires = jiffies + 10*HZ;
-	add_timer(&chip->timer_init_register);
 
 	//Init variable
-	chip->charger_plugin = 0xFF;
+	chip->last_temp = DEFAULT_BATT_TEMP;
+	chip->index_soft_temp_comp_mv = NORMAL;
 
 	//Set timer to print register value
 	INIT_DELAYED_WORK(&chip->delaywork_print_register, smb23x_delaywork_print_register);
@@ -2790,6 +2861,16 @@ static int smb23x_probe(struct i2c_client *client,
 		pr_err("Register power_supply failed, rc = %d\n", rc);
 		goto destroy_mutex;
 	}
+	//Init charger state flag
+	chip->charger_plugin = 1;
+	if (smb23x_read(chip, I2C_COMM_CFG_REG, &reg) < 0)
+		chip->charger_plugin = 0;
+	else {
+		chip->charger_plugin = 1;
+		del_timer(&chip->timer_init_register);
+		chip->timer_init_register.expires = jiffies + HZ;
+		add_timer(&chip->timer_init_register);
+	}
 
 #ifdef QTI_SMB231
 	chip->resume_completed = true;
@@ -2845,8 +2926,7 @@ static int smb23x_suspend(struct device *dev)
 		pr_err("Save irq config failed, rc=%d\n", rc);
 
 	/* enable only important IRQs */
-	rc = smb23x_write(chip, IRQ_CFG_REG_9,
-			BATT_MISSING_IRQ_EN_BIT | INOK_IRQ_EN_BIT);
+	rc = smb23x_write(chip, IRQ_CFG_REG_9, BATT_MISSING_IRQ_EN_BIT);
 	if (rc < 0)
 		pr_err("Set irq_cfg failed, rc = %d\n", rc);
 

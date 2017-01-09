@@ -22,7 +22,7 @@
 #include <linux/power_supply.h>
 #include <linux/power/stc3117_battery.h>
 #include <linux/slab.h>
-#include <linux/qpnp/qpnp-adc.h>
+#include <linux/qpnp/qpnp-adc.h> 
 #include <linux/wakelock.h>
 
 #define GG_VERSION "1.00a"
@@ -73,7 +73,7 @@
 #define APP_MIN_VOLTAGE	    3300  /* application cut-off voltage*/
 #define TEMP_MIN_ADJ	    (-5) /* minimum temperature for gain adjustment */
 
-/* normalized VM_CNF at 60, 40, 25, 10, 0, -10°C, -20°C */
+/* normalized VM_CNF at 60, 40, 25, 10, 0, -10Â°C, -20Â°C */
 #define VMTEMPTABLE        { 85, 90, 100, 160, 320, 440, 840 }
 
 #define AVGFILTER           4  /* average filter constant */
@@ -189,7 +189,7 @@
 /* Private constants -------------------------------------------------------*/
 
 #define NTEMP 7
-/* temperature table from 60°C to -20°C (descending order!) */
+/* temperature table from 60Â°C to -20Â°C (descending order!) */
 static const int TempTable[NTEMP] = {60, 40, 25, 10, 0, -10, -20};
 static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 static const char *charger_name = "battery";
@@ -215,7 +215,7 @@ static int conv(short value, unsigned short factor);
 struct GasGauge_DataTypeDef {
 	int Voltage;        /* battery voltage in mV */
 	int Current;        /* battery current in mA */
-	int Temperature;    /* battery temperature in 0.1°C */
+	int Temperature;    /* battery temperature in 0.1Â°C */
 	int SOC;            /* battery relative SOC (%) in 0.1% */
 	int OCV;
 	int AvgSOC;
@@ -239,7 +239,7 @@ struct GasGauge_DataTypeDef {
 	int RelaxCurrent; /* current for relaxation (< C/20) */
 	int Adaptive;     /* adaptive mode */
 	/* capacity derating in 0.1%, for temp = 60, 40, 25, 10,   0, -10, -20
-	 * °C */
+	 * Â°C */
 	int CapDerating[7];
 	int OCVValue[OCVTAB_SIZE];    /* OCV curve values */
 	int SOCValue[SOCTAB_SIZE];    /* SOC curve values */
@@ -256,7 +256,7 @@ struct STC311x_BattDataTypeDef {
 	int Vmode;       /* 1=Voltage mode, 0=mixed mode */
 	int Voltage;     /* voltage in mV            */
 	int Current;     /* current in mA            */
-	int Temperature; /* temperature in 0.1°C     */
+	int Temperature; /* temperature in 0.1Â°C     */
 	int HRSOC;       /* uncompensated SOC in 1/512%   */
 	int OCV;         /* OCV in mV*/
 	int ConvCounter; /* convertion counter       */
@@ -304,7 +304,7 @@ static union {
 	unsigned char db[RAM_SIZE];  /* last byte holds the CRC */
 	struct {
 		short int TstWord;     /* 0-1 */
-		short int HRSOC;       /* 2-3 SOC backup */
+		unsigned short int HRSOC;       /* 2-3 SOC backup */
 		short int CC_cnf;      /* 4-5 current CC_cnf */
 		short int VM_cnf;      /* 6-7 current VM_cnf */
 		char SOC;              /* 8 SOC for trace (in %) */
@@ -324,7 +324,7 @@ int Capacity_Adjust;
 /* ------------------------------------------------------------------------ */
 
 #define STC311x_BATTERY_FULL 100
-#define STC311x_DELAY	 500 //5 sec
+#define STC311x_DELAY	 3000 //30 sec
 #define STC311x_DELAY_LOW_BATT 500 //5 sec
 #define STC311x_SOC_THRESHOLD 5
 
@@ -352,7 +352,7 @@ struct stc311x_chip {
 
 	int Temperature;
 	struct device     *dev;
-	struct qpnp_vadc_chip	*vadc_dev;
+	struct qpnp_vadc_chip	*vadc_dev;    
 };
 
 int null_fn(void)
@@ -379,11 +379,11 @@ static struct stc311x_platform_data stc3117_data = {
 	.Alm_SOC = 15,/* SOC alm level %*/
 	.Alm_Vbat = 3600,/* Vbat alm level mV*/
 	/* nominal CC_cnf, coming from battery characterisation*/
-	.CC_cnf = 59,
+	.CC_cnf = 54,
 	/* nominal VM cnf , coming from battery characterisation*/
-	.VM_cnf = 271,
+	.VM_cnf = 280,
 	/* nominal internal impedance*/
-	.Rint = 1253,
+	.Rint = 994,
 	/* nominal capacity in mAh, coming from battery characterisation*/
 	.Cnom = 300,
 	.Rsense = 10, /* sense resistor mOhms*/
@@ -391,31 +391,31 @@ static struct stc311x_platform_data stc3117_data = {
 	.Adaptive = 1, /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 
 	/* Elentec Co Ltd Battery pack - 80 means 8% */
-        .CapDerating[6] = -5,            /* capacity derating in 0.1%, for temp = -20 degC */
-        .CapDerating[5] = -5,            /* capacity derating in 0.1%, for temp = -10 degC */
-        .CapDerating[4] = -5,             /* capacity derating in 0.1%, for temp = 0 degC */
-        .CapDerating[3] = -5,             /* capacity derating in 0.1%, for temp = 10 degC */
+        .CapDerating[6] = 727,            /* capacity derating in 0.1%, for temp = -20 degC */
+        .CapDerating[5] = 255,            /* capacity derating in 0.1%, for temp = -10 degC */
+        .CapDerating[4] = 65,             /* capacity derating in 0.1%, for temp = 0 degC */
+        .CapDerating[3] = 12,             /* capacity derating in 0.1%, for temp = 10 degC */
         .CapDerating[2] = 0,              /* capacity derating in 0.1%, for temp = 25 degC */
         .CapDerating[1] = 0,           /* capacity derating in 0.1%, for temp = 40 degC */
         .CapDerating[0] = 0,           /* capacity derating in 0.1%, for temp = 60 degC */
 
 	/*OCV curve example for a 4.35V li-ion battery*/
-        .OCVValue[15] = 4297,             /* OCV curve value */
-        .OCVValue[14] = 4182,             /* OCV curve value */
-        .OCVValue[13] = 4087,             /* OCV curve value */
-        .OCVValue[12] = 3967,             /* OCV curve value */
-        .OCVValue[11] = 3942,             /* OCV curve value */
-        .OCVValue[10] = 3899,             /* OCV curve value */
-        .OCVValue[9] = 3832,              /* OCV curve value */
-        .OCVValue[8] = 3795,              /* OCV curve value */
-        .OCVValue[7] = 3766,              /* OCV curve value */
-        .OCVValue[6] = 3748,              /* OCV curve value */
+        .OCVValue[15] = 4259,             /* OCV curve value */
+        .OCVValue[14] = 4156,             /* OCV curve value */
+        .OCVValue[13] = 4072,             /* OCV curve value */
+        .OCVValue[12] = 3956,             /* OCV curve value */
+        .OCVValue[11] = 3932,             /* OCV curve value */
+        .OCVValue[10] = 3885,             /* OCV curve value */
+        .OCVValue[9] = 3833,              /* OCV curve value */
+        .OCVValue[8] = 3798,              /* OCV curve value */
+        .OCVValue[7] = 3765,              /* OCV curve value */
+        .OCVValue[6] = 3746,              /* OCV curve value */
         .OCVValue[5] = 3731,              /* OCV curve value */
-        .OCVValue[4] = 3702,              /* OCV curve value */
-        .OCVValue[3] = 3684,              /* OCV curve value */
-        .OCVValue[2] = 3671,              /* OCV curve value */
-        .OCVValue[1] = 3559,              /* OCV curve value */
-        .OCVValue[0] = 3300,              /* OCV curve value */
+        .OCVValue[4] = 3705,              /* OCV curve value */
+        .OCVValue[3] = 3685,              /* OCV curve value */
+        .OCVValue[2] = 3681,              /* OCV curve value */
+        .OCVValue[1] = 3613,              /* OCV curve value */
+        .OCVValue[0] = 3450,              /* OCV curve value */
 
 	/* SOC_TAB data */
 	.SOCValue[15] = 100,
@@ -469,7 +469,7 @@ static int stc311x_get_property(struct power_supply *psy,
 	/* from power_supply.h:
 	 * All voltages, currents, charges, energies, time and
 	 * temperatures in uV,
-	 * ÂµA, ÂµAh, ÂµWh, seconds and tenths of degree Celsius
+	 * Ã‚ÂµA, Ã‚ÂµAh, Ã‚ÂµWh, seconds and tenths of degree Celsius
 	 * unless otherwise
 	 * stated. It's driver's job to convert its raw values to
 	 * units in which
@@ -945,7 +945,7 @@ static int STC311x_SaveVMCnf(void)
  * Function Name  : conv
  * Description    : conversion utility
  *  convert a raw 16-bit value from STC311x registers into user units
- (mA, mAh, mV, °C)
+ (mA, mAh, mV, Â°C)
  *  (optimized routine for efficient operation on 8-bit processors
  such as STM8)
  * Input          : value, factor
@@ -1029,7 +1029,7 @@ static int STC311x_ReadBatteryData(struct STC311x_BattDataTypeDef *BattData)
 	value = data[10];
 	if (value >= 0x80)
 		value -= 0x100;  /* convert to signed value */
-	BattData->Temperature = value*10;  /* result in 0.1°C */
+	BattData->Temperature = value*10;  /* result in 0.1Â°C */
 
 	/* Avg current */
 	value = data[12];
@@ -1335,7 +1335,7 @@ static void CompensateVM(int temp)
 static void VM_FSM(void)
 {
 
-#define DELTA_TEMP 30   /* 3 °C */
+#define DELTA_TEMP 30   /* 3 Â°C */
 
 	/* in voltage mode, monitor temperature to compensate voltage mode
 	 * gain*/
@@ -1398,7 +1398,7 @@ void SOC_correction(struct GasGauge_DataTypeDef *GG)
 		Var3 = 400;
 
 	if (g_debug) {
-		pr_err("before SOC_correction: BattData.SOC = %d (0.1) \n", BattData.SOC);
+		pr_err("before SOC_correction: BattData.SOC = %d (0.1) \n", BattData.SOC);	
 		pr_err("Var3 = %d, BattData.AvgCurrent = %d \n", Var3, BattData.AvgCurrent);
 	}
 	Var1 = 256*BattData.AvgCurrent*A_Var3/Var3/CURRENT_TH;
@@ -1453,7 +1453,7 @@ void SOC_correction(struct GasGauge_DataTypeDef *GG)
 	}
 
 	if (g_debug)
-		pr_err("after SOC_correction: BattData.SOC = %d (0.1) \n", BattData.SOC);
+		pr_err("after SOC_correction: BattData.SOC = %d (0.1) \n", BattData.SOC);	
 #endif
 
 }
@@ -1640,7 +1640,7 @@ void stc311x_debug_info(void)
 	run_mode = data[1] & GG_VM_BIT ? VM_MODE : CC_MODE;
 	pr_err("REG[01] CTRL = 0x%x, %s \n", data[1], run_mode ? "VM_MODE" : "CC_MODE");
 
-	/* SOC */
+	/* SOC */	
 	value = data[3];
 	value = (value<<8) + data[2];
 	data_soc = (int)(value/512);
@@ -1677,9 +1677,9 @@ void stc311x_debug_info(void)
 	value = data[10];
 	if (value >= 0x80)
 		value -= 0x100;  /* convert to signed value */
-	//BattData->Temperature = value*10;  /* result in 0.1°C */
+	//BattData->Temperature = value*10;  /* result in 0.1Â°C */
 	pr_err("REG[10] temperature = %d degC \n", value*10);
-
+	
 	/* Avg current */
 	value = data[12];
 	value = (value<<8) + data[11];
@@ -1693,7 +1693,7 @@ void stc311x_debug_info(void)
 		value = conv(value, (36*400)); //BattData->CRateFactor
 	}
 	pr_err("REG[11-12] AVG Current = %d mA \n", value);
-
+	
 	/* OCV */
 	value = data[14];
 	value = (value<<8) + data[13];
@@ -1718,7 +1718,7 @@ void stc311x_debug_info(void)
 
 	/* ALARM_SOC */
 	//pr_err("REG[19] ALARM_SOC = %d \n", (int)(data[19]/2));
-
+	
 	/* ALARM_VOLTAGE */
 	//pr_err("REG[20] ALARM_VOLTAGE = %d mv \n", (int)((data[20]*176)/10));
 
@@ -1764,14 +1764,14 @@ void stc311x_debug_info(void)
 			value = (value<<8) + OCVTAB[i];
 			value2 = OCVTAB[i+3];
 			value2 = (value2<<8) + OCVTAB[i+2];
-			value3 = OCVTAB[i+5];
+			value3 = OCVTAB[i+5];	
 			value3 = (value3<<8) + OCVTAB[i+4];
 			value4 = OCVTAB[i+7];
 			value4 = (value4<<8) + OCVTAB[i+6];
 			pr_err("OCV_TAB[%d]: %d, [%d]: %d, [%d]: %d, [%d]: %d \n",
 				(i/2), (value*55/100), (i+2)/2, (value2*55/100), (i+4)/2, (value3*55/100), (i+6)/2, (value4*55/100));
 			}
-
+			
 		}
 
 	// read SOCTAB registers from 80 to 95
@@ -1784,12 +1784,12 @@ void stc311x_debug_info(void)
 			i, (SOCTAB[i]/2), i+1, (SOCTAB[i+1]/2), i+2, (SOCTAB[i+2]/2), i+3, (SOCTAB[i+3]/2));
 	}
 
-	pr_err("end: mode = 0x%x, ctrl = 0x%x, CMONIT_COUNT = %d, SOC = %d, voltage = %d, OCV = %d \n",data[0], data[1], data[22], data_soc, data_voltage, data_ocv);
+	pr_err("mode=0x%x, ctrl=0x%x, CMONIT_COUNT=%d, SOC=%d, voltage=%d, OCV=%d \n",data[0], data[1], data[22], data_soc, data_voltage, data_ocv);
 }
 
 static void STC311x_Rewrite_OCV(void)
 {
-	int mode, ocv, curr, voltage, soc;
+	int mode, ocv, curr, voltage, soc;	
 
 	mode = STC31xx_ReadByte(STC311x_REG_MODE);
 	if (mode < 0)
@@ -1799,7 +1799,7 @@ static void STC311x_Rewrite_OCV(void)
 		return;
 
 	pr_info("Rewrite OCV due to standby mode, reg_mode = 0x%x \n", mode);
-	//set operation mode to get current
+	//set operation mode to get current	
 	STC31xx_WriteByte(STC311x_REG_MODE, 0x18);
 	mdelay(200);
 
@@ -1830,7 +1830,7 @@ static void STC311x_Rewrite_OCV(void)
 	STC31xx_WriteWord(STC311x_REG_OCV, ocv);
 
 	mdelay(200);
-	mode = STC31xx_ReadByte(STC311x_REG_MODE);
+	mode = STC31xx_ReadByte(STC311x_REG_MODE);	
 	soc = STC31xx_ReadWord(STC311x_REG_SOC);
 	ocv = STC31xx_ReadWord(STC311x_REG_OCV);
 	voltage = STC31xx_ReadWord(STC311x_REG_VOLTAGE);
@@ -1926,7 +1926,7 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 
 	/* check INIT state */
 	if (GG_Ram.reg.GG_Status == GG_INIT) {
-		if (g_debug)
+		if (g_debug)	
 			pr_err("GG_INIT \n");
 		/* INIT state, wait for current & temperature value available:
 		 * */
@@ -2033,6 +2033,11 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 			}
 		}
 
+		//Set max SOC to fix SOC > 100
+		if (BattData.HRSOC > (MAX_HRSOC+512)) {
+			BattData.SOC = MAX_SOC;
+			STC311x_SetSOC(MAX_HRSOC+512);
+		}
 
 		/* -------- APPLICATION RESULTS ------------ */
 
@@ -2305,12 +2310,12 @@ int STC31xx_ForceCC(void)
 	return OK;
 }
 
-/*
-static int stc311x_read_pmic_adc_temperature(struct stc311x_chip *chip)
+
+static int stc311x_read_pmic_adc_temperature(struct stc311x_chip *chip, int *batt_temp)
 {
 	struct qpnp_vadc_result result;
 	int res;
-
+	
 	// get pm8916 mpp3 adc
 	if(NULL == chip->vadc_dev) {
 		chip->vadc_dev = qpnp_get_vadc(chip->dev, "pm8916");
@@ -2322,24 +2327,23 @@ static int stc311x_read_pmic_adc_temperature(struct stc311x_chip *chip)
 					pr_err("stc311x - fail to get the pm8916 vadc \n");
 				chip->vadc_dev = NULL;
 
-				return -1;
+				return -1; 
 	          }
 	}
-
+	
 	res=qpnp_vadc_read(chip->vadc_dev, P_MUX3_1_1, &result);//get channel 0x12
 	if (res < 0) {
 		pr_err("stc311x - Error reading VADC chennal_12: %d\n", res);
 		return res;
-	}
-	else {
+	} else {
 		// update the tempetature from pmic adc
 		pr_debug("stc311x - read pmic mpp3,  temperature = %lld \n", result.physical);
-		chip->Temperature = (result.physical * 10);
+		*batt_temp = (int)(result.physical * 10);
 	}
 	return 0;
 }
-*/
 
+	
 /* -------------------------------------------------------------- */
 
 int stc311x_updata(void)
@@ -2368,7 +2372,7 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 		ret.intval = 0;
 		rc = charger_psy->get_property(charger_psy, POWER_SUPPLY_PROP_STATUS, &ret);
 		if (rc) {
-			pr_err("stc311x can't get smb23x register data \n");
+			pr_err("stc311x can't get smb23x register data \n");	
 			return;
 		} else {
 			g_last_status = chip->status;
@@ -2381,15 +2385,15 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 		rc = charger_psy->get_property(charger_psy,
 					POWER_SUPPLY_PROP_RESISTANCE, &ret);
 		if (rc) {
-			pr_err("stc311x can't get smb23x register data \n");
+			pr_err("stc311x can't get smb23x register data \n");	
 			return;
 		}
 
 		if (ret.intval > 0) {
-			//if charger setting is reset to default, trigger charger to set new setting
+			//if charger setting is reset to default, trigger charger to set new setting		
 			if (ret.intval == SMB231_REG0_DEFAULT) {
 				pr_err("smb23x register is default, call smb23x to set new setting \n");
-				ret.intval = 1;
+				ret.intval = 1;	
 				charger_psy->set_property(charger_psy, POWER_SUPPLY_PROP_STATUS, &ret);
 			}
 		}
@@ -2397,7 +2401,7 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 }
 
 /*
-* 1. If charge is fulled and charger exists, keep soc = 100%
+* 1. If charge is fulled and charger exists, keep soc = 100% 
 * 2. The moment when charger is removed, if soc = 100% and drops, keep 100%. Else, update soc
 * 3. When discharging, soc can only decrease
 * 4. If SOC = 0% and in charging, show SOC = 1%
@@ -2427,7 +2431,7 @@ void UI_soc_adjustment(struct stc311x_chip *chip)
 				return;
 			}
 		}
-
+		
 		//when discharging, the new SOC can only decrease
 		if (chip->batt_soc > g_ui_soc) {
 			pr_err("Discharging, new soc = %d > original soc = %d, abort \n", chip->batt_soc, g_ui_soc);
@@ -2437,40 +2441,6 @@ void UI_soc_adjustment(struct stc311x_chip *chip)
 	} else
 		g_ui_soc = chip->batt_soc;
 
-}
-
-static int stc311x_get_pmic_batt_therm(struct stc311x_chip *chip, int *batt_temp)
-{
-	struct qpnp_vadc_result result;
-	int res;
-
-	// get pm8916 vadc
-	if (NULL == chip->vadc_dev) {
-		chip->vadc_dev = qpnp_get_vadc(chip->dev, "pm8916");
-		if (IS_ERR(chip->vadc_dev)) {
-			res = PTR_ERR(chip->vadc_dev);
-			if (res == -EPROBE_DEFER)
-				pr_err("stc311x - pm8916 vadc not found - defer rc \n");
-			else
-				pr_err("stc311x - fail to get the pm8916 vadc \n");
-			chip->vadc_dev = NULL;
-
-			return -1;
-		}
-	}
-
-	res = qpnp_vadc_read(chip->vadc_dev, LR_MUX1_BATT_THERM, &result);
-	if (res) {
-		pr_err("error reading adc channel = %d, res = %d\n",
-					LR_MUX1_BATT_THERM, res);
-		return res;
-	}
-	pr_err("batt_temp phy = %lld meas = 0x%llx\n",
-			result.physical, result.measurement);
-
-	*batt_temp = (int)result.physical;
-
-	return 0;
 }
 
 static void stc311x_work(struct work_struct *work)
@@ -2505,7 +2475,7 @@ static void stc311x_work(struct work_struct *work)
 		/* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 		GasGaugeData.Adaptive = chip->pdata->Adaptive;
 		/* capacity derating in 0.1%, for temp = 60, 40, 25, 10,   0,
-		 * -10 °C */
+		 * -10 Â°C */
 		for (Loop = 0; Loop < NTEMP; Loop++) {
 			GasGaugeData.CapDerating[Loop] =
 				chip->pdata->CapDerating[Loop];
@@ -2520,7 +2490,7 @@ static void stc311x_work(struct work_struct *work)
 			GasGaugeData.SOCValue[Loop] =
 				chip->pdata->SOCValue[Loop];
 		}
-		/*External temperature fonction, return °C*/
+		/*External temperature fonction, return Â°C*/
 		GasGaugeData.ExternalTemperature =
 			chip->pdata->ExternalTemperature();
 		/* 1=External temperature, 0=STC3117 temperature */
@@ -2532,7 +2502,7 @@ static void stc311x_work(struct work_struct *work)
 		pr_err(" ===  Before GasGauge_Task() === \n");
 		stc311x_debug_info();
 	}
-
+	
 	/* process gas gauge algorithm, returns results */
 	res = GasGauge_Task(&GasGaugeData);
 	if (res > 0) {
@@ -2555,19 +2525,19 @@ static void stc311x_work(struct work_struct *work)
 		pr_err("GasGauge_Task return (-1) \n");
 	}
 
-
-	rc = stc311x_get_pmic_batt_therm(chip, &temp);
-	if (rc < 0)
-		pr_err("read pmic batt therm fail \n");
-	// [TODO]
-	// For now, real battery is not present. Device will always get 79 degC from this function.
-	// Uncomment once we get reail battery.
-	//else
-	//	chip->Temperature = temp;
-
-	pr_err("gauge temp= %d, PMIC batt therm = %d \n", GasGaugeData.Temperature, temp);
+	//get temperature by pmic ADC. 
+	rc = stc311x_read_pmic_adc_temperature(chip, &temp);
+	if (rc) {
+		//If fail, use stc3117 data
+		if (res >0)
+			chip->Temperature = GasGaugeData.Temperature;
+		else
+			chip->Temperature = 250; //default
+	} else
+		chip->Temperature = temp;
 
 	if (g_debug) {
+		pr_err("ST temperature= %d, pmic mpp_3 temperature = %d \n", GasGaugeData.Temperature, temp);
 		pr_err(" ===  After GasGauge_Task() === \n");
 		stc311x_debug_info();
 	}
@@ -2578,7 +2548,7 @@ static void stc311x_work(struct work_struct *work)
 		UI_soc_adjustment(chip);
 
 	//Control SOC between  0 - 100%
-	if (g_ui_soc >= 100)
+	if (g_ui_soc >= 100) 
 		g_ui_soc = 100;
 	if (g_ui_soc <= 0)
 		g_ui_soc = 0;
@@ -2638,7 +2608,7 @@ static int stc311x_probe(struct i2c_client *client,
 	/* The common I2C client data is placed right specific data. */
 	chip->client = client;
 	chip->pdata = &stc3117_data;
-	chip->dev = &(client->dev);
+	chip->dev = &(client->dev); 
 	i2c_set_clientdata(client, chip);
 
 	chip->battery.name		= "bms";
@@ -2690,7 +2660,7 @@ static int stc311x_probe(struct i2c_client *client,
 		/* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 		GasGaugeData.Adaptive = chip->pdata->Adaptive;
 		/* capacity derating in 0.1%, for temp
-		 * = 60, 40, 25, 10,   0, -10 °C */
+		 * = 60, 40, 25, 10,   0, -10 Â°C */
 		for (Loop = 0; Loop < NTEMP; Loop++) {
 			GasGaugeData.CapDerating[Loop] =
 				chip->pdata->CapDerating[Loop];
@@ -2705,7 +2675,7 @@ static int stc311x_probe(struct i2c_client *client,
 			GasGaugeData.SOCValue[Loop] =
 				chip->pdata->SOCValue[Loop];
 		}
-		/*External temperature fonction, return °C*/
+		/*External temperature fonction, return Â°C*/
 		GasGaugeData.ExternalTemperature =
 			chip->pdata->ExternalTemperature();
 		/* 1=External temperature, 0=STC3117 temperature */
@@ -2729,15 +2699,15 @@ static int stc311x_probe(struct i2c_client *client,
 		g_standby_mode = 1;
 		pr_err("stc311x in standby mode \n");
 	}
-
+	
 	GasGauge_Start(&GasGaugeData);
 	msleep(200);
 
 	if (g_debug) {
 		pr_info(" ===  Before GasGauge_Task() === \n");
 		stc311x_debug_info();
-	}
-
+	}	
+	
 	/* process gas gauge algorithm, returns results */
 	res = GasGauge_Task(&GasGaugeData);
 	if (res > 0) {
@@ -2768,10 +2738,10 @@ static int stc311x_probe(struct i2c_client *client,
 		pr_info(" ===  After GasGauge_Task() === \n");
 		stc311x_debug_info();
 	}
-
+	
 	INIT_DEFERRABLE_WORK(&chip->work, stc311x_work);
 
-	//if gauge need to do reset, start work after 5 seconds
+	//if gauge need to do reset, start work after 5 seconds 
 	if (res == -1)
 		schedule_delayed_work(&chip->work, 500);
 	else
