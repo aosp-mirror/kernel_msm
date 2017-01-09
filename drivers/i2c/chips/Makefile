@@ -11,6 +11,3 @@
 #
 #HTC_AUD
 obj-$(CONFIG_AMP_TFA9888)       += tfa9888.o
-
-#Laser Sensor
-obj-$(CONFIG_LASER_STMVL53L0_SUPPORT)   += stmvl53l0/

@@ -5,7 +5,6 @@
 #
 
 menu "Miscellaneous I2C Chip support"
-source drivers/i2c/chips/stmvl53l0/Kconfig
 
 config AMP_TFA9888
 	tristate "NXP TFA9888 Speaker AMP Driver"
