@@ -22,6 +22,7 @@
 #include "gar-dsi-panel-hx8394d-480p-video.dtsi"
 #include "gar-dsi-panel-auo-qvga-cmd.dtsi"
 #include "gar-dsi-panel-auo-cx-qvga-cmd.dtsi"
+#include "gar-dsi-panel-auo-400p-cmd.dtsi"
 #include "gar-dsi-panel-auo-320x290-cmd.dtsi"
 
 &soc {
@@ -36,6 +37,7 @@
 			qcom,supply-max-voltage = <2850000>;
 			qcom,supply-enable-load = <100000>;
 			qcom,supply-disable-load = <100>;
+			qcom,supply-ulp-load = <100>;
 		};
 
 		qcom,panel-supply-entry@1 {
@@ -45,6 +47,7 @@
 			qcom,supply-max-voltage = <1800000>;
 			qcom,supply-enable-load = <100000>;
 			qcom,supply-disable-load = <100>;
+			qcom,supply-ulp-load = <100>;
 		};
 	};
 };

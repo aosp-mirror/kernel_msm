@@ -18,7 +18,6 @@
 			vdd-supply = <&pm8916_l6>;
 		};
 	};
-
 };
 
 &audio_codec_mtp {
@@ -149,6 +148,7 @@
 		qcom,vin-sel = <2>; /* QPNP_PIN_VIN2 */
 		qcom,src-sel = <2>; /* QPNP_PIN_SEL_FUNC_1 */
 		qcom,master-en = <1>;
+		status = "okay";
 	};
 
 	gpio@c200 { /* GPIO 3 */

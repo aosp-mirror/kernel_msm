@@ -114,23 +114,38 @@
 	};
 
 	i2c@78b9000 { /* BLSP1 QUP5 */
-		synaptics@20 {
-			compatible = "synaptics,dsx";
-			reg = <0x20>;
+		focaltech@38 {
+			compatible = "focaltech,fts";
+			reg = <0x38>;
 			interrupt-parent = <&msm_gpio>;
-			interrupts = <13 0x2008>;
-			avdd-supply = <&pm8909_l17>;
-			vdd-supply = <&pm8909_l6>;
+			interrupts = <13 0x2002>;
+			vdd-supply = <&pm8916_l17>;
+			vcc_i2c-supply = <&pm8916_l16>;
+			focaltech,name = "fts";
+			focaltech,family-id = <0x0e>;
+			focaltech,reset-gpio = <&msm_gpio 12 0x00>;
+			focaltech,irq-gpio =<&msm_gpio 13 0x00>;
 			/* pins used by touchscreen */
 			pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
 			pinctrl-0 = <&ts_int_active &ts_reset_active>;
 			pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
 			pinctrl-2 = <&ts_release>;
-			synaptics,irq-gpio = <&msm_gpio 13 0x2008>;
-			synaptics,reset-gpio = <&msm_gpio 12 0x0>;
-			synaptics,disable-gpios;
-			synaptics,display-coords = <0 0 719 1279>;
-			synaptics,panel-coords = <0 0 719 1405>;
+			focaltech,display-coords = <0 0 320 290>;       /* for android wear */
+			focaltech,panel-coords = <0 0 320 290>;
+			focaltech,button-map= <70 150 907>;
+			focaltech,no-force-update;
+			focaltech,i2c-pull-up;
+			focaltech,group-id = <1>;
+			focaltech,hard-reset-delay-ms = <20>;
+			focaltech,soft-reset-delay-ms = <300>;
+			focaltech,num-max-touches = <2>;
+			focaltech,fw-name = "PFW2_3207_0x61_0x07_app.i";
+			focaltech,fw-delay-aa-ms = <50>;
+			focaltech,fw-delay-55-ms = <30>;
+			focaltech,fw-upgrade-id1 = <0x79>;
+			focaltech,fw-upgrade-id2 = <0x03>;
+			focaltech,fw-delay-readid-ms = <10>;
+			focaltech,fw-delay-era-flsh-ms = <2000>;
 		};
 	};
 
@@ -150,7 +165,7 @@
 		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
 		pinctrl-0 = <&gpio_key_active>;
 		pinctrl-1 = <&gpio_key_suspend>;
-
+/*
 		camera_focus {
 			label = "camera_focus";
 			gpios = <&msm_gpio 91 0x1>;
@@ -177,6 +192,7 @@
 			gpio-key,wakeup;
 			debounce-interval = <15>;
 		};
+*/
 	};
 
 	audio_codec_mtp: sound {
@@ -193,7 +209,7 @@
 		qcom,msm-codec-type = "internal";
 		qcom,msm-ext-pa = "primary";
 		qcom,msm-mclk-freq = <9600000>;
-		qcom,msm-mbhc-hphl-swh = <0>;
+		qcom,msm-mbhc-hphl-swh = <1>;
 		qcom,msm-mbhc-gnd-swh = <0>;
 		qcom,msm-hs-micbias-type = "internal";
 		qcom,msm-micbias1-ext-cap;
@@ -203,34 +219,36 @@
 			"RX_BIAS", "MCLK",
 			"SPK_RX_BIAS", "MCLK",
 			"INT_LDO_H", "MCLK",
-			"MIC BIAS External", "Handset Mic",
+			"MIC BIAS External", "Digital Mic1",
 			"MIC BIAS Internal2", "Headset Mic",
-			"MIC BIAS External", "Secondary Mic",
-			"AMIC1", "MIC BIAS External",
+			"MIC BIAS External", "Digital Mic2",
+			"DMIC1", "MIC BIAS External",
 			"AMIC2", "MIC BIAS Internal2",
-			"AMIC3", "MIC BIAS External";
+			"DMIC2", "MIC BIAS External";
 		qcom,msm-gpios =
 			"pri_i2s",
-			"us_eu_gpio";
+			"us_eu_gpio",
+			"dmic_lines";
 		qcom,pinctrl-names =
 			"all_off",
 			"pri_i2s_act",
 			"us_eu_gpio_act",
-			"pri_i2s_us_eu_gpio_act";
+			"pri_i2s_us_eu_gpio_act",
+			"dmic_lines_sus",
+			"dmic_lines_act";
 		pinctrl-names =
 			"all_off",
 			"pri_i2s_act",
 			"us_eu_gpio_act",
-			"pri_i2s_us_eu_gpio_act";
-		pinctrl-0 = <&cdc_pdm_lines_sus &cross_conn_det_sus
-							&vdd_spkdrv_sus>;
-		pinctrl-1 = <&cdc_pdm_lines_act &cross_conn_det_sus
-							&vdd_spkdrv_act>;
-		pinctrl-2 = <&cdc_pdm_lines_sus &cross_conn_det_act
-							&vdd_spkdrv_sus>;
-		pinctrl-3 = <&cdc_pdm_lines_act &cross_conn_det_act
-							&vdd_spkdrv_act>;
-		qcom,cdc-us-euro-gpios = <&msm_gpio 97 0>;
+			"pri_i2s_us_eu_gpio_act",
+			"dmic_lines_sus",
+			"dmic_lines_act";
+		pinctrl-0 = <&cdc_pdm_lines_sus &cross_conn_det_sus &dmic_clk_sus &dmic_data_sus>;
+		pinctrl-1 = <&cdc_pdm_lines_act &cross_conn_det_sus &dmic_clk_act &dmic_data_act>;
+		pinctrl-2 = <&cdc_pdm_lines_sus &cross_conn_det_act &dmic_clk_act &dmic_data_act>;
+		pinctrl-3 = <&cdc_pdm_lines_act &cross_conn_det_act &dmic_clk_act &dmic_data_act>;
+		pinctrl-4 = <&cdc_pdm_lines_act &cross_conn_det_sus &dmic_clk_sus &dmic_data_sus>;
+		pinctrl-5 = <&cdc_pdm_lines_act &cross_conn_det_sus &dmic_clk_act &dmic_data_act>;
 		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,
 				<&afe>, <&lsm>, <&routing>, <&lpa>,
@@ -266,7 +284,7 @@
 	};
 };
 
-&blsp1_uart1 {
+&blsp1_uart2 {
 	status = "ok";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart_console_sleep>;
@@ -360,6 +378,12 @@
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
+&dsi_auo_320x290_cmd {
+    qcom,esd-check-enabled;
+    qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+    qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};
+
 &dsi_auo_cx_qvga_cmd {
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
@@ -441,7 +465,7 @@
 
 
 &mdss_dsi0 {
-	qcom,dsi-pref-prim-pan = <&dsi_hx8394d_720_vid>;
+	qcom,dsi-pref-prim-pan = <&dsi_auo_320x290_cmd>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
