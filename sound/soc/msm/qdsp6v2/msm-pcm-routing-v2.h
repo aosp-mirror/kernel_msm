@@ -393,4 +393,5 @@ void msm_pcm_routing_reg_stream_app_type_cfg(int fedai_id, int app_type,
 			int acdb_dev_id, int sample_rate, int session_type);
 int msm_pcm_routing_get_stream_app_type_cfg(int fedai_id, int session_type,
 			int *app_type, int *acdb_dev_id, int *sample_rate);
+int check_if_lte_call_fallback(void);
 #endif /*_MSM_PCM_H*/
