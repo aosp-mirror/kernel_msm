@@ -47,6 +47,9 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&esl_pmic_default>;
 
+		/* use byte array instead of i2c transactions */
+		bcm,bringup;
+
 		bcm,pon-gpio = <&tlmm 25 0x00>;
 		bcm,intb-gpio = <&tlmm 26 0x00>;
 		bcm,resetb-gpio = <&tlmm 27 0x00>;
