@@ -3142,7 +3142,6 @@ static int android_enable_ffs_function(struct android_dev *dev,
 	struct android_usb_platform_data *pdata = dev->pdata;
 	struct usb_gadget *gadget = dev->cdev->gadget;
 
-	mutex_lock(&ffs_configs_lock);
 	list_for_each_entry(config, &ffs_configs, list_item) {
 		/* Function already enabled */
 		if (config->android_func->android_dev)
@@ -3161,18 +3160,15 @@ static int android_enable_ffs_function(struct android_dev *dev,
 	if (!match) {
 		pr_err("too many ffs functions enabled, max is %d\n",
 				MAX_FFS_FUNCTIONS);
-		mutex_unlock(&ffs_configs_lock);
 		return -EOVERFLOW;
 	}
 	f_holder = kzalloc(sizeof(*f_holder), GFP_KERNEL);
 	if (unlikely(!f_holder)) {
-		mutex_unlock(&ffs_configs_lock);
 		return -ENOMEM;
 	}
 
 	match->android_dev = dev;
 	f_holder->f = match;
-	mutex_unlock(&ffs_configs_lock);
 	list_add_tail(&f_holder->enabled_list,
 			&conf->enabled_functions);
 	pr_debug("func:%s is enabled.\n", match->name);
@@ -3269,10 +3265,12 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	int is_ffs;
 	int ffs_enabled = 0;
 
+	mutex_lock(&ffs_configs_lock);
 	mutex_lock(&dev->mutex);
 
 	if (dev->enabled) {
 		mutex_unlock(&dev->mutex);
+		mutex_unlock(&ffs_configs_lock);
 		return -EBUSY;
 	}
 
@@ -3352,6 +3350,7 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	}
 
 	mutex_unlock(&dev->mutex);
+	mutex_unlock(&ffs_configs_lock);
 
 	return size;
 }
