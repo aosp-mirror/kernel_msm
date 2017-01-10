@@ -1991,10 +1991,14 @@ static void asus_bat_is_cooler_check_work(struct work_struct *work)
 	struct qpnp_lbc_chip *chip = container_of(dwork,
 		      struct qpnp_lbc_chip, bat_is_cooler_check_work);
 
-	pr_info("asus_bat_is_cooler_check_work()\n");
+	temp = get_prop_batt_temp(chip);
+	pr_info("asus_bat_is_cooler_check_work(), low_temp:%d, high_temp:%d, state:%d, temp:%d\n",
+		chip->adc_param.low_temp, chip->adc_param.high_temp, chip->adc_param.state_request, temp);
+
+	if (qpnp_adc_tm_channel_measure(chip->adc_tm_dev, &chip->adc_param))
+		pr_err("request ADC error\n");
 
 	mutex_lock(&chip->bat_is_cooler_lock);
-	temp = get_prop_batt_temp(chip);
 	if ((temp <= chip->cfg_cooler_bat_decidegc) && (g_bat_is_cooler == false)){
 		g_bat_is_cooler = true;
 		adc_notification_set_cool_current(JEITA_enable_cooler);
@@ -2006,6 +2010,7 @@ static void asus_bat_is_cooler_check_work(struct work_struct *work)
 	} else if (!chip->bat_is_cool){
 		g_bat_is_cooler = false;
 		pr_info("g_bat_is_cooler is cancelled!\n");
+		adc_notification_set_cool_current(JEITA_disable_cool);
 		mutex_unlock(&chip->bat_is_cooler_lock);
 		return;
 	} else if ((temp <= chip->cfg_cool_bat_decidegc) && (g_bat_is_cooler == false)) {
@@ -2028,10 +2033,11 @@ static void asus_bat_is_warmer_check_work(struct work_struct *work)
 	struct qpnp_lbc_chip *chip = container_of(dwork,
 		struct qpnp_lbc_chip, bat_is_warmer_check_work);
 
-	pr_info("asus_bat_is_warmer_check_work()\n");
+	temp = get_prop_batt_temp(chip);
+	pr_info("asus_bat_is_warmer_check_work(), low_temp:%d, high_temp:%d, state:%d, temp:%d\n",
+		chip->adc_param.low_temp, chip->adc_param.high_temp, chip->adc_param.state_request, temp);
 
 	mutex_lock(&chip->bat_is_warmer_lock);
-	temp = get_prop_batt_temp(chip);
 	if ((temp >= chip->cfg_warmer_bat_decidegc) && (g_bat_is_warmer == false)){
 		g_bat_is_warmer = true;
 		adc_notification_set_warm_current(JEITA_enable_warmer);
@@ -2041,7 +2047,18 @@ static void asus_bat_is_warmer_check_work(struct work_struct *work)
 		g_bat_is_warmer = false;
 		adc_notification_set_warm_current(JEITA_enable_warm);
 		pr_info("g_bat_is_warmer is false!\n");
-	} else if (!chip->bat_is_warm){
+	} else if (!bat_warm || (temp <= chip->cfg_warm_bat_decidegc - HYSTERISIS_DECIDEGC)) {
+		bat_warm = false;
+		bat_cool = false;
+
+		qpnp_lbc_ibatmax_set(chip, 540);
+		adc_notification_set_warm_current(JEITA_disable_warm);
+		chip->adc_param.low_temp = chip->cfg_cool_bat_decidegc;
+		chip->adc_param.high_temp = chip->cfg_warm_bat_decidegc;
+		chip->adc_param.state_request = ADC_TM_HIGH_LOW_THR_ENABLE;
+		if (qpnp_adc_tm_channel_measure(chip->adc_tm_dev, &chip->adc_param))
+			pr_err("request ADC error\n");
+
 		g_bat_is_warmer = false;
 		pr_info("g_bat_is_warmer is cancelled!\n");
 		mutex_unlock(&chip->bat_is_warmer_lock);
@@ -2104,6 +2121,7 @@ static void qpnp_lbc_jeita_adc_notification(enum qpnp_tm_state state, void *ctx)
 			bat_cool = false;
 
 			adc_notification_set_cool_current(JEITA_disable_cool);
+			adc_notification_set_warm_current(JEITA_disable_warm);
 
 			chip->adc_param.low_temp =
 					chip->cfg_cool_bat_decidegc;
@@ -2134,6 +2152,7 @@ static void qpnp_lbc_jeita_adc_notification(enum qpnp_tm_state state, void *ctx)
 			bat_warm = false;
 			bat_cool = false;
 
+			adc_notification_set_cool_current(JEITA_disable_cool);
 			adc_notification_set_warm_current(JEITA_disable_warm);
 			chip->adc_param.low_temp =
 					chip->cfg_cool_bat_decidegc;
@@ -2676,14 +2695,6 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_fake_handler(int irq, void *_chip)
 
 	usb_present = qpnp_lbc_is_usb_chg_plugged_in(chip);
 	pr_info("usbin-valid_irq_fake triggered: %d\n", usb_present);
-
-	if ((usb_present != 1) && (g_bat_is_cooler || g_bat_is_warmer)) {
-		g_bat_is_cooler = false;
-		g_bat_is_warmer = false;
-		mutex_unlock(&chip->bat_is_cooler_lock);
-		mutex_unlock(&chip->bat_is_warmer_lock);
-		pr_info("cancel cooler/warmer schedule_delayed_work");
-	}
 
 	return IRQ_HANDLED;
 }

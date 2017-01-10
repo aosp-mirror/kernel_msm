@@ -913,12 +913,10 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 	pr_debug("ICL set to = %d\n",
 			usbin_current_ma_table[tmp >> USBIN_ICL_OFFSET]);
 #endif
-	if (!(chip->workaround_flags & WRKRND_USB_SUSPEND)) {
-		/* un-suspend USB input */
-		rc = smb23x_suspend_usb(chip, CURRENT, false);
-		if (rc < 0)
-			pr_err("Un-suspend USB failed, rc=%d\n", rc);
-	}
+	/* un-suspend USB input */
+	rc = smb23x_suspend_usb(chip, CURRENT, false);
+	if (rc < 0)
+		pr_err("Un-suspend USB failed, rc=%d\n", rc);
 
 	return rc;
 }
@@ -1448,9 +1446,6 @@ static int cold_hard_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int hot_soft_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
-	chip->batt_warm = !!rt_sts;
-
 	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
 
 	smb23x_enable_volatile_writes(chip);
@@ -1460,9 +1455,6 @@ static int hot_soft_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int cold_soft_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
-	chip->batt_cool = !!rt_sts;
-
 	pr_info("[BAT][CHG] rt_sts = 0x02%x\n", rt_sts);
 
 	smb23x_enable_volatile_writes(chip);
@@ -1739,6 +1731,14 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	if (chip->usb_present == 0 && usb_present == 1) {
 		gpio_set_value(GPIO_num17,0);
 		pr_info("[BAT][CHG] gpio_17 set to 0\n");
+
+		smb23x_enable_volatile_writes(chip);
+		// Set input current limit value follow register setting
+		smb23x_masked_write(chip, CMD_REG_1, USBAC_MODE_BIT, 0x01);
+		// Set system voltage to VBATT tracking(VBATT + 250mV)
+		smb23x_masked_write(chip, CFG_REG_4, SYSTEM_VOLTAGE_MASK, 0x2);
+		// Set system voltage threshold for initiating charge current deduction
+		smb23x_masked_write(chip, CFG_REG_6, CHG_CHARGE_SYS_VOLT_MASK, 0x20);
 	} else if (chip->usb_present == 1 && usb_present == 0) {
 		gpio_set_value(GPIO_num17,0);
 		chip->batt_full = false;
@@ -1903,10 +1903,6 @@ static int smb23x_determine_initial_status(struct smb23x_chip *chip)
 		chip->batt_hot = true;
 	else if (reg & COLD_HARD_BIT)
 		chip->batt_cold = true;
-	else if (reg & HOT_SOFT_BIT)
-		chip->batt_warm = true;
-	else if (reg & COLD_SOFT_BIT)
-		chip->batt_cool = true;
 
 	chip->batt_present = true;
 	rc = smb23x_read(chip, IRQ_B_STATUS_REG, &reg);
