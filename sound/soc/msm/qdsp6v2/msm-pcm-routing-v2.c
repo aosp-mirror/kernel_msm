@@ -1994,6 +1994,26 @@ static int msm_routing_ext_ec_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+int check_if_lte_call_fallback()
+{
+	bool cs_rx, lte_rx, rc;
+	rc = false;
+	cs_rx=false;
+	lte_rx=false;
+
+	cs_rx = test_bit(MSM_FRONTEND_DAI_CS_VOICE, &msm_bedais[MSM_BACKEND_DAI_QUATERNARY_MI2S_RX].fe_sessions);
+
+	lte_rx = test_bit(MSM_FRONTEND_DAI_VOLTE, &msm_bedais[MSM_BACKEND_DAI_QUATERNARY_MI2S_RX].fe_sessions);
+
+	/*if lte fall back after call setup, echo path should not be closed*/
+	if ((cs_rx) && (lte_rx))
+		rc = false;
+	else
+		rc = true;
+
+	return rc;
+}
+
 static int msm_routing_ext_ec_put(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
 {
@@ -2038,7 +2058,9 @@ static int msm_routing_ext_ec_put(struct snd_kcontrol *kcontrol,
 	}
 	if (!voc_set_ext_ec_ref(msm_route_ext_ec_ref, state)) {
 		mutex_unlock(&routing_lock);
-		snd_soc_dapm_mux_update_power(widget->dapm, kcontrol, mux, e, update);
+		if (check_if_lte_call_fallback()) {
+			snd_soc_dapm_mux_update_power(widget->dapm, kcontrol, mux, e, update);
+		}
 	} else {
 		ret = -EINVAL;
 		mutex_unlock(&routing_lock);

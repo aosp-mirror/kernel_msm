@@ -27,6 +27,7 @@
 #include <sound/audio_cal_utils.h>
 #include "q6voice.h"
 #include <sound/adsp_err.h>
+#include "msm-pcm-routing-v2.h"
 
 #define TIMEOUT_MS 300
 
@@ -6188,8 +6189,10 @@ int voc_set_ext_ec_ref(uint16_t port_id, bool state)
 		common.ec_port_id = port_id;
 		common.ec_ref_ext = true;
 	} else {
-		common.ec_ref_ext = false;
-		common.ec_port_id = port_id;
+		if (check_if_lte_call_fallback()) {
+			common.ec_ref_ext = false;
+			common.ec_port_id = port_id;
+		}
 	}
 exit:
 	mutex_unlock(&common.common_lock);
