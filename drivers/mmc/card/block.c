@@ -1086,6 +1086,14 @@ static inline int mmc_blk_part_switch(struct mmc_card *card,
 		part_config &= ~EXT_CSD_PART_CONFIG_ACC_MASK;
 		part_config |= md->part_type;
 
+		if (EXT_CSD_PART_CONFIG_ACC_RPMB == (part_config & EXT_CSD_PART_CONFIG_ACC_MASK)) {
+			ret = mmc_flush_cache(card);
+			if (ret) {
+				pr_err("RPMB:flush cache failed\n");
+				return ret;
+			}
+		}
+
 		ret = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 				 EXT_CSD_PART_CONFIG, part_config,
 				 card->ext_csd.part_time);
