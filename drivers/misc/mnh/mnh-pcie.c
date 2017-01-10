@@ -1469,6 +1469,19 @@ static void setup_smmu(struct pci_dev *pdev)
 	dev_info(&pdev->dev, "attached to IOMMU\n");
 }
 
+/*
+ * mnh_pci_fixup - Fixup routine before probe
+ *
+ * @pdev: PCI device structure
+ */
+static void mnh_pci_fixup(struct pci_dev *pdev)
+{
+	if (pdev->class == PCI_CLASS_NOT_DEFINED) {
+		dev_dbg(&pdev->dev, "setting pcie class\n");
+		pdev->class = PCI_CLASS_MEMORY_OTHER;
+	}
+}
+
 /**
  * mnh_pci_probe - Device Initialization Routine
  *
@@ -1695,6 +1708,10 @@ static struct pci_driver mnh_pci_driver = {
 };
 
 module_pci_driver(mnh_pci_driver);
+
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL,
+			 PCI_DEVICE_ID_MNH,
+			 mnh_pci_fixup);
 
 MODULE_AUTHOR("Intel Corporation");
 MODULE_DESCRIPTION("MNH PCI HOST DRIVER");
