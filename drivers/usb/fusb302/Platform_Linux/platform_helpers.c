@@ -997,9 +997,10 @@ void fusb_Delay10us(FSC_U32 delay10us)
     }
 }
 
-u8 fusb_battery_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], int *device_max_ma)
+FSC_S32 fusb_battery_select_source_capability(u8 obj_cnt, doDataObject_t pd_data[7], int *device_max_ma)
 {
-    u8 i, sel_voltage_pdo_index;
+    u8 i;
+    FSC_S32 sel_voltage_pdo_index;
     struct htc_pd_data htc_pdo_data;
 
     for (i = 0; i <= obj_cnt; i++) {

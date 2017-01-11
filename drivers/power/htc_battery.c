@@ -1455,14 +1455,12 @@ static void batt_worker(struct work_struct *work)
 	if ((int)htc_batt_info.rep.charging_source > POWER_SUPPLY_TYPE_BATTERY) {
 		/*  STEP 11.1.1 check and update chg_dis_reason */
 		if (g_ftm_charger_control_flag == FTM_FAST_CHARGE || g_flag_force_ac_chg) {
-			s_prev_user_set_chg_curr = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
 			if (htc_batt_info.rep.charging_source == POWER_SUPPLY_TYPE_USB){
 				user_set_chg_curr = FAST_CHARGE_CURR;
 			} else {
 				user_set_chg_curr = WALL_CHARGE_CURR;
 			}
 		} else if (g_ftm_charger_control_flag == FTM_SLOW_CHARGE) {
-			s_prev_user_set_chg_curr = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
 			user_set_chg_curr = SLOW_CHARGE_CURR;
 			pmi8994_set_iusb_max(user_set_chg_curr);
 #ifdef CONFIG_HTC_CHARGER
@@ -1472,7 +1470,7 @@ static void batt_worker(struct work_struct *work)
 		} else {
 			/* WA: QCT  recorgnize D+/D- open charger won't set 500mA. */
 			if ((htc_batt_info.rep.charging_source == POWER_SUPPLY_TYPE_USB)) {
-				s_prev_user_set_chg_curr = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
+				user_set_chg_curr = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
 				if (!get_connect2pc() && !g_rerun_apsd_done && !g_is_unknown_charger) {
 					user_set_chg_curr = SLOW_CHARGE_CURR;
 					if (delayed_work_pending(&htc_batt_info.chk_unknown_chg_work))
@@ -1480,15 +1478,14 @@ static void batt_worker(struct work_struct *work)
 					schedule_delayed_work(&htc_batt_info.chk_unknown_chg_work,
 							msecs_to_jiffies(CHG_UNKNOWN_CHG_PERIOD_MS));
 				} else {
-					if (s_prev_user_set_chg_curr < SLOW_CHARGE_CURR)
-						s_prev_user_set_chg_curr = SLOW_CHARGE_CURR;
-					user_set_chg_curr = s_prev_user_set_chg_curr;
+					if (user_set_chg_curr < SLOW_CHARGE_CURR)
+						user_set_chg_curr = SLOW_CHARGE_CURR;
 				}
 			} else if (htc_batt_info.rep.charging_source == POWER_SUPPLY_TYPE_USB_HVDCP){
-				s_prev_user_set_chg_curr = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
+				user_set_chg_curr = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
 				pmi8994_set_iusb_max(HVDCP_CHARGE_CURR);
 			} else if (htc_batt_info.rep.charging_source == POWER_SUPPLY_TYPE_USB_HVDCP_3){
-				s_prev_user_set_chg_curr = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
+				user_set_chg_curr = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
 				pmi8994_set_iusb_max(HVDCP_3_CHARGE_CURR);
 			}
 		}
