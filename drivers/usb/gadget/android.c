@@ -727,6 +727,7 @@ ffs_aliases_store(struct device *pdev, struct device_attribute *attr,
 
 	dev = list_first_entry(&android_dev_list, struct android_dev,
 					list_item);
+	mutex_lock(&ffs_configs_lock);
 	mutex_lock(&dev->mutex);
 
 	if (dev->enabled) {
@@ -739,7 +740,6 @@ ffs_aliases_store(struct device *pdev, struct device_attribute *attr,
 	strlcpy(dev->ffs_aliases, aliases, sizeof(dev->ffs_aliases));
 
 	/* Free old aliases */
-	mutex_lock(&ffs_configs_lock);
 	list_for_each_entry(config, &ffs_configs, list_item) {
 		opts = to_f_fs_opts(config->fi);
 		kfree(opts->dev->name);
@@ -764,8 +764,8 @@ ffs_aliases_store(struct device *pdev, struct device_attribute *attr,
 		config_ptr = config_ptr->next;
 	}
 
-	mutex_unlock(&ffs_configs_lock);
 	mutex_unlock(&dev->mutex);
+	mutex_unlock(&ffs_configs_lock);
 
 	return size;
 }
@@ -3431,7 +3431,6 @@ static int android_enable_ffs_function(struct android_dev *dev,
 	struct android_usb_function *match = NULL;
 	struct android_usb_function_holder *f_holder;
 
-	mutex_lock(&ffs_configs_lock);
 	list_for_each_entry(config, &ffs_configs, list_item) {
 		opts = to_f_fs_opts(config->fi);
 		if (opts->dev->name && !strcmp(opts->dev->name, alias)) {
@@ -3441,32 +3440,27 @@ static int android_enable_ffs_function(struct android_dev *dev,
 	}
 	if (!match) {
 		pr_err("ffs function %s was never aliased\n", alias);
-		mutex_unlock(&ffs_configs_lock);
 		return -ENODEV;
 	}
 	/* Function has already been enabled. */
 	if (match->android_dev) {
 		pr_err("ffs function %s already enabled\n", alias);
-		mutex_unlock(&ffs_configs_lock);
 		return -EBUSY;
 	}
 	if (!opts->dev->ffs_data) {
 		pr_err("ffs function %s was never mounted\n", alias);
-		mutex_unlock(&ffs_configs_lock);
 		return -ENODEV;
 	}
 
 
 	f_holder = kzalloc(sizeof(*f_holder), GFP_KERNEL);
 	if (!f_holder) {
-		mutex_unlock(&ffs_configs_lock);
 		return -ENOMEM;
 	}
 
 	match->android_dev = dev;
 	f_holder->f = match;
 	list_add_tail(&f_holder->enabled_list, &conf->enabled_functions);
-	mutex_unlock(&ffs_configs_lock);
 	pr_debug("ffs func:%s is enabled.\n", alias);
 	return 0;
 }
@@ -3562,10 +3556,12 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	int is_ffs;
 	int ffs_enabled = 0;
 
+	mutex_lock(&ffs_configs_lock);
 	mutex_lock(&dev->mutex);
 
 	if (dev->enabled) {
 		mutex_unlock(&dev->mutex);
+		mutex_unlock(&ffs_configs_lock);
 		return -EBUSY;
 	}
 
@@ -3648,6 +3644,7 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	}
 
 	mutex_unlock(&dev->mutex);
+	mutex_unlock(&ffs_configs_lock);
 
 	return size;
 }
