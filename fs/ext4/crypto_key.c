@@ -192,6 +192,8 @@ retry:
 		break;
 	case EXT4_ENCRYPTION_MODE_PRIVATE:
 		cipher_str = "bugon";
+	case EXT4_ENCRYPTION_MODE_AES_256_HEH:
+		cipher_str = "heh(aes)";
 		break;
 	default:
 		printk_once(KERN_WARNING
