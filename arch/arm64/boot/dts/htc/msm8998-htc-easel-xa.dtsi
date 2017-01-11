@@ -27,6 +27,20 @@
 			};
 		};
 	};
+
+	esl_console_active: esl_console_active {
+		mux {
+			pins = "gpio8", "gpio9";
+			function = "blsp_uart1_b";
+		};
+
+		config {
+			pins = "gpio8", "gpio9";
+			drive-strength = <2>;
+			bias-disable;
+		};
+	};
+
 };
 
 &i2c_9 {
@@ -55,5 +69,21 @@
 			compatible = "brcm,bcm15602-thermal";
 			#thermal-sensor-cells = <0>;
 		};
+	};
+};
+
+&soc {
+	esl_console: serial@0c16f000 {
+		compatible = "qcom,msm-uartdm-v1.4", "qcom,msm-uartdm";
+		reg = <0xc16f000 0x1000>;
+
+		interrupts = <0 107 0>;
+
+		clocks = <&clock_gcc clk_gcc_blsp1_uart1_apps_clk>,
+			 <&clock_gcc clk_gcc_blsp1_ahb_clk>;
+		clock-names = "core", "iface";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&esl_console_active>;
 	};
 };
