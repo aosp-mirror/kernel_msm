@@ -794,6 +794,9 @@ static int fg_masked_write_raw(struct fg_chip *chip, u16 addr,
 	int rc;
 	u8 reg;
 
+	if (WARN_ONCE(len > 1, "Length invalid %d\n", len))
+		return -EINVAL;
+
 	rc = fg_read(chip, &reg, addr, len);
 	if (rc) {
 		pr_err("spmi read failed: addr=%03X, rc=%d\n", addr, rc);
@@ -1140,8 +1143,9 @@ static int fg_conventional_mem_write(struct fg_chip *chip, u8 *val, u16 address,
 	if (offset > 3)
 		return -EINVAL;
 
-	address = ((address + offset) / 4) * 4;
-	offset = (address + offset) % 4;
+	address += offset;
+	offset = address % 4;
+	address = (address / 4) * 4;
 
 	user_cnt = atomic_add_return(1, &chip->memif_user_cnt);
 	if (fg_debug_mask & FG_MEM_DEBUG_WRITES)
@@ -1509,20 +1513,20 @@ static int __fg_interleaved_mem_write(struct fg_chip *chip, u8 *val,
 					len, address, offset);
 
 	while (len > 0) {
-			num_bytes = (offset + len) > BUF_LEN ?
-				(BUF_LEN - offset) : len;
-			/* write to byte_enable */
-			for (i = offset; i < (offset + num_bytes); i++)
-				byte_enable |= BIT(i);
+		num_bytes = (offset + len) > BUF_LEN ?
+			(BUF_LEN - offset) : len;
+		/* write to byte_enable */
+		for (i = offset; i < (offset + num_bytes); i++)
+			byte_enable |= BIT(i);
 
-			rc = fg_write(chip, &byte_enable,
-				chip->mem_base + MEM_INTF_IMA_BYTE_EN, 1);
-			if (rc) {
-				pr_err("Unable to write to byte_en_reg rc=%d\n",
-								rc);
-				return rc;
-			}
-			/* write data */
+		rc = fg_write(chip, &byte_enable,
+			chip->mem_base + MEM_INTF_IMA_BYTE_EN, 1);
+		if (rc) {
+			pr_err("Unable to write to byte_en_reg rc=%d\n",
+							rc);
+			return rc;
+		}
+		/* write data */
 		rc = fg_write(chip, word, MEM_INTF_WR_DATA0(chip) + offset,
 				num_bytes);
 		if (rc) {
@@ -1827,7 +1831,7 @@ static int fg_interleaved_mem_write(struct fg_chip *chip, u8 *val, u16 address,
 retry:
 	rc = fg_interleaved_mem_config(chip, val, address, offset, len, 1);
 	if (rc) {
-		pr_err("failed to xonfigure SRAM for IMA rc = %d\n", rc);
+		pr_err("failed to configure SRAM for IMA rc = %d\n", rc);
 		goto out;
 	}
 
@@ -1890,6 +1894,9 @@ static int fg_mem_masked_write(struct fg_chip *chip, u16 addr,
 	u8 reg[4];
 	char str[DEBUG_PRINT_BUFFER_SIZE];
 
+	if (WARN_ONCE(offset >= sizeof(reg), "offset too large %d\n", offset))
+		return -EINVAL;
+
 	rc = fg_mem_read(chip, reg, addr, 4, 0, 1);
 	if (rc) {
 		pr_err("spmi read failed: addr=%03X, rc=%d\n", addr, rc);
@@ -1927,6 +1934,7 @@ static int fg_backup_sram_registers(struct fg_chip *chip, bool save)
 		address = fg_backup_regs[i].address;
 		offset = fg_backup_regs[i].offset;
 		len = fg_backup_regs[i].len;
+		BUG_ON(ptr + len > sram_backup_buffer + sizeof(sram_backup_buffer));
 		if (save)
 			rc = fg_interleaved_mem_read(chip, ptr, address,
 					len, offset);
@@ -1949,7 +1957,7 @@ static int fg_backup_sram_registers(struct fg_chip *chip, bool save)
 #define SOC_LOW_PWR_CFG 0xF5
 static int fg_reset(struct fg_chip *chip, bool reset)
 {
-	int rc;
+		int rc;
 	u8 soc_low_pwr_cfg;
 
 	rc = fg_sec_masked_write(chip, chip->soc_base + SOC_FG_RESET,
@@ -2189,7 +2197,7 @@ static int get_monotonic_soc_raw(struct fg_chip *chip)
 #define SYSTEM_SOC_SIZE                2
 static int get_system_soc(struct fg_chip *chip)
 {
-	u8 cap[2];
+	u8 cap[SYSTEM_SOC_SIZE];
 	int soc;
 	int rc;
 
@@ -6221,9 +6229,9 @@ fail:
 #ifdef CONFIG_HTC_BATT
 static int __init batt_enable_bms_charger_log_set(char *str)
 {
-    g_fg_flag_enable_batt_debug_log = true;
-    pr_info("flag_enable_batt_debug_log is set\n");
-    return 0;
+	g_fg_flag_enable_batt_debug_log = true;
+	pr_info("flag_enable_batt_debug_log is set\n");
+	return 0;
 }
 __setup("batt_enable_bms_charger_log=1", batt_enable_bms_charger_log_set);
 #endif /* CONFIG_HTC_BATT */
@@ -8412,7 +8420,7 @@ static void ima_error_recovery_work(struct work_struct *work)
 		goto out;
 	}
 
-		pr_info("resetting FG\n");
+	pr_info("resetting FG\n");
 
 	/* Assert FG reset */
 	rc = fg_reset(chip, true);
@@ -8424,7 +8432,7 @@ static void ima_error_recovery_work(struct work_struct *work)
 	/* Wait for a small time before deasserting FG reset */
 	msleep(100);
 
-		pr_info("clearing FG from reset\n");
+	pr_info("clearing FG from reset\n");
 
 	/* Deassert FG reset */
 	rc = fg_reset(chip, false);
@@ -8443,7 +8451,7 @@ static void ima_error_recovery_work(struct work_struct *work)
 		goto wait;
 	}
 
-		pr_info("Calling hw_init\n");
+	pr_info("Calling hw_init\n");
 
 	/*
 	 * Once FG is reset, everything in SRAM will be wiped out. Redo
@@ -8466,7 +8474,7 @@ static void ima_error_recovery_work(struct work_struct *work)
 			goto out;
 	}
 
-		pr_info("loading battery profile\n");
+	pr_info("loading battery profile\n");
 	if (!chip->use_otp_profile) {
 		chip->battery_missing = true;
 		chip->profile_loaded = false;
