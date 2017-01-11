@@ -91,8 +91,7 @@
 
 	.if	\el == 0
 	mrs	x21, sp_el0
-	mov	tsk, sp
-	and	tsk, tsk, #~(THREAD_SIZE - 1)	// Ensure MDSCR_EL1.SS is clear,
+	get_thread_info tsk			// Ensure MDSCR_EL1.SS is clear,
 	ldr	x19, [tsk, #TI_FLAGS]		// since we can unmask debug
 	disable_step_tsk x19, x20		// exceptions when scheduling.
 	.else
@@ -144,13 +143,6 @@ alternative_endif
 	.if	\el == 0
 	mvn	x21, xzr
 	str	x21, [sp, #S_SYSCALLNO]
-	.endif
-
-	/*
-	 * Set sp_el0 to current thread_info.
-	 */
-	.if	\el == 0
-	msr	sp_el0, tsk
 	.endif
 
 	/*
@@ -718,8 +710,6 @@ ENTRY(cpu_switch_to)
 	mov	v15.16b, v15.16b
 #endif
 	mov	sp, x9
-	and	x9, x9, #~(THREAD_SIZE - 1)
-	msr	sp_el0, x9
 	ret
 ENDPROC(cpu_switch_to)
 

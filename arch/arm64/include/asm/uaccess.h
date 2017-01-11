@@ -462,6 +462,7 @@ alternative_else
 	nop
 	nop
 	nop
+	nop
 alternative_endif
 #endif
 alternative_if_not ARM64_ALT_PAN_NOT_UAO
