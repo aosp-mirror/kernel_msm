@@ -334,6 +334,9 @@ values to unprivileged users is a concern.
 When kptr_restrict is set to (2), kernel pointers printed using
 %pK will be replaced with 0's regardless of privileges.
 
+When kptr_restrict is set to (3), kernel pointers printed using
+%p and %pK will be replaced with 0's regardless of privileges.
+
 ==============================================================
 
 kstack_depth_to_print: (X86 only)
