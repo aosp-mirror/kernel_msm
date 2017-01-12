@@ -601,11 +601,4 @@
 			reg = <0 0x88f00000 0 0x00100000>;
 		};
     };
-}
-
-/* Set to batteryless to avoid system shutdown when unplugging USB cable */
-/* TODO(ericyz): remove this section once we bring up battery/charger, and
- * users switch to use battery instead of DC power supply. */
-&pmi8998_charger {
-        qcom,batteryless-platform;
 };
