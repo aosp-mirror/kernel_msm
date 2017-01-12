@@ -1597,6 +1597,7 @@ static void ffs_epfiles_destroy(struct ffs_epfile *epfiles, unsigned count)
 			dput(epfile->dentry);
 			epfile->dentry = NULL;
 		}
+		kfree(epfile->buffer);
 	}
 
 	kfree(epfiles);
