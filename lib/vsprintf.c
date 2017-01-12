@@ -378,7 +378,7 @@ struct printf_spec {
 	s16	precision;	/* # of digits/chars */
 };
 
-int kptr_restrict __read_mostly;
+int kptr_restrict __read_mostly = 4;
 
 /*
  * Always cleanse %p and %pK specifiers
