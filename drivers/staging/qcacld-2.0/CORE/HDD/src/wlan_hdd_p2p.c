@@ -890,7 +890,8 @@ static int wlan_hdd_request_remain_on_channel( struct wiphy *wiphy,
     if (0 != ret)
         return ret;
 
-    if (hdd_isConnectionInProgress((hdd_context_t *)pAdapter->pHddCtx)) {
+    if (hdd_isConnectionInProgress((hdd_context_t *)pAdapter->pHddCtx, NULL,
+                                    NULL)) {
         hddLog(LOGE, FL("Connection is in progress"));
         isBusy = VOS_TRUE;
     }
