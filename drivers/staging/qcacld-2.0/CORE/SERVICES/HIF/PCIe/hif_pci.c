@@ -2354,6 +2354,7 @@ HIF_sleep_entry(void *arg)
 	A_target_id_t pci_addr = TARGID_TO_PCI_ADDR(hif_state->targid);
 	struct hif_pci_softc *sc = hif_state->sc;
 	u_int32_t idle_ms;
+	unsigned long flags;
 
 	if (vos_is_unload_in_progress())
 		return;
@@ -2361,7 +2362,7 @@ HIF_sleep_entry(void *arg)
 	if (sc->recovery)
 		return;
 
-	adf_os_spin_lock_irqsave(&hif_state->keep_awake_lock);
+	spin_lock_irqsave(&hif_state->keep_awake_lock, flags);
 	if (hif_state->verified_awake == FALSE) {
 		idle_ms = adf_os_ticks_to_msecs(adf_os_ticks()
 					- hif_state->sleep_ticks);
@@ -2381,7 +2382,7 @@ HIF_sleep_entry(void *arg)
 		adf_os_timer_start(&hif_state->sleep_timer,
 			HIF_SLEEP_INACTIVITY_TIMER_PERIOD_MS);
 	}
-	adf_os_spin_unlock_irqrestore(&hif_state->keep_awake_lock);
+	spin_unlock_irqrestore(&hif_state->keep_awake_lock, flags);
 }
 
 void
@@ -2390,8 +2391,9 @@ HIFCancelDeferredTargetSleep(HIF_DEVICE *hif_device)
 	struct HIF_CE_state *hif_state = (struct HIF_CE_state *)hif_device;
 	A_target_id_t pci_addr = TARGID_TO_PCI_ADDR(hif_state->targid);
 	struct hif_pci_softc *sc = hif_state->sc;
+	unsigned long flags;
 
-	adf_os_spin_lock_irqsave(&hif_state->keep_awake_lock);
+	spin_lock_irqsave(&hif_state->keep_awake_lock, flags);
 	/*
 	 * If the deferred sleep timer is running cancel it
 	 * and put the soc into sleep.
@@ -2404,7 +2406,7 @@ HIFCancelDeferredTargetSleep(HIF_DEVICE *hif_device)
 		}
 		hif_state->fake_sleep = FALSE;
 	}
-	adf_os_spin_unlock_irqrestore(&hif_state->keep_awake_lock);
+	spin_unlock_irqrestore(&hif_state->keep_awake_lock, flags);
 }
 
 /*
@@ -2446,9 +2448,9 @@ HIF_PCIDeviceProbed(hif_handle_t hif_hdl)
     sc->hif_device = (HIF_DEVICE *)hif_state;
     hif_state->sc = sc;
 
-    adf_os_spinlock_init(&hif_state->keep_awake_lock);
+    spin_lock_init(&hif_state->keep_awake_lock);
 
-    adf_os_spinlock_init(&hif_state->suspend_lock);
+    spin_lock_init(&hif_state->suspend_lock);
 
     adf_os_atomic_init(&hif_state->hif_thread_idle);
     adf_os_atomic_inc(&hif_state->hif_thread_idle);
@@ -2760,6 +2762,7 @@ HIFTargetSleepStateAdjust(A_target_id_t targid,
     static int max_delay;
     static int debug = 0;
     struct hif_pci_softc *sc = hif_state->sc;
+    unsigned long flags;
 
 
     if (sc->recovery)
@@ -2781,7 +2784,7 @@ HIFTargetSleepStateAdjust(A_target_id_t targid,
     }
 
     if (sleep_ok) {
-        adf_os_spin_lock_irqsave(&hif_state->keep_awake_lock);
+        spin_lock_irqsave(&hif_state->keep_awake_lock, flags);
         hif_state->keep_awake_count--;
         if (hif_state->keep_awake_count == 0) {
             /* Allow sleep */
@@ -2797,9 +2800,9 @@ HIFTargetSleepStateAdjust(A_target_id_t targid,
             adf_os_timer_start(&hif_state->sleep_timer,
                 HIF_SLEEP_INACTIVITY_TIMER_PERIOD_MS);
         }
-        adf_os_spin_unlock_irqrestore(&hif_state->keep_awake_lock);
+        spin_unlock_irqrestore(&hif_state->keep_awake_lock, flags);
     } else {
-        adf_os_spin_lock_irqsave(&hif_state->keep_awake_lock);
+        spin_lock_irqsave(&hif_state->keep_awake_lock, flags);
 
         if (hif_state->fake_sleep) {
             hif_state->verified_awake = TRUE;
@@ -2811,7 +2814,7 @@ HIFTargetSleepStateAdjust(A_target_id_t targid,
             }
         }
         hif_state->keep_awake_count++;
-        adf_os_spin_unlock_irqrestore(&hif_state->keep_awake_lock);
+        spin_unlock_irqrestore(&hif_state->keep_awake_lock, flags);
 
         if (wait_for_it && !hif_state->verified_awake) {
 #define PCIE_WAKE_TIMEOUT 8000 /* 8Ms */
