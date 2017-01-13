@@ -4657,7 +4657,7 @@ struct energy_env {
  */
 static unsigned long __cpu_norm_util(int cpu, unsigned long capacity, int delta)
 {
-	int util = __cpu_util(cpu, delta, UTIL_EST);
+	int util = __cpu_util(cpu, delta, UTIL_AVG);
 
 	if (util >= capacity)
 		return SCHED_CAPACITY_SCALE;
@@ -4682,7 +4682,7 @@ unsigned long group_max_util(struct energy_env *eenv)
 
 	for_each_cpu(i, sched_group_cpus(eenv->sg_cap)) {
 		delta = calc_util_delta(eenv, i);
-		max_util = max(max_util, __cpu_util(i, delta, UTIL_EST));
+		max_util = max(max_util, __cpu_util(i, delta, UTIL_AVG));
 	}
 
 	return max_util;
