@@ -5539,8 +5539,7 @@ static inline int find_best_target(struct task_struct *p, bool boosted, bool pre
 	int best_idle_cpu = -1;
 	int best_idle_cstate = INT_MAX;
 	int backup_cpu = -1;
-	unsigned long min_util;
-	unsigned long new_util;
+	unsigned long min_util = boosted_task_util(p);
 	struct sched_domain *sd;
 	struct sched_group *sg;
 	int cpu = start_cpu(boosted);
@@ -5555,13 +5554,11 @@ static inline int find_best_target(struct task_struct *p, bool boosted, bool pre
 
 	sg = sd->groups;
 
-	min_util = boosted_task_util(p);
-
 	do {
 		int i;
 
 		for_each_cpu_and(i, tsk_cpus_allowed(p), sched_group_cpus(sg)) {
-			unsigned long cur_capacity;
+			unsigned long cur_capacity, new_util;
 
 			if (!cpu_online(i))
 				continue;
@@ -5579,6 +5576,7 @@ static inline int find_best_target(struct task_struct *p, bool boosted, bool pre
 			 * than the one required to boost the task.
 			 */
 			new_util = max(min_util, new_util);
+
 			if (new_util > capacity_orig_of(i))
 				continue;
 
