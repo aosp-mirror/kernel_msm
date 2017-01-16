@@ -2846,16 +2846,13 @@ unsigned long sum_capacity_reqs(unsigned long cfs_cap,
 
 static void sched_freq_tick_pelt(int cpu)
 {
-	unsigned long cpu_utilization = cpu_util(cpu, UTIL_EST);
+	unsigned long cpu_utilization = capacity_max;
 	unsigned long capacity_curr = capacity_curr_of(cpu);
 	struct sched_capacity_reqs *scr;
 
 	scr = &per_cpu(cpu_sched_capacity_reqs, cpu);
 	if (sum_capacity_reqs(cpu_utilization, scr) < capacity_curr)
 		return;
-
-	if (!use_util_est())
-		cpu_utilization = capacity_max;
 
 	/*
 	 * To make free room for a task that is building up its "real"
@@ -2869,7 +2866,7 @@ static void sched_freq_tick_pelt(int cpu)
 #ifdef CONFIG_SCHED_WALT
 static void sched_freq_tick_walt(int cpu)
 {
-	unsigned long cpu_utilization = cpu_util(cpu, UTIL_EST);
+	unsigned long cpu_utilization = cpu_util(cpu);
 	unsigned long capacity_curr = capacity_curr_of(cpu);
 
 	if (walt_disabled || !sysctl_sched_use_walt_cpu_util)
