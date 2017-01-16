@@ -31,4 +31,16 @@
 &headset {
 	interrupts = <131 IRQ_TYPE_LEVEL_LOW>;
 	pinctrl-0 = <&da7219_interrupt_p2_default>;
+	dlg,micbias-lvl = <2400>;
+};
+
+&rpm_bus {
+	rpm-regulator-ldoa18 {
+		status = "okay";
+		pm8998_l18: regulator-l18 {
+			regulator-min-microvolt = <2500000>;
+			regulator-max-microvolt = <2500000>;
+			status = "okay";
+		};
+	};
 };
