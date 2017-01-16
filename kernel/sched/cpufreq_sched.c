@@ -295,7 +295,7 @@ static int cpufreq_sched_policy_init(struct cpufreq_policy *policy)
 	if (rc) {
 		pr_err("%s: couldn't create sysfs attributes: %d\n", __func__, rc);
 		goto err;
- 	}
+	}
 
 	if (cpufreq_driver_is_slow()) {
 		cpufreq_driver_slow = true;
