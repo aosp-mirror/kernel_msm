@@ -2,6 +2,7 @@
 #include "msm8998-htc-regulator.dtsi"
 #include "msm8998-htc-pm.dtsi"
 #include "dsi-panel-muskie-s6e3ha3.dtsi"
+#include "dsi-panel-muskie-ea8064tg.dtsi"
 #include "msm8998-htc-nfc.dtsi"
 
 &pcie0 {
@@ -24,4 +25,64 @@
 	/delete-property/ wake-gpio;
 	/* Remove pcie0_wake_default from pin muxing */
 	pinctrl-0 = <&pcie0_clkreq_default &pcie0_perst_default>;
+};
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_s6e3ha3_dualdsi_wqhd_cmd>;
+	/delete-property/qcom,panel-mode-gpio;
+	wqhd-vddio-supply = <&pm8998_l14>;
+	vci-supply = <&pm8998_l22>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+	qcom,platform-reset-gpio = <&tlmm 94 0>;
+	qcom,platform-te-gpio = <&tlmm 10 0>;
+};
+
+&mdss_dsi1 {
+	qcom,dsi-pref-prim-pan = <&dsi_s6e3ha3_dualdsi_wqhd_cmd>;
+	/delete-property/qcom,panel-mode-gpio;
+	wqhd-vddio-supply = <&pm8998_l14>;
+	vci-supply = <&pm8998_l22>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+	qcom,platform-reset-gpio = <&tlmm 94 0>;
+	qcom,platform-te-gpio = <&tlmm 10 0>;
+};
+
+&pm8998_l14 {
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+};
+
+&pm8998_l22 {
+	regulator-min-microvolt = <3000000>;
+	regulator-max-microvolt = <3000000>;
+};
+
+&tlmm {
+	pmx_mdss: pmx_mdss {
+		mdss_dsi_active: mdss_dsi_active {
+			mux {
+				pins = "gpio94";
+				function = "gpio";
+			};
+				config {
+				pins = "gpio94";
+				drive-strength = <8>; /* 8 mA */
+				bias-disable = <0>; /* no pull */
+			};
+		};
+		mdss_dsi_suspend: mdss_dsi_suspend {
+			mux {
+				pins = "gpio94";
+				function = "gpio";
+			};
+				config {
+				pins = "gpio94";
+				drive-strength = <2>; /* 2 mA */
+				bias-pull-down; /* pull down */
+			};
+		};
+	};
 };
