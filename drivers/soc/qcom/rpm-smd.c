@@ -110,7 +110,7 @@ static struct glink_apps_rpm_data *glink_data;
 		sizeof(struct rpm_v0_hdr) : sizeof(struct rpm_v1_hdr))
 #define GET_FIELD(offset, size) (((1U << (offset + size)) - 1) - \
 		((1U << offset) - 1))
-#define CLEAR_FIELD(offset, size) (~GET_FIELD(offset, size))
+#define CLEAR_FIELD(offset, size) (~GENMASK(offset + size -1, offset))
 
 static ATOMIC_NOTIFIER_HEAD(msm_rpm_sleep_notifier);
 static bool standalone;
@@ -223,7 +223,7 @@ static uint32_t msm_rpm_get_next_msg_id(void);
 static inline uint32_t get_offset_value(uint32_t val, uint32_t offset,
 		uint32_t size)
 {
-	return (((val) & GET_FIELD(offset, size))
+	return (((val) & GENMASK(offset + size - 1, offset))
 		>> offset);
 }
 
