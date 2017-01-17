@@ -17,6 +17,19 @@
 #ifndef __MNH_SM_CONFIG
 #define __MNH_SM_CONFIG
 
+#include "mnh-hwio-bases.h"
+#include "mnh-pwr.h"
+#include "mnh-ddr.h"
+
+#include <linux/init.h>
+
+#define MNH_MUX_DEVICE_TX_MAX	2
+#define MNH_MUX_DEVICE_TX0	0
+#define MNH_MUX_DEVICE_TX1	1
+#define MNH_MUX_DEVICE_RX0	0
+#define MNH_MUX_DEVICE_RX1	1
+#define MNH_MUX_DEVICE_RX2	2
+
 /** Firmware download image state */
 enum fw_image_state {
 	FW_IMAGE_NONE = 0,
@@ -48,27 +61,25 @@ struct mnh_sm_power_seq_entity {
 	unsigned int delay; /* delay in micro seconds */
 };
 
+struct mnh_mipi_conf {
+	uint32_t freq;
+	int      is_gen3;
+};
+
+struct mnh_tx_conf {
+	/* Rx dev MNH_MUX_DEVICE_RX* */
+	int		rxdev;
+	/* The conf sel is the index in list of mnh_mipi_conf */
+	int		conf_sel;
+};
 
 struct mnh_sm_configuration {
-
-	const unsigned int power_items;
-	const struct mnh_sm_power_seq_entity *power_entities;
-	const unsigned int power_delay; /* in micro seconds */
-
-	const unsigned int powerup_regs_items;
-	const struct mnh_sm_register_write_rep *powerup_regs;
-
-	const unsigned int poweroff_regs_items;
-	const struct mnh_sm_register_write_rep *poweroff_regs;
-
-	const unsigned int ddr_suspend_regs_items;
-	const struct mnh_sm_register_write_rep *ddr_suspend_regs;
-
-	const unsigned int ddr_resume_regs_items;
-	const struct mnh_sm_register_write_rep *ddr_resume_regs;
-
-	const unsigned int mipi_powerup_regs_items;
-	const struct mnh_sm_register_write_rep *mipi_powerup_regs;
+	const struct mnh_pwr_controls *mnh_pwr;
+	const unsigned int mipi_items;
+	const struct mnh_mipi_conf *mipi_configs;
+	struct mnh_tx_conf *tx_configs;
+	struct mnh_ddr_state *ddr_config;
+	unsigned int cur_mipi_config;
 };
 
 #endif /* __MNH_SM_CONFIG */

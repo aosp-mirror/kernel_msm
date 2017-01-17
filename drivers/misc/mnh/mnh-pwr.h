@@ -27,7 +27,14 @@ struct mnh_pwr_controls {
 	struct gpio suspend_n;
 	struct gpio ddr_iso_n;
 	struct gpio reset_n;
-	struct gpio soc_pwr_good; /* input to AP */
+	struct gpio soc_pwr_good;
+	struct gpio clk32k_stop_n;
+	struct gpio pcie_clk_sel;
+	struct gpio clk_sel;
+	struct gpio bypasswake;
+	struct gpio boot_strap;
+	struct gpio thermtrip;
+	struct gpio ready;
 };
 
 enum mnh_pwr_state {

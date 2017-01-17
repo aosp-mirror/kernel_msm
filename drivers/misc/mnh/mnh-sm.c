@@ -33,7 +33,10 @@
 
 #include "mnh-pcie.h"
 #include "hw-mnh-regs.h"
+#include "mnh-sm-config.h"
+#include "mnh-sm-config-a.h"
 #include "mnh-sm.h"
+#include "mnh-mipi.h"
 
 #define MAX_STR_COPY 32
 #define SUCCESS 0
@@ -57,8 +60,6 @@
 #define FIP_IMG_UBOOT_SIZE_OFFSET	0x50
 #define FIP_IMG_UBOOT_ADDR_OFFSET	0x48
 
-/* SM GPIO definitions */
-#define MNH_POWER_ON_GPIO 393
 #define MNH_PCIE_CHAN_0 0
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
@@ -73,19 +74,17 @@ static struct class *mclass;
 static struct device *mdevice;
 static struct mnh_sm_device *mnh_sm_dev;
 static hotplug_cb_t mnh_hotplug_cb;
-static int mnh_sm_uboot;
+static int mnh_state;
+static int mnh_sm_uboot = 1;
 
 static ssize_t mnh_sm_poweron_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
 {
 	ssize_t strlen = 0;
-	int gpio_value = 0;
 
 	dev_info(mdevice, "Entering mnh_sm_poweron_show...\n");
-	gpio_request(MNH_POWER_ON_GPIO, "MNH PWRON");
-	gpio_value = gpio_export(MNH_POWER_ON_GPIO, true);
-	gpio_direction_output(MNH_POWER_ON_GPIO, 1);
+	mnh_sm_poweron(sm_config_1);
 	return strlen;
 }
 
@@ -95,7 +94,6 @@ static ssize_t mnh_sm_poweron_store(struct device *dev,
 			      size_t count)
 {
 	dev_info(mdevice, "Entering mnh_sm_poweron_store...\n");
-	gpio_set_value(MNH_POWER_ON_GPIO, 1);
 	return -EINVAL;
 }
 
@@ -107,13 +105,9 @@ static ssize_t mnh_sm_poweroff_show(struct device *dev,
 			     char *buf)
 {
 	ssize_t strlen = 0;
-	int gpio_value = 0;
 
 	dev_info(mdevice, "Entering mnh_sm_poweroff_show...\n");
-	gpio_request(MNH_POWER_ON_GPIO, "MNH PWRON");
-	gpio_value = gpio_export(MNH_POWER_ON_GPIO, true);
-	gpio_direction_output(MNH_POWER_ON_GPIO, 1);
-	dev_info(mdevice, "MNH_POWER_ON_GPIO = %d", gpio_value);
+	mnh_sm_poweroff(sm_config_1);
 
 	return strlen;
 }
@@ -125,12 +119,112 @@ static ssize_t mnh_sm_poweroff_store(struct device *dev,
 {
 	dev_info(mdevice, "Entering mnh_sm_poweroff_store...\n");
 
-	gpio_set_value(MNH_POWER_ON_GPIO, 0);
-	return count;
+	return -EINVAL;
 }
 
 static DEVICE_ATTR(poweroff, S_IWUSR | S_IRUSR | S_IRGRP,
 		mnh_sm_poweroff_show, mnh_sm_poweroff_store);
+
+
+
+static ssize_t mnh_sm_config_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	ssize_t strlen = 0;
+
+	dev_info(mdevice, "Entering mnh_sm_config_show...\n");
+	mnh_sm_config(sm_config_1);
+	return strlen;
+}
+
+static ssize_t mnh_sm_config_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf,
+			      size_t count)
+{
+	unsigned long val;
+	uint8_t *token;
+	const char *delim = ";";
+	struct mnh_sm_configuration sm_config;
+	struct mnh_mipi_conf mipi_config;
+
+	dev_err(mdevice, "Entering mnh_sm_config_store...\n");
+	sm_config.mnh_pwr = &mnh_power_config;
+
+	dev_err(mdevice, "Input buffer: %s", buf);
+
+	token = strsep((char **)&buf, delim);
+	if (token) {
+		if (kstrtoul(token, 0, &val))
+			return -EINVAL;
+		if ((val < 0) || (val > 1400))
+			return -EINVAL;
+		mipi_config.freq = val;
+		dev_err(mdevice, "MIPI config frequency is %d\n",
+			mipi_config.freq);
+	} else {
+		return -EINVAL;
+	}
+
+	token = strsep((char **)&buf, delim);
+
+	if (token) {
+		if (kstrtoul(token, 0, &val))
+			return -EINVAL;
+		if ((val < 0) || (val >= 2))
+			return -EINVAL;
+		mipi_config.is_gen3 = val;
+		dev_err(mdevice, "MIPI config is_gen3 is %d\n",
+			mipi_config.is_gen3);
+	} else {
+		return -EINVAL;
+	}
+
+	/* sm_config.mipi_configs = &mipi_config; */
+	/* mnh_sm_config(sm_config); */
+
+	mnh_sm_mipi_bypass_gen3_init(mipi_config.freq);
+
+	dev_err(mdevice, "Exiting mnh_sm_config_store...\n");
+
+	return -EINVAL;
+}
+
+static DEVICE_ATTR(config, S_IWUSR | S_IRUGO,
+		mnh_sm_config_show, mnh_sm_config_store);
+
+
+static ssize_t mnh_sm_state_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	dev_info(mdevice, "Entering mnh_sm_state_show...\n");
+
+	return scnprintf(buf, MAX_STR_COPY, "0x%x\n", mnh_state);
+}
+
+static ssize_t mnh_sm_state_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf,
+			      size_t count)
+{
+	unsigned long int val = 0;
+	uint8_t *token;
+	const char *delim = ";";
+
+	dev_info(mdevice, "Entering mnh_sm_state_store...\n");
+	token = strsep((char **)&buf, delim);
+	if ((token) && (!(kstrtoul(token, 0, &val)))
+	    && (val >= MNH_HW_INIT) && (val <= MNH_HW_SUSPEND_HIBERNATE)) {
+		mnh_state = val;
+		return mnh_state;
+	}
+	return -EINVAL;
+}
+
+static DEVICE_ATTR(state, S_IWUSR | S_IRUGO,
+		mnh_sm_state_show, mnh_sm_state_store);
 
 static int dma_callback(uint8_t chan, enum mnh_dma_chan_dir_t dir,
 		enum mnh_dma_trans_status_t status)
@@ -372,16 +466,8 @@ static ssize_t mnh_sm_download_show(struct device *dev,
 	return strlen;
 }
 
-static ssize_t mnh_sm_download_store(struct device *dev,
-			      struct device_attribute *attr,
-			      const char *buf,
-			      size_t count)
-{
-	return -EINVAL;
-}
-
-static DEVICE_ATTR(download, S_IWUSR | S_IRUSR | S_IRGRP,
-		mnh_sm_download_show, mnh_sm_download_store);
+static DEVICE_ATTR(download, S_IRUSR | S_IRGRP,
+		mnh_sm_download_show, NULL);
 
 
 static ssize_t mnh_sm_suspend_show(struct device *dev,
@@ -389,6 +475,8 @@ static ssize_t mnh_sm_suspend_show(struct device *dev,
 			     char *buf)
 {
 	ssize_t strlen = 0;
+
+	mnh_sm_suspend(sm_config_1);
 	return strlen;
 }
 
@@ -408,6 +496,8 @@ static ssize_t mnh_sm_resume_show(struct device *dev,
 			     char *buf)
 {
 	ssize_t strlen = 0;
+
+	mnh_sm_resume(sm_config_1);
 	return strlen;
 }
 
@@ -441,14 +531,77 @@ static ssize_t mnh_sm_reset_store(struct device *dev,
 static DEVICE_ATTR(reset, S_IRUGO | S_IWUSR | S_IWGRP,
 		mnh_sm_reset_show, mnh_sm_reset_store);
 
+static ssize_t mnh_sm_clk_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	int ret = 0, pos = 0, i;
+
+	ret = pos = snprintf(buf, PAGE_SIZE, "supported frequencies\n");
+	buf += pos;
+	for (i = 0; i < sm_config_1.mipi_items; i++) {
+		pos = snprintf(buf, PAGE_SIZE, "%d %d\n",
+				i,
+				sm_config_1.mipi_configs[i].freq);
+		dev_info(mdevice, "found link_freq %d\n",
+			 sm_config_1.mipi_configs[i].freq);
+		buf += pos;
+		ret += pos;
+	}
+	return ret;
+}
+
+static DEVICE_ATTR(supported_clk, S_IRUGO | S_IWUSR | S_IWGRP,
+		   mnh_sm_clk_show, NULL);
+
+static ssize_t mnh_sm_tx_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf,
+			unsigned int txdev)
+{
+	int ret = 0, pos = 0;
+
+	buf += pos;
+	pos = snprintf(buf, PAGE_SIZE, "tx%d sel: %d, rxdev %d\n",
+			txdev,
+			sm_config_1.tx_configs[txdev].conf_sel,
+			sm_config_1.tx_configs[txdev].rxdev);
+	buf += pos;
+	ret += pos;
+	return ret;
+}
+
+static ssize_t mnh_sm_tx0_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	return mnh_sm_tx_show(dev, attr, buf, 0);
+}
+static ssize_t mnh_sm_tx1_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	return mnh_sm_tx_show(dev, attr, buf, 1);
+}
+
+static DEVICE_ATTR(tx0, S_IRUGO | S_IWUSR | S_IWGRP,
+		   mnh_sm_tx0_show, NULL);
+static DEVICE_ATTR(tx1, S_IRUGO | S_IWUSR | S_IWGRP,
+		   mnh_sm_tx1_show, NULL);
+
 
 static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_poweron.attr,
 	&dev_attr_poweroff.attr,
+	&dev_attr_config.attr,
+	&dev_attr_state.attr,
 	&dev_attr_download.attr,
 	&dev_attr_suspend.attr,
 	&dev_attr_resume.attr,
 	&dev_attr_reset.attr,
+	&dev_attr_supported_clk.attr,
+	&dev_attr_tx0.attr,
+	&dev_attr_tx1.attr,
 	NULL
 };
 
@@ -459,11 +612,12 @@ static struct attribute_group mnh_sm_group = {
 
 /*******************************************************************************
  *
- *	APIs
+ *      APIs
  *
  ******************************************************************************/
 
-/** API to register hotplug callback to receive MNH up/down notifications
+/**
+ * API to register hotplug callback to receive MNH up/down notifications
  * @param[in] hotplug_cb  handler for hotplug in/out events
  * @return 0
  */
@@ -475,17 +629,56 @@ int mnh_sm_reg_hotplug_callback(hotplug_cb_t hotplug_cb)
 EXPORT_SYMBOL(mnh_sm_reg_hotplug_callback);
 
 /**
- * API to initialize Power and clocks to MNH, MIPI, DDR, DDR training,
+ * API to initialize Power and clocks to MNH.
+ * @param[in] Structure argument to configure power and clock component.
+ *            This structure will be populated within the kernel module.
+ * @return 0 if success or -EINVAL or -EFATAL on failure
+ */
+int mnh_sm_poweron(struct mnh_sm_configuration mnh_sm_boot_args)
+{
+	mnh_state = MNH_HW_INIT;
+	/* Initialize MNH Power */
+	mnh_pwr_set_state(mdevice, mnh_sm_boot_args.mnh_pwr, MNH_PWR_S0);
+
+	return 0;
+}
+EXPORT_SYMBOL(mnh_sm_poweron);
+
+
+/**
+ * API to power monette hill.
+ * @return 0 if success or -EINVAL or -EFATAL on failure
+ */
+int mnh_sm_poweroff(struct mnh_sm_configuration mnh_sm_boot_args)
+{
+	mnh_state = MNH_HW_OFF;
+	/* Power down MNH */
+	mnh_pwr_set_state(mdevice, mnh_sm_boot_args.mnh_pwr, MNH_PWR_S4);
+	return 0;
+}
+EXPORT_SYMBOL(mnh_sm_poweroff);
+
+/**
+ * API to initialize MIPI, DDR, DDR training,
  * and PCIE.
  * @param[in] Structure argument to configure each boot component.
  *            This structure will be populated within the kernel module.
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
-int mnh_sm_poweron(struct mnh_sm_configuration *mnh_sm_boot_args)
+int mnh_sm_config(struct mnh_sm_configuration mnh_sm_boot_args)
 {
+	/* Initialize DDR */
+
+	/* Initialize DDR training */
+
+	/* Initialze MIPI bypass */
+	/* TODO hardcode the to use the first config */
+	mnh_sm_mipi_bypass_init(&mnh_sm_boot_args);
+
+	mnh_ddr_po_init(mdevice, mnh_sm_boot_args.ddr_config);
 	return 0;
 }
-EXPORT_SYMBOL(mnh_sm_poweron);
+EXPORT_SYMBOL(mnh_sm_config);
 
 /**
  * API to obtain the state of monette hill.
@@ -500,19 +693,27 @@ EXPORT_SYMBOL(mnh_sm_poweron);
  */
 int mnh_sm_get_state(void)
 {
-	return 0;
+	return mnh_state;
 }
 EXPORT_SYMBOL(mnh_sm_get_state);
 
 /**
- * API to power monette hill.
- * @return 0 if success or -EINVAL or -EFATAL on failure
+ * API to set the state of monette hill.
+ * @param[in] Set the power states of mnh(ex: On, Off, Active, Suspend, Bypass).
+ *      MNH_HW_INIT - MNH is on, Kernel not executing, and before FW download.
+ *      MNH_HW_OFF - MNH is powered off
+ *      MNH_HW_ACTIVE: MNH is on and flashed. Kernel is running.
+ *      MNH_HW_SUSPEND_SELF_REFRESH: DDR is self refreshing.
+ *                                   All other components are off.
+ *      MNH_HW_SUSPEND_HIBERNATE: Hibernation image stored in AP RAM
+ *                                over PCIe outbound and MNH is powered down.
  */
-int mnh_sm_poweroff(void)
+int mnh_sm_set_state(int state)
 {
+	mnh_state = state;
 	return 0;
 }
-EXPORT_SYMBOL(mnh_sm_poweroff);
+EXPORT_SYMBOL(mnh_sm_set_state);
 
 /**
  * API to download the binary images(SBL, UBoot, Kernel, Ramdisk) for mnh.
@@ -548,8 +749,11 @@ EXPORT_SYMBOL(mnh_sm_download);
  * and put in self refresh while the CPU is powered down.
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
-int mnh_sm_suspend(void)
+int mnh_sm_suspend(struct mnh_sm_configuration mnh_sm_boot_args)
 {
+	mnh_state = MNH_HW_SUSPEND_SELF_REFRESH;
+	/* Suspend MNH power */
+	mnh_pwr_set_state(mdevice, mnh_sm_boot_args.mnh_pwr, MNH_PWR_S3);
 	return 0;
 }
 EXPORT_SYMBOL(mnh_sm_suspend);
@@ -562,8 +766,11 @@ EXPORT_SYMBOL(mnh_sm_suspend);
  * resume.
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
-int mnh_sm_resume(void)
+int mnh_sm_resume(struct mnh_sm_configuration mnh_sm_boot_args)
 {
+	mnh_state = MNH_HW_ACTIVE;
+	/* Initialize MNH Power */
+	mnh_pwr_set_state(mdevice, mnh_sm_boot_args.mnh_pwr, MNH_PWR_S0);
 	return 0;
 }
 EXPORT_SYMBOL(mnh_sm_resume);
@@ -571,12 +778,12 @@ EXPORT_SYMBOL(mnh_sm_resume);
 static void __exit mnh_sm_exit(void)
 {
 	dev_dbg(mdevice, "MNHPM Un-initializing\n");
+	mnh_sm_poweroff(sm_config_1);
 	sysfs_remove_group(kernel_kobj, &mnh_sm_group);
 	cdev_del(mcdev);
 	unregister_chrdev_region(dev_num, 1);
 	device_destroy(mclass, MKDEV(MAJOR(dev_num), 0));
 	class_destroy(mclass);
-	gpio_free(MNH_POWER_ON_GPIO);
 }
 
 static int __init mnh_sm_init(void)
@@ -630,6 +837,8 @@ static int __init mnh_sm_init(void)
 		dev_err(mdevice, "failed to create /sys/kernel/mnh_sm\n");
 	else
 		dev_info(mdevice, "MNH SM initialized successfully\n");
+
+	mnh_sm_poweroff(sm_config_1);
 
 	return error;
 

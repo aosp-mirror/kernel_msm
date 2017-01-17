@@ -1,0 +1,10338 @@
+/* mnh ddr tool: v0.7 */
+#ifndef _MNH_DDR_600_H_
+#define _MNH_DDR_600_H_
+#include "mnh-ddr.h"
+struct mnh_ddr_reg_config mnh_ddr_600 = {
+	{ /* BEGIN CTL */
+	/*
+	 * 0
+	 * VERSION:RD:16:16:=0x0000
+	 * DRAM_CLASS:RW:8:4:=0x0b
+	 * START:RW:0:1:=0x00
+	 */
+	{ 0xb00, 0x0 },
+	/*
+	 * 1
+	 * READ_DATA_FIFO_DEPTH:RD:24:8:=0x00
+	 * MAX_CS_REG:RD:16:1:=0x00
+	 * MAX_COL_REG:RD:8:4:=0x00
+	 * MAX_ROW_REG:RD:0:4:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 2
+	 * MEMCD_RMODW_FIFO_DEPTH:RD:24:8:=0x00
+	 * WRITE_DATA_FIFO_PTR_WIDTH:RD:16:8:=0x00
+	 * WRITE_DATA_FIFO_DEPTH:RD:8:8:=0x00
+	 * READ_DATA_FIFO_PTR_WIDTH:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 3
+	 * AXI0_RDFIFO_LOG2_DEPTH:RD:24:8:=0x00
+	 * AXI0_CMDFIFO_LOG2_DEPTH:RD:16:8:=0x00
+	 * ASYNC_CDC_STAGES:RD:8:8:=0x00
+	 * MEMCD_RMODW_FIFO_PTR_WIDTH:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 4
+	 * AXI1_RDFIFO_LOG2_DEPTH:RD:24:8:=0x00
+	 * AXI1_CMDFIFO_LOG2_DEPTH:RD:16:8:=0x00
+	 * AXI0_WRCMD_PROC_FIFO_LOG2_DEPTH:RD:8:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 5
+	 * DFS_CLOSE_BANKS:RW:16:1:=0x00
+	 * AXI1_WRCMD_PROC_FIFO_LOG2_DEPTH:RD:8:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 6
+	 * TINIT_F0:RW:0:24:=0x001a0b
+	 */
+	{ 0x1a0b, 0x0 },
+	/*
+	 * 7
+	 * TINIT3_F0:RW:0:24:=0x01046b
+	 */
+	{ 0x1046b, 0x0 },
+	/*
+	 * 8
+	 * TINIT4_F0:RW:0:24:=0x000005
+	 */
+	{ 0x5, 0x0 },
+	/*
+	 * 9
+	 * TINIT5_F0:RW:0:24:=0x000043
+	 */
+	{ 0x43, 0x0 },
+	/*
+	 * 10
+	 * TINIT_F1:RW:0:24:=0x03a9e1
+	 */
+	{ 0x3a9e1, 0x0 },
+	/*
+	 * 11
+	 * TINIT3_F1:RW:0:24:=0x24a2c1
+	 */
+	{ 0x24a2c1, 0x0 },
+	/*
+	 * 12
+	 * TINIT4_F1:RW:0:24:=0x000005
+	 */
+	{ 0x5, 0x0 },
+	/*
+	 * 13
+	 * TINIT5_F1:RW:0:24:=0x000961
+	 */
+	{ 0x961, 0x0 },
+	/*
+	 * 14
+	 * TINIT_F2:RW:0:24:=0x03a9e1
+	 */
+	{ 0x3a9e1, 0x0 },
+	/*
+	 * 15
+	 * TINIT3_F2:RW:0:24:=0x24a2c1
+	 */
+	{ 0x24a2c1, 0x0 },
+	/*
+	 * 16
+	 * TINIT4_F2:RW:0:24:=0x000005
+	 */
+	{ 0x5, 0x0 },
+	/*
+	 * 17
+	 * TINIT5_F2:RW:0:24:=0x000961
+	 */
+	{ 0x961, 0x0 },
+	/*
+	 * 18
+	 * TINIT_F3:RW:0:24:=0x03a9e1
+	 */
+	{ 0x3a9e1, 0x0 },
+	/*
+	 * 19
+	 * TINIT3_F3:RW:0:24:=0x24a2c1
+	 */
+	{ 0x24a2c1, 0x0 },
+	/*
+	 * 20
+	 * TINIT4_F3:RW:0:24:=0x000005
+	 */
+	{ 0x5, 0x0 },
+	/*
+	 * 21
+	 * NO_AUTO_MRR_INIT:RW:24:1:=0x00
+	 * TINIT5_F3:RW:0:24:=0x000961
+	 */
+	{ 0x1000961, 0x0 },
+	/*
+	 * 22
+	 * NO_MRW_INIT:RW:24:1:=0x00
+	 * NO_MRW_BT_INIT:RW:16:1:=0x00
+	 * DFI_INV_DATA_CS:RW:8:1:=0x00
+	 * MRR_ERROR_STATUS:RD:0:2:=0x00
+	 */
+	{ 0x1010000, 0x0 },
+	/*
+	 * 23
+	 * DFIBUS_BOOT_FREQ:RW:24:2:=0x02
+	 * DFIBUS_FREQ_INIT:RW:16:2:=0x03
+	 * PHY_INDEP_TRAIN_MODE:RW:8:1:=0x01
+	 * RESERVED:RW_D:0:1:=0x01
+	 */
+	{ 0x20101, 0x0 },
+	/*
+	 * 24
+	 * DFIBUS_FREQ_F3:RW:24:5:=0x01
+	 * DFIBUS_FREQ_F2:RW:16:5:=0x00
+	 * DFIBUS_FREQ_F1:RW:8:5:=0x01
+	 * DFIBUS_FREQ_F0:RW:0:5:=0x02
+	 */
+	{ 0x3020100, 0x0 },
+	/*
+	 * 25
+	 * TRST_PWRON:RW:0:32:=0x00000007
+	 */
+	{ 0x7, 0x0 },
+	/*
+	 * 26
+	 * CKE_INACTIVE:RW:0:32:=0x00000011
+	 */
+	{ 0x11, 0x0 },
+	/*
+	 * 27
+	 * WRLAT_F1:RW:24:7:=0x0c
+	 * CASLAT_LIN_F1:RW:16:7:=0x30
+	 * WRLAT_F0:RW:8:7:=0x04
+	 * CASLAT_LIN_F0:RW:0:7:=0x0c
+	 */
+	{ 0xc30040c, 0x0 },
+	/*
+	 * 28
+	 * WRLAT_F3:RW:24:7:=0x0c
+	 * CASLAT_LIN_F3:RW:16:7:=0x30
+	 * WRLAT_F2:RW:8:7:=0x0c
+	 * CASLAT_LIN_F2:RW:0:7:=0x30
+	 */
+	{ 0xc300c30, 0x0 },
+	/*
+	 * 29
+	 * TRC_F0:RW:24:8:=0x07
+	 * TRRD_F0:RW:16:8:=0x04
+	 * TCCD:RW:8:5:=0x08
+	 * TBST_INT_INTERVAL:RW:0:3:=0x04
+	 */
+	{ 0x7040804, 0x0 },
+	/*
+	 * 30
+	 * TFAW_F0:RW:24:8:=0x02
+	 * TRP_F0:RW:16:8:=0x04
+	 * TWTR_F0:RW:8:6:=0x09
+	 * TRAS_MIN_F0:RW:0:8:=0x03
+	 */
+	{ 0x2040903, 0x0 },
+	/*
+	 * 31
+	 * TWTR_F1:RW:24:6:=0x0e
+	 * TRAS_MIN_F1:RW:16:8:=0x33
+	 * TRC_F1:RW:8:8:=0x49
+	 * TRRD_F1:RW:0:8:=0x0d
+	 */
+	{ 0xe33490d, 0x0 },
+	/*
+	 * 32
+	 * TRC_F2:RW:24:8:=0x49
+	 * TRRD_F2:RW:16:8:=0x0d
+	 * TFAW_F1:RW:8:8:=0x31
+	 * TRP_F1:RW:0:8:=0x16
+	 */
+	{ 0x490d3116, 0x0 },
+	/*
+	 * 33
+	 * TFAW_F2:RW:24:8:=0x31
+	 * TRP_F2:RW:16:8:=0x16
+	 * TWTR_F2:RW:8:6:=0x0e
+	 * TRAS_MIN_F2:RW:0:8:=0x33
+	 */
+	{ 0x31160e33, 0x0 },
+	/*
+	 * 34
+	 * TWTR_F3:RW:24:6:=0x0e
+	 * TRAS_MIN_F3:RW:16:8:=0x33
+	 * TRC_F3:RW:8:8:=0x49
+	 * TRRD_F3:RW:0:8:=0x0d
+	 */
+	{ 0xe33490d, 0x0 },
+	/*
+	 * 35
+	 * TRTP_F0:RW:24:8:=0x08
+	 * TCCDMW:RW:16:6:=0x20
+	 * TFAW_F3:RW:8:8:=0x31
+	 * TRP_F3:RW:0:8:=0x16
+	 */
+	{ 0x8203116, 0x0 },
+	/*
+	 * 36
+	 * TMOD_F0:RW:8:8:=0x0a
+	 * TMRD_F0:RW:0:8:=0x0a
+	 */
+	{ 0xa0a, 0x0 },
+	/*
+	 * 37
+	 * TCKE_F0:RW:24:4:=0x04
+	 * TRAS_MAX_F0:RW:0:17:=0x000924
+	 */
+	{ 0x4000924, 0x0 },
+	/*
+	 * 38
+	 * TMOD_F1:RW:24:8:=0x0d
+	 * TMRD_F1:RW:16:8:=0x0d
+	 * TRTP_F1:RW:8:8:=0x0a
+	 * TCKESR_F0:RW:0:8:=0x04
+	 */
+	{ 0xd0d0a04, 0x0 },
+	/*
+	 * 39
+	 * TCKE_F1:RW:24:4:=0x0a
+	 * TRAS_MAX_F1:RW:0:17:=0x014931
+	 */
+	{ 0xa014931, 0x0 },
+	/*
+	 * 40
+	 * TMOD_F2:RW:24:8:=0x0d
+	 * TMRD_F2:RW:16:8:=0x0d
+	 * TRTP_F2:RW:8:8:=0x0a
+	 * TCKESR_F1:RW:0:8:=0x0a
+	 */
+	{ 0xd0d0a0a, 0x0 },
+	/*
+	 * 41
+	 * TCKE_F2:RW:24:4:=0x0a
+	 * TRAS_MAX_F2:RW:0:17:=0x014931
+	 */
+	{ 0xa014931, 0x0 },
+	/*
+	 * 42
+	 * TMOD_F3:RW:24:8:=0x0d
+	 * TMRD_F3:RW:16:8:=0x0d
+	 * TRTP_F3:RW:8:8:=0x0a
+	 * TCKESR_F2:RW:0:8:=0x0a
+	 */
+	{ 0xd0d0a0a, 0x0 },
+	/*
+	 * 43
+	 * TCKE_F3:RW:24:4:=0x0a
+	 * TRAS_MAX_F3:RW:0:17:=0x014931
+	 */
+	{ 0xa014931, 0x0 },
+	/*
+	 * 44
+	 * RESERVED:RW:24:3:=0x02
+	 * RESERVED:RW:16:3:=0x03
+	 * TPPD:RW_D:8:3:=0x04
+	 * TCKESR_F3:RW:0:8:=0x0a
+	 */
+	{ 0x203040a, 0x0 },
+	/*
+	 * 45
+	 * TRCD_F1:RW:24:8:=0x16
+	 * TWR_F0:RW:16:6:=0x04
+	 * TRCD_F0:RW:8:8:=0x04
+	 * WRITEINTERP:RW:0:1:=0x00
+	 */
+	{ 0x16040400, 0x0 },
+	/*
+	 * 46
+	 * TRCD_F3:RW:24:8:=0x16
+	 * TWR_F2:RW:16:6:=0x17
+	 * TRCD_F2:RW:8:8:=0x16
+	 * TWR_F1:RW:0:6:=0x17
+	 */
+	{ 0x16171617, 0x0 },
+	/*
+	 * 47
+	 * TCACKEL:RW:16:5:=0x0a
+	 * TMRR:RW:8:4:=0x08
+	 * TWR_F3:RW:0:6:=0x17
+	 */
+	{ 0xa0817, 0x0 },
+	/*
+	 * 48
+	 * TCAEXT:RW:24:5:=0x0a
+	 * TCAMRD:RW:16:6:=0x14
+	 * TCAENT:RW:0:10:=0x0009
+	 */
+	{ 0xa140009, 0x0 },
+	/*
+	 * 49
+	 * TMRZ_F2:RW:24:5:=0x02
+	 * TMRZ_F1:RW:16:5:=0x02
+	 * TMRZ_F0:RW:8:5:=0x01
+	 * TCACKEH:RW:0:5:=0x0a
+	 */
+	{ 0x202010a, 0x0 },
+	/*
+	 * 50
+	 * TRAS_LOCKOUT:RW:24:1:=0x00
+	 * CONCURRENTAP:RW:16:1:=0x01
+	 * AP:RW:8:1:=0x00
+	 * TMRZ_F3:RW:0:5:=0x02
+	 */
+	{ 0x10002, 0x0 },
+	/*
+	 * 51
+	 * TDAL_F3:RW:24:8:=0x2d
+	 * TDAL_F2:RW:16:8:=0x2d
+	 * TDAL_F1:RW:8:8:=0x2d
+	 * TDAL_F0:RW:0:8:=0x08
+	 */
+	{ 0x2d2d2d08, 0x0 },
+	/*
+	 * 52
+	 * TRP_AB_F2:RW:24:8:=0x1a
+	 * TRP_AB_F1:RW:16:8:=0x1a
+	 * TRP_AB_F0:RW:8:8:=0x04
+	 * BSTLEN:RW_D:0:5:=0x04
+	 */
+	{ 0x1a1a0404, 0x0 },
+	/*
+	 * 53
+	 * RESERVED:RW:24:1:=0x01
+	 * OPTIMAL_RMODW_EN:RW:16:1:=0x01
+	 * REG_DIMM_ENABLE:RW:8:1:=0x00
+	 * TRP_AB_F3:RW:0:8:=0x1a
+	 */
+	{ 0x101001a, 0x0 },
+	/*
+	 * 54
+	 * TREF_ENABLE:RW:24:1:=0x01
+	 * RESERVED:RW:16:1:=0x00
+	 * AREFRESH:WR:8:1:=0x00
+	 * NO_MEMORY_DM:RW:0:1:=0x00
+	 */
+	{ 0x01000000, 0x0 },
+	/*
+	 * 55
+	 * TRFC_F0:RW:8:10:=0x0005
+	 * RESERVED:RW:0:3:=0x03
+	 */
+	{ 0x503, 0x0 },
+	/*
+	 * 56
+	 * TRFC_F1:RW:16:10:=0x009d
+	 * TREF_F0:RW:0:16:=0x007a
+	 */
+	{ 0x9d007a, 0x0 },
+	/*
+	 * 57
+	 * TRFC_F2:RW:16:10:=0x009d
+	 * TREF_F1:RW:0:16:=0x1241
+	 */
+	{ 0x9d1241, 0x0 },
+	/*
+	 * 58
+	 * TRFC_F3:RW:16:10:=0x009d
+	 * TREF_F2:RW:0:16:=0x1241
+	 */
+	{ 0x9d1241, 0x0 },
+	/*
+	 * 59
+	 * TREF_F3:RW:0:16:=0x1241
+	 */
+	{ 0x1241, 0x0 },
+	/*
+	 * 60
+	 * TPDEX_F1:RW:16:16:=0x000a
+	 * TPDEX_F0:RW:0:16:=0x0003
+	 */
+	{ 0xa0003, 0x0 },
+	/*
+	 * 61
+	 * TPDEX_F3:RW:16:16:=0x000a
+	 * TPDEX_F2:RW:0:16:=0x000a
+	 */
+	{ 0xa000a, 0x0 },
+	/*
+	 * 62
+	 * TMRRI_F3:RW:24:8:=0x23
+	 * TMRRI_F2:RW:16:8:=0x23
+	 * TMRRI_F1:RW:8:8:=0x23
+	 * TMRRI_F0:RW:0:8:=0x0a
+	 */
+	{ 0x2323230a, 0x0 },
+	/*
+	 * 63
+	 * TMRWCKEL_F0:RW:24:5:=0x0a
+	 * TCKEHCS_F0:RW:16:4:=0x00
+	 * TCKELCS_F0:RW:8:4:=0x00
+	 * TCSCKE_F0:RW:0:4:=0x01
+	 */
+	{ 0xa000001, 0x0 },
+	/*
+	 * 64
+	 * TCKELCS_F1:RW:24:4:=0x00
+	 * TCSCKE_F1:RW:16:4:=0x03
+	 * CA_DEFAULT_VAL_F0:RW:8:1:=0x01
+	 * TZQCKE_F0:RW:0:4:=0x03
+	 */
+	{ 0x30103, 0x0 },
+	/*
+	 * 65
+	 * CA_DEFAULT_VAL_F1:RW:24:1:=0x01
+	 * TZQCKE_F1:RW:16:4:=0x03
+	 * TMRWCKEL_F1:RW:8:5:=0x11
+	 * TCKEHCS_F1:RW:0:4:=0x00
+	 */
+	{ 0x1031100, 0x0 },
+	/*
+	 * 66
+	 * TMRWCKEL_F2:RW:24:5:=0x11
+	 * TCKEHCS_F2:RW:16:4:=0x00
+	 * TCKELCS_F2:RW:8:4:=0x00
+	 * TCSCKE_F2:RW:0:4:=0x03
+	 */
+	{ 0x11000003, 0x0 },
+	/*
+	 * 67
+	 * TCKELCS_F3:RW:24:4:=0x00
+	 * TCSCKE_F3:RW:16:4:=0x03
+	 * CA_DEFAULT_VAL_F2:RW:8:1:=0x01
+	 * TZQCKE_F2:RW:0:4:=0x03
+	 */
+	{ 0x30103, 0x0 },
+	/*
+	 * 68
+	 * CA_DEFAULT_VAL_F3:RW:24:1:=0x01
+	 * TZQCKE_F3:RW:16:4:=0x03
+	 * TMRWCKEL_F3:RW:8:5:=0x11
+	 * TCKEHCS_F3:RW:0:4:=0x00
+	 */
+	{ 0x1031100, 0x0 },
+	/*
+	 * 69
+	 * TXSNR_F0:RW:16:16:=0x0005
+	 * TXSR_F0:RW:0:16:=0x0003
+	 */
+	{ 0x50003, 0x0 },
+	/*
+	 * 70
+	 * TXSNR_F1:RW:16:16:=0x00a6
+	 * TXSR_F1:RW:0:16:=0x000a
+	 */
+	{ 0xa6000a, 0x0 },
+	/*
+	 * 71
+	 * TXSNR_F2:RW:16:16:=0x00a6
+	 * TXSR_F2:RW:0:16:=0x000a
+	 */
+	{ 0xa6000a, 0x0 },
+	/*
+	 * 72
+	 * TXSNR_F3:RW:16:16:=0x00a6
+	 * TXSR_F3:RW:0:16:=0x000a
+	 */
+	{ 0xa6000a, 0x0 },
+	/*
+	 * 73
+	 * TSR_F0:RW:24:8:=0x03
+	 * TCKCKEL_F0:RW:16:4:=0x05
+	 * TCKEHCMD_F0:RW:8:4:=0x05
+	 * TCKELCMD_F0:RW:0:4:=0x05
+	 */
+	{ 0x3050505, 0x0 },
+	/*
+	 * 74
+	 * TCMDCKE_F0:RW:24:4:=0x03
+	 * TCSCKEH_F0:RW:16:4:=0x01
+	 * TCKELPD_F0:RW:8:4:=0x03
+	 * TESCKE_F0:RW:0:3:=0x02
+	 */
+	{ 0x3010302, 0x0 },
+	/*
+	 * 75
+	 * TSR_F1:RW:24:8:=0x13
+	 * TCKCKEL_F1:RW:16:4:=0x07
+	 * TCKEHCMD_F1:RW:8:4:=0x0a
+	 * TCKELCMD_F1:RW:0:4:=0x07
+	 */
+	{ 0x13070a07, 0x0 },
+	/*
+	 * 76
+	 * TCMDCKE_F1:RW:24:4:=0x03
+	 * TCSCKEH_F1:RW:16:4:=0x03
+	 * TCKELPD_F1:RW:8:4:=0x0a
+	 * TESCKE_F1:RW:0:3:=0x02
+	 */
+	{ 0x3030a02, 0x0 },
+	/*
+	 * 77
+	 * TSR_F2:RW:24:8:=0x13
+	 * TCKCKEL_F2:RW:16:4:=0x07
+	 * TCKEHCMD_F2:RW:8:4:=0x0a
+	 * TCKELCMD_F2:RW:0:4:=0x07
+	 */
+	{ 0x13070a07, 0x0 },
+	/*
+	 * 78
+	 * TCMDCKE_F2:RW:24:4:=0x03
+	 * TCSCKEH_F2:RW:16:4:=0x03
+	 * TCKELPD_F2:RW:8:4:=0x0a
+	 * TESCKE_F2:RW:0:3:=0x02
+	 */
+	{ 0x3030a02, 0x0 },
+	/*
+	 * 79
+	 * TSR_F3:RW:24:8:=0x13
+	 * TCKCKEL_F3:RW:16:4:=0x07
+	 * TCKEHCMD_F3:RW:8:4:=0x0a
+	 * TCKELCMD_F3:RW:0:4:=0x07
+	 */
+	{ 0x13070a07, 0x0 },
+	/*
+	 * 80
+	 * TCMDCKE_F3:RW:24:4:=0x03
+	 * TCSCKEH_F3:RW:16:4:=0x03
+	 * TCKELPD_F3:RW:8:4:=0x0a
+	 * TESCKE_F3:RW:0:3:=0x02
+	 */
+	{ 0x3030a02, 0x0 },
+	/*
+	 * 81
+	 * CKE_DELAY:RW:24:3:=0x03
+	 * ENABLE_QUICK_SREFRESH:RW:16:1:=0x01
+	 * RESERVED:RW:8:1:=0x00
+	 * PWRUP_SREFRESH_EXIT:RW:0:1:=0x00
+	 */
+	{ 0x3010000, 0x0 },
+	/*
+	 * 82
+	 * DFS_CALVL_EN:RW:24:1:=0x00
+	 * DFS_ZQ_EN:RW:16:1:=0x01
+	 * DFS_STATUS:RD:8:2:=0x00
+	 * RESERVED:WR:0:5:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 83
+	 * DFS_RDLVL_GATE_EN:RW:16:1:=0x00
+	 * DFS_RDLVL_EN:RW:8:1:=0x00
+	 * DFS_WRLVL_EN:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 84
+	 * DFS_PROMOTE_THRESHOLD_F1:RW:16:16:=0x0000
+	 * DFS_PROMOTE_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 85
+	 * DFS_PROMOTE_THRESHOLD_F3:RW:16:16:=0x0000
+	 * DFS_PROMOTE_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 86
+	 * RESERVED:RW:24:3:=0x01
+	 * ZQ_CALINIT_CS_CL_STATUS:RD:16:2:=0x00
+	 * ZQ_CALLATCH_STATUS:RD:8:2:=0x00
+	 * ZQ_CALSTART_STATUS:RD:0:2:=0x00
+	 */
+	{ 0x1000000, 0x0 },
+	/*
+	 * 87
+	 * RESERVED:RW:24:8:=0x80
+	 * RESERVED:RW:16:8:=0x10
+	 * RESERVED:RW:8:8:=0x40
+	 * RESERVED:RW:0:3:=0x02
+	 */
+	{ 0x80104002, 0x0 },
+	/*
+	 * 88
+	 * UPD_CTRLUPD_HIGH_THRESHOLD_F0:RW:16:16:=0x0004
+	 * UPD_CTRLUPD_NORM_THRESHOLD_F0:RW:0:16:=0x0003
+	 */
+	{ 0x40003, 0x0 },
+	/*
+	 * 89
+	 * UPD_CTRLUPD_SW_PROMOTE_THRESHOLD_F0:RW:16:16:=0x0004
+	 * UPD_CTRLUPD_TIMEOUT_F0:RW:0:16:=0x0005
+	 */
+	{ 0x40005, 0x0 },
+	/*
+	 * 90
+	 * UPD_CTRLUPD_NORM_THRESHOLD_F1:RW:16:16:=0x0003
+	 * UPD_PHYUPD_DFI_PROMOTE_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 91
+	 * UPD_CTRLUPD_TIMEOUT_F1:RW:16:16:=0x0005
+	 * UPD_CTRLUPD_HIGH_THRESHOLD_F1:RW:0:16:=0x0004
+	 */
+	{ 0x50004, 0x0 },
+	/*
+	 * 92
+	 * UPD_PHYUPD_DFI_PROMOTE_THRESHOLD_F1:RW:16:16:=0x0000
+	 * UPD_CTRLUPD_SW_PROMOTE_THRESHOLD_F1:RW:0:16:=0x0004
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 93
+	 * UPD_CTRLUPD_HIGH_THRESHOLD_F2:RW:16:16:=0x0004
+	 * UPD_CTRLUPD_NORM_THRESHOLD_F2:RW:0:16:=0x0003
+	 */
+	{ 0x40003, 0x0 },
+	/*
+	 * 94
+	 * UPD_CTRLUPD_SW_PROMOTE_THRESHOLD_F2:RW:16:16:=0x0004
+	 * UPD_CTRLUPD_TIMEOUT_F2:RW:0:16:=0x0005
+	 */
+	{ 0x40005, 0x0 },
+	/*
+	 * 95
+	 * UPD_CTRLUPD_NORM_THRESHOLD_F3:RW:16:16:=0x0003
+	 * UPD_PHYUPD_DFI_PROMOTE_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 96
+	 * UPD_CTRLUPD_TIMEOUT_F3:RW:16:16:=0x0005
+	 * UPD_CTRLUPD_HIGH_THRESHOLD_F3:RW:0:16:=0x0004
+	 */
+	{ 0x50004, 0x0 },
+	/*
+	 * 97
+	 * UPD_PHYUPD_DFI_PROMOTE_THRESHOLD_F3:RW:16:16:=0x0000
+	 * UPD_CTRLUPD_SW_PROMOTE_THRESHOLD_F3:RW:0:16:=0x0004
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 98
+	 * TDFI_PHYMSTR_RESP_F0:RW:16:16:=0x00f4
+	 * TDFI_PHYMSTR_MAX_F0:RW:0:16:=0x01e8
+	 */
+	{ 0xf401e8, 0x0 },
+	/*
+	 * 99
+	 * TDFI_PHYMSTR_MAX_F1:RW:16:16:=0x4904
+	 * PHYMSTR_DFI_PROMOTE_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x49040000, 0x0 },
+	/*
+	 * 100
+	 * PHYMSTR_DFI_PROMOTE_THRESHOLD_F1:RW:16:16:=0x0000
+	 * TDFI_PHYMSTR_RESP_F1:RW:0:16:=0x2482
+	 */
+	{ 0x2482, 0x0 },
+	/*
+	 * 101
+	 * TDFI_PHYMSTR_RESP_F2:RW:16:16:=0x2482
+	 * TDFI_PHYMSTR_MAX_F2:RW:0:16:=0x4904
+	 */
+	{ 0x24824904, 0x0 },
+	/*
+	 * 102
+	 * TDFI_PHYMSTR_MAX_F3:RW:16:16:=0x4904
+	 * PHYMSTR_DFI_PROMOTE_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x49040000, 0x0 },
+	/*
+	 * 103
+	 * PHYMSTR_DFI_PROMOTE_THRESHOLD_F3:RW:16:16:=0x0000
+	 * TDFI_PHYMSTR_RESP_F3:RW:0:16:=0x2482
+	 */
+	{ 0x2482, 0x0 },
+	/*
+	 * 104
+	 * MRR_TEMPCHK_NORM_THRESHOLD_F0:RW:16:16:=0x0000
+	 * PHYMSTR_ERROR_STATUS:RD:8:2:=0x00
+	 * PHYMSTR_NO_AREF:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 105
+	 * MRR_TEMPCHK_TIMEOUT_F0:RW:16:16:=0x0000
+	 * MRR_TEMPCHK_HIGH_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 106
+	 * MRR_TEMPCHK_HIGH_THRESHOLD_F1:RW:16:16:=0x0000
+	 * MRR_TEMPCHK_NORM_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 107
+	 * MRR_TEMPCHK_NORM_THRESHOLD_F2:RW:16:16:=0x0000
+	 * MRR_TEMPCHK_TIMEOUT_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 108
+	 * MRR_TEMPCHK_TIMEOUT_F2:RW:16:16:=0x0000
+	 * MRR_TEMPCHK_HIGH_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 109
+	 * MRR_TEMPCHK_HIGH_THRESHOLD_F3:RW:16:16:=0x0000
+	 * MRR_TEMPCHK_NORM_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 110
+	 * CKSRE_F0:RW:24:8:=0x03
+	 * LOWPOWER_REFRESH_ENABLE:RW:16:1:=0x00
+	 * MRR_TEMPCHK_TIMEOUT_F3:RW:0:16:=0x0000
+	 */
+	{ 0x3000000, 0x0 },
+	/*
+	 * 111
+	 * CKSRE_F2:RW:24:8:=0x0a
+	 * CKSRX_F1:RW:16:8:=0x03
+	 * CKSRE_F1:RW:8:8:=0x0a
+	 * CKSRX_F0:RW:0:8:=0x03
+	 */
+	{ 0xa030a03, 0x0 },
+	/*
+	 * 112
+	 * LP_CMD:WR:24:8:=0x00
+	 * CKSRX_F3:RW:16:8:=0x03
+	 * CKSRE_F3:RW:8:8:=0x0a
+	 * CKSRX_F2:RW:0:8:=0x03
+	 */
+	{ 0x30a03, 0x0 },
+	/*
+	 * 113
+	 * LPI_SRPD_LITE_WAKEUP_F0:RW:24:4:=0x02
+	 * LPI_SR_MCCLK_GATE_WAKEUP_F0:RW:16:4:=0x03
+	 * LPI_SR_WAKEUP_F0:RW:8:4:=0x02
+	 * LPI_PD_WAKEUP_F0:RW:0:4:=0x00
+	 */
+	{ 0x2030200, 0x0 },
+	/*
+	 * 114
+	 * LPI_PD_WAKEUP_F1:RW:24:4:=0x00
+	 * LPI_TIMER_WAKEUP_F0:RW:16:4:=0x07
+	 * LPI_SRPD_DEEP_MCCLK_GATE_WAKEUP_F0:RW:8:4:=0x07
+	 * LPI_SRPD_DEEP_WAKEUP_F0:RW:0:4:=0x03
+	 */
+	{ 0x70703, 0x0 },
+	/*
+	 * 115
+	 * LPI_SRPD_DEEP_WAKEUP_F1:RW:24:4:=0x03
+	 * LPI_SRPD_LITE_WAKEUP_F1:RW:16:4:=0x02
+	 * LPI_SR_MCCLK_GATE_WAKEUP_F1:RW:8:4:=0x03
+	 * LPI_SR_WAKEUP_F1:RW:0:4:=0x02
+	 */
+	{ 0x3020302, 0x0 },
+	/*
+	 * 116
+	 * LPI_SR_WAKEUP_F2:RW:24:4:=0x02
+	 * LPI_PD_WAKEUP_F2:RW:16:4:=0x00
+	 * LPI_TIMER_WAKEUP_F1:RW:8:4:=0x07
+	 * LPI_SRPD_DEEP_MCCLK_GATE_WAKEUP_F1:RW:0:4:=0x07
+	 */
+	{ 0x2000707, 0x0 },
+	/*
+	 * 117
+	 * LPI_SRPD_DEEP_MCCLK_GATE_WAKEUP_F2:RW:24:4:=0x07
+	 * LPI_SRPD_DEEP_WAKEUP_F2:RW:16:4:=0x03
+	 * LPI_SRPD_LITE_WAKEUP_F2:RW:8:4:=0x02
+	 * LPI_SR_MCCLK_GATE_WAKEUP_F2:RW:0:4:=0x03
+	 */
+	{ 0x7030203, 0x0 },
+	/*
+	 * 118
+	 * LPI_SR_MCCLK_GATE_WAKEUP_F3:RW:24:4:=0x03
+	 * LPI_SR_WAKEUP_F3:RW:16:4:=0x02
+	 * LPI_PD_WAKEUP_F3:RW:8:4:=0x00
+	 * LPI_TIMER_WAKEUP_F2:RW:0:4:=0x07
+	 */
+	{ 0x3020007, 0x0 },
+	/*
+	 * 119
+	 * LPI_TIMER_WAKEUP_F3:RW:24:4:=0x07
+	 * LPI_SRPD_DEEP_MCCLK_GATE_WAKEUP_F3:RW:16:4:=0x07
+	 * LPI_SRPD_DEEP_WAKEUP_F3:RW:8:4:=0x03
+	 * LPI_SRPD_LITE_WAKEUP_F3:RW:0:4:=0x02
+	 */
+	{ 0x7070302, 0x0 },
+	/*
+	 * 120
+	 * LPI_TIMER_COUNT:RW:8:12:=0x0003
+	 * LPI_WAKEUP_EN:RW:0:5:=0x0f
+	 */
+	{ 0x30f, 0x0 },
+	/*
+	 * 121
+	 * LP_STATE:RD:24:7:=0x00
+	 * TDFI_LP_RESP:RW:16:3:=0x07
+	 * LPI_WAKEUP_TIMEOUT:RW:0:12:=0x0004
+	 */
+	{ 0x70004, 0x0 },
+	/*
+	 * 122
+	 * LP_AUTO_MEM_GATE_EN:RW:16:3:=0x00
+	 * LP_AUTO_EXIT_EN:RW:8:4:=0x00
+	 * LP_AUTO_ENTRY_EN:RW:0:4:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 123
+	 * LP_AUTO_SRPD_LITE_IDLE:RW:16:12:=0x0000
+	 * LP_AUTO_PD_IDLE:RW:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 124
+	 * HW_PROMOTE_THRESHOLD_F0:RW:16:16:=0x0000
+	 * LP_AUTO_SR_MC_GATE_IDLE:RW:8:8:=0x00
+	 * LP_AUTO_SR_IDLE:RW:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 125
+	 * HW_PROMOTE_THRESHOLD_F2:RW:16:16:=0x0000
+	 * HW_PROMOTE_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 126
+	 * LPC_PROMOTE_THRESHOLD_F0:RW:16:16:=0x0000
+	 * HW_PROMOTE_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 127
+	 * LPC_PROMOTE_THRESHOLD_F2:RW:16:16:=0x0000
+	 * LPC_PROMOTE_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 128
+	 * LPC_SR_PHYUPD_EN:RW:24:1:=0x00
+	 * LPC_SR_CTRLUPD_EN:RW:16:1:=0x00
+	 * LPC_PROMOTE_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 129
+	 * RESERVED:RW:24:8:=0x00
+	 * LPC_SR_ZQ_EN:RW:16:1:=0x00
+	 * RESERVED:RW:8:1:=0x00
+	 * LPC_SR_PHYMSTR_EN:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 130
+	 * TDFI_INIT_COMPLETE_F0:RW_D:16:16:=0x0400
+	 * TDFI_INIT_START_F0:RW_D:8:8:=0xc0
+	 * DFS_ENABLE:RW:0:1:=0x01
+	 */
+	{ 0x400c001, 0x0 },
+	/*
+	 * 131
+	 * TDFI_INIT_START_F2:RW_D:24:8:=0xc0
+	 * TDFI_INIT_COMPLETE_F1:RW_D:8:16:=0x0400
+	 * TDFI_INIT_START_F1:RW_D:0:8:=0xc0
+	 */
+	{ 0xc00400c0, 0x0 },
+	/*
+	 * 132
+	 * TDFI_INIT_START_F3:RW_D:16:8:=0xc0
+	 * TDFI_INIT_COMPLETE_F2:RW_D:0:16:=0x0400
+	 */
+	{ 0xc00400, 0x0 },
+	/*
+	 * 133
+	 * DFS_PHY_REG_WRITE_EN:RW:24:1:=0x01
+	 * CURRENT_REG_COPY:RD:16:2:=0x00
+	 * TDFI_INIT_COMPLETE_F3:RW_D:0:16:=0x0400
+	 */
+	{ 0x1000400, 0x0 },
+	/*
+	 * 134
+	 * DFS_PHY_REG_WRITE_ADDR:RW:0:32:=0x00000c00
+	 */
+	{ 0xc00, 0x0 },
+	/*
+	 * 135
+	 * DFS_PHY_REG_WRITE_DATA_F0:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 136
+	 * DFS_PHY_REG_WRITE_DATA_F1:RW:0:32:=0x00000001
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 137
+	 * DFS_PHY_REG_WRITE_DATA_F2:RW:0:32:=0x00000002
+	 */
+	{ 0x2, 0x0 },
+	/*
+	 * 138
+	 * DFS_PHY_REG_WRITE_DATA_F3:RW:0:32:=0x00000003
+	 */
+	{ 0x3, 0x0 },
+	/*
+	 * 139
+	 * DFS_PHY_REG_WRITE_WAIT:RW:8:16:=0x0010
+	 * DFS_PHY_REG_WRITE_MASK:RW:0:4:=0x0e
+	 */
+	{ 0x100e, 0x0 },
+	/*
+	 * 140
+	 * WRITE_MODEREG:RW+:0:27:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 141
+	 * READ_MODEREG:RW+:8:17:=0x000000
+	 * MRW_STATUS:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 142
+	 * PERIPHERAL_MRR_DATA:RD:0:40:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 143
+	 * DISABLE_UPDATE_TVRCG:RW:24:1:=0x00
+	 * AUTO_TEMPCHK_VAL_0:RD:8:16:=0x0000
+	 * PERIPHERAL_MRR_DATA:RD:0:40:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 144
+	 * TVRCG_ENABLE_F0:RW:16:10:=0x0007
+	 * MRW_DFS_UPDATE_FRC:RW:0:2:=0x00
+	 */
+	{ 0x70000, 0x0 },
+	/*
+	 * 145
+	 * TFC_F0:RW:16:10:=0x0009
+	 * TVRCG_DISABLE_F0:RW:0:10:=0x0004
+	 */
+	{ 0x90004, 0x0 },
+	/*
+	 * 146
+	 * TVREF_LONG_F0:RW:16:16:=0x0009
+	 * TCKFSPX_F0:RW:8:5:=0x04
+	 * TCKFSPE_F0:RW:0:5:=0x04
+	 */
+	{ 0x90404, 0x0 },
+	/*
+	 * 147
+	 * TVRCG_DISABLE_F1:RW:16:10:=0x0079
+	 * TVRCG_ENABLE_F1:RW:0:10:=0x00f1
+	 */
+	{ 0x7900f1, 0x0 },
+	/*
+	 * 148
+	 * TCKFSPX_F1:RW:24:5:=0x0a
+	 * TCKFSPE_F1:RW:16:5:=0x0a
+	 * TFC_F1:RW:0:10:=0x012d
+	 */
+	{ 0xa0a012d, 0x0 },
+	/*
+	 * 149
+	 * TVRCG_ENABLE_F2:RW:16:10:=0x00f1
+	 * TVREF_LONG_F1:RW:0:16:=0x012d
+	 */
+	{ 0xf1012d, 0x0 },
+	/*
+	 * 150
+	 * TFC_F2:RW:16:10:=0x012d
+	 * TVRCG_DISABLE_F2:RW:0:10:=0x0079
+	 */
+	{ 0x12d0079, 0x0 },
+	/*
+	 * 151
+	 * TVREF_LONG_F2:RW:16:16:=0x012d
+	 * TCKFSPX_F2:RW:8:5:=0x0a
+	 * TCKFSPE_F2:RW:0:5:=0x0a
+	 */
+	{ 0x12d0a0a, 0x0 },
+	/*
+	 * 152
+	 * TVRCG_DISABLE_F3:RW:16:10:=0x0079
+	 * TVRCG_ENABLE_F3:RW:0:10:=0x00f1
+	 */
+	{ 0x7900f1, 0x0 },
+	/*
+	 * 153
+	 * TCKFSPX_F3:RW:24:5:=0x0a
+	 * TCKFSPE_F3:RW:16:5:=0x0a
+	 * TFC_F3:RW:0:10:=0x012d
+	 */
+	{ 0xa0a012d, 0x0 },
+	/*
+	 * 154
+	 * MRR_PROMOTE_THRESHOLD_F0:RW:16:16:=0x0000
+	 * TVREF_LONG_F3:RW:0:16:=0x012d
+	 */
+	{ 0x12d, 0x0 },
+	/*
+	 * 155
+	 * MRR_PROMOTE_THRESHOLD_F2:RW:16:16:=0x0000
+	 * MRR_PROMOTE_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 156
+	 * MRW_PROMOTE_THRESHOLD_F0:RW:16:16:=0x0000
+	 * MRR_PROMOTE_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 157
+	 * MRW_PROMOTE_THRESHOLD_F2:RW:16:16:=0x0000
+	 * MRW_PROMOTE_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 158
+	 * MR2_DATA_F0_0:RW:24:8:=0x00
+	 * MR1_DATA_F0_0:RW:16:8:=0x04
+	 * MRW_PROMOTE_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x40000, 0x0 },
+	/*
+	 * 159
+	 * MR2_DATA_F2_0:RW:24:8:=0x24
+	 * MR1_DATA_F2_0:RW:16:8:=0x44
+	 * MR2_DATA_F1_0:RW:8:8:=0x24
+	 * MR1_DATA_F1_0:RW:0:8:=0x44
+	 */
+	{ 0x24442444, 0x0 },
+	/*
+	 * 160
+	 * MR3_DATA_F0_0:RW:24:8:=0x31
+	 * MRSINGLE_DATA_0:RW:16:8:=0x00
+	 * MR2_DATA_F3_0:RW:8:8:=0x24
+	 * MR1_DATA_F3_0:RW:0:8:=0x44
+	 */
+	{ 0x31002444, 0x0 },
+	/*
+	 * 161
+	 * MR8_DATA_0:RD:24:8:=0x00
+	 * MR3_DATA_F3_0:RW:16:8:=0x31
+	 * MR3_DATA_F2_0:RW:8:8:=0x31
+	 * MR3_DATA_F1_0:RW:0:8:=0x31
+	 */
+	{ 0x313131, 0x0 },
+	/*
+	 * 162
+	 * MR11_DATA_F3_0:RW:24:8:=0x00
+	 * MR11_DATA_F2_0:RW:16:8:=0x00
+	 * MR11_DATA_F1_0:RW:8:8:=0x00
+	 * MR11_DATA_F0_0:RW:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 163
+	 * MR12_DATA_F3_0:RW:24:8:=0x00
+	 * MR12_DATA_F2_0:RW:16:8:=0x00
+	 * MR12_DATA_F1_0:RW:8:8:=0x00
+	 * MR12_DATA_F0_0:RW:0:8:=0x00
+	 */
+	{ 0x4d4d4d4d, 0x0 },
+	/*
+	 * 164
+	 * MR14_DATA_F2_0:RW:24:8:=0x00
+	 * MR14_DATA_F1_0:RW:16:8:=0x00
+	 * MR14_DATA_F0_0:RW:8:8:=0x00
+	 * MR13_DATA_0:RW:0:8:=0x00
+	 */
+	{ 0x4d4d4d00, 0x0 },
+	/*
+	 * 165
+	 * MR_FSP_DATA_VALID_F2_0:RW:24:1:=0x00
+	 * MR_FSP_DATA_VALID_F1_0:RW:16:1:=0x00
+	 * MR_FSP_DATA_VALID_F0_0:RW:8:1:=0x00
+	 * MR14_DATA_F3_0:RW:0:8:=0x00
+	 */
+	{ 0x4d, 0x0 },
+	/*
+	 * 166
+	 * MR20_DATA_0:RD:24:8:=0x00
+	 * MR17_DATA_0:RW:16:8:=0x00
+	 * MR16_DATA_0:RW:8:8:=0x00
+	 * MR_FSP_DATA_VALID_F3_0:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 167
+	 * MR22_DATA_F3_0:RW:24:8:=0x00
+	 * MR22_DATA_F2_0:RW:16:8:=0x00
+	 * MR22_DATA_F1_0:RW:8:8:=0x00
+	 * MR22_DATA_F0_0:RW:0:8:=0x00
+	 */
+	{ 0x6060606, 0x0 },
+	/*
+	 * 168
+	 * FSP_PHY_UPDATE_MRW:RW:24:1:=0x01
+	 * RESERVED:RD:16:1:=0x00
+	 * RESERVED:RD:8:1:=0x00
+	 * RL3_SUPPORT_EN:RD:0:1:=0x00
+	 */
+	{ 0x1000000, 0x0 },
+	/*
+	 * 169
+	 * FSP_WR_CURRENT:RW+:24:1:=0x00
+	 * FSP_OP_CURRENT:RW+:16:1:=0x00
+	 * FSP_STATUS:RW:8:1:=0x00
+	 * DFS_ALWAYS_WRITE_FSP:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 170
+	 * FSP1_FRC:RW+:24:2:=0x00
+	 * FSP0_FRC:RW+:16:2:=0x00
+	 * FSP1_FRC_VALID:RW+:8:1:=0x00
+	 * FSP0_FRC_VALID:RW+:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 171
+	 * BIST_DATA_CHECK:RW:24:1:=0x01
+	 * ADDR_SPACE:RW:16:6:=0x00
+	 * BIST_RESULT:RD:8:2:=0x00
+	 * BIST_GO:WR:0:1:=0x00
+	 */
+	{ 0x1000000, 0x0 },
+	/*
+	 * 172
+	 * BIST_ADDR_CHECK:RW:0:1:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 173
+	 * BIST_START_ADDRESS:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 174
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 175
+	 * BIST_DATA_MASK:RW:0:64:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 176
+	 * BIST_DATA_MASK:RW:0:64:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 177
+	 * BIST_TEST_MODE:RW:0:3:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 178
+	 * BIST_DATA_PATTERN:RW:0:128:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 179
+	 * BIST_DATA_PATTERN:RW:0:128:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 180
+	 * BIST_DATA_PATTERN:RW:0:128:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 181
+	 * BIST_DATA_PATTERN:RW:0:128:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 182
+	 * BIST_ERR_STOP:RW:16:12:=0x0000
+	 * BIST_RET_STATE:RD:8:1:=0x00
+	 * BIST_RET_STATE_EXIT:WR:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 183
+	 * AREF_NORM_THRESHOLD:RW:24:5:=0x11
+	 * LONG_COUNT_MASK:RW:16:5:=0x00
+	 * BIST_ERR_COUNT:RD:0:12:=0x0000
+	 */
+	{ 0x11000000, 0x0 },
+	/*
+	 * 184
+	 * AREF_MAX_CREDIT:RW:16:5:=0x0c
+	 * AREF_MAX_DEFICIT:RW:8:5:=0x18
+	 * AREF_HIGH_THRESHOLD:RW:0:5:=0x15
+	 */
+	{ 0xc1815, 0x0 },
+	/*
+	 * 185
+	 * ZQ_CALSTART_HIGH_THRESHOLD_F0:RW:16:16:=0x0000
+	 * ZQ_CALSTART_NORM_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 186
+	 * ZQ_CS_NORM_THRESHOLD_F0:RW:16:16:=0x0000
+	 * ZQ_CALLATCH_HIGH_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 187
+	 * ZQ_CALSTART_TIMEOUT_F0:RW:16:16:=0x0000
+	 * ZQ_CS_HIGH_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 188
+	 * ZQ_CS_TIMEOUT_F0:RW:16:16:=0x0000
+	 * ZQ_CALLATCH_TIMEOUT_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 189
+	 * ZQ_CALSTART_NORM_THRESHOLD_F1:RW:16:16:=0x0000
+	 * ZQ_PROMOTE_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 190
+	 * ZQ_CALLATCH_HIGH_THRESHOLD_F1:RW:16:16:=0x0000
+	 * ZQ_CALSTART_HIGH_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 191
+	 * ZQ_CS_HIGH_THRESHOLD_F1:RW:16:16:=0x0000
+	 * ZQ_CS_NORM_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 192
+	 * ZQ_CALLATCH_TIMEOUT_F1:RW:16:16:=0x0000
+	 * ZQ_CALSTART_TIMEOUT_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 193
+	 * ZQ_PROMOTE_THRESHOLD_F1:RW:16:16:=0x0000
+	 * ZQ_CS_TIMEOUT_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 194
+	 * ZQ_CALSTART_HIGH_THRESHOLD_F2:RW:16:16:=0x0000
+	 * ZQ_CALSTART_NORM_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 195
+	 * ZQ_CS_NORM_THRESHOLD_F2:RW:16:16:=0x0000
+	 * ZQ_CALLATCH_HIGH_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 196
+	 * ZQ_CALSTART_TIMEOUT_F2:RW:16:16:=0x0000
+	 * ZQ_CS_HIGH_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 197
+	 * ZQ_CS_TIMEOUT_F2:RW:16:16:=0x0000
+	 * ZQ_CALLATCH_TIMEOUT_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 198
+	 * ZQ_CALSTART_NORM_THRESHOLD_F3:RW:16:16:=0x0000
+	 * ZQ_PROMOTE_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 199
+	 * ZQ_CALLATCH_HIGH_THRESHOLD_F3:RW:16:16:=0x0000
+	 * ZQ_CALSTART_HIGH_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 200
+	 * ZQ_CS_HIGH_THRESHOLD_F3:RW:16:16:=0x0000
+	 * ZQ_CS_NORM_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 201
+	 * ZQ_CALLATCH_TIMEOUT_F3:RW:16:16:=0x0000
+	 * ZQ_CALSTART_TIMEOUT_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 202
+	 * ZQ_PROMOTE_THRESHOLD_F3:RW:16:16:=0x0000
+	 * ZQ_CS_TIMEOUT_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 203
+	 * ZQINIT_F0:RW_D:8:12:=0x0200
+	 * RESERVED:RW:0:3:=0x03
+	 */
+	{ 0x20003, 0x0 },
+	/*
+	 * 204
+	 * ZQCS_F0:RW:16:12:=0x0040
+	 * ZQCL_F0:RW:0:12:=0x0100
+	 */
+	{ 0x400100, 0x0 },
+	/*
+	 * 205
+	 * TZQLAT_F0:RW:16:6:=0x08
+	 * TZQCAL_F0:RW:0:12:=0x0022
+	 */
+	{ 0x80022, 0x0 },
+	/*
+	 * 206
+	 * ZQCL_F1:RW:16:12:=0x0100
+	 * ZQINIT_F1:RW_D:0:12:=0x0200
+	 */
+	{ 0x1000200, 0x0 },
+	/*
+	 * 207
+	 * TZQCAL_F1:RW:16:12:=0x04b1
+	 * ZQCS_F1:RW:0:12:=0x0040
+	 */
+	{ 0x4b10040, 0x0 },
+	/*
+	 * 208
+	 * ZQINIT_F2:RW_D:8:12:=0x0200
+	 * TZQLAT_F1:RW:0:6:=0x25
+	 */
+	{ 0x20025, 0x0 },
+	/*
+	 * 209
+	 * ZQCS_F2:RW:16:12:=0x0040
+	 * ZQCL_F2:RW:0:12:=0x0100
+	 */
+	{ 0x400100, 0x0 },
+	/*
+	 * 210
+	 * TZQLAT_F2:RW:16:6:=0x25
+	 * TZQCAL_F2:RW:0:12:=0x04b1
+	 */
+	{ 0x2504b1, 0x0 },
+	/*
+	 * 211
+	 * ZQCL_F3:RW:16:12:=0x0100
+	 * ZQINIT_F3:RW_D:0:12:=0x0200
+	 */
+	{ 0x1000200, 0x0 },
+	/*
+	 * 212
+	 * TZQCAL_F3:RW:16:12:=0x04b1
+	 * ZQCS_F3:RW:0:12:=0x0040
+	 */
+	{ 0x4b10040, 0x0 },
+	/*
+	 * 213
+	 * ZQ_REQ_PENDING:RD:16:1:=0x00
+	 * ZQ_REQ:WR:8:4:=0x00
+	 * TZQLAT_F3:RW:0:6:=0x25
+	 */
+	{ 0x25, 0x0 },
+	/*
+	 * 214
+	 * ZQRESET_F1:RW:16:12:=0x003d
+	 * ZQRESET_F0:RW:0:12:=0x0003
+	 */
+	{ 0x3d0003, 0x0 },
+	/*
+	 * 215
+	 * ZQRESET_F3:RW:16:12:=0x003d
+	 * ZQRESET_F2:RW:0:12:=0x003d
+	 */
+	{ 0x3d003d, 0x0 },
+	/*
+	 * 216
+	 * COL_DIFF:RW:24:4:=0x02
+	 * ROW_DIFF:RW:16:3:=0x01
+	 * BANK_DIFF:RW:8:2:=0x00
+	 * NO_ZQ_INIT:RW:0:1:=0x00
+	 */
+	{ 0x2010000, 0x0 },
+	/*
+	 * 217
+	 * AGE_COUNT:RW:24:8:=0xff
+	 * APREBIT:RW_D:16:4:=0x0b
+	 * BANK_ADDR_INTLV_EN:RW:8:1:=0x00
+	 * BANK_START_BIT:RW:0:5:=0x00
+	 */
+	{ 0xff0b0000, 0x0 },
+	/*
+	 * 218
+	 * BANK_SPLIT_EN:RW:24:1:=0x01
+	 * RESERVED:RW:16:1:=0x01
+	 * ADDR_CMP_EN:RW:8:1:=0x01
+	 * COMMAND_AGE_COUNT:RW:0:8:=0xff
+	 */
+	{ 0x10101ff, 0x0 },
+	/*
+	 * 219
+	 * RW_SAME_PAGE_EN:RW:24:1:=0x01
+	 * RW_SAME_EN:RW:16:1:=0x01
+	 * PRIORITY_EN:RW:8:1:=0x01
+	 * PLACEMENT_EN:RW:0:1:=0x01
+	 */
+	{ 0x1010101, 0x0 },
+	/*
+	 * 220
+	 * DISABLE_RD_INTERLEAVE:RW:24:1:=0x00
+	 * SWAP_EN:RW:16:1:=0x01
+	 * NUM_Q_ENTRIES_ACT_DISABLE:RW:8:4:=0x0b
+	 * DISABLE_RW_GROUP_W_BNK_CONFLICT:RW:0:2:=0x01
+	 */
+	{ 0x10b01, 0x0 },
+	/*
+	 * 221
+	 * RESERVED:RW:24:4:=0x01
+	 * MEMDATA_RATIO_0:RW:16:3:=0x01
+	 * REDUC:RW:8:1:=0x00
+	 * INHIBIT_DRAM_CMD:RW:0:2:=0x00
+	 */
+	{ 0x1010000, 0x0 },
+	/*
+	 * 222
+	 * Q_FULLNESS:RW:24:4:=0x00
+	 * RESERVED:RW:16:4:=0x00
+	 * RESERVED:RW:8:4:=0x00
+	 * RESERVED:RW:0:4:=0x04
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 223
+	 * CTRLUPD_REQ_PER_AREF_EN:RW:24:1:=0x01
+	 * CTRLUPD_REQ:WR:16:1:=0x00
+	 * CONTROLLER_BUSY:RD:8:1:=0x00
+	 * IN_ORDER_ACCEPT:RW:0:1:=0x00
+	 */
+	{ 0x1000001, 0x0 },
+	/*
+	 * 224
+	 * PREAMBLE_SUPPORT_F3:RW:24:2:=0x02
+	 * PREAMBLE_SUPPORT_F2:RW:16:2:=0x02
+	 * PREAMBLE_SUPPORT_F1:RW:8:2:=0x02
+	 * PREAMBLE_SUPPORT_F0:RW:0:2:=0x02
+	 */
+	{ 0x2020202, 0x0 },
+	/*
+	 * 225
+	 * DFI_ERROR:RD:24:5:=0x00
+	 * RD_DBI_EN:RW:16:1:=0x00
+	 * WR_DBI_EN:RW:8:1:=0x00
+	 * RD_PREAMBLE_TRAINING_EN:RW:0:1:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 226
+	 * RESERVED:RW+:24:1:=0x00
+	 * DFI_ERROR_INFO:RD:0:20:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 227
+	 * INT_STATUS:RD:0:36:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 228
+	 * INT_STATUS:RD:0:36:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 229
+	 * INT_ACK:WR:0:35:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 230
+	 * INT_ACK:WR:0:35:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 231
+	 * INT_MASK:RW:0:36:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 232
+	 * INT_MASK:RW:0:36:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 233
+	 * OUT_OF_RANGE_ADDR:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 234
+	 * OUT_OF_RANGE_TYPE:RD:24:7:=0x00
+	 * OUT_OF_RANGE_LENGTH:RD:8:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 235
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 236
+	 * BIST_EXP_DATA:RD:0:128:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 237
+	 * BIST_EXP_DATA:RD:0:128:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 238
+	 * BIST_EXP_DATA:RD:0:128:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 239
+	 * BIST_EXP_DATA:RD:0:128:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 240
+	 * BIST_FAIL_DATA:RD:0:128:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 241
+	 * BIST_FAIL_DATA:RD:0:128:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 242
+	 * BIST_FAIL_DATA:RD:0:128:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 243
+	 * BIST_FAIL_DATA:RD:0:128:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 244
+	 * BIST_FAIL_ADDR:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 245
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 246
+	 * PORT_CMD_ERROR_ADDR:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 247
+	 * TODTL_2CMD_F0:RW:24:8:=0x00
+	 * PORT_CMD_ERROR_TYPE:RD:16:3:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 248
+	 * TODTL_2CMD_F2:RW:24:8:=0x00
+	 * TODTH_WR_F1:RW:16:4:=0x01
+	 * TODTL_2CMD_F1:RW:8:8:=0x00
+	 * TODTH_WR_F0:RW:0:4:=0x01
+	 */
+	{ 0x10001, 0x0 },
+	/*
+	 * 249
+	 * ODT_EN_F0:RW:24:1:=0x01
+	 * TODTH_WR_F3:RW:16:4:=0x01
+	 * TODTL_2CMD_F3:RW:8:8:=0x00
+	 * TODTH_WR_F2:RW:0:4:=0x01
+	 */
+	{ 0x1010001, 0x0 },
+	/*
+	 * 250
+	 * EN_ODT_ASSERT_EXCEPT_RD:RW:24:1:=0x00
+	 * ODT_EN_F3:RW:16:1:=0x01
+	 * ODT_EN_F2:RW:8:1:=0x01
+	 * ODT_EN_F1:RW:0:1:=0x01
+	 */
+	{ 0x10101, 0x0 },
+	/*
+	 * 251
+	 * RW2MRW_DLY_F1:RW_D:24:4:=0x0a
+	 * RW2MRW_DLY_F0:RW_D:16:4:=0x08
+	 * RESERVED:RW:8:6:=0x03
+	 * CTLR_DISABLE_ODT_ON_ZQ:RW:0:1:=0x00
+	 */
+	{ 0xa080300, 0x0 },
+	/*
+	 * 252
+	 * R2W_SAMECS_DLY_F0:RW_D:24:5:=0x08
+	 * R2R_SAMECS_DLY:RW:16:5:=0x00
+	 * RW2MRW_DLY_F3:RW_D:8:4:=0x0a
+	 * RW2MRW_DLY_F2:RW_D:0:4:=0x0a
+	 */
+	{ 0x8000a0a, 0x0 },
+	/*
+	 * 253
+	 * W2R_SAMECS_DLY:RW:24:5:=0x00
+	 * R2W_SAMECS_DLY_F3:RW_D:16:5:=0x0b
+	 * R2W_SAMECS_DLY_F2:RW_D:8:5:=0x0b
+	 * R2W_SAMECS_DLY_F1:RW_D:0:5:=0x0b
+	 */
+	{ 0xb0b0b, 0x0 },
+	/*
+	 * 254
+	 * TDQSCK_MAX_F2:RW:24:4:=0x05
+	 * TDQSCK_MAX_F1:RW:16:4:=0x05
+	 * TDQSCK_MAX_F0:RW:8:4:=0x01
+	 * W2W_SAMECS_DLY:RW:0:5:=0x00
+	 */
+	{ 0x5050100, 0x0 },
+	/*
+	 * 255
+	 * SWLVL_START:WR:24:1:=0x00
+	 * SWLVL_LOAD:WR:16:1:=0x00
+	 * SW_LEVELING_MODE:RW:8:3:=0x00
+	 * TDQSCK_MAX_F3:RW:0:4:=0x05
+	 */
+	{ 0x5, 0x0 },
+	/*
+	 * 256
+	 * SWLVL_RESP_1:RD:24:1:=0x00
+	 * SWLVL_RESP_0:RD:16:1:=0x00
+	 * SWLVL_OP_DONE:RD:8:1:=0x00
+	 * SWLVL_EXIT:WR:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 257
+	 * WRLVL_REQ:WR:24:1:=0x00
+	 * PHYUPD_APPEND_EN:RW:16:1:=0x01
+	 * SWLVL_RESP_3:RD:8:1:=0x00
+	 * SWLVL_RESP_2:RD:0:1:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 258
+	 * WRLVL_EN:RW:24:1:=0x00
+	 * WLMRD:RW:16:6:=0x28
+	 * WLDQSEN:RW:8:6:=0x0d
+	 * WRLVL_CS:RW:0:1:=0x00
+	 */
+	{ 0x280d00, 0x0 },
+	/*
+	 * 259
+	 * WRLVL_RESP_MASK:RW:24:4:=0x00
+	 * WRLVL_ON_SREF_EXIT:RW:16:1:=0x00
+	 * WRLVL_PERIODIC:RW:8:1:=0x00
+	 * DFI_PHY_WRLVL_MODE:RW:0:1:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 260
+	 * WRLVL_NORM_THRESHOLD_F0:RW:16:16:=0x0000
+	 * WRLVL_ERROR_STATUS:RD:8:2:=0x00
+	 * WRLVL_AREF_EN:RW:0:1:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 261
+	 * WRLVL_TIMEOUT_F0:RW:16:16:=0x0000
+	 * WRLVL_HIGH_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 262
+	 * WRLVL_DFI_PROMOTE_THRESHOLD_F0:RW:16:16:=0x0000
+	 * WRLVL_SW_PROMOTE_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 263
+	 * WRLVL_HIGH_THRESHOLD_F1:RW:16:16:=0x0000
+	 * WRLVL_NORM_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 264
+	 * WRLVL_SW_PROMOTE_THRESHOLD_F1:RW:16:16:=0x0000
+	 * WRLVL_TIMEOUT_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 265
+	 * WRLVL_NORM_THRESHOLD_F2:RW:16:16:=0x0000
+	 * WRLVL_DFI_PROMOTE_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 266
+	 * WRLVL_TIMEOUT_F2:RW:16:16:=0x0000
+	 * WRLVL_HIGH_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 267
+	 * WRLVL_DFI_PROMOTE_THRESHOLD_F2:RW:16:16:=0x0000
+	 * WRLVL_SW_PROMOTE_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 268
+	 * WRLVL_HIGH_THRESHOLD_F3:RW:16:16:=0x0000
+	 * WRLVL_NORM_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 269
+	 * WRLVL_SW_PROMOTE_THRESHOLD_F3:RW:16:16:=0x0000
+	 * WRLVL_TIMEOUT_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 270
+	 * RDLVL_GATE_REQ:WR:24:1:=0x00
+	 * RDLVL_REQ:WR:16:1:=0x00
+	 * WRLVL_DFI_PROMOTE_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 271
+	 * DFI_PHY_RDLVL_MODE:RW:24:1:=0x01
+	 * RDLVL_GATE_SEQ_EN:RW:16:4:=0x00
+	 * RDLVL_SEQ_EN:RW:8:4:=0x00
+	 * RDLVL_CS:RW:0:1:=0x00
+	 */
+	{ 0x1000000, 0x0 },
+	/*
+	 * 272
+	 * RDLVL_GATE_PERIODIC:RW:24:1:=0x00
+	 * RDLVL_ON_SREF_EXIT:RW:16:1:=0x00
+	 * RDLVL_PERIODIC:RW:8:1:=0x00
+	 * DFI_PHY_RDLVL_GATE_MODE:RW:0:1:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 273
+	 * RESERVED:RW:24:1:=0x00
+	 * RDLVL_GATE_AREF_EN:RW:16:1:=0x01
+	 * RDLVL_AREF_EN:RW:8:1:=0x01
+	 * RDLVL_GATE_ON_SREF_EXIT:RW:0:1:=0x00
+	 */
+	{ 0x10100, 0x0 },
+	/*
+	 * 274
+	 * RDLVL_HIGH_THRESHOLD_F0:RW:16:16:=0x0000
+	 * RDLVL_NORM_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 275
+	 * RDLVL_SW_PROMOTE_THRESHOLD_F0:RW:16:16:=0x0000
+	 * RDLVL_TIMEOUT_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 276
+	 * RDLVL_GATE_NORM_THRESHOLD_F0:RW:16:16:=0x0000
+	 * RDLVL_DFI_PROMOTE_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 277
+	 * RDLVL_GATE_TIMEOUT_F0:RW:16:16:=0x0000
+	 * RDLVL_GATE_HIGH_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 278
+	 * RDLVL_GATE_DFI_PROMOTE_THRESHOLD_F0:RW:16:16:=0x0000
+	 * RDLVL_GATE_SW_PROMOTE_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 279
+	 * RDLVL_HIGH_THRESHOLD_F1:RW:16:16:=0x0000
+	 * RDLVL_NORM_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 280
+	 * RDLVL_SW_PROMOTE_THRESHOLD_F1:RW:16:16:=0x0000
+	 * RDLVL_TIMEOUT_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 281
+	 * RDLVL_GATE_NORM_THRESHOLD_F1:RW:16:16:=0x0000
+	 * RDLVL_DFI_PROMOTE_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 282
+	 * RDLVL_GATE_TIMEOUT_F1:RW:16:16:=0x0000
+	 * RDLVL_GATE_HIGH_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 283
+	 * RDLVL_GATE_DFI_PROMOTE_THRESHOLD_F1:RW:16:16:=0x0000
+	 * RDLVL_GATE_SW_PROMOTE_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 284
+	 * RDLVL_HIGH_THRESHOLD_F2:RW:16:16:=0x0000
+	 * RDLVL_NORM_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 285
+	 * RDLVL_SW_PROMOTE_THRESHOLD_F2:RW:16:16:=0x0000
+	 * RDLVL_TIMEOUT_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 286
+	 * RDLVL_GATE_NORM_THRESHOLD_F2:RW:16:16:=0x0000
+	 * RDLVL_DFI_PROMOTE_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 287
+	 * RDLVL_GATE_TIMEOUT_F2:RW:16:16:=0x0000
+	 * RDLVL_GATE_HIGH_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 288
+	 * RDLVL_GATE_DFI_PROMOTE_THRESHOLD_F2:RW:16:16:=0x0000
+	 * RDLVL_GATE_SW_PROMOTE_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 289
+	 * RDLVL_HIGH_THRESHOLD_F3:RW:16:16:=0x0000
+	 * RDLVL_NORM_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 290
+	 * RDLVL_SW_PROMOTE_THRESHOLD_F3:RW:16:16:=0x0000
+	 * RDLVL_TIMEOUT_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 291
+	 * RDLVL_GATE_NORM_THRESHOLD_F3:RW:16:16:=0x0000
+	 * RDLVL_DFI_PROMOTE_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 292
+	 * RDLVL_GATE_TIMEOUT_F3:RW:16:16:=0x0000
+	 * RDLVL_GATE_HIGH_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 293
+	 * RDLVL_GATE_DFI_PROMOTE_THRESHOLD_F3:RW:16:16:=0x0000
+	 * RDLVL_GATE_SW_PROMOTE_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 294
+	 * CALVL_CS:RW:8:1:=0x00
+	 * CALVL_REQ:WR:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 295
+	 * CALVL_PAT_0:RW:0:20:=0x0556aa
+	 */
+	{ 0x556aa, 0x0 },
+	/*
+	 * 296
+	 * CALVL_BG_PAT_0:RW:0:20:=0x0aaaaa
+	 */
+	{ 0xaaaaa, 0x0 },
+	/*
+	 * 297
+	 * CALVL_PAT_1:RW:0:20:=0x0aa955
+	 */
+	{ 0xaa955, 0x0 },
+	/*
+	 * 298
+	 * CALVL_BG_PAT_1:RW:0:20:=0x055555
+	 */
+	{ 0x55555, 0x0 },
+	/*
+	 * 299
+	 * CALVL_PAT_2:RW:0:20:=0x0b3133
+	 */
+	{ 0xb3133, 0x0 },
+	/*
+	 * 300
+	 * CALVL_BG_PAT_2:RW:0:20:=0x04cd33
+	 */
+	{ 0x4cd33, 0x0 },
+	/*
+	 * 301
+	 * CALVL_PAT_3:RW:0:20:=0x04cecc
+	 */
+	{ 0x4cecc, 0x0 },
+	/*
+	 * 302
+	 * RESERVED:RW:24:1:=0x00
+	 * CALVL_BG_PAT_3:RW:0:20:=0x0b32cc
+	 */
+	{ 0xb32cc, 0x0 },
+	/*
+	 * 303
+	 * CALVL_PERIODIC:RW:24:1:=0x00
+	 * DFI_PHY_CALVL_MODE:RW:16:1:=0x01
+	 * CALVL_SEQ_EN:RW:8:2:=0x03
+	 * RESERVED:RW:0:4:=0x00
+	 */
+	{ 0x10300, 0x0 },
+	/*
+	 * 304
+	 * CALVL_NORM_THRESHOLD_F0:RW:16:16:=0x0000
+	 * CALVL_AREF_EN:RW:8:1:=0x01
+	 * CALVL_ON_SREF_EXIT:RW:0:1:=0x00
+	 */
+	{ 0x100, 0x0 },
+	/*
+	 * 305
+	 * CALVL_TIMEOUT_F0:RW:16:16:=0x0000
+	 * CALVL_HIGH_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 306
+	 * CALVL_DFI_PROMOTE_THRESHOLD_F0:RW:16:16:=0x0000
+	 * CALVL_SW_PROMOTE_THRESHOLD_F0:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 307
+	 * CALVL_HIGH_THRESHOLD_F1:RW:16:16:=0x0000
+	 * CALVL_NORM_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 308
+	 * CALVL_SW_PROMOTE_THRESHOLD_F1:RW:16:16:=0x0000
+	 * CALVL_TIMEOUT_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 309
+	 * CALVL_NORM_THRESHOLD_F2:RW:16:16:=0x0000
+	 * CALVL_DFI_PROMOTE_THRESHOLD_F1:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 310
+	 * CALVL_TIMEOUT_F2:RW:16:16:=0x0000
+	 * CALVL_HIGH_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 311
+	 * CALVL_DFI_PROMOTE_THRESHOLD_F2:RW:16:16:=0x0000
+	 * CALVL_SW_PROMOTE_THRESHOLD_F2:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 312
+	 * CALVL_HIGH_THRESHOLD_F3:RW:16:16:=0x0000
+	 * CALVL_NORM_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 313
+	 * CALVL_SW_PROMOTE_THRESHOLD_F3:RW:16:16:=0x0000
+	 * CALVL_TIMEOUT_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 314
+	 * AXI0_FIXED_PORT_PRIORITY_ENABLE:RW:24:1:=0x00
+	 * AXI0_ALL_STROBES_USED_ENABLE:RW:16:1:=0x00
+	 * CALVL_DFI_PROMOTE_THRESHOLD_F3:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 315
+	 * AXI1_ALL_STROBES_USED_ENABLE:RW:24:1:=0x00
+	 * AXI0_FIFO_TYPE_REG:RW:16:2:=0x00
+	 * AXI0_W_PRIORITY:RW:8:2:=0x01
+	 * AXI0_R_PRIORITY:RW:0:2:=0x01
+	 */
+	{ 0x101, 0x0 },
+	/*
+	 * 316
+	 * AXI1_FIFO_TYPE_REG:RW:24:2:=0x00
+	 * AXI1_W_PRIORITY:RW:16:2:=0x01
+	 * AXI1_R_PRIORITY:RW:8:2:=0x01
+	 * AXI1_FIXED_PORT_PRIORITY_ENABLE:RW:0:1:=0x00
+	 */
+	{ 0x10100, 0x0 },
+	/*
+	 * 317
+	 * AXI1_ADDRESS_RANGE_ENABLE:RW:16:1:=0x00
+	 * AXI0_ADDRESS_RANGE_ENABLE:RW:8:1:=0x00
+	 * PORT_ADDR_PROTECTION_EN:RW:0:1:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 318
+	 * AXI0_START_ADDR_0:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 319
+	 * AXI0_END_ADDR_0:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 320
+	 * AXI0_START_ADDR_1:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 321
+	 * AXI0_END_ADDR_1:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 322
+	 * AXI0_START_ADDR_2:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 323
+	 * AXI0_END_ADDR_2:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 324
+	 * AXI0_START_ADDR_3:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 325
+	 * AXI0_END_ADDR_3:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 326
+	 * AXI0_START_ADDR_4:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 327
+	 * AXI0_END_ADDR_4:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 328
+	 * AXI0_START_ADDR_5:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 329
+	 * AXI0_END_ADDR_5:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 330
+	 * AXI0_START_ADDR_6:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 331
+	 * AXI0_END_ADDR_6:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 332
+	 * AXI0_START_ADDR_7:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 333
+	 * AXI0_END_ADDR_7:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 334
+	 * AXI0_START_ADDR_8:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 335
+	 * AXI0_END_ADDR_8:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 336
+	 * AXI0_START_ADDR_9:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 337
+	 * AXI0_END_ADDR_9:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 338
+	 * AXI0_START_ADDR_10:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 339
+	 * AXI0_END_ADDR_10:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 340
+	 * AXI0_START_ADDR_11:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 341
+	 * AXI0_END_ADDR_11:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 342
+	 * AXI0_START_ADDR_12:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 343
+	 * AXI0_END_ADDR_12:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 344
+	 * AXI0_START_ADDR_13:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 345
+	 * AXI0_END_ADDR_13:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 346
+	 * AXI0_START_ADDR_14:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 347
+	 * AXI0_END_ADDR_14:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 348
+	 * AXI0_START_ADDR_15:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 349
+	 * AXI0_END_ADDR_15:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 350
+	 * AXI1_START_ADDR_0:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 351
+	 * AXI1_END_ADDR_0:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 352
+	 * AXI1_START_ADDR_1:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 353
+	 * AXI1_END_ADDR_1:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 354
+	 * AXI1_START_ADDR_2:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 355
+	 * AXI1_END_ADDR_2:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 356
+	 * AXI1_START_ADDR_3:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 357
+	 * AXI1_END_ADDR_3:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 358
+	 * AXI1_START_ADDR_4:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 359
+	 * AXI1_END_ADDR_4:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 360
+	 * AXI1_START_ADDR_5:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 361
+	 * AXI1_END_ADDR_5:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 362
+	 * AXI1_START_ADDR_6:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 363
+	 * AXI1_END_ADDR_6:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 364
+	 * AXI1_START_ADDR_7:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 365
+	 * AXI1_END_ADDR_7:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 366
+	 * AXI1_START_ADDR_8:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 367
+	 * AXI1_END_ADDR_8:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 368
+	 * AXI1_START_ADDR_9:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 369
+	 * AXI1_END_ADDR_9:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 370
+	 * AXI1_START_ADDR_10:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 371
+	 * AXI1_END_ADDR_10:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 372
+	 * AXI1_START_ADDR_11:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 373
+	 * AXI1_END_ADDR_11:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 374
+	 * AXI1_START_ADDR_12:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 375
+	 * AXI1_END_ADDR_12:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 376
+	 * AXI1_START_ADDR_13:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 377
+	 * AXI1_END_ADDR_13:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 378
+	 * AXI1_START_ADDR_14:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 379
+	 * AXI1_END_ADDR_14:RW:0:18:=0x03ffff
+	 */
+	{ 0x3ffff, 0x0 },
+	/*
+	 * 380
+	 * AXI1_START_ADDR_15:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 381
+	 * AXI0_RANGE_PROT_BITS_0:RW:24:2:=0x03
+	 * AXI1_END_ADDR_15:RW:0:18:=0x03ffff
+	 */
+	{ 0x303ffff, 0x0 },
+	/*
+	 * 382
+	 * AXI0_RANGE_WID_CHECK_BITS_0:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_0:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 383
+	 * AXI0_RANGE_PROT_BITS_1:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 384
+	 * AXI0_RANGE_WID_CHECK_BITS_1:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_1:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 385
+	 * AXI0_RANGE_PROT_BITS_2:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 386
+	 * AXI0_RANGE_WID_CHECK_BITS_2:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_2:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 387
+	 * AXI0_RANGE_PROT_BITS_3:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 388
+	 * AXI0_RANGE_WID_CHECK_BITS_3:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_3:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 389
+	 * AXI0_RANGE_PROT_BITS_4:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 390
+	 * AXI0_RANGE_WID_CHECK_BITS_4:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_4:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 391
+	 * AXI0_RANGE_PROT_BITS_5:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 392
+	 * AXI0_RANGE_WID_CHECK_BITS_5:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_5:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 393
+	 * AXI0_RANGE_PROT_BITS_6:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 394
+	 * AXI0_RANGE_WID_CHECK_BITS_6:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_6:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 395
+	 * AXI0_RANGE_PROT_BITS_7:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 396
+	 * AXI0_RANGE_WID_CHECK_BITS_7:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_7:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 397
+	 * AXI0_RANGE_PROT_BITS_8:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 398
+	 * AXI0_RANGE_WID_CHECK_BITS_8:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_8:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 399
+	 * AXI0_RANGE_PROT_BITS_9:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 400
+	 * AXI0_RANGE_WID_CHECK_BITS_9:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_9:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 401
+	 * AXI0_RANGE_PROT_BITS_10:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 402
+	 * AXI0_RANGE_WID_CHECK_BITS_10:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_10:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 403
+	 * AXI0_RANGE_PROT_BITS_11:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 404
+	 * AXI0_RANGE_WID_CHECK_BITS_11:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_11:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 405
+	 * AXI0_RANGE_PROT_BITS_12:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 406
+	 * AXI0_RANGE_WID_CHECK_BITS_12:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_12:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 407
+	 * AXI0_RANGE_PROT_BITS_13:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 408
+	 * AXI0_RANGE_WID_CHECK_BITS_13:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_13:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 409
+	 * AXI0_RANGE_PROT_BITS_14:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 410
+	 * AXI0_RANGE_WID_CHECK_BITS_14:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_14:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 411
+	 * AXI0_RANGE_PROT_BITS_15:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 412
+	 * AXI0_RANGE_WID_CHECK_BITS_15:RW:16:16:=0xffff
+	 * AXI0_RANGE_RID_CHECK_BITS_15:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 413
+	 * AXI1_RANGE_PROT_BITS_0:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 414
+	 * AXI1_RANGE_WID_CHECK_BITS_0:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_0:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 415
+	 * AXI1_RANGE_PROT_BITS_1:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 416
+	 * AXI1_RANGE_WID_CHECK_BITS_1:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_1:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 417
+	 * AXI1_RANGE_PROT_BITS_2:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 418
+	 * AXI1_RANGE_WID_CHECK_BITS_2:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_2:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 419
+	 * AXI1_RANGE_PROT_BITS_3:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 420
+	 * AXI1_RANGE_WID_CHECK_BITS_3:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_3:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 421
+	 * AXI1_RANGE_PROT_BITS_4:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 422
+	 * AXI1_RANGE_WID_CHECK_BITS_4:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_4:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 423
+	 * AXI1_RANGE_PROT_BITS_5:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 424
+	 * AXI1_RANGE_WID_CHECK_BITS_5:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_5:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 425
+	 * AXI1_RANGE_PROT_BITS_6:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 426
+	 * AXI1_RANGE_WID_CHECK_BITS_6:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_6:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 427
+	 * AXI1_RANGE_PROT_BITS_7:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 428
+	 * AXI1_RANGE_WID_CHECK_BITS_7:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_7:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 429
+	 * AXI1_RANGE_PROT_BITS_8:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 430
+	 * AXI1_RANGE_WID_CHECK_BITS_8:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_8:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 431
+	 * AXI1_RANGE_PROT_BITS_9:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 432
+	 * AXI1_RANGE_WID_CHECK_BITS_9:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_9:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 433
+	 * AXI1_RANGE_PROT_BITS_10:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 434
+	 * AXI1_RANGE_WID_CHECK_BITS_10:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_10:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 435
+	 * AXI1_RANGE_PROT_BITS_11:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 436
+	 * AXI1_RANGE_WID_CHECK_BITS_11:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_11:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 437
+	 * AXI1_RANGE_PROT_BITS_12:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 438
+	 * AXI1_RANGE_WID_CHECK_BITS_12:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_12:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 439
+	 * AXI1_RANGE_PROT_BITS_13:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 440
+	 * AXI1_RANGE_WID_CHECK_BITS_13:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_13:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 441
+	 * AXI1_RANGE_PROT_BITS_14:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 442
+	 * AXI1_RANGE_WID_CHECK_BITS_14:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_14:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 443
+	 * AXI1_RANGE_PROT_BITS_15:RW:16:2:=0x03
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 444
+	 * AXI1_RANGE_WID_CHECK_BITS_15:RW:16:16:=0xffff
+	 * AXI1_RANGE_RID_CHECK_BITS_15:RW:0:16:=0xffff
+	 */
+	{ 0xffffffff, 0x0 },
+	/*
+	 * 445
+	 * WEIGHTED_ROUND_ROBIN_WEIGHT_SHARING:RW:24:1:=0x00
+	 * WEIGHTED_ROUND_ROBIN_LATENCY_CONTROL:RW:16:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 446
+	 * AXI0_PRIORITY2_RELATIVE_PRIORITY:RW:24:4:=0x02
+	 * AXI0_PRIORITY1_RELATIVE_PRIORITY:RW:16:4:=0x02
+	 * AXI0_PRIORITY0_RELATIVE_PRIORITY:RW:8:4:=0x02
+	 * WRR_PARAM_VALUE_ERR:RD:0:4:=0x00
+	 */
+	{ 0x2020200, 0x0 },
+	/*
+	 * 447
+	 * AXI0_PRIORITY_RELAX:RW:16:10:=0x0064
+	 * AXI0_PORT_ORDERING:RW:8:1:=0x00
+	 * AXI0_PRIORITY3_RELATIVE_PRIORITY:RW:0:4:=0x02
+	 */
+	{ 0x640002, 0x0 },
+	/*
+	 * 448
+	 * AXI1_PRIORITY3_RELATIVE_PRIORITY:RW:24:4:=0x01
+	 * AXI1_PRIORITY2_RELATIVE_PRIORITY:RW:16:4:=0x01
+	 * AXI1_PRIORITY1_RELATIVE_PRIORITY:RW:8:4:=0x01
+	 * AXI1_PRIORITY0_RELATIVE_PRIORITY:RW:0:4:=0x01
+	 */
+	{ 0x1010101, 0x0 },
+	/*
+	 * 449
+	 * CKE_STATUS:RD:24:1:=0x00
+	 * AXI1_PRIORITY_RELAX:RW:8:10:=0x0064
+	 * AXI1_PORT_ORDERING:RW:0:1:=0x01
+	 */
+	{ 0x6401, 0x0 },
+	/*
+	 * 450
+	 * DLL_RST_ADJ_DLY:RW:24:8:=0x00
+	 * DLL_RST_DELAY:RW:8:16:=0x0000
+	 * MEM_RST_VALID:RD:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 451
+	 * TDFI_PHY_RDLAT_F1:RW_D:24:7:=0x22
+	 * TDFI_PHY_RDLAT_F0:RW_D:16:7:=0x14
+	 * UPDATE_ERROR_STATUS:RD:8:7:=0x00
+	 * TDFI_PHY_WRLAT:RD:0:7:=0x00
+	 */
+	{ 0x22140000, 0x0 },
+	/*
+	 * 452
+	 * DRAM_CLK_DISABLE:RW:24:1:=0x00
+	 * TDFI_RDDATA_EN:RD:16:7:=0x00
+	 * TDFI_PHY_RDLAT_F3:RW_D:8:7:=0x22
+	 * TDFI_PHY_RDLAT_F2:RW_D:0:7:=0x22
+	 */
+	{ 0x2222, 0x0 },
+	/*
+	 * 453
+	 * TDFI_CTRLUPD_MAX_F0:RW:8:16:=0x00f4
+	 * TDFI_CTRLUPD_MIN:RW:0:4:=0x08
+	 */
+	{ 0xf408, 0x0 },
+	/*
+	 * 454
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 455
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 456
+	 * TDFI_PHYUPD_RESP_F0:RW:0:16:=0x00f4
+	 */
+	{ 0xf4, 0x0 },
+	/*
+	 * 457
+	 * TDFI_CTRLUPD_INTERVAL_F0:RW:0:32:=0x00000988
+	 */
+	{ 0x988, 0x0 },
+	/*
+	 * 458
+	 * TDFI_CTRLUPD_MAX_F1:RW:16:16:=0x2482
+	 * WRLAT_ADJ_F0:RW:8:7:=0x02
+	 * RDLAT_ADJ_F0:RW:0:7:=0x05
+	 */
+	{ 0x24820205, 0x0 },
+	/*
+	 * 459
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 460
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 461
+	 * TDFI_PHYUPD_RESP_F1:RW:0:16:=0x2482
+	 */
+	{ 0x2482, 0x0 },
+	/*
+	 * 462
+	 * TDFI_CTRLUPD_INTERVAL_F1:RW:0:32:=0x00016d14
+	 */
+	{ 0x16d14, 0x0 },
+	/*
+	 * 463
+	 * TDFI_CTRLUPD_MAX_F2:RW:16:16:=0x2482
+	 * WRLAT_ADJ_F1:RW:8:7:=0x0a
+	 * RDLAT_ADJ_F1:RW:0:7:=0x15
+	 */
+	{ 0x24820a15, 0x0 },
+	/*
+	 * 464
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 465
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 466
+	 * TDFI_PHYUPD_RESP_F2:RW:0:16:=0x2482
+	 */
+	{ 0x2482, 0x0 },
+	/*
+	 * 467
+	 * TDFI_CTRLUPD_INTERVAL_F2:RW:0:32:=0x00016d14
+	 */
+	{ 0x16d14, 0x0 },
+	/*
+	 * 468
+	 * TDFI_CTRLUPD_MAX_F3:RW:16:16:=0x2482
+	 * WRLAT_ADJ_F2:RW:8:7:=0x0a
+	 * RDLAT_ADJ_F2:RW:0:7:=0x15
+	 */
+	{ 0x24820a15, 0x0 },
+	/*
+	 * 469
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 470
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 471
+	 * TDFI_PHYUPD_RESP_F3:RW:0:16:=0x2482
+	 */
+	{ 0x2482, 0x0 },
+	/*
+	 * 472
+	 * TDFI_CTRLUPD_INTERVAL_F3:RW:0:32:=0x00016d14
+	 */
+	{ 0x16d14, 0x0 },
+	/*
+	 * 473
+	 * TDFI_CTRL_DELAY_F1:RW_D:24:4:=0x02
+	 * TDFI_CTRL_DELAY_F0:RW_D:16:4:=0x02
+	 * WRLAT_ADJ_F3:RW:8:7:=0x0a
+	 * RDLAT_ADJ_F3:RW:0:7:=0x15
+	 */
+	{ 0x2020a15, 0x0 },
+	/*
+	 * 474
+	 * TDFI_DRAM_CLK_ENABLE:RW:24:4:=0x03
+	 * TDFI_DRAM_CLK_DISABLE:RW:16:4:=0x02
+	 * TDFI_CTRL_DELAY_F3:RW_D:8:4:=0x02
+	 * TDFI_CTRL_DELAY_F2:RW_D:0:4:=0x02
+	 */
+	{ 0x3020202, 0x0 },
+	/*
+	 * 475
+	 * TDFI_WRLVL_WW:RW:8:10:=0x0018
+	 * TDFI_WRLVL_EN:RW:0:8:=0x03
+	 */
+	{ 0x1803, 0x0 },
+	/*
+	 * 476
+	 * TDFI_WRLVL_RESP:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 477
+	 * TDFI_WRLVL_MAX:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 478
+	 * TDFI_RDLVL_RR:RW:8:10:=0x0014
+	 * TDFI_RDLVL_EN:RW:0:8:=0x03
+	 */
+	{ 0x1403, 0x0 },
+	/*
+	 * 479
+	 * TDFI_RDLVL_RESP:RW:0:32:=0x000007d0
+	 */
+	{ 0x7d0, 0x0 },
+	/*
+	 * 480
+	 * RDLVL_GATE_EN:RW:16:1:=0x00
+	 * RDLVL_EN:RW:8:1:=0x00
+	 * RDLVL_RESP_MASK:RW:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 481
+	 * TDFI_RDLVL_MAX:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 482
+	 * TDFI_CALVL_EN:RW:16:8:=0x03
+	 * RDLVL_GATE_ERROR_STATUS:RD:8:2:=0x00
+	 * RDLVL_ERROR_STATUS:RD:0:2:=0x00
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 483
+	 * TDFI_CALVL_CAPTURE_F0:RW:16:10:=0x0006
+	 * TDFI_CALVL_CC_F0:RW:0:10:=0x0018
+	 */
+	{ 0x60018, 0x0 },
+	/*
+	 * 484
+	 * TDFI_CALVL_CAPTURE_F1:RW:16:10:=0x0012
+	 * TDFI_CALVL_CC_F1:RW:0:10:=0x0024
+	 */
+	{ 0x120024, 0x0 },
+	/*
+	 * 485
+	 * TDFI_CALVL_CAPTURE_F2:RW:16:10:=0x0012
+	 * TDFI_CALVL_CC_F2:RW:0:10:=0x0024
+	 */
+	{ 0x120024, 0x0 },
+	/*
+	 * 486
+	 * TDFI_CALVL_CAPTURE_F3:RW:16:10:=0x0012
+	 * TDFI_CALVL_CC_F3:RW:0:10:=0x0024
+	 */
+	{ 0x120024, 0x0 },
+	/*
+	 * 487
+	 * TDFI_CALVL_RESP:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 488
+	 * TDFI_CALVL_MAX:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 489
+	 * TDFI_PHY_WRDATA_F0:RW:24:3:=0x02
+	 * CALVL_ERROR_STATUS:RD:16:4:=0x00
+	 * CALVL_EN:RW:8:1:=0x00
+	 * CALVL_RESP_MASK:RW:0:1:=0x00
+	 */
+	{ 0x2000000, 0x0 },
+	/*
+	 * 490
+	 * TDFI_RDCSLAT_F0:RW:24:7:=0x05
+	 * TDFI_PHY_WRDATA_F3:RW:16:3:=0x02
+	 * TDFI_PHY_WRDATA_F2:RW:8:3:=0x02
+	 * TDFI_PHY_WRDATA_F1:RW:0:3:=0x02
+	 */
+	{ 0x5020202, 0x0 },
+	/*
+	 * 491
+	 * TDFI_RDCSLAT_F2:RW:24:7:=0x17
+	 * TDFI_WRCSLAT_F1:RW:16:7:=0x09
+	 * TDFI_RDCSLAT_F1:RW:8:7:=0x17
+	 * TDFI_WRCSLAT_F0:RW:0:7:=0x01
+	 */
+	{ 0x17091701, 0x0 },
+	/*
+	 * 492
+	 * TDFI_WRDATA_DELAY:RW:24:8:=0x05
+	 * TDFI_WRCSLAT_F3:RW:16:7:=0x09
+	 * TDFI_RDCSLAT_F3:RW:8:7:=0x17
+	 * TDFI_WRCSLAT_F2:RW:0:7:=0x09
+	 */
+	{ 0x5091709, 0x0 },
+	/*
+	 * 493
+	 * RESERVED:RW_D:24:1:=0x01
+	 * BL_ON_FLY_ENABLE:RW_D:16:1:=0x00
+	 * DISABLE_MEMORY_MASKED_WRITE:RW_D:8:1:=0x01
+	 * EN_1T_TIMING:RW:0:1:=0x01
+	 */
+	{ 0x1000101, 0x0 },
+	/*
+	 * 494
+	 * RESERVED:RW_D:24:3:=0x01
+	 * RESERVED:RW_D:16:3:=0x01
+	 * RESERVED:RW_D:8:3:=0x01
+	 * RESERVED:RW_D:0:3:=0x01
+	 */
+	{ 0x1010101, 0x0 },
+	/*
+	 * 495
+	 * RESERVED:RW_D:24:4:=0x01
+	 * RESERVED:RW_D:16:4:=0x00
+	 * RESERVED:RW_D:8:3:=0x01
+	 * RESERVED:RW_D:0:3:=0x01
+	 */
+	{ 0x1000101, 0x0 },
+	/*
+	 * 496
+	 * RESERVED:RW_D:24:4:=0x01
+	 * RESERVED:RW_D:16:4:=0x00
+	 * RESERVED:RW_D:8:4:=0x01
+	 * RESERVED:RW_D:0:4:=0x00
+	 */
+	{ 0x1000100, 0x0 },
+	/*
+	 * 497
+	 * RESERVED:RW_D:24:4:=0x00
+	 * RESERVED:RW_D:16:4:=0x01
+	 * RESERVED:RW_D:8:4:=0x00
+	 * RESERVED:RW_D:0:4:=0x01
+	 */
+	{ 0x10001, 0x0 },
+	/*
+	 * 498
+	 * RESERVED:RW_D:24:4:=0x00
+	 * RESERVED:RW_D:16:4:=0x01
+	 * RESERVED:RW_D:8:4:=0x00
+	 * RESERVED:RW_D:0:4:=0x02
+	 */
+	{ 0x10002, 0x0 },
+	/*
+	 * 499
+	 * RESERVED:RW_D:24:4:=0x00
+	 * RESERVED:RW_D:16:4:=0x02
+	 * RESERVED:RW_D:8:4:=0x01
+	 * RESERVED:RW_D:0:4:=0x00
+	 */
+	{ 0x20100, 0x0 },
+	/*
+	 * 500
+	 * AXI0_WR_ARRAY_LOG2_DEPTH:RD:24:8:=0x00
+	 * SRAM_READ_LATENCY:RW_D:16:2:=0x02
+	 * RESERVED:RW_D:8:4:=0x00
+	 * RESERVED:RW_D:0:4:=0x02
+	 */
+	{ 0x20002, 0x0 },
+	/*
+	 * 501
+	 * PBR_EN:RW:24:1:=0x00
+	 * AXI1_TRANS_WRFIFO_LOG2_DEPTH:RD:16:8:=0x00
+	 * AXI1_WR_ARRAY_LOG2_DEPTH:RD:8:8:=0x00
+	 * AXI0_TRANS_WRFIFO_LOG2_DEPTH:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 502
+	 * TRFC_PB_F0:RW:8:10:=0x0002
+	 * PBR_NUMERIC_ORDER:RW:0:1:=0x00
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 503
+	 * TRFC_PB_F1:RW:16:10:=0x0049
+	 * TREFI_PB_F0:RW:0:16:=0x0008
+	 */
+	{ 0x490008, 0x0 },
+	/*
+	 * 504
+	 * TRFC_PB_F2:RW:16:10:=0x0049
+	 * TREFI_PB_F1:RW:0:16:=0x0241
+	 */
+	{ 0x490241, 0x0 },
+	/*
+	 * 505
+	 * TRFC_PB_F3:RW:16:10:=0x0049
+	 * TREFI_PB_F2:RW:0:16:=0x0241
+	 */
+	{ 0x490241, 0x0 },
+	/*
+	 * 506
+	 * PBR_MAX_BANK_WAIT:RW:16:16:=0x0040
+	 * TREFI_PB_F3:RW:0:16:=0x0241
+	 */
+	{ 0x400241, 0x0 },
+	/*
+	 * 507
+	 * AREF_PBR_CONT_DIS_THRESHOLD:RW:24:5:=0x00
+	 * AREF_PBR_CONT_EN_THRESHOLD:RW:16:5:=0x12
+	 * PBR_CONT_REQ_EN:RW:8:1:=0x01
+	 * PBR_BANK_SELECT_DELAY:RW:0:4:=0x03
+	 */
+	{ 0x120103, 0x0 },
+	/*
+	 * 508
+	 * WR_ORDER_REQ:RW:0:2:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 509
+	 * TDFI_PHYUPD_TYPE0_F0:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 510
+	 * TDFI_PHYUPD_TYPE1_F0:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 511
+	 * TDFI_PHYUPD_TYPE2_F0:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 512
+	 * TDFI_PHYUPD_TYPE3_F0:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 513
+	 * TDFI_PHYUPD_TYPE0_F1:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 514
+	 * TDFI_PHYUPD_TYPE1_F1:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 515
+	 * TDFI_PHYUPD_TYPE2_F1:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 516
+	 * TDFI_PHYUPD_TYPE3_F1:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 517
+	 * TDFI_PHYUPD_TYPE0_F2:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 518
+	 * TDFI_PHYUPD_TYPE1_F2:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 519
+	 * TDFI_PHYUPD_TYPE2_F2:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 520
+	 * TDFI_PHYUPD_TYPE3_F2:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 521
+	 * TDFI_PHYUPD_TYPE0_F3:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 522
+	 * TDFI_PHYUPD_TYPE1_F3:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 523
+	 * TDFI_PHYUPD_TYPE2_F3:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 524
+	 * TDFI_PHYUPD_TYPE3_F3:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 525
+	 * OUT_OF_RANGE_SOURCE_ID:RD:8:10:=0x0000
+	 * CTRLUPD_AREF_HP_ENABLE:RW:0:1:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 526
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_0:RW:16:9:=0x000f
+	 * PORT_CMD_ERROR_ID:RD:0:10:=0x0000
+	 */
+	{ 0xf0000, 0x0 },
+	/*
+	 * 527
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_1:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_0:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 528
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_2:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_1:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 529
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_3:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_2:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 530
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_4:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_3:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 531
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_5:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_4:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 532
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_6:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_5:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 533
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_7:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_6:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 534
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_8:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_7:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 535
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_9:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_8:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 536
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_10:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_9:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 537
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_11:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_10:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 538
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_12:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_11:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 539
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_13:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_12:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 540
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_14:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_13:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 541
+	 * AXI0_RANGE_RID_CHECK_BITS_ID_LOOKUP_15:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_14:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 542
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_0:RW:16:9:=0x000f
+	 * AXI0_RANGE_WID_CHECK_BITS_ID_LOOKUP_15:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 543
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_1:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_0:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 544
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_2:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_1:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 545
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_3:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_2:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 546
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_4:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_3:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 547
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_5:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_4:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 548
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_6:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_5:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 549
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_7:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_6:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 550
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_8:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_7:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 551
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_9:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_8:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 552
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_10:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_9:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 553
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_11:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_10:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 554
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_12:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_11:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 555
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_13:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_12:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 556
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_14:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_13:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 557
+	 * AXI1_RANGE_RID_CHECK_BITS_ID_LOOKUP_15:RW:16:9:=0x000f
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_14:RW:0:9:=0x000f
+	 */
+	{ 0xf000f, 0x0 },
+	/*
+	 * 558
+	 * AXI1_RANGE_WID_CHECK_BITS_ID_LOOKUP_15:RW:0:9:=0x000f
+	 */
+	{ 0xf, 0x0 },
+	} /* END CTL */,
+	{ /* BEGIN PHY */
+	/*
+	 * 0
+	 * PHY_DQ_DM_SWIZZLE0_0:RW:0:32:=0x76543210
+	 */
+	{ 0x76543210, 0x0 },
+	/*
+	 * 1
+	 * PHY_CLK_WR_BYPASS_SLAVE_DELAY_0:RW:8:11:=0x04f0
+	 * PHY_DQ_DM_SWIZZLE1_0:RW:0:4:=0x08
+	 */
+	{ 0x4f008, 0x0 },
+	/*
+	 * 2
+	 * PHY_CLK_BYPASS_OVERRIDE_0:RW:24:1:=0x00
+	 * PHY_BYPASS_TWO_CYC_PREAMBLE_0:RW:16:2:=0x02
+	 * PHY_RDDQS_GATE_BYPASS_SLAVE_DELAY_0:RW:0:10:=0x0133
+	 */
+	{ 0x20133, 0x0 },
+	/*
+	 * 3
+	 * PHY_SW_WRDQ3_SHIFT_0:RW:24:5:=0x00
+	 * PHY_SW_WRDQ2_SHIFT_0:RW:16:5:=0x00
+	 * PHY_SW_WRDQ1_SHIFT_0:RW:8:5:=0x00
+	 * PHY_SW_WRDQ0_SHIFT_0:RW:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 4
+	 * PHY_SW_WRDQ7_SHIFT_0:RW:24:5:=0x00
+	 * PHY_SW_WRDQ6_SHIFT_0:RW:16:5:=0x00
+	 * PHY_SW_WRDQ5_SHIFT_0:RW:8:5:=0x00
+	 * PHY_SW_WRDQ4_SHIFT_0:RW:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 5
+	 * PHY_DQ_TSEL_ENABLE_0:RW:16:3:=0x01
+	 * PHY_SW_WRDQS_SHIFT_0:RW:8:4:=0x00
+	 * PHY_SW_WRDM_SHIFT_0:RW:0:5:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 6
+	 * PHY_DQS_TSEL_ENABLE_0:RW:24:3:=0x01
+	 * PHY_DQ_TSEL_SELECT_0:RW:0:24:=0x665555
+	 */
+	{ 0x1cece0e, 0x0 },
+	/*
+	 * 7
+	 * PHY_TWO_CYC_PREAMBLE_0:RW+:24:2:=0x02
+	 * PHY_DQS_TSEL_SELECT_0:RW:0:24:=0x665555
+	 */
+	{ 0x2cece0e, 0x0 },
+	/*
+	 * 8
+	 * PHY_LP4_BOOT_RDDATA_EN_TSEL_DLY_0:RW:24:4:=0x00
+	 * PHY_LP4_BOOT_RDDATA_EN_DLY_0:RW:16:4:=0x01
+	 * PHY_LP4_BOOT_RDDATA_EN_IE_DLY_0:RW:8:2:=0x00
+	 * PHY_DBI_MODE_0:RW:0:1:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 9
+	 * PHY_LPBK_CONTROL_0:RW:16:9:=0x0000
+	 * PHY_LP4_BOOT_RDDQS_LATENCY_ADJUST_0:RW:8:4:=0x00
+	 * PHY_LP4_BOOT_RPTR_UPDATE_0:RW:0:4:=0x04
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 10
+	 * PHY_LPBK_DFX_TIMEOUT_EN_0:RW:0:1:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 11
+	 * PHY_AUTO_TIMING_MARGIN_CONTROL_0:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 12
+	 * PHY_AUTO_TIMING_MARGIN_OBS_0:RD:0:28:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 13
+	 * PHY_PRBS_PATTERN_MASK_0:RW:16:9:=0x0000
+	 * PHY_PRBS_PATTERN_START_0:RW_D:8:7:=0x01
+	 * PHY_SLICE_PWR_RDC_DISABLE_0:RW:0:1:=0x00
+	 */
+	{ 0x100, 0x0 },
+	/*
+	 * 14
+	 * SC_PHY_SNAP_OBS_REGS_0:WR:24:1:=0x00
+	 * PHY_GATE_ERROR_DELAY_SELECT_0:RW:16:5:=0x17
+	 * PHY_RDDQS_DQ_BYPASS_SLAVE_DELAY_0:RW:0:10:=0x00c0
+	 */
+	{ 0x1700c0, 0x0 },
+	/*
+	 * 15
+	 * PHY_LPDDR_TYPE_0:RW:24:2:=0x02
+	 * PHY_LPDDR_0:RW:16:1:=0x01
+	 * PHY_GATE_SMPL1_SLAVE_DELAY_0:RW:0:9:=0x00cc
+	 */
+	{ 0x20100cc, 0x0 },
+	/*
+	 * 16
+	 * ON_FLY_GATE_ADJUST_EN_0:RW:16:2:=0x03
+	 * PHY_GATE_SMPL2_SLAVE_DELAY_0:RW:0:9:=0x0066
+	 */
+	{ 0x30066, 0x0 },
+	/*
+	 * 17
+	 * PHY_GATE_TRACKING_OBS_0:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 18
+	 * PHY_LP4_PST_AMBLE_0:RW:0:2:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 19
+	 * PHY_LP4_RDLVL_PATT8_0:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 20
+	 * PHY_LP4_RDLVL_PATT9_0:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 21
+	 * PHY_LP4_RDLVL_PATT10_0:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 22
+	 * PHY_LP4_RDLVL_PATT11_0:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 23
+	 * PHY_RDDQ_ENC_OBS_SELECT_0:RW:24:3:=0x00
+	 * PHY_MASTER_DLY_LOCK_OBS_SELECT_0:RW:16:4:=0x00
+	 * PHY_SW_FIFO_PTR_RST_DISABLE_0:RW:8:1:=0x00
+	 * PHY_SLAVE_LOOP_CNT_UPDATE_0:RW:0:3:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 24
+	 * PHY_FIFO_PTR_OBS_SELECT_0:RW:24:4:=0x00
+	 * PHY_WR_SHIFT_OBS_SELECT_0:RW:16:4:=0x00
+	 * PHY_WR_ENC_OBS_SELECT_0:RW:8:4:=0x00
+	 * PHY_RDDQS_DQ_ENC_OBS_SELECT_0:RW:0:4:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 25
+	 * PHY_WRLVL_UPDT_WAIT_CNT_0:RW:24:4:=0x04
+	 * PHY_WRLVL_CAPTURE_CNT_0:RW:16:6:=0x08
+	 * SC_PHY_LVL_DEBUG_CONT_0:WR:8:1:=0x00
+	 * PHY_LVL_DEBUG_MODE_0:RW:0:1:=0x00
+	 */
+	{ 0x4080000, 0x0 },
+	/*
+	 * 26
+	 * PHY_RDLVL_UPDT_WAIT_CNT_0:RW:24:4:=0x04
+	 * PHY_RDLVL_CAPTURE_CNT_0:RW:16:6:=0x08
+	 * PHY_GTLVL_UPDT_WAIT_CNT_0:RW:8:4:=0x04
+	 * PHY_GTLVL_CAPTURE_CNT_0:RW:0:6:=0x00
+	 */
+	{ 0x4080400, 0x0 },
+	/*
+	 * 27
+	 * PHY_WDQLVL_BURST_CNT_0:RW:24:6:=0x10
+	 * PHY_RDLVL_DATA_MASK_0:RW:16:8:=0x00
+	 * PHY_RDLVL_RDDQS_DQ_OBS_SELECT_0:RW:8:5:=0x00
+	 * PHY_RDLVL_OP_MODE_0:RW:0:2:=0x00
+	 */
+	{ 0x10000000, 0x0 },
+	/*
+	 * 28
+	 * PHY_WDQLVL_UPDT_WAIT_CNT_0:RW:24:4:=0x0c
+	 * PHY_WDQLVL_DQDM_SLV_DLY_JUMP_OFFSET_0:RW:8:11:=0x0080
+	 * PHY_WDQLVL_PATT_0:RW:0:3:=0x07
+	 */
+	{ 0xc008007, 0x0 },
+	/*
+	 * 29
+	 * SC_PHY_WDQLVL_CLR_PREV_RESULTS_0:WR:16:1:=0x00
+	 * PHY_WDQLVL_QTR_DLY_STEP_0:RW:8:4:=0x01
+	 * PHY_WDQLVL_DQDM_OBS_SELECT_0:RW:0:4:=0x00
+	 */
+	{ 0x100, 0x0 },
+	/*
+	 * 30
+	 * PHY_WDQLVL_DATADM_MASK_0:RW:0:9:=0x0100
+	 */
+	{ 0x100, 0x0 },
+	/*
+	 * 31
+	 * PHY_USER_PATT0_0:RW:0:32:=0x55555555
+	 */
+	{ 0x55555555, 0x0 },
+	/*
+	 * 32
+	 * PHY_USER_PATT1_0:RW:0:32:=0xAAAAAAAA
+	 */
+	{ 0xaaaaaaaa, 0x0 },
+	/*
+	 * 33
+	 * PHY_USER_PATT2_0:RW:0:32:=0x55555555
+	 */
+	{ 0x55555555, 0x0 },
+	/*
+	 * 34
+	 * PHY_USER_PATT3_0:RW:0:32:=0xAAAAAAAA
+	 */
+	{ 0xaaaaaaaa, 0x0 },
+	/*
+	 * 35
+	 * SC_PHY_MANUAL_CLEAR_0:WR:24:6:=0x00
+	 * PHY_CALVL_VREF_DRIVING_SLICE_0:RW:16:1:=0x01
+	 * PHY_USER_PATT4_0:RW:0:16:=0x5555
+	 */
+	{ 0x15555, 0x0 },
+	/*
+	 * 36
+	 * PHY_FIFO_PTR_OBS_0:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 37
+	 * PHY_LPBK_RESULT_OBS_0:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 38
+	 * PHY_MASTER_DLY_LOCK_OBS_0:RD:16:10:=0x0000
+	 * PHY_LPBK_ERROR_COUNT_OBS_0:RD:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 39
+	 * PHY_RDDQS_DQ_FALL_ADDER_SLV_DLY_ENC_OBS_0:RD:24:8:=0x00
+	 * PHY_RDDQS_DQ_RISE_ADDER_SLV_DLY_ENC_OBS_0:RD:16:8:=0x00
+	 * PHY_RDDQS_BASE_SLV_DLY_ENC_OBS_0:RD:8:7:=0x00
+	 * PHY_RDDQ_SLV_DLY_ENC_OBS_0:RD:0:6:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 40
+	 * PHY_WRDQ_BASE_SLV_DLY_ENC_OBS_0:RD:24:8:=0x00
+	 * PHY_WRDQS_BASE_SLV_DLY_ENC_OBS_0:RD:16:7:=0x00
+	 * PHY_RDDQS_GATE_SLV_DLY_ENC_OBS_0:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 41
+	 * PHY_WRLVL_HARD0_DELAY_OBS_0:RD:16:10:=0x0000
+	 * PHY_WR_SHIFT_OBS_0:RD:8:3:=0x00
+	 * PHY_WR_ADDER_SLV_DLY_ENC_OBS_0:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 42
+	 * PHY_WRLVL_HARD1_DELAY_OBS_0:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 43
+	 * PHY_WRLVL_STATUS_OBS_0:RD:0:17:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 44
+	 * PHY_GATE_SMPL2_SLV_DLY_ENC_OBS_0:RD:16:9:=0x0000
+	 * PHY_GATE_SMPL1_SLV_DLY_ENC_OBS_0:RD:0:9:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 45
+	 * PHY_GTLVL_HARD1_DELAY_OBS_0:RD:16:14:=0x0000
+	 * PHY_GTLVL_HARD0_DELAY_OBS_0:RD:0:14:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 46
+	 * PHY_GTLVL_STATUS_OBS_0:RD:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 47
+	 * PHY_RDLVL_RDDQS_DQ_TE_DLY_OBS_0:RD:16:10:=0x0000
+	 * PHY_RDLVL_RDDQS_DQ_LE_DLY_OBS_0:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 48
+	 * PHY_RDLVL_RDDQS_DQ_NUM_WINDOWS_OBS_0:RD:0:2:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 49
+	 * PHY_RDLVL_STATUS_OBS_0:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 50
+	 * PHY_WDQLVL_DQDM_TE_DLY_OBS_0:RD:16:11:=0x0000
+	 * PHY_WDQLVL_DQDM_LE_DLY_OBS_0:RD:0:11:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 51
+	 * PHY_WDQLVL_STATUS_OBS_0:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 52
+	 * PHY_DDL_MODE_0:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 53
+	 * PHY_DDL_TEST_OBS_0:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 54
+	 * PHY_DDL_TEST_MSTR_DLY_OBS_0:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 55
+	 * PHY_RX_CAL_OVERRIDE_0:RW:24:1:=0x00
+	 * SC_PHY_RX_CAL_START_0:WR:16:1:=0x00
+	 * PHY_LP4_WDQS_OE_EXTEND_0:RW:8:1:=0x00
+	 * PHY_DDL_TRACK_UPD_THRESHOLD_0:RW:0:8:=0x04
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 56
+	 * PHY_RX_CAL_DQ0_0:RW+:8:12:=0x0000
+	 * PHY_RX_CAL_SAMPLE_WAIT_0:RW:0:8:=0x20
+	 */
+	{ 0x20, 0x0 },
+	/*
+	 * 57
+	 * PHY_RX_CAL_DQ2_0:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ1_0:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 58
+	 * PHY_RX_CAL_DQ4_0:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ3_0:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 59
+	 * PHY_RX_CAL_DQ6_0:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ5_0:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 60
+	 * PHY_RX_CAL_DM_0:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ7_0:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 61
+	 * PHY_RX_CAL_FDBK_0:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQS_0:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 62
+	 * PHY_RX_CAL_LOCK_OBS_0:RD:16:9:=0x0000
+	 * PHY_RX_CAL_OBS_0:RD:0:11:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 63
+	 * PHY_RX_CAL_DISABLE_0:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 64
+	 * PHY_CLK_WRDQ1_SLAVE_DELAY_0:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ0_SLAVE_DELAY_0:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 65
+	 * PHY_CLK_WRDQ3_SLAVE_DELAY_0:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ2_SLAVE_DELAY_0:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 66
+	 * PHY_CLK_WRDQ5_SLAVE_DELAY_0:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ4_SLAVE_DELAY_0:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 67
+	 * PHY_CLK_WRDQ7_SLAVE_DELAY_0:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ6_SLAVE_DELAY_0:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 68
+	 * PHY_CLK_WRDQS_SLAVE_DELAY_0:RW+:16:10:=0x0000
+	 * PHY_CLK_WRDM_SLAVE_DELAY_0:RW+:0:11:=0x0280
+	 */
+	{ 0x280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 69
+	 * PHY_RDDQ0_SLAVE_DELAY_0:RW+:8:10:=0x0000
+	 * PHY_WRLVL_THRESHOLD_ADJUST_0:RW+:0:2:=0x00
+	 */
+	{ 0x0, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 70
+	 * PHY_RDDQ2_SLAVE_DELAY_0:RW+:16:10:=0x0000
+	 * PHY_RDDQ1_SLAVE_DELAY_0:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 71
+	 * PHY_RDDQ4_SLAVE_DELAY_0:RW+:16:10:=0x0000
+	 * PHY_RDDQ3_SLAVE_DELAY_0:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 72
+	 * PHY_RDDQ6_SLAVE_DELAY_0:RW+:16:10:=0x0000
+	 * PHY_RDDQ5_SLAVE_DELAY_0:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 73
+	 * PHY_RDDM_SLAVE_DELAY_0:RW+:16:10:=0x0000
+	 * PHY_RDDQ7_SLAVE_DELAY_0:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 74
+	 * PHY_RDDQS_DQ0_FALL_SLAVE_DELAY_0:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ0_RISE_SLAVE_DELAY_0:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 75
+	 * PHY_RDDQS_DQ1_FALL_SLAVE_DELAY_0:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ1_RISE_SLAVE_DELAY_0:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 76
+	 * PHY_RDDQS_DQ2_FALL_SLAVE_DELAY_0:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ2_RISE_SLAVE_DELAY_0:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 77
+	 * PHY_RDDQS_DQ3_FALL_SLAVE_DELAY_0:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ3_RISE_SLAVE_DELAY_0:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 78
+	 * PHY_RDDQS_DQ4_FALL_SLAVE_DELAY_0:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ4_RISE_SLAVE_DELAY_0:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 79
+	 * PHY_RDDQS_DQ5_FALL_SLAVE_DELAY_0:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ5_RISE_SLAVE_DELAY_0:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 80
+	 * PHY_RDDQS_DQ6_FALL_SLAVE_DELAY_0:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ6_RISE_SLAVE_DELAY_0:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 81
+	 * PHY_RDDQS_DQ7_FALL_SLAVE_DELAY_0:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ7_RISE_SLAVE_DELAY_0:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 82
+	 * PHY_RDDQS_DM_FALL_SLAVE_DELAY_0:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DM_RISE_SLAVE_DELAY_0:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 83
+	 * PHY_WRITE_PATH_LAT_ADD_0:RW+:24:3:=0x00
+	 * PHY_RDDQS_LATENCY_ADJUST_0:RW+:16:4:=0x03
+	 * PHY_RDDQS_GATE_SLAVE_DELAY_0:RW+:0:10:=0x011a
+	 */
+	{ 0x3011a, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 84
+	 * PHY_WRLVL_DELAY_PERIOD_THRESHOLD_0:RW+:16:10:=0x0000
+	 * PHY_WRLVL_DELAY_EARLY_THRESHOLD_0:RW+:0:10:=0x01d0
+	 */
+	{ 0x1d0, 0x0 },
+	/*
+	 * 85
+	 * PHY_GTLVL_LAT_ADJ_START_0:RW+:24:4:=0x01
+	 * PHY_GTLVL_RDDQS_SLV_DLY_START_0:RW+:8:10:=0x0000
+	 * PHY_WRLVL_EARLY_FORCE_ZERO_0:RW+:0:1:=0x00
+	 */
+	{ 0x1000000, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 86
+	 * PHY_RDLVL_RDDQS_DQ_SLV_DLY_START_0:RW+:16:10:=0x0000
+	 * PHY_WDQLVL_DQDM_SLV_DLY_START_0:RW+:0:11:=0x0200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 87
+	 * PHY_FDBK_PWR_CTRL_0:RW:0:3:=0x04
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 88
+	 * PHY_DQS_OE_TIMING_0:RW+:24:8:=0x51
+	 * PHY_DQ_TSEL_WR_TIMING_0:RW+:16:8:=0x81
+	 * PHY_DQ_TSEL_RD_TIMING_0:RW+:8:8:=0x61
+	 * PHY_DQ_OE_TIMING_0:RW+:0:8:=0x52
+	 */
+	{ 0x51816152, 0x0 },
+	/*
+	 * 89
+	 * PHY_DQS_IE_TIMING_0:RW+:24:8:=0xc0
+	 * PHY_DQ_IE_TIMING_0:RW+:16:8:=0xc0
+	 * PHY_DQS_TSEL_WR_TIMING_0:RW+:8:8:=0x81
+	 * PHY_DQS_TSEL_RD_TIMING_0:RW+:0:8:=0x61
+	 */
+	{ 0xc0c08161, 0x0 },
+	/*
+	 * 90
+	 * PHY_RDDATA_EN_TSEL_DLY_0:RW+:24:5:=0x02
+	 * PHY_RDDATA_EN_DLY_0:RW+:16:5:=0x03
+	 * PHY_IE_MODE_0:RW+:8:2:=0x00
+	 * PHY_RDDATA_EN_IE_DLY_0:RW+:0:2:=0x00
+	 */
+	{ 0x2030000, 0x0 },
+	/*
+	 * 91
+	 * PHY_MASTER_DELAY_STEP_0:RW+:24:6:=0x08
+	 * PHY_MASTER_DELAY_START_0:RW+:8:10:=0x0010
+	 * PHY_SW_MASTER_MODE_0:RW+:0:4:=0x00
+	 */
+	{ 0x8001000, 0x0 },
+	/*
+	 * 92
+	 * PHY_WRLVL_DLY_STEP_0:RW+:24:4:=0x0c
+	 * PHY_RPTR_UPDATE_0:RW+:16:4:=0x07
+	 * PHY_MASTER_DELAY_HALF_MEASURE_0:RW+:8:8:=0x3e
+	 * PHY_MASTER_DELAY_WAIT_0:RW+:0:8:=0x42
+	 */
+	{ 0xc073e42, 0x0 },
+	/*
+	 * 93
+	 * PHY_GTLVL_RESP_WAIT_CNT_0:RW+:16:5:=0x0f
+	 * PHY_GTLVL_DLY_STEP_0:RW+:8:4:=0x0c
+	 * PHY_WRLVL_RESP_WAIT_CNT_0:RW+:0:5:=0x18
+	 */
+	{ 0xf0c18, 0x0 },
+	/*
+	 * 94
+	 * PHY_GTLVL_FINAL_STEP_0:RW+:16:10:=0x0100
+	 * PHY_GTLVL_BACK_STEP_0:RW+:0:10:=0x0140
+	 */
+	{ 0x1000140, 0x0 },
+	/*
+	 * 95
+	 * PHY_RDLVL_DLY_STEP_0:RW+:8:4:=0x0c
+	 * PHY_WDQLVL_DLY_STEP_0:RW+:0:8:=0x20
+	 */
+	{ 0xc20, 0x0 },
+	/*
+	 * 96
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 97
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 98
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 99
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 100
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 101
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 102
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 103
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 104
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 105
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 106
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 107
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 108
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 109
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 110
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 111
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 112
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 113
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 114
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 115
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 116
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 117
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 118
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 119
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 120
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 121
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 122
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 123
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 124
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 125
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 126
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 127
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 128
+	 * PHY_DQ_DM_SWIZZLE0_1:RW:0:32:=0x76543210
+	 */
+	{ 0x76543210, 0x0 },
+	/*
+	 * 129
+	 * PHY_CLK_WR_BYPASS_SLAVE_DELAY_1:RW:8:11:=0x04f0
+	 * PHY_DQ_DM_SWIZZLE1_1:RW:0:4:=0x08
+	 */
+	{ 0x4f008, 0x0 },
+	/*
+	 * 130
+	 * PHY_CLK_BYPASS_OVERRIDE_1:RW:24:1:=0x00
+	 * PHY_BYPASS_TWO_CYC_PREAMBLE_1:RW:16:2:=0x02
+	 * PHY_RDDQS_GATE_BYPASS_SLAVE_DELAY_1:RW:0:10:=0x0133
+	 */
+	{ 0x20133, 0x0 },
+	/*
+	 * 131
+	 * PHY_SW_WRDQ3_SHIFT_1:RW:24:5:=0x00
+	 * PHY_SW_WRDQ2_SHIFT_1:RW:16:5:=0x00
+	 * PHY_SW_WRDQ1_SHIFT_1:RW:8:5:=0x00
+	 * PHY_SW_WRDQ0_SHIFT_1:RW:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 132
+	 * PHY_SW_WRDQ7_SHIFT_1:RW:24:5:=0x00
+	 * PHY_SW_WRDQ6_SHIFT_1:RW:16:5:=0x00
+	 * PHY_SW_WRDQ5_SHIFT_1:RW:8:5:=0x00
+	 * PHY_SW_WRDQ4_SHIFT_1:RW:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 133
+	 * PHY_DQ_TSEL_ENABLE_1:RW:16:3:=0x01
+	 * PHY_SW_WRDQS_SHIFT_1:RW:8:4:=0x00
+	 * PHY_SW_WRDM_SHIFT_1:RW:0:5:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 134
+	 * PHY_DQS_TSEL_ENABLE_1:RW:24:3:=0x01
+	 * PHY_DQ_TSEL_SELECT_1:RW:0:24:=0x665555
+	 */
+	{ 0x1cece0e, 0x0 },
+	/*
+	 * 135
+	 * PHY_TWO_CYC_PREAMBLE_1:RW+:24:2:=0x02
+	 * PHY_DQS_TSEL_SELECT_1:RW:0:24:=0x665555
+	 */
+	{ 0x2cece0e, 0x0 },
+	/*
+	 * 136
+	 * PHY_LP4_BOOT_RDDATA_EN_TSEL_DLY_1:RW:24:4:=0x00
+	 * PHY_LP4_BOOT_RDDATA_EN_DLY_1:RW:16:4:=0x01
+	 * PHY_LP4_BOOT_RDDATA_EN_IE_DLY_1:RW:8:2:=0x00
+	 * PHY_DBI_MODE_1:RW:0:1:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 137
+	 * PHY_LPBK_CONTROL_1:RW:16:9:=0x0000
+	 * PHY_LP4_BOOT_RDDQS_LATENCY_ADJUST_1:RW:8:4:=0x00
+	 * PHY_LP4_BOOT_RPTR_UPDATE_1:RW:0:4:=0x04
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 138
+	 * PHY_LPBK_DFX_TIMEOUT_EN_1:RW:0:1:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 139
+	 * PHY_AUTO_TIMING_MARGIN_CONTROL_1:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 140
+	 * PHY_AUTO_TIMING_MARGIN_OBS_1:RD:0:28:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 141
+	 * PHY_PRBS_PATTERN_MASK_1:RW:16:9:=0x0000
+	 * PHY_PRBS_PATTERN_START_1:RW_D:8:7:=0x01
+	 * PHY_SLICE_PWR_RDC_DISABLE_1:RW:0:1:=0x00
+	 */
+	{ 0x100, 0x0 },
+	/*
+	 * 142
+	 * SC_PHY_SNAP_OBS_REGS_1:WR:24:1:=0x00
+	 * PHY_GATE_ERROR_DELAY_SELECT_1:RW:16:5:=0x17
+	 * PHY_RDDQS_DQ_BYPASS_SLAVE_DELAY_1:RW:0:10:=0x00c0
+	 */
+	{ 0x1700c0, 0x0 },
+	/*
+	 * 143
+	 * PHY_LPDDR_TYPE_1:RW:24:2:=0x02
+	 * PHY_LPDDR_1:RW:16:1:=0x01
+	 * PHY_GATE_SMPL1_SLAVE_DELAY_1:RW:0:9:=0x00cc
+	 */
+	{ 0x20100cc, 0x0 },
+	/*
+	 * 144
+	 * ON_FLY_GATE_ADJUST_EN_1:RW:16:2:=0x03
+	 * PHY_GATE_SMPL2_SLAVE_DELAY_1:RW:0:9:=0x0066
+	 */
+	{ 0x30066, 0x0 },
+	/*
+	 * 145
+	 * PHY_GATE_TRACKING_OBS_1:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 146
+	 * PHY_LP4_PST_AMBLE_1:RW:0:2:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 147
+	 * PHY_LP4_RDLVL_PATT8_1:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 148
+	 * PHY_LP4_RDLVL_PATT9_1:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 149
+	 * PHY_LP4_RDLVL_PATT10_1:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 150
+	 * PHY_LP4_RDLVL_PATT11_1:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 151
+	 * PHY_RDDQ_ENC_OBS_SELECT_1:RW:24:3:=0x00
+	 * PHY_MASTER_DLY_LOCK_OBS_SELECT_1:RW:16:4:=0x00
+	 * PHY_SW_FIFO_PTR_RST_DISABLE_1:RW:8:1:=0x00
+	 * PHY_SLAVE_LOOP_CNT_UPDATE_1:RW:0:3:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 152
+	 * PHY_FIFO_PTR_OBS_SELECT_1:RW:24:4:=0x00
+	 * PHY_WR_SHIFT_OBS_SELECT_1:RW:16:4:=0x00
+	 * PHY_WR_ENC_OBS_SELECT_1:RW:8:4:=0x00
+	 * PHY_RDDQS_DQ_ENC_OBS_SELECT_1:RW:0:4:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 153
+	 * PHY_WRLVL_UPDT_WAIT_CNT_1:RW:24:4:=0x04
+	 * PHY_WRLVL_CAPTURE_CNT_1:RW:16:6:=0x08
+	 * SC_PHY_LVL_DEBUG_CONT_1:WR:8:1:=0x00
+	 * PHY_LVL_DEBUG_MODE_1:RW:0:1:=0x00
+	 */
+	{ 0x4080000, 0x0 },
+	/*
+	 * 154
+	 * PHY_RDLVL_UPDT_WAIT_CNT_1:RW:24:4:=0x04
+	 * PHY_RDLVL_CAPTURE_CNT_1:RW:16:6:=0x08
+	 * PHY_GTLVL_UPDT_WAIT_CNT_1:RW:8:4:=0x04
+	 * PHY_GTLVL_CAPTURE_CNT_1:RW:0:6:=0x00
+	 */
+	{ 0x4080400, 0x0 },
+	/*
+	 * 155
+	 * PHY_WDQLVL_BURST_CNT_1:RW:24:6:=0x10
+	 * PHY_RDLVL_DATA_MASK_1:RW:16:8:=0x00
+	 * PHY_RDLVL_RDDQS_DQ_OBS_SELECT_1:RW:8:5:=0x00
+	 * PHY_RDLVL_OP_MODE_1:RW:0:2:=0x00
+	 */
+	{ 0x10000000, 0x0 },
+	/*
+	 * 156
+	 * PHY_WDQLVL_UPDT_WAIT_CNT_1:RW:24:4:=0x0c
+	 * PHY_WDQLVL_DQDM_SLV_DLY_JUMP_OFFSET_1:RW:8:11:=0x0080
+	 * PHY_WDQLVL_PATT_1:RW:0:3:=0x07
+	 */
+	{ 0xc008007, 0x0 },
+	/*
+	 * 157
+	 * SC_PHY_WDQLVL_CLR_PREV_RESULTS_1:WR:16:1:=0x00
+	 * PHY_WDQLVL_QTR_DLY_STEP_1:RW:8:4:=0x01
+	 * PHY_WDQLVL_DQDM_OBS_SELECT_1:RW:0:4:=0x00
+	 */
+	{ 0x100, 0x0 },
+	/*
+	 * 158
+	 * PHY_WDQLVL_DATADM_MASK_1:RW:0:9:=0x0100
+	 */
+	{ 0x100, 0x0 },
+	/*
+	 * 159
+	 * PHY_USER_PATT0_1:RW:0:32:=0x55555555
+	 */
+	{ 0x55555555, 0x0 },
+	/*
+	 * 160
+	 * PHY_USER_PATT1_1:RW:0:32:=0xAAAAAAAA
+	 */
+	{ 0xaaaaaaaa, 0x0 },
+	/*
+	 * 161
+	 * PHY_USER_PATT2_1:RW:0:32:=0x55555555
+	 */
+	{ 0x55555555, 0x0 },
+	/*
+	 * 162
+	 * PHY_USER_PATT3_1:RW:0:32:=0xAAAAAAAA
+	 */
+	{ 0xaaaaaaaa, 0x0 },
+	/*
+	 * 163
+	 * SC_PHY_MANUAL_CLEAR_1:WR:24:6:=0x00
+	 * PHY_CALVL_VREF_DRIVING_SLICE_1:RW:16:1:=0x00
+	 * PHY_USER_PATT4_1:RW:0:16:=0x5555
+	 */
+	{ 0x5555, 0x0 },
+	/*
+	 * 164
+	 * PHY_FIFO_PTR_OBS_1:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 165
+	 * PHY_LPBK_RESULT_OBS_1:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 166
+	 * PHY_MASTER_DLY_LOCK_OBS_1:RD:16:10:=0x0000
+	 * PHY_LPBK_ERROR_COUNT_OBS_1:RD:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 167
+	 * PHY_RDDQS_DQ_FALL_ADDER_SLV_DLY_ENC_OBS_1:RD:24:8:=0x00
+	 * PHY_RDDQS_DQ_RISE_ADDER_SLV_DLY_ENC_OBS_1:RD:16:8:=0x00
+	 * PHY_RDDQS_BASE_SLV_DLY_ENC_OBS_1:RD:8:7:=0x00
+	 * PHY_RDDQ_SLV_DLY_ENC_OBS_1:RD:0:6:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 168
+	 * PHY_WRDQ_BASE_SLV_DLY_ENC_OBS_1:RD:24:8:=0x00
+	 * PHY_WRDQS_BASE_SLV_DLY_ENC_OBS_1:RD:16:7:=0x00
+	 * PHY_RDDQS_GATE_SLV_DLY_ENC_OBS_1:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 169
+	 * PHY_WRLVL_HARD0_DELAY_OBS_1:RD:16:10:=0x0000
+	 * PHY_WR_SHIFT_OBS_1:RD:8:3:=0x00
+	 * PHY_WR_ADDER_SLV_DLY_ENC_OBS_1:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 170
+	 * PHY_WRLVL_HARD1_DELAY_OBS_1:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 171
+	 * PHY_WRLVL_STATUS_OBS_1:RD:0:17:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 172
+	 * PHY_GATE_SMPL2_SLV_DLY_ENC_OBS_1:RD:16:9:=0x0000
+	 * PHY_GATE_SMPL1_SLV_DLY_ENC_OBS_1:RD:0:9:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 173
+	 * PHY_GTLVL_HARD1_DELAY_OBS_1:RD:16:14:=0x0000
+	 * PHY_GTLVL_HARD0_DELAY_OBS_1:RD:0:14:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 174
+	 * PHY_GTLVL_STATUS_OBS_1:RD:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 175
+	 * PHY_RDLVL_RDDQS_DQ_TE_DLY_OBS_1:RD:16:10:=0x0000
+	 * PHY_RDLVL_RDDQS_DQ_LE_DLY_OBS_1:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 176
+	 * PHY_RDLVL_RDDQS_DQ_NUM_WINDOWS_OBS_1:RD:0:2:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 177
+	 * PHY_RDLVL_STATUS_OBS_1:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 178
+	 * PHY_WDQLVL_DQDM_TE_DLY_OBS_1:RD:16:11:=0x0000
+	 * PHY_WDQLVL_DQDM_LE_DLY_OBS_1:RD:0:11:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 179
+	 * PHY_WDQLVL_STATUS_OBS_1:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 180
+	 * PHY_DDL_MODE_1:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 181
+	 * PHY_DDL_TEST_OBS_1:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 182
+	 * PHY_DDL_TEST_MSTR_DLY_OBS_1:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 183
+	 * PHY_RX_CAL_OVERRIDE_1:RW:24:1:=0x00
+	 * SC_PHY_RX_CAL_START_1:WR:16:1:=0x00
+	 * PHY_LP4_WDQS_OE_EXTEND_1:RW:8:1:=0x00
+	 * PHY_DDL_TRACK_UPD_THRESHOLD_1:RW:0:8:=0x04
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 184
+	 * PHY_RX_CAL_DQ0_1:RW+:8:12:=0x0000
+	 * PHY_RX_CAL_SAMPLE_WAIT_1:RW:0:8:=0x20
+	 */
+	{ 0x20, 0x0 },
+	/*
+	 * 185
+	 * PHY_RX_CAL_DQ2_1:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ1_1:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 186
+	 * PHY_RX_CAL_DQ4_1:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ3_1:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 187
+	 * PHY_RX_CAL_DQ6_1:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ5_1:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 188
+	 * PHY_RX_CAL_DM_1:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ7_1:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 189
+	 * PHY_RX_CAL_FDBK_1:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQS_1:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 190
+	 * PHY_RX_CAL_LOCK_OBS_1:RD:16:9:=0x0000
+	 * PHY_RX_CAL_OBS_1:RD:0:11:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 191
+	 * PHY_RX_CAL_DISABLE_1:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 192
+	 * PHY_CLK_WRDQ1_SLAVE_DELAY_1:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ0_SLAVE_DELAY_1:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 193
+	 * PHY_CLK_WRDQ3_SLAVE_DELAY_1:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ2_SLAVE_DELAY_1:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 194
+	 * PHY_CLK_WRDQ5_SLAVE_DELAY_1:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ4_SLAVE_DELAY_1:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 195
+	 * PHY_CLK_WRDQ7_SLAVE_DELAY_1:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ6_SLAVE_DELAY_1:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 196
+	 * PHY_CLK_WRDQS_SLAVE_DELAY_1:RW+:16:10:=0x0000
+	 * PHY_CLK_WRDM_SLAVE_DELAY_1:RW+:0:11:=0x0280
+	 */
+	{ 0x280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 197
+	 * PHY_RDDQ0_SLAVE_DELAY_1:RW+:8:10:=0x0000
+	 * PHY_WRLVL_THRESHOLD_ADJUST_1:RW+:0:2:=0x00
+	 */
+	{ 0x0, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 198
+	 * PHY_RDDQ2_SLAVE_DELAY_1:RW+:16:10:=0x0000
+	 * PHY_RDDQ1_SLAVE_DELAY_1:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 199
+	 * PHY_RDDQ4_SLAVE_DELAY_1:RW+:16:10:=0x0000
+	 * PHY_RDDQ3_SLAVE_DELAY_1:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 200
+	 * PHY_RDDQ6_SLAVE_DELAY_1:RW+:16:10:=0x0000
+	 * PHY_RDDQ5_SLAVE_DELAY_1:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 201
+	 * PHY_RDDM_SLAVE_DELAY_1:RW+:16:10:=0x0000
+	 * PHY_RDDQ7_SLAVE_DELAY_1:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 202
+	 * PHY_RDDQS_DQ0_FALL_SLAVE_DELAY_1:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ0_RISE_SLAVE_DELAY_1:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 203
+	 * PHY_RDDQS_DQ1_FALL_SLAVE_DELAY_1:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ1_RISE_SLAVE_DELAY_1:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 204
+	 * PHY_RDDQS_DQ2_FALL_SLAVE_DELAY_1:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ2_RISE_SLAVE_DELAY_1:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 205
+	 * PHY_RDDQS_DQ3_FALL_SLAVE_DELAY_1:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ3_RISE_SLAVE_DELAY_1:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 206
+	 * PHY_RDDQS_DQ4_FALL_SLAVE_DELAY_1:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ4_RISE_SLAVE_DELAY_1:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 207
+	 * PHY_RDDQS_DQ5_FALL_SLAVE_DELAY_1:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ5_RISE_SLAVE_DELAY_1:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 208
+	 * PHY_RDDQS_DQ6_FALL_SLAVE_DELAY_1:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ6_RISE_SLAVE_DELAY_1:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 209
+	 * PHY_RDDQS_DQ7_FALL_SLAVE_DELAY_1:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ7_RISE_SLAVE_DELAY_1:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 210
+	 * PHY_RDDQS_DM_FALL_SLAVE_DELAY_1:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DM_RISE_SLAVE_DELAY_1:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 211
+	 * PHY_WRITE_PATH_LAT_ADD_1:RW+:24:3:=0x00
+	 * PHY_RDDQS_LATENCY_ADJUST_1:RW+:16:4:=0x03
+	 * PHY_RDDQS_GATE_SLAVE_DELAY_1:RW+:0:10:=0x011a
+	 */
+	{ 0x3011a, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 212
+	 * PHY_WRLVL_DELAY_PERIOD_THRESHOLD_1:RW+:16:10:=0x0000
+	 * PHY_WRLVL_DELAY_EARLY_THRESHOLD_1:RW+:0:10:=0x01d0
+	 */
+	{ 0x1d0, 0x0 },
+	/*
+	 * 213
+	 * PHY_GTLVL_LAT_ADJ_START_1:RW+:24:4:=0x01
+	 * PHY_GTLVL_RDDQS_SLV_DLY_START_1:RW+:8:10:=0x0000
+	 * PHY_WRLVL_EARLY_FORCE_ZERO_1:RW+:0:1:=0x00
+	 */
+	{ 0x1000000, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 214
+	 * PHY_RDLVL_RDDQS_DQ_SLV_DLY_START_1:RW+:16:10:=0x0000
+	 * PHY_WDQLVL_DQDM_SLV_DLY_START_1:RW+:0:11:=0x0200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 215
+	 * PHY_FDBK_PWR_CTRL_1:RW:0:3:=0x04
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 216
+	 * PHY_DQS_OE_TIMING_1:RW+:24:8:=0x51
+	 * PHY_DQ_TSEL_WR_TIMING_1:RW+:16:8:=0x81
+	 * PHY_DQ_TSEL_RD_TIMING_1:RW+:8:8:=0x61
+	 * PHY_DQ_OE_TIMING_1:RW+:0:8:=0x52
+	 */
+	{ 0x51816152, 0x0 },
+	/*
+	 * 217
+	 * PHY_DQS_IE_TIMING_1:RW+:24:8:=0xc0
+	 * PHY_DQ_IE_TIMING_1:RW+:16:8:=0xc0
+	 * PHY_DQS_TSEL_WR_TIMING_1:RW+:8:8:=0x81
+	 * PHY_DQS_TSEL_RD_TIMING_1:RW+:0:8:=0x61
+	 */
+	{ 0xc0c08161, 0x0 },
+	/*
+	 * 218
+	 * PHY_RDDATA_EN_TSEL_DLY_1:RW+:24:5:=0x02
+	 * PHY_RDDATA_EN_DLY_1:RW+:16:5:=0x03
+	 * PHY_IE_MODE_1:RW+:8:2:=0x00
+	 * PHY_RDDATA_EN_IE_DLY_1:RW+:0:2:=0x00
+	 */
+	{ 0x2030000, 0x0 },
+	/*
+	 * 219
+	 * PHY_MASTER_DELAY_STEP_1:RW+:24:6:=0x08
+	 * PHY_MASTER_DELAY_START_1:RW+:8:10:=0x0010
+	 * PHY_SW_MASTER_MODE_1:RW+:0:4:=0x00
+	 */
+	{ 0x8001000, 0x0 },
+	/*
+	 * 220
+	 * PHY_WRLVL_DLY_STEP_1:RW+:24:4:=0x0c
+	 * PHY_RPTR_UPDATE_1:RW+:16:4:=0x07
+	 * PHY_MASTER_DELAY_HALF_MEASURE_1:RW+:8:8:=0x3e
+	 * PHY_MASTER_DELAY_WAIT_1:RW+:0:8:=0x42
+	 */
+	{ 0xc073e42, 0x0 },
+	/*
+	 * 221
+	 * PHY_GTLVL_RESP_WAIT_CNT_1:RW+:16:5:=0x0f
+	 * PHY_GTLVL_DLY_STEP_1:RW+:8:4:=0x0c
+	 * PHY_WRLVL_RESP_WAIT_CNT_1:RW+:0:5:=0x18
+	 */
+	{ 0xf0c18, 0x0 },
+	/*
+	 * 222
+	 * PHY_GTLVL_FINAL_STEP_1:RW+:16:10:=0x0100
+	 * PHY_GTLVL_BACK_STEP_1:RW+:0:10:=0x0140
+	 */
+	{ 0x1000140, 0x0 },
+	/*
+	 * 223
+	 * PHY_RDLVL_DLY_STEP_1:RW+:8:4:=0x0c
+	 * PHY_WDQLVL_DLY_STEP_1:RW+:0:8:=0x20
+	 */
+	{ 0xc20, 0x0 },
+	/*
+	 * 224
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 225
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 226
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 227
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 228
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 229
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 230
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 231
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 232
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 233
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 234
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 235
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 236
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 237
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 238
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 239
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 240
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 241
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 242
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 243
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 244
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 245
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 246
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 247
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 248
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 249
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 250
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 251
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 252
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 253
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 254
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 255
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 256
+	 * PHY_DQ_DM_SWIZZLE0_2:RW:0:32:=0x76543210
+	 */
+	{ 0x76543210, 0x0 },
+	/*
+	 * 257
+	 * PHY_CLK_WR_BYPASS_SLAVE_DELAY_2:RW:8:11:=0x04f0
+	 * PHY_DQ_DM_SWIZZLE1_2:RW:0:4:=0x08
+	 */
+	{ 0x4f008, 0x0 },
+	/*
+	 * 258
+	 * PHY_CLK_BYPASS_OVERRIDE_2:RW:24:1:=0x00
+	 * PHY_BYPASS_TWO_CYC_PREAMBLE_2:RW:16:2:=0x02
+	 * PHY_RDDQS_GATE_BYPASS_SLAVE_DELAY_2:RW:0:10:=0x0133
+	 */
+	{ 0x20133, 0x0 },
+	/*
+	 * 259
+	 * PHY_SW_WRDQ3_SHIFT_2:RW:24:5:=0x00
+	 * PHY_SW_WRDQ2_SHIFT_2:RW:16:5:=0x00
+	 * PHY_SW_WRDQ1_SHIFT_2:RW:8:5:=0x00
+	 * PHY_SW_WRDQ0_SHIFT_2:RW:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 260
+	 * PHY_SW_WRDQ7_SHIFT_2:RW:24:5:=0x00
+	 * PHY_SW_WRDQ6_SHIFT_2:RW:16:5:=0x00
+	 * PHY_SW_WRDQ5_SHIFT_2:RW:8:5:=0x00
+	 * PHY_SW_WRDQ4_SHIFT_2:RW:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 261
+	 * PHY_DQ_TSEL_ENABLE_2:RW:16:3:=0x01
+	 * PHY_SW_WRDQS_SHIFT_2:RW:8:4:=0x00
+	 * PHY_SW_WRDM_SHIFT_2:RW:0:5:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 262
+	 * PHY_DQS_TSEL_ENABLE_2:RW:24:3:=0x01
+	 * PHY_DQ_TSEL_SELECT_2:RW:0:24:=0x665555
+	 */
+	{ 0x1cece0e, 0x0 },
+	/*
+	 * 263
+	 * PHY_TWO_CYC_PREAMBLE_2:RW+:24:2:=0x02
+	 * PHY_DQS_TSEL_SELECT_2:RW:0:24:=0x665555
+	 */
+	{ 0x2cece0e, 0x0 },
+	/*
+	 * 264
+	 * PHY_LP4_BOOT_RDDATA_EN_TSEL_DLY_2:RW:24:4:=0x00
+	 * PHY_LP4_BOOT_RDDATA_EN_DLY_2:RW:16:4:=0x01
+	 * PHY_LP4_BOOT_RDDATA_EN_IE_DLY_2:RW:8:2:=0x00
+	 * PHY_DBI_MODE_2:RW:0:1:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 265
+	 * PHY_LPBK_CONTROL_2:RW:16:9:=0x0000
+	 * PHY_LP4_BOOT_RDDQS_LATENCY_ADJUST_2:RW:8:4:=0x00
+	 * PHY_LP4_BOOT_RPTR_UPDATE_2:RW:0:4:=0x04
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 266
+	 * PHY_LPBK_DFX_TIMEOUT_EN_2:RW:0:1:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 267
+	 * PHY_AUTO_TIMING_MARGIN_CONTROL_2:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 268
+	 * PHY_AUTO_TIMING_MARGIN_OBS_2:RD:0:28:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 269
+	 * PHY_PRBS_PATTERN_MASK_2:RW:16:9:=0x0000
+	 * PHY_PRBS_PATTERN_START_2:RW_D:8:7:=0x01
+	 * PHY_SLICE_PWR_RDC_DISABLE_2:RW:0:1:=0x00
+	 */
+	{ 0x100, 0x0 },
+	/*
+	 * 270
+	 * SC_PHY_SNAP_OBS_REGS_2:WR:24:1:=0x00
+	 * PHY_GATE_ERROR_DELAY_SELECT_2:RW:16:5:=0x17
+	 * PHY_RDDQS_DQ_BYPASS_SLAVE_DELAY_2:RW:0:10:=0x00c0
+	 */
+	{ 0x1700c0, 0x0 },
+	/*
+	 * 271
+	 * PHY_LPDDR_TYPE_2:RW:24:2:=0x02
+	 * PHY_LPDDR_2:RW:16:1:=0x01
+	 * PHY_GATE_SMPL1_SLAVE_DELAY_2:RW:0:9:=0x00cc
+	 */
+	{ 0x20100cc, 0x0 },
+	/*
+	 * 272
+	 * ON_FLY_GATE_ADJUST_EN_2:RW:16:2:=0x03
+	 * PHY_GATE_SMPL2_SLAVE_DELAY_2:RW:0:9:=0x0066
+	 */
+	{ 0x30066, 0x0 },
+	/*
+	 * 273
+	 * PHY_GATE_TRACKING_OBS_2:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 274
+	 * PHY_LP4_PST_AMBLE_2:RW:0:2:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 275
+	 * PHY_LP4_RDLVL_PATT8_2:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 276
+	 * PHY_LP4_RDLVL_PATT9_2:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 277
+	 * PHY_LP4_RDLVL_PATT10_2:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 278
+	 * PHY_LP4_RDLVL_PATT11_2:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 279
+	 * PHY_RDDQ_ENC_OBS_SELECT_2:RW:24:3:=0x00
+	 * PHY_MASTER_DLY_LOCK_OBS_SELECT_2:RW:16:4:=0x00
+	 * PHY_SW_FIFO_PTR_RST_DISABLE_2:RW:8:1:=0x00
+	 * PHY_SLAVE_LOOP_CNT_UPDATE_2:RW:0:3:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 280
+	 * PHY_FIFO_PTR_OBS_SELECT_2:RW:24:4:=0x00
+	 * PHY_WR_SHIFT_OBS_SELECT_2:RW:16:4:=0x00
+	 * PHY_WR_ENC_OBS_SELECT_2:RW:8:4:=0x00
+	 * PHY_RDDQS_DQ_ENC_OBS_SELECT_2:RW:0:4:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 281
+	 * PHY_WRLVL_UPDT_WAIT_CNT_2:RW:24:4:=0x04
+	 * PHY_WRLVL_CAPTURE_CNT_2:RW:16:6:=0x08
+	 * SC_PHY_LVL_DEBUG_CONT_2:WR:8:1:=0x00
+	 * PHY_LVL_DEBUG_MODE_2:RW:0:1:=0x00
+	 */
+	{ 0x4080000, 0x0 },
+	/*
+	 * 282
+	 * PHY_RDLVL_UPDT_WAIT_CNT_2:RW:24:4:=0x04
+	 * PHY_RDLVL_CAPTURE_CNT_2:RW:16:6:=0x08
+	 * PHY_GTLVL_UPDT_WAIT_CNT_2:RW:8:4:=0x04
+	 * PHY_GTLVL_CAPTURE_CNT_2:RW:0:6:=0x00
+	 */
+	{ 0x4080400, 0x0 },
+	/*
+	 * 283
+	 * PHY_WDQLVL_BURST_CNT_2:RW:24:6:=0x10
+	 * PHY_RDLVL_DATA_MASK_2:RW:16:8:=0x00
+	 * PHY_RDLVL_RDDQS_DQ_OBS_SELECT_2:RW:8:5:=0x00
+	 * PHY_RDLVL_OP_MODE_2:RW:0:2:=0x00
+	 */
+	{ 0x10000000, 0x0 },
+	/*
+	 * 284
+	 * PHY_WDQLVL_UPDT_WAIT_CNT_2:RW:24:4:=0x0c
+	 * PHY_WDQLVL_DQDM_SLV_DLY_JUMP_OFFSET_2:RW:8:11:=0x0080
+	 * PHY_WDQLVL_PATT_2:RW:0:3:=0x07
+	 */
+	{ 0xc008007, 0x0 },
+	/*
+	 * 285
+	 * SC_PHY_WDQLVL_CLR_PREV_RESULTS_2:WR:16:1:=0x00
+	 * PHY_WDQLVL_QTR_DLY_STEP_2:RW:8:4:=0x01
+	 * PHY_WDQLVL_DQDM_OBS_SELECT_2:RW:0:4:=0x00
+	 */
+	{ 0x100, 0x0 },
+	/*
+	 * 286
+	 * PHY_WDQLVL_DATADM_MASK_2:RW:0:9:=0x0100
+	 */
+	{ 0x100, 0x0 },
+	/*
+	 * 287
+	 * PHY_USER_PATT0_2:RW:0:32:=0x55555555
+	 */
+	{ 0x55555555, 0x0 },
+	/*
+	 * 288
+	 * PHY_USER_PATT1_2:RW:0:32:=0xAAAAAAAA
+	 */
+	{ 0xaaaaaaaa, 0x0 },
+	/*
+	 * 289
+	 * PHY_USER_PATT2_2:RW:0:32:=0x55555555
+	 */
+	{ 0x55555555, 0x0 },
+	/*
+	 * 290
+	 * PHY_USER_PATT3_2:RW:0:32:=0xAAAAAAAA
+	 */
+	{ 0xaaaaaaaa, 0x0 },
+	/*
+	 * 291
+	 * SC_PHY_MANUAL_CLEAR_2:WR:24:6:=0x00
+	 * PHY_CALVL_VREF_DRIVING_SLICE_2:RW:16:1:=0x01
+	 * PHY_USER_PATT4_2:RW:0:16:=0x5555
+	 */
+	{ 0x15555, 0x0 },
+	/*
+	 * 292
+	 * PHY_FIFO_PTR_OBS_2:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 293
+	 * PHY_LPBK_RESULT_OBS_2:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 294
+	 * PHY_MASTER_DLY_LOCK_OBS_2:RD:16:10:=0x0000
+	 * PHY_LPBK_ERROR_COUNT_OBS_2:RD:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 295
+	 * PHY_RDDQS_DQ_FALL_ADDER_SLV_DLY_ENC_OBS_2:RD:24:8:=0x00
+	 * PHY_RDDQS_DQ_RISE_ADDER_SLV_DLY_ENC_OBS_2:RD:16:8:=0x00
+	 * PHY_RDDQS_BASE_SLV_DLY_ENC_OBS_2:RD:8:7:=0x00
+	 * PHY_RDDQ_SLV_DLY_ENC_OBS_2:RD:0:6:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 296
+	 * PHY_WRDQ_BASE_SLV_DLY_ENC_OBS_2:RD:24:8:=0x00
+	 * PHY_WRDQS_BASE_SLV_DLY_ENC_OBS_2:RD:16:7:=0x00
+	 * PHY_RDDQS_GATE_SLV_DLY_ENC_OBS_2:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 297
+	 * PHY_WRLVL_HARD0_DELAY_OBS_2:RD:16:10:=0x0000
+	 * PHY_WR_SHIFT_OBS_2:RD:8:3:=0x00
+	 * PHY_WR_ADDER_SLV_DLY_ENC_OBS_2:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 298
+	 * PHY_WRLVL_HARD1_DELAY_OBS_2:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 299
+	 * PHY_WRLVL_STATUS_OBS_2:RD:0:17:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 300
+	 * PHY_GATE_SMPL2_SLV_DLY_ENC_OBS_2:RD:16:9:=0x0000
+	 * PHY_GATE_SMPL1_SLV_DLY_ENC_OBS_2:RD:0:9:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 301
+	 * PHY_GTLVL_HARD1_DELAY_OBS_2:RD:16:14:=0x0000
+	 * PHY_GTLVL_HARD0_DELAY_OBS_2:RD:0:14:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 302
+	 * PHY_GTLVL_STATUS_OBS_2:RD:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 303
+	 * PHY_RDLVL_RDDQS_DQ_TE_DLY_OBS_2:RD:16:10:=0x0000
+	 * PHY_RDLVL_RDDQS_DQ_LE_DLY_OBS_2:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 304
+	 * PHY_RDLVL_RDDQS_DQ_NUM_WINDOWS_OBS_2:RD:0:2:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 305
+	 * PHY_RDLVL_STATUS_OBS_2:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 306
+	 * PHY_WDQLVL_DQDM_TE_DLY_OBS_2:RD:16:11:=0x0000
+	 * PHY_WDQLVL_DQDM_LE_DLY_OBS_2:RD:0:11:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 307
+	 * PHY_WDQLVL_STATUS_OBS_2:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 308
+	 * PHY_DDL_MODE_2:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 309
+	 * PHY_DDL_TEST_OBS_2:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 310
+	 * PHY_DDL_TEST_MSTR_DLY_OBS_2:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 311
+	 * PHY_RX_CAL_OVERRIDE_2:RW:24:1:=0x00
+	 * SC_PHY_RX_CAL_START_2:WR:16:1:=0x00
+	 * PHY_LP4_WDQS_OE_EXTEND_2:RW:8:1:=0x00
+	 * PHY_DDL_TRACK_UPD_THRESHOLD_2:RW:0:8:=0x04
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 312
+	 * PHY_RX_CAL_DQ0_2:RW+:8:12:=0x0000
+	 * PHY_RX_CAL_SAMPLE_WAIT_2:RW:0:8:=0x20
+	 */
+	{ 0x20, 0x0 },
+	/*
+	 * 313
+	 * PHY_RX_CAL_DQ2_2:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ1_2:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 314
+	 * PHY_RX_CAL_DQ4_2:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ3_2:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 315
+	 * PHY_RX_CAL_DQ6_2:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ5_2:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 316
+	 * PHY_RX_CAL_DM_2:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ7_2:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 317
+	 * PHY_RX_CAL_FDBK_2:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQS_2:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 318
+	 * PHY_RX_CAL_LOCK_OBS_2:RD:16:9:=0x0000
+	 * PHY_RX_CAL_OBS_2:RD:0:11:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 319
+	 * PHY_RX_CAL_DISABLE_2:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 320
+	 * PHY_CLK_WRDQ1_SLAVE_DELAY_2:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ0_SLAVE_DELAY_2:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 321
+	 * PHY_CLK_WRDQ3_SLAVE_DELAY_2:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ2_SLAVE_DELAY_2:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 322
+	 * PHY_CLK_WRDQ5_SLAVE_DELAY_2:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ4_SLAVE_DELAY_2:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 323
+	 * PHY_CLK_WRDQ7_SLAVE_DELAY_2:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ6_SLAVE_DELAY_2:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 324
+	 * PHY_CLK_WRDQS_SLAVE_DELAY_2:RW+:16:10:=0x0000
+	 * PHY_CLK_WRDM_SLAVE_DELAY_2:RW+:0:11:=0x0280
+	 */
+	{ 0x280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 325
+	 * PHY_RDDQ0_SLAVE_DELAY_2:RW+:8:10:=0x0000
+	 * PHY_WRLVL_THRESHOLD_ADJUST_2:RW+:0:2:=0x00
+	 */
+	{ 0x0, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 326
+	 * PHY_RDDQ2_SLAVE_DELAY_2:RW+:16:10:=0x0000
+	 * PHY_RDDQ1_SLAVE_DELAY_2:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 327
+	 * PHY_RDDQ4_SLAVE_DELAY_2:RW+:16:10:=0x0000
+	 * PHY_RDDQ3_SLAVE_DELAY_2:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 328
+	 * PHY_RDDQ6_SLAVE_DELAY_2:RW+:16:10:=0x0000
+	 * PHY_RDDQ5_SLAVE_DELAY_2:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 329
+	 * PHY_RDDM_SLAVE_DELAY_2:RW+:16:10:=0x0000
+	 * PHY_RDDQ7_SLAVE_DELAY_2:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 330
+	 * PHY_RDDQS_DQ0_FALL_SLAVE_DELAY_2:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ0_RISE_SLAVE_DELAY_2:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 331
+	 * PHY_RDDQS_DQ1_FALL_SLAVE_DELAY_2:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ1_RISE_SLAVE_DELAY_2:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 332
+	 * PHY_RDDQS_DQ2_FALL_SLAVE_DELAY_2:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ2_RISE_SLAVE_DELAY_2:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 333
+	 * PHY_RDDQS_DQ3_FALL_SLAVE_DELAY_2:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ3_RISE_SLAVE_DELAY_2:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 334
+	 * PHY_RDDQS_DQ4_FALL_SLAVE_DELAY_2:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ4_RISE_SLAVE_DELAY_2:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 335
+	 * PHY_RDDQS_DQ5_FALL_SLAVE_DELAY_2:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ5_RISE_SLAVE_DELAY_2:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 336
+	 * PHY_RDDQS_DQ6_FALL_SLAVE_DELAY_2:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ6_RISE_SLAVE_DELAY_2:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 337
+	 * PHY_RDDQS_DQ7_FALL_SLAVE_DELAY_2:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ7_RISE_SLAVE_DELAY_2:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 338
+	 * PHY_RDDQS_DM_FALL_SLAVE_DELAY_2:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DM_RISE_SLAVE_DELAY_2:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 339
+	 * PHY_WRITE_PATH_LAT_ADD_2:RW+:24:3:=0x00
+	 * PHY_RDDQS_LATENCY_ADJUST_2:RW+:16:4:=0x03
+	 * PHY_RDDQS_GATE_SLAVE_DELAY_2:RW+:0:10:=0x011a
+	 */
+	{ 0x3011a, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 340
+	 * PHY_WRLVL_DELAY_PERIOD_THRESHOLD_2:RW+:16:10:=0x0000
+	 * PHY_WRLVL_DELAY_EARLY_THRESHOLD_2:RW+:0:10:=0x01d0
+	 */
+	{ 0x1d0, 0x0 },
+	/*
+	 * 341
+	 * PHY_GTLVL_LAT_ADJ_START_2:RW+:24:4:=0x01
+	 * PHY_GTLVL_RDDQS_SLV_DLY_START_2:RW+:8:10:=0x0000
+	 * PHY_WRLVL_EARLY_FORCE_ZERO_2:RW+:0:1:=0x00
+	 */
+	{ 0x1000000, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 342
+	 * PHY_RDLVL_RDDQS_DQ_SLV_DLY_START_2:RW+:16:10:=0x0000
+	 * PHY_WDQLVL_DQDM_SLV_DLY_START_2:RW+:0:11:=0x0200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 343
+	 * PHY_FDBK_PWR_CTRL_2:RW:0:3:=0x04
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 344
+	 * PHY_DQS_OE_TIMING_2:RW+:24:8:=0x51
+	 * PHY_DQ_TSEL_WR_TIMING_2:RW+:16:8:=0x81
+	 * PHY_DQ_TSEL_RD_TIMING_2:RW+:8:8:=0x61
+	 * PHY_DQ_OE_TIMING_2:RW+:0:8:=0x52
+	 */
+	{ 0x51816152, 0x0 },
+	/*
+	 * 345
+	 * PHY_DQS_IE_TIMING_2:RW+:24:8:=0xc0
+	 * PHY_DQ_IE_TIMING_2:RW+:16:8:=0xc0
+	 * PHY_DQS_TSEL_WR_TIMING_2:RW+:8:8:=0x81
+	 * PHY_DQS_TSEL_RD_TIMING_2:RW+:0:8:=0x61
+	 */
+	{ 0xc0c08161, 0x0 },
+	/*
+	 * 346
+	 * PHY_RDDATA_EN_TSEL_DLY_2:RW+:24:5:=0x02
+	 * PHY_RDDATA_EN_DLY_2:RW+:16:5:=0x03
+	 * PHY_IE_MODE_2:RW+:8:2:=0x00
+	 * PHY_RDDATA_EN_IE_DLY_2:RW+:0:2:=0x00
+	 */
+	{ 0x2030000, 0x0 },
+	/*
+	 * 347
+	 * PHY_MASTER_DELAY_STEP_2:RW+:24:6:=0x08
+	 * PHY_MASTER_DELAY_START_2:RW+:8:10:=0x0010
+	 * PHY_SW_MASTER_MODE_2:RW+:0:4:=0x00
+	 */
+	{ 0x8001000, 0x0 },
+	/*
+	 * 348
+	 * PHY_WRLVL_DLY_STEP_2:RW+:24:4:=0x0c
+	 * PHY_RPTR_UPDATE_2:RW+:16:4:=0x07
+	 * PHY_MASTER_DELAY_HALF_MEASURE_2:RW+:8:8:=0x3e
+	 * PHY_MASTER_DELAY_WAIT_2:RW+:0:8:=0x42
+	 */
+	{ 0xc073e42, 0x0 },
+	/*
+	 * 349
+	 * PHY_GTLVL_RESP_WAIT_CNT_2:RW+:16:5:=0x0f
+	 * PHY_GTLVL_DLY_STEP_2:RW+:8:4:=0x0c
+	 * PHY_WRLVL_RESP_WAIT_CNT_2:RW+:0:5:=0x18
+	 */
+	{ 0xf0c18, 0x0 },
+	/*
+	 * 350
+	 * PHY_GTLVL_FINAL_STEP_2:RW+:16:10:=0x0100
+	 * PHY_GTLVL_BACK_STEP_2:RW+:0:10:=0x0140
+	 */
+	{ 0x1000140, 0x0 },
+	/*
+	 * 351
+	 * PHY_RDLVL_DLY_STEP_2:RW+:8:4:=0x0c
+	 * PHY_WDQLVL_DLY_STEP_2:RW+:0:8:=0x20
+	 */
+	{ 0xc20, 0x0 },
+	/*
+	 * 352
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 353
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 354
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 355
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 356
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 357
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 358
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 359
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 360
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 361
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 362
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 363
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 364
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 365
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 366
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 367
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 368
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 369
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 370
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 371
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 372
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 373
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 374
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 375
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 376
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 377
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 378
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 379
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 380
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 381
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 382
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 383
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 384
+	 * PHY_DQ_DM_SWIZZLE0_3:RW:0:32:=0x76543210
+	 */
+	{ 0x76543210, 0x0 },
+	/*
+	 * 385
+	 * PHY_CLK_WR_BYPASS_SLAVE_DELAY_3:RW:8:11:=0x04f0
+	 * PHY_DQ_DM_SWIZZLE1_3:RW:0:4:=0x08
+	 */
+	{ 0x4f008, 0x0 },
+	/*
+	 * 386
+	 * PHY_CLK_BYPASS_OVERRIDE_3:RW:24:1:=0x00
+	 * PHY_BYPASS_TWO_CYC_PREAMBLE_3:RW:16:2:=0x02
+	 * PHY_RDDQS_GATE_BYPASS_SLAVE_DELAY_3:RW:0:10:=0x0133
+	 */
+	{ 0x20133, 0x0 },
+	/*
+	 * 387
+	 * PHY_SW_WRDQ3_SHIFT_3:RW:24:5:=0x00
+	 * PHY_SW_WRDQ2_SHIFT_3:RW:16:5:=0x00
+	 * PHY_SW_WRDQ1_SHIFT_3:RW:8:5:=0x00
+	 * PHY_SW_WRDQ0_SHIFT_3:RW:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 388
+	 * PHY_SW_WRDQ7_SHIFT_3:RW:24:5:=0x00
+	 * PHY_SW_WRDQ6_SHIFT_3:RW:16:5:=0x00
+	 * PHY_SW_WRDQ5_SHIFT_3:RW:8:5:=0x00
+	 * PHY_SW_WRDQ4_SHIFT_3:RW:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 389
+	 * PHY_DQ_TSEL_ENABLE_3:RW:16:3:=0x01
+	 * PHY_SW_WRDQS_SHIFT_3:RW:8:4:=0x00
+	 * PHY_SW_WRDM_SHIFT_3:RW:0:5:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 390
+	 * PHY_DQS_TSEL_ENABLE_3:RW:24:3:=0x01
+	 * PHY_DQ_TSEL_SELECT_3:RW:0:24:=0x665555
+	 */
+	{ 0x1cece0e, 0x0 },
+	/*
+	 * 391
+	 * PHY_TWO_CYC_PREAMBLE_3:RW+:24:2:=0x02
+	 * PHY_DQS_TSEL_SELECT_3:RW:0:24:=0x665555
+	 */
+	{ 0x2cece0e, 0x0 },
+	/*
+	 * 392
+	 * PHY_LP4_BOOT_RDDATA_EN_TSEL_DLY_3:RW:24:4:=0x00
+	 * PHY_LP4_BOOT_RDDATA_EN_DLY_3:RW:16:4:=0x01
+	 * PHY_LP4_BOOT_RDDATA_EN_IE_DLY_3:RW:8:2:=0x00
+	 * PHY_DBI_MODE_3:RW:0:1:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 393
+	 * PHY_LPBK_CONTROL_3:RW:16:9:=0x0000
+	 * PHY_LP4_BOOT_RDDQS_LATENCY_ADJUST_3:RW:8:4:=0x00
+	 * PHY_LP4_BOOT_RPTR_UPDATE_3:RW:0:4:=0x04
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 394
+	 * PHY_LPBK_DFX_TIMEOUT_EN_3:RW:0:1:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 395
+	 * PHY_AUTO_TIMING_MARGIN_CONTROL_3:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 396
+	 * PHY_AUTO_TIMING_MARGIN_OBS_3:RD:0:28:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 397
+	 * PHY_PRBS_PATTERN_MASK_3:RW:16:9:=0x0000
+	 * PHY_PRBS_PATTERN_START_3:RW_D:8:7:=0x01
+	 * PHY_SLICE_PWR_RDC_DISABLE_3:RW:0:1:=0x00
+	 */
+	{ 0x100, 0x0 },
+	/*
+	 * 398
+	 * SC_PHY_SNAP_OBS_REGS_3:WR:24:1:=0x00
+	 * PHY_GATE_ERROR_DELAY_SELECT_3:RW:16:5:=0x17
+	 * PHY_RDDQS_DQ_BYPASS_SLAVE_DELAY_3:RW:0:10:=0x00c0
+	 */
+	{ 0x1700c0, 0x0 },
+	/*
+	 * 399
+	 * PHY_LPDDR_TYPE_3:RW:24:2:=0x02
+	 * PHY_LPDDR_3:RW:16:1:=0x01
+	 * PHY_GATE_SMPL1_SLAVE_DELAY_3:RW:0:9:=0x00cc
+	 */
+	{ 0x20100cc, 0x0 },
+	/*
+	 * 400
+	 * ON_FLY_GATE_ADJUST_EN_3:RW:16:2:=0x03
+	 * PHY_GATE_SMPL2_SLAVE_DELAY_3:RW:0:9:=0x0066
+	 */
+	{ 0x30066, 0x0 },
+	/*
+	 * 401
+	 * PHY_GATE_TRACKING_OBS_3:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 402
+	 * PHY_LP4_PST_AMBLE_3:RW:0:2:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 403
+	 * PHY_LP4_RDLVL_PATT8_3:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 404
+	 * PHY_LP4_RDLVL_PATT9_3:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 405
+	 * PHY_LP4_RDLVL_PATT10_3:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 406
+	 * PHY_LP4_RDLVL_PATT11_3:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 407
+	 * PHY_RDDQ_ENC_OBS_SELECT_3:RW:24:3:=0x00
+	 * PHY_MASTER_DLY_LOCK_OBS_SELECT_3:RW:16:4:=0x00
+	 * PHY_SW_FIFO_PTR_RST_DISABLE_3:RW:8:1:=0x00
+	 * PHY_SLAVE_LOOP_CNT_UPDATE_3:RW:0:3:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 408
+	 * PHY_FIFO_PTR_OBS_SELECT_3:RW:24:4:=0x00
+	 * PHY_WR_SHIFT_OBS_SELECT_3:RW:16:4:=0x00
+	 * PHY_WR_ENC_OBS_SELECT_3:RW:8:4:=0x00
+	 * PHY_RDDQS_DQ_ENC_OBS_SELECT_3:RW:0:4:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 409
+	 * PHY_WRLVL_UPDT_WAIT_CNT_3:RW:24:4:=0x04
+	 * PHY_WRLVL_CAPTURE_CNT_3:RW:16:6:=0x08
+	 * SC_PHY_LVL_DEBUG_CONT_3:WR:8:1:=0x00
+	 * PHY_LVL_DEBUG_MODE_3:RW:0:1:=0x00
+	 */
+	{ 0x4080000, 0x0 },
+	/*
+	 * 410
+	 * PHY_RDLVL_UPDT_WAIT_CNT_3:RW:24:4:=0x04
+	 * PHY_RDLVL_CAPTURE_CNT_3:RW:16:6:=0x08
+	 * PHY_GTLVL_UPDT_WAIT_CNT_3:RW:8:4:=0x04
+	 * PHY_GTLVL_CAPTURE_CNT_3:RW:0:6:=0x00
+	 */
+	{ 0x4080400, 0x0 },
+	/*
+	 * 411
+	 * PHY_WDQLVL_BURST_CNT_3:RW:24:6:=0x10
+	 * PHY_RDLVL_DATA_MASK_3:RW:16:8:=0x00
+	 * PHY_RDLVL_RDDQS_DQ_OBS_SELECT_3:RW:8:5:=0x00
+	 * PHY_RDLVL_OP_MODE_3:RW:0:2:=0x00
+	 */
+	{ 0x10000000, 0x0 },
+	/*
+	 * 412
+	 * PHY_WDQLVL_UPDT_WAIT_CNT_3:RW:24:4:=0x0c
+	 * PHY_WDQLVL_DQDM_SLV_DLY_JUMP_OFFSET_3:RW:8:11:=0x0080
+	 * PHY_WDQLVL_PATT_3:RW:0:3:=0x07
+	 */
+	{ 0xc008007, 0x0 },
+	/*
+	 * 413
+	 * SC_PHY_WDQLVL_CLR_PREV_RESULTS_3:WR:16:1:=0x00
+	 * PHY_WDQLVL_QTR_DLY_STEP_3:RW:8:4:=0x01
+	 * PHY_WDQLVL_DQDM_OBS_SELECT_3:RW:0:4:=0x00
+	 */
+	{ 0x100, 0x0 },
+	/*
+	 * 414
+	 * PHY_WDQLVL_DATADM_MASK_3:RW:0:9:=0x0100
+	 */
+	{ 0x100, 0x0 },
+	/*
+	 * 415
+	 * PHY_USER_PATT0_3:RW:0:32:=0x55555555
+	 */
+	{ 0x55555555, 0x0 },
+	/*
+	 * 416
+	 * PHY_USER_PATT1_3:RW:0:32:=0xAAAAAAAA
+	 */
+	{ 0xaaaaaaaa, 0x0 },
+	/*
+	 * 417
+	 * PHY_USER_PATT2_3:RW:0:32:=0x55555555
+	 */
+	{ 0x55555555, 0x0 },
+	/*
+	 * 418
+	 * PHY_USER_PATT3_3:RW:0:32:=0xAAAAAAAA
+	 */
+	{ 0xaaaaaaaa, 0x0 },
+	/*
+	 * 419
+	 * SC_PHY_MANUAL_CLEAR_3:WR:24:6:=0x00
+	 * PHY_CALVL_VREF_DRIVING_SLICE_3:RW:16:1:=0x00
+	 * PHY_USER_PATT4_3:RW:0:16:=0x5555
+	 */
+	{ 0x5555, 0x0 },
+	/*
+	 * 420
+	 * PHY_FIFO_PTR_OBS_3:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 421
+	 * PHY_LPBK_RESULT_OBS_3:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 422
+	 * PHY_MASTER_DLY_LOCK_OBS_3:RD:16:10:=0x0000
+	 * PHY_LPBK_ERROR_COUNT_OBS_3:RD:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 423
+	 * PHY_RDDQS_DQ_FALL_ADDER_SLV_DLY_ENC_OBS_3:RD:24:8:=0x00
+	 * PHY_RDDQS_DQ_RISE_ADDER_SLV_DLY_ENC_OBS_3:RD:16:8:=0x00
+	 * PHY_RDDQS_BASE_SLV_DLY_ENC_OBS_3:RD:8:7:=0x00
+	 * PHY_RDDQ_SLV_DLY_ENC_OBS_3:RD:0:6:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 424
+	 * PHY_WRDQ_BASE_SLV_DLY_ENC_OBS_3:RD:24:8:=0x00
+	 * PHY_WRDQS_BASE_SLV_DLY_ENC_OBS_3:RD:16:7:=0x00
+	 * PHY_RDDQS_GATE_SLV_DLY_ENC_OBS_3:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 425
+	 * PHY_WRLVL_HARD0_DELAY_OBS_3:RD:16:10:=0x0000
+	 * PHY_WR_SHIFT_OBS_3:RD:8:3:=0x00
+	 * PHY_WR_ADDER_SLV_DLY_ENC_OBS_3:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 426
+	 * PHY_WRLVL_HARD1_DELAY_OBS_3:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 427
+	 * PHY_WRLVL_STATUS_OBS_3:RD:0:17:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 428
+	 * PHY_GATE_SMPL2_SLV_DLY_ENC_OBS_3:RD:16:9:=0x0000
+	 * PHY_GATE_SMPL1_SLV_DLY_ENC_OBS_3:RD:0:9:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 429
+	 * PHY_GTLVL_HARD1_DELAY_OBS_3:RD:16:14:=0x0000
+	 * PHY_GTLVL_HARD0_DELAY_OBS_3:RD:0:14:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 430
+	 * PHY_GTLVL_STATUS_OBS_3:RD:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 431
+	 * PHY_RDLVL_RDDQS_DQ_TE_DLY_OBS_3:RD:16:10:=0x0000
+	 * PHY_RDLVL_RDDQS_DQ_LE_DLY_OBS_3:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 432
+	 * PHY_RDLVL_RDDQS_DQ_NUM_WINDOWS_OBS_3:RD:0:2:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 433
+	 * PHY_RDLVL_STATUS_OBS_3:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 434
+	 * PHY_WDQLVL_DQDM_TE_DLY_OBS_3:RD:16:11:=0x0000
+	 * PHY_WDQLVL_DQDM_LE_DLY_OBS_3:RD:0:11:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 435
+	 * PHY_WDQLVL_STATUS_OBS_3:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 436
+	 * PHY_DDL_MODE_3:RW:0:18:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 437
+	 * PHY_DDL_TEST_OBS_3:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 438
+	 * PHY_DDL_TEST_MSTR_DLY_OBS_3:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 439
+	 * PHY_RX_CAL_OVERRIDE_3:RW:24:1:=0x00
+	 * SC_PHY_RX_CAL_START_3:WR:16:1:=0x00
+	 * PHY_LP4_WDQS_OE_EXTEND_3:RW:8:1:=0x00
+	 * PHY_DDL_TRACK_UPD_THRESHOLD_3:RW:0:8:=0x04
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 440
+	 * PHY_RX_CAL_DQ0_3:RW+:8:12:=0x0000
+	 * PHY_RX_CAL_SAMPLE_WAIT_3:RW:0:8:=0x20
+	 */
+	{ 0x20, 0x0 },
+	/*
+	 * 441
+	 * PHY_RX_CAL_DQ2_3:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ1_3:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 442
+	 * PHY_RX_CAL_DQ4_3:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ3_3:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 443
+	 * PHY_RX_CAL_DQ6_3:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ5_3:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 444
+	 * PHY_RX_CAL_DM_3:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQ7_3:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 445
+	 * PHY_RX_CAL_FDBK_3:RW+:16:12:=0x0000
+	 * PHY_RX_CAL_DQS_3:RW+:0:12:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 446
+	 * PHY_RX_CAL_LOCK_OBS_3:RD:16:9:=0x0000
+	 * PHY_RX_CAL_OBS_3:RD:0:11:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 447
+	 * PHY_RX_CAL_DISABLE_3:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 448
+	 * PHY_CLK_WRDQ1_SLAVE_DELAY_3:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ0_SLAVE_DELAY_3:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 449
+	 * PHY_CLK_WRDQ3_SLAVE_DELAY_3:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ2_SLAVE_DELAY_3:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 450
+	 * PHY_CLK_WRDQ5_SLAVE_DELAY_3:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ4_SLAVE_DELAY_3:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 451
+	 * PHY_CLK_WRDQ7_SLAVE_DELAY_3:RW+:16:11:=0x0280
+	 * PHY_CLK_WRDQ6_SLAVE_DELAY_3:RW+:0:11:=0x0280
+	 */
+	{ 0x2800280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 452
+	 * PHY_CLK_WRDQS_SLAVE_DELAY_3:RW+:16:10:=0x0000
+	 * PHY_CLK_WRDM_SLAVE_DELAY_3:RW+:0:11:=0x0280
+	 */
+	{ 0x280, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 453
+	 * PHY_RDDQ0_SLAVE_DELAY_3:RW+:8:10:=0x0000
+	 * PHY_WRLVL_THRESHOLD_ADJUST_3:RW+:0:2:=0x00
+	 */
+	{ 0x0, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 454
+	 * PHY_RDDQ2_SLAVE_DELAY_3:RW+:16:10:=0x0000
+	 * PHY_RDDQ1_SLAVE_DELAY_3:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 455
+	 * PHY_RDDQ4_SLAVE_DELAY_3:RW+:16:10:=0x0000
+	 * PHY_RDDQ3_SLAVE_DELAY_3:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 456
+	 * PHY_RDDQ6_SLAVE_DELAY_3:RW+:16:10:=0x0000
+	 * PHY_RDDQ5_SLAVE_DELAY_3:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 457
+	 * PHY_RDDM_SLAVE_DELAY_3:RW+:16:10:=0x0000
+	 * PHY_RDDQ7_SLAVE_DELAY_3:RW+:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 458
+	 * PHY_RDDQS_DQ0_FALL_SLAVE_DELAY_3:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ0_RISE_SLAVE_DELAY_3:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 459
+	 * PHY_RDDQS_DQ1_FALL_SLAVE_DELAY_3:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ1_RISE_SLAVE_DELAY_3:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 460
+	 * PHY_RDDQS_DQ2_FALL_SLAVE_DELAY_3:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ2_RISE_SLAVE_DELAY_3:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 461
+	 * PHY_RDDQS_DQ3_FALL_SLAVE_DELAY_3:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ3_RISE_SLAVE_DELAY_3:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 462
+	 * PHY_RDDQS_DQ4_FALL_SLAVE_DELAY_3:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ4_RISE_SLAVE_DELAY_3:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 463
+	 * PHY_RDDQS_DQ5_FALL_SLAVE_DELAY_3:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ5_RISE_SLAVE_DELAY_3:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 464
+	 * PHY_RDDQS_DQ6_FALL_SLAVE_DELAY_3:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ6_RISE_SLAVE_DELAY_3:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 465
+	 * PHY_RDDQS_DQ7_FALL_SLAVE_DELAY_3:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DQ7_RISE_SLAVE_DELAY_3:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 466
+	 * PHY_RDDQS_DM_FALL_SLAVE_DELAY_3:RW+:16:10:=0x0080
+	 * PHY_RDDQS_DM_RISE_SLAVE_DELAY_3:RW+:0:10:=0x0080
+	 */
+	{ 0x800080, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 467
+	 * PHY_WRITE_PATH_LAT_ADD_3:RW+:24:3:=0x00
+	 * PHY_RDDQS_LATENCY_ADJUST_3:RW+:16:4:=0x03
+	 * PHY_RDDQS_GATE_SLAVE_DELAY_3:RW+:0:10:=0x011a
+	 */
+	{ 0x3011a, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 468
+	 * PHY_WRLVL_DELAY_PERIOD_THRESHOLD_3:RW+:16:10:=0x0000
+	 * PHY_WRLVL_DELAY_EARLY_THRESHOLD_3:RW+:0:10:=0x01d0
+	 */
+	{ 0x1d0, 0x0 },
+	/*
+	 * 469
+	 * PHY_GTLVL_LAT_ADJ_START_3:RW+:24:4:=0x01
+	 * PHY_GTLVL_RDDQS_SLV_DLY_START_3:RW+:8:10:=0x0000
+	 * PHY_WRLVL_EARLY_FORCE_ZERO_3:RW+:0:1:=0x00
+	 */
+	{ 0x1000000, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 470
+	 * PHY_RDLVL_RDDQS_DQ_SLV_DLY_START_3:RW+:16:10:=0x0000
+	 * PHY_WDQLVL_DQDM_SLV_DLY_START_3:RW+:0:11:=0x0200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 471
+	 * PHY_FDBK_PWR_CTRL_3:RW:0:3:=0x04
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 472
+	 * PHY_DQS_OE_TIMING_3:RW+:24:8:=0x51
+	 * PHY_DQ_TSEL_WR_TIMING_3:RW+:16:8:=0x81
+	 * PHY_DQ_TSEL_RD_TIMING_3:RW+:8:8:=0x61
+	 * PHY_DQ_OE_TIMING_3:RW+:0:8:=0x52
+	 */
+	{ 0x51816152, 0x0 },
+	/*
+	 * 473
+	 * PHY_DQS_IE_TIMING_3:RW+:24:8:=0xc0
+	 * PHY_DQ_IE_TIMING_3:RW+:16:8:=0xc0
+	 * PHY_DQS_TSEL_WR_TIMING_3:RW+:8:8:=0x81
+	 * PHY_DQS_TSEL_RD_TIMING_3:RW+:0:8:=0x61
+	 */
+	{ 0xc0c08161, 0x0 },
+	/*
+	 * 474
+	 * PHY_RDDATA_EN_TSEL_DLY_3:RW+:24:5:=0x02
+	 * PHY_RDDATA_EN_DLY_3:RW+:16:5:=0x03
+	 * PHY_IE_MODE_3:RW+:8:2:=0x00
+	 * PHY_RDDATA_EN_IE_DLY_3:RW+:0:2:=0x00
+	 */
+	{ 0x2030000, 0x0 },
+	/*
+	 * 475
+	 * PHY_MASTER_DELAY_STEP_3:RW+:24:6:=0x08
+	 * PHY_MASTER_DELAY_START_3:RW+:8:10:=0x0010
+	 * PHY_SW_MASTER_MODE_3:RW+:0:4:=0x00
+	 */
+	{ 0x8001000, 0x0 },
+	/*
+	 * 476
+	 * PHY_WRLVL_DLY_STEP_3:RW+:24:4:=0x0c
+	 * PHY_RPTR_UPDATE_3:RW+:16:4:=0x07
+	 * PHY_MASTER_DELAY_HALF_MEASURE_3:RW+:8:8:=0x3e
+	 * PHY_MASTER_DELAY_WAIT_3:RW+:0:8:=0x42
+	 */
+	{ 0xc073e42, 0x0 },
+	/*
+	 * 477
+	 * PHY_GTLVL_RESP_WAIT_CNT_3:RW+:16:5:=0x0f
+	 * PHY_GTLVL_DLY_STEP_3:RW+:8:4:=0x0c
+	 * PHY_WRLVL_RESP_WAIT_CNT_3:RW+:0:5:=0x18
+	 */
+	{ 0xf0c18, 0x0 },
+	/*
+	 * 478
+	 * PHY_GTLVL_FINAL_STEP_3:RW+:16:10:=0x0100
+	 * PHY_GTLVL_BACK_STEP_3:RW+:0:10:=0x0140
+	 */
+	{ 0x1000140, 0x0 },
+	/*
+	 * 479
+	 * PHY_RDLVL_DLY_STEP_3:RW+:8:4:=0x0c
+	 * PHY_WDQLVL_DLY_STEP_3:RW+:0:8:=0x20
+	 */
+	{ 0xc20, 0x0 },
+	/*
+	 * 480
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 481
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 482
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 483
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 484
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 485
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 486
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 487
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 488
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 489
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 490
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 491
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 492
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 493
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 494
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 495
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 496
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 497
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 498
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 499
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 500
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 501
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 502
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 503
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 504
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 505
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 506
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 507
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 508
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 509
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 510
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 511
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 512
+	 * PHY_ADR3_SW_WRADDR_SHIFT_0:RW+:24:5:=0x00
+	 * PHY_ADR2_SW_WRADDR_SHIFT_0:RW+:16:5:=0x00
+	 * PHY_ADR1_SW_WRADDR_SHIFT_0:RW+:8:5:=0x00
+	 * PHY_ADR0_SW_WRADDR_SHIFT_0:RW+:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 513
+	 * PHY_ADR_CLK_WR_BYPASS_SLAVE_DELAY_0:RW:16:11:=0x0000
+	 * PHY_ADR5_SW_WRADDR_SHIFT_0:RW+:8:5:=0x00
+	 * PHY_ADR4_SW_WRADDR_SHIFT_0:RW+:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 514
+	 * SC_PHY_ADR_MANUAL_CLEAR_0:WR:8:3:=0x00
+	 * PHY_ADR_CLK_BYPASS_OVERRIDE_0:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 515
+	 * PHY_ADR_LPBK_RESULT_OBS_0:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 516
+	 * PHY_ADR_MASTER_DLY_LOCK_OBS_SELECT_0:RW:16:4:=0x00
+	 * PHY_ADR_LPBK_ERROR_COUNT_OBS_0:RD:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 517
+	 * PHY_ADR_BASE_SLV_DLY_ENC_OBS_0:RD:16:9:=0x0000
+	 * PHY_ADR_MASTER_DLY_LOCK_OBS_0:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 518
+	 * SC_PHY_ADR_SNAP_OBS_REGS_0:WR:24:1:=0x00
+	 * PHY_ADR_SLV_DLY_ENC_OBS_SELECT_0:RW:16:3:=0x00
+	 * PHY_ADR_SLAVE_LOOP_CNT_UPDATE_0:RW:8:3:=0x00
+	 * PHY_ADR_ADDER_SLV_DLY_ENC_OBS_0:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 519
+	 * PHY_ADR_PRBS_PATTERN_MASK_0:RW:24:5:=0x00
+	 * PHY_ADR_PRBS_PATTERN_START_0:RW_D:16:7:=0x01
+	 * PHY_ADR_LPBK_CONTROL_0:RW:8:7:=0x00
+	 * PHY_ADR_TSEL_ENABLE_0:RW:0:1:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 520
+	 * PHY_ADR_IE_MODE_0:RW:24:1:=0x00
+	 * PHY_ADR_WRADDR_SHIFT_OBS_0:RD:16:3:=0x00
+	 * PHY_ADR_TYPE_0:RW:8:2:=0x02
+	 * PHY_ADR_PWR_RDC_DISABLE_0:RW:0:1:=0x00
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 521
+	 * PHY_ADR_DDL_MODE_0:RW:0:15:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 522
+	 * PHY_ADR_DDL_TEST_OBS_0:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 523
+	 * PHY_ADR_DDL_TEST_MSTR_DLY_OBS_0:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 524
+	 * PHY_ADR_CALVL_COARSE_DLY_0:RW:16:11:=0x0040
+	 * PHY_ADR_CALVL_START_0:RW:0:11:=0x0320
+	 */
+	{ 0x400320, 0x0 },
+	/*
+	 * 525
+	 * PHY_ADR_CALVL_QTR_0:RW:0:11:=0x0040
+	 */
+	{ 0x40, 0x0 },
+	/*
+	 * 526
+	 * PHY_ADR_CALVL_SWIZZLE0_0:RW:0:24:=0x000098
+	 */
+	{ 0x98, 0x0 },
+	/*
+	 * 527
+	 * PHY_ADR_CALVL_RANK_CTRL_0:RW:24:2:=0x03
+	 * PHY_ADR_CALVL_SWIZZLE1_0:RW:0:24:=0x000098
+	 */
+	{ 0x3000098, 0x0 },
+	/*
+	 * 528
+	 * PHY_ADR_CALVL_DEBUG_MODE_0:RW:24:1:=0x00
+	 * PHY_ADR_CALVL_RESP_WAIT_CNT_0:RW:16:4:=0x00
+	 * PHY_ADR_CALVL_CAPTURE_CNT_0:RW:8:4:=0x02
+	 * PHY_ADR_CALVL_NUM_PATTERNS_0:RW:0:2:=0x00
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 529
+	 * PHY_ADR_CALVL_OBS_SELECT_0:RW:16:3:=0x00
+	 * SC_PHY_ADR_CALVL_ERROR_CLR_0:WR:8:1:=0x00
+	 * SC_PHY_ADR_CALVL_DEBUG_CONT_0:WR:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 530
+	 * PHY_ADR_CALVL_OBS0_0:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 531
+	 * PHY_ADR_CALVL_OBS1_0:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 532
+	 * PHY_ADR_CALVL_FG_0_0:RW:0:20:=0x00002a
+	 */
+	{ 0x2a, 0x0 },
+	/*
+	 * 533
+	 * PHY_ADR_CALVL_BG_0_0:RW:0:20:=0x000015
+	 */
+	{ 0x15, 0x0 },
+	/*
+	 * 534
+	 * PHY_ADR_CALVL_FG_1_0:RW:0:20:=0x000015
+	 */
+	{ 0x15, 0x0 },
+	/*
+	 * 535
+	 * PHY_ADR_CALVL_BG_1_0:RW:0:20:=0x00002a
+	 */
+	{ 0x2a, 0x0 },
+	/*
+	 * 536
+	 * PHY_ADR_CALVL_FG_2_0:RW:0:20:=0x000033
+	 */
+	{ 0x33, 0x0 },
+	/*
+	 * 537
+	 * PHY_ADR_CALVL_BG_2_0:RW:0:20:=0x00000c
+	 */
+	{ 0xc, 0x0 },
+	/*
+	 * 538
+	 * PHY_ADR_CALVL_FG_3_0:RW:0:20:=0x00000c
+	 */
+	{ 0xc, 0x0 },
+	/*
+	 * 539
+	 * PHY_ADR_CALVL_BG_3_0:RW:0:20:=0x000033
+	 */
+	{ 0x33, 0x0 },
+	/*
+	 * 540
+	 * PHY_ADR_ADDR_SEL_0:RW:0:24:=0x000010
+	 */
+	{ 0x10, 0x0 },
+	/*
+	 * 541
+	 * PHY_ADR_SEG_MASK_0:RW:24:6:=0x00
+	 * PHY_ADR_BIT_MASK_0:RW:16:6:=0x03
+	 * PHY_ADR_LP4_BOOT_SLV_DELAY_0:RW:0:10:=0x0000
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 542
+	 * PHY_ADR_SW_TXIO_CTRL_0:RW:8:6:=0x00
+	 * PHY_ADR_CALVL_TRAIN_MASK_0:RW:0:6:=0x03
+	 */
+	{ 0x3, 0x0 },
+	/*
+	 * 543
+	 * PHY_ADR0_CLK_WR_SLAVE_DELAY_0:RW+:8:11:=0x0300
+	 * PHY_ADR_TSEL_SELECT_0:RW+:0:8:=0x55
+	 */
+	{ 0x300ce, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 544
+	 * PHY_ADR2_CLK_WR_SLAVE_DELAY_0:RW+:16:11:=0x0300
+	 * PHY_ADR1_CLK_WR_SLAVE_DELAY_0:RW+:0:11:=0x0300
+	 */
+	{ 0x3000300, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 545
+	 * PHY_ADR4_CLK_WR_SLAVE_DELAY_0:RW+:16:11:=0x0300
+	 * PHY_ADR3_CLK_WR_SLAVE_DELAY_0:RW+:0:11:=0x0300
+	 */
+	{ 0x3000300, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 546
+	 * PHY_ADR_SW_MASTER_MODE_0:RW+:16:4:=0x00
+	 * PHY_ADR5_CLK_WR_SLAVE_DELAY_0:RW+:0:11:=0x0300
+	 */
+	{ 0x300, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 547
+	 * PHY_ADR_MASTER_DELAY_WAIT_0:RW+:24:8:=0x42
+	 * PHY_ADR_MASTER_DELAY_STEP_0:RW+:16:6:=0x08
+	 * PHY_ADR_MASTER_DELAY_START_0:RW+:0:10:=0x0010
+	 */
+	{ 0x42080010, 0x0 },
+	/*
+	 * 548
+	 * PHY_ADR_CALVL_DLY_STEP_0:RW+:8:4:=0x03
+	 * PHY_ADR_MASTER_DELAY_HALF_MEASURE_0:RW+:0:8:=0x3e
+	 */
+	{ 0x33e, 0x0 },
+	/*
+	 * 549
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 550
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 551
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 552
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 553
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 554
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 555
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 556
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 557
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 558
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 559
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 560
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 561
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 562
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 563
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 564
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 565
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 566
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 567
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 568
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 569
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 570
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 571
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 572
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 573
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 574
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 575
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 576
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 577
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 578
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 579
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 580
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 581
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 582
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 583
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 584
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 585
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 586
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 587
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 588
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 589
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 590
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 591
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 592
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 593
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 594
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 595
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 596
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 597
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 598
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 599
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 600
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 601
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 602
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 603
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 604
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 605
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 606
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 607
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 608
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 609
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 610
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 611
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 612
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 613
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 614
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 615
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 616
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 617
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 618
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 619
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 620
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 621
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 622
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 623
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 624
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 625
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 626
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 627
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 628
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 629
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 630
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 631
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 632
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 633
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 634
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 635
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 636
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 637
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 638
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 639
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 640
+	 * PHY_ADR3_SW_WRADDR_SHIFT_1:RW+:24:5:=0x00
+	 * PHY_ADR2_SW_WRADDR_SHIFT_1:RW+:16:5:=0x00
+	 * PHY_ADR1_SW_WRADDR_SHIFT_1:RW+:8:5:=0x00
+	 * PHY_ADR0_SW_WRADDR_SHIFT_1:RW+:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 641
+	 * PHY_ADR_CLK_WR_BYPASS_SLAVE_DELAY_1:RW:16:11:=0x0000
+	 * PHY_ADR5_SW_WRADDR_SHIFT_1:RW+:8:5:=0x00
+	 * PHY_ADR4_SW_WRADDR_SHIFT_1:RW+:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 642
+	 * SC_PHY_ADR_MANUAL_CLEAR_1:WR:8:3:=0x00
+	 * PHY_ADR_CLK_BYPASS_OVERRIDE_1:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 643
+	 * PHY_ADR_LPBK_RESULT_OBS_1:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 644
+	 * PHY_ADR_MASTER_DLY_LOCK_OBS_SELECT_1:RW:16:4:=0x00
+	 * PHY_ADR_LPBK_ERROR_COUNT_OBS_1:RD:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 645
+	 * PHY_ADR_BASE_SLV_DLY_ENC_OBS_1:RD:16:9:=0x0000
+	 * PHY_ADR_MASTER_DLY_LOCK_OBS_1:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 646
+	 * SC_PHY_ADR_SNAP_OBS_REGS_1:WR:24:1:=0x00
+	 * PHY_ADR_SLV_DLY_ENC_OBS_SELECT_1:RW:16:3:=0x00
+	 * PHY_ADR_SLAVE_LOOP_CNT_UPDATE_1:RW:8:3:=0x00
+	 * PHY_ADR_ADDER_SLV_DLY_ENC_OBS_1:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 647
+	 * PHY_ADR_PRBS_PATTERN_MASK_1:RW:24:5:=0x00
+	 * PHY_ADR_PRBS_PATTERN_START_1:RW_D:16:7:=0x01
+	 * PHY_ADR_LPBK_CONTROL_1:RW:8:7:=0x00
+	 * PHY_ADR_TSEL_ENABLE_1:RW:0:1:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 648
+	 * PHY_ADR_IE_MODE_1:RW:24:1:=0x00
+	 * PHY_ADR_WRADDR_SHIFT_OBS_1:RD:16:3:=0x00
+	 * PHY_ADR_TYPE_1:RW:8:2:=0x02
+	 * PHY_ADR_PWR_RDC_DISABLE_1:RW:0:1:=0x00
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 649
+	 * PHY_ADR_DDL_MODE_1:RW:0:15:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 650
+	 * PHY_ADR_DDL_TEST_OBS_1:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 651
+	 * PHY_ADR_DDL_TEST_MSTR_DLY_OBS_1:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 652
+	 * PHY_ADR_CALVL_COARSE_DLY_1:RW:16:11:=0x0040
+	 * PHY_ADR_CALVL_START_1:RW:0:11:=0x0320
+	 */
+	{ 0x400320, 0x0 },
+	/*
+	 * 653
+	 * PHY_ADR_CALVL_QTR_1:RW:0:11:=0x0040
+	 */
+	{ 0x40, 0x0 },
+	/*
+	 * 654
+	 * PHY_ADR_CALVL_SWIZZLE0_1:RW:0:24:=0x00dcba
+	 */
+	{ 0xdcba, 0x0 },
+	/*
+	 * 655
+	 * PHY_ADR_CALVL_RANK_CTRL_1:RW:24:2:=0x03
+	 * PHY_ADR_CALVL_SWIZZLE1_1:RW:0:24:=0x00dcba
+	 */
+	{ 0x300dcba, 0x0 },
+	/*
+	 * 656
+	 * PHY_ADR_CALVL_DEBUG_MODE_1:RW:24:1:=0x00
+	 * PHY_ADR_CALVL_RESP_WAIT_CNT_1:RW:16:4:=0x00
+	 * PHY_ADR_CALVL_CAPTURE_CNT_1:RW:8:4:=0x02
+	 * PHY_ADR_CALVL_NUM_PATTERNS_1:RW:0:2:=0x00
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 657
+	 * PHY_ADR_CALVL_OBS_SELECT_1:RW:16:3:=0x00
+	 * SC_PHY_ADR_CALVL_ERROR_CLR_1:WR:8:1:=0x00
+	 * SC_PHY_ADR_CALVL_DEBUG_CONT_1:WR:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 658
+	 * PHY_ADR_CALVL_OBS0_1:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 659
+	 * PHY_ADR_CALVL_OBS1_1:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 660
+	 * PHY_ADR_CALVL_FG_0_1:RW:0:20:=0x00002a
+	 */
+	{ 0x2a, 0x0 },
+	/*
+	 * 661
+	 * PHY_ADR_CALVL_BG_0_1:RW:0:20:=0x000015
+	 */
+	{ 0x15, 0x0 },
+	/*
+	 * 662
+	 * PHY_ADR_CALVL_FG_1_1:RW:0:20:=0x000015
+	 */
+	{ 0x15, 0x0 },
+	/*
+	 * 663
+	 * PHY_ADR_CALVL_BG_1_1:RW:0:20:=0x00002a
+	 */
+	{ 0x2a, 0x0 },
+	/*
+	 * 664
+	 * PHY_ADR_CALVL_FG_2_1:RW:0:20:=0x000033
+	 */
+	{ 0x33, 0x0 },
+	/*
+	 * 665
+	 * PHY_ADR_CALVL_BG_2_1:RW:0:20:=0x00000c
+	 */
+	{ 0xc, 0x0 },
+	/*
+	 * 666
+	 * PHY_ADR_CALVL_FG_3_1:RW:0:20:=0x00000c
+	 */
+	{ 0xc, 0x0 },
+	/*
+	 * 667
+	 * PHY_ADR_CALVL_BG_3_1:RW:0:20:=0x000033
+	 */
+	{ 0x33, 0x0 },
+	/*
+	 * 668
+	 * PHY_ADR_ADDR_SEL_1:RW:0:24:=0x005432
+	 */
+	{ 0x5432, 0x0 },
+	/*
+	 * 669
+	 * PHY_ADR_SEG_MASK_1:RW:24:6:=0x00
+	 * PHY_ADR_BIT_MASK_1:RW:16:6:=0x0f
+	 * PHY_ADR_LP4_BOOT_SLV_DELAY_1:RW:0:10:=0x0000
+	 */
+	{ 0xf0000, 0x0 },
+	/*
+	 * 670
+	 * PHY_ADR_SW_TXIO_CTRL_1:RW:8:6:=0x00
+	 * PHY_ADR_CALVL_TRAIN_MASK_1:RW:0:6:=0x0f
+	 */
+	{ 0xf, 0x0 },
+	/*
+	 * 671
+	 * PHY_ADR0_CLK_WR_SLAVE_DELAY_1:RW+:8:11:=0x0300
+	 * PHY_ADR_TSEL_SELECT_1:RW+:0:8:=0x55
+	 */
+	{ 0x300ce, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 672
+	 * PHY_ADR2_CLK_WR_SLAVE_DELAY_1:RW+:16:11:=0x0300
+	 * PHY_ADR1_CLK_WR_SLAVE_DELAY_1:RW+:0:11:=0x0300
+	 */
+	{ 0x3000300, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 673
+	 * PHY_ADR4_CLK_WR_SLAVE_DELAY_1:RW+:16:11:=0x0300
+	 * PHY_ADR3_CLK_WR_SLAVE_DELAY_1:RW+:0:11:=0x0300
+	 */
+	{ 0x3000300, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 674
+	 * PHY_ADR_SW_MASTER_MODE_1:RW+:16:4:=0x00
+	 * PHY_ADR5_CLK_WR_SLAVE_DELAY_1:RW+:0:11:=0x0300
+	 */
+	{ 0x300, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 675
+	 * PHY_ADR_MASTER_DELAY_WAIT_1:RW+:24:8:=0x42
+	 * PHY_ADR_MASTER_DELAY_STEP_1:RW+:16:6:=0x08
+	 * PHY_ADR_MASTER_DELAY_START_1:RW+:0:10:=0x0010
+	 */
+	{ 0x42080010, 0x0 },
+	/*
+	 * 676
+	 * PHY_ADR_CALVL_DLY_STEP_1:RW+:8:4:=0x03
+	 * PHY_ADR_MASTER_DELAY_HALF_MEASURE_1:RW+:0:8:=0x3e
+	 */
+	{ 0x33e, 0x0 },
+	/*
+	 * 677
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 678
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 679
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 680
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 681
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 682
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 683
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 684
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 685
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 686
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 687
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 688
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 689
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 690
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 691
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 692
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 693
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 694
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 695
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 696
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 697
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 698
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 699
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 700
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 701
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 702
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 703
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 704
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 705
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 706
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 707
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 708
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 709
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 710
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 711
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 712
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 713
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 714
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 715
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 716
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 717
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 718
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 719
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 720
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 721
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 722
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 723
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 724
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 725
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 726
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 727
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 728
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 729
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 730
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 731
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 732
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 733
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 734
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 735
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 736
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 737
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 738
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 739
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 740
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 741
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 742
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 743
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 744
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 745
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 746
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 747
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 748
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 749
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 750
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 751
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 752
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 753
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 754
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 755
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 756
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 757
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 758
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 759
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 760
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 761
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 762
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 763
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 764
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 765
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 766
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 767
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 768
+	 * PHY_ADR3_SW_WRADDR_SHIFT_2:RW+:24:5:=0x00
+	 * PHY_ADR2_SW_WRADDR_SHIFT_2:RW+:16:5:=0x00
+	 * PHY_ADR1_SW_WRADDR_SHIFT_2:RW+:8:5:=0x00
+	 * PHY_ADR0_SW_WRADDR_SHIFT_2:RW+:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 769
+	 * PHY_ADR_CLK_WR_BYPASS_SLAVE_DELAY_2:RW:16:11:=0x0000
+	 * PHY_ADR5_SW_WRADDR_SHIFT_2:RW+:8:5:=0x00
+	 * PHY_ADR4_SW_WRADDR_SHIFT_2:RW+:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 770
+	 * SC_PHY_ADR_MANUAL_CLEAR_2:WR:8:3:=0x00
+	 * PHY_ADR_CLK_BYPASS_OVERRIDE_2:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 771
+	 * PHY_ADR_LPBK_RESULT_OBS_2:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 772
+	 * PHY_ADR_MASTER_DLY_LOCK_OBS_SELECT_2:RW:16:4:=0x00
+	 * PHY_ADR_LPBK_ERROR_COUNT_OBS_2:RD:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 773
+	 * PHY_ADR_BASE_SLV_DLY_ENC_OBS_2:RD:16:9:=0x0000
+	 * PHY_ADR_MASTER_DLY_LOCK_OBS_2:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 774
+	 * SC_PHY_ADR_SNAP_OBS_REGS_2:WR:24:1:=0x00
+	 * PHY_ADR_SLV_DLY_ENC_OBS_SELECT_2:RW:16:3:=0x00
+	 * PHY_ADR_SLAVE_LOOP_CNT_UPDATE_2:RW:8:3:=0x00
+	 * PHY_ADR_ADDER_SLV_DLY_ENC_OBS_2:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 775
+	 * PHY_ADR_PRBS_PATTERN_MASK_2:RW:24:5:=0x00
+	 * PHY_ADR_PRBS_PATTERN_START_2:RW_D:16:7:=0x01
+	 * PHY_ADR_LPBK_CONTROL_2:RW:8:7:=0x00
+	 * PHY_ADR_TSEL_ENABLE_2:RW:0:1:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 776
+	 * PHY_ADR_IE_MODE_2:RW:24:1:=0x00
+	 * PHY_ADR_WRADDR_SHIFT_OBS_2:RD:16:3:=0x00
+	 * PHY_ADR_TYPE_2:RW:8:2:=0x02
+	 * PHY_ADR_PWR_RDC_DISABLE_2:RW:0:1:=0x00
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 777
+	 * PHY_ADR_DDL_MODE_2:RW:0:15:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 778
+	 * PHY_ADR_DDL_TEST_OBS_2:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 779
+	 * PHY_ADR_DDL_TEST_MSTR_DLY_OBS_2:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 780
+	 * PHY_ADR_CALVL_COARSE_DLY_2:RW:16:11:=0x0040
+	 * PHY_ADR_CALVL_START_2:RW:0:11:=0x0320
+	 */
+	{ 0x400320, 0x0 },
+	/*
+	 * 781
+	 * PHY_ADR_CALVL_QTR_2:RW:0:11:=0x0040
+	 */
+	{ 0x40, 0x0 },
+	/*
+	 * 782
+	 * PHY_ADR_CALVL_SWIZZLE0_2:RW:0:24:=0x000098
+	 */
+	{ 0x98, 0x0 },
+	/*
+	 * 783
+	 * PHY_ADR_CALVL_RANK_CTRL_2:RW:24:2:=0x03
+	 * PHY_ADR_CALVL_SWIZZLE1_2:RW:0:24:=0x000098
+	 */
+	{ 0x3000098, 0x0 },
+	/*
+	 * 784
+	 * PHY_ADR_CALVL_DEBUG_MODE_2:RW:24:1:=0x00
+	 * PHY_ADR_CALVL_RESP_WAIT_CNT_2:RW:16:4:=0x00
+	 * PHY_ADR_CALVL_CAPTURE_CNT_2:RW:8:4:=0x02
+	 * PHY_ADR_CALVL_NUM_PATTERNS_2:RW:0:2:=0x00
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 785
+	 * PHY_ADR_CALVL_OBS_SELECT_2:RW:16:3:=0x00
+	 * SC_PHY_ADR_CALVL_ERROR_CLR_2:WR:8:1:=0x00
+	 * SC_PHY_ADR_CALVL_DEBUG_CONT_2:WR:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 786
+	 * PHY_ADR_CALVL_OBS0_2:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 787
+	 * PHY_ADR_CALVL_OBS1_2:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 788
+	 * PHY_ADR_CALVL_FG_0_2:RW:0:20:=0x00002a
+	 */
+	{ 0x2a, 0x0 },
+	/*
+	 * 789
+	 * PHY_ADR_CALVL_BG_0_2:RW:0:20:=0x000015
+	 */
+	{ 0x15, 0x0 },
+	/*
+	 * 790
+	 * PHY_ADR_CALVL_FG_1_2:RW:0:20:=0x000015
+	 */
+	{ 0x15, 0x0 },
+	/*
+	 * 791
+	 * PHY_ADR_CALVL_BG_1_2:RW:0:20:=0x00002a
+	 */
+	{ 0x2a, 0x0 },
+	/*
+	 * 792
+	 * PHY_ADR_CALVL_FG_2_2:RW:0:20:=0x000033
+	 */
+	{ 0x33, 0x0 },
+	/*
+	 * 793
+	 * PHY_ADR_CALVL_BG_2_2:RW:0:20:=0x00000c
+	 */
+	{ 0xc, 0x0 },
+	/*
+	 * 794
+	 * PHY_ADR_CALVL_FG_3_2:RW:0:20:=0x00000c
+	 */
+	{ 0xc, 0x0 },
+	/*
+	 * 795
+	 * PHY_ADR_CALVL_BG_3_2:RW:0:20:=0x000033
+	 */
+	{ 0x33, 0x0 },
+	/*
+	 * 796
+	 * PHY_ADR_ADDR_SEL_2:RW:0:24:=0x000010
+	 */
+	{ 0x10, 0x0 },
+	/*
+	 * 797
+	 * PHY_ADR_SEG_MASK_2:RW:24:6:=0x00
+	 * PHY_ADR_BIT_MASK_2:RW:16:6:=0x03
+	 * PHY_ADR_LP4_BOOT_SLV_DELAY_2:RW:0:10:=0x0000
+	 */
+	{ 0x30000, 0x0 },
+	/*
+	 * 798
+	 * PHY_ADR_SW_TXIO_CTRL_2:RW:8:6:=0x00
+	 * PHY_ADR_CALVL_TRAIN_MASK_2:RW:0:6:=0x03
+	 */
+	{ 0x3, 0x0 },
+	/*
+	 * 799
+	 * PHY_ADR0_CLK_WR_SLAVE_DELAY_2:RW+:8:11:=0x0300
+	 * PHY_ADR_TSEL_SELECT_2:RW+:0:8:=0x55
+	 */
+	{ 0x300ce, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 800
+	 * PHY_ADR2_CLK_WR_SLAVE_DELAY_2:RW+:16:11:=0x0300
+	 * PHY_ADR1_CLK_WR_SLAVE_DELAY_2:RW+:0:11:=0x0300
+	 */
+	{ 0x3000300, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 801
+	 * PHY_ADR4_CLK_WR_SLAVE_DELAY_2:RW+:16:11:=0x0300
+	 * PHY_ADR3_CLK_WR_SLAVE_DELAY_2:RW+:0:11:=0x0300
+	 */
+	{ 0x3000300, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 802
+	 * PHY_ADR_SW_MASTER_MODE_2:RW+:16:4:=0x00
+	 * PHY_ADR5_CLK_WR_SLAVE_DELAY_2:RW+:0:11:=0x0300
+	 */
+	{ 0x300, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 803
+	 * PHY_ADR_MASTER_DELAY_WAIT_2:RW+:24:8:=0x42
+	 * PHY_ADR_MASTER_DELAY_STEP_2:RW+:16:6:=0x08
+	 * PHY_ADR_MASTER_DELAY_START_2:RW+:0:10:=0x0010
+	 */
+	{ 0x42080010, 0x0 },
+	/*
+	 * 804
+	 * PHY_ADR_CALVL_DLY_STEP_2:RW+:8:4:=0x03
+	 * PHY_ADR_MASTER_DELAY_HALF_MEASURE_2:RW+:0:8:=0x3e
+	 */
+	{ 0x33e, 0x0 },
+	/*
+	 * 805
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 806
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 807
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 808
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 809
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 810
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 811
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 812
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 813
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 814
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 815
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 816
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 817
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 818
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 819
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 820
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 821
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 822
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 823
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 824
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 825
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 826
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 827
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 828
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 829
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 830
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 831
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 832
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 833
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 834
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 835
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 836
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 837
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 838
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 839
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 840
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 841
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 842
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 843
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 844
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 845
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 846
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 847
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 848
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 849
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 850
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 851
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 852
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 853
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 854
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 855
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 856
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 857
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 858
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 859
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 860
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 861
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 862
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 863
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 864
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 865
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 866
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 867
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 868
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 869
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 870
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 871
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 872
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 873
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 874
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 875
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 876
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 877
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 878
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 879
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 880
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 881
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 882
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 883
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 884
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 885
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 886
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 887
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 888
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 889
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 890
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 891
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 892
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 893
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 894
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 895
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 896
+	 * PHY_ADR3_SW_WRADDR_SHIFT_3:RW+:24:5:=0x00
+	 * PHY_ADR2_SW_WRADDR_SHIFT_3:RW+:16:5:=0x00
+	 * PHY_ADR1_SW_WRADDR_SHIFT_3:RW+:8:5:=0x00
+	 * PHY_ADR0_SW_WRADDR_SHIFT_3:RW+:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 897
+	 * PHY_ADR_CLK_WR_BYPASS_SLAVE_DELAY_3:RW:16:11:=0x0000
+	 * PHY_ADR5_SW_WRADDR_SHIFT_3:RW+:8:5:=0x00
+	 * PHY_ADR4_SW_WRADDR_SHIFT_3:RW+:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 898
+	 * SC_PHY_ADR_MANUAL_CLEAR_3:WR:8:3:=0x00
+	 * PHY_ADR_CLK_BYPASS_OVERRIDE_3:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 899
+	 * PHY_ADR_LPBK_RESULT_OBS_3:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 900
+	 * PHY_ADR_MASTER_DLY_LOCK_OBS_SELECT_3:RW:16:4:=0x00
+	 * PHY_ADR_LPBK_ERROR_COUNT_OBS_3:RD:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 901
+	 * PHY_ADR_BASE_SLV_DLY_ENC_OBS_3:RD:16:9:=0x0000
+	 * PHY_ADR_MASTER_DLY_LOCK_OBS_3:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 902
+	 * SC_PHY_ADR_SNAP_OBS_REGS_3:WR:24:1:=0x00
+	 * PHY_ADR_SLV_DLY_ENC_OBS_SELECT_3:RW:16:3:=0x00
+	 * PHY_ADR_SLAVE_LOOP_CNT_UPDATE_3:RW:8:3:=0x00
+	 * PHY_ADR_ADDER_SLV_DLY_ENC_OBS_3:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 903
+	 * PHY_ADR_PRBS_PATTERN_MASK_3:RW:24:5:=0x00
+	 * PHY_ADR_PRBS_PATTERN_START_3:RW_D:16:7:=0x01
+	 * PHY_ADR_LPBK_CONTROL_3:RW:8:7:=0x00
+	 * PHY_ADR_TSEL_ENABLE_3:RW:0:1:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 904
+	 * PHY_ADR_IE_MODE_3:RW:24:1:=0x00
+	 * PHY_ADR_WRADDR_SHIFT_OBS_3:RD:16:3:=0x00
+	 * PHY_ADR_TYPE_3:RW:8:2:=0x02
+	 * PHY_ADR_PWR_RDC_DISABLE_3:RW:0:1:=0x00
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 905
+	 * PHY_ADR_DDL_MODE_3:RW:0:15:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 906
+	 * PHY_ADR_DDL_TEST_OBS_3:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 907
+	 * PHY_ADR_DDL_TEST_MSTR_DLY_OBS_3:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 908
+	 * PHY_ADR_CALVL_COARSE_DLY_3:RW:16:11:=0x0040
+	 * PHY_ADR_CALVL_START_3:RW:0:11:=0x0320
+	 */
+	{ 0x400320, 0x0 },
+	/*
+	 * 909
+	 * PHY_ADR_CALVL_QTR_3:RW:0:11:=0x0040
+	 */
+	{ 0x40, 0x0 },
+	/*
+	 * 910
+	 * PHY_ADR_CALVL_SWIZZLE0_3:RW:0:24:=0x00dcba
+	 */
+	{ 0xdcba, 0x0 },
+	/*
+	 * 911
+	 * PHY_ADR_CALVL_RANK_CTRL_3:RW:24:2:=0x03
+	 * PHY_ADR_CALVL_SWIZZLE1_3:RW:0:24:=0x00dcba
+	 */
+	{ 0x300dcba, 0x0 },
+	/*
+	 * 912
+	 * PHY_ADR_CALVL_DEBUG_MODE_3:RW:24:1:=0x00
+	 * PHY_ADR_CALVL_RESP_WAIT_CNT_3:RW:16:4:=0x00
+	 * PHY_ADR_CALVL_CAPTURE_CNT_3:RW:8:4:=0x02
+	 * PHY_ADR_CALVL_NUM_PATTERNS_3:RW:0:2:=0x00
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 913
+	 * PHY_ADR_CALVL_OBS_SELECT_3:RW:16:3:=0x00
+	 * SC_PHY_ADR_CALVL_ERROR_CLR_3:WR:8:1:=0x00
+	 * SC_PHY_ADR_CALVL_DEBUG_CONT_3:WR:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 914
+	 * PHY_ADR_CALVL_OBS0_3:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 915
+	 * PHY_ADR_CALVL_OBS1_3:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 916
+	 * PHY_ADR_CALVL_FG_0_3:RW:0:20:=0x00002a
+	 */
+	{ 0x2a, 0x0 },
+	/*
+	 * 917
+	 * PHY_ADR_CALVL_BG_0_3:RW:0:20:=0x000015
+	 */
+	{ 0x15, 0x0 },
+	/*
+	 * 918
+	 * PHY_ADR_CALVL_FG_1_3:RW:0:20:=0x000015
+	 */
+	{ 0x15, 0x0 },
+	/*
+	 * 919
+	 * PHY_ADR_CALVL_BG_1_3:RW:0:20:=0x00002a
+	 */
+	{ 0x2a, 0x0 },
+	/*
+	 * 920
+	 * PHY_ADR_CALVL_FG_2_3:RW:0:20:=0x000033
+	 */
+	{ 0x33, 0x0 },
+	/*
+	 * 921
+	 * PHY_ADR_CALVL_BG_2_3:RW:0:20:=0x00000c
+	 */
+	{ 0xc, 0x0 },
+	/*
+	 * 922
+	 * PHY_ADR_CALVL_FG_3_3:RW:0:20:=0x00000c
+	 */
+	{ 0xc, 0x0 },
+	/*
+	 * 923
+	 * PHY_ADR_CALVL_BG_3_3:RW:0:20:=0x000033
+	 */
+	{ 0x33, 0x0 },
+	/*
+	 * 924
+	 * PHY_ADR_ADDR_SEL_3:RW:0:24:=0x005432
+	 */
+	{ 0x5432, 0x0 },
+	/*
+	 * 925
+	 * PHY_ADR_SEG_MASK_3:RW:24:6:=0x00
+	 * PHY_ADR_BIT_MASK_3:RW:16:6:=0x0f
+	 * PHY_ADR_LP4_BOOT_SLV_DELAY_3:RW:0:10:=0x0000
+	 */
+	{ 0xf0000, 0x0 },
+	/*
+	 * 926
+	 * PHY_ADR_SW_TXIO_CTRL_3:RW:8:6:=0x00
+	 * PHY_ADR_CALVL_TRAIN_MASK_3:RW:0:6:=0x0f
+	 */
+	{ 0xf, 0x0 },
+	/*
+	 * 927
+	 * PHY_ADR0_CLK_WR_SLAVE_DELAY_3:RW+:8:11:=0x0300
+	 * PHY_ADR_TSEL_SELECT_3:RW+:0:8:=0x55
+	 */
+	{ 0x300ce, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 928
+	 * PHY_ADR2_CLK_WR_SLAVE_DELAY_3:RW+:16:11:=0x0300
+	 * PHY_ADR1_CLK_WR_SLAVE_DELAY_3:RW+:0:11:=0x0300
+	 */
+	{ 0x3000300, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 929
+	 * PHY_ADR4_CLK_WR_SLAVE_DELAY_3:RW+:16:11:=0x0300
+	 * PHY_ADR3_CLK_WR_SLAVE_DELAY_3:RW+:0:11:=0x0300
+	 */
+	{ 0x3000300, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 930
+	 * PHY_ADR_SW_MASTER_MODE_3:RW+:16:4:=0x00
+	 * PHY_ADR5_CLK_WR_SLAVE_DELAY_3:RW+:0:11:=0x0300
+	 */
+	{ 0x300, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 931
+	 * PHY_ADR_MASTER_DELAY_WAIT_3:RW+:24:8:=0x42
+	 * PHY_ADR_MASTER_DELAY_STEP_3:RW+:16:6:=0x08
+	 * PHY_ADR_MASTER_DELAY_START_3:RW+:0:10:=0x0010
+	 */
+	{ 0x42080010, 0x0 },
+	/*
+	 * 932
+	 * PHY_ADR_CALVL_DLY_STEP_3:RW+:8:4:=0x03
+	 * PHY_ADR_MASTER_DELAY_HALF_MEASURE_3:RW+:0:8:=0x3e
+	 */
+	{ 0x33e, 0x0 },
+	/*
+	 * 933
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 934
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 935
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 936
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 937
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 938
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 939
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 940
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 941
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 942
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 943
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 944
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 945
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 946
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 947
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 948
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 949
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 950
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 951
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 952
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 953
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 954
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 955
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 956
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 957
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 958
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 959
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 960
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 961
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 962
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 963
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 964
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 965
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 966
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 967
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 968
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 969
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 970
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 971
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 972
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 973
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 974
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 975
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 976
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 977
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 978
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 979
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 980
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 981
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 982
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 983
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 984
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 985
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 986
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 987
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 988
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 989
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 990
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 991
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 992
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 993
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 994
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 995
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 996
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 997
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 998
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 999
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1001
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1002
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1003
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1004
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1005
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1006
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1007
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1008
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1009
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1010
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1011
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1012
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1013
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1014
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1015
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1016
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1017
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1018
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1019
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1020
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1021
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1022
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1023
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1024
+	 * PHY_FREQ_SEL:RW:0:3:=0x00
+	 */
+	{ 0x0, MNH_DDR_REG_CONFIG_FLAG_SKIP_PUSH },
+	/*
+	 * 1025
+	 * PHY_SW_GRP_SHIFT_0:RW+:24:5:=0x00
+	 * PHY_FREQ_SEL_INDEX:RW+:16:2:=0x00
+	 * PHY_FREQ_SEL_MULTICAST_EN:RW+:8:1:=0x01
+	 * PHY_FREQ_SEL_FROM_REGIF:RW_D:0:1:=0x00
+	 */
+	{ 0x10100, MNH_DDR_REG_CONFIG_FLAG_SKIP_PUSH },
+	/*
+	 * 1026
+	 * PHY_SW_GRP_BYPASS_SHIFT:RW:24:5:=0x05
+	 * PHY_GRP_BYPASS_SLAVE_DELAY:RW:8:11:=0x0000
+	 * PHY_SW_GRP_SHIFT_1:RW+:0:5:=0x00
+	 */
+	{ 0x5000000, 0x0 },
+	/*
+	 * 1027
+	 * PHY_CSLVL_ENABLE:RW:24:1:=0x01
+	 * PHY_LP4_BOOT_DISABLE:RW:16:1:=0x01
+	 * SC_PHY_MANUAL_UPDATE:WR:8:1:=0x00
+	 * PHY_GRP_BYPASS_OVERRIDE:RW:0:1:=0x00
+	 */
+	{ 0x1000000, 0x0 },
+	/*
+	 * 1028
+	 * PHY_CSLVL_START:RW:8:11:=0x0400
+	 * PHY_CSLVL_CS_MAP:RW:0:2:=0x03
+	 */
+	{ 0x40003, 0x0 },
+	/*
+	 * 1029
+	 * PHY_CSLVL_COARSE_CHK:RW:16:11:=0x0032
+	 * PHY_CSLVL_QTR:RW:0:11:=0x0040
+	 */
+	{ 0x320100, 0x0 },
+	/*
+	 * 1030
+	 * PHY_CSLVL_COARSE_CAPTURE_CNT:RW:24:4:=0x02
+	 * PHY_CSLVL_COARSE_DLY:RW:8:11:=0x0055
+	 * PHY_CSLVL_CAPTURE_CNT:RW:0:4:=0x02
+	 */
+	{ 0x2005502, 0x0 },
+	/*
+	 * 1031
+	 * SC_PHY_CSLVL_ERROR_CLR:WR:16:1:=0x00
+	 * SC_PHY_CSLVL_DEBUG_CONT:WR:8:1:=0x00
+	 * PHY_CSLVL_DEBUG_MODE:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1032
+	 * PHY_CSLVL_OBS0:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1033
+	 * PHY_CSLVL_OBS1:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1034
+	 * PHY_GRP_SHIFT_OBS_SELECT:RW:24:5:=0x00
+	 * PHY_GRP_SLV_DLY_ENC_OBS_SELECT:RW:8:10:=0x0000
+	 * PHY_CALVL_CS_MAP:RW:0:4:=0x04
+	 */
+	{ 0x4, 0x0 },
+	/*
+	 * 1035
+	 * PHY_ADRCTL_SLAVE_LOOP_CNT_UPDATE:RW:24:3:=0x00
+	 * PHY_GRP_SHIFT_OBS:RD:16:3:=0x00
+	 * PHY_GRP_SLV_DLY_ENC_OBS:RD:0:10:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1036
+	 * PHY_LP4_ACTIVE:RW:24:1:=0x01
+	 * PHY_ADRCTL_LPDDR:RW:16:1:=0x01
+	 * PHY_DFI_PHYUPD_TYPE:RW:8:2:=0x01
+	 * PHY_ADRCTL_SNAP_OBS_REGS:WR:0:1:=0x00
+	 */
+	{ 0x1010100, 0x0 },
+	/*
+	 * 1037
+	 * PHY_CONTINUOUS_CLK_CAL_UPDATE:RW:24:1:=0x00
+	 * SC_PHY_UPDATE_CLK_CAL_VALUES:WR:16:1:=0x00
+	 * PHY_CALVL_RESULT_MASK:RW:8:2:=0x02
+	 * PHY_LPDDR3_CS:RW_D:0:1:=0x00
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 1038
+	 * PHY_CA_SW_TXPWR_CTRL:RW:24:1:=0x01
+	 * PHY_MEMCLK_SW_TXIO_CTRL:RW:16:1:=0x00
+	 * PHY_SW_TXIO_CTRL_1:RW:8:4:=0x00
+	 * PHY_SW_TXIO_CTRL_0:RW:0:4:=0x00
+	 */
+	{ 0x1000000, 0x0 },
+	/*
+	 * 1039
+	 * PHY_MEMCLK_SW_TXPWR_CTRL:RW:0:1:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 1040
+	 * PHY_USER_DEF_REG_AC_0:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1041
+	 * PHY_USER_DEF_REG_AC_1:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1042
+	 * PHY_USER_DEF_REG_AC_2:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1043
+	 * PHY_USER_DEF_REG_AC_3:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1044
+	 * PHY_PLL_WAIT_TOP:RW:8:8:=0x50
+	 * PHY_PLL_WAIT:RW:0:8:=0x64
+	 */
+	{ 0x5064, 0x0 },
+	/*
+	 * 1045
+	 * PHY_PLL_CTRL_TOP:RW+:16:13:=0x0122
+	 * PHY_PLL_CTRL:RW+:0:13:=0x1102
+	 */
+	{ 0x1221102, 0x0 },
+	/*
+	 * 1046
+	 * PHY_PLL_CTRL_CA:RW+:0:13:=0x0122
+	 */
+	{ 0x122, 0x0 },
+	/*
+	 * 1047
+	 * PHY_PLL_BYPASS:RW+:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1048
+	 * PHY_PAD_VREF_CTRL_DQ_0:RW:8:12:=0x0100
+	 * PHY_LOW_FREQ_SEL:RW+:0:1:=0x00
+	 */
+	{ 0xf1f00, 0x0 },
+	/*
+	 * 1049
+	 * PHY_PAD_VREF_CTRL_DQ_2:RW:16:12:=0x0100
+	 * PHY_PAD_VREF_CTRL_DQ_1:RW:0:12:=0x0100
+	 */
+	{ 0xf1f0f1f, 0x0 },
+	/*
+	 * 1050
+	 * PHY_PAD_VREF_CTRL_AC:RW:16:12:=0x0100
+	 * PHY_PAD_VREF_CTRL_DQ_3:RW:0:12:=0x0100
+	 */
+	{ 0xf1f0f1f, 0x0 },
+	/*
+	 * 1051
+	 * PHY_GRP_SLAVE_DELAY_0:RW+:16:11:=0x0300
+	 * PHY_SET_DFI_INPUT_RST_PAD:RW:8:1:=0x00
+	 * PHY_CSLVL_DLY_STEP:RW+:0:4:=0x03
+	 */
+	{ 0x3000003, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 1052
+	 * PHY_GRP_SLAVE_DELAY_1:RW+:0:11:=0x0300
+	 */
+	{ 0x300, MNH_DDR_REG_CONFIG_FLAG_SAVE_REST },
+	/*
+	 * 1053
+	 * PHY_LP4_BOOT_PLL_CTRL_CA:RW:16:13:=0x0b22
+	 * PHY_LP4_BOOT_PLL_CTRL:RW:0:13:=0x1b02
+	 */
+	{ 0xb221b02, 0x0 },
+	/*
+	 * 1054
+	 * PHY_PLL_CTRL_OVERRIDE:RW:16:16:=0x0924
+	 * PHY_LP4_BOOT_TOP_PLL_CTRL:RW:0:13:=0x0b22
+	 */
+	{ 0x9240b22, 0x0 },
+	/*
+	 * 1055
+	 * PHY_PLL_OBS_1:RD:16:16:=0x0000
+	 * PHY_PLL_OBS_0:RD:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1056
+	 * PHY_PLL_OBS_3:RD:16:16:=0x0000
+	 * PHY_PLL_OBS_2:RD:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1057
+	 * PHY_TCKSRE_WAIT:RW:24:4:=0x05
+	 * PHY_PLL_TESTOUT_SEL:RW:16:3:=0x03
+	 * PHY_PLL_OBS_4:RD:0:16:=0x0000
+	 */
+	{ 0x5030000, 0x0 },
+	/*
+	 * 1058
+	 * PHY_LP_CTRLUPD_CNTR_CFG:RW:24:5:=0x14
+	 * PHY_LS_IDLE_EN:RW:16:1:=0x00
+	 * PHY_LP_WAKEUP:RW:8:8:=0x00
+	 * PHY_LP4_BOOT_LOW_FREQ_SEL:RW:0:1:=0x01
+	 */
+	{ 0x14000001, 0x0 },
+	/*
+	 * 1059
+	 * PHY_PAD_FDBK_DRIVE:RW+:8:23:=0x004011
+	 * PHY_TDFI_PHY_WRDELAY:RW:0:1:=0x00
+	 */
+	{ 0x63c0ce00, 0x0 },
+	/*
+	 * 1060
+	 * PHY_PAD_FDBK_DRIVE2:RW+:0:16:=0x4011
+	 */
+	{ 0xe, 0x0 },
+	/*
+	 * 1061
+	 * PHY_PAD_DATA_DRIVE:RW+:0:21:=0x000040
+	 */
+	{ 0x1f0fc0, 0x0 },
+	/*
+	 * 1062
+	 * PHY_PAD_DQS_DRIVE:RW+:0:23:=0x000040
+	 */
+	{ 0x3c37c0, 0x0 },
+	/*
+	 * 1063
+	 * PHY_PAD_ADDR_DRIVE:RW+:0:29:=0x00004011
+	 */
+	{ 0x1f0fc0ce, 0x0 },
+	/*
+	 * 1064
+	 * PHY_PAD_CLK_DRIVE:RW+:0:31:=0x00004011
+	 */
+	{ 0x3c37c0ce, 0x0 },
+	/*
+	 * 1065
+	 * PHY_PAD_FDBK_TERM:RW+:0:18:=0x004410
+	 */
+	{ 0x24410, 0x0 },
+	/*
+	 * 1066
+	 * PHY_PAD_DATA_TERM:RW+:0:17:=0x004410
+	 */
+	{ 0x4410, 0x0 },
+	/*
+	 * 1067
+	 * PHY_PAD_DQS_TERM:RW+:0:17:=0x004410
+	 */
+	{ 0x4410, 0x0 },
+	/*
+	 * 1068
+	 * PHY_PAD_ADDR_TERM:RW+:0:18:=0x004410
+	 */
+	{ 0x24410, 0x0 },
+	/*
+	 * 1069
+	 * PHY_PAD_CLK_TERM:RW+:0:18:=0x004410
+	 */
+	{ 0x4410, 0x0 },
+	/*
+	 * 1070
+	 * PHY_PAD_CKE_DRIVE:RW+:0:29:=0x00004011
+	 */
+	{ 0xfc0ff, 0x0 },
+	/*
+	 * 1071
+	 * PHY_PAD_CKE_TERM:RW+:0:18:=0x004410
+	 */
+	{ 0x4410, 0x0 },
+	/*
+	 * 1072
+	 * PHY_PAD_RST_DRIVE:RW+:0:29:=0x00004011
+	 */
+	{ 0xfc0ff, 0x0 },
+	/*
+	 * 1073
+	 * PHY_PAD_RST_TERM:RW+:0:18:=0x004410
+	 */
+	{ 0x4410, 0x0 },
+	/*
+	 * 1074
+	 * PHY_PAD_CS_DRIVE:RW+:0:29:=0x00004011
+	 */
+	{ 0x1f0fc0ce, 0x0 },
+	/*
+	 * 1075
+	 * PHY_PAD_CS_TERM:RW+:0:18:=0x004410
+	 */
+	{ 0x4410, 0x0 },
+	/*
+	 * 1076
+	 * PHY_PAD_ODT_DRIVE:RW+:0:29:=0x00004011
+	 */
+	{ 0x4011, 0x0 },
+	/*
+	 * 1077
+	 * PHY_PAD_ODT_TERM:RW+:0:18:=0x004410
+	 */
+	{ 0x4410, 0x0 },
+	/*
+	 * 1078
+	 * PHY_ADRCTL_LP3_RX_CAL:RW:16:13:=0x0000
+	 * PHY_ADRCTL_RX_CAL:RW:0:14:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1079
+	 * PHY_TST_CLK_PAD_CTRL:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1080
+	 * PHY_TST_CLK_PAD_CTRL2:RW:0:23:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1081
+	 * PHY_TST_CLK_PAD_CTRL3:RW:0:21:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1082
+	 * PHY_CAL_START_0:WR:24:1:=0x00
+	 * PHY_CAL_CLEAR_0:WR:16:1:=0x00
+	 * PHY_CAL_MODE_0:RW:0:9:=0x0064
+	 */
+	{ 0x78, 0x0 },
+	/*
+	 * 1083
+	 * PHY_CAL_INTERVAL_COUNT_0:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1084
+	 * PHY_CAL_CLK_SELECT_0:RW+:16:3:=0x01
+	 * PHY_LP4_BOOT_CAL_CLK_SELECT_0:RW:8:3:=0x01
+	 * PHY_CAL_SAMPLE_WAIT_0:RW:0:8:=0x08
+	 */
+	{ 0x10108, 0x0 },
+	/*
+	 * 1085
+	 * PHY_CAL_RESULT_OBS_0:RD:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1086
+	 * PHY_CAL_CPTR_CNT_0:RW:24:7:=0x03
+	 * PHY_CAL_RESULT2_OBS_0:RD:0:24:=0x000000
+	 */
+	{ 0x3000000, 0x0 },
+	/*
+	 * 1087
+	 * PHY_CAL_RCV_FINE_ADJ_0:RW:24:8:=0x00
+	 * PHY_CAL_PD_FINE_ADJ_0:RW:16:8:=0x00
+	 * PHY_CAL_PU_FINE_ADJ_0:RW:8:8:=0x00
+	 * PHY_CAL_SETTLING_PRD_0:RW:0:5:=0x08
+	 */
+	{ 0x8, 0x0 },
+	/*
+	 * 1088
+	 * SC_PHY_PAD_DBG_CONT_0:WR:8:1:=0x00
+	 * PHY_CAL_DBG_CFG_0:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1089
+	 * PHY_CAL_RESULT3_OBS_0:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1090
+	 * PHY_AC_LPBK_ERR_CLEAR:WR:24:1:=0x00
+	 * PHY_ADRCTL_MANUAL_UPDATE:WR:16:1:=0x00
+	 * PHY_PAD_ATB_CTRL:RW:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1091
+	 * PHY_AC_LPBK_CONTROL:RW:16:9:=0x0000
+	 * PHY_AC_LPBK_ENABLE:RW:8:2:=0x00
+	 * PHY_AC_LPBK_OBS_SELECT:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1092
+	 * PHY_AC_PRBS_PATTERN_MASK:RW:8:4:=0x00
+	 * PHY_AC_PRBS_PATTERN_START:RW_D:0:7:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 1093
+	 * PHY_AC_LPBK_RESULT_OBS:RD:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1094
+	 * PHY_AC_CLK_LPBK_CONTROL:RW:16:6:=0x00
+	 * PHY_AC_CLK_LPBK_ENABLE:RW:8:2:=0x00
+	 * PHY_AC_CLK_LPBK_OBS_SELECT:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1095
+	 * PHY_LPDDR4_CONNECT:RW:24:1:=0x01
+	 * PHY_AC_PWR_RDC_DISABLE:RW:16:1:=0x00
+	 * PHY_AC_CLK_LPBK_RESULT_OBS:RD:0:16:=0x0000
+	 */
+	{ 0x1000000, 0x0 },
+	/*
+	 * 1096
+	 * PHY_CS_DLY_UPT_PER_AC_SLICE:RW:16:1:=0x00
+	 * PHY_ADRCTL_MSTR_DLY_ENC_SEL:RW:8:4:=0x00
+	 * PHY_CALVL_DEVICE_MAP:RW:0:5:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 1097
+	 * PHY_DDL_AC_ENABLE:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 1098
+	 * PHY_INIT_UPDATE_CONFIG:RW:24:3:=0x07
+	 * PHY_PAD_BACKGROUND_CAL:RW:16:1:=0x01
+	 * PHY_DDL_AC_MODE:RW:0:11:=0x0000
+	 */
+	{ 0x7010000, 0x0 },
+	/*
+	 * 1099
+	 * PHY_AC_INIT_COMPLETE_OBS:RD:16:10:=0x0000
+	 * PHY_DLL_RST_EN:RW_D:8:2:=0x02
+	 * PHY_DDL_TRACK_UPD_THRESHOLD_AC:RW:0:8:=0x04
+	 */
+	{ 0x204, 0x0 },
+	/*
+	 * 1100
+	 * PHY_UPDATE_MASK:RW:8:1:=0x00
+	 * PHY_DS_INIT_COMPLETE_OBS:RD:0:4:=0x00
+	 */
+	{ 0x0, 0x0 },
+	} /* END PHY */,
+	{ /* BEGIN PI */
+	/*
+	 * 0
+	 * PI_VERSION:RD:16:16:=0x0000
+	 * PI_DRAM_CLASS:RW:8:4:=0x0b
+	 * PI_START:RW:0:1:=0x00
+	 */
+	{ 0xb00, 0x0 },
+	/*
+	 * 1
+	 * PI_NOTCARE_PHYUPD:RW:16:1:=0x00
+	 * PI_INIT_LVL_EN:RW:8:1:=0x01
+	 * PI_NORMAL_LVL_SEQ:RW:0:1:=0x01
+	 */
+	{ 0x101, 0x0 },
+	/*
+	 * 2
+	 * PI_MASTER_ACK_DURATION_MIN:RW:16:8:=0x64
+	 * PI_TCMD_GAP:RW:0:16:=0x0000
+	 */
+	{ 0x640000, 0x0 },
+	/*
+	 * 3
+	 * PI_TDFI_PHYMSTR_MAX_F0:RW:0:32:=0x00049040
+	 */
+	{ 0x49040, 0x0 },
+	/*
+	 * 4
+	 * PI_TDFI_PHYMSTR_RESP_F0:RW:0:16:=0x00f4
+	 */
+	{ 0xf4, 0x0 },
+	/*
+	 * 5
+	 * PI_TDFI_PHYMSTR_MAX_F1:RW:0:32:=0x00049040
+	 */
+	{ 0x49040, 0x0 },
+	/*
+	 * 6
+	 * PI_TDFI_PHYMSTR_RESP_F1:RW:0:16:=0x2482
+	 */
+	{ 0x2482, 0x0 },
+	/*
+	 * 7
+	 * PI_TDFI_PHYMSTR_MAX_F2:RW:0:32:=0x00049040
+	 */
+	{ 0x49040, 0x0 },
+	/*
+	 * 8
+	 * PI_TDFI_PHYMSTR_RESP_F2:RW:0:16:=0x2482
+	 */
+	{ 0x2482, 0x0 },
+	/*
+	 * 9
+	 * PI_TDFI_PHYMSTR_MAX_F3:RW:0:32:=0x00049040
+	 */
+	{ 0x49040, 0x0 },
+	/*
+	 * 10
+	 * PI_TDFI_PHYMSTR_RESP_F3:RW:0:16:=0x2482
+	 */
+	{ 0x2482, 0x0 },
+	/*
+	 * 11
+	 * PI_TDFI_PHYUPD_RESP_F0:RW:0:20:=0x0000f4
+	 */
+	{ 0xf4, 0x0 },
+	/*
+	 * 12
+	 * PI_TDFI_PHYUPD_TYPE0_F0:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 13
+	 * PI_TDFI_PHYUPD_TYPE1_F0:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 14
+	 * PI_TDFI_PHYUPD_TYPE2_F0:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 15
+	 * PI_TDFI_PHYUPD_TYPE3_F0:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 16
+	 * PI_TDFI_PHYUPD_RESP_F1:RW:0:20:=0x002482
+	 */
+	{ 0x2482, 0x0 },
+	/*
+	 * 17
+	 * PI_TDFI_PHYUPD_TYPE0_F1:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 18
+	 * PI_TDFI_PHYUPD_TYPE1_F1:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 19
+	 * PI_TDFI_PHYUPD_TYPE2_F1:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 20
+	 * PI_TDFI_PHYUPD_TYPE3_F1:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 21
+	 * PI_TDFI_PHYUPD_RESP_F2:RW:0:20:=0x002482
+	 */
+	{ 0x2482, 0x0 },
+	/*
+	 * 22
+	 * PI_TDFI_PHYUPD_TYPE0_F2:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 23
+	 * PI_TDFI_PHYUPD_TYPE1_F2:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 24
+	 * PI_TDFI_PHYUPD_TYPE2_F2:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 25
+	 * PI_TDFI_PHYUPD_TYPE3_F2:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 26
+	 * PI_TDFI_PHYUPD_RESP_F3:RW:0:20:=0x002482
+	 */
+	{ 0x2482, 0x0 },
+	/*
+	 * 27
+	 * PI_TDFI_PHYUPD_TYPE0_F3:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 28
+	 * PI_TDFI_PHYUPD_TYPE1_F3:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 29
+	 * PI_TDFI_PHYUPD_TYPE2_F3:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 30
+	 * PI_TDFI_PHYUPD_TYPE3_F3:RW:0:32:=0x00000200
+	 */
+	{ 0x200, 0x0 },
+	/*
+	 * 31
+	 * PI_EXIT_AFTER_INIT_CALVL:RW_D:16:1:=0x01
+	 * PI_CONTROL_ERROR_STATUS:RD:0:9:=0x0000
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 32
+	 * PI_FREQ_MAP:RW:0:32:=0x0000000f
+	 */
+	{ 0x5, 0x0 },
+	/*
+	 * 33
+	 * PI_POWER_ON_SEQ_END_ARRAY:RW:24:8:=0x01
+	 * PI_POWER_ON_SEQ_BYPASS_ARRAY:RW:16:8:=0x00
+	 * PI_INIT_DFS_CALVL_ONLY:RW:8:1:=0x00
+	 * PI_INIT_WORK_FREQ:RW:0:5:=0x01
+	 */
+	{ 0x1000002, 0x0 },
+	/*
+	 * 34
+	 * PI_SEQ1_PAT:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 35
+	 * PI_SEQ1_PAT_MASK:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 36
+	 * PI_SEQ2_PAT:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 37
+	 * PI_SEQ2_PAT_MASK:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 38
+	 * PI_SEQ3_PAT:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 39
+	 * PI_SEQ3_PAT_MASK:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 40
+	 * PI_SEQ4_PAT:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 41
+	 * PI_SEQ4_PAT_MASK:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 42
+	 * PI_SEQ5_PAT:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 43
+	 * PI_SEQ5_PAT_MASK:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 44
+	 * PI_SEQ6_PAT:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 45
+	 * PI_SEQ6_PAT_MASK:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 46
+	 * PI_SEQ7_PAT:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 47
+	 * PI_SEQ7_PAT_MASK:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 48
+	 * PI_SEQ8_PAT:RW:0:24:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 49
+	 * PI_WDT_DISABLE:RW_D:24:1:=0x01
+	 * PI_SEQ8_PAT_MASK:RW:0:24:=0x000000
+	 */
+	{ 0x1000000, 0x0 },
+	/*
+	 * 50
+	 * PI_TDELAY_RDWR_2_BUS_IDLE_F0:RW:24:8:=0x29
+	 * PI_CS_MAP:RW:16:2:=0x03
+	 * RESERVED:RW:8:1:=0x00
+	 * PI_SW_RST_N:RW_D:0:1:=0x01
+	 */
+	{ 0x29030001, 0x0 },
+	/*
+	 * 51
+	 * PI_TMRR:RW:24:4:=0x08
+	 * PI_TDELAY_RDWR_2_BUS_IDLE_F3:RW:16:8:=0x47
+	 * PI_TDELAY_RDWR_2_BUS_IDLE_F2:RW:8:8:=0x47
+	 * PI_TDELAY_RDWR_2_BUS_IDLE_F1:RW:0:8:=0x47
+	 */
+	{ 0x8474747, 0x0 },
+	/*
+	 * 52
+	 * PI_MCAREF_FORWARD_ONLY:RW:16:1:=0x01
+	 * PI_AREFRESH:WR:8:1:=0x00
+	 * PI_PREAMBLE_SUPPORT:RW:0:2:=0x02
+	 */
+	{ 0x10002, 0x0 },
+	/*
+	 * 53
+	 * PI_TRFC_F0:RW:0:10:=0x0005
+	 */
+	{ 0x5, 0x0 },
+	/*
+	 * 54
+	 * PI_TREF_F0:RW:0:20:=0x00007a
+	 */
+	{ 0x7a, 0x0 },
+	/*
+	 * 55
+	 * PI_TRFC_F1:RW:0:10:=0x009d
+	 */
+	{ 0x9d, 0x0 },
+	/*
+	 * 56
+	 * PI_TREF_F1:RW:0:20:=0x001241
+	 */
+	{ 0x1241, 0x0 },
+	/*
+	 * 57
+	 * PI_TRFC_F2:RW:0:10:=0x009d
+	 */
+	{ 0x9d, 0x0 },
+	/*
+	 * 58
+	 * PI_TREF_F2:RW:0:20:=0x001241
+	 */
+	{ 0x1241, 0x0 },
+	/*
+	 * 59
+	 * PI_TRFC_F3:RW:0:10:=0x009d
+	 */
+	{ 0x9d, 0x0 },
+	/*
+	 * 60
+	 * RESERVED:RW:24:1:=0x00
+	 * PI_TREF_F3:RW:0:20:=0x001241
+	 */
+	{ 0x1241, 0x0 },
+	/*
+	 * 61
+	 * PI_SWLVL_OP_DONE:RD:24:1:=0x00
+	 * PI_SWLVL_LOAD:WR:16:1:=0x00
+	 * PI_FREQ_SEL_FROM_REGIF:RW:8:1:=0x00
+	 * PI_FREQ_CHANGE_REG_COPY:RW:0:5:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 62
+	 * PI_SW_WRLVL_RESP_3:RD:24:1:=0x00
+	 * PI_SW_WRLVL_RESP_2:RD:16:1:=0x00
+	 * PI_SW_WRLVL_RESP_1:RD:8:1:=0x00
+	 * PI_SW_WRLVL_RESP_0:RD:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 63
+	 * PI_SW_RDLVL_RESP_3:RD:24:2:=0x00
+	 * PI_SW_RDLVL_RESP_2:RD:16:2:=0x00
+	 * PI_SW_RDLVL_RESP_1:RD:8:2:=0x00
+	 * PI_SW_RDLVL_RESP_0:RD:0:2:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 64
+	 * PI_SWLVL_EXIT:WR:24:1:=0x00
+	 * PI_SWLVL_START:WR:16:1:=0x00
+	 * PI_SW_LEVELING_MODE:RW:8:3:=0x00
+	 * PI_SW_CALVL_RESP_0:RD:0:2:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 65
+	 * PI_SW_WDQLVL_RESP_0:RD:24:2:=0x00
+	 * PI_SWLVL_VREF_UPDATE_SLICE_0:WR:16:1:=0x00
+	 * PI_SWLVL_RD_SLICE_0:WR:8:1:=0x00
+	 * PI_SWLVL_WR_SLICE_0:WR:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 66
+	 * PI_SW_WDQLVL_RESP_1:RD:24:2:=0x00
+	 * PI_SWLVL_VREF_UPDATE_SLICE_1:WR:16:1:=0x00
+	 * PI_SWLVL_RD_SLICE_1:WR:8:1:=0x00
+	 * PI_SWLVL_WR_SLICE_1:WR:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 67
+	 * PI_SW_WDQLVL_RESP_2:RD:24:2:=0x00
+	 * PI_SWLVL_VREF_UPDATE_SLICE_2:WR:16:1:=0x00
+	 * PI_SWLVL_RD_SLICE_2:WR:8:1:=0x00
+	 * PI_SWLVL_WR_SLICE_2:WR:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 68
+	 * PI_SW_WDQLVL_RESP_3:RD:24:2:=0x00
+	 * PI_SWLVL_VREF_UPDATE_SLICE_3:WR:16:1:=0x00
+	 * PI_SWLVL_RD_SLICE_3:WR:8:1:=0x00
+	 * PI_SWLVL_WR_SLICE_3:WR:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 69
+	 * PI_SWLVL_SM2_RD:WR:24:1:=0x00
+	 * PI_SWLVL_SM2_WR:WR:16:1:=0x00
+	 * PI_SWLVL_SM2_START:WR:8:1:=0x00
+	 * PI_SW_WDQLVL_VREF:RW:0:7:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 70
+	 * PI_DFI40_POLARITY:RW:24:1:=0x01
+	 * PI_SRE_PERIOD_EN:RW:16:1:=0x00
+	 * PI_DFS_PERIOD_EN:RW:8:1:=0x00
+	 * PI_SEQUENTIAL_LVL_REQ:WR:0:1:=0x00
+	 */
+	{ 0x1000000, 0x0 },
+	/*
+	 * 71
+	 * PI_TDFI_CTRL_DELAY_F2:RW_D:24:4:=0x04
+	 * PI_TDFI_CTRL_DELAY_F1:RW_D:16:4:=0x04
+	 * PI_TDFI_CTRL_DELAY_F0:RW_D:8:4:=0x04
+	 * PI_16BIT_DRAM_CONNECT:RW_D:0:1:=0x01
+	 */
+	{ 0x4040401, 0x0 },
+	/*
+	 * 72
+	 * PI_WLDQSEN:RW:24:6:=0x0a
+	 * PI_WRLVL_CS:RW:16:1:=0x00
+	 * PI_WRLVL_REQ:WR:8:1:=0x00
+	 * PI_TDFI_CTRL_DELAY_F3:RW_D:0:4:=0x04
+	 */
+	{ 0xa000004, 0x0 },
+	/*
+	 * 73
+	 * PI_WRLVL_EN_F2:RW:24:2:=0x01
+	 * PI_WRLVL_EN_F1:RW:16:2:=0x01
+	 * PI_WRLVL_EN_F0:RW:8:2:=0x01
+	 * PI_WLMRD:RW:0:6:=0x28
+	 */
+	{ 0x1010128, 0x0 },
+	/*
+	 * 74
+	 * PI_WRLVL_PERIODIC:RW:24:1:=0x00
+	 * PI_WRLVL_INTERVAL:RW:8:16:=0x0000
+	 * PI_WRLVL_EN_F3:RW:0:2:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 75
+	 * PI_WRLVL_ROTATE:RW:24:1:=0x00
+	 * PI_WRLVL_RESP_MASK:RW:16:4:=0x00
+	 * PI_WRLVL_DISABLE_DFS:RW:8:1:=0x00
+	 * PI_WRLVL_ON_SREF_EXIT:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 76
+	 * PI_TDFI_WRLVL_EN:RW:16:8:=0x03
+	 * PI_WRLVL_ERROR_STATUS:RD:8:2:=0x00
+	 * PI_WRLVL_CS_MAP:RW:0:2:=0x03
+	 */
+	{ 0x30003, 0x0 },
+	/*
+	 * 77
+	 * PI_TDFI_WRLVL_WW:RW:0:10:=0x0018
+	 */
+	{ 0x18, 0x0 },
+	/*
+	 * 78
+	 * PI_TDFI_WRLVL_RESP:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 79
+	 * PI_TDFI_WRLVL_MAX:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 80
+	 * PI_TODTL_2CMD_F0:RW:24:8:=0x00
+	 * RESERVED:RW:16:5:=0x06
+	 * RESERVED:RW:8:1:=0x00
+	 * PI_WRLVL_STROBE_NUM:RW:0:5:=0x02
+	 */
+	{ 0x60002, 0x0 },
+	/*
+	 * 81
+	 * PI_TODTL_2CMD_F2:RW:24:8:=0x00
+	 * PI_ODT_EN_F1:RW:16:1:=0x01
+	 * PI_TODTL_2CMD_F1:RW:8:8:=0x00
+	 * PI_ODT_EN_F0:RW:0:1:=0x01
+	 */
+	{ 0x10001, 0x0 },
+	/*
+	 * 82
+	 * PI_TODTH_WR:RW:24:4:=0x01
+	 * PI_ODT_EN_F3:RW:16:1:=0x01
+	 * PI_TODTL_2CMD_F3:RW:8:8:=0x00
+	 * PI_ODT_EN_F2:RW:0:1:=0x01
+	 */
+	{ 0x1010001, 0x0 },
+	/*
+	 * 83
+	 * PI_ODT_RD_MAP_CS1:RW:24:2:=0x02
+	 * PI_ODT_WR_MAP_CS0:RW:16:2:=0x01
+	 * PI_ODT_RD_MAP_CS0:RW:8:2:=0x01
+	 * PI_TODTH_RD:RW:0:4:=0x00
+	 */
+	{ 0x2010100, 0x0 },
+	/*
+	 * 84
+	 * PI_WR_TO_ODTH_F1:RW:24:6:=0x07
+	 * PI_WR_TO_ODTH_F0:RW:16:6:=0x03
+	 * PI_EN_ODT_ASSERT_EXCEPT_RD:RW:8:1:=0x00
+	 * PI_ODT_WR_MAP_CS1:RW:0:2:=0x02
+	 */
+	{ 0x7030002, 0x0 },
+	/*
+	 * 85
+	 * PI_RD_TO_ODTH_F1:RW:24:6:=0x12
+	 * PI_RD_TO_ODTH_F0:RW:16:6:=0x04
+	 * PI_WR_TO_ODTH_F3:RW:8:6:=0x07
+	 * PI_WR_TO_ODTH_F2:RW:0:6:=0x07
+	 */
+	{ 0x12040707, 0x0 },
+	/*
+	 * 86
+	 * PI_RDLVL_GATE_REQ:WR:24:1:=0x00
+	 * PI_RDLVL_REQ:WR:16:1:=0x00
+	 * PI_RD_TO_ODTH_F3:RW:8:6:=0x12
+	 * PI_RD_TO_ODTH_F2:RW:0:6:=0x12
+	 */
+	{ 0x1212, 0x0 },
+	/*
+	 * 87
+	 * PI_RDLVL_PERIODIC:RW:24:1:=0x00
+	 * PI_RDLVL_GATE_SEQ_EN:RW:16:4:=0x00
+	 * PI_RDLVL_SEQ_EN:RW:8:4:=0x00
+	 * PI_RDLVL_CS:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 88
+	 * PI_RDLVL_GATE_ON_SREF_EXIT:RW:24:1:=0x00
+	 * PI_RDLVL_GATE_PERIODIC:RW:16:1:=0x00
+	 * PI_RDLVL_DISABLE_DFS:RW:8:1:=0x00
+	 * PI_RDLVL_ON_SREF_EXIT:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 89
+	 * PI_RDLVL_GATE_ROTATE:RW:24:1:=0x00
+	 * PI_RDLVL_ROTATE:RW:16:1:=0x00
+	 * RESERVED:RW:8:1:=0x00
+	 * PI_RDLVL_GATE_DISABLE_DFS:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 90
+	 * PI_TDFI_RDLVL_RR:RW:16:10:=0x001e
+	 * PI_RDLVL_GATE_CS_MAP:RW:8:2:=0x03
+	 * PI_RDLVL_CS_MAP:RW:0:2:=0x03
+	 */
+	{ 0x1e0303, 0x0 },
+	/*
+	 * 91
+	 * PI_TDFI_RDLVL_RESP:RW:0:32:=0x000007d0
+	 */
+	{ 0x7d0, 0x0 },
+	/*
+	 * 92
+	 * PI_RDLVL_GATE_EN_F0:RW:24:2:=0x01
+	 * PI_RDLVL_EN_F0:RW:16:2:=0x01
+	 * PI_TDFI_RDLVL_EN:RW:8:8:=0x03
+	 * PI_RDLVL_RESP_MASK:RW:0:4:=0x00
+	 */
+	{ 0x1010300, 0x0 },
+	/*
+	 * 93
+	 * PI_RDLVL_GATE_EN_F2:RW:24:2:=0x01
+	 * PI_RDLVL_EN_F2:RW:16:2:=0x01
+	 * PI_RDLVL_GATE_EN_F1:RW:8:2:=0x01
+	 * PI_RDLVL_EN_F1:RW:0:2:=0x01
+	 */
+	{ 0x1010101, 0x0 },
+	/*
+	 * 94
+	 * PI_RDLVL_GATE_EN_F3:RW:8:2:=0x01
+	 * PI_RDLVL_EN_F3:RW:0:2:=0x01
+	 */
+	{ 0x101, 0x0 },
+	/*
+	 * 95
+	 * PI_TDFI_RDLVL_MAX:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 96
+	 * PI_RDLVL_INTERVAL:RW:8:16:=0x0000
+	 * PI_RDLVL_ERROR_STATUS:RD:0:2:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 97
+	 * PI_RDLVL_PATTERN_NUM:RW:24:4:=0x01
+	 * PI_RDLVL_PATTERN_START:RW:16:4:=0x00
+	 * PI_RDLVL_GATE_INTERVAL:RW:0:16:=0x0000
+	 */
+	{ 0x1000000, 0x0 },
+	/*
+	 * 98
+	 * PI_RDLVL_GATE_STROBE_NUM:RW:8:5:=0x01
+	 * PI_RDLVL_STROBE_NUM:RW:0:5:=0x01
+	 */
+	{ 0x101, 0x0 },
+	/*
+	 * 99
+	 * PI_LPDDR4_RDLVL_PATTERN_8:RW:0:32:=0x55555a5a
+	 */
+	{ 0x55555a5a, 0x0 },
+	/*
+	 * 100
+	 * PI_LPDDR4_RDLVL_PATTERN_9:RW:0:32:=0x55555a5a
+	 */
+	{ 0x55555a5a, 0x0 },
+	/*
+	 * 101
+	 * PI_LPDDR4_RDLVL_PATTERN_10:RW:0:32:=0x55555a5a
+	 */
+	{ 0x55555a5a, 0x0 },
+	/*
+	 * 102
+	 * PI_LPDDR4_RDLVL_PATTERN_11:RW:0:32:=0x55555a5a
+	 */
+	{ 0x55555a5a, 0x0 },
+	/*
+	 * 103
+	 * PI_RDLAT_ADJ_F1:RW:24:7:=0x15
+	 * PI_RDLAT_ADJ_F0:RW:16:7:=0x05
+	 * PI_REG_DIMM_ENABLE:RW:8:1:=0x00
+	 * PI_RD_PREAMBLE_TRAINING_EN:RW:0:1:=0x01
+	 */
+	{ 0x15050001, 0x0 },
+	/*
+	 * 104
+	 * PI_WRLAT_ADJ_F0:RW:24:7:=0x02
+	 * PI_TDFI_RDDATA_EN:RD:16:7:=0x00
+	 * PI_RDLAT_ADJ_F3:RW:8:7:=0x15
+	 * PI_RDLAT_ADJ_F2:RW:0:7:=0x15
+	 */
+	{ 0x2001515, 0x0 },
+	/*
+	 * 105
+	 * PI_TDFI_PHY_WRLAT:RD:24:7:=0x00
+	 * PI_WRLAT_ADJ_F3:RW:16:7:=0x0a
+	 * PI_WRLAT_ADJ_F2:RW:8:7:=0x0a
+	 * PI_WRLAT_ADJ_F1:RW:0:7:=0x0a
+	 */
+	{ 0xa0a0a, 0x0 },
+	/*
+	 * 106
+	 * PI_TDFI_RDCSLAT_F3:RW:24:7:=0x17
+	 * PI_TDFI_RDCSLAT_F2:RW:16:7:=0x17
+	 * PI_TDFI_RDCSLAT_F1:RW:8:7:=0x17
+	 * PI_TDFI_RDCSLAT_F0:RW:0:7:=0x05
+	 */
+	{ 0x17171705, 0x0 },
+	/*
+	 * 107
+	 * PI_TDFI_PHY_WRDATA_F3:RW:24:3:=0x02
+	 * PI_TDFI_PHY_WRDATA_F2:RW:16:3:=0x02
+	 * PI_TDFI_PHY_WRDATA_F1:RW:8:3:=0x02
+	 * PI_TDFI_PHY_WRDATA_F0:RW:0:3:=0x02
+	 */
+	{ 0x2020202, 0x0 },
+	/*
+	 * 108
+	 * RESERVED:RW:24:4:=0x00
+	 * RESERVED:RW:16:1:=0x00
+	 * PI_CALVL_CS:RW:8:1:=0x00
+	 * PI_CALVL_REQ:WR:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 109
+	 * PI_CALVL_DISABLE_DFS:RW:24:1:=0x00
+	 * PI_CALVL_ON_SREF_EXIT:RW:16:1:=0x00
+	 * PI_CALVL_PERIODIC:RW:8:1:=0x00
+	 * PI_CALVL_SEQ_EN:RW:0:2:=0x03
+	 */
+	{ 0x3, 0x0 },
+	/*
+	 * 110
+	 * PI_TDFI_CALVL_EN:RW:16:8:=0x17
+	 * PI_CALVL_CS_MAP:RW:8:2:=0x03
+	 * PI_CALVL_ROTATE:RW:0:1:=0x00
+	 */
+	{ 0x170300, 0x0 },
+	/*
+	 * 111
+	 * PI_TDFI_CALVL_CAPTURE_F0:RW:16:10:=0x0006
+	 * PI_TDFI_CALVL_CC_F0:RW:0:10:=0x0018
+	 */
+	{ 0x60018, 0x0 },
+	/*
+	 * 112
+	 * PI_TDFI_CALVL_CAPTURE_F1:RW:16:10:=0x0012
+	 * PI_TDFI_CALVL_CC_F1:RW:0:10:=0x0024
+	 */
+	{ 0x120024, 0x0 },
+	/*
+	 * 113
+	 * PI_TDFI_CALVL_CAPTURE_F2:RW:16:10:=0x0012
+	 * PI_TDFI_CALVL_CC_F2:RW:0:10:=0x0024
+	 */
+	{ 0x120024, 0x0 },
+	/*
+	 * 114
+	 * PI_TDFI_CALVL_CAPTURE_F3:RW:16:10:=0x0012
+	 * PI_TDFI_CALVL_CC_F3:RW:0:10:=0x0024
+	 */
+	{ 0x120024, 0x0 },
+	/*
+	 * 115
+	 * PI_TDFI_CALVL_RESP:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 116
+	 * PI_TDFI_CALVL_MAX:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 117
+	 * PI_CALVL_EN_F2:RW:24:2:=0x01
+	 * PI_CALVL_EN_F1:RW:16:2:=0x01
+	 * PI_CALVL_EN_F0:RW:8:2:=0x01
+	 * PI_CALVL_RESP_MASK:RW:0:1:=0x00
+	 */
+	{ 0x1010100, 0x0 },
+	/*
+	 * 118
+	 * PI_CALVL_INTERVAL:RW:16:16:=0x0000
+	 * PI_CALVL_ERROR_STATUS:RD:8:2:=0x00
+	 * PI_CALVL_EN_F3:RW:0:2:=0x01
+	 */
+	{ 0x1, 0x0 },
+	/*
+	 * 119
+	 * PI_TMRZ_F0:RW:24:5:=0x01
+	 * PI_TCACKEH:RW:16:5:=0x0a
+	 * PI_TCAMRD:RW:8:6:=0x14
+	 * PI_TCACKEL:RW:0:5:=0x0a
+	 */
+	{ 0x10a140a, 0x0 },
+	/*
+	 * 120
+	 * PI_TMRZ_F1:RW:16:5:=0x02
+	 * PI_TCAENT_F0:RW:0:14:=0x0009
+	 */
+	{ 0x20009, 0x0 },
+	/*
+	 * 121
+	 * PI_TMRZ_F2:RW:16:5:=0x02
+	 * PI_TCAENT_F1:RW:0:14:=0x012d
+	 */
+	{ 0x2012d, 0x0 },
+	/*
+	 * 122
+	 * PI_TMRZ_F3:RW:16:5:=0x02
+	 * PI_TCAENT_F2:RW:0:14:=0x012d
+	 */
+	{ 0x2012d, 0x0 },
+	/*
+	 * 123
+	 * PI_CA_TRAIN_VREF_EN:RW:24:1:=0x01
+	 * PI_TCAEXT:RW:16:5:=0x0a
+	 * PI_TCAENT_F3:RW:0:14:=0x012d
+	 */
+	{ 0x10a012d, 0x0 },
+	/*
+	 * 124
+	 * PI_TVREF_SHORT_F0:RW:16:10:=0x000a
+	 * PI_TDFI_CASEL_F0:RW:8:5:=0x01
+	 * PI_TDFI_CACSCA_F0:RW:0:5:=0x00
+	 */
+	{ 0xa0100, 0x0 },
+	/*
+	 * 125
+	 * PI_TDFI_CASEL_F1:RW:24:5:=0x01
+	 * PI_TDFI_CACSCA_F1:RW:16:5:=0x00
+	 * PI_TVREF_LONG_F0:RW:0:10:=0x000a
+	 */
+	{ 0x100000a, 0x0 },
+	/*
+	 * 126
+	 * PI_TVREF_LONG_F1:RW:16:10:=0x012e
+	 * PI_TVREF_SHORT_F1:RW:0:10:=0x012e
+	 */
+	{ 0x12e012e, 0x0 },
+	/*
+	 * 127
+	 * PI_TVREF_SHORT_F2:RW:16:10:=0x012e
+	 * PI_TDFI_CASEL_F2:RW:8:5:=0x01
+	 * PI_TDFI_CACSCA_F2:RW:0:5:=0x00
+	 */
+	{ 0x12e0100, 0x0 },
+	/*
+	 * 128
+	 * PI_TDFI_CASEL_F3:RW:24:5:=0x01
+	 * PI_TDFI_CACSCA_F3:RW:16:5:=0x00
+	 * PI_TVREF_LONG_F2:RW:0:10:=0x012e
+	 */
+	{ 0x100012e, 0x0 },
+	/*
+	 * 129
+	 * PI_TVREF_LONG_F3:RW:16:10:=0x012e
+	 * PI_TVREF_SHORT_F3:RW:0:10:=0x012e
+	 */
+	{ 0x12e012e, 0x0 },
+	/*
+	 * 130
+	 * PI_CALVL_VREF_NORMAL_STEPSIZE:RW:24:4:=0x02
+	 * PI_CALVL_VREF_INITIAL_STEPSIZE:RW:16:4:=0x04
+	 * PI_CALVL_VREF_INITIAL_STOP_POINT:RW:8:7:=0x1e
+	 * PI_CALVL_VREF_INITIAL_START_POINT:RW:0:7:=0x1a
+	 */
+	{ 0x2044d4d, 0x0 },
+	/*
+	 * 131
+	 * PI_TDFI_CALVL_STROBE_F0:RW:24:4:=0x06
+	 * PI_TDFI_INIT_COMPLETE_MIN:RW:16:8:=0x05
+	 * PI_TDFI_INIT_START_MIN:RW:8:8:=0x10
+	 * PI_CALVL_VREF_DELTA:RW:0:4:=0x01
+	 */
+	{ 0x6051001, 0x0 },
+	/*
+	 * 132
+	 * PI_TCKCKEH:RW:24:4:=0x02
+	 * PI_TDFI_CALVL_STROBE_F3:RW:16:4:=0x08
+	 * PI_TDFI_CALVL_STROBE_F2:RW:8:4:=0x08
+	 * PI_TDFI_CALVL_STROBE_F1:RW:0:4:=0x08
+	 */
+	{ 0x2080808, 0x0 },
+	/*
+	 * 133
+	 * PI_TDFI_INIT_START_F0:RW:16:8:=0xc0
+	 * PI_SW_CA_TRAIN_VREF:RW:8:7:=0x00
+	 * PI_CALVL_STROBE_NUM:RW:0:5:=0x02
+	 */
+	{ 0xc00002, 0x0 },
+	/*
+	 * 134
+	 * PI_TDFI_INIT_START_F1:RW:16:8:=0xc0
+	 * PI_TDFI_INIT_COMPLETE_F0:RW:0:16:=0x1000
+	 */
+	{ 0xc01000, 0x0 },
+	/*
+	 * 135
+	 * PI_TDFI_INIT_START_F2:RW:16:8:=0xc0
+	 * PI_TDFI_INIT_COMPLETE_F1:RW:0:16:=0x1000
+	 */
+	{ 0xc01000, 0x0 },
+	/*
+	 * 136
+	 * PI_TDFI_INIT_START_F3:RW:16:8:=0xc0
+	 * PI_TDFI_INIT_COMPLETE_F2:RW:0:16:=0x1000
+	 */
+	{ 0xc01000, 0x0 },
+	/*
+	 * 137
+	 * PI_INIT_STARTORCOMPLETE_2_CLKDISABLE:RW:24:8:=0x04
+	 * PI_CLKDISABLE_2_INIT_START:RW:16:8:=0x04
+	 * PI_TDFI_INIT_COMPLETE_F3:RW:0:16:=0x1000
+	 */
+	{ 0x4041000, 0x0 },
+	/*
+	 * 138
+	 * PI_TCKEHDQS_F1:RW:24:6:=0x15
+	 * PI_TCKEHDQS_F0:RW:16:6:=0x02
+	 * PI_REFRESH_BETWEEN_SEGMENT_DISABLE:RW_D:8:1:=0x01
+	 * PI_DRAM_CLK_DISABLE_DEASSERT_SEL:RW:0:1:=0x00
+	 */
+	{ 0x15020100, 0x0 },
+	/*
+	 * 139
+	 * PI_WDQLVL_VREF_EN:RW:24:1:=0x01
+	 * PI_MC_DFS_PI_SET_VREF_ENABLE:RW:16:1:=0x00
+	 * PI_TCKEHDQS_F3:RW:8:6:=0x15
+	 * PI_TCKEHDQS_F2:RW:0:6:=0x15
+	 */
+	{ 0x1001515, 0x0 },
+	/*
+	 * 140
+	 * PI_TDFI_WDQLVL_WR_F0:RW:8:10:=0x0019
+	 * PI_WDQLVL_BST_NUM:RW:0:3:=0x01
+	 */
+	{ 0x1901, 0x0 },
+	/*
+	 * 141
+	 * PI_TDFI_WDQLVL_WR_F2:RW:16:10:=0x0026
+	 * PI_TDFI_WDQLVL_WR_F1:RW:0:10:=0x0026
+	 */
+	{ 0x260026, 0x0 },
+	/*
+	 * 142
+	 * PI_TDFI_WDQLVL_RW:RW:16:10:=0x005f
+	 * PI_TDFI_WDQLVL_WR_F3:RW:0:10:=0x0026
+	 */
+	{ 0x5f0026, 0x0 },
+	/*
+	 * 143
+	 * PI_WDQLVL_VREF_INITIAL_START_POINT:RW:24:7:=0x1a
+	 * PI_WDQLVL_CS_MAP:RW:16:2:=0x03
+	 * PI_WDQLVL_ROTATE:RW:8:1:=0x00
+	 * PI_WDQLVL_RESP_MASK:RW:0:4:=0x00
+	 */
+	{ 0x4d030000, 0x0 },
+	/*
+	 * 144
+	 * PI_WDQLVL_VREF_DELTA:RW:24:4:=0x01
+	 * PI_WDQLVL_VREF_NORMAL_STEPSIZE:RW:16:5:=0x02
+	 * PI_WDQLVL_VREF_INITIAL_STEPSIZE:RW:8:5:=0x04
+	 * PI_WDQLVL_VREF_INITIAL_STOP_POINT:RW:0:7:=0x1e
+	 */
+	{ 0x102044d, 0x0 },
+	/*
+	 * 145
+	 * PI_TDFI_WDQLVL_EN:RW:24:8:=0x34
+	 * PI_WDQLVL_CS:RW:16:1:=0x00
+	 * PI_WDQLVL_REQ:WR:8:1:=0x00
+	 * PI_WDQLVL_PERIODIC:RW:0:1:=0x00
+	 */
+	{ 0x34000000, 0x0 },
+	/*
+	 * 146
+	 * PI_TDFI_WDQLVL_RESP:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 147
+	 * PI_TDFI_WDQLVL_MAX:RW:0:32:=0x00000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 148
+	 * PI_WDQLVL_EN_F1:RW:24:2:=0x01
+	 * PI_WDQLVL_EN_F0:RW:16:2:=0x01
+	 * PI_WDQLVL_INTERVAL:RW:0:16:=0x0000
+	 */
+	{ 0x1010000, 0x0 },
+	/*
+	 * 149
+	 * PI_WDQLVL_DISABLE_DFS:RW:24:1:=0x00
+	 * PI_WDQLVL_ON_SREF_EXIT:RW:16:1:=0x00
+	 * PI_WDQLVL_EN_F3:RW:8:2:=0x01
+	 * PI_WDQLVL_EN_F2:RW:0:2:=0x01
+	 */
+	{ 0x101, 0x0 },
+	/*
+	 * 150
+	 * PI_MR3_DATA_F0_0:RW+:24:8:=0x31
+	 * PI_MR2_DATA_F0_0:RW+:16:8:=0x00
+	 * PI_MR1_DATA_F0_0:RW+:8:8:=0x04
+	 * PI_WDQLVL_ERROR_STATUS:RD:0:2:=0x00
+	 */
+	{ 0x31000400, 0x0 },
+	/*
+	 * 151
+	 * PI_MR22_DATA_F0_0:RW+:24:8:=0x00
+	 * PI_MR14_DATA_F0_0:RW+:16:8:=0x4d
+	 * PI_MR12_DATA_F0_0:RW+:8:8:=0x4d
+	 * PI_MR11_DATA_F0_0:RW+:0:8:=0x00
+	 */
+	{ 0x64d4d00, 0x0 },
+	/*
+	 * 152
+	 * PI_MR11_DATA_F1_0:RW+:24:8:=0x00
+	 * PI_MR3_DATA_F1_0:RW+:16:8:=0x31
+	 * PI_MR2_DATA_F1_0:RW+:8:8:=0x24
+	 * PI_MR1_DATA_F1_0:RW+:0:8:=0x44
+	 */
+	{ 0x312444, 0x0 },
+	/*
+	 * 153
+	 * PI_MR1_DATA_F2_0:RW+:24:8:=0x44
+	 * PI_MR22_DATA_F1_0:RW+:16:8:=0x00
+	 * PI_MR14_DATA_F1_0:RW+:8:8:=0x4d
+	 * PI_MR12_DATA_F1_0:RW+:0:8:=0x4d
+	 */
+	{ 0x44064d4d, 0x0 },
+	/*
+	 * 154
+	 * PI_MR12_DATA_F2_0:RW+:24:8:=0x4d
+	 * PI_MR11_DATA_F2_0:RW+:16:8:=0x00
+	 * PI_MR3_DATA_F2_0:RW+:8:8:=0x31
+	 * PI_MR2_DATA_F2_0:RW+:0:8:=0x24
+	 */
+	{ 0x4d003124, 0x0 },
+	/*
+	 * 155
+	 * PI_MR2_DATA_F3_0:RW+:24:8:=0x24
+	 * PI_MR1_DATA_F3_0:RW+:16:8:=0x44
+	 * PI_MR22_DATA_F2_0:RW+:8:8:=0x00
+	 * PI_MR14_DATA_F2_0:RW+:0:8:=0x4d
+	 */
+	{ 0x2444064d, 0x0 },
+	/*
+	 * 156
+	 * PI_MR14_DATA_F3_0:RW+:24:8:=0x4d
+	 * PI_MR12_DATA_F3_0:RW+:16:8:=0x4d
+	 * PI_MR11_DATA_F3_0:RW+:8:8:=0x00
+	 * PI_MR3_DATA_F3_0:RW+:0:8:=0x31
+	 */
+	{ 0x4d4d0031, 0x0 },
+	/*
+	 * 157
+	 * PI_MR2_DATA_F0_1:RW+:24:8:=0x00
+	 * PI_MR1_DATA_F0_1:RW+:16:8:=0x04
+	 * PI_MR13_DATA_0:RW+:8:8:=0x00
+	 * PI_MR22_DATA_F3_0:RW+:0:8:=0x00
+	 */
+	{ 0x40006, 0x0 },
+	/*
+	 * 158
+	 * PI_MR14_DATA_F0_1:RW+:24:8:=0x4d
+	 * PI_MR12_DATA_F0_1:RW+:16:8:=0x4d
+	 * PI_MR11_DATA_F0_1:RW+:8:8:=0x00
+	 * PI_MR3_DATA_F0_1:RW+:0:8:=0x31
+	 */
+	{ 0x4d4d0031, 0x0 },
+	/*
+	 * 159
+	 * PI_MR3_DATA_F1_1:RW+:24:8:=0x31
+	 * PI_MR2_DATA_F1_1:RW+:16:8:=0x24
+	 * PI_MR1_DATA_F1_1:RW+:8:8:=0x44
+	 * PI_MR22_DATA_F0_1:RW+:0:8:=0x00
+	 */
+	{ 0x31244400, 0x0 },
+	/*
+	 * 160
+	 * PI_MR22_DATA_F1_1:RW+:24:8:=0x00
+	 * PI_MR14_DATA_F1_1:RW+:16:8:=0x4d
+	 * PI_MR12_DATA_F1_1:RW+:8:8:=0x4d
+	 * PI_MR11_DATA_F1_1:RW+:0:8:=0x00
+	 */
+	{ 0x64d4d00, 0x0 },
+	/*
+	 * 161
+	 * PI_MR11_DATA_F2_1:RW+:24:8:=0x00
+	 * PI_MR3_DATA_F2_1:RW+:16:8:=0x31
+	 * PI_MR2_DATA_F2_1:RW+:8:8:=0x24
+	 * PI_MR1_DATA_F2_1:RW+:0:8:=0x44
+	 */
+	{ 0x312444, 0x0 },
+	/*
+	 * 162
+	 * PI_MR1_DATA_F3_1:RW+:24:8:=0x44
+	 * PI_MR22_DATA_F2_1:RW+:16:8:=0x00
+	 * PI_MR14_DATA_F2_1:RW+:8:8:=0x4d
+	 * PI_MR12_DATA_F2_1:RW+:0:8:=0x4d
+	 */
+	{ 0x44064d4d, 0x0 },
+	/*
+	 * 163
+	 * PI_MR12_DATA_F3_1:RW+:24:8:=0x4d
+	 * PI_MR11_DATA_F3_1:RW+:16:8:=0x00
+	 * PI_MR3_DATA_F3_1:RW+:8:8:=0x31
+	 * PI_MR2_DATA_F3_1:RW+:0:8:=0x24
+	 */
+	{ 0x4d003124, 0x0 },
+	/*
+	 * 164
+	 * PI_BANK_DIFF:RW:24:2:=0x00
+	 * PI_MR13_DATA_1:RW+:16:8:=0x00
+	 * PI_MR22_DATA_F3_1:RW+:8:8:=0x00
+	 * PI_MR14_DATA_F3_1:RW+:0:8:=0x4d
+	 */
+	{ 0x64d, 0x0 },
+	/*
+	 * 165
+	 * PI_TFC_F0:RW:8:10:=0x0009
+	 * PI_ROW_DIFF:RW:0:3:=0x01
+	 */
+	{ 0x901, 0x0 },
+	/*
+	 * 166
+	 * PI_TFC_F2:RW:16:10:=0x012d
+	 * PI_TFC_F1:RW:0:10:=0x012d
+	 */
+	{ 0x12d012d, 0x0 },
+	/*
+	 * 167
+	 * PI_TMRW_F0:RW:24:8:=0x01
+	 * PI_TMRD_F0:RW:16:6:=0x0a
+	 * PI_TFC_F3:RW:0:10:=0x012d
+	 */
+	{ 0x10a012d, 0x0 },
+	/*
+	 * 168
+	 * PI_TMRW_F2:RW:24:8:=0x0d
+	 * PI_TMRD_F2:RW:16:6:=0x11
+	 * PI_TMRW_F1:RW:8:8:=0x0d
+	 * PI_TMRD_F1:RW:0:6:=0x11
+	 */
+	{ 0xd110d11, 0x0 },
+	/*
+	 * 169
+	 * RESERVED:RW_D:24:4:=0x00
+	 * RESERVED:RW_D:16:4:=0x02
+	 * PI_TMRW_F3:RW:8:8:=0x0d
+	 * PI_TMRD_F3:RW:0:6:=0x11
+	 */
+	{ 0x20d11, 0x0 },
+	/*
+	 * 170
+	 * RESERVED:RW_D:24:4:=0x00
+	 * RESERVED:RW_D:16:4:=0x02
+	 * RESERVED:RW_D:8:4:=0x00
+	 * RESERVED:RW_D:0:4:=0x02
+	 */
+	{ 0x20002, 0x0 },
+	/*
+	 * 171
+	 * RESERVED:RW_D:24:4:=0x00
+	 * RESERVED:RW_D:16:4:=0x02
+	 * RESERVED:RW_D:8:4:=0x00
+	 * RESERVED:RW_D:0:4:=0x02
+	 */
+	{ 0x20002, 0x0 },
+	/*
+	 * 172
+	 * PI_INT_STATUS:RD:0:17:=0x000000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 173
+	 * PI_INT_ACK:WR:0:16:=0x0000
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 174
+	 * PI_BSTLEN:RW_D:24:5:=0x04
+	 * PI_INT_MASK:RW:0:17:=0x000000
+	 */
+	{ 0x4000000, 0x0 },
+	/*
+	 * 175
+	 * PI_TDFI_CTRLUPD_MIN:RW:16:4:=0x08
+	 * PI_CTRLUPD_REQ_PER_AREF_EN:RW:8:1:=0x01
+	 * PI_LONG_COUNT_MASK:RW:0:5:=0x00
+	 */
+	{ 0x80100, 0x0 },
+	/*
+	 * 176
+	 * PI_TDFI_CTRLUPD_MAX_F0:RW:0:16:=0x00f4
+	 */
+	{ 0xf4, 0x0 },
+	/*
+	 * 177
+	 * PI_TDFI_CTRLUPD_INTERVAL_F0:RW:0:32:=0x00000988
+	 */
+	{ 0x988, 0x0 },
+	/*
+	 * 178
+	 * PI_TDFI_CTRLUPD_MAX_F1:RW:0:16:=0x2482
+	 */
+	{ 0x2482, 0x0 },
+	/*
+	 * 179
+	 * PI_TDFI_CTRLUPD_INTERVAL_F1:RW:0:32:=0x00016d14
+	 */
+	{ 0x16d14, 0x0 },
+	/*
+	 * 180
+	 * PI_TDFI_CTRLUPD_MAX_F2:RW:0:16:=0x2482
+	 */
+	{ 0x2482, 0x0 },
+	/*
+	 * 181
+	 * PI_TDFI_CTRLUPD_INTERVAL_F2:RW:0:32:=0x00016d14
+	 */
+	{ 0x16d14, 0x0 },
+	/*
+	 * 182
+	 * PI_TDFI_CTRLUPD_MAX_F3:RW:0:16:=0x2482
+	 */
+	{ 0x2482, 0x0 },
+	/*
+	 * 183
+	 * PI_TDFI_CTRLUPD_INTERVAL_F3:RW:0:32:=0x00016d14
+	 */
+	{ 0x16d14, 0x0 },
+	/*
+	 * 184
+	 * PI_MONITOR_0:RD:24:8:=0x00
+	 * PI_MONITOR_CAP_SEL_0:RW:16:1:=0x01
+	 * PI_MONITOR_SRC_SEL_0:RW:8:4:=0x00
+	 * PI_UPDATE_ERROR_STATUS:RD:0:7:=0x00
+	 */
+	{ 0x10000, 0x0 },
+	/*
+	 * 185
+	 * PI_MONITOR_SRC_SEL_2:RW:24:4:=0x02
+	 * PI_MONITOR_1:RD:16:8:=0x00
+	 * PI_MONITOR_CAP_SEL_1:RW:8:1:=0x01
+	 * PI_MONITOR_SRC_SEL_1:RW:0:4:=0x01
+	 */
+	{ 0x2000101, 0x0 },
+	/*
+	 * 186
+	 * PI_MONITOR_CAP_SEL_3:RW:24:1:=0x01
+	 * PI_MONITOR_SRC_SEL_3:RW:16:4:=0x03
+	 * PI_MONITOR_2:RD:8:8:=0x00
+	 * PI_MONITOR_CAP_SEL_2:RW:0:1:=0x01
+	 */
+	{ 0x1030001, 0x0 },
+	/*
+	 * 187
+	 * PI_MONITOR_4:RD:24:8:=0x00
+	 * PI_MONITOR_CAP_SEL_4:RW:16:1:=0x01
+	 * PI_MONITOR_SRC_SEL_4:RW:8:4:=0x04
+	 * PI_MONITOR_3:RD:0:8:=0x00
+	 */
+	{ 0x10400, 0x0 },
+	/*
+	 * 188
+	 * PI_MONITOR_SRC_SEL_6:RW:24:4:=0x06
+	 * PI_MONITOR_5:RD:16:8:=0x00
+	 * PI_MONITOR_CAP_SEL_5:RW:8:1:=0x01
+	 * PI_MONITOR_SRC_SEL_5:RW:0:4:=0x05
+	 */
+	{ 0x6000105, 0x0 },
+	/*
+	 * 189
+	 * PI_MONITOR_CAP_SEL_7:RW:24:1:=0x01
+	 * PI_MONITOR_SRC_SEL_7:RW:16:4:=0x07
+	 * PI_MONITOR_6:RD:8:8:=0x00
+	 * PI_MONITOR_CAP_SEL_6:RW:0:1:=0x01
+	 */
+	{ 0x1070001, 0x0 },
+	/*
+	 * 190
+	 * PI_FREQ_NUMBER_STATUS:RD:24:5:=0x00
+	 * PI_DLL_LOCK:RD:16:1:=0x00
+	 * PI_MONITOR_STROBE:WR:8:8:=0x00
+	 * PI_MONITOR_7:RD:0:8:=0x00
+	 */
+	{ 0x0, 0x0 },
+	/*
+	 * 191
+	 * PI_PHYMSTR_TYPE:RW:8:1:=0x00
+	 * RESERVED:RW:0:1:=0x00
+	 */
+	{ 0x0, 0x0 },
+	} /* END PI */
+};
+#endif

@@ -1509,8 +1509,9 @@ static void setup_smmu(struct pci_dev *pdev)
  */
 static void mnh_pci_fixup(struct pci_dev *pdev)
 {
+	dev_dbg(&pdev->dev, "MNH PCI Entering mnh_pci_fixup\n");
 	if (pdev->class == PCI_CLASS_NOT_DEFINED) {
-		dev_dbg(&pdev->dev, "setting pcie class\n");
+		dev_info(&pdev->dev, "setting pcie class\n");
 		pdev->class = PCI_CLASS_MEMORY_OTHER;
 	}
 }

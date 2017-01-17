@@ -30,6 +30,7 @@
 #ifndef __MNH_HWIO_H_
 #define __MNH_HWIO_H_
 
+#include "mnh-hwio-bases.h"
 #include "mnh-pcie.h"
 
 static inline uint32_t mnh_reg_read(uint32_t addr)
@@ -87,11 +88,5 @@ static inline void mnh_reg_write(uint32_t addr, uint32_t value)
 			~HWIO_##mod##_##reg##_##fld##_FLDMASK) | \
 		       ((val << HWIO_##mod##_##reg##_##fld##_FLDSHFT) & \
 			HWIO_##mod##_##reg##_##fld##_FLDMASK))
-
-/* some useful base addresses */
-#define HWIO_SCU_BASE_ADDR			(0x04003000)
-#define MNH_DRAM_CTL_BASE_ADDR			(0x04008000)
-#define MNH_DRAM_PI_BASE_ADDR			(0x04009000)
-#define MNH_DRAM_PHY_BASE_ADDR			(0x0400A000)
 
 #endif /* __MNH_HWIO_H_ */

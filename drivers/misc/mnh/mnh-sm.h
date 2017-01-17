@@ -19,6 +19,14 @@
 
 #include "mnh-sm-config.h"
 
+enum mnh_sm_state {
+	MNH_HW_INIT,
+	MNH_HW_OFF,
+	MNH_HW_ACTIVE,
+	MNH_HW_SUSPEND_SELF_REFRESH,
+	MNH_HW_SUSPEND_HIBERNATE
+};
+
 /** API to register hotplug callback to receive MNH up/down notifications
  * @param[in] hotplug_cb  handler for hotplug in/out events
  * @return 0
@@ -32,7 +40,24 @@ int mnh_sm_reg_hotplug_callback(hotplug_cb_t hotplug_cb);
  *            This structure will be populated within the kernel module.
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
-int mnh_sm_poweron(struct mnh_sm_configuration *mnh_sm_boot_args);
+int mnh_sm_poweron(struct mnh_sm_configuration mnh_sm_boot_args);
+
+
+/**
+ * API to power monette hill.
+ * @return 0 if success or -EINVAL or -EFATAL on failure
+ */
+int mnh_sm_poweroff(struct mnh_sm_configuration mnh_sm_boot_args);
+
+/**
+ * API to initialize MIPI, DDR, DDR training,
+ * and PCIE.
+ * @param[in] Structure argument to configure each boot component.
+ *            This structure will be populated within the kernel module.
+ * @return 0 if success or -EINVAL or -EFATAL on failure
+ */
+int mnh_sm_config(struct mnh_sm_configuration mnh_sm_boot_args);
+
 
 /**
  * API to obtain the state of monette hill.
@@ -48,10 +73,17 @@ int mnh_sm_poweron(struct mnh_sm_configuration *mnh_sm_boot_args);
 int mnh_sm_get_state(void);
 
 /**
- * API to power monette hill.
- * @return 0 if success or -EINVAL or -EFATAL on failure
+ * API to set the state of monette hill.
+ * @param[in] Set the power states of mnh(ex: On, Off, Active, Suspend, Bypass).
+ *      MNH_HW_INIT - MNH is on, Kernel not executing, and before FW download.
+ *      MNH_HW_OFF - MNH is powered off
+ *      MNH_HW_ACTIVE: MNH is on and flashed. Kernel is running.
+ *      MNH_HW_SUSPEND_SELF_REFRESH: DDR is self refreshing.
+ *                                   All other components are off.
+ *      MNH_HW_SUSPEND_HIBERNATE: Hibernation image stored in AP RAM
+ *                                over PCIe outbound and MNH is powered down.
  */
-int mnh_sm_poweroff(void);
+int mnh_sm_set_state(int state);
 
 /**
  * API to download the binary images(SBL, UBoot, Kernel, Ramdisk) for mnh.
@@ -65,7 +97,7 @@ int mnh_sm_download(void);
  * and put in self refresh while the CPU is powered down.
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
-int mnh_sm_suspend(void);
+int mnh_sm_suspend(struct mnh_sm_configuration mnh_sm_boot_args);
 
 /**
  * API to put MNH into active state.
@@ -75,7 +107,7 @@ int mnh_sm_suspend(void);
  * resume.
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
-int mnh_sm_resume(void);
+int mnh_sm_resume(struct mnh_sm_configuration mnh_sm_boot_args);
 
 #endif /* __MNH_SM_HOST */
 

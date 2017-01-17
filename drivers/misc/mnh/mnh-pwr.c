@@ -33,46 +33,39 @@ static int is_valid_system_state(enum mnh_pwr_state sys_state)
 static void mnh_pwr_config_gpios(struct device *dev,
 				 const struct mnh_pwr_controls *gpios)
 {
-	if (gpio_direction_input(gpios->soc_pwr_good.gpio)) {
-		dev_err(dev, "%s could not make soc_pwr_good (%d) an input\n",
-			__func__, gpios->soc_pwr_good.gpio);
-	} else {
-		dev_info(dev, "%s soc_pwr_good (%d) set to input\n",
-			__func__, gpios->soc_pwr_good.gpio);
-	}
+#define CFG_OUTPUT(elem, val) do { \
+		if (gpio_direction_output(gpios->elem.gpio, val)) { \
+			dev_err(dev, "%s could not make %s (%d) an output.\n",\
+			__func__, gpios->elem.label, gpios->elem.gpio);\
+		} else {\
+			dev_info(dev, "%s %s (%d) set to output.\n",\
+			__func__, gpios->elem.label, gpios->elem.gpio);\
+		} \
+	} while (0)
 
-	if (gpio_direction_output(gpios->reset_n.gpio, 0)) {
-		dev_err(dev, "%s could not make reset_n (%d) an output\n",
-			__func__, gpios->reset_n.gpio);
-	} else {
-		dev_info(dev, "%s reset_n (%d) set to output low\n",
-			__func__, gpios->reset_n.gpio);
-	}
+#define CFG_INPUT(elem) do { \
+		if (gpio_direction_input(gpios->elem.gpio)) {\
+			dev_err(dev, "%s could not make %s (%d) an input.\n",\
+			__func__, gpios->elem.label, gpios->elem.gpio);\
+		} else {\
+			dev_info(dev, "%s %s (%d) set to input.\n",\
+			__func__, gpios->elem.label, gpios->elem.gpio);\
+		} \
+	} while (0)
 
-	if (gpio_direction_output(gpios->suspend_n.gpio, 0)) {
-		dev_err(dev, "%s could not make suspend_n (%d) an output\n",
-			__func__, gpios->suspend_n.gpio);
-	} else {
-		dev_info(dev, "%s suspend_n (%d) set to output low\n",
-			__func__, gpios->suspend_n.gpio);
-	}
-
-	if (gpio_direction_output(gpios->power_on.gpio, 0)) {
-		dev_err(dev, "%s could not make power_on (%d) an output\n",
-			__func__, gpios->power_on.gpio);
-	} else {
-		dev_info(dev, "%s power_on (%d) set to output low\n",
-			__func__, gpios->power_on.gpio);
-	}
-
-	if (gpio_direction_output(gpios->ddr_iso_n.gpio, 1)) {
-		dev_err(dev, "%s could not make ddr_iso_n (%d) an output\n",
-			__func__, gpios->ddr_iso_n.gpio);
-	} else {
-		dev_info(dev, "%s ddr_iso_n (%d) set to output high\n",
-			__func__, gpios->ddr_iso_n.gpio);
-	}
-
+	CFG_OUTPUT(power_on,       0);
+	CFG_OUTPUT(suspend_n,      0);
+	CFG_OUTPUT(ddr_iso_n,      1);
+	CFG_OUTPUT(reset_n,        0);
+	CFG_INPUT(soc_pwr_good);
+	CFG_OUTPUT(clk32k_stop_n,  0);
+	CFG_OUTPUT(pcie_clk_sel,   0);
+	CFG_OUTPUT(clk_sel,        0);
+	CFG_OUTPUT(bypasswake,     0);
+	/* will need to be overridden later for spi */
+	CFG_OUTPUT(boot_strap,     0);
+	CFG_INPUT(thermtrip);
+	CFG_INPUT(ready);
 }
 
 static void mnh_pwr_down(struct device *dev,
@@ -95,9 +88,8 @@ static void mnh_pwr_suspend(struct device *dev,
 	 * should have already put mem system into refresh
 	 * and asserted ddr_iso_n from mnh-dram driver.
 	 */
-	gpio_set_value(gpios->suspend_n.gpio, 0);
-	while (gpio_get_value(gpios->soc_pwr_good.gpio) == 1)
-		udelay(1);
+	gpio_set_value(gpios->reset_n.gpio,      0);
+	gpio_set_value(gpios->suspend_n.gpio,    0);
 	_sys_state = MNH_PWR_S3;
 }
 
@@ -109,12 +101,16 @@ static void mnh_pwr_up(struct device *dev, const struct mnh_pwr_controls *gpios)
 		udelay(30);
 	}
 
-	gpio_set_value(gpios->power_on.gpio,  1);
+	if (_sys_state == MNH_PWR_S4)
+		gpio_set_value(gpios->power_on.gpio, 1);
+
 	gpio_set_value(gpios->suspend_n.gpio, 1);
-	while (gpio_get_value(gpios->soc_pwr_good.gpio) == 0)
-		udelay(1);
-	udelay(30);
-	gpio_set_value(gpios->reset_n.gpio,   1);
+	msleep(20);
+	dev_info(dev, "%s hardcoded wait for power good done.", __func__);
+	gpio_set_value(gpios->reset_n.gpio, 1);
+
+	msleep(20);
+	dev_info(dev, "%s hardcoded wait for ready done.", __func__);
 	_sys_state = MNH_PWR_S0;
 }
 
@@ -124,6 +120,8 @@ int mnh_pwr_set_state(struct device *dev,
 {
 	int ret = -1;
 
+	dev_info(dev, "%s req: %d, current: %d\n",
+		 __func__, system_state, mnh_pwr_get_state(dev));
 	if (is_valid_system_state(system_state)) {
 		ret = 0;
 		switch (system_state) {
@@ -138,10 +136,14 @@ int mnh_pwr_set_state(struct device *dev,
 			break;
 		}
 	}
+	dev_info(dev, "%s done with state: %d\n",
+		 __func__, mnh_pwr_get_state(dev));
 	return ret;
 }
+EXPORT_SYMBOL_GPL(mnh_pwr_set_state);
 
 enum mnh_pwr_state mnh_pwr_get_state(struct device *dev)
 {
 	return _sys_state;
 }
+EXPORT_SYMBOL_GPL(mnh_pwr_get_state);

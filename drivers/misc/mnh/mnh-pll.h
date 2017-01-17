@@ -24,6 +24,7 @@
 enum mnh_lpddr4_freq {
 	/* used as an index */
 	MNH_LP4_FREQ_BOOT	=   0,
+	MNH_LP4_FREQ_400,
 	MNH_LP4_FREQ_800,
 	MNH_LP4_FREQ_1200,
 	MNH_LP4_FREQ_1600,
