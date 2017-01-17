@@ -31,6 +31,12 @@
 
 #define DRIVER_NAME "bcm15602"
 
+/* defines the timeout in jiffies for reset completion */
+#define BCM15602_RESET_TIMEOUT msecs_to_jiffies(50)
+
+/* defines the timeout in jiffies for ADC conversion completion */
+#define BCM15602_ADC_CONV_TIMEOUT  msecs_to_jiffies(25)
+
 static int bcm15602_chip_init(struct bcm15602_chip *ddata);
 static int bcm15602_regulator_get_voltage(struct regulator_dev *rdev);
 static int bcm15602_regulator_enable(struct regulator_dev *rdev);
@@ -296,9 +302,6 @@ int bcm15602_update_bits(struct bcm15602_chip *ddata, u8 addr,
 	return regmap_update_bits(ddata->regmap, addr, mask, data);
 }
 EXPORT_SYMBOL_GPL(bcm15602_update_bits);
-
-/* defines the timeout in jiffies for ADC conversion completion */
-#define BCM15602_ADC_CONV_TIMEOUT  msecs_to_jiffies(25)
 
 int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
 			   int chan_num, u16 *chan_data)
@@ -603,8 +606,7 @@ static irqreturn_t bcm15602_resetb_irq_handler(int irq, void *cookie)
 {
 	struct bcm15602_chip *ddata = (struct bcm15602_chip *)cookie;
 
-	if (gpio_get_value(ddata->pdata->resetb_gpio))
-		bcm15602_chip_init(ddata);
+	complete(&ddata->reset_complete);
 
 	return IRQ_HANDLED;
 }
@@ -978,7 +980,7 @@ static int bcm15602_probe(struct i2c_client *client,
 	struct device *dev = &client->dev;
 	struct bcm15602_chip *ddata;
 	struct bcm15602_platform_data *pdata;
-	int ret;
+	int timeout, ret;
 
 	/* allocate memory for chip structure */
 	ddata = devm_kzalloc(dev, sizeof(struct bcm15602_chip),
@@ -1003,6 +1005,7 @@ static int bcm15602_probe(struct i2c_client *client,
 	dev->platform_data = pdata;
 
 	/* initialize completions */
+	init_completion(&ddata->reset_complete);
 	init_completion(&ddata->adc_conv_complete);
 
 	/* initialize regmap */
@@ -1038,9 +1041,18 @@ static int bcm15602_probe(struct i2c_client *client,
 	/* disable intb_irq until chip interrupts are programmed */
 	disable_irq(pdata->intb_irq);
 
-	/* initialize the chip now */
-	if (pdata->bringup)
-		bcm15602_chip_init(ddata);
+	/* wait for chip to come out of reset, signaled by resetb interrupt */
+	timeout = wait_for_completion_timeout(&ddata->reset_complete,
+					      BCM15602_RESET_TIMEOUT);
+	if (timeout <= 0) {
+		ret = (timeout == 0) ? -ETIMEDOUT : timeout;
+		dev_err(dev, "error waiting for device to return from reset (%d)\n",
+			ret);
+		goto error_reset;
+	}
+
+	/* initialize chip */
+	bcm15602_chip_init(ddata);
 
 	/* initialize and register device regulators */
 	ddata->rdevs =
@@ -1059,6 +1071,9 @@ static int bcm15602_probe(struct i2c_client *client,
 	return mfd_add_devices(dev, -1, bcm15602_devs,
 			       ARRAY_SIZE(bcm15602_devs),
 			       NULL, 0, NULL);
+
+error_reset:
+	return ret;
 }
 
 #ifdef CONFIG_PM

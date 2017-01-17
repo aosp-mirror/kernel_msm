@@ -295,6 +295,9 @@ struct bcm15602_chip {
 	u16 hk_status;
 	bool wdt_enabled;
 
+	/* completion used for initialization */
+	struct completion reset_complete;
+
 	/* counter for enabled regulators */
 	atomic_t reg_enabled_cnt;
 
