@@ -2394,7 +2394,6 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 		}
 		pr_info("Charger plug, state=%d\n", chip->charger_plugin);
 		power_supply_changed(chip->usb_psy);
-		power_supply_set_present(chip->usb_psy, chip->charger_plugin);
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 		smb23x_charging_enable(chip, val->intval);
