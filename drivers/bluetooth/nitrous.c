@@ -155,11 +155,14 @@ static enum hrtimer_restart nitrous_tx_lpm_handler(struct hrtimer *timer)
 	pr_debug("%s\n", __func__);
 
 	/* Release UART and BT resources */
-	spin_lock_irqsave(&bt_lpm->uart_port->lock, flags);
-	nitrous_wake_device_locked(bt_lpm, false);
-	spin_unlock_irqrestore(&bt_lpm->uart_port->lock, flags);
+	if (spin_trylock_irqsave(&bt_lpm->uart_port->lock, flags)) {
+		nitrous_wake_device_locked(bt_lpm, false);
+		spin_unlock_irqrestore(&bt_lpm->uart_port->lock, flags);
+		return HRTIMER_NORESTART;
+	}
 
-	return HRTIMER_NORESTART;
+	pr_warn("%s: pending to sleep\n", __func__);
+	return HRTIMER_RESTART;
 }
 
 /*
