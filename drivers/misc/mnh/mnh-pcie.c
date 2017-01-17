@@ -156,6 +156,9 @@ EXPORT_SYMBOL(mnh_unmap_mem);
 int mnh_pcie_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 {
 
+	if (!mnh_dev)
+		return -ENODEV;
+
 	if (len != sizeof(uint32_t))
 		return -EINVAL; /* only 32bit access is supported */
 
@@ -183,6 +186,9 @@ EXPORT_SYMBOL(mnh_pcie_config_read);
  */
 int mnh_pcie_config_write(uint32_t offset, uint32_t len, uint32_t data)
 {
+	if (!mnh_dev)
+		return -ENODEV;
+
 	if (len != sizeof(uint32_t))
 		return -EINVAL; /* only 32bit access is supported */
 
@@ -210,6 +216,9 @@ EXPORT_SYMBOL(mnh_pcie_config_write);
 int mnh_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 {
 	uint32_t new_offset;
+
+	if (!mnh_dev)
+		return -ENODEV;
 
 	if (offset > HW_MNH_PCIE_BAR_2_ADDR_END - len) {
 		dev_err(&mnh_dev->pdev->dev, "Addr Invalid: %x", offset);
@@ -251,6 +260,9 @@ int mnh_config_write(uint32_t offset, uint32_t len, uint32_t data)
 {
 	uint32_t new_offset;
 
+	if (!mnh_dev)
+		return -ENODEV;
+
 	if (offset > HW_MNH_PCIE_BAR_2_ADDR_END - len)
 		return -EINVAL; /* address invalid */
 
@@ -285,6 +297,9 @@ EXPORT_SYMBOL(mnh_config_write);
  */
 int mnh_ddr_read(uint32_t offset,  uint32_t len, void *data)
 {
+	if (!mnh_dev)
+		return -ENODEV;
+
 	if (len > mnh_dev->bar_size[BAR_4])
 		return -EINVAL;
 
@@ -310,6 +325,9 @@ EXPORT_SYMBOL(mnh_ddr_read);
  */
 int mnh_ddr_write(uint32_t offset, uint32_t len, void *data)
 {
+	if (!mnh_dev)
+		return -ENODEV;
+
 	if (len > mnh_dev->bar_size[BAR_4])
 			return -EINVAL;
 
@@ -340,6 +358,9 @@ int mnh_send_irq(enum mnh_irq_msg_t irq)
 	uint32_t mask = 0, data = 0;
 
 	SET_BIT(mask, irq);
+
+	if (!mnh_dev)
+		return -ENODEV;
 
 	dev_dbg(&mnh_dev->pdev->dev, "Send IRQ to EP:%d", irq);
 
@@ -391,6 +412,9 @@ EXPORT_SYMBOL(mnh_reg_irq_callback);
  */
 int mnh_send_vendor_msg(struct mnh_pcie_vm msg)
 {
+	if (!mnh_dev)
+		return -ENODEV;
+
 	dev_dbg(&mnh_dev->pdev->dev, "Send Vendor Msg: NOT SUPPORTED\n");
 	return 0;
 }
@@ -429,6 +453,9 @@ int mnh_set_outbound_iatu(struct mnh_outb_region *outb)
 	uint32_t data, upper, lower;
 	int size = sizeof(uint32_t);
 
+	if (!mnh_dev)
+		return -ENODEV;
+
 	dev_dbg(&mnh_dev->pdev->dev, "Set outbound IATU\n");
 
 	if ((outb->region > 0xF) ||
@@ -463,6 +490,9 @@ int mnh_set_inbound_iatu(struct mnh_inb_window *inb)
 {
 	uint32_t data, upper, lower;
 	int size = sizeof(uint32_t);
+
+	if (!mnh_dev)
+		return -ENODEV;
 
 	dev_dbg(&mnh_dev->pdev->dev, "Set inbound IATU\n");
 
@@ -971,6 +1001,9 @@ static uint32_t mnh_check_iatu_bar2(uint32_t offset)
 	uint64_t start_addr;
 	uint32_t new_offset;
 	struct mnh_inb_window iatu;
+
+	if (!mnh_dev)
+		return -ENODEV;
 
 	if (mnh_dev->bar2_iatu_region == 0) /* No need to reprogram the IATU */
 		return offset;
