@@ -40,7 +40,7 @@
 /* #define RE_CALIBRATION */   /* Re-Calibration after system resume. */
 //#define ELAN_2WIREICE
 #define ELAN_POWER_SOURCE
-//#define ELAN_RESUME_RST
+#define ELAN_RESUME_RST
 #define DEVICE_NAME "elan_ktf" 
 #define EKTF3K_FLASH
 #if 1 /* Only one of the protocols can be enabled */
