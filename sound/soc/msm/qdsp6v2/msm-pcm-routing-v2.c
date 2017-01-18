@@ -81,13 +81,38 @@ enum {
 #define SLIMBUS_3_TX_TEXT "SLIMBUS_3_TX"
 #define SLIMBUS_4_TX_TEXT "SLIMBUS_4_TX"
 #define SLIMBUS_5_TX_TEXT "SLIMBUS_5_TX"
+#define PRI_MI2S_TX_TEXT "PRI_MI2S_TX"
+#define SEC_MI2S_TX_TEXT "SEC_MI2S_TX"
 #define TERT_MI2S_TX_TEXT "TERT_MI2S_TX"
+#define QUAT_MI2S_TX_TEXT "QUAT_MI2S_TX"
 #define LSM_FUNCTION_TEXT "LSM Function"
+#define MAD_TYPE_UNDEFINED -1
+
+struct mad_audio_info {
+	const char *name;
+	int mad_type;
+	u16 port_id;
+};
+
 static const char * const mad_audio_mux_text[] = {
 	"None",
 	SLIMBUS_0_TX_TEXT, SLIMBUS_1_TX_TEXT, SLIMBUS_2_TX_TEXT,
 	SLIMBUS_3_TX_TEXT, SLIMBUS_4_TX_TEXT, SLIMBUS_5_TX_TEXT,
-	TERT_MI2S_TX_TEXT
+	PRI_MI2S_TX_TEXT, SEC_MI2S_TX_TEXT, TERT_MI2S_TX_TEXT, QUAT_MI2S_TX_TEXT
+};
+
+static const struct mad_audio_info mad_audio_mux_info[] = {
+	{"None", MAD_TYPE_UNDEFINED, 0},
+	{SLIMBUS_0_TX_TEXT, MAD_TYPE_UNDEFINED, SLIMBUS_0_TX},
+	{SLIMBUS_1_TX_TEXT, MAD_TYPE_UNDEFINED, SLIMBUS_1_TX},
+	{SLIMBUS_2_TX_TEXT, MAD_TYPE_UNDEFINED, SLIMBUS_2_TX},
+	{SLIMBUS_3_TX_TEXT, MAD_TYPE_UNDEFINED, SLIMBUS_3_TX},
+	{SLIMBUS_4_TX_TEXT, MAD_TYPE_UNDEFINED, SLIMBUS_4_TX},
+	{SLIMBUS_5_TX_TEXT, MAD_TYPE_UNDEFINED, SLIMBUS_5_TX},
+	{PRI_MI2S_TX_TEXT, MAD_SW_AUDIO, AFE_PORT_ID_PRIMARY_MI2S_TX},
+	{SEC_MI2S_TX_TEXT, MAD_SW_AUDIO, AFE_PORT_ID_SECONDARY_MI2S_TX},
+	{TERT_MI2S_TX_TEXT, MAD_SW_AUDIO, AFE_PORT_ID_TERTIARY_MI2S_TX},
+	{QUAT_MI2S_TX_TEXT, MAD_SW_AUDIO, AFE_PORT_ID_QUATERNARY_MI2S_TX},
 };
 
 struct msm_pcm_route_bdai_pp_params {
@@ -1870,24 +1895,22 @@ static int msm_routing_lsm_func_get(struct snd_kcontrol *kcontrol,
 	enum afe_mad_type mad_type;
 
 	pr_debug("%s: enter\n", __func__);
-	for (i = 0; i < ARRAY_SIZE(mad_audio_mux_text); i++)
-		if (!strncmp(kcontrol->id.name, mad_audio_mux_text[i],
-			    strlen(mad_audio_mux_text[i])))
+	for (i = 0; i < ARRAY_SIZE(mad_audio_mux_info); i++)
+		if (!strncmp(kcontrol->id.name, mad_audio_mux_info[i].name,
+		             strlen(mad_audio_mux_info[i].name)))
 			break;
 
-	if (i-- == ARRAY_SIZE(mad_audio_mux_text)) {
+	if (i == 0)
+		return 0;
+	if (i-- == ARRAY_SIZE(mad_audio_mux_info)) {
 		WARN(1, "Invalid id name %s\n", kcontrol->id.name);
 		return -EINVAL;
 	}
 
-	/*Check for Tertiary TX port*/
-	if (!strcmp(kcontrol->id.name, mad_audio_mux_text[7])) {
-		ucontrol->value.integer.value[0] = MADSWAUDIO;
-		return 0;
-	}
-
-	port_id = i * 2 + 1 + SLIMBUS_0_RX;
-	mad_type = afe_port_get_mad_type(port_id);
+	port_id = mad_audio_mux_info[i].port_id;
+	mad_type = mad_audio_mux_info[i].mad_type;
+	if (mad_type == MAD_TYPE_UNDEFINED)
+		mad_type = afe_port_get_mad_type(port_id);
 	pr_debug("%s: port_id 0x%x, mad_type %d\n", __func__, port_id,
 		 mad_type);
 	switch (mad_type) {
@@ -1905,7 +1928,7 @@ static int msm_routing_lsm_func_get(struct snd_kcontrol *kcontrol,
 		break;
 	case MAD_SW_AUDIO:
 		ucontrol->value.integer.value[0] = MADSWAUDIO;
-	break;
+		break;
 	default:
 		WARN(1, "Unknown\n");
 		return -EINVAL;
@@ -1921,17 +1944,19 @@ static int msm_routing_lsm_func_put(struct snd_kcontrol *kcontrol,
 	enum afe_mad_type mad_type;
 
 	pr_debug("%s: enter\n", __func__);
-	for (i = 0; i < ARRAY_SIZE(mad_audio_mux_text); i++)
-		if (!strncmp(kcontrol->id.name, mad_audio_mux_text[i],
-			    strlen(mad_audio_mux_text[i])))
+	for (i = 0; i < ARRAY_SIZE(mad_audio_mux_info); i++)
+		if (!strncmp(kcontrol->id.name, mad_audio_mux_info[i].name,
+		             strlen(mad_audio_mux_info[i].name)))
 			break;
 
-	if (i-- == ARRAY_SIZE(mad_audio_mux_text)) {
+	if (i == 0)
+		return 0;
+	if (i-- == ARRAY_SIZE(mad_audio_mux_info)) {
 		WARN(1, "Invalid id name %s\n", kcontrol->id.name);
 		return -EINVAL;
 	}
 
-	port_id = i * 2 + 1 + SLIMBUS_0_RX;
+	port_id = mad_audio_mux_info[i].port_id;
 	switch (ucontrol->value.integer.value[0]) {
 	case MADNONE:
 		mad_type = MAD_HW_NONE;
@@ -1951,12 +1976,6 @@ static int msm_routing_lsm_func_put(struct snd_kcontrol *kcontrol,
 	default:
 		WARN(1, "Unknown\n");
 		return -EINVAL;
-	}
-
-	/*Check for Tertiary TX port*/
-	if (!strcmp(kcontrol->id.name, mad_audio_mux_text[7])) {
-		port_id = AFE_PORT_ID_TERTIARY_MI2S_TX;
-		mad_type = MAD_SW_AUDIO;
 	}
 
 	pr_debug("%s: port_id 0x%x, mad_type %d\n", __func__, port_id,
