@@ -12,6 +12,12 @@
 
 #include <dt-bindings/interrupt-controller/irq.h>
 
+/ {
+	aliases {
+		serial1 = &esl_console;
+	};
+};
+
 &tlmm {
 	bcm15602_pins {
 		bcm15602_pins_default: bcm15602_pins_default {
