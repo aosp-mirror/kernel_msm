@@ -567,6 +567,7 @@ static unsigned long randomize_stack_top(unsigned long stack_top)
 #endif
 }
 
+#ifdef CONFIG_ARM64
 #define ANDROID_NOTE_OWNER "Android"
 #define ANDROID_KUSER_HELPER_TYPE 0x3L
 #define ANDROID_KUSER_HELPER_ON 0x1L
@@ -652,6 +653,7 @@ static int should_call_arch_setup_additional_pages(struct linux_binprm *bprm,
 
 	return false;
 }
+#endif
 
 static int load_elf_binary(struct linux_binprm *bprm)
 {
