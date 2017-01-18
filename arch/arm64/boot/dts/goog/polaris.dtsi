@@ -602,3 +602,8 @@
 		};
     };
 };
+
+&ssc_sensors {
+	/* SLPI firmware files are spli.* */
+	qcom,firmware-name = "slpi";
+};
