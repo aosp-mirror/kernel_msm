@@ -762,6 +762,10 @@ int mdss_dsi_cmdlist_put(struct mdss_dsi_ctrl_pdata *ctrl,
 	clist = &ctrl->cmdlist;
 	req = &clist->list[clist->put];
 	*req = *cmdreq;
+	if (ctrl->dsi_cmd_hs) {
+		req->flags |= CMD_REQ_HS_MODE;
+		pr_debug("HS_mode\n");
+	}
 	clist->put++;
 	clist->put %= CMD_REQ_MAX;
 	clist->tot++;
