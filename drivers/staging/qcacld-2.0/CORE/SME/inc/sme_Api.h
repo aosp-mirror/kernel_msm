@@ -4071,10 +4071,6 @@ eHalStatus sme_SetBssHotlist (tHalHandle hHal,
 eHalStatus sme_ResetBssHotlist (tHalHandle hHal,
                              tSirExtScanResetBssidHotlistReqParams *pResetReq);
 
-eHalStatus
-sme_set_ssid_hotlist(tHalHandle hal,
-		     struct sir_set_ssid_hotlist_request *request);
-
 /* ---------------------------------------------------------------------------
     \fn sme_SetSignificantChange
     \brief  SME API to set significant change
