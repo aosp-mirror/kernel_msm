@@ -19,6 +19,10 @@
 #include "sched.h"
 #include "tune.h"
 
+#ifdef CONFIG_SCHED_WALT
+unsigned long boosted_cpu_util(int cpu);
+#endif
+
 /* Stub out fast switch routines present on mainline to reduce the backport
  * overhead. */
 #define cpufreq_driver_fast_switch(x, y) 0
