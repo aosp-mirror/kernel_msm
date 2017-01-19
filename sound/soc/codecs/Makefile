@@ -428,3 +428,4 @@ obj-$(CONFIG_SND_SOC_TPA6130A2)	+= snd-soc-tpa6130a2.o
 obj-y += msm8x16/
 
 obj-$(CONFIG_SND_SOC_TFA98XX) += tfa/
+obj-$(CONFIG_SND_SOC_TAS2557_STEREO) += tas2557/
