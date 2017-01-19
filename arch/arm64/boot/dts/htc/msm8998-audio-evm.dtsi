@@ -1,0 +1,52 @@
+&pm8005_gpios {
+	gpio@c000 {
+		reg = <0xc000 0x100>;
+		qcom,pin-num = <1>;
+		qcom,mode = <1>;	/* Digital output */
+		qcom,output-type = <0>;	/* CMOS logic */
+		qcom,,vin-sel = <2>;	/* S4 1.8V */
+		qcom,src-sel = <0>;	/* Constant */
+		qcom,master-en = <1>;	/* Enable GPIO  */
+		qcom,invert = <1>;	/* output high */
+		status = "okay";
+	};
+};
+
+&spi_2 {
+	status = "disabled";
+};
+
+&soc {
+	sound-9335 {
+		status = "ok";
+	};
+	sound-tavil {
+		status = "disabled";
+	};
+
+	i2c@c1b5000 { /* i2c_7 */
+		nxp_tfa98xx_amp@34 {
+				status = "ok";
+		};
+
+		nxp_tfa98xx_amp@35 {
+				status = "ok";
+		};
+
+		tas2557s@4d {
+				status = "disabled";
+		};
+	};
+
+};
+
+&slim_aud {
+	tasha_codec {
+		status = "ok";
+	};
+
+	tavil_codec {
+		status = "disabled";
+	};
+};
+

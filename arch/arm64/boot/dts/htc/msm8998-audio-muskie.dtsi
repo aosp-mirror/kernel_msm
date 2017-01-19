@@ -1,19 +1,10 @@
-&pm8005_gpios {
-	gpio@c000 {
-		reg = <0xc000 0x100>;
-		qcom,pin-num = <1>;
-		qcom,mode = <1>;	/* Digital output */
-		qcom,output-type = <0>;	/* CMOS logic */
-		qcom,,vin-sel = <2>;	/* S4 1.8V */
-		qcom,src-sel = <0>;	/* Constant */
-		qcom,master-en = <1>;	/* Enable GPIO  */
-		qcom,invert = <1>;	/* output high */
-		status = "okay";
-	};
+&spi_2 {
+	status = "ok";
 };
 
 &soc {
 	sound-9335 {
+		status = "disabled";
 		qcom,audio-routing =
 			"AIF4 VI", "MCLK",
 			"RX_BIAS", "MCLK",
@@ -47,20 +38,68 @@
 		qcom,msm-mbhc-gnd-swh = <1>; /* for NO Audio Jack */
 		qcom,wsa-max-devs = <0>; /* No wsa device */
 		/delete-property/ qcom,wsa-devs;
+
+		htc,use-external-amp;
+		htc,external-amp-be-sname = "Quaternary MI2S Playback",
+					    "Tertiary MI2S Playback";
+		htc,external-amp-be-codec-phandle = <&nxp_tfa98xx_34>,
+						    <&nxp_tfa98xx_35>;
+		htc,external-amp-be-codec-dai-name = "tfa98xx-aif-7-34",
+						     "tfa98xx-aif-7-35";
 	};
-/* nxp config for right left spk */
+
+	sound-tavil {
+		qcom,audio-routing =
+			"RX_BIAS", "MCLK",
+			"MADINPUT", "MCLK",
+			"DMIC1", "MIC BIAS1",
+			"MIC BIAS1", "Handset Mic",
+			"DMIC2", "MIC BIAS3",
+			"MIC BIAS3", "Handset Mic",
+			"DMIC3", "MIC BIAS3",
+			"MIC BIAS3", "Handset Mic";
+
+		qcom,wsa-max-devs = <0>; /* No wsa device */
+		/delete-property/ qcom,wsa-devs;
+
+		htc,use-external-amp;
+		htc,external-amp-be-sname = "Quaternary MI2S Playback",
+					    "Quaternary MI2S Capture";
+
+		htc,external-amp-be-codec-phandle = <&ti_tas2557_4d>,
+						    <&ti_tas2557_4d>;
+
+		htc,external-amp-be-codec-dai-name = "tas2557 Stereo ASI1",
+						     "tas2557 Stereo ASI1";
+	};
+
 	i2c@c1b5000 { /* i2c_7 */
-		nxp_tfa98xx_amp@34 {
-			compatible = "nxp,tfa98xx";
-			reg = <0x34>;
-			reset-gpio = <&pm8998_gpios 6 0x1>;
-			upper-spk; /* left */
+		nxp_tfa98xx_34: nxp_tfa98xx_amp@34 {
+				compatible = "nxp,tfa98xx";
+				reg = <0x34>;
+				reset-gpio = <&pm8998_gpios 6 0x1>;
+				upper-spk; /* left */
+				status = "disabled";
 		};
 
-		nxp_tfa98xx_amp@35 {
-			compatible = "nxp,tfa98xx";
-			reg = <0x35>;
-			reset-gpio = <&pm8998_gpios 7 0x1>;
+		nxp_tfa98xx_35: nxp_tfa98xx_amp@35 {
+				compatible = "nxp,tfa98xx";
+				reg = <0x35>;
+				reset-gpio = <&pm8998_gpios 7 0x1>;
+				status = "disabled";
+		};
+
+		ti_tas2557_4d: tas2557s@4d {
+				#sound-dai-cells = <1>;
+				compatible = "ti,tas2557s";
+				reg = <0x4d>;
+				ti,cdc-reset-gpio = <&pm8998_gpios 6 0>;
+				ti,irq-gpio-left = <&pm8998_gpios 7 0>;
+				ti,irq-gpio-right = <&pm8998_gpios 8 0>;
+				ti,left-channel = <0x4c>;
+				ti,right-channel = <0x4d>;
+				ti,load = <0>;   /* 0, 8Ohm; 1, 6Ohm; 2, 4Ohm */
+				status = "ok";
 		};
 	};
 
@@ -82,6 +121,15 @@
 
 &slim_aud {
 	tasha_codec {
+		status = "disabled";
+		/delete-node/ swr_master;
+	};
+
+	wcd934x_cdc: tavil_codec {
+		clocks = <&clock_audio clk_audio_pmi_clk>;
+		wcd_spi_0: wcd_spi {
+			qcom,master-bus-num = <2>;
+		};
 		/delete-node/ swr_master;
 	};
 };

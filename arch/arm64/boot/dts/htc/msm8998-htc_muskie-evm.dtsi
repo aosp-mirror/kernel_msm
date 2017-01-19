@@ -15,6 +15,7 @@
 #include "msm8998-htc_muskie.dtsi"
 #include "msm8998-camera-sensor.dtsi"
 #include "msm8998-htc-easel-evm.dtsi"
+#include "msm8998-audio-evm.dtsi"
 
 &i2c_9 {
 	tca6418_i2c: tca6418-i2c@34 {
