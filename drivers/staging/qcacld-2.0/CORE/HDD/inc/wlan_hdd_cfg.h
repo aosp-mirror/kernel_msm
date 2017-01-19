@@ -3989,6 +3989,32 @@ enum dot11p_mode {
 #define CFG_PROBE_REQ_OUI_NAME    "gProbeReqOUIs"
 #define CFG_PROBE_REQ_OUI_DEFAULT ""
 
+/*
+ * <ini>
+ * arp_ac_category - ARP access category
+ * @Min: 0
+ * @Max: 3
+ * @Default: 3
+ *
+ * Firmware by default categorizes ARP packets with VOICE TID.
+ * This ini shall be used to override the default configuration.
+ * Access category enums are referenced in ieee80211_common.h
+ * WME_AC_BE = 0 (Best effort)
+ * WME_AC_BK = 1 (Background)
+ * WME_AC_VI = 2 (Video)
+ * WME_AC_VO = 3 (Voice)
+ *
+ * Related: none
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_ARP_AC_CATEGORY                "arp_ac_category"
+#define CFG_ARP_AC_CATEGORY_MIN            (0)
+#define CFG_ARP_AC_CATEGORY_MAX            (3)
+#define CFG_ARP_AC_CATEGORY_DEFAULT        (3)
+
 
 /*---------------------------------------------------------------------------
   Type declarations
@@ -4778,6 +4804,7 @@ struct hdd_config {
 
    /* Probe Request multiple vendor OUIs */
    uint8_t probe_req_ouis[MAX_PRB_REQ_VENDOR_OUI_INI_LEN];
+   uint32_t                    arp_ac_category;
 };
 
 typedef struct hdd_config hdd_config_t;
