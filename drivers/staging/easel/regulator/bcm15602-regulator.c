@@ -243,22 +243,18 @@ static struct regulator_init_data
 
 int bcm15602_read_byte(struct bcm15602_chip *ddata, u8 addr, u8 *data)
 {
-	if (ddata->pdata->bringup) {
-		*data = ddata->pseudo_regmap[addr];
-	} else {
-		int ret;
-		unsigned int val;
+	int ret;
+	unsigned int val;
 
-		ret = regmap_read(ddata->regmap, addr, &val);
-		if (ret < 0) {
-			dev_err(ddata->dev,
-				"failed to read addr 0x%.2x (%d)\n",
-				addr, ret);
-			return ret;
-		}
-
-		*data = (u8)val;
+	ret = regmap_read(ddata->regmap, addr, &val);
+	if (ret < 0) {
+		dev_err(ddata->dev,
+			"failed to read addr 0x%.2x (%d)\n",
+			addr, ret);
+		return ret;
 	}
+
+	*data = (u8)val;
 
 	return 0;
 }
@@ -267,18 +263,14 @@ EXPORT_SYMBOL_GPL(bcm15602_read_byte);
 int bcm15602_read_bytes(struct bcm15602_chip *ddata, u8 addr, u8 *data,
 		       size_t count)
 {
-	if (ddata->pdata->bringup) {
-		memcpy(data, &ddata->pseudo_regmap[addr], count);
-	} else {
-		int ret;
+	int ret;
 
-		ret = regmap_bulk_read(ddata->regmap, addr, data, count);
-		if (ret < 0) {
-			dev_err(ddata->dev,
-				"failed to read addr 0x%.2x (%d)\n",
-				addr, ret);
-			return ret;
-		}
+	ret = regmap_bulk_read(ddata->regmap, addr, data, count);
+	if (ret < 0) {
+		dev_err(ddata->dev,
+			"failed to read addr 0x%.2x (%d)\n",
+			addr, ret);
+		return ret;
 	}
 
 	return 0;
@@ -287,37 +279,21 @@ EXPORT_SYMBOL_GPL(bcm15602_read_bytes);
 
 int bcm15602_write_byte(struct bcm15602_chip *ddata, u8 addr, u8 data)
 {
-	if (ddata->pdata->bringup) {
-		ddata->pseudo_regmap[addr] = data;
-		return 0;
-	} else {
-		return regmap_write(ddata->regmap, addr, data);
-	}
+	return regmap_write(ddata->regmap, addr, data);
 }
 EXPORT_SYMBOL_GPL(bcm15602_write_byte);
 
 int bcm15602_write_bytes(struct bcm15602_chip *ddata, u8 addr, u8 *data,
 			 size_t count)
 {
-	if (ddata->pdata->bringup) {
-		memcpy(&ddata->pseudo_regmap[addr], data, count);
-		return 0;
-	} else {
-		return regmap_bulk_write(ddata->regmap, addr, data, count);
-	}
+	return regmap_bulk_write(ddata->regmap, addr, data, count);
 }
 EXPORT_SYMBOL_GPL(bcm15602_write_bytes);
 
 int bcm15602_update_bits(struct bcm15602_chip *ddata, u8 addr,
 			 unsigned int mask, u8 data)
 {
-	if (ddata->pdata->bringup) {
-		ddata->pseudo_regmap[addr] =
-			(ddata->pseudo_regmap[addr] & ~mask) | data;
-		return 0;
-	} else {
-		return regmap_update_bits(ddata->regmap, addr, mask, data);
-	}
+	return regmap_update_bits(ddata->regmap, addr, mask, data);
 }
 EXPORT_SYMBOL_GPL(bcm15602_update_bits);
 
@@ -875,7 +851,6 @@ static struct bcm15602_platform_data *bcm15602_get_platform_data_from_dt
 	if (!pdata)
 		return ERR_PTR(-ENOMEM);
 
-	pdata->bringup = of_get_property(np, "bcm,bringup", NULL);
 	pdata->pon_gpio = of_get_named_gpio(np, "bcm,pon-gpio", 0);
 	pdata->resetb_gpio = of_get_named_gpio(np, "bcm,resetb-gpio", 0);
 	pdata->intb_gpio = of_get_named_gpio(np, "bcm,intb-gpio", 0);
@@ -1026,10 +1001,6 @@ static int bcm15602_probe(struct i2c_client *client,
 	ddata->dev = dev;
 	ddata->pdata = pdata;
 	dev->platform_data = pdata;
-
-	/* allocate memory for pseudo regmap if bringup is enabled */
-	if (pdata->bringup)
-		ddata->pseudo_regmap = devm_kzalloc(dev, sizeof(u8), 256);
 
 	/* initialize completions */
 	init_completion(&ddata->adc_conv_complete);

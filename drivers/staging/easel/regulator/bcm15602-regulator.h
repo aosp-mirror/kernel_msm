@@ -304,9 +304,6 @@ struct bcm15602_chip {
 
 	/* completion used for signaling end of adc conversion */
 	struct completion adc_conv_complete;
-
-	/* for device bringup, use byte array instead of i2c */
-	u8 *pseudo_regmap;
 };
 
 /* platform data structure */
@@ -316,7 +313,6 @@ struct bcm15602_platform_data {
 	int intb_gpio;
 	unsigned int resetb_irq;
 	unsigned int intb_irq;
-	bool bringup;
 };
 
 /* adc channel configuration */
