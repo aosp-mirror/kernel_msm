@@ -74,7 +74,6 @@ struct mnh_tx_conf {
 };
 
 struct mnh_sm_configuration {
-	const struct mnh_pwr_controls *mnh_pwr;
 	const unsigned int mipi_items;
 	const struct mnh_mipi_conf *mipi_configs;
 	struct mnh_tx_conf *tx_configs;

@@ -47,22 +47,6 @@ static struct mnh_tx_conf mnh_tx_configs[] = {
 
 };
 
-static const struct mnh_pwr_controls mnh_power_config = {
-	{ 448, 0, "MNH_POWER_ON" },
-	{ 444, 0, "MNH_SUSPEND_N" },
-	{ 392, 0, "MNH_DDR_ISO_N" },
-	{ 450, 0, "MNH_RESET_N" },
-	{ 447, 0, "MNH_POWER_GOOD" },
-	{ 451, 0, "MNH_CLK32K_STOP_N" },
-	{ 398, 0, "MNH_PCIE_CLK_SEL" },
-	{ 400, 0, "MNH_CLK_SEL" },
-	{ 401, 0, "MNH_BYPASSWAKE" },
-	{ 397, 0, "MNH_BOOT_STRAP" },
-	{ 449, 0, "MNH_THERMTRIP" },
-	{ 396, 0, "MNH_READY" },
-};
-
-
 static struct mnh_ddr_state mnh_ddr_po_config = {
 	.bases = {
 		HWIO_DDR_CTL_BASE_ADDR,
@@ -84,7 +68,6 @@ static struct mnh_ddr_state mnh_ddr_po_config = {
 };
 
 struct mnh_sm_configuration sm_config_1 = {
-	.mnh_pwr = &mnh_power_config,
 	.mipi_items = ARRAY_SIZE(mnh_mipi_configs),
 	.mipi_configs = mnh_mipi_configs,
 	.tx_configs = mnh_tx_configs,
