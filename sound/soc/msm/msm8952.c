@@ -2833,8 +2833,7 @@ codec_dai:
 				ret = -ENODEV;
 				goto err;
 			}
-			pr_err("%s: codec dai %s failed\n",
-					__func__, dai_link[i].codec_name);
+
 			dai_link[i].codec_of_node = phandle;
 			dai_link[i].codec_name = NULL;
 		}
