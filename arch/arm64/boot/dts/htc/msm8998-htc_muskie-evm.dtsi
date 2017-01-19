@@ -14,7 +14,6 @@
 #include "../qcom/msm8998-mtp.dtsi"
 #include "msm8998-htc_muskie.dtsi"
 #include "msm8998-camera-sensor.dtsi"
-#include "msm8998-htc-easel-evm.dtsi"
 #include "msm8998-audio-evm.dtsi"
 #include "msm8998-htc-fingerprint-muskie-evm.dtsi"
 
