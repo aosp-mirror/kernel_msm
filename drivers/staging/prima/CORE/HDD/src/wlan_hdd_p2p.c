@@ -717,7 +717,8 @@ static int wlan_hdd_request_remain_on_channel( struct wiphy *wiphy,
      * wlan driver is keep on receiving the remain on channel command
      * and which is resulting in crash. So not allowing any remain on
      * channel requets when Load/Unload is in progress*/
-    if(hdd_isConnectionInProgress((hdd_context_t *)pAdapter->pHddCtx))
+    if(hdd_isConnectionInProgress((hdd_context_t *)pAdapter->pHddCtx, NULL,
+                                  NULL))
     {
         hddLog( LOGE,
                "%s: Connection is in progress", __func__);
