@@ -5694,13 +5694,8 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Tertiary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.2",
 		.platform_name = "msm-pcm-routing",
-#ifndef CONFIG_SND_SOC_TFA98XX
 		.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-rx",
-#else
-		.codec_name = "tfa98xx.7-0035",
-		.codec_dai_name = "tfa98xx-aif-7-35",
-#endif
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_TERTIARY_MI2S_RX,
@@ -5728,13 +5723,8 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Quaternary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
 		.platform_name = "msm-pcm-routing",
-#ifndef CONFIG_SND_SOC_TFA98XX
 		.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-rx",
-#else
-		.codec_name = "tfa98xx.7-0034",
-		.codec_dai_name = "tfa98xx-aif-7-34",
-#endif
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
@@ -5989,6 +5979,74 @@ struct snd_soc_card snd_soc_card_tavil_msm = {
 	.name		= "msm8998-tavil-snd-card",
 	.late_probe	= msm_snd_card_tavil_late_probe,
 };
+
+static int htc_populate_external_amp(struct snd_soc_card *card)
+{
+	int i, j, count, ret = 0;
+	struct device *cdev = card->dev;
+	struct snd_soc_dai_link *dai_link = card->dai_link;
+	struct device_node *np;
+	const char *codec_dai_str = NULL;
+	const char *be_sname_str = NULL;
+
+	if (!cdev) {
+		pr_err("%s: Sound card device memory NULL\n", __func__);
+		return -ENODEV;
+	}
+
+	if (of_property_read_bool(cdev->of_node,
+				"htc,use-external-amp")) {
+
+		count = of_property_count_strings(cdev->of_node,
+					"htc,external-amp-be-sname");
+		if (count > 0) {
+			for (i = 0; i < count; i++) {
+				codec_dai_str = NULL;
+				be_sname_str = NULL;
+
+
+				ret = of_property_read_string_index(cdev->of_node,
+							"htc,external-amp-be-sname",
+							i, &be_sname_str);
+
+				if (ret) {
+					pr_err("%s: failed to get be sname%d\n", __func__, i);
+					continue;
+				}
+
+				np = of_parse_phandle(cdev->of_node,
+							"htc,external-amp-be-codec-phandle",
+							i);
+
+				if (!np) {
+					pr_err("%s: can't find codec hanlde for %d\n", __func__, i);
+					continue;
+				}
+
+				ret = of_property_read_string_index(cdev->of_node,
+							"htc,external-amp-be-codec-dai-name",
+							i, &codec_dai_str);
+
+				if (ret) {
+					pr_err("%s: failed to get be codec_dai %d\n", __func__, i);
+					continue;
+				}
+
+				for (j = 0; j < card->num_links; j++) {
+					if (dai_link[j].no_pcm && /* Only check BE */
+						!strcmp(dai_link[j].stream_name, be_sname_str)) {
+						dai_link[j].codec_of_node = np;
+						dai_link[j].codec_dai_name = codec_dai_str;
+						dai_link[j].codec_name = NULL;
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	return ret;
+}
 
 static int msm_populate_dai_link_component_of_node(
 					struct snd_soc_card *card)
@@ -6754,6 +6812,8 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	ret = msm_init_wsa_dev(pdev, card);
 	if (ret)
 		goto err;
+
+	htc_populate_external_amp(card);
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret == -EPROBE_DEFER) {
