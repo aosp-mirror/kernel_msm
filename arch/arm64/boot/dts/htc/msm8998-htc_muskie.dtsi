@@ -29,6 +29,8 @@
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_s6e3ha3_dualdsi_wqhd_cmd>;
 	/delete-property/qcom,panel-mode-gpio;
+	/delete-property/ lab-supply;
+	/delete-property/ ibb-supply;
 	wqhd-vddio-supply = <&pm8998_l14>;
 	vci-supply = <&pm8998_l22>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
@@ -41,6 +43,8 @@
 &mdss_dsi1 {
 	qcom,dsi-pref-prim-pan = <&dsi_s6e3ha3_dualdsi_wqhd_cmd>;
 	/delete-property/qcom,panel-mode-gpio;
+	/delete-property/ lab-supply;
+	/delete-property/ ibb-supply;
 	wqhd-vddio-supply = <&pm8998_l14>;
 	vci-supply = <&pm8998_l22>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
@@ -85,4 +89,22 @@
 			};
 		};
 	};
+};
+&pmi8998_wled {
+	status = "disabled";
+};
+&labibb {
+	status = "disabled";
+};
+&mdss_fb2 {
+	status = "disabled";
+};
+&mdss_hdmi_tx {
+	status = "disabled";
+};
+&mdss_fb3 {
+	status = "disabled";
+};
+&mdss_dp_ctrl {
+	status = "disabled";
 };
