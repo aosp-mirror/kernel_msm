@@ -10525,7 +10525,8 @@ allow_suspend:
  * Go through each adapter and check if Connection is in progress
  *
  */
-v_BOOL_t hdd_isConnectionInProgress( hdd_context_t *pHddCtx)
+v_BOOL_t hdd_isConnectionInProgress(hdd_context_t *pHddCtx, v_U8_t *session_id,
+                                    scan_reject_states *reason)
 {
     hdd_adapter_list_node_t *pAdapterNode = NULL, *pNext = NULL;
     hdd_station_ctx_t *pHddStaCtx = NULL;
@@ -10562,6 +10563,11 @@ v_BOOL_t hdd_isConnectionInProgress( hdd_context_t *pHddCtx)
                 hddLog(VOS_TRACE_LEVEL_ERROR,
                        "%s: %p(%d) Connection is in progress", __func__,
                        WLAN_HDD_GET_STATION_CTX_PTR(pAdapter), pAdapter->sessionId);
+                if (session_id && reason)
+                {
+                    *session_id = pAdapter->sessionId;
+                    *reason = eHDD_CONNECTION_IN_PROGRESS;
+                }
                 return VOS_TRUE;
             }
             if ((WLAN_HDD_INFRA_STATION == pAdapter->device_mode) &&
@@ -10570,6 +10576,11 @@ v_BOOL_t hdd_isConnectionInProgress( hdd_context_t *pHddCtx)
                 hddLog(VOS_TRACE_LEVEL_ERROR,
                        "%s: %p(%d) Reassociation is in progress", __func__,
                        WLAN_HDD_GET_STATION_CTX_PTR(pAdapter), pAdapter->sessionId);
+                if (session_id && reason)
+                {
+                    *session_id = pAdapter->sessionId;
+                    *reason = eHDD_REASSOC_IN_PROGRESS;
+                }
                 return VOS_TRUE;
             }
             if ((WLAN_HDD_INFRA_STATION == pAdapter->device_mode) ||
@@ -10585,6 +10596,11 @@ v_BOOL_t hdd_isConnectionInProgress( hdd_context_t *pHddCtx)
                            "%s: client " MAC_ADDRESS_STR
                            " is in the middle of WPS/EAPOL exchange.", __func__,
                             MAC_ADDR_ARRAY(staMac));
+                    if (session_id && reason)
+                    {
+                        *session_id = pAdapter->sessionId;
+                        *reason = eHDD_EAPOL_IN_PROGRESS;
+                    }
                     return VOS_TRUE;
                 }
             }
@@ -10610,6 +10626,11 @@ v_BOOL_t hdd_isConnectionInProgress( hdd_context_t *pHddCtx)
                                "%s: client " MAC_ADDRESS_STR " of SoftAP/P2P-GO is in the "
                                "middle of WPS/EAPOL exchange.", __func__,
                                 MAC_ADDR_ARRAY(staMac));
+                        if (session_id && reason)
+                        {
+                            *session_id = pAdapter->sessionId;
+                            *reason = eHDD_SAP_EAPOL_IN_PROGRESS;
+                        }
                         return VOS_TRUE;
                     }
                 }
@@ -10647,6 +10668,8 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
     bool is_p2p_scan = false;
     v_S7_t rssi=0;
     hdd_station_ctx_t *pHddStaCtx=NULL;
+    v_U8_t curr_session_id;
+    scan_reject_states curr_reason;
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0))
     struct net_device *dev = NULL;
@@ -10754,20 +10777,33 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
 
     /* Check if scan is allowed at this point of time.
      */
-    if (hdd_isConnectionInProgress(pHddCtx))
+    if (hdd_isConnectionInProgress(pHddCtx, &curr_session_id, &curr_reason))
     {
         hddLog(VOS_TRACE_LEVEL_ERROR, FL("Scan not allowed"));
-        if (SCAN_ABORT_THRESHOLD < pHddCtx->con_scan_abort_cnt) {
-            VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                    FL("Triggering SSR, SSR status = %d"), status);
-            vos_wlanRestart();
-        }
-        else
-            pHddCtx->con_scan_abort_cnt++;
 
-        return -EBUSY;
+        if (pHddCtx->last_scan_reject_session_id != curr_session_id ||
+            pHddCtx->last_scan_reject_reason != curr_reason ||
+            !pHddCtx->last_scan_reject_timestamp)
+        {
+            pHddCtx->last_scan_reject_session_id = curr_session_id;
+            pHddCtx->last_scan_reject_reason = curr_reason;
+            pHddCtx->last_scan_reject_timestamp = vos_timer_get_system_time();
+        }
+        else {
+            if ((vos_timer_get_system_time() -
+                 pHddCtx->last_scan_reject_timestamp) >=
+                SCAN_REJECT_THRESHOLD_TIME)
+            {
+                pHddCtx->last_scan_reject_timestamp = 0;
+                hddLog(LOGE, FL("Triggering SSR due to scan stuck"));
+                vos_wlanRestart();
+            }
+         }
+         return -EBUSY;
     }
-    pHddCtx->con_scan_abort_cnt = 0;
+    pHddCtx->last_scan_reject_timestamp = 0;
+    pHddCtx->last_scan_reject_session_id = 0xFF;
+    pHddCtx->last_scan_reject_reason = 0;
 
     vos_mem_zero( &scanRequest, sizeof(scanRequest));
 
