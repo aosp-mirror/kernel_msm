@@ -1614,7 +1614,7 @@
 					pins = "gpio97";
 					drive-strength = <8>;
 					output-low;
-					bias-pull-down;
+					bias-pull-none;
 				};
 			};
 
@@ -1627,7 +1627,7 @@
 				config {
 					pins = "gpio97";
 					drive-strength = <2>;
-					bias-pull-down;
+					bias-pull-none;
 				};
 			};
 		};
