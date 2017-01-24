@@ -2623,7 +2623,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 	REG("coredump_filter", S_IRUGO|S_IWUSR, proc_coredump_filter_operations),
 #endif
 #ifdef CONFIG_TASK_IO_ACCOUNTING
-	ONE("io",	S_IRUGO, proc_tgid_io_accounting),
+	ONE("io",	S_IRUSR, proc_tgid_io_accounting),
 #endif
 #ifdef CONFIG_HARDWALL
 	ONE("hardwall",   S_IRUGO, proc_pid_hardwall),
