@@ -47,8 +47,39 @@
 				pins = "gpio17","gpio18";
 				bias-pull-down; /* PULL DOWN */
 				drive-strength = <20>; /* 20 MA */
+				output-low; /*HTC ADD*/
 			};
 		};
+
+		cci1_active: cci1_active {
+			mux {
+				/* CLK, DATA */
+				pins = "gpio19","gpio20";
+				function = "cci_i2c";
+			};
+
+			config {
+				pins = "gpio19","gpio20";
+				bias-pull-up; /* PULL UP*/
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cci1_suspend: cci1_suspend {
+			mux {
+				/* CLK, DATA */
+				pins = "gpio19","gpio20";
+				function = "cci_i2c";
+			};
+
+			config {
+				pins = "gpio19","gpio20";
+				bias-pull-down; /* PULL DOWN */
+				drive-strength = <2>; /* 2 MA */
+				output-low; /*HTC ADD*/
+			};
+		};
+
 		cam_sensor_rear_active: cam_sensor_rear_active {
 			/* RESET, STANDBY */
 			mux {
@@ -63,6 +94,7 @@
 				output-low;			/*HTC ADD*/
 			};
 		};
+
 		cam_sensor_rear_suspend: cam_sensor_rear_suspend{
 			/* RESET, STANDBY */
 			mux {
@@ -75,6 +107,66 @@
 				bias-disable; /* No PULL */
 				drive-strength = <2>; /* 2 MA */
 				output-low;			/*HTC ADD*/
+			};
+		};
+
+		cam_sensor_front_active: cam_sensor_front_active {
+			/* RESET, STANDBY */
+			mux {
+				pins = "gpio23";	/*HTC modify */
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio23";	/*HTC modify */
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+				output-low;			/*HTC ADD*/
+			};
+		};
+
+		cam_sensor_front_suspend: cam_sensor_front_suspend {
+			/* RESET, STANDBY */
+			mux {
+				pins = "gpio23";	/*HTC modify */
+				function = "gpio";
+			};
+			config {
+				pins = "gpio23";	/*HTC modify */
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+				output-low;			/*HTC ADD*/
+			};
+		};
+
+		cam_sensor_mclk1_active: cam_sensor_mclk1_active {
+			/* MCLK1 */
+			mux {
+				/* CLK, DATA */
+				pins = "gpio14";
+				function = "cam_mclk";
+			};
+
+			config {
+				pins = "gpio14";
+				bias-disable; /* No PULL */
+				drive-strength = <8>; /* HTC modify 8 MA */
+			};
+		};
+
+		cam_sensor_mclk1_suspend: cam_sensor_mclk1_suspend {
+			/* MCLK1 */
+			mux {
+				/* CLK, DATA */
+				pins = "gpio14";
+				function = "cam_mclk";
+			};
+
+			config {
+				pins = "gpio14";
+				bias-pull-down; /* PULL DOWN */
+				drive-strength = <8>; /* HTC modify 8 MA */
+				output-low; /*HTC ADD*/
 			};
 		};
 	};
@@ -173,7 +265,40 @@
 		clock-names = "cam_src_clk", "cam_clk";
 		qcom,clock-rates = <24000000 0>;
 	};
-
+	eeprom1: qcom,eeprom@1 {
+		cell-index = <1>;
+		reg = <1>;
+		compatible = "qcom,eeprom";
+		qcom,cci-master = <1>;
+		cam_vdig-supply = <&pm8998_gpios 6 0>;//212mA
+		cam_ana-suplly = <&pm8998_gpios 3 0>;
+		cam_vio-supply = <&pm8998_lvs1>;//7mA
+		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana";
+		qcom,cam-vreg-min-voltage = <1200000 1800000 2850000>;
+		qcom,cam-vreg-max-voltage = <1200000 1800000 2850000>;
+		qcom,cam-vreg-op-mode = <0 0 0>;//uA
+		qcom,gpio-no-mux = <0>;
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&cam_sensor_mclk1_active &cam_sensor_front_active &cci1_active>;
+		pinctrl-1 = <&cam_sensor_mclk1_suspend &cam_sensor_front_suspend &cci1_suspend>;
+		gpios = <&tlmm 14 0>,
+			<&tlmm 23 0>,
+			<&pm8998_gpios 6 0>,
+			<&pm8998_gpios 3 0>;
+		qcom,gpio-reset = <1>;
+		qcom,gpio-vdig = <2>;
+		qcom,gpio-vana = <3>;
+		qcom,gpio-req-tbl-num = <0 1 2 3>;
+		qcom,gpio-req-tbl-flags = <1 0 0 0>;
+		qcom,gpio-req-tbl-label = "CAMIF_MCLK1",
+					"CAM_RESET1",
+					"CAM2_VDIG",
+					"CAM2_VANA";
+		clocks = <&clock_mmss clk_mclk1_clk_src>,
+				<&clock_mmss clk_mmss_camss_mclk1_clk>;
+		clock-names = "cam_src_clk", "cam_clk";
+		qcom,clock-rates = <24000000 0>;
+	};
 	qcom,camera@0 {
 		cell-index = <0>;
 		compatible = "qcom,camera";
@@ -196,9 +321,9 @@
 		qcom,gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk0_active
-				 &cam_sensor_rear_active>;
+				 &cam_sensor_rear_active &cci0_active>;
 		pinctrl-1 = <&cam_sensor_mclk0_suspend
-				 &cam_sensor_rear_suspend>;
+				 &cam_sensor_rear_suspend &cci0_suspend>;
 		gpios = <&tlmm 13 0>,
 			<&tlmm 24 0>,
 			<&pm8998_gpios 20 0>,
@@ -227,6 +352,50 @@
 		status = "ok";
 		clocks = <&clock_mmss clk_mclk0_clk_src>,
 				<&clock_mmss clk_mmss_camss_mclk0_clk>;
+		clock-names = "cam_src_clk", "cam_clk";
+		qcom,clock-rates = <24000000 0>;
+	};
+
+	qcom,camera@1 {
+		cell-index = <1>;
+		compatible = "qcom,camera";
+		reg = <0x1>;
+		qcom,csiphy-sd-index = <1>;
+		qcom,csid-sd-index = <1>;
+		qcom,mount-angle = <270>;
+		//qcom,led-flash-src = <&led_flash1>;
+		//qcom,actuator-src = <&actuator1>;
+		qcom,eeprom-src = <&eeprom1>;
+		cam_vdig-supply = <&pmi8998_gpios 6 0>;//212mA
+		cam_vio-supply = <&pm8998_lvs1>;//7mA
+		cam_vana-supply = <&pmi8998_gpios 3 0>;
+		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana";
+		qcom,cam-vreg-min-voltage = <1200000 1800000 2850000>;
+		qcom,cam-vreg-max-voltage = <1200000 1800000 2850000>;
+		qcom,cam-vreg-op-mode = <0 0 0>;//uA
+		qcom,gpio-no-mux = <0>;
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&cam_sensor_mclk1_active &cam_sensor_front_active &cci1_active>;
+		pinctrl-1 = <&cam_sensor_mclk1_suspend &cam_sensor_front_suspend &cci1_suspend>;
+		gpios = <&tlmm 14 0>,
+			<&tlmm 23 0>,
+			<&pmi8998_gpios 6 0>,
+			<&pmi8998_gpios 3 0>;
+		qcom,gpio-reset = <1>;
+		qcom,gpio-vdig = <2>;
+		qcom,gpio-vana = <3>;
+		qcom,gpio-req-tbl-num = <0 1 2 3>;
+		qcom,gpio-req-tbl-flags = <1 0 0 0>;
+		qcom,gpio-req-tbl-label = "CAMIF_MCLK1",
+					"CAM_RESET1",
+					"CAM2_VDIG",
+					"CAM2_VANA";
+		qcom,sensor-position = <1>;
+		qcom,sensor-mode = <1>;
+		qcom,cci-master = <1>;
+		status = "ok";
+		clocks = <&clock_mmss clk_mclk1_clk_src>,
+				<&clock_mmss clk_mmss_camss_mclk1_clk>;
 		clock-names = "cam_src_clk", "cam_clk";
 		qcom,clock-rates = <24000000 0>;
 	};
@@ -278,6 +447,28 @@
 		qcom,vin-sel = <1>;		/* VIN1 GPIO_MV */
 		qcom,src-sel = <0>;		/* GPIO */
 		qcom,invert = <0>;		/* Invert */
+		qcom,master-en = <1>;		/* Enable GPIO */
+		status = "ok";
+	};
+};
+
+&pmi8998_gpios {
+	gpio@c200 { /* GPIO 3 - CAMERA SENSOR 1 VANA */
+		qcom,mode = <1>;		/* Output */
+		qcom,pull = <5>;		/* No Pull */
+		qcom,vin-sel = <0>;		/* VIN1 GPIO_LV */
+		qcom,src-sel = <0>;		/* GPIO */
+		qcom,invert = <1>;		/* Invert */
+		qcom,master-en = <1>;		/* Enable GPIO */
+		status = "ok";
+	};
+
+	gpio@c500 { /* GPIO 6 - CAMERA SENSOR 1 VDIG */
+		qcom,mode = <1>;		/* Output */
+		qcom,pull = <5>;		/* No Pull */
+		qcom,vin-sel = <0>;		/* VIN1 GPIO_LV */
+		qcom,src-sel = <0>;		/* GPIO */
+		qcom,invert = <1>;		/* Invert */
 		qcom,master-en = <1>;		/* Enable GPIO */
 		status = "ok";
 	};
