@@ -957,6 +957,7 @@ TRACE_EVENT(sched_overutilized,
 	TP_printk("overutilized=%d",
 		__entry->overutilized ? 1 : 0)
 );
+
 #ifdef CONFIG_SCHED_WALT
 struct rq;
 
