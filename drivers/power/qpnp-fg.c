@@ -2662,7 +2662,18 @@ static int read_beat(struct fg_chip *chip, u8 *beat_count)
 	return rc;
 }
 
+/*
+ * The FG_ALG_SYSCTL_1 word contains control bits for the
+ * fuel-gauge algorithm, most of whose effect are not
+ * publicly disclosed. The low nibble of 0x4B3 contains
+ * bits to control whether an IRQ is raised on low-battery
+ * conditions, as well as a debug bit (bit 3) that forces
+ * a delta-soc interrupt on every fuel-gauge cycle.
+ * The value in FG_ALG_SYSCTL_1_DFLT is the recommended
+ * default configuration with the IRQ's enabled.
+ */
 #define FG_ALG_SYSCTL_1		0x4B0
+#define FG_ALG_SYSCTL_1_DFLT	0x870C7999
 static int fg_check_system_config(struct fg_chip *chip)
 {
 	int rc;
@@ -2679,9 +2690,9 @@ static int fg_check_system_config(struct fg_chip *chip)
 
 	if (fg_debug_mask & FG_STATUS)
 		pr_info("FG_ALG_SYSCTL_1: %x\n", buf);
-	if (buf != 0x870C7999) {
+	if (buf != FG_ALG_SYSCTL_1_DFLT) {
 		pr_err("FG_ALG_SYSCTL_1 corrupted? buf: %x\n", buf);
-		buf = 0x870C7999;
+		buf = FG_ALG_SYSCTL_1_DFLT;
 		rc = fg_mem_write(chip, (u8 *)&buf, FG_ALG_SYSCTL_1, 4, 0, 0);
 		if (rc) {
 			pr_err("Failed to write 0x4B0-3 rc=%d\n", rc);
@@ -5231,10 +5242,8 @@ static irqreturn_t fg_soc_irq_handler(int irq, void *_chip)
 		pr_info("triggered 0x%x\n", soc_rt_sts);
 
 	rc = fg_check_system_config(chip);
-	if (rc) {
+	if (rc)
 		pr_err("Failed to check system config rc=%d\n", rc);
-		return rc;
-	}
 
 	if (chip->dischg_gain.enable) {
 		fg_stay_awake(&chip->dischg_gain_wakeup_source);
