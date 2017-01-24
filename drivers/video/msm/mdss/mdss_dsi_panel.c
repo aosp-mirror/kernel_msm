@@ -2399,10 +2399,10 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		"qcom,mdss-dsi-off-command", "qcom,mdss-dsi-off-command-state");
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_mode_in_cmds,
-	    "qcom,mdss-dsi-panel-idle-in-command", NULL);
+	    "qcom,mdss-dsi-panel-idle-in-command", "qcom,mdss-dsi-idle-in-command-state");
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_mode_out_cmds,
-	    "qcom,mdss-dsi-panel-idle-out-command", NULL);
+	    "qcom,mdss-dsi-panel-idle-out-command", "qcom,mdss-dsi-idle-out-command-state");
 
 	rc = of_property_read_u32(np, "qcom,adjust-timer-wakeup-ms", &tmp);
 	pinfo->adjust_timer_delay_ms = (!rc ? tmp : 0);
