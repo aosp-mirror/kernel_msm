@@ -1,0 +1,36 @@
+/*
+ * Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&pm8998_gpios {
+	gpio@c400 { /* GPIO 5 - V_OTG_5V_EN_AP */
+		qcom,mode = <1>;
+		qcom,output-type = <0>;
+		qcom,invert = <0>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <0>;
+		qcom,out-strength = <1>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+
+	gpio@d000 { /* GPIO 17 - V_OTG_VOUT_SET */
+		qcom,mode = <1>;
+		qcom,output-type = <0>;
+		qcom,invert = <1>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <0>;
+		qcom,out-strength = <1>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+};
