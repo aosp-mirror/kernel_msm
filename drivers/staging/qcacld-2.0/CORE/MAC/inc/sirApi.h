@@ -3764,7 +3764,7 @@ typedef struct sSirSetRSSIFilterReq
  * SIR_MAC_ACTION_DLP              2      0
  * SIR_MAC_ACTION_BLKACK           3      0
  * SIR_MAC_ACTION_PUBLIC_USAGE     4      1
- * SIR_MAC_ACTION_RRM              5      1
+ * SIR_MAC_ACTION_RRM              5      0
  * SIR_MAC_ACTION_FAST_BSS_TRNST   6      0
  * SIR_MAC_ACTION_HT               7      0
  * SIR_MAC_ACTION_SA_QUERY         8      1
@@ -3784,7 +3784,6 @@ typedef struct sSirSetRSSIFilterReq
 		((1 << SIR_MAC_ACTION_SPECTRUM_MGMT) | \
 		 (1 << SIR_MAC_ACTION_QOS_MGMT) | \
 		 (1 << SIR_MAC_ACTION_PUBLIC_USAGE) | \
-		 (1 << SIR_MAC_ACTION_RRM) | \
 		 (1 << SIR_MAC_ACTION_SA_QUERY) | \
 		 (1 << SIR_MAC_ACTION_WNM) | \
 		 (1 << SIR_MAC_ACTION_WME) | \
