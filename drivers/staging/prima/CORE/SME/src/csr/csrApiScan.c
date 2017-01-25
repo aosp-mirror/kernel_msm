@@ -7406,7 +7406,7 @@ static eHalStatus csr_ssid_scan_done_callback(tHalHandle halHandle,
 		csrRoamCallCallback(scan_context->pMac, scan_context->sessionId,
 				NULL, scan_context->roamId,
 				eCSR_ROAM_ASSOCIATION_FAILURE,
-				eCSR_ROAM_FAILED);
+				eCSR_ROAM_RESULT_FAILURE);
 	vos_mem_free(scan_context);
 	return eHAL_STATUS_SUCCESS;
 }
