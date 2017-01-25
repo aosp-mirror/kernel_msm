@@ -4011,7 +4011,7 @@ static inline void hrtick_update(struct rq *rq)
 static bool cpu_overutilized(int cpu);
 static inline unsigned long boosted_cpu_util(int cpu);
 #else
-#define boosted_cpu_util(cpu) cpu_util(cpu, UTIL_EST)
+#define boosted_cpu_util(cpu) cpu_util(cpu)
 #endif
 
 #ifdef CONFIG_CPU_FREQ_GOV_SCHED
