@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2011, 2014, 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2014, 2016-2017 The Linux Foundation.
+ * All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -475,7 +476,7 @@ htt_tx_send_std(
     NBUF_UPDATE_TX_PKT_COUNT(msdu, NBUF_TX_PKT_HTT);
     DPTRACE(adf_dp_trace(msdu, ADF_DP_TRACE_HTT_PACKET_PTR_RECORD,
                 adf_nbuf_data_addr(msdu),
-                sizeof(adf_nbuf_data(msdu))));
+                sizeof(adf_nbuf_data(msdu)), ADF_TX));
 
     if (adf_nbuf_queue_len(&pdev->txnbufq) > 0) {
         HTT_TX_NBUF_QUEUE_ADD(pdev, msdu);

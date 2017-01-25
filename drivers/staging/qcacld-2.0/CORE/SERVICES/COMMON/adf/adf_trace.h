@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -56,6 +56,11 @@
 #define ADF_DP_TRACE_VERBOSITY_LOW     1
 #define ADF_DP_TRACE_VERBOSITY_DEFAULT 0
 
+#define DUMP_DP_TRACE       0
+#define ENABLE_DP_TRACE_LIVE_MODE	1
+#define CLEAR_DP_TRACE_BUFFER	2
+
+
 /**
  * struct adf_mac_addr - mac address array
  * @bytes: MAC address bytes
@@ -68,8 +73,8 @@ struct adf_mac_addr {
  * enum ADF_DP_TRACE_ID - Generic ID to identify various events in data path
  * @ADF_DP_TRACE_INVALID: Invalid ID
  * @ADF_DP_TRACE_DROP_PACKET_RECORD: Dropped packet stored with this id
- * @ADF_DP_TRACE_HDD_PACKET_PTR_RECORD: nbuf->data ptr of HDD
- * @ADF_DP_TRACE_HDD_PACKET_RECORD: nbuf->data stored with this id
+ * @ADF_DP_TRACE_HDD_TX_PACKET_PTR_RECORD: nbuf->data ptr of HDD
+ * @ADF_DP_TRACE_HDD_TX_PACKET_RECORD: nbuf->data stored with this id
  * @ADF_DP_TRACE_CE_PACKET_PTR_RECORD: nbuf->data ptr of CE
  * @ADF_DP_TRACE_CE_PACKET_RECORD: nbuf->data stored with this id
  * @ADF_DP_TRACE_TXRX_QUEUE_PACKET_PTR_RECORD: nbuf->data ptr of txrx queue
@@ -91,10 +96,13 @@ enum  ADF_DP_TRACE_ID {
 	ADF_DP_TRACE_DEFAULT_VERBOSITY,
 	ADF_DP_TRACE_HDD_TX_TIMEOUT,
 	ADF_DP_TRACE_HDD_SOFTAP_TX_TIMEOUT,
-	ADF_DP_TRACE_HDD_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_HDD_TX_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_CE_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_CE_FAST_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_FREE_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_RX_HTT_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_RX_OFFLOAD_HTT_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_RX_HDD_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_LOW_VERBOSITY,
 	ADF_DP_TRACE_TXRX_QUEUE_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_TXRX_PACKET_PTR_RECORD,
@@ -102,8 +110,9 @@ enum  ADF_DP_TRACE_ID {
 	ADF_DP_TRACE_HTT_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_HTC_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_HIF_PACKET_PTR_RECORD,
+	ADF_DP_TRACE_RX_TXRX_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_MED_VERBOSITY,
-	ADF_DP_TRACE_HDD_PACKET_RECORD,
+	ADF_DP_TRACE_HDD_TX_PACKET_RECORD,
 	ADF_DP_TRACE_HIGH_VERBOSITY,
 	ADF_DP_TRACE_MAX
 };
@@ -166,7 +175,9 @@ struct s_adf_dp_trace_data {
 	uint8_t no_of_record;
 	uint8_t verbosity;
 	bool enable;
-	uint32_t count;
+	uint32_t tx_count;
+	uint32_t rx_count;
+	bool live_mode;
 };
 /* Function declarations and documenation */
 
@@ -174,9 +185,9 @@ struct s_adf_dp_trace_data {
 void adf_dp_trace_init(void);
 void adf_dp_trace_set_value(uint8_t proto_bitmap, uint8_t no_of_records,
 			 uint8_t verbosity);
-void adf_dp_trace_set_track(adf_nbuf_t nbuf);
+void adf_dp_trace_set_track(adf_nbuf_t nbuf, enum adf_proto_dir dir);
 void adf_dp_trace(adf_nbuf_t nbuf, enum ADF_DP_TRACE_ID code,
-			uint8_t *data, uint8_t size);
+			uint8_t *data, uint8_t size, enum adf_proto_dir dir);
 void adf_dp_trace_dump_all(uint32_t count);
 typedef void (*tp_adf_dp_trace_cb)(struct adf_dp_trace_record_s* , uint16_t);
 void adf_dp_display_record(struct adf_dp_trace_record_s *record,
@@ -194,7 +205,9 @@ adf_dp_trace_proto_pkt(enum ADF_DP_TRACE_ID code, uint8_t vdev_id,
 void adf_dp_display_proto_pkt(struct adf_dp_trace_record_s *record,
 				uint16_t index);
 void adf_dp_trace_log_pkt(uint8_t session_id, struct sk_buff *skb,
-				uint8_t event_type);
+				enum adf_proto_dir dir);
+void adf_dp_trace_enable_live_mode(void);
+void adf_dp_trace_clear_buffer(void);
 
 #else
 static inline void adf_dp_trace_init(void)
@@ -206,12 +219,14 @@ static inline void adf_dp_trace_set_value(uint8_t proto_bitmap,
 {
 }
 
-static inline void adf_dp_trace_set_track(adf_nbuf_t nbuf)
+static inline void adf_dp_trace_set_track(adf_nbuf_t nbuf,
+	enum adf_proto_dir dir)
 {
 }
 
 static inline void adf_dp_trace(adf_nbuf_t nbuf,
-		enum ADF_DP_TRACE_ID code, uint8_t *data, uint8_t size)
+		enum ADF_DP_TRACE_ID code, uint8_t *data, uint8_t size,
+		enum adf_proto_dir dir)
 {
 }
 
@@ -254,10 +269,19 @@ adf_dp_display_proto_pkt(struct adf_dp_trace_record_s *record,
 }
 
 static inline void adf_dp_trace_log_pkt(uint8_t session_id, struct sk_buff *skb,
-				uint8_t event_type)
+				enum adf_proto_dir dir)
 {
 }
 
+static inline
+void adf_dp_trace_enable_live_mode(void)
+{
+}
+
+static inline
+void adf_dp_trace_clear_buffer(void)
+{
+}
 #endif
 
 #endif  /* __ADF_TRACE_H */

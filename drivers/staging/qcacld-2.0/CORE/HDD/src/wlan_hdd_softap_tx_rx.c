@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -401,15 +401,15 @@ int __hdd_softap_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
        NBUF_SET_PACKET_TRACK(skb, NBUF_TX_PKT_DATA_TRACK);
        NBUF_UPDATE_TX_PKT_COUNT(skb, NBUF_TX_PKT_HDD);
 
-       adf_dp_trace_set_track(skb);
-       DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_PACKET_PTR_RECORD,
-                  (uint8_t *)&skb->data, sizeof(skb->data)));
-       DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_PACKET_RECORD,
-                  (uint8_t *)skb->data, skb->len));
+       adf_dp_trace_set_track(skb, ADF_TX);
+       DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_TX_PACKET_PTR_RECORD,
+                  (uint8_t *)&skb->data, sizeof(skb->data), ADF_TX));
+       DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_TX_PACKET_RECORD,
+                  (uint8_t *)skb->data, skb->len, ADF_TX));
        if (skb->len > ADF_DP_TRACE_RECORD_SIZE)
-            DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_PACKET_RECORD,
+            DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_TX_PACKET_RECORD,
                   (uint8_t *)&skb->data[ADF_DP_TRACE_RECORD_SIZE],
-                  (skb->len - ADF_DP_TRACE_RECORD_SIZE)));
+                  (skb->len - ADF_DP_TRACE_RECORD_SIZE), ADF_TX));
 
        skb = skb_next;
        continue;
@@ -479,7 +479,7 @@ static void __hdd_softap_tx_timeout(struct net_device *dev)
    int i = 0;
 
    DPTRACE(adf_dp_trace(NULL, ADF_DP_TRACE_HDD_SOFTAP_TX_TIMEOUT,
-                        NULL, 0));
+                        NULL, 0, ADF_TX));
 
    hdd_ctx = WLAN_HDD_GET_CTX(adapter);
    if (hdd_ctx->isLogpInProgress) {
@@ -846,8 +846,11 @@ VOS_STATUS hdd_softap_rx_packet_cbk(v_VOID_t *vosContext,
       ++pAdapter->stats.rx_packets;
       pAdapter->stats.rx_bytes += skb->len;
 
-      adf_dp_trace_log_pkt(pAdapter->sessionId, skb,
-          WIFI_EVENT_DRIVER_EAPOL_FRAME_RECEIVED);
+      DPTRACE(adf_dp_trace(rxBuf,
+              ADF_DP_TRACE_RX_HDD_PACKET_PTR_RECORD,
+              adf_nbuf_data_addr(rxBuf),
+              sizeof(adf_nbuf_data(rxBuf)), ADF_RX));
+
 #ifdef QCA_PKT_PROTO_TRACE
       if ((pHddCtx->cfg_ini->gEnableDebugLog & VOS_PKT_TRAC_TYPE_EAPOL) ||
           (pHddCtx->cfg_ini->gEnableDebugLog & VOS_PKT_TRAC_TYPE_DHCP)) {

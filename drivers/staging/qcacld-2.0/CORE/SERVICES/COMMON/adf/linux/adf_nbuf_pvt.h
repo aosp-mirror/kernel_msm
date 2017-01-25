@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014,2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014,2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -65,6 +65,17 @@ typedef void (*__adf_nbuf_callback_fn) (struct sk_buff *skb);
 #define CVG_NBUF_MAX_EXTRA_FRAGS 2
 
 typedef void (*adf_nbuf_trace_update_t)(char *);
+struct nbuf_rx_cb {
+	uint8_t dp_trace:1,
+		    reserved:7;
+	uint8_t packet_trace;
+};
+
+#define ADF_NBUF_CB_RX_DP_TRACE(skb) \
+	(((struct nbuf_rx_cb*)((skb)->cb))->dp_trace)
+
+#define ADF_NBUF_CB_RX_PACKET_TRACE(skb) \
+	(((struct nbuf_rx_cb*)((skb)->cb))->packet_trace)
 
 struct cvg_nbuf_cb {
     /*
@@ -218,10 +229,7 @@ struct cvg_nbuf_cb {
 #define NBUF_UPDATE_TX_PKT_COUNT(skb, PACKET_STATE) \
     adf_nbuf_set_state(skb, PACKET_STATE)
 
-#define ADF_NBUF_SET_DP_TRACE(skb, enable) \
-    (((struct cvg_nbuf_cb *)((skb)->cb))->trace.dp_trace \
-                                     = enable)
-#define ADF_NBUF_GET_DP_TRACE(skb) \
+#define ADF_NBUF_CB_TX_DP_TRACE(skb) \
     (((struct cvg_nbuf_cb *)((skb)->cb))->trace.dp_trace)
 
 #define __adf_nbuf_get_num_frags(skb)              \

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -60,6 +60,7 @@
 #include <ol_vowext_dbg_defs.h>
 #include <wma.h>
 #include "pktlog_ac_fmt.h"
+#include "adf_trace.h"
 
 #ifdef HTT_RX_RESTORE
 #include "vos_cnss.h"
@@ -1317,6 +1318,11 @@ ol_rx_in_order_deliver(
     while (msdu) {
         adf_nbuf_t next = adf_nbuf_next(msdu);
 
+        DPTRACE(adf_dp_trace(msdu,
+                ADF_DP_TRACE_RX_TXRX_PACKET_PTR_RECORD,
+                adf_nbuf_data_addr(msdu),
+                sizeof(adf_nbuf_data(msdu)), ADF_RX));
+
         OL_RX_PEER_STATS_UPDATE(peer, msdu);
         OL_RX_ERR_STATISTICS_1(vdev->pdev, vdev, peer, rx_desc, OL_RX_ERR_NONE);
         TXRX_STATS_MSDU_INCR(vdev->pdev, rx.delivered, msdu);
@@ -1331,6 +1337,24 @@ ol_rx_in_order_deliver(
         0 /* don't print contents */);
 
     OL_RX_OSIF_DELIVER(vdev, peer, msdu_list);
+}
+
+/**
+ * ol_rx_log_packet() - log rx packet
+ * @htt_pdev: htt pdev
+ * @peer_id: peer_id
+ * @msdu: skb
+ *
+ * Return: none
+ */
+void ol_rx_log_packet(htt_pdev_handle htt_pdev,
+                      uint8_t peer_id, adf_nbuf_t msdu)
+{
+    struct ol_txrx_peer_t *peer;
+
+    peer = ol_txrx_peer_find_by_id(htt_pdev->txrx_pdev, peer_id);
+    if (peer)
+        adf_dp_trace_log_pkt(peer->vdev->vdev_id, msdu, ADF_RX);
 }
 
 void
@@ -1353,6 +1377,13 @@ ol_rx_offload_paddr_deliver_ind_handler(
 
         peer = ol_txrx_peer_find_by_id(htt_pdev->txrx_pdev, peer_id);
         if (peer && peer->vdev) {
+            adf_dp_trace_set_track(head_buf, ADF_RX);
+            adf_dp_trace_log_pkt(peer->vdev->vdev_id,
+                                 head_buf, ADF_RX);
+            DPTRACE(adf_dp_trace(head_buf,
+                    ADF_DP_TRACE_RX_OFFLOAD_HTT_PACKET_PTR_RECORD,
+                    adf_nbuf_data_addr(head_buf),
+                    sizeof(adf_nbuf_data(head_buf)), ADF_RX));
             vdev = peer->vdev;
             OL_RX_OSIF_DELIVER(vdev, peer, head_buf);
         } else {

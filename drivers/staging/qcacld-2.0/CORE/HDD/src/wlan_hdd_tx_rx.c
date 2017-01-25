@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -358,11 +358,11 @@ void hdd_tx_resume_cb(void *adapter_context,
 void hdd_drop_skb(hdd_adapter_t *adapter, struct sk_buff *skb)
 {
 	DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_DROP_PACKET_RECORD,
-			(uint8_t *)skb->data, skb->len));
+			(uint8_t *)skb->data, skb->len, ADF_TX));
 	if (skb->len > ADF_DP_TRACE_RECORD_SIZE)
 		DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_DROP_PACKET_RECORD,
 				(uint8_t *)&skb->data[ADF_DP_TRACE_RECORD_SIZE],
-				(skb->len - ADF_DP_TRACE_RECORD_SIZE)));
+				(skb->len - ADF_DP_TRACE_RECORD_SIZE), ADF_TX));
 
 	++adapter->stats.tx_dropped;
 	++adapter->hdd_stats.hddTxRxStats.txXmitDropped;
@@ -385,12 +385,12 @@ void hdd_drop_skb_list(hdd_adapter_t *adapter, struct sk_buff *skb,
 
 	while (skb) {
 		DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_DROP_PACKET_RECORD,
-				(uint8_t *)skb->data, skb->len));
+				(uint8_t *)skb->data, skb->len, ADF_TX));
 		if (skb->len > ADF_DP_TRACE_RECORD_SIZE)
 			DPTRACE(adf_dp_trace(skb,
 				ADF_DP_TRACE_DROP_PACKET_RECORD,
 				(uint8_t *)&skb->data[ADF_DP_TRACE_RECORD_SIZE],
-				(skb->len - ADF_DP_TRACE_RECORD_SIZE)));
+				(skb->len - ADF_DP_TRACE_RECORD_SIZE), ADF_TX));
 
 		++adapter->stats.tx_dropped;
 		++adapter->hdd_stats.hddTxRxStats.txXmitDropped;
@@ -659,20 +659,19 @@ int __hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
            list_tail = list_tail->next;
        }
        vos_mem_zero(skb->cb, sizeof(skb->cb));
-       adf_dp_trace_log_pkt(pAdapter->sessionId, skb,
-           WIFI_EVENT_DRIVER_EAPOL_FRAME_TRANSMIT_REQUESTED);
+       adf_dp_trace_log_pkt(pAdapter->sessionId, skb, ADF_TX);
        NBUF_SET_PACKET_TRACK(skb, NBUF_TX_PKT_DATA_TRACK);
        NBUF_UPDATE_TX_PKT_COUNT(skb, NBUF_TX_PKT_HDD);
 
-       adf_dp_trace_set_track(skb);
-       DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_PACKET_PTR_RECORD,
-                 (uint8_t *)&skb->data, sizeof(skb->data)));
-       DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_PACKET_RECORD,
-                 (uint8_t *)skb->data, skb->len));
+       adf_dp_trace_set_track(skb, ADF_TX);
+       DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_TX_PACKET_PTR_RECORD,
+                 (uint8_t *)&skb->data, sizeof(skb->data), ADF_TX));
+       DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_TX_PACKET_RECORD,
+                 (uint8_t *)skb->data, skb->len, ADF_TX));
        if (skb->len > ADF_DP_TRACE_RECORD_SIZE)
-           DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_PACKET_RECORD,
+           DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_TX_PACKET_RECORD,
                       (uint8_t *)&skb->data[ADF_DP_TRACE_RECORD_SIZE],
-                      (skb->len - ADF_DP_TRACE_RECORD_SIZE)));
+                      (skb->len - ADF_DP_TRACE_RECORD_SIZE), ADF_TX));
        skb = skb_next;
        continue;
 
@@ -850,7 +849,7 @@ static void __hdd_tx_timeout(struct net_device *dev)
    hddLog(LOGE, FL("Transmission timeout occurred jiffies %lu trans_start %lu"),
           jiffies, dev->trans_start);
    DPTRACE(adf_dp_trace(NULL, ADF_DP_TRACE_HDD_TX_TIMEOUT,
-                        NULL, 0));
+                        NULL, 0, ADF_TX));
    /*
     * Getting here implies we disabled the TX queues for too long. Queues are
     * disabled either because of disassociation or low resource scenarios. In
@@ -1255,8 +1254,10 @@ VOS_STATUS hdd_rx_packet_cbk(v_VOID_t *vosContext,
             continue;
       }
 
-      adf_dp_trace_log_pkt(pAdapter->sessionId, skb,
-          WIFI_EVENT_DRIVER_EAPOL_FRAME_RECEIVED);
+      DPTRACE(adf_dp_trace(rxBuf,
+              ADF_DP_TRACE_RX_HDD_PACKET_PTR_RECORD,
+              adf_nbuf_data_addr(rxBuf),
+              sizeof(adf_nbuf_data(rxBuf)), ADF_RX));
 
 #ifdef QCA_PKT_PROTO_TRACE
       if ((pHddCtx->cfg_ini->gEnableDebugLog & VOS_PKT_TRAC_TYPE_EAPOL) ||

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -50,6 +50,7 @@
 #include <ol_htt_rx_api.h>
 #include <htt_internal.h> /* HTT_ASSERT, htt_pdev_t, HTT_RX_BUF_SIZE */
 #include "regtable.h"
+#include "adf_trace.h"
 
 #include <ieee80211_common.h>         /* ieee80211_frame, ieee80211_qoscntl */
 #include <ieee80211_defines.h> /* ieee80211_rx_status */
@@ -1867,6 +1868,8 @@ htt_rx_amsdu_rx_in_order_pop_ll(
     /* Get the total number of MSDUs */
     msdu_count = HTT_RX_IN_ORD_PADDR_IND_MSDU_CNT_GET(*(msg_word + 1));
     HTT_RX_CHECK_MSDU_COUNT(msdu_count);
+    peer_id = HTT_RX_IN_ORD_PADDR_IND_PEER_ID_GET(
+                                 *(u_int32_t *)rx_ind_data);
 
     msg_word = (u_int32_t *)(rx_ind_data + HTT_RX_IN_ORD_PADDR_IND_HDR_BYTES);
     if (offload_ind) {
@@ -1908,6 +1911,14 @@ htt_rx_amsdu_rx_in_order_pop_ll(
          */
         adf_nbuf_pull_head(msdu, HTT_RX_STD_DESC_RESERVATION);
 
+        adf_dp_trace_set_track(msdu, ADF_RX);
+        ADF_NBUF_CB_RX_PACKET_TRACE(msdu) = NBUF_TX_PKT_DATA_TRACK;
+        ol_rx_log_packet(pdev, peer_id, msdu);
+        DPTRACE(adf_dp_trace(msdu,
+                ADF_DP_TRACE_RX_HTT_PACKET_PTR_RECORD,
+                adf_nbuf_data_addr(msdu),
+                sizeof(adf_nbuf_data(msdu)), ADF_RX));
+
         adf_nbuf_trim_tail(
            msdu, HTT_RX_BUF_SIZE - (RX_STD_DESC_SIZE +
                               HTT_RX_IN_ORD_PADDR_IND_MSDU_LEN_GET(*(msg_word + 1))));
@@ -1918,8 +1929,7 @@ htt_rx_amsdu_rx_in_order_pop_ll(
         msdu_count--;
 
         /* calling callback function for packet logging */
-        peer_id = HTT_RX_IN_ORD_PADDR_IND_PEER_ID_GET(
-                                 *(u_int32_t *)rx_ind_data);
+
         if (adf_os_unlikely((*((u_int8_t *) &rx_desc->fw_desc.u.val)) &
                     FW_RX_DESC_MIC_ERR_M))
             status = RX_PKT_FATE_FW_DROP_INVALID;

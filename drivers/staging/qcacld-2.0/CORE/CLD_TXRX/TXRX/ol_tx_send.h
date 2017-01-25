@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -60,7 +60,7 @@ void
 ol_tx_send(
     struct ol_txrx_pdev_t *pdev,
     struct ol_tx_desc_t *tx_desc,
-    adf_nbuf_t msdu);
+    adf_nbuf_t msdu, uint8_t vdev_id);
 
 /**
  * @brief Send a tx batch download to the target.
