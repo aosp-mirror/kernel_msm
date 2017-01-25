@@ -4,6 +4,7 @@
 #include "dsi-panel-muskie-s6e3ha3.dtsi"
 #include "dsi-panel-muskie-ea8064tg.dtsi"
 #include "msm8998-htc-nfc.dtsi"
+#include "msm8998-camera-laser-muskie.dtsi"
 
 &pcie0 {
 	/* move and resize conf, io, and bars (mem) allocations */
