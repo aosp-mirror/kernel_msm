@@ -1,0 +1,9 @@
+#
+# ST VL53L0 Laser Sensor Driver
+#
+
+config STMVL53L0
+       tristate "ST VL53L0 Laser Sensor"
+       depends on I2C
+       help
+         This driver provides support for VL53L0 Laser Sensor.

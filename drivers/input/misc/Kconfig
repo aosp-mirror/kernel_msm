@@ -11,6 +11,7 @@ menuconfig INPUT_MISC
 	  If unsure, say Y.
 
 if INPUT_MISC
+source drivers/input/misc/vl53L0/Kconfig
 
 config INPUT_88PM860X_ONKEY
 	tristate "88PM860x ONKEY support"
