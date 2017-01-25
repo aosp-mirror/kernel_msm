@@ -71,4 +71,4 @@
 	};
 };
 
-#include "msm8998-htc-usb.dtsi"
+#include "msm8998-htc-usb-evm.dtsi"
