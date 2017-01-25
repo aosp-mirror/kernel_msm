@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1256,3 +1256,65 @@ int adf_nbuf_update_radiotap(struct mon_rx_status *rx_status, adf_nbuf_t nbuf,
 			rtap_hdr_len, rtap_len - rtap_hdr_len);
 	return rtap_len;
 }
+
+/**
+ * __adf_nbuf_is_wai_pkt() - Check if frame is WAI
+ * @data: pointer to skb data buffer
+ *
+ * This function checks if the frame is WAI.
+ *
+ * Return: true (1) if WAI
+ *
+ */
+bool __adf_nbuf_is_wai_pkt(uint8_t *data)
+{
+	uint16_t ether_type;
+
+	ether_type = (uint16_t)(*(uint16_t *)
+			(data + ADF_NBUF_TRAC_ETH_TYPE_OFFSET));
+
+	if (ether_type == VOS_SWAP_U16(ADF_NBUF_TRAC_WAI_ETH_TYPE))
+		return true;
+
+	return false;
+}
+
+/**
+ * __adf_nbuf_is_group_pkt() - Check if frame is multicast packet
+ * @data: pointer to skb data buffer
+ *
+ * This function checks if the frame is multicast packet.
+ *
+ * Return: true (1) if multicast
+ *
+ */
+bool __adf_nbuf_is_multicast_pkt(uint8_t *data)
+{
+	struct adf_mac_addr *mac_addr = (struct adf_mac_addr*)data;
+
+	if ( mac_addr->bytes[0] & 0x01 )
+		return true;
+
+	return false;
+}
+
+/**
+ * __adf_nbuf_is_bcast_pkt() - Check if frame is broadcast packet
+ * @data: pointer to skb data buffer
+ *
+ * This function checks if the frame is broadcast packet.
+ *
+ * Return: true (1) if broadcast
+ *
+ */
+bool __adf_nbuf_is_bcast_pkt(uint8_t *data)
+{
+	struct adf_mac_addr *mac_addr = (struct adf_mac_addr*)data;
+	struct adf_mac_addr bcast_addr = VOS_MAC_ADDR_BROADCAST_INITIALIZER;
+
+	if (!memcmp( mac_addr, &bcast_addr, VOS_MAC_ADDR_SIZE))
+		return true;
+
+	return false;
+}
+

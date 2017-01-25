@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -79,6 +79,7 @@
 #define ADF_NBUF_TRAC_TCP_TYPE          6
 #define ADF_NBUF_TRAC_UDP_TYPE          17
 #define ADF_NBUF_TRAC_ICMPV6_TYPE       0x3a
+#define ADF_NBUF_TRAC_WAI_ETH_TYPE      0x88b4
 
 /* EAPOL Related MASK */
 #define EAPOL_PACKET_TYPE_OFFSET        15
@@ -1899,6 +1900,51 @@ adf_nbuf_update_skb_mark(adf_nbuf_t skb, uint32_t mask)
 {
 	 __adf_nbuf_update_skb_mark(skb, mask);
 }
+
+/**
+ * adf_nbuf_is_wai_pkt() - Check if frame is WAI
+ * @skb: Pointer to skb
+ *
+ * This function checks if the frame is WAI.
+ *
+ * Return: true (1) if WAI
+ *
+ */
+static inline bool adf_nbuf_is_wai_pkt(struct sk_buff *skb)
+{
+	return __adf_nbuf_is_wai_pkt(skb->data);
+}
+
+/**
+ * adf_nbuf_is_multicast_pkt() - Check if frame is multicast packet
+ * @skb: Pointer to skb
+ *
+ * This function checks if the frame is multicast packet.
+ *
+ * Return: true (1) if multicast
+ *
+ */
+static inline bool adf_nbuf_is_multicast_pkt(struct sk_buff *skb)
+{
+	return __adf_nbuf_is_multicast_pkt(skb->data);
+}
+
+/**
+ * adf_nbuf_is_bcast_pkt() - Check if frame is broadcast packet
+ * @skb: Pointer to skb
+ *
+ * This function checks if the frame is broadcast packet.
+ *
+ * Return: true (1) if broadcast
+ *
+ */
+static inline bool adf_nbuf_is_bcast_pkt(struct sk_buff *skb)
+{
+	return __adf_nbuf_is_bcast_pkt(skb->data);
+}
+
+
+
 
 void adf_nbuf_set_state(adf_nbuf_t nbuf, uint8_t current_state);
 void adf_nbuf_tx_desc_count_display(void);

@@ -91,38 +91,6 @@ const v_U8_t hdd_QdiscAcToTlAC[] = {
   Function definitions and documentation
   -------------------------------------------------------------------------*/
 
-/**
- * wlan_hdd_is_wai() - Check if frame is EAPOL or WAPI
- * @skb:    skb data
- *
- * This function checks if the frame is EAPOL or WAPI.
- * single routine call will check for both types, thus avoiding
- * data path performance penalty.
- *
- * Return: true (1) if packet is EAPOL or WAPI
- *
- */
-static bool wlan_hdd_is_eapol_or_wai(struct sk_buff *skb)
-{
-	uint16_t ether_type;
-
-	if (!skb) {
-		hddLog(VOS_TRACE_LEVEL_ERROR, FL("skb is NULL"));
-		return false;
-	}
-
-	ether_type = (uint16_t)(*(uint16_t *)
-			(skb->data + HDD_ETHERTYPE_802_1_X_FRAME_OFFSET));
-
-	if (ether_type == VOS_SWAP_U16(HDD_ETHERTYPE_802_1_X) ||
-	    ether_type == VOS_SWAP_U16(HDD_ETHERTYPE_WAI))
-		return true;
-
-	/* No error msg handled since this will happen often */
-	return false;
-}
-
-
 /**============================================================================
   @brief hdd_flush_tx_queues() - Utility function to flush the TX queues
 
@@ -452,6 +420,33 @@ static void hdd_get_transmit_sta_id(hdd_adapter_t *adapter,
 	}
 }
 
+/**
+ * wlan_hdd_classify_pkt() - classify skb packet type.
+ * @data: Pointer to skb
+ *
+ * This function classifies skb packet type.
+ *
+ * Return: none
+ */
+void wlan_hdd_classify_pkt(struct sk_buff *skb)
+{
+	/* classify broadcast/multicast packet */
+	if (adf_nbuf_is_bcast_pkt(skb))
+		ADF_NBUF_SET_BCAST(skb);
+	else if (adf_nbuf_is_multicast_pkt(skb))
+		ADF_NBUF_SET_MCAST(skb);
+
+	/* classify eapol/arp/dhcp/wai packet */
+	if (adf_nbuf_is_eapol_pkt(skb))
+		ADF_NBUF_SET_EAPOL(skb);
+	else if (adf_nbuf_is_ipv4_arp_pkt(skb))
+		ADF_NBUF_SET_ARP(skb);
+	else if (adf_nbuf_is_dhcp_pkt(skb))
+		ADF_NBUF_SET_DHCP(skb);
+	else if (adf_nbuf_is_wai_pkt(skb))
+		ADF_NBUF_SET_WAPI(skb);
+}
+
 /**============================================================================
   @brief hdd_hard_start_xmit() - Function registered with the Linux OS for
   transmitting packets. This version of the function directly passes the packet
@@ -502,6 +497,10 @@ int __hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
    while (skb) {
        skb_next = skb->next;
+       /* memset skb control block */
+       vos_mem_zero(skb->cb, sizeof(skb->cb));
+       wlan_hdd_classify_pkt(skb);
+
        pDestMacAddress = (v_MACADDR_t*)skb->data;
        STAId = HDD_WLAN_INVALID_STA_ID;
 
@@ -575,7 +574,7 @@ int __hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
              likely(
              pAdapter->hddWmmStatus.wmmAcStatus[ac].wmmAcAccessAllowed)) ||
            ((pHddStaCtx->conn_info.uIsAuthenticated == VOS_FALSE) &&
-             wlan_hdd_is_eapol_or_wai(skb)))
+             (ADF_NBUF_GET_IS_EAPOL(skb) || ADF_NBUF_GET_IS_WAPI(skb))))
        {
            granted = VOS_TRUE;
        }

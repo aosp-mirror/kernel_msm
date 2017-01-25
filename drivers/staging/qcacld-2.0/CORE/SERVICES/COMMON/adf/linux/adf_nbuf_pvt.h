@@ -152,6 +152,15 @@ struct cvg_nbuf_cb {
     unsigned char tx_htt2_frm: 1;
     unsigned char tx_htt2_reserved: 7;
 #endif /* QCA_TX_HTT2_SUPPORT */
+    struct {
+        uint8_t is_eapol: 1;
+        uint8_t is_arp: 1;
+        uint8_t is_dhcp: 1;
+        uint8_t is_wapi: 1;
+        uint8_t is_mcast: 1;
+        uint8_t is_bcast: 1;
+        uint8_t reserved: 2;
+    } packet_type;
 } __packed;
 
 #ifdef QCA_ARP_SPOOFING_WAR
@@ -223,6 +232,25 @@ struct cvg_nbuf_cb {
 #define NBUF_SET_PACKET_TRACK(skb, pkt_track) \
     (((struct cvg_nbuf_cb *)((skb)->cb))->trace.packet_track = \
                                            pkt_track)
+#define ADF_NBUF_SET_EAPOL(skb) \
+		(((struct cvg_nbuf_cb *)((skb)->cb))->packet_type.is_eapol = \
+                                           true)
+#define ADF_NBUF_SET_ARP(skb) \
+		(((struct cvg_nbuf_cb *)((skb)->cb))->packet_type.is_arp = \
+                                           true)
+#define ADF_NBUF_SET_DHCP(skb) \
+			(((struct cvg_nbuf_cb *)((skb)->cb))->packet_type.is_dhcp = \
+                                           true)
+#define ADF_NBUF_SET_WAPI(skb) \
+			(((struct cvg_nbuf_cb *)((skb)->cb))->packet_type.is_wapi = \
+                                           true)
+#define ADF_NBUF_SET_MCAST(skb) \
+			(((struct cvg_nbuf_cb *)((skb)->cb))->packet_type.is_mcast = \
+                                           true)
+#define ADF_NBUF_SET_BCAST(skb) \
+			(((struct cvg_nbuf_cb *)((skb)->cb))->packet_type.is_bcast = \
+                                           true)
+
 #define NBUF_GET_PACKET_TRACK(skb) \
     (((struct cvg_nbuf_cb *)((skb)->cb))->trace.packet_track)
 
@@ -231,6 +259,26 @@ struct cvg_nbuf_cb {
 
 #define ADF_NBUF_CB_TX_DP_TRACE(skb) \
     (((struct cvg_nbuf_cb *)((skb)->cb))->trace.dp_trace)
+
+#define ADF_NBUF_GET_IS_EAPOL(skb) \
+    (((struct cvg_nbuf_cb *)((skb)->cb))->packet_type.is_eapol)
+
+#define ADF_NBUF_GET_IS_ARP(skb) \
+    (((struct cvg_nbuf_cb *)((skb)->cb))->packet_type.is_arp)
+
+#define ADF_NBUF_GET_IS_DHCP(skb) \
+		(((struct cvg_nbuf_cb *)((skb)->cb))->packet_type.is_dhcp)
+
+#define ADF_NBUF_GET_IS_WAPI(skb) \
+		(((struct cvg_nbuf_cb *)((skb)->cb))->packet_type.is_wapi)
+
+#define ADF_NBUF_GET_IS_BCAST(skb) \
+			(((struct cvg_nbuf_cb *)((skb)->cb))->packet_type.is_bcast)
+
+#define ADF_NBUF_GET_IS_MCAST(skb) \
+			(((struct cvg_nbuf_cb *)((skb)->cb))->packet_type.is_mcast)
+
+
 
 #define __adf_nbuf_get_num_frags(skb)              \
     /* assume the OS provides a single fragment */ \
@@ -359,6 +407,9 @@ enum adf_proto_subtype  __adf_nbuf_data_get_icmp_subtype(uint8_t *data);
 enum adf_proto_subtype  __adf_nbuf_data_get_icmpv6_subtype(uint8_t *data);
 uint8_t         __adf_nbuf_data_get_ipv4_proto(uint8_t *data);
 uint8_t         __adf_nbuf_data_get_ipv6_proto(uint8_t *data);
+bool __adf_nbuf_is_bcast_pkt(uint8_t *data);
+bool __adf_nbuf_is_multicast_pkt(uint8_t *data);
+bool __adf_nbuf_is_wai_pkt(uint8_t *data);
 
 
 #ifdef QCA_PKT_PROTO_TRACE
