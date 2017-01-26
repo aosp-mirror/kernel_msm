@@ -5,7 +5,6 @@
 #include "msm8998-touch-muskie.dtsi"
 #include "msm8998-key-muskie.dtsi"
 #include "msm8998-audio-muskie.dtsi"
-#include "msm8998-htc-fingerprint-muskie.dtsi"
 
 &i2c_6 {
 	status = "disabled";
