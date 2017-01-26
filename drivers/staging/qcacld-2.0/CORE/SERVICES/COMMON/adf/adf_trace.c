@@ -772,12 +772,10 @@ void adf_dp_display_record(struct adf_dp_trace_record_s *pRecord,
 		pRecord->time, adf_dp_code_to_string(pRecord->code));
 	switch (pRecord->code) {
 	case  ADF_DP_TRACE_HDD_TX_TIMEOUT:
-		VOS_TRACE(VOS_MODULE_ID_ADF, VOS_TRACE_LEVEL_ERROR,
-						"HDD TX Timeout\n");
+		DPTRACE_PRINT("DPT: HDD TX Timeout\n");
 		break;
 	case  ADF_DP_TRACE_HDD_SOFTAP_TX_TIMEOUT:
-		VOS_TRACE(VOS_MODULE_ID_ADF, VOS_TRACE_LEVEL_ERROR,
-						"HDD SoftAP TX Timeout\n");
+		DPTRACE_PRINT("DPT: HDD SoftAP TX Timeout\n");
 		break;
 	case ADF_DP_TRACE_HDD_TX_PACKET_RECORD:
 	case ADF_DP_TRACE_HDD_RX_PACKET_RECORD:
