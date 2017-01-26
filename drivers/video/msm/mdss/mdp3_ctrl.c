@@ -1330,6 +1330,32 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 		return -EPERM;
 	}
 
+	panel = mdp3_session->panel;
+	mutex_lock(&mdp3_res->fs_idle_pc_lock);
+	if (mdp3_session->in_splash_screen ||
+		mdp3_res->idle_pc) {
+		pr_debug("%s: reset- in_splash = %d, idle_pc = %d", __func__,
+			mdp3_session->in_splash_screen, mdp3_res->idle_pc);
+		rc = mdp3_ctrl_reset(mfd);
+		if (rc) {
+			pr_err("fail to reset display\n");
+			mutex_unlock(&mdp3_res->fs_idle_pc_lock);
+			return -EINVAL;
+		}
+		if ((mdp3_session->dma->roi.x || mdp3_session->dma->roi.y) &&
+			panel_info->partial_update_enabled)
+			mdp3_session->dma->update_src_cfg = true;
+	}
+	mutex_unlock(&mdp3_res->fs_idle_pc_lock);
+
+	mutex_lock(&mdp3_session->lock);
+
+	if (!mdp3_session->status) {
+		pr_err("%s, display off!\n", __func__);
+		mutex_unlock(&mdp3_session->lock);
+		return -EPERM;
+	}
+
 	if (panel_info->partial_update_enabled &&
 		is_roi_valid(mdp3_session->dma->source_config, cmt_data->l_roi)
 		&& update_roi(mdp3_session->dma->roi, cmt_data->l_roi)) {
@@ -1343,29 +1369,6 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 				mdp3_session->dma->roi.y,
 				mdp3_session->dma->roi.w,
 				mdp3_session->dma->roi.h);
-	}
-
-	panel = mdp3_session->panel;
-	mutex_lock(&mdp3_res->fs_idle_pc_lock);
-	if (mdp3_session->in_splash_screen ||
-		mdp3_res->idle_pc) {
-		pr_debug("%s: reset- in_splash = %d, idle_pc = %d", __func__,
-			mdp3_session->in_splash_screen, mdp3_res->idle_pc);
-		rc = mdp3_ctrl_reset(mfd);
-		if (rc) {
-			pr_err("fail to reset display\n");
-			mutex_unlock(&mdp3_res->fs_idle_pc_lock);
-			return -EINVAL;
-		}
-	}
-	mutex_unlock(&mdp3_res->fs_idle_pc_lock);
-
-	mutex_lock(&mdp3_session->lock);
-
-	if (!mdp3_session->status) {
-		pr_err("%s, display off!\n", __func__);
-		mutex_unlock(&mdp3_session->lock);
-		return -EPERM;
 	}
 
 	mdp3_ctrl_notify(mdp3_session, MDP_NOTIFY_FRAME_BEGIN);

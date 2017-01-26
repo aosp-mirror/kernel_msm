@@ -2130,12 +2130,6 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 			return ret;
 		}
 
-		ret = check_vma_flags(vma, entry->memdesc.flags);
-		if (ret) {
-			up_read(&current->mm->mmap_sem);
-			return ret;
-		}
-
 		/*
 		 * Check to see that this isn't our own memory that we have
 		 * already mapped
