@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014,2016-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -143,13 +143,14 @@ struct cvg_nbuf_cb {
     unsigned char tx_htt2_reserved: 7;
 #endif /* QCA_TX_HTT2_SUPPORT */
     struct {
-        uint8_t is_eapol: 1;
-        uint8_t is_arp: 1;
-        uint8_t is_dhcp: 1;
-        uint8_t is_wapi: 1;
-        uint8_t is_mcast: 1;
-        uint8_t is_bcast: 1;
-        uint8_t reserved: 2;
+        uint8_t is_eapol:1;
+        uint8_t is_arp:1;
+        uint8_t is_dhcp:1;
+        uint8_t is_wapi:1;
+        uint8_t is_mcast:1;
+        uint8_t is_bcast:1;
+        uint8_t reserved:1;
+        uint8_t print:1;
     } packet_type;
 } __packed;
 
@@ -249,6 +250,9 @@ struct cvg_nbuf_cb {
 
 #define ADF_NBUF_CB_TX_DP_TRACE(skb) \
     (((struct cvg_nbuf_cb *)((skb)->cb))->trace.dp_trace_tx)
+
+#define ADF_NBUF_CB_DP_TRACE_PRINT(skb) \
+	(((struct cvg_nbuf_cb *)((skb)->cb))->packet_type.print)
 
 #define ADF_NBUF_CB_RX_DP_TRACE(skb) \
     (((struct cvg_nbuf_cb *)((skb)->cb))->trace.dp_trace_rx)

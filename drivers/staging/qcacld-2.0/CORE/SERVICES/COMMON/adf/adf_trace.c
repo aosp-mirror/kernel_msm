@@ -75,10 +75,12 @@ void adf_dp_trace_init(void)
 	g_adf_dp_trace_data.head = INVALID_ADF_DP_TRACE_ADDR;
 	g_adf_dp_trace_data.tail = INVALID_ADF_DP_TRACE_ADDR;
 	g_adf_dp_trace_data.num = 0;
-	g_adf_dp_trace_data.proto_bitmap = NBUF_PKT_TRAC_TYPE_DHCP |
-			NBUF_PKT_TRAC_TYPE_EAPOL | NBUF_PKT_TRAC_TYPE_MGMT_ACTION;
+	g_adf_dp_trace_data.proto_bitmap = NBUF_PKT_TRAC_TYPE_EAPOL |
+					   NBUF_PKT_TRAC_TYPE_DHCP |
+					   NBUF_PKT_TRAC_TYPE_MGMT_ACTION |
+					   NBUF_PKT_TRAC_TYPE_ARP;
 	g_adf_dp_trace_data.no_of_record = 0;
-	g_adf_dp_trace_data.verbosity    = ADF_DP_TRACE_VERBOSITY_LOW;
+	g_adf_dp_trace_data.verbosity    = ADF_DP_TRACE_VERBOSITY_HIGH;
 	g_adf_dp_trace_data.enable = true;
 
 	for (i = 0; i < ADF_DP_TRACE_MAX; i++)
@@ -460,6 +462,8 @@ bool adf_log_eapol_pkt(uint8_t session_id, struct sk_buff *skb,
 			ADF_NBUF_CB_TX_DP_TRACE(skb) = 1;
 		else if (ADF_RX == dir)
 			ADF_NBUF_CB_RX_DP_TRACE(skb) = 1;
+
+		ADF_NBUF_CB_DP_TRACE_PRINT(skb) = true;
 		return true;
 	}
 	return false;
@@ -493,6 +497,7 @@ bool adf_log_dhcp_pkt(uint8_t session_id, struct sk_buff *skb,
 		else if (ADF_RX == dir)
 			ADF_NBUF_CB_RX_DP_TRACE(skb) = 1;
 
+		ADF_NBUF_CB_DP_TRACE_PRINT(skb) = true;
 		return true;
 	}
 	return false;
@@ -527,6 +532,7 @@ bool adf_log_arp_pkt(uint8_t session_id, struct sk_buff *skb,
 		else if (ADF_RX == dir)
 			ADF_NBUF_CB_RX_DP_TRACE(skb) = 1;
 
+		ADF_NBUF_CB_DP_TRACE_PRINT(skb) = true;
 		return true;
 	}
 	return false;
@@ -695,7 +701,8 @@ void adf_dp_trace_ptr(adf_nbuf_t nbuf, enum ADF_DP_TRACE_ID code,
 	adf_os_mem_copy(&buf.cookie, data, size);
 	buf.msdu_id = msdu_id;
 	buf.status = status;
-	adf_dp_add_record(code, (uint8_t *)&buf, buf_size, false);
+	adf_dp_add_record(code, (uint8_t *)&buf, buf_size,
+				ADF_NBUF_CB_DP_TRACE_PRINT(nbuf));
 }
 
 /**
@@ -744,7 +751,8 @@ void adf_dp_trace(adf_nbuf_t nbuf, enum ADF_DP_TRACE_ID code,
 	if (adf_dp_enable_check(nbuf, code, dir) == false)
 		return;
 
-	adf_dp_add_record(code, data, size, false);
+	adf_dp_add_record(code, data, size,
+				ADF_NBUF_CB_DP_TRACE_PRINT(nbuf));
 }
 
 /**
