@@ -351,4 +351,5 @@ static inline uint32_t vos_system_ticks_to_msecs(vos_time_t ticks)
 }
 
 unsigned long vos_get_time_of_the_day_ms(void);
+void vos_get_time_of_the_day_in_hr_min_sec_usec(char *tbuf, int len);
 #endif // #if !defined __VOSS_TIMER_H

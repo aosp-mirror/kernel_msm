@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1078,8 +1078,6 @@ Notify(tpAniSirGlobal pMac, tANI_U16 cfgId, tANI_U32 ntfMask)
     mmhMsg.type = SIR_CFG_PARAM_UPDATE_IND;
     mmhMsg.bodyval = (tANI_U32)cfgId;
     mmhMsg.bodyptr = NULL;
-
-    MTRACE(macTraceMsgTx(pMac, NO_SESSION, mmhMsg.type));
 
     if ((ntfMask & CFG_CTL_NTF_SCH) != 0)
         schPostMessage(pMac, &mmhMsg);

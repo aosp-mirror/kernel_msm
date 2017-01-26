@@ -499,6 +499,7 @@ void vos_trace(v_U8_t module, v_U8_t code, v_U16_t session, v_U32_t data)
 {
     tpvosTraceRecord rec = NULL;
     unsigned long flags;
+    char time[20];
 
     if (!gvosTraceData.enable)
     {
@@ -509,6 +510,8 @@ void vos_trace(v_U8_t module, v_U8_t code, v_U16_t session, v_U32_t data)
     if (NULL == vostraceCBTable[module]) {
          return;
     }
+
+    vos_get_time_of_the_day_in_hr_min_sec_usec(time, sizeof(time));
 
     /* Aquire the lock so that only one thread at a time can fill the ring buffer */
     spin_lock_irqsave(&ltraceLock, flags);
@@ -547,13 +550,12 @@ void vos_trace(v_U8_t module, v_U8_t code, v_U16_t session, v_U32_t data)
 
         gvosTraceData.tail = tail;
     }
-
     rec = &gvosTraceTbl[gvosTraceData.tail];
     rec->code = code;
     rec->session = session;
     rec->data = data;
-    rec->time = adf_get_boottime();
-    rec->module =  module;
+    snprintf(rec->time, sizeof(rec->time), "%s", time);
+    rec->module = module;
     rec->pid = (in_interrupt() ? 0 : current->pid);
     gvosTraceData.numSinceLastDump ++;
     spin_unlock_irqrestore(&ltraceLock, flags);

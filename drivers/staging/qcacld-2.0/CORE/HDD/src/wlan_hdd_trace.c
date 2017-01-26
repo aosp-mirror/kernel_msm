@@ -128,11 +128,11 @@ static tANI_U8 *hddTraceGetEventString(tANI_U32 code)
 void hddTraceDump(void *pMac, tpvosTraceRecord pRecord, tANI_U16 recIndex)
 {
     if (TRACE_CODE_HDD_RX_SME_MSG == pRecord->code)
-        hddLog(LOG1, "%04d %012llu S%d %-14s %-30s(0x%x)",
+        hddLog(LOG1, "%04d %s S%d %-14s %-30s(0x%x)",
             recIndex, pRecord->time, pRecord->session, "RX SME MSG:",
             get_eRoamCmdStatus_str(pRecord->data), pRecord->data);
     else
-        hddLog(LOG1, "%04d %012llu S%d %-14s %-30s(0x%x)",
+        hddLog(LOG1, "%04d %s S%d %-14s %-30s(0x%x)",
             recIndex, pRecord->time, pRecord->session, "HDD Event:",
             hddTraceGetEventString(pRecord->code), pRecord->data);
 }

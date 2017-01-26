@@ -869,3 +869,19 @@ unsigned long vos_get_time_of_the_day_ms(void)
 		(tm.tm_min *60 * 1000) + (tm.tm_sec * 1000)+
 		(tv.tv_usec/1000));
 }
+
+void vos_get_time_of_the_day_in_hr_min_sec_usec(char *tbuf, int len)
+{
+       struct timeval tv;
+       struct rtc_time tm;
+       unsigned long local_time;
+
+       /* Format the Log time R#: [hr:min:sec.microsec] */
+       do_gettimeofday(&tv);
+       /* Convert rtc to local time */
+       local_time = (u32)(tv.tv_sec - (sys_tz.tz_minuteswest * 60));
+       rtc_time_to_tm(local_time, &tm);
+       snprintf(tbuf, len,
+               "[%02d:%02d:%02d.%06lu] ",
+               tm.tm_hour, tm.tm_min, tm.tm_sec, tv.tv_usec);
+}
