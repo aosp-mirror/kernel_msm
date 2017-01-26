@@ -1,0 +1,37 @@
+&pmi8998_gpios {
+	gpio@c800 { /* GPIO 9 - V_LED_3V3_EN */
+		qcom,mode = <1>;
+		qcom,output-type = <0>;
+		qcom,invert = <1>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <0>;
+		qcom,out-strength = <1>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+};
+&i2c_7 {
+	lp5562@30 {
+		compatible = "ti,lp5562";
+		reg = <0x30>;
+		clock-mode = /bits/8 <2>;
+		enable-gpio =<&pm8998_gpios 18 0x00>;
+		chan0 {
+			chan-name = "red";
+			led-cur = /bits/ 8 <0x20>;
+			max-cur = /bits/ 8 <0x60>;
+		};
+
+		chan1 {
+			chan-name = "green";
+			led-cur = /bits/ 8 <0x20>;
+			 max-cur = /bits/ 8 <0x60>;
+		};
+
+		chan2 {
+			chan-name = "blue";
+			led-cur = /bits/ 8 <0x20>;
+			max-cur = /bits/ 8 <0x60>;
+		};
+	};
+};
