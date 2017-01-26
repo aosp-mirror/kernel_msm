@@ -949,7 +949,7 @@ static inline int cgroup_attach_task_all(struct task_struct *from,
 static inline int subsys_cgroup_allow_attach(struct cgroup_subsys_state *css,
 					     void *tset)
 {
-	return -EINVAL;
+	return 0;
 }
 
 static inline int cgroup_attach_task_to_root(struct task_struct *tsk, int wait)
