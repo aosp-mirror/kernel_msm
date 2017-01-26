@@ -407,11 +407,13 @@ int __hdd_softap_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
        DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_TX_PACKET_PTR_RECORD,
                   (uint8_t *)&skb->data, sizeof(skb->data), ADF_TX));
        DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_TX_PACKET_RECORD,
-                  (uint8_t *)skb->data, skb->len, ADF_TX));
-       if (skb->len > ADF_DP_TRACE_RECORD_SIZE)
+                  (uint8_t *)skb->data, adf_nbuf_len(skb), ADF_TX));
+
+       if (adf_nbuf_len(skb) > ADF_DP_TRACE_RECORD_SIZE)
             DPTRACE(adf_dp_trace(skb, ADF_DP_TRACE_HDD_TX_PACKET_RECORD,
-                  (uint8_t *)&skb->data[ADF_DP_TRACE_RECORD_SIZE],
-                  (skb->len - ADF_DP_TRACE_RECORD_SIZE), ADF_TX));
+                    (uint8_t *)&skb->data[ADF_DP_TRACE_RECORD_SIZE],
+                    (adf_nbuf_len(skb) - ADF_DP_TRACE_RECORD_SIZE),
+                    ADF_TX));
 
        skb = skb_next;
        continue;
@@ -852,6 +854,16 @@ VOS_STATUS hdd_softap_rx_packet_cbk(v_VOID_t *vosContext,
               ADF_DP_TRACE_RX_HDD_PACKET_PTR_RECORD,
               adf_nbuf_data_addr(skb),
               sizeof(adf_nbuf_data(skb)), ADF_RX));
+      DPTRACE(adf_dp_trace(skb,
+              ADF_DP_TRACE_HDD_RX_PACKET_RECORD,
+              (uint8_t *)skb->data, adf_nbuf_len(skb), ADF_RX));
+
+      if (adf_nbuf_len(skb) > ADF_DP_TRACE_RECORD_SIZE)
+          DPTRACE(adf_dp_trace(skb,
+                  ADF_DP_TRACE_HDD_RX_PACKET_RECORD,
+                  (uint8_t *)&skb->data[ADF_DP_TRACE_RECORD_SIZE],
+                  (adf_nbuf_len(skb) - ADF_DP_TRACE_RECORD_SIZE),
+                  ADF_RX));
 
 #ifdef QCA_PKT_PROTO_TRACE
       if ((pHddCtx->cfg_ini->gEnableDebugLog & VOS_PKT_TRAC_TYPE_EAPOL) ||
