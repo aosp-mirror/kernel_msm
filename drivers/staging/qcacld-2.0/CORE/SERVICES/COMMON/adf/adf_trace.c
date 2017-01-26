@@ -43,6 +43,7 @@
 #include "sirDebug.h"
 #include "debug_linux.h"
 #include "adf_os_io.h"
+#include "vos_timer.h"
 
 /* Static and Global variables */
 static spinlock_t l_dp_trace_lock;
@@ -82,6 +83,9 @@ void adf_dp_trace_init(void)
 	g_adf_dp_trace_data.no_of_record = 0;
 	g_adf_dp_trace_data.verbosity    = ADF_DP_TRACE_VERBOSITY_HIGH;
 	g_adf_dp_trace_data.enable = true;
+	g_adf_dp_trace_data.tx_count = 0;
+	g_adf_dp_trace_data.rx_count = 0;
+	g_adf_dp_trace_data.live_mode = 0;
 
 	for (i = 0; i < ADF_DP_TRACE_MAX; i++)
 		adf_dp_trace_cb_table[i] = adf_dp_display_record;
@@ -449,7 +453,8 @@ void adf_dp_add_record(enum ADF_DP_TRACE_ID code,
 		adf_os_mem_copy(rec->data, data, size);
 
 	}
-	rec->time = adf_os_gettimestamp();
+	vos_get_time_of_the_day_in_hr_min_sec_usec(rec->time,
+					sizeof(rec->time));
 	rec->pid = (in_interrupt() ? 0 : current->pid);
 	spin_unlock_bh(&l_dp_trace_lock);
 
@@ -598,7 +603,7 @@ void adf_dp_display_proto_pkt(struct adf_dp_trace_record_s *record,
 	struct adf_dp_trace_proto_buf *buf =
 		(struct adf_dp_trace_proto_buf *)record->data;
 
-	DPTRACE_PRINT("DPT: %04d: %012llu: %s vdev_id %d\n", index,
+	DPTRACE_PRINT("DPT: %04d: %s: %s vdev_id %d\n", index,
 		record->time, adf_dp_code_to_string(record->code),
 		buf->vdev_id);
 	DPTRACE_PRINT("DPT: SA: " MAC_ADDRESS_STR " %s DA: " MAC_ADDRESS_STR
@@ -648,7 +653,7 @@ void adf_dp_display_mgmt_pkt(struct adf_dp_trace_record_s *record,
 	struct adf_dp_trace_mgmt_buf *buf =
 		(struct adf_dp_trace_mgmt_buf *)record->data;
 
-	DPTRACE_PRINT("DPT: %04d: %012llu: %s vdev_id %d", index,
+	DPTRACE_PRINT("DPT: %04d: %s: %s vdev_id %d", index,
 		record->time, adf_dp_code_to_string(record->code),
 		buf->vdev_id);
 	DPTRACE_PRINT("DPT: Type %s Subtype %s", adf_dp_type_to_str(buf->type),
@@ -679,7 +684,7 @@ void adf_dp_display_event_record(struct adf_dp_trace_record_s *record,
 	struct adf_dp_trace_event_buf *buf =
 		(struct adf_dp_trace_event_buf *)record->data;
 
-	DPTRACE_PRINT("DPT: %04d: %012llu: %s vdev_id %d", index,
+	DPTRACE_PRINT("DPT: %04d: %s: %s vdev_id %d", index,
 		record->time, adf_dp_code_to_string(record->code),
 		buf->vdev_id);
 	DPTRACE_PRINT("DPT: Type %s Subtype %s", adf_dp_type_to_str(buf->type),
@@ -718,11 +723,11 @@ void adf_dp_display_ptr_record(struct adf_dp_trace_record_s *record,
 		(struct adf_dp_trace_ptr_buf *)record->data;
 
 	if (record->code == ADF_DP_TRACE_FREE_PACKET_PTR_RECORD)
-		DPTRACE_PRINT("DPT: %04d: %012llu: %s msdu_id: %d, status: %d\n", index,
+		DPTRACE_PRINT("DPT: %04d: %s: %s msdu_id: %d, status: %d\n", index,
 			record->time, adf_dp_code_to_string(record->code),
 			buf->msdu_id, buf->status);
 	else
-		DPTRACE_PRINT("DPT: %04d: %012llu: %s msdu_id: %d, vdev_id: %d\n", index,
+		DPTRACE_PRINT("DPT: %04d: %s: %s msdu_id: %d, vdev_id: %d\n", index,
 			record->time, adf_dp_code_to_string(record->code),
 			buf->msdu_id, buf->status);
 
@@ -768,7 +773,7 @@ void adf_dp_trace_ptr(adf_nbuf_t nbuf, enum ADF_DP_TRACE_ID code,
 void adf_dp_display_record(struct adf_dp_trace_record_s *pRecord,
 				uint16_t recIndex)
 {
-	DPTRACE_PRINT("DPT: %04d: %012llu: %s\n", recIndex,
+	DPTRACE_PRINT("DPT: %04d: %s: %s\n", recIndex,
 		pRecord->time, adf_dp_code_to_string(pRecord->code));
 	switch (pRecord->code) {
 	case  ADF_DP_TRACE_HDD_TX_TIMEOUT:
@@ -821,10 +826,16 @@ void adf_dp_trace_clear_buffer(void)
 	g_adf_dp_trace_data.head = INVALID_ADF_DP_TRACE_ADDR;
 	g_adf_dp_trace_data.tail = INVALID_ADF_DP_TRACE_ADDR;
 	g_adf_dp_trace_data.num = 0;
-	g_adf_dp_trace_data.proto_bitmap = 0;
+	g_adf_dp_trace_data.proto_bitmap = NBUF_PKT_TRAC_TYPE_EAPOL |
+					   NBUF_PKT_TRAC_TYPE_DHCP |
+					   NBUF_PKT_TRAC_TYPE_MGMT_ACTION |
+					   NBUF_PKT_TRAC_TYPE_ARP;
 	g_adf_dp_trace_data.no_of_record = 0;
-	g_adf_dp_trace_data.verbosity	 = ADF_DP_TRACE_VERBOSITY_DEFAULT;
+	g_adf_dp_trace_data.verbosity	 = ADF_DP_TRACE_VERBOSITY_HIGH;
 	g_adf_dp_trace_data.enable = true;
+	g_adf_dp_trace_data.tx_count = 0;
+	g_adf_dp_trace_data.rx_count = 0;
+	g_adf_dp_trace_data.live_mode = 0;
 
 	memset(g_adf_dp_trace_tbl, 0,
 		MAX_ADF_DP_TRACE_RECORDS * sizeof(struct adf_dp_trace_record_s));

@@ -205,7 +205,7 @@ struct adf_dp_trace_event_buf {
  * @pid : process id which stored the data in this record
  */
 struct adf_dp_trace_record_s {
-	uint64_t time;
+	char time[20];
 	uint8_t code;
 	uint8_t data[ADF_DP_TRACE_RECORD_SIZE];
 	uint8_t size;
