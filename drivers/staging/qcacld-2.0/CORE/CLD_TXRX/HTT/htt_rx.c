@@ -1912,7 +1912,7 @@ htt_rx_amsdu_rx_in_order_pop_ll(
         adf_nbuf_pull_head(msdu, HTT_RX_STD_DESC_RESERVATION);
 
         adf_dp_trace_set_track(msdu, ADF_RX);
-        ADF_NBUF_CB_RX_PACKET_TRACE(msdu) = NBUF_TX_PKT_DATA_TRACK;
+        NBUF_SET_PACKET_TRACK(msdu, NBUF_TX_PKT_DATA_TRACK);
         ol_rx_log_packet(pdev, peer_id, msdu);
         DPTRACE(adf_dp_trace(msdu,
                 ADF_DP_TRACE_RX_HTT_PACKET_PTR_RECORD,
