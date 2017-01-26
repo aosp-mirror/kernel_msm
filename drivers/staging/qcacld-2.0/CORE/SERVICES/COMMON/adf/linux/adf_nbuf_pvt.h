@@ -99,9 +99,10 @@ struct cvg_nbuf_cb {
      * Store info for data path tracing
      */
     struct {
-        uint8_t packet_state;
-        uint8_t packet_track;
-        uint8_t dp_trace;
+        uint8_t packet_state: 4;
+        uint8_t packet_track: 2;
+        uint8_t dp_trace: 1;
+        uint8_t dp_trace_reserved: 1;
     } trace;
 
     /*
