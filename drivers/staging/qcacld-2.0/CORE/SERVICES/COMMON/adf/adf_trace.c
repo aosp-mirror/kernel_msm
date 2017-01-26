@@ -185,6 +185,9 @@ void adf_dp_trace_set_track(adf_nbuf_t nbuf,  enum adf_proto_dir dir)
 	spin_unlock_bh(&l_dp_trace_lock);
 }
 
+#define DPTRACE_PRINT(args...) \
+	VOS_TRACE(VOS_MODULE_ID_ADF, VOS_TRACE_LEVEL_INFO, ## args)
+
 /**
  * dump_hex_trace() - Display the data in buffer
  * @str:     string to print
@@ -195,13 +198,20 @@ void adf_dp_trace_set_track(adf_nbuf_t nbuf,  enum adf_proto_dir dir)
  */
 static void dump_hex_trace(char *str, uint8_t *buf, uint8_t buf_len)
 {
-	uint8_t i;
+	unsigned char linebuf[BUFFER_SIZE];
+	const u8 *ptr = buf;
+	int i, linelen, remaining = buf_len;
 
 	/* Dump the bytes in the last line */
-	adf_os_print("%s: ", str);
-	for (i = 0; i < buf_len; i++)
-		adf_os_print("%02x ", buf[i]);
-	adf_os_print("\n");
+	for (i = 0; i < buf_len; i += ROW_SIZE) {
+		linelen = min(remaining, ROW_SIZE);
+		remaining -= ROW_SIZE;
+
+		hex_dump_to_buffer(ptr + i, linelen, ROW_SIZE, 1,
+				linebuf, sizeof(linebuf), false);
+
+		DPTRACE_PRINT("DPT: %s: %s", str, linebuf);
+	}
 }
 
 /**
@@ -588,10 +598,10 @@ void adf_dp_display_proto_pkt(struct adf_dp_trace_record_s *record,
 	struct adf_dp_trace_proto_buf *buf =
 		(struct adf_dp_trace_proto_buf *)record->data;
 
-	adf_os_print("DPT: %04d: %012llu: %s vdev_id %d\n", index,
+	DPTRACE_PRINT("DPT: %04d: %012llu: %s vdev_id %d\n", index,
 		record->time, adf_dp_code_to_string(record->code),
 		buf->vdev_id);
-	adf_os_print("DPT: SA: " MAC_ADDRESS_STR " %s DA: " MAC_ADDRESS_STR
+	DPTRACE_PRINT("DPT: SA: " MAC_ADDRESS_STR " %s DA: " MAC_ADDRESS_STR
 						" Type %s Subtype %s\n",
 		MAC_ADDR_ARRAY(buf->sa.bytes), adf_dp_dir_to_str(buf->dir),
 		MAC_ADDR_ARRAY(buf->da.bytes), adf_dp_type_to_str(buf->type),
@@ -638,10 +648,10 @@ void adf_dp_display_mgmt_pkt(struct adf_dp_trace_record_s *record,
 	struct adf_dp_trace_mgmt_buf *buf =
 		(struct adf_dp_trace_mgmt_buf *)record->data;
 
-	adf_os_print("DPT: %04d: %012llu: %s vdev_id %d", index,
+	DPTRACE_PRINT("DPT: %04d: %012llu: %s vdev_id %d", index,
 		record->time, adf_dp_code_to_string(record->code),
 		buf->vdev_id);
-	adf_os_print("DPT: Type %s Subtype %s", adf_dp_type_to_str(buf->type),
+	DPTRACE_PRINT("DPT: Type %s Subtype %s", adf_dp_type_to_str(buf->type),
 		adf_dp_subtype_to_str(buf->subtype));
 }
 
@@ -669,10 +679,10 @@ void adf_dp_display_event_record(struct adf_dp_trace_record_s *record,
 	struct adf_dp_trace_event_buf *buf =
 		(struct adf_dp_trace_event_buf *)record->data;
 
-	adf_os_print("DPT: %04d: %012llu: %s vdev_id %d", index,
+	DPTRACE_PRINT("DPT: %04d: %012llu: %s vdev_id %d", index,
 		record->time, adf_dp_code_to_string(record->code),
 		buf->vdev_id);
-	adf_os_print("DPT: Type %s Subtype %s", adf_dp_type_to_str(buf->type),
+	DPTRACE_PRINT("DPT: Type %s Subtype %s", adf_dp_type_to_str(buf->type),
 		adf_dp_subtype_to_str(buf->subtype));
 }
 
@@ -708,11 +718,11 @@ void adf_dp_display_ptr_record(struct adf_dp_trace_record_s *record,
 		(struct adf_dp_trace_ptr_buf *)record->data;
 
 	if (record->code == ADF_DP_TRACE_FREE_PACKET_PTR_RECORD)
-		adf_os_print("%04d: %012llu: %s msdu_id: %d, status: %d\n", index,
+		DPTRACE_PRINT("DPT: %04d: %012llu: %s msdu_id: %d, status: %d\n", index,
 			record->time, adf_dp_code_to_string(record->code),
 			buf->msdu_id, buf->status);
 	else
-		adf_os_print("%04d: %012llu: %s msdu_id: %d, vdev_id: %d\n", index,
+		DPTRACE_PRINT("DPT: %04d: %012llu: %s msdu_id: %d, vdev_id: %d\n", index,
 			record->time, adf_dp_code_to_string(record->code),
 			buf->msdu_id, buf->status);
 
@@ -758,7 +768,7 @@ void adf_dp_trace_ptr(adf_nbuf_t nbuf, enum ADF_DP_TRACE_ID code,
 void adf_dp_display_record(struct adf_dp_trace_record_s *pRecord,
 				uint16_t recIndex)
 {
-	adf_os_print("DPT: %04d: %012llu: %s\n", recIndex,
+	DPTRACE_PRINT("DPT: %04d: %012llu: %s\n", recIndex,
 		pRecord->time, adf_dp_code_to_string(pRecord->code));
 	switch (pRecord->code) {
 	case  ADF_DP_TRACE_HDD_TX_TIMEOUT:

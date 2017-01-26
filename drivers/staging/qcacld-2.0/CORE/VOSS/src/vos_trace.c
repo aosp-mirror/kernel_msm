@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014, 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -334,10 +334,6 @@ void vos_trace_display(void)
          );
    }
 }
-
-#define ROW_SIZE 16
-/* Buffer size = data bytes(2 hex chars plus space) + NULL */
-#define BUFFER_SIZE ((ROW_SIZE * 3) + 1)
 
 /*----------------------------------------------------------------------------
 
