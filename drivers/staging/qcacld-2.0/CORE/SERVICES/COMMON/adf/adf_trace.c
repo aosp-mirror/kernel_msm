@@ -436,7 +436,8 @@ bool adf_log_eapol_pkt(uint8_t session_id, struct sk_buff *skb,
 	enum adf_proto_subtype subtype;
 
 	if ((adf_dp_get_proto_bitmap() & NBUF_PKT_TRAC_TYPE_EAPOL) &&
-		ADF_NBUF_GET_IS_EAPOL(skb)) {
+		((dir == ADF_TX && ADF_NBUF_GET_IS_EAPOL(skb)) ||
+		(dir == ADF_RX && adf_nbuf_is_eapol_pkt(skb) == true))) {
 
 		subtype = adf_nbuf_get_eapol_subtype(skb);
 		DPTRACE(adf_dp_trace_proto_pkt(ADF_DP_TRACE_EAPOL_PACKET_RECORD,
@@ -467,7 +468,8 @@ bool adf_log_dhcp_pkt(uint8_t session_id, struct sk_buff *skb,
 	enum adf_proto_subtype subtype = ADF_PROTO_INVALID;
 
 	if ((adf_dp_get_proto_bitmap() & NBUF_PKT_TRAC_TYPE_DHCP) &&
-		ADF_NBUF_GET_IS_DHCP(skb)) {
+		((dir == ADF_TX && ADF_NBUF_GET_IS_DHCP(skb)) ||
+		(dir == ADF_RX && adf_nbuf_is_dhcp_pkt(skb) == true))) {
 
 		subtype = adf_nbuf_get_dhcp_subtype(skb);
 		DPTRACE(adf_dp_trace_proto_pkt(ADF_DP_TRACE_DHCP_PACKET_RECORD,
@@ -499,7 +501,8 @@ bool adf_log_arp_pkt(uint8_t session_id, struct sk_buff *skb,
 	enum adf_proto_subtype proto_subtype;
 
 	if ((adf_dp_get_proto_bitmap() & NBUF_PKT_TRAC_TYPE_ARP) &&
-	     ADF_NBUF_GET_IS_ARP(skb)) {
+	    ((dir == ADF_TX && ADF_NBUF_GET_IS_ARP(skb)) ||
+	    (dir == ADF_RX && adf_nbuf_is_ipv4_arp_pkt(skb) == true))){
 
 		proto_subtype = adf_nbuf_get_arp_subtype(skb);
 
