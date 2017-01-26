@@ -187,12 +187,14 @@ struct mon_rx_status {
  * @ADF_PROTO_TYPE_EAPOL - EAPOL
  * @ADF_PROTO_TYPE_ARP - ARP
  * @ADF_PROTO_TYPE_MGMT - MGMT
+ * @ADF_PROTO_TYPE_EVENT - EVENT
  */
 enum adf_proto_type {
 	ADF_PROTO_TYPE_DHCP = 0,
 	ADF_PROTO_TYPE_EAPOL,
 	ADF_PROTO_TYPE_ARP,
 	ADF_PROTO_TYPE_MGMT,
+	ADF_PROTO_TYPE_EVENT,
 	ADF_PROTO_TYPE_MAX
 };
 
@@ -226,6 +228,9 @@ enum adf_proto_type {
  * @ADF_PROTO_MGMT_DISASSOC - disassoc
  * @ADF_PROTO_MGMT_AUTH - auth
  * @ADF_PROTO_MGMT_DEAUTH - deauth
+ * @ADF_ROAM_SYNCH - roam synch indication from fw
+ * @ADF_ROAM_COMPLETE - roam complete cmd to fw
+ * @ADF_ROAM_EVENTID - roam eventid from fw
  */
 enum adf_proto_subtype {
 	ADF_PROTO_INVALID = 0,
@@ -257,6 +262,9 @@ enum adf_proto_subtype {
 	ADF_PROTO_MGMT_DISASSOC,
 	ADF_PROTO_MGMT_AUTH,
 	ADF_PROTO_MGMT_DEAUTH,
+	ADF_ROAM_SYNCH,
+	ADF_ROAM_COMPLETE,
+	ADF_ROAM_EVENTID,
 	ADF_PROTO_SUBTYPE_MAX
 };
 

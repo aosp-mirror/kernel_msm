@@ -95,6 +95,8 @@ void adf_dp_trace_init(void)
 				adf_dp_display_proto_pkt;
 	adf_dp_trace_cb_table[ADF_DP_TRACE_MGMT_PACKET_RECORD] =
 				adf_dp_display_mgmt_pkt;
+	adf_dp_trace_cb_table[ADF_DP_TRACE_EVENT_RECORD] =
+				adf_dp_display_event_record;
 }
 
 /**
@@ -221,6 +223,8 @@ const char *adf_dp_code_to_string(enum ADF_DP_TRACE_ID code)
 		return "ARP:";
 	case ADF_DP_TRACE_MGMT_PACKET_RECORD:
 		return "MGMT:";
+	case ADF_DP_TRACE_EVENT_RECORD:
+		return "EVENT:";
 	case ADF_DP_TRACE_HDD_TX_PACKET_PTR_RECORD:
 		return "HDD: TX: PTR:";
 	case ADF_DP_TRACE_HDD_TX_PACKET_RECORD:
@@ -293,6 +297,8 @@ const char *adf_dp_type_to_str(enum adf_proto_type type)
 		return "ARP";
 	case ADF_PROTO_TYPE_MGMT:
 		return "MGMT";
+	case ADF_PROTO_TYPE_EVENT:
+		return "EVENT";
 	default:
 		return "invalid";
 	}
@@ -343,6 +349,12 @@ const char *adf_dp_subtype_to_str(enum adf_proto_subtype subtype)
 		return "AUTH";
 	case ADF_PROTO_MGMT_DEAUTH:
 		return "DEAUTH";
+	case ADF_ROAM_SYNCH:
+		return "ROAM SYNCH";
+	case ADF_ROAM_COMPLETE:
+		return "ROAM COMPLETE";
+	case ADF_ROAM_EVENTID:
+		return "ROAM EVENTID";
 	default:
 		return "invalid";
 	}
@@ -638,6 +650,37 @@ void adf_dp_trace_mgmt_pkt(enum ADF_DP_TRACE_ID code, uint8_t vdev_id,
 {
 	struct adf_dp_trace_mgmt_buf buf;
 	int buf_size = sizeof(struct adf_dp_trace_mgmt_buf);
+
+	if (adf_dp_enable_check(NULL, code, ADF_NA) == false)
+		return;
+
+	if (buf_size > ADF_DP_TRACE_RECORD_SIZE)
+		ADF_BUG(0);
+
+	buf.type = type;
+	buf.subtype = subtype;
+	buf.vdev_id = vdev_id;
+	adf_dp_add_record(code, (uint8_t *)&buf, buf_size, true);
+}
+
+void adf_dp_display_event_record(struct adf_dp_trace_record_s *record,
+			      uint16_t index)
+{
+	struct adf_dp_trace_event_buf *buf =
+		(struct adf_dp_trace_event_buf *)record->data;
+
+	adf_os_print("DPT: %04d: %012llu: %s vdev_id %d", index,
+		record->time, adf_dp_code_to_string(record->code),
+		buf->vdev_id);
+	adf_os_print("DPT: Type %s Subtype %s", adf_dp_type_to_str(buf->type),
+		adf_dp_subtype_to_str(buf->subtype));
+}
+
+void adf_dp_trace_record_event(enum ADF_DP_TRACE_ID code, uint8_t vdev_id,
+		enum adf_proto_type type, enum adf_proto_subtype subtype)
+{
+	struct adf_dp_trace_event_buf buf;
+	int buf_size = sizeof(struct adf_dp_trace_event_buf);
 
 	if (adf_dp_enable_check(NULL, code, ADF_NA) == false)
 		return;

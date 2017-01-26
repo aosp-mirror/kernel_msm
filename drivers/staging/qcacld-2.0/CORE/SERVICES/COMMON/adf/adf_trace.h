@@ -77,6 +77,7 @@ struct adf_mac_addr {
  * @ADF_DP_TRACE_DHCP_PACKET_RECORD - record DHCP packet
  * @ADF_DP_TRACE_ARP_PACKET_RECORD - record ARP packet
  * @ADF_DP_TRACE_MGMT_PACKET_RECORD - record MGMT pacekt
+ * @ADF_DP_TRACE_EVENT_RECORD - record events
  * @ADF_DP_TRACE_DEFAULT_VERBOSITY - below this are part of default verbosity
  * @ADF_DP_TRACE_HDD_TX_TIMEOUT - HDD tx timeout
  * @ADF_DP_TRACE_HDD_SOFTAP_TX_TIMEOUT- SOFTAP HDD tx timeout
@@ -105,6 +106,7 @@ enum  ADF_DP_TRACE_ID {
 	ADF_DP_TRACE_DHCP_PACKET_RECORD,
 	ADF_DP_TRACE_ARP_PACKET_RECORD,
 	ADF_DP_TRACE_MGMT_PACKET_RECORD,
+	ADF_DP_TRACE_EVENT_RECORD,
 	ADF_DP_TRACE_DEFAULT_VERBOSITY,
 	ADF_DP_TRACE_HDD_TX_TIMEOUT,
 	ADF_DP_TRACE_HDD_SOFTAP_TX_TIMEOUT,
@@ -177,6 +179,18 @@ struct adf_dp_trace_proto_buf {
  * @subtype: packet subtype
  */
 struct adf_dp_trace_mgmt_buf {
+	uint8_t vdev_id;
+	uint8_t type;
+	uint8_t subtype;
+};
+
+/**
+ * struct adf_dp_trace_event_buf - event buffer
+ * @vdev_id : vdev id
+ * @type: packet type
+ * @subtype: packet subtype
+ */
+struct adf_dp_trace_event_buf {
 	uint8_t vdev_id;
 	uint8_t type;
 	uint8_t subtype;
@@ -274,6 +288,28 @@ void adf_dp_trace_mgmt_pkt(enum ADF_DP_TRACE_ID code, uint8_t vdev_id,
  */
 void adf_dp_display_mgmt_pkt(struct adf_dp_trace_record_s *record,
 			      uint16_t index);
+
+/**
+ * adf_dp_display_event_record() - display event records
+ * @record: dptrace record
+ * @index: index
+ *
+ * Return: none
+ */
+void adf_dp_display_event_record(struct adf_dp_trace_record_s *record,
+			      uint16_t index);
+
+/**
+ * adf_dp_trace_record_event() - record events
+ * @code: dptrace code
+ * @vdev_id: vdev id
+ * @type: proto type
+ * @subtype: proto subtype
+ *
+ * Return: none
+ */
+void adf_dp_trace_record_event(enum ADF_DP_TRACE_ID code, uint8_t vdev_id,
+		enum adf_proto_type type, enum adf_proto_subtype subtype);
 #else
 static inline void adf_dp_trace_init(void)
 {
