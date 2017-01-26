@@ -5632,7 +5632,11 @@ static int energy_aware_wake_cpu(struct task_struct *p, int target, int sync)
 		/*
 		 * Find a cpu with sufficient capacity
 		 */
+#ifdef CONFIG_CGROUP_SCHEDTUNE
 		bool boosted = schedtune_task_boost(p) > 0;
+#else
+		bool boosted = get_sysctl_sched_cfs_boost() > 0;
+#endif
 		bool prefer_idle = schedtune_prefer_idle(p) > 0;
 		int tmp_target = find_best_target(p, boosted, prefer_idle);
 		if (tmp_target >= 0) {
