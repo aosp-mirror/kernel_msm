@@ -71,34 +71,45 @@ struct adf_mac_addr {
 
 /**
  * enum ADF_DP_TRACE_ID - Generic ID to identify various events in data path
- * @ADF_DP_TRACE_INVALID: Invalid ID
- * @ADF_DP_TRACE_DROP_PACKET_RECORD: Dropped packet stored with this id
- * @ADF_DP_TRACE_HDD_TX_PACKET_PTR_RECORD: nbuf->data ptr of HDD
- * @ADF_DP_TRACE_HDD_TX_PACKET_RECORD: nbuf->data stored with this id
- * @ADF_DP_TRACE_CE_PACKET_PTR_RECORD: nbuf->data ptr of CE
- * @ADF_DP_TRACE_CE_PACKET_RECORD: nbuf->data stored with this id
- * @ADF_DP_TRACE_TXRX_QUEUE_PACKET_PTR_RECORD: nbuf->data ptr of txrx queue
- * @ADF_DP_TRACE_TXRX_PACKET_PTR_RECORD: nbuf->data ptr of txrx
- * @ADF_DP_TRACE_HTT_PACKET_PTR_RECORD: nbuf->data ptr of htt
- * @ADF_DP_TRACE_HTC_PACKET_PTR_RECORD: nbuf->data ptr of htc
- * @ADF_DP_TRACE_HIF_PACKET_PTR_RECORD: nbuf->data ptr of hif
- * @ADF_DP_TRACE_HDD_TX_TIMEOUT: hdd tx timeout event
- * @ADF_DP_TRACE_HDD_SOFTAP_TX_TIMEOUT: hdd tx softap timeout event
- *
+ * @ADF_DP_TRACE_INVALID - invalid
+ * @ADF_DP_TRACE_DROP_PACKET_RECORD - record drop packet
+ * @ADF_DP_TRACE_EAPOL_PACKET_RECORD - record EAPOL packet
+ * @ADF_DP_TRACE_DHCP_PACKET_RECORD - record DHCP packet
+ * @ADF_DP_TRACE_ARP_PACKET_RECORD - record ARP packet
+ * @ADF_DP_TRACE_MGMT_PACKET_RECORD - record MGMT pacekt
+ * @ADF_DP_TRACE_DEFAULT_VERBOSITY - below this are part of default verbosity
+ * @ADF_DP_TRACE_HDD_TX_TIMEOUT - HDD tx timeout
+ * @ADF_DP_TRACE_HDD_SOFTAP_TX_TIMEOUT- SOFTAP HDD tx timeout
+ * @ADF_DP_TRACE_HDD_TX_PACKET_PTR_RECORD - HDD layer ptr record
+ * @ADF_DP_TRACE_CE_PACKET_PTR_RECORD - CE layer ptr record
+ * @ADF_DP_TRACE_FREE_PACKET_PTR_RECORD - tx completion ptr record
+ * @ADF_DP_TRACE_RX_HTT_PACKET_PTR_RECORD - HTT RX record
+ * @ADF_DP_TRACE_RX_OFFLOAD_HTT_PACKET_PTR_RECORD- HTT RX offload record
+ * @ADF_DP_TRACE_RX_HDD_PACKET_PTR_RECORD - HDD RX record
+ * @ADF_DP_TRACE_LOW_VERBOSITY - below this are part of low verbosity
+ * @ADF_DP_TRACE_TXRX_QUEUE_PACKET_PTR_RECORD -tx queue ptr record
+ * @ADF_DP_TRACE_TXRX_PACKET_PTR_RECORD - txrx packet ptr record
+ * @ADF_DP_TRACE_HTT_PACKET_PTR_RECORD - htt packet ptr record
+ * @ADF_DP_TRACE_HTC_PACKET_PTR_RECORD - htc packet ptr record
+ * @ADF_DP_TRACE_HIF_PACKET_PTR_RECORD - hif packet ptr record
+ * @ADF_DP_TRACE_RX_TXRX_PACKET_PTR_RECORD - txrx packet ptr record
+ * @ADF_DP_TRACE_MED_VERBOSITY - below this are part of med verbosity
+ * @ADF_DP_TRACE_HDD_TX_PACKET_RECORD - record 32 bytes at HDD
+ * @ADF_DP_TRACE_HDD_RX_PACKET_RECORD - record 32 bytes at HDD
+ * @ADF_DP_TRACE_HIGH_VERBOSITY - below this are part of high verbosity
  */
-
 enum  ADF_DP_TRACE_ID {
 	ADF_DP_TRACE_INVALID = 0,
 	ADF_DP_TRACE_DROP_PACKET_RECORD,
 	ADF_DP_TRACE_EAPOL_PACKET_RECORD,
 	ADF_DP_TRACE_DHCP_PACKET_RECORD,
 	ADF_DP_TRACE_ARP_PACKET_RECORD,
+	ADF_DP_TRACE_MGMT_PACKET_RECORD,
 	ADF_DP_TRACE_DEFAULT_VERBOSITY,
 	ADF_DP_TRACE_HDD_TX_TIMEOUT,
 	ADF_DP_TRACE_HDD_SOFTAP_TX_TIMEOUT,
 	ADF_DP_TRACE_HDD_TX_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_CE_PACKET_PTR_RECORD,
-	ADF_DP_TRACE_CE_FAST_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_FREE_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_RX_HTT_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_RX_OFFLOAD_HTT_PACKET_PTR_RECORD,
@@ -106,7 +117,6 @@ enum  ADF_DP_TRACE_ID {
 	ADF_DP_TRACE_LOW_VERBOSITY,
 	ADF_DP_TRACE_TXRX_QUEUE_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_TXRX_PACKET_PTR_RECORD,
-	ADF_DP_TRACE_TXRX_FAST_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_HTT_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_HTC_PACKET_PTR_RECORD,
 	ADF_DP_TRACE_HIF_PACKET_PTR_RECORD,
@@ -118,17 +128,39 @@ enum  ADF_DP_TRACE_ID {
 	ADF_DP_TRACE_MAX
 };
 
+/**
+ * adf_proto_dir - direction
+ * @ADF_TX: TX direction
+ * @ADF_RX: RX direction
+ * @ADF_NA: not applicable
+ */
 enum adf_proto_dir {
 	ADF_TX,
-	ADF_RX
+	ADF_RX,
+	ADF_NA
 };
 
+/**
+ * struct adf_dp_trace_ptr_buf - pointer record buffer
+ * @cookie: cookie value
+ * @msdu_id: msdu_id
+ * @status: completion status
+ */
 struct adf_dp_trace_ptr_buf {
 	uint64_t cookie;
 	uint16_t msdu_id;
 	uint16_t status;
 };
 
+/**
+ * struct adf_dp_trace_proto_buf - proto packet buffer
+ * @sa: source address
+ * @da: destination address
+ * @vdev_id : vdev id
+ * @type: packet type
+ * @subtype: packet subtype
+ * @dir: direction
+ */
 struct adf_dp_trace_proto_buf {
 	struct adf_mac_addr sa;
 	struct adf_mac_addr da;
@@ -138,6 +170,17 @@ struct adf_dp_trace_proto_buf {
 	uint8_t dir;
 };
 
+/**
+ * struct adf_dp_trace_mgmt_buf - mgmt packet buffer
+ * @vdev_id : vdev id
+ * @type: packet type
+ * @subtype: packet subtype
+ */
+struct adf_dp_trace_mgmt_buf {
+	uint8_t vdev_id;
+	uint8_t type;
+	uint8_t subtype;
+};
 
 /**
  * struct adf_dp_trace_record_s - Describes a record in DP trace
@@ -210,6 +253,27 @@ void adf_dp_trace_log_pkt(uint8_t session_id, struct sk_buff *skb,
 void adf_dp_trace_enable_live_mode(void);
 void adf_dp_trace_clear_buffer(void);
 
+/**
+ * adf_dp_trace_mgmt_pkt() - record mgmt packet
+ * @code: dptrace code
+ * @vdev_id: vdev id
+ * @type: proto type
+ * @subtype: proto subtype
+ *
+ * Return: none
+ */
+void adf_dp_trace_mgmt_pkt(enum ADF_DP_TRACE_ID code, uint8_t vdev_id,
+		enum adf_proto_type type, enum adf_proto_subtype subtype);
+
+/**
+ * adf_dp_display_mgmt_pkt() - display proto packet
+ * @record: dptrace record
+ * @index: index
+ *
+ * Return: none
+ */
+void adf_dp_display_mgmt_pkt(struct adf_dp_trace_record_s *record,
+			      uint16_t index);
 #else
 static inline void adf_dp_trace_init(void)
 {

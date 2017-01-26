@@ -76,7 +76,7 @@ void adf_dp_trace_init(void)
 	g_adf_dp_trace_data.tail = INVALID_ADF_DP_TRACE_ADDR;
 	g_adf_dp_trace_data.num = 0;
 	g_adf_dp_trace_data.proto_bitmap = NBUF_PKT_TRAC_TYPE_DHCP |
-			NBUF_PKT_TRAC_TYPE_EAPOL;
+			NBUF_PKT_TRAC_TYPE_EAPOL | NBUF_PKT_TRAC_TYPE_MGMT_ACTION;
 	g_adf_dp_trace_data.no_of_record = 0;
 	g_adf_dp_trace_data.verbosity    = ADF_DP_TRACE_VERBOSITY_LOW;
 	g_adf_dp_trace_data.enable = true;
@@ -85,13 +85,14 @@ void adf_dp_trace_init(void)
 		adf_dp_trace_cb_table[i] = adf_dp_display_record;
 
 	adf_dp_trace_cb_table[ADF_DP_TRACE_TXRX_PACKET_PTR_RECORD] =
-	adf_dp_trace_cb_table[ADF_DP_TRACE_TXRX_FAST_PACKET_PTR_RECORD] =
 	adf_dp_trace_cb_table[ADF_DP_TRACE_FREE_PACKET_PTR_RECORD] =
 				adf_dp_display_ptr_record;
 	adf_dp_trace_cb_table[ADF_DP_TRACE_EAPOL_PACKET_RECORD] =
 	adf_dp_trace_cb_table[ADF_DP_TRACE_DHCP_PACKET_RECORD] =
 	adf_dp_trace_cb_table[ADF_DP_TRACE_ARP_PACKET_RECORD] =
 				adf_dp_display_proto_pkt;
+	adf_dp_trace_cb_table[ADF_DP_TRACE_MGMT_PACKET_RECORD] =
+				adf_dp_display_mgmt_pkt;
 }
 
 /**
@@ -216,14 +217,14 @@ const char *adf_dp_code_to_string(enum ADF_DP_TRACE_ID code)
 		return "DHCP:";
 	case ADF_DP_TRACE_ARP_PACKET_RECORD:
 		return "ARP:";
+	case ADF_DP_TRACE_MGMT_PACKET_RECORD:
+		return "MGMT:";
 	case ADF_DP_TRACE_HDD_TX_PACKET_PTR_RECORD:
 		return "HDD: TX: PTR:";
 	case ADF_DP_TRACE_HDD_TX_PACKET_RECORD:
 		return "HDD: TX: DATA:";
 	case ADF_DP_TRACE_CE_PACKET_PTR_RECORD:
 		return "CE: TX: PTR:";
-	case ADF_DP_TRACE_CE_FAST_PACKET_PTR_RECORD:
-		return "CE: TX: FAST: PTR:";
 	case ADF_DP_TRACE_FREE_PACKET_PTR_RECORD:
 		return "FREE: TX: PTR:";
 	case ADF_DP_TRACE_RX_HTT_PACKET_PTR_RECORD:
@@ -238,8 +239,6 @@ const char *adf_dp_code_to_string(enum ADF_DP_TRACE_ID code)
 		return "TXRX: TX: Q: PTR:";
 	case ADF_DP_TRACE_TXRX_PACKET_PTR_RECORD:
 		return "TXRX: TX: PTR:";
-	case ADF_DP_TRACE_TXRX_FAST_PACKET_PTR_RECORD:
-		return "TXRX: TX: FAST: PTR:";
 	case ADF_DP_TRACE_HTT_PACKET_PTR_RECORD:
 		return "HTT: TX: PTR:";
 	case ADF_DP_TRACE_HTC_PACKET_PTR_RECORD:
@@ -290,6 +289,8 @@ const char *adf_dp_type_to_str(enum adf_proto_type type)
 		return "EAPOL";
 	case ADF_PROTO_TYPE_ARP:
 		return "ARP";
+	case ADF_PROTO_TYPE_MGMT:
+		return "MGMT";
 	default:
 		return "invalid";
 	}
@@ -332,6 +333,14 @@ const char *adf_dp_subtype_to_str(enum adf_proto_subtype subtype)
 		return "REQUEST";
 	case ADF_PROTO_ARP_RES:
 		return "RESPONSE";
+	case ADF_PROTO_MGMT_ASSOC:
+		return "ASSOC";
+	case ADF_PROTO_MGMT_DISASSOC:
+		return "DISASSOC";
+	case ADF_PROTO_MGMT_AUTH:
+		return "AUTH";
+	case ADF_PROTO_MGMT_DEAUTH:
+		return "DEAUTH";
 	default:
 		return "invalid";
 	}
@@ -599,6 +608,37 @@ void adf_dp_trace_proto_pkt(enum ADF_DP_TRACE_ID code, uint8_t vdev_id,
 	memcpy(&buf.sa, sa, ETH_ALEN);
 	memcpy(&buf.da, da, ETH_ALEN);
 	buf.dir = dir;
+	buf.type = type;
+	buf.subtype = subtype;
+	buf.vdev_id = vdev_id;
+	adf_dp_add_record(code, (uint8_t *)&buf, buf_size, true);
+}
+
+void adf_dp_display_mgmt_pkt(struct adf_dp_trace_record_s *record,
+			      uint16_t index)
+{
+	struct adf_dp_trace_mgmt_buf *buf =
+		(struct adf_dp_trace_mgmt_buf *)record->data;
+
+	adf_os_print("DPT: %04d: %012llu: %s vdev_id %d", index,
+		record->time, adf_dp_code_to_string(record->code),
+		buf->vdev_id);
+	adf_os_print("DPT: Type %s Subtype %s", adf_dp_type_to_str(buf->type),
+		adf_dp_subtype_to_str(buf->subtype));
+}
+
+void adf_dp_trace_mgmt_pkt(enum ADF_DP_TRACE_ID code, uint8_t vdev_id,
+		enum adf_proto_type type, enum adf_proto_subtype subtype)
+{
+	struct adf_dp_trace_mgmt_buf buf;
+	int buf_size = sizeof(struct adf_dp_trace_mgmt_buf);
+
+	if (adf_dp_enable_check(NULL, code, ADF_NA) == false)
+		return;
+
+	if (buf_size > ADF_DP_TRACE_RECORD_SIZE)
+		ADF_BUG(0);
+
 	buf.type = type;
 	buf.subtype = subtype;
 	buf.vdev_id = vdev_id;

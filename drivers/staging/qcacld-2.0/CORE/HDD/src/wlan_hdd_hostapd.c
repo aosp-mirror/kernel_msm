@@ -1794,6 +1794,10 @@ VOS_STATUS hdd_hostapd_SAPEventCB( tpSap_Event pSapEvent, v_PVOID_t usrDataForCa
             }
 #endif /* QCA_PKT_PROTO_TRACE */
 
+            DPTRACE(adf_dp_trace_mgmt_pkt(ADF_DP_TRACE_MGMT_PACKET_RECORD,
+                           pHostapdAdapter->sessionId,
+                           ADF_PROTO_TYPE_MGMT, ADF_PROTO_MGMT_ASSOC));
+
 #ifdef FEATURE_BUS_BANDWIDTH
             /* start timer in sap/p2p_go */
             if (pHddApCtx->bApActive == VOS_FALSE)
@@ -1916,6 +1920,11 @@ VOS_STATUS hdd_hostapd_SAPEventCB( tpSap_Event pSapEvent, v_PVOID_t usrDataForCa
                vos_pkt_trace_buf_update("HA:DISASC");
             }
 #endif /* QCA_PKT_PROTO_TRACE */
+
+            DPTRACE(adf_dp_trace_mgmt_pkt(ADF_DP_TRACE_MGMT_PACKET_RECORD,
+                           pHostapdAdapter->sessionId,
+                           ADF_PROTO_TYPE_MGMT, ADF_PROTO_MGMT_DISASSOC));
+
             hdd_softap_DeregisterSTA(pHostapdAdapter, staId);
 
             pHddApCtx->bApActive = VOS_FALSE;

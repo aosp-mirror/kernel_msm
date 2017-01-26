@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -72,6 +72,7 @@
 #include <wlan_logging_sock_svc.h>
 #include "tl_shim.h"
 #include "wlan_hdd_oemdata.h"
+#include "adf_trace.h"
 
 struct ether_addr
 {
@@ -986,6 +987,10 @@ static eHalStatus hdd_DisConnectHandler( hdd_adapter_t *pAdapter, tCsrRoamInfo *
      }
 #endif /* QCA_PKT_PROTO_TRACE */
 
+    DPTRACE(adf_dp_trace_mgmt_pkt(ADF_DP_TRACE_MGMT_PACKET_RECORD,
+                   pAdapter->sessionId,
+                   ADF_PROTO_TYPE_MGMT, ADF_PROTO_MGMT_DISASSOC));
+
     /* HDD has initiated disconnect, do not send disconnect indication
      * to kernel. Sending disconnected event to kernel for userspace
      * initiated disconnect will be handled by diconnect handler call
@@ -1819,6 +1824,11 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
            vos_pkt_trace_buf_update("ST:ASSOC");
         }
 #endif /* QCA_PKT_PROTO_TRACE */
+
+        DPTRACE(adf_dp_trace_mgmt_pkt(ADF_DP_TRACE_MGMT_PACKET_RECORD,
+                       pAdapter->sessionId,
+                       ADF_PROTO_TYPE_MGMT, ADF_PROTO_MGMT_ASSOC));
+
         //For reassoc, the station is already registered, all we need is to change the state
         //of the STA in TL.
         //If authentication is required (WPA/WPA2/DWEP), change TL to CONNECTED instead of AUTHENTICATED
