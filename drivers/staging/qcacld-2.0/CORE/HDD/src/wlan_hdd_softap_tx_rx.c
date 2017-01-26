@@ -270,6 +270,10 @@ int __hdd_softap_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
    while (skb) {
        skb_next = skb->next;
+       /* memset skb control block */
+       vos_mem_zero(skb->cb, sizeof(skb->cb));
+       wlan_hdd_classify_pkt(skb);
+
        pDestMacAddress = (v_MACADDR_t*)skb->data;
 
        if (vos_is_macaddr_broadcast( pDestMacAddress ) ||
@@ -355,9 +359,6 @@ int __hdd_softap_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
        ac = hdd_QdiscAcToTlAC[skb->queue_mapping];
        ++pAdapter->hdd_stats.hddTxRxStats.txXmitClassifiedAC[ac];
 
-       adf_dp_trace_log_pkt(pAdapter->sessionId, skb,
-                          WIFI_EVENT_DRIVER_EAPOL_FRAME_TRANSMIT_REQUESTED);
-
 #ifdef QCA_PKT_PROTO_TRACE
        if ((hddCtxt->cfg_ini->gEnableDebugLog & VOS_PKT_TRAC_TYPE_EAPOL) ||
            (hddCtxt->cfg_ini->gEnableDebugLog & VOS_PKT_TRAC_TYPE_DHCP))
@@ -397,7 +398,8 @@ int __hdd_softap_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
            list_tail->next = skb;
            list_tail = list_tail->next;
        }
-       vos_mem_zero(skb->cb, sizeof(skb->cb));
+
+       adf_dp_trace_log_pkt(pAdapter->sessionId, skb, ADF_TX);
        NBUF_SET_PACKET_TRACK(skb, NBUF_TX_PKT_DATA_TRACK);
        NBUF_UPDATE_TX_PKT_COUNT(skb, NBUF_TX_PKT_HDD);
 
