@@ -605,10 +605,14 @@ static int should_call_arch_setup_additional_pages(struct linux_binprm *bprm,
 
 		retval = kernel_read(bprm->file, elf_ppnt->p_offset,
 				     (char *)elf_pnotes, elf_ppnt->p_filesz);
-		if ((retval < 0) ||
-		    ((Elf64_Xword) retval != elf_ppnt->p_filesz)) {
+		if (retval < 0) {
 			kfree(elf_pnotes);
 			return retval;
+		}
+
+		if((Elf64_Xword) retval != elf_ppnt->p_filesz) {
+			kfree(elf_pnotes);
+			return -EIO;
 		}
 
 		/*
