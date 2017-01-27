@@ -16,9 +16,9 @@
 
 #ifndef __MNH_SM_CONFIG_A
 #define __MNH_SM_CONFIG_A
-#include "mnh-ddr-regconfig-100.h"
-#include "mnh-ddr-regconfig-400.h"
-#include "mnh-ddr-regconfig-600.h"
+
+#include "mnh-ddr-600.h"
+#include "mnh-ddr-33-300-600-400.h"
 
 static const struct mnh_mipi_conf mnh_mipi_configs[] = {
 	{
@@ -53,18 +53,23 @@ static struct mnh_ddr_state mnh_ddr_po_config = {
 		HWIO_DDR_PHY_BASE_ADDR,
 		HWIO_DDR_PI_BASE_ADDR
 	},
+#ifndef MNH_DDR_DO_FSP
 	.fsps = {
-		MNH_LP4_FREQ_BOOT,
-		MNH_LP4_FREQ_2400,
-		MNH_LP4_FREQ_2400,
-		MNH_LP4_FREQ_2400
+		0x100B007D,
+		0x0311007D,
+		0x0311007D,
+		0x0311007D
 	},
-	.configs = {
-		&mnh_ddr_600,
-		&mnh_ddr_600,
-		&mnh_ddr_600,
-		&mnh_ddr_600,
-	}
+	&mnh_ddr_600,
+#else
+	.fsps = {
+		0x100B007D,
+		0x0311007D,
+		0x0311007D,
+		0x0311007D
+	},
+	&mnh_ddr_33_300_600_400,
+#endif
 };
 
 struct mnh_sm_configuration sm_config_1 = {

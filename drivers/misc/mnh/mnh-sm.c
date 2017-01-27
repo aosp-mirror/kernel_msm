@@ -50,7 +50,8 @@
 #define INIT_DONE 0x1
 
 /* Firmware download address */
-#define HW_MNH_SBL_DOWNLOAD		0x40000000
+/* #define HW_MNH_SBL_DOWNLOAD		0x40000000 */
+#define HW_MNH_SBL_DOWNLOAD		0x00101000 /* push directly to sram */
 #define HW_MNH_SBL_DOWNLOAD_EXE		0x00101000
 #define HW_MNH_UBOOT_DOWNLOAD		0x40020000
 #define HW_MNH_KERNEL_DOWNLOAD		0x40080000
@@ -561,7 +562,7 @@ static ssize_t mnh_sm_clk_show(struct device *dev,
 	return ret;
 }
 
-static DEVICE_ATTR(supported_clk, S_IRUGO | S_IWUSR | S_IWGRP,
+static DEVICE_ATTR(supported_clk, S_IRUGO,
 		   mnh_sm_clk_show, NULL);
 
 static ssize_t mnh_sm_tx_show(struct device *dev,
@@ -569,16 +570,61 @@ static ssize_t mnh_sm_tx_show(struct device *dev,
 			char *buf,
 			unsigned int txdev)
 {
-	int ret = 0, pos = 0;
+	int ret = 0, pos = 0, sel;
 
+	sel = sm_config_1.tx_configs[txdev].conf_sel;
 	buf += pos;
-	pos = snprintf(buf, PAGE_SIZE, "tx%d sel: %d, rxdev %d\n",
+	pos = snprintf(buf, PAGE_SIZE,
+			"tx%d mipiconf: %d [%d], rxdev %d\n\n"
+			"To change: echo '<conf selection> <rxdev>\n"
+			"Example change to supported_clk 1 and RX0:\n"
+			"   echo '1 0'\n",
 			txdev,
-			sm_config_1.tx_configs[txdev].conf_sel,
+			sel,
+			sm_config_1.mipi_configs[sel].freq,
 			sm_config_1.tx_configs[txdev].rxdev);
 	buf += pos;
 	ret += pos;
 	return ret;
+}
+
+static ssize_t mnh_sm_tx_store(struct device *dev,
+			  struct device_attribute *attr,
+			  const char *buf,
+			  size_t count,
+			  unsigned int txdev)
+{
+	int sel, rxdev;
+	int ret;
+	char *token;
+	char *string;
+
+	/* Try to parse the tokens to get mode, and other pixels */
+	dev_info(mnh_sm_dev->dev, "%s parse\n", __func__);
+	string = kmalloc(count + 1, GFP_KERNEL);
+	if (string)
+		strlcpy(string, buf, count);
+	token = strsep(&string, " ");
+	dev_info(mnh_sm_dev->dev, "read token: %s\n", token);
+	if (token != NULL) {
+		ret = kstrtoint(token, 0, &sel);
+		dev_info(mnh_sm_dev->dev, "sel: %d, ret %d\n", sel, ret);
+		if (ret == 0)
+			sm_config_1.tx_configs[txdev].conf_sel = sel;
+	} else {
+		dev_err(mnh_sm_dev->dev, "Could not parse!\n");
+	}
+	token = strsep(&string, " ");
+	dev_info(mnh_sm_dev->dev, "read token: %s\n", token);
+	if (token != NULL) {
+		ret = kstrtoint(token, 0, &rxdev);
+		if (ret == 0)
+			sm_config_1.tx_configs[txdev].rxdev = rxdev;
+	} else {
+		dev_err(mnh_sm_dev->dev, "Could not parse!\n");
+	}
+
+	return count;
 }
 
 static ssize_t mnh_sm_tx0_show(struct device *dev,
@@ -594,10 +640,25 @@ static ssize_t mnh_sm_tx1_show(struct device *dev,
 	return mnh_sm_tx_show(dev, attr, buf, 1);
 }
 
+static ssize_t mnh_sm_tx0_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf,
+			size_t count)
+{
+	return mnh_sm_tx_store(dev, attr, buf, count, 0);
+}
+static ssize_t mnh_sm_tx1_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf,
+			size_t count)
+{
+	return mnh_sm_tx_store(dev, attr, buf, count, 1);
+}
+
 static DEVICE_ATTR(tx0, S_IRUGO | S_IWUSR | S_IWGRP,
-		   mnh_sm_tx0_show, NULL);
+		   mnh_sm_tx0_show, mnh_sm_tx0_store);
 static DEVICE_ATTR(tx1, S_IRUGO | S_IWUSR | S_IWGRP,
-		   mnh_sm_tx1_show, NULL);
+		   mnh_sm_tx1_show, mnh_sm_tx1_store);
 
 
 static struct attribute *mnh_sm_dev_attributes[] = {
