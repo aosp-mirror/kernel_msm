@@ -52,7 +52,7 @@ struct synaptics_dsx_button_map {
 	unsigned char nbuttons;
 	unsigned int *map;
 };
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 #define SYN_CFG_BLK_UNIT        (16)
 #define SYN_CONFIG_SIZE         (128 * SYN_CFG_BLK_UNIT)
 
@@ -123,7 +123,7 @@ struct synaptics_dsx_board_data {
 	const char *bus_reg_name;
 	struct synaptics_dsx_button_map *cap_button_map;
 	struct synaptics_dsx_button_map *vir_button_map;
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	int switch_gpio;
 	uint8_t update_feature;
 	uint16_t tw_pin_mask;

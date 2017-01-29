@@ -147,7 +147,7 @@
 
 #define PRODUCT_INFO_SIZE 2
 #define PRODUCT_ID_SIZE 10
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 #define CHIP_ID_SIZE 2
 #define SENSOR_ID_CHECKING_EN (1 << 16)
 #endif
@@ -182,7 +182,7 @@
 #define MASK_2BIT 0x03
 #define MASK_1BIT 0x01
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 #define SYNAPTICS_RMI4_UPDATE_NONE	0
 #define SYNAPTICS_RMI4_UPDATE_IMAGE	1
 #define SYNAPTICS_RMI4_UPDATE_CONFIG	2
@@ -319,14 +319,14 @@ struct synaptics_rmi4_device_info {
 	unsigned char product_props;
 	unsigned char product_info[PRODUCT_INFO_SIZE];
 	unsigned char product_id_string[PRODUCT_ID_SIZE + 1];
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	unsigned char package_id[CHIP_ID_SIZE];
 #endif
 	unsigned char build_id[BUILD_ID_SIZE];
 	struct list_head support_fn_list;
 };
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 struct synaptics_rmi4_noise_state {
 	uint16_t im;
 	uint16_t im_m;
@@ -337,7 +337,7 @@ struct synaptics_rmi4_noise_state {
 };
 #endif
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 struct synaptics_rmi4_report_points {
 	uint8_t state;
 	int finger_ind;
@@ -458,7 +458,7 @@ struct synaptics_rmi4_data {
 	unsigned short f51_query_base_addr;
 #endif
 	unsigned int firmware_id;
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	struct synaptics_rmi4_noise_state noise_state;
 	unsigned short f34_query_base_addr;
 	unsigned short f34_cmd_base_addr;

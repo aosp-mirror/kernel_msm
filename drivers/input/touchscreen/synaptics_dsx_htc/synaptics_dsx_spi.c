@@ -51,7 +51,7 @@ static unsigned char *buf;
 static struct spi_transfer *xfer;
 
 #ifdef CONFIG_OF
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 static int parse_config(struct device *dev,
 		struct synaptics_dsx_board_data *bdata)
 {
@@ -129,7 +129,7 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 	const char *name;
 	struct property *prop;
 	struct device_node *np = dev->of_node;
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	uint32_t coords[4] = {0};
 	int coords_size;
 #endif
@@ -230,7 +230,7 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 		bdata->reset_delay_ms = 0;
 	}
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	bdata->switch_gpio = of_get_named_gpio_flags(np,
 			"synaptics,switch-gpio", 0, NULL);
 	if (bdata->switch_gpio < 0) {
@@ -365,7 +365,7 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 		bdata->vir_button_map->map = NULL;
 	}
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	retval = of_property_read_u32(np, "synaptics,tw-pin-mask",
 			&value);
 	if (retval < 0)

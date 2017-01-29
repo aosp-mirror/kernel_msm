@@ -46,9 +46,6 @@
 #ifdef KERNEL_ABOVE_2_6_38
 #include <linux/input/mt.h>
 #endif
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
-#include <trace/events/power.h>
-#endif
 
 #define INPUT_PHYS_NAME "synaptics_dsx/touch_input"
 #define STYLUS_PHYS_NAME "synaptics_dsx/stylus"
@@ -95,7 +92,7 @@
 
 #define F01_STD_QUERY_LEN 21
 #define F01_BUID_ID_OFFSET 18
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 #define F01_CHIP_ID_OFFSET 17
 #endif
 
@@ -119,7 +116,7 @@
 #define F12_WAKEUP_GESTURE_MODE 0x02
 #define F12_UDG_DETECT 0x0f
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 #define V5V6_CONFIG_ID_SIZE 4
 #define V7_CONFIG_ID_SIZE 32
 #define SHIFT_BITS (10)
@@ -196,7 +193,7 @@ static ssize_t synaptics_rmi4_wake_gesture_show(struct device *dev,
 static ssize_t synaptics_rmi4_wake_gesture_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 static ssize_t synaptics_rmi4_wake_event_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 #endif
@@ -720,7 +717,7 @@ struct synaptics_rmi4_f1a_handle {
 	struct synaptics_rmi4_f1a_control button_control;
 };
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 struct synaptics_rmi4_f54_query {
 	union {
 		struct {
@@ -908,7 +905,7 @@ static struct device_attribute attrs[] = {
 	__ATTR(wake_gesture, (S_IRUGO | S_IWUSR | S_IWGRP),
 			synaptics_rmi4_wake_gesture_show,
 			synaptics_rmi4_wake_gesture_store),
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	__ATTR(wake_event, (S_IRUGO),
 			synaptics_rmi4_wake_event_show,
 			synaptics_rmi4_store_error),
@@ -1100,7 +1097,7 @@ static ssize_t synaptics_rmi4_wake_gesture_store(struct device *dev,
 	return count;
 }
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 static ssize_t synaptics_rmi4_wake_event_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -1108,7 +1105,7 @@ static ssize_t synaptics_rmi4_wake_event_show(struct device *dev,
 }
 #endif
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 static ssize_t synaptics_reset_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -1455,7 +1452,7 @@ static ssize_t synaptics_rmi4_virtual_key_map_show(struct kobject *kobj,
 	return count;
 }
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 static void report_wake_event(struct synaptics_rmi4_data *rmi4_data)
 {
 	sysfs_notify(&rmi4_data->input_dev->dev.kobj, NULL, "wake_event");
@@ -1660,7 +1657,7 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 				x = rmi4_data->sensor_max_x - x;
 			if (rmi4_data->hw_if->board_data->y_flip)
 				y = rmi4_data->sensor_max_y - y;
-#ifndef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if !IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 			input_report_key(rmi4_data->input_dev,
 					BTN_TOUCH, 1);
 			input_report_key(rmi4_data->input_dev,
@@ -1672,7 +1669,7 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 					ABS_MT_POSITION_Y, y);
 #ifdef REPORT_2D_W
 			input_report_abs(rmi4_data->input_dev,
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 					ABS_MT_TOUCH_MAJOR, synaptics_sqrt(wx*wx + wy*wy));
 #else
 					ABS_MT_TOUCH_MAJOR, max(wx, wy));
@@ -1695,7 +1692,7 @@ static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	}
 
 	if (touch_count == 0) {
-#ifndef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if !IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 		input_report_key(rmi4_data->input_dev,
 				BTN_TOUCH, 0);
 		input_report_key(rmi4_data->input_dev,
@@ -1751,7 +1748,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 #ifdef F12_DATA_15_WORKAROUND
 	static unsigned char objects_already_present;
 #endif
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	int state = 0;
 #endif
 
@@ -1773,7 +1770,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 		if (gesture_type && gesture_type != F12_UDG_DETECT) {
 			dev_info(rmi4_data->pdev->dev.parent, "%s, Double-Tap wake up\n",
 					__func__);
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 			report_wake_event(rmi4_data);
 #else
 			input_report_key(rmi4_data->input_dev, KEY_WAKEUP, 1);
@@ -1851,7 +1848,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	mutex_lock(&(rmi4_data->rmi4_report_mutex));
 
 	for (finger = 0; finger < fingers_to_process; finger++) {
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 		if (debug_mask & BIT(3))
 			rmi4_data->report_points[finger].finger_ind = 0;
 #endif
@@ -1894,7 +1891,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			input_mt_report_slot_state(rmi4_data->input_dev,
 					MT_TOOL_FINGER, 1);
 #endif
-#ifndef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if !IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 			input_report_key(rmi4_data->input_dev,
 					BTN_TOUCH, 1);
 			input_report_key(rmi4_data->input_dev,
@@ -1913,7 +1910,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			} else {
 				input_report_abs(rmi4_data->input_dev,
 						ABS_MT_TOUCH_MAJOR,
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 						synaptics_sqrt(wx*wx + wy*wy));
 #else
 						max(wx, wy));
@@ -1965,7 +1962,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			input_mt_sync(rmi4_data->input_dev);
 #endif
 
-#ifndef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if !IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 			dev_dbg(rmi4_data->pdev->dev.parent,
 					"%s: Finger %d: status = 0x%02x, x = %d, y = %d, wx = %d, wy = %d\n",
 					__func__, finger,
@@ -1974,7 +1971,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 #endif
 
 			finger_presence = 1;
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 			if(debug_mask & BIT(1))
 				if (rmi4_data->width_factor && rmi4_data->height_factor)
 					pr_info("%s: Finger %d: status = 0x%02x, x = %d, y = %d, wx = %d, wy = %d\n",
@@ -2050,7 +2047,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 #endif
 			if(rmi4_data->report_pressure == true)
 				input_report_abs(rmi4_data->input_dev, ABS_MT_PRESSURE, 0);
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 			if (debug_mask & BIT(3)) {
 				state = 0;
 				if (rmi4_data->report_points[finger].state != state) {
@@ -2071,7 +2068,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 #ifdef F12_DATA_15_WORKAROUND
 		objects_already_present = 0;
 #endif
-#ifndef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if !IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 		input_report_key(rmi4_data->input_dev,
 				BTN_TOUCH, 0);
 		input_report_key(rmi4_data->input_dev,
@@ -2096,7 +2093,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 
 		if(rmi4_data->report_pressure == true)
 			input_report_abs(rmi4_data->input_dev, ABS_MT_PRESSURE, 0);
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 		if (debug_mask & BIT(3)) {
 			for (finger = 0; finger < fingers_to_process; finger++) {
 				state = 0;
@@ -2114,17 +2111,13 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 
 	input_sync(rmi4_data->input_dev);
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	if (debug_mask & BIT(2)) {
 		getnstimeofday(&time_end);
 		time_delta.tv_nsec = (time_end.tv_sec*1000000000+time_end.tv_nsec)
 			-(time_start.tv_sec*1000000000+time_start.tv_nsec);
 		pr_info("Touch latency = %ld us\n", time_delta.tv_nsec/1000);
 	}
-
-	if (debug_mask & BIT(4))
-		if (rmi4_data->width_factor && rmi4_data->height_factor)
-			trace_clock_set_rate("tp_report", (rmi4_data->report_points[0].y*rmi4_data->height_factor)>>SHIFT_BITS, -4);
 
 	if (debug_mask & BIT(3)) {
 		for (finger = 0; finger < fingers_to_process; finger++) {
@@ -2154,7 +2147,7 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	}
 #endif
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	synaptics_rmi4_get_noise_state(rmi4_data);
 #endif
 
@@ -2267,7 +2260,7 @@ static void synaptics_rmi4_f1a_report(struct synaptics_rmi4_data *rmi4_data,
 	return;
 }
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 static void synaptics_rmi4_f54_report(struct synaptics_rmi4_data *rmi4_data)
 {
 	int ret, size;
@@ -2349,7 +2342,7 @@ static void synaptics_rmi4_report_touch(struct synaptics_rmi4_data *rmi4_data,
 	case SYNAPTICS_RMI4_F1A:
 		synaptics_rmi4_f1a_report(rmi4_data, fhandler);
 		break;
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	case SYNAPTICS_RMI4_F54:
 		synaptics_rmi4_f54_report(rmi4_data);
 		break;
@@ -2469,7 +2462,7 @@ static irqreturn_t synaptics_rmi4_irq(int irq, void *data)
 	if (gpio_get_value(bdata->irq_gpio) != bdata->irq_on_state)
 		goto exit;
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	if (debug_mask & BIT(2)) {
 		getnstimeofday(&time_start);
 	}
@@ -2521,7 +2514,7 @@ static int synaptics_rmi4_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 {
 	int retval = 0;
 	unsigned char data[MAX_INTR_REGISTERS];
-#ifndef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if !IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	const struct synaptics_dsx_board_data *bdata =
 			rmi4_data->hw_if->board_data;
 #endif
@@ -2557,7 +2550,7 @@ static int synaptics_rmi4_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 			goto exit;
 		}
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 		enable_irq(rmi4_data->irq);
 #else
 		retval = request_threaded_irq(rmi4_data->irq, NULL,
@@ -2579,7 +2572,7 @@ static int synaptics_rmi4_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 	} else {
 		if (rmi4_data->irq_enabled) {
 			disable_irq(rmi4_data->irq);
-#ifndef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if !IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 			free_irq(rmi4_data->irq, rmi4_data);
 #endif
 			rmi4_data->irq_enabled = false;
@@ -2697,7 +2690,7 @@ static int synaptics_rmi4_f11_init(struct synaptics_rmi4_data *rmi4_data,
 			rmi4_data->sensor_max_x,
 			rmi4_data->sensor_max_y);
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	if (bdata->display_width && bdata->display_height
 			&& rmi4_data->sensor_max_x && rmi4_data->sensor_max_y) {
 
@@ -2708,7 +2701,7 @@ static int synaptics_rmi4_f11_init(struct synaptics_rmi4_data *rmi4_data,
 	}
 #endif
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	rmi4_data->max_touch_width = synaptics_sqrt(
 			MAX_F11_TOUCH_WIDTH * MAX_F11_TOUCH_WIDTH * 2);
 #else
@@ -3366,7 +3359,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		rmi4_data->sensor_max_y =
 				((unsigned int)ctrl_8->max_y_coord_lsb << 0) |
 				((unsigned int)ctrl_8->max_y_coord_msb << 8);
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 		rmi4_data->num_of_rx = ctrl_8->num_of_rx;
 		rmi4_data->num_of_tx = ctrl_8->num_of_tx;
 
@@ -3397,7 +3390,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		rmi4_data->max_touch_width = MAX_F12_TOUCH_WIDTH;
 	}
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	dev_info(rmi4_data->pdev->dev.parent,
 			"%s: Function %02x max x = %d max y = %d Rx: %d Tx: %d\n",
 			__func__, fhandler->fn_number,
@@ -3413,7 +3406,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 			rmi4_data->sensor_max_y);
 #endif
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	if (bdata->display_width && bdata->display_height
 			&& rmi4_data->sensor_max_x && rmi4_data->sensor_max_y) {
 		dev_info(rmi4_data->pdev->dev.parent, "%s Load display resolution: %dx%d\n",
@@ -3495,7 +3488,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		goto exit;
 	}
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	if (rmi4_data->temp_report_data != NULL)
 		kfree(rmi4_data->temp_report_data);
 	if (rmi4_data->report_data != NULL)
@@ -3709,7 +3702,7 @@ error_exit:
 	return retval;
 }
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 static int synaptics_rmi4_f34_init(struct synaptics_rmi4_data *rmi4_data,
 		struct synaptics_rmi4_fn *fhandler,
 		struct synaptics_rmi4_fn_desc *fd,
@@ -4033,7 +4026,7 @@ static int synaptics_rmi4_query_device(struct synaptics_rmi4_data *rmi4_data)
 	unsigned char intr_count;
 	unsigned char *f01_query;
 	unsigned short pdt_entry_addr;
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	uint8_t data[32]={0};
 	unsigned char ii;
 	unsigned char config_id_size;
@@ -4188,7 +4181,7 @@ rescan_pdt:
 #endif
 				}
 				break;
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 			case SYNAPTICS_RMI4_F34:
 				if (rmi_fd.intr_src_count == 0)
 					break;
@@ -4349,7 +4342,7 @@ flash_prog_mode:
 
 	memset(rmi4_data->intr_mask, 0x00, sizeof(rmi4_data->intr_mask));
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	retval = synaptics_rmi4_reg_read(rmi4_data,
 			rmi4_data->f01_query_base_addr + F01_CHIP_ID_OFFSET,
 			rmi->package_id,
@@ -4491,7 +4484,7 @@ static void synaptics_rmi4_set_params(struct synaptics_rmi4_data *rmi4_data)
 		input_mt_destroy_slots(rmi4_data->input_dev);
 #ifdef KERNEL_ABOVE_3_6
 	input_mt_init_slots(rmi4_data->input_dev,
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 			rmi4_data->num_of_fingers, 0);
 #else
 			rmi4_data->num_of_fingers, INPUT_MT_DIRECT);
@@ -4569,7 +4562,7 @@ static int synaptics_rmi4_set_input_dev(struct synaptics_rmi4_data *rmi4_data)
 	set_bit(EV_SYN, rmi4_data->input_dev->evbit);
 	set_bit(EV_KEY, rmi4_data->input_dev->evbit);
 	set_bit(EV_ABS, rmi4_data->input_dev->evbit);
-#ifndef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if !IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	set_bit(BTN_TOUCH, rmi4_data->input_dev->keybit);
 	set_bit(BTN_TOOL_FINGER, rmi4_data->input_dev->keybit);
 #endif
@@ -4760,7 +4753,7 @@ static int synaptics_rmi4_set_gpio(struct synaptics_rmi4_data *rmi4_data)
 		}
 	}
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	if (bdata->switch_gpio >= 0) {
 		retval = synaptics_rmi4_gpio_setup(
 				bdata->switch_gpio,
@@ -4788,7 +4781,7 @@ static int synaptics_rmi4_set_gpio(struct synaptics_rmi4_data *rmi4_data)
 
 	return 0;
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 err_gpio_switch:
 	if (bdata->switch_gpio >= 0)
 		synaptics_rmi4_gpio_setup(bdata->switch_gpio, false, 0, 0);
@@ -4915,13 +4908,13 @@ static int synaptics_rmi4_free_fingers(struct synaptics_rmi4_data *rmi4_data)
 		input_mt_slot(rmi4_data->input_dev, ii);
 		input_mt_report_slot_state(rmi4_data->input_dev,
 				MT_TOOL_FINGER, 0);
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 		if (debug_mask & BIT(3))
 			rmi4_data->report_points[ii].state = 0;
 #endif
 	}
 #endif
-#ifndef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if !IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	input_report_key(rmi4_data->input_dev,
 			BTN_TOUCH, 0);
 	input_report_key(rmi4_data->input_dev,
@@ -5366,7 +5359,7 @@ exit:
 }
 EXPORT_SYMBOL(synaptics_rmi4_new_function);
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 static int check_chip_exist(struct synaptics_rmi4_data *rmi4_data)
 {
 	unsigned char data;
@@ -5479,7 +5472,7 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 		}
 	}
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	retval = check_chip_exist(rmi4_data);
 	if (retval < 0) {
 		dev_info(&pdev->dev, "%s: No Synaptics chip\n", __func__);
@@ -5520,7 +5513,7 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 
 	rmi4_data->irq = gpio_to_irq(bdata->irq_gpio);
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	retval = request_threaded_irq(rmi4_data->irq, NULL,
 			synaptics_rmi4_irq, bdata->irq_flags,
 			PLATFORM_DRIVER_NAME, rmi4_data);
@@ -5564,7 +5557,7 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 			}
 		}
 	}
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	retval = synaptics_rmi4_sysfs_init(rmi4_data, true);
 	if (retval < 0) {
 		dev_err(&pdev->dev,
@@ -5594,7 +5587,7 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 			create_singlethread_workqueue("dsx_rebuild_workqueue");
 	INIT_DELAYED_WORK(&rmi4_data->rb_work, synaptics_rmi4_rebuild_work);
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	rmi4_data->diag_command = READ_RAW_DATA;
 	rmi4_data->noise_state.im_m = 0;
 	rmi4_data->noise_state.cidim_m = 0;
@@ -5624,7 +5617,7 @@ err_sysfs:
 				&attrs[attr_count].attr);
 	}
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 err_sysfs_init:
 	synaptics_rmi4_sysfs_init(rmi4_data, false);
 #endif
@@ -5639,7 +5632,7 @@ err_virtual_buttons:
 	synaptics_rmi4_irq_enable(rmi4_data, false, false);
 
 err_enable_irq:
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	free_irq(rmi4_data->irq, rmi4_data);
 err_request_irq:
 #endif
@@ -5653,7 +5646,7 @@ err_request_irq:
 
 	synaptics_rmi4_empty_fn_list(rmi4_data);
 	input_unregister_device(rmi4_data->input_dev);
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	if (rmi4_data->temp_report_data != NULL)
 		kfree(rmi4_data->temp_report_data);
 	if (rmi4_data->report_data != NULL)
@@ -5668,7 +5661,7 @@ err_request_irq:
 err_set_input_dev:
 	synaptics_rmi4_gpio_setup(bdata->irq_gpio, false, 0, 0);
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	if (bdata->switch_gpio >= 0)
 		synaptics_rmi4_gpio_setup(bdata->switch_gpio, false, 0, 0);
 #endif
@@ -5721,7 +5714,7 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 				&attrs[attr_count].attr);
 	}
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	synaptics_rmi4_sysfs_init(rmi4_data, false);
 #endif
 
@@ -5732,7 +5725,7 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 	}
 
 	synaptics_rmi4_irq_enable(rmi4_data, false, false);
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	free_irq(rmi4_data->irq, rmi4_data);
 #endif
 
@@ -5744,7 +5737,7 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 	unregister_early_suspend(&rmi4_data->early_suspend);
 #endif
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	if (rmi4_data->temp_report_data != NULL)
 		kfree(rmi4_data->temp_report_data);
 	if (rmi4_data->report_data != NULL)
@@ -5760,7 +5753,7 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 
 	synaptics_rmi4_gpio_setup(bdata->irq_gpio, false, 0, 0);
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	if (bdata->switch_gpio >= 0)
 		synaptics_rmi4_gpio_setup(bdata->switch_gpio, false, 0, 0);
 #endif

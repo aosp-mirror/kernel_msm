@@ -41,7 +41,7 @@
 #include <linux/platform_device.h>
 #include <linux/input/synaptics_dsx_v2_6.h>
 #include "synaptics_dsx_core.h"
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 #include <linux/wakelock.h>
 #endif
 
@@ -272,7 +272,7 @@ enum v5v6_flash_command {
 	CMD_V5V6_READ_CONFIG = 0x5,
 	CMD_V5V6_WRITE_CONFIG = 0x6,
 	CMD_V5V6_ERASE_UI_CONFIG = 0x7,
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	CMD_V5V6_SENSOR_ID = 0x8,
 #endif
 	CMD_V5V6_ERASE_BL_CONFIG = 0x9,
@@ -301,7 +301,7 @@ enum flash_command {
 	CMD_ERASE_BOOTLOADER,
 	CMD_ERASE_UTILITY_PARAMETER,
 	CMD_ENABLE_FLASH_PROG,
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	CMD_READ_SENSOR_ID,
 #endif
 };
@@ -702,7 +702,7 @@ struct synaptics_rmi4_fwu_handle {
 	struct synaptics_rmi4_data *rmi4_data;
 	struct workqueue_struct *fwu_workqueue;
 	struct work_struct fwu_work;
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	struct wake_lock fwu_wake_lock;
 #endif
 };
@@ -768,7 +768,7 @@ static struct device_attribute attrs[] = {
 static struct synaptics_rmi4_fwu_handle *fwu;
 
 DECLARE_COMPLETION(fwu_remove_complete);
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 static uint32_t syn_crc(uint16_t *data, uint32_t len)
 {
 	uint32_t sum1, sum2;
@@ -1562,7 +1562,7 @@ static int fwu_write_f34_v7_command(unsigned char cmd)
 	case CMD_ENABLE_FLASH_PROG:
 		command = CMD_V7_ENTER_BL;
 		break;
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	case CMD_READ_SENSOR_ID:
 		command = CMD_V7_SENSOR_ID;
 		break;
@@ -1653,7 +1653,7 @@ static int fwu_write_f34_v5v6_command(unsigned char cmd)
 	case CMD_ENABLE_FLASH_PROG:
 		command = CMD_V5V6_ENABLE_FLASH_PROG;
 		break;
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	case CMD_READ_SENSOR_ID:
 		command = CMD_V5V6_SENSOR_ID;
 		break;
@@ -1776,7 +1776,7 @@ static int fwu_write_f34_v7_partition_id(unsigned char cmd)
 	case CMD_ENABLE_FLASH_PROG:
 		partition = BOOTLOADER_PARTITION;
 		break;
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	case CMD_READ_SENSOR_ID:
 		partition = BOOTLOADER_PARTITION;
 		break;
@@ -3497,7 +3497,7 @@ static int fwu_write_bl_area_v7(void)
 }
 #endif
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 static int fwu_get_tw_vendor_v7(void)
 {
 	int retval;
@@ -4358,7 +4358,7 @@ static int fwu_start_reflash(void)
 		}
 	}
 #endif
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	if (fwu->bootloader_id[1] != fwu->img.bootloader.data[0] ||
 		fwu->bootloader_id[0] != fwu->img.bootloader.data[1]) {
 		dev_err(rmi4_data->pdev->dev.parent,
@@ -4836,7 +4836,7 @@ exit:
 	return retval;
 }
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 static int fwu_do_write_config(uint8_t *config_data)
 {
 	fwu->config_area = UI_CONFIG_AREA;
@@ -4872,7 +4872,7 @@ int synaptics_fw_updater(const unsigned char *fw_data)
 EXPORT_SYMBOL(synaptics_fw_updater);
 
 #ifdef DO_STARTUP_FW_UPDATE
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 int synaptics_config_updater(struct synaptics_dsx_board_data *bdata)
 {
 	int retval, i, ii;
@@ -5063,7 +5063,7 @@ static void fwu_startup_fw_update_work(struct work_struct *work)
 	unsigned int timeout;
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
 #endif
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	struct synaptics_dsx_board_data *bdata = fwu->rmi4_data->hw_if->board_data;
 	unsigned char *fw_source = NULL;
 #endif
@@ -5087,7 +5087,7 @@ static void fwu_startup_fw_update_work(struct work_struct *work)
 	}
 #endif
 
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	wake_lock(&fwu->fwu_wake_lock);
 	if (bdata->update_feature & SYNAPTICS_RMI4_UPDATE_IMAGE)
 		synaptics_fw_updater(fw_source);
@@ -5586,7 +5586,7 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 	}
 
 #ifdef DO_STARTUP_FW_UPDATE
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	wake_lock_init(&fwu->fwu_wake_lock, WAKE_LOCK_SUSPEND, "fwu_wake_lock");
 #endif
 	fwu->fwu_workqueue = create_singlethread_workqueue("fwu_workqueue");
@@ -5636,7 +5636,7 @@ static void synaptics_rmi4_fwu_remove(struct synaptics_rmi4_data *rmi4_data)
 	cancel_work_sync(&fwu->fwu_work);
 	flush_workqueue(fwu->fwu_workqueue);
 	destroy_workqueue(fwu->fwu_workqueue);
-#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	wake_lock_destroy(&fwu->fwu_wake_lock);
 #endif
 #endif
