@@ -167,6 +167,10 @@
 	hw-config = "split_dsi";
 };
 
+&mdss_fb0 {
+	qcom,mdss-mixer-swap;
+};
+
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_jdi_novatek_nt36860>; /* for synaptic panel use &dsi_jdi_synaptics_r63450 */
 	pinctrl-names = "mdss_default", "mdss_sleep";
