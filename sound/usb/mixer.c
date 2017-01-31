@@ -203,6 +203,12 @@ static int snd_usb_copy_string_desc(struct mixer_build *state,
 				    int index, char *buf, int maxlen)
 {
 	int len = usb_string(state->chip->dev, index, buf, maxlen - 1);
+	if (len < 0) {
+		usb_audio_err(state->chip,
+			      "cannot copy usb string desc for index %d, rc=%d\n",
+			      index, len);
+		len = 0;
+	}
 	buf[len] = 0;
 	return len;
 }
