@@ -82,7 +82,7 @@ struct mnh_sm_device {
 static struct mnh_sm_device *mnh_sm_dev;
 static hotplug_cb_t mnh_hotplug_cb;
 static int mnh_state;
-static int mnh_sm_uboot = 1;
+static int mnh_sm_uboot;
 
 static ssize_t mnh_sm_poweron_show(struct device *dev,
 			     struct device_attribute *attr,

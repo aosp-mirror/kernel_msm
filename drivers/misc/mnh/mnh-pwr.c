@@ -18,10 +18,14 @@
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/machine.h>
+#include <linux/interrupt.h>
 #include <linux/msm_pcie.h>
 #include <linux/regulator/consumer.h>
 
 #include "mnh-pwr.h"
+
+/* defines the timeout in jiffies for ready signal assertion */
+#define MNH_READY_TIMEOUT msecs_to_jiffies(250)
 
 #define MNH_PCIE_RC_INDEX 0
 #define MNH_PCIE_VENDOR_ID  0x8086
@@ -52,8 +56,14 @@ struct mnh_pwr_data {
 	struct gpio_desc *ddr_pad_iso_n_pin;
 	struct gpio_desc *ready_pin;
 
+	/* irqs */
+	unsigned int ready_irq;
+
 	/* pcie device */
 	struct pci_dev *pcidev;
+
+	/* completion used for easel ready signal */
+	struct completion ready_complete;
 
 	enum mnh_pwr_state state;
 };
@@ -141,21 +151,21 @@ static int mnh_pwr_pcie_resume(void)
 		}
 
 		pcidev = mnh_pwr->pcidev;
-	}
+	} else {
+		ret = msm_pcie_pm_control(MSM_PCIE_RESUME, pcidev->bus->number,
+					  pcidev, NULL, PM_OPT_RESUME);
+		if (ret) {
+			dev_err(mnh_pwr->dev,
+				"%s: msm_pcie_pm_control(RESUME) failed (%d)\n",
+				__func__, ret);
+		}
 
-	ret = msm_pcie_pm_control(MSM_PCIE_RESUME, pcidev->bus->number,
-				  pcidev, NULL, MSM_PCIE_CONFIG_NO_CFG_RESTORE);
-	if (ret) {
-		dev_err(mnh_pwr->dev,
-			"%s: msm_pcie_pm_control(RESUME) failed (%d)\n",
-			__func__, ret);
-	}
-
-	ret = msm_pcie_recover_config(pcidev);
-	if (ret) {
-		dev_err(mnh_pwr->dev,
-			"%s: msm_pcie_recover_config failed (%d)\n",
-			__func__, ret);
+		ret = msm_pcie_recover_config(pcidev);
+		if (ret) {
+			dev_err(mnh_pwr->dev,
+				"%s: msm_pcie_recover_config failed (%d)\n",
+				__func__, ret);
+		}
 	}
 
 	/* Disable L1 */
@@ -185,7 +195,7 @@ static int mnh_pwr_pcie_resume(void)
 static void mnh_pwr_down(void)
 {
 	/* assert ddr_pad_iso_n */
-	gpiod_set_value_cansleep(mnh_pwr->ddr_pad_iso_n_pin, 0);
+	gpiod_set_value_cansleep(mnh_pwr->ddr_pad_iso_n_pin, 1);
 
 	/* suspend pcie link */
 	mnh_pwr_pcie_suspend();
@@ -232,7 +242,7 @@ static void mnh_pwr_suspend(void)
 
 static void mnh_pwr_up(void)
 {
-	int ready = 0, ret;
+	int ret, timeout;
 
 	/* enable supplies */
 	ret = regulator_enable(mnh_pwr->ioldo_supply);
@@ -252,10 +262,17 @@ static void mnh_pwr_up(void)
 	/* assert soc_pwr_good */
 	gpiod_set_value_cansleep(mnh_pwr->soc_pwr_good_pin, 1);
 
-	/* wait for ready */
-	do {
-		ready = gpiod_get_value(mnh_pwr->ready_pin);
-	} while (!ready);
+	/* wait for easel to assert ready */
+	reinit_completion(&mnh_pwr->ready_complete);
+	timeout = wait_for_completion_timeout(&mnh_pwr->ready_complete,
+					      MNH_READY_TIMEOUT);
+	if (timeout <= 0) {
+		ret = (timeout == 0) ? -ETIMEDOUT : timeout;
+		dev_err(mnh_pwr->dev,
+			"error waiting for device to assert ready (%d)\n",
+			ret);
+		/* TODO: return and handle error */
+	}
 
 	/* resume pcie link */
 	mnh_pwr_pcie_resume();
@@ -328,6 +345,9 @@ static int mnh_pwr_get_resources(void)
 		return PTR_ERR(mnh_pwr->ready_pin);
 	}
 
+	/* request irqs */
+	mnh_pwr->ready_irq = gpiod_to_irq(mnh_pwr->ready_pin);
+
 	/* request clocks */
 	mnh_pwr->ref_clk = devm_clk_get(dev, "ref_clk");
 	if (IS_ERR(mnh_pwr->ref_clk)) {
@@ -344,6 +364,15 @@ static int mnh_pwr_get_resources(void)
 	}
 
 	return 0;
+}
+
+static irqreturn_t mnh_pwr_ready_irq_handler(int irq, void *cookie)
+{
+	struct mnh_pwr_data *_mnh_pwr = (struct mnh_pwr_data *)cookie;
+
+	complete(&_mnh_pwr->ready_complete);
+
+	return IRQ_HANDLED;
 }
 
 int mnh_pwr_set_state(enum mnh_pwr_state system_state)
@@ -386,7 +415,6 @@ enum mnh_pwr_state mnh_pwr_get_state(void)
 }
 EXPORT_SYMBOL_GPL(mnh_pwr_get_state);
 
-
 int mnh_pwr_init(struct device *dev)
 {
 	int ret;
@@ -410,11 +438,23 @@ int mnh_pwr_init(struct device *dev)
 		return ret;
 	}
 
+	/* request irq for ready pin */
+	ret = devm_request_threaded_irq(dev, mnh_pwr->ready_irq, NULL,
+					mnh_pwr_ready_irq_handler,
+					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+					"easel-ready", mnh_pwr);
+
+	/* initialize easel ready completion */
+	init_completion(&mnh_pwr->ready_complete);
+
+	/* TODO: temporarily disable until pcie resume sequence is finished */
+#if 0
 	/* power on the device, but do not resume pcie link */
 	mnh_pwr_up();
 
 	/* power down the device */
 	mnh_pwr_down();
+#endif
 
 	return 0;
 }

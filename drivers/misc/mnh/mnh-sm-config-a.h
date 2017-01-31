@@ -38,11 +38,11 @@ static const struct mnh_mipi_conf mnh_mipi_configs[] = {
 static struct mnh_tx_conf mnh_tx_configs[] = {
 	{
 	.rxdev = MNH_MUX_DEVICE_RX0,
-	.conf_sel = 0,
+	.conf_sel = 1,
 	},
 	{
 	.rxdev = MNH_MUX_DEVICE_RX1,
-	.conf_sel = 0,
+	.conf_sel = 1,
 	},
 
 };
