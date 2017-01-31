@@ -513,7 +513,6 @@ int binder_alloc_mmap_handler(struct binder_alloc *alloc,
 	alloc->buffer = area->addr;
 	WRITE_ONCE(alloc->user_buffer_offset,
 			vma->vm_start - (uintptr_t)alloc->buffer);
-	mutex_unlock(&alloc->mutex);
 
 #ifdef CONFIG_CPU_CACHE_VIPT
 	if (cache_is_vipt_aliasing()) {
@@ -552,6 +551,7 @@ int binder_alloc_mmap_handler(struct binder_alloc *alloc,
 	barrier();
 	alloc->vma = vma;
 	alloc->vma_vm_mm = vma->vm_mm;
+	mutex_unlock(&alloc->mutex);
 
 	return 0;
 
@@ -559,7 +559,6 @@ err_alloc_small_buf_failed:
 	kfree(alloc->pages);
 	alloc->pages = NULL;
 err_alloc_pages_failed:
-	mutex_lock(&alloc->mutex);
 	vfree(alloc->buffer);
 	alloc->buffer = NULL;
 err_get_vm_area_failed:
@@ -591,7 +590,6 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 		binder_free_buf_locked(alloc, buffer);
 		buffers++;
 	}
-	mutex_unlock(&alloc->mutex);
 
 	page_count = 0;
 	if (alloc->pages) {
@@ -614,6 +612,7 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 		kfree(alloc->pages);
 		vfree(alloc->buffer);
 	}
+	mutex_unlock(&alloc->mutex);
 
 	binder_alloc_debug(BINDER_DEBUG_OPEN_CLOSE,
 		     "%s: %d buffers %d, pages %d\n",
@@ -656,8 +655,10 @@ int binder_alloc_get_allocated_count(struct binder_alloc *alloc)
 
 void binder_alloc_vma_close(struct binder_alloc *alloc)
 {
+	mutex_lock(&alloc->mutex);
 	alloc->vma = NULL;
 	alloc->vma_vm_mm = NULL;
+	mutex_unlock(&alloc->mutex);
 }
 
 void binder_alloc_init(struct binder_alloc *alloc)

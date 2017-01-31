@@ -86,7 +86,12 @@ extern void binder_alloc_print_allocated(struct seq_file *m,
 static inline size_t
 binder_alloc_get_free_async_space(struct binder_alloc *alloc)
 {
-	return alloc->free_async_space;
+	size_t free_async_space;
+
+	mutex_lock(&alloc->mutex);
+	free_async_space = alloc->free_async_space;
+	mutex_unlock(&alloc->mutex);
+	return free_async_space;
 }
 
 static inline ptrdiff_t
