@@ -17,13 +17,9 @@
 
 / {
 	model = "Google, Inc. Polaris P1.1";
-	/* compatible = "goog,polaris", "goog,polaris-p1"; */
 	goog,board-revision = "polaris-p1";
-
-	/* TODO(muirj): Remove once the boot-loader can select based
-	 * on the above information only. */
-	compatible = "qcom,msm8998-cdp", "qcom,msm8998", "qcom,cdp";
-	qcom,board-id = <1 0>;
+	/* Board-Id GPIOs: 0: 100, 1: 99, 2: 119, 3: 118, and 4: 96. */
+	goog,board-id = <100 1 99 0 119 0 118 0 96 0>;
 };
 
 #include "polaris.dtsi"
