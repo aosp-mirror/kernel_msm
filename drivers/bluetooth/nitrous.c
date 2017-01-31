@@ -184,7 +184,7 @@ void nitrous_prepare_uart_tx_locked(struct uart_port *port)
 		return;
 	}
 
-	hrtimer_cancel(&bt_lpm->tx_lpm_timer);
+	hrtimer_try_to_cancel(&bt_lpm->tx_lpm_timer);
 	nitrous_wake_device_locked(bt_lpm, true);
 	hrtimer_start(&bt_lpm->tx_lpm_timer, ktime_set(UART_TIMEOUT_SEC, 0),
 		HRTIMER_MODE_REL);
