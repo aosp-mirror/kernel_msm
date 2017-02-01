@@ -82,7 +82,12 @@ struct nanohub_data {
 
 	uint32_t interrupts[8];
 
-	int err_cnt;
+	ktime_t wakeup_err_ktime;
+	int wakeup_err_cnt;
+
+	ktime_t kthread_err_ktime;
+	int kthread_err_cnt;
+
 	void *vbuf;
 	struct task_struct *thread;
 };
