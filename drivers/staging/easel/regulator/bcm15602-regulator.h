@@ -240,11 +240,11 @@
 #define BCM15602_ADC_STATE_ACTIVE   1
 
 /* adc config oversampling */
-#define BCM15602_ADC_OVSP_1    0
-#define BCM15602_ADC_OVSP_2    1
-#define BCM15602_ADC_OVSP_4    2
-#define BCM15602_ADC_OVSP_8    3
-#define BCM15602_ADC_OVSP_16   4
+#define BCM15602_ADC_OVSP_1    0x00
+#define BCM15602_ADC_OVSP_2    0x10
+#define BCM15602_ADC_OVSP_4    0x20
+#define BCM15602_ADC_OVSP_8    0x30
+#define BCM15602_ADC_OVSP_16   0x40
 
 /* adc config over/under threshold */
 #define BCM15602_ADC_UNDER_TH   0

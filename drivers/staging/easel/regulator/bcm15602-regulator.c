@@ -317,7 +317,7 @@ int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
 	/* enable the ADC clock and write the channel number to trigger
 	 * the conversion */
 	bytes[0] = 0x1;
-	bytes[1] = chan_num;
+	bytes[1] = BCM15602_ADC_OVSP_4 | chan_num;
 	bcm15602_write_bytes(ddata, BCM15602_REG_ADC_MAN_CTRL, bytes, 2);
 
 	/* wait for completion signaled by interrupt */
