@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -217,6 +217,8 @@ struct smb_charger {
 	/* workaround flag */
 	u32			wa_flags;
 	enum cc2_sink_type	cc2_sink_detach_flag;
+
+        bool      usb_ever_removed;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -360,8 +362,6 @@ int smblib_set_prop_pd_in_hard_reset(struct smb_charger *chg,
 
 int smblib_get_prop_slave_current_now(struct smb_charger *chg,
 				union power_supply_propval *val);
-
-int smblib_validate_initial_typec_legacy_status(struct smb_charger *chg);
 
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);

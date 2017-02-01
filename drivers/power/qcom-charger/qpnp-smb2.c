@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1301,13 +1301,6 @@ static int smb2_init_hw(struct smb2 *chip)
 
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't configure charge inhibit threshold rc=%d\n",
-			rc);
-		return rc;
-	}
-
-	rc = smblib_validate_initial_typec_legacy_status(chg);
-	if (rc < 0) {
-		dev_err(chg->dev, "Couldn't validate typec legacy status rc=%d\n",
 			rc);
 		return rc;
 	}
