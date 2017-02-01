@@ -49,9 +49,11 @@
 #define WAKEUP_INTERRUPT	1
 #define WAKEUP_TIMEOUT_MS	1000
 #define SUSPEND_TIMEOUT_MS	100
-#define ERR_RESET_TIME_SEC	60
-#define ERR_RESET_COUNT		70
-#define ERR_WARNING_COUNT	10
+#define KTHREAD_ERR_TIME_NS	(60LL * NSEC_PER_SEC)
+#define KTHREAD_ERR_CNT		70
+#define KTHREAD_WARN_CNT	10
+#define WAKEUP_ERR_TIME_NS	(60LL * NSEC_PER_SEC)
+#define WAKEUP_ERR_CNT		4
 
 /**
  * struct gpio_config - this is a binding between platform data and driver data
@@ -87,9 +89,9 @@ static ssize_t nanohub_read(struct file *, char *, size_t, loff_t *);
 static ssize_t nanohub_write(struct file *, const char *, size_t, loff_t *);
 static unsigned int nanohub_poll(struct file *, poll_table *);
 static int nanohub_release(struct inode *, struct file *);
+static int nanohub_hw_reset(struct nanohub_data *data);
 
 static struct class *sensor_class;
-static struct timespec first_err_ts;
 static int major;
 
 static const struct gpio_config gconf[] = {
@@ -299,6 +301,11 @@ static inline int nanohub_get_state(struct nanohub_data *data)
 	return atomic_read(&data->thread_state);
 }
 
+static inline void nanohub_clear_err_cnt(struct nanohub_data *data)
+{
+	data->kthread_err_cnt = data->wakeup_err_cnt = 0;
+}
+
 /* the following fragment is based on wait_event_* code from wait.h */
 #define wait_event_interruptible_timeout_locked(q, cond, tmo)		\
 ({									\
@@ -344,6 +351,10 @@ int request_wakeup_ex(struct nanohub_data *data, long timeout_ms,
 {
 	long timeout;
 	bool priority_lock = lock_mode > LOCK_MODE_NORMAL;
+	struct device *sensor_dev = data->io[ID_NANOHUB_SENSOR].dev;
+	int ret;
+	ktime_t ktime_delta;
+	ktime_t wakeup_ktime;
 
 	spin_lock(&data->wakeup_wait.lock);
 	mcu_wakeup_gpio_get_locked(data, priority_lock);
@@ -351,6 +362,8 @@ int request_wakeup_ex(struct nanohub_data *data, long timeout_ms,
 		   msecs_to_jiffies(timeout_ms) :
 		   MAX_SCHEDULE_TIMEOUT;
 
+	if (!priority_lock && !data->wakeup_err_cnt)
+		wakeup_ktime = ktime_get_boottime();
 	timeout = wait_event_interruptible_timeout_locked(
 			data->wakeup_wait,
 			((priority_lock || nanohub_irq1_fired(data)) &&
@@ -359,11 +372,33 @@ int request_wakeup_ex(struct nanohub_data *data, long timeout_ms,
 		  );
 
 	if (timeout <= 0) {
+		if (!timeout && !priority_lock) {
+			if (!data->wakeup_err_cnt)
+				data->wakeup_err_ktime = wakeup_ktime;
+			ktime_delta = ktime_sub(ktime_get_boottime(),
+						data->wakeup_err_ktime);
+			data->wakeup_err_cnt++;
+			if (ktime_to_ns(ktime_delta) > WAKEUP_ERR_TIME_NS
+				&& data->wakeup_err_cnt > WAKEUP_ERR_CNT) {
+				mcu_wakeup_gpio_put_locked(data, priority_lock);
+				spin_unlock(&data->wakeup_wait.lock);
+				dev_info(sensor_dev,
+					"wakeup: hard reset due to consistent error\n");
+				ret = nanohub_hw_reset(data);
+				if (ret) {
+					dev_info(sensor_dev,
+						"%s: failed to reset nanohub: ret=%d\n",
+						__func__, ret);
+				}
+				return -ETIME;
+			}
+		}
 		mcu_wakeup_gpio_put_locked(data, priority_lock);
 
 		if (timeout == 0)
 			timeout = -ETIME;
 	} else {
+		data->wakeup_err_cnt = 0;
 		timeout = 0;
 	}
 	spin_unlock(&data->wakeup_wait.lock);
@@ -471,7 +506,7 @@ static ssize_t nanohub_wakeup_query(struct device *dev,
 	struct nanohub_data *data = dev_get_nanohub_data(dev);
 	const struct nanohub_platform_data *pdata = data->pdata;
 
-	data->err_cnt = 0;
+	nanohub_clear_err_cnt(data);
 	if (nanohub_irq1_fired(data) || nanohub_irq2_fired(data))
 		wake_up_interruptible(&data->wakeup_wait);
 
@@ -612,6 +647,7 @@ static void __nanohub_hw_reset(struct nanohub_data *data, int boot0)
 		usleep_range(70000, 75000);
 	else if (!boot0)
 		usleep_range(750000, 800000);
+	nanohub_clear_err_cnt(data);
 }
 
 static int nanohub_hw_reset(struct nanohub_data *data)
@@ -620,7 +656,6 @@ static int nanohub_hw_reset(struct nanohub_data *data)
 	ret = nanohub_wakeup_lock(data, LOCK_MODE_RESET);
 
 	if (!ret) {
-		data->err_cnt = 0;
 		__nanohub_hw_reset(data, 0);
 		nanohub_wakeup_unlock(data);
 	}
@@ -652,7 +687,6 @@ static ssize_t nanohub_erase_shared(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	data->err_cnt = 0;
 	__nanohub_hw_reset(data, 1);
 
 	status = nanohub_bl_erase_shared(data);
@@ -677,7 +711,6 @@ static ssize_t nanohub_erase_shared_bl(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	data->err_cnt = 0;
 	__nanohub_hw_reset(data, -1);
 
 	status = nanohub_bl_erase_shared_bl(data);
@@ -703,7 +736,6 @@ static ssize_t nanohub_download_bl(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	data->err_cnt = 0;
 	__nanohub_hw_reset(data, 1);
 
 	ret = request_firmware(&fw_entry, "nanohub.full.bin", dev);
@@ -763,7 +795,6 @@ static ssize_t nanohub_download_kernel_bl(struct device *dev,
 		if (ret < 0)
 			return ret;
 
-		data->err_cnt = 0;
 		__nanohub_hw_reset(data, -1);
 
 		status = nanohub_bl_erase_shared_bl(data);
@@ -891,7 +922,6 @@ static ssize_t nanohub_lock_bl(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	data->err_cnt = 0;
 	__nanohub_hw_reset(data, 1);
 
 	gpio_set_value(data->pdata->boot0_gpio, 0);
@@ -917,7 +947,6 @@ static ssize_t nanohub_unlock_bl(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	data->err_cnt = 0;
 	__nanohub_hw_reset(data, 1);
 
 	gpio_set_value(data->pdata->boot0_gpio, 0);
@@ -1167,7 +1196,7 @@ static void nanohub_process_buffer(struct nanohub_data *data,
 	bool wakeup = false;
 	struct nanohub_io *io = &data->io[ID_NANOHUB_SENSOR];
 
-	data->err_cnt = 0;
+	data->kthread_err_cnt = 0;
 	if (ret < 4 || nanohub_os_log((*buf)->buffer, ret)) {
 		release_wakeup(data);
 		return;
@@ -1204,14 +1233,14 @@ static int nanohub_kthread(void *arg)
 	struct nanohub_data *data = (struct nanohub_data *)arg;
 	struct nanohub_buf *buf = NULL;
 	int ret;
-	struct timespec curr_ts;
+	ktime_t ktime_delta;
 	uint32_t clear_interrupts[8] = { 0x00000006 };
 	struct device *sensor_dev = data->io[ID_NANOHUB_SENSOR].dev;
 	static const struct sched_param param = {
 		.sched_priority = (MAX_USER_RT_PRIO/2)-1,
 	};
 
-	data->err_cnt = 0;
+	data->kthread_err_cnt = 0;
 	sched_setscheduler(current, SCHED_FIFO, &param);
 	nanohub_set_state(data, ST_IDLE);
 
@@ -1224,10 +1253,12 @@ static int nanohub_kthread(void *arg)
 			nanohub_set_state(data, ST_RUNNING);
 			break;
 		case ST_ERROR:
-			get_monotonic_boottime(&curr_ts);
-			if (curr_ts.tv_sec - first_err_ts.tv_sec > ERR_RESET_TIME_SEC
-				&& data->err_cnt > ERR_RESET_COUNT) {
-				dev_info(sensor_dev, "hard reset due to consistent error\n");
+			ktime_delta = ktime_sub(ktime_get_boottime(),
+						data->kthread_err_ktime);
+			if (ktime_to_ns(ktime_delta) > KTHREAD_ERR_TIME_NS
+				&& data->kthread_err_cnt > KTHREAD_ERR_CNT) {
+				dev_info(sensor_dev,
+					"kthread: hard reset due to consistent error\n");
 				if (nanohub_hw_reset(data)) {
 					dev_info(sensor_dev,
 						"%s: failed to reset nanohub: ret=%d\n",
@@ -1266,21 +1297,23 @@ static int nanohub_kthread(void *arg)
 				}
 			} else if (ret == 0) {
 				/* queue empty, go to sleep */
-				data->err_cnt = 0;
+				data->kthread_err_cnt = 0;
 				data->interrupts[0] &= ~0x00000006;
 				release_wakeup(data);
 				nanohub_set_state(data, ST_IDLE);
 				continue;
 			} else {
 				release_wakeup(data);
-				if (data->err_cnt == 0)
-					get_monotonic_boottime(&first_err_ts);
+				if (data->kthread_err_cnt == 0)
+					data->kthread_err_ktime =
+						ktime_get_boottime();
 
-				if (++data->err_cnt >= ERR_WARNING_COUNT) {
+				data->kthread_err_cnt++;
+				if (data->kthread_err_cnt >= KTHREAD_WARN_CNT) {
 					dev_err(sensor_dev,
-						"%s: err_cnt=%d\n",
+						"%s: kthread_err_cnt=%d\n",
 						__func__,
-						data->err_cnt);
+						data->kthread_err_cnt);
 					nanohub_set_state(data, ST_ERROR);
 					continue;
 				}
