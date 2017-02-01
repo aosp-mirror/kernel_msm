@@ -28,9 +28,13 @@
 
 #define VBUS_REG_CHECK_DELAY	(msecs_to_jiffies(2000))
 #define CHG_RECHECK_DELAY	(jiffies + msecs_to_jiffies(2000))
+#define CHG_BOOT_DELAY	        (jiffies + msecs_to_jiffies(15000))
 #define MAX_INVALID_CHRGR_RETRY 3
 static int max_chgr_retry_count = MAX_INVALID_CHRGR_RETRY;
+static int boot_finished = 0;
 module_param(max_chgr_retry_count, int, S_IRUGO | S_IWUSR);
+module_param(boot_finished, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(boot_finished, "Boot time charger count");
 MODULE_PARM_DESC(max_chgr_retry_count, "Max invalid charger retry count");
 
 static void dwc3_otg_notify_host_mode(struct usb_otg *otg, int host_mode);
@@ -578,8 +582,13 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 									1);
 					phy->state = OTG_STATE_B_PERIPHERAL;
 					dotg->false_sdp_retry_count = 0;
-					mod_timer(&dotg->chg_check_timer,
+					if (!boot_finished) {
+						mod_timer(&dotg->chg_check_timer,
+						CHG_BOOT_DELAY);
+                                        } else {
+						mod_timer(&dotg->chg_check_timer,
 						CHG_RECHECK_DELAY);
+                                        }
 					work = 1;
 					break;
 				case DWC3_FLOATED_CHARGER:
