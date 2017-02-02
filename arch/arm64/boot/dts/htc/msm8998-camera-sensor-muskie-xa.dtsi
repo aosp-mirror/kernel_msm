@@ -283,8 +283,8 @@
 		pinctrl-1 = <&cam_sensor_mclk1_suspend &cam_sensor_front_suspend &cci1_suspend>;
 		gpios = <&tlmm 14 0>,
 			<&tlmm 23 0>,
-			<&pm8998_gpios 6 0>,
-			<&pm8998_gpios 3 0>;
+			<&pmi8998_gpios 6 0>,
+			<&pmi8998_gpios 3 0>;
 		qcom,gpio-reset = <1>;
 		qcom,gpio-vdig = <2>;
 		qcom,gpio-vana = <3>;
