@@ -2495,6 +2495,7 @@ int smblib_set_prop_pd_in_hard_reset(struct smb_charger *chg,
 	return rc;
 }
 
+#define EXTERNAL_BOOSTER_RAMP_UP_DELAY_MS 50
 int smblib_set_prop_use_external_vbus_output(struct smb_charger *chg,
 				const union power_supply_propval *val)
 {
@@ -2535,6 +2536,8 @@ int smblib_set_prop_use_external_vbus_output(struct smb_charger *chg,
 				   rc);
 			goto unlock;
 		}
+
+		msleep(EXTERNAL_BOOSTER_RAMP_UP_DELAY_MS);
 
 		rc = smblib_otg_disable(chg);
 		if (rc < 0)
