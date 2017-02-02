@@ -30,6 +30,11 @@
 #define MNH_MUX_DEVICE_RX1	1
 #define MNH_MUX_DEVICE_RX2	2
 
+#define MNH_MIPI_VC0_EN_MASK	0x1
+#define MNH_MIPI_VC1_EN_MASK	0x2
+#define MNH_MIPI_VC2_EN_MASK	0x4
+#define MNH_MIPI_VC3_EN_MASK	0x8
+
 /** Firmware download image state */
 enum fw_image_state {
 	FW_IMAGE_NONE = 0,
@@ -61,22 +66,21 @@ struct mnh_sm_power_seq_entity {
 	unsigned int delay; /* delay in micro seconds */
 };
 
-struct mnh_mipi_conf {
-	uint32_t freq;
-	int      is_gen3;
-};
-
-struct mnh_tx_conf {
+struct mnh_mipi_config {
 	/* Rx dev MNH_MUX_DEVICE_RX* */
 	int		rxdev;
-	/* The conf sel is the index in list of mnh_mipi_conf */
-	int		conf_sel;
+	/* RX MIPI transfer rate */
+	int		rx_rate;
+	/* TX MIPI transfer rate */
+	int		tx_rate;
+	/* virtual channel enable mask */
+	int		vc_en_mask;
+	/* MIPI gen3 ports? */
+	int		is_gen3;
 };
 
 struct mnh_sm_configuration {
-	const unsigned int mipi_items;
-	const struct mnh_mipi_conf *mipi_configs;
-	struct mnh_tx_conf *tx_configs;
+	struct mnh_mipi_config *mipi_configs;
 	struct mnh_ddr_state *ddr_config;
 	unsigned int cur_mipi_config;
 };

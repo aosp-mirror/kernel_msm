@@ -20,31 +20,21 @@
 #include "mnh-ddr-600.h"
 #include "mnh-ddr-33-300-600-400.h"
 
-static const struct mnh_mipi_conf mnh_mipi_configs[] = {
+static struct mnh_mipi_config mnh_mipi_configs[] = {
 	{
-	.freq = 640,
-	.is_gen3 = 1,
+		.rxdev = MNH_MUX_DEVICE_RX0,
+		.rx_rate = 1296,
+		.tx_rate = 1296,
+		.vc_en_mask = MNH_MIPI_VC0_EN_MASK,
+		.is_gen3 = 1,
 	},
 	{
-	.freq = 1296,
-	.is_gen3 = 1,
+		.rxdev = MNH_MUX_DEVICE_RX1,
+		.rx_rate = 648,
+		.tx_rate = 1296,
+		.vc_en_mask = MNH_MIPI_VC0_EN_MASK,
+		.is_gen3 = 1,
 	},
-	{
-	.freq = 2100,
-	.is_gen3 = 1,
-	},
-};
-
-static struct mnh_tx_conf mnh_tx_configs[] = {
-	{
-	.rxdev = MNH_MUX_DEVICE_RX0,
-	.conf_sel = 1,
-	},
-	{
-	.rxdev = MNH_MUX_DEVICE_RX1,
-	.conf_sel = 1,
-	},
-
 };
 
 static struct mnh_ddr_state mnh_ddr_po_config = {
@@ -73,9 +63,7 @@ static struct mnh_ddr_state mnh_ddr_po_config = {
 };
 
 struct mnh_sm_configuration sm_config_1 = {
-	.mipi_items = ARRAY_SIZE(mnh_mipi_configs),
 	.mipi_configs = mnh_mipi_configs,
-	.tx_configs = mnh_tx_configs,
 	.ddr_config = &mnh_ddr_po_config,
 };
 

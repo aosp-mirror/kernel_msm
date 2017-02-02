@@ -145,60 +145,8 @@ static ssize_t mnh_sm_config_show(struct device *dev,
 	return strlen;
 }
 
-static ssize_t mnh_sm_config_store(struct device *dev,
-			      struct device_attribute *attr,
-			      const char *buf,
-			      size_t count)
-{
-	unsigned long val;
-	uint8_t *token;
-	const char *delim = ";";
-	struct mnh_sm_configuration sm_config;
-	struct mnh_mipi_conf mipi_config;
-
-	dev_err(dev, "Entering mnh_sm_config_store...\n");
-
-	dev_err(dev, "Input buffer: %s", buf);
-
-	token = strsep((char **)&buf, delim);
-	if (token) {
-		if (kstrtoul(token, 0, &val))
-			return -EINVAL;
-		if ((val < 0) || (val > 1400))
-			return -EINVAL;
-		mipi_config.freq = val;
-		dev_err(dev, "MIPI config frequency is %d\n",
-			mipi_config.freq);
-	} else {
-		return -EINVAL;
-	}
-
-	token = strsep((char **)&buf, delim);
-
-	if (token) {
-		if (kstrtoul(token, 0, &val))
-			return -EINVAL;
-		if ((val < 0) || (val >= 2))
-			return -EINVAL;
-		mipi_config.is_gen3 = val;
-		dev_err(dev, "MIPI config is_gen3 is %d\n",
-			mipi_config.is_gen3);
-	} else {
-		return -EINVAL;
-	}
-
-	/* sm_config.mipi_configs = &mipi_config; */
-	/* mnh_sm_config(sm_config); */
-
-	mnh_sm_mipi_bypass_gen3_init(mipi_config.freq);
-
-	dev_err(dev, "Exiting mnh_sm_config_store...\n");
-
-	return -EINVAL;
-}
-
-static DEVICE_ATTR(config, S_IWUSR | S_IRUGO,
-		mnh_sm_config_show, mnh_sm_config_store);
+static DEVICE_ATTR(config, S_IRUGO,
+		mnh_sm_config_show, NULL);
 
 
 static ssize_t mnh_sm_state_show(struct device *dev,
@@ -542,125 +490,6 @@ static ssize_t mnh_sm_reset_store(struct device *dev,
 static DEVICE_ATTR(reset, S_IRUGO | S_IWUSR | S_IWGRP,
 		mnh_sm_reset_show, mnh_sm_reset_store);
 
-static ssize_t mnh_sm_clk_show(struct device *dev,
-			struct device_attribute *attr,
-			char *buf)
-{
-	int ret = 0, pos = 0, i;
-
-	ret = pos = snprintf(buf, PAGE_SIZE, "supported frequencies\n");
-	buf += pos;
-	for (i = 0; i < sm_config_1.mipi_items; i++) {
-		pos = snprintf(buf, PAGE_SIZE, "%d %d\n",
-				i,
-				sm_config_1.mipi_configs[i].freq);
-		dev_info(dev, "found link_freq %d\n",
-			 sm_config_1.mipi_configs[i].freq);
-		buf += pos;
-		ret += pos;
-	}
-	return ret;
-}
-
-static DEVICE_ATTR(supported_clk, S_IRUGO,
-		   mnh_sm_clk_show, NULL);
-
-static ssize_t mnh_sm_tx_show(struct device *dev,
-			struct device_attribute *attr,
-			char *buf,
-			unsigned int txdev)
-{
-	int ret = 0, pos = 0, sel;
-
-	sel = sm_config_1.tx_configs[txdev].conf_sel;
-	buf += pos;
-	pos = snprintf(buf, PAGE_SIZE,
-			"tx%d mipiconf: %d [%d], rxdev %d\n\n"
-			"To change: echo '<conf selection> <rxdev>\n"
-			"Example change to supported_clk 1 and RX0:\n"
-			"   echo '1 0'\n",
-			txdev,
-			sel,
-			sm_config_1.mipi_configs[sel].freq,
-			sm_config_1.tx_configs[txdev].rxdev);
-	buf += pos;
-	ret += pos;
-	return ret;
-}
-
-static ssize_t mnh_sm_tx_store(struct device *dev,
-			  struct device_attribute *attr,
-			  const char *buf,
-			  size_t count,
-			  unsigned int txdev)
-{
-	int sel, rxdev;
-	int ret;
-	char *token;
-	char *string;
-
-	/* Try to parse the tokens to get mode, and other pixels */
-	dev_info(mnh_sm_dev->dev, "%s parse\n", __func__);
-	string = kmalloc(count + 1, GFP_KERNEL);
-	if (string)
-		strlcpy(string, buf, count);
-	token = strsep(&string, " ");
-	dev_info(mnh_sm_dev->dev, "read token: %s\n", token);
-	if (token != NULL) {
-		ret = kstrtoint(token, 0, &sel);
-		dev_info(mnh_sm_dev->dev, "sel: %d, ret %d\n", sel, ret);
-		if (ret == 0)
-			sm_config_1.tx_configs[txdev].conf_sel = sel;
-	} else {
-		dev_err(mnh_sm_dev->dev, "Could not parse!\n");
-	}
-	token = strsep(&string, " ");
-	dev_info(mnh_sm_dev->dev, "read token: %s\n", token);
-	if (token != NULL) {
-		ret = kstrtoint(token, 0, &rxdev);
-		if (ret == 0)
-			sm_config_1.tx_configs[txdev].rxdev = rxdev;
-	} else {
-		dev_err(mnh_sm_dev->dev, "Could not parse!\n");
-	}
-
-	return count;
-}
-
-static ssize_t mnh_sm_tx0_show(struct device *dev,
-			struct device_attribute *attr,
-			char *buf)
-{
-	return mnh_sm_tx_show(dev, attr, buf, 0);
-}
-static ssize_t mnh_sm_tx1_show(struct device *dev,
-			struct device_attribute *attr,
-			char *buf)
-{
-	return mnh_sm_tx_show(dev, attr, buf, 1);
-}
-
-static ssize_t mnh_sm_tx0_store(struct device *dev,
-			struct device_attribute *attr,
-			const char *buf,
-			size_t count)
-{
-	return mnh_sm_tx_store(dev, attr, buf, count, 0);
-}
-static ssize_t mnh_sm_tx1_store(struct device *dev,
-			struct device_attribute *attr,
-			const char *buf,
-			size_t count)
-{
-	return mnh_sm_tx_store(dev, attr, buf, count, 1);
-}
-
-static DEVICE_ATTR(tx0, S_IRUGO | S_IWUSR | S_IWGRP,
-		   mnh_sm_tx0_show, mnh_sm_tx0_store);
-static DEVICE_ATTR(tx1, S_IRUGO | S_IWUSR | S_IWGRP,
-		   mnh_sm_tx1_show, mnh_sm_tx1_store);
-
-
 static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_poweron.attr,
 	&dev_attr_poweroff.attr,
@@ -670,9 +499,6 @@ static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_suspend.attr,
 	&dev_attr_resume.attr,
 	&dev_attr_reset.attr,
-	&dev_attr_supported_clk.attr,
-	&dev_attr_tx0.attr,
-	&dev_attr_tx1.attr,
 	NULL
 };
 
