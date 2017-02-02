@@ -366,6 +366,7 @@ struct binder_proc {
 	int active_thread_count;
 	struct task_struct *tsk;
 	struct files_struct *files;
+	struct files_struct *zombie_files;
 	struct hlist_node deferred_work_node;
 	int deferred_work;
 	spinlock_t proc_lock;
@@ -4029,6 +4030,8 @@ static bool binder_proc_clear_zombies(struct binder_proc *proc)
 	struct hlist_head threads_to_free;
 	struct hlist_head refs_to_free;
 	bool needs_requeue = false;
+	struct files_struct *files;
+
 	INIT_HLIST_HEAD(&nodes_to_free);
 	INIT_HLIST_HEAD(&threads_to_free);
 	INIT_HLIST_HEAD(&refs_to_free);
@@ -4062,7 +4065,13 @@ static bool binder_proc_clear_zombies(struct binder_proc *proc)
 	if (!RB_EMPTY_ROOT(&proc->threads))
 		needs_requeue = true;
 
+	files = proc->zombie_files;
+	proc->zombie_files = NULL;
+
 	binder_proc_unlock(proc, __LINE__);
+
+	if (files)
+		put_files_struct(files);
 
 	hlist_for_each_entry_safe(node, tmp, &nodes_to_free, dead_node) {
 		hlist_del_init(&node->dead_node);
@@ -4148,7 +4157,6 @@ static void binder_clear_zombies(void)
 static void binder_deferred_func(struct work_struct *work)
 {
 	struct binder_proc *proc;
-	struct files_struct *files;
 	int defer;
 
 	do {
@@ -4166,11 +4174,15 @@ static void binder_deferred_func(struct work_struct *work)
 		}
 		mutex_unlock(&binder_deferred_lock);
 
-		files = NULL;
 		if (defer & BINDER_DEFERRED_PUT_FILES) {
-			files = proc->files;
-			if (files)
+			binder_proc_lock(proc, __LINE__);
+			if (proc->files) {
+				BUG_ON(proc->zombie_files);
+				proc->zombie_files = proc->files;
 				proc->files = NULL;
+				binder_queue_for_zombie_cleanup(proc);
+			}
+			binder_proc_unlock(proc, __LINE__);
 		}
 
 		if (defer & BINDER_DEFERRED_FLUSH)
@@ -4183,8 +4195,6 @@ static void binder_deferred_func(struct work_struct *work)
 			binder_clear_zombies();
 
 		binder_unlock(__func__);
-		if (files)
-			put_files_struct(files);
 	} while (proc);
 
 }
