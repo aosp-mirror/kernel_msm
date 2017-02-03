@@ -26,6 +26,7 @@
 #include <linux/wakelock.h>
 #include <linux/qpnp/qpnp-adc.h>
 #include <soc/qcom/socinfo.h>
+#include <linux/alarmtimer.h>
 
 static bool is_fake_battery = false;
 module_param(is_fake_battery, bool, 0644);
@@ -122,6 +123,7 @@ struct smb23x_chip {
 	struct smb23x_wakeup_source	smb23x_ws;
 	struct delayed_work		temp_control_work;
 	struct qpnp_vadc_chip	*vadc_dev;
+	struct alarm			update_temp_alarm;
 };
 
 static int usbin_current_ma_table[] = {
@@ -362,6 +364,10 @@ static int hot_bat_decidegc_table[] = {
 #define AICL_1500_MA		(BIT(2) | BIT(1))
 #define USB5_LIMIT		BIT(4)
 #define USB1_LIMIT		BIT(5)
+
+#define BMS_NORMAL_UPDATE_TEMP_INTERVAL_NS	20000000000 /*20s*/
+#define BMS_FAST_UPDATE_TEMP_INTERVAL_NS	1000000000 /*1s*/
+#define BMS_SLOW_UPDATE_TEMP_INTERVAL_NS	300000000000 /*300s*/
 
 struct smb_irq_info {
 	const char	*name;
@@ -1688,7 +1694,7 @@ static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	if (!chip->apsd_enabled)
 		return 0;
 
-	pr_debug("chip->usb_present = %d, usb_present = %d\n",
+	pr_info("chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present, usb_present);
 	if (chip->usb_present ^ usb_present) {
 		wake_lock_timeout(&chip->charger_wake_lock, 5 * HZ);
@@ -1696,12 +1702,12 @@ static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 	if (usb_present && !chip->usb_present) {
 		pr_info("Charger insert!\n");
-		wake_lock(&chip->charger_valid_lock);
+		/*wake_lock(&chip->charger_valid_lock);*/
 		chip->usb_present = usb_present;
 		handle_usb_insertion(chip);
 	} else if (!usb_present && chip->usb_present) {
 		pr_info("Charger removed!\n");
-		wake_unlock(&chip->charger_valid_lock);
+		/*wake_unlock(&chip->charger_valid_lock);*/
 		chip->usb_present = usb_present;
 		smb23x_charging_disable(chip, CURRENT, false);
 		chip->batt_full = false;
@@ -1830,10 +1836,10 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 		chip->batt_full = false;
 		chip->batt_warm_full = false;
 		chip->batt_real_full = false;
-		wake_unlock(&chip->charger_valid_lock);
+		/*wake_unlock(&chip->charger_valid_lock);*/
 	} else if (usb_present && !chip->usb_present) {
 		pr_info("Charger insert!\n");
-		wake_lock(&chip->charger_valid_lock);
+		/*wake_lock(&chip->charger_valid_lock);*/
 	}
 	chip->usb_present = usb_present;
 	reconfig_upon_unplug(chip);
@@ -2982,7 +2988,6 @@ static void smb23x_temp_control_func(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct smb23x_chip *chip = container_of(dwork, struct smb23x_chip, temp_control_work);
-
 	int state = SMB_TM_NORMAL_STATE;
 	int temp = 0;
 	int period = TEMP_DETECT_WORK_DELAY_2S;
@@ -3053,9 +3058,13 @@ static void smb23x_temp_control_func(struct work_struct *work)
 check_again:
 	mutex_unlock(&chip->jeita_configure_lock);
 
-	pr_debug("bat_is_warm %d,bat_cold = %d, bat_is_cool %d bat_is_hot %d, low = %d, high = %d\n",
-			chip->batt_warm,chip->batt_cold, chip->batt_cool, chip->batt_hot,
-			chip->low_temp_threshold, chip->high_temp_threshold);
+	if ((state == SMB_TM_HIGHER_STATE) || (state == SMB_TM_LOWER_STATE)) {
+		pr_info("temp=%d threshold=(%d-%d) health=(%d-%d-%d-%d)\n",
+				temp, chip->low_temp_threshold, chip->high_temp_threshold,
+				chip->batt_cold, chip->batt_cool,
+				chip->batt_warm, chip->batt_hot);
+	}
+
 	if (chip->tm_state == SMB_TEMP_NORMAL_STATE)
 		period = TEMP_DETECT_WORK_DELAY_30S;
 	else
@@ -3063,7 +3072,17 @@ check_again:
 	schedule_delayed_work(&chip->temp_control_work, round_jiffies_relative(msecs_to_jiffies(period)));
 }
 
+static enum alarmtimer_restart update_temp_alarm_cb(struct alarm *alarm,
+							ktime_t now)
+{
+	struct smb23x_chip *chip = container_of(alarm, struct smb23x_chip,
+											update_temp_alarm);
 
+	pr_info("alarm fired, usb_present=%d\n", chip->usb_present);
+
+	return ALARMTIMER_NORESTART;
+
+}
 
 static int smb23x_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
@@ -3110,6 +3129,9 @@ static int smb23x_probe(struct i2c_client *client,
 	wake_lock_init(&chip->charger_valid_lock, WAKE_LOCK_SUSPEND, "zte_chg_valid");
 	INIT_DELAYED_WORK(&chip->irq_polling_work, smb23x_irq_polling_work_fn);
 	INIT_DELAYED_WORK(&chip->temp_control_work, smb23x_temp_control_func);
+
+	alarm_init(&chip->update_temp_alarm, ALARM_REALTIME,
+			update_temp_alarm_cb);
 
 	/* enable the USB_SUSPEND always */
 	chip->workaround_flags |= WRKRND_USB_SUSPEND;
@@ -3235,6 +3257,18 @@ static int smb23x_suspend(struct device *dev)
 	mutex_unlock(&chip->irq_complete);
 	cancel_delayed_work_sync(&chip->temp_control_work);
 
+	if (chip->usb_present) {
+		alarm_start_relative(&chip->update_temp_alarm,
+				ns_to_ktime(BMS_NORMAL_UPDATE_TEMP_INTERVAL_NS));
+		pr_info("start alarm to %llds with charger\n",
+				BMS_NORMAL_UPDATE_TEMP_INTERVAL_NS/1000000000);
+	} else {
+		alarm_start_relative(&chip->update_temp_alarm,
+				ns_to_ktime(BMS_SLOW_UPDATE_TEMP_INTERVAL_NS));
+		pr_info("start alarm to %llds with no charger\n",
+				BMS_SLOW_UPDATE_TEMP_INTERVAL_NS/1000000000);
+	}
+
 	return 0;
 }
 
@@ -3271,6 +3305,8 @@ static int smb23x_resume(struct device *dev)
 		mutex_unlock(&chip->irq_complete);
 	}
 	schedule_delayed_work(&chip->temp_control_work, 0);
+	alarm_cancel(&chip->update_temp_alarm);
+	pr_info("cancel alarm\n");
 
 	return 0;
 }
