@@ -49,6 +49,9 @@ enum print_reason {
 #define PD_INACTIVE_VOTER		"PD_INACTIVE_VOTER"
 #define BOOST_BACK_VOTER		"BOOST_BACK_VOTER"
 
+#define VCONN_MAX_ATTEMPTS		3
+#define OTG_MAX_ATTEMPTS			3
+
 enum smb_mode {
 	PARALLEL_MASTER = 0,
 	PARALLEL_SLAVE,
@@ -144,11 +147,18 @@ struct smb_charger {
 	struct smb_iio		iio;
 	int			*debug_mask;
 	enum smb_mode		mode;
+	bool			external_vconn;
 
 	/* locks */
 	struct mutex		write_lock;
 	struct mutex		ps_change_lock;
-	struct mutex		vbus_output_lock; /* for vbus output states */
+	struct mutex		vbus_output_lock; /* for vbus output src sel */
+	struct mutex		otg_overcurrent_lock;
+	/*
+	 * vbus_output_lock and otg_overcurrent_lock can sometimes be held
+	 * at the same time. vbus_output_lock should be locked before
+	 * otg_overcurrent_lock.
+	 */
 
 	/* power supplies */
 	struct power_supply		*batt_psy;
@@ -217,6 +227,10 @@ struct smb_charger {
 	bool			is_hdc;
 	bool			chg_done;
 	int			input_limited_fcc_ua;
+	bool			otg_en;
+	bool			vconn_en;
+	int			otg_attempts;
+	int			vconn_attempts;
 
 	bool			use_external_vbus_reg;
 	/* workaround flag */
@@ -255,6 +269,7 @@ int smblib_vconn_regulator_disable(struct regulator_dev *rdev);
 int smblib_vconn_regulator_is_enabled(struct regulator_dev *rdev);
 
 irqreturn_t smblib_handle_debug(int irq, void *data);
+irqreturn_t smblib_handle_otg_overcurrent(int irq, void *data);
 irqreturn_t smblib_handle_chg_state_change(int irq, void *data);
 irqreturn_t smblib_handle_step_chg_state_change(int irq, void *data);
 irqreturn_t smblib_handle_step_chg_soc_update_fail(int irq, void *data);

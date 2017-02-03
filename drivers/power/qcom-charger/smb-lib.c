@@ -996,12 +996,119 @@ static int smblib_apsd_disable_vote_callback(struct votable *votable,
 	return 0;
 }
 
+/*******************
+ * VCONN REGULATOR *
+ * *****************/
+static int _smblib_vconn_regulator_enable(struct regulator_dev *rdev)
+{
+	struct smb_charger *chg = rdev_get_drvdata(rdev);
+	u8 otg_stat, stat4;
+	int rc = 0;
+
+	if (!chg->external_vconn && !chg->use_external_vbus_reg) {
+		rc = smblib_read(chg, OTG_STATUS_REG, &otg_stat);
+		if (rc < 0) {
+			smblib_err(chg, "Couldn't read OTG status rc=%d\n", rc);
+			return rc;
+		}
+
+		if ((otg_stat & OTG_STATE_MASK) != OTG_STATE_ENABLED) {
+			smblib_err(chg, "Couldn't enable VCONN; OTG is not ready otg_stat=0x%02x\n",
+				   otg_stat);
+			return -EAGAIN;
+		}
+	}
+
+	/*
+	 * VCONN_EN_ORIENTATION is overloaded with overriding the CC pin used
+	 * for Vconn, and it should be set with reverse polarity of CC_OUT.
+	 */
+	rc = smblib_read(chg, TYPE_C_STATUS_4_REG, &stat4);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read TYPE_C_STATUS_4 rc=%d\n", rc);
+		return rc;
+	}
+
+	stat4 = stat4 & CC_ORIENTATION_BIT ? 0 : VCONN_EN_ORIENTATION_BIT;
+	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
+				 VCONN_EN_VALUE_BIT | VCONN_EN_ORIENTATION_BIT,
+				 VCONN_EN_VALUE_BIT | stat4);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't enable vconn setting rc=%d\n", rc);
+		return rc;
+	}
+
+	return rc;
+}
+
+int smblib_vconn_regulator_enable(struct regulator_dev *rdev)
+{
+	struct smb_charger *chg = rdev_get_drvdata(rdev);
+	int rc = 0;
+
+	mutex_lock(&chg->vbus_output_lock);
+	mutex_lock(&chg->otg_overcurrent_lock);
+	if (chg->vconn_en)
+		goto unlock;
+
+	rc = _smblib_vconn_regulator_enable(rdev);
+	if (rc >= 0)
+		chg->vconn_en = true;
+
+unlock:
+	mutex_unlock(&chg->otg_overcurrent_lock);
+	mutex_unlock(&chg->vbus_output_lock);
+	return rc;
+}
+
+static int _smblib_vconn_regulator_disable(struct regulator_dev *rdev)
+{
+	struct smb_charger *chg = rdev_get_drvdata(rdev);
+	int rc = 0;
+
+	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
+				 VCONN_EN_VALUE_BIT, 0);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't disable vconn regulator rc=%d\n", rc);
+
+	return rc;
+}
+
+int smblib_vconn_regulator_disable(struct regulator_dev *rdev)
+{
+	struct smb_charger *chg = rdev_get_drvdata(rdev);
+	int rc = 0;
+
+	mutex_lock(&chg->otg_overcurrent_lock);
+	if (!chg->vconn_en)
+		goto unlock;
+
+	rc = _smblib_vconn_regulator_disable(rdev);
+	if (rc >= 0)
+		chg->vconn_en = false;
+
+unlock:
+	mutex_unlock(&chg->otg_overcurrent_lock);
+	return rc;
+}
+
+int smblib_vconn_regulator_is_enabled(struct regulator_dev *rdev)
+{
+	struct smb_charger *chg = rdev_get_drvdata(rdev);
+	int ret;
+
+	mutex_lock(&chg->otg_overcurrent_lock);
+	ret = chg->vconn_en;
+	mutex_unlock(&chg->otg_overcurrent_lock);
+	return ret;
+}
+
 /*****************
  * OTG REGULATOR *
  *****************/
 
 #define MAX_SOFTSTART_TRIES	2
-static int smblib_otg_enable(struct smb_charger *chg)
+static int _smblib_otg_enable(struct smb_charger *chg)
 {
 	u8 stat;
 	int rc = 0;
@@ -1038,16 +1145,61 @@ static int smblib_otg_enable(struct smb_charger *chg)
 		}
 	} while (--tries);
 
-	if (tries == 0)
+	if (tries == 0) {
 		smblib_err(chg, "Timeout waiting for boost softstart rc=%d\n",
 				rc);
+		return -ETIMEDOUT;
+	}
 
 	return rc;
 }
 
-static int smblib_otg_disable(struct smb_charger *chg)
+static int smblib_otg_enable(struct smb_charger *chg)
 {
 	int rc = 0;
+
+	mutex_lock(&chg->otg_overcurrent_lock);
+	if (chg->otg_en)
+		goto unlock;
+
+	rc = _smblib_otg_enable(chg);
+	if (rc >= 0)
+		chg->otg_en = true;
+
+unlock:
+	mutex_unlock(&chg->otg_overcurrent_lock);
+	return rc;
+}
+
+/*
+ * must hold otg_overcurrent_lock
+ */
+static int _smblib_otg_disable(struct smb_charger *chg)
+{
+	int rc = 0;
+	u8 stat;
+
+	if (!chg->external_vconn) {
+		rc = smblib_read(chg, RID_CC_CONTROL_7_0_REG, &stat);
+		if (rc < 0) {
+			smblib_err(chg,
+				   "Couldn't read RID_CC_CONTROL_7_0 rc=%d\n",
+				   rc);
+			return rc;
+		}
+
+		/* check if VCONN is enabled on either CC pin */
+		if (stat & VCONN_EN_CC_MASK) {
+			smblib_dbg(chg, PR_MISC,
+				   "Killing VCONN before disabling OTG\n");
+			rc = _smblib_vconn_regulator_disable(chg);
+			if (rc < 0)
+				smblib_err(chg,
+					   "Couldn't disable VCONN rc=%d\n",
+					   rc);
+			return rc;
+		}
+	}
 
 	rc = smblib_write(chg, CMD_OTG_REG, 0);
 	if (rc < 0) {
@@ -1068,18 +1220,32 @@ static int smblib_otg_disable(struct smb_charger *chg)
 	return rc;
 }
 
-static int smblib_otg_is_enabled(struct smb_charger *chg)
+static int smblib_otg_disable(struct smb_charger *chg)
 {
 	int rc = 0;
-	u8 cmd;
 
-	rc = smblib_read(chg, CMD_OTG_REG, &cmd);
-	if (rc < 0) {
-		smblib_err(chg, "Couldn't read CMD_OTG rc=%d", rc);
-		return rc;
-	}
+	mutex_lock(&chg->otg_overcurrent_lock);
+	if (!chg->otg_en)
+		goto unlock;
 
-	return (cmd & OTG_EN_BIT) ? 1 : 0;
+	rc = _smblib_otg_disable(chg);
+	if (rc >= 0)
+		chg->otg_en = false;
+
+unlock:
+	mutex_unlock(&chg->otg_overcurrent_lock);
+	return rc;
+}
+
+static int smblib_otg_is_enabled(struct smb_charger *chg)
+{
+	int ret;
+
+	mutex_lock(&chg->otg_overcurrent_lock);
+	ret = chg->otg_en;
+	mutex_unlock(&chg->otg_overcurrent_lock);
+
+	return ret;
 }
 
 int smblib_vbus_regulator_enable(struct regulator_dev *rdev)
@@ -1191,65 +1357,6 @@ int smblib_vbus_regulator_is_enabled(struct regulator_dev *rdev)
 	mutex_unlock(&chg->vbus_output_lock);
 
 	return rc;
-}
-
-/*******************
- * VCONN REGULATOR *
- * *****************/
-
-int smblib_vconn_regulator_enable(struct regulator_dev *rdev)
-{
-	struct smb_charger *chg = rdev_get_drvdata(rdev);
-	u8 stat;
-	int rc = 0;
-
-	/*
-	 * VCONN_EN_ORIENTATION is overloaded with overriding the CC pin used
-	 * for Vconn, and it should be set with reverse polarity of CC_OUT.
-	 */
-	rc = smblib_read(chg, TYPE_C_STATUS_4_REG, &stat);
-	if (rc < 0) {
-		smblib_err(chg, "Couldn't read TYPE_C_STATUS_4 rc=%d\n", rc);
-		return rc;
-	}
-	stat = stat & CC_ORIENTATION_BIT ? 0 : VCONN_EN_ORIENTATION_BIT;
-	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
-				 VCONN_EN_VALUE_BIT | VCONN_EN_ORIENTATION_BIT,
-				 VCONN_EN_VALUE_BIT | stat);
-	if (rc < 0)
-		smblib_err(chg, "Couldn't enable vconn setting rc=%d\n", rc);
-
-	return rc;
-}
-
-int smblib_vconn_regulator_disable(struct regulator_dev *rdev)
-{
-	struct smb_charger *chg = rdev_get_drvdata(rdev);
-	int rc = 0;
-
-	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
-				 VCONN_EN_VALUE_BIT, 0);
-	if (rc < 0)
-		smblib_err(chg, "Couldn't disable vconn regulator rc=%d\n",
-			rc);
-
-	return rc;
-}
-
-int smblib_vconn_regulator_is_enabled(struct regulator_dev *rdev)
-{
-	struct smb_charger *chg = rdev_get_drvdata(rdev);
-	int rc = 0;
-	u8 cmd;
-
-	rc = smblib_read(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG, &cmd);
-	if (rc < 0) {
-		smblib_err(chg, "Couldn't read TYPE_C_INTRPT_ENB_SOFTWARE_CTRL rc=%d\n",
-			rc);
-		return rc;
-	}
-
-	return (cmd & VCONN_EN_VALUE_BIT) ? 1 : 0;
 }
 
 /********************
@@ -2598,6 +2705,74 @@ irqreturn_t smblib_handle_debug(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+irqreturn_t smblib_handle_otg_overcurrent(int irq, void *data)
+{
+	struct smb_irq_data *irq_data = data;
+	struct smb_charger *chg = irq_data->parent_data;
+	int rc;
+	u8 stat;
+
+	rc = smblib_read(chg, OTG_BASE + INT_RT_STS_OFFSET, &stat);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't read OTG_INT_RT_STS rc=%d\n", rc);
+		return IRQ_HANDLED;
+	}
+
+	if (!(stat & OTG_OVERCURRENT_RT_STS_BIT))
+		return IRQ_HANDLED;
+
+	smblib_err(chg, "over-current detected on VBUS\n");
+	if (!chg->vbus_vreg || !chg->vbus_vreg->rdev)
+		return IRQ_HANDLED;
+
+	mutex_lock(&chg->vbus_output_lock);
+	mutex_lock(&chg->otg_overcurrent_lock);
+	if (!chg->external_vconn && chg->vconn_en) {
+		rc = _smblib_vconn_regulator_disable(chg->vconn_vreg->rdev);
+		if (rc < 0)
+			smblib_err(chg, "Couldn't disable VCONN rc=%d\n", rc);
+	}
+
+	rc = _smblib_otg_disable(chg->vbus_vreg->rdev);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't disable VBUS rc=%d\n", rc);
+
+	/*
+	 * VBUS must be disabled after OC to be ready for the next insertion.
+	 * If the maximum number of attempts have been reached then don't try
+	 * to re-enable.
+	 */
+	if (++chg->otg_attempts > OTG_MAX_ATTEMPTS) {
+		smblib_err(chg, "OTG failed to enable after %d attempts\n",
+			   chg->otg_attempts - 1);
+		goto unlock;
+	}
+
+	/* allow the attached device to discharge */
+	mutex_unlock(&chg->otg_overcurrent_lock);
+	mutex_unlock(&chg->vbus_output_lock);
+
+	msleep(250);
+
+	mutex_lock(&chg->vbus_output_lock);
+	mutex_lock(&chg->otg_overcurrent_lock);
+
+	rc = _smblib_otg_enable(chg->vbus_vreg->rdev);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't enable VBUS rc=%d\n", rc);
+
+	if (!chg->external_vconn && chg->vconn_en) {
+		rc = _smblib_vconn_regulator_enable(chg->vconn_vreg->rdev);
+		if (rc < 0)
+			smblib_err(chg, "Couldn't enable VCONN rc=%d\n", rc);
+	}
+
+unlock:
+	mutex_unlock(&chg->otg_overcurrent_lock);
+	mutex_unlock(&chg->vbus_output_lock);
+	return IRQ_HANDLED;
+}
+
 static void smblib_pl_handle_chg_state_change(struct smb_charger *chg, u8 stat)
 {
 	bool pl_enabled;
@@ -3105,6 +3280,8 @@ static void smblib_handle_typec_removal(struct smb_charger *chg)
 	 */
 	vote(chg->apsd_disable_votable, PD_HARD_RESET_VOTER, false, 0);
 
+	chg->vconn_attempts = 0;
+	chg->otg_attempts = 0;
 	typec_source_removal(chg);
 	typec_sink_removal(chg);
 
@@ -3183,6 +3360,45 @@ static void smblib_handle_typec_debounce_done(struct smb_charger *chg,
 		   smblib_typec_mode_name[pval.intval]);
 }
 
+static void smblib_handle_vconn_overcurrent(struct smb_charger *chg)
+{
+	int rc;
+
+	smblib_err(chg, "over-current detected on VCONN\n");
+	if (!chg->vconn_vreg || !chg->vconn_vreg->rdev)
+		return;
+
+	mutex_lock(&chg->otg_overcurrent_lock);
+	rc = _smblib_vconn_regulator_disable(chg->vconn_vreg->rdev);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't disable VCONN rc=%d\n", rc);
+
+	/*
+	 * VCONN must be disabled after OC to be ready for the next insertion.
+	 * If the maximum number of attempts have been reached then don't try
+	 * to re-enable.
+	 */
+	if (++chg->vconn_attempts > VCONN_MAX_ATTEMPTS) {
+		smblib_err(chg, "VCONN failed to enable after %d attempts\n",
+			   chg->vconn_attempts - 1);
+		mutex_unlock(&chg->otg_overcurrent_lock);
+		return;
+	}
+
+	/* allow the attached device to discharge */
+	mutex_unlock(&chg->otg_overcurrent_lock);
+
+	msleep(250);
+	mutex_lock(&chg->vbus_output_lock);
+	mutex_lock(&chg->otg_overcurrent_lock);
+
+	rc = _smblib_vconn_regulator_enable(chg->vconn_vreg->rdev);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't enable VCONN rc=%d\n", rc);
+	mutex_unlock(&chg->otg_overcurrent_lock);
+	mutex_unlock(&chg->vbus_output_lock);
+}
+
 irqreturn_t smblib_handle_usb_typec_change(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
@@ -3217,6 +3433,9 @@ irqreturn_t smblib_handle_usb_typec_change(int irq, void *data)
 	if (stat4 & TYPEC_VBUS_ERROR_STATUS_BIT)
 		smblib_dbg(chg, PR_INTERRUPT, "IRQ: %s vbus-error\n",
 			   irq_data->name);
+
+	if (stat4 & TYPEC_VCONN_OVERCURR_STATUS_BIT)
+		smblib_handle_vconn_overcurrent(chg);
 
 	power_supply_changed(chg->usb_psy);
 	smblib_dbg(chg, PR_REGISTER, "TYPE_C_STATUS_4 = 0x%02x\n", stat4);
@@ -3630,6 +3849,7 @@ int smblib_init(struct smb_charger *chg)
 
 	mutex_init(&chg->write_lock);
 	mutex_init(&chg->vbus_output_lock);
+	mutex_init(&chg->otg_overcurrent_lock);
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->pl_detect_work, smblib_pl_detect_work);
 	INIT_WORK(&chg->rdstd_cc2_detach_work, rdstd_cc2_detach_work);
