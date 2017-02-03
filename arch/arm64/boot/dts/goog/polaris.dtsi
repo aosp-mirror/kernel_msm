@@ -607,3 +607,23 @@
 	/* SLPI firmware files are spli.* */
 	qcom,firmware-name = "slpi";
 };
+
+&pil_slpi_mem {
+	/* qct original reg = <0 0x93800000 0 0xf00000>; */
+	reg = <0 0x94300000 0 0xf00000>;
+};
+
+&pil_video_mem {
+	/* qct original reg = <0 0x93300000 0 0x500000>; */
+	reg = <0 0x93E00000 0 0x500000>;
+};
+
+&pil_adsp_mem {
+	/* qct original reg = <0 0x91900000 0 0x1a00000>; */
+	reg = <0 0x92400000 0 0x1a00000>;
+};
+
+&modem_mem {
+	/* qct original reg = <0 0x8ac00000 0 0x6d00000>; */
+	reg = <0 0x8ac00000 0 0x7800000>;
+};
