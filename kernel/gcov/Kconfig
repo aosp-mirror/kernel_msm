@@ -78,6 +78,11 @@ config GCOV_FORMAT_4_7
 	---help---
 	Select this option to use the format defined by GCC 4.7.
 
+config GCOV_FORMAT_CLANG
+	bool "Clang format"
+	---help---
+	Select this option to use the format defined by Clang.
+
 endchoice
 
 endmenu
