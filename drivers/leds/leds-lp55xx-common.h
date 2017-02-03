@@ -176,6 +176,8 @@ struct lp55xx_led {
 	struct work_struct brightness_work;
 	u8 brightness;
 	struct lp55xx_chip *chip;
+	int on_ms;
+	int off_ms;
 };
 
 /* register access */

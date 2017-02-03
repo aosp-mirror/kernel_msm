@@ -102,6 +102,14 @@
 #define LP5562_CMD_DIRECT		0x3F
 #define LP5562_PATTERN_OFF		0
 
+#define RGB_LED_MIN_MS			15
+#define RGB_LED_MAX_MS			13000
+#define ENG_1_PC_CONTROL		0x09
+#define ENG_2_PC_CONTROL		0x0A
+#define ENG_3_PC_CONTROL		0x0B
+#define MAX_CHANNEL			3
+#define LP5562_REG_PROG_MEM_MAX		32
+
 static inline void lp5562_wait_opmode_done(void)
 {
 	/* operation mode change needs to be longer than 153 us */
@@ -207,10 +215,10 @@ static void lp5562_run_engine(struct lp55xx_chip *chip, bool start)
 }
 
 static int lp5562_update_firmware(struct lp55xx_chip *chip,
-					const u8 *data, size_t size)
+				  const u8 *data, size_t size)
 {
 	enum lp55xx_engine_index idx = chip->engine_idx;
-	u8 pattern[LP5562_PROGRAM_LENGTH] = {0};
+	u8 pattern[LP5562_PROGRAM_LENGTH] = { 0 };
 	u8 addr[] = {
 		[LP55XX_ENGINE_1] = LP5562_REG_PROG_MEM_ENG1,
 		[LP55XX_ENGINE_2] = LP5562_REG_PROG_MEM_ENG2,
@@ -239,7 +247,7 @@ static int lp5562_update_firmware(struct lp55xx_chip *chip,
 		if (ret != 1)
 			goto err;
 
-		pattern[i] = (u8)cmd;
+		pattern[i] = (u8) cmd;
 		offset += nrchars;
 		i++;
 	}
@@ -313,7 +321,7 @@ static int lp5562_post_init_device(struct lp55xx_chip *chip)
 
 static void lp5562_led_brightness_work(struct work_struct *work)
 {
-	struct lp55xx_led *led = container_of(work, struct lp55xx_led,
+/*	struct lp55xx_led *led = container_of(work, struct lp55xx_led,
 					      brightness_work);
 	struct lp55xx_chip *chip = led->chip;
 	u8 addr[] = {
@@ -326,6 +334,7 @@ static void lp5562_led_brightness_work(struct work_struct *work)
 	mutex_lock(&chip->lock);
 	lp55xx_write(chip, addr[led->chan_nr], led->brightness);
 	mutex_unlock(&chip->lock);
+*/
 }
 
 static void lp5562_write_program_memory(struct lp55xx_chip *chip,
@@ -347,8 +356,8 @@ static void lp5562_write_program_memory(struct lp55xx_chip *chip,
 static inline bool _is_pc_overflow(struct lp55xx_predef_pattern *ptn)
 {
 	return ptn->size_r >= LP5562_PROGRAM_LENGTH ||
-	       ptn->size_g >= LP5562_PROGRAM_LENGTH ||
-	       ptn->size_b >= LP5562_PROGRAM_LENGTH;
+	    ptn->size_g >= LP5562_PROGRAM_LENGTH ||
+	    ptn->size_b >= LP5562_PROGRAM_LENGTH;
 }
 
 static int lp5562_run_predef_led_pattern(struct lp55xx_chip *chip, int mode)
@@ -388,11 +397,11 @@ static int lp5562_run_predef_led_pattern(struct lp55xx_chip *chip, int mode)
 
 	/* Program engines */
 	lp5562_write_program_memory(chip, LP5562_REG_PROG_MEM_ENG1,
-				ptn->r, ptn->size_r);
+				    ptn->r, ptn->size_r);
 	lp5562_write_program_memory(chip, LP5562_REG_PROG_MEM_ENG2,
-				ptn->g, ptn->size_g);
+				    ptn->g, ptn->size_g);
 	lp5562_write_program_memory(chip, LP5562_REG_PROG_MEM_ENG3,
-				ptn->b, ptn->size_b);
+				    ptn->b, ptn->size_b);
 
 	/* Run engines */
 	lp5562_run_engine(chip, true);
@@ -401,8 +410,8 @@ static int lp5562_run_predef_led_pattern(struct lp55xx_chip *chip, int mode)
 }
 
 static ssize_t lp5562_store_pattern(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t len)
+				    struct device_attribute *attr,
+				    const char *buf, size_t len)
 {
 	struct lp55xx_led *led = i2c_get_clientdata(to_i2c_client(dev));
 	struct lp55xx_chip *chip = led->chip;
@@ -429,8 +438,8 @@ static ssize_t lp5562_store_pattern(struct device *dev,
 }
 
 static ssize_t lp5562_store_engine_mux(struct device *dev,
-				     struct device_attribute *attr,
-				     const char *buf, size_t len)
+				       struct device_attribute *attr,
+				       const char *buf, size_t len)
 {
 	struct lp55xx_led *led = i2c_get_clientdata(to_i2c_client(dev));
 	struct lp55xx_chip *chip = led->chip;
@@ -492,22 +501,281 @@ static const struct attribute_group lp5562_group = {
 
 /* Chip specific configurations */
 static struct lp55xx_device_config lp5562_cfg = {
-	.max_channel  = LP5562_MAX_LEDS,
+	.max_channel = LP5562_MAX_LEDS,
 	.reset = {
-		.addr = LP5562_REG_RESET,
-		.val  = LP5562_RESET,
-	},
+		  .addr = LP5562_REG_RESET,
+		  .val = LP5562_RESET,
+		  },
 	.enable = {
-		.addr = LP5562_REG_ENABLE,
-		.val  = LP5562_ENABLE_DEFAULT,
-	},
-	.post_init_device   = lp5562_post_init_device,
-	.set_led_current    = lp5562_set_led_current,
+		   .addr = LP5562_REG_ENABLE,
+		   .val = LP5562_ENABLE_DEFAULT,
+		   },
+	.post_init_device = lp5562_post_init_device,
+	.set_led_current = lp5562_set_led_current,
 	.brightness_work_fn = lp5562_led_brightness_work,
-	.run_engine         = lp5562_run_engine,
-	.firmware_cb        = lp5562_firmware_loaded,
-	.dev_attr_group     = &lp5562_group,
+	.run_engine = lp5562_run_engine,
+	.firmware_cb = lp5562_firmware_loaded,
+	.dev_attr_group = &lp5562_group,
 };
+
+static ssize_t rgb_on_off_ms_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct led_classdev *cdev = dev_get_drvdata(dev);
+	struct lp55xx_led *led = container_of(cdev, struct lp55xx_led, cdev);
+
+	return snprintf(buf, PAGE_SIZE, "%d %d\n", led->on_ms, led->off_ms);
+}
+
+static ssize_t rgb_on_off_ms_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t len)
+{
+	struct led_classdev *cdev = dev_get_drvdata(dev);
+	struct lp55xx_led *led = container_of(cdev, struct lp55xx_led, cdev);
+	int on_ms;
+	int off_ms;
+
+	if (sscanf(buf, "%d %d", &on_ms, &off_ms) != 2)
+		return -EINVAL;
+
+	if (on_ms < RGB_LED_MIN_MS)
+		on_ms = RGB_LED_MIN_MS;
+	if (on_ms > RGB_LED_MAX_MS)
+		on_ms = RGB_LED_MAX_MS;
+	if (off_ms > RGB_LED_MAX_MS)
+		off_ms = RGB_LED_MAX_MS;
+	if (on_ms == led->on_ms && off_ms == led->off_ms)
+		return len;
+	led->on_ms = on_ms;
+	led->off_ms = off_ms;
+	return len;
+}
+
+static DEVICE_ATTR(on_off_ms, 0660, rgb_on_off_ms_show, rgb_on_off_ms_store);
+static void lp5562_on_off_work(struct lp55xx_led *led)
+{
+	struct lp55xx_chip *chip = led->chip;
+	uint8_t data = 0x00;
+	int reg_index = 0;
+	uint8_t mode = 0x00;
+	int i = 0, mutlipe_time = 0, reset_time = 0;
+
+	mutex_lock(&chip->lock);
+	if (led[0].brightness)
+		mode |= (3 << 4);
+	if (led[1].brightness)
+		mode |= (3 << 2);
+	if (led[2].brightness)
+		mode |= 3;
+	data = mode & 0x15;
+	lp55xx_write(chip, LP5562_REG_OP_MODE, data);
+
+	udelay(200);
+	lp55xx_write(chip, ENG_1_PC_CONTROL, 0);
+	udelay(200);
+	lp55xx_write(chip, ENG_2_PC_CONTROL, 0);
+	udelay(200);
+	lp55xx_write(chip, ENG_3_PC_CONTROL, 0);
+
+	if (led[0].brightness) {
+		reg_index = 0;
+		if (led[0].off_ms != 0) {
+			/* set pwm 0 */
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG1 + reg_index++,
+				     0x40);
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG1 + reg_index++,
+				     0x00);
+			/* wait off_ms */
+			mutlipe_time = led[0].off_ms / 1000;
+			for (i = 0; i < mutlipe_time; i++) {
+				lp55xx_write(chip,
+					     LP5562_REG_PROG_MEM_ENG1 +
+					     reg_index++, 0x7f);
+				lp55xx_write(chip,
+					     LP5562_REG_PROG_MEM_ENG1 +
+					     reg_index++, 0x00);
+			}
+			reset_time = led[0].off_ms - mutlipe_time * 1000;
+			reset_time = 0x30 | reset_time / 15;
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG1 + reg_index++,
+				     reset_time);
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG1 + reg_index++,
+				     0x00);
+		}
+		/* set pwm */
+		lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG1 + reg_index++,
+			     0x40);
+		lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG1 + reg_index++,
+			     led[0].brightness);
+		/* wait on_ms */
+		mutlipe_time = led[0].on_ms / 1000;
+		for (i = 0; i < mutlipe_time; i++) {
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG1 + reg_index++,
+				     0x7f);
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG1 + reg_index++,
+				     0x00);
+		}
+		reset_time = led[0].on_ms - mutlipe_time * 1000;
+		reset_time = 0x30 | reset_time / 15;
+		lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG1 + reg_index++,
+			     reset_time);
+		lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG1 + reg_index++,
+			     0x00);
+		/* clean register */
+		for (i = reg_index; i < LP5562_REG_PROG_MEM_MAX; i++)
+			lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG1 + i, 0x00);
+
+	}
+
+	if (led[1].brightness) {
+		reg_index = 0;
+		if (led[1].off_ms != 0) {
+			/* set pwm 0 */
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG2 + reg_index++,
+				     0x40);
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG2 + reg_index++,
+				     0x00);
+			/* wait off_ms */
+			mutlipe_time = led[1].off_ms / 1000;
+			for (i = 0; i < mutlipe_time; i++) {
+				lp55xx_write(chip,
+					     LP5562_REG_PROG_MEM_ENG2 +
+					     reg_index++, 0x7f);
+				lp55xx_write(chip,
+					     LP5562_REG_PROG_MEM_ENG2 +
+					     reg_index++, 0x00);
+			}
+			reset_time = led[1].off_ms - mutlipe_time * 1000;
+			reset_time = 0x30 | reset_time / 15;
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG2 + reg_index++,
+				     reset_time);
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG2 + reg_index++,
+				     0x00);
+		}
+		/* set pwm */
+		lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG2 + reg_index++,
+			     0x40);
+		lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG2 + reg_index++,
+			     led[1].brightness);
+		/* wait on_ms */
+		mutlipe_time = led[1].on_ms / 1000;
+		for (i = 0; i < mutlipe_time; i++) {
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG2 + reg_index++,
+				     0x7f);
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG2 + reg_index++,
+				     0x00);
+		}
+		reset_time = led[1].on_ms - mutlipe_time * 1000;
+		reset_time = 0x30 | reset_time / 15;
+		lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG2 + reg_index++,
+			     reset_time);
+		lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG2 + reg_index++,
+			     0x00);
+		/* clean register */
+		for (i = reg_index; i < LP5562_REG_PROG_MEM_MAX; i++)
+			lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG2 + i, 0x00);
+	}
+
+	if (led[2].brightness) {
+		reg_index = 0;
+		if (led[2].off_ms != 0) {
+			/* set pwm 0 */
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG3 + reg_index++,
+				     0x40);
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG3 + reg_index++,
+				     0x00);
+			/* wait off_ms */
+			mutlipe_time = led[2].off_ms / 1000;
+			for (i = 0; i < mutlipe_time; i++) {
+				lp55xx_write(chip,
+					     LP5562_REG_PROG_MEM_ENG3 +
+					     reg_index++, 0x7f);
+				lp55xx_write(chip,
+					     LP5562_REG_PROG_MEM_ENG3 +
+					     reg_index++, 0x00);
+			}
+			reset_time = led[2].off_ms - mutlipe_time * 1000;
+			reset_time = 0x30 | reset_time / 15;
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG3 + reg_index++,
+				     reset_time);
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG3 + reg_index++,
+				     0x00);
+		}
+		/* set pwm */
+		lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG3 + reg_index++,
+			     0x40);
+		lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG3 + reg_index++,
+			     led[2].brightness);
+		/* wait on_ms */
+		mutlipe_time = led[2].on_ms / 1000;
+		for (i = 0; i < mutlipe_time; i++) {
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG3 + reg_index++,
+				     0x7f);
+			lp55xx_write(chip,
+				     LP5562_REG_PROG_MEM_ENG3 + reg_index++,
+				     0x00);
+		}
+		reset_time = led[2].on_ms - mutlipe_time * 1000;
+		reset_time = 0x30 | reset_time / 15;
+		lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG3 + reg_index++,
+			     reset_time);
+		lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG3 + reg_index++,
+			     0x00);
+		/* clean register */
+		for (i = reg_index; i < LP5562_REG_PROG_MEM_MAX; i++)
+			lp55xx_write(chip, LP5562_REG_PROG_MEM_ENG3 + i, 0x00);
+	}
+
+	data = mode & 0x2a;
+	lp55xx_write(chip, LP5562_REG_OP_MODE, data);
+	udelay(200);
+	data = (mode & 0x2a) | 0x40;
+	lp55xx_write(chip, LP5562_REG_ENABLE, data);
+	udelay(550);
+	mutex_unlock(&chip->lock);
+}
+
+static ssize_t rgb_start_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t len)
+{
+	struct led_classdev *cdev = dev_get_drvdata(dev);
+	struct lp55xx_led *led = container_of(cdev, struct lp55xx_led, cdev);
+	int rgb_start;
+
+	if (kstrtoint(buf, 10, &rgb_start) != 0)
+		return -EINVAL;
+	lp55xx_write(led->chip, LP5562_REG_OP_MODE, LP5562_CMD_DISABLE);
+
+	if (rgb_start) {
+		lp55xx_write(led->chip, LP5562_REG_ENABLE, 0x40);
+		udelay(550);
+		lp55xx_write(led->chip, LP5562_REG_CONFIG, 0x29);
+		lp55xx_write(led->chip, LP5562_REG_ENG_SEL, 0xDB);
+		lp5562_on_off_work(led);
+	}
+	return len;
+}
+
+static DEVICE_ATTR(rgb_start, 0220, NULL, rgb_start_store);
 
 static int lp5562_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
@@ -517,6 +785,7 @@ static int lp5562_probe(struct i2c_client *client,
 	struct lp55xx_led *led;
 	struct lp55xx_platform_data *pdata = dev_get_platdata(&client->dev);
 	struct device_node *np = client->dev.of_node;
+	int i;
 
 	if (!pdata) {
 		if (np) {
@@ -534,7 +803,7 @@ static int lp5562_probe(struct i2c_client *client,
 		return -ENOMEM;
 
 	led = devm_kzalloc(&client->dev,
-			sizeof(*led) * pdata->num_channels, GFP_KERNEL);
+			   sizeof(*led) * pdata->num_channels, GFP_KERNEL);
 	if (!led)
 		return -ENOMEM;
 
@@ -553,6 +822,11 @@ static int lp5562_probe(struct i2c_client *client,
 	ret = lp55xx_register_leds(led, chip);
 	if (ret)
 		goto err_register_leds;
+
+	for (i = 0; i < MAX_CHANNEL; i++) {
+		device_create_file(led[i].cdev.dev, &dev_attr_on_off_ms);
+		device_create_file(led[i].cdev.dev, &dev_attr_rgb_start);
+	}
 
 	ret = lp55xx_register_sysfs(chip);
 	if (ret) {
@@ -574,8 +848,14 @@ static int lp5562_remove(struct i2c_client *client)
 {
 	struct lp55xx_led *led = i2c_get_clientdata(client);
 	struct lp55xx_chip *chip = led->chip;
+	int i;
 
 	lp5562_stop_engine(chip);
+
+	for (i = 0; i < MAX_CHANNEL; i++) {
+		device_remove_file(led[i].cdev.dev, &dev_attr_on_off_ms);
+		device_remove_file(led[i].cdev.dev, &dev_attr_rgb_start);
+	}
 
 	lp55xx_unregister_sysfs(chip);
 	lp55xx_unregister_leds(led, chip);
@@ -585,14 +865,15 @@ static int lp5562_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id lp5562_id[] = {
-	{ "lp5562", 0 },
-	{ }
+	{"lp5562", 0},
+	{}
 };
+
 MODULE_DEVICE_TABLE(i2c, lp5562_id);
 
 #ifdef CONFIG_OF
 static const struct of_device_id of_lp5562_leds_match[] = {
-	{ .compatible = "ti,lp5562", },
+	{.compatible = "ti,lp5562",},
 	{},
 };
 
@@ -601,12 +882,12 @@ MODULE_DEVICE_TABLE(of, of_lp5562_leds_match);
 
 static struct i2c_driver lp5562_driver = {
 	.driver = {
-		.name	= "lp5562",
-		.of_match_table = of_match_ptr(of_lp5562_leds_match),
-	},
-	.probe		= lp5562_probe,
-	.remove		= lp5562_remove,
-	.id_table	= lp5562_id,
+		   .name = "lp5562",
+		   .of_match_table = of_match_ptr(of_lp5562_leds_match),
+		   },
+	.probe = lp5562_probe,
+	.remove = lp5562_remove,
+	.id_table = lp5562_id,
 };
 
 module_i2c_driver(lp5562_driver);
