@@ -66,6 +66,7 @@ int mnh_ddr_po_init(struct device *dev,
 		    struct mnh_ddr_state *state)
 {
 	int index;
+	int i;
 
 	dev_info(dev, "%s start.", __func__);
 
@@ -168,10 +169,16 @@ int mnh_ddr_po_init(struct device *dev,
 	MNH_DDR_PI_OUTf(00, PI_START, 1);
 	MNH_DDR_CTL_OUTf(00, START, 1);
 
-	while (!(MNH_DDR_CTL_IN(227) & 0x00000010))
+	i = 0;
+	while ((i < 1000) && !(MNH_DDR_CTL_IN(227) & 0x00000010)) {
 		udelay(10);
+		i++;
+	}
 
-	dev_info(dev, "%s done.", __func__);
+	if (i == 1000)
+		dev_err(dev, "%s: ddr training failed\n", __func__);
+	else
+		dev_info(dev, "%s done.", __func__);
 #ifdef MNH_DDR_DO_FSP
 	MNH_DDR_CTL_OUTf(165, MR_FSP_DATA_VALID_F0_0, 1);
 	MNH_DDR_CTL_OUTf(165, MR_FSP_DATA_VALID_F1_0, 1);

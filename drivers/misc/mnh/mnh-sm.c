@@ -722,9 +722,6 @@ static int mnh_sm_probe(struct platform_device *pdev)
 
 	dev_info(dev, "MNH SM initialized successfully\n");
 
-	/* TODO: Is this necessary? */
-	mnh_sm_poweroff(sm_config_1);
-
 	return 0;
 
 fail_mnh_pwr_init:

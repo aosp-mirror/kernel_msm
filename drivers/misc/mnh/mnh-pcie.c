@@ -13,7 +13,7 @@
  * more details.
  *
  */
-#define DEBUG
+/* #define DEBUG */
 #include <asm/dma-iommu.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
@@ -65,15 +65,11 @@
 
 #define IS_NULL(ptr) ((ptr == NULL)?1:0)
 
-
-
 /* mnh_pci_tbl - PCI Device ID Table */
 static const struct pci_device_id mnh_pci_tbl[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_MNH)},
 	{0, } /* terminate the list */
 };
-
-
 MODULE_DEVICE_TABLE(pci, mnh_pci_tbl);
 
 struct mnh_device {
@@ -1516,6 +1512,66 @@ static void mnh_pci_fixup(struct pci_dev *pdev)
 	}
 }
 
+int mnh_pci_init_resume(void)
+{
+	int err;
+	int i = 0;
+	uint32_t  magic;
+	struct mnh_inb_window iatu;
+	struct pci_dev *pdev = mnh_dev->pdev;
+
+	/* enable pci dev */
+	err = pci_enable_device(pdev);
+	if (err)
+		dev_err(&pdev->dev, "failed to enable pci device.\n");
+
+	/* set PCI host mastering  */
+	pci_set_master(pdev);
+
+	if (dma_set_mask(&pdev->dev, DMA_BIT_MASK(64)) ||
+		dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(64))) {
+
+		err = dma_set_mask(&pdev->dev, DMA_BIT_MASK(32));
+		if (err)
+			err = dma_set_coherent_mask(&pdev->dev,
+							DMA_BIT_MASK(32));
+	}
+	if (err)
+		dev_err(&pdev->dev, "No usable DMA configuration, aborting\n");
+
+	for (i = 0; i < BAR_MAX_NUM; i++)
+		mnh_check_pci_resources(pdev, i);
+
+	mnh_dma_init();
+
+	/* Programing the inbound IATU */
+	iatu.mode = BAR_MATCH;
+	iatu.bar = 2;
+	iatu.region = 1;
+	iatu.target_mth_address = HW_MNH_PCIE_BAR_2_ADDR_START;
+	iatu.limit_pcie_address = 0xfff;
+	iatu.base_pcie_address = 0x3fffffff00000000;
+	mnh_set_inbound_iatu(&iatu);
+
+	iatu.mode = BAR_MATCH;
+	iatu.bar = 4;
+	iatu.region = 2;
+	iatu.target_mth_address = HW_MNH_PCIE_BAR_4_ADDR_START;
+	iatu.limit_pcie_address = 0xfff;
+	iatu.base_pcie_address = 0x3ffffff00000000;
+	mnh_set_inbound_iatu(&iatu);
+
+	err = mnh_pcie_config_read(0, sizeof(uint32_t), &magic);
+	if (err) {
+		dev_err(&pdev->dev, "failed to read magic register: 0x%08x (%d)\n",
+			magic, err);
+	}
+
+	dev_dbg(&pdev->dev, "MNH PCIe reinitialization successful.\n");
+
+	return 0;
+}
+
 /**
  * mnh_pci_probe - Device Initialization Routine
  *
@@ -1634,7 +1690,12 @@ static int mnh_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	setup_smmu(pdev);
 
-	mnh_pcie_config_read(0, sizeof(uint32_t), &magic);
+	err = mnh_pcie_config_read(0, sizeof(uint32_t), &magic);
+	if (err) {
+		dev_err(&pdev->dev, "failed to read magic register: 0x%08x (%d)\n",
+			magic, err);
+	}
+
 	dev_dbg(&pdev->dev, "MNH PCIe initialization successful.\n");
 
 	return 0;
@@ -1699,8 +1760,6 @@ static void mnh_pci_remove(struct pci_dev *pdev)
 	pci_disable_device(pdev);
 
 	dev_dbg(&pdev->dev, "MNH PCIe driver is removed\n");
-
-
 }
 
 #ifdef CONFIG_PM
