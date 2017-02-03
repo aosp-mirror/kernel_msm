@@ -1,0 +1,17 @@
+* Texas Instruments - drv2624 Haptics driver
+
+Required properties:
+	- compatible - "ti,drv2624" - DRV2624
+	- reg -  I2C slave address
+	- ti,reset-gpio - GPIO to reset the device
+
+Example:
+
+drv2624: drv2624@5a {
+	compatible = "ti,drv2624";
+	reg = <0x5a>;
+	ti,reset-gpio = <&tlmm 95 0>;
+};
+
+For more product information please see the link below:
+http://www.ti.com/product/drv2624
