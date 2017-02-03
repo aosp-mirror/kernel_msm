@@ -5192,7 +5192,7 @@ static int elan_ktf_ts_resume(struct i2c_client *client)
 #ifdef ELAN_RESUME_RST
 		printk("[elan] %s: Used Rest instead of command to resume touch panel\n", __func__);
 		elan_ktf_ts_hw_reset();
-		return 0;
+		/* return 0; */
 #endif
 		do {
 			/* eWD1000 resumes by HW, driver does not have to set power state */
