@@ -2193,7 +2193,7 @@ static int smb23x_get_prop_batt_status(struct smb23x_chip *chip)
         return POWER_SUPPLY_STATUS_FULL;
     }
 
-    return (chip->charger_plugin != 0) ? POWER_SUPPLY_STATUS_CHARGING : POWER_SUPPLY_STATUS_DISCHARGING;
+    return (chip->charger_plugin == 1) ? POWER_SUPPLY_STATUS_CHARGING : POWER_SUPPLY_STATUS_DISCHARGING;
 }
 
 #ifdef QTI_SMB231
