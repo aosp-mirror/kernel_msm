@@ -921,6 +921,9 @@ static void bcm15602_config_adc(struct bcm15602_chip *ddata)
 
 	/* update hk every 10 ms */
 	bcm15602_write_byte(ddata, BCM15602_REG_ADC_HKCTRL, 0x8);
+
+	/* enable bandgap curvature correction for improved accuracy */
+	bcm15602_write_byte(ddata, BCM15602_REG_ADC_BGCTRL, 0x7B);
 }
 
 /* enable all of the interrupts */
