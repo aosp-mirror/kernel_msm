@@ -3319,3 +3319,4 @@
 #include "msm8998-blsp.dtsi"
 #include "msm8998-audio.dtsi"
 #include "msm-smb138x.dtsi"
+#include "msm8998-sde.dtsi"
