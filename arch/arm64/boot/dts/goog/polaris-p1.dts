@@ -466,7 +466,6 @@
 
 		qcom,msm-mbhc-hphl-swh = <1>;
 		qcom,msm-mbhc-gnd-swh = <1>;
-		goog,us-euro-supply = <&pmcobalt_l28>;
 	};
 
 	wcd_rst_gpio: msm_cdc_pinctrl@116 {

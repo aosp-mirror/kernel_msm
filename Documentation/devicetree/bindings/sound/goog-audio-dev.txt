@@ -9,9 +9,6 @@ Additional or modified required properties:
 - compatible : "goog,polaris-snd"
 - qcom,model : "goog-polaris-snd-card"
 
-Additional optional properties:
-- goog,us-euro-supply : Regulator that supplies voltage to the OMTP/CTIA switch.
-
 Example:
 
 	sound-9335 {
@@ -46,7 +43,6 @@ Example:
 
 		qcom,msm-mbhc-hphl-swh = <1>;
 		qcom,msm-mbhc-gnd-swh = <1>;
-		goog,us-euro-supply = <&pmcobalt_l28>;
 		qcom,tasha-mclk-clk-freq = <9600000>;
 		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,
