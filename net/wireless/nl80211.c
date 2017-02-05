@@ -398,8 +398,6 @@ static const struct nla_policy nl80211_policy[NL80211_ATTR_MAX+1] = {
 	[NL80211_ATTR_MAC_MASK] = { .len = ETH_ALEN },
 	[NL80211_ATTR_PBSS] = { .type = NLA_FLAG },
 	[NL80211_ATTR_BSSID] = { .len = ETH_ALEN },
-	[NL80211_ATTR_SCHED_SCAN_RELATIVE_RSSI] = { .type = NLA_S8 },
-	[NL80211_ATTR_SCHED_SCAN_RELATIVE_RSSI_5G_PREF] = { .type = NLA_S8 },
 };
 
 /* policy for the key attributes */
@@ -5948,12 +5946,6 @@ nl80211_parse_sched_scan(struct wiphy *wiphy, struct wireless_dev *wdev,
 	if (!n_plans || n_plans > wiphy->max_sched_scan_plans)
 		return ERR_PTR(-EINVAL);
 
-	if (!wiphy_ext_feature_isset(
-		    wiphy, NL80211_EXT_FEATURE_SCHED_SCAN_RELATIVE_RSSI) &&
-	    (attrs[NL80211_ATTR_SCHED_SCAN_RELATIVE_RSSI] ||
-	     attrs[NL80211_ATTR_SCHED_SCAN_RELATIVE_RSSI_5G_PREF]))
-		return ERR_PTR(-EINVAL);
-
 	request = kzalloc(sizeof(*request)
 			+ sizeof(*request->ssids) * n_ssids
 			+ sizeof(*request->match_sets) * n_match_sets
@@ -6153,14 +6145,6 @@ nl80211_parse_sched_scan(struct wiphy *wiphy, struct wireless_dev *wdev,
 				goto out_free;
 		}
 	}
-
-	if (attrs[NL80211_ATTR_SCHED_SCAN_RELATIVE_RSSI])
-		request->relative_rssi = nla_get_s8(
-			attrs[NL80211_ATTR_SCHED_SCAN_RELATIVE_RSSI]);
-
-	if (attrs[NL80211_ATTR_SCHED_SCAN_RELATIVE_RSSI_5G_PREF])
-		request->relative_rssi_5g_pref = nla_get_s8(
-			attrs[NL80211_ATTR_SCHED_SCAN_RELATIVE_RSSI_5G_PREF]);
 
 	err = nl80211_parse_sched_scan_plans(wiphy, n_plans, request,
 					     attrs);
