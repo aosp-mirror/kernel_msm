@@ -1353,7 +1353,7 @@ static void yield_task_rt(struct rq *rq)
 }
 
 #ifdef CONFIG_SMP
-static int find_lowest_rq(struct task_struct *task, int sync);
+static int find_lowest_rq(struct task_struct *task);
 
 /*
  * Return whether the task on the given cpu is currently non-preemptible
@@ -1379,7 +1379,6 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags)
 	struct rq *rq;
 	bool may_not_preempt;
 	int target;
-	int sync = flags & WF_SYNC;
 
 	if (p->nr_cpus_allowed == 1)
 		goto out;
@@ -1390,11 +1389,18 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags)
 
 	rq = cpu_rq(cpu);
 
+	 /* Return current cpu if WF_SYNC hint is set */
+	if (sysctl_sched_sync_hint_enable && (flags & WF_SYNC)) {
+		int this_cpu = smp_processor_id();
+		if (cpumask_test_cpu(this_cpu, tsk_cpus_allowed(p)))
+			return this_cpu;
+	}
+
 	rcu_read_lock();
 	curr = READ_ONCE(rq->curr); /* unlocked access */
 
 	may_not_preempt = task_may_not_preempt(curr, cpu);
-	target = find_lowest_rq(p, sync);
+	target = find_lowest_rq(p);
 	/*
 	 * Possible race. Don't bother moving it if the
 	 * destination CPU is not running a lower priority task.
@@ -1739,7 +1745,7 @@ static int find_best_rt_target(struct task_struct* task, int cpu,
 	return target_cpu;
 }
 
-static int find_lowest_rq(struct task_struct *task, int sync)
+static int find_lowest_rq(struct task_struct *task)
 {
 	struct sched_domain *sd;
 	struct cpumask *lowest_mask = this_cpu_cpumask_var_ptr(local_cpu_mask);
@@ -1757,16 +1763,6 @@ static int find_lowest_rq(struct task_struct *task, int sync)
 	/* Constructing cpumask of lowest priorities */
 	if (!cpupri_find(&task_rq(task)->rd->cpupri, task, lowest_mask))
 		return -1; /* No targets found */
-
-	/* Return current cpu if WF_SYNC hint is set and present in
-	 * lowest_mask. Improves data locality.
-	 */
-	if (sysctl_sched_sync_hint_enable && sync) {
-		cpumask_t search_cpus;
-		cpumask_and(&search_cpus, tsk_cpus_allowed(task), lowest_mask);
-		if (cpumask_test_cpu(cpu, &search_cpus))
-			return cpu;
-	}
 
 	/*
 	 * At this point we have built a mask of cpus representing the
@@ -1846,7 +1842,7 @@ static struct rq *find_lock_lowest_rq(struct task_struct *task, struct rq *rq)
 	int cpu;
 
 	for (tries = 0; tries < RT_MAX_TRIES; tries++) {
-		cpu = find_lowest_rq(task, 0);
+		cpu = find_lowest_rq(task);
 
 		if ((cpu == -1) || (cpu == rq->cpu))
 			break;
