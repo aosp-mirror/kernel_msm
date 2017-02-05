@@ -19660,7 +19660,6 @@ static VOS_STATUS wma_pno_start(tp_wma_handle wma, tpSirPNOScanReq pno)
 	int ret;
 	wmi_vendor_oui *voui = NULL;
 	struct vendor_oui *pvoui = NULL;
-	connected_nlo_rssi_params *nlo_rssi = NULL;
 
 	WMA_LOGD("PNO Start");
 
@@ -19677,7 +19676,6 @@ static VOS_STATUS wma_pno_start(tp_wma_handle wma, tpSirPNOScanReq pno)
 	/* Add the fixed length of enlo_candidate_score_params */
 	len += sizeof(enlo_candidate_score_params);
 	len += sizeof(wmi_vendor_oui) * pno->num_vendor_oui;
-	len += sizeof(connected_nlo_rssi_params);
 
 	buf = wmi_buf_alloc(wma->wmi_handle, len);
 	if (!buf) {
@@ -19718,8 +19716,6 @@ static VOS_STATUS wma_pno_start(tp_wma_handle wma, tpSirPNOScanReq pno)
 
 	if (pno->ie_whitelist)
 		cmd->flags |= WMI_NLO_CONFIG_ENABLE_IE_WHITELIST_IN_PROBE_REQ;
-
-	cmd->flags |= WMI_NLO_CONFIG_ENABLE_CNLO_RSSI_CONFIG;
 
 	WMA_LOGI("pno flags = %x", cmd->flags);
 
@@ -19820,14 +19816,6 @@ static VOS_STATUS wma_pno_start(tp_wma_handle wma, tpSirPNOScanReq pno)
 		}
 		buf_ptr += cmd->num_vendor_oui * sizeof(wmi_vendor_oui);
 	}
-
-	nlo_rssi = (connected_nlo_rssi_params *) buf_ptr;
-	WMITLV_SET_HDR(&nlo_rssi->tlv_header,
-		WMITLV_TAG_STRUC_wmi_connected_nlo_rssi_params,
-		WMITLV_GET_STRUCT_TLVLEN(connected_nlo_rssi_params));
-	nlo_rssi->relative_rssi = pno->relative_rssi;
-	nlo_rssi->relative_rssi_5g_pref = pno->relative_rssi_5g_pref;
-	buf_ptr += sizeof(connected_nlo_rssi_params);
 
 	/* TODO: Discrete firmware doesn't have command/option to configure
 	 * App IE which comes from wpa_supplicant as of part PNO start request.

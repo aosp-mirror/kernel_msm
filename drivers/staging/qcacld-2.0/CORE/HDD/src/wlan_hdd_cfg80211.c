@@ -11349,10 +11349,6 @@ int wlan_hdd_cfg80211_init(struct device *dev,
         wiphy->max_match_sets       = SIR_PNO_MAX_SUPP_NETWORKS;
         wiphy->max_sched_scan_ie_len = SIR_MAC_MAX_IE_LENGTH;
     }
-#if defined(CFG80211_SCHED_SCAN_RELATIVE_RSSI)
-    wiphy_ext_feature_set(wiphy,
-        NL80211_EXT_FEATURE_SCHED_SCAN_RELATIVE_RSSI);
-#endif
 #endif/*FEATURE_WLAN_SCAN_PNO*/
 
 #if  defined QCA_WIFI_FTM
@@ -21145,23 +21141,6 @@ static void hdd_config_sched_scan_plan(tpSirPNOScanReq pno_req,
 }
 #endif
 
-
-#if defined(CFG80211_SCHED_SCAN_RELATIVE_RSSI)
-static inline void wlan_hdd_sched_scan_update_relative_rssi(
-			tpSirPNOScanReq pno_request,
-			struct cfg80211_sched_scan_request *request)
-{
-    pno_request->relative_rssi = request->relative_rssi;
-    pno_request->relative_rssi_5g_pref = request->relative_rssi_5g_pref;
-}
-#else
-static inline void wlan_hdd_sched_scan_update_relative_rssi(
-			tpSirPNOScanReq pno_request,
-			struct cfg80211_sched_scan_request *request)
-{
-}
-#endif
-
 /*
  * FUNCTION: __wlan_hdd_cfg80211_sched_scan_start
  * Function to enable PNO
@@ -21407,7 +21386,6 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
     }
 
     hdd_config_sched_scan_plan(pPnoRequest, request, pHddCtx);
-    wlan_hdd_sched_scan_update_relative_rssi(pPnoRequest, request);
 
     pPnoRequest->modePNO = SIR_PNO_MODE_IMMEDIATE;
 

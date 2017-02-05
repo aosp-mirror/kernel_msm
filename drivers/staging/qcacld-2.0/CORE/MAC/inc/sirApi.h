@@ -3735,8 +3735,6 @@ typedef struct
  * @p24GProbeTemplate: 2.4G probe template
  * @us5GProbeTemplateLen: 5G probe template length
  * @p5GProbeTemplate: 5G probe template
- * @relative_rssi: Relative rssi threshold, used for connected pno
- * @relative_rssi_5g_pref: Rssi preference that can be given to 5G BSS
  */
 typedef struct sSirPNOScanReq {
 	uint8_t         enable;
@@ -3758,8 +3756,6 @@ typedef struct sSirPNOScanReq {
 	uint8_t         p24GProbeTemplate[SIR_PNO_MAX_PB_REQ_SIZE];
 	uint16_t        us5GProbeTemplateLen;
 	uint8_t         p5GProbeTemplate[SIR_PNO_MAX_PB_REQ_SIZE];
-	int8_t          relative_rssi;
-	int8_t          relative_rssi_5g_pref;
 
 	/* mac address randomization attributes */
 	uint32_t enable_pno_scan_randomization;
