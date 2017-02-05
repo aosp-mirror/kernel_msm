@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -776,6 +776,7 @@ typedef struct sSirMbMsgP2p
 #define SIR_HAL_SEND_FREQ_RANGE_CONTROL_IND (SIR_HAL_ITC_MSG_TYPES_BEGIN + 359)
 #define SIR_BTC_BT_WLAN_INTERVAL_CMD        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 360)
 #define SIR_HAL_SET_ALLOWED_ACTION_FRAMES   (SIR_HAL_ITC_MSG_TYPES_BEGIN + 361)
+#define SIR_HAL_ACTION_FRAME_RANDOM_MAC     (SIR_HAL_ITC_MSG_TYPES_BEGIN + 374)
 
 #define SIR_HAL_MSG_TYPES_END              (SIR_HAL_MSG_TYPES_BEGIN + 0x1FF)
 

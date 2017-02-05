@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -998,6 +998,7 @@ tANI_U8* macTraceGetWdaMsgString(tANI_U16 wdaMsg)
 	CASE_RETURN_STRING(WDA_MIB_STATS_REQ);
 	CASE_RETURN_STRING(WDA_SET_MIB_STATS_ENABLE);
 	CASE_RETURN_STRING(WDA_SET_MIB_STATS_DISABLE);
+	CASE_RETURN_STRING(WDA_ACTION_FRAME_RANDOM_MAC);
 	default:
 		return((tANI_U8*) "UNKNOWN");
 		break;
