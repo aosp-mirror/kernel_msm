@@ -1001,15 +1001,13 @@ static const struct snd_soc_dapm_widget msm_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("Lineout_3 amp", NULL),
 	SND_SOC_DAPM_SPK("Lineout_2 amp", NULL),
 	SND_SOC_DAPM_SPK("Lineout_4 amp", NULL),
-	SND_SOC_DAPM_SPK("Loopback Output", NULL),
-
 	SND_SOC_DAPM_MIC("Handset Mic", NULL),
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("ANCRight Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("ANCLeft Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("Analog Mic5", NULL),
 	SND_SOC_DAPM_MIC("Analog Mic6", NULL),
-	SND_SOC_DAPM_MIC("Loopback Input", NULL),
+
 	SND_SOC_DAPM_MIC("Digital Mic0", NULL),
 	SND_SOC_DAPM_MIC("Digital Mic1", NULL),
 	SND_SOC_DAPM_MIC("Digital Mic2", NULL),
@@ -1407,8 +1405,6 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "ANC LINEOUT2");
 	snd_soc_dapm_ignore_suspend(dapm, "AIF4 VI");
 	snd_soc_dapm_ignore_suspend(dapm, "VIINPUT");
-	snd_soc_dapm_ignore_suspend(dapm, "Loopback Output");
-	snd_soc_dapm_ignore_suspend(dapm, "Loopback Input");
 
 	snd_soc_dapm_sync(dapm);
 
