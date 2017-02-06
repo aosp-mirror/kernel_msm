@@ -3048,6 +3048,8 @@ static int __ref update_offline_cores(int val)
 		}
 	}
 
+	pr_info("cpus_offlined: %d\n", cpus_offlined);
+
 	if (pend_hotplug_req && !in_suspend && !retry_in_progress) {
 		retry_in_progress = true;
 		schedule_delayed_work(&retry_hotplug_work,
@@ -3108,8 +3110,10 @@ static __ref int do_hotplug(void *data)
 				mask |= BIT(cpu);
 			mutex_unlock(&devices->hotplug_dev->clnt_lock);
 		}
-		if (mask != cpus_offlined)
+		if (mask != cpus_offlined) {
 			update_offline_cores(mask);
+			pr_info("cpu mask updated: %d\n", mask);
+		}
 		mutex_unlock(&core_control_mutex);
 
 		if (devices && devices->hotplug_dev) {
@@ -4930,6 +4934,9 @@ static ssize_t __ref store_cpus_offlined(struct kobject *kobj,
 		pr_err("Ignoring request; polling thread is enabled.\n");
 		goto done_cc;
 	}
+
+	pr_info("\"%s\"(PID:%i) request cpus offlined mask %d\n",
+		current->comm, current->pid, val);
 
 	for_each_possible_cpu(cpu) {
 		if (!(msm_thermal_info.core_control_mask & BIT(cpu)))
