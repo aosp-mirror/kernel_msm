@@ -1,0 +1,23 @@
+
+&pmi8998_haptics {
+	status = "disabled";
+};
+
+&i2c_6 {
+	status = "okay";
+	drv2624@5a {
+		compatible = "ti,drv2624";
+		reg = <0x5a>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <86 0>;
+		interrupt-names = "drv2624_irq";
+		ti,reset-gpio = <&tlmm 95 0>;
+		ti,irq-gpio = <&tlmm 96 0>; /* FIXME: GND */
+		ti,smart-loop = <0>; /* 0-closeloop, 1-openloop */
+		ti,actuator = <1>; /* 0-ERM, 1-LRA */
+		ti,rated-voltage = <83>;
+		ti,odclamp-voltage = <155>;
+		ti,lra-frequency = <175>; /* DON'T Care if ERM */
+		status = "ok";
+	};
+};
