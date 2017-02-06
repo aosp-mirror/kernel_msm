@@ -35,14 +35,27 @@
 	};
 
 	easel_pins {
-		easel_pins_default: easel_pins_default {
+		easel_ready_default: easel_ready_default {
 			mux {
-				pins = "gpio27", "gpio28";
+				pins = "gpio27";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio27", "gpio28";
+				pins = "gpio27";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		easel_boot_mode_default: easel_boot_mode_default {
+			mux {
+				pins = "gpio28";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio28";
 				drive-strength = <2>;
 				bias-disable;
 			};
@@ -115,7 +128,7 @@
 		clock-names = "ref_clk", "sleep_clk";
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&easel_pins_default>;
+		pinctrl-0 = <&easel_ready_default &easel_boot_mode_default>;
 
 		soc-pwr-good-gpio = <&bcm15602_gpio 0 0x00>;
 		ddr-pad-iso-n-gpio = <&bcm15602_gpio 1 0x00>;
