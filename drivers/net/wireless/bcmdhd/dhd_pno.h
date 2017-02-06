@@ -268,6 +268,8 @@ typedef struct dhd_pno_gscan_channel_bucket {
 	uint16 band;
 	uint8 report_flag;
 	uint8 num_channels;
+	uint16 repeat;
+	uint16 bucket_max_multiple;
 	uint16 chan_list[GSCAN_MAX_CH_BUCKETS];
 } dhd_pno_gscan_channel_bucket_t;
 
