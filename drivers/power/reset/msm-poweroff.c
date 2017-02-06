@@ -333,6 +333,14 @@ static void msm_restart_prepare(const char *cmd)
 					     restart_reason);
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
+		} else if (!strncmp(cmd, "download", 8)) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_DOWNLOAD_MODE);
+			__raw_writel(0x6f656d00 | 0xe0, restart_reason);
+		} else if (!strncmp(cmd, "ftm", 3)) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_FTM_MODE);
+			__raw_writel(0x6f656d00 | 0xe1, restart_reason);
 		} else {
 			__raw_writel(0x77665501, restart_reason);
 		}
