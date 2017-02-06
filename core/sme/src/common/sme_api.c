@@ -16812,7 +16812,7 @@ void sme_get_vdev_type_nss(tHalHandle hal, enum tQDF_ADAPTER_MODE dev_mode,
  * this function will call csrUpdateChannelList as well
  * to include/exclude DFS channels and unsafe channels.
  *
- * Return: eHAL_STATUS_SUCCESS or non-zero on failure.
+ * Return: QDF_STATUS_SUCCESS or non-zero on failure.
  */
 QDF_STATUS sme_update_sta_roam_policy(tHalHandle hal_handle,
 		enum sta_roam_policy_dfs_mode dfs_mode,
@@ -17430,3 +17430,96 @@ free_scan_flter:
 	return QDF_STATUS_SUCCESS;
 }
 
+QDF_STATUS sme_set_random_mac(tHalHandle hal,
+			      action_frame_random_filter_callback callback,
+			      uint32_t session_id, uint8_t *random_mac,
+			      void *context)
+{
+
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	QDF_STATUS vos_status = QDF_STATUS_SUCCESS;
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+	cds_msg_t vos_msg;
+	struct action_frame_random_filter *filter;
+
+	filter = qdf_mem_malloc(sizeof(*filter));
+
+	if (!filter) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			  FL("Failed to alloc random mac filter"));
+		return QDF_STATUS_E_FAILURE;
+	}
+	qdf_mem_zero(filter, sizeof(*filter));
+
+	filter->session_id = session_id;
+	filter->filter_type = SME_ACTION_FRAME_RANDOM_MAC_SET;
+	filter->callback = callback;
+	filter->context = context;
+	qdf_mem_copy(filter->mac_addr, random_mac, QDF_MAC_ADDR_SIZE);
+
+	status = sme_acquire_global_lock(&mac_ctx->sme);
+	if (status == QDF_STATUS_SUCCESS) {
+		/* Serialize the req through MC thread */
+		vos_msg.bodyptr = filter;
+		vos_msg.type = WDA_ACTION_FRAME_RANDOM_MAC;
+		vos_status = cds_mq_post_message(QDF_MODULE_ID_WMA, &vos_msg);
+
+		if (!QDF_IS_STATUS_SUCCESS(vos_status)) {
+			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				FL("action frame set random mac msg fail"));
+			status = QDF_STATUS_E_FAILURE;
+			qdf_mem_free(filter);
+		}
+		sme_release_global_lock(&mac_ctx->sme);
+	} else {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				FL("sme_AcquireGlobalLock failed"));
+		qdf_mem_free(filter);
+	}
+	return status;
+}
+
+QDF_STATUS sme_clear_random_mac(tHalHandle hal, uint32_t session_id,
+				uint8_t *random_mac)
+{
+
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	QDF_STATUS vos_status = QDF_STATUS_SUCCESS;
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+	cds_msg_t vos_msg;
+	struct action_frame_random_filter *filter;
+
+	filter = qdf_mem_malloc(sizeof(*filter));
+
+	if (!filter) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			  FL("Failed to alloc random mac filter"));
+		return QDF_STATUS_E_FAILURE;
+	}
+	qdf_mem_zero(filter, sizeof(*filter));
+
+	filter->session_id = session_id;
+	filter->filter_type = SME_ACTION_FRAME_RANDOM_MAC_CLEAR;
+	qdf_mem_copy(filter->mac_addr, random_mac, QDF_MAC_ADDR_SIZE);
+
+	status = sme_acquire_global_lock(&mac_ctx->sme);
+	if (status == QDF_STATUS_SUCCESS) {
+		/* Serialize the req through MC thread */
+		vos_msg.bodyptr = filter;
+		vos_msg.type = WDA_ACTION_FRAME_RANDOM_MAC;
+		vos_status = cds_mq_post_message(QDF_MODULE_ID_WMA, &vos_msg);
+
+		if (!QDF_IS_STATUS_SUCCESS(vos_status)) {
+			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				FL("action frame clear random mac msg fail"));
+			status = QDF_STATUS_E_FAILURE;
+			qdf_mem_free(filter);
+		}
+		sme_release_global_lock(&mac_ctx->sme);
+	} else {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				FL("sme_acquire_global_lock failed"));
+		qdf_mem_free(filter);
+	}
+	return status;
+}

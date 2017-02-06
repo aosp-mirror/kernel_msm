@@ -6971,4 +6971,31 @@ struct sme_rcpi_req {
 	struct qdf_mac_addr mac_addr;
 };
 
+/**
+ * enum action_filter_type - Type of action frame filter
+ * @SME_ACTION_FRAME_RANDOM_MAC_SET: Set filter
+ * @SME_ACTION_FRAME_RANDOM_MAC_CLEAR: Clear filter
+ */
+enum action_filter_type {
+	SME_ACTION_FRAME_RANDOM_MAC_SET,
+	SME_ACTION_FRAME_RANDOM_MAC_CLEAR,
+};
+
+typedef void (*action_frame_random_filter_callback)(bool set_random_addr,
+						    void *context);
+/**
+ * struct action_frame_random_filter - Random mac filter attrs for set/clear
+ * @session_id: Session interface
+ * @filter_type: Type of filter from action_filter_type
+ * @callback: Invoked from wmi
+ * @context: Parameter to be used with callback
+ * @mac_addr: Random mac addr for which filter is to be set
+ */
+struct action_frame_random_filter {
+	uint32_t session_id;
+	enum action_filter_type filter_type;
+	action_frame_random_filter_callback callback;
+	void *context;
+	uint8_t mac_addr[QDF_MAC_ADDR_SIZE];
+};
 #endif /* __SIR_API_H */

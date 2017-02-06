@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -522,7 +522,7 @@ static QDF_STATUS sme_rrm_send_scan_result(tpAniSirGlobal mac_ctx,
 
 	roam_info = qdf_mem_malloc(sizeof(*roam_info));
 	if (NULL == roam_info) {
-		sms_log(mac_ctx, LOGP, FL("vos_mem_malloc failed"));
+		sms_log(mac_ctx, LOGP, FL("qdf_mem_malloc failed"));
 		status = QDF_STATUS_E_NOMEM;
 		goto rrm_send_scan_results_done;
 	}
