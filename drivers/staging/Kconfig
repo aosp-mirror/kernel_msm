@@ -108,4 +108,8 @@ source "drivers/staging/skein/Kconfig"
 
 source "drivers/staging/unisys/Kconfig"
 
+# Quanta {
+source "drivers/staging/prima/Kconfig"
+# Quanta }
+
 endif # STAGING
