@@ -687,6 +687,24 @@ source "drivers/cpuidle/Kconfig"
 
 endmenu
 
+menu "Expermimental Security Enhancements"
+
+config KUSER_HELPERS_SELECTIVE_DISABLE
+	bool "Disable KUSER_HELPERS selectively"
+	depends on ARM64
+	help
+	  Kuser_Helpers is a set of functions in the vector page at a fixed address that
+	  are used to support applications compiled for legacy ARM <7.  These functions
+	  being at a fixed address creates an ASLR bypass.
+
+	  Do not enable this feature unless you know what you are doing, this is
+	  experimental, and will break any application that uses the Kuser_Helpers or
+	  registers a signal handler and uses the kernel trampolines.
+
+	  If unsure, say N.
+
+endmenu
+
 source "net/Kconfig"
 
 source "drivers/Kconfig"
