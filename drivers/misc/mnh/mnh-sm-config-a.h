@@ -17,7 +17,6 @@
 #ifndef __MNH_SM_CONFIG_A
 #define __MNH_SM_CONFIG_A
 
-#include "mnh-ddr-600.h"
 #include "mnh-ddr-33-300-600-400.h"
 
 static struct mnh_mipi_config mnh_mipi_configs[] = {
@@ -25,14 +24,14 @@ static struct mnh_mipi_config mnh_mipi_configs[] = {
 		.rxdev = MNH_MUX_DEVICE_RX0,
 		.rx_rate = 1296,
 		.tx_rate = 1296,
-		.vc_en_mask = MNH_MIPI_VC0_EN_MASK,
+		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
 		.is_gen3 = 1,
 	},
 	{
 		.rxdev = MNH_MUX_DEVICE_RX1,
 		.rx_rate = 648,
 		.tx_rate = 1296,
-		.vc_en_mask = MNH_MIPI_VC0_EN_MASK,
+		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
 		.is_gen3 = 1,
 	},
 };
@@ -43,26 +42,16 @@ static struct mnh_ddr_state mnh_ddr_po_config = {
 		HWIO_DDR_PHY_BASE_ADDR,
 		HWIO_DDR_PI_BASE_ADDR
 	},
-#ifndef MNH_DDR_DO_FSP
 	.fsps = {
 		0x100B007D,
+		0x0433007D,
 		0x0311007D,
-		0x0311007D,
-		0x0311007D
-	},
-	&mnh_ddr_600,
-#else
-	.fsps = {
-		0x100B007D,
-		0x0311007D,
-		0x0311007D,
-		0x0311007D
+		0x0422007D
 	},
 	&mnh_ddr_33_300_600_400,
-#endif
 };
 
-struct mnh_sm_configuration sm_config_1 = {
+struct mnh_sm_configuration sm_config_default = {
 	.mipi_configs = mnh_mipi_configs,
 	.ddr_config = &mnh_ddr_po_config,
 };

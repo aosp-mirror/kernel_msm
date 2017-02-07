@@ -59,16 +59,59 @@
 	HW_OUTf(HWIO_SCU_BASE_ADDR, SCU, RSTC, fld, val)
 
 #define WRITE_DDR_REG_CONFIG(ddrblock, regindex) \
-	mnh_reg_write(state->bases.ddrblock##_base + (regindex * sizeof(u32)), \
-		      state->config->ddrblock[regindex])
+	mnh_reg_write(_state.ddrblock##_base + (regindex * sizeof(u32)), \
+		      _state.ddrblock[regindex])
 
-int mnh_ddr_po_init(struct device *dev,
-		    struct mnh_ddr_state *state)
+#define WRITE_DDR_PHY_CONFIG(fsp, regindex)    \
+	mnh_reg_write(_state.phy_base + (regindex * sizeof(u32)),\
+		      _state.phy[fsp][regindex])
+
+#define WRITE_SCU_FSP(fsp) \
+	MNH_SCU_OUTx(LPDDR4_FSP_SETTING, fsp, _state.fsps[fsp])
+
+#define SAVE_DDR_REG_CONFIG(ddrblock, regindex) \
+	_state.ddrblock[regindex] = \
+		mnh_reg_read(_state.ddrblock##_base + (regindex * sizeof(u32)))
+
+#define SAVE_DDR_PHY_REG_CONFIG(fsp, regindex) \
+	_state.phy[fsp][regindex] = \
+		mnh_reg_read(_state.phy_base + (regindex * sizeof(u32)))
+
+#define CLR_START(ddrblock) (_state.ddrblock[0] &= (0xFFFFFFFE))
+
+struct mnh_ddr_internal_state _state;
+
+static void mnh_ddr_init_internal_state(struct mnh_ddr_state *state)
 {
-	int index;
-	int i;
+	_state.ctl_base = state->bases.ctl_base;
+	_state.phy_base = state->bases.phy_base;
+	_state.pi_base = state->bases.pi_base;
+	memcpy(&(_state.ctl[0]),
+		 &(state->config->ctl[0]),
+		 MNH_DDR_NUM_CTL_REG * sizeof(u32));
 
-	dev_info(dev, "%s start.", __func__);
+	memcpy(&(_state.phy[0][0]),
+		&(state->config->phy[0]),
+		MNH_DDR_NUM_PHY_REG * sizeof(u32));
+	memcpy(&(_state.phy[1][0]),
+		&(state->config->phy[0]),
+		MNH_DDR_NUM_PHY_REG * sizeof(u32));
+	memcpy(&(_state.phy[2][0]),
+		&(state->config->phy[0]),
+		MNH_DDR_NUM_PHY_REG * sizeof(u32));
+
+	memcpy(&(_state.pi[0]),
+		&(state->config->pi[0]),
+		MNH_DDR_NUM_PI_REG * sizeof(u32));
+
+	memcpy(&(_state.fsps[0]),
+		&(state->fsps[0]),
+		MNH_DDR_NUM_FSPS * sizeof(u32));
+}
+
+void mnh_ddr_init_clocks(struct device *dev)
+{
+	int timeout = 0;
 
 	/* MNH_PLL_PASSCODE_SET */
 	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x4CD9);
@@ -78,15 +121,156 @@ int mnh_ddr_po_init(struct device *dev,
 	MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FOUTPOSTDIVPD, 0);
 	MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FRZ_PLL_IN, 0);
 
+	dev_info(dev, "%s waiting for lpddr4 pll lock", __func__);
+	while ((timeout < 20) && (!MNH_SCU_INf(LPDDR4_REFCLK_PLL_STS, LOCK))) {
+		udelay(1);
+		timeout++;
+	}
+
+	if (timeout == 20)
+		dev_err(dev, "%s lpddr4 pll lock failed", __func__);
+	else
+		dev_info(dev, "%s lpddr4 pll locked after %d iterations",
+			 __func__, timeout);
+
 	MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG, LP4_FSP_SW_OVERRIDE, 0);
 
-	MNH_SCU_OUTx(LPDDR4_FSP_SETTING, 0, state->fsps[0]);
-	MNH_SCU_OUTx(LPDDR4_FSP_SETTING, 1, state->fsps[1]);
-	MNH_SCU_OUTx(LPDDR4_FSP_SETTING, 2, state->fsps[2]);
-	MNH_SCU_OUTx(LPDDR4_FSP_SETTING, 3, state->fsps[3]);
+	WRITE_SCU_FSP(0);
+	WRITE_SCU_FSP(1);
+	WRITE_SCU_FSP(2);
+	WRITE_SCU_FSP(3);
 
 	/* MNH_PLL_PASSCODE_CLR */
 	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x0);
+}
+
+int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n)
+{
+	int index, fsp;
+	int timeout = 0;
+
+#ifdef PARTIAL_REFRESH
+	/* refresh only first segment */
+	MNH_DDR_CTL_OUTf(166, MR17_DATA_0, 0xFE);
+#endif
+
+	for (index = 0; index < MNH_DDR_NUM_CTL_REG; index++)
+		SAVE_DDR_REG_CONFIG(ctl, index);
+	CLR_START(ctl);
+
+	for (index = 0; index < MNH_DDR_NUM_PI_REG; index++)
+		SAVE_DDR_REG_CONFIG(pi, index);
+	CLR_START(pi);
+
+	for (fsp = 0; fsp < MNH_DDR_PHY_NUM_FSPS; fsp++) {
+		MNH_DDR_PHY_OUTf(1025, PHY_FREQ_SEL_INDEX, fsp);
+
+		for (index = 0; index < MNH_DDR_NUM_PHY_REG; index++)
+			SAVE_DDR_PHY_REG_CONFIG(fsp, index);
+	}
+
+	MNH_DDR_CTL_OUTf(112, LP_CMD, 0xFE);
+	dev_info(dev, "%s waiting for LP complete.", __func__);
+	while ((timeout < 10) && !(MNH_DDR_CTL_IN(227) & 0x00000020)) {
+		udelay(1);
+		timeout++;
+	}
+	if (timeout == 10)
+		dev_info(dev, "%s: failed to get LP complete\n", __func__);
+	else
+		dev_info(dev, "%s got it after %d iterations. 121 is 0x%x",
+			 __func__, timeout, MNH_DDR_CTL_INf(121, LP_STATE));
+
+	gpiod_set_value_cansleep(iso_n, 0);
+	udelay(1000);
+
+	dev_info(dev, "%s done.", __func__);
+
+	return 0;
+}
+EXPORT_SYMBOL(mnh_ddr_suspend);
+
+int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n)
+{
+	int index, fsp;
+	int timeout = 0;
+
+	mnh_ddr_init_clocks(dev);
+
+	for (index = 0; index < MNH_DDR_NUM_CTL_REG; index++)
+		WRITE_DDR_REG_CONFIG(ctl, index);
+
+#ifdef PARTIAL_REFRESH
+	/* refresh no segments */
+	MNH_DDR_CTL_OUTf(166, MR17_DATA_0, 0xFF);
+#endif
+
+	for (index = 0; index < MNH_DDR_NUM_PI_REG; index++)
+		WRITE_DDR_REG_CONFIG(pi, index);
+
+	for (fsp = 0; fsp < MNH_DDR_PHY_NUM_FSPS; fsp++) {
+		MNH_DDR_PHY_OUTf(1025, PHY_FREQ_SEL_MULTICAST_EN, 0);
+		MNH_DDR_PHY_OUTf(1025, PHY_FREQ_SEL_INDEX, fsp);
+
+		for (index = 0; index < MNH_DDR_NUM_PHY_REG; index++) {
+			if (index != 1025)
+				WRITE_DDR_PHY_CONFIG(fsp, index);
+		}
+	}
+
+	gpiod_set_value_cansleep(iso_n, 1);
+	udelay(1000);
+	MNH_DDR_CTL_OUTf(81, PWRUP_SREFRESH_EXIT, 1);
+
+	while ((timeout < 10) && (MNH_DDR_CTL_INf(450, MEM_RST_VALID) == 0)) {
+		udelay(1000);
+		timeout++;
+	}
+
+	if (timeout == 10)
+		dev_err(dev, "%s: failed to see reset valid\n", __func__);
+	else
+		dev_info(dev, "%s: observed reset valid after %d iterations\n",
+			 __func__, timeout);
+
+	/*MNH_DDR_PHY_OUTf(1051, PHY_SET_DFI_INPUT_RST_PAD, 1);*/
+	udelay(1000);
+
+	/*MNH_DDR_PI_OUTf(00, PI_START, 1);*/
+	MNH_DDR_CTL_OUTf(00, START, 1);
+
+	dev_info(dev, "%s waiting for init done.", __func__);
+
+	/*
+	* INT_STATUS: bit 4 init done
+	*/
+	timeout = 0;
+	while ((timeout < 10) && !(MNH_DDR_CTL_IN(227) & 0x00000010)) {
+		udelay(1);
+		timeout++;
+	}
+	if (timeout == 10)
+		dev_err(dev, "%s: init failed", __func__);
+	else
+		dev_info(dev, "%s: init done after %d iterations.",
+			 __func__, timeout);
+
+	return 0;
+}
+EXPORT_SYMBOL(mnh_ddr_resume);
+
+
+int mnh_ddr_po_init(struct device *dev,
+		    struct mnh_ddr_state *state)
+{
+	int index;
+	int timeout = 0;
+
+	mnh_ddr_init_internal_state(state);
+
+	dev_info(dev, "%s start.", __func__);
+
+	mnh_ddr_init_clocks(dev);
 
 	for (index = 0; index < MNH_DDR_NUM_CTL_REG; index++)
 		WRITE_DDR_REG_CONFIG(ctl, index);
@@ -94,17 +278,12 @@ int mnh_ddr_po_init(struct device *dev,
 	for (index = 0; index < MNH_DDR_NUM_PI_REG; index++)
 		WRITE_DDR_REG_CONFIG(pi, index);
 
-#ifndef MNH_DDR_DO_FSP
-	MNH_DDR_PHY_OUTf(1024, PHY_FREQ_SEL, 2);
-	MNH_DDR_PHY_OUTf(1025, PHY_FREQ_SEL_MULTICAST_EN, 1);
-#else
 	MNH_DDR_PHY_OUTf(1025, PHY_FREQ_SEL_MULTICAST_EN, 1);
 	MNH_DDR_PHY_OUTf(1025, PHY_FREQ_SEL_INDEX, 0);
-#endif
-	for (index = 0; index < MNH_DDR_NUM_PHY_REG; index++)
-		WRITE_DDR_REG_CONFIG(phy, index);
 
-#ifdef MNH_DDR_DO_FSP
+	for (index = 0; index < MNH_DDR_NUM_PHY_REG; index++)
+		WRITE_DDR_PHY_CONFIG(0, index);
+
 	MNH_DDR_PHY_OUTf(1025, PHY_FREQ_SEL_MULTICAST_EN, 0);
 	MNH_DDR_PHY_OUTf(1025, PHY_FREQ_SEL_INDEX, 1);
 
@@ -163,28 +342,27 @@ int mnh_ddr_po_init(struct device *dev,
 	MNH_DDR_PHY_OUTf(1045, PHY_PLL_CTRL_TOP, 0x0122);
 	MNH_DDR_PHY_OUTf(1045, PHY_PLL_CTRL, 0x1102);
 	MNH_DDR_PHY_OUTf(1046, PHY_PLL_CTRL_CA, 0x0122);
-#endif
 
 	dev_info(dev, "%s begin training,", __func__);
 	MNH_DDR_PI_OUTf(00, PI_START, 1);
 	MNH_DDR_CTL_OUTf(00, START, 1);
 
-	i = 0;
-	while ((i < 1000) && !(MNH_DDR_CTL_IN(227) & 0x00000010)) {
+	while ((timeout < 1000) && !(MNH_DDR_CTL_IN(227) & 0x00000010)) {
 		udelay(10);
-		i++;
+		timeout++;
 	}
 
-	if (i == 1000)
+	if (timeout == 1000)
 		dev_err(dev, "%s: ddr training failed\n", __func__);
 	else
-		dev_info(dev, "%s done.", __func__);
-#ifdef MNH_DDR_DO_FSP
+		dev_info(dev, "%s done after %d iterations.",
+			 __func__, timeout);
+
 	MNH_DDR_CTL_OUTf(165, MR_FSP_DATA_VALID_F0_0, 1);
 	MNH_DDR_CTL_OUTf(165, MR_FSP_DATA_VALID_F1_0, 1);
 	MNH_DDR_CTL_OUTf(165, MR_FSP_DATA_VALID_F2_0, 1);
 	MNH_DDR_CTL_OUTf(166, MR_FSP_DATA_VALID_F3_0, 1);
-#endif
+
 	return 0;
 }
 EXPORT_SYMBOL(mnh_ddr_po_init);

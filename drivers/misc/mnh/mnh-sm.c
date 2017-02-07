@@ -39,6 +39,7 @@
 #include "mnh-sm-config-a.h"
 #include "mnh-sm.h"
 #include "mnh-mipi.h"
+#include "mnh-clk.h"
 
 #define MAX_STR_COPY 32
 #define SUCCESS 0
@@ -68,6 +69,9 @@
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
+#define MNH_UBOOT_ENABLE 1
+#define MNH_UBOOT_DISABLE 0
+
 struct mnh_sm_device {
 	struct platform_device *pdev;
 	struct device *dev;
@@ -81,8 +85,20 @@ struct mnh_sm_device {
 
 static struct mnh_sm_device *mnh_sm_dev;
 static hotplug_cb_t mnh_hotplug_cb;
-static int mnh_state;
-static int mnh_sm_uboot;
+static int mnh_state = MNH_HW_UNKNOWN;
+static int mnh_sm_uboot = MNH_UBOOT_DISABLE;
+
+static int mnh_sm_get_val_from_buf(const char *buf, unsigned long *val)
+{
+	uint8_t *token;
+	const char *delim = ";";
+
+	token = strsep((char **)&buf, delim);
+	if ((token) && (!(kstrtoul(token, 0, val))))
+		return 0;
+	else
+		return -EINVAL;
+}
 
 static ssize_t mnh_sm_poweron_show(struct device *dev,
 			     struct device_attribute *attr,
@@ -91,7 +107,7 @@ static ssize_t mnh_sm_poweron_show(struct device *dev,
 	ssize_t strlen = 0;
 
 	dev_info(dev, "Entering mnh_sm_poweron_show...\n");
-	mnh_sm_poweron(sm_config_1);
+	mnh_sm_poweron(sm_config_default);
 	return strlen;
 }
 
@@ -114,7 +130,7 @@ static ssize_t mnh_sm_poweroff_show(struct device *dev,
 	ssize_t strlen = 0;
 
 	dev_info(dev, "Entering mnh_sm_poweroff_show...\n");
-	mnh_sm_poweroff(sm_config_1);
+	mnh_sm_poweroff(sm_config_default);
 
 	return strlen;
 }
@@ -141,7 +157,7 @@ static ssize_t mnh_sm_config_show(struct device *dev,
 	ssize_t strlen = 0;
 
 	dev_info(dev, "Entering mnh_sm_config_show...\n");
-	mnh_sm_config(sm_config_1);
+	mnh_sm_config(sm_config_default);
 	return strlen;
 }
 
@@ -163,14 +179,13 @@ static ssize_t mnh_sm_state_store(struct device *dev,
 			      const char *buf,
 			      size_t count)
 {
-	unsigned long int val = 0;
-	uint8_t *token;
-	const char *delim = ";";
+	unsigned long val = 0;
+	int ret;
 
 	dev_info(dev, "Entering mnh_sm_state_store...\n");
-	token = strsep((char **)&buf, delim);
-	if ((token) && (!(kstrtoul(token, 0, &val)))
-	    && (val >= MNH_HW_INIT) && (val <= MNH_HW_SUSPEND_HIBERNATE)) {
+
+	ret = mnh_sm_get_val_from_buf(buf, &val);
+	if (!ret && (val >= MNH_HW_INIT) && (val <= MNH_HW_SUSPEND_HIBERNATE)) {
 		mnh_state = val;
 		return mnh_state;
 	}
@@ -435,7 +450,7 @@ static ssize_t mnh_sm_suspend_show(struct device *dev,
 {
 	ssize_t strlen = 0;
 
-	mnh_sm_suspend(sm_config_1);
+	mnh_sm_suspend(sm_config_default);
 	return strlen;
 }
 
@@ -456,7 +471,7 @@ static ssize_t mnh_sm_resume_show(struct device *dev,
 {
 	ssize_t strlen = 0;
 
-	mnh_sm_resume(sm_config_1);
+	mnh_sm_resume(sm_config_default);
 	return strlen;
 }
 
@@ -490,6 +505,62 @@ static ssize_t mnh_sm_reset_store(struct device *dev,
 static DEVICE_ATTR(reset, S_IRUGO | S_IWUSR | S_IWGRP,
 		mnh_sm_reset_show, mnh_sm_reset_store);
 
+static ssize_t mnh_sm_cpu_clk_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf,
+			      size_t count)
+{
+	unsigned long val = 0;
+	int ret;
+
+	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_cpu_clk_store...\n");
+
+	if (count > 10)
+		return -EINVAL;
+
+	ret = mnh_sm_get_val_from_buf(buf, &val);
+	if (!ret && (val >= CPU_FREQ_MIN) && (val <= CPU_FREQ_MAX)) {
+		mnh_sm_cpu_set_clk_freq(mnh_sm_dev->dev, val);
+		return val;
+	}
+
+	return -EINVAL;
+}
+
+static DEVICE_ATTR(cpu_clk, S_IWUSR,
+		NULL, mnh_sm_cpu_clk_store);
+
+static ssize_t mnh_sm_uboot_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
+{
+	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_uboot_show...\n");
+
+	return scnprintf(buf, MAX_STR_COPY, "uboot flag: 0x%x\n", mnh_sm_uboot);
+}
+
+static ssize_t mnh_sm_uboot_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf,
+				  size_t count)
+{
+	unsigned long val = 0;
+	int ret;
+
+	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_uboot_show...\n");
+
+	ret = mnh_sm_get_val_from_buf(buf, &val);
+	if (!ret) {
+		mnh_sm_uboot = val;
+		return mnh_sm_uboot;
+	}
+
+	return -EINVAL;
+}
+
+static DEVICE_ATTR(uboot, S_IWUSR | S_IRUGO,
+		mnh_sm_uboot_show, mnh_sm_uboot_store);
+
 static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_poweron.attr,
 	&dev_attr_poweroff.attr,
@@ -499,6 +570,8 @@ static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_suspend.attr,
 	&dev_attr_resume.attr,
 	&dev_attr_reset.attr,
+	&dev_attr_cpu_clk.attr,
+	&dev_attr_uboot.attr,
 	NULL
 };
 
@@ -532,14 +605,28 @@ EXPORT_SYMBOL(mnh_sm_reg_hotplug_callback);
  */
 int mnh_sm_poweron(struct mnh_sm_configuration mnh_sm_boot_args)
 {
-	mnh_state = MNH_HW_INIT;
+	int ret;
+
+	if (!mnh_sm_dev)
+		return -ENODEV;
+
 	/* Initialize MNH Power */
-	mnh_pwr_set_state(MNH_PWR_S0);
+	ret = mnh_pwr_set_state(MNH_PWR_S0);
+	if (ret) {
+		dev_err(mnh_sm_dev->dev,
+			"%s: failed to power on device (%d)\n",
+			__func__, ret);
+
+		mnh_state = MNH_HW_OFF;
+
+		return ret;
+	}
+
+	mnh_state = MNH_HW_INIT;
 
 	return 0;
 }
 EXPORT_SYMBOL(mnh_sm_poweron);
-
 
 /**
  * API to power monette hill.
@@ -547,9 +634,12 @@ EXPORT_SYMBOL(mnh_sm_poweron);
  */
 int mnh_sm_poweroff(struct mnh_sm_configuration mnh_sm_boot_args)
 {
-	mnh_state = MNH_HW_OFF;
+	if (!mnh_sm_dev)
+		return -ENODEV;
+
 	/* Power down MNH */
 	mnh_pwr_set_state(MNH_PWR_S4);
+	mnh_state = MNH_HW_OFF;
 	return 0;
 }
 EXPORT_SYMBOL(mnh_sm_poweroff);
@@ -563,15 +653,42 @@ EXPORT_SYMBOL(mnh_sm_poweroff);
  */
 int mnh_sm_config(struct mnh_sm_configuration mnh_sm_boot_args)
 {
-	/* Initialize DDR */
+	int ret;
 
-	/* Initialize DDR training */
+	if (!mnh_sm_dev)
+		return -ENODEV;
+
+	/* check to see if device is powered; power on if not */
+	if (mnh_state == MNH_HW_OFF) {
+		dev_info(mnh_sm_dev->dev,
+			 "%s: powering on device before running config\n",
+			 __func__);
+
+		ret = mnh_sm_poweron(mnh_sm_boot_args);
+		if (ret) {
+			dev_err(mnh_sm_dev->dev,
+				"%s: could not run config because of poweron failure (%d)\n",
+				__func__, ret);
+			return ret;
+		}
+	}
+
+	if (mnh_state != MNH_HW_INIT) {
+		dev_err(mnh_sm_dev->dev,
+			"%s: cannot config device in state %d\n",
+			__func__, mnh_state);
+		return -EINVAL;
+	}
 
 	/* Initialze MIPI bypass */
 	/* TODO hardcode the to use the first config */
 	mnh_sm_mipi_bypass_init(&mnh_sm_boot_args);
 
+	/* Initialize DDR */
 	mnh_ddr_po_init(mnh_sm_dev->dev, mnh_sm_boot_args.ddr_config);
+
+	mnh_state = MNH_HW_CONFIG;
+
 	return 0;
 }
 EXPORT_SYMBOL(mnh_sm_config);
@@ -620,8 +737,16 @@ int mnh_sm_download(void)
 {
 	uint32_t  magic;
 
+	if (mnh_state != MNH_HW_CONFIG) {
+		dev_err(mnh_sm_dev->dev,
+			"%s: cannot download firmware when device is in state %d\n",
+			__func__, mnh_state);
+		return -EINVAL;
+	}
+
 	if (mnh_download_firmware() == 0) {
-		/* Magic number setting to notify MNH that PCIE initialization
+		/*
+		 * Magic number setting to notify MNH that PCIE initialization
 		 * is done on Host side
 		 */
 		if (mnh_config_read(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
@@ -631,11 +756,19 @@ int mnh_sm_download(void)
 			mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
 					 HW_MNH_PCIE_GP_0,
 					 sizeof(uint32_t), INIT_DONE);
+
+			/* Set the state to configured */
+			mnh_state = MNH_HW_ACTIVE;
 		} else {
-			dev_err(mnh_sm_dev->dev, "Read GP0 register fail or GP0 is not 0:%d",
+			dev_err(mnh_sm_dev->dev,
+				"Read GP0 register fail or GP0 is not 0:%d",
 				magic);
 		}
+	} else {
+		dev_err(mnh_sm_dev->dev,
+			"%s: firmware download failed\n", __func__);
 	}
+
 	return 0;
 }
 EXPORT_SYMBOL(mnh_sm_download);
@@ -651,6 +784,7 @@ int mnh_sm_suspend(struct mnh_sm_configuration mnh_sm_boot_args)
 	/* Suspend MNH power */
 	mnh_pwr_set_state(MNH_PWR_S3);
 	return 0;
+
 }
 EXPORT_SYMBOL(mnh_sm_suspend);
 
@@ -668,8 +802,21 @@ int mnh_sm_resume(struct mnh_sm_configuration mnh_sm_boot_args)
 	/* Initialize MNH Power */
 	mnh_pwr_set_state(MNH_PWR_S0);
 	return 0;
+
 }
 EXPORT_SYMBOL(mnh_sm_resume);
+
+int mnh_sm_is_present(void)
+{
+	return (mnh_sm_dev != NULL) ? 1 : 0;
+}
+EXPORT_SYMBOL(mnh_sm_is_present);
+
+void mnh_sm_get_default_config(struct mnh_sm_configuration *config)
+{
+	*config = sm_config_default;
+}
+EXPORT_SYMBOL(mnh_sm_get_default_config);
 
 static int mnh_sm_probe(struct platform_device *pdev)
 {
@@ -731,6 +878,7 @@ fail_sysfs_create_group:
 fail_cdev_add:
 	unregister_chrdev_region(mnh_sm_dev->dev_num, 1);
 	devm_kfree(dev, mnh_sm_dev);
+	mnh_sm_dev = NULL;
 
 	return error;
 }

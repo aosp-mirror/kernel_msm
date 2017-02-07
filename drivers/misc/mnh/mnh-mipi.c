@@ -419,8 +419,7 @@ static int mnh_mipi_gen3_lookup_freq_code(uint32_t rate)
 	return i;
 }
 
-static void mnh_mipi_gen3_host(uint32_t device, uint32_t rate,
-			       uint32_t vc_en_mask)
+static void mnh_mipi_gen3_host(uint32_t device, uint32_t rate)
 {
 	uint32_t code_index, freq_range_code, osc_freq_code;
 
@@ -442,14 +441,6 @@ static void mnh_mipi_gen3_host(uint32_t device, uint32_t rate,
 	HW_OUT(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0, 0x1);
 	udelay(1);
 	HW_OUT(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0, 0x0);
-
-	/* set the virtual channel enable mask */
-	if (device == 0)
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, RX0_MODE, RX0_VC_EN,
-			vc_en_mask);
-	else
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, RX1_MODE, RX1_VC_EN,
-			vc_en_mask);
 
 	/* get the PHY settings */
 	code_index = mnh_mipi_gen3_lookup_freq_code(rate);
@@ -648,6 +639,7 @@ int mnh_sm_mipi_bypass_gen3_init(struct mnh_mipi_config config, uint32_t txdev)
 	uint32_t rx_rate = config.rx_rate;
 	uint32_t tx_rate = config.tx_rate;
 	uint32_t vc_en_mask = config.vc_en_mask;
+	uint32_t rx_mode, tx_en_mode;
 
 	pr_info("%s: init rxdev %d, txdev %d, rx_rate %d, tx_rate %d, vc_en_mask 0x%01x",
 		__func__, rxdev, txdev, rx_rate, tx_rate, vc_en_mask);
@@ -677,7 +669,7 @@ int mnh_sm_mipi_bypass_gen3_init(struct mnh_mipi_config config, uint32_t txdev)
 	 * ##########################################################
 	 */
 	/* mipicsi_host_start */
-	mnh_mipi_gen3_host(rxdev, rx_rate, vc_en_mask);
+	mnh_mipi_gen3_host(rxdev, rx_rate);
 
 	/*
 	 * ##########################################################
@@ -728,20 +720,57 @@ int mnh_sm_mipi_bypass_gen3_init(struct mnh_mipi_config config, uint32_t txdev)
 	 * #  Setup TX (Device)
 	 * ##########################################################
 	 */
+
+	/*
+	 * construct the rx mode register. This register is synchronized with
+	 * the IDI domain when the RX clock is present. However, if the clock is
+	 * not present, only the first write to the register will succeed.
+	 * Therefore, use read-modify-write to construct register so we only
+	 * need to write once.
+	 */
+	if (rxdev == 0)
+		rx_mode = HW_IN(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, RX0_MODE);
+	else if (rxdev == 1)
+		rx_mode = HW_IN(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, RX1_MODE);
+	else
+		rx_mode = HW_IN(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, RX2_MODE);
+
+	/*
+	 * it doesn't actually matter which RX# I use since this is just to
+	 * create the mask. The actual register write occurs below.
+	 */
+	rx_mode &= ~HWIO_MIPI_TOP_RX0_MODE_RX0_VC_EN_FLDMASK;
+	rx_mode &= ~HWIO_MIPI_TOP_RX0_MODE_RX0_BYP_TX0_EN_FLDMASK;
+	rx_mode &= ~HWIO_MIPI_TOP_RX0_MODE_RX0_BYP_TX1_EN_FLDMASK;
+	rx_mode &= ~HWIO_MIPI_TOP_RX0_MODE_RX0_IPU_EN_FLDMASK;
+
+	vc_en_mask <<= HWIO_MIPI_TOP_RX0_MODE_RX0_VC_EN_FLDSHFT;
+	vc_en_mask &= HWIO_MIPI_TOP_RX0_MODE_RX0_VC_EN_FLDMASK;
+
+	tx_en_mode = HWIO_MIPI_TOP_RX0_MODE_RX0_BYP_TX0_EN_FLDMASK << txdev;
+
+	rx_mode = (rx_mode | vc_en_mask | tx_en_mode);
+
 	switch (txdev) {
 	case 0:
 		switch (rxdev) {
 		case 0:
-			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
-				MIPI_TOP, RX0_MODE, RX0_BYP_TX0_EN, 1);
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, RX0_MODE, rx_mode);
 			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
 				MIPI_TOP, TX0_MODE, TX0_BYP_SEL, 0x1);
 			break;
 		case 1:
-			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
-			MIPI_TOP, RX1_MODE, RX1_BYP_TX0_EN, 1);
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, RX1_MODE, rx_mode);
 			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
 				MIPI_TOP, TX0_MODE, TX0_BYP_SEL, 0x2);
+			break;
+		case 2:
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, RX2_MODE, rx_mode);
+			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
+				MIPI_TOP, TX0_MODE, TX0_BYP_SEL, 0x3);
 			break;
 		default:
 			pr_err("mnh_sm: invalid rx device %d!\n", rxdev);
@@ -750,16 +779,22 @@ int mnh_sm_mipi_bypass_gen3_init(struct mnh_mipi_config config, uint32_t txdev)
 	case 1:
 		switch (rxdev) {
 		case 0:
-			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
-				MIPI_TOP, RX0_MODE, RX0_BYP_TX1_EN, 1);
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, RX0_MODE, rx_mode);
 			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
 				MIPI_TOP, TX1_MODE, TX1_BYP_SEL, 0x1);
 			break;
 		case 1:
-			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
-				MIPI_TOP, RX1_MODE, RX1_BYP_TX1_EN, 1);
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, RX1_MODE, rx_mode);
 			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
 				MIPI_TOP, TX1_MODE, TX1_BYP_SEL, 0x2);
+			break;
+		case 2:
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, RX2_MODE, rx_mode);
+			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
+				MIPI_TOP, TX1_MODE, TX1_BYP_SEL, 0x3);
 			break;
 		default:
 			pr_err("mnh_sm: invalid rx device %d!\n", rxdev);

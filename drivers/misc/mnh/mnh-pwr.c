@@ -14,6 +14,8 @@
  *
  */
 
+#define DEBUG
+
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
@@ -22,6 +24,7 @@
 #include <linux/msm_pcie.h>
 #include <linux/regulator/consumer.h>
 
+#include "mnh-ddr.h"
 #include "mnh-pcie.h"
 #include "mnh-pwr.h"
 
@@ -42,6 +45,10 @@ struct mnh_pwr_data {
 	struct regulator *sdsr_supply;
 	struct regulator *sdldo_supply;
 	struct regulator *ioldo_supply;
+	struct notifier_block asr_nb;
+	struct notifier_block sdsr_nb;
+	struct notifier_block ioldo_nb;
+	struct notifier_block sdldo_nb;
 
 	/* clocks */
 	struct clk *ref_clk;
@@ -55,11 +62,114 @@ struct mnh_pwr_data {
 	/* pcie device */
 	struct pci_dev *pcidev;
 	struct pci_saved_state *pristine_state;
+	struct msm_pcie_register_event pci_link_event;
+
+	struct work_struct shutdown_work;
 
 	enum mnh_pwr_state state;
 };
 
 static struct mnh_pwr_data *mnh_pwr;
+
+static int mnh_pwr_down(void);
+
+static void mnh_pwr_shutdown_work(struct work_struct *data)
+{
+	dev_err(mnh_pwr->dev, "%s: begin emergency power down\n", __func__);
+
+	/* need to do something to save root complex config information */
+
+	mnh_pwr_down();
+}
+
+static int mnh_pwr_asr_notifier_cb(struct notifier_block *nb,
+				   unsigned long event, void *cookie)
+{
+	dev_dbg(mnh_pwr->dev, "%s: received event %ld\n", __func__, event);
+
+	/* force emergency shutdown if regulator output has failed */
+	if (event == REGULATOR_EVENT_FAIL) {
+		dev_err(mnh_pwr->dev,
+			"%s: asr supply has failed, forcing shutdown\n",
+			__func__);
+
+		schedule_work(&mnh_pwr->shutdown_work);
+	}
+
+	return 0;
+}
+
+static int mnh_pwr_sdsr_notifier_cb(struct notifier_block *nb,
+				   unsigned long event, void *cookie)
+{
+	dev_dbg(mnh_pwr->dev, "%s: received event %ld\n", __func__, event);
+
+	/* force emergency shutdown if regulator output has failed */
+	if (event == REGULATOR_EVENT_FAIL) {
+		dev_err(mnh_pwr->dev,
+			"%s: sdsr supply has failed, forcing shutdown\n",
+			__func__);
+
+		schedule_work(&mnh_pwr->shutdown_work);
+	}
+
+	return 0;
+}
+
+static int mnh_pwr_ioldo_notifier_cb(struct notifier_block *nb,
+				   unsigned long event, void *cookie)
+{
+	dev_dbg(mnh_pwr->dev, "%s: received event %ld\n", __func__, event);
+
+	/* force emergency shutdown if regulator output has failed */
+	if (event == REGULATOR_EVENT_FAIL) {
+		dev_err(mnh_pwr->dev,
+			"%s: ioldo supply has failed, forcing shutdown\n",
+			__func__);
+
+		schedule_work(&mnh_pwr->shutdown_work);
+	}
+
+	return 0;
+}
+
+static int mnh_pwr_sdldo_notifier_cb(struct notifier_block *nb,
+				   unsigned long event, void *cookie)
+{
+	dev_dbg(mnh_pwr->dev, "%s: received event %ld\n", __func__, event);
+
+	/* force emergency shutdown if regulator output has failed */
+	if (event == REGULATOR_EVENT_FAIL) {
+		dev_err(mnh_pwr->dev,
+			"%s: sdldo supply has failed, forcing shutdown\n",
+			__func__);
+
+		schedule_work(&mnh_pwr->shutdown_work);
+	}
+
+	return 0;
+}
+
+void mnh_pwr_pcie_link_state_cb(struct msm_pcie_notify *notify)
+{
+	struct mnh_pwr_data *mnh_pwr = notify->data;
+
+	switch (notify->event) {
+	case MSM_PCIE_EVENT_LINKDOWN:
+		dev_err(mnh_pwr->dev,
+			"%s: PCIe link is down, forcing power down\n",
+			__func__);
+
+		/* force emergency shutdown */
+		schedule_work(&mnh_pwr->shutdown_work);
+		break;
+	default:
+		dev_err(mnh_pwr->dev,
+			"%s: received invalid pcie link state event (%d)\n",
+			__func__, notify->event);
+		break;
+	}
+}
 
 static int mnh_pwr_pcie_enumerate(void)
 {
@@ -69,9 +179,8 @@ static int mnh_pwr_pcie_enumerate(void)
 	/* enumerate PCIE */
 	ret = msm_pcie_enumerate(MNH_PCIE_RC_INDEX);
 	if (ret < 0) {
-		dev_err(mnh_pwr->dev,
-			"%s: enumeration failed\n",
-			__func__);
+		dev_err(mnh_pwr->dev, "%s: pcie enumeration failed (%d)\n",
+			__func__, ret);
 		return ret;
 	}
 
@@ -85,8 +194,7 @@ static int mnh_pwr_pcie_enumerate(void)
 			break;
 	} while (true);
 	if (!pcidev) {
-		dev_err(mnh_pwr->dev,
-			"%s: could not find mnh device\n",
+		dev_err(mnh_pwr->dev, "%s: could not find mnh device\n",
 			__func__);
 		return -ENODEV;
 	}
@@ -94,9 +202,10 @@ static int mnh_pwr_pcie_enumerate(void)
 	/* save current state in pcidev */
 	ret = pci_save_state(pcidev);
 	if (ret) {
-		dev_err(mnh_pwr->dev,
-			"%s: pci_save_state failed (%d)\n",
+		dev_err(mnh_pwr->dev, "%s: pci_save_state failed (%d)\n",
 			__func__, ret);
+		pci_dev_put(pcidev);
+		return ret;
 	}
 
 	/* store saved state so we can recall it after resume */
@@ -105,6 +214,8 @@ static int mnh_pwr_pcie_enumerate(void)
 		dev_err(mnh_pwr->dev,
 			"%s: pci_store_saved_state failed\n",
 			__func__);
+		pci_dev_put(pcidev);
+		return ret;
 	}
 
 	/* save device to driver struct */
@@ -134,7 +245,7 @@ static int mnh_pwr_pcie_suspend(void)
 				  pcidev, NULL, PM_OPT_SUSPEND);
 	if (ret) {
 		dev_err(mnh_pwr->dev,
-			"%s: msm_pcie_pm_control(SUSPEND) failed (%d)\n",
+			"%s: msm_pcie_pm_control(suspend) failed (%d)\n",
 			__func__, ret);
 		return ret;
 	}
@@ -158,14 +269,28 @@ static int mnh_pwr_pcie_resume(void)
 			return ret;
 		}
 
+		/* save the newly enumerated device to the local copy */
 		pcidev = mnh_pwr->pcidev;
+
+		/* register for link down events so we can handle them */
+		mnh_pwr->pci_link_event.events = MSM_PCIE_EVENT_LINKDOWN;
+		mnh_pwr->pci_link_event.user = pcidev;
+		mnh_pwr->pci_link_event.callback = mnh_pwr_pcie_link_state_cb;
+		mnh_pwr->pci_link_event.notify.data = mnh_pwr;
+		ret = msm_pcie_register_event(&mnh_pwr->pci_link_event);
+		if (ret) {
+			dev_err(mnh_pwr->dev,
+				"%s: msm_pcie_register_event failed (%d)\n",
+				__func__, ret);
+		}
 	} else {
 		ret = msm_pcie_pm_control(MSM_PCIE_RESUME, pcidev->bus->number,
 					  pcidev, NULL, PM_OPT_RESUME);
 		if (ret) {
 			dev_err(mnh_pwr->dev,
-				"%s: msm_pcie_pm_control(RESUME) failed (%d)\n",
+				"%s: msm_pcie_pm_control(resume) failed (%d)\n",
 				__func__, ret);
+			return ret;
 		}
 
 		/* prepare the root complex and endpoint */
@@ -174,6 +299,7 @@ static int mnh_pwr_pcie_resume(void)
 			dev_err(mnh_pwr->dev,
 				"%s: pci_back_from_sleep failed (%d)\n",
 				__func__, ret);
+			goto fail_pcie_resume_awake;
 		}
 
 		/* load the saved state in the device buffer */
@@ -182,25 +308,48 @@ static int mnh_pwr_pcie_resume(void)
 			dev_err(mnh_pwr->dev,
 				"%s: pci_load_saved_state failed (%d)\n",
 				__func__, ret);
+			goto fail_pcie_resume_load_state;
 		}
 
 		/* apply the saved state to the device */
 		pci_restore_state(pcidev);
 
 		/* reinitialize some of the driver state */
-		mnh_pci_init_resume();
+		ret = mnh_pci_init_resume();
+		if (ret) {
+			dev_err(mnh_pwr->dev,
+				"%s: mnh_pci_init_resume (%d)\n",
+				__func__, ret);
+			goto fail_pcie_resume_mnh_init;
+		}
 	}
 
 	return 0;
+
+fail_pcie_resume_mnh_init:
+fail_pcie_resume_load_state:
+	pci_prepare_to_sleep(pcidev);
+fail_pcie_resume_awake:
+	msm_pcie_pm_control(MSM_PCIE_SUSPEND, pcidev->bus->number, pcidev,
+			     NULL, PM_OPT_SUSPEND);
+
+	return ret;
 }
 
-static void mnh_pwr_down(void)
+static int mnh_pwr_down(void)
 {
+	int ret;
+
 	/* assert ddr_pad_iso_n */
 	gpiod_set_value_cansleep(mnh_pwr->ddr_pad_iso_n_pin, 1);
 
 	/* suspend pcie link */
-	mnh_pwr_pcie_suspend();
+	ret = mnh_pwr_pcie_suspend();
+	if (ret) {
+		dev_err(mnh_pwr->dev, "%s: failed to suspend pcie link (%d)\n",
+			__func__, ret);
+		goto fail_pwr_down_pcie;
+	}
 
 	/* deassert soc_pwr_good */
 	gpiod_set_value_cansleep(mnh_pwr->soc_pwr_good_pin, 0);
@@ -209,25 +358,84 @@ static void mnh_pwr_down(void)
 	clk_disable_unprepare(mnh_pwr->ref_clk);
 	clk_disable_unprepare(mnh_pwr->sleep_clk);
 
-	/* disable supplies */
-	/* sdsr -> asr -> ioldo -> sdldo */
-	regulator_disable(mnh_pwr->sdsr_supply);
+	/* disable supplies: sdsr -> asr -> ioldo -> sdldo */
+	ret = regulator_disable(mnh_pwr->sdsr_supply);
+	if (ret) {
+		dev_err(mnh_pwr->dev,
+			"%s: failed to disable sdsr (%d)\n", __func__, ret);
+		goto fail_pwr_down_sdsr;
+	}
+
 	if (mnh_pwr->state == MNH_PWR_S0) {
-		regulator_disable(mnh_pwr->asr_supply);
+		ret = regulator_disable(mnh_pwr->asr_supply);
+		if (ret) {
+			dev_err(mnh_pwr->dev,
+				"%s: failed to disable asr (%d)\n",
+				__func__, ret);
+			goto fail_pwr_down_asr;
+		}
+
 		regulator_disable(mnh_pwr->ioldo_supply);
+		if (ret) {
+			dev_err(mnh_pwr->dev,
+				"%s: failed to disable ioldo (%d)\n",
+				__func__, ret);
+			goto fail_pwr_down_ioldo;
+		}
 	}
 	regulator_disable(mnh_pwr->sdldo_supply);
+	if (ret) {
+		dev_err(mnh_pwr->dev,
+			"%s: failed to disable sdldo (%d)\n", __func__, ret);
+		goto fail_pwr_down_sdldo;
+	}
 
 	mnh_pwr->state = MNH_PWR_S4;
+
+	return 0;
+
+fail_pwr_down_pcie:
+	gpiod_set_value_cansleep(mnh_pwr->soc_pwr_good_pin, 0);
+	clk_disable_unprepare(mnh_pwr->sleep_clk);
+	clk_disable_unprepare(mnh_pwr->ref_clk);
+	if (regulator_is_enabled(mnh_pwr->sdsr_supply))
+		regulator_disable(mnh_pwr->sdsr_supply);
+fail_pwr_down_sdsr:
+	if (regulator_is_enabled(mnh_pwr->asr_supply))
+		regulator_disable(mnh_pwr->asr_supply);
+fail_pwr_down_asr:
+	if (regulator_is_enabled(mnh_pwr->ioldo_supply))
+		regulator_disable(mnh_pwr->ioldo_supply);
+fail_pwr_down_ioldo:
+	if (regulator_is_enabled(mnh_pwr->sdldo_supply))
+		regulator_disable(mnh_pwr->sdldo_supply);
+fail_pwr_down_sdldo:
+
+	mnh_pwr->state = MNH_PWR_S4;
+
+	dev_err(mnh_pwr->dev,
+		"%s: force shutdown because of powerdown failure (%d)\n",
+		__func__, ret);
+
+	mnh_pwr->state = MNH_PWR_S4;
+
+	return ret;
 }
 
-static void mnh_pwr_suspend(void)
+static int mnh_pwr_suspend(void)
 {
-	/* assert ddr_pad_iso_n */
-	gpiod_set_value_cansleep(mnh_pwr->ddr_pad_iso_n_pin, 0);
+	int ret;
+
+	/* put ddr into self-refresh mode, assert pad isolation */
+	mnh_ddr_suspend(mnh_pwr->dev, mnh_pwr->ddr_pad_iso_n_pin);
 
 	/* suspend pcie link */
-	mnh_pwr_pcie_suspend();
+	ret = mnh_pwr_pcie_suspend();
+	if (ret) {
+		dev_err(mnh_pwr->dev, "%s: failed to suspend pcie link (%d)\n",
+			__func__, ret);
+		goto fail_pwr_suspend_pcie;
+	}
 
 	/* deassert soc_pwr_good */
 	gpiod_set_value_cansleep(mnh_pwr->soc_pwr_good_pin, 0);
@@ -237,31 +445,102 @@ static void mnh_pwr_suspend(void)
 	clk_disable_unprepare(mnh_pwr->sleep_clk);
 
 	/* disable core supplies */
-	regulator_disable(mnh_pwr->asr_supply);
+	ret = regulator_disable(mnh_pwr->asr_supply);
+	if (ret) {
+		dev_err(mnh_pwr->dev,
+			"%s: failed to disable asr (%d)\n", __func__, ret);
+		goto fail_pwr_suspend_regulators;
+	}
+
 	regulator_disable(mnh_pwr->ioldo_supply);
+	if (ret) {
+		dev_err(mnh_pwr->dev,
+			"%s: failed to disable ioldo (%d)\n", __func__, ret);
+		goto fail_pwr_suspend_regulators;
+	}
 
 	mnh_pwr->state = MNH_PWR_S3;
+
+	return 0;
+
+fail_pwr_suspend_pcie:
+	gpiod_set_value_cansleep(mnh_pwr->ddr_pad_iso_n_pin, 1);
+	gpiod_set_value_cansleep(mnh_pwr->soc_pwr_good_pin, 0);
+	clk_disable_unprepare(mnh_pwr->sleep_clk);
+	clk_disable_unprepare(mnh_pwr->ref_clk);
+fail_pwr_suspend_regulators:
+	if (regulator_is_enabled(mnh_pwr->sdsr_supply))
+		regulator_disable(mnh_pwr->sdsr_supply);
+	if (regulator_is_enabled(mnh_pwr->asr_supply))
+		regulator_disable(mnh_pwr->asr_supply);
+	if (regulator_is_enabled(mnh_pwr->ioldo_supply))
+		regulator_disable(mnh_pwr->ioldo_supply);
+	if (regulator_is_enabled(mnh_pwr->sdldo_supply))
+		regulator_disable(mnh_pwr->sdldo_supply);
+
+	dev_err(mnh_pwr->dev,
+		"%s: force shutdown because of suspend failure (%d)\n",
+		__func__, ret);
+
+	mnh_pwr->state = MNH_PWR_S4;
+
+	return ret;
 }
 
-static void mnh_pwr_up(void)
+static int mnh_pwr_up(void)
 {
 	int ret;
 
-	/* deassert ddr_pad_iso_n */
-	gpiod_set_value_cansleep(mnh_pwr->ddr_pad_iso_n_pin, 1);
-
 	/* enable supplies */
 	/* sdldo -> ioldo -> asr -> sdsr */
-	if (mnh_pwr->state == MNH_PWR_S4)
+	if (mnh_pwr->state == MNH_PWR_S4) {
 		ret = regulator_enable(mnh_pwr->sdldo_supply);
+		if (ret) {
+			dev_err(mnh_pwr->dev,
+				"%s: failed to enable sdldo (%d)\n",
+				__func__, ret);
+			goto fail_pwr_up_regulators;
+		}
+	}
+
 	ret = regulator_enable(mnh_pwr->ioldo_supply);
+	if (ret) {
+		dev_err(mnh_pwr->dev, "%s: failed to enable ioldo (%d)\n",
+			__func__, ret);
+		goto fail_pwr_up_regulators;
+	}
+
 	ret = regulator_enable(mnh_pwr->asr_supply);
-	if (mnh_pwr->state == MNH_PWR_S4)
+	if (ret) {
+		dev_err(mnh_pwr->dev, "%s: failed to enable ioldo (%d)\n",
+			__func__, ret);
+		goto fail_pwr_up_regulators;
+	}
+
+	if (mnh_pwr->state == MNH_PWR_S4) {
 		ret = regulator_enable(mnh_pwr->sdsr_supply);
+		if (ret) {
+			dev_err(mnh_pwr->dev,
+				"%s: failed to enable sdsr (%d)\n",
+				__func__, ret);
+			goto fail_pwr_up_regulators;
+		}
+	}
 
 	/* turn on clocks */
 	ret = clk_prepare_enable(mnh_pwr->ref_clk);
+	if (ret) {
+		dev_err(mnh_pwr->dev, "%s: failed to enable ref clk (%d)\n",
+			__func__, ret);
+		goto fail_pwr_up_ref_clk;
+	}
+
 	ret = clk_prepare_enable(mnh_pwr->sleep_clk);
+	if (ret) {
+		dev_err(mnh_pwr->dev, "%s: failed to enable sleep clk (%d)\n",
+			__func__, ret);
+		goto fail_pwr_up_sleep_clk;
+	}
 
 	/* assert soc_pwr_good */
 	gpiod_set_value_cansleep(mnh_pwr->soc_pwr_good_pin, 1);
@@ -270,14 +549,50 @@ static void mnh_pwr_up(void)
 	udelay(60);
 
 	/* resume pcie link */
-	mnh_pwr_pcie_resume();
+	ret = mnh_pwr_pcie_resume();
+	if (ret) {
+		dev_err(mnh_pwr->dev, "%s: failed to resume pcie link (%d)\n",
+			__func__, ret);
+		goto fail_pwr_up_pcie;
+	}
+
+	/* if this is a resume from self-refresh, resume ddr */
+	if (mnh_pwr->state == MNH_PWR_S3)
+		mnh_ddr_resume(mnh_pwr->dev, mnh_pwr->ddr_pad_iso_n_pin);
 
 	mnh_pwr->state = MNH_PWR_S0;
+
+	return 0;
+
+fail_pwr_up_pcie:
+	gpiod_set_value_cansleep(mnh_pwr->soc_pwr_good_pin, 0);
+	clk_disable_unprepare(mnh_pwr->sleep_clk);
+fail_pwr_up_sleep_clk:
+	clk_disable_unprepare(mnh_pwr->ref_clk);
+fail_pwr_up_ref_clk:
+fail_pwr_up_regulators:
+	if (regulator_is_enabled(mnh_pwr->sdsr_supply))
+		regulator_disable(mnh_pwr->sdsr_supply);
+	if (regulator_is_enabled(mnh_pwr->asr_supply))
+		regulator_disable(mnh_pwr->asr_supply);
+	if (regulator_is_enabled(mnh_pwr->ioldo_supply))
+		regulator_disable(mnh_pwr->ioldo_supply);
+	if (regulator_is_enabled(mnh_pwr->sdldo_supply))
+		regulator_disable(mnh_pwr->sdldo_supply);
+
+	dev_err(mnh_pwr->dev,
+		"%s: force shutdown because of power up failure (%d)\n",
+		__func__, ret);
+
+	mnh_pwr->state = MNH_PWR_S4;
+
+	return ret;
 }
 
 static int mnh_pwr_get_resources(void)
 {
 	struct device *dev = mnh_pwr->dev;
+	int ret;
 
 	/* request supplies */
 	mnh_pwr->asr_supply = devm_regulator_get(dev, "bcm15602_asr");
@@ -306,6 +621,47 @@ static int mnh_pwr_get_resources(void)
 		dev_err(dev, "%s: failed to get sdldo supply (%ld)\n",
 			__func__, PTR_ERR(mnh_pwr->sdldo_supply));
 		return PTR_ERR(mnh_pwr->sdldo_supply);
+	}
+
+	/* register the notifier for each of the supplies */
+	mnh_pwr->asr_nb.notifier_call = mnh_pwr_asr_notifier_cb;
+	ret = devm_regulator_register_notifier(mnh_pwr->asr_supply,
+					       &mnh_pwr->asr_nb);
+	if (ret) {
+		dev_err(dev,
+			"%s: failed to register notifier block for asr supply (%d)\n",
+			__func__, ret);
+		return ret;
+	}
+
+	mnh_pwr->sdsr_nb.notifier_call = mnh_pwr_sdsr_notifier_cb;
+	ret = devm_regulator_register_notifier(mnh_pwr->sdsr_supply,
+					       &mnh_pwr->sdsr_nb);
+	if (ret) {
+		dev_err(dev,
+			"%s: failed to register notifier block for sdsr supply (%d)\n",
+			__func__, ret);
+		return ret;
+	}
+
+	mnh_pwr->ioldo_nb.notifier_call = mnh_pwr_ioldo_notifier_cb;
+	ret = devm_regulator_register_notifier(mnh_pwr->ioldo_supply,
+					       &mnh_pwr->ioldo_nb);
+	if (ret) {
+		dev_err(dev,
+			"%s: failed to register notifier block for ioldo supply (%d)\n",
+			__func__, ret);
+		return ret;
+	}
+
+	mnh_pwr->sdldo_nb.notifier_call = mnh_pwr_sdldo_notifier_cb;
+	ret = devm_regulator_register_notifier(mnh_pwr->sdldo_supply,
+					       &mnh_pwr->sdldo_nb);
+	if (ret) {
+		dev_err(dev,
+			"%s: failed to register notifier block for sdldo supply (%d)\n",
+			__func__, ret);
+		return ret;
 	}
 
 	/* request gpio descriptors */
@@ -353,19 +709,21 @@ static int mnh_pwr_get_resources(void)
 
 int mnh_pwr_set_state(enum mnh_pwr_state system_state)
 {
+	int ret = 0;
+
 	dev_info(mnh_pwr->dev, "%s req: %d, current: %d\n",
 		 __func__, system_state, mnh_pwr_get_state());
 
 	if (system_state != mnh_pwr->state) {
 		switch (system_state) {
 		case MNH_PWR_S0:
-			mnh_pwr_up();
+			ret = mnh_pwr_up();
 			break;
 		case MNH_PWR_S3:
-			mnh_pwr_suspend();
+			ret = mnh_pwr_suspend();
 			break;
 		case MNH_PWR_S4:
-			mnh_pwr_down();
+			ret = mnh_pwr_down();
 			break;
 		default:
 			dev_err(mnh_pwr->dev, "%s: invalid state %d\n",
@@ -374,14 +732,19 @@ int mnh_pwr_set_state(enum mnh_pwr_state system_state)
 			break;
 		}
 
-		dev_info(mnh_pwr->dev, "%s done with state: %d\n",
-			 __func__, mnh_pwr_get_state());
+		if (ret)
+			dev_info(mnh_pwr->dev,
+				 "%s: state transition failed (%d)\n",
+				 __func__, ret);
+		else
+			dev_info(mnh_pwr->dev, "%s done with state: %d\n",
+				 __func__, mnh_pwr_get_state());
 	} else {
 		dev_info(mnh_pwr->dev, "%s: no state change needed\n",
 			 __func__);
 	}
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(mnh_pwr_set_state);
 
@@ -414,11 +777,23 @@ int mnh_pwr_init(struct device *dev)
 		return ret;
 	}
 
+	/* initialize some structures */
+	INIT_WORK(&mnh_pwr->shutdown_work, mnh_pwr_shutdown_work);
+
 	/* power on the device to enumerate PCIe */
-	mnh_pwr_up();
+	ret = mnh_pwr_up();
+	if (ret) {
+		dev_err(dev, "%s: failed initial power up (%d)", __func__, ret);
+		return ret;
+	}
 
 	/* power down the device */
-	mnh_pwr_down();
+	ret = mnh_pwr_down();
+	if (ret) {
+		dev_err(dev, "%s: failed initial power down (%d)", __func__,
+			ret);
+		return ret;
+	}
 
 	return 0;
 }

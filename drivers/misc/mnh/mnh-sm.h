@@ -17,14 +17,17 @@
 #ifndef __MNH_SM_HOST
 #define __MNH_SM_HOST
 
+#include "mnh-pcie.h"
 #include "mnh-sm-config.h"
 
 enum mnh_sm_state {
-	MNH_HW_INIT,
-	MNH_HW_OFF,
-	MNH_HW_ACTIVE,
-	MNH_HW_SUSPEND_SELF_REFRESH,
-	MNH_HW_SUSPEND_HIBERNATE
+	MNH_HW_INIT, /* powered on, unconfigured */
+	MNH_HW_CONFIG, /* powered on, mipi and ddr configured */
+	MNH_HW_OFF, /* powered off */
+	MNH_HW_ACTIVE, /* powered on and booted */
+	MNH_HW_SUSPEND_SELF_REFRESH, /* suspended, ddr in self-refresh */
+	MNH_HW_SUSPEND_HIBERNATE, /* suspended, kernel image in AP DRAM */
+	MNH_HW_UNKNOWN /* on init */
 };
 
 /** API to register hotplug callback to receive MNH up/down notifications
@@ -108,6 +111,10 @@ int mnh_sm_suspend(struct mnh_sm_configuration mnh_sm_boot_args);
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
 int mnh_sm_resume(struct mnh_sm_configuration mnh_sm_boot_args);
+
+int mnh_sm_is_present(void);
+
+void mnh_sm_get_default_config(struct mnh_sm_configuration *mnh_sm_boot_args);
 
 #endif /* __MNH_SM_HOST */
 

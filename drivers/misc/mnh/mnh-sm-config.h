@@ -34,6 +34,7 @@
 #define MNH_MIPI_VC1_EN_MASK	0x2
 #define MNH_MIPI_VC2_EN_MASK	0x4
 #define MNH_MIPI_VC3_EN_MASK	0x8
+#define MNH_MIPI_VC_ALL_EN_MASK 0xf
 
 /** Firmware download image state */
 enum fw_image_state {
