@@ -1910,11 +1910,23 @@ static int create_debugfs_entries(struct mp2661_chg *chip)
     return 0;
 }
 
+#define HW_HYSTERISIS_DECIDEGC 30
 static void mp2661_initialize_batt_temp_status(struct mp2661_chg *chip)
 {
     int temp = mp2661_get_prop_batt_temp(chip);
+    int hot_hysterisis_decidegc = 0;
+    int cold_hysterisis_decidegc = 0;
 
-    if(temp >= chip->hot_batt_decidegc)
+    if (BAT_TEMP_STATUS_HOT == chip->batt_temp_status)
+    {
+        hot_hysterisis_decidegc = -HW_HYSTERISIS_DECIDEGC;
+    }
+    else if (BAT_TEMP_STATUS_COLD == chip->batt_temp_status)
+    {
+        cold_hysterisis_decidegc = HW_HYSTERISIS_DECIDEGC;
+    }
+
+    if(temp >= (chip->hot_batt_decidegc + hot_hysterisis_decidegc))
     {
         chip->batt_temp_status = BAT_TEMP_STATUS_HOT;
     }
@@ -1930,7 +1942,7 @@ static void mp2661_initialize_batt_temp_status(struct mp2661_chg *chip)
     {
         chip->batt_temp_status = BAT_TEMP_STATUS_NORMAL_STATE2;
     }
-    else if(temp >= chip->cold_batt_decidegc)
+    else if(temp >= (chip->cold_batt_decidegc + cold_hysterisis_decidegc))
     {
         chip->batt_temp_status = BAT_TEMP_STATUS_NORMAL_STATE1;
     }
@@ -2328,7 +2340,11 @@ static __ref int mp2661_monitor_kthread(void *arg)
         temp = mp2661_get_prop_batt_temp(chip);
         pr_debug("temp = %d\n",temp);
 
-        if(abs(temp - chip->last_temp) >= MONITOR_TEMP_DELTA)
+        if((abs(temp - chip->last_temp) >= MONITOR_TEMP_DELTA)
+            || ((BAT_TEMP_STATUS_HOT == chip->batt_temp_status)
+                && (temp < (chip->hot_batt_decidegc - HW_HYSTERISIS_DECIDEGC)))
+            || ((BAT_TEMP_STATUS_COLD == chip->batt_temp_status)
+                && (temp >= (chip->cold_batt_decidegc + HW_HYSTERISIS_DECIDEGC))))
         {
             pr_debug("temp = %d, last_temp = %d\n", temp, chip->last_temp);
 
@@ -2459,6 +2475,7 @@ static int mp2661_charger_probe(struct i2c_client *client,
         return rc;
     }
 
+    chip->batt_temp_status = BAT_TEMP_STATUS_MAX; /* default status */
     mp2661_initialize_batt_temp_status(chip);
 
     rc = mp2661_hw_init(chip);
