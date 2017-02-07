@@ -67,6 +67,15 @@ struct qpnp_vib {
 	struct mutex lock;
 };
 
+struct timed_output_dev *timed_dev_g;
+
+static void qpnp_vib_enable(struct timed_output_dev *dev, int value);
+
+int vibrator_enable(int value) {
+        qpnp_vib_enable(timed_dev_g, value);
+        return 0;
+}
+
 static int qpnp_vib_read_u8(struct qpnp_vib *vib, u8 *data, u16 reg)
 {
 	int rc;
@@ -369,6 +378,7 @@ static int qpnp_vibrator_probe(struct spmi_device *spmi)
 
 	dev_set_drvdata(&spmi->dev, vib);
 
+        timed_dev_g = &vib->timed_dev;
 	rc = timed_output_dev_register(&vib->timed_dev);
 	if (rc < 0)
 		return rc;

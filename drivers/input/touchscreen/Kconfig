@@ -13,6 +13,11 @@ if INPUT_TOUCHSCREEN
 
 source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
 
+config TOUCHSCREEN_ELAN_KTF
+    bool "Elan eWD1020 touch driver"
+    help
+        Say Y here to enable Elan eWD1020 touch driver
+
 config OF_TOUCHSCREEN
 	def_tristate INPUT
 	depends on INPUT && OF
