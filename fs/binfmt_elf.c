@@ -570,8 +570,8 @@ static unsigned long randomize_stack_top(unsigned long stack_top)
 #endif
 }
 
-#ifdef CONFIG_ARM64
-#define ANDROID_NOTE_OWNER "Android"
+#ifdef CONFIG_KUSER_HELPERS_SELECTIVE_DISABLE
+#define ANDROID_NOTE_OWNER"Android"
 #define ANDROID_KUSER_HELPER_TYPE 0x3L
 #define ANDROID_KUSER_HELPER_ON 0x1L
 
@@ -1010,7 +1010,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	set_binfmt(&elf_format);
 
 #ifdef ARCH_HAS_SETUP_ADDITIONAL_PAGES
-#ifdef CONFIG_ARM64
+#ifdef CONFIG_KUSER_HELPERS_SELECTIVE_DISABLE
 	retval = should_call_arch_setup_additional_pages(bprm, &loc->elf_ex,
 							 elf_phdata);
 	if (retval < 0)
@@ -1021,7 +1021,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 		retval = arch_setup_additional_pages(bprm, !!elf_interpreter);
 		if (retval < 0)
 			goto out;
-#ifdef CONFIG_ARM64
+#ifdef CONFIG_KUSER_HELPERS_SELECTIVE_DISABLE
 	}
 #endif
 #endif /* ARCH_HAS_SETUP_ADDITIONAL_PAGES */
