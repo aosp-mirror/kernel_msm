@@ -33,6 +33,12 @@
 #include <linux/power/max17055_battery.h>
 #include <linux/of.h>
 #include <linux/regmap.h>
+#include <linux/wakelock.h>
+#include <linux/kthread.h>
+#include <linux/sched.h>
+#include <linux/timer.h>
+#include <linux/param.h>
+#include <linux/jiffies.h>
 
 /* Status register bits */
 #define STATUS_POR_BIT             (1 << 1)
@@ -77,6 +83,15 @@
 #define MAX17055_MISCCFG_REPSOC              0x00
 #define MAX17055_MISCCFG_SACFG_MASK          0x03
 #define MAX17055_BATT_ID_GUANGYU             0x01
+#define MAX17055_ULPM_SOC                    5
+#define MAX17055_RCELL                       0x14
+#define MAX17055_OCV_THRESHOLD_GUANGYU       3590000
+#define MAX17055_OCV_THRESHOLD_DESAY         3650000
+#define MAX17055_CUTOFF_THRESHOLD            3200000
+#define ULPM_DROP_SOC_INTERVAL_SEC           3
+#define ULPM_CATCHUP_SOC_INTERVAL_SEC        5
+#define ULPM_SOC_DIFF                        2
+
 extern int get_global_batt_id(void);
 static bool g_max17055_initialized = false;
 bool get_global_max17055_intialized_flag(void)
@@ -90,6 +105,18 @@ const static u16 dPaccVals[2][2] = {
 	{0x0ac7, 0x0c80}
 };
 
+struct ulpm_catchup_soc_struct {
+	struct task_struct     *ulpm_catchup_soc_task;
+	bool                   is_running; /* indicate thread state */
+	bool                   exist_flag; /* indicate thread whether to exist */
+};
+
+struct ulpm_drop_soc_struct {
+	struct task_struct     *ulpm_drop_soc_task;
+	bool                   is_running; /* indicate thread  state */
+	bool                   exist_flag; /* indicate thread whether to exist */
+};
+
 struct max17055_chip {
 	struct i2c_client *client;
 	struct regmap *regmap;
@@ -98,6 +125,14 @@ struct max17055_chip {
 	struct max17055_platform_data *pdata;
 	struct work_struct work;
 	int    init_complete;
+#if CONFIG_HUAWEI_SAWSHARK
+	int                                last_soc;
+	struct power_supply                *usb_psy;
+	struct wake_lock                   ulpm_wake_lock;
+	struct ulpm_catchup_soc_struct     ulpm_catchup_soc;
+	struct ulpm_drop_soc_struct        ulpm_drop_soc;
+	struct timespec                    last_soc_changed_time;
+#endif
 };
 
 #if CONFIG_HUAWEI_SAWSHARK
@@ -294,6 +329,250 @@ int max17055_global_get_real_capacity(void)
 
 extern bool mp2661_global_get_repeat_charging_detect_flag(void);
 #define DEFAULT_BATT_AUTO_RECHARGE_CAPACITY   100
+static void ulpm_voltage_check(struct max17055_chip *chip, int est_ocv_uv, int ocv_threshold_uv)
+{
+	if (wake_lock_active(&chip->ulpm_wake_lock))
+	{
+		if (est_ocv_uv > ocv_threshold_uv)
+		{
+			pr_info("max17055: hit ulpm threshold, releasing ulpm wakelock\n");
+			wake_unlock(&chip->ulpm_wake_lock);
+		}
+	}
+	else if (est_ocv_uv <= ocv_threshold_uv)
+	{
+		pr_info("max17055: estimate ocv = %duv holding ulpm wakelock\n", est_ocv_uv);
+		wake_lock(&chip->ulpm_wake_lock);
+	}
+}
+
+static int __ref ulpm_drop_soc_func(void *arg)
+{
+	struct max17055_chip *chip = (struct max17055_chip *)arg;
+
+	while (1)
+	{
+		pr_info("ulpm_drop_soc_func\n");
+		if (!chip->ulpm_drop_soc.is_running)
+		{
+			chip->ulpm_drop_soc.is_running = true;
+		}
+
+		set_current_state(TASK_INTERRUPTIBLE);
+		schedule_timeout(ULPM_DROP_SOC_INTERVAL_SEC * HZ);
+		power_supply_changed(&chip->battery);
+
+		if (chip->ulpm_drop_soc.exist_flag)
+		{
+			break;
+		}
+	}
+	chip->ulpm_drop_soc.is_running = false;
+
+	return 0;
+}
+
+static int __ref ulpm_catchup_soc_func(void *arg)
+{
+	struct max17055_chip *chip = (struct max17055_chip *)arg;
+
+	while (1)
+	{
+		pr_info("ulpm_catchup_soc_func\n");
+		if (!chip->ulpm_catchup_soc.is_running)
+		{
+			chip->ulpm_catchup_soc.is_running = true;
+		}
+
+		set_current_state(TASK_INTERRUPTIBLE);
+		schedule_timeout(ULPM_CATCHUP_SOC_INTERVAL_SEC * HZ);
+		power_supply_changed(&chip->battery);
+
+		if (chip->ulpm_catchup_soc.exist_flag)
+		{
+			break;
+		}
+	}
+	chip->ulpm_catchup_soc.is_running = false;
+
+	return 0;
+}
+
+static void check_ulpm_dropsoc_thread(struct max17055_chip *chip)
+{
+	if (!chip->ulpm_drop_soc.is_running)
+	{
+		chip->ulpm_drop_soc.ulpm_drop_soc_task = kthread_create(ulpm_drop_soc_func, chip,
+			"ulpm_drop_soc");
+		if (IS_ERR(chip->ulpm_drop_soc.ulpm_drop_soc_task))
+		{
+			pr_err("can not creat ulpm drop soc threthd\n");
+		}
+		else
+		{
+			wake_up_process(chip->ulpm_drop_soc.ulpm_drop_soc_task);
+		}
+	}
+}
+
+static void check_ulpm_catchup_soc_thread(struct max17055_chip *chip)
+{
+	if (!chip->ulpm_catchup_soc.is_running)
+	{
+		chip->ulpm_catchup_soc.ulpm_catchup_soc_task = kthread_create(ulpm_catchup_soc_func, chip,
+			"ulpm_catchup_soc");
+		if (IS_ERR(chip->ulpm_catchup_soc.ulpm_catchup_soc_task))
+		{
+			pr_err("can not creat ulpm catchup soc threthd\n");
+		}
+		else
+		{
+			wake_up_process(chip->ulpm_catchup_soc.ulpm_catchup_soc_task);
+		}
+	}
+}
+
+static int adjust_soc(struct max17055_chip *chip, int repsoc)
+{
+	int batt_id = -1;
+	u32 data = 0;
+	u32 est_ocv_uv = 0;
+	u32 ocv_threshold_uv = 0;
+	union power_supply_propval usb_present_pval = {0, };
+	union power_supply_propval pval_current_avg = {0, };
+	union power_supply_propval pval_vcell_avg = {0, };
+	struct timespec current_time;
+	int tmp_soc = chip->last_soc;
+
+	/* In system booting or bms reposoc is below 0, using repsoc */
+	if ((-1 == chip->last_soc) || (repsoc <= 0))
+	{
+		chip->last_soc = repsoc;
+
+		pr_info("max17055: repsoc = %d and last soc = %d in system booting\n",
+			repsoc, chip->last_soc);
+
+		return chip->last_soc;
+	}
+
+	chip->usb_psy->get_property(chip->usb_psy,
+		POWER_SUPPLY_PROP_PRESENT, &usb_present_pval);
+	regmap_read(chip->regmap, MAX17055_RCELL, &data);
+	(&chip->battery)->get_property(&chip->battery,
+		POWER_SUPPLY_PROP_VOLTAGE_AVG, &pval_vcell_avg);
+	(&chip->battery)->get_property(&chip->battery,
+		POWER_SUPPLY_PROP_CURRENT_AVG, &pval_current_avg);
+	est_ocv_uv = (pval_vcell_avg.intval - ((pval_current_avg.intval / 1000) * ((data * 1000) / 4096)));
+	pr_debug("max17055: vcell avg is %duv\n", pval_vcell_avg.intval);
+	pr_debug("max17055: rcell is %dmohm\n", ((data * 1000) / 4096));
+	pr_debug("max17055: current avg is %dma\n", (pval_current_avg.intval / 1000));
+	pr_debug("max17055: est_ocv_uv is %duv\n", est_ocv_uv);
+
+	get_monotonic_boottime(&current_time);
+	batt_id = get_global_batt_id();
+	ocv_threshold_uv = (MAX17055_BATT_ID_GUANGYU == batt_id) ? MAX17055_OCV_THRESHOLD_GUANGYU : MAX17055_OCV_THRESHOLD_DESAY;
+	ulpm_voltage_check(chip, est_ocv_uv, ocv_threshold_uv);
+
+	if (usb_present_pval.intval)
+	{
+		/* drop soc thread needs to exit */
+		if (!chip->ulpm_drop_soc.exist_flag)
+		{
+			chip->ulpm_drop_soc.exist_flag = true;
+		}
+
+		if (repsoc <= chip->last_soc) /* soc can not decrease */
+		{
+			pr_info("max17055: usb is present and cannot decrease soc, repsoc = %d and last soc = %d\n",
+				repsoc, chip->last_soc);
+			chip->ulpm_catchup_soc.exist_flag = true;
+		}
+		else if ((repsoc - chip->last_soc) >= ULPM_SOC_DIFF) /* soc increases step by step */
+		{
+			/* create ulpm catchup soc thread */
+			chip->ulpm_catchup_soc.exist_flag = false;
+			check_ulpm_catchup_soc_thread(chip);
+
+			if ((current_time.tv_sec - chip->last_soc_changed_time.tv_sec) >= ULPM_CATCHUP_SOC_INTERVAL_SEC)
+			{
+				chip->last_soc++;
+				pr_info("max17055: usb is present and catchup soc, fix repsoc from %d to %d in late state\n ",
+					repsoc, chip->last_soc);
+			}
+		}
+		else /* repsoc - last_soc = 1*/
+		{
+			chip->last_soc = repsoc;
+			chip->ulpm_catchup_soc.exist_flag = true;
+		}
+	}
+	else
+	{
+		/* catchup soc thread needs to exit */
+		if (!chip->ulpm_catchup_soc.exist_flag)
+		{
+			chip->ulpm_catchup_soc.exist_flag = true;
+		}
+
+		if (est_ocv_uv <= ocv_threshold_uv) /* ocv is below 5% */
+		{
+			if (repsoc <= MAX17055_ULPM_SOC) /* soc is in normal state below 5% ocv */
+			{
+				if (chip->last_soc > MAX17055_ULPM_SOC) /* this avoid soc to increase, such as 3% to 5% when removing usb */
+				{
+					chip->last_soc = MAX17055_ULPM_SOC;
+					pr_info("max17055: usb is gone, fix repsoc from %d to %d in normal state\n ",
+						repsoc, MAX17055_ULPM_SOC);
+				}
+				chip->ulpm_drop_soc.exist_flag = true;
+			}
+			else /* soc is in late state below 5% ocv*/
+			{
+				/* create ulpm dropsoc thread */
+				chip->ulpm_drop_soc.exist_flag = false;
+				check_ulpm_dropsoc_thread(chip);
+
+				if (((current_time.tv_sec - chip->last_soc_changed_time.tv_sec) >= ULPM_DROP_SOC_INTERVAL_SEC)
+					&& (chip->last_soc > MAX17055_ULPM_SOC))
+				{
+					chip->last_soc--;
+					pr_info("max17055: usb is gone, fix repsoc from %d to %d in late state\n ",
+						repsoc, chip->last_soc);
+				}
+			}
+		}
+		else if (repsoc > chip->last_soc)
+		{
+			pr_info("max17055: usb is gone and soc can not increase, reposoc = %d, soc =%d\n",
+				repsoc, chip->last_soc);
+			chip->ulpm_drop_soc.exist_flag = true;
+		}
+		else
+		{
+			if (repsoc <= MAX17055_ULPM_SOC) /* soc is in early state above 5% ocv */
+			{
+				if (chip->last_soc > MAX17055_ULPM_SOC + 1) /* this avoid soc to increase, such as 3% to 6% when removing usb */
+				{
+					chip->last_soc = MAX17055_ULPM_SOC + 1;
+					pr_info("max17055: usb is not present, fix repsoc from %d to %d in early state\n ",
+						repsoc, chip->last_soc);
+				}
+			}
+			else /* soc is in normal state above 5% ocv */
+			{
+				chip->last_soc = repsoc;
+			}
+			chip->ulpm_drop_soc.exist_flag = true;
+		}
+	}
+
+	if (chip->last_soc != tmp_soc)
+	{
+		memcpy(&chip->last_soc_changed_time, &current_time, sizeof(chip->last_soc_changed_time));
+	}
+
+	return chip->last_soc;
+}
 #endif
 
 static int max17055_get_property(struct power_supply *psy,
@@ -403,6 +682,8 @@ static int max17055_get_property(struct power_supply *psy,
 				val->intval = (data >> 8);
 			}
 		}
+
+		val->intval = adjust_soc(chip, val->intval);
 #else
 		val->intval = data >> 8;
 #endif
@@ -1142,7 +1423,9 @@ static int max17055_probe(struct i2c_client *client,
 	int ret;
 	int i;
 	u32 val, driver_version;
-
+#if CONFIG_HUAWEI_SAWSHARK
+	struct power_supply *usb_psy;
+#endif
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_WORD_DATA))
 		return -EIO;
@@ -1152,12 +1435,24 @@ static int max17055_probe(struct i2c_client *client,
 	{
 		return -EPROBE_DEFER;
 	}
+
+	usb_psy = power_supply_get_by_name("usb");
+	if (!usb_psy)
+	{
+		pr_err("USB psy not found; deferring probe\n");
+		return -EPROBE_DEFER;
+	}
 #endif
 	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
 		return -ENOMEM;
 
 	chip->client = client;
+#if CONFIG_HUAWEI_SAWSHARK
+	chip->last_soc = -1;
+	chip->usb_psy = usb_psy;
+#endif
+
 	chip->regmap = devm_regmap_init_i2c(client, &max17055_regmap_config);
 	if (IS_ERR(chip->regmap)) {
 		dev_err(&client->dev, "Failed to initialize regmap\n");
@@ -1228,6 +1523,10 @@ static int max17055_probe(struct i2c_client *client,
 		dev_err(&client->dev, "failed: power supply register\n");
 		return ret;
 	}
+
+#if CONFIG_HUAWEI_SAWSHARK
+	wake_lock_init(&chip->ulpm_wake_lock, WAKE_LOCK_SUSPEND, "ulpm_wake_lock");
+#endif
 
 	regmap_read(chip->regmap, MAX17055_Status, &val);
 
