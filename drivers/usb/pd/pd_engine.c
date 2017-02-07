@@ -228,29 +228,6 @@ static const char * const typec_cc_orientation_name[] = {
 	[TYPEC_CC_ORIENTATION_CC2]		= "CC2",
 };
 
-static const enum typec_cc_status cc_status[][2] = {
-	[POWER_SUPPLY_TYPEC_NONE]
-		= {TYPEC_CC_OPEN, TYPEC_CC_OPEN},
-	[POWER_SUPPLY_TYPEC_SOURCE_DEFAULT]
-		= {TYPEC_CC_RP_DEF, TYPEC_CC_OPEN},
-	[POWER_SUPPLY_TYPEC_SOURCE_MEDIUM]
-		= {TYPEC_CC_RP_1_5, TYPEC_CC_OPEN},
-	[POWER_SUPPLY_TYPEC_SOURCE_HIGH]
-		= {TYPEC_CC_RP_3_0, TYPEC_CC_OPEN},
-	[POWER_SUPPLY_TYPEC_NON_COMPLIANT]
-		= {TYPEC_CC_OPEN, TYPEC_CC_OPEN},
-	[POWER_SUPPLY_TYPEC_SINK]
-		= {TYPEC_CC_RD, TYPEC_CC_OPEN},
-	[POWER_SUPPLY_TYPEC_SINK_POWERED_CABLE]
-		= {TYPEC_CC_RD, TYPEC_CC_RA},
-	[POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY]
-		= {TYPEC_CC_RD, TYPEC_CC_RD},
-	[POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER]
-		= {TYPEC_CC_RA, TYPEC_CC_RA},
-	[POWER_SUPPLY_TYPEC_POWERED_CABLE_ONLY]
-		= {TYPEC_CC_RA, TYPEC_CC_OPEN},
-};
-
 static const char * const typec_cc_status_name[] = {
 	[TYPEC_CC_OPEN]		= "OPEN",
 	[TYPEC_CC_RA]		= "Ra",
@@ -260,29 +237,107 @@ static const char * const typec_cc_status_name[] = {
 	[TYPEC_CC_RP_3_0]	= "Rd-3.0",
 };
 
+/*
+ * parses the type-c mode to cc pin status in the orientation_none special case.
+ */
+static void parse_cc_status_none_orientation(
+		enum power_supply_typec_mode typec_mode,
+		enum typec_cc_status *cc1,
+		enum typec_cc_status *cc2)
+{
+	switch (typec_mode) {
+	case POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY:
+		*cc1 = *cc2 = TYPEC_CC_RD;
+		break;
+	case POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER:
+		*cc1 = *cc2 = TYPEC_CC_RA;
+		break;
+	default:
+		*cc1 = *cc2 = TYPEC_CC_OPEN;
+		break;
+	}
+}
+
+/*
+ * parses the type-c mode to the status of the active and inactive cc pin.
+ */
+static void parse_cc_status_active_inactive(
+		enum power_supply_typec_mode typec_mode,
+		enum typec_cc_status *cc_active,
+		enum typec_cc_status *cc_inactive)
+{
+	switch (typec_mode) {
+	case POWER_SUPPLY_TYPEC_NONE:
+		*cc_active = TYPEC_CC_OPEN;
+		*cc_inactive = TYPEC_CC_OPEN;
+		break;
+	case POWER_SUPPLY_TYPEC_SOURCE_DEFAULT:
+		*cc_active = TYPEC_CC_RP_DEF;
+		*cc_inactive = TYPEC_CC_OPEN;
+		break;
+	case POWER_SUPPLY_TYPEC_SOURCE_MEDIUM:
+		*cc_active = TYPEC_CC_RP_1_5;
+		*cc_inactive = TYPEC_CC_OPEN;
+		break;
+	case POWER_SUPPLY_TYPEC_SOURCE_HIGH:
+		*cc_active = TYPEC_CC_RP_3_0;
+		*cc_inactive = TYPEC_CC_OPEN;
+		break;
+	case POWER_SUPPLY_TYPEC_NON_COMPLIANT:
+		*cc_active = TYPEC_CC_OPEN;
+		*cc_inactive = TYPEC_CC_OPEN;
+		break;
+	case POWER_SUPPLY_TYPEC_SINK:
+		*cc_active = TYPEC_CC_RD;
+		*cc_inactive = TYPEC_CC_OPEN;
+		break;
+	case POWER_SUPPLY_TYPEC_SINK_POWERED_CABLE:
+		*cc_active = TYPEC_CC_RD;
+		*cc_inactive = TYPEC_CC_RA;
+		break;
+	case POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY:
+		*cc_active = TYPEC_CC_RD;
+		*cc_inactive = TYPEC_CC_RD;
+		break;
+	case POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER:
+		*cc_active = TYPEC_CC_RA;
+		*cc_inactive = TYPEC_CC_RA;
+		break;
+	case POWER_SUPPLY_TYPEC_POWERED_CABLE_ONLY:
+		*cc_active = TYPEC_CC_RA;
+		*cc_inactive = TYPEC_CC_OPEN;
+		break;
+	default:
+		*cc_active = TYPEC_CC_OPEN;
+		*cc_inactive = TYPEC_CC_OPEN;
+		break;
+	}
+}
+
 static void parse_cc_status(enum power_supply_typec_mode typec_mode,
 			    enum typec_cc_orientation typec_cc_orientation,
 			    enum typec_cc_status *cc1,
 			    enum typec_cc_status *cc2)
 {
-	switch (typec_cc_orientation) {
-	case TYPEC_CC_ORIENTATION_NONE:
-		*cc1 = TYPEC_CC_OPEN;
-		*cc2 = TYPEC_CC_OPEN;
-		break;
-	case TYPEC_CC_ORIENTATION_CC1:
-		*cc1 = cc_status[typec_mode][0];
-		*cc2 = cc_status[typec_mode][1];
-		break;
-	case TYPEC_CC_ORIENTATION_CC2:
-		*cc1 = cc_status[typec_mode][1];
-		*cc2 = cc_status[typec_mode][0];
-		break;
-	default:
-		/* unnkown typec_cc_orientation */
-		*cc1 = TYPEC_CC_OPEN;
-		*cc2 = TYPEC_CC_OPEN;
-		break;
+	enum typec_cc_status cc_active, cc_inactive;
+
+	/* handle orientation_none special cases */
+	if (typec_cc_orientation == TYPEC_CC_ORIENTATION_NONE) {
+		parse_cc_status_none_orientation(typec_mode, cc1, cc2);
+		return;
+	}
+
+	parse_cc_status_active_inactive(typec_mode, &cc_active, &cc_inactive);
+
+	/* assign cc1, cc2 status based on orientation */
+	if (typec_cc_orientation == TYPEC_CC_ORIENTATION_CC1) {
+		*cc1 = cc_active;
+		*cc2 = cc_inactive;
+	} else if (typec_cc_orientation == TYPEC_CC_ORIENTATION_CC2) {
+		*cc1 = cc_inactive;
+		*cc2 = cc_active;
+	} else {
+		*cc1 = *cc2 = TYPEC_CC_OPEN;
 	}
 }
 
