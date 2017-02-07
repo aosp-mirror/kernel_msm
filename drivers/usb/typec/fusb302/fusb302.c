@@ -27,16 +27,24 @@
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/power/htc_battery.h>
+#include <linux/power_supply.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/usb/pd.h>
 #include <linux/usb/typec.h>
+#include <linux/usb/usb_controller.h>
+#include <linux/usb/usb_typec.h>
 #include <linux/workqueue.h>
 
 #include "fusb302_reg.h"
 #include "../tcpm.h"
+
+bool IsPRSwap;
+bool PolicyIsDFP;
+bool PolicyIsSource;
 
 static void *fusb302_log;
 #define fusb302_log(fmt, ...) ipc_log_string(fusb302_log, "%s: " fmt, \
@@ -123,7 +131,13 @@ struct fusb302_chip {
 	enum typec_cc_polarity cc_polarity;
 	enum typec_cc_status cc1;
 	enum typec_cc_status cc2;
+
+	struct usb_controller *uc;
+	struct usb_typec_ctrl *utc;
+	struct power_supply *batt_psy;
 };
+
+static struct fusb302_chip *__fusb302_chip;
 
 #define FUSB302_RESUME_RETRY 10
 #define FUSB302_RESUME_RETRY_SLEEP 50
@@ -704,10 +718,14 @@ static int tcpm_set_vbus(struct tcpc_dev *dev, bool on, bool charge)
 	if (chip->vbus_on == on) {
 		fusb302_log("vbus is already %s\n", on ? "On" : "Off");
 	} else {
-		if (on)
-			ret = regulator_enable(chip->vbus);
-		else
-			ret = regulator_disable(chip->vbus);
+		if (chip->uc && chip->uc->pd_vbus_ctrl) {
+			ret = chip->uc->pd_vbus_ctrl(on, true);
+		} else {
+			if (on)
+				ret = regulator_enable(chip->vbus);
+			else
+				ret = regulator_disable(chip->vbus);
+		}
 		if (ret < 0) {
 			fusb302_log("cannot %s vbus regulator, ret=%d\n",
 				    on ? "enable" : "disable", ret);
@@ -727,10 +745,48 @@ done:
 	return ret;
 }
 
+enum usb_typec_current {
+	USB_TYPEC_CURRENT_NONE = 0,
+	USB_TYPEC_CURRENT_DEFAULT,
+	USB_TYPEC_CURRENT_1_5_A,
+	USB_TYPEC_CURRENT_3_0_A,
+};
+
 static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 {
-	fusb302_log("current limit: %d ma, %d mv (not implemented)\n",
+	struct fusb302_chip *chip = container_of(dev, struct fusb302_chip,
+						 tcpc_dev);
+	int ret = 0;
+	int dummy_val;
+	struct htc_pd_data pd_data;
+	enum usb_typec_current sink_current;
+
+	fusb302_log("current limit: %d ma, %d mv\n",
 		    max_ma, mv);
+
+	if ((mv == 5000) && (max_ma == 0 || max_ma == 1500 || max_ma == 3000)) {
+		if (max_ma == 0)
+			sink_current = USB_TYPEC_CURRENT_DEFAULT;
+		else if (max_ma == 1500)
+			sink_current = USB_TYPEC_CURRENT_1_5_A;
+		else
+			sink_current = USB_TYPEC_CURRENT_3_0_A;
+		if (chip->utc)
+			chip->utc->sink_current = sink_current;
+		ret = chip->batt_psy->set_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_TYPEC_SINK_CURRENT,
+				(const union power_supply_propval *)
+						&sink_current);
+		if (ret < 0) {
+			fusb302_log("cannot set battery sink current, ret=%d\n",
+				    ret);
+		}
+	}
+
+	pd_data.pd_list[0][0] = mv;
+	pd_data.pd_list[0][1] = max_ma;
+
+	htc_battery_pd_charger_support(1, pd_data, &dummy_val);
 
 	return 0;
 }
@@ -1656,6 +1712,13 @@ static int fusb302_probe(struct i2c_client *client,
 	chip->dev = &client->dev;
 	mutex_init(&chip->lock);
 
+	chip->batt_psy = power_supply_get_by_name("battery");
+	if (IS_ERR(chip->batt_psy)) {
+		ret = PTR_ERR(chip->batt_psy);
+		fusb302_log("cannot get battery power supply, ret=%d\n", ret);
+		return ret;
+	}
+
 	chip->wq = create_singlethread_workqueue(dev_name(chip->dev));
 	if (!chip->wq)
 		return -ENOMEM;
@@ -1683,6 +1746,7 @@ static int fusb302_probe(struct i2c_client *client,
 		gpio_free(chip->gpio_int_n);
 		return ret;
 	}
+	__fusb302_chip = chip;
 	enable_irq_wake(chip->gpio_int_n_irq);
 	return ret;
 
@@ -1752,6 +1816,30 @@ static struct i2c_driver fusb302_driver = {
 	.id_table = fusb302_i2c_device_id,
 };
 module_i2c_driver(fusb302_driver);
+
+int usb_controller_register(struct device *parent, struct usb_controller *uc)
+{
+	struct fusb302_chip *chip = __fusb302_chip;
+
+	if (chip == NULL)
+		return -ENODEV;
+	chip->uc = uc;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(usb_controller_register);
+
+int usb_typec_ctrl_register(struct device *parent, struct usb_typec_ctrl *utc)
+{
+	struct fusb302_chip *chip = __fusb302_chip;
+
+	if (chip == NULL)
+		return -ENODEV;
+	chip->utc = utc;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(usb_typec_ctrl_register);
 
 MODULE_AUTHOR("Yueyao Zhu <yueyao@google.com>");
 MODULE_DESCRIPTION("Fairchild FUSB302 Type-C Chip Driver");
