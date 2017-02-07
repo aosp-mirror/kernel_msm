@@ -455,6 +455,11 @@ int pstore_register(struct pstore_info *psi)
 			msecs_to_jiffies(pstore_update_ms);
 		add_timer(&pstore_timer);
 	}
+/*
+ * Update the module parameter backend, so it is visible
+ * through /sys/module/pstore/parameters/backend
+ */
+	backend = psi->name;
 
 	pr_info("Registered %s as persistent store backend\n", psi->name);
 
