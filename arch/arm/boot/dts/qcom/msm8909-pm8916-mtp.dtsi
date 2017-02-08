@@ -11,8 +11,6 @@
  * GNU General Public License for more details.
  */
 
-#include "msm8909-pm8916-camera-sensor-mtp.dtsi"
-
 &soc {
 	i2c@78b9000 {
 		synaptics@20 {
