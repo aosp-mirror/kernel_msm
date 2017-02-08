@@ -465,6 +465,8 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds status_cmds;
 	struct dsi_panel_cmds idle_on_cmds; /* for lp mode */
 	struct dsi_panel_cmds idle_off_cmds;
+        struct dsi_panel_cmds idle_mode_in_cmds;
+        struct dsi_panel_cmds idle_mode_out_cmds;
 	u32 *status_valid_params;
 	u32 *status_cmds_rlen;
 	u32 *status_value;
