@@ -27,6 +27,11 @@
 	/* Remove pcie0_wake_default from pin muxing */
 	pinctrl-0 = <&pcie0_clkreq_default &pcie0_perst_default>;
 };
+
+&wil6210 {
+	status = "disabled";
+};
+
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_s6e3ha3_dualdsi_wqhd_cmd>;
 	/delete-property/qcom,panel-mode-gpio;
