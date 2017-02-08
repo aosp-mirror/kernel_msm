@@ -165,27 +165,15 @@
 			"AMIC2", "MIC BIAS Internal2",
 			"AMIC3", "MIC BIAS External";
 		qcom,msm-gpios =
-			"pri_i2s",
-			"us_eu_gpio";
+			"pri_i2s";
 		qcom,pinctrl-names =
 			"all_off",
-			"pri_i2s_act",
-			"us_eu_gpio_act",
-			"pri_i2s_us_eu_gpio_act";
+			"pri_i2s_act";
 		pinctrl-names =
 			"all_off",
-			"pri_i2s_act",
-			"us_eu_gpio_act",
-			"pri_i2s_us_eu_gpio_act";
-		pinctrl-0 = <&cdc_pdm_lines_sus &cross_conn_det_sus
-							&vdd_spkdrv_sus>;
-		pinctrl-1 = <&cdc_pdm_lines_act &cross_conn_det_sus
-							&vdd_spkdrv_act>;
-		pinctrl-2 = <&cdc_pdm_lines_sus &cross_conn_det_act
-							&vdd_spkdrv_sus>;
-		pinctrl-3 = <&cdc_pdm_lines_act &cross_conn_det_act
-							&vdd_spkdrv_act>;
-		qcom,cdc-us-euro-gpios = <&msm_gpio 97 0>;
+			"pri_i2s_act";
+		pinctrl-0 = <&cdc_pdm_lines_sus &vdd_spkdrv_sus>;
+		pinctrl-1 = <&cdc_pdm_lines_act &vdd_spkdrv_act>;
 		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,
 				<&afe>, <&lsm>, <&routing>, <&lpa>,

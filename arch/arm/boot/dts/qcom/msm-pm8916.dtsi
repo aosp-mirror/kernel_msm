@@ -592,6 +592,8 @@
 			qcom,cdc-vdd-mic-bias-voltage = <3075000 3075000>;
 			qcom,cdc-vdd-mic-bias-current = <25000>;
 
+			qcom,cdc-micbias-cfilt-mv = <2800>;
+
 			qcom,cdc-mclk-clk-rate = <9600000>;
 
 			qcom,cdc-static-supplies = "cdc-vdda-h",
