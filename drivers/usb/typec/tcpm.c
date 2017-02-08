@@ -1795,7 +1795,7 @@ static bool tcpm_start_drp_toggling(struct tcpm_port *port)
 
 	if (port->tcpc->start_drp_toggling &&
 	    port->typec_caps.type == TYPEC_PORT_DRP) {
-		tcpm_log(port, "Start DRP toggling");
+		tcpm_log_force(port, "Start DRP toggling");
 		ret = port->tcpc->start_drp_toggling(port->tcpc,
 						     tcpm_rp_cc(port));
 		if (!ret)
@@ -2140,8 +2140,10 @@ static void run_state_machine(struct tcpm_port *port)
 		break;
 	case SRC_SEND_CAPABILITIES:
 		port->caps_count++;
-		if (port->caps_count > PD_N_CAPS_COUNT)
+		if (port->caps_count > PD_N_CAPS_COUNT) {
+			tcpm_set_state(port, SRC_READY, 0);
 			break;
+		}
 		ret = tcpm_pd_send_source_caps(port);
 		if (ret < 0) {
 			tcpm_set_state(port, SRC_SEND_CAPABILITIES,
