@@ -838,6 +838,9 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 	struct mdss_panel_info *pinfo;
 
+    struct dsi_panel_cmds *idle_mode_in_cmds;
+    struct dsi_panel_cmds *idle_mode_out_cmds;
+
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
 		return -EINVAL;
@@ -847,13 +850,31 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+	idle_mode_in_cmds = &ctrl->idle_mode_in_cmds;
+	idle_mode_out_cmds = &ctrl->idle_mode_out_cmds;
+
 	pr_debug("%s: ctrl=%pK ndx=%d enable=%d\n", __func__, ctrl, ctrl->ndx,
 		enable);
 
 	/* Any panel specific low power commands/config */
+	if (enable) {
+		/* Go to idle mode */
+		if (idle_mode_in_cmds->cmd_cnt) {
+			pr_info("%s: dsi panel go to idle mode \n", __func__);
+			mdss_dsi_panel_cmds_send(ctrl, idle_mode_in_cmds,
+						CMD_REQ_COMMIT);
+		}
+	} else {
+		/* Go to idle mode */
+		if (idle_mode_out_cmds->cmd_cnt) {
+			pr_info("%s: dsi panel leave idle mode \n", __func__);
+			mdss_dsi_panel_cmds_send(ctrl, idle_mode_out_cmds,
+						CMD_REQ_COMMIT);
+		}
+	}
 
 	/* Control idle mode for panel */
-	mdss_dsi_panel_set_idle_mode(pdata, enable);
+	/* mdss_dsi_panel_set_idle_mode(pdata, enable); */
 
 	pr_debug("%s:-\n", __func__);
 	return 0;
@@ -2430,6 +2451,13 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->off_cmds,
 		"qcom,mdss-dsi-off-command", "qcom,mdss-dsi-off-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_mode_in_cmds,
+	    "qcom,mdss-dsi-panel-idle-in-command", "qcom,mdss-dsi-idle-in-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_mode_out_cmds,
+	    "qcom,mdss-dsi-panel-idle-out-command", "qcom,mdss-dsi-idle-out-command-state");
+
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_on_cmds,
 		"qcom,mdss-dsi-idle-on-command", "qcom,mdss-dsi-idle-on-command-state");

@@ -109,13 +109,11 @@
 	reg = <0x0 0x8d200000 0x0 0x0500000>;
 };
 
-/* Quanta BU10SW, Stanley Tsao, 2016.02.22, Add display driver for EverDisplay RM67160 400P CMD mode { */
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_everdisp_rm67160_400_cmd>;
 	qcom,cont-splash-enabled;
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
-/* Quanta BU10SW, Stanley Tsao, 2016.02.22, Add display driver for EverDisplay RM67160 400P CMD mode } */
 
 &blsp1_uart1 {
 	status = "ok";

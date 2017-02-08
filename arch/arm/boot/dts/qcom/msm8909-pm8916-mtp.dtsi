@@ -68,6 +68,10 @@
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
+&dsi_everdisp_rm67160_400_cmd {
+        qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};
+
 &pm8916_chg {
 	status = "ok";
 	qcom,charging-disabled;
