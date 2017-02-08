@@ -350,7 +350,7 @@ int bcm15602_read_hk_slot(struct bcm15602_chip *ddata,
 {
 	u8 reading_mask[2];
 	u8 zeros[2] = {0, 0};
-	u8 byte;
+	u8 byte = 0;
 
 	/* serialize reads to the hk slots */
 	if (test_and_set_bit(0, &ddata->hk_read_busy))
@@ -395,7 +395,7 @@ static void bcm15602_clear_wdt(struct bcm15602_chip *ddata)
 }
 
 #define NOTIFY(id, event) regulator_notifier_call_chain(ddata->rdevs[id], \
-	REGULATOR_EVENT_OVER_CURRENT, NULL)
+	event, NULL)
 
 /* read housekeeping adc slot status and notify any polling threads */
 static int bcm15602_handle_hk_int(struct bcm15602_chip *ddata)
@@ -491,41 +491,51 @@ static int bcm15602_handle_int(struct bcm15602_chip *ddata,
 	struct device *dev = ddata->dev;
 
 	dev_dbg(dev, "Handling flag %d\n", flag_num);
+
 	switch (flag_num) {
 	case BCM15602_INT_ASR_OVERI:
+		dev_err(dev, "Detected ASR over-current event\n");
 		NOTIFY(BCM15602_ID_ASR, REGULATOR_EVENT_OVER_CURRENT);
 		break;
 
 	case BCM15602_INT_ASR_SHUTDOWN:
-		NOTIFY(BCM15602_ID_ASR, REGULATOR_EVENT_DISABLE);
+		dev_err(dev, "Detected ASR shutdown event\n");
+		NOTIFY(BCM15602_ID_ASR, REGULATOR_EVENT_FAIL);
 		break;
 
 	case BCM15602_INT_ASR_UV:
+		dev_err(dev, "Detected ASR under-voltage event\n");
 		NOTIFY(BCM15602_ID_ASR, REGULATOR_EVENT_UNDER_VOLTAGE);
 		break;
 
 	case BCM15602_INT_SDSR_OVERI:
+		dev_err(dev, "Detected SDSR over-current event\n");
 		NOTIFY(BCM15602_ID_SDSR, REGULATOR_EVENT_OVER_CURRENT);
 		break;
 
 	case BCM15602_INT_SDSR_SHUTDOWN:
-		NOTIFY(BCM15602_ID_SDSR, REGULATOR_EVENT_DISABLE);
+		dev_err(dev, "Detected SDSR shutdown event\n");
+		NOTIFY(BCM15602_ID_SDSR, REGULATOR_EVENT_FAIL);
 		break;
 
 	case BCM15602_INT_IOLDO_OVERI:
+		dev_err(dev, "Detected IOLDO over-current event\n");
 		NOTIFY(BCM15602_ID_IOLDO, REGULATOR_EVENT_OVER_CURRENT);
 		break;
 
 	case BCM15602_INT_IOLDO_SHUTDOWN:
-		NOTIFY(BCM15602_ID_IOLDO, REGULATOR_EVENT_DISABLE);
+		dev_err(dev, "Detected IOLDO shutdown event\n");
+		NOTIFY(BCM15602_ID_IOLDO, REGULATOR_EVENT_FAIL);
 		break;
 
 	case BCM15602_INT_SDLDO_OVERI:
+		dev_err(dev, "Detected SDLDO over-current event\n");
 		NOTIFY(BCM15602_ID_SDLDO, REGULATOR_EVENT_OVER_CURRENT);
 		break;
 
 	case BCM15602_INT_SDLDO_SHUTDOWN:
-		NOTIFY(BCM15602_ID_SDLDO, REGULATOR_EVENT_DISABLE);
+		dev_err(dev, "Detected SDLDO shutdown event\n");
+		NOTIFY(BCM15602_ID_SDLDO, REGULATOR_EVENT_FAIL);
 		break;
 
 	case BCM15602_INT_ADC_HK_INT:
@@ -545,13 +555,15 @@ static int bcm15602_handle_int(struct bcm15602_chip *ddata,
 		break;
 
 	case BCM15602_INT_WDT_EXP:
+		dev_err(dev, "Watchdog timer expired\n");
 	case BCM15602_INT_THERM_TRIP:
+		dev_err(dev, "Received thermal trip event from device\n");
 	case BCM15602_INT_THERM_TRIP_DONE:
 		/* notify regulator clients of failures */
-		NOTIFY(BCM15602_ID_ASR, REGULATOR_EVENT_DISABLE);
-		NOTIFY(BCM15602_ID_SDSR, REGULATOR_EVENT_DISABLE);
-		NOTIFY(BCM15602_ID_SDLDO, REGULATOR_EVENT_DISABLE);
-		NOTIFY(BCM15602_ID_IOLDO, REGULATOR_EVENT_DISABLE);
+		NOTIFY(BCM15602_ID_ASR, REGULATOR_EVENT_FAIL);
+		NOTIFY(BCM15602_ID_SDSR, REGULATOR_EVENT_FAIL);
+		NOTIFY(BCM15602_ID_SDLDO, REGULATOR_EVENT_FAIL);
+		NOTIFY(BCM15602_ID_IOLDO, REGULATOR_EVENT_FAIL);
 		bcm15602_print_psm_status(ddata);
 		break;
 
