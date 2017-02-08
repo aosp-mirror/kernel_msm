@@ -1,0 +1,100 @@
+/*
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+
+#include "msm8909w-swoctp.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. MSM8909W-PM8916 SWOC 768MB MTP";
+	compatible = "qcom,msm8909-mtp", "qcom,msm8909", "qcom,mtp";
+	qcom,msm-id =   <245 0>,
+			<258 0>,
+			<275 0>,
+			<300 0>;
+	qcom,board-id= <8 0x209>;
+};
+
+&external_image_mem {
+	reg = <0x0 0x87a00000 0x0 0x0600000>;
+};
+
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x05200000>;
+};
+
+&peripheral_mem {
+	reg = <0x0 0x8d200000 0x0 0x0500000>;
+};
+
+&audio_codec_mtp {
+	qcom,pinctrl-names =
+		"all_off",
+		"pri_i2s_act",
+		"ext_spk_gpio_sus",
+		"ext_spk_gpio_act",
+		"cdc_dmic_lines_sus",
+		"cdc_dmic_lines_act";
+	pinctrl-names =
+		"all_off",
+		"pri_i2s_act",
+		"ext_spk_gpio_sus",
+		"ext_spk_gpio_act",
+		"cdc_dmic_lines_sus",
+		"cdc_dmic_lines_act";
+	pinctrl-0 = <&cdc_pdm_lines_sus>;
+	pinctrl-1 = <&cdc_pdm_lines_act>;
+	pinctrl-2 = <&vdd_spkdrv_sus>;
+	pinctrl-3 = <&vdd_spkdrv_act>;
+	pinctrl-4 = <&dmic_clk_sus &dmic_data_sus>;
+	pinctrl-5 = <&dmic_clk_act &dmic_data_act>;
+};
+
+&blsp1_uart1 {
+	status = "disabled";
+	pinctrl-names = "default";
+pinctrl-0 = <&uart_console_sleep>;
+};
+
+&blsp1_uart2 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_sleep>;
+};
+
+&soc {
+	msm_gpio: pinctrl@1000000 {
+		uart_console_active: uart_console_active {
+			mux {
+				pins = "gpio20", "gpio21";
+				function = "blsp_uart2";
+			};
+			config {
+				pins = "gpio20", "gpio21";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+		uart_console_sleep: uart_console_sleep {
+			mux {
+				pins = "gpio20", "gpio21";
+				function = "blsp_uart2";
+			};
+			config {
+				pins = "gpio20", "gpio21";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+};
