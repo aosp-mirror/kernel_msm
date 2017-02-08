@@ -873,8 +873,10 @@ static u8 sdhci_calc_timeout(struct sdhci_host *host, struct mmc_command *cmd)
 	 * longer to time out, but that's much better than having a too-short
 	 * timeout value.
 	 */
-	if (host->quirks & SDHCI_QUIRK_BROKEN_TIMEOUT_VAL)
-		return 0xE;
+	if (host->quirks & SDHCI_QUIRK_BROKEN_TIMEOUT_VAL){
+		pr_debug("SDHCI_QUIRK_BROKEN_TIMEOUT_VAL return 0xF\n");
+		return 0xF;
+	}
 
 	/* Unspecified timeout, assume max */
 	if (!data && !cmd->busy_timeout)
