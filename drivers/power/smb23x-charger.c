@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 #define pr_fmt(fmt) "SMB:%s: " fmt, __func__
+#define FEATURE_DOCK_CHARGING
 
 #include <linux/i2c.h>
 #include <linux/delay.h>
@@ -23,6 +24,12 @@
 #include <linux/debugfs.h>
 #include <linux/pm_wakeup.h>
 #include <linux/spinlock.h>
+
+#ifdef FEATURE_DOCK_CHARGING
+#include <linux/switch.h>
+#endif /* FEATURE_DOCK_CHARGING */
+
+#define FEATURE_CHARGING_BY_DUTY_CYCLE
 
 struct smb23x_wakeup_source {
 	struct wakeup_source source;
@@ -50,6 +57,7 @@ struct smb23x_chip {
 	bool				cfg_bms_controlled_charging;
 
 	int				cfg_vfloat_mv;
+	int				cfg_vsystem;
 	int				cfg_resume_delta_mv;
 	int				cfg_chg_inhibit_delta_mv;
 	int				cfg_iterm_ma;
@@ -91,6 +99,11 @@ struct smb23x_chip {
 	struct power_supply		*usb_psy;
 	struct power_supply		*bms_psy;
 	struct power_supply		batt_psy;
+#ifdef FEATURE_DOCK_CHARGING
+	/* switch */
+	struct switch_dev		dock_sdev;
+#endif /* FEATURE_DOCK_CHARGING */
+
 	struct mutex			read_write_lock;
 	struct mutex			irq_complete;
 	struct mutex			chg_disable_lock;
@@ -187,6 +200,7 @@ static int hot_bat_decidegc_table[] = {
 #define MIN_FLOAT_MV	3480
 #define MAX_FLOAT_MV	4720
 #define FLOAT_STEP_MV	40
+#define MAX_SYS_VOL_SEL	3
 
 #define _SMB_MASK(BITS, POS) \
 	((unsigned char)(((1 << (BITS)) - 1) << (POS)))
@@ -217,6 +231,7 @@ static int hot_bat_decidegc_table[] = {
 #define SAFETY_TIMER_MASK	SMB_MASK(4, 3)
 #define SAFETY_TIMER_OFFSET	3
 #define SAFETY_TIMER_DISABLE	SMB_MASK(4, 3)
+#define SYSTEM_VOLTAGE_MASK	SMB_MASK(1, 0)
 
 #define CFG_REG_5		0x05
 #define BAT_THERM_DIS_BIT	BIT(7)
@@ -231,6 +246,8 @@ static int hot_bat_decidegc_table[] = {
 #define CFG_REG_6		0x06
 #define CHG_INHIBIT_THRESH_MASK	SMB_MASK(7, 6)
 #define INHIBIT_THRESH_OFFSET	6
+#define SYSTEM_VOLTAGE_THRESH_MASK	SMB_MASK(5, 4)
+#define VOLTAGE_THRESH_MASK_OFFSET	4
 #define BMD_ALGO_MASK		SMB_MASK(1, 0)
 #define BMD_ALGO_THERM_IO	SMB_MASK(1, 0)
 
@@ -361,6 +378,15 @@ enum {
 	WRKRND_IRQ_POLLING = BIT(0),
 	WRKRND_USB_SUSPEND = BIT(1),
 };
+
+enum system_voltage_type {
+	SYSTEM_VOLTAGE_TO_4300 = 0,
+	SYSTEM_VOLTAGE_TO_5500,
+	SYSTEM_VOLTAGE_TO_VBATT_TRACKING,
+	SYSTEM_VOLTAGE_TO_VIN,
+	SYSTEM_VOLTAGE_UNKNOWN
+};
+
 
 static irqreturn_t smb23x_stat_handler(int irq, void *dev_id);
 
@@ -540,6 +566,17 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 		if (chip->cfg_vfloat_mv > MAX_FLOAT_MV
 			|| chip->cfg_vfloat_mv < MIN_FLOAT_MV) {
 			pr_err("Float voltage out of range\n");
+			return (-EINVAL);
+		}
+	}
+
+	rc = of_property_read_u32(node, "qcom,system-voltage",
+					&chip->cfg_vsystem);
+	if (rc < 0) {
+		chip->cfg_vsystem = -EINVAL;
+	} else {
+		if (chip->cfg_vsystem >= SYSTEM_VOLTAGE_UNKNOWN) {
+			pr_err("System voltage out of range\n");
 			return (-EINVAL);
 		}
 	}
@@ -928,12 +965,34 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 		}
 	}
 
+	/* system voltage setting */
+	if (chip->cfg_vsystem != -EINVAL) {
+		rc = smb23x_masked_write(chip, CFG_REG_4,
+				SYSTEM_VOLTAGE_MASK, chip->cfg_vsystem);
+		if (rc < 0) {
+			pr_err("Set system voltage failed, rc=%d\n", rc);
+			return rc;
+		}
+		if (chip->cfg_vsystem == SYSTEM_VOLTAGE_TO_VBATT_TRACKING) {
+			tmp = chip->cfg_vsystem << VOLTAGE_THRESH_MASK_OFFSET;
+			rc = smb23x_masked_write(chip, CFG_REG_6,
+					SYSTEM_VOLTAGE_THRESH_MASK, tmp);
+			if (rc < 0) {
+				pr_err("Set system voltage threshold failed, rc=%d\n", rc);
+				return rc;
+			}
+		}
+	}
+
 	/* fastchg current setting */
 	if (chip->cfg_fastchg_ma != -EINVAL) {
 		i = find_closest_in_ascendant_list(
 			chip->cfg_fastchg_ma, fastchg_current_ma_table,
 			ARRAY_SIZE(fastchg_current_ma_table));
 		tmp = i;
+#ifdef FEATURE_CHARGING_BY_DUTY_CYCLE
+		pr_err ("[CycleCharging] write current = %d\n", fastchg_current_ma_table[i]);
+#endif
 		rc = smb23x_masked_write(chip, CFG_REG_2,
 				FASTCHG_CURR_MASK, tmp);
 		if (rc < 0) {
@@ -1229,6 +1288,10 @@ static int get_usb_supply_type(struct smb23x_chip *chip)
 	return type;
 }
 
+#ifdef FEATURE_CHARGING_BY_DUTY_CYCLE
+static int duty_cycle = 0;
+static bool charging_enable = true;
+#endif
 static int handle_usb_insertion(struct smb23x_chip *chip)
 {
 	enum power_supply_type usb_type;
@@ -1238,6 +1301,10 @@ static int handle_usb_insertion(struct smb23x_chip *chip)
 	power_supply_set_present(chip->usb_psy, chip->usb_present);
 	power_supply_set_online(chip->usb_psy, true);
 
+#ifdef FEATURE_CHARGING_BY_DUTY_CYCLE
+	pr_err("\n[[CycleCharging] set duty_cycle = 0\n");
+	duty_cycle = 0;
+#endif
 	return 0;
 }
 
@@ -1307,6 +1374,10 @@ static int usbin_ov_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	return 0;
 }
 
+#ifdef FEATURE_CHARGING_BY_DUTY_CYCLE
+unsigned int charging_cycle = 43;
+unsigned int discharging_cycle = 17;
+#endif
 #define IRQ_POLLING_MS	500
 static void smb23x_irq_polling_work_fn(struct work_struct *work)
 {
@@ -1318,6 +1389,25 @@ static void smb23x_irq_polling_work_fn(struct work_struct *work)
 	if (chip->usb_present)
 		schedule_delayed_work(&chip->irq_polling_work,
 			msecs_to_jiffies(IRQ_POLLING_MS));
+
+#ifdef FEATURE_CHARGING_BY_DUTY_CYCLE
+	if (chip->usb_present && charging_enable)
+	{
+		if (duty_cycle == charging_cycle*2)
+		{
+			pr_err("discharging cycle start (%d) sec\n", discharging_cycle);
+			__smb23x_charging_disable(chip, true);
+		}
+		if (duty_cycle == (charging_cycle+discharging_cycle)*2)
+		{
+			//read_cycle_parameter();
+			pr_err("charging cycle start (%d) sec\n", charging_cycle);
+			__smb23x_charging_disable(chip, false);
+			duty_cycle = 0;
+		}
+		duty_cycle++;
+    }
+#endif
 }
 
 /*
@@ -1341,6 +1431,8 @@ static void reconfig_upon_unplug(struct smb23x_chip *chip)
 					msecs_to_jiffies(IRQ_POLLING_MS));
 		} else {
 			pr_debug("restore software settings after unplug\n");
+			pr_debug("waiting 300ms for smb231 chip reset\n");
+			msleep(300);
 			smb23x_relax(&chip->smb23x_ws, WAKEUP_SRC_IRQ_POLLING);
 			rc = smb23x_hw_init(chip);
 			if (rc)
@@ -1376,6 +1468,10 @@ static void reconfig_upon_unplug(struct smb23x_chip *chip)
 static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	bool usb_present = !rt_sts;
+#ifdef FEATURE_DOCK_CHARGING
+	int state = 0;
+#endif /* FEATURE_DOCK_CHARGING */
+
 
 	pr_debug("chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present,  usb_present);
@@ -1385,6 +1481,15 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	chip->usb_present = usb_present;
 	reconfig_upon_unplug(chip);
 	power_supply_set_present(chip->usb_psy, usb_present);
+
+#ifdef FEATURE_DOCK_CHARGING
+	state = chip->dock_sdev.state;
+	pr_err("[Alan] chip->chg_present = %d, dock state = %d\n", chip->usb_present, state);
+	if (chip->usb_present != state) {
+		switch_set_state(&chip->dock_sdev, chip->usb_present);
+		pr_err("[Alan] Dock state changed, dock state %d to %d\n", state, chip->dock_sdev.state);
+	}
+#endif /* FEATURE_DOCK_CHARGING */
 
 	return 0;
 }
@@ -1666,10 +1771,13 @@ static enum power_supply_property smb23x_battery_properties[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CHARGING_ENABLED,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
 };
 
@@ -1780,17 +1888,45 @@ static int smb23x_get_prop_batt_capacity(struct smb23x_chip *chip)
 }
 
 #define DEFAULT_BATT_TEMP	280
+#define DEFAULT_BATT_HOT_TEMP	650
+#define DEFAULT_BATT_WARM_TEMP	450
+#define DEFAULT_BATT_NORM_TEMP	250
 static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
+{
+	if (chip->batt_hot)
+		return DEFAULT_BATT_HOT_TEMP;
+	if (chip->batt_warm)
+		return DEFAULT_BATT_WARM_TEMP;
+
+	return DEFAULT_BATT_NORM_TEMP;
+}
+
+#define DEFAULT_BATT_VOLTAGE	3760000
+static int smb23x_get_prop_batt_voltage(struct smb23x_chip *chip)
 {
 	union power_supply_propval ret = {0, };
 
 	if (chip->bms_psy) {
 		chip->bms_psy->get_property(chip->bms_psy,
-				POWER_SUPPLY_PROP_TEMP, &ret);
+				POWER_SUPPLY_PROP_VOLTAGE_NOW, &ret);
 		return ret.intval;
 	}
 
-	return DEFAULT_BATT_TEMP;
+	return DEFAULT_BATT_VOLTAGE;
+}
+
+#define DEFAULT_BATT_CURRENT	99000
+static int smb23x_get_prop_batt_current(struct smb23x_chip *chip)
+{
+	union power_supply_propval ret = {0, };
+
+	if (chip->bms_psy) {
+		chip->bms_psy->get_property(chip->bms_psy,
+				POWER_SUPPLY_PROP_CURRENT_NOW, &ret);
+		return ret.intval;
+	}
+
+	return DEFAULT_BATT_CURRENT;
 }
 
 static int smb23x_system_temp_level_set(struct smb23x_chip *chip, int lvl_sel)
@@ -1859,6 +1995,15 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = smb23x_get_prop_batt_temp(chip);
 		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		val->intval = smb23x_get_prop_batt_voltage(chip);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		val->intval = smb23x_get_prop_batt_current(chip);
+		break;
+        case POWER_SUPPLY_PROP_TECHNOLOGY:
+                val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
+                break;
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
 		val->intval = chip->therm_lvl_sel;
 		break;
@@ -1917,9 +2062,17 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 		smb23x_suspend_usb(chip, USER, !val->intval);
 		power_supply_changed(&chip->batt_psy);
 		power_supply_changed(chip->usb_psy);
+#ifdef FEATURE_CHARGING_BY_DUTY_CYCLE
+		charging_enable = val->intval;
+		pr_err("%s USB charging\n", val->intval ? "Resume" : "Suspend");
+#endif
 		break;
 	case POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED:
 		smb23x_charging_disable(chip, USER, !val->intval);
+#ifdef FEATURE_CHARGING_BY_DUTY_CYCLE
+		charging_enable = val->intval;
+		pr_err("%s Battery charging\n", val->intval ? "Enable" : "Disable");
+#endif
 		power_supply_changed(&chip->batt_psy);
 		break;
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
@@ -1967,6 +2120,7 @@ static void smb23x_external_power_changed(struct power_supply *psy)
 		chip->bms_psy =
 			power_supply_get_by_name((char *)chip->bms_psy_name);
 
+#if 0
 	rc = chip->usb_psy->get_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_CURRENT_MAX, &prop);
 	if (rc < 0)
@@ -1978,6 +2132,26 @@ static void smb23x_external_power_changed(struct power_supply *psy)
 	if (chip->usb_psy_ma != icl) {
 		mutex_lock(&chip->icl_set_lock);
 		chip->usb_psy_ma = icl;
+		rc = smb23x_set_appropriate_usb_current(chip);
+		mutex_unlock(&chip->icl_set_lock);
+		if (rc < 0)
+			pr_err("Set appropriate current failed, rc=%d\n", rc);
+	}
+#endif
+	icl = 500;
+	
+	rc = chip->usb_psy->get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_PRESENT, &prop);
+	if (rc < 0)
+		pr_err("Get present from usb failed, rc=%d\n", rc);
+	else {
+		pr_debug("[Alan] usb present value is %d\n", prop.intval);
+		mutex_lock(&chip->icl_set_lock);
+		if ( prop.intval == 1 )
+			chip->usb_psy_ma = icl;
+		else
+			chip->usb_psy_ma = 0;
+
 		rc = smb23x_set_appropriate_usb_current(chip);
 		mutex_unlock(&chip->icl_set_lock);
 		if (rc < 0)
@@ -2246,7 +2420,6 @@ static void smb23x_irq_polling_wa_check(struct smb23x_chip *chip)
 
 	pr_debug("use polling: %d\n", !(reg & UNPLUG_RELOAD_DIS_BIT));
 }
-
 static int smb23x_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
@@ -2344,6 +2517,17 @@ static int smb23x_probe(struct i2c_client *client,
 		pr_err("Register power_supply failed, rc = %d\n", rc);
 		goto destroy_mutex;
 	}
+
+#ifdef FEATURE_DOCK_CHARGING
+	chip->dock_sdev.name = "dock";
+
+	rc = switch_dev_register(&chip->dock_sdev);
+	if (rc < 0) {
+		pr_err("Couldn't register dock switch rc = %d\n", rc);
+		goto unregister_batt_psy;
+	}
+#endif /* FEATURE_DOCK_CHARGING */
+
 	chip->resume_completed = true;
 	/* Register IRQ */
 	if (client->irq) {
@@ -2353,7 +2537,11 @@ static int smb23x_probe(struct i2c_client *client,
 		if (rc < 0) {
 			pr_err("Request IRQ(%d) failed, rc = %d\n",
 				client->irq, rc);
+#ifdef FEATURE_DOCK_CHARGING
+			goto unregister_switch_dev;
+#else /* FEATURE_DOCK_CHARGING */
 			goto unregister_batt_psy;
+#endif /* FEATURE_DOCK_CHARGING */
 		}
 		enable_irq_wake(client->irq);
 	}
@@ -2364,6 +2552,10 @@ static int smb23x_probe(struct i2c_client *client,
 			smb23x_get_prop_batt_present(chip), chip->usb_present);
 
 	return 0;
+#ifdef FEATURE_DOCK_CHARGING
+unregister_switch_dev:
+	switch_dev_unregister(&chip->dock_sdev);
+#endif /* FEATURE_DOCK_CHARGING */
 unregister_batt_psy:
 	power_supply_unregister(&chip->batt_psy);
 destroy_mutex:
@@ -2441,6 +2633,9 @@ static int smb23x_remove(struct i2c_client *client)
 {
 	struct smb23x_chip *chip = i2c_get_clientdata(client);
 
+#ifdef FEATURE_DOCK_CHARGING
+	switch_dev_unregister(&chip->dock_sdev);
+#endif /* FEATURE_DOCK_CHARGING */
 	power_supply_unregister(&chip->batt_psy);
 	wakeup_source_trash(&chip->smb23x_ws.source);
 	mutex_destroy(&chip->read_write_lock);

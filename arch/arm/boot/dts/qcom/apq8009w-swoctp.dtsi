@@ -144,11 +144,12 @@
 		pinctrl-0 = <&smb_int_default &smb_susp_default>;
 
 		qcom,bms-psy-name = "bms";
-		qcom,float-voltage-mv = <4200>;
+		qcom,float-voltage-mv = <4400>;
+		qcom,system-voltage = <2>; /* 0=>4.3V(default), 1=>5.5V, 2=>VBATT+250mV, 3=>VIN */
 		qcom,charging-timeout = <360>;
 		qcom,recharge-thresh-mv = <150>;
 		qcom,iterm-ma = <50>;
-		qcom,fastchg-ma = <1000>;
+		qcom,fastchg-ma = <100>;
 		qcom,hot-bat-decidegc = <550>;
 		qcom,warm-bat-decidegc = <450>;
 		qcom,cool-bat-decidegc = <50>;
@@ -174,12 +175,8 @@
 		st,adaptive-capacity-tbl =
 			/bits/ 16 <0x00 0x00 0x00 0x05 0x0d 0x2a 0x47>;
 		st,ocv-tbl =
-			/bits/ 16 <3400 3478 3631 3684 3703 3724
-				3744 3759 3782 3808 3850 3884
-				3922 3984 4066 4167>;
-		st,soc-tbl = /bits/ 8 <0 3 6 10 15 20
-					25 30 40 50 60 65
-					70 80 90 100>;
+			/bits/ 16 <3000 3310 3456 3538 3582 3610 3629 3647 3671 3697 3758 3834 3928 4037 4158 4305>;
+		st,soc-tbl = /bits/ 8 <0 3 6 10 15 20 25 30 35 40 50 60 70 80 90 100>;
 		st,vmtemp-tbl =
 			/bits/ 16 <0x55 0x5a 0x64 0xa0 0x140 0x1b8 0x348>;
 		st,temp-tbl =
