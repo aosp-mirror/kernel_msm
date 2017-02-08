@@ -98,3 +98,43 @@ pinctrl-0 = <&uart_console_sleep>;
 		};
 	};
 };
+
+&blsp1_uart1 {
+	status = "disabled";
+	pinctrl-names = "default";
+pinctrl-0 = <&uart_console_sleep>;
+};
+
+&blsp1_uart2 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_sleep>;
+
+};
+
+&soc {
+	msm_gpio: pinctrl@1000000 {
+		uart_console_active: uart_console_active {
+			mux {
+				pins = "gpio20", "gpio21";
+				function = "blsp_uart2";
+			};
+			config {
+				pins = "gpio20", "gpio21";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+		uart_console_sleep: uart_console_sleep {
+			mux {
+				pins = "gpio20", "gpio21";
+				function = "blsp_uart2";
+			};
+			config {
+				pins = "gpio20", "gpio21";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+};
