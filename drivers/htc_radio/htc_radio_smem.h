@@ -19,7 +19,7 @@
 #include <linux/types.h>
 
 /*hTC radio smem driver version */
-#define HTC_RADIO_SMEM_VERSION	0x20161215
+#define HTC_RADIO_SMEM_VERSION	0x20170119
 
 struct htc_smem_type {
 	uint32_t	version;
@@ -28,8 +28,9 @@ struct htc_smem_type {
 	uint32_t	htc_smem_app_run_mode;
 	uint8_t		htc_rom_ver[16];
 	uint8_t		htc_smem_skuid[48];
+	uint32_t	htc_smem_factory_reset;
 	uint32_t	htc_smem_flag;
-	uint8_t		reserved[1964];
+	uint8_t		reserved[1960];
 	/* totally 2048 bytes */
 };
 

@@ -35,6 +35,7 @@ static void smem_init(struct htc_smem_type *smem)
 	smem->htc_smem_pid = 0;
 	smem->htc_smem_app_run_mode = 0;
 	smem->htc_smem_flag = 0;
+	smem->htc_smem_factory_reset = 0;
 
 	for (i = 0; i < sizeof(smem->htc_rom_ver); i++)
 		smem->htc_rom_ver[i] = 0;
@@ -81,6 +82,8 @@ static int htc_radio_smem_probe(struct platform_device *pdev)
 				&htc_radio_smem->htc_smem_app_run_mode);
 		of_property_read_u32(dnp, "htc_smem_pid",
 				&htc_radio_smem->htc_smem_pid);
+		of_property_read_u32(dnp, "htc_smem_factory_reset",
+				&htc_radio_smem->htc_smem_factory_reset);
 		of_property_read_u8_array(dnp, "htc_rom_ver",
 				&htc_radio_smem->htc_rom_ver[0],
 				sizeof(htc_radio_smem->htc_rom_ver));
