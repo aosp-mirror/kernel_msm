@@ -3067,8 +3067,8 @@ static struct android_usb_function *default_functions[] = {
 	&serial_function,
 	&ccid_function,
 	&acm_function,
-	&mtp_function,
-	&ptp_function,
+	//&mtp_function,	//Quanta: MUST NOT support Android MTP host and Android File Transfer.
+	//&ptp_function,	//Quanta
 	&rndis_function,
 	&rndis_qc_function,
 	&ecm_function,
