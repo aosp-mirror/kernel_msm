@@ -171,6 +171,14 @@ static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 	}
 }
 
+static void dump_context_switch_regs(struct task_struct *tsk)
+{
+	unsigned long start = (unsigned long)&tsk->thread.cpu_context;
+	unsigned long end = start + sizeof(tsk->thread.cpu_context);
+	dump_mem(KERN_EMERG, "Context switch saved registers",
+		start, end);
+}
+
 void show_stack(struct task_struct *tsk, unsigned long *sp)
 {
 	dump_backtrace(NULL, tsk);
@@ -209,6 +217,7 @@ static int __die(const char *str, int err, struct thread_info *thread,
 		 TASK_COMM_LEN, tsk->comm, task_pid_nr(tsk), thread + 1);
 
 	if (!user_mode(regs) || in_interrupt()) {
+		dump_context_switch_regs(tsk);
 		dump_backtrace(regs, tsk);
 		dump_instr(KERN_EMERG, regs);
 	}
