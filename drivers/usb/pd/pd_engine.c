@@ -192,28 +192,54 @@ static void pd_engine_debugfs_exit(struct usbpd *pd)
 	debugfs_remove(pd->dentry);
 }
 
-static const char * const typec_mode_name[] = {
-	[POWER_SUPPLY_TYPEC_NONE]		  = "NONE",
-	[POWER_SUPPLY_TYPEC_SOURCE_DEFAULT]	  = "SOURCE_DEFAULT",
-	[POWER_SUPPLY_TYPEC_SOURCE_MEDIUM]	  = "SOURCE_MEDIUM",
-	[POWER_SUPPLY_TYPEC_SOURCE_HIGH]	  = "SOURCE_HIGH",
-	[POWER_SUPPLY_TYPEC_NON_COMPLIANT]	  = "NON_COMPLIANT",
-	[POWER_SUPPLY_TYPEC_SINK]		  = "SINK",
-	[POWER_SUPPLY_TYPEC_SINK_POWERED_CABLE]   = "SINK_POWERED_CABLE",
-	[POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY] = "SINK_DEBUG_ACCESSORY",
-	[POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER]   = "SINK_AUDIO_ADAPTER",
-	[POWER_SUPPLY_TYPEC_POWERED_CABLE_ONLY]   = "POWERED_CABLE_ONLY",
-};
+static const char * const get_typec_mode_name(
+		enum power_supply_typec_mode typec_mode)
+{
+	switch (typec_mode) {
+	case POWER_SUPPLY_TYPEC_NONE:
+		return "NONE";
+	case POWER_SUPPLY_TYPEC_SOURCE_DEFAULT:
+		return "SOURCE_DEFAULT";
+	case POWER_SUPPLY_TYPEC_SOURCE_MEDIUM:
+		return "SOURCE_MEDIUM";
+	case POWER_SUPPLY_TYPEC_SOURCE_HIGH:
+		return "SOURCE_HIGH";
+	case POWER_SUPPLY_TYPEC_NON_COMPLIANT:
+		return "NON_COMPLIANT";
+	case POWER_SUPPLY_TYPEC_SINK:
+		return "SINK";
+	case POWER_SUPPLY_TYPEC_SINK_POWERED_CABLE:
+		return "SINK_POWERED_CABLE";
+	case POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY:
+		return "SINK_DEBUG_ACCESSORY";
+	case POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER:
+		return "SINK_AUDIO_ADAPTER";
+	case POWER_SUPPLY_TYPEC_POWERED_CABLE_ONLY:
+		return "POWERED_CABLE_ONLY";
+	default:
+		return "UNDEFINED";
+	}
+}
 
-/* must include all possible power supply type in use */
-static const char * const psy_type_name[] = {
-	[POWER_SUPPLY_TYPE_UNKNOWN]		= "UNKNOWN",
-	[POWER_SUPPLY_TYPE_USB]			= "SDP",
-	[POWER_SUPPLY_TYPE_USB_CDP]		= "CDP",
-	[POWER_SUPPLY_TYPE_USB_DCP]		= "DCP",
-	[POWER_SUPPLY_TYPE_USB_HVDCP]		= "HVDCP2",
-	[POWER_SUPPLY_TYPE_USB_HVDCP_3]		= "HVDCP3",
-};
+static const char * const get_psy_type_name(enum power_supply_type psy_type)
+{
+	switch (psy_type) {
+	case POWER_SUPPLY_TYPE_UNKNOWN:
+		return "UNKNOWN";
+	case POWER_SUPPLY_TYPE_USB:
+		return "SDP";
+	case POWER_SUPPLY_TYPE_USB_CDP:
+		return "CDP";
+	case POWER_SUPPLY_TYPE_USB_DCP:
+		return "DCP";
+	case POWER_SUPPLY_TYPE_USB_HVDCP:
+		return "HVDCP2";
+	case POWER_SUPPLY_TYPE_USB_HVDCP_3:
+		return "HVDCP3";
+	default:
+		return "UNDEFINED";
+	}
+}
 
 /* must align with smblib's integer representation of cc orientation. */
 enum typec_cc_orientation {
@@ -222,20 +248,41 @@ enum typec_cc_orientation {
 	TYPEC_CC_ORIENTATION_CC2 = 2,
 };
 
-static const char * const typec_cc_orientation_name[] = {
-	[TYPEC_CC_ORIENTATION_NONE]		= "NONE",
-	[TYPEC_CC_ORIENTATION_CC1]		= "CC1",
-	[TYPEC_CC_ORIENTATION_CC2]		= "CC2",
-};
+static const char * const get_typec_cc_orientation_name(
+		enum typec_cc_orientation typec_cc_orientation)
+{
+	switch (typec_cc_orientation) {
+	case TYPEC_CC_ORIENTATION_NONE:
+		return "NONE";
+	case TYPEC_CC_ORIENTATION_CC1:
+		return "CC1";
+	case TYPEC_CC_ORIENTATION_CC2:
+		return "CC2";
+	default:
+		return "UNDEFINED";
+	}
+}
 
-static const char * const typec_cc_status_name[] = {
-	[TYPEC_CC_OPEN]		= "OPEN",
-	[TYPEC_CC_RA]		= "Ra",
-	[TYPEC_CC_RD]		= "Rd",
-	[TYPEC_CC_RP_DEF]	= "Rd-def",
-	[TYPEC_CC_RP_1_5]	= "Rd-1.5",
-	[TYPEC_CC_RP_3_0]	= "Rd-3.0",
-};
+static const char * const get_typec_cc_status_name(
+		enum typec_cc_status cc_status)
+{
+	switch (cc_status) {
+	case TYPEC_CC_OPEN:
+		return "OPEN";
+	case TYPEC_CC_RA:
+		return "Ra";
+	case TYPEC_CC_RD:
+		return "Rd";
+	case TYPEC_CC_RP_DEF:
+		return "Rd-def";
+	case TYPEC_CC_RP_1_5:
+		return "Rd-1.5";
+	case TYPEC_CC_RP_3_0:
+		return "Rd-3.0";
+	default:
+		return "UNDEFINED";
+	}
+}
 
 /*
  * parses the type-c mode to cc pin status in the orientation_none special case.
@@ -473,13 +520,13 @@ static void psy_changed_handler(struct work_struct *work)
 
 	pd_engine_log(pd,
 		      "type [%s], apsd done [%s], vbus present [%s], typec_mode [%s], typec_orientation [%s], cc1 [%s], cc2 [%s]",
-		      psy_type_name[psy_type],
+		      get_psy_type_name(psy_type),
 		      apsd_done ? "Y" : "N",
 		      vbus_present ? "Y" : "N",
-		      typec_mode_name[typec_mode],
-		      typec_cc_orientation_name[typec_cc_orientation],
-		      typec_cc_status_name[cc1],
-		      typec_cc_status_name[cc2]);
+		      get_typec_mode_name(typec_mode),
+		      get_typec_cc_orientation_name(typec_cc_orientation),
+		      get_typec_cc_status_name(cc1),
+		      get_typec_cc_status_name(cc2));
 
 	mutex_lock(&pd->lock);
 
@@ -497,10 +544,10 @@ static void psy_changed_handler(struct work_struct *work)
 
 	if (cc1 != pd->cc1 || cc2 != pd->cc2) {
 		pd_engine_log(pd, "cc1: %s -> %s, cc2: %s -> %s",
-			      typec_cc_status_name[pd->cc1],
-			      typec_cc_status_name[cc1],
-			      typec_cc_status_name[pd->cc2],
-			      typec_cc_status_name[cc2]);
+			      get_typec_cc_status_name(pd->cc1),
+			      get_typec_cc_status_name(cc1),
+			      get_typec_cc_status_name(pd->cc2),
+			      get_typec_cc_status_name(cc2));
 		pd->cc1 = cc1;
 		pd->cc2 = cc2;
 		tcpm_cc_change(pd->tcpm_port);
@@ -581,7 +628,7 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		break;
 	default:
 		pd_engine_log(pd, "tcpm_set_cc: invalid cc %s",
-			      typec_cc_status_name[cc]);
+			      get_typec_cc_status_name(cc));
 		ret = -EINVAL;
 		goto unlock;
 	}
@@ -605,8 +652,8 @@ static int tcpm_get_cc(struct tcpc_dev *dev, enum typec_cc_status *cc1,
 	mutex_lock(&pd->lock);
 
 	pd_engine_log(pd, "tcpm_get_cc: cc1=%s, cc2=%s",
-		      typec_cc_status_name[pd->cc1],
-		      typec_cc_status_name[pd->cc2]);
+		      get_typec_cc_status_name(pd->cc1),
+		      get_typec_cc_status_name(pd->cc2));
 	*cc1 = pd->cc1;
 	*cc2 = pd->cc2;
 
@@ -762,16 +809,30 @@ static int get_data_len(__le16 header)
 	return ret;
 }
 
-static const char * const tcpm_transmit_type_name[] = {
-	[TCPC_TX_SOP]			= "SOP",
-	[TCPC_TX_SOP_PRIME]		= "SOP_PRIME",
-	[TCPC_TX_SOP_PRIME_PRIME]	= "SOP_PRIME_PRIME",
-	[TCPC_TX_SOP_DEBUG_PRIME]	= "SOP_DEBUG_PRIME",
-	[TCPC_TX_SOP_DEBUG_PRIME_PRIME]	= "SOP_DEBUG_PRIME_PRIME",
-	[TCPC_TX_HARD_RESET]		= "HARD_RESET",
-	[TCPC_TX_CABLE_RESET]		= "CABLE_RESET",
-	[TCPC_TX_BIST_MODE_2]		= "BIST_MODE_2",
-};
+static const char * const get_tcpm_transmit_type_name(
+		enum tcpm_transmit_type type)
+{
+	switch (type) {
+	case TCPC_TX_SOP:
+		return "SOP";
+	case TCPC_TX_SOP_PRIME:
+		return "SOP_PRIME";
+	case TCPC_TX_SOP_PRIME_PRIME:
+		return "SOP_PRIME_PRIME";
+	case TCPC_TX_SOP_DEBUG_PRIME:
+		return "SOP_DEBUG_PRIME";
+	case TCPC_TX_SOP_DEBUG_PRIME_PRIME:
+		return "SOP_DEBUG_PRIME_PRIME";
+	case TCPC_TX_HARD_RESET:
+		return "HARD_RESET";
+	case TCPC_TX_CABLE_RESET:
+		return "CABLE_RESET";
+	case TCPC_TX_BIST_MODE_2:
+		return "BIST_MODE_2";
+	default:
+		return "UNDEFINED";
+	}
+}
 
 struct pd_transmit_work {
 	struct work_struct work;
@@ -780,11 +841,20 @@ struct pd_transmit_work {
 	struct pd_message msg;
 };
 
-static const char * const tcpm_transmit_status_name[] = {
-	[TCPC_TX_SUCCESS]	= "SUCCESS",
-	[TCPC_TX_DISCARDED]	= "DISCARDED",
-	[TCPC_TX_FAILED]	= "FAILED",
-};
+static const char * const get_tcpm_transmit_status_name(
+		enum tcpm_transmit_status status)
+{
+	switch (status) {
+	case TCPC_TX_SUCCESS:
+		return "SUCCESS";
+	case TCPC_TX_DISCARDED:
+		return "DISCARDED";
+	case TCPC_TX_FAILED:
+		return "FAILED";
+	default:
+		return "UNDEFINED";
+	}
+}
 
 #define PD_TX_TIMEOUT_MS (PD_T_TCPC_TX_TIMEOUT - 10)
 static void pd_transmit_handler(struct work_struct *work)
@@ -849,13 +919,13 @@ static void pd_transmit_handler(struct work_struct *work)
 	if (signal)
 		pd_engine_log(pd,
 			      "pd tx type [%s], pdphy ret [%d], status [%s]",
-			      tcpm_transmit_type_name[type],
-			      ret, tcpm_transmit_status_name[status]);
+			      get_tcpm_transmit_type_name(type),
+			      ret, get_tcpm_transmit_status_name(status));
 	else
 		pd_engine_log(pd,
 			      "pd tx header [%#x], type [%s], pdphy ret [%d], status [%s]",
-			      msg->header, tcpm_transmit_type_name[type],
-			      ret, tcpm_transmit_status_name[status]);
+			      msg->header, get_tcpm_transmit_type_name(type),
+			      ret, get_tcpm_transmit_status_name(status));
 
 	kfree(pd_tx_work);
 }
@@ -875,7 +945,7 @@ static int tcpm_pd_transmit(struct tcpc_dev *dev, enum tcpm_transmit_type type,
 		break;
 	default:
 		pd_engine_log(pd, "unsupported pd type: %s",
-			      tcpm_transmit_type_name[type]);
+			      get_tcpm_transmit_type_name(type));
 		return -EINVAL;
 	}
 
@@ -891,10 +961,10 @@ static int tcpm_pd_transmit(struct tcpc_dev *dev, enum tcpm_transmit_type type,
 
 	if (msg)
 		pd_engine_log(pd, "queue pd tx header [%#x], type [%s]",
-			      msg->header, tcpm_transmit_type_name[type]);
+			      msg->header, get_tcpm_transmit_type_name(type));
 	else
 		pd_engine_log(pd, "queue pd tx type [%s]",
-			      tcpm_transmit_type_name[type]);
+			      get_tcpm_transmit_type_name(type));
 	return 0;
 }
 
@@ -929,35 +999,81 @@ unlock:
 	return ret;
 }
 
-enum power_role typec_role_pdphy_pr[] = {
-	[TYPEC_SINK]		= PR_SINK,
-	[TYPEC_SOURCE]		= PR_SRC,
-};
+enum power_role get_pdphy_power_role(enum typec_role role)
+{
+	switch (role) {
+	case TYPEC_SINK:
+		return PR_SINK;
+	case TYPEC_SOURCE:
+		return PR_SRC;
+	default:
+		return PR_NONE;
+	}
+}
 
-static const char * const typec_role_name[] = {
-	[TYPEC_SINK]		= "SINK",
-	[TYPEC_SOURCE]		= "SOURCE",
-};
+static const char * const get_typec_role_name(enum typec_role role)
+{
+	switch (role) {
+	case TYPEC_SINK:
+		return "SINK";
+	case TYPEC_SOURCE:
+		return "SOURCE";
+	default:
+		return "UNDEFINED";
+	}
+}
 
-static const char * const pdphy_pr_name[] = {
-	[PR_SINK]		= "PR_SINK",
-	[PR_SRC]		= "PR_SRC",
-};
+static const char * const get_pdphy_pr_name(enum power_role pdphy_pr)
+{
+	switch (pdphy_pr) {
+	case PR_SINK:
+		return "PR_SINK";
+	case PR_SRC:
+		return "PR_SRC";
+	case PR_NONE:
+		return "PR_NONE";
+	default:
+		return "UNDEFINED";
+	}
+}
 
-enum data_role typec_data_role_pdphy_dr[] = {
-	[TYPEC_DEVICE]		= DR_UFP,
-	[TYPEC_HOST]		= DR_DFP,
-};
+enum data_role get_pdphy_data_role(enum typec_data_role data)
+{
+	switch (data) {
+	case TYPEC_DEVICE:
+		return DR_UFP;
+	case TYPEC_HOST:
+		return DR_DFP;
+	default:
+		return DR_NONE;
+	}
+}
 
-static const char * const typec_data_role_name[] = {
-	[TYPEC_DEVICE]		= "DEVICE",
-	[TYPEC_HOST]		= "HOST",
-};
+static const char * const get_typec_data_role_name(enum typec_data_role data)
+{
+	switch (data) {
+	case TYPEC_DEVICE:
+		return "DEVICE";
+	case TYPEC_HOST:
+		return "HOST";
+	default:
+		return "UNDEFINED";
+	}
+}
 
-static const char * const pdphy_dr_name[] = {
-	[DR_UFP]		= "DR_UFP",
-	[DR_DFP]		= "DR_DFP",
-};
+static const char * const get_pdphy_dr_name(enum data_role pdphy_dr)
+{
+	switch (pdphy_dr) {
+	case DR_UFP:
+		return "DR_UFP";
+	case DR_DFP:
+		return "DR_DFP";
+	case DR_NONE:
+		return "DR_NONE";
+	default:
+		return "UNDEFINED";
+	}
+}
 
 static int set_pd_header(struct usbpd *pd, enum typec_role role,
 			 enum typec_data_role data)
@@ -966,20 +1082,20 @@ static int set_pd_header(struct usbpd *pd, enum typec_role role,
 	enum data_role pdphy_dr;
 	int ret = 0;
 
-	pdphy_pr = typec_role_pdphy_pr[role];
-	pdphy_dr = typec_data_role_pdphy_dr[data];
+	pdphy_pr = get_pdphy_power_role(role);
+	pdphy_dr = get_pdphy_data_role(data);
 	ret = pd_phy_update_roles(pdphy_dr, pdphy_pr);
 	if (ret < 0) {
 		pd_engine_log(pd, "unable to set pd_phy_header: %s, %s, ret=%d",
-			      pdphy_pr_name[pdphy_pr],
-			      pdphy_dr_name[pdphy_dr],
+			      get_pdphy_pr_name(pdphy_pr),
+			      get_pdphy_dr_name(pdphy_dr),
 			      ret);
 		return ret;
 	}
 
 	pd_engine_log(pd, "set pd_phy_header: %s, %s",
-		      pdphy_pr_name[pdphy_pr],
-		      pdphy_dr_name[pdphy_dr]);
+		      get_pdphy_pr_name(pdphy_pr),
+		      get_pdphy_dr_name(pdphy_dr));
 
 	return 0;
 }
@@ -1022,8 +1138,8 @@ static int set_usb_data_role(struct usbpd *pd, bool attached,
 
 	pd_engine_log(pd,
 		      "set usb_data_role: power [%s], data [%s], apsd_done [%s], attached [%s]",
-		      typec_role_name[role],
-		      typec_data_role_name[data],
+		      get_typec_role_name(role),
+		      get_typec_data_role_name(data),
 		      apsd_done ? "Y" : "N",
 		      attached ? "Y" : "N");
 
