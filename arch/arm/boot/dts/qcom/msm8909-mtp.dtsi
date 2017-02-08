@@ -147,6 +147,7 @@
 		qcom,msm-snd-card-id = <0>;
 		qcom,msm-codec-type = "internal";
 		qcom,msm-ext-pa = "primary";
+		qcom,msm-spk-ext-pa = <&msm_gpio 23 0>;
 		qcom,msm-mclk-freq = <9600000>;
 		qcom,msm-mbhc-hphl-swh = <0>;
 		qcom,msm-mbhc-gnd-swh = <0>;
@@ -163,7 +164,11 @@
 			"MIC BIAS External", "Secondary Mic",
 			"AMIC1", "MIC BIAS External",
 			"AMIC2", "MIC BIAS Internal2",
-			"AMIC3", "MIC BIAS External";
+			"AMIC3", "MIC BIAS External",
+			"DMIC1", "MIC BIAS Internal1",
+			"MIC BIAS Internal1", "Digital Mic1",
+			"DMIC2", "MIC BIAS Internal1",
+			"MIC BIAS Internal1", "Digital Mic2";
 		qcom,msm-gpios =
 			"pri_i2s";
 		qcom,pinctrl-names =

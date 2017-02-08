@@ -79,6 +79,16 @@ static int msm8952_mclk_event(struct snd_soc_dapm_widget *w,
 			      struct snd_kcontrol *kcontrol, int event);
 static int msm8952_wsa_switch_event(struct snd_soc_dapm_widget *w,
 			      struct snd_kcontrol *kcontrol, int event);
+static int msm8952_dmic_event(struct snd_soc_dapm_widget *w,
+                  struct snd_kcontrol *kcontrol, int event);
+struct cdc_dmic_pinctrl_info {
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *cdc_dmic_lines_act;
+	struct pinctrl_state *cdc_dmic_lines_sus;
+	struct pinctrl_state *ext_spk_gpio_act;
+	struct pinctrl_state *ext_spk_gpio_sus;
+};
+static struct cdc_dmic_pinctrl_info dmic_pinctrl_info;
 
 /*
  * Android L spec
@@ -202,8 +212,8 @@ static const struct snd_soc_dapm_widget msm8952_dapm_widgets[] = {
 	SND_SOC_DAPM_MIC("Handset Mic", NULL),
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("Secondary Mic", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic1", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic2", NULL),
+	SND_SOC_DAPM_MIC("Digital Mic1", msm8952_dmic_event),
+	SND_SOC_DAPM_MIC("Digital Mic2", msm8952_dmic_event),
 	SND_SOC_DAPM_SUPPLY("VDD_WSA_SWITCH", SND_SOC_NOPM, 0, 0,
 	msm8952_wsa_switch_event,
 	SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
@@ -244,25 +254,42 @@ static int enable_spk_ext_pa(struct snd_soc_codec *codec, int enable)
 		return false;
 	}
 
-	pr_debug("%s: %s external speaker PA\n", __func__,
+	pr_debug("aadbg - %s: %s external speaker PA\n", __func__,
 		enable ? "Enable" : "Disable");
 
 	if (enable) {
-		ret = msm_gpioset_activate(CLIENT_WCD_INT, "ext_spk_gpio");
-		if (ret) {
-			pr_err("%s: gpio set cannot be de-activated %s\n",
-					__func__, "ext_spk_gpio");
-			return ret;
+		// ret = msm_gpioset_activate(CLIENT_WCD_INT, "ext_spk_gpio");
+		// if (ret) {
+		// 	pr_err("aadbg - %s: gpio set cannot be activated %s\n",
+		// 			__func__, "ext_spk_gpio");
+		// 	return ret;
+		// }
+		// gpio_set_value_cansleep(pdata->spk_ext_pa_gpio, enable);
+		if(dmic_pinctrl_info.ext_spk_gpio_act){
+			pr_debug("[aadbg] %s: select pinctrl to enable spk_ext_pa_gpio\n",__func__);
+			ret = pinctrl_select_state(dmic_pinctrl_info.pinctrl,dmic_pinctrl_info.ext_spk_gpio_act);
+		}else{
+			pr_err("[aadbg] %s: NO pinctrl state for event: SND_SOC_DAPM_PRE_PMU\n",__func__);
 		}
-		gpio_set_value_cansleep(pdata->spk_ext_pa_gpio, enable);
+		if (ret < 0)
+			pr_err("[aadbg] %s: error during pinctrl state select, ev: SND_SOC_DAPM_PRE_PMU\n",__func__);
+
 	} else {
-		gpio_set_value_cansleep(pdata->spk_ext_pa_gpio, enable);
-		ret = msm_gpioset_suspend(CLIENT_WCD_INT, "ext_spk_gpio");
-		if (ret) {
-			pr_err("%s: gpio set cannot be de-activated %s\n",
-					__func__, "ext_spk_gpio");
-			return ret;
+		// gpio_set_value_cansleep(pdata->spk_ext_pa_gpio, enable);
+		// ret = msm_gpioset_suspend(CLIENT_WCD_INT, "ext_spk_gpio");
+		// if (ret) {
+		// 	pr_err("aadbg - %s: gpio set cannot be de-activated %s\n",
+		// 			__func__, "ext_spk_gpio");
+		// 	return ret;
+		// }
+		if(dmic_pinctrl_info.ext_spk_gpio_sus){
+			pr_debug("[aadbg] %s: select pinctrl to disable spk_ext_pa_gpio\n",__func__);
+			ret = pinctrl_select_state(dmic_pinctrl_info.pinctrl,dmic_pinctrl_info.ext_spk_gpio_sus);
+		}else{
+			pr_err("[aadbg] %s: NO pinctrl state for event: SND_SOC_DAPM_POST_PMD\n",__func__);
 		}
+		if (ret < 0)
+			pr_err("[aadbg] %s: error during pinctrl state select, ev: SND_SOC_DAPM_POST_PMD\n",__func__);
 	}
 	return 0;
 }
@@ -1050,6 +1077,42 @@ static int msm8952_wsa_switch_event(struct snd_soc_dapm_widget *w,
 	}
 
 	return ret;
+}
+
+static int msm8952_dmic_event(struct snd_soc_dapm_widget *w,
+                  struct snd_kcontrol *kcontrol, int event)
+{
+	struct msm8916_asoc_mach_data *pdata = NULL;
+	int ret = 0;
+
+	pdata = snd_soc_card_get_drvdata(w->codec->component.card);
+	pr_debug("[aadbg] %s: event = %d\n", __func__, event);
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		if(dmic_pinctrl_info.cdc_dmic_lines_act){
+			pr_debug("[aadbg] %s: select pinctrl for event: SND_SOC_DAPM_PRE_PMU\n",__func__);
+			ret = pinctrl_select_state(dmic_pinctrl_info.pinctrl,dmic_pinctrl_info.cdc_dmic_lines_act);
+		}else{
+			pr_err("[aadbg] %s: NO pinctrl state for dmic event: SND_SOC_DAPM_PRE_PMU\n",__func__);
+		}
+		if (ret < 0)
+			pr_err("[aadbg] %s: error during pinctrl state select, ev: SND_SOC_DAPM_PRE_PMU\n",__func__);
+	break;
+	case SND_SOC_DAPM_POST_PMD:
+		if(dmic_pinctrl_info.cdc_dmic_lines_sus){
+			pr_debug("[aadbg] %s: select pinctrl for event: SND_SOC_DAPM_POST_PMD\n",__func__);
+			ret = pinctrl_select_state(dmic_pinctrl_info.pinctrl,dmic_pinctrl_info.cdc_dmic_lines_sus);
+		}else{
+			pr_err("[aadbg] %s: NO pinctrl state for dmic event: SND_SOC_DAPM_POST_PMD\n",__func__);
+		}
+		if (ret < 0)
+			pr_err("[aadbg] %s: error during pinctrl state select, ev: SND_SOC_DAPM_POST_PMD\n",__func__);
+	break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
 }
 
 static int msm8952_enable_wsa_mclk(struct snd_soc_card *card, bool enable)
@@ -2846,6 +2909,7 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card;
 	struct msm8916_asoc_mach_data *pdata = NULL;
+	struct pinctrl *dmic_pinctrl;
 	const char *hs_micbias_type = "qcom,msm-hs-micbias-type";
 	const char *ext_pa = "qcom,msm-ext-pa";
 	const char *mclk = "qcom,msm-mclk-freq";
@@ -3054,6 +3118,35 @@ parse_mclk_freq:
 	if (ret < 0)
 		pr_err("%s:  doesn't support external speaker pa\n",
 				__func__);
+
+	dmic_pinctrl = devm_pinctrl_get(&pdev->dev);
+	if (IS_ERR(dmic_pinctrl)) {
+		pr_err("[aadbg] %s: Unable to get pinctrl handle\n",__func__);
+		return -EINVAL;
+	}
+	dmic_pinctrl_info.pinctrl = dmic_pinctrl;
+
+	dmic_pinctrl_info.cdc_dmic_lines_sus = pinctrl_lookup_state(dmic_pinctrl,"cdc_dmic_lines_sus");
+	if (IS_ERR(dmic_pinctrl_info.cdc_dmic_lines_sus)) {
+		dmic_pinctrl_info.cdc_dmic_lines_sus = NULL;
+		pr_err("[aadbg] %s: Unable to get pinctrl cdc_dmic_lines_sus handle\n", __func__);
+	}
+	dmic_pinctrl_info.cdc_dmic_lines_act = pinctrl_lookup_state(dmic_pinctrl,"cdc_dmic_lines_act");
+	if (IS_ERR(dmic_pinctrl_info.cdc_dmic_lines_act)) {
+		dmic_pinctrl_info.cdc_dmic_lines_act = NULL;
+		pr_err("[aadbg] %s: Unable to get pinctrl cdc_dmic_lines_act handle\n",__func__);
+	}
+
+	dmic_pinctrl_info.ext_spk_gpio_sus = pinctrl_lookup_state(dmic_pinctrl,"ext_spk_gpio_sus");
+	if (IS_ERR(dmic_pinctrl_info.ext_spk_gpio_sus)) {
+		dmic_pinctrl_info.ext_spk_gpio_sus = NULL;
+		pr_err("[aadbg] %s: Unable to get pinctrl ext_spk_gpio_sus handle\n", __func__);
+	}
+	dmic_pinctrl_info.ext_spk_gpio_act = pinctrl_lookup_state(dmic_pinctrl,"ext_spk_gpio_act");
+	if (IS_ERR(dmic_pinctrl_info.ext_spk_gpio_act)) {
+		dmic_pinctrl_info.ext_spk_gpio_act = NULL;
+		pr_err("[aadbg] %s: Unable to get pinctrl ext_spk_gpio_act handle\n",__func__);
+	}
 
 	ret = of_property_read_string(pdev->dev.of_node,
 		hs_micbias_type, &type);
