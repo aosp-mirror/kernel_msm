@@ -95,6 +95,9 @@ DEFINE_PER_CPU(struct hrtimer_cpu_base, hrtimer_bases) =
 };
 
 static const int hrtimer_clock_to_base_table[MAX_CLOCKS] = {
+	/* Make sure we catch unsupported clockids */
+	[0 ... MAX_CLOCKS - 1]	= HRTIMER_MAX_CLOCK_BASES,
+
 	[CLOCK_REALTIME]	= HRTIMER_BASE_REALTIME,
 	[CLOCK_MONOTONIC]	= HRTIMER_BASE_MONOTONIC,
 	[CLOCK_BOOTTIME]	= HRTIMER_BASE_BOOTTIME,
@@ -103,7 +106,9 @@ static const int hrtimer_clock_to_base_table[MAX_CLOCKS] = {
 
 static inline int hrtimer_clockid_to_base(clockid_t clock_id)
 {
-	return hrtimer_clock_to_base_table[clock_id];
+	int base = hrtimer_clock_to_base_table[clock_id];
+	BUG_ON(base == HRTIMER_MAX_CLOCK_BASES);
+	return base;
 }
 
 /*
@@ -1845,15 +1850,19 @@ schedule_hrtimeout_range_clock(ktime_t *expires, u64 delta,
  * You can set the task state as follows -
  *
  * %TASK_UNINTERRUPTIBLE - at least @timeout time is guaranteed to
- * pass before the routine returns.
+ * pass before the routine returns unless the current task is explicitly
+ * woken up, (e.g. by wake_up_process()).
  *
  * %TASK_INTERRUPTIBLE - the routine may return early if a signal is
- * delivered to the current task.
+ * delivered to the current task or the current task is explicitly woken
+ * up.
  *
  * The current task state is guaranteed to be TASK_RUNNING when this
  * routine returns.
  *
- * Returns 0 when the timer has expired otherwise -EINTR
+ * Returns 0 when the timer has expired. If the task was woken before the
+ * timer expired by a signal (only possible in state TASK_INTERRUPTIBLE) or
+ * by an explicit wakeup, it returns -EINTR.
  */
 int __sched schedule_hrtimeout_range(ktime_t *expires, u64 delta,
 				     const enum hrtimer_mode mode)
@@ -1875,15 +1884,19 @@ EXPORT_SYMBOL_GPL(schedule_hrtimeout_range);
  * You can set the task state as follows -
  *
  * %TASK_UNINTERRUPTIBLE - at least @timeout time is guaranteed to
- * pass before the routine returns.
+ * pass before the routine returns unless the current task is explicitly
+ * woken up, (e.g. by wake_up_process()).
  *
  * %TASK_INTERRUPTIBLE - the routine may return early if a signal is
- * delivered to the current task.
+ * delivered to the current task or the current task is explicitly woken
+ * up.
  *
  * The current task state is guaranteed to be TASK_RUNNING when this
  * routine returns.
  *
- * Returns 0 when the timer has expired otherwise -EINTR
+ * Returns 0 when the timer has expired. If the task was woken before the
+ * timer expired by a signal (only possible in state TASK_INTERRUPTIBLE) or
+ * by an explicit wakeup, it returns -EINTR.
  */
 int __sched schedule_hrtimeout(ktime_t *expires,
 			       const enum hrtimer_mode mode)

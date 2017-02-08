@@ -1,7 +1,7 @@
 /*
  * f_qdss.c -- QDSS function Driver
  *
- * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -569,7 +569,7 @@ static int qdss_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	struct usb_qdss_ch *ch = &qdss->ch;
 	int ret = 0;
 
-	pr_debug("qdss_set_alt qdss pointer = %p\n", qdss);
+	pr_debug("qdss_set_alt qdss pointer = %pK\n", qdss);
 	qdss->gadget = gadget;
 
 	if (alt != 0)
@@ -844,32 +844,37 @@ EXPORT_SYMBOL(usb_qdss_open);
 void usb_qdss_close(struct usb_qdss_ch *ch)
 {
 	struct f_qdss *qdss = ch->priv_usb;
-	struct usb_gadget *gadget = qdss->gadget;
+	struct usb_gadget *gadget;
 	unsigned long flags;
 	int status;
 
 	pr_debug("usb_qdss_close\n");
 
 	spin_lock_irqsave(&qdss_lock, flags);
+	if (!qdss || !qdss->usb_connected) {
+		ch->app_conn = 0;
+		spin_unlock_irqrestore(&qdss_lock, flags);
+		return;
+	}
+
 	usb_ep_dequeue(qdss->port.data, qdss->endless_req);
 	usb_ep_free_request(qdss->port.data, qdss->endless_req);
 	qdss->endless_req = NULL;
+	gadget = qdss->gadget;
 	ch->app_conn = 0;
 	spin_unlock_irqrestore(&qdss_lock, flags);
 
-	if (qdss->usb_connected) {
-		status = uninit_data(qdss->port.data);
-		if (status)
-			pr_err("%s: uninit_data error\n", __func__);
+	status = uninit_data(qdss->port.data);
+	if (status)
+		pr_err("%s: uninit_data error\n", __func__);
 
-		status = set_qdss_data_connection(
+	status = set_qdss_data_connection(
 				gadget,
 				qdss->port.data,
 				qdss->port.data->address,
 				0);
-		if (status)
-			pr_err("%s:qdss_disconnect error\n", __func__);
-	}
+	if (status)
+		pr_err("%s:qdss_disconnect error\n", __func__);
 	usb_gadget_restart(gadget);
 }
 EXPORT_SYMBOL(usb_qdss_close);

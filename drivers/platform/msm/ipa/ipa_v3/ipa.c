@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -624,15 +624,15 @@ static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	IPADBG("cmd=%x nr=%d\n", cmd, _IOC_NR(cmd));
 
-	if (!ipa3_is_ready()) {
-		IPAERR("IPA not ready, waiting for init completion\n");
-		wait_for_completion(&ipa3_ctx->init_completion_obj);
-	}
-
 	if (_IOC_TYPE(cmd) != IPA_IOC_MAGIC)
 		return -ENOTTY;
 	if (_IOC_NR(cmd) >= IPA_IOCTL_MAX)
 		return -ENOTTY;
+
+	if (!ipa3_is_ready()) {
+		IPAERR("IPA not ready, waiting for init completion\n");
+		wait_for_completion(&ipa3_ctx->init_completion_obj);
+	}
 
 	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
 
@@ -784,7 +784,8 @@ static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			retval = -EFAULT;
 			break;
 		}
-		if (ipa3_del_hdr((struct ipa_ioc_del_hdr *)param)) {
+		if (ipa3_del_hdr_by_user((struct ipa_ioc_del_hdr *)param,
+			true)) {
 			retval = -EFAULT;
 			break;
 		}
@@ -1553,8 +1554,8 @@ static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			retval = -EFAULT;
 			break;
 		}
-		if (ipa3_del_hdr_proc_ctx(
-			(struct ipa_ioc_del_hdr_proc_ctx *)param)) {
+		if (ipa3_del_hdr_proc_ctx_by_user(
+			(struct ipa_ioc_del_hdr_proc_ctx *)param, true)) {
 			retval = -EFAULT;
 			break;
 		}
@@ -2301,12 +2302,16 @@ void ipa3_q6_post_shutdown_cleanup(void)
 	int client_idx;
 
 	IPADBG_LOW("ENTER\n");
-	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
 
 	if (!ipa3_ctx->uc_ctx.uc_loaded) {
 		IPAERR("uC is not loaded. Skipping\n");
 		return;
 	}
+
+	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
+
+	/* Handle the issue where SUSPEND was removed for some reason */
+	ipa3_q6_avoid_holb();
 
 	for (client_idx = 0; client_idx < IPA_CLIENT_MAX; client_idx++)
 		if (IPA_CLIENT_IS_Q6_PROD(client_idx)) {
@@ -2917,7 +2922,7 @@ fail_schedule_delayed_work:
 	if (ipa3_ctx->dflt_v4_rt_rule_hdl)
 		__ipa3_del_rt_rule(ipa3_ctx->dflt_v4_rt_rule_hdl);
 	if (ipa3_ctx->excp_hdr_hdl)
-		__ipa3_del_hdr(ipa3_ctx->excp_hdr_hdl);
+		__ipa3_del_hdr(ipa3_ctx->excp_hdr_hdl, false);
 	ipa3_teardown_sys_pipe(ipa3_ctx->clnt_hdl_cmd);
 fail_cmd:
 	return result;
@@ -2929,7 +2934,7 @@ static void ipa3_teardown_apps_pipes(void)
 	ipa3_teardown_sys_pipe(ipa3_ctx->clnt_hdl_data_in);
 	__ipa3_del_rt_rule(ipa3_ctx->dflt_v6_rt_rule_hdl);
 	__ipa3_del_rt_rule(ipa3_ctx->dflt_v4_rt_rule_hdl);
-	__ipa3_del_hdr(ipa3_ctx->excp_hdr_hdl);
+	__ipa3_del_hdr(ipa3_ctx->excp_hdr_hdl, false);
 	ipa3_teardown_sys_pipe(ipa3_ctx->clnt_hdl_cmd);
 }
 
@@ -3612,6 +3617,7 @@ static int ipa3_apps_cons_request_resource(void)
 
 static void ipa3_sps_release_resource(struct work_struct *work)
 {
+	mutex_lock(&ipa3_ctx->transport_pm.transport_pm_mutex);
 	/* check whether still need to decrease client usage */
 	if (atomic_read(&ipa3_ctx->transport_pm.dec_clients)) {
 		if (atomic_read(&ipa3_ctx->transport_pm.eot_activity)) {
@@ -3623,6 +3629,7 @@ static void ipa3_sps_release_resource(struct work_struct *work)
 		}
 	}
 	atomic_set(&ipa3_ctx->transport_pm.eot_activity, 0);
+	mutex_unlock(&ipa3_ctx->transport_pm.transport_pm_mutex);
 }
 
 int ipa3_create_apps_resource(void)
@@ -4402,6 +4409,8 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 		goto fail_create_transport_wq;
 	}
 
+	/* Initialize the SPS PM lock. */
+	mutex_init(&ipa3_ctx->transport_pm.transport_pm_mutex);
 	spin_lock_init(&ipa3_ctx->transport_pm.lock);
 	ipa3_ctx->transport_pm.res_granted = false;
 	ipa3_ctx->transport_pm.res_rel_in_prog = false;

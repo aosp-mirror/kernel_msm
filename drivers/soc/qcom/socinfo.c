@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -42,8 +42,8 @@
 #define SMEM_IMAGE_VERSION_NAME_SIZE 75
 #define SMEM_IMAGE_VERSION_VARIANT_SIZE 20
 #define SMEM_IMAGE_VERSION_VARIANT_OFFSET 75
-#define SMEM_IMAGE_VERSION_OEM_SIZE 32
-#define SMEM_IMAGE_VERSION_OEM_OFFSET 96
+#define SMEM_IMAGE_VERSION_OEM_SIZE 33
+#define SMEM_IMAGE_VERSION_OEM_OFFSET 95
 #define SMEM_IMAGE_VERSION_PARTITION_APPS 10
 
 enum {
@@ -535,11 +535,15 @@ static struct msm_soc_info cpu_of_id[] = {
 	/* Hamster ID */
 	[306] = {MSM_CPU_HAMSTER, "MSMHAMSTER"},
 
-	/* falcon ID */
-	[317] = {MSM_CPU_FALCON, "MSMFALCON"},
+	/* 660 ID */
+	[317] = {MSM_CPU_660, "SDM660"},
+	[324] = {MSM_CPU_660, "SDA660"},
+	[325] = {MSM_CPU_660, "SDM658"},
+	[326] = {MSM_CPU_660, "SDA658"},
 
-	/* triton ID */
-	[318] = {MSM_CPU_TRITON, "MSMTRITON"},
+	/* 630 ID */
+	[318] = {MSM_CPU_630, "SDM630"},
+	[327] = {MSM_CPU_630, "SDA630"},
 
 	/* Uninitialized IDs are not known to run Linux.
 	   MSM_CPU_UNKNOWN is set to 0 to ensure these IDs are
@@ -974,7 +978,7 @@ msm_get_image_crm_version(struct device *dev,
 	}
 	string_address += current_image * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
 	string_address += SMEM_IMAGE_VERSION_OEM_OFFSET;
-	return snprintf(buf, SMEM_IMAGE_VERSION_OEM_SIZE, "%-.32s\n",
+	return snprintf(buf, SMEM_IMAGE_VERSION_OEM_SIZE, "%-.33s\n",
 			string_address);
 }
 
@@ -995,7 +999,7 @@ msm_set_image_crm_version(struct device *dev,
 	}
 	store_address += current_image * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
 	store_address += SMEM_IMAGE_VERSION_OEM_OFFSET;
-	snprintf(store_address, SMEM_IMAGE_VERSION_OEM_SIZE, "%-.32s", buf);
+	snprintf(store_address, SMEM_IMAGE_VERSION_OEM_SIZE, "%-.33s", buf);
 	return count;
 }
 
@@ -1049,7 +1053,8 @@ msm_get_images(struct device *dev,
 				image_address);
 		pos += snprintf(buf + pos, PAGE_SIZE - pos, "\tVariant:\t%-.20s\n",
 				image_address + SMEM_IMAGE_VERSION_VARIANT_OFFSET);
-		pos += snprintf(buf + pos, PAGE_SIZE - pos, "\tVersion:\t%-.32s\n\n",
+		pos += snprintf(buf + pos, PAGE_SIZE - pos,
+				"\tVersion:\t%-.33s\n",
 				image_address + SMEM_IMAGE_VERSION_OEM_OFFSET);
 
 		image_address += SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
@@ -1206,13 +1211,29 @@ static void * __init setup_dummy_socinfo(void)
 		dummy_socinfo.id = 306;
 		strlcpy(dummy_socinfo.build_id, "msmhamster - ",
 			sizeof(dummy_socinfo.build_id));
-	} else if (early_machine_is_msmfalcon()) {
+	} else if (early_machine_is_sdm660()) {
 		dummy_socinfo.id = 317;
-		strlcpy(dummy_socinfo.build_id, "msmfalcon - ",
+		strlcpy(dummy_socinfo.build_id, "sdm660 - ",
 			sizeof(dummy_socinfo.build_id));
-	} else if (early_machine_is_msmtriton()) {
+	} else if (early_machine_is_sda660()) {
+		dummy_socinfo.id = 324;
+		strlcpy(dummy_socinfo.build_id, "sda660 - ",
+			sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_sdm658()) {
+		dummy_socinfo.id = 325;
+		strlcpy(dummy_socinfo.build_id, "sdm658 - ",
+			sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_sda658()) {
+		dummy_socinfo.id = 326;
+		strlcpy(dummy_socinfo.build_id, "sda658 - ",
+			sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_sdm630()) {
 		dummy_socinfo.id = 318;
-		strlcpy(dummy_socinfo.build_id, "msmtriton - ",
+		strlcpy(dummy_socinfo.build_id, "sdm630 - ",
+			sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_sda630()) {
+		dummy_socinfo.id = 327;
+		strlcpy(dummy_socinfo.build_id, "sda630 - ",
 			sizeof(dummy_socinfo.build_id));
 	} else if (early_machine_is_apq8998()) {
 		dummy_socinfo.id = 319;

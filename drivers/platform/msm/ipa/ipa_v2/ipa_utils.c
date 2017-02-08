@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -450,6 +450,10 @@ int ipa_get_clients_from_rm_resource(
 	case IPA_RM_RESOURCE_MHI_CONS:
 		clients->names[i++] = IPA_CLIENT_MHI_CONS;
 		break;
+	case IPA_RM_RESOURCE_ODU_ADAPT_CONS:
+		clients->names[i++] = IPA_CLIENT_ODU_EMB_CONS;
+		clients->names[i++] = IPA_CLIENT_ODU_TETH_CONS;
+		break;
 	case IPA_RM_RESOURCE_USB_PROD:
 		clients->names[i++] = IPA_CLIENT_USB_PROD;
 		break;
@@ -459,6 +463,8 @@ int ipa_get_clients_from_rm_resource(
 	case IPA_RM_RESOURCE_MHI_PROD:
 		clients->names[i++] = IPA_CLIENT_MHI_PROD;
 		break;
+	case IPA_RM_RESOURCE_ODU_ADAPT_PROD:
+		clients->names[i++] = IPA_CLIENT_ODU_PROD;
 	default:
 		break;
 	}
@@ -490,13 +496,15 @@ bool ipa_should_pipe_be_suspended(enum ipa_client_type client)
 	if (ep->keep_ipa_awake)
 		return false;
 
-	if (client == IPA_CLIENT_USB_CONS   ||
-	    client == IPA_CLIENT_MHI_CONS   ||
-	    client == IPA_CLIENT_HSIC1_CONS ||
-	    client == IPA_CLIENT_WLAN1_CONS ||
-	    client == IPA_CLIENT_WLAN2_CONS ||
-	    client == IPA_CLIENT_WLAN3_CONS ||
-	    client == IPA_CLIENT_WLAN4_CONS)
+	if (client == IPA_CLIENT_USB_CONS     ||
+	    client == IPA_CLIENT_MHI_CONS     ||
+	    client == IPA_CLIENT_HSIC1_CONS   ||
+	    client == IPA_CLIENT_WLAN1_CONS   ||
+	    client == IPA_CLIENT_WLAN2_CONS   ||
+	    client == IPA_CLIENT_WLAN3_CONS   ||
+	    client == IPA_CLIENT_WLAN4_CONS   ||
+	    client == IPA_CLIENT_ODU_EMB_CONS ||
+	    client == IPA_CLIENT_ODU_TETH_CONS)
 		return true;
 
 	return false;
@@ -876,8 +884,8 @@ int ipa_init_hw(void)
 	ipa_write_reg(ipa_ctx->mmio, IPA_COMP_SW_RESET_OFST, 1);
 	ipa_write_reg(ipa_ctx->mmio, IPA_COMP_SW_RESET_OFST, 0);
 
-	/* enable IPA */
-	ipa_write_reg(ipa_ctx->mmio, IPA_COMP_CFG_OFST, 1);
+	/* enable IPA Bit:0, enable 2x fast clock Bit:4 */
+	ipa_write_reg(ipa_ctx->mmio, IPA_COMP_CFG_OFST, 0x11);
 
 	/* Read IPA version and make sure we have access to the registers */
 	ipa_version = ipa_read_reg(ipa_ctx->mmio, IPA_VERSION_OFST);
@@ -945,11 +953,39 @@ void ipa2_set_client(int index, enum ipacm_client_enum client, bool uplink)
 	}
 }
 
+/* ipa2_get_wlan_stats() - get ipa wifi stats
+ *
+ * Return value: success or failure
+ */
+int ipa2_get_wlan_stats(struct ipa_get_wdi_sap_stats *wdi_sap_stats)
+{
+	if (ipa_ctx->uc_wdi_ctx.stats_notify) {
+		ipa_ctx->uc_wdi_ctx.stats_notify(IPA_GET_WDI_SAP_STATS,
+			wdi_sap_stats);
+	} else {
+		IPAERR("uc_wdi_ctx.stats_notify not registered\n");
+		return -EFAULT;
+	}
+	return 0;
+}
+
+int ipa2_set_wlan_quota(struct ipa_set_wifi_quota *wdi_quota)
+{
+	if (ipa_ctx->uc_wdi_ctx.stats_notify) {
+		ipa_ctx->uc_wdi_ctx.stats_notify(IPA_SET_WIFI_QUOTA,
+			wdi_quota);
+	} else {
+		IPAERR("uc_wdi_ctx.stats_notify not registered\n");
+		return -EFAULT;
+	}
+	return 0;
+}
+
 /**
  * ipa2_get_client() - provide client mapping
  * @client: client type
  *
- * Return value: none
+ * Return value: client mapping enum
  */
 enum ipacm_client_enum ipa2_get_client(int pipe_idx)
 {
@@ -1667,6 +1703,7 @@ int ipa_generate_hw_rule(enum ipa_ip_type ip,
 	 * OFFSET_MEQ32_0 with mask of 0 and val of 0 and offset 0
 	 */
 	if (attrib->attrib_mask == 0) {
+		IPADBG_LOW("building default rule\n");
 		if (ipa_ofst_meq32[ofst_meq32] == -1) {
 			IPAERR("ran out of meq32 eq\n");
 			return -EPERM;
@@ -4905,13 +4942,17 @@ static int ipa2_stop_gsi_channel(u32 clnt_hdl)
 
 static void *ipa2_get_ipc_logbuf(void)
 {
-	/* no support for IPC logging in IPAv2 */
+	if (ipa_ctx)
+		return ipa_ctx->logbuf;
+
 	return NULL;
 }
 
 static void *ipa2_get_ipc_logbuf_low(void)
 {
-	/* no support for IPC logging in IPAv2 */
+	if (ipa_ctx)
+		return ipa_ctx->logbuf_low;
+
 	return NULL;
 }
 
@@ -5017,6 +5058,8 @@ int ipa2_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 	api_ctrl->ipa_suspend_wdi_pipe = ipa2_suspend_wdi_pipe;
 	api_ctrl->ipa_get_wdi_stats = ipa2_get_wdi_stats;
 	api_ctrl->ipa_get_smem_restr_bytes = ipa2_get_smem_restr_bytes;
+	api_ctrl->ipa_broadcast_wdi_quota_reach_ind =
+			ipa2_broadcast_wdi_quota_reach_ind;
 	api_ctrl->ipa_uc_wdi_get_dbpa = ipa2_uc_wdi_get_dbpa;
 	api_ctrl->ipa_uc_reg_rdyCB = ipa2_uc_reg_rdyCB;
 	api_ctrl->ipa_uc_dereg_rdyCB = ipa2_uc_dereg_rdyCB;

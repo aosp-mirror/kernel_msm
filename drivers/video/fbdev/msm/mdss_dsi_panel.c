@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -343,8 +343,14 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			}
 
 			if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
-				rc = gpio_direction_output(
-					ctrl_pdata->bklt_en_gpio, 1);
+
+				if (ctrl_pdata->bklt_en_gpio_invert)
+					rc = gpio_direction_output(
+						ctrl_pdata->bklt_en_gpio, 0);
+				else
+					rc = gpio_direction_output(
+						ctrl_pdata->bklt_en_gpio, 1);
+
 				if (rc) {
 					pr_err("%s: unable to set dir for bklt gpio\n",
 						__func__);
@@ -380,7 +386,12 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		}
 	} else {
 		if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
-			gpio_set_value((ctrl_pdata->bklt_en_gpio), 0);
+
+			if (ctrl_pdata->bklt_en_gpio_invert)
+				gpio_set_value((ctrl_pdata->bklt_en_gpio), 1);
+			else
+				gpio_set_value((ctrl_pdata->bklt_en_gpio), 0);
+
 			gpio_free(ctrl_pdata->bklt_en_gpio);
 		}
 		if (gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
@@ -1226,6 +1237,58 @@ void mdss_dsi_panel_dsc_pps_send(struct mdss_dsi_ctrl_pdata *ctrl,
 	mdss_dsi_panel_cmds_send(ctrl, &pcmds, CMD_REQ_COMMIT);
 }
 
+static int mdss_dsi_parse_hdr_settings(struct device_node *np,
+		struct mdss_panel_info *pinfo)
+{
+	int rc = 0;
+	struct mdss_panel_hdr_properties *hdr_prop;
+
+	if (!np) {
+		pr_err("%s: device node pointer is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!pinfo) {
+		pr_err("%s: panel info is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	hdr_prop = &pinfo->hdr_properties;
+	hdr_prop->hdr_enabled = of_property_read_bool(np,
+		"qcom,mdss-dsi-panel-hdr-enabled");
+
+	if (hdr_prop->hdr_enabled) {
+		rc = of_property_read_u32_array(np,
+				"qcom,mdss-dsi-panel-hdr-color-primaries",
+				hdr_prop->display_primaries,
+				DISPLAY_PRIMARIES_COUNT);
+		if (rc) {
+			pr_info("%s:%d, Unable to read color primaries,rc:%u",
+					__func__, __LINE__,
+					hdr_prop->hdr_enabled = false);
+			}
+
+		rc = of_property_read_u32(np,
+			"qcom,mdss-dsi-panel-peak-brightness",
+			&(hdr_prop->peak_brightness));
+		if (rc) {
+			pr_info("%s:%d, Unable to read hdr brightness, rc:%u",
+				__func__, __LINE__, rc);
+			hdr_prop->hdr_enabled = false;
+		}
+
+		rc = of_property_read_u32(np,
+			"qcom,mdss-dsi-panel-blackness-level",
+			&(hdr_prop->blackness_level));
+		if (rc) {
+			pr_info("%s:%d, Unable to read hdr brightness, rc:%u",
+				__func__, __LINE__, rc);
+			hdr_prop->hdr_enabled = false;
+		}
+	}
+	return 0;
+}
+
 static int mdss_dsi_parse_dsc_version(struct device_node *np,
 		struct mdss_panel_timing *timing)
 {
@@ -1442,8 +1505,9 @@ static int mdss_dsi_parse_topology_config(struct device_node *np,
 				goto end;
 			}
 		}
-		rc = of_property_read_string(cfg_np, "qcom,split-mode", &data);
-		if (!rc && !strcmp(data, "pingpong-split"))
+
+		if (!of_property_read_string(cfg_np, "qcom,split-mode",
+		    &data) && !strcmp(data, "pingpong-split"))
 			pinfo->use_pingpong_split = true;
 
 		if (((timing->lm_widths[0]) || (timing->lm_widths[1])) &&
@@ -1703,10 +1767,12 @@ static void mdss_dsi_parse_dms_config(struct device_node *np,
 		pr_debug("%s: default dms suspend/resume\n", __func__);
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl->video2cmd,
-		"qcom,video-to-cmd-mode-switch-commands", NULL);
+		"qcom,video-to-cmd-mode-switch-commands",
+		"qcom,mode-switch-commands-state");
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl->cmd2video,
-		"qcom,cmd-to-video-mode-switch-commands", NULL);
+		"qcom,cmd-to-video-mode-switch-commands",
+		"qcom,mode-switch-commands-state");
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl->post_dms_on_cmds,
 		"qcom,mdss-dsi-post-mode-switch-on-command",
@@ -1959,6 +2025,9 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
 
 	pinfo->panel_ack_disabled = pinfo->sim_panel_mode ?
 		1 : of_property_read_bool(np, "qcom,panel-ack-disabled");
+
+	pinfo->allow_phy_power_off = of_property_read_bool(np,
+		"qcom,panel-allow-phy-poweroff");
 
 	mdss_dsi_parse_esd_params(np, ctrl);
 
@@ -2309,9 +2378,9 @@ static int mdss_dsi_panel_timing_from_dt(struct device_node *np,
 		phy_timings_present = true;
 	}
 
-	data = of_get_property(np, "qcom,mdss-dsi-panel-timings-8996", &len);
+	data = of_get_property(np, "qcom,mdss-dsi-panel-timings-phy-v2", &len);
 	if ((!data) || (len != 40)) {
-		pr_debug("%s:%d, Unable to read 8996 Phy lane timing settings",
+		pr_debug("%s:%d, Unable to read phy-v2 lane timing settings",
 		       __func__, __LINE__);
 	} else {
 		for (i = 0; i < len; i++)
@@ -2599,6 +2668,9 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		"qcom,mdss-dsi-lane-3-state");
 
 	rc = mdss_panel_parse_display_timings(np, &ctrl_pdata->panel_data);
+	if (rc)
+		return rc;
+	rc = mdss_dsi_parse_hdr_settings(np, pinfo);
 	if (rc)
 		return rc;
 

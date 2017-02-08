@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -933,17 +933,18 @@ int mdss_mdp_smp_handoff(struct mdss_data_type *mdata)
 		data = readl_relaxed(mdata->mdp_base +
 			MDSS_MDP_REG_SMP_ALLOC_W0 + off);
 		client_id = (data >> s) & 0xFF;
-		if (test_bit(i, mdata->mmb_alloc_map)) {
-			/*
-			 * Certain pipes may have a dedicated set of
-			 * SMP MMBs statically allocated to them. In
-			 * such cases, we do not need to do anything
-			 * here.
-			 */
-			pr_debug("smp mmb %d already assigned to pipe %d (client_id %d)\n"
-				, i, pipe ? pipe->num : -1, client_id);
-			continue;
-		}
+		if (i < ARRAY_SIZE(mdata->mmb_alloc_map))
+			if (test_bit(i, mdata->mmb_alloc_map)) {
+				/*
+				 * Certain pipes may have a dedicated set of
+				 * SMP MMBs statically allocated to them. In
+				 * such cases, we do not need to do anything
+				 * here.
+				 */
+				pr_debug("smp mmb %d already assigned to pipe %d (client_id %d)\n"
+					, i, pipe ? pipe->num : -1, client_id);
+				continue;
+			}
 
 		if (client_id) {
 			if (client_id != prev_id) {
@@ -1114,6 +1115,7 @@ static void mdss_mdp_init_pipe_params(struct mdss_mdp_pipe *pipe)
 	pipe->is_right_blend = false;
 	pipe->src_split_req = false;
 	pipe->bwc_mode = 0;
+	pipe->restore_roi = false;
 
 	pipe->mfd = NULL;
 	pipe->mixer_left = pipe->mixer_right = NULL;
@@ -2459,7 +2461,8 @@ static u32 __get_ts_count(struct mdss_mdp_pipe *pipe,
 		if (pipe &&
 		    pipe->multirect.mode == MDSS_MDP_PIPE_MULTIRECT_SERIAL) {
 			__get_ordered_rects(pipe, &low_pipe, &high_pipe);
-			ts_ypos = high_pipe->dst.y - low_pipe->dst.y - 1;
+			ts_ypos = high_pipe->dst.y -
+				(low_pipe->dst.y + low_pipe->dst.h) - 1;
 			rate_factor = TS_CLK / fps;
 			ts_count = mult_frac(ts_ypos, rate_factor, v_total);
 			MDSS_XLOG(ts_ypos, rate_factor, ts_count);
@@ -2533,7 +2536,7 @@ static u32 __get_ts_bytes(struct mdss_mdp_pipe *pipe,
 		/* calculate ts bytes as the sum of both rects */
 		ts_bytes_low = __calc_ts_bytes(&low_pipe->src, fps,
 			low_pipe->src_fmt->bpp);
-		ts_bytes_high = __calc_ts_bytes(&low_pipe->src, fps,
+		ts_bytes_high = __calc_ts_bytes(&high_pipe->src, fps,
 			high_pipe->src_fmt->bpp);
 
 		ts_bytes = ts_bytes_low + ts_bytes_high;
@@ -2599,7 +2602,8 @@ static int mdss_mdp_set_ts_pipe(struct mdss_mdp_pipe *pipe)
 	__get_ordered_rects(pipe, &low_pipe, &high_pipe);
 
 	ts_count_low  = __get_ts_count(low_pipe, mixer, true);
-	ts_count_high = __get_ts_count(high_pipe, mixer, false);
+	if (high_pipe != NULL)
+		ts_count_high = __get_ts_count(high_pipe, mixer, false);
 	ts_bytes = __get_ts_bytes(pipe, mixer);
 
 	if (low_pipe->multirect.num == MDSS_MDP_PIPE_RECT0) {
@@ -2702,8 +2706,8 @@ int mdss_mdp_pipe_queue_data(struct mdss_mdp_pipe *pipe,
 		if (ret) {
 			pr_err("pipe pp setup error for pnum=%d\n", pipe->num);
 
-			MDSS_XLOG(pipe->num, pipe->mixer_left->num,
-				pipe->play_cnt, 0xbad);
+			MDSS_XLOG(pipe->num, pipe->multirect.num,
+				pipe->mixer_left->num, pipe->play_cnt, 0xbad);
 
 			goto done;
 		}
@@ -2714,13 +2718,14 @@ int mdss_mdp_pipe_queue_data(struct mdss_mdp_pipe *pipe,
 		pipe->params_changed = 0;
 		mdss_mdp_pipe_solidfill_setup(pipe);
 
-		MDSS_XLOG(pipe->num, pipe->mixer_left->num, pipe->play_cnt,
-			0x111);
+		MDSS_XLOG(pipe->num, pipe->multirect.num, pipe->mixer_left->num,
+			pipe->play_cnt, 0x111);
 
 		goto update_nobuf;
 	}
 
-	MDSS_XLOG(pipe->num, pipe->mixer_left->num, pipe->play_cnt, 0x222);
+	MDSS_XLOG(pipe->num, pipe->multirect.num, pipe->mixer_left->num,
+		pipe->play_cnt, 0x222);
 
 	if (params_changed) {
 		pipe->params_changed = 0;

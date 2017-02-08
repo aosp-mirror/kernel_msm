@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -279,6 +279,7 @@ struct ipa3_rt_tbl {
  * @id: header entry id
  * @is_eth2_ofst_valid: is eth2_ofst field valid?
  * @eth2_ofst: offset to start of Ethernet-II/802.3 header
+ * @user_deleted: is the header deleted by the user?
  */
 struct ipa3_hdr_entry {
 	struct list_head link;
@@ -296,6 +297,7 @@ struct ipa3_hdr_entry {
 	int id;
 	u8 is_eth2_ofst_valid;
 	u16 eth2_ofst;
+	bool user_deleted;
 };
 
 /**
@@ -335,6 +337,7 @@ struct ipa3_hdr_proc_ctx_offset_entry {
  * @cookie: cookie used for validity check
  * @ref_cnt: reference counter of routing table
  * @id: processing context header entry id
+ * @user_deleted: is the hdr processing context deleted by the user?
  */
 struct ipa3_hdr_proc_ctx_entry {
 	struct list_head link;
@@ -344,6 +347,7 @@ struct ipa3_hdr_proc_ctx_entry {
 	u32 cookie;
 	u32 ref_cnt;
 	int id;
+	bool user_deleted;
 };
 
 /**
@@ -963,6 +967,10 @@ struct ipa3_uc_wdi_ctx {
 	struct IpaHwStatsWDIInfoData_t *wdi_uc_stats_mmio;
 	void *priv;
 	ipa_uc_ready_cb uc_ready_cb;
+	/* for AP+STA stats update */
+#ifdef IPA_WAN_MSG_IPv6_ADDR_GW_LEN
+	ipa_wdi_meter_notifier_cb stats_notify;
+#endif
 };
 
 /**
@@ -970,6 +978,7 @@ struct ipa3_uc_wdi_ctx {
  * @lock: lock for ensuring atomic operations
  * @res_granted: true if SPS requested IPA resource and IPA granted it
  * @res_rel_in_prog: true if releasing IPA resource is in progress
+ * @transport_pm_mutex: Mutex to protect the transport_pm functionality.
  */
 struct ipa3_transport_pm {
 	spinlock_t lock;
@@ -977,6 +986,7 @@ struct ipa3_transport_pm {
 	bool res_rel_in_prog;
 	atomic_t dec_clients;
 	atomic_t eot_activity;
+	struct mutex transport_pm_mutex;
 };
 
 /**
@@ -1542,6 +1552,8 @@ int ipa3_add_hdr(struct ipa_ioc_add_hdr *hdrs);
 
 int ipa3_del_hdr(struct ipa_ioc_del_hdr *hdls);
 
+int ipa3_del_hdr_by_user(struct ipa_ioc_del_hdr *hdls, bool by_user);
+
 int ipa3_commit_hdr(void);
 
 int ipa3_reset_hdr(void);
@@ -1558,6 +1570,9 @@ int ipa3_copy_hdr(struct ipa_ioc_copy_hdr *copy);
 int ipa3_add_hdr_proc_ctx(struct ipa_ioc_add_hdr_proc_ctx *proc_ctxs);
 
 int ipa3_del_hdr_proc_ctx(struct ipa_ioc_del_hdr_proc_ctx *hdls);
+
+int ipa3_del_hdr_proc_ctx_by_user(struct ipa_ioc_del_hdr_proc_ctx *hdls,
+	bool by_user);
 
 /*
  * Routing
@@ -1674,6 +1689,7 @@ int ipa3_resume_wdi_pipe(u32 clnt_hdl);
 int ipa3_suspend_wdi_pipe(u32 clnt_hdl);
 int ipa3_get_wdi_stats(struct IpaHwStatsWDIInfoData_t *stats);
 u16 ipa3_get_smem_restr_bytes(void);
+int ipa3_broadcast_wdi_quota_reach_ind(uint32_t fid, uint64_t num_bytes);
 int ipa3_setup_uc_ntn_pipes(struct ipa_ntn_conn_in_params *in,
 		ipa_notify_cb notify, void *priv, u8 hdr_len,
 		struct ipa_ntn_conn_out_params *outp);
@@ -1714,6 +1730,9 @@ enum ipacm_client_enum ipa3_get_client(int pipe_idx);
 
 bool ipa3_get_client_uplink(int pipe_idx);
 
+int ipa3_get_wlan_stats(struct ipa_get_wdi_sap_stats *wdi_sap_stats);
+
+int ipa3_set_wlan_quota(struct ipa_set_wifi_quota *wdi_quota);
 /*
  * IPADMA
  */
@@ -1859,7 +1878,7 @@ int ipa3_active_clients_log_print_table(char *buf, int size);
 void ipa3_active_clients_log_clear(void);
 int ipa3_interrupts_init(u32 ipa_irq, u32 ee, struct device *ipa_dev);
 int __ipa3_del_rt_rule(u32 rule_hdl);
-int __ipa3_del_hdr(u32 hdr_hdl);
+int __ipa3_del_hdr(u32 hdr_hdl, bool by_user);
 int __ipa3_release_hdr(u32 hdr_hdl);
 int __ipa3_release_hdr_proc_ctx(u32 proc_ctx_hdl);
 int _ipa_read_ep_reg_v3_0(char *buf, int max_len, int pipe);
@@ -1909,6 +1928,9 @@ int ipa3_alloc_rule_id(struct idr *rule_ids);
 int ipa3_id_alloc(void *ptr);
 void *ipa3_id_find(u32 id);
 void ipa3_id_remove(u32 id);
+int ipa3_enable_force_clear(u32 request_id, bool throttle_source,
+	u32 source_pipe_bitmask);
+int ipa3_disable_force_clear(u32 request_id);
 
 int ipa3_set_required_perf_profile(enum ipa_voltage_level floor_voltage,
 				  u32 bandwidth_mbps);

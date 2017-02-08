@@ -22,6 +22,7 @@
 #include <linux/notifier.h>
 #include <linux/irqreturn.h>
 #include <linux/kref.h>
+#include <linux/kthread.h>
 
 #include "mdss.h"
 #include "mdss_mdp_hwio.h"
@@ -423,6 +424,7 @@ struct mdss_mdp_ctl_intfs_ops {
 struct mdss_mdp_cwb {
 	struct mutex queue_lock;
 	struct list_head data_queue;
+	struct list_head cleanup_queue;
 	int valid;
 	u32 wb_idx;
 	struct mdp_output_layer layer;
@@ -466,6 +468,8 @@ struct mdss_mdp_ctl {
 	u32 underrun_cnt;
 
 	atomic_t wait_pp;
+	struct work_struct cpu_pm_work;
+	int autorefresh_frame_cnt;
 
 	u16 width;
 	u16 height;
@@ -475,6 +479,7 @@ struct mdss_mdp_ctl {
 
 	/* used for WFD */
 	u32 dst_format;
+	enum mdss_mdp_csc_type csc_type;
 	struct mult_factor dst_comp_ratio;
 
 	u32 clk_rate;
@@ -548,6 +553,7 @@ struct mdss_mdp_ctl {
 	/* dynamic resolution switch during cont-splash handoff */
 	bool switch_with_handoff;
 	struct mdss_mdp_avr_info avr_info;
+	bool commit_in_progress;
 };
 
 struct mdss_mdp_mixer {
@@ -929,7 +935,6 @@ struct mdss_overlay_private {
 
 	struct sw_sync_timeline *vsync_timeline;
 	struct mdss_mdp_vsync_handler vsync_retire_handler;
-	struct work_struct retire_work;
 	int retire_cnt;
 	bool kickoff_released;
 	u32 cursor_ndx[2];
@@ -941,6 +946,11 @@ struct mdss_overlay_private {
 	struct mdss_mdp_cwb cwb;
 	wait_queue_head_t wb_waitq;
 	atomic_t wb_busy;
+	bool allow_kickoff;
+
+	struct kthread_worker worker;
+	struct kthread_work vsync_work;
+	struct task_struct *thread;
 };
 
 struct mdss_mdp_set_ot_params {
@@ -1277,7 +1287,9 @@ static inline int mdss_mdp_panic_signal_support_mode(
 		IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev,
 				MDSS_MDP_HW_REV_116) ||
 		IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev,
-				MDSS_MDP_HW_REV_300))
+				MDSS_MDP_HW_REV_300) ||
+		IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev,
+				MDSS_MDP_HW_REV_320))
 		signal_mode = MDSS_MDP_PANIC_PER_PIPE_CFG;
 
 	return signal_mode;
@@ -1312,12 +1324,21 @@ static inline int mdss_mdp_get_wb_ctl_support(struct mdss_data_type *mdata,
 							bool rotator_session)
 {
 	/*
-	 * Initial control paths are used for primary and external
-	 * interfaces and remaining control paths are used for WB
-	 * interfaces.
+	 * Any control path can be routed to any of the hardware datapaths.
+	 * But there is a HW restriction for 3D Mux block. As the 3D Mux
+	 * settings in the CTL registers are double buffered, if an interface
+	 * uses it and disconnects, then the subsequent interface which gets
+	 * connected should use the same control path in order to clear the
+	 * 3D MUX settings.
+	 * To handle this restriction, we are allowing WB also, to loop through
+	 * all the avialable control paths, so that it can reuse the control
+	 * path left by the external interface, thereby clearing the 3D Mux
+	 * settings.
+	 * The initial control paths can be used by Primary, External and WB.
+	 * The rotator can use the remaining available control paths.
 	 */
 	return rotator_session ? (mdata->nctl - mdata->nmixers_wb) :
-				(mdata->nctl - mdata->nwb);
+		MDSS_MDP_CTL0;
 }
 
 static inline bool mdss_mdp_is_nrt_vbif_client(struct mdss_data_type *mdata,
@@ -1588,7 +1609,7 @@ u32 mdss_mdp_get_irq_mask(u32 intr_type, u32 intf_num);
 
 void mdss_mdp_footswitch_ctrl_splash(int on);
 void mdss_mdp_batfet_ctrl(struct mdss_data_type *mdata, int enable);
-void mdss_mdp_set_clk_rate(unsigned long min_clk_rate);
+void mdss_mdp_set_clk_rate(unsigned long min_clk_rate, bool locked);
 unsigned long mdss_mdp_get_clk_rate(u32 clk_idx, bool locked);
 int mdss_mdp_vsync_clk_enable(int enable, bool locked);
 void mdss_mdp_clk_ctrl(int enable);
@@ -1912,6 +1933,7 @@ int mdss_mdp_ctl_cmd_set_autorefresh(struct mdss_mdp_ctl *ctl, int frame_cnt);
 int mdss_mdp_ctl_cmd_get_autorefresh(struct mdss_mdp_ctl *ctl);
 int mdss_mdp_enable_panel_disable_mode(struct msm_fb_data_type *mfd,
 	bool disable_panel);
+void mdss_mdp_ctl_event_timer(void *data);
 int mdss_mdp_pp_get_version(struct mdp_pp_feature_version *version);
 int mdss_mdp_layer_pre_commit_cwb(struct msm_fb_data_type *mfd,
 		struct mdp_layer_commit_v1 *commit);

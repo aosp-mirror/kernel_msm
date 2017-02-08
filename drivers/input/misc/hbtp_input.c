@@ -54,6 +54,7 @@ struct hbtp_data {
 	struct pinctrl *ts_pinctrl;
 	struct pinctrl_state *gpio_state_active;
 	struct pinctrl_state *gpio_state_suspend;
+	bool ddic_rst_enabled;
 	struct pinctrl_state *ddic_rst_state_active;
 	struct pinctrl_state *ddic_rst_state_suspend;
 	u32 ts_pinctrl_seq_delay;
@@ -207,9 +208,13 @@ static int hbtp_input_create_input_dev(struct hbtp_input_absinfo *absinfo)
 	input_mt_init_slots(input_dev, HBTP_MAX_FINGER, 0);
 	for (i = 0; i <= ABS_MT_LAST - ABS_MT_FIRST; i++) {
 		abs = absinfo + i;
-		if (abs->active)
-			input_set_abs_params(input_dev, abs->code,
+		if (abs->active) {
+			if (abs->code >= 0 && abs->code < ABS_CNT)
+				input_set_abs_params(input_dev, abs->code,
 					abs->minimum, abs->maximum, 0, 0);
+			else
+				pr_err("%s: ABS code out of bound\n", __func__);
+		}
 	}
 
 	if (hbtp->override_disp_coords) {
@@ -521,15 +526,17 @@ static int hbtp_pinctrl_enable(struct hbtp_data *ts, bool on)
 	if (rc < 0)
 		return -EINVAL;
 
-	rc = hbtp_ddic_rst_select(ts, true);
-	if (rc < 0)
-		goto err_ddic_rst_pinctrl_enable;
+	if (ts->ddic_rst_enabled) {
+		rc = hbtp_ddic_rst_select(ts, true);
+		if (rc < 0)
+			goto err_ddic_rst_pinctrl_enable;
+	}
 
 	return rc;
 
 pinctrl_suspend:
-	if (ts->ddic_rst_state_suspend)
-		hbtp_ddic_rst_select(ts, true);
+	if (ts->ddic_rst_enabled)
+		hbtp_ddic_rst_select(ts, false);
 err_ddic_rst_pinctrl_enable:
 	hbtp_gpio_select(ts, false);
 	return rc;
@@ -1078,8 +1085,10 @@ static int hbtp_pinctrl_init(struct hbtp_data *data)
 			dev_err(&data->pdev->dev, "count(%u) is not same as %u\n",
 				(u32)count, HBTP_PINCTRL_DDIC_SEQ_NUM);
 		}
+
+		data->ddic_rst_enabled = true;
 	} else {
-		dev_err(&data->pdev->dev, "ddic pinctrl act/sus not found\n");
+		dev_warn(&data->pdev->dev, "ddic pinctrl act/sus not found\n");
 	}
 
 	data->manage_pin_ctrl = true;

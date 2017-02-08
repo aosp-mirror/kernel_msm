@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2202,7 +2202,7 @@ static void tasha_mbhc_moisture_config(struct wcd_mbhc *mbhc)
 {
 	struct snd_soc_codec *codec = mbhc->codec;
 
-	if (TASHA_MBHC_MOISTURE_VREF == V_OFF)
+	if (mbhc->moist_vref == V_OFF)
 		return;
 
 	/* Donot enable moisture detection if jack type is NC */
@@ -2213,8 +2213,8 @@ static void tasha_mbhc_moisture_config(struct wcd_mbhc *mbhc)
 	}
 
 	snd_soc_update_bits(codec, WCD9335_MBHC_CTL_2,
-			    0x0C, TASHA_MBHC_MOISTURE_VREF << 2);
-	tasha_mbhc_hph_l_pull_up_control(codec, TASHA_MBHC_MOISTURE_IREF);
+			    0x0C, mbhc->moist_vref << 2);
+	tasha_mbhc_hph_l_pull_up_control(codec, mbhc->moist_iref);
 }
 
 static const struct wcd_mbhc_cb mbhc_cb = {
@@ -7931,6 +7931,13 @@ static int tasha_mad_input_put(struct snd_kcontrol *kcontrol,
 
 	tasha_mad_input = ucontrol->value.integer.value[0];
 
+	if (tasha_mad_input >= ARRAY_SIZE(tasha_conn_mad_text)) {
+		dev_err(codec->dev,
+			"%s: tasha_mad_input = %d out of bounds\n",
+			__func__, tasha_mad_input);
+		return -EINVAL;
+	}
+
 	if (!strcmp(tasha_conn_mad_text[tasha_mad_input], "NOTUSED1") ||
 	    !strcmp(tasha_conn_mad_text[tasha_mad_input], "NOTUSED2") ||
 	    !strcmp(tasha_conn_mad_text[tasha_mad_input], "NOTUSED3") ||
@@ -13441,8 +13448,6 @@ static int tasha_post_reset_cb(struct wcd9xxx *wcd9xxx)
 
 	/* Class-H Init*/
 	wcd_clsh_init(&tasha->clsh_d);
-	/* Default HPH Mode to Class-H HiFi */
-	tasha->hph_mode = CLS_H_HIFI;
 
 	for (i = 0; i < TASHA_MAX_MICBIAS; i++)
 		tasha->micb_ref[i] = 0;
@@ -13450,8 +13455,6 @@ static int tasha_post_reset_cb(struct wcd9xxx *wcd9xxx)
 	tasha_update_reg_defaults(tasha);
 
 	tasha->codec = codec;
-	for (i = 0; i < COMPANDER_MAX; i++)
-		tasha->comp_enabled[i] = 0;
 
 	dev_dbg(codec->dev, "%s: MCLK Rate = %x\n",
 		__func__, control->mclk_rate);
@@ -13688,6 +13691,7 @@ static int tasha_codec_probe(struct snd_soc_codec *codec)
 		snd_soc_dapm_ignore_suspend(dapm, "AIF Mix Playback");
 		snd_soc_dapm_ignore_suspend(dapm, "AIF4 MAD TX");
 		snd_soc_dapm_ignore_suspend(dapm, "VIfeed");
+		snd_soc_dapm_ignore_suspend(dapm, "AIF5 CPE TX");
 	}
 
 	snd_soc_dapm_sync(dapm);

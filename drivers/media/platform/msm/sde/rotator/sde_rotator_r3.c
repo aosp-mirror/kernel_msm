@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -35,6 +35,12 @@
 #include "sde_rotator_r3_debug.h"
 #include "sde_rotator_trace.h"
 #include "sde_rotator_debug.h"
+
+#define RES_UHD              (3840*2160)
+
+/* traffic shaping clock ticks = finish_time x 19.2MHz */
+#define TRAFFIC_SHAPE_CLKTICK_14MS   268800
+#define TRAFFIC_SHAPE_CLKTICK_12MS   230400
 
 /* XIN mapping */
 #define XIN_SSPP		0
@@ -641,12 +647,27 @@ static void sde_hw_rotator_setup_fetchengine(struct sde_hw_rotator_context *ctx,
 			((rot->highest_bank & 0x3) << 18));
 
 	/* setup source buffer plane security status */
-	if (flags & SDE_ROT_FLAG_SECURE_OVERLAY_SESSION) {
+	if (flags & (SDE_ROT_FLAG_SECURE_OVERLAY_SESSION |
+			SDE_ROT_FLAG_SECURE_CAMERA_SESSION)) {
 		SDE_REGDMA_WRITE(wrptr, ROT_SSPP_SRC_ADDR_SW_STATUS, 0xF);
 		ctx->is_secure = true;
 	} else {
 		SDE_REGDMA_WRITE(wrptr, ROT_SSPP_SRC_ADDR_SW_STATUS, 0);
 		ctx->is_secure = false;
+	}
+
+	/*
+	 * Determine if traffic shaping is required. Only enable traffic
+	 * shaping when content is 4k@30fps. The actual traffic shaping
+	 * bandwidth calculation is done in output setup.
+	 */
+	if (((cfg->src_rect->w * cfg->src_rect->h) >= RES_UHD) &&
+			(cfg->fps <= 30)) {
+		SDEROT_DBG("Enable Traffic Shaper\n");
+		ctx->is_traffic_shaping = true;
+	} else {
+		SDEROT_DBG("Disable Traffic Shaper\n");
+		ctx->is_traffic_shaping = false;
 	}
 
 	/* Update command queue write ptr */
@@ -739,7 +760,8 @@ static void sde_hw_rotator_setup_wbengine(struct sde_hw_rotator_context *ctx,
 	SDE_REGDMA_WRITE(wrptr, ROT_WB_OUT_XY,
 			cfg->dst_rect->x | (cfg->dst_rect->y << 16));
 
-	if (flags & SDE_ROT_FLAG_SECURE_OVERLAY_SESSION)
+	if (flags & (SDE_ROT_FLAG_SECURE_OVERLAY_SESSION |
+			SDE_ROT_FLAG_SECURE_CAMERA_SESSION))
 		SDE_REGDMA_WRITE(wrptr, ROT_WB_DST_ADDR_SW_STATUS, 0x1);
 	else
 		SDE_REGDMA_WRITE(wrptr, ROT_WB_DST_ADDR_SW_STATUS, 0);
@@ -759,6 +781,36 @@ static void sde_hw_rotator_setup_wbengine(struct sde_hw_rotator_context *ctx,
 		SDE_REGDMA_WRITE(wrptr, ROTTOP_OP_MODE, 0x3);
 	else
 		SDE_REGDMA_WRITE(wrptr, ROTTOP_OP_MODE, 0x1);
+
+	/* setup traffic shaper for 4k 30fps content */
+	if (ctx->is_traffic_shaping) {
+		u32 bw;
+
+		/*
+		 * Target to finish in 12ms, and we need to set number of bytes
+		 * per clock tick for traffic shaping.
+		 * Each clock tick run @ 19.2MHz, so we need we know total of
+		 * clock ticks in 14ms, i.e. 12ms/(1/19.2MHz) ==> 23040
+		 * Finally, calcualte the byte count per clock tick based on
+		 * resolution, bpp and compression ratio.
+		 */
+		bw = cfg->dst_rect->w * cfg->dst_rect->h;
+
+		if (fmt->chroma_sample == SDE_MDP_CHROMA_420)
+			bw = (bw * 3) / 2;
+		else
+			bw *= fmt->bpp;
+
+		bw /= TRAFFIC_SHAPE_CLKTICK_12MS;
+		if (bw > 0xFF)
+			bw = 0xFF;
+		SDE_REGDMA_WRITE(wrptr, ROT_WB_TRAFFIC_SHAPER_WR_CLIENT,
+				BIT(31) | bw);
+		SDEROT_DBG("Enable ROT_WB Traffic Shaper:%d\n", bw);
+	} else {
+		SDE_REGDMA_WRITE(wrptr, ROT_WB_TRAFFIC_SHAPER_WR_CLIENT, 0);
+		SDEROT_DBG("Disable ROT_WB Traffic Shaper\n");
+	}
 
 	/* Update command queue write ptr */
 	sde_hw_rotator_put_regdma_segment(ctx, wrptr);
@@ -1037,6 +1089,7 @@ static u32 sde_hw_rotator_wait_done_regdma(
 				!sde_hw_rotator_pending_swts(rot, ctx, &swts),
 				KOFF_TIMEOUT);
 
+		ATRACE_INT("sde_rot_done", 0);
 		spin_lock_irqsave(&rot->rotisr_lock, flags);
 
 		last_isr = ctx->last_regdma_isr_status;
@@ -1076,21 +1129,33 @@ static u32 sde_hw_rotator_wait_done_regdma(
 		spin_unlock_irqrestore(&rot->rotisr_lock, flags);
 	} else {
 		int cnt = 200;
+		bool pending;
 
 		do {
 			udelay(500);
-			status = SDE_ROTREG_READ(rot->mdss_base, ROTTOP_STATUS);
+			last_isr = SDE_ROTREG_READ(rot->mdss_base,
+					REGDMA_CSR_REGDMA_INT_STATUS);
+			pending = sde_hw_rotator_pending_swts(rot, ctx, &swts);
 			cnt--;
-		} while ((cnt > 0) && (status & ROT_BUSY_BIT)
-				&& ((status & ROT_ERROR_BIT) == 0));
+		} while ((cnt > 0) && pending &&
+				((last_isr & REGDMA_INT_ERR_MASK) == 0));
 
-		if (status & ROT_ERROR_BIT)
-			SDEROT_ERR("Rotator error\n");
-		else if (status & ROT_BUSY_BIT)
-			SDEROT_ERR("Rotator busy\n");
+		if (last_isr & REGDMA_INT_ERR_MASK) {
+			SDEROT_ERR("Rotator error, ts:0x%X/0x%X status:%x\n",
+				ctx->timestamp, swts, last_isr);
+			sde_hw_rotator_dump_status(rot);
+			status = ROT_ERROR_BIT;
+		} else if (pending) {
+			SDEROT_ERR("Rotator timeout, ts:0x%X/0x%X status:%x\n",
+				ctx->timestamp, swts, last_isr);
+			sde_hw_rotator_dump_status(rot);
+			status = ROT_ERROR_BIT;
+		} else {
+			status = 0;
+		}
 
 		SDE_ROTREG_WRITE(rot->mdss_base, REGDMA_CSR_REGDMA_INT_CLEAR,
-				0xFFFF);
+				last_isr);
 	}
 
 	sts = (status & ROT_ERROR_BIT) ? -ENODEV : 0;
@@ -1131,14 +1196,10 @@ static int sde_hw_rotator_swts_create(struct sde_hw_rotator *rot)
 	int rc = 0;
 	struct ion_handle *handle;
 	struct sde_mdp_img_data *data;
+	struct sde_rot_data_type *mdata = sde_rot_get_mdata();
 	u32 bufsize = sizeof(int) * SDE_HW_ROT_REGDMA_TOTAL_CTX * 2;
 
-	rot->iclient = msm_ion_client_create(rot->pdev->name);
-	if (IS_ERR_OR_NULL(rot->iclient)) {
-		SDEROT_ERR("msm_ion_client_create() return error (%p)\n",
-				rot->iclient);
-		return -EINVAL;
-	}
+	rot->iclient = mdata->iclient;
 
 	handle = ion_alloc(rot->iclient, bufsize, SZ_4K,
 			ION_HEAP(ION_SYSTEM_HEAP_ID), 0);
@@ -1564,9 +1625,14 @@ static int sde_hw_rotator_config(struct sde_rot_hw_resource *hw,
 			SDE_ROT_FLAG_DEINTERLACE : 0;
 	flags |= (item->flags & SDE_ROTATION_SECURE) ?
 			SDE_ROT_FLAG_SECURE_OVERLAY_SESSION : 0;
+	flags |= (item->flags & SDE_ROTATION_SECURE_CAMERA) ?
+			SDE_ROT_FLAG_SECURE_CAMERA_SESSION : 0;
+
 
 	sspp_cfg.img_width = item->input.width;
 	sspp_cfg.img_height = item->input.height;
+	sspp_cfg.fps = entry->perf->config.frame_rate;
+	sspp_cfg.bw = entry->perf->bw;
 	sspp_cfg.fmt = sde_get_format_params(item->input.format);
 	if (!sspp_cfg.fmt) {
 		SDEROT_ERR("null format\n");
@@ -1586,6 +1652,8 @@ static int sde_hw_rotator_config(struct sde_rot_hw_resource *hw,
 
 	wb_cfg.img_width = item->output.width;
 	wb_cfg.img_height = item->output.height;
+	wb_cfg.fps = entry->perf->config.frame_rate;
+	wb_cfg.bw = entry->perf->bw;
 	wb_cfg.fmt = sde_get_format_params(item->output.format);
 	wb_cfg.dst_rect = &item->dst_rect;
 	wb_cfg.data = &entry->dst_buf;
@@ -1629,7 +1697,9 @@ static int sde_hw_rotator_config(struct sde_rot_hw_resource *hw,
 				MMSS_VBIF_NRT_VBIF_CLK_FORCE_CTRL0;
 		ot_params.bit_off_mdp_clk_ctrl =
 				MMSS_VBIF_NRT_VBIF_CLK_FORCE_CTRL0_XIN0;
-		ot_params.fmt = entry->perf->config.input.format;
+		ot_params.fmt = ctx->is_traffic_shaping ?
+			SDE_PIX_FMT_ABGR_8888 :
+			entry->perf->config.input.format;
 		sde_mdp_set_ot_limit(&ot_params);
 	}
 
@@ -1647,7 +1717,9 @@ static int sde_hw_rotator_config(struct sde_rot_hw_resource *hw,
 				MMSS_VBIF_NRT_VBIF_CLK_FORCE_CTRL0;
 		ot_params.bit_off_mdp_clk_ctrl =
 				MMSS_VBIF_NRT_VBIF_CLK_FORCE_CTRL0_XIN1;
-		ot_params.fmt = entry->perf->config.input.format;
+		ot_params.fmt = ctx->is_traffic_shaping ?
+			SDE_PIX_FMT_ABGR_8888 :
+			entry->perf->config.input.format;
 		sde_mdp_set_ot_limit(&ot_params);
 	}
 
@@ -1698,7 +1770,6 @@ static int sde_hw_rotator_kickoff(struct sde_rot_hw_resource *hw,
 	struct sde_hw_rotator *rot;
 	struct sde_hw_rotator_resource_info *resinfo;
 	struct sde_hw_rotator_context *ctx;
-	int ret = 0;
 
 	if (!hw || !entry) {
 		SDEROT_ERR("null hw resource/entry\n");
@@ -1714,12 +1785,6 @@ static int sde_hw_rotator_kickoff(struct sde_rot_hw_resource *hw,
 		SDEROT_ERR("Cannot locate rotator ctx from sesison id:%d\n",
 				entry->item.session_id);
 		return -EINVAL;
-	}
-
-	ret = sde_smmu_ctrl(1);
-	if (IS_ERR_VALUE(ret)) {
-		SDEROT_ERR("IOMMU attach failed\n");
-		return ret;
 	}
 
 	rot->ops.start_rotator(ctx, ctx->q_id);
@@ -1760,8 +1825,6 @@ static int sde_hw_rotator_wait4done(struct sde_rot_hw_resource *hw,
 	}
 
 	ret = rot->ops.wait_rotator_done(ctx, ctx->q_id, 0);
-
-	sde_smmu_ctrl(0);
 
 	if (rot->dbgmem) {
 		sde_hw_rotator_unmap_vaddr(&ctx->src_dbgbuf);
@@ -1808,13 +1871,14 @@ static int sde_rotator_hw_rev_init(struct sde_hw_rotator *rot)
 		set_bit(SDE_CAPS_R3_1P5_DOWNSCALE,  mdata->sde_caps_map);
 	}
 
+	set_bit(SDE_CAPS_SEC_ATTACH_DETACH_SMMU, mdata->sde_caps_map);
+
 	mdata->nrt_vbif_dbg_bus = nrt_vbif_dbg_bus_r3;
 	mdata->nrt_vbif_dbg_bus_size =
 			ARRAY_SIZE(nrt_vbif_dbg_bus_r3);
 
 	mdata->regdump = sde_rot_r3_regdump;
 	mdata->regdump_size = ARRAY_SIZE(sde_rot_r3_regdump);
-
 	SDE_ROTREG_WRITE(rot->mdss_base, REGDMA_TIMESTAMP_REG, 0);
 	return 0;
 }
@@ -2095,6 +2159,8 @@ static ssize_t sde_hw_rotator_show_caps(struct sde_rot_mgr *mgr,
 		SPRINT("min_downscale=1.5\n");
 	else
 		SPRINT("min_downscale=2.0\n");
+
+	SPRINT("downscale_compression=1\n");
 
 #undef SPRINT
 	return cnt;

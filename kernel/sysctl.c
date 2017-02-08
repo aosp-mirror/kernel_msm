@@ -289,13 +289,6 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
 	},
-	{
-		.procname	= "sched_wake_to_idle",
-		.data		= &sysctl_sched_wake_to_idle,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-	},
 #ifdef CONFIG_SCHED_HMP
 	{
 		.procname	= "sched_freq_reporting_policy",
@@ -411,15 +404,6 @@ static struct ctl_table kern_table[] = {
 		.extra1		= &zero,
 	},
 	{
-		.procname       = "sched_enable_colocation",
-		.data           = &sysctl_sched_enable_colocation,
-		.maxlen         = sizeof(unsigned int),
-		.mode           = 0644,
-		.proc_handler   = proc_dointvec,
-		.extra1		= &zero,
-		.extra2		= &one,
-	},
-	{
 		.procname	= "sched_restrict_cluster_spill",
 		.data		= &sysctl_sched_restrict_cluster_spill,
 		.maxlen		= sizeof(unsigned int),
@@ -507,6 +491,20 @@ static struct ctl_table kern_table[] = {
 		.extra1         = &zero,
 		.extra2		= &three,
 	},
+	{
+		.procname	= "sched_short_burst_ns",
+		.data		= &sysctl_sched_short_burst,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname       = "sched_short_sleep_ns",
+		.data           = &sysctl_sched_short_sleep,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec,
+	},
 #endif	/* CONFIG_SCHED_HMP */
 #ifdef CONFIG_SCHED_DEBUG
 	{
@@ -526,6 +524,34 @@ static struct ctl_table kern_table[] = {
 		.proc_handler	= sched_proc_update_handler,
 		.extra1		= &min_sched_granularity_ns,
 		.extra2		= &max_sched_granularity_ns,
+	},
+	{
+		.procname	= "sched_is_big_little",
+		.data		= &sysctl_sched_is_big_little,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "sched_sync_hint_enable",
+		.data		= &sysctl_sched_sync_hint_enable,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "sched_initial_task_util",
+		.data		= &sysctl_sched_initial_task_util,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "sched_cstate_aware",
+		.data		= &sysctl_sched_cstate_aware,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
 	},
 	{
 		.procname	= "sched_wakeup_granularity_ns",

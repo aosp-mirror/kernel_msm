@@ -39,11 +39,6 @@
 #define EDP_PORT_MAX		1
 #define EDP_SINK_CAP_LEN	16
 
-#define EDP_AUX_ERR_NONE	0
-#define EDP_AUX_ERR_ADDR	-1
-#define EDP_AUX_ERR_TOUT	-2
-#define EDP_AUX_ERR_NACK	-3
-
 /* 4 bits of aux command */
 #define EDP_CMD_AUX_WRITE	0x8
 #define EDP_CMD_AUX_READ	0x9
@@ -228,6 +223,7 @@ struct dp_alt_mode {
 #define DP_LINK_RATE_MAX	DP_LINK_RATE_540
 
 #define DP_LINK_RATE_MULTIPLIER	27000000
+#define DP_KHZ_TO_HZ            1000
 #define DP_MAX_PIXEL_CLK_KHZ	675000
 struct downstream_port_config {
 	/* Byte 02205h */
@@ -272,6 +268,7 @@ struct dpcd_test_request {
 	u32 test_requested;
 	u32 test_link_rate;
 	u32 test_lane_count;
+	u32 phy_test_pattern_sel;
 	u32 response;
 };
 
@@ -387,6 +384,7 @@ struct mdss_dp_drv_pdata {
 	struct platform_device *ext_pdev;
 
 	struct usbpd *pd;
+	enum plug_orientation orientation;
 	struct dp_hdcp hdcp;
 	struct usbpd_svid_handler svid_handler;
 	struct dp_alt_mode alt_mode;
@@ -401,6 +399,9 @@ struct mdss_dp_drv_pdata {
 	bool core_clks_on;
 	bool link_clks_on;
 	bool power_on;
+	bool sink_info_read;
+	bool hpd;
+	bool psm_enabled;
 
 	/* dp specific */
 	unsigned char *base;
@@ -437,6 +438,7 @@ struct mdss_dp_drv_pdata {
 	struct dss_module_power power_data[DP_MAX_PM];
 	struct dp_pinctrl_res pin_res;
 	int aux_sel_gpio;
+	int aux_sel_gpio_output;
 	int aux_en_gpio;
 	int usbplug_cc_gpio;
 	int hpd_gpio;
@@ -489,12 +491,12 @@ struct mdss_dp_drv_pdata {
 	u32 current_event;
 	spinlock_t event_lock;
 	spinlock_t lock;
-	struct hdmi_util_ds_data ds_data;
 	struct switch_dev sdev;
 	struct kobject *kobj;
 	u32 max_pclk_khz;
 	u32 vic;
 	u32 new_vic;
+	u16 dpcd_version;
 	int fb_node;
 	int hdcp_status;
 
@@ -510,24 +512,104 @@ enum dp_lane_count {
 	DP_LANE_COUNT_4	= 4,
 };
 
+enum phy_test_pattern {
+	PHY_TEST_PATTERN_NONE,
+	PHY_TEST_PATTERN_D10_2_NO_SCRAMBLING,
+	PHY_TEST_PATTERN_SYMBOL_ERR_MEASUREMENT_CNT,
+	PHY_TEST_PATTERN_PRBS7,
+	PHY_TEST_PATTERN_80_BIT_CUSTOM_PATTERN,
+	PHY_TEST_PATTERN_HBR2_CTS_EYE_PATTERN,
+};
+
+static inline char *mdss_dp_get_phy_test_pattern(u32 phy_test_pattern_sel)
+{
+	switch (phy_test_pattern_sel) {
+	case PHY_TEST_PATTERN_NONE:
+		return DP_ENUM_STR(PHY_TEST_PATTERN_NONE);
+	case PHY_TEST_PATTERN_D10_2_NO_SCRAMBLING:
+		return DP_ENUM_STR(PHY_TEST_PATTERN_D10_2_NO_SCRAMBLING);
+	case PHY_TEST_PATTERN_SYMBOL_ERR_MEASUREMENT_CNT:
+		return DP_ENUM_STR(PHY_TEST_PATTERN_SYMBOL_ERR_MEASUREMENT_CNT);
+	case PHY_TEST_PATTERN_PRBS7:
+		return DP_ENUM_STR(PHY_TEST_PATTERN_PRBS7);
+	case PHY_TEST_PATTERN_80_BIT_CUSTOM_PATTERN:
+		return DP_ENUM_STR(PHY_TEST_PATTERN_80_BIT_CUSTOM_PATTERN);
+	case PHY_TEST_PATTERN_HBR2_CTS_EYE_PATTERN:
+		return DP_ENUM_STR(PHY_TEST_PATTERN_HBR2_CTS_EYE_PATTERN);
+	default:
+		return "unknown";
+	}
+}
+
+static inline bool mdss_dp_is_phy_test_pattern_supported(
+		u32 phy_test_pattern_sel)
+{
+	switch (phy_test_pattern_sel) {
+	case PHY_TEST_PATTERN_NONE:
+	case PHY_TEST_PATTERN_D10_2_NO_SCRAMBLING:
+	case PHY_TEST_PATTERN_SYMBOL_ERR_MEASUREMENT_CNT:
+	case PHY_TEST_PATTERN_PRBS7:
+	case PHY_TEST_PATTERN_80_BIT_CUSTOM_PATTERN:
+	case PHY_TEST_PATTERN_HBR2_CTS_EYE_PATTERN:
+		return true;
+	default:
+		return false;
+	}
+}
+
+enum dp_aux_error {
+	EDP_AUX_ERR_NONE	= 0,
+	EDP_AUX_ERR_ADDR	= -1,
+	EDP_AUX_ERR_TOUT	= -2,
+	EDP_AUX_ERR_NACK	= -3,
+	EDP_AUX_ERR_DEFER	= -4,
+	EDP_AUX_ERR_NACK_DEFER	= -5,
+};
+
+static inline char *mdss_dp_get_aux_error(u32 aux_error)
+{
+	switch (aux_error) {
+	case EDP_AUX_ERR_NONE:
+		return DP_ENUM_STR(EDP_AUX_ERR_NONE);
+	case EDP_AUX_ERR_ADDR:
+		return DP_ENUM_STR(EDP_AUX_ERR_ADDR);
+	case EDP_AUX_ERR_TOUT:
+		return DP_ENUM_STR(EDP_AUX_ERR_TOUT);
+	case EDP_AUX_ERR_NACK:
+		return DP_ENUM_STR(EDP_AUX_ERR_NACK);
+	case EDP_AUX_ERR_DEFER:
+		return DP_ENUM_STR(EDP_AUX_ERR_DEFER);
+	case EDP_AUX_ERR_NACK_DEFER:
+		return DP_ENUM_STR(EDP_AUX_ERR_NACK_DEFER);
+	default:
+		return "unknown";
+	}
+}
+
 enum test_response {
-	TEST_NACK	= 0x0,
-	TEST_ACK	= 0x1,
+	TEST_ACK			= 0x1,
+	TEST_NACK			= 0x2,
+	TEST_EDID_CHECKSUM_WRITE	= 0x4,
 };
 
 static inline char *mdss_dp_get_test_response(u32 test_response)
 {
 	switch (test_response) {
-	case TEST_NACK:		return DP_ENUM_STR(TEST_NACK);
-	case TEST_ACK:		return DP_ENUM_STR(TEST_ACK);
-	default:		return "unknown";
+	case TEST_NACK:
+		return DP_ENUM_STR(TEST_NACK);
+	case TEST_ACK:
+		return DP_ENUM_STR(TEST_ACK);
+	case TEST_EDID_CHECKSUM_WRITE:
+		return DP_ENUM_STR(TEST_EDID_CHECKSUM_WRITE);
+	default:
+		return "unknown";
 	}
 }
 
 enum test_type {
 	UNKNOWN_TEST		= 0,
 	TEST_LINK_TRAINING	= BIT(0),
-	TEST_PATTERN		= BIT(1),
+	PHY_TEST_PATTERN	= BIT(3),
 	TEST_EDID_READ		= BIT(2),
 };
 
@@ -535,7 +617,7 @@ static inline char *mdss_dp_get_test_name(u32 test_requested)
 {
 	switch (test_requested) {
 	case TEST_LINK_TRAINING:	return DP_ENUM_STR(TEST_LINK_TRAINING);
-	case TEST_PATTERN:		return DP_ENUM_STR(TEST_PATTERN);
+	case PHY_TEST_PATTERN:		return DP_ENUM_STR(PHY_TEST_PATTERN);
 	case TEST_EDID_READ:		return DP_ENUM_STR(TEST_EDID_READ);
 	default:			return "unknown";
 	}
@@ -601,10 +683,16 @@ void mdss_dp_lane_power_ctrl(struct mdss_dp_drv_pdata *ep, int up);
 void mdss_dp_config_ctrl(struct mdss_dp_drv_pdata *ep);
 char mdss_dp_gen_link_clk(struct mdss_panel_info *pinfo, char lane_cnt);
 int mdss_dp_aux_set_sink_power_state(struct mdss_dp_drv_pdata *ep, char state);
+int mdss_dp_aux_send_psm_request(struct mdss_dp_drv_pdata *dp, bool enable);
 void mdss_dp_aux_send_test_response(struct mdss_dp_drv_pdata *ep);
 void *mdss_dp_get_hdcp_data(struct device *dev);
 int mdss_dp_hdcp2p2_init(struct mdss_dp_drv_pdata *dp_drv);
 bool mdss_dp_aux_clock_recovery_done(struct mdss_dp_drv_pdata *ep);
 bool mdss_dp_aux_channel_eq_done(struct mdss_dp_drv_pdata *ep);
+bool mdss_dp_aux_is_link_rate_valid(u32 link_rate);
+bool mdss_dp_aux_is_lane_count_valid(u32 lane_count);
+int mdss_dp_aux_link_status_read(struct mdss_dp_drv_pdata *ep, int len);
+void mdss_dp_aux_update_voltage_and_pre_emphasis_lvl(
+		struct mdss_dp_drv_pdata *dp);
 
 #endif /* MDSS_DP_H */

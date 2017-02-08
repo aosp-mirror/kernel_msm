@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -134,7 +134,7 @@ void mdss_dsi_ctrl_init(struct device *ctrl_dev,
 	}
 }
 
-static void mdss_dsi_set_reg(struct mdss_dsi_ctrl_pdata *ctrl, int off,
+void mdss_dsi_set_reg(struct mdss_dsi_ctrl_pdata *ctrl, int off,
 						u32 mask, u32 val)
 {
 	u32 data;
@@ -1216,6 +1216,15 @@ void mdss_dsi_dsc_config(struct mdss_dsi_ctrl_pdata *ctrl, struct dsc_desc *dsc)
 {
 	u32 data, offset;
 
+	if (!dsc) {
+		if (ctrl->panel_mode == DSI_VIDEO_MODE)
+			offset = MDSS_DSI_VIDEO_COMPRESSION_MODE_CTRL;
+		else
+			offset = MDSS_DSI_COMMAND_COMPRESSION_MODE_CTRL;
+		MIPI_OUTP((ctrl->ctrl_base) + offset, 0);
+		return;
+	}
+
 	if (dsc->pkt_per_line <= 0) {
 		pr_err("%s: Error: pkt_per_line cannot be negative or 0\n",
 			__func__);
@@ -1334,8 +1343,6 @@ static void mdss_dsi_mode_setup(struct mdss_panel_data *pdata)
 		vsync_period = vspw + vbp + height + dummy_yres + vfp;
 		hsync_period = hspw + hbp + width + dummy_xres + hfp;
 
-		if (ctrl_pdata->timing_db_mode)
-			MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x1e8, 0x1);
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x24,
 			((hspw + hbp + width + dummy_xres) << 16 |
 			(hspw + hbp)));
@@ -1349,8 +1356,6 @@ static void mdss_dsi_mode_setup(struct mdss_panel_data *pdata)
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x30, (hspw << 16));
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x34, 0);
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x38, (vspw << 16));
-		if (ctrl_pdata->timing_db_mode)
-			MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x1e4, 0x1);
 	} else {		/* command mode */
 		if (mipi->dst_format == DSI_CMD_DST_FORMAT_RGB888)
 			bpp = 3;
@@ -1404,8 +1409,7 @@ static void mdss_dsi_mode_setup(struct mdss_panel_data *pdata)
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x5C, stream_total);
 	}
 
-	if (dsc)	/* compressed */
-		mdss_dsi_dsc_config(ctrl_pdata, dsc);
+	mdss_dsi_dsc_config(ctrl_pdata, dsc);
 }
 
 void mdss_dsi_ctrl_setup(struct mdss_dsi_ctrl_pdata *ctrl)
@@ -2142,7 +2146,7 @@ static int mdss_dsi_cmd_dma_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 	u32 *lp, *temp, data;
 	int i, j = 0, off, cnt;
 	bool ack_error = false;
-	char reg[16];
+	char reg[16] = {0x0};
 	int repeated_bytes = 0;
 
 	lp = (u32 *)rp->data;
@@ -2978,7 +2982,7 @@ bool mdss_dsi_dln0_phy_err(struct mdss_dsi_ctrl_pdata *ctrl, bool print_en)
 
 static bool mdss_dsi_fifo_status(struct mdss_dsi_ctrl_pdata *ctrl)
 {
-	u32 status, isr;
+	u32 status;
 	unsigned char *base;
 	bool ret = false;
 
@@ -2990,17 +2994,7 @@ static bool mdss_dsi_fifo_status(struct mdss_dsi_ctrl_pdata *ctrl)
 	if (status & 0xcccc4409) {
 		MIPI_OUTP(base + 0x000c, status);
 
-		/*
-		 * When dynamic refresh operation is under progress, it is
-		 * expected to have FIFO underflow error sometimes. In such
-		 * cases, do not trigger the underflow recovery process and
-		 * avoid printing the error status on console.
-		 */
-		isr = MIPI_INP(ctrl->ctrl_base + 0x0110);
-		if (isr & DSI_INTR_DYNAMIC_REFRESH_MASK)
-			status &= ~(0x88880000);
-		else
-			pr_err("%s: status=%x\n", __func__, status);
+		pr_err("%s: status=%x\n", __func__, status);
 
 		if (status & 0x44440000) {/* DLNx_HS_FIFO_OVERFLOW */
 			dsi_send_events(ctrl, DSI_EV_DLNx_FIFO_OVERFLOW, 0);
@@ -3048,6 +3042,10 @@ static bool mdss_dsi_clk_status(struct mdss_dsi_ctrl_pdata *ctrl)
 
 	if (status & 0x10000) { /* DSI_CLK_PLL_UNLOCKED */
 		MIPI_OUTP(base + 0x0120, status);
+		/* If PLL unlock is masked, do not report error */
+		if (MIPI_INP(base + 0x10c) & BIT(28))
+			return false;
+
 		dsi_send_events(ctrl, DSI_EV_PLL_UNLOCKED, 0);
 		pr_err("%s: status=%x\n", __func__, status);
 		ret = true;
@@ -3134,6 +3132,11 @@ irqreturn_t mdss_dsi_isr(int irq, void *ptr)
 
 	pr_debug("%s: ndx=%d isr=%x\n", __func__, ctrl->ndx, isr);
 
+	if (isr & DSI_INTR_ERROR) {
+		MDSS_XLOG(ctrl->ndx, ctrl->mdp_busy, isr, 0x97);
+		mdss_dsi_error(ctrl);
+	}
+
 	if (isr & DSI_INTR_BTA_DONE) {
 		MDSS_XLOG(ctrl->ndx, ctrl->mdp_busy, isr, 0x96);
 		spin_lock(&ctrl->mdp_lock);
@@ -3156,11 +3159,6 @@ irqreturn_t mdss_dsi_isr(int irq, void *ptr)
 			mdss_dsi_set_reg(ctrl, 0x0c, 0x44440000, 0x44440000);
 		}
 		spin_unlock(&ctrl->mdp_lock);
-	}
-
-	if (isr & DSI_INTR_ERROR) {
-		MDSS_XLOG(ctrl->ndx, ctrl->mdp_busy, isr, 0x97);
-		mdss_dsi_error(ctrl);
 	}
 
 	if (isr & DSI_INTR_VIDEO_DONE) {

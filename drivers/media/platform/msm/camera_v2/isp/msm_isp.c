@@ -500,6 +500,10 @@ static int vfe_probe(struct platform_device *pdev)
 	memset(&vfe_common_data, 0, sizeof(vfe_common_data));
 	mutex_init(&vfe_common_data.vfe_common_mutex);
 	spin_lock_init(&vfe_common_data.common_dev_data_lock);
+	spin_lock_init(&vfe_common_data.vfe_irq_dump.
+			common_dev_irq_dump_lock);
+	spin_lock_init(&vfe_common_data.vfe_irq_dump.
+			common_dev_tasklet_dump_lock);
 	for (i = 0; i < (VFE_AXI_SRC_MAX * MAX_VFE); i++)
 		spin_lock_init(&(vfe_common_data.streams[i].lock));
 	for (i = 0; i < (MSM_ISP_STATS_MAX * MAX_VFE); i++)
@@ -655,8 +659,6 @@ int vfe_hw_probe(struct platform_device *pdev)
 		goto probe_fail3;
 	}
 	msm_isp_enable_debugfs(vfe_dev, msm_isp_bw_request_history);
-	vfe_dev->buf_mgr->num_iommu_secure_ctx =
-		vfe_dev->hw_info->num_iommu_secure_ctx;
 	vfe_dev->buf_mgr->init_done = 1;
 	vfe_dev->vfe_open_cnt = 0;
 	return rc;

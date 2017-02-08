@@ -483,6 +483,15 @@ config PANIC_ON_GLADIATOR_ERROR_V2
 
 		If unsure, say N.
 
+config MSM_GLADIATOR_ERROR_V2_MAIN_LOGGER_ONLY
+	depends on MSM_GLADIATOR_ERP_V2
+	bool "QCOM Gladiator error v2 main logger support only"
+	help
+	  Gladiator has two error loggers to report error captured.
+	  By default, two error loggers will both be enabled.
+	  This option enables only the main error logger.
+	  If unsure, say no
+
 config MSM_GLADIATOR_HANG_DETECT
 	tristate "MSM Gladiator Hang Detection Support"
 	help
@@ -628,12 +637,10 @@ config MSM_PERFORMANCE
 config MSM_PERFORMANCE_HOTPLUG_ON
 	bool "Hotplug functionality through msm_performance turned on"
 	depends on MSM_PERFORMANCE
-	default y
 	help
-	  If some other core-control driver is present turn off the core-control
-	  capability of msm_performance driver. Setting this flag to false will
-	  compile out the nodes needed for core-control functionality through
-	  msm_performance.
+	 Setting this flag to true will enable the nodes needed for core-control
+	 functionality of hot plugging cores through msm_performance if there is
+	 no default core-control driver available.
 
 endif # ARCH_QCOM
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -272,6 +272,10 @@ static struct spcom_device *spcom_dev;
 static int spcom_create_channel_chardev(const char *name);
 static int spcom_open(struct spcom_channel *ch, unsigned int timeout_msec);
 static int spcom_close(struct spcom_channel *ch);
+static void spcom_notify_rx_abort(void *handle, const void *priv,
+				  const void *pkt_priv);
+static struct spcom_channel *spcom_find_channel_by_name(const char *name);
+static int spcom_unlock_ion_buf(struct spcom_channel *ch, int fd);
 
 /**
  * spcom_is_ready() - driver is initialized and ready.
@@ -345,6 +349,9 @@ static int spcom_create_predefined_channels_chardev(void)
 static void spcom_link_state_notif_cb(struct glink_link_state_cb_info *cb_info,
 				      void *priv)
 {
+	struct spcom_channel *ch = NULL;
+	const char *ch_name = "sp_kernel";
+
 	spcom_dev->link_state = cb_info->link_state;
 
 	pr_debug("spcom_link_state_notif_cb called. transport = %s edge = %s\n",
@@ -352,11 +359,22 @@ static void spcom_link_state_notif_cb(struct glink_link_state_cb_info *cb_info,
 
 	switch (cb_info->link_state) {
 	case GLINK_LINK_STATE_UP:
-		pr_debug("GLINK_LINK_STATE_UP.\n");
+		pr_info("GLINK_LINK_STATE_UP.\n");
 		spcom_create_predefined_channels_chardev();
 		break;
 	case GLINK_LINK_STATE_DOWN:
-		pr_debug("GLINK_LINK_STATE_DOWN.\n");
+		pr_err("GLINK_LINK_STATE_DOWN.\n");
+
+		/*
+		 * Free all the SKP ION buffers that were locked
+		 * for SPSS app swapping, when remote subsystem reset.
+		 */
+		pr_debug("Free all SKP ION buffers on SSR.\n");
+		ch = spcom_find_channel_by_name(ch_name);
+		if (!ch)
+			pr_err("failed to find channel [%s].\n", ch_name);
+		else
+			spcom_unlock_ion_buf(ch, SPCOM_ION_FD_UNLOCK_ALL);
 		break;
 	default:
 		pr_err("unknown link_state [%d].\n", cb_info->link_state);
@@ -466,7 +484,14 @@ static void spcom_notify_state(void *handle, const void *priv, unsigned event)
 		 * This is not expected on normal operation.
 		 * This may happen upon remote SSR.
 		 */
-		pr_debug("GLINK_REMOTE_DISCONNECTED, ch [%s].\n", ch->name);
+		pr_err("GLINK_REMOTE_DISCONNECTED, ch [%s].\n", ch->name);
+
+		/*
+		 * Abort any blocking read() operation.
+		 * The glink notification might be after REMOTE_DISCONNECT.
+		 */
+		spcom_notify_rx_abort(NULL, ch, NULL);
+
 		/*
 		 * after glink_close(),
 		 * expecting notify GLINK_LOCAL_DISCONNECTED
@@ -515,7 +540,7 @@ static void spcom_notify_rx_abort(void *handle, const void *priv,
 
 	pr_debug("ch [%s] pending rx aborted.\n", ch->name);
 
-	if (spcom_is_channel_connected(ch)) {
+	if (spcom_is_channel_connected(ch) && (!ch->rx_abort)) {
 		ch->rx_abort = true;
 		complete_all(&ch->rx_done);
 	}
@@ -535,9 +560,9 @@ static void spcom_notify_tx_abort(void *handle, const void *priv,
 
 	pr_debug("ch [%s] pending tx aborted.\n", ch->name);
 
-	if (spcom_is_channel_connected(ch)) {
-		complete_all(&ch->tx_done);
+	if (spcom_is_channel_connected(ch) && (!ch->tx_abort)) {
 		ch->tx_abort = true;
+		complete_all(&ch->tx_done);
 	}
 }
 
@@ -731,7 +756,9 @@ static int spcom_close(struct spcom_channel *ch)
 
 	ch->glink_handle = NULL;
 	ch->ref_count = 0;
-
+	ch->rx_abort = false;
+	ch->tx_abort = false;
+	ch->glink_state = GLINK_LOCAL_DISCONNECTED;
 	ch->txn_id = INITIAL_TXN_ID; /* use non-zero nonce for debug */
 	ch->pid = 0;
 
@@ -1333,6 +1360,16 @@ static int spcom_handle_send_command(struct spcom_channel *ch,
 
 	pr_debug("send req/resp ch [%s] size [%d] .\n", ch->name, size);
 
+	/*
+	 * check that cmd buf size is at least struct size,
+	 * to allow access to struct fields.
+	 */
+	if (size < sizeof(*cmd)) {
+		pr_err("ch [%s] invalid cmd buf.\n",
+			ch->name);
+		return -EINVAL;
+	}
+
 	/* Check if remote side connect */
 	if (!spcom_is_channel_connected(ch)) {
 		pr_err("ch [%s] remote side not connect.\n", ch->name);
@@ -1343,6 +1380,18 @@ static int spcom_handle_send_command(struct spcom_channel *ch,
 	buf = &cmd->buf;
 	buf_size = cmd->buf_size;
 	timeout_msec = cmd->timeout_msec;
+
+	/* Check param validity */
+	if (buf_size > SPCOM_MAX_RESPONSE_SIZE) {
+		pr_err("ch [%s] invalid buf size [%d].\n",
+			ch->name, buf_size);
+		return -EINVAL;
+	}
+	if (size != sizeof(*cmd) + buf_size) {
+		pr_err("ch [%s] invalid cmd size [%d].\n",
+			ch->name, size);
+		return -EINVAL;
+	}
 
 	/* Allocate Buffers*/
 	tx_buf_size = sizeof(*hdr) + buf_size;
@@ -1404,6 +1453,11 @@ static int modify_ion_addr(void *buf,
 
 	if (fd < 0) {
 		pr_err("invalid fd [%d].\n", fd);
+		return -ENODEV;
+	}
+
+	if (buf_size < sizeof(uint64_t)) {
+		pr_err("buf size too small [%d].\n", buf_size);
 		return -ENODEV;
 	}
 
@@ -1469,6 +1523,16 @@ static int spcom_handle_send_modified_command(struct spcom_channel *ch,
 
 	pr_debug("send req/resp ch [%s] size [%d] .\n", ch->name, size);
 
+	/*
+	 * check that cmd buf size is at least struct size,
+	 * to allow access to struct fields.
+	 */
+	if (size < sizeof(*cmd)) {
+		pr_err("ch [%s] invalid cmd buf.\n",
+			ch->name);
+		return -EINVAL;
+	}
+
 	/* Check if remote side connect */
 	if (!spcom_is_channel_connected(ch)) {
 		pr_err("ch [%s] remote side not connect.\n", ch->name);
@@ -1480,6 +1544,18 @@ static int spcom_handle_send_modified_command(struct spcom_channel *ch,
 	buf_size = cmd->buf_size;
 	timeout_msec = cmd->timeout_msec;
 	memcpy(ion_info, cmd->ion_info, sizeof(ion_info));
+
+	/* Check param validity */
+	if (buf_size > SPCOM_MAX_RESPONSE_SIZE) {
+		pr_err("ch [%s] invalid buf size [%d].\n",
+			ch->name, buf_size);
+		return -EINVAL;
+	}
+	if (size != sizeof(*cmd) + buf_size) {
+		pr_err("ch [%s] invalid cmd size [%d].\n",
+			ch->name, size);
+		return -EINVAL;
+	}
 
 	/* Allocate Buffers*/
 	tx_buf_size = sizeof(*hdr) + buf_size;
@@ -1539,12 +1615,17 @@ static int spcom_handle_lock_ion_buf_command(struct spcom_channel *ch,
 	struct ion_handle *ion_handle;
 	int i;
 
+	if (size != sizeof(*cmd)) {
+		pr_err("cmd size [%d] , expected [%d].\n",
+		       (int) size,  (int) sizeof(*cmd));
+		return -EINVAL;
+	}
+
 	/* Check ION client */
 	if (spcom_dev->ion_client == NULL) {
 		pr_err("invalid ion client.\n");
 		return -ENODEV;
 	}
-
 
 	/* Get ION handle from fd - this increments the ref count */
 	ion_handle = ion_import_dma_buf(spcom_dev->ion_client, fd);
@@ -1578,18 +1659,18 @@ static int spcom_handle_lock_ion_buf_command(struct spcom_channel *ch,
 }
 
 /**
- * spcom_handle_unlock_ion_buf_command() - Unlock an ION buffer.
+ * spcom_unlock_ion_buf() - Unlock an ION buffer.
  *
  * Unlock an ION buffer, let it be free, when it is no longer being used by
  * the remote subsystem.
  */
-static int spcom_handle_unlock_ion_buf_command(struct spcom_channel *ch,
-					      void *cmd_buf, int size)
+static int spcom_unlock_ion_buf(struct spcom_channel *ch, int fd)
 {
-	struct spcom_user_command *cmd = cmd_buf;
-	int fd = cmd->arg;
 	struct ion_client *ion_client = spcom_dev->ion_client;
 	int i;
+	bool found = false;
+
+	pr_debug("Unlock ion buf ch [%s] fd [%d].\n", ch->name, fd);
 
 	/* Check ION client */
 	if (ion_client == NULL) {
@@ -1598,6 +1679,8 @@ static int spcom_handle_unlock_ion_buf_command(struct spcom_channel *ch,
 	}
 
 	if (fd == (int) SPCOM_ION_FD_UNLOCK_ALL) {
+		pr_debug("unlocked ALL ion buf ch [%s].\n", ch->name);
+		found = true;
 		/* unlock all ION buf */
 		for (i = 0 ; i < ARRAY_SIZE(ch->ion_handle_table) ; i++) {
 			if (ch->ion_handle_table[i] != NULL) {
@@ -1615,12 +1698,42 @@ static int spcom_handle_unlock_ion_buf_command(struct spcom_channel *ch,
 				ch->ion_handle_table[i] = NULL;
 				ch->ion_fd_table[i] = -1;
 				pr_debug("unlocked ion buf#[%d].\n", i);
+				found = true;
 				break;
 			}
 		}
 	}
 
+	if (!found) {
+		pr_err("ch [%s] fd [%d] was not found.\n", ch->name, fd);
+		return -ENODEV;
+	}
+
 	return 0;
+}
+
+/**
+ * spcom_handle_unlock_ion_buf_command() - Unlock an ION buffer.
+ *
+ * Unlock an ION buffer, let it be free, when it is no longer being used by
+ * the remote subsystem.
+ */
+static int spcom_handle_unlock_ion_buf_command(struct spcom_channel *ch,
+					      void *cmd_buf, int size)
+{
+	int ret;
+	struct spcom_user_command *cmd = cmd_buf;
+	int fd = cmd->arg;
+
+	if (size != sizeof(*cmd)) {
+		pr_err("cmd size [%d] , expected [%d].\n",
+		       (int) size,  (int) sizeof(*cmd));
+		return -EINVAL;
+	}
+
+	ret = spcom_unlock_ion_buf(ch, fd);
+
+	return ret;
 }
 
 /**
@@ -1744,6 +1857,13 @@ static int spcom_handle_read_req_resp(struct spcom_channel *ch,
 	if (!spcom_is_channel_connected(ch)) {
 		pr_err("ch [%s] remote side not connect.\n", ch->name);
 		return -ENOTCONN;
+	}
+
+	/* Check param validity */
+	if (size > SPCOM_MAX_RESPONSE_SIZE) {
+		pr_err("ch [%s] inavlid size [%d].\n",
+			ch->name, size);
+		return -EINVAL;
 	}
 
 	/* Allocate Buffers*/
@@ -2058,6 +2178,11 @@ static ssize_t spcom_device_read(struct file *filp, char __user *user_buff,
 		return -ENOMEM;
 
 	actual_size = spcom_handle_read(ch, buf, size);
+	if ((actual_size <= 0) || (actual_size > size)) {
+		pr_err("invalid actual_size [%d].\n", actual_size);
+		kfree(buf);
+		return -EFAULT;
+	}
 
 	ret = copy_to_user(user_buff, buf, actual_size);
 

@@ -169,7 +169,8 @@ static ssize_t panel_debug_base_reg_write(struct file *file,
 			break;
 		}
 		/* End of a hex value in given string */
-		bufp[NEXT_VALUE_OFFSET - 1] = 0;
+		if ((bufp + NEXT_VALUE_OFFSET - 1) < (buf + count))
+			bufp[NEXT_VALUE_OFFSET - 1] = 0;
 	}
 	if (len < PANEL_CMD_MIN_TX_COUNT) {
 		pr_err("wrong input reg len\n");
@@ -244,23 +245,19 @@ static ssize_t panel_debug_base_reg_read(struct file *file,
 	mdss_dsi_panel_cmd_read(ctrl_pdata, panel_reg[0], panel_reg[1],
 				NULL, rx_buf, dbg->cnt);
 
-	len = snprintf(panel_reg_buf, reg_buf_len, "0x%02zx: ", dbg->off);
-	if (len < 0)
-		goto read_reg_fail;
+	len = scnprintf(panel_reg_buf, reg_buf_len, "0x%02zx: ", dbg->off);
 
 	for (i = 0; (len < reg_buf_len) && (i < ctrl_pdata->rx_len); i++)
 		len += scnprintf(panel_reg_buf + len, reg_buf_len - len,
 				"0x%02x ", rx_buf[i]);
 
-	panel_reg_buf[len - 1] = '\n';
+	if (len)
+		panel_reg_buf[len - 1] = '\n';
 
 	if (mdata->debug_inf.debug_enable_clock)
 		mdata->debug_inf.debug_enable_clock(0);
 
-	if (len < 0 || len >= sizeof(panel_reg_buf))
-		return 0;
-
-	if ((count < sizeof(panel_reg_buf))
+	if ((count < reg_buf_len)
 			|| (copy_to_user(user_buf, panel_reg_buf, len)))
 		goto read_reg_fail;
 
@@ -1363,7 +1360,9 @@ static inline struct mdss_mdp_misr_map *mdss_misr_get_map(u32 block_id,
 						(mdata->mdp_rev ==
 							MDSS_MDP_HW_REV_300) ||
 						(mdata->mdp_rev ==
-							MDSS_MDP_HW_REV_301)) {
+							MDSS_MDP_HW_REV_301) ||
+						(mdata->mdp_rev ==
+							MDSS_MDP_HW_REV_320)) {
 						ctrl_reg += 0x8;
 						value_reg += 0x8;
 					}

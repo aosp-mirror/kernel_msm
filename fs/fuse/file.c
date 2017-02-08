@@ -435,6 +435,15 @@ static int fuse_flush(struct file *file, fl_owner_t id)
 	fuse_sync_writes(inode);
 	mutex_unlock(&inode->i_mutex);
 
+	if (test_bit(AS_ENOSPC, &file->f_mapping->flags) &&
+	    test_and_clear_bit(AS_ENOSPC, &file->f_mapping->flags))
+		err = -ENOSPC;
+	if (test_bit(AS_EIO, &file->f_mapping->flags) &&
+	    test_and_clear_bit(AS_EIO, &file->f_mapping->flags))
+		err = -EIO;
+	if (err)
+		return err;
+
 	req = fuse_get_req_nofail_nopages(fc, file);
 	memset(&inarg, 0, sizeof(inarg));
 	inarg.fh = ff->fh;
@@ -480,6 +489,21 @@ int fuse_fsync_common(struct file *file, loff_t start, loff_t end,
 		goto out;
 
 	fuse_sync_writes(inode);
+
+	/*
+	 * Due to implementation of fuse writeback
+	 * filemap_write_and_wait_range() does not catch errors.
+	 * We have to do this directly after fuse_sync_writes()
+	 */
+	if (test_bit(AS_ENOSPC, &file->f_mapping->flags) &&
+	    test_and_clear_bit(AS_ENOSPC, &file->f_mapping->flags))
+		err = -ENOSPC;
+	if (test_bit(AS_EIO, &file->f_mapping->flags) &&
+	    test_and_clear_bit(AS_EIO, &file->f_mapping->flags))
+		err = -EIO;
+	if (err)
+		goto out;
+
 	err = sync_inode_metadata(inode, 1);
 	if (err)
 		goto out;
@@ -875,6 +899,43 @@ static int fuse_readpages_fill(void *_data, struct page *page)
 		fuse_put_request(fc, req);
 		return -EIO;
 	}
+
+#ifdef CONFIG_CMA
+	if (is_cma_pageblock(page)) {
+		struct page *oldpage = page, *newpage;
+		int err;
+
+		/* make sure that old page is not free in-between the calls */
+		page_cache_get(oldpage);
+
+		newpage = alloc_page(GFP_HIGHUSER);
+		if (!newpage) {
+			page_cache_release(oldpage);
+			return -ENOMEM;
+		}
+
+		err = replace_page_cache_page(oldpage, newpage, GFP_KERNEL);
+		if (err) {
+			__free_page(newpage);
+			page_cache_release(oldpage);
+			return err;
+		}
+
+		/*
+		 * Decrement the count on new page to make page cache the only
+		 * owner of it
+		 */
+		lock_page(newpage);
+		put_page(newpage);
+
+		lru_cache_add_file(newpage);
+
+		/* finally release the old page and swap pointers */
+		unlock_page(oldpage);
+		page_cache_release(oldpage);
+		page = newpage;
+	}
+#endif
 
 	page_cache_get(page);
 	req->pages[req->num_pages] = page;

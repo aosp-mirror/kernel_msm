@@ -143,6 +143,12 @@ Optional Properties:
 				Specify the name of GPU temperature sensor. This name will be used
 				to get the temperature from the thermal driver API.
 
+- qcom,enable-midframe-timer:
+				Boolean. Enables the use of midframe sampling timer. This timer
+				samples the GPU powerstats if the cmdbatch expiry takes longer than
+				the threshold set by KGSL_GOVERNOR_CALL_INTERVAL. Enable only if
+				target has NAP state enabled.
+
 GPU Quirks:
 - qcom,gpu-quirk-two-pass-use-wfi:
 				Signal the GPU to set Set TWOPASSUSEWFI bit in
@@ -187,7 +193,7 @@ Documentation/devicetree/bindings/coresight/coresight.txt
 - coresight-child-list   List of phandles pointing to the children of this
                          component.
 - coresight-child-ports  List of input port numbers of the children.
-
+- coresight-atid         The unique ATID value of the coresight device
 
 Example of A330 GPU in MSM8916:
 

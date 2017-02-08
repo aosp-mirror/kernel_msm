@@ -213,7 +213,8 @@ int dwc3_gadget_resize_tx_fifos(struct dwc3 *dwc)
 		 * use mult as 3 for GSI IN endpoint always irrespective
 		 * USB speed.
 		 */
-		if (dep->endpoint.ep_type == EP_TYPE_GSI)
+		if (dep->endpoint.ep_type == EP_TYPE_GSI ||
+				dep->endpoint.endless)
 			mult = 3;
 
 		if (!(dep->flags & DWC3_EP_ENABLED)) {
@@ -290,7 +291,7 @@ void dwc3_gadget_giveback(struct dwc3_ep *dep, struct dwc3_request *req,
 		usb_gadget_unmap_request(&dwc->gadget, &req->request,
 				req->direction);
 
-	dev_dbg(dwc->dev, "request %p from %s completed %d/%d ===> %d\n",
+	dev_dbg(dwc->dev, "request %pK from %s completed %d/%d ===> %d\n",
 			req, dep->name, req->request.actual,
 			req->request.length, status);
 	trace_dwc3_gadget_giveback(req);
@@ -383,7 +384,7 @@ int dwc3_send_gadget_ep_cmd(struct dwc3 *dwc, unsigned ep,
 			if (!(cmd & DWC3_DEPCMD_ENDTRANSFER)) {
 				dwc->ep_cmd_timeout_cnt++;
 				dwc3_notify_event(dwc,
-					DWC3_CONTROLLER_RESTART_USB_SESSION);
+					DWC3_CONTROLLER_RESTART_USB_SESSION, 0);
 			}
 			return -ETIMEDOUT;
 		}
@@ -759,7 +760,7 @@ static int dwc3_gadget_ep_enable(struct usb_ep *ep,
 	int				ret;
 
 	if (!ep || !desc || desc->bDescriptorType != USB_DT_ENDPOINT) {
-		pr_debug("dwc3: invalid parameters. ep=%p, desc=%p, DT=%d\n",
+		pr_debug("dwc3: invalid parameters. ep=%pK, desc=%pK, DT=%d\n",
 			ep, desc, desc ? desc->bDescriptorType : 0);
 		return -EINVAL;
 	}
@@ -854,7 +855,7 @@ static void dwc3_prepare_one_trb(struct dwc3_ep *dep,
 {
 	struct dwc3_trb		*trb;
 
-	dwc3_trace(trace_dwc3_gadget, "%s: req %p dma %08llx length %d%s%s",
+	dwc3_trace(trace_dwc3_gadget, "%s: req %pK dma %08llx length %d%s%s",
 			dep->name, req, (unsigned long long) dma,
 			length, last ? " last" : "",
 			chain ? " chain" : "");
@@ -1199,7 +1200,7 @@ static int __dwc3_gadget_ep_queue(struct dwc3_ep *dep, struct dwc3_request *req)
 
 	if (req->request.status == -EINPROGRESS) {
 		ret = -EBUSY;
-		dev_err(dwc->dev, "%s: %p request already in queue",
+		dev_err(dwc->dev, "%s: %pK request already in queue",
 					dep->name, req);
 		return ret;
 	}
@@ -1343,16 +1344,27 @@ static int dwc3_gadget_ep_queue(struct usb_ep *ep, struct usb_request *request,
 
 	spin_lock_irqsave(&dwc->lock, flags);
 	if (!dep->endpoint.desc) {
-		dev_dbg(dwc->dev, "trying to queue request %p to disabled %s\n",
+		dev_dbg(dwc->dev, "trying to queue request %pK to disabled %s\n",
 				request, ep->name);
 		ret = -ESHUTDOWN;
 		goto out;
 	}
 
-	if (WARN(req->dep != dep, "request %p belongs to '%s'\n",
+	if (WARN(req->dep != dep, "request %pK belongs to '%s'\n",
 				request, req->dep->name)) {
 		ret = -EINVAL;
 		goto out;
+	}
+
+	/*
+	 * Queuing endless request to USB endpoint through generic ep queue
+	 * API should not be allowed.
+	 */
+	if (dep->endpoint.endless) {
+		dev_dbg(dwc->dev, "trying to queue endless request %p to %s\n",
+				request, ep->name);
+		spin_unlock_irqrestore(&dwc->lock, flags);
+		return -EPERM;
 	}
 
 	if (dwc3_gadget_is_suspended(dwc)) {
@@ -1409,7 +1421,7 @@ static int dwc3_gadget_ep_dequeue(struct usb_ep *ep,
 			dwc3_stop_active_transfer(dwc, dep->number, true);
 			goto out1;
 		}
-		dev_err(dwc->dev, "request %p was not queued to %s\n",
+		dev_err(dwc->dev, "request %pK was not queued to %s\n",
 				request, ep->name);
 		ret = -EINVAL;
 		goto out0;
@@ -1871,7 +1883,7 @@ static int dwc3_gadget_vbus_draw(struct usb_gadget *g, unsigned mA)
 
 	dwc->vbus_draw = mA;
 	dev_dbg(dwc->dev, "Notify controller from %s. mA = %d\n", __func__, mA);
-	dwc3_notify_event(dwc, DWC3_CONTROLLER_SET_CURRENT_DRAW_EVENT);
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_SET_CURRENT_DRAW_EVENT, 0);
 	return 0;
 }
 
@@ -1906,7 +1918,7 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	 */
 	dev_dbg(dwc->dev, "Notify OTG from %s\n", __func__);
 	dwc->b_suspend = false;
-	dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT);
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT, 0);
 
 	ret = dwc3_gadget_run_stop(dwc, is_on, false);
 	spin_unlock_irqrestore(&dwc->lock, flags);
@@ -2142,7 +2154,7 @@ static int dwc3_gadget_restart_usb_session(struct usb_gadget *g)
 {
 	struct dwc3		*dwc = gadget_to_dwc(g);
 
-	return dwc3_notify_event(dwc, DWC3_CONTROLLER_RESTART_USB_SESSION);
+	return dwc3_notify_event(dwc, DWC3_CONTROLLER_RESTART_USB_SESSION, 0);
 }
 
 static const struct usb_gadget_ops dwc3_gadget_ops = {
@@ -2322,7 +2334,7 @@ static int __dwc3_cleanup_done_trbs(struct dwc3 *dwc, struct dwc3_ep *dep,
 		 * would help. Lets hope that if this occurs, someone
 		 * fixes the root cause instead of looking away :)
 		 */
-		dev_err(dwc->dev, "%s's TRB (%p) still owned by HW\n",
+		dev_err(dwc->dev, "%s's TRB (%pK) still owned by HW\n",
 				dep->name, trb);
 	count = trb->size & DWC3_TRB_SIZE_MASK;
 
@@ -2658,6 +2670,10 @@ void dwc3_stop_active_transfer(struct dwc3 *dwc, u32 epnum, bool force)
 	if (!dep->resource_index)
 		return;
 
+	if (dep->endpoint.endless)
+		dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_DISABLE_UPDXFER,
+								dep->number);
+
 	/*
 	 * NOTICE: We are violating what the Databook says about the
 	 * EndTransfer command. Ideally we would _always_ wait for the
@@ -2742,7 +2758,7 @@ static void dwc3_gadget_disconnect_interrupt(struct dwc3 *dwc)
 
 	dev_dbg(dwc->dev, "Notify OTG from %s\n", __func__);
 	dwc->b_suspend = false;
-	dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT);
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT, 0);
 
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 	reg &= ~DWC3_DCTL_INITU1ENA;
@@ -2798,7 +2814,7 @@ static void dwc3_gadget_reset_interrupt(struct dwc3 *dwc)
 
 	dev_dbg(dwc->dev, "Notify OTG from %s\n", __func__);
 	dwc->b_suspend = false;
-	dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT);
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT, 0);
 
 	dwc3_usb3_phy_suspend(dwc, false);
 	usb_gadget_vbus_draw(&dwc->gadget, 100);
@@ -2959,7 +2975,7 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 		return;
 	}
 
-	dwc3_notify_event(dwc, DWC3_CONTROLLER_CONNDONE_EVENT);
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_CONNDONE_EVENT, 0);
 
 	/*
 	 * Configure PHY via GUSB3PIPECTLn if required.
@@ -2995,7 +3011,8 @@ static void dwc3_gadget_wakeup_interrupt(struct dwc3 *dwc, bool remote_wakeup)
 		 */
 		dev_dbg(dwc->dev, "Notify OTG from %s\n", __func__);
 		dwc->b_suspend = false;
-		dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT);
+		dwc3_notify_event(dwc,
+				DWC3_CONTROLLER_NOTIFY_OTG_EVENT, 0);
 
 		/*
 		 * set state to U0 as function level resume is trying to queue
@@ -3162,7 +3179,7 @@ static void dwc3_gadget_suspend_interrupt(struct dwc3 *dwc,
 
 		dev_dbg(dwc->dev, "Notify OTG from %s\n", __func__);
 		dwc->b_suspend = true;
-		dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT);
+		dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT, 0);
 	}
 
 	dwc->link_state = next;
@@ -3333,7 +3350,8 @@ static irqreturn_t dwc3_process_event_buf(struct dwc3 *dwc, u32 buf)
 			evt->lpos = (evt->lpos + left) %
 					DWC3_EVENT_BUFFERS_SIZE;
 			dwc3_writel(dwc->regs, DWC3_GEVNTCOUNT(buf), left);
-			if (dwc3_notify_event(dwc, DWC3_CONTROLLER_ERROR_EVENT))
+			if (dwc3_notify_event(dwc,
+						DWC3_CONTROLLER_ERROR_EVENT, 0))
 				dwc->err_evt_seen = 0;
 			break;
 		}

@@ -16,6 +16,8 @@
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/clk/msm-clk.h>
+#include <linux/iopoll.h>
+#include <linux/kthread.h>
 
 #include "mdss_dsi.h"
 #include "mdss_dp.h"
@@ -425,6 +427,20 @@ static void mdss_dsi_ctrl_phy_reset(struct mdss_dsi_ctrl_pdata *ctrl)
 	MIPI_OUTP(ctrl->ctrl_base + 0x12c, 0x0000);
 	udelay(100);
 	wmb();	/* maek sure reset cleared */
+}
+
+int mdss_dsi_phy_pll_reset_status(struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	int rc;
+	u32 val;
+	u32 const sleep_us = 10, timeout_us = 100;
+
+	pr_debug("%s: polling for RESETSM_READY_STATUS.CORE_READY\n",
+		__func__);
+	rc = readl_poll_timeout(ctrl->phy_io.base + 0x4cc, val,
+		(val & 0x1), sleep_us, timeout_us);
+
+	return rc;
 }
 
 static void mdss_dsi_phy_sw_reset_sub(struct mdss_dsi_ctrl_pdata *ctrl)
@@ -931,8 +947,11 @@ static void mdss_dsi_8996_phy_power_off(
 {
 	int ln;
 	void __iomem *base;
+	u32 data;
 
-	MIPI_OUTP(ctrl->phy_io.base + DSIPHY_CMN_CTRL_0, 0x7f);
+	/* Turn off PLL power */
+	data = MIPI_INP(ctrl->phy_io.base + DSIPHY_CMN_CTRL_0);
+	MIPI_OUTP(ctrl->phy_io.base + DSIPHY_CMN_CTRL_0, data & ~BIT(7));
 
 	/* 4 lanes + clk lane configuration */
 	for (ln = 0; ln < 5; ln++) {
@@ -960,13 +979,22 @@ static void mdss_dsi_8996_phy_power_off(
 static void mdss_dsi_phy_power_off(
 	struct mdss_dsi_ctrl_pdata *ctrl)
 {
+	struct mdss_panel_info *pinfo;
+
 	if (ctrl->phy_power_off)
 		return;
 
-	/* supported for phy rev 2.0 */
-	if (ctrl->shared_data->phy_rev != DSI_PHY_REV_20)
-		return;
+	pinfo = &ctrl->panel_data.panel_info;
 
+	if ((ctrl->shared_data->phy_rev != DSI_PHY_REV_20) ||
+		!pinfo->allow_phy_power_off) {
+		pr_debug("%s: ctrl%d phy rev:%d panel support for phy off:%d\n",
+			__func__, ctrl->ndx, ctrl->shared_data->phy_rev,
+			pinfo->allow_phy_power_off);
+		return;
+	}
+
+	/* supported for phy rev 2.0 and if panel allows it*/
 	mdss_dsi_8996_phy_power_off(ctrl);
 
 	ctrl->phy_power_off = true;
@@ -979,6 +1007,7 @@ static void mdss_dsi_8996_phy_power_on(
 	void __iomem *base;
 	struct mdss_dsi_phy_ctrl *pd;
 	char *ip;
+	u32 data;
 
 	pd = &(((ctrl->panel_data).panel_info.mipi).dsi_phy_db);
 
@@ -998,12 +1027,16 @@ static void mdss_dsi_8996_phy_power_on(
 	}
 
 	mdss_dsi_8996_phy_regulator_enable(ctrl);
+
+	/* Turn on PLL power */
+	data = MIPI_INP(ctrl->phy_io.base + DSIPHY_CMN_CTRL_0);
+	MIPI_OUTP(ctrl->phy_io.base + DSIPHY_CMN_CTRL_0, data | BIT(7));
 }
 
 static void mdss_dsi_phy_power_on(
 	struct mdss_dsi_ctrl_pdata *ctrl, bool mmss_clamp)
 {
-	if (mmss_clamp && (ctrl->shared_data->phy_rev != DSI_PHY_REV_20))
+	if (mmss_clamp && !ctrl->phy_power_off)
 		mdss_dsi_phy_init(ctrl);
 	else if ((ctrl->shared_data->phy_rev == DSI_PHY_REV_20) &&
 	    ctrl->phy_power_off)
@@ -1101,6 +1134,7 @@ static void mdss_dsi_8996_phy_config(struct mdss_dsi_ctrl_pdata *ctrl)
 			mdss_dsi_8996_pll_source_standalone(ctrl);
 	}
 
+	MIPI_OUTP(ctrl->phy_io.base + DSIPHY_CMN_CTRL_0, 0x7f);
 	wmb(); /* make sure registers committed */
 }
 

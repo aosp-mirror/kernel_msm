@@ -60,6 +60,11 @@
 #define DP_MAINLINK_LEVELS			(0x00000444)
 #define	DP_TU					(0x0000044C)
 
+#define DP_HBR2_COMPLIANCE_SCRAMBLER_RESET	(0x00000454)
+#define DP_TEST_80BIT_CUSTOM_PATTERN_REG0	(0x000004C0)
+#define DP_TEST_80BIT_CUSTOM_PATTERN_REG1	(0x000004C4)
+#define DP_TEST_80BIT_CUSTOM_PATTERN_REG2	(0x000004C8)
+
 #define	MMSS_DP_AUDIO_TIMING_GEN		(0x00000480)
 #define	MMSS_DP_AUDIO_TIMING_RBR_32		(0x00000484)
 #define	MMSS_DP_AUDIO_TIMING_HBR_32		(0x00000488)
@@ -185,6 +190,7 @@
 #define DP_HDCP_RCVPORT_DATA6                          (0x0C4)
 
 #define HDCP_SEC_DP_TZ_HV_HLOS_HDCP_SHA_CTRL           (0x024)
+#define HDCP_SEC_DP_TZ_HV_HLOS_HDCP_SHA_DATA           (0x028)
 #define HDCP_SEC_DP_TZ_HV_HLOS_HDCP_RCVPORT_DATA0      (0x004)
 #define HDCP_SEC_DP_TZ_HV_HLOS_HDCP_RCVPORT_DATA1      (0x008)
 #define HDCP_SEC_DP_TZ_HV_HLOS_HDCP_RCVPORT_DATA7      (0x00C)
@@ -244,6 +250,8 @@ static const struct dp_vc_tu_mapping_table tu_table[] = {
 			0x21, 0x001a, false, 0x00, 0x00, 0x00, 0x27},
 	{HDMI_VFRMT_1920x1080p60_16_9, 4, 06, 24,
 			0x16, 0x000f, false, 0x00, 0x00, 0x00, 0x1f},
+	{HDMI_VFRMT_1920x1080p60_16_9, 4, 10, 24,
+			0x21, 0x0013, false, 0x21, 0x8, 0x1, 0x26},
 	{HDMI_VFRMT_1920x1080p60_16_9, 2, 10, 24,
 			0x21, 0x0011, false, 0x00, 0x00, 0x00, 0x27},
 	{HDMI_VFRMT_1920x1080p60_16_9, 1, 20, 24,
@@ -276,7 +284,7 @@ void mdss_dp_phy_reset(struct dss_io_data *ctrl_io);
 void mdss_dp_switch_usb3_phy_to_dp_mode(struct dss_io_data *tcsr_reg_io);
 void mdss_dp_assert_phy_reset(struct dss_io_data *ctrl_io, bool assert);
 void mdss_dp_setup_tr_unit(struct dss_io_data *ctrl_io, u8 link_rate,
-				u8 ln_cnt, u32 res);
+			u8 ln_cnt, u32 res, struct mdss_panel_info *pinfo);
 void mdss_dp_config_misc_settings(struct dss_io_data *ctrl_io,
 					struct mdss_panel_info *pinfo);
 void mdss_dp_phy_aux_setup(struct dss_io_data *phy_io);
@@ -312,5 +320,6 @@ void mdss_dp_audio_set_sample_rate(struct dss_io_data *ctrl_io,
 void mdss_dp_set_safe_to_exit_level(struct dss_io_data *ctrl_io,
 		uint32_t lane_cnt);
 int mdss_dp_aux_read_rx_status(struct mdss_dp_drv_pdata *dp, u8 *rx_status);
+void mdss_dp_phy_send_test_pattern(struct mdss_dp_drv_pdata *dp);
 
 #endif /* __DP_UTIL_H__ */

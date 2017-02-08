@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -50,6 +50,11 @@ enum {
 	ENC_FMT_AAC_V2 = ASM_MEDIA_FMT_AAC_V2,
 	ENC_FMT_APTX = ASM_MEDIA_FMT_APTX,
 	ENC_FMT_APTX_HD = ASM_MEDIA_FMT_APTX_HD,
+};
+
+enum {
+	SPKR_1,
+	SPKR_2,
 };
 
 static const struct afe_clk_set lpass_clk_set_default = {
@@ -176,6 +181,7 @@ struct msm_dai_q6_dai_data {
 	u16 afe_in_bitformat;
 	struct afe_enc_config enc_config;
 	union afe_port_config port_config;
+	u16 vi_feed_mono;
 };
 
 struct msm_dai_q6_spdif_dai_data {
@@ -231,8 +237,14 @@ static const char *const mi2s_format[] = {
 	"Compr-60958"
 };
 
+static const char *const mi2s_vi_feed_mono[] = {
+	"Left",
+	"Right",
+};
+
 static const struct soc_enum mi2s_config_enum[] = {
 	SOC_ENUM_SINGLE_EXT(4, mi2s_format),
+	SOC_ENUM_SINGLE_EXT(2, mi2s_vi_feed_mono),
 };
 
 static const char *const sb_format[] = {
@@ -1757,6 +1769,7 @@ static int msm_dai_q6_hw_params(struct snd_pcm_substream *substream,
 	case SLIMBUS_2_TX:
 	case SLIMBUS_3_TX:
 	case SLIMBUS_4_TX:
+	case SLIMBUS_TX_VI:
 	case SLIMBUS_5_TX:
 	case SLIMBUS_6_TX:
 	case SLIMBUS_7_TX:
@@ -1888,6 +1901,11 @@ static int msm_dai_q6_set_channel_map(struct snd_soc_dai *dai,
 			pr_err("%s: rx slot not found\n", __func__);
 			return -EINVAL;
 		}
+		if (rx_num > AFE_PORT_MAX_AUDIO_CHAN_CNT) {
+			pr_err("%s: invalid rx num %d\n", __func__, rx_num);
+			return -EINVAL;
+		}
+
 		for (i = 0; i < rx_num; i++) {
 			dai_data->port_config.slim_sch.shared_ch_mapping[i] =
 			    rx_slot[i];
@@ -1906,6 +1924,7 @@ static int msm_dai_q6_set_channel_map(struct snd_soc_dai *dai,
 	case SLIMBUS_2_TX:
 	case SLIMBUS_3_TX:
 	case SLIMBUS_4_TX:
+	case SLIMBUS_TX_VI:
 	case SLIMBUS_5_TX:
 	case SLIMBUS_6_TX:
 	case SLIMBUS_7_TX:
@@ -1920,6 +1939,11 @@ static int msm_dai_q6_set_channel_map(struct snd_soc_dai *dai,
 			pr_err("%s: tx slot not found\n", __func__);
 			return -EINVAL;
 		}
+		if (tx_num > AFE_PORT_MAX_AUDIO_CHAN_CNT) {
+			pr_err("%s: invalid tx num %d\n", __func__, tx_num);
+			return -EINVAL;
+		}
+
 		for (i = 0; i < tx_num; i++) {
 			dai_data->port_config.slim_sch.shared_ch_mapping[i] =
 			    tx_slot[i];
@@ -2284,6 +2308,9 @@ static const struct snd_kcontrol_new sb_config_controls[] = {
 		     msm_dai_q6_cal_info_put),
 	SOC_ENUM_EXT("SLIM_2_RX Format", sb_config_enum[0],
 		     msm_dai_q6_sb_format_get,
+		     msm_dai_q6_sb_format_put),
+	SOC_ENUM_EXT("SLIM_TX_VI Format", sb_config_enum[0],
+		     msm_dai_q6_sb_format_get,
 		     msm_dai_q6_sb_format_put)
 };
 
@@ -2334,6 +2361,11 @@ static int msm_dai_q6_dai_probe(struct snd_soc_dai *dai)
 	case SLIMBUS_4_TX:
 		rc = snd_ctl_add(dai->component->card->snd_card,
 				 snd_ctl_new1(&sb_config_controls[0],
+				 dai_data));
+		break;
+	case SLIMBUS_TX_VI:
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				 snd_ctl_new1(&sb_config_controls[3],
 				 dai_data));
 		break;
 	case SLIMBUS_2_RX:
@@ -3218,6 +3250,25 @@ static struct snd_soc_dai_driver msm_dai_q6_slimbus_tx_dai[] = {
 	},
 	{
 		.capture = {
+			.stream_name = "Slimbus VI Capture",
+			.aif_name = "SLIMBUS_TX_VI",
+			.rates = SNDRV_PCM_RATE_8000_96000 |
+			SNDRV_PCM_RATE_192000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 4,
+			.rate_min = 8000,
+			.rate_max = 192000,
+		},
+		.ops = &msm_dai_q6_ops,
+		.id = SLIMBUS_TX_VI,
+		.probe = msm_dai_q6_dai_probe,
+		.remove = msm_dai_q6_dai_remove,
+	},
+	{
+		.capture = {
 			.stream_name = "Slimbus5 Capture",
 			.aif_name = "SLIMBUS_5_TX",
 			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
@@ -3317,6 +3368,26 @@ static int msm_dai_q6_mi2s_format_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int msm_dai_q6_mi2s_vi_feed_mono_put(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	struct msm_dai_q6_dai_data *dai_data = kcontrol->private_data;
+	int value = ucontrol->value.integer.value[0];
+
+	dai_data->vi_feed_mono = value;
+	pr_debug("%s: value = %d\n", __func__, value);
+	return 0;
+}
+
+static int msm_dai_q6_mi2s_vi_feed_mono_get(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	struct msm_dai_q6_dai_data *dai_data = kcontrol->private_data;
+
+	ucontrol->value.integer.value[0] = dai_data->vi_feed_mono;
+	return 0;
+}
+
 static const struct snd_kcontrol_new mi2s_config_controls[] = {
 	SOC_ENUM_EXT("PRI MI2S RX Format", mi2s_config_enum[0],
 		     msm_dai_q6_mi2s_format_get,
@@ -3351,6 +3422,15 @@ static const struct snd_kcontrol_new mi2s_config_controls[] = {
 	SOC_ENUM_EXT("SENARY MI2S TX Format", mi2s_config_enum[0],
 		     msm_dai_q6_mi2s_format_get,
 		     msm_dai_q6_mi2s_format_put),
+	SOC_ENUM_EXT("INT5 MI2S TX Format", mi2s_config_enum[0],
+		     msm_dai_q6_mi2s_format_get,
+		     msm_dai_q6_mi2s_format_put),
+};
+
+static const struct snd_kcontrol_new mi2s_vi_feed_controls[] = {
+	SOC_ENUM_EXT("INT5 MI2S VI MONO", mi2s_config_enum[1],
+		     msm_dai_q6_mi2s_vi_feed_mono_get,
+		     msm_dai_q6_mi2s_vi_feed_mono_put),
 };
 
 static int msm_dai_q6_dai_mi2s_probe(struct snd_soc_dai *dai)
@@ -3362,6 +3442,7 @@ static int msm_dai_q6_dai_mi2s_probe(struct snd_soc_dai *dai)
 	struct snd_kcontrol *kcontrol = NULL;
 	int rc = 0;
 	const struct snd_kcontrol_new *ctrl = NULL;
+	const struct snd_kcontrol_new *vi_feed_ctrl = NULL;
 
 	dai->id = mi2s_pdata->intf_id;
 
@@ -3404,6 +3485,8 @@ static int msm_dai_q6_dai_mi2s_probe(struct snd_soc_dai *dai)
 			ctrl = &mi2s_config_controls[9];
 		if (dai->id == MSM_SENARY_MI2S)
 			ctrl = &mi2s_config_controls[10];
+		if (dai->id == MSM_INT5_MI2S)
+			ctrl = &mi2s_config_controls[11];
 	}
 
 	if (ctrl) {
@@ -3419,6 +3502,21 @@ static int msm_dai_q6_dai_mi2s_probe(struct snd_soc_dai *dai)
 				__func__, dai->name);
 		}
 	}
+
+	if (dai->id == MSM_INT5_MI2S)
+		vi_feed_ctrl = &mi2s_vi_feed_controls[0];
+
+	if (vi_feed_ctrl) {
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				snd_ctl_new1(vi_feed_ctrl,
+				&mi2s_dai_data->tx_dai.mi2s_dai_data));
+
+		if (IS_ERR_VALUE(rc)) {
+			dev_err(dai->dev, "%s: err add TX vi feed channel ctl DAI = %s\n",
+				__func__, dai->name);
+		}
+	}
+
 	rc = msm_dai_q6_dai_add_route(dai);
 rtn:
 	return rc;
@@ -3666,8 +3764,12 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 		case AFE_PORT_I2S_QUAD01:
 		case AFE_PORT_I2S_6CHS:
 		case AFE_PORT_I2S_8CHS:
-			dai_data->port_config.i2s.channel_mode =
-						AFE_PORT_I2S_SD0;
+			if (dai_data->vi_feed_mono == SPKR_1)
+				dai_data->port_config.i2s.channel_mode =
+							AFE_PORT_I2S_SD0;
+			else
+				dai_data->port_config.i2s.channel_mode =
+							AFE_PORT_I2S_SD1;
 			break;
 		case AFE_PORT_I2S_QUAD23:
 			dai_data->port_config.i2s.channel_mode =
@@ -4522,6 +4624,9 @@ register_slim_playback:
 		goto register_slim_capture;
 	case SLIMBUS_4_TX:
 		strlcpy(stream_name, "Slimbus4 Capture", 80);
+		goto register_slim_capture;
+	case SLIMBUS_TX_VI:
+		strlcpy(stream_name, "Slimbus VI Capture", 80);
 		goto register_slim_capture;
 	case SLIMBUS_5_TX:
 		strlcpy(stream_name, "Slimbus5 Capture", 80);

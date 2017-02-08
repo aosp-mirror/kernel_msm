@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -175,6 +175,7 @@ enum {
 	VI_SENSE_2,
 	AUDIO_NOMINAL,
 	HPH_PA_DELAY,
+	CLSH_Z_CONFIG,
 };
 
 enum {
@@ -1879,13 +1880,10 @@ static void tavil_codec_override(struct snd_soc_codec *codec, int mode,
 {
 	if (mode == CLS_AB || mode == CLS_AB_HIFI) {
 		switch (event) {
+		case SND_SOC_DAPM_PRE_PMU:
 		case SND_SOC_DAPM_POST_PMU:
-			if (!(snd_soc_read(codec,
-					WCD934X_CDC_RX2_RX_PATH_CTL) & 0x10) &&
-				(!(snd_soc_read(codec,
-					WCD934X_CDC_RX1_RX_PATH_CTL) & 0x10)))
-				snd_soc_update_bits(codec,
-					WCD9XXX_A_ANA_RX_SUPPLIES, 0x02, 0x02);
+			snd_soc_update_bits(codec,
+				WCD9XXX_A_ANA_RX_SUPPLIES, 0x02, 0x02);
 		break;
 		case SND_SOC_DAPM_POST_PMD:
 			snd_soc_update_bits(codec,
@@ -1921,10 +1919,14 @@ static int tavil_codec_enable_hphr_pa(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_POST_PMU:
 		/*
 		 * 7ms sleep is required after PA is enabled as per
-		 * HW requirement
+		 * HW requirement. If compander is disabled, then
+		 * 20ms delay is needed.
 		 */
 		if (test_bit(HPH_PA_DELAY, &tavil->status_mask)) {
-			usleep_range(7000, 7100);
+			if (!tavil->comp_enabled[COMPANDER_2])
+				usleep_range(20000, 20100);
+			else
+				usleep_range(7000, 7100);
 			clear_bit(HPH_PA_DELAY, &tavil->status_mask);
 		}
 
@@ -1963,10 +1965,18 @@ static int tavil_codec_enable_hphr_pa(struct snd_soc_dapm_widget *w,
 		snd_soc_update_bits(codec, WCD934X_HPH_R_TEST, 0x01, 0x00);
 		snd_soc_update_bits(codec, WCD934X_CDC_RX2_RX_PATH_CTL,
 				    0x10, 0x10);
+		snd_soc_update_bits(codec, WCD934X_CDC_RX2_RX_PATH_MIX_CTL,
+				    0x10, 0x10);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
-		/* 5ms sleep is required after PA disable */
-		usleep_range(5000, 5100);
+		/*
+		 * 5ms sleep is required after PA disable. If compander is
+		 * disabled, then 20ms delay is needed after PA disable.
+		 */
+		if (!tavil->comp_enabled[COMPANDER_2])
+			usleep_range(20000, 20100);
+		else
+			usleep_range(5000, 5100);
 		tavil_codec_override(codec, tavil->hph_mode, event);
 		blocking_notifier_call_chain(&tavil->mbhc->notifier,
 					     WCD_EVENT_POST_HPHR_PA_OFF,
@@ -2006,10 +2016,14 @@ static int tavil_codec_enable_hphl_pa(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_POST_PMU:
 		/*
 		 * 7ms sleep is required after PA is enabled as per
-		 * HW requirement
+		 * HW requirement. If compander is disabled, then
+		 * 20ms delay is needed.
 		 */
 		if (test_bit(HPH_PA_DELAY, &tavil->status_mask)) {
-			usleep_range(7000, 7100);
+			if (!tavil->comp_enabled[COMPANDER_1])
+				usleep_range(20000, 20100);
+			else
+				usleep_range(7000, 7100);
 			clear_bit(HPH_PA_DELAY, &tavil->status_mask);
 		}
 		snd_soc_update_bits(codec, WCD934X_HPH_L_TEST, 0x01, 0x01);
@@ -2047,10 +2061,18 @@ static int tavil_codec_enable_hphl_pa(struct snd_soc_dapm_widget *w,
 		snd_soc_update_bits(codec, WCD934X_HPH_L_TEST, 0x01, 0x00);
 		snd_soc_update_bits(codec, WCD934X_CDC_RX1_RX_PATH_CTL,
 				    0x10, 0x10);
+		snd_soc_update_bits(codec, WCD934X_CDC_RX1_RX_PATH_MIX_CTL,
+				    0x10, 0x10);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
-		/* 5ms sleep is required after PA disable */
-		usleep_range(5000, 5100);
+		/*
+		 * 5ms sleep is required after PA disable. If compander is
+		 * disabled, then 20ms delay is needed after PA disable.
+		 */
+		if (!tavil->comp_enabled[COMPANDER_1])
+			usleep_range(20000, 20100);
+		else
+			usleep_range(5000, 5100);
 		tavil_codec_override(codec, tavil->hph_mode, event);
 		blocking_notifier_call_chain(&tavil->mbhc->notifier,
 					     WCD_EVENT_POST_HPHL_PA_OFF,
@@ -2088,6 +2110,9 @@ static int tavil_codec_enable_lineout_pa(struct snd_soc_dapm_widget *w,
 	}
 
 	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		tavil_codec_override(codec, CLS_AB, event);
+		break;
 	case SND_SOC_DAPM_POST_PMU:
 		/*
 		 * 5ms sleep is required after PA is enabled as per
@@ -2102,6 +2127,13 @@ static int tavil_codec_enable_lineout_pa(struct snd_soc_dapm_widget *w,
 					    lineout_mix_vol_reg,
 					    0x10, 0x00);
 		break;
+	case SND_SOC_DAPM_POST_PMD:
+		/*
+		 * 5ms sleep is required after PA is disabled as per
+		 * HW requirement
+		 */
+		usleep_range(5000, 5500);
+		tavil_codec_override(codec, CLS_AB, event);
 	default:
 		break;
 	};
@@ -2230,6 +2262,7 @@ static int tavil_codec_hphl_dac_event(struct snd_soc_dapm_widget *w,
 	u8 dem_inp;
 	int ret = 0;
 	struct tavil_dsd_config *dsd_conf = tavil->dsd_config;
+	uint32_t impedl = 0, impedr = 0;
 
 	dev_dbg(codec->dev, "%s wname: %s event: %d hph_mode: %d\n", __func__,
 		w->name, event, hph_mode);
@@ -2266,6 +2299,18 @@ static int tavil_codec_hphl_dac_event(struct snd_soc_dapm_widget *w,
 			     WCD_CLSH_EVENT_PRE_DAC,
 			     WCD_CLSH_STATE_HPHL,
 			     hph_mode);
+
+		ret = tavil_mbhc_get_impedance(tavil->mbhc,
+					       &impedl, &impedr);
+		if (!ret) {
+			wcd_clsh_imped_config(codec, impedl, false);
+			set_bit(CLSH_Z_CONFIG, &tavil->status_mask);
+		} else {
+			dev_dbg(codec->dev, "%s: Failed to get mbhc impedance %d\n",
+				__func__, ret);
+			ret = 0;
+		}
+
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		/* 1000us required as per HW requirement */
@@ -2284,6 +2329,11 @@ static int tavil_codec_hphl_dac_event(struct snd_soc_dapm_widget *w,
 			snd_soc_update_bits(codec,
 					    WCD934X_HPH_NEW_INT_RDAC_GAIN_CTL,
 					    0xF0, 0x0);
+
+		if (test_bit(CLSH_Z_CONFIG, &tavil->status_mask)) {
+			wcd_clsh_imped_config(codec, impedl, true);
+			clear_bit(CLSH_Z_CONFIG, &tavil->status_mask);
+		}
 		break;
 	default:
 		break;
@@ -5096,19 +5146,18 @@ static int tavil_amic_pwr_lvl_get(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	u16 amic_reg;
+	u16 amic_reg = 0;
 
 	if (!strcmp(kcontrol->id.name, "AMIC_1_2 PWR MODE"))
 		amic_reg = WCD934X_ANA_AMIC1;
 	if (!strcmp(kcontrol->id.name, "AMIC_3_4 PWR MODE"))
 		amic_reg = WCD934X_ANA_AMIC3;
-	else
-		goto ret;
 
-	ucontrol->value.integer.value[0] =
-		(snd_soc_read(codec, amic_reg) & WCD934X_AMIC_PWR_LVL_MASK) >>
-			     WCD934X_AMIC_PWR_LVL_SHIFT;
-ret:
+	if (amic_reg)
+		ucontrol->value.integer.value[0] =
+			(snd_soc_read(codec, amic_reg) &
+			 WCD934X_AMIC_PWR_LVL_MASK) >>
+			  WCD934X_AMIC_PWR_LVL_SHIFT;
 	return 0;
 }
 
@@ -5117,7 +5166,7 @@ static int tavil_amic_pwr_lvl_put(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	u32 mode_val;
-	u16 amic_reg;
+	u16 amic_reg = 0;
 
 	mode_val = ucontrol->value.enumerated.item[0];
 
@@ -5127,12 +5176,10 @@ static int tavil_amic_pwr_lvl_put(struct snd_kcontrol *kcontrol,
 		amic_reg = WCD934X_ANA_AMIC1;
 	if (!strcmp(kcontrol->id.name, "AMIC_3_4 PWR MODE"))
 		amic_reg = WCD934X_ANA_AMIC3;
-	else
-		goto ret;
 
-	snd_soc_update_bits(codec, amic_reg, WCD934X_AMIC_PWR_LVL_MASK,
-			    mode_val << WCD934X_AMIC_PWR_LVL_SHIFT);
-ret:
+	if (amic_reg)
+		snd_soc_update_bits(codec, amic_reg, WCD934X_AMIC_PWR_LVL_MASK,
+				    mode_val << WCD934X_AMIC_PWR_LVL_SHIFT);
 	return 0;
 }
 
@@ -5176,6 +5223,14 @@ static int tavil_mad_input_put(struct snd_kcontrol *kcontrol,
 	bool is_adc2_input = false;
 
 	tavil_mad_input = ucontrol->value.integer.value[0];
+
+	if (tavil_mad_input >= sizeof(tavil_conn_mad_text)/
+	    sizeof(tavil_conn_mad_text[0])) {
+		dev_err(codec->dev,
+			"%s: tavil_mad_input = %d out of bounds\n",
+			__func__, tavil_mad_input);
+		return -EINVAL;
+	}
 
 	if (strnstr(tavil_conn_mad_text[tavil_mad_input], "NOTUSED",
 				sizeof("NOTUSED"))) {
@@ -7039,10 +7094,12 @@ static const struct snd_soc_dapm_widget tavil_dapm_widgets[] = {
 		SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_PGA_E("LINEOUT1 PA", WCD934X_ANA_LO_1_2, 7, 0, NULL, 0,
 		tavil_codec_enable_lineout_pa,
-		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
+		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
+		SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_PGA_E("LINEOUT2 PA", WCD934X_ANA_LO_1_2, 6, 0, NULL, 0,
 		tavil_codec_enable_lineout_pa,
-		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
+		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
+		SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_PGA_E("ANC EAR PA", WCD934X_ANA_EAR, 7, 0, NULL, 0,
 		tavil_codec_enable_ear_pa, SND_SOC_DAPM_POST_PMU |
 		SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
@@ -8156,6 +8213,8 @@ static const struct tavil_reg_mask_val tavil_codec_reg_defaults[] = {
 	{WCD934X_CDC_RX0_RX_PATH_DSMDEM_CTL, 0x01, 0x01},
 	{WCD934X_CDC_RX1_RX_PATH_DSMDEM_CTL, 0x01, 0x01},
 	{WCD934X_CDC_RX2_RX_PATH_DSMDEM_CTL, 0x01, 0x01},
+	{WCD934X_CDC_RX3_RX_PATH_DSMDEM_CTL, 0x01, 0x01},
+	{WCD934X_CDC_RX4_RX_PATH_DSMDEM_CTL, 0x01, 0x01},
 	{WCD934X_CDC_RX7_RX_PATH_DSMDEM_CTL, 0x01, 0x01},
 	{WCD934X_CDC_RX8_RX_PATH_DSMDEM_CTL, 0x01, 0x01},
 	{WCD934X_CDC_COMPANDER8_CTL7, 0x1E, 0x18},
@@ -8189,6 +8248,8 @@ static const struct tavil_reg_mask_val tavil_codec_reg_init_1_1_val[] = {
 	{WCD934X_CDC_COMPANDER2_CTL7, 0x1E, 0x06},
 	{WCD934X_HPH_NEW_INT_RDAC_HD2_CTL_L, 0xFF, 0x84},
 	{WCD934X_HPH_NEW_INT_RDAC_HD2_CTL_R, 0xFF, 0x84},
+	{WCD934X_CDC_RX3_RX_PATH_SEC0, 0xFC, 0xF4},
+	{WCD934X_CDC_RX4_RX_PATH_SEC0, 0xFC, 0xF4},
 };
 
 static const struct tavil_cpr_reg_defaults cpr_defaults[] = {
@@ -8572,7 +8633,7 @@ static int tavil_handle_pdata(struct tavil_priv *tavil,
 	if (pdata->dmic_clk_drv ==
 	    WCD9XXX_DMIC_CLK_DRIVE_UNDEFINED) {
 		pdata->dmic_clk_drv = WCD934X_DMIC_CLK_DRIVE_DEFAULT;
-		dev_info(codec->dev,
+		dev_dbg(codec->dev,
 			 "%s: dmic_clk_strength invalid, default = %d\n",
 			 __func__, pdata->dmic_clk_drv);
 	}

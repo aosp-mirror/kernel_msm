@@ -39,7 +39,10 @@ extern unsigned int sysctl_sched_latency;
 extern unsigned int sysctl_sched_min_granularity;
 extern unsigned int sysctl_sched_wakeup_granularity;
 extern unsigned int sysctl_sched_child_runs_first;
-extern unsigned int sysctl_sched_wake_to_idle;
+extern unsigned int sysctl_sched_is_big_little;
+extern unsigned int sysctl_sched_sync_hint_enable;
+extern unsigned int sysctl_sched_initial_task_util;
+extern unsigned int sysctl_sched_cstate_aware;
 
 #ifdef CONFIG_SCHED_HMP
 extern int sysctl_sched_freq_inc_notify;
@@ -60,7 +63,6 @@ extern unsigned int sysctl_sched_boost;
 extern unsigned int sysctl_sched_small_wakee_task_load_pct;
 extern unsigned int sysctl_sched_big_waker_task_load_pct;
 extern unsigned int sysctl_sched_select_prev_cpu_us;
-extern unsigned int sysctl_sched_enable_colocation;
 extern unsigned int sysctl_sched_restrict_cluster_spill;
 extern unsigned int sysctl_sched_new_task_windows;
 extern unsigned int sysctl_sched_pred_alert_freq;
@@ -68,6 +70,8 @@ extern unsigned int sysctl_sched_freq_aggregate;
 extern unsigned int sysctl_sched_enable_thread_grouping;
 extern unsigned int sysctl_sched_freq_aggregate_threshold_pct;
 extern unsigned int sysctl_sched_prefer_sync_wakee_to_waker;
+extern unsigned int sysctl_sched_short_burst;
+extern unsigned int sysctl_sched_short_sleep;
 
 #else /* CONFIG_SCHED_HMP */
 

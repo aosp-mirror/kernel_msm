@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,6 +25,8 @@
 #include <linux/timer.h>
 #include <linux/pm_opp.h>
 #include <linux/cpu_cooling.h>
+#include <linux/bitmap.h>
+#include <linux/msm_thermal.h>
 
 #include <asm/smp_plat.h>
 #include <asm/cacheflush.h>
@@ -46,6 +48,7 @@
 #define MSM_LIMITS_ALGO_MODE_ENABLE	0x454E424C
 
 #define MSM_LIMITS_HI_THRESHOLD		0x48494748
+#define MSM_LIMITS_LOW_THRESHOLD        0x4C4F5700
 #define MSM_LIMITS_ARM_THRESHOLD	0x41524D00
 
 #define MSM_LIMITS_CLUSTER_0		0x6370302D
@@ -55,6 +58,7 @@
 
 #define MSM_LIMITS_HIGH_THRESHOLD_VAL	95000
 #define MSM_LIMITS_ARM_THRESHOLD_VAL	65000
+#define MSM_LIMITS_LOW_THRESHOLD_OFFSET 500
 #define MSM_LIMITS_POLLING_DELAY_MS	10
 #define MSM_LIMITS_CLUSTER_0_REQ	0x179C1B04
 #define MSM_LIMITS_CLUSTER_1_REQ	0x179C3B04
@@ -83,6 +87,7 @@ struct msm_lmh_dcvs_hw {
 	uint32_t max_freq;
 	uint32_t hw_freq_limit;
 	struct list_head list;
+	DECLARE_BITMAP(is_irq_enabled, 1);
 };
 
 LIST_HEAD(lmh_dcvs_hw_list);
@@ -145,8 +150,19 @@ static void msm_lmh_dcvs_poll(unsigned long data)
 	if (max_limit >= hw->max_freq) {
 		del_timer(&hw->poll_timer);
 		writel_relaxed(0xFF, hw->int_clr_reg);
+		set_bit(1, hw->is_irq_enabled);
 		enable_irq(hw->irq_num);
 	} else {
+		mod_timer(&hw->poll_timer, jiffies + msecs_to_jiffies(
+			MSM_LIMITS_POLLING_DELAY_MS));
+	}
+}
+
+static void lmh_dcvs_notify(struct msm_lmh_dcvs_hw *hw)
+{
+	if (test_and_clear_bit(1, hw->is_irq_enabled)) {
+		disable_irq_nosync(hw->irq_num);
+		msm_lmh_mitigation_notify(hw);
 		mod_timer(&hw->poll_timer, jiffies + msecs_to_jiffies(
 			MSM_LIMITS_POLLING_DELAY_MS));
 	}
@@ -156,11 +172,7 @@ static irqreturn_t lmh_dcvs_handle_isr(int irq, void *data)
 {
 	struct msm_lmh_dcvs_hw *hw = data;
 
-	disable_irq_nosync(irq);
-	msm_lmh_mitigation_notify(hw);
-	mod_timer(&hw->poll_timer, jiffies + msecs_to_jiffies(
-			MSM_LIMITS_POLLING_DELAY_MS));
-
+	lmh_dcvs_notify(hw);
 	return IRQ_HANDLED;
 }
 
@@ -217,7 +229,8 @@ static int lmh_activate_trip(struct thermal_zone_device *dev,
 		int trip, enum thermal_trip_activation_mode mode)
 {
 	struct msm_lmh_dcvs_hw *hw = dev->devdata;
-	uint32_t enable, temp, thresh;
+	uint32_t enable, temp;
+	int ret = 0;
 
 	enable = (mode == THERMAL_TRIP_ACTIVATION_ENABLED) ? 1 : 0;
 	if (!enable) {
@@ -230,12 +243,35 @@ static int lmh_activate_trip(struct thermal_zone_device *dev,
 			hw->temp_limits[LIMITS_TRIP_HI])
 		return -EINVAL;
 
-	thresh = (trip == LIMITS_TRIP_LO) ? MSM_LIMITS_ARM_THRESHOLD :
-			MSM_LIMITS_HI_THRESHOLD;
 	temp = hw->temp_limits[trip];
+	switch (trip) {
+	case LIMITS_TRIP_LO:
+		ret =  msm_lmh_dcvs_write(hw->affinity,
+				MSM_LIMITS_SUB_FN_THERMAL,
+				MSM_LIMITS_ARM_THRESHOLD, temp);
+		break;
+	case LIMITS_TRIP_HI:
+		/*
+		 * The high threshold should be atleast greater than the
+		 * low threshold offset
+		 */
+		if (temp < MSM_LIMITS_LOW_THRESHOLD_OFFSET)
+			return -EINVAL;
+		ret =  msm_lmh_dcvs_write(hw->affinity,
+				MSM_LIMITS_SUB_FN_THERMAL,
+				MSM_LIMITS_HI_THRESHOLD, temp);
+		if (ret)
+			break;
+		ret =  msm_lmh_dcvs_write(hw->affinity,
+				MSM_LIMITS_SUB_FN_THERMAL,
+				MSM_LIMITS_LOW_THRESHOLD, temp -
+				MSM_LIMITS_LOW_THRESHOLD_OFFSET);
+		break;
+	default:
+		return -EINVAL;
+	}
 
-	return msm_lmh_dcvs_write(hw->affinity, MSM_LIMITS_SUB_FN_THERMAL,
-				thresh, temp);
+	return ret;
 }
 
 static int lmh_get_trip_temp(struct thermal_zone_device *dev,
@@ -313,6 +349,17 @@ static struct cpu_cooling_ops cd_ops = {
 	.get_cur_state = lmh_get_cur_limit,
 	.ceil_limit = lmh_set_max_limit,
 };
+
+int msm_lmh_dcvsh_sw_notify(int cpu)
+{
+	struct msm_lmh_dcvs_hw *hw = get_dcvsh_hw_from_cpu(cpu);
+
+	if (!hw)
+		return -EINVAL;
+
+	lmh_dcvs_notify(hw);
+	return 0;
+}
 
 static int msm_lmh_dcvs_probe(struct platform_device *pdev)
 {
@@ -460,6 +507,7 @@ static int msm_lmh_dcvs_probe(struct platform_device *pdev)
 		pr_err("Error getting IRQ number. err:%d\n", ret);
 		return ret;
 	}
+	set_bit(1, hw->is_irq_enabled);
 	ret = devm_request_threaded_irq(&pdev->dev, hw->irq_num, NULL,
 		lmh_dcvs_handle_isr, IRQF_TRIGGER_HIGH | IRQF_ONESHOT
 		| IRQF_NO_SUSPEND, sensor_name, hw);
