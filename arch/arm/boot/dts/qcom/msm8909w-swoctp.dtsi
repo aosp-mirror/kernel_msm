@@ -176,6 +176,30 @@
 			output-high;
 		};
 	};
+
+	wpc_stat_default: wpc_stat_default {
+		mux {
+			pins = "gpio22";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio22";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+		};
+	};
+
+	wpc_dock_det_default: wpc_dock_det_default {
+		mux {
+			pins = "gpio69";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio69";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+		};
+	};
 };
 
 &i2c_4 {
@@ -233,7 +257,7 @@
 		qcom,dc-psy-type = "Wireless";
 		qcom,dc-psy-ma = <500>;
 		//qcom,iterm-disabled;
-		qcom,iterm-ma = <30>;
+		qcom,iterm-ma = <60>;
 		qcom,chg-inhibit-disabled;
 		qcom,skip-usb-suspend-for-fake-battery;
 		/*
@@ -260,6 +284,45 @@
 		 */
 		status = "ok";
 	};
+
+	stc3117-204@70 {
+		compatible = "STC,stc3117-fg";
+		reg = <0x70>;
+/*
+		stc,battery_online          = <0>;
+		stc,charger_online          = <0>;    // used in stc311x_get_status()
+		stc,charger_enable          = <0>;    // used in stc311x_get_status()
+		stc,power_supply_register   = <0>;
+		stc,power_supply_unregister = <0>;
+*/
+		stc,Vmode                   = <0>;    /*REG_MODE, BIT_VMODE 1=Voltage mode, 0=mixed mode */
+		stc,Alm_SOC                 = <10>;   /* SOC alm level %*/
+		stc,Alm_Vbat                = <3681>; /* Vbat alm level mV*/
+		stc,CC_cnf                  = <89>;   /* nominal CC_cnf, coming from battery characterisation*/
+		stc,VM_cnf                  = <461>;   /* nominal VM cnf , coming from battery characterisation*/
+		stc,Rint                    = <1037>;  /* nominal internal impedance*/
+		stc,Cnom                    = <450>;  /* nominal capacity in mAh, coming from battery characterisation*/
+		stc,Rsense                  = <10>;   /* sense resistor mOhms*/
+		stc,RelaxCurrent            = <8>;    /* current for relaxation in mA (< C/20) */
+		stc,Adaptive                = <1>;    /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
+			/* Elentec Co Ltd Battery pack - 80 means 8% */
+			/* capacity derating in 0.1%, for temp = 60, 40, 25, 10, 0, -10, -20 */
+		stc,CapDerating = <0 0 0 45 152 498 900>;
+			//OCV curve example for a 4.4V li-ion battery
+			/* OCV curve adjustment */
+		stc,OCVValue    = <3300 3563 3670 3681 3699 3728 3745 3764 3798 3837 3896 3946 3993 4089 4192 4306>;
+			/* SOC Table */
+		stc,SOCValue    = <0 3 6 10 15 20 25 30 35 40 50 60 70 80 90 100>;
+			/*if the application temperature data is preferred than the STC3117 temperature*/
+		stc,ExternalTemperature      = <25>; //Temperature_fn, /*External temperature fonction, return ??? */
+		stc,ForceExternalTemperature = <0>;  /* 1=External temperature, 0=STC3117 temperature */
+
+		status = "ok";
+	};
+
+
+/* Quanta remove Qcom default { */
+/*
 	st-fg@70 {
 		compatible = "st,stc3117";
 		reg = <0x70>;
@@ -285,6 +348,8 @@
 		qcom,fg-vadc = <&pm8916_vadc>;
 		qcom,fg-adc_tm = <&pm8916_adc_tm>;
 	};
+*/
+/* Quanta remove Qcom default } */
 };
 
 &sdhc_2 {
