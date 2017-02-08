@@ -48,6 +48,9 @@
 		i2c1 = &i2c_1; /* I2C1 controller */
 		i2c2 = &i2c_2; /* I2C2 NFC qup2 device */
 		i2c4 = &i2c_4; /* I2C4 controller device */
+
+		/* QCI, Aaron Tzeng@20150910, add alias for blsp1_uart1 */
+		serial0 = &blsp1_uart1;
 	};
 
 	cpus {
@@ -934,6 +937,8 @@
 		qcom,ignore-core-reset-ack;
 		qcom,disable-clk-gating;
 		qcom,reset-bam-on-disconnect;
+
+		status = "disabled";
 
 		qcom,pipe0 {
 			label = "hsusb-qdss-in-0";

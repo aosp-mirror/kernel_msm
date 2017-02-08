@@ -80,7 +80,7 @@
 &spmi_bus {
 	qcom,pm8916@0 {
 		qcom,leds@a300 {
-			status = "okay";
+			status = "disabled";
 			qcom,led_mpp_4 {
 				label = "mpp";
 				linux,name = "button-backlight";
@@ -123,11 +123,7 @@
 
 	mpp@a300 { /* MPP 4 */
 		/* Backlight PWM */
-		qcom,mode = <1>;		/* Digital output */
-		qcom,invert = <0>;		/* Disable invert */
-		qcom,src-sel = <4>;		/* DTEST1 */
-		qcom,vin-sel = <0>;		/* VPH_PWR */
-		qcom,master-en = <1>;		/* Enable MPP */
+		status = "disabled";
 	};
 };
 
