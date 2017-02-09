@@ -99,7 +99,7 @@
 * Static variables
 *******************************************************************************/
 static unsigned char CTPM_FW_I_FILE[] = {
-	#include "FTS_FW/Default_V0x0A_20170123_app.i"
+	#include "FTS_FW/TP3207_0x30_V0x02_20170125_app.i"
 };
 
  struct fts_Upgrade_Info fts_updateinfo[] =
