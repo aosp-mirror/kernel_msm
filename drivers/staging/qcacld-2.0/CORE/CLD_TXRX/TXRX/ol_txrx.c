@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1723,7 +1723,7 @@ ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer)
     if (adf_os_atomic_dec_and_test(&peer->ref_cnt)) {
         u_int16_t peer_id;
 
-        TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+        TXRX_PRINT(TXRX_PRINT_LEVEL_INFO1,
             "Deleting peer %p (%02x:%02x:%02x:%02x:%02x:%02x)\n",
             peer,
             peer->mac_addr.raw[0], peer->mac_addr.raw[1],
@@ -1836,7 +1836,7 @@ ol_txrx_peer_detach(ol_txrx_peer_handle peer)
     /* debug print to dump rx reorder state */
     //htt_rx_reorder_log_print(vdev->pdev->htt_pdev);
 
-    TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+    TXRX_PRINT(TXRX_PRINT_LEVEL_INFO1,
         "%s:peer %p (%02x:%02x:%02x:%02x:%02x:%02x)\n",
           __func__, peer,
           peer->mac_addr.raw[0], peer->mac_addr.raw[1],

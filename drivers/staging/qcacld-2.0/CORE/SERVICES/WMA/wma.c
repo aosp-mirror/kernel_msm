@@ -1678,7 +1678,7 @@ void wma_remove_peer(tp_wma_handle wma, u_int8_t *bssid,
 		__func__, bssid, vdev_id, wma->interfaces[vdev_id].peer_count);
 	    return;
 	} else {
-	    WMA_LOGE("%s: Removed peer with addr %pM vdevid %d peer_count %d",
+	    WMA_LOGI("%s: Removing peer with addr %pM vdevid %d peer_count %d",
 		__func__, bssid, vdev_id, wma->interfaces[vdev_id].peer_count);
 	}
 #endif
@@ -36438,7 +36438,7 @@ void WDA_TxAbort(v_U8_t vdev_id)
 			 __func__, iface->handle);
 		return;
 	}
-	WMA_LOGA("%s: vdevid %d bssid %pM", __func__, vdev_id, iface->bssid);
+	WMA_LOGI("%s: vdevid %d bssid %pM", __func__, vdev_id, iface->bssid);
 	iface->pause_bitmap |= (1 << PAUSE_TYPE_HOST);
 	wdi_in_vdev_pause(iface->handle, OL_TXQ_PAUSE_REASON_TX_ABORT);
 

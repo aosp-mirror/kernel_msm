@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -487,7 +487,7 @@ ol_rx_peer_unmap_handler(
      * Remove a reference to the peer.
      * If there are no more references, delete the peer object.
      */
-    TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+    TXRX_PRINT(TXRX_PRINT_LEVEL_INFO1,
         "%s: Remove the ID %d reference to peer %p\n",
         __func__, peer_id, peer);
     ol_txrx_peer_unref_delete(peer);
