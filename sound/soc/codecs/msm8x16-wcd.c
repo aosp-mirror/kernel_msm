@@ -2174,7 +2174,7 @@ static int msm8x16_wcd_audio_ssr_status_get(struct snd_kcontrol *kcontrol,
 	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
 
 	ret = test_bit(BUS_DOWN, &msm8x16_wcd->status_mask);
-	pr_debug("%s status: %d\n", __func__, ret);
+	pr_info("%s status: %d\n", __func__, ret);
 	if (ret) {
 		ucontrol->value.integer.value[0] = 0;
 	} else {
@@ -2186,7 +2186,7 @@ static int msm8x16_wcd_audio_ssr_status_get(struct snd_kcontrol *kcontrol,
 static int msm8x16_wcd_audio_ssr_status_set(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
-	pr_debug("%s\n", __func__);
+	pr_info("%s\n", __func__);
 	/* dummy */
 	return 0;
 }

@@ -31,6 +31,8 @@
 #include "../codecs/msm8x16-wcd.h"
 #include "../codecs/wsa881x-analog.h"
 #include <linux/regulator/consumer.h>
+#include <soc/qcom/smem.h>
+
 #define DRV_NAME "msm8952-asoc-wcd"
 
 #define BTSCO_RATE_8KHZ 8000
@@ -77,6 +79,7 @@ static atomic_t auxpcm_mi2s_clk_ref;
 
 static int msm_quat_mi2s_clk = 0;
 int msm_function_mi2s = 0;
+static int msm_is_audio_init_complete = 0;
 static int muxsel_csr_gp_io_mux_mic_ctl = 0;
 static int muxsel_csr_gp_io_mux_mic_ctl_size = 0;
 
@@ -1113,6 +1116,37 @@ int msm_q6_enable_mi2s_clocks(bool enable, u32 rate)
 			pr_debug("<%s> <%d>: Stop AFE_PORT_ID_QUATERNARY_MI2S_RX success.\n", __func__, __LINE__);
 		}
 	return rc;
+}
+
+#define AUDIO_MAGIC_NUMBER 0xCCBBBBCC
+int msm_audio_init_complete_put(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	unsigned char *smem = NULL;
+	unsigned int  magic_number = AUDIO_MAGIC_NUMBER;
+	msm_is_audio_init_complete = ucontrol->value.integer.value[0];
+	pr_info("%s: is audio complete = %d\n",__func__, msm_is_audio_init_complete);
+	smem = (unsigned char *) smem_alloc(SMEM_ID_VENDOR1, sizeof(magic_number), 0,SMEM_ANY_HOST_FLAG);
+	if(NULL == smem)
+	{
+		pr_err(KERN_ERR "%s: alloc share memory failed!\n", __func__);
+		return -ENOMEM;
+	}
+	memset(smem, 0, sizeof(magic_number));
+	if(msm_is_audio_init_complete)
+	{
+		/*set magic number to the shared memory*/
+		memcpy(smem, &magic_number, sizeof(magic_number));
+		pr_info("%s: smem %x %x %x %x!\n", __func__, smem[0], smem[1], smem[2], smem[3]);
+	}
+	return 0;
+
+}
+
+int msm_audio_init_complete_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
+{
+	pr_info("%s: is audio complete = %d\n", __func__, msm_is_audio_init_complete);
+	ucontrol->value.integer.value[0] = msm_is_audio_init_complete;
+	return 0;
 }
 
 int msm_i2s_function_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)

@@ -110,6 +110,14 @@ static const char *const mi2s_function_text[] = {"music", "voice"};
 static const struct soc_enum msm_mi2s_function_enum[] = {
        SOC_ENUM_SINGLE_EXT(2, mi2s_function_text),
 };
+
+extern int msm_audio_init_complete_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
+extern int msm_audio_init_complete_put(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
+static const char *const is_audio_init_complete_text[] = {"no", "yes"};
+static const struct soc_enum msm_is_audio_init_complete_enum[] = {
+       SOC_ENUM_SINGLE_EXT(2, is_audio_init_complete_text),
+};
+
 extern int msm_external_pa_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
 extern int msm_external_pa_put(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
 static const char *const external_pa_text[] = {"disable", "enable"};
@@ -5560,6 +5568,8 @@ static const struct snd_kcontrol_new lsm_function[] = {
 			msm_external_pa_get, msm_external_pa_put),
 	SOC_ENUM_EXT("I2s function", msm_mi2s_function_enum[0],
 			msm_i2s_function_get, msm_i2s_function_put),
+	SOC_ENUM_EXT("Audio init complete", msm_is_audio_init_complete_enum[0],
+			msm_audio_init_complete_get, msm_audio_init_complete_put),
 };
 
 static const char * const aanc_slim_0_rx_text[] = {
