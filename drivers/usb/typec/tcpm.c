@@ -1835,6 +1835,10 @@ static void tcpm_typec_connect(struct tcpm_port *port)
 {
 	if (!port->connected) {
 		port->partner.usb_pd = port->pd_capable;
+		if (tcpm_port_is_debug(port))
+			port->partner.accessory = TYPEC_ACCESSORY_DEBUG;
+		else if (tcpm_port_is_audio(port))
+			port->partner.accessory = TYPEC_ACCESSORY_AUDIO;
 		typec_connect(port->typec_port, &port->con);
 		port->connected = true;
 	}
@@ -1981,7 +1985,7 @@ static int tcpm_acc_attach(struct tcpm_port *port)
 {
 	int ret;
 
-	if (!port->attached)
+	if (port->attached)
 		return 0;
 
 	ret = tcpm_set_roles(port, true, TYPEC_SOURCE, TYPEC_HOST);
@@ -1991,6 +1995,8 @@ static int tcpm_acc_attach(struct tcpm_port *port)
 	memset(&port->partner, 0, sizeof(port->partner));
 
 	port->attached = true;
+
+	tcpm_typec_connect(port);
 
 	return 0;
 }
