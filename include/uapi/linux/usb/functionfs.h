@@ -179,7 +179,7 @@ struct usb_functionfs_event {
  * Sets a buffer length for which all r/w operations under that size use a
  * preallocated buffer. Behavior of larger operations does not change.
  */
-#define FUNCTIONFS_ENDPOINT_ALLOC	_IOR('g', 131, __u32)
+#define FUNCTIONFS_ENDPOINT_ALLOC	_IOR('g', 231, __u32)
 
 
 #endif /* _UAPI__LINUX_FUNCTIONFS_H__ */
