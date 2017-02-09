@@ -64,14 +64,6 @@
 #define WE_ENABLE_DPD        12
 #define WE_SET_CB            13
 #define WE_TX_CW_RF_GEN      14
-/*--------------------------------------------------*/
-#define WE_SET_TX_WAVEFORM_GAIN_PRIMA_V1     15
-// ASUS_BSP_WIFI +++ Add for wifitest: channel bonding HT40
-#define WE_SET_CHANNEL_40     16
-// ASUS_BSP_WIFI --- Add for wifitest: channel bonding HT40
-#define WE_SET_TX_POWER_MODE      17
-#define WE_SET_TX_POWER_VALUE     18
-/*--------------------------------------------------*/
 
 /* Private ioctls and their sub-ioctls */
 #define WLAN_FTM_PRIV_SET_NONE_GET_INT    (SIOCIWFIRSTPRIV + 1)
@@ -86,13 +78,6 @@
 #define WLAN_FTM_PRIV_SET_CHAR_GET_NONE   (SIOCIWFIRSTPRIV + 3)
 #define WE_SET_MAC_ADDRESS   1
 #define WE_SET_TX_RATE       2
-/*--------------------------------------------------*/
-#define WE_FTM_CLEAR_RX_PKTCNT    3
-#define WE_FTM_SET_CHANNEL        4
-#define WE_FTM_ENABLE_CHAIN       5
-#define WE_FTM_TX_PKT_GEN         6
-#define WE_FTM_SET_TX_RF_GAIN     7
-/*--------------------------------------------------*/
 
 /* Private ioctls and their sub-ioctls */
 #define WLAN_FTM_PRIV_SET_THREE_INT_GET_NONE   (SIOCIWFIRSTPRIV + 4)

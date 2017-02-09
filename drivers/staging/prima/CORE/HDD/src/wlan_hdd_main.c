@@ -121,10 +121,6 @@ int wlan_hdd_ftm_start(hdd_context_t *pAdapter);
 #include "wlan_hdd_debugfs.h"
 #include "sapInternal.h"
 
-//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-#include <linux/asusdebug.h>
-//ASUS_BSP--- "for /data/log/ASUSEvtlog"
-
 #ifdef MODULE
 #define WLAN_MODULE_NAME  module_name(THIS_MODULE)
 #else
@@ -203,9 +199,6 @@ static vos_wake_lock_t wlan_wake_lock;
 /* set when SSR is needed after unload */
 static e_hdd_ssr_required isSsrRequired = HDD_SSR_NOT_REQUIRED;
 
-/*--------------------------------------------------------------------------------*/
-extern WLAN_ASUS_MAC g_WlanAsusMac[];
-/*--------------------------------------------------------------------------------*/
 //internal function declaration
 static VOS_STATUS wlan_hdd_framework_restart(hdd_context_t *pHddCtx);
 static void wlan_hdd_restart_init(hdd_context_t *pHddCtx);
@@ -5953,14 +5946,16 @@ VOS_STATUS hdd_request_firmware(char *pfileName,v_VOID_t *pCtx,v_VOID_t **ppfw_d
        status = request_firmware(&pHddCtx->nv, pfileName, pHddCtx->parent_dev);
 
        if(status || !pHddCtx->nv || !pHddCtx->nv->data) {
-           hddLog(1, "[wlan]: %s: nv %s download failed.", __func__, pfileName);
+           hddLog(VOS_TRACE_LEVEL_FATAL, "%s: nv %s download failed",
+                  __func__, pfileName);
            retval = VOS_STATUS_E_FAILURE;
        }
 
        else {
          *ppfw_data = (v_VOID_t *)pHddCtx->nv->data;
          *pSize = pHddCtx->nv->size;
-          printk("[wlan]: (%s), size=%d.\n", pfileName, *pSize);
+          hddLog(VOS_TRACE_LEVEL_INFO, "%s: nv file size = %d",
+                 __func__, *pSize);
        }
    }
 
@@ -6697,12 +6692,10 @@ void hdd_set_pwrparams(hdd_context_t *pHddCtx)
            {
                powerRequest.uDTIMPeriod = pHddCtx->cfg_ini->enableModulatedDTIM;
                powerRequest.uListenInterval = pHddCtx->hdd_actual_LI_value;
-	       printk("[wlan]: enableModulatedDTIM, (%d, %d).\n", ((int)(powerRequest.uDTIMPeriod)), ((int)(powerRequest.uListenInterval)));
            }
            else
            {
                powerRequest.uListenInterval = pHddCtx->cfg_ini->enableDynamicDTIM;
-	       printk("[wlan]: enableDynamicDTIM, (%d).\n", ((int)(powerRequest.uListenInterval)));
            }
 
            /* Update ignoreDTIM and ListedInterval in CFG to remain at the DTIM
@@ -6930,8 +6923,7 @@ hdd_adapter_t* hdd_open_adapter( hdd_context_t *pHddCtx, tANI_U8 session_type,
    VOS_STATUS status = VOS_STATUS_E_FAILURE;
    VOS_STATUS exitbmpsStatus;
 
-//   hddLog(VOS_TRACE_LEVEL_INFO_HIGH, "%s iface =%s type = %d",__func__,iface_name,session_type);
-   hddLog(1, "[wlan]: iface=%s, type=%d.",iface_name, session_type);
+   hddLog(VOS_TRACE_LEVEL_INFO_HIGH, "%s iface =%s type = %d",__func__,iface_name,session_type);
 
    if(macAddr == NULL)
    {
@@ -9171,7 +9163,6 @@ void hdd_exchange_version_and_caps(hdd_context_t *pHddCtx)
 
       pr_info("%s: WCNSS software version %s\n",
               WLAN_MODULE_NAME, versionString);
-      vos_mem_copy(pHddCtx->fw_Version, versionString, sizeof(versionString));
 
       vstatus = sme_GetWcnssHardwareVersion(pHddCtx->hHal,
                                             versionString,
@@ -9635,7 +9626,7 @@ static void hdd_dp_util_send_rps_ind(hdd_context_t  *hdd_ctxt)
 
 int hdd_wlan_startup(struct device *dev )
 {
-   VOS_STATUS status, nv_parse_status;
+   VOS_STATUS status;
    hdd_adapter_t *pAdapter = NULL;
    hdd_adapter_t *pP2pAdapter = NULL;
    hdd_context_t *pHddCtx = NULL;
@@ -9648,7 +9639,6 @@ int hdd_wlan_startup(struct device *dev )
    int ret;
    struct wiphy *wiphy;
    v_MACADDR_t mac_addr;
-   int i = 0, j = 0;
 
    ENTER();
    /*
@@ -9698,7 +9688,9 @@ int hdd_wlan_startup(struct device *dev )
    ((VosContextType*)(pVosContext))->pHDDContext = (v_VOID_t*)pHddCtx;
 
    pHddCtx->parent_dev = dev;
-   pHddCtx->con_scan_abort_cnt = 0;
+   pHddCtx->last_scan_reject_session_id = 0xFF;
+   pHddCtx->last_scan_reject_reason = 0;
+   pHddCtx->last_scan_reject_timestamp = 0;
 
    init_completion(&pHddCtx->full_pwr_comp_var);
    init_completion(&pHddCtx->standby_comp_var);
@@ -9737,11 +9729,6 @@ int hdd_wlan_startup(struct device *dev )
    /* By default Strict Regulatory For FCC should be false */
 
    pHddCtx->nEnableStrictRegulatoryForFCC = FALSE;
-   /*--------------------------------------------------*/
-   // Read and parse the asus nv file
-   nv_parse_status = hdd_parse_config_nv(pHddCtx);
-   /*--------------------------------------------------*/
-
    // Load all config first as TL config is needed during vos_open
    pHddCtx->cfg_ini = (hdd_config_t*) kmalloc(sizeof(hdd_config_t), GFP_KERNEL);
    if(pHddCtx->cfg_ini == NULL)
@@ -10014,7 +10001,6 @@ int hdd_wlan_startup(struct device *dev )
       // Apply the NV to cfg.dat
       /* Prima Update MAC address only at here */
 #ifdef WLAN_AUTOGEN_MACADDR_FEATURE
-#if 0
       /* There was not a valid set of MAC Addresses in NV.  See if the
          default addresses were modified by the cfg.ini settings.  If so,
          we'll use them, but if not, we'll autogenerate a set of MAC
@@ -10041,31 +10027,6 @@ int hdd_wlan_startup(struct device *dev )
                    MAC_ADDR_ARRAY(pHddCtx->cfg_ini->intfMacAddr[0].bytes));
          }
       }
-#else
-      static const v_MACADDR_t default_address[] = { {{0x00, 0x0A, 0xF5, 0x89, 0x89, 0xFF}},
-                                                 {{0x00, 0x0A, 0xF5, 0x89, 0x89, 0xFE}},
-                                                 {{0x00, 0x0A, 0xF5, 0x89, 0x89, 0xFD}},
-                                                 {{0x00, 0x0A, 0xF5, 0x89, 0x89, 0xFC}}, };
-
-      /*----------------------------------------------------------------------*/
-      if( VOS_STATUS_SUCCESS == nv_parse_status ) {
-          for( i=0; i<4; i++ ){
-              for( j=0; j<VOS_MAC_ADDRESS_LEN; j++ ){
-                  pHddCtx->cfg_ini->intfMacAddr[i].bytes[j] = (v_BYTE_t)(g_WlanAsusMac[i].MacAddress[j]);
-              }
-          }
-          hddLog(1, "[wlan]: copy g_WlanAsusMac to intfMacAddr.");
-      }
-      /*----------------------------------------------------------------------*/
-
-      if( 0 != memcmp(&default_address[0], &pHddCtx->cfg_ini->intfMacAddr[0], sizeof(v_MACADDR_t)) ) {
-          if( 0 == memcmp(&default_address[1], &pHddCtx->cfg_ini->intfMacAddr[1], sizeof(v_MACADDR_t)) ) {
-              memcpy(&pHddCtx->cfg_ini->intfMacAddr[1], &pHddCtx->cfg_ini->intfMacAddr[0], sizeof(v_MACADDR_t));
-              pHddCtx->cfg_ini->intfMacAddr[1].bytes[0] |= 0x02; /*set locally administered addresses*/
-              hddLog(1, "[wlan]: set 2nd-MAC locally administered addresses.");
-          }
-      }
-#endif
       else
 #endif //WLAN_AUTOGEN_MACADDR_FEATURE
       {
@@ -10091,16 +10052,6 @@ int hdd_wlan_startup(struct device *dev )
          hddLog(VOS_TRACE_LEVEL_ERROR,"%s: Failed to set MAC Address. "
                 "HALStatus is %08d [x%08x]",__func__, halStatus, halStatus );
          goto err_vosclose;
-      }
-
-      for( i=0; i<4; i++ ){
-          hddLog(1, "[wlan]: intfMacAddr[%d]=[%02X:%02X:%02X:%02X:%02X:%02X].", i,
-                          pHddCtx->cfg_ini->intfMacAddr[i].bytes[0],
-                          pHddCtx->cfg_ini->intfMacAddr[i].bytes[1],
-                          pHddCtx->cfg_ini->intfMacAddr[i].bytes[2],
-                          pHddCtx->cfg_ini->intfMacAddr[i].bytes[3],
-                          pHddCtx->cfg_ini->intfMacAddr[i].bytes[4],
-                          pHddCtx->cfg_ini->intfMacAddr[i].bytes[5] );
       }
    }
 
@@ -10634,10 +10585,6 @@ static int hdd_driver_init( void)
    wlan_logging_sock_init_svc();
 #endif
 
-   //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-   ASUSEvtlog("[wlan]: hdd_driver_init +.\n");
-   //ASUS_BSP--- "for /data/log/ASUSEvtlog"
-
    ENTER();
 
    vos_wake_lock_init(&wlan_wake_lock, "wlan");
@@ -10737,9 +10684,6 @@ static int hdd_driver_init( void)
 #endif
 
       pr_err("%s: driver load failure\n", WLAN_MODULE_NAME);
-      //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-      ASUSEvtlog("[wlan]: driver load failure.\n");
-      //ASUS_BSP--- "for /data/log/ASUSEvtlog"
    }
    else
    {
@@ -10747,16 +10691,9 @@ static int hdd_driver_init( void)
       send_btc_nlink_msg(WLAN_MODULE_UP_IND, 0);
 
       pr_info("%s: driver loaded\n", WLAN_MODULE_NAME);
-      //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-      ASUSEvtlog("[wlan]: driver loaded.\n");
-      //ASUS_BSP--- "for /data/log/ASUSEvtlog"
    }
 
    EXIT();
-
-   //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-   ASUSEvtlog("[wlan]: hdd_driver_init -.\n");
-   //ASUS_BSP--- "for /data/log/ASUSEvtlog"
 
    return ret_status;
 }
@@ -10806,9 +10743,6 @@ static void hdd_driver_exit(void)
    unsigned long rc = 0;
 
    pr_info("%s: unloading driver v%s\n", WLAN_MODULE_NAME, QWLAN_VERSIONSTR);
-   //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-   ASUSEvtlog("[wlan]: hdd_driver_exit +.\n");
-   //ASUS_BSP--- "for /data/log/ASUSEvtlog"
 
    //Get the global vos context
    pVosContext = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
@@ -10907,10 +10841,6 @@ done:
    vos_wake_lock_destroy(&wlan_wake_lock);
 
    pr_info("%s: driver unloaded\n", WLAN_MODULE_NAME);
-   //ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-   ASUSEvtlog("[wlan]: driver unloaded.\n");
-   ASUSEvtlog("[wlan]: hdd_driver_exit -.\n");
-   //ASUS_BSP--- "for /data/log/ASUSEvtlog"
 }
 
 /**---------------------------------------------------------------------------

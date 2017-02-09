@@ -67,11 +67,6 @@ static WDTS_TransportDriverTrype gTransportDriver = {
 
 static WDTS_SetPowerStateCbInfoType gSetPowerStateCbInfo;
 
-//ASUS_BSP+++ "for wlan wakeup trace"
-extern int wcnss_irq_flag_function_wdi(void);
-//ASUS_BSP--- "for wlan wakeup trace"
-
-
 typedef struct 
 {
    uint32 phyRate;   //unit in Mega bits per sec X 10
@@ -610,11 +605,6 @@ wpt_status WDTS_RxPacket (void *pContext, wpt_packet *pFrame, WDTS_ChannelType c
   wpt_uint16                  usMPDUDOffset, usMPDULen;
   WDI_DS_RxMetaInfoType     *pRxMetadata;
   wpt_uint8                  isFcBd = 0;
-  //ASUS_BSP+++ "for wlan wakeup trace"
-  static char saved_beacon_mpduDataPtr[256];
-  static unsigned int saved_beacon_mpduLength;
-  static unsigned int saved_beacon_seqNum;
-  //ASUS_BSP--- "for wlan wakeup trace"
 
   tpSirMacFrameCtl  pMacFrameCtl;
   // Do Sanity checks
@@ -911,111 +901,6 @@ wpt_status WDTS_RxPacket (void *pContext, wpt_packet *pFrame, WDTS_ChannelType c
         }
      }
   }
-
-  //ASUS_BSP+++ "for wlan wakeup trace"
-#if 1
-  if( wcnss_irq_flag_function_wdi() == 1 ) {
-      
-      /* print packet content */
-      {
-         tpSirMacMgmtHdr HDR;
-         char *tmp_mpduDataPtr = NULL;
-         int tmp_mpduLength = 0;
-         int index = 0;
-         char tmp_ID = 0, tmp_length = 0;
-
-         HDR = (tpSirMacMgmtHdr)(((WDI_DS_RxMetaInfoType*)pRxMetadata)->mpduHeaderPtr);
-         pr_info("[wlan_wakeup]: WDTS_RxPacket, (type %x, subtype %x), SN=[%d]\n",
-                 pRxMetadata->type, pRxMetadata->subtype, ((HDR->seqControl.seqNumHi << 4) | (HDR->seqControl.seqNumLo)));
-         pr_info("[wlan_wakeup]: (DestMac %.2x %.2x %.2x %.2x %.2x %.2x)(SrcMac %.2x %.2x %.2x %.2x %.2x %.2x)\n",
-			 HDR->da[0], HDR->da[1], HDR->da[2], HDR->da[3], HDR->da[4], HDR->da[5],
-			 HDR->sa[0], HDR->sa[1], HDR->sa[2], HDR->sa[3], HDR->sa[4], HDR->sa[5]);
-         
-         /* Beacon Frame */
-         if( ((pRxMetadata->type) == 0) && ((pRxMetadata->subtype) == 8) ) {
-			 
-			/* Saved Beacon Frame */
-			tmp_mpduDataPtr = saved_beacon_mpduDataPtr; 
-			tmp_mpduLength = saved_beacon_mpduLength;
-			
-			pr_info("[wlan_wakeup]: Saved beacon SN=[%d], mpduLength=%d\n", saved_beacon_seqNum, tmp_mpduLength);
-			
-            index = 12;
-            while( (index < tmp_mpduLength) && (index < 256) )
-            {
-                tmp_ID = (char)(*(tmp_mpduDataPtr + index));
-                index ++;
-                tmp_length = (char)(*(tmp_mpduDataPtr + index));
-                index ++;
-
-                /* ERP Information ID (42) */
-                if( (tmp_ID == 42) && (tmp_length >= 1) ) {
-                    pr_info("[wlan_wakeup]: Saved beacon ERP_Info [%02x]\n", (char)(*(tmp_mpduDataPtr + index)));
-                }
-                /* HT Information ID (61) */
-                else if( (tmp_ID == 61) && (tmp_length >= 6) ) {
-                    pr_info("[wlan_wakeup]: Saved beacon HT_Info, (%d) [%02x] [%02x%02x] [%02x%02x]\n", 
-                                        (char)(*(tmp_mpduDataPtr + index)),
-                                        (char)(*(tmp_mpduDataPtr + index + 1)),
-                                        (char)(*(tmp_mpduDataPtr + index + 3)), (char)(*(tmp_mpduDataPtr + index + 2)),
-                                        (char)(*(tmp_mpduDataPtr + index + 5)), (char)(*(tmp_mpduDataPtr + index + 4)) );
-                }
-
-                index = index + tmp_length;
-            }
-			 
-			/* Wakeup Beacon Frame */ 
-            tmp_mpduDataPtr = pRxMetadata->mpduDataPtr;
-            tmp_mpduLength = pRxMetadata->mpduLength;
-
-            pr_info("[wlan_wakeup]: Wakeup beacon [%02x:%02x:%02x:%02x:%02x:%02x], mpduLength=%d\n", 
-                    (HDR->bssId[0]), (HDR->bssId[1]), (HDR->bssId[2]), (HDR->bssId[3]), (HDR->bssId[4]), (HDR->bssId[5]),
-                    tmp_mpduLength);
-
-            /* index offset 12 (Timestamp [8], Beacon Interval [2], Capability Info [2]). */
-            index = 12;
-            while( index < tmp_mpduLength )
-            {
-                tmp_ID = (char)(*(tmp_mpduDataPtr + index));
-                index ++;
-                tmp_length = (char)(*(tmp_mpduDataPtr + index));
-                index ++;
-
-                /* ERP Information ID (42) */
-                if( (tmp_ID == 42) && (tmp_length >= 1) ) {
-                    pr_info("[wlan_wakeup]: Wakeup beacon ERP_Info [%02x]\n", (char)(*(tmp_mpduDataPtr + index)));
-                }
-                /* HT Information ID (61) */
-                else if( (tmp_ID == 61) && (tmp_length >= 6) ) {
-                    pr_info("[wlan_wakeup]: Wakeup beacon HT_Info, (%d) [%02x] [%02x%02x] [%02x%02x]\n", 
-                                        (char)(*(tmp_mpduDataPtr + index)),
-                                        (char)(*(tmp_mpduDataPtr + index + 1)),
-                                        (char)(*(tmp_mpduDataPtr + index + 3)), (char)(*(tmp_mpduDataPtr + index + 2)),
-                                        (char)(*(tmp_mpduDataPtr + index + 5)), (char)(*(tmp_mpduDataPtr + index + 4)) );
-                }
-
-                index = index + tmp_length;
-            }
-         }
-      }
-  }
-  /* Save mpduData, mpduLength and sequence number of last beacon */
-  {
-     tpSirMacMgmtHdr HDR;
-
-     HDR = (tpSirMacMgmtHdr)(((WDI_DS_RxMetaInfoType*)pRxMetadata)->mpduHeaderPtr);
-     if( ((pRxMetadata->type) == 0) && ((pRxMetadata->subtype) == 8) ) {
-		 if(pRxMetadata->mpduLength <= 256)
-			memcpy(saved_beacon_mpduDataPtr, pRxMetadata->mpduDataPtr, pRxMetadata->mpduLength);
-		 else
-		    memcpy(saved_beacon_mpduDataPtr, pRxMetadata->mpduDataPtr, 256);
-		 saved_beacon_mpduLength = pRxMetadata->mpduLength;
-		 saved_beacon_seqNum = (HDR->seqControl.seqNumHi << 4) | (HDR->seqControl.seqNumLo);
-     }
-  }  
-#endif
-  //ASUS_BSP--- "for wlan wakeup trace"
-
   return eWLAN_PAL_STATUS_SUCCESS;
 }
 

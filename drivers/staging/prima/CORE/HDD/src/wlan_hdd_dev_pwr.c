@@ -111,8 +111,6 @@ static int wlan_suspend(hdd_context_t* pHddCtx)
 
    pVosSchedContext vosSchedContext = NULL;
 
-   printk("[wlan]: wlan_suspend +.\n");
-
    /* Get the global VOSS context */
    vosSchedContext = get_vos_sched_ctxt();
 
@@ -169,8 +167,6 @@ tx_suspend:
    /* Set the Tx Thread as Suspended */
    pHddCtx->isTxThreadSuspended = TRUE;
 
-   printk("[wlan]: Tx Thread suspended\n");
-
    INIT_COMPLETION(pHddCtx->rx_sus_event_var);
 
    /* Indicate Rx Thread to Suspend */
@@ -211,8 +207,6 @@ tx_suspend:
 rx_suspend:
    /* Set the Rx Thread as Suspended */
    pHddCtx->isRxThreadSuspended = TRUE;
-
-   printk("[wlan]: Rx Thread suspended\n");
 
    INIT_COMPLETION(pHddCtx->mc_sus_event_var);
 
@@ -263,12 +257,9 @@ mc_suspend:
    /* Set the Mc Thread as Suspended */
    pHddCtx->isMcThreadSuspended = TRUE;
    
-   printk("[wlan]: Mc Thread suspended\n");
-   
    /* Set the Station state as Suspended */
    pHddCtx->isWlanSuspended = TRUE;
 
-   printk("[wlan]: wlan_suspend -.\n");
    return 0;
 }
 
@@ -286,8 +277,6 @@ mc_suspend:
 static void wlan_resume(hdd_context_t* pHddCtx)
 {
    pVosSchedContext vosSchedContext = NULL;
-
-   printk("[wlan]: wlan_resume +.\n");
 
    //Get the global VOSS context.
    vosSchedContext = get_vos_sched_ctxt();
@@ -322,8 +311,6 @@ static void wlan_resume(hdd_context_t* pHddCtx)
 
    /* Set the Station state as Suspended */
    pHddCtx->isWlanSuspended = FALSE;
-
-   printk("[wlan]: wlan_resume -.\n");
 }
 
 /*----------------------------------------------------------------------------

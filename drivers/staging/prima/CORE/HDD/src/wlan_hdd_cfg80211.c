@@ -95,8 +95,6 @@
 #include "wlan_qct_wda.h"
 #include "wlan_nv.h"
 #include "wlan_hdd_dev_pwr.h"
-#include "qwlan_version.h"
-
 
 #define g_mode_rates_size (12)
 #define a_mode_rates_size (8)
@@ -1712,7 +1710,7 @@ static int __wlan_hdd_cfg80211_ll_stats_set(struct wiphy *wiphy,
     if ( (TRUE != pHddCtx->cfg_ini->fEnableLLStats) ||
          (TRUE != sme_IsFeatureSupportedByFW(LINK_LAYER_STATS_MEAS)))
     {
-        hddLog(VOS_TRACE_LEVEL_ERROR,
+        hddLog(VOS_TRACE_LEVEL_WARN,
                FL("Link Layer Statistics not supported by Firmware"));
         return -EINVAL;
     }
@@ -5226,120 +5224,6 @@ static int wlan_hdd_cfg80211_firmware_roaming(struct wiphy *wiphy,
     return ret;
 }
 
-static const struct
-nla_policy
-qca_wlan_vendor_get_wifi_info_policy[
-         QCA_WLAN_VENDOR_ATTR_WIFI_INFO_GET_MAX +1] = {
-    [QCA_WLAN_VENDOR_ATTR_WIFI_INFO_DRIVER_VERSION] = {.type = NLA_U8 },
-    [QCA_WLAN_VENDOR_ATTR_WIFI_INFO_FIRMWARE_VERSION] = {.type = NLA_U8 },
-};
-
-
-/**
- * __wlan_hdd_cfg80211_get_wifi_info() - Get the wifi driver related info
- * @wiphy:   pointer to wireless wiphy structure.
- * @wdev:    pointer to wireless_dev structure.
- * @data:    Pointer to the data to be passed via vendor interface
- * @data_len:Length of the data to be passed
- *
- * This is called when wlan driver needs to send wifi driver related info
- * (driver/fw version) to the user space application upon request.
- *
- * Return:   Return the Success or Failure code.
- */
-static int __wlan_hdd_cfg80211_get_wifi_info(struct wiphy *wiphy,
-                                  struct wireless_dev *wdev,
-                              const void *data, int data_len)
-{
-    hdd_context_t *hdd_ctx = wiphy_priv(wiphy);
-    struct nlattr *tb_vendor[QCA_WLAN_VENDOR_ATTR_WIFI_INFO_GET_MAX + 1];
-    tSirVersionString version;
-    uint32 version_len;
-    uint8 attr;
-    int status;
-    struct sk_buff *reply_skb = NULL;
-
-    if (VOS_FTM_MODE == hdd_get_conparam()) {
-        hddLog(LOGE, FL("Command not allowed in FTM mode"));
-        return -EINVAL;
-    }
-
-    status = wlan_hdd_validate_context(hdd_ctx);
-    if (0 != status) {
-        hddLog(LOGE, FL("HDD context is not valid"));
-        return -EINVAL;
-    }
-
-    if (nla_parse(tb_vendor, QCA_WLAN_VENDOR_ATTR_WIFI_INFO_GET_MAX, data,
-        data_len, qca_wlan_vendor_get_wifi_info_policy)) {
-        hddLog(LOGE, FL("WIFI_INFO_GET NL CMD parsing failed"));
-        return -EINVAL;
-    }
-
-    if (tb_vendor[QCA_WLAN_VENDOR_ATTR_WIFI_INFO_DRIVER_VERSION]) {
-        hddLog(LOG1, FL("Rcvd req for Driver version Driver version is %s"),
-                                                          QWLAN_VERSIONSTR);
-        strlcpy(version, QWLAN_VERSIONSTR, sizeof(version));
-        attr = QCA_WLAN_VENDOR_ATTR_WIFI_INFO_DRIVER_VERSION;
-    } else if (tb_vendor[QCA_WLAN_VENDOR_ATTR_WIFI_INFO_FIRMWARE_VERSION]) {
-        hddLog(LOG1, FL("Rcvd req for FW version FW version is %s"),
-                                               hdd_ctx->fw_Version);
-        strlcpy(version, hdd_ctx->fw_Version, sizeof(version));
-        attr = QCA_WLAN_VENDOR_ATTR_WIFI_INFO_FIRMWARE_VERSION;
-    } else {
-        hddLog(LOGE, FL("Invalid attribute in get wifi info request"));
-        return -EINVAL;
-    }
-
-    version_len = strlen(version);
-    reply_skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy,
-    version_len + NLA_HDRLEN + NLMSG_HDRLEN);
-    if (!reply_skb) {
-        hddLog(LOGE, FL("cfg80211_vendor_cmd_alloc_reply_skb failed"));
-        return -ENOMEM;
-    }
-
-    if (nla_put(reply_skb, attr, version_len, version)) {
-        hddLog(LOGE, FL("nla put fail"));
-        kfree_skb(reply_skb);
-        return -EINVAL;
-    }
-
-    return cfg80211_vendor_cmd_reply(reply_skb);
-}
-
-/**
- * __wlan_hdd_cfg80211_get_wifi_info() - Get the wifi driver related info
- * @wiphy:   pointer to wireless wiphy structure.
- * @wdev:    pointer to wireless_dev structure.
- * @data:    Pointer to the data to be passed via vendor interface
- * @data_len:Length of the data to be passed
- * @data_len: Length of the data received
- *
- * This function is used to enable or disable the collection of packet
- * statistics from the firmware
- *
- * Return: 0 on success and errno on failure
- */
-
-static int
-wlan_hdd_cfg80211_get_wifi_info(struct wiphy *wiphy,
-                                  struct wireless_dev *wdev,
-                              const void *data, int data_len)
-
-
-{
-    int ret = 0;
-
-    vos_ssr_protect(__func__);
-    ret = __wlan_hdd_cfg80211_get_wifi_info(wiphy,
-          wdev, data, data_len);
-    vos_ssr_unprotect(__func__);
-
-    return ret;
-}
-
-
 /**
  * __wlan_hdd_cfg80211_setband() - set band
  * @wiphy: Pointer to wireless phy
@@ -5594,14 +5478,6 @@ const struct wiphy_vendor_command hdd_wiphy_vendor_commands[] =
             WIPHY_VENDOR_CMD_NEED_NETDEV |
             WIPHY_VENDOR_CMD_NEED_RUNNING,
         .doit = wlan_hdd_cfg80211_setband
-    },
-    {
-        .info.vendor_id = QCA_NL80211_VENDOR_ID,
-        .info.subcmd = QCA_NL80211_VENDOR_SUBCMD_GET_WIFI_INFO,
-        .flags = WIPHY_VENDOR_CMD_NEED_WDEV |
-                 WIPHY_VENDOR_CMD_NEED_NETDEV|
-                  WIPHY_VENDOR_CMD_NEED_RUNNING,
-        .doit = wlan_hdd_cfg80211_get_wifi_info
     }
 };
 
@@ -5711,12 +5587,6 @@ struct nl80211_vendor_cmd_info wlan_hdd_cfg80211_vendor_events[] =
         .vendor_id = QCA_NL80211_VENDOR_ID,
         .subcmd = QCA_NL80211_VENDOR_SUBCMD_NAN
     },
-
-    {
-        .vendor_id = QCA_NL80211_VENDOR_ID,
-        .subcmd = QCA_NL80211_VENDOR_SUBCMD_GET_WIFI_INFO,
-    }
-
 
 };
 
@@ -10134,12 +10004,6 @@ wlan_hdd_cfg80211_inform_bss_frame( hdd_adapter_t *pAdapter,
     hddLog(VOS_TRACE_LEVEL_INFO, "%s: BSSID:" MAC_ADDRESS_STR " Channel:%d"
           " RSSI:%d", __func__, MAC_ADDR_ARRAY(mgmt->bssid),
                       vos_freq_to_chan(chan->center_freq), (int)(rssi/100));
-    //ASUS_BSP+++ "add for the RSSI (value = 0) issue"
-    if( rssi == 0 ) {
-        hddLog(1, "[wlan]: wlan_hdd_cfg80211_inform_bss_frame, rssi (0 -> -9900).\n");
-        rssi = (-9900);
-    }
-    //ASUS_BSP--- "add for the RSSI (value = 0) issue"
 
     bss_status = cfg80211_inform_bss_frame(wiphy, chan, mgmt,
             frame_len, rssi, GFP_KERNEL);
@@ -10579,11 +10443,13 @@ static eHalStatus hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
 
     /* Get the Scan Req */
     req = pAdapter->request;
+    pAdapter->request = NULL;
 
-    if (!req)
+    if (!req || req->wiphy == NULL)
     {
         hddLog(VOS_TRACE_LEVEL_ERROR, "request is became NULL");
         pScanInfo->mScanPending = VOS_FALSE;
+        complete(&pScanInfo->abortscan_event_var);
         goto allow_suspend;
     }
 
@@ -10621,7 +10487,10 @@ static eHalStatus hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
          aborted = true;
     }
 
-    cfg80211_scan_done(req, aborted);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
+    if (pAdapter->dev->flags & IFF_UP)
+#endif
+        cfg80211_scan_done(req, aborted);
 
     complete(&pScanInfo->abortscan_event_var);
 
@@ -10656,7 +10525,8 @@ allow_suspend:
  * Go through each adapter and check if Connection is in progress
  *
  */
-v_BOOL_t hdd_isConnectionInProgress( hdd_context_t *pHddCtx)
+v_BOOL_t hdd_isConnectionInProgress(hdd_context_t *pHddCtx, v_U8_t *session_id,
+                                    scan_reject_states *reason)
 {
     hdd_adapter_list_node_t *pAdapterNode = NULL, *pNext = NULL;
     hdd_station_ctx_t *pHddStaCtx = NULL;
@@ -10693,6 +10563,11 @@ v_BOOL_t hdd_isConnectionInProgress( hdd_context_t *pHddCtx)
                 hddLog(VOS_TRACE_LEVEL_ERROR,
                        "%s: %p(%d) Connection is in progress", __func__,
                        WLAN_HDD_GET_STATION_CTX_PTR(pAdapter), pAdapter->sessionId);
+                if (session_id && reason)
+                {
+                    *session_id = pAdapter->sessionId;
+                    *reason = eHDD_CONNECTION_IN_PROGRESS;
+                }
                 return VOS_TRUE;
             }
             if ((WLAN_HDD_INFRA_STATION == pAdapter->device_mode) &&
@@ -10701,6 +10576,11 @@ v_BOOL_t hdd_isConnectionInProgress( hdd_context_t *pHddCtx)
                 hddLog(VOS_TRACE_LEVEL_ERROR,
                        "%s: %p(%d) Reassociation is in progress", __func__,
                        WLAN_HDD_GET_STATION_CTX_PTR(pAdapter), pAdapter->sessionId);
+                if (session_id && reason)
+                {
+                    *session_id = pAdapter->sessionId;
+                    *reason = eHDD_REASSOC_IN_PROGRESS;
+                }
                 return VOS_TRUE;
             }
             if ((WLAN_HDD_INFRA_STATION == pAdapter->device_mode) ||
@@ -10716,6 +10596,11 @@ v_BOOL_t hdd_isConnectionInProgress( hdd_context_t *pHddCtx)
                            "%s: client " MAC_ADDRESS_STR
                            " is in the middle of WPS/EAPOL exchange.", __func__,
                             MAC_ADDR_ARRAY(staMac));
+                    if (session_id && reason)
+                    {
+                        *session_id = pAdapter->sessionId;
+                        *reason = eHDD_EAPOL_IN_PROGRESS;
+                    }
                     return VOS_TRUE;
                 }
             }
@@ -10741,6 +10626,11 @@ v_BOOL_t hdd_isConnectionInProgress( hdd_context_t *pHddCtx)
                                "%s: client " MAC_ADDRESS_STR " of SoftAP/P2P-GO is in the "
                                "middle of WPS/EAPOL exchange.", __func__,
                                 MAC_ADDR_ARRAY(staMac));
+                        if (session_id && reason)
+                        {
+                            *session_id = pAdapter->sessionId;
+                            *reason = eHDD_SAP_EAPOL_IN_PROGRESS;
+                        }
                         return VOS_TRUE;
                     }
                 }
@@ -10778,6 +10668,8 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
     bool is_p2p_scan = false;
     v_S7_t rssi=0;
     hdd_station_ctx_t *pHddStaCtx=NULL;
+    v_U8_t curr_session_id;
+    scan_reject_states curr_reason;
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0))
     struct net_device *dev = NULL;
@@ -10885,20 +10777,33 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
 
     /* Check if scan is allowed at this point of time.
      */
-    if (hdd_isConnectionInProgress(pHddCtx))
+    if (hdd_isConnectionInProgress(pHddCtx, &curr_session_id, &curr_reason))
     {
         hddLog(VOS_TRACE_LEVEL_ERROR, FL("Scan not allowed"));
-        if (SCAN_ABORT_THRESHOLD < pHddCtx->con_scan_abort_cnt) {
-            VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                    FL("Triggering SSR, SSR status = %d"), status);
-            vos_wlanRestart();
-        }
-        else
-            pHddCtx->con_scan_abort_cnt++;
 
-        return -EBUSY;
+        if (pHddCtx->last_scan_reject_session_id != curr_session_id ||
+            pHddCtx->last_scan_reject_reason != curr_reason ||
+            !pHddCtx->last_scan_reject_timestamp)
+        {
+            pHddCtx->last_scan_reject_session_id = curr_session_id;
+            pHddCtx->last_scan_reject_reason = curr_reason;
+            pHddCtx->last_scan_reject_timestamp = jiffies_to_msecs(jiffies);
+        }
+        else {
+            if ((jiffies_to_msecs(jiffies) -
+                 pHddCtx->last_scan_reject_timestamp) >=
+                SCAN_REJECT_THRESHOLD_TIME)
+            {
+                pHddCtx->last_scan_reject_timestamp = 0;
+                hddLog(LOGE, FL("Triggering SSR due to scan stuck"));
+                vos_wlanRestart();
+            }
+         }
+         return -EBUSY;
     }
-    pHddCtx->con_scan_abort_cnt = 0;
+    pHddCtx->last_scan_reject_timestamp = 0;
+    pHddCtx->last_scan_reject_session_id = 0xFF;
+    pHddCtx->last_scan_reject_reason = 0;
 
     vos_mem_zero( &scanRequest, sizeof(scanRequest));
 
@@ -12453,6 +12358,11 @@ static int __wlan_hdd_cfg80211_connect( struct wiphy *wiphy,
             return -ECONNREFUSED;
     }
 
+    /* Abort if any scan is going on */
+    status = wlan_hdd_scan_abort(pAdapter);
+    if (0 != status)
+        hddLog(VOS_TRACE_LEVEL_ERROR, FL("scan abort failed"));
+
     if ( req->channel )
     {
         status = wlan_hdd_cfg80211_connect_start(pAdapter, req->ssid,
@@ -12642,8 +12552,6 @@ static int __wlan_hdd_cfg80211_disconnect( struct wiphy *wiphy,
     hddLog(VOS_TRACE_LEVEL_INFO, "%s: device_mode = %s(%d)",
            __func__, hdd_device_modetoString(pAdapter->device_mode),
                                              pAdapter->device_mode);
-
-    pr_info("wlan: Disconnect called with reason code %d\n",reason);
 
     hddLog(VOS_TRACE_LEVEL_INFO, "%s: Disconnect called with reason code %d",
             __func__, reason);
@@ -14872,10 +14780,8 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
     else
         pnoRequest.scanTimers.ucScanTimersCount =
                                                HDD_PNO_SCAN_TIMERS_SET_MULTIPLE;
-//ASUS_BSP+++ "Update PNO scan interval to 300s"
-//    tempInterval = (request->interval)/1000;
-    tempInterval = 300;
-//ASUS_BSP--- "Update PNO scan interval to 300s"
+
+    tempInterval = (request->interval)/1000;
     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
               "Base scan interval = %d PNOScanTimerRepeatValue = %d",
               tempInterval, pHddCtx->cfg_ini->configPNOScanTimerRepeatValue);

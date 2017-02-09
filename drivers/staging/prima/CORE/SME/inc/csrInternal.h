@@ -714,6 +714,13 @@ typedef struct tagCsrVotes11d
     tANI_U8 countryCode[WNI_CFG_COUNTRY_CODE_LEN];
 }tCsrVotes11d;
 
+struct csr_disable_scan_during_sco_timer_info
+{
+    struct net_device *dev;
+    tANI_U32 scan_id;
+    csrScanCompleteCallback callback;
+};
+
 typedef struct tagCsrScanStruct
 {
     tScanProfile scanProfile;
@@ -723,6 +730,10 @@ typedef struct tagCsrScanStruct
     tANI_BOOLEAN fScanEnable;
     tANI_BOOLEAN fFullScanIssued;
     vos_timer_t hTimerGetResult;
+    vos_timer_t disable_scan_during_sco_timer;
+    struct csr_disable_scan_during_sco_timer_info
+                                 disable_scan_during_sco_timer_info;
+    tANI_BOOLEAN disable_scan_during_sco;
 #ifdef WLAN_AP_STA_CONCURRENCY
     vos_timer_t hTimerStaApConcTimer;
 #endif

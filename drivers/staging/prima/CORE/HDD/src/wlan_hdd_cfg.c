@@ -60,24 +60,6 @@
 #include <pmcApi.h>
 #include <wlan_hdd_misc.h>
 
-WLAN_ASUS_NV g_WlanAsusNv[] =
-{
-    { {"MacAddress0"}, {""} },
-    { {"MacAddress1"}, {""} },
-    { {"MacAddress2"}, {""} },
-    { {"MacAddress3"}, {""} },
-    { {"RegDomain"}, {"0"} },
-    { {"CountryCode"}, {"US"} },
-};
-
-WLAN_ASUS_MAC g_WlanAsusMac[] =
-{
-    { {0x00, 0x0A, 0xF5, 0x89, 0x89, 0xFF} },
-    { {0x00, 0x0A, 0xF5, 0x89, 0x89, 0xFE} },
-    { {0x00, 0x0A, 0xF5, 0x89, 0x89, 0xFD} },
-    { {0x00, 0x0A, 0xF5, 0x89, 0x89, 0xFC} },
-};
-
 #if  defined (WLAN_FEATURE_VOWIFI_11R) || defined (FEATURE_WLAN_ESE) || defined(FEATURE_WLAN_LFR)
 static void cbNotifySetRoamPrefer5GHz(hdd_context_t *pHddCtx, unsigned long NotifyId)
 {
@@ -3442,6 +3424,12 @@ REG_VARIABLE( CFG_EXTSCAN_ENABLE, WLAN_PARAM_Integer,
                  CFG_DISABLE_BAR_WAKEUP_HOST_MIN,
                  CFG_DISABLE_BAR_WAKEUP_HOST_MAX),
 
+  REG_VARIABLE(CFG_DISABLE_SCAN_DURING_SCO, WLAN_PARAM_Integer,
+               hdd_config_t, disable_scan_during_sco,
+               VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+               CFG_DISABLE_SCAN_DURING_SCO_DEFAULT,
+               CFG_DISABLE_SCAN_DURING_SCO_MIN,
+               CFG_DISABLE_SCAN_DURING_SCO_MAX ),
 };
 
 /*
@@ -3526,140 +3514,6 @@ typedef struct
 
 static VOS_STATUS hdd_apply_cfg_ini( hdd_context_t * pHddCtx,
     tCfgIniEntry* iniTable, unsigned long entries);
-
-/*--------------------------------------------------------------------------------*/
-VOS_STATUS hdd_parse_config_nv(hdd_context_t* pHddCtx)
-{
-    int status, i=0, j=0, k=0;
-    const struct firmware *fw = NULL;
-    char *buffer, *line,*pTemp;
-    size_t size;
-    char *name, *value;
-    char tempChar[2], tmp;
-
-
-    status = request_firmware(&fw, WLAN_ASUS_NV_FILE_LINK, pHddCtx->parent_dev);
-    if(status) {
-        hddLog(1, "[wlan]: request_firmware fail (%s, %d).", WLAN_ASUS_NV_FILE_LINK, status);
-        return VOS_STATUS_E_FAILURE;
-    }
-
-    if(!fw || !fw->data || !fw->size) {
-        hddLog(1, "[wlan]: %s download fail.", WLAN_ASUS_NV_FILE_LINK);
-        return VOS_STATUS_E_FAILURE;
-    }
-
-    buffer = NULL;
-    buffer = (char*)vos_mem_malloc(fw->size);
-    if(NULL == buffer) {
-        hddLog(1, "[wlan]: vos_mem_malloc() fail.");
-        release_firmware(fw);
-        return VOS_STATUS_E_FAILURE;
-    }
-
-    pTemp = buffer;
-    vos_mem_copy((void*)buffer,(void *)fw->data, fw->size);
-    size = fw->size;
-
-    i = 0;
-    while (buffer != NULL)
-    {
-      /*
-       * get_next_line function used to modify the \n and \r delimiter
-       * to \0 before returning, without checking if it is over parsing the
-       * source buffer. So changed the function not to modify the buffer
-       * passed to it and letting the calling/caller function to take
-       * care of the return pointer validation and modification of the buffer.
-       * So validating if the return pointer is not greater than the end
-       * buffer address and modifying the buffer value.
-       */
-        line = get_next_line(buffer, (pTemp + (fw->size-1)));
-        buffer = i_trim(buffer);
-
-        //hddLog(LOGE,"%s: item \n",buffer);
-	  
-        if(strlen((char*)buffer) == 0 || *buffer == '#')  {
-            buffer = line;
-            continue;
-        }
-        else if(strncmp(buffer, "END", 3) == 0 ) {
-            break;
-        }
-        else {
-            name = buffer;
-            while(*buffer != '=' && *buffer != '\0') 
-                buffer++;
-
-            if(*buffer != '\0') {
-                *buffer++ = '\0';
-                i_trim(name);
-                if(strlen (name) != 0) {
-                    buffer = i_trim(buffer);
-
-                    if(strlen(buffer)>0) {
-                        value = buffer;
-                        while(!i_isspace(*buffer) && *buffer != '\0') 
-                            buffer++;
-
-                        *buffer = '\0';
-
-                        for(j=0; j<WLAN_ASUS_NV_MAXITEMS; j++) {
-                            if( strncmp(g_WlanAsusNv[j].name, name, strlen(g_WlanAsusNv[j].name)) == 0 ) {
-                                strcpy(g_WlanAsusNv[j].value, value);
-                                break;
-                            }
-                        }
-
-                        i++;
-                        if(i >= WLAN_ASUS_NV_MAXITEMS) {
-                            //hddLog(1,"[wlan]: %s iterm number > %d.", WLAN_ASUS_NV_FILE_LINK, WLAN_ASUS_NV_MAXITEMS);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        buffer = line;
-    }
-
-    printk("[wlan]: -------------------------\n");
-    for( i=0; i<WLAN_ASUS_NV_MAXITEMS; i++ ) {
-        printk("[wlan]: %s=%s", g_WlanAsusNv[i].name, g_WlanAsusNv[i].value);
-    }
-    printk("[wlan]: -------------------------\n");
-
-    for( i=0; i<4; i++ ){
-        if( strlen(g_WlanAsusNv[i].value) == 12 ) {
-            for( j=0; j<12; j++ ) {
-                tmp = g_WlanAsusNv[i].value[j];
-                if( ((tmp >= 0x30) && (tmp <= 0x39)) || ((tmp >= 0x41) && (tmp <= 0x46)) || ((tmp >= 0x61) && (tmp <= 0x66)) ) {
-                    //hddLog(1,"[wlan]: check MAC");
-                }
-                else {
-                    break;
-                }
-            }
-
-            if( j == 12 ) {
-                for( k=0; k<VOS_MAC_ADDRESS_LEN; k++ ) {
-                    g_WlanAsusMac[i].MacAddress[k] = 0;
-                    tempChar[0] = 0;
-                    tempChar[1] = 0;
-
-                    memcpy( tempChar, (g_WlanAsusNv[i].value + k*2), 2 );
-                    sscanf( tempChar, "%02X", (int*)&(g_WlanAsusMac[i].MacAddress[k]) );
-                }
-            }
-        }
-    }
-
-
-    release_firmware(fw);
-    vos_mem_free(pTemp);
-
-    return VOS_STATUS_SUCCESS;
-} 
-/*--------------------------------------------------------------------------------*/
 
 #ifdef WLAN_CFG_DEBUG
 void dump_cfg_ini (tCfgIniEntry* iniTable, unsigned long entries)
@@ -4003,9 +3857,11 @@ static void print_hdd_cfg(hdd_context_t *pHddCtx)
   VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO_HIGH,
           "Name = [disableBarWakeUp] Value = [%u] ",
           pHddCtx->cfg_ini->disableBarWakeUp);
+
+  VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO_HIGH,
+        "Name = [gDisableScanDuringSco] Value = [%u] ",
+         pHddCtx->cfg_ini->disable_scan_during_sco);
 }
-
-
 
 #define CFG_VALUE_MAX_LEN 256
 #define CFG_ENTRY_MAX_LEN (32+CFG_VALUE_MAX_LEN)
@@ -5587,6 +5443,15 @@ v_BOOL_t hdd_update_config_dat( hdd_context_t *pHddCtx )
        fStatus = FALSE;
        hddLog(LOGE, "Could not pass on WNI_CFG_DISABLE_BAR_WAKE_UP_HOST to CCM");
    }
+
+   if (ccmCfgSetInt(pHddCtx->hHal, WNI_CFG_DISABLE_SCAN_DURING_SCO,
+               pConfig->disable_scan_during_sco,
+               NULL, eANI_BOOLEAN_FALSE) == eHAL_STATUS_FAILURE)
+   {
+      fStatus = FALSE;
+      hddLog(LOGE, "Could not pass on WNI_CFG_DISABLE_SCAN_DURING_SCO to CCM");
+   }
+
    return fStatus;
 }
 
@@ -5718,6 +5583,8 @@ VOS_STATUS hdd_set_sme_config( hdd_context_t *pHddCtx )
    smeConfig->csrConfig.nTxPowerCap = pConfig->nTxPowerCap;
    smeConfig->csrConfig.fEnableBypass11d          = pConfig->enableBypass11d;
    smeConfig->csrConfig.fEnableDFSChnlScan        = pConfig->enableDFSChnlScan;
+   smeConfig->csrConfig.disable_scan_during_sco   =
+                                              pConfig->disable_scan_during_sco;
 #if  defined (WLAN_FEATURE_VOWIFI_11R) || defined (FEATURE_WLAN_ESE) || defined(FEATURE_WLAN_LFR)
    smeConfig->csrConfig.nRoamPrefer5GHz           = pConfig->nRoamPrefer5GHz;
    smeConfig->csrConfig.nRoamIntraBand            = pConfig->nRoamIntraBand;

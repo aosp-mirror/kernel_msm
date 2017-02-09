@@ -406,7 +406,6 @@ limTearDownLinkWithAp(tpAniSirGlobal pMac, tANI_U8 sessionId, tSirMacReasonCodes
      * Trigger link tear down.
      */
 
-    pr_info("wlan: No ProbeRsp from AP after HB failure. Tearing down link\n");
     pMac->pmm.inMissedBeaconScenario = FALSE;
     limLog(pMac, LOGW,
        FL("No ProbeRsp from AP after HB failure. Tearing down link"));
@@ -524,7 +523,6 @@ void limHandleHeartBeatFailure(tpAniSirGlobal pMac,tpPESession psessionEntry)
         /**
          * Beacon frame not received within heartbeat timeout.
          */
-        pr_info("wlan: Heartbeat Failure\n");
         PELOGW(limLog(pMac, LOGW, FL("Heartbeat Failure"));)
         pMac->lim.gLimHBfailureCntInLinkEstState++;
 
@@ -543,7 +541,6 @@ void limHandleHeartBeatFailure(tpAniSirGlobal pMac,tpPESession psessionEntry)
              * it is still around. Wait until certain
              * timeout for Probe Response from AP.
              */
-            pr_info("wlan: Heart Beat missed from AP. Sending Probe Req\n");
             PELOGW(limLog(pMac, LOGW, FL("Heart Beat missed from AP. Sending Probe Req"));)
             /* for searching AP, we don't include any additional IE */
             limSendProbeReqMgmtFrame(pMac, &psessionEntry->ssId, psessionEntry->bssId,

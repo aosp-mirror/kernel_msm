@@ -119,6 +119,7 @@ tCsrIgnoreChannels countryIgnoreList[MAX_COUNTRY_IGNORE] = { };
 extern tSirRetStatus wlan_cfgGetStr(tpAniSirGlobal, tANI_U16, tANI_U8*, tANI_U32*);
 
 void csrScanGetResultTimerHandler(void *);
+void csr_handle_disable_scan(void *pv);
 static void csrPurgeScanResultByAge(void *pv);
 void csrScanIdleScanTimerHandler(void *);
 static void csrSetDefaultScanTiming( tpAniSirGlobal pMac, tSirScanType scanType, tCsrScanRequest *pScanRequest);
@@ -229,6 +230,15 @@ eHalStatus csrScanOpen( tpAniSirGlobal pMac )
             smsLog(pMac, LOGE, FL("cannot allocate memory for idleScan timer"));
             break;
         }
+        status = vos_timer_init(&pMac->scan.disable_scan_during_sco_timer,
+                                VOS_TIMER_TYPE_SW,
+                                csr_handle_disable_scan,
+                                pMac);
+        if (!HAL_STATUS_SUCCESS(status)) {
+            smsLog(pMac, LOGE,
+                   FL("cannot allocate memory for disable_scan_during_sco_timer"));
+            break;
+        }
     }while(0);
     
     return (status);
@@ -257,6 +267,7 @@ eHalStatus csrScanClose( tpAniSirGlobal pMac )
     vos_timer_destroy(&pMac->scan.hTimerStaApConcTimer);
 #endif
     vos_timer_destroy(&pMac->scan.hTimerIdleScan);
+    vos_timer_destroy(&pMac->scan.disable_scan_during_sco_timer);
     return eHAL_STATUS_SUCCESS;
 }
 
@@ -6462,14 +6473,17 @@ void csrScanCallCallback(tpAniSirGlobal pMac, tSmeCmd *pCommand, eCsrScanStatus 
     if(pCommand->u.scanCmd.callback)
     {
         if (pCommand->u.scanCmd.abortScanIndication){
-             smsLog( pMac, LOG1, FL("scanDone due to abort"));
-             scanStatus = eCSR_SCAN_ABORT;
+             if ((pCommand->u.scanCmd.reason != eCsrScanForSsid) ||
+                 (scanStatus != eCSR_SCAN_SUCCESS)) {
+                 smsLog( pMac, LOG1, FL("scanDone due to abort"));
+                 scanStatus = eCSR_SCAN_ABORT;
+             }
         }
-//        sme_ReleaseGlobalLock( &pMac->sme );
         pCommand->u.scanCmd.callback(pMac, pCommand->u.scanCmd.pContext, pCommand->u.scanCmd.scanID, scanStatus); 
-//        sme_AcquireGlobalLock( &pMac->sme );
     } else {
-        smsLog( pMac, LOG2, "%s:%d - Callback NULL!!!", __func__, __LINE__);
+        smsLog(pMac, LOG2,
+               FL("Callback NULL cmd reason %d"),
+               pCommand->u.scanCmd.reason);
     }
 }
 
@@ -6511,6 +6525,21 @@ void csrScanGetResultTimerHandler(void *pv)
     csrScanRequestResult(pMac);
 
     vos_timer_start(&pMac->scan.hTimerGetResult, CSR_SCAN_GET_RESULT_INTERVAL/PAL_TIMER_TO_MS_UNIT);
+}
+
+
+void csr_handle_disable_scan(void *pv)
+{
+    tpAniSirGlobal mac = PMAC_STRUCT(pv);
+
+    if (mac->scan.disable_scan_during_sco_timer_info.callback)
+        mac->scan.disable_scan_during_sco_timer_info.callback(
+        mac,
+        mac->scan.disable_scan_during_sco_timer_info.dev,
+        mac->scan.disable_scan_during_sco_timer_info.scan_id,
+        eHAL_STATUS_SUCCESS);
+    else
+        smsLog(mac, LOGE, FL("Callback is NULL"));
 }
 
 #ifdef WLAN_AP_STA_CONCURRENCY
@@ -7317,7 +7346,36 @@ eHalStatus csrScanGetBKIDCandidateList(tpAniSirGlobal pMac, tANI_U32 sessionId,
 }
 #endif /* FEATURE_WLAN_WAPI */
 
+/**
+ * csr_ssid_scan_done_callback() - Callback to indicate
+ *                            scan is done for ssid scan
+ * @halHandle: handle to hal
+ * @context: SSID scan context
+ * @scanId: Scan id for the scheduled scan
+ * @status: scan done status
+ *
+ * Return - eHalStatus
+ */
+static eHalStatus csr_ssid_scan_done_callback(tHalHandle halHandle,
+					      void *context,
+					      tANI_U32 scanId,
+					      eCsrScanStatus status)
+{
+	struct csr_scan_for_ssid_context *scan_context =
+		(struct csr_scan_for_ssid_context *)context;
 
+	if (NULL == scan_context)
+		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+				FL("scan for ssid context not found"));
+
+	if (eCSR_SCAN_ABORT == status)
+		csrRoamCallCallback(scan_context->pMac, scan_context->sessionId,
+				NULL, scan_context->roamId,
+				eCSR_ROAM_ASSOCIATION_FAILURE,
+				eCSR_ROAM_RESULT_FAILURE);
+	vos_mem_free(scan_context);
+	return eHAL_STATUS_SUCCESS;
+}
 
 //This function is usually used for BSSs that suppresses SSID so the profile 
 //shall have one and only one SSID
@@ -7328,6 +7386,7 @@ eHalStatus csrScanForSSID(tpAniSirGlobal pMac, tANI_U32 sessionId, tCsrRoamProfi
     tANI_U8 bAddr[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff}; 
     tANI_U8  index = 0;
     tANI_U32 numSsid = pProfile->SSIDs.numOfSSIDs;
+    struct csr_scan_for_ssid_context *context;
 
     smsLog(pMac, LOG2, FL("called"));
     //For WDS, we use the index 0. There must be at least one in there
@@ -7355,13 +7414,23 @@ eHalStatus csrScanForSSID(tpAniSirGlobal pMac, tANI_U32 sessionId, tCsrRoamProfi
             {
                 status = csrRoamCopyProfile(pMac, pScanCmd->u.scanCmd.pToRoamProfile, pProfile);
             }
+            context = vos_mem_malloc(sizeof(*context));
+            if (NULL == context)
+            {
+                smsLog(pMac, LOGE,
+                       "Failed to allocate memory for ssid scan context");
+                status = eHAL_STATUS_FAILED_ALLOC;
+            }
             if(!HAL_STATUS_SUCCESS(status))
                 break;
+            context->pMac = pMac;
+            context->sessionId = sessionId;
+            context->roamId = roamId;
             pScanCmd->u.scanCmd.roamId = roamId;
             pScanCmd->command = eSmeCommandScan;
             pScanCmd->sessionId = (tANI_U8)sessionId;
-            pScanCmd->u.scanCmd.callback = NULL;
-            pScanCmd->u.scanCmd.pContext = NULL;
+            pScanCmd->u.scanCmd.callback = csr_ssid_scan_done_callback;
+            pScanCmd->u.scanCmd.pContext = context;
             pScanCmd->u.scanCmd.reason = eCsrScanForSsid;//Need to check: might need a new reason for SSID scan for LFR during multisession with p2p
             pScanCmd->u.scanCmd.scanID = pMac->scan.nextScanID++; //let it wrap around
             vos_mem_set(&pScanCmd->u.scanCmd.u.scanRequest, sizeof(tCsrScanRequest), 0);

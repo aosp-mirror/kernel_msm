@@ -1924,6 +1924,7 @@ eHalStatus csrChangeDefaultConfigParam(tpAniSirGlobal pMac, tCsrConfigParam *pPa
         pMac->scan.fValidateList = pParam->fValidateList;
         pMac->scan.fEnableBypass11d = pParam->fEnableBypass11d;
         pMac->scan.fEnableDFSChnlScan = pParam->fEnableDFSChnlScan;
+        pMac->scan.disable_scan_during_sco = pParam->disable_scan_during_sco;
         pMac->scan.scanResultCfgAgingTime = pParam->scanCfgAgingTime;
         pMac->roam.configParam.fScanTwice = pParam->fScanTwice;
         pMac->scan.fFirstScanOnly2GChnl = pParam->fFirstScanOnly2GChnl;
@@ -2038,6 +2039,7 @@ eHalStatus csrGetConfigParam(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
         pParam->fValidateList = pMac->roam.configParam.fValidateList;
         pParam->fEnableBypass11d = pMac->scan.fEnableBypass11d;
         pParam->fEnableDFSChnlScan = pMac->scan.fEnableDFSChnlScan;
+        pParam->disable_scan_during_sco = pMac->scan.disable_scan_during_sco;
         pParam->fScanTwice = pMac->roam.configParam.fScanTwice;
         pParam->fFirstScanOnly2GChnl = pMac->scan.fFirstScanOnly2GChnl;
         pParam->fEnableMCCMode = pMac->roam.configParam.fenableMCCMode;
