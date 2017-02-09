@@ -177,6 +177,8 @@ struct mon_rx_status {
 #define ICMPV6_SUBTYPE_OFFSET         54
 #define ICMPV6_REQUEST                0x80
 #define ICMPV6_RESPONSE               0x81
+#define ICMPV6_RS                     0x85
+#define ICMPV6_RA                     0x86
 #define ICMPV6_NS                     0x87
 #define ICMPV6_NA                     0x88
 #define ADF_NBUF_IPA_CHECK_MASK       0x80000000
@@ -218,6 +220,8 @@ enum adf_proto_type {
  * @ADF_PROTO_ICMP_RES - icmp response
  * @ADF_PROTO_ICMPV6_REQ - icmpv6 request
  * @ADF_PROTO_ICMPV6_RES - icmpv6 response
+ * @ADF_PROTO_ICMPV6_RS - icmpv6 rs packet
+ * @ADF_PROTO_ICMPV6_RA - icmpv6 ra packet
  * @ADF_PROTO_ICMPV6_NS - icmpv6 ns packet
  * @ADF_PROTO_ICMPV6_NA - icmpv6 na packet
  * @ADF_PROTO_IPV4_UDP - ipv4 udp
@@ -252,6 +256,8 @@ enum adf_proto_subtype {
 	ADF_PROTO_ICMP_RES,
 	ADF_PROTO_ICMPV6_REQ,
 	ADF_PROTO_ICMPV6_RES,
+	ADF_PROTO_ICMPV6_RS,
+	ADF_PROTO_ICMPV6_RA,
 	ADF_PROTO_ICMPV6_NS,
 	ADF_PROTO_ICMPV6_NA,
 	ADF_PROTO_IPV4_UDP,
