@@ -790,11 +790,11 @@ extern int write_to_file(dhd_pub_t *dhd, uint8 *buf, int size);
 #endif /* DHD_DEBUG */
 
 #ifdef FILTER_IE
-extern int dhd_read_from_file(dhd_pub_t *dhd, uint8 *buf, int size);
-extern int dhd_parse_filter_ie(dhd_pub_t *dhd, uint8 *buf);
-extern int dhd_get_filter_ie_count(dhd_pub_t *dhd, uint8 *buf);
-extern int dhd_parse_oui(dhd_pub_t *dhd, uint8 *inbuf, uint8 *oui, int len);
-extern int dhd_check_valid_ie(dhd_pub_t *dhdp, uint8* buf, int len);
+int dhd_read_from_file(dhd_pub_t *dhd);
+int dhd_parse_filter_ie(dhd_pub_t *dhd, uint8 *buf);
+int dhd_get_filter_ie_count(dhd_pub_t *dhd, uint8 *buf);
+int dhd_parse_oui(dhd_pub_t *dhd, uint8 *inbuf, uint8 *oui, int len);
+int dhd_check_valid_ie(dhd_pub_t *dhdp, uint8 *buf, int len);
 #endif /* FILTER_IE */
 
 extern int dhd_dev_set_rssi_monitor_cfg(struct net_device *dev, int start,

@@ -5581,9 +5581,6 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	eventmsgs_ext_t *eventmask_msg;
 	char iov_buf[WLC_IOCTL_SMLEN];
 	int ret2 = 0;
-#if defined FILTER_IE
-	uint8 ie_buf[FILE_BLOCK_READ_SIZE];
-#endif
 #if defined(CUSTOM_AMPDU_BA_WSIZE)
 	uint32 ampdu_ba_wsize = 0;
 #endif
@@ -6304,8 +6301,9 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #endif
 
 #ifdef FILTER_IE
-        /* Failure to configure filter IE is not a fatal error, ignore error */
-        dhd_read_from_file(dhd, ie_buf, FILE_BLOCK_READ_SIZE);
+	/* Failure to configure filter IE is not a fatal error, ignore it.*/
+	if (!(dhd->op_mode & (DHD_FLAG_HOSTAP_MODE | DHD_FLAG_MFG_MODE)))
+		dhd_read_from_file(dhd);
 #endif /* FILTER_IE */
 
 #ifdef WL11U
@@ -9684,26 +9682,29 @@ exit:
 #endif /* DHD_DEBUG */
 
 #ifdef FILTER_IE
-int dhd_read_from_file(dhd_pub_t *dhd, uint8 *buf, int size)
+int dhd_read_from_file(dhd_pub_t *dhd)
 {
-	int ret = 0, nread = 0, fd;
-	mm_segment_t old_fs;
+	int ret = 0, nread = 0;
+	void *fd;
+	uint8 *buf;
 	NULL_CHECK(dhd, "dhd is NULL", ret);
-	NULL_CHECK(buf, "buf is NULL", ret);
-	/* change to KERNEL_DS address limit */
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
 
-	/* open file to read */
-	fd = sys_open(FILTER_IE_PATH, O_RDONLY, 0);
-	if (fd < 0) {
-                DHD_ERROR(("error: failed to open %s\n", FILTER_IE_PATH));
-                ret = BCME_EPERM;
-		goto exit;
+	buf = kzalloc(FILE_BLOCK_READ_SIZE, GFP_KERNEL);
+	if (!buf) {
+		DHD_ERROR(("error: failed to alllocate buf.\n"));
+		return BCME_NOMEM;
 	}
 
-	if ((nread = sys_read(fd, buf, size)) > 0) {
-		buf[nread - 1] = '\0';
+	/* open file to read */
+	fd = dhd_os_open_image(FILTER_IE_PATH);
+	if (!fd) {
+		DHD_ERROR(("error: failed to open %s\n", FILTER_IE_PATH));
+		ret = BCME_EPERM;
+		goto exit;
+	}
+	nread = dhd_os_get_image_block(buf, (FILE_BLOCK_READ_SIZE - 1), fd);
+	if (nread > 0) {
+		buf[nread] = '\0';
 		if ((ret = dhd_parse_filter_ie(dhd, buf)) < 0) {
 			DHD_ERROR(("error: failed to parse filter ie\n"));
 		}
@@ -9711,10 +9712,9 @@ int dhd_read_from_file(dhd_pub_t *dhd, uint8 *buf, int size)
 		DHD_ERROR(("error: zero length file.failed to read\n"));
 		ret = BCME_ERROR;
 	}
-	sys_close(fd);
-
+	dhd_os_close_image(fd);
 exit:
-	set_fs(old_fs);
+	kfree(buf);
 	return ret;
 }
 #endif /* FILTER_IE */
