@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -88,45 +88,6 @@ void swap_bit_field16(uint16_t in, uint16_t *out)
 	       ((in & 0x0008) << 9) |
 	       ((in & 0x0004) << 11) |
 	       ((in & 0x0002) << 13) | ((in & 0x0001) << 15);
-#endif /* ANI_LITTLE_BIT_ENDIAN */
-}
-
-void swap_bit_field32(uint32_t in, uint32_t *out)
-{
-#ifdef ANI_LITTLE_BIT_ENDIAN
-	*out = in;
-#else                           /* Big-Endian... */
-	*out = ((in & 0x80000000) >> 31) |
-	       ((in & 0x40000000) >> 29) |
-	       ((in & 0x20000000) >> 27) |
-	       ((in & 0x10000000) >> 25) |
-	       ((in & 0x08000000) >> 23) |
-	       ((in & 0x04000000) >> 21) |
-	       ((in & 0x02000000) >> 19) |
-	       ((in & 0x01000000) >> 17) |
-	       ((in & 0x00800000) >> 15) |
-	       ((in & 0x00400000) >> 13) |
-	       ((in & 0x00200000) >> 11) |
-	       ((in & 0x00100000) >> 9) |
-	       ((in & 0x00080000) >> 7) |
-	       ((in & 0x00040000) >> 5) |
-	       ((in & 0x00020000) >> 3) |
-	       ((in & 0x00010000) >> 1) |
-	       ((in & 0x00008000) << 1) |
-	       ((in & 0x00004000) << 3) |
-	       ((in & 0x00002000) << 5) |
-	       ((in & 0x00001000) << 7) |
-	       ((in & 0x00000800) << 9) |
-	       ((in & 0x00000400) << 11) |
-	       ((in & 0x00000200) << 13) |
-	       ((in & 0x00000100) << 15) |
-	       ((in & 0x00000080) << 17) |
-	       ((in & 0x00000040) << 19) |
-	       ((in & 0x00000020) << 21) |
-	       ((in & 0x00000010) << 23) |
-	       ((in & 0x00000008) << 25) |
-	       ((in & 0x00000004) << 27) |
-	       ((in & 0x00000002) << 29) | ((in & 0x00000001) << 31);
 #endif /* ANI_LITTLE_BIT_ENDIAN */
 }
 
@@ -897,7 +858,8 @@ void lim_log_vht_cap(tpAniSirGlobal pMac, tDot11fIEVHTCaps *pDot11f)
 #endif /* DUMP_MGMT_CNTNTS */
 }
 
-void lim_log_vht_operation(tpAniSirGlobal pMac, tDot11fIEVHTOperation *pDot11f)
+static void lim_log_vht_operation(tpAniSirGlobal pMac,
+				  tDot11fIEVHTOperation *pDot11f)
 {
 #ifdef DUMP_MGMT_CNTNTS
 	lim_log(pMac, LOG1, FL("chanWidth : %d"), pDot11f->chanWidth);
@@ -909,7 +871,8 @@ void lim_log_vht_operation(tpAniSirGlobal pMac, tDot11fIEVHTOperation *pDot11f)
 #endif /* DUMP_MGMT_CNTNTS */
 }
 
-void lim_log_vht_ext_bss_load(tpAniSirGlobal pMac, tDot11fIEVHTExtBssLoad *pDot11f)
+static void lim_log_vht_ext_bss_load(tpAniSirGlobal pMac,
+				     tDot11fIEVHTExtBssLoad *pDot11f)
 {
 #ifdef DUMP_MGMT_CNTNTS
 	lim_log(pMac, LOG1, FL("muMIMOCapStaCount : %d"),
@@ -922,7 +885,8 @@ void lim_log_vht_ext_bss_load(tpAniSirGlobal pMac, tDot11fIEVHTExtBssLoad *pDot1
 #endif /* DUMP_MGMT_CNTNTS */
 }
 
-void lim_log_operating_mode(tpAniSirGlobal pMac, tDot11fIEOperatingMode *pDot11f)
+static void lim_log_operating_mode(tpAniSirGlobal pMac,
+				   tDot11fIEOperatingMode *pDot11f)
 {
 #ifdef DUMP_MGMT_CNTNTS
 	lim_log(pMac, LOG1, FL("ChanWidth : %d"), pDot11f->chanWidth);
@@ -932,7 +896,7 @@ void lim_log_operating_mode(tpAniSirGlobal pMac, tDot11fIEOperatingMode *pDot11f
 #endif /* DUMP_MGMT_CNTNTS */
 }
 
-void lim_log_qos_map_set(tpAniSirGlobal pMac, tSirQosMapSet *pQosMapSet)
+static void lim_log_qos_map_set(tpAniSirGlobal pMac, tSirQosMapSet *pQosMapSet)
 {
 	uint8_t i;
 	if (pQosMapSet->num_dscp_exceptions > QOS_MAP_MAX_EX)
@@ -1552,7 +1516,7 @@ populate_dot11f_qos_caps_ap(tpAniSirGlobal pMac,
 } /* End PopulatedDot11fQOSCaps. */
 
 void
-populate_dot11f_qos_caps_station(tpAniSirGlobal pMac,
+populate_dot11f_qos_caps_station(tpAniSirGlobal pMac, tpPESession pe_session,
 				 tDot11fIEQOSCapsStation *pDot11f)
 {
 	uint32_t val = 0;
@@ -1567,13 +1531,13 @@ populate_dot11f_qos_caps_station(tpAniSirGlobal pMac,
 
 	if (pMac->lim.gUapsdEnable) {
 		pDot11f->acbe_uapsd =
-			LIM_UAPSD_GET(ACBE, pMac->lim.gUapsdPerAcBitmask);
+			LIM_UAPSD_GET(ACBE, pe_session->gUapsdPerAcBitmask);
 		pDot11f->acbk_uapsd =
-			LIM_UAPSD_GET(ACBK, pMac->lim.gUapsdPerAcBitmask);
+			LIM_UAPSD_GET(ACBK, pe_session->gUapsdPerAcBitmask);
 		pDot11f->acvi_uapsd =
-			LIM_UAPSD_GET(ACVI, pMac->lim.gUapsdPerAcBitmask);
+			LIM_UAPSD_GET(ACVI, pe_session->gUapsdPerAcBitmask);
 		pDot11f->acvo_uapsd =
-			LIM_UAPSD_GET(ACVO, pMac->lim.gUapsdPerAcBitmask);
+			LIM_UAPSD_GET(ACVO, pe_session->gUapsdPerAcBitmask);
 	}
 	pDot11f->present = 1;
 } /* End PopulatedDot11fQOSCaps. */
@@ -1991,6 +1955,40 @@ void populate_dot11f_re_assoc_tspec(tpAniSirGlobal pMac,
 		}
 	}
 }
+
+void ese_populate_wmm_tspec(tSirMacTspecIE *source,
+	ese_wmm_tspec_ie *dest)
+{
+	dest->traffic_type = source->tsinfo.traffic.trafficType;
+	dest->tsid = source->tsinfo.traffic.tsid;
+	dest->direction = source->tsinfo.traffic.direction;
+	dest->access_policy = source->tsinfo.traffic.accessPolicy;
+	dest->aggregation = source->tsinfo.traffic.aggregation;
+	dest->psb = source->tsinfo.traffic.psb;
+	dest->user_priority = source->tsinfo.traffic.userPrio;
+	dest->tsinfo_ack_pol = source->tsinfo.traffic.ackPolicy;
+	dest->burst_size_defn = source->tsinfo.traffic.burstSizeDefn;
+	/* As defined in IEEE 802.11-2007, section 7.3.2.30
+	 * Nominal MSDU size: Bit[0:14]=Size, Bit[15]=Fixed
+	 */
+	dest->size = (source->nomMsduSz & SIZE_MASK);
+	dest->fixed = (source->nomMsduSz & FIXED_MASK) ? 1 : 0;
+	dest->max_msdu_size = source->maxMsduSz;
+	dest->min_service_int = source->minSvcInterval;
+	dest->max_service_int = source->maxSvcInterval;
+	dest->inactivity_int = source->inactInterval;
+	dest->suspension_int = source->suspendInterval;
+	dest->service_start_time = source->svcStartTime;
+	dest->min_data_rate = source->minDataRate;
+	dest->mean_data_rate = source->meanDataRate;
+	dest->peak_data_rate = source->peakDataRate;
+	dest->burst_size = source->maxBurstSz;
+	dest->delay_bound = source->delayBound;
+	dest->min_phy_rate = source->minPhyRate;
+	dest->surplus_bw_allowance = source->surplusBw;
+	dest->medium_time = source->mediumTime;
+}
+
 #endif
 
 void populate_dot11f_wmm_info_ap(tpAniSirGlobal pMac, tDot11fIEWMMInfoAp *pInfo,
@@ -2951,7 +2949,7 @@ sir_convert_assoc_resp_frame2_struct(tpAniSirGlobal pMac,
 			     sizeof(tDot11fIEFTInfo));
 	}
 
-	if (ar.num_RICDataDesc) {
+	if (ar.num_RICDataDesc <= 2) {
 		for (cnt = 0; cnt < ar.num_RICDataDesc; cnt++) {
 			if (ar.RICDataDesc[cnt].present) {
 				qdf_mem_copy(&pAssocRsp->RICData[cnt],

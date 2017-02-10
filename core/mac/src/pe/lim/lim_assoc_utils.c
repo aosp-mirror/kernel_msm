@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -573,6 +573,10 @@ lim_cleanup_rx_path(tpAniSirGlobal pMac, tpDphHashNode pStaDs,
 			       (pMac, TRACE_CODE_TIMER_DEACTIVATE,
 			       psessionEntry->peSessionId, eLIM_ADDTS_RSP_TIMER));
 		tx_timer_deactivate(&pMac->lim.limTimers.gLimAddtsRspTimer);
+		lim_log(pMac, LOG1,
+			FL("Reset gLimAddtsSent flag and send addts timeout to SME"));
+		lim_process_sme_addts_rsp_timeout(pMac,
+					pMac->lim.gLimAddtsRspTimerCount);
 	}
 
 	if (pStaDs->mlmStaContext.mlmState == eLIM_MLM_WT_ASSOC_CNF_STATE) {
@@ -682,14 +686,6 @@ lim_send_del_sta_cnf(tpAniSirGlobal pMac, struct qdf_mac_addr sta_dsaddr,
 		}
 
 		psessionEntry->limAID = 0;
-
-	} else if (
-		(mlmStaContext.cleanupTrigger ==
-			eLIM_LINK_MONITORING_DISASSOC) ||
-		(mlmStaContext.cleanupTrigger ==
-			eLIM_LINK_MONITORING_DEAUTH)) {
-		/* only for non-STA cases PE/SME is serialized */
-		return;
 	}
 
 	if ((mlmStaContext.cleanupTrigger ==
@@ -2779,6 +2775,9 @@ lim_add_sta_self(tpAniSirGlobal pMac, uint16_t staIdx, uint8_t updateSta,
 						      psessionEntry);
 			pAddStaParams->maxAmsduSize =
 				lim_get_ht_capability(pMac, eHT_MAX_AMSDU_LENGTH,
+						      psessionEntry);
+			pAddStaParams->max_amsdu_num =
+				lim_get_ht_capability(pMac, eHT_MAX_AMSDU_NUM,
 						      psessionEntry);
 			pAddStaParams->fDsssCckMode40Mhz =
 				lim_get_ht_capability(pMac, eHT_DSSS_CCK_MODE_40MHZ,

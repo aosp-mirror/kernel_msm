@@ -62,6 +62,18 @@ enum hdd_ipa_wlan_event {
 #include <wlan_hdd_assoc.h> /* hdd_context_t */
 
 /**
+ * enum hdd_ipa_forward_type: Type of forward packet received from IPA
+ * @HDD_IPA_FORWARD_PKT_NONE: No forward packet
+ * @HDD_IPA_FORWARD_PKT_LOCAL_STACK: Packet forwarded to kernel network stack
+ * @HDD_IPA_FORWARD_PKT_DISCARD: Discarded packet before sending to kernel stack
+ */
+enum hdd_ipa_forward_type {
+	HDD_IPA_FORWARD_PKT_NONE = 0,
+	HDD_IPA_FORWARD_PKT_LOCAL_STACK = 1,
+	HDD_IPA_FORWARD_PKT_DISCARD = 2
+};
+
+/**
  * FIXME: Temporary hack - until IPA functionality gets restored
  *
  */
@@ -86,6 +98,10 @@ void hdd_ipa_uc_stat_query(hdd_context_t *hdd_ctx, uint32_t *ipa_tx_diff,
 	uint32_t *ipa_rx_diff);
 void hdd_ipa_uc_rt_debug_host_dump(hdd_context_t *hdd_ctx);
 void hdd_ipa_uc_stat_request(hdd_adapter_t *adapter, uint8_t reason);
+void hdd_ipa_uc_sharing_stats_request(hdd_adapter_t *adapter,
+				      uint8_t reset_stats);
+void hdd_ipa_uc_set_quota(hdd_adapter_t *adapter, uint8_t set_quota,
+			  uint64_t quota_bytes);
 bool hdd_ipa_is_enabled(hdd_context_t *pHddCtx);
 bool hdd_ipa_uc_is_enabled(hdd_context_t *pHddCtx);
 #ifndef QCA_LL_TX_FLOW_CONTROL_V2
@@ -103,6 +119,7 @@ void hdd_ipa_uc_force_pipe_shutdown(hdd_context_t *hdd_ctx);
 struct sk_buff *hdd_ipa_tx_packet_ipa(hdd_context_t *hdd_ctx,
 	struct sk_buff *skb, uint8_t session_id);
 bool hdd_ipa_is_present(hdd_context_t *hdd_ctx);
+void hdd_ipa_dump_info(hdd_context_t *hdd_ctx);
 #else
 static inline QDF_STATUS hdd_ipa_init(hdd_context_t *hdd_ctx)
 {
@@ -178,6 +195,12 @@ static inline bool hdd_ipa_uc_is_enabled(hdd_context_t *pHddCtx)
 {
 	return false;
 }
+
+static inline void hdd_ipa_dump_info(hdd_context_t *hdd_ctx)
+{
+	return;
+}
+
 static inline int hdd_ipa_uc_ssr_reinit(void)
 {
 	return false;

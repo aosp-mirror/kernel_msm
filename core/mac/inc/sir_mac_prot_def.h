@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -144,6 +144,7 @@
 #define SIR_MAC_ACTION_WME            17
 #define SIR_MAC_ACTION_FST            18
 #define SIR_MAC_ACTION_VHT            21
+#define SIR_MAC_ACTION_MAX            256
 
 #define SIR_MAC_ACTION_TX             1
 #define SIR_MAC_ACTION_RX             2
@@ -1670,6 +1671,7 @@ typedef enum eHTCapability {
 	eHT_PSMP,
 	eHT_DSSS_CCK_MODE_40MHZ,
 	eHT_MAX_AMSDU_LENGTH,
+	eHT_MAX_AMSDU_NUM,
 	eHT_RX_STBC,
 	eHT_TX_STBC,
 	eHT_SHORT_GI_40MHZ,

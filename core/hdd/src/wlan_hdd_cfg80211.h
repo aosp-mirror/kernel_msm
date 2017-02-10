@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -135,6 +135,9 @@ static inline void wlan_hdd_clear_link_layer_stats(hdd_adapter_t *adapter) {}
 #define MAX_CHANNEL (NUM_24GHZ_CHANNELS + NUM_5GHZ_CHANNELS)
 #define MAX_SCAN_SSID 10
 
+#define IS_CHANNEL_VALID(channel) ((channel >= 0 && channel < 15) \
+			|| (channel >= 36 && channel <= 184))
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 12, 0)) \
 	|| defined(BACKPORTED_CHANNEL_SWITCH_PRESENT)
 #define CHANNEL_SWITCH_SUPPORTED
@@ -245,11 +248,6 @@ typedef enum {
  * @QCA_NL80211_VENDOR_SUBCMD_WIFI_LOGGER_MEMORY_DUMP: memory dump request
  * @QCA_NL80211_VENDOR_SUBCMD_GET_LOGGER_FEATURE_SET: get logger feature set
  * @QCA_NL80211_VENDOR_SUBCMD_ROAM: roam
- * @QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_SET_SSID_HOTLIST: extscan set ssid hotlist
- * @QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_RESET_SSID_HOTLIST:
- *	extscan reset ssid hotlist
- * @QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_FOUND: hotlist ssid found
- * @QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_LOST: hotlist ssid lost
  * @QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_SET_LIST: set pno list
  * @QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_SET_PASSPOINT_LIST: set passpoint list
  * @QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_RESET_PASSPOINT_LIST:
@@ -268,6 +266,7 @@ typedef enum {
  * @QCA_NL80211_VENDOR_SUBCMD_SETBAND: vendor setband command
  * @QCA_NL80211_VENDOR_SUBCMD_TRIGGER_SCAN: venodr scan command
  * @QCA_NL80211_VENDOR_SUBCMD_SCAN_DONE: vendor scan complete
+ * @QCA_NL80211_VENDOR_SUBCMD_ABORT_SCAN: vendor abort scan
  * @QCA_NL80211_VENDOR_SUBCMD_OTA_TEST: enable OTA test
  * @QCA_NL80211_VENDOR_SUBCMD_SET_TXPOWER_SCALE: set tx power by percentage
  * @QCA_NL80211_VENDOR_SUBCMD_SET_TXPOWER_SCALE_DECR_DB: reduce tx power by DB
@@ -298,6 +297,10 @@ typedef enum {
  * @QCA_NL80211_VENDOR_SUBCMD_CONFIGURE_TDLS: Configure the TDLS behavior
  *	in the host driver. The different TDLS configurations are defined
  *	by the attributes in enum qca_wlan_vendor_attr_tdls_configuration.
+ * @QCA_NL80211_VENDOR_SUBCMD_SET_SAR_LIMITS:Set the Specific Absorption Rate
+ *	(SAR) power limits. A critical regulation for FCC compliance, OEMs
+ *	require methods to set SAR limits on TX power of WLAN/WWAN.
+ *	enum qca_vendor_attr_sar_limits attributes are used with this command.
  */
 
 enum qca_nl80211_vendor_subcmds {
@@ -367,10 +370,12 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_WIFI_LOGGER_START = 62,
 	QCA_NL80211_VENDOR_SUBCMD_WIFI_LOGGER_MEMORY_DUMP = 63,
 	QCA_NL80211_VENDOR_SUBCMD_ROAM = 64,
-	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_SET_SSID_HOTLIST = 65,
-	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_RESET_SSID_HOTLIST = 66,
-	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_FOUND = 67,
-	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_LOST = 68,
+
+	/*
+	 * APIs corresponding to the sub commands 65-68 are deprecated.
+	 * These sub commands are reserved and not supposed to be used
+	 * for any other purpose
+	 */
 	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_SET_LIST = 69,
 	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_SET_PASSPOINT_LIST = 70,
 	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_RESET_PASSPOINT_LIST = 71,
@@ -444,6 +449,12 @@ enum qca_nl80211_vendor_subcmds {
 
 	/* Configure the TDLS mode from user space */
 	QCA_NL80211_VENDOR_SUBCMD_CONFIGURE_TDLS = 143,
+
+	/* Vendor abort scan command */
+	QCA_NL80211_VENDOR_SUBCMD_ABORT_SCAN = 145,
+
+	/* Set Specific Absorption Rate(SAR) Power Limits */
+	QCA_NL80211_VENDOR_SUBCMD_SET_SAR_LIMITS = 146,
 };
 
 /**
@@ -636,14 +647,6 @@ enum qca_wlan_vendor_attr_get_station_info {
  *	pno network found index
  * @QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_PASSPOINT_NETWORK_FOUND_INDEX:
  *	passpoint match found index
- * @QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_SET_SSID_HOTLIST_INDEX:
- *	set ssid hotlist index
- * @QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_RESET_SSID_HOTLIST_INDEX:
- *	reset ssid hotlist index
- * @QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_FOUND_INDEX:
- *	hotlist ssid found index
- * @QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_LOST_INDEX:
- *	hotlist ssid lost index
  * @QCA_NL80211_VENDOR_SUBCMD_DCC_STATS_EVENT_INDEX
  *	dcc stats event index
  * @QCA_NL80211_VENDOR_SUBCMD_SCAN_INDEX: vendor scan index
@@ -711,10 +714,6 @@ enum qca_nl80211_vendor_subcmds_index {
 	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_AP_LOST_INDEX,
 	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_NETWORK_FOUND_INDEX,
 	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_PNO_PASSPOINT_NETWORK_FOUND_INDEX,
-	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_SET_SSID_HOTLIST_INDEX,
-	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_RESET_SSID_HOTLIST_INDEX,
-	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_FOUND_INDEX,
-	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_LOST_INDEX,
 #endif /* FEATURE_WLAN_EXTSCAN */
 	QCA_NL80211_VENDOR_SUBCMD_MONITOR_RSSI_INDEX,
 #ifdef WLAN_FEATURE_MEMDUMP
@@ -1291,10 +1290,6 @@ enum qca_wlan_vendor_attr_extscan_results {
 	QCA_WLAN_VENDOR_ATTR_EXTSCAN_RESULTS_CAPABILITIES_MAX_NUM_EPNO_NETS_BY_SSID,
 	QCA_WLAN_VENDOR_ATTR_EXTSCAN_RESULTS_CAPABILITIES_MAX_NUM_WHITELISTED_SSID,
 
-	/* EXTSCAN attributes for
-	 * QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_FOUND sub-command &
-	 * QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_LOST sub-command
-	 */
 	/* Use attr QCA_WLAN_VENDOR_ATTR_EXTSCAN_NUM_RESULTS_AVAILABLE
 	 * to indicate number of results.
 	 */
@@ -1732,6 +1727,7 @@ enum qca_wlan_vendor_attr_set_scanning_mac_oui {
  *	scan flag is set
  * @QCA_WLAN_VENDOR_ATTR_SCAN_MAC_MASK: 6-byte MAC address mask to be used with
  *	randomisation
+ * @QCA_WLAN_VENDOR_ATTR_SCAN_BSSID: BSSID provided to do scan for specific BSS
  */
 enum qca_wlan_vendor_attr_scan {
 	QCA_WLAN_VENDOR_ATTR_SCAN_INVALID_PARAM = 0,
@@ -1745,6 +1741,7 @@ enum qca_wlan_vendor_attr_scan {
 	QCA_WLAN_VENDOR_ATTR_SCAN_STATUS,
 	QCA_WLAN_VENDOR_ATTR_SCAN_MAC,
 	QCA_WLAN_VENDOR_ATTR_SCAN_MAC_MASK,
+	QCA_WLAN_VENDOR_ATTR_SCAN_BSSID,
 	QCA_WLAN_VENDOR_ATTR_SCAN_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_SCAN_MAX =
 		QCA_WLAN_VENDOR_ATTR_SCAN_AFTER_LAST - 1
@@ -2701,6 +2698,16 @@ enum qca_wlan_vendor_attr_packet_filter {
  * Rx wake packet count due to ipv6 multicast
  * @QCA_WLAN_VENDOR_ATTR_OTHER_RX_MULTICAST_CNT:
  * Rx wake packet count due to non-ipv4 and non-ipv6 packets
+ * @QCA_WLAN_VENDOR_ATTR_RSSI_BREACH_CNT:
+ * wake rssi breach packet count
+ * @QCA_WLAN_VENDOR_ATTR_LOW_RSSI_CNT:
+ * wake low rssi packet count
+ * @QCA_WLAN_VENDOR_ATTR_GSCAN_CNT:
+ * wake gscan packet count
+ * @QCA_WLAN_VENDOR_ATTR_PNO_COMPLETE_CNT:
+ * wake pno complete packet count
+ * @QCA_WLAN_VENDOR_ATTR_PNO_MATCH_CNT:
+ * wake pno match packet count
  */
 enum qca_wlan_vendor_attr_wake_stats {
 	QCA_WLAN_VENDOR_ATTR_GET_WAKE_STATS_INVALID = 0,
@@ -2722,6 +2729,11 @@ enum qca_wlan_vendor_attr_wake_stats {
 	QCA_WLAN_VENDOR_ATTR_ICMP4_RX_MULTICAST_CNT,
 	QCA_WLAN_VENDOR_ATTR_ICMP6_RX_MULTICAST_CNT,
 	QCA_WLAN_VENDOR_ATTR_OTHER_RX_MULTICAST_CNT,
+	QCA_WLAN_VENDOR_ATTR_RSSI_BREACH_CNT,
+	QCA_WLAN_VENDOR_ATTR_LOW_RSSI_CNT,
+	QCA_WLAN_VENDOR_ATTR_GSCAN_CNT,
+	QCA_WLAN_VENDOR_ATTR_PNO_COMPLETE_CNT,
+	QCA_WLAN_VENDOR_ATTR_PNO_MATCH_CNT,
 	/* keep last */
 	QCA_WLAN_VENDOR_GET_WAKE_STATS_AFTER_LAST,
 	QCA_WLAN_VENDOR_GET_WAKE_STATS_MAX =
@@ -3146,6 +3158,124 @@ enum qca_wlan_vendor_tdls_trigger_mode {
 	QCA_WLAN_VENDOR_TDLS_TRIGGER_MODE_EXTERNAL = 1 << 2,
 };
 
+/**
+ * enum qca_vendor_attr_sar_limits_selections - Source of SAR power limits
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF0: Select SAR profile #0
+ *	that is hard-coded in the Board Data File (BDF).
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF1: Select SAR profile #1
+ *	that is hard-coded in the Board Data File (BDF).
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF2: Select SAR profile #2
+ *	that is hard-coded in the Board Data File (BDF).
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF3: Select SAR profile #3
+ *	that is hard-coded in the Board Data File (BDF).
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF4: Select SAR profile #4
+ *	that is hard-coded in the Board Data File (BDF).
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_NONE: Do not select any
+ *	source of SAR power limits, thereby disabling the SAR power
+ *	limit feature.
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_USER: Select the SAR power
+ *	limits configured by %QCA_NL80211_VENDOR_SUBCMD_SET_SAR.
+ *
+ * This enumerates the valid set of values that may be supplied for
+ * attribute %QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT in an instance of
+ * the %QCA_NL80211_VENDOR_SUBCMD_SET_SAR_LIMITS vendor command.
+ */
+enum qca_vendor_attr_sar_limits_selections {
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF0 = 0,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF1 = 1,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF2 = 2,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF3 = 3,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF4 = 4,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_NONE = 5,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_USER = 6,
+};
+
+/**
+ * enum qca_vendor_attr_sar_limits_spec_modulations -
+ *	SAR limits specification modulation
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION_CCK -
+ *	CCK modulation
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION_OFDM -
+ *	OFDM modulation
+ *
+ * This enumerates the valid set of values that may be supplied for
+ * attribute %QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION in an
+ * instance of attribute %QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC in an
+ * instance of the %QCA_NL80211_VENDOR_SUBCMD_SET_SAR_LIMITS vendor
+ * command.
+ */
+enum qca_vendor_attr_sar_limits_spec_modulations {
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION_CCK = 0,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION_OFDM = 1,
+};
+
+/**
+ * enum qca_vendor_attr_sar_limits - Attributes for SAR power limits
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SAR_ENABLE: Optional (u32) value to
+ *	select which SAR power limit table should be used.  Valid
+ *	values are enumerated in enum
+ *	%qca_vendor_attr_sar_limits_selections.  The existing SAR
+ *	power limit selection is unchanged if this attribute is not
+ *	present.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_NUM_SPECS: Optional (u32) value
+ *	which specifies the number of SAR power limit specifications
+ *	which will follow.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC: Nested array of SAR power
+ *	limit specifications. The number of specifications is
+ *	specified by @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_NUM_SPECS. Each
+ *	specification contains a set of
+ *	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_* attributes. A
+ *	specification is uniquely identified by the attributes
+ *	%QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_BAND,
+ *	%QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_CHAIN, and
+ *	%QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION and always
+ *	contains as a payload the attribute
+ *	%QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_POWER_LIMIT.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_BAND: Optional (u32) value to
+ *	indicate for which band this specification applies. Valid
+ *	values are enumerated in enum %nl80211_band (although not all
+ *	bands may be supported by a given device). If the attribute is
+ *	not supplied then the specification will be applied to all
+ *	supported bands.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_CHAIN: Optional (u32) value
+ *	to indicate for which antenna chain this specification
+ *	applies, i.e. 1 for chain 1, 2 for chain 2, etc. If the
+ *	attribute is not supplied then the specification will be
+ *	applied to all chains.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION: Optional (u32)
+ *	value to indicate for which modulation scheme this
+ *	specification applies. Valid values are enumerated in enum
+ *	%qca_vendor_attr_sar_limits_spec_modulations. If the attribute
+ *	is not supplied then the specification will be applied to all
+ *	modulation schemes.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_POWER_LIMIT: Required (u32)
+ *	value to specify the actual power limit value in steps of 0.5
+ *	dbm.
+ *
+ * These attributes are used with %QCA_NL80211_VENDOR_SUBCMD_SET_SAR_LIMITS.
+ */
+enum qca_vendor_attr_sar_limits {
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SAR_ENABLE = 1,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_NUM_SPECS = 2,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC = 3,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_BAND = 4,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_CHAIN = 5,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION = 6,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_POWER_LIMIT = 7,
+
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_MAX =
+		QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_AFTER_LAST - 1
+};
+
 struct cfg80211_bss *wlan_hdd_cfg80211_update_bss_db(hdd_adapter_t *pAdapter,
 						tCsrRoamInfo *pRoamInfo);
 
@@ -3173,6 +3303,10 @@ void wlan_hdd_cfg80211_set_key_wapi(hdd_adapter_t *pAdapter, uint8_t key_index,
 				    int key_Len);
 #endif
 hdd_context_t *hdd_cfg80211_wiphy_alloc(int priv_size);
+
+int wlan_hdd_cfg80211_tdls_scan(struct wiphy *wiphy,
+				struct cfg80211_scan_request *request,
+				uint8_t source);
 
 int wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 			   struct cfg80211_scan_request *request);
@@ -3261,12 +3395,12 @@ int wlan_hdd_cfg80211_update_bss(struct wiphy *wiphy,
 void wlan_hdd_cfg80211_acs_ch_select_evt(hdd_adapter_t *adapter);
 
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
-int wlan_hdd_send_roam_auth_event(hdd_context_t *hdd_ctx_ptr, uint8_t *bssid,
+int wlan_hdd_send_roam_auth_event(hdd_adapter_t *adapter, uint8_t *bssid,
 		uint8_t *req_rsn_ie, uint32_t req_rsn_length, uint8_t
 		*rsp_rsn_ie, uint32_t rsp_rsn_length, tCsrRoamInfo
 		*roam_info_ptr);
 #else
-static inline int wlan_hdd_send_roam_auth_event(hdd_context_t *hdd_ctx_ptr,
+static inline int wlan_hdd_send_roam_auth_event(hdd_adapter_t *adapter,
 		uint8_t *bssid, uint8_t *req_rsn_ie, uint32_t req_rsn_length,
 		uint8_t *rsp_rsn_ie, uint32_t rsp_rsn_length, tCsrRoamInfo
 		*roam_info_ptr)
@@ -3365,4 +3499,26 @@ struct cfg80211_bss *wlan_hdd_cfg80211_inform_bss_frame(hdd_adapter_t *pAdapter,
  */
 void hdd_lost_link_info_cb(void *context,
 			struct sir_lost_link_info *lost_link_info);
+/*
+ * hdd_get_sap_operating_band:  Get current operating channel
+ * for sap.
+ * @hdd_ctx: hdd context
+ *
+ * Return : Corresponding band for SAP operating channel
+ */
+uint8_t hdd_get_sap_operating_band(hdd_context_t *hdd_ctx);
+
+/**
+ * hdd_process_defer_disconnect() - Handle the deferred disconnect
+ * @adapter: HDD Adapter
+ *
+ * If roaming is in progress and there is a request to
+ * disconnect the session, then it is deferred. Once
+ * roaming is complete/aborted, then this routine is
+ * used to resume the disconnect that was deferred
+ *
+ * Return: None
+ */
+void hdd_process_defer_disconnect(hdd_adapter_t *adapter);
+
 #endif

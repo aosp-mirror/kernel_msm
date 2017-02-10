@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012, 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -38,7 +38,7 @@
 
 #ifdef WLAN_FEATURE_PACKET_FILTERING
 
-#define HDD_MAX_CMP_PER_PACKET_FILTER     5
+#define HDD_MAX_CMP_PER_PACKET_FILTER	5
 
 /**
  * enum pkt_filter_protocol_layer - packet filter protocol layer
@@ -147,12 +147,29 @@ enum suspend_resume_state {
 QDF_STATUS hdd_wlan_shutdown(void);
 QDF_STATUS hdd_wlan_re_init(void);
 
-void hdd_conf_mcastbcast_filter(hdd_context_t *pHddCtx, bool setfilter);
 QDF_STATUS hdd_conf_arp_offload(hdd_adapter_t *pAdapter, bool fenable);
 void hdd_conf_hostoffload(hdd_adapter_t *pAdapter, bool fenable);
 
+/**
+ * hdd_set_non_arp_hw_broadcast_filter() - enable HW Broadcast filter
+ * when target goes to wow suspend/resume mode
+ * @adapter: Adapter context for which broadcast filter is to be configured
+ *
+ * Return: zero if success, non-zero otherwise
+ */
+int hdd_set_non_arp_hw_broadcast_filter(hdd_adapter_t *adapter);
+
+/**
+ * hdd_clear_non_arp_hw_broadcast_filter() - disable HW Broadcast filter
+ * when target goes to wow suspend/resume mode
+ * @adapter: Adapter context for which broadcast filter is to be configured
+ *
+ * Return: zero if success, non-zero otherwise
+ */
+int hdd_clear_non_arp_hw_broadcast_filter(hdd_adapter_t *adapter);
+
 #ifdef WLAN_FEATURE_PACKET_FILTERING
-void wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, uint8_t set);
+int wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, uint8_t set);
 #else
 static inline void
 wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, uint8_t set)
@@ -222,6 +239,18 @@ void wlan_hdd_inc_suspend_stats(hdd_context_t *hdd_ctx,
  * enabling/disabling appropriate copy engine irqs.
  */
 #ifdef WLAN_SUSPEND_RESUME_TEST
+/**
+ * wlan_hdd_unit_test_bus_suspend() - suspend the wlan bus
+ * @state: state containing the suspend source event
+ *
+ * This function does the same as wlan_hdd_bus_suspend, but additionally passes
+ * the appropriate flags to FW, indicating this is a unit-test suspend and it
+ * should use an HTC wakeup method to resume.
+ *
+ * Return: 0 for success or error code
+ */
+int wlan_hdd_unit_test_bus_suspend(pm_message_t state);
+
 /**
  * hdd_wlan_fake_apps_resume() - Resume from unit-test triggered suspend
  * @wiphy: the kernel wiphy struct for the device being resumed

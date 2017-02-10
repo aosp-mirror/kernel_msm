@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -106,6 +106,7 @@ int hdd_napi_create(void)
 	struct  hif_opaque_softc *hif_ctx;
 	int     rc = 0;
 	hdd_context_t *hdd_ctx;
+	uint8_t feature_flags = 0;
 
 	NAPI_DEBUG("-->");
 
@@ -114,9 +115,15 @@ int hdd_napi_create(void)
 		QDF_ASSERT(NULL != hif_ctx);
 		rc = -EFAULT;
 	} else {
+
+		feature_flags = QCA_NAPI_FEATURE_CPU_CORRECTION |
+				QCA_NAPI_FEATURE_IRQ_BLACKLISTING |
+				QCA_NAPI_FEATURE_CORE_CTL_BOOST;
+
 		rc = hif_napi_create(hif_ctx, hdd_napi_poll,
 				     QCA_NAPI_BUDGET,
-				     QCA_NAPI_DEF_SCALE);
+				     QCA_NAPI_DEF_SCALE,
+				     feature_flags);
 		if (rc < 0) {
 			hdd_err("ERR(%d) creating NAPI instances",
 				rc);
@@ -124,7 +131,7 @@ int hdd_napi_create(void)
 			hdd_info("napi instances were created. Map=0x%x", rc);
 			hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 			if (unlikely(NULL == hdd_ctx)) {
-				QDF_ASSERT( 0 );
+				QDF_ASSERT(0);
 				rc = -EFAULT;
 			} else {
 				rc = hdd_napi_event(NAPI_EVT_INI_FILE,
@@ -171,7 +178,7 @@ int hdd_napi_destroy(int force)
 						rc++;
 						hdd_napi_map &= ~(0x01 << i);
 					} else
-						hdd_err("cannot destroy napi %d: (pipe:%d), f=%d\n",
+						hdd_warn("cannot destroy napi %d: (pipe:%d), f=%d\n",
 							i,
 							NAPI_PIPE2ID(i), force);
 				}
@@ -276,7 +283,7 @@ int hdd_napi_apply_throughput_policy(struct hdd_context_s *hddctx,
 	uint64_t packets = tx_packets + rx_packets;
 	enum qca_napi_tput_state req_state;
 	struct qca_napi_data *napid = hdd_napi_get_all();
-	int enabled = 0;
+	int enabled;
 
 	NAPI_DEBUG("-->%s(tx=%lld, rx=%lld)", __func__, tx_packets, rx_packets);
 
@@ -293,20 +300,24 @@ int hdd_napi_apply_throughput_policy(struct hdd_context_s *hddctx,
 		return rc;
 	}
 
-	if ((napid != NULL) &&
-	    (enabled = hdd_napi_enabled(HDD_NAPI_ANY))) {
-		if (packets > hddctx->config->busBandwidthHighThreshold)
-			req_state = QCA_NAPI_TPUT_HI;
-		else
-			req_state = QCA_NAPI_TPUT_LO;
-
-		if (req_state != napid->napi_mode)
-			rc = hdd_napi_event(NAPI_EVT_TPUT_STATE,
-					    (void *)req_state);
-	} else {
-		hdd_err("ERR: napid (%p) NULL or napi_enabled (%d) FALSE",
-			napid, enabled);
+	if (!napid) {
+		hdd_err("ERR: napid NULL");
+		return rc;
 	}
+
+	enabled = hdd_napi_enabled(HDD_NAPI_ANY);
+	if (!enabled) {
+		hdd_err("ERR: napi not enabled");
+		return rc;
+	}
+
+	if (packets > hddctx->config->busBandwidthHighThreshold)
+		req_state = QCA_NAPI_TPUT_HI;
+	else
+		req_state = QCA_NAPI_TPUT_LO;
+
+	if (req_state != napid->napi_mode)
+		rc = hdd_napi_event(NAPI_EVT_TPUT_STATE, (void *)req_state);
 	return rc;
 }
 
@@ -395,7 +406,10 @@ int hdd_display_napi_stats(void)
 		hdd_err("%s unable to retrieve napi structure", __func__);
 		return -EFAULT;
 	}
-	qdf_print("[NAPI -- STATS]:  scheds   polls   comps    done time-lim pkt-lim napi-buckets(%d)", QCA_NAPI_NUM_BUCKETS);
+	qdf_print("[NAPI %u][BL %d]:  scheds   polls   comps    done t-lim p-lim  corr napi-buckets(%d)",
+		  napid->napi_mode,
+		  hif_napi_cpu_blacklist(napid, BLACKLIST_QUERY),
+		  QCA_NAPI_NUM_BUCKETS);
 
 	for (i = 0; i < CE_COUNT_MAX; i++)
 		if (napid->ce_map & (0x01 << i)) {
@@ -412,7 +426,7 @@ int hdd_display_napi_stats(void)
 				}
 
 				if (napis->napi_schedules != 0)
-					qdf_print("NAPI[%2d]CPU[%2d]: %7d %7d %7d %7d %8d %7d %s",
+					qdf_print("NAPI[%2d]CPU[%d]: %7d %7d %7d %7d %5d %5d %5d %s",
 						  i, j,
 						  napis->napi_schedules,
 						  napis->napi_polls,
@@ -420,6 +434,7 @@ int hdd_display_napi_stats(void)
 						  napis->napi_workdone,
 						  napis->time_limit_reached,
 						  napis->rxpkt_thresh_reached,
+						  napis->cpu_corrected,
 						  buf);
 			}
 		}

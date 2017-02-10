@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -47,6 +47,8 @@
 #include <wmi_unified.h>
 
 #define FW_MODULE_LOG_LEVEL_STRING_LENGTH  (255)
+#define TX_SCHED_WRR_PARAM_STRING_LENGTH   (50)
+#define TX_SCHED_WRR_PARAMS_NUM            (5)
 
 #define CFG_ENABLE_RX_THREAD		(1 << 0)
 #define CFG_ENABLE_RPS			(1 << 1)
@@ -62,10 +64,47 @@
 
 /* Defines for all of the things we read from the configuration (registry). */
 
+/*
+ * <ini>
+ * RTSThreshold - Will provide RTSThreshold
+ * @Min: 0
+ * @Max: 1048576
+ * @Default: 2347
+ *
+ * This ini is used to set default RTSThreshold
+ * If minimum value 0 is selectd then it will use always RTS
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_RTS_THRESHOLD_NAME                 "RTSThreshold"
 #define CFG_RTS_THRESHOLD_MIN                  WNI_CFG_RTS_THRESHOLD_STAMIN     /* min is 0, meaning always use RTS. */
 #define CFG_RTS_THRESHOLD_MAX                  WNI_CFG_RTS_THRESHOLD_STAMAX     /* max is the max frame size */
 #define CFG_RTS_THRESHOLD_DEFAULT              WNI_CFG_RTS_THRESHOLD_STADEF
+
+/*
+ * <ini>
+ * gFragmentationThreshold - It will set fragmentation threshold
+ * @Min: 256
+ * @Max: 8000
+ * @Default: 8000
+ *
+ * This ini is used to indicate default fragmentation threshold
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_FRAG_THRESHOLD_NAME                "gFragmentationThreshold"
 #define CFG_FRAG_THRESHOLD_MIN                 WNI_CFG_FRAGMENTATION_THRESHOLD_STAMIN
@@ -76,6 +115,24 @@
 #define CFG_OPERATING_CHANNEL_MIN              (0)
 #define CFG_OPERATING_CHANNEL_MAX              (14)
 #define CFG_OPERATING_CHANNEL_DEFAULT          (1)
+
+/*
+ * <ini>
+ * gShortSlotTimeEnabled - It will set slot timing slot.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set default timing slot.
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_SHORT_SLOT_TIME_ENABLED_NAME       "gShortSlotTimeEnabled"
 #define CFG_SHORT_SLOT_TIME_ENABLED_MIN        WNI_CFG_SHORT_SLOT_TIME_STAMIN
@@ -103,51 +160,28 @@
 #define CFG_HEARTBEAT_THRESH_24_MAX            WNI_CFG_HEART_BEAT_THRESHOLD_STAMAX
 #define CFG_HEARTBEAT_THRESH_24_DEFAULT        WNI_CFG_HEART_BEAT_THRESHOLD_STADEF
 
-#define CFG_POWER_USAGE_NAME                   "gPowerUsage"
-#define CFG_POWER_USAGE_MIN                    "Min"    /* Minimum Power Save */
-#define CFG_POWER_USAGE_MAX                    "Max"    /* Maximum Power Save */
-#define CFG_POWER_USAGE_DEFAULT                "Mod"    /* Moderate Power Save */
+/*
+ * <ini>
+ * gMaxRxAmpduFactor - Provide the maximum ampdu factor.
+ * @Min: 0
+ * @Max: 3
+ * @Default: 3
+ *
+ * This ini is used to set default maxampdu factor
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
-#define CFG_WOWL_PATTERN_NAME                  "gWowlPattern"
-#define CFG_WOWL_PATTERN_DEFAULT               ""
-
-/* IMPS = IdleModePowerSave */
-#define CFG_ENABLE_IMPS_NAME                   "gEnableImps"
-#define CFG_ENABLE_IMPS_MIN                    (0)
-#define CFG_ENABLE_IMPS_MAX                    (1)
-#define CFG_ENABLE_IMPS_DEFAULT                (1)
-
-/* PS = PowerSave */
-#define CFG_ENABLE_PS_NAME                     "gEnableBmps"
-#define CFG_ENABLE_PS_MIN                      (0)
-#define CFG_ENABLE_PS_MAX                      (1)
-#define CFG_ENABLE_PS_DEFAULT                  (1)
-
-/* Auto BMPS timer value in sec */
-#define CFG_AUTO_PS_ENABLE_TIMER_NAME          "gAutoBmpsTimerValue"
-#define CFG_AUTO_PS_ENABLE_TIMER_MIN           (0)
-#define CFG_AUTO_PS_ENABLE_TIMER_MAX           (120)
-#define CFG_AUTO_PS_ENABLE_TIMER_DEFAULT       (0)
-
-#define CFG_BMPS_MINIMUM_LI_NAME               "gBmpsMinListenInterval"
-#define CFG_BMPS_MINIMUM_LI_MIN                (1)
-#define CFG_BMPS_MINIMUM_LI_MAX                (65535)
-#define CFG_BMPS_MINIMUM_LI_DEFAULT            (1)
-
-#define CFG_BMPS_MODERATE_LI_NAME              "gBmpsModListenInterval"
-#define CFG_BMPS_MODERATE_LI_MIN               (1)
-#define CFG_BMPS_MODERATE_LI_MAX               (65535)
-#define CFG_BMPS_MODERATE_LI_DEFAULT           (1)
-
-#define CFG_BMPS_MAXIMUM_LI_NAME               "gBmpsMaxListenInterval"
-#define CFG_BMPS_MAXIMUM_LI_MIN                (1)
-#define CFG_BMPS_MAXIMUM_LI_MAX                (65535)
-#define CFG_BMPS_MAXIMUM_LI_DEFAULT            (1)
-
-#define CFG_MAX_RX_AMPDU_FACTOR_NAME           "gMaxRxAmpduFactor"
-#define CFG_MAX_RX_AMPDU_FACTOR_MIN            WNI_CFG_MAX_RX_AMPDU_FACTOR_STAMIN
-#define CFG_MAX_RX_AMPDU_FACTOR_MAX            WNI_CFG_MAX_RX_AMPDU_FACTOR_STAMAX
-#define CFG_MAX_RX_AMPDU_FACTOR_DEFAULT        WNI_CFG_MAX_RX_AMPDU_FACTOR_STADEF
+#define CFG_MAX_RX_AMPDU_FACTOR_NAME         "gMaxRxAmpduFactor"
+#define CFG_MAX_RX_AMPDU_FACTOR_MIN          WNI_CFG_MAX_RX_AMPDU_FACTOR_STAMIN
+#define CFG_MAX_RX_AMPDU_FACTOR_MAX          WNI_CFG_MAX_RX_AMPDU_FACTOR_STAMAX
+#define CFG_MAX_RX_AMPDU_FACTOR_DEFAULT      WNI_CFG_MAX_RX_AMPDU_FACTOR_STADEF
 
 /* Configuration option for HT MPDU density (Table 8-125 802.11-2012)
  * 0 for no restriction
@@ -164,8 +198,25 @@
 #define CFG_HT_MPDU_DENSITY_MAX                WNI_CFG_MPDU_DENSITY_STAMAX
 #define CFG_HT_MPDU_DENSITY_DEFAULT            WNI_CFG_MPDU_DENSITY_STADEF
 
-/* Configuration added to enable/disable CTS2SELF in */
-/* Adaptive RX drain feature */
+/*
+ * <ini>
+ * gEnableAdaptRxDrain - It will enable adapt received drain.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to Configuration added to enable/disable CTS2SELF in
+ * Adaptive RX drain feature.
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_ENABLE_ADAPT_RX_DRAIN_NAME     "gEnableAdaptRxDrain"
 #define CFG_ENABLE_ADAPT_RX_DRAIN_MIN       WNI_CFG_ENABLE_ADAPT_RX_DRAIN_STAMIN
 #define CFG_ENABLE_ADAPT_RX_DRAIN_MAX       WNI_CFG_ENABLE_ADAPT_RX_DRAIN_STAMAX
@@ -195,25 +246,92 @@ typedef enum {
 	eHDD_DOT11_MODE_11a,
 } eHddDot11Mode;
 
-#define CFG_DOT11_MODE_NAME                    "gDot11Mode"
-#define CFG_DOT11_MODE_MIN                     eHDD_DOT11_MODE_AUTO
-#define CFG_DOT11_MODE_DEFAULT                 eHDD_DOT11_MODE_11ac
-#define CFG_DOT11_MODE_MAX                     eHDD_DOT11_MODE_11a
+/*
+ * <ini>
+ * gChannelBondingMode24GHz - Configures Channel Bonding in 24 GHz
+ * @Min: 0
+ * @Max: 10
+ * @Default: 0
+ *
+ * This ini is used to set default channel bonding mode 24GHZ
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_CHANNEL_BONDING_MODE_24GHZ_NAME    "gChannelBondingMode24GHz"
 #define CFG_CHANNEL_BONDING_MODE_MIN           WNI_CFG_CHANNEL_BONDING_MODE_STAMIN
 #define CFG_CHANNEL_BONDING_MODE_MAX           WNI_CFG_CHANNEL_BONDING_MODE_STAMAX
 #define CFG_CHANNEL_BONDING_MODE_DEFAULT       WNI_CFG_CHANNEL_BONDING_MODE_STADEF
 
+/*
+ * <ini>
+ * gChannelBondingMode5GHz - Configures Channel Bonding in 5 GHz
+ * @Min: 0
+ * @Max: 10
+ * @Default: 0
+ *
+ * This ini is used to set default channel bonding mode 5GHZ
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_CHANNEL_BONDING_MODE_5GHZ_NAME     "gChannelBondingMode5GHz"
 #define CFG_CHANNEL_BONDING_MODE_MIN           WNI_CFG_CHANNEL_BONDING_MODE_STAMIN
 #define CFG_CHANNEL_BONDING_MODE_MAX           WNI_CFG_CHANNEL_BONDING_MODE_STAMAX
 #define CFG_CHANNEL_BONDING_MODE_DEFAULT       WNI_CFG_CHANNEL_BONDING_MODE_STADEF
 
+/*
+ * <ini>
+ * gFixedRate - It will provide fixed rate
+ * @Min: 0
+ * @Max: 44
+ * @Default: 0
+ *
+ * This ini is used to set default fixed rate
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_FIXED_RATE_NAME                    "gFixedRate"
 #define CFG_FIXED_RATE_MIN                     WNI_CFG_FIXED_RATE_STAMIN
 #define CFG_FIXED_RATE_MAX                     WNI_CFG_FIXED_RATE_STAMAX
 #define CFG_FIXED_RATE_DEFAULT                 WNI_CFG_FIXED_RATE_STADEF
+
+/*
+ * <ini>
+ * gShortGI20Mhz - Short Guard Interval for HT20
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set default short interval for HT20
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_SHORT_GI_20MHZ_NAME                "gShortGI20Mhz"
 #define CFG_SHORT_GI_20MHZ_MIN                 WNI_CFG_SHORT_GI_20MHZ_STAMIN
@@ -247,15 +365,526 @@ typedef enum {
 #define CFG_SCAN_RESULT_AGE_TIME_CPS_MAX       (10000)
 #define CFG_SCAN_RESULT_AGE_TIME_CPS_DEFAULT   (600)
 
+/*
+ * <ini>
+ * gRssiCatGap - Set Rssi CatGap
+ * @Min: 5
+ * @Max: 100
+ * @Default: 5
+ *
+ * This ini is used to set default RssiCatGap
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_RSSI_CATEGORY_GAP_NAME             "gRssiCatGap"
 #define CFG_RSSI_CATEGORY_GAP_MIN              (5)
 #define CFG_RSSI_CATEGORY_GAP_MAX              (100)
 #define CFG_RSSI_CATEGORY_GAP_DEFAULT          (5)
 
-#define CFG_ROAM_PREFER_5GHZ                   "gRoamPrefer5GHz"
+/*
+ * <ini>
+ * gRoamPrefer5GHz - Prefer roaming to 5GHz Bss
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to inform FW to prefer roaming to 5GHz BSS
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_PREFER_5GHZ                  "gRoamPrefer5GHz"
 #define CFG_ROAM_PREFER_5GHZ_MIN              (0)
 #define CFG_ROAM_PREFER_5GHZ_MAX              (1)
 #define CFG_ROAM_PREFER_5GHZ_DEFAULT          (1)
+
+/*
+ * <ini>
+ * gRoamIntraBand - Prefer roaming within Band
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to inform FW to prefer roaming within band
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_INTRA_BAND                   "gRoamIntraBand"
+#define CFG_ROAM_INTRA_BAND_MIN               (0)
+#define CFG_ROAM_INTRA_BAND_MAX               (1)
+#define CFG_ROAM_INTRA_BAND_DEFAULT           (0)
+
+/*
+ * <ini>
+ * FastRoamEnabled - Enable fast roaming
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to inform FW to enable fast roaming
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_LFR_FEATURE_ENABLED_NAME                        "FastRoamEnabled"
+#define CFG_LFR_FEATURE_ENABLED_MIN                         (0)
+#define CFG_LFR_FEATURE_ENABLED_MAX                         (1)
+#define CFG_LFR_FEATURE_ENABLED_DEFAULT                     (0)
+
+/*
+ * <ini>
+ * FastTransitionEnabled - Enable fast transition in case of 11r and ese.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to turn ON/OFF the whole neighbor roam, pre-auth, reassoc.
+ * With this turned OFF 11r will completely not work. For 11r this flag has to
+ * be ON. For ESE fastroam will not work.
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_FAST_TRANSITION_ENABLED_NAME                    "FastTransitionEnabled"
+#define CFG_FAST_TRANSITION_ENABLED_NAME_MIN                (0)
+#define CFG_FAST_TRANSITION_ENABLED_NAME_MAX                (1)
+#define CFG_FAST_TRANSITION_ENABLED_NAME_DEFAULT            (1)
+
+/*
+ * <ini>
+ * RoamRssiDiff - Enable roam based on rssi
+ * @Min: 0
+ * @Max: 30
+ * @Default: 5
+ *
+ * This INI is used to decide whether to Roam or not based on RSSI. AP1 is the
+ * currently associated AP and AP2 is chosen for roaming. The Roaming will
+ * happen only if AP2 has better Signal Quality and it has a RSSI better than
+ * AP2. RoamRssiDiff is the number of units (typically measured in dB) AP2
+ * is better than AP1.
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_RSSI_DIFF_NAME                             "RoamRssiDiff"
+#define CFG_ROAM_RSSI_DIFF_MIN                              (0)
+#define CFG_ROAM_RSSI_DIFF_MAX                              (30)
+#define CFG_ROAM_RSSI_DIFF_DEFAULT                          (5)
+
+/*
+ * <ini>
+ * gRoamScanNProbes - Sets the number of probes to be sent for firmware roaming
+ * @Min: 1
+ * @Max: 10
+ * @Default: 2
+ *
+ * This INI is used to set the maximum number of probes the firmware can send
+ * for firmware internal roaming cases.
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_SCAN_N_PROBES                              "gRoamScanNProbes"
+#define CFG_ROAM_SCAN_N_PROBES_MIN                          (1)
+#define CFG_ROAM_SCAN_N_PROBES_MAX                          (10)
+#define CFG_ROAM_SCAN_N_PROBES_DEFAULT                      (2)
+
+/*
+ * <ini>
+ * gRoamScanHomeAwayTime - Sets the Home Away Time to firmware
+ * @Min: 0
+ * @Max: 300
+ * @Default: 0
+ *
+ * Home Away Time should be at least equal to (gNeighborScanChannelMaxTime
+ * + (2*RFS)), where RFS is the RF Switching time(3). It is twice RFS
+ * to consider the time to go off channel and return to the home channel.
+ *
+ * Related: gNeighborScanChannelMaxTime
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_SCAN_HOME_AWAY_TIME                        "gRoamScanHomeAwayTime"
+#define CFG_ROAM_SCAN_HOME_AWAY_TIME_MIN                    (0)
+#define CFG_ROAM_SCAN_HOME_AWAY_TIME_MAX                    (300)
+#define CFG_ROAM_SCAN_HOME_AWAY_TIME_DEFAULT                (0)
+
+/*
+ * <ini>
+ * OkcEnabled - Enable OKC(Oppurtunistic Key Caching)
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This INI is used to enable OKC feature
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_OKC_FEATURE_ENABLED_NAME                       "OkcEnabled"
+#define CFG_OKC_FEATURE_ENABLED_MIN                        (0)
+#define CFG_OKC_FEATURE_ENABLED_MAX                        (1)
+#define CFG_OKC_FEATURE_ENABLED_DEFAULT                    (1)
+
+/*
+ * <ini>
+ * gRoamScanOffloadEnabled - Enable Roam Scan Offload
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This INI is used to enable Roam Scan Offload in firmware
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_SCAN_OFFLOAD_ENABLED                       "gRoamScanOffloadEnabled"
+#define CFG_ROAM_SCAN_OFFLOAD_ENABLED_MIN                   (0)
+#define CFG_ROAM_SCAN_OFFLOAD_ENABLED_MAX                   (1)
+#define CFG_ROAM_SCAN_OFFLOAD_ENABLED_DEFAULT               (1)
+
+/*
+ * <ini>
+ * gRoamRescanRssiDiff - Sets RSSI for Scan trigger in firmware
+ * @Min: 0
+ * @Max: 100
+ * @Default: 5
+ *
+ * This INI is the drop in RSSI value that will trigger a precautionary
+ * scan by firmware. Max value is chosen in such a way that this type
+ * of scan can be disabled by user.
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_RESCAN_RSSI_DIFF_NAME                  "gRoamRescanRssiDiff"
+#define CFG_ROAM_RESCAN_RSSI_DIFF_MIN                   (0)
+#define CFG_ROAM_RESCAN_RSSI_DIFF_MAX                   (100)
+#define CFG_ROAM_RESCAN_RSSI_DIFF_DEFAULT               (5)
+
+/*
+ * <ini>
+ * gEnableFastRoamInConcurrency - Enable LFR roaming on STA during concurrency
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This INI is used to enable Legacy fast roaming(LFR) on STA link during
+ * concurrent sessions.
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_FAST_ROAM_IN_CONCURRENCY          "gEnableFastRoamInConcurrency"
+#define CFG_ENABLE_FAST_ROAM_IN_CONCURRENCY_MIN      (0)
+#define CFG_ENABLE_FAST_ROAM_IN_CONCURRENCY_MAX      (1)
+#define CFG_ENABLE_FAST_ROAM_IN_CONCURRENCY_DEFAULT  (1)
+
+/*
+ * <ini>
+ * gSelect5GHzMargin - Sets RSSI preference for 5GHz over 2.4GHz AP.
+ * @Min: 0
+ * @Max: 60
+ * @Default: 0
+ *
+ * Prefer connecting to 5G AP even if its RSSI is lower by gSelect5GHzMargin
+ * dBm than 2.4G AP. This feature requires the dependent cfg.ini
+ * "gRoamPrefer5GHz" set to 1
+ *
+ * Related: gRoamPrefer5GHz
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_STRICT_5GHZ_PREF_BY_MARGIN                 "gSelect5GHzMargin"
+#define CFG_STRICT_5GHZ_PREF_BY_MARGIN_MIN             (0)
+#define CFG_STRICT_5GHZ_PREF_BY_MARGIN_MAX             (60)
+#define CFG_STRICT_5GHZ_PREF_BY_MARGIN_DEFAULT         (0)
+
+#ifdef WLAN_FEATURE_ROAM_OFFLOAD
+/*
+ * <ini>
+ * gRoamOffloadEnabled - enable/disable roam offload feature
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This INI is used to enable/disable roam offload feature
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAMING_OFFLOAD_NAME                "gRoamOffloadEnabled"
+#define CFG_ROAMING_OFFLOAD_MIN                 (0)
+#define CFG_ROAMING_OFFLOAD_MAX                 (1)
+#define CFG_ROAMING_OFFLOAD_DEFAULT             (1)
+#endif
+
+/*
+ * <ini>
+ * gRoamScanHiRssiMaxCount - Sets 5GHz maximum scan count
+ * @Min: 0
+ * @Max: 10
+ * @Default: 3
+ *
+ * This INI is used to set maximum scan count in 5GHz
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_SCAN_HI_RSSI_MAXCOUNT_NAME         "gRoamScanHiRssiMaxCount"
+#define CFG_ROAM_SCAN_HI_RSSI_MAXCOUNT_MIN          (0)
+#define CFG_ROAM_SCAN_HI_RSSI_MAXCOUNT_MAX          (10)
+#define CFG_ROAM_SCAN_HI_RSSI_MAXCOUNT_DEFAULT      (3)
+
+/*
+ * <ini>
+ * gRoamScanHiRssiDelta - Sets RSSI Delta for scan trigger
+ * @Min: 0
+ * @Max: 16
+ * @Default: 10
+ *
+ * This INI is used to set change in RSSI at which scan is triggered
+ * in 5GHz.
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_SCAN_HI_RSSI_DELTA_NAME           "gRoamScanHiRssiDelta"
+#define CFG_ROAM_SCAN_HI_RSSI_DELTA_MIN            (0)
+#define CFG_ROAM_SCAN_HI_RSSI_DELTA_MAX            (16)
+#define CFG_ROAM_SCAN_HI_RSSI_DELTA_DEFAULT        (10)
+
+/*
+ * <ini>
+ * gRoamScanHiRssiDelay - Sets minimum delay between 5GHz scans
+ * @Min: 5000
+ * @Max: 0x7fffffff
+ * @Default: 15000
+ *
+ * This INI is used to set the minimum delay between 5GHz scans.
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_SCAN_HI_RSSI_DELAY_NAME            "gRoamScanHiRssiDelay"
+#define CFG_ROAM_SCAN_HI_RSSI_DELAY_MIN             (5000)
+#define CFG_ROAM_SCAN_HI_RSSI_DELAY_MAX             (0x7fffffff)
+#define CFG_ROAM_SCAN_HI_RSSI_DELAY_DEFAULT         (15000)
+
+/*
+ * <ini>
+ * gRoamScanHiRssiUpperBound - Sets upper bound after which 5GHz scan
+ * @Min: -66
+ * @Max: 0
+ * @Default: -30
+ *
+ * This INI is used to set the RSSI upper bound above which the 5GHz scan
+ * will not be performed.
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_SCAN_HI_RSSI_UB_NAME              "gRoamScanHiRssiUpperBound"
+#define CFG_ROAM_SCAN_HI_RSSI_UB_MIN               (-66)
+#define CFG_ROAM_SCAN_HI_RSSI_UB_MAX               (0)
+#define CFG_ROAM_SCAN_HI_RSSI_UB_DEFAULT           (-30)
+
+#ifdef FEATURE_LFR_SUBNET_DETECTION
+/*
+ * <ini>
+ * gLFRSubnetDetectionEnable - Enable LFR3 subnet detection
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * Enable IP subnet detection during legacy fast roming version 3. Legacy fast
+ * roaming could roam across IP subnets without host processors' knowledge.
+ * This feature enables firmware to wake up the host processor if it
+ * successfully determines change in the IP subnet. Change in IP subnet could
+ * potentially cause disruption in IP connnectivity if IP address is not
+ * refreshed.
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_LFR_SUBNET_DETECTION    "gLFRSubnetDetectionEnable"
+#define CFG_ENABLE_LFR_SUBNET_MIN          (0)
+#define CFG_ENABLE_LFR_SUBNET_MAX          (1)
+#define CFG_ENABLE_LFR_SUBNET_DEFAULT      (1)
+#endif /* FEATURE_LFR_SUBNET_DETECTION */
+
+/*
+ * <ini>
+ * groam_dense_rssi_thresh_offset - Sets dense roam RSSI threshold diff
+ * @Min: 0
+ * @Max: 20
+ * @Default: 10
+ *
+ * This INI is used to set offset value from normal RSSI threshold to dense
+ * RSSI threshold Fw will optimize roaming based on new RSSI threshold once
+ * it detects dense enviournment.
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_DENSE_RSSI_THRE_OFFSET         "groam_dense_rssi_thresh_offset"
+#define CFG_ROAM_DENSE_RSSI_THRE_OFFSET_MIN     (0)
+#define CFG_ROAM_DENSE_RSSI_THRE_OFFSET_MAX     (20)
+#define CFG_ROAM_DENSE_RSSI_THRE_OFFSET_DEFAULT (10)
+
+/*
+ * <ini>
+ * groam_dense_min_aps - Sets minimum number of AP for dense roam
+ * @Min: 1
+ * @Max: 5
+ * @Default: 3
+ *
+ * Minimum number of APs required for dense roam. FW will consider
+ * environment as dense once it detects #APs operating is more than
+ * groam_dense_min_aps.
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_DENSE_MIN_APS         "groam_dense_min_aps"
+#define CFG_ROAM_DENSE_MIN_APS_MIN     (1)
+#define CFG_ROAM_DENSE_MIN_APS_MAX     (5)
+#define CFG_ROAM_DENSE_MIN_APS_DEFAULT (3)
+
+/*
+ * <ini>
+ * roamscan_adaptive_dwell_mode - Sets dwell time adaptive mode
+ * @Min: 0
+ * @Max: 4
+ * @Default: 0
+ *
+ * This parameter will set the algo used in dwell time optimization during
+ * roam scan. see enum wmi_dwelltime_adaptive_mode.
+ * Acceptable values for this:
+ * 0: Default (Use firmware default mode)
+ * 1: Conservative optimization
+ * 2: Moderate optimization
+ * 3: Aggressive optimization
+ * 4: Static
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ADAPTIVE_ROAMSCAN_DWELL_MODE_NAME    "roamscan_adaptive_dwell_mode"
+#define CFG_ADAPTIVE_ROAMSCAN_DWELL_MODE_MIN     (0)
+#define CFG_ADAPTIVE_ROAMSCAN_DWELL_MODE_MAX     (4)
+#define CFG_ADAPTIVE_ROAMSCAN_DWELL_MODE_DEFAULT (0)
 
 /*
  * Timer waiting for interface up from the upper layer. If
@@ -264,27 +893,340 @@ typedef enum {
  */
 #define CFG_INTERFACE_CHANGE_WAIT_NAME    "gInterfaceChangeWait"
 #define CFG_INTERFACE_CHANGE_WAIT_MIN     (10)
-#define CFG_INTERFACE_CHANGE_WAIT_MAX     (10000)
-#define CFG_INTERFACE_CHANGE_WAIT_DEFAULT (50)
+#define CFG_INTERFACE_CHANGE_WAIT_MAX     (500000)
+#define CFG_INTERFACE_CHANGE_WAIT_DEFAULT (100000)
 
 /*
-    To enable, set gRoamIntraBand=1 (Roaming within band)
-    To disable, set gRoamIntraBand=0 (Roaming across band)
+ * <ini>
+ * gShortPreamble - Set Short Preamble
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set default short Preamble
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
-#define CFG_ROAM_INTRA_BAND                   "gRoamIntraBand"
-#define CFG_ROAM_INTRA_BAND_MIN               (0)
-#define CFG_ROAM_INTRA_BAND_MAX               (1)
-#define CFG_ROAM_INTRA_BAND_DEFAULT           (0)
 
 #define CFG_SHORT_PREAMBLE_NAME                "gShortPreamble"
 #define CFG_SHORT_PREAMBLE_MIN                 WNI_CFG_SHORT_PREAMBLE_STAMIN
 #define CFG_SHORT_PREAMBLE_MAX                 WNI_CFG_SHORT_PREAMBLE_STAMAX
 #define CFG_SHORT_PREAMBLE_DEFAULT             WNI_CFG_SHORT_PREAMBLE_STADEF
 
+/*
+ * <ini>
+ * gIbssBssid - Default IBSS BSSID if BSSID is not provided by supplicant
+ * @Min: "000000000000"
+ * @Max: "ffffffffffff"
+ * @Default: "000AF5040506"
+ *
+ * This ini is used to set Default IBSS BSSID if BSSID
+ * is not provided by supplicant and Coalesing is disabled
+ *
+ * Related: Only applicable if gCoalesingInIBSS is 0
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_IBSS_BSSID_NAME                    "gIbssBssid"
 #define CFG_IBSS_BSSID_MIN                     "000000000000"
 #define CFG_IBSS_BSSID_MAX                     "ffffffffffff"
 #define CFG_IBSS_BSSID_DEFAULT                 "000AF5040506"
+
+/*
+ * <ini>
+ * gAdHocChannel5G - Default 5Ghz IBSS channel if channel is not
+ * provided by supplicant.
+ * @Min: 36
+ * @Max: 165
+ * @Default: 44
+ *
+ * This ini is used to set default 5Ghz IBSS channel
+ * if channel is not provided by supplicant and band is 5Ghz
+ *
+ * Related: None
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_IBSS_ADHOC_CHANNEL_5GHZ_NAME          "gAdHocChannel5G"
+#define CFG_IBSS_ADHOC_CHANNEL_5GHZ_MIN           (36)
+#define CFG_IBSS_ADHOC_CHANNEL_5GHZ_MAX           (165)
+#define CFG_IBSS_ADHOC_CHANNEL_5GHZ_DEFAULT       (44)
+
+/*
+ * <ini>
+ * gAdHocChannel24G - Default 2.4Ghz IBSS channel if channel is not
+ * provided by supplicant.
+ * @Min: 1
+ * @Max: 14
+ * @Default: 6
+ *
+ * This ini is used to set default 2.4Ghz IBSS channel
+ * if channel is not provided by supplicant and band is 2.4Ghz
+ *
+ * Related: None
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_IBSS_ADHOC_CHANNEL_24GHZ_NAME         "gAdHocChannel24G"
+#define CFG_IBSS_ADHOC_CHANNEL_24GHZ_MIN          (1)
+#define CFG_IBSS_ADHOC_CHANNEL_24GHZ_MAX          (14)
+#define CFG_IBSS_ADHOC_CHANNEL_24GHZ_DEFAULT      (6)
+
+/*
+ * <ini>
+ * gCoalesingInIBSS - If IBSS coalesing is enabled.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set IBSS coalesing
+ *
+ * Related: None
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_COALESING_IN_IBSS_NAME                "gCoalesingInIBSS"
+#define CFG_COALESING_IN_IBSS_MIN                 (0)
+#define CFG_COALESING_IN_IBSS_MAX                 (1)
+#define CFG_COALESING_IN_IBSS_DEFAULT             (0)   /* disabled */
+
+/*
+ * <ini>
+ * gIbssATIMWinSize - Set IBSS ATIM window size
+ * @Min: 0
+ * @Max: 50
+ * @Default: 0
+ *
+ * This ini is used to set IBSS ATIM window size
+ *
+ * Related: None
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_IBSS_ATIM_WIN_SIZE_NAME                "gIbssATIMWinSize"
+#define CFG_IBSS_ATIM_WIN_SIZE_MIN                 (0)
+#define CFG_IBSS_ATIM_WIN_SIZE_MAX                 (50)
+#define CFG_IBSS_ATIM_WIN_SIZE_DEFAULT             (0)
+
+
+/*
+ * <ini>
+ * gIbssIsPowerSaveAllowed - Indicates if IBSS Power Save is
+ * supported or not
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to Indicates if IBSS Power Save is
+ * supported or not. When not allowed,IBSS station has
+ * to stay awake all the time and should never set PM=1
+ * in its transmitted frames.
+ *
+ * Related: valid only when gIbssATIMWinSize is non-zero
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_IBSS_IS_POWER_SAVE_ALLOWED_NAME        "gIbssIsPowerSaveAllowed"
+#define CFG_IBSS_IS_POWER_SAVE_ALLOWED_MIN         (0)
+#define CFG_IBSS_IS_POWER_SAVE_ALLOWED_MAX         (1)
+#define CFG_IBSS_IS_POWER_SAVE_ALLOWED_DEFAULT     (1)
+
+/*
+ * <ini>
+ * gIbssIsPowerCollapseAllowed - Indicates if IBSS Power Collapse
+ * is allowed
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to indicates if IBSS Power Collapse
+ * is allowed
+ *
+ * Related: None
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_IBSS_IS_POWER_COLLAPSE_ALLOWED_NAME    "gIbssIsPowerCollapseAllowed"
+#define CFG_IBSS_IS_POWER_COLLAPSE_ALLOWED_MIN     (0)
+#define CFG_IBSS_IS_POWER_COLLAPSE_ALLOWED_MAX     (1)
+#define CFG_IBSS_IS_POWER_COLLAPSE_ALLOWED_DEFAULT (1)
+
+/*
+ * <ini>
+ * gIbssAwakeOnTxRx - Indicates whether IBSS station
+ * can exit power save mode and enter power active
+ * state whenever there is a TX/RX activity.
+ *
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to ndicates whether IBSS station
+ * can exit power save mode and enter power active
+ * state whenever there is a TX/RX activity.
+ *
+ * Related: None
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_IBSS_AWAKE_ON_TX_RX_NAME               "gIbssAwakeOnTxRx"
+#define CFG_IBSS_AWAKE_ON_TX_RX_MIN                (0)
+#define CFG_IBSS_AWAKE_ON_TX_RX_MAX                (1)
+#define CFG_IBSS_AWAKE_ON_TX_RX_DEFAULT            (0)
+
+/*
+ * <ini>
+ * gIbssInactivityTime - Indicates the data
+ * inactivity time in number of beacon intervals
+ * after which IBSS station re-inters power save
+ *
+ * @Min: 1
+ * @Max: 10
+ * @Default: 1
+ *
+ * In IBSS mode if Awake on TX/RX activity is enabled
+ * Ibss Inactivity parameter indicates the data
+ * inactivity time in number of beacon intervals
+ * after which IBSS station re-inters power save
+ * by sending Null frame with PM=1
+ *
+ * Related: Aplicable if gIbssAwakeOnTxRx is enabled
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_IBSS_INACTIVITY_TIME_NAME              "gIbssInactivityTime"
+#define CFG_IBSS_INACTIVITY_TIME_MIN               (1)
+#define CFG_IBSS_INACTIVITY_TIME_MAX               (10)
+#define CFG_IBSS_INACTIVITY_TIME_DEFAULT           (1)
+
+/*
+ * <ini>
+ * gIbssTxSpEndInactivityTime - Indicates the time after
+ * which TX Service Period is terminated by
+ * sending a Qos Null frame with EOSP.
+ *
+ * @Min: 0
+ * @Max: 100
+ * @Default: 0
+ *
+ * In IBSS mode Tx Service Period Inactivity
+ * time in msecs indicates the time after
+ * which TX Service Period is terminated by
+ * sending a Qos Null frame with EOSP.
+ * If value is 0, TX SP is terminated with the
+ * last buffered packet itself instead of waiting
+ * for the inactivity.
+ *
+ * Related: None
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_IBSS_TXSP_END_INACTIVITY_NAME          "gIbssTxSpEndInactivityTime"
+#define CFG_IBSS_TXSP_END_INACTIVITY_MIN           (0)
+#define CFG_IBSS_TXSP_END_INACTIVITY_MAX           (100)
+#define CFG_IBSS_TXSP_END_INACTIVITY_DEFAULT       (0)
+
+/*
+ * <ini>
+ * gIbssPsWarmupTime - PS-supporting device
+ * does not enter protocol sleep state during first
+ * gIbssPsWarmupTime seconds.
+ *
+ * @Min: 0
+ * @Max: 65535
+ * @Default: 0
+ *
+ * When IBSS network is initialized, PS-supporting device
+ * does not enter protocol sleep state during first
+ * gIbssPsWarmupTime seconds.
+ *
+ * Related: valid if gIbssIsPowerSaveAllowed is set
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_IBSS_PS_WARMUP_TIME_NAME               "gIbssPsWarmupTime"
+#define CFG_IBSS_PS_WARMUP_TIME_MIN                (0)
+/* Allow unsigned Int Max for now */
+#define CFG_IBSS_PS_WARMUP_TIME_MAX                (65535)
+#define CFG_IBSS_PS_WARMUP_TIME_DEFAULT            (0)
+
+/*
+ * <ini>
+ * gIbssPsWarmupTime - IBSS Power Save Enable/Disable 1 RX
+ * chain usage during the ATIM window
+ *
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * IBSS Power Save Enable/Disable 1 RX
+ * chain usage during the ATIM window
+ *
+ * Related: Depend on gIbssIsPowerSaveAllowed
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_IBSS_PS_1RX_CHAIN_IN_ATIM_WINDOW_NAME    "gIbssPs1RxChainInAtim"
+#define CFG_IBSS_PS_1RX_CHAIN_IN_ATIM_WINDOW_MIN     (0)
+#define CFG_IBSS_PS_1RX_CHAIN_IN_ATIM_WINDOW_MAX     (1)
+#define CFG_IBSS_PS_1RX_CHAIN_IN_ATIM_WINDOW_DEFAULT (0)
+
+
+
 
 #define CFG_INTF0_MAC_ADDR_NAME                  "Intf0MacAddress"
 #define CFG_INTF0_MAC_ADDR_MIN                   "000000000000"
@@ -306,48 +1248,283 @@ typedef enum {
 #define CFG_INTF3_MAC_ADDR_MAX                   "ffffffffffff"
 #define CFG_INTF3_MAC_ADDR_DEFAULT               "000AF58989FC"
 
-#define CFG_AP_QOS_UAPSD_MODE_NAME             "gEnableApUapsd" /* ACs to setup U-APSD for at assoc */
+/*
+ * <ini>
+ * gDot11Mode - SAP phy mode
+ * @Min: 0
+ * @Max: 10 (11a)
+ * @Default: 9 (11ac)
+ *
+ * This ini is used to set Phy Mode (auto, b, g, n, etc/) Valid values are
+ * 0-10, with 0 = Auto, 10 = 11a.
+ *
+ * Related: None.
+ *
+ * Supported Feature: SAP
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_DOT11_MODE_NAME                    "gDot11Mode"
+#define CFG_DOT11_MODE_MIN                     eHDD_DOT11_MODE_AUTO
+#define CFG_DOT11_MODE_DEFAULT                 eHDD_DOT11_MODE_11ac
+#define CFG_DOT11_MODE_MAX                     eHDD_DOT11_MODE_11a
+
+/*
+ * <ini>
+ * gEnableApUapsd - Enable/disable UAPSD for SoftAP
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to setup setup U-APSD for Acs at association
+ *
+ * Related: None.
+ *
+ * Supported Feature: SAP
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_AP_QOS_UAPSD_MODE_NAME             "gEnableApUapsd"
 #define CFG_AP_QOS_UAPSD_MODE_MIN              (0)
 #define CFG_AP_QOS_UAPSD_MODE_MAX              (1)
 #define CFG_AP_QOS_UAPSD_MODE_DEFAULT          (1)
 
+/*
+ * <ini>
+ * gEnableApRandomBssid - Create ramdom BSSID
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to create a random BSSID in SoftAP mode to meet
+ * the Android requirement.
+ *
+ * Related: None.
+ *
+ * Supported Feature: SAP
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_AP_ENABLE_RANDOM_BSSID_NAME            "gEnableApRandomBssid"
 #define CFG_AP_ENABLE_RANDOM_BSSID_MIN             (0)
 #define CFG_AP_ENABLE_RANDOM_BSSID_MAX             (1)
 #define CFG_AP_ENABLE_RANDOM_BSSID_DEFAULT         (0)
 
+/*
+ * <ini>
+ * gEnableApProt - Enable/Disable AP protection
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable AP protection
+ *
+ * Related: None.
+ *
+ * Supported Feature: SAP
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_AP_ENABLE_PROTECTION_MODE_NAME            "gEnableApProt"
 #define CFG_AP_ENABLE_PROTECTION_MODE_MIN             (0)
 #define CFG_AP_ENABLE_PROTECTION_MODE_MAX             (1)
 #define CFG_AP_ENABLE_PROTECTION_MODE_DEFAULT         (1)
 
-/* Bit map for CFG_AP_PROTECTION_MODE_DEFAULT */
-/* LOWER byte for associated stations */
-/* UPPER byte for overlapping stations */
-/* each byte will have the following info */
-/* bit15 bit14 bit13     bit12  bit11 bit10    bit9     bit8 */
-/* OBSS  RIFS  LSIG_TXOP NON_GF HT20  FROM_11G FROM_11B FROM_11A */
-/* bit7  bit6  bit5      bit4   bit3  bit2     bit1     bit0 */
-/* OBSS  RIFS  LSIG_TXOP NON_GF HT_20 FROM_11G FROM_11B FROM_11A */
+/*
+ * <ini>
+ * gApProtection - Set AP protection parameter
+ * @Min: 0x0
+ * @Max: 0xFFFF
+ * @Default: 0xBFFF
+ *
+ * This ini is used to set AP protection parameter
+ * Bit map for CFG_AP_PROTECTION_MODE_DEFAULT
+ * LOWER byte for associated stations
+ * UPPER byte for overlapping stations
+ * each byte will have the following info
+ * bit15 bit14 bit13     bit12  bit11 bit10    bit9     bit8
+ * OBSS  RIFS  LSIG_TXOP NON_GF HT20  FROM_11G FROM_11B FROM_11A
+ * bit7  bit6  bit5      bit4   bit3  bit2     bit1     bit0
+ * OBSS  RIFS  LSIG_TXOP NON_GF HT_20 FROM_11G FROM_11B FROM_11A
+ *
+ * Related: None.
+ *
+ * Supported Feature: SAP
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_AP_PROTECTION_MODE_NAME            "gApProtection"
 #define CFG_AP_PROTECTION_MODE_MIN             (0x0)
 #define CFG_AP_PROTECTION_MODE_MAX             (0xFFFF)
 #define CFG_AP_PROTECTION_MODE_DEFAULT         (0xBFFF)
 
+/*
+ * <ini>
+ * gEnableApOBSSProt - Enable/Disable AP OBSS protection
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable AP OBSS protection
+ *
+ * Related: None.
+ *
+ * Supported Feature: SAP
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_AP_OBSS_PROTECTION_MODE_NAME       "gEnableApOBSSProt"
 #define CFG_AP_OBSS_PROTECTION_MODE_MIN        (0)
 #define CFG_AP_OBSS_PROTECTION_MODE_MAX        (1)
 #define CFG_AP_OBSS_PROTECTION_MODE_DEFAULT    (0)
 
+/*
+ * <ini>
+ * gDisableIntraBssFwd - Disable intrs BSS Rx packets
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to disbale to forward Intra-BSS Rx packets when
+ * ap_isolate=1 in hostapd.conf
+ *
+ * Related: None.
+ *
+ * Supported Feature: SAP
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_AP_STA_SECURITY_SEPERATION_NAME    "gDisableIntraBssFwd"
 #define CFG_AP_STA_SECURITY_SEPERATION_MIN     (0)
 #define CFG_AP_STA_SECURITY_SEPERATION_MAX     (1)
 #define CFG_AP_STA_SECURITY_SEPERATION_DEFAULT (0)
 
+/*
+ * <ini>
+ * gAPAutoShutOff - Auto shutdown when timer expires
+ * @Min: 0
+ * @Max: 4294967295UL
+ * @Default: 0
+ *
+ * This ini is used to configure timer value to shutdown AP once timer expired
+ *
+ * Related: None.
+ *
+ * Supported Feature: SAP
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_AP_AUTO_SHUT_OFF                "gAPAutoShutOff"
 #define CFG_AP_AUTO_SHUT_OFF_MIN            (0)
 #define CFG_AP_AUTO_SHUT_OFF_MAX            (4294967295UL)
 #define CFG_AP_AUTO_SHUT_OFF_DEFAULT        (0)
+
+/*
+ * <ini>
+ * gApKeepAlivePeriod - AP keep alive period
+ * @Min: 1
+ * @Max: 65535
+ * @Default: 20
+ *
+ * This ini is used to set keep alive period of AP
+ *
+ * Related: None.
+ *
+ * Supported Feature: SAP
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_AP_KEEP_ALIVE_PERIOD_NAME          "gApKeepAlivePeriod"
+#define CFG_AP_KEEP_ALIVE_PERIOD_MIN           WNI_CFG_AP_KEEP_ALIVE_TIMEOUT_STAMIN
+#define CFG_AP_KEEP_ALIVE_PERIOD_MAX           WNI_CFG_AP_KEEP_ALIVE_TIMEOUT_STAMAX
+#define CFG_AP_KEEP_ALIVE_PERIOD_DEFAULT       WNI_CFG_AP_KEEP_ALIVE_TIMEOUT_STADEF
+
+/*
+ * <ini>
+ * gApLinkMonitorPeriod - AP keep alive period
+ * @Min: 3
+ * @Max: 50
+ * @Default: 10
+ *
+ * This ini is used to configure AP link monitor timeout value
+ *
+ * Related: None.
+ *
+ * Supported Feature: SAP
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_AP_LINK_MONITOR_PERIOD_NAME          "gApLinkMonitorPeriod"
+#define CFG_AP_LINK_MONITOR_PERIOD_MIN           (3)
+#define CFG_AP_LINK_MONITOR_PERIOD_MAX           (50)
+#define CFG_AP_LINK_MONITOR_PERIOD_DEFAULT       (10)
+
+/*
+ * <ini>
+ * gBeaconInterval - Beacon interval for SoftAP
+ * @Min: 0
+ * @Max: 65535
+ * @Default: 100
+ *
+ * This ini is used to set beacon interval for SoftAP
+ *
+ * Related: None.
+ *
+ * Supported Feature: SAP
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_BEACON_INTERVAL_NAME               "gBeaconInterval"
+#define CFG_BEACON_INTERVAL_MIN                WNI_CFG_BEACON_INTERVAL_STAMIN
+#define CFG_BEACON_INTERVAL_MAX                WNI_CFG_BEACON_INTERVAL_STAMAX
+#define CFG_BEACON_INTERVAL_DEFAULT            WNI_CFG_BEACON_INTERVAL_STADEF
+
+/*
+ * <ini>
+ * gEnableVSTASupport - Enable/disable VSTA support
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable VSTA based on max assoc limit.
+ * Enable to have maximum 32 STA (P2P GC) on DUT as P2P GO or SAP
+ *
+ * Related: None.
+ *
+ * Supported Feature: SAP
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#ifdef WLAN_SOFTAP_VSTA_FEATURE
+#define CFG_VSTA_SUPPORT_ENABLE               "gEnableVSTASupport"
+#define CFG_VSTA_SUPPORT_ENABLE_MIN           (0)
+#define CFG_VSTA_SUPPORT_ENABLE_MAX           (1)
+#define CFG_VSTA_SUPPORT_ENABLE_DEFAULT       (0)
+#endif
 
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
 #define CFG_WLAN_AUTO_SHUTDOWN              "gWlanAutoShutdown"
@@ -357,6 +1534,27 @@ typedef enum {
 #endif
 
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
+/*
+ * <ini>
+ * gWlanMccToSccSwitchMode - Control SAP channel.
+ * @Min: 0
+ * @Max: 2
+ * @Default: 0
+ *
+ * This ini is used to override SAP channel.
+ * If gWlanMccToSccSwitchMode = 0: disabled.
+ * If gWlanMccToSccSwitchMode = 1: override to SCC if channel overlap in
+ * same band.
+ * If gWlanMccToSccSwitchMode = 2: force to SCC in same band.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_WLAN_MCC_TO_SCC_SWITCH_MODE          "gWlanMccToSccSwitchMode"
 #define CFG_WLAN_MCC_TO_SCC_SWITCH_MODE_MIN      (QDF_MCC_TO_SCC_SWITCH_DISABLE)
 #define CFG_WLAN_MCC_TO_SCC_SWITCH_MODE_MAX \
@@ -374,20 +1572,10 @@ typedef enum {
 #define CFG_ENABLE_LTE_COEX_MAX               (1)
 #define CFG_ENABLE_LTE_COEX_DEFAULT           (0)
 
-#define CFG_AP_KEEP_ALIVE_PERIOD_NAME          "gApKeepAlivePeriod"
-#define CFG_AP_KEEP_ALIVE_PERIOD_MIN           WNI_CFG_AP_KEEP_ALIVE_TIMEOUT_STAMIN
-#define CFG_AP_KEEP_ALIVE_PERIOD_MAX           WNI_CFG_AP_KEEP_ALIVE_TIMEOUT_STAMAX
-#define CFG_AP_KEEP_ALIVE_PERIOD_DEFAULT       WNI_CFG_AP_KEEP_ALIVE_TIMEOUT_STADEF
-
 #define CFG_GO_KEEP_ALIVE_PERIOD_NAME          "gGoKeepAlivePeriod"
 #define CFG_GO_KEEP_ALIVE_PERIOD_MIN           WNI_CFG_GO_KEEP_ALIVE_TIMEOUT_STAMIN
 #define CFG_GO_KEEP_ALIVE_PERIOD_MAX           WNI_CFG_GO_KEEP_ALIVE_TIMEOUT_STAMAX
 #define CFG_GO_KEEP_ALIVE_PERIOD_DEFAULT       WNI_CFG_GO_KEEP_ALIVE_TIMEOUT_STADEF
-
-#define CFG_AP_LINK_MONITOR_PERIOD_NAME          "gApLinkMonitorPeriod"
-#define CFG_AP_LINK_MONITOR_PERIOD_MIN           (3)
-#define CFG_AP_LINK_MONITOR_PERIOD_MAX           (50)
-#define CFG_AP_LINK_MONITOR_PERIOD_DEFAULT       (10)
 
 /* gGoLinkMonitorPeriod is period where link is idle and where
  * we send NULL frame
@@ -396,11 +1584,6 @@ typedef enum {
 #define CFG_GO_LINK_MONITOR_PERIOD_MIN           (3)
 #define CFG_GO_LINK_MONITOR_PERIOD_MAX           (50)
 #define CFG_GO_LINK_MONITOR_PERIOD_DEFAULT       (10)
-
-#define CFG_BEACON_INTERVAL_NAME               "gBeaconInterval"
-#define CFG_BEACON_INTERVAL_MIN                WNI_CFG_BEACON_INTERVAL_STAMIN
-#define CFG_BEACON_INTERVAL_MAX                WNI_CFG_BEACON_INTERVAL_STAMAX
-#define CFG_BEACON_INTERVAL_DEFAULT            WNI_CFG_BEACON_INTERVAL_STADEF
 
 #define CFG_VCC_RSSI_TRIGGER_NAME             "gVccRssiTrigger"
 #define CFG_VCC_RSSI_TRIGGER_MIN              (0)
@@ -448,44 +1631,165 @@ typedef enum {
 #define CFG_RETRY_LIMIT_TWO_DEFAULT    (15)
 
 #ifdef WLAN_AP_STA_CONCURRENCY
-
+/*
+ * <ini>
+ * gPassiveMaxChannelTimeConc - Maximum passive scan time in milliseconds.
+ * @Min: 0
+ * @Max: 10000
+ * @Default: 110
+ *
+ * This ini is used to set maximum passive scan time in STA+SAP concurrent
+ * mode.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_PASSIVE_MAX_CHANNEL_TIME_CONC_NAME      "gPassiveMaxChannelTimeConc"
 #define CFG_PASSIVE_MAX_CHANNEL_TIME_CONC_MIN       (0)
 #define CFG_PASSIVE_MAX_CHANNEL_TIME_CONC_MAX       (10000)
 #define CFG_PASSIVE_MAX_CHANNEL_TIME_CONC_DEFAULT   (110)
 
+/*
+ * <ini>
+ * gPassiveMinChannelTimeConc - Minimum passive scan time in milliseconds.
+ * @Min: 0
+ * @Max: 10000
+ * @Default: 60
+ *
+ * This ini is used to set minimum passive scan time in STA+SAP concurrent
+ * mode.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_PASSIVE_MIN_CHANNEL_TIME_CONC_NAME      "gPassiveMinChannelTimeConc"
 #define CFG_PASSIVE_MIN_CHANNEL_TIME_CONC_MIN       (0)
 #define CFG_PASSIVE_MIN_CHANNEL_TIME_CONC_MAX       (10000)
 #define CFG_PASSIVE_MIN_CHANNEL_TIME_CONC_DEFAULT   (60)
 
+/*
+ * <ini>
+ * gActiveMaxChannelTimeConc - Maximum active scan time in milliseconds.
+ * @Min: 0
+ * @Max: 10000
+ * @Default: 40
+ *
+ * This ini is used to set maximum active scan time in STA+SAP concurrent
+ * mode.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_ACTIVE_MAX_CHANNEL_TIME_CONC_NAME       "gActiveMaxChannelTimeConc"
 #define CFG_ACTIVE_MAX_CHANNEL_TIME_CONC_MIN        (0)
 #define CFG_ACTIVE_MAX_CHANNEL_TIME_CONC_MAX        (10000)
 #define CFG_ACTIVE_MAX_CHANNEL_TIME_CONC_DEFAULT    (40)
 
+/*
+ * <ini>
+ * gActiveMinChannelTimeConc - Minimum active scan time in milliseconds..
+ * @Min: 0
+ * @Max: 10000
+ * @Default: 20
+ *
+ * This ini is used to set minimum active scan time in STA+SAP concurrent
+ * mode.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_ACTIVE_MIN_CHANNEL_TIME_CONC_NAME       "gActiveMinChannelTimeConc"
 #define CFG_ACTIVE_MIN_CHANNEL_TIME_CONC_MIN        (0)
 #define CFG_ACTIVE_MIN_CHANNEL_TIME_CONC_MAX        (10000)
 #define CFG_ACTIVE_MIN_CHANNEL_TIME_CONC_DEFAULT    (20)
 
+/*
+ * <ini>
+ * gRestTimeConc - Rest time before moving to a new channel to scan.
+ * @Min: 0
+ * @Max: 10000
+ * @Default: 100
+ *
+ * This ini is used to configure rest time.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_REST_TIME_CONC_NAME                     "gRestTimeConc"
 #define CFG_REST_TIME_CONC_MIN                      (0)
 #define CFG_REST_TIME_CONC_MAX                      (10000)
 #define CFG_REST_TIME_CONC_DEFAULT                  (100)
 
-/* Mininum time spent on home channel before moving to a new channel to scan */
+/*
+ * <ini>
+ * gMinRestTimeConc - Mininum time spent on home channel before moving to a
+ * new channel to scan.
+ * @Min: 0
+ * @Max: 50
+ * @Default: 50
+ *
+ * This ini is used to configure minimum time spent on home channel before
+ * moving to a new channel to scan.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_MIN_REST_TIME_NAME                      "gMinRestTimeConc"
 #define CFG_MIN_REST_TIME_MIN                       (0)
 #define CFG_MIN_REST_TIME_MAX                       (50)
 #define CFG_MIN_REST_TIME_DEFAULT                   (50)
 
-/* Data inactivity time in msec on bss channel that will be used
- * by scan engine in firmware.
- * for example if this value is 25ms then firmware will check for
- * data inactivity every 25ms till gRestTimeConc is reached.
- * If inactive then scan engine will move from home channel to
- * scan the next frequency.
+/*
+ * <ini>
+ * gIdleTimeConc - Data inactivity time in msec.
+ * @Min: 0
+ * @Max: 25
+ * @Default: 25
+ *
+ * This ini is used to configure data inactivity time in msec on bss channel
+ * that will be used by scan engine in firmware.
+ * For example if this value is 25ms then firmware will check for data
+ * inactivity every 25ms till gRestTimeConc is reached.
+ * If inactive then scan engine will move from home channel to scan the next
+ * frequency.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_IDLE_TIME_NAME                          "gIdleTimeConc"
 #define CFG_IDLE_TIME_MIN                           (0)
@@ -493,11 +1797,49 @@ typedef enum {
 #define CFG_IDLE_TIME_DEFAULT                       (25)
 
 
+/*
+ * <ini>
+ * gNumStaChanCombinedConc - Number of channels combined for STA in each
+ * split scan operation.
+ * @Min: 1
+ * @Max: 255
+ * @Default: 3
+ *
+ * This ini is used to configure the number of channels combined for STA in
+ * each split scan operation.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_NUM_STA_CHAN_COMBINED_CONC_NAME             "gNumStaChanCombinedConc"
 #define CFG_NUM_STA_CHAN_COMBINED_CONC_MIN              (1)
 #define CFG_NUM_STA_CHAN_COMBINED_CONC_MAX              (255)
 #define CFG_NUM_STA_CHAN_COMBINED_CONC_DEFAULT          (3)
 
+/*
+ * <ini>
+ * gNumP2PChanCombinedConc - Number of channels combined for P2P in each
+ * split scan operation.
+ * @Min: 1
+ * @Max: 255
+ * @Default: 1
+ *
+ * This ini is used to configure the number of channels combined for P2P in
+ * each split scan operation.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_NUM_P2P_CHAN_COMBINED_CONC_NAME             "gNumP2PChanCombinedConc"
 #define CFG_NUM_P2P_CHAN_COMBINED_CONC_MIN              (1)
 #define CFG_NUM_P2P_CHAN_COMBINED_CONC_MAX              (255)
@@ -521,17 +1863,52 @@ typedef enum {
 #define CFG_TX_POWER_CTRL_MIN                  (0)
 #define CFG_TX_POWER_CTRL_MAX                  (1)
 
+/*
+ * <ini>
+ * gLowGainOverride - Indicates Low Gain Override
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set default Low Gain Override
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_LOW_GAIN_OVERRIDE_NAME             "gLowGainOverride"
 #define CFG_LOW_GAIN_OVERRIDE_MIN              WNI_CFG_LOW_GAIN_OVERRIDE_STAMIN
 #define CFG_LOW_GAIN_OVERRIDE_MAX              WNI_CFG_LOW_GAIN_OVERRIDE_STAMAX
 #define CFG_LOW_GAIN_OVERRIDE_DEFAULT          WNI_CFG_LOW_GAIN_OVERRIDE_STADEF
 
+/*
+ * <ini>
+ * gRssiFilterPeriod - Enable gRssi Filter for RSSI Monitoring
+ * @Min: STAMIN
+ * @Max: STAMAX
+ * @Default: STADEF
+ *
+ * This ini is used to Increased this value for Non-ESE AP this is cause FW
+ * RSSI Monitoring the consumer of this value is ON by default. So to impact
+ * power numbers we are setting this to a high value.
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_RSSI_FILTER_PERIOD_NAME            "gRssiFilterPeriod"
 #define CFG_RSSI_FILTER_PERIOD_MIN             WNI_CFG_RSSI_FILTER_PERIOD_STAMIN
 #define CFG_RSSI_FILTER_PERIOD_MAX             WNI_CFG_RSSI_FILTER_PERIOD_STAMAX
-/* Increased this value for Non-ESE AP. This is cause FW RSSI Monitoring */
-/* the consumer of this value is ON by default. So to impact power numbers */
-/* we are setting this to a high value. */
 #define CFG_RSSI_FILTER_PERIOD_DEFAULT         WNI_CFG_RSSI_FILTER_PERIOD_STADEF
 
 #define CFG_IGNORE_DTIM_NAME                   "gIgnoreDtim"
@@ -539,36 +1916,139 @@ typedef enum {
 #define CFG_IGNORE_DTIM_MAX                    WNI_CFG_IGNORE_DTIM_STAMAX
 #define CFG_IGNORE_DTIM_DEFAULT                WNI_CFG_IGNORE_DTIM_STADEF
 
+/*
+ * <ini>
+ * gMaxLIModulatedDTIM - Set MaxLIModulate Dtim
+ * @Min: 1
+ * @Max: 10
+ * @Default: 10
+ *
+ * This ini is used to set default MaxLIModulatedDTIM
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_MAX_LI_MODULATED_DTIM_NAME         "gMaxLIModulatedDTIM"
 #define CFG_MAX_LI_MODULATED_DTIM_MIN          (1)
 #define CFG_MAX_LI_MODULATED_DTIM_MAX          (10)
 #define CFG_MAX_LI_MODULATED_DTIM_DEFAULT      (10)
+
+/*
+ * <ini>
+ * gEnableFWHeartBeatMonitoring - Enable FWHeartBeat Monitor
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set default FWHeartBeat Monitor
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_FW_HEART_BEAT_MONITORING_NAME      "gEnableFWHeartBeatMonitoring"
 #define CFG_FW_HEART_BEAT_MONITORING_MIN       (0)
 #define CFG_FW_HEART_BEAT_MONITORING_MAX       (1)
 #define CFG_FW_HEART_BEAT_MONITORING_DEFAULT   (1)
 
+/*
+ * <ini>
+ * gEnableFWBeaconFiltering - Enable FWBeacon Filter
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set default FWBeacon Filter
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_FW_BEACON_FILTERING_NAME           "gEnableFWBeaconFiltering"
 #define CFG_FW_BEACON_FILTERING_MIN            (0)
 #define CFG_FW_BEACON_FILTERING_MAX            (1)
 #define CFG_FW_BEACON_FILTERING_DEFAULT        (1)
+
+/*
+ * <ini>
+ * gEnableFWRssiMonitoring - Enable FWRssi Monitor
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set default FWRssi Monitor
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_FW_RSSI_MONITORING_NAME            "gEnableFWRssiMonitoring"
 #define CFG_FW_RSSI_MONITORING_MIN             (0)
 #define CFG_FW_RSSI_MONITORING_MAX             (1)
 #define CFG_FW_RSSI_MONITORING_DEFAULT         (1)
 
-/* enable use of long duration RTS-CTS protection when SAP goes off channel
- * in MCC mode
+/*
+ * <ini>
+ * gFWMccRtsCtsProtection - RTS-CTS protection in MCC.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable use of long duration RTS-CTS protection
+ * when SAP goes off channel in MCC mode.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
+
 #define CFG_FW_MCC_RTS_CTS_PROT_NAME           "gFWMccRtsCtsProtection"
 #define CFG_FW_MCC_RTS_CTS_PROT_MIN            (0)
 #define CFG_FW_MCC_RTS_CTS_PROT_MAX            (1)
 #define CFG_FW_MCC_RTS_CTS_PROT_DEFAULT        (0)
 
-/* Enable use of broadcast probe response to increase the detectability of
- * SAP in MCC mode
+/*
+ * <ini>
+ * gFWMccBCastProbeResponse - Broadcast Probe Response in MCC.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable use of broadcast probe response to
+ * increase the detectability of SAP in MCC mode.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_FW_MCC_BCAST_PROB_RESP_NAME        "gFWMccBCastProbeResponse"
 #define CFG_FW_MCC_BCAST_PROB_RESP_MIN         (0)
@@ -579,72 +2059,850 @@ typedef enum {
 #define CFG_DATA_INACTIVITY_TIMEOUT_MIN        (1)
 #define CFG_DATA_INACTIVITY_TIMEOUT_MAX        (255)
 #define CFG_DATA_INACTIVITY_TIMEOUT_DEFAULT    (200)
+/*
+ * <ini>
+ * rfSettlingTimeUs - Settle the TimeUs
+ * @Min: 0
+ * @Max: 60000
+ * @Default: 1500
+ *
+ * This ini is used to set default TimeUs
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_RF_SETTLING_TIME_CLK_NAME          "rfSettlingTimeUs"
 #define CFG_RF_SETTLING_TIME_CLK_MIN           (0)
 #define CFG_RF_SETTLING_TIME_CLK_MAX           (60000)
 #define CFG_RF_SETTLING_TIME_CLK_DEFAULT       (1500)
 
+/*
+ * <ini>
+ * gStaKeepAlivePeriod - Sends NULL frame to AP periodically in
+ * seconds to notify STA's existence
+ * @Min: 0
+ * @Max: 65535
+ * @Default: 30
+ *
+ * This ini is used to send default NULL frame to AP
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_INFRA_STA_KEEP_ALIVE_PERIOD_NAME          "gStaKeepAlivePeriod"
 #define CFG_INFRA_STA_KEEP_ALIVE_PERIOD_MIN           (0)
 #define CFG_INFRA_STA_KEEP_ALIVE_PERIOD_MAX           (65535)
-#define CFG_INFRA_STA_KEEP_ALIVE_PERIOD_DEFAULT       (30)
+#define CFG_INFRA_STA_KEEP_ALIVE_PERIOD_DEFAULT       (90)
 
 /* WMM configuration */
-#define CFG_QOS_WMM_MODE_NAME                             "WmmIsEnabled"
-#define CFG_QOS_WMM_MODE_MIN                               (0)
-#define CFG_QOS_WMM_MODE_MAX                               (2)  /* HDD_WMM_NO_QOS */
-#define CFG_QOS_WMM_MODE_DEFAULT                           (0)  /* HDD_WMM_AUTO */
+/*
+ * <ini>
+ * WmmIsEnabled - Enable WMM feature
+ * @Min: 0
+ * @Max: 2
+ * @Default: 0
+ *
+ * This ini is used to enable/disable WMM.
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_MODE_NAME                          "WmmIsEnabled"
+#define CFG_QOS_WMM_MODE_MIN                           (0)
+#define CFG_QOS_WMM_MODE_MAX                           (2)  /* HDD_WMM_NO_QOS */
+#define CFG_QOS_WMM_MODE_DEFAULT                       (0)  /* HDD_WMM_AUTO */
 
+/*
+ * <ini>
+ * 80211eIsEnabled - Enable 802.11e feature
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable 802.11e.
+ *
+ * Related: None.
+ *
+ * Supported Feature: 802.11e
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_QOS_WMM_80211E_ENABLED_NAME                   "80211eIsEnabled"
 #define CFG_QOS_WMM_80211E_ENABLED_MIN                     (0)
 #define CFG_QOS_WMM_80211E_ENABLED_MAX                     (1)
 #define CFG_QOS_WMM_80211E_ENABLED_DEFAULT                 (0)
 
-#define CFG_QOS_WMM_UAPSD_MASK_NAME                        "UapsdMask"  /* ACs to setup U-APSD for at assoc */
+/*
+ * <ini>
+ * UapsdMask - To setup U-APSD mask for ACs
+ * @Min: 0x00
+ * @Max: 0xFF
+ * @Default: 0x00
+ *
+ * This ini is used to setup U-APSD mask for ACs.
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_UAPSD_MASK_NAME                        "UapsdMask"
 #define CFG_QOS_WMM_UAPSD_MASK_MIN                         (0x00)
 #define CFG_QOS_WMM_UAPSD_MASK_MAX                         (0xFF)
 #define CFG_QOS_WMM_UAPSD_MASK_DEFAULT                     (0x00)
 
-#define CFG_QOS_WMM_INFRA_UAPSD_VO_SRV_INTV_NAME           "InfraUapsdVoSrvIntv"
-#define CFG_QOS_WMM_INFRA_UAPSD_VO_SRV_INTV_MIN             (0)
-#define CFG_QOS_WMM_INFRA_UAPSD_VO_SRV_INTV_MAX             (4294967295UL)
-#define CFG_QOS_WMM_INFRA_UAPSD_VO_SRV_INTV_DEFAULT         (20)
+/*
+ * <ini>
+ * ImplicitQosIsEnabled - Enableimplicit QOS
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable implicit QOS.
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_IMPLICIT_SETUP_ENABLED_NAME             "ImplicitQosIsEnabled"
+#define CFG_QOS_IMPLICIT_SETUP_ENABLED_MIN              (0)
+#define CFG_QOS_IMPLICIT_SETUP_ENABLED_MAX              (1)
+#define CFG_QOS_IMPLICIT_SETUP_ENABLED_DEFAULT          (0)
 
-#define CFG_QOS_WMM_INFRA_UAPSD_VO_SUS_INTV_NAME           "InfraUapsdVoSuspIntv"
-#define CFG_QOS_WMM_INFRA_UAPSD_VO_SUS_INTV_MIN             (0)
-#define CFG_QOS_WMM_INFRA_UAPSD_VO_SUS_INTV_MAX             (4294967295UL)
-#define CFG_QOS_WMM_INFRA_UAPSD_VO_SUS_INTV_DEFAULT         (2000)
+/*
+ * <ini>
+ * InfraUapsdVoSrvIntv - Set Uapsd service interval for voice
+ * @Min: 0
+ * @Max: 4294967295UL
+ * @Default: 20
+ *
+ * This ini is used to set Uapsd service interval for voice.
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_UAPSD_VO_SRV_INTV_NAME          "InfraUapsdVoSrvIntv"
+#define CFG_QOS_WMM_INFRA_UAPSD_VO_SRV_INTV_MIN            (0)
+#define CFG_QOS_WMM_INFRA_UAPSD_VO_SRV_INTV_MAX            (4294967295UL)
+#define CFG_QOS_WMM_INFRA_UAPSD_VO_SRV_INTV_DEFAULT        (20)
 
-#define CFG_QOS_WMM_INFRA_UAPSD_VI_SRV_INTV_NAME           "InfraUapsdViSrvIntv"
-#define CFG_QOS_WMM_INFRA_UAPSD_VI_SRV_INTV_MIN             (0)
-#define CFG_QOS_WMM_INFRA_UAPSD_VI_SRV_INTV_MAX             (4294967295UL)
-#define CFG_QOS_WMM_INFRA_UAPSD_VI_SRV_INTV_DEFAULT         (300)
+/*
+ * <ini>
+ * InfraUapsdVoSuspIntv - Set Uapsd suspension interval for voice
+ * @Min: 0
+ * @Max: 4294967295UL
+ * @Default: 2000
+ *
+ * This ini is used to set Uapsd suspension interval for voice.
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_UAPSD_VO_SUS_INTV_NAME         "InfraUapsdVoSuspIntv"
+#define CFG_QOS_WMM_INFRA_UAPSD_VO_SUS_INTV_MIN           (0)
+#define CFG_QOS_WMM_INFRA_UAPSD_VO_SUS_INTV_MAX           (4294967295UL)
+#define CFG_QOS_WMM_INFRA_UAPSD_VO_SUS_INTV_DEFAULT       (2000)
 
-#define CFG_QOS_WMM_INFRA_UAPSD_VI_SUS_INTV_NAME           "InfraUapsdViSuspIntv"
-#define CFG_QOS_WMM_INFRA_UAPSD_VI_SUS_INTV_MIN             (0)
-#define CFG_QOS_WMM_INFRA_UAPSD_VI_SUS_INTV_MAX             (4294967295UL)
-#define CFG_QOS_WMM_INFRA_UAPSD_VI_SUS_INTV_DEFAULT         (2000)
+/*
+ * <ini>
+ * InfraUapsdViSrvIntv - Set Uapsd service interval for video
+ * @Min: 0
+ * @Max: 4294967295UL
+ * @Default: 300
+ *
+ * This ini is used to set Uapsd service interval for video.
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_UAPSD_VI_SRV_INTV_NAME          "InfraUapsdViSrvIntv"
+#define CFG_QOS_WMM_INFRA_UAPSD_VI_SRV_INTV_MIN            (0)
+#define CFG_QOS_WMM_INFRA_UAPSD_VI_SRV_INTV_MAX            (4294967295UL)
+#define CFG_QOS_WMM_INFRA_UAPSD_VI_SRV_INTV_DEFAULT        (300)
 
-#define CFG_QOS_WMM_INFRA_UAPSD_BE_SRV_INTV_NAME           "InfraUapsdBeSrvIntv"
-#define CFG_QOS_WMM_INFRA_UAPSD_BE_SRV_INTV_MIN             (0)
-#define CFG_QOS_WMM_INFRA_UAPSD_BE_SRV_INTV_MAX             (4294967295UL)
-#define CFG_QOS_WMM_INFRA_UAPSD_BE_SRV_INTV_DEFAULT         (300)
+/*
+ * <ini>
+ * InfraUapsdViSuspIntv - Set Uapsd suspension interval for video
+ * @Min: 0
+ * @Max: 4294967295UL
+ * @Default: 2000
+ *
+ * This ini is used to set Uapsd suspension interval for video
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_UAPSD_VI_SUS_INTV_NAME         "InfraUapsdViSuspIntv"
+#define CFG_QOS_WMM_INFRA_UAPSD_VI_SUS_INTV_MIN           (0)
+#define CFG_QOS_WMM_INFRA_UAPSD_VI_SUS_INTV_MAX           (4294967295UL)
+#define CFG_QOS_WMM_INFRA_UAPSD_VI_SUS_INTV_DEFAULT       (2000)
 
-#define CFG_QOS_WMM_INFRA_UAPSD_BE_SUS_INTV_NAME           "InfraUapsdBeSuspIntv"
-#define CFG_QOS_WMM_INFRA_UAPSD_BE_SUS_INTV_MIN             (0)
-#define CFG_QOS_WMM_INFRA_UAPSD_BE_SUS_INTV_MAX             (4294967295UL)
-#define CFG_QOS_WMM_INFRA_UAPSD_BE_SUS_INTV_DEFAULT         (2000)
+/*
+ * <ini>
+ * InfraUapsdBeSrvIntv - Set Uapsd service interval for BE
+ * @Min: 0
+ * @Max: 4294967295UL
+ * @Default: 300
+ *
+ * This ini is used to set Uapsd service interval for BE
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_UAPSD_BE_SRV_INTV_NAME         "InfraUapsdBeSrvIntv"
+#define CFG_QOS_WMM_INFRA_UAPSD_BE_SRV_INTV_MIN           (0)
+#define CFG_QOS_WMM_INFRA_UAPSD_BE_SRV_INTV_MAX           (4294967295UL)
+#define CFG_QOS_WMM_INFRA_UAPSD_BE_SRV_INTV_DEFAULT       (300)
 
-#define CFG_QOS_WMM_INFRA_UAPSD_BK_SRV_INTV_NAME           "InfraUapsdBkSrvIntv"
-#define CFG_QOS_WMM_INFRA_UAPSD_BK_SRV_INTV_MIN             (0)
-#define CFG_QOS_WMM_INFRA_UAPSD_BK_SRV_INTV_MAX             (4294967295UL)
-#define CFG_QOS_WMM_INFRA_UAPSD_BK_SRV_INTV_DEFAULT         (300)
+/*
+ * <ini>
+ * InfraUapsdBeSuspIntv - Set Uapsd suspension interval for BE
+ * @Min: 0
+ * @Max: 4294967295UL
+ * @Default: 2000
+ *
+ * This ini is used to set Uapsd suspension interval for BE
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_UAPSD_BE_SUS_INTV_NAME        "InfraUapsdBeSuspIntv"
+#define CFG_QOS_WMM_INFRA_UAPSD_BE_SUS_INTV_MIN          (0)
+#define CFG_QOS_WMM_INFRA_UAPSD_BE_SUS_INTV_MAX          (4294967295UL)
+#define CFG_QOS_WMM_INFRA_UAPSD_BE_SUS_INTV_DEFAULT      (2000)
 
-#define CFG_QOS_WMM_INFRA_UAPSD_BK_SUS_INTV_NAME           "InfraUapsdBkSuspIntv"
-#define CFG_QOS_WMM_INFRA_UAPSD_BK_SUS_INTV_MIN             (0)
-#define CFG_QOS_WMM_INFRA_UAPSD_BK_SUS_INTV_MAX             (4294967295UL)
-#define CFG_QOS_WMM_INFRA_UAPSD_BK_SUS_INTV_DEFAULT         (2000)
+/*
+ * <ini>
+ * InfraUapsdBkSrvIntv - Set Uapsd service interval for BK
+ * @Min: 0
+ * @Max: 4294967295UL
+ * @Default: 300
+ *
+ * This ini is used to set Uapsd service interval for BK
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_UAPSD_BK_SRV_INTV_NAME         "InfraUapsdBkSrvIntv"
+#define CFG_QOS_WMM_INFRA_UAPSD_BK_SRV_INTV_MIN           (0)
+#define CFG_QOS_WMM_INFRA_UAPSD_BK_SRV_INTV_MAX           (4294967295UL)
+#define CFG_QOS_WMM_INFRA_UAPSD_BK_SRV_INTV_DEFAULT       (300)
+
+/*
+ * <ini>
+ * InfraUapsdBkSuspIntv - Set Uapsd suspension interval for BK
+ * @Min: 0
+ * @Max: 4294967295UL
+ * @Default: 2000
+ *
+ * This ini is used to set Uapsd suspension interval for BK
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_UAPSD_BK_SUS_INTV_NAME        "InfraUapsdBkSuspIntv"
+#define CFG_QOS_WMM_INFRA_UAPSD_BK_SUS_INTV_MIN          (0)
+#define CFG_QOS_WMM_INFRA_UAPSD_BK_SUS_INTV_MAX          (4294967295UL)
+#define CFG_QOS_WMM_INFRA_UAPSD_BK_SUS_INTV_DEFAULT      (2000)
+
+/* default TSPEC parameters for AC_VO */
+/*
+ * <ini>
+ * InfraDirAcVo - Set TSPEC direction for VO
+ * @Min: 0
+ * @Max: 3
+ * @Default: 3
+ *
+ * This ini is used to set TSPEC direction for VO
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_DIR_AC_VO_NAME   "InfraDirAcVo"
+#define CFG_QOS_WMM_INFRA_DIR_AC_VO_MIN     (0)
+#define CFG_QOS_WMM_INFRA_DIR_AC_VO_MAX     (3)
+#define CFG_QOS_WMM_INFRA_DIR_AC_VO_DEFAULT (3) /*WLAN_QCT_CUST_WMM_TSDIR_BOTH*/
+
+/*
+ * <ini>
+ * InfraNomMsduSizeAcVo - Set normal MSDU size for VO
+ * @Min: 0x0
+ * @Max: 0xFFFF
+ * @Default: 0x80D0
+ *
+ * This ini is used to set normal MSDU size for VO
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VO_NAME      "InfraNomMsduSizeAcVo"
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VO_MIN        (0x0)
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VO_MAX        (0xFFFF)
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VO_DEFAULT    (0x80D0)
+
+/*
+ * <ini>
+ * InfraMeanDataRateAcVo - Set mean data rate for VO
+ * @Min: 0x0
+ * @Max: 0xFFFFFFFF
+ * @Default: 0x14500
+ *
+ * This ini is used to set mean data rate for VO
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VO_NAME    "InfraMeanDataRateAcVo"
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VO_MIN      (0x0)
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VO_MAX      (0xFFFFFFFF)
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VO_DEFAULT  (0x14500)
+
+/*
+ * <ini>
+ * InfraMinPhyRateAcVo - Set min PHY rate for VO
+ * @Min: 0x0
+ * @Max: 0xFFFFFFFF
+ * @Default: 0x5B8D80
+ *
+ * This ini is used to set min PHY rate for VO
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VO_NAME       "InfraMinPhyRateAcVo"
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VO_MIN         (0x0)
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VO_MAX         (0xFFFFFFFF)
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VO_DEFAULT     (0x5B8D80)
+
+/*
+ * <ini>
+ * InfraSbaAcVo - Set surplus bandwidth allowance for VO
+ * @Min: 0x2001
+ * @Max: 0xFFFF
+ * @Default: 0x2001
+ *
+ * This ini is used to set surplus bandwidth allowance for VO
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_SBA_AC_VO_NAME                   "InfraSbaAcVo"
+#define CFG_QOS_WMM_INFRA_SBA_AC_VO_MIN                     (0x2001)
+#define CFG_QOS_WMM_INFRA_SBA_AC_VO_MAX                     (0xFFFF)
+#define CFG_QOS_WMM_INFRA_SBA_AC_VO_DEFAULT                 (0x2001)
+
+/* default TSPEC parameters for AC_VI */
+/*
+ * <ini>
+ * InfraDirAcVi - Set TSPEC direction for VI
+ * @Min: 0
+ * @Max: 3
+ * @Default: 3
+ *
+ * This ini is used to set TSPEC direction for VI
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_DIR_AC_VI_NAME   "InfraDirAcVi"
+#define CFG_QOS_WMM_INFRA_DIR_AC_VI_MIN     (0)
+#define CFG_QOS_WMM_INFRA_DIR_AC_VI_MAX     (3)
+#define CFG_QOS_WMM_INFRA_DIR_AC_VI_DEFAULT (3) /*WLAN_QCT_CUST_WMM_TSDIR_BOTH*/
+
+/*
+ * <ini>
+ * InfraNomMsduSizeAcVi - Set normal MSDU size for VI
+ * @Min: 0x0
+ * @Max: 0xFFFF
+ * @Default: 0x85DC
+ *
+ * This ini is used to set normal MSDU size for VI
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VI_NAME      "InfraNomMsduSizeAcVi"
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VI_MIN        (0x0)
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VI_MAX        (0xFFFF)
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VI_DEFAULT    (0x85DC)
+
+/*
+ * <ini>
+ * InfraMeanDataRateAcVi - Set mean data rate for VI
+ * @Min: 0x0
+ * @Max: 0xFFFFFFFF
+ * @Default: 0x57E40
+ *
+ * This ini is used to set mean data rate for VI
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VI_NAME    "InfraMeanDataRateAcVi"
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VI_MIN      (0x0)
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VI_MAX      (0xFFFFFFFF)
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VI_DEFAULT  (0x57E40)
+
+/*
+ * <ini>
+ * iInfraMinPhyRateAcVi - Set min PHY rate for VI
+ * @Min: 0x0
+ * @Max: 0xFFFFFFFF
+ * @Default: 0x5B8D80
+ *
+ * This ini is used to set min PHY rate for VI
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VI_NAME        "InfraMinPhyRateAcVi"
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VI_MIN          (0x0)
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VI_MAX          (0xFFFFFFFF)
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VI_DEFAULT      (0x5B8D80)
+
+/*
+ * <ini>
+ * InfraSbaAcVi - Set surplus bandwidth allowance for VI
+ * @Min: 0x2001
+ * @Max: 0xFFFF
+ * @Default: 0x2001
+ *
+ * This ini is used to set surplus bandwidth allowance for VI
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_SBA_AC_VI_NAME                   "InfraSbaAcVi"
+#define CFG_QOS_WMM_INFRA_SBA_AC_VI_MIN                     (0x2001)
+#define CFG_QOS_WMM_INFRA_SBA_AC_VI_MAX                     (0xFFFF)
+#define CFG_QOS_WMM_INFRA_SBA_AC_VI_DEFAULT                 (0x2001)
+
+/* default TSPEC parameters for AC_BE*/
+/*
+ * <ini>
+ * InfraDirAcBe - Set TSPEC direction for BE
+ * @Min: 0
+ * @Max: 3
+ * @Default: 3
+ *
+ * This ini is used to set TSPEC direction for BE
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_DIR_AC_BE_NAME   "InfraDirAcBe"
+#define CFG_QOS_WMM_INFRA_DIR_AC_BE_MIN     (0)
+#define CFG_QOS_WMM_INFRA_DIR_AC_BE_MAX     (3)
+#define CFG_QOS_WMM_INFRA_DIR_AC_BE_DEFAULT (3) /*WLAN_QCT_CUST_WMM_TSDIR_BOTH*/
+
+/*
+ * <ini>
+ * InfraNomMsduSizeAcBe - Set normal MSDU size for BE
+ * @Min: 0x0
+ * @Max: 0xFFFF
+ * @Default: 0x85DC
+ *
+ * This ini is used to set normal MSDU size for BE
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BE_NAME      "InfraNomMsduSizeAcBe"
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BE_MIN        (0x0)
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BE_MAX        (0xFFFF)
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BE_DEFAULT    (0x85DC)
+
+/*
+ * <ini>
+ * InfraMeanDataRateAcBe - Set mean data rate for BE
+ * @Min: 0x0
+ * @Max: 0xFFFFFFFF
+ * @Default: 0x493E0
+ *
+ * This ini is used to set mean data rate for BE
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BE_NAME    "InfraMeanDataRateAcBe"
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BE_MIN      (0x0)
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BE_MAX      (0xFFFFFFFF)
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BE_DEFAULT  (0x493E0)
+
+/*
+ * <ini>
+ * InfraMinPhyRateAcBe - Set min PHY rate for BE
+ * @Min: 0x0
+ * @Max: 0xFFFFFFFF
+ * @Default: 0x5B8D80
+ *
+ * This ini is used to set min PHY rate for BE
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BE_NAME        "InfraMinPhyRateAcBe"
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BE_MIN          (0x0)
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BE_MAX          (0xFFFFFFFF)
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BE_DEFAULT      (0x5B8D80)
+
+/*
+ * <ini>
+ * InfraSbaAcBe - Set surplus bandwidth allowance for BE
+ * @Min: 0x2001
+ * @Max: 0xFFFF
+ * @Default: 0x2001
+ *
+ * This ini is used to set surplus bandwidth allowance for BE
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_SBA_AC_BE_NAME                   "InfraSbaAcBe"
+#define CFG_QOS_WMM_INFRA_SBA_AC_BE_MIN                     (0x2001)
+#define CFG_QOS_WMM_INFRA_SBA_AC_BE_MAX                     (0xFFFF)
+#define CFG_QOS_WMM_INFRA_SBA_AC_BE_DEFAULT                 (0x2001)
+
+/* default TSPEC parameters for AC_Bk*/
+/*
+ * <ini>
+ * InfraDirAcBk - Set TSPEC direction for BK
+ * @Min: 0
+ * @Max: 3
+ * @Default: 3
+ *
+ * This ini is used to set TSPEC direction for BK
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_DIR_AC_BK_NAME   "InfraDirAcBk"
+#define CFG_QOS_WMM_INFRA_DIR_AC_BK_MIN     (0)
+#define CFG_QOS_WMM_INFRA_DIR_AC_BK_MAX     (3)
+#define CFG_QOS_WMM_INFRA_DIR_AC_BK_DEFAULT (3) /*WLAN_QCT_CUST_WMM_TSDIR_BOTH*/
+
+/*
+ * <ini>
+ * InfraNomMsduSizeAcBk - Set normal MSDU size for BK
+ * @Min: 0x0
+ * @Max: 0xFFFF
+ * @Default: 0x85DC
+ *
+ * This ini is used to set normal MSDU size for BK
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BK_NAME      "InfraNomMsduSizeAcBk"
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BK_MIN        (0x0)
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BK_MAX        (0xFFFF)
+#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BK_DEFAULT    (0x85DC)
+
+/*
+ * <ini>
+ * InfraMeanDataRateAcBk - Set mean data rate for BK
+ * @Min: 0x0
+ * @Max: 0xFFFFFFFF
+ * @Default: 0x493E0
+ *
+ * This ini is used to set mean data rate for BK
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BK_NAME    "InfraMeanDataRateAcBk"
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BK_MIN      (0x0)
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BK_MAX      (0xFFFFFFFF)
+#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BK_DEFAULT  (0x493E0)
+
+/*
+ * <ini>
+ * InfraMinPhyRateAcBke - Set min PHY rate for BK
+ * @Min: 0x0
+ * @Max: 0xFFFFFFFF
+ * @Default: 0x5B8D80
+ *
+ * This ini is used to set min PHY rate for BK
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BK_NAME        "InfraMinPhyRateAcBk"
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BK_MIN          (0x0)
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BK_MAX          (0xFFFFFFFF)
+#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BK_DEFAULT      (0x5B8D80)
+
+/*
+ * <ini>
+ * InfraSbaAcBk - Set surplus bandwidth allowance for BK
+ * @Min: 0x2001
+ * @Max: 0xFFFF
+ * @Default: 0x2001
+ *
+ * This ini is used to set surplus bandwidth allowance for BK
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_INFRA_SBA_AC_BK_NAME                   "InfraSbaAcBk"
+#define CFG_QOS_WMM_INFRA_SBA_AC_BK_MIN                     (0x2001)
+#define CFG_QOS_WMM_INFRA_SBA_AC_BK_MAX                     (0xFFFF)
+#define CFG_QOS_WMM_INFRA_SBA_AC_BK_DEFAULT                 (0x2001)
+
+/*
+ * <ini>
+ * burstSizeDefinition - Set TS burst size
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set TS burst size
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_BURST_SIZE_DEFN_NAME                "burstSizeDefinition"
+#define CFG_QOS_WMM_BURST_SIZE_DEFN_MIN                  (0)
+#define CFG_QOS_WMM_BURST_SIZE_DEFN_MAX                  (1)
+#define CFG_QOS_WMM_BURST_SIZE_DEFN_DEFAULT              (0)
+
+/*
+ * <ini>
+ * tsInfoAckPolicy - Set TS ack policy
+ * @Min: 0x00
+ * @Max: 0x01
+ * @Default: 0x00
+ *
+ * This ini is used to set TS ack policy
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_WMM_TS_INFO_ACK_POLICY_NAME              "tsInfoAckPolicy"
+#define CFG_QOS_WMM_TS_INFO_ACK_POLICY_MIN                (0x00)
+#define CFG_QOS_WMM_TS_INFO_ACK_POLICY_MAX                (0x01)
+#define CFG_QOS_WMM_TS_INFO_ACK_POLICY_DEFAULT            (0x00)
+
+/*
+ * <ini>
+ * SingleTIDRC - Set replay counter for all TID's
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set replay counter for all TID's
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_SINGLE_TID_RC_NAME    "SingleTIDRC"
+#define CFG_SINGLE_TID_RC_MIN      (0) /* Separate replay counter for all TID */
+#define CFG_SINGLE_TID_RC_MAX      (1) /* Single replay counter for all TID */
+#define CFG_SINGLE_TID_RC_DEFAULT  (1)
+
+/*
+ * <ini>
+ * gAddTSWhenACMIsOff - Set ACM value for AC
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set ACM value for AC
+ *
+ * Related: None.
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QOS_ADDTS_WHEN_ACM_IS_OFF_NAME               "gAddTSWhenACMIsOff"
+#define CFG_QOS_ADDTS_WHEN_ACM_IS_OFF_MIN                (0)
+/* Send AddTs even when ACM is not set for the AC */
+#define CFG_QOS_ADDTS_WHEN_ACM_IS_OFF_MAX                (1)
+#define CFG_QOS_ADDTS_WHEN_ACM_IS_OFF_DEFAULT            (0)
 
 #ifdef FEATURE_WLAN_ESE
 #define CFG_QOS_WMM_INFRA_INACTIVITY_INTERVAL_NAME         "InfraInactivityInterval"
@@ -658,168 +2916,16 @@ typedef enum {
 #define CFG_ESE_FEATURE_ENABLED_DEFAULT                     (0) /* disabled */
 #endif /* FEATURE_WLAN_ESE */
 
-#define CFG_LFR_FEATURE_ENABLED_NAME                       "FastRoamEnabled"
-#define CFG_LFR_FEATURE_ENABLED_MIN                         (0)
-#define CFG_LFR_FEATURE_ENABLED_MAX                         (1)
-#define CFG_LFR_FEATURE_ENABLED_DEFAULT                     (0) /* disabled */
-
 #define CFG_LFR_MAWC_FEATURE_ENABLED_NAME                   "MAWCEnabled"
 #define CFG_LFR_MAWC_FEATURE_ENABLED_MIN                    (0)
 #define CFG_LFR_MAWC_FEATURE_ENABLED_MAX                    (1)
 #define CFG_LFR_MAWC_FEATURE_ENABLED_DEFAULT                (0) /* disabled */
-
-/* This flag will control fasttransition in case of 11r and ese. */
-/* Basically with this the whole neighbor roam, pre-auth, reassoc */
-/* can be turned ON/OFF. */
-/* With this turned OFF 11r will completely not work. */
-/* For 11r this flag has to be ON. */
-/* For ESE fastroam will not work. */
-#define CFG_FAST_TRANSITION_ENABLED_NAME                    "FastTransitionEnabled"
-#define CFG_FAST_TRANSITION_ENABLED_NAME_MIN                (0)
-#define CFG_FAST_TRANSITION_ENABLED_NAME_MAX                (1)
-#define CFG_FAST_TRANSITION_ENABLED_NAME_DEFAULT            (1) /* Enabled */
-
-/* This parameter is used to decide whether to Roam or not.
- * AP1 is the currently associated AP and AP2 is chosen for roaming.
- * The Roaming will happen only if AP2 has better Signal Quality and it has a RSSI better than AP1
- * in terms of RoamRssiDiff,and RoamRssiDiff is the number of units (typically measured in dB) AP2
- * is better than AP1.
- * This check is not done if the value is Zero */
-#define CFG_ROAM_RSSI_DIFF_NAME                             "RoamRssiDiff"
-#define CFG_ROAM_RSSI_DIFF_MIN                              (0)
-#define CFG_ROAM_RSSI_DIFF_MAX                              (30)
-#define CFG_ROAM_RSSI_DIFF_DEFAULT                          (5)
 
 /*This parameter is used to set Wireless Extended Security Mode.*/
 #define CFG_ENABLE_WES_MODE_NAME                            "gWESModeEnabled"
 #define CFG_ENABLE_WES_MODE_NAME_MIN                        (0)
 #define CFG_ENABLE_WES_MODE_NAME_MAX                        (1)
 #define CFG_ENABLE_WES_MODE_NAME_DEFAULT                    (0)
-
-#define CFG_ROAM_SCAN_N_PROBES                             "gRoamScanNProbes"
-#define CFG_ROAM_SCAN_N_PROBES_MIN                          (1)
-#define CFG_ROAM_SCAN_N_PROBES_MAX                          (10)
-#define CFG_ROAM_SCAN_N_PROBES_DEFAULT                      (2)
-
-#define CFG_ROAM_SCAN_HOME_AWAY_TIME                        "gRoamScanHomeAwayTime"
-#define CFG_ROAM_SCAN_HOME_AWAY_TIME_MIN                    (0) /* 0 for disable */
-#define CFG_ROAM_SCAN_HOME_AWAY_TIME_MAX                    (300)
-#define CFG_ROAM_SCAN_HOME_AWAY_TIME_DEFAULT                (CFG_ROAM_SCAN_HOME_AWAY_TIME_MIN)
-/* disabled by default */
-
-#define CFG_OKC_FEATURE_ENABLED_NAME                       "OkcEnabled"
-#define CFG_OKC_FEATURE_ENABLED_MIN                        (0)
-#define CFG_OKC_FEATURE_ENABLED_MAX                        (1)
-#define CFG_OKC_FEATURE_ENABLED_DEFAULT                    (1)
-
-#define CFG_ROAM_SCAN_OFFLOAD_ENABLED                       "gRoamScanOffloadEnabled"
-#define CFG_ROAM_SCAN_OFFLOAD_ENABLED_MIN                   (0)
-#define CFG_ROAM_SCAN_OFFLOAD_ENABLED_MAX                   (1)
-#define CFG_ROAM_SCAN_OFFLOAD_ENABLED_DEFAULT               (1)
-
-/* default TSPEC parameters for AC_VO */
-#define CFG_QOS_WMM_INFRA_DIR_AC_VO_NAME                   "InfraDirAcVo"
-#define CFG_QOS_WMM_INFRA_DIR_AC_VO_MIN                     (0)
-#define CFG_QOS_WMM_INFRA_DIR_AC_VO_MAX                     (3)
-#define CFG_QOS_WMM_INFRA_DIR_AC_VO_DEFAULT                 (3) /* WLAN_QCT_CUST_WMM_TSDIR_BOTH */
-
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VO_NAME         "InfraNomMsduSizeAcVo"
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VO_MIN           (0x0)
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VO_MAX           (0xFFFF)
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VO_DEFAULT       (0x80D0)
-
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VO_NAME        "InfraMeanDataRateAcVo"
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VO_MIN          (0x0)
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VO_MAX          (0xFFFFFFFF)
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VO_DEFAULT      (0x14500)
-
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VO_NAME          "InfraMinPhyRateAcVo"
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VO_MIN            (0x0)
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VO_MAX            (0xFFFFFFFF)
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VO_DEFAULT        (0x5B8D80)
-
-#define CFG_QOS_WMM_INFRA_SBA_AC_VO_NAME                   "InfraSbaAcVo"
-#define CFG_QOS_WMM_INFRA_SBA_AC_VO_MIN                     (0x2001)
-#define CFG_QOS_WMM_INFRA_SBA_AC_VO_MAX                     (0xFFFF)
-#define CFG_QOS_WMM_INFRA_SBA_AC_VO_DEFAULT                 (0x2001)
-
-/* default TSPEC parameters for AC_VI */
-#define CFG_QOS_WMM_INFRA_DIR_AC_VI_NAME                   "InfraDirAcVi"
-#define CFG_QOS_WMM_INFRA_DIR_AC_VI_MIN                     (0)
-#define CFG_QOS_WMM_INFRA_DIR_AC_VI_MAX                     (3)
-#define CFG_QOS_WMM_INFRA_DIR_AC_VI_DEFAULT                 (3) /* WLAN_QCT_CUST_WMM_TSDIR_BOTH */
-
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VI_NAME         "InfraNomMsduSizeAcVi"
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VI_MIN           (0x0)
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VI_MAX           (0xFFFF)
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_VI_DEFAULT       (0x85DC)
-
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VI_NAME        "InfraMeanDataRateAcVi"
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VI_MIN          (0x0)
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VI_MAX          (0xFFFFFFFF)
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_VI_DEFAULT      (0x57E40)
-
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VI_NAME          "InfraMinPhyRateAcVi"
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VI_MIN            (0x0)
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VI_MAX            (0xFFFFFFFF)
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_VI_DEFAULT        (0x5B8D80)
-
-#define CFG_QOS_WMM_INFRA_SBA_AC_VI_NAME                   "InfraSbaAcVi"
-#define CFG_QOS_WMM_INFRA_SBA_AC_VI_MIN                     (0x2001)
-#define CFG_QOS_WMM_INFRA_SBA_AC_VI_MAX                     (0xFFFF)
-#define CFG_QOS_WMM_INFRA_SBA_AC_VI_DEFAULT                 (0x2001)
-
-/* default TSPEC parameters for AC_BE*/
-#define CFG_QOS_WMM_INFRA_DIR_AC_BE_NAME                   "InfraDirAcBe"
-#define CFG_QOS_WMM_INFRA_DIR_AC_BE_MIN                     (0)
-#define CFG_QOS_WMM_INFRA_DIR_AC_BE_MAX                     (3)
-#define CFG_QOS_WMM_INFRA_DIR_AC_BE_DEFAULT                 (3) /* WLAN_QCT_CUST_WMM_TSDIR_BOTH */
-
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BE_NAME         "InfraNomMsduSizeAcBe"
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BE_MIN           (0x0)
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BE_MAX           (0xFFFF)
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BE_DEFAULT       (0x85DC)
-
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BE_NAME        "InfraMeanDataRateAcBe"
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BE_MIN          (0x0)
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BE_MAX          (0xFFFFFFFF)
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BE_DEFAULT      (0x493E0)
-
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BE_NAME          "InfraMinPhyRateAcBe"
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BE_MIN            (0x0)
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BE_MAX            (0xFFFFFFFF)
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BE_DEFAULT        (0x5B8D80)
-
-#define CFG_QOS_WMM_INFRA_SBA_AC_BE_NAME                   "InfraSbaAcBe"
-#define CFG_QOS_WMM_INFRA_SBA_AC_BE_MIN                     (0x2001)
-#define CFG_QOS_WMM_INFRA_SBA_AC_BE_MAX                     (0xFFFF)
-#define CFG_QOS_WMM_INFRA_SBA_AC_BE_DEFAULT                 (0x2001)
-
-/* default TSPEC parameters for AC_Bk*/
-#define CFG_QOS_WMM_INFRA_DIR_AC_BK_NAME                   "InfraDirAcBk"
-#define CFG_QOS_WMM_INFRA_DIR_AC_BK_MIN                     (0)
-#define CFG_QOS_WMM_INFRA_DIR_AC_BK_MAX                     (3)
-#define CFG_QOS_WMM_INFRA_DIR_AC_BK_DEFAULT                 (3) /* WLAN_QCT_CUST_WMM_TSDIR_BOTH */
-
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BK_NAME         "InfraNomMsduSizeAcBk"
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BK_MIN           (0x0)
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BK_MAX           (0xFFFF)
-#define CFG_QOS_WMM_INFRA_NOM_MSDU_SIZE_AC_BK_DEFAULT       (0x85DC)
-
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BK_NAME        "InfraMeanDataRateAcBk"
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BK_MIN          (0x0)
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BK_MAX          (0xFFFFFFFF)
-#define CFG_QOS_WMM_INFRA_MEAN_DATA_RATE_AC_BK_DEFAULT      (0x493E0)
-
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BK_NAME          "InfraMinPhyRateAcBk"
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BK_MIN            (0x0)
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BK_MAX            (0xFFFFFFFF)
-#define CFG_QOS_WMM_INFRA_MIN_PHY_RATE_AC_BK_DEFAULT        (0x5B8D80)
-
-#define CFG_QOS_WMM_INFRA_SBA_AC_BK_NAME                   "InfraSbaAcBk"
-#define CFG_QOS_WMM_INFRA_SBA_AC_BK_MIN                     (0x2001)
-#define CFG_QOS_WMM_INFRA_SBA_AC_BK_MAX                     (0xFFFF)
-#define CFG_QOS_WMM_INFRA_SBA_AC_BK_DEFAULT                 (0x2001)
 
 #define CFG_TL_DELAYED_TRGR_FRM_INT_NAME                   "DelayedTriggerFrmInt"
 #define CFG_TL_DELAYED_TRGR_FRM_INT_MIN                     1
@@ -847,11 +2953,6 @@ typedef enum {
  */
 #define CFG_RM_CAPABILITY_NAME            "rm_capability"
 #define CFG_RM_CAPABILITY_DEFAULT         "73,10,91,00,04"
-
-#define CFG_QOS_IMPLICIT_SETUP_ENABLED_NAME                 "ImplicitQosIsEnabled"
-#define CFG_QOS_IMPLICIT_SETUP_ENABLED_MIN                  (0)
-#define CFG_QOS_IMPLICIT_SETUP_ENABLED_MAX                  (1)
-#define CFG_QOS_IMPLICIT_SETUP_ENABLED_DEFAULT              (0)
 
 #define CFG_FT_RESOURCE_REQ_NAME                        "gFTResourceReqSupported"
 #define CFG_FT_RESOURCE_REQ_MIN                         (0)
@@ -892,16 +2993,6 @@ typedef enum {
 #define CFG_DELAY_BEFORE_VDEV_STOP_MIN               (2)
 #define CFG_DELAY_BEFORE_VDEV_STOP_MAX               (200)
 #define CFG_DELAY_BEFORE_VDEV_STOP_DEFAULT           (20)
-
-/*
- * This parameter is the drop in RSSI value that will trigger a precautionary
- * scan by firmware.
- * MAX value is choose so that this type of scan can be disabled by user.
- */
-#define CFG_ROAM_RESCAN_RSSI_DIFF_NAME                  "gRoamRescanRssiDiff"
-#define CFG_ROAM_RESCAN_RSSI_DIFF_MIN                   (0)
-#define CFG_ROAM_RESCAN_RSSI_DIFF_MAX                   (100)
-#define CFG_ROAM_RESCAN_RSSI_DIFF_DEFAULT               (5)
 
 /*
  * This parameter is the RSSI diff above neighbor lookup threshold, when
@@ -958,39 +3049,92 @@ typedef enum {
 #define CFG_ROAM_BEACON_RSSI_WEIGHT_MAX                 (16)
 #define CFG_ROAM_BEACON_RSSI_WEIGHT_DEFAULT             (14)
 
-#define CFG_QOS_WMM_BURST_SIZE_DEFN_NAME                        "burstSizeDefinition"
-#define CFG_QOS_WMM_BURST_SIZE_DEFN_MIN                         (0)
-#define CFG_QOS_WMM_BURST_SIZE_DEFN_MAX                         (1)
-#define CFG_QOS_WMM_BURST_SIZE_DEFN_DEFAULT                     (0)
+/*
+ * <ini>
+ * McastBcastFilter - Filters Mcast/Bcast Rx packets completely
+ * @Min: 0
+ * @Max: 3
+ * @Default: 0
+ *
+ * This ini is used to send default NULL frame to AP
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
-#define CFG_QOS_WMM_TS_INFO_ACK_POLICY_NAME                        "tsInfoAckPolicy"
-#define CFG_QOS_WMM_TS_INFO_ACK_POLICY_MIN                         (0x00)
-#define CFG_QOS_WMM_TS_INFO_ACK_POLICY_MAX                         (0x01)
-#define CFG_QOS_WMM_TS_INFO_ACK_POLICY_DEFAULT                     (0x00)
-
-#define CFG_SINGLE_TID_RC_NAME                             "SingleTIDRC"
-#define CFG_SINGLE_TID_RC_MIN                               (0) /* Seperate replay counter for all TID */
-#define CFG_SINGLE_TID_RC_MAX                               (1) /* Single replay counter for all TID */
-#define CFG_SINGLE_TID_RC_DEFAULT                           (1)
 #define CFG_MCAST_BCAST_FILTER_SETTING_NAME          "McastBcastFilter"
 #define CFG_MCAST_BCAST_FILTER_SETTING_MIN           (0)
 #define CFG_MCAST_BCAST_FILTER_SETTING_MAX           (3)
 #define CFG_MCAST_BCAST_FILTER_SETTING_DEFAULT       (0)
+
+/*
+ * <ini>
+ * gDynamicPSPollvalue - Set dynamic PSpoll value
+ * @Min: 0
+ * @Max: 255
+ * @Default: 0
+ *
+ * This ini is used to send default PSpoll value
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_DYNAMIC_PSPOLL_VALUE_NAME          "gDynamicPSPollvalue"
 #define CFG_DYNAMIC_PSPOLL_VALUE_MIN           (0)
 #define CFG_DYNAMIC_PSPOLL_VALUE_MAX           (255)
 #define CFG_DYNAMIC_PSPOLL_VALUE_DEFAULT       (0)
 
+/*
+ * <ini>
+ * gTelescopicBeaconWakeupEn - Set teles copic beacon wakeup
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set default teles copic beacon wakeup
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_TELE_BCN_WAKEUP_EN_NAME            "gTelescopicBeaconWakeupEn"
 #define CFG_TELE_BCN_WAKEUP_EN_MIN             (0)
 #define CFG_TELE_BCN_WAKEUP_EN_MAX             (1)
 #define CFG_TELE_BCN_WAKEUP_EN_DEFAULT         (0)
 
-#define CFG_QOS_ADDTS_WHEN_ACM_IS_OFF_NAME                 "gAddTSWhenACMIsOff"
-#define CFG_QOS_ADDTS_WHEN_ACM_IS_OFF_MIN                  (0)
-#define CFG_QOS_ADDTS_WHEN_ACM_IS_OFF_MAX                  (1)  /* Send AddTs even when ACM is not set for the AC */
-#define CFG_QOS_ADDTS_WHEN_ACM_IS_OFF_DEFAULT              (0)
+/*
+ * <ini>
+ * gValidateScanList - Set valid date scan list
+ * @Min: 0
+ * @Max: 65535
+ * @Default: 30
+ *
+ * This ini is used to set default valid date scan list
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_VALIDATE_SCAN_LIST_NAME                 "gValidateScanList"
 #define CFG_VALIDATE_SCAN_LIST_MIN                  (0)
@@ -1017,32 +3161,29 @@ typedef enum {
 #define CFG_ENABLE_HOST_SSDP_MAX               (1)
 #define CFG_ENABLE_HOST_SSDP_DEFAULT           (1)
 
-#ifdef FEATURE_RUNTIME_PM
-/*
- * config item to enable runtime suspend
- * 1 means runtime suspend is enabled
- * by default runtime suspend is disabled
- */
-#define CFG_ENABLE_RUNTIME_PM                  "gRuntimePM"
-#define CFG_ENABLE_RUNTIME_PM_MIN              (0)
-#define CFG_ENABLE_RUNTIME_PM_MAX              (1)
-#define CFG_ENABLE_RUNTIME_PM_DEFAULT          (0)
-
-/*
- * config item for runtime pm's inactivity timer.
- * the wlan driver will wait for this number of miliseconds
- * of inactivity before performing a runtime suspend.
- */
-#define CFG_RUNTIME_PM_DELAY_NAME               "gRuntimePMDelay"
-#define CFG_RUNTIME_PM_DELAY_MIN                (100)
-#define CFG_RUNTIME_PM_DELAY_MAX                (10000)
-#define CFG_RUNTIME_PM_DELAY_DEFAULT            (500)
-#endif
-
 #define CFG_ENABLE_HOST_NSOFFLOAD_NAME         "hostNSOffload"
 #define CFG_ENABLE_HOST_NSOFFLOAD_MIN          (0)
 #define CFG_ENABLE_HOST_NSOFFLOAD_MAX          (1)
 #define CFG_ENABLE_HOST_NSOFFLOAD_DEFAULT      (1)
+
+/*
+ * <ini>
+ * BandCapability - Preferred band (0: Both,  1: 2.4G only,  2: 5G only)
+ * @Min: 0
+ * @Max: 2
+ * @Default: 0
+ *
+ * This ini is used to set default band capability
+ * (0: Both, 1: 2.4G only, 2: 5G only)
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_BAND_CAPABILITY_NAME          "BandCapability"
 #define CFG_BAND_CAPABILITY_MIN           (0)
@@ -1063,6 +3204,24 @@ typedef enum {
 #define CFG_ENABLE_DFS_PNO_CHNL_SCAN_MIN               (0)
 #define CFG_ENABLE_DFS_PNO_CHNL_SCAN_MAX               (1)
 #define CFG_ENABLE_DFS_PNO_CHNL_SCAN_DEFAULT           (1)
+
+/*
+ * <ini>
+ * gEnableDumpCollect - It will use for collect the dumps
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set collect default dump
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_ENABLE_RAMDUMP_COLLECTION              "gEnableDumpCollect"
 #define CFG_ENABLE_RAMDUMP_COLLECTION_MIN          (0)
@@ -1104,16 +3263,39 @@ typedef enum {
 #define CFG_VHT_ENABLE_2x2_CAP_FEATURE_MAX     (1)
 #define CFG_VHT_ENABLE_2x2_CAP_FEATURE_DEFAULT (0)
 
-/* 0 - Connects in 160MHz 1x1 when AP is 160MHz 2x2
+/*
+ * <ini>
+ * gStaPrefer80MHzOver160MHz - Set prefer range for sta
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set default range for sta
+ * 0 - Connects in 160MHz 1x1 when AP is 160MHz 2x2
  * 1 - Connects in 80MHz 2x2 when AP is 160MHz 2x2
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
+
 #define CFG_STA_PREFER_80MHZ_OVER_160MHZ         "gStaPrefer80MHzOver160MHz"
 #define CFG_STA_PREFER_80MHZ_OVER_160MHZ_MIN     (0)
 #define CFG_STA_PREFER_80MHZ_OVER_160MHZ_MAX     (1)
 #define CFG_STA_PREFER_80MHZ_OVER_160MHZ_DEFAULT (1)
 
 /*
- * NSS cfg bit definition.
+ * <ini>
+ * gVdevTypeNss_2g - Select the value for each two bit configuration
+ * @Min: 0x5555
+ * @Max: 0xAAAA
+ * @Default: 0xAAAA
+ *
+ * This ini is used to set NSS cfg bit in 2g definition.
  * STA          BIT[0:1]
  * SAP          BIT[2:3]
  * P2P_GO       BIT[4:5]
@@ -1122,11 +3304,46 @@ typedef enum {
  * TDLS         BIT[10:11]
  * P2P_DEVICE   BIT[12:13]
  * OCB          BIT[14:15]
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
+
 #define CFG_VDEV_TYPE_NSS_2G         "gVdevTypeNss_2g"
 #define CFG_VDEV_TYPE_NSS_2G_MIN     (0x5555)
 #define CFG_VDEV_TYPE_NSS_2G_MAX     (0xAAAA)
 #define CFG_VDEV_TYPE_NSS_2G_DEFAULT (0xAAAA)
+
+/*
+ * <ini>
+ * gVdevTypeNss_5g - Select the value for each two bit configuration
+ * @Min: 0x5555
+ * @Max: 0xAAAA
+ * @Default: 0xAAAA
+ *
+ * This ini is used to set NSS cfg bit in 5g definition
+ * STA          BIT[0:1]
+ * SAP          BIT[2:3]
+ * P2P_GO       BIT[4:5]
+ * P2P_CLIENT   BIT[6:7]
+ * IBSS         BIT[8:9]
+ * TDLS         BIT[10:11]
+ * P2P_DEVICE   BIT[12:13]
+ * OCB          BIT[14:15]
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_VDEV_TYPE_NSS_5G         "gVdevTypeNss_5g"
 #define CFG_VDEV_TYPE_NSS_5G_MIN     (0x5555)
@@ -1157,6 +3374,24 @@ typedef enum {
 #define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_MIN     (1)
 #define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_MAX     (2)
 #define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_DEFAULT (1)
+
+/*
+ * <ini>
+ * gEnableAMPDUPS - Enable the AMPDUPS
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set default AMPDUPS
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_ENABLE_AMPDUPS_FEATURE              "gEnableAMPDUPS"
 #define CFG_ENABLE_AMPDUPS_FEATURE_MIN          (0)
@@ -1204,18 +3439,69 @@ typedef enum {
 #define CFG_REPORT_MAX_LINK_SPEED_DEFAULT          (eHDD_LINK_SPEED_REPORT_MAX_SCALED)
 
 /*
- * RSSI Thresholds
+ * <ini>
+ * gLinkSpeedRssiHigh - Report the max possible speed with RSSI scaling
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set default eHDD_LINK_SPEED_REPORT
  * Used when eHDD_LINK_SPEED_REPORT_SCALED is selected
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
+
 #define CFG_LINK_SPEED_RSSI_HIGH                   "gLinkSpeedRssiHigh"
 #define CFG_LINK_SPEED_RSSI_HIGH_MIN               (-127)
 #define CFG_LINK_SPEED_RSSI_HIGH_MAX               (0)
 #define CFG_LINK_SPEED_RSSI_HIGH_DEFAULT           (-55)
 
+/*
+ * <ini>
+ * gLinkSpeedRssiMed - Used when eHDD_LINK_SPEED_REPORT_SCALED is selected
+ * @Min: -127
+ * @Max: 0
+ * @Default: -65
+ *
+ * This ini is used to set medium rssi link speed
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_LINK_SPEED_RSSI_MID                    "gLinkSpeedRssiMed"
 #define CFG_LINK_SPEED_RSSI_MID_MIN                (-127)
 #define CFG_LINK_SPEED_RSSI_MID_MAX                (0)
 #define CFG_LINK_SPEED_RSSI_MID_DEFAULT            (-65)
+
+/*
+ * <ini>
+ * gLinkSpeedRssiLow - Used when eHDD_LINK_SPEED_REPORT_SCALED is selected
+ * @Min: -127
+ * @Max: 0
+ * @Default: -80
+ *
+ * This ini is used to set low rssi link speed
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_LINK_SPEED_RSSI_LOW                    "gLinkSpeedRssiLow"
 #define CFG_LINK_SPEED_RSSI_LOW_MIN                (-127)
@@ -1227,15 +3513,74 @@ typedef enum {
 #define CFG_P2P_DEVICE_ADDRESS_ADMINISTRATED_MAX                 (1)
 #define CFG_P2P_DEVICE_ADDRESS_ADMINISTRATED_DEFAULT             (1)
 
+/*
+ * <ini>
+ * gEnableSSR - Enable/Disable SSR
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable System Self Recovery at the times of
+ * System crash or fatal errors
+ * gEnableSSR = 0 Disabled
+ * gEnableSSR = 1 wlan shutdown and re-init happens
+ *
+ * Related: None
+ *
+ * Supported Feature: SSR
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_ENABLE_SSR                      "gEnableSSR"
 #define CFG_ENABLE_SSR_MIN                  (0)
 #define CFG_ENABLE_SSR_MAX                  (1)
 #define CFG_ENABLE_SSR_DEFAULT              (1)
 
+/*
+ * <ini>
+ * gEnableOverLapCh - Enables Overlap Channel. If set, allow overlapping
+ *                    channels to be selected for the SoftAP
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set Overlap Channel
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_ENABLE_OVERLAP_CH               "gEnableOverLapCh"
 #define CFG_ENABLE_OVERLAP_CH_MIN           (0)
 #define CFG_ENABLE_OVERLAP_CH_MAX           (1)
 #define CFG_ENABLE_OVERLAP_CH_DEFAULT       (0)
+
+/*
+ * <ini>
+ * gEnable5gEBT - Enables/disables 5G early beacon termination. When enabled
+ *                 terminate the reception of beacon if the TIM element is
+ *                 clear for the power saving
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set default 5G early beacon termination
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_PPS_ENABLE_5G_EBT                 "gEnable5gEBT"
 #define CFG_PPS_ENABLE_5G_EBT_FEATURE_MIN     (0)
@@ -1247,9 +3592,25 @@ typedef enum {
 #define CFG_ENABLE_MEMORY_DEEP_SLEEP_MAX      (1)
 #define CFG_ENABLE_MEMORY_DEEP_SLEEP_DEFAULT  (1)
 
-/* In cfg.dat 1=1MBPS, 2=2MBPS, 3=5_5MBPS, 4=11MBPS, 5=6MBPS, 6=9MBPS,
+/*
+ * <ini>
+ * gDefaultRateIndex24Ghz -Set the rate index for 24Ghz
+ * @Min: 1
+ * @Max: 9
+ * @Default: 1
+ *
+ * This ini is used to set default rate index
+ * In cfg.dat 1=1MBPS, 2=2MBPS, 3=5_5MBPS, 4=11MBPS, 5=6MBPS, 6=9MBPS,
  * 7=12MBPS, 8=18MBPS, 9=24MBPS. But 6=9MBPS and 8=18MBPS are not basic
  * 11g rates and should not be set by gDefaultRateIndex24Ghz.
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 
 #define CFG_DEFAULT_RATE_INDEX_24GH               "gDefaultRateIndex24Ghz"
@@ -1294,7 +3655,13 @@ typedef enum {
 #define CFG_ENABLE_FW_MODULE_LOG_DEFAULT  ""
 
 /*
- * gEnableRTSProfiles for configuring different RTS profiles
+ * <ini>
+ * gEnableRTSProfiles - It will use configuring different RTS profiles
+ * @Min: 0
+ * @Max: 34
+ * @Default: 33
+ *
+ * This ini used for configuring different RTS profiles
  * to firmware.
  * Following are the valid values for the rtsprofile:
  * RTSCTS_DISABLED                           0
@@ -1302,7 +3669,16 @@ typedef enum {
  * CTS2SELF_ENABLED_4_SECOND_RATESERIES      18
  * RTSCTS_ENABLED_4_SWRETRIES                33
  * CTS2SELF_ENABLED_4_SWRETRIES              34
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
+
 #define CFG_ENABLE_FW_RTS_PROFILE              "gEnableRTSProfiles"
 #define CFG_ENABLE_FW_RTS_PROFILE_MIN          (0)
 #define CFG_ENABLE_FW_RTS_PROFILE_MAX          (34)
@@ -1338,7 +3714,35 @@ typedef enum {
 
 #endif
 
+/*
+ * This INI item is used to control subsystem restart(SSR) test framework
+ * Set it's value to 1 to enable APPS trigerred SSR testing
+ */
+#define CFG_ENABLE_CRASH_INJECT         "gEnableForceTargetAssert"
+#define CFG_ENABLE_CRASH_INJECT_MIN     (0)
+#define CFG_ENABLE_CRASH_INJECT_MAX     (1)
+#define CFG_ENABLE_CRASH_INJECT_DEFAULT (0)
+
 #ifdef FEATURE_WLAN_FORCE_SAP_SCC
+/*
+ * <ini>
+ * gSapSccChanAvoidance - Channel avoidance for SAP in SCC.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable channel avoidance for SAP in SCC
+ * scenario.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_SAP_SCC_CHAN_AVOIDANCE         "gSapSccChanAvoidance"
 #define CFG_SAP_SCC_CHAN_AVOIDANCE_MIN     (0)
 #define CFG_SAP_SCC_CHAN_AVOIDANCE_MAX     (1)
@@ -1465,14 +3869,46 @@ typedef enum {
 #define CFG_IGNORE_DYNAMIC_DTIM_IN_P2P_MODE_MAX        (1)
 #define CFG_IGNORE_DYNAMIC_DTIM_IN_P2P_MODE_DEFAULT    (0)
 
+/*
+ * <ini>
+ * gShortGI40Mhz - It will check gShortGI20Mhz and
+ * gShortGI40Mhz from session entry
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set default gShortGI40Mhz
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_SHORT_GI_40MHZ_NAME                "gShortGI40Mhz"
 #define CFG_SHORT_GI_40MHZ_MIN                 0
 #define CFG_SHORT_GI_40MHZ_MAX                 1
 #define CFG_SHORT_GI_40MHZ_DEFAULT             1
 
 /*
- * Enable / Disable MCC feature
- * Default: Enable
+ * <ini>
+ * gEnableMCCMode - Enable/Disable MCC feature.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable MCC feature.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_ENABLE_MCC_ENABLED_NAME             "gEnableMCCMode"
 #define CFG_ENABLE_MCC_ENABLED_MIN              (0)
@@ -1480,21 +3916,36 @@ typedef enum {
 #define CFG_ENABLE_MCC_ENABLED_DEFAULT          (1)
 
 /*
- * Allow GO in MCC mode to accept different beacon interval than STA's.
+ * <ini>
+ * gAllowMCCGODiffBI - Allow GO in MCC mode to accept different beacon interval
+ * than STA's.
+ * @Min: 0
+ * @Max: 4
+ * @Default: 4
+ *
+ * This ini is used to allow GO in MCC mode to accept different beacon interval
+ * than STA's.
  * Added for Wi-Fi Cert. 5.1.12
- * Default: gAllowMCCGODiffBI = 2
- * If gAllowMCCGODiffBI = 1  // Set to 1 for WFA certification. GO Beacon
- *                              interval is not changed. MCC GO
- *                              doesn't work well in optimized way.
- *                              In worst scenario, it may invite STA
- *                              disconnection.
- * gAllowMCCGODiffBI = 2     //If set to 2 workaround 1 disassoc all the clients
- *                             and update beacon Interval
- * gAllowMCCGODiffBI = 3     //If set to 3 tear down the P2P link in auto/
- *                             Non-autonomous -GO case
- * gAllowMCCGODiffBI = 4     //If set to 4 don't disconnect the P2P client
- *                             in autonomous/Non-autonomous -GO case update
- *                             the BI dynamically
+ * If gAllowMCCGODiffBI = 1
+ *	Set to 1 for WFA certification. GO Beacon interval is not changed.
+ *	MCC GO doesn't work well in optimized way. In worst scenario, it may
+ *	invite STA disconnection.
+ * If gAllowMCCGODiffBI = 2
+ *	If set to 2 workaround 1 disassoc all the clients and update beacon
+ *	Interval.
+ * If gAllowMCCGODiffBI = 3
+ *	If set to 3 tear down the P2P link in auto/Non-autonomous -GO case.
+ * If gAllowMCCGODiffBI = 4
+ *	If set to 4 don't disconnect the P2P client in autonomous/Non-auto-
+ *	nomous -GO case update the BI dynamically
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_ALLOW_MCC_GO_DIFF_BI_NAME           "gAllowMCCGODiffBI"
 #define CFG_ALLOW_MCC_GO_DIFF_BI_MIN            (0)
@@ -1640,7 +4091,7 @@ typedef enum {
 #define CFG_THERMAL_MIGRATION_ENABLE_NAME      "gThermalMitigationEnable"
 #define CFG_THERMAL_MIGRATION_ENABLE_MIN       (0)
 #define CFG_THERMAL_MIGRATION_ENABLE_MAX       (1)
-#define CFG_THERMAL_MIGRATION_ENABLE_DEFAULT   (1)
+#define CFG_THERMAL_MIGRATION_ENABLE_DEFAULT   (0)
 
 #define CFG_THROTTLE_PERIOD_NAME               "gThrottlePeriod"
 #define CFG_THROTTLE_PERIOD_MIN                (10)
@@ -1723,72 +4174,242 @@ typedef enum {
 #define CFG_ENABLE_MODULATED_DTIM_DEFAULT    (0)
 
 /*
- * Enable/Disable Multicast MAC Address List feature
+ * <ini>
+ * gMCAddrListEnable - Enable/Disable Multicast MAC Address List feature
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set default MAC Address
  * Default: Enable
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
+
 #define CFG_MC_ADDR_LIST_ENABLE_NAME          "gMCAddrListEnable"
 #define CFG_MC_ADDR_LIST_ENABLE_MIN           (0)
 #define CFG_MC_ADDR_LIST_ENABLE_MAX           (1)
 #define CFG_MC_ADDR_LIST_ENABLE_DEFAULT       (1)
+
+/*
+ * <ini>
+ * gEnableRXSTBC - Enables/disables Rx STBC capability in STA mode
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set default Rx STBC capability
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_ENABLE_RX_STBC                       "gEnableRXSTBC"
 #define CFG_ENABLE_RX_STBC_MIN                   (0)
 #define CFG_ENABLE_RX_STBC_MAX                   (1)
 #define CFG_ENABLE_RX_STBC_DEFAULT               (1)
 
+/*
+ * <ini>
+ * gEnableTXSTBC - Enables/disables Tx STBC capability in STA mode
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set default Tx STBC capability
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_ENABLE_TX_STBC                       "gEnableTXSTBC"
 #define CFG_ENABLE_TX_STBC_MIN                   (0)
 #define CFG_ENABLE_TX_STBC_MAX                   (1)
 #define CFG_ENABLE_TX_STBC_DEFAULT               (0)
+
+/*
+ * <ini>
+ * gEnableRXLDPC - Enables/disables Rx LDPC capability in STA mode
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set default Rx LDPC capability
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_ENABLE_RX_LDPC                       "gEnableRXLDPC"
 #define CFG_ENABLE_RX_LDPC_MIN                   (0)
 #define CFG_ENABLE_RX_LDPC_MAX                   (1)
 #define CFG_ENABLE_RX_LDPC_DEFAULT               (0)
 
-/*
- * Enable/Disable vsta based on MAX Assoc limit
- * defined in WCNSS_qcom_cfg.ini.
- */
-#ifdef WLAN_SOFTAP_VSTA_FEATURE
-#define CFG_VSTA_SUPPORT_ENABLE               "gEnableVSTASupport"
-#define CFG_VSTA_SUPPORT_ENABLE_MIN           (0)
-#define CFG_VSTA_SUPPORT_ENABLE_MAX           (1)
-#define CFG_VSTA_SUPPORT_ENABLE_DEFAULT       (0)
-#endif
-
 #ifdef FEATURE_WLAN_TDLS
+/*
+ * <ini>
+ * gEnableTDLSSupport - Enable support for TDLS.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable TDLS support.
+ *
+ * Related: None.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_SUPPORT_ENABLE                     "gEnableTDLSSupport"
 #define CFG_TDLS_SUPPORT_ENABLE_MIN                 (0)
 #define CFG_TDLS_SUPPORT_ENABLE_MAX                 (1)
 #define CFG_TDLS_SUPPORT_ENABLE_DEFAULT             (0)
 
+/*
+ * <ini>
+ * gEnableTDLSImplicitTrigger - Enable Implicit TDLS.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable implicit TDLS.
+ * CLD driver initiates TDLS Discovery towards a peer whenever TDLS Setup
+ * criteria (throughput and RSSI thresholds) is met and then it tears down
+ * TDLS when teardown criteria (idle packet count and RSSI) is met.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_IMPLICIT_TRIGGER                   "gEnableTDLSImplicitTrigger"
 #define CFG_TDLS_IMPLICIT_TRIGGER_MIN               (0)
 #define CFG_TDLS_IMPLICIT_TRIGGER_MAX               (1)
 #define CFG_TDLS_IMPLICIT_TRIGGER_DEFAULT           (0)
 
+/*
+ * <ini>
+ * gTDLSTxStatsPeriod - TDLS TX statistics time period.
+ * @Min: 1000
+ * @Max: 4294967295
+ * @Default: 2000
+ *
+ * This ini is used to configure the time period (in ms) to evaluate whether
+ * the number of Tx/Rx packets exceeds TDLSTxPacketThreshold and triggers a
+ * TDLS Discovery request.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_TX_STATS_PERIOD                    "gTDLSTxStatsPeriod"
 #define CFG_TDLS_TX_STATS_PERIOD_MIN                (1000)
 #define CFG_TDLS_TX_STATS_PERIOD_MAX                (4294967295UL)
 #define CFG_TDLS_TX_STATS_PERIOD_DEFAULT            (2000)
 
+/*
+ * <ini>
+ * gTDLSTxPacketThreshold - Tx/Rx Packet threshold for initiating TDLS.
+ * @Min: 0
+ * @Max: 4294967295
+ * @Default: 40
+ *
+ * This ini is used to configure the number of Tx/Rx packets during the
+ * period of gTDLSTxStatsPeriod when exceeded, a TDLS Discovery request
+ * is triggered.
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_TX_PACKET_THRESHOLD                "gTDLSTxPacketThreshold"
 #define CFG_TDLS_TX_PACKET_THRESHOLD_MIN            (0)
 #define CFG_TDLS_TX_PACKET_THRESHOLD_MAX            (4294967295UL)
 #define CFG_TDLS_TX_PACKET_THRESHOLD_DEFAULT        (40)
 
+/*
+ * <ini>
+ * gTDLSMaxDiscoveryAttempt - Attempts for sending TDLS discovery requests.
+ * @Min: 1
+ * @Max: 100
+ * @Default: 5
+ *
+ * This ini is used to configure the number of failures of discover request,
+ * when exceeded, the peer is assumed to be not TDLS capable and no further
+ * TDLS Discovery request is made.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_MAX_DISCOVERY_ATTEMPT              "gTDLSMaxDiscoveryAttempt"
 #define CFG_TDLS_MAX_DISCOVERY_ATTEMPT_MIN          (1)
 #define CFG_TDLS_MAX_DISCOVERY_ATTEMPT_MAX          (100)
 #define CFG_TDLS_MAX_DISCOVERY_ATTEMPT_DEFAULT      (5)
 
-/*  teardown notification interval (gTDLSIdleTimeout) should be multiple of
- *  setup notification (gTDLSTxStatsPeriod) interval.
- *  e.g.
- *       if setup notification (gTDLSTxStatsPeriod) interval = 500, then
- *       teardown notification (gTDLSIdleTimeout) interval should be 1000,
- *       1500, 2000, 2500...
+/*
+ * <ini>
+ * gTDLSIdleTimeout - Duration within which number of TX / RX frames meet the
+ * criteria for TDLS teardown.
+ * @Min: 500
+ * @Max: 40000
+ * @Default: 5000
+ *
+ * This ini is used to configure the time period (in ms) to evaluate whether
+ * the number of Tx/Rx packets exceeds gTDLSIdlePacketThreshold and thus meets
+ * criteria for TDLS teardown.
+ * Teardown notification interval (gTDLSIdleTimeout) should be multiple of
+ * setup notification (gTDLSTxStatsPeriod) interval.
+ * e.g.
+ *      if setup notification (gTDLSTxStatsPeriod) interval = 500, then
+ *      teardown notification (gTDLSIdleTimeout) interval should be 1000,
+ *      1500, 2000, 2500...
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_TDLS_IDLE_TIMEOUT                       "gTDLSIdleTimeout"
 #define CFG_TDLS_IDLE_TIMEOUT_MIN                   (500)
@@ -1796,83 +4417,366 @@ typedef enum {
 #define CFG_TDLS_IDLE_TIMEOUT_DEFAULT               (5000)
 
 
+/*
+ * <ini>
+ * gTDLSIdlePacketThreshold - Number of idle packet.
+ * @Min: 0
+ * @Max: 40000
+ * @Default: 3
+ *
+ * This ini is used to configure the number of Tx/Rx packet, below which
+ * within last gTDLSTxStatsPeriod period is considered as idle condition.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_IDLE_PACKET_THRESHOLD              "gTDLSIdlePacketThreshold"
 #define CFG_TDLS_IDLE_PACKET_THRESHOLD_MIN          (0)
 #define CFG_TDLS_IDLE_PACKET_THRESHOLD_MAX          (40000)
 #define CFG_TDLS_IDLE_PACKET_THRESHOLD_DEFAULT      (3)
 
+/*
+ * <ini>
+ * gTDLSRSSITriggerThreshold - RSSI threshold for TDLS connection.
+ * @Min: -120
+ * @Max: 0
+ * @Default: -75
+ *
+ * This ini is used to configure the absolute value (in dB) of the peer RSSI,
+ * below which a TDLS setup request is triggered.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_RSSI_TRIGGER_THRESHOLD             "gTDLSRSSITriggerThreshold"
 #define CFG_TDLS_RSSI_TRIGGER_THRESHOLD_MIN         (-120)
 #define CFG_TDLS_RSSI_TRIGGER_THRESHOLD_MAX         (0)
 #define CFG_TDLS_RSSI_TRIGGER_THRESHOLD_DEFAULT     (-75)
 
+/*
+ * <ini>
+ * gTDLSRSSITeardownThreshold - RSSI threshold for TDLS teardown.
+ * @Min: -120
+ * @Max: 0
+ * @Default: -75
+ *
+ * This ini is used to configure the absolute value (in dB) of the peer RSSI,
+ * when exceed, a TDLS teardown is triggered.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_RSSI_TEARDOWN_THRESHOLD            "gTDLSRSSITeardownThreshold"
 #define CFG_TDLS_RSSI_TEARDOWN_THRESHOLD_MIN        (-120)
 #define CFG_TDLS_RSSI_TEARDOWN_THRESHOLD_MAX        (0)
 #define CFG_TDLS_RSSI_TEARDOWN_THRESHOLD_DEFAULT    (-75)
 
+/*
+ * <ini>
+ * gTDLSRSSIDelta - Delta value for the peer RSSI that can trigger teardown.
+ * @Min: -30
+ * @Max: 0
+ * @Default: -20
+ *
+ * This ini is used to .
+ * This ini is used to configure delta for peer RSSI such that if Peer RSSI
+ * is less than AP RSSI plus delta will trigger a teardown.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_RSSI_DELTA                         "gTDLSRSSIDelta"
 #define CFG_TDLS_RSSI_DELTA_MIN                     (-30)
 #define CFG_TDLS_RSSI_DELTA_MAX                     (0)
 #define CFG_TDLS_RSSI_DELTA_DEFAULT                 (-20)
 
-#define CFG_TDLS_QOS_WMM_UAPSD_MASK_NAME            "gTDLSUapsdMask"    /* ACs to setup U-APSD for TDLS Sta */
+/*
+ * <ini>
+ * gTDLSUapsdMask - ACs to setup U-APSD for TDLS Sta.
+ * @Min: 0
+ * @Max: 0x0F
+ * @Default: 0x0F
+ *
+ * This ini is used to configure the ACs for which mask needs to be enabled.
+ * 0x1: Background	0x2: Best effort
+ * 0x4: Video		0x8:Voice
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_TDLS_QOS_WMM_UAPSD_MASK_NAME            "gTDLSUapsdMask"
 #define CFG_TDLS_QOS_WMM_UAPSD_MASK_MIN             (0)
 #define CFG_TDLS_QOS_WMM_UAPSD_MASK_MAX             (0x0F)
 #define CFG_TDLS_QOS_WMM_UAPSD_MASK_DEFAULT         (0x0F)
 
+/*
+ * <ini>
+ * gEnableTDLSBufferSta - Controls the TDLS buffer.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to control the TDLS buffer.
+ * Buffer STA is not enabled in CLD 2.0 yet.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_BUFFER_STA_SUPPORT_ENABLE          "gEnableTDLSBufferSta"
 #define CFG_TDLS_BUFFER_STA_SUPPORT_ENABLE_MIN      (0)
 #define CFG_TDLS_BUFFER_STA_SUPPORT_ENABLE_MAX      (1)
-/* Buffer STA is not enabled in CLD 2.0 yet */
 #define CFG_TDLS_BUFFER_STA_SUPPORT_ENABLE_DEFAULT  (1)
 
+/*
+ * <ini>
+ * gTDLSPuapsdInactivityTime - Peer UAPSD Inactivity time.
+ * @Min: 0
+ * @Max: 10
+ * @Default: 0
+ *
+ * This ini is used to configure peer uapsd inactivity time.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_PUAPSD_INACTIVITY_TIME             "gTDLSPuapsdInactivityTime"
 #define CFG_TDLS_PUAPSD_INACTIVITY_TIME_MIN         (0)
 #define CFG_TDLS_PUAPSD_INACTIVITY_TIME_MAX         (10)
 #define CFG_TDLS_PUAPSD_INACTIVITY_TIME_DEFAULT     (0)
 
+/*
+ * <ini>
+ * gTDLSPuapsdRxFrameThreshold - Peer UAPSD Rx frame threshold.
+ * @Min: 10
+ * @Max: 20
+ * @Default: 10
+ *
+ * This ini is used to configure maximum Rx frame during SP.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_PUAPSD_RX_FRAME_THRESHOLD          "gTDLSPuapsdRxFrameThreshold"
 #define CFG_TDLS_PUAPSD_RX_FRAME_THRESHOLD_MIN      (10)
 #define CFG_TDLS_PUAPSD_RX_FRAME_THRESHOLD_MAX      (20)
 #define CFG_TDLS_PUAPSD_RX_FRAME_THRESHOLD_DEFAULT  (10)
 
+/*
+ * <ini>
+ * gTDLSPuapsdPTIWindow - This ini is used to configure peer traffic indication
+ * window.
+ * @Min: 1
+ * @Max: 5
+ * @Default: 2
+ *
+ * This ini is used to configure buffering time in number of beacon intervals.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_PUAPSD_PEER_TRAFFIC_IND_WINDOW          "gTDLSPuapsdPTIWindow"
 #define CFG_TDLS_PUAPSD_PEER_TRAFFIC_IND_WINDOW_MIN      (1)
 #define CFG_TDLS_PUAPSD_PEER_TRAFFIC_IND_WINDOW_MAX      (5)
 #define CFG_TDLS_PUAPSD_PEER_TRAFFIC_IND_WINDOW_DEFAULT  (2)
 
+/*
+ * <ini>
+ * gTDLSPuapsdPTRTimeout - Peer Traffic Response timer duration in ms.
+ * @Min: 0
+ * @Max: 10000
+ * @Default: 5000
+ *
+ * This ini is used to configure the peer traffic response timer duration
+ * in ms.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_PUAPSD_PEER_TRAFFIC_RSP_TIMEOUT         "gTDLSPuapsdPTRTimeout"
 #define CFG_TDLS_PUAPSD_PEER_TRAFFIC_RSP_TIMEOUT_MIN     (0)
 #define CFG_TDLS_PUAPSD_PEER_TRAFFIC_RSP_TIMEOUT_MAX     (10000)
 #define CFG_TDLS_PUAPSD_PEER_TRAFFIC_RSP_TIMEOUT_DEFAULT (5000)
 
+/*
+ * <ini>
+ * gTDLSExternalControl - Enable external TDLS control.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable external TDLS control.
+ * TDLS external control works with TDLS implicit trigger. TDLS external
+ * control allows a user to add a MAC address of potential TDLS peers so
+ * that the CLD driver can initiate implicit TDLS setup to only those peers
+ * when criteria for TDLS setup (throughput and RSSI threshold) is met.
+ *
+ * Related: gEnableTDLSSupport, gEnableTDLSImplicitTrigger.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_EXTERNAL_CONTROL                   "gTDLSExternalControl"
 #define CFG_TDLS_EXTERNAL_CONTROL_MIN               (0)
 #define CFG_TDLS_EXTERNAL_CONTROL_MAX               (1)
 #define CFG_TDLS_EXTERNAL_CONTROL_DEFAULT           (1)
 
+/*
+ * <ini>
+ * gEnableTDLSOffChannel - Enables off-channel support for TDLS link.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable off-channel support for TDLS link.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_OFF_CHANNEL_SUPPORT_ENABLE          "gEnableTDLSOffChannel"
 #define CFG_TDLS_OFF_CHANNEL_SUPPORT_ENABLE_MIN      (0)
 #define CFG_TDLS_OFF_CHANNEL_SUPPORT_ENABLE_MAX      (1)
 #define CFG_TDLS_OFF_CHANNEL_SUPPORT_ENABLE_DEFAULT  (0)
 
+/*
+ * <ini>
+ * gEnableTDLSWmmMode - Enables WMM support over TDLS link.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable WMM support over TDLS link.
+ * This is required to be set to 1 for any TDLS and uAPSD functionality.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_WMM_MODE_ENABLE                     "gEnableTDLSWmmMode"
 #define CFG_TDLS_WMM_MODE_ENABLE_MIN                 (0)
 #define CFG_TDLS_WMM_MODE_ENABLE_MAX                 (1)
 #define CFG_TDLS_WMM_MODE_ENABLE_DEFAULT             (1)
 
+/*
+ * <ini>
+ * gTDLSPrefOffChanNum - Preferred TDLS channel number when off-channel support
+ * is enabled.
+ * @Min: 1
+ * @Max: 165
+ * @Default: 36
+ *
+ * This ini is used to configure preferred TDLS channel number when off-channel
+ * support is enabled.
+ *
+ * Related: gEnableTDLSSupport, gEnableTDLSOffChannel.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_PREFERRED_OFF_CHANNEL_NUM          "gTDLSPrefOffChanNum"
 #define CFG_TDLS_PREFERRED_OFF_CHANNEL_NUM_MIN      (1)
 #define CFG_TDLS_PREFERRED_OFF_CHANNEL_NUM_MAX      (165)
 #define CFG_TDLS_PREFERRED_OFF_CHANNEL_NUM_DEFAULT  (36)
 
+/*
+ * <ini>
+ * gTDLSPrefOffChanBandwidth - Preferred TDLS channel bandwidth when
+ * off-channel support is enabled.
+ * @Min: 0
+ * @Max: 0x0F
+ * @Default: 0x07
+ *
+ * This ini is used to configure preferred TDLS channel bandwidth when
+ * off-channel support is enabled.
+ * 0x1: 20 MHz	0x2: 40 MHz	0x4: 80 MHz	0x8: 160 MHz
+ * When more than one bits are set then firmware starts from the highest and
+ * selects one based on capability of peer.
+ *
+ * Related: gEnableTDLSSupport, gEnableTDLSOffChannel.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_TDLS_PREFERRED_OFF_CHANNEL_BW           "gTDLSPrefOffChanBandwidth"
 #define CFG_TDLS_PREFERRED_OFF_CHANNEL_BW_MIN      (0)
 #define CFG_TDLS_PREFERRED_OFF_CHANNEL_BW_MAX      (0x0F)
 #define CFG_TDLS_PREFERRED_OFF_CHANNEL_BW_DEFAULT  (0x07)
 
-/* Enable TDLS Scan: Allow scan and maintain TDLS link.
+/*
+ * <ini>
+ * gEnableTDLSScan - Allow scan and maintain TDLS link.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable TDLS scan.
  *  0: If peer is not buffer STA capable and device is not sleep STA
  *     capable, then teardown TDLS link when scan is initiated. If peer
  *     is buffer STA and we can be sleep STA then TDLS link is maintained
@@ -1882,19 +4786,42 @@ typedef enum {
  *     Rx pkts since peer would not know when device moves away from tdls
  *     channel. Tx on TDLS link would stop when device moves away from tdls
  *     channel.
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_TDLS_SCAN_ENABLE                       "gEnableTDLSScan"
 #define CFG_TDLS_SCAN_ENABLE_MIN                   (0)
 #define CFG_TDLS_SCAN_ENABLE_MAX                   (1)
 #define CFG_TDLS_SCAN_ENABLE_DEFAULT               (0)
 
-/* TDLS peer kickout threshold to fw
+/*
+ * <ini>
+ * gTDLSPeerKickoutThreshold - TDLS peer kickout threshold to firmware.
+ * @Min: 10
+ * @Max: 5000
+ * @Default: 96
+ *
+ * This ini is used to configure TDLS peer kickout threshold to firmware.
  *     Firmware will use this value to determine, when to send TDLS
  *     peer kick out event to host.
  *     E.g.
  *        if peer kick out threshold is 10, then firmware will wait for 10
  *        consecutive packet failures and then send TDLS kickout
  *        notification to host driver
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_TDLS_PEER_KICKOUT_THRESHOLD            "gTDLSPeerKickoutThreshold"
 #define CFG_TDLS_PEER_KICKOUT_THRESHOLD_MIN        (10)
@@ -1902,6 +4829,29 @@ typedef enum {
 #define CFG_TDLS_PEER_KICKOUT_THRESHOLD_DEFAULT    (96)
 
 #endif
+
+/*
+ * <ini>
+ * gTDLSEnableDeferTime - Timer to defer for enabling TDLS on P2P listen.
+ * @Min: 2000
+ * @Max: 6000
+ * @Default: 5000
+ *
+ * This ini is used to set the timer to defer for enabling TDLS on P2P
+ * listen (value in milliseconds).
+ *
+ * Related: gEnableTDLSSupport.
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_TDLS_ENABLE_DEFER_TIMER                "gTDLSEnableDeferTime"
+#define CFG_TDLS_ENABLE_DEFER_TIMER_MIN            (2000)
+#define CFG_TDLS_ENABLE_DEFER_TIMER_MAX            (6000)
+#define CFG_TDLS_ENABLE_DEFER_TIMER_DEFAULT        (5000)
 
 /* Enable/Disable LPWR Image(cMEM uBSP) Transition */
 #define CFG_ENABLE_LPWR_IMG_TRANSITION_NAME        "gEnableLpwrImgTransition"
@@ -1928,8 +4878,21 @@ typedef enum {
 #define CFG_TX_LDPC_ENABLE_FEATURE_DEFAULT (3)
 
 /*
- * Enable / Disable MCC Adaptive Scheduler feature
- * Default: Enable
+ * <ini>
+ * gEnableMCCAdaptiveScheduler - MCC Adaptive Scheduler feature.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable MCC Adaptive Scheduler feature.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_ENABLE_MCC_ADATIVE_SCHEDULER_ENABLED_NAME             "gEnableMCCAdaptiveScheduler"
 #define CFG_ENABLE_MCC_ADATIVE_SCHEDULER_ENABLED_MIN              (0)
@@ -1984,19 +4947,6 @@ typedef enum {
 #define CFG_DISABLE_LDPC_WITH_TXBF_AP_MAX         (1)
 #define CFG_DISABLE_LDPC_WITH_TXBF_AP_DEFAULT     (0)
 
-/*
- * IBSS Operating Channels for 2.4G and 5GHz channels
- */
-#define CFG_IBSS_ADHOC_CHANNEL_5GHZ_NAME          "gAdHocChannel5G"
-#define CFG_IBSS_ADHOC_CHANNEL_5GHZ_MIN           (36)
-#define CFG_IBSS_ADHOC_CHANNEL_5GHZ_MAX           (165)
-#define CFG_IBSS_ADHOC_CHANNEL_5GHZ_DEFAULT       (44)
-
-#define CFG_IBSS_ADHOC_CHANNEL_24GHZ_NAME         "gAdHocChannel24G"
-#define CFG_IBSS_ADHOC_CHANNEL_24GHZ_MIN          (1)
-#define CFG_IBSS_ADHOC_CHANNEL_24GHZ_MAX          (14)
-#define CFG_IBSS_ADHOC_CHANNEL_24GHZ_DEFAULT      (6)
-
 /* Parameter to control VHT support in 2.4 GHz band */
 #define CFG_ENABLE_VHT_FOR_24GHZ_NAME             "gEnableVhtFor24GHzBand"
 #define CFG_ENABLE_VHT_FOR_24GHZ_MIN              (0)
@@ -2013,31 +4963,92 @@ typedef enum {
 #define CFG_ENABLE_VENDOR_VHT_FOR_24GHZ_MAX       (1)
 #define CFG_ENABLE_VENDOR_VHT_FOR_24GHZ_DEFAULT   (1)
 
+/*
+ * <ini>
+ * gMaxMediumTime - Set Maximum channel time
+ * @Min: STAMIN
+ * @Max: STAMAX
+ * @Default: STADEF
+ *
+ * This ini is used to set default max channel time
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_MAX_MEDIUM_TIME                      "gMaxMediumTime"
 #define CFG_MAX_MEDIUM_TIME_STAMIN               WNI_CFG_MAX_MEDIUM_TIME_STAMIN
 #define CFG_MAX_MEDIUM_TIME_STAMAX               WNI_CFG_MAX_MEDIUM_TIME_STAMAX
 #define CFG_MAX_MEDIUM_TIME_STADEFAULT           WNI_CFG_MAX_MEDIUM_TIME_STADEF
 
 /*
- * Enable legacy fast roaming (LFR) on STA link during concurrent sessions
+ * <ini>
+ * gEnableIbssHeartBeatOffload - Enable heart beat monitoring offload to FW
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set default ibbs heartbeat offload
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
-#define CFG_ENABLE_FAST_ROAM_IN_CONCURRENCY          "gEnableFastRoamInConcurrency"
-#define CFG_ENABLE_FAST_ROAM_IN_CONCURRENCY_MIN      (0)
-#define CFG_ENABLE_FAST_ROAM_IN_CONCURRENCY_MAX      (1)
-#define CFG_ENABLE_FAST_ROAM_IN_CONCURRENCY_DEFAULT  (1)
 
-/*
- * Enable heart beat monitoring offload to FW
- */
 #define CFG_ENABLE_HEART_BEAT_OFFLOAD          "gEnableIbssHeartBeatOffload"
 #define CFG_ENABLE_HEART_BEAT_OFFLOAD_MIN      (0)
 #define CFG_ENABLE_HEART_BEAT_OFFLOAD_MAX      (1)
 #define CFG_ENABLE_HEART_BEAT_OFFLOAD_DEFAULT  (1)
 
+/*
+ * <ini>
+ * gAntennaDiversity - It will use to set Antenna diversity
+ * @Min: 0
+ * @Max: 3
+ * @Default: 0
+ *
+ * This ini is used to set default Antenna diversity
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_ANTENNA_DIVERSITY_PARAM_NAME          "gAntennaDiversity"
 #define CFG_ANTENNA_DIVERSITY_PARAM_MIN           (0)
 #define CFG_ANTENNA_DIVERSITY_PARAM_MAX           (3)
 #define CFG_ANTENNA_DIVERSITY_PARAM_DEFAULT       (0)
+
+/*
+ * <ini>
+ * gEnableSNRMonitoring - Enables SNR Monitoring
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set default snr monitor
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_ENABLE_SNR_MONITORING_NAME              "gEnableSNRMonitoring"
 #define CFG_ENABLE_SNR_MONITORING_MIN               (0)
@@ -2061,44 +5072,70 @@ typedef enum {
 #define CFG_PNO_SLOW_SCAN_MULTIPLIER_MAX             (30)
 #endif
 
-#define CFG_AMSDU_SUPPORT_IN_AMPDU_NAME                "gAmsduSupportInAMPDU"
-#define CFG_AMSDU_SUPPORT_IN_AMPDU_MIN                 (0)
-#define CFG_AMSDU_SUPPORT_IN_AMPDU_MAX                 (1)
-#define CFG_AMSDU_SUPPORT_IN_AMPDU_DEFAULT             (0)      /* disabled */
-
-/* Prefer connecting to 5G AP even if its RSSI is lower by
-   gSelect5GHzMargin dBm than 2.4G AP.
-   This feature requires the dependent cfg.ini "gRoamPrefer5GHz" set to 1 */
-#define CFG_STRICT_5GHZ_PREF_BY_MARGIN                 "gSelect5GHzMargin"
-#define CFG_STRICT_5GHZ_PREF_BY_MARGIN_MIN             (0)
-#define CFG_STRICT_5GHZ_PREF_BY_MARGIN_MAX             (60)
-#define CFG_STRICT_5GHZ_PREF_BY_MARGIN_DEFAULT         (0)      /* set 0 to disable */
-
-/* It enables IP, TCP and UDP checksum offload in hardware
- * and also advertise same to network stack.
+/*
+ * <ini>
+ * gMaxAmsduNum - Max number of MSDU's in aggregate
+ * @Min: 0
+ * @Max: 3
+ * @Default: 1
+ * gMaxAmsduNum is the number of MSDU's transmitted in the 11n aggregate
+ * frame. Setting it to a value larger than 1 enables transmit aggregation.
+ * It is a PHY parameter that applies to all vdev's in firmware.
+ *
+ * Supported Feature: 11n aggregation
+ *
+ * Usage: Internal
+ *
+ * </ini>
  */
+#define CFG_MAX_AMSDU_NUM_NAME                "gMaxAmsduNum"
+#define CFG_MAX_AMSDU_NUM_MIN                 (0)
+#define CFG_MAX_AMSDU_NUM_MAX                 (3)
+#define CFG_MAX_AMSDU_NUM_DEFAULT             (1)
+
+/*
+ * <ini>
+ * gEnableIpTcpUdpChecksumOffload - It enables IP, TCP and UDP checksum
+ * offload in hardware
+ * @Min: 0
+ * @Max: 1
+ * @Default: DEF
+ *
+ * This ini is used to enable IP, TCP and UDP checksum offload in hardware
+ * and also advertise same to network stack
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_ENABLE_IP_TCP_UDP_CHKSUM_OFFLOAD            "gEnableIpTcpUdpChecksumOffload"
 #define CFG_ENABLE_IP_TCP_UDP_CHKSUM_OFFLOAD_DISABLE    (0)
 #define CFG_ENABLE_IP_TCP_UDP_CHKSUM_OFFLOAD_ENABLE     (1)
 #define CFG_ENABLE_IP_TCP_UDP_CHKSUM_OFFLOAD_DEFAULT    (CFG_ENABLE_IP_TCP_UDP_CHKSUM_OFFLOAD_ENABLE)
 
-/*
- * Power Save Offload
- * Power Save Offload configuration:
- * Current values of gEnablePowerSaveOffload:
- * 0 -> Power save offload is disabled
- * 1 -> Legacy Power save enabled + Deep sleep Disabled
- * 2 -> QPower enabled + Deep sleep Disabled
- * 3 -> Legacy Power save enabled + Deep sleep Enabled
- * 4 -> QPower enabled + Deep sleep Enabled
- * 5 -> Duty cycling QPower enabled
- */
-#define CFG_POWERSAVE_OFFLOAD_NAME                "gEnablePowerSaveOffload"
-#define CFG_POWERSAVE_OFFLOAD_MIN                 (0)
-#define CFG_POWERSAVE_OFFLOAD_MAX                 (PS_DUTY_CYCLING_QPOWER)
-#define CFG_POWERSAVE_OFFLOAD_DEFAULT             (CFG_POWERSAVE_OFFLOAD_MIN)
-
 #ifdef WLAN_FEATURE_FASTPATH
+
+/*
+ * <ini>
+ * gEnableFastPath - Control to enable fastpath feature
+ *
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable fastpath feature
+ *
+ * Supported Feature: Wlan Fastpath Feature
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_ENABLE_FASTPATH                      "gEnableFastPath"
 #define CFG_ENABLE_FASTPATH_MIN                  (0)
 #define CFG_ENABLE_FASTPATH_MAX                  (1)
@@ -2154,16 +5191,36 @@ typedef enum {
  */
 #define CFG_ENABLE_FW_LOG_NAME                   "gEnablefwlog"
 #define CFG_ENABLE_FW_LOG_DISABLE                (0)
-#define CFG_ENABLE_FW_LOG_ENABLE                 (1)
+#define CFG_ENABLE_FW_LOG_WMI                    (1)
+#define CFG_ENABLE_FW_LOG_DIAG                   (2)
+#define CFG_ENABLE_FW_LOG_MAX                    (CFG_ENABLE_FW_LOG_DIAG)
 #ifdef QCA_WIFI_3_0_ADRASTEA
-#define CFG_ENABLE_FW_LOG_DEFAULT                (CFG_ENABLE_FW_LOG_DISABLE)
+#define CFG_ENABLE_FW_LOG_DEFAULT                (CFG_ENABLE_FW_LOG_DIAG)
 #else
-#define CFG_ENABLE_FW_LOG_DEFAULT                (CFG_ENABLE_FW_LOG_ENABLE)
+#define CFG_ENABLE_FW_LOG_DEFAULT                (CFG_ENABLE_FW_LOG_WMI)
 #endif
 
 /*
- * Enable/Disable SSR for USB
+ * <ini>
+ * gEnableFwSelfRecovery - Enable/disable FW self-recovery for USB
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable FW self-recovery
+ * gEnableFwSelfRecovery = 0: Disabled
+ * gEnableFwSelfRecovery = 1: Driver triggers SSR instead of triggering
+ * kernel  panic after firmware crash.
+ *
+ * Related: gEnableSSR
+ *
+ * Supported Feature: SSR
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
+
 #define CFG_ENABLE_FW_SELF_RECOVERY_NAME         "gEnableFwSelfRecovery"
 #define CFG_ENABLE_FW_SELF_RECOVERY_DISABLE      (0)
 #define CFG_ENABLE_FW_SELF_RECOVERY_ENABLE       (1)
@@ -2180,127 +5237,35 @@ typedef enum {
 #define CFG_VHT_MPDU_LEN_MAX                           (2)
 #define CFG_VHT_MPDU_LEN_DEFAULT                       (0)
 
-#define CFG_MAX_WOW_FILTERS_NAME                       "gMaxWoWFilters"
-#define CFG_MAX_WOW_FILTERS_MIN                        (0)
-#define CFG_MAX_WOW_FILTERS_MAX                        (WOW_MAX_BITMAP_FILTERS)
-#define CFG_MAX_WOW_FILTERS_DEFAULT                    (WOW_MAX_BITMAP_FILTERS)
-
-/*
- * WOW Enable/Disable.
- * 0 - Disable both magic pattern match and pattern byte match.
- * 1 - Enable magic pattern match on all interfaces.
- * 2 - Enable pattern byte match on all interfaces.
- * 3 - Enable both magic patter and pattern byte match on all interfaces.
- */
-#define CFG_WOW_STATUS_NAME                           "gEnableWoW"
-#define CFG_WOW_ENABLE_MIN                            (0)
-#define CFG_WOW_ENABLE_MAX                            (3)
-#define CFG_WOW_STATUS_DEFAULT                        (3)
-
-#define CFG_COALESING_IN_IBSS_NAME                "gCoalesingInIBSS"
-#define CFG_COALESING_IN_IBSS_MIN                 (0)
-#define CFG_COALESING_IN_IBSS_MAX                 (1)
-#define CFG_COALESING_IN_IBSS_DEFAULT             (0)   /* disabled */
-
-#define CFG_IBSS_ATIM_WIN_SIZE_NAME                "gIbssATIMWinSize"
-#define CFG_IBSS_ATIM_WIN_SIZE_MIN                 (0)
-#define CFG_IBSS_ATIM_WIN_SIZE_MAX                 (50)
-#define CFG_IBSS_ATIM_WIN_SIZE_DEFAULT             (0)
-
-/*
- * Indicates if IBSS Power Save is
- * supported or not. When not allowed,
- * IBSS station has to stay awake all
- * the time and should never set PM=1
- * in its transmitted frames. This
- * parameter is meaningful/valid only
- * when gIbssATIMWinSize is non-zero
- */
-#define CFG_IBSS_IS_POWER_SAVE_ALLOWED_NAME        "gIbssIsPowerSaveAllowed"
-#define CFG_IBSS_IS_POWER_SAVE_ALLOWED_MIN         (0)
-#define CFG_IBSS_IS_POWER_SAVE_ALLOWED_MAX         (1)
-#define CFG_IBSS_IS_POWER_SAVE_ALLOWED_DEFAULT     (1)
-
-/*
- * Indicates if IBSS Power Collapse
- * is allowed or not.
- */
-#define CFG_IBSS_IS_POWER_COLLAPSE_ALLOWED_NAME    "gIbssIsPowerCollapseAllowed"
-#define CFG_IBSS_IS_POWER_COLLAPSE_ALLOWED_MIN     (0)
-#define CFG_IBSS_IS_POWER_COLLAPSE_ALLOWED_MAX     (1)
-#define CFG_IBSS_IS_POWER_COLLAPSE_ALLOWED_DEFAULT (1)
-
-/*
- * This parameter indicates whether IBSS station
- * can exit power save mode and enter power active
- * state whenever there is a TX/RX activity.
- */
-#define CFG_IBSS_AWAKE_ON_TX_RX_NAME               "gIbssAwakeOnTxRx"
-#define CFG_IBSS_AWAKE_ON_TX_RX_MIN                (0)
-#define CFG_IBSS_AWAKE_ON_TX_RX_MAX                (1)
-#define CFG_IBSS_AWAKE_ON_TX_RX_DEFAULT            (0)
-
-/*
- * In IBSS mode if Awake on TX/RX activity is enabled
- * Ibss Inactivity parameter indicates the data
- * inactivity time in number of beacon intervals
- * after which IBSS station re-inters power save
- * by sending Null frame with PM=1
- */
-#define CFG_IBSS_INACTIVITY_TIME_NAME              "gIbssInactivityTime"
-#define CFG_IBSS_INACTIVITY_TIME_MIN               (1)
-#define CFG_IBSS_INACTIVITY_TIME_MAX               (10)
-#define CFG_IBSS_INACTIVITY_TIME_DEFAULT           (1)
-
-/*
- * In IBSS mode Tx Service Period Inactivity
- * time in msecs indicates the time after
- * which TX Service Period is terminated by
- * sending a Qos Null frame with EOSP.
- * If value is 0, TX SP is terminated with the
- * last buffered packet itself instead of waiting
- * for the inactivity
- */
-#define CFG_IBSS_TXSP_END_INACTIVITY_NAME          "gIbssTxSpEndInactivityTime"
-#define CFG_IBSS_TXSP_END_INACTIVITY_MIN           (0)
-#define CFG_IBSS_TXSP_END_INACTIVITY_MAX           (100)
-#define CFG_IBSS_TXSP_END_INACTIVITY_DEFAULT       (0)
-
-/*
- * When IBSS network is initialized, PS-supporting device
- * does not enter protocol sleep state during first
- * gIbssPsWarmupTime seconds.
- */
-#define CFG_IBSS_PS_WARMUP_TIME_NAME               "gIbssPsWarmupTime"
-#define CFG_IBSS_PS_WARMUP_TIME_MIN                (0)
-/* Allow unsigned Int Max for now */
-#define CFG_IBSS_PS_WARMUP_TIME_MAX                (65535)
-#define CFG_IBSS_PS_WARMUP_TIME_DEFAULT            (0)
-
-/*
- * IBSS Power Save Enable/Disable 1 RX
- * chain usage during the ATIM window
- */
-#define CFG_IBSS_PS_1RX_CHAIN_IN_ATIM_WINDOW_NAME    "gIbssPs1RxChainInAtim"
-#define CFG_IBSS_PS_1RX_CHAIN_IN_ATIM_WINDOW_MIN     (0)
-#define CFG_IBSS_PS_1RX_CHAIN_IN_ATIM_WINDOW_MAX     (1)
-#define CFG_IBSS_PS_1RX_CHAIN_IN_ATIM_WINDOW_DEFAULT (0)
-
 #define CFG_SAP_MAX_NO_PEERS                       "gSoftApMaxPeers"
 #define CFG_SAP_MAX_NO_PEERS_MIN                   (1)
 #define CFG_SAP_MAX_NO_PEERS_MAX                   (32)
 #define CFG_SAP_MAX_NO_PEERS_DEFAULT               (32)
 
 /*
- * Connection related log Enable/Disable.
+ * <ini>
+ * gEnableDebugLog - Enable/Disable the Connection related logs
+ * @Min: 0
+ * @Max: 0xFF
+ * @Default: 0x0F
+ *
+ * This ini is used to enable/disable the connection related logs
  * 0x1 - Enable mgmt pkt logs (excpet probe req/rsp, beacons).
  * 0x2 - Enable EAPOL pkt logs.
  * 0x4 - Enable DHCP pkt logs.
  * 0x8 - Enable mgmt action frames logs.
  * 0x0 - Disable all the above connection related logs.
+ * The default value of 0x0F will enable all the above logs
  *
- * The default value of 0x0F will enable all the above logs.
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
+
 #define CFG_ENABLE_DEBUG_CONNECT_ISSUE             "gEnableDebugLog"
 #define CFG_ENABLE_DEBUG_CONNECT_ISSUE_MIN         (0)
 #define CFG_ENABLE_DEBUG_CONNECT_ISSUE_MAX         (0xFF)
@@ -2319,52 +5284,252 @@ typedef enum {
 #define CFG_SET_TXPOWER_LIMIT5G_DEFAULT            (30)
 
 #ifdef QCA_LL_LEGACY_TX_FLOW_CONTROL
+
+/*
+ * <ini>
+ * TxFlowLowWaterMark - Low watermark for pausing network queues
+ *
+ * @Min: 0
+ * @Max: 1000
+ * @Default: 300
+ *
+ * This ini specifies the low watermark of data packets transmitted
+ * before pausing netif queues in tx flow path. It is only applicable
+ * where legacy flow control is used i.e.for Rome.
+ *
+ * Related: TxFlowHighWaterMarkOffset, TxFlowMaxQueueDepth,
+ *          TxLbwFlowLowWaterMark, TxLbwFlowHighWaterMarkOffset,
+ *          TxLbwFlowMaxQueueDepth, TxHbwFlowLowWaterMark,
+ *          TxHbwFlowHighWaterMarkOffset, TxHbwFlowMaxQueueDepth
+ *
+ * Supported Feature: Dynamic Flow Control
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_LL_TX_FLOW_LWM                         "TxFlowLowWaterMark"
 #define CFG_LL_TX_FLOW_LWM_MIN                     (0)
 #define CFG_LL_TX_FLOW_LWM_MAX                     (1000)
-
 #define CFG_LL_TX_FLOW_LWM_DEFAULT                 (300)
 
+/*
+ * <ini>
+ * TxFlowHighWaterMarkOffset - High Watermark offset to unpause Netif queues
+ * @Min: 0
+ * @Max: 300
+ * @Default: 94
+ *
+ * This ini specifies the offset to upause the netif queues
+ * when they are paused due to insufficient descriptors as guided by
+ * ini TxFlowLowWaterMark. It is only applicable where legacy flow control
+ * is used i.e.for Rome.
+ *
+ * Related: TxFlowLowWaterMark, TxFlowMaxQueueDepth,
+ *          TxLbwFlowLowWaterMark, TxLbwFlowHighWaterMarkOffset,
+ *          TxLbwFlowMaxQueueDepth, TxHbwFlowLowWaterMark,
+ *          TxHbwFlowHighWaterMarkOffset, TxHbwFlowMaxQueueDepth
+ *
+ * Supported Feature: Dynamic Flow Control
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_LL_TX_FLOW_HWM_OFFSET                  "TxFlowHighWaterMarkOffset"
 #define CFG_LL_TX_FLOW_HWM_OFFSET_MIN              (0)
 #define CFG_LL_TX_FLOW_HWM_OFFSET_MAX              (300)
-
 #define CFG_LL_TX_FLOW_HWM_OFFSET_DEFAULT          (94)
 
+/*
+ * <ini>
+ * TxFlowMaxQueueDepth - Max pause queue depth.
+ *
+ * @Min: 400
+ * @Max: 3500
+ * @Default: 1500
+ *
+ * This ini specifies the max queue pause depth.It is only applicable
+ * where legacy flow control is used i.e.for Rome.
+ *
+ * Related: TxFlowLowWaterMark, TxFlowHighWaterMarkOffset,
+ *          TxLbwFlowLowWaterMark, TxLbwFlowHighWaterMarkOffset,
+ *          TxLbwFlowMaxQueueDepth, TxHbwFlowLowWaterMark,
+ *          TxHbwFlowHighWaterMarkOffset, TxHbwFlowMaxQueueDepth
+ *
+ * Supported Feature: Dynamic Flow Control
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_LL_TX_FLOW_MAX_Q_DEPTH                 "TxFlowMaxQueueDepth"
 #define CFG_LL_TX_FLOW_MAX_Q_DEPTH_MIN             (400)
 #define CFG_LL_TX_FLOW_MAX_Q_DEPTH_MAX             (3500)
 #define CFG_LL_TX_FLOW_MAX_Q_DEPTH_DEFAULT         (1500)
 
+/*
+ * <ini>
+ * TxLbwFlowLowWaterMark - Low watermark for pausing network queues
+ *                         in low bandwidth band
+ * @Min: 0
+ * @Max: 1000
+ * @Default: 450
+ *
+ * This ini specifies the low watermark of data packets transmitted
+ * before pausing netif queues in tx flow path in low bandwidth band.
+ * It is only applicable where legacy flow control is used i.e.for Rome.
+ *
+ * Related: TxFlowLowWaterMark, TxFlowHighWaterMarkOffset,
+ *          TxFlowMaxQueueDepth, TxLbwFlowHighWaterMarkOffset,
+ *          TxLbwFlowMaxQueueDepth, TxHbwFlowLowWaterMark,
+ *          TxHbwFlowHighWaterMarkOffset, TxHbwFlowMaxQueueDepth
+ *
+ * Supported Feature: Dynamic Flow Control
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_LL_TX_LBW_FLOW_LWM                     "TxLbwFlowLowWaterMark"
 #define CFG_LL_TX_LBW_FLOW_LWM_MIN                 (0)
 #define CFG_LL_TX_LBW_FLOW_LWM_MAX                 (1000)
-
 #define CFG_LL_TX_LBW_FLOW_LWM_DEFAULT             (450)
 
+/*
+ * <ini>
+ * TxLbwFlowHighWaterMarkOffset - High Watermark offset to unpause Netif queues
+ *                                in low bandwidth band.
+ * @Min: 0
+ * @Max: 300
+ * @Default: 50
+ *
+ * This ini specifies the offset to upause the netif queues
+ * when they are paused due to insufficient descriptors as guided by
+ * ini TxLbwFlowLowWaterMark in low bandwidth band. It is only applicable
+ * where legacy flow control is used i.e.for Rome.
+ *
+ * Related: TxFlowLowWaterMark, TxFlowHighWaterMarkOffset,
+ *          TxFlowMaxQueueDepth, TxLbwFlowLowWaterMark,
+ *          TxLbwFlowMaxQueueDepth, TxHbwFlowLowWaterMark,
+ *          TxHbwFlowHighWaterMarkOffset, TxHbwFlowMaxQueueDepth
+ *
+ * Supported Feature: Dynamic Flow Control
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_LL_TX_LBW_FLOW_HWM_OFFSET              "TxLbwFlowHighWaterMarkOffset"
 #define CFG_LL_TX_LBW_FLOW_HWM_OFFSET_MIN          (0)
 #define CFG_LL_TX_LBW_FLOW_HWM_OFFSET_MAX          (300)
-
 #define CFG_LL_TX_LBW_FLOW_HWM_OFFSET_DEFAULT      (50)
 
+/*
+ * <ini>
+ * TxLbwFlowMaxQueueDepth - Max pause queue depth in low bandwidth band
+ *
+ * @Min: 400
+ * @Max: 3500
+ * @Default: 750
+ *
+ * This ini specifies the max queue pause depth in low bandwidth band.
+ * It is only applicable where legacy flow control is used i.e.for Rome.
+ *
+ * Related: TxFlowLowWaterMark, TxFlowHighWaterMarkOffset,
+ *          TxFlowMaxQueueDepth, TxLbwFlowLowWaterMark,
+ *          TxLbwFlowHighWaterMarkOffset, TxHbwFlowLowWaterMark,
+ *          TxHbwFlowHighWaterMarkOffset, TxHbwFlowMaxQueueDepth
+ *
+ * Supported Feature: Dynamic Flow Control
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_LL_TX_LBW_FLOW_MAX_Q_DEPTH             "TxLbwFlowMaxQueueDepth"
 #define CFG_LL_TX_LBW_FLOW_MAX_Q_DEPTH_MIN         (400)
 #define CFG_LL_TX_LBW_FLOW_MAX_Q_DEPTH_MAX         (3500)
 #define CFG_LL_TX_LBW_FLOW_MAX_Q_DEPTH_DEFAULT     (750)
 
+/*
+ * <ini>
+ * TxHbwFlowLowWaterMark - Low watermark for pausing network queues
+ *                         in high bandwidth band
+ * @Min: 0
+ * @Max: 1000
+ * @Default: 406
+ *
+ * This ini specifies the threshold of data packets transmitted
+ * before pausing netif queues.It is only applicable where
+ * legacy flow control is used i.e.for Rome.
+ *
+ * Related: TxFlowLowWaterMark, TxFlowHighWaterMarkOffset,
+ *          TxFlowMaxQueueDepth, TxLbwFlowLowWaterMark,
+ *          TxLbwFlowHighWaterMarkOffset, TxLbwFlowMaxQueueDepth,
+ *          TxHbwFlowHighWaterMarkOffset, TxHbwFlowMaxQueueDepth
+ *
+ * Supported Feature: Dynamic Flow Control
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_LL_TX_HBW_FLOW_LWM                     "TxHbwFlowLowWaterMark"
 #define CFG_LL_TX_HBW_FLOW_LWM_MIN                 (0)
 #define CFG_LL_TX_HBW_FLOW_LWM_MAX                 (1000)
-
 #define CFG_LL_TX_HBW_FLOW_LWM_DEFAULT             (406)
 
+/*
+ * <ini>
+ * TxHbwFlowHighWaterMarkOffset - High Watermark offset to unpause Netif queues
+ *                                in high bandwidth band.
+ * @Min: 0
+ * @Max: 300
+ * @Default: 94
+ *
+ * This ini specifies the offset to upause the netif queues
+ * when they are paused due to insufficient descriptors as guided by
+ * ini TxHbwFlowLowWaterMark in high bandwidth band. It is only applicable
+ * where legacy flow control is used i.e.for Rome.
+ *
+ * Related: TxFlowLowWaterMark, TxFlowHighWaterMarkOffset,
+ *          TxFlowMaxQueueDepth, TxLbwFlowLowWaterMark,
+ *          TxLbwFlowHighWaterMarkOffset, TxLbwFlowMaxQueueDepth,
+ *          TxHbwFlowLowWaterMark, TxHbwFlowMaxQueueDepth
+ *
+ * Supported Feature: Dynamic Flow Control
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_LL_TX_HBW_FLOW_HWM_OFFSET              "TxHbwFlowHighWaterMarkOffset"
 #define CFG_LL_TX_HBW_FLOW_HWM_OFFSET_MIN          (0)
 #define CFG_LL_TX_HBW_FLOW_HWM_OFFSET_MAX          (300)
-
 #define CFG_LL_TX_HBW_FLOW_HWM_OFFSET_DEFAULT      (94)
 
+/*
+ * <ini>
+ * TxHbwFlowMaxQueueDepth - Max pause queue depth in high bandwidth band
+ * @Min: 4000
+ * @Max: 3500
+ * @Default: 1500
+ *
+ * This ini specifies the max queue pause depth in high bandwidth band.
+ * It is only applicable where legacy flow control is used i.e.for Rome.
+ *
+ * Related: TxFlowLowWaterMark, TxFlowHighWaterMarkOffset,
+ *          TxFlowMaxQueueDepth, TxLbwFlowLowWaterMark,
+ *          TxLbwFlowHighWaterMarkOffset, TxLbwFlowMaxQueueDepth,
+ *          TxHbwFlowLowWaterMark, TxHbwFlowHighWaterMarkOffset
+ *
+ * Supported Feature: Dynamic Flow Control
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_LL_TX_HBW_FLOW_MAX_Q_DEPTH             "TxHbwFlowMaxQueueDepth"
 #define CFG_LL_TX_HBW_FLOW_MAX_Q_DEPTH_MIN         (400)
 #define CFG_LL_TX_HBW_FLOW_MAX_Q_DEPTH_MAX         (3500)
@@ -2373,15 +5538,54 @@ typedef enum {
 
 #ifdef QCA_LL_TX_FLOW_CONTROL_V2
 
-#define CFG_LL_TX_FLOW_STOP_QUEUE_TH		   "TxFlowStopQueueThreshold"
-#define CFG_LL_TX_FLOW_STOP_QUEUE_TH_DEFAULT	   (15)
-#define CFG_LL_TX_FLOW_STOP_QUEUE_TH_MIN	   (0)
-#define CFG_LL_TX_FLOW_STOP_QUEUE_TH_MAX	   (50)
+/*
+ * <ini>
+ * TxFlowStopQueueThreshold - Stop queue Threshold to pause
+ *                            Netif queues when it reaches
+ * @Min: 0
+ * @Max: 50
+ * @Default: 15
+ *
+ * This ini specifies the threshold of data packets transmitted
+ * before pausing netif queues.
+ *
+ * Related: TxFlowStartQueueOffset
+ *
+ * Supported Feature: Dynamic Flow Control
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_LL_TX_FLOW_STOP_QUEUE_TH               "TxFlowStopQueueThreshold"
+#define CFG_LL_TX_FLOW_STOP_QUEUE_TH_DEFAULT       (15)
+#define CFG_LL_TX_FLOW_STOP_QUEUE_TH_MIN           (0)
+#define CFG_LL_TX_FLOW_STOP_QUEUE_TH_MAX           (50)
 
-#define CFG_LL_TX_FLOW_START_QUEUE_OFFSET	   "TxFlowStartQueueOffset"
+/*
+ * <ini>
+ * TxFlowStartQueueOffset - Start queue offset to unpause
+ *                          Netif queues
+ * @Min: 0
+ * @Max: 30
+ * @Default: 11
+ *
+ * This ini specifies the offset to upause the netif queues
+ * when they are paused due to insufficient descriptors as guided by
+ * ini TxFlowStopQueueThreshold.
+ *
+ * Related: TxFlowStopQueueThreshold
+ *
+ * Supported Feature: Dynamic Flow Control
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_LL_TX_FLOW_START_QUEUE_OFFSET          "TxFlowStartQueueOffset"
 #define CFG_LL_TX_FLOW_START_QUEUE_OFFSET_DEFAULT  (10)
-#define CFG_LL_TX_FLOW_START_QUEUE_OFFSET_MIN	   (0)
-#define CFG_LL_TX_FLOW_START_QUEUE_OFFSET_MAX	   (30)
+#define CFG_LL_TX_FLOW_START_QUEUE_OFFSET_MIN      (0)
+#define CFG_LL_TX_FLOW_START_QUEUE_OFFSET_MAX      (30)
 
 #endif /* QCA_LL_TX_FLOW_CONTROL_V2 */
 
@@ -2407,12 +5611,47 @@ typedef enum {
 #define CFG_RA_RATE_LIMIT_INTERVAL_DEFAULT         (60) /*60 SEC */
 #endif
 
+/*
+ * <ini>
+ * gIgnorePeerErpInfo - Used for ignore peer infrormation
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to ignore default peer info
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_IGNORE_PEER_ERP_INFO_NAME      "gIgnorePeerErpInfo"
 #define CFG_IGNORE_PEER_ERP_INFO_MIN       (0)
 #define CFG_IGNORE_PEER_ERP_INFO_MAX       (1)
 #define CFG_IGNORE_PEER_ERP_INFO_DEFAULT   (0)
 
-/* Enable Memory Debug */
+/*
+ * <ini>
+ * gEnableMemoryDebug - Enables the memory debug
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable default memory debug
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #ifdef MEMORY_DEBUG
 #define CFG_ENABLE_MEMORY_DEBUG_NAME             "gEnableMemoryDebug"
 #define CFG_ENABLE_MEMORY_DEBUG_MIN              (0)
@@ -2420,15 +5659,70 @@ typedef enum {
 #define CFG_ENABLE_MEMORY_DEBUG_DEFAULT          (1)
 #endif
 
+
+/*
+ * <ini>
+ * gInitialDwellTime - Used to set initial dwell time
+ * @Min: 0
+ * @Max: 0
+ * @Default: 100
+ *
+ * This ini is used to set default initial dwell time
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_INITIAL_DWELL_TIME_NAME            "gInitialDwellTime"
 #define CFG_INITIAL_DWELL_TIME_DEFAULT         (0)
 #define CFG_INITIAL_DWELL_TIME_MIN             (0)
 #define CFG_INITIAL_DWELL_TIME_MAX             (100)
 
+/*
+ * <ini>
+ * gInitialScanNoDFSChnl - WLAN skips scanning the DFS channels
+ * @Min: 0
+ * @Max: 0
+ * @Default: 1
+ *
+ * This ini is used to set for the first scan after driver
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_INITIAL_SCAN_NO_DFS_CHNL_NAME         "gInitialScanNoDFSChnl"
 #define CFG_INITIAL_SCAN_NO_DFS_CHNL_DEFAULT      (0)
 #define CFG_INITIAL_SCAN_NO_DFS_CHNL_MIN          (0)
 #define CFG_INITIAL_SCAN_NO_DFS_CHNL_MAX          (1)
+
+/*
+ * <ini>
+ * gAllowDFSChannelRoam - Allow dfs channel in roam
+ * @Min: 0
+ * @Max: 1
+ * @Default: 2
+ *
+ * This ini is used to set default dfs channel
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_ROAMING_DFS_CHANNEL_NAME               "gAllowDFSChannelRoam"
 #define CFG_ROAMING_DFS_CHANNEL_DISABLED           (0)
@@ -2460,37 +5754,121 @@ typedef enum {
 #define CFG_BUS_BANDWIDTH_COMPUTE_INTERVAL_MAX     (10000)
 
 /*
- * Dynamic configuration of tcp delack is enabled by default.
- * User can set gTcpDelAckEnable flag to 0 in the INI file to disable dynamic
- * reconfiguration of tcp delack. This does not disable the update of receive
- * histogram
+ * <ini>
+ * gTcpDelAckEnable - Control to enable Dynamic Configuration of Tcp Delayed Ack
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable Dynamic Configuration of Tcp Delayed Ack
+ *
+ * Related: gTcpDelAckThresholdHigh, gTcpDelAckThresholdLow,
+ *          gTcpDelAckTimerCount
+ *
+ * Supported Feature: Tcp Delayed Ack
+ *
+ * Usage: Internal
+ *
+ * </ini>
  */
 #define CFG_ENABLE_TCP_DELACK                      "gTcpDelAckEnable"
 #define CFG_ENABLE_TCP_DELACK_DEFAULT              (1)
 #define CFG_ENABLE_TCP_DELACK_MIN                  (0)
 #define CFG_ENABLE_TCP_DELACK_MAX                  (1)
 
+
+/*
+ * <ini>
+ * gTcpDelAckThresholdHigh - High Threshold inorder to trigger TCP Del Ack
+ *                                          indication
+ * @Min: 0
+ * @Max: 16000
+ * @Default: 500
+ *
+ * This ini is used to mention the High Threshold inorder to trigger TCP Del Ack
+ * indication i.e the threshold of packets received over a period of 100 ms.
+ * i.e to have a low RX throughput requirement
+ * Related: gTcpDelAckEnable, gTcpDelAckThresholdLow, gTcpDelAckTimerCount
+ *
+ * Supported Feature: Tcp Delayed Ack
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_TCP_DELACK_THRESHOLD_HIGH              "gTcpDelAckThresholdHigh"
 #define CFG_TCP_DELACK_THRESHOLD_HIGH_DEFAULT      (500)
 #define CFG_TCP_DELACK_THRESHOLD_HIGH_MIN          (0)
 #define CFG_TCP_DELACK_THRESHOLD_HIGH_MAX          (16000)
 
+/*
+ * <ini>
+ * gTcpDelAckThresholdLow - Low Threshold inorder to trigger TCP Del Ack
+ *                                          indication
+ * @Min: 0
+ * @Max: 10000
+ * @Default: 1000
+ *
+ * This ini is used to mention the Low Threshold inorder to trigger TCP Del Ack
+ * indication i.e the threshold of packets received over a period of 100 ms.
+ * i.e to have a low RX throughput requirement
+ *
+ * Related: gTcpDelAckEnable, gTcpDelAckThresholdHigh, gTcpDelAckTimerCount
+ *
+ * Supported Feature: Tcp Delayed Ack
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_TCP_DELACK_THRESHOLD_LOW               "gTcpDelAckThresholdLow"
 #define CFG_TCP_DELACK_THRESHOLD_LOW_DEFAULT       (1000)
 #define CFG_TCP_DELACK_THRESHOLD_LOW_MIN           (0)
 #define CFG_TCP_DELACK_THRESHOLD_LOW_MAX           (10000)
 
+/*
+ * <ini>
+ * gTcpDelAckTimerCount - Del Ack Timer Count  inorder to trigger TCP Del Ack
+ *                                      indication
+ * @Min: 1
+ * @Max: 1000
+ * @Default: 30
+ *
+ * This ini is used to mention the Del Ack Timer Count inorder to
+ * trigger TCP Del Ack indication i.e number of 100 ms periods
+ *
+ * Related: gTcpDelAckEnable, gTcpDelAckThresholdHigh, gTcpDelAckThresholdLow
+ *
+ * Supported Feature: Tcp Delayed Ack
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_TCP_DELACK_TIMER_COUNT                 "gTcpDelAckTimerCount"
 #define CFG_TCP_DELACK_TIMER_COUNT_DEFAULT         (30)
 #define CFG_TCP_DELACK_TIMER_COUNT_MIN             (1)
 #define CFG_TCP_DELACK_TIMER_COUNT_MAX             (1000)
 
 
-/* TCP_TX_HIGH_TPUT_THRESHOLD specifies the threshold of packets transmitted
+/*
+ * <ini>
+ * gTcpTxHighTputThreshold - High Threshold inorder to trigger High
+ *                                          Tx Throughput requirement.
+ * @Min: 0
+ * @Max: 16000
+ * @Default: 500
+ *
+ * This ini specifies the threshold of packets transmitted
  * over a period of 100 ms beyond which TCP can be considered to have a high
  * TX throughput requirement. The driver uses this condition to tweak TCP TX
- * specific parameters (via cnss-daemon).
- * default  - 500
+ * specific parameters (via cnss-daemon)
+ *
+ * Supported Feature: To tweak TCP TX n/w parameters
+ *
+ * Usage: Internal
+ *
+ * </ini>
  */
 #define CFG_TCP_TX_HIGH_TPUT_THRESHOLD_NAME         "gTcpTxHighTputThreshold"
 #define CFG_TCP_TX_HIGH_TPUT_THRESHOLD_DEFAULT      (500)
@@ -2500,21 +5878,91 @@ typedef enum {
 #endif /* MSM_PLATFORM */
 
 #ifdef WLAN_FEATURE_11W
+/*
+ * <ini>
+ * pmfSaQueryMaxRetries - Control PMF SA query retries for SAP
+ * @Min: 0
+ * @Max: 20
+ * @Default: 5
+ *
+ * This ini to set the number of PMF SA query retries for SAP
+ *
+ * Related: None.
+ *
+ * Supported Feature: PMF(11W)
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_PMF_SA_QUERY_MAX_RETRIES_NAME          "pmfSaQueryMaxRetries"
 #define CFG_PMF_SA_QUERY_MAX_RETRIES_DEFAULT       (5)
 #define CFG_PMF_SA_QUERY_MAX_RETRIES_MIN           (0)
 #define CFG_PMF_SA_QUERY_MAX_RETRIES_MAX           (20)
 
+/*
+ * <ini>
+ * pmfSaQueryRetryInterval - Control PMF SA query retry interval
+ * for SAP in ms
+ * @Min: 0
+ * @Max: 2000
+ * @Default: 200
+ *
+ * This ini to set the PMF SA query retry interval for SAP in ms
+ *
+ * Related: None.
+ *
+ * Supported Feature: PMF(11W)
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_PMF_SA_QUERY_RETRY_INTERVAL_NAME       "pmfSaQueryRetryInterval"
 #define CFG_PMF_SA_QUERY_RETRY_INTERVAL_DEFAULT    (200)
 #define CFG_PMF_SA_QUERY_RETRY_INTERVAL_MIN        (0)
 #define CFG_PMF_SA_QUERY_RETRY_INTERVAL_MAX        (2000)
 #endif
 
+/*
+ * <ini>
+ * gMaxConcurrentActiveSessions - Maximum number of concurrent connections.
+ * @Min: 1
+ * @Max: 4
+ * @Default: 3
+ *
+ * This ini is used to configure the maximum number of concurrent connections.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_MAX_CONCURRENT_CONNECTIONS_NAME        "gMaxConcurrentActiveSessions"
 #define CFG_MAX_CONCURRENT_CONNECTIONS_DEFAULT     (3)
 #define CFG_MAX_CONCURRENT_CONNECTIONS_MIN         (1)
 #define CFG_MAX_CONCURRENT_CONNECTIONS_MAX         (4)
+
+/*
+ * <ini>
+ * gIgnoreCAC - Used to ignore CAC
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set default CAC
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_IGNORE_CAC_NAME                        "gIgnoreCAC"
 #define CFG_IGNORE_CAC_MIN                         (0)
@@ -2530,18 +5978,31 @@ typedef enum {
 #define CFG_DFS_RADAR_PRI_MULTIPLIER_DEFAULT       (4)
 #define CFG_DFS_RADAR_PRI_MULTIPLIER_MIN           (0)
 #define CFG_DFS_RADAR_PRI_MULTIPLIER_MAX           (10)
+
+/*
+ * <ini>
+ * gReorderOffloadSupported - Packet reordering offload to firmware
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set default Packet reordering
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_REORDER_OFFLOAD_SUPPORT_NAME    "gReorderOffloadSupported"
 #define CFG_REORDER_OFFLOAD_SUPPORT_MIN     (0)
 #define CFG_REORDER_OFFLOAD_SUPPORT_MAX     (1)
 #define CFG_REORDER_OFFLOAD_SUPPORT_DEFAULT (0)
 
-#ifdef WLAN_FEATURE_ROAM_OFFLOAD
-#define CFG_ROAMING_OFFLOAD_NAME                "gRoamOffloadEnabled"
-#define CFG_ROAMING_OFFLOAD_MIN                 (0)
-#define CFG_ROAMING_OFFLOAD_MAX                 (1)
-#define CFG_ROAMING_OFFLOAD_DEFAULT             (1)
-#endif
-
+/* IpaUcTxBufCount should be power of 2 */
 #define CFG_IPA_UC_TX_BUF_COUNT_NAME               "IpaUcTxBufCount"
 #define CFG_IPA_UC_TX_BUF_COUNT_MIN                (0)
 #define CFG_IPA_UC_TX_BUF_COUNT_MAX                (2048)
@@ -2552,6 +6013,7 @@ typedef enum {
 #define CFG_IPA_UC_TX_BUF_SIZE_MAX                (4096)
 #define CFG_IPA_UC_TX_BUF_SIZE_DEFAULT            (2048)
 
+/* IpaUcRxIndRingCount should be power of 2 */
 #define CFG_IPA_UC_RX_IND_RING_COUNT_NAME          "IpaUcRxIndRingCount"
 #define CFG_IPA_UC_RX_IND_RING_COUNT_MIN           (0)
 #define CFG_IPA_UC_RX_IND_RING_COUNT_MAX           (2048)
@@ -2581,6 +6043,24 @@ typedef enum {
 #define CFG_WLAN_LOGGING_NUM_BUF_MAX                (512)
 #define CFG_WLAN_LOGGING_NUM_BUF_DEFAULT            (256)
 #endif /* WLAN_LOGGING_SOCK_SVC_ENABLE */
+
+/*
+ * <ini>
+ * gEnableSifsBurst - Enables Sifs Burst
+ * @Min: 0
+ * @Max: 1
+ * @Default: DEF
+ *
+ * This ini is used to set default Sifs Burst
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_ENABLE_SIFS_BURST                      "gEnableSifsBurst"
 #define CFG_ENABLE_SIFS_BURST_MIN                  (0)
@@ -2616,62 +6096,23 @@ typedef enum {
 #define CFG_ENABLE_SAP_SUSPEND_MAX                 (1)
 #define CFG_ENABLE_SAP_SUSPEND_DEFAULT             (1)
 
-#ifdef WLAN_FEATURE_EXTWOW_SUPPORT
-#define CFG_EXTWOW_GO_TO_SUSPEND                   "gExtWoWgotoSuspend"
-#define CFG_EXTWOW_GO_TO_SUSPEND_MIN               (0)
-#define CFG_EXTWOW_GO_TO_SUSPEND_MAX               (1)
-#define CFG_EXTWOW_GO_TO_SUSPEND_DEFAULT           (1)
-
-#define CFG_EXTWOW_APP1_WAKE_PIN_NUMBER            "gExtWowApp1WakeupPinNumber"
-#define CFG_EXTWOW_APP1_WAKE_PIN_NUMBER_MIN        (0)
-#define CFG_EXTWOW_APP1_WAKE_PIN_NUMBER_MAX        (255)
-#define CFG_EXTWOW_APP1_WAKE_PIN_NUMBER_DEFAULT    (12)
-
-#define CFG_EXTWOW_APP2_WAKE_PIN_NUMBER            "gExtWowApp2WakeupPinNumber"
-#define CFG_EXTWOW_APP2_WAKE_PIN_NUMBER_MIN        (0)
-#define CFG_EXTWOW_APP2_WAKE_PIN_NUMBER_MAX        (255)
-#define CFG_EXTWOW_APP2_WAKE_PIN_NUMBER_DEFAULT    (16)
-
-#define CFG_EXTWOW_KA_INIT_PING_INTERVAL           "gExtWoWApp2KAInitPingInterval"
-#define CFG_EXTWOW_KA_INIT_PING_INTERVAL_MIN       (0)
-#define CFG_EXTWOW_KA_INIT_PING_INTERVAL_MAX       (0xffffffff)
-#define CFG_EXTWOW_KA_INIT_PING_INTERVAL_DEFAULT   (240)
-
-#define CFG_EXTWOW_KA_MIN_PING_INTERVAL            "gExtWoWApp2KAMinPingInterval"
-#define CFG_EXTWOW_KA_MIN_PING_INTERVAL_MIN        (0)
-#define CFG_EXTWOW_KA_MIN_PING_INTERVAL_MAX        (0xffffffff)
-#define CFG_EXTWOW_KA_MIN_PING_INTERVAL_DEFAULT    (240)
-
-#define CFG_EXTWOW_KA_MAX_PING_INTERVAL            "gExtWoWApp2KAMaxPingInterval"
-#define CFG_EXTWOW_KA_MAX_PING_INTERVAL_MIN        (0)
-#define CFG_EXTWOW_KA_MAX_PING_INTERVAL_MAX        (0xffffffff)
-#define CFG_EXTWOW_KA_MAX_PING_INTERVAL_DEFAULT    (1280)
-
-#define CFG_EXTWOW_KA_INC_PING_INTERVAL            "gExtWoWApp2KAIncPingInterval"
-#define CFG_EXTWOW_KA_INC_PING_INTERVAL_MIN        (0)
-#define CFG_EXTWOW_KA_INC_PING_INTERVAL_MAX        (0xffffffff)
-#define CFG_EXTWOW_KA_INC_PING_INTERVAL_DEFAULT    (4)
-
-#define CFG_EXTWOW_TCP_SRC_PORT                    "gExtWoWApp2TcpSrcPort"
-#define CFG_EXTWOW_TCP_SRC_PORT_MIN                (0)
-#define CFG_EXTWOW_TCP_SRC_PORT_MAX                (65535)
-#define CFG_EXTWOW_TCP_SRC_PORT_DEFAULT            (5000)
-
-#define CFG_EXTWOW_TCP_DST_PORT                    "gExtWoWApp2TcpDstPort"
-#define CFG_EXTWOW_TCP_DST_PORT_MIN                (0)
-#define CFG_EXTWOW_TCP_DST_PORT_MAX                (65535)
-#define CFG_EXTWOW_TCP_DST_PORT_DEFAULT            (5001)
-
-#define CFG_EXTWOW_TCP_TX_TIMEOUT                  "gExtWoWApp2TcpTxTimeout"
-#define CFG_EXTWOW_TCP_TX_TIMEOUT_MIN              (0)
-#define CFG_EXTWOW_TCP_TX_TIMEOUT_MAX              (0xffffffff)
-#define CFG_EXTWOW_TCP_TX_TIMEOUT_DEFAULT          (200)
-
-#define CFG_EXTWOW_TCP_RX_TIMEOUT                  "gExtWoWApp2TcpRxTimeout"
-#define CFG_EXTWOW_TCP_RX_TIMEOUT_MIN              (0)
-#define CFG_EXTWOW_TCP_RX_TIMEOUT_MAX              (0xffffffff)
-#define CFG_EXTWOW_TCP_RX_TIMEOUT_DEFAULT          (200)
-#endif
+/*
+ * <ini>
+ * gEnableDeauthToDisassocMap - Enables deauth to disassoc map
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set default  disassoc map
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_ENABLE_DEAUTH_TO_DISASSOC_MAP_NAME    "gEnableDeauthToDisassocMap"
 #define CFG_ENABLE_DEAUTH_TO_DISASSOC_MAP_MIN     (0)
@@ -2694,24 +6135,75 @@ typedef enum {
 #endif /* DHCP_SERVER_OFFLOAD */
 
 /*
+ * <ini>
+ * gSendDeauthBeforeCon - It will send deauth before connection
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set default DeauthBeforeCon
  * If last disconnection was due to HB failure and we reconnect
  * to same AP next time, send Deauth before starting connection
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
+
 #define CFG_ENABLE_DEAUTH_BEFORE_CONNECTION                  "gSendDeauthBeforeCon"
 #define CFG_ENABLE_DEAUTH_BEFORE_CONNECTION_MIN              (0)
 #define CFG_ENABLE_DEAUTH_BEFORE_CONNECTION_MAX              (1)
 #define CFG_ENABLE_DEAUTH_BEFORE_CONNECTION_DEFAULT          (0)
 
 /*
- * Custom concurrency rule1:
- * If SAP comes up first and STA comes up later then SAP
- * needs to follow STA's channel.
+ * <ini>
+ * gEnableCustomConcRule1 - Enable custom concurrency rule1.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable custom concurrency rule1.
+ * If SAP comes up first and STA comes up later then SAP needs to follow STA's
+ * channel.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_ENABLE_CUSTOM_CONC_RULE1_NAME         "gEnableCustomConcRule1"
 #define CFG_ENABLE_CUSTOM_CONC_RULE1_NAME_MIN     (0)
 #define CFG_ENABLE_CUSTOM_CONC_RULE1_NAME_MAX     (1)
 #define CFG_ENABLE_CUSTOM_CONC_RULE1_NAME_DEFAULT (0)
 
+/*
+ * <ini>
+ * gEnableCustomConcRule2 - Enable custom concurrency rule2.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable custom concurrency rule2.
+ * If P2PGO comes up first and STA comes up later then P2PGO need to follow
+ * STA's channel in 5Ghz. In following if condition we are just adding sanity
+ * check to make sure that by this time P2PGO's channel is same as STA's
+ * channel.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_ENABLE_CUSTOM_CONC_RULE2_NAME         "gEnableCustomConcRule2"
 #define CFG_ENABLE_CUSTOM_CONC_RULE2_NAME_MIN     (0)
 #define CFG_ENABLE_CUSTOM_CONC_RULE2_NAME_MAX     (1)
@@ -2732,12 +6224,47 @@ typedef enum {
 #define CFG_P2P_LISTEN_DEFER_INTERVAL_MAX         (200)
 #define CFG_P2P_LISTEN_DEFER_INTERVAL_DEFAULT     (100)
 
+/*
+ * <ini>
+ * gStaMiracastMccRestTimeVal - Rest time when Miracast is running.
+ * @Min: 100
+ * @Max: 500
+ * @Default: 400
+ *
+ * This ini is used to set rest time for home channel for Miracast before
+ * going for scan.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_STA_MIRACAST_MCC_REST_TIME_VAL          "gStaMiracastMccRestTimeVal"
 #define CFG_STA_MIRACAST_MCC_REST_TIME_VAL_MIN     (100)
 #define CFG_STA_MIRACAST_MCC_REST_TIME_VAL_MAX     (500)
 #define CFG_STA_MIRACAST_MCC_REST_TIME_VAL_DEFAULT (400)
 
 #ifdef FEATURE_AP_MCC_CH_AVOIDANCE
+/*
+ * <ini>
+ * gSapChannelAvoidance - SAP MCC channel avoidance.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to sets sap mcc channel avoidance.
+ *
+ * Related: None.
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_SAP_MCC_CHANNEL_AVOIDANCE_NAME         "gSapChannelAvoidance"
 #define CFG_SAP_MCC_CHANNEL_AVOIDANCE_MIN          (0)
 #define CFG_SAP_MCC_CHANNEL_AVOIDANCE_MAX          (1)
@@ -2765,24 +6292,65 @@ typedef enum {
 #define CFG_MULTICAST_HOST_FW_MSGS_DEFAULT  (1)
 
 /*
- * wlan system preference option to help policy manager decide
- * on Preferred Channel List for a new connection. For possible
- * values refer to enum hdd_conc_priority_mode
+ * <ini>
+ * gSystemPref - Configure wlan system preference for PCL.
+ * @Min: 0
+ * @Max: 2
+ * @Default: 0
+ *
+ * This ini is used to configure wlan system preference option to help
+ * policy manager decide on Preferred Channel List for a new connection.
+ * For possible values refer to enum hdd_conc_priority_mode
+ *
+ * Related: None.
+ *
+ * Supported Feature: DBS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_CONC_SYSTEM_PREF               "gSystemPref"
 #define CFG_CONC_SYSTEM_PREF_MIN           (0)
 #define CFG_CONC_SYSTEM_PREF_MAX           (2)
 #define CFG_CONC_SYSTEM_PREF_DEFAULT       (0)
 
+/*
+ * <ini>
+ * TSOEnable - Control to enable tso feature
+ *
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable TSO feature
+ *
+ * Supported Feature: TSO Feature
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_TSO_ENABLED_NAME           "TSOEnable"
 #define CFG_TSO_ENABLED_MIN            (0)
 #define CFG_TSO_ENABLED_MAX            (1)
 #define CFG_TSO_ENABLED_DEFAULT        (0)
 
 /*
- * Configuration option to enable or disable LRO (Large Receive Offload)
- *  in the WLAN driver
- *  Set 1 - enable, 0 - disable
+ * <ini>
+ * LROEnable - Control to enable lro feature
+ *
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable LRO feature
+ *
+ * Supported Feature: LRO
+ *
+ * Usage: Internal
+ *
+ * </ini>
  */
 #define CFG_LRO_ENABLED_NAME           "LROEnable"
 #define CFG_LRO_ENABLED_MIN            (0)
@@ -2839,13 +6407,46 @@ typedef enum {
 #define CFG_BPF_PACKET_FILTER_OFFLOAD_DEFAULT   (1)
 
 /*
+ * <ini>
+ * gCckChainMaskEnable - Used to enable/disable Cck ChainMask
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set default Cck ChainMask
  * 0: disable the cck tx chain mask (default)
  * 1: enable the cck tx chain mask
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
+
 #define CFG_TX_CHAIN_MASK_CCK          "gCckChainMaskEnable"
 #define CFG_TX_CHAIN_MASK_CCK_MIN      (0)
 #define CFG_TX_CHAIN_MASK_CCK_MAX      (1)
 #define CFG_TX_CHAIN_MASK_CCK_DEFAULT  (0)
+/*
+ * <ini>
+ * gTxChainMask1ss - Enables/disables tx chain Mask1ss
+ * @Min: 0
+ * @Max: 3
+ * @Default: 1
+ *
+ * This ini is used to set default tx chain Mask1ss
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 
 #define CFG_TX_CHAIN_MASK_1SS       "gTxChainMask1ss"
 #define CFG_TX_CHAIN_MASK_1SS_MIN      (0)
@@ -2862,18 +6463,50 @@ typedef enum {
 #define CFG_SELF_GEN_FRM_PWR_DEFAULT  (0)
 
 /*
+ * <ini>
+ * gTxAggregationSize - Gives an option to configure Tx aggregation size
+ * in no of MPDUs
+ * @Min: 0
+ * @Max: 64
+ * @Default: 64
+ *
  * gTxAggregationSize gives an option to configure Tx aggregation size
- * in no of MPDUs. This can be useful in debugging throughput issues
+ * in no of MPDUs.This can be useful in debugging throughput issues
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
+
 #define CFG_TX_AGGREGATION_SIZE      "gTxAggregationSize"
 #define CFG_TX_AGGREGATION_SIZE_MIN      (0)
 #define CFG_TX_AGGREGATION_SIZE_MAX      (64)
 #define CFG_TX_AGGREGATION_SIZE_DEFAULT  (64)
 
 /*
+ * <ini>
+ * gRxAggregationSize - Gives an option to configure Rx aggregation size
+ * in no of MPDUs
+ * @Min: 1
+ * @Max: 64
+ * @Default: 64
+ *
  * gRxAggregationSize gives an option to configure Rx aggregation size
  * in no of MPDUs. This can be useful in debugging throughput issues
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
+
 #define CFG_RX_AGGREGATION_SIZE      "gRxAggregationSize"
 #define CFG_RX_AGGREGATION_SIZE_MIN      (1)
 #define CFG_RX_AGGREGATION_SIZE_MAX      (64)
@@ -2994,31 +6627,6 @@ enum dot11p_mode {
 #define CFG_DUAL_MAC_FEATURE_DISABLE_MAX          (1)
 #define CFG_DUAL_MAC_FEATURE_DISABLE_DEFAULT      (0)
 
-/* Parameters for roaming scans performed at high RSSI */
-
-/* Maximum number of scans after RSSI change */
-#define CFG_ROAM_SCAN_HI_RSSI_MAXCOUNT_NAME         "gRoamScanHiRssiMaxCount"
-#define CFG_ROAM_SCAN_HI_RSSI_MAXCOUNT_MIN          (0)
-#define CFG_ROAM_SCAN_HI_RSSI_MAXCOUNT_MAX          (10)
-#define CFG_ROAM_SCAN_HI_RSSI_MAXCOUNT_DEFAULT      (3)
-
-/* Change in RSSI at which scan is triggered */
-#define CFG_ROAM_SCAN_HI_RSSI_DELTA_NAME           "gRoamScanHiRssiDelta"
-#define CFG_ROAM_SCAN_HI_RSSI_DELTA_MIN            (0)
-#define CFG_ROAM_SCAN_HI_RSSI_DELTA_MAX            (16)
-#define CFG_ROAM_SCAN_HI_RSSI_DELTA_DEFAULT        (10)
-
-/* Delay between consecutive scans in milliseconds */
-#define CFG_ROAM_SCAN_HI_RSSI_DELAY_NAME            "gRoamScanHiRssiDelay"
-#define CFG_ROAM_SCAN_HI_RSSI_DELAY_MIN             (5000)
-#define CFG_ROAM_SCAN_HI_RSSI_DELAY_MAX             (0x7fffffff)
-#define CFG_ROAM_SCAN_HI_RSSI_DELAY_DEFAULT         (15000)
-
-/* Upper bound after which scan will not be performed */
-#define CFG_ROAM_SCAN_HI_RSSI_UB_NAME              "gRoamScanHiRssiUpperBound"
-#define CFG_ROAM_SCAN_HI_RSSI_UB_MIN               (-66)
-#define CFG_ROAM_SCAN_HI_RSSI_UB_MAX               (0)
-#define CFG_ROAM_SCAN_HI_RSSI_UB_DEFAULT           (-30)
 /*
  * gPNOChannelPrediction will allow user to enable/disable the
  * PNO channel prediction feature.
@@ -3109,20 +6717,6 @@ enum dot11p_mode {
 #define CFG_FIRST_SCAN_BUCKET_THRESHOLD_MAX       (-30)
 #define CFG_FIRST_SCAN_BUCKET_THRESHOLD_DEFAULT   (-30)
 
-#ifdef FEATURE_LFR_SUBNET_DETECTION
-/*
- * Enable IP subnet detection during legacy fast roming version 3.
- * Legacy fast roaming could roam across IP subnets without host
- * processors' knowledge. This feature enables firmware to wake up
- * the host processor if it successfully determines change in the IP subnet.
- * Change in IP subnet could potentially cause disruption in IP connnectivity
- * if IP address is not refreshed.
- */
-#define CFG_ENABLE_LFR_SUBNET_DETECTION    "gLFRSubnetDetectionEnable"
-#define CFG_ENABLE_LFR_SUBNET_MIN          (0)
-#define CFG_ENABLE_LFR_SUBNET_MAX          (1)
-#define CFG_ENABLE_LFR_SUBNET_DEFAULT      (1)
-#endif /* FEATURE_LFR_SUBNET_DETECTION */
 /* Option to report rssi in cfg80211_inform_bss_frame()
  * 0 = use rssi value based on noise floor = -96 dBm
  * 1 = use rssi value based on actual noise floor in hardware
@@ -3172,17 +6766,6 @@ enum dot11p_mode {
 #define CFG_ROAM_DENSE_TRAFFIC_THRESHOLD_DEFAULT (400)
 
 /*
- * Dense Roam RSSI Threshold diff
- * offset value from normal RSSI threshold to dense RSSI threshold
- * Fw will optimize roaming based on new RSSI threshold once it detects
- * dense enviournment.
- */
-#define CFG_ROAM_DENSE_RSSI_THRE_OFFSET         "groam_dense_rssi_thresh_offset"
-#define CFG_ROAM_DENSE_RSSI_THRE_OFFSET_MIN     (0)
-#define CFG_ROAM_DENSE_RSSI_THRE_OFFSET_MAX     (20)
-#define CFG_ROAM_DENSE_RSSI_THRE_OFFSET_DEFAULT (10)
-
-/*
  * Create bug report in case of nil scan results
  */
 #define CFG_CREATE_BUG_REPORT_FOR_SCAN       "gbug_report_for_scan_results"
@@ -3220,17 +6803,6 @@ enum dot11p_mode {
 #endif
 
 /*
- * Dense Roam Min APs
- * minimum number of AP required for dense roam
- * FW will consider environment as dense once it detects #APs
- * operating is more than CFG_ROAM_DENSE_MIN_APS.
- */
-#define CFG_ROAM_DENSE_MIN_APS         "groam_dense_min_aps"
-#define CFG_ROAM_DENSE_MIN_APS_MIN     (1)
-#define CFG_ROAM_DENSE_MIN_APS_MAX     (5)
-#define CFG_ROAM_DENSE_MIN_APS_DEFAULT (3)
-
-/*
  * Enable/Disable to initiate BUG report in case of fatal event
  * Default: Enable
  */
@@ -3240,88 +6812,361 @@ enum dot11p_mode {
 #define CFG_ENABLE_FATAL_EVENT_TRIGGER_DEFAULT         (1)
 
 /*
- * If gEnableEdcaParams is set to 1, params gEdcaVoCwmin,
+ * <ini>
+ * gEnableEdcaParams - Enable edca parameter
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used if gEnableEdcaParams is set to 1, params gEdcaVoCwmin,
  * gEdcaViCwmin, gEdcaBkCwmin, gEdcaBeCwmin, gEdcaVoCwmax,
  * gEdcaViCwmax, gEdcaBkCwmax, gEdcaBeCwmax, gEdcaVoAifs,
  * gEdcaViAifs, gEdcaBkAifs and gEdcaBeAifs values are used
  * to overwrite the values received from AP
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
+
 #define CFG_ENABLE_EDCA_INI_NAME       "gEnableEdcaParams"
 #define CFG_ENABLE_EDCA_INI_MIN        (0)
 #define CFG_ENABLE_EDCA_INI_MAX        (1)
 #define CFG_ENABLE_EDCA_INI_DEFAULT    (0)
 
-/* Cwmin value for EDCA_AC_VO. CWVomin = 2^gEdcaVoCwmin -1 */
+/*
+ * <ini>
+ * gEdcaVoCwmin - Set Cwmin value for EDCA_AC_VO
+ * @Min: 0
+ * @Max: 0x15
+ * @Default: 2
+ *
+ * This ini is used to set default Cwmin value for EDCA_AC_VO
+ * Cwmin value for EDCA_AC_VO. CWVomin = 2^gEdcaVoCwmin -1
+ *
+ * Related: If gEnableEdcaParams is set to 1, params gEdcaVoCwmin etc
+ * are aplicable
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_EDCA_VO_CWMIN_VALUE_NAME      "gEdcaVoCwmin"
 #define CFG_EDCA_VO_CWMIN_VALUE_MIN       (0x0)
 #define CFG_EDCA_VO_CWMIN_VALUE_MAX       (15)
 #define CFG_EDCA_VO_CWMIN_VALUE_DEFAULT   (2)
 
-/* Cwmin value for EDCA_AC_VI. CWVimin = 2^gEdcaViCwmin -1 */
+/*
+ * <ini>
+ * gEdcaViCwmin - Set Cwmin value for EDCA_AC_VI
+ * @Min: 0x0
+ * @Max: 15
+ * @Default: 3
+ *
+ * This ini is used to set default value for EDCA_AC_VI
+ * Cwmin value for EDCA_AC_VI. CWVimin = 2^gEdcaViCwmin -1
+ *
+ * Related: If gEnableEdcaParams is set to 1, params gEdcaVoCwmin
+ * etc are aplicable
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_EDCA_VI_CWMIN_VALUE_NAME      "gEdcaViCwmin"
 #define CFG_EDCA_VI_CWMIN_VALUE_MIN       (0x0)
 #define CFG_EDCA_VI_CWMIN_VALUE_MAX       (15)
 #define CFG_EDCA_VI_CWMIN_VALUE_DEFAULT   (3)
 
-/* Cwmin value for EDCA_AC_BK. CWBkmin = 2^gEdcaBkCwmin -1 */
+/*
+ * <ini>
+ * gEdcaBkCwmin - Set Cwmin value for EDCA_AC_BK
+ * @Min: 0x0
+ * @Max: 15
+ * @Default: 4
+ *
+ * This ini is used to set default Cwmin value for EDCA_AC_BK
+ * Cwmin value for EDCA_AC_BK. CWBkmin = 2^gEdcaBkCwmin -1
+ *
+ * Related: If gEnableEdcaParams is set to 1, params gEdcaVoCwmin
+ * etc are aplicable
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ * </ini>
+ */
+
 #define CFG_EDCA_BK_CWMIN_VALUE_NAME      "gEdcaBkCwmin"
 #define CFG_EDCA_BK_CWMIN_VALUE_MIN       (0x0)
 #define CFG_EDCA_BK_CWMIN_VALUE_MAX       (15)
 #define CFG_EDCA_BK_CWMIN_VALUE_DEFAULT   (4)
 
-/* Cwmin value for EDCA_AC_BE. CWBemin = 2^gEdcaBeCwmin -1 */
+/*
+ * <ini>
+ * gEdcaBeCwmin - Set Cwmin value for EDCA_AC_BE
+ * @Min: 0x0
+ * @Max: 15
+ * @Default: 4
+ *
+ * This ini is used to set default Cwmin value for EDCA_AC_BE
+ * Cwmin value for EDCA_AC_BE. CWBemin = 2^gEdcaBeCwmin
+ *
+ * Related: If gEnableEdcaParams is set to 1, params gEdcaVoCwmin
+ * etc are aplicable
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_EDCA_BE_CWMIN_VALUE_NAME      "gEdcaBeCwmin"
 #define CFG_EDCA_BE_CWMIN_VALUE_MIN       (0x0)
 #define CFG_EDCA_BE_CWMIN_VALUE_MAX       (15)
 #define CFG_EDCA_BE_CWMIN_VALUE_DEFAULT   (4)
 
-/* Cwmax value for EDCA_AC_VO. CWVomax = 2^gEdcaVoCwmax -1 */
+/*
+ * <ini>
+ * gEdcaVoCwmax - Set Cwmax value for EDCA_AC_VO
+ * @Min: 0
+ * @Max: 15
+ * @Default: 3
+ *
+ * This ini is used to set default Cwmax value for EDCA_AC_VO
+ * Cwmax value for EDCA_AC_VO. CWVomax = 2^gEdcaVoCwmax -1
+ *
+ * Related: If gEnableEdcaParams is set to 1, params gEdcaVoCwmin
+ * etc are aplicable
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_EDCA_VO_CWMAX_VALUE_NAME      "gEdcaVoCwmax"
 #define CFG_EDCA_VO_CWMAX_VALUE_MIN       (0)
 #define CFG_EDCA_VO_CWMAX_VALUE_MAX       (15)
 #define CFG_EDCA_VO_CWMAX_VALUE_DEFAULT   (3)
 
-/* Cwmax value for EDCA_AC_VI. CWVimax = 2^gEdcaViCwmax -1 */
+/*
+ * <ini>
+ * gEdcaViCwmax - Set Cwmax value for EDCA_AC_VI
+ * @Min: 0
+ * @Max: 15
+ * @Default: 4
+ *
+ * This ini is used to set default Cwmax value for EDCA_AC_VI
+ * Cwmax value for EDCA_AC_VI. CWVimax = 2^gEdcaViCwmax -1
+ *
+ * Related: If gEnableEdcaParams is set to 1, params gEdcaVoCwmin
+ * etc are aplicable
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_EDCA_VI_CWMAX_VALUE_NAME      "gEdcaViCwmax"
 #define CFG_EDCA_VI_CWMAX_VALUE_MIN       (0)
 #define CFG_EDCA_VI_CWMAX_VALUE_MAX       (15)
 #define CFG_EDCA_VI_CWMAX_VALUE_DEFAULT   (4)
 
-/* Cwmax value for EDCA_AC_BK. CWBkmax = 2^gEdcaBkCwmax -1 */
+/*
+ * <ini>
+ * gEdcaBkCwmax - Set Cwmax value for EDCA_AC_BK
+ * @Min: 0
+ * @Max: 15
+ * @Default: 10
+ *
+ * This ini is used to set default Cwmax value for EDCA_AC_BK
+ * Cwmax value for EDCA_AC_BK. CWBkmax = 2^gEdcaBkCwmax -1
+ *
+ * Related: If gEnableEdcaParams is set to 1, params gEdcaVoCwmin
+ * etc are aplicable
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_EDCA_BK_CWMAX_VALUE_NAME      "gEdcaBkCwmax"
 #define CFG_EDCA_BK_CWMAX_VALUE_MIN       (0)
 #define CFG_EDCA_BK_CWMAX_VALUE_MAX       (15)
 #define CFG_EDCA_BK_CWMAX_VALUE_DEFAULT   (10)
 
-/* Cwmax value for EDCA_AC_BE. CWBemax = 2^gEdcaBeCwmax -1 */
+/*
+ * <ini>
+ * gEdcaBeCwmax - Set Cwmax value for EDCA_AC_BE
+ * @Min: 0
+ * @Max: 15
+ * @Default: 10
+ *
+ * This ini is used to set default Cwmax value for EDCA_AC_BE
+ * Cwmax value for EDCA_AC_BE. CWBemax = 2^gEdcaBeCwmax -1
+ *
+ * Related: If gEnableEdcaParams is set to 1, params gEdcaVoCwmin
+ * etc are aplicable
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_EDCA_BE_CWMAX_VALUE_NAME      "gEdcaBeCwmax"
 #define CFG_EDCA_BE_CWMAX_VALUE_MIN       (0)
 #define CFG_EDCA_BE_CWMAX_VALUE_MAX       (15)
 #define CFG_EDCA_BE_CWMAX_VALUE_DEFAULT   (10)
 
-/* Aifs value for EDCA_AC_VO.*/
+/*
+ * <ini>
+ * gEdcaVoAifs - Set Aifs value for EDCA_AC_VO
+ * @Min: 0
+ * @Max: 15
+ * @Default: 2
+ *
+ * This ini is used to set default Aifs value for EDCA_AC_VO
+ *
+ * Related: If gEnableEdcaParams is set to 1, params gEdcaVoCwmin
+ * etc are aplicable
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_EDCA_VO_AIFS_VALUE_NAME       "gEdcaVoAifs"
 #define CFG_EDCA_VO_AIFS_VALUE_MIN        (0)
 #define CFG_EDCA_VO_AIFS_VALUE_MAX        (15)
 #define CFG_EDCA_VO_AIFS_VALUE_DEFAULT    (2)
 
-/* Aifs value for EDCA_AC_VI.*/
+/*
+ * <ini>
+ * gEdcaViAifs - Set Aifs value for EDCA_AC_VI
+ * @Min: 0
+ * @Max: 15
+ * @Default: 2
+ *
+ * This ini is used to set default Aifs value for EDCA_AC_VI
+ *
+ * Related: If gEnableEdcaParams is set to 1, params gEdcaVoCwmin
+ * etc are aplicable
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_EDCA_VI_AIFS_VALUE_NAME       "gEdcaViAifs"
 #define CFG_EDCA_VI_AIFS_VALUE_MIN        (0)
 #define CFG_EDCA_VI_AIFS_VALUE_MAX        (15)
 #define CFG_EDCA_VI_AIFS_VALUE_DEFAULT    (2)
 
-/* Aifs value for EDCA_AC_BK.*/
+/*
+ * <ini>
+ * gEdcaBkAifs - Set Aifs value for EDCA_AC_BK
+ * @Min: 0
+ * @Max: 15
+ * @Default: 7
+ *
+ * This ini is used to set default Aifs value for EDCA_AC_BK
+ *
+ * Related: If gEnableEdcaParams is set to 1, params gEdcaVoCwmin
+ * etc are aplicable
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_EDCA_BK_AIFS_VALUE_NAME       "gEdcaBkAifs"
 #define CFG_EDCA_BK_AIFS_VALUE_MIN        (0)
 #define CFG_EDCA_BK_AIFS_VALUE_MAX        (15)
 #define CFG_EDCA_BK_AIFS_VALUE_DEFAULT    (7)
 
-/* Aifs value for EDCA_AC_BE.*/
+/*
+ * <ini>
+ * gEdcaBeAifs - Set Aifs value for EDCA_AC_BE
+ * @Min: 0
+ * @Max: 15
+ * @Default: 3
+ *
+ * This ini is used to set default Aifs value for EDCA_AC_BE
+ *
+ * Related: If gEnableEdcaParams is set to 1, params gEdcaVoCwmin
+ * etc are aplicable
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_EDCA_BE_AIFS_VALUE_NAME       "gEdcaBeAifs"
 #define CFG_EDCA_BE_AIFS_VALUE_MIN        (0)
 #define CFG_EDCA_BE_AIFS_VALUE_MAX        (15)
 #define CFG_EDCA_BE_AIFS_VALUE_DEFAULT    (3)
+
+/*
+ * This key is mapping to VO defined in data path module through
+ * OL_TX_SCHED_WRR_ADV_CAT_CFG_SPEC. The user can tune the
+ * WRR TX sched parameters such as skip, credit, limit, credit, disc for VO.
+ * e.g., gEnableTxSchedWrrVO = 10, 9, 8, 1, 8
+ */
+#define CFG_ENABLE_TX_SCHED_WRR_VO          "gEnableTxSchedWrrVO"
+#define CFG_ENABLE_TX_SCHED_WRR_VO_DEFAULT  ""
+
+/*
+ * This key is mapping to VI defined in data path module through
+ * OL_TX_SCHED_WRR_ADV_CAT_CFG_SPEC. The user can tune the
+ * WRR TX sched parameters such as skip, credit, limit, credit, disc for VI.
+ * e.g., gEnableTxSchedWrrVI = 10, 9, 8, 1, 8
+ */
+#define CFG_ENABLE_TX_SCHED_WRR_VI          "gEnableTxSchedWrrVI"
+#define CFG_ENABLE_TX_SCHED_WRR_VI_DEFAULT  ""
+
+/*
+ * This key is mapping to BE defined in data path module through
+ * OL_TX_SCHED_WRR_ADV_CAT_CFG_SPEC. The user can tune the
+ * WRR TX sched parameters such as skip, credit, limit, credit, disc for BE.
+ * e.g., gEnableTxSchedWrrBE = 10, 9, 8, 1, 8
+ */
+#define CFG_ENABLE_TX_SCHED_WRR_BE          "gEnableTxSchedWrrBE"
+#define CFG_ENABLE_TX_SCHED_WRR_BE_DEFAULT  ""
+
+/*
+ * This key is mapping to BK defined in data path module through
+ * OL_TX_SCHED_WRR_ADV_CAT_CFG_SPEC. The user can tune the
+ * WRR TX sched parameters such as skip, credit, limit, credit, disc for BK.
+ * e.g., gEnableTxSchedWrrBK = 10, 9, 8, 1, 8
+ */
+#define CFG_ENABLE_TX_SCHED_WRR_BK          "gEnableTxSchedWrrBK"
+#define CFG_ENABLE_TX_SCHED_WRR_BK_DEFAULT  ""
 
 /*
  * Enable/disable DPTRACE
@@ -3348,7 +7193,7 @@ enum dot11p_mode {
 #define CFG_ADAPTIVE_DWELL_MODE_ENABLED_NAME      "adaptive_dwell_mode_enabled"
 #define CFG_ADAPTIVE_DWELL_MODE_ENABLED_MIN       (0)
 #define CFG_ADAPTIVE_DWELL_MODE_ENABLED_MAX       (1)
-#define CFG_ADAPTIVE_DWELL_MODE_ENABLED_DEFAULT   (0)
+#define CFG_ADAPTIVE_DWELL_MODE_ENABLED_DEFAULT   (1)
 
 /*
  * This parameter will set default adaptive mode, will be used if any of the
@@ -3358,7 +7203,7 @@ enum dot11p_mode {
 #define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_NAME       "global_adapt_dwelltime_mode"
 #define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_MIN        (0)
 #define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_MAX        (4)
-#define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_DEFAULT    (0)
+#define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_DEFAULT    (1)
 
 /*
  * This parameter will set the weight to calculate the average low pass
@@ -3406,21 +7251,6 @@ enum dot11p_mode {
 
 /*
  * This parameter will set the algo used in dwell time optimization during
- * roam scan. see enum wmi_dwelltime_adaptive_mode.
- * Acceptable values for this:
- * 0: Default (Use firmware default mode)
- * 1: Conservative optimization
- * 2: Moderate optimization
- * 3: Aggressive optimization
- * 4: Static
- */
-#define CFG_ADAPTIVE_ROAMSCAN_DWELL_MODE_NAME    "roamscan_adaptive_dwell_mode"
-#define CFG_ADAPTIVE_ROAMSCAN_DWELL_MODE_MIN     (0)
-#define CFG_ADAPTIVE_ROAMSCAN_DWELL_MODE_MAX     (4)
-#define CFG_ADAPTIVE_ROAMSCAN_DWELL_MODE_DEFAULT (0)
-
-/*
- * This parameter will set the algo used in dwell time optimization during
  * ext scan. see enum wmi_dwelltime_adaptive_mode.
  * Acceptable values for this:
  * 0: Default (Use firmware default mode)
@@ -3435,11 +7265,25 @@ enum dot11p_mode {
 #define CFG_ADAPTIVE_EXTSCAN_DWELL_MODE_DEFAULT  (0)
 
 /*
- * This parameter will help to debug ssr reinit failure issues
- * by raising vos bug so dumps can be collected. If OEM
- * wants to avoid this crash, just disable this parameter.
- * wlan driver will only recover after driver unload and load.
- * Default: Enable
+ * <ini>
+ * g_bug_on_reinit_failure  - Enable/Disable bug on reinit
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to debug ssr reinit failure issues by raising vos bug so
+ * dumps can be collected.
+ * g_bug_on_reinit_failure = 0 wlan driver will only recover after driver
+ * unload and load
+ * g_bug_on_reinit_failure = 1 raise vos bug to collect dumps
+ *
+ * Related: gEnableSSR
+ *
+ * Supported Feature: SSR
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_BUG_ON_REINIT_FAILURE_NAME     "g_bug_on_reinit_failure"
 #define CFG_BUG_ON_REINIT_FAILURE_MIN      (0)
@@ -3462,9 +7306,24 @@ enum dot11p_mode {
 #define CFG_ADAPTIVE_PNOSCAN_DWELL_MODE_DEFAULT  (0)
 
 /*
+ * <ini>
+ * gSub20ChannelWidth - Control sub 20 channel width (5/10 Mhz)
+ * @Min: 0
+ * @Max: 2
+ * @Default: 0
+ *
+ * This ini is used to set the sub 20 channel width.
  * gSub20ChannelWidth=0: indicates do not use Sub 20 MHz bandwidth
  * gSub20ChannelWidth=1: Bring up SAP/STA in 5 MHz bandwidth
  * gSub20ChannelWidth=2: Bring up SAP/STA in 10 MHz bandwidth
+ *
+ * Related: None
+ *
+ * Supported Feature: 5/10 Mhz channel width support
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_SUB_20_CHANNEL_WIDTH_NAME              "gSub20ChannelWidth"
 #define CFG_SUB_20_CHANNEL_WIDTH_MIN               (WLAN_SUB_20_CH_WIDTH_NONE)
@@ -3492,11 +7351,22 @@ enum dot11p_mode {
 #define CFG_SAP_MAX_INACTIVITY_OVERRIDE_DEFAULT  (0)
 
 /*
- * This parameter determines that which defered method will be use in rx path
- * If no bits are set then rx path processing will happen in tasklet context.
- * Bit 0: rx_thread enable
- * Bit 1: RPS enable
- * Bit 2: NAPI enable
+ * <ini>
+ * rx_mode - Control to decide rx mode
+ *
+ * @Min: 0
+ * @Max: (CFG_ENABLE_RX_THREAD | CFG_ENABLE_RPS | CFG_ENABLE_NAPI)
+ * @Default: MDM_PLATFORM   -  0
+ *           HELIUMPLUS     -  CFG_ENABLE_NAPI
+ *           Other cases    -  (CFG_ENABLE_RX_THREAD | CFG_ENABLE_NAPI)
+ *
+ * This ini is used to decide mode for the rx path
+ *
+ * Supported Feature: NAPI
+ *
+ * Usage: Internal
+ *
+ * </ini>
  */
 #define CFG_RX_MODE_NAME     "rx_mode"
 #define CFG_RX_MODE_MIN      (0)
@@ -3550,6 +7420,47 @@ enum dot11p_mode {
  * max string len = 24 + 1(for '\0'). Considering 30 to be on safe side.
  */
 #define CFG_RPS_RX_QUEUE_CPU_MAP_LIST_LEN 30
+
+#ifdef WLAN_FEATURE_WOW_PULSE
+/*
+ * Enable/Disable  WOW PULSE feature
+ * Set the wakeup pulse which FW use to wake up HOST
+ * Default : Disable
+ */
+#define CFG_WOW_PULSE_SUPPORT_NAME     "gwow_pulse_support"
+#define CFG_WOW_PULSE_SUPPORT_MIN      (0)
+#define CFG_WOW_PULSE_SUPPORT_MAX      (1)
+#define CFG_WOW_PULSE_SUPPORT_DEFAULT  (CFG_WOW_PULSE_SUPPORT_MIN)
+
+/*
+ * GPIO PIN for Pulse
+ * Which PIN to send the Pulse
+ */
+#define CFG_WOW_PULSE_PIN_NAME         "gwow_pulse_pin"
+#define CFG_WOW_PULSE_PIN_MIN          (CFG_SET_TSF_GPIO_PIN_MIN)
+#define CFG_WOW_PULSE_PIN_MAX          (CFG_SET_TSF_GPIO_PIN_MAX)
+#define CFG_WOW_PULSE_PIN_DEFAULT      (35)
+
+/*
+ * Pulse interval low
+ * The interval of low level in the pulse
+ * The value which defined by customer should between 160 and 480
+ */
+#define CFG_WOW_PULSE_INTERVAL_LOW_NAME     "gwow_pulse_interval_low"
+#define CFG_WOW_PULSE_INTERVAL_LOW_MIN      (160)
+#define CFG_WOW_PULSE_INTERVAL_LOW_MAX      (480)
+#define CFG_WOW_PULSE_INTERVAL_LOW_DEFAULT  (180)
+
+/*
+ * Pulse interval high
+ * The interval of high level in the pulse
+ * The value which defined by customer should between 20 and 40
+ */
+#define CFG_WOW_PULSE_INTERVAL_HIGH_NAME    "gwow_pulse_interval_high"
+#define CFG_WOW_PULSE_INTERVAL_HIGH_MIN     (20)
+#define CFG_WOW_PULSE_INTERVAL_HIGH_MAX     (40)
+#define CFG_WOW_PULSE_INTERVAL_HIGH_DEFAULT (20)
+#endif
 
 /*
  * Support to start sap in indoor channel
@@ -3608,12 +7519,852 @@ enum dot11p_mode {
 #define CFG_OPTIMIZE_CA_EVENT_ENABLE     (1)
 #define CFG_OPTIMIZE_CA_EVENT_DEFAULT    (0)
 
-/* Trigger BUG ON when firmware fails to send response */
+/*
+ * <ini>
+ * fw_timeout_crash - Enable/Disable BUG ON
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to Trigger host crash when firmware fails to send the
+ * response to host
+ * fw_timeout_crash = 0 Disabled
+ * fw_timeout_crash = 1 Trigger host crash
+ *
+ * Related: None
+ *
+ * Supported Feature: SSR
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_CRASH_FW_TIMEOUT_NAME       "fw_timeout_crash"
 #define CFG_CRASH_FW_TIMEOUT_DISABLE    (0)
 #define CFG_CRASH_FW_TIMEOUT_ENABLE     (1)
 #define CFG_CRASH_FW_TIMEOUT_DEFAULT    (0)
 
+/* Hold wakelock for unicast RX packets for the specified duration  */
+#define CFG_RX_WAKELOCK_TIMEOUT_NAME     "rx_wakelock_timeout"
+#define CFG_RX_WAKELOCK_TIMEOUT_DEFAULT  (50)
+#define CFG_RX_WAKELOCK_TIMEOUT_MIN      (0)
+#define CFG_RX_WAKELOCK_TIMEOUT_MAX      (100)
+
+#ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
+/*
+ * Enable/Disable  UDP response offload feature
+ * Default : Disable
+ */
+#define CFG_UDP_RESP_OFFLOAD_SUPPORT_NAME           "gudp_resp_offload_support"
+#define CFG_UDP_RESP_OFFLOAD_SUPPORT_MIN            (0)
+#define CFG_UDP_RESP_OFFLOAD_SUPPORT_MAX            (1)
+#define CFG_UDP_RESP_OFFLOAD_SUPPORT_DEFAULT        (CFG_UDP_RESP_OFFLOAD_SUPPORT_MIN)
+
+/* Dest port of specific UDP packet */
+#define CFG_UDP_RESP_OFFLOAD_DEST_PORT_NAME         "gudp_resp_offload_dest_port"
+#define CFG_UDP_RESP_OFFLOAD_DEST_PORT_MIN          (0)
+#define CFG_UDP_RESP_OFFLOAD_DEST_PORT_MAX          (65535)
+#define CFG_UDP_RESP_OFFLOAD_DEST_PORT_DEFAULT      (CFG_UDP_RESP_OFFLOAD_DEST_PORT_MAX)
+
+/*
+ * Payload filter of specific UDP packet
+ * Firmware will use this filter to identify the specific UDP packet
+ */
+#define CFG_UDP_RESP_OFFLOAD_PAYLOAD_FILTER_NAME       "gudp_resp_offload_payload_filter"
+#define CFG_UDP_RESP_OFFLOAD_PAYLOAD_FILTER_DEFAULT    ""
+
+/*
+ * Payload of the response UDP
+ * The specific response UDP packet payload
+ */
+#define CFG_UDP_RESP_OFFLOAD_RESPONSE_PAYLOAD_NAME     "gudp_resp_offload_response_payload"
+#define CFG_UDP_RESP_OFFLOAD_RESPONSE_PAYLOAD_DEFAULT  "status=off"
+#endif
+
+/*
+ * <ini>
+ * g_max_sched_scan_plan_int - pno sched max scan plan interval.
+ * @Min: 1
+ * @Max: 7200
+ * @Default: 3600
+ * This ini is used to set max sched scan plan interval for pno scan
+ * (value in seconds).
+ *
+ * Related: gPNOScanSupport
+ *
+ * Supported Feature: PNO scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_MAX_SCHED_SCAN_PLAN_INT_NAME       "g_max_sched_scan_plan_int"
+#define CFG_MAX_SCHED_SCAN_PLAN_INT_MIN        (1)
+#define CFG_MAX_SCHED_SCAN_PLAN_INT_MAX        (7200)
+#define CFG_MAX_SCHED_SCAN_PLAN_INT_DEFAULT    (3600)
+
+/*
+ * <ini>
+ * g_max_sched_scan_plan_iterations - pno sched max scan plan iterations.
+ * @Min: 1
+ * @Max: 100
+ * @Default: 10
+ *
+ * This ini is used to set max sched scan plan iterations for pno scan
+ * (value in seconds).
+ * Related: gPNOScanSupport
+ * Supported Feature: PNO scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_MAX_SCHED_SCAN_PLAN_ITRNS_NAME   "g_max_sched_scan_plan_iterations"
+#define CFG_MAX_SCHED_SCAN_PLAN_ITRNS_MIN     (1)
+#define CFG_MAX_SCHED_SCAN_PLAN_ITRNS_MAX     (100)
+#define CFG_MAX_SCHED_SCAN_PLAN_ITRNS_DEFAULT (10)
+
+/*
+ * <ini>
+ * gper_roam_enabled - To enabled/disable PER based roaming in FW
+ * @Min: 0
+ * @Max: 3
+ * @Default: 0
+ *
+ * This ini is used to enable/disable Packet error based roaming, enabling this
+ * will cause DUT to monitor Tx and Rx traffic and roam to a better candidate
+ * if current is not good enough.
+ *
+ * Values supported:
+ * 0: disabled
+ * 1: enabled for Rx traffic
+ * 2: enabled for Tx traffic
+ * 3: enabled for Tx and Rx traffic
+ *
+ * Related: gper_roam_high_rate_th, gper_roam_low_rate_th,
+ *          gper_roam_th_percent, gper_roam_rest_time
+ *
+ * Supported Feature: LFR-3.0
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_PER_ROAM_ENABLE_NAME           "gper_roam_enabled"
+#define CFG_PER_ROAM_ENABLE_MIN            (0)
+#define CFG_PER_ROAM_ENABLE_MAX            (3)
+#define CFG_PER_ROAM_ENABLE_DEFAULT        (0)
+
+/*
+ * <ini>
+ * gper_roam_high_rate_th - Rate at which PER based roam will stop
+ * @Min: 1 Mbps
+ * @Max: 0xffffffff
+ * @Default: 40 Mbps
+ *
+ * This ini is used to define the data rate in mbps*10 at which FW will stop
+ * monitoring the traffic for PER based roam.
+ *
+ * Related: gper_roam_enabled, gper_roam_low_rate_th,
+ *          gper_roam_th_percent, gper_roam_rest_time
+ *
+ * Supported Feature: LFR-3.0
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_PER_ROAM_CONFIG_HIGH_RATE_TH_NAME    "gper_roam_high_rate_th"
+#define CFG_PER_ROAM_CONFIG_HIGH_RATE_TH_MIN     (10)
+#define CFG_PER_ROAM_CONFIG_HIGH_RATE_TH_MAX     (0xffffffff)
+#define CFG_PER_ROAM_CONFIG_HIGH_RATE_TH_DEFAULT (400)
+
+/*
+ * <ini>
+ * gper_roam_low_rate_th - Rate at which FW starts considering traffic for PER
+ * based roam.
+ *
+ * @Min: 1 Mbps
+ * @Max: 0xffffffff
+ * @Default: 20 Mbps
+ *
+ * This ini is used to define the rate in mbps*10 at which FW starts considering
+ * traffic for PER based roam, if gper_roam_th_percent of data is below this
+ * rate, FW will issue a roam scan.
+ *
+ * Related: gper_roam_enabled, gper_roam_high_rate_th,
+ *          gper_roam_th_percent, gper_roam_rest_time
+ *
+ * Supported Feature: LFR-3.0
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_PER_ROAM_CONFIG_LOW_RATE_TH_NAME    "gper_roam_low_rate_th"
+#define CFG_PER_ROAM_CONFIG_LOW_RATE_TH_MIN     (10)
+#define CFG_PER_ROAM_CONFIG_LOW_RATE_TH_MAX     (0xffffffff)
+#define CFG_PER_ROAM_CONFIG_LOW_RATE_TH_DEFAULT (200)
+
+/*
+ * <ini>
+ * gper_roam_th_percent - Percentage at which FW will issue a roam scan if
+ * traffic is below gper_roam_low_rate_th rate.
+ *
+ * @Min: 10%
+ * @Max: 100%
+ * @Default: 60%
+ *
+ * This ini is used to define the percentage at which FW will issue a roam scan
+ * if traffic is below gper_roam_low_rate_th rate.
+ *
+ * Related: gper_roam_enabled, gper_roam_high_rate_th,
+ *          gper_roam_high_rate_th, gper_roam_rest_time
+ *
+ * Supported Feature: LFR-3.0
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_PER_ROAM_CONFIG_RATE_TH_PERCENT_NAME      "gper_roam_th_percent"
+#define CFG_PER_ROAM_CONFIG_RATE_TH_PERCENT_MIN       (10)
+#define CFG_PER_ROAM_CONFIG_RATE_TH_PERCENT_MAX       (100)
+#define CFG_PER_ROAM_CONFIG_RATE_TH_PERCENT_DEFAULT   (60)
+
+/*
+ * <ini>
+ * gper_roam_rest_time - Time for which FW will wait once it issues a
+ * roam scan.
+ *
+ * @Min: 10 seconds
+ * @Max: 3600 seconds
+ * @Default: 300 seconds
+ *
+ * This ini is used to define the time for which FW will wait once it issues a
+ * PER based roam scan.
+ *
+ * Related: gper_roam_enabled, gper_roam_high_rate_th,
+ *          gper_roam_high_rate_th, gper_roam_th_percent
+ *
+ * Supported Feature: LFR-3.0
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_PER_ROAM_REST_TIME_NAME     "gper_roam_rest_time"
+#define CFG_PER_ROAM_REST_TIME_MIN      (10)
+#define CFG_PER_ROAM_REST_TIME_MAX      (3600)
+#define CFG_PER_ROAM_REST_TIME_DEFAULT  (300)
+
+/*
+ * <ini>
+ * gPowerUsage - Preferred Power Usage
+ * @Min: Min
+ * @Max: Max
+ * @Default: Mod
+ *
+ * This ini is used to set the preferred power usage
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_POWER_USAGE_NAME                   "gPowerUsage"
+#define CFG_POWER_USAGE_MIN                    "Min"
+#define CFG_POWER_USAGE_MAX                    "Max"
+#define CFG_POWER_USAGE_DEFAULT                "Mod"
+
+/*
+ * <ini>
+ * gWowlPattern - WOW Pattern to used when PBM filtering is enabled
+ * @Default:
+ *
+ * This ini is used to set the WOW Pattern to be used for PBM Filtering
+ *
+ * Related: gMaxWoWFilters
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_WOWL_PATTERN_NAME                  "gWowlPattern"
+#define CFG_WOWL_PATTERN_DEFAULT               ""
+
+/*
+ * <ini>
+ * gMaxWoWFilters - Maximum WoW patterns that can be configured
+ * @Min: 0
+ * @Max: WOW_MAX_BITMAP_FILTERS(32)
+ * @Default: WOW_MAX_BITMAP_FILTERS(32)
+ *
+ * This ini is used to set the maximum WoW patterns that can be configured
+ *
+ * Related: gWowlPattern
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_MAX_WOW_FILTERS_NAME                       "gMaxWoWFilters"
+#define CFG_MAX_WOW_FILTERS_MIN                        (0)
+#define CFG_MAX_WOW_FILTERS_MAX                        (WOW_MAX_BITMAP_FILTERS)
+#define CFG_MAX_WOW_FILTERS_DEFAULT                    (WOW_MAX_BITMAP_FILTERS)
+
+/*
+ * <ini>
+ * gEnableImps - Enable/Disable IMPS
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/Disable IMPS(IdleModePowerSave) Mode
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_IMPS_NAME                   "gEnableImps"
+#define CFG_ENABLE_IMPS_MIN                    (0)
+#define CFG_ENABLE_IMPS_MAX                    (1)
+#define CFG_ENABLE_IMPS_DEFAULT                (1)
+
+/*
+ * <ini>
+ * gEnableBmps - Enable/Disable BMPS
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/Disable BMPS(BeaconModePowerSave) Mode
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_PS_NAME                     "gEnableBmps"
+#define CFG_ENABLE_PS_MIN                      (0)
+#define CFG_ENABLE_PS_MAX                      (1)
+#define CFG_ENABLE_PS_DEFAULT                  (1)
+
+/*
+ * <ini>
+ * gAutoBmpsTimerValue - Set Auto BMPS Timer value
+ * @Min: 0
+ * @Max: 120
+ * @Default: 0
+ *
+ * This ini is used to set Auto BMPS Timer value in seconds
+ *
+ * Related: gEnableBmps
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_AUTO_PS_ENABLE_TIMER_NAME          "gAutoBmpsTimerValue"
+#define CFG_AUTO_PS_ENABLE_TIMER_MIN           (0)
+#define CFG_AUTO_PS_ENABLE_TIMER_MAX           (120)
+#define CFG_AUTO_PS_ENABLE_TIMER_DEFAULT       (0)
+
+/*
+ * <ini>
+ * gBmpsMinListenInterval - Set BMPS Minimum Listen Interval
+ * @Min: 1
+ * @Max: 65535
+ * @Default: 1
+ *
+ * This ini is used to set BMPS Minimum Listen Interval. If gPowerUsage
+ * is set "Min", this INI need to be set.
+ *
+ * Related: gEnableBmps, gPowerUsage
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_BMPS_MINIMUM_LI_NAME               "gBmpsMinListenInterval"
+#define CFG_BMPS_MINIMUM_LI_MIN                (1)
+#define CFG_BMPS_MINIMUM_LI_MAX                (65535)
+#define CFG_BMPS_MINIMUM_LI_DEFAULT            (1)
+
+/*
+ * <ini>
+ * gBmpsModListenInterval - Set BMPS Moderate Listen Interval
+ * @Min: 1
+ * @Max: 65535
+ * @Default: 1
+ *
+ * This ini is used to set BMPS Moderate Listen Interval. If gPowerUsage
+ * is set "Mod", this INI need to be set.
+ *
+ * Related: gEnableBmps, gPowerUsage
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_BMPS_MODERATE_LI_NAME              "gBmpsModListenInterval"
+#define CFG_BMPS_MODERATE_LI_MIN               (1)
+#define CFG_BMPS_MODERATE_LI_MAX               (65535)
+#define CFG_BMPS_MODERATE_LI_DEFAULT           (1)
+
+/*
+ * <ini>
+ * gBmpsMaxListenInterval - Set BMPS Maximum Listen Interval
+ * @Min: 1
+ * @Max: 65535
+ * @Default: 1
+ *
+ * This ini is used to set BMPS Maximum Listen Interval. If gPowerUsage
+ * is set "Max", this INI need to be set.
+ *
+ * Related: gEnableBmps, gPowerUsage
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_BMPS_MAXIMUM_LI_NAME               "gBmpsMaxListenInterval"
+#define CFG_BMPS_MAXIMUM_LI_MIN                (1)
+#define CFG_BMPS_MAXIMUM_LI_MAX                (65535)
+#define CFG_BMPS_MAXIMUM_LI_DEFAULT            (1)
+
+#ifdef FEATURE_RUNTIME_PM
+/*
+ * <ini>
+ * gRuntimePM - enable runtime suspend
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable runtime_suspend
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_RUNTIME_PM                  "gRuntimePM"
+#define CFG_ENABLE_RUNTIME_PM_MIN              (0)
+#define CFG_ENABLE_RUNTIME_PM_MAX              (1)
+#define CFG_ENABLE_RUNTIME_PM_DEFAULT          (0)
+
+/*
+ * <ini>
+ * gRuntimePMDelay - Set runtime pm's inactivity timer
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to set runtime pm's inactivity timer value.
+ * the wlan driver will wait for this number of milliseconds of
+ * inactivity before performing a runtime suspend.
+ *
+ * Related: gRuntimePM
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_RUNTIME_PM_DELAY_NAME               "gRuntimePMDelay"
+#define CFG_RUNTIME_PM_DELAY_MIN                (100)
+#define CFG_RUNTIME_PM_DELAY_MAX                (10000)
+#define CFG_RUNTIME_PM_DELAY_DEFAULT            (500)
+#endif
+
+/*
+ * <ini>
+ * gEnablePowerSaveOffload - Enable Power Save Offload
+ * @Min: 0
+ * @Max: 5
+ * @Default: 0
+ *
+ * This ini is used to set Power Save Offload configuration:
+ * Current values of gEnablePowerSaveOffload:
+ * 0 -> Power save offload is disabled
+ * 1 -> Legacy Power save enabled + Deep sleep Disabled
+ * 2 -> QPower enabled + Deep sleep Disabled
+ * 3 -> Legacy Power save enabled + Deep sleep Enabled
+ * 4 -> QPower enabled + Deep sleep Enabled
+ * 5 -> Duty cycling QPower enabled
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_POWERSAVE_OFFLOAD_NAME                "gEnablePowerSaveOffload"
+#define CFG_POWERSAVE_OFFLOAD_MIN                 (0)
+#define CFG_POWERSAVE_OFFLOAD_MAX                 (PS_DUTY_CYCLING_QPOWER)
+#define CFG_POWERSAVE_OFFLOAD_DEFAULT             (CFG_POWERSAVE_OFFLOAD_MIN)
+
+/*
+ * <ini>
+ * gEnableWoW - Enable/Disable WoW
+ * @Min: 0
+ * @Max: 3
+ * @Default: 3
+ *
+ * This ini is used to enable/disable WoW. Configurations are as follows:
+ * 0 - Disable both magic pattern match and pattern byte match.
+ * 1 - Enable magic pattern match on all interfaces.
+ * 2 - Enable pattern byte match on all interfaces.
+ * 3 - Enable both magic patter and pattern byte match on all interfaces.
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_WOW_STATUS_NAME                           "gEnableWoW"
+#define CFG_WOW_ENABLE_MIN                            (0)
+#define CFG_WOW_ENABLE_MAX                            (3)
+#define CFG_WOW_STATUS_DEFAULT                        (3)
+
+#ifdef WLAN_FEATURE_EXTWOW_SUPPORT
+/*
+ * <ini>
+ * gExtWoWgotoSuspend - Enable/Disable Extended WoW
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable Extended WoW.
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTWOW_GO_TO_SUSPEND                   "gExtWoWgotoSuspend"
+#define CFG_EXTWOW_GO_TO_SUSPEND_MIN               (0)
+#define CFG_EXTWOW_GO_TO_SUSPEND_MAX               (1)
+#define CFG_EXTWOW_GO_TO_SUSPEND_DEFAULT           (1)
+
+/*
+ * <ini>
+ * gExtWowApp1WakeupPinNumber - Set wakeup1 PIN number
+ * @Min: 0
+ * @Max: 255
+ * @Default: 12
+ *
+ * This ini is used to set EXT WOW APP1 wakeup PIN number
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTWOW_APP1_WAKE_PIN_NUMBER            "gExtWowApp1WakeupPinNumber"
+#define CFG_EXTWOW_APP1_WAKE_PIN_NUMBER_MIN        (0)
+#define CFG_EXTWOW_APP1_WAKE_PIN_NUMBER_MAX        (255)
+#define CFG_EXTWOW_APP1_WAKE_PIN_NUMBER_DEFAULT    (12)
+
+/*
+ * <ini>
+ * gExtWowApp2WakeupPinNumber - Set wakeup2 PIN number
+ * @Min: 0
+ * @Max: 255
+ * @Default: 16
+ *
+ * This ini is used to set EXT WOW APP2 wakeup PIN number
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTWOW_APP2_WAKE_PIN_NUMBER            "gExtWowApp2WakeupPinNumber"
+#define CFG_EXTWOW_APP2_WAKE_PIN_NUMBER_MIN        (0)
+#define CFG_EXTWOW_APP2_WAKE_PIN_NUMBER_MAX        (255)
+#define CFG_EXTWOW_APP2_WAKE_PIN_NUMBER_DEFAULT    (16)
+
+/*
+ * <ini>
+ * gExtWoWApp2KAInitPingInterval - Set Keep Alive Init Ping Interval
+ * @Min: 0
+ * @Max: 0xffffffff
+ * @Default: 240
+ *
+ * This ini is used to set Keep Alive Init Ping Interval for EXT WOW
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTWOW_KA_INIT_PING_INTERVAL           "gExtWoWApp2KAInitPingInterval"
+#define CFG_EXTWOW_KA_INIT_PING_INTERVAL_MIN       (0)
+#define CFG_EXTWOW_KA_INIT_PING_INTERVAL_MAX       (0xffffffff)
+#define CFG_EXTWOW_KA_INIT_PING_INTERVAL_DEFAULT   (240)
+
+/*
+ * <ini>
+ * gExtWoWApp2KAMinPingInterval - Set Keep Alive Minimum Ping Interval
+ * @Min: 0
+ * @Max: 0xffffffff
+ * @Default: 240
+ *
+ * This ini is used to set Keep Alive Minimum Ping Interval for EXT WOW
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTWOW_KA_MIN_PING_INTERVAL            "gExtWoWApp2KAMinPingInterval"
+#define CFG_EXTWOW_KA_MIN_PING_INTERVAL_MIN        (0)
+#define CFG_EXTWOW_KA_MIN_PING_INTERVAL_MAX        (0xffffffff)
+#define CFG_EXTWOW_KA_MIN_PING_INTERVAL_DEFAULT    (240)
+
+/*
+ * <ini>
+ * gExtWoWApp2KAMaxPingInterval - Set Keep Alive Maximum Ping Interval
+ * @Min: 0
+ * @Max: 0xffffffff
+ * @Default: 1280
+ *
+ * This ini is used to set Keep Alive Maximum Ping Interval for EXT WOW
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTWOW_KA_MAX_PING_INTERVAL            "gExtWoWApp2KAMaxPingInterval"
+#define CFG_EXTWOW_KA_MAX_PING_INTERVAL_MIN        (0)
+#define CFG_EXTWOW_KA_MAX_PING_INTERVAL_MAX        (0xffffffff)
+#define CFG_EXTWOW_KA_MAX_PING_INTERVAL_DEFAULT    (1280)
+
+/*
+ * <ini>
+ * gExtWoWApp2KAIncPingInterval - Set Keep Alive increment of Ping Interval
+ * @Min: 0
+ * @Max: 0xffffffff
+ * @Default: 4
+ *
+ * This ini is used to set Keep Alive increment of Ping Interval for EXT WOW
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTWOW_KA_INC_PING_INTERVAL            "gExtWoWApp2KAIncPingInterval"
+#define CFG_EXTWOW_KA_INC_PING_INTERVAL_MIN        (0)
+#define CFG_EXTWOW_KA_INC_PING_INTERVAL_MAX        (0xffffffff)
+#define CFG_EXTWOW_KA_INC_PING_INTERVAL_DEFAULT    (4)
+
+/*
+ * <ini>
+ * gExtWoWApp2KAIncPingInterval - Set TCP source port
+ * @Min: 0
+ * @Max: 65535
+ * @Default: 5000
+ *
+ * This ini is used to set TCP source port when EXT WOW is enabled
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTWOW_TCP_SRC_PORT                    "gExtWoWApp2TcpSrcPort"
+#define CFG_EXTWOW_TCP_SRC_PORT_MIN                (0)
+#define CFG_EXTWOW_TCP_SRC_PORT_MAX                (65535)
+#define CFG_EXTWOW_TCP_SRC_PORT_DEFAULT            (5000)
+
+/*
+ * <ini>
+ * gExtWoWApp2TcpDstPort - Set TCP Destination port
+ * @Min: 0
+ * @Max: 65535
+ * @Default: 5001
+ *
+ * This ini is used to set TCP Destination port when EXT WOW is enabled
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTWOW_TCP_DST_PORT                    "gExtWoWApp2TcpDstPort"
+#define CFG_EXTWOW_TCP_DST_PORT_MIN                (0)
+#define CFG_EXTWOW_TCP_DST_PORT_MAX                (65535)
+#define CFG_EXTWOW_TCP_DST_PORT_DEFAULT            (5001)
+
+/*
+ * <ini>
+ * gExtWoWApp2TcpTxTimeout - Set TCP tx timeout
+ * @Min: 0
+ * @Max: 0xffffffff
+ * @Default: 200
+ *
+ * This ini is used to set TCP Tx timeout when EXT WOW is enabled
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTWOW_TCP_TX_TIMEOUT                  "gExtWoWApp2TcpTxTimeout"
+#define CFG_EXTWOW_TCP_TX_TIMEOUT_MIN              (0)
+#define CFG_EXTWOW_TCP_TX_TIMEOUT_MAX              (0xffffffff)
+#define CFG_EXTWOW_TCP_TX_TIMEOUT_DEFAULT          (200)
+
+/*
+ * <ini>
+ * gExtWoWApp2TcpRxTimeout - Set TCP rx timeout
+ * @Min: 0
+ * @Max: 0xffffffff
+ * @Default: 200
+ *
+ * This ini is used to set TCP Rx timeout when EXT WOW is enabled
+ *
+ * Related: None
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTWOW_TCP_RX_TIMEOUT                  "gExtWoWApp2TcpRxTimeout"
+#define CFG_EXTWOW_TCP_RX_TIMEOUT_MIN              (0)
+#define CFG_EXTWOW_TCP_RX_TIMEOUT_MAX              (0xffffffff)
+#define CFG_EXTWOW_TCP_RX_TIMEOUT_DEFAULT          (200)
+#endif
+
+/*
+ * <ini>
+ * gEnableFastPwrTransition - Configuration for fast power transition
+ * @Min: 0
+ * @Max: 2
+ * @Default: 0
+ *
+ * This ini supported values:
+ * 0x0: Phy register retention disabled (Higher timeline, Good for power)
+ * 0x1: Phy register retention statically enabled
+ * 0x2: Phy register retention enabled/disabled dynamically
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_PHY_REG_NAME         "gEnableFastPwrTransition"
+#define CFG_PHY_REG_DEFAULT         (0x0)
+#define CFG_PHY_REG_MIN             (0x0)
+#define CFG_PHY_REG_MAX             (0x2)
+
+/*
+ * <ini>
+ * gActiveBpfMode - Control active BPF mode
+ * @Min: 0 (disabled)
+ * @Max: 2 (adaptive)
+ * @Default: 0 (disabled)
+ *
+ * This config item is used to control BPF in active mode. There are 3 modes:
+ *	0) disabled - BPF is disabled in active mode
+ *	1) enabled - BPF is enabled for all packets in active mode
+ *	2) adaptive - BPF is enabled for packets up to some throughput threshold
+ *
+ * Related: N/A
+ *
+ * Supported Feature: Active Mode BPF
+ *
+ * Usage: Internal/External
+ * </ini>
+ */
+#define CFG_ACTIVE_BPF_MODE_NAME    "gActiveBpfMode"
+#define CFG_ACTIVE_BPF_MODE_MIN     (ACTIVE_BPF_DISABLED)
+#define CFG_ACTIVE_BPF_MODE_MAX     (ACTIVE_BPF_MODE_COUNT - 1)
+#define CFG_ACTIVE_BPF_MODE_DEFAULT (ACTIVE_BPF_DISABLED)
+
+/*
+ * <ini>
+ * g_enable_non_arp_bc_hw_filter - Enable HW broadcast filtering
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini support to dynamically enable/disable Broadast filter
+ * when target goes to wow suspend/resume mode
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_HW_BC_FILTER_NAME     "g_enable_non_arp_bc_hw_filter"
+#define CFG_HW_FILTER_DEFAULT         (0)
+#define CFG_HW_FILTER_MIN             (0)
+#define CFG_HW_FILTER_MAX             (1)
 
 /*---------------------------------------------------------------------------
    Type declarations
@@ -3996,7 +8747,7 @@ struct hdd_config {
 	uint32_t configPNOScanTimerRepeatValue;
 	uint32_t pno_slow_scan_multiplier;
 #endif
-	uint8_t isAmsduSupportInAMPDU;
+	uint8_t max_amsdu_num;
 	uint8_t nSelect5GHzMargin;
 	uint8_t isCoalesingInIBSSAllowed;
 
@@ -4013,7 +8764,7 @@ struct hdd_config {
 	bool enable_ip_tcp_udp_checksum_offload;
 	bool enablePowersaveOffload;
 	bool enablefwprint;
-	bool enable_fw_log;
+	uint8_t enable_fw_log;
 	uint8_t fVhtAmpduLenExponent;
 	uint32_t vhtMpduLen;
 	uint32_t IpaConfig;
@@ -4116,6 +8867,8 @@ struct hdd_config {
 	uint32_t egap_inact_time;
 	uint32_t egap_wait_time;
 #endif
+	/* Flag to indicate crash inject enabled or not */
+	bool crash_inject_enabled;
 	uint8_t force_sap_acs;
 	uint8_t force_sap_acs_st_ch;
 	uint8_t force_sap_acs_end_ch;
@@ -4194,6 +8947,8 @@ struct hdd_config {
 	bool flow_steering_enable;
 	bool active_mode_offload;
 	bool bpf_packet_filter_enable;
+	/* parameter for defer timer for enabling TDLS on p2p listen */
+	uint16_t tdls_enable_defer_time;
 	uint32_t fine_time_meas_cap;
 	uint8_t max_scan_count;
 #ifdef WLAN_FEATURE_FASTPATH
@@ -4214,6 +8969,12 @@ struct hdd_config {
 	bool     tx_chain_mask_cck;
 	uint8_t  tx_chain_mask_1ss;
 	uint16_t  self_gen_frm_pwr;
+#ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
+	bool udp_resp_offload_support;
+	uint32_t dest_port;
+	char payload_filter[MAX_LEN_UDP_RESP_OFFLOAD];
+	char response_payload[MAX_LEN_UDP_RESP_OFFLOAD];
+#endif
 #ifdef FEATURE_WLAN_SCAN_PNO
 	bool pno_channel_prediction;
 	uint8_t top_k_num_of_channels;
@@ -4252,6 +9013,16 @@ struct hdd_config {
 	uint32_t edca_vi_aifs;
 	uint32_t edca_bk_aifs;
 	uint32_t edca_be_aifs;
+
+	/* Tuning TX sched parameters for VO (skip credit limit credit disc) */
+	uint8_t  tx_sched_wrr_vo[TX_SCHED_WRR_PARAM_STRING_LENGTH];
+	/* Tuning TX sched parameters for VI (skip credit limit credit disc) */
+	uint8_t  tx_sched_wrr_vi[TX_SCHED_WRR_PARAM_STRING_LENGTH];
+	/* Tuning TX sched parameters for BE (skip credit limit credit disc) */
+	uint8_t  tx_sched_wrr_be[TX_SCHED_WRR_PARAM_STRING_LENGTH];
+	/* Tuning TX sched parameters for BK (skip credit limit credit disc) */
+	uint8_t  tx_sched_wrr_bk[TX_SCHED_WRR_PARAM_STRING_LENGTH];
+
 	bool enable_fatal_event;
 	bool bpf_enabled;
 	bool enable_dp_trace;
@@ -4288,6 +9059,23 @@ struct hdd_config {
 	bool sta_prefer_80MHz_over_160MHz;
 	uint8_t sap_max_inactivity_override;
 	bool fw_timeout_crash;
+	uint32_t rx_wakelock_timeout;
+#ifdef WLAN_FEATURE_WOW_PULSE
+	bool wow_pulse_support;
+	uint8_t wow_pulse_pin;
+	uint16_t wow_pulse_interval_high;
+	uint16_t wow_pulse_interval_low;
+#endif
+	uint8_t is_per_roam_enabled;
+	uint32_t per_roam_high_rate_threshold;
+	uint32_t per_roam_low_rate_threshold;
+	uint32_t per_roam_th_percent;
+	uint32_t per_roam_rest_time;
+	uint32_t max_sched_scan_plan_interval;
+	uint32_t max_sched_scan_plan_iterations;
+	uint8_t enable_phy_reg_retention;
+	enum active_bpf_mode active_bpf_mode;
+	bool hw_broadcast_filter;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))

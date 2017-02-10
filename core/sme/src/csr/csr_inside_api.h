@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -67,6 +67,7 @@
 #define CSR_MAX_BSS_SUPPORT            512
 #define SYSTEM_TIME_MSEC_TO_USEC      1000
 #define SYSTEM_TIME_SEC_TO_MSEC       1000
+#define SYSTEM_TIME_NSEC_TO_USEC      1000
 
 /* This number minus 1 means the number of times a channel is scanned before a BSS is remvoed from */
 /* cache scan result */
@@ -96,17 +97,16 @@
 #define CSR_ROAMING_DFS_CHANNEL_ENABLED_NORMAL     (1)
 #define CSR_ROAMING_DFS_CHANNEL_ENABLED_ACTIVE     (2)
 
-/* ***************************************************************************
- * The MAX BSSID Count should be lower than the command timeout value and it
- * can be of a fraction of 3/4 of the total command timeout value.
- * ***************************************************************************/
-#define CSR_ACTIVE_LIST_CMD_TIMEOUT_VALUE (1000*30*4)
 #ifdef QCA_WIFI_3_0_EMU
 #define CSR_ACTIVE_SCAN_LIST_CMD_TIMEOUT (1000*30*20)
 #else
 #define CSR_ACTIVE_SCAN_LIST_CMD_TIMEOUT (1000*30)
 #endif
-#define CSR_MAX_BSSID_COUNT     ((CSR_ACTIVE_LIST_CMD_TIMEOUT_VALUE/4000) * 3)
+/* ***************************************************************************
+ * The MAX BSSID Count should be lower than the command timeout value and it
+ * can be of a fraction of 3/4 of the total command timeout value.
+ * ***************************************************************************/
+#define CSR_MAX_BSSID_COUNT     ((SME_ACTIVE_LIST_CMD_TIMEOUT_VALUE/4000) * 3)
 #define CSR_CUSTOM_CONC_GO_BI    100
 
 typedef enum {
@@ -170,6 +170,19 @@ typedef struct {
 	tDblLinkList List;
 	tListElem *pCurEntry;
 } tScanResultList;
+
+/**
+ * csr_scan_for_ssid_context() - Callback context for SSID scan
+ *
+ * @mac_ctx: mac context
+ * @session_id: scan session id
+ * @roam_id: roam Id
+ */
+struct csr_scan_for_ssid_context {
+	tpAniSirGlobal mac_ctx;
+	uint32_t session_id;
+	uint32_t roam_id;
+};
 
 #define CSR_IS_ROAM_REASON(pCmd, reason) ((reason) == (pCmd)->roamCmd.roamReason)
 #define CSR_IS_BETTER_PREFER_VALUE(v1, v2)   ((v1) > (v2))
@@ -267,13 +280,27 @@ QDF_STATUS csr_scan_for_ssid(tpAniSirGlobal pMac, uint32_t sessionId,
 /* To remove fresh scan commands from the pending queue */
 bool csr_scan_remove_fresh_scan_command(tpAniSirGlobal pMac, uint8_t sessionId);
 QDF_STATUS csr_scan_abort_mac_scan(tpAniSirGlobal pMac, uint8_t sessionId,
-				   eCsrAbortReason reason);
+				   uint32_t scan_id, eCsrAbortReason reason);
 QDF_STATUS csr_scan_abort_all_scans(tpAniSirGlobal mac_ctx,
 				   eCsrAbortReason reason);
-void csr_remove_cmd_from_pending_list(tpAniSirGlobal pMac, tDblLinkList *pList,
-				      eSmeCommandType commandType);
-void csr_remove_cmd_with_session_id_from_pending_list(tpAniSirGlobal pMac,
+/**
+ * csr_remove_cmd_from_pending_list() - Remove command from
+ * pending list
+ * @pMac: Pointer to Global MAC structure
+ * @sessionId: session id
+ * @scan_id: scan id
+ * @pList: pointer to pending command list
+ * @commandType: sme command type
+ *
+ * Remove command from pending list by matching either
+ * scan id or session id.
+ *
+ * Return: QDF_STATUS_SUCCESS for success, QDF_STATUS_E_FAILURE
+ * for failure
+ */
+QDF_STATUS csr_remove_cmd_from_pending_list(tpAniSirGlobal pMac,
 						      uint8_t sessionId,
+						      uint32_t scan_id,
 						      tDblLinkList *pList,
 						      eSmeCommandType commandType);
 QDF_STATUS csr_scan_abort_mac_scan_not_for_connect(tpAniSirGlobal pMac,
@@ -284,7 +311,7 @@ void csr_remove_scan_for_ssid_from_pending_list(tpAniSirGlobal pMac,
 						uint32_t sessionId);
 
 QDF_STATUS csr_abort_scan_from_active_list(tpAniSirGlobal pMac,
-		tDblLinkList *pList, uint32_t sessionId,
+		tDblLinkList *pList, uint32_t sessionId, uint32_t scan_id,
 		eSmeCommandType scan_cmd_type, eCsrAbortReason abort_reason);
 
 /* To age out scan results base. tSmeGetScanChnRsp is a pointer returned by LIM that */
@@ -993,7 +1020,7 @@ static inline void csr_release_command_preauth(tpAniSirGlobal mac_ctx,
 
 #if defined(FEATURE_WLAN_ESE)
 void update_cckmtsf(uint32_t *timeStamp0, uint32_t *timeStamp1,
-		    uint32_t *incr);
+		    uint64_t *incr);
 #endif
 
 QDF_STATUS csr_roam_enqueue_preauth(tpAniSirGlobal pMac, uint32_t sessionId,
@@ -1035,6 +1062,9 @@ QDF_STATUS csr_scan_handle_search_for_ssid(tpAniSirGlobal mac,
 		tSmeCmd *command);
 QDF_STATUS csr_scan_handle_search_for_ssid_failure(tpAniSirGlobal mac,
 		tSmeCmd *command);
+
+tpSirBssDescription csr_get_fst_bssdescr_ptr(tScanResultHandle result_handle);
+
 tSirBssDescription*
 csr_get_bssdescr_from_scan_handle(tScanResultHandle result_handle,
 				  tSirBssDescription *bss_descr);

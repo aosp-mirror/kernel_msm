@@ -1192,23 +1192,19 @@ QDF_STATUS wlansap_clear_acl(void *pCtx)
 		return QDF_STATUS_E_RESOURCES;
 	}
 
-	if (pSapCtx->denyMacList != NULL) {
-		for (i = 0; i < (pSapCtx->nDenyMac - 1); i++) {
-			qdf_mem_zero((pSapCtx->denyMacList + i)->bytes,
-				     QDF_MAC_ADDR_SIZE);
-
-		}
+	for (i = 0; i < (pSapCtx->nDenyMac - 1); i++) {
+		qdf_mem_zero((pSapCtx->denyMacList + i)->bytes,
+			     QDF_MAC_ADDR_SIZE);
 	}
+
 	sap_print_acl(pSapCtx->denyMacList, pSapCtx->nDenyMac);
 	pSapCtx->nDenyMac = 0;
 
-	if (pSapCtx->acceptMacList != NULL) {
-		for (i = 0; i < (pSapCtx->nAcceptMac - 1); i++) {
-			qdf_mem_zero((pSapCtx->acceptMacList + i)->bytes,
-				     QDF_MAC_ADDR_SIZE);
-
-		}
+	for (i = 0; i < (pSapCtx->nAcceptMac - 1); i++) {
+		qdf_mem_zero((pSapCtx->acceptMacList + i)->bytes,
+			     QDF_MAC_ADDR_SIZE);
 	}
+
 	sap_print_acl(pSapCtx->acceptMacList, pSapCtx->nAcceptMac);
 	pSapCtx->nAcceptMac = 0;
 
@@ -2615,6 +2611,13 @@ wlansap_channel_change_request(void *pSapCtx, uint8_t target_channel)
 	}
 	mac_ctx = PMAC_STRUCT(hHal);
 	phy_mode = sapContext->csr_roamProfile.phyMode;
+
+	if (sapContext->csr_roamProfile.ChannelInfo.numOfChannels == 0 ||
+	    sapContext->csr_roamProfile.ChannelInfo.ChannelList == NULL) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+			FL("Invalid channel list"));
+		return QDF_STATUS_E_FAULT;
+	}
 	sapContext->csr_roamProfile.ChannelInfo.ChannelList[0] = target_channel;
 	/*
 	 * We are getting channel bonding mode from sapDfsInfor structure
@@ -2635,6 +2638,8 @@ wlansap_channel_change_request(void *pSapCtx, uint8_t target_channel)
 						ch_params->center_freq_seg0;
 	sapContext->csr_roamProfile.ch_params.center_freq_seg1 =
 						ch_params->center_freq_seg1;
+	sapContext->csr_roamProfile.supported_rates.numRates = 0;
+	sapContext->csr_roamProfile.extended_rates.numRates = 0;
 
 	qdf_ret_status = sme_roam_channel_change_req(hHal, sapContext->bssid,
 				ch_params, &sapContext->csr_roamProfile);
@@ -3663,5 +3668,31 @@ QDF_STATUS wlansap_set_tx_leakage_threshold(tHalHandle hal,
 	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
 			"%s: leakage_threshold %d", __func__,
 			mac->sap.SapDfsInfo.tx_leakage_threshold);
+	return QDF_STATUS_SUCCESS;
+}
+
+/*
+ * wlansap_set_invalid_session() - set session ID to invalid
+ * @cds_ctx: pointer of global context
+ *
+ * This function sets session ID to invalid
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS
+wlansap_set_invalid_session(void *cds_ctx)
+{
+	ptSapContext psapctx;
+
+	psapctx = CDS_GET_SAP_CB(cds_ctx);
+	if (NULL == psapctx) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+			FL("Invalid SAP pointer from pctx"));
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	psapctx->sessionId = CSR_SESSION_ID_INVALID;
+	psapctx->isSapSessionOpen = eSAP_FALSE;
+
 	return QDF_STATUS_SUCCESS;
 }

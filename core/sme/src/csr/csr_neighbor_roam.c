@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -132,38 +132,47 @@ void csr_neighbor_roam_send_lfr_metric_event(
 }
 #endif
 
-QDF_STATUS
-csr_neighbor_roam_update_fast_roaming_enabled(tpAniSirGlobal pMac,
-					      uint8_t sessionId,
-					      const bool fastRoamEnabled)
+/**
+ * csr_neighbor_roam_update_fast_roaming_enabled() - update roaming capability
+ *
+ * @mac_ctx: Global MAC context
+ * @session_id: Session
+ * @fast_roam_enabled: Is fast roaming enabled on this device?
+ *                     This capability can be changed dynamically.
+ *
+ * Return: None
+ */
+QDF_STATUS csr_neighbor_roam_update_fast_roaming_enabled(tpAniSirGlobal mac_ctx,
+						uint8_t session_id,
+						const bool fast_roam_enabled)
 {
 	QDF_STATUS qdf_status = QDF_STATUS_SUCCESS;
-	tpCsrNeighborRoamControlInfo pNeighborRoamInfo =
-		&pMac->roam.neighborRoamInfo[sessionId];
+	tpCsrNeighborRoamControlInfo neighbor_roam_info =
+		&mac_ctx->roam.neighborRoamInfo[session_id];
 
-	switch (pNeighborRoamInfo->neighborRoamState) {
+	switch (neighbor_roam_info->neighborRoamState) {
 	case eCSR_NEIGHBOR_ROAM_STATE_CONNECTED:
-		if (true == fastRoamEnabled) {
-			csr_roam_offload_scan(pMac, sessionId,
+		if (fast_roam_enabled) {
+			csr_roam_offload_scan(mac_ctx, session_id,
 					      ROAM_SCAN_OFFLOAD_START,
 					      REASON_CONNECT);
 		} else {
-			csr_roam_offload_scan(pMac, sessionId,
+			csr_roam_offload_scan(mac_ctx, session_id,
 					      ROAM_SCAN_OFFLOAD_STOP,
 					      REASON_DISCONNECTED);
 		}
 	break;
 	case eCSR_NEIGHBOR_ROAM_STATE_INIT:
-		NEIGHBOR_ROAM_DEBUG(pMac, LOG2,
-				FL
-				("Currently in INIT state, Nothing to do"));
+		NEIGHBOR_ROAM_DEBUG(mac_ctx, LOG2,
+				    FL
+				    ("Currently in INIT state, Nothing to do"));
 		break;
 	default:
-		NEIGHBOR_ROAM_DEBUG(pMac, LOGE,
-				FL
-				("Unexpected state %s, returning failure"),
-				mac_trace_get_neighbour_roam_state
-				(pNeighborRoamInfo->neighborRoamState));
+		NEIGHBOR_ROAM_DEBUG(mac_ctx, LOGE,
+				    FL
+				    ("Unexpected state %s, returning failure"),
+				    mac_trace_get_neighbour_roam_state
+				    (neighbor_roam_info->neighborRoamState));
 		qdf_status = QDF_STATUS_E_FAILURE;
 		break;
 	}
@@ -898,6 +907,7 @@ QDF_STATUS csr_neighbor_roam_indicate_disconnect(tpAniSirGlobal pMac,
 				eCSR_NEIGHBOR_ROAM_STATE_INIT, sessionId);
 			pNeighborRoamInfo->roamChannelInfo.
 				IAPPNeighborListReceived = false;
+			pNeighborRoamInfo->uOsRequestedHandoff = 0;
 		}
 		break;
 
@@ -938,6 +948,7 @@ QDF_STATUS csr_neighbor_roam_indicate_disconnect(tpAniSirGlobal pMac,
 				eCSR_NEIGHBOR_ROAM_STATE_INIT, sessionId);
 			pNeighborRoamInfo->roamChannelInfo.
 			IAPPNeighborListReceived = false;
+			pNeighborRoamInfo->uOsRequestedHandoff = 0;
 		break;
 	}
 	/*Inform the Firmware to STOP Scanning as the host has a disconnect. */
@@ -1034,8 +1045,7 @@ static void csr_neighbor_roam_info_ctx_init(
 	/* Initialize all the data structures needed for the 11r FT Preauth */
 	ngbr_roam_info->FTRoamInfo.currentNeighborRptRetryNum = 0;
 	csr_neighbor_roam_purge_preauth_failed_list(pMac);
-	if (!cds_is_multiple_active_sta_sessions() &&
-		csr_roam_is_roam_offload_scan_enabled(pMac)) {
+	if (csr_roam_is_roam_offload_scan_enabled(pMac)) {
 		/*
 		 * If this is not a INFRA type BSS, then do not send the command
 		 * down to firmware.Do not send the START command for
@@ -1162,6 +1172,7 @@ QDF_STATUS csr_neighbor_roam_indicate_connect(
 				eCSR_NEIGHBOR_ROAM_STATE_INIT, session_id);
 			ngbr_roam_info->roamChannelInfo.IAPPNeighborListReceived =
 				false;
+			ngbr_roam_info->uOsRequestedHandoff = 0;
 			break;
 		}
 	/* Fall through if the status is SUCCESS */
@@ -1368,6 +1379,7 @@ QDF_STATUS csr_neighbor_roam_init(tpAniSirGlobal pMac, uint8_t sessionId)
 	csr_neighbor_roam_state_transition(pMac,
 			eCSR_NEIGHBOR_ROAM_STATE_INIT, sessionId);
 	pNeighborRoamInfo->roamChannelInfo.IAPPNeighborListReceived = false;
+	pNeighborRoamInfo->uOsRequestedHandoff = 0;
 	/* Set the Last Sent Cmd as RSO_STOP */
 	pNeighborRoamInfo->last_sent_cmd = ROAM_SCAN_OFFLOAD_STOP;
 	return QDF_STATUS_SUCCESS;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -60,7 +60,6 @@
 #endif /* REMOVE_PKT_LOG */
 
 #include "dbglog_host.h"
-/* FIXME: Inclusion of .c looks odd but this is how it is in internal codebase */
 #include "csr_api.h"
 
 #include "dfs.h"
@@ -571,7 +570,7 @@ static QDF_STATUS wma_handle_vdev_detach(tp_wma_handle wma_handle,
 					 &wma_handle->wmi_cmd_rsp_wake_lock,
 					 WMA_FW_RSP_EVENT_WAKE_LOCK_DURATION);
 		qdf_runtime_pm_prevent_suspend(
-					wma_handle->wmi_cmd_rsp_runtime_lock);
+					&wma_handle->wmi_cmd_rsp_runtime_lock);
 	}
 	WMA_LOGD("Call txrx detach with callback for vdev %d", vdev_id);
 	ol_txrx_vdev_detach(iface->handle, NULL, NULL);
@@ -784,6 +783,56 @@ void wma_find_mcc_ap(tp_wma_handle wma, uint8_t vdev_id, bool add)
 }
 #endif /* FEATURE_AP_MCC_CH_AVOIDANCE */
 
+static const wmi_channel_width mode_to_width[MODE_MAX] = {
+	[MODE_11A]           = WMI_CHAN_WIDTH_20,
+	[MODE_11G]           = WMI_CHAN_WIDTH_20,
+	[MODE_11B]           = WMI_CHAN_WIDTH_20,
+	[MODE_11GONLY]       = WMI_CHAN_WIDTH_20,
+	[MODE_11NA_HT20]     = WMI_CHAN_WIDTH_20,
+	[MODE_11NG_HT20]     = WMI_CHAN_WIDTH_20,
+	[MODE_11AC_VHT20]    = WMI_CHAN_WIDTH_20,
+	[MODE_11AC_VHT20_2G] = WMI_CHAN_WIDTH_20,
+	[MODE_11NA_HT40]     = WMI_CHAN_WIDTH_40,
+	[MODE_11NG_HT40]     = WMI_CHAN_WIDTH_40,
+	[MODE_11AC_VHT40]    = WMI_CHAN_WIDTH_40,
+	[MODE_11AC_VHT40_2G] = WMI_CHAN_WIDTH_40,
+	[MODE_11AC_VHT80]    = WMI_CHAN_WIDTH_80,
+	[MODE_11AC_VHT80_2G] = WMI_CHAN_WIDTH_80,
+#if CONFIG_160MHZ_SUPPORT
+	[MODE_11AC_VHT80_80] = WMI_CHAN_WIDTH_80P80,
+	[MODE_11AC_VHT160]   = WMI_CHAN_WIDTH_160,
+#endif
+
+#if SUPPORT_11AX
+	[MODE_11AX_HE20]     = WMI_CHAN_WIDTH_20,
+	[MODE_11AX_HE40]     = WMI_CHAN_WIDTH_40,
+	[MODE_11AX_HE80]     = WMI_CHAN_WIDTH_80,
+	[MODE_11AX_HE80_80]  = WMI_CHAN_WIDTH_80P80,
+	[MODE_11AX_HE160]    = WMI_CHAN_WIDTH_160,
+	[MODE_11AX_HE20_2G]  = WMI_CHAN_WIDTH_20,
+	[MODE_11AX_HE40_2G]  = WMI_CHAN_WIDTH_40,
+	[MODE_11AX_HE80_2G]  = WMI_CHAN_WIDTH_80,
+#endif
+};
+
+/**
+ * chanmode_to_chanwidth() - get channel width through channel mode
+ * @chanmode:   channel phy mode
+ *
+ * Return: channel width
+ */
+static wmi_channel_width chanmode_to_chanwidth(WLAN_PHY_MODE chanmode)
+{
+	wmi_channel_width chan_width;
+
+	if (chanmode >= MODE_11A && chanmode < MODE_MAX)
+		chan_width = mode_to_width[chanmode];
+	else
+		chan_width = WMI_CHAN_WIDTH_20;
+
+	return chan_width;
+}
+
 /**
  * wma_vdev_start_resp_handler() - vdev start response handler
  * @handle: wma handle
@@ -802,6 +851,8 @@ int wma_vdev_start_resp_handler(void *handle, uint8_t *cmd_param_info,
 	struct wma_txrx_node *iface;
 	struct vdev_up_params param = {0};
 	QDF_STATUS status;
+	int err;
+	wmi_channel_width chanwidth;
 
 #ifdef FEATURE_AP_MCC_CH_AVOIDANCE
 	tpAniSirGlobal mac_ctx = cds_get_context(QDF_MODULE_ID_PE);
@@ -942,6 +993,23 @@ int wma_vdev_start_resp_handler(void *handle, uint8_t *cmd_param_info,
 			(iface->type == WMI_VDEV_TYPE_STA)) ||
 			((resp_event->resp_type == WMI_VDEV_START_RESP_EVENT) &&
 			 (iface->type == WMI_VDEV_TYPE_MONITOR))) {
+			err = wma_set_peer_param(wma, iface->bssid,
+					WMI_PEER_PHYMODE, iface->chanmode,
+					resp_event->vdev_id);
+
+			WMA_LOGD("%s:vdev_id %d chanmode %d status %d",
+				__func__, resp_event->vdev_id,
+				iface->chanmode, err);
+
+			chanwidth = chanmode_to_chanwidth(iface->chanmode);
+			err = wma_set_peer_param(wma, iface->bssid,
+					WMI_PEER_CHWIDTH, chanwidth,
+					resp_event->vdev_id);
+
+			WMA_LOGD("%s:vdev_id %d chanwidth %d status %d",
+				__func__, resp_event->vdev_id,
+				chanwidth, err);
+
 			param.vdev_id = resp_event->vdev_id;
 			param.assoc_id = iface->aid;
 			status = wmi_unified_vdev_up_send(wma->wmi_handle,
@@ -1072,6 +1140,14 @@ void wma_remove_peer(tp_wma_handle wma, uint8_t *bssid,
 	struct peer_flush_params param = {0};
 	uint8_t *peer_mac_addr;
 
+	peer_mac_addr = ol_txrx_peer_get_peer_mac_addr(peer);
+	if (peer_mac_addr == NULL) {
+		WMA_LOGE("%s: peer mac addr is NULL, Can't remove peer, vdevid %d peer_count %d",
+			 __func__, vdev_id,
+			 wma->interfaces[vdev_id].peer_count);
+		return;
+	}
+
 	if (!wma->interfaces[vdev_id].peer_count) {
 		WMA_LOGE("%s: Can't remove peer with peer_addr %pM vdevid %d peer_count %d",
 			__func__, bssid, vdev_id,
@@ -1079,26 +1155,8 @@ void wma_remove_peer(tp_wma_handle wma, uint8_t *bssid,
 		return;
 	}
 
-	if (peer) {
-		if (roam_synch_in_progress)
-			ol_txrx_peer_detach_force_delete(peer);
-		else
-			ol_txrx_peer_detach(peer);
-	}
-	peer_mac_addr = ol_txrx_peer_get_peer_mac_addr(peer);
-	if (peer_mac_addr == NULL) {
-		WMA_LOGE("%s: peer mac addr is NULL, Can't remove peer with peer_addr %pM vdevid %d peer_count %d",
-			 __func__, bssid, vdev_id,
-			 wma->interfaces[vdev_id].peer_count);
-		return;
-	}
-
-	wma->interfaces[vdev_id].peer_count--;
-	WMA_LOGE("%s: Removed peer %p with peer_addr %pM vdevid %d peer_count %d",
-		 __func__, peer, bssid, vdev_id,
-		 wma->interfaces[vdev_id].peer_count);
 	if (roam_synch_in_progress)
-		return;
+		goto peer_detach;
 	/* Flush all TIDs except MGMT TID for this peer in Target */
 	peer_tid_bitmap &= ~(0x1 << WMI_MGMT_TID);
 	param.peer_tid_bitmap = peer_tid_bitmap;
@@ -1112,8 +1170,26 @@ void wma_remove_peer(tp_wma_handle wma, uint8_t *bssid,
 		peer_addr = peer_mac_addr;
 	}
 
+	wma_peer_debug_log(vdev_id, DEBUG_PEER_DELETE_SEND,
+			   DEBUG_INVALID_PEER_ID, peer_addr, peer,
+			   0,
+			   qdf_atomic_read(&peer->ref_cnt));
 	wmi_unified_peer_delete_send(wma->wmi_handle, peer_addr,
 						vdev_id);
+
+peer_detach:
+	WMA_LOGE("%s: Remove peer %p with peer_addr %pM vdevid %d peer_count %d",
+		 __func__, peer, bssid, vdev_id,
+		 wma->interfaces[vdev_id].peer_count);
+
+	if (peer) {
+		if (roam_synch_in_progress)
+			ol_txrx_peer_detach_force_delete(peer);
+		else
+			ol_txrx_peer_detach(peer);
+	}
+
+	wma->interfaces[vdev_id].peer_count--;
 #undef PEER_ALL_TID_BITMASK
 }
 
@@ -1171,6 +1247,9 @@ QDF_STATUS wma_create_peer(tp_wma_handle wma, ol_txrx_pdev_handle pdev,
 		  __func__, peer, qdf_atomic_read(&peer->ref_cnt),
 		  peer_addr, vdev_id,
 		  wma->interfaces[vdev_id].peer_count);
+	wma_peer_debug_log(vdev_id, DEBUG_PEER_CREATE_SEND,
+			   DEBUG_INVALID_PEER_ID, peer_addr, peer, 0,
+			   qdf_atomic_read(&peer->ref_cnt));
 
 	mac_addr_raw = ol_txrx_get_vdev_mac_addr(vdev);
 	if (mac_addr_raw == NULL) {
@@ -1337,6 +1416,42 @@ static void wma_cleanup_target_req_param(struct wma_target_req *tgt_req)
 		qdf_mem_free(tgt_req->user_data);
 		tgt_req->user_data = NULL;
 	}
+}
+
+/**
+ * wma_config_active_bpf_mode() - Config active BPF mode in FW
+ * @wma: the WMA handle
+ * @vdev_id: the Id of the vdev for which the configuration should be applied
+ *
+ * Return: QDF status
+ */
+static QDF_STATUS wma_config_active_bpf_mode(t_wma_handle *wma, uint8_t vdev_id)
+{
+	const FW_ACTIVE_BPF_MODE mcbc_mode = FW_ACTIVE_BPF_MODE_FORCE_ENABLE;
+	FW_ACTIVE_BPF_MODE uc_mode;
+
+	WMA_LOGI("Configuring Active BPF Mode %d for vdev %u",
+		 wma->active_bpf_mode, vdev_id);
+
+	switch (wma->active_bpf_mode) {
+	case ACTIVE_BPF_DISABLED:
+		uc_mode = FW_ACTIVE_BPF_MODE_DISABLE;
+		break;
+	case ACTIVE_BPF_ENABLED:
+		uc_mode = FW_ACTIVE_BPF_MODE_FORCE_ENABLE;
+		break;
+	case ACTIVE_BPF_ADAPTIVE:
+		uc_mode = FW_ACTIVE_BPF_MODE_ADAPTIVE_ENABLE;
+		break;
+	default:
+		WMA_LOGE("Invalid Active BPF Mode %d; Using 'disabled'",
+			 wma->active_bpf_mode);
+		uc_mode = FW_ACTIVE_BPF_MODE_DISABLE;
+		break;
+	}
+
+	return wmi_unified_set_active_bpf_mode_cmd(wma->wmi_handle, vdev_id,
+						   uc_mode, mcbc_mode);
 }
 
 /**
@@ -1797,7 +1912,17 @@ ol_txrx_vdev_handle wma_vdev_attach(tp_wma_handle wma_handle,
 	wma_register_wow_wakeup_events(wma_handle, self_sta_req->session_id,
 					self_sta_req->type,
 					self_sta_req->sub_type);
+
+	wma_register_action_frame_patterns(wma_handle,
+					self_sta_req->session_id);
 	wma_register_wow_default_patterns(wma_handle, self_sta_req->session_id);
+
+	if (self_sta_req->type == WMI_VDEV_TYPE_STA) {
+		status = wma_config_active_bpf_mode(wma_handle,
+						    self_sta_req->session_id);
+		if (QDF_IS_STATUS_ERROR(status))
+			WMA_LOGE("Failed to configure active BPF mode");
+	}
 
 end:
 	self_sta_req->status = status;
@@ -2196,7 +2321,7 @@ int wma_vdev_delete_handler(void *handle, uint8_t *cmd_param_info,
 	}
 	qdf_wake_lock_release(&wma->wmi_cmd_rsp_wake_lock,
 				WIFI_POWER_EVENT_WAKELOCK_WMI_CMD_RSP);
-	qdf_runtime_pm_allow_suspend(wma->wmi_cmd_rsp_runtime_lock);
+	qdf_runtime_pm_allow_suspend(&wma->wmi_cmd_rsp_runtime_lock);
 	/* Send response to upper layers */
 	wma_vdev_detach_callback(req_msg->user_data);
 	qdf_mc_timer_stop(&req_msg->event_timeout);
@@ -2240,6 +2365,10 @@ int wma_peer_delete_handler(void *handle, uint8_t *cmd_param_info,
 	WMI_MAC_ADDR_TO_CHAR_ARRAY(&event->peer_macaddr, macaddr);
 	WMA_LOGE(FL("Peer Delete Response, vdev %d Peer %pM"),
 			event->vdev_id, macaddr);
+	wma_peer_debug_log(event->vdev_id, DEBUG_PEER_DELETE_RESP,
+			   DEBUG_INVALID_PEER_ID, macaddr, NULL,
+			   0,
+			   0);
 	req_msg = wma_find_remove_req_msgtype(wma, event->vdev_id,
 					WMA_DELETE_STA_REQ);
 	if (!req_msg) {
@@ -2249,7 +2378,7 @@ int wma_peer_delete_handler(void *handle, uint8_t *cmd_param_info,
 
 	qdf_wake_lock_release(&wma->wmi_cmd_rsp_wake_lock,
 				WIFI_POWER_EVENT_WAKELOCK_WMI_CMD_RSP);
-	qdf_runtime_pm_allow_suspend(wma->wmi_cmd_rsp_runtime_lock);
+	qdf_runtime_pm_allow_suspend(&wma->wmi_cmd_rsp_runtime_lock);
 		/* Cleanup timeout handler */
 	qdf_mc_timer_stop(&req_msg->event_timeout);
 	qdf_mc_timer_destroy(&req_msg->event_timeout);
@@ -2519,6 +2648,12 @@ void wma_vdev_resp_timer(void *data)
 			qdf_mc_timer_stop(&tgt_req->event_timeout);
 			goto free_tgt_req;
 		}
+		/* Trigger host crash when vdev response timesout */
+		if (wma->fw_timeout_crash == true) {
+			BUG_ON(1);
+			return;
+		}
+
 		if (wma_is_vdev_in_ibss_mode(wma, tgt_req->vdev_id))
 			wma_delete_all_ibss_peers(wma, tgt_req->vdev_id);
 		else {
@@ -2568,10 +2703,7 @@ void wma_vdev_resp_timer(void *data)
 		}
 		params->status = QDF_STATUS_E_TIMEOUT;
 		WMA_LOGA("%s: WMA_DELETE_BSS_REQ timedout", __func__);
-		if (wma->fw_timeout_crash == true)
-			BUG_ON(1);
-		else
-			wma_send_msg(wma, WMA_DELETE_BSS_RSP,
+		wma_send_msg(wma, WMA_DELETE_BSS_RSP,
 				    (void *)params, 0);
 		if (iface->del_staself_req) {
 			WMA_LOGA("scheduling defered deletion(vdev id %x)",
@@ -2589,7 +2721,7 @@ void wma_vdev_resp_timer(void *data)
 			qdf_wake_lock_release(&wma->wmi_cmd_rsp_wake_lock,
 				WIFI_POWER_EVENT_WAKELOCK_WMI_CMD_RSP);
 			qdf_runtime_pm_allow_suspend(
-				wma->wmi_cmd_rsp_runtime_lock);
+				&wma->wmi_cmd_rsp_runtime_lock);
 		}
 		params->status = QDF_STATUS_E_TIMEOUT;
 
@@ -4123,7 +4255,7 @@ static void wma_delete_sta_req_ap_mode(tp_wma_handle wma,
 				      WIFI_POWER_EVENT_WAKELOCK_WMI_CMD_RSP);
 		qdf_wake_lock_timeout_acquire(&wma->wmi_cmd_rsp_wake_lock,
 				      WMA_FW_RSP_EVENT_WAKE_LOCK_DURATION);
-		qdf_runtime_pm_prevent_suspend(wma->wmi_cmd_rsp_runtime_lock);
+		qdf_runtime_pm_prevent_suspend(&wma->wmi_cmd_rsp_runtime_lock);
 		return;
 	}
 
@@ -4279,6 +4411,8 @@ void wma_delete_sta(tp_wma_handle wma, tpDeleteStaParams del_sta)
 	if (del_sta->staType == STA_ENTRY_NDI_PEER)
 		oper_mode = BSS_OPERATIONAL_MODE_NDI;
 
+	WMA_LOGD(FL("oper_mode %d"), oper_mode);
+
 	switch (oper_mode) {
 	case BSS_OPERATIONAL_MODE_STA:
 		wma_delete_sta_req_sta_mode(wma, del_sta);
@@ -4381,6 +4515,14 @@ void wma_delete_bss_ho_fail(tp_wma_handle wma, tpDeleteBssParams params)
 		qdf_mem_free(iface->psnr_req);
 		iface->psnr_req = NULL;
 	}
+
+	if (iface->rcpi_req) {
+		struct sme_rcpi_req *rcpi_req = iface->rcpi_req;
+
+		iface->rcpi_req = NULL;
+		qdf_mem_free(rcpi_req);
+	}
+
 	qdf_mem_zero(&iface->ns_offload_req,
 			sizeof(iface->ns_offload_req));
 	qdf_mem_zero(&iface->arp_offload_req,
@@ -4492,6 +4634,13 @@ void wma_delete_bss(tp_wma_handle wma, tpDeleteBssParams params)
 	if (iface->psnr_req) {
 		qdf_mem_free(iface->psnr_req);
 		iface->psnr_req = NULL;
+	}
+
+	if (iface->rcpi_req) {
+		struct sme_rcpi_req *rcpi_req = iface->rcpi_req;
+
+		iface->rcpi_req = NULL;
+		qdf_mem_free(rcpi_req);
 	}
 
 	if (wlan_op_mode_ibss == ol_txrx_get_opmode(txrx_vdev))

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -113,6 +113,64 @@ static const uint8_t arp_mask[] = {0xff, 0xff};
 static const uint8_t ns_ptrn[] = {0x86, 0xDD};
 static const uint8_t discvr_ptrn[] = {0xe0, 0x00, 0x00, 0xf8};
 static const uint8_t discvr_mask[] = {0xf0, 0x00, 0x00, 0xf8};
+
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+/**
+ * qdf_wma_wow_wakeup_stats_event()- send wow wakeup stats
+ *
+ * This function sends wow wakeup stats diag event
+ *
+ * Return: void.
+ */
+static void qdf_wma_wow_wakeup_stats_event(void)
+{
+	QDF_STATUS status;
+	struct sir_wake_lock_stats stats;
+	WLAN_HOST_DIAG_EVENT_DEF(WowStats,
+		struct host_event_wlan_powersave_wow_stats);
+
+	status = wma_get_wakelock_stats(&stats);
+	if (QDF_IS_STATUS_ERROR(status))
+		return;
+
+	qdf_mem_zero(&WowStats, sizeof(WowStats));
+	WowStats.wow_bcast_wake_up_count =
+		stats.wow_bcast_wake_up_count;
+	WowStats.wow_ipv4_mcast_wake_up_count =
+		stats.wow_ipv4_mcast_wake_up_count;
+	WowStats.wow_ipv6_mcast_wake_up_count =
+		stats.wow_ipv6_mcast_wake_up_count;
+	WowStats.wow_ipv6_mcast_ra_stats =
+		stats.wow_ipv6_mcast_ra_stats;
+	WowStats.wow_ipv6_mcast_ns_stats =
+		stats.wow_ipv6_mcast_ns_stats;
+	WowStats.wow_ipv6_mcast_na_stats =
+		stats.wow_ipv6_mcast_na_stats;
+	WowStats.wow_pno_match_wake_up_count =
+		stats.wow_pno_match_wake_up_count;
+	WowStats.wow_pno_complete_wake_up_count =
+		stats.wow_pno_complete_wake_up_count;
+	WowStats.wow_gscan_wake_up_count =
+		stats.wow_gscan_wake_up_count;
+	WowStats.wow_low_rssi_wake_up_count =
+		stats.wow_low_rssi_wake_up_count;
+	WowStats.wow_rssi_breach_wake_up_count =
+		stats.wow_rssi_breach_wake_up_count;
+	WowStats.wow_icmpv4_count =
+		stats.wow_icmpv4_count;
+	WowStats.wow_icmpv6_count =
+		stats.wow_icmpv6_count;
+	WowStats.wow_oem_response_wake_up_count =
+		stats.wow_oem_response_wake_up_count;
+
+	WLAN_HOST_DIAG_EVENT_REPORT(&WowStats, EVENT_WLAN_POWERSAVE_WOW_STATS);
+}
+#else
+static void qdf_wma_wow_wakeup_stats_event(void)
+{
+	return;
+}
+#endif
 
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
 /**
@@ -1622,8 +1680,7 @@ int wma_csa_offload_handler(void *handle, uint8_t *event, uint32_t len)
 	 * basic sanity check: requested channel should not be 0
 	 * and equal to home channel
 	 */
-	if ((0 == csa_offload_event->channel) ||
-	    (cur_chan == csa_offload_event->channel)) {
+	if (0 == csa_offload_event->channel) {
 		WMA_LOGE("CSA Event with channel %d. Ignore !!",
 			 csa_offload_event->channel);
 		qdf_mem_free(csa_offload_event);
@@ -2308,47 +2365,52 @@ static const u8 *wma_wow_wake_reason_str(A_INT32 wake_reason)
 		return "RECV_MAGIC_PATTERN";
 	case WOW_REASON_P2P_DISC:
 		return "P2P_DISC";
-#ifdef FEATURE_WLAN_LPHB
 	case WOW_REASON_WLAN_HB:
 		return "WLAN_HB";
-#endif /* FEATURE_WLAN_LPHB */
-
 	case WOW_REASON_CSA_EVENT:
 		return "CSA_EVENT";
 	case WOW_REASON_PROBE_REQ_WPS_IE_RECV:
-		return "PROBE_REQ_RECV";
+		return "PROBE_REQ_WPS_IE_RECV";
 	case WOW_REASON_AUTH_REQ_RECV:
 		return "AUTH_REQ_RECV";
 	case WOW_REASON_ASSOC_REQ_RECV:
 		return "ASSOC_REQ_RECV";
 	case WOW_REASON_HTT_EVENT:
-		return "WOW_REASON_HTT_EVENT";
-#ifdef FEATURE_WLAN_RA_FILTERING
+		return "HTT_EVENT";
 	case WOW_REASON_RA_MATCH:
-		return "WOW_REASON_RA_MATCH";
-#endif /* FEATURE_WLAN_RA_FILTERING */
-	case WOW_REASON_BEACON_RECV:
-		return "WOW_REASON_IBSS_BEACON_RECV";
-#ifdef FEATURE_WLAN_AUTO_SHUTDOWN
+		return "RA_MATCH";
 	case WOW_REASON_HOST_AUTO_SHUTDOWN:
-		return "WOW_REASON_HOST_AUTO_SHUTDOWN";
-#endif /* FEATURE_WLAN_AUTO_SHUTDOWN */
-#ifdef WLAN_FEATURE_ROAM_OFFLOAD
+		return "HOST_AUTO_SHUTDOWN";
+	case WOW_REASON_IOAC_MAGIC_EVENT:
+		return "IOAC_MAGIC_EVENT";
+	case WOW_REASON_IOAC_SHORT_EVENT:
+		return "IOAC_SHORT_EVENT";
+	case WOW_REASON_IOAC_EXTEND_EVENT:
+		return "IOAC_EXTEND_EVENT";
+	case WOW_REASON_IOAC_TIMER_EVENT:
+		return "IOAC_TIMER_EVENT";
 	case WOW_REASON_ROAM_HO:
-		return "WOW_REASON_ROAM_HO";
-#endif /* WLAN_FEATURE_ROAM_OFFLOAD */
-#ifdef FEATURE_WLAN_EXTSCAN
-	case WOW_REASON_EXTSCAN:
-		return "WOW_REASON_EXTSCAN";
-#endif
-	case WOW_REASON_RSSI_BREACH_EVENT:
-		return "WOW_REASON_RSSI_BREACH_EVENT";
-	case WOW_REASON_NLO_SCAN_COMPLETE:
-		return "WOW_REASON_NLO_SCAN_COMPLETE";
+		return "ROAM_HO";
+	case WOW_REASON_DFS_PHYERR_RADADR_EVENT:
+		return "DFS_PHYERR_RADADR_EVENT";
+	case WOW_REASON_BEACON_RECV:
+		return "BEACON_RECV";
+	case WOW_REASON_CLIENT_KICKOUT_EVENT:
+		return "CLIENT_KICKOUT_EVENT";
 	case WOW_REASON_NAN_EVENT:
-		return "WOW_REASON_NAN_EVENT";
-	case WOW_REASON_OEM_RESPONSE_EVENT:
-		return "WOW_OEM_RESPONSE_EVENT";
+		return "NAN_EVENT";
+	case WOW_REASON_EXTSCAN:
+		return "EXTSCAN";
+	case WOW_REASON_RSSI_BREACH_EVENT:
+		return "RSSI_BREACH_EVENT";
+	case WOW_REASON_IOAC_REV_KA_FAIL_EVENT:
+		return "IOAC_REV_KA_FAIL_EVENT";
+	case WOW_REASON_IOAC_SOCK_EVENT:
+		return "IOAC_SOCK_EVENT";
+	case WOW_REASON_NLO_SCAN_COMPLETE:
+		return "NLO_SCAN_COMPLETE";
+	case WOW_REASON_PACKET_FILTER_MATCH:
+		return "PACKET_FILTER_MATCH";
 	case WOW_REASON_ASSOC_RES_RECV:
 		return "ASSOC_RES_RECV";
 	case WOW_REASON_REASSOC_REQ_RECV:
@@ -2358,47 +2420,61 @@ static const u8 *wma_wow_wake_reason_str(A_INT32 wake_reason)
 	case WOW_REASON_ACTION_FRAME_RECV:
 		return "ACTION_FRAME_RECV";
 	case WOW_REASON_BPF_ALLOW:
-		return "WOW_REASON_BPF_ALLOW";
+		return "BPF_ALLOW";
+	case WOW_REASON_NAN_DATA:
+		return "NAN_DATA";
+	case WOW_REASON_OEM_RESPONSE_EVENT:
+		return "OEM_RESPONSE_EVENT";
+	case WOW_REASON_TDLS_CONN_TRACKER_EVENT:
+		return "TDLS_CONN_TRACKER_EVENT";
+	case WOW_REASON_CRITICAL_LOG:
+		return "CRITICAL_LOG";
+	case WOW_REASON_P2P_LISTEN_OFFLOAD:
+		return "P2P_LISTEN_OFFLOAD";
+	case WOW_REASON_NAN_EVENT_WAKE_HOST:
+		return "NAN_EVENT_WAKE_HOST";
+	case WOW_REASON_DEBUG_TEST:
+		return "DEBUG_TEST";
+	default:
+		return "unknown";
 	}
-	return "unknown";
 }
 
 /**
- * wma_wow_wake_up_stats_display() - display wow wake up stats
- * @wma: Pointer to wma handle
+ * wma_wow_stats_display() - display wow wake up stats
+ * @stats: per vdev stats counters
  *
  * Return: none
  */
-static void wma_wow_wake_up_stats_display(tp_wma_handle wma)
+static void wma_wow_stats_display(struct sir_vdev_wow_stats *stats)
 {
 	WMA_LOGA("uc %d bc %d v4_mc %d v6_mc %d ra %d ns %d na %d pno_match %d pno_complete %d gscan %d low_rssi %d rssi_breach %d icmp %d icmpv6 %d oem %d",
-		wma->wow_ucast_wake_up_count,
-		wma->wow_bcast_wake_up_count,
-		wma->wow_ipv4_mcast_wake_up_count,
-		wma->wow_ipv6_mcast_wake_up_count,
-		wma->wow_ipv6_mcast_ra_stats,
-		wma->wow_ipv6_mcast_ns_stats,
-		wma->wow_ipv6_mcast_na_stats,
-		wma->wow_pno_match_wake_up_count,
-		wma->wow_pno_complete_wake_up_count,
-		wma->wow_gscan_wake_up_count,
-		wma->wow_low_rssi_wake_up_count,
-		wma->wow_rssi_breach_wake_up_count,
-		wma->wow_icmpv4_count,
-		wma->wow_icmpv6_count,
-		wma->wow_oem_response_wake_up_count);
-
-	return;
+		stats->ucast,
+		stats->bcast,
+		stats->ipv4_mcast,
+		stats->ipv6_mcast,
+		stats->ipv6_mcast_ra,
+		stats->ipv6_mcast_ns,
+		stats->ipv6_mcast_na,
+		stats->pno_match,
+		stats->pno_complete,
+		stats->gscan,
+		stats->low_rssi,
+		stats->rssi_breach,
+		stats->icmpv4,
+		stats->icmpv6,
+		stats->oem_response);
 }
 
 /**
  * wma_wow_ipv6_mcast_stats() - ipv6 mcast wake up stats
- * @wma: Pointer to wma handle
+ * @stats: per vdev stats counters
  * @data: Pointer to pattern match data
  *
  * Return: none
  */
-static void wma_wow_ipv6_mcast_stats(tp_wma_handle wma, uint8_t *data)
+static void wma_wow_ipv6_mcast_stats(struct sir_vdev_wow_stats *stats,
+				     uint8_t *data)
 {
 	static const uint8_t ipv6_ether_type[] = {0x86, 0xDD};
 
@@ -2406,16 +2482,16 @@ static void wma_wow_ipv6_mcast_stats(tp_wma_handle wma, uint8_t *data)
 						sizeof(ipv6_ether_type))) {
 		if (WMA_ICMP_V6_HEADER_TYPE ==
 			*(data + WMA_ICMP_V6_HEADER_OFFSET)) {
-			wma->wow_icmpv6_count++;
+			stats->icmpv6++;
 			if (WMA_ICMP_V6_RA_TYPE ==
 				*(data + WMA_ICMP_V6_TYPE_OFFSET))
-				wma->wow_ipv6_mcast_ra_stats++;
+				stats->ipv6_mcast_ra++;
 			else if (WMA_ICMP_V6_NS_TYPE ==
 				*(data + WMA_ICMP_V6_TYPE_OFFSET))
-				wma->wow_ipv6_mcast_ns_stats++;
+				stats->ipv6_mcast_ns++;
 			else if (WMA_ICMP_V6_NA_TYPE ==
 				*(data + WMA_ICMP_V6_TYPE_OFFSET))
-				wma->wow_ipv6_mcast_na_stats++;
+				stats->ipv6_mcast_na++;
 			else
 				WMA_LOGA("ICMP V6 type : 0x%x",
 					*(data + WMA_ICMP_V6_TYPE_OFFSET));
@@ -2433,92 +2509,99 @@ static void wma_wow_ipv6_mcast_stats(tp_wma_handle wma, uint8_t *data)
 }
 
 /**
- * wma_wow_wake_up_stats() - maintain wow pattern match wake up stats
- * @wma: Pointer to wma handle
+ * wma_inc_wow_stats() - maintain wow pattern match wake up stats
+ * @stats: per vdev stats counters
  * @data: Pointer to pattern match data
  * @len: Pattern match data length
- * @event: Wake up event
+ * @reason: Wake up reason
  *
  * Return: none
  */
-static void wma_wow_wake_up_stats(tp_wma_handle wma, uint8_t *data,
-	int32_t len, WOW_WAKE_REASON_TYPE event)
+static void wma_inc_wow_stats(struct sir_vdev_wow_stats *stats, uint8_t *data,
+			      int32_t len, WOW_WAKE_REASON_TYPE reason)
 {
-	switch (event) {
-
+	switch (reason) {
 	case WOW_REASON_BPF_ALLOW:
 	case WOW_REASON_PATTERN_MATCH_FOUND:
+		if (!data || len == 0) {
+			WMA_LOGE("Null data packet for wow reason %s",
+				 wma_wow_wake_reason_str(reason));
+			break;
+		}
+
 		if (WMA_BCAST_MAC_ADDR == *data) {
-			wma->wow_bcast_wake_up_count++;
+			stats->bcast++;
 			if (len >= WMA_IPV4_PROTO_GET_MIN_LEN &&
 			    qdf_nbuf_data_is_icmp_pkt(data))
-				wma->wow_icmpv4_count++;
+				stats->icmpv4++;
 			else if ((len > WMA_ICMP_V6_TYPE_OFFSET) &&
 			    qdf_nbuf_data_is_icmpv6_pkt(data))
-				wma->wow_icmpv6_count++;
+				stats->icmpv6++;
 		} else if (WMA_MCAST_IPV4_MAC_ADDR == *data) {
-			wma->wow_ipv4_mcast_wake_up_count++;
+			stats->ipv4_mcast++;
 			if (len >= WMA_IPV4_PROTO_GET_MIN_LEN &&
 			    WMA_ICMP_PROTOCOL == *(data + WMA_IPV4_PROTOCOL))
-				wma->wow_icmpv4_count++;
+				stats->icmpv4++;
 		} else if (WMA_MCAST_IPV6_MAC_ADDR == *data) {
-			wma->wow_ipv6_mcast_wake_up_count++;
+			stats->ipv6_mcast++;
 			if (len > WMA_ICMP_V6_TYPE_OFFSET)
-				wma_wow_ipv6_mcast_stats(wma, data);
+				wma_wow_ipv6_mcast_stats(stats, data);
 			else
 				WMA_LOGA("ICMP_V6 data len %d", len);
 		} else {
-			wma->wow_ucast_wake_up_count++;
+			stats->ucast++;
 			if (qdf_nbuf_data_is_ipv4_mcast_pkt(data))
-				wma->wow_ipv4_mcast_wake_up_count++;
+				stats->ipv4_mcast++;
 			else if (qdf_nbuf_data_is_ipv6_mcast_pkt(data))
-				wma->wow_ipv6_mcast_wake_up_count++;
+				stats->ipv6_mcast++;
 
 			if (len >= WMA_IPV4_PROTO_GET_MIN_LEN &&
 			    qdf_nbuf_data_is_icmp_pkt(data))
-				wma->wow_icmpv4_count++;
+				stats->icmpv4++;
 			else if (len > WMA_ICMP_V6_TYPE_OFFSET &&
 			    qdf_nbuf_data_is_icmpv6_pkt(data))
-				wma->wow_icmpv6_count++;
+				stats->icmpv6++;
 		}
 		break;
 
 	case WOW_REASON_RA_MATCH:
-		wma->wow_icmpv6_count++;
-		wma->wow_ipv6_mcast_ra_stats++;
-		wma->wow_ipv6_mcast_wake_up_count++;
+		stats->ipv6_mcast++;
+		stats->ipv6_mcast_ra++;
+		stats->icmpv6++;
 		break;
 
 	case WOW_REASON_NLOD:
-		wma->wow_pno_match_wake_up_count++;
+		stats->pno_match++;
 		break;
 
 	case WOW_REASON_NLO_SCAN_COMPLETE:
-		wma->wow_pno_complete_wake_up_count++;
+		stats->pno_complete++;
 		break;
 
 	case WOW_REASON_LOW_RSSI:
-		wma->wow_low_rssi_wake_up_count++;
+		stats->low_rssi++;
 		break;
 
 	case WOW_REASON_EXTSCAN:
-		wma->wow_gscan_wake_up_count++;
+		stats->gscan++;
 		break;
 
 	case WOW_REASON_RSSI_BREACH_EVENT:
-		wma->wow_rssi_breach_wake_up_count++;
+		stats->rssi_breach++;
 		break;
 	case WOW_REASON_OEM_RESPONSE_EVENT:
-		wma->wow_oem_response_wake_up_count++;
+		stats->oem_response++;
 		break;
 
 	default:
-		WMA_LOGE("Unknown wake up reason");
-		break;
+		WMA_LOGI("Stats for WoW reason %s are not tracked",
+			 wma_wow_wake_reason_str(reason));
+
+		/* don't bother displaying stats that haven't changed */
+		return;
 	}
 
-	wma_wow_wake_up_stats_display(wma);
-	return;
+	wma_wow_stats_display(stats);
 }
 
 #ifdef FEATURE_WLAN_EXTSCAN
@@ -2561,10 +2644,6 @@ static int wma_extscan_get_eventid_from_tlvtag(uint32_t tag)
 
 	case WMITLV_TAG_STRUC_wmi_extscan_capabilities_event_fixed_param:
 		event_id = WMI_EXTSCAN_CAPABILITIES_EVENTID;
-		break;
-
-	case WMITLV_TAG_STRUC_wmi_extscan_hotlist_ssid_match_event_fixed_param:
-		event_id = WMI_EXTSCAN_HOTLIST_SSID_MATCH_EVENTID;
 		break;
 
 	default:
@@ -3049,37 +3128,37 @@ static void wma_wow_dump_mgmt_buffer(uint8_t *wow_packet_buffer,
 }
 
 /**
- * wma_wow_get_wakelock_duration() - return the wakelock duration
+ * wma_wow_get_wakelock_ms() - return the wakelock duration
  *        for some mgmt packets received.
  * @wake_reason: wow wakeup reason
  *
  * This function returns the wakelock duration for some mgmt packets
  * received while in wow suspend.
  *
- * Return: wakelock duration
+ * Return: wakelock duration in ms
  */
-static uint32_t wma_wow_get_wakelock_duration(int wake_reason)
+static uint32_t wma_wow_get_wakelock_ms(int wake_reason)
 {
-	uint32_t wake_lock_duration = 0;
-
 	switch (wake_reason) {
 	case WOW_REASON_AUTH_REQ_RECV:
-		wake_lock_duration = WMA_AUTH_REQ_RECV_WAKE_LOCK_TIMEOUT;
-		break;
+		return WMA_AUTH_REQ_RECV_WAKE_LOCK_TIMEOUT;
 	case WOW_REASON_ASSOC_REQ_RECV:
-		wake_lock_duration = WMA_ASSOC_REQ_RECV_WAKE_LOCK_DURATION;
-		break;
+		return WMA_ASSOC_REQ_RECV_WAKE_LOCK_DURATION;
 	case WOW_REASON_DEAUTH_RECVD:
-		wake_lock_duration = WMA_DEAUTH_RECV_WAKE_LOCK_DURATION;
-		break;
+		return WMA_DEAUTH_RECV_WAKE_LOCK_DURATION;
 	case WOW_REASON_DISASSOC_RECVD:
-		wake_lock_duration = WMA_DISASSOC_RECV_WAKE_LOCK_DURATION;
-		break;
-	default:
-		break;
+		return WMA_DISASSOC_RECV_WAKE_LOCK_DURATION;
+	case WOW_REASON_AP_ASSOC_LOST:
+		return WMA_BMISS_EVENT_WAKE_LOCK_DURATION;
+#ifdef FEATURE_WLAN_AUTO_SHUTDOWN
+	case WOW_REASON_HOST_AUTO_SHUTDOWN:
+		return WMA_AUTO_SHUTDOWN_WAKE_LOCK_DURATION;
+#endif
+	case WOW_REASON_ROAM_HO:
+		return WMA_ROAM_HO_WAKE_LOCK_DURATION;
 	}
 
-	return wake_lock_duration;
+	return 0;
 }
 
 /**
@@ -3127,6 +3206,28 @@ exit_handler:
 	wma_beacon_miss_handler(wma, wake_info->vdev_id, 0);
 }
 
+static const char *wma_vdev_type_str(uint32_t vdev_type)
+{
+	switch (vdev_type) {
+	case WMI_VDEV_TYPE_AP:
+		return "AP";
+	case WMI_VDEV_TYPE_STA:
+		return "STA";
+	case WMI_VDEV_TYPE_IBSS:
+		return "IBSS";
+	case WMI_VDEV_TYPE_MONITOR:
+		return "MONITOR";
+	case WMI_VDEV_TYPE_NAN:
+		return "NAN";
+	case WMI_VDEV_TYPE_OCB:
+		return "OCB";
+	case WMI_VDEV_TYPE_NDI:
+		return "NDI";
+	default:
+		return "unknown";
+	}
+}
+
 /**
  * wma_wow_wakeup_host_event() - wakeup host event handler
  * @handle: wma handle
@@ -3142,14 +3243,13 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 			      uint32_t len)
 {
 	tp_wma_handle wma = (tp_wma_handle) handle;
+	struct wma_txrx_node *wma_vdev;
 	WMI_WOW_WAKEUP_HOST_EVENTID_param_tlvs *param_buf;
 	WOW_EVENT_INFO_fixed_param *wake_info;
-#ifdef FEATURE_WLAN_SCAN_PNO
-	struct wma_txrx_node *node;
-#endif /* FEATURE_WLAN_SCAN_PNO */
-	uint32_t wake_lock_duration = 0;
+	uint32_t wakelock_duration;
 	void *wmi_cmd_struct_ptr = NULL;
 	uint32_t tlv_hdr, tag, wow_buf_pkt_len = 0, event_id = 0;
+	uint8_t *wow_buf_data = NULL;
 	int tlv_ok_status;
 
 	param_buf = (WMI_WOW_WAKEUP_HOST_EVENTID_param_tlvs *) event;
@@ -3159,14 +3259,18 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 	}
 
 	wake_info = param_buf->fixed_param;
+	wma_vdev = &wma->interfaces[wake_info->vdev_id];
 
 	if ((wake_info->wake_reason != WOW_REASON_UNSPECIFIED) ||
 	    (wake_info->wake_reason == WOW_REASON_UNSPECIFIED &&
 	     !wmi_get_runtime_pm_inprogress(wma->wmi_handle))) {
-		WMA_LOGA("WOW wakeup host event received (reason: %s(%d)) for vdev %d",
+		WMA_LOGA("WOW wakeup host event received; reason: %s(%d), vdev_id: %d, vdev_type: %s",
 			 wma_wow_wake_reason_str(wake_info->wake_reason),
-			 wake_info->wake_reason, wake_info->vdev_id);
+			 wake_info->wake_reason,
+			 wake_info->vdev_id,
+			 wma_vdev ? wma_vdev_type_str(wma_vdev->type) : "null");
 		qdf_wow_wakeup_host_event(wake_info->wake_reason);
+		qdf_wma_wow_wakeup_stats_event();
 	}
 
 	qdf_event_set(&wma->wma_resume_event);
@@ -3210,8 +3314,6 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 	case WOW_REASON_REASSOC_RES_RECV:
 	case WOW_REASON_BEACON_RECV:
 	case WOW_REASON_ACTION_FRAME_RECV:
-		wake_lock_duration =
-			wma_wow_get_wakelock_duration(wake_info->wake_reason);
 		if (param_buf->wow_packet_buffer) {
 			/* First 4-bytes of wow_packet_buffer is the length */
 			qdf_mem_copy((uint8_t *) &wow_buf_pkt_len,
@@ -3228,12 +3330,10 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 		break;
 
 	case WOW_REASON_AP_ASSOC_LOST:
-		wake_lock_duration = WMA_BMISS_EVENT_WAKE_LOCK_DURATION;
 		wma_wow_ap_lost_helper(wma, param_buf);
 		break;
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
 	case WOW_REASON_HOST_AUTO_SHUTDOWN:
-		wake_lock_duration = WMA_AUTO_SHUTDOWN_WAKE_LOCK_DURATION;
 		WMA_LOGA("Received WOW Auto Shutdown trigger in suspend");
 		if (wma_post_auto_shutdown_msg())
 			return -EINVAL;
@@ -3241,11 +3341,9 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 #endif /* FEATURE_WLAN_AUTO_SHUTDOWN */
 #ifdef FEATURE_WLAN_SCAN_PNO
 	case WOW_REASON_NLOD:
-		wma_wow_wake_up_stats(wma, NULL, 0, WOW_REASON_NLOD);
-		node = &wma->interfaces[wake_info->vdev_id];
-		if (node) {
+		if (wma_vdev) {
 			WMA_LOGD("NLO match happened");
-			node->nlo_match_evt_received = true;
+			wma_vdev->nlo_match_evt_received = true;
 			cds_host_diag_log_work(&wma->pno_wake_lock,
 					WMA_PNO_MATCH_WAKE_LOCK_TIMEOUT,
 					WIFI_POWER_EVENT_WAKELOCK_PNO);
@@ -3268,7 +3366,7 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 		WMA_LOGD("Host woken up because of CSA IE");
 		wma_csa_offload_handler(handle, wmi_cmd_struct_ptr,
 					wow_buf_pkt_len);
-	break;
+		break;
 
 #ifdef FEATURE_WLAN_LPHB
 	case WOW_REASON_WLAN_HB:
@@ -3285,34 +3383,28 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 	case WOW_REASON_RA_MATCH:
 #endif /* FEATURE_WLAN_RA_FILTERING */
 	case WOW_REASON_RECV_MAGIC_PATTERN:
-		wma_wow_wake_up_stats_display(wma);
+		if (wma_vdev)
+			wma_wow_stats_display(&wma_vdev->wow_stats);
+
 		WMA_LOGD("Wake up for Rx packet, dump starting from ethernet hdr");
-		if (param_buf->wow_packet_buffer) {
-			/* First 4-bytes of wow_packet_buffer is the length */
-			qdf_mem_copy((uint8_t *) &wow_buf_pkt_len,
-				     param_buf->wow_packet_buffer, 4);
-			if (wow_buf_pkt_len) {
-				uint8_t *data;
-
-				wma_wow_wake_up_stats(wma,
-					param_buf->wow_packet_buffer + 4,
-					wow_buf_pkt_len,
-					wake_info->wake_reason);
-				qdf_trace_hex_dump(QDF_MODULE_ID_WMA,
-					QDF_TRACE_LEVEL_DEBUG,
-					param_buf->wow_packet_buffer + 4,
-					wow_buf_pkt_len);
-
-				data = (uint8_t *)
-					(param_buf->wow_packet_buffer + 4);
-				wma_wow_parse_data_pkt_buffer(data,
-					wow_buf_pkt_len);
-			} else {
-				WMA_LOGE("wow packet buffer is empty");
-			}
-		} else {
+		if (!param_buf->wow_packet_buffer) {
 			WMA_LOGE("No wow packet buffer present");
+			break;
 		}
+
+		/* First 4-bytes of wow_packet_buffer is the length */
+		qdf_mem_copy((uint8_t *)&wow_buf_pkt_len,
+			     param_buf->wow_packet_buffer, 4);
+		if (wow_buf_pkt_len == 0) {
+			WMA_LOGE("wow packet buffer is empty");
+			break;
+		}
+
+		wow_buf_data = (uint8_t *)(param_buf->wow_packet_buffer + 4);
+		qdf_trace_hex_dump(QDF_MODULE_ID_WMA, QDF_TRACE_LEVEL_DEBUG,
+				   wow_buf_data, wow_buf_pkt_len);
+		wma_wow_parse_data_pkt_buffer(wow_buf_data, wow_buf_pkt_len);
+
 		break;
 
 	case WOW_REASON_LOW_RSSI:
@@ -3321,7 +3413,9 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 		 * WMI_ROAM_REASON_SUITABLE_AP will be handled by
 		 * wma_roam_event_callback().
 		 */
-		wma_wow_wake_up_stats(wma, NULL, 0, WOW_REASON_LOW_RSSI);
+		wma_peer_debug_log(wake_info->vdev_id, DEBUG_WOW_ROAM_EVENT,
+				   DEBUG_INVALID_PEER_ID, NULL, NULL,
+				   WOW_REASON_LOW_RSSI, 0);
 		WMA_LOGD("Host woken up because of roam event");
 		if (param_buf->wow_packet_buffer) {
 			/* Roam event is embedded in wow_packet_buffer */
@@ -3356,7 +3450,6 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 #ifdef FEATURE_WLAN_EXTSCAN
 	case WOW_REASON_EXTSCAN:
 		WMA_LOGD("Host woken up because of extscan reason");
-		wma_wow_wake_up_stats(wma, NULL, 0, WOW_REASON_EXTSCAN);
 		if (param_buf->wow_packet_buffer)
 			wma_extscan_wow_event_callback(handle,
 				wmi_cmd_struct_ptr, wow_buf_pkt_len);
@@ -3365,8 +3458,6 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 		break;
 #endif
 	case WOW_REASON_RSSI_BREACH_EVENT:
-		wma_wow_wake_up_stats(wma, NULL, 0,
-				WOW_REASON_RSSI_BREACH_EVENT);
 		WMA_LOGD("Host woken up because of rssi breach reason");
 		/* rssi breach event is embedded in wow_packet_buffer */
 		if (param_buf->wow_packet_buffer)
@@ -3390,8 +3481,6 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 		}
 		break;
 	case WOW_REASON_OEM_RESPONSE_EVENT:
-		wma_wow_wake_up_stats(wma, NULL, 0,
-				WOW_REASON_OEM_RESPONSE_EVENT);
 		/*
 		 * Actual OEM Response event will follow after this
 		 * WOW Wakeup event
@@ -3412,13 +3501,25 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 		break;
 	}
 
-	if (wake_lock_duration) {
+	/* Log wake reason at appropriate (global/vdev) level  */
+	if (wake_info->wake_reason == WOW_REASON_UNSPECIFIED)
+		wma->wow_unspecified_wake_count++;
+	else if (wma_vdev)
+		wma_inc_wow_stats(&wma_vdev->wow_stats,
+				  wow_buf_data,
+				  wow_buf_data ? wow_buf_pkt_len : 0,
+				  wake_info->wake_reason);
+	else
+		WMA_LOGE("Vdev is NULL, but wake reason is vdev related");
+
+	wakelock_duration = wma_wow_get_wakelock_ms(wake_info->wake_reason);
+	if (wakelock_duration) {
 		cds_host_diag_log_work(&wma->wow_wake_lock,
-				       wake_lock_duration,
+				       wakelock_duration,
 				       WIFI_POWER_EVENT_WAKELOCK_WOW);
 		qdf_wake_lock_timeout_acquire(&wma->wow_wake_lock,
-					      wake_lock_duration);
-		WMA_LOGA("Holding %d msec wake_lock", wake_lock_duration);
+					      wakelock_duration);
+		WMA_LOGA("Holding %d msec wake_lock", wakelock_duration);
 	}
 
 	if (wmi_cmd_struct_ptr)
@@ -3454,11 +3555,9 @@ int wma_pdev_resume_event_handler(void *handle, uint8_t *event, uint32_t len)
  */
 static inline void wma_set_wow_bus_suspend(tp_wma_handle wma, int val)
 {
-
 	qdf_atomic_set(&wma->is_wow_bus_suspended, val);
+	wmi_set_is_wow_bus_suspended(wma->wmi_handle, val);
 }
-
-
 
 /**
  * wma_add_wow_wakeup_event() -  Configures wow wakeup events.
@@ -3676,6 +3775,53 @@ static QDF_STATUS wma_configure_ssdp(tp_wma_handle wma, uint8_t vdev_id)
 }
 
 /**
+ * wma_register_action_frame_patterns() - register action frame map to fw
+ * @handle: Pointer to wma handle
+ * @vdev_id: VDEV ID
+ *
+ * This is called to push action frames wow patterns from local
+ * cache to firmware.
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS wma_register_action_frame_patterns(WMA_HANDLE handle,
+						uint8_t vdev_id)
+{
+	tp_wma_handle wma = handle;
+	struct action_wakeup_set_param cmd = {0};
+	int32_t err;
+	int i = 0;
+
+	cmd.vdev_id = vdev_id;
+	cmd.operation = WOW_ACTION_WAKEUP_OPERATION_SET;
+
+	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP0;
+	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP1;
+	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP2;
+	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP3;
+	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP4;
+	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP5;
+	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP6;
+	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP7;
+
+	for (i = 0; i < WMI_SUPPORTED_ACTION_CATEGORY_ELE_LIST; i++) {
+		if (i < ALLOWED_ACTION_FRAME_MAP_WORDS)
+			WMA_LOGD("%s: %d action Wakeup pattern 0x%x in fw",
+				__func__, i, cmd.action_category_map[i]);
+		else
+			cmd.action_category_map[i] = 0;
+	}
+
+	err = wmi_unified_action_frame_patterns_cmd(wma->wmi_handle, &cmd);
+	if (err) {
+		WMA_LOGE("Failed to config wow action frame map, ret %d", err);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
+/**
  * wma_wow_sta() - set WOW patterns in sta mode
  * @wma: wma handle
  * @vdev_id: vdev id
@@ -3873,10 +4019,11 @@ void wma_enable_disable_wakeup_event(WMA_HANDLE handle,
 /**
  * wma_enable_wow_in_fw() - wnable wow in fw
  * @wma: wma handle
+ * @wow_flags: bitmap of WMI WOW flags to pass to FW
  *
  * Return: QDF status
  */
-QDF_STATUS wma_enable_wow_in_fw(WMA_HANDLE handle)
+QDF_STATUS wma_enable_wow_in_fw(WMA_HANDLE handle, uint32_t wow_flags)
 {
 	tp_wma_handle wma = handle;
 	int ret;
@@ -3901,17 +4048,9 @@ QDF_STATUS wma_enable_wow_in_fw(WMA_HANDLE handle)
 	WMA_LOGD("Credits:%d; Pending_Cmds: %d",
 		 host_credits, wmi_pending_cmds);
 
-	if (host_credits < WMI_WOW_REQUIRED_CREDITS) {
-		WMA_LOGE("%s: Host Doesn't have enough credits to Post WMI_WOW_ENABLE_CMDID! "
-			"Credits:%d, pending_cmds:%d\n", __func__, host_credits,
-			wmi_pending_cmds);
-#ifndef QCA_WIFI_3_0_EMU
-		goto error;
-#endif
-	}
-
 	param.enable = true;
 	param.can_suspend_link = htc_can_suspend_link(wma->htc_handle);
+	param.flags = wow_flags;
 	ret = wmi_unified_wow_enable_send(wma->wmi_handle, &param,
 				   WMA_WILDCARD_PDEV_ID);
 	if (ret) {
@@ -4011,7 +4150,7 @@ QDF_STATUS wma_resume_req(tp_wma_handle wma, enum qdf_suspend_type type)
 	wmi_set_runtime_pm_inprogress(wma->wmi_handle, false);
 
 	if (type == QDF_RUNTIME_SUSPEND)
-		qdf_runtime_pm_allow_suspend(wma->wma_runtime_resume_lock);
+		qdf_runtime_pm_allow_suspend(&wma->wma_runtime_resume_lock);
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -4656,6 +4795,7 @@ static QDF_STATUS wma_send_host_wakeup_ind_to_fw(tp_wma_handle wma)
 			 wmi_get_host_credits(wma->wmi_handle));
 		if (!cds_is_driver_recovering()) {
 			if (pMac->sme.enableSelfRecovery) {
+				wmi_tag_crash_inject(wma->wmi_handle, true);
 				cds_trigger_recovery(false);
 			} else {
 				QDF_BUG(0);
@@ -4918,8 +5058,9 @@ int wma_process_receive_filter_clear_filter_req(tp_wma_handle wma,
 	uint8_t vdev_id;
 
 	/* Get the vdev id */
-	if (!wma_find_vdev_by_bssid(wma,
-				rcv_clear_param->bssid.bytes, &vdev_id)) {
+	if (!wma_find_vdev_by_addr(wma,
+				rcv_clear_param->self_macaddr.bytes,
+				&vdev_id)) {
 		WMA_LOGE("vdev handle is invalid for %pM",
 			 rcv_clear_param->bssid.bytes);
 		return -EINVAL;
@@ -5287,6 +5428,9 @@ QDF_STATUS wma_process_gtk_offload_req(tp_wma_handle wma,
 
 	WMA_LOGD("%s Enter", __func__);
 
+	WMA_LOGD("%s replay_ctr 0x%llx", __func__,
+		 params->ullKeyReplayCounter);
+
 	/* Get the vdev id */
 	if (!wma_find_vdev_by_bssid(wma, params->bssid.bytes, &vdev_id)) {
 		WMA_LOGE("vdev handle is invalid for %pM", params->bssid.bytes);
@@ -5439,6 +5583,40 @@ QDF_STATUS wma_enable_arp_ns_offload(tp_wma_handle wma,
 	return QDF_STATUS_SUCCESS;
 }
 
+QDF_STATUS wma_configure_non_arp_broadcast_filter(tp_wma_handle wma,
+				struct broadcast_filter_request *bcast_filter)
+{
+	int32_t res;
+	uint8_t vdev_id;
+
+	/* Get the vdev id */
+	if (!wma_find_vdev_by_bssid(wma, bcast_filter->bssid.bytes,
+					&vdev_id)) {
+		WMA_LOGE("vdev handle is invalid for %pM",
+			 bcast_filter->bssid.bytes);
+		qdf_mem_free(bcast_filter);
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (!wma->interfaces[vdev_id].vdev_up) {
+		WMA_LOGE("vdev %d is not up skipping enable Broadcast Filter",
+			 vdev_id);
+		qdf_mem_free(bcast_filter);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	res = wmi_unified_configure_broadcast_filter_cmd(wma->wmi_handle,
+				vdev_id, bcast_filter->enable);
+
+	if (res) {
+		WMA_LOGE("Failed to enable/disable Broadcast Filter");
+		qdf_mem_free(bcast_filter);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	qdf_mem_free(bcast_filter);
+	return QDF_STATUS_SUCCESS;
+}
 
 /**
  * wma_process_cesium_enable_ind() - enables cesium functionality in target
@@ -5545,6 +5723,8 @@ QDF_STATUS wma_process_get_peer_info_req
 
 	ret = wmi_unified_cmd_send(wma->wmi_handle, buf, len,
 				   WMI_PEER_INFO_REQ_CMDID);
+	if (ret != QDF_STATUS_SUCCESS)
+		wmi_buf_free(buf);
 
 	WMA_LOGE("IBSS get peer info cmd sent len: %d, vdev %d"
 		 " command id: %d, status: %d", len,
@@ -5636,6 +5816,8 @@ QDF_STATUS wma_process_rmc_enable_ind(tp_wma_handle wma)
 
 	ret = wmi_unified_cmd_send(wma->wmi_handle, buf, len,
 				   WMI_RMC_SET_MODE_CMDID);
+	if (ret != QDF_STATUS_SUCCESS)
+		wmi_buf_free(buf);
 
 	WMA_LOGE("Enable RMC cmd sent len: %d, vdev %d" " command id: %d,"
 		 " status: %d", len, vdev_id, WMI_RMC_SET_MODE_CMDID, ret);
@@ -5686,6 +5868,8 @@ QDF_STATUS wma_process_rmc_disable_ind(tp_wma_handle wma)
 
 	ret = wmi_unified_cmd_send(wma->wmi_handle, buf, len,
 				   WMI_RMC_SET_MODE_CMDID);
+	if (ret != QDF_STATUS_SUCCESS)
+		wmi_buf_free(buf);
 
 	WMA_LOGE("Disable RMC cmd sent len: %d, vdev %d" " command id: %d,"
 		 " status: %d", len, vdev_id, WMI_RMC_SET_MODE_CMDID, ret);
@@ -5749,6 +5933,8 @@ QDF_STATUS wma_process_rmc_action_period_ind(tp_wma_handle wma)
 
 	ret = wmi_unified_cmd_send(wma->wmi_handle, buf, len,
 				   WMI_RMC_SET_ACTION_PERIOD_CMDID);
+	if (ret != QDF_STATUS_SUCCESS)
+		wmi_buf_free(buf);
 
 	WMA_LOGE("RMC action period %d cmd sent len: %d, vdev %d"
 		 " command id: %d, status: %d", periodicity_msec,
@@ -6389,7 +6575,7 @@ static QDF_STATUS wma_post_runtime_resume_msg(WMA_HANDLE handle)
 	QDF_STATUS status;
 	tp_wma_handle wma = (tp_wma_handle) handle;
 
-	qdf_runtime_pm_prevent_suspend(wma->wma_runtime_resume_lock);
+	qdf_runtime_pm_prevent_suspend(&wma->wma_runtime_resume_lock);
 
 	resume_msg.bodyptr = NULL;
 	resume_msg.type    = WMA_RUNTIME_PM_RESUME_IND;
@@ -6398,7 +6584,7 @@ static QDF_STATUS wma_post_runtime_resume_msg(WMA_HANDLE handle)
 
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		WMA_LOGE("Failed to post Runtime PM Resume IND to VOS");
-		qdf_runtime_pm_allow_suspend(wma->wma_runtime_resume_lock);
+		qdf_runtime_pm_allow_suspend(&wma->wma_runtime_resume_lock);
 	}
 
 	return status;
@@ -6446,13 +6632,14 @@ failure:
 /**
  * __wma_bus_suspend(): handles bus suspend for wma
  * @type: is this suspend part of runtime suspend or system suspend?
+ * @wow_flags: bitmap of WMI WOW flags to pass to FW
  *
  * Bails if a scan is in progress.
  * Calls the appropriate handlers based on configuration and event.
  *
  * Return: 0 for success or error code
  */
-static int __wma_bus_suspend(enum qdf_suspend_type type)
+static int __wma_bus_suspend(enum qdf_suspend_type type, uint32_t wow_flags)
 {
 	WMA_HANDLE handle = cds_get_context(QDF_MODULE_ID_WMA);
 	if (NULL == handle) {
@@ -6476,15 +6663,20 @@ static int __wma_bus_suspend(enum qdf_suspend_type type)
 				wma_is_wow_mode_selected(handle));
 
 	if (wma_is_wow_mode_selected(handle)) {
-		QDF_STATUS status = wma_enable_wow_in_fw(handle);
+		QDF_STATUS status = wma_enable_wow_in_fw(handle, wow_flags);
 		return qdf_status_to_os_return(status);
 	}
+
+	wma_peer_debug_log(DEBUG_INVALID_VDEV_ID, DEBUG_BUS_SUSPEND,
+			   DEBUG_INVALID_PEER_ID, NULL, NULL,
+			   0, 0);
 
 	return wma_suspend_target(handle, 0);
 }
 
 /**
  * wma_runtime_suspend() - handles runtime suspend request from hdd
+ * @wow_flags: bitmap of WMI WOW flags to pass to FW
  *
  * Calls the appropriate handler based on configuration and event.
  * Last busy marking should prevent race conditions between processing
@@ -6496,22 +6688,23 @@ static int __wma_bus_suspend(enum qdf_suspend_type type)
  *
  * Return: 0 for success or error code
  */
-int wma_runtime_suspend(void)
+int wma_runtime_suspend(uint32_t wow_flags)
 {
-	return __wma_bus_suspend(QDF_RUNTIME_SUSPEND);
+	return __wma_bus_suspend(QDF_RUNTIME_SUSPEND, wow_flags);
 }
 
 /**
  * wma_bus_suspend() - handles bus suspend request from hdd
+ * @wow_flags: bitmap of WMI WOW flags to pass to FW
  *
  * Calls the appropriate handler based on configuration and event
  *
  * Return: 0 for success or error code
  */
-int wma_bus_suspend(void)
+int wma_bus_suspend(uint32_t wow_flags)
 {
 
-	return __wma_bus_suspend(QDF_SYSTEM_SUSPEND);
+	return __wma_bus_suspend(QDF_SYSTEM_SUSPEND, wow_flags);
 }
 
 /**
@@ -6528,6 +6721,10 @@ static int __wma_bus_resume(WMA_HANDLE handle)
 	QDF_STATUS status;
 
 	WMA_LOGI("%s: wow mode %d", __func__, wow_mode);
+
+	wma_peer_debug_log(DEBUG_INVALID_VDEV_ID, DEBUG_BUS_RESUME,
+			   DEBUG_INVALID_PEER_ID, NULL, NULL,
+			   0, 0);
 
 	wma->wow_initial_wake_up = false;
 
@@ -7741,6 +7938,7 @@ int wma_fw_mem_dump_event_handler(void *handle, u_int8_t *cmd_param_info,
 QDF_STATUS wma_process_set_ie_info(tp_wma_handle wma,
 				   struct vdev_ie_info *ie_info)
 {
+	struct wma_txrx_node *interface;
 	struct vdev_ie_info_param cmd = {0};
 	int ret;
 
@@ -7752,6 +7950,17 @@ QDF_STATUS wma_process_set_ie_info(tp_wma_handle wma,
 	/* Validate the input */
 	if (ie_info->length  <= 0) {
 		WMA_LOGE(FL("Invalid IE length"));
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (ie_info->vdev_id >= wma->max_bssid) {
+		WMA_LOGE(FL("Invalid vdev_id: %d"), ie_info->vdev_id);
+		return QDF_STATUS_E_INVAL;
+	}
+
+	interface = &wma->interfaces[ie_info->vdev_id];
+	if (!interface->is_vdev_valid) {
+		WMA_LOGE(FL("vdev_id: %d is not active"), ie_info->vdev_id);
 		return QDF_STATUS_E_INVAL;
 	}
 
@@ -8198,46 +8407,59 @@ int wma_p2p_lo_event_handler(void *handle, uint8_t *event_buf,
 }
 
 /**
- * wma_get_wakelock_stats() - Collects wake lock stats
- * @wake_lock_stats: wakelock structure to be filled
+ * wma_get_wakelock_stats() - Populates wake lock stats
+ * @stats: non-null wakelock structure to populate
  *
  * This function collects wake lock stats
  *
- * Return: VOS_STATUS_SUCCESS on success, error number otherwise
+ * Return: QDF_STATUS_SUCCESS on success, error value otherwise
  */
-QDF_STATUS wma_get_wakelock_stats(struct sir_wake_lock_stats *wake_lock_stats)
+QDF_STATUS wma_get_wakelock_stats(struct sir_wake_lock_stats *stats)
 {
-	tp_wma_handle wma_handle;
+	t_wma_handle *wma;
+	struct sir_vdev_wow_stats *vstats;
+	int i;
 
-	wma_handle = cds_get_context(QDF_MODULE_ID_WMA);
-
-	if (!wake_lock_stats) {
-		WMA_LOGE("%s: invalid pointer", __func__);
+	if (!stats) {
+		WMA_LOGE("%s: invalid stats pointer", __func__);
 		return QDF_STATUS_E_INVAL;
 	}
 
-	if (!wma_handle) {
-		WMA_LOGE("%s: WMA context is invalid!", __func__);
+	wma = cds_get_context(QDF_MODULE_ID_WMA);
+	if (!wma) {
+		WMA_LOGE("%s: invalid WMA context", __func__);
 		return QDF_STATUS_E_INVAL;
 	}
 
-	wake_lock_stats->wow_ucast_wake_up_count =
-			wma_handle->wow_ucast_wake_up_count;
-	wake_lock_stats->wow_bcast_wake_up_count =
-			wma_handle->wow_bcast_wake_up_count;
-	wake_lock_stats->wow_ipv4_mcast_wake_up_count =
-			wma_handle->wow_ipv4_mcast_wake_up_count;
-	wake_lock_stats->wow_ipv6_mcast_wake_up_count =
-			wma_handle->wow_ipv6_mcast_wake_up_count;
-	wake_lock_stats->wow_ipv6_mcast_ra_stats =
-			wma_handle->wow_ipv6_mcast_ra_stats;
-	wake_lock_stats->wow_ipv6_mcast_ns_stats =
-			wma_handle->wow_ipv6_mcast_ns_stats;
-	wake_lock_stats->wow_ipv6_mcast_na_stats =
-			wma_handle->wow_ipv6_mcast_na_stats;
-	wake_lock_stats->wow_icmpv4_count = wma_handle->wow_icmpv4_count;
-	wake_lock_stats->wow_icmpv6_count =
-			wma_handle->wow_icmpv6_count;
+	/* ensure counters are zeroed */
+	qdf_mem_zero(stats, sizeof(*stats));
+
+	/* populate global level stats */
+	stats->wow_unspecified_wake_up_count = wma->wow_unspecified_wake_count;
+
+	/* populate vdev level stats */
+	for (i = 0; i < wma->max_bssid; ++i) {
+		if (!wma->interfaces[i].handle)
+			continue;
+
+		vstats = &wma->interfaces[i].wow_stats;
+
+		stats->wow_ucast_wake_up_count += vstats->ucast;
+		stats->wow_bcast_wake_up_count += vstats->bcast;
+		stats->wow_ipv4_mcast_wake_up_count += vstats->ipv4_mcast;
+		stats->wow_ipv6_mcast_wake_up_count += vstats->ipv6_mcast;
+		stats->wow_ipv6_mcast_ra_stats += vstats->ipv6_mcast_ra;
+		stats->wow_ipv6_mcast_ns_stats += vstats->ipv6_mcast_ns;
+		stats->wow_ipv6_mcast_na_stats += vstats->ipv6_mcast_na;
+		stats->wow_icmpv4_count += vstats->icmpv4;
+		stats->wow_icmpv6_count += vstats->icmpv6;
+		stats->wow_rssi_breach_wake_up_count += vstats->rssi_breach;
+		stats->wow_low_rssi_wake_up_count += vstats->low_rssi;
+		stats->wow_gscan_wake_up_count += vstats->gscan;
+		stats->wow_pno_complete_wake_up_count += vstats->pno_complete;
+		stats->wow_pno_match_wake_up_count += vstats->pno_match;
+		stats->wow_oem_response_wake_up_count += vstats->oem_response;
+	}
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -8311,6 +8533,30 @@ QDF_STATUS wma_enable_disable_caevent_ind(tp_wma_handle wma, uint8_t val)
 	}
 
 	return QDF_STATUS_SUCCESS;
+}
+
+QDF_STATUS wma_set_sar_limit(WMA_HANDLE handle,
+		struct sar_limit_cmd_params *sar_limit_params)
+{
+	int ret;
+	tp_wma_handle wma = (tp_wma_handle) handle;
+
+	if (!wma || !wma->wmi_handle) {
+		WMA_LOGE("%s: WMA is closed, can not issue set sar limit msg",
+			__func__);
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (sar_limit_params == NULL) {
+		WMA_LOGE("%s: set sar limit ptr NULL",
+			__func__);
+		return QDF_STATUS_E_INVAL;
+	}
+
+	ret = wmi_unified_send_sar_limit_cmd(wma->wmi_handle,
+				sar_limit_params);
+
+	return ret;
 }
 
 #ifdef WLAN_FEATURE_DISA
@@ -8417,5 +8663,182 @@ int wma_encrypt_decrypt_msg_handler(void *handle, uint8_t *data,
 	pmac->sme.encrypt_decrypt_cb(pmac->hHdd, &encrypt_decrypt_rsp_params);
 
 	return 0;
+}
+#endif
+
+/**
+ * wma_unified_power_debug_stats_event_handler() - WMA handler function to
+ * handle Power stats event from firmware
+ * @handle: Pointer to wma handle
+ * @cmd_param_info: Pointer to Power stats event TLV
+ * @len: Length of the cmd_param_info
+ *
+ * Return: 0 on success, error number otherwise
+ */
+#ifdef WLAN_POWER_DEBUGFS
+int wma_unified_power_debug_stats_event_handler(void *handle,
+			uint8_t *cmd_param_info, uint32_t len)
+{
+	WMI_PDEV_CHIP_POWER_STATS_EVENTID_param_tlvs *param_tlvs;
+	struct power_stats_response *power_stats_results;
+	wmi_pdev_chip_power_stats_event_fixed_param *param_buf;
+	uint32_t power_stats_len, stats_registers_len, *debug_registers;
+
+	tpAniSirGlobal mac = (tpAniSirGlobal)cds_get_context(QDF_MODULE_ID_PE);
+	param_tlvs =
+		(WMI_PDEV_CHIP_POWER_STATS_EVENTID_param_tlvs *) cmd_param_info;
+
+	param_buf = (wmi_pdev_chip_power_stats_event_fixed_param *)
+		param_tlvs->fixed_param;
+	if (!mac || !mac->sme.power_stats_resp_callback) {
+		WMA_LOGD("%s: NULL mac ptr or HDD callback is null", __func__);
+		return -EINVAL;
+	}
+
+	if (!param_buf) {
+		WMA_LOGD("%s: NULL power stats event fixed param", __func__);
+		return -EINVAL;
+	}
+
+	debug_registers = param_tlvs->debug_registers;
+	stats_registers_len =
+		(sizeof(uint32_t) * param_buf->num_debug_register);
+	power_stats_len = stats_registers_len + sizeof(*power_stats_results);
+	power_stats_results = qdf_mem_malloc(power_stats_len);
+	if (!power_stats_results) {
+		WMA_LOGD("%s: could not allocate mem for power stats results",
+				__func__);
+		return -ENOMEM;
+	}
+	WMA_LOGD("Cumulative sleep time %d cumulative total on time %d deep sleep enter counter %d last deep sleep enter tstamp ts %d debug registers fmt %d num debug register %d",
+			param_buf->cumulative_sleep_time_ms,
+			param_buf->cumulative_total_on_time_ms,
+			param_buf->deep_sleep_enter_counter,
+			param_buf->last_deep_sleep_enter_tstamp_ms,
+			param_buf->debug_register_fmt,
+			param_buf->num_debug_register);
+
+	power_stats_results->cumulative_sleep_time_ms
+		= param_buf->cumulative_sleep_time_ms;
+	power_stats_results->cumulative_total_on_time_ms
+		= param_buf->cumulative_total_on_time_ms;
+	power_stats_results->deep_sleep_enter_counter
+		= param_buf->deep_sleep_enter_counter;
+	power_stats_results->last_deep_sleep_enter_tstamp_ms
+		= param_buf->last_deep_sleep_enter_tstamp_ms;
+	power_stats_results->debug_register_fmt
+		= param_buf->debug_register_fmt;
+	power_stats_results->num_debug_register
+		= param_buf->num_debug_register;
+
+	power_stats_results->debug_registers
+		= (uint32_t *)(power_stats_results + 1);
+
+	qdf_mem_copy(power_stats_results->debug_registers,
+			debug_registers, stats_registers_len);
+
+	mac->sme.power_stats_resp_callback(power_stats_results,
+			mac->sme.power_debug_stats_context);
+	qdf_mem_free(power_stats_results);
+	return 0;
+}
+#else
+int wma_unified_power_debug_stats_event_handler(void *handle,
+		uint8_t *cmd_param_info, uint32_t len)
+{
+	return 0;
+}
+#endif
+
+#ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
+/**
+* wma_send_udp_resp_offload_cmd() - send wmi cmd of udp response offload
+* infomation to fw.
+* @wma_handle: wma handler
+* @udp_response: udp_resp_offload struct pointer
+*
+* Return: QDF_STATUS
+*/
+QDF_STATUS wma_send_udp_resp_offload_cmd(tp_wma_handle wma_handle,
+					struct udp_resp_offload *udp_response)
+{
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	wmi_buf_t buf;
+	WMI_WOW_UDP_SVC_OFLD_CMD_fixed_param *cmd;
+	uint16_t len;
+	uint16_t pattern_len = 0;
+	uint16_t response_len = 0;
+	uint16_t udp_len = 0;
+	uint16_t resp_len = 0;
+
+	WMA_LOGD("%s: Enter", __func__);
+	if (1 == udp_response->enable) {
+		pattern_len = strlen(udp_response->udp_payload_filter);
+		response_len = strlen(udp_response->udp_response_payload);
+	}
+
+	udp_len = (pattern_len % 4) ?
+			(4 * ((pattern_len / 4) + 1)) : (pattern_len);
+
+	resp_len = (response_len % 4) ?
+			(4 * ((response_len / 4) + 1)) : (response_len);
+
+
+	len = sizeof(*cmd) + udp_len + resp_len + 2 * WMI_TLV_HDR_SIZE;
+	buf = wmi_buf_alloc(wma_handle->wmi_handle, len);
+	if (!buf) {
+		 WMA_LOGE("wmi_buf_alloc failed");
+		 return QDF_STATUS_E_NOMEM;
+	}
+
+	cmd = (WMI_WOW_UDP_SVC_OFLD_CMD_fixed_param *)wmi_buf_data(buf);
+
+	WMITLV_SET_HDR(&cmd->tlv_header,
+			WMITLV_TAG_STRUC_WMI_WOW_UDP_SVC_OFLD_CMD_fixed_param,
+			WMITLV_GET_STRUCT_TLVLEN(
+				WMI_WOW_UDP_SVC_OFLD_CMD_fixed_param));
+
+	cmd->vdev_id = udp_response->vdev_id;
+	cmd->enable = udp_response->enable;
+	cmd->dest_port = udp_response->dest_port;
+	cmd->pattern_len = pattern_len;
+	cmd->response_len = response_len;
+
+
+	WMITLV_SET_HDR((A_UINT32 *)(cmd + 1),
+			WMITLV_TAG_ARRAY_BYTE,
+			udp_len);
+
+	qdf_mem_copy((void *)(cmd + 1) + WMI_TLV_HDR_SIZE,
+			(void *)udp_response->udp_payload_filter,
+			cmd->pattern_len);
+	WMITLV_SET_HDR((A_UINT32 *)((void *)(cmd + 1) +
+			WMI_TLV_HDR_SIZE + udp_len),
+			WMITLV_TAG_ARRAY_BYTE,
+			resp_len);
+
+	qdf_mem_copy((void *)(cmd + 1) + WMI_TLV_HDR_SIZE +
+			udp_len + WMI_TLV_HDR_SIZE,
+			(void *)udp_response->udp_response_payload,
+			cmd->response_len);
+
+	WMA_LOGD("wma_set_udp_resp_cmd: enable:%d vdev_id:%d dest_port:%u",
+		cmd->enable, cmd->vdev_id, cmd->dest_port);
+
+	if (wmi_unified_cmd_send(wma_handle->wmi_handle, buf, len,
+				 WMI_WOW_UDP_SVC_OFLD_CMDID)) {
+		WMA_LOGE("Failed to send set udp resp offload");
+		wmi_buf_free(buf);
+		status = QDF_STATUS_E_FAILURE;
+	}
+
+	WMA_LOGD("%s: Exit", __func__);
+	return status;
+}
+#else
+inline QDF_STATUS wma_send_udp_resp_offload_cmd(tp_wma_handle wma_handle,
+					struct udp_resp_offload *udp_response)
+{
+	return QDF_STATUS_E_FAILURE;
 }
 #endif

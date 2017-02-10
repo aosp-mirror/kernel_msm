@@ -849,6 +849,7 @@ lim_send_sme_disassoc_ntf(tpAniSirGlobal pMac,
 	tpPESession session = NULL;
 	uint16_t i, assoc_id;
 	tpDphHashNode sta_ds = NULL;
+	struct sir_sme_discon_done_ind *sir_sme_dis_ind;
 
 	lim_log(pMac, LOG1, FL("Disassoc Ntf with trigger : %d reasonCode: %d"),
 		disassocTrigger, reasonCode);
@@ -888,12 +889,6 @@ lim_send_sme_disassoc_ntf(tpAniSirGlobal pMac,
 		}
 		failure = true;
 		break;
-
-	case eLIM_PEER_ENTITY_DISASSOC:
-		if (reasonCode != eSIR_SME_STA_NOT_ASSOCIATED) {
-			failure = true;
-			goto error;
-		}
 
 	case eLIM_HOST_DISASSOC:
 		/**
@@ -939,6 +934,42 @@ lim_send_sme_disassoc_ntf(tpAniSirGlobal pMac,
 				      psessionEntry, (uint16_t) reasonCode, 0);
 #endif
 		pMsg = (uint32_t *) pSirSmeDisassocRsp;
+		break;
+
+	case eLIM_PEER_ENTITY_DISASSOC:
+	case eLIM_LINK_MONITORING_DISASSOC:
+		sir_sme_dis_ind =
+			qdf_mem_malloc(sizeof(*sir_sme_dis_ind));
+		if (!sir_sme_dis_ind) {
+			lim_log(pMac, LOGE,
+				FL("call to AllocateMemory failed for disconnect indication"));
+			return;
+		}
+
+		lim_log(pMac, LOG1,
+			FL("send  eWNI_SME_DISCONNECT_DONE_IND with retCode: %d"),
+				reasonCode);
+
+		sir_sme_dis_ind->message_type =
+			eWNI_SME_DISCONNECT_DONE_IND;
+		sir_sme_dis_ind->length =
+			sizeof(*sir_sme_dis_ind);
+		qdf_mem_copy(sir_sme_dis_ind->peer_mac, peerMacAddr,
+			     sizeof(tSirMacAddr));
+		sir_sme_dis_ind->session_id   = smesessionId;
+		sir_sme_dis_ind->reason_code  = reasonCode;
+		/*
+		 * Instead of sending deauth reason code as 505 which is
+		 * internal value(eSIR_SME_LOST_LINK_WITH_PEER_RESULT_CODE)
+		 * Send reason code as zero to Supplicant
+		 */
+		if (reasonCode == eSIR_SME_LOST_LINK_WITH_PEER_RESULT_CODE)
+			sir_sme_dis_ind->reason_code = 0;
+		else
+			sir_sme_dis_ind->reason_code = reasonCode;
+
+		pMsg = (uint32_t *)sir_sme_dis_ind;
+
 		break;
 
 	default:
@@ -1150,6 +1181,9 @@ lim_send_sme_tdls_del_sta_ind(tpAniSirGlobal pMac, tpDphHashNode pStaDs,
 				("AllocateMemory failed for eWNI_SME_TDLS_DEL_STA_IND "));
 		return;
 	}
+	lim_log(pMac, LOG1, FL("Delete TDLS Peer "MAC_ADDRESS_STR
+				  "with reason code %d"),
+			MAC_ADDR_ARRAY(pStaDs->staAddr), reasonCode);
 	/* messageType */
 	pSirTdlsDelStaInd->messageType = eWNI_SME_TDLS_DEL_STA_IND;
 	pSirTdlsDelStaInd->length = sizeof(tSirTdlsDelStaInd);
@@ -1243,7 +1277,8 @@ lim_send_sme_tdls_delete_all_peer_ind(tpAniSirGlobal pMac, tpPESession psessionE
  */
 void
 lim_send_sme_mgmt_tx_completion(tpAniSirGlobal pMac,
-				tpPESession psessionEntry, uint32_t txCompleteStatus)
+				uint32_t sme_session_id,
+				uint32_t txCompleteStatus)
 {
 	tSirMsgQ mmhMsg;
 	tSirMgmtTxCompletionInd *pSirMgmtTxCompletionInd;
@@ -1262,7 +1297,7 @@ lim_send_sme_mgmt_tx_completion(tpAniSirGlobal pMac,
 	pSirMgmtTxCompletionInd->length = sizeof(tSirMgmtTxCompletionInd);
 
 	/* sessionId */
-	pSirMgmtTxCompletionInd->sessionId = psessionEntry->smeSessionId;
+	pSirMgmtTxCompletionInd->sessionId = sme_session_id;
 
 	pSirMgmtTxCompletionInd->txCompleteStatus = txCompleteStatus;
 
@@ -1340,12 +1375,10 @@ lim_send_sme_deauth_ntf(tpAniSirGlobal pMac, tSirMacAddr peerMacAddr,
 	tpPESession psessionEntry;
 	uint8_t sessionId;
 	uint32_t *pMsg;
+	struct sir_sme_discon_done_ind *sir_sme_dis_ind;
 
 	psessionEntry = pe_find_session_by_bssid(pMac, peerMacAddr, &sessionId);
 	switch (deauthTrigger) {
-	case eLIM_PEER_ENTITY_DEAUTH:
-		return;
-
 	case eLIM_HOST_DEAUTH:
 		/**
 		 * Deauthentication response to host triggered
@@ -1377,6 +1410,42 @@ lim_send_sme_deauth_ntf(tpAniSirGlobal pMac, tSirMacAddr peerMacAddr,
 				      psessionEntry, 0, (uint16_t) reasonCode);
 #endif
 		pMsg = (uint32_t *) pSirSmeDeauthRsp;
+
+		break;
+
+	case eLIM_PEER_ENTITY_DEAUTH:
+	case eLIM_LINK_MONITORING_DEAUTH:
+		sir_sme_dis_ind =
+			qdf_mem_malloc(sizeof(*sir_sme_dis_ind));
+		if (!sir_sme_dis_ind) {
+			lim_log(pMac, LOGE,
+				FL("call to AllocateMemory failed for disconnect indication"));
+			return;
+		}
+
+		lim_log(pMac, LOG1,
+		       FL("send  eWNI_SME_DISCONNECT_DONE_IND withretCode: %d"),
+				reasonCode);
+
+		sir_sme_dis_ind->message_type =
+			eWNI_SME_DISCONNECT_DONE_IND;
+		sir_sme_dis_ind->length =
+			sizeof(*sir_sme_dis_ind);
+		sir_sme_dis_ind->session_id = smesessionId;
+		sir_sme_dis_ind->reason_code = reasonCode;
+		qdf_mem_copy(sir_sme_dis_ind->peer_mac, peerMacAddr,
+			 ETH_ALEN);
+		/*
+		 * Instead of sending deauth reason code as 505 which is
+		 * internal value(eSIR_SME_LOST_LINK_WITH_PEER_RESULT_CODE)
+		 * Send reason code as zero to Supplicant
+		 */
+		if (reasonCode == eSIR_SME_LOST_LINK_WITH_PEER_RESULT_CODE)
+			sir_sme_dis_ind->reason_code = 0;
+		else
+			sir_sme_dis_ind->reason_code = reasonCode;
+
+		pMsg = (uint32_t *)sir_sme_dis_ind;
 
 		break;
 
@@ -1463,6 +1532,7 @@ lim_send_sme_wm_status_change_ntf(tpAniSirGlobal mac_ctx,
 {
 	tSirMsgQ msg;
 	tSirSmeWmStatusChangeNtf *wm_status_change_ntf;
+	uint32_t max_info_len;
 
 	wm_status_change_ntf = qdf_mem_malloc(sizeof(tSirSmeWmStatusChangeNtf));
 	if (NULL == wm_status_change_ntf) {
@@ -1476,6 +1546,18 @@ lim_send_sme_wm_status_change_ntf(tpAniSirGlobal mac_ctx,
 	msg.bodyptr = wm_status_change_ntf;
 
 	switch (status_change_code) {
+	case eSIR_SME_AP_CAPS_CHANGED:
+		max_info_len = sizeof(tSirSmeApNewCaps);
+		break;
+	case eSIR_SME_JOINED_NEW_BSS:
+		max_info_len = sizeof(tSirSmeNewBssInfo);
+		break;
+	default:
+		max_info_len = sizeof(wm_status_change_ntf->statusChangeInfo);
+		break;
+	}
+
+	switch (status_change_code) {
 	case eSIR_SME_RADAR_DETECTED:
 		break;
 	default:
@@ -1484,8 +1566,7 @@ lim_send_sme_wm_status_change_ntf(tpAniSirGlobal mac_ctx,
 		wm_status_change_ntf->statusChangeCode = status_change_code;
 		wm_status_change_ntf->length = sizeof(tSirSmeWmStatusChangeNtf);
 		wm_status_change_ntf->sessionId = session_id;
-		if (sizeof(wm_status_change_ntf->statusChangeInfo) >=
-			info_len) {
+		if (info_len <= max_info_len && status_change_info) {
 			qdf_mem_copy(
 			    (uint8_t *) &wm_status_change_ntf->statusChangeInfo,
 			    (uint8_t *) status_change_info, info_len);
@@ -2230,6 +2311,13 @@ void lim_handle_csa_offload_msg(tpAniSirGlobal mac_ctx, tpSirMsgQ msg)
 	}
 	lim_log(mac_ctx, LOG1, FL("new ch width = %d space:%d"),
 			session_entry->gLimChannelSwitch.ch_width, chan_space);
+	if ((session_entry->currentOperChannel == csa_params->channel) &&
+		(session_entry->ch_width ==
+		 session_entry->gLimChannelSwitch.ch_width)) {
+		lim_log(mac_ctx, LOGE, FL(
+				"Ignore CSA, no change in ch and bw"));
+		goto err;
+	}
 
 	lim_prepare_for11h_channel_switch(mac_ctx, session_entry);
 	csa_offload_ind = qdf_mem_malloc(sizeof(tSmeCsaOffloadInd));

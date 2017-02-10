@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -2936,6 +2936,10 @@ uint8_t lim_get_ht_capability(tpAniSirGlobal pMac,
 
 	case eHT_MAX_AMSDU_LENGTH:
 		retVal = (uint8_t) macHTCapabilityInfo.maximalAMSDUsize;
+		break;
+
+	case eHT_MAX_AMSDU_NUM:
+		retVal = (uint8_t) psessionEntry->max_amsdu_num;
 		break;
 
 	case eHT_RX_STBC:
@@ -6078,12 +6082,13 @@ void lim_pmf_sa_query_timer_handler(void *pMacGlobal, uint32_t param)
 #endif
 
 bool lim_check_vht_op_mode_change(tpAniSirGlobal pMac, tpPESession psessionEntry,
-				  uint8_t chanWidth, uint8_t staId,
-				  uint8_t *peerMac)
+				uint8_t chanWidth, uint8_t dot11_mode,
+				uint8_t staId, uint8_t *peerMac)
 {
 	tUpdateVHTOpMode tempParam;
 
 	tempParam.opMode = chanWidth;
+	tempParam.dot11_mode = dot11_mode;
 	tempParam.staId = staId;
 	tempParam.smesessionId = psessionEntry->smeSessionId;
 	qdf_mem_copy(tempParam.peer_mac, peerMac, sizeof(tSirMacAddr));

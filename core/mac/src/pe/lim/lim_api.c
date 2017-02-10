@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -234,7 +234,6 @@ static void __lim_init_vars(tpAniSirGlobal pMac)
 
 	/* WMM Related Flag */
 	pMac->lim.gUapsdEnable = 0;
-	pMac->lim.gUapsdPerAcBitmask = 0;
 
 	/* QoS-AC Downgrade: Initially, no AC is admitted */
 	pMac->lim.gAcAdmitMask[SIR_MAC_DIRECTION_UPLINK] = 0;
@@ -626,6 +625,7 @@ void lim_cleanup(tpAniSirGlobal pMac)
 		}
 		qdf_mutex_release(&pMac->lim.lim_frame_register_lock);
 		qdf_list_destroy(&pMac->lim.gLimMgmtFrameRegistratinQueue);
+		qdf_mutex_destroy(&pMac->lim.lim_frame_register_lock);
 	}
 
 	lim_cleanup_mlm(pMac);
@@ -2026,8 +2026,8 @@ QDF_STATUS pe_roam_synch_callback(tpAniSirGlobal mac_ctx,
 	curr_sta_ds->nss = local_nss;
 	ft_session_ptr->limMlmState = eLIM_MLM_LINK_ESTABLISHED_STATE;
 	lim_init_tdls_data(mac_ctx, ft_session_ptr);
-	join_rsp_len = ft_session_ptr->RICDataLen + sizeof(tSirSmeJoinRsp) -
-			sizeof(uint8_t);
+	join_rsp_len = ft_session_ptr->RICDataLen + ft_session_ptr->tspecLen +
+			sizeof(tSirSmeJoinRsp) - sizeof(uint8_t);
 	roam_sync_ind_ptr->join_rsp = qdf_mem_malloc(join_rsp_len);
 	if (NULL == roam_sync_ind_ptr->join_rsp) {
 		lim_log(mac_ctx, LOGE, FL("LFR3:mem alloc failed"));
@@ -2038,8 +2038,8 @@ QDF_STATUS pe_roam_synch_callback(tpAniSirGlobal mac_ctx,
 		return QDF_STATUS_E_NOMEM;
 	}
 
-	lim_log(mac_ctx, LOG1, FL("Session RicLength = %d"),
-			ft_session_ptr->RICDataLen);
+	lim_log(mac_ctx, LOG1, FL("Session RicLength = %d tspecLen = %d"),
+			ft_session_ptr->RICDataLen, ft_session_ptr->tspecLen);
 	if (ft_session_ptr->ricData != NULL) {
 		roam_sync_ind_ptr->join_rsp->parsedRicRspLen =
 			ft_session_ptr->RICDataLen;
@@ -2049,6 +2049,17 @@ QDF_STATUS pe_roam_synch_callback(tpAniSirGlobal mac_ctx,
 		qdf_mem_free(ft_session_ptr->ricData);
 		ft_session_ptr->ricData = NULL;
 		ft_session_ptr->RICDataLen = 0;
+	}
+	if (ft_session_ptr->tspecIes != NULL) {
+		roam_sync_ind_ptr->join_rsp->tspecIeLen =
+			ft_session_ptr->tspecLen;
+		qdf_mem_copy(roam_sync_ind_ptr->join_rsp->frames +
+				roam_sync_ind_ptr->join_rsp->parsedRicRspLen,
+				ft_session_ptr->tspecIes,
+				roam_sync_ind_ptr->join_rsp->tspecIeLen);
+		qdf_mem_free(ft_session_ptr->tspecIes);
+		ft_session_ptr->tspecIes = NULL;
+		ft_session_ptr->tspecLen = 0;
 	}
 	roam_sync_ind_ptr->join_rsp->vht_channel_width =
 		ft_session_ptr->ch_width;
@@ -2068,6 +2079,10 @@ QDF_STATUS pe_roam_synch_callback(tpAniSirGlobal mac_ctx,
 	if (mac_ctx->roam.pReassocResp)
 		qdf_mem_free(mac_ctx->roam.pReassocResp);
 	mac_ctx->roam.pReassocResp = NULL;
+
+	if (roam_sync_ind_ptr->authStatus == CSR_ROAM_AUTH_STATUS_AUTHENTICATED)
+		ft_session_ptr->is_key_installed = true;
+
 	return QDF_STATUS_SUCCESS;
 }
 #endif
@@ -2186,7 +2201,8 @@ void lim_update_lost_link_info(tpAniSirGlobal mac, tpPESession session,
 	tSirMsgQ mmh_msg;
 
 	if ((NULL == mac) || (NULL == session)) {
-		lim_log(mac, LOGE, FL("parameter NULL"));
+		QDF_TRACE(QDF_MODULE_ID_PE, QDF_TRACE_LEVEL_ERROR,
+			FL("parameter NULL"));
 		return;
 	}
 	if (!LIM_IS_STA_ROLE(session)) {

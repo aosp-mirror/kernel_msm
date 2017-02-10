@@ -1,5 +1,5 @@
-				/*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -262,7 +262,13 @@ enum ds_mode {
 #define WMA_VDEV_START_REQUEST_TIMEOUT (6000)   /* 6 seconds */
 #define WMA_VDEV_STOP_REQUEST_TIMEOUT  (6000)   /* 6 seconds */
 
-#define WMA_TGT_INVALID_SNR 0x127
+/*
+ * The firmware value has been changed recently to 0x127
+ * But, to maintain backward compatibility, the old
+ * value is also preserved.
+ */
+#define WMA_TGT_INVALID_SNR_OLD (-1)
+#define WMA_TGT_INVALID_SNR_NEW 0x127
 
 #define WMA_TX_Q_RECHECK_TIMER_WAIT      2      /* 2 ms */
 #define WMA_TX_Q_RECHECK_TIMER_MAX_WAIT  20     /* 20 ms */
@@ -311,11 +317,12 @@ enum ds_mode {
 #define WMA_ASSOC_REQ_RECV_WAKE_LOCK_DURATION   (5 * 1000)     /* in msec */
 #define WMA_DEAUTH_RECV_WAKE_LOCK_DURATION      (5 * 1000)     /* in msec */
 #define WMA_DISASSOC_RECV_WAKE_LOCK_DURATION    (5 * 1000)     /* in msec */
+#define WMA_ROAM_HO_WAKE_LOCK_DURATION          (500)          /* in msec */
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
 #define WMA_AUTO_SHUTDOWN_WAKE_LOCK_DURATION    (5 * 1000)     /* in msec */
 #endif
 #define WMA_BMISS_EVENT_WAKE_LOCK_DURATION      (4 * 1000)     /* in msec */
-#define WMA_FW_RSP_EVENT_WAKE_LOCK_DURATION      (3 * 1000)  /* in msec */
+#define WMA_FW_RSP_EVENT_WAKE_LOCK_DURATION     (3 * 1000)     /* in msec */
 
 #define WMA_TXMIC_LEN 8
 #define WMA_RXMIC_LEN 8
@@ -510,6 +517,9 @@ typedef void (*txFailIndCallback)(uint8_t *peer_mac, uint8_t seqNo);
 typedef void (*encrypt_decrypt_cb)(struct sir_encrypt_decrypt_rsp_params
 		*encrypt_decrypt_rsp_params);
 
+
+typedef void (*tp_wma_packetdump_cb)(qdf_nbuf_t netbuf,
+			uint8_t status, uint8_t vdev_id, uint8_t type);
 
 /**
  * enum t_wma_drv_type - wma driver type
@@ -1004,6 +1014,8 @@ typedef struct {
  * @wep_default_key_idx: wep default index for group key
  * @arp_offload_req: cached arp offload request
  * @ns_offload_req: cached ns offload request
+ * @wow_stats: stat counters for WoW related events
+ * @rcpi_req: rcpi request
  * It stores parameters per vdev in wma.
  */
 struct wma_txrx_node {
@@ -1082,6 +1094,8 @@ struct wma_txrx_node {
 	tSirHostOffloadReq arp_offload_req;
 	tSirHostOffloadReq ns_offload_req;
 	bool is_vdev_valid;
+	struct sir_vdev_wow_stats wow_stats;
+	struct sme_rcpi_req *rcpi_req;
 };
 
 #if defined(QCA_WIFI_FTM)
@@ -1190,6 +1204,7 @@ struct wmi_desc_t {
 	pWMAAckFnTxComp  ota_post_proc_cb;
 	qdf_nbuf_t	 nbuf;
 	uint32_t	 desc_id;
+	uint8_t vdev_id;
 };
 
 /**
@@ -1272,6 +1287,41 @@ struct extended_caps {
 };
 
 /**
+ * struct peer_debug_rec - peer debug information record definition
+ * @time: timestamp when record was added
+ * @operation: identifier for operation, command, event, etc.
+ * @vdev_id: vdev identifier
+ * @peer_id: peer_id. Range 0 - 255, 0xffff is invalid peer_id.
+ * @mac_addr: mac address of peer
+ * @peer_obj: pointer to peer object
+ * @arg1: Optional argument #1
+ * @arg2: Opttional argument #2
+ */
+struct peer_debug_rec {
+	uint64_t time;
+	uint8_t operation;
+	uint8_t vdev_id;
+	uint16_t peer_id;
+	struct qdf_mac_addr mac_addr;
+	void *peer_obj;
+	uint32_t arg1;
+	uint32_t arg2;
+};
+
+#define WMA_PEER_DEBUG_MAX_REC 256
+/**
+ * struct peer_debug_info - Buffer to store the peer debug records
+ * @index: index of the most recent entry in the circular buffer
+ * @num_max_rec: maximum records stored in the records array
+ * @rec: array to store peer debug records, used in circular fashion
+ */
+struct peer_debug_info {
+	qdf_atomic_t index;
+	uint32_t num_max_rec;
+	struct peer_debug_rec rec[WMA_PEER_DEBUG_MAX_REC];
+};
+
+/**
  * struct t_wma_handle - wma context
  * @wmi_handle: wmi handle
  * @htc_handle: htc handle
@@ -1283,7 +1333,6 @@ struct extended_caps {
  * @recovery_event: wma FW recovery event
  * @max_station: max stations
  * @max_bssid: max bssid
- * @frame_xln_reqd: frame transmission required
  * @driver_type: driver type
  * @myaddr: current mac address
  * @hwaddr: mac address from EEPROM
@@ -1399,11 +1448,13 @@ struct extended_caps {
  * It contains global wma module parameters and
  * handle of other modules.
  * @saved_wmi_init_cmd: Saved WMI INIT command
- * @bool bpf_packet_filter_enable: BPF filter enabled or not
+ * @bpf_packet_filter_enable: BPF filter enabled or not
+ * @active_bpf_mode: Setting that determines how BPF is applied in active mode
  * @service_ready_ext_evt: Wait event for service ready ext
  * @wmi_cmd_rsp_wake_lock: wmi command response wake lock
  * @wmi_cmd_rsp_runtime_lock: wmi command response bus lock
  * @saved_chan: saved channel list sent as part of WMI_SCAN_CHAN_LIST_CMDID
+ * @fw_mem_dump_enabled: Fw memory dump support
  */
 typedef struct {
 	void *wmi_handle;
@@ -1417,7 +1468,6 @@ typedef struct {
 	qdf_event_t recovery_event;
 	uint16_t max_station;
 	uint16_t max_bssid;
-	uint32_t frame_xln_reqd;
 	t_wma_drv_type driver_type;
 	uint8_t myaddr[IEEE80211_ADDR_LEN];
 	uint8_t hwaddr[IEEE80211_ADDR_LEN];
@@ -1545,21 +1595,7 @@ typedef struct {
 	qdf_atomic_t scan_id_counter;
 	qdf_atomic_t num_pending_scans;
 	wma_peer_authorized_fp peer_authorized_cb;
-	uint32_t wow_pno_match_wake_up_count;
-	uint32_t wow_pno_complete_wake_up_count;
-	uint32_t wow_gscan_wake_up_count;
-	uint32_t wow_low_rssi_wake_up_count;
-	uint32_t wow_rssi_breach_wake_up_count;
-	uint32_t wow_ucast_wake_up_count;
-	uint32_t wow_bcast_wake_up_count;
-	uint32_t wow_ipv4_mcast_wake_up_count;
-	uint32_t wow_ipv6_mcast_wake_up_count;
-	uint32_t wow_ipv6_mcast_ra_stats;
-	uint32_t wow_ipv6_mcast_ns_stats;
-	uint32_t wow_ipv6_mcast_na_stats;
-	uint32_t wow_icmpv4_count;
-	uint32_t wow_icmpv6_count;
-	uint32_t wow_oem_response_wake_up_count;
+	uint32_t wow_unspecified_wake_count;
 
 	/* OCB request contexts */
 	struct sir_ocb_config *ocb_config_req;
@@ -1597,6 +1633,7 @@ typedef struct {
 	uint32_t fine_time_measurement_cap;
 	bool bpf_enabled;
 	bool bpf_packet_filter_enable;
+	enum active_bpf_mode active_bpf_mode;
 	struct wma_ini_config ini_config;
 	struct wma_valid_channels saved_chan;
 	/* NAN datapath support enabled in firmware */
@@ -1605,7 +1642,13 @@ typedef struct {
 					   cds_msg_t *msg);
 	bool fw_timeout_crash;
 	bool sub_20_support;
+	tp_wma_packetdump_cb wma_mgmt_tx_packetdump_cb;
+	tp_wma_packetdump_cb wma_mgmt_rx_packetdump_cb;
+	bool rcpi_enabled;
 	tSirLLStatsResults *link_stats_results;
+	bool fw_mem_dump_enabled;
+	tSirAddonPsReq ps_setting;
+	struct peer_debug_info *peer_dbg;
 } t_wma_handle, *tp_wma_handle;
 
 /**
@@ -1818,6 +1861,8 @@ typedef struct {
  * @WMA_VDEV_IBSS_PS_SET_1RX_CHAIN_IN_ATIM_WINDOW: set IBSS power save ATIM
  * @WMA_VDEV_DFS_CONTROL_CMDID: DFS control command
  * @WMA_VDEV_TXRX_GET_IPA_UC_FW_STATS_CMDID: get IPA microcontroller fw stats
+ * @WMA_VDEV_TXRX_GET_IPA_UC_SHARING_STATS_CMDID: get IPA uC wifi-sharing stats
+ * @WMA_VDEV_TXRX_SET_IPA_UC_QUOTA_CMDID: set IPA uC quota limit
  *
  * wma command ids for configuration request which
  * does not involve sending a wmi command.
@@ -1837,6 +1882,8 @@ enum wma_cfg_cmd_id {
 	WMA_VDEV_IBSS_PS_SET_1RX_CHAIN_IN_ATIM_WINDOW,
 	WMA_VDEV_DFS_CONTROL_CMDID,
 	WMA_VDEV_TXRX_GET_IPA_UC_FW_STATS_CMDID,
+	WMA_VDEV_TXRX_GET_IPA_UC_SHARING_STATS_CMDID,
+	WMA_VDEV_TXRX_SET_IPA_UC_QUOTA_CMDID,
 	WMA_CMD_ID_MAX
 };
 
@@ -2151,11 +2198,15 @@ typedef struct wma_unit_test_cmd {
  * @vdev_id: vdev id
  * @bssid: mac address
  * @channel: channel
+ * @frame_len: frame length, includs mac header, fixed params and ies
+ * @frame_buf: buffer contaning probe response or beacon
  */
 struct wma_roam_invoke_cmd {
 	uint32_t vdev_id;
 	uint8_t bssid[IEEE80211_ADDR_LEN];
 	uint32_t channel;
+	uint32_t frame_len;
+	uint8_t *frame_buf;
 };
 
 /**
@@ -2276,6 +2327,7 @@ static inline QDF_STATUS wma_lro_config_cmd(tp_wma_handle wma_handle,
 	return QDF_STATUS_SUCCESS;
 }
 #endif
+bool wma_is_current_hwmode_dbs(void);
 void
 wma_indicate_err(enum ol_rx_err_type err_type,
 	 struct ol_error_info *err_info);
@@ -2315,7 +2367,6 @@ QDF_STATUS wma_create_peer(tp_wma_handle wma, ol_txrx_pdev_handle pdev,
 			   u_int32_t peer_type, u_int8_t vdev_id,
 			   bool roam_synch_in_progress);
 
-#endif
 struct wma_ini_config *wma_get_ini_handle(tp_wma_handle wma_handle);
 WLAN_PHY_MODE wma_chan_phy_mode(u8 chan, enum phy_ch_width chan_width,
 	u8 dot11_mode);
@@ -2327,5 +2378,13 @@ QDF_STATUS wma_start_oem_data_req(tp_wma_handle wma_handle,
 
 QDF_STATUS wma_enable_disable_caevent_ind(tp_wma_handle wma_handle,
 				uint8_t val);
+void wma_register_packetdump_callback(
+		tp_wma_packetdump_cb wma_mgmt_tx_packetdump_cb,
+		tp_wma_packetdump_cb wma_mgmt_rx_packetdump_cb);
+void wma_deregister_packetdump_callback(void);
 void wma_update_sta_inactivity_timeout(tp_wma_handle wma,
 		struct sme_sta_inactivity_timeout  *sta_inactivity_timer);
+
+QDF_STATUS wma_send_udp_resp_offload_cmd(tp_wma_handle wma_handle,
+					struct udp_resp_offload *udp_response);
+#endif

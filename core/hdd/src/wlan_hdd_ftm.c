@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -30,9 +30,6 @@
  *
  * This file contains the WLAN factory test mode implementation
  */
-
-/* denote that this file does not allow legacy hddLog */
-#define HDD_DISALLOW_LEGACY_HDDLOG 1
 
 #include <cds_mq.h>
 #include "cds_sched.h"
@@ -136,10 +133,6 @@ int hdd_update_cds_config_ftm(hdd_context_t *hdd_ctx)
 	cds_cfg->powersave_offload_enabled =
 			hdd_ctx->config->enablePowersaveOffload;
 	hdd_lpass_populate_cds_config(cds_cfg, hdd_ctx);
-	/* UMA is supported in hardware for performing the
-	 * frame translation 802.11 <-> 802.3
-	 */
-	cds_cfg->frame_xln_reqd = 1;
 	cds_cfg->sub_20_channel_width = WLAN_SUB_20_CH_WIDTH_NONE;
 	cds_init_ini_config(cds_cfg);
 
@@ -226,7 +219,7 @@ static int wlan_hdd_qcmbr_command(hdd_adapter_t *adapter,
 		if (!ret) {
 			memcpy(pqcmbr_data->buf, qcmbr_buf->utf_buf,
 			       (MAX_UTF_LENGTH + 4));
-			kfree(qcmbr_buf);
+			qdf_mem_free(qcmbr_buf);
 		} else {
 			ret = -EAGAIN;
 		}
@@ -251,7 +244,7 @@ static int wlan_hdd_qcmbr_compat_ioctl(hdd_adapter_t *adapter,
 	qcmbr_data_t *qcmbr_data;
 	int ret = 0;
 
-	qcmbr_data = kzalloc(sizeof(qcmbr_data_t), GFP_KERNEL);
+	qcmbr_data = qdf_mem_malloc(sizeof(qcmbr_data_t));
 	if (qcmbr_data == NULL)
 		return -ENOMEM;
 
@@ -267,7 +260,7 @@ static int wlan_hdd_qcmbr_compat_ioctl(hdd_adapter_t *adapter,
 	}
 
 exit:
-	kfree(qcmbr_data);
+	qdf_mem_free(qcmbr_data);
 	return ret;
 }
 #else                           /* CONFIG_COMPAT */
@@ -290,7 +283,7 @@ static int wlan_hdd_qcmbr_ioctl(hdd_adapter_t *adapter, struct ifreq *ifr)
 	qcmbr_data_t *qcmbr_data;
 	int ret = 0;
 
-	qcmbr_data = kzalloc(sizeof(qcmbr_data_t), GFP_KERNEL);
+	qcmbr_data = qdf_mem_malloc(sizeof(qcmbr_data_t));
 	if (qcmbr_data == NULL)
 		return -ENOMEM;
 
@@ -306,7 +299,7 @@ static int wlan_hdd_qcmbr_ioctl(hdd_adapter_t *adapter, struct ifreq *ifr)
 	}
 
 exit:
-	kfree(qcmbr_data);
+	qdf_mem_free(qcmbr_data);
 	return ret;
 }
 
@@ -342,7 +335,7 @@ static void wlanqcmbr_mc_process_msg(void *message)
 	uint32_t data_len;
 
 	data_len = *((uint32_t *) message) + sizeof(uint32_t);
-	qcmbr_buf = kzalloc(sizeof(qcmbr_queue_t), GFP_KERNEL);
+	qcmbr_buf = qdf_mem_malloc(sizeof(qcmbr_queue_t));
 	if (qcmbr_buf != NULL) {
 		memcpy(qcmbr_buf->utf_buf, message, data_len);
 		spin_lock_bh(&qcmbr_queue_lock);

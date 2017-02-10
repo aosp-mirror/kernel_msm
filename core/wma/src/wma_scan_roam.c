@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -265,6 +265,9 @@ QDF_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 	else
 		WMA_LOGD("OFDM_RATES not included in 11B mode");
 
+	if (scan_req->p2pScanType)
+		scan_req->scan_adaptive_dwell_mode = WMI_DWELL_MODE_STATIC;
+
 	WMI_SCAN_SET_DWELL_MODE(cmd->scan_ctrl_flags,
 			scan_req->scan_adaptive_dwell_mode);
 
@@ -273,6 +276,12 @@ QDF_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 	 * By default, prefer throughput performance over scan cycle time.
 	 */
 	cmd->burst_duration = 0;
+
+	/* mac randomization attributes */
+	cmd->enable_scan_randomization = scan_req->enable_scan_randomization;
+	qdf_mem_copy(cmd->mac_addr, scan_req->mac_addr, QDF_MAC_ADDR_SIZE);
+	qdf_mem_copy(cmd->mac_addr_mask, scan_req->mac_addr_mask,
+		     QDF_MAC_ADDR_SIZE);
 
 	if (!scan_req->p2pScanType) {
 		WMA_LOGD("Normal Scan request");
@@ -805,7 +814,7 @@ QDF_STATUS wma_roam_scan_offload_mode(tp_wma_handle wma_handle,
 						roam_req->assoc_ie.length);
 	}
 
-	WMA_LOGE(FL("my_dbg: qos_caps: %d, qos_enabled: %d"),
+	WMA_LOGD(FL("qos_caps: %d, qos_enabled: %d"),
 		params->roam_offload_params.qos_caps,
 		params->roam_offload_params.qos_enabled);
 
@@ -1732,6 +1741,7 @@ QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
 
 	if (NULL == pMac) {
 		WMA_LOGE("%s: pMac is NULL", __func__);
+		qdf_mem_free(roam_req);
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -2030,6 +2040,25 @@ QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
 	return qdf_status;
 }
 
+void wma_update_per_roam_config(WMA_HANDLE handle,
+				 struct wmi_per_roam_config_req *req_buf)
+{
+	int status;
+	tp_wma_handle wma_handle = (tp_wma_handle) handle;
+
+	if (!wma_handle || !wma_handle->wmi_handle) {
+		WMA_LOGE("%s: WMA is closed, cannot send per roam config",
+			__func__);
+		return;
+	}
+
+	status = wmi_unified_set_per_roam_config(wma_handle->wmi_handle,
+						req_buf);
+	if (status != EOK)
+		WMA_LOGE("%s: failed to set per roam config to FW",
+			__func__);
+}
+
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 
 /**
@@ -2050,12 +2079,17 @@ void wma_process_roam_invoke(WMA_HANDLE handle,
 	if (!wma_handle || !wma_handle->wmi_handle) {
 		WMA_LOGE("%s: WMA is closed, can not send roam invoke",
 				__func__);
-		return;
+		goto free_frame_buf;
 	}
 	ch_hz = (A_UINT32)cds_chan_to_freq(roaminvoke->channel);
 	wmi_unified_roam_invoke_cmd(wma_handle->wmi_handle,
 				(struct wmi_roam_invoke_cmd *)roaminvoke,
 				ch_hz);
+free_frame_buf:
+	if (roaminvoke->frame_len) {
+		qdf_mem_free(roaminvoke->frame_buf);
+		roaminvoke->frame_buf = NULL;
+	}
 
 	return;
 }
@@ -2071,11 +2105,16 @@ void wma_process_roam_synch_fail(WMA_HANDLE handle,
 				 struct roam_offload_synch_fail *synch_fail)
 {
 	tp_wma_handle wma_handle = (tp_wma_handle) handle;
+
 	if (!wma_handle || !wma_handle->wmi_handle) {
 		WMA_LOGE("%s: WMA is closed, can not clean-up roam synch",
 			__func__);
 		return;
 	}
+
+	wma_peer_debug_log(synch_fail->session_id, DEBUG_ROAM_SYNCH_FAIL,
+			   DEBUG_INVALID_PEER_ID, NULL, NULL, 0, 0);
+
 	/* Hand Off Failure could happen as an exception, when a roam synch
 	 * indication is posted to Host, but a roam synch complete is not
 	 * posted to the firmware.So, clear the roam synch in progress
@@ -2116,6 +2155,15 @@ static void wma_fill_roam_synch_buffer(tp_wma_handle wma,
 	roam_synch_ind_ptr->isBeacon = synch_event->is_beacon;
 	WMI_MAC_ADDR_TO_CHAR_ARRAY(&synch_event->bssid,
 				   roam_synch_ind_ptr->bssid.bytes);
+	WMA_LOGI("%s: roamedVdevId %d authStatus %d roamReason %d rssi %d"
+		 "isBeacon %d",
+		__func__,
+		roam_synch_ind_ptr->roamedVdevId,
+		roam_synch_ind_ptr->authStatus,
+		roam_synch_ind_ptr->roamReason,
+		roam_synch_ind_ptr->rssi,
+		roam_synch_ind_ptr->isBeacon);
+
 	wma->csr_roam_synch_cb((tpAniSirGlobal)wma->mac_context,
 		roam_synch_ind_ptr, NULL, SIR_ROAMING_DEREGISTER_STA);
 	/* Beacon/Probe Rsp data */
@@ -2284,6 +2332,9 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 		return status;
 	}
 
+	wma_peer_debug_log(synch_event->vdev_id, DEBUG_ROAM_SYNCH_IND,
+			   DEBUG_INVALID_PEER_ID, NULL, NULL, 0, 0);
+
 	DPTRACE(qdf_dp_trace_record_event(QDF_DP_TRACE_EVENT_RECORD,
 		synch_event->vdev_id, QDF_PROTO_TYPE_EVENT, QDF_ROAM_SYNCH));
 
@@ -2294,17 +2345,20 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 	}
 	WMA_LOGE("LFR3: Received WMA_ROAM_OFFLOAD_SYNCH_IND");
 
+	qdf_wake_lock_timeout_acquire(&wma->wow_wake_lock,
+				      WMA_ROAM_HO_WAKE_LOCK_DURATION);
+
 	wma->interfaces[synch_event->vdev_id].roam_synch_in_progress = true;
 	len = sizeof(roam_offload_synch_ind) +
 	      synch_event->bcn_probe_rsp_len + synch_event->reassoc_rsp_len +
 	      synch_event->reassoc_req_len;
-	roam_synch_ind_ptr =
-		(roam_offload_synch_ind *) qdf_mem_malloc(len);
+	roam_synch_ind_ptr = (roam_offload_synch_ind *)qdf_mem_malloc(len);
 	if (!roam_synch_ind_ptr) {
 		WMA_LOGE("%s: failed to allocate memory for roam_synch_event",
 			 __func__);
 		QDF_ASSERT(roam_synch_ind_ptr != NULL);
-		return -ENOMEM;
+		status = -ENOMEM;
+		goto cleanup_label;
 	}
 	qdf_mem_zero(roam_synch_ind_ptr, len);
 	wma_fill_roam_synch_buffer(wma, roam_synch_ind_ptr, param_buf);
@@ -2321,7 +2375,7 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 	if (NULL == bss_desc_ptr) {
 		WMA_LOGE("LFR3: mem alloc failed!");
 		QDF_ASSERT(bss_desc_ptr != NULL);
-		status =  -ENOMEM;
+		status = -ENOMEM;
 		goto cleanup_label;
 	}
 	qdf_mem_zero(bss_desc_ptr, sizeof(tSirBssDescription) + ie_len);
@@ -2347,8 +2401,11 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 		wma->interfaces[synch_event->vdev_id].roam_synch_delay);
 	wma->csr_roam_synch_cb((tpAniSirGlobal)wma->mac_context,
 		roam_synch_ind_ptr, bss_desc_ptr, SIR_ROAM_SYNCH_NAPI_OFF);
+
+	status = 0;
+
 cleanup_label:
-	if (roam_synch_ind_ptr->join_rsp)
+	if (roam_synch_ind_ptr && roam_synch_ind_ptr->join_rsp)
 		qdf_mem_free(roam_synch_ind_ptr->join_rsp);
 	if (roam_synch_ind_ptr)
 		qdf_mem_free(roam_synch_ind_ptr);
@@ -2356,7 +2413,7 @@ cleanup_label:
 		qdf_mem_free(bss_desc_ptr);
 	wma->interfaces[synch_event->vdev_id].roam_synch_in_progress = false;
 
-	return 0;
+	return status;
 }
 
 /**
@@ -2699,6 +2756,9 @@ void wma_process_roam_synch_complete(WMA_HANDLE handle, uint8_t vdev_id)
 	DPTRACE(qdf_dp_trace_record_event(QDF_DP_TRACE_EVENT_RECORD,
 		vdev_id, QDF_PROTO_TYPE_EVENT, QDF_ROAM_COMPLETE));
 
+	wma_peer_debug_log(vdev_id, DEBUG_ROAM_SYNCH_CNF,
+			   DEBUG_INVALID_PEER_ID, NULL, NULL, 0, 0);
+
 	WMA_LOGE("LFR3: Posting WMA_ROAM_OFFLOAD_SYNCH_CNF");
 	return;
 }
@@ -2811,7 +2871,7 @@ static QDF_STATUS wma_switch_channel(tp_wma_handle wma,
 
 	if (ret < 0) {
 		WMA_LOGP("%s: Failed to send vdev start command", __func__);
-		qdf_nbuf_free(buf);
+		wmi_buf_free(buf);
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -3010,6 +3070,7 @@ QDF_STATUS wma_pno_start(tp_wma_handle wma, tpSirPNOScanReq pno)
 	params->enable = pno->enable;
 	params->modePNO = (enum pno_mode) pno->modePNO;
 	params->ucNetworksCount = pno->ucNetworksCount;
+	params->do_passive_scan = pno->do_passive_scan;
 	params->sessionId = pno->sessionId;
 	params->fast_scan_period = pno->fast_scan_period;
 	params->slow_scan_period = pno->slow_scan_period;
@@ -3045,6 +3106,12 @@ QDF_STATUS wma_pno_start(tp_wma_handle wma, tpSirPNOScanReq pno)
 			pno->aNetworks[i].ssId.ssId,
 				WMI_MAC_MAX_SSID_LENGTH);
 	}
+
+	params->enable_pno_scan_randomization =
+					pno->enable_pno_scan_randomization;
+	qdf_mem_copy(params->mac_addr, pno->mac_addr, QDF_MAC_ADDR_SIZE);
+	qdf_mem_copy(params->mac_addr_mask, pno->mac_addr_mask,
+		     QDF_MAC_ADDR_SIZE);
 
 	status = wmi_unified_pno_start_cmd(wma->wmi_handle,
 					params, channel_list);
@@ -3381,11 +3448,6 @@ void wma_extscan_wow_event_callback(void *handle, void *event, uint32_t len)
 		wma_extscan_capabilities_event_handler(handle, event, len);
 		break;
 
-	case WMITLV_TAG_STRUC_wmi_extscan_hotlist_ssid_match_event_fixed_param:
-		wma_extscan_hotlist_ssid_match_event_handler(handle,
-							     event, len);
-		break;
-
 	default:
 		WMA_LOGE(FL("Unknown tag: %d"), tag);
 		break;
@@ -3553,12 +3615,6 @@ void wma_register_extscan_event_handler(tp_wma_handle wma_handle)
 	wmi_unified_register_event_handler(wma_handle->wmi_handle,
 			WMI_PASSPOINT_MATCH_EVENTID,
 			wma_passpoint_match_event_handler,
-			WMA_RX_SERIALIZER_CTX);
-
-
-	wmi_unified_register_event_handler(wma_handle->wmi_handle,
-			WMI_EXTSCAN_HOTLIST_SSID_MATCH_EVENTID,
-			wma_extscan_hotlist_ssid_match_event_handler,
 			WMA_RX_SERIALIZER_CTX);
 
 	return;
@@ -4479,102 +4535,6 @@ int wma_passpoint_match_event_handler(void *handle,
 				dest_match);
 	WMA_LOGI("%s: sending passpoint match event to hdd", __func__);
 	qdf_mem_free(dest_match);
-	return 0;
-}
-
-/**
- * wma_extscan_hotlist_ssid_match_event_handler() -
- *	Handler for SSID hotlist match event from firmware
- * @handle: WMA handle
- * @cmd_param_info: WMI command buffer
- * @len: length of @cmd_param_info
- *
- * Return: 0 on success, non-zero on failure
- */
-int
-wma_extscan_hotlist_ssid_match_event_handler(void *handle,
-					     uint8_t *cmd_param_info,
-					     uint32_t len)
-{
-	WMI_EXTSCAN_HOTLIST_SSID_MATCH_EVENTID_param_tlvs *param_buf;
-	wmi_extscan_hotlist_ssid_match_event_fixed_param  *event;
-	tSirWifiScanResultEvent  *dest_hotlist;
-	tSirWifiScanResult      *dest_ap;
-	wmi_extscan_wlan_descriptor    *src_hotlist;
-	int numap, j;
-	bool ssid_found = false;
-	tpAniSirGlobal mac = cds_get_context(QDF_MODULE_ID_PE);
-
-	if (!mac) {
-		WMA_LOGE("%s: Invalid mac", __func__);
-		return -EINVAL;
-	}
-
-	if (!mac->sme.pExtScanIndCb) {
-		WMA_LOGE("%s: Callback not registered", __func__);
-		return -EINVAL;
-	}
-
-	param_buf = (WMI_EXTSCAN_HOTLIST_SSID_MATCH_EVENTID_param_tlvs *)
-					cmd_param_info;
-	if (!param_buf) {
-		WMA_LOGE("%s: Invalid hotlist match event", __func__);
-		return -EINVAL;
-	}
-
-	event = param_buf->fixed_param;
-	src_hotlist = param_buf->hotlist_ssid_match;
-	numap = event->total_entries;
-	if (!src_hotlist || !numap) {
-		WMA_LOGE("%s: Hotlist AP's list invalid", __func__);
-		return -EINVAL;
-	}
-
-	dest_hotlist = qdf_mem_malloc(sizeof(*dest_hotlist) +
-					sizeof(*dest_ap) * numap);
-	if (!dest_hotlist) {
-		WMA_LOGE("%s: Allocation failed for hotlist buffer",
-			__func__);
-		return -EINVAL;
-	}
-
-	dest_ap = &dest_hotlist->ap[0];
-	dest_hotlist->numOfAps = event->total_entries;
-	dest_hotlist->requestId = event->config_request_id;
-
-	if (event->first_entry_index +
-		event->num_entries_in_page < event->total_entries)
-		dest_hotlist->moreData = 1;
-	else
-		dest_hotlist->moreData = 0;
-
-	WMA_LOGD("%s: Hotlist match: requestId: %u,numOfAps: %d", __func__,
-		 dest_hotlist->requestId, dest_hotlist->numOfAps);
-
-	for (j = 0; j < numap; j++) {
-		dest_ap->channel = src_hotlist->channel;
-		dest_ap->ts = src_hotlist->tstamp;
-		ssid_found = src_hotlist->flags & WMI_HOTLIST_FLAG_PRESENCE;
-		dest_ap->rtt = src_hotlist->rtt;
-		dest_ap->rtt_sd = src_hotlist->rtt_sd;
-		dest_ap->beaconPeriod = src_hotlist->beacon_interval;
-		dest_ap->capability = src_hotlist->capabilities;
-		dest_ap->ieLength = src_hotlist->ie_length;
-		WMI_MAC_ADDR_TO_CHAR_ARRAY(&src_hotlist->bssid,
-					   dest_ap->bssid.bytes);
-		qdf_mem_copy(dest_ap->ssid, src_hotlist->ssid.ssid,
-					src_hotlist->ssid.ssid_len);
-		dest_ap->ssid[src_hotlist->ssid.ssid_len] = '\0';
-		dest_ap++;
-		src_hotlist++;
-	}
-
-	dest_hotlist->ap_found = ssid_found;
-	mac->sme.pExtScanIndCb(mac->hHdd,
-			       eSIR_EXTSCAN_HOTLIST_SSID_MATCH_IND,
-			       dest_hotlist);
-	WMA_LOGI("%s: sending hotlist ssid match event", __func__);
-	qdf_mem_free(dest_hotlist);
 	return 0;
 }
 
@@ -5570,41 +5530,6 @@ QDF_STATUS wma_reset_passpoint_network_list(tp_wma_handle wma,
 	return status;
 }
 
-/**
- * wma_set_ssid_hotlist() - Handle an SSID hotlist set request
- * @wma: WMA handle
- * @request: SSID hotlist set request from SME
- *
- * Return: QDF_STATUS enumeration
- */
-QDF_STATUS
-wma_set_ssid_hotlist(tp_wma_handle wma,
-		     struct sir_set_ssid_hotlist_request *request)
-{
-
-	if (!wma || !wma->wmi_handle) {
-		WMA_LOGE("%s: WMA is closed, can not issue hotlist cmd",
-			 __func__);
-		return QDF_STATUS_E_FAILURE;
-	}
-	if (!request) {
-		WMA_LOGE("%s: Invalid request buffer", __func__);
-		return QDF_STATUS_E_FAILURE;
-	}
-	if (!WMI_SERVICE_IS_ENABLED(wma->wmi_service_bitmap,
-				    WMI_SERVICE_EXTSCAN)) {
-		WMA_LOGE("%s: extscan not enabled",
-			__func__);
-		return QDF_STATUS_E_NOSUPPORT;
-	}
-
-	if (wmi_unified_set_ssid_hotlist_cmd(wma->wmi_handle,
-		 (struct ssid_hotlist_request_params *)request)) {
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	return QDF_STATUS_SUCCESS;
-}
 #endif
 
 /**
@@ -5629,6 +5554,10 @@ QDF_STATUS wma_scan_probe_setoui(tp_wma_handle wma, tSirScanMacOui *psetoui)
 
 	qdf_mem_copy(set_oui.oui, psetoui->oui,
 				WMI_WIFI_SCANNING_MAC_OUI_LENGTH);
+
+	set_oui.vdev_id = psetoui->vdev_id;
+	set_oui.enb_probe_req_sno_randomization =
+				psetoui->enb_probe_req_sno_randomization;
 
 	return wmi_unified_scan_probe_setoui_cmd(wma->wmi_handle,
 						&set_oui);
@@ -5805,6 +5734,10 @@ int wma_roam_event_callback(WMA_HANDLE handle, uint8_t *event_buf,
 
 	DPTRACE(qdf_dp_trace_record_event(QDF_DP_TRACE_EVENT_RECORD,
 		wmi_event->vdev_id, QDF_PROTO_TYPE_EVENT, QDF_ROAM_EVENTID));
+
+	wma_peer_debug_log(wmi_event->vdev_id, DEBUG_ROAM_EVENT,
+			   DEBUG_INVALID_PEER_ID, NULL, NULL,
+			   wmi_event->reason, wmi_event->rssi);
 
 	switch (wmi_event->reason) {
 	case WMI_ROAM_REASON_BMISS:

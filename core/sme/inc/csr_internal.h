@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -619,7 +619,7 @@ typedef struct tagCsrConfig {
 	 * Enable/Disable heartbeat offload
 	 */
 	bool enableHeartBeatOffload;
-	uint8_t isAmsduSupportInAMPDU;
+	uint8_t max_amsdu_num;
 	uint8_t nSelect5GHzMargin;
 	uint8_t isCoalesingInIBSSAllowed;
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
@@ -670,6 +670,7 @@ typedef struct tagCsrConfig {
 	struct csr_sta_roam_policy_params sta_roam_policy;
 	uint32_t tx_aggregation_size;
 	uint32_t rx_aggregation_size;
+	struct wmi_per_roam_config per_roam_config;
 } tCsrConfig;
 
 typedef struct tagCsrChannelPowerInfo {
@@ -1002,6 +1003,7 @@ typedef struct tagCsrRoamSession {
 	bool disable_hi_rssi;
 	bool dhcp_done;
 	uint8_t disconnect_reason;
+	uint8_t uapsd_mask;
 } tCsrRoamSession;
 
 typedef struct tagCsrRoamStruct {
@@ -1048,6 +1050,7 @@ typedef struct tagCsrRoamStruct {
 	uint32_t deauthRspStatus;
 	uint8_t *pReassocResp;          /* reassociation response from new AP */
 	uint16_t reassocRespLen;        /* length of reassociation response */
+	qdf_mc_timer_t packetdump_timer;
 } tCsrRoamStruct;
 
 #define GET_NEXT_ROAM_ID(pRoamStruct)  (((pRoamStruct)->nextRoamId + 1 == 0) ? \

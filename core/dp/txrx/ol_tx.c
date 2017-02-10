@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -98,6 +98,9 @@ static inline uint8_t ol_tx_prepare_tso(ol_txrx_vdev_handle vdev,
 	msdu_info->tso_info.curr_seg = NULL;
 	if (qdf_nbuf_is_tso(msdu)) {
 		int num_seg = qdf_nbuf_get_tso_num_seg(msdu);
+		struct qdf_tso_num_seg_elem_t *tso_num_seg;
+
+		msdu_info->tso_info.tso_num_seg_list = NULL;
 		msdu_info->tso_info.tso_seg_list = NULL;
 		msdu_info->tso_info.num_segs = num_seg;
 		while (num_seg) {
@@ -122,6 +125,25 @@ static inline uint8_t ol_tx_prepare_tso(ol_txrx_vdev_handle vdev,
 				}
 				return 1;
 			}
+		}
+		tso_num_seg = ol_tso_num_seg_alloc(vdev->pdev);
+		if (tso_num_seg) {
+			tso_num_seg->next = msdu_info->tso_info.
+						tso_num_seg_list;
+			msdu_info->tso_info.tso_num_seg_list = tso_num_seg;
+		} else {
+			/* Free the already allocated num of segments */
+			struct qdf_tso_seg_elem_t *next_seg;
+			struct qdf_tso_seg_elem_t *free_seg =
+					msdu_info->tso_info.tso_seg_list;
+			qdf_print("TSO num of seg alloc for one jumbo skb failed!\n");
+			while (free_seg) {
+				next_seg = free_seg->next;
+				ol_tso_free_segment(vdev->pdev,
+					 free_seg);
+				free_seg = next_seg;
+			}
+			return 1;
 		}
 		qdf_nbuf_get_tso_info(vdev->pdev->osdev,
 			msdu, &(msdu_info->tso_info));
@@ -217,12 +239,64 @@ qdf_nbuf_t ol_tx_send_ipa_data_frame(void *vdev,
 }
 #endif
 
+#if defined(FEATURE_TSO)
+/**
+ * ol_tx_tso_update_stats() - update TSO stats
+ * @pdev: pointer to ol_txrx_pdev_t structure
+ * @msdu_info: tso msdu_info for the msdu
+ * @msdu: tso mdsu for which stats are updated
+ * @tso_msdu_idx: stats index in the global TSO stats array where stats will be
+ *                updated
+ *
+ * Return: None
+ */
+static inline void ol_tx_tso_update_stats(struct ol_txrx_pdev_t *pdev ,
+					struct qdf_tso_info_t  *tso_info,
+					qdf_nbuf_t msdu,
+					uint32_t tso_msdu_idx)
+{
+	TXRX_STATS_TSO_HISTOGRAM(pdev,  tso_info->num_segs);
+	TXRX_STATS_TSO_GSO_SIZE_UPDATE(pdev, tso_msdu_idx,
+					qdf_nbuf_tcp_tso_size(msdu));
+	TXRX_STATS_TSO_TOTAL_LEN_UPDATE(pdev,
+					tso_msdu_idx, qdf_nbuf_len(msdu));
+	TXRX_STATS_TSO_NUM_FRAGS_UPDATE(pdev, tso_msdu_idx,
+					qdf_nbuf_get_nr_frags(msdu));
+}
+
+/**
+ * ol_tx_tso_get_stats_idx() - retrieve global TSO stats index and increment it
+ * @pdev: pointer to ol_txrx_pdev_t structure
+ *
+ * Retreive  the current value of the global variable and increment it. This is
+ * done in a spinlock as the global TSO stats may be accessed in parallel by
+ * multiple TX streams.
+ *
+ * Return: The current value of TSO stats index.
+ */
+static uint32_t ol_tx_tso_get_stats_idx(struct ol_txrx_pdev_t *pdev)
+{
+	uint32_t msdu_stats_idx = 0;
+
+	qdf_spin_lock_bh(&pdev->stats.pub.tx.tso.tso_stats_lock);
+	msdu_stats_idx = pdev->stats.pub.tx.tso.tso_info.tso_msdu_idx;
+	pdev->stats.pub.tx.tso.tso_info.tso_msdu_idx++;
+	pdev->stats.pub.tx.tso.tso_info.tso_msdu_idx &=
+					NUM_MAX_TSO_MSDUS_MASK;
+	qdf_spin_unlock_bh(&pdev->stats.pub.tx.tso.tso_stats_lock);
+
+	TXRX_STATS_TSO_RESET_MSDU(pdev, msdu_stats_idx);
+
+	return msdu_stats_idx;
+}
+#endif
 
 #if defined(FEATURE_TSO)
 qdf_nbuf_t ol_tx_ll(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 {
 	qdf_nbuf_t msdu = msdu_list;
 	struct ol_txrx_msdu_info_t msdu_info;
+	uint32_t tso_msdu_stats_idx = 0;
 
 	msdu_info.htt.info.l2_hdr_type = vdev->pdev->htt_pkt_type;
 	msdu_info.htt.action.tx_comp_req = 0;
@@ -248,14 +322,15 @@ qdf_nbuf_t ol_tx_ll(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 		}
 
 		segments = msdu_info.tso_info.num_segs;
-		TXRX_STATS_TSO_HISTOGRAM(vdev->pdev, segments);
-		TXRX_STATS_TSO_GSO_SIZE_UPDATE(vdev->pdev,
-					 qdf_nbuf_tcp_tso_size(msdu));
-		TXRX_STATS_TSO_TOTAL_LEN_UPDATE(vdev->pdev,
-					 qdf_nbuf_len(msdu));
-		TXRX_STATS_TSO_NUM_FRAGS_UPDATE(vdev->pdev,
-					 qdf_nbuf_get_nr_frags(msdu));
 
+		if (msdu_info.tso_info.is_tso) {
+			tso_msdu_stats_idx =
+					ol_tx_tso_get_stats_idx(vdev->pdev);
+			msdu_info.tso_info.msdu_stats_idx = tso_msdu_stats_idx;
+			ol_tx_tso_update_stats(vdev->pdev,
+						&(msdu_info.tso_info),
+						msdu, tso_msdu_stats_idx);
+		}
 
 		/*
 		 * The netbuf may get linked into a different list inside the
@@ -302,16 +377,14 @@ qdf_nbuf_t ol_tx_ll(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 			qdf_nbuf_reset_num_frags(msdu);
 
 			if (msdu_info.tso_info.is_tso) {
-				TXRX_STATS_TSO_INC_SEG(vdev->pdev);
-				TXRX_STATS_TSO_INC_SEG_IDX(vdev->pdev);
+				TXRX_STATS_TSO_INC_SEG(vdev->pdev,
+					tso_msdu_stats_idx);
+				TXRX_STATS_TSO_INC_SEG_IDX(vdev->pdev,
+					tso_msdu_stats_idx);
 			}
 		} /* while segments */
 
 		msdu = next;
-		if (msdu_info.tso_info.is_tso) {
-			TXRX_STATS_TSO_INC_MSDU_IDX(vdev->pdev);
-			TXRX_STATS_TSO_RESET_MSDU(vdev->pdev);
-		}
 	} /* while msdus */
 	return NULL;            /* all MSDUs were accepted */
 }
@@ -394,6 +467,7 @@ ol_tx_prepare_ll_fast(struct ol_txrx_pdev_t *pdev,
 	tx_desc->netbuf = msdu;
 	if (msdu_info->tso_info.is_tso) {
 		tx_desc->tso_desc = msdu_info->tso_info.curr_seg;
+		tx_desc->tso_num_desc = msdu_info->tso_info.tso_num_seg_list;
 		tx_desc->pkt_type = OL_TX_FRM_TSO;
 		TXRX_STATS_MSDU_INCR(pdev, tx.tso.tso_pkts, msdu);
 	} else {
@@ -443,6 +517,7 @@ ol_tx_prepare_ll_fast(struct ol_txrx_pdev_t *pdev,
 		htt_tx_desc_fill_tso_info(pdev->htt_pdev,
 			 tx_desc->htt_frag_desc, &msdu_info->tso_info);
 		TXRX_STATS_TSO_SEG_UPDATE(pdev,
+			 msdu_info->tso_info.msdu_stats_idx,
 			 msdu_info->tso_info.curr_seg->seg);
 	} else {
 		for (i = 1; i < num_frags; i++) {
@@ -464,7 +539,7 @@ ol_tx_prepare_ll_fast(struct ol_txrx_pdev_t *pdev,
 			qdf_print("%s:%d: htt_fdesc=%p frag=%d frag_paddr=0x%0llx len=%zu",
 				  __func__, __LINE__, tx_desc->htt_frag_desc,
 				  i-1, frag_paddr, frag_len);
-			dump_pkt(netbuf, frag_paddr, 64);
+			ol_txrx_dump_pkt(netbuf, frag_paddr, 64);
 #endif /* HELIUMPLUS_DEBUG */
 #else /* ! defined(HELIUMPLUSPADDR64) */
 			htt_tx_desc_frag(pdev->htt_pdev, tx_desc->htt_tx_desc,
@@ -519,6 +594,7 @@ ol_tx_ll_fast(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 		((struct htt_pdev_t *)(pdev->htt_pdev))->download_len;
 	uint32_t ep_id = HTT_EPID_GET(pdev->htt_pdev);
 	struct ol_txrx_msdu_info_t msdu_info;
+	uint32_t tso_msdu_stats_idx = 0;
 
 	msdu_info.htt.info.l2_hdr_type = vdev->pdev->htt_pkt_type;
 	msdu_info.htt.action.tx_comp_req = 0;
@@ -544,13 +620,15 @@ ol_tx_ll_fast(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 		}
 
 		segments = msdu_info.tso_info.num_segs;
-		TXRX_STATS_TSO_HISTOGRAM(vdev->pdev, segments);
-		TXRX_STATS_TSO_GSO_SIZE_UPDATE(vdev->pdev,
-				 qdf_nbuf_tcp_tso_size(msdu));
-		TXRX_STATS_TSO_TOTAL_LEN_UPDATE(vdev->pdev,
-				 qdf_nbuf_len(msdu));
-		TXRX_STATS_TSO_NUM_FRAGS_UPDATE(vdev->pdev,
-				 qdf_nbuf_get_nr_frags(msdu));
+
+		if (msdu_info.tso_info.is_tso) {
+			tso_msdu_stats_idx =
+					ol_tx_tso_get_stats_idx(vdev->pdev);
+			msdu_info.tso_info.msdu_stats_idx = tso_msdu_stats_idx;
+			ol_tx_tso_update_stats(vdev->pdev,
+						&(msdu_info.tso_info),
+						msdu, tso_msdu_stats_idx);
+		}
 
 		/*
 		 * The netbuf may get linked into a different list
@@ -637,8 +715,10 @@ ol_tx_ll_fast(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 
 				if (msdu_info.tso_info.is_tso) {
 					qdf_nbuf_reset_num_frags(msdu);
-					TXRX_STATS_TSO_INC_SEG(vdev->pdev);
-					TXRX_STATS_TSO_INC_SEG_IDX(vdev->pdev);
+					TXRX_STATS_TSO_INC_SEG(vdev->pdev,
+						tso_msdu_stats_idx);
+					TXRX_STATS_TSO_INC_SEG_IDX(vdev->pdev,
+						tso_msdu_stats_idx);
 				}
 			} else {
 				TXRX_STATS_MSDU_LIST_INCR(
@@ -649,10 +729,6 @@ ol_tx_ll_fast(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 		} /* while segments */
 
 		msdu = next;
-		if (msdu_info.tso_info.is_tso) {
-			TXRX_STATS_TSO_INC_MSDU_IDX(vdev->pdev);
-			TXRX_STATS_TSO_RESET_MSDU(vdev->pdev);
-		}
 	} /* while msdus */
 	return NULL; /* all MSDUs were accepted */
 }
@@ -1917,12 +1993,21 @@ qdf_nbuf_t ol_tx_reinject(struct ol_txrx_vdev_t *vdev,
 }
 
 #if defined(FEATURE_TSO)
+/**
+ * ol_tso_seg_list_init() - function to initialise the tso seg freelist
+ * @pdev: the data physical device sending the data
+ * @num_seg: number of segments needs to be intialised
+ *
+ * Return: none
+ */
 void ol_tso_seg_list_init(struct ol_txrx_pdev_t *pdev, uint32_t num_seg)
 {
 	int i;
 	struct qdf_tso_seg_elem_t *c_element;
 
 	c_element = qdf_mem_malloc(sizeof(struct qdf_tso_seg_elem_t));
+	c_element->on_freelist = 1;
+	c_element->cookie = TSO_SEG_MAGIC_COOKIE;
 	pdev->tso_seg_pool.freelist = c_element;
 	for (i = 0; i < (num_seg - 1); i++) {
 		if (qdf_unlikely(!c_element)) {
@@ -1934,21 +2019,34 @@ void ol_tso_seg_list_init(struct ol_txrx_pdev_t *pdev, uint32_t num_seg)
 			qdf_spinlock_create(&pdev->tso_seg_pool.tso_mutex);
 			return;
 		}
-
+		/* set the freelist bit and magic cookie*/
 		c_element->next =
 			qdf_mem_malloc(sizeof(struct qdf_tso_seg_elem_t));
 		c_element = c_element->next;
+		c_element->on_freelist = 1;
+		c_element->cookie = TSO_SEG_MAGIC_COOKIE;
 		c_element->next = NULL;
 	}
 	pdev->tso_seg_pool.pool_size = num_seg;
 	qdf_spinlock_create(&pdev->tso_seg_pool.tso_mutex);
 }
 
+/**
+ * ol_tso_seg_list_deinit() - function to de-initialise the tso seg freelist
+ * @pdev: the data physical device sending the data
+ *
+ * Return: none
+ */
 void ol_tso_seg_list_deinit(struct ol_txrx_pdev_t *pdev)
 {
 	int i;
 	struct qdf_tso_seg_elem_t *c_element;
 	struct qdf_tso_seg_elem_t *temp;
+
+	/* pool size 0 implies that tso seg list is not initialised*/
+	if (pdev->tso_seg_pool.freelist == NULL &&
+	    pdev->tso_seg_pool.pool_size == 0)
+		return;
 
 	qdf_spin_lock_bh(&pdev->tso_seg_pool.tso_mutex);
 	c_element = pdev->tso_seg_pool.freelist;
@@ -1960,6 +2058,91 @@ void ol_tso_seg_list_deinit(struct ol_txrx_pdev_t *pdev)
 
 	qdf_spin_unlock_bh(&pdev->tso_seg_pool.tso_mutex);
 	qdf_spinlock_destroy(&pdev->tso_seg_pool.tso_mutex);
+
+	while (i-- > 0 && c_element) {
+		temp = c_element->next;
+		if (c_element->on_freelist != 1) {
+			qdf_print("this seg memory is already freed (double free?)");
+			QDF_BUG(0);
+			return;
+		} else if (c_element->cookie != TSO_SEG_MAGIC_COOKIE) {
+			qdf_print("this seg cookie is bad (memory corruption?)");
+			QDF_BUG(0);
+			return;
+		}
+		/* free this seg, so reset the cookie value*/
+		c_element->cookie = 0;
+		qdf_mem_free(c_element);
+		c_element = temp;
+	}
+}
+
+/**
+ * ol_tso_num_seg_list_init() - function to initialise the freelist of elements
+ *				use to count the num of tso segments in jumbo
+ *				skb packet freelist
+ * @pdev: the data physical device sending the data
+ * @num_seg: number of elements needs to be intialised
+ *
+ * Return: none
+ */
+void ol_tso_num_seg_list_init(struct ol_txrx_pdev_t *pdev, uint32_t num_seg)
+{
+	int i;
+	struct qdf_tso_num_seg_elem_t *c_element;
+
+	c_element = qdf_mem_malloc(sizeof(struct qdf_tso_num_seg_elem_t));
+	pdev->tso_num_seg_pool.freelist = c_element;
+	for (i = 0; i < (num_seg - 1); i++) {
+		if (qdf_unlikely(!c_element)) {
+			TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+				"%s: ERROR: c_element NULL for num of seg %d",
+				__func__, i);
+			QDF_BUG(0);
+			pdev->tso_num_seg_pool.num_seg_pool_size = i;
+			qdf_spinlock_create(&pdev->tso_num_seg_pool.
+							tso_num_seg_mutex);
+			return;
+		}
+
+		c_element->next =
+			qdf_mem_malloc(sizeof(struct qdf_tso_num_seg_elem_t));
+		c_element = c_element->next;
+		c_element->next = NULL;
+	}
+	pdev->tso_num_seg_pool.num_seg_pool_size = num_seg;
+	qdf_spinlock_create(&pdev->tso_num_seg_pool.tso_num_seg_mutex);
+}
+
+/**
+ * ol_tso_num_seg_list_deinit() - function to de-initialise the freelist of
+ *				  elements use to count the num of tso segment
+ *				  in a jumbo skb packet freelist
+ * @pdev: the data physical device sending the data
+ *
+ * Return: none
+ */
+void ol_tso_num_seg_list_deinit(struct ol_txrx_pdev_t *pdev)
+{
+	int i;
+	struct qdf_tso_num_seg_elem_t *c_element;
+	struct qdf_tso_num_seg_elem_t *temp;
+
+	/* pool size 0 implies that tso num seg list is not initialised*/
+	if (pdev->tso_num_seg_pool.freelist == NULL &&
+	    pdev->tso_num_seg_pool.num_seg_pool_size == 0)
+		return;
+
+	qdf_spin_lock_bh(&pdev->tso_num_seg_pool.tso_num_seg_mutex);
+	c_element = pdev->tso_num_seg_pool.freelist;
+	i = pdev->tso_num_seg_pool.num_seg_pool_size;
+
+	pdev->tso_num_seg_pool.freelist = NULL;
+	pdev->tso_num_seg_pool.num_free = 0;
+	pdev->tso_num_seg_pool.num_seg_pool_size = 0;
+
+	qdf_spin_unlock_bh(&pdev->tso_num_seg_pool.tso_num_seg_mutex);
+	qdf_spinlock_destroy(&pdev->tso_num_seg_pool.tso_num_seg_mutex);
 
 	while (i-- > 0 && c_element) {
 		temp = c_element->next;

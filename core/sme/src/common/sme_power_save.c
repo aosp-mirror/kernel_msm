@@ -81,11 +81,11 @@ static void sme_ps_fill_uapsd_req_params(tpAniSirGlobal mac_ctx,
 	struct ps_params *ps_param = &ps_global_info->ps_params[session_id];
 
 	uapsd_delivery_mask =
-		ps_param->uapsd_per_ac_bit_mask |
+		ps_param->uapsd_per_ac_bit_mask &
 		ps_param->uapsd_per_ac_delivery_enable_mask;
 
 	uapsd_trigger_mask =
-		ps_param->uapsd_per_ac_bit_mask |
+		ps_param->uapsd_per_ac_bit_mask &
 		ps_param->uapsd_per_ac_trigger_enable_mask;
 
 	uapsdParams->bkDeliveryEnabled =
@@ -611,6 +611,7 @@ void sme_set_tspec_uapsd_mask_per_session(tpAniSirGlobal mac_ctx,
 	 */
 	ac = ((~ac) & 0x3);
 	if (ts_info->traffic.psb) {
+		ps_param->uapsd_per_ac_bit_mask |= (1 << ac);
 		if (direction == SIR_MAC_DIRECTION_UPLINK)
 			ps_param->uapsd_per_ac_trigger_enable_mask |=
 				(1 << ac);
@@ -624,6 +625,7 @@ void sme_set_tspec_uapsd_mask_per_session(tpAniSirGlobal mac_ctx,
 				(1 << ac);
 		}
 	} else {
+		ps_param->uapsd_per_ac_bit_mask &= ~(1 << ac);
 		if (direction == SIR_MAC_DIRECTION_UPLINK)
 			ps_param->uapsd_per_ac_trigger_enable_mask &=
 				~(1 << ac);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -30,9 +30,6 @@
  *
  * WLAN Host Device Driver implementation
  */
-
-/* denote that this file does not allow legacy hddLog */
-#define HDD_DISALLOW_LEGACY_HDDLOG 1
 
 /* Include Files */
 
@@ -157,7 +154,7 @@ static void hdd_hostapd_channel_allow_suspend(hdd_adapter_t *pAdapter,
 		hdd_err("DFS: allowing suspend (chan %d)", channel);
 		qdf_wake_lock_release(&pHddCtx->sap_dfs_wakelock,
 				      WIFI_POWER_EVENT_WAKELOCK_DFS);
-		qdf_runtime_pm_allow_suspend(pHddCtx->runtime_context.dfs);
+		qdf_runtime_pm_allow_suspend(&pHddCtx->runtime_context.dfs);
 
 	}
 }
@@ -193,7 +190,7 @@ static void hdd_hostapd_channel_prevent_suspend(hdd_adapter_t *pAdapter,
 	/* Acquire wakelock if we have at least one DFS channel in use */
 	if (atomic_inc_return(&pHddCtx->sap_dfs_ref_cnt) == 1) {
 		hdd_err("DFS: preventing suspend (chan %d)", channel);
-		qdf_runtime_pm_prevent_suspend(pHddCtx->runtime_context.dfs);
+		qdf_runtime_pm_prevent_suspend(&pHddCtx->runtime_context.dfs);
 		qdf_wake_lock_acquire(&pHddCtx->sap_dfs_wakelock,
 				      WIFI_POWER_EVENT_WAKELOCK_DFS);
 	}
@@ -237,16 +234,25 @@ void hdd_sap_context_destroy(hdd_context_t *hdd_ctx)
 static int __hdd_hostapd_open(struct net_device *dev)
 {
 	hdd_adapter_t *pAdapter = netdev_priv(dev);
+	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(pAdapter);
+	int ret;
 
 	ENTER_DEV(dev);
 
 	MTRACE(qdf_trace(QDF_MODULE_ID_HDD,
 			 TRACE_CODE_HDD_HOSTAPD_OPEN_REQUEST, NO_SESSION, 0));
 
-	if (cds_is_load_or_unload_in_progress()) {
-		hdd_err("Driver load/unload in progress, ignore, state: 0x%x",
-			cds_get_driver_state());
-		goto done;
+	ret = wlan_hdd_validate_context(hdd_ctx);
+	if (ret)
+		return ret;
+	/*
+	 * Check statemachine state and also stop iface change timer if running
+	 */
+	ret = hdd_wlan_start_modules(hdd_ctx, pAdapter, false);
+
+	if (ret) {
+		hdd_err("Failed to start WLAN modules return");
+		return ret;
 	}
 
 	set_bit(DEVICE_IFACE_OPENED, &pAdapter->event_flags);
@@ -255,7 +261,6 @@ static int __hdd_hostapd_open(struct net_device *dev)
 	wlan_hdd_netif_queue_control(pAdapter,
 				   WLAN_START_ALL_NETIF_QUEUE_N_CARRIER,
 				   WLAN_CONTROL_PATH);
-done:
 	EXIT();
 	return 0;
 }
@@ -900,6 +905,8 @@ void wlan_hdd_sap_pre_cac_failure(void *data)
 	}
 
 	cds_ssr_protect(__func__);
+	wlan_hdd_release_intf_addr(hdd_ctx,
+				   pHostapdAdapter->macAddressCurrent.bytes);
 	hdd_stop_adapter(hdd_ctx, pHostapdAdapter, true);
 	hdd_close_adapter(hdd_ctx, pHostapdAdapter, false);
 	cds_ssr_unprotect(__func__);
@@ -936,6 +943,8 @@ static void wlan_hdd_sap_pre_cac_success(void *data)
 	}
 
 	cds_ssr_protect(__func__);
+	wlan_hdd_release_intf_addr(hdd_ctx,
+				   pHostapdAdapter->macAddressCurrent.bytes);
 	hdd_stop_adapter(hdd_ctx, pHostapdAdapter, true);
 	hdd_close_adapter(hdd_ctx, pHostapdAdapter, false);
 	cds_ssr_unprotect(__func__);
@@ -1129,6 +1138,7 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 			 * wait till 10 secs and no other connection will
 			 * go through before that.
 			 */
+			pHostapdState->bssState = BSS_STOP;
 			qdf_event_set(&pHostapdState->qdf_event);
 			goto stopbss;
 		} else {
@@ -1651,6 +1661,7 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 		/* Lets do abort scan to ensure smooth authentication for client */
 		if ((pScanInfo != NULL) && pScanInfo->mScanPending) {
 			hdd_abort_mac_scan(pHddCtx, pHostapdAdapter->sessionId,
+					   INVALID_SCAN_ID,
 					   eCSR_SCAN_ABORT_DEFAULT);
 		}
 		if (pHostapdAdapter->device_mode == QDF_P2P_GO_MODE) {
@@ -1677,7 +1688,7 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 		hdd_notice(" disassociated " MAC_ADDRESS_STR,
 		       MAC_ADDR_ARRAY(wrqu.addr.sa_data));
 
-		qdf_status = qdf_event_set(&pHostapdState->qdf_event);
+		qdf_status = qdf_event_set(&pHostapdState->qdf_sta_disassoc_event);
 		if (!QDF_IS_STATUS_SUCCESS(qdf_status))
 			hdd_err("ERR: Station Deauth event Set failed");
 
@@ -2063,7 +2074,10 @@ stopbss:
 
 		/* Stop the pkts from n/w stack as we are going to free all of
 		 * the TX WMM queues for all STAID's */
-		hdd_hostapd_stop(dev);
+		hdd_notice("Disabling queues");
+		wlan_hdd_netif_queue_control(pHostapdAdapter,
+					     WLAN_NETIF_TX_DISABLE_N_CARRIER,
+					     WLAN_CONTROL_PATH);
 
 		/* reclaim all resources allocated to the BSS */
 		qdf_status = hdd_softap_stop_bss(pHostapdAdapter);
@@ -2087,6 +2101,8 @@ stopbss:
 		we_custom_event_generic = we_custom_event;
 		wireless_send_event(dev, we_event, &wrqu,
 				    (char *)we_custom_event_generic);
+		cds_decr_session_set_pcl(pHostapdAdapter->device_mode,
+					 pHostapdAdapter->sessionId);
 		cds_dump_concurrency_info();
 		/* Send SCC/MCC Switching event to IPA */
 		hdd_ipa_send_mcc_scc_msg(pHddCtx, pHddCtx->mcc_mode);
@@ -2443,6 +2459,10 @@ static int __iw_softap_set_two_ints_getnone(struct net_device *dev,
 	case QCSAP_IOCTL_SET_FW_CRASH_INJECT:
 		hdd_err("WE_SET_FW_CRASH_INJECT: %d %d",
 		       value[1], value[2]);
+		if (!hdd_ctx->config->crash_inject_enabled) {
+			hdd_err("Crash Inject ini disabled, Ignore Crash Inject");
+			return 0;
+		}
 		ret = wma_cli_set2_command(adapter->sessionId,
 					   GEN_PARAM_CRASH_INJECT,
 					   value[1], value[2],
@@ -3107,12 +3127,14 @@ static __iw_softap_setparam(struct net_device *dev,
 			hdd_ipa_uc_stat_request(pHostapdAdapter, set_value);
 			break;
 		case 3:
-			hdd_ipa_uc_rt_debug_host_dump(
-					WLAN_HDD_GET_CTX(pHostapdAdapter));
+			hdd_ipa_uc_rt_debug_host_dump(hdd_ctx);
+			break;
+		case 4:
+			hdd_ipa_dump_info(hdd_ctx);
 			break;
 		default:
 			/* place holder for stats clean up
-			 * Stats clean not implemented yet on firmware and ipa
+			 * Stats clean not implemented yet on FW and IPA
 			 */
 			break;
 		}
@@ -3804,7 +3826,7 @@ static __iw_softap_getassoc_stamacaddr(struct net_device *dev,
 	}
 
 	/* allocate local buffer to build the response */
-	buf = kmalloc(wrqu->data.length, GFP_KERNEL);
+	buf = qdf_mem_malloc(wrqu->data.length);
 	if (!buf) {
 		hdd_notice("failed to allocate response buffer");
 		return -ENOMEM;
@@ -3833,7 +3855,7 @@ static __iw_softap_getassoc_stamacaddr(struct net_device *dev,
 		hdd_notice("failed to copy response to user buffer");
 		ret = -EFAULT;
 	}
-	kfree(buf);
+	qdf_mem_free(buf);
 	EXIT();
 	return ret;
 }
@@ -4767,8 +4789,8 @@ __iw_softap_stopbss(struct net_device *dev,
 		if (QDF_IS_STATUS_SUCCESS(status)) {
 			qdf_status =
 				qdf_wait_single_event(&pHostapdState->
-						      qdf_stop_bss_event,
-						      10000);
+					qdf_stop_bss_event,
+					SME_CMD_TIMEOUT_VALUE);
 
 			if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 				hdd_err("wait for single_event failed!!");
@@ -4955,6 +4977,12 @@ static int __iw_set_ap_genie(struct net_device *dev,
 	if (!wrqu->data.length) {
 		EXIT();
 		return 0;
+	}
+
+	if (wrqu->data.length > DOT11F_IE_RSN_MAX_LEN) {
+		hdd_err("%s: WPARSN Ie input length is more than max[%d]",
+			__func__, wrqu->data.length);
+		return QDF_STATUS_E_INVAL;
 	}
 
 	switch (genie[0]) {
@@ -5801,6 +5829,14 @@ QDF_STATUS hdd_init_ap_mode(hdd_adapter_t *pAdapter)
 		return qdf_status;
 	}
 
+	qdf_status = qdf_event_create(&phostapdBuf->qdf_sta_disassoc_event);
+	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
+		hdd_err("ERROR: Hostapd HDD sta disassoc event init failed!!");
+		wlansap_close(sapContext);
+		pAdapter->sessionCtx.ap.sapContext = NULL;
+		return qdf_status;
+	}
+
 	init_completion(&pAdapter->session_close_comp_var);
 	init_completion(&pAdapter->session_open_comp_var);
 
@@ -5836,6 +5872,10 @@ QDF_STATUS hdd_init_ap_mode(hdd_adapter_t *pAdapter)
 	qdf_mem_free(pAdapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list);
 	qdf_mem_zero(&pAdapter->sessionCtx.ap.sapConfig.acs_cfg,
 						sizeof(struct sap_acs_cfg));
+
+	/* rcpi info initialization */
+	qdf_mem_zero(&pAdapter->rcpi, sizeof(pAdapter->rcpi));
+
 	return status;
 
 error_wmm_init:
@@ -6952,7 +6992,13 @@ static int wlan_hdd_setup_driver_overrides(hdd_adapter_t *ap_adapter)
 	 *
 	 * Default override enabled (for android). MDM shall disable this in ini
 	 */
-	if (hdd_ctx->config->sap_p2p_11ac_override &&
+	/*
+	 * sub_20 MHz channel width is incompatible with 11AC rates, hence do
+	 * not allow 11AC rates or more than 20 MHz channel width when
+	 * enable_sub_20_channel_width is non zero
+	 */
+	if (!hdd_ctx->config->enable_sub_20_channel_width &&
+			hdd_ctx->config->sap_p2p_11ac_override &&
 			(sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11n ||
 			sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11ac ||
 			sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11ac_ONLY) &&
@@ -7052,6 +7098,85 @@ setup_acs_overrides:
 	return 0;
 }
 
+#ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
+/**
+ * wlan_hdd_set_udp_resp_offload() - get specific udp and response udp info from
+ * ini file
+ * @padapter: hdd adapter pointer
+ * @enable: enable or disable the specific udp and response behaviour
+ *
+ * This function reads specific udp and response udp related info from ini file,
+ * these configurations will be sent to fw through wmi.
+ *
+ * Return: 0 on success, otherwise error value
+ */
+static int wlan_hdd_set_udp_resp_offload(hdd_adapter_t *padapter, bool enable)
+{
+	hdd_context_t *phddctx = WLAN_HDD_GET_CTX(padapter);
+	struct hdd_config *pcfg_ini = phddctx->config;
+	struct udp_resp_offload udp_resp_cmd_info;
+	QDF_STATUS status;
+	uint8_t udp_payload_filter_len;
+	uint8_t udp_response_payload_len;
+
+	hdd_info("udp_resp_offload enable flag is %d", enable);
+
+	/* prepare the request to send to SME */
+	if ((enable == true) &&
+	    (pcfg_ini->udp_resp_offload_support)) {
+		if (pcfg_ini->response_payload[0] != '\0') {
+			udp_resp_cmd_info.vdev_id = padapter->sessionId;
+			udp_resp_cmd_info.enable = 1;
+			udp_resp_cmd_info.dest_port =
+					pcfg_ini->dest_port;
+
+			udp_payload_filter_len =
+				strlen(pcfg_ini->payload_filter);
+			hdd_info("payload_filter[%s]",
+				pcfg_ini->payload_filter);
+			udp_response_payload_len =
+				strlen(pcfg_ini->response_payload);
+			hdd_info("response_payload[%s]",
+				pcfg_ini->response_payload);
+
+			qdf_mem_copy(udp_resp_cmd_info.udp_payload_filter,
+					pcfg_ini->payload_filter,
+					udp_payload_filter_len + 1);
+
+			qdf_mem_copy(udp_resp_cmd_info.udp_response_payload,
+					pcfg_ini->response_payload,
+					udp_response_payload_len + 1);
+
+			status = sme_set_udp_resp_offload(&udp_resp_cmd_info);
+			if (QDF_STATUS_E_FAILURE == status) {
+				hdd_err("sme_set_udp_resp_offload failure!");
+				return -EIO;
+			}
+			hdd_info("sme_set_udp_resp_offload success!");
+		}
+	} else {
+		udp_resp_cmd_info.vdev_id = padapter->sessionId;
+		udp_resp_cmd_info.enable = 0;
+		udp_resp_cmd_info.dest_port = 0;
+		udp_resp_cmd_info.udp_payload_filter[0] = '\0';
+		udp_resp_cmd_info.udp_response_payload[0] = '\0';
+		status = sme_set_udp_resp_offload(&udp_resp_cmd_info);
+		if (QDF_STATUS_E_FAILURE == status) {
+			hdd_err("sme_set_udp_resp_offload failure!");
+			return -EIO;
+		}
+		hdd_info("sme_set_udp_resp_offload success!");
+	}
+	return 0;
+}
+#else
+static inline int wlan_hdd_set_udp_resp_offload(hdd_adapter_t *padapter,
+				bool enable)
+{
+	return 0;
+}
+#endif
+
 /**
  * wlan_hdd_cfg80211_start_bss() - start bss
  * @pHostapdAdapter: Pointer to hostapd adapter
@@ -7095,7 +7220,7 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 
 	ENTER();
 
-	if (!update_beacon && cds_is_connection_in_progress()) {
+	if (!update_beacon && cds_is_connection_in_progress(NULL, NULL)) {
 		hdd_err("Can't start BSS: connection is in progress");
 		return -EINVAL;
 	}
@@ -7446,7 +7571,8 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 			acl_entry++;
 		}
 	}
-	if (!pHddCtx->config->force_sap_acs) {
+	if (!pHddCtx->config->force_sap_acs &&
+	    !(ssid && (0 == qdf_mem_cmp(ssid, PRE_CAC_SSID, ssid_len)))) {
 		pIe = wlan_hdd_cfg80211_get_ie_ptr(
 				&pMgmt_frame->u.beacon.variable[0],
 				pBeacon->head_len, WLAN_EID_SUPP_RATES);
@@ -7481,7 +7607,9 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 		}
 	}
 
-	wlan_hdd_set_sap_hwmode(pHostapdAdapter);
+	if (!cds_is_sub_20_mhz_enabled())
+		wlan_hdd_set_sap_hwmode(pHostapdAdapter);
+
 	if (pHddCtx->config->sap_force_11n_for_11ac) {
 		if (pConfig->SapHw_mode == eCSR_DOT11_MODE_11ac ||
 		    pConfig->SapHw_mode == eCSR_DOT11_MODE_11ac_ONLY)
@@ -7608,7 +7736,8 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 
 	hdd_notice("Waiting for Scan to complete(auto mode) and BSS to start");
 
-	qdf_status = qdf_wait_single_event(&pHostapdState->qdf_event, 10000);
+	qdf_status = qdf_wait_single_event(&pHostapdState->qdf_event,
+						SME_CMD_TIMEOUT_VALUE);
 
 	wlansap_reset_sap_config_add_ie(pConfig, eUPDATE_IE_ALL);
 
@@ -7625,8 +7754,9 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	set_bit(SOFTAP_BSS_STARTED, &pHostapdAdapter->event_flags);
 	/* Initialize WMM configuation */
 	hdd_wmm_init(pHostapdAdapter);
-	cds_incr_active_session(pHostapdAdapter->device_mode,
-					 pHostapdAdapter->sessionId);
+	if (pHostapdState->bssState == BSS_START)
+		cds_incr_active_session(pHostapdAdapter->device_mode,
+					pHostapdAdapter->sessionId);
 #ifdef DHCP_SERVER_OFFLOAD
 	if (iniConfig->enableDHCPServerOffload)
 		wlan_hdd_set_dhcp_server_offload(pHostapdAdapter);
@@ -7670,7 +7800,7 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 					struct net_device *dev)
 {
 	hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
-	hdd_context_t *pHddCtx = NULL;
+	hdd_context_t *pHddCtx = wiphy_priv(wiphy);
 	hdd_scaninfo_t *pScanInfo = NULL;
 	hdd_adapter_t *staAdapter = NULL;
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
@@ -7686,6 +7816,11 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 
 	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
 		hdd_err("Command not allowed in FTM mode");
+		return -EINVAL;
+	}
+
+	if (pHddCtx->driver_status == DRIVER_MODULES_CLOSED) {
+		hdd_err("Driver module is closed; dropping request");
 		return -EINVAL;
 	}
 
@@ -7707,7 +7842,6 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 		hdd_device_mode_to_string(pAdapter->device_mode),
 		pAdapter->device_mode);
 
-	pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
 	ret = wlan_hdd_validate_context(pHddCtx);
 	if (0 != ret)
 		return ret;
@@ -7730,6 +7864,7 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 				INIT_COMPLETION(pScanInfo->abortscan_event_var);
 				hdd_abort_mac_scan(staAdapter->pHddCtx,
 						   staAdapter->sessionId,
+						   INVALID_SCAN_ID,
 						   eCSR_SCAN_ABORT_DEFAULT);
 				rc = wait_for_completion_timeout(
 					&pScanInfo->abortscan_event_var,
@@ -7762,7 +7897,10 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 	wlan_hdd_undo_acs(pAdapter);
 	qdf_mem_zero(&pAdapter->sessionCtx.ap.sapConfig.acs_cfg,
 						sizeof(struct sap_acs_cfg));
-	hdd_hostapd_stop(dev);
+	/* Stop all tx queues */
+	hdd_notice("Disabling queues");
+	wlan_hdd_netif_queue_control(pAdapter, WLAN_NETIF_TX_DISABLE_N_CARRIER,
+				     WLAN_CONTROL_PATH);
 
 	old = pAdapter->sessionCtx.ap.beacon;
 	if (!old) {
@@ -7784,8 +7922,8 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 		if (QDF_IS_STATUS_SUCCESS(status)) {
 			qdf_status =
 				qdf_wait_single_event(&pHostapdState->
-						      qdf_stop_bss_event,
-						      10000);
+					qdf_stop_bss_event,
+					SME_CMD_TIMEOUT_VALUE);
 
 			if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 				hdd_err("HDD qdf wait for single_event failed!!");
@@ -7940,12 +8078,12 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 	if (0 != status)
 		return status;
 
-	hdd_info("pAdapter = %p, Device mode %s(%d)", pAdapter,
-	       hdd_device_mode_to_string(pAdapter->device_mode),
-	       pAdapter->device_mode);
+	hdd_info("pAdapter = %p, Device mode %s(%d) sub20 %d",
+		pAdapter, hdd_device_mode_to_string(pAdapter->device_mode),
+		pAdapter->device_mode, cds_is_sub_20_mhz_enabled());
 
 
-	if (cds_is_connection_in_progress()) {
+	if (cds_is_connection_in_progress(NULL, NULL)) {
 		hdd_err("Can't start BSS: connection is in progress");
 		return -EBUSY;
 	}
@@ -7957,6 +8095,8 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 	if (cds_is_sub_20_mhz_enabled()) {
 		enum channel_state ch_state;
 		enum phy_ch_width sub_20_ch_width = CH_WIDTH_INVALID;
+		tsap_Config_t *sap_cfg = &pAdapter->sessionCtx.ap.sapConfig;
+
 		/* Avoid ACS/DFS, and overwrite ch wd to 20 */
 		if (channel == 0) {
 			hdd_err("Can't start SAP-ACS (channel=0) with sub 20 MHz ch width.");
@@ -7985,6 +8125,7 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 			hdd_err("Given ch width not supported by reg domain.");
 			return -EINVAL;
 		}
+		sap_cfg->SapHw_mode = eCSR_DOT11_MODE_abg;
 	}
 
 	/* check if concurrency is allowed */
@@ -8098,6 +8239,13 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 				params->inactivity_timeout;
 			sme_update_sta_inactivity_timeout(WLAN_HDD_GET_HAL_CTX
 					(pAdapter), sta_inactivity_timer);
+		}
+
+		if (status == 0) {
+			if (0 !=
+				wlan_hdd_set_udp_resp_offload(pAdapter, true))
+				hdd_notice("set udp resp cmd failed %d",
+								status);
 		}
 	}
 
@@ -8219,4 +8367,30 @@ int wlan_hdd_cfg80211_change_beacon(struct wiphy *wiphy,
 	cds_ssr_unprotect(__func__);
 
 	return ret;
+}
+
+bool hdd_is_peer_associated(hdd_adapter_t *adapter,
+			    struct qdf_mac_addr *mac_addr)
+{
+	uint32_t cnt = 0;
+	hdd_station_info_t *sta_info = NULL;
+
+	if (!adapter || !mac_addr) {
+		hdd_err("Invalid adapter or mac_addr");
+		return false;
+	}
+
+	sta_info = adapter->aStaInfo;
+	spin_lock_bh(&adapter->staInfo_lock);
+	for (cnt = 0; cnt < WLAN_MAX_STA_COUNT; cnt++) {
+		if ((sta_info[cnt].isUsed) &&
+		    !qdf_mem_cmp(&(sta_info[cnt].macAddrSTA), mac_addr,
+		    QDF_MAC_ADDR_SIZE))
+			break;
+	}
+	spin_unlock_bh(&adapter->staInfo_lock);
+	if (cnt != WLAN_MAX_STA_COUNT)
+		return true;
+
+	return false;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -30,9 +30,6 @@
  *
  * Linux Wireless Extensions Implementation
  */
-
-/* denote that this file does not allow legacy hddLog */
-#define HDD_DISALLOW_LEGACY_HDDLOG 1
 
 #include <linux/version.h>
 #include <linux/module.h>
@@ -95,6 +92,7 @@
 #include "pld_common.h"
 #endif
 #include "wlan_hdd_lro.h"
+#include "cds_utils.h"
 
 #define HDD_FINISH_ULA_TIME_OUT         800
 #define HDD_SET_MCBC_FILTERS_TO_FW      1
@@ -126,32 +124,377 @@ static const hdd_freq_chan_map_t freq_chan_map[] = {
 #define WE_SET_11D_STATE     1
 #define WE_WOWL              2
 #define WE_SET_POWER         3
+/*
+ * <ioctl>
+ * setMaxAssoc - Sets the maximum number of associated stations
+ *
+ * @INPUT: 1 to 32
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL sets the maximum number of associated stations
+ *
+ * @E.g: iwpriv wlan0 setMaxAssoc <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_MAX_ASSOC     4
 #define WE_SET_SCAN_DISABLE  5
+/*
+ * <ioctl>
+ * inactivityTO - sets the timeout value for inactivity data while
+ * in power save mode
+ *
+ * @INPUT: int1…..int255
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL set the timeout value for inactivity data in power save mode
+ *
+ * @E.g: iwpriv wlan0 inactivityTO 20
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_DATA_INACTIVITY_TO  6
+/*
+ * <ioctl>
+ * setMaxTxPower - Dynamically sets the maximum transmission power
+ *
+ * @INPUT: Transmission power in dBm
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL dynamically sets the maximum transmission power
+ * This setting does not persist over reboots
+ *
+ * @E.g: iwpriv wlan0 setMaxTxPower <value in db)
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_MAX_TX_POWER  7
 #define WE_SET_HIGHER_DTIM_TRANSITION   8
 #define WE_SET_TM_LEVEL      9
+/*
+ * <ioctl>
+ * setphymode - Set the phymode dynamically
+ *
+ * @INPUT: 0 IEEE80211_MODE_AUTO to 22 IEEE80211_MODE_11AGN
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL sets the phymode dynamically
+ *
+ * @E.g: iwpriv wlan0 setphymode 10
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_PHYMODE       10
+/*
+ * <ioctl>
+ * nss - Set the number of spatial streams
+ *
+ * @INPUT: int1…..int3
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL sets the number of spatial streams. Supported values are 1 and 2
+ *
+ * @E.g: iwpriv wlan0 nss 2
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_NSS           11
+/*
+ * <ioctl>
+ * ldpc - Enables or disables LDPC
+ *
+ * @INPUT: 0 – Disable, 1 - Enable
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL enables or disables LDPC
+ *
+ * @E.g: iwpriv wlan0 ldpc 1
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_LDPC          12
+/*
+ * <ioctl>
+ * tx_stbc - Enables or disables tx_stbc
+ *
+ * @INPUT: Int 0 – Disable, 1 - Enable
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL used to enables or disables tx_stbc
+ *
+ * @E.g: iwpriv wlan0 tx_stbc <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_TX_STBC       13
+/*
+ * <ioctl>
+ * rx_stbc - Set the rx_stbc parameter
+ *
+ * @INPUT: Int 0 – Disable, 1 - Enable
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL used to set rx_stbc parameter
+ *
+ * @E.g: iwpriv wlan0 rx_stbc <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_RX_STBC       14
+/*
+ * <ioctl>
+ * shortgi  - Enables or disables a short-guard interval
+ *
+ * @INPUT: Int 0 – Disable, 1 - Enable
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL enables or disables a short-guard interval.
+ *
+ * @E.g: iwpriv wlan0 shortgi <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_SHORT_GI      15
+/*
+ * <ioctl>
+ * enablertscts - enables or disables rts/cts.
+ *
+ * @INPUT: 1-Enable , 0-Disable
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL enables or disables rts/cts.
+ *
+ * @E.g: iwpriv wlan0 enablertscts <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_RTSCTS        16
+/*
+ * <ioctl>
+ * chwidth - Set the channel bandwidth
+ *
+ * @INPUT: 0-20mhz to 3-160mhz
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL used to set the channel bandwidth
+ *
+ * @E.g: iwpriv wlan0 chwidth 1
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_CHWIDTH       17
 #define WE_SET_ANI_EN_DIS    18
 #define WE_SET_ANI_POLL_PERIOD    19
 #define WE_SET_ANI_LISTEN_PERIOD  20
 #define WE_SET_ANI_OFDM_LEVEL     21
 #define WE_SET_ANI_CCK_LEVEL      22
+/*
+ * <ioctl>
+ * cwmenable - Enables or disables the dynamic channel bandwidth
+ *
+ * @INPUT: 0-Disable, 1-Enable
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL used to enables or disables the dynamic channel bandwidth
+ *
+ * @E.g: iwpriv wlan0 cwmenable <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_DYNAMIC_BW         23
+/*
+ * <ioctl>
+ * txchainmask - This IOCTL sets the current Tx chain mask
+ *
+ * @INPUT: Mask Value
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL sets the current Tx chain mask
+ *
+ * @E.g: iwpriv wlan0 txchainmask 1
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_TX_CHAINMASK  24
+/*
+ * <ioctl>
+ * rxchainmask - Sets the current Rx chain mask
+ *
+ * @INPUT: Mask Value
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL sets the current Rx chain mask. This command is the
+ * equivalent to setting in gSetRxChainmask1x1 in WCNSS_qcom_cfg.ini.
+ *
+ * @E.g: iwpriv wlan0 rxchainmask <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_RX_CHAINMASK  25
+/*
+ * <ioctl>
+ * set11NRates - Fixes the Tx data rate of the 11N mode.
+ *
+ * @INPUT: 0x1b to 0x8f
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL fixes the Tx data rate of the 11N mode.
+ *
+ * @E.g: iwpriv wlan0 set11NRates 0x85
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_11N_RATE      26
+/*
+ * <ioctl>
+ * ampdu  - Set the the maximum subframe of ampdu
+ *
+ * @INPUT: int 1 to int 63
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL sets the maximum subframe of ampdu.
+ *
+ * @E.g: iwpriv wlan0 ampdu 9
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_AMPDU         27
+/*
+ * <ioctl>
+ * amsdu - Sets the maximum subframe of amsdu.
+ *
+ * @INPUT: int 1 to int 31
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL sets the maximum subframe of amsdu.
+ *
+ * @E.g: iwpriv wlan0 amsdu 9
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_AMSDU         28
+/*
+ * <ioctl>
+ * txpow2g - current 2 GHz Tx power setting
+ *
+ * @INPUT: Tx power in dBm
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL  used to set 2 ghz tx power
+ *
+ * @E.g: iwpriv wlan0 txpow2g
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_TXPOW_2G      29
+/*
+ * <ioctl>
+ * txpow5g - Current 5 GHz tx power setting
+ *
+ * @INPUT: Tx power in dBm
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL used to set the 5 ghz txpower
+ *
+ * @E.g: iwpriv wlan0 txpow5g
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_TXPOW_5G      30
 /* Private ioctl for firmware debug log */
 #define WE_DBGLOG_LOG_LEVEL             31
@@ -162,10 +505,66 @@ static const hdd_freq_chan_map_t freq_chan_map[] = {
 #define WE_DBGLOG_MOD_LOG_LEVEL         36
 #define WE_DBGLOG_TYPE                  37
 #define WE_SET_TXRX_FWSTATS             38
+/*
+ * <ioctl>
+ * set11ACRates  - Fixes the Tx data rate of 11AC
+ *
+ * @INPUT: 0x1 to 0x9
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL fixes the Tx data rate of 11AC.
+ *
+ * @E.g: iwpriv wlan0 set11ACRates 0x9
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_VHT_RATE                 39
 #define WE_DBGLOG_REPORT_ENABLE         40
 #define WE_TXRX_FWSTATS_RESET           41
+/*
+ * <ioctl>
+ * setTxMaxPower2G - Set the maximum transmit power for the 2.4-GHz band
+ *
+ * @INPUT: Transmission power in dBm
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL sets the maximum transmit power for the 2.4-GHz band
+ * This setting does not persist over reboots
+ *
+ * @E.g: iwpriv wlan0 setTxMaxPower2G 10
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_MAX_TX_POWER_2_4   42
+/*
+ * <ioctl>
+ * setTxMaxPower5G - Set the maximum transmit power for the 5-GHz band
+ *
+ * @INPUT: Transmission power in dBm
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL sets the maximum transmit power for the 5-GHz band
+ * This setting does not persist over reboots
+ *
+ * @E.g: iwpriv wlan0 setTxMaxPower5G 10
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_MAX_TX_POWER_5_0   43
 #define WE_SET_PKTLOG                   44
 /* Private ioctl for packet powe save */
@@ -177,34 +576,339 @@ static const hdd_freq_chan_map_t freq_chan_map[] = {
 #define  WE_PPS_MACADDR_MISMATCH        50
 #define  WE_PPS_DELIM_CRC_FAIL          51
 #define  WE_PPS_GID_NSTS_ZERO           52
+/*
+ * <ioctl>
+ * rssi_chk - Chek the rssi
+ *
+ * @INPUT: One argument as input
+ *
+ * @OUTPUT: rssi
+ *  wlan0	rssi_chk:56
+ *
+ * This IOTCL used to chek rssi
+ *
+ * @E.g: iwpriv wlan0 rssi_chk <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define  WE_PPS_RSSI_CHECK              53
+/*
+ * <ioctl>
+ * setAutoChannel - set ACS enable/disable
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT:  None
+ *
+ * This IOCTL is used to set SAP ACS eanble/disable
+ *
+ * @E.g: iwpriv wlan0 setAutoChannel 0
+ *
+ * Supported Feature: SAP
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_SAP_AUTO_CHANNEL_SELECTION     54
+/*
+ * <ioctl>
+ * htsmps - Sets the htsmps
+ *
+ * @INPUT: Atleast one int argument
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL used to set htsmps
+ *
+ * @E.g: iwpriv wlan0 htsmps <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_HTSMPS                   55
 /* Private ioctl for QPower */
 #define WE_SET_QPOWER_MAX_PSPOLL_COUNT            56
 #define WE_SET_QPOWER_MAX_TX_BEFORE_WAKE          57
 #define WE_SET_QPOWER_SPEC_PSPOLL_WAKE_INTERVAL   58
 #define WE_SET_QPOWER_SPEC_MAX_SPEC_NODATA_PSPOLL 59
-
+/*
+ * <ioctl>
+ * burst_enable - Enables or disables the burst feature
+ *
+ * @INPUT: 0-Disable, 1-Enable
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL enables or disables the burst feature.
+ *
+ * @E.g: iwpriv wlan0 burst_enable 0
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_BURST_ENABLE             60
+/*
+ * <ioctl>
+ * burst_dur - Enables or disables the burst feature
+ *
+ * @INPUT: int 1…..int 8191 in microseconds
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL sets the burst duration.
+ *
+ * @E.g: iwpriv wlan0 burst_dur <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_BURST_DUR                61
 /* GTX Commands */
+/*
+ * <ioctl>
+ * gtxHTMcs - Set the tx HTM value
+ *
+ * @INPUT: Atleast one int orgument
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL sets htm tx value
+ *
+ * @E.g: iwpriv wlan0 gtxHTMcs <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_GTX_HT_MCS               62
+/*
+ * <ioctl>
+ * gtxVHTMcs - Set gtxVHTMcs value
+ *
+ * @INPUT: Atleast one int argument
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL used to set gtxVHTMcs value
+ *
+ * @E.g: iwpriv wlan0 gtxVHTMcs <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_GTX_VHT_MCS              63
+/*
+ * <ioctl>
+ * gtxUsrCfg - Host request for GTX mask
+ *
+ * @INPUT: Atleast one int orgument
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL used send the host request for GTX mask
+ *
+ * @E.g: iwpriv wlan0 gtxUsrCfg <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_GTX_USRCFG               64
+/*
+ * <ioctl>
+ * gtxThre - Set the tx threshold
+ *
+ * @INPUT: Atleast one int argument
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL used to set tx threshold
+ *
+ * @E.g: iwpriv wlan0 gtxThre <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_GTX_THRE                 65
+/*
+ * <ioctl>
+ * gtxMargin  - Set the gtxMargin
+ *
+ * @INPUT: 1 to 32
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL use dto set gtxMargin
+ *
+ * @E.g: iwpriv wlan0 gtxMargini <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_GTX_MARGIN               66
+/*
+ * <ioctl>
+ * gtxStep - Set the gtxStep
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL used to sets gtxStep
+ *
+ * @E.g: iwpriv wlan0 gtxStep <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_GTX_STEP                 67
+/*
+ * <ioctl>
+ * gtxMinTpc - Sets the gtxMinTpc
+ *
+ * @INPUT: Atleast one int argument
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL sets the tx MinTpc
+ *
+ * @E.g: iwpriv wlan0 gtxMinTpc <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_GTX_MINTPC               68
+/*
+ * <ioctl>
+ * gtxBWMask - Sets the BW mask (20/40/80/160 Mhz)
+ *
+ * @INPUT: Mask value
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL used to set gtxBWMask
+ *
+ * @E.g: iwpriv wlan0 gtxBWMask <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
+
 #define WE_SET_GTX_BWMASK               69
-/* Private ioctl to configure MCC home channels time quota and latency */
+/*
+ * <ioctl>
+ * setMccLatency - Sets the MCC latency value during STA-P2P concurrency
+ *
+ * @INPUT: set_value
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to set the MCC latency value in milliseconds
+ * during STA-P2P concurrency.
+ *
+ * If 0ms latency is provided, then FW will set to a default.
+ * Otherwise, latency must be at least 30ms.
+ *
+ * @E.g: iwpriv wlan0 setMccLatency 40
+ *
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_MCC_CONFIG_LATENCY           70
+
+/*
+ * <ioctl>
+ * setMccQuota- Set the quota for P2P cases
+ *
+ * @INPUT: set_value [0,100]
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to set the quota in milliseconds for P2P_GO/STA.
+ *
+ * Currently used to set time quota for 2 MCC vdevs/adapters using
+ * (operating channel, quota) for each mode.
+ * The info is provided run time using iwpriv command:
+ * iwpriv <wlan0 | p2p0> setMccQuota <quota in ms>.
+ * Note: the quota provided in command is for the same mode in cmd.
+ * HDD checks if MCC mode is active, gets the second mode and its
+ * operating chan.
+ * Quota for the 2nd role is calculated as 100 - quota of first mode.
+ *
+ * @E.g: iwpriv wlan0 setMccQuota 50
+ *       iwpriv p2p0 setMccQuota 50
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_MCC_CONFIG_QUOTA             71
 /* Private IOCTL for debug connection issues */
 #define WE_SET_DEBUG_LOG                72
 #ifdef WE_SET_TX_POWER
 #undef WE_SET_TX_POWER
 #endif
+/*
+ * <ioctl>
+ * setTxPower - Set the current transmit power
+ *
+ * @INPUT: Transmission power in dBm
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL sets the current transmit power.
+ * This setting does not persist over reboots.
+ *
+ * @E.g: iwpriv wlan0 setTxPower 10
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_TX_POWER                 74
 /* Private ioctl for earlyrx power save feature */
 #define WE_SET_EARLY_RX_ADJUST_ENABLE         75
@@ -213,47 +917,536 @@ static const hdd_freq_chan_map_t freq_chan_map[] = {
 #define WE_SET_EARLY_RX_SLOP_STEP             78
 #define WE_SET_EARLY_RX_INIT_SLOP             79
 #define WE_SET_EARLY_RX_ADJUST_PAUSE          80
+/*
+ * <ioctl>
+ * setMcRate  - Set the data rate for multicast data
+ *
+ * @INPUT: 1 to 32
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL sets the data rate for multicast data. Note that this command
+ * is allowed only in STA, IBSS, or QCMobileAP mode
+ *
+ * @E.g: iwpriv wlan0 setMcRate <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_MC_RATE                        81
 #define WE_SET_EARLY_RX_DRIFT_SAMPLE          82
 /* Private ioctl for packet power save */
+/*
+ * <ioctl>
+ * 5g_ebt - Sets the 5g_ebt
+ *
+ * @INPUT: <value>
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL used to set 5g_ebt
+ *
+ * @E.g: iwpriv wlan0 5g_ebt <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_PPS_5G_EBT                         83
+/*
+ * <ioctl>
+ * cts_cbw  - Set CTS channel BW for dynamic BW adjustment
+ *
+ * @INPUT: 20 t0 160
+ *
+ * @OUTPUT: None
+ *
+ * This IOTCL used to set CTS channel BW for dynamic BW adjustment
+ *
+ * @E.g: iwpriv wlan0 cts_cbw <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_CTS_CBW                        84
 #define WE_DUMP_STATS                         85
 #define WE_CLEAR_STATS                        86
 /* Private sub ioctl for starting/stopping the profiling */
 #define WE_START_FW_PROFILE                      87
+/*
+ * <ioctl>
+ * setChanChange - Initiate channel change
+ *
+ * @INPUT: channel number to switch to.
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to initiate a channel change.
+ * If called on STA/CLI interface it will send the
+ * ECSA action frame to the connected SAP/GO asking to
+ * initiate the ECSA, if supported.
+ * If called on SAP/GO interface it will initiate
+ * ECSA and ask connected peers to move to new channel.
+ *
+ * @E.g: iwpriv wlan0 setChanChange <channel>
+ * iwpriv wlan0 setChanChange 1
+ *
+ * Supported Feature: ECSA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_CHANNEL                        88
 #define WE_SET_CONC_SYSTEM_PREF               89
 
 /* Private ioctls and their sub-ioctls */
 #define WLAN_PRIV_SET_NONE_GET_INT    (SIOCIWFIRSTPRIV + 1)
 #define WE_GET_11D_STATE     1
-#define WE_IBSS_STATUS       2
 #define WE_SET_SAP_CHANNELS  3
 #define WE_GET_WLAN_DBG      4
 #define WE_GET_MAX_ASSOC     6
 /* 7 is unused */
 #define WE_GET_SAP_AUTO_CHANNEL_SELECTION 8
+
+/*
+ * <ioctl>
+ * getconcurrency - Get concurrency mode
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: It shows concurrency value
+ * Bit 0:STA   1:SAP     2:P2P_Client  3:P2P_GO
+ *     4:FTM   5:IBSS    6:Monitor     7:P2P_Device
+ *     8:OCB   9:EPPING  10:QVIT       11:NDI
+ *
+ * This IOCTL is used to retrieve concurrency mode.
+ *
+ * @E.g: iwpriv wlan0 getconcurrency
+ * wlan0     getconcurrency:5
+ * Above value shows STA+P2P_Client
+ *
+ * Supported Feature: Concurrency
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_CONCURRENCY_MODE 9
+/*
+ * <ioctl>
+ * get_nss - Get the number of spatial STBC streams (NSS)
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: NSS
+ *  wlan0     get_nss:2
+ *
+ * This IOTCL used to get the number of spatial STBC streams
+ *
+ * @E.g: iwpriv wlan0 get_nss
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_NSS           11
+/*
+ * <ioctl>
+ * get_ldpc - This IOCTL gets the low density parity check (LDPC)
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: ldpc
+ *  wlan0     get_ldpc:1
+ *
+ * This IOTCL used to gets the low density parity check (LDPC)
+ *
+ * @E.g: iwpriv wlan0 get_ldpc
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_LDPC          12
+/*
+ * <ioctl>
+ * get_tx_stbc - Get the value of the current Tx space time block code (STBC)
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: TXSTBC
+ *  wlan0     get_tx_stbc:1
+ *
+ * This IOTCL get the value of the current Tx space time block code (STBC)
+ *
+ * @E.g: iwpriv wlan0 get_tx_stbc
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_TX_STBC       13
+/*
+ * <ioctl>
+ * get_rx_stbc - Gets the value of the current Rx STBC
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Rx STBC
+ *  wlan0     get_rx_stbc:1
+ *
+ * This IOTCL used to get the value of the current Rx STBC
+ *
+ * @E.g: iwpriv wlan0 get_rx_stbc
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_RX_STBC       14
+/*
+ * <ioctl>
+ * get_shortgi - Get the value of the current short GI setting
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Enable/disable of shortgi
+ *  wlan0     get_shortgi:1
+ *
+ * This IOCTL gets the value of the current short GI setting
+ *
+ * @E.g: iwpriv wlan0 get_shortgi
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_SHORT_GI      15
+/*
+ * <ioctl>
+ * get_rtscts - Get the value of the current RTS/CTS setting.
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Enable/disable of RTS/CTS
+ *  wlan0     get_rtscts:33
+ *
+ * This IOTCL get the value of the current RTS/CTS setting.
+ *
+ * @E.g: iwpriv wlan0 get_rtscts
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_RTSCTS        16
+/*
+ * <ioctl>
+ * get_chwidth - Get the current channel width setting
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: channel width
+ *  wlan0     get_chwidth:0
+ *
+ * This IOTCL get the current channel width setting.
+ *
+ * @E.g: iwpriv wlan0 get_chwidth
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_CHWIDTH       17
+/*
+ * <ioctl>
+ * get_anienable - Get the anienable
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT:
+ *  wlan0     get_anienable:0
+ *
+ * This IOTCL get the anienable
+ *
+ * @E.g: iwpriv wlan0 get_anienable
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_ANI_EN_DIS    18
+/*
+ * <ioctl>
+ * get_aniplen  - Get the aniplen
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT:
+ *  wlan0     get_aniplen:0
+ *
+ * This IOTCL get the aniplen
+ *
+ * @E.g: iwpriv wlan0 get_aniplen
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_ANI_POLL_PERIOD    19
+/*
+ * <ioctl>
+ * get_anilislen- Get the anilislen
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT:
+ *  wlan0     get_anilislen:0
+ *
+ * This IOTCL used to get anilislen
+ *
+ * @E.g: iwpriv wlan0 get_anilislen
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_ANI_LISTEN_PERIOD  20
+/*
+ * <ioctl>
+ * get_aniofdmlvl - Get the OFDM level
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: OFDM
+ *  wlan0     get_aniofdmlvl:0
+ *
+ * This IOTCL used to get ofdm level
+ *
+ * @E.g: iwpriv wlan0 get_aniofdmlvl
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_ANI_OFDM_LEVEL     21
+/*
+ * <ioctl>
+ * get_aniccklvl - Get the cck level
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT:
+ *  wlan0     get_aniccklvl:0
+ *
+ * This IOTCL used to get cck level
+ *
+ * @E.g: iwpriv wlan0 get_aniccklvl
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_ANI_CCK_LEVEL      22
+/*
+ * <ioctl>
+ * get_cwmenable - Get the value of the dynamic channel bandwidth setting
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Enable/disable dynamic channel bandwidth
+ *  wlan0     get_cwmenable:0
+ *
+ * This IOTCL get the value of the dynamic channel bandwidth setting
+ *
+ * @E.g: iwpriv wlan0 get_cwmenable
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_DYNAMIC_BW         23
+/*
+ * <ioctl>
+ * get_txchainmask - Get the txchainmask that was set
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: txchainmask
+ *  wlan0     get_txchainmask:1
+ *
+ * This IOCTL gets the txchainmask that was set
+ * This command is useful if it was previously set
+ *
+ * @E.g: iwpriv wlan0 get_txchainmask
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_TX_CHAINMASK  24
+/*
+ * <ioctl>
+ * get_rxchainmask - Get the rxchainmask that was set
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: rxchainmask
+ *  wlan0     get_rxchainmask:1
+ *
+ * This IOCTL gets the rxchainmask that was set
+ * This command is useful only if it was previously set.
+ *
+ * @E.g: iwpriv wlan0 get_rxchainmask
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_RX_CHAINMASK  25
+/*
+ * <ioctl>
+ * get_11nrate - Get the fixed Tx data rate
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Using this command does not return the same value as set
+ *  wlan0     get_11nrate:0
+ *
+ * This IOCTL gets the fixed Tx data rate
+ * This command is useful only if setting the fixed Tx rate.
+ *
+ * @E.g: iwpriv wlan0 get_11nrate
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_11N_RATE      26
+/*
+ * <ioctl>
+ * get_ampdu - Get the maximum subframe of ampdu
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Maximum subframe of ampdu
+ *  wlan0     get_ampdu:1
+ *
+ * This IOCTL gets the maximum subframe of ampdu
+ * This command is useful only if setting ampdu.
+ *
+ * @E.g: iwpriv wlan0 get_ampdu
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_AMPDU         27
+/*
+ * <ioctl>
+ * get_amsdu - Get the maximum subframe of amsdu
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Maximum subframe of amsdu
+ *  wlan0     get_amsdu:1
+ *
+ * This IOCTL gets the maximum subframe of amsdu.
+ * This command is useful only if setting amsdu
+ *
+ * @E.g: iwpriv wlan0 get_amsdu
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_AMSDU         28
+/*
+ * <ioctl>
+ * get_txpow2g - Get the current 2 GHz Tx power setting
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Tx Power in dbm
+ * wlan0     get_txpow2g:0
+ *
+ * This IOCTL gets the current 2 GHz Tx power setting
+ * This command is useful if setting Tx power
+ *
+ * @E.g: iwpriv wlan0 get_txpow2g
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_TXPOW_2G      29
+/*
+ * <ioctl>
+ * get_txpow5g - Get the current 5 GHz Tx power setting
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Tx Power in dbm
+ * wlan0     get_txpow5g:0
+ *
+ * This IOCTL gets the current 5 GHz Tx power setting
+ * This command is useful if setting Tx power
+ *
+ * @E.g: iwpriv wlan0 get_txpow5g
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_TXPOW_5G      30
 /* 31 is unused */
 #define WE_GET_PPS_PAID_MATCH           32
@@ -270,16 +1463,207 @@ static const hdd_freq_chan_map_t freq_chan_map[] = {
 #define WE_GET_QPOWER_MAX_TX_BEFORE_WAKE          42
 #define WE_GET_QPOWER_SPEC_PSPOLL_WAKE_INTERVAL   43
 #define WE_GET_QPOWER_SPEC_MAX_SPEC_NODATA_PSPOLL 44
+/*
+ * <ioctl>
+ * get_burst_en - Enables or disables the burst feature
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Enable/disable of burst feature
+ *  wlan0     get_burst_en:1
+ *
+ * This IOCTL enables or disables the burst feature
+ *
+ * @E.g: iwpriv wlan0 get_burst_en
+ *
+ * Supported Feature:STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_BURST_ENABLE             45
+/*
+ * <ioctl>
+ * get_burst_dur - Get the burst duration
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Duration in microseconds
+ *  wlan0     get_burst_dur:8160
+ *
+ * This IOCTL gets the burst duration
+ * This command is useful if setting burst enable
+ *
+ * @E.g: iwpriv wlan0 get_burst_dur
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_BURST_DUR                46
 /* GTX Commands */
+/*
+ * <ioctl>
+ * get_gtxHTMcs - Get the tx HTM
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: HTM
+ *  wlan0     get_gtxHTMcs:32896
+ *
+ * This IOTCL used to get HTM
+ *
+ * @E.g: iwpriv wlan0 get_gtxHTMcs
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_GTX_HT_MCS               47
+/*
+ * <ioctl>
+ * get_gtxVHTMcs - Get the VHTM
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: VHTM
+ *  wlan0     get_gtxVHTMcs:524800
+ *
+ * This IOTCL used to get the VHTM
+ *
+ * @E.g: iwpriv wlan0 get_gtxVHTMcs
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_GTX_VHT_MCS              48
+/*
+ * <ioctl>
+ * get_gtxUsrCfg - Get the tx cfg
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: TXCFG
+ *  wlan0     get_gtxUsrCfg:32
+ *
+ * This IOTCL used to get the tx cfg
+ *
+ * @E.g: iwpriv wlan0 get_gtxUsrCfg
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_GTX_USRCFG               49
+/*
+ * <ioctl>
+ * get_gtxThre - Get the tx threshold
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Threshold
+ *  wlan0     get_gtxThre:3
+ *
+ * This IOCTL is used to get tx threshold
+ *
+ * @E.g: iwpriv wlan0 get_gtxThre
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_GTX_THRE                 50
+/*
+ * <ioctl>
+ * get_gtxMargin - Get the tx margin
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: GTXMARGIN
+ *  wlan0     get_gtxMargin:2
+ *
+ * This IOCTL is used to set tx margin
+ *
+ * @E.g: iwpriv wlan0 get_gtxMargin
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_GTX_MARGIN               51
+/*
+ * <ioctl>
+ * get_gtxStep - Get the tx step
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: GTXSTEP
+ * wlan0     get_gtxStep:0
+ *
+ * This IOCTL is used to get the gtx step
+ *
+ * @E.g: iwpriv wlan0 get_gtxStep
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_GTX_STEP                 52
+/*
+ * <ioctl>
+ * get_gtxMinTpc - Get the tx miminum tpc
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: TPC
+ * wlan0     get_gtxMinTpc:0
+ *
+ * This IOCTL is used to get tx miminum tpc
+ *
+ * @E.g: iwpriv wlan0 get_gtxMinTpc
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_GTX_MINTPC               53
+/*
+ * <ioctl>
+ * get_gtxBWMask - Get the tx BW MASK
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: MASK
+ * wlan0     get_gtxBWMask:15
+ *
+ * This IOCTL is used get gtx bw mask
+ *
+ * @E.g: iwpriv wlan0 get_gtxBWMask
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_GTX_BWMASK               54
 #define WE_GET_TEMPERATURE              56
 #define WE_CAP_TSF                      58
@@ -293,6 +1677,24 @@ static const hdd_freq_chan_map_t freq_chan_map[] = {
 #define WE_WOWL_ADD_PTRN     1
 #define WE_WOWL_DEL_PTRN     2
 #define WE_NEIGHBOR_REPORT_REQUEST 3
+/*
+ * <ioctl>
+ * set_ap_wps_ie - Set the P2P IE of the probe response
+ *
+ * @INPUT: string
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL sets the P2P IE of the probe response
+ *
+ * @E.g: iwpriv wlan0 set_ap_wps_ie abcd
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_AP_WPS_IE     4  /* This is called in station mode to set probe rsp ie. */
 #define WE_SET_CONFIG        5
 
@@ -307,37 +1709,254 @@ static const hdd_freq_chan_map_t freq_chan_map[] = {
 #define WLAN_PRIV_GET_CHAR_SET_NONE   (SIOCIWFIRSTPRIV + 5)
 #define WE_WLAN_VERSION      1
 #define WE_GET_STATS         2
+/*
+ * <ioctl>
+ * getConfig - gets the values of all configurations listed in WCNSS
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Current configuration to the sys log
+ *  wlan0	getConfig: WLAN configuration written to system log
+ *
+ * This IOCTL gets the values of all configurations listed in WCNSS
+ *
+ * @E.g: iwpriv wlan0 getConfig
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_CFG           3
 #define WE_GET_WMM_STATUS    4
+/*
+ * <ioctl>
+ * getChannelList - Get the available channel list while in QCMobileAP
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Channel list
+ * wlan0     getChannelList:36 US 1..165
+ *
+ * This IOCTL gets the available channel list while in QCMobileAP
+ *
+ * @E.g: iwpriv wlan0 getChannelList
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_CHANNEL_LIST  5
+/*
+ * <ioctl>
+ * getRSSI - Get the Received Signal Strength Indicator
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: RSSI
+ * wlan0     getRSSI:rsssi=-32
+ *
+ * This IOCTL gets the Received Signal Strength Indicator (RSSI)
+ *
+ * @E.g: iwpriv wlan0 getRSSI
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_RSSI          6
+
+/*
+ * <ioctl>
+ * getSuspendStats - Get suspend/resume stats
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: character string containing formatted suspend/resume stats
+ *
+ * This ioctl is used to get suspend/resume stats formatted for display.
+ * Currently it includes suspend/resume counts, wow wake up reasons, and
+ * suspend fail reasons.
+ *
+ * @E.g: iwpriv wlan0 getSuspendStats
+ * iwpriv wlan0 getSuspendStats
+ *
+ * Supported Feature: suspend/resume
+ *
+ * Usage: Internal
+ *
+ * </ioctl>
+ */
+#define WE_GET_SUSPEND_RESUME_STATS 7
 #ifdef FEATURE_WLAN_TDLS
+/*
+ * <ioctl>
+ * getTdlsPeers - Get all TDLS peers.
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Returns the MAC address of all the TDLS peers
+ * wlan0     getTdlsPeers:
+ * MAC               Id cap up RSSI
+ * ---------------------------------
+ * 00:0a:f5:0e:bd:18  2   Y  Y  -44
+ * 00:0a:f5:bf:0e:12  0   N  N    0
+ *
+ * This IOCTL is used to get all TDLS peers.
+ *
+ * @E.g: iwpriv wlan0 getTdlsPeers
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_TDLS_PEERS    8
 #endif
 #ifdef WLAN_FEATURE_11W
+/*
+ * <ioctl>
+ * getPMFInfo - get the PMF info of the connected session
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT:
+ *  wlan0     getPMFInfo:
+ *  BSSID E4:F4:C6:0A:E0:36, Is PMF Assoc? 0
+ *  Number of Unprotected Disassocs 0
+ *  Number of Unprotected Deauths 0
+ *
+ * This IOCTL is used to get the PMF stats/status of the current
+ * connection.
+ *
+ * @e.g:iwpriv wlan0 getPMFInfo
+ *
+ * Supported Feature: PMF
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_11W_INFO      9
 #endif
 #define WE_GET_STATES        10
+/*
+ * <ioctl>
+ * getIbssSTAs - get ibss sta info
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Give the MAC of the IBSS STA
+ *  wlan0     getIbssSTAs:
+ *  1 .8c:fd:f0:01:9c:bf
+ *
+ * This IOCTL is used to get ibss sta info
+ *
+ * @E.g: iwpriv wlan0 getIbssSTAs
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_IBSS_STA_INFO 11
+/*
+ * <ioctl>
+ * getphymode - Get the current phymode.
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: In phymode
+ *  wlan0     getphymode:AUTO MODE
+ *
+ * This IOCTL used to gets the current phymode.
+ *
+ * @E.g: iwpriv wlan0 getphymode
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_PHYMODE       12
 #ifdef FEATURE_OEM_DATA_SUPPORT
 #define WE_GET_OEM_DATA_CAP  13
 #endif
+/*
+ * <ioctl>
+ * getSNR - Enable SNR Monitoring
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: Signal strength/ratio
+ *  wlan0     getSNR:1
+ *
+ * This IOCTL is used to get ibss sta info
+ *
+ * @E.g: iwpriv wlan0 getSNR
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_GET_SNR           14
 #define WE_LIST_FW_PROFILE      15
 
 /* Private ioctls and their sub-ioctls */
 #define WLAN_PRIV_SET_NONE_GET_NONE   (SIOCIWFIRSTPRIV + 6)
+
+/*
+ * <ioctl>
+ * reassoc - Trigger STA re-association to the connected AP
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to trigger STA reassociation to the connected AP.
+ *
+ * @E.g: iwpriv wlan0 reassoc
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: Internal
+ *
+ * </ioctl>
+ */
 #define WE_SET_REASSOC_TRIGGER     8
+/*
+ * <ioctl>
+ * ibssPeerInfoAll - Print the ibss peers's MAC, rate and RSSI
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: print ibss peer in info logs
+ *  pPeerInfo->numIBSSPeers = 1
+ *  PEER ADDR : 8c:fd:f0:01:9c:bf TxRate: 1 Mbps RSSI: -35
+ *
+ * This IOCTL is used to rint the ibss peers's MAC, rate and RSSI
+ * in info logs
+ *
+ * @E.g: iwpriv wlan0 ibssPeerInfoAll
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_IBSS_GET_PEER_INFO_ALL 10
-#define WE_DUMP_AGC_START          11
-#define WE_DUMP_AGC                12
-#define WE_DUMP_CHANINFO_START     13
-#define WE_DUMP_CHANINFO           14
-#define WE_DUMP_WATCHDOG           15
-#ifdef CONFIG_ATH_PCIE_ACCESS_DEBUG
-#define WE_DUMP_PCIE_LOG           16
-#endif
+/* Sub ioctls 11 to 16 are not used */
 #define WE_GET_RECOVERY_STAT       17
 #define WE_GET_FW_PROFILE_DATA     18
 #define WE_STOP_OBSS_SCAN          19
@@ -351,8 +1970,64 @@ static const hdd_freq_chan_map_t freq_chan_map[] = {
 #define WE_MAC_PWR_DEBUG_CMD 4
 
 #ifdef FEATURE_WLAN_TDLS
+/*
+ * <ioctl>
+ * setTdlsConfig - Set TDLS configuration parameters.
+ *
+ * @INPUT: 11 TDLS configuration parameters
+ *	@args[0]: tdls: [0..2]
+ *	@args[1]: tx_period_t: [1000..4294967295UL]
+ *	@args[2]: tx_packet_n: [0..4294967295UL]
+ *	@args[3]: [discovery_period is not used anymore]
+ *	@args[4]: discovery_tries_n: [1..100]
+ *	@args[5]: [idle_timeout is not used anymore]
+ *	@args[6]: idle_packet_n: [0..40000]
+ *	@args[7]: [rssi_hysteresis is not used anymore]
+ *	@args[8]: rssi_trigger_threshold: [-120..0]
+ *	@args[9]: rssi_teardown_threshold: [-120..0]
+ *	@args[10]: rssi_delta: [-30..0]
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to set the TDLS configuration parameters.
+ *
+ * @E.g: iwpriv wlan0 setTdlsConfig tdls tx_period_t tx_packet_n
+ *		discovery_period discovery_tries_n idle_timeout
+ *		idle_packet_n rssi_hysteresis rssi_trigger_threshold
+ *		rssi_teardown_threshold rssi_delta
+ * iwpriv wlan0 setTdlsConfig 1 1500 40 1 5 1 5 0 -70 -70 -10
+ *
+ * Supported Feature: TDLS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
+
+
 #define WE_TDLS_CONFIG_PARAMS   5
 #endif
+/*
+ * <ioctl>
+ * ibssPeerInfo - Print the ibss peers's MAC, rate and RSSI
+ *
+ * @INPUT: staid
+ *
+ * @OUTPUT: print ibss peer corresponding to staid in info logs
+ *  PEER ADDR : 8c:fd:f0:01:9c:bf TxRate: 1 Mbps RSSI: -35
+ *
+ * This IOCTL is used to print the specific ibss peers's MAC,
+ * rate and RSSI in info logs
+ *
+ * @E.g: iwpriv wlan0 ibssPeerInfo <sta_id>
+ *  iwpriv wlan0 ibssPeerInfo 0
+ *
+ * Supported Feature: IBSS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_IBSS_GET_PEER_INFO   6
 #define WE_UNIT_TEST_CMD   7
 
@@ -364,18 +2039,310 @@ static const hdd_freq_chan_map_t freq_chan_map[] = {
 #define WE_LED_FLASHING_PARAM    10
 #endif
 
+/*
+ * <ioctl>
+ * pm_clist - Increments the index value of the concurrent connection list
+ * and update with the input parameters provided.
+ *
+ * @INPUT: Following 8 arguments:
+ * @vdev_id: vdev id
+ * @tx_streams: TX streams
+ * @rx_streams: RX streams
+ * @chain_mask: Chain mask
+ * @type: vdev_type
+ *    AP:1    STA:2    IBSS:3    Monitor:4    NAN:5    OCB:6    NDI:7
+ * @sub_type: vdev_subtype
+ *    P2P_Device:1    P2P_Client:2     P2P_GO:3
+ *    Proxy_STA:4     Mesh:5           Mesh_11s:6
+ * @channel: Channel
+ * @mac: Mac id
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to increments the index value of the concurrent connection
+ * list and update with the input parameters provided.
+ *
+ * @E.g: iwpriv wlan0 pm_clist vdev_id tx_streams rx_streams chain_mask type
+ *                    sub_type channel mac
+ * iwpriv wlan0 pm_clist 1 2 2 1 2 3 10 1
+ *
+ * Supported Feature: DBS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_POLICY_MANAGER_CLIST_CMD    11
+
+/*
+ * <ioctl>
+ * pm_dlist - Delete the index from the concurrent connection list that is
+ * present in the given vdev_id.
+ *
+ * @INPUT: delete_all, vdev_id
+ * @delete_all: delete all indices
+ * @vdev_id: vdev id
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to delete the index from the concurrent connection list
+ * that is present in the given vdev_id.
+ *
+ * @E.g: iwpriv wlan0 pm_dlist delete_all vdev_id
+ * iwpriv wlan0 pm_dlist 0 1
+ *
+ * Supported Feature: DBS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_POLICY_MANAGER_DLIST_CMD    12
+
+/*
+ * <ioctl>
+ * pm_dbs - Set dbs capability and system preference
+ *
+ * @INPUT: dbs, system_pref
+ * @dbs: Value of DBS capability to be set
+ * @system_pref: System preference
+ *     0:CDS_THROUGHPUT 1: CDS_POWERSAVE 2: CDS_LATENCY
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to set dbs capability and system preference.
+ *
+ * @E.g: iwpriv wlan0 pm_dbs dbs system_pref
+ * iwpriv wlan0 pm_dbs 1 0
+ *
+ * Supported Feature: DBS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_POLICY_MANAGER_DBS_CMD      13
+
+/*
+ * <ioctl>
+ * pm_pcl - Set pcl for concurrency mode.
+ *
+ * @INPUT: cds_con_mode
+ * @cds_con_mode: concurrency mode for PCL table
+ *     0:STA  1:SAP  2:P2P_Client  3:P2P_GO  4:IBSS
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to set pcl for concurrency mode.
+ *
+ * @E.g: iwpriv wlan0 pm_pcl cds_con_mode
+ * iwpriv wlan0 pm_pcl 0
+ *
+ * Supported Feature: DBS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_POLICY_MANAGER_PCL_CMD      14
+
+/*
+ * <ioctl>
+ * pm_cinfo - Shows the concurrent connection list.
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to show the concurrent connection list.
+ *
+ * @E.g: iwpriv wlan0 pm_cinfo
+ *
+ * Supported Feature: DBS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_POLICY_MANAGER_CINFO_CMD    15
+
+/*
+ * <ioctl>
+ * pm_ulist - Updates the index value of the concurrent connection list
+ * with the input parameters provided.
+ *
+ * @INPUT: Following 8 arguments:
+ * @vdev_id: vdev id
+ * @tx_streams: TX streams
+ * @rx_streams: RX streams
+ * @chain_mask: Chain mask
+ * @type: vdev_type
+ *    AP:1    STA:2    IBSS:3    Monitor:4    NAN:5    OCB:6    NDI:7
+ * @sub_type: vdev_subtype
+ *    P2P_Device:1    P2P_Client:2     P2P_GO:3
+ *    Proxy_STA:4     Mesh:5           Mesh_11s:6
+ * @channel: Channel
+ * @mac: Mac id
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to updates the index value of the concurrent
+ * connection list with the input parameters provided.
+ *
+ * @E.g: iwpriv wlan0 pm_ulist vdev_id tx_streams rx_streams chain_mask type
+ *                    sub_type channel mac
+ * iwpriv wlan0 pm_ulist 1 2 2 1 2 3 10 1
+ *
+ * Supported Feature: DBS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_POLICY_MANAGER_ULIST_CMD    16
+
+/*
+ * <ioctl>
+ * pm_query_action - Initiate actions needed on current connections as
+ * per the channel provided.
+ *
+ * @INPUT: channel
+ * @channel: Channel on which new connection will be.
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to initiate actions needed on current connections
+ * as per the channel provided.
+ *
+ * @E.g: iwpriv wlan0 pm_query_action channel
+ * iwpriv wlan0 pm_query_action 6
+ *
+ * Supported Feature: DBS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_POLICY_MANAGER_QUERY_ACTION_CMD    17
+
+/*
+ * <ioctl>
+ * pm_query_allow - Checks for allowed concurrency combination
+ *
+ * @INPUT: mode, channel, bandwidth
+ * @mode:	new connection mode
+ *     0:STA  1:SAP  2:P2P_Client  3:P2P_GO  4:IBSS
+ * @channel: channel on which new connection is coming up
+ * @bandwidth: Bandwidth requested by the connection
+ *     0:None    1:5MHz    2:10MHz      3:20MHz
+ *     4:40MHz   5:80MHz   6:80+80MHz   7:160MHz
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to checks for allowed concurrency combination.
+ *
+ * @E.g: iwpriv wlan0 pm_query_allow mode channel bandwidth
+ * iwpriv wlan0 pm_query_allow 0 6 4
+ *
+ * Supported Feature: DBS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_POLICY_MANAGER_QUERY_ALLOW_CMD    18
+
+/*
+ * <ioctl>
+ * pm_run_scenario - Create scenario with number of connections provided.
+ *
+ * @INPUT: num_of_conn
+ * @num_of_conn: the number of connections (values: 1~3)
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to create scenario with the number of connections
+ * provided.
+ *
+ * @E.g: iwpriv wlan0 pm_run_scenario num_of_conn
+ * iwpriv wlan0 pm_run_scenario 1
+ *
+ * Supported Feature: DBS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_POLICY_MANAGER_SCENARIO_CMD 19
+
+/*
+ * <ioctl>
+ * pm_set_hw_mode - Set hardware for single/dual mac.
+ *
+ * @INPUT: hw_mode
+ *     0:single mac     1:dual mac
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to set hardware for single/dual mac.
+ *
+ * @E.g: iwpriv wlan0 pm_set_hw_mode hw_mode
+ * iwpriv wlan0 pm_set_hw_mode 1
+ *
+ * Supported Feature: DBS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_POLICY_SET_HW_MODE_CMD 20
 
+/*
+ * <ioctl>
+ * set_scan_cfg - Set dual MAC scan config parameters.
+ *
+ * @INPUT: dbs, dbs_plus_agile_scan, single_mac_scan_with_dbs
+ * @dbs: Value of DBS bit
+ * @dbs_plus_agile_scan: Value of DBS plus agile scan bit
+ * @single_mac_scan_with_dbs: Value of Single MAC scan with DBS
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to set the dual MAC scan config.
+ *
+ * @E.g: iwpriv wlan0 set_scan_cfg dbs dbs_plus_agile_scan
+ *                    single_mac_scan_with_dbs
+ * iwpriv wlan0 set_scan_cfg 1 0 1
+ *
+ * Supported Feature: DBS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_DUAL_MAC_SCAN_CONFIG    21
+
+/*
+ * <ioctl>
+ * set_fw_mode_cfg - Sets the dual mac FW mode config
+ *
+ * @INPUT: dbs, dfs
+ * @dbs: DBS bit
+ * @dfs: Agile DFS bit
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL is used to set the dual mac FW mode config.
+ *
+ * @E.g: iwpriv wlan0 set_fw_mode_cfg dbs dfs
+ * iwpriv wlan0 set_fw_mode_cfg 1 1
+ *
+ * Supported Feature: DBS
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WE_SET_DUAL_MAC_FW_MODE_CONFIG 22
 #define WE_SET_MON_MODE_CHAN 23
 
@@ -389,8 +2356,95 @@ static const hdd_freq_chan_map_t freq_chan_map[] = {
 
 /* Private ioctls (with no sub-ioctls) */
 /* note that they must be odd so that they have "get" semantics */
+/*
+ * <ioctl>
+ * addTspec - Add TSPEC for each AC
+ *
+ * @INPUT: 19 TSPEC params
+ *	@[arg0]: handle
+ *	@[arg1]: tid
+ *	@[arg2]: dir
+ *	@[arg3]: psb
+ *	@[arg4]: up
+ *	@[arg5]: nomMsduSize
+ *	@[arg6]: maxMsduSize
+ *	@[arg7]: minDataRate
+ *	@[arg8]: meanDataRate
+ *	@[arg9]: peakDataRate
+ *	@[arg10]: maxBurstSize
+ *	@[arg11]: minPhyRate
+ *	@[arg12]: sba
+ *	@[arg13]: minServiceIntv
+ *	@[arg14]: suspendIntv
+ *	@[arg15]: burstSizeDefn
+ *	@[arg16]: ackPolicy
+ *	@[arg17]: inactivityPeriod
+ *	@[arg18]: maxServiceIntv
+ *
+ * @OUTPUT: Success/Failure
+ *
+ * This IOCTL is used to add TSPEC for each AC.
+ *
+ * @E.g: iwpriv wlan0 addTspec <handle> <tid> <dir> <psb> <up> <nomMsduSize>
+ *				<maxMsduSize> <minDataRate> <meanDataRate>
+ *				<peakDataRate> <maxBurstSize> <minPhyRate>
+ *				<sba> <minServiceIntv> <suspendIntv>
+ *				<burstSizeDefn> <ackPolicy> <inactivityPeriod>
+ *				<maxServiceIntv>
+ * iwpriv wlan0 addTspec 7001 6 2 1 6 0x80D0 0x80D0 0x14500 0x14500 0x14500
+ *			 0 0x5B8D80 0x2001 20 2000 0 0 0 2000
+ * wlan0     addTspec:3
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WLAN_PRIV_ADD_TSPEC (SIOCIWFIRSTPRIV +  9)
+/*
+ * <ioctl>
+ * delTspec - Delete TSPEC entry for each AC
+ *
+ * @INPUT: 1 TSPEC param
+ *	@[arg0]: handle
+ *
+ * @OUTPUT: Success/Failure
+ *
+ * This IOCTL is used to delete TSPEC entry for each AC.
+ *
+ * @E.g: iwpriv wlan0 delTspec <handle>
+ * iwpriv wlan0 delTspec 7001
+ * wlan0     delTspec:16
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WLAN_PRIV_DEL_TSPEC (SIOCIWFIRSTPRIV + 11)
+/*
+ * <ioctl>
+ * getTspec - Get TSPEC entry for each AC
+ *
+ * @INPUT: 1 TSPEC param
+ *	@[arg0]: handle
+ *
+ * @OUTPUT: Success/Failure
+ *
+ * This IOCTL is used to get TSPEC entry for each AC.
+ *
+ * @E.g: iwpriv wlan0 getTspec <handle>
+ * iwpriv wlan0 getTspec 7001
+ * wlan0     delTspec:18
+ *
+ * Supported Feature: WMM
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WLAN_PRIV_GET_TSPEC (SIOCIWFIRSTPRIV + 13)
 
 /* (SIOCIWFIRSTPRIV + 8)  is currently unused */
@@ -412,6 +2466,26 @@ static const hdd_freq_chan_map_t freq_chan_map[] = {
 #define WLAN_GET_WLAN_STATISTICS (SIOCIWFIRSTPRIV + 21)
 
 /* Private ioctl to set the Keep Alive Params */
+/*
+ * <ioctl>
+ * setKeepAlive - Set the keep alive feature
+ *
+ * @INPUT: 28 bytes of information in the order of packet type, time period
+ * host IPv4 address, destination IPv4 address, destination MAC address, bssID
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL sets the keep alive feature to send either NULL
+ * or unsolicited ARP response packets
+ *
+ * @E.g: iwpriv wlan0 setKeepAlive
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WLAN_SET_KEEPALIVE_PARAMS (SIOCIWFIRSTPRIV + 22)
 
 #ifdef WLAN_FEATURE_PACKET_FILTERING
@@ -424,10 +2498,29 @@ static const hdd_freq_chan_map_t freq_chan_map[] = {
 /* Private ioctl to get the statistics */
 #define WLAN_SET_PNO (SIOCIWFIRSTPRIV + 24)
 #endif
-
+/*
+ * <ioctl>
+ * SETBAND - Set the operational band
+ *
+ * @INPUT: 0 to Auto, 1 to 5 GHz and 2 to 2.4 GHz
+ *
+ * @OUTPUT: None
+ *
+ * This IOCTL Set the operational band If the new band is different from the
+ * current operational band, it aborts the pending scan requests, flushes
+ * the existing scan results, and then change * the band capability
+ *
+ * @E.g: iwpriv wlan0 SETBAND <value>
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WLAN_SET_BAND_CONFIG  (SIOCIWFIRSTPRIV + 25)
 
-/* (SIOCIWFIRSTPRIV + 26) is currently unused */
+#define WLAN_PRIV_SET_MCBC_FILTER   (SIOCIWFIRSTPRIV + 26)
 /* (SIOCIWFIRSTPRIV + 27) is currently unused */
 
 /* Private ioctls and their sub-ioctls */
@@ -450,6 +2543,25 @@ static const hdd_freq_chan_map_t freq_chan_map[] = {
 /* 802.11p IOCTL */
 #define WLAN_SET_DOT11P_CHANNEL_SCHED    (SIOCIWFIRSTPRIV + 30)
 
+/*
+ * <ioctl>
+ * getLinkSpeed - Gets the current link speed in Mbps
+ *
+ * @INPUT: None
+ *
+ * @OUTPUT: linkspeed in mbps
+ *  wlan0     getLinkSpeed:7
+ *
+ * This IOCTL is used get the current link speed in Mbps
+ *
+ * @E.g: iwpriv wlan0 getLinkSpeed
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ioctl>
+ */
 #define WLAN_GET_LINK_SPEED          (SIOCIWFIRSTPRIV + 31)
 
 #define WLAN_STATS_INVALID            0
@@ -528,7 +2640,7 @@ void *mem_alloc_copy_from_user_helper(const __user void *wrqu_data, size_t len)
 		return NULL;
 	}
 
-	ptr = kmalloc(len + 1, GFP_KERNEL);
+	ptr = qdf_mem_malloc(len + 1);
 	if (NULL == ptr) {
 		hdd_err("unable to allocate memory");
 		return NULL;
@@ -536,7 +2648,7 @@ void *mem_alloc_copy_from_user_helper(const __user void *wrqu_data, size_t len)
 
 	if (copy_from_user(ptr, wrqu_data, len)) {
 		hdd_err("failed to copy data to user buffer");
-		kfree(ptr);
+		qdf_mem_free(ptr);
 		return NULL;
 	}
 	ptr[len] = '\0';
@@ -659,6 +2771,81 @@ void hdd_wlan_get_stats(hdd_adapter_t *pAdapter, uint16_t *length,
 	len += ol_txrx_stats(pAdapter->sessionId,
 		&buffer[len], (buf_len - len));
 	*length = len + 1;
+}
+
+/**
+ * wlan_hdd_write_suspend_resume_stats() - Writes suspend/resume stats to buffer
+ * @hdd_ctx: The Hdd context owning the stats to be written
+ * @buffer: The char buffer to write to
+ * @max_len: The maximum number of chars to write
+ *
+ * This assumes hdd_ctx has already been validated, and buffer is not NULL.
+ *
+ * Return - length of written content, negative number on error
+ */
+static int wlan_hdd_write_suspend_resume_stats(hdd_context_t *hdd_ctx,
+					       char *buffer, uint16_t max_len)
+{
+	QDF_STATUS status;
+	struct suspend_resume_stats *sr_stats;
+	struct sir_wake_lock_stats wow_stats;
+
+	sr_stats = &hdd_ctx->suspend_resume_stats;
+
+	status = wma_get_wakelock_stats(&wow_stats);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		hdd_err("Failed to get WoW stats");
+		return qdf_status_to_os_return(status);
+	}
+
+	return scnprintf(buffer, max_len,
+			"\n"
+			"Suspends: %u\n"
+			"Resumes: %u\n"
+			"\n"
+			"Suspend Fail Reasons\n"
+			"\tIPA: %u\n"
+			"\tRadar: %u\n"
+			"\tRoam: %u\n"
+			"\tScan: %u\n"
+			"\tInitial Wakeup: %u\n"
+			"\n"
+			"WoW Wake Reasons\n"
+			"\tunicast: %u\n"
+			"\tbroadcast: %u\n"
+			"\tIPv4 multicast: %u\n"
+			"\tIPv6 multicast: %u\n"
+			"\tIPv6 multicast RA: %u\n"
+			"\tIPv6 multicast NS: %u\n"
+			"\tIPv6 multicast NA: %u\n"
+			"\tICMPv4: %u\n"
+			"\tICMPv6: %u\n"
+			"\tRSSI Breach: %u\n"
+			"\tLow RSSI: %u\n"
+			"\tG-Scan: %u\n"
+			"\tPNO Complete: %u\n"
+			"\tPNO Match: %u\n",
+			sr_stats->suspends,
+			sr_stats->resumes,
+			sr_stats->suspend_fail[SUSPEND_FAIL_IPA],
+			sr_stats->suspend_fail[SUSPEND_FAIL_RADAR],
+			sr_stats->suspend_fail[SUSPEND_FAIL_ROAM],
+			sr_stats->suspend_fail[SUSPEND_FAIL_SCAN],
+			sr_stats->suspend_fail[SUSPEND_FAIL_INITIAL_WAKEUP],
+			wow_stats.wow_ucast_wake_up_count,
+			wow_stats.wow_bcast_wake_up_count,
+			wow_stats.wow_ipv4_mcast_wake_up_count,
+			wow_stats.wow_ipv6_mcast_wake_up_count,
+			wow_stats.wow_ipv6_mcast_ra_stats,
+			wow_stats.wow_ipv6_mcast_ns_stats,
+			wow_stats.wow_ipv6_mcast_na_stats,
+			wow_stats.wow_icmpv4_count,
+			wow_stats.wow_icmpv6_count,
+			wow_stats.wow_rssi_breach_wake_up_count,
+			wow_stats.wow_low_rssi_wake_up_count,
+			wow_stats.wow_gscan_wake_up_count,
+			wow_stats.wow_pno_complete_wake_up_count,
+			wow_stats.wow_pno_match_wake_up_count);
 }
 
 /**
@@ -852,11 +3039,10 @@ static QDF_STATUS hdd_wlan_get_ibss_peer_info(hdd_adapter_t *pAdapter,
 	hdd_station_ctx_t *pStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 	tSirPeerInfoRspParams *pPeerInfo = &pStaCtx->ibss_peer_info;
 
-	status =
-		sme_request_ibss_peer_info(hHal, pAdapter, hdd_get_ibss_peer_info_cb,
-					   false, staIdx);
-
 	INIT_COMPLETION(pAdapter->ibss_peer_info_comp);
+	status = sme_request_ibss_peer_info(hHal, pAdapter,
+					    hdd_get_ibss_peer_info_cb,
+					    false, staIdx);
 
 	if (QDF_STATUS_SUCCESS == status) {
 		unsigned long rc;
@@ -902,10 +3088,10 @@ static QDF_STATUS hdd_wlan_get_ibss_peer_info_all(hdd_adapter_t *pAdapter)
 	tSirPeerInfoRspParams *pPeerInfo = &pStaCtx->ibss_peer_info;
 	int i;
 
-	status =
-		sme_request_ibss_peer_info(hHal, pAdapter, hdd_get_ibss_peer_info_cb,
-					   true, 0xFF);
 	INIT_COMPLETION(pAdapter->ibss_peer_info_comp);
+	status = sme_request_ibss_peer_info(hHal, pAdapter,
+					    hdd_get_ibss_peer_info_cb,
+					    true, 0xFF);
 
 	if (QDF_STATUS_SUCCESS == status) {
 		unsigned long rc;
@@ -1261,7 +3447,7 @@ QDF_STATUS wlan_hdd_get_rssi(hdd_adapter_t *pAdapter, int8_t *rssi_value)
 		return QDF_STATUS_E_FAULT;
 	}
 	if (cds_is_driver_recovering()) {
-		hdd_err("Recovery in Progress. State: 0x%x Ignore!!!",
+		hdd_warn("Recovery in Progress. State: 0x%x Ignore!!!",
 			cds_get_driver_state());
 		/* return a cached value */
 		*rssi_value = pAdapter->rssi;
@@ -1272,7 +3458,7 @@ QDF_STATUS wlan_hdd_get_rssi(hdd_adapter_t *pAdapter, int8_t *rssi_value)
 	pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 
 	if (eConnectionState_Associated != pHddStaCtx->conn_info.connState) {
-		hdd_err("Not associated!, rssi on disconnect %d",
+		hdd_info("Not associated!, rssi on disconnect %d",
 			pAdapter->rssi_on_disconnect);
 		*rssi_value = pAdapter->rssi_on_disconnect;
 		return QDF_STATUS_SUCCESS;
@@ -1688,6 +3874,9 @@ void hdd_clear_roam_profile_ie(hdd_adapter_t *pAdapter)
 	pWextState->roamProfile.AuthType.authType[0] =
 		eCSR_AUTH_TYPE_OPEN_SYSTEM;
 
+	qdf_mem_zero(pWextState->roamProfile.bssid_hint.bytes,
+		QDF_MAC_ADDR_SIZE);
+
 #ifdef WLAN_FEATURE_11W
 	pWextState->roamProfile.MFPEnabled = false;
 	pWextState->roamProfile.MFPRequired = 0;
@@ -1921,7 +4110,7 @@ int hdd_set_rx_stbc(hdd_adapter_t *adapter, int value)
 	tHalHandle hal = WLAN_HDD_GET_HAL_CTX(adapter);
 	int ret;
 
-	hdd_alert("%d", value);
+	hdd_alert("set rx_stbc : %d", value);
 	if (value) {
 		/* make sure HT capabilities allow this */
 		QDF_STATUS status;
@@ -2818,6 +5007,13 @@ static int __iw_set_genie(struct net_device *dev,
 
 		hdd_notice("IE[0x%X], LEN[%d]", elementId, eLen);
 
+		if (remLen < eLen) {
+			hdd_err("Remaining len: %u less than ie len: %u",
+				remLen, eLen);
+			ret = -EINVAL;
+			goto exit;
+		}
+
 		switch (elementId) {
 		case IE_EID_VENDOR:
 			if ((IE_LEN_SIZE + IE_EID_SIZE + IE_VENDOR_OUI_SIZE) > eLen) {  /* should have at least OUI */
@@ -2897,12 +5093,15 @@ static int __iw_set_genie(struct net_device *dev,
 			hdd_err("Set UNKNOWN IE %X", elementId);
 			goto exit;
 		}
-		genie += eLen;
 		remLen -= eLen;
+
+		/* Move genie only if next element is present */
+		if (remLen >= 2)
+			genie += eLen;
 	}
 exit:
 	EXIT();
-	kfree(base_genie);
+	qdf_mem_free(base_genie);
 	return ret;
 }
 
@@ -3685,7 +5884,7 @@ QDF_STATUS wlan_hdd_get_class_astats(hdd_adapter_t *pAdapter)
 		return QDF_STATUS_E_FAULT;
 	}
 	if (cds_is_driver_recovering()) {
-		hdd_err("Recovery in Progress. State: 0x%x Ignore!!!",
+		hdd_warn("Recovery in Progress. State: 0x%x Ignore!!!",
 			 cds_get_driver_state());
 		return QDF_STATUS_SUCCESS;
 	}
@@ -4784,7 +6983,7 @@ static int __iw_set_mlme(struct net_device *dev,
 					WLAN_CONTROL_PATH);
 
 		} else {
-			hdd_err("%d Command Disassociate/Deauthenticate called but station is not in associated state",
+			hdd_warn("%d Command Disassociate/Deauthenticate called but station is not in associated state",
 				(int)mlme->cmd);
 		}
 		break;
@@ -5266,7 +7465,7 @@ static int __iw_setint_getnone(struct net_device *dev,
 		case 0x03:
 			enable_mp = (set_value & 0x01) ? 1 : 0;
 			enable_pbm = (set_value & 0x02) ? 1 : 0;
-			hdd_err("magic packet ? = %s pattern byte matching ? = %s",
+			hdd_notice("magic packet ? = %s pattern byte matching ? = %s",
 			       (enable_mp ? "YES" : "NO"),
 			       (enable_pbm ? "YES" : "NO"));
 			hdd_enter_wowl(pAdapter, enable_mp, enable_pbm);
@@ -5787,6 +7986,9 @@ static int __iw_setint_getnone(struct net_device *dev,
 		ret = wma_cli_set_command(pAdapter->sessionId,
 					  GEN_VDEV_PARAM_AMSDU,
 					  set_value, GEN_CMD);
+		/* Update the stored ini value */
+		if (!ret)
+			hdd_ctx->config->max_amsdu_num = set_value;
 		break;
 	}
 
@@ -6489,7 +8691,7 @@ static int __iw_setchar_getnone(struct net_device *dev,
 	}
 	break;
 	case WE_SET_AP_WPS_IE:
-		hdd_err("Received WE_SET_AP_WPS_IE");
+		hdd_notice("Received WE_SET_AP_WPS_IE");
 		sme_update_p2p_ie(WLAN_HDD_GET_HAL_CTX(pAdapter), pBuffer,
 				  s_priv_data.length);
 		break;
@@ -6507,7 +8709,7 @@ static int __iw_setchar_getnone(struct net_device *dev,
 		break;
 	}
 	}
-	kfree(pBuffer);
+	qdf_mem_free(pBuffer);
 	EXIT();
 	return ret;
 }
@@ -6563,10 +8765,6 @@ static int __iw_setnone_getint(struct net_device *dev,
 
 		break;
 	}
-
-	case WE_IBSS_STATUS:
-		hdd_notice("****Return IBSS Status*****");
-		break;
 
 	case WE_GET_WLAN_DBG:
 	{
@@ -7232,6 +9430,18 @@ static int __iw_get_char_setnone(struct net_device *dev,
 		break;
 	}
 
+	case WE_GET_SUSPEND_RESUME_STATS:
+	{
+		ret = wlan_hdd_write_suspend_resume_stats(hdd_ctx, extra,
+							  WE_MAX_STR_LEN);
+		if (ret >= 0) {
+			wrqu->data.length = ret;
+			ret = 0;
+		}
+
+		break;
+	}
+
 	case WE_LIST_FW_PROFILE:
 		hdd_wlan_list_fw_profile(&(wrqu->data.length),
 					extra, WE_MAX_STR_LEN);
@@ -7517,7 +9727,7 @@ static int __iw_get_char_setnone(struct net_device *dev,
 #ifdef WLAN_FEATURE_11W
 	case WE_GET_11W_INFO:
 	{
-		hdd_err("WE_GET_11W_ENABLED = %d",
+		hdd_notice("WE_GET_11W_ENABLED = %d",
 		       pWextState->roamProfile.MFPEnabled);
 
 		snprintf(extra, WE_MAX_STR_LEN,
@@ -7580,16 +9790,25 @@ static int __iw_get_char_setnone(struct net_device *dev,
 		tHalHandle hal = WLAN_HDD_GET_HAL_CTX(pAdapter);
 		eCsrPhyMode phymode;
 		eCsrBand currBand;
-		tSmeConfigParams smeconfig;
+		tSmeConfigParams *sme_config;
 
-		sme_get_config_param(hal, &smeconfig);
+		sme_config = qdf_mem_malloc(sizeof(*sme_config));
+		if (!sme_config) {
+			hdd_err("Out of memory");
+			ret = -ENOMEM;
+			break;
+		}
+
+		sme_get_config_param(hal, sme_config);
 		if (WNI_CFG_CHANNEL_BONDING_MODE_DISABLE !=
-		    smeconfig.csrConfig.channelBondingMode24GHz)
+		    sme_config->csrConfig.channelBondingMode24GHz)
 			ch_bond24 = true;
 
 		if (WNI_CFG_CHANNEL_BONDING_MODE_DISABLE !=
-		    smeconfig.csrConfig.channelBondingMode5GHz)
+		    sme_config->csrConfig.channelBondingMode5GHz)
 			ch_bond5g = true;
+
+		qdf_mem_free(sme_config);
 
 		phymode = sme_get_phy_mode(hal);
 		if ((QDF_STATUS_SUCCESS !=
@@ -7699,8 +9918,9 @@ static int __iw_get_char_setnone(struct net_device *dev,
 		break;
 	}
 	}
+
 	EXIT();
-	return 0;
+	return ret;
 }
 
 static int iw_get_char_setnone(struct net_device *dev,
@@ -7797,7 +10017,7 @@ static int __iw_setnone_getnone(struct net_device *dev,
 			qdf_mem_copy(bssid,
 				&adapter->sessionCtx.station.conn_info.bssId,
 				sizeof(bssid));
-			hdd_wma_send_fastreassoc_cmd((int)adapter->sessionId,
+			hdd_wma_send_fastreassoc_cmd(adapter,
 						     bssid, operating_ch);
 		} else {
 			sme_roam_reassoc(hdd_ctx->hHal, adapter->sessionId,
@@ -7806,57 +10026,6 @@ static int __iw_setnone_getnone(struct net_device *dev,
 		return 0;
 	}
 
-	case WE_DUMP_AGC_START:
-	{
-		hdd_notice("WE_DUMP_AGC_START");
-		ret = wma_cli_set_command(adapter->sessionId,
-					  GEN_PARAM_DUMP_AGC_START,
-					  0, GEN_CMD);
-		break;
-	}
-	case WE_DUMP_AGC:
-	{
-		hdd_notice("WE_DUMP_AGC");
-		ret = wma_cli_set_command(adapter->sessionId,
-					  GEN_PARAM_DUMP_AGC,
-					  0, GEN_CMD);
-		break;
-	}
-
-	case WE_DUMP_CHANINFO_START:
-	{
-		hdd_notice("WE_DUMP_CHANINFO_START");
-		ret = wma_cli_set_command(adapter->sessionId,
-					  GEN_PARAM_DUMP_CHANINFO_START,
-					  0, GEN_CMD);
-		break;
-	}
-	case WE_DUMP_CHANINFO:
-	{
-		hdd_notice("WE_DUMP_CHANINFO_START");
-		ret = wma_cli_set_command(adapter->sessionId,
-					  GEN_PARAM_DUMP_CHANINFO,
-					  0, GEN_CMD);
-		break;
-	}
-	case WE_DUMP_WATCHDOG:
-	{
-		hdd_notice("WE_DUMP_WATCHDOG");
-		ret = wma_cli_set_command(adapter->sessionId,
-					  GEN_PARAM_DUMP_WATCHDOG,
-					  0, GEN_CMD);
-		break;
-	}
-#ifdef CONFIG_ATH_PCIE_ACCESS_DEBUG
-	case WE_DUMP_PCIE_LOG:
-	{
-		hdd_err("WE_DUMP_PCIE_LOG");
-		ret = wma_cli_set_command(adapter->sessionId,
-					  GEN_PARAM_DUMP_PCIE_ACCESS_LOG,
-					  0, GEN_CMD);
-		break;
-	}
-#endif
 	case WE_STOP_OBSS_SCAN:
 	{
 		/*
@@ -7896,6 +10065,176 @@ static int iw_setnone_getnone(struct net_device *dev,
 
 	return ret;
 }
+
+#ifdef MPC_UT_FRAMEWORK
+static int iw_get_policy_manager_ut_ops(hdd_context_t *hdd_ctx,
+			hdd_adapter_t *adapter, int sub_cmd, int *apps_args)
+{
+	switch(sub_cmd) {
+	case WE_POLICY_MANAGER_CLIST_CMD:
+	{
+		hdd_notice("<iwpriv wlan0 pm_clist> is called");
+		cds_incr_connection_count_utfw(apps_args[0],
+			apps_args[1], apps_args[2], apps_args[3],
+			apps_args[4], apps_args[5], apps_args[6],
+			apps_args[7]);
+	}
+	break;
+
+	case WE_POLICY_MANAGER_DLIST_CMD:
+	{
+		hdd_notice("<iwpriv wlan0 pm_dlist> is called");
+		cds_decr_connection_count_utfw(apps_args[0],
+			apps_args[1]);
+	}
+	break;
+
+	case WE_POLICY_MANAGER_ULIST_CMD:
+	{
+		hdd_notice("<iwpriv wlan0 pm_ulist> is called");
+		cds_update_connection_info_utfw(apps_args[0],
+			apps_args[1], apps_args[2], apps_args[3],
+			apps_args[4], apps_args[5], apps_args[6],
+			apps_args[7]);
+	}
+	break;
+
+	case WE_POLICY_MANAGER_DBS_CMD:
+	{
+		hdd_notice("<iwpriv wlan0 pm_dbs> is called");
+		if (apps_args[0] == 0)
+			wma_set_dbs_capability_ut(0);
+		else
+			wma_set_dbs_capability_ut(1);
+
+		if (apps_args[1] >= CDS_THROUGHPUT &&
+			apps_args[1] <= CDS_LATENCY) {
+			pr_info("setting system pref to [%d]\n", apps_args[1]);
+			hdd_ctx->config->conc_system_pref = apps_args[1];
+		}
+	}
+	break;
+
+	case WE_POLICY_MANAGER_PCL_CMD:
+	{
+		uint8_t pcl[QDF_MAX_NUM_CHAN] = {0};
+		uint8_t weight_list[QDF_MAX_NUM_CHAN] = {0};
+		uint32_t pcl_len = 0, i = 0;
+
+		hdd_notice("<iwpriv wlan0 pm_pcl> is called");
+
+		cds_get_pcl(apps_args[0],
+				pcl, &pcl_len,
+				weight_list, QDF_ARRAY_SIZE(weight_list));
+		pr_info("PCL list for role[%d] is {", apps_args[0]);
+		for (i = 0 ; i < pcl_len; i++)
+			pr_info(" %d, ", pcl[i]);
+		pr_info("}--------->\n");
+	}
+	break;
+
+	case WE_POLICY_SET_HW_MODE_CMD:
+	{
+		if (apps_args[0] == 0) {
+			hdd_err("set hw mode for single mac");
+			cds_pdev_set_hw_mode(
+					adapter->sessionId,
+					HW_MODE_SS_2x2,
+					HW_MODE_80_MHZ,
+					HW_MODE_SS_0x0, HW_MODE_BW_NONE,
+					HW_MODE_DBS_NONE,
+					HW_MODE_AGILE_DFS_NONE,
+					HW_MODE_SBS_NONE,
+					SIR_UPDATE_REASON_UT);
+		} else if (apps_args[0] == 1) {
+			hdd_err("set hw mode for dual mac");
+			cds_pdev_set_hw_mode(
+					adapter->sessionId,
+					HW_MODE_SS_1x1,
+					HW_MODE_80_MHZ,
+					HW_MODE_SS_1x1, HW_MODE_40_MHZ,
+					HW_MODE_DBS,
+					HW_MODE_AGILE_DFS_NONE,
+					HW_MODE_SBS_NONE,
+					SIR_UPDATE_REASON_UT);
+		}
+	}
+	break;
+
+	case WE_POLICY_MANAGER_QUERY_ACTION_CMD:
+	{
+		enum cds_conc_next_action action;
+		hdd_notice("<iwpriv wlan0 pm_query_action> is called");
+		action = cds_current_connections_update(adapter->sessionId,
+						apps_args[0],
+						SIR_UPDATE_REASON_UT);
+		pr_info("next action is %d {HDD_NOP = 0, HDD_DBS, HDD_DBS_DOWNGRADE, HDD_MCC, HDD_MCC_UPGRADE}", action);
+	}
+	break;
+
+	case WE_POLICY_MANAGER_QUERY_ALLOW_CMD:
+	{
+		bool allow;
+		hdd_notice("<iwpriv wlan0 pm_query_allow> is called");
+		allow = cds_allow_concurrency(
+				apps_args[0], apps_args[1], apps_args[2]);
+		pr_info("allow %d {0 = don't allow, 1 = allow}", allow);
+	}
+	break;
+
+	case WE_POLICY_MANAGER_SCENARIO_CMD:
+	{
+		clean_report(hdd_ctx);
+		if (apps_args[0] == 1) {
+			wlan_hdd_one_connection_scenario(hdd_ctx);
+		} else if (apps_args[0] == 2) {
+			wlan_hdd_two_connections_scenario(hdd_ctx,
+				6, CDS_TWO_TWO);
+			wlan_hdd_two_connections_scenario(hdd_ctx,
+				36, CDS_TWO_TWO);
+			wlan_hdd_two_connections_scenario(hdd_ctx,
+				6, CDS_ONE_ONE);
+			wlan_hdd_two_connections_scenario(hdd_ctx,
+				36, CDS_ONE_ONE);
+		} else if (apps_args[0] == 3) {
+			/* MCC on same band with 2x2 same mac*/
+			wlan_hdd_three_connections_scenario(hdd_ctx,
+				6, 11, CDS_TWO_TWO, 0);
+			/* MCC on diff band with 2x2 same mac*/
+			wlan_hdd_three_connections_scenario(hdd_ctx,
+				6, 36, CDS_TWO_TWO, 0);
+			/* MCC on diff band with 1x1 diff mac */
+			wlan_hdd_three_connections_scenario(hdd_ctx,
+				36, 6, CDS_ONE_ONE, 0);
+			/* MCC on diff band with 1x1 same mac */
+			wlan_hdd_three_connections_scenario(hdd_ctx,
+				36, 6, CDS_ONE_ONE, 1);
+			/* SCC on same band with 2x2 same mac */
+			wlan_hdd_three_connections_scenario(hdd_ctx,
+				36, 36, CDS_TWO_TWO, 0);
+			/* SCC on same band with 1x1 same mac */
+			wlan_hdd_three_connections_scenario(hdd_ctx,
+				36, 36, CDS_ONE_ONE, 1);
+			/* MCC on same band with 2x2 same mac */
+			wlan_hdd_three_connections_scenario(hdd_ctx,
+				36, 149, CDS_TWO_TWO, 0);
+			/* MCC on same band with 1x1 same mac */
+			wlan_hdd_three_connections_scenario(hdd_ctx,
+				36, 149, CDS_ONE_ONE, 1);
+		}
+		print_report(hdd_ctx);
+	}
+	break;
+	}
+	return 0;
+}
+#else
+static int iw_get_policy_manager_ut_ops(hdd_context_t *hdd_ctx,
+			hdd_adapter_t *adapter, int sub_cmd, int *apps_args)
+{
+	return 0;
+}
+#endif
 
 /**
  * __iw_set_var_ints_getnone - Generic "set many" private ioctl handler
@@ -7997,181 +10336,28 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
 	}
 	break;
 
-	case WE_POLICY_MANAGER_CLIST_CMD:
-	{
-		hdd_err("<iwpriv wlan0 pm_clist> is called");
-		cds_incr_connection_count_utfw(apps_args[0],
-			apps_args[1], apps_args[2], apps_args[3],
-			apps_args[4], apps_args[5], apps_args[6],
-			apps_args[7]);
-	}
-	break;
-
-	case WE_POLICY_MANAGER_DLIST_CMD:
-	{
-		hdd_err("<iwpriv wlan0 pm_dlist> is called");
-		cds_decr_connection_count_utfw(apps_args[0],
-			apps_args[1]);
-	}
-	break;
-
-	case WE_POLICY_MANAGER_ULIST_CMD:
-	{
-		hdd_err("<iwpriv wlan0 pm_ulist> is called");
-		cds_update_connection_info_utfw(apps_args[0],
-			apps_args[1], apps_args[2], apps_args[3],
-			apps_args[4], apps_args[5], apps_args[6],
-			apps_args[7]);
-	}
-	break;
-
-	case WE_POLICY_MANAGER_DBS_CMD:
-	{
-		hdd_err("<iwpriv wlan0 pm_dbs> is called");
-		if (apps_args[0] == 0)
-			wma_set_dbs_capability_ut(0);
-		else
-			wma_set_dbs_capability_ut(1);
-
-		if (apps_args[1] >= CDS_THROUGHPUT &&
-			apps_args[1] <= CDS_LATENCY) {
-			pr_info("setting system pref to [%d]\n", apps_args[1]);
-			hdd_ctx->config->conc_system_pref = apps_args[1];
-		}
-	}
-	break;
-
-	case WE_POLICY_MANAGER_PCL_CMD:
-	{
-		uint8_t pcl[QDF_MAX_NUM_CHAN] = {0};
-		uint8_t weight_list[QDF_MAX_NUM_CHAN] = {0};
-		uint32_t pcl_len = 0, i = 0;
-
-		hdd_err("<iwpriv wlan0 pm_pcl> is called");
-
-		cds_get_pcl(apps_args[0],
-				pcl, &pcl_len,
-				weight_list, QDF_ARRAY_SIZE(weight_list));
-		pr_info("PCL list for role[%d] is {", apps_args[0]);
-		for (i = 0 ; i < pcl_len; i++)
-			pr_info(" %d, ", pcl[i]);
-		pr_info("}--------->\n");
-	}
-	break;
-
 	case WE_POLICY_MANAGER_CINFO_CMD:
 	{
 		struct cds_conc_connection_info *conn_info;
 		uint32_t i = 0, len = 0;
 
-		hdd_err("<iwpriv wlan0 pm_cinfo> is called");
+		hdd_info("<iwpriv wlan0 pm_cinfo> is called");
 		conn_info = cds_get_conn_info(&len);
-		pr_info("+-----------------------------+\n");
+		pr_info("+--------------------------+\n");
 		for (i = 0; i < len; i++) {
-			pr_info("|table_index[%d]\t\t|\n", i);
-			pr_info("|\t|vdev_id - %d\t\t|\n", conn_info->vdev_id);
-			pr_info("|\t|chan - %d\t\t|\n", conn_info->chan);
-			pr_info("|\t|bw - %d\t\t|\n", conn_info->bw);
-			pr_info("|\t|mode - %d\t\t|\n", conn_info->mode);
-			pr_info("|\t|mac - %d\t\t|\n", conn_info->mac);
-			pr_info("|\t|in_use - %d\t\t|\n", conn_info->in_use);
-			pr_info("+-----------------------------+\n");
-			conn_info++;
+		     pr_info("|table_index[%d]\t\t\n", i);
+		     pr_info("|\t|vdev_id - %-10d|\n", conn_info->vdev_id);
+		     pr_info("|\t|chan    - %-10d|\n", conn_info->chan);
+		     pr_info("|\t|bw      - %-10d|\n", conn_info->bw);
+		     pr_info("|\t|mode    - %-10d|\n", conn_info->mode);
+		     pr_info("|\t|mac     - %-10d|\n", conn_info->mac);
+		     pr_info("|\t|in_use  - %-10d|\n", conn_info->in_use);
+		     pr_info("+--------------------------+\n");
+		     conn_info++;
 		}
 	}
 	break;
 
-	case WE_POLICY_SET_HW_MODE_CMD:
-	{
-		if (apps_args[0] == 0) {
-			hdd_err("set hw mode for single mac");
-			cds_pdev_set_hw_mode(
-					pAdapter->sessionId,
-					HW_MODE_SS_2x2,
-					HW_MODE_80_MHZ,
-					HW_MODE_SS_0x0, HW_MODE_BW_NONE,
-					HW_MODE_DBS_NONE,
-					HW_MODE_AGILE_DFS_NONE,
-					HW_MODE_SBS_NONE,
-					SIR_UPDATE_REASON_UT);
-		} else if (apps_args[0] == 1) {
-			hdd_err("set hw mode for dual mac");
-			cds_pdev_set_hw_mode(
-					pAdapter->sessionId,
-					HW_MODE_SS_1x1,
-					HW_MODE_80_MHZ,
-					HW_MODE_SS_1x1, HW_MODE_40_MHZ,
-					HW_MODE_DBS,
-					HW_MODE_AGILE_DFS_NONE,
-					HW_MODE_SBS_NONE,
-					SIR_UPDATE_REASON_UT);
-		}
-	}
-	break;
-
-	case WE_POLICY_MANAGER_QUERY_ACTION_CMD:
-	{
-		enum cds_conc_next_action action;
-		hdd_err("<iwpriv wlan0 pm_query_action> is called");
-		action = cds_current_connections_update(pAdapter->sessionId,
-						apps_args[0],
-						SIR_UPDATE_REASON_UT);
-		pr_info("next action is %d {HDD_NOP = 0, HDD_DBS, HDD_DBS_DOWNGRADE, HDD_MCC, HDD_MCC_UPGRADE}", action);
-	}
-	break;
-	case WE_POLICY_MANAGER_QUERY_ALLOW_CMD:
-	{
-		bool allow;
-		hdd_err("<iwpriv wlan0 pm_query_allow> is called");
-		allow = cds_allow_concurrency(
-				apps_args[0], apps_args[1], apps_args[2]);
-		pr_info("allow %d {0 = don't allow, 1 = allow}", allow);
-	}
-	break;
-
-	case WE_POLICY_MANAGER_SCENARIO_CMD:
-	{
-		clean_report(hdd_ctx);
-		if (apps_args[0] == 1) {
-			wlan_hdd_one_connection_scenario(hdd_ctx);
-		} else if (apps_args[0] == 2) {
-			wlan_hdd_two_connections_scenario(hdd_ctx,
-				6, CDS_TWO_TWO);
-			wlan_hdd_two_connections_scenario(hdd_ctx,
-				36, CDS_TWO_TWO);
-			wlan_hdd_two_connections_scenario(hdd_ctx,
-				6, CDS_ONE_ONE);
-			wlan_hdd_two_connections_scenario(hdd_ctx,
-				36, CDS_ONE_ONE);
-		} else if (apps_args[0] == 3) {
-			/* MCC on same band with 2x2 same mac*/
-			wlan_hdd_three_connections_scenario(hdd_ctx,
-				6, 11, CDS_TWO_TWO, 0);
-			/* MCC on diff band with 2x2 same mac*/
-			wlan_hdd_three_connections_scenario(hdd_ctx,
-				6, 36, CDS_TWO_TWO, 0);
-			/* MCC on diff band with 1x1 diff mac */
-			wlan_hdd_three_connections_scenario(hdd_ctx,
-				36, 6, CDS_ONE_ONE, 0);
-			/* MCC on diff band with 1x1 same mac */
-			wlan_hdd_three_connections_scenario(hdd_ctx,
-				36, 6, CDS_ONE_ONE, 1);
-			/* SCC on same band with 2x2 same mac */
-			wlan_hdd_three_connections_scenario(hdd_ctx,
-				36, 36, CDS_TWO_TWO, 0);
-			/* SCC on same band with 1x1 same mac */
-			wlan_hdd_three_connections_scenario(hdd_ctx,
-				36, 36, CDS_ONE_ONE, 1);
-			/* MCC on same band with 2x2 same mac */
-			wlan_hdd_three_connections_scenario(hdd_ctx,
-				36, 149, CDS_TWO_TWO, 0);
-			/* MCC on same band with 1x1 same mac */
-			wlan_hdd_three_connections_scenario(hdd_ctx,
-				36, 149, CDS_ONE_ONE, 1);
-		}
-		print_report(hdd_ctx);
-	}
-	break;
 
 #ifdef FEATURE_WLAN_TDLS
 	case WE_TDLS_CONFIG_PARAMS:
@@ -8307,6 +10493,20 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
 						    &mac_pwr_dbg_args)) {
 			return -EINVAL;
 		}
+	}
+	break;
+	case WE_POLICY_MANAGER_CLIST_CMD:
+	case WE_POLICY_MANAGER_DLIST_CMD:
+	case WE_POLICY_MANAGER_ULIST_CMD:
+	case WE_POLICY_MANAGER_DBS_CMD:
+	case WE_POLICY_MANAGER_PCL_CMD:
+	case WE_POLICY_SET_HW_MODE_CMD:
+	case WE_POLICY_MANAGER_QUERY_ACTION_CMD:
+	case WE_POLICY_MANAGER_QUERY_ALLOW_CMD:
+	case WE_POLICY_MANAGER_SCENARIO_CMD:
+	{
+		iw_get_policy_manager_ut_ops(hdd_ctx, pAdapter,
+					     sub_cmd, apps_args);
 	}
 	break;
 	default:
@@ -8752,6 +10952,35 @@ static int iw_set_fties(struct net_device *dev,
 }
 
 /**
+ * iw_set_dynamic_mcbc_filter() - Set Dynamic MCBC Filter ioctl handler
+ * @dev: device upon which the ioctl was received
+ * @info: ioctl request information
+ * @wrqu: ioctl request data
+ * @extra: ioctl extra data
+ *
+ * This IOCTL is OBSOLETE as of Jan 30, 2017. We are leaving it here for the
+ * time being to provide guidance in migrating to standard APIs.
+ *
+ * Return: 0 on success, non-zero on error
+ */
+static int iw_set_dynamic_mcbc_filter(struct net_device *dev,
+				      struct iw_request_info *info,
+				      union iwreq_data *wrqu,
+				      char *extra)
+{
+	hdd_err("\n"
+		"setMCBCFilter is obsolete. Use the following instead:\n"
+		"Configure multicast filtering via the ‘ip’ command.\n"
+		"\tip maddr add 11:22:33:44:55:66 dev wlan0 # allow traffic to address\n"
+		"\tip maddr del 11:22:33:44:55:66 dev wlan0 # undo allow\n"
+		"Configure broadcast filtering via ini item, 'g_enable_non_arp_bc_hw_filter.'\n"
+		"\tg_enable_non_arp_bc_hw_filter=1 # drop all non-ARP broadcast traffic\n"
+		"\tg_enable_non_arp_bc_hw_filter=0 # allow all broadcast traffic");
+
+	return -EINVAL;
+}
+
+/**
  * iw_set_host_offload - Set host offload ioctl handler
  * @dev: device upon which the ioctl was received
  * @info: ioctl request information
@@ -8965,7 +11194,7 @@ static int wlan_hdd_set_filter(hdd_context_t *hdd_ctx,
 	int i = 0;
 
 	if (hdd_ctx->config->disablePacketFilter) {
-		hdd_err("packet filtering disabled in ini returning");
+		hdd_warn("packet filtering disabled in ini returning");
 		return 0;
 	}
 
@@ -8997,6 +11226,15 @@ static int wlan_hdd_set_filter(hdd_context_t *hdd_ctx,
 			packetFilterSetReq.paramsData[i].dataLength =
 				request->params_data[i].data_length;
 			packetFilterSetReq.paramsData[i].reserved = 0;
+
+			if (request->params_data[i].data_offset >
+			    SIR_MAX_FILTER_TEST_DATA_OFFSET) {
+				hdd_err("Invalid data offset %u for param %d (max = %d)",
+					request->params_data[i].data_offset,
+					i,
+					SIR_MAX_FILTER_TEST_DATA_OFFSET);
+				return -EINVAL;
+			}
 
 			if (request->params_data[i].data_length >
 				SIR_MAX_FILTER_TEST_DATA_LEN) {
@@ -9129,7 +11367,7 @@ static int __iw_set_packet_filter_params(struct net_device *dev,
 
 	ret = wlan_hdd_set_filter(hdd_ctx, request, adapter->sessionId);
 
-	kfree(request);
+	qdf_mem_free(request);
 	EXIT();
 	return ret;
 }
@@ -9408,8 +11646,9 @@ static int __iw_set_pno(struct net_device *dev,
 	hdd_context_t *hdd_ctx;
 	int ret;
 	int offset;
-	char *ptr;
+	char *ptr, *data;
 	uint8_t i, j, params, mode;
+	size_t len;
 
 	/* request is a large struct, so we make it static to avoid
 	 * stack overflow.  This API is only invoked via ioctl, so it
@@ -9427,13 +11666,23 @@ static int __iw_set_pno(struct net_device *dev,
 
 	hdd_notice("PNO data len %d data %s", wrqu->data.length, extra);
 
+	/* making sure argument string ends with '\0' */
+	len = (wrqu->data.length + 1);
+	data = qdf_mem_malloc(len);
+	if (NULL == data) {
+		hdd_err("fail to allocate memory %zu", len);
+		return -EINVAL;
+	}
+	qdf_mem_zero(data, len);
+	qdf_mem_copy(data, extra, (len-1));
+	ptr = data;
+
 	request.enable = 0;
 	request.ucNetworksCount = 0;
 
-	ptr = extra;
-
-	if (1 != sscanf(ptr, "%hhu%n", &(request.enable), &offset)) {
+	if (1 != sscanf(ptr, " %hhu%n", &(request.enable), &offset)) {
 		hdd_err("PNO enable input is not valid %s", ptr);
+		qdf_mem_free(data);
 		return -EINVAL;
 	}
 
@@ -9443,14 +11692,16 @@ static int __iw_set_pno(struct net_device *dev,
 		sme_set_preferred_network_list(WLAN_HDD_GET_HAL_CTX(adapter),
 					       &request, adapter->sessionId,
 					       found_pref_network_cb, adapter);
+		qdf_mem_free(data);
 		return 0;
 	}
 
 	ptr += offset;
 
 	if (1 !=
-	    sscanf(ptr, "%hhu %n", &(request.ucNetworksCount), &offset)) {
+	    sscanf(ptr, " %hhu %n", &(request.ucNetworksCount), &offset)) {
 		hdd_err("PNO count input not valid %s", ptr);
+		qdf_mem_free(data);
 		return -EINVAL;
 
 	}
@@ -9462,6 +11713,7 @@ static int __iw_set_pno(struct net_device *dev,
 	    (request.ucNetworksCount > SIR_PNO_MAX_SUPP_NETWORKS)) {
 		hdd_err("Network count %d invalid",
 			request.ucNetworksCount);
+		qdf_mem_free(data);
 		return -EINVAL;
 	}
 
@@ -9471,12 +11723,13 @@ static int __iw_set_pno(struct net_device *dev,
 
 		request.aNetworks[i].ssId.length = 0;
 
-		params = sscanf(ptr, "%hhu %n",
+		params = sscanf(ptr, " %hhu %n",
 				  &(request.aNetworks[i].ssId.length),
 				  &offset);
 
 		if (1 != params) {
 			hdd_err("PNO ssid length input is not valid %s", ptr);
+			qdf_mem_free(data);
 			return -EINVAL;
 		}
 
@@ -9484,6 +11737,7 @@ static int __iw_set_pno(struct net_device *dev,
 		    (request.aNetworks[i].ssId.length > 32)) {
 			hdd_err("SSID Len %d is not correct for network %d",
 				  request.aNetworks[i].ssId.length, i);
+			qdf_mem_free(data);
 			return -EINVAL;
 		}
 
@@ -9494,7 +11748,7 @@ static int __iw_set_pno(struct net_device *dev,
 		       request.aNetworks[i].ssId.length);
 		ptr += request.aNetworks[i].ssId.length;
 
-		params = sscanf(ptr, "%u %u %hhu %n",
+		params = sscanf(ptr, " %u %u %hhu %n",
 				  &(request.aNetworks[i].authentication),
 				  &(request.aNetworks[i].encryption),
 				  &(request.aNetworks[i].ucChannelCount),
@@ -9502,6 +11756,7 @@ static int __iw_set_pno(struct net_device *dev,
 
 		if (3 != params) {
 			hdd_warn("Incorrect cmd %s", ptr);
+			qdf_mem_free(data);
 			return -EINVAL;
 		}
 
@@ -9519,6 +11774,7 @@ static int __iw_set_pno(struct net_device *dev,
 		if (SIR_PNO_MAX_NETW_CHANNELS <
 		    request.aNetworks[i].ucChannelCount) {
 			hdd_warn("Incorrect number of channels");
+			qdf_mem_free(data);
 			return -EINVAL;
 		}
 
@@ -9526,11 +11782,19 @@ static int __iw_set_pno(struct net_device *dev,
 			for (j = 0; j < request.aNetworks[i].ucChannelCount;
 			     j++) {
 				if (1 !=
-				    sscanf(ptr, "%hhu %n",
+				    sscanf(ptr, " %hhu %n",
 					   &(request.aNetworks[i].
 					     aChannels[j]), &offset)) {
 					hdd_err("PNO network channel input is not valid %s",
 						  ptr);
+					qdf_mem_free(data);
+					return -EINVAL;
+				}
+				if (!IS_CHANNEL_VALID(
+					request.aNetworks[i].aChannels[j])) {
+					hdd_err("invalid channel: %hhu",
+					request.aNetworks[i].aChannels[j]);
+					qdf_mem_free(data);
 					return -EINVAL;
 				}
 				/* Advance to next channel number */
@@ -9538,11 +11802,18 @@ static int __iw_set_pno(struct net_device *dev,
 			}
 		}
 
-		if (1 != sscanf(ptr, "%u %n",
+		if (1 != sscanf(ptr, " %u %n",
 				&(request.aNetworks[i].bcastNetwType),
 				&offset)) {
 			hdd_err("PNO broadcast network type input is not valid %s",
 				  ptr);
+			qdf_mem_free(data);
+			return -EINVAL;
+		}
+		if (request.aNetworks[i].bcastNetwType > 2) {
+			hdd_err("invalid bcast nw type: %u",
+				request.aNetworks[i].bcastNetwType);
+			qdf_mem_free(data);
 			return -EINVAL;
 		}
 
@@ -9551,11 +11822,12 @@ static int __iw_set_pno(struct net_device *dev,
 
 		/* Advance to rssi Threshold */
 		ptr += offset;
-		if (1 != sscanf(ptr, "%d %n",
+		if (1 != sscanf(ptr, " %d %n",
 				&(request.aNetworks[i].rssiThreshold),
 				&offset)) {
 			hdd_err("PNO rssi threshold input is not valid %s",
 				  ptr);
+			qdf_mem_free(data);
 			return -EINVAL;
 		}
 		hdd_notice("PNO rssi %d offset %d",
@@ -9565,17 +11837,32 @@ static int __iw_set_pno(struct net_device *dev,
 	} /* For ucNetworkCount */
 
 	request.fast_scan_period = 0;
-	if (sscanf(ptr, "%u %n", &(request.fast_scan_period), &offset) > 0) {
+	if (sscanf(ptr, " %u %n", &(request.fast_scan_period), &offset) > 0) {
 		request.fast_scan_period *= MSEC_PER_SEC;
 		ptr += offset;
 	}
+	if (request.fast_scan_period == 0) {
+		hdd_err("invalid fast scan period %u",
+			request.fast_scan_period);
+		qdf_mem_free(data);
+		return -EINVAL;
+	}
 
 	request.fast_scan_max_cycles = 0;
-	if (sscanf(ptr, "%hhu %n", &(request.fast_scan_max_cycles),
+	if (sscanf(ptr, " %hhu %n", &(request.fast_scan_max_cycles),
 		   &offset) > 0)
 		ptr += offset;
+	if (request.fast_scan_max_cycles <
+			CFG_PNO_SCAN_TIMER_REPEAT_VALUE_MIN ||
+			request.fast_scan_max_cycles >
+			CFG_PNO_SCAN_TIMER_REPEAT_VALUE_MAX) {
+		hdd_err("invalid fast scan max cycles %hhu",
+			request.fast_scan_max_cycles);
+		qdf_mem_free(data);
+		return -EINVAL;
+	}
 
-	params = sscanf(ptr, "%hhu %n", &(mode), &offset);
+	params = sscanf(ptr, " %hhu %n", &(mode), &offset);
 
 	request.modePNO = mode;
 	/* for LA we just expose suspend option */
@@ -9588,6 +11875,7 @@ static int __iw_set_pno(struct net_device *dev,
 				       adapter->sessionId,
 				       found_pref_network_cb, adapter);
 
+	qdf_mem_free(data);
 	return 0;
 }
 
@@ -9675,6 +11963,7 @@ int hdd_set_band(struct net_device *dev, u8 ui_band)
 			pAdapter = pAdapterNode->pAdapter;
 			hHal = WLAN_HDD_GET_HAL_CTX(pAdapter);
 			hdd_abort_mac_scan(pHddCtx, pAdapter->sessionId,
+					   INVALID_SCAN_ID,
 					   eCSR_SCAN_ABORT_DUE_TO_BAND_CHANGE);
 			connectedBand =
 				hdd_conn_get_connected_band
@@ -9812,6 +12101,7 @@ static int wlan_hdd_set_mon_chan(hdd_adapter_t *adapter, uint32_t chan,
 	}
 
 	hdd_info("Set monitor mode Channel %d", chan);
+	qdf_mem_zero(&roam_profile, sizeof(roam_profile));
 	roam_profile.ChannelInfo.ChannelList = &ch_info->channel;
 	roam_profile.ChannelInfo.numOfChannels = 1;
 	roam_profile.phyMode = ch_info->phy_mode;
@@ -9860,10 +12150,14 @@ static int __iw_set_two_ints_getnone(struct net_device *dev,
 		break;
 #ifdef WLAN_DEBUG
 	case WE_SET_FW_CRASH_INJECT:
-		hdd_err("WE_SET_FW_CRASH_INJECT: %d %d",
+		hdd_notice("WE_SET_FW_CRASH_INJECT: %d %d",
 		       value[1], value[2]);
 		pr_err("SSR is triggered by iwpriv CRASH_INJECT: %d %d\n",
 			   value[1], value[2]);
+		if (!hdd_ctx->config->crash_inject_enabled) {
+			hdd_err("Crash Inject ini disabled, Ignore Crash Inject");
+			return 0;
+		}
 		ret = wma_cli_set2_command(pAdapter->sessionId,
 					   GEN_PARAM_CRASH_INJECT,
 					   value[1], value[2], GEN_CMD);
@@ -10022,6 +12316,8 @@ static const iw_handler we_private[] = {
 	[WLAN_SET_PNO - SIOCIWFIRSTPRIV] = iw_set_pno,
 #endif
 	[WLAN_SET_BAND_CONFIG - SIOCIWFIRSTPRIV] = iw_set_band_config,
+	[WLAN_PRIV_SET_MCBC_FILTER - SIOCIWFIRSTPRIV] =
+		iw_set_dynamic_mcbc_filter,
 	[WLAN_GET_LINK_SPEED - SIOCIWFIRSTPRIV] = iw_get_linkspeed,
 	[WLAN_PRIV_SET_TWO_INT_GET_NONE - SIOCIWFIRSTPRIV] =
 		iw_set_two_ints_getnone,
@@ -10473,11 +12769,6 @@ static const struct iw_priv_args we_private_args[] = {
 	 IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
 	 "get11Dstate"},
 
-	{WE_IBSS_STATUS,
-	 0,
-	 IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
-	 "getAdhocStatus"},
-
 	{WE_GET_WLAN_DBG,
 	 0,
 	 IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
@@ -10811,6 +13102,10 @@ static const struct iw_priv_args we_private_args[] = {
 	 0,
 	 IW_PRIV_TYPE_CHAR | WE_MAX_STR_LEN,
 	 "getStats"},
+	{WE_GET_SUSPEND_RESUME_STATS,
+	 0,
+	 IW_PRIV_TYPE_CHAR | WE_MAX_STR_LEN,
+	 "getSuspendStats"},
 	{WE_LIST_FW_PROFILE,
 	 0,
 	 IW_PRIV_TYPE_CHAR | WE_MAX_STR_LEN,
@@ -10902,36 +13197,6 @@ static const struct iw_priv_args we_private_args[] = {
 	0,
 	"reassoc"},
 
-	{WE_DUMP_AGC_START,
-	 0,
-	 0,
-	 "dump_agc_start"},
-
-	{WE_DUMP_AGC,
-	 0,
-	 0,
-	 "dump_agc"},
-
-	{WE_DUMP_CHANINFO_START,
-	 0,
-	 0,
-	 "dump_chninfo_en"},
-
-	{WE_DUMP_CHANINFO,
-	 0,
-	 0,
-	 "dump_chninfo"},
-
-	{WE_DUMP_WATCHDOG,
-	 0,
-	 0,
-	 "dump_watchdog"},
-#ifdef CONFIG_ATH_PCIE_ACCESS_DEBUG
-	{WE_DUMP_PCIE_LOG,
-	 0,
-	 0,
-	 "dump_pcie_log"},
-#endif
 	{WE_STOP_OBSS_SCAN,
 	 0,
 	 0,
@@ -10958,6 +13223,12 @@ static const struct iw_priv_args we_private_args[] = {
 	 IW_PRIV_TYPE_INT | MAX_VAR_ARGS,
 	 0,
 	 "dumplog"},
+
+	{WE_POLICY_MANAGER_CINFO_CMD,
+	 IW_PRIV_TYPE_INT | MAX_VAR_ARGS,
+	 0,
+	 "pm_cinfo"},
+
 #ifdef MPC_UT_FRAMEWORK
 	{WE_POLICY_MANAGER_CLIST_CMD,
 	 IW_PRIV_TYPE_INT | MAX_VAR_ARGS,
@@ -10978,11 +13249,6 @@ static const struct iw_priv_args we_private_args[] = {
 	 IW_PRIV_TYPE_INT | MAX_VAR_ARGS,
 	 0,
 	 "pm_pcl"},
-
-	{WE_POLICY_MANAGER_CINFO_CMD,
-	 IW_PRIV_TYPE_INT | MAX_VAR_ARGS,
-	 0,
-	 "pm_cinfo"},
 
 	{WE_POLICY_MANAGER_ULIST_CMD,
 	 IW_PRIV_TYPE_INT | MAX_VAR_ARGS,
@@ -11106,6 +13372,14 @@ static const struct iw_priv_args we_private_args[] = {
 		"SETBAND"
 	}
 	,
+	{
+		WLAN_PRIV_SET_MCBC_FILTER,
+		0,
+		0,
+		"setMCBCFilter"
+	}
+	,
+
 	{
 		WLAN_GET_LINK_SPEED,
 		IW_PRIV_TYPE_CHAR | 18,

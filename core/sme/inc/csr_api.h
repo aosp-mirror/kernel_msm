@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -293,6 +293,10 @@ typedef struct tagCsrScanRequest {
 	bool bcnRptReqScan;     /* is Scan issued by Beacon Report Request */
 	uint32_t scan_id;
 	uint32_t timestamp;
+
+	bool enable_scan_randomization;
+	uint8_t mac_addr[QDF_MAC_ADDR_SIZE];
+	uint8_t mac_addr_mask[QDF_MAC_ADDR_SIZE];
 } tCsrScanRequest;
 
 typedef struct tagCsrScanResultInfo {
@@ -392,6 +396,7 @@ typedef struct tagCsrScanResultFilter {
 	 */
 	uint8_t scan_filter_for_roam;
 	struct sCsrChannel_ pcl_channels;
+	struct qdf_mac_addr bssid_hint;
 	enum tQDF_ADAPTER_MODE csrPersona;
 } tCsrScanResultFilter;
 
@@ -970,6 +975,7 @@ typedef struct tagCsrRoamProfile {
 	uint8_t beacon_tx_rate;
 	tSirMacRateSet  supported_rates;
 	tSirMacRateSet  extended_rates;
+	struct qdf_mac_addr bssid_hint;
 	bool do_not_roam;
 
 } tCsrRoamProfile;
@@ -1082,10 +1088,12 @@ enum sta_roam_policy_dfs_mode {
  * struct csr_sta_roam_policy_params - sta roam policy params for station
  * @dfs_mode: tell is DFS channels needs to be skipped while scanning
  * @skip_unsafe_channels: tells if unsafe channels needs to be skip in scanning
+ * @sap_operating_band: Opearting band for SAP
  */
 struct csr_sta_roam_policy_params {
 	enum sta_roam_policy_dfs_mode dfs_mode;
 	bool skip_unsafe_channels;
+	uint8_t sap_operating_band;
 };
 
 typedef struct tagCsrConfigParam {
@@ -1242,7 +1250,7 @@ typedef struct tagCsrConfigParam {
 	uint8_t scanCfgAgingTime;
 	uint8_t enableTxLdpc;
 	uint8_t enableRxLDPC;
-	uint8_t isAmsduSupportInAMPDU;
+	uint8_t max_amsdu_num;
 	uint8_t nSelect5GHzMargin;
 	uint8_t isCoalesingInIBSSAllowed;
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
@@ -1312,6 +1320,7 @@ typedef struct tagCsrConfigParam {
 	struct csr_sta_roam_policy_params sta_roam_policy_params;
 	uint32_t tx_aggregation_size;
 	uint32_t rx_aggregation_size;
+	struct wmi_per_roam_config per_roam_config;
 } tCsrConfigParam;
 
 /* Tush */
@@ -1758,5 +1767,6 @@ static inline void csr_roam_fill_tdls_info(tpAniSirGlobal mac_ctx, tCsrRoamInfo 
 				tpSirSmeJoinRsp join_rsp)
 {}
 #endif
+void csr_packetdump_timer_stop(void);
 
 #endif

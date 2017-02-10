@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -170,6 +170,7 @@ enum log_event_indicator {
    @WLAN_LOG_REASON_SME_OUT_OF_CMD_BUFL sme out of cmd buffer
  * @WLAN_LOG_REASON_NO_SCAN_RESULTS: no scan results to report from HDD
  * This enum contains the different reason codes for bug report
+ * @WLAN_LOG_REASON_SCAN_NOT_ALLOWED: scan not allowed due to connection states
  */
 enum log_event_host_reason_code {
 	WLAN_LOG_REASON_CODE_UNUSED,
@@ -183,6 +184,7 @@ enum log_event_host_reason_code {
 	WLAN_LOG_REASON_HDD_TIME_OUT,
 	WLAN_LOG_REASON_SME_OUT_OF_CMD_BUF,
 	WLAN_LOG_REASON_NO_SCAN_RESULTS,
+	WLAN_LOG_REASON_SCAN_NOT_ALLOWED,
 };
 
 
@@ -606,13 +608,6 @@ typedef struct sAniSirLim {
 	/* UAPSD flag used on AP */
 	uint8_t gUapsdEnable;
 
-	/* Used on STA, this is a static UAPSD mask setting
-	 * derived  from SME_JOIN_REQ and SME_REASSOC_REQ. If a
-	 * particular AC bit is set, it means the AC is both
-	 * trigger enabled and delivery enabled.
-	 */
-	uint8_t gUapsdPerAcBitmask;
-
 	/* Used on STA for AC downgrade. This is a dynamic mask
 	 * setting which keep tracks of ACs being admitted.
 	 * If bit is set to 0: That partiular AC is not admitted
@@ -830,6 +825,7 @@ typedef struct sAniSirLim {
 		uint32_t scan_id, uint32_t flags);
 	uint8_t retry_packet_cnt;
 	uint8_t scan_disabled;
+	uint8_t beacon_probe_rsp_cnt_per_scan;
 } tAniSirLim, *tpAniSirLim;
 
 struct mgmt_frm_reg_info {
@@ -972,7 +968,7 @@ typedef struct sAniSirGlobal {
 	enum auth_tx_ack_status auth_ack_status;
 	uint8_t user_configured_nss;
 	bool sta_prefer_80MHz_over_160MHz;
-	bool is_11d_hint;
+	enum  country_src reg_hint_src;
 } tAniSirGlobal;
 
 typedef enum {

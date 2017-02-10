@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -61,7 +61,7 @@
 #endif
 #include <ol_tx_queue.h>
 #include <ol_txrx.h>
-
+#include <pktlog_ac_fmt.h>
 
 #ifdef TX_CREDIT_RECLAIM_SUPPORT
 
@@ -539,6 +539,7 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 	struct ol_tx_desc_t *tx_desc;
 	uint32_t byte_cnt = 0;
 	qdf_nbuf_t netbuf;
+	tp_ol_packetdump_cb packetdump_cb;
 
 	union ol_tx_desc_list_elem_t *lcl_freelist = NULL;
 	union ol_tx_desc_list_elem_t *tx_desc_last = NULL;
@@ -553,6 +554,14 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 		tx_desc->status = status;
 		netbuf = tx_desc->netbuf;
 		QDF_NBUF_UPDATE_TX_PKT_COUNT(netbuf, QDF_NBUF_TX_PKT_FREE);
+
+		if (tx_desc->pkt_type != OL_TX_FRM_TSO) {
+			packetdump_cb = pdev->ol_tx_packetdump_cb;
+			if (packetdump_cb)
+				packetdump_cb(netbuf, status,
+					tx_desc->vdev->vdev_id, TX_DATA_PKT);
+		}
+
 		DPTRACE(qdf_dp_trace_ptr(netbuf,
 			QDF_DP_TRACE_FREE_PACKET_PTR_RECORD,
 			qdf_nbuf_data_addr(netbuf),
@@ -572,7 +581,7 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 					    lcl_freelist, tx_desc_last, status);
 		}
 #ifdef QCA_SUPPORT_TXDESC_SANITY_CHECKS
-		tx_desc->pkt_type = 0xff;
+		tx_desc->pkt_type = ol_tx_frm_freed;
 #ifdef QCA_COMPUTE_TX_DELAY
 		tx_desc->entry_timestamp_ticks = 0xffffffff;
 #endif
@@ -758,14 +767,28 @@ ol_tx_single_completion_handler(ol_txrx_pdev_handle pdev,
 {
 	struct ol_tx_desc_t *tx_desc;
 	qdf_nbuf_t netbuf;
+	tp_ol_packetdump_cb packetdump_cb;
 
-	tx_desc = ol_tx_desc_find(pdev, tx_desc_id);
+	tx_desc = ol_tx_desc_find_check(pdev, tx_desc_id);
+	if (tx_desc == NULL) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+				"%s: invalid desc_id(%u), ignore it.\n",
+				__func__,
+				tx_desc_id);
+		return;
+	}
+
 	tx_desc->status = status;
 	netbuf = tx_desc->netbuf;
 
 	QDF_NBUF_UPDATE_TX_PKT_COUNT(netbuf, QDF_NBUF_TX_PKT_FREE);
 	/* Do one shot statistics */
 	TXRX_STATS_UPDATE_TX_STATS(pdev, status, 1, qdf_nbuf_len(netbuf));
+
+	packetdump_cb = pdev->ol_tx_packetdump_cb;
+	if (packetdump_cb)
+		packetdump_cb(netbuf, status,
+			tx_desc->vdev->vdev_id, TX_MGMT_PKT);
 
 	if (OL_TX_DESC_NO_REFS(tx_desc)) {
 		ol_tx_desc_frame_free_nonstd(pdev, tx_desc,
@@ -836,6 +859,13 @@ ol_tx_inspect_handler(ol_txrx_pdev_handle pdev,
 			ol_tx_msdu_complete(pdev, tx_desc, tx_descs, netbuf,
 					    lcl_freelist, tx_desc_last,
 					    htt_tx_status_ok);
+
+#ifdef QCA_SUPPORT_TXDESC_SANITY_CHECKS
+			tx_desc->pkt_type = ol_tx_frm_freed;
+#ifdef QCA_COMPUTE_TX_DELAY
+			tx_desc->entry_timestamp_ticks = 0xffffffff;
+#endif
+#endif
 		}
 	}
 
@@ -1169,3 +1199,57 @@ ol_tx_delay_compute(struct ol_txrx_pdev_t *pdev,
 }
 
 #endif /* QCA_COMPUTE_TX_DELAY */
+
+/**
+ * ol_register_packetdump_callback() - registers
+ *  tx data packet, tx mgmt. packet and rx data packet
+ *  dump callback handler.
+ *
+ * @ol_tx_packetdump_cb: tx packetdump cb
+ * @ol_rx_packetdump_cb: rx packetdump cb
+ *
+ * This function is used to register tx data pkt, tx mgmt.
+ * pkt and rx data pkt dump callback
+ *
+ * Return: None
+ *
+ */
+void ol_register_packetdump_callback(tp_ol_packetdump_cb ol_tx_packetdump_cb,
+					tp_ol_packetdump_cb ol_rx_packetdump_cb)
+{
+	ol_txrx_pdev_handle pdev = cds_get_context(QDF_MODULE_ID_TXRX);
+
+	if (!pdev) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+				"%s: pdev is NULL", __func__);
+		return;
+	}
+
+	pdev->ol_tx_packetdump_cb = ol_tx_packetdump_cb;
+	pdev->ol_rx_packetdump_cb = ol_rx_packetdump_cb;
+}
+
+/**
+ * ol_deregister_packetdump_callback() - deregidters
+ *  tx data packet, tx mgmt. packet and rx data packet
+ *  dump callback handler
+ *
+ * This function is used to deregidter tx data pkt.,
+ * tx mgmt. pkt and rx data pkt. dump callback
+ *
+ * Return: None
+ *
+ */
+void ol_deregister_packetdump_callback(void)
+{
+	ol_txrx_pdev_handle pdev = cds_get_context(QDF_MODULE_ID_TXRX);
+
+	if (!pdev) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+				"%s: pdev is NULL", __func__);
+		return;
+	}
+
+	pdev->ol_tx_packetdump_cb = NULL;
+	pdev->ol_rx_packetdump_cb = NULL;
+}

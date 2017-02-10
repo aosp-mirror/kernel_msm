@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -24,9 +24,6 @@
  * under proprietary terms before Copyright ownership was assigned
  * to the Linux Foundation.
  */
-
-/* denote that this file does not allow legacy hddLog */
-#define HDD_DISALLOW_LEGACY_HDDLOG 1
 
 #include <linux/platform_device.h>
 #include <linux/pci.h>
@@ -424,6 +421,8 @@ static void wlan_hdd_remove(struct device *dev)
 		__hdd_wlan_exit();
 	}
 
+	cds_set_unload_in_progress(false);
+
 	pr_info("%s: Driver De-initialized\n", WLAN_MODULE_NAME);
 }
 
@@ -494,6 +493,7 @@ static void wlan_hdd_notify_handler(int state)
 /**
  * __wlan_hdd_bus_suspend() - handles platform supsend
  * @state: suspend message from the kernel
+ * @wow_flags: bitmap of WMI WOW flags to pass to FW
  *
  * Does precondtion validation. Ensures that a subsystem restart isn't in
  * progress.  Ensures that no load or unload is in progress.
@@ -505,42 +505,53 @@ static void wlan_hdd_notify_handler(int state)
  *     -EBUSY or -EAGAIN if another opperation is in progress and
  *     wlan will not be ready to suspend in time.
  */
-static int __wlan_hdd_bus_suspend(pm_message_t state)
+static int __wlan_hdd_bus_suspend(pm_message_t state, uint32_t wow_flags)
 {
 	hdd_context_t *hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 	void *hif_ctx;
-	int err = wlan_hdd_validate_context(hdd_ctx);
+	int err;
 	int status;
 
-	hdd_info("event %d", state.event);
+	hdd_info("starting bus suspend; event:%d, flags:%u",
+		 state.event, wow_flags);
 
-	if (err)
+	err = wlan_hdd_validate_context(hdd_ctx);
+	if (err) {
+		hdd_err("Invalid hdd context");
 		goto done;
+	}
 
 	if (hdd_ctx->driver_status != DRIVER_MODULES_ENABLED) {
-		hdd_info("Driver Module closed return success");
+		hdd_info("Driver Module closed; return success");
 		return 0;
 	}
 
 	hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
 	if (NULL == hif_ctx) {
+		hdd_err("Failed to get hif context");
 		err = -EINVAL;
 		goto done;
 	}
 
 	err = qdf_status_to_os_return(ol_txrx_bus_suspend());
-	if (err)
+	if (err) {
+		hdd_err("Failed tx/rx bus suspend");
 		goto done;
+	}
 
-	err = wma_bus_suspend();
-	if (err)
+	err = wma_bus_suspend(wow_flags);
+	if (err) {
+		hdd_err("Failed wma bus suspend");
 		goto resume_oltxrx;
+	}
 
 	err = hif_bus_suspend(hif_ctx);
-	if (err)
+	if (err) {
+		hdd_err("Failed hif bus suspend");
 		goto resume_wma;
+	}
 
-	hdd_info("suspend done");
+	hdd_info("bus suspend succeeded");
 	return 0;
 
 resume_wma:
@@ -559,11 +570,25 @@ int wlan_hdd_bus_suspend(pm_message_t state)
 	int ret;
 
 	cds_ssr_protect(__func__);
-	ret = __wlan_hdd_bus_suspend(state);
+	ret = __wlan_hdd_bus_suspend(state, 0);
 	cds_ssr_unprotect(__func__);
 
 	return ret;
 }
+
+#ifdef WLAN_SUSPEND_RESUME_TEST
+int wlan_hdd_unit_test_bus_suspend(pm_message_t state)
+{
+	int ret;
+
+	cds_ssr_protect(__func__);
+	ret = __wlan_hdd_bus_suspend(state, WMI_WOW_FLAG_UNIT_TEST_ENABLE |
+				     WMI_WOW_FLAG_DO_HTC_WAKEUP);
+	cds_ssr_unprotect(__func__);
+
+	return ret;
+}
+#endif
 
 /**
  * __wlan_hdd_bus_suspend_noirq() - handle .suspend_noirq callback
@@ -606,6 +631,8 @@ static int __wlan_hdd_bus_suspend_noirq(void)
 	err = wma_is_target_wake_up_received();
 	if (err)
 		goto resume_hif_noirq;
+
+	hdd_ctx->suspend_resume_stats.suspends++;
 
 	hdd_info("suspend_noirq done");
 	return 0;
@@ -659,34 +686,45 @@ static int __wlan_hdd_bus_resume(void)
 	if (cds_is_driver_recovering())
 		return 0;
 
+	hdd_info("starting bus resume");
+
 	status = wlan_hdd_validate_context(hdd_ctx);
-	if (status)
+	if (status) {
+		hdd_err("Invalid hdd context");
 		return status;
+	}
 
 	if (hdd_ctx->driver_status != DRIVER_MODULES_ENABLED) {
-		hdd_info("Driver Module closed return success");
+		hdd_info("Driver Module closed; return success");
 		return 0;
 	}
 
 	hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
-	if (NULL == hif_ctx)
+	if (NULL == hif_ctx) {
+		hdd_err("Failed to get hif context");
 		return -EINVAL;
+	}
 
 	status = hif_bus_resume(hif_ctx);
-	if (status)
+	if (status) {
+		hdd_err("Failed hif bus resume");
 		goto out;
+	}
 
 	status = wma_bus_resume();
-	if (status)
+	if (status) {
+		hdd_err("Failed wma bus resume");
 		goto out;
+	}
 
 	qdf_status = ol_txrx_bus_resume();
 	status = qdf_status_to_os_return(qdf_status);
-	if (status)
+	if (status) {
+		hdd_err("Failed tx/rx bus resume");
 		goto out;
+	}
 
-	hdd_info("resume done");
-
+	hdd_info("bus resume succeeded");
 	return 0;
 
 out:
@@ -822,7 +860,7 @@ static int __wlan_hdd_runtime_suspend(struct device *dev)
 	if (status)
 		goto resume_txrx;
 
-	status = wma_runtime_suspend();
+	status = wma_runtime_suspend(0);
 	if (status)
 		goto resume_htc;
 

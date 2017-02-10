@@ -51,20 +51,20 @@
 #include "qdf_mc_timer.h"
 #include "cds_config.h"
 
-#define TX_POST_EVENT_MASK               0x001
-#define TX_SUSPEND_EVENT_MASK            0x002
-#define MC_POST_EVENT_MASK               0x001
-#define MC_SUSPEND_EVENT_MASK            0x002
-#define RX_POST_EVENT_MASK               0x001
-#define RX_SUSPEND_EVENT_MASK            0x002
-#define TX_SHUTDOWN_EVENT_MASK           0x010
-#define MC_SHUTDOWN_EVENT_MASK           0x010
-#define RX_SHUTDOWN_EVENT_MASK           0x010
-#define WD_POST_EVENT_MASK               0x001
-#define WD_SHUTDOWN_EVENT_MASK           0x002
-#define WD_CHIP_RESET_EVENT_MASK         0x004
-#define WD_WLAN_SHUTDOWN_EVENT_MASK      0x008
-#define WD_WLAN_REINIT_EVENT_MASK        0x010
+#define TX_POST_EVENT               0x001
+#define TX_SUSPEND_EVENT            0x002
+#define MC_POST_EVENT               0x001
+#define MC_SUSPEND_EVENT            0x002
+#define RX_POST_EVENT               0x001
+#define RX_SUSPEND_EVENT            0x002
+#define TX_SHUTDOWN_EVENT           0x010
+#define MC_SHUTDOWN_EVENT           0x010
+#define RX_SHUTDOWN_EVENT           0x010
+#define WD_POST_EVENT               0x001
+#define WD_SHUTDOWN_EVENT           0x002
+#define WD_CHIP_RESET_EVENT         0x004
+#define WD_WLAN_SHUTDOWN_EVENT      0x008
+#define WD_WLAN_REINIT_EVENT        0x010
 
 /*
  * Maximum number of messages in the system
@@ -245,6 +245,8 @@ typedef struct _cds_msg_wrapper {
 
 } cds_msg_wrapper, *p_cds_msg_wrapper;
 
+/* forward-declare hdd_context_s as it is used ina function type */
+struct hdd_context_s;
 typedef struct _cds_context_type {
 	/* Messages buffers */
 	cds_msg_t aMsgBuffers[CDS_CORE_MAX_MESSAGES];
@@ -310,7 +312,10 @@ typedef struct _cds_context_type {
 	void (*sme_get_nss_for_vdev)(void*, enum tQDF_ADAPTER_MODE,
 		uint8_t *, uint8_t *);
 
-	void (*ol_txrx_update_mac_id)(uint8_t , uint8_t);
+	/* Datapath callback functions */
+	void (*ol_txrx_update_mac_id_cb)(uint8_t , uint8_t);
+	void (*hdd_en_lro_in_cc_cb)(struct hdd_context_s *);
+	void (*hdd_disable_lro_in_cc_cb)(struct hdd_context_s *);
 
 	/* This list is not sessionized. This mandatory channel list would be
 	 * as per OEMs preference as per the regulatory/other considerations.

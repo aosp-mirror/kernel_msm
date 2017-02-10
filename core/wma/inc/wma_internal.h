@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -186,6 +186,16 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 					uint32_t len);
 #endif
 
+/**
+ * wma_update_per_roam_config() -per roam config parameter updation to FW
+ * @handle: wma handle
+ * @req_buf: per roam config parameters
+ *
+ * Return: none
+ */
+void wma_update_per_roam_config(WMA_HANDLE handle,
+				 struct wmi_per_roam_config_req *req_buf);
+
 QDF_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 				      tSirScanOffloadReq *scan_req,
 				      struct scan_start_params *cmd);
@@ -337,10 +347,6 @@ int wma_passpoint_match_event_handler(void *handle,
 				     uint8_t  *cmd_param_info,
 				     uint32_t len);
 
-int
-wma_extscan_hotlist_ssid_match_event_handler(void *handle,
-					     uint8_t *cmd_param_info,
-					     uint32_t len);
 #endif
 
 void wma_register_extscan_event_handler(tp_wma_handle wma_handle);
@@ -396,9 +402,6 @@ QDF_STATUS wma_set_passpoint_network_list(tp_wma_handle wma,
 
 QDF_STATUS wma_reset_passpoint_network_list(tp_wma_handle wma,
 					struct wifi_passpoint_req *req);
-QDF_STATUS
-wma_set_ssid_hotlist(tp_wma_handle wma,
-		     struct sir_set_ssid_hotlist_request *request);
 #endif
 
 QDF_STATUS  wma_ipa_offload_enable_disable(tp_wma_handle wma,
@@ -1035,6 +1038,18 @@ QDF_STATUS wma_enable_arp_ns_offload(tp_wma_handle wma,
 				     tpSirHostOffloadReq pHostOffloadParams,
 				     bool bArpOnly);
 
+/**
+ * wma_configure_non_arp_broadcast_filter() - API to Enable/Disable Broadcast
+ * filter
+ * when target goes to wow suspend/resume mode
+ * @wma: wma handle
+ * @bcastFilter: broadcast filter request
+ *
+ * Return: QDF Status
+ */
+QDF_STATUS wma_configure_non_arp_broadcast_filter(tp_wma_handle wma,
+				struct broadcast_filter_request *bcast_filter);
+
 QDF_STATUS wma_process_cesium_enable_ind(tp_wma_handle wma);
 
 QDF_STATUS wma_process_get_peer_info_req
@@ -1231,4 +1246,28 @@ static inline int wma_encrypt_decrypt_msg_handler(void *handle, uint8_t *data,
  */
 void wma_lost_link_info_handler(tp_wma_handle wma, uint32_t vdev_id,
 				int32_t rssi);
+int wma_unified_power_debug_stats_event_handler(void *handle,
+			uint8_t *cmd_param_info, uint32_t len);
+
+/**
+ * wma_get_rcpi_req() - get rcpi request
+ * @handle: wma handle
+ * @rcpi_request: rcpi params
+ *
+ * Return: none
+ */
+QDF_STATUS wma_get_rcpi_req(WMA_HANDLE handle,
+			    struct sme_rcpi_req *rcpi_request);
+
+/**
+ * wma_rcpi_event_handler() - rcpi event handler
+ * @handle: wma handle
+ * @cmd_param_info: data from event
+ * @len: length
+ *
+ * Return: 0 for success or error code
+ */
+int wma_rcpi_event_handler(void *handle, uint8_t *cmd_param_info,
+			   uint32_t len);
+
 #endif

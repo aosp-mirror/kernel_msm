@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -57,6 +57,8 @@ typedef struct sAniSirGlobal *tpAniSirGlobal;
 #include "wmi_unified_param.h"
 #include <dot11f.h>
 
+#define MAX_PEERS 32
+
 #define OFFSET_OF(structType, fldName)   (&((structType *)0)->fldName)
 
 /* / Max supported channel list */
@@ -103,7 +105,6 @@ typedef uint8_t tSirVersionString[SIR_VERSION_STRING_LEN];
 #define WLAN_EXTSCAN_MAX_BUCKETS                  16
 #define WLAN_EXTSCAN_MAX_HOTLIST_APS              128
 #define WLAN_EXTSCAN_MAX_SIGNIFICANT_CHANGE_APS   64
-#define WLAN_EXTSCAN_MAX_HOTLIST_SSIDS            8
 
 /* This should not be greater than MAX_NUMBER_OF_CONC_CONNECTIONS */
 #define MAX_VDEV_SUPPORTED                        4
@@ -114,6 +115,8 @@ typedef uint8_t tSirVersionString[SIR_VERSION_STRING_LEN];
 #define QOS_MAP_LEN_MAX \
 	(QOS_MAP_LEN_MIN + 2 * QOS_MAP_MAX_EX)
 #define NUM_CHAINS_MAX  2
+
+#define MAX_LEN_UDP_RESP_OFFLOAD 128
 
 /**
  * enum sir_conn_update_reason: Reason for conc connection update
@@ -163,7 +166,6 @@ typedef enum {
 	eSIR_PASSPOINT_NETWORK_FOUND_IND,
 	eSIR_EXTSCAN_SET_SSID_HOTLIST_RSP,
 	eSIR_EXTSCAN_RESET_SSID_HOTLIST_RSP,
-	eSIR_EXTSCAN_HOTLIST_SSID_MATCH_IND,
 
 	/* Keep this last */
 	eSIR_EXTSCAN_CALLBACK_TYPE_MAX,
@@ -711,7 +713,7 @@ typedef struct sSirBssDescription {
 	/* offset of the ieFields from bssId. */
 	uint16_t length;
 	tSirMacAddr bssId;
-	unsigned long scanSysTimeMsec;
+	unsigned long scansystimensec;
 	uint32_t timeStamp[2];
 	uint16_t beaconInterval;
 	uint16_t capabilityInfo;
@@ -902,6 +904,11 @@ typedef struct sSirSmeScanReq {
 	uint16_t uIEFieldLen;
 	uint16_t uIEFieldOffset;
 
+	/* mac address randomization attributes */
+	bool enable_scan_randomization;
+	uint8_t mac_addr[QDF_MAC_ADDR_SIZE];
+	uint8_t mac_addr_mask[QDF_MAC_ADDR_SIZE];
+
 	/* channelList MUST be the last field of this structure */
 	tSirChannelList channelList;
 	/*-----------------------------
@@ -950,6 +957,35 @@ struct oem_data_rsp {
 #endif /* FEATURE_OEM_DATA_SUPPORT */
 
 #ifdef FEATURE_WLAN_ESE
+typedef struct ese_wmm_tspec_ie {
+	uint16_t         traffic_type:1;
+	uint16_t                 tsid:4;
+	uint16_t            direction:2;
+	uint16_t        access_policy:2;
+	uint16_t          aggregation:1;
+	uint16_t                  psb:1;
+	uint16_t        user_priority:3;
+	uint16_t       tsinfo_ack_pol:2;
+	uint8_t          tsinfo_rsvd:7;
+	uint8_t      burst_size_defn:1;
+	uint16_t                 size:15;
+	uint16_t                fixed:1;
+	uint16_t            max_msdu_size;
+	uint32_t            min_service_int;
+	uint32_t            max_service_int;
+	uint32_t            inactivity_int;
+	uint32_t            suspension_int;
+	uint32_t            service_start_time;
+	uint32_t            min_data_rate;
+	uint32_t            mean_data_rate;
+	uint32_t            peak_data_rate;
+	uint32_t            burst_size;
+	uint32_t            delay_bound;
+	uint32_t            min_phy_rate;
+	uint16_t            surplus_bw_allowance;
+	uint16_t            medium_time;
+} qdf_packed ese_wmm_tspec_ie;
+
 typedef struct sTspecInfo {
 	uint8_t valid;
 	tSirMacTspecIE tspec;
@@ -1156,7 +1192,7 @@ typedef struct sSirSmeJoinReq {
 	uint8_t htSmps;
 	bool send_smps_action;
 
-	uint8_t isAmsduSupportInAMPDU;
+	uint8_t max_amsdu_num;
 	tAniBool isWMEenabled;
 	tAniBool isQosEnabled;
 	tAniBool isOSENConnection;
@@ -1551,6 +1587,23 @@ typedef struct sSirSmeDisassocCnf {
 	struct qdf_mac_addr peer_macaddr;
 } tSirSmeDisassocCnf, *tpSirSmeDisassocCnf,
 	tSirSmeDeauthCnf, *tpSirSmeDeauthCnf;
+
+/**
+ * struct sir_sme_discon_done_ind  - disconnect done indiaction
+ * @message_type: msg type
+ * @length: length of msg
+ * @session_id: session id of the indication
+ * @reason_code: reason for disconnect indication
+ * @peer_mac: peer mac
+ */
+struct sir_sme_discon_done_ind {
+	uint16_t           message_type;
+	uint16_t           length;
+	uint8_t            session_id;
+	tSirResultCodes    reason_code;
+	tSirMacAddr        peer_mac;
+};
+
 
 /* / Definition for Deauthetication request */
 typedef struct sSirSmeDeauthReq {
@@ -2631,10 +2684,6 @@ typedef struct sSirUpdateAPWPARSNIEsReq {
 #define SIR_IPV6_NS_OFFLOAD                         2
 #define SIR_OFFLOAD_DISABLE                         0
 #define SIR_OFFLOAD_ENABLE                          1
-#define SIR_OFFLOAD_BCAST_FILTER_ENABLE             0x2
-#define SIR_OFFLOAD_MCAST_FILTER_ENABLE             0x4
-#define SIR_OFFLOAD_ARP_AND_BCAST_FILTER_ENABLE     (SIR_OFFLOAD_ENABLE|SIR_OFFLOAD_BCAST_FILTER_ENABLE)
-#define SIR_OFFLOAD_NS_AND_MCAST_FILTER_ENABLE      (SIR_OFFLOAD_ENABLE|SIR_OFFLOAD_MCAST_FILTER_ENABLE)
 
 #ifdef WLAN_NS_OFFLOAD
 typedef struct sSirNsOffloadReq {
@@ -2648,6 +2697,16 @@ typedef struct sSirNsOffloadReq {
 	uint8_t slotIdx;
 } tSirNsOffloadReq, *tpSirNsOffloadReq;
 #endif /* WLAN_NS_OFFLOAD */
+
+/**
+ * struct broadcast_filter_request - For enable/disable HW Broadcast Filter
+ * @enable: value to enable disable feature
+ * @bss_id: bss_id for get session.
+ */
+struct broadcast_filter_request {
+	bool enable;
+	struct qdf_mac_addr bssid;
+};
 
 typedef struct sSirHostOffloadReq {
 	uint8_t offloadType;
@@ -2799,12 +2858,6 @@ typedef struct {
 } tSirAppType2Params, *tpSirAppType2Params;
 #endif
 
-typedef struct sSirWlanSetRxpFilters {
-	uint8_t configuredMcstBcstFilterSetting;
-	uint8_t setMcstBcstFilter;
-} tSirWlanSetRxpFilters, *tpSirWlanSetRxpFilters;
-
-
 #define ANI_MAX_IBSS_ROUTE_TABLE_ENTRY   100
 
 typedef struct sAniDestIpNextHopMacPair {
@@ -2825,7 +2878,7 @@ typedef struct sAniIbssRouteTable {
 
 
 /* Set PNO */
-#define SIR_PNO_MAX_PLAN_REQUEST   1
+#define SIR_PNO_MAX_PLAN_REQUEST   2
 #define SIR_PNO_MAX_NETW_CHANNELS  26
 #define SIR_PNO_MAX_NETW_CHANNELS_EX  60
 #define SIR_PNO_MAX_SUPP_NETWORKS  16
@@ -2860,6 +2913,7 @@ typedef struct {
  * struct sSirPNOScanReq - PNO Scan request structure
  * @enable: flag to enable or disable
  * @modePNO: PNO Mode
+ * @do_passive_scan: Flag to request passive scan to fw
  * @ucNetworksCount: Number of networks
  * @aNetworks: Preferred network list
  * @sessionId: Session identifier
@@ -2874,6 +2928,7 @@ typedef struct {
 typedef struct sSirPNOScanReq {
 	uint8_t enable;
 	eSirPNOMode modePNO;
+	bool    do_passive_scan;
 	uint8_t ucNetworksCount;
 	tSirNetworkType aNetworks[SIR_PNO_MAX_SUPP_NETWORKS];
 	uint8_t sessionId;
@@ -2893,6 +2948,11 @@ typedef struct sSirPNOScanReq {
 	enum wmi_dwelltime_adaptive_mode pnoscan_adaptive_dwell_mode;
 	uint32_t channel_prediction_full_scan;
 #endif
+
+	/* mac address randomization attributes */
+	bool enable_pno_scan_randomization;
+	uint8_t mac_addr[QDF_MAC_ADDR_SIZE];
+	uint8_t mac_addr_mask[QDF_MAC_ADDR_SIZE];
 } tSirPNOScanReq, *tpSirPNOScanReq;
 
 /* Preferred Network Found Indication */
@@ -2912,6 +2972,59 @@ typedef struct {
 	uint8_t data[1];
 } tSirPrefNetworkFoundInd, *tpSirPrefNetworkFoundInd;
 #endif /* FEATURE_WLAN_SCAN_PNO */
+
+/*
+ * ALLOWED_ACTION_FRAMES_BITMAP
+ *
+ * Bitmask is based on the below. The frames with 0's
+ * set to their corresponding bit can be dropped in FW.
+ *
+ * -----------------------------+-----+-------+
+ *         Type                 | Bit | Allow |
+ * -----------------------------+-----+-------+
+ * SIR_MAC_ACTION_SPECTRUM_MGMT    0      1
+ * SIR_MAC_ACTION_QOS_MGMT         1      1
+ * SIR_MAC_ACTION_DLP              2      0
+ * SIR_MAC_ACTION_BLKACK           3      0
+ * SIR_MAC_ACTION_PUBLIC_USAGE     4      1
+ * SIR_MAC_ACTION_RRM              5      1
+ * SIR_MAC_ACTION_FAST_BSS_TRNST   6      0
+ * SIR_MAC_ACTION_HT               7      0
+ * SIR_MAC_ACTION_SA_QUERY         8      1
+ * SIR_MAC_ACTION_PROT_DUAL_PUB    9      1
+ * SIR_MAC_ACTION_WNM             10      1
+ * SIR_MAC_ACTION_UNPROT_WNM      11      0
+ * SIR_MAC_ACTION_TDLS            12      0
+ * SIR_MAC_ACITON_MESH            13      0
+ * SIR_MAC_ACTION_MHF             14      0
+ * SIR_MAC_SELF_PROTECTED         15      0
+ * SIR_MAC_ACTION_WME             17      1
+ * SIR_MAC_ACTION_FST             18      1
+ * SIR_MAC_ACTION_VHT             21      1
+ * ----------------------------+------+-------+
+ */
+#define ALLOWED_ACTION_FRAMES_BITMAP0 \
+		((1 << SIR_MAC_ACTION_SPECTRUM_MGMT) | \
+		 (1 << SIR_MAC_ACTION_QOS_MGMT) | \
+		 (1 << SIR_MAC_ACTION_PUBLIC_USAGE) | \
+		 (1 << SIR_MAC_ACTION_RRM) | \
+		 (1 << SIR_MAC_ACTION_SA_QUERY) | \
+		 (1 << SIR_MAC_ACTION_PROT_DUAL_PUB) | \
+		 (1 << SIR_MAC_ACTION_WNM) | \
+		 (1 << SIR_MAC_ACTION_WME) | \
+		 (1 << SIR_MAC_ACTION_FST) | \
+		 (1 << SIR_MAC_ACTION_VHT))
+
+#define ALLOWED_ACTION_FRAMES_BITMAP1   0x0
+#define ALLOWED_ACTION_FRAMES_BITMAP2   0x0
+#define ALLOWED_ACTION_FRAMES_BITMAP3   0x0
+#define ALLOWED_ACTION_FRAMES_BITMAP4   0x0
+#define ALLOWED_ACTION_FRAMES_BITMAP5   0x0
+#define ALLOWED_ACTION_FRAMES_BITMAP6   0x0
+#define ALLOWED_ACTION_FRAMES_BITMAP7   0x0
+
+#define ALLOWED_ACTION_FRAME_MAP_WORDS (SIR_MAC_ACTION_MAX / 32)
+
 
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 typedef struct {
@@ -3083,6 +3196,7 @@ typedef struct sSirRoamOffloadScanRsp {
    Packet Filtering Parameters
    ---------------------------------------------------------------------------*/
 #define    SIR_MAX_FILTER_TEST_DATA_LEN       8
+#define    SIR_MAX_FILTER_TEST_DATA_OFFSET  200
 #define    SIR_MAX_NUM_MULTICAST_ADDRESS    240
 #define    SIR_MAX_NUM_FILTERS               20
 #define    SIR_MAX_NUM_TESTS_PER_FILTER      10
@@ -3666,6 +3780,12 @@ typedef struct sSirScanOffloadReq {
 	enum wmi_dwelltime_adaptive_mode scan_adaptive_dwell_mode;
 	uint16_t uIEFieldLen;
 	uint16_t uIEFieldOffset;
+
+	/* mac address randomization attributes */
+	bool enable_scan_randomization;
+	uint8_t mac_addr[QDF_MAC_ADDR_SIZE];
+	uint8_t mac_addr_mask[QDF_MAC_ADDR_SIZE];
+
 	tSirChannelList channelList;
 	/*-----------------------------
 	  sSirScanOffloadReq....
@@ -4623,36 +4743,6 @@ struct sir_wisa_params {
 	bool mode;
 	uint8_t vdev_id;
 };
-/**
- * struct sir_ssid_hotlist_param - param for SSID Hotlist
- * @ssid: SSID which is being hotlisted
- * @band: Band in which the given SSID should be scanned
- * @rssi_low: Low bound on RSSI
- * @rssi_high: High bound on RSSI
- */
-struct sir_ssid_hotlist_param {
-	tSirMacSSid ssid;
-	uint8_t band;
-	int32_t rssi_low;
-	int32_t rssi_high;
-};
-
-/**
- * struct sir_set_ssid_hotlist_request - set SSID hotlist request struct
- * @request_id: ID of the request
- * @session_id: ID of the session
- * @lost_ssid_sample_size: Number of consecutive scans in which the SSID
- *	must not be seen in order to consider the SSID "lost"
- * @ssid_count: Number of valid entries in the @ssids array
- * @ssids: Array that defines the SSIDs that are in the hotlist
- */
-struct sir_set_ssid_hotlist_request {
-	uint32_t request_id;
-	uint8_t session_id;
-	uint32_t lost_ssid_sample_size;
-	uint32_t ssid_count;
-	struct sir_ssid_hotlist_param ssids[WLAN_EXTSCAN_MAX_HOTLIST_SSIDS];
-};
 
 typedef struct {
 	uint32_t requestId;
@@ -4830,8 +4920,32 @@ typedef struct {
 	uint8_t stopReq;
 } tSirLLStatsClearReq, *tpSirLLStatsClearReq;
 
+#ifdef WLAN_POWER_DEBUGFS
+/**
+ * struct power_stats_response - Power stats response
+ * @cumulative_sleep_time_ms: cumulative sleep time in ms
+ * @cumulative_total_on_time_ms: total awake time in ms
+ * @deep_sleep_enter_counter: deep sleep enter counter
+ * @last_deep_sleep_enter_tstamp_ms: last deep sleep enter timestamp
+ * @debug_register_fmt: debug registers format
+ * @num_debug_register: number of debug registers
+ * @debug_registers: Pointer to the debug registers buffer
+ */
+struct power_stats_response {
+	uint32_t cumulative_sleep_time_ms;
+	uint32_t cumulative_total_on_time_ms;
+	uint32_t deep_sleep_enter_counter;
+	uint32_t last_deep_sleep_enter_tstamp_ms;
+	uint32_t debug_register_fmt;
+	uint32_t num_debug_register;
+	uint32_t *debug_registers;
+};
+#endif
+
 typedef struct {
 	uint8_t oui[WIFI_SCANNING_MAC_OUI_LENGTH];
+	uint32_t vdev_id;
+	bool enb_probe_req_sno_randomization;
 } tSirScanMacOui, *tpSirScanMacOui;
 
 enum {
@@ -6052,6 +6166,7 @@ struct sir_bpf_get_offload {
 
 /**
  * struct sir_wake_lock_stats - wake lock stats structure
+ * @wow_unspecified_wake_up_count: number of non-wow related wake ups
  * @wow_ucast_wake_up_count: Unicast wakeup count
  * @wow_bcast_wake_up_count: Broadcast wakeup count
  * @wow_ipv4_mcast_wake_up_count: ipv4 multicast wakeup count
@@ -6061,8 +6176,15 @@ struct sir_bpf_get_offload {
  * @wow_ipv6_mcast_na_stats: ipv6 multicast na stats
  * @wow_icmpv4_count: ipv4 icmp packet count
  * @wow_icmpv6_count: ipv6 icmp packet count
+ * @wow_rssi_breach_wake_up_count: rssi breach wakeup count
+ * @wow_low_rssi_wake_up_count: low rssi wakeup count
+ * @wow_gscan_wake_up_count: gscan wakeup count
+ * @wow_pno_complete_wake_up_count: pno complete wakeup count
+ * @wow_pno_match_wake_up_count: pno match wakeup count
+ * @wow_oem_response_wake_up_count: oem response wakeup count
  */
 struct sir_wake_lock_stats {
+	uint32_t wow_unspecified_wake_up_count;
 	uint32_t wow_ucast_wake_up_count;
 	uint32_t wow_bcast_wake_up_count;
 	uint32_t wow_ipv4_mcast_wake_up_count;
@@ -6072,6 +6194,48 @@ struct sir_wake_lock_stats {
 	uint32_t wow_ipv6_mcast_na_stats;
 	uint32_t wow_icmpv4_count;
 	uint32_t wow_icmpv6_count;
+	uint32_t wow_rssi_breach_wake_up_count;
+	uint32_t wow_low_rssi_wake_up_count;
+	uint32_t wow_gscan_wake_up_count;
+	uint32_t wow_pno_complete_wake_up_count;
+	uint32_t wow_pno_match_wake_up_count;
+	uint32_t wow_oem_response_wake_up_count;
+};
+
+/**
+ * struct sir_vdev_wow_stats - container for per vdev wow related stat counters
+ * @ucast: Unicast wakeup count
+ * @bcast: Broadcast wakeup count
+ * @ipv4_mcast: ipv4 multicast wakeup count
+ * @ipv6_mcast: ipv6 multicast wakeup count
+ * @ipv6_mcast_ra: ipv6 multicast ra stats
+ * @ipv6_mcast_ns: ipv6 multicast ns stats
+ * @ipv6_mcast_na: ipv6 multicast na stats
+ * @icmpv4: ipv4 icmp packet count
+ * @icmpv6: ipv6 icmp packet count
+ * @rssi_breach: rssi breach wakeup count
+ * @low_rssi: low rssi wakeup count
+ * @gscan: gscan wakeup count
+ * @pno_complete: pno complete wakeup count
+ * @pno_match: pno match wakeup count
+ * @oem_response: oem response wakeup count
+ */
+struct sir_vdev_wow_stats {
+	uint32_t ucast;
+	uint32_t bcast;
+	uint32_t ipv4_mcast;
+	uint32_t ipv6_mcast;
+	uint32_t ipv6_mcast_ra;
+	uint32_t ipv6_mcast_ns;
+	uint32_t ipv6_mcast_na;
+	uint32_t icmpv4;
+	uint32_t icmpv6;
+	uint32_t rssi_breach;
+	uint32_t low_rssi;
+	uint32_t gscan;
+	uint32_t pno_complete;
+	uint32_t pno_match;
+	uint32_t oem_response;
 };
 
 /**
@@ -6249,6 +6413,28 @@ struct ndp_app_info {
 };
 
 /**
+ * struct ndp_scid - structure to hold sceurity context identifier
+ * @scid_len: length of scid
+ * @scid: scid
+ *
+ */
+struct ndp_scid {
+	uint32_t scid_len;
+	uint8_t *scid;
+};
+
+/**
+ * struct ndp_pmk - structure to hold pairwise master key
+ * @pmk_len: length of pairwise master key
+ * @pmk: buffer containing pairwise master key
+ *
+ */
+struct ndp_pmk {
+	uint32_t pmk_len;
+	uint8_t *pmk;
+};
+
+/**
  * struct ndi_create_req - ndi create request params
  * @transaction_id: unique identifier
  * @iface_name: interface name
@@ -6287,22 +6473,28 @@ struct ndi_delete_rsp {
  * @transaction_id: unique identifier
  * @vdev_id: session id of the interface over which ndp is being created
  * @channel: suggested channel for ndp creation
+ * @channel_cfg: channel config, 0=no channel, 1=optional, 2=mandatory
  * @service_instance_id: Service identifier
  * @peer_discovery_mac_addr: Peer's discovery mac address
  * @self_ndi_mac_addr: self NDI mac address
  * @ndp_config: ndp configuration params
  * @ndp_info: ndp application info
+ * @ncs_sk_type: indicates NCS_SK_128 or NCS_SK_256
+ * @pmk: pairwise master key
  *
  */
 struct ndp_initiator_req {
 	uint32_t transaction_id;
 	uint32_t vdev_id;
 	uint32_t channel;
+	uint32_t channel_cfg;
 	uint32_t service_instance_id;
 	struct qdf_mac_addr peer_discovery_mac_addr;
 	struct qdf_mac_addr self_ndi_mac_addr;
 	struct ndp_cfg ndp_config;
 	struct ndp_app_info ndp_info;
+	uint32_t ncs_sk_type;
+	struct ndp_pmk pmk;
 };
 
 /**
@@ -6334,6 +6526,8 @@ struct ndp_initiator_rsp {
  * @ndp_accept_policy: accept policy configured by the upper layer
  * @ndp_config: ndp configuration params
  * @ndp_info: ndp application info
+ * @ncs_sk_type: indicates NCS_SK_128 or NCS_SK_256
+ * @scid: security context identifier
  *
  */
 struct ndp_indication_event {
@@ -6346,6 +6540,8 @@ struct ndp_indication_event {
 	enum ndp_accept_policy policy;
 	struct ndp_cfg ndp_config;
 	struct ndp_app_info ndp_info;
+	uint32_t ncs_sk_type;
+	struct ndp_scid scid;
 };
 
 /**
@@ -6356,6 +6552,8 @@ struct ndp_indication_event {
  * @ndp_rsp: response to the ndp create request
  * @ndp_config: ndp configuration params
  * @ndp_info: ndp application info
+ * @pmk: pairwise master key
+ * @ncs_sk_type: indicates NCS_SK_128 or NCS_SK_256
  *
  */
 struct ndp_responder_req {
@@ -6365,6 +6563,8 @@ struct ndp_responder_req {
 	enum ndp_response_code ndp_rsp;
 	struct ndp_cfg ndp_config;
 	struct ndp_app_info ndp_info;
+	struct ndp_pmk pmk;
+	uint32_t ncs_sk_type;
 };
 
 /**
@@ -6382,6 +6582,7 @@ struct ndp_responder_rsp_event {
 	uint32_t status;
 	uint32_t reason;
 	struct qdf_mac_addr peer_mac_addr;
+	bool create_peer;
 };
 
 /**
@@ -6665,4 +6866,58 @@ struct sme_sta_inactivity_timeout {
 	uint8_t session_id;
 	uint32_t sta_inactivity_timeout;
 };
+
+/*
+ * struct wow_pulse_mode - WoW Pulse set cmd struct
+ * @wow_pulse_enable: enable or disable this feature
+ * @wow_pulse_pin: GPIO PIN for Pulse
+ * @wow_pulse_interval_low: Pulse interval low
+ * @wow_pulse_interval_high: Pulse interval high
+ *
+ * SME uses this structure to configure wow pulse info
+ * and send it to WMA
+ */
+struct wow_pulse_mode {
+	bool                       wow_pulse_enable;
+	uint8_t                    wow_pulse_pin;
+	uint16_t                   wow_pulse_interval_high;
+	uint16_t                   wow_pulse_interval_low;
+};
+
+/*
+ * struct udp_resp_offload - the basic info structure
+ * @vdev_id: vdev id
+ * @dest_port: specific UDP dest port
+ * @udp_payload_filter: specific UDP payload filter
+ * @udp_response_payload: response UDP oayload
+ *
+ * driver use this structure to configure fw specific
+ * udp offload filter and response udp info
+ */
+struct udp_resp_offload {
+	uint32_t   vdev_id;
+	uint32_t   enable;
+	uint32_t   dest_port;
+	char       udp_payload_filter[MAX_LEN_UDP_RESP_OFFLOAD];
+	char       udp_response_payload[MAX_LEN_UDP_RESP_OFFLOAD];
+};
+
+typedef void (*sme_rcpi_callback)(void *context, struct qdf_mac_addr mac_addr,
+				  int32_t rcpi, QDF_STATUS status);
+/**
+ * struct sme_rcpi_req - structure for querying rcpi info
+ * @session_id: session for which rcpi is required
+ * @measurement_type: type of measurement from enum rcpi_measurement_type
+ * @rcpi_callback: callback function to be invoked for rcpi response
+ * @rcpi_context: context info for rcpi callback
+ * @mac_addr: peer addr for which rcpi is required
+ */
+struct sme_rcpi_req {
+	uint32_t session_id;
+	enum rcpi_measurement_type measurement_type;
+	sme_rcpi_callback rcpi_callback;
+	void *rcpi_context;
+	struct qdf_mac_addr mac_addr;
+};
+
 #endif /* __SIR_API_H */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -60,6 +60,7 @@
 #include <asm/barrier.h>
 #include <wma_api.h>
 #endif
+#include <pktlog_ac_fmt.h>
 
 #ifdef HTT_DEBUG_DATA
 #define HTT_PKT_DUMP(x) x
@@ -123,17 +124,21 @@ static void htt_rx_hash_deinit(struct htt_pdev_t *pdev)
 
 	uint32_t i;
 	struct htt_rx_hash_entry *hash_entry;
+	struct htt_rx_hash_bucket **hash_table;
 	struct htt_list_node *list_iter = NULL;
 
 	if (NULL == pdev->rx_ring.hash_table)
 		return;
 
 	qdf_spin_lock_bh(&(pdev->rx_ring.rx_hash_lock));
+	hash_table = pdev->rx_ring.hash_table;
+	pdev->rx_ring.hash_table = NULL;
+	qdf_spin_unlock_bh(&(pdev->rx_ring.rx_hash_lock));
 
 	for (i = 0; i < RX_NUM_HASH_BUCKETS; i++) {
 		/* Free the hash entries in hash bucket i */
-		list_iter = pdev->rx_ring.hash_table[i]->listhead.next;
-		while (list_iter != &pdev->rx_ring.hash_table[i]->listhead) {
+		list_iter = hash_table[i]->listhead.next;
+		while (list_iter != &hash_table[i]->listhead) {
 			hash_entry =
 				(struct htt_rx_hash_entry *)((char *)list_iter -
 							     pdev->rx_ring.
@@ -155,13 +160,11 @@ static void htt_rx_hash_deinit(struct htt_pdev_t *pdev)
 				qdf_mem_free(hash_entry);
 		}
 
-		qdf_mem_free(pdev->rx_ring.hash_table[i]);
+		qdf_mem_free(hash_table[i]);
 
 	}
-	qdf_mem_free(pdev->rx_ring.hash_table);
-	pdev->rx_ring.hash_table = NULL;
+	qdf_mem_free(hash_table);
 
-	qdf_spin_unlock_bh(&(pdev->rx_ring.rx_hash_lock));
 	qdf_spinlock_destroy(&(pdev->rx_ring.rx_hash_lock));
 
 }
@@ -405,13 +408,17 @@ static void htt_rx_ring_refill_retry(void *arg)
 }
 #endif
 
-static void htt_rx_ring_fill_n(struct htt_pdev_t *pdev, int num)
+/* full_reorder_offload case: this function is called with lock held */
+static int htt_rx_ring_fill_n(struct htt_pdev_t *pdev, int num)
 {
 	int idx;
 	QDF_STATUS status;
 	struct htt_host_rx_desc_base *rx_desc;
+	int filled = 0;
 
 	idx = *(pdev->rx_ring.alloc_idx.vaddr);
+
+moretofill:
 	while (num > 0) {
 		qdf_dma_addr_t paddr;
 		qdf_nbuf_t rx_netbuf;
@@ -501,12 +508,21 @@ static void htt_rx_ring_fill_n(struct htt_pdev_t *pdev, int num)
 
 		num--;
 		idx++;
+		filled++;
 		idx &= pdev->rx_ring.size_mask;
+	}
+	if (qdf_atomic_read(&pdev->rx_ring.refill_debt) > 0) {
+		num = qdf_atomic_read(&pdev->rx_ring.refill_debt);
+		/* Ideally the following gives 0, but sub is safer */
+		qdf_atomic_sub(num, &pdev->rx_ring.refill_debt);
+		goto moretofill;
 	}
 
 fail:
 	*(pdev->rx_ring.alloc_idx.vaddr) = idx;
-	return;
+	htt_rx_dbg_rxbuf_indupd(pdev, idx);
+
+	return filled;
 }
 
 static inline unsigned htt_rx_ring_elems(struct htt_pdev_t *pdev)
@@ -578,6 +594,9 @@ void htt_rx_detach(struct htt_pdev_t *pdev)
 				   pdev->rx_ring.base_paddr,
 				   qdf_get_dma_mem_context((&pdev->rx_ring.buf),
 							   memctx));
+
+	/* destroy the rx-parallelization refill spinlock */
+	qdf_spinlock_destroy(&(pdev->rx_ring.refill_lock));
 }
 #endif
 
@@ -1901,9 +1920,6 @@ void htt_rx_mon_note_capture_channel(htt_pdev_handle pdev, int mon_ch)
 	ch_info->ch_freq = cds_chan_to_freq(mon_ch);
 }
 
-extern void
-dump_pkt(qdf_nbuf_t nbuf, uint32_t nbuf_paddr, int len);
-
 uint32_t htt_rx_amsdu_rx_in_order_get_pktlog(qdf_nbuf_t rx_ind_msg)
 {
 	uint32_t *msg_word;
@@ -1926,8 +1942,11 @@ htt_rx_amsdu_rx_in_order_pop_ll(htt_pdev_handle pdev,
 	uint8_t offload_ind, frag_ind;
 	uint8_t peer_id;
 	struct htt_host_rx_desc_base *rx_desc;
+	enum rx_pkt_fate status = RX_PKT_FATE_SUCCESS;
 
 	HTT_ASSERT1(htt_rx_in_order_ring_elems(pdev) != 0);
+
+	htt_rx_dbg_rxbuf_httrxind(pdev);
 
 	rx_ind_data = qdf_nbuf_data(rx_ind_msg);
 	rx_ctx_id = QDF_NBUF_CB_RX_CTX_ID(rx_ind_msg);
@@ -2006,13 +2025,22 @@ htt_rx_amsdu_rx_in_order_pop_ll(htt_pdev_handle pdev,
 				    HTT_RX_IN_ORD_PADDR_IND_MSDU_LEN_GET(
 					    *(msg_word + NEXT_FIELD_OFFSET_IN32))));
 #if defined(HELIUMPLUS_DEBUG)
-		dump_pkt(msdu, 0, 64);
+		ol_txrx_dump_pkt(msdu, 0, 64);
 #endif
 		*((uint8_t *) &rx_desc->fw_desc.u.val) =
 			HTT_RX_IN_ORD_PADDR_IND_FW_DESC_GET(*(msg_word + NEXT_FIELD_OFFSET_IN32));
 #undef NEXT_FIELD_OFFSET_IN32
 
 		msdu_count--;
+
+		/* calling callback function for packet logging */
+		if (pdev->rx_pkt_dump_cb) {
+			if (qdf_unlikely((*((u_int8_t *)
+				   &rx_desc->fw_desc.u.val)) &
+				   FW_RX_DESC_ANY_ERR_M))
+				status = RX_PKT_FATE_FW_DROP_INVALID;
+			pdev->rx_pkt_dump_cb(msdu, peer_id, status);
+		}
 
 		if (qdf_unlikely((*((u_int8_t *) &rx_desc->fw_desc.u.val)) &
 				    FW_RX_DESC_ANY_ERR_M)) {
@@ -2796,6 +2824,31 @@ void htt_rx_msdu_buff_replenish(htt_pdev_handle pdev)
 	qdf_atomic_inc(&pdev->rx_ring.refill_ref_cnt);
 }
 
+#define RX_RING_REFILL_DEBT_MAX 128
+int htt_rx_msdu_buff_in_order_replenish(htt_pdev_handle pdev, uint32_t num)
+{
+	int filled = 0;
+
+	if (!qdf_spin_trylock_bh(&(pdev->rx_ring.refill_lock))) {
+		if (qdf_atomic_read(&pdev->rx_ring.refill_debt)
+			 < RX_RING_REFILL_DEBT_MAX) {
+			qdf_atomic_add(num, &pdev->rx_ring.refill_debt);
+			return filled; /* 0 */
+		}
+		/*
+		 * else:
+		 * If we have quite a debt, then it is better for the lock
+		 * holder to finish its work and then acquire the lock and
+		 * fill our own part.
+		 */
+		qdf_spin_lock_bh(&(pdev->rx_ring.refill_lock));
+	}
+	filled = htt_rx_ring_fill_n(pdev, num);
+	qdf_spin_unlock_bh(&(pdev->rx_ring.refill_lock));
+
+	return filled;
+}
+
 #define AR600P_ASSEMBLE_HW_RATECODE(_rate, _nss, _pream)     \
 	(((_pream) << 6) | ((_nss) << 4) | (_rate))
 
@@ -2995,6 +3048,7 @@ static int htt_rx_hash_init(struct htt_pdev_t *pdev)
 {
 	int i, j;
 	int rc = 0;
+	void *allocation;
 
 	HTT_ASSERT2(QDF_IS_PWR2(RX_NUM_HASH_BUCKETS));
 
@@ -3013,10 +3067,13 @@ static int htt_rx_hash_init(struct htt_pdev_t *pdev)
 
 	for (i = 0; i < RX_NUM_HASH_BUCKETS; i++) {
 
+		qdf_spin_unlock_bh(&(pdev->rx_ring.rx_hash_lock));
 		/* pre-allocate bucket and pool of entries for this bucket */
-		pdev->rx_ring.hash_table[i] = qdf_mem_malloc(
-			(sizeof(struct htt_rx_hash_bucket) +
+		allocation = qdf_mem_malloc((sizeof(struct htt_rx_hash_bucket) +
 			(RX_ENTRIES_SIZE * sizeof(struct htt_rx_hash_entry))));
+		qdf_spin_lock_bh(&(pdev->rx_ring.rx_hash_lock));
+		pdev->rx_ring.hash_table[i] = allocation;
+
 
 		HTT_RX_HASH_COUNT_RESET(pdev->rx_ring.hash_table[i]);
 
@@ -3182,6 +3239,11 @@ int htt_rx_attach(struct htt_pdev_t *pdev)
 	*/
 	qdf_atomic_init(&pdev->rx_ring.refill_ref_cnt);
 	qdf_atomic_inc(&pdev->rx_ring.refill_ref_cnt);
+
+	/* Initialize the refill_lock and debt (for rx-parallelization) */
+	qdf_spinlock_create(&(pdev->rx_ring.refill_lock));
+	qdf_atomic_init(&pdev->rx_ring.refill_debt);
+
 
 	/* Initialize the Rx refill retry timer */
 	qdf_timer_init(pdev->osdev,
@@ -3450,3 +3512,51 @@ int htt_rx_ipa_uc_detach(struct htt_pdev_t *pdev)
 	return 0;
 }
 #endif /* IPA_OFFLOAD */
+
+/**
+ * htt_register_rx_pkt_dump_callback() - registers callback to
+ *   get rx pkt status and call callback to do rx packet dump
+ *
+ * @pdev: htt pdev handle
+ * @callback: callback to get rx pkt status and
+ *     call callback to do rx packet dump
+ *
+ * This function is used to register the callback to get
+ * rx pkt status and call callback to do rx packet dump
+ *
+ * Return: None
+ *
+ */
+void htt_register_rx_pkt_dump_callback(struct htt_pdev_t *pdev,
+				tp_rx_pkt_dump_cb callback)
+{
+	if (!pdev) {
+		qdf_print("%s: htt pdev is NULL, rx packet status callback register unsuccessful\n",
+						__func__);
+		return;
+	}
+	pdev->rx_pkt_dump_cb = callback;
+}
+
+/**
+ * htt_deregister_rx_pkt_dump_callback() - deregisters callback to
+ *   get rx pkt status and call callback to do rx packet dump
+ *
+ * @pdev: htt pdev handle
+ *
+ * This function is used to deregister the callback to get
+ * rx pkt status and call callback to do rx packet dump
+ *
+ * Return: None
+ *
+ */
+void htt_deregister_rx_pkt_dump_callback(struct htt_pdev_t *pdev)
+{
+	if (!pdev) {
+		qdf_print("%s: htt pdev is NULL, rx packet status callback deregister unsuccessful\n",
+						__func__);
+		return;
+	}
+	pdev->rx_pkt_dump_cb = NULL;
+}
+

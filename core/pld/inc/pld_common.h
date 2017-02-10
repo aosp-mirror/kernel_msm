@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -94,6 +94,7 @@ struct pld_fw_files {
 	char epping_file[PLD_MAX_FILE_NAME];
 	char evicted_data[PLD_MAX_FILE_NAME];
 	char setup_file[PLD_MAX_FILE_NAME];
+	char ibss_image_file[PLD_MAX_FILE_NAME];
 };
 
 /**
@@ -305,7 +306,7 @@ void pld_unregister_driver(void);
 int pld_wlan_enable(struct device *dev, struct pld_wlan_enable_cfg *config,
 		    enum pld_driver_mode mode, const char *host_version);
 int pld_wlan_disable(struct device *dev, enum pld_driver_mode mode);
-int pld_set_fw_debug_mode(struct device *dev, bool enablefwlog);
+int pld_set_fw_log_mode(struct device *dev, u8 fw_log_mode);
 void pld_get_default_fw_files(struct pld_fw_files *pfw_files);
 int pld_get_fw_files_for_target(struct device *dev,
 				struct pld_fw_files *pfw_files,
@@ -356,7 +357,8 @@ void *pld_smmu_get_mapping(struct device *dev);
 int pld_smmu_map(struct device *dev, phys_addr_t paddr,
 		 uint32_t *iova_addr, size_t size);
 unsigned int pld_socinfo_get_serial_number(struct device *dev);
-uint8_t *pld_common_get_wlan_mac_address(struct device *dev, uint32_t *num);
+uint8_t *pld_get_wlan_mac_address(struct device *dev, uint32_t *num);
 int pld_is_qmi_disable(struct device *dev);
+int pld_force_assert_target(struct device *dev);
 
 #endif

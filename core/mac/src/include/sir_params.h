@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -577,7 +577,7 @@ typedef struct sSirMbMsgP2p {
 #define SIR_HAL_SET_EPNO_LIST_REQ          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 313)
 #define SIR_HAL_SET_PASSPOINT_LIST_REQ     (SIR_HAL_ITC_MSG_TYPES_BEGIN + 316)
 #define SIR_HAL_RESET_PASSPOINT_LIST_REQ   (SIR_HAL_ITC_MSG_TYPES_BEGIN + 317)
-#define SIR_HAL_EXTSCAN_SET_SSID_HOTLIST_REQ (SIR_HAL_ITC_MSG_TYPES_BEGIN + 318)
+/* 318 unused */
 
 #define SIR_HAL_OCB_SET_CONFIG_CMD          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 319)
 #define SIR_HAL_OCB_SET_UTC_TIME_CMD        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 320)
@@ -640,7 +640,20 @@ typedef struct sSirMbMsgP2p {
 #define SIR_HAL_SHORT_RETRY_LIMIT_CNT       (SIR_HAL_ITC_MSG_TYPES_BEGIN + 365)
 #define SIR_HAL_LONG_RETRY_LIMIT_CNT        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 366)
 #define SIR_HAL_UPDATE_TX_FAIL_CNT_TH       (SIR_HAL_ITC_MSG_TYPES_BEGIN + 367)
-#define SIR_HAL_MSG_TYPES_END                (SIR_HAL_MSG_TYPES_BEGIN + 0x1FF)
+#define SIR_HAL_POWER_DEBUG_STATS_REQ       (SIR_HAL_ITC_MSG_TYPES_BEGIN + 368)
+
+#define SIR_HAL_SET_WOW_PULSE_CMD           (SIR_HAL_ITC_MSG_TYPES_BEGIN + 369)
+
+#define SIR_HAL_SET_UDP_RESP_OFFLOAD        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 370)
+
+#define SIR_HAL_SET_PER_ROAM_CONFIG_CMD     (SIR_HAL_ITC_MSG_TYPES_BEGIN + 371)
+
+#define SIR_HAL_GET_RCPI_REQ                (SIR_HAL_ITC_MSG_TYPES_BEGIN + 372)
+
+#define SIR_HAL_ENABLE_BCAST_FILTER         (SIR_HAL_ITC_MSG_TYPES_BEGIN + 373)
+#define SIR_HAL_DISABLE_BCAST_FILTER        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 374)
+
+#define SIR_HAL_MSG_TYPES_END               (SIR_HAL_MSG_TYPES_BEGIN + 0x1FF)
 
 /* CFG message types */
 #define SIR_CFG_MSG_TYPES_BEGIN        (SIR_CFG_MODULE_ID << 8)

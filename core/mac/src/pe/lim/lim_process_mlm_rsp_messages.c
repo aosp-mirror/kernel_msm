@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -691,9 +691,21 @@ void lim_process_mlm_assoc_cnf(tpAniSirGlobal mac_ctx,
 	}
 	if (((tLimMlmAssocCnf *) msg)->resultCode != eSIR_SME_SUCCESS) {
 		/* Association failure */
-		lim_log(mac_ctx, LOG1, FL("SessionId:%d Association failure"),
-			session_entry->peSessionId);
-		session_entry->limSmeState = eLIM_SME_JOIN_FAILURE_STATE;
+		lim_log(mac_ctx, LOG1, FL("SessionId:%d Association failure resultCode: %d limSmeState:%d"),
+			session_entry->peSessionId,
+			((tLimMlmAssocCnf *) msg)->resultCode,
+			session_entry->limSmeState);
+
+		/* If driver gets deauth when its waiting for ADD_STA_RSP then
+		 * we need to do DEL_STA followed by DEL_BSS. So based on below
+		 * reason-code here we decide whether to do only DEL_BSS or
+		 * DEL_STA + DEL_BSS.
+		 */
+		if (((tLimMlmAssocCnf *) msg)->resultCode !=
+		    eSIR_SME_JOIN_DEAUTH_FROM_AP_DURING_ADD_STA)
+			session_entry->limSmeState =
+				eLIM_SME_JOIN_FAILURE_STATE;
+
 		MTRACE(mac_trace(mac_ctx, TRACE_CODE_SME_STATE,
 			session_entry->peSessionId, mac_ctx->lim.gLimSmeState));
 		/*
@@ -1326,6 +1338,46 @@ void lim_process_mlm_set_keys_cnf(tpAniSirGlobal pMac, uint32_t *pMsgBuf)
 } /*** end lim_process_mlm_set_keys_cnf() ***/
 
 /**
+ * lim_join_result_callback() - Callback to handle join rsp
+ * @mac: Pointer to Global MAC structure
+ * @param: callback argument
+ * @status: status
+ *
+ * This callback function is used to delete PE session
+ * entry and send join response to sme.
+ *
+ * Return: None
+ */
+static void lim_join_result_callback(tpAniSirGlobal mac, void *param,
+				     bool status)
+{
+	join_params *link_state_params = (join_params *) param;
+	tpPESession session;
+	uint8_t sme_session_id;
+	uint16_t sme_trans_id;
+
+	if (!link_state_params) {
+		lim_log(mac, LOGE,
+			FL("Link state params is NULL"));
+		return;
+	}
+	session = pe_find_session_by_session_id(mac, link_state_params->
+						pe_session_id);
+	if (!session) {
+		qdf_mem_free(link_state_params);
+		return;
+	}
+	sme_session_id = session->smeSessionId;
+	sme_trans_id = session->transactionId;
+	lim_send_sme_join_reassoc_rsp(mac, eWNI_SME_JOIN_RSP,
+				      link_state_params->result_code,
+				      link_state_params->prot_status_code,
+				      NULL, sme_session_id, sme_trans_id);
+	pe_delete_session(mac, session);
+	qdf_mem_free(link_state_params);
+}
+
+/**
  * lim_handle_sme_join_result() - Handles sme join result
  * @mac_ctx:  Pointer to Global MAC structure
  * @result_code: Failure code to be sent
@@ -1346,6 +1398,7 @@ void lim_handle_sme_join_result(tpAniSirGlobal mac_ctx,
 	tpDphHashNode sta_ds = NULL;
 	uint8_t sme_session_id;
 	uint16_t sme_trans_id;
+	join_params *param = NULL;
 
 	if (session_entry == NULL) {
 		lim_log(mac_ctx, LOGE, FL("psessionEntry is NULL "));
@@ -1391,15 +1444,19 @@ void lim_handle_sme_join_result(tpAniSirGlobal mac_ctx,
 error:
 	/* Delete the session if JOIN failure occurred. */
 	if (result_code != eSIR_SME_SUCCESS) {
+		param = qdf_mem_malloc(sizeof(join_params));
+		if (param != NULL) {
+			param->result_code = result_code;
+			param->prot_status_code = prot_status_code;
+			param->pe_session_id = session_entry->peSessionId;
+		}
 		if (lim_set_link_state
-			(mac_ctx, eSIR_LINK_DOWN_STATE,
-			session_entry->bssId,
-			session_entry->selfMacAddr, NULL,
-			NULL) != eSIR_SUCCESS)
+			(mac_ctx, eSIR_LINK_DOWN_STATE, session_entry->bssId,
+			 session_entry->selfMacAddr, lim_join_result_callback,
+			 param) != eSIR_SUCCESS)
 			lim_log(mac_ctx, LOGE,
 				FL("Failed to set the LinkState."));
-		pe_delete_session(mac_ctx, session_entry);
-		session_entry = NULL;
+		return;
 	}
 
 	lim_send_sme_join_reassoc_rsp(mac_ctx, eWNI_SME_JOIN_RSP, result_code,
@@ -3282,8 +3339,19 @@ void lim_process_rx_scan_event(tpAniSirGlobal pMac, void *buf)
 	switch (pScanEvent->event) {
 	case SIR_SCAN_EVENT_STARTED:
 		break;
-	case SIR_SCAN_EVENT_START_FAILED:
 	case SIR_SCAN_EVENT_COMPLETED:
+	lim_log(pMac, LOG1, FL("No.of beacons and probe response received per scan %d"),
+		pMac->lim.beacon_probe_rsp_cnt_per_scan);
+#ifdef FEATURE_WLAN_DIAG_SUPPORT_LIM    /* FEATURE_WLAN_DIAG_SUPPORT */
+	lim_diag_event_report(pMac, WLAN_PE_DIAG_SCAN_COMPLETE_EVENT, NULL,
+			      eSIR_SUCCESS, eSIR_SUCCESS);
+	if (pMac->lim.beacon_probe_rsp_cnt_per_scan)
+		lim_diag_event_report(pMac,
+				      WLAN_PE_DIAG_SCAN_RESULT_FOUND_EVENT,
+				      NULL, eSIR_SUCCESS, eSIR_SUCCESS);
+#endif
+	/* Fall through */
+	case SIR_SCAN_EVENT_START_FAILED:
 		if (ROC_SCAN_REQUESTOR_ID == pScanEvent->requestor) {
 			lim_send_sme_roc_rsp(pMac, eWNI_SME_REMAIN_ON_CHN_RSP,
 					 QDF_STATUS_SUCCESS,

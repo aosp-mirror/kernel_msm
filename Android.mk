@@ -50,6 +50,7 @@ endif # platform-sdk-version
 KBUILD_OPTIONS := WLAN_ROOT=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(WLAN_BLD_DIR)/qcacld-3.0
 KBUILD_OPTIONS += WLAN_COMMON_ROOT=../qca-wifi-host-cmn
 KBUILD_OPTIONS += WLAN_COMMON_INC=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(WLAN_BLD_DIR)/qca-wifi-host-cmn
+KBUILD_OPTIONS += WLAN_FW_INC=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(WLAN_BLD_DIR)/fw-api
 
 # We are actually building wlan.ko here, as per the
 # requirement we are specifying <chipset>_wlan.ko as LOCAL_MODULE.
@@ -62,7 +63,7 @@ KBUILD_OPTIONS += $(WLAN_SELECT)
 include $(CLEAR_VARS)
 LOCAL_MODULE              := $(WLAN_CHIPSET)_wlan.ko
 LOCAL_MODULE_KBUILD_NAME  := wlan.ko
-LOCAL_MODULE_TAGS         := debug
+LOCAL_MODULE_TAGS         := optional
 LOCAL_MODULE_DEBUG_ENABLE := true
 LOCAL_MODULE_PATH         := $(TARGET_OUT)/lib/modules/$(WLAN_CHIPSET)
 include $(DLKM_DIR)/AndroidKernelModule.mk

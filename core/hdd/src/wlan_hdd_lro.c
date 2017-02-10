@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -29,9 +29,6 @@
  *
  * WLAN HDD LRO interface implementation
  */
-
-/* denote that this file does not allow legacy hddLog */
-#define HDD_DISALLOW_LEGACY_HDDLOG 1
 
 #include <wlan_hdd_includes.h>
 #include <qdf_types.h>
@@ -419,9 +416,8 @@ int hdd_lro_init(hdd_context_t *hdd_ctx)
 	struct wma_lro_config_cmd_t lro_config;
 
 	if ((!hdd_ctx->config->lro_enable) &&
-	    (hdd_napi_enabled(HDD_NAPI_ANY) == 0))
-	{
-		hdd_err("LRO and NAPI are both disabled.");
+	    (hdd_napi_enabled(HDD_NAPI_ANY) == 0)) {
+		hdd_warn("LRO and NAPI are both disabled.");
 		return 0;
 	}
 
@@ -540,6 +536,11 @@ int hdd_lro_enable(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
 	ol_register_lro_flush_cb(hdd_lro_flush, hdd_init_lro_mgr);
 	adapter->dev->features |= NETIF_F_LRO;
 
+	if (hdd_ctx->config->enable_tcp_delack) {
+		hdd_ctx->config->enable_tcp_delack = 0;
+		hdd_reset_tcp_delack(hdd_ctx);
+	}
+
 	hdd_info("LRO Enabled");
 
 	return 0;
@@ -548,7 +549,7 @@ int hdd_lro_enable(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
 static void hdd_deinit_lro_mgr(void *lro_info)
 {
 	if (lro_info) {
-		hdd_err("LRO instance %p is being freed", lro_info);
+		hdd_notice("LRO instance %p is being freed", lro_info);
 		qdf_mem_free(lro_info);
 	}
 }
@@ -591,8 +592,11 @@ enum hdd_lro_rx_status hdd_lro_rx(hdd_context_t *hdd_ctx,
 {
 	enum hdd_lro_rx_status status = HDD_LRO_NO_RX;
 
-	if ((adapter->dev->features & NETIF_F_LRO) &&
-		 QDF_NBUF_CB_RX_TCP_PROTO(skb)) {
+	if (((adapter->dev->features & NETIF_F_LRO) != NETIF_F_LRO) ||
+			qdf_atomic_read(&hdd_ctx->disable_lro_in_concurrency))
+		return status;
+
+	if (QDF_NBUF_CB_RX_TCP_PROTO(skb)) {
 		struct iphdr *iph;
 		struct tcphdr *tcph;
 		struct net_lro_desc *lro_desc = NULL;
@@ -653,4 +657,38 @@ enum hdd_lro_rx_status hdd_lro_rx(hdd_context_t *hdd_ctx,
 void hdd_lro_display_stats(hdd_context_t *hdd_ctx)
 {
 	hdd_err("LRO stats is broken, will fix it");
+}
+
+/**
+ * hdd_enable_lro_in_concurrency() - Enable LRO if concurrency is not active
+ * @hdd_ctx: hdd context
+ *
+ * Return: none
+ */
+void hdd_enable_lro_in_concurrency(hdd_context_t *hdd_ctx)
+{
+	if (hdd_ctx->config->enable_tcp_delack) {
+		hdd_info("Disable TCP delack as LRO is enabled");
+		hdd_ctx->config->enable_tcp_delack = 0;
+		hdd_reset_tcp_delack(hdd_ctx);
+	}
+	qdf_atomic_set(&hdd_ctx->disable_lro_in_concurrency, 0);
+}
+
+/**
+ * hdd_disable_lro_in_concurrency() - Disable LRO due to concurrency
+ * @hdd_ctx: hdd context
+ *
+ * Return: none
+ */
+void hdd_disable_lro_in_concurrency(hdd_context_t *hdd_ctx)
+{
+	if (!hdd_ctx->config->enable_tcp_delack) {
+		hdd_info("Enable TCP delack as LRO disabled in concurrency");
+		wlan_hdd_send_svc_nlink_msg(hdd_ctx->radio_index,
+			WLAN_SVC_WLAN_TP_IND, &hdd_ctx->cur_rx_level,
+			sizeof(hdd_ctx->cur_rx_level));
+		hdd_ctx->config->enable_tcp_delack = 1;
+	}
+	qdf_atomic_set(&hdd_ctx->disable_lro_in_concurrency, 1);
 }
