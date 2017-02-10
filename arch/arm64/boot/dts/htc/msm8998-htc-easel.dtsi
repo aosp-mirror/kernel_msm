@@ -20,16 +20,42 @@
 
 &tlmm {
 	bcm15602_pins {
-		bcm15602_pins_default: bcm15602_pins_default {
+		bcm15602_pon_default: bcm15602_pon_default {
 			mux {
-				pins = "gpio25", "gpio26", "gpio91";
+				pins = "gpio25";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio25", "gpio26", "gpio91";
+				pins = "gpio25";
 				drive-strength = <2>;
 				bias-disable;
+			};
+		};
+
+		bcm15602_intb_default: bcm15602_intb_default {
+			mux {
+				pins = "gpio26";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio26";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		bcm15602_resetb_default: bcm15602_resetb_default {
+			mux {
+				pins = "gpio91";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio91";
+				drive-strength = <2>;
+				bias-pull-down;
 			};
 		};
 	};
@@ -86,7 +112,8 @@
 		interrupt-names = "bcm15602_intb";
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&bcm15602_pins_default>;
+		pinctrl-0 = <&bcm15602_pon_default &bcm15602_intb_default
+			&bcm15602_resetb_default>;
 
 		bcm,pon-gpio = <&tlmm 25 0x00>;
 		bcm,intb-gpio = <&tlmm 26 0x00>;
