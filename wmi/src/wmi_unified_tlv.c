@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -255,7 +255,7 @@ QDF_STATUS send_vdev_start_cmd_tlv(wmi_unified_t wmi_handle,
 	else if (req->is_quarter_rate)
 		WMI_SET_CHANNEL_FLAG(chan, WMI_CHAN_FLAG_QUARTER_RATE);
 
-	if (req->is_dfs) {
+	if (req->is_dfs && req->flag_dfs) {
 		WMI_SET_CHANNEL_FLAG(chan, req->flag_dfs);
 		cmd->disable_hw_ack = req->dis_hw_ack;
 	}
@@ -296,11 +296,11 @@ QDF_STATUS send_vdev_start_cmd_tlv(wmi_unified_t wmi_handle,
 	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_STRUC,
 		       cmd->num_noa_descriptors *
 		       sizeof(wmi_p2p_noa_descriptor));
-	WMI_LOGA("\n%s: vdev_id %d freq %d chanmode %d is_dfs %d "
+	WMI_LOGA("%s: vdev_id %d freq %d chanmode %d ch_info: 0x%x is_dfs %d "
 		"beacon interval %d dtim %d center_chan %d center_freq2 %d "
 		"reg_info_1: 0x%x reg_info_2: 0x%x, req->max_txpow: 0x%x "
 		"Tx SS %d, Rx SS %d",
-		__func__, req->vdev_id, chan->mhz, req->chan_mode,
+		__func__, req->vdev_id, chan->mhz, req->chan_mode, chan->info,
 		req->is_dfs, req->beacon_intval, cmd->dtim_period,
 		chan->band_center_freq1, chan->band_center_freq2,
 		chan->reg_info_1, chan->reg_info_2, req->max_txpow,
@@ -461,12 +461,12 @@ QDF_STATUS send_peer_delete_cmd_tlv(wmi_unified_t wmi,
 	WMI_CHAR_ARRAY_TO_MAC_ADDR(peer_addr, &cmd->peer_macaddr);
 	cmd->vdev_id = vdev_id;
 
+	WMI_LOGD("%s: peer_addr %pM vdev_id %d", __func__, peer_addr, vdev_id);
 	if (wmi_unified_cmd_send(wmi, buf, len, WMI_PEER_DELETE_CMDID)) {
 		WMI_LOGP("%s: Failed to send peer delete command", __func__);
 		wmi_buf_free(buf);
 		return QDF_STATUS_E_FAILURE;
 	}
-	WMI_LOGD("%s: peer_addr %pM vdev_id %d", __func__, peer_addr, vdev_id);
 
 	return 0;
 }
@@ -880,6 +880,7 @@ QDF_STATUS send_wow_enable_cmd_tlv(wmi_unified_t wmi_handle,
 		cmd->pause_iface_config = WOW_IFACE_PAUSE_ENABLED;
 	else
 		cmd->pause_iface_config = WOW_IFACE_PAUSE_DISABLED;
+	cmd->flags = param->flags;
 
 	WMI_LOGI("suspend type: %s",
 		cmd->pause_iface_config == WOW_IFACE_PAUSE_ENABLED ?
@@ -1420,6 +1421,36 @@ QDF_STATUS send_peer_assoc_cmd_tlv(wmi_unified_t wmi_handle,
 	return ret;
 }
 
+/*
+ * wmi_fill_vendor_oui() - fill vendor OUIs
+ * @buf_ptr: pointer to wmi tlv buffer
+ * @num_vendor_oui: number of vendor OUIs to be filled
+ * @param_voui: pointer to OUI buffer
+ *
+ * This function populates the wmi tlv buffer when vendor specific OUIs are
+ * present.
+ *
+ * Return: None
+ */
+static void wmi_fill_vendor_oui(uint8_t *buf_ptr, uint32_t num_vendor_oui,
+				void *param_voui)
+{
+	wmi_vendor_oui *voui = NULL;
+	struct vendor_oui *pvoui = NULL;
+	uint32_t i;
+
+	voui = (wmi_vendor_oui *)buf_ptr;
+	pvoui = (struct vendor_oui *)param_voui;
+
+	for (i = 0; i < num_vendor_oui; i++) {
+		WMITLV_SET_HDR(&voui[i].tlv_header,
+			       WMITLV_TAG_STRUC_wmi_vendor_oui,
+			       WMITLV_GET_STRUCT_TLVLEN(wmi_vendor_oui));
+		voui[i].oui_type_subtype = pvoui[i].oui_type |
+						(pvoui[i].oui_subtype << 24);
+	}
+}
+
 /**
  *  send_scan_start_cmd_tlv() - WMI scan start function
  *  @param wmi_handle      : handle to WMI.
@@ -1460,6 +1491,10 @@ QDF_STATUS send_scan_start_cmd_tlv(wmi_unified_t wmi_handle,
 	if (params->ie_len)
 		len += roundup(params->ie_len, sizeof(uint32_t));
 
+	len += WMI_TLV_HDR_SIZE; /* Length of TLV for array of wmi_vendor_oui */
+	if (params->num_vendor_oui)
+		len += params->num_vendor_oui * sizeof(wmi_vendor_oui);
+
 	/* Allocate the memory */
 	wmi_buf = wmi_buf_alloc(wmi_handle, len);
 	if (!wmi_buf) {
@@ -1495,6 +1530,27 @@ QDF_STATUS send_scan_start_cmd_tlv(wmi_unified_t wmi_handle,
 	cmd->num_ssids = params->num_ssids;
 	cmd->ie_len = params->ie_len;
 	cmd->n_probes = params->n_probes;
+
+	/* mac randomization attributes */
+	if (params->enable_scan_randomization) {
+		cmd->scan_ctrl_flags |= WMI_SCAN_ADD_SPOOFED_MAC_IN_PROBE_REQ |
+					WMI_SCAN_RANDOM_SEQ_NO_IN_PROBE_REQ;
+		WMI_CHAR_ARRAY_TO_MAC_ADDR(params->mac_addr, &cmd->mac_addr);
+		WMI_CHAR_ARRAY_TO_MAC_ADDR(params->mac_addr_mask,
+					   &cmd->mac_mask);
+	}
+
+	if (params->ie_whitelist) {
+		cmd->scan_ctrl_flags |=
+				WMI_SCAN_ENABLE_IE_WHTELIST_IN_PROBE_REQ;
+		for (i = 0; i < PROBE_REQ_BITMAP_LEN; i++)
+			cmd->ie_bitmap[i] = params->probe_req_ie_bitmap[i];
+
+		cmd->num_vendor_oui = params->num_vendor_oui;
+	}
+
+	WMI_LOGI("scan_ctrl_flags = %x", cmd->scan_ctrl_flags);
+
 	buf_ptr += sizeof(*cmd);
 	tmp_ptr = (uint32_t *) (buf_ptr + WMI_TLV_HDR_SIZE);
 	for (i = 0; i < params->num_chan; ++i)
@@ -1536,6 +1592,17 @@ QDF_STATUS send_scan_start_cmd_tlv(wmi_unified_t wmi_handle,
 			     (params->uie_fieldOffset), params->ie_len);
 	}
 	buf_ptr += WMI_TLV_HDR_SIZE + params->ie_len_with_pad;
+
+	/* probe req ie whitelisting */
+	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_STRUC,
+		       params->num_vendor_oui * sizeof(wmi_vendor_oui));
+
+	buf_ptr += WMI_TLV_HDR_SIZE;
+
+	if (cmd->num_vendor_oui != 0) {
+		wmi_fill_vendor_oui(buf_ptr, cmd->num_vendor_oui, params->voui);
+		buf_ptr += cmd->num_vendor_oui * sizeof(wmi_vendor_oui);
+	}
 
 	ret = wmi_unified_cmd_send(wmi_handle, wmi_buf,
 				      len, WMI_START_SCAN_CMDID);
@@ -3395,7 +3462,9 @@ QDF_STATUS send_set_sta_keep_alive_cmd_tlv(wmi_unified_t wmi_handle,
 		       WMITLV_TAG_STRUC_WMI_STA_KEEPALVE_ARP_RESPONSE,
 		       WMITLV_GET_STRUCT_TLVLEN(WMI_STA_KEEPALVE_ARP_RESPONSE));
 
-	if (params->method == WMI_KEEP_ALIVE_UNSOLICIT_ARP_RSP) {
+	if ((params->method == WMI_KEEP_ALIVE_UNSOLICIT_ARP_RSP) ||
+	    (params->method ==
+	     WMI_STA_KEEPALIVE_METHOD_GRATUITOUS_ARP_REQUEST)) {
 		if ((NULL == params->hostv4addr) ||
 			(NULL == params->destv4addr) ||
 			(NULL == params->destmac)) {
@@ -3405,7 +3474,7 @@ QDF_STATUS send_set_sta_keep_alive_cmd_tlv(wmi_unified_t wmi_handle,
 			wmi_buf_free(buf);
 			return QDF_STATUS_E_FAILURE;
 		}
-		cmd->method = WMI_STA_KEEPALIVE_METHOD_UNSOLICITED_ARP_RESPONSE;
+		cmd->method = params->method;
 		qdf_mem_copy(&arp_rsp->sender_prot_addr, params->hostv4addr,
 			     WMI_IPV4_ADDR_LEN);
 		qdf_mem_copy(&arp_rsp->target_prot_addr, params->destv4addr,
@@ -3714,12 +3783,95 @@ QDF_STATUS send_setup_install_key_cmd_tlv(wmi_unified_t wmi_handle,
 }
 
 /**
+ * send_sar_limit_cmd_tlv() - send sar limit cmd to fw
+ * @wmi_handle: wmi handle
+ * @params: sar limit params
+ *
+ * Return: QDF_STATUS_SUCCESS for success or error code
+ */
+static QDF_STATUS send_sar_limit_cmd_tlv(wmi_unified_t wmi_handle,
+		struct sar_limit_cmd_params *sar_limit_params)
+{
+	wmi_buf_t buf;
+	QDF_STATUS qdf_status;
+	wmi_sar_limits_cmd_fixed_param *cmd;
+	int i;
+	uint8_t *buf_ptr;
+	wmi_sar_limit_cmd_row *wmi_sar_rows_list;
+	struct sar_limit_cmd_row *sar_rows_list;
+	uint32_t len = sizeof(*cmd) + WMI_TLV_HDR_SIZE;
+
+	len += sizeof(wmi_sar_limit_cmd_row) * sar_limit_params->num_limit_rows;
+	buf = wmi_buf_alloc(wmi_handle, len);
+	if (!buf) {
+		WMI_LOGE("Failed to allocate memory");
+		qdf_status = QDF_STATUS_E_NOMEM;
+		goto end;
+	}
+
+	buf_ptr = (uint8_t *) wmi_buf_data(buf);
+	cmd = (wmi_sar_limits_cmd_fixed_param *) buf_ptr;
+	WMITLV_SET_HDR(&cmd->tlv_header,
+		       WMITLV_TAG_STRUC_wmi_sar_limits_cmd_fixed_param,
+		       WMITLV_GET_STRUCT_TLVLEN
+		       (wmi_sar_limits_cmd_fixed_param));
+	cmd->sar_enable = sar_limit_params->sar_enable;
+	cmd->commit_limits = sar_limit_params->commit_limits;
+	cmd->num_limit_rows = sar_limit_params->num_limit_rows;
+
+	WMI_LOGD("no of sar rows = %d, len = %d",
+		 sar_limit_params->num_limit_rows, len);
+	buf_ptr += sizeof(*cmd);
+	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_STRUC,
+		       sizeof(wmi_sar_limit_cmd_row) *
+			       sar_limit_params->num_limit_rows);
+	if (cmd->num_limit_rows == 0)
+		goto send_sar_limits;
+
+	wmi_sar_rows_list = (wmi_sar_limit_cmd_row *)
+			(buf_ptr + WMI_TLV_HDR_SIZE);
+	sar_rows_list = sar_limit_params->sar_limit_row_list;
+
+	for (i = 0; i < sar_limit_params->num_limit_rows; i++) {
+		WMITLV_SET_HDR(&wmi_sar_rows_list->tlv_header,
+			       WMITLV_TAG_STRUC_wmi_sar_limit_cmd_row,
+			       WMITLV_GET_STRUCT_TLVLEN(wmi_sar_limit_cmd_row));
+		wmi_sar_rows_list->band_id = sar_rows_list->band_id;
+		wmi_sar_rows_list->chain_id = sar_rows_list->chain_id;
+		wmi_sar_rows_list->mod_id = sar_rows_list->mod_id;
+		wmi_sar_rows_list->limit_value = sar_rows_list->limit_value;
+		wmi_sar_rows_list->validity_bitmap =
+						sar_rows_list->validity_bitmap;
+		WMI_LOGD("row %d, band_id = %d, chain_id = %d, mod_id = %d, limit_value = %d, validity_bitmap = %d",
+			 i, wmi_sar_rows_list->band_id,
+			 wmi_sar_rows_list->chain_id,
+			 wmi_sar_rows_list->mod_id,
+			 wmi_sar_rows_list->limit_value,
+			 wmi_sar_rows_list->validity_bitmap);
+		sar_rows_list++;
+		wmi_sar_rows_list++;
+	}
+send_sar_limits:
+	qdf_status = wmi_unified_cmd_send(wmi_handle, buf, len,
+				      WMI_SAR_LIMITS_CMDID);
+
+	if (QDF_IS_STATUS_ERROR(qdf_status)) {
+		WMI_LOGE("Failed to send WMI_SAR_LIMITS_CMDID");
+		wmi_buf_free(buf);
+	}
+
+end:
+	return qdf_status;
+}
+
+/**
  * send_encrypt_decrypt_send_cmd() - send encrypt/decrypt cmd to fw
  * @wmi_handle: wmi handle
  * @params: encrypt/decrypt params
  *
  * Return: QDF_STATUS_SUCCESS for success or error code
  */
+static
 QDF_STATUS send_encrypt_decrypt_send_cmd_tlv(wmi_unified_t wmi_handle,
 		struct encrypt_decrypt_req_params *encrypt_decrypt_params)
 {
@@ -4002,8 +4154,11 @@ QDF_STATUS send_scan_probe_setoui_cmd_tlv(wmi_unified_t wmi_handle,
 	uint32_t len;
 	uint8_t *buf_ptr;
 	uint32_t *oui_buf;
+	uint32_t i = 0;
 
-	len = sizeof(*cmd);
+	len = sizeof(*cmd) + WMI_TLV_HDR_SIZE +
+		psetoui->num_vendor_oui * sizeof(wmi_vendor_oui);
+
 	wmi_buf = wmi_buf_alloc(wmi_handle, len);
 	if (!wmi_buf) {
 		WMI_LOGE("%s: wmi_buf_alloc failed", __func__);
@@ -4022,6 +4177,32 @@ QDF_STATUS send_scan_probe_setoui_cmd_tlv(wmi_unified_t wmi_handle,
 		   | psetoui->oui[2];
 	WMI_LOGD("%s: wmi:oui received from hdd %08x", __func__,
 		 cmd->prob_req_oui);
+
+	cmd->vdev_id = psetoui->vdev_id;
+	cmd->flags = WMI_SCAN_PROBE_OUI_SPOOFED_MAC_IN_PROBE_REQ;
+	if (psetoui->enb_probe_req_sno_randomization)
+		cmd->flags |= WMI_SCAN_PROBE_OUI_RANDOM_SEQ_NO_IN_PROBE_REQ;
+
+	if (psetoui->ie_whitelist) {
+		cmd->flags |=
+			WMI_SCAN_PROBE_OUI_ENABLE_IE_WHITELIST_IN_PROBE_REQ;
+		cmd->num_vendor_oui = psetoui->num_vendor_oui;
+		for (i = 0; i < PROBE_REQ_BITMAP_LEN; i++)
+			cmd->ie_bitmap[i] = psetoui->probe_req_ie_bitmap[i];
+	}
+
+	WMI_LOGI(FL("vdev_id = %d, flags = %x"), cmd->vdev_id, cmd->flags);
+
+	buf_ptr += sizeof(*cmd);
+	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_STRUC,
+		       psetoui->num_vendor_oui * sizeof(wmi_vendor_oui));
+	buf_ptr += WMI_TLV_HDR_SIZE;
+
+	if (cmd->num_vendor_oui != 0) {
+		wmi_fill_vendor_oui(buf_ptr, cmd->num_vendor_oui,
+				    psetoui->voui);
+		buf_ptr += cmd->num_vendor_oui * sizeof(wmi_vendor_oui);
+	}
 
 	if (wmi_unified_cmd_send(wmi_handle, wmi_buf, len,
 				 WMI_SCAN_PROB_REQ_OUI_CMDID)) {
@@ -4607,6 +4788,7 @@ QDF_STATUS send_roam_scan_offload_rssi_thresh_cmd_tlv(wmi_unified_t wmi_handle,
  *
  * Return: QDF_STATUS_SUCCESS on success and QDF failure reason code for failure
  */
+static
 QDF_STATUS send_adapt_dwelltime_params_cmd_tlv(wmi_unified_t wmi_handle,
 		struct wmi_adaptive_dwelltime_params *dwelltime_params)
 {
@@ -5348,6 +5530,7 @@ QDF_STATUS send_stop_extscan_cmd_tlv(wmi_unified_t wmi_handle,
  *
  * Return: CDF Status.
  */
+static
 QDF_STATUS wmi_get_buf_extscan_start_cmd(wmi_unified_t wmi_handle,
 			 struct wifi_scan_cmd_req_params *pstart,
 			 wmi_buf_t *buf, int *buf_len)
@@ -5876,15 +6059,19 @@ QDF_STATUS send_pno_start_cmd_tlv(wmi_unified_t wmi_handle,
 	 * TLV place holder for array nlo_configured_parameters(nlo_list)
 	 * TLV place holder for array of uint32_t channel_list
 	 * TLV place holder for chnnl prediction cfg
+	 * TLV place holder for array of wmi_vendor_oui
 	 */
 	len = sizeof(*cmd) +
-		WMI_TLV_HDR_SIZE + WMI_TLV_HDR_SIZE + WMI_TLV_HDR_SIZE;
+		WMI_TLV_HDR_SIZE + WMI_TLV_HDR_SIZE + WMI_TLV_HDR_SIZE +
+		WMI_TLV_HDR_SIZE;
 
 	len += sizeof(uint32_t) * QDF_MIN(pno->aNetworks[0].ucChannelCount,
 					  WMI_NLO_MAX_CHAN);
 	len += sizeof(nlo_configured_parameters) *
 	       QDF_MIN(pno->ucNetworksCount, WMI_NLO_MAX_SSIDS);
 	len += sizeof(nlo_channel_prediction_cfg);
+	len += sizeof(enlo_candidate_score_params);
+	len += sizeof(wmi_vendor_oui) * pno->num_vendor_oui;
 
 	buf = wmi_buf_alloc(wmi_handle, len);
 	if (!buf) {
@@ -5910,6 +6097,8 @@ QDF_STATUS send_pno_start_cmd_tlv(wmi_unified_t wmi_handle,
 	cmd->active_dwell_time = pno->active_max_time;
 	cmd->passive_dwell_time = pno->passive_max_time;
 
+	if (pno->do_passive_scan)
+		cmd->flags |= WMI_NLO_CONFIG_SCAN_PASSIVE;
 	/* Copy scan interval */
 	cmd->fast_scan_period = pno->fast_scan_period;
 	cmd->slow_scan_period = pno->slow_scan_period;
@@ -5982,10 +6171,41 @@ QDF_STATUS send_pno_start_cmd_tlv(wmi_unified_t wmi_handle,
 			sizeof(nlo_channel_prediction_cfg));
 	buf_ptr += WMI_TLV_HDR_SIZE;
 	wmi_set_pno_channel_prediction(buf_ptr, pno);
-	buf_ptr += WMI_TLV_HDR_SIZE;
+	buf_ptr += sizeof(nlo_channel_prediction_cfg);
 	/** TODO: Discrete firmware doesn't have command/option to configure
 	 * App IE which comes from wpa_supplicant as of part PNO start request.
 	 */
+
+	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_STRUC_enlo_candidate_score_param,
+		       WMITLV_GET_STRUCT_TLVLEN(enlo_candidate_score_params));
+	buf_ptr += sizeof(enlo_candidate_score_params);
+
+	/* mac randomization attributes */
+	if (pno->enable_pno_scan_randomization) {
+		cmd->flags |= WMI_NLO_CONFIG_SPOOFED_MAC_IN_PROBE_REQ |
+			      WMI_NLO_CONFIG_RANDOM_SEQ_NO_IN_PROBE_REQ;
+		WMI_CHAR_ARRAY_TO_MAC_ADDR(pno->mac_addr, &cmd->mac_addr);
+		WMI_CHAR_ARRAY_TO_MAC_ADDR(pno->mac_addr_mask, &cmd->mac_mask);
+	}
+	if (pno->ie_whitelist) {
+		cmd->flags |= WMI_NLO_CONFIG_ENABLE_IE_WHITELIST_IN_PROBE_REQ;
+		cmd->num_vendor_oui = pno->num_vendor_oui;
+		for (i = 0; i < PROBE_REQ_BITMAP_LEN; i++)
+			cmd->ie_bitmap[i] = pno->probe_req_ie_bitmap[i];
+	}
+	WMI_LOGI("pno flags = %x", cmd->flags);
+
+	/* ie white list */
+	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_STRUC, pno->num_vendor_oui *
+		       sizeof(wmi_vendor_oui));
+
+	buf_ptr += WMI_TLV_HDR_SIZE;
+
+	if (cmd->num_vendor_oui != 0) {
+		wmi_fill_vendor_oui(buf_ptr, cmd->num_vendor_oui, pno->voui);
+		buf_ptr += cmd->num_vendor_oui * sizeof(wmi_vendor_oui);
+	}
+
 	ret = wmi_unified_cmd_send(wmi_handle, buf, len,
 				   WMI_NETWORK_LIST_OFFLOAD_CONFIG_CMDID);
 	if (ret) {
@@ -6801,6 +7021,50 @@ QDF_STATUS send_egap_conf_params_cmd_tlv(wmi_unified_t wmi_handle,
 	cmd->flags = egap_params->flags;
 	err = wmi_unified_cmd_send(wmi_handle, buf,
 				   sizeof(*cmd), WMI_AP_PS_EGAP_PARAM_CMDID);
+	if (err) {
+		WMI_LOGE("Failed to send ap_ps_egap cmd");
+		wmi_buf_free(buf);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
+/**
+ * send_action_frame_patterns_cmd_tlv() - send wmi cmd of action filter params
+ * @wmi_handle: wmi handler
+ * @action_params: pointer to action_params
+ *
+ * Return: 0 for success, otherwise appropriate error code
+ */
+QDF_STATUS send_action_frame_patterns_cmd_tlv(wmi_unified_t wmi_handle,
+				struct action_wakeup_set_param *action_params)
+{
+	WMI_WOW_SET_ACTION_WAKE_UP_CMD_fixed_param *cmd;
+	wmi_buf_t buf;
+	int i;
+	int32_t err;
+
+	buf = wmi_buf_alloc(wmi_handle, sizeof(*cmd));
+	if (!buf) {
+		WMI_LOGE("Failed to allocate buffer to send action filter cmd");
+		return QDF_STATUS_E_NOMEM;
+	}
+	cmd = (WMI_WOW_SET_ACTION_WAKE_UP_CMD_fixed_param *) wmi_buf_data(buf);
+	WMITLV_SET_HDR(&cmd->tlv_header,
+		WMITLV_TAG_STRUC_wmi_wow_set_action_wake_up_cmd_fixed_param,
+		WMITLV_GET_STRUCT_TLVLEN(
+				WMI_WOW_SET_ACTION_WAKE_UP_CMD_fixed_param));
+
+	cmd->vdev_id = action_params->vdev_id;
+	cmd->operation = action_params->operation;
+
+	for (i = 0; i < MAX_SUPPORTED_ACTION_CATEGORY_ELE_LIST; i++)
+		cmd->action_category_map[i] =
+				action_params->action_category_map[i];
+
+	err = wmi_unified_cmd_send(wmi_handle, buf,
+			sizeof(*cmd), WMI_WOW_SET_ACTION_WAKE_UP_CMDID);
 	if (err) {
 		WMI_LOGE("Failed to send ap_ps_egap cmd");
 		wmi_buf_free(buf);
@@ -9153,7 +9417,7 @@ QDF_STATUS send_process_set_ie_info_cmd_tlv(wmi_unified_t wmi_handle,
 	return ret;
 }
 
-
+static
 void wmi_copy_resource_config(wmi_resource_config *resource_cfg,
 				target_resource_config *tgt_res_cfg)
 {
@@ -9878,6 +10142,7 @@ QDF_STATUS send_pdev_set_hw_mode_cmd_tlv(wmi_unified_t wmi_handle,
  *
  * Return: QDF_STATUS. 0 on success.
  */
+static
 QDF_STATUS send_pdev_set_dual_mac_config_cmd_tlv(wmi_unified_t wmi_handle,
 		struct wmi_dual_mac_config *msg)
 {
@@ -10195,6 +10460,49 @@ QDF_STATUS send_enable_arp_ns_offload_cmd_tlv(wmi_unified_t wmi_handle,
 	return QDF_STATUS_SUCCESS;
 }
 
+QDF_STATUS send_enable_broadcast_filter_cmd_tlv(wmi_unified_t wmi_handle,
+			   uint8_t vdev_id, bool enable)
+{
+	int32_t res;
+	wmi_hw_data_filter_cmd_fixed_param *cmd;
+	A_UINT8 *buf_ptr;
+	wmi_buf_t buf;
+	int32_t len;
+
+	/*
+	 * TLV place holder size for array of ARP tuples
+	 */
+	len = sizeof(wmi_hw_data_filter_cmd_fixed_param);
+
+	buf = wmi_buf_alloc(wmi_handle, len);
+	if (!buf) {
+		WMI_LOGE("%s: wmi_buf_alloc failed", __func__);
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	buf_ptr = (A_UINT8 *) wmi_buf_data(buf);
+	cmd = (wmi_hw_data_filter_cmd_fixed_param *) buf_ptr;
+	WMITLV_SET_HDR(&cmd->tlv_header,
+		       WMITLV_TAG_STRUC_wmi_hw_data_filter_cmd_fixed_param,
+		       WMITLV_GET_STRUCT_TLVLEN
+			       (wmi_hw_data_filter_cmd_fixed_param));
+	cmd->vdev_id = vdev_id;
+	cmd->enable = enable;
+	cmd->hw_filter_bitmap = WMI_HW_DATA_FILTER_DROP_NON_ARP_BC;
+
+	WMI_LOGD("HW Broadcast Filter vdev_id: %d", cmd->vdev_id);
+
+	res = wmi_unified_cmd_send(wmi_handle, buf, len,
+				     WMI_HW_DATA_FILTER_CMDID);
+	if (res) {
+		WMI_LOGE("Failed to enable ARP NDP/NSffload");
+		wmi_buf_free(buf);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
 /**
  * send_set_ssid_hotlist_cmd_tlv() - Handle an SSID hotlist set request
  * @wmi_handle: wmi handle
@@ -10334,6 +10642,7 @@ QDF_STATUS send_process_roam_synch_complete_cmd_tlv(wmi_unified_t wmi_handle,
  *
  * Return: CDF STATUS
  */
+static
 QDF_STATUS send_fw_test_cmd_tlv(wmi_unified_t wmi_handle,
 			       struct set_fwtest_params *wmi_fwtest)
 {
@@ -10442,10 +10751,12 @@ QDF_STATUS send_roam_invoke_cmd_tlv(wmi_unified_t wmi_handle,
 	u_int16_t len, args_tlv_len;
 	A_UINT32 *channel_list;
 	wmi_mac_addr *bssid_list;
+	wmi_tlv_buf_len_param *buf_len_tlv;
 
 	/* Host sends only one channel and one bssid */
-	args_tlv_len = 2 * WMI_TLV_HDR_SIZE + sizeof(A_UINT32) +
-			sizeof(wmi_mac_addr);
+	args_tlv_len = (4 * WMI_TLV_HDR_SIZE) + sizeof(A_UINT32) +
+			sizeof(wmi_mac_addr) + sizeof(wmi_tlv_buf_len_param) +
+			roundup(roaminvoke->frame_len, sizeof(uint32_t));
 	len = sizeof(wmi_roam_invoke_cmd_fixed_param) + args_tlv_len;
 	wmi_buf = wmi_buf_alloc(wmi_handle, len);
 	if (!wmi_buf) {
@@ -10460,11 +10771,19 @@ QDF_STATUS send_roam_invoke_cmd_tlv(wmi_unified_t wmi_handle,
 	WMITLV_GET_STRUCT_TLVLEN(wmi_roam_invoke_cmd_fixed_param));
 	cmd->vdev_id = roaminvoke->vdev_id;
 	cmd->flags = 0;
-	cmd->roam_scan_mode = 0;
+
+	if (roaminvoke->frame_len)
+		cmd->roam_scan_mode = WMI_ROAM_INVOKE_SCAN_MODE_SKIP;
+	else
+		cmd->roam_scan_mode = WMI_ROAM_INVOKE_SCAN_MODE_FIXED_CH;
+
 	cmd->roam_ap_sel_mode = 0;
 	cmd->roam_delay = 0;
 	cmd->num_chan = 1;
 	cmd->num_bssid = 1;
+	/* packing 1 beacon/probe_rsp frame with WMI cmd */
+	cmd->num_buf = 1;
+
 	buf_ptr += sizeof(wmi_roam_invoke_cmd_fixed_param);
 	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_UINT32,
 				(sizeof(u_int32_t)));
@@ -10475,6 +10794,32 @@ QDF_STATUS send_roam_invoke_cmd_tlv(wmi_unified_t wmi_handle,
 				(sizeof(wmi_mac_addr)));
 	bssid_list = (wmi_mac_addr *)(buf_ptr + WMI_TLV_HDR_SIZE);
 	WMI_CHAR_ARRAY_TO_MAC_ADDR(roaminvoke->bssid, bssid_list);
+
+	/* move to next tlv i.e. bcn_prb_buf_list */
+	buf_ptr += WMI_TLV_HDR_SIZE + sizeof(wmi_mac_addr);
+
+	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_FIXED_STRUC,
+			sizeof(wmi_tlv_buf_len_param));
+
+	buf_len_tlv = (wmi_tlv_buf_len_param *)(buf_ptr + WMI_TLV_HDR_SIZE);
+	buf_len_tlv->buf_len = roaminvoke->frame_len;
+
+	/* move to next tlv i.e. bcn_prb_frm */
+	buf_ptr += WMI_TLV_HDR_SIZE + sizeof(wmi_tlv_buf_len_param);
+	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_BYTE,
+		roundup(roaminvoke->frame_len, sizeof(uint32_t)));
+
+	/* copy frame after the header */
+	qdf_mem_copy(buf_ptr + WMI_TLV_HDR_SIZE,
+			roaminvoke->frame_buf,
+			roaminvoke->frame_len);
+
+	WMI_LOGD(FL("Hex dump of beacon/probe_rsp frame, length: %d"),
+		roaminvoke->frame_len);
+	QDF_TRACE_HEX_DUMP(QDF_MODULE_ID_WMA, QDF_TRACE_LEVEL_DEBUG,
+			buf_ptr + WMI_TLV_HDR_SIZE,
+			roaminvoke->frame_len);
+
 	if (wmi_unified_cmd_send(wmi_handle, wmi_buf, len,
 					WMI_ROAM_INVOKE_CMDID)) {
 		WMI_LOGP("%s: failed to send roam invoke command", __func__);
@@ -10735,6 +11080,63 @@ error:
 	return status;
 }
 
+QDF_STATUS send_per_roam_config_cmd_tlv(wmi_unified_t wmi_handle,
+			struct wmi_per_roam_config_req *req_buf)
+{
+	wmi_buf_t buf = NULL;
+	QDF_STATUS status;
+	int len;
+	uint8_t *buf_ptr;
+	wmi_roam_per_config_fixed_param *wmi_per_config;
+
+	len = sizeof(wmi_roam_per_config_fixed_param);
+	buf = wmi_buf_alloc(wmi_handle, len);
+	if (!buf) {
+		WMI_LOGE("%s : wmi_buf_alloc failed", __func__);
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	buf_ptr = (uint8_t *) wmi_buf_data(buf);
+	wmi_per_config =
+		(wmi_roam_per_config_fixed_param *) buf_ptr;
+	WMITLV_SET_HDR(&wmi_per_config->tlv_header,
+		       WMITLV_TAG_STRUC_wmi_roam_per_config_fixed_param,
+		       WMITLV_GET_STRUCT_TLVLEN
+			       (wmi_roam_per_config_fixed_param));
+
+	/* fill in per roam config values */
+	wmi_per_config->vdev_id = req_buf->vdev_id;
+
+	wmi_per_config->enable = req_buf->per_config.enable;
+	wmi_per_config->high_rate_thresh =
+			(req_buf->per_config.tx_high_rate_thresh << 16) |
+			(req_buf->per_config.rx_high_rate_thresh & 0x0000ffff);
+	wmi_per_config->low_rate_thresh =
+			(req_buf->per_config.tx_low_rate_thresh << 16) |
+			(req_buf->per_config.rx_low_rate_thresh & 0x0000ffff);
+	wmi_per_config->pkt_err_rate_thresh_pct =
+		(req_buf->per_config.tx_rate_thresh_percnt << 16) |
+		(req_buf->per_config.rx_rate_thresh_percnt & 0x0000ffff);
+	wmi_per_config->per_rest_time = req_buf->per_config.per_rest_time;
+
+	/* Send per roam config parameters */
+	status = wmi_unified_cmd_send(wmi_handle, buf,
+				      len, WMI_ROAM_PER_CONFIG_CMDID);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		WMI_LOGE("WMI_ROAM_PER_CONFIG_CMDID failed, Error %d",
+			status);
+		goto error;
+	}
+
+	WMI_LOGI(FL("per roam enable=%d, vdev=%d"),
+		req_buf->per_config.enable, req_buf->vdev_id);
+	return QDF_STATUS_SUCCESS;
+error:
+	wmi_buf_free(buf);
+
+	return status;
+}
+
 /**
  * send_roam_scan_offload_rssi_change_cmd_tlv() - set roam offload RSSI th
  * @wmi_handle: wmi handle
@@ -10860,8 +11262,8 @@ QDF_STATUS send_get_buf_extscan_hotlist_cmd_tlv(wmi_unified_t wmi_handle,
 	/* setbssid hotlist expects the bssid list
 	 * to be non zero value
 	 */
-	if (!numap) {
-		WMI_LOGE("%s: Invalid number of bssid's", __func__);
+	if ((numap <= 0) || (numap > WMI_WLAN_EXTSCAN_MAX_HOTLIST_APS)) {
+		WMI_LOGE("Invalid number of APs: %d", numap);
 		return QDF_STATUS_E_INVAL;
 	}
 
@@ -10946,6 +11348,53 @@ QDF_STATUS send_get_buf_extscan_hotlist_cmd_tlv(wmi_unified_t wmi_handle,
 	return QDF_STATUS_SUCCESS;
 }
 
+QDF_STATUS send_set_active_bpf_mode_cmd_tlv(wmi_unified_t wmi_handle,
+					    uint8_t vdev_id,
+					    FW_ACTIVE_BPF_MODE ucast_mode,
+					    FW_ACTIVE_BPF_MODE mcast_bcast_mode)
+{
+	const WMITLV_TAG_ID tag_id =
+		WMITLV_TAG_STRUC_wmi_bpf_set_vdev_active_mode_cmd_fixed_param;
+	const uint32_t tlv_len = WMITLV_GET_STRUCT_TLVLEN(
+				wmi_bpf_set_vdev_active_mode_cmd_fixed_param);
+	QDF_STATUS status;
+	wmi_bpf_set_vdev_active_mode_cmd_fixed_param *cmd;
+	wmi_buf_t buf;
+
+	WMI_LOGI("Sending WMI_BPF_SET_VDEV_ACTIVE_MODE_CMDID(%u, %d, %d)",
+		 vdev_id, ucast_mode, mcast_bcast_mode);
+
+	/* allocate command buffer */
+	buf = wmi_buf_alloc(wmi_handle, sizeof(*cmd));
+	if (!buf) {
+		WMI_LOGE("%s: wmi_buf_alloc failed", __func__);
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	/* set TLV header */
+	cmd = (wmi_bpf_set_vdev_active_mode_cmd_fixed_param *)wmi_buf_data(buf);
+	WMITLV_SET_HDR(&cmd->tlv_header, tag_id, tlv_len);
+
+	/* populate data */
+	cmd->vdev_id = vdev_id;
+	cmd->uc_mode = ucast_mode;
+	cmd->mcbc_mode = mcast_bcast_mode;
+
+	/* send to FW */
+	status = wmi_unified_cmd_send(wmi_handle, buf, sizeof(*cmd),
+				      WMI_BPF_SET_VDEV_ACTIVE_MODE_CMDID);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		WMI_LOGE("Failed to send WMI_BPF_SET_VDEV_ACTIVE_MODE_CMDID:%d",
+			 status);
+		wmi_buf_free(buf);
+		return status;
+	}
+
+	WMI_LOGI("Sent WMI_BPF_SET_VDEV_ACTIVE_MODE_CMDID successfully");
+
+	return QDF_STATUS_SUCCESS;
+}
+
 /**
  * send_power_dbg_cmd_tlv() - send power debug commands
  * @wmi_handle: wmi handle
@@ -10955,6 +11404,7 @@ QDF_STATUS send_get_buf_extscan_hotlist_cmd_tlv(wmi_unified_t wmi_handle,
  *
  * Return: QDF_STATUS_SUCCESS on success, QDF_STATUS_E_** on error
  */
+static
 QDF_STATUS send_power_dbg_cmd_tlv(wmi_unified_t wmi_handle,
 				struct wmi_power_dbg_params *param)
 {
@@ -11128,6 +11578,7 @@ static QDF_STATUS init_cmd_send_tlv(wmi_unified_t wmi_handle,
  * Return: None
  */
 #ifdef WMI_TLV_AND_NON_TLV_SUPPORT
+static
 void save_service_bitmap_tlv(wmi_unified_t wmi_handle, void *evt_buf)
 {
 	WMI_SERVICE_READY_EVENTID_param_tlvs *param_buf;
@@ -11138,6 +11589,7 @@ void save_service_bitmap_tlv(wmi_unified_t wmi_handle, void *evt_buf)
 			(WMI_SERVICE_BM_SIZE * sizeof(uint32_t)));
 }
 #else
+static
 void save_service_bitmap_tlv(wmi_unified_t wmi_handle, void *evt_buf)
 {
 	return;
@@ -12117,6 +12569,161 @@ static bool is_management_record_tlv(uint32_t cmd_id)
 }
 #endif
 
+static uint16_t wmi_tag_vdev_set_cmd(wmi_unified_t wmi_hdl, wmi_buf_t buf)
+{
+	wmi_vdev_set_param_cmd_fixed_param *set_cmd;
+
+	set_cmd = (wmi_vdev_set_param_cmd_fixed_param *)wmi_buf_data(buf);
+
+	switch (set_cmd->param_id) {
+	case WMI_VDEV_PARAM_LISTEN_INTERVAL:
+	case WMI_VDEV_PARAM_DTIM_POLICY:
+		return HTC_TX_PACKET_TAG_AUTO_PM;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static uint16_t wmi_tag_sta_powersave_cmd(wmi_unified_t wmi_hdl, wmi_buf_t buf)
+{
+	wmi_sta_powersave_param_cmd_fixed_param *ps_cmd;
+
+	ps_cmd = (wmi_sta_powersave_param_cmd_fixed_param *)wmi_buf_data(buf);
+
+	switch (ps_cmd->param) {
+	case WMI_STA_PS_PARAM_TX_WAKE_THRESHOLD:
+	case WMI_STA_PS_PARAM_INACTIVITY_TIME:
+	case WMI_STA_PS_ENABLE_QPOWER:
+		return HTC_TX_PACKET_TAG_AUTO_PM;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static uint16_t wmi_tag_common_cmd(wmi_unified_t wmi_hdl, wmi_buf_t buf,
+				   uint32_t cmd_id)
+{
+	if (qdf_atomic_read(&wmi_hdl->is_wow_bus_suspended))
+		return 0;
+
+	switch (cmd_id) {
+	case WMI_VDEV_SET_PARAM_CMDID:
+		return wmi_tag_vdev_set_cmd(wmi_hdl, buf);
+	case WMI_STA_POWERSAVE_PARAM_CMDID:
+		return wmi_tag_sta_powersave_cmd(wmi_hdl, buf);
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static uint16_t wmi_tag_fw_hang_cmd(wmi_unified_t wmi_handle)
+{
+	uint16_t tag = 0;
+
+	if (qdf_atomic_read(&wmi_handle->is_target_suspended)) {
+		pr_err("%s: Target is already suspended, Ignore FW Hang Command\n",
+			__func__);
+		return tag;
+	}
+
+	if (wmi_handle->tag_crash_inject)
+		tag = HTC_TX_PACKET_TAG_AUTO_PM;
+
+	wmi_handle->tag_crash_inject = false;
+	return tag;
+}
+
+/**
+ * wmi_set_htc_tx_tag() - set HTC TX tag for WMI commands
+ * @wmi_handle:	WMI handle
+ * @buf:	WMI buffer
+ * @cmd_id:	WMI command Id
+ *
+ * Return htc_tx_tag
+ */
+static uint16_t wmi_set_htc_tx_tag_tlv(wmi_unified_t wmi_handle,
+				wmi_buf_t buf,
+				uint32_t cmd_id)
+{
+	uint16_t htc_tx_tag = 0;
+
+	switch (cmd_id) {
+	case WMI_WOW_ENABLE_CMDID:
+	case WMI_PDEV_SUSPEND_CMDID:
+	case WMI_WOW_ENABLE_DISABLE_WAKE_EVENT_CMDID:
+	case WMI_WOW_ADD_WAKE_PATTERN_CMDID:
+	case WMI_WOW_HOSTWAKEUP_FROM_SLEEP_CMDID:
+	case WMI_PDEV_RESUME_CMDID:
+	case WMI_WOW_DEL_WAKE_PATTERN_CMDID:
+	case WMI_WOW_SET_ACTION_WAKE_UP_CMDID:
+#ifdef FEATURE_WLAN_D0WOW
+	case WMI_D0_WOW_ENABLE_DISABLE_CMDID:
+#endif
+		htc_tx_tag = HTC_TX_PACKET_TAG_AUTO_PM;
+		break;
+	case WMI_FORCE_FW_HANG_CMDID:
+		htc_tx_tag = wmi_tag_fw_hang_cmd(wmi_handle);
+		break;
+	case WMI_VDEV_SET_PARAM_CMDID:
+	case WMI_STA_POWERSAVE_PARAM_CMDID:
+		htc_tx_tag = wmi_tag_common_cmd(wmi_handle, buf, cmd_id);
+	default:
+		break;
+	}
+
+	return htc_tx_tag;
+}
+
+/**
+ * send_get_rcpi_cmd_tlv() - get rcpi request
+ * @wmi_handle: wmi handle
+ * @get_rcpi_param: rcpi params
+ *
+ * Return: CDF status
+ */
+static QDF_STATUS send_get_rcpi_cmd_tlv(wmi_unified_t wmi_handle,
+					struct rcpi_req  *get_rcpi_param)
+{
+	wmi_buf_t buf;
+	wmi_request_rcpi_cmd_fixed_param *cmd;
+	uint8_t len = sizeof(wmi_request_rcpi_cmd_fixed_param);
+
+	buf = wmi_buf_alloc(wmi_handle, len);
+	if (!buf) {
+		WMI_LOGE("%s: Failed to allocate wmi buffer", __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+
+	cmd = (wmi_request_rcpi_cmd_fixed_param *) wmi_buf_data(buf);
+	WMITLV_SET_HDR(&cmd->tlv_header,
+		       WMITLV_TAG_STRUC_wmi_request_rcpi_cmd_fixed_param,
+		       WMITLV_GET_STRUCT_TLVLEN
+		       (wmi_request_rcpi_cmd_fixed_param));
+
+	cmd->vdev_id = get_rcpi_param->vdev_id;
+	WMI_CHAR_ARRAY_TO_MAC_ADDR(get_rcpi_param->mac_addr,
+				   &cmd->peer_macaddr);
+	cmd->measurement_type = get_rcpi_param->measurement_type;
+	WMI_LOGD("RCPI REQ VDEV_ID:%d-->", cmd->vdev_id);
+	if (wmi_unified_cmd_send(wmi_handle, buf, len,
+				 WMI_REQUEST_RCPI_CMDID)) {
+
+		WMI_LOGE("%s: Failed to send WMI_REQUEST_RCPI_CMDID",
+			 __func__);
+		wmi_buf_free(buf);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
 struct wmi_ops tlv_ops =  {
 	.send_vdev_create_cmd = send_vdev_create_cmd_tlv,
 	.send_vdev_delete_cmd = send_vdev_delete_cmd_tlv,
@@ -12241,6 +12848,7 @@ struct wmi_ops tlv_ops =  {
 	.send_process_dhcp_ind_cmd = send_process_dhcp_ind_cmd_tlv,
 	.send_get_link_speed_cmd = send_get_link_speed_cmd_tlv,
 	.send_egap_conf_params_cmd = send_egap_conf_params_cmd_tlv,
+	.send_action_frame_patterns_cmd = send_action_frame_patterns_cmd_tlv,
 	.send_bcn_buf_ll_cmd = send_bcn_buf_ll_cmd_tlv,
 	.send_process_update_edca_param_cmd =
 				 send_process_update_edca_param_cmd_tlv,
@@ -12314,6 +12922,8 @@ struct wmi_ops tlv_ops =  {
 		 send_pdev_set_dual_mac_config_cmd_tlv,
 	.send_enable_arp_ns_offload_cmd =
 		 send_enable_arp_ns_offload_cmd_tlv,
+	.send_enable_broadcast_filter_cmd =
+		 send_enable_broadcast_filter_cmd_tlv,
 	.send_app_type1_params_in_fw_cmd =
 		 send_app_type1_params_in_fw_cmd_tlv,
 	.send_set_ssid_hotlist_cmd = send_set_ssid_hotlist_cmd_tlv,
@@ -12330,6 +12940,7 @@ struct wmi_ops tlv_ops =  {
 		 send_roam_scan_offload_rssi_change_cmd_tlv,
 	.send_get_buf_extscan_hotlist_cmd =
 		 send_get_buf_extscan_hotlist_cmd_tlv,
+	.send_set_active_bpf_mode_cmd = send_set_active_bpf_mode_cmd_tlv,
 	.send_adapt_dwelltime_params_cmd =
 		send_adapt_dwelltime_params_cmd_tlv,
 	.init_cmd_send = init_cmd_send_tlv,
@@ -12370,6 +12981,10 @@ struct wmi_ops tlv_ops =  {
 	.send_power_dbg_cmd = send_power_dbg_cmd_tlv,
 	.send_encrypt_decrypt_send_cmd =
 				send_encrypt_decrypt_send_cmd_tlv,
+	.send_sar_limit_cmd = send_sar_limit_cmd_tlv,
+	.send_per_roam_config_cmd = send_per_roam_config_cmd_tlv,
+	.wmi_set_htc_tx_tag = wmi_set_htc_tx_tag_tlv,
+	.send_get_rcpi_cmd = send_get_rcpi_cmd_tlv,
 };
 
 #ifdef WMI_TLV_AND_NON_TLV_SUPPORT
@@ -12714,6 +13329,7 @@ static void populate_tlv_events_id(uint32_t *event_ids)
 				WMI_SOC_HW_MODE_TRANSITION_EVENTID;
 	event_ids[wmi_soc_set_dual_mac_config_resp_event_id] =
 				WMI_SOC_SET_DUAL_MAC_CONFIG_RESP_EVENTID;
+	event_ids[wmi_update_rcpi_event_id] = WMI_UPDATE_RCPI_EVENTID;
 }
 
 /**

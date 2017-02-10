@@ -31,6 +31,32 @@
 #ifndef _CDP_TXRX_CFG_H_
 #define _CDP_TXRX_CFG_H_
 
+#define TX_WMM_AC_NUM	4
+
+/**
+ * struct ol_tx_sched_wrr_ac_specs_t - the wrr ac specs params structure
+ * @wrr_skip_weight: map to ol_tx_sched_wrr_adv_category_info_t.specs.
+ *                            wrr_skip_weight
+ * @credit_threshold: map to ol_tx_sched_wrr_adv_category_info_t.specs.
+ *                            credit_threshold
+ * @send_limit: map to ol_tx_sched_wrr_adv_category_info_t.specs.
+ *                            send_limit
+ * @credit_reserve: map to ol_tx_sched_wrr_adv_category_info_t.specs.
+ *                            credit_reserve
+ * @discard_weight: map to ol_tx_sched_wrr_adv_category_info_t.specs.
+ *                            discard_weight
+ *
+ * This structure is for wrr ac specs params set from user, it will update
+ * its content corresponding to the ol_tx_sched_wrr_adv_category_info_t.specs.
+ */
+struct ol_tx_sched_wrr_ac_specs_t {
+	int wrr_skip_weight;
+	uint32_t credit_threshold;
+	uint16_t send_limit;
+	int credit_reserve;
+	int discard_weight;
+};
+
 /**
  * struct txrx_pdev_cfg_param_t - configuration information
  * passed to the data path
@@ -59,6 +85,8 @@ struct txrx_pdev_cfg_param_t {
 	/* Start queue offset in percentage */
 	uint32_t tx_flow_start_queue_offset;
 #endif
+
+	struct ol_tx_sched_wrr_ac_specs_t ac_specs[TX_WMM_AC_NUM];
 };
 
 void ol_set_cfg_rx_fwd_disabled(ol_pdev_handle pdev, uint8_t disable_rx_fwd);

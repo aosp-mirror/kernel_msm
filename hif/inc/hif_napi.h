@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -78,7 +78,17 @@ enum qca_napi_event {
 	NAPI_EVT_USR_SERIAL,
 	NAPI_EVT_USR_NORMAL
 };
-
+/**
+ * Following are some of NAPI related features controlled using feature flag
+ * These flags need to be enabled in the qca_napi_data->flags variable for the
+ * feature to kick in.
+.* QCA_NAPI_FEATURE_CPU_CORRECTION   - controls CPU correction logic
+.* QCA_NAPI_FEATURE_IRQ_BLACKLISTING - controls call to  irq_blacklist_on API
+.* QCA_NAPI_FEATURE_CORE_CTL_BOOST   - controls call to core_ctl_set_boost API
+ */
+#define QCA_NAPI_FEATURE_CPU_CORRECTION            BIT(1)
+#define QCA_NAPI_FEATURE_IRQ_BLACKLISTING          BIT(2)
+#define QCA_NAPI_FEATURE_CORE_CTL_BOOST            BIT(3)
 
 /**
  * Macros to map ids -returned by ...create()- to pipes and vice versa
@@ -106,7 +116,8 @@ void *hif_napi_get_lro_info(struct hif_opaque_softc *hif_hdl, int napi_id);
 int hif_napi_create(struct hif_opaque_softc   *hif,
 		    int (*poll)(struct napi_struct *, int),
 		    int                budget,
-		    int                scale);
+		    int                scale,
+		    uint8_t            flags);
 int hif_napi_destroy(struct hif_opaque_softc  *hif,
 		     uint8_t           id,
 		     int               force);
@@ -156,6 +167,13 @@ static inline void hif_napi_update_yield_stats(struct CE_state *ce_state,
 #define HNC_ACT_COLLAPSE (1)
 #define HNC_ACT_DISPERSE (-1)
 
+enum qca_blacklist_op {
+	BLACKLIST_QUERY,
+	BLACKLIST_OFF,
+	BLACKLIST_ON
+};
+
+int hif_napi_cpu_blacklist(struct qca_napi_data *napid, enum qca_blacklist_op op);
 /**
  * Local interface to HIF implemented functions of NAPI CPU affinity management.
  * Note:
@@ -171,23 +189,23 @@ static inline void hif_napi_update_yield_stats(struct CE_state *ce_state,
  */
 /* fw-declare to make compiler happy */
 struct qca_napi_data;
-static inline int hif_napi_cpu_init(void *ctx) { return 0; }
-static inline int hif_napi_cpu_deinit(void *ctx) { return 0; }
+static inline int hif_napi_cpu_init(struct hif_opaque_softc *hif)
+{ return 0; }
+
+static inline int hif_napi_cpu_deinit(struct hif_opaque_softc *hif)
+{ return 0; }
+
 static inline int hif_napi_serialize(struct hif_opaque_softc *hif, int is_on)
-{
-	return -EPERM;
-}
+{ return -EPERM; }
 #else /* HELIUMPLUS - NAPI CPU symbols are valid */
 
 /*
  * prototype signatures
  */
-int hif_napi_cpu_init(void *);
-int hif_napi_cpu_deinit(void *);
+int hif_napi_cpu_init(struct hif_opaque_softc *hif);
+int hif_napi_cpu_deinit(struct hif_opaque_softc *hif);
 
 int hif_napi_cpu_migrate(struct qca_napi_data *napid, int cpu, int action);
-int hif_napi_cpu_blacklist(bool is_on);
-
 int hif_napi_serialize(struct hif_opaque_softc *hif, int is_on);
 
 #endif /* HELIUMPLUS */
@@ -207,7 +225,8 @@ static inline int hif_napi_create(struct hif_opaque_softc   *hif,
 				  uint8_t            pipe_id,
 				  int (*poll)(struct napi_struct *, int),
 				  int                budget,
-				  int                scale)
+				  int                scale,
+				  uint8_t            flags)
 { return -EPERM; }
 
 static inline int hif_napi_destroy(struct hif_opaque_softc  *hif,

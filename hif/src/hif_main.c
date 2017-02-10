@@ -300,6 +300,21 @@ static const struct qwlan_hw qwlan_hw_list[] = {
 		.id = WCN3990_v2,
 		.subid = 0x0,
 		.name = "WCN3990_V2",
+	},
+	{
+		.id = WCN3990_v2_1,
+		.subid = 0x0,
+		.name = "WCN3990_V2.1",
+	},
+	{
+		.id = QCA9379_REV1_VERSION,
+		.subid = 0xC,
+		.name = "QCA9379_REV1",
+	},
+	{
+		.id = QCA9379_REV1_VERSION,
+		.subid = 0xD,
+		.name = "QCA9379_REV1_1",
 	}
 };
 
@@ -313,6 +328,9 @@ static const char *hif_get_hw_name(struct hif_target_info *info)
 {
 	int i;
 
+	if (info->hw_name)
+		return info->hw_name;
+
 	for (i = 0; i < ARRAY_SIZE(qwlan_hw_list); i++) {
 		if (info->target_version == qwlan_hw_list[i].id &&
 		    info->target_revision == qwlan_hw_list[i].subid) {
@@ -320,7 +338,16 @@ static const char *hif_get_hw_name(struct hif_target_info *info)
 		}
 	}
 
-	return "Unknown Device";
+	info->hw_name = qdf_mem_malloc(64);
+	if (!info->hw_name)
+		return "Unknown Device (nomem)";
+
+	i = qdf_snprint(info->hw_name, 64, "HW_VERSION=%x.",
+			info->target_version);
+	if (i < 0)
+		return "Unknown Device (snprintf failure)";
+	else
+		return info->hw_name;
 }
 
 /**
@@ -376,8 +403,6 @@ struct hif_opaque_softc *hif_open(qdf_device_t qdf_ctx, uint32_t mode,
 		return GET_HIF_OPAQUE_HDL(scn);
 	}
 
-	qdf_mem_zero(scn, bus_context_size);
-
 	scn->qdf_dev = qdf_ctx;
 	scn->hif_con_param = mode;
 	qdf_atomic_init(&scn->active_tasklet_cnt);
@@ -414,6 +439,12 @@ void hif_close(struct hif_opaque_softc *hif_ctx)
 	if (scn->athdiag_procfs_inited) {
 		athdiag_procfs_remove();
 		scn->athdiag_procfs_inited = false;
+	}
+
+	if (scn->target_info.hw_name) {
+		char *hw_name = scn->target_info.hw_name;
+		scn->target_info.hw_name = "ErrUnloading";
+		qdf_mem_free(hw_name);
 	}
 
 	hif_bus_close(scn);

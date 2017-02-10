@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -178,6 +178,9 @@ QDF_STATUS (*send_vdev_delete_cmd)(wmi_unified_t wmi_handle,
 
 QDF_STATUS (*send_vdev_stop_cmd)(wmi_unified_t wmi,
 					uint8_t vdev_id);
+
+QDF_STATUS (*send_enable_broadcast_filter_cmd)(wmi_unified_t wmi_handle,
+			   uint8_t vdev_id, bool enable);
 
 QDF_STATUS (*send_vdev_down_cmd)(wmi_unified_t wmi,
 			uint8_t vdev_id);
@@ -514,6 +517,9 @@ QDF_STATUS (*send_pktlog_wmi_send_cmd)(wmi_unified_t wmi_handle,
 				   WMI_CMD_ID cmd_id, uint8_t user_triggered);
 #endif
 
+QDF_STATUS (*send_action_frame_patterns_cmd)(wmi_unified_t wmi_handle,
+			struct action_wakeup_set_param *action_params);
+
 QDF_STATUS (*send_fw_profiling_cmd)(wmi_unified_t wmi_handle,
 			uint32_t cmd, uint32_t value1, uint32_t value2);
 
@@ -707,9 +713,17 @@ QDF_STATUS (*send_roam_scan_offload_rssi_change_cmd)(wmi_unified_t wmi_handle,
 	uint32_t bcn_rssi_weight,
 	uint32_t hirssi_delay_btw_scans);
 
+QDF_STATUS (*send_per_roam_config_cmd)(wmi_unified_t wmi_handle,
+		struct wmi_per_roam_config_req *req_buf);
+
 QDF_STATUS (*send_get_buf_extscan_hotlist_cmd)(wmi_unified_t wmi_handle,
 				   struct ext_scan_setbssi_hotlist_params *
 				   photlist, int *buf_len);
+
+QDF_STATUS (*send_set_active_bpf_mode_cmd)(wmi_unified_t wmi_handle,
+					   uint8_t vdev_id,
+					   FW_ACTIVE_BPF_MODE ucast_mode,
+					   FW_ACTIVE_BPF_MODE mcast_bcast_mode);
 
 QDF_STATUS (*send_pdev_get_tpc_config_cmd)(wmi_unified_t wmi_handle,
 		uint32_t param);
@@ -1136,6 +1150,14 @@ QDF_STATUS (*send_fw_test_cmd)(wmi_unified_t wmi_handle,
 
 QDF_STATUS (*send_encrypt_decrypt_send_cmd)(wmi_unified_t wmi_handle,
 				struct encrypt_decrypt_req_params *params);
+
+QDF_STATUS (*send_sar_limit_cmd)(wmi_unified_t wmi_handle,
+				struct sar_limit_cmd_params *params);
+uint16_t (*wmi_set_htc_tx_tag)(wmi_unified_t wmi_handle,
+				wmi_buf_t buf, uint32_t cmd_id);
+
+QDF_STATUS (*send_get_rcpi_cmd)(wmi_unified_t wmi_handle,
+				struct rcpi_req *get_rcpi_param);
 };
 
 struct target_abi_version {
@@ -1200,7 +1222,9 @@ struct wmi_unified {
 #ifdef FEATURE_RUNTIME_PM
 	qdf_atomic_t runtime_pm_inprogress;
 #endif
-
+	qdf_atomic_t is_wow_bus_suspended;
+	bool tag_crash_inject;
+	bool tgt_force_assert_enable;
 	enum wmi_target_type target_type;
 	struct wmi_rx_ops rx_ops;
 	struct wmi_ops *ops;

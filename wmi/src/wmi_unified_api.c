@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -2173,7 +2173,28 @@ QDF_STATUS wmi_unified_egap_conf_params_cmd(void *wmi_hdl,
 
 	return QDF_STATUS_E_FAILURE;
 }
+
 #endif
+
+/**
+ * wmi_unified_action_frame_patterns_cmd() - send wmi cmd of action filter params
+ * @wmi_handle: wmi handler
+ * @action_params: pointer to action_params
+ *
+ * Return: 0 for success, otherwise appropriate error code
+ */
+QDF_STATUS wmi_unified_action_frame_patterns_cmd(void *wmi_hdl,
+				struct action_wakeup_set_param *action_params)
+{
+	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
+
+	if (wmi_handle->ops->send_action_frame_patterns_cmd)
+		return wmi_handle->ops->send_action_frame_patterns_cmd(
+				wmi_handle,
+				action_params);
+
+	return QDF_STATUS_E_FAILURE;
+}
 
 /**
  * wmi_unified_fw_profiling_data_cmd() - send FW profiling cmd to WLAN FW
@@ -3156,6 +3177,18 @@ QDF_STATUS wmi_unified_enable_arp_ns_offload_cmd(void *wmi_hdl,
 	return QDF_STATUS_E_FAILURE;
 }
 
+QDF_STATUS wmi_unified_configure_broadcast_filter_cmd(void *wmi_hdl,
+			   uint8_t vdev_id, bool bc_filter)
+{
+	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
+
+	if (wmi_handle->ops->send_enable_broadcast_filter_cmd)
+		return wmi_handle->ops->send_enable_broadcast_filter_cmd(
+				wmi_handle, vdev_id, bc_filter);
+
+	return QDF_STATUS_E_FAILURE;
+}
+
 /**
  * wmi_unified_set_led_flashing_cmd() - set led flashing in fw
  * @wmi_hdl: wmi handle
@@ -3424,6 +3457,18 @@ QDF_STATUS wmi_unified_roam_scan_offload_rssi_change_cmd(void *wmi_hdl,
 	return QDF_STATUS_E_FAILURE;
 }
 
+QDF_STATUS wmi_unified_set_per_roam_config(void *wmi_hdl,
+		struct wmi_per_roam_config_req *req_buf)
+{
+	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
+
+	if (wmi_handle->ops->send_per_roam_config_cmd)
+		return wmi_handle->ops->send_per_roam_config_cmd(wmi_handle,
+					req_buf);
+
+	return QDF_STATUS_E_FAILURE;
+}
+
 /**
  * wmi_unified_get_buf_extscan_hotlist_cmd() - prepare hotlist command
  * @wmi_hdl: wmi handle
@@ -3446,6 +3491,24 @@ QDF_STATUS wmi_unified_get_buf_extscan_hotlist_cmd(void *wmi_hdl,
 				  photlist, buf_len);
 
 	return QDF_STATUS_E_FAILURE;
+}
+
+QDF_STATUS
+wmi_unified_set_active_bpf_mode_cmd(void *wmi_hdl,
+				    uint8_t vdev_id,
+				    FW_ACTIVE_BPF_MODE ucast_mode,
+				    FW_ACTIVE_BPF_MODE mcast_bcast_mode)
+{
+	wmi_unified_t wmi = (wmi_unified_t)wmi_hdl;
+
+	if (!wmi->ops->send_set_active_bpf_mode_cmd) {
+		WMI_LOGI("send_set_active_bpf_mode_cmd op is NULL");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return wmi->ops->send_set_active_bpf_mode_cmd(wmi, vdev_id,
+						      ucast_mode,
+						      mcast_bcast_mode);
 }
 
 /**
@@ -6124,6 +6187,25 @@ QDF_STATUS wmi_unified_send_power_dbg_cmd(void *wmi_hdl,
 }
 
 /**
+ * wmi_unified_send_sar_limit_cmd() - send sar limit cmd to fw
+ * @wmi_hdl: wmi handle
+ * @params: sar limit command params
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS wmi_unified_send_sar_limit_cmd(void *wmi_hdl,
+				struct sar_limit_cmd_params *params)
+{
+	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
+
+	if (wmi_handle->ops->send_sar_limit_cmd)
+		return wmi_handle->ops->send_sar_limit_cmd(
+						wmi_handle,
+						params);
+	return QDF_STATUS_E_FAILURE;
+}
+
+/**
  * wmi_unified_encrypt_decrypt_send_cmd() - send encryptdecrypt cmd to fw
  * @wmi_hdl: wmi handle
  * @params: encrypt/decrypt params
@@ -6139,6 +6221,25 @@ QDF_STATUS wmi_unified_encrypt_decrypt_send_cmd(void *wmi_hdl,
 		return wmi_handle->ops->send_encrypt_decrypt_send_cmd(
 						wmi_handle,
 						params);
+
+	return QDF_STATUS_E_FAILURE;
+}
+
+/**
+ * wmi_unified_get_rcpi_cmd() - get rcpi request
+ * @wmi_hdl: wma handle
+ * @get_rcpi_param: rcpi params
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS wmi_unified_get_rcpi_cmd(void *wmi_hdl,
+				    struct rcpi_req *get_rcpi_param)
+{
+	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
+
+	if (wmi_handle->ops->send_get_rcpi_cmd)
+		return wmi_handle->ops->send_get_rcpi_cmd(wmi_handle,
+			   get_rcpi_param);
 
 	return QDF_STATUS_E_FAILURE;
 }

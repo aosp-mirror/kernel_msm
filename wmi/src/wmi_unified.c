@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -95,7 +95,7 @@ typedef PREPACK struct {
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0))
 /* TODO Cleanup this backported function */
-int qcacld_bp_seq_printf(struct seq_file *m, const char *f, ...)
+static int qcacld_bp_seq_printf(struct seq_file *m, const char *f, ...)
 {
 	va_list args;
 
@@ -522,7 +522,8 @@ static inline void wmi_log_buffer_free(struct wmi_unified *wmi_handle)
 #else
 static inline void wmi_log_buffer_free(struct wmi_unified *wmi_handle)
 {
-	/* Do Nothing */
+	wmi_handle->log_info.wmi_logging_enable = 0;
+	qdf_spinlock_destroy(&wmi_handle->log_info.wmi_record_lock);
 }
 #endif
 
@@ -1643,6 +1644,17 @@ static uint8_t *wmi_id_to_name(uint32_t wmi_command)
 		CASE_RETURN_STRING(WMI_PDEV_DFS_PHYERR_OFFLOAD_DISABLE_CMDID);
 		CASE_RETURN_STRING(WMI_VDEV_ADFS_CH_CFG_CMDID);
 		CASE_RETURN_STRING(WMI_VDEV_ADFS_OCAC_ABORT_CMDID);
+		CASE_RETURN_STRING(WMI_SAR_LIMITS_CMDID);
+		CASE_RETURN_STRING(WMI_REQUEST_RCPI_CMDID);
+		CASE_RETURN_STRING(WMI_REQUEST_PEER_STATS_INFO_CMDID);
+		CASE_RETURN_STRING(WMI_SET_CURRENT_COUNTRY_CMDID);
+		CASE_RETURN_STRING(WMI_11D_SCAN_START_CMDID);
+		CASE_RETURN_STRING(WMI_11D_SCAN_STOP_CMDID);
+		CASE_RETURN_STRING(WMI_REQUEST_RADIO_CHAN_STATS_CMDID);
+		CASE_RETURN_STRING(WMI_ROAM_PER_CONFIG_CMDID);
+		CASE_RETURN_STRING(WMI_VDEV_ADD_MAC_ADDR_TO_RX_FILTER_CMDID);
+		CASE_RETURN_STRING(WMI_BPF_SET_VDEV_ACTIVE_MODE_CMDID);
+		CASE_RETURN_STRING(WMI_HW_DATA_FILTER_CMDID);
 	}
 
 	return "Invalid WMI cmd";
@@ -1661,31 +1673,7 @@ static uint8_t *wmi_id_to_name(uint32_t wmi_command)
 #endif
 
 
-/**
- * wmi_is_runtime_pm_cmd() - check if a cmd is from suspend resume sequence
- * @cmd: command to check
- *
- * Return: true if the command is part of the suspend resume sequence.
- */
 #ifndef WMI_NON_TLV_SUPPORT
-static bool wmi_is_runtime_pm_cmd(uint32_t cmd_id)
-{
-	switch (cmd_id) {
-	case WMI_WOW_ENABLE_CMDID:
-	case WMI_PDEV_SUSPEND_CMDID:
-	case WMI_WOW_ENABLE_DISABLE_WAKE_EVENT_CMDID:
-	case WMI_WOW_ADD_WAKE_PATTERN_CMDID:
-	case WMI_WOW_HOSTWAKEUP_FROM_SLEEP_CMDID:
-	case WMI_PDEV_RESUME_CMDID:
-	case WMI_WOW_DEL_WAKE_PATTERN_CMDID:
-	case WMI_D0_WOW_ENABLE_DISABLE_CMDID:
-		return true;
-
-	default:
-		return false;
-	}
-}
-
 /**
  * wmi_is_pm_resume_cmd() - check if a cmd is part of the resume sequence
  * @cmd_id: command to check
@@ -1704,10 +1692,6 @@ static bool wmi_is_pm_resume_cmd(uint32_t cmd_id)
 	}
 }
 #else
-static bool wmi_is_runtime_pm_cmd(uint32_t cmd_id)
-{
-	return false;
-}
 static bool wmi_is_pm_resume_cmd(uint32_t cmd_id)
 {
 	return false;
@@ -1733,8 +1717,9 @@ QDF_STATUS wmi_unified_cmd_send(wmi_unified_t wmi_handle, wmi_buf_t buf,
 	uint16_t htc_tag = 0;
 
 	if (wmi_get_runtime_pm_inprogress(wmi_handle)) {
-		if (wmi_is_runtime_pm_cmd(cmd_id))
-			htc_tag = HTC_TX_PACKET_TAG_AUTO_PM;
+		htc_tag =
+			(A_UINT16)wmi_handle->ops->wmi_set_htc_tx_tag(
+						wmi_handle, buf, cmd_id);
 	} else if (qdf_atomic_read(&wmi_handle->is_target_suspended) &&
 		(!wmi_is_pm_resume_cmd(cmd_id))) {
 		QDF_TRACE(QDF_MODULE_ID_WMI, QDF_TRACE_LEVEL_ERROR,
@@ -1839,8 +1824,8 @@ QDF_STATUS wmi_unified_cmd_send(wmi_unified_t wmi_handle, wmi_buf_t buf,
  *
  * Return: event handler's index
  */
-int wmi_unified_get_event_handler_ix(wmi_unified_t wmi_handle,
-				     uint32_t event_id)
+static int wmi_unified_get_event_handler_ix(wmi_unified_t wmi_handle,
+					    uint32_t event_id)
 {
 	uint32_t idx = 0;
 	int32_t invalid_idx = -1;
@@ -2020,7 +2005,7 @@ static void wmi_process_fw_event_worker_thread_ctx
  *
  * Return: none
  */
-void wmi_control_rx(void *ctx, HTC_PACKET *htc_packet)
+static void wmi_control_rx(void *ctx, HTC_PACKET *htc_packet)
 {
 	struct wmi_unified *wmi_handle = (struct wmi_unified *)ctx;
 	wmi_buf_t evt_buf;
@@ -2158,7 +2143,7 @@ end:
  *
  * Return: none
  */
-void wmi_rx_event_work(struct work_struct *work)
+static void wmi_rx_event_work(struct work_struct *work)
 {
 	struct wmi_unified *wmi = container_of(work, struct wmi_unified,
 					rx_event_work);
@@ -2250,7 +2235,6 @@ void *wmi_unified_attach(void *scn_handle,
 	INIT_WORK(&wmi_handle->rx_event_work, wmi_rx_event_work);
 #ifdef WMI_INTERFACE_EVENT_LOGGING
 	if (QDF_STATUS_SUCCESS == wmi_log_init(wmi_handle)) {
-		qdf_spinlock_create(&wmi_handle->log_info.wmi_record_lock);
 		wmi_debugfs_init(wmi_handle);
 	}
 #endif
@@ -2340,7 +2324,7 @@ wmi_unified_remove_work(struct wmi_unified *wmi_handle)
  *
  * @Return: none.
  */
-void wmi_htc_tx_complete(void *ctx, HTC_PACKET *htc_pkt)
+static void wmi_htc_tx_complete(void *ctx, HTC_PACKET *htc_pkt)
 {
 	struct wmi_unified *wmi_handle = (struct wmi_unified *)ctx;
 	wmi_buf_t wmi_cmd_buf = GET_HTC_PACKET_NET_BUF_CONTEXT(htc_pkt);
@@ -2475,6 +2459,38 @@ void wmi_set_target_suspend(wmi_unified_t wmi_handle, A_BOOL val)
 	qdf_atomic_set(&wmi_handle->is_target_suspended, val);
 }
 
+/**
+ * WMI API to set crash injection state
+ * @param wmi_handle:	handle to WMI.
+ * @param val:		crash injection state boolean.
+ */
+void wmi_tag_crash_inject(wmi_unified_t wmi_handle, A_BOOL flag)
+{
+	wmi_handle->tag_crash_inject = flag;
+}
+
+/**
+ * WMI API to set bus suspend state
+ * @param wmi_handle:	handle to WMI.
+ * @param val:		suspend state boolean.
+ */
+void wmi_set_is_wow_bus_suspended(wmi_unified_t wmi_handle, A_BOOL val)
+{
+	qdf_atomic_set(&wmi_handle->is_wow_bus_suspended, val);
+}
+
+/**
+ * wmi_set_tgt_assert() - set target assert configuration
+ *
+ * @wmi_handle      : handle to WMI.
+ * @val             : target assert config value
+ *
+ * @Return: none.
+ */
+void wmi_set_tgt_assert(wmi_unified_t wmi_handle, bool val)
+{
+	wmi_handle->tgt_force_assert_enable = val;
+}
 #ifdef WMI_NON_TLV_SUPPORT
 /**
  * API to flush all the previous packets  associated with the wmi endpoint

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1835,6 +1835,22 @@ static inline uint32_t qdf_nbuf_get_tso_info(qdf_device_t osdev,
 }
 
 /**
+ * qdf_nbuf_unmap_tso_segment() - function to dma unmap TSO segment element
+ *
+ * @osdev: qdf device handle
+ * @tso_seg: TSO segment element to be unmapped
+ * @is_last_seg: whether this is last tso seg or not
+ *
+ * Return: none
+ */
+static inline void qdf_nbuf_unmap_tso_segment(qdf_device_t osdev,
+			  struct qdf_tso_seg_elem_t *tso_seg,
+			  bool is_last_seg)
+{
+	return __qdf_nbuf_unmap_tso_segment(osdev, tso_seg, is_last_seg);
+}
+
+/**
  * qdf_nbuf_get_tso_num_seg() - function to calculate the number
  * of TCP segments within the TSO jumbo packet
  * @nbuf:   TSO jumbo network buffer to be segmented
@@ -2102,6 +2118,20 @@ static inline void
 qdf_nbuf_mark_wakeup_frame(qdf_nbuf_t buf)
 {
 	 __qdf_nbuf_mark_wakeup_frame(buf);
+}
+
+/**
+ * qdf_nbuf_reg_free_cb - Registers nbuf free callback
+ * @cb_func_ptr: Callback pointer
+ *
+ * This function registers nbuf free callback
+ *
+ * Return: void
+ */
+static inline void
+qdf_nbuf_reg_free_cb(qdf_nbuf_free_t cb_func_ptr)
+{
+	 __qdf_nbuf_reg_free_cb(cb_func_ptr);
 }
 
 #endif /* _QDF_NBUF_H */
