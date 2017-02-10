@@ -78,12 +78,12 @@ struct cpu_context {
 };
 
 struct thread_struct {
-	struct debug_info	debug;		/* debugging */
 	struct cpu_context	cpu_context;	/* cpu context */
 	unsigned long		tp_value;
 	struct fpsimd_state	fpsimd_state;
 	unsigned long		fault_address;	/* fault info */
 	unsigned long		fault_code;	/* ESR_EL1 value */
+	struct debug_info	debug;		/* debugging */
 };
 
 #define INIT_THREAD  {	}
