@@ -6304,10 +6304,8 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 #endif
 
 #ifdef FILTER_IE
-	ret = dhd_read_from_file(dhd, ie_buf, FILE_BLOCK_READ_SIZE);
-	if (ret < 0) {
-		DHD_ERROR(("%s failed to read IEs from file\n", __FUNCTION__));
-	}
+        /* Failure to configure filter IE is not a fatal error, ignore error */
+        dhd_read_from_file(dhd, ie_buf, FILE_BLOCK_READ_SIZE);
 #endif /* FILTER_IE */
 
 #ifdef WL11U
@@ -9692,7 +9690,6 @@ int dhd_read_from_file(dhd_pub_t *dhd, uint8 *buf, int size)
 	mm_segment_t old_fs;
 	NULL_CHECK(dhd, "dhd is NULL", ret);
 	NULL_CHECK(buf, "buf is NULL", ret);
-
 	/* change to KERNEL_DS address limit */
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
@@ -9700,13 +9697,14 @@ int dhd_read_from_file(dhd_pub_t *dhd, uint8 *buf, int size)
 	/* open file to read */
 	fd = sys_open(FILTER_IE_PATH, O_RDONLY, 0);
 	if (fd < 0) {
-		ret = BCME_ERROR;
+                DHD_ERROR(("error: failed to open %s\n", FILTER_IE_PATH));
+                ret = BCME_EPERM;
 		goto exit;
 	}
 
 	if ((nread = sys_read(fd, buf, size)) > 0) {
 		buf[nread - 1] = '\0';
-		if ((ret = dhd_parse_filter_ie(dhd, buf)) < 0) { 
+		if ((ret = dhd_parse_filter_ie(dhd, buf)) < 0) {
 			DHD_ERROR(("error: failed to parse filter ie\n"));
 		}
 	} else {
