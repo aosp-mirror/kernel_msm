@@ -51,9 +51,25 @@ struct uhid_device {
 	u32 report_id;
 	u32 report_type;
 	struct uhid_event report_buf;
+	struct work_struct worker;
 };
 
 static struct miscdevice uhid_misc;
+
+static void uhid_device_add_worker(struct work_struct *work)
+{
+	struct uhid_device *uhid = container_of(work, struct uhid_device, worker);
+	int ret;
+
+	ret = hid_add_device(uhid->hid);
+	if (ret) {
+		hid_err(uhid->hid, "Cannot register HID device: error %d\n", ret);
+
+		hid_destroy_device(uhid->hid);
+		uhid->hid = NULL;
+		uhid->running = false;
+	}
+}
 
 static void uhid_queue(struct uhid_device *uhid, struct uhid_event *ev)
 {
@@ -159,27 +175,9 @@ static int __uhid_report_queue_and_wait(struct uhid_device *uhid,
 	uhid_queue(uhid, ev);
 	spin_unlock_irqrestore(&uhid->qlock, flags);
 
-	/*
-	 * Assumption: report_lock and devlock are both locked. So unlock
-	 * before sleeping.
-	 */
-	mutex_unlock(&uhid->report_lock);
-	mutex_unlock(&uhid->devlock);
 	ret = wait_event_interruptible_timeout(uhid->report_wait,
 				!uhid->report_running || !uhid->running,
 				5 * HZ);
-	ret = mutex_lock_interruptible(&uhid->devlock);
-	if (ret)
-		return ret;
-	ret = mutex_lock_interruptible(&uhid->report_lock);
-	if (ret) {
-		/*
-		 * Failed to lock, unlock previous mutex before exiting
-		 * this function.
-		 */
-		mutex_unlock(&uhid->devlock);
-		return ret;
-	}
 	if (!ret || !uhid->running || uhid->report_running)
 		ret = -EIO;
 	else if (ret < 0)
@@ -516,18 +514,14 @@ static int uhid_dev_create2(struct uhid_device *uhid,
 	uhid->hid = hid;
 	uhid->running = true;
 
-	ret = hid_add_device(hid);
-	if (ret) {
-		hid_err(hid, "Cannot register HID device\n");
-		goto err_hid;
-	}
+	/* Adding of a HID device is done through a worker, to allow HID drivers
+	 * which use feature requests during .probe to work, without they would
+	 * be blocked on devlock, which is held by uhid_char_write.
+	 */
+	schedule_work(&uhid->worker);
 
 	return 0;
 
-err_hid:
-	hid_destroy_device(hid);
-	uhid->hid = NULL;
-	uhid->running = false;
 err_free:
 	kfree(uhid->rd_data);
 	uhid->rd_data = NULL;
@@ -567,6 +561,8 @@ static int uhid_dev_destroy(struct uhid_device *uhid)
 
 	uhid->running = false;
 	wake_up_interruptible(&uhid->report_wait);
+
+	cancel_work_sync(&uhid->worker);
 
 	hid_destroy_device(uhid->hid);
 	kfree(uhid->rd_data);
@@ -630,6 +626,7 @@ static int uhid_char_open(struct inode *inode, struct file *file)
 	init_waitqueue_head(&uhid->waitq);
 	init_waitqueue_head(&uhid->report_wait);
 	uhid->running = false;
+	INIT_WORK(&uhid->worker, uhid_device_add_worker);
 
 	file->private_data = uhid;
 	nonseekable_open(inode, file);

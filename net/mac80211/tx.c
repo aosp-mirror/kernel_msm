@@ -365,7 +365,7 @@ static void purge_old_ps_buffers(struct ieee80211_local *local)
 		skb = skb_dequeue(&ps->bc_buf);
 		if (skb) {
 			purged++;
-			dev_kfree_skb(skb);
+			ieee80211_free_txskb(&local->hw, skb);
 		}
 		total += skb_queue_len(&ps->bc_buf);
 	}
@@ -448,7 +448,7 @@ ieee80211_tx_h_multicast_ps_buf(struct ieee80211_tx_data *tx)
 	if (skb_queue_len(&ps->bc_buf) >= AP_MAX_BC_BUFFER) {
 		ps_dbg(tx->sdata,
 		       "BC TX buffer full - dropping the oldest frame\n");
-		dev_kfree_skb(skb_dequeue(&ps->bc_buf));
+		ieee80211_free_txskb(&tx->local->hw, skb_dequeue(&ps->bc_buf));
 	} else
 		tx->local->total_ps_buffered++;
 
@@ -1266,7 +1266,11 @@ static void ieee80211_drv_tx(struct ieee80211_local *local,
 	if (atomic_read(&sdata->txqs_len[ac]) >= local->hw.txq_ac_max_pending)
 		netif_stop_subqueue(sdata->dev, ac);
 
-	skb_queue_tail(&txqi->queue, skb);
+	spin_lock_bh(&txqi->queue.lock);
+	txqi->byte_cnt += skb->len;
+	__skb_queue_tail(&txqi->queue, skb);
+	spin_unlock_bh(&txqi->queue.lock);
+
 	drv_wake_tx_queue(local, txqi);
 
 	return;
@@ -1293,6 +1297,8 @@ struct sk_buff *ieee80211_tx_dequeue(struct ieee80211_hw *hw,
 	skb = __skb_dequeue(&txqi->queue);
 	if (!skb)
 		goto out;
+
+	txqi->byte_cnt -= skb->len;
 
 	atomic_dec(&sdata->txqs_len[ac]);
 	if (__netif_subqueue_stopped(sdata->dev, ac))
@@ -3781,7 +3787,7 @@ ieee80211_get_buffered_bc(struct ieee80211_hw *hw,
 			sdata = IEEE80211_DEV_TO_SUB_IF(skb->dev);
 		if (!ieee80211_tx_prepare(sdata, &tx, NULL, skb))
 			break;
-		dev_kfree_skb_any(skb);
+		ieee80211_free_txskb(hw, skb);
 	}
 
 	info = IEEE80211_SKB_CB(skb);

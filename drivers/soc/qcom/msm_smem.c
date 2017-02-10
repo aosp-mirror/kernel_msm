@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -375,7 +375,7 @@ static void *__smem_get_entry_secure(unsigned id,
 	uint32_t a_hdr_size;
 	int rc;
 
-	SMEM_DBG("%s(%u, %u, %u, %u, %d, %d)\n", __func__, id, *size, to_proc,
+	SMEM_DBG("%s(%u, %u, %u, %d, %d)\n", __func__, id, to_proc,
 					flags, skip_init_check, use_rspinlock);
 
 	if (!skip_init_check && !smem_initialized_check())
@@ -817,7 +817,7 @@ EXPORT_SYMBOL(smem_alloc);
 void *smem_get_entry(unsigned id, unsigned *size, unsigned to_proc,
 								unsigned flags)
 {
-	SMEM_DBG("%s(%u, %u, %u, %u)\n", __func__, id, *size, to_proc, flags);
+	SMEM_DBG("%s(%u, %u, %u)\n", __func__, id, to_proc, flags);
 
 	/*
 	 * Handle the circular dependecy between SMEM and software implemented
@@ -1222,12 +1222,18 @@ static void smem_init_security_partition(struct smem_toc_entry *entry,
 		LOG_ERR("Smem partition %d cached heap exceeds size\n", num);
 		BUG();
 	}
-	if (hdr->host0 == SMEM_COMM_HOST && hdr->host1 == SMEM_COMM_HOST) {
-		comm_partition.partition_num = num;
-		comm_partition.offset = entry->offset;
-		comm_partition.size_cacheline = entry->size_cacheline;
-		SMEM_INFO("Common Partition %d offset:%x\n", num,
-						entry->offset);
+	if (is_comm_partition) {
+		if (hdr->host0 == SMEM_COMM_HOST
+			&& hdr->host1 == SMEM_COMM_HOST) {
+			comm_partition.partition_num = num;
+			comm_partition.offset = entry->offset;
+			comm_partition.size_cacheline = entry->size_cacheline;
+			SMEM_INFO("Common Partition %d offset:%x\n", num,
+							entry->offset);
+		} else {
+			LOG_ERR("Smem Comm partition hosts don't match TOC\n");
+			WARN_ON(1);
+		}
 		return;
 	}
 	if (hdr->host0 != SMEM_APPS && hdr->host1 != SMEM_APPS) {

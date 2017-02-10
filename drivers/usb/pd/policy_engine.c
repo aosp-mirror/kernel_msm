@@ -256,12 +256,6 @@ static void *usbpd_ipc_log;
 static int min_sink_current = 900;
 module_param(min_sink_current, int, S_IRUSR | S_IWUSR);
 
-static bool ss_host;
-module_param(ss_host, bool, S_IRUSR | S_IWUSR);
-
-static bool ss_dev = true;
-module_param(ss_dev, bool, S_IRUSR | S_IWUSR);
-
 static const u32 default_src_caps[] = { 0x36019096 };	/* VSafe5V @ 1.5A */
 static const u32 default_snk_caps[] = { 0x2601905A };	/* 5V @ 900mA */
 
@@ -375,20 +369,34 @@ enum plug_orientation usbpd_get_plug_orientation(struct usbpd *pd)
 }
 EXPORT_SYMBOL(usbpd_get_plug_orientation);
 
-static bool is_cable_flipped(struct usbpd *pd)
+static inline void stop_usb_host(struct usbpd *pd)
 {
-	enum plug_orientation cc;
+	extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST, 0);
+}
 
-	cc = usbpd_get_plug_orientation(pd);
-	if (cc == ORIENTATION_CC2)
-		return true;
+static inline void start_usb_host(struct usbpd *pd, bool ss)
+{
+	enum plug_orientation cc = usbpd_get_plug_orientation(pd);
 
-	/*
-	 * ORIENTATION_CC1 or ORIENTATION_NONE.
-	 * Return value for ORIENTATION_NONE is
-	 * "dont care" as disconnect handles it.
-	 */
-	return false;
+	extcon_set_cable_state_(pd->extcon, EXTCON_USB_CC,
+			cc == ORIENTATION_CC2);
+	extcon_set_cable_state_(pd->extcon, EXTCON_USB_SPEED, ss);
+	extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST, 1);
+}
+
+static inline void stop_usb_peripheral(struct usbpd *pd)
+{
+	extcon_set_cable_state_(pd->extcon, EXTCON_USB, 0);
+}
+
+static inline void start_usb_peripheral(struct usbpd *pd)
+{
+	enum plug_orientation cc = usbpd_get_plug_orientation(pd);
+
+	extcon_set_cable_state_(pd->extcon, EXTCON_USB_CC,
+			cc == ORIENTATION_CC2);
+	extcon_set_cable_state_(pd->extcon, EXTCON_USB_SPEED, 1);
+	extcon_set_cable_state_(pd->extcon, EXTCON_USB, 1);
 }
 
 static int set_power_role(struct usbpd *pd, enum power_role pr)
@@ -774,17 +782,12 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 	case PE_SRC_READY:
 		pd->in_explicit_contract = true;
 		if (pd->current_dr == DR_DFP) {
+			/* don't start USB host until after SVDM discovery */
 			if (pd->vdm_state == VDM_NONE)
 				usbpd_send_svdm(pd, USBPD_SID,
 						USBPD_SVDM_DISCOVER_IDENTITY,
 						SVDM_CMD_TYPE_INITIATOR, 0,
 						NULL, 0);
-
-			extcon_set_cable_state_(pd->extcon, EXTCON_USB_CC,
-					is_cable_flipped(pd));
-			extcon_set_cable_state_(pd->extcon, EXTCON_USB_SPEED,
-					ss_host);
-			extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST, 1);
 		}
 
 		kobject_uevent(&pd->dev.kobj, KOBJ_CHANGE);
@@ -820,15 +823,8 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 			pd->current_dr = DR_UFP;
 
 			if (pd->psy_type == POWER_SUPPLY_TYPE_USB ||
-				pd->psy_type == POWER_SUPPLY_TYPE_USB_CDP) {
-				extcon_set_cable_state_(pd->extcon,
-						EXTCON_USB_CC,
-						is_cable_flipped(pd));
-				extcon_set_cable_state_(pd->extcon,
-						EXTCON_USB_SPEED, ss_dev);
-				extcon_set_cable_state_(pd->extcon,
-						EXTCON_USB, 1);
-			}
+				pd->psy_type == POWER_SUPPLY_TYPE_USB_CDP)
+				start_usb_peripheral(pd);
 		}
 
 		dual_role_instance_changed(pd->dual_role);
@@ -928,14 +924,9 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 
 	case PE_SNK_TRANSITION_TO_DEFAULT:
 		if (pd->current_dr != DR_UFP) {
-			extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST, 0);
-
+			stop_usb_host(pd);
+			start_usb_peripheral(pd);
 			pd->current_dr = DR_UFP;
-			extcon_set_cable_state_(pd->extcon, EXTCON_USB_CC,
-					is_cable_flipped(pd));
-			extcon_set_cable_state_(pd->extcon, EXTCON_USB_SPEED,
-					ss_dev);
-			extcon_set_cable_state_(pd->extcon, EXTCON_USB, 1);
 			pd_phy_update_roles(pd->current_dr, pd->current_pr);
 		}
 		if (pd->vconn_enabled) {
@@ -1061,6 +1052,7 @@ static void handle_vdm_rx(struct usbpd *pd, struct rx_msg *rx_msg)
 	u8 i, num_vdos = rx_msg->len - 1;	/* num objects minus header */
 	u8 cmd = SVDM_HDR_CMD(vdm_hdr);
 	u8 cmd_type = SVDM_HDR_CMD_TYPE(vdm_hdr);
+	bool has_dp = false;
 	struct usbpd_svid_handler *handler;
 
 	usbpd_dbg(&pd->dev, "VDM rx: svid:%x cmd:%x cmd_type:%x vdm_hdr:%x\n",
@@ -1210,7 +1202,17 @@ static void handle_vdm_rx(struct usbpd *pd, struct rx_msg *rx_msg)
 						handler->discovered = true;
 					}
 				}
+
+				if (svid == 0xFF01)
+					has_dp = true;
 			}
+
+			/*
+			 * Finally start USB host now that we have determined
+			 * if DisplayPort mode is present or not and limit USB
+			 * to HS-only mode if so.
+			 */
+			start_usb_host(pd, !has_dp);
 
 			break;
 
@@ -1224,6 +1226,16 @@ static void handle_vdm_rx(struct usbpd *pd, struct rx_msg *rx_msg)
 	case SVDM_CMD_TYPE_RESP_NAK:
 		usbpd_info(&pd->dev, "VDM NAK received for SVID:0x%04x command:0x%x\n",
 				svid, cmd);
+
+		switch (cmd) {
+		case USBPD_SVDM_DISCOVER_IDENTITY:
+		case USBPD_SVDM_DISCOVER_SVIDS:
+			start_usb_host(pd, true);
+			break;
+		default:
+			break;
+		}
+
 		break;
 
 	case SVDM_CMD_TYPE_RESP_BUSY:
@@ -1325,26 +1337,19 @@ static void reset_vdm_state(struct usbpd *pd)
 
 static void dr_swap(struct usbpd *pd)
 {
+	reset_vdm_state(pd);
+
 	if (pd->current_dr == DR_DFP) {
-		extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST, 0);
-		extcon_set_cable_state_(pd->extcon, EXTCON_USB_CC,
-				is_cable_flipped(pd));
-		extcon_set_cable_state_(pd->extcon, EXTCON_USB_SPEED, ss_dev);
-		extcon_set_cable_state_(pd->extcon, EXTCON_USB, 1);
+		stop_usb_host(pd);
+		start_usb_peripheral(pd);
 		pd->current_dr = DR_UFP;
 	} else if (pd->current_dr == DR_UFP) {
-		extcon_set_cable_state_(pd->extcon, EXTCON_USB, 0);
-		extcon_set_cable_state_(pd->extcon, EXTCON_USB_CC,
-				is_cable_flipped(pd));
-		extcon_set_cable_state_(pd->extcon, EXTCON_USB_SPEED, ss_host);
-		extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST, 1);
+		stop_usb_peripheral(pd);
 		pd->current_dr = DR_DFP;
 
-		if (pd->vdm_state == VDM_NONE)
-			usbpd_send_svdm(pd, USBPD_SID,
-					USBPD_SVDM_DISCOVER_IDENTITY,
-					SVDM_CMD_TYPE_INITIATOR, 0,
-					NULL, 0);
+		/* don't start USB host until after SVDM discovery */
+		usbpd_send_svdm(pd, USBPD_SID, USBPD_SVDM_DISCOVER_IDENTITY,
+				SVDM_CMD_TYPE_INITIATOR, 0, NULL, 0);
 	}
 
 	pd_phy_update_roles(pd->current_dr, pd->current_pr);
@@ -1466,9 +1471,9 @@ static void usbpd_sm(struct work_struct *w)
 		}
 
 		if (pd->current_dr == DR_UFP)
-			extcon_set_cable_state_(pd->extcon, EXTCON_USB, 0);
+			stop_usb_peripheral(pd);
 		else if (pd->current_dr == DR_DFP)
-			extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST, 0);
+			stop_usb_host(pd);
 
 		pd->current_pr = PR_NONE;
 		pd->current_dr = DR_NONE;
@@ -1566,14 +1571,9 @@ static void usbpd_sm(struct work_struct *w)
 		if (ret) {
 			pd->caps_count++;
 
-			if (pd->caps_count == 5 && pd->current_dr == DR_DFP) {
+			if (pd->caps_count == 10 && pd->current_dr == DR_DFP) {
 				/* Likely not PD-capable, start host now */
-				extcon_set_cable_state_(pd->extcon,
-					EXTCON_USB_CC, is_cable_flipped(pd));
-				extcon_set_cable_state_(pd->extcon,
-						EXTCON_USB_SPEED, ss_host);
-				extcon_set_cable_state_(pd->extcon,
-						EXTCON_USB_HOST, 1);
+				start_usb_host(pd, true);
 			} else if (pd->caps_count >= PD_CAPS_COUNT) {
 				usbpd_dbg(&pd->dev, "Src CapsCounter exceeded, disabling PD\n");
 				usbpd_set_state(pd, PE_SRC_DISABLED);
@@ -2974,11 +2974,6 @@ struct usbpd *usbpd_create(struct device *parent)
 		goto destroy_wq;
 	}
 
-	pd->psy_nb.notifier_call = psy_changed;
-	ret = power_supply_reg_notifier(&pd->psy_nb);
-	if (ret)
-		goto put_psy;
-
 	/*
 	 * associate extcon with the parent dev as it could have a DT
 	 * node which will be useful for extcon_get_edev_by_phandle()
@@ -2987,26 +2982,26 @@ struct usbpd *usbpd_create(struct device *parent)
 	if (IS_ERR(pd->extcon)) {
 		usbpd_err(&pd->dev, "failed to allocate extcon device\n");
 		ret = PTR_ERR(pd->extcon);
-		goto unreg_psy;
+		goto put_psy;
 	}
 
 	pd->extcon->mutually_exclusive = usbpd_extcon_exclusive;
 	ret = devm_extcon_dev_register(parent, pd->extcon);
 	if (ret) {
 		usbpd_err(&pd->dev, "failed to register extcon device\n");
-		goto unreg_psy;
+		goto put_psy;
 	}
 
 	pd->vbus = devm_regulator_get(parent, "vbus");
 	if (IS_ERR(pd->vbus)) {
 		ret = PTR_ERR(pd->vbus);
-		goto unreg_psy;
+		goto put_psy;
 	}
 
 	pd->vconn = devm_regulator_get(parent, "vconn");
 	if (IS_ERR(pd->vconn)) {
 		ret = PTR_ERR(pd->vconn);
-		goto unreg_psy;
+		goto put_psy;
 	}
 
 	pd->vconn_is_external = device_property_present(parent,
@@ -3031,7 +3026,7 @@ struct usbpd *usbpd_create(struct device *parent)
 			&pd->dr_desc);
 	if (IS_ERR(pd->dual_role)) {
 		usbpd_err(&pd->dev, "could not register dual_role instance\n");
-		goto unreg_psy;
+		goto put_psy;
 	} else {
 		pd->dual_role->drv_data = pd;
 	}
@@ -3045,13 +3040,18 @@ struct usbpd *usbpd_create(struct device *parent)
 	INIT_LIST_HEAD(&pd->svid_handlers);
 	init_completion(&pd->swap_complete);
 
+	pd->psy_nb.notifier_call = psy_changed;
+	ret = power_supply_reg_notifier(&pd->psy_nb);
+	if (ret)
+		goto del_inst;
+
 	/* force read initial power_supply values */
 	psy_changed(&pd->psy_nb, PSY_EVENT_PROP_CHANGED, pd->usb_psy);
 
 	return pd;
 
-unreg_psy:
-	power_supply_unreg_notifier(&pd->psy_nb);
+del_inst:
+	list_del(&pd->instance);
 put_psy:
 	power_supply_put(pd->usb_psy);
 destroy_wq:

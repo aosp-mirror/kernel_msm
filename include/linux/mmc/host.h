@@ -17,10 +17,12 @@
 #include <linux/device.h>
 #include <linux/devfreq.h>
 #include <linux/fault-inject.h>
+#include <linux/blkdev.h>
 
 #include <linux/mmc/core.h>
 #include <linux/mmc/card.h>
 #include <linux/mmc/pm.h>
+#include <linux/mmc/ring_buffer.h>
 
 #define MMC_AUTOSUSPEND_DELAY_MS	3000
 
@@ -553,7 +555,6 @@ struct mmc_host {
 		int				num_funcs;
 	} embedded_sdio_data;
 #endif
-
 	/*
 	 * Set to 1 to just stop the SDCLK to the card without
 	 * actually disabling the clock from it's source.
@@ -571,6 +572,7 @@ struct mmc_host {
 	} perf;
 	bool perf_enable;
 #endif
+	struct mmc_trace_buffer trace_buf;
 	enum dev_state dev_status;
 	bool			wakeup_on_idle;
 	struct mmc_cmdq_context_info	cmdq_ctx;
@@ -585,6 +587,11 @@ struct mmc_host {
 	 */
 	void *cmdq_private;
 	struct mmc_request	*err_mrq;
+#ifdef CONFIG_BLOCK
+	int			latency_hist_enabled;
+	struct io_latency_state io_lat_s;
+#endif
+
 	unsigned long		private[0] ____cacheline_aligned;
 };
 

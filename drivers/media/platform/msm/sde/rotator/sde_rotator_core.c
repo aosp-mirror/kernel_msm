@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -530,7 +530,7 @@ static int sde_rotator_import_buffer(struct sde_layer_buffer *buffer,
 	return ret;
 }
 
-static int sde_rotator_secure_session_ctrl(struct sde_rot_entry *entry)
+static int sde_rotator_secure_session_ctrl(bool enable)
 {
 	struct sde_rot_data_type *mdata = sde_rot_get_mdata();
 	uint32_t sid_info;
@@ -546,8 +546,7 @@ static int sde_rotator_secure_session_ctrl(struct sde_rot_entry *entry)
 		desc.args[1] = SCM_BUFFER_PHYS(&sid_info);
 		desc.args[2] = sizeof(uint32_t);
 
-		if (!mdata->sec_cam_en &&
-			(entry->item.flags & SDE_ROTATION_SECURE_CAMERA)) {
+		if (!mdata->sec_cam_en && enable) {
 			/*
 			 * Enable secure camera operation
 			 * Send SCM call to hypervisor to switch the
@@ -573,11 +572,8 @@ static int sde_rotator_secure_session_ctrl(struct sde_rot_entry *entry)
 
 			SDEROT_DBG("scm_call(1) ret=%d, resp=%x",
 				ret, resp);
-			SDEROT_EVTLOG(1, entry->item.flags,
-					entry->src_buf.p[0].addr,
-					entry->dst_buf.p[0].addr);
-		} else if (mdata->sec_cam_en && !(entry->item.flags &
-				SDE_ROTATION_SECURE_CAMERA)) {
+			SDEROT_EVTLOG(1);
+		} else if (mdata->sec_cam_en && !enable) {
 			/*
 			 * Disable secure camera operation
 			 * Send SCM call to hypervisor to switch the
@@ -596,9 +592,7 @@ static int sde_rotator_secure_session_ctrl(struct sde_rot_entry *entry)
 
 			/* force smmu to reattach */
 			sde_smmu_secure_ctrl(1);
-			SDEROT_EVTLOG(0, entry->item.flags,
-					entry->src_buf.p[0].addr,
-					entry->dst_buf.p[0].addr);
+			SDEROT_EVTLOG(0);
 		}
 	} else {
 		return 0;
@@ -618,6 +612,7 @@ static int sde_rotator_map_and_check_data(struct sde_rot_entry *entry)
 	struct sde_mdp_format_params *fmt;
 	struct sde_mdp_plane_sizes ps;
 	bool rotation;
+	bool secure;
 
 	input = &entry->item.input;
 	output = &entry->item.output;
@@ -628,7 +623,9 @@ static int sde_rotator_map_and_check_data(struct sde_rot_entry *entry)
 	if (IS_ERR_VALUE(ret))
 		return ret;
 
-	ret = sde_rotator_secure_session_ctrl(entry);
+	secure = (entry->item.flags & SDE_ROTATION_SECURE_CAMERA) ?
+			true : false;
+	ret = sde_rotator_secure_session_ctrl(secure);
 	if (ret) {
 		SDEROT_ERR("failed secure session enabling/disabling %d\n",
 			ret);
@@ -1393,6 +1390,14 @@ static void sde_rotator_commit_handler(struct work_struct *work)
 		entry->item.dst_rect.x, entry->item.dst_rect.y,
 		entry->item.dst_rect.w, entry->item.dst_rect.h);
 
+	ATRACE_INT("sde_smmu_ctrl", 0);
+	ret = sde_smmu_ctrl(1);
+	if (IS_ERR_VALUE(ret)) {
+		SDEROT_ERR("IOMMU attach failed\n");
+		goto smmu_error;
+	}
+	ATRACE_INT("sde_smmu_ctrl", 1);
+
 	ret = sde_rotator_map_and_check_data(entry);
 	if (ret) {
 		SDEROT_ERR("fail to prepare input/output data %d\n", ret);
@@ -1418,6 +1423,8 @@ static void sde_rotator_commit_handler(struct work_struct *work)
 	sde_rot_mgr_unlock(mgr);
 	return;
 error:
+	sde_smmu_ctrl(0);
+smmu_error:
 	sde_rotator_put_hw_resource(entry->commitq, entry, hw);
 get_hw_res_err:
 	sde_rotator_signal_output(entry);
@@ -1494,6 +1501,7 @@ static void sde_rotator_done_handler(struct work_struct *work)
 	sde_rot_mgr_lock(mgr);
 	sde_rotator_put_hw_resource(entry->commitq, entry, entry->commitq->hw);
 	sde_rotator_signal_output(entry);
+	ATRACE_INT("sde_rot_done", 1);
 	sde_rotator_release_entry(mgr, entry);
 	atomic_dec(&request->pending_count);
 	if (request->retireq && request->retire_work)
@@ -1501,6 +1509,10 @@ static void sde_rotator_done_handler(struct work_struct *work)
 	if (entry->item.ts)
 		entry->item.ts[SDE_ROTATOR_TS_RETIRE] = ktime_get();
 	sde_rot_mgr_unlock(mgr);
+
+	ATRACE_INT("sde_smmu_ctrl", 3);
+	sde_smmu_ctrl(0);
+	ATRACE_INT("sde_smmu_ctrl", 4);
 }
 
 static bool sde_rotator_verify_format(struct sde_rot_mgr *mgr,
@@ -2194,6 +2206,11 @@ static int sde_rotator_close(struct sde_rot_mgr *mgr,
 		return -EINVAL;
 	}
 
+	/*
+	 * if secure camera session was enabled
+	 * go back to non secure state
+	 */
+	sde_rotator_secure_session_ctrl(false);
 	sde_rotator_release_rotator_perf_session(mgr, private);
 
 	list_del_init(&private->list);
@@ -2216,7 +2233,7 @@ static ssize_t sde_rotator_show_caps(struct device *dev,
 #define SPRINT(fmt, ...) \
 		(cnt += scnprintf(buf + cnt, len - cnt, fmt, ##__VA_ARGS__))
 
-	SPRINT("wb_count=%d\n", mgr->queue_count);
+	SPRINT("queue_count=%d\n", mgr->queue_count);
 	SPRINT("downscale=1\n");
 	SPRINT("ubwc=1\n");
 
@@ -2523,7 +2540,7 @@ static int sde_rotator_register_clk(struct platform_device *pdev,
 
 static void sde_rotator_unregister_clk(struct sde_rot_mgr *mgr)
 {
-	kfree(mgr->rot_clk);
+	devm_kfree(mgr->device, mgr->rot_clk);
 	mgr->rot_clk = NULL;
 	mgr->num_rot_clk = 0;
 }

@@ -459,6 +459,15 @@ config CAVIUM_ERRATUM_22375
 
 	  If unsure, say Y.
 
+config CAVIUM_ERRATUM_23144
+	bool "Cavium erratum 23144: ITS SYNC hang on dual socket system"
+	depends on NUMA
+	default y
+	help
+	  ITS SYNC command hang for cross node io and collections/cpu mapping.
+
+	  If unsure, say Y.
+
 config CAVIUM_ERRATUM_23154
 	bool "Cavium erratum 23154: Access to ICC_IAR1_EL1 is not sync'ed"
 	default y
@@ -808,7 +817,6 @@ menu "ARMv8.1 architectural features"
 
 config ARM64_HW_AFDBM
 	bool "Support for hardware updates of the Access and Dirty page flags"
-	default y
 	help
 	  The ARMv8.1 architecture extensions introduce support for
 	  hardware updates of the access and dirty information in page
@@ -825,7 +833,6 @@ config ARM64_HW_AFDBM
 
 config ARM64_PAN
 	bool "Enable support for Privileged Access Never (PAN)"
-	default y
 	help
 	 Privileged Access Never (PAN; part of the ARMv8.1 Extensions)
 	 prevents the kernel or hypervisor from accessing user-space (EL0)
@@ -853,7 +860,6 @@ endmenu
 
 config ARM64_UAO
 	bool "Enable support for User Access Override (UAO)"
-	default y
 	help
 	  User Access Override (UAO; part of the ARMv8.2 Extensions)
 	  causes the 'unprivileged' variant of the load/store instructions to

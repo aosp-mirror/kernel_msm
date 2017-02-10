@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -46,6 +46,8 @@
 #define CLAMP_N_EN			BIT(5)
 #define FREEZIO_N			BIT(1)
 #define POWER_DOWN			BIT(0)
+
+#define QUSB2PHY_PORT_TEST_CTRL		0xB8
 
 #define QUSB2PHY_PWR_CTRL1		0x210
 #define PWR_CTRL1_CLAMP_N_EN		BIT(1)
@@ -688,6 +690,21 @@ static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
 			writel_relaxed(intr_mask,
 				qphy->base + QUSB2PHY_PORT_INTR_CTRL);
 
+			/* enable phy auto-resume */
+			writel_relaxed(0x0C,
+					qphy->base + QUSB2PHY_PORT_TEST_CTRL);
+			/* flush the previous write before next write */
+			wmb();
+			writel_relaxed(0x04,
+				qphy->base + QUSB2PHY_PORT_TEST_CTRL);
+
+
+			dev_dbg(phy->dev, "%s: intr_mask = %x\n",
+			__func__, intr_mask);
+
+			/* Makes sure that above write goes through */
+			wmb();
+
 			qusb_phy_enable_clocks(qphy, false);
 		} else { /* Disconnect case */
 			/* Disable all interrupts */
@@ -701,7 +718,12 @@ static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
 			if (qphy->tcsr_clamp_dig_n)
 				writel_relaxed(0x0,
 					qphy->tcsr_clamp_dig_n);
-			qusb_phy_enable_power(qphy, false);
+			/* Do not disable power rails if there is vote for it */
+			if (!qphy->rm_pulldown)
+				qusb_phy_enable_power(qphy, false);
+			else
+				dev_dbg(phy->dev, "race with rm_pulldown. Keep ldo ON\n");
+
 			/*
 			 * Set put_into_high_z_state to true so next USB
 			 * cable connect, DPF_DMF request performs PHY
@@ -1087,6 +1109,10 @@ static int qusb_phy_probe(struct platform_device *pdev)
 	ret = qusb_phy_regulator_init(qphy);
 	if (ret)
 		usb_remove_phy(&qphy->phy);
+
+	/* de-assert clamp dig n to reduce leakage on 1p8 upon boot up */
+	if (qphy->tcsr_clamp_dig_n)
+		writel_relaxed(0x0, qphy->tcsr_clamp_dig_n);
 
 	return ret;
 }

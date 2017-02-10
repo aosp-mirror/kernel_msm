@@ -121,6 +121,7 @@ struct hw_perf_event {
 		struct { /* intel_cqm */
 			int			cqm_state;
 			u32			cqm_rmid;
+			int			is_group_event;
 			struct list_head	cqm_events_entry;
 			struct list_head	cqm_groups_entry;
 			struct list_head	cqm_group_entry;
@@ -476,6 +477,12 @@ struct perf_event {
 	int				nr_siblings;
 	int				group_flags;
 	struct perf_event		*group_leader;
+
+	/*
+	 * Protect the pmu, attributes and context of a group leader.
+	 * Note: does not protect the pointer to the group_leader.
+	 */
+	struct mutex			group_leader_mutex;
 	struct pmu			*pmu;
 
 	enum perf_event_active_state	state;

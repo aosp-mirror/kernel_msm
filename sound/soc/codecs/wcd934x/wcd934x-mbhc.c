@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -772,18 +772,24 @@ static void tavil_mbhc_moisture_config(struct wcd_mbhc *mbhc)
 {
 	struct snd_soc_codec *codec = mbhc->codec;
 
-	if (TAVIL_MBHC_MOISTURE_RREF == R_OFF)
+	if ((mbhc->moist_rref == R_OFF) ||
+	    (mbhc->mbhc_cfg->enable_usbc_analog)) {
+		snd_soc_update_bits(codec, WCD934X_MBHC_NEW_CTL_2,
+				    0x0C, R_OFF << 2);
 		return;
+	}
 
 	/* Donot enable moisture detection if jack type is NC */
 	if (!mbhc->hphl_swh) {
 		dev_dbg(codec->dev, "%s: disable moisture detection for NC\n",
 			__func__);
+		snd_soc_update_bits(codec, WCD934X_MBHC_NEW_CTL_2,
+				    0x0C, R_OFF << 2);
 		return;
 	}
 
 	snd_soc_update_bits(codec, WCD934X_MBHC_NEW_CTL_2,
-			    0x0C, TAVIL_MBHC_MOISTURE_RREF << 2);
+			    0x0C, mbhc->moist_rref << 2);
 }
 
 static bool tavil_hph_register_recovery(struct wcd_mbhc *mbhc)
@@ -904,6 +910,29 @@ static const struct snd_kcontrol_new impedance_detect_controls[] = {
 	SOC_SINGLE_EXT("HPHR Impedance", 0, 1, UINT_MAX, 0,
 		       tavil_hph_impedance_get, NULL),
 };
+
+/*
+ * tavil_mbhc_get_impedance: get impedance of headphone left and right channels
+ * @wcd934x_mbhc: handle to struct wcd934x_mbhc *
+ * @zl: handle to left-ch impedance
+ * @zr: handle to right-ch impedance
+ * return 0 for success or error code in case of failure
+ */
+int tavil_mbhc_get_impedance(struct wcd934x_mbhc *wcd934x_mbhc,
+			     uint32_t *zl, uint32_t *zr)
+{
+	if (!wcd934x_mbhc) {
+		pr_err("%s: mbhc not initialized!\n", __func__);
+		return -EINVAL;
+	}
+	if (!zl || !zr) {
+		pr_err("%s: zl or zr null!\n", __func__);
+		return -EINVAL;
+	}
+
+	return wcd_mbhc_get_impedance(&wcd934x_mbhc->wcd_mbhc, zl, zr);
+}
+EXPORT_SYMBOL(tavil_mbhc_get_impedance);
 
 /*
  * tavil_mbhc_hs_detect: starts mbhc insertion/removal functionality

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3332,6 +3332,18 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 					    134, 135, 136, 137, 138, 139,
 					    140, 141, 142, 143};
 
+	/* Tavil Codec SLIMBUS configuration
+	 * RX1, RX2, RX3, RX4, RX5, RX6, RX7, RX8
+	 * TX1, TX2, TX3, TX4, TX5, TX6, TX7, TX8, TX9, TX10, TX11, TX12, TX13
+	 * TX14, TX15, TX16
+	 */
+	unsigned int rx_ch_tavil[WCD934X_RX_MAX] = {144, 145, 146, 147, 148,
+						    149, 150, 151};
+	unsigned int tx_ch_tavil[WCD934X_TX_MAX] = {128, 129, 130, 131, 132,
+						    133, 134, 135, 136, 137,
+						    138, 139, 140, 141, 142,
+						    143};
+
 	pr_info("%s: dev_name%s\n", __func__, dev_name(cpu_dai->dev));
 
 	rtd->pmdown_time = 0;
@@ -3392,8 +3404,15 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 
 	snd_soc_dapm_sync(dapm);
 
-	snd_soc_dai_set_channel_map(codec_dai, ARRAY_SIZE(tx_ch),
-				    tx_ch, ARRAY_SIZE(rx_ch), rx_ch);
+	if (!strcmp(dev_name(codec_dai->dev), "tavil_codec")) {
+		snd_soc_dai_set_channel_map(codec_dai, ARRAY_SIZE(tx_ch_tavil),
+					tx_ch_tavil, ARRAY_SIZE(rx_ch_tavil),
+					rx_ch_tavil);
+	} else {
+		snd_soc_dai_set_channel_map(codec_dai, ARRAY_SIZE(tx_ch),
+					tx_ch, ARRAY_SIZE(rx_ch),
+					rx_ch);
+	}
 
 	if (!strcmp(dev_name(codec_dai->dev), "tavil_codec")) {
 		msm_codec_fn.get_afe_config_fn = tavil_get_afe_config;
@@ -4956,6 +4975,26 @@ static struct snd_soc_dai_link msm_tavil_fe_dai_links[] = {
 	},
 };
 
+static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
+	{
+		.name = MSM_DAILINK_NAME(ASM Loopback),
+		.stream_name = "MultiMedia6",
+		.cpu_dai_name = "MultiMedia6",
+		.platform_name = "msm-pcm-loopback",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.dpcm_capture = 1,
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_suspend = 1,
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_pmdown_time = 1,
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA6,
+	},
+};
+
 static struct snd_soc_dai_link msm_common_be_dai_links[] = {
 	/* Backend AFE DAI Links */
 	{
@@ -5879,6 +5918,7 @@ static struct snd_soc_dai_link msm_auxpcm_be_dai_links[] = {
 static struct snd_soc_dai_link msm_tasha_dai_links[
 			 ARRAY_SIZE(msm_common_dai_links) +
 			 ARRAY_SIZE(msm_tasha_fe_dai_links) +
+			 ARRAY_SIZE(msm_common_misc_fe_dai_links) +
 			 ARRAY_SIZE(msm_common_be_dai_links) +
 			 ARRAY_SIZE(msm_tasha_be_dai_links) +
 			 ARRAY_SIZE(msm_wcn_be_dai_links) +
@@ -5889,6 +5929,7 @@ static struct snd_soc_dai_link msm_tasha_dai_links[
 static struct snd_soc_dai_link msm_tavil_dai_links[
 			 ARRAY_SIZE(msm_common_dai_links) +
 			 ARRAY_SIZE(msm_tavil_fe_dai_links) +
+			 ARRAY_SIZE(msm_common_misc_fe_dai_links) +
 			 ARRAY_SIZE(msm_common_be_dai_links) +
 			 ARRAY_SIZE(msm_tavil_be_dai_links) +
 			 ARRAY_SIZE(msm_wcn_be_dai_links) +
@@ -6290,7 +6331,7 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 {
 	struct snd_soc_card *card = NULL;
 	struct snd_soc_dai_link *dailink;
-	int len_1, len_2, len_3;
+	int len_1, len_2, len_3, len_4;
 	int total_links;
 	const struct of_device_id *match;
 
@@ -6305,8 +6346,9 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		card = &snd_soc_card_tasha_msm;
 		len_1 = ARRAY_SIZE(msm_common_dai_links);
 		len_2 = len_1 + ARRAY_SIZE(msm_tasha_fe_dai_links);
-		len_3 = len_2 + ARRAY_SIZE(msm_common_be_dai_links);
-		total_links = len_3 + ARRAY_SIZE(msm_tasha_be_dai_links);
+		len_3 = len_2 + ARRAY_SIZE(msm_common_misc_fe_dai_links);
+		len_4 = len_3 + ARRAY_SIZE(msm_common_be_dai_links);
+		total_links = len_4 + ARRAY_SIZE(msm_tasha_be_dai_links);
 		memcpy(msm_tasha_dai_links,
 		       msm_common_dai_links,
 		       sizeof(msm_common_dai_links));
@@ -6314,9 +6356,12 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		       msm_tasha_fe_dai_links,
 		       sizeof(msm_tasha_fe_dai_links));
 		memcpy(msm_tasha_dai_links + len_2,
+		       msm_common_misc_fe_dai_links,
+		       sizeof(msm_common_misc_fe_dai_links));
+		memcpy(msm_tasha_dai_links + len_3,
 		       msm_common_be_dai_links,
 		       sizeof(msm_common_be_dai_links));
-		memcpy(msm_tasha_dai_links + len_3,
+		memcpy(msm_tasha_dai_links + len_4,
 		       msm_tasha_be_dai_links,
 		       sizeof(msm_tasha_be_dai_links));
 
@@ -6357,8 +6402,9 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		card = &snd_soc_card_tavil_msm;
 		len_1 = ARRAY_SIZE(msm_common_dai_links);
 		len_2 = len_1 + ARRAY_SIZE(msm_tavil_fe_dai_links);
-		len_3 = len_2 + ARRAY_SIZE(msm_common_be_dai_links);
-		total_links = len_3 + ARRAY_SIZE(msm_tavil_be_dai_links);
+		len_3 = len_2 + ARRAY_SIZE(msm_common_misc_fe_dai_links);
+		len_4 = len_3 + ARRAY_SIZE(msm_common_be_dai_links);
+		total_links = len_4 + ARRAY_SIZE(msm_tavil_be_dai_links);
 		memcpy(msm_tavil_dai_links,
 		       msm_common_dai_links,
 		       sizeof(msm_common_dai_links));
@@ -6366,9 +6412,12 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		       msm_tavil_fe_dai_links,
 		       sizeof(msm_tavil_fe_dai_links));
 		memcpy(msm_tavil_dai_links + len_2,
+		       msm_common_misc_fe_dai_links,
+		       sizeof(msm_common_misc_fe_dai_links));
+		memcpy(msm_tavil_dai_links + len_3,
 		       msm_common_be_dai_links,
 		       sizeof(msm_common_be_dai_links));
-		memcpy(msm_tavil_dai_links + len_3,
+		memcpy(msm_tavil_dai_links + len_4,
 		       msm_tavil_be_dai_links,
 		       sizeof(msm_tavil_be_dai_links));
 

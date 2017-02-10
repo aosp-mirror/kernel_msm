@@ -1334,6 +1334,7 @@ struct ravg {
 	u32 sum, demand;
 	u32 sum_history[RAVG_HIST_SIZE_MAX];
 	u32 curr_window, prev_window;
+	u64 curr_burst, avg_burst, avg_sleep_time;
 	u16 active_windows;
 };
 #endif

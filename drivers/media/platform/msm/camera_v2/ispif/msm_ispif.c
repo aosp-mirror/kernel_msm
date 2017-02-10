@@ -443,7 +443,7 @@ static int msm_ispif_reset_hw(struct ispif_device *ispif)
 	msm_camera_io_w(ISPIF_RST_CMD_MASK,
 				ispif->base + ISPIF_RST_CMD_ADDR);
 
-	timeout = wait_for_completion_timeout(
+	timeout = wait_for_completion_interruptible_timeout(
 			&ispif->reset_complete[VFE0], msecs_to_jiffies(500));
 	CDBG("%s: VFE0 done\n", __func__);
 
@@ -457,7 +457,7 @@ static int msm_ispif_reset_hw(struct ispif_device *ispif)
 		atomic_set(&ispif->reset_trig[VFE1], 1);
 		msm_camera_io_w(ISPIF_RST_CMD_1_MASK,
 					ispif->base + ISPIF_RST_CMD_1_ADDR);
-		timeout = wait_for_completion_timeout(
+		timeout = wait_for_completion_interruptible_timeout(
 				&ispif->reset_complete[VFE1],
 				msecs_to_jiffies(500));
 		CDBG("%s: VFE1 done\n", __func__);
@@ -1120,7 +1120,7 @@ static int msm_ispif_restart_frame_boundary(struct ispif_device *ispif,
 		/* initiate reset of ISPIF */
 		msm_camera_io_w(ISPIF_RST_CMD_MASK_RESTART,
 				ispif->base + ISPIF_RST_CMD_ADDR);
-		timeout = wait_for_completion_timeout(
+		timeout = wait_for_completion_interruptible_timeout(
 			&ispif->reset_complete[VFE0], msecs_to_jiffies(500));
 		if (timeout <= 0) {
 			pr_err("%s: VFE0 reset wait timeout\n", __func__);
@@ -1133,7 +1133,7 @@ static int msm_ispif_restart_frame_boundary(struct ispif_device *ispif,
 		atomic_set(&ispif->reset_trig[VFE1], 1);
 		msm_camera_io_w(ISPIF_RST_CMD_1_MASK_RESTART,
 			ispif->base + ISPIF_RST_CMD_1_ADDR);
-		timeout = wait_for_completion_timeout(
+		timeout = wait_for_completion_interruptible_timeout(
 				&ispif->reset_complete[VFE1],
 				msecs_to_jiffies(500));
 		if (timeout <= 0) {
@@ -1447,6 +1447,12 @@ static inline void msm_ispif_read_irq_status(struct ispif_irq_status *out,
 		pr_err_ratelimited("%s: fatal error, stop ispif immediately\n",
 				__func__);
 		for (i = 0; i < ispif->vfe_info.num_vfe; i++) {
+			msm_camera_io_w(0x0,
+				ispif->base + ISPIF_VFE_m_IRQ_MASK_0(i));
+			msm_camera_io_w(0x0,
+				ispif->base + ISPIF_VFE_m_IRQ_MASK_1(i));
+			msm_camera_io_w(0x0,
+				ispif->base + ISPIF_VFE_m_IRQ_MASK_2(i));
 			msm_camera_io_w(ISPIF_STOP_INTF_IMMEDIATELY,
 				ispif->base + ISPIF_VFE_m_INTF_CMD_0(i));
 			msm_camera_io_w(ISPIF_STOP_INTF_IMMEDIATELY,

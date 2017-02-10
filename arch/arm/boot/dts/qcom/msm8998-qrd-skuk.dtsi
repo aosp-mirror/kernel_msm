@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,7 +13,6 @@
 #include <dt-bindings/interrupt-controller/irq.h>
 #include "msm8998-pinctrl.dtsi"
 #include "msm8998-audio.dtsi"
-#include "msm8998-camera-sensor-skuk.dtsi"
 
 / {
 	bluetooth: bt_wcn3990 {
@@ -101,7 +100,39 @@
 	pinctrl-0 = <&uart_console_active>;
 };
 
+&i2c_6 { /* BLSP1 QUP6 (NFC) */
+	status = "okay";
+	nq@28 {
+		compatible = "qcom,nq-nci";
+		reg = <0x28>;
+		qcom,nq-irq = <&tlmm 92 0x00>;
+		qcom,nq-ven = <&tlmm 12 0x00>;
+		qcom,nq-firm = <&tlmm 93 0x00>;
+		qcom,nq-clkreq = <&pm8998_gpios 21 0x00>;
+		qcom,nq-esepwr = <&tlmm 116 0x00>;
+		interrupt-parent = <&tlmm>;
+		qcom,clk-src = "BBCLK3";
+		interrupts = <92 0>;
+		interrupt-names = "nfc_irq";
+		pinctrl-names = "nfc_active", "nfc_suspend";
+		pinctrl-0 = <&nfc_int_active &nfc_enable_active>;
+		pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend>;
+		clocks = <&clock_gcc clk_ln_bb_clk3_pin>;
+		clock-names = "ref_clk";
+	};
+};
+
 &pm8998_gpios {
+	/* GPIO 5 for Home Key */
+	gpio@c400 {
+		status = "okay";
+		qcom,mode = <0>;
+		qcom,pull = <0>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <0>;
+		qcom,out-strength = <1>;
+	};
+
 	/* GPIO 6 for Vol+ Key */
 	gpio@c500 {
 		status = "okay";
@@ -111,6 +142,15 @@
 		qcom,src-sel = <0>;
 		qcom,out-strength = <1>;
 	};
+
+	/* GPIO 21 (NFC_CLK_REQ) */
+	gpio@d400 {
+		qcom,mode = <0>;
+		qcom,vin-sel = <1>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
 };
 
 &soc {
@@ -118,6 +158,15 @@
 		compatible = "gpio-keys";
 		input-name = "gpio-keys";
 		status = "okay";
+
+		home {
+			label = "home";
+			gpios = <&pm8998_gpios 5 0x1>;
+			linux,input-type = <1>;
+			linux,code = <102>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
 
 		vol_up {
 			label = "volume_up";
@@ -162,11 +211,11 @@
 		vcc_ana-supply = <&pm8998_l28>;
 		vcc_dig-supply = <&pm8998_l6>;
 		qcom,afe-load = <20000>;
-		qcom,afe-vtg-min = <2850000>;
-		qcom,afe-vtg-max = <3000000>;
+		qcom,afe-vtg-min = <3008000>;
+		qcom,afe-vtg-max = <3008000>;
 		qcom,dig-load = <40000>;
-		qcom,dig-vtg-min = <1800000>;
-		qcom,dig-vtg-max = <1800000>;
+		qcom,dig-vtg-min = <1808000>;
+		qcom,dig-vtg-max = <1808000>;
 		qcom,fb-resume-delay-us = <10000>;
 		qcom,afe-power-on-delay-us = <1000>;
 		qcom,afe-power-off-delay-us = <6>;
@@ -249,10 +298,16 @@
 
 &pmi8998_fg {
 	qcom,battery-data = <&qrd_batterydata>;
+	qcom,fg-jeita-thresholds = <0 5 55 55>;
 };
 
 &pmi8998_haptics {
 	status = "okay";
+};
+
+&pmi8998_wled {
+	qcom,led-strings-list = [00 01];
+	qcom,fs-curr-ua = <20000>;
 };
 
 &tlmm {
@@ -388,4 +443,47 @@
 		qcom,btm-channel-number = <0x78>;
 		qcom,thermal-node;
 	};
+};
+
+&red_led {
+	/delete-property/ linux,default-trigger;
+	qcom,start-idx = <1>;
+	qcom,idx-len = <10>;
+	qcom,duty-pcts = [00 19 32 4b 64
+			64 4b 32 19 00];
+	qcom,lut-flags = <3>;
+	qcom,pause-lo = <0>;
+	qcom,pause-hi = <0>;
+	qcom,ramp-step-ms = <255>;
+	qcom,use-blink;
+};
+
+&green_led {
+	/delete-property/ linux,default-trigger;
+	qcom,start-idx = <1>;
+	qcom,idx-len = <10>;
+	qcom,duty-pcts = [00 19 32 4b 64
+			64 4b 32 19 00];
+	qcom,lut-flags = <3>;
+	qcom,pause-lo = <0>;
+	qcom,pause-hi = <0>;
+	qcom,ramp-step-ms = <255>;
+	qcom,use-blink;
+};
+
+&blue_led {
+	/delete-property/ linux,default-trigger;
+	qcom,start-idx = <1>;
+	qcom,idx-len = <10>;
+	qcom,duty-pcts = [00 19 32 4b 64
+			64 4b 32 19 00];
+	qcom,lut-flags = <3>;
+	qcom,pause-lo = <0>;
+	qcom,pause-hi = <0>;
+	qcom,ramp-step-ms = <255>;
+	qcom,use-blink;
+};
+
+&wil6210 {
+	status = "ok";
 };
