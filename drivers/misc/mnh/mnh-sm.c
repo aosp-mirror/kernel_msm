@@ -111,7 +111,7 @@ static struct mnh_mipi_config mnh_mipi_configs[] = {
 		.txdev = MNH_MUX_DEVICE_TX1,
 		.rxdev = MNH_MUX_DEVICE_RX1,
 		.rx_rate = 648,
-		.tx_rate = 1296,
+		.tx_rate = 648,
 		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
 		.is_gen3 = 1,
 	},
@@ -703,8 +703,8 @@ static int mnh_sm_config_mipi(void)
 {
 	/* Initialze MIPI bypass */
 	/* TODO hardcode the to use the first config */
-	mnh_sm_mipi_bypass_init(mnh_mipi_configs[0]);
-	mnh_sm_mipi_bypass_init(mnh_mipi_configs[1]);
+	mnh_mipi_config(mnh_sm_dev->dev, mnh_mipi_configs[0]);
+	mnh_mipi_config(mnh_sm_dev->dev, mnh_mipi_configs[1]);
 
 	return 0;
 }
@@ -982,7 +982,7 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 				__func__, err);
 			return err;
 		}
-		mnh_sm_mipi_bypass_init(mipi_config);
+		mnh_mipi_config(mnh_sm_dev->dev, mipi_config);
 		/* TODO */
 		mnh_state = MNH_STATE_CONFIG_MIPI;
 		break;
