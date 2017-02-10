@@ -8,6 +8,7 @@ dts-dirs += cavium
 dts-dirs += exynos
 dts-dirs += freescale
 dts-dirs += hisilicon
+dts-dirs += lge
 dts-dirs += marvell
 dts-dirs += mediatek
 dts-dirs += qcom

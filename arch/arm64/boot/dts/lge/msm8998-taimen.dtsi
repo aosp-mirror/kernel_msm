@@ -1,0 +1,191 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <dt-bindings/interrupt-controller/irq.h>
+#include "msm8998-taimen-pinctrl.dtsi"
+#include "msm8998-taimen-misc.dtsi"
+#include "msm8998-taimen-panel.dtsi"
+#include "msm8998-taimen-pm.dtsi"
+#include "msm8998-taimen-sound.dtsi"
+#include "msm8998-taimen-connectivity.dtsi"
+#include "msm8998-taimen-nfc.dtsi"
+#include "msm8998-taimen-hdmi.dtsi"
+#include "msm8998-taimen-touch.dtsi"
+#include "msm8998-taimen-fingerprint.dtsi"
+
+/ {
+	reserved-memory {
+		ramoops_mem: ramoops_region@b0000000 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0xb0000000 0 0x100000>;
+		};
+
+		crash_fb_mem: crash_fb_mem@b0100000 {
+			linux,contiguous-region;
+			reg = <0 0xb0100000 0 0xc00000>;
+			label = "crash_fb_mem";
+		};
+	};
+};
+
+&soc {
+	wdog: qcom,wdt@17817000 {
+		qcom,bark-time = <16000>;
+	};
+
+	ramoops {
+		compatible = "ramoops";
+		mem-size = <0x80000>;
+		mem-address = <0xb0000000>;
+		record-size = <4096>;
+		console-size = <0x40000>;
+		ftrace-size = <0x40000>;
+		pmsg-size = <0>;
+		ecc-size = <0>;
+	};
+
+	crash_fb {
+		compatible = "crash_fb";
+		mem-addr = <0xb0100000>;
+		mem-size = <0xc00000>;
+	};
+
+	bootlog {
+		compatible = "bootlog";
+	};
+};
+
+&blsp1_uart3_hs {
+	status = "ok";
+};
+
+&ufsphy1 {
+	vdda-phy-supply = <&pm8998_l1>;
+	vdda-pll-supply = <&pm8998_l2>;
+	vddp-ref-clk-supply = <&pm8998_l26>;
+	vdda-phy-max-microamp = <51400>;
+	vdda-pll-max-microamp = <14600>;
+	vddp-ref-clk-max-microamp = <100>;
+	vddp-ref-clk-always-on;
+	status = "ok";
+};
+
+&ufs1 {
+	vdd-hba-supply = <&gdsc_ufs>;
+	vdd-hba-fixed-regulator;
+	vcc-supply = <&pm8998_l20>;
+	vccq-supply = <&pm8998_l26>;
+	vccq2-supply = <&pm8998_s4>;
+	vcc-max-microamp = <750000>;
+	vccq-max-microamp = <560000>;
+	vccq2-max-microamp = <750000>;
+	status = "ok";
+};
+
+&ufs_ice {
+	status = "ok";
+};
+
+&sdhc_2 {
+	vdd-supply = <&pm8998_l21>;
+	qcom,vdd-voltage-level = <2950000 2960000>;
+	qcom,vdd-current-level = <200 800000>;
+
+	vdd-io-supply = <&pm8998_l13>;
+	qcom,vdd-io-voltage-level = <1808000 2960000>;
+	qcom,vdd-io-current-level = <200 22000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdc2_cd_off>;
+
+	qcom,clk-rates = <400000 20000000 25000000
+				50000000 100000000 200000000>;
+	qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50", "SDR104";
+
+	cd-gpios = <&tlmm 40 0x1>;
+
+	status = "ok";
+};
+
+&uartblsp2dm1 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_active>;
+};
+
+&pm8998_gpios {
+	/* GPIO 6 for Vol+ Key */
+	gpio@c500 {
+		status = "okay";
+		qcom,mode = <0>;
+		qcom,pull = <0>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <0>;
+		qcom,out-strength = <1>;
+	};
+
+	gpio@cc00 { /* GPIO 13 */
+		qcom,mode = <1>;
+		qcom,output-type = <0>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <0>;
+		qcom,out-strength = <1>;
+		qcom,src-sel = <3>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+
+	/* GPIO 18 SMB138X */
+	gpio@d100 {
+		qcom,mode = <0>;
+		qcom,pull = <0>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+};
+
+&i2c_7 {
+	status = "okay";
+	bq25898s@6B{
+		compatible = "ti,bq25898s";
+		reg = <0x6B>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <119 0x2002>;
+		irq-gpio = <&tlmm 119 0x2002>;
+		ti,bq2589x,charge-voltage = <4200>;
+		ti,bq2589x,charge-current = <2250>;
+		ti,bq2589x,term-current = <512>;
+		ti,bq2589x,input-current-limit = <2000>;
+		ti,bq2589x,input-voltage-limit = <4600>;
+	};
+};
+
+&mdss_dp_ctrl {
+	pinctrl-names = "mdss_dp_active", "mdss_dp_sleep";
+	pinctrl-0 = <&mdss_dp_aux_active &mdss_dp_usbplug_cc_active>;
+	pinctrl-1 = <&mdss_dp_aux_suspend &mdss_dp_usbplug_cc_suspend>;
+	qcom,aux-en-gpio = <&tlmm 100 0>;
+	qcom,aux-sel-gpio = <&tlmm 80 0>;
+	qcom,usbplug-cc-gpio = <&tlmm 38 0>;
+};
+
+&pcie0 {
+	status = "disabled";
+};
+
+&wil6210 {
+	status = "disabled";
+};

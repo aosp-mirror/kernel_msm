@@ -1,0 +1,92 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "dsi-panel-sw43401-dsc-qhd-cmd.dtsi"
+#include "dsi-panel-sw43402-dsc-qhd-cmd.dtsi"
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi {
+        hw-config = "single_dsi";
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_sw43402_dsc_qhd_cmd>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+	qcom,platform-reset-gpio = <&tlmm 35 0>;
+	qcom,platform-te-gpio = <&tlmm 10 0>;
+	/delete-property/wqhd-vddio-supply;
+	lge,extra-gpio-names = "vddio", "vpnl";
+	lge,gpio-vddio = <&tlmm 60 0>;
+	lge,gpio-vpnl =  <&tlmm 69 0>;
+};
+
+&mdss_dsi1 {
+	/delete-property/cell-index;
+};
+
+&dsi_sw43401_dsc_qhd_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	/* qcom,cont-splash-enabled; */
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+
+	qcom,mdss-dsi-panel-timings = [00 0F 04 03 06 0B 04 04 03 03 04 00];
+	qcom,mdss-dsi-t-clk-post = <0x05>;
+	qcom,mdss-dsi-t-clk-pre = <0x19>;
+};
+
+&dsi_sw43402_dsc_qhd_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	/* qcom,cont-splash-enabled; */
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+
+	qcom,mdss-dsi-panel-timings = [00 11 04 04 07 0C 04 04 03 03 04 00];
+	qcom,mdss-dsi-t-clk-post = <0x05>;
+	qcom,mdss-dsi-t-clk-pre = <0x1B>;
+};
+
+&soc {
+	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		/delete-node/qcom,panel-supply-entry@0;
+		/delete-node/qcom,panel-supply-entry@1;
+		/delete-node/qcom,panel-supply-entry@2;
+	};
+};
+
+/* End of overriding parameters in msm8998-mdss-panel.dtsi */
+
+/* Hall IC */
+&soc {
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+
+		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+		pinctrl-0 = <&hallic_gpio_active>;
+		pinctrl-1 = <&hallic_gpio_suspend>;
+
+		hall_ic {
+			label = "hall_ic";
+			gpios = <&tlmm 124 0x1>;
+			linux,input-type = <5>;
+			linux,code = <222>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+	};
+};

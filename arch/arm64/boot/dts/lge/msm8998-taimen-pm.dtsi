@@ -1,0 +1,286 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/{
+	taimen_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <15>;
+#include "batterydata-lge-blt32-lgc-3300mah.dtsi"
+#include "batterydata-lge-blt32-tocad-3300mah.dtsi"
+	};
+};
+
+&soc {
+	qcom,msm-thermal {
+		qcom,disable-gfx-phase-ctrl;
+		qcom,disable-psm;
+		qcom,disable-ocr;
+		qcom,disable-cx-phase-ctrl;
+		qcom,disable-vdd-mx;
+		/* mitigate gold cluster freq to 1.536Ghz */
+		qcom,freq-mitigation-temp = <95>;
+		qcom,freq-mitigation-temp-hysteresis = <10>;
+		qcom,freq-mitigation-value = <1536000>;
+	};
+
+	qcom,bcl {
+		/delete-property/ qcom,bcl-soc-hotplug-list;
+		qcom,ibat-monitor {
+			qcom,soc-low-threshold = <0>;
+		};
+	};
+
+	qcom,limit_info-4 {
+		qcom,emergency-frequency-mitigate;
+	};
+
+	qcom,limit_info-5 {
+		qcom,emergency-frequency-mitigate;
+	};
+
+	qcom,limit_info-6 {
+		qcom,emergency-frequency-mitigate;
+	};
+
+	qcom,limit_info-7 {
+		qcom,emergency-frequency-mitigate;
+	};
+
+	qcom,sensor-information {
+		compatible = "qcom,sensor-information";
+
+		sensor_information30: qcom,sensor-information-30 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "xo_therm";
+		};
+
+		sensor_information31: qcom,sensor-information-31 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "amux5_quiet_therm";
+		};
+
+		sensor_information32: qcom,sensor-information-32 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "vts";
+			qcom,scaling-factor = <10>;
+		};
+
+		sensor_information33: qcom,sensor-information-33 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "led_sensor";
+			qcom,scaling-factor = <10>;
+		};
+
+		sensor_information34: qcom,sensor-information-34 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "battery";
+			qcom,scaling-factor = <1000>;
+		};
+	};
+};
+
+&spmi_bus {
+	qcom,pmi8998@3 {
+		qcom,leds@d000 {
+			compatible = "qcom,leds-qpnp";
+			reg = <0xd000 0x100>;
+			label = "rgb";
+			status = "disabled";
+		};
+
+		pmi8998_wled: qcom,leds@d800 {
+			compatible = "qcom,qpnp-wled";
+			status = "disabled";
+		};
+	};
+};
+
+&pm8998_vadc {
+	chan@85 {
+		label = "vcoin";
+		reg = <0x85>;
+		qcom,decimation = <2>;
+		qcom,pre-div-channel-scaling = <1>;
+		qcom,calibration-type = "absolute";
+		qcom,scale-function = <0>;
+		qcom,hw-settle-time = <0>;
+		qcom,fast-avg-setup = <0>;
+	};
+
+	chan@4c {
+		label = "xo_therm";
+		reg = <0x4c>;
+		qcom,decimation = <2>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <4>;
+		qcom,hw-settle-time = <2>;
+		qcom,fast-avg-setup = <0>;
+	};
+
+	chan@4d {
+		label = "pcb_rev";
+		reg = <0x4d>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <0>;
+		qcom,hw-settle-time = <1>;
+		qcom,fast-avg-setup = <0>;
+	};
+
+	chan@4f {
+		label = "pa_therm0";
+		reg = <0x4f>;
+		qcom,decimation = <2>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <2>;
+		qcom,hw-settle-time = <2>;
+		qcom,fast-avg-setup = <0>;
+	};
+
+	chan@50 {
+		label = "pa_therm1";
+		reg = <0x50>;
+		qcom,decimation = <2>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <2>;
+		qcom,hw-settle-time = <2>;
+		qcom,fast-avg-setup = <0>;
+	};
+
+	chan@51 {
+		label = "amux5_quiet_therm";
+		reg = <0x51>;
+		qcom,decimation = <2>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <2>;
+		qcom,hw-settle-time = <2>;
+		qcom,fast-avg-setup = <0>;
+	};
+
+	chan@0e {
+		label = "usb_id_lv";
+		reg = <0x0e>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <0>;
+		qcom,hw-settle-time = <5>;
+		qcom,fast-avg-setup = <0>;
+	};
+};
+
+&pm8998_adc_tm {
+	chan@83 {
+		label = "vph_pwr";
+		reg = <0x83>;
+		qcom,pre-div-channel-scaling = <1>;
+		qcom,calibration-type = "absolute";
+		qcom,scale-function = <0>;
+		qcom,hw-settle-time = <0>;
+		qcom,btm-channel-number = <0x60>;
+	};
+
+	chan@4f {
+		label = "pa_therm0";
+		reg = <0x4f>;
+		qcom,decimation = <2>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <2>;
+		qcom,hw-settle-time = <2>;
+		qcom,fast-avg-setup = <0>;
+		qcom,btm-channel-number = <0x68>;
+		qcom,thermal-node;
+	};
+
+	chan@50 {
+		label = "pa_therm1";
+		reg = <0x50>;
+		qcom,decimation = <2>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <2>;
+		qcom,hw-settle-time = <2>;
+		qcom,fast-avg-setup = <0>;
+		qcom,btm-channel-number = <0x70>;
+		qcom,thermal-node;
+	};
+
+	chan@4c {
+		label = "xo_therm";
+		reg = <0x4c>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <4>;
+		qcom,hw-settle-time = <2>;
+		qcom,btm-channel-number = <0x78>;
+		qcom,thermal-node;
+	};
+
+	chan@51 {
+		label = "amux5_quiet_therm";
+		reg = <0x51>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <2>;
+		qcom,hw-settle-time = <2>;
+		qcom,btm-channel-number = <0x80>;
+		qcom,thermal-node;
+	};
+};
+
+&pmi8998_gpios {
+	gpio@c800 {
+		qcom,master-en = <1>;		/* Enable GPIO */
+		status = "okay";
+	};
+};
+
+&pmi8998_charger {
+	qcom,usb-icl-ua = <1800000>;
+	qcom,fcc-max-ua = <3300000>;
+	qcom,dc-icl-ua = <1000000>;
+	qcom,dc-psy-type = "Wireless";
+};
+
+&pmi8998_fg {
+	qcom,battery-data = <&taimen_batterydata>;
+	qcom,fg-force-load-profile;
+};
+
+&spmi_bus {
+	qcom,pm8998@0 {
+		qcom,power-on@800 {
+			qcom,s3-debounce = <8>;
+			qcom,s3-src = "kpdpwr-and-resin";
+			qcom,pon_1 {  /* KPD_PWR_N */
+				status = "ok";
+				qcom,support-reset = <0>;
+			};
+			qcom,pon_2 {  /* RESIN_N */
+				status = "ok";
+				qcom,support-reset = <0>;
+			};
+			qcom,pon_3 {  /* KPD_PWR_N AND RESIN_N */
+				status = "ok";
+				qcom,support-reset = <0>;
+				qcom,s1-timer = <6720>;
+				qcom,s2-timer = <2000>;
+				qcom,s2-type = <7>;
+			};
+		};
+	};
+};

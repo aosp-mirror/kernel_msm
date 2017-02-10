@@ -1,0 +1,81 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+qcom,lge_blt32_tocad_3300mah {
+	qcom, = <22>;
+	/* #2728810_LGE_BLT32tocad_3300mAh_averaged_MasterSlave_Dec12th2016*/
+	qcom,max-voltage-uv = <4350000>;
+	qcom,nom-batt-capacity-mah = <3300>;
+	qcom,batt-id-kohm = <56>;
+	qcom,battery-beta = <4250>;
+	qcom,battery-type = "lge_blt32_tocad_3300mah";
+	qcom,checksum = <0x64AF>;
+	qcom,gui-version = "PMI8998GUI - 2.0.0.53";
+	qcom,fg-profile-data = [
+		 88 1F A3 05
+		 66 0A A3 FC
+		 48 1D 0D DB
+		 41 0A 14 0C
+		 97 18 D2 22
+		 C3 45 70 52
+		 5B 00 00 00
+		 0E 00 00 00
+		 00 00 AC C5
+		 F1 CC 65 CB
+		 20 00 08 00
+		 05 EB 29 E4
+		 9F FC 89 F3
+		 EA F4 AA 12
+		 AB FC ED 32
+		 1F 06 09 20
+		 27 00 14 00
+		 22 1C A3 FA
+		 39 E4 8E 00
+		 F1 1C 48 02
+		 A1 0D 05 0A
+		 11 1A 72 1B
+		 BE 3D F0 43
+		 7D 00 00 00
+		 11 00 00 00
+		 00 00 A9 CC
+		 86 CA 00 AC
+		 1A 00 00 00
+		 05 EB 29 E4
+		 C5 06 85 00
+		 1C D2 7B 0A
+		 6C 06 54 1A
+		 99 33 CC FF
+		 07 10 00 00
+		 0A 0D 99 45
+		 1A 00 40 00
+		 E4 01 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};
