@@ -76,7 +76,6 @@
 #include "cdp_txrx_flow_ctrl_v2.h"
 #include "pld_common.h"
 #include "wlan_hdd_driver_ops.h"
-#include <wlan_logging_sock_svc.h>
 
 /* Preprocessor definitions and constants */
 #define HDD_SSR_BRING_UP_TIME 30000
@@ -1461,11 +1460,8 @@ QDF_STATUS hdd_wlan_shutdown(void)
 	}
 
 	cds_clear_concurrent_session_count();
-
-	hdd_info("Invoking packetdump deregistration API");
-	wlan_deregister_txrx_packetdump();
-
 	hdd_cleanup_scan_queue(pHddCtx);
+	hdd_ipa_uc_ssr_deinit();
 	hdd_reset_all_adapters(pHddCtx);
 
 	/* Flush cached rx frame queue */
@@ -1473,7 +1469,6 @@ QDF_STATUS hdd_wlan_shutdown(void)
 
 	/* De-register the HDD callbacks */
 	hdd_deregister_cb(pHddCtx);
-	hdd_ipa_uc_ssr_deinit();
 
 	cds_sched_context = get_cds_sched_ctxt();
 
