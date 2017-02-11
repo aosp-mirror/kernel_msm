@@ -428,6 +428,13 @@ REG_TABLE_ENTRY g_registry_table[] = {
 		     CFG_ENABLE_PS_MIN,
 		     CFG_ENABLE_PS_MAX),
 
+	REG_VARIABLE(CFG_AUTO_PS_ENABLE_TIMER_NAME, WLAN_PARAM_Integer,
+		     struct hdd_config, auto_bmps_timer_val,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_AUTO_PS_ENABLE_TIMER_DEFAULT,
+		     CFG_AUTO_PS_ENABLE_TIMER_MIN,
+		     CFG_AUTO_PS_ENABLE_TIMER_MAX),
+
 	REG_VARIABLE(CFG_BMPS_MINIMUM_LI_NAME, WLAN_PARAM_Integer,
 		     struct hdd_config, nBmpsMinListenInterval,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
@@ -3859,6 +3866,27 @@ REG_TABLE_ENTRY g_registry_table[] = {
 			CFG_EDCA_BE_AIFS_VALUE_DEFAULT,
 			CFG_EDCA_BE_AIFS_VALUE_MIN,
 			CFG_EDCA_BE_AIFS_VALUE_MAX),
+
+	REG_VARIABLE_STRING(CFG_ENABLE_TX_SCHED_WRR_VO, WLAN_PARAM_String,
+			struct hdd_config, tx_sched_wrr_vo,
+			VAR_FLAGS_OPTIONAL,
+			(void *) CFG_ENABLE_TX_SCHED_WRR_VO_DEFAULT),
+
+	REG_VARIABLE_STRING(CFG_ENABLE_TX_SCHED_WRR_VI, WLAN_PARAM_String,
+			struct hdd_config, tx_sched_wrr_vi,
+			VAR_FLAGS_OPTIONAL,
+			(void *) CFG_ENABLE_TX_SCHED_WRR_VI_DEFAULT),
+
+	REG_VARIABLE_STRING(CFG_ENABLE_TX_SCHED_WRR_BE, WLAN_PARAM_String,
+			struct hdd_config, tx_sched_wrr_be,
+			VAR_FLAGS_OPTIONAL,
+			(void *) CFG_ENABLE_TX_SCHED_WRR_BE_DEFAULT),
+
+	REG_VARIABLE_STRING(CFG_ENABLE_TX_SCHED_WRR_BK, WLAN_PARAM_String,
+			struct hdd_config, tx_sched_wrr_bk,
+			VAR_FLAGS_OPTIONAL,
+			(void *) CFG_ENABLE_TX_SCHED_WRR_BK_DEFAULT),
+
 #ifdef WLAN_FEATURE_NAN_DATAPATH
 	REG_VARIABLE(CFG_ENABLE_NAN_DATAPATH_NAME, WLAN_PARAM_Integer,
 		struct hdd_config, enable_nan_datapath,
@@ -3979,6 +4007,14 @@ REG_TABLE_ENTRY g_registry_table[] = {
 		     CFG_INDOOR_CHANNEL_SUPPORT_MIN,
 		     CFG_INDOOR_CHANNEL_SUPPORT_MAX),
 
+	REG_VARIABLE(CFG_SAP_TX_LEAKAGE_THRESHOLD_NAME,
+		WLAN_PARAM_Integer,
+		struct hdd_config, sap_tx_leakage_threshold,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_SAP_TX_LEAKAGE_THRESHOLD_DEFAULT,
+		CFG_SAP_TX_LEAKAGE_THRESHOLD_MIN,
+		CFG_SAP_TX_LEAKAGE_THRESHOLD_MAX),
+
 	REG_VARIABLE(CFG_BUG_ON_REINIT_FAILURE_NAME, WLAN_PARAM_Integer,
 		     struct hdd_config, bug_on_reinit_failure,
 		     VAR_FLAGS_OPTIONAL |
@@ -4048,6 +4084,12 @@ REG_TABLE_ENTRY g_registry_table[] = {
 		CFG_CRASH_FW_TIMEOUT_DEFAULT,
 		CFG_CRASH_FW_TIMEOUT_DISABLE,
 		CFG_CRASH_FW_TIMEOUT_ENABLE),
+	REG_VARIABLE(CFG_RX_WAKELOCK_TIMEOUT_NAME, WLAN_PARAM_Integer,
+		struct hdd_config, rx_wakelock_timeout,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_RX_WAKELOCK_TIMEOUT_DEFAULT,
+		CFG_RX_WAKELOCK_TIMEOUT_MIN,
+		CFG_RX_WAKELOCK_TIMEOUT_MAX)
 };
 
 /**
@@ -5680,6 +5722,20 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 	hdd_info("Name = [%s] Value = [%u]",
 		CFG_EDCA_BE_AIFS_VALUE_NAME,
 		pHddCtx->config->edca_be_aifs);
+
+	hddLog(LOG2, "Name = [%s] Value = [%s]",
+		CFG_ENABLE_TX_SCHED_WRR_VO,
+		pHddCtx->config->tx_sched_wrr_vo);
+	hddLog(LOG2, "Name = [%s] Value = [%s]",
+		CFG_ENABLE_TX_SCHED_WRR_VI,
+		pHddCtx->config->tx_sched_wrr_vi);
+	hddLog(LOG2, "Name = [%s] Value = [%s]",
+		CFG_ENABLE_TX_SCHED_WRR_BK,
+		pHddCtx->config->tx_sched_wrr_bk);
+	hddLog(LOG2, "Name = [%s] Value = [%s]",
+		CFG_ENABLE_TX_SCHED_WRR_BE,
+		pHddCtx->config->tx_sched_wrr_be);
+
 	hdd_info("Name = [%s] Value = [%u]",
 		CFG_ENABLE_DP_TRACE,
 		pHddCtx->config->enable_dp_trace);
@@ -7157,6 +7213,8 @@ QDF_STATUS hdd_set_sme_config(hdd_context_t *pHddCtx)
 		pHddCtx->config->prefer_non_dfs_on_radar;
 
 	smeConfig->csrConfig.is_ps_enabled = pHddCtx->config->is_ps_enabled;
+	smeConfig->csrConfig.auto_bmps_timer_val =
+		pHddCtx->config->auto_bmps_timer_val;
 	hdd_set_fine_time_meas_cap(pHddCtx, smeConfig);
 
 	cds_set_multicast_logging(pHddCtx->config->multicast_host_fw_msgs);

@@ -118,6 +118,7 @@
 #define WLAN_WAIT_TIME_POWER       800
 #define WLAN_WAIT_TIME_COUNTRY     1000
 #define WLAN_WAIT_TIME_LINK_STATUS 800
+#define WLAN_WAIT_TIME_POWER_STATS 800
 /* Amount of time to wait for sme close session callback.
    This value should be larger than the timeout used by WDI to wait for
    a response from WCNSS */
@@ -161,7 +162,7 @@
 /** Mac Address string **/
 #define MAC_ADDRESS_STR "%02x:%02x:%02x:%02x:%02x:%02x"
 #define MAC_ADDRESS_STR_LEN 18  /* Including null terminator */
-#define MAX_GENIE_LEN 255
+#define MAX_GENIE_LEN 512
 
 #define WLAN_CHIP_VERSION   "WCNSS"
 
@@ -221,9 +222,6 @@
 
 #define WLAN_HDD_PUBLIC_ACTION_TDLS_DISC_RESP 14
 #define WLAN_HDD_TDLS_ACTION_FRAME 12
-#ifdef WLAN_FEATURE_HOLD_RX_WAKELOCK
-#define HDD_WAKE_LOCK_DURATION 50       /* in msecs */
-#endif
 
 #define WLAN_HDD_QOS_ACTION_FRAME 1
 #define WLAN_HDD_QOS_MAP_CONFIGURE 4
@@ -326,6 +324,7 @@ extern spinlock_t hdd_context_lock;
 #define LINK_STATUS_MAGIC   0x4C4B5354  /* LINKSTATUS(LNST) */
 #define TEMP_CONTEXT_MAGIC  0x74656d70   /* TEMP (temperature) */
 #define BPF_CONTEXT_MAGIC 0x4575354    /* BPF */
+#define POWER_STATS_MAGIC 0x14111990
 
 /* MAX OS Q block time value in msec
  * Prevent from permanent stall, resume OS Q if timer expired */
@@ -333,7 +332,7 @@ extern spinlock_t hdd_context_lock;
 #define WLAN_SAP_HDD_TX_FLOW_CONTROL_OS_Q_BLOCK_TIME 100
 #define WLAN_HDD_TX_FLOW_CONTROL_MAX_24BAND_CH   14
 
-#define NUM_TX_RX_HISTOGRAM 1024
+#define NUM_TX_RX_HISTOGRAM 128
 #define NUM_TX_RX_HISTOGRAM_MASK (NUM_TX_RX_HISTOGRAM - 1)
 
 /**
@@ -700,6 +699,7 @@ typedef struct hdd_hostapd_state_s {
 	int bssState;
 	qdf_event_t qdf_event;
 	qdf_event_t qdf_stop_bss_event;
+	qdf_event_t qdf_sta_disassoc_event;
 	QDF_STATUS qdf_status;
 	bool bCommit;
 
@@ -876,7 +876,28 @@ struct hdd_connect_pm_context {
 	qdf_runtime_lock_t connect;
 };
 
+/*
+ * WLAN_HDD_ADAPTER_MAGIC is a magic number used to identify net devices
+ * belonging to this driver from net devices belonging to other devices.
+ * Therefore, the magic number must be unique relative to the numbers for
+ * other drivers in the system. If WLAN_HDD_ADAPTER_MAGIC is already defined
+ * (e.g. by compiler argument), then use that. If it's not already defined,
+ * then use the first 4 characters of MULTI_IF_NAME to construct the magic
+ * number. If MULTI_IF_NAME is not defined, then use a default magic number.
+ */
+#ifndef WLAN_HDD_ADAPTER_MAGIC
+#ifdef MULTI_IF_NAME
+#define WLAN_HDD_ADAPTER_MAGIC                                          \
+	(MULTI_IF_NAME[0] == 0 ? 0x574c414e :                           \
+	(MULTI_IF_NAME[1] == 0 ? (MULTI_IF_NAME[0] << 24) :             \
+	(MULTI_IF_NAME[2] == 0 ? (MULTI_IF_NAME[0] << 24) |             \
+		(MULTI_IF_NAME[1] << 16) :                              \
+	(MULTI_IF_NAME[0] << 24) | (MULTI_IF_NAME[1] << 16) |           \
+	(MULTI_IF_NAME[2] << 8) | MULTI_IF_NAME[3])))
+#else
 #define WLAN_HDD_ADAPTER_MAGIC 0x574c414e       /* ASCII "WLAN" */
+#endif
+#endif
 
 struct hdd_adapter_s {
 	/* Magic cookie for adapter sanity verification.  Note that this
@@ -991,6 +1012,7 @@ struct hdd_adapter_s {
 #endif
 
 	int8_t rssi;
+	int32_t rssi_on_disconnect;
 #ifdef WLAN_FEATURE_LPSS
 	bool rssi_send;
 #endif
@@ -1108,6 +1130,7 @@ struct hdd_adapter_s {
 	 */
 	uint8_t pre_cac_chan;
 	struct hdd_connect_pm_context connect_rpm_ctx;
+	struct power_stats_response *chip_power_stats;
 };
 
 #define WLAN_HDD_GET_STATION_CTX_PTR(pAdapter) (&(pAdapter)->sessionCtx.station)
@@ -1341,10 +1364,7 @@ struct hdd_context_s {
 	/** P2P Device MAC Address for the adapter  */
 	struct qdf_mac_addr p2pDeviceAddress;
 
-#ifdef WLAN_FEATURE_HOLD_RX_WAKELOCK
 	qdf_wake_lock_t rx_wake_lock;
-#endif
-
 	qdf_wake_lock_t sap_wake_lock;
 
 #ifdef FEATURE_WLAN_TDLS
@@ -1552,6 +1572,7 @@ struct hdd_context_s {
 	/* counters for failed suspend reasons */
 	uint32_t suspend_fail_stats[SUSPEND_FAIL_MAX_COUNT];
 	struct hdd_runtime_pm_context runtime_context;
+	bool roaming_in_progress;
 };
 
 /*---------------------------------------------------------------------------
@@ -1764,7 +1785,7 @@ void hdd_clean_up_pre_cac_interface(hdd_context_t *hdd_ctx);
 void wlan_hdd_txrx_pause_cb(uint8_t vdev_id,
 	enum netif_action_type action, enum netif_reason_type reason);
 
-void hdd_wlan_dump_stats(hdd_adapter_t *adapter, int value);
+int hdd_wlan_dump_stats(hdd_adapter_t *adapter, int value);
 void wlan_hdd_deinit_tx_rx_histogram(hdd_context_t *hdd_ctx);
 void wlan_hdd_display_tx_rx_histogram(hdd_context_t *pHddCtx);
 void wlan_hdd_clear_tx_rx_histogram(hdd_context_t *pHddCtx);
@@ -1790,7 +1811,8 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 		struct cfg80211_beacon_data *params,
 		const u8 *ssid, size_t ssid_len,
 		enum nl80211_hidden_ssid hidden_ssid,
-		bool check_for_concurrency);
+		bool check_for_concurrency,
+		bool update_beacon);
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
 QDF_STATUS hdd_register_for_sap_restart_with_channel_switch(void);
 #else
@@ -1911,7 +1933,7 @@ static inline int wlan_hdd_nl_init(hdd_context_t *hdd_ctx)
 QDF_STATUS hdd_sme_close_session_callback(void *pContext);
 
 int hdd_reassoc(hdd_adapter_t *adapter, const uint8_t *bssid,
-		const uint8_t channel, const handoff_src src);
+		uint8_t channel, const handoff_src src);
 void hdd_svc_fw_shutdown_ind(struct device *dev);
 int hdd_register_cb(hdd_context_t *hdd_ctx);
 void hdd_deregister_cb(hdd_context_t *hdd_ctx);
@@ -1968,5 +1990,8 @@ static inline int wlan_hdd_validate_session_id(u8 session_id)
 
 	return -EINVAL;
 }
+
+bool hdd_is_roaming_in_progress(void);
+void hdd_set_roaming_in_progress(bool value);
 
 #endif /* end #if !defined(WLAN_HDD_MAIN_H) */

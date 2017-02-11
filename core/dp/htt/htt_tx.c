@@ -90,10 +90,6 @@ do {                                                                           \
 
 /*--- setup / tear-down functions -------------------------------------------*/
 
-#ifdef QCA_SUPPORT_TXDESC_SANITY_CHECKS
-uint32_t *g_dbg_htt_desc_end_addr, *g_dbg_htt_desc_start_addr;
-#endif
-
 static qdf_dma_addr_t htt_tx_get_paddr(htt_pdev_handle pdev,
 				char *target_vaddr);
 
@@ -1062,10 +1058,11 @@ void htt_tx_desc_display(void *tx_desc)
  *
  * Return: 0 success
  */
-int htt_tx_ipa_uc_wdi_tx_buf_alloc(struct htt_pdev_t *pdev,
-			 unsigned int uc_tx_buf_sz,
-			 unsigned int uc_tx_buf_cnt,
-			 unsigned int uc_tx_partition_base)
+
+static int htt_tx_ipa_uc_wdi_tx_buf_alloc(struct htt_pdev_t *pdev,
+					  unsigned int uc_tx_buf_sz,
+					  unsigned int uc_tx_buf_cnt,
+					  unsigned int uc_tx_partition_base)
 {
 	unsigned int tx_buffer_count;
 	void *buffer_vaddr;
@@ -1130,10 +1127,10 @@ int htt_tx_ipa_uc_wdi_tx_buf_alloc(struct htt_pdev_t *pdev,
 	return tx_buffer_count;
 }
 #else
-int htt_tx_ipa_uc_wdi_tx_buf_alloc(struct htt_pdev_t *pdev,
-			 unsigned int uc_tx_buf_sz,
-			 unsigned int uc_tx_buf_cnt,
-			 unsigned int uc_tx_partition_base)
+static int htt_tx_ipa_uc_wdi_tx_buf_alloc(struct htt_pdev_t *pdev,
+					  unsigned int uc_tx_buf_sz,
+					  unsigned int uc_tx_buf_cnt,
+					  unsigned int uc_tx_partition_base)
 {
 	unsigned int tx_buffer_count;
 	qdf_nbuf_t buffer_vaddr;

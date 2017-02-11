@@ -70,8 +70,12 @@
 #include <ol_tx_queue.h>
 #include <ol_tx_sched.h>           /* ol_tx_sched_attach, etc. */
 #include <ol_txrx.h>
+#include <ol_txrx_types.h>
 #include <cdp_txrx_flow_ctrl_legacy.h>
+#include <cdp_txrx_bus.h>
 #include <cdp_txrx_ipa.h>
+#include <cdp_txrx_lro.h>
+#include <cdp_txrx_pmf.h>
 #include "wma.h"
 #include "hif.h"
 #include <cdp_txrx_peer_ops.h>
@@ -1059,7 +1063,7 @@ void htt_pkt_log_init(struct ol_txrx_pdev_t *handle, void *scn)
  *
  * Return: void
  */
-void htt_pktlogmod_exit(struct ol_txrx_pdev_t *handle, void *scn)
+static void htt_pktlogmod_exit(struct ol_txrx_pdev_t *handle, void *scn)
 {
 	if (scn && cds_get_conparam() != QDF_GLOBAL_FTM_MODE &&
 		!QDF_IS_EPPING_ENABLED(cds_get_conparam()) &&
@@ -1070,7 +1074,7 @@ void htt_pktlogmod_exit(struct ol_txrx_pdev_t *handle, void *scn)
 }
 #else
 void htt_pkt_log_init(ol_txrx_pdev_handle handle, void *ol_sc) { }
-void htt_pktlogmod_exit(ol_txrx_pdev_handle handle, void *sc)  { }
+static void htt_pktlogmod_exit(ol_txrx_pdev_handle handle, void *sc)  { }
 #endif
 
 /**
@@ -2128,6 +2132,8 @@ ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr)
 			TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
 				"error waiting for peer(%d) deletion, status %d\n",
 				vdev->wait_on_peer_id, (int) rc);
+			/* Added for debugging only */
+			QDF_BUG(0);
 			vdev->wait_on_peer_id = OL_TXRX_INVALID_LOCAL_PEER_ID;
 			return NULL;
 		}
@@ -3596,7 +3602,7 @@ void ol_txrx_peer_display(ol_txrx_peer_handle peer, int indent)
 #endif /* TXRX_DEBUG_LEVEL */
 
 #if defined(FEATURE_TSO) && defined(FEATURE_TSO_DEBUG)
-void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
+static void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
 {
 	int msdu_idx;
 	int seg_idx;
@@ -3629,6 +3635,8 @@ void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
 			TXRX_STATS_TSO_MSDU_IDX(pdev));
 
 	for (msdu_idx = 0; msdu_idx < NUM_MAX_TSO_MSDUS; msdu_idx++) {
+		if (TXRX_STATS_TSO_MSDU_TOTAL_LEN(pdev, msdu_idx) == 0)
+			continue;
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
 			"jumbo pkt idx: %d num segs %d gso_len %d total_len %d nr_frags %d",
 			msdu_idx,
@@ -3661,11 +3669,10 @@ void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
 				 tso_seg.tso_flags.tcp_seq_num,
 				 tso_seg.tso_flags.ip_id);
 		}
-	 QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR, "\n");
 	}
 }
 #else
-void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
+static void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
 {
 	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
 	 "TSO is not supported\n");
@@ -3694,7 +3701,7 @@ ol_txrx_stats(uint8_t vdev_id, char *buffer, unsigned buf_len)
 	}
 
 	len = scnprintf(buffer, buf_len,
-			"\nTXRX stats:\n\nllQueue State : %s\n pause %u unpause %u\n overflow %u\n llQueue timer state : %s\n",
+			"\n\nTXRX stats:\nllQueue State : %s\npause %u unpause %u\noverflow %u\nllQueue timer state : %s",
 			((vdev->ll_pause.is_q_paused == false) ?
 			 "UNPAUSED" : "PAUSED"),
 			vdev->ll_pause.q_pause_cnt,
@@ -4163,44 +4170,21 @@ void ol_txrx_ipa_uc_get_stat(ol_txrx_pdev_handle pdev)
 #endif /* IPA_UC_OFFLOAD */
 
 /**
- * ol_txrx_display_stats_help() - print statistics help
+ * ol_txrx_display_stats() - Display OL TXRX display stats
+ * @value: Module id for which stats needs to be displayed
  *
- * Return: none
+ * Return: QDF_STATUS_SUCCESS on success, QDF_STATUS_E code on failure
  */
-static void ol_txrx_display_stats_help(void)
-{
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				"iwpriv wlan0 dumpStats [option] - dump statistics");
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				"iwpriv wlan0 clearStats [option] - clear statistics");
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				"options:");
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				"  1 -- TXRX Layer statistics");
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				"  2 -- Bandwidth compute timer stats");
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				"  3 -- TSO statistics");
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				"  4 -- Network queue statistics");
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				"  5 -- Flow control statistics");
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				"  6 -- Per Layer statistics");
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				"  7 -- Copy engine interrupt statistics");
-
-}
-
-void ol_txrx_display_stats(uint16_t value)
+QDF_STATUS ol_txrx_display_stats(uint16_t value)
 {
 	ol_txrx_pdev_handle pdev;
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
 
 	pdev = cds_get_context(QDF_MODULE_ID_TXRX);
 	if (!pdev) {
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
 			  "%s: pdev is NULL", __func__);
-		return;
+		return QDF_STATUS_E_NULL_VALUE;
 	}
 
 	switch (value) {
@@ -4237,20 +4221,28 @@ void ol_txrx_display_stats(uint16_t value)
 #endif
 #endif
 	default:
-		ol_txrx_display_stats_help();
+		status = QDF_STATUS_E_INVAL;
 		break;
 	}
+	return status;
 }
 
-void ol_txrx_clear_stats(uint16_t value)
+/**
+ * ol_txrx_clear_stats() - Clear OL TXRX stats
+ * @value: Module id for which stats needs to be cleared
+ *
+ * Return: QDF_STATUS_SUCCESS on success, QDF_STATUS_E code on failure
+ */
+QDF_STATUS ol_txrx_clear_stats(uint16_t value)
 {
 	ol_txrx_pdev_handle pdev;
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
 
 	pdev = cds_get_context(QDF_MODULE_ID_TXRX);
 	if (!pdev) {
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
 			  "%s: pdev is NULL", __func__);
-		return;
+		return QDF_STATUS_E_NULL_VALUE;
 	}
 
 	switch (value) {
@@ -4280,9 +4272,11 @@ void ol_txrx_clear_stats(uint16_t value)
 		break;
 #endif
 	default:
-		ol_txrx_display_stats_help();
+		status = QDF_STATUS_E_INVAL;
 		break;
 	}
+
+	return status;
 }
 
 /**
@@ -4600,6 +4594,92 @@ bool ol_txrx_get_ocb_peer(struct ol_txrx_pdev_t *pdev,
 exit:
 	return rc;
 }
+#define MAX_TID		15
+#define MAX_DATARATE	7
+#define OCB_HEADER_VERSION 1
+
+/**
+ * ol_txrx_set_ocb_def_tx_param() - Set the default OCB TX parameters
+ * @vdev: The OCB vdev that will use these defaults.
+ * @_def_tx_param: The default TX parameters.
+ * @def_tx_param_size: The size of the _def_tx_param buffer.
+ *
+ * Return: true if the default parameters were set correctly, false if there
+ * is an error, for example an invalid parameter. In the case that false is
+ * returned, see the kernel log for the error description.
+ */
+bool ol_txrx_set_ocb_def_tx_param(ol_txrx_vdev_handle vdev,
+	void *_def_tx_param, uint32_t def_tx_param_size)
+{
+	struct ocb_tx_ctrl_hdr_t *def_tx_param =
+		(struct ocb_tx_ctrl_hdr_t *)_def_tx_param;
+
+		if (def_tx_param) {
+			/*
+			* Default TX parameters are provided.
+			* Validate the contents and
+			* save them in the vdev.
+			*/
+		if (def_tx_param_size != sizeof(struct ocb_tx_ctrl_hdr_t)) {
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+			"%sInvalid size of OCB default TX params", __func__);
+			return false;
+		}
+
+		if (def_tx_param->version != OCB_HEADER_VERSION) {
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+			"%sInvalid version of OCB default TX params", __func__);
+			return false;
+		}
+
+		if (def_tx_param->channel_freq) {
+			int i;
+
+			for (i = 0; i < vdev->ocb_channel_count; i++) {
+				if (vdev->ocb_channel_info[i].chan_freq ==
+					def_tx_param->channel_freq)
+					break;
+			}
+			if (i == vdev->ocb_channel_count) {
+				QDF_TRACE(QDF_MODULE_ID_TXRX,
+				QDF_TRACE_LEVEL_ERROR,
+			"%sInvalid default channel frequency", __func__);
+				return false;
+			}
+		}
+
+		if (def_tx_param->valid_datarate &&
+				def_tx_param->datarate > MAX_DATARATE) {
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+				"%sInvalid default datarate", __func__);
+			return false;
+		}
+
+		if (def_tx_param->valid_tid &&
+				def_tx_param->ext_tid > MAX_TID) {
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+				"%sInvalid default TID", __func__);
+			return false;
+		}
+
+		if (vdev->ocb_def_tx_param == NULL)
+			vdev->ocb_def_tx_param =
+				qdf_mem_malloc(sizeof(*vdev->ocb_def_tx_param));
+			qdf_mem_copy(vdev->ocb_def_tx_param, def_tx_param,
+				sizeof(*vdev->ocb_def_tx_param));
+		} else {
+		/*
+		* Default TX parameters are not provided.
+		* Delete the old defaults.
+		*/
+		if (vdev->ocb_def_tx_param) {
+			qdf_mem_free(vdev->ocb_def_tx_param);
+			vdev->ocb_def_tx_param = NULL;
+		}
+	}
+
+	return true;
+}
 
 #ifdef QCA_LL_TX_FLOW_CONTROL_V2
 /**
@@ -4633,11 +4713,11 @@ QDF_STATUS ol_txrx_register_pause_cb(ol_tx_pause_callback_fp pause_cb)
  *
  * Return: none
  */
-void ol_txrx_lro_flush_handler(void *context,
-			       void *rxpkt,
-			       uint16_t staid)
+static void ol_txrx_lro_flush_handler(void *context,
+				      void *rxpkt,
+				      uint16_t staid)
 {
-	ol_txrx_pdev_handle pdev = (ol_txrx_pdev_handle)context;
+	ol_txrx_pdev_handle pdev = cds_get_context(QDF_MODULE_ID_TXRX);
 
 	if (qdf_unlikely(!pdev)) {
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
@@ -4647,7 +4727,7 @@ void ol_txrx_lro_flush_handler(void *context,
 	}
 
 	if (pdev->lro_info.lro_flush_cb)
-		pdev->lro_info.lro_flush_cb(pdev->lro_info.lro_data);
+		pdev->lro_info.lro_flush_cb(context);
 	else
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
 			  "%s: lro_flush_cb NULL", __func__);
@@ -4662,17 +4742,17 @@ void ol_txrx_lro_flush_handler(void *context,
  *
  * Return: none
  */
-void ol_txrx_lro_flush(void *data)
+static void ol_txrx_lro_flush(void *data)
 {
 	p_cds_sched_context sched_ctx = get_cds_sched_ctxt();
 	struct cds_ol_rx_pkt *pkt;
-	ol_txrx_pdev_handle pdev = (ol_txrx_pdev_handle)data;
+	ol_txrx_pdev_handle pdev = cds_get_context(QDF_MODULE_ID_TXRX);
 
 	if (qdf_unlikely(!sched_ctx))
 		return;
 
 	if (!ol_cfg_is_rx_thread_enabled(pdev->ctrl_pdev)) {
-		ol_txrx_lro_flush_handler((void *)pdev, NULL, 0);
+		ol_txrx_lro_flush_handler(data, NULL, 0);
 	} else {
 		pkt = cds_alloc_ol_rx_pkt(sched_ctx);
 		if (qdf_unlikely(!pkt)) {
@@ -4683,7 +4763,7 @@ void ol_txrx_lro_flush(void *data)
 
 		pkt->callback =
 			 (cds_ol_rx_thread_cb) ol_txrx_lro_flush_handler;
-		pkt->context = pdev;
+		pkt->context = data;
 		pkt->Rxpkt = NULL;
 		pkt->staId = 0;
 		cds_indicate_rxpkt(sched_ctx, pkt);
@@ -4692,51 +4772,77 @@ void ol_txrx_lro_flush(void *data)
 
 /**
  * ol_register_lro_flush_cb() - register the LRO flush callback
- * @handler: callback function
- * @data: opaque data pointer to be passed back
+ * @lro_flush_cb: flush callback function
+ * @lro_init_cb: Allocate and initialize LRO data structure.
  *
  * Store the LRO flush callback provided and in turn
  * register OL's LRO flush handler with CE
  *
  * Return: none
  */
-void ol_register_lro_flush_cb(void (handler)(void *), void *data)
+void ol_register_lro_flush_cb(void (lro_flush_cb)(void *),
+			      void *(lro_init_cb)(void))
 {
-	struct hif_opaque_softc *hif_device =
-		(struct hif_opaque_softc *)cds_get_context(QDF_MODULE_ID_HIF);
+	struct hif_opaque_softc *hif_device;
 	struct ol_txrx_pdev_t *pdev = cds_get_context(QDF_MODULE_ID_TXRX);
 
-	if (pdev != NULL) {
-		pdev->lro_info.lro_flush_cb = handler;
-		pdev->lro_info.lro_data = data;
-	} else
+	if (pdev == NULL) {
 		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR, "%s: pdev NULL!", __func__);
+		TXRX_ASSERT2(0);
+		goto out;
+	}
+	if (pdev->lro_info.lro_flush_cb != NULL) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			   "%s: LRO already initialised\n", __func__);
+		if (pdev->lro_info.lro_flush_cb != lro_flush_cb) {
+			TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+				   "lro_flush_cb is differ to previously registered callback\n")
+			TXRX_ASSERT2(0);
+			goto out;
+		}
+		qdf_atomic_inc(&pdev->lro_info.lro_dev_cnt);
+		goto out;
+	}
+	pdev->lro_info.lro_flush_cb = lro_flush_cb;
+	hif_device = (struct hif_opaque_softc *)
+				cds_get_context(QDF_MODULE_ID_HIF);
 
-	hif_lro_flush_cb_register(hif_device, ol_txrx_lro_flush, pdev);
+	hif_lro_flush_cb_register(hif_device, ol_txrx_lro_flush, lro_init_cb);
+	qdf_atomic_inc(&pdev->lro_info.lro_dev_cnt);
+
+out:
+	return;
 }
 
 /**
- * ol_deregister_lro_flush_cb() - deregister the LRO flush
- * callback
+ * ol_deregister_lro_flush_cb() - deregister the LRO flush callback
+ * @lro_deinit_cb: callback function for deregistration.
  *
  * Remove the LRO flush callback provided and in turn
  * deregister OL's LRO flush handler with CE
  *
  * Return: none
  */
-void ol_deregister_lro_flush_cb(void)
+void ol_deregister_lro_flush_cb(void (lro_deinit_cb)(void *))
 {
-	struct hif_opaque_softc *hif_device =
-		(struct hif_opaque_softc *)cds_get_context(QDF_MODULE_ID_HIF);
+	struct hif_opaque_softc *hif_device;
 	struct ol_txrx_pdev_t *pdev = cds_get_context(QDF_MODULE_ID_TXRX);
 
-	hif_lro_flush_cb_deregister(hif_device);
-
-	if (pdev != NULL) {
-		pdev->lro_info.lro_flush_cb = NULL;
-		pdev->lro_info.lro_data = NULL;
-	} else
+	if (pdev == NULL) {
 		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR, "%s: pdev NULL!", __func__);
+		return;
+	}
+	if (qdf_atomic_dec_and_test(&pdev->lro_info.lro_dev_cnt) == 0) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			   "%s: Other LRO enabled modules still exist, do not unregister the lro_flush_cb\n", __func__);
+		return;
+	}
+	hif_device =
+		(struct hif_opaque_softc *)cds_get_context(QDF_MODULE_ID_HIF);
+
+	hif_lro_flush_cb_deregister(hif_device, lro_deinit_cb);
+
+	pdev->lro_info.lro_flush_cb = NULL;
 }
 #endif /* FEATURE_LRO */
 

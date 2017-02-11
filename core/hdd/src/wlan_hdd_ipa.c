@@ -640,6 +640,27 @@ static inline bool hdd_ipa_uc_sta_is_enabled(hdd_context_t *hdd_ctx)
 }
 
 /**
+ * hdd_ipa_uc_sta_reset_sta_connected() - Reset sta_connected flag
+ * @hdd_ipa: Global HDD IPA context
+ *
+ * Return: None
+ */
+#ifdef IPA_UC_STA_OFFLOAD
+static inline void hdd_ipa_uc_sta_reset_sta_connected(
+		struct hdd_ipa_priv *hdd_ipa)
+{
+	vos_lock_acquire(&hdd_ipa->event_lock);
+	hdd_ipa->sta_connected = 0;
+	vos_lock_release(&hdd_ipa->event_lock);
+}
+#else
+static inline void hdd_ipa_uc_sta_reset_sta_connected(
+		struct hdd_ipa_priv *hdd_ipa)
+{
+}
+#endif
+
+/**
  * hdd_ipa_is_pre_filter_enabled() - Is IPA pre-filter enabled?
  * @hdd_ipa: Global HDD IPA context
  *
@@ -900,8 +921,6 @@ static void hdd_ipa_uc_rt_debug_init(hdd_context_t *hdd_ctx)
 	struct hdd_ipa_priv *hdd_ipa = (struct hdd_ipa_priv *)hdd_ctx->hdd_ipa;
 
 	qdf_mutex_create(&hdd_ipa->rt_debug_lock);
-	qdf_mc_timer_init(&hdd_ipa->rt_debug_fill_timer, QDF_TIMER_TYPE_SW,
-		hdd_ipa_uc_rt_debug_host_fill, (void *)hdd_ctx);
 	hdd_ipa->rt_buf_fill_index = 0;
 	qdf_mem_zero(hdd_ipa->rt_bug_buffer,
 		sizeof(struct uc_rt_debug_info) *
@@ -912,15 +931,18 @@ static void hdd_ipa_uc_rt_debug_init(hdd_context_t *hdd_ctx)
 	hdd_ipa->ipa_rx_internel_drop_count = 0;
 	hdd_ipa->ipa_rx_destructor_count = 0;
 
-	qdf_mc_timer_start(&hdd_ipa->rt_debug_fill_timer,
-		HDD_IPA_UC_RT_DEBUG_FILL_INTERVAL);
-
 	/* Reatime debug enable on feature enable */
 	if (!hdd_ipa_is_rt_debugging_enabled(hdd_ctx)) {
 		HDD_IPA_LOG(QDF_TRACE_LEVEL_INFO,
 			"%s: IPA RT debug is not enabled", __func__);
 		return;
 	}
+
+	qdf_mc_timer_init(&hdd_ipa->rt_debug_fill_timer, QDF_TIMER_TYPE_SW,
+		hdd_ipa_uc_rt_debug_host_fill, (void *)hdd_ctx);
+	qdf_mc_timer_start(&hdd_ipa->rt_debug_fill_timer,
+		HDD_IPA_UC_RT_DEBUG_FILL_INTERVAL);
+
 	qdf_mc_timer_init(&hdd_ipa->rt_debug_timer, QDF_TIMER_TYPE_SW,
 		hdd_ipa_uc_rt_debug_handler, (void *)hdd_ctx);
 	qdf_mc_timer_start(&hdd_ipa->rt_debug_timer,
@@ -2013,6 +2035,9 @@ int hdd_ipa_uc_ssr_deinit(void)
 		hdd_ipa->assoc_stas_map[idx].sta_id = 0xFF;
 	}
 	qdf_mutex_release(&hdd_ipa->ipa_lock);
+
+	if (hdd_ipa_uc_sta_is_enabled(hdd_ipa->hdd_ctx))
+		hdd_ipa_uc_sta_reset_sta_connected(hdd_ipa);
 
 	/* Full IPA driver cleanup not required since wlan driver is now
 	 * unloaded and reloaded after SSR.
