@@ -897,6 +897,22 @@ end:
 }
 
 #ifdef FEATURE_RUNTIME_PM
+static const char *hif_pm_runtime_state_to_string(uint32_t state)
+{
+	switch (state) {
+	case HIF_PM_RUNTIME_STATE_NONE:
+		return "INIT_STATE";
+	case HIF_PM_RUNTIME_STATE_ON:
+		return "ON";
+	case HIF_PM_RUNTIME_STATE_INPROGRESS:
+		return "INPROGRESS";
+	case HIF_PM_RUNTIME_STATE_SUSPENDED:
+		return "SUSPENDED";
+	default:
+		return "INVALID STATE";
+	}
+}
+
 #define HIF_PCI_RUNTIME_PM_STATS(_s, _sc, _name) \
 	seq_printf(_s, "%30s: %u\n", #_name, _sc->pm_stats._name)
 /**
@@ -912,9 +928,10 @@ void hif_pci_runtime_pm_warn(struct hif_pci_softc *sc, const char *msg)
 {
 	struct hif_pm_runtime_lock *ctx;
 
-	HIF_ERROR("%s: usage_count: %d, pm_state: %d, prevent_suspend_cnt: %d",
+	HIF_ERROR("%s: usage_count: %d, pm_state: %s, prevent_suspend_cnt: %d",
 			msg, atomic_read(&sc->dev->power.usage_count),
-			atomic_read(&sc->pm_state),
+			hif_pm_runtime_state_to_string(
+					atomic_read(&sc->pm_state)),
 			sc->prevent_suspend_cnt);
 
 	HIF_ERROR("runtime_status: %d, runtime_error: %d, disable_depth: %d autosuspend_delay: %d",
@@ -1183,8 +1200,21 @@ static void hif_pm_runtime_open(struct hif_pci_softc *sc)
  */
 static void hif_pm_runtime_sanitize_on_exit(struct hif_pci_softc *sc)
 {
+	unsigned long flags;
+	struct hif_pm_runtime_lock *ctx, *tmp;
+
 	if (atomic_read(&sc->dev->power.usage_count) != 1)
 		hif_pci_runtime_pm_warn(sc, "Driver UnLoaded");
+	else
+		return;
+
+	spin_lock_irqsave(&sc->runtime_lock, flags);
+	list_for_each_entry_safe(ctx, tmp, &sc->prevent_suspend_list, list) {
+		spin_unlock_irqrestore(&sc->runtime_lock, flags);
+		hif_pm_runtime_allow_suspend(GET_HIF_OPAQUE_HDL(sc), ctx);
+		spin_lock_irqsave(&sc->runtime_lock, flags);
+	}
+	spin_unlock_irqrestore(&sc->runtime_lock, flags);
 
 	/* ensure 1 and only 1 usage count so that when the wlan
 	 * driver is re-insmodded runtime pm won't be
@@ -1197,6 +1227,29 @@ static void hif_pm_runtime_sanitize_on_exit(struct hif_pci_softc *sc)
 		hif_pm_runtime_put_auto(sc->dev);
 }
 
+static int __hif_pm_runtime_allow_suspend(struct hif_pci_softc *hif_sc,
+					  struct hif_pm_runtime_lock *lock);
+
+/**
+ * hif_pm_runtime_sanitize_on_ssr_exit() - Empty the suspend list on SSR
+ * @sc: PCIe Context
+ *
+ * API is used to empty the runtime pm prevent suspend list.
+ *
+ * Return: void
+ */
+static void hif_pm_runtime_sanitize_on_ssr_exit(struct hif_pci_softc *sc)
+{
+	unsigned long flags;
+	struct hif_pm_runtime_lock *ctx, *tmp;
+
+	spin_lock_irqsave(&sc->runtime_lock, flags);
+	list_for_each_entry_safe(ctx, tmp, &sc->prevent_suspend_list, list) {
+		 __hif_pm_runtime_allow_suspend(sc, ctx);
+	}
+	spin_unlock_irqrestore(&sc->runtime_lock, flags);
+}
+
 /**
  * hif_pm_runtime_close(): close runtime pm
  * @sc: pci bus handle
@@ -1205,17 +1258,18 @@ static void hif_pm_runtime_sanitize_on_exit(struct hif_pci_softc *sc)
  */
 static void hif_pm_runtime_close(struct hif_pci_softc *sc)
 {
+	struct hif_softc *scn = HIF_GET_SOFTC(sc);
+
 	if (qdf_atomic_read(&sc->pm_state) == HIF_PM_RUNTIME_STATE_NONE)
 		return;
 	else
 		hif_pm_runtime_stop(sc);
 
-	hif_pm_runtime_sanitize_on_exit(sc);
+	hif_is_recovery_in_progress(scn) ?
+		hif_pm_runtime_sanitize_on_ssr_exit(sc) :
+		hif_pm_runtime_sanitize_on_exit(sc);
 }
-
-
 #else
-
 static void hif_pm_runtime_close(struct hif_pci_softc *sc) {}
 static void hif_pm_runtime_open(struct hif_pci_softc *sc) {}
 static void hif_pm_runtime_start(struct hif_pci_softc *sc) {}
@@ -3766,8 +3820,10 @@ static int __hif_pm_runtime_prevent_suspend(struct hif_pci_softc
 
 	hif_sc->pm_stats.prevent_suspend++;
 
-	HIF_ERROR("%s: in pm_state:%d ret: %d", __func__,
-			qdf_atomic_read(&hif_sc->pm_state), ret);
+	HIF_ERROR("%s: in pm_state:%s ret: %d", __func__,
+		hif_pm_runtime_state_to_string(
+			qdf_atomic_read(&hif_sc->pm_state)),
+					ret);
 
 	return ret;
 }
@@ -3811,8 +3867,10 @@ static int __hif_pm_runtime_allow_suspend(struct hif_pci_softc *hif_sc,
 	hif_pm_runtime_mark_last_busy(hif_sc->dev);
 	ret = hif_pm_runtime_put_auto(hif_sc->dev);
 
-	HIF_ERROR("%s: in pm_state:%d ret: %d", __func__,
-			qdf_atomic_read(&hif_sc->pm_state), ret);
+	HIF_ERROR("%s: in pm_state:%s ret: %d", __func__,
+		hif_pm_runtime_state_to_string(
+			qdf_atomic_read(&hif_sc->pm_state)),
+					ret);
 
 	hif_sc->pm_stats.allow_suspend++;
 	return ret;
@@ -3996,8 +4054,10 @@ int hif_pm_runtime_prevent_suspend_timeout(struct hif_opaque_softc *ol_sc,
 
 	spin_unlock_irqrestore(&hif_sc->runtime_lock, flags);
 
-	HIF_ERROR("%s: pm_state: %d delay: %dms ret: %d\n", __func__,
-			qdf_atomic_read(&hif_sc->pm_state), delay, ret);
+	HIF_ERROR("%s: pm_state: %s delay: %dms ret: %d\n", __func__,
+		hif_pm_runtime_state_to_string(
+			qdf_atomic_read(&hif_sc->pm_state)),
+					delay, ret);
 
 	return ret;
 }
@@ -4055,5 +4115,4 @@ void hif_runtime_lock_deinit(struct hif_opaque_softc *hif_ctx,
 
 	qdf_mem_free(context);
 }
-
 #endif /* FEATURE_RUNTIME_PM */
