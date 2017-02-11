@@ -95,7 +95,7 @@ typedef PREPACK struct {
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0))
 /* TODO Cleanup this backported function */
-int qcacld_bp_seq_printf(struct seq_file *m, const char *f, ...)
+static int qcacld_bp_seq_printf(struct seq_file *m, const char *f, ...)
 {
 	va_list args;
 
@@ -1643,6 +1643,7 @@ static uint8_t *wmi_id_to_name(uint32_t wmi_command)
 		CASE_RETURN_STRING(WMI_PDEV_DFS_PHYERR_OFFLOAD_DISABLE_CMDID);
 		CASE_RETURN_STRING(WMI_VDEV_ADFS_CH_CFG_CMDID);
 		CASE_RETURN_STRING(WMI_VDEV_ADFS_OCAC_ABORT_CMDID);
+		CASE_RETURN_STRING(WMI_SAR_LIMITS_CMDID);
 	}
 
 	return "Invalid WMI cmd";
@@ -1720,6 +1721,8 @@ static bool wmi_is_pm_resume_cmd(uint32_t cmd_id)
  * @buf: wmi buf
  * @len: wmi buffer length
  * @cmd_id: wmi command id
+ *
+ * Note, it is NOT safe to access buf after calling this function!
  *
  * Return: 0 on success
  */
@@ -1837,8 +1840,8 @@ QDF_STATUS wmi_unified_cmd_send(wmi_unified_t wmi_handle, wmi_buf_t buf,
  *
  * Return: event handler's index
  */
-int wmi_unified_get_event_handler_ix(wmi_unified_t wmi_handle,
-				     uint32_t event_id)
+static int wmi_unified_get_event_handler_ix(wmi_unified_t wmi_handle,
+					    uint32_t event_id)
 {
 	uint32_t idx = 0;
 	int32_t invalid_idx = -1;
@@ -2018,7 +2021,7 @@ static void wmi_process_fw_event_worker_thread_ctx
  *
  * Return: none
  */
-void wmi_control_rx(void *ctx, HTC_PACKET *htc_packet)
+static void wmi_control_rx(void *ctx, HTC_PACKET *htc_packet)
 {
 	struct wmi_unified *wmi_handle = (struct wmi_unified *)ctx;
 	wmi_buf_t evt_buf;
@@ -2156,7 +2159,7 @@ end:
  *
  * Return: none
  */
-void wmi_rx_event_work(struct work_struct *work)
+static void wmi_rx_event_work(struct work_struct *work)
 {
 	struct wmi_unified *wmi = container_of(work, struct wmi_unified,
 					rx_event_work);
@@ -2338,7 +2341,7 @@ wmi_unified_remove_work(struct wmi_unified *wmi_handle)
  *
  * @Return: none.
  */
-void wmi_htc_tx_complete(void *ctx, HTC_PACKET *htc_pkt)
+static void wmi_htc_tx_complete(void *ctx, HTC_PACKET *htc_pkt)
 {
 	struct wmi_unified *wmi_handle = (struct wmi_unified *)ctx;
 	wmi_buf_t wmi_cmd_buf = GET_HTC_PACKET_NET_BUF_CONTEXT(htc_pkt);
