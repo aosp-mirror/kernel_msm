@@ -77,7 +77,7 @@
 #include <cdp_txrx_peer_ops.h>
 #include <cdp_txrx_cfg.h>
 #include "cdp_txrx_stats.h"
-
+#include "ol_ctrl_txrx_api.h"
 
 typedef struct {
 	int32_t rate;
@@ -1556,11 +1556,6 @@ QDF_STATUS wma_tx_detach(tp_wma_handle wma_handle)
 						NULL, txrx_pdev);
 		}
 	}
-	/* Destroy Tx Frame Complete event */
-	qdf_event_destroy(&wma_handle->tx_frm_download_comp_event);
-
-	/* Tx queue empty check event (dummy event) */
-	qdf_event_destroy(&wma_handle->tx_queue_empty_event);
 
 	/* Reset Tx Frm Callbacks */
 	wma_handle->tx_frm_download_comp_cb = NULL;
@@ -2001,7 +1996,7 @@ QDF_STATUS wma_set_thermal_mgmt(tp_wma_handle wma_handle,
  *
  * Return: thermal (throttle) level
  */
-uint8_t wma_thermal_mgmt_get_level(void *handle, uint32_t temp)
+static uint8_t wma_thermal_mgmt_get_level(void *handle, uint32_t temp)
 {
 	tp_wma_handle wma = (tp_wma_handle) handle;
 	int i;
@@ -2836,6 +2831,7 @@ QDF_STATUS wma_tx_packet(void *wma_context, void *tx_frame, uint16_t frmLen,
 			status = QDF_STATUS_E_FAILURE;
 		} else {
 			mgmt_param.desc_id = wmi_desc->desc_id;
+			wmi_desc->vdev_id = vdev_id;
 			status = wmi_mgmt_unified_cmd_send(
 					wma_handle->wmi_handle,
 					&mgmt_param);
@@ -2974,7 +2970,6 @@ void ol_rx_err(ol_pdev_handle pdev, uint8_t vdev_id,
 			__func__);
 		return;
 	}
-	qdf_mem_set((void *)mic_err_ind, sizeof(*mic_err_ind), 0);
 
 	mic_err_ind->messageType = eWNI_SME_MIC_FAILURE_IND;
 	mic_err_ind->length = sizeof(*mic_err_ind);

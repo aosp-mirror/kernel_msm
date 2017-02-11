@@ -53,8 +53,6 @@
 
 #define MAX_SUPPORTED_PEERS_WEP 16
 
-static void lim_handle_sme_join_result(tpAniSirGlobal, tSirResultCodes, uint16_t,
-				       tpPESession);
 void lim_process_mlm_join_cnf(tpAniSirGlobal, uint32_t *);
 void lim_process_mlm_auth_cnf(tpAniSirGlobal, uint32_t *);
 void lim_process_mlm_start_cnf(tpAniSirGlobal, uint32_t *);
@@ -586,8 +584,6 @@ void lim_process_mlm_auth_cnf(tpAniSirGlobal mac_ctx, uint32_t *msg)
 				FL("mlmAuthReq :Memory alloc failed "));
 			return;
 		}
-		qdf_mem_set((uint8_t *) auth_req,
-			sizeof(tLimMlmAuthReq), 0);
 		if (session_entry->limSmeState ==
 			eLIM_SME_WT_AUTH_STATE) {
 			sir_copy_mac_addr(auth_req->peerMacAddr,
@@ -1307,15 +1303,20 @@ void lim_process_mlm_set_keys_cnf(tpAniSirGlobal pMac, uint32_t *pMsgBuf)
 	* Firmware so we can set the protection bit
 	*/
 	if (eSIR_SME_SUCCESS == pMlmSetKeysCnf->resultCode) {
-		psessionEntry->is_key_installed = 1;
+		if (pMlmSetKeysCnf->key_len_nonzero)
+			psessionEntry->is_key_installed = 1;
 		if (LIM_IS_AP_ROLE(psessionEntry)) {
 			sta_ds = dph_lookup_hash_entry(pMac,
 				pMlmSetKeysCnf->peer_macaddr.bytes,
 				&aid, &psessionEntry->dph.dphHashTable);
-			if (sta_ds != NULL)
+			if (sta_ds != NULL && pMlmSetKeysCnf->key_len_nonzero)
 				sta_ds->is_key_installed = 1;
 		}
 	}
+	lim_log(pMac, LOG1,
+		FL("is_key_installed = %d"),
+		psessionEntry->is_key_installed);
+
 	lim_send_sme_set_context_rsp(pMac,
 				     pMlmSetKeysCnf->peer_macaddr,
 				     1,
@@ -1338,8 +1339,7 @@ void lim_process_mlm_set_keys_cnf(tpAniSirGlobal pMac, uint32_t *pMsgBuf)
  *
  * Return: None
  */
-static void
-lim_handle_sme_join_result(tpAniSirGlobal mac_ctx,
+void lim_handle_sme_join_result(tpAniSirGlobal mac_ctx,
 	tSirResultCodes result_code, uint16_t prot_status_code,
 	tpPESession session_entry)
 {
@@ -1374,6 +1374,8 @@ lim_handle_sme_join_result(tpAniSirGlobal mac_ctx,
 			 * to SME
 			 */
 			lim_cleanup_rx_path(mac_ctx, sta_ds, session_entry);
+			qdf_mem_free(session_entry->pLimJoinReq);
+			session_entry->pLimJoinReq = NULL;
 			/* Cleanup if add bss failed */
 			if (session_entry->add_bss_failed) {
 				dph_delete_hash_entry(mac_ctx,
@@ -1381,15 +1383,13 @@ lim_handle_sme_join_result(tpAniSirGlobal mac_ctx,
 					 &session_entry->dph.dphHashTable);
 				goto error;
 			}
-			qdf_mem_free(session_entry->pLimJoinReq);
-			session_entry->pLimJoinReq = NULL;
 			return;
 		}
+		qdf_mem_free(session_entry->pLimJoinReq);
+		session_entry->pLimJoinReq = NULL;
 	}
 error:
-	qdf_mem_free(session_entry->pLimJoinReq);
-	session_entry->pLimJoinReq = NULL;
-	/* Delete teh session if JOIN failure occurred. */
+	/* Delete the session if JOIN failure occurred. */
 	if (result_code != eSIR_SME_SUCCESS) {
 		if (lim_set_link_state
 			(mac_ctx, eSIR_LINK_DOWN_STATE,
@@ -2710,6 +2710,8 @@ void lim_process_mlm_set_sta_key_rsp(tpAniSirGlobal mac_ctx,
 	tLimMlmSetKeysCnf mlm_set_key_cnf;
 	uint8_t session_id = 0;
 	tpPESession session_entry;
+	uint16_t key_len;
+	uint16_t result_status;
 
 	SET_LIM_PROCESS_DEFD_MESGS(mac_ctx, true);
 	qdf_mem_set((void *)&mlm_set_key_cnf, sizeof(tLimMlmSetKeysCnf), 0);
@@ -2737,6 +2739,15 @@ void lim_process_mlm_set_sta_key_rsp(tpAniSirGlobal mac_ctx,
 		mlm_set_key_cnf.resultCode =
 			(uint16_t)(((tpSetStaKeyParams) msg->bodyptr)->status);
 	}
+
+	result_status = (uint16_t)(((tpSetStaKeyParams) msg->bodyptr)->status);
+	key_len = ((tpSetStaKeyParams)msg->bodyptr)->key[0].keyLength;
+
+	if (result_status == eSIR_SME_SUCCESS && key_len)
+		mlm_set_key_cnf.key_len_nonzero = true;
+	else
+		mlm_set_key_cnf.key_len_nonzero = false;
+
 
 	qdf_mem_free(msg->bodyptr);
 	msg->bodyptr = NULL;
@@ -2783,6 +2794,7 @@ void lim_process_mlm_set_bss_key_rsp(tpAniSirGlobal mac_ctx,
 	uint8_t session_id = 0;
 	tpPESession session_entry;
 	tpLimMlmSetKeysReq set_key_req;
+	uint16_t key_len;
 
 	SET_LIM_PROCESS_DEFD_MESGS(mac_ctx, true);
 	qdf_mem_set((void *)&set_key_cnf, sizeof(tLimMlmSetKeysCnf), 0);
@@ -2800,16 +2812,24 @@ void lim_process_mlm_set_bss_key_rsp(tpAniSirGlobal mac_ctx,
 		msg->bodyptr = NULL;
 		return;
 	}
-	if (eLIM_MLM_WT_SET_BSS_KEY_STATE == session_entry->limMlmState)
+	if (eLIM_MLM_WT_SET_BSS_KEY_STATE == session_entry->limMlmState) {
 		result_status =
 			(uint16_t)(((tpSetBssKeyParams)msg->bodyptr)->status);
-	else
+		key_len = ((tpSetBssKeyParams)msg->bodyptr)->key[0].keyLength;
+	} else {
 		/*
 		 * BCAST key also uses tpSetStaKeyParams.
 		 * Done this way for readabilty.
 		 */
 		result_status =
 			(uint16_t)(((tpSetStaKeyParams)msg->bodyptr)->status);
+		key_len = ((tpSetStaKeyParams)msg->bodyptr)->key[0].keyLength;
+	}
+
+	if (result_status == eSIR_SME_SUCCESS && key_len)
+		set_key_cnf.key_len_nonzero = true;
+	else
+		set_key_cnf.key_len_nonzero = false;
 
 	/* Validate MLME state */
 	if (eLIM_MLM_WT_SET_BSS_KEY_STATE != session_entry->limMlmState &&
@@ -3152,6 +3172,11 @@ void lim_process_switch_channel_rsp(tpAniSirGlobal pMac, void *body)
 		 * the policy manager connection table needs to be updated.
 		 */
 		cds_update_connection_info(psessionEntry->smeSessionId);
+		if (psessionEntry->pePersona == QDF_P2P_CLIENT_MODE) {
+			lim_log(pMac, LOG1,
+				FL("Send p2p operating channel change conf action frame once first beacon is received on new channel"));
+			psessionEntry->send_p2p_conf_frame = true;
+		}
 		break;
 	case LIM_SWITCH_CHANNEL_SAP_DFS:
 	{
@@ -3197,7 +3222,6 @@ void lim_send_beacon_ind(tpAniSirGlobal pMac, tpPESession psessionEntry)
 		       )
 		return;
 	}
-	qdf_mem_set(pBeaconGenParams, sizeof(*pBeaconGenParams), 0);
 	qdf_mem_copy((void *)pBeaconGenParams->bssId,
 		     (void *)psessionEntry->bssId, QDF_MAC_ADDR_SIZE);
 	limMsg.bodyptr = pBeaconGenParams;

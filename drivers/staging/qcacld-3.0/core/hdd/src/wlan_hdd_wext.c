@@ -1625,7 +1625,6 @@ static void hdd_statistics_cb(void *pStats, void *pContext)
  */
 void hdd_clear_roam_profile_ie(hdd_adapter_t *pAdapter)
 {
-	int i = 0;
 	hdd_wext_state_t *pWextState = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
 
 	ENTER();
@@ -1668,11 +1667,8 @@ void hdd_clear_roam_profile_ie(hdd_adapter_t *pAdapter)
 
 	pWextState->authKeyMgmt = 0;
 
-	for (i = 0; i < CSR_MAX_NUM_KEY; i++) {
-		if (pWextState->roamProfile.Keys.KeyMaterial[i]) {
-			pWextState->roamProfile.Keys.KeyLength[i] = 0;
-		}
-	}
+	qdf_mem_zero(pWextState->roamProfile.Keys.KeyLength, CSR_MAX_NUM_KEY);
+
 #ifdef FEATURE_WLAN_WAPI
 	pAdapter->wapi_info.wapiAuthMode = WAPI_AUTH_MODE_OPEN;
 	pAdapter->wapi_info.nWapiMode = 0;
@@ -3043,7 +3039,7 @@ static int __iw_get_encode(struct net_device *dev,
 	}
 
 	for (i = 0; i < MAX_WEP_KEYS; i++) {
-		if (pRoamProfile->Keys.KeyMaterial[i] == NULL) {
+		if (pRoamProfile->Keys.KeyLength[i] == 0) {
 			continue;
 		} else {
 			break;
@@ -3793,7 +3789,7 @@ QDF_STATUS wlan_hdd_get_station_stats(hdd_adapter_t *pAdapter)
 	hdd_station_ctx_t *pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 	QDF_STATUS hstatus;
 	unsigned long rc;
-	struct statsContext context;
+	static struct statsContext context;
 
 	if (NULL == pAdapter) {
 		hdd_err("pAdapter is NULL");
@@ -4057,7 +4053,6 @@ static int __iw_set_encode(struct net_device *dev, struct iw_request_info *info,
 	uint8_t key_length;
 	eCsrEncryptionType encryptionType = eCSR_ENCRYPT_TYPE_NONE;
 	bool fKeyPresent = 0;
-	int i;
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	int ret;
 
@@ -4084,13 +4079,8 @@ static int __iw_set_encode(struct net_device *dev, struct iw_request_info *info,
 	if (wrqu->data.flags & IW_ENCODE_DISABLED) {
 		hdd_notice("****iwconfig wlan0 key off*****");
 		if (!fKeyPresent) {
-
-			for (i = 0; i < CSR_MAX_NUM_KEY; i++) {
-
-				if (pWextState->roamProfile.Keys.KeyMaterial[i])
-					pWextState->roamProfile.Keys.
-					KeyLength[i] = 0;
-			}
+			qdf_mem_zero(pWextState->roamProfile.Keys.KeyLength,
+							CSR_MAX_NUM_KEY);
 		}
 		pHddStaCtx->conn_info.authType = eCSR_AUTH_TYPE_OPEN_SYSTEM;
 		pWextState->wpaVersion = IW_AUTH_WPA_VERSION_DISABLED;
@@ -4270,7 +4260,7 @@ static int __iw_get_encodeext(struct net_device *dev,
 	}
 
 	for (i = 0; i < MAX_WEP_KEYS; i++) {
-		if (pRoamProfile->Keys.KeyMaterial[i] == NULL) {
+		if (pRoamProfile->Keys.KeyLength[i] == 0) {
 			continue;
 		} else {
 			break;
@@ -4379,7 +4369,7 @@ static int __iw_set_encodeext(struct net_device *dev,
 			return -EINVAL;
 		} else {
 			/*Static wep, update the roam profile with the keys */
-			if (ext->key
+			if (ext->key_len
 			    && (ext->key_len <=
 				eCSR_SECURITY_WEP_KEYSIZE_MAX_BYTES)
 			    && key_index < CSR_MAX_NUM_KEY) {
@@ -5086,10 +5076,10 @@ int wlan_hdd_update_phymode(struct net_device *net, tHalHandle hal,
 			return -EIO;
 		}
 		if (phddctx->config->nChannelBondingMode5GHz)
-			phddctx->wiphy->bands[IEEE80211_BAND_5GHZ]->ht_cap.cap
+			phddctx->wiphy->bands[NL80211_BAND_5GHZ]->ht_cap.cap
 				|= IEEE80211_HT_CAP_SUP_WIDTH_20_40;
 		else
-			phddctx->wiphy->bands[IEEE80211_BAND_5GHZ]->ht_cap.cap
+			phddctx->wiphy->bands[NL80211_BAND_5GHZ]->ht_cap.cap
 				&= ~IEEE80211_HT_CAP_SUP_WIDTH_20_40;
 
 		hdd_warn("New_Phymode= %d ch_bonding=%d band=%d VHT_ch_width=%u",
@@ -5380,11 +5370,6 @@ static int __iw_setint_getnone(struct net_device *dev,
 			return -EIO;
 		}
 
-		break;
-	}
-	case WE_SET_PKTLOG:
-	{
-		hdd_process_pktlog_command(hdd_ctx, set_value);
 		break;
 	}
 	case WE_SET_HIGHER_DTIM_TRANSITION:
@@ -8236,6 +8221,22 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
 	}
 	break;
 #endif
+	case WE_SET_PKTLOG:
+	{
+		int ret;
+
+		if (num_args < 1 || num_args > 2) {
+			hdd_err("pktlog: either 1 or 2 parameters are required");
+			return -EINVAL;
+		}
+
+		ret = hdd_process_pktlog_command(hdd_ctx, apps_args[0],
+						   apps_args[1]);
+		if (ret)
+			return ret;
+		break;
+	}
+
 	case WE_MAC_PWR_DEBUG_CMD:
 	{
 		struct sir_mac_pwr_dbg_cmd mac_pwr_dbg_args;
@@ -9872,10 +9873,10 @@ static int __iw_set_two_ints_getnone(struct net_device *dev,
 		ret = wlan_hdd_set_mon_chan(pAdapter, value[1], value[2]);
 		break;
 	case WE_SET_WLAN_SUSPEND:
-		ret = hdd_wlan_fake_apps_suspend(hdd_ctx->wiphy);
+		ret = hdd_wlan_fake_apps_suspend(hdd_ctx->wiphy, dev);
 		break;
 	case WE_SET_WLAN_RESUME:
-		ret = hdd_wlan_fake_apps_resume(hdd_ctx->wiphy);
+		ret = hdd_wlan_fake_apps_resume(hdd_ctx->wiphy, dev);
 		break;
 	default:
 		hdd_err("Invalid IOCTL command %d", sub_cmd);
@@ -10065,7 +10066,7 @@ static const struct iw_priv_args we_private_args[] = {
 	 "setTxMaxPower5G"},
 
 	{WE_SET_PKTLOG,
-	 IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
+	 IW_PRIV_TYPE_INT | MAX_VAR_ARGS,
 	 0,
 	 "pktlog"},
 
@@ -11049,8 +11050,8 @@ static const struct iw_priv_args we_private_args[] = {
 #ifdef WLAN_FEATURE_PACKET_FILTERING
 	{
 		WLAN_SET_PACKET_FILTER_PARAMS,
-		IW_PRIV_TYPE_BYTE | IW_PRIV_SIZE_FIXED |
-					sizeof(struct pkt_filter_cfg),
+		IW_PRIV_TYPE_BYTE |
+		sizeof(struct pkt_filter_cfg),
 		0,
 		"setPktFilter"
 	}

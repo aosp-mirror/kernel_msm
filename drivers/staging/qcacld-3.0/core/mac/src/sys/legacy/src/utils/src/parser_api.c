@@ -1052,8 +1052,15 @@ populate_dot11f_vht_caps(tpAniSirGlobal pMac,
 		CFG_GET_INT(nStatus, pMac, WNI_CFG_VHT_RXSTBC, nCfgValue);
 		pDot11f->rxSTBC = (nCfgValue & 0x0007);
 
-		pDot11f->suBeamformeeCap = 0;
-		pDot11f->muBeamformeeCap = 0;
+		nCfgValue = 0;
+		CFG_GET_INT(nStatus, pMac,
+			    WNI_CFG_VHT_SU_BEAMFORMEE_CAP, nCfgValue);
+		pDot11f->suBeamformeeCap = (nCfgValue & 0x0001);
+
+		nCfgValue = 0;
+		CFG_GET_INT(nStatus, pMac,
+			    WNI_CFG_VHT_MU_BEAMFORMEE_CAP, nCfgValue);
+		pDot11f->muBeamformeeCap = (nCfgValue & 0x0001);
 
 		nCfgValue = 0;
 		CFG_GET_INT(nStatus, pMac, WNI_CFG_VHT_SU_BEAMFORMER_CAP,
@@ -2327,8 +2334,6 @@ tSirRetStatus sir_convert_probe_frame2_struct(tpAniSirGlobal pMac,
 		return eSIR_MEM_ALLOC_FAILED;
 	}
 
-	qdf_mem_set((uint8_t *) pr, sizeof(tDot11fProbeResponse), 0);
-
 	/* delegate to the framesc-generated code, */
 	status = dot11f_unpack_probe_response(pMac, pFrame, nFrame, pr);
 	if (DOT11F_FAILED(status)) {
@@ -2624,7 +2629,6 @@ sir_convert_assoc_req_frame2_struct(tpAniSirGlobal pMac,
 	}
 	/* Zero-init our [out] parameter, */
 	qdf_mem_set((uint8_t *) pAssocReq, sizeof(tSirAssocReq), 0);
-	qdf_mem_set((uint8_t *) ar, sizeof(tDot11fAssocRequest), 0);
 
 	/* delegate to the framesc-generated code, */
 	status = dot11f_unpack_assoc_request(pMac, pFrame, nFrame, ar);
@@ -3829,8 +3833,6 @@ sir_convert_beacon_frame2_struct(tpAniSirGlobal pMac,
 		return eSIR_MEM_ALLOC_FAILED;
 	}
 
-	qdf_mem_set((uint8_t *) pBeacon, sizeof(tDot11fBeacon), 0);
-
 	/* get the MAC address out of the BD, */
 	qdf_mem_copy(pBeaconStruct->bssid, pHdr->sa, 6);
 
@@ -4634,7 +4636,7 @@ sir_convert_qos_map_configure_frame2_struct(tpAniSirGlobal pMac,
 	uint32_t status;
 	status =
 		dot11f_unpack_qos_map_configure(pMac, pFrame, nFrame, &mapConfigure);
-	if (DOT11F_FAILED(status)) {
+	if (DOT11F_FAILED(status) || !mapConfigure.QosMapSet.present) {
 		dot11f_log(pMac, LOGE,
 			   FL("Failed to parse Qos Map Configure frame (0x%08x, %d bytes):"),
 			   status, nFrame);
