@@ -1014,7 +1014,7 @@ tSirRetStatus pe_process_messages(tpAniSirGlobal pMac, tSirMsgQ *pMsg)
  * @return None
  */
 
-QDF_STATUS pe_handle_mgmt_frame(void *p_cds_gctx, void *cds_buff)
+static QDF_STATUS pe_handle_mgmt_frame(void *p_cds_gctx, void *cds_buff)
 {
 	tpAniSirGlobal pMac;
 	tpSirMacMgmtHdr mHdr;
@@ -1091,10 +1091,7 @@ QDF_STATUS pe_handle_mgmt_frame(void *p_cds_gctx, void *cds_buff)
 /**
  * pe_register_callbacks_with_wma() - register SME and PE callback functions to
  * WMA.
- * @pMac: mac global ctx
- * @ready_req: Ready request parameters, containing callback pointers
- *
- * Return: None
+ * (function documentation in lim_api.h)
  */
 void pe_register_callbacks_with_wma(tpAniSirGlobal pMac,
 				    tSirSmeReadyReq *ready_req)
@@ -1748,9 +1745,10 @@ void lim_fill_join_rsp_ht_caps(tpPESession session, tpSirSmeJoinRsp join_rsp)
 #endif
 
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
-QDF_STATUS lim_roam_fill_bss_descr(tpAniSirGlobal pMac,
-		roam_offload_synch_ind *roam_offload_synch_ind_ptr,
-		tpSirBssDescription  bss_desc_ptr)
+static QDF_STATUS
+lim_roam_fill_bss_descr(tpAniSirGlobal pMac,
+			roam_offload_synch_ind *roam_offload_synch_ind_ptr,
+			tpSirBssDescription  bss_desc_ptr)
 {
 	uint32_t ie_len = 0;
 	tpSirProbeRespBeacon parsed_frm_ptr;
@@ -2070,10 +2068,7 @@ QDF_STATUS pe_roam_synch_callback(tpAniSirGlobal mac_ctx,
 	roam_sync_ind_ptr->join_rsp->nss = curr_sta_ds->nss;
 	roam_sync_ind_ptr->join_rsp->max_rate_flags =
 		lim_get_max_rate_flags(mac_ctx, curr_sta_ds);
-	roam_sync_ind_ptr->join_rsp->tdls_prohibited =
-		ft_session_ptr->tdls_prohibited;
-	roam_sync_ind_ptr->join_rsp->tdls_chan_swit_prohibited =
-		ft_session_ptr->tdls_chan_swit_prohibited;
+	lim_set_tdls_flags(roam_sync_ind_ptr, ft_session_ptr);
 	roam_sync_ind_ptr->join_rsp->aid = ft_session_ptr->limAID;
 	lim_fill_join_rsp_ht_caps(ft_session_ptr, roam_sync_ind_ptr->join_rsp);
 	ft_session_ptr->limPrevSmeState = ft_session_ptr->limSmeState;
@@ -2086,7 +2081,8 @@ QDF_STATUS pe_roam_synch_callback(tpAniSirGlobal mac_ctx,
 }
 #endif
 
-uint8_t lim_is_beacon_miss_scenario(tpAniSirGlobal pMac, uint8_t *pRxPacketInfo)
+static bool lim_is_beacon_miss_scenario(tpAniSirGlobal pMac,
+					uint8_t *pRxPacketInfo)
 {
 	tpSirMacMgmtHdr pHdr = WMA_GET_RX_MAC_HEADER(pRxPacketInfo);
 	uint8_t sessionId;
