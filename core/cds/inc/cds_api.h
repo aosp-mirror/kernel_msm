@@ -213,6 +213,8 @@ QDF_STATUS cds_disable(v_CONTEXT_t cds_context);
  */
 void cds_flush_cache_rx_queue(void);
 
+QDF_STATUS cds_post_disable(v_CONTEXT_t cds_context);
+
 QDF_STATUS cds_close(v_CONTEXT_t cds_context);
 
 void cds_core_return_msg(void *pVContext, p_cds_msg_wrapper pMsgWrapper);
@@ -239,7 +241,7 @@ bool cds_is_packet_log_enabled(void);
 
 uint64_t cds_get_monotonic_boottime(void);
 
-void cds_trigger_recovery(void);
+void cds_trigger_recovery(bool);
 
 void cds_set_wakelock_logging(bool value);
 bool cds_is_wakelock_enabled(void);
