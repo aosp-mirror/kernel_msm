@@ -121,8 +121,8 @@ static void wma_service_ready_ext_evt_timeout(void *data)
 	}
 
 end:
-	/* Panic so that we can debug why FW is not responding */
-	QDF_BUG(0);
+	/* Assert here. Panic is being called in insmod thread */
+	QDF_ASSERT(0);
 }
 
 /**
@@ -241,6 +241,8 @@ static void wma_set_default_tgt_config(tp_wma_handle wma_handle)
 	tgt_cfg.scan_max_pending_req = wma_handle->max_scan;
 
 	WMI_RSRC_CFG_FLAG_MGMT_COMP_EVT_BUNDLE_SUPPORT_SET(tgt_cfg.flag1, 1);
+	WMI_RSRC_CFG_FLAG_TX_MSDU_ID_NEW_PARTITION_SUPPORT_SET(tgt_cfg.flag1,
+							       1);
 
 	WMITLV_SET_HDR(&tgt_cfg.tlv_header,
 		       WMITLV_TAG_STRUC_wmi_resource_config,
@@ -2116,6 +2118,7 @@ QDF_STATUS wma_open(void *cds_context,
 	qdf_spinlock_create(&wma_handle->wma_hold_req_q_lock);
 	qdf_atomic_init(&wma_handle->is_wow_bus_suspended);
 	qdf_atomic_init(&wma_handle->scan_id_counter);
+	qdf_atomic_init(&wma_handle->num_pending_scans);
 
 	/* Register vdev start response event handler */
 	wmi_unified_register_event_handler(wma_handle->wmi_handle,
@@ -3722,6 +3725,21 @@ static inline void wma_update_target_services(tp_wma_handle wh,
 
 	if (WMI_SERVICE_IS_ENABLED(wh->wmi_service_bitmap, WMI_SERVICE_RTT))
 		g_fw_wlan_feat_caps |= (1 << RTT);
+
+	if (WMI_SERVICE_IS_ENABLED(wh->wmi_service_bitmap,
+			WMI_SERVICE_TX_MSDU_ID_NEW_PARTITION_SUPPORT)) {
+		ol_cfg_set_ipa_uc_tx_partition_base((ol_pdev_handle)
+				((p_cds_contextType) wh->cds_context)->cfg_ctx,
+				HTT_TX_IPA_NEW_MSDU_ID_SPACE_BEGIN);
+		WMA_LOGI("%s: TX_MSDU_ID_NEW_PARTITION=%d", __func__,
+				HTT_TX_IPA_NEW_MSDU_ID_SPACE_BEGIN);
+	} else {
+		ol_cfg_set_ipa_uc_tx_partition_base((ol_pdev_handle)
+				((p_cds_contextType) wh->cds_context)->cfg_ctx,
+				HTT_TX_IPA_MSDU_ID_SPACE_BEGIN);
+		WMA_LOGI("%s: TX_MSDU_ID_OLD_PARTITION=%d", __func__,
+				HTT_TX_IPA_MSDU_ID_SPACE_BEGIN);
+	}
 }
 
 /**
@@ -4188,6 +4206,7 @@ static void wma_update_hdd_cfg(tp_wma_handle wma_handle)
 	wma_update_target_ext_vht_cap(wma_handle, &tgt_cfg.vht_cap);
 
 	tgt_cfg.target_fw_version = wma_handle->target_fw_version;
+	tgt_cfg.target_fw_vers_ext = wma_handle->target_fw_vers_ext;
 #ifdef WLAN_FEATURE_LPSS
 	tgt_cfg.lpss_support = wma_handle->lpss_support;
 #endif /* WLAN_FEATURE_LPSS */
@@ -4298,16 +4317,17 @@ void wma_dump_dbs_hw_mode(tp_wma_handle wma_handle)
 		param = wma_handle->hw_mode.hw_mode_list[i];
 		WMA_LOGA("%s:[%d]-MAC0: tx_ss:%d rx_ss:%d bw_idx:%d",
 			__func__, i,
-			WMI_DBS_HW_MODE_MAC0_TX_STREAMS_GET(param),
-			WMI_DBS_HW_MODE_MAC0_RX_STREAMS_GET(param),
-			WMI_DBS_HW_MODE_MAC0_BANDWIDTH_GET(param));
+			WMA_HW_MODE_MAC0_TX_STREAMS_GET(param),
+			WMA_HW_MODE_MAC0_RX_STREAMS_GET(param),
+			WMA_HW_MODE_MAC0_BANDWIDTH_GET(param));
 		WMA_LOGA("%s:[%d]-MAC1: tx_ss:%d rx_ss:%d bw_idx:%d",
 			__func__, i,
-			WMI_DBS_HW_MODE_MAC1_TX_STREAMS_GET(param),
-			WMI_DBS_HW_MODE_MAC1_RX_STREAMS_GET(param),
-			WMI_DBS_HW_MODE_MAC1_BANDWIDTH_GET(param));
-		WMA_LOGA("%s:[%d] DBS:%d", __func__, i,
-			WMI_DBS_HW_MODE_DBS_MODE_GET(param));
+			WMA_HW_MODE_MAC1_TX_STREAMS_GET(param),
+			WMA_HW_MODE_MAC1_RX_STREAMS_GET(param),
+			WMA_HW_MODE_MAC1_BANDWIDTH_GET(param));
+		WMA_LOGA("%s:[%d] DBS:%d SBS:%d", __func__, i,
+			WMA_HW_MODE_DBS_MODE_GET(param),
+			WMA_HW_MODE_SBS_MODE_GET(param));
 	}
 }
 
@@ -5018,6 +5038,7 @@ static void wma_get_hw_mode_params(WMI_MAC_PHY_CAPABILITIES *caps,
  * @mac1_ss_bw_info: TX-RX streams, BW for MAC1
  * @pos: refers to hw_mode_index
  * @dbs_mode: dbs_mode for the dbs_hw_mode
+ * @sbs_mode: sbs_mode for the sbs_hw_mode
  *
  * This function sets TX-RX stream, bandwidth and DBS mode in
  * hw_mode_list.
@@ -5027,32 +5048,36 @@ static void wma_get_hw_mode_params(WMI_MAC_PHY_CAPABILITIES *caps,
 static void wma_set_hw_mode_params(t_wma_handle *wma_handle,
 			struct mac_ss_bw_info mac0_ss_bw_info,
 			struct mac_ss_bw_info mac1_ss_bw_info,
-			uint32_t pos, uint32_t dbs_mode)
+			uint32_t pos, uint32_t dbs_mode,
+			uint32_t sbs_mode)
 {
-	WMI_DBS_HW_MODE_MAC0_TX_STREAMS_SET(
+	WMA_HW_MODE_MAC0_TX_STREAMS_SET(
 		wma_handle->hw_mode.hw_mode_list[pos],
 		mac0_ss_bw_info.mac_tx_stream);
-	WMI_DBS_HW_MODE_MAC0_RX_STREAMS_SET(
+	WMA_HW_MODE_MAC0_RX_STREAMS_SET(
 		wma_handle->hw_mode.hw_mode_list[pos],
 		mac0_ss_bw_info.mac_rx_stream);
-	WMI_DBS_HW_MODE_MAC0_BANDWIDTH_SET(
+	WMA_HW_MODE_MAC0_BANDWIDTH_SET(
 		wma_handle->hw_mode.hw_mode_list[pos],
 		mac0_ss_bw_info.mac_bw);
-	WMI_DBS_HW_MODE_MAC1_TX_STREAMS_SET(
+	WMA_HW_MODE_MAC1_TX_STREAMS_SET(
 		wma_handle->hw_mode.hw_mode_list[pos],
 		mac1_ss_bw_info.mac_tx_stream);
-	WMI_DBS_HW_MODE_MAC1_RX_STREAMS_SET(
+	WMA_HW_MODE_MAC1_RX_STREAMS_SET(
 		wma_handle->hw_mode.hw_mode_list[pos],
 		mac1_ss_bw_info.mac_rx_stream);
-	WMI_DBS_HW_MODE_MAC1_BANDWIDTH_SET(
+	WMA_HW_MODE_MAC1_BANDWIDTH_SET(
 		wma_handle->hw_mode.hw_mode_list[pos],
 		mac1_ss_bw_info.mac_bw);
-	WMI_DBS_HW_MODE_DBS_MODE_SET(
+	WMA_HW_MODE_DBS_MODE_SET(
 		wma_handle->hw_mode.hw_mode_list[pos],
 		dbs_mode);
-	WMI_DBS_HW_MODE_AGILE_DFS_SET(
+	WMA_HW_MODE_AGILE_DFS_SET(
 		wma_handle->hw_mode.hw_mode_list[pos],
-		0);
+		HW_MODE_AGILE_DFS_NONE);
+	WMA_HW_MODE_SBS_MODE_SET(
+		wma_handle->hw_mode.hw_mode_list[pos],
+		sbs_mode);
 }
 
 /**
@@ -5068,7 +5093,8 @@ static QDF_STATUS wma_update_hw_mode_list(t_wma_handle *wma_handle)
 {
 	struct extended_caps *phy_caps;
 	WMI_MAC_PHY_CAPABILITIES *tmp;
-	uint32_t i, dbs_mode, hw_config_type, j = 0;
+	uint32_t i, hw_config_type, j = 0;
+	uint32_t dbs_mode, sbs_mode;
 	struct mac_ss_bw_info mac0_ss_bw_info = {0};
 	struct mac_ss_bw_info mac1_ss_bw_info = {0};
 
@@ -5117,7 +5143,8 @@ static QDF_STATUS wma_update_hw_mode_list(t_wma_handle *wma_handle)
 		wma_get_hw_mode_params(tmp, &mac0_ss_bw_info);
 		hw_config_type =
 			phy_caps->each_hw_mode_cap[i].hw_mode_config_type;
-		dbs_mode = 0;
+		dbs_mode = HW_MODE_DBS_NONE;
+		sbs_mode = HW_MODE_SBS_NONE;
 		mac1_ss_bw_info.mac_tx_stream = 0;
 		mac1_ss_bw_info.mac_rx_stream = 0;
 		mac1_ss_bw_info.mac_bw = 0;
@@ -5129,12 +5156,17 @@ static QDF_STATUS wma_update_hw_mode_list(t_wma_handle *wma_handle)
 			/* Update for MAC1 */
 			tmp = &phy_caps->each_phy_cap_per_hwmode[j++];
 			wma_get_hw_mode_params(tmp, &mac1_ss_bw_info);
-			dbs_mode = 1;
+			if (hw_config_type == WMI_HW_MODE_DBS)
+				dbs_mode = HW_MODE_DBS;
+			if ((hw_config_type == WMI_HW_MODE_SBS_PASSIVE) ||
+			    (hw_config_type == WMI_HW_MODE_SBS))
+				sbs_mode = HW_MODE_SBS;
 		}
 
 		/* Updating HW mode list */
 		wma_set_hw_mode_params(wma_handle, mac0_ss_bw_info,
-				       mac1_ss_bw_info, i, dbs_mode);
+				       mac1_ss_bw_info, i, dbs_mode,
+				       sbs_mode);
 	}
 	wma_dump_dbs_hw_mode(wma_handle);
 	return QDF_STATUS_SUCCESS;
@@ -5345,7 +5377,7 @@ int wma_rx_service_ready_ext_event(void *handle, uint8_t *event,
 	wma_init_scan_fw_mode_config(wma_handle,
 				ev->default_conc_scan_config_bits,
 				ev->default_fw_config_bits);
-
+	wma_handle->target_fw_vers_ext = ev->fw_build_vers_ext;
 	return 0;
 }
 
@@ -6626,8 +6658,6 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 	case WDA_BPF_SET_INSTRUCTIONS_REQ:
 		wma_set_bpf_instructions(wma_handle, msg->bodyptr);
 		qdf_mem_free(msg->bodyptr);
-	case WMA_SET_CTS2SELF_FOR_STA:
-		wma_set_cts2self_for_p2p_go(wma_handle, true);
 		break;
 	case SIR_HAL_NDP_INITIATOR_REQ:
 		wma_handle_ndp_initiator_req(wma_handle, msg->bodyptr);
