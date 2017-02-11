@@ -76,6 +76,7 @@
 #include "cdp_txrx_flow_ctrl_v2.h"
 #include "pld_common.h"
 #include "wlan_hdd_driver_ops.h"
+#include <wlan_logging_sock_svc.h>
 
 /* Preprocessor definitions and constants */
 #define HDD_SSR_BRING_UP_TIME 30000
@@ -232,29 +233,31 @@ static int __wlan_hdd_ipv6_changed(struct notifier_block *nb,
 	struct net_device *ndev = ifa->idev->dev;
 	hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(ndev);
 	hdd_context_t *pHddCtx;
+	hdd_station_ctx_t *sta_ctx;
 	int status;
 
-	ENTER();
+	ENTER_DEV(ndev);
 
 	if ((pAdapter == NULL) || (WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic)) {
 		hdd_err("Adapter context is invalid %p", pAdapter);
-		return -EINVAL;
+		return NOTIFY_DONE;
 	}
 
 	if ((pAdapter->dev == ndev) &&
-		(pAdapter->device_mode == QDF_STA_MODE ||
-		pAdapter->device_mode == QDF_P2P_CLIENT_MODE ||
-		pAdapter->device_mode == QDF_NDI_MODE)) {
+	    (pAdapter->device_mode == QDF_STA_MODE ||
+	     pAdapter->device_mode == QDF_P2P_CLIENT_MODE ||
+	     pAdapter->device_mode == QDF_NDI_MODE)) {
 		pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
 		status = wlan_hdd_validate_context(pHddCtx);
 		if (0 != status)
 			return NOTIFY_DONE;
+		sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 		if (eConnectionState_Associated ==
-		   WLAN_HDD_GET_STATION_CTX_PTR(
-		   pAdapter)->conn_info.connState)
+						sta_ctx->conn_info.connState) {
+			hdd_info("invoking sme_dhcp_done_ind");
 			sme_dhcp_done_ind(pHddCtx->hHal,
-				pAdapter->sessionId);
-
+					  pAdapter->sessionId);
+		}
 		schedule_work(&pAdapter->ipv6NotifierWorkQueue);
 	}
 	EXIT();
@@ -750,30 +753,33 @@ static int __wlan_hdd_ipv4_changed(struct notifier_block *nb,
 	struct net_device *ndev = ifa->ifa_dev->dev;
 	hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(ndev);
 	hdd_context_t *pHddCtx;
+	hdd_station_ctx_t *sta_ctx;
 	int status;
 
-	ENTER();
+	ENTER_DEV(ndev);
 
 	if ((pAdapter == NULL) || (WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic)) {
 		hdd_err("Adapter context is invalid %p", pAdapter);
-		return -EINVAL;
+		return NOTIFY_DONE;
 	}
 
-	if ((pAdapter && pAdapter->dev == ndev) &&
-		(pAdapter->device_mode == QDF_STA_MODE ||
-		pAdapter->device_mode == QDF_P2P_CLIENT_MODE ||
-		pAdapter->device_mode == QDF_NDI_MODE)) {
+	if ((pAdapter->dev == ndev) &&
+	    (pAdapter->device_mode == QDF_STA_MODE ||
+	     pAdapter->device_mode == QDF_P2P_CLIENT_MODE ||
+	     pAdapter->device_mode == QDF_NDI_MODE)) {
 
 		pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
 		status = wlan_hdd_validate_context(pHddCtx);
 		if (0 != status)
 			return NOTIFY_DONE;
 
+		sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 		if (eConnectionState_Associated ==
-		   WLAN_HDD_GET_STATION_CTX_PTR(
-		   pAdapter)->conn_info.connState)
+						sta_ctx->conn_info.connState) {
+			hdd_info("invoking sme_dhcp_done_ind");
 			sme_dhcp_done_ind(pHddCtx->hHal,
-				pAdapter->sessionId);
+					  pAdapter->sessionId);
+		}
 
 		if (!pHddCtx->config->fhostArpOffload) {
 			hdd_notice("Offload not enabled ARPOffload=%d",
@@ -1057,7 +1063,6 @@ void wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, uint8_t set)
 		hdd_err("Could not allocate Memory");
 		return;
 	}
-	qdf_mem_zero(pMulticastAddrs, sizeof(tSirRcvFltMcAddrList));
 	pMulticastAddrs->action = set;
 
 	if (set) {
@@ -1456,6 +1461,10 @@ QDF_STATUS hdd_wlan_shutdown(void)
 	}
 
 	cds_clear_concurrent_session_count();
+
+	hdd_info("Invoking packetdump deregistration API");
+	wlan_deregister_txrx_packetdump();
+
 	hdd_cleanup_scan_queue(pHddCtx);
 	hdd_reset_all_adapters(pHddCtx);
 
@@ -1586,7 +1595,7 @@ QDF_STATUS hdd_wlan_re_init(void)
 		goto err_cds_disable;
 
 	if (cds_is_packet_log_enabled())
-		hdd_pktlog_enable_disable(pHddCtx, true, 0);
+		hdd_pktlog_enable_disable(pHddCtx, true, 0, 0);
 
 	hdd_err("WLAN host driver reinitiation completed!");
 	goto success;
@@ -1724,6 +1733,9 @@ static int __wlan_hdd_cfg80211_resume_wlan(struct wiphy *wiphy)
 	p_cds_sched_context cds_sched_context = get_cds_sched_ctxt();
 
 	ENTER();
+
+	if (cds_is_driver_recovering())
+		return 0;
 
 	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
 		hdd_err("Command not allowed in FTM mode");
@@ -1890,6 +1902,12 @@ static int __wlan_hdd_cfg80211_suspend_wlan(struct wiphy *wiphy,
 	status = hdd_get_front_adapter(pHddCtx, &pAdapterNode);
 	while (NULL != pAdapterNode && QDF_STATUS_SUCCESS == status) {
 		pAdapter = pAdapterNode->pAdapter;
+
+		if (wlan_hdd_validate_session_id(pAdapter->sessionId)) {
+			hdd_err("invalid session id: %d", pAdapter->sessionId);
+			goto next_adapter;
+		}
+
 		if (QDF_SAP_MODE == pAdapter->device_mode) {
 			if (BSS_START ==
 			    WLAN_HDD_GET_HOSTAP_STATE_PTR(pAdapter)->bssState &&
@@ -1918,6 +1936,7 @@ static int __wlan_hdd_cfg80211_suspend_wlan(struct wiphy *wiphy,
 		}
 		if (pAdapter->is_roc_inprogress)
 			wlan_hdd_cleanup_remain_on_channel_ctx(pAdapter);
+next_adapter:
 		status = hdd_get_next_adapter(pHddCtx, pAdapterNode, &pNext);
 		pAdapterNode = pNext;
 	}
@@ -2135,6 +2154,11 @@ static int __wlan_hdd_cfg80211_set_power_mgmt(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
+	if (wlan_hdd_validate_session_id(pAdapter->sessionId)) {
+		hdd_err("invalid session id: %d", pAdapter->sessionId);
+		return -EINVAL;
+	}
+
 	MTRACE(qdf_trace(QDF_MODULE_ID_HDD,
 			 TRACE_CODE_HDD_CFG80211_SET_POWER_MGMT,
 			 pAdapter->sessionId, timeout));
@@ -2320,6 +2344,11 @@ static int __wlan_hdd_cfg80211_get_txpower(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
+	if (wlan_hdd_validate_session_id(adapter->sessionId)) {
+		hdd_err("invalid session id: %d", adapter->sessionId);
+		return -EINVAL;
+	}
+
 	status = wlan_hdd_validate_context(pHddCtx);
 	if (0 != status) {
 		*dbm = 0;
@@ -2332,8 +2361,8 @@ static int __wlan_hdd_cfg80211_get_txpower(struct wiphy *wiphy,
 	}
 
 	/* Validate adapter sessionId */
-	if (adapter->sessionId == HDD_SESSION_ID_INVALID) {
-		hdd_err("Adapter Session Invalid!");
+	if (wlan_hdd_validate_session_id(adapter->sessionId)) {
+		hdd_err("invalid session id: %d", adapter->sessionId);
 		return -ENOTSUPP;
 	}
 
@@ -2423,6 +2452,7 @@ int hdd_set_qpower_config(hdd_context_t *hddctx, hdd_adapter_t *adapter,
  */
 #define CE_IRQ_COUNT 12
 #define CE_WAKE_IRQ 2
+static struct net_device *g_dev;
 static struct wiphy *g_wiphy;
 
 #define HDD_FA_SUSPENDED_BIT (0)
@@ -2432,11 +2462,13 @@ static unsigned long fake_apps_state;
  * __hdd_wlan_fake_apps_resume() - The core logic for
  *	hdd_wlan_fake_apps_resume() skipping the call to hif_fake_apps_resume(),
  *	which is only need for non-irq resume
- * @wiphy: wiphy struct from a validated hdd context
+ * @wiphy: the kernel wiphy struct for the device being resumed
+ * @dev: the kernel net_device struct for the device being resumed
  *
- * Return: Zero on success, calls QDF_BUG() on failure
+ * Return: none, calls QDF_BUG() on failure
  */
-static void __hdd_wlan_fake_apps_resume(struct wiphy *wiphy)
+static void __hdd_wlan_fake_apps_resume(struct wiphy *wiphy,
+					struct net_device *dev)
 {
 	qdf_device_t qdf_dev = cds_get_context(QDF_MODULE_ID_QDF_DEVICE);
 	int i, resume_err;
@@ -2462,6 +2494,8 @@ static void __hdd_wlan_fake_apps_resume(struct wiphy *wiphy)
 
 	resume_err = wlan_hdd_cfg80211_resume_wlan(wiphy);
 	QDF_BUG(resume_err == 0);
+
+	dev->watchdog_timeo = HDD_TX_TIMEOUT;
 }
 
 /**
@@ -2478,11 +2512,13 @@ static void hdd_wlan_fake_apps_resume_irq_callback(uint32_t val)
 	hdd_info("Trigger unit-test resume WLAN; val: 0x%x", val);
 
 	QDF_BUG(g_wiphy);
-	__hdd_wlan_fake_apps_resume(g_wiphy);
+	QDF_BUG(g_dev);
+	__hdd_wlan_fake_apps_resume(g_wiphy, g_dev);
 	g_wiphy = NULL;
+	g_dev = NULL;
 }
 
-int hdd_wlan_fake_apps_suspend(struct wiphy *wiphy)
+int hdd_wlan_fake_apps_suspend(struct wiphy *wiphy, struct net_device *dev)
 {
 	qdf_device_t qdf_dev = cds_get_context(QDF_MODULE_ID_QDF_DEVICE);
 	struct hif_opaque_softc *hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
@@ -2515,9 +2551,16 @@ int hdd_wlan_fake_apps_suspend(struct wiphy *wiphy)
 	/* re-enable wake irq */
 	pld_enable_irq(qdf_dev->dev, CE_WAKE_IRQ);
 
-	/* pass wiphy to callback via global variable */
+	/* pass wiphy/dev to callback via global variables */
 	g_wiphy = wiphy;
+	g_dev = dev;
 	hif_fake_apps_suspend(hif_ctx, hdd_wlan_fake_apps_resume_irq_callback);
+
+	/*
+	 * Tell the kernel not to worry if TX queues aren't moving. This is
+	 * expected since we are suspending the wifi hardware, but not APPS
+	 */
+	dev->watchdog_timeo = INT_MAX;
 
 	return 0;
 
@@ -2539,12 +2582,12 @@ resume_done:
 	return suspend_err;
 }
 
-int hdd_wlan_fake_apps_resume(struct wiphy *wiphy)
+int hdd_wlan_fake_apps_resume(struct wiphy *wiphy, struct net_device *dev)
 {
 	struct hif_opaque_softc *hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
 
 	hif_fake_apps_resume(hif_ctx);
-	__hdd_wlan_fake_apps_resume(wiphy);
+	__hdd_wlan_fake_apps_resume(wiphy, dev);
 
 	return 0;
 }

@@ -1070,10 +1070,10 @@ struct hdd_adapter_s {
 	int temperature;
 
 	/* Time stamp for last completed RoC request */
-	unsigned long last_roc_ts;
+	uint64_t last_roc_ts;
 
 	/* Time stamp for start RoC request */
-	unsigned long start_roc_ts;
+	uint64_t start_roc_ts;
 
 	/* State for synchronous OCB requests to WMI */
 	struct sir_ocb_set_config_response ocb_set_config_resp;
@@ -1460,6 +1460,9 @@ struct hdd_context_s {
 #ifdef FEATURE_WLAN_AP_AP_ACS_OPTIMIZE
 	qdf_mc_timer_t skip_acs_scan_timer;
 	uint8_t skip_acs_scan_status;
+	uint8_t *last_acs_channel_list;
+	uint8_t num_of_channels;
+	qdf_spinlock_t acs_skip_lock;
 #endif
 
 	qdf_wake_lock_t sap_dfs_wakelock;
@@ -1802,14 +1805,19 @@ static inline QDF_STATUS hdd_register_for_sap_restart_with_channel_switch(void)
 #endif
 
 #if !defined(REMOVE_PKT_LOG)
-int hdd_process_pktlog_command(hdd_context_t *hdd_ctx, uint32_t set_value);
-int hdd_pktlog_enable_disable(hdd_context_t *hdd_ctx, bool enable, uint8_t);
+int hdd_process_pktlog_command(hdd_context_t *hdd_ctx, uint32_t set_value,
+			       int set_value2);
+int hdd_pktlog_enable_disable(hdd_context_t *hdd_ctx, bool enable,
+			      uint8_t user_triggered, int size);
+
 #else
-int hdd_pktlog_enable_disable(hdd_context_t *hdd_ctx, bool enable, uint8_t)
+static inline int hdd_pktlog_enable_disable(hdd_context_t *hdd_ctx, bool enable,
+					    uint8_t user_triggered, int size)
 {
 	return 0;
 }
-int hdd_process_pktlog_command(hdd_context_t *hdd_ctx, uint32_t set_value)
+static inline int hdd_process_pktlog_command(hdd_context_t *hdd_ctx,
+					     uint32_t set_value, int set_value2)
 {
 	return 0;
 }
@@ -1936,11 +1944,33 @@ static inline void hdd_enable_fastpath(struct hdd_config *hdd_cfg,
 }
 #endif
 void hdd_wlan_update_target_info(hdd_context_t *hdd_ctx, void *context);
-
 enum  sap_acs_dfs_mode wlan_hdd_get_dfs_mode(enum dfs_mode mode);
-
 void hdd_ch_avoid_cb(void *hdd_context, void *indi_param);
 void hdd_unsafe_channel_restart_sap(hdd_context_t *hdd_ctx);
 int hdd_enable_disable_ca_event(hdd_context_t *hddctx,
 				uint8_t set_value);
+void wlan_hdd_undo_acs(hdd_adapter_t *adapter);
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0))
+static inline int
+hdd_wlan_nla_put_u64(struct sk_buff *skb, int attrtype, u64 value)
+{
+	return nla_put_u64(skb, attrtype, value);
+}
+#else
+static inline int
+hdd_wlan_nla_put_u64(struct sk_buff *skb, int attrtype, u64 value)
+{
+	return nla_put_u64_64bit(skb, attrtype, value, NL80211_ATTR_PAD);
+}
+#endif
+
+static inline int wlan_hdd_validate_session_id(u8 session_id)
+{
+	if (session_id != HDD_SESSION_ID_INVALID)
+		return 0;
+
+	return -EINVAL;
+}
+
 #endif /* end #if !defined(WLAN_HDD_MAIN_H) */

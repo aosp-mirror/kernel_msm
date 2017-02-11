@@ -649,6 +649,7 @@ typedef enum {
 	eCSR_DISCONNECT_REASON_IBSS_LEAVE,
 	eCSR_DISCONNECT_REASON_STA_HAS_LEFT,
 	eCSR_DISCONNECT_REASON_NDI_DELETE,
+	eCSR_DISCONNECT_REASON_ROAM_HO_FAIL,
 } eCsrRoamDisconnectReason;
 
 typedef enum {
@@ -1756,5 +1757,6 @@ static inline void csr_roam_fill_tdls_info(tpAniSirGlobal mac_ctx, tCsrRoamInfo 
 				tpSirSmeJoinRsp join_rsp)
 {}
 #endif
+void csr_packetdump_timer_stop(void);
 
 #endif

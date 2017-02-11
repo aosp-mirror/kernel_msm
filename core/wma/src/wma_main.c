@@ -766,8 +766,8 @@ static int32_t wma_set_priv_cfg(tp_wma_handle wma_handle,
  *
  * Return: none
  */
-void wma_set_dtim_period(tp_wma_handle wma,
-			    struct set_dtim_params *dtim_params)
+static void wma_set_dtim_period(tp_wma_handle wma,
+				struct set_dtim_params *dtim_params)
 {
 	QDF_STATUS ret;
 	uint8_t vdev_id = dtim_params->session_id;
@@ -1672,6 +1672,25 @@ static void wma_init_max_no_of_peers(tp_wma_handle wma_handle,
 	cfg->max_no_of_peers = max_peers;
 }
 
+/**
+ * wma_shutdown_notifier_cb - Shutdown notifer call back
+ * @priv : WMA handle
+ *
+ * During recovery, WMA may wait for resume to complete if the crash happens
+ * while in suspend. This may cause delays in completing the recovery. This call
+ * back would be called during recovery and the event is completed so that if
+ * the resume is waiting on FW to respond then it can get out of the wait so
+ * that recovery thread can start bringing down all the modules.
+ *
+ * Return: None
+ */
+static void wma_shutdown_notifier_cb(void *priv)
+{
+	tp_wma_handle wma_handle = priv;
+
+	qdf_event_set(&wma_handle->wma_resume_event);
+}
+
 struct wma_version_info g_wmi_version_info;
 
 /**
@@ -2012,6 +2031,7 @@ QDF_STATUS wma_open(void *cds_context,
 	wma_handle->enable_mc_list = cds_cfg->enable_mc_list;
 	wma_handle->bpf_packet_filter_enable =
 		cds_cfg->bpf_packet_filter_enable;
+	wma_handle->link_stats_results = NULL;
 #ifdef FEATURE_WLAN_RA_FILTERING
 	wma_handle->IsRArateLimitEnabled = cds_cfg->is_ra_ratelimit_enabled;
 	wma_handle->RArateLimitInterval = cds_cfg->ra_ratelimit_interval;
@@ -2052,6 +2072,7 @@ QDF_STATUS wma_open(void *cds_context,
 	wma_handle->old_hw_mode_index = WMA_DEFAULT_HW_MODE_INDEX;
 	wma_handle->new_hw_mode_index = WMA_DEFAULT_HW_MODE_INDEX;
 	wma_handle->saved_chan.num_channels = 0;
+	wma_handle->fw_timeout_crash = cds_cfg->fw_timeout_crash;
 
 	qdf_status = qdf_event_create(&wma_handle->wma_ready_event);
 	if (qdf_status != QDF_STATUS_SUCCESS) {
@@ -2094,6 +2115,14 @@ QDF_STATUS wma_open(void *cds_context,
 	if (qdf_status != QDF_STATUS_SUCCESS) {
 		WMA_LOGP("%s: wma_resume_event initialization failed",
 			 __func__);
+		goto err_event_init;
+	}
+
+	qdf_status = cds_shutdown_notifier_register(wma_shutdown_notifier_cb,
+						    wma_handle);
+	if (qdf_status != QDF_STATUS_SUCCESS) {
+		WMA_LOGP("%s: Shutdown notifier register failed: %d",
+			 __func__, qdf_status);
 		goto err_event_init;
 	}
 
@@ -3475,6 +3504,8 @@ QDF_STATUS wma_close(void *cds_ctx)
 	qdf_event_destroy(&wma_handle->wma_resume_event);
 	qdf_event_destroy(&wma_handle->runtime_suspend);
 	qdf_event_destroy(&wma_handle->recovery_event);
+	qdf_event_destroy(&wma_handle->tx_frm_download_comp_event);
+	qdf_event_destroy(&wma_handle->tx_queue_empty_event);
 	wma_cleanup_vdev_resp(wma_handle);
 	wma_cleanup_hold_req(wma_handle);
 	qdf_wake_lock_destroy(&wma_handle->wmi_cmd_rsp_wake_lock);
@@ -3504,6 +3535,11 @@ QDF_STATUS wma_close(void *cds_ctx)
 	if (NULL != wma_handle->pGetRssiReq) {
 		qdf_mem_free(wma_handle->pGetRssiReq);
 		wma_handle->pGetRssiReq = NULL;
+	}
+
+	if (wma_handle->link_stats_results) {
+		qdf_mem_free(wma_handle->link_stats_results);
+		wma_handle->link_stats_results = NULL;
 	}
 
 	wma_ndp_unregister_all_event_handlers(wma_handle);
@@ -4304,7 +4340,7 @@ static int wma_setup_wmi_init_msg(tp_wma_handle wma_handle,
  *
  * Return: None
  */
-void wma_dump_dbs_hw_mode(tp_wma_handle wma_handle)
+static void wma_dump_dbs_hw_mode(tp_wma_handle wma_handle)
 {
 	uint32_t i, param;
 
@@ -4342,9 +4378,9 @@ void wma_dump_dbs_hw_mode(tp_wma_handle wma_handle)
  *
  * Return: None
  */
-void wma_init_scan_fw_mode_config(tp_wma_handle wma_handle,
-				uint32_t scan_config,
-				uint32_t fw_config)
+static void wma_init_scan_fw_mode_config(tp_wma_handle wma_handle,
+					 uint32_t scan_config,
+					 uint32_t fw_config)
 {
 	tpAniSirGlobal mac = cds_get_context(QDF_MODULE_ID_PE);
 
@@ -4975,7 +5011,7 @@ static void wma_print_populate_soc_caps(t_wma_handle *wma_handle)
  *
  * Return: BW in terms of hw_mode_bandwidth.
  */
-enum hw_mode_bandwidth wma_map_wmi_channel_width_to_hw_mode_bw(
+static enum hw_mode_bandwidth wma_map_wmi_channel_width_to_hw_mode_bw(
 			wmi_channel_width width)
 {
 	switch (width) {
@@ -5625,8 +5661,8 @@ pkt_pwr_save_config:
  *
  * Return: QDF_SUCCESS for success otherwise failure
  */
-QDF_STATUS wma_process_set_mas(tp_wma_handle wma,
-		uint32_t *mas_val)
+static QDF_STATUS wma_process_set_mas(tp_wma_handle wma,
+				      uint32_t *mas_val)
 {
 	uint32_t val;
 
@@ -5658,7 +5694,8 @@ QDF_STATUS wma_process_set_mas(tp_wma_handle wma,
  * Return: QDF_SUCCESS for success otherwise failure
  *
  */
-QDF_STATUS wma_process_set_miracast(tp_wma_handle wma, uint32_t *miracast_val)
+static QDF_STATUS wma_process_set_miracast(tp_wma_handle wma,
+					   uint32_t *miracast_val)
 {
 	if (NULL == wma || NULL == miracast_val) {
 		WMA_LOGE("%s: Invalid input to store miracast value", __func__);
@@ -5751,8 +5788,8 @@ static QDF_STATUS wma_config_guard_time(tp_wma_handle wma,
  *
  * Return: None
  */
-void wma_enable_specific_fw_logs(tp_wma_handle wma_handle,
-		struct sir_wifi_start_log *start_log)
+static void wma_enable_specific_fw_logs(tp_wma_handle wma_handle,
+					struct sir_wifi_start_log *start_log)
 {
 
 	if (!start_log) {
@@ -5777,7 +5814,7 @@ void wma_enable_specific_fw_logs(tp_wma_handle wma_handle,
 	return;
 }
 
-#if !defined(REMOVE_PKT_LOG)
+#define MEGABYTE	(1024 * 1024)
 /**
  * wma_set_wifi_start_packet_stats() - Start/stop packet stats
  * @wma_handle: WMA handle
@@ -5789,8 +5826,15 @@ void wma_enable_specific_fw_logs(tp_wma_handle wma_handle,
  * Return: None
  *
  */
-void wma_set_wifi_start_packet_stats(void *wma_handle,
-		struct sir_wifi_start_log *start_log)
+#ifdef REMOVE_PKT_LOG
+static void wma_set_wifi_start_packet_stats(void *wma_handle,
+					struct sir_wifi_start_log *start_log)
+{
+	return;
+}
+#else
+static void wma_set_wifi_start_packet_stats(void *wma_handle,
+					struct sir_wifi_start_log *start_log)
 {
 	struct hif_opaque_softc *scn;
 	uint32_t log_state;
@@ -5820,6 +5864,11 @@ void wma_set_wifi_start_packet_stats(void *wma_handle,
 	log_state = ATH_PKTLOG_ANI | ATH_PKTLOG_RCUPDATE | ATH_PKTLOG_RCFIND |
 		ATH_PKTLOG_RX | ATH_PKTLOG_TX |
 		ATH_PKTLOG_TEXT | ATH_PKTLOG_SW_EVENT;
+
+	if (start_log->size != 0) {
+		pktlog_setsize(scn, start_log->size * MEGABYTE);
+		return;
+	}
 
 	if (start_log->verbose_level == WLAN_LOG_LEVEL_ACTIVE) {
 		pktlog_enable(scn, log_state, start_log->ini_triggered,
@@ -5876,6 +5925,171 @@ static QDF_STATUS wma_update_wep_default_key(tp_wma_handle wma,
 	iface->wep_default_key_idx = update_def_key->default_idx;
 
 	return QDF_STATUS_SUCCESS;
+}
+
+
+/**
+ * wma_update_tx_fail_cnt_th() - Set threshold for TX pkt fail
+ * @wma_handle: WMA handle
+ * @tx_fail_cnt_th: sme_tx_fail_cnt_threshold parameter
+ *
+ * This function is used to set Tx pkt fail count threshold,
+ * FW will do disconnect with station once this threshold is reached.
+ *
+ * Return: VOS_STATUS_SUCCESS on success, error number otherwise
+ */
+static QDF_STATUS wma_update_tx_fail_cnt_th(tp_wma_handle wma,
+				struct sme_tx_fail_cnt_threshold *tx_fail_cnt_th)
+{
+	u_int8_t vdev_id;
+	u_int32_t tx_fail_disconn_th;
+	int ret = -EIO;
+
+	if (!wma || !wma->wmi_handle) {
+		WMA_LOGE(FL("WMA is closed, can not issue Tx pkt fail count threshold"));
+		return QDF_STATUS_E_INVAL;
+	}
+	vdev_id = tx_fail_cnt_th->session_id;
+	tx_fail_disconn_th = tx_fail_cnt_th->tx_fail_cnt_threshold;
+	WMA_LOGD("Set TX pkt fail count threshold  vdevId %d count %d",
+			vdev_id, tx_fail_disconn_th);
+
+
+	ret = wma_vdev_set_param(wma->wmi_handle, vdev_id,
+			WMI_VDEV_PARAM_DISCONNECT_TH,
+			tx_fail_disconn_th);
+
+	if (ret) {
+		WMA_LOGE(FL("Failed to send TX pkt fail count threshold command"));
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
+/**
+ * wma_update_short_retry_limit() - Set retry limit for short frames
+ * @wma_handle: WMA handle
+ * @short_retry_limit_th: retry limir count for Short frames.
+ *
+ * This function is used to configure the transmission retry limit at which
+ * short frames needs to be retry.
+ *
+ * Return: VOS_STATUS_SUCCESS on success, error number otherwise
+ */
+static QDF_STATUS wma_update_short_retry_limit(tp_wma_handle wma,
+		struct sme_short_retry_limit *short_retry_limit_th)
+{
+	uint8_t vdev_id;
+	uint32_t short_retry_limit;
+	int ret;
+
+	if (!wma || !wma->wmi_handle) {
+		WMA_LOGE("WMA is closed, can not issue short retry limit threshold");
+		return QDF_STATUS_E_INVAL;
+	}
+	vdev_id = short_retry_limit_th->session_id;
+	short_retry_limit = short_retry_limit_th->short_retry_limit;
+	WMA_LOGD("Set short retry limit threshold  vdevId %d count %d",
+		vdev_id, short_retry_limit);
+
+	ret = wma_vdev_set_param(wma->wmi_handle, vdev_id,
+		WMI_VDEV_PARAM_NON_AGG_SW_RETRY_TH,
+		short_retry_limit);
+
+	if (ret) {
+		WMA_LOGE("Failed to send short limit threshold command");
+		return QDF_STATUS_E_FAILURE;
+	}
+	return QDF_STATUS_SUCCESS;
+}
+
+/**
+ * wma_update_long_retry_limit() - Set retry limit for long frames
+ * @wma_handle: WMA handle
+ * @long_retry_limit_th: retry limir count for long frames
+ *
+ * This function is used to configure the transmission retry limit at which
+ * long frames needs to be retry
+ *
+ * Return: VOS_STATUS_SUCCESS on success, error number otherwise
+ */
+static QDF_STATUS wma_update_long_retry_limit(tp_wma_handle wma,
+		struct sme_long_retry_limit  *long_retry_limit_th)
+{
+	uint8_t vdev_id;
+	uint32_t long_retry_limit;
+	int ret;
+
+	if (!wma || !wma->wmi_handle) {
+		WMA_LOGE("WMA is closed, can not issue long retry limit threshold");
+		return QDF_STATUS_E_INVAL;
+	}
+	vdev_id = long_retry_limit_th->session_id;
+	long_retry_limit = long_retry_limit_th->long_retry_limit;
+	WMA_LOGD("Set TX pkt fail count threshold  vdevId %d count %d",
+		vdev_id, long_retry_limit);
+
+	ret  = wma_vdev_set_param(wma->wmi_handle, vdev_id,
+			WMI_VDEV_PARAM_AGG_SW_RETRY_TH,
+			long_retry_limit);
+
+	if (ret) {
+		WMA_LOGE("Failed to send long limit threshold command");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
+/*
+ * wma_update_sta_inactivity_timeout() - Set sta_inactivity_timeout to fw
+ * @wma_handle: WMA handle
+ * @sta_inactivity_timer: sme_sta_inactivity_timeout
+ *
+ * This function is used to set sta_inactivity_timeout.
+ * If a station does not send anything in sta_inactivity_timeout seconds, an
+ * empty data frame is sent to it in order to verify whether it is
+ * still in range. If this frame is not ACKed, the station will be
+ * disassociated and then deauthenticated.
+ *
+ * Return: None
+ */
+void wma_update_sta_inactivity_timeout(tp_wma_handle wma,
+		struct sme_sta_inactivity_timeout  *sta_inactivity_timer)
+{
+	uint8_t vdev_id;
+	uint32_t max_unresponsive_time;
+	uint32_t min_inactive_time, max_inactive_time;
+
+	if (!wma || !wma->wmi_handle) {
+		WMA_LOGE("WMA is closed, can not issue sta_inactivity_timeout");
+		return;
+	}
+	vdev_id = sta_inactivity_timer->session_id;
+	max_unresponsive_time = sta_inactivity_timer->sta_inactivity_timeout;
+	max_inactive_time = max_unresponsive_time * TWO_THIRD;
+	min_inactive_time = max_unresponsive_time - max_inactive_time;
+
+	if (wma_vdev_set_param(wma->wmi_handle, vdev_id,
+			WMI_VDEV_PARAM_AP_KEEPALIVE_MIN_IDLE_INACTIVE_TIME_SECS,
+			min_inactive_time))
+		WMA_LOGE("Failed to Set AP MIN IDLE INACTIVE TIME");
+
+	if (wma_vdev_set_param(wma->wmi_handle, vdev_id,
+			WMI_VDEV_PARAM_AP_KEEPALIVE_MAX_IDLE_INACTIVE_TIME_SECS,
+			max_inactive_time))
+		WMA_LOGE("Failed to Set AP MAX IDLE INACTIVE TIME");
+
+	if (wma_vdev_set_param(wma->wmi_handle, vdev_id,
+		WMI_VDEV_PARAM_AP_KEEPALIVE_MAX_UNRESPONSIVE_TIME_SECS,
+		max_unresponsive_time))
+		WMA_LOGE("Failed to Set MAX UNRESPONSIVE TIME");
+
+	WMA_LOGI("%s:vdev_id:%d min_inactive_time: %u max_inactive_time: %u max_unresponsive_time: %u",
+			__func__, vdev_id,
+			min_inactive_time, max_inactive_time,
+			max_unresponsive_time);
 }
 
 /**
@@ -5990,6 +6204,10 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 		break;
 	case WMA_DELETE_STA_REQ:
 		wma_delete_sta(wma_handle, (tpDeleteStaParams) msg->bodyptr);
+		break;
+	case WMA_DELETE_BSS_HO_FAIL_REQ:
+		wma_delete_bss_ho_fail(wma_handle,
+			(tpDeleteBssParams) msg->bodyptr);
 		break;
 	case WMA_DELETE_BSS_REQ:
 		wma_delete_bss(wma_handle, (tpDeleteBssParams) msg->bodyptr);
@@ -6687,6 +6905,18 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 		break;
 	case WMA_ENCRYPT_DECRYPT_MSG:
 		wma_encrypt_decrypt_msg(wma_handle, msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
+	case SIR_HAL_UPDATE_TX_FAIL_CNT_TH:
+		wma_update_tx_fail_cnt_th(wma_handle, msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
+	case SIR_HAL_LONG_RETRY_LIMIT_CNT:
+		wma_update_long_retry_limit(wma_handle, msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
+	case SIR_HAL_SHORT_RETRY_LIMIT_CNT:
+		wma_update_short_retry_limit(wma_handle, msg->bodyptr);
 		qdf_mem_free(msg->bodyptr);
 		break;
 	default:

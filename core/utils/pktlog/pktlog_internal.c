@@ -56,8 +56,6 @@
 #define TX_DESC_ID_HIGH_MASK    0xffff0000
 #define TX_DESC_ID_HIGH_SHIFT   16
 
-#define PER_PACKET_STATS_THRESHOLD 4096
-
 void pktlog_getbuf_intsafe(struct ath_pktlog_arg *plarg)
 {
 	struct ath_pktlog_buf *log_buf;
@@ -148,31 +146,6 @@ void pktlog_getbuf_intsafe(struct ath_pktlog_arg *plarg)
 	plarg->buf = log_ptr;
 }
 
-/**
- * pktlog_check_threshold() - This function checks threshold for triggering
- * packet stats
- * @pl_info: Packet log information pointer
- * @log_size: Size of current packet log information
- *
- * This function internally triggers logging of per packet stats when the
- * incoming data crosses threshold limit
- *
- * Return: None
- *
- */
-void pktlog_check_threshold(struct ath_pktlog_info *pl_info,
-		size_t log_size)
-{
-	PKTLOG_LOCK(pl_info);
-	pl_info->buf->bytes_written += log_size + sizeof(struct ath_pktlog_hdr);
-
-	if (pl_info->buf->bytes_written >= PER_PACKET_STATS_THRESHOLD) {
-		wlan_logging_set_per_pkt_stats();
-		pl_info->buf->bytes_written = 0;
-	}
-	PKTLOG_UNLOCK(pl_info);
-}
-
 char *pktlog_getbuf(struct ol_pktlog_dev_t *pl_dev,
 		    struct ath_pktlog_info *pl_info,
 		    size_t log_size, struct ath_pktlog_hdr *pl_hdr)
@@ -205,15 +178,6 @@ char *pktlog_getbuf(struct ol_pktlog_dev_t *pl_dev,
 		pktlog_getbuf_intsafe(&plarg);
 		PKTLOG_UNLOCK(pl_info);
 	}
-
-	/*
-	 * We do not want to do this packet stats related processing when
-	 * packet log tool is run. i.e., we want this processing to be
-	 * done only when start logging command of packet stats is initiated.
-	 */
-	if (cds_get_ring_log_level(RING_ID_PER_PACKET_STATS) ==
-			WLAN_LOG_LEVEL_ACTIVE)
-		pktlog_check_threshold(pl_info, log_size);
 
 	return plarg.buf;
 }
@@ -426,6 +390,9 @@ A_STATUS process_tx_info(struct ol_txrx_pdev_t *txrx_pdev, void *data)
 					((void *)data +
 					 sizeof(struct ath_pktlog_hdr)),
 					 pl_hdr.size);
+		pl_hdr.size = log_size;
+		cds_pkt_stats_to_logger_thread(&pl_hdr, NULL,
+						txdesc_hdr_ctl);
 	}
 
 	if (pl_hdr.log_type == PKTLOG_TYPE_TX_STAT) {
@@ -439,6 +406,8 @@ A_STATUS process_tx_info(struct ol_txrx_pdev_t *txrx_pdev, void *data)
 		qdf_mem_copy(txstat_log.ds_status,
 			     ((void *)data + sizeof(struct ath_pktlog_hdr)),
 			     pl_hdr.size);
+		cds_pkt_stats_to_logger_thread(&pl_hdr, NULL,
+						txstat_log.ds_status);
 	}
 	return A_OK;
 }
@@ -544,6 +513,9 @@ A_STATUS process_tx_info(struct ol_txrx_pdev_t *txrx_pdev, void *data)
 		qdf_assert(txctl_log.txdesc_hdr_ctl);
 		qdf_mem_copy(txctl_log.txdesc_hdr_ctl, &txctl_log.priv,
 			     sizeof(txctl_log.priv));
+		pl_hdr.size = log_size;
+		cds_pkt_stats_to_logger_thread(&pl_hdr, NULL,
+						txctl_log.txdesc_hdr_ctl);
 		/* Add Protocol information and HT specific information */
 	}
 
@@ -557,6 +529,8 @@ A_STATUS process_tx_info(struct ol_txrx_pdev_t *txrx_pdev, void *data)
 		qdf_mem_copy(txstat_log.ds_status,
 			     ((void *)data + sizeof(struct ath_pktlog_hdr)),
 			     pl_hdr.size);
+		cds_pkt_stats_to_logger_thread(&pl_hdr, NULL,
+						txstat_log.ds_status);
 	}
 
 	if (pl_hdr.log_type == PKTLOG_TYPE_TX_MSDU_ID) {
@@ -576,6 +550,8 @@ A_STATUS process_tx_info(struct ol_txrx_pdev_t *txrx_pdev, void *data)
 			     sizeof(pl_msdu_info.priv.msdu_id_info));
 		qdf_mem_copy(pl_msdu_info.ath_msdu_info, &pl_msdu_info.priv,
 			     sizeof(pl_msdu_info.priv));
+		cds_pkt_stats_to_logger_thread(&pl_hdr, NULL,
+						pl_msdu_info.ath_msdu_info);
 	}
 	return A_OK;
 }
@@ -635,6 +611,8 @@ A_STATUS process_rx_info_remote(void *pdev, void *data)
 							   log_size, &pl_hdr);
 		qdf_mem_copy(rxstat_log.rx_desc, (void *)rx_desc +
 			     sizeof(struct htt_host_fw_desc_base), pl_hdr.size);
+		cds_pkt_stats_to_logger_thread(&pl_hdr, NULL,
+						rxstat_log.rx_desc);
 		msdu = qdf_nbuf_next(msdu);
 	}
 	return A_OK;
@@ -684,6 +662,7 @@ A_STATUS process_rx_info(void *pdev, void *data)
 
 	qdf_mem_copy(rxstat_log.rx_desc,
 		     (void *)data + sizeof(struct ath_pktlog_hdr), pl_hdr.size);
+	cds_pkt_stats_to_logger_thread(&pl_hdr, NULL, rxstat_log.rx_desc);
 
 	return A_OK;
 }
@@ -748,6 +727,7 @@ A_STATUS process_rate_find(void *pdev, void *data)
 	qdf_mem_copy(rcf_log.rcFind,
 				 ((char *)data + sizeof(struct ath_pktlog_hdr)),
 				 pl_hdr.size);
+	cds_pkt_stats_to_logger_thread(&pl_hdr, NULL, rcf_log.rcFind);
 
 	return A_OK;
 }
@@ -880,6 +860,7 @@ A_STATUS process_rate_update(void *pdev, void *data)
 	qdf_mem_copy(rcu_log.txRateCtrl,
 		     ((char *)data + sizeof(struct ath_pktlog_hdr)),
 		     pl_hdr.size);
+	cds_pkt_stats_to_logger_thread(&pl_hdr, NULL, rcu_log.txRateCtrl);
 	return A_OK;
 }
 #endif /*REMOVE_PKT_LOG */

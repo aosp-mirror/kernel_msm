@@ -233,10 +233,6 @@ QDF_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 	} else
 		cmd->dwell_time_passive = scan_req->maxChannelTime;
 
-	WMA_LOGI("Scan Type %x, Active dwell time %u, Passive dwell time %u",
-		 scan_req->scanType, cmd->dwell_time_active,
-		 cmd->dwell_time_passive);
-
 	/* Ensure correct number of probes are sent on active channel */
 	cmd->repeat_probe_time =
 		cmd->dwell_time_active / WMA_SCAN_NPROBES_DEFAULT;
@@ -465,8 +461,19 @@ QDF_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 				QDF_MIN(SSID_num,
 					WMA_DWELL_TIME_PROBE_TIME_MAP_SIZE
 					- 1)].probe_time;
+			cmd->n_probes = (cmd->repeat_probe_time > 0) ?
+				cmd->dwell_time_active/
+				cmd->repeat_probe_time : 0;
 		}
 	}
+	WMA_LOGI("Scan Type 0x%x, Active dwell time %u, Passive dwell time %u",
+		scan_req->scanType, cmd->dwell_time_active,
+		cmd->dwell_time_passive);
+	WMA_LOGI("Scan repeat_probe_time %u n_probes %u num_ssids %u num_bssid %u",
+		cmd->repeat_probe_time,
+		cmd->n_probes,
+		cmd->num_ssids,
+		cmd->num_bssid);
 
 	qdf_mem_copy(cmd->mac_add_bytes, scan_req->bssId.bytes, QDF_MAC_ADDR_SIZE);
 	cmd->ie_len = scan_req->uIEFieldLen;
@@ -755,14 +762,17 @@ QDF_STATUS wma_roam_scan_offload_mode(tp_wma_handle wma_handle,
 	struct roam_offload_scan_params *params =
 				qdf_mem_malloc(sizeof(*params));
 
+	if (!params) {
+		WMA_LOGE("%s: Failed to allocate scan params", __func__);
+		return QDF_STATUS_E_NOMEM;
+	}
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
-	int auth_mode = WMI_AUTH_NONE;
+	params->auth_mode = WMI_AUTH_NONE;
 	if (roam_req)
-		auth_mode = e_csr_auth_type_to_rsn_authmode
+		params->auth_mode = e_csr_auth_type_to_rsn_authmode
 				    (roam_req->ConnectedNetwork.authentication,
 				    roam_req->ConnectedNetwork.encryption);
-	WMA_LOGD("%s : auth mode = %d", __func__, auth_mode);
-	params->auth_mode = auth_mode;
+	WMA_LOGD("%s : auth mode = %d", __func__, params->auth_mode);
 #endif /* WLAN_FEATURE_ROAM_OFFLOAD */
 
 	params->is_roam_req_valid = 0;
@@ -1544,8 +1554,8 @@ QDF_STATUS wma_roam_scan_offload_ap_profile(tp_wma_handle wma_handle,
  * Return: Return success upon succesfully passing the
  *         parameters to the firmware, otherwise failure.
  */
-QDF_STATUS wma_roam_scan_filter(tp_wma_handle wma_handle,
-	tSirRoamOffloadScanReq *roam_req)
+static QDF_STATUS wma_roam_scan_filter(tp_wma_handle wma_handle,
+				       tSirRoamOffloadScanReq *roam_req)
 {
 	int i;
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
@@ -1839,10 +1849,10 @@ QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
 			wma_roam_scan_fill_scan_params(wma_handle, pMac,
 						       NULL, &scan_params);
 			qdf_status = wma_roam_scan_offload_mode(wma_handle,
-								&scan_params,
-								NULL,
-								WMI_ROAM_SCAN_MODE_NONE,
-								roam_req->sessionId);
+						&scan_params, NULL,
+						WMI_ROAM_SCAN_MODE_NONE |
+						WMI_ROAM_SCAN_MODE_ROAMOFFLOAD,
+						roam_req->sessionId);
 		}
 		/*
 		 * If the STOP command is due to a disconnect, then
@@ -2086,9 +2096,9 @@ void wma_process_roam_synch_fail(WMA_HANDLE handle,
  *
  * Return: None
  */
-void wma_fill_roam_synch_buffer(tp_wma_handle wma,
-		roam_offload_synch_ind *roam_synch_ind_ptr,
-		WMI_ROAM_SYNCH_EVENTID_param_tlvs *param_buf)
+static void wma_fill_roam_synch_buffer(tp_wma_handle wma,
+				roam_offload_synch_ind *roam_synch_ind_ptr,
+				WMI_ROAM_SYNCH_EVENTID_param_tlvs *param_buf)
 {
 	wmi_roam_synch_event_fixed_param *synch_event;
 	uint8_t *bcn_probersp_ptr;
@@ -2178,8 +2188,8 @@ void wma_fill_roam_synch_buffer(tp_wma_handle wma,
  *
  * Return: None
  */
-void wma_roam_update_vdev(tp_wma_handle wma,
-	roam_offload_synch_ind *roam_synch_ind_ptr)
+static void wma_roam_update_vdev(tp_wma_handle wma,
+				 roam_offload_synch_ind *roam_synch_ind_ptr)
 {
 	tDeleteBssParams *del_bss_params;
 	tDeleteStaParams *del_sta_params;
@@ -2272,6 +2282,9 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 		WMA_LOGE("%s: received null event data from target", __func__);
 		return status;
 	}
+
+	DPTRACE(qdf_dp_trace_record_event(QDF_DP_TRACE_EVENT_RECORD,
+		synch_event->vdev_id, QDF_PROTO_TYPE_EVENT, QDF_ROAM_SYNCH));
 
 	if (wma_is_roam_synch_in_progress(wma, synch_event->vdev_id)) {
 		WMA_LOGE("%s: Ignoring RSI since one is already in progress",
@@ -2679,6 +2692,10 @@ void wma_process_roam_synch_complete(WMA_HANDLE handle, uint8_t vdev_id)
 				 vdev_id)) {
 		return;
 	}
+
+	DPTRACE(qdf_dp_trace_record_event(QDF_DP_TRACE_EVENT_RECORD,
+		vdev_id, QDF_PROTO_TYPE_EVENT, QDF_ROAM_COMPLETE));
+
 	WMA_LOGE("LFR3: Posting WMA_ROAM_OFFLOAD_SYNCH_CNF");
 	return;
 }
@@ -2691,7 +2708,8 @@ void wma_process_roam_synch_complete(WMA_HANDLE handle, uint8_t vdev_id)
  *
  * Return: 0 for success, otherwise appropriate error code
  */
-QDF_STATUS wma_switch_channel(tp_wma_handle wma, struct wma_vdev_start_req *req)
+static QDF_STATUS wma_switch_channel(tp_wma_handle wma,
+				     struct wma_vdev_start_req *req)
 {
 
 	wmi_buf_t buf;
@@ -5777,6 +5795,9 @@ int wma_roam_event_callback(WMA_HANDLE handle, uint8_t *event_buf,
 	WMA_LOGD("%s: Reason %x, Notif %x for vdevid %x, rssi %d",
 		 __func__, wmi_event->reason, wmi_event->notif,
 		 wmi_event->vdev_id, wmi_event->rssi);
+
+	DPTRACE(qdf_dp_trace_record_event(QDF_DP_TRACE_EVENT_RECORD,
+		wmi_event->vdev_id, QDF_PROTO_TYPE_EVENT, QDF_ROAM_EVENTID));
 
 	switch (wmi_event->reason) {
 	case WMI_ROAM_REASON_BMISS:
