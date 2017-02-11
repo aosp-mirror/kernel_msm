@@ -62,6 +62,7 @@
  * ---------------:------------------:------------------
  * EVT_INI_FILE   : cfg->napi_enable : after ini file processed
  * EVT_CMD_STATE  : cmd arg          : by the vendor cmd
+ * EVT_INT_STATE  : 0                : internal - shut off/disable
  * EVT_CPU_STATE  : (cpu << 16)|state: CPU hotplug events
  * EVT_TPUT_STATE : (high/low)       : tput trigger
  * EVT_USR_SERIAL : num-serial_calls : WMA/ROAMING-START/IND
@@ -71,11 +72,13 @@ enum qca_napi_event {
 	NAPI_EVT_INVALID,
 	NAPI_EVT_INI_FILE,
 	NAPI_EVT_CMD_STATE,
+	NAPI_EVT_INT_STATE,
 	NAPI_EVT_CPU_STATE,
 	NAPI_EVT_TPUT_STATE,
 	NAPI_EVT_USR_SERIAL,
 	NAPI_EVT_USR_NORMAL
 };
+
 
 /**
  * Macros to map ids -returned by ...create()- to pipes and vice versa
@@ -83,7 +86,14 @@ enum qca_napi_event {
 #define NAPI_ID2PIPE(i) ((i)-1)
 #define NAPI_PIPE2ID(p) ((p)+1)
 
+int hif_napi_lro_flush_cb_register(struct hif_opaque_softc *hif_hdl,
+				   void (lro_flush_handler)(void *),
+				   void *(lro_init_handler)(void));
 
+void hif_napi_lro_flush_cb_deregister(struct hif_opaque_softc *hif_hdl,
+				      void (lro_deinit_cb)(void *));
+
+void *hif_napi_get_lro_info(struct hif_opaque_softc *hif_hdl, int napi_id);
 #ifdef FEATURE_NAPI
 
 /**
@@ -119,6 +129,20 @@ int hif_napi_schedule(struct hif_opaque_softc *scn, int ce_id);
 /* called by hdd_napi, which is called by kernel */
 int hif_napi_poll(struct hif_opaque_softc *hif_ctx,
 			struct napi_struct *napi, int budget);
+#ifdef HELIUMPLUS
+/* called to retrieve NAPI CPU statistics */
+void hif_napi_stats(struct qca_napi_data *napid);
+void hif_napi_update_yield_stats(struct CE_state *ce_state,
+				 bool time_limit_reached,
+				 bool rxpkt_thresh_reached);
+#else
+static inline void hif_napi_stats(struct qca_napi_data *napid) { }
+
+static inline void hif_napi_update_yield_stats(struct CE_state *ce_state,
+				 bool time_limit_reached,
+				 bool rxpkt_thresh_reached) { }
+
+#endif
 
 #ifdef FEATURE_NAPI_DEBUG
 #define NAPI_DEBUG(fmt, ...)			\
@@ -147,19 +171,21 @@ int hif_napi_poll(struct hif_opaque_softc *hif_ctx,
  */
 /* fw-declare to make compiler happy */
 struct qca_napi_data;
-static inline int hif_napi_cpu_init(void *ctx) { return 0; }
-static inline int hif_napi_cpu_deinit(void *ctx) { return 0; }
+static inline int hif_napi_cpu_init(struct hif_opaque_softc *hif)
+{ return 0; }
+
+static inline int hif_napi_cpu_deinit(struct hif_opaque_softc *hif)
+{ return 0; }
+
 static inline int hif_napi_serialize(struct hif_opaque_softc *hif, int is_on)
-{
-	return -EPERM;
-}
+{ return -EPERM; }
 #else /* HELIUMPLUS - NAPI CPU symbols are valid */
 
 /*
  * prototype signatures
  */
-int hif_napi_cpu_init(void *);
-int hif_napi_cpu_deinit(void *);
+int hif_napi_cpu_init(struct hif_opaque_softc *hif);
+int hif_napi_cpu_deinit(struct hif_opaque_softc *hif);
 
 int hif_napi_cpu_migrate(struct qca_napi_data *napid, int cpu, int action);
 int hif_napi_cpu_blacklist(bool is_on);
@@ -213,6 +239,8 @@ static inline int hif_napi_schedule(struct hif_opaque_softc *hif, int ce_id)
 
 static inline int hif_napi_poll(struct napi_struct *napi, int budget)
 { return -EPERM; }
+
+static inline void hif_napi_stats(struct qca_napi_data *napid) { }
 
 #endif /* FEATURE_NAPI */
 

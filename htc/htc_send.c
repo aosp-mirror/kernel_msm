@@ -741,9 +741,9 @@ static void queue_htc_pm_packets(HTC_ENDPOINT *endpoint,
  *
  * Return: None
  */
-void get_htc_send_packets_credit_based(HTC_TARGET *target,
-				       HTC_ENDPOINT *pEndpoint,
-				       HTC_PACKET_QUEUE *pQueue)
+static void get_htc_send_packets_credit_based(HTC_TARGET *target,
+					      HTC_ENDPOINT *pEndpoint,
+					      HTC_PACKET_QUEUE *pQueue)
 {
 	int creditsRequired;
 	int remainder;
@@ -878,9 +878,9 @@ void get_htc_send_packets_credit_based(HTC_TARGET *target,
 
 }
 
-void get_htc_send_packets(HTC_TARGET *target,
-			  HTC_ENDPOINT *pEndpoint,
-			  HTC_PACKET_QUEUE *pQueue, int Resources)
+static void get_htc_send_packets(HTC_TARGET *target,
+				 HTC_ENDPOINT *pEndpoint,
+				 HTC_PACKET_QUEUE *pQueue, int Resources)
 {
 
 	HTC_PACKET *pPacket;
@@ -1210,10 +1210,9 @@ static HTC_SEND_QUEUE_RESULT htc_try_send(HTC_TARGET *target,
 
 			for (i = HTC_PACKET_QUEUE_DEPTH(&sendQueue); i > 0; i--)
 				hif_pm_runtime_put(target->hif_dev);
-
+			LOCK_HTC_TX(target);
 			HTC_PACKET_QUEUE_TRANSFER_TO_HEAD(&pEndpoint->TxQueue,
 							  &sendQueue);
-			LOCK_HTC_TX(target);
 			break;
 		}
 

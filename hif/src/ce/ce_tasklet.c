@@ -172,11 +172,13 @@ static void ce_tasklet(unsigned long data)
 		QDF_BUG(0);
 	}
 
+	qdf_spin_lock_bh(&CE_state->lro_unloading_lock);
 	ce_per_engine_service(scn, tasklet_entry->ce_id);
 
 	if (CE_state->lro_flush_cb != NULL) {
 		CE_state->lro_flush_cb(CE_state->lro_data);
 	}
+	qdf_spin_unlock_bh(&CE_state->lro_unloading_lock);
 
 	if (ce_check_rx_pending(CE_state)) {
 		/*
@@ -435,7 +437,6 @@ void hif_display_ce_stats(struct HIF_CE_state *hif_ce_state)
 	for (i = 0; i < CE_COUNT_MAX; i++) {
 		size = STR_SIZE;
 		pos = 0;
-		qdf_print("CE id: %d", i);
 		for (j = 0; j < QDF_MAX_AVAILABLE_CPU; j++) {
 			ret = snprintf(str_buffer + pos, size, "[%d]: %d",
 				j, hif_ce_state->stats.ce_per_cpu[i][j]);
@@ -444,7 +445,7 @@ void hif_display_ce_stats(struct HIF_CE_state *hif_ce_state)
 			size -= ret;
 			pos += ret;
 		}
-		qdf_print("%s", str_buffer);
+		qdf_print("CE id[%d] - %s", i, str_buffer);
 	}
 #undef STR_SIZE
 }
@@ -457,7 +458,7 @@ void hif_display_ce_stats(struct HIF_CE_state *hif_ce_state)
  */
 void hif_clear_ce_stats(struct HIF_CE_state *hif_ce_state)
 {
-	qdf_mem_zero(&hif_ce_state->stats, sizeof(struct ce_intr_stats));
+	qdf_mem_zero(&hif_ce_state->stats, sizeof(struct ce_stats));
 }
 
 /**
@@ -547,6 +548,13 @@ QDF_STATUS ce_unregister_irq(struct HIF_CE_state *hif_ce_state, uint32_t mask)
 
 	scn = HIF_GET_SOFTC(hif_ce_state);
 	ce_count = scn->ce_count;
+	/* we are removing interrupts, so better stop NAPI */
+	ret = hif_napi_event(GET_HIF_OPAQUE_HDL(scn),
+			     NAPI_EVT_INT_STATE, (void *)0);
+	if (ret != 0)
+		HIF_ERROR("%s: napi_event INT_STATE returned %d",
+			  __func__, ret);
+	/* this is not fatal, continue */
 
 	for (id = 0; id < ce_count; id++) {
 		if ((mask & (1 << id)) && hif_ce_state->tasklets[id].inited) {
