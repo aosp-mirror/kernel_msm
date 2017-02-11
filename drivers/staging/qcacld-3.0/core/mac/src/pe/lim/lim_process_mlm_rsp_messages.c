@@ -691,9 +691,21 @@ void lim_process_mlm_assoc_cnf(tpAniSirGlobal mac_ctx,
 	}
 	if (((tLimMlmAssocCnf *) msg)->resultCode != eSIR_SME_SUCCESS) {
 		/* Association failure */
-		lim_log(mac_ctx, LOG1, FL("SessionId:%d Association failure"),
-			session_entry->peSessionId);
-		session_entry->limSmeState = eLIM_SME_JOIN_FAILURE_STATE;
+		lim_log(mac_ctx, LOG1, FL("SessionId:%d Association failure resultCode: %d limSmeState:%d"),
+			session_entry->peSessionId,
+			((tLimMlmAssocCnf *) msg)->resultCode,
+			session_entry->limSmeState);
+
+		/* If driver gets deauth when its waiting for ADD_STA_RSP then
+		 * we need to do DEL_STA followed by DEL_BSS. So based on below
+		 * reason-code here we decide whether to do only DEL_BSS or
+		 * DEL_STA + DEL_BSS.
+		 */
+		if (((tLimMlmAssocCnf *) msg)->resultCode !=
+		    eSIR_SME_JOIN_DEAUTH_FROM_AP_DURING_ADD_STA)
+			session_entry->limSmeState =
+				eLIM_SME_JOIN_FAILURE_STATE;
+
 		MTRACE(mac_trace(mac_ctx, TRACE_CODE_SME_STATE,
 			session_entry->peSessionId, mac_ctx->lim.gLimSmeState));
 		/*
@@ -2626,7 +2638,6 @@ void lim_process_mlm_add_bss_rsp(tpAniSirGlobal mac_ctx,
 		return;
 	}
 
-	session_entry->nss = add_bss_param->nss;
 	bss_type = session_entry->bssType;
 	/* update PE session Id */
 	mlm_start_cnf.sessionId = session_entry->peSessionId;

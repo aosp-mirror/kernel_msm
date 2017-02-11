@@ -3083,6 +3083,51 @@ static uint32_t wma_wow_get_wakelock_duration(int wake_reason)
 }
 
 /**
+ * wma_wow_ap_lost_helper() - helper function to handle WOW_REASON_AP_ASSOC_LOST
+ * reason code and retrieve RSSI from the event.
+ * @wma: Pointer to wma handle
+ * @param: WMI_WOW_WAKEUP_HOST_EVENTID_param_tlvs buffer pointer
+ *
+ * Return: none
+ */
+static void wma_wow_ap_lost_helper(tp_wma_handle wma, void *param)
+{
+	WMI_WOW_WAKEUP_HOST_EVENTID_param_tlvs *param_buf;
+	WOW_EVENT_INFO_fixed_param *wake_info;
+	WMI_ROAM_EVENTID_param_tlvs event_param;
+	wmi_roam_event_fixed_param *roam_event;
+	u_int32_t wow_buf_pkt_len = 0;
+
+	param_buf = (WMI_WOW_WAKEUP_HOST_EVENTID_param_tlvs *) param;
+	wake_info = param_buf->fixed_param;
+	WMA_LOGA("%s: Beacon miss indication on vdev %d",
+		__func__, wake_info->vdev_id);
+
+	if (NULL == param_buf->wow_packet_buffer) {
+		WMA_LOGE("%s: invalid wow packet buffer", __func__);
+		goto exit_handler;
+	}
+
+	qdf_mem_copy((u_int8_t *) &wow_buf_pkt_len,
+		param_buf->wow_packet_buffer, 4);
+	WMA_LOGD("wow_packet_buffer dump");
+	qdf_trace_hex_dump(QDF_MODULE_ID_WMA, QDF_TRACE_LEVEL_DEBUG,
+		param_buf->wow_packet_buffer, wow_buf_pkt_len);
+	if (wow_buf_pkt_len >= sizeof(event_param)) {
+		roam_event = (wmi_roam_event_fixed_param *)
+			(param_buf->wow_packet_buffer + 4);
+		wma_beacon_miss_handler(wma, wake_info->vdev_id,
+			roam_event->rssi);
+		return;
+	}
+
+exit_handler:
+	/* in the case that no RSSI is available from the event */
+	WMA_LOGE("%s: rssi is not available from wow_packet_buffer", __func__);
+	wma_beacon_miss_handler(wma, wake_info->vdev_id, 0);
+}
+
+/**
  * wma_wow_wakeup_host_event() - wakeup host event handler
  * @handle: wma handle
  * @event: event data
@@ -3184,9 +3229,7 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 
 	case WOW_REASON_AP_ASSOC_LOST:
 		wake_lock_duration = WMA_BMISS_EVENT_WAKE_LOCK_DURATION;
-		WMA_LOGA("Beacon miss indication on vdev %x",
-			 wake_info->vdev_id);
-		wma_beacon_miss_handler(wma, wake_info->vdev_id);
+		wma_wow_ap_lost_helper(wma, param_buf);
 		break;
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
 	case WOW_REASON_HOST_AUTO_SHUTDOWN:
@@ -3830,10 +3873,11 @@ void wma_enable_disable_wakeup_event(WMA_HANDLE handle,
 /**
  * wma_enable_wow_in_fw() - wnable wow in fw
  * @wma: wma handle
+ * @wow_flags: bitmap of WMI WOW flags to pass to FW
  *
  * Return: QDF status
  */
-QDF_STATUS wma_enable_wow_in_fw(WMA_HANDLE handle)
+QDF_STATUS wma_enable_wow_in_fw(WMA_HANDLE handle, uint32_t wow_flags)
 {
 	tp_wma_handle wma = handle;
 	int ret;
@@ -3869,6 +3913,7 @@ QDF_STATUS wma_enable_wow_in_fw(WMA_HANDLE handle)
 
 	param.enable = true;
 	param.can_suspend_link = htc_can_suspend_link(wma->htc_handle);
+	param.flags = wow_flags;
 	ret = wmi_unified_wow_enable_send(wma->wmi_handle, &param,
 				   WMA_WILDCARD_PDEV_ID);
 	if (ret) {
@@ -5505,7 +5550,7 @@ QDF_STATUS wma_process_get_peer_info_req
 
 	WMA_LOGE("IBSS get peer info cmd sent len: %d, vdev %d"
 		 " command id: %d, status: %d", len,
-		 p_get_peer_info_cmd->vdev_id, WMI_PEER_INFO_REQ_CMDID, ret);
+		 vdev_id, WMI_PEER_INFO_REQ_CMDID, ret);
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -5595,8 +5640,7 @@ QDF_STATUS wma_process_rmc_enable_ind(tp_wma_handle wma)
 				   WMI_RMC_SET_MODE_CMDID);
 
 	WMA_LOGE("Enable RMC cmd sent len: %d, vdev %d" " command id: %d,"
-		 " status: %d", len, p_rmc_enable_cmd->vdev_id,
-		 WMI_RMC_SET_MODE_CMDID, ret);
+		 " status: %d", len, vdev_id, WMI_RMC_SET_MODE_CMDID, ret);
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -5646,8 +5690,7 @@ QDF_STATUS wma_process_rmc_disable_ind(tp_wma_handle wma)
 				   WMI_RMC_SET_MODE_CMDID);
 
 	WMA_LOGE("Disable RMC cmd sent len: %d, vdev %d" " command id: %d,"
-		 " status: %d", len, p_rmc_disable_cmd->vdev_id,
-		 WMI_RMC_SET_MODE_CMDID, ret);
+		 " status: %d", len, vdev_id, WMI_RMC_SET_MODE_CMDID, ret);
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -5663,7 +5706,7 @@ QDF_STATUS wma_process_rmc_action_period_ind(tp_wma_handle wma)
 	int ret;
 	uint8_t *p;
 	uint16_t len;
-	uint32_t val;
+	uint32_t periodicity_msec;
 	wmi_buf_t buf;
 	int32_t vdev_id;
 	wmi_rmc_set_action_period_cmd_fixed_param *p_rmc_cmd;
@@ -5697,21 +5740,21 @@ QDF_STATUS wma_process_rmc_action_period_ind(tp_wma_handle wma)
 		       WMITLV_GET_STRUCT_TLVLEN
 			       (wmi_rmc_set_action_period_cmd_fixed_param));
 
-	if (wlan_cfg_get_int(mac, WNI_CFG_RMC_ACTION_PERIOD_FREQUENCY, &val)
-	    != eSIR_SUCCESS) {
+	if (wlan_cfg_get_int(mac, WNI_CFG_RMC_ACTION_PERIOD_FREQUENCY,
+			     &periodicity_msec) != eSIR_SUCCESS) {
 		WMA_LOGE("Failed to get value for RMC action period using default");
-		val = WNI_CFG_RMC_ACTION_PERIOD_FREQUENCY_STADEF;
+		periodicity_msec = WNI_CFG_RMC_ACTION_PERIOD_FREQUENCY_STADEF;
 	}
 
 	p_rmc_cmd->vdev_id = vdev_id;
-	p_rmc_cmd->periodicity_msec = val;
+	p_rmc_cmd->periodicity_msec = periodicity_msec;
 
 	ret = wmi_unified_cmd_send(wma->wmi_handle, buf, len,
 				   WMI_RMC_SET_ACTION_PERIOD_CMDID);
 
 	WMA_LOGE("RMC action period %d cmd sent len: %d, vdev %d"
-		 " command id: %d, status: %d", p_rmc_cmd->periodicity_msec,
-		 len, p_rmc_cmd->vdev_id, WMI_RMC_SET_ACTION_PERIOD_CMDID, ret);
+		 " command id: %d, status: %d", periodicity_msec,
+		 len, vdev_id, WMI_RMC_SET_ACTION_PERIOD_CMDID, ret);
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -6405,13 +6448,14 @@ failure:
 /**
  * __wma_bus_suspend(): handles bus suspend for wma
  * @type: is this suspend part of runtime suspend or system suspend?
+ * @wow_flags: bitmap of WMI WOW flags to pass to FW
  *
  * Bails if a scan is in progress.
  * Calls the appropriate handlers based on configuration and event.
  *
  * Return: 0 for success or error code
  */
-static int __wma_bus_suspend(enum qdf_suspend_type type)
+static int __wma_bus_suspend(enum qdf_suspend_type type, uint32_t wow_flags)
 {
 	WMA_HANDLE handle = cds_get_context(QDF_MODULE_ID_WMA);
 	if (NULL == handle) {
@@ -6435,7 +6479,7 @@ static int __wma_bus_suspend(enum qdf_suspend_type type)
 				wma_is_wow_mode_selected(handle));
 
 	if (wma_is_wow_mode_selected(handle)) {
-		QDF_STATUS status = wma_enable_wow_in_fw(handle);
+		QDF_STATUS status = wma_enable_wow_in_fw(handle, wow_flags);
 		return qdf_status_to_os_return(status);
 	}
 
@@ -6444,6 +6488,7 @@ static int __wma_bus_suspend(enum qdf_suspend_type type)
 
 /**
  * wma_runtime_suspend() - handles runtime suspend request from hdd
+ * @wow_flags: bitmap of WMI WOW flags to pass to FW
  *
  * Calls the appropriate handler based on configuration and event.
  * Last busy marking should prevent race conditions between processing
@@ -6455,22 +6500,23 @@ static int __wma_bus_suspend(enum qdf_suspend_type type)
  *
  * Return: 0 for success or error code
  */
-int wma_runtime_suspend(void)
+int wma_runtime_suspend(uint32_t wow_flags)
 {
-	return __wma_bus_suspend(QDF_RUNTIME_SUSPEND);
+	return __wma_bus_suspend(QDF_RUNTIME_SUSPEND, wow_flags);
 }
 
 /**
  * wma_bus_suspend() - handles bus suspend request from hdd
+ * @wow_flags: bitmap of WMI WOW flags to pass to FW
  *
  * Calls the appropriate handler based on configuration and event
  *
  * Return: 0 for success or error code
  */
-int wma_bus_suspend(void)
+int wma_bus_suspend(uint32_t wow_flags)
 {
 
-	return __wma_bus_suspend(QDF_SYSTEM_SUSPEND);
+	return __wma_bus_suspend(QDF_SYSTEM_SUSPEND, wow_flags);
 }
 
 /**
@@ -8375,6 +8421,90 @@ int wma_encrypt_decrypt_msg_handler(void *handle, uint8_t *data,
 
 	pmac->sme.encrypt_decrypt_cb(pmac->hHdd, &encrypt_decrypt_rsp_params);
 
+	return 0;
+}
+#endif
+
+/**
+ * wma_unified_power_debug_stats_event_handler() - WMA handler function to
+ * handle Power stats event from firmware
+ * @handle: Pointer to wma handle
+ * @cmd_param_info: Pointer to Power stats event TLV
+ * @len: Length of the cmd_param_info
+ *
+ * Return: 0 on success, error number otherwise
+ */
+#ifdef WLAN_POWER_DEBUGFS
+int wma_unified_power_debug_stats_event_handler(void *handle,
+			uint8_t *cmd_param_info, uint32_t len)
+{
+	WMI_PDEV_CHIP_POWER_STATS_EVENTID_param_tlvs *param_tlvs;
+	struct power_stats_response *power_stats_results;
+	wmi_pdev_chip_power_stats_event_fixed_param *param_buf;
+	uint32_t power_stats_len, stats_registers_len, *debug_registers;
+
+	tpAniSirGlobal mac = (tpAniSirGlobal)cds_get_context(QDF_MODULE_ID_PE);
+	param_tlvs =
+		(WMI_PDEV_CHIP_POWER_STATS_EVENTID_param_tlvs *) cmd_param_info;
+
+	param_buf = (wmi_pdev_chip_power_stats_event_fixed_param *)
+		param_tlvs->fixed_param;
+	if (!mac || !mac->sme.power_stats_resp_callback) {
+		WMA_LOGD("%s: NULL mac ptr or HDD callback is null", __func__);
+		return -EINVAL;
+	}
+
+	if (!param_buf) {
+		WMA_LOGD("%s: NULL power stats event fixed param", __func__);
+		return -EINVAL;
+	}
+
+	debug_registers = param_tlvs->debug_registers;
+	stats_registers_len =
+		(sizeof(uint32_t) * param_buf->num_debug_register);
+	power_stats_len = stats_registers_len + sizeof(*power_stats_results);
+	power_stats_results = qdf_mem_malloc(power_stats_len);
+	if (!power_stats_results) {
+		WMA_LOGD("%s: could not allocate mem for power stats results",
+				__func__);
+		return -ENOMEM;
+	}
+	WMA_LOGD("Cumulative sleep time %d cumulative total on time %d deep sleep enter counter %d last deep sleep enter tstamp ts %d debug registers fmt %d num debug register %d",
+			param_buf->cumulative_sleep_time_ms,
+			param_buf->cumulative_total_on_time_ms,
+			param_buf->deep_sleep_enter_counter,
+			param_buf->last_deep_sleep_enter_tstamp_ms,
+			param_buf->debug_register_fmt,
+			param_buf->num_debug_register);
+
+	power_stats_results->cumulative_sleep_time_ms
+		= param_buf->cumulative_sleep_time_ms;
+	power_stats_results->cumulative_total_on_time_ms
+		= param_buf->cumulative_total_on_time_ms;
+	power_stats_results->deep_sleep_enter_counter
+		= param_buf->deep_sleep_enter_counter;
+	power_stats_results->last_deep_sleep_enter_tstamp_ms
+		= param_buf->last_deep_sleep_enter_tstamp_ms;
+	power_stats_results->debug_register_fmt
+		= param_buf->debug_register_fmt;
+	power_stats_results->num_debug_register
+		= param_buf->num_debug_register;
+
+	power_stats_results->debug_registers
+		= (uint32_t *)(power_stats_results + 1);
+
+	qdf_mem_copy(power_stats_results->debug_registers,
+			debug_registers, stats_registers_len);
+
+	mac->sme.power_stats_resp_callback(power_stats_results,
+			mac->sme.power_debug_stats_context);
+	qdf_mem_free(power_stats_results);
+	return 0;
+}
+#else
+int wma_unified_power_debug_stats_event_handler(void *handle,
+		uint8_t *cmd_param_info, uint32_t len)
+{
 	return 0;
 }
 #endif

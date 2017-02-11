@@ -1565,8 +1565,10 @@ static QDF_STATUS hdd_dis_connect_handler(hdd_adapter_t *pAdapter,
 							);
 			}
 
-			hdd_info("sent disconnected event to nl80211, rssi: %d",
-				pAdapter->rssi);
+			hdd_info("sent disconnected event to nl80211, reason code %d",
+				(eCSR_ROAM_LOSTLINK == roamStatus) ?
+				pRoamInfo->reasonCode :
+				WLAN_REASON_UNSPECIFIED);
 		}
 		/*
 		 * During the WLAN uninitialization,supplicant is stopped
@@ -2050,10 +2052,11 @@ static int hdd_change_sta_state_authenticated(hdd_adapter_t *adapter,
 	int ret;
 	uint32_t timeout;
 	hdd_station_ctx_t *hddstactx = WLAN_HDD_GET_STATION_CTX_PTR(adapter);
+	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 
 	timeout = hddstactx->hdd_ReassocScenario ?
 		AUTO_PS_ENTRY_TIMER_DEFAULT_VALUE :
-		AUTO_DEFERRED_PS_ENTRY_TIMER_DEFAULT_VALUE;
+		hdd_ctx->config->auto_bmps_timer_val * 1000;
 
 	hdd_info("Changing TL state to AUTHENTICATED for StaId= %d",
 		 hddstactx->conn_info.staId[0]);
@@ -2819,43 +2822,16 @@ static QDF_STATUS hdd_association_completion_handler(hdd_adapter_t *pAdapter,
 						GFP_KERNEL,
 						connect_timeout);
 			} else {
-				if (pRoamInfo) {
-					eCsrAuthType authType =
-						pWextState->roamProfile.AuthType.
-						authType[0];
-					eCsrEncryptionType encryption_type =
-						pWextState->roamProfile.
-						EncryptionType.encryptionType[0];
-					bool isWep =
-						(((authType ==
-						eCSR_AUTH_TYPE_OPEN_SYSTEM) ||
-						(authType ==
-						eCSR_AUTH_TYPE_SHARED_KEY)) &&
-						((encryption_type ==
-						eCSR_ENCRYPT_TYPE_WEP40) ||
-						(encryption_type ==
-						eCSR_ENCRYPT_TYPE_WEP104) ||
-						(encryption_type ==
-						eCSR_ENCRYPT_TYPE_WEP40_STATICKEY) ||
-						(encryption_type ==
-						eCSR_ENCRYPT_TYPE_WEP104_STATICKEY)));
-					/*
-					 * In case of OPEN-WEP or SHARED-WEP
-					 * authentication, send exact protocol
-					 * reason code. This enables user
-					 * applications to reconnect the station
-					 * with correct configuration.
-					 */
+				if (pRoamInfo)
 					hdd_connect_result(dev,
 						pRoamInfo->bssid.bytes,
 						NULL, NULL, 0, NULL, 0,
-						(isWep &&
-						 pRoamInfo->reasonCode) ?
+						pRoamInfo->reasonCode ?
 						pRoamInfo->reasonCode :
 						WLAN_STATUS_UNSPECIFIED_FAILURE,
 						GFP_KERNEL,
 						connect_timeout);
-				} else
+				else
 					hdd_connect_result(dev,
 						pWextState->req_bssId.bytes,
 						NULL, NULL, 0, NULL, 0,
@@ -3882,7 +3858,7 @@ hdd_roam_tdls_status_update_handler(hdd_adapter_t *pAdapter,
 					       pRoamInfo->peerMac.bytes,
 					       true);
 		if (!curr_peer) {
-			hdd_err("curr_peer is null");
+			hdd_info("curr_peer is null");
 			status = QDF_STATUS_E_FAILURE;
 		} else {
 			if (eTDLS_LINK_CONNECTED ==
@@ -3908,8 +3884,9 @@ hdd_roam_tdls_status_update_handler(hdd_adapter_t *pAdapter,
 						curr_peer->isForcedPeer,
 						pRoamInfo->reasonCode);
 				}
-				wlan_hdd_tdls_pre_setup_init_work
-					(pHddTdlsCtx, curr_peer);
+				pHddTdlsCtx->curr_candidate = curr_peer;
+				wlan_hdd_tdls_implicit_send_discovery_request(
+								pHddTdlsCtx);
 			}
 			status = QDF_STATUS_SUCCESS;
 		}
@@ -3922,7 +3899,7 @@ hdd_roam_tdls_status_update_handler(hdd_adapter_t *pAdapter,
 			wlan_hdd_tdls_find_peer(pAdapter,
 						pRoamInfo->peerMac.bytes, true);
 		if (!curr_peer) {
-			hdd_err("curr_peer is null");
+			hdd_info("curr_peer is null");
 			status = QDF_STATUS_E_FAILURE;
 		} else {
 			if (eTDLS_LINK_CONNECTED ==
@@ -3970,7 +3947,7 @@ hdd_roam_tdls_status_update_handler(hdd_adapter_t *pAdapter,
 			wlan_hdd_tdls_find_peer(pAdapter,
 						pRoamInfo->peerMac.bytes, true);
 		if (!curr_peer) {
-			hdd_err("curr_peer is null");
+			hdd_info("curr_peer is null");
 			status = QDF_STATUS_E_FAILURE;
 		} else {
 			if (eTDLS_LINK_CONNECTED ==
@@ -4624,6 +4601,7 @@ hdd_sme_roam_callback(void *pContext, tCsrRoamInfo *pRoamInfo, uint32_t roamId,
 	case eCSR_ROAM_NAPI_OFF:
 		hdd_info("After Roam Synch Comp: NAPI Serialize OFF");
 		hdd_napi_serialize(0);
+		hdd_set_roaming_in_progress(false);
 		break;
 	case eCSR_ROAM_SHOULD_ROAM:
 		/* notify apps that we can't pass traffic anymore */
@@ -4911,6 +4889,7 @@ hdd_sme_roam_callback(void *pContext, tCsrRoamInfo *pRoamInfo, uint32_t roamId,
 				WLAN_CONTROL_PATH);
 		hdd_napi_serialize(1);
 		cds_set_connection_in_progress(true);
+		hdd_set_roaming_in_progress(true);
 		cds_restart_opportunistic_timer(true);
 		break;
 	case eCSR_ROAM_ABORT:
@@ -4920,6 +4899,7 @@ hdd_sme_roam_callback(void *pContext, tCsrRoamInfo *pRoamInfo, uint32_t roamId,
 				WLAN_WAKE_ALL_NETIF_QUEUE,
 				WLAN_CONTROL_PATH);
 		cds_set_connection_in_progress(false);
+		hdd_set_roaming_in_progress(false);
 		break;
 
 	default:

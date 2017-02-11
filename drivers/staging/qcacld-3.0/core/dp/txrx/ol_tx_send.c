@@ -52,6 +52,7 @@
 #include <ol_txrx_internal.h>   /* OL_TX_DESC_NO_REFS, etc. */
 #include <ol_osif_txrx_api.h>
 #include <ol_tx.h>              /* ol_tx_reinject */
+#include <ol_tx_send.h>
 
 #include <ol_cfg.h>             /* ol_cfg_is_high_latency */
 #include <ol_tx_sched.h>
@@ -571,7 +572,7 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 					    lcl_freelist, tx_desc_last, status);
 		}
 #ifdef QCA_SUPPORT_TXDESC_SANITY_CHECKS
-		tx_desc->pkt_type = 0xff;
+		tx_desc->pkt_type = ol_tx_frm_freed;
 #ifdef QCA_COMPUTE_TX_DELAY
 		tx_desc->entry_timestamp_ticks = 0xffffffff;
 #endif
@@ -758,7 +759,15 @@ ol_tx_single_completion_handler(ol_txrx_pdev_handle pdev,
 	struct ol_tx_desc_t *tx_desc;
 	qdf_nbuf_t netbuf;
 
-	tx_desc = ol_tx_desc_find(pdev, tx_desc_id);
+	tx_desc = ol_tx_desc_find_check(pdev, tx_desc_id);
+	if (tx_desc == NULL) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+				"%s: invalid desc_id(%u), ignore it.\n",
+				__func__,
+				tx_desc_id);
+		return;
+	}
+
 	tx_desc->status = status;
 	netbuf = tx_desc->netbuf;
 
@@ -835,6 +844,13 @@ ol_tx_inspect_handler(ol_txrx_pdev_handle pdev,
 			ol_tx_msdu_complete(pdev, tx_desc, tx_descs, netbuf,
 					    lcl_freelist, tx_desc_last,
 					    htt_tx_status_ok);
+
+#ifdef QCA_SUPPORT_TXDESC_SANITY_CHECKS
+			tx_desc->pkt_type = ol_tx_frm_freed;
+#ifdef QCA_COMPUTE_TX_DELAY
+			tx_desc->entry_timestamp_ticks = 0xffffffff;
+#endif
+#endif
 		}
 	}
 
@@ -896,7 +912,7 @@ ol_tx_packet_count(ol_txrx_pdev_handle pdev,
 	pdev->packet_loss_count[category] = 0;
 }
 
-uint32_t ol_tx_delay_avg(uint64_t sum, uint32_t num)
+static uint32_t ol_tx_delay_avg(uint64_t sum, uint32_t num)
 {
 	uint32_t sum32;
 	int shift = 0;
