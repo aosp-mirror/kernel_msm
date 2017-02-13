@@ -61,6 +61,8 @@
 
 		qcom,wsa-max-devs = <0>; /* No wsa device */
 		/delete-property/ qcom,wsa-devs;
+		/delete-property/ qcom,usbc-analog-en1_gpio;
+		/delete-property/ qcom,usbc-analog-en2_n_gpio;
 
 		htc,use-external-amp;
 		htc,external-amp-be-sname = "Quaternary MI2S Playback",
@@ -117,6 +119,9 @@
 				     &quat_mi2s_sd1_sleep>;
 		};
 	};
+
+	/delete-node/ msm_cdc_pinctrl@59;
+	/delete-node/ msm_cdc_pinctrl@60;
 };
 
 &slim_aud {
