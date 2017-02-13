@@ -33,18 +33,17 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 
-#include "mnh-pcie.h"
 #include "hw-mnh-regs.h"
-#include "mnh-sm-config.h"
-#include "mnh-sm-config-a.h"
-#include "mnh-sm.h"
-#include "mnh-mipi.h"
 #include "mnh-clk.h"
+#include "mnh-ddr.h"
+#include "mnh-mipi.h"
+#include "mnh-pcie.h"
+#include "mnh-pwr.h"
+#include "mnh-sm.h"
 
 #define MAX_STR_COPY 32
 #define SUCCESS 0
 #define DEVICE_NAME "mnh_sm"
-#define CLASS_NAME "mnh_sm"
 
 #define SGL_SIZE 64
 
@@ -72,20 +71,50 @@
 #define MNH_UBOOT_ENABLE 1
 #define MNH_UBOOT_DISABLE 0
 
+enum fw_image_state {
+	FW_IMAGE_NONE = 0,
+	FW_IMAGE_DOWNLOADING,
+	FW_IMAGE_DOWNLOAD_SUCCESS,
+	FW_IMAGE_DOWNLOAD_FAIL
+};
+
 struct mnh_sm_device {
 	struct platform_device *pdev;
 	struct device *dev;
-
-	/* char device resources */
 	struct cdev cdev;
 	dev_t dev_num;
+	struct device *chardev;
+	struct class *dev_class;
+	int open;
+	enum fw_image_state image_loaded;
 
-	enum fw_image_state	image_loaded;
+	/* kernel thread for state transitions from ioctls */
+	struct work_struct set_state_work;
+	int next_mnh_state;
+};
+
+static struct mnh_mipi_config mnh_mipi_configs[] = {
+	{
+		.txdev = MNH_MUX_DEVICE_TX0,
+		.rxdev = MNH_MUX_DEVICE_RX0,
+		.rx_rate = 1296,
+		.tx_rate = 1296,
+		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
+		.is_gen3 = 1,
+	},
+	{
+		.txdev = MNH_MUX_DEVICE_TX1,
+		.rxdev = MNH_MUX_DEVICE_RX1,
+		.rx_rate = 648,
+		.tx_rate = 1296,
+		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
+		.is_gen3 = 1,
+	},
 };
 
 static struct mnh_sm_device *mnh_sm_dev;
 static hotplug_cb_t mnh_hotplug_cb;
-static int mnh_state = MNH_HW_UNKNOWN;
+static int mnh_state;
 static int mnh_sm_uboot = MNH_UBOOT_DISABLE;
 
 static int mnh_sm_get_val_from_buf(const char *buf, unsigned long *val)
@@ -107,7 +136,7 @@ static ssize_t mnh_sm_poweron_show(struct device *dev,
 	ssize_t strlen = 0;
 
 	dev_info(dev, "Entering mnh_sm_poweron_show...\n");
-	mnh_sm_poweron(sm_config_default);
+	mnh_sm_set_state(MNH_STATE_INIT);
 	return strlen;
 }
 
@@ -130,7 +159,7 @@ static ssize_t mnh_sm_poweroff_show(struct device *dev,
 	ssize_t strlen = 0;
 
 	dev_info(dev, "Entering mnh_sm_poweroff_show...\n");
-	mnh_sm_poweroff(sm_config_default);
+	mnh_sm_set_state(MNH_STATE_OFF);
 
 	return strlen;
 }
@@ -149,6 +178,34 @@ static DEVICE_ATTR(poweroff, S_IWUSR | S_IRUSR | S_IRGRP,
 		mnh_sm_poweroff_show, mnh_sm_poweroff_store);
 
 
+static ssize_t mnh_sm_config_mipi_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	ssize_t strlen = 0;
+
+	dev_info(dev, "Entering mnh_sm_config_mipi_show...\n");
+	mnh_sm_set_state(MNH_STATE_CONFIG_MIPI);
+	return strlen;
+}
+
+static DEVICE_ATTR(config_mipi, S_IRUGO,
+		mnh_sm_config_mipi_show, NULL);
+
+static ssize_t mnh_sm_config_ddr_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	ssize_t strlen = 0;
+
+	dev_info(dev, "Entering mnh_sm_config_ddr_show...\n");
+	mnh_sm_set_state(MNH_STATE_CONFIG_DDR);
+	return strlen;
+}
+
+static DEVICE_ATTR(config_ddr, S_IRUGO,
+		mnh_sm_config_ddr_show, NULL);
+
 
 static ssize_t mnh_sm_config_show(struct device *dev,
 			     struct device_attribute *attr,
@@ -157,7 +214,8 @@ static ssize_t mnh_sm_config_show(struct device *dev,
 	ssize_t strlen = 0;
 
 	dev_info(dev, "Entering mnh_sm_config_show...\n");
-	mnh_sm_config(sm_config_default);
+	mnh_sm_set_state(MNH_STATE_CONFIG_MIPI);
+	mnh_sm_set_state(MNH_STATE_CONFIG_DDR);
 	return strlen;
 }
 
@@ -185,11 +243,7 @@ static ssize_t mnh_sm_state_store(struct device *dev,
 	dev_info(dev, "Entering mnh_sm_state_store...\n");
 
 	ret = mnh_sm_get_val_from_buf(buf, &val);
-	if (!ret && (val >= MNH_HW_INIT) && (val <= MNH_HW_SUSPEND_HIBERNATE)) {
-		mnh_state = val;
-		return mnh_state;
-	}
-	return -EINVAL;
+	return mnh_sm_set_state((int)val);
 }
 
 static DEVICE_ATTR(state, S_IWUSR | S_IRUGO,
@@ -435,7 +489,7 @@ static ssize_t mnh_sm_download_show(struct device *dev,
 
 	dev_info(mnh_sm_dev->dev, "MNH PM mnh_pm_download_show...\n");
 
-	mnh_sm_download();
+	mnh_sm_set_state(MNH_STATE_ACTIVE);
 
 	return strlen;
 }
@@ -450,7 +504,8 @@ static ssize_t mnh_sm_suspend_show(struct device *dev,
 {
 	ssize_t strlen = 0;
 
-	mnh_sm_suspend(sm_config_default);
+	mnh_sm_set_state(MNH_STATE_SUSPEND_SELF_REFRESH);
+
 	return strlen;
 }
 
@@ -471,7 +526,8 @@ static ssize_t mnh_sm_resume_show(struct device *dev,
 {
 	ssize_t strlen = 0;
 
-	mnh_sm_resume(sm_config_default);
+	mnh_sm_set_state(MNH_STATE_ACTIVE);
+
 	return strlen;
 }
 
@@ -564,6 +620,8 @@ static DEVICE_ATTR(uboot, S_IWUSR | S_IRUGO,
 static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_poweron.attr,
 	&dev_attr_poweroff.attr,
+	&dev_attr_config_mipi.attr,
+	&dev_attr_config_ddr.attr,
 	&dev_attr_config.attr,
 	&dev_attr_state.attr,
 	&dev_attr_download.attr,
@@ -603,12 +661,9 @@ EXPORT_SYMBOL(mnh_sm_reg_hotplug_callback);
  *            This structure will be populated within the kernel module.
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
-int mnh_sm_poweron(struct mnh_sm_configuration mnh_sm_boot_args)
+static int mnh_sm_poweron(void)
 {
 	int ret;
-
-	if (!mnh_sm_dev)
-		return -ENODEV;
 
 	/* Initialize MNH Power */
 	ret = mnh_pwr_set_state(MNH_PWR_S0);
@@ -616,33 +671,22 @@ int mnh_sm_poweron(struct mnh_sm_configuration mnh_sm_boot_args)
 		dev_err(mnh_sm_dev->dev,
 			"%s: failed to power on device (%d)\n",
 			__func__, ret);
-
-		mnh_state = MNH_HW_OFF;
-
 		return ret;
 	}
 
-	mnh_state = MNH_HW_INIT;
-
 	return 0;
 }
-EXPORT_SYMBOL(mnh_sm_poweron);
 
 /**
  * API to power monette hill.
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
-int mnh_sm_poweroff(struct mnh_sm_configuration mnh_sm_boot_args)
+static int mnh_sm_poweroff(void)
 {
-	if (!mnh_sm_dev)
-		return -ENODEV;
-
 	/* Power down MNH */
 	mnh_pwr_set_state(MNH_PWR_S4);
-	mnh_state = MNH_HW_OFF;
 	return 0;
 }
-EXPORT_SYMBOL(mnh_sm_poweroff);
 
 /**
  * API to initialize MIPI, DDR, DDR training,
@@ -651,98 +695,32 @@ EXPORT_SYMBOL(mnh_sm_poweroff);
  *            This structure will be populated within the kernel module.
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
-int mnh_sm_config(struct mnh_sm_configuration mnh_sm_boot_args)
+static int mnh_sm_config_mipi(void)
 {
-	int ret;
-
-	if (!mnh_sm_dev)
-		return -ENODEV;
-
-	/* check to see if device is powered; power on if not */
-	if (mnh_state == MNH_HW_OFF) {
-		dev_info(mnh_sm_dev->dev,
-			 "%s: powering on device before running config\n",
-			 __func__);
-
-		ret = mnh_sm_poweron(mnh_sm_boot_args);
-		if (ret) {
-			dev_err(mnh_sm_dev->dev,
-				"%s: could not run config because of poweron failure (%d)\n",
-				__func__, ret);
-			return ret;
-		}
-	}
-
-	if (mnh_state != MNH_HW_INIT) {
-		dev_err(mnh_sm_dev->dev,
-			"%s: cannot config device in state %d\n",
-			__func__, mnh_state);
-		return -EINVAL;
-	}
-
 	/* Initialze MIPI bypass */
 	/* TODO hardcode the to use the first config */
-	mnh_sm_mipi_bypass_init(&mnh_sm_boot_args);
+	mnh_sm_mipi_bypass_init(mnh_mipi_configs[0]);
+	mnh_sm_mipi_bypass_init(mnh_mipi_configs[1]);
 
+	return 0;
+}
+
+static int mnh_sm_config_ddr(void)
+{
 	/* Initialize DDR */
-	mnh_ddr_po_init(mnh_sm_dev->dev, mnh_sm_boot_args.ddr_config);
-
-	mnh_state = MNH_HW_CONFIG;
+	mnh_ddr_po_init(mnh_sm_dev->dev);
 
 	return 0;
 }
-EXPORT_SYMBOL(mnh_sm_config);
-
-/**
- * API to obtain the state of monette hill.
- * @return the power states of mnh(ex: On, Off, Active, Suspend, Bypass).
- *      MNH_HW_INIT - MNH is on, Kernel not executing, and before FW download.
- *      MNH_HW_OFF - MNH is powered off
- *      MNH_HW_ACTIVE: MNH is on and flashed. Kernel is running.
- *      MNH_HW_SUSPEND_SELF_REFRESH: DDR is self refreshing.
- *                                   All other components are off.
- *      MNH_HW_SUSPEND_HIBERNATE: Hibernation image stored in AP RAM
- *                                over PCIe outbound and MNH is powered down.
- */
-int mnh_sm_get_state(void)
-{
-	return mnh_state;
-}
-EXPORT_SYMBOL(mnh_sm_get_state);
-
-/**
- * API to set the state of monette hill.
- * @param[in] Set the power states of mnh(ex: On, Off, Active, Suspend, Bypass).
- *      MNH_HW_INIT - MNH is on, Kernel not executing, and before FW download.
- *      MNH_HW_OFF - MNH is powered off
- *      MNH_HW_ACTIVE: MNH is on and flashed. Kernel is running.
- *      MNH_HW_SUSPEND_SELF_REFRESH: DDR is self refreshing.
- *                                   All other components are off.
- *      MNH_HW_SUSPEND_HIBERNATE: Hibernation image stored in AP RAM
- *                                over PCIe outbound and MNH is powered down.
- */
-int mnh_sm_set_state(int state)
-{
-	mnh_state = state;
-	return 0;
-}
-EXPORT_SYMBOL(mnh_sm_set_state);
 
 /**
  * API to download the binary images(SBL, UBoot, Kernel, Ramdisk) for mnh.
  * The location of the binaries will be located in the AP file system.
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
-int mnh_sm_download(void)
+static int mnh_sm_download(void)
 {
 	uint32_t  magic;
-
-	if (mnh_state != MNH_HW_CONFIG) {
-		dev_err(mnh_sm_dev->dev,
-			"%s: cannot download firmware when device is in state %d\n",
-			__func__, mnh_state);
-		return -EINVAL;
-	}
 
 	if (mnh_download_firmware() == 0) {
 		/*
@@ -758,7 +736,7 @@ int mnh_sm_download(void)
 					 sizeof(uint32_t), INIT_DONE);
 
 			/* Set the state to configured */
-			mnh_state = MNH_HW_ACTIVE;
+			mnh_state = MNH_STATE_ACTIVE;
 		} else {
 			dev_err(mnh_sm_dev->dev,
 				"Read GP0 register fail or GP0 is not 0:%d",
@@ -771,22 +749,18 @@ int mnh_sm_download(void)
 
 	return 0;
 }
-EXPORT_SYMBOL(mnh_sm_download);
 
 /**
  * API to put MNH in suspend state.  In suspend mode the DDR will be isolated
  * and put in self refresh while the CPU is powered down.
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
-int mnh_sm_suspend(struct mnh_sm_configuration mnh_sm_boot_args)
+static int mnh_sm_suspend(void)
 {
-	mnh_state = MNH_HW_SUSPEND_SELF_REFRESH;
 	/* Suspend MNH power */
 	mnh_pwr_set_state(MNH_PWR_S3);
 	return 0;
-
 }
-EXPORT_SYMBOL(mnh_sm_suspend);
 
 /**
  * API to put MNH into active state.
@@ -796,15 +770,87 @@ EXPORT_SYMBOL(mnh_sm_suspend);
  * resume.
  * @return 0 if success or -EINVAL or -EFATAL on failure
  */
-int mnh_sm_resume(struct mnh_sm_configuration mnh_sm_boot_args)
+static int mnh_sm_resume(void)
 {
-	mnh_state = MNH_HW_ACTIVE;
 	/* Initialize MNH Power */
 	mnh_pwr_set_state(MNH_PWR_S0);
-	return 0;
 
+	return 0;
 }
-EXPORT_SYMBOL(mnh_sm_resume);
+
+/**
+ * API to obtain the state of monette hill.
+ * @return the power states of mnh
+ */
+int mnh_sm_get_state(void)
+{
+	return mnh_state;
+}
+EXPORT_SYMBOL(mnh_sm_get_state);
+
+/**
+ * API to set the state of monette hill.
+ * @param[in] Set the power states of mnh
+ */
+int mnh_sm_set_state(int state)
+{
+	if (!mnh_sm_dev)
+		return -ENODEV;
+
+	dev_info(mnh_sm_dev->dev,
+		 "%s: request state %d\n", __func__, state);
+
+	if (state == mnh_state) {
+		dev_info(mnh_sm_dev->dev,
+			 "%s: already in state %d\n", __func__, state);
+		return 0;
+	}
+
+	switch (state) {
+	case MNH_STATE_OFF:
+		mnh_sm_poweroff();
+		break;
+	case MNH_STATE_INIT:
+		mnh_sm_set_state(MNH_STATE_OFF);
+		mnh_sm_poweron();
+		break;
+	case MNH_STATE_CONFIG_MIPI:
+		if (mnh_state != MNH_STATE_CONFIG_DDR)
+			mnh_sm_set_state(MNH_STATE_INIT);
+		mnh_sm_config_mipi();
+		break;
+	case MNH_STATE_CONFIG_DDR:
+		if (mnh_state != MNH_STATE_CONFIG_MIPI)
+			mnh_sm_set_state(MNH_STATE_INIT);
+		mnh_sm_config_ddr();
+		break;
+	case MNH_STATE_ACTIVE:
+		if (mnh_state == MNH_STATE_SUSPEND_SELF_REFRESH) {
+			mnh_sm_resume();
+		} else {
+			mnh_sm_set_state(MNH_STATE_CONFIG_DDR);
+			mnh_sm_download();
+		}
+		break;
+	case MNH_STATE_SUSPEND_SELF_REFRESH:
+		mnh_sm_set_state(MNH_STATE_ACTIVE);
+		mnh_sm_suspend();
+		break;
+	case MNH_STATE_SUSPEND_HIBERNATE:
+		dev_err(mnh_sm_dev->dev,
+			 "%s: TODO unsupported state %d\n", __func__, state);
+		break;
+	default:
+		dev_err(mnh_sm_dev->dev,
+			 "%s: invalid state %d\n", __func__, state);
+		return -EINVAL;
+	}
+
+	mnh_state = state;
+
+	return 0;
+}
+EXPORT_SYMBOL(mnh_sm_set_state);
 
 int mnh_sm_is_present(void)
 {
@@ -812,11 +858,182 @@ int mnh_sm_is_present(void)
 }
 EXPORT_SYMBOL(mnh_sm_is_present);
 
-void mnh_sm_get_default_config(struct mnh_sm_configuration *config)
+static int mnh_sm_open(struct inode *inode, struct file *filp)
 {
-	*config = sm_config_default;
+	struct mnh_sm_device *data = container_of(inode->i_cdev,
+						  struct mnh_sm_device, cdev);
+
+	dev_dbg(data->dev, "%s: opening mnh_sm\n", __func__);
+
+	filp->private_data = data; /* for other methods */
+
+	if (data->open)
+		return -EBUSY;
+	data->open++;
+
+	dev_dbg(data->dev, "%s: open count %d\n", __func__, data->open);
+
+	return 0;
 }
-EXPORT_SYMBOL(mnh_sm_get_default_config);
+
+static int mnh_sm_close(struct inode *inode, struct file *filp)
+{
+	struct mnh_sm_device *data = container_of(inode->i_cdev,
+						  struct mnh_sm_device, cdev);
+
+	dev_dbg(data->dev, "%s: closing mnh_sm\n", __func__);
+
+	filp->private_data = data; /* for other methods */
+
+	data->open--;
+
+	dev_dbg(data->dev, "%s: open count %d\n", __func__, data->open);
+
+	return 0;
+}
+
+static void mnh_sm_set_state_work(struct work_struct *data)
+{
+	mnh_sm_set_state(mnh_sm_dev->next_mnh_state);
+}
+
+static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
+			  unsigned long arg)
+{
+	int err = 0;
+	struct mnh_mipi_config mipi_config;
+
+	/*
+	 * the direction is a bitmask, and VERIFY_WRITE catches R/W
+	 * transfers. `Type' is user-oriented, while
+	 * access_ok is kernel-oriented, so the concept of "read" and
+	 * "write" is reversed
+	 */
+	if (_IOC_DIR(cmd) & _IOC_READ)
+		err = !access_ok(VERIFY_WRITE, (void __user *)arg,
+				  _IOC_SIZE(cmd));
+	else if (_IOC_DIR(cmd) & _IOC_WRITE)
+		err =  !access_ok(VERIFY_READ, (void __user *)arg,
+				  _IOC_SIZE(cmd));
+	if (err) {
+		dev_err(mnh_sm_dev->dev, "%s: access error!\n", __func__);
+		return -EFAULT;
+	}
+
+	/*
+	 * extract the type and number bitfields, and don't decode
+	 * wrong cmds: return ENOTTY (inappropriate ioctl) before access_ok(  )
+	 */
+
+	if (_IOC_TYPE(cmd) != MNH_SM_IOC_MAGIC) {
+		dev_err(mnh_sm_dev->dev,
+			"%s: invalid ioctl type %c (0x%08x)\n",
+			__func__, _IOC_TYPE(cmd), cmd);
+		return -ENOTTY;
+	}
+
+	switch (cmd) {
+	case MNH_SM_IOC_POWERON:
+		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_POWERON\n", __func__);
+		mnh_sm_dev->next_mnh_state = MNH_STATE_INIT;
+		schedule_work(&mnh_sm_dev->set_state_work);
+		break;
+	case MNH_SM_IOC_POWEROFF:
+		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_POWEROFF\n", __func__);
+		mnh_sm_dev->next_mnh_state = MNH_STATE_OFF;
+		schedule_work(&mnh_sm_dev->set_state_work);
+		break;
+	case MNH_SM_IOC_CONFIG_MIPI:
+		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_CONFIG_MIPI\n",
+			__func__);
+		err = copy_from_user(&mipi_config, (void __user *)arg,
+				     sizeof(struct mnh_mipi_config));
+		if (err) {
+			dev_err(mnh_sm_dev->dev,
+				"%s: failed to copy mipi config from userspace (%d)\n",
+				__func__, err);
+			return err;
+		}
+		mnh_sm_mipi_bypass_init(mipi_config);
+		/* TODO */
+		mnh_state = MNH_STATE_CONFIG_MIPI;
+		break;
+	case MNH_SM_IOC_CONFIG_DDR:
+		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_CONFIG_DDR\n",
+			__func__);
+		mnh_sm_dev->next_mnh_state = MNH_STATE_CONFIG_DDR;
+		schedule_work(&mnh_sm_dev->set_state_work);
+		break;
+	case MNH_SM_IOC_GET_STATE:
+		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_GET_STATE\n",
+			__func__);
+		err = copy_to_user((void __user *)arg, &mnh_state,
+				   sizeof(mnh_state));
+		if (err) {
+			dev_err(mnh_sm_dev->dev,
+				"%s: failed to copy mnh_state to userspace (%d)\n",
+				__func__, err);
+			return err;
+		}
+		break;
+	case MNH_SM_IOC_SET_STATE:
+		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_SET_STATE\n",
+			__func__);
+		mnh_sm_dev->next_mnh_state = (int)arg;
+		schedule_work(&mnh_sm_dev->set_state_work);
+		break;
+	case MNH_SM_IOC_DOWNLOAD:
+		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_DOWNLOAD\n", __func__);
+		mnh_sm_dev->next_mnh_state = MNH_STATE_ACTIVE;
+		schedule_work(&mnh_sm_dev->set_state_work);
+		break;
+	case MNH_SM_IOC_SUSPEND:
+		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_SUSPEND\n", __func__);
+		mnh_sm_dev->next_mnh_state = MNH_STATE_SUSPEND_SELF_REFRESH;
+		schedule_work(&mnh_sm_dev->set_state_work);
+		break;
+	case MNH_SM_IOC_RESUME:
+		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_RESUME\n", __func__);
+		mnh_sm_dev->next_mnh_state = MNH_STATE_ACTIVE;
+		schedule_work(&mnh_sm_dev->set_state_work);
+		break;
+	default:
+		dev_err(mnh_sm_dev->dev,
+			"%s: unknown ioctl %c, dir=%d, #%d (0x%08x)\n",
+			__func__, _IOC_TYPE(cmd), _IOC_DIR(cmd), _IOC_NR(cmd),
+			cmd);
+		break;
+	}
+
+	return err;
+}
+
+static long mnh_sm_compat_ioctl(struct file *file, unsigned int cmd,
+				unsigned long arg)
+{
+	int ret;
+
+	switch (_IOC_NR(cmd)) {
+	case _IOC_NR(MNH_SM_IOC_CONFIG_MIPI):
+	case _IOC_NR(MNH_SM_IOC_GET_STATE):
+		cmd &= ~(_IOC_SIZEMASK << _IOC_SIZESHIFT);
+		cmd |= sizeof(void *) << _IOC_SIZESHIFT;
+		ret = mnh_sm_ioctl(file, cmd, (unsigned long)compat_ptr(arg));
+		break;
+	default:
+		ret = mnh_sm_ioctl(file, cmd, arg);
+		break;
+	}
+
+	return ret;
+}
+
+const struct file_operations mnh_sm_fops = {
+	.open = mnh_sm_open,
+	.unlocked_ioctl = mnh_sm_ioctl,
+	.compat_ioctl = mnh_sm_compat_ioctl,
+	.release = mnh_sm_close
+};
 
 static int mnh_sm_probe(struct platform_device *pdev)
 {
@@ -836,6 +1053,8 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	mnh_sm_dev->dev = dev;
 	dev_set_drvdata(dev, mnh_sm_dev);
 
+	INIT_WORK(&mnh_sm_dev->set_state_work, mnh_sm_set_state_work);
+
 	/* allocate character device region */
 	error = alloc_chrdev_region(&mnh_sm_dev->dev_num, 0, 1, DEVICE_NAME);
 	if (error < 0) {
@@ -843,12 +1062,36 @@ static int mnh_sm_probe(struct platform_device *pdev)
 		return error;
 	}
 
-	/* make cdev */
-	cdev_init(&mnh_sm_dev->cdev, NULL);
+	/* initialize cdev */
+	cdev_init(&mnh_sm_dev->cdev, &mnh_sm_fops);
+
+	/* add cdev to kernel */
 	error = cdev_add(&mnh_sm_dev->cdev, mnh_sm_dev->dev_num, 1);
 	if (error) {
 		dev_err(dev, "cdev_add failed (%d)\n", error);
 		goto fail_cdev_add;
+	}
+
+	/* Register the device class */
+	mnh_sm_dev->dev_class = class_create(THIS_MODULE, DEVICE_NAME);
+	if (IS_ERR(mnh_sm_dev->dev_class)) {
+		dev_err(mnh_sm_dev->dev,
+			"%s: class_create failed (%ld)\n",
+			__func__, PTR_ERR(mnh_sm_dev->dev_class));
+		error = PTR_ERR(mnh_sm_dev->dev_class);
+		goto fail_create_class;
+	}
+
+	mnh_sm_dev->chardev =
+		device_create(mnh_sm_dev->dev_class, NULL,
+			      MKDEV(MAJOR(mnh_sm_dev->dev_num), 0), NULL,
+			      DEVICE_NAME);
+	if (IS_ERR(mnh_sm_dev->chardev)) {
+		dev_err(mnh_sm_dev->dev,
+			"%s: device_create failed (%ld)\n",
+			__func__, PTR_ERR(mnh_sm_dev->chardev));
+		error = PTR_ERR(mnh_sm_dev->chardev);
+		goto fail_device_create;
 	}
 
 	dev_dbg(dev, "char driver %s added", DEVICE_NAME);
@@ -856,7 +1099,7 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	/* create sysfs group */
 	error = sysfs_create_group(&dev->kobj, &mnh_sm_group);
 	if (error) {
-		dev_err(dev, "failed to create /sys/kernel/mnh_sm\n");
+		dev_err(dev, "failed to create sysfs group\n");
 		goto fail_sysfs_create_group;
 	}
 
@@ -874,6 +1117,11 @@ static int mnh_sm_probe(struct platform_device *pdev)
 fail_mnh_pwr_init:
 	sysfs_remove_group(&dev->kobj, &mnh_sm_group);
 fail_sysfs_create_group:
+	device_destroy(mnh_sm_dev->dev_class,
+		       MKDEV(MAJOR(mnh_sm_dev->dev_num), 0));
+fail_device_create:
+	class_destroy(mnh_sm_dev->dev_class);
+fail_create_class:
 	cdev_del(&mnh_sm_dev->cdev);
 fail_cdev_add:
 	unregister_chrdev_region(mnh_sm_dev->dev_num, 1);

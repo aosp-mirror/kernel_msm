@@ -14,6 +14,11 @@
  *
  */
 
-int mnh_sm_mipi_bypass_gen3_init(uint32_t freq);
+#ifndef __MNH_MIPI
+#define __MNH_MIPI
 
-int mnh_sm_mipi_bypass_init(struct mnh_sm_configuration *mnh_sm_boot_args);
+#include <uapi/linux/mnh-sm.h>
+
+int mnh_sm_mipi_bypass_init(struct mnh_mipi_config cfg);
+
+#endif /* __MNH_MIPI */

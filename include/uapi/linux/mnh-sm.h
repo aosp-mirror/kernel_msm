@@ -14,14 +14,8 @@
  *
  */
 
-#ifndef __MNH_SM_CONFIG
-#define __MNH_SM_CONFIG
-
-#include "mnh-hwio-bases.h"
-#include "mnh-pwr.h"
-#include "mnh-ddr.h"
-
-#include <linux/init.h>
+#ifndef _UAPI__MNH_SM_H
+#define _UAPI__MNH_SM_H
 
 #define MNH_MUX_DEVICE_TX_MAX	2
 #define MNH_MUX_DEVICE_TX0	0
@@ -36,38 +30,31 @@
 #define MNH_MIPI_VC3_EN_MASK	0x8
 #define MNH_MIPI_VC_ALL_EN_MASK 0xf
 
-/** Firmware download image state */
-enum fw_image_state {
-	FW_IMAGE_NONE = 0,
-	FW_IMAGE_DOWNLOADING,
-	FW_IMAGE_DOWNLOAD_SUCCESS,
-	FW_IMAGE_DOWNLOAD_FAIL
-};
+#define MNH_SM_IOC_MAGIC 'T'
+#define MNH_SM_MAX 8
 
-struct mnh_sm_register_write_rep {
-	u16 address;
-	u8 len;
-	u32 val;
-	u16 dev_i2c_addr;
-};
-
-struct mnh_sm_register_read_rep {
-	u16 address;
-	u8 len;
-	u32 mask;
-	u16 dev_i2c_addr;
-};
-
-struct mnh_sm_power_seq_entity {
-	char ent_name[12];
-	int ent_number;
-	u16 address;
-	unsigned int val;
-	unsigned int undo_val; /* Undo value if any previous step failed */
-	unsigned int delay; /* delay in micro seconds */
-};
+#define MNH_SM_IOC_POWERON \
+	_IO(MNH_SM_IOC_MAGIC, 1)
+#define MNH_SM_IOC_POWEROFF \
+	_IO(MNH_SM_IOC_MAGIC, 2)
+#define MNH_SM_IOC_CONFIG_MIPI \
+	_IOW(MNH_SM_IOC_MAGIC, 3, struct mnh_mipi_config *)
+#define MNH_SM_IOC_CONFIG_DDR \
+	_IO(MNH_SM_IOC_MAGIC, 4)
+#define MNH_SM_IOC_GET_STATE \
+	_IOR(MNH_SM_IOC_MAGIC, 5, int *)
+#define MNH_SM_IOC_SET_STATE \
+	_IOW(MNH_SM_IOC_MAGIC, 6, int)
+#define MNH_SM_IOC_DOWNLOAD \
+	_IO(MNH_SM_IOC_MAGIC, 7)
+#define MNH_SM_IOC_SUSPEND \
+	_IO(MNH_SM_IOC_MAGIC, 8)
+#define MNH_SM_IOC_RESUME \
+	_IO(MNH_SM_IOC_MAGIC, 9)
 
 struct mnh_mipi_config {
+	/* Tx dev MNH_MUX_DEVICE_TX* */
+	int		txdev;
 	/* Rx dev MNH_MUX_DEVICE_RX* */
 	int		rxdev;
 	/* RX MIPI transfer rate */
@@ -80,10 +67,4 @@ struct mnh_mipi_config {
 	int		is_gen3;
 };
 
-struct mnh_sm_configuration {
-	struct mnh_mipi_config *mipi_configs;
-	struct mnh_ddr_state *ddr_config;
-	unsigned int cur_mipi_config;
-};
-
-#endif /* __MNH_SM_CONFIG */
+#endif /* _UAPI__MNH_SM_H */

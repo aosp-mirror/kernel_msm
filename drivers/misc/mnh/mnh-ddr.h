@@ -48,7 +48,7 @@ struct mnh_ddr_internal_state {
 	u32 fsps[MNH_DDR_NUM_FSPS];
 };
 
-int mnh_ddr_po_init(struct device *dev, struct mnh_ddr_state *state);
+int mnh_ddr_po_init(struct device *dev);
 int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n);
 int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n);
 

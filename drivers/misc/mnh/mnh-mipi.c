@@ -21,8 +21,7 @@
 #include "mnh-hwio-mipi-tx.h"
 #include "mnh-hwio-mipi-top.h"
 #include "mnh-hwio-bases.h"
-#include "mnh-sm-config.h"
-
+#include "mnh-mipi.h"
 
 #define HWIO_MIPI_TX_BASE_ADDR_TXO HWIO_MIPI_TX_BASE_ADDR(0)
 #define HWIO_MIPI_RX_BASE_ADDR_RXO HWIO_MIPI_RX_BASE_ADDR(0)
@@ -631,10 +630,11 @@ static void mnh_mipi_gen3_device(uint32_t device, uint32_t rate)
 	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_RSTZ, PHY_RSTZ, 1);
 }
 
-int mnh_sm_mipi_bypass_gen3_init(struct mnh_mipi_config config, uint32_t txdev)
+static int mnh_sm_mipi_bypass_gen3_init(struct mnh_mipi_config config)
 {
 	unsigned int long data;
 	int i = 0;
+	uint32_t txdev = config.txdev;
 	uint32_t rxdev = config.rxdev;
 	uint32_t rx_rate = config.rx_rate;
 	uint32_t tx_rate = config.tx_rate;
@@ -807,25 +807,17 @@ int mnh_sm_mipi_bypass_gen3_init(struct mnh_mipi_config config, uint32_t txdev)
 	return 0;
 
 }
-EXPORT_SYMBOL_GPL(mnh_sm_mipi_bypass_gen3_init);
 
-
-int mnh_sm_mipi_bypass_init(struct mnh_sm_configuration *mnh_sm_boot_args)
+int mnh_sm_mipi_bypass_init(struct mnh_mipi_config config)
 {
-	int i;
-	struct mnh_mipi_config config;
+	pr_info("%s: txdev %d, rxdev %d, rx rate %d, tx rate %d\n",
+		__func__, config.txdev, config.rxdev, config.rx_rate,
+		config.tx_rate);
 
-	pr_info("%s: start\n", __func__);
-	for (i = 0; i < MNH_MUX_DEVICE_TX_MAX; i++) {
-		config = mnh_sm_boot_args->mipi_configs[i];
-		pr_info("%s: config %d, rxdev %d, rx rate %d, tx rate %d\n",
-			__func__, i, config.rxdev, config.rx_rate,
-			config.tx_rate);
-		if (config.is_gen3 == 0)
-			mnh_sm_mipi_bypass_init_haps();
-		else
-			mnh_sm_mipi_bypass_gen3_init(config, i);
-	}
+	if (config.is_gen3 == 0)
+		mnh_sm_mipi_bypass_init_haps();
+	else
+		mnh_sm_mipi_bypass_gen3_init(config);
 
 	return 0;
 }

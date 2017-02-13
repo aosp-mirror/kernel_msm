@@ -20,6 +20,7 @@
 #include "mnh-hwio-ddr-pi.h"
 #include "mnh-hwio-ddr-phy.h"
 #include "mnh-hwio-scu.h"
+#include "mnh-ddr-33-300-600-400.h"
 #include "mnh-ddr.h"
 #include "mnh-pcie.h"
 
@@ -78,6 +79,21 @@
 		mnh_reg_read(_state.phy_base + (regindex * sizeof(u32)))
 
 #define CLR_START(ddrblock) (_state.ddrblock[0] &= (0xFFFFFFFE))
+
+static struct mnh_ddr_state mnh_ddr_po_config = {
+	.bases = {
+		HWIO_DDR_CTL_BASE_ADDR,
+		HWIO_DDR_PHY_BASE_ADDR,
+		HWIO_DDR_PI_BASE_ADDR
+	},
+	.fsps = {
+		0x100B007D,
+		0x0433007D,
+		0x0311007D,
+		0x0422007D
+	},
+	&mnh_ddr_33_300_600_400,
+};
 
 struct mnh_ddr_internal_state _state;
 
@@ -260,11 +276,11 @@ int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n)
 EXPORT_SYMBOL(mnh_ddr_resume);
 
 
-int mnh_ddr_po_init(struct device *dev,
-		    struct mnh_ddr_state *state)
+int mnh_ddr_po_init(struct device *dev)
 {
 	int index;
 	int timeout = 0;
+	struct mnh_ddr_state *state = &mnh_ddr_po_config;
 
 	mnh_ddr_init_internal_state(state);
 
