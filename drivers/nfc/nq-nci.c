@@ -47,6 +47,7 @@ MODULE_DEVICE_TABLE(of, msm_match_table);
 
 #define MAX_BUFFER_SIZE			(320)
 #define WAKEUP_SRC_TIMEOUT		(2000)
+#define MAX_I2C_WRITE_RETRIES		(5)
 
 struct nqx_dev {
 	wait_queue_head_t	read_wq;
@@ -222,7 +223,7 @@ static ssize_t nfc_write(struct file *filp, const char __user *buf,
 {
 	struct nqx_dev *nqx_dev = filp->private_data;
 	char *tmp = NULL;
-	int ret = 0;
+	int ret = 0, i;
 
 	if (!nqx_dev) {
 		ret = -ENODEV;
@@ -243,13 +244,26 @@ static ssize_t nfc_write(struct file *filp, const char __user *buf,
 		goto out;
 	}
 
-	ret = i2c_master_send(nqx_dev->client, tmp, count);
+	for (i = 0; i < MAX_I2C_WRITE_RETRIES; i++) {
+		ret = i2c_master_send(nqx_dev->client, tmp, count);
+		if (ret < 0) {
+			dev_err(&nqx_dev->client->dev,
+			"%s: write failed(%d), retry no. %d\n", __func__, ret, i+1);
+		} else {
+			dev_dbg(&nqx_dev->client->dev,
+			"%s: write success(%d)\n", __func__, ret);
+			break;
+		}
+		msleep(20);
+	}
+
 	if (ret != count) {
 		dev_err(&nqx_dev->client->dev,
 		"%s: failed to write %d\n", __func__, ret);
 		ret = -EIO;
 		goto out_free;
 	}
+
 #ifdef NFC_KERNEL_BU
 	dev_dbg(&nqx_dev->client->dev,
 			"%s : i2c-%d: NfcNciTx %x %x %x\n",
