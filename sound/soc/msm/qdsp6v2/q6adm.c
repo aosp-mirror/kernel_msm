@@ -39,6 +39,7 @@
 #define ULL_SUPPORTED_SAMPLE_RATE 48000
 
 #define CMD_GET_HDR_SZ 16
+#define U16_MAX		((u16)~0U)
 
 enum {
 	ADM_CUSTOM_TOP_CAL = 0,
