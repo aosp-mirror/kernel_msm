@@ -451,7 +451,8 @@
 				config {
 					pins = "gpio13";
 					drive-strength = <2>;
-					bias-pull-down;
+					//bias-pull-down;
+					bias-pull-up;
 				};
 			};
 		};
@@ -481,7 +482,8 @@
 				config {
 					pins = "gpio12";
 					drive-strength = <2>;
-					bias-pull-down;
+					//bias-pull-down;
+					bias-pull-up;
 				};
 			};
 		};
