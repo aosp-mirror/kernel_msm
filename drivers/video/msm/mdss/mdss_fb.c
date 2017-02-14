@@ -967,7 +967,11 @@ static ssize_t mdss_fb_set_acl_mode(struct device *dev,
 	if ( 0 == mfd->index )
 	{
 		if (ctrl_pdata && ctrl_pdata->set_acl)
+		{
+			ctrl_pdata->acl_enable = acl_enable;
+			//effect acl feature in unblank state
 			ctrl_pdata->set_acl(pdata, acl_enable);
+		}
 	}
 
 	return count;
