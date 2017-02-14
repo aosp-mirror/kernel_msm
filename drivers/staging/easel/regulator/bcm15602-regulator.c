@@ -981,6 +981,9 @@ static int bcm15602_chip_init(struct bcm15602_chip *ddata)
 	bcm15602_print_id(ddata);
 	bcm15602_print_psm_event(ddata);
 
+	/* disable ASR differential sense */
+	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL0, 0x40, 0x00);
+
 	bcm15602_config_adc(ddata);
 	bcm15602_config_ints(ddata);
 
