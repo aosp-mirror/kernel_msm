@@ -135,6 +135,10 @@
 		};
 	};
 
+	audio_ext_clk_lnbb {
+		status = "disabled";
+	};
+
 	/delete-node/ msm_cdc_pinctrl@59;
 	/delete-node/ msm_cdc_pinctrl@60;
 };
