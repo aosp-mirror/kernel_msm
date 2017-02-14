@@ -34,10 +34,10 @@
 			qcom,warm-bat-decidegc = <450>;
 			qcom,cool-bat-decidegc = <170>;
 			qcom,cold-bat-decidegc = <0>;
-			qcom,fastchg-ma = <250>;
+			qcom,fastchg-ma = <100>;
 			qcom,soft-temp-vfloat-comp-mv = <80>;
-			qcom,soft-temp-current-comp-ma = <250>;
-			cei,max-ac-current-ma = <500>;
+			qcom,soft-temp-current-comp-ma = <100>;
+			cei,max-ac-current-ma = <300>;
 			cei,prechg-current-ma = <20>;
 			cei,chg-en-active = <0>;
 			cei,sys-voltage = <2>;
