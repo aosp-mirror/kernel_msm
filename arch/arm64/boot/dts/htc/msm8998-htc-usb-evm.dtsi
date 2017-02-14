@@ -89,5 +89,7 @@
 };
 
 &pmi8998_charger {
+	qcom,hvdcp-disable;		/* disable HVDCP */
+
 	external-vbus-supply = <&tps61099_vbus>;
 };

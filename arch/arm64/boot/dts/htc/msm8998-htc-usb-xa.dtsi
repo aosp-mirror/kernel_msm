@@ -34,3 +34,7 @@
 		status = "okay";
 	};
 };
+
+&pmi8998_charger {
+	qcom,hvdcp-disable;		/* disable HVDCP */
+};
