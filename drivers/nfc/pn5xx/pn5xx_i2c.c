@@ -47,6 +47,7 @@
 #include <linux/clk.h>
 #include <linux/wakelock.h>
 #define DATA_TRANSFER_INTERVAL (2*HZ)
+#define READ_DATA_TIMEOUT (100)
 #define SIG_NFC 44
 #define MAX_BUFFER_SIZE    512
 
@@ -164,14 +165,7 @@ static irqreturn_t pn5xx_dev_irq_handler(int irq, void *dev_id)
 
 static int pn5xx_suspend(struct i2c_client *client, pm_message_t mesg)
 {
-    struct pn5xx_dev *pn5xx_dev;
     pr_info("%s\n", __func__);
-    pn5xx_dev = i2c_get_clientdata(client);
-    if(!gpio_get_value(pn5xx_dev->clkreq_gpio))
-    {
-        pr_info("%s,  clkreq_gpio is 0 \n", __func__);
-        pn5xx_clock_disable(pn5xx_dev);
-    }
     return 0;
 }
 
@@ -478,6 +472,11 @@ static ssize_t pn5xx_dev_read(struct file *filp, char __user *buf,
     if(0 != wake_lock_active(&pn5xx_dev->wake_lock))
     {
         wake_unlock(&pn5xx_dev->wake_lock);
+    }
+    if(gpio_get_value(pn5xx_dev->clkreq_gpio))
+    {
+        pr_err("%s: wake_lock_timeout in POS when read\n", __func__);
+        wake_lock_timeout(&pn5xx_dev->wake_lock, READ_DATA_TIMEOUT);
     }
     if (ret < 0) {
         pr_err("%s: i2c_master_recv returned %d\n", __func__, ret);
