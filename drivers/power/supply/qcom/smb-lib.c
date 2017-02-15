@@ -1296,13 +1296,8 @@ static int smblib_hvdcp_enable_vote_callback(struct votable *votable,
 	/* vote to enable/disable HW autonomous INOV */
 	vote(chg->hvdcp_hw_inov_dis_votable, client, !hvdcp_enable, 0);
 
-	/*
-	 * Disable the autonomous bit and auth bit for disabling hvdcp.
-	 * This ensures only qc 2.0 detection runs but no vbus
-	 * negotiation happens.
-	 */
 	if (!hvdcp_enable)
-		val = HVDCP_EN_BIT;
+		val = 0;
 
 	rc = smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
 				 HVDCP_EN_BIT | HVDCP_AUTH_ALG_EN_CFG_BIT,
