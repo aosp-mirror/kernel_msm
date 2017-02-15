@@ -32,7 +32,10 @@
 #define DRIVER_NAME "bcm15602"
 
 /* defines the timeout in jiffies for reset completion */
-#define BCM15602_RESET_TIMEOUT msecs_to_jiffies(50)
+#define BCM15602_PON_RESET_TIMEOUT msecs_to_jiffies(50)
+
+/* defines the timeout in jiffies for reset completion after shutdown */
+#define BCM15602_SHUTDOWN_RESET_TIMEOUT msecs_to_jiffies(10000)
 
 /* defines the timeout in jiffies for ADC conversion completion */
 #define BCM15602_ADC_CONV_TIMEOUT  msecs_to_jiffies(25)
@@ -308,7 +311,7 @@ int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
 {
 	u8 bytes[2];
 	int ret = 0;
-	int timeout;
+	unsigned long timeout;
 
 	/* serialize manual adc conversions */
 	if (test_and_set_bit(0, &ddata->adc_conv_busy))
@@ -324,9 +327,9 @@ int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
 	reinit_completion(&ddata->adc_conv_complete);
 	timeout = wait_for_completion_timeout(&ddata->adc_conv_complete,
 					  BCM15602_ADC_CONV_TIMEOUT);
-	if (timeout <= 0) {
-		ret = (timeout == 0) ? -ETIMEDOUT : timeout;
-		dev_err(ddata->dev, "ADC converstion failed (%d)\n", ret);
+	if (!timeout) {
+		ret = -ETIMEDOUT;
+		dev_err(ddata->dev, "ADC converstion timeout\n");
 		goto finish;
 	}
 
@@ -613,12 +616,46 @@ static int bcm15602_check_int_flags(struct bcm15602_chip *ddata)
 	return 0;
 }
 
+/* kernel thread for waiting for chip to come out of reset */
+static void bcm15602_reset_work(struct work_struct *data)
+{
+	struct bcm15602_chip *ddata = container_of(data, struct bcm15602_chip,
+						   reset_work);
+	unsigned long timeout;
+
+	/* notify regulators of shutdown event */
+	dev_err(ddata->dev,
+		"%s: Notifying regulators of shutdown event\n", __func__);
+	NOTIFY(BCM15602_ID_ASR, REGULATOR_EVENT_FAIL);
+	NOTIFY(BCM15602_ID_SDSR, REGULATOR_EVENT_FAIL);
+	NOTIFY(BCM15602_ID_IOLDO, REGULATOR_EVENT_FAIL);
+	NOTIFY(BCM15602_ID_SDLDO, REGULATOR_EVENT_FAIL);
+
+	dev_err(ddata->dev,
+		"%s: waiting for chip to come out of reset\n", __func__);
+
+	/* wait for chip to come out of reset, signaled by resetb interrupt */
+	timeout = wait_for_completion_timeout(&ddata->reset_complete,
+					      BCM15602_SHUTDOWN_RESET_TIMEOUT);
+	if (!timeout)
+		dev_err(ddata->dev,
+			"%s: timeout waiting for device to return from reset\n",
+			__func__);
+	else
+		bcm15602_chip_init(ddata);
+}
+
 /* irq handler for resetb pin */
 static irqreturn_t bcm15602_resetb_irq_handler(int irq, void *cookie)
 {
 	struct bcm15602_chip *ddata = (struct bcm15602_chip *)cookie;
 
-	complete(&ddata->reset_complete);
+	if (gpio_get_value(ddata->pdata->resetb_gpio)) {
+		complete(&ddata->reset_complete);
+	} else {
+		dev_err(ddata->dev, "%s: unexpected device reset\n", __func__);
+		schedule_work(&ddata->reset_work);
+	}
 
 	return IRQ_HANDLED;
 }
@@ -976,8 +1013,6 @@ static void bcm15602_disable_wdt(struct bcm15602_chip *ddata)
 /* initialize the chip */
 static int bcm15602_chip_init(struct bcm15602_chip *ddata)
 {
-	struct bcm15602_platform_data *pdata = ddata->pdata;
-
 	bcm15602_print_id(ddata);
 	bcm15602_print_psm_event(ddata);
 
@@ -986,8 +1021,6 @@ static int bcm15602_chip_init(struct bcm15602_chip *ddata)
 
 	bcm15602_config_adc(ddata);
 	bcm15602_config_ints(ddata);
-
-	enable_irq(pdata->intb_irq);
 
 	return 0;
 }
@@ -998,7 +1031,8 @@ static int bcm15602_probe(struct i2c_client *client,
 	struct device *dev = &client->dev;
 	struct bcm15602_chip *ddata;
 	struct bcm15602_platform_data *pdata;
-	int timeout, ret;
+	unsigned long timeout;
+	int ret;
 
 	/* allocate memory for chip structure */
 	ddata = devm_kzalloc(dev, sizeof(struct bcm15602_chip),
@@ -1021,6 +1055,9 @@ static int bcm15602_probe(struct i2c_client *client,
 	ddata->dev = dev;
 	ddata->pdata = pdata;
 	dev->platform_data = pdata;
+
+	/* initialize some structures */
+	INIT_WORK(&ddata->reset_work, bcm15602_reset_work);
 
 	/* initialize completions */
 	init_completion(&ddata->reset_complete);
@@ -1056,16 +1093,12 @@ static int bcm15602_probe(struct i2c_client *client,
 					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 					"bcm15602-intb", ddata);
 
-	/* disable intb_irq until chip interrupts are programmed */
-	disable_irq(pdata->intb_irq);
-
 	/* wait for chip to come out of reset, signaled by resetb interrupt */
 	timeout = wait_for_completion_timeout(&ddata->reset_complete,
-					      BCM15602_RESET_TIMEOUT);
-	if (timeout <= 0) {
-		ret = (timeout == 0) ? -ETIMEDOUT : timeout;
-		dev_err(dev, "error waiting for device to return from reset (%d)\n",
-			ret);
+					      BCM15602_PON_RESET_TIMEOUT);
+	if (!timeout) {
+		ret = -ETIMEDOUT;
+		dev_err(dev, "timeout waiting for device to return from reset\n");
 		goto error_reset;
 	}
 

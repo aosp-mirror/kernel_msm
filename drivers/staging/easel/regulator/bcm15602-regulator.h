@@ -295,6 +295,9 @@ struct bcm15602_chip {
 	u16 hk_status;
 	bool wdt_enabled;
 
+	/* kernel thread for waiting for reset after shutdown */
+	struct work_struct reset_work;
+
 	/* completion used for initialization */
 	struct completion reset_complete;
 

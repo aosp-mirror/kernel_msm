@@ -195,17 +195,19 @@ static ssize_t bcm15602_attr_show_total_power(struct device *dev,
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
 	int asr_curr, sdsr_curr, sdldo_curr, ioldo_curr;
-	int total_power;
+	long int total_power;
 
 	bcm15602_get_asr_curr(ddata, &asr_curr);
 	bcm15602_get_sdsr_curr(ddata, &sdsr_curr);
 	bcm15602_get_sdldo_curr(ddata, &sdldo_curr);
 	bcm15602_get_ioldo_curr(ddata, &ioldo_curr);
 
-	total_power = (asr_curr * 950 / 1000) + (sdsr_curr * 1100 / 1000) +
-		(sdldo_curr * 1800 / 1000) + (ioldo_curr * 1800 / 1000);
+	total_power = (((long int)asr_curr) * 950 / 1000) +
+		(((long int)sdsr_curr) * 1100 / 1000) +
+		(((long int)sdldo_curr) * 1800 / 1000) +
+		(((long int)ioldo_curr) * 1800 / 1000);
 
-	return snprintf(data, PAGE_SIZE, "%d\n", total_power);
+	return snprintf(data, PAGE_SIZE, "%ld\n", total_power);
 }
 
 static ssize_t bcm15602_attr_show_hk_status(struct device *dev,
