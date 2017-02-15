@@ -40,7 +40,6 @@
 #include "mnh-sm.h"
 
 static atomic_t easel_sessions = ATOMIC_INIT(0);
-static struct mnh_sm_configuration easel_config;
 static int valid_easel;
 #endif
 
@@ -702,8 +701,7 @@ static int camera_v4l2_open(struct file *filep)
 #ifdef CONFIG_GOOGLE_EASEL
 	if (valid_easel && atomic_inc_return(&easel_sessions) == 1) {
 		pr_debug("enabling easel\n");
-		mnh_sm_poweron(easel_config);
-		mnh_sm_config(easel_config);
+		mnh_sm_set_state(MNH_STATE_CONFIG_MIPI);
 	}
 #endif
 
@@ -795,7 +793,7 @@ static int camera_v4l2_close(struct file *filep)
 #ifdef CONFIG_GOOGLE_EASEL
 	if (valid_easel && atomic_dec_and_test(&easel_sessions)) {
 		pr_debug("disabling easel\n");
-		mnh_sm_poweroff(easel_config);
+		mnh_sm_set_state(MNH_STATE_OFF);
 	}
 #endif
 
@@ -944,7 +942,6 @@ int camera_init_v4l2(struct device *dev, unsigned int *session)
 
 #ifdef CONFIG_GOOGLE_EASEL
 	valid_easel = mnh_sm_is_present();
-	mnh_sm_get_default_config(&easel_config);
 #endif
 
 	*session = pvdev->vdev->num;
