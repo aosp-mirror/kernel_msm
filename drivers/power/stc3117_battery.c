@@ -193,7 +193,7 @@
 static const int TempTable[NTEMP] = {60, 40, 25, 10, 0, -10, -20};
 static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 static const char *charger_name = "battery";
-//static int g_low_battery_counter;
+static int g_low_battery_counter = 0;
 static bool g_debug, g_standby_mode;
 static int g_ui_soc, g_last_status, g_ocv;
 static const char * const charge_status[] = {
@@ -324,7 +324,7 @@ int Capacity_Adjust;
 /* ------------------------------------------------------------------------ */
 
 #define STC311x_BATTERY_FULL 100
-#define STC311x_DELAY	 500 //5 sec
+#define STC311x_DELAY	 3000 //30 sec
 #define STC311x_DELAY_LOW_BATT 500 //5 sec
 #define STC311x_SOC_THRESHOLD 5
 
@@ -1978,21 +1978,21 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 		BattData.SOC = CompensateSOC(BattData.SOC,
 					     BattData.Temperature);
 		if (g_debug)
-			pr_err("after CompensateSOC: BattData.SOC = %d (0.1), temp = %d degC \n", BattData.SOC, BattData.Temperature);
+			pr_err("temperature compensate SOC: BattData.SOC = %d (0.1), temp = %d degC \n", BattData.SOC, BattData.Temperature);
 
 		/*early empty compensation*/
 		value = BattData.AvgVoltage;
 		if (BattData.Voltage < value)
 			value = BattData.Voltage;
-		if (value < (APP_MIN_VOLTAGE+200) &&
+		if (value < (APP_MIN_VOLTAGE+50) &&
 		    value > (APP_MIN_VOLTAGE-500)) {
-			if (value < APP_MIN_VOLTAGE)
+			if ((value < APP_MIN_VOLTAGE) && ((BattData.AvgCurrent > -100) && (BattData.AvgCurrent < 0)))
 				BattData.SOC = 0;
 			else
 				BattData.SOC = BattData.SOC *
-					(value - APP_MIN_VOLTAGE) / 200;
+					(value - APP_MIN_VOLTAGE) / 50;
 			if (g_debug)
-				pr_err("early compensation:  BattData.SOC = %d (0.1)\n", BattData.SOC);
+				pr_err("early empty compensation:  AvgVoltage = %d, Voltage = %d, BattData.SOC = %d (0.1)\n", BattData.AvgVoltage, BattData.Voltage, BattData.SOC);
 		}
 
 		BattData.AccVoltage += (BattData.Voltage - BattData.AvgVoltage);
@@ -2400,83 +2400,63 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 }
 
 /*
-* 1. If charge is fulled and charger exists, keep soc = 100%
-* 2. The moment when charger is removed, if soc = 100% and drops, keep 100%. Else, update soc
-* 3. When discharging, soc can only decrease
-* 4. If SOC = 0% and in charging, show SOC = 1%
+* 1. If charge is full and charger exists, keep soc = 100%
+* 2. If SOC = 0% and in charging, show SOC = 1%
+* 3. The moment when charger is removed, if soc = 100% and drops, keep 100%. Else, update soc
+* 4. When discharging, soc can only decrease
 */
 void UI_soc_adjustment(struct stc311x_chip *chip)
 {
-	pr_err("charging status = %d, UI soc = %d,  ST soc = %d \n", chip->status,  g_ui_soc, chip->batt_soc);
-	if ((g_ui_soc == STC311x_BATTERY_FULL) && (chip->status != POWER_SUPPLY_STATUS_DISCHARGING))
-		return;
+    pr_err("charging status = %d, UI soc = %d,  ST soc = %d \n", chip->status,  g_ui_soc, chip->batt_soc);
 
-	if (chip->batt_soc == 0) {
-		if (chip->status == POWER_SUPPLY_STATUS_CHARGING)
-			g_ui_soc = 1;
-		else
-			g_ui_soc = 0;
-		return;
-	}
+    //special case
+    if((g_ui_soc == STC311x_BATTERY_FULL) && (chip->status != POWER_SUPPLY_STATUS_DISCHARGING))
+        return;
 
-	if (chip->status == POWER_SUPPLY_STATUS_DISCHARGING) {
-		//charger is plugged out
-		if (g_last_status != POWER_SUPPLY_STATUS_DISCHARGING) {
-			if (g_ui_soc == STC311x_BATTERY_FULL)
-				return;
-			else {
-				g_ui_soc = chip->batt_soc;
-				pr_info("charger plugged out, update SOC = %d \n", g_ui_soc);
-				return;
-			}
-		}
+    if((chip->batt_soc == 0) && (chip->status == POWER_SUPPLY_STATUS_CHARGING) && (chip->batt_current > 0))
+    {
+        g_ui_soc = 1;
+        return;
+    }
 
-		//when discharging, the new SOC can only decrease
-		if (chip->batt_soc > g_ui_soc) {
-			pr_err("Discharging, new soc = %d > original soc = %d, abort \n", chip->batt_soc, g_ui_soc);
-			return;
-		} else
-			g_ui_soc = chip->batt_soc;
-	} else
-		g_ui_soc = chip->batt_soc;
+    if(chip->status == POWER_SUPPLY_STATUS_DISCHARGING)
+    {
+        //charger is plugged out
+        if ((g_last_status != POWER_SUPPLY_STATUS_DISCHARGING) && (g_ui_soc == STC311x_BATTERY_FULL))
+            return;
 
+        //when discharging, the new SOC can only decrease
+        if (chip->batt_soc > g_ui_soc)
+            pr_err("Discharging, new soc = %d > original soc = %d, abort \n", chip->batt_soc, g_ui_soc);
+    }
+
+
+    //normal case
+    if((chip->status == POWER_SUPPLY_STATUS_CHARGING) && (chip->batt_current >= 0))
+    {
+        if(g_ui_soc < chip->batt_soc)
+        {
+            g_ui_soc++;
+        }
+    }
+    else if((chip->status == POWER_SUPPLY_STATUS_CHARGING) && (chip->batt_current <= 0))
+    {
+        if(g_ui_soc > (chip->batt_soc + 5) || (chip->batt_voltage < APP_MIN_VOLTAGE))
+        {
+            g_ui_soc--;
+        }
+    }
+    else if((chip->status == POWER_SUPPLY_STATUS_DISCHARGING) && (chip->batt_current <= 0))
+    {
+        if((g_ui_soc > chip->batt_soc) || (chip->batt_voltage < APP_MIN_VOLTAGE))
+        {
+            g_ui_soc--;
+        }
+    }
+
+    if(g_debug)
+        pr_err("-charging status = %d, UI soc = %d,  ST soc = %d \n", chip->status,  g_ui_soc, chip->batt_soc);
 }
-
-/*
-static int stc311x_get_pmic_batt_therm(struct stc311x_chip *chip, int *batt_temp)
-{
-	struct qpnp_vadc_result result;
-	int res;
-
-	// get pm8916 vadc
-	if (NULL == chip->vadc_dev) {
-		chip->vadc_dev = qpnp_get_vadc(chip->dev, "pm8916");
-		if (IS_ERR(chip->vadc_dev)) {
-			res = PTR_ERR(chip->vadc_dev);
-			if (res == -EPROBE_DEFER)
-				pr_err("stc311x - pm8916 vadc not found - defer rc \n");
-			else
-				pr_err("stc311x - fail to get the pm8916 vadc \n");
-			chip->vadc_dev = NULL;
-
-			return -1;
-		}
-	}
-
-	res = qpnp_vadc_read(chip->vadc_dev, LR_MUX1_BATT_THERM, &result);
-	if (res) {
-		pr_err("error reading adc channel = %d, res = %d\n",
-					LR_MUX1_BATT_THERM, res);
-		return res;
-	}
-	pr_err("batt_temp phy = %lld meas = 0x%llx\n",
-			result.physical, result.measurement);
-
-	*batt_temp = (int)result.physical;
-
-	return 0;
-}
-*/
 
 static void stc311x_work(struct work_struct *work)
 {
@@ -2580,8 +2560,28 @@ static void stc311x_work(struct work_struct *work)
 
 	stc311x_check_charger_state(chip);
 
-	if (((res > 0) && (chip->batt_soc ^ g_ui_soc)) || (chip->batt_soc == 0))
-		UI_soc_adjustment(chip);
+	if ((chip->batt_soc ^ g_ui_soc) || (chip->batt_soc == 0))
+	{
+		if(g_ui_soc > STC311x_SOC_THRESHOLD)
+		{
+			g_low_battery_counter = 0;
+
+			UI_soc_adjustment(chip);
+		}
+		else
+		{
+			if(g_low_battery_counter <= 1)
+			{
+				g_low_battery_counter++;
+			}
+			else
+			{
+				g_low_battery_counter = 0;
+
+				UI_soc_adjustment(chip);
+			}
+		}
+	}
 
 	//Control SOC between  0 - 100%
 	if (g_ui_soc >= 100)
