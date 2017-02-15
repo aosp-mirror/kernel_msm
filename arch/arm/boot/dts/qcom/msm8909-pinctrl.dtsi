@@ -1456,12 +1456,12 @@
 		pmx_rd_nfc_int {
 			nfc_int_active: active {
 				mux {
-					pins = "gpio21";
+					pins = "gpio33";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio21";
+					pins = "gpio33";
 					drive-strength = <6>;
 					bias-pull-up;
 				};
@@ -1469,12 +1469,12 @@
 
 			nfc_int_suspend: suspend {
 				mux {
-					pins = "gpio21";
+					pins = "gpio33";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio21";
+					pins = "gpio33";
 					drive-strength = <6>;
 					bias-pull-up;
 				};
@@ -1484,12 +1484,12 @@
 		pmx_nfc_power {
 			nfc_enable_active: active {
 				mux {
-					pins = "gpio20";
+					pins = "gpio32";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio20";
+					pins = "gpio32";
 					drive-strength = <6>;
 					bias-pull-up;
 				};
@@ -1497,12 +1497,12 @@
 
 			nfc_enable_suspend: suspend {
 				mux {
-					pins = "gpio20";
+					pins = "gpio32";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio20";
+					pins = "gpio32";
 					drive-strength = <6>;
 					bias-disable;
 				};
