@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -119,7 +119,7 @@ struct adreno_dispatcher {
 	atomic_t fault;
 	struct plist_head pending;
 	spinlock_t plist_lock;
-	struct work_struct work;
+	struct kthread_work work;
 	struct kobject kobj;
 	struct completion idle_gate;
 	atomic_t preemption_state;
