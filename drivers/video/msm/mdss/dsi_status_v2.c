@@ -140,11 +140,12 @@ void mdp3_check_dsi_ctrl_status(struct work_struct *work,
 		pr_err("%s: wait_for_dma_done error\n", __func__);
 
 	if (mdss_fb_is_power_on(pdsi_status->mfd)) {
-		if (ret > 0)
-			schedule_delayed_work(&pdsi_status->check_status,
-						msecs_to_jiffies(interval));
-		else
-			goto status_dead;
+		if (ret <= 0) {
+			pr_err("send esd recovery\n");
+			mdss_dsi_esd_recovery(ctrl_pdata);
+		}
+		schedule_delayed_work(&pdsi_status->check_status,
+					msecs_to_jiffies(interval));
 	}
 sim:
 	if (pdata->panel_info.panel_force_dead) {
