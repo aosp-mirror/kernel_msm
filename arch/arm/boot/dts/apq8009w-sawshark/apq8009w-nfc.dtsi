@@ -21,8 +21,9 @@
             nxp,pn5xx-ven = <&msm_gpio 34 0x00>;
             nxp,pn5xx-fw-dwnld = <&msm_gpio 32 0x00>;
             nxp,pn5xx-ese-pwr = <&msm_gpio 51 0x00>;
-            clocks = <&clock_rpm clk_bb_clk2>;
+            clocks = <&clock_rpm clk_bb_clk2_pin>;
             clock-names = "bbclk2";
+            qcom,clk-src = "BBCLK2";
             nxp,pn5xx-clkreq = <&pm8916_gpios 2 0>;
         };
      };
