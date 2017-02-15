@@ -53,6 +53,8 @@ struct mnh_pwr_data {
 	/* clocks */
 	struct clk *ref_clk;
 	struct clk *sleep_clk;
+	bool ref_clk_enabled;
+	bool sleep_clk_enabled;
 
 	/* pins */
 	struct gpio_desc *boot_mode_pin;
@@ -71,15 +73,13 @@ struct mnh_pwr_data {
 
 static struct mnh_pwr_data *mnh_pwr;
 
-static int mnh_pwr_down(void);
-
 static void mnh_pwr_shutdown_work(struct work_struct *data)
 {
 	dev_err(mnh_pwr->dev, "%s: begin emergency power down\n", __func__);
 
 	/* need to do something to save root complex config information */
 
-	mnh_pwr_down();
+	mnh_pwr_set_state(MNH_PWR_S4);
 }
 
 static int mnh_pwr_asr_notifier_cb(struct notifier_block *nb,
@@ -93,7 +93,8 @@ static int mnh_pwr_asr_notifier_cb(struct notifier_block *nb,
 			"%s: asr supply has failed, forcing shutdown\n",
 			__func__);
 
-		schedule_work(&mnh_pwr->shutdown_work);
+		if (mnh_pwr->state != MNH_PWR_S4)
+			schedule_work(&mnh_pwr->shutdown_work);
 	}
 
 	return 0;
@@ -110,7 +111,8 @@ static int mnh_pwr_sdsr_notifier_cb(struct notifier_block *nb,
 			"%s: sdsr supply has failed, forcing shutdown\n",
 			__func__);
 
-		schedule_work(&mnh_pwr->shutdown_work);
+		if (mnh_pwr->state != MNH_PWR_S4)
+			schedule_work(&mnh_pwr->shutdown_work);
 	}
 
 	return 0;
@@ -127,7 +129,8 @@ static int mnh_pwr_ioldo_notifier_cb(struct notifier_block *nb,
 			"%s: ioldo supply has failed, forcing shutdown\n",
 			__func__);
 
-		schedule_work(&mnh_pwr->shutdown_work);
+		if (mnh_pwr->state != MNH_PWR_S4)
+			schedule_work(&mnh_pwr->shutdown_work);
 	}
 
 	return 0;
@@ -144,7 +147,8 @@ static int mnh_pwr_sdldo_notifier_cb(struct notifier_block *nb,
 			"%s: sdldo supply has failed, forcing shutdown\n",
 			__func__);
 
-		schedule_work(&mnh_pwr->shutdown_work);
+		if (mnh_pwr->state != MNH_PWR_S4)
+			schedule_work(&mnh_pwr->shutdown_work);
 	}
 
 	return 0;
@@ -355,8 +359,14 @@ static int mnh_pwr_down(void)
 	gpiod_set_value_cansleep(mnh_pwr->soc_pwr_good_pin, 0);
 
 	/* disable clocks */
-	clk_disable_unprepare(mnh_pwr->ref_clk);
-	clk_disable_unprepare(mnh_pwr->sleep_clk);
+	if (mnh_pwr->ref_clk_enabled) {
+		clk_disable_unprepare(mnh_pwr->ref_clk);
+		mnh_pwr->ref_clk_enabled = false;
+	}
+	if (mnh_pwr->sleep_clk_enabled) {
+		clk_disable_unprepare(mnh_pwr->sleep_clk);
+		mnh_pwr->sleep_clk_enabled = false;
+	}
 
 	/* disable supplies: sdsr -> asr -> ioldo -> sdldo */
 	ret = regulator_disable(mnh_pwr->sdsr_supply);
@@ -396,8 +406,14 @@ static int mnh_pwr_down(void)
 
 fail_pwr_down_pcie:
 	gpiod_set_value_cansleep(mnh_pwr->soc_pwr_good_pin, 0);
-	clk_disable_unprepare(mnh_pwr->sleep_clk);
-	clk_disable_unprepare(mnh_pwr->ref_clk);
+	if (mnh_pwr->sleep_clk_enabled) {
+		clk_disable_unprepare(mnh_pwr->sleep_clk);
+		mnh_pwr->sleep_clk_enabled = false;
+	}
+	if (mnh_pwr->ref_clk_enabled) {
+		clk_disable_unprepare(mnh_pwr->ref_clk);
+		mnh_pwr->ref_clk_enabled = false;
+	}
 	if (regulator_is_enabled(mnh_pwr->sdsr_supply))
 		regulator_disable(mnh_pwr->sdsr_supply);
 fail_pwr_down_sdsr:
@@ -441,8 +457,14 @@ static int mnh_pwr_suspend(void)
 	gpiod_set_value_cansleep(mnh_pwr->soc_pwr_good_pin, 0);
 
 	/* disable clocks */
-	clk_disable_unprepare(mnh_pwr->ref_clk);
-	clk_disable_unprepare(mnh_pwr->sleep_clk);
+	if (mnh_pwr->ref_clk_enabled) {
+		clk_disable_unprepare(mnh_pwr->ref_clk);
+		mnh_pwr->ref_clk_enabled = false;
+	}
+	if (mnh_pwr->sleep_clk_enabled) {
+		clk_disable_unprepare(mnh_pwr->sleep_clk);
+		mnh_pwr->sleep_clk_enabled = false;
+	}
 
 	/* disable core supplies */
 	ret = regulator_disable(mnh_pwr->asr_supply);
@@ -466,8 +488,14 @@ static int mnh_pwr_suspend(void)
 fail_pwr_suspend_pcie:
 	gpiod_set_value_cansleep(mnh_pwr->ddr_pad_iso_n_pin, 1);
 	gpiod_set_value_cansleep(mnh_pwr->soc_pwr_good_pin, 0);
-	clk_disable_unprepare(mnh_pwr->sleep_clk);
-	clk_disable_unprepare(mnh_pwr->ref_clk);
+	if (mnh_pwr->sleep_clk_enabled) {
+		clk_disable_unprepare(mnh_pwr->sleep_clk);
+		mnh_pwr->sleep_clk_enabled = false;
+	}
+	if (mnh_pwr->ref_clk_enabled) {
+		clk_disable_unprepare(mnh_pwr->ref_clk);
+		mnh_pwr->ref_clk_enabled = false;
+	}
 fail_pwr_suspend_regulators:
 	if (regulator_is_enabled(mnh_pwr->sdsr_supply))
 		regulator_disable(mnh_pwr->sdsr_supply);
@@ -528,18 +556,26 @@ static int mnh_pwr_up(void)
 	}
 
 	/* turn on clocks */
-	ret = clk_prepare_enable(mnh_pwr->ref_clk);
-	if (ret) {
-		dev_err(mnh_pwr->dev, "%s: failed to enable ref clk (%d)\n",
-			__func__, ret);
-		goto fail_pwr_up_ref_clk;
+	if (!mnh_pwr->ref_clk_enabled) {
+		ret = clk_prepare_enable(mnh_pwr->ref_clk);
+		if (ret) {
+			dev_err(mnh_pwr->dev,
+				"%s: failed to enable ref clk (%d)\n",
+				__func__, ret);
+			goto fail_pwr_up_ref_clk;
+		}
+		mnh_pwr->ref_clk_enabled = true;
 	}
 
-	ret = clk_prepare_enable(mnh_pwr->sleep_clk);
-	if (ret) {
-		dev_err(mnh_pwr->dev, "%s: failed to enable sleep clk (%d)\n",
-			__func__, ret);
-		goto fail_pwr_up_sleep_clk;
+	if (!mnh_pwr->sleep_clk_enabled) {
+		ret = clk_prepare_enable(mnh_pwr->sleep_clk);
+		if (ret) {
+			dev_err(mnh_pwr->dev,
+				"%s: failed to enable sleep clk (%d)\n",
+				__func__, ret);
+			goto fail_pwr_up_sleep_clk;
+		}
+		mnh_pwr->sleep_clk_enabled = true;
 	}
 
 	/* assert soc_pwr_good */
@@ -566,9 +602,15 @@ static int mnh_pwr_up(void)
 
 fail_pwr_up_pcie:
 	gpiod_set_value_cansleep(mnh_pwr->soc_pwr_good_pin, 0);
-	clk_disable_unprepare(mnh_pwr->sleep_clk);
+	if (mnh_pwr->sleep_clk_enabled) {
+		clk_disable_unprepare(mnh_pwr->sleep_clk);
+		mnh_pwr->sleep_clk_enabled = false;
+	}
 fail_pwr_up_sleep_clk:
-	clk_disable_unprepare(mnh_pwr->ref_clk);
+	if (mnh_pwr->ref_clk_enabled) {
+		clk_disable_unprepare(mnh_pwr->ref_clk);
+		mnh_pwr->ref_clk_enabled = false;
+	}
 fail_pwr_up_ref_clk:
 fail_pwr_up_regulators:
 	if (regulator_is_enabled(mnh_pwr->sdsr_supply))
