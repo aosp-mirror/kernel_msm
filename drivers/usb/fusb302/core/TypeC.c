@@ -1453,7 +1453,7 @@ void SetStateAttachedSource(void)
     
     platform_set_vbus_lvl_enable(VBUS_LVL_5V, TRUE, TRUE);                      // Enable only the 5V output
     if (!IsPRSwap)
-        platform_notify_attached_source(1);
+        platform_notify_attached_source(1, true);
     ConnState = AttachedSource;                                                 // Set the state machine variable to Attached.Src
     TypeCSubState = 0;
     sourceOrSink = SOURCE;

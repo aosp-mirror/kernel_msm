@@ -850,7 +850,7 @@ void PolicySourceTransitionDefault(void)
                 PolicyIsDFP = TRUE;;                                            // Set the current data role
                 Registers.Switches.DATAROLE = PolicyIsDFP;                      // Update the data role
                 DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]);      // Commit the data role in the 302
-                platform_notify_attached_source(PolicyIsDFP);
+                platform_notify_attached_source(PolicyIsDFP, true);
             }
             if(IsVCONNSource)                                                   // Disable VCONN if VCONN Source
             {
@@ -1363,7 +1363,7 @@ void PolicySourceSendDRSwap(void)
                             DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]); // Commit the data role in the 302 for the auto CRC
                             PolicyState = peSourceReady;                        // Source ready state
                             pr_info("FUSB %s: accept, PolicyIsDFP(%d)\n", __func__, PolicyIsDFP);
-                            platform_notify_attached_source(PolicyIsDFP);
+                            platform_notify_attached_source(PolicyIsDFP, true);
                             break;
                         case CMTSoftReset:
                             PolicyState = peSourceSoftReset;                    // Go to the soft reset state if we received a reset command
@@ -1410,7 +1410,7 @@ void PolicySourceEvaluateDRSwap(void)
         Registers.Switches.DATAROLE = PolicyIsDFP;                          // Update the data role
         DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]);          // Commit the data role in the 302 for the auto CRC
         pr_info("FUSB %s: accept, PolicyIsDFP(%d)\n", __func__, PolicyIsDFP);
-        platform_notify_attached_source(PolicyIsDFP);
+        platform_notify_attached_source(PolicyIsDFP, true);
     }
     else if (Status == STAT_ERROR)                                          // If we didn't receive the good CRC...
     {
@@ -1897,7 +1897,7 @@ void PolicySinkTransitionDefault(void)
                 PolicyIsDFP = FALSE;                                            // Set the current data role
                 Registers.Switches.DATAROLE = PolicyIsDFP;                      // Update the data role
                 DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]);      // Commit the data role in the 302
-                platform_notify_attached_source(PolicyIsDFP);
+                platform_notify_attached_source(PolicyIsDFP, true);
             }
             if(IsVCONNSource)                                                   // Disable VCONN if VCONN Source
             {
@@ -2505,7 +2505,7 @@ void PolicySinkSendDRSwap(void)
                             DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]); // Commit the data role in the 302 for the auto CRC
                             PolicyState = peSinkReady;                          // Sink ready state
                             pr_info("FUSB %s: accept, PolicyIsDFP(%d)\n", __func__, PolicyIsDFP);
-                            platform_notify_attached_source(PolicyIsDFP);
+                            platform_notify_attached_source(PolicyIsDFP, true);
                             break;
                         case CMTSoftReset:
                             PolicyState = peSinkSoftReset;                      // Go to the soft reset state if we received a reset command
@@ -2553,7 +2553,7 @@ void PolicySinkEvaluateDRSwap(void)
         Registers.Switches.DATAROLE = PolicyIsDFP;                          // Update the data role
         DeviceWrite(regSwitches1, 1, &Registers.Switches.byte[1]);         // Commit the data role in the 302 for the auto CRC
         pr_info("FUSB %s: accept, PolicyIsDFP(%d)\n", __func__, PolicyIsDFP);
-        platform_notify_attached_source(PolicyIsDFP);
+        platform_notify_attached_source(PolicyIsDFP, true);
     }
     else if (Status == STAT_ERROR)                                          // If we didn't receive the good CRC...
     {
