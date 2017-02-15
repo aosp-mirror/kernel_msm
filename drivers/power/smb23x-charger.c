@@ -413,6 +413,7 @@ enum {
 
 enum {
 	WRKRND_IRQ_POLLING = BIT(0),
+	WRKRND_USB_SUSPEND = BIT(1),
 };
 
 enum {
@@ -995,11 +996,15 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 	current_ma = min(therm_ma, usb_current);
 
 	if (current_ma <= CURRENT_SUSPEND) {
-		/* suspend USB input */
-		rc = smb23x_suspend_usb(chip, CURRENT, true);
-		if (rc)
-			pr_err("Suspend USB failed, rc=%d\n", rc);
-		return rc;
+		if (chip->workaround_flags & WRKRND_USB_SUSPEND) {
+			current_ma = CURRENT_100_MA;
+		} else {
+			/* suspend USB input */
+			rc = smb23x_suspend_usb(chip, CURRENT, true);
+			if (rc)
+				pr_err("Suspend USB failed, rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	if (current_ma <= CURRENT_100_MA) {
@@ -1035,12 +1040,15 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 		pr_err("Set ICL failed\n, rc=%d\n", rc);
 		return rc;
 	}
-	pr_debug("ICL set to = %d\n", usbin_current_ma_table[tmp]);
+	pr_debug("ICL set to = %d\n",
+			usbin_current_ma_table[tmp >> USBIN_ICL_OFFSET]);
 
-	/* un-suspend USB input */
-	rc = smb23x_suspend_usb(chip, CURRENT, false);
-	if (rc < 0)
-		pr_err("Un-suspend USB failed, rc=%d\n", rc);
+	if (!(chip->workaround_flags & WRKRND_USB_SUSPEND)) {
+		/* un-suspend USB input */
+		rc = smb23x_suspend_usb(chip, CURRENT, false);
+		if (rc < 0)
+			pr_err("Un-suspend USB failed, rc=%d\n", rc);
+	}
 
 	return rc;
 }
@@ -1731,11 +1739,13 @@ static void reconfig_upon_unplug(struct smb23x_chip *chip)
 			mutex_lock(&chip->usb_suspend_lock);
 			reason = chip->usb_suspended_status;
 			mutex_unlock(&chip->usb_suspend_lock);
-			rc = smb23x_suspend_usb(chip, reason,
-					!!reason ? true : false);
-			if (rc < 0)
-				pr_err("%suspend USB failed\n",
-					!!reason ? "S" : "Un-s");
+			if (!(chip->workaround_flags & WRKRND_USB_SUSPEND)) {
+				rc = smb23x_suspend_usb(chip, reason,
+						!!reason ? true : false);
+				if (rc < 0)
+					pr_err("%suspend USB failed\n",
+						!!reason ? "S" : "Un-s");
+			}
 		}
 	}
 }
@@ -3076,6 +3086,9 @@ static int smb23x_probe(struct i2c_client *client,
 	smb23x_wakeup_src_init(chip);
 	INIT_DELAYED_WORK(&chip->irq_polling_work, smb23x_irq_polling_work_fn);
 #endif
+
+	/* enable the USB_SUSPEND always */
+	chip->workaround_flags |= WRKRND_USB_SUSPEND;
 
 	rc = smb23x_parse_dt(chip);
 	if (rc < 0) {
