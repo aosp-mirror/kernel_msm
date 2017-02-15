@@ -1258,6 +1258,8 @@ static int smb2_init_hw(struct smb2 *chip)
 		DEFAULT_VOTER, true, chip->dt.fv_uv);
 	vote(chg->usb_icl_votable,
 		DCP_VOTER, true, chip->dt.usb_icl_ua);
+	vote(chg->usb_icl_votable,
+		DEFAULT_VOTER, true, chip->dt.usb_icl_ua);
 	vote(chg->dc_icl_votable,
 		DEFAULT_VOTER, true, chip->dt.dc_icl_ua);
 	vote(chg->hvdcp_disable_votable_indirect, DEFAULT_VOTER,

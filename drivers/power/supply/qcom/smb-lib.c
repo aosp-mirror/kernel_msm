@@ -2338,16 +2338,84 @@ int smblib_set_prop_usb_voltage_min(struct smb_charger *chg,
 	return rc;
 }
 
-#define USBIN_5V	5000000
+/* sets the USBIN_CONT_AICL_THRESHOLD_CFG to the minimum value above the
+ * the threshold.
+ * - Threshold = 4.00V + (DATA * 100mV) for DATA < 16
+ * - Threshold = 5.60V + (DATA - 16) * 200mV) for DATA > 15
+ * - The maximum threshold is 11.8V, data = 0x30
+ */
+#define THRESHOLD_4P0V_UV	 4000000
+#define THRESHOLD_5P6V_UV	 5600000
+#define THRESHOLD_11P8V_UV	11800000
+#define THRESHOLD_STEP_100MV_UV	  100000
+#define THRESHOLD_STEP_200MV_UV	  200000
+static int smblib_set_usbin_cont_aicl_threshold(struct smb_charger *chg,
+						int threshold)
+{
+	int rc = 0;
+	u8 data = 0;
+
+	if (threshold < THRESHOLD_4P0V_UV) {
+		smblib_err(chg, "invalid aicl threshold %duV\n", threshold);
+		return -EINVAL;
+	} else if (threshold <= THRESHOLD_5P6V_UV) {
+		threshold -= THRESHOLD_4P0V_UV;
+		data = (threshold + THRESHOLD_STEP_100MV_UV - 1)
+				/ THRESHOLD_STEP_100MV_UV;
+	} else if (threshold <= THRESHOLD_11P8V_UV) {
+		data = 16;
+		threshold -= THRESHOLD_5P6V_UV;
+		data += (threshold + THRESHOLD_STEP_200MV_UV - 1)
+				/ THRESHOLD_STEP_200MV_UV;
+	} else {
+		smblib_err(chg, "invalid aicl threshold %duV\n", threshold);
+		return -EINVAL;
+	}
+
+	smblib_dbg(chg, PR_MISC,
+		   "set USBIN_CONT_AICL_THRESHOLD_CFG_REG to 0x%.02x\n",
+		   data);
+
+	rc = smblib_masked_write(chg, USBIN_CONT_AICL_THRESHOLD_CFG_REG,
+				 USBIN_CONT_AICL_THRESHOLD_CFG_MASK,
+				 data);
+	if (rc < 0)
+		smblib_err(chg,
+			   "Couldn't set USBIN_CONT_AICL_THRESHOLD rc=%d\n",
+			   rc);
+
+	return rc;
+}
+
+#define USBIN_5V_UV	5000000
+#define USBIN_4V_UV	4000000
+#define USBIN_0P75V_UV	 750000
 int smblib_set_prop_usb_voltage_max(struct smb_charger *chg,
 				    const union power_supply_propval *val)
 {
+	int rc = 0;
+	int aicl_threshold;
+
 	if (val->intval == 0)
-		chg->voltage_max_uv = USBIN_5V;
+		chg->voltage_max_uv = USBIN_5V_UV;
 	else
 		chg->voltage_max_uv = val->intval;
 
-	return 0;
+	/*
+	 * update the AICL threshold voltage with respect to
+	 * Type-C specification release 1.2 section 4.8.1.2.
+	 *
+	 * Threshold = V * (1-5%) - 0.75V (@ current <= 3A)
+	 */
+	aicl_threshold = (long)chg->voltage_max_uv * 95 / 100 - USBIN_0P75V_UV;
+	rc = smblib_set_usbin_cont_aicl_threshold(chg, aicl_threshold);
+
+	if (rc < 0)
+		smblib_err(chg,
+			   "Couldn't set USBIN_CONT_AICL_THRESHOLD rc=%d\n",
+			   rc);
+
+	return rc;
 }
 
 int smblib_set_prop_pd_cc_override(struct smb_charger *chg,
