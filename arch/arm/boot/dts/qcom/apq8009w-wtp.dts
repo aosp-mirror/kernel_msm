@@ -81,7 +81,11 @@
 	status = "ok";
 };
 
-&blsp1_uart2 {
+&i2c_2 {
+	status = "ok";
+};
+
+&blsp1_uart1 {
 	status = "ok";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart_console_sleep>;

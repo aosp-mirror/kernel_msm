@@ -91,7 +91,7 @@ static int wil_ioc_memio_dword(struct wil6210_priv *wil, void __user *data)
 	case wil_mmio_write:
 		writel(io.val, a);
 		wmb(); /* make sure write propagated to HW */
-		break;a
+		break;
 #endif
 	default:
 		wil_err(wil, "Unsupported operation, op = 0x%08x\n", io.op);
