@@ -81,6 +81,7 @@
 #define MAX_SOC			1000
 #define MAX_HRSOC		51200
 #define SOC_FACTOR		512
+#define APP_MIN_VOLTAGE         3000
 
 /* 2's complement conversion macros */
 #define TEMP_SIGN_BIT			7
@@ -160,6 +161,9 @@ struct stc311x_chip  {
 	/* Averaging/Accumulation */
 	int				avg_voltage_mv;
 	int				acc_voltage_mv;
+#ifdef FEATURE_GAUGE_LOCKED_WORKAROUND
+	bool				reset_flag;
+#endif  /* FEATURE_GAUGE_LOCKED_WORKAROUND */
 
 	/* parameters */
 	u32				cfg_alarm_soc;
@@ -421,7 +425,7 @@ static void stc311x_init_ram(struct stc311x_chip *chip)
 static int stc311x_update_params(struct stc311x_chip *chip)
 {
 	int rc, i;
-	u8 reg_val, mask;
+	u8 reg_val, mask, soc_val;
 	u16 ocv_mv;
 
 	/* gg_run = 0 before updating parameters */
@@ -443,14 +447,13 @@ static int stc311x_update_params(struct stc311x_chip *chip)
 	}
 
 	/* covert SOC points and fill SOC table*/
-	for (i = 0; i < OCV_SOC_SIZE; i++)
-		chip->cfg_soc_table[i] *= SOCTAB_MULTIPLIER;
-
-	rc = stc311x_write_raw(chip, SOCTAB_REG, chip->cfg_soc_table,
-				OCV_SOC_SIZE);
-	if (rc < 0) {
-		pr_err("failed to update SOCTAB rc=%d\n", rc);
-		return rc;
+	for (i = 0; i < OCV_SOC_SIZE; i++){
+		soc_val = chip->cfg_soc_table[i] * SOCTAB_MULTIPLIER;
+		rc = stc311x_write_raw(chip, SOCTAB_REG + i, &soc_val, 1);
+		if (rc < 0) {
+			pr_err("failed to update SOCTAB rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	/* update Alarm SOC */
@@ -1179,7 +1182,7 @@ void soc_correction(struct stc311x_chip *chip)
 		if (rc < 0) {
 			pr_err("failed to write soc rc=%d\n", rc);
 		} else {
-			soc = DIV_ROUND_CLOSEST(socopt, SOC_FACTOR);
+			soc = DIV_ROUND_CLOSEST(socopt * 10, SOC_FACTOR);
 			pr_debug("old soc = %hu old hr_soc = %hu new soc = %hu new hr_soc =%hu\n",
 					chip->soc, chip->hr_soc, soc, socopt);
 			chip->hr_soc = socopt;
@@ -1246,8 +1249,8 @@ static void stc311x_mm_mode_fsm(struct stc311x_chip *chip)
 	int rc;
 	u16 soc;
 
-	if ((chip->avg_voltage_mv > chip->cfg_float_voltage_mv)
-			&& (chip->avg_current_ma < chip->cfg_term_current_ma)) {
+	if ((chip->voltage_mv > chip->cfg_float_voltage_mv)
+			&& (chip->avg_current_ma < (chip->cfg_term_current_ma + 10))) {
 		/* End of charge */
 		soc = MAX_HRSOC;
 		rc = stc311x_write_param(chip, SOC_REG, soc);
@@ -1267,6 +1270,7 @@ static int stc311x_process_fg_task(struct stc311x_chip *chip)
 {
 	int rc, last_soc, cutoff, soc;
 	struct fg_data temp_data;
+	int value;
 
 	last_soc = chip->soc;
 	rc = stc311x_read_fg(chip, &temp_data);
@@ -1281,14 +1285,31 @@ static int stc311x_process_fg_task(struct stc311x_chip *chip)
 		return rc;
 	}
 
+#ifdef FEATURE_GAUGE_LOCKED_WORKAROUND
+	if ((chip->ctrl_reg & (BATFAIL_BIT | UVLOD_BIT)) || chip->reset_flag) {
+#else /* FEATURE_GAUGE_LOCKED_WORKAROUND */
 	if ((chip->ctrl_reg & (BATFAIL_BIT | UVLOD_BIT))) {
+#endif /* FEATURE_GAUGE_LOCKED_WORKAROUND */
 		pr_warn("BATFAIL_BIT/UVLOD_BIT detected\n");
 		/* Reset FG */
+#ifdef FEATURE_GAUGE_LOCKED_WORKAROUND
+		pr_debug("[Alan] Reset procedure, reset_flag=%d\n", chip->reset_flag);
+		/* Release flag */
+		chip->reset_flag = 0;
+#endif /* FEATURE_GAUGE_LOCKED_WORKAROUND */
 		rc = stc311x_reset(chip);
 		if (rc) {
 			pr_err("failed to reset FG rc=%d\n", rc);
 			return rc;
 		}
+
+#ifdef FEATURE_GAUGE_LOCKED_WORKAROUND
+		rc = stc311x_restore_fg(chip);
+		if (rc) {
+			pr_err("failed to restore FG after reset rc=%d\n", rc);
+			return rc;
+		}
+#endif /* FEATURE_GAUGE_LOCKED_WORKAROUND */
 
 		/* BATD or UVLOD detected */
 		if (chip->conv_counter > 0) {
@@ -1356,6 +1377,18 @@ static int stc311x_process_fg_task(struct stc311x_chip *chip)
 
 	cutoff = chip->cfg_alarm_voltage_mv;
 
+	/* early empty compensation */
+	value = chip->avg_voltage_mv;
+	if (chip->voltage_mv < value)
+		value = chip->voltage_mv;
+
+	if (value < (APP_MIN_VOLTAGE + 200) && value > (APP_MIN_VOLTAGE - 500))	{
+		if (value < APP_MIN_VOLTAGE)
+			chip->soc = 0;
+		else
+			chip->soc = chip->soc * (value - APP_MIN_VOLTAGE) / 200;
+	}
+
 	/* We can move to moving average after some testing instead of this */
 	chip->acc_voltage_mv += chip->voltage_mv - chip->avg_voltage_mv;
 	chip->avg_voltage_mv = (chip->acc_voltage_mv + (AVG_FILTER / 2))
@@ -1405,6 +1438,11 @@ static int stc311x_process_fg_task(struct stc311x_chip *chip)
 		pr_debug("old soc %hu new soc = %hu hr_sox = %hu\n",
 				last_soc, chip->soc, chip->hr_soc);
 		power_supply_changed(&chip->bms_psy);
+	}
+
+	if (chip->hr_soc >= MAX_HRSOC) {
+		pr_err("[Alan] hr_soc workaround\n");
+		stc311x_write_param(chip, SOC_REG, MAX_HRSOC);
 	}
 
 	return 0;
@@ -1489,7 +1527,7 @@ static int stc311x_get_property(struct power_supply *psy,
 		val->intval = chip->current_ma * 1000 * -1;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		val->intval = chip->soc / 10;
+		val->intval = DIV_ROUND_CLOSEST(chip->soc, 10);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = chip->temperature;
@@ -1773,7 +1811,7 @@ static int stc311x_probe(struct i2c_client *client,
 	mask = GG_RUN_BIT;
 	gg_run_bit = (mode_reg & mask) >> 4;
 	if (!gg_run_bit)
-		pr_err("[Alan] Standby Mode! Abnormal case, need do reset!\n");
+		pr_err("[Alan] Standby Mode!\n");
 
 	rc = stc311x_read_raw(chip, CTRL_REG, &ctrl_reg, 1);
 	if (rc) {
@@ -1785,10 +1823,10 @@ static int stc311x_probe(struct i2c_client *client,
 	uvlod_bit = (ctrl_reg & mask) >> 7;
 	if (uvlod_bit)
 		pr_err("[Alan] UVLOD is set!\n");
-
+	
 	if ( !gg_run_bit || uvlod_bit ) {
-		pr_err("[Alan] Do reset!\n");
-		stc311x_reset(chip);
+		pr_err("[Alan] Enable reset flag!\n");
+		chip->reset_flag = 1;
 	}
 #endif /* FEATURE_GAUGE_LOCKED_WORKAROUND */
 
