@@ -232,6 +232,7 @@ static int __init aio_setup(void)
 
 	if (bdi_init(&aio_fs_backing_dev_info))
 		panic("Failed to init aio fs backing dev info.");
+	aio_mnt->mnt_flags |= MNT_NOEXEC;
 
 	kiocb_cachep = KMEM_CACHE(kiocb, SLAB_HWCACHE_ALIGN|SLAB_PANIC);
 	kioctx_cachep = KMEM_CACHE(kioctx,SLAB_HWCACHE_ALIGN|SLAB_PANIC);
