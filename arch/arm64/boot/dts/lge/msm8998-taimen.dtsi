@@ -216,6 +216,7 @@
 };
 
 &mdss_dp_ctrl {
+	status = "disabled";
 	pinctrl-names = "mdss_dp_active", "mdss_dp_sleep";
 	pinctrl-0 = <&mdss_dp_aux_active &mdss_dp_usbplug_cc_active>;
 	pinctrl-1 = <&mdss_dp_aux_suspend &mdss_dp_usbplug_cc_suspend>;

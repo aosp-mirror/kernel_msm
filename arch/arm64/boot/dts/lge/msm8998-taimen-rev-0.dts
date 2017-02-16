@@ -39,3 +39,9 @@
 	};
 };
 
+&mdss_dsi0 {
+	/* LCD only */
+	/delete-property/qcom,platform-extra-ldo-vpnl-gpio;
+	qcom,platform-extra-ldo-lcd-vcl-gpio = <&tlmm 100 0>;
+	qcom,platform-extra-ldo-vddio-always-on;
+};

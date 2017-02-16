@@ -10,15 +10,15 @@
  * GNU General Public License for more details.
  */
 
-#include "dsi-panel-sw43401-dsc-qhd-cmd.dtsi"
 #include "dsi-panel-sw43402-dsc-qhd-cmd.dtsi"
+#include "dsi-panel-sw49408-dsc-qhd-cmd.dtsi"
 
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
 };
 
 &mdss_dsi {
-        hw-config = "single_dsi";
+	hw-config = "single_dsi";
 };
 
 &mdss_dsi0 {
@@ -26,48 +26,37 @@
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
-	qcom,platform-reset-gpio = <&tlmm 35 0>;
+	qcom,platform-reset-gpio = <&tlmm 94 0>;
 	qcom,platform-te-gpio = <&tlmm 10 0>;
+	qcom,platform-extra-ldo-vddio-gpio = <&tlmm 133 0>;
+	qcom,platform-extra-ldo-vpnl-gpio = <&tlmm 21 0>;
 	/delete-property/wqhd-vddio-supply;
-	lge,extra-gpio-names = "vddio", "vpnl";
-	lge,gpio-vddio = <&tlmm 60 0>;
-	lge,gpio-vpnl =  <&tlmm 69 0>;
 };
 
 &mdss_dsi1 {
 	/delete-property/cell-index;
 };
 
-&dsi_sw43401_dsc_qhd_cmd {
-	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-	/* qcom,cont-splash-enabled; */
-	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
-
-	qcom,mdss-dsi-panel-timings = [00 0F 04 03 06 0B 04 04 03 03 04 00];
-	qcom,mdss-dsi-t-clk-post = <0x05>;
-	qcom,mdss-dsi-t-clk-pre = <0x19>;
-};
-
 &dsi_sw43402_dsc_qhd_cmd {
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	/* qcom,cont-splash-enabled; */
-	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_no_labibb>;
 
 	qcom,mdss-dsi-panel-timings = [00 11 04 04 07 0C 04 04 03 03 04 00];
 	qcom,mdss-dsi-t-clk-post = <0x05>;
 	qcom,mdss-dsi-t-clk-pre = <0x1B>;
 };
 
-&soc {
-	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
-		#address-cells = <1>;
-		#size-cells = <0>;
-		/delete-node/qcom,panel-supply-entry@0;
-		/delete-node/qcom,panel-supply-entry@1;
-		/delete-node/qcom,panel-supply-entry@2;
-	};
-};
+&dsi_sw49408_dsc_qhd_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 
+	qcom,mdss-dsi-panel-timings = [00 18 05 05 09 0F 05 06 04 03 04 00];
+	qcom,mdss-dsi-t-clk-post = <0x07>;
+	qcom,mdss-dsi-t-clk-pre = <0x24>;
+};
 /* End of overriding parameters in msm8998-mdss-panel.dtsi */
 
 /* Hall IC */
