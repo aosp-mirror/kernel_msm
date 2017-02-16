@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -131,7 +131,7 @@ uint16_t wmi_get_max_msg_len(wmi_unified_t wmi_handle)
 }
 
 wmi_buf_t
-wmi_buf_alloc(wmi_unified_t wmi_handle, u_int16_t len)
+wmi_buf_alloc(wmi_unified_t wmi_handle, uint32_t len)
 {
 	wmi_buf_t wmi_buf;
 
