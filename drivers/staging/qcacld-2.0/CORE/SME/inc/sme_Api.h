@@ -4628,4 +4628,9 @@ eHalStatus sme_set_random_mac(tHalHandle hal,
 eHalStatus sme_clear_random_mac(tHalHandle hal, uint32_t session_id,
 				uint8_t *random_mac);
 
+#ifdef WLAN_POWER_DEBUGFS
+eHalStatus sme_power_debug_stats_req(tHalHandle hal, void (*callback_fn)
+			(struct power_stats_response *response,
+			void *context), void *power_stats_context);
+#endif
 #endif //#if !defined( __SME_API_H )
