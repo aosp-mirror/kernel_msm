@@ -276,6 +276,7 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 {
 	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+	struct mdss_panel_info *pinfo;
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -285,6 +286,17 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
+	pinfo = &ctrl_pdata->panel_data.panel_info;
+
+	if (gpio_is_valid(ctrl_pdata->extra_ldo_vpnl_gpio)) {
+		gpio_set_value(ctrl_pdata->extra_ldo_vpnl_gpio, 0);
+		usleep_range(10000,10000);
+	}
+	if (gpio_is_valid(ctrl_pdata->extra_ldo_vddio_gpio) &&
+			!ctrl_pdata->extra_ldo_vddio_always_on) {
+		gpio_set_value(ctrl_pdata->extra_ldo_vddio_gpio, 0);
+		usleep_range(10000,10000);
+	}
 
 	ret = mdss_dsi_panel_reset(pdata, 0);
 	if (ret) {
@@ -310,6 +322,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 {
 	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+	struct mdss_panel_info *pinfo;
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -318,6 +331,18 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
+	pinfo = &ctrl_pdata->panel_data.panel_info;
+
+	if (gpio_is_valid(ctrl_pdata->extra_ldo_vddio_gpio)) {
+		gpio_set_value(ctrl_pdata->extra_ldo_vddio_gpio, 1);
+		usleep_range(10000,10000);
+	}
+	if (gpio_is_valid(ctrl_pdata->extra_ldo_vpnl_gpio)) {
+		gpio_set_value(ctrl_pdata->extra_ldo_vpnl_gpio, 1);
+		usleep_range(10000,10000);
+	}
+	if (gpio_is_valid(ctrl_pdata->extra_ldo_lcd_vcl_gpio))
+		gpio_set_value(ctrl_pdata->extra_ldo_lcd_vcl_gpio, 1);
 
 	ret = msm_dss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,
@@ -4159,6 +4184,28 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 		pr_debug("%s:%d mode gpio not specified\n", __func__, __LINE__);
 		ctrl_pdata->lcd_mode_sel_gpio = -EINVAL;
 	}
+
+	ctrl_pdata->extra_ldo_vddio_gpio =
+		of_get_named_gpio(ctrl_pdev->dev.of_node,
+			 "qcom,platform-extra-ldo-vddio-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->extra_ldo_vddio_gpio))
+		pr_warn("%s: vddio gpio not specified\n", __func__);
+
+	ctrl_pdata->extra_ldo_vddio_always_on =
+		of_property_read_bool(ctrl_pdev->dev.of_node,
+				"qcom,platform-extra-ldo-vddio-always-on");
+
+	ctrl_pdata->extra_ldo_vpnl_gpio =
+		of_get_named_gpio(ctrl_pdev->dev.of_node,
+			 "qcom,platform-extra-ldo-vpnl-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->extra_ldo_vpnl_gpio))
+		pr_warn("%s: vpnl gpio not specified\n", __func__);
+
+	ctrl_pdata->extra_ldo_lcd_vcl_gpio =
+		of_get_named_gpio(ctrl_pdev->dev.of_node,
+			 "qcom,platform-extra-ldo-lcd-vcl-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->extra_ldo_lcd_vcl_gpio))
+		pr_warn("%s: lcd vcl gpio not specified\n", __func__);
 
 	return 0;
 }
