@@ -6641,8 +6641,8 @@ static int msm_pcie_pm_resume(struct pci_dev *dev,
 				"RC%d: entry of PCI framework restore state\n",
 				pcie_dev->rc_idx);
 
-			pci_load_and_free_saved_state(dev,
-					&pcie_dev->saved_state);
+			pci_load_saved_state(dev,
+					pcie_dev->saved_state);
 			pci_restore_state(dev);
 
 			PCIE_DBG(pcie_dev,
