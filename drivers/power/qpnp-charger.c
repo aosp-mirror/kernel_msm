@@ -378,6 +378,7 @@ struct qpnp_chg_chip {
 #endif
 	bool				fastchg_on;
 	bool				parallel_ovp_mode;
+	bool				weak_charger_detection;
 	unsigned int			bpd_detection;
 	unsigned int			max_bat_chg_current;
 	unsigned int			warm_bat_chg_ma;
@@ -1549,6 +1550,122 @@ qpnp_chg_set_appropriate_vbatdet(struct qpnp_chg_chip *chip)
 			- chip->resume_delta_mv);
 }
 
+static int
+get_prop_battery_voltage_now(struct qpnp_chg_chip *chip)
+{
+	int rc = 0;
+	struct qpnp_vadc_result results;
+
+	if (chip->revision == 0 && chip->type == SMBB) {
+		pr_err("vbat reading not supported for 1.0 rc=%d\n", rc);
+		return 0;
+	} else {
+		rc = qpnp_vadc_read(chip->vadc_dev, VBAT_SNS, &results);
+		if (rc) {
+			pr_err("Unable to read vbat rc=%d\n", rc);
+			return 0;
+		}
+		return results.physical;
+	}
+}
+
+static int
+qpnp_chg_ovpfet_on(struct qpnp_chg_chip *chip, bool on)
+{
+	int rc = 0;
+
+	rc = qpnp_chg_masked_write(chip,
+			chip->usb_chgpth_base + SEC_ACCESS,
+			0xFF,
+			0xA5, 1);
+
+	if (rc)
+		pr_err("failed to write SEC_ACCESS rc=%d\n", rc);
+
+	if (on) {
+		rc = qpnp_chg_masked_write(chip,
+				chip->usb_chgpth_base + 0x50, 0xFF, 0x00, 1);
+		if (rc) {
+			pr_err("failed to write OVP_FET rc=%d\n", rc);
+			return rc;
+		}
+	} else {
+		rc = qpnp_chg_masked_write(chip,
+				chip->usb_chgpth_base + 0x50, 0xFF, 0x02, 1);
+		if (rc) {
+			pr_err("failed to write OVP_FET rc=%d\n", rc);
+			return rc;
+		}
+	}
+	return rc;
+}
+
+static int
+qpnp_chg_ovpfet_get(struct qpnp_chg_chip *chip)
+{
+	int rc = 0;
+	u8 ovp_sts;
+
+	rc = qpnp_chg_read(chip, &ovp_sts,
+			chip->usb_chgpth_base + 0x50, 1);
+	if (rc) {
+		pr_err("failed to read OVP_FET status rc=%d\n", rc);
+		return 0;
+	}
+
+	return ovp_sts;
+}
+
+static void
+qpnp_weak_charger_remove(struct qpnp_chg_chip *chip)
+{
+	u8 usb_sts = 0;
+	int rc = 0, vbat_mv = 0, ovp_sts = 0;
+
+	rc = qpnp_chg_read(chip, &usb_sts,
+			INT_RT_STS(chip->usb_chgpth_base), 1);
+	if (rc)
+		pr_err("failed to read usb_chgpth_sts rc=%d\n", rc);
+
+	 /* see if USBIN is still valid and chg_gone is still true */
+	if (qpnp_chg_is_usb_chg_plugged_in(chip) && (usb_sts & CHG_GONE_IRQ)) {
+		 /* test if it's the weak charger by opening the ovp_fet */
+		pr_debug("open ovp_fet\n");
+		ovp_sts = qpnp_chg_ovpfet_get(chip);
+		if (ovp_sts != 0x02)
+			qpnp_chg_ovpfet_on(chip, false);
+
+		msleep(200);
+		if (qpnp_chg_is_usb_chg_plugged_in(chip)) {
+			pr_debug("weak charger detected\n");
+
+			schedule_delayed_work(&chip->arb_stop_work,
+						msecs_to_jiffies(3000));
+
+			/* Periodical battery voltage check for recharging. */
+			vbat_mv = get_prop_battery_voltage_now(chip) / 1000;
+			if (vbat_mv > (chip->max_voltage_mv -
+						chip->resume_delta_mv)) {
+				pr_debug("vbat (%d mV) above vbat_det thrershold\n",
+						vbat_mv);
+				return;
+			}
+		}
+		msleep(500);
+	}
+
+	ovp_sts = qpnp_chg_ovpfet_get(chip);
+	if (ovp_sts != 0x00) {
+		qpnp_chg_ovpfet_on(chip, true);
+		msleep(500);
+		pr_debug("close ovp_fet\n");
+	}
+
+	if (!chip->chg_done)
+		qpnp_chg_charge_en(chip, !chip->charging_disabled);
+	qpnp_chg_force_run_on_batt(chip, chip->charging_disabled);
+}
+
 static void
 qpnp_arb_stop_work(struct work_struct *work)
 {
@@ -1556,9 +1673,13 @@ qpnp_arb_stop_work(struct work_struct *work)
 	struct qpnp_chg_chip *chip = container_of(dwork,
 				struct qpnp_chg_chip, arb_stop_work);
 
-	if (!chip->chg_done)
-		qpnp_chg_charge_en(chip, !chip->charging_disabled);
-	qpnp_chg_force_run_on_batt(chip, chip->charging_disabled);
+	if (chip->weak_charger_detection) {
+		qpnp_weak_charger_remove(chip);
+	} else {
+		if (!chip->chg_done)
+			qpnp_chg_charge_en(chip, !chip->charging_disabled);
+		qpnp_chg_force_run_on_batt(chip, chip->charging_disabled);
+	}
 }
 
 static void
@@ -2734,25 +2855,6 @@ qpnp_aicl_check_work(struct work_struct *work)
 		pr_debug("charger_monitor is present\n");
 	}
 	chip->charger_monitor_checked = true;
-}
-
-static int
-get_prop_battery_voltage_now(struct qpnp_chg_chip *chip)
-{
-	int rc = 0;
-	struct qpnp_vadc_result results;
-
-	if (chip->revision == 0 && chip->type == SMBB) {
-		pr_err("vbat reading not supported for 1.0 rc=%d\n", rc);
-		return 0;
-	} else {
-		rc = qpnp_vadc_read(chip->vadc_dev, VBAT_SNS, &results);
-		if (rc) {
-			pr_err("Unable to read vbat rc=%d\n", rc);
-			return 0;
-		}
-		return results.physical;
-	}
 }
 
 #define BATT_PRES_BIT BIT(7)
@@ -6326,6 +6428,10 @@ qpnp_charger_read_dt_props(struct qpnp_chg_chip *chip)
 	chip->parallel_ovp_mode =
 			of_property_read_bool(chip->spmi->dev.of_node,
 					"qcom,parallel-ovp-mode");
+
+	chip->weak_charger_detection =
+			of_property_read_bool(chip->spmi->dev.of_node,
+					"qcom,weak-charger-detection");
 
 	of_get_property(chip->spmi->dev.of_node, "qcom,thermal-mitigation",
 		&(chip->thermal_levels));
