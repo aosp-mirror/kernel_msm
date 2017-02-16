@@ -87,6 +87,20 @@
 			};
 		};
 
+		/* these pins are unused, but we don't want them floating */
+		easel_spi_default: easel_spi_default {
+			mux {
+				pins = "gpio65", "gpio66", "gpio67", "gpio68";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio65", "gpio66", "gpio67", "gpio68";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
 		esl_console_active: esl_console_active {
 			mux {
 				pins = "gpio8", "gpio9";
@@ -97,6 +111,19 @@
 				pins = "gpio8", "gpio9";
 				drive-strength = <2>;
 				bias-disable;
+			};
+		};
+
+		esl_console_sleep: esl_console_sleep {
+			mux {
+				pins = "gpio8", "gpio9";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio8", "gpio9";
+				drive-strength = <2>;
+				bias-pull-down;
 			};
 		};
 	};
@@ -143,8 +170,9 @@
 			 <&clock_gcc clk_gcc_blsp1_ahb_clk>;
 		clock-names = "core", "iface";
 
-		pinctrl-names = "default";
+		pinctrl-names = "default", "sleep";
 		pinctrl-0 = <&esl_console_active>;
+		pinctrl-1 = <&esl_console_sleep>;
 	};
 
 	mnh-sm {
@@ -155,7 +183,8 @@
 		clock-names = "ref_clk", "sleep_clk";
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&easel_ready_default &easel_boot_mode_default>;
+		pinctrl-0 = <&easel_ready_default &easel_boot_mode_default
+			&easel_spi_default>;
 
 		soc-pwr-good-gpio = <&bcm15602_gpio 0 0x00>;
 		ddr-pad-iso-n-gpio = <&bcm15602_gpio 1 0x00>;
