@@ -2265,6 +2265,15 @@ wl_run_escan(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 			if (!wl_get_valid_channels(ndev, chan_buf, sizeof(chan_buf))) {
 				list = (wl_uint32_list_t *) chan_buf;
 				n_valid_chan = dtoh32(list->count);
+
+				if (n_valid_chan > WL_NUMCHANNELS) {
+					WL_ERR(("wrong n_valid_chan:%d\n",
+						n_valid_chan));
+					kfree(default_chan_list);
+					err = -EINVAL;
+					goto exit;
+				}
+
 				for (i = 0; i < num_chans; i++)
 				{
 					_freq = request->channels[i]->center_freq;
@@ -2285,6 +2294,9 @@ wl_run_escan(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 						/* allows only supported channel on
 						*  current reguatory
 						*/
+						if (n_nodfs >= num_chans)
+							break;
+
 						if (channel == (dtoh32(list->element[j])))
 							default_chan_list[n_nodfs++] =
 								channel;
@@ -9138,8 +9150,12 @@ wl_notify_pfn_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 	struct wiphy *wiphy = bcmcfg_to_wiphy(cfg);
 #endif /* GSCAN_SUPPORT */
 
-	WL_ERR((">>> PNO Event\n"));
+	if (!data) {
+		WL_ERR(("Data is NULL!\n"));
+		return 0;
+	}
 
+	WL_DBG((">>> PNO Event\n"));
 	ndev = cfgdev_to_wlc_ndev(cfgdev, cfg);
 
 #ifdef GSCAN_SUPPORT
@@ -12859,6 +12875,10 @@ wl_cfg80211_add_iw_ie(struct bcm_cfg80211 *cfg, struct net_device *ndev, s32 bss
 	if (ie_id != DOT11_MNG_INTERWORKING_ID)
 		return BCME_UNSUPPORTED;
 
+	if (data_len > IW_IES_MAX_BUF_LEN) {
+		WL_ERR(("wrong data_len:%d\n", data_len));
+		return BCME_BADARG;
+	}
 	/* Validate the pktflag parameter */
 	if ((pktflag & ~(VNDR_IE_BEACON_FLAG | VNDR_IE_PRBRSP_FLAG |
 	            VNDR_IE_ASSOCRSP_FLAG | VNDR_IE_AUTHRSP_FLAG |
