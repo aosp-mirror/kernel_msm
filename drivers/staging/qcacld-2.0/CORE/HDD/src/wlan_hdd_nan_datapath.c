@@ -540,13 +540,9 @@ static int hdd_ndp_initiator_req_handler(hdd_context_t *hdd_ctx,
 		req.channel =
 			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL]);
 
-	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_CONFIG]) {
+	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_CONFIG])
 		req.channel_cfg =
 			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_CONFIG]);
-	} else {
-		hddLog(LOGE, FL("Channel config is unavailable"));
-		return -EINVAL;
-	}
 
 	if (!tb[QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_INSTANCE_ID]) {
 		hddLog(LOGE, FL("NDP service instance ID is unavailable"));
@@ -602,8 +598,8 @@ static int hdd_ndp_initiator_req_handler(hdd_context_t *hdd_ctx,
 	}
 
 	hddLog(LOG1,
-		FL("vdev_id: %d, transaction_id: %d, channel: %d, service_instance_id: %d, ndp_app_info_len: %d, csid: %d, peer_discovery_mac_addr: %pM"),
-		req.vdev_id, req.transaction_id, req.channel,
+		FL("vdev_id: %d, transaction_id: %d, channel: %d, channel_cfg: %d, service_instance_id: %d, ndp_app_info_len: %d, csid: %d, peer_discovery_mac_addr: %pM"),
+		req.vdev_id, req.transaction_id, req.channel, req.channel_cfg,
 		req.service_instance_id, req.ndp_info.ndp_app_info_len,
 		req.ncs_sk_type, req.peer_discovery_mac_addr.bytes);
 	status = sme_ndp_initiator_req_handler(hal, &req);
