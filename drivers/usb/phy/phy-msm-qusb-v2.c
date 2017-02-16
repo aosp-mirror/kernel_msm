@@ -117,6 +117,8 @@ struct qusb_phy {
 	int			phy_pll_reset_seq_len;
 	int			*emu_dcm_reset_seq;
 	int			emu_dcm_reset_seq_len;
+
+	bool			skip_efuse_reg;
 };
 
 static void qusb_phy_enable_clocks(struct qusb_phy *qphy, bool on)
@@ -498,7 +500,8 @@ static int qusb_phy_init(struct usb_phy *phy)
 	if (qphy->qusb_phy_init_seq)
 		qusb_phy_write_seq(qphy->base, qphy->qusb_phy_init_seq,
 				qphy->init_seq_len, 0);
-	if (qphy->efuse_reg) {
+
+	if (!qphy->skip_efuse_reg && qphy->efuse_reg) {
 		if (!qphy->tune_val)
 			qusb_phy_get_tune1_param(qphy);
 
@@ -870,6 +873,9 @@ static int qusb_phy_probe(struct platform_device *pdev)
 			}
 		}
 	}
+
+	qphy->skip_efuse_reg = of_property_read_bool(dev->of_node,
+					"skip_efuse_reg");
 
 	qphy->ref_clk_src = devm_clk_get(dev, "ref_clk_src");
 	if (IS_ERR(qphy->ref_clk_src))
