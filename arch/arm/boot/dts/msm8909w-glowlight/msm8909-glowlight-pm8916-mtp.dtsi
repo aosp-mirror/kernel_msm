@@ -41,7 +41,7 @@
 			focaltech,hard-reset-delay-ms = <20>;
 			focaltech,soft-reset-delay-ms = <300>;
 			focaltech,num-max-touches = <2>;
-			focaltech,fw-name = "CEI_FNW1_3207_V0x02_20160115_app.i";
+			focaltech,fw-name = "TP3207_0x77_V0x02_20170217_app.i";
 			focaltech,fw-delay-aa-ms = <50>;
 			focaltech,fw-delay-55-ms = <30>;
 			focaltech,fw-upgrade-id1 = <0x79>;
