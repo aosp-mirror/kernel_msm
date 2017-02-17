@@ -588,12 +588,12 @@ static void mnh_mipi_gen3_device(uint32_t device, uint32_t rate)
 		mnh_sm_mipi_tx_dphy_write_gen3(0x5B, 0x51, device);
 		mnh_sm_mipi_tx_dphy_write_gen3(0x5C, 0xCA, device);
 		mnh_sm_mipi_tx_dphy_write_gen3(0x5D, 0x09, device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x5E, 0x4A, device);
+		mnh_sm_mipi_tx_dphy_write_gen3(0x5E, 0x4E, device);
 		mnh_sm_mipi_tx_dphy_write_gen3(0x5F, 0xA7, device);
 		mnh_sm_mipi_tx_dphy_write_gen3(0x61, 0x50, device);
 		mnh_sm_mipi_tx_dphy_write_gen3(0x62, 0xCC, device);
 		mnh_sm_mipi_tx_dphy_write_gen3(0x63, 0x07, device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x64, 0x46, device);
+		mnh_sm_mipi_tx_dphy_write_gen3(0x64, 0x4D, device);
 		mnh_sm_mipi_tx_dphy_write_gen3(0x65, 0x8D, device);
 	} else if (rate == 2100) {
 		mnh_sm_mipi_tx_dphy_write_gen3(0x5A, 0x9a, device);
