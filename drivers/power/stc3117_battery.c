@@ -2401,10 +2401,10 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 }
 
 /*
-* 1. If charge is fulled and charger exists, keep soc = 100% 
-* 2. The moment when charger is removed, if soc = 100% and drops, keep 100%. Else, update soc
-* 3. When discharging, soc can only decrease
-* 4. If SOC = 0% and in charging, show SOC = 1%
+* 1. If charge is fulled and charger exists, keep soc = 100%
+* 2. If SOC = 0% and in charging, show SOC = 1%
+* 3. The moment when charger is removed, if soc = 100% and drops, keep 100%. Else, update soc
+* 4. When discharging, soc can only decrease
 */
 void UI_soc_adjustment(struct stc311x_chip *chip)
 {
@@ -2412,35 +2412,46 @@ void UI_soc_adjustment(struct stc311x_chip *chip)
 	if ((g_ui_soc == STC311x_BATTERY_FULL) && (chip->status != POWER_SUPPLY_STATUS_DISCHARGING))
 		return;
 
-	if (chip->batt_soc == 0) {
-		if (chip->status == POWER_SUPPLY_STATUS_CHARGING)
-			g_ui_soc = 1;
-		else
-			g_ui_soc = 0;
+	if ((chip->batt_soc == 0) && (chip->status == POWER_SUPPLY_STATUS_CHARGING) && (chip->batt_current > 0)) {
+		g_ui_soc = 1;
 		return;
 	}
 
 	if (chip->status == POWER_SUPPLY_STATUS_DISCHARGING) {
 		//charger is plugged out
-		if (g_last_status != POWER_SUPPLY_STATUS_DISCHARGING) {
-			if (g_ui_soc == STC311x_BATTERY_FULL)
-				return;
-			else {
-				g_ui_soc = chip->batt_soc;
-				pr_info("charger plugged out, update SOC = %d \n", g_ui_soc);
-				return;
-			}
-		}
-		
-		//when discharging, the new SOC can only decrease
-		if (chip->batt_soc > g_ui_soc) {
-			pr_err("Discharging, new soc = %d > original soc = %d, abort \n", chip->batt_soc, g_ui_soc);
+		if ((g_last_status != POWER_SUPPLY_STATUS_DISCHARGING) && (g_ui_soc == STC311x_BATTERY_FULL))
 			return;
-		} else
-			g_ui_soc = chip->batt_soc;
-	} else
-		g_ui_soc = chip->batt_soc;
 
+		//when discharging, the new SOC can only decrease
+		if (chip->batt_soc > g_ui_soc)
+			pr_err("Discharging, new soc = %d > original soc = %d, abort \n", chip->batt_soc, g_ui_soc);	
+	}
+
+	//normal SOC calculate
+	switch (chip->status) {
+	case POWER_SUPPLY_STATUS_CHARGING:
+	case POWER_SUPPLY_STATUS_FULL:
+		if (chip->batt_soc > g_ui_soc)
+			g_ui_soc++;
+		//charger exist but current not enough
+		else if (chip->batt_current <= 0) {
+			if ((g_ui_soc - chip->batt_soc > 5 ) || (chip->batt_voltage < APP_MIN_VOLTAGE))
+				g_ui_soc--;
+		}
+		break;
+	case POWER_SUPPLY_STATUS_DISCHARGING:
+	case POWER_SUPPLY_STATUS_NOT_CHARGING:
+		if ((chip->batt_soc < g_ui_soc ) || (chip->batt_voltage < APP_MIN_VOLTAGE))
+			g_ui_soc--;
+		break;
+	case POWER_SUPPLY_STATUS_UNKNOWN:
+	default:
+		if (chip->batt_soc > g_ui_soc)
+			g_ui_soc++;
+		else
+			g_ui_soc--;
+		break;
+	}
 }
 
 static void stc311x_work(struct work_struct *work)
@@ -2544,7 +2555,7 @@ static void stc311x_work(struct work_struct *work)
 
 	stc311x_check_charger_state(chip);
 
-	if (((res > 0) && (chip->batt_soc ^ g_ui_soc)) || (chip->batt_soc == 0))
+	if ((chip->batt_soc ^ g_ui_soc) || (chip->batt_soc == 0))
 		UI_soc_adjustment(chip);
 
 	//Control SOC between  0 - 100%
