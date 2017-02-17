@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -66,8 +66,15 @@ void nl_srv_exit(void);
 #endif /* WLAN_KD_READY_NOTIFIER */
 int nl_srv_register(tWlanNlModTypes msg_type, nl_srv_msg_callback msg_handler);
 int nl_srv_unregister(tWlanNlModTypes msg_type, nl_srv_msg_callback msg_handler);
-int nl_srv_ucast(struct sk_buff * skb, int dst_pid, int flag);
-int nl_srv_bcast(struct sk_buff * skb);
+
+#ifdef CNSS_GENL
+int nl_srv_ucast(struct sk_buff *skb, int dst_pid, int flag,
+			int app_id, int mcgroup_id);
+int nl_srv_bcast(struct sk_buff *skb, int mcgroup_id, int app_id);
+#else
+int nl_srv_ucast(struct sk_buff *skb, int dst_pid, int flag);
+int nl_srv_bcast(struct sk_buff *skb);
+#endif
 int nl_srv_is_initialized(void);
 
 #else

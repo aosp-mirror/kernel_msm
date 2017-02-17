@@ -136,6 +136,10 @@ void hdd_ch_avoid_cb(void *hdd_context,void *indi_param);
 #include "tl_shim.h"
 #include "wlan_hdd_oemdata.h"
 
+#ifdef CNSS_GENL
+#include <net/cnss_nl.h>
+#endif
+
 #if defined(LINUX_QCMBR)
 #define SIOCIOCTLTX99 (SIOCDEVPRIVATE+13)
 #endif
@@ -16641,6 +16645,23 @@ void wlan_hdd_enable_roaming(hdd_adapter_t *pAdapter)
 }
 #endif
 
+/**
+ * nl_srv_bcast_svc() - Wrapper function to send bcast msgs to SVC mcast group
+ * @skb: sk buffer pointer
+ *
+ * Sends the bcast message to SVC multicast group with generic nl socket
+ * if CNSS_GENL is enabled. Else, use the legacy netlink socket to send.
+ *
+ * Return: None
+ */
+static void nl_srv_bcast_svc(struct sk_buff *skb)
+{
+#ifdef CNSS_GENL
+	nl_srv_bcast(skb, CLD80211_MCGRP_SVC_MSGS, WLAN_NL_MSG_SVC);
+#else
+	nl_srv_bcast(skb);
+#endif
+}
 
 void wlan_hdd_send_svc_nlink_msg(int type, void *data, int len)
 {
@@ -16703,7 +16724,7 @@ void wlan_hdd_send_svc_nlink_msg(int type, void *data, int len)
         return;
     }
 
-    nl_srv_bcast(skb);
+    nl_srv_bcast_svc(skb);
 
     return;
 }
@@ -16939,7 +16960,6 @@ void hdd_stop_bus_bw_compute_timer(hdd_adapter_t *pAdapter)
     }
 }
 #endif
-
 
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
 void wlan_hdd_check_sta_ap_concurrent_ch_intf(void *data)
