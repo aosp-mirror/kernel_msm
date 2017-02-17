@@ -980,22 +980,30 @@ void dbg_print_reg(const char *name, int reg)
 static ssize_t dwc3_store_events(struct file *file,
 			    const char __user *buf, size_t count, loff_t *ppos)
 {
-	unsigned tty;
+	int ret;
+	u8 tty;
 
 	if (buf == NULL) {
 		pr_err("[%s] EINVAL\n", __func__);
-		goto done;
+		ret = -EINVAL;
+		return ret;
 	}
 
-	if (sscanf(buf, "%u", &tty) != 1 || tty > 1) {
+	ret = kstrtou8_from_user(buf, count, 0, &tty);
+	if (ret < 0) {
+		pr_err("can't get enter value.\n");
+		return ret;
+	}
+
+	if (tty > 1) {
 		pr_err("<1|0>: enable|disable console log\n");
-		goto done;
+		ret = -EINVAL;
+		return ret;
 	}
 
 	dbg_dwc3_data.tty = tty;
 	pr_info("tty = %u", dbg_dwc3_data.tty);
 
- done:
 	return count;
 }
 
