@@ -26,9 +26,14 @@
 
 static void *smblib_ipc_log;
 
-#define smblib_err(chg, fmt, ...)		\
-	pr_err("%s: %s: " fmt, chg->name,	\
-		__func__, ##__VA_ARGS__)	\
+#define smblib_err(chg, fmt, ...)				\
+	do {							\
+		pr_err("%s: %s: " fmt, chg->name,		\
+			__func__, ##__VA_ARGS__);		\
+		ipc_log_string(smblib_ipc_log, "%s: %s: " fmt,	\
+			       dev_name(chg->dev),		\
+			       __func__, ##__VA_ARGS__);	\
+	} while (0)						\
 
 #define smblib_dbg(chg, reason, fmt, ...)			\
 	do {							\
@@ -826,6 +831,7 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 	int pd_icl_ua, default_icl_ua, usb_icl_ua;
 	int rc = 0;
 	u8 icl_options;
+	u8 apsd_stat;
 
 	pd_icl_ua = get_client_vote_locked(votable, PD_VOTER);
 	default_icl_ua = get_client_vote_locked(votable, DEFAULT_VOTER);
@@ -844,12 +850,28 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 					 USBIN_MODE_CHG_BIT);
 		if (rc < 0)
 			return rc;
-		/* override APSD ICL limit */
-		rc = smblib_masked_write(chg, CMD_APSD_REG,
-					 ICL_OVERRIDE_BIT,
-					 ICL_OVERRIDE_BIT);
-		if (rc < 0)
+
+		rc = smblib_read(chg, APSD_RESULT_STATUS_REG, &apsd_stat);
+		if (rc < 0) {
+			smblib_err(chg, "Couldn't get APSD status rc=%d\n", rc);
 			return rc;
+		}
+
+		if (!(apsd_stat & ICL_OVERRIDE_LATCH_BIT)) {
+			smblib_dbg(chg, PR_MISC, "Set ICL override\n");
+			rc = smblib_masked_write(chg, CMD_APSD_REG,
+						 ICL_OVERRIDE_BIT,
+						 ICL_OVERRIDE_BIT);
+			if (rc < 0) {
+				smblib_err(chg,
+					   "Couldn't set ICL_OVERRIDE_BIT rc=%d\n",
+					   rc);
+				return rc;
+			}
+		} else {
+			smblib_dbg(chg, PR_MISC, "ICL is already overridden\n");
+		}
+
 		chg->current_max_ua = pd_icl_ua;
 		return rc;
 	}
