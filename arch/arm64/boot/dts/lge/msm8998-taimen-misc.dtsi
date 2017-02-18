@@ -18,7 +18,7 @@
 
 		vol_up {
 			label = "volume_up";
-			gpios = <&pm8998_gpios 6 0x1>;
+			gpios = <&tlmm 126 0x1>;
 			linux,input-type = <1>;
 			linux,code = <115>;
 			gpio-key,wakeup;
