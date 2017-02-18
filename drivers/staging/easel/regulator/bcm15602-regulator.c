@@ -970,9 +970,6 @@ static void bcm15602_config_adc(struct bcm15602_chip *ddata)
 
 	/* update hk every 10 ms */
 	bcm15602_write_byte(ddata, BCM15602_REG_ADC_HKCTRL, 0x8);
-
-	/* enable bandgap curvature correction for improved accuracy */
-	bcm15602_write_byte(ddata, BCM15602_REG_ADC_BGCTRL, 0x7B);
 }
 
 /* enable all of the interrupts */
@@ -1010,14 +1007,28 @@ static void bcm15602_disable_wdt(struct bcm15602_chip *ddata)
 	}
 }
 
+/* some changes to default configuration based on bringup */
+static int bcm15602_chip_fixup(struct bcm15602_chip *ddata)
+{
+	/* enable bandgap curvature correction for improved accuracy */
+	bcm15602_write_byte(ddata, BCM15602_REG_ADC_BGCTRL, 0x7B);
+
+	/* disable ASR differential sense */
+	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL0, 0x40, 0x00);
+
+	/* increase ASR over-I threshold to 4.5A and 12.8 microseconds */
+	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL7, 0xFC, 0xEC);
+
+	return 0;
+}
+
 /* initialize the chip */
 static int bcm15602_chip_init(struct bcm15602_chip *ddata)
 {
 	bcm15602_print_id(ddata);
 	bcm15602_print_psm_event(ddata);
 
-	/* disable ASR differential sense */
-	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL0, 0x40, 0x00);
+	bcm15602_chip_fixup(ddata);
 
 	bcm15602_config_adc(ddata);
 	bcm15602_config_ints(ddata);
