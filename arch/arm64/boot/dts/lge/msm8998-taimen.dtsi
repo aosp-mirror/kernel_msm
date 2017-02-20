@@ -35,6 +35,48 @@
 			reg = <0 0xb0100000 0 0xc00000>;
 			label = "crash_fb_mem";
 		};
+
+		/delete-node/pil_slpi_region@93800000;
+		/delete-node/pil_video_region@93300000;
+		/delete-node/pil_adsp_region@91900000;
+		/delete-node/modem_region@8ac00000;
+		/delete-node/spss_region@8ab00000;
+
+		pil_ipa_gpu_mem: pil_ipa_gpu_region@95000000 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x95000000 0 0x100000>;
+		};
+
+		pil_slpi_mem: pil_slpi_region@94100000 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x94100000 0 0xf00000>;
+		};
+
+		pil_video_mem: pil_video_region@93c00000 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x93c00000 0 0x500000>;
+		};
+
+		modem_mem: modem_region@8cc00000 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x8cc00000 0 0x6d00000>;
+		};
+
+		pil_adsp_mem: pil_adsp_region@0x8b200000 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x8b200000 0 0x1a00000>;
+		};
+
+		spss_mem: spss_region@8ab00000 { /* for SPSS-PIL */
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x8ab00000 0 0x700000>;
+		};
 	};
 };
 
