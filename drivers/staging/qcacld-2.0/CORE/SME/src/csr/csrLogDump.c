@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -31,7 +31,6 @@ Implements the dump commands specific to the csr module.
 ============================================================================*/
 #include "aniGlobal.h"
 #include "csrApi.h"
-#include "btcApi.h"
 #include "logDump.h"
 #include "smsDebug.h"
 #include "smeInside.h"
@@ -55,50 +54,7 @@ dump_csr( tpAniSirGlobal pMac, tANI_U32 arg1, tANI_U32 arg2, tANI_U32 arg3, tANI
     }
     return p;
 }
-static char *dump_btcSetEvent( tpAniSirGlobal pMac, tANI_U32 arg1,
-                               tANI_U32 arg2, tANI_U32 arg3, tANI_U32 arg4, char *p )
-{
-    tSmeBtEvent btEvent;
-    if( arg1 < BT_EVENT_TYPE_MAX )
-    {
-        smsLog(pMac, LOGE, FL(" signal BT event (%d) handle (%d) 3rd param(%d)"), arg1, arg2, arg3);
-        vos_mem_zero(&btEvent, sizeof(tSmeBtEvent));
-        btEvent.btEventType = arg1;
-        switch( arg1 )
-        {
-        case BT_EVENT_SYNC_CONNECTION_COMPLETE:
-        case BT_EVENT_SYNC_CONNECTION_UPDATED:
-            btEvent.uEventParam.btSyncConnection.connectionHandle = (v_U16_t)arg2;
-            btEvent.uEventParam.btSyncConnection.status = (v_U8_t)arg3;
-            break;
-        case BT_EVENT_DISCONNECTION_COMPLETE:
-            btEvent.uEventParam.btDisconnect.connectionHandle = (v_U16_t)arg2;
-            break;
-        case BT_EVENT_CREATE_ACL_CONNECTION:
-        case BT_EVENT_ACL_CONNECTION_COMPLETE:
-            btEvent.uEventParam.btAclConnection.connectionHandle = (v_U16_t)arg2;
-            btEvent.uEventParam.btAclConnection.status = (v_U8_t)arg3;
-            break;
-        case BT_EVENT_MODE_CHANGED:
-            btEvent.uEventParam.btAclModeChange.connectionHandle = (v_U16_t)arg2;
-            break;
-        default:
-            break;
-        }
-#ifndef WLAN_MDM_CODE_REDUCTION_OPT
-        if(HAL_STATUS_SUCCESS(sme_AcquireGlobalLock( &pMac->sme )))
-        {
-            btcSignalBTEvent(pMac, &btEvent);
-            sme_ReleaseGlobalLock( &pMac->sme );
-        }
-#endif
-    }
-    else
-    {
-        smsLog(pMac, LOGE, FL(" invalid event (%d)"), arg1);
-    }
-    return p;
-}
+
 static char* dump_csrApConcScanParams( tpAniSirGlobal pMac, tANI_U32 arg1,
                                tANI_U32 arg2, tANI_U32 arg3, tANI_U32 arg4, char *p )
 {
@@ -123,7 +79,6 @@ static char* dump_csrApConcScanParams( tpAniSirGlobal pMac, tANI_U32 arg1,
 static tDumpFuncEntry csrMenuDumpTable[] = {
     {0,     "CSR (850-860)",                                    NULL},
     {851,   "CSR: CSR testing connection to AniNet",            dump_csr},
-    {852,   "BTC: Fake BT events (event, handle)",              dump_btcSetEvent},
     {853,   "CSR: Split Scan related params",                   dump_csrApConcScanParams},
 };
 
