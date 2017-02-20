@@ -815,7 +815,7 @@ static ssize_t firmware_direct_read(struct file *filp, struct kobject *kobj,
 	if (count > fw->size - offset)
 		count = fw->size - offset;
 
-	if (test_bit(FW_STATUS_DONE, &fw_priv->buf->status)) {
+	if (!fw_priv->buf || test_bit(FW_STATUS_DONE, &fw_priv->buf->status)) {
 		ret_count = -ENODEV;
 		goto out;
 	}
@@ -840,7 +840,7 @@ static ssize_t firmware_direct_write(struct file *filp, struct kobject *kobj,
 
 	mutex_lock(&fw_lock);
 	fw = fw_priv->fw;
-	if (!fw || test_bit(FW_STATUS_DONE, &fw_priv->buf->status)) {
+	if (!fw || !fw_priv->buf || test_bit(FW_STATUS_DONE, &fw_priv->buf->status)) {
 		retval = -ENODEV;
 		goto out;
 	}
