@@ -26,6 +26,23 @@ fw-shipped- += acenic/tg1.bin
 else
 acenic-objs := acenic/tg1.bin acenic/tg2.bin
 endif
+
+ifdef CONFIG_LGE_TOUCH_FW_PATH
+fwpath := $(subst ",,$(CONFIG_LGE_TOUCH_FW_PATH))
+ifdef CONFIG_LGE_TOUCH_DUAL
+lge_touch_image_files := $(wildcard $(srctree)/firmware/$(fwpath)/*/*.img)
+lge_touch_image_files += $(wildcard $(srctree)/firmware/$(fwpath)/*/*.ftb)
+lge_touch_image_files += $(wildcard $(srctree)/firmware/$(fwpath)/*/*.txt)
+else
+lge_touch_image_files := $(wildcard $(srctree)/firmware/$(fwpath)/*.img)
+lge_touch_image_files += $(wildcard $(srctree)/firmware/$(fwpath)/*.ftb)
+lge_touch_image_files += $(wildcard $(srctree)/firmware/$(fwpath)/*.txt)
+endif
+endif
+lge_touch_firmware := $(subst $(srctree)/firmware/,,$(lge_touch_image_files))
+fw-shipped-$(CONFIG_LGE_TOUCH_CORE_BASE) += $(lge_touch_firmware)
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS) += $(lge_touch_firmware)
+
 fw-shipped-$(CONFIG_ACENIC) += $(acenic-objs)
 fw-shipped-$(CONFIG_ADAPTEC_STARFIRE) += adaptec/starfire_rx.bin \
 					 adaptec/starfire_tx.bin
@@ -141,6 +158,9 @@ fw-shipped-all := $(fw-shipped-y) $(fw-shipped-m) $(fw-shipped-)
 quiet_cmd_ihex  = IHEX    $@
       cmd_ihex  = $(OBJCOPY) -Iihex -Obinary $< $@
 
+quiet_cmd_copy  = COPY    $@
+      cmd_copy  = cp -u $(srctree)/$@ $@
+
 quiet_cmd_ihex2fw  = IHEX2FW $@
       cmd_ihex2fw  = $(objtree)/$(obj)/ihex2fw $< $@
 
@@ -178,6 +198,18 @@ wordsize_deps := $(wildcard include/config/64bit.h include/config/32bit.h \
 		include/config/superh32.h include/config/superh64.h \
 		include/config/x86_32.h include/config/x86_64.h)
 
+# Workaround for make < 3.81, where .SECONDEXPANSION doesn't work.
+# It'll end up depending on these targets, so make them a PHONY rule which
+# depends on _all_ the directories in $(firmware-dirs), and it'll work out OK.
+PHONY += $(objtree)/$$(%) $(objtree)/$(obj)/$$(%)
+$(objtree)/$$(%) $(objtree)/$(obj)/$$(%): $(firmware-dirs)
+	@true
+# For the $$(dir %) trick, where we need % to be expanded first.
+.SECONDEXPANSION:
+ifneq ($(objtree),$(srctree))
+$(patsubst %,$(obj)/%, $(fw-shipped-y)): %: %.gen.S
+	$(call cmd,copy)
+endif
 $(patsubst %,$(obj)/%.gen.S, $(fw-shipped-y)): %: $(wordsize_deps)
 	$(call cmd,fwbin,$(patsubst %.gen.S,%,$@))
 $(patsubst %,$(obj)/%.gen.S, $(fw-external-y)): %: $(wordsize_deps) \
