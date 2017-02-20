@@ -1,0 +1,22 @@
+#
+# STMicroelectronics TOUCH driver configuration
+#
+
+config TOUCHSCREEN_FTS
+	tristate "STMicroelectronics i2c multitouch touchscreen with FingerTipS"
+	depends on I2C
+	help
+		Say Y here to enable STMicroelectronics touchscreen support.
+		If unsure, say N.
+		To compile this driver as a module, choose M here: the
+		module will be called STM_ts.
+
+config LGE_TOUCH_FW_PATH
+	string "LGE TOUCH Firmware Path"
+	help
+	LGE_TOUCH_FW_PATH is set to path of touch firmware
+
+config LGE_TOUCH_DUAL
+	bool "LGE Touch  - Touch Dualization"
+	help
+		If touch dualization is applied, say Y

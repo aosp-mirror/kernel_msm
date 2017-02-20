@@ -1,0 +1,36 @@
+#
+# LGE touch core configuration
+#
+
+if INPUT_TOUCHSCREEN
+
+menuconfig LGE_TOUCH_CORE
+	bool "LGE Touch Core - Generic"
+	select LGE_TOUCH_CORE_BASE
+	help
+	  If your plaform is generic linux, say Y
+
+menuconfig LGE_TOUCH_CORE_MTK
+	bool "LGE Touch Core - MTK"
+	select LGE_TOUCH_CORE_BASE
+	help
+	  If your plaform is mtk linux, say Y
+
+config LGE_TOUCH_CORE_BASE
+	bool "LGE Touch Core Base"
+	depends on SPI_MASTER && I2C
+
+config LGE_TOUCH_FW_PATH
+	string "LGE Touch Core Firmware Path"
+	help
+	LGE_TOUCH_FW_PATH is set to path of synaptics firmware
+
+config LGE_TOUCH_DUAL
+	bool "LGE Touch  - Touch Dualization"
+	help
+		If touch dualization is applied, say Y
+
+source "drivers/input/touchscreen/lge/lgsic/Kconfig"
+
+endif
+
