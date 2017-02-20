@@ -35,6 +35,19 @@
 	};
 };
 
+&pmi8998_gpios {
+	gpio@c800 { /* GPIO 9 - V_LED_3V3_EN - shared power for Re-drive */
+		qcom,mode = <1>;
+		qcom,output-type = <0>;
+		qcom,invert = <1>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <0>;
+		qcom,out-strength = <1>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+};
+
 &pmi8998_charger {
 	qcom,hvdcp-disable;		/* disable HVDCP */
 };
@@ -51,4 +64,131 @@
 				0xe4 0x248 /* tune4 */
 				0x19 0xb4>; /* digital_timers_two */
 	skip_efuse_reg;
+};
+
+&soc {
+	ptn36241g {
+		compatible = "nxp,ptn36241g";
+		extcon = <&pmi8998_pdphy>;
+
+		pinctrl-names = "nxp_vdd",
+				"nxp_cc1_active-HH", "nxp_cc1_sleep-LL",
+				"nxp_cc2_active-HH", "nxp_cc2_sleep-LL";
+		/*USBSS_SW_1V8_EN*/
+		pinctrl-0 = <&nxp_vdd_active>;
+		/*nxp_cc1_active-HH*/
+		pinctrl-1 = <&nxp_cc1_c1_High &nxp_cc1_c2_High>;
+		/*nxp_cc1_sleep-LL*/
+		pinctrl-2 = <&nxp_cc1_c1_Low &nxp_cc1_c2_Low>;
+		/*nxp_cc2_active-HH*/
+		pinctrl-3 = <&nxp_cc2_c1_High &nxp_cc2_c2_High>;
+		/*nxp_cc2_sleep-LL*/
+		pinctrl-4 = <&nxp_cc2_c2_Low &nxp_cc2_c2_Low>;
+	};
+};
+
+&tlmm {
+	nxp_vdd_active: nxp_vdd_active {
+		config {
+			pins = "gpio49";
+			bias-disable;
+			output-high;
+		};
+	};
+
+	nxp_cc1_pinctrl {
+		nxp_cc1_c1_High: nxp_cc1_c1_High {
+			config {
+				pins = "gpio41";
+				bias-disable;
+				output-high;
+			};
+		};
+
+		nxp_cc1_c1_Low: nxp_cc1_c1_Low {
+			config {
+				pins = "gpio41";
+				bias-disable;
+				output-low;
+			};
+		};
+
+		nxp_cc1_c1_HighZ: nxp_cc1_c1_HighZ {
+			config {
+				pins = "gpio41";
+				bias-disable;
+			};
+		};
+
+		nxp_cc1_c2_High: nxp_cc1_c2_High {
+			config {
+				pins = "gpio42";
+				bias-disable;
+				output-high;
+			};
+		};
+
+		nxp_cc1_c2_Low: nxp_cc1_c2_Low {
+			config {
+				pins = "gpio42";
+				bias-disable;
+				output-low;
+			};
+		};
+
+		nxp_cc1_c2_HighZ: nxp_cc1_c2_HighZ {
+			config {
+				pins = "gpio42";
+				bias-disable;
+			};
+		};
+	};
+
+	nxp_cc2_pinctrl {
+		nxp_cc2_c1_High: nxp_cc2_c1_High {
+			config {
+				pins = "gpio76";
+				bias-disable;
+				output-high;
+			};
+		};
+
+		nxp_cc2_c1_Low: nxp_cc2_c1_Low {
+			config {
+				pins = "gpio76";
+				bias-disable;
+				output-low;
+			};
+		};
+
+		nxp_cc2_c1_HighZ: nxp_cc2_c1_HighZ {
+			config {
+				pins = "gpio76";
+				bias-disable;
+			};
+		};
+
+		nxp_cc2_c2_High: nxp_cc2_c2_High {
+			config {
+				pins = "gpio77";
+				bias-disable;
+				output-high;
+			};
+		};
+
+		nxp_cc2_c2_Low: nxp_cc2_c2_Low {
+			config {
+				pins = "gpio77";
+				bias-disable;
+				output-low;
+			};
+		};
+
+		nxp_cc2_c2_HighZ: nxp_cc2_c2_HighZ {
+			config {
+				pins = "gpio77";
+				bias-disable;
+			};
+		};
+	};
 };
