@@ -3,6 +3,7 @@
 #include "msm8998-htc-pm.dtsi"
 #include "dsi-panel-muskie-s6e3ha3.dtsi"
 #include "dsi-panel-muskie-ea8064tg.dtsi"
+#include "dsi-panel-walleye-s6e3fa5.dtsi"
 #include "msm8998-htc-nfc.dtsi"
 #include "msm8998-camera-laser-muskie.dtsi"
 
