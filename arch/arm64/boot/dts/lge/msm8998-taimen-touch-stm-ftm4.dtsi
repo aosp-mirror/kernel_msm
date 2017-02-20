@@ -1,0 +1,55 @@
+/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&pm8998_l28 {
+        regulator-min-microvolt = <3300000>;
+        regulator-max-microvolt = <3300000>;
+        qcom,init-voltage = <3300000>;
+        status = "okay";
+};
+
+&pm8998_l6 {
+        regulator-min-microvolt = <1800000>;
+        regulator-max-microvolt = <1800000>;
+        qcom,init-voltage = <1800000>;
+        status = "okay";
+};
+
+&i2c_5 {
+	status = "disabled";
+	qcom,clk-freq-out = <400000>;
+
+	fts_touch@49 {
+		status = "ok";
+		compatible = "stm,fts_touch";
+		reg = <0x49>;
+
+		pinctrl-names = "on_state","off_state";
+		pinctrl-0 = <&ts_active>;
+		pinctrl-1 = <&ts_suspend>;
+
+		stm,irq_gpio = <&tlmm 125 0>;
+		stm,irq_type = <0x2008>;
+		stm,num_lines = <32 16>;
+		stm,max_coords = <1440 2880>;
+		stm,regulator_dvdd = "pm8998_l6";
+		stm,regulator_avdd = "pm8998_l28";
+		//stm,tspid_gpio = <&gpg1 4 0>;
+		//stm,tspid2_gpio = <&gpr3 2 0>;
+
+		//stm,vdd-gpio = <&tlmm 85 0x0>;
+		//stm,vio-gpio = <&tlmm 86 0x0>;
+
+		stm,firmware_name = "touch/taimen/stm/v30_v0.01.ftb";
+	};
+};
+

@@ -10,44 +10,5 @@
  * GNU General Public License for more details.
  */
 
-&i2c_5 {
-	status = "okay";
-	qcom,clk-freq-out = <400000>;
-
-	stm_ftm4@49 {
-		status = "ok";
-		compatible = "stm,ftm4";
-
-		reg = <0x49>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <125 0x2008>;
-		irqflags = <0x00000002>;
-
-		pinctrl-names = "touch_pin_active", "touch_pin_sleep";
-		pinctrl-0 = <&ts_ftm4_reset_active &ts_ftm4_int_active>;
-		pinctrl-1 = <&ts_ftm4_reset_suspend &ts_ftm4_int_suspend>;
-
-		vdd-gpio = <&tlmm 85 0x00>;
-		vio-gpio = <&tlmm 86 0x00>;
-		reset-gpio = <&tlmm 89 0x00>;
-		irq-gpio = <&tlmm 125 0x2008>;
-
-		/* Caps */
-		max_x = <1439>;
-		max_y = <2879>;
-		max_pressure = <0xff>;
-		max_width_major = <2879>;
-		max_width_minor = <2879>;
-		max_orientation = <90>;
-		max_id = <10>;
-		hw_reset_delay = <200>;	/* temp value */
-		sw_reset_delay = <20>;	/* temp value */
-
-		/* Role */
-		use_lpwg = <1>;
-		use_lpwg_test = <1>;
-		hide_coordinate = <0>;
-
-	};
-};
-
+#include "msm8998-taimen-touch-stm-ftm4.dtsi"
+#include "msm8998-taimen-touch-sic-sw49408.dtsi"

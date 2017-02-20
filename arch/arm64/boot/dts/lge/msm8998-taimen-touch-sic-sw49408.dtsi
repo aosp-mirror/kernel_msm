@@ -1,0 +1,101 @@
+/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/ {
+	aliases {
+		spi5 = &spi_5;
+	};
+
+	soc {
+		spi_5: spi@c179000{    /* BLSP1 QUP5 */
+			status = "ok";
+			compatible = "qcom,spi-qup-v2";
+
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			reg-names = "spi_physical", "spi_bam_physical";
+			reg = <0xC179000 0x600>, <0xC144000 0x25000>;
+
+			interrupt-names = "spi_irq", "spi_bam_irq";
+			interrupts = <0 99 0>, <0 238 0>;
+
+			spi-max-frequency = <40000000>;
+			qcom,master-id = <86>;
+
+			clock-names = "iface_clk", "core_clk";
+			clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+			       <&clock_gcc clk_gcc_blsp1_qup5_spi_apps_clk>;
+
+			/* Assign runtime functions to pins */
+			qcom,use-pinctrl;
+			pinctrl-names = "spi_default","spi_sleep";
+			pinctrl-0 = <&spi_ts_active>;
+			pinctrl-1 = <&spi_ts_suspend>;
+
+			qcom,infinite-mode = <0>;
+			qcom,ver-reg-exists;
+
+			qcom,use-bam;
+			qcom,bam-consumer-pipe-index = <14>;
+			qcom,bam-producer-pipe-index = <15>;
+
+			qcom,rt-priority;
+
+			sw49408 {
+				compatible = "lge,sw49408";
+				reg = <1>;
+				status = "ok";
+				interrupt-parent = <&tlmm>;
+				interrupts = <125 0x2008>;
+				irqflags = <0x00000002>;
+				spi-max-frequency = <40000000>;
+
+				pinctrl-names = "touch_pin_active", "touch_pin_sleep";
+				pinctrl-0 = <&ts_reset_active &ts_int_active>;
+				pinctrl-1 = <&ts_reset_suspend &ts_int_suspend>;
+
+				reset-gpio = <&tlmm 89 0x00>;
+				irq-gpio = <&tlmm 125 0x2008>;
+
+				/* Caps */
+				max_x = <1439>;
+				max_y = <2879>;
+				max_pressure = <0xff>;
+				max_width_major = <1439>;
+				max_width_minor = <2879>;
+				max_orientation = <90>;
+				max_id = <10>;
+				hw_reset_delay = <90>;
+				sw_reset_delay = <10>;
+
+				/* Role */
+				use_lpwg = <1>;
+				use_lpwg_test = <1>;
+				hide_coordinate = <0>;
+
+				/* Firmware */
+				fw_image = "touch/taimen/sw49408/L1L57P2_1_02.img",
+					 "touch/taimen/sw49408/L1L57P2_1_02.img";
+
+				panel_spec = "touch/taimen/sw49408/taimen_limit.txt";
+				panel_spec_mfts_folder = "touch/taimen/sw49408/taimen_limit_mfts.txt";
+
+				/* ASC */
+				use_asc = <0>;
+				low_delta_thres = <350>;
+				high_delta_thres = <600>;
+				max_delta_cnt = <2>;
+			};
+		};
+	};
+};

@@ -584,6 +584,37 @@
 				};
 			};
 		};
+		spi_5 {
+			spi_5_active: spi_5_active {
+				mux {
+					pins = "gpio85", "gpio86",
+							"gpio87", "gpio88";
+					function = "blsp_spi5";
+				};
+
+				config {
+					pins = "gpio85", "gpio86",
+							"gpio87", "gpio88";
+					drive-strength = <6>;
+					bias-disable;
+				};
+			};
+
+			spi_5_sleep: spi_5_sleep {
+				mux {
+					pins = "gpio85", "gpio86",
+							"gpio87", "gpio88";
+					function = "blsp_spi5";
+				};
+
+				config {
+					pins = "gpio85", "gpio86",
+							"gpio87", "gpio88";
+					drive-strength = <6>;
+					bias-disable;
+				};
+			};
+		};
 
 		cci0_active: cci0_active {
 			mux {
@@ -1403,6 +1434,8 @@
 		};
 
 		ts_mux {
+			/delete-node/ ts_reset_suspend;
+			/delete-node/ ts_int_suspend;
 			ts_active: ts_active {
 				mux {
 					pins = "gpio89", "gpio125";
@@ -1553,6 +1586,90 @@
 					pins = "gpio125";
 					drive-strength = <2>;
 					bias-disable;
+				};
+			};
+		};
+
+		pmx_ts_reset_active {
+			ts_reset_active: ts_reset_active {
+				mux {
+					pins = "gpio89";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio89";
+					drive-strength = <6>;
+					bias-pull-up;
+				};
+			};
+
+			ts_reset_suspend: ts_reset_suspend {
+				mux {
+					pins = "gpio89";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio89";
+					drive-strength = <6>;
+					bias-pull-down;
+				};
+			};
+		};
+
+		pmx_ts_int_active {
+			ts_int_active: ts_int_active {
+				mux {
+					pins = "gpio125";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio125";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+
+			ts_int_suspend: ts_int_suspend {
+				mux {
+					pins = "gpio125";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio125";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+
+		pmx_spi_ts: pmx_spi_ts {
+			spi_ts_active: spi_ts_active {
+			/* TOUCH MOSI, MISO */
+				mux {
+					pins = "gpio85", "gpio86",
+							"gpio87", "gpio88";
+					function = "blsp_spi5";
+				};
+				config {
+					pins = "gpio85", "gpio86",
+							"gpio87", "gpio88";
+					drive-strength = <6>; /* 8MA */
+					bias-pull-up;
+				};
+			};
+
+			spi_ts_suspend: spi_ts_suspend {
+			/* TOUCH MOSI, MISO */
+				mux {
+					pins = "gpio85", "gpio86",
+							"gpio87", "gpio88";
+					function = "blsp_spi5";
+				};
+				config {
+					pins = "gpio85", "gpio86",
+							"gpio87", "gpio88";
+					drive-strength = <6>; /* 2MA */
+					bias-disable; /* No PULL */
 				};
 			};
 		};
