@@ -379,11 +379,11 @@ static struct stc311x_platform_data stc3117_data = {
 	.Alm_SOC = 15,/* SOC alm level %*/
 	.Alm_Vbat = 3600,/* Vbat alm level mV*/
 	/* nominal CC_cnf, coming from battery characterisation*/
-	.CC_cnf = 59,
+	.CC_cnf = 61,
 	/* nominal VM cnf , coming from battery characterisation*/
-	.VM_cnf = 271,
+	.VM_cnf = 317,
 	/* nominal internal impedance*/
-	.Rint = 1253,
+	.Rint = 970,
 	/* nominal capacity in mAh, coming from battery characterisation*/
 	.Cnom = 300,
 	.Rsense = 10, /* sense resistor mOhms*/
@@ -391,31 +391,31 @@ static struct stc311x_platform_data stc3117_data = {
 	.Adaptive = 1, /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 
 	/* Elentec Co Ltd Battery pack - 80 means 8% */
-        .CapDerating[6] = -5,            /* capacity derating in 0.1%, for temp = -20 degC */
-        .CapDerating[5] = -5,            /* capacity derating in 0.1%, for temp = -10 degC */
-        .CapDerating[4] = -5,             /* capacity derating in 0.1%, for temp = 0 degC */
-        .CapDerating[3] = -5,             /* capacity derating in 0.1%, for temp = 10 degC */
+        .CapDerating[6] = 800,            /* capacity derating in 0.1%, for temp = -20 degC */
+        .CapDerating[5] = 330,            /* capacity derating in 0.1%, for temp = -10 degC */
+        .CapDerating[4] = 77,             /* capacity derating in 0.1%, for temp = 0 degC */
+        .CapDerating[3] = 25,             /* capacity derating in 0.1%, for temp = 10 degC */
         .CapDerating[2] = 0,              /* capacity derating in 0.1%, for temp = 25 degC */
         .CapDerating[1] = 0,           /* capacity derating in 0.1%, for temp = 40 degC */
         .CapDerating[0] = 0,           /* capacity derating in 0.1%, for temp = 60 degC */
 
 	/*OCV curve example for a 4.35V li-ion battery*/
-        .OCVValue[15] = 4297,             /* OCV curve value */
-        .OCVValue[14] = 4182,             /* OCV curve value */
-        .OCVValue[13] = 4087,             /* OCV curve value */
-        .OCVValue[12] = 3967,             /* OCV curve value */
+        .OCVValue[15] = 4299,             /* OCV curve value */
+        .OCVValue[14] = 4190,             /* OCV curve value */
+        .OCVValue[13] = 4098,             /* OCV curve value */
+        .OCVValue[12] = 3977,             /* OCV curve value */
         .OCVValue[11] = 3942,             /* OCV curve value */
-        .OCVValue[10] = 3899,             /* OCV curve value */
-        .OCVValue[9] = 3832,              /* OCV curve value */
-        .OCVValue[8] = 3795,              /* OCV curve value */
-        .OCVValue[7] = 3766,              /* OCV curve value */
-        .OCVValue[6] = 3748,              /* OCV curve value */
-        .OCVValue[5] = 3731,              /* OCV curve value */
-        .OCVValue[4] = 3702,              /* OCV curve value */
-        .OCVValue[3] = 3684,              /* OCV curve value */
-        .OCVValue[2] = 3671,              /* OCV curve value */
-        .OCVValue[1] = 3559,              /* OCV curve value */
-        .OCVValue[0] = 3300,              /* OCV curve value */
+        .OCVValue[10] = 3902,             /* OCV curve value */
+        .OCVValue[9] = 3839,              /* OCV curve value */
+        .OCVValue[8] = 3800,              /* OCV curve value */
+        .OCVValue[7] = 3768,              /* OCV curve value */
+        .OCVValue[6] = 3750,              /* OCV curve value */
+        .OCVValue[5] = 3734,              /* OCV curve value */
+        .OCVValue[4] = 3707,              /* OCV curve value */
+        .OCVValue[3] = 3685,              /* OCV curve value */
+        .OCVValue[2] = 3682,              /* OCV curve value */
+        .OCVValue[1] = 3621,              /* OCV curve value */
+        .OCVValue[0] = 3450,              /* OCV curve value */
 
 	/* SOC_TAB data */
 	.SOCValue[15] = 100,
