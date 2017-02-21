@@ -432,11 +432,12 @@ static int tcpm_seq_show(struct seq_file *s, void *v)
 	mutex_lock(&port->logbuffer_lock);
 	tail = port->logbuffer_tail;
 	while (tail != port->logbuffer_head) {
-		seq_printf(s, "%s\n", port->logbuffer[tail]);
+		if (seq_printf(s, "%s\n", port->logbuffer[tail]) < 0)
+			goto abort;
 		tail = (tail + 1) % LOG_BUFFER_ENTRIES;
 	}
-	if (!seq_has_overflowed(s))
-		port->logbuffer_tail = tail;
+	port->logbuffer_tail = tail;
+abort:
 	mutex_unlock(&port->logbuffer_lock);
 
 	return 0;
