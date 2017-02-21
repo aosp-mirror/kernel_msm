@@ -223,9 +223,12 @@ struct qpnp_pon {
 	u8			warm_reset_reason2;
 	bool			is_spon;
 	bool			store_hard_reset_reason;
-	struct timer_list cblpwr_timer;
-	struct delayed_work cblpwr_delay_work;
-	struct workqueue_struct    *cblpwr_workqueue;
+
+	/* extend */
+	bool                    timer_cblpwr_running;
+	struct timer_list       timer_cblpwr;
+	struct delayed_work     delaywork_cblpwr;
+	struct workqueue_struct *workqueue_cblpwr;
 };
 
 static struct qpnp_pon *g_pon;
@@ -855,23 +858,23 @@ static irqreturn_t qpnp_kpdpwr_resin_bark_irq(int irq, void *_pon)
 
 static irqreturn_t qpnp_cblpwr_irq(int irq, void *_pon)
 {
-	int rc;
-	struct qpnp_pon *pon = _pon;
 	int vbus;
 	struct power_supply *usb_psy;
 
-	usb_psy = power_supply_get_by_name("usb");
-	if (usb_psy == NULL)
-		pr_err("qpnp_cblpwr_irq can't find usb device \n");
-	else {
-		vbus = !!irq_read_line(irq);
-		power_supply_set_present(usb_psy, vbus);
-		pr_err("qpnp_cblpwr_irq set usb present: %d \n", vbus);
+	vbus = !!irq_read_line(irq);
+	if ((g_pon->timer_cblpwr_running == 0) && (vbus == 1)) {
+		usb_psy = power_supply_get_by_name("usb");
+		if (usb_psy == NULL) {
+			pr_err("qpnp_cblpwr_irq can't find usb device \n");
+		} else {
+			power_supply_set_present(usb_psy, vbus);
+			pr_err("qpnp_cblpwr_irq set usb present: %d \n", vbus);
+		}
 	}
-
-	rc = qpnp_pon_input_dispatch(pon, PON_CBLPWR);
-	if (rc)
-		dev_err(&pon->spmi->dev, "Unable to send input event\n");
+	del_timer(&g_pon->timer_cblpwr);
+	g_pon->timer_cblpwr_running = 1;
+	g_pon->timer_cblpwr.expires = jiffies + HZ;
+	add_timer(&g_pon->timer_cblpwr);
 
 	return IRQ_HANDLED;
 }
@@ -1184,6 +1187,9 @@ qpnp_pon_request_irqs(struct qpnp_pon *pon, struct qpnp_pon_config *cfg)
 							cfg->state_irq);
 			return rc;
 		}
+		//Wake up system to notify charger state change
+		enable_irq_wake(cfg->state_irq);
+
 		break;
 	case PON_KPDPWR_RESIN:
 		if (cfg->use_bark) {
@@ -1949,7 +1955,8 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 
 void qpnp_pon_delay_work(unsigned long dev)
 {
-	queue_delayed_work(g_pon->cblpwr_workqueue, &g_pon->cblpwr_delay_work, 0);
+	g_pon->timer_cblpwr_running = 0;
+	queue_delayed_work(g_pon->workqueue_cblpwr, &g_pon->delaywork_cblpwr, 0);
 }
 
 void qpnp_pon_timer_trigger_usb(struct work_struct *work)
@@ -1958,39 +1965,20 @@ void qpnp_pon_timer_trigger_usb(struct work_struct *work)
 	struct power_supply *usb_psy;
 	u8 cblpwr = 0;
 
-	pr_err("qpnp_pon_timer_trigger_usb: re-trigger usb detection \n");
-	rc = spmi_ext_register_readl(g_pon->spmi->ctrl, g_pon->spmi->sid, 0x810,
-							&cblpwr, 1);
+	usb_psy = power_supply_get_by_name("usb");
+	if (usb_psy == NULL) {
+		pr_err("%s: can't find usb device \n", __func__);
+	} else {
+		rc = spmi_ext_register_readl(g_pon->spmi->ctrl, g_pon->spmi->sid, PON_INT_RT_STS, &cblpwr, 1);
+		pr_err("%s: PON_INT_RT_STS: %d \n", __func__, cblpwr);
+		cblpwr = ((cblpwr & CBLPWR_ON) >> 2);
 
-	pr_debug("PON_INT_RT_STS: %d \n", cblpwr);
-	cblpwr = ((cblpwr & 0x04) >> 2);
-
-	if (cblpwr) {
-		usb_psy = power_supply_get_by_name("usb");
-		if (usb_psy == NULL) {
-			pr_err("qpnp_pon_timer_trigger_usb can't find usb device \n");
-			return;
-		}
-		else {
-			pr_err("qpnp_pon_timer_trigger_usb: set usb present \n");
-			power_supply_set_present(usb_psy, cblpwr);
-		}
-
-		rc = qpnp_pon_input_dispatch(g_pon, PON_CBLPWR);
-		if (rc)
-			dev_err(&g_pon->spmi->dev, "Unable to send input event\n");
+		power_supply_set_present(usb_psy, cblpwr);
 	}
-}
 
-void qpnp_pon_init_timer(void)
-{
-	//init timer
-	init_timer(&g_pon->cblpwr_timer);
-	g_pon->cblpwr_timer.function = qpnp_pon_delay_work;
-
-	//10 sec
-	g_pon->cblpwr_timer.expires = jiffies + 10*HZ;
-	add_timer(&g_pon->cblpwr_timer);
+	rc = qpnp_pon_input_dispatch(g_pon, PON_CBLPWR);
+	if (rc)
+		dev_err(&g_pon->spmi->dev, "Unable to send input event\n");
 }
 
 static int qpnp_pon_probe(struct spmi_device *spmi)
@@ -2033,6 +2021,19 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 		return -ENXIO;
 	}
 	pon->base = pon_resource->start;
+
+	g_pon = pon;
+	pon->timer_cblpwr_running = 0;
+	//Init workqueue
+	pon->workqueue_cblpwr = create_singlethread_workqueue("cblpwr-workqueue");
+	if (g_pon->workqueue_cblpwr == NULL) {
+		pr_err("%s: failed to create cblpwr work queue\n", __func__);
+		return -EINVAL;
+	}
+	//Init timer and delayed_work
+	INIT_DELAYED_WORK(&pon->delaywork_cblpwr, qpnp_pon_timer_trigger_usb);
+	init_timer(&pon->timer_cblpwr);
+	pon->timer_cblpwr.function = qpnp_pon_delay_work;
 
 	/* get the total number of pon configurations */
 	for_each_available_child_of_node(spmi->dev.of_node, node) {
@@ -2346,7 +2347,7 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 	pr_debug("PON_INT_RT_STS: %d \n", cblpwr);
 	cblpwr = ((cblpwr & CBLPWR_ON) >> 2);
 
-	if (cblpwr)
+	if (cblpwr && (pon->timer_cblpwr_running == 0))
 	{
 		pr_debug("probe: re-trigger usb detect \n");
 		usb_psy = power_supply_get_by_name("usb");
@@ -2354,17 +2355,11 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 			pr_err("qpnp_pon_probe can't find usb device \n");
 
 			//if usb is still not ready, init timer and delay 10 sec to re-trigger usb
-			g_pon = pon;
-			INIT_DELAYED_WORK(&g_pon->cblpwr_delay_work, qpnp_pon_timer_trigger_usb);
-			g_pon->cblpwr_workqueue = create_singlethread_workqueue("qpnp-pon-cblpwr-work");
-
-			if (g_pon->cblpwr_workqueue == NULL)
-				pr_err("%s: failed to create qpnp-pon-cblpwr work queue\n", __func__);
-
-			qpnp_pon_init_timer();
-		}
-		else
+			pon->timer_cblpwr.expires = jiffies + 10*HZ;
+			add_timer(&pon->timer_cblpwr);
+		} else {
 			power_supply_set_present(usb_psy, cblpwr);
+		}
 
 		rc = qpnp_pon_input_dispatch(pon, PON_CBLPWR);
 		if (rc)

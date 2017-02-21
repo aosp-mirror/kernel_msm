@@ -324,7 +324,7 @@ int Capacity_Adjust;
 /* ------------------------------------------------------------------------ */
 
 #define STC311x_BATTERY_FULL 100
-#define STC311x_DELAY	 500 //5 sec
+#define STC311x_DELAY	 3000 //30 sec
 #define STC311x_DELAY_LOW_BATT 500 //5 sec
 #define STC311x_SOC_THRESHOLD 5
 
@@ -1784,7 +1784,7 @@ void stc311x_debug_info(void)
 			i, (SOCTAB[i]/2), i+1, (SOCTAB[i+1]/2), i+2, (SOCTAB[i+2]/2), i+3, (SOCTAB[i+3]/2));
 	}
 
-	pr_err("end: mode = 0x%x, ctrl = 0x%x, CMONIT_COUNT = %d, SOC = %d, voltage = %d, OCV = %d \n",data[0], data[1], data[22], data_soc, data_voltage, data_ocv);
+	pr_err("mode=0x%x, ctrl=0x%x, CMONIT_COUNT=%d, SOC=%d, voltage=%d, OCV=%d \n",data[0], data[1], data[22], data_soc, data_voltage, data_ocv);
 }
 
 static void STC311x_Rewrite_OCV(void)
@@ -2305,8 +2305,8 @@ int STC31xx_ForceCC(void)
 	return OK;
 }
 
-/*
-static int stc311x_read_pmic_adc_temperature(struct stc311x_chip *chip)
+
+static int stc311x_read_pmic_adc_temperature(struct stc311x_chip *chip, int *batt_temp)
 {
 	struct qpnp_vadc_result result;
 	int res;
@@ -2330,15 +2330,14 @@ static int stc311x_read_pmic_adc_temperature(struct stc311x_chip *chip)
 	if (res < 0) {
 		pr_err("stc311x - Error reading VADC chennal_12: %d\n", res);
 		return res;
-	}
-	else {
+	} else {
 		// update the tempetature from pmic adc
 		pr_debug("stc311x - read pmic mpp3,  temperature = %lld \n", result.physical);
-		chip->Temperature = (result.physical * 10);
+		*batt_temp = (int)(result.physical * 10);
 	}
 	return 0;
 }
-*/
+
 
 /* -------------------------------------------------------------- */
 
@@ -2439,40 +2438,6 @@ void UI_soc_adjustment(struct stc311x_chip *chip)
 
 }
 
-static int stc311x_get_pmic_batt_therm(struct stc311x_chip *chip, int *batt_temp)
-{
-	struct qpnp_vadc_result result;
-	int res;
-
-	// get pm8916 vadc
-	if (NULL == chip->vadc_dev) {
-		chip->vadc_dev = qpnp_get_vadc(chip->dev, "pm8916");
-		if (IS_ERR(chip->vadc_dev)) {
-			res = PTR_ERR(chip->vadc_dev);
-			if (res == -EPROBE_DEFER)
-				pr_err("stc311x - pm8916 vadc not found - defer rc \n");
-			else
-				pr_err("stc311x - fail to get the pm8916 vadc \n");
-			chip->vadc_dev = NULL;
-
-			return -1;
-		}
-	}
-
-	res = qpnp_vadc_read(chip->vadc_dev, LR_MUX1_BATT_THERM, &result);
-	if (res) {
-		pr_err("error reading adc channel = %d, res = %d\n",
-					LR_MUX1_BATT_THERM, res);
-		return res;
-	}
-	pr_err("batt_temp phy = %lld meas = 0x%llx\n",
-			result.physical, result.measurement);
-
-	*batt_temp = (int)result.physical;
-
-	return 0;
-}
-
 static void stc311x_work(struct work_struct *work)
 {
 	struct stc311x_chip *chip;
@@ -2555,16 +2520,19 @@ static void stc311x_work(struct work_struct *work)
 		pr_err("GasGauge_Task return (-1) \n");
 	}
 
-
-	rc = stc311x_get_pmic_batt_therm(chip, &temp);
-	if (rc < 0)
-		pr_err("read pmic batt therm fail \n");
-	else
+	//get temperature by pmic ADC.
+	rc = stc311x_read_pmic_adc_temperature(chip, &temp);
+	if (rc) {
+		//If fail, use stc3117 data
+		if (res >0)
+			chip->Temperature = GasGaugeData.Temperature;
+		else
+			chip->Temperature = 250; //default
+	} else
 		chip->Temperature = temp;
 
-	pr_err("gauge temp= %d, PMIC batt therm = %d \n", GasGaugeData.Temperature, temp);
-
 	if (g_debug) {
+		pr_err("ST temperature= %d, pmic mpp_3 temperature = %d \n", GasGaugeData.Temperature, temp);
 		pr_err(" ===  After GasGauge_Task() === \n");
 		stc311x_debug_info();
 	}
