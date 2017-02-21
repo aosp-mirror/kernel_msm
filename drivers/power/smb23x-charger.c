@@ -175,33 +175,33 @@ static int inhibit_mv_table[] = {
 	385,
 	512,
 };
-
+/* R1 = 9.1K, R2 = 0K, RT = 10K, Beta = 3435 */
 static int cold_bat_decidegc_table[] = {
-	100,
-	50,
+	110,
+	60,
 	0,
 	-50,
 };
 
 static int cool_bat_decidegc_table[] = {
-	150,
-	100,
-	50,
+	170,
+	110,
+	60,
 	0,
 };
 
 static int warm_bat_decidegc_table[] = {
-	400,
 	450,
 	500,
-	550,
+	560,
+	610,
 };
 
 static int hot_bat_decidegc_table[] = {
-	500,
-	550,
-	600,
-	650,
+	560,
+	610,
+	670,
+	730,
 };
 
 
