@@ -1978,21 +1978,21 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 		BattData.SOC = CompensateSOC(BattData.SOC,
 					     BattData.Temperature);
 		if (g_debug)
-			pr_err("after CompensateSOC: BattData.SOC = %d (0.1), temp = %d degC \n", BattData.SOC, BattData.Temperature);
+			pr_err("temperature compensate SOC: BattData.SOC = %d (0.1), temp = %d degC \n", BattData.SOC, BattData.Temperature);
 
 		/*early empty compensation*/
 		value = BattData.AvgVoltage;
 		if (BattData.Voltage < value)
 			value = BattData.Voltage;
-		if (value < (APP_MIN_VOLTAGE+200) &&
+		if (value < (APP_MIN_VOLTAGE+50) &&
 		    value > (APP_MIN_VOLTAGE-500)) {
-			if (value < APP_MIN_VOLTAGE)
+			if ((value < APP_MIN_VOLTAGE) && ((BattData.AvgCurrent > -100) && (BattData.AvgCurrent < 0)))
 				BattData.SOC = 0;
 			else
 				BattData.SOC = BattData.SOC *
-					(value - APP_MIN_VOLTAGE) / 200;
+					(value - APP_MIN_VOLTAGE) / 50;
 			if (g_debug)
-				pr_err("early compensation:  BattData.SOC = %d (0.1)\n", BattData.SOC);
+				pr_err("early empty compensation:  AvgVoltage = %d, BattData.Voltage = %d, BattData.SOC = %d (0.1)\n", BattData.AvgVoltage, BattData.Voltage, BattData.SOC);
 	}
 
 		BattData.AccVoltage += (BattData.Voltage - BattData.AvgVoltage);
