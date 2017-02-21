@@ -303,12 +303,12 @@ static struct STC311x_BattDataTypeDef BattData;   /* STC311x data */
 static union {
 	unsigned char db[RAM_SIZE];  /* last byte holds the CRC */
 	struct {
-		short int TstWord;     /* 0-1 */
-		short int HRSOC;       /* 2-3 SOC backup */
-		short int CC_cnf;      /* 4-5 current CC_cnf */
-		short int VM_cnf;      /* 6-7 current VM_cnf */
-		char SOC;              /* 8 SOC for trace (in %) */
-		char GG_Status;        /* 9  */
+		short int TstWord;          /* 0-1 */
+		unsigned short int HRSOC;   /* 2-3 SOC backup */
+		short int CC_cnf;           /* 4-5 current CC_cnf */
+		short int VM_cnf;           /* 6-7 current VM_cnf */
+		char SOC;                   /* 8 SOC for trace (in %) */
+		char GG_Status;             /* 9  */
 		/* bytes ..RAM_SIZE-2 are free, last byte RAM_SIZE-1 is the
 		 * CRC*/
 	} reg;
@@ -2033,6 +2033,11 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 			}
 		}
 
+		//Set max SOC to fix SOC > 100
+		if (BattData.HRSOC > (MAX_HRSOC+512)) {
+			BattData.SOC = MAX_SOC;
+			STC311x_SetSOC(MAX_HRSOC+512);
+		}
 
 		/* -------- APPLICATION RESULTS ------------ */
 
