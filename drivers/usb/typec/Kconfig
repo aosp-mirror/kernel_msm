@@ -11,4 +11,6 @@ config TYPEC_TCPM
 	  The Type-C Port Controller Manager provides a USB PD and USB Type-C
 	  state machine for use with Type-C Port Controllers.
 
+source "drivers/usb/typec/fusb302/Kconfig"
+
 endmenu

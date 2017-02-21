@@ -1,0 +1,3 @@
+config TYPEC_FUSB302
+	tristate "Fairchild FUSB302 Type-C chip driver"
+	select TYPEC_TCPM
