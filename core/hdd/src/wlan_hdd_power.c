@@ -756,7 +756,6 @@ static int hdd_set_grat_arp_keepalive(hdd_adapter_t *adapter)
 	hdd_station_ctx_t *sta_ctx;
 	tSirKeepAliveReq req = {
 		.packetType = SIR_KEEP_ALIVE_UNSOLICIT_ARP_RSP,
-		.destIpv4Addr = {0xff, 0xff, 0xff, 0xff},
 		.dest_macaddr = QDF_MAC_ADDR_BROADCAST_INITIALIZER,
 	};
 
@@ -782,6 +781,10 @@ static int hdd_set_grat_arp_keepalive(hdd_adapter_t *adapter)
 		hdd_err("Failed to populate ipv4 address");
 		return exit_code;
 	}
+
+	/* according to RFC5227, sender/target ip address should be the same */
+	qdf_mem_copy(&req.destIpv4Addr, &req.hostIpv4Addr,
+		     sizeof(req.destIpv4Addr));
 
 	qdf_copy_macaddr(&req.bssid, &sta_ctx->conn_info.bssId);
 	req.timePeriod = hdd_ctx->config->infraStaKeepAlivePeriod;
@@ -1449,8 +1452,10 @@ static void hdd_ssr_restart_sap(hdd_context_t *hdd_ctx)
 	while (NULL != adapter_node && QDF_STATUS_SUCCESS == status) {
 		adapter = adapter_node->pAdapter;
 		if (adapter && adapter->device_mode == QDF_SAP_MODE) {
-			hdd_notice("in sap mode %p", adapter);
-			wlan_hdd_start_sap(adapter, true);
+			if (test_bit(SOFTAP_INIT_DONE, &adapter->event_flags)) {
+				hdd_notice("Restart prev SAP session");
+				wlan_hdd_start_sap(adapter, true);
+			}
 		}
 		status = hdd_get_next_adapter(hdd_ctx, adapter_node, &next);
 		adapter_node = next;
@@ -1540,6 +1545,29 @@ QDF_STATUS hdd_wlan_shutdown(void)
 	hdd_alert("WLAN driver shutdown complete");
 	return QDF_STATUS_SUCCESS;
 }
+
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+/**
+* hdd_wlan_ssr_reinit_event()- send ssr reinit state
+*
+* This Function send send ssr reinit state diag event
+*
+* Return: void.
+*/
+static void hdd_wlan_ssr_reinit_event(void)
+{
+	WLAN_HOST_DIAG_EVENT_DEF(ssr_reinit, struct host_event_wlan_ssr_reinit);
+	qdf_mem_zero(&ssr_reinit, sizeof(ssr_reinit));
+	ssr_reinit.status = SSR_SUB_SYSTEM_REINIT;
+	WLAN_HOST_DIAG_EVENT_REPORT(&ssr_reinit,
+					EVENT_WLAN_SSR_REINIT_SUBSYSTEM);
+}
+#else
+static inline void hdd_wlan_ssr_reinit_event(void)
+{
+
+}
+#endif
 
 /**
  * hdd_wlan_re_init() - HDD SSR re-init function
@@ -1661,6 +1689,7 @@ success:
 	if (pHddCtx->config->sap_internal_restart)
 		hdd_ssr_restart_sap(pHddCtx);
 	hdd_ssr_timer_del();
+	hdd_wlan_ssr_reinit_event();
 	return QDF_STATUS_SUCCESS;
 }
 
@@ -2469,6 +2498,12 @@ int hdd_set_qpower_config(hdd_context_t *hddctx, hdd_adapter_t *adapter,
 
 	if (!hddctx->config->enablePowersaveOffload) {
 		hdd_err("qpower is disabled in configuration");
+		return -EINVAL;
+	}
+	if (adapter->device_mode != QDF_STA_MODE &&
+	    adapter->device_mode != QDF_P2P_CLIENT_MODE) {
+		hdd_info(FL("QPOWER only allowed in STA/P2P-Client modes:%d "),
+			adapter->device_mode);
 		return -EINVAL;
 	}
 

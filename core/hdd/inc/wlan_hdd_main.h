@@ -104,6 +104,7 @@
 #define DEVICE_IFACE_OPENED    (5)
 #define TDLS_INIT_DONE         (6)
 #define ACS_PENDING            (7)
+#define SOFTAP_INIT_DONE       (8)
 
 /* HDD global event flags */
 #define ACS_IN_PROGRESS        (0)
@@ -157,9 +158,6 @@
 #define MAX_NUMBER_OF_ADAPTERS 4
 
 #define MAX_CFG_STRING_LEN  255
-
-/* SSR Retry Count */
-#define HDD_MOD_EXIT_SSR_MAX_RETRIES 75
 
 #define MAC_ADDR_ARRAY(a) (a)[0], (a)[1], (a)[2], (a)[3], (a)[4], (a)[5]
 /** Mac Address string **/

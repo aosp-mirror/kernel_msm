@@ -1841,15 +1841,17 @@ int hdd_wlan_start_modules(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 		}
 
 		if (reinit) {
-			if (hdd_ipa_uc_ssr_reinit(hdd_ctx))
-			hdd_err("HDD IPA UC reinit failed");
+			if (hdd_ipa_uc_ssr_reinit(hdd_ctx)) {
+				hdd_err("HDD IPA UC reinit failed");
+				goto post_disable;
+			}
 		}
 
 	/* Fall through dont add break here */
 	case DRIVER_MODULES_OPENED:
 		if (!adapter) {
 			hdd_alert("adapter is Null");
-			goto close;
+			goto post_disable;
 		}
 		if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
 			hdd_err("in ftm mode, no need to configure cds modules");
@@ -1857,7 +1859,7 @@ int hdd_wlan_start_modules(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 		}
 		if (hdd_configure_cds(hdd_ctx, adapter)) {
 			hdd_err("Failed to Enable cds modules");
-			goto close;
+			goto post_disable;
 		}
 		hdd_enable_power_management();
 		hdd_info("Driver Modules Successfully Enabled");
@@ -1876,7 +1878,11 @@ int hdd_wlan_start_modules(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 	EXIT();
 	return 0;
 
+post_disable:
+	cds_post_disable();
+
 close:
+	hdd_ctx->driver_status = DRIVER_MODULES_CLOSED;
 	cds_close(p_cds_context);
 
 ol_cds_free:
@@ -1891,6 +1897,7 @@ release_lock:
 	hdd_ctx->start_modules_in_progress = false;
 	mutex_unlock(&hdd_ctx->iface_change_lock);
 	EXIT();
+
 	return -EINVAL;
 }
 
@@ -3603,6 +3610,12 @@ QDF_STATUS hdd_stop_adapter(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 	void *sap_ctx;
 
 	ENTER();
+
+	if (!test_bit(DEVICE_IFACE_OPENED, &adapter->event_flags)) {
+		hdd_info("interface %d is not up %lu",
+			adapter->device_mode, adapter->event_flags);
+		return -ENODEV;
+	}
 
 	scan_info = &adapter->scan_info;
 	hdd_notice("Disabling queues");
@@ -5384,7 +5397,7 @@ static void hdd_pld_request_bus_bandwidth(hdd_context_t *hdd_ctx,
 	uint64_t temp_rx = 0;
 	uint64_t temp_tx = 0;
 	enum pld_bus_width_type next_vote_level = PLD_BUS_WIDTH_NONE;
-	enum wlan_tp_level next_rx_level = WLAN_SVC_TP_NONE;
+	static enum wlan_tp_level next_rx_level = WLAN_SVC_TP_NONE;
 	enum wlan_tp_level next_tx_level = WLAN_SVC_TP_NONE;
 	uint32_t delack_timer_cnt = hdd_ctx->config->tcp_delack_timer_count;
 	uint16_t index = 0;
@@ -5431,7 +5444,6 @@ static void hdd_pld_request_bus_bandwidth(hdd_context_t *hdd_ctx,
 
 	hdd_ctx->prev_rx = rx_packets;
 
-	next_rx_level = WLAN_SVC_TP_LOW;
 	if (temp_rx > hdd_ctx->config->tcpDelackThresholdHigh) {
 		if ((hdd_ctx->cur_rx_level != WLAN_SVC_TP_HIGH) &&
 		   (++hdd_ctx->rx_high_ind_cnt == delack_timer_cnt)) {
@@ -5439,6 +5451,7 @@ static void hdd_pld_request_bus_bandwidth(hdd_context_t *hdd_ctx,
 		}
 	} else {
 		hdd_ctx->rx_high_ind_cnt = 0;
+		next_rx_level = WLAN_SVC_TP_LOW;
 	}
 
 	if (hdd_ctx->cur_rx_level != next_rx_level) {
@@ -7998,6 +8011,15 @@ int hdd_configure_cds(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
 		goto out;
 	}
 
+	/* Always get latest IPA resources allocated from cds_open and configure
+	 * IPA module before configuring them to FW. Sequence required as crash
+	 * observed otherwise.
+	 */
+	if (hdd_ipa_uc_ol_init(hdd_ctx)) {
+		hdd_err("Failed to setup pipes");
+		goto out;
+	}
+
 	/*
 	 * Start CDS which starts up the SME/MAC/HAL modules and everything
 	 * else
@@ -8163,7 +8185,7 @@ int hdd_wlan_stop_modules(hdd_context_t *hdd_ctx)
 		goto done;
 	}
 
-	qdf_status = cds_post_disable(hdd_ctx->pcds_context);
+	qdf_status = cds_post_disable();
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 		hdd_err("Failed to process post CDS disable Modules! :%d",
 			qdf_status);

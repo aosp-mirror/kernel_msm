@@ -303,19 +303,13 @@ static int __hdd_hostapd_stop(struct net_device *dev)
 	hdd_adapter_t *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 	ptSapContext sap_ctx = adapter->sessionCtx.ap.sapContext;
+	int ret;
 
 	ENTER_DEV(dev);
+	ret = wlan_hdd_validate_context(hdd_ctx);
+	if (ret)
+		return ret;
 
-	if (NULL == hdd_ctx) {
-		hdd_info("%pS HDD context is Null", (void *)_RET_IP_);
-		return -ENODEV;
-	}
-
-	if (!test_bit(DEVICE_IFACE_OPENED, &adapter->event_flags)) {
-		hdd_info("iface is not in open state, flags: %lu",
-			adapter->event_flags);
-		return 0;
-	}
 	if (!sap_ctx) {
 		hdd_err("invalid sap ctx : %p", sap_ctx);
 		return -ENODEV;
@@ -7282,6 +7276,14 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 		return -EINVAL;
 	}
 
+	if (cds_is_hw_mode_change_in_progress()) {
+		status = qdf_wait_for_connection_update();
+		if (!QDF_IS_STATUS_SUCCESS(status)) {
+			hdd_err("qdf wait for event failed!!");
+			return -EINVAL;
+		}
+	}
+
 	iniConfig = pHddCtx->config;
 	pHostapdState = WLAN_HDD_GET_HOSTAP_STATE_PTR(pHostapdAdapter);
 
@@ -7778,6 +7780,7 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	pSapEventCallback = hdd_hostapd_sap_event_cb;
 
 	(WLAN_HDD_GET_AP_CTX_PTR(pHostapdAdapter))->dfs_cac_block_tx = true;
+	set_bit(SOFTAP_INIT_DONE, &pHostapdAdapter->event_flags);
 
 	qdf_event_reset(&pHostapdState->qdf_event);
 	status = wlansap_start_bss(
@@ -7838,6 +7841,7 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	return 0;
 
 error:
+	clear_bit(SOFTAP_INIT_DONE, &pHostapdAdapter->event_flags);
 	if (pHostapdAdapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list) {
 		qdf_mem_free(pHostapdAdapter->sessionCtx.ap.sapConfig.
 			acs_cfg.ch_list);
@@ -8023,6 +8027,7 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 	}
 	/* Reset WNI_CFG_PROBE_RSP Flags */
 	wlan_hdd_reset_prob_rspies(pAdapter);
+	clear_bit(SOFTAP_INIT_DONE, &pAdapter->event_flags);
 
 #ifdef WLAN_FEATURE_P2P_DEBUG
 	if ((pAdapter->device_mode == QDF_P2P_GO_MODE) &&
@@ -8112,6 +8117,7 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 
 	ENTER();
 
+	clear_bit(SOFTAP_INIT_DONE, &pAdapter->event_flags);
 	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
 		hdd_err("Command not allowed in FTM mode");
 		return -EINVAL;
@@ -8143,6 +8149,14 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 	if (cds_is_connection_in_progress(NULL, NULL)) {
 		hdd_err("Can't start BSS: connection is in progress");
 		return -EBUSY;
+	}
+
+	if (cds_is_hw_mode_change_in_progress()) {
+		status = qdf_wait_for_connection_update();
+		if (!QDF_IS_STATUS_SUCCESS(status)) {
+			hdd_err("qdf wait for event failed!!");
+			return -EINVAL;
+		}
 	}
 
 	channel_width = wlan_hdd_get_channel_bw(params->chandef.width);

@@ -338,35 +338,968 @@ typedef enum {
 #define CFG_SHORT_GI_20MHZ_MAX                 WNI_CFG_SHORT_GI_20MHZ_STAMAX
 #define CFG_SHORT_GI_20MHZ_DEFAULT             WNI_CFG_SHORT_GI_20MHZ_STADEF
 
+/*
+ * <ini>
+ * gScanResultAgeCount - Set scan result age count
+ * @Min: 1
+ * @Max: 100
+ * @Default: 1
+ *
+ * This ini parameter is the number of times a scan
+ * doesn't find it before it is removed from results.
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
 #define CFG_SCAN_RESULT_AGE_COUNT_NAME         "gScanResultAgeCount"
 #define CFG_SCAN_RESULT_AGE_COUNT_MIN          (1)
 #define CFG_SCAN_RESULT_AGE_COUNT_MAX          (100)
 #define CFG_SCAN_RESULT_AGE_COUNT_DEFAULT      (1)
 
-/* All in seconds */
-/* Not Connect, No Power Save */
-#define CFG_SCAN_RESULT_AGE_TIME_NCNPS_NAME    "gScanResultAgeNCNPS"
-#define CFG_SCAN_RESULT_AGE_TIME_NCNPS_MIN     (10)
-#define CFG_SCAN_RESULT_AGE_TIME_NCNPS_MAX     (10000)
-#define CFG_SCAN_RESULT_AGE_TIME_NCNPS_DEFAULT (50)
-/* Not Connect, Power Save */
-#define CFG_SCAN_RESULT_AGE_TIME_NCPS_NAME     "gScanResultAgeNCPS"
-#define CFG_SCAN_RESULT_AGE_TIME_NCPS_MIN      (10)
-#define CFG_SCAN_RESULT_AGE_TIME_NCPS_MAX      (10000)
-#define CFG_SCAN_RESULT_AGE_TIME_NCPS_DEFAULT  (300)
-/* Connect, No Power Save */
-#define CFG_SCAN_RESULT_AGE_TIME_CNPS_NAME     "gScanResultAgeCNPS"
-#define CFG_SCAN_RESULT_AGE_TIME_CNPS_MIN      (10)
-#define CFG_SCAN_RESULT_AGE_TIME_CNPS_MAX      (10000)
-#define CFG_SCAN_RESULT_AGE_TIME_CNPS_DEFAULT  (150)
-/* Connect, Power Save */
-#define CFG_SCAN_RESULT_AGE_TIME_CPS_NAME      "gScanResultAgeCPS"
-#define CFG_SCAN_RESULT_AGE_TIME_CPS_MIN       (10)
-#define CFG_SCAN_RESULT_AGE_TIME_CPS_MAX       (10000)
-#define CFG_SCAN_RESULT_AGE_TIME_CPS_DEFAULT   (600)
+/*
+ * <ini>
+ * gNeighborScanTimerPeriod - Set neighbor scan timer period
+ * @Min: 3
+ * @Max: 300
+ * @Default: 200
+ *
+ * This ini is used to set the timer period in secs after
+ * which neighbor scan is trigerred.
+ *
+ * Related: None
+ *
+ * Supported Feature: LFR Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_NEIGHBOR_SCAN_TIMER_PERIOD_NAME             "gNeighborScanTimerPeriod"
+#define CFG_NEIGHBOR_SCAN_TIMER_PERIOD_MIN              (3)
+#define CFG_NEIGHBOR_SCAN_TIMER_PERIOD_MAX              (300)
+#define CFG_NEIGHBOR_SCAN_TIMER_PERIOD_DEFAULT          (200)
 
 /*
  * <ini>
+ * gOpportunisticThresholdDiff - Set oppurtunistic threshold diff
+ * @Min: 0
+ * @Max: 127
+ * @Default: 0
+ *
+ * This ini is used to set opportunistic threshold diff.
+ * This parameter is the RSSI diff above neighbor lookup
+ * threshold, when opportunistic scan should be triggered.
+ * MAX value is choosen so that this type of scan can be
+ * always enabled by user.
+ * MIN value will cause opportunistic scan to be triggered
+ * in neighbor lookup RSSI range.
+ *
+ * Related: None
+ *
+ * Supported Feature: LFR Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_OPPORTUNISTIC_SCAN_THRESHOLD_DIFF_NAME            "gOpportunisticThresholdDiff"
+#define CFG_OPPORTUNISTIC_SCAN_THRESHOLD_DIFF_MIN             (0)
+#define CFG_OPPORTUNISTIC_SCAN_THRESHOLD_DIFF_MAX             (127)
+#define CFG_OPPORTUNISTIC_SCAN_THRESHOLD_DIFF_DEFAULT         (0)
+
+/*
+ * <ini>
+ * gNeighborScanChannelList - Set channels to be scanned
+ * by firmware for LFR scan
+ * @Default: ""
+ *
+ * This ini is used to set the channels to be scanned
+ * by firmware for LFR scan.
+ *
+ * Related: None
+ *
+ * Supported Feature: LFR Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_NEIGHBOR_SCAN_CHAN_LIST_NAME             "gNeighborScanChannelList"
+#define CFG_NEIGHBOR_SCAN_CHAN_LIST_DEFAULT          ""
+
+/*
+ * <ini>
+ * gNeighborScanChannelMinTime - Set neighbor scan channel min time
+ * @Min: 10
+ * @Max: 40
+ * @Default: 20
+ *
+ * This ini is used to set the minimum time in secs spent on each
+ * channel in LFR scan inside firmware.
+ *
+ * Related: None
+ *
+ * Supported Feature: LFR Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_NEIGHBOR_SCAN_MIN_CHAN_TIME_NAME      "gNeighborScanChannelMinTime"
+#define CFG_NEIGHBOR_SCAN_MIN_CHAN_TIME_MIN       (10)
+#define CFG_NEIGHBOR_SCAN_MIN_CHAN_TIME_MAX       (40)
+#define CFG_NEIGHBOR_SCAN_MIN_CHAN_TIME_DEFAULT   (20)
+
+/*
+ * <ini>
+ * gNeighborScanChannelMaxTime - Set neighbor scan channel max time
+ * @Min: 3
+ * @Max: 300
+ * @Default: 30
+ *
+ * This ini is used to set the maximum time in secs spent on each
+ * channel in LFR scan inside firmware.
+ *
+ * Related: None
+ *
+ * Supported Feature: LFR Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_NEIGHBOR_SCAN_MAX_CHAN_TIME_NAME      "gNeighborScanChannelMaxTime"
+#define CFG_NEIGHBOR_SCAN_MAX_CHAN_TIME_MIN       (3)
+#define CFG_NEIGHBOR_SCAN_MAX_CHAN_TIME_MAX       (300)
+#define CFG_NEIGHBOR_SCAN_MAX_CHAN_TIME_DEFAULT   (30)
+
+/*
+ * <ini>
+ * gNeighborScanRefreshPeriod - Set neighbor scan refresh period
+ * @Min: 1000
+ * @Max: 60000
+ * @Default: 20000
+ *
+ * This ini is used by firmware to set scan refresh period
+ * in msecs for lfr scan.
+ *
+ * Related: None
+ *
+ * Supported Feature: LFR Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_NEIGHBOR_SCAN_RESULTS_REFRESH_PERIOD_NAME         "gNeighborScanRefreshPeriod"
+#define CFG_NEIGHBOR_SCAN_RESULTS_REFRESH_PERIOD_MIN          (1000)
+#define CFG_NEIGHBOR_SCAN_RESULTS_REFRESH_PERIOD_MAX          (60000)
+#define CFG_NEIGHBOR_SCAN_RESULTS_REFRESH_PERIOD_DEFAULT      (20000)
+
+/*
+ * <ini>
+ * gEmptyScanRefreshPeriod - Set empty scan refresh period
+ * @Min: 0
+ * @Max: 60000
+ * @Default: 0
+ *
+ * This ini is used by firmware to set scan period in msecs
+ * following empty scan results.
+ *
+ * Related: None
+ *
+ * Supported Feature: LFR Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EMPTY_SCAN_REFRESH_PERIOD_NAME         "gEmptyScanRefreshPeriod"
+#define CFG_EMPTY_SCAN_REFRESH_PERIOD_MIN          (0)
+#define CFG_EMPTY_SCAN_REFRESH_PERIOD_MAX          (60000)
+#define CFG_EMPTY_SCAN_REFRESH_PERIOD_DEFAULT      (0)
+
+/*
+ * <ini>
+ * gEnableDFSChnlScan - Enable DFS channel scan
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable or disable DFS channel
+ * scan
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_DFS_CHNL_SCAN_NAME              "gEnableDFSChnlScan"
+#define CFG_ENABLE_DFS_CHNL_SCAN_MIN               (0)
+#define CFG_ENABLE_DFS_CHNL_SCAN_MAX               (1)
+#define CFG_ENABLE_DFS_CHNL_SCAN_DEFAULT           (1)
+
+/*
+ * <ini>
+ * gEnableDFSPnoChnlScan - Enable DFS PNO channel scan
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable or disable DFS channel
+ * for PNO scan
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_DFS_PNO_CHNL_SCAN_NAME              "gEnableDFSPnoChnlScan"
+#define CFG_ENABLE_DFS_PNO_CHNL_SCAN_MIN               (0)
+#define CFG_ENABLE_DFS_PNO_CHNL_SCAN_MAX               (1)
+#define CFG_ENABLE_DFS_PNO_CHNL_SCAN_DEFAULT           (1)
+
+/*
+ * <ini>
+ * gEnableFirstScan2GOnly - Enable first scan 2G only
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to scan 2G channels only in first scan.
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_FIRST_SCAN_2G_ONLY_NAME            "gEnableFirstScan2GOnly"
+#define CFG_ENABLE_FIRST_SCAN_2G_ONLY_MIN        (0)
+#define CFG_ENABLE_FIRST_SCAN_2G_ONLY_MAX        (1)
+#define CFG_ENABLE_FIRST_SCAN_2G_ONLY_DEFAULT    (0)
+
+/*
+ * <ini>
+ * gScanAgingTime - Set scan aging time
+ * @Min: 0
+ * @Max: 200
+ * @Default: 30
+ *
+ * This ini is used to set scan aging timeout value
+ * in secs. For example after 30 secs the bss results
+ * greater than 30secs age will be flushed.
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_SCAN_AGING_PARAM_NAME          "gScanAgingTime"
+#define CFG_SCAN_AGING_PARAM_MIN           (0)
+#define CFG_SCAN_AGING_PARAM_MAX           (200)
+#define CFG_SCAN_AGING_PARAM_DEFAULT       (30)
+
+#ifdef FEATURE_WLAN_SCAN_PNO
+/*
+ * <ini>
+ * gPNOScanSupport - Enable or Disable PNO scan
+ * @Min: 1
+ * @Max: 0
+ * @Default: 1
+ *
+ * This ini is used to Enable or Disable PNO scan
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_PNO_SCAN_SUPPORT                         "gPNOScanSupport"
+#define CFG_PNO_SCAN_SUPPORT_ENABLE                  (1)
+#define CFG_PNO_SCAN_SUPPORT_DISABLE                 (0)
+#define CFG_PNO_SCAN_SUPPORT_DEFAULT                 (1)
+
+/*
+ * <ini>
+ * gPNOScanTimerRepeatValue - Set PNO scan timer repeat value
+ * @Min: 30
+ * @Max: 0
+ * @Default: 0xffffffff
+ *
+ * This ini is used by firmware to set fast scan max cycles
+ * equal to gPNOScanTimerRepeatValue. Taking power consumption
+ * into account firmware after gPNOScanTimerRepeatValue times
+ * fast_scan_period switches to slow_scan_period.
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_PNO_SCAN_TIMER_REPEAT_VALUE              "gPNOScanTimerRepeatValue"
+#define CFG_PNO_SCAN_TIMER_REPEAT_VALUE_DEFAULT      (30)
+#define CFG_PNO_SCAN_TIMER_REPEAT_VALUE_MIN          (0)
+#define CFG_PNO_SCAN_TIMER_REPEAT_VALUE_MAX          (0xffffffff)
+
+/*
+ * <ini>
+ * gPNOSlowScanMultiplier - Set PNO slow scan multiplier
+ * @Min: 6
+ * @Max: 0
+ * @Default: 30
+ *
+ * This ini is used by firmware to set slow scan period
+ * as gPNOSlowScanMultiplier times fast_scan_period.
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_PNO_SLOW_SCAN_MULTIPLIER                 "gPNOSlowScanMultiplier"
+#define CFG_PNO_SLOW_SCAN_MULTIPLIER_DEFAULT         (6)
+#define CFG_PNO_SLOW_SCAN_MULTIPLIER_MIN             (0)
+#define CFG_PNO_SLOW_SCAN_MULTIPLIER_MAX             (30)
+#endif
+
+/*
+ * <ini>
+ * max_scan_count - Set maximum number of scans
+ * @Min: 1
+ * @Max: 8
+ * @Default: 4
+ *
+ * This ini is used to set the maximum number of
+ * scans that host can queue at firmware.
+ * Rome firmware support 8 scan queue size and 4
+ * are reserved for internal scan requests like
+ * roaming. So host can send 4 scan requests.
+ * In iHelium, there is no constraint in number of
+ * scan queue size at firmware but the current use
+ * cases needs support of maximum of 4 scan request
+ * from host.
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_MAX_SCAN_COUNT_NAME           "max_scan_count"
+#define CFG_MAX_SCAN_COUNT_MIN            (1)
+#define CFG_MAX_SCAN_COUNT_MAX            (8)
+#define CFG_MAX_SCAN_COUNT_DEFAULT        (4)
+
+/*
+ * <ini>
+ * gPassiveMaxChannelTime - Set max channel time for passive scan
+ * @Min: 0
+ * @Max: 10000
+ * @Default: 110
+ *
+ * This ini is used to set maximum channel time in secs spent in
+ * passive scan
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_PASSIVE_MAX_CHANNEL_TIME_NAME      "gPassiveMaxChannelTime"
+#define CFG_PASSIVE_MAX_CHANNEL_TIME_MIN       (0)
+#define CFG_PASSIVE_MAX_CHANNEL_TIME_MAX       (10000)
+#define CFG_PASSIVE_MAX_CHANNEL_TIME_DEFAULT   (110)
+
+/*
+ * <ini>
+ * gPassiveMinChannelTime - Set min channel time for passive scan
+ * @Min: 0
+ * @Max: 10000
+ * @Default: 60
+ *
+ * This ini is used to set minimum channel time in secs spent in
+ * passive scan
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_PASSIVE_MIN_CHANNEL_TIME_NAME      "gPassiveMinChannelTime"
+#define CFG_PASSIVE_MIN_CHANNEL_TIME_MIN       (0)
+#define CFG_PASSIVE_MIN_CHANNEL_TIME_MAX       (10000)
+#define CFG_PASSIVE_MIN_CHANNEL_TIME_DEFAULT   (60)
+
+/*
+ * <ini>
+ * gActiveMaxChannelTime - Set max channel time for active scan
+ * @Min: 0
+ * @Max: 10000
+ * @Default: 40
+ *
+ * This ini is used to set maximum channel time in secs spent in
+ * active scan
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ACTIVE_MAX_CHANNEL_TIME_NAME       "gActiveMaxChannelTime"
+#define CFG_ACTIVE_MAX_CHANNEL_TIME_MIN        (0)
+#define CFG_ACTIVE_MAX_CHANNEL_TIME_MAX        (10000)
+#define CFG_ACTIVE_MAX_CHANNEL_TIME_DEFAULT    (40)
+
+/*
+ * <ini>
+ * gActiveMinChannelTime - Set min channel time for active scan
+ * @Min: 0
+ * @Max: 10000
+ * @Default: 20
+ *
+ * This ini is used to set minimum channel time in secs spent in
+ * active scan
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ACTIVE_MIN_CHANNEL_TIME_NAME       "gActiveMinChannelTime"
+#define CFG_ACTIVE_MIN_CHANNEL_TIME_MIN        (0)
+#define CFG_ACTIVE_MIN_CHANNEL_TIME_MAX        (10000)
+#define CFG_ACTIVE_MIN_CHANNEL_TIME_DEFAULT    (20)
+
+#ifdef FEATURE_WLAN_EXTSCAN
+/*
+ * <ini>
+ * gExtScanEnable - Enable external scan
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to control enabling of external scan
+ * feature.
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTSCAN_ALLOWED_NAME                   "gExtScanEnable"
+#define CFG_EXTSCAN_ALLOWED_MIN                    (0)
+#define CFG_EXTSCAN_ALLOWED_MAX                    (1)
+#define CFG_EXTSCAN_ALLOWED_DEF                    (1)
+
+/*
+ * <ini>
+ * gExtScanPassiveMaxChannelTime - Set max channel time for external
+ * passive scan
+ * @Min: 0
+ * @Max: 500
+ * @Default: 110
+ *
+ * This ini is used to set maximum channel time  in secs spent in
+ * external passive scan
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTSCAN_PASSIVE_MAX_CHANNEL_TIME_NAME      "gExtScanPassiveMaxChannelTime"
+#define CFG_EXTSCAN_PASSIVE_MAX_CHANNEL_TIME_MIN       (0)
+#define CFG_EXTSCAN_PASSIVE_MAX_CHANNEL_TIME_MAX       (500)
+#define CFG_EXTSCAN_PASSIVE_MAX_CHANNEL_TIME_DEFAULT   (110)
+
+/*
+ * <ini>
+ * gExtScanPassiveMinChannelTime - Set min channel time for external
+ * passive scan
+ * @Min: 0
+ * @Max: 500
+ * @Default: 60
+ *
+ * This ini is used to set minimum channel time in secs spent in
+ * external passive scan
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTSCAN_PASSIVE_MIN_CHANNEL_TIME_NAME      "gExtScanPassiveMinChannelTime"
+#define CFG_EXTSCAN_PASSIVE_MIN_CHANNEL_TIME_MIN       (0)
+#define CFG_EXTSCAN_PASSIVE_MIN_CHANNEL_TIME_MAX       (500)
+#define CFG_EXTSCAN_PASSIVE_MIN_CHANNEL_TIME_DEFAULT   (60)
+
+/*
+ * <ini>
+ * gExtScanActiveMaxChannelTime - Set min channel time for external
+ * active scan
+ * @Min: 0
+ * @Max: 110
+ * @Default: 40
+ *
+ * This ini is used to set maximum channel time in secs spent in
+ * external active scan
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTSCAN_ACTIVE_MAX_CHANNEL_TIME_NAME       "gExtScanActiveMaxChannelTime"
+#define CFG_EXTSCAN_ACTIVE_MAX_CHANNEL_TIME_MIN        (0)
+#define CFG_EXTSCAN_ACTIVE_MAX_CHANNEL_TIME_MAX        (110)
+#define CFG_EXTSCAN_ACTIVE_MAX_CHANNEL_TIME_DEFAULT    (40)
+
+/*
+ * <ini>
+ * gExtScanActiveMinChannelTime - Set min channel time for external
+ * active scan
+ * @Min: 0
+ * @Max: 110
+ * @Default: 20
+ *
+ * This ini is used to set minimum channel time in secs spent in
+ * external active scan
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EXTSCAN_ACTIVE_MIN_CHANNEL_TIME_NAME       "gExtScanActiveMinChannelTime"
+#define CFG_EXTSCAN_ACTIVE_MIN_CHANNEL_TIME_MIN        (0)
+#define CFG_EXTSCAN_ACTIVE_MIN_CHANNEL_TIME_MAX        (110)
+#define CFG_EXTSCAN_ACTIVE_MIN_CHANNEL_TIME_DEFAULT    (20)
+#endif
+
+/*
+ * <ini>
+ * gChPredictionFullScanMs - Set periodic timer for channel
+ * prediction
+ * @Min: 3000
+ * @Max: 0x7fffffff
+ * @Default: 60000
+ *
+ * This ini is used to set the periodic timer upon which
+ * a full scan needs to be triggered when PNO channel
+ * prediction feature is enabled. This parameter is intended
+ * to tweak the internal algortihm for experiments.
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_CHANNEL_PREDICTION_FULL_SCAN_MS_NAME      "gChPredictionFullScanMs"
+#define CFG_CHANNEL_PREDICTION_FULL_SCAN_MS_MIN       (30000)
+#define CFG_CHANNEL_PREDICTION_FULL_SCAN_MS_MAX       (0x7fffffff)
+#define CFG_CHANNEL_PREDICTION_FULL_SCAN_MS_DEFAULT   (60000)
+
+/*
+ * <ini>
+ * gEnableEarlyStopScan - Set early stop scan
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set early stop scan. Early stop
+ * scan is a feature for roaming to stop the scans at
+ * an early stage as soon as we find a better AP to roam.
+ * This would make the roaming happen quickly.
+ *
+ * Related: None
+ *
+ * Supported Feature: LFR Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EARLY_STOP_SCAN_ENABLE           "gEnableEarlyStopScan"
+#define CFG_EARLY_STOP_SCAN_ENABLE_MIN       (0)
+#define CFG_EARLY_STOP_SCAN_ENABLE_MAX       (1)
+#define CFG_EARLY_STOP_SCAN_ENABLE_DEFAULT   (1)
+
+/*
+ * <ini>
+ * gEarlyStopScanMinThreshold - Set early stop scan min
+ * threshold
+ * @Min: -80
+ * @Max: -70
+ * @Default: -73
+ *
+ * This ini is used to set the early stop scan minimum
+ * threshold. Early stop scan minimum threshold is the
+ * minimum threshold to be considered for stopping the
+ * scan. The algorithm starts with a scan on the greedy
+ * channel list with the maximum threshold and steps down
+ * the threshold by 20% for each further channel. It can
+ * step down on each channel but cannot go lower than the
+ * minimum threshold.
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EARLY_STOP_SCAN_MIN_THRESHOLD           "gEarlyStopScanMinThreshold"
+#define CFG_EARLY_STOP_SCAN_MIN_THRESHOLD_MIN       (-80)
+#define CFG_EARLY_STOP_SCAN_MIN_THRESHOLD_MAX       (-70)
+#define CFG_EARLY_STOP_SCAN_MIN_THRESHOLD_DEFAULT   (-73)
+
+/*
+ * <ini>
+ * gEarlyStopScanMaxThreshold - Set early stop scan max
+ * threshold
+ * @Min: -60
+ * @Max: -40
+ * @Default: -43
+ *
+ * This ini is used to set the the early stop scan maximum
+ * threshold at which the candidate AP should be to be
+ * qualified as a potential roam candidate and good enough
+ * to stop the roaming scan.
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_EARLY_STOP_SCAN_MAX_THRESHOLD           "gEarlyStopScanMaxThreshold"
+#define CFG_EARLY_STOP_SCAN_MAX_THRESHOLD_MIN       (-60)
+#define CFG_EARLY_STOP_SCAN_MAX_THRESHOLD_MAX       (-40)
+#define CFG_EARLY_STOP_SCAN_MAX_THRESHOLD_DEFAULT   (-43)
+
+/*
+ * <ini>
+ * gFirstScanBucketThreshold - Set first scan bucket
+ * threshold
+ * @Min: -50
+ * @Max: -30
+ * @Default: -30
+ *
+ * This ini will configure the first scan bucket
+ * threshold to the mentioned value and all the AP's which
+ * have RSSI under this threshold will fall under this
+ * bucket. This configuration item used to tweak and
+ * test the input for internal algorithm.
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_FIRST_SCAN_BUCKET_THRESHOLD_NAME      "gFirstScanBucketThreshold"
+#define CFG_FIRST_SCAN_BUCKET_THRESHOLD_MIN       (-50)
+#define CFG_FIRST_SCAN_BUCKET_THRESHOLD_MAX       (-30)
+#define CFG_FIRST_SCAN_BUCKET_THRESHOLD_DEFAULT   (-30)
+
+/*
+ * <ini>
+ * obss_active_dwelltime - Set obss active dwelltime
+ * @Min: 5
+ * @Max: 1000
+ * @Default: 10
+ *
+ * This ini is used to set dwell time in secs for active
+ * obss scan
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_OBSS_HT40_SCAN_ACTIVE_DWELL_TIME_NAME    "obss_active_dwelltime"
+#define CFG_OBSS_HT40_SCAN_ACTIVE_DWELL_TIME_MIN     (5)
+#define CFG_OBSS_HT40_SCAN_ACTIVE_DWELL_TIME_MAX     (1000)
+#define CFG_OBSS_HT40_SCAN_ACTIVE_DWELL_TIME_DEFAULT (10)
+
+/*
+ * <ini>
+ * obss_passive_dwelltime - Set obss passive dwelltime
+ * @Min: 10
+ * @Max: 1000
+ * @Default: 20
+ *
+ * This ini is used to set dwell time in secs for passive
+ * obss scan
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_OBSS_HT40_SCAN_PASSIVE_DWELL_TIME_NAME    "obss_passive_dwelltime"
+#define CFG_OBSS_HT40_SCAN_PASSIVE_DWELL_TIME_MIN     (10)
+#define CFG_OBSS_HT40_SCAN_PASSIVE_DWELL_TIME_MAX     (1000)
+#define CFG_OBSS_HT40_SCAN_PASSIVE_DWELL_TIME_DEFAULT (20)
+
+/*
+ * <ini>
+ * obss_width_trigger_interval - Set obss trigger interval
+ * @Min: 10
+ * @Max: 900
+ * @Default: 200
+ *
+ * This ini is used during an OBSS scan operation,
+ * where each channel in the set is scanned at least
+ * once per configured trigger interval time.
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_OBSS_HT40_SCAN_WIDTH_TRIGGER_INTERVAL_NAME    "obss_width_trigger_interval"
+#define CFG_OBSS_HT40_SCAN_WIDTH_TRIGGER_INTERVAL_MIN     (10)
+#define CFG_OBSS_HT40_SCAN_WIDTH_TRIGGER_INTERVAL_MAX     (900)
+#define CFG_OBSS_HT40_SCAN_WIDTH_TRIGGER_INTERVAL_DEFAULT (200)
+
+/*
+ * <ini>
+ * gbug_report_for_scan_results - Enable bug report
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to create bug report in
+ * case of nil scan results.
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_CREATE_BUG_REPORT_FOR_SCAN       "gbug_report_for_scan_results"
+#define CFG_CREATE_BUG_REPORT_FOR_SCAN_DISABLE    (0)
+#define CFG_CREATE_BUG_REPORT_FOR_SCAN_ENABLE     (1)
+#define CFG_CREATE_BUG_REPORT_FOR_SCAN_DEFAULT    (0)
+
+/*
+ * <ini>
+ * hostscan_adaptive_dwell_mode - Enable adaptive dwell mode
+ * during host scan
+ * @Min: 0
+ * @Max: 4
+ * @Default: 0
+ *
+ * This ini will set the algo used in dwell time optimization
+ * during host scan. see enum wmi_dwelltime_adaptive_mode.
+ * Acceptable values for this:
+ * 0: Default (Use firmware default mode)
+ * 1: Conservative optimization
+ * 2: Moderate optimization
+ * 3: Aggressive optimization
+ * 4: Static
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ADAPTIVE_SCAN_DWELL_MODE_NAME        "hostscan_adaptive_dwell_mode"
+#define CFG_ADAPTIVE_SCAN_DWELL_MODE_MIN         (0)
+#define CFG_ADAPTIVE_SCAN_DWELL_MODE_MAX         (4)
+#define CFG_ADAPTIVE_SCAN_DWELL_MODE_DEFAULT     (0)
+
+/*
+ * <ini>
+ * extscan_adaptive_dwell_mode - Enable adaptive dwell mode
+ * during ext scan
+ * @Min: 0
+ * @Max: 4
+ * @Default: 0
+ *
+ * This ini will set the algo used in dwell time optimization
+ * during ext scan. see enum wmi_dwelltime_adaptive_mode.
+ * Acceptable values for this:
+ * 0: Default (Use firmware default mode)
+ * 1: Conservative optimization
+ * 2: Moderate optimization
+ * 3: Aggressive optimization
+ * 4: Static
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ADAPTIVE_EXTSCAN_DWELL_MODE_NAME     "extscan_adaptive_dwell_mode"
+#define CFG_ADAPTIVE_EXTSCAN_DWELL_MODE_MIN      (0)
+#define CFG_ADAPTIVE_EXTSCAN_DWELL_MODE_MAX      (4)
+#define CFG_ADAPTIVE_EXTSCAN_DWELL_MODE_DEFAULT  (0)
+
+/*
+ * <ini>
+ * pnoscan_adaptive_dwell_mode - Enable adaptive dwell mode
+ * during pno scan
+ * @Min: 0
+ * @Max: 4
+ * @Default: 0
+ *
+ * This ini will set the algo used in dwell time optimization
+ * during pno scan. see enum wmi_dwelltime_adaptive_mode.
+ * Acceptable values for this:
+ * 0: Default (Use firmware default mode)
+ * 1: Conservative optimization
+ * 2: Moderate optimization
+ * 3: Aggressive optimization
+ * 4: Static
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ADAPTIVE_PNOSCAN_DWELL_MODE_NAME     "pnoscan_adaptive_dwell_mode"
+#define CFG_ADAPTIVE_PNOSCAN_DWELL_MODE_MIN      (0)
+#define CFG_ADAPTIVE_PNOSCAN_DWELL_MODE_MAX      (4)
+#define CFG_ADAPTIVE_PNOSCAN_DWELL_MODE_DEFAULT  (0)
+
+/*
+ * <ini>
+ * adaptive_dwell_mode_enabled - Enable adaptive dwell mode
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This parameter will globally disable/enable the adaptive dwell config.
+ * Following parameters will set different values of attributes for dwell
+ * time optimization thus reducing total scan time.
+ * Acceptable values for this:
+ * 0: Config is disabled
+ * 1: Config is enabled
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ADAPTIVE_DWELL_MODE_ENABLED_NAME      "adaptive_dwell_mode_enabled"
+#define CFG_ADAPTIVE_DWELL_MODE_ENABLED_MIN       (0)
+#define CFG_ADAPTIVE_DWELL_MODE_ENABLED_MAX       (1)
+#define CFG_ADAPTIVE_DWELL_MODE_ENABLED_DEFAULT   (1)
+
+/*
+ * <ini>
+ * global_adapt_dwelltime_mode - Set default adaptive mode
+ * @Min: 0
+ * @Max: 4
+ * @Default: 1
+ *
+ * This parameter will set default adaptive mode, will be used if any of the
+ * scan dwell mode is set to default.
+ * For uses : see enum wmi_dwelltime_adaptive_mode
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_NAME       "global_adapt_dwelltime_mode"
+#define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_MIN        (0)
+#define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_MAX        (4)
+#define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_DEFAULT    (1)
+
+/*
  * gRssiCatGap - Set Rssi CatGap
  * @Min: 5
  * @Max: 100
@@ -1594,26 +2527,6 @@ typedef enum {
 #define CFG_VCC_UL_MAC_LOSS_THRESH_MIN        (0)
 #define CFG_VCC_UL_MAC_LOSS_THRESH_MAX        (9)
 #define CFG_VCC_UL_MAC_LOSS_THRESH_DEFAULT    (9)
-
-#define CFG_PASSIVE_MAX_CHANNEL_TIME_NAME      "gPassiveMaxChannelTime"
-#define CFG_PASSIVE_MAX_CHANNEL_TIME_MIN       (0)
-#define CFG_PASSIVE_MAX_CHANNEL_TIME_MAX       (10000)
-#define CFG_PASSIVE_MAX_CHANNEL_TIME_DEFAULT   (110)
-
-#define CFG_PASSIVE_MIN_CHANNEL_TIME_NAME      "gPassiveMinChannelTime"
-#define CFG_PASSIVE_MIN_CHANNEL_TIME_MIN       (0)
-#define CFG_PASSIVE_MIN_CHANNEL_TIME_MAX       (10000)
-#define CFG_PASSIVE_MIN_CHANNEL_TIME_DEFAULT   (60)
-
-#define CFG_ACTIVE_MAX_CHANNEL_TIME_NAME       "gActiveMaxChannelTime"
-#define CFG_ACTIVE_MAX_CHANNEL_TIME_MIN        (0)
-#define CFG_ACTIVE_MAX_CHANNEL_TIME_MAX        (10000)
-#define CFG_ACTIVE_MAX_CHANNEL_TIME_DEFAULT    (40)
-
-#define CFG_ACTIVE_MIN_CHANNEL_TIME_NAME       "gActiveMinChannelTime"
-#define CFG_ACTIVE_MIN_CHANNEL_TIME_MIN        (0)
-#define CFG_ACTIVE_MIN_CHANNEL_TIME_MAX        (10000)
-#define CFG_ACTIVE_MIN_CHANNEL_TIME_DEFAULT    (20)
 
 #define CFG_RETRY_LIMIT_ZERO_NAME       "gRetryLimitZero"
 #define CFG_RETRY_LIMIT_ZERO_MIN        (0)
@@ -2979,11 +3892,6 @@ typedef enum {
 #define CFG_TELE_BCN_MAX_LI_NUM_IDLE_BCNS_MAX        (255)
 #define CFG_TELE_BCN_MAX_LI_NUM_IDLE_BCNS_DEFAULT    (15)
 
-#define CFG_NEIGHBOR_SCAN_TIMER_PERIOD_NAME             "gNeighborScanTimerPeriod"
-#define CFG_NEIGHBOR_SCAN_TIMER_PERIOD_MIN              (3)
-#define CFG_NEIGHBOR_SCAN_TIMER_PERIOD_MAX              (300)
-#define CFG_NEIGHBOR_SCAN_TIMER_PERIOD_DEFAULT          (200)
-
 #define CFG_NEIGHBOR_LOOKUP_RSSI_THRESHOLD_NAME      "gNeighborLookupThreshold"
 #define CFG_NEIGHBOR_LOOKUP_RSSI_THRESHOLD_MIN       (10)
 #define CFG_NEIGHBOR_LOOKUP_RSSI_THRESHOLD_MAX       (120)
@@ -2994,45 +3902,10 @@ typedef enum {
 #define CFG_DELAY_BEFORE_VDEV_STOP_MAX               (200)
 #define CFG_DELAY_BEFORE_VDEV_STOP_DEFAULT           (20)
 
-/*
- * This parameter is the RSSI diff above neighbor lookup threshold, when
- * opportunistic scan should be triggered.
- * MAX value is choose so that this type of scan can be always enabled by user.
- * MIN value will cause opportunistic scan to be triggered in neighbor lookup
- * RSSI range.
- */
-#define CFG_OPPORTUNISTIC_SCAN_THRESHOLD_DIFF_NAME            "gOpportunisticThresholdDiff"
-#define CFG_OPPORTUNISTIC_SCAN_THRESHOLD_DIFF_MIN             (0)
-#define CFG_OPPORTUNISTIC_SCAN_THRESHOLD_DIFF_MAX             (127)
-#define CFG_OPPORTUNISTIC_SCAN_THRESHOLD_DIFF_DEFAULT         (0)
-
-#define CFG_NEIGHBOR_SCAN_CHAN_LIST_NAME                      "gNeighborScanChannelList"
-#define CFG_NEIGHBOR_SCAN_CHAN_LIST_DEFAULT                   ""
-
-#define CFG_NEIGHBOR_SCAN_MIN_CHAN_TIME_NAME                  "gNeighborScanChannelMinTime"
-#define CFG_NEIGHBOR_SCAN_MIN_CHAN_TIME_MIN                   (10)
-#define CFG_NEIGHBOR_SCAN_MIN_CHAN_TIME_MAX                   (40)
-#define CFG_NEIGHBOR_SCAN_MIN_CHAN_TIME_DEFAULT               (20)
-
-#define CFG_NEIGHBOR_SCAN_MAX_CHAN_TIME_NAME                  "gNeighborScanChannelMaxTime"
-#define CFG_NEIGHBOR_SCAN_MAX_CHAN_TIME_MIN                   (3)
-#define CFG_NEIGHBOR_SCAN_MAX_CHAN_TIME_MAX                   (300)
-#define CFG_NEIGHBOR_SCAN_MAX_CHAN_TIME_DEFAULT               (30)
-
 #define CFG_11R_NEIGHBOR_REQ_MAX_TRIES_NAME           "gMaxNeighborReqTries"
 #define CFG_11R_NEIGHBOR_REQ_MAX_TRIES_MIN            (1)
 #define CFG_11R_NEIGHBOR_REQ_MAX_TRIES_MAX            (4)
 #define CFG_11R_NEIGHBOR_REQ_MAX_TRIES_DEFAULT        (3)
-
-#define CFG_NEIGHBOR_SCAN_RESULTS_REFRESH_PERIOD_NAME         "gNeighborScanRefreshPeriod"
-#define CFG_NEIGHBOR_SCAN_RESULTS_REFRESH_PERIOD_MIN          (1000)
-#define CFG_NEIGHBOR_SCAN_RESULTS_REFRESH_PERIOD_MAX          (60000)
-#define CFG_NEIGHBOR_SCAN_RESULTS_REFRESH_PERIOD_DEFAULT      (20000)
-
-#define CFG_EMPTY_SCAN_REFRESH_PERIOD_NAME         "gEmptyScanRefreshPeriod"
-#define CFG_EMPTY_SCAN_REFRESH_PERIOD_MIN          (0)
-#define CFG_EMPTY_SCAN_REFRESH_PERIOD_MAX          (60000)
-#define CFG_EMPTY_SCAN_REFRESH_PERIOD_DEFAULT      (0)
 
 #define CFG_ROAM_BMISS_FIRST_BCNT_NAME                  "gRoamBmissFirstBcnt"
 #define CFG_ROAM_BMISS_FIRST_BCNT_MIN                   (5)
@@ -3195,11 +4068,46 @@ typedef enum {
 #define CFG_ENABLE_BYPASS_11D_MAX                  (1)
 #define CFG_ENABLE_BYPASS_11D_DEFAULT              (1)
 
+/*
+ * <ini>
+ * gEnableDFSChnlScan - enable dfs channel scan.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable dfs channels in scan, enabling this
+ * will enable driver to include dfs channels in its scan list.
+ * Related: NA
+ *
+ * Supported Feature: DFS, Scan
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_ENABLE_DFS_CHNL_SCAN_NAME              "gEnableDFSChnlScan"
 #define CFG_ENABLE_DFS_CHNL_SCAN_MIN               (0)
 #define CFG_ENABLE_DFS_CHNL_SCAN_MAX               (1)
 #define CFG_ENABLE_DFS_CHNL_SCAN_DEFAULT           (1)
 
+/*
+ * <ini>
+ * gEnableDFSPnoChnlScan - enable dfs channels in PNO scan
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable dfs channels in PNO scan request,
+ * enabling this ini enables driver to include dfs channels in its
+ * PNO scan request
+ * Related: NA
+ *
+ * Supported Feature: DFS, PNO
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_ENABLE_DFS_PNO_CHNL_SCAN_NAME              "gEnableDFSPnoChnlScan"
 #define CFG_ENABLE_DFS_PNO_CHNL_SCAN_MIN               (0)
 #define CFG_ENABLE_DFS_PNO_CHNL_SCAN_MAX               (1)
@@ -3233,30 +4141,159 @@ typedef enum {
 	eHDD_LINK_SPEED_REPORT_MAX = 1,
 	eHDD_LINK_SPEED_REPORT_MAX_SCALED = 2,
 } eHddLinkSpeedReportType;
+
+/*
+ * <ini>
+ * gVhtChannelWidth - Channel width capability for 11ac
+ * @Min: 0
+ * @Max: 4
+ * @Default: 3
+ *
+ * This ini is  used to set channel width capability for 11AC.
+ * eHT_CHANNEL_WIDTH_20MHZ = 0,
+ * eHT_CHANNEL_WIDTH_40MHZ = 1,
+ * eHT_CHANNEL_WIDTH_80MHZ = 2,
+ * eHT_CHANNEL_WIDTH_160MHZ = 3,
+ * eHT_CHANNEL_WIDTH_80P80MHZ = 4,
+ *
+ * Related: NA
+ *
+ * Supported Feature: 11AC
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
 #define CFG_VHT_CHANNEL_WIDTH                "gVhtChannelWidth"
 #define CFG_VHT_CHANNEL_WIDTH_MIN            (0)
 #define CFG_VHT_CHANNEL_WIDTH_MAX            (4)
 #define CFG_VHT_CHANNEL_WIDTH_DEFAULT        (3)
+
+/*
+* <ini>
+* gVhtRxMCS - VHT Rx MCS capability for 1x1 mode
+* @Min: 0
+* @Max: 2
+* @Default: 0
+*
+* This ini is  used to set VHT Rx MCS capability for 1x1 mode.
+* 0, MCS0-7
+* 1, MCS0-8
+* 2, MCS0-9
+*
+* Related: NA
+*
+* Supported Feature: 11AC
+*
+* Usage: Internal/External
+*
+* </ini>
+*/
 
 #define CFG_VHT_ENABLE_RX_MCS_8_9               "gVhtRxMCS"
 #define CFG_VHT_ENABLE_RX_MCS_8_9_MIN           (0)
 #define CFG_VHT_ENABLE_RX_MCS_8_9_MAX           (2)
 #define CFG_VHT_ENABLE_RX_MCS_8_9_DEFAULT       (0)
 
+/*
+ * <ini>
+ * gVhtTxMCS - VHT Tx MCS capability for 1x1 mode
+ * @Min: 0
+ * @Max: 2
+ * @Default: 0
+ *
+ * This ini is  used to set VHT Tx MCS capability for 1x1 mode.
+ * 0, MCS0-7
+ * 1, MCS0-8
+ * 2, MCS0-9
+ *
+ * Related: NA
+ *
+ * Supported Feature: 11AC
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_VHT_ENABLE_TX_MCS_8_9               "gVhtTxMCS"
 #define CFG_VHT_ENABLE_TX_MCS_8_9_MIN           (0)
 #define CFG_VHT_ENABLE_TX_MCS_8_9_MAX           (2)
 #define CFG_VHT_ENABLE_TX_MCS_8_9_DEFAULT       (0)
+
+/*
+ * <ini>
+ * gVhtRxMCS2x2 - VHT Rx MCS capability for 2x2 mode
+ * @Min: 0
+ * @Max: 2
+ * @Default: 0
+ *
+ * This ini is  used to set VHT Rx MCS capability for 2x2 mode.
+ * 0, MCS0-7
+ * 1, MCS0-8
+ * 2, MCS0-9
+ *
+ * Related: NA
+ *
+ * Supported Feature: 11AC
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
 
 #define CFG_VHT_ENABLE_RX_MCS2x2_8_9               "gVhtRxMCS2x2"
 #define CFG_VHT_ENABLE_RX_MCS2x2_8_9_MIN           (0)
 #define CFG_VHT_ENABLE_RX_MCS2x2_8_9_MAX           (2)
 #define CFG_VHT_ENABLE_RX_MCS2x2_8_9_DEFAULT       (0)
 
+/*
+ * <ini>
+ * gVhtTxMCS2x2 - VHT Tx MCS capability for 2x2 mode
+ * @Min: 0
+ * @Max: 2
+ * @Default: 0
+ *
+ * This ini is  used to set VHT Tx MCS capability for 2x2 mode.
+ * 0, MCS0-7
+ * 1, MCS0-8
+ * 2, MCS0-9
+ *
+ * Related: NA
+ *
+ * Supported Feature: 11AC
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+
 #define CFG_VHT_ENABLE_TX_MCS2x2_8_9               "gVhtTxMCS2x2"
 #define CFG_VHT_ENABLE_TX_MCS2x2_8_9_MIN           (0)
 #define CFG_VHT_ENABLE_TX_MCS2x2_8_9_MAX           (2)
 #define CFG_VHT_ENABLE_TX_MCS2x2_8_9_DEFAULT       (0)
+
+/*
+ * <ini>
+ * gEnable2x2 - Enables/disables VHT Tx/Rx MCS values for 2x2
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini disables/enables 2x2 mode. If this is zero then DUT operates as
+ * 1x1.
+ *
+ * 0, Disable.
+ * 1, Enable
+ *
+ * Related: NA
+ *
+ * Supported Feature: 11AC
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
 
 #define CFG_VHT_ENABLE_2x2_CAP_FEATURE         "gEnable2x2"
 #define CFG_VHT_ENABLE_2x2_CAP_FEATURE_MIN     (0)
@@ -3265,20 +4302,21 @@ typedef enum {
 
 /*
  * <ini>
- * gStaPrefer80MHzOver160MHz - Set prefer range for sta
+ * gStaPrefer80MHzOver160MHz - set Sta perferance to connect in 80HZ/160HZ
  * @Min: 0
  * @Max: 1
  * @Default: 1
  *
- * This ini is used to set default range for sta
+ * This ini is  used to set Sta perferance to connect in 80HZ/160HZ
+ *
  * 0 - Connects in 160MHz 1x1 when AP is 160MHz 2x2
  * 1 - Connects in 80MHz 2x2 when AP is 160MHz 2x2
  *
- * Related: None
+ * Related: NA
  *
- * Supported Feature: STA
+ * Supported Feature: 11AC
  *
- * Usage: Internal/External
+ * Usage: External
  *
  * </ini>
  */
@@ -3290,12 +4328,27 @@ typedef enum {
 
 /*
  * <ini>
- * gVdevTypeNss_2g - Select the value for each two bit configuration
+ * gVdevTypeNss_2g - set Number of streams per VDEV for 2G band.
  * @Min: 0x5555
  * @Max: 0xAAAA
  * @Default: 0xAAAA
  *
- * This ini is used to set NSS cfg bit in 2g definition.
+ * This ini is  used to set Number of streams per VDEV for 2G band
+ *
+ * These Nss parameters will have 32-bit configuration value, 2 bits are
+ * allocated for each vdev.
+ * Valid values are:
+ * Min value – 0x5555
+ * Max value – 0xAAAA
+ * Default value will be 0xAAAA for both the parameters.
+ * Value 0x5555 will configure all vdevs in 1x1 mode in 2.4G band.
+ * Value 0xAAAA will configure all vdevs in 2x2 mode in 2.4G band.
+ *
+ * The max value is defined based on the valid max Nss of the vdev, the valid
+ * values for each vdev 2-bits are 0x1 and 0x2. 0x3 and 0x0 are not valid vdev
+ * Nss values.
+ *
+ * NSS cfg bit definition.
  * STA          BIT[0:1]
  * SAP          BIT[2:3]
  * P2P_GO       BIT[4:5]
@@ -3305,11 +4358,11 @@ typedef enum {
  * P2P_DEVICE   BIT[12:13]
  * OCB          BIT[14:15]
  *
- * Related: None
+ * Related: NA
  *
- * Supported Feature: STA
+ * Supported Feature: Antenna Sharing
  *
- * Usage: Internal/External
+ * Usage: External
  *
  * </ini>
  */
@@ -3321,12 +4374,27 @@ typedef enum {
 
 /*
  * <ini>
- * gVdevTypeNss_5g - Select the value for each two bit configuration
+ * gVdevTypeNss_5g - set Number of streams per VDEV for 5G band.
  * @Min: 0x5555
  * @Max: 0xAAAA
  * @Default: 0xAAAA
  *
- * This ini is used to set NSS cfg bit in 5g definition
+ * This ini is  used to set Number of streams per VDEV for 5G band
+ *
+ * These Nss parameters will have 32-bit configuration value, 2 bits are
+ * allocated for each vdev.
+ * Valid values are:
+ * Min value – 0x5555
+ * Max value – 0xAAAA
+ * Default value will be 0xAAAA for both the parameters.
+ * Value 0x5555 will configure all vdevs in 1x1 mode in 5 band.
+ * Value 0xAAAA will configure all vdevs in 2x2 mode in 5 band.
+ *
+ * The max value is defined based on the valid max Nss of the vdev, the valid
+ * values for each vdev 2-bits are 0x1 and 0x2. 0x3 and 0x0 are not valid vdev
+ * Nss values.
+ *
+ * NSS cfg bit definition.
  * STA          BIT[0:1]
  * SAP          BIT[2:3]
  * P2P_GO       BIT[4:5]
@@ -3336,11 +4404,11 @@ typedef enum {
  * P2P_DEVICE   BIT[12:13]
  * OCB          BIT[14:15]
  *
- * Related: None
+ * Related: NA
  *
- * Supported Feature: STA
+ * Supported Feature: Antenna Sharing
  *
- * Usage: Internal/External
+ * Usage: External
  *
  * </ini>
  */
@@ -3349,6 +4417,28 @@ typedef enum {
 #define CFG_VDEV_TYPE_NSS_5G_MIN     (0x5555)
 #define CFG_VDEV_TYPE_NSS_5G_MAX     (0xAAAA)
 #define CFG_VDEV_TYPE_NSS_5G_DEFAULT (0xAAAA)
+
+/*
+ * <ini>
+ * gEnableMuBformee - Enables/disables multi-user (MU) beam formee capability
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini enables/disables multi-user (MU) beam formee
+ * capability
+ *
+ * Change MU Bformee only when  gTxBFEnable is enabled.
+ * When gTxBFEnable and gEnableMuBformee are set, MU beam formee capability is
+ * enabled.
+ * Related:  gTxBFEnable
+ *
+ * Supported Feature: 11AC
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
 
 #define CFG_VHT_ENABLE_MU_BFORMEE_CAP_FEATURE         "gEnableMuBformee"
 #define CFG_VHT_ENABLE_MU_BFORMEE_CAP_FEATURE_MIN     (0)
@@ -3365,10 +4455,56 @@ typedef enum {
 #define CFG_VHT_ENABLE_GID_FEATURE_MAX          (1)
 #define CFG_VHT_ENABLE_GID_FEATURE_DEFAULT      (0)
 
+/*
+ * <ini>
+ * gSetTxChainmask1x1 - sets Transmit chain mask.
+ * @Min: 1
+ * @Max: 2
+ * @Default: 1
+ *
+ * This ini sets Transmit chain mask.
+ *
+ * If gEnable2x2 is disabled, gSetTxChainmask1x1 and gSetRxChainmask1x1 values
+ * are taken into account. If chainmask value exceeds the maximum number of
+ * chains supported by target, the max number of chains is used. By default,
+ * chain0 is selected for both Tx and Rx.
+ * gSetTxChainmask1x1=1 or gSetRxChainmask1x1=1 to select chain0.
+ * gSetTxChainmask1x1=2 or gSetRxChainmask1x1=2 to select chain1.
+ *
+ * Supported Feature: 11AC
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+
 #define CFG_VHT_ENABLE_1x1_TX_CHAINMASK         "gSetTxChainmask1x1"
 #define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_MIN     (1)
 #define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_MAX     (2)
 #define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_DEFAULT (1)
+
+/*
+ * <ini>
+ * gSetRxChainmask1x1 - Sets Receive chain mask.
+ * @Min: 1
+ * @Max: 2
+ * @Default: 1
+ *
+ * This ini is  used to set Receive chain mask.
+ *
+ * If gEnable2x2 is disabled, gSetTxChainmask1x1 and gSetRxChainmask1x1 values
+ * are taken into account. If chainmask value exceeds the maximum number of
+ * chains supported by target, the max number of chains is used. By default,
+ * chain0 is selected for both Tx and Rx.
+ * gSetTxChainmask1x1=1 or gSetRxChainmask1x1=1 to select chain0.
+ * gSetTxChainmask1x1=2 or gSetRxChainmask1x1=2 to select chain1.
+ *
+ * Supported Feature: 11AC
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
 
 #define CFG_VHT_ENABLE_1x1_RX_CHAINMASK         "gSetRxChainmask1x1"
 #define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_MIN     (1)
@@ -3408,26 +4544,115 @@ typedef enum {
 #define CFG_HT_SMPS_CAP_FEATURE_MAX             (3)
 #define CFG_HT_SMPS_CAP_FEATURE_DEFAULT         (3)
 
+/*
+ * <ini>
+ * gDisableDFSChSwitch - Disable channel switch if radar is found
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to disable channel switch if radar is found
+ * on that channel.
+ * Related: NA.
+ *
+ * Supported Feature: DFS
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
 #define CFG_DISABLE_DFS_CH_SWITCH                 "gDisableDFSChSwitch"
 #define CFG_DISABLE_DFS_CH_SWITCH_MIN             (0)
 #define CFG_DISABLE_DFS_CH_SWITCH_MAX             (1)
 #define CFG_DISABLE_DFS_CH_SWITCH_DEFAULT         (0)
 
+/*
+ * <ini>
+ * gEnableDFSMasterCap - Enable DFS master capability
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable the DFS master capability.
+ * Disabling it will cause driver to not advertise the spectrum
+ * management capability
+ * Related: NA.
+ *
+ * Supported Feature: DFS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_ENABLE_DFS_MASTER_CAPABILITY               "gEnableDFSMasterCap"
 #define CFG_ENABLE_DFS_MASTER_CAPABILITY_MIN           (0)
 #define CFG_ENABLE_DFS_MASTER_CAPABILITY_MAX           (1)
 #define CFG_ENABLE_DFS_MASTER_CAPABILITY_DEFAULT       (0)
 
+/*
+ * <ini>
+ * gSapPreferredChanLocation - Restrict channel switches between ondoor and
+ * outdoor.
+ * @Min: 0
+ * @Max: 2
+ * @Default: 0
+ *
+ * This ini is used for restricting channel switches between Indoor and outdoor
+ * channels after radar detection.
+ * 0- No preferred channel location
+ * 1- Use indoor channels only
+ * 2- Use outdoor channels only
+ * Related: NA.
+ *
+ * Supported Feature: DFS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_SAP_PREFERRED_CHANNEL_LOCATION          "gSapPreferredChanLocation"
 #define CFG_SAP_PREFERRED_CHANNEL_LOCATION_MIN      (0)
 #define CFG_SAP_PREFERRED_CHANNEL_LOCATION_MAX      (2)
 #define CFG_SAP_PREFERRED_CHANNEL_LOCATION_DEFAULT  (0)
 
+/*
+ * <ini>
+ * gDisableDfsJapanW53 - Block W53 channels in random channel selection
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to block W53 Japan channel in random channel selection
+ * Related: NA.
+ *
+ * Supported Feature: DFS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_DISABLE_DFS_JAPAN_W53                      "gDisableDfsJapanW53"
 #define CFG_DISABLE_DFS_JAPAN_W53_MIN                  (0)
 #define CFG_DISABLE_DFS_JAPAN_W53_MAX                  (1)
 #define CFG_DISABLE_DFS_JAPAN_W53_DEFAULT              (0)
 
+/*
+ * <ini>
+ * gDisableDfsJapanW53 - Enable dfs phyerror filtering offload in FW
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to to enable dfs phyerror filtering offload to firmware
+ * Enabling it will cause basic phy error to be discarding in firmware.
+ * Related: NA.
+ *
+ * Supported Feature: DFS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_ENABLE_DFS_PHYERR_FILTEROFFLOAD_NAME       "dfsPhyerrFilterOffload"
 #define CFG_ENABLE_DFS_PHYERR_FILTEROFFLOAD_MIN        (0)
 #define CFG_ENABLE_DFS_PHYERR_FILTEROFFLOAD_MAX        (1)
@@ -3508,6 +4733,23 @@ typedef enum {
 #define CFG_LINK_SPEED_RSSI_LOW_MAX                (0)
 #define CFG_LINK_SPEED_RSSI_LOW_DEFAULT            (-80)
 
+/*
+ * <ini>
+ * isP2pDeviceAddrAdministrated - Enables to derive the P2P MAC address from
+ * the primary MAC address
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable to derive the P2P MAC address from the
+ * primary MAC address.
+ *
+ * Supported Feature: P2P
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_P2P_DEVICE_ADDRESS_ADMINISTRATED_NAME                "isP2pDeviceAddrAdministrated"
 #define CFG_P2P_DEVICE_ADDRESS_ADMINISTRATED_MIN                 (0)
 #define CFG_P2P_DEVICE_ADDRESS_ADMINISTRATED_MAX                 (1)
@@ -3813,17 +5055,6 @@ typedef enum {
 #define CFG_ENABLE_DYNAMIC_DTIM_DEFAULT    (0)
 
 /*
- * Enable First Scan 2G Only
- * Options
- * 0 - Disable First Scan 2G Option
- * 1 - Enable First Scan 2G Option
- */
-#define CFG_ENABLE_FIRST_SCAN_2G_ONLY_NAME            "gEnableFirstScan2GOnly"
-#define CFG_ENABLE_FIRST_SCAN_2G_ONLY_MIN        (0)
-#define CFG_ENABLE_FIRST_SCAN_2G_ONLY_MAX        (1)
-#define CFG_ENABLE_FIRST_SCAN_2G_ONLY_DEFAULT    (0)
-
-/*
  * Driver Force ACS is reintroduced for android SAP legacy configuration method.
  * If Driver force acs is enabled, channel/ hw config from hostapd is ignored.
  * Driver uses INI params dot11Mode, channel bonding mode and vht chan width
@@ -3848,10 +5079,40 @@ typedef enum {
 #define CFG_FORCE_SAP_ACS_END_CH_DEFAULT   (11)
 
 /*
- * Skip DFS Channel in case of P2P Search
- * Options
+ * <ini>
+ * gSkipDfsChannelInP2pSearch - Skip DFS Channel in case of P2P Search
+ * options
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to decide if DFS channels should be skipped in p2p
+ * search or not.
  * 0 - Don't Skip DFS Channel in case of P2P Search
  * 1 - Skip DFS Channel in case of P2P Search
+ *
+ * Supported Feature: P2P, Scan
+ *
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+/*
+ * <ini>
+ * gSkipDfsChannelInP2pSearch - Skip DFS Channel in case of P2P Search
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to to disable(skip) dfs channel in p2p search.
+ * Related: NA.
+ *
+ * Supported Feature: DFS P2P
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_ENABLE_SKIP_DFS_IN_P2P_SEARCH_NAME       "gSkipDfsChannelInP2pSearch"
 #define CFG_ENABLE_SKIP_DFS_IN_P2P_SEARCH_MIN        (0)
@@ -3859,10 +5120,24 @@ typedef enum {
 #define CFG_ENABLE_SKIP_DFS_IN_P2P_SEARCH_DEFAULT    (1)
 
 /*
- * Ignore Dynamic Dtim in case of P2P
- * Options
+ * <ini>
+ * gIgnoreDynamicDtimInP2pMode - Ignore Dynamic Dtim in case of P2P
+ * Options.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to decide if Dynamic Dtim needs to be consider or
+ * not in case of P2P.
  * 0 - Consider Dynamic Dtim incase of P2P
  * 1 - Ignore Dynamic Dtim incase of P2P
+ *
+ * Supported Feature: P2P
+ *
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_IGNORE_DYNAMIC_DTIM_IN_P2P_MODE_NAME       "gIgnoreDynamicDtimInP2pMode"
 #define CFG_IGNORE_DYNAMIC_DTIM_IN_P2P_MODE_MIN        (0)
@@ -4859,14 +6134,6 @@ typedef enum {
 #define CFG_ENABLE_LPWR_IMG_TRANSITION_MAX         (1)
 #define CFG_ENABLE_LPWR_IMG_TRANSITION_DEFAULT     (0)
 
-/*
- * Scan Aging timeout value in seconds
- */
-#define CFG_SCAN_AGING_PARAM_NAME          "gScanAgingTime"
-#define CFG_SCAN_AGING_PARAM_MIN           (0)
-#define CFG_SCAN_AGING_PARAM_MAX           (200)
-#define CFG_SCAN_AGING_PARAM_DEFAULT       (30)
-
 /* Config Param to enable the txLdpc capability
  * 0 - disable
  * 1 - HT LDPC enable
@@ -5054,23 +6321,6 @@ typedef enum {
 #define CFG_ENABLE_SNR_MONITORING_MIN               (0)
 #define CFG_ENABLE_SNR_MONITORING_MAX               (1)
 #define CFG_ENABLE_SNR_MONITORING_DEFAULT           (0)
-
-#ifdef FEATURE_WLAN_SCAN_PNO
-#define CFG_PNO_SCAN_SUPPORT                         "gPNOScanSupport"
-#define CFG_PNO_SCAN_SUPPORT_ENABLE                  (1)
-#define CFG_PNO_SCAN_SUPPORT_DISABLE                 (0)
-#define CFG_PNO_SCAN_SUPPORT_DEFAULT                 (1)
-
-#define CFG_PNO_SCAN_TIMER_REPEAT_VALUE              "gPNOScanTimerRepeatValue"
-#define CFG_PNO_SCAN_TIMER_REPEAT_VALUE_DEFAULT      (30)
-#define CFG_PNO_SCAN_TIMER_REPEAT_VALUE_MIN          (0)
-#define CFG_PNO_SCAN_TIMER_REPEAT_VALUE_MAX          (0xffffffff)
-
-#define CFG_PNO_SLOW_SCAN_MULTIPLIER                 "gPNOSlowScanMultiplier"
-#define CFG_PNO_SLOW_SCAN_MULTIPLIER_DEFAULT         (6)
-#define CFG_PNO_SLOW_SCAN_MULTIPLIER_MIN             (0)
-#define CFG_PNO_SLOW_SCAN_MULTIPLIER_MAX             (30)
-#endif
 
 /*
  * <ini>
@@ -6270,7 +7520,30 @@ typedef enum {
 #define CFG_SAP_MCC_CHANNEL_AVOIDANCE_MAX          (1)
 #define CFG_SAP_MCC_CHANNEL_AVOIDANCE_DEFAULT      (0)
 #endif /* FEATURE_AP_MCC_CH_AVOIDANCE */
-
+/*
+ * <ini>
+ * gAP11ACOverride - Override 11AC when GO follow SAP channel
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable 11AC override.
+ * 1. P2P GO also follows start_bss and since p2p GO could not be
+ *    configured to setup VHT channel width in wpa_supplicant, driver
+ *    can override 11AC.
+ * 2. Android UI does not provide advanced configuration options
+ *    for SoftAP
+ *    Default override enabled for android. MDM shall
+ *    disable it in ini
+ *
+ *
+ * Supported Feature: P2P
+ *
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_SAP_P2P_11AC_OVERRIDE_NAME             "gAP11ACOverride"
 #define CFG_SAP_P2P_11AC_OVERRIDE_MIN              (0)
 #define CFG_SAP_P2P_11AC_OVERRIDE_MAX              (1)
@@ -6540,23 +7813,6 @@ typedef enum {
 #define CFG_FINE_TIME_MEAS_CAPABILITY_MAX          (0x00BD)
 #define CFG_FINE_TIME_MEAS_CAPABILITY_DEFAULT      (0x000D)
 
-/*
- * Maximum number of scans that host can queue at firmware is controlled
- * through the configuration item  'max_scan_count'.
- *
- * Rome - Rome firmware support 8 scan queue size and 4 are reserved
- * for internal scan requests like roaming. So host can send 4
- * scan requests.
- *
- * ihelium - There is no constraint in number of scan queue size at
- * firmware but the current uses cases needs support of maximum
- * of 4 scan request from host.
- */
-#define CFG_MAX_SCAN_COUNT_NAME           "max_scan_count"
-#define CFG_MAX_SCAN_COUNT_MIN            (1)
-#define CFG_MAX_SCAN_COUNT_MAX            (8)
-#define CFG_MAX_SCAN_COUNT_DEFAULT        (4)
-
 /**
  * enum dot11p_mode - The 802.11p mode of operation
  * @WLAN_HDD_11P_DISABLED:   802.11p mode is disabled
@@ -6574,43 +7830,26 @@ enum dot11p_mode {
 #define CFG_DOT11P_MODE_MIN              (WLAN_HDD_11P_DISABLED)
 #define CFG_DOT11P_MODE_MAX              (WLAN_HDD_11P_CONCURRENT)
 
-#ifdef FEATURE_WLAN_EXTSCAN
-
 /*
- * This ini is added to control the enabling of extscan feature outside of code.
- * By default extscan feature will be enabled, to disable extscan add
- * gExtScanEnable=0 in ini file.
- */
-#define CFG_EXTSCAN_ALLOWED_NAME                   "gExtScanEnable"
-#define CFG_EXTSCAN_ALLOWED_MIN                    (0)
-#define CFG_EXTSCAN_ALLOWED_MAX                    (1)
-#define CFG_EXTSCAN_ALLOWED_DEF                    (1)
-
-#define CFG_EXTSCAN_PASSIVE_MAX_CHANNEL_TIME_NAME      "gExtScanPassiveMaxChannelTime"
-#define CFG_EXTSCAN_PASSIVE_MAX_CHANNEL_TIME_MIN       (0)
-#define CFG_EXTSCAN_PASSIVE_MAX_CHANNEL_TIME_MAX       (500)
-#define CFG_EXTSCAN_PASSIVE_MAX_CHANNEL_TIME_DEFAULT   (110)
-
-#define CFG_EXTSCAN_PASSIVE_MIN_CHANNEL_TIME_NAME      "gExtScanPassiveMinChannelTime"
-#define CFG_EXTSCAN_PASSIVE_MIN_CHANNEL_TIME_MIN       (0)
-#define CFG_EXTSCAN_PASSIVE_MIN_CHANNEL_TIME_MAX       (500)
-#define CFG_EXTSCAN_PASSIVE_MIN_CHANNEL_TIME_DEFAULT   (60)
-
-#define CFG_EXTSCAN_ACTIVE_MAX_CHANNEL_TIME_NAME       "gExtScanActiveMaxChannelTime"
-#define CFG_EXTSCAN_ACTIVE_MAX_CHANNEL_TIME_MIN        (0)
-#define CFG_EXTSCAN_ACTIVE_MAX_CHANNEL_TIME_MAX        (110)
-#define CFG_EXTSCAN_ACTIVE_MAX_CHANNEL_TIME_DEFAULT    (40)
-
-#define CFG_EXTSCAN_ACTIVE_MIN_CHANNEL_TIME_NAME       "gExtScanActiveMinChannelTime"
-#define CFG_EXTSCAN_ACTIVE_MIN_CHANNEL_TIME_MIN        (0)
-#define CFG_EXTSCAN_ACTIVE_MIN_CHANNEL_TIME_MAX        (110)
-#define CFG_EXTSCAN_ACTIVE_MIN_CHANNEL_TIME_DEFAULT    (20)
-#endif
-
-/* When gEnable_go_cts2self_for_sta is
+ * <ini>
+ * gEnable_go_cts2self_for_sta - Indicate firmware to stop NOA and
+ * start using cts2self
+ * @Min: 1
+ * @Max: 1
+ * @Default: 0
+ *
+ * When gEnable_go_cts2self_for_sta is
  * enabled  then if a legacy client connects to P2P GO,
  * Host will send a WMI VDEV command to FW to stop using NOA for P2P GO
  * and start using CTS2SELF.
+ *
+ *
+ * Supported Feature: P2P
+ *
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_ENABLE_GO_CTS2SELF_FOR_STA   "gEnable_go_cts2self_for_sta"
 #define CFG_ENABLE_GO_CTS2SELF_FOR_STA_DEFAULT  (0)
@@ -6679,61 +7918,6 @@ enum dot11p_mode {
 #define CFG_STATIONARY_THRESHOLD_MIN       (0)
 #define CFG_STATIONARY_THRESHOLD_MAX       (100)
 #define CFG_STATIONARY_THRESHOLD_DEFAULT   (10)
-/*
- * The following parameter is the periodic timer upon which
- * a full scan needs to be triggered when PNO channel prediction
- * feature is enabled. This parameter is intended to tweak the
- * internal algortihm for experiments. This should not be changed
- * externally.
- */
-#define CFG_CHANNEL_PREDICTION_FULL_SCAN_MS_NAME      "gChPredictionFullScanMs"
-#define CFG_CHANNEL_PREDICTION_FULL_SCAN_MS_MIN       (30000)
-#define CFG_CHANNEL_PREDICTION_FULL_SCAN_MS_MAX       (0x7fffffff)
-#define CFG_CHANNEL_PREDICTION_FULL_SCAN_MS_DEFAULT   (60000)
-
-/*
- * Early stop scan is a feature for roaming to stop the scans at
- * an early stage as soon as we find a better AP to roam. This
- * would make the roaming happen quickly.
- */
-#define CFG_EARLY_STOP_SCAN_ENABLE           "gEnableEarlyStopScan"
-#define CFG_EARLY_STOP_SCAN_ENABLE_MIN       (0)
-#define CFG_EARLY_STOP_SCAN_ENABLE_MAX       (1)
-#define CFG_EARLY_STOP_SCAN_ENABLE_DEFAULT   (1)
-/*
- * Early stop scan minimum threshold is the minimum threshold
- * to be considered for stopping the scan. The algorithm starts
- * with a scan on the greedy channel list with the maximum threshold
- * and steps down the threshold by 20% for each further channel.
- * It can step down on each channel but cannot go lower than the minimum
- * threshold.
- */
-#define CFG_EARLY_STOP_SCAN_MIN_THRESHOLD           "gEarlyStopScanMinThreshold"
-#define CFG_EARLY_STOP_SCAN_MIN_THRESHOLD_MIN       (-80)
-#define CFG_EARLY_STOP_SCAN_MIN_THRESHOLD_MAX       (-70)
-#define CFG_EARLY_STOP_SCAN_MIN_THRESHOLD_DEFAULT   (-73)
-/*
- * Early stop scan maximum threshold is the maximum threshold
- * at which the candidate AP should be to be qualified as a
- * potential roam candidate and good enough to stop the roaming scan
- */
-#define CFG_EARLY_STOP_SCAN_MAX_THRESHOLD           "gEarlyStopScanMaxThreshold"
-#define CFG_EARLY_STOP_SCAN_MAX_THRESHOLD_MIN       (-60)
-#define CFG_EARLY_STOP_SCAN_MAX_THRESHOLD_MAX       (-40)
-#define CFG_EARLY_STOP_SCAN_MAX_THRESHOLD_DEFAULT   (-43)
-
-/*
- * This parameter will configure the first scan bucket
- * threshold to the mentioned value and all the AP's which
- * have RSSI under this threshold will fall under this
- * bucket.
- * This is a configuration item used to tweak and test the input
- * for internal algorithm. It should not be modified externally.
- */
-#define CFG_FIRST_SCAN_BUCKET_THRESHOLD_NAME      "gFirstScanBucketThreshold"
-#define CFG_FIRST_SCAN_BUCKET_THRESHOLD_MIN       (-50)
-#define CFG_FIRST_SCAN_BUCKET_THRESHOLD_MAX       (-30)
-#define CFG_FIRST_SCAN_BUCKET_THRESHOLD_DEFAULT   (-30)
 
 /* Option to report rssi in cfg80211_inform_bss_frame()
  * 0 = use rssi value based on noise floor = -96 dBm
@@ -6752,28 +7936,6 @@ enum dot11p_mode {
 #define CFG_SET_TSF_GPIO_PIN_DEFAULT               (TSF_GPIO_PIN_INVALID)
 
 /*
- * OBSS scan parameters
- * obss_active_dwelltime - minimum per channel scan duration in active scan
- * obss_passive_dwelltime - minimum per channel scan duration in passive scan
- * obss_width_trigger_interval - During an OBSS scan operation, each channel
- *  in the set is scanned at least once per configured trigger interval time.
- */
-#define CFG_OBSS_HT40_SCAN_ACTIVE_DWELL_TIME_NAME    "obss_active_dwelltime"
-#define CFG_OBSS_HT40_SCAN_ACTIVE_DWELL_TIME_MIN     (5)
-#define CFG_OBSS_HT40_SCAN_ACTIVE_DWELL_TIME_MAX     (1000)
-#define CFG_OBSS_HT40_SCAN_ACTIVE_DWELL_TIME_DEFAULT (10)
-
-#define CFG_OBSS_HT40_SCAN_PASSIVE_DWELL_TIME_NAME   "obss_passive_dwelltime"
-#define CFG_OBSS_HT40_SCAN_PASSIVE_DWELL_TIME_MIN    (10)
-#define CFG_OBSS_HT40_SCAN_PASSIVE_DWELL_TIME_MAX    (1000)
-#define CFG_OBSS_HT40_SCAN_PASSIVE_DWELL_TIME_DEFAULT (20)
-
-#define CFG_OBSS_HT40_SCAN_WIDTH_TRIGGER_INTERVAL_NAME "obss_width_trigger_interval"
-#define CFG_OBSS_HT40_SCAN_WIDTH_TRIGGER_INTERVAL_MIN  (10)
-#define CFG_OBSS_HT40_SCAN_WIDTH_TRIGGER_INTERVAL_MAX  (900)
-#define CFG_OBSS_HT40_SCAN_WIDTH_TRIGGER_INTERVAL_DEFAULT (200)
-
-/*
  * Dense traffic threshold
  * traffic threshold required for dense roam scan
  * Measured in kbps
@@ -6782,14 +7944,6 @@ enum dot11p_mode {
 #define CFG_ROAM_DENSE_TRAFFIC_THRESHOLD_MIN     (0)
 #define CFG_ROAM_DENSE_TRAFFIC_THRESHOLD_MAX     (0xffffffff)
 #define CFG_ROAM_DENSE_TRAFFIC_THRESHOLD_DEFAULT (400)
-
-/*
- * Create bug report in case of nil scan results
- */
-#define CFG_CREATE_BUG_REPORT_FOR_SCAN       "gbug_report_for_scan_results"
-#define CFG_CREATE_BUG_REPORT_FOR_SCAN_DISABLE    (0)
-#define CFG_CREATE_BUG_REPORT_FOR_SCAN_ENABLE     (1)
-#define CFG_CREATE_BUG_REPORT_FOR_SCAN_DEFAULT    (0)
 
 /*
  * Enabling gignore_peer_ht_opmode will enable 11g
@@ -6954,6 +8108,30 @@ enum dot11p_mode {
 #define CFG_EDCA_BE_CWMIN_VALUE_MIN       (0x0)
 #define CFG_EDCA_BE_CWMIN_VALUE_MAX       (15)
 #define CFG_EDCA_BE_CWMIN_VALUE_DEFAULT   (4)
+/*
+ * <ini>
+ * gP2PListenDeferInterval - Defer Remain on channel for some duration
+ * @Min: 100
+ * @Max: 200
+ * @Default: 100
+ *
+ * This ini is used to defer back to back RoC request when sta is
+ * connected.
+ * If back to back listen received when sta is connected then fw is
+ * not getting enough time to spend on home channel so it leading to
+ * heartbeat failure.
+ *
+ * Supported Feature: P2P
+ *
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_P2P_LISTEN_DEFER_INTERVAL_NAME        "gP2PListenDeferInterval"
+#define CFG_P2P_LISTEN_DEFER_INTERVAL_MIN         (100)
+#define CFG_P2P_LISTEN_DEFER_INTERVAL_MAX         (200)
+#define CFG_P2P_LISTEN_DEFER_INTERVAL_DEFAULT     (100)
 
 /*
  * <ini>
@@ -7196,34 +8374,6 @@ enum dot11p_mode {
 #define CFG_ENABLE_DP_TRACE_DEFAULT	(1)
 
 /*
- * This parameter will globally disable/enable the adaptive dwell config.
- * Scan dwell time optimization
- * Following parameters will set different values of attributes for dwell
- * time optimization thus reducing total scan time.
- */
-
-/*
- * This parameter will globally disable/enable the adaptive dwell config.
- * Acceptable values for this:
- * 0: Config is disabled
- * 1: Config is enabled
- */
-#define CFG_ADAPTIVE_DWELL_MODE_ENABLED_NAME      "adaptive_dwell_mode_enabled"
-#define CFG_ADAPTIVE_DWELL_MODE_ENABLED_MIN       (0)
-#define CFG_ADAPTIVE_DWELL_MODE_ENABLED_MAX       (1)
-#define CFG_ADAPTIVE_DWELL_MODE_ENABLED_DEFAULT   (1)
-
-/*
- * This parameter will set default adaptive mode, will be used if any of the
- * scan dwell mode is set to default.
- * For uses : see enum wmi_dwelltime_adaptive_mode
- */
-#define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_NAME       "global_adapt_dwelltime_mode"
-#define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_MIN        (0)
-#define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_MAX        (4)
-#define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_DEFAULT    (1)
-
-/*
  * This parameter will set the weight to calculate the average low pass
  * filter for channel congestion.
  * Acceptable values for this: 0-100 (In %)
@@ -7253,36 +8403,6 @@ enum dot11p_mode {
 #define CFG_ADAPT_DWELL_WIFI_THRESH_DEFAULT    (10)
 
 /*
- * This parameter will set the algo used in dwell time optimization during
- * host scan. see enum wmi_dwelltime_adaptive_mode.
- * Acceptable values for this:
- * 0: Default (Use firmware default mode)
- * 1: Conservative optimization
- * 2: Moderate optimization
- * 3: Aggressive optimization
- * 4: Static
- */
-#define CFG_ADAPTIVE_SCAN_DWELL_MODE_NAME        "hostscan_adaptive_dwell_mode"
-#define CFG_ADAPTIVE_SCAN_DWELL_MODE_MIN         (0)
-#define CFG_ADAPTIVE_SCAN_DWELL_MODE_MAX         (4)
-#define CFG_ADAPTIVE_SCAN_DWELL_MODE_DEFAULT     (0)
-
-/*
- * This parameter will set the algo used in dwell time optimization during
- * ext scan. see enum wmi_dwelltime_adaptive_mode.
- * Acceptable values for this:
- * 0: Default (Use firmware default mode)
- * 1: Conservative optimization
- * 2: Moderate optimization
- * 3: Aggressive optimization
- * 4: Static
- */
-#define CFG_ADAPTIVE_EXTSCAN_DWELL_MODE_NAME     "extscan_adaptive_dwell_mode"
-#define CFG_ADAPTIVE_EXTSCAN_DWELL_MODE_MIN      (0)
-#define CFG_ADAPTIVE_EXTSCAN_DWELL_MODE_MAX      (4)
-#define CFG_ADAPTIVE_EXTSCAN_DWELL_MODE_DEFAULT  (0)
-
-/*
  * <ini>
  * g_bug_on_reinit_failure  - Enable/Disable bug on reinit
  * @Min: 0
@@ -7307,21 +8427,6 @@ enum dot11p_mode {
 #define CFG_BUG_ON_REINIT_FAILURE_MIN      (0)
 #define CFG_BUG_ON_REINIT_FAILURE_MAX      (1)
 #define CFG_BUG_ON_REINIT_FAILURE_DEFAULT  (1)
-
-/*
- * This parameter will set the algo used in dwell time optimization during
- * pno scan. see enum wmi_dwelltime_adaptive_mode.
- * Acceptable values for this:
- * 0: Default (Use firmware default mode)
- * 1: Conservative optimization
- * 2: Moderate optimization
- * 3: Aggressive optimization
- * 4: Static
- */
-#define CFG_ADAPTIVE_PNOSCAN_DWELL_MODE_NAME     "pnoscan_adaptive_dwell_mode"
-#define CFG_ADAPTIVE_PNOSCAN_DWELL_MODE_MIN      (0)
-#define CFG_ADAPTIVE_PNOSCAN_DWELL_MODE_MAX      (4)
-#define CFG_ADAPTIVE_PNOSCAN_DWELL_MODE_DEFAULT  (0)
 
 /*
  * <ini>
@@ -8420,10 +9525,6 @@ struct hdd_config {
 	uint16_t TxRate;
 	uint32_t ShortGI20MhzEnable;
 	uint32_t ScanResultAgeCount;
-	uint32_t nScanAgeTimeNCNPS;
-	uint32_t nScanAgeTimeNCPS;
-	uint32_t nScanAgeTimeCNPS;
-	uint32_t nScanAgeTimeCPS;
 	uint8_t nRssiCatGap;
 	bool fIsShortPreamble;
 	struct qdf_mac_addr IbssBssid;
