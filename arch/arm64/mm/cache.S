@@ -243,6 +243,7 @@ ENDPROC(__dma_clean_range)
  *	- end     - virtual end address of region
  */
 ENTRY(__dma_flush_range)
+	uaccess_ttbr0_enable x2, x3
 	dcache_line_size x2, x3
 	sub	x3, x2, #1
 	bic	x0, x0, x3
@@ -251,6 +252,7 @@ ENTRY(__dma_flush_range)
 	cmp	x0, x1
 	b.lo	1b
 	dsb	sy
+	uaccess_ttbr0_disable x1
 	ret
 ENDPIPROC(__dma_flush_range)
 
