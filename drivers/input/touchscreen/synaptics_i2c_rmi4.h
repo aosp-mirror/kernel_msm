@@ -288,6 +288,7 @@ struct synaptics_rmi4_data {
 	struct completion st_irq_processed;
 #endif
 	int idle_mode;
+	int is_wakeup_touch;
 };
 
 enum exp_fn {

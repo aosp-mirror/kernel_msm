@@ -142,6 +142,9 @@ enum DOZE_MODE {
 #define DEF_DOZE_BURST_SIZE 40
 #define DEF_DOZE_BW 3
 
+#define ANALOG_COMMAND	0X14D
+#define FORCE_CAL 2
+
 static int synaptics_rmi4_i2c_read(struct synaptics_rmi4_data *rmi4_data,
 		unsigned short addr, unsigned char *data,
 		unsigned short length);
@@ -1123,9 +1126,6 @@ static ssize_t synaptics_rmi4_idle_mode_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	if (rmi4_data->idle_mode == idle_mode)
-		return count;
-
 	rmi4_data->idle_mode = idle_mode;
 
 	if (idle_mode) {
@@ -1506,6 +1506,8 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	struct synaptics_rmi4_f12_finger_data *data;
 	struct synaptics_rmi4_f12_finger_data *finger_data;
 	int finger_state_changed = 0;
+	unsigned char command = FORCE_CAL;
+	int num_of_release = 0;
 
 	fingers_to_process = fhandler->num_of_data_points;
 	data_addr = fhandler->full_addr.data_base;
@@ -1596,6 +1598,9 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 		}
 	}
 #endif
+
+	if (rmi4_data->idle_mode == 1)
+		rmi4_data->is_wakeup_touch = 1;
 
 	for (finger = 0; finger < fingers_to_process; finger++) {
 		finger_data = data + finger;
@@ -1690,6 +1695,24 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			}
 			if (debug_enabled)
 				rmi4_data->finger_state[finger] = FS_NO;
+
+			num_of_release++;
+			if (rmi4_data->is_wakeup_touch) {
+				if (num_of_release == rmi4_data->num_of_fingers) {
+					msleep(100);
+					retval = synaptics_rmi4_i2c_write(rmi4_data,
+								ANALOG_COMMAND,
+								&command,
+								1);
+					dev_info(&rmi4_data->i2c_client->dev,
+							"Force Calibration\n");
+					if (retval < 0) {
+						dev_warn(&rmi4_data->i2c_client->dev,
+							"Failed to write force cal command\n");
+					}
+					rmi4_data->is_wakeup_touch = 0;
+				}
+			}
 		}
 	}
 
@@ -3817,6 +3840,7 @@ static void synaptics_rmi4_set_idle_param(struct synaptics_rmi4_data
 	static unsigned char doze_burst_size_active = 0;
 	static unsigned char doze_bw_active = 0;
 	unsigned char palm_filter;
+	unsigned char command = FORCE_CAL;
 
 	doze_interval = active ? rmi4_data->board->doze_interval_active :
 				rmi4_data->board->doze_interval_sleep;
@@ -3894,6 +3918,19 @@ static void synaptics_rmi4_set_idle_param(struct synaptics_rmi4_data
 	if (retval < 0) {
 		dev_warn(&(rmi4_data->input_dev->dev),
 			"Failed to write doze bw\n");
+	}
+
+	if (active == DOZE_ACTIVE && !rmi4_data->is_wakeup_touch) {
+		retval = synaptics_rmi4_i2c_write(rmi4_data,
+					ANALOG_COMMAND,
+					&command,
+					1);
+		dev_info(&rmi4_data->i2c_client->dev,
+						"Force Calibration\n");
+		if (retval < 0) {
+			dev_warn(&rmi4_data->i2c_client->dev,
+				"Failed to write force cal command\n");
+		}
 	}
 }
 
@@ -4049,8 +4086,6 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 				__func__);
 		goto err_free_gpios;
 	}
-
-	synaptics_rmi4_set_idle_param(rmi4_data, DOZE_ACTIVE);
 
 	if (platform_data->detect_device) {
 		retval = synaptics_rmi4_parse_dt_children(&client->dev,
