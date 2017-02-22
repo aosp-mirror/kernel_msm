@@ -40,7 +40,7 @@
 #include "../codecs/da7219.h"
 #include "../codecs/da7219-aad.h"
 
-#define DRV_NAME "goog-polaris-asoc-snd"
+#define DRV_NAME "polaris-asoc-snd"
 
 #define __CHIPSET__ "MSM8998 "
 #define MSM_DAILINK_NAME(name) (__CHIPSET__#name)
@@ -3119,7 +3119,7 @@ err_fail:
 	return ret;
 }
 
-static int goog_polaris_notifier_service_cb(struct notifier_block *this,
+static int polaris_notifier_service_cb(struct notifier_block *this,
 					 unsigned long opcode, void *ptr)
 {
 	int ret;
@@ -3177,7 +3177,7 @@ done:
 }
 
 static struct notifier_block service_nb = {
-	.notifier_call  = goog_polaris_notifier_service_cb,
+	.notifier_call  = polaris_notifier_service_cb,
 	.priority = -INT_MAX,
 };
 
@@ -5641,7 +5641,7 @@ err_pcm_runtime:
 }
 
 struct snd_soc_card snd_soc_card_polaris = {
-	.name		= "goog-polaris-snd-card",
+	.name		= "polaris-snd-card",
 	.late_probe	= msm_snd_card_late_probe,
 };
 
@@ -5793,7 +5793,7 @@ err:
 	return ret;
 }
 
-static const struct of_device_id goog_polaris_asoc_machine_of_match[]  = {
+static const struct of_device_id polaris_asoc_machine_of_match[]  = {
 	{ .compatible = "goog,polaris-snd",
 	  .data = "tasha_codec"},
 	{},
@@ -5807,7 +5807,7 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	int total_links;
 	const struct of_device_id *match;
 
-	match = of_match_node(goog_polaris_asoc_machine_of_match, dev->of_node);
+	match = of_match_node(polaris_asoc_machine_of_match, dev->of_node);
 	if (!match) {
 		dev_err(dev, "%s: No DT match found for sound card\n",
 			__func__);
@@ -6178,7 +6178,7 @@ static void i2s_auxpcm_deinit(void)
 			mi2s_auxpcm_conf[count].pcm_i2s_sel_vt_addr);
 }
 
-static int goog_polaris_card_suspend(struct snd_soc_card *card)
+static int polaris_card_suspend(struct snd_soc_card *card)
 {
 	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 	int ret = 0;
@@ -6195,7 +6195,7 @@ static int goog_polaris_card_suspend(struct snd_soc_card *card)
 	return 0;
 }
 
-static int goog_polaris_card_resume(struct snd_soc_card *card)
+static int polaris_card_resume(struct snd_soc_card *card)
 {
 	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 	int ret = 0;
@@ -6212,7 +6212,7 @@ static int goog_polaris_card_resume(struct snd_soc_card *card)
 	return 0;
 }
 
-static const struct snd_soc_dapm_widget goog_polaris_dapm_widgets[] = {
+static const struct snd_soc_dapm_widget polaris_dapm_widgets[] = {
 	SND_SOC_DAPM_HP("DA7219 Headphone Jack", NULL),
 	SND_SOC_DAPM_MIC("DA7219 Headset Mic", NULL),
 };
@@ -6243,10 +6243,10 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 	card->dev = &pdev->dev;
-	card->suspend_post = goog_polaris_card_suspend;
-	card->resume_pre = goog_polaris_card_resume;
-	card->dapm_widgets = goog_polaris_dapm_widgets,
-	card->num_dapm_widgets = ARRAY_SIZE(goog_polaris_dapm_widgets),
+	card->suspend_post = polaris_card_suspend;
+	card->resume_pre = polaris_card_resume;
+	card->dapm_widgets = polaris_dapm_widgets,
+	card->num_dapm_widgets = ARRAY_SIZE(polaris_dapm_widgets),
 	platform_set_drvdata(pdev, card);
 	snd_soc_card_set_drvdata(card, pdata);
 
@@ -6264,7 +6264,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	match = of_match_node(goog_polaris_asoc_machine_of_match,
+	match = of_match_node(polaris_asoc_machine_of_match,
 			pdev->dev.of_node);
 	if (!match) {
 		dev_err(&pdev->dev, "%s: no matched codec is found.\n",
@@ -6406,7 +6406,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	i2s_auxpcm_init(pdev);
 
 	is_initial_boot = true;
-	ret = audio_notifier_register("googpolaris", AUDIO_NOTIFIER_ADSP_DOMAIN,
+	ret = audio_notifier_register("polaris", AUDIO_NOTIFIER_ADSP_DOMAIN,
 				      &service_nb);
 	if (ret < 0)
 		pr_err("%s: Audio notifier register failed ret = %d\n",
@@ -6457,19 +6457,19 @@ static int msm_asoc_machine_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static struct platform_driver goog_polaris_asoc_machine_driver = {
+static struct platform_driver polaris_asoc_machine_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.owner = THIS_MODULE,
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = goog_polaris_asoc_machine_of_match,
+		.of_match_table = polaris_asoc_machine_of_match,
 	},
 	.probe = msm_asoc_machine_probe,
 	.remove = msm_asoc_machine_remove,
 };
-module_platform_driver(goog_polaris_asoc_machine_driver);
+module_platform_driver(polaris_asoc_machine_driver);
 
 MODULE_DESCRIPTION("ALSA SoC msm");
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:" DRV_NAME);
-MODULE_DEVICE_TABLE(of, goog_polaris_asoc_machine_of_match);
+MODULE_DEVICE_TABLE(of, polaris_asoc_machine_of_match);

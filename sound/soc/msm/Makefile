@@ -35,5 +35,5 @@ obj-$(CONFIG_SND_SOC_EXT_CODEC) += snd-soc-sdm660-common.o
 obj-$(CONFIG_SND_SOC_EXT_CODEC) += snd-soc-ext-codec.o
 
 # for POLARIS sound card driver
-snd-soc-goog-polaris-objs := polaris.o
-obj-$(CONFIG_SND_SOC_GOOG_POLARIS) += snd-soc-goog-polaris.o
+snd-soc-polaris-objs := polaris.o
+obj-$(CONFIG_SND_SOC_POLARIS) += snd-soc-polaris.o

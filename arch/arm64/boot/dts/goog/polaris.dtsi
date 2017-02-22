@@ -411,7 +411,7 @@
 		/delete-property/ qcom,us-euro-gpios;
 
 		compatible = "goog,polaris-snd";
-		qcom,model = "goog-polaris-snd-card";
+		qcom,model = "polaris-snd-card";
 
 		qcom,mbhc-audio-jack-type = "none";
 
