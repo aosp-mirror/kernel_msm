@@ -77,12 +77,12 @@ config ARCH_MSM8998
 	This enables support for the MSM8998 chipset. If you do not
 	wish to build a kernel that runs on this chipset, say 'N' here.
 
-config ARCH_GOOG_POLARIS
-	bool "Enable Support for Google Polaris"
+config BOARD_POLARIS
+	bool "Enable Support for Qualcomm Polaris board"
 	select ARCH_MSM8998
 	depends on ARCH_QCOM
 	help
-	This enables support for the Google Polaris boards which
+	This enables support for the Qualcomm Polaris boards which
 	use the MSM8998 chipset. If you do not wish to build a kernel
 	that runs on this board, say 'N' here.
 

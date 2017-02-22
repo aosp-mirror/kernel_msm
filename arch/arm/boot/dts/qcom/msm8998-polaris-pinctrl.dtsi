@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  */
 
-#include "../qcom/msm8998-pinctrl.dtsi"
+#include "msm8998-pinctrl.dtsi"
 
 &tlmm {
 	/delete-node/ wcd_gnd_mic_swap;

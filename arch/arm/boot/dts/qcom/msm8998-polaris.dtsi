@@ -15,7 +15,7 @@
 
 #include "dsi-panel-jdi-synaptics-r63450.dtsi"
 #include "dsi-panel-jdi-novatek-nt36860.dtsi"
-#include "polaris-pinctrl.dtsi"
+#include "msm8998-polaris-pinctrl.dtsi"
 
 / {
 	bluetooth: bt_wcn3990 {
