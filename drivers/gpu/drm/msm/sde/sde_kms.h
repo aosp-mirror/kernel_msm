@@ -1,13 +1,19 @@
-/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2013 Red Hat
+ * Author: Rob Clark <robdclark@gmail.com>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 as published by
+ * the Free Software Foundation.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef __SDE_KMS_H__
@@ -15,18 +21,79 @@
 
 #include "msm_drv.h"
 #include "msm_kms.h"
-#include "mdp/mdp_kms.h"
+#include "msm_mmu.h"
+#include "sde_dbg.h"
 #include "sde_hw_catalog.h"
-#include "sde_hw_mdp_ctl.h"
+#include "sde_hw_ctl.h"
 #include "sde_hw_lm.h"
 #include "sde_hw_interrupts.h"
+#include "sde_hw_wb.h"
+#include "sde_hw_top.h"
+#include "sde_rm.h"
+#include "sde_power_handle.h"
+#include "sde_irq.h"
+#include "sde_core_perf.h"
+
+#define DRMID(x) ((x) ? (x)->base.id : -1)
+
+/**
+ * SDE_DEBUG - macro for kms/plane/crtc/encoder/connector logs
+ * @fmt: Pointer to format string
+ */
+#define SDE_DEBUG(fmt, ...)                                                \
+	do {                                                               \
+		if (unlikely(drm_debug & DRM_UT_KMS))                      \
+			drm_ut_debug_printk(__func__, fmt, ##__VA_ARGS__); \
+		else                                                       \
+			pr_debug(fmt, ##__VA_ARGS__);                      \
+	} while (0)
+
+/**
+ * SDE_DEBUG_DRIVER - macro for hardware driver logging
+ * @fmt: Pointer to format string
+ */
+#define SDE_DEBUG_DRIVER(fmt, ...)                                         \
+	do {                                                               \
+		if (unlikely(drm_debug & DRM_UT_DRIVER))                   \
+			drm_ut_debug_printk(__func__, fmt, ##__VA_ARGS__); \
+		else                                                       \
+			pr_debug(fmt, ##__VA_ARGS__);                      \
+	} while (0)
+
+#define SDE_ERROR(fmt, ...) pr_err("[sde error]" fmt, ##__VA_ARGS__)
+
+#define POPULATE_RECT(rect, a, b, c, d, Q16_flag) \
+	do {						\
+		(rect)->x = (Q16_flag) ? (a) >> 16 : (a);    \
+		(rect)->y = (Q16_flag) ? (b) >> 16 : (b);    \
+		(rect)->w = (Q16_flag) ? (c) >> 16 : (c);    \
+		(rect)->h = (Q16_flag) ? (d) >> 16 : (d);    \
+	} while (0)
+
+#define CHECK_LAYER_BOUNDS(offset, size, max_size) \
+	(((size) > (max_size)) || ((offset) > ((max_size) - (size))))
+
+/**
+ * ktime_compare_safe - compare two ktime structures
+ *	This macro is similar to the standard ktime_compare() function, but
+ *	attempts to also handle ktime overflows.
+ * @A: First ktime value
+ * @B: Second ktime value
+ * Returns: -1 if A < B, 0 if A == B, 1 if A > B
+ */
+#define ktime_compare_safe(A, B) \
+	ktime_compare(ktime_sub((A), (B)), ktime_set(0, 0))
+
+#define SDE_NAME_SIZE  12
 
 /*
  * struct sde_irq_callback - IRQ callback handlers
+ * @list: list to callback
  * @func: intr handler
  * @arg: argument for the handler
  */
 struct sde_irq_callback {
+	struct list_head list;
 	void (*func)(void *arg, int irq_idx);
 	void *arg;
 };
@@ -35,79 +102,60 @@ struct sde_irq_callback {
  * struct sde_irq: IRQ structure contains callback registration info
  * @total_irq:    total number of irq_idx obtained from HW interrupts mapping
  * @irq_cb_tbl:   array of IRQ callbacks setting
+ * @enable_counts array of IRQ enable counts
  * @cb_lock:      callback lock
+ * @debugfs_file: debugfs file for irq statistics
  */
 struct sde_irq {
 	u32 total_irqs;
-	struct sde_irq_callback *irq_cb_tbl;
+	struct list_head *irq_cb_tbl;
+	atomic_t *enable_counts;
+	atomic_t *irq_counts;
 	spinlock_t cb_lock;
-};
-
-/**
- *  struct sde_hw_res_map : Default resource table identifying default
- *             hw resource map. Primarily used for forcing DSI to use CTL_0/1
- *             and Pingpong 0/1, if the field is set to SDE_NONE means any HW
- *             intstance for that tpye is allowed as long as it is unused.
- */
-struct sde_hw_res_map {
-	enum sde_intf intf;
-	enum sde_lm lm;
-	enum sde_pingpong pp;
-	enum sde_ctl ctl;
-};
-
-/* struct sde_hw_resource_manager : Resource mananger maintains the current
- *                                  platform configuration and manages shared
- *                                  hw resources ex:ctl_path hw driver context
- *                                  is needed by CRTCs/PLANEs/ENCODERs
- * @ctl        : table of control path hw driver contexts allocated
- * @mixer      : list of mixer hw drivers contexts allocated
- * @intr       : pointer to hw interrupt context
- * @res_table  : pointer to default hw_res table for this platform
- * @feature_map :BIT map for default enabled features ex:specifies if PP_SPLIT
- *               is enabled/disabled by defalt for this platform
- */
-struct sde_hw_resource_manager {
-	struct sde_hw_ctl *ctl[CTL_MAX];
-	struct sde_hw_mixer *mixer[LM_MAX];
-	struct sde_hw_intr *intr;
-	const struct sde_hw_res_map *res_table;
-	bool feature_map;
+	struct dentry *debugfs_file;
 };
 
 struct sde_kms {
 	struct msm_kms base;
 	struct drm_device *dev;
-	int rev;
+	int core_rev;
 	struct sde_mdss_cfg *catalog;
 
-	struct msm_mmu *mmu;
-	int mmu_id;
+	struct msm_mmu *mmu[MSM_SMMU_DOMAIN_MAX];
+	int mmu_id[MSM_SMMU_DOMAIN_MAX];
+	struct sde_power_client *core_client;
+
+	/* directory entry for debugfs */
+	void *debugfs_root;
+	struct dentry *debugfs_debug;
+	struct dentry *debugfs_danger;
+	struct dentry *debugfs_vbif;
 
 	/* io/register spaces: */
-	void __iomem *mmio, *vbif;
+	void __iomem *mmio, *vbif[VBIF_MAX];
 
 	struct regulator *vdd;
 	struct regulator *mmagic;
 	struct regulator *venus;
 
-	struct clk *axi_clk;
-	struct clk *ahb_clk;
-	struct clk *src_clk;
-	struct clk *core_clk;
-	struct clk *lut_clk;
-	struct clk *mmagic_clk;
-	struct clk *iommu_clk;
-	struct clk *vsync_clk;
-
-	struct {
-		unsigned long enabled_mask;
-		struct irq_domain *domain;
-	} irqcontroller;
+	struct sde_irq_controller irq_controller;
 
 	struct sde_hw_intr *hw_intr;
 	struct sde_irq irq_obj;
-	struct sde_hw_resource_manager hw_res;
+
+	struct sde_core_perf perf;
+
+	struct sde_rm rm;
+	bool rm_init;
+
+	struct sde_hw_vbif *hw_vbif[VBIF_MAX];
+	struct sde_hw_mdp *hw_mdp;
+	int dsi_display_count;
+	void **dsi_displays;
+	int wb_display_count;
+	void **wb_displays;
+
+	bool has_danger_ctrl;
 };
 
 struct vsync_info {
@@ -117,188 +165,207 @@ struct vsync_info {
 
 #define to_sde_kms(x) container_of(x, struct sde_kms, base)
 
-struct sde_plane_state {
-	struct drm_plane_state base;
+/**
+ * sde_is_custom_client - whether or not to enable non-standard customizations
+ *
+ * Return: Whether or not the 'sdeclient' module parameter was set on boot up
+ */
+bool sde_is_custom_client(void);
 
-	/* aligned with property */
-	uint8_t premultiplied;
-	uint8_t zpos;
-	uint8_t alpha;
+/**
+ * Debugfs functions - extra helper functions for debugfs support
+ *
+ * Main debugfs documentation is located at,
+ *
+ * Documentation/filesystems/debugfs.txt
+ *
+ * @sde_debugfs_setup_regset32: Initialize data for sde_debugfs_create_regset32
+ * @sde_debugfs_create_regset32: Create 32-bit register dump file
+ * @sde_debugfs_get_root: Get root dentry for SDE_KMS's debugfs node
+ */
 
-	/* assigned by crtc blender */
-	enum sde_stage stage;
-
-	/* some additional transactional status to help us know in the
-	 * apply path whether we need to update SMP allocation, and
-	 * whether current update is still pending:
-	 */
-	bool mode_changed : 1;
-	bool pending : 1;
+/**
+ * Companion structure for sde_debugfs_create_regset32. Do not initialize the
+ * members of this structure explicitly; use sde_debugfs_setup_regset32 instead.
+ */
+struct sde_debugfs_regset32 {
+	uint32_t offset;
+	uint32_t blk_len;
+	struct sde_kms *sde_kms;
 };
 
-#define to_sde_plane_state(x) \
-		container_of(x, struct sde_plane_state, base)
-
-int sde_disable(struct sde_kms *sde_kms);
-int sde_enable(struct sde_kms *sde_kms);
+/**
+ * sde_debugfs_setup_regset32 - Initialize register block definition for debugfs
+ * This function is meant to initialize sde_debugfs_regset32 structures for use
+ * with sde_debugfs_create_regset32.
+ * @regset: opaque register definition structure
+ * @offset: sub-block offset
+ * @length: sub-block length, in bytes
+ * @sde_kms: pointer to sde kms structure
+ */
+void sde_debugfs_setup_regset32(struct sde_debugfs_regset32 *regset,
+		uint32_t offset, uint32_t length, struct sde_kms *sde_kms);
 
 /**
- * HW resource manager functions
- * @sde_rm_acquire_ctl_path : Allocates control path
- * @sde_rm_get_ctl_path     : returns control path driver context for already
- *                           acquired ctl path
- * @sde_rm_release_ctl_path : Frees control path driver context
- * @sde_rm_acquire_mixer   : Allocates mixer hw driver context
- * @sde_rm_get_mixer       : returns mixer context for already
- *                           acquired mixer
- * @sde_rm_release_mixer   : Frees mixer hw driver context
- * @sde_rm_get_hw_res_map  : Returns map for the passed INTF
+ * sde_debugfs_create_regset32 - Create register read back file for debugfs
+ *
+ * This function is almost identical to the standard debugfs_create_regset32()
+ * function, with the main difference being that a list of register
+ * names/offsets do not need to be provided. The 'read' function simply outputs
+ * sequential register values over a specified range.
+ *
+ * Similar to the related debugfs_create_regset32 API, the structure pointed to
+ * by regset needs to persist for the lifetime of the created file. The calling
+ * code is responsible for initialization/management of this structure.
+ *
+ * The structure pointed to by regset is meant to be opaque. Please use
+ * sde_debugfs_setup_regset32 to initialize it.
+ *
+ * @name:   File name within debugfs
+ * @mode:   File mode within debugfs
+ * @parent: Parent directory entry within debugfs, can be NULL
+ * @regset: Pointer to persistent register block definition
+ *
+ * Return: dentry pointer for newly created file, use either debugfs_remove()
+ *         or debugfs_remove_recursive() (on a parent directory) to remove the
+ *         file
  */
-struct sde_hw_ctl *sde_rm_acquire_ctl_path(struct sde_kms *sde_kms,
-		enum sde_ctl idx);
-struct sde_hw_ctl *sde_rm_get_ctl_path(struct sde_kms *sde_kms,
-		enum sde_ctl idx);
-void sde_rm_release_ctl_path(struct sde_kms *sde_kms,
-		enum sde_ctl idx);
-struct sde_hw_mixer *sde_rm_acquire_mixer(struct sde_kms *sde_kms,
-		enum sde_lm idx);
-struct sde_hw_mixer *sde_rm_get_mixer(struct sde_kms *sde_kms,
-		enum sde_lm idx);
-void sde_rm_release_mixer(struct sde_kms *sde_kms,
-		enum sde_lm idx);
-struct sde_hw_intr *sde_rm_acquire_intr(struct sde_kms *sde_kms);
-struct sde_hw_intr *sde_rm_get_intr(struct sde_kms *sde_kms);
-
-const struct sde_hw_res_map *sde_rm_get_res_map(struct sde_kms *sde_kms,
-		enum sde_intf idx);
+void *sde_debugfs_create_regset32(const char *name, umode_t mode,
+		void *parent, struct sde_debugfs_regset32 *regset);
 
 /**
- * IRQ functions
+ * sde_debugfs_get_root - Return root directory entry for SDE's debugfs
+ *
+ * The return value should be passed as the 'parent' argument to subsequent
+ * debugfs create calls.
+ *
+ * @sde_kms: Pointer to SDE's KMS structure
+ *
+ * Return: dentry pointer for SDE's debugfs location
  */
-int sde_irq_domain_init(struct sde_kms *sde_kms);
-int sde_irq_domain_fini(struct sde_kms *sde_kms);
-void sde_irq_preinstall(struct msm_kms *kms);
-int sde_irq_postinstall(struct msm_kms *kms);
-void sde_irq_uninstall(struct msm_kms *kms);
-irqreturn_t sde_irq(struct msm_kms *kms);
+void *sde_debugfs_get_root(struct sde_kms *sde_kms);
 
 /**
- * sde_set_irqmask - IRQ helper function for writing IRQ mask
- *                   to SDE HW interrupt register.
- * @sde_kms:		SDE handle
- * @reg_off:		SDE HW interrupt register offset
- * @irqmask:		IRQ mask
+ * SDE info management functions
+ * These functions/definitions allow for building up a 'sde_info' structure
+ * containing one or more "key=value\n" entries.
  */
-void sde_set_irqmask(
-		struct sde_kms *sde_kms,
-		uint32_t reg_off,
-		uint32_t irqmask);
+#define SDE_KMS_INFO_MAX_SIZE	4096
 
 /**
- * sde_irq_idx_lookup - IRQ helper function for lookup irq_idx from HW
- *                      interrupt mapping table.
- * @sde_kms:		SDE handle
- * @intr_type:		SDE HW interrupt type for lookup
- * @instance_idx:	SDE HW block instance defined in sde_hw_mdss.h
- * @return:		irq_idx or -EINVAL when fail to lookup
+ * struct sde_kms_info - connector information structure container
+ * @data: Array of information character data
+ * @len: Current length of information data
+ * @staged_len: Temporary data buffer length, commit to
+ *              len using sde_kms_info_stop
+ * @start: Whether or not a partial data entry was just started
  */
-int sde_irq_idx_lookup(
-		struct sde_kms *sde_kms,
-		enum sde_intr_type intr_type,
-		uint32_t instance_idx);
+struct sde_kms_info {
+	char data[SDE_KMS_INFO_MAX_SIZE];
+	uint32_t len;
+	uint32_t staged_len;
+	bool start;
+};
 
 /**
- * sde_enable_irq - IRQ helper function for enabling one or more IRQs
- * @sde_kms:		SDE handle
- * @irq_idxs:		Array of irq index
- * @irq_count:		Number of irq_idx provided in the array
- * @return:		0 for success enabling IRQ, otherwise failure
+ * SDE_KMS_INFO_DATA - Macro for accessing sde_kms_info data bytes
+ * @S: Pointer to sde_kms_info structure
+ * Returns: Pointer to byte data
  */
-int sde_enable_irq(
-		struct sde_kms *sde_kms,
-		int *irq_idxs,
-		uint32_t irq_count);
+#define SDE_KMS_INFO_DATA(S)    ((S) ? ((struct sde_kms_info *)(S))->data : 0)
 
 /**
- * sde_disable_irq - IRQ helper function for diabling one of more IRQs
- * @sde_kms:		SDE handle
- * @irq_idxs:		Array of irq index
- * @irq_count:		Number of irq_idx provided in the array
- * @return:		0 for success disabling IRQ, otherwise failure
+ * SDE_KMS_INFO_DATALEN - Macro for accessing sde_kms_info data length
+ * @S: Pointer to sde_kms_info structure
+ * Returns: Size of available byte data
  */
-int sde_disable_irq(
-		struct sde_kms *sde_kms,
-		int *irq_idxs,
-		uint32_t irq_count);
+#define SDE_KMS_INFO_DATALEN(S) ((S) ? ((struct sde_kms_info *)(S))->len : 0)
 
 /**
- * sde_register_irq_callback - For registering callback function on IRQ
- *                             interrupt
- * @sde_kms:		SDE handle
- * @irq_idx:		irq index
- * @irq_cb:		IRQ callback structure, containing callback function
- *			and argument. Passing NULL for irq_cb will unregister
- *			the callback for the given irq_idx
- * @return:		0 for success registering callback, otherwise failure
+ * sde_kms_info_reset - reset sde_kms_info structure
+ * @info: Pointer to sde_kms_info structure
  */
-int sde_register_irq_callback(
-		struct sde_kms *sde_kms,
-		int irq_idx,
-		struct sde_irq_callback *irq_cb);
+void sde_kms_info_reset(struct sde_kms_info *info);
 
 /**
- * sde_clear_all_irqs - Clearing all SDE IRQ interrupt status
- * @sde_kms:		SDE handle
+ * sde_kms_info_add_keyint - add integer value to 'sde_kms_info'
+ * @info: Pointer to sde_kms_info structure
+ * @key: Pointer to key string
+ * @value: Signed 32-bit integer value
  */
-void sde_clear_all_irqs(struct sde_kms *sde_kms);
+void sde_kms_info_add_keyint(struct sde_kms_info *info,
+		const char *key,
+		int32_t value);
 
 /**
- * sde_disable_all_irqs - Diabling all SDE IRQ interrupt
- * @sde_kms:		SDE handle
+ * sde_kms_info_add_keystr - add string value to 'sde_kms_info'
+ * @info: Pointer to sde_kms_info structure
+ * @key: Pointer to key string
+ * @value: Pointer to string value
  */
-void sde_disable_all_irqs(struct sde_kms *sde_kms);
+void sde_kms_info_add_keystr(struct sde_kms_info *info,
+		const char *key,
+		const char *value);
+
+/**
+ * sde_kms_info_start - begin adding key to 'sde_kms_info'
+ * Usage:
+ *      sde_kms_info_start(key)
+ *      sde_kms_info_append(val_1)
+ *      ...
+ *      sde_kms_info_append(val_n)
+ *      sde_kms_info_stop
+ * @info: Pointer to sde_kms_info structure
+ * @key: Pointer to key string
+ */
+void sde_kms_info_start(struct sde_kms_info *info,
+		const char *key);
+
+/**
+ * sde_kms_info_append - append value string to 'sde_kms_info'
+ * Usage:
+ *      sde_kms_info_start(key)
+ *      sde_kms_info_append(val_1)
+ *      ...
+ *      sde_kms_info_append(val_n)
+ *      sde_kms_info_stop
+ * @info: Pointer to sde_kms_info structure
+ * @str: Pointer to partial value string
+ */
+void sde_kms_info_append(struct sde_kms_info *info,
+		const char *str);
+
+/**
+ * sde_kms_info_append_format - append format code string to 'sde_kms_info'
+ * Usage:
+ *      sde_kms_info_start(key)
+ *      sde_kms_info_append_format(fourcc, modifier)
+ *      ...
+ *      sde_kms_info_stop
+ * @info: Pointer to sde_kms_info structure
+ * @pixel_format: FOURCC format code
+ * @modifier: 64-bit drm format modifier
+ */
+void sde_kms_info_append_format(struct sde_kms_info *info,
+		uint32_t pixel_format,
+		uint64_t modifier);
+
+/**
+ * sde_kms_info_stop - finish adding key to 'sde_kms_info'
+ * Usage:
+ *      sde_kms_info_start(key)
+ *      sde_kms_info_append(val_1)
+ *      ...
+ *      sde_kms_info_append(val_n)
+ *      sde_kms_info_stop
+ * @info: Pointer to sde_kms_info structure
+ */
+void sde_kms_info_stop(struct sde_kms_info *info);
 
 /**
  * Vblank enable/disable functions
  */
 int sde_enable_vblank(struct msm_kms *kms, struct drm_crtc *crtc);
 void sde_disable_vblank(struct msm_kms *kms, struct drm_crtc *crtc);
-
-/**
- * Plane functions
- */
-enum sde_sspp sde_plane_pipe(struct drm_plane *plane);
-struct drm_plane *sde_plane_init(struct drm_device *dev, uint32_t pipe,
-		bool private_plane);
-
-/**
- * CRTC functions
- */
-uint32_t sde_crtc_vblank(struct drm_crtc *crtc);
-void sde_crtc_wait_for_commit_done(struct drm_crtc *crtc);
-void sde_crtc_cancel_pending_flip(struct drm_crtc *crtc, struct drm_file *file);
-struct drm_crtc *sde_crtc_init(struct drm_device *dev,
-		struct drm_encoder *encoder,
-		struct drm_plane *plane, int id);
-
-/**
- * Encoder functions and data types
- */
-struct sde_encoder_hw_resources {
-	enum sde_intf_mode intfs[INTF_MAX];
-	bool pingpongs[PINGPONG_MAX];
-	bool ctls[CTL_MAX];
-	bool pingpongsplit;
-};
-
-void sde_encoder_get_hw_resources(struct drm_encoder *encoder,
-		struct sde_encoder_hw_resources *hw_res);
-void sde_encoder_register_vblank_callback(struct drm_encoder *drm_enc,
-		void (*cb)(void *), void *data);
-void sde_encoders_init(struct drm_device *dev);
-void sde_encoder_get_vsync_info(struct drm_encoder *encoder,
-		struct vsync_info *vsync);
-
-
 
 #endif /* __sde_kms_H__ */

@@ -28,6 +28,7 @@ static void dsi_catalog_14_init(struct dsi_ctrl_hw *ctrl)
 	ctrl->ops.video_engine_setup     = dsi_ctrl_hw_14_video_engine_setup;
 	ctrl->ops.set_video_timing       = dsi_ctrl_hw_14_set_video_timing;
 	ctrl->ops.cmd_engine_setup       = dsi_ctrl_hw_14_cmd_engine_setup;
+	ctrl->ops.setup_cmd_stream       = dsi_ctrl_hw_14_setup_cmd_stream;
 	ctrl->ops.ctrl_en                = dsi_ctrl_hw_14_ctrl_en;
 	ctrl->ops.cmd_engine_en          = dsi_ctrl_hw_14_cmd_engine_en;
 	ctrl->ops.phy_sw_reset           = dsi_ctrl_hw_14_phy_sw_reset;
@@ -58,6 +59,7 @@ static void dsi_catalog_14_init(struct dsi_ctrl_hw *ctrl)
 	ctrl->ops.test_pattern_enable    = dsi_ctrl_hw_14_test_pattern_enable;
 	ctrl->ops.trigger_cmd_test_pattern =
 		dsi_ctrl_hw_14_trigger_cmd_test_pattern;
+	ctrl->ops.reg_dump_to_buffer    = dsi_ctrl_hw_14_reg_dump_to_buffer;
 }
 
 /**

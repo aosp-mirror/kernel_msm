@@ -50,6 +50,9 @@ static unsigned long rx_digital_gain_reg[] = {
 static unsigned long tx_digital_gain_reg[] = {
 	MSM89XX_CDC_CORE_TX1_VOL_CTL_GAIN,
 	MSM89XX_CDC_CORE_TX2_VOL_CTL_GAIN,
+	MSM89XX_CDC_CORE_TX3_VOL_CTL_GAIN,
+	MSM89XX_CDC_CORE_TX4_VOL_CTL_GAIN,
+	MSM89XX_CDC_CORE_TX5_VOL_CTL_GAIN,
 };
 
 static const DECLARE_TLV_DB_SCALE(digital_gain, 0, 1, 0);
@@ -329,21 +332,6 @@ static int msm_dig_cdc_codec_enable_interpolator(struct snd_soc_dapm_widget *w,
 				MSM89XX_CDC_CORE_RX3_B6_CTL, 0x01, 0x00);
 			msm_dig_cdc->mute_mask &= ~(SPKR_PA_DISABLE);
 		}
-	}
-	return 0;
-}
-
-static int msm_dig_cdc_codec_enable_rx_chain(struct snd_soc_dapm_widget *w,
-					     struct snd_kcontrol *kcontrol,
-					     int event)
-{
-	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
-
-	switch (event) {
-	case SND_SOC_DAPM_POST_PMD:
-		snd_soc_update_bits(codec, w->reg,
-			    1 << w->shift, 0x00);
-		break;
 	}
 	return 0;
 }
@@ -744,6 +732,7 @@ static int msm_dig_cdc_hw_params(struct snd_pcm_substream *substream,
 				MSM89XX_CDC_CORE_CLK_RX_I2S_CTL, 0x20, 0x20);
 		break;
 	case SNDRV_PCM_FORMAT_S24_LE:
+	case SNDRV_PCM_FORMAT_S24_3LE:
 		snd_soc_update_bits(dai->codec,
 				MSM89XX_CDC_CORE_CLK_RX_I2S_CTL, 0x20, 0x00);
 		break;
@@ -809,7 +798,7 @@ static int msm_dig_cdc_codec_enable_dmic(struct snd_soc_dapm_widget *w,
 		(*dmic_clk_cnt)++;
 		if (*dmic_clk_cnt == 1) {
 			snd_soc_update_bits(codec, dmic_clk_reg,
-					0x0E, 0x02);
+					0x0E, 0x04);
 			snd_soc_update_bits(codec, dmic_clk_reg,
 					dmic_clk_en, dmic_clk_en);
 		}
@@ -894,6 +883,10 @@ static int msm_dig_cdc_codec_enable_dec(struct snd_soc_dapm_widget *w,
 			 32 * (decimator - 1);
 	tx_mux_ctl_reg = MSM89XX_CDC_CORE_TX1_MUX_CTL +
 			  32 * (decimator - 1);
+	if (decimator == 5) {
+		tx_vol_ctl_reg = MSM89XX_CDC_CORE_TX5_VOL_CTL_CFG;
+		tx_mux_ctl_reg = MSM89XX_CDC_CORE_TX5_MUX_CTL;
+	}
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
@@ -1235,11 +1228,18 @@ static const struct snd_soc_dapm_route audio_dig_map[] = {
 
 	{"I2S TX1", NULL, "DEC1 MUX"},
 	{"I2S TX2", NULL, "DEC2 MUX"},
-	{"I2S TX3", NULL, "DEC3 MUX"},
-	{"I2S TX4", NULL, "DEC4 MUX"},
+	{"I2S TX3", NULL, "I2S TX2 INP1"},
+	{"I2S TX4", NULL, "I2S TX2 INP2"},
 	{"I2S TX5", NULL, "DEC3 MUX"},
-	{"I2S TX6", NULL, "DEC4 MUX"},
-	{"I2S TX6", NULL, "DEC5 MUX"},
+	{"I2S TX6", NULL, "I2S TX3 INP2"},
+
+	{"I2S TX2 INP1", "RX_MIX1", "RX1 MIX2"},
+	{"I2S TX2 INP1", "DEC3", "DEC3 MUX"},
+	{"I2S TX2 INP2", "RX_MIX2", "RX2 MIX2"},
+	{"I2S TX2 INP2", "RX_MIX3", "RX3 MIX1"},
+	{"I2S TX2 INP2", "DEC4", "DEC4 MUX"},
+	{"I2S TX3 INP2", "DEC4", "DEC4 MUX"},
+	{"I2S TX3 INP2", "DEC5", "DEC5 MUX"},
 
 	{"PDM_OUT_RX1", NULL, "RX1 CHAIN"},
 	{"PDM_OUT_RX2", NULL, "RX2 CHAIN"},
@@ -1360,6 +1360,19 @@ static const struct snd_soc_dapm_route audio_dig_map[] = {
 	{"IIR1 INP1 MUX", "DEC4", "DEC4 MUX"},
 };
 
+
+static const char * const i2s_tx2_inp1_text[] = {
+	"ZERO", "RX_MIX1", "DEC3"
+};
+
+static const char * const i2s_tx2_inp2_text[] = {
+	"ZERO", "RX_MIX2", "RX_MIX3", "DEC4"
+};
+
+static const char * const i2s_tx3_inp2_text[] = {
+	"DEC4", "DEC5"
+};
+
 static const char * const rx_mix1_text[] = {
 	"ZERO", "IIR1", "IIR2", "RX1", "RX2", "RX3"
 };
@@ -1375,6 +1388,20 @@ static const char * const dec_mux_text[] = {
 static const char * const iir_inp1_text[] = {
 	"ZERO", "DEC1", "DEC2", "RX1", "RX2", "RX3", "DEC3", "DEC4"
 };
+
+/* I2S TX MUXes */
+static const struct soc_enum i2s_tx2_inp1_chain_enum =
+	SOC_ENUM_SINGLE(MSM89XX_CDC_CORE_CONN_TX_I2S_SD1_CTL,
+		2, 3, i2s_tx2_inp1_text);
+
+static const struct soc_enum i2s_tx2_inp2_chain_enum =
+	SOC_ENUM_SINGLE(MSM89XX_CDC_CORE_CONN_TX_I2S_SD1_CTL,
+		0, 4, i2s_tx2_inp2_text);
+
+static const struct soc_enum i2s_tx3_inp2_chain_enum =
+	SOC_ENUM_SINGLE(MSM89XX_CDC_CORE_CONN_TX_I2S_SD1_CTL,
+		4, 2, i2s_tx3_inp2_text);
+
 /* RX1 MIX1 */
 static const struct soc_enum rx_mix1_inp1_chain_enum =
 	SOC_ENUM_SINGLE(MSM89XX_CDC_CORE_CONN_RX1_B1_CTL,
@@ -1492,6 +1519,15 @@ static const struct snd_kcontrol_new dec4_mux =
 static const struct snd_kcontrol_new decsva_mux =
 	MSM89XX_DEC_ENUM("DEC5 MUX Mux", decsva_mux_enum);
 
+static const struct snd_kcontrol_new i2s_tx2_inp1_mux =
+	SOC_DAPM_ENUM("I2S TX2 INP1 Mux", i2s_tx2_inp1_chain_enum);
+
+static const struct snd_kcontrol_new i2s_tx2_inp2_mux =
+	SOC_DAPM_ENUM("I2S TX2 INP2 Mux", i2s_tx2_inp2_chain_enum);
+
+static const struct snd_kcontrol_new i2s_tx3_inp2_mux =
+	SOC_DAPM_ENUM("I2S TX3 INP2 Mux", i2s_tx3_inp2_chain_enum);
+
 static const struct snd_kcontrol_new iir1_inp1_mux =
 	SOC_DAPM_ENUM("IIR1 INP1 Mux", iir1_inp1_mux_enum);
 
@@ -1556,18 +1592,9 @@ static const struct snd_soc_dapm_widget msm_dig_dapm_widgets[] = {
 	SND_SOC_DAPM_MIXER("RX1 MIX1", SND_SOC_NOPM, 0, 0, NULL, 0),
 	SND_SOC_DAPM_MIXER("RX2 MIX1", SND_SOC_NOPM, 0, 0, NULL, 0),
 
-	SND_SOC_DAPM_MIXER_E("RX1 CHAIN", SND_SOC_NOPM,
-			     0, 0, NULL, 0,
-			     msm_dig_cdc_codec_enable_rx_chain,
-			     SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MIXER_E("RX2 CHAIN", SND_SOC_NOPM,
-			     0, 0, NULL, 0,
-			     msm_dig_cdc_codec_enable_rx_chain,
-			     SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MIXER_E("RX3 CHAIN", SND_SOC_NOPM,
-			     0, 0, NULL, 0,
-			     msm_dig_cdc_codec_enable_rx_chain,
-			     SND_SOC_DAPM_POST_PMD),
+	SND_SOC_DAPM_MIXER("RX1 CHAIN", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("RX2 CHAIN", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("RX3 CHAIN", SND_SOC_NOPM, 0, 0, NULL, 0),
 
 	SND_SOC_DAPM_MUX("RX1 MIX1 INP1", SND_SOC_NOPM, 0, 0,
 		&rx_mix1_inp1_mux),
@@ -1641,6 +1668,14 @@ static const struct snd_soc_dapm_widget msm_dig_dapm_widgets[] = {
 		MSM89XX_CDC_CORE_CLK_RX_I2S_CTL, 4, 0, NULL, 0),
 	SND_SOC_DAPM_SUPPLY("TX_I2S_CLK",
 		MSM89XX_CDC_CORE_CLK_TX_I2S_CTL, 4, 0, NULL, 0),
+
+
+	SND_SOC_DAPM_MUX("I2S TX2 INP1", SND_SOC_NOPM, 0, 0,
+			&i2s_tx2_inp1_mux),
+	SND_SOC_DAPM_MUX("I2S TX2 INP2", SND_SOC_NOPM, 0, 0,
+			&i2s_tx2_inp2_mux),
+	SND_SOC_DAPM_MUX("I2S TX3 INP2", SND_SOC_NOPM, 0, 0,
+			&i2s_tx3_inp2_mux),
 
 	/* Digital Mic Inputs */
 	SND_SOC_DAPM_ADC_E("DMIC1", NULL, SND_SOC_NOPM, 0, 0,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,7 +14,7 @@
 #define _SDE_HW_LM_H
 
 #include "sde_hw_mdss.h"
-#include "sde_hw_mdp_util.h"
+#include "sde_hw_util.h"
 
 struct sde_hw_mixer;
 
@@ -46,15 +46,13 @@ struct sde_hw_lm_ops {
 	 * Alpha blending configuration
 	 * for the specified stage
 	 */
-	void (*setup_blend_config)(struct sde_hw_mixer *ctx,
-			int stage,
-			struct sde_hw_blend_cfg *blend);
+	void (*setup_blend_config)(struct sde_hw_mixer *ctx, uint32_t stage,
+		uint32_t fg_alpha, uint32_t bg_alpha, uint32_t blend_op);
 
 	/*
 	 * Alpha color component selection from either fg or bg
 	 */
-	void (*setup_alpha_out)(struct sde_hw_mixer *ctx,
-			struct sde_hw_color3_cfg *cfg);
+	void (*setup_alpha_out)(struct sde_hw_mixer *ctx, uint32_t mixer_op);
 
 	/**
 	 * setup_border_color : enable/disable border color
@@ -62,8 +60,10 @@ struct sde_hw_lm_ops {
 	void (*setup_border_color)(struct sde_hw_mixer *ctx,
 		struct sde_mdss_color *color,
 		u8 border_en);
-
-	void (*setup_gammcorrection)(struct sde_hw_mixer *mixer,
+	/**
+	 * setup_gc : enable/disable gamma correction feature
+	 */
+	void (*setup_gc)(struct sde_hw_mixer *mixer,
 			void *cfg);
 
 };
@@ -92,5 +92,11 @@ struct sde_hw_mixer {
 struct sde_hw_mixer *sde_hw_lm_init(enum sde_lm idx,
 		void __iomem *addr,
 		struct sde_mdss_cfg *m);
+
+/**
+ * sde_hw_lm_destroy(): Destroys layer mixer driver context
+ * @lm:   Pointer to LM driver context
+ */
+void sde_hw_lm_destroy(struct sde_hw_mixer *lm);
 
 #endif /*_SDE_HW_LM_H */

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -47,6 +47,7 @@ enum ipahal_reg_name {
 	IPA_ENDP_INIT_MODE_n,
 	IPA_ENDP_INIT_NAT_n,
 	IPA_ENDP_INIT_CTRL_n,
+	IPA_ENDP_INIT_CTRL_SCND_n,
 	IPA_ENDP_INIT_HOL_BLOCK_EN_n,
 	IPA_ENDP_INIT_HOL_BLOCK_TIMER_n,
 	IPA_ENDP_INIT_DEAGGR_n,
@@ -83,6 +84,8 @@ enum ipahal_reg_name {
 	IPA_QSB_MAX_WRITES,
 	IPA_QSB_MAX_READS,
 	IPA_TX_CFG,
+	IPA_DPS_SEQUENCER_FIRST,
+	IPA_HPS_SEQUENCER_FIRST,
 	IPA_REG_MAX,
 };
 
@@ -327,6 +330,14 @@ struct ipahal_reg_tx_cfg {
 	bool tx0_prefetch_disable;
 	bool tx1_prefetch_disable;
 	u16 prefetch_almost_empty_size;
+};
+
+/*
+ * struct ipa_ep_cfg_ctrl_scnd - PA_ENDP_INIT_CTRL_SCND_n register
+ * @endp_delay: delay endpoint
+ */
+struct ipahal_ep_cfg_ctrl_scnd {
+	bool endp_delay;
 };
 
 /*

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -525,6 +525,12 @@ static int32_t msm_actuator_piezo_move_focus(
 	if (num_steps <= 0 || num_steps > MAX_NUMBER_OF_STEPS) {
 		pr_err("num_steps out of range = %d\n",
 			num_steps);
+		return -EFAULT;
+	}
+
+	if (dest_step_position > a_ctrl->total_steps) {
+		pr_err("Step pos greater than total steps = %d\n",
+			dest_step_position);
 		return -EFAULT;
 	}
 
@@ -1930,7 +1936,7 @@ static int32_t msm_actuator_platform_probe(struct platform_device *pdev)
 	}
 	rc = msm_sensor_driver_get_gpio_data(&(msm_actuator_t->gconf),
 		(&pdev->dev)->of_node);
-	if (rc < 0) {
+	if (rc <= 0) {
 		pr_err("%s: No/Error Actuator GPIOs\n", __func__);
 	} else {
 		msm_actuator_t->cam_pinctrl_status = 1;
