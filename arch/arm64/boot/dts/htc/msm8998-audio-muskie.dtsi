@@ -2,6 +2,22 @@
 	status = "ok";
 };
 
+&pm8998_gpios {
+
+		gpio@c500 { /* pm8998 gpio 6 */
+			qcom,mode = <1>; /* output mode */
+			qcom,master-en = <0x1>;
+		};
+
+		gpio@c600 { /* pm8998 gpio 7 */
+			qcom,pull = <5>; /* NO PULL */
+		};
+
+		gpio@c700 { /* pm8998 gpio 8 */
+			qcom,pull = <5>; /* NO PULL */
+		};
+};
+
 &soc {
 	sound-9335 {
 		status = "disabled";
@@ -65,14 +81,11 @@
 		/delete-property/ qcom,usbc-analog-en2_n_gpio;
 
 		htc,use-external-amp;
-		htc,external-amp-be-sname = "Quaternary MI2S Playback",
-					    "Quaternary MI2S Capture";
+		htc,external-amp-be-sname = "Quaternary MI2S Playback";
 
-		htc,external-amp-be-codec-phandle = <&ti_tas2557_4d>,
-						    <&ti_tas2557_4d>;
+		htc,external-amp-be-codec-phandle = <&ti_tas2557_4d>;
 
-		htc,external-amp-be-codec-dai-name = "tas2557 Stereo ASI1",
-						     "tas2557 Stereo ASI1";
+		htc,external-amp-be-codec-dai-name = "tas2557 Stereo ASI1";
 	};
 
 	i2c@c1b5000 { /* i2c_7 */
@@ -100,6 +113,8 @@
 				ti,irq-gpio-right = <&pm8998_gpios 8 0>;
 				ti,left-channel = <0x4c>;
 				ti,right-channel = <0x4d>;
+				ti,echo-ref = <0>;   /* 0, left channel; 1, right channel; 2, both */
+				ti,i2s-bits = <16>;   /* support 16, 24, 32 */
 				ti,load = <0>;   /* 0, 8Ohm; 1, 6Ohm; 2, 4Ohm */
 				status = "ok";
 		};
