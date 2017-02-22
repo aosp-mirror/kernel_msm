@@ -1124,11 +1124,11 @@ ffs_epfile_release(struct inode *inode, struct file *file)
 
 	atomic_set(&epfile->opened, 0);
 	atomic_set(&epfile->error, 1);
-	ffs_data_closed(epfile->ffs);
-	file->private_data = NULL;
 	epfile->buf_len = 0;
 	kfree(epfile->buffer);
 	epfile->buffer = NULL;
+	ffs_data_closed(epfile->ffs);
+	file->private_data = NULL;
 
 	return 0;
 }
