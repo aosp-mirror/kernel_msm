@@ -523,76 +523,98 @@ static int tas2557_dev_update_bits(
 	return nResult;
 }
 
-void tas2557_enableIRQ(struct tas2557_priv *pTAS2557, bool enable, bool clear)
+int tas2557_enableIRQ(struct tas2557_priv *pTAS2557, bool enable, bool clear)
 {
 	unsigned int nValue;
+	int nResult = 0;
 
 	if (enable) {
 		if (clear) {
-			pTAS2557->read(pTAS2557, channel_left, TAS2557_FLAGS_1, &nValue);
+			nResult = pTAS2557->read(pTAS2557, channel_left, TAS2557_FLAGS_1, &nValue);
+			if (nResult < 0)
+				goto end;
 			pTAS2557->read(pTAS2557, channel_left, TAS2557_FLAGS_2, &nValue);
-			pTAS2557->read(pTAS2557, channel_right, TAS2557_FLAGS_1, &nValue);
+			nResult = pTAS2557->read(pTAS2557, channel_right, TAS2557_FLAGS_1, &nValue);
+			if (nResult < 0)
+				goto end;
 			pTAS2557->read(pTAS2557, channel_right, TAS2557_FLAGS_2, &nValue);
 		}
 
-		if (pTAS2557->mnLeftChlIRQ != 0)
-			enable_irq(pTAS2557->mnLeftChlIRQ);
-		if ((pTAS2557->mnRightChlIRQ != 0)
-			&& (pTAS2557->mnRightChlIRQ != pTAS2557->mnLeftChlIRQ))
-			enable_irq(pTAS2557->mnRightChlIRQ);
+		if (!pTAS2557->mbIRQEnable) {
+			if (pTAS2557->mnLeftChlIRQ != 0)
+				enable_irq(pTAS2557->mnLeftChlIRQ);
+			if ((pTAS2557->mnRightChlIRQ != 0)
+				&& (pTAS2557->mnRightChlIRQ != pTAS2557->mnLeftChlIRQ))
+				enable_irq(pTAS2557->mnRightChlIRQ);
+			pTAS2557->mbIRQEnable = true;
+		}
 	} else {
-		if (pTAS2557->mnLeftChlIRQ != 0)
-			disable_irq(pTAS2557->mnLeftChlIRQ);
-		if ((pTAS2557->mnRightChlIRQ != 0)
-			&& (pTAS2557->mnRightChlIRQ != pTAS2557->mnLeftChlIRQ))
-			disable_irq(pTAS2557->mnRightChlIRQ);
+		if (pTAS2557->mbIRQEnable) {
+			if (pTAS2557->mnLeftChlIRQ != 0)
+				disable_irq_nosync(pTAS2557->mnLeftChlIRQ);
+			if ((pTAS2557->mnRightChlIRQ != 0)
+				&& (pTAS2557->mnRightChlIRQ != pTAS2557->mnLeftChlIRQ))
+				disable_irq_nosync(pTAS2557->mnRightChlIRQ);
+			pTAS2557->mbIRQEnable = false;
+		}
 
 		if (clear) {
-			pTAS2557->read(pTAS2557, channel_left, TAS2557_FLAGS_1, &nValue);
+			nResult = pTAS2557->read(pTAS2557, channel_left, TAS2557_FLAGS_1, &nValue);
+			if (nResult < 0)
+				goto end;
 			pTAS2557->read(pTAS2557, channel_left, TAS2557_FLAGS_2, &nValue);
-			pTAS2557->read(pTAS2557, channel_right, TAS2557_FLAGS_1, &nValue);
+			nResult = pTAS2557->read(pTAS2557, channel_right, TAS2557_FLAGS_1, &nValue);
+			if (nResult < 0)
+				goto end;
 			pTAS2557->read(pTAS2557, channel_right, TAS2557_FLAGS_2, &nValue);
 		}
 	}
+
+end:
+
+	return nResult;
 }
 
 static void irq_work_routine(struct work_struct *work)
 {
 	int nResult = 0;
-	unsigned int nDevIntStatus;
+	unsigned int nDevLInt1Status = 0, nDevLInt2Status = 0;
+	unsigned int nDevRInt1Status = 0, nDevRInt2Status = 0;
 	struct tas2557_priv *pTAS2557 =
-		container_of(work, struct tas2557_priv, irq_work);
+		container_of(work, struct tas2557_priv, irq_work.work);
 
 	struct i2c_client *pClient = pTAS2557->client;
 
 	if (!pTAS2557->mbPowerUp)
 		return;
 
-	nResult = tas2557_dev_read(pTAS2557, channel_left, TAS2557_FLAGS_1, &nDevIntStatus);
-	if (nResult < 0) {
+	nResult = tas2557_dev_read(pTAS2557, channel_left, TAS2557_FLAGS_1, &nDevLInt1Status);
+	if (nResult < 0)
 		dev_err(pTAS2557->dev, "left channel I2C doesn't work\n");
-		goto program;
-	} else if ((nDevIntStatus && 0xdc) != 0) {
-		/* in case of INT_OC, INT_UV, INT_OT, INT_BO, INT_CL */
-		dev_err(pTAS2557->dev, "left channel critical error 0x%x\n", nDevIntStatus);
-		goto program;
-	} else
-		dev_dbg(pTAS2557->dev, "%s, left int 0x%x\n", __func__, nDevIntStatus);
+	else
+		nResult = tas2557_dev_read(pTAS2557, channel_left, TAS2557_FLAGS_2, &nDevLInt2Status);
 
-	nResult = tas2557_dev_read(pTAS2557, channel_right, TAS2557_FLAGS_1, &nDevIntStatus);
-	if (nResult < 0) {
+	nResult = tas2557_dev_read(pTAS2557, channel_right, TAS2557_FLAGS_1, &nDevRInt1Status);
+	if (nResult < 0)
 		dev_err(pTAS2557->dev, "right channel I2C doesn't work\n");
-		goto program;
-	} else if ((nDevIntStatus && 0xdc) != 0) {
-		/* in case of INT_OC, INT_UV, INT_OT, INT_BO, INT_CL */
-		dev_err(pTAS2557->dev, "right channel critical error 0x%x\n", nDevIntStatus);
+	else
+		nResult = tas2557_dev_read(pTAS2557, channel_right, TAS2557_FLAGS_2, &nDevRInt2Status);
+
+	if (((nDevLInt1Status & 0xdc) != 0) || ((nDevLInt2Status & 0x0c) != 0)
+		|| ((nDevRInt1Status & 0xdc) != 0) || ((nDevRInt2Status & 0x0c) != 0)) {
+		/* in case of INT_OC, INT_UV, INT_OT, INT_BO, INT_CL, INT_CLK1, INT_CLK2 */
+		dev_err(pTAS2557->dev, "critical error L: 0x%x, 0x%x; R: 0x%x, 0x%x\n",
+			nDevLInt1Status, nDevLInt2Status, nDevRInt1Status, nDevRInt2Status);
 		goto program;
 	} else
-		dev_dbg(pTAS2557->dev, "%s, right int 0x%x\n", __func__, nDevIntStatus);
+		dev_dbg(pTAS2557->dev, "%s, L: 0x%x, 0x%x; R: 0x%x, 0x%x\n",
+			__func__, nDevLInt1Status, nDevLInt2Status, nDevRInt1Status, nDevRInt2Status);
 
 	return;
 
 program:
+	/* FIXME workaround for IRQ error of bit-clk not ready */
+	return;
 	/* hardware reset and reload */
 	if (gpio_is_valid(pTAS2557->mnResetGPIO)) {
 #ifdef HW_RESET/* mandatory */
@@ -612,7 +634,8 @@ static irqreturn_t tas2557_irq_handler(int irq, void *dev_id)
 	struct tas2557_priv *pTAS2557 = (struct tas2557_priv *)dev_id;
 
 	tas2557_enableIRQ(pTAS2557, false, false);
-	schedule_work(&pTAS2557->irq_work);
+	/* get IRQ status after 100 ms */
+	schedule_delayed_work(&pTAS2557->irq_work, msecs_to_jiffies(100));
 	return IRQ_HANDLED;
 }
 
@@ -645,6 +668,7 @@ static int tas2557_i2c_probe(struct i2c_client *pClient,
 	struct tas2557_priv *pTAS2557;
 	int nResult = 0;
 	unsigned int nValue = 0;
+	char *fw_name = TAS2557_FW_NAME;
 
 	dev_info(&pClient->dev, "%s enter\n", __func__);
 
@@ -724,13 +748,15 @@ static int tas2557_i2c_probe(struct i2c_client *pClient,
 		pTAS2557->mnLeftChlIRQ = gpio_to_irq(pTAS2557->mnLeftChlGpioINT);
 		dev_dbg(pTAS2557->dev, "irq = %d\n", pTAS2557->mnLeftChlIRQ);
 		nResult = request_threaded_irq(pTAS2557->mnLeftChlIRQ, tas2557_irq_handler,
-				NULL, IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+				NULL, IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 				pClient->name, pTAS2557);
 		if (nResult < 0) {
 			dev_err(pTAS2557->dev,
 				"request_irq failed, %d\n", nResult);
 			goto err;
 		}
+
+		disable_irq(pTAS2557->mnLeftChlIRQ);
 	}
 
 	if (gpio_is_valid(pTAS2557->mnRightChlGpioINT)) {
@@ -747,21 +773,21 @@ static int tas2557_i2c_probe(struct i2c_client *pClient,
 			pTAS2557->mnRightChlIRQ = gpio_to_irq(pTAS2557->mnRightChlGpioINT);
 			dev_dbg(pTAS2557->dev, "irq = %d\n", pTAS2557->mnRightChlIRQ);
 			nResult = request_threaded_irq(pTAS2557->mnRightChlIRQ, tas2557_irq_handler,
-					NULL, IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+					NULL, IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 					pClient->name, pTAS2557);
 			if (nResult < 0) {
 				dev_err(pTAS2557->dev,
 					"request_irq failed, %d\n", nResult);
 				goto err;
 			}
+
+			disable_irq(pTAS2557->mnRightChlIRQ);
 		}
 	}
 
 	if (gpio_is_valid(pTAS2557->mnLeftChlGpioINT)
 		|| gpio_is_valid(pTAS2557->mnRightChlGpioINT)) {
-		INIT_WORK(&pTAS2557->irq_work, irq_work_routine);
-		tas2557_configIRQ(pTAS2557);
-		tas2557_enableIRQ(pTAS2557, false, true);
+		INIT_DELAYED_WORK(&pTAS2557->irq_work, irq_work_routine);
 	}
 
 	pTAS2557->mpFirmware = devm_kzalloc(&pClient->dev, sizeof(struct TFirmware), GFP_KERNEL);
@@ -789,9 +815,14 @@ static int tas2557_i2c_probe(struct i2c_client *pClient,
 	tiload_driver_init(pTAS2557);
 #endif
 
-	nResult = request_firmware_nowait(THIS_MODULE, 1, TAS2557_FW_NAME,
-		pTAS2557->dev, GFP_KERNEL, pTAS2557, tas2557_fw_ready);
+	switch (pTAS2557->mnLPGID) {
+	case TAS2557_PG_VERSION_2P1:
+		fw_name = TAS2557_FW_PG21_NAME;
+		break;
+	}
 
+	nResult = request_firmware_nowait(THIS_MODULE, 1, fw_name,
+		pTAS2557->dev, GFP_KERNEL, pTAS2557, tas2557_fw_ready);
 err:
 
 	return nResult;

@@ -23,6 +23,7 @@
 #define _TAS2557_H
 
 #include <linux/regmap.h>
+#include <linux/workqueue.h>
 
 /* Page Control Register */
 #define TAS2557_PAGECTL_REG			0
@@ -114,7 +115,7 @@
 
 #define TAS2557_GPIO1_PIN_REG			TAS2557_REG(0, 1, 61)
 #define TAS2557_GPIO2_PIN_REG			TAS2557_REG(0, 1, 62)
-#define TAS2557_GPIO3_PIN_REG			TAS2557_REG(0, 1, 63)
+#define TAS2557_GPIO3_PIN_REG			TAS2557_REG(0, 1, 63)	/*B0_P1_R0x3f */
 #define TAS2557_GPIO4_PIN_REG			TAS2557_REG(0, 1, 64)	/*B0_P1_R0x40 */
 #define TAS2557_GPIO5_PIN_REG			TAS2557_REG(0, 1, 65)
 #define TAS2557_GPIO6_PIN_REG			TAS2557_REG(0, 1, 66)
@@ -153,7 +154,8 @@
 #define TAS2557_INT_GEN1_REG			TAS2557_REG(0, 1, 108)	/* B0_P1_R0x6c */
 #define TAS2557_INT_GEN2_REG			TAS2557_REG(0, 1, 109)
 #define TAS2557_INT_GEN3_REG			TAS2557_REG(0, 1, 110)	/* B0_P1_R0x6e */
-#define TAS2557_INT_GEN4_REG			TAS2557_REG(0, 1, 111)
+#define TAS2557_INT_GEN4_REG			TAS2557_REG(0, 1, 111)	/* B0_P1_R0x6f */
+#define TAS2557_INT_MODE_REG			TAS2557_REG(0, 1, 114)	/* B0_P1_R0x72 */
 
 #define TAS2557_MAIN_CLKIN_REG			TAS2557_REG(0, 1, 115)
 #define TAS2557_PLL_CLKIN_REG			TAS2557_REG(0, 1, 116)
@@ -168,8 +170,11 @@
 #define TAS2557_BOOSTON_EFFICIENCY		TAS2557_REG(0, 51, 16)
 #define TAS2557_BOOSTOFF_EFFICIENCY		TAS2557_REG(0, 51, 20)
 #define TAS2557_BOOST_HEADROOM			TAS2557_REG(0, 51, 24)
-#define TAS2557_THERMAL_FOLDBACK_REG		TAS2557_REG(0, 51, 100)
+#define TAS2557_THERMAL_FOLDBACK_REG	TAS2557_REG(0, 51, 100)
 #define TAS2557_VPRED_COMP_REG			TAS2557_REG(0, 53, 24)
+
+#define TAS2557_SA_COEFF_SWAP_REG		TAS2557_REG(0, 53, 44)
+#define TAS2557_SA_CHL_CTRL_REG		TAS2557_REG(0, 58, 120)
 
 #define TAS2557_TEST_MODE_REG			TAS2557_REG(0, 253, 13)
 #define TAS2557_BROADCAST_REG			TAS2557_REG(0, 253, 54)
@@ -187,6 +192,9 @@
 #define TAS2557_ISENSE_DIV_REG			TAS2557_REG(100, 0, 42)
 #define TAS2557_RAMP_CLK_DIV_MSB_REG		TAS2557_REG(100, 0, 43)
 #define TAS2557_RAMP_CLK_DIV_LSB_REG		TAS2557_REG(100, 0, 44)
+
+#define TAS2557_XMEM_44_REG				TAS2557_REG(130, 2, 64)	/* B0x82_P0x02_R0x40 */
+
 /* Bits */
 /* B0P0R4 - TAS2557_POWER_CTRL1_REG */
 #define TAS2557_SW_SHUTDOWN			(0x1 << 0)
@@ -280,11 +288,16 @@
 #define TAS2557_DSP_CLK_FROM_PLL		(0x1 << 5)
 
 #define TAS2557_FW_NAME     "tas2557s_uCDSP.bin"
+#define TAS2557_FW_PG21_NAME     "tas2557s_PG21_uCDSP.bin"
 
 #define TAS2557_BROADCAST_ADDR	0x4c
 
 struct TBlock {
 	unsigned int mnType;
+	unsigned char mbPChkSumPresent;
+	unsigned char mnPChkSum;
+	unsigned char mbYChkSumPresent;
+	unsigned char mnYChkSum;
 	unsigned int mnCommands;
 	unsigned char *mpData;
 };
@@ -361,6 +374,12 @@ enum channel {
 	channel_broadcast = 0x4,
 };
 
+enum echo_reference {
+	echoref_left = 0x00,
+	echoref_right = 0x01,
+	echoref_both = 0x02
+};
+
 struct tas2557_priv {
 	struct device *dev;
 	struct regmap *mpRegmap;
@@ -415,13 +434,18 @@ struct tas2557_priv {
 		int config);
 	int (*set_calibration)(struct tas2557_priv *pTAS2557,
 		int calibration);
-	void (*enableIRQ)(struct tas2557_priv *pTAS2557, bool enable, bool clear);
+	int (*enableIRQ)(struct tas2557_priv *pTAS2557, bool enable, bool clear);
 
 	int mnLeftChlGpioINT;
 	int mnRightChlGpioINT;
-	struct work_struct irq_work;
+	struct delayed_work irq_work;
 	unsigned int mnLeftChlIRQ;
 	unsigned int mnRightChlIRQ;
+	bool mbIRQEnable;
+	enum echo_reference mnEchoRef;
+	unsigned char mnI2SBits;
+
+	bool mnChannelSwap;	/* 0, default; 1, swapped */
 
 #ifdef CONFIG_TAS2557_MISC_STEREO
 	int mnDBGCmd;
