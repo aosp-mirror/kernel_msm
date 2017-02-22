@@ -25,6 +25,7 @@
 #include <linux/kernel.h>
 #include <linux/kobject.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/stat.h>
@@ -36,6 +37,7 @@
 #include "hw-mnh-regs.h"
 #include "mnh-clk.h"
 #include "mnh-ddr.h"
+#include "mnh-hwio-bases.h"
 #include "mnh-mipi.h"
 #include "mnh-pcie.h"
 #include "mnh-pwr.h"
@@ -87,6 +89,9 @@ struct mnh_sm_device {
 	struct class *dev_class;
 	int open;
 	enum fw_image_state image_loaded;
+
+	/* mutex to synchronize state transitions */
+	struct mutex lock;
 
 	/* kernel thread for state transitions from ioctls */
 	struct work_struct set_state_work;
@@ -575,7 +580,7 @@ static ssize_t mnh_sm_cpu_clk_store(struct device *dev,
 
 	ret = mnh_sm_get_val_from_buf(buf, &val);
 	if (!ret && (val >= CPU_FREQ_MIN) && (val <= CPU_FREQ_MAX)) {
-		mnh_sm_cpu_set_clk_freq(mnh_sm_dev->dev, val);
+		mnh_cpu_freq_change(val);
 		return val;
 	}
 
@@ -787,52 +792,36 @@ int mnh_sm_get_state(void)
 }
 EXPORT_SYMBOL(mnh_sm_get_state);
 
-/**
- * API to set the state of monette hill.
- * @param[in] Set the power states of mnh
- */
-int mnh_sm_set_state(int state)
+static int mnh_sm_set_state_locked(int state)
 {
-	if (!mnh_sm_dev)
-		return -ENODEV;
-
-	dev_info(mnh_sm_dev->dev,
-		 "%s: request state %d\n", __func__, state);
-
-	if (state == mnh_state) {
-		dev_info(mnh_sm_dev->dev,
-			 "%s: already in state %d\n", __func__, state);
-		return 0;
-	}
-
 	switch (state) {
 	case MNH_STATE_OFF:
 		mnh_sm_poweroff();
 		break;
 	case MNH_STATE_INIT:
-		mnh_sm_set_state(MNH_STATE_OFF);
+		mnh_sm_set_state_locked(MNH_STATE_OFF);
 		mnh_sm_poweron();
 		break;
 	case MNH_STATE_CONFIG_MIPI:
 		if (mnh_state != MNH_STATE_CONFIG_DDR)
-			mnh_sm_set_state(MNH_STATE_INIT);
+			mnh_sm_set_state_locked(MNH_STATE_INIT);
 		mnh_sm_config_mipi();
 		break;
 	case MNH_STATE_CONFIG_DDR:
 		if (mnh_state != MNH_STATE_CONFIG_MIPI)
-			mnh_sm_set_state(MNH_STATE_INIT);
+			mnh_sm_set_state_locked(MNH_STATE_INIT);
 		mnh_sm_config_ddr();
 		break;
 	case MNH_STATE_ACTIVE:
 		if (mnh_state == MNH_STATE_SUSPEND_SELF_REFRESH) {
 			mnh_sm_resume();
 		} else {
-			mnh_sm_set_state(MNH_STATE_CONFIG_DDR);
+			mnh_sm_set_state_locked(MNH_STATE_CONFIG_DDR);
 			mnh_sm_download();
 		}
 		break;
 	case MNH_STATE_SUSPEND_SELF_REFRESH:
-		mnh_sm_set_state(MNH_STATE_ACTIVE);
+		mnh_sm_set_state_locked(MNH_STATE_ACTIVE);
 		mnh_sm_suspend();
 		break;
 	case MNH_STATE_SUSPEND_HIBERNATE:
@@ -847,10 +836,44 @@ int mnh_sm_set_state(int state)
 
 	mnh_state = state;
 
+	return 0;
+}
+
+/**
+ * API to set the state of monette hill.
+ * @param[in] Set the power states of mnh
+ */
+int mnh_sm_set_state(int state)
+{
+	int ret;
+	int prev_state = mnh_state;
+
+	if (!mnh_sm_dev)
+		return -ENODEV;
+
+	dev_info(mnh_sm_dev->dev,
+		 "%s: request state %d\n", __func__, state);
+
+	mutex_lock(&mnh_sm_dev->lock);
+
+	if (state == mnh_state) {
+		dev_info(mnh_sm_dev->dev,
+			 "%s: already in state %d\n", __func__, state);
+		mutex_unlock(&mnh_sm_dev->lock);
+		return 0;
+	}
+
+	ret = mnh_sm_set_state_locked(state);
+
+	mutex_unlock(&mnh_sm_dev->lock);
+
+	if (ret)
+		return ret;
+
 	/* check for hotplug conditions */
-	if (mnh_hotplug_cb && (state == MNH_STATE_ACTIVE))
+	if (mnh_hotplug_cb && (mnh_state == MNH_STATE_ACTIVE))
 		mnh_hotplug_cb(MNH_HOTPLUG_IN);
-	else if (mnh_hotplug_cb && (mnh_state == MNH_STATE_ACTIVE))
+	else if (mnh_hotplug_cb && (prev_state == MNH_STATE_ACTIVE))
 		mnh_hotplug_cb(MNH_HOTPLUG_OUT);
 
 	return 0;
@@ -1058,7 +1081,9 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	mnh_sm_dev->dev = dev;
 	dev_set_drvdata(dev, mnh_sm_dev);
 
+	/* initialize driver structures */
 	INIT_WORK(&mnh_sm_dev->set_state_work, mnh_sm_set_state_work);
+	mutex_init(&mnh_sm_dev->lock);
 
 	/* allocate character device region */
 	error = alloc_chrdev_region(&mnh_sm_dev->dev_num, 0, 1, DEVICE_NAME);
@@ -1114,6 +1139,9 @@ static int mnh_sm_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to initialize mnh-pwr (%d)\n", error);
 		goto fail_mnh_pwr_init;
 	}
+
+	/* initialize mnh-clk driver */
+	mnh_clk_init(dev, HWIO_SCU_BASE_ADDR);
 
 	dev_info(dev, "MNH SM initialized successfully\n");
 

@@ -185,6 +185,11 @@ int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n)
 			SAVE_DDR_PHY_REG_CONFIG(fsp, index);
 	}
 
+	/* Enable clock gating */
+	MNH_SCU_OUTf(CCU_CLK_CTL, HALT_LP4CG_EN, 1);
+	MNH_SCU_OUTf(CCU_CLK_CTL, HALT_LP4_PLL_BYPCLK_CG_EN, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, HALT_LP4CMEM_PD_EN, 1);
+
 	MNH_DDR_CTL_OUTf(112, LP_CMD, 0xFE);
 	dev_info(dev, "%s waiting for LP complete.", __func__);
 	while ((timeout < 10) && !(MNH_DDR_CTL_IN(227) & 0x00000020)) {
