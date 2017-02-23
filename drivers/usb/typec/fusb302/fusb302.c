@@ -934,25 +934,18 @@ static int fusb302_pd_set_interrupts(struct fusb302_chip *chip, bool on)
 	return ret;
 }
 
-void fusb302_notify_uc_data_role(struct fusb302_chip *chip,
-				 enum typec_data_role value)
+static int fusb302_notify_uc_data_role(struct fusb302_chip *chip,
+				       enum typec_data_role value)
 {
-	int notify_retry_count = 0;
-
 	fusb302_log("notify_uc_data_role of %d\n", value);
 
-	do {
-		if (chip->uc != NULL &&
-		    chip->uc->notify_attached_source != NULL) {
-			chip->uc->notify_attached_source(chip->uc, value);
-			break;
-		}
+	if (chip->uc != NULL && chip->uc->notify_attached_source != NULL) {
+		chip->uc->notify_attached_source(chip->uc, value);
+		return 0;
+	}
 
-		fusb302_log("notify uc data role error, retry_count = %d\n",
-			    notify_retry_count);
-		notify_retry_count++;
-		msleep(5000);
-	} while (notify_retry_count <= 3);
+	fusb302_log("notify uc data role error\n");
+	return -ENODEV;
 }
 
 static int tcpm_set_pd_rx(struct tcpc_dev *dev, bool on)
@@ -1014,7 +1007,9 @@ static int tcpm_set_roles(struct tcpc_dev *dev, bool attached,
 	if (!attached)
 		data = TYPEC_DEVICE;
 
-	fusb302_notify_uc_data_role(chip, data);
+	ret = fusb302_notify_uc_data_role(chip, data);
+	if (ret < 0)
+		return ret;
 
 	mutex_lock(&chip->lock);
 	if (pwr == TYPEC_SOURCE)
