@@ -86,6 +86,15 @@ config BOARD_POLARIS
 	use the MSM8998 chipset. If you do not wish to build a kernel
 	that runs on this board, say 'N' here.
 
+config BOARD_VEGA
+	bool "Enable Support for Lenovo Vega board"
+	select ARCH_MSM8998
+	depends on ARCH_QCOM
+	help
+	This enables support for the Lenovo Vega boards which
+	use the MSM8998 chipset. If you do not wish to build a kernel
+	that runs on this board, say 'N' here.
+
 config BOARD_MSMCORTEX
         bool "Enable Support for Qualcomm MSM8998 MTP board"
 	depends on ARCH_QCOM
