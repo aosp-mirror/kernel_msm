@@ -36,13 +36,6 @@
 #define fh_to_private(__fh) \
 	container_of(__fh, struct camera_v4l2_private, fh)
 
-#ifdef CONFIG_GOOGLE_EASEL
-#include "mnh-sm.h"
-
-static atomic_t easel_sessions = ATOMIC_INIT(0);
-static int valid_easel;
-#endif
-
 struct camera_v4l2_private {
 	struct v4l2_fh fh;
 	unsigned int stream_id;
@@ -698,13 +691,6 @@ static int camera_v4l2_open(struct file *filep)
 				MSM_CAMERA_STREAM_CNT_BITS));
 	atomic_cmpxchg(&pvdev->opened, opn_idx, idx);
 
-#ifdef CONFIG_GOOGLE_EASEL
-	if (valid_easel && atomic_inc_return(&easel_sessions) == 1) {
-		pr_debug("enabling easel\n");
-		mnh_sm_set_state(MNH_STATE_CONFIG_MIPI);
-	}
-#endif
-
 	return rc;
 
 post_fail:
@@ -789,13 +775,6 @@ static int camera_v4l2_close(struct file *filep)
 	}
 
 	camera_v4l2_fh_release(filep);
-
-#ifdef CONFIG_GOOGLE_EASEL
-	if (valid_easel && atomic_dec_and_test(&easel_sessions)) {
-		pr_debug("disabling easel\n");
-		mnh_sm_set_state(MNH_STATE_OFF);
-	}
-#endif
 
 	return 0;
 }
@@ -938,10 +917,6 @@ int camera_init_v4l2(struct device *dev, unsigned int *session)
 #if defined(CONFIG_MEDIA_CONTROLLER)
 	/* FIXME: How to get rid of this messy? */
 	pvdev->vdev->entity.name = video_device_node_name(pvdev->vdev);
-#endif
-
-#ifdef CONFIG_GOOGLE_EASEL
-	valid_easel = mnh_sm_is_present();
 #endif
 
 	*session = pvdev->vdev->num;
