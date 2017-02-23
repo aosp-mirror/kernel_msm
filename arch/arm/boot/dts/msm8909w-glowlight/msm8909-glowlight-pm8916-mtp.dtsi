@@ -11,6 +11,8 @@
  * GNU General Public License for more details.
  */
 
+/* #include "msm8909-glowlight-pm8916-camera-sensor-mtp.dtsi" */
+
 &soc {
 	i2c@78b9000 {
 		focaltech@38 {
@@ -188,6 +190,7 @@
 		qcom,vin-sel = <2>; /* QPNP_PIN_VIN2 */
 		qcom,src-sel = <2>; /* QPNP_PIN_SEL_FUNC_1 */
 		qcom,master-en = <1>;
+		status = "okay";
 	};
 
 	gpio@c200 { /* GPIO 3 */

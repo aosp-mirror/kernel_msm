@@ -24,6 +24,7 @@
 #include "glowlight-dsi-panel-auo-cx-qvga-cmd.dtsi"
 #include "glowlight-dsi-panel-auo-amoled-cmd.dtsi"
 #include "glowlight-dsi-panel-auo-w022-amoled-cmd.dtsi"
+#include "glowlight-dsi-panel-auo-400p-cmd.dtsi"
 
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
@@ -37,6 +38,7 @@
 			qcom,supply-max-voltage = <2850000>;
 			qcom,supply-enable-load = <100000>;
 			qcom,supply-disable-load = <100>;
+			qcom,supply-ulp-load = <100>;
 		};
 
 		qcom,panel-supply-entry@1 {
@@ -46,6 +48,7 @@
 			qcom,supply-max-voltage = <1800000>;
 			qcom,supply-enable-load = <100000>;
 			qcom,supply-disable-load = <100>;
+			qcom,supply-ulp-load = <100>;
 		};
 	};
 };

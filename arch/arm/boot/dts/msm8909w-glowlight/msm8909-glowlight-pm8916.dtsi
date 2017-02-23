@@ -14,6 +14,7 @@
 #include "msm-pm8916-glowlight-rpm-regulator.dtsi"
 #include "msm-pm8916-glowlight.dtsi"
 #include "msm8916-glowlight-regulator.dtsi"
+/* #include "msm8909-glowlight-pm8916-camera.dtsi" */
 
 / {
 	qcom,pmic-id = <0x1000B 0x0 0x0 0x0>;
