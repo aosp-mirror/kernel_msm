@@ -1,0 +1,26 @@
+config COMMON_CLK_MSM
+	tristate "Support for MSM clock controllers"
+	depends on OF
+	depends on ARCH_QCOM
+	select RATIONAL
+	help
+	  This support clock controller used by MSM devices which support
+	  global, mmss and gpu clock controller.
+	  Say Y if you want to support the clocks exposed by the MSM on
+	  platforms such as msm8996, msm8998 etc.
+
+config MSM_CLK_CONTROLLER_V2
+	bool "QTI clock driver"
+	depends on COMMON_CLK_MSM
+	---help---
+	   Generate clock data structures from definitions found in
+	   device tree.
+
+source "drivers/clk/msm/mdss/Kconfig"
+
+config MSM_Q6_MI2S_MCLK
+	bool "MSM Hexagon MI2S MCLK driver"
+	depends on COMMON_CLK_MSM && (MSM_QDSP6_APRV2 || MSM_QDSP6_APRV3 || MSM_QDSP6_APRV2_GLINK || MSM_QDSP6_APRV3_GLINK) && SND_SOC_MSM_QDSP6V2_INTF
+	help
+	  Control the Q6 MI2S clocks from your I2S device using a standard
+	  clock device driver.

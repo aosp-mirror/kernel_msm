@@ -1,0 +1,42 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+
+#include "apq8998-v2.1.dtsi"
+#include "msm8998-camera-sensor-cdp.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Polaris P2";
+	goog,board-revision = "polaris-p2";
+	/* Board-Id GPIOs: 0: 100, 1: 99, 2: 119, 3: 118, and 4: 96. */
+	goog,board-id = <100 0 99 1 119 0 118 0 96 0>;
+};
+
+#include "msm8998-polaris.dtsi"
+
+&headset {
+	interrupts = <131 IRQ_TYPE_LEVEL_LOW>;
+	pinctrl-0 = <&da7219_interrupt_p2_default>;
+	dlg,micbias-lvl = <2400>;
+};
+
+&rpm_bus {
+	rpm-regulator-ldoa18 {
+		status = "okay";
+		pm8998_l18: regulator-l18 {
+			regulator-min-microvolt = <2500000>;
+			regulator-max-microvolt = <2500000>;
+			status = "okay";
+		};
+	};
+};

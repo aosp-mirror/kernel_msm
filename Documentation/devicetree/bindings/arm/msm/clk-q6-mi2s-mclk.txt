@@ -1,0 +1,29 @@
+Hexagon AFE MI2S MCLK Driver
+
+This driver provides a standard clock driver interface for use in I2S devices
+that are connected to the MSM LPASS.
+
+Required properties:
+- compatible:		Must be "qcom,q6-mi2s-mclk".
+- #clock-cells:		Must be <1>.
+
+Example:
+	&soc {
+		mi2s_mclk: mi2s_mclk {
+			compatible = "qcom,q6-mi2s-mclk";
+			#clock-cells = <1>;
+		};
+	};
+
+I2S devices refer to the clock as follows:
+
+	headset: name {
+		...
+		clocks = <&mi2s_mclk clk_sec_mi2s_mclk>;
+		clock-names = "mclk";
+		...
+	};
+
+Where 'clk_sec_mi2s_mclk' specifies the MCLK for the secondary I2S bus.
+See include/dt-bindings/clock/audio-ext-clk.h for a list of supported
+I2S interfaces.

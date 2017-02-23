@@ -1,0 +1,220 @@
+USB Type-C port devices (eg. /sys/class/typec/usbc0/)
+
+What:		/sys/class/typec/<port>/current_data_role
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		The current USB data role the port is operating in. This
+		attribute can be used for requesting data role swapping on the
+		port. Swapping is supported as synchronous operation, so
+		write(2) to the attribute will not return until the operation
+		has finished. The attribute is notified about role changes so
+		that poll(2) on the attribute wakes up. Change on the role will
+		also generate uevent KOBJ_CHANGE on the port.
+
+		Valid values:
+		- host
+		- device
+
+What:		/sys/class/typec/<port>/current_power_role
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		The current power role of the port. This attribute can be used
+		to request power role swap on the port when the port supports
+		USB Power Delivery. Swapping is supported as synchronous
+		operation, so write(2) to the attribute will not return until
+		the operation has finished. The attribute is notified about role
+		changes so that poll(2) on the attribute wakes up. Change on the
+		role will also generate uevent KOBJ_CHANGE.
+
+		Valid values:
+		- source
+		- sink
+
+What:		/sys/class/typec/<port>/vconn_source
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Shows is the port VCONN Source. This attribute can be used to
+		request VCONN swap to change the VCONN Source during connection
+		when both the port and the partner support USB Power Delivery.
+		Swapping is supported as synchronous operation, so write(2) to
+		the attribute will not return until the operation has finished.
+		The attribute is notified about VCONN source changes so that
+		poll(2) on the attribute wakes up. Change on VCONN source also
+		generates uevent KOBJ_CHANGE.
+
+		Valid values are:
+		- 0 when the port is not the VCONN Source
+		- 1 when the port is the VCONN Source
+
+What:		/sys/class/typec/<port>/power_operation_mode
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Shows the current power operational mode the port is in.
+
+		Valid values:
+		- USB - Normal power levels defined in USB specifications
+		- USB Type-C 1.5A - Higher 1.5A current defined in USB Type-C
+				    specification.
+		- USB Type-C 3.0A - Higher 3A current defined in USB Type-C
+				    specification.
+                - USB Power Delivery - The voltages and currents defined in USB
+				       Power Delivery specification
+
+What:		/sys/class/typec/<port>/preferred_role
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		The user space can notify the driver about the preferred role.
+		It should be handled as enabling of Try.SRC or Try.SNK, as
+		defined in USB Type-C specification, in the port drivers. By
+		default there is no preferred role.
+
+		Valid values:
+		- source
+		- sink
+		- none - to remove preference
+
+What:		/sys/class/typec/<port>/supported_accessory_modes
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Lists the Accessory Modes, defined in the USB Type-C
+		specification, the port supports.
+
+What:		/sys/class/typec/<port>/supported_data_roles
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Lists the USB data roles the port is capable of supporting.
+
+		Valid values:
+		- device
+		- host
+		- device, host (DRD as defined in USB Type-C specification v1.2)
+
+What:		/sys/class/typec/<port>/supported_power_roles
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Lists the power roles the port is capable of supporting.
+
+		Valid values:
+		- source
+		- sink
+		- source, sink (DRP as defined in USB Type-C specification v1.2)
+
+What:		/sys/class/typec/<port>/supports_usb_power_delivery
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Shows if the port supports USB Power Delivery.
+		- 1 if USB Power Delivery is supported
+		- 0 when it's not
+
+
+USB Type-C partner devices (eg. /sys/class/typec/usbc0-partner/)
+
+What:		/sys/class/typec/<port>-partner/accessory_mode
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Shows the Accessory Mode name, or "no" when the partner does not
+		support Accesory Modes. The Accessory Modes are defined in USB
+		Type-C Specification.
+
+What:		/sys/class/typec/<port>-partner/supports_usb_power_delivery
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Shows if the partner supports USB Power Delivery:
+		- 0 when USB Power Delivery is not supported
+		- 1 when USB Power Delivery is supported
+
+
+USB Type-C cable devices (eg. /sys/class/typec/usbc0-cable/)
+
+Note: Electronically Marked Cables will have a device also for one cable plug
+(eg. /sys/class/typec/usbc0-plug0). If the cable is active and has also SOP
+Double Prime controller (USB Power Deliver specification ch. 2.4) it will have
+second device also for the other plug. Both plugs may have their alternate modes
+as described in USB Type-C and USB Power Delivery specifications.
+
+What:		/sys/class/typec/<port>-cable/active
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Shows if the cable is active or passive.
+
+		Valid values:
+		- 0 when the cable is passive
+		- 1 when the cable is active
+
+What:		/sys/class/typec/<port>-cable/plug_type
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Shows type of the plug on the cable:
+		- Type-A - Standard A
+		- Type-B - Standard B
+		- Type-C - USB Type-C
+		- Captive - Non-standard
+
+What:		/sys/class/typec/<port>-cable/supports_usb_power_delivery
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Shows if the cable supports USB Power Delivery:
+		- 0 when USB Power Delivery is not supported
+		- 1 when USB Power Delivery is supported
+
+
+Alternate Mode devices (For example,
+/sys/class/typec/usbc0-partner/usbc0-partner.svid:xxxx/). The ports, partners
+and cable plugs can have alternate modes.
+
+What:		/sys/class/typec/<dev>/<dev>.svid:<svid>/<mode>/active
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Shows if the mode is active or not. The attribute can be used
+		for entering/exiting the mode with partners and cable plugs, and
+		with the port alternate modes it can be used for disabling
+		support for specific alternate modes. Entering/exiting modes is
+		supported as synchronous operation so write(2) to the attribute
+		does not return until the enter/exit mode operation has
+		finished. The attribute is notified when the mode is
+		entered/exited so poll(2) on the attribute wakes up.
+		Entering/exiting a mode will also generate uevent KOBJ_CHANGE.
+
+		Valid values:
+		- 0 when the mode is deactive
+		- 1 when the mode is active
+
+What:		/sys/class/typec/<dev>/<dev>.svid:<svid>/<mode>/description
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Shows description of the mode. The description is optional for
+		the drivers, just like with the Billboard Devices.
+
+What:		/sys/class/typec/<dev>/<dev>.svid:<svid>/<mode>/vdo
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Shows the VDO in hexadecimal returned from the Discover Modes
+		command.
+
+What:		/sys/class/typec/<port>/<port>.svid:<svid>/<mode>/supported_roles
+Date:		December 2016
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Shows the roles, source or sink, the mode is supported with.
+
+		This attribute is available for the devices describing the
+		alternate modes a port supports, and it will not be exposed with
+		the devices presenting the alternate modes the partners or cable
+		plugs support.
