@@ -87,10 +87,15 @@
 #define MAX17055_RCELL                       0x14
 #define MAX17055_OCV_THRESHOLD_GUANGYU       3590000
 #define MAX17055_OCV_THRESHOLD_DESAY         3650000
-#define MAX17055_CUTOFF_THRESHOLD            3200000
 #define ULPM_DROP_SOC_INTERVAL_SEC           3
 #define ULPM_CATCHUP_SOC_INTERVAL_SEC        5
-#define ULPM_SOC_DIFF                        2
+#define MAX_FAKE_REDUCE_VALUE                5
+#define MAX17055_RESISTOR_LSB_SIZE           4096
+#define MAX17055_UNIT_CONVERSION_SIZE        1000
+
+#define ESTIMATE_OCV(VCELL_AVG, CURRENT_AVG, RCELL) \
+	((VCELL_AVG) - (((CURRENT_AVG) / MAX17055_UNIT_CONVERSION_SIZE) * \
+		(((RCELL) * MAX17055_UNIT_CONVERSION_SIZE) / MAX17055_RESISTOR_LSB_SIZE)))
 
 extern int get_global_batt_id(void);
 static bool g_max17055_initialized = false;
@@ -462,10 +467,10 @@ static int adjust_soc(struct max17055_chip *chip, int repsoc)
 		POWER_SUPPLY_PROP_VOLTAGE_AVG, &pval_vcell_avg);
 	(&chip->battery)->get_property(&chip->battery,
 		POWER_SUPPLY_PROP_CURRENT_AVG, &pval_current_avg);
-	est_ocv_uv = (pval_vcell_avg.intval - ((pval_current_avg.intval / 1000) * ((data * 1000) / 4096)));
+	est_ocv_uv = ESTIMATE_OCV(pval_vcell_avg.intval, pval_current_avg.intval, data);
 	pr_debug("max17055: vcell avg is %duv\n", pval_vcell_avg.intval);
-	pr_debug("max17055: rcell is %dmohm\n", ((data * 1000) / 4096));
-	pr_debug("max17055: current avg is %dma\n", (pval_current_avg.intval / 1000));
+	pr_debug("max17055: rcell is %dmohm\n", ((data * MAX17055_UNIT_CONVERSION_SIZE) / MAX17055_RESISTOR_LSB_SIZE));
+	pr_debug("max17055: current avg is %dma\n", (pval_current_avg.intval / MAX17055_UNIT_CONVERSION_SIZE));
 	pr_debug("max17055: est_ocv_uv is %duv\n", est_ocv_uv);
 
 	get_monotonic_boottime(&current_time);
@@ -481,29 +486,45 @@ static int adjust_soc(struct max17055_chip *chip, int repsoc)
 			chip->ulpm_drop_soc.exist_flag = true;
 		}
 
-		if (repsoc <= chip->last_soc) /* soc can not decrease */
+		if (repsoc == chip->last_soc)
 		{
-			pr_info("max17055: usb is present and cannot decrease soc, repsoc = %d and last soc = %d\n",
-				repsoc, chip->last_soc);
 			chip->ulpm_catchup_soc.exist_flag = true;
 		}
-		else if ((repsoc - chip->last_soc) >= ULPM_SOC_DIFF) /* soc increases step by step */
+		else if (repsoc > chip->last_soc)
 		{
-			/* create ulpm catchup soc thread */
-			chip->ulpm_catchup_soc.exist_flag = false;
-			check_ulpm_catchup_soc_thread(chip);
-
-			if ((current_time.tv_sec - chip->last_soc_changed_time.tv_sec) >= ULPM_CATCHUP_SOC_INTERVAL_SEC)
+			if (1 == (repsoc - chip->last_soc))
 			{
-				chip->last_soc++;
-				pr_info("max17055: usb is present and catchup soc, fix repsoc from %d to %d in late state\n ",
-					repsoc, chip->last_soc);
+				chip->last_soc = repsoc;
+				chip->ulpm_catchup_soc.exist_flag = true;
+			}
+			else /* soc increases step by step */
+			{
+				/* create ulpm catchup soc thread */
+				chip->ulpm_catchup_soc.exist_flag = false;
+				check_ulpm_catchup_soc_thread(chip);
+
+				if ((current_time.tv_sec - chip->last_soc_changed_time.tv_sec) >= ULPM_CATCHUP_SOC_INTERVAL_SEC)
+				{
+					chip->last_soc++;
+					pr_info("max17055: usb is present and catchup soc, fix repsoc from %d to %d in late state\n ",
+						repsoc, chip->last_soc);
+				}
 			}
 		}
-		else /* repsoc - last_soc = 1*/
+		else
 		{
-			chip->last_soc = repsoc;
 			chip->ulpm_catchup_soc.exist_flag = true;
+
+			if ((chip->last_soc - repsoc) >= MAX_FAKE_REDUCE_VALUE)
+			{
+				pr_info("max17055: usb present,fake capacity from last_soc %d to repsoc %d\n", chip->last_soc, repsoc);
+				chip->last_soc = repsoc;
+			}
+			else
+			{
+				pr_info("max17055: usb is present and cannot decrease soc, repsoc = %d and last soc = %d\n",
+					repsoc, chip->last_soc);
+			}
 		}
 	}
 	else
@@ -681,9 +702,9 @@ static int max17055_get_property(struct power_supply *psy,
 			{
 				val->intval = (data >> 8);
 			}
-		}
 
-		val->intval = adjust_soc(chip, val->intval);
+			val->intval = adjust_soc(chip, val->intval);
+		}
 #else
 		val->intval = data >> 8;
 #endif
