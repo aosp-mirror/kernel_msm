@@ -18,6 +18,7 @@
 #include "msm8998-htc_muskie.dtsi"
 #include "msm8998-htc-nfc.dtsi"
 #include "msm8998-htc-usb-xa.dtsi"
+#include "msm8998-htc-easel.dtsi"
 
 / {
 	model = "HTC Corporation. MSM8998 v2.1 Muskie XB";
