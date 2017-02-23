@@ -171,6 +171,8 @@ static enum hrtimer_restart nitrous_tx_lpm_handler(struct hrtimer *timer)
  */
 void nitrous_prepare_uart_tx_locked(struct uart_port *port)
 {
+	unsigned long flags;
+
 	if (!bt_lpm) {
 		pr_err("%s: missing bt_lpm\n", __func__);
 		return;
@@ -181,7 +183,9 @@ void nitrous_prepare_uart_tx_locked(struct uart_port *port)
 		return;
 	}
 
+	spin_unlock_irqrestore(&port->lock, flags);
 	hrtimer_cancel(&bt_lpm->tx_lpm_timer);
+	spin_lock_irqsave(&port->lock, flags);
 	nitrous_wake_device_locked(bt_lpm, true);
 	hrtimer_start(&bt_lpm->tx_lpm_timer, ktime_set(UART_TIMEOUT_SEC, 0),
 		HRTIMER_MODE_REL);
