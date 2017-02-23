@@ -38,3 +38,17 @@
 &pmi8998_charger {
 	qcom,hvdcp-disable;		/* disable HVDCP */
 };
+
+&qusb_phy0 {
+	qcom,qusb-phy-init-seq =
+			/* <value reg_offset> */
+				<0x13 0x04 /* analog_controls_two */
+				0x7c 0x18c /* pll_clock_inverter */
+				0x80 0x2c /* pll_cmode */
+				0x0a 0x184 /* pll_lock_delay */
+				0xf5 0x23c /* tune1 */
+				0x0b 0x240 /* tune2 */
+				0xe4 0x248 /* tune4 */
+				0x19 0xb4>; /* digital_timers_two */
+	skip_efuse_reg;
+};
