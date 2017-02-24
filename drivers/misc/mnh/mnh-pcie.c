@@ -155,6 +155,9 @@ int mnh_pcie_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 	if (!mnh_dev)
 		return -ENODEV;
 
+	if (mnh_dev->pdev->current_state != PCI_D0)
+		return -EIO;
+
 	if (len != sizeof(uint32_t))
 		return -EINVAL; /* only 32bit access is supported */
 
@@ -184,6 +187,9 @@ int mnh_pcie_config_write(uint32_t offset, uint32_t len, uint32_t data)
 {
 	if (!mnh_dev)
 		return -ENODEV;
+
+	if (mnh_dev->pdev->current_state != PCI_D0)
+		return -EIO;
 
 	if (len != sizeof(uint32_t))
 		return -EINVAL; /* only 32bit access is supported */
@@ -215,6 +221,9 @@ int mnh_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 
 	if (!mnh_dev)
 		return -ENODEV;
+
+	if (mnh_dev->pdev->current_state != PCI_D0)
+		return -EIO;
 
 	if (offset > HW_MNH_PCIE_BAR_2_ADDR_END - len) {
 		dev_err(&mnh_dev->pdev->dev, "Addr Invalid: %x", offset);
@@ -259,6 +268,9 @@ int mnh_config_write(uint32_t offset, uint32_t len, uint32_t data)
 	if (!mnh_dev)
 		return -ENODEV;
 
+	if (mnh_dev->pdev->current_state != PCI_D0)
+		return -EIO;
+
 	if (offset > HW_MNH_PCIE_BAR_2_ADDR_END - len)
 		return -EINVAL; /* address invalid */
 
@@ -296,6 +308,9 @@ int mnh_ddr_read(uint32_t offset,  uint32_t len, void *data)
 	if (!mnh_dev)
 		return -ENODEV;
 
+	if (mnh_dev->pdev->current_state != PCI_D0)
+		return -EIO;
+
 	if (len > mnh_dev->bar_size[BAR_4])
 		return -EINVAL;
 
@@ -323,6 +338,9 @@ int mnh_ddr_write(uint32_t offset, uint32_t len, void *data)
 {
 	if (!mnh_dev)
 		return -ENODEV;
+
+	if (mnh_dev->pdev->current_state != PCI_D0)
+		return -EIO;
 
 	if (len > mnh_dev->bar_size[BAR_4])
 			return -EINVAL;
@@ -357,6 +375,9 @@ int mnh_send_irq(enum mnh_irq_msg_t irq)
 
 	if (!mnh_dev)
 		return -ENODEV;
+
+	if (mnh_dev->pdev->current_state != PCI_D0)
+		return -EIO;
 
 	dev_dbg(&mnh_dev->pdev->dev, "Send IRQ to EP:%d", irq);
 
