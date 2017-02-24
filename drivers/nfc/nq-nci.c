@@ -719,6 +719,8 @@ static int nqx_probe(struct i2c_client *client,
 
 	if (nqx_dev->pvdd_reg != NULL)
 	{
+		r = regulator_set_voltage(nqx_dev->pvdd_reg, 1800000, 1800000);
+		r = regulator_set_optimum_mode(nqx_dev->pvdd_reg, 200000);
 		r = regulator_enable(nqx_dev->pvdd_reg);
 		if (r < 0){
 			dev_err(&client->dev, "%s: not able to enable pvdd\n", __func__);
