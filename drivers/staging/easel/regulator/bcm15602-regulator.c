@@ -31,6 +31,9 @@
 
 #define DRIVER_NAME "bcm15602"
 
+/* defines the number of tries to repeat an I2C transaction */
+#define BCM15602_I2C_RETRY_COUNT 10
+
 /* defines the timeout in jiffies for reset completion */
 #define BCM15602_PON_RESET_TIMEOUT msecs_to_jiffies(50)
 
@@ -254,18 +257,21 @@ int bcm15602_read_byte(struct bcm15602_chip *ddata, u8 addr, u8 *data)
 {
 	int ret;
 	unsigned int val;
+	int retry_cnt = 0;
 
-	ret = regmap_read(ddata->regmap, addr, &val);
-	if (ret < 0) {
+	do {
+		ret = regmap_read(ddata->regmap, addr, &val);
+		if (!ret) {
+			*data = (u8)val;
+			return 0;
+		}
+
 		dev_err(ddata->dev,
-			"failed to read addr 0x%.2x (%d)\n",
-			addr, ret);
-		return ret;
-	}
+			"failed to read addr 0x%.2x (%d), retry %d\n",
+			addr, ret, retry_cnt);
+	} while (++retry_cnt < BCM15602_I2C_RETRY_COUNT);
 
-	*data = (u8)val;
-
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(bcm15602_read_byte);
 
@@ -273,36 +279,78 @@ int bcm15602_read_bytes(struct bcm15602_chip *ddata, u8 addr, u8 *data,
 		       size_t count)
 {
 	int ret;
+	int retry_cnt = 0;
 
-	ret = regmap_bulk_read(ddata->regmap, addr, data, count);
-	if (ret < 0) {
+	do {
+		ret = regmap_bulk_read(ddata->regmap, addr, data, count);
+		if (!ret)
+			return 0;
+
 		dev_err(ddata->dev,
-			"failed to read addr 0x%.2x (%d)\n",
-			addr, ret);
-		return ret;
-	}
+			"failed to read %zd bytes from addr 0x%.2x (%d), retry %d\n",
+			count, addr, ret, retry_cnt);
+	} while (++retry_cnt < BCM15602_I2C_RETRY_COUNT);
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(bcm15602_read_bytes);
 
 int bcm15602_write_byte(struct bcm15602_chip *ddata, u8 addr, u8 data)
 {
-	return regmap_write(ddata->regmap, addr, data);
+	int ret;
+	int retry_cnt = 0;
+
+	do {
+		ret = regmap_write(ddata->regmap, addr, data);
+		if (!ret)
+			return 0;
+
+		dev_err(ddata->dev,
+			"failed to write addr 0x%.2x (%d), retry %d\n",
+			addr, ret, retry_cnt);
+	} while (++retry_cnt < BCM15602_I2C_RETRY_COUNT);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(bcm15602_write_byte);
 
 int bcm15602_write_bytes(struct bcm15602_chip *ddata, u8 addr, u8 *data,
 			 size_t count)
 {
-	return regmap_bulk_write(ddata->regmap, addr, data, count);
+	int ret;
+	int retry_cnt = 0;
+
+	do {
+		ret = regmap_bulk_write(ddata->regmap, addr, data, count);
+		if (!ret)
+			return 0;
+
+		dev_err(ddata->dev,
+			"failed to write %zd bytes to addr 0x%.2x (%d), retry %d\n",
+			count, addr, ret, retry_cnt);
+	} while (++retry_cnt < BCM15602_I2C_RETRY_COUNT);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(bcm15602_write_bytes);
 
 int bcm15602_update_bits(struct bcm15602_chip *ddata, u8 addr,
 			 unsigned int mask, u8 data)
 {
-	return regmap_update_bits(ddata->regmap, addr, mask, data);
+	int ret;
+	int retry_cnt = 0;
+
+	do {
+		ret = regmap_update_bits(ddata->regmap, addr, mask, data);
+		if (!ret)
+			return 0;
+
+		dev_err(ddata->dev,
+			"failed to update addr 0x%.2x (%d), retry %d\n",
+			addr, ret, retry_cnt);
+	} while (++retry_cnt < BCM15602_I2C_RETRY_COUNT);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(bcm15602_update_bits);
 
