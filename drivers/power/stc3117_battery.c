@@ -324,8 +324,10 @@ int Capacity_Adjust;
 #define STC311x_BATTERY_FULL 100
 #define STC311x_DELAY_BOOTUP	 12000 //120 sec
 #define STC311x_DELAY	 3000 //30 sec
-#define STC311x_DELAY_LOW_BATT 500 //5 sec
-#define STC311x_SOC_THRESHOLD 5
+#define STC311x_DELAY_LOW_BATT 2000 //20 sec
+#define STC311x_DELAY_CRITICAL_BATT 500 //5 sec
+#define STC311x_SOC_LOW_THRESHOLD 7
+#define STC311x_SOC_CRITICAL_THRESHOLD 3
 #define BATTERY_NTC_ERROR_TEMP -40
 
 /* ************************************************************************ */
@@ -2573,10 +2575,12 @@ static void stc311x_work(struct work_struct *work)
 	if (g_debug)
 		pr_err("*** ST_SOC = %d, UI_SOC = %d, reg_soc = %d, voltage = %d mv, OCV = %d mv, current = %d mA, Temperature = %d, charging_status = %d *** \n", chip->batt_soc, g_ui_soc, g_reg_soc, chip->batt_voltage, g_ocv, chip->batt_current, chip->Temperature, chip->status);
 
-	if (chip->batt_soc > STC311x_SOC_THRESHOLD)
+	if (chip->batt_soc > STC311x_SOC_LOW_THRESHOLD)
 		schedule_delayed_work(&chip->work, STC311x_DELAY);
-	else
+	else if ((STC311x_SOC_CRITICAL_THRESHOLD <= chip->batt_soc) && (chip->batt_soc <= STC311x_SOC_LOW_THRESHOLD))
 		schedule_delayed_work(&chip->work, STC311x_DELAY_LOW_BATT);
+	else
+		schedule_delayed_work(&chip->work, STC311x_DELAY_CRITICAL_BATT);
 
 	if (wake_lock_active(&chip->wlock)) {
 		wake_unlock(&chip->wlock);
