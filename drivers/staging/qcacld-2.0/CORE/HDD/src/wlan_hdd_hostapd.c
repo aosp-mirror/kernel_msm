@@ -5440,68 +5440,69 @@ static int __iw_set_ap_genie(struct net_device *dev,
 			     char *extra)
 {
 
-    hdd_adapter_t *pHostapdAdapter = (netdev_priv(dev));
+	hdd_adapter_t *pHostapdAdapter = (netdev_priv(dev));
 #ifndef WLAN_FEATURE_MBSSID
-    v_CONTEXT_t pVosContext;
+	v_CONTEXT_t pVosContext;
 #endif
-    eHalStatus halStatus= eHAL_STATUS_SUCCESS;
-    u_int8_t *genie = (u_int8_t *)extra;
-    hdd_context_t *hdd_ctx;
-    int ret;
+	eHalStatus halStatus = eHAL_STATUS_SUCCESS;
+	u_int8_t *genie = (u_int8_t *)extra;
+	hdd_context_t *hdd_ctx;
+	int ret;
 
-    ENTER();
+	ENTER();
 
-    hdd_ctx = WLAN_HDD_GET_CTX(pHostapdAdapter);
-    ret = wlan_hdd_validate_context(hdd_ctx);
-    if (0 != ret)
-        return ret;
+	hdd_ctx = WLAN_HDD_GET_CTX(pHostapdAdapter);
+	ret = wlan_hdd_validate_context(hdd_ctx);
+	if (0 != ret)
+		return ret;
 
 #ifndef WLAN_FEATURE_MBSSID
-    pVosContext = hdd_ctx->pvosContext;
-    if (NULL == pVosContext) {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                "%s: VOS Context is NULL", __func__);
-        return -EINVAL;
-    }
+	pVosContext = hdd_ctx->pvosContext;
+	if (NULL == pVosContext) {
+		VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+		    "%s: VOS Context is NULL", __func__);
+		return -EINVAL;
+	}
 #endif
 
-    if(!wrqu->data.length)
-    {
-        EXIT();
-        return 0;
-    }
+	if (!wrqu->data.length) {
+		EXIT();
+		return 0;
+	}
 
-    if (wrqu->data.length > DOT11F_IE_RSN_MAX_LEN) {
-       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-               "%s: WPARSN Ie input length is more than max[%d]", __func__,
-                wrqu->data.length);
-       return -EINVAL;
-    }
+	if (wrqu->data.length > DOT11F_IE_RSN_MAX_LEN) {
+		VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+		   "%s: WPARSN Ie input length is more than max[%d]", __func__,
+		    wrqu->data.length);
+		return -EINVAL;
+	}
 
-    switch (genie[0])
-    {
-        case DOT11F_EID_WPA:
-        case DOT11F_EID_RSN:
-            if((WLAN_HDD_GET_AP_CTX_PTR(pHostapdAdapter))->uPrivacy == 0)
-            {
-                hdd_softap_Deregister_BC_STA(pHostapdAdapter);
-                hdd_softap_Register_BC_STA(pHostapdAdapter, 1);
-            }
-            (WLAN_HDD_GET_AP_CTX_PTR(pHostapdAdapter))->uPrivacy = 1;
+	switch (genie[0]) {
+	case DOT11F_EID_WPA:
+	case DOT11F_EID_RSN:
+		if ((WLAN_HDD_GET_AP_CTX_PTR(pHostapdAdapter))->uPrivacy == 0) {
+			hdd_softap_Deregister_BC_STA(pHostapdAdapter);
+			hdd_softap_Register_BC_STA(pHostapdAdapter, 1);
+		}
+		(WLAN_HDD_GET_AP_CTX_PTR(pHostapdAdapter))->uPrivacy = 1;
 #ifdef WLAN_FEATURE_MBSSID
-            halStatus = WLANSAP_Set_WPARSNIes(WLAN_HDD_GET_SAP_CTX_PTR(pHostapdAdapter), genie, wrqu->data.length);
+		halStatus = WLANSAP_Set_WPARSNIes(
+		    WLAN_HDD_GET_SAP_CTX_PTR(pHostapdAdapter),
+		    genie,
+		    wrqu->data.length);
 #else
-            halStatus = WLANSAP_Set_WPARSNIes(pVosContext, genie, wrqu->data.length);
+		halStatus = WLANSAP_Set_WPARSNIes(pVosContext,
+						  genie, wrqu->data.length);
 #endif
-            break;
+		break;
 
-        default:
-            hddLog (LOGE, "%s Set UNKNOWN IE %X",__func__, genie[0]);
-            halStatus = 0;
-    }
+	default:
+		hddLog(LOGE, "%s Set UNKNOWN IE %X", __func__, genie[0]);
+		halStatus = 0;
+	}
 
-    EXIT();
-    return halStatus;
+	EXIT();
+	return halStatus;
 }
 
 /**
