@@ -827,6 +827,18 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			goto end;
 		}
 
+		/* copy the app handle to user */
+		rc = copy_to_user((void __user *)app.app_handle, &app_handle,
+			sizeof(*app.app_handle));
+
+		if (rc != 0) {
+			dev_err(drvdata->dev,
+				"%s: Failed copy 2us LOAD rc:%d\n",
+				 __func__, rc);
+			rc = -ENOMEM;
+			goto end;
+		}
+
 		break;
 	}
 	case QBT1000_UNLOAD_APP:
