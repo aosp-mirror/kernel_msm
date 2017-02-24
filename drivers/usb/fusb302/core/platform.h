@@ -218,7 +218,7 @@ void platform_notify_pd_contract(FSC_BOOL contract);
 *******************************************************************************/
 void platform_notify_unsupported_accessory(void);
 
-void platform_notify_attached_source(int value);
+void platform_notify_attached_source(int value, bool connected);
 
 int platform_set_sink_current_previous(CCTermType Termination);
 

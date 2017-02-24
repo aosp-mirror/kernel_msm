@@ -311,7 +311,7 @@ void platform_notify_cc_orientation(CC_ORIENTATION orientation)
 		if (chip && chip->uc && chip->uc->pd_vbus_ctrl) {
 			chip->uc->pd_vbus_ctrl(-1, FALSE);
 			if (!IsPRSwap)
-				platform_notify_attached_source(0);
+				platform_notify_attached_source(0, false);
 		}
 	}
 }
@@ -359,7 +359,7 @@ void platform_notify_unsupported_accessory(void)
 }
 
 extern FSC_BOOL PolicyIsDFP;
-void platform_notify_attached_source(int value)
+void platform_notify_attached_source(int value, bool connected)
 {
 	struct fusb30x_chip* chip = fusb30x_GetChip();
 	int notify_retry_count = 0;
@@ -378,8 +378,15 @@ void platform_notify_attached_source(int value)
 	} while (notify_retry_count <= 3);
 
 	PolicyIsDFP = value ? TRUE : FALSE;
-	chip->pmode = value ? DUAL_ROLE_PROP_MODE_DFP : DUAL_ROLE_PROP_MODE_UFP;
-	chip->drole = value ? DUAL_ROLE_PROP_DR_HOST : DUAL_ROLE_PROP_DR_DEVICE;
+	if (connected) {
+		chip->pmode = value ? DUAL_ROLE_PROP_MODE_DFP : DUAL_ROLE_PROP_MODE_UFP;
+		chip->drole = value ? DUAL_ROLE_PROP_DR_HOST : DUAL_ROLE_PROP_DR_DEVICE;
+	} else {
+		chip->pmode = DUAL_ROLE_PROP_MODE_NONE;
+		chip->drole = DUAL_ROLE_PROP_DR_NONE;
+		chip->prole = DUAL_ROLE_PROP_PR_NONE;
+	}
+
 	if (chip->fusb_instance)
 		dual_role_instance_changed(chip->fusb_instance);
 }
