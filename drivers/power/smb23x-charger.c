@@ -2303,7 +2303,7 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 			val->intval = 0x00;
 		else
 			val->intval = reg;
-		pr_err("RESISTANCE 0x00=0x%02x\n", reg);
+		pr_info("RESISTANCE 0x00=0x%02x\n", reg);
 		break;
 #endif
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
