@@ -113,9 +113,11 @@ static struct mnh_mipi_config mnh_mipi_configs[] = {
 };
 
 static struct mnh_sm_device *mnh_sm_dev;
-static hotplug_cb_t mnh_hotplug_cb;
 static int mnh_state;
 static int mnh_sm_uboot = MNH_UBOOT_DISABLE;
+
+/* callback when easel enters and leaves the active state */
+static hotplug_cb_t mnh_hotplug_cb;
 
 static int mnh_sm_get_val_from_buf(const char *buf, unsigned long *val)
 {
@@ -459,9 +461,6 @@ int mnh_download_firmware(void)
 
 	/* Unregister DMA callback */
 	mnh_reg_irq_callback(NULL, NULL, NULL);
-
-	if (mnh_hotplug_cb)
-		mnh_hotplug_cb(MNH_HOTPLUG_IN);
 
 	return 0;
 
@@ -847,6 +846,12 @@ int mnh_sm_set_state(int state)
 	}
 
 	mnh_state = state;
+
+	/* check for hotplug conditions */
+	if (mnh_hotplug_cb && (state == MNH_STATE_ACTIVE))
+		mnh_hotplug_cb(MNH_HOTPLUG_IN);
+	else if (mnh_hotplug_cb && (mnh_state == MNH_STATE_ACTIVE))
+		mnh_hotplug_cb(MNH_HOTPLUG_OUT);
 
 	return 0;
 }
