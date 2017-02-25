@@ -131,6 +131,8 @@ static ssize_t power_supply_show_property(struct device *dev,
 		return sprintf(buf, "%s\n", battery_id[value.intval]);
 	else if (off == POWER_SUPPLY_PROP_DEVICE_NAME)
 		return sprintf(buf, "0x%04x\n", value.intval);
+	else if (off == POWER_SUPPLY_PROP_RETAIL_MODE)
+		return sprintf(buf, "%d\n", value.intval);
 	else if (off >= POWER_SUPPLY_PROP_MODEL_NAME)
 		return sprintf(buf, "%s\n", value.strval);
 
@@ -279,6 +281,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(usb_input_current),
 	POWER_SUPPLY_ATTR(battery_id),
 	POWER_SUPPLY_ATTR(dev_name),
+	POWER_SUPPLY_ATTR(retail_mode),
 };
 
 static struct attribute *
