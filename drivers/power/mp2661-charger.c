@@ -215,6 +215,7 @@ struct mp2661_chg {
     int                        batt_cv_chg_current_ma;
     int                        repeat_charging_detect_threshold_mv;
     bool                       enable_charging_flag;
+    int                        retail_mode;
 };
 
 struct mp2661_chg  *global_mp2661 = NULL;
@@ -403,6 +404,7 @@ static enum power_supply_property mp2661_battery_properties[] = {
     POWER_SUPPLY_PROP_CURRENT_NOW,
     POWER_SUPPLY_PROP_USB_INPUT_CURRENT,
     POWER_SUPPLY_PROP_BATTERY_ID,
+    POWER_SUPPLY_PROP_RETAIL_MODE,
 };
 
 static int mp2661_get_prop_batt_status(struct mp2661_chg *chip)
@@ -1294,6 +1296,9 @@ static int mp2661_battery_set_property(struct power_supply *psy,
             rc = mp2661_set_usb_input_current(chip, val->intval);
             update_psy = 1;
             break;
+        case POWER_SUPPLY_PROP_RETAIL_MODE:
+            chip->retail_mode = val->intval;
+            break;
         default:
             rc = -EINVAL;
     }
@@ -1352,6 +1357,9 @@ static int mp2661_battery_get_property(struct power_supply *psy,
             break;
         case POWER_SUPPLY_PROP_BATTERY_ID:
             val->intval = mp2661_get_prop_batt_id(chip);
+            break;
+        case POWER_SUPPLY_PROP_RETAIL_MODE:
+            val->intval = chip->retail_mode;
             break;
         default:
             return -EINVAL;
@@ -1452,24 +1460,21 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
                                             &ret);
                 }
 
-                /* enable charge when remove and install charger */
-                pr_info("enable charge when remove charger!\n");
-                rc = mp2661_set_charging_enable(chip, true);
-                if (rc)
-                {
-                    pr_err("Couldn't set charging enable rc=%d\n", rc);
-                }
-
                 chip->repeat_charging_detect_flag = false;
             }
 
             pr_info("clear stmr count and enable charge when remove charger!");
             chip->stmr_expiration_count = 0;
             chip->batt_temp_in_normal_state1_count = 0;
-            rc = mp2661_set_charging_enable(chip, true);
-            if (rc)
+
+            /* hold charging enable status in retail mode */
+            if (0 == chip->retail_mode)
             {
-                pr_err("Couldn't set charging enable rc=%d\n", rc);
+                rc = mp2661_set_charging_enable(chip, true);
+                if (rc)
+                {
+                    pr_err("Couldn't set charging enable rc=%d\n", rc);
+                }
             }
 
             /* clear enable charging flag */
@@ -2132,6 +2137,8 @@ static int mp2661_batt_property_is_writeable(struct power_supply *psy,
             return 1;
         case POWER_SUPPLY_PROP_CHARGING_ENABLED:
             return 1;
+        case POWER_SUPPLY_PROP_RETAIL_MODE:
+            return 1;
         default:
             break;
     }
@@ -2317,6 +2324,35 @@ static void mp2661_adjust_batt_charging_current_and_voltage(
     }
 }
 
+#define RETAIL_MODE_UPPER_CAPACITY    70
+#define RETAIL_MODE_LOWER_CAPACITY    60
+static void mp2661_retail_mode_check(struct mp2661_chg *chip, int capacity)
+{
+    int rc = -1;
+
+    if (chip->retail_mode) /* retail mode */
+    {
+        if (capacity >= RETAIL_MODE_UPPER_CAPACITY)
+        {
+            rc = mp2661_set_charging_enable(chip, false);
+            if (rc)
+            {
+                pr_err("Couldn't set charging disable rc=%d in retail mode\n", rc);
+            }
+        }
+        else if ((capacity <= RETAIL_MODE_LOWER_CAPACITY)
+                 && (chip->batt_temp_status != BAT_TEMP_STATUS_HOT)
+                 && (chip->batt_temp_status != BAT_TEMP_STATUS_COLD))
+        {
+            rc = mp2661_set_charging_enable(chip, true);
+            if (rc)
+            {
+                pr_err("Couldn't set charging enable rc=%d\n", rc);
+            }
+        }
+    }
+}
+
 #define MONITOR_WORK_DELAY_MS         10000
 #define MONITOR_TEMP_DELTA            10
 #define TEMP_IN_STATE1_CHECK_CYCLES   60
@@ -2412,6 +2448,8 @@ static __ref int mp2661_monitor_kthread(void *arg)
         }
         cycle_count++;
 
+        mp2661_retail_mode_check(chip, capacity);
+
         if(down_timeout(&chip->monitor_temp_sem, msecs_to_jiffies(MONITOR_WORK_DELAY_MS)))
         {
             pr_debug("Unable to acquire monitor temp lock\n");
@@ -2476,6 +2514,7 @@ static int mp2661_charger_probe(struct i2c_client *client,
         return rc;
     }
 
+    chip->retail_mode = 0;
     chip->batt_temp_status = BAT_TEMP_STATUS_MAX; /* default status */
     mp2661_initialize_batt_temp_status(chip);
 
