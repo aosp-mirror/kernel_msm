@@ -900,6 +900,18 @@ static struct binder_ref *binder_get_ref(struct binder_proc *proc,
 			binder_proc_unlock(proc, __LINE__);
 			return NULL;
 		} else {
+			/*
+			 * We take an implicit weak reference to ensure
+			 * that the ref is not used and deref'd before the
+			 * caller has a chance to add a reference. The caller
+			 * must use binder_put_ref to indicate completion
+			 * of the operation on the ref
+			 *
+			 * This ref is orthogonal to any existing weak/strong
+			 * reference taken by the callers (no relation to the
+			 * passed-in need_strong_ref).
+			 */
+			atomic_inc(&ref->weak);
 			binder_proc_unlock(proc, __LINE__);
 			return ref;
 		}
@@ -909,7 +921,8 @@ static struct binder_ref *binder_get_ref(struct binder_proc *proc,
 }
 
 static struct binder_ref *binder_get_ref_for_node(struct binder_proc *proc,
-						  struct binder_node *node)
+					struct binder_node *node,
+					struct binder_worklist *target_list)
 {
 	struct rb_node *n;
 	struct rb_node **p = &proc->refs_by_node.rb_node;
@@ -928,6 +941,7 @@ static struct binder_ref *binder_get_ref_for_node(struct binder_proc *proc,
 		else if (node > ref->node)
 			p = &(*p)->rb_right;
 		else {
+			atomic_inc(&ref->weak);
 			binder_proc_unlock(proc, __LINE__);
 			return ref;
 		}
@@ -944,7 +958,14 @@ static struct binder_ref *binder_get_ref_for_node(struct binder_proc *proc,
 	new_ref->proc = proc;
 	new_ref->node = node;
 	atomic_set(&new_ref->strong, 0);
-	atomic_set(&new_ref->weak, 0);
+	/*
+	 * We take an implicit weak reference to ensure
+	 * that the ref is not used and deref'd before the
+	 * caller has a chance to add a reference. The caller
+	 * must use binder_put_ref to indicate completion
+	 * of the operation on the ref
+	 */
+	atomic_set(&new_ref->weak, 1);
 
 	binder_proc_lock(proc, __LINE__);
 	/*
@@ -961,6 +982,7 @@ static struct binder_ref *binder_get_ref_for_node(struct binder_proc *proc,
 		else if (node > ref->node)
 			p = &(*p)->rb_right;
 		else {
+			atomic_inc(&ref->weak);
 			binder_proc_unlock(proc, __LINE__);
 			kfree(new_ref);
 			binder_stats_deleted(BINDER_STAT_REF);
@@ -1003,6 +1025,12 @@ static struct binder_ref *binder_get_ref_for_node(struct binder_proc *proc,
 		      proc->pid, new_ref->debug_id, new_ref->desc,
 		      node->is_zombie ? "zombie " : "");
 	binder_proc_unlock(node_proc, __LINE__);
+	smp_mb();
+	/*
+	 * complete the implicit weak inc_ref by incrementing
+	 * the node.
+	 */
+	binder_inc_node(new_ref->node, 0, 1, target_list, __LINE__);
 	return new_ref;
 }
 
@@ -1117,6 +1145,11 @@ static int binder_dec_ref(struct binder_ref *ref, int strong, int line)
 		 */
 		binder_delete_ref(ref, false, line);
 	return 0;
+}
+
+static inline void binder_put_ref(struct binder_ref *ref)
+{
+	binder_dec_ref(ref, 0, __LINE__);
 }
 
 static void binder_pop_transaction(struct binder_thread *target_thread,
@@ -1416,6 +1449,7 @@ static void binder_transaction_buffer_release(struct binder_proc *proc,
 				     ref->debug_id, ref->desc, ref->node->debug_id);
 			binder_dec_ref(ref, hdr->type == BINDER_TYPE_HANDLE,
 				       __LINE__);
+			binder_put_ref(ref);
 		} break;
 
 		case BINDER_TYPE_FD: {
@@ -1515,7 +1549,7 @@ static int binder_translate_binder(struct flat_binder_object *fp,
 		return -EPERM;
 	}
 
-	ref = binder_get_ref_for_node(target_proc, node);
+	ref = binder_get_ref_for_node(target_proc, node, &thread->todo);
 	if (!ref) {
 		binder_put_node(node);
 		return -EINVAL;
@@ -1536,6 +1570,7 @@ static int binder_translate_binder(struct flat_binder_object *fp,
 		     "        node %d u%016llx -> ref %d desc %d\n",
 		     node->debug_id, (u64)node->ptr,
 		     ref->debug_id, ref->desc);
+	binder_put_ref(ref);
 	binder_put_node(node);
 	return 0;
 }
@@ -1555,8 +1590,10 @@ static int binder_translate_handle(struct flat_binder_object *fp,
 				  proc->pid, thread->pid, fp->handle);
 		return -EINVAL;
 	}
-	if (security_binder_transfer_binder(proc->tsk, target_proc->tsk))
+	if (security_binder_transfer_binder(proc->tsk, target_proc->tsk)) {
+		binder_put_ref(ref);
 		return -EPERM;
+	}
 
 	if (ref->node->proc == target_proc) {
 		if (fp->hdr.type == BINDER_TYPE_HANDLE)
@@ -1575,9 +1612,11 @@ static int binder_translate_handle(struct flat_binder_object *fp,
 	} else {
 		struct binder_ref *new_ref;
 
-		new_ref = binder_get_ref_for_node(target_proc, ref->node);
-		if (!new_ref)
+		new_ref = binder_get_ref_for_node(target_proc, ref->node, NULL);
+		if (!new_ref) {
+			binder_put_ref(ref);
 			return -EINVAL;
+		}
 
 		fp->binder = 0;
 		fp->handle = new_ref->desc;
@@ -1589,7 +1628,9 @@ static int binder_translate_handle(struct flat_binder_object *fp,
 			     "        ref %d desc %d -> ref %d desc %d (node %d)\n",
 			     ref->debug_id, ref->desc, new_ref->debug_id,
 			     new_ref->desc, ref->node->debug_id);
+		binder_put_ref(new_ref);
 	}
+	binder_put_ref(ref);
 	return 0;
 }
 
@@ -1846,6 +1887,7 @@ static void binder_transaction(struct binder_proc *proc,
 				goto err_invalid_target_handle;
 			}
 			target_node = ref->node;
+			binder_put_ref(ref);
 		} else {
 			target_node = context->binder_context_mgr_node;
 			if (target_node == NULL) {
@@ -2260,7 +2302,8 @@ static int binder_thread_write(struct binder_proc *proc,
 			if (target == 0 && ctx_mgr_node &&
 			    (cmd == BC_INCREFS || cmd == BC_ACQUIRE)) {
 				ref = binder_get_ref_for_node(proc,
-							      ctx_mgr_node);
+							      ctx_mgr_node,
+							      NULL);
 				if (ref && ref->desc != target) {
 					binder_user_error("%d:%d tried to acquire reference to desc 0, got %d instead\n",
 						proc->pid, thread->pid,
@@ -2301,6 +2344,7 @@ static int binder_thread_write(struct binder_proc *proc,
 				     atomic_read(&ref->strong),
 				     atomic_read(&ref->weak),
 				     ref->node->debug_id);
+			binder_put_ref(ref);
 			break;
 		}
 		case BC_INCREFS_DONE:
@@ -2533,6 +2577,7 @@ static int binder_thread_write(struct binder_proc *proc,
 				if (ref->death) {
 					binder_user_error("%d:%d BC_REQUEST_DEATH_NOTIFICATION death notification already set\n",
 						proc->pid, thread->pid);
+					binder_put_ref(ref);
 					break;
 				}
 				death = kzalloc(sizeof(*death), GFP_KERNEL);
@@ -2541,6 +2586,7 @@ static int binder_thread_write(struct binder_proc *proc,
 					binder_debug(BINDER_DEBUG_FAILED_TRANSACTION,
 						     "%d:%d BC_REQUEST_DEATH_NOTIFICATION failed\n",
 						     proc->pid, thread->pid);
+					binder_put_ref(ref);
 					break;
 				}
 				binder_stats_created(BINDER_STAT_DEATH);
@@ -2569,6 +2615,7 @@ static int binder_thread_write(struct binder_proc *proc,
 				if (ref->death == NULL) {
 					binder_user_error("%d:%d BC_CLEAR_DEATH_NOTIFICATION death notification not active\n",
 						proc->pid, thread->pid);
+					binder_put_ref(ref);
 					break;
 				}
 				death = ref->death;
@@ -2577,6 +2624,7 @@ static int binder_thread_write(struct binder_proc *proc,
 						proc->pid, thread->pid,
 						(u64)death->cookie,
 						(u64)cookie);
+					binder_put_ref(ref);
 					break;
 				}
 				ref->death = NULL;
@@ -2602,6 +2650,7 @@ static int binder_thread_write(struct binder_proc *proc,
 					death->work.type = BINDER_WORK_DEAD_BINDER_AND_CLEAR;
 				}
 			}
+			binder_put_ref(ref);
 		} break;
 		case BC_DEAD_BINDER_DONE: {
 			struct binder_work *w;
