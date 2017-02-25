@@ -3779,6 +3779,7 @@ static int binder_open(struct inode *nodp, struct file *filp)
 	binder_dev = container_of(filp->private_data, struct binder_device,
 				  miscdev);
 	proc->context = &binder_dev->context;
+	binder_alloc_init(&proc->alloc);
 
 	mutex_lock(&binder_procs_lock);
 
@@ -3798,8 +3799,6 @@ static int binder_open(struct inode *nodp, struct file *filp)
 	filp->private_data = proc;
 
 	mutex_unlock(&binder_procs_lock);
-
-	binder_alloc_init(&proc->alloc);
 
 	if (binder_debugfs_dir_entry_proc) {
 		char strbuf[11];
