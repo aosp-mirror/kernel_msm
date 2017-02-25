@@ -1685,6 +1685,11 @@ long qcedev_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 				return err;
 		}
 
+		if (handle->sha_ctxt.diglen > QCEDEV_MAX_SHA_DIGEST) {
+			pr_err("Invalid sha_ctxt.diglen %d\n",
+					handle->sha_ctxt.diglen);
+			return -EINVAL;
+		}
 		memcpy(&qcedev_areq.sha_op_req.digest[0],
 			&handle->sha_ctxt.digest[0],
 			min_t(uint32_t,
