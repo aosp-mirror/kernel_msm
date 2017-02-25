@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -36,11 +36,11 @@ struct sde_hw_dspp_ops {
 	void (*read_histogram)(struct sde_hw_dspp *ctx, void *cfg);
 
 	/**
-	 * update_igc - update dspp igc
+	 * setup_igc - update dspp igc
 	 * @ctx: Pointer to dspp context
 	 * @cfg: Pointer to configuration
 	 */
-	void (*update_igc)(struct sde_hw_dspp *ctx, void *cfg);
+	void (*setup_igc)(struct sde_hw_dspp *ctx, void *cfg);
 
 	/**
 	 * setup_pa - setup dspp pa
@@ -75,7 +75,7 @@ struct sde_hw_dspp_ops {
 	 * @ctx: Pointer to dspp context
 	 * @cfg: Pointer to configuration
 	 */
-	void (*setup_sixzone)(struct sde_hw_dspp *dspp);
+	void (*setup_sixzone)(struct sde_hw_dspp *dspp, void *cfg);
 
 	/**
 	 * setup_danger_safe - setup danger safe LUTS
@@ -83,12 +83,62 @@ struct sde_hw_dspp_ops {
 	 * @cfg: Pointer to configuration
 	 */
 	void (*setup_danger_safe)(struct sde_hw_dspp *ctx, void *cfg);
+
 	/**
 	 * setup_dither - setup dspp dither
 	 * @ctx: Pointer to dspp context
 	 * @cfg: Pointer to configuration
 	 */
 	void (*setup_dither)(struct sde_hw_dspp *ctx, void *cfg);
+
+	/**
+	 * setup_hue - setup dspp PA hue
+	 * @ctx: Pointer to dspp context
+	 * @cfg: Pointer to configuration
+	 */
+	void (*setup_hue)(struct sde_hw_dspp *ctx, void *cfg);
+
+	/**
+	 * setup_sat - setup dspp PA saturation
+	 * @ctx: Pointer to dspp context
+	 * @cfg: Pointer to configuration
+	 */
+	void (*setup_sat)(struct sde_hw_dspp *ctx, void *cfg);
+
+	/**
+	 * setup_val - setup dspp PA value
+	 * @ctx: Pointer to dspp context
+	 * @cfg: Pointer to configuration
+	 */
+	void (*setup_val)(struct sde_hw_dspp *ctx, void *cfg);
+
+	/**
+	 * setup_cont - setup dspp PA contrast
+	 * @ctx: Pointer to dspp context
+	 * @cfg: Pointer to configuration
+	 */
+	void (*setup_cont)(struct sde_hw_dspp *ctx, void *cfg);
+
+	/**
+	 * setup_vlut - setup dspp PA VLUT
+	 * @ctx: Pointer to dspp context
+	 * @cfg: Pointer to configuration
+	 */
+	void (*setup_vlut)(struct sde_hw_dspp *ctx, void *cfg);
+
+	/**
+	 * setup_gc - update dspp gc
+	 * @ctx: Pointer to dspp context
+	 * @cfg: Pointer to configuration
+	 */
+	void (*setup_gc)(struct sde_hw_dspp *ctx, void *cfg);
+
+	/**
+	 * setup_gamut - update dspp gamut
+	 * @ctx: Pointer to dspp context
+	 * @cfg: Pointer to configuration
+	 */
+	void (*setup_gamut)(struct sde_hw_dspp *ctx, void *cfg);
 };
 
 /**
@@ -123,5 +173,11 @@ struct sde_hw_dspp {
 struct sde_hw_dspp *sde_hw_dspp_init(enum sde_dspp idx,
 			void __iomem *addr,
 			struct sde_mdss_cfg *m);
+
+/**
+ * sde_hw_dspp_destroy(): Destroys DSPP driver context
+ * @dspp:   Pointer to DSPP driver context
+ */
+void sde_hw_dspp_destroy(struct sde_hw_dspp *dspp);
 
 #endif /*_SDE_HW_DSPP_H */

@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,6 +24,7 @@
 #include <linux/pfk.h>
 #include <crypto/ice.h>
 #include <soc/qcom/scm.h>
+#include <soc/qcom/qseecomi.h>
 #include "iceregs.h"
 
 #define TZ_SYSCALL_CREATE_SMC_ID(o, s, f) \
@@ -39,6 +40,13 @@
 
 #define TZ_OS_KS_RESTORE_KEY_ID_PARAM_ID \
 	TZ_SYSCALL_CREATE_PARAM_ID_0
+
+#define TZ_OS_KS_RESTORE_KEY_CONFIG_ID \
+	TZ_SYSCALL_CREATE_SMC_ID(TZ_OWNER_QSEE_OS, TZ_SVC_KEYSTORE, 0x06)
+
+#define TZ_OS_KS_RESTORE_KEY_CONFIG_ID_PARAM_ID \
+	TZ_SYSCALL_CREATE_PARAM_ID_1(TZ_SYSCALL_PARAM_TYPE_VAL)
+
 
 #define ICE_REV(x, y) (((x) & ICE_CORE_##y##_REV_MASK) >> ICE_CORE_##y##_REV)
 #define QCOM_UFS_ICE_DEV	"iceufs"
@@ -830,6 +838,24 @@ static int qcom_ice_restore_config(void)
 	return ret;
 }
 
+static int qcom_ice_restore_key_config(void)
+{
+	struct scm_desc desc = {0};
+	int ret = -1;
+
+	/* For ice 3, key configuration needs to be restored in case of reset */
+
+	desc.arginfo = TZ_OS_KS_RESTORE_KEY_CONFIG_ID_PARAM_ID;
+	desc.args[0] = 10; /* UFS_ICE */
+
+	ret = scm_call2(TZ_OS_KS_RESTORE_KEY_CONFIG_ID, &desc);
+
+	if (ret)
+		pr_err("%s: Error:  0x%x\n", __func__, ret);
+
+	return ret;
+}
+
 static int qcom_ice_init_clocks(struct ice_device *ice)
 {
 	int ret = -EINVAL;
@@ -1103,6 +1129,22 @@ static int qcom_ice_finish_power_collapse(struct ice_device *ice_dev)
 				err = -EFAULT;
 				goto out;
 			}
+
+		/*
+		 * ICE looses its key configuration when UFS is reset,
+		 * restore it
+		 */
+		} else if (ICE_REV(ice_dev->ice_hw_version, MAJOR) > 2) {
+			err = qcom_ice_restore_key_config();
+			if (err)
+				goto out;
+
+			/*
+			 * for PFE case, clear the cached ICE key table,
+			 * this will force keys to be reconfigured
+			 * per each next transaction
+			 */
+			pfk_clear_on_reset();
 		}
 	}
 
@@ -1608,7 +1650,18 @@ static int enable_ice_setup(struct ice_device *ice_dev)
 out_clocks:
 	qcom_ice_enable_clocks(ice_dev, false);
 out_reg:
-	regulator_disable(ice_dev->reg);
+	if (ice_dev->is_regulator_available) {
+		if (qcom_ice_get_vreg(ice_dev)) {
+			pr_err("%s: Could not get regulator\n", __func__);
+			goto out;
+		}
+		ret = regulator_disable(ice_dev->reg);
+		if (ret) {
+			pr_err("%s:%pK: Could not disable regulator\n",
+					__func__, ice_dev);
+			goto out;
+		}
+	}
 out:
 	return ret;
 }

@@ -26,7 +26,7 @@ struct ath10k_hif_sg_item {
 	u16 transfer_id;
 	void *transfer_context; /* NULL = tx completion callback not called */
 	void *vaddr; /* for debugging mostly */
-	u32 paddr;
+	dma_addr_t paddr;
 	u16 len;
 };
 
@@ -74,9 +74,9 @@ struct ath10k_hif_ops {
 
 	u16 (*get_free_queue_number)(struct ath10k *ar, u8 pipe_id);
 
-	u32 (*read32)(struct ath10k *ar, u32 address);
+	u32 (*read32)(void *ar, u32 address);
 
-	void (*write32)(struct ath10k *ar, u32 address, u32 value);
+	void (*write32)(void *ar, u32 address, u32 value);
 
 	/* Power up the device and enter BMI transfer mode for FW download */
 	int (*power_up)(struct ath10k *ar);

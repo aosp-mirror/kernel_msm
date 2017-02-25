@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -33,11 +33,11 @@
 #define CDM_CDWN2_OUT_SIZE                 0x130
 
 #define CDM_HDMI_PACK_OP_MODE              0x200
-#define CDM_CSC_10_MATRIX_COEFF_0          0x204
+#define CDM_CSC_10_MATRIX_COEFF_0          0x004
 
 /**
- * Horizontal coeffiecients for cosite chroma downscale
- * s13 repesentation of coefficients
+ * Horizontal coefficients for cosite chroma downscale
+ * s13 representation of coefficients
  */
 static u32 cosite_h_coeff[] = {0x00000016, 0x000001cc, 0x0100009e};
 
@@ -80,6 +80,7 @@ static struct sde_cdm_cfg *_cdm_offset(enum sde_cdm cdm,
 			b->base_off = addr;
 			b->blk_off = m->cdm[i].base;
 			b->hwversion = m->hwversion;
+			b->log_mask = SDE_DBG_MASK_CDM;
 			return &m->cdm[i];
 		}
 	}
@@ -91,11 +92,49 @@ static void sde_hw_cdm_setup_csc_10bit(struct sde_hw_cdm *ctx,
 		struct sde_csc_cfg *data)
 {
 	struct sde_hw_blk_reg_map *c = &ctx->hw;
+	u32 csc_reg_off = CDM_CSC_10_MATRIX_COEFF_0;
+	u32 val;
 
-	sde_hw_csc_setup(c, CDM_CSC_10_MATRIX_COEFF_0, data);
+	/* matrix coeff */
+	val = data->csc_mv[0] | (data->csc_mv[1] << 16);
+	SDE_REG_WRITE(c, csc_reg_off,  val);
+	val = data->csc_mv[2] | (data->csc_mv[3] << 16);
+	SDE_REG_WRITE(c, csc_reg_off + 0x4, val);
+	val = data->csc_mv[4] | (data->csc_mv[5] << 16);
+	SDE_REG_WRITE(c, csc_reg_off + 0x8, val);
+	val = data->csc_mv[6] | (data->csc_mv[7] << 16);
+	SDE_REG_WRITE(c, csc_reg_off + 0xc, val);
+	val = data->csc_mv[8];
+	SDE_REG_WRITE(c, csc_reg_off + 0x10, val);
+
+	/* Pre clamp */
+	val = (data->csc_pre_lv[0] << 16) | data->csc_pre_lv[1];
+	SDE_REG_WRITE(c, csc_reg_off + 0x14,  val);
+	val = (data->csc_pre_lv[2] << 16) | data->csc_pre_lv[3];
+	SDE_REG_WRITE(c, csc_reg_off  + 0x18, val);
+	val = (data->csc_pre_lv[4] << 16) | data->csc_pre_lv[5];
+	SDE_REG_WRITE(c, csc_reg_off  + 0x1c, val);
+
+	/* Post clamp */
+	val = (data->csc_post_lv[0] << 16) | data->csc_post_lv[1];
+	SDE_REG_WRITE(c, csc_reg_off + 0x20,  val);
+	val = (data->csc_post_lv[2] << 16) | data->csc_post_lv[3];
+	SDE_REG_WRITE(c, csc_reg_off  + 0x24, val);
+	val = (data->csc_post_lv[4] << 16) | data->csc_post_lv[5];
+	SDE_REG_WRITE(c, csc_reg_off  + 0x28, val);
+
+	/* Pre-Bias */
+	SDE_REG_WRITE(c, csc_reg_off + 0x2c,  data->csc_pre_bv[0]);
+	SDE_REG_WRITE(c, csc_reg_off + 0x30, data->csc_pre_bv[1]);
+	SDE_REG_WRITE(c, csc_reg_off + 0x34, data->csc_pre_bv[2]);
+
+	/* Post-Bias */
+	SDE_REG_WRITE(c, csc_reg_off + 0x38,  data->csc_post_bv[0]);
+	SDE_REG_WRITE(c, csc_reg_off + 0x3c, data->csc_post_bv[1]);
+	SDE_REG_WRITE(c, csc_reg_off + 0x40, data->csc_post_bv[2]);
 }
 
-int sde_hw_cdm_setup_cdwn(struct sde_hw_cdm *ctx,
+static int sde_hw_cdm_setup_cdwn(struct sde_hw_cdm *ctx,
 		struct sde_hw_cdm_cfg *cfg)
 {
 	struct sde_hw_blk_reg_map *c = &ctx->hw;
@@ -217,31 +256,31 @@ int sde_hw_cdm_enable(struct sde_hw_cdm *ctx,
 		struct sde_hw_cdm_cfg *cdm)
 {
 	struct sde_hw_blk_reg_map *c = &ctx->hw;
-	struct sde_mdp_format_params *fmt = cdm->output_fmt;
+	const struct sde_format *fmt = cdm->output_fmt;
+	struct cdm_output_cfg cdm_cfg = { 0 };
 	u32 opmode = 0;
-	u32 cdm_enable = 0;
 	u32 csc = 0;
 
-	if (!fmt->is_yuv)
-		return 0;
+	if (!SDE_FORMAT_IS_YUV(fmt))
+		return -EINVAL;
 
 	if (cdm->output_type == CDM_CDWN_OUTPUT_HDMI) {
-		if (fmt->chroma_sample != SDE_MDP_CHROMA_H1V2)
+		if (fmt->chroma_sample != SDE_CHROMA_H1V2)
 			return -EINVAL; /*unsupported format */
 		opmode = BIT(0);
 		opmode |= (fmt->chroma_sample << 1);
-		cdm_enable |= BIT(19);
+		cdm_cfg.intf_en = true;
 	} else {
 		opmode = 0;
-		cdm_enable = BIT(24);
+		cdm_cfg.wb_en = true;
 	}
 
 	csc |= BIT(2);
 	csc &= ~BIT(1);
 	csc |= BIT(0);
 
-	/* For this register we need to offset it to MDP TOP BLOCK */
-	SDE_REG_WRITE(c, MDP_OUT_CTL_0, cdm_enable);
+	if (ctx->hw_mdp && ctx->hw_mdp->ops.setup_cdm_output)
+		ctx->hw_mdp->ops.setup_cdm_output(ctx->hw_mdp, &cdm_cfg);
 
 	SDE_REG_WRITE(c, CDM_CSC_10_OPMODE, csc);
 	SDE_REG_WRITE(c, CDM_HDMI_PACK_OP_MODE, opmode);
@@ -250,10 +289,10 @@ int sde_hw_cdm_enable(struct sde_hw_cdm *ctx,
 
 void sde_hw_cdm_disable(struct sde_hw_cdm *ctx)
 {
-	struct sde_hw_blk_reg_map *c = &ctx->hw;
+	struct cdm_output_cfg cdm_cfg = { 0 };
 
-	/* mdp top block */
-	SDE_REG_WRITE(c, MDP_OUT_CTL_0, 0); /* bypass mode */
+	if (ctx->hw_mdp && ctx->hw_mdp->ops.setup_cdm_output)
+		ctx->hw_mdp->ops.setup_cdm_output(ctx->hw_mdp, &cdm_cfg);
 }
 
 static void _setup_cdm_ops(struct sde_hw_cdm_ops *ops,
@@ -267,7 +306,8 @@ static void _setup_cdm_ops(struct sde_hw_cdm_ops *ops,
 
 struct sde_hw_cdm *sde_hw_cdm_init(enum sde_cdm idx,
 		void __iomem *addr,
-		struct sde_mdss_cfg *m)
+		struct sde_mdss_cfg *m,
+		struct sde_hw_mdp *hw_mdp)
 {
 	struct sde_hw_cdm *c;
 	struct sde_cdm_cfg *cfg;
@@ -285,6 +325,7 @@ struct sde_hw_cdm *sde_hw_cdm_init(enum sde_cdm idx,
 	c->idx = idx;
 	c->cdm_hw_cap = cfg;
 	_setup_cdm_ops(&c->ops, c->cdm_hw_cap->features);
+	c->hw_mdp = hw_mdp;
 
 	/*
 	 * Perform any default initialization for the chroma down module
@@ -293,4 +334,9 @@ struct sde_hw_cdm *sde_hw_cdm_init(enum sde_cdm idx,
 	sde_hw_cdm_setup_csc_10bit(c, &rgb2yuv_cfg);
 
 	return c;
+}
+
+void sde_hw_cdm_destroy(struct sde_hw_cdm *cdm)
+{
+	kfree(cdm);
 }

@@ -17,6 +17,16 @@
 #define ICNSS_MAX_IRQ_REGISTRATIONS    12
 #define ICNSS_MAX_TIMESTAMP_LEN        32
 
+enum icnss_uevent {
+	ICNSS_UEVENT_FW_READY,
+	ICNSS_UEVENT_FW_CRASHED,
+};
+
+struct icnss_uevent_data {
+	enum icnss_uevent uevent;
+	void *data;
+};
+
 struct icnss_driver_ops {
 	char *name;
 	int (*probe)(struct device *dev);
@@ -28,6 +38,7 @@ struct icnss_driver_ops {
 	int (*pm_resume)(struct device *dev);
 	int (*suspend_noirq)(struct device *dev);
 	int (*resume_noirq)(struct device *dev);
+	int (*uevent)(struct device *dev, struct icnss_uevent_data *uevent);
 };
 
 
@@ -104,7 +115,7 @@ extern int icnss_ce_request_irq(unsigned int ce_id,
 	irqreturn_t (*handler)(int, void *),
 	unsigned long flags, const char *name, void *ctx);
 extern int icnss_get_ce_id(int irq);
-extern int icnss_set_fw_debug_mode(bool enable_fw_log);
+extern int icnss_set_fw_log_mode(uint8_t fw_log_mode);
 extern int icnss_athdiag_read(struct device *dev, uint32_t offset,
 			      uint32_t mem_type, uint32_t data_len,
 			      uint8_t *output);

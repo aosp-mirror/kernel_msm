@@ -78,6 +78,14 @@ enum {
 	EXT_SND_CARD_TAVIL,
 };
 
+struct msm_snd_interrupt {
+	void __iomem *mpm_wakeup;
+	void __iomem *intr1_cfg_apps;
+	void __iomem *lpi_gpio_intr_cfg;
+	void __iomem *lpi_gpio_cfg;
+	void __iomem *lpi_gpio_inout;
+};
+
 struct msm_asoc_mach_data {
 	int us_euro_gpio; /* used by gpio driver API */
 	int hph_en1_gpio;
@@ -87,7 +95,6 @@ struct msm_asoc_mach_data {
 	struct device_node *hph_en0_gpio_p; /* used by pinctrl API */
 	struct device_node *pdm_gpio_p; /* used by pinctrl API */
 	struct device_node *comp_gpio_p; /* used by pinctrl API */
-	struct device_node *sdw_gpio_p; /* used by pinctrl API */
 	struct device_node *dmic_gpio_p; /* used by pinctrl API */
 	struct device_node *ext_spk_gpio_p; /* used by pinctrl API */
 	struct snd_soc_codec *codec;
@@ -105,6 +112,7 @@ struct msm_asoc_mach_data {
 	struct mutex cdc_int_mclk0_mutex;
 	struct delayed_work disable_int_mclk0_work;
 	struct afe_clk_set digital_cdc_core_clk;
+	struct msm_snd_interrupt msm_snd_intr_lpi;
 };
 
 int msm_common_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,

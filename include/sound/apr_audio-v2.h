@@ -42,6 +42,8 @@ struct param_outband {
 #define ADM_MATRIX_ID_AUDIO_TX              1
 
 #define ADM_MATRIX_ID_COMPRESSED_AUDIO_RX   2
+
+#define ADM_MATRIX_ID_LISTEN_TX             4
 /* Enumeration for an audio Tx matrix ID.*/
 #define ADM_MATRIX_ID_AUDIOX              1
 
@@ -1349,6 +1351,8 @@ struct afe_mod_enable_param {
  * #AFE_MODULE_SIDETONE_IIR_FILTER module.
  */
 #define AFE_PARAM_ID_SIDETONE_IIR_FILTER_CONFIG	0x00010204
+#define MAX_SIDETONE_IIR_DATA_SIZE 224
+#define MAX_NO_IIR_FILTER_STAGE    10
 
 struct afe_sidetone_iir_filter_config_params {
 	u16                  num_biquad_stages;
@@ -1360,6 +1364,7 @@ struct afe_sidetone_iir_filter_config_params {
 /* Pregain for the compensating filter response.
  * Supported values: Any number in Q13 format
  */
+	uint8_t   iir_config[MAX_SIDETONE_IIR_DATA_SIZE];
 } __packed;
 
 #define AFE_MODULE_LOOPBACK	0x00010205
@@ -1511,6 +1516,55 @@ struct afe_loopback_cfg_v1 {
 
 } __packed;
 
+struct afe_loopback_sidetone_gain {
+	u16                  rx_port_id;
+	u16                  gain;
+} __packed;
+
+struct loopback_cfg_data {
+	u32                  loopback_cfg_minor_version;
+/* Minor version used for tracking the version of the RMC module
+ * configuration interface.
+ * Supported values: #AFE_API_VERSION_LOOPBACK_CONFIG
+ */
+	u16                  dst_port_id;
+	/* Destination Port Id. */
+	u16                  routing_mode;
+/* Specifies data path type from src to dest port.
+ * Supported values:
+ * #LB_MODE_DEFAULT
+ * #LB_MODE_SIDETONE
+ * #LB_MODE_EC_REF_VOICE_AUDIO
+ * #LB_MODE_EC_REF_VOICE_A
+ * #LB_MODE_EC_REF_VOICE
+ */
+
+	u16                  enable;
+/* Specifies whether to enable (1) or
+ * disable (0) an AFE loopback.
+ */
+	u16                  reserved;
+/* Reserved for 32-bit alignment. This field must be set to 0.
+ */
+} __packed;
+
+struct afe_st_loopback_cfg_v1 {
+	struct apr_hdr                    hdr;
+	struct afe_port_cmd_set_param_v2  param;
+	struct afe_port_param_data_v2     gain_pdata;
+	struct afe_loopback_sidetone_gain gain_data;
+	struct afe_port_param_data_v2     cfg_pdata;
+	struct loopback_cfg_data          cfg_data;
+} __packed;
+
+struct afe_loopback_iir_cfg_v2 {
+	struct apr_hdr                          hdr;
+	struct afe_port_cmd_set_param_v2        param;
+	struct afe_port_param_data_v2           st_iir_enable_pdata;
+	struct afe_mod_enable_param             st_iir_mode_enable_data;
+	struct afe_port_param_data_v2           st_iir_filter_config_pdata;
+	struct afe_sidetone_iir_filter_config_params st_iir_filter_config_data;
+} __packed;
 #define AFE_MODULE_SPEAKER_PROTECTION	0x00010209
 #define AFE_PARAM_ID_SPKR_PROT_CONFIG	0x0001020a
 #define AFE_API_VERSION_SPKR_PROT_CONFIG	0x1
@@ -2417,6 +2471,13 @@ struct afe_param_id_slimbus_cfg {
  */
 #define AFE_PARAM_ID_USB_AUDIO_DEV_PARAMS    0x000102A5
 
+
+/* ID of the parameter used to set the endianness value for the
+ * USB audio device. It should be used with
+ * AFE_MODULE_AUDIO_DEV_INTERFACE
+ */
+#define AFE_PARAM_ID_USB_AUDIO_DEV_LPCM_FMT 0x000102AA
+
 /* Minor version used for tracking USB audio  configuration */
 #define AFE_API_MINIOR_VERSION_USB_AUDIO_CONFIG 0x1
 
@@ -2430,6 +2491,15 @@ struct afe_param_id_usb_audio_dev_params {
 	u32                  cfg_minor_version;
 /* Token of actual end USB aduio device */
 	u32                  dev_token;
+} __packed;
+
+struct afe_param_id_usb_audio_dev_lpcm_fmt {
+/* Minor version used for tracking USB audio device parameter.
+ * Supported values: AFE_API_MINIOR_VERSION_USB_AUDIO_CONFIG
+ */
+	u32                  cfg_minor_version;
+/* Endianness of actual end USB audio device */
+	u32                  endian;
 } __packed;
 
 /* ID of the parameter used by AFE_PARAM_ID_USB_AUDIO_CONFIG to configure
@@ -2476,13 +2546,18 @@ struct afe_param_id_usb_audio_cfg {
 	u16                  reserved;
 /* device token of actual end USB aduio device */
 	u32                  dev_token;
+/* endianness of this interface */
+	u32                   endian;
 } __packed;
 
 struct afe_usb_audio_dev_param_command {
 	struct apr_hdr hdr;
 	struct afe_port_cmd_set_param_v2 param;
 	struct afe_port_param_data_v2    pdata;
-	struct afe_param_id_usb_audio_dev_params usb_dev;
+	union {
+		struct afe_param_id_usb_audio_dev_params usb_dev;
+		struct afe_param_id_usb_audio_dev_lpcm_fmt lpcm_fmt;
+	};
 } __packed;
 
 /*
@@ -4924,8 +4999,8 @@ struct asm_amrwbplus_fmt_blk_v2 {
 
 } __packed;
 
-#define ASM_MEDIA_FMT_AC3			0x00010DEE
-#define ASM_MEDIA_FMT_EAC3			0x00010DEF
+#define ASM_MEDIA_FMT_AC3                    0x00010DEE
+#define ASM_MEDIA_FMT_EAC3                   0x00010DEF
 #define ASM_MEDIA_FMT_DTS                    0x00010D88
 #define ASM_MEDIA_FMT_MP2                    0x00010DE9
 #define ASM_MEDIA_FMT_FLAC                   0x00010C16
@@ -4933,7 +5008,6 @@ struct asm_amrwbplus_fmt_blk_v2 {
 #define ASM_MEDIA_FMT_VORBIS                 0x00010C15
 #define ASM_MEDIA_FMT_APE                    0x00012F32
 #define ASM_MEDIA_FMT_DSD                    0x00012F3E
-
 
 /* Media format ID for adaptive transform acoustic coding. This
  * ID is used by the #ASM_STREAM_CMD_OPEN_WRITE_COMPRESSED command
@@ -8941,6 +9015,31 @@ struct asm_dts_eagle_param_get {
 	struct asm_stream_cmd_get_pp_params_v2 param;
 } __packed;
 
+/* Opcode to set BT address and license for aptx decoder */
+#define APTX_DECODER_BT_ADDRESS 0x00013201
+#define APTX_CLASSIC_DEC_LICENSE_ID 0x00013202
+
+struct aptx_dec_bt_addr_cfg {
+	uint32_t lap;
+	uint32_t uap;
+	uint32_t nap;
+} __packed;
+
+struct aptx_dec_bt_dev_addr {
+	struct apr_hdr hdr;
+	struct asm_stream_cmd_set_encdec_param encdec;
+	struct aptx_dec_bt_addr_cfg bt_addr_cfg;
+} __packed;
+
+struct asm_aptx_dec_fmt_blk_v2 {
+	struct apr_hdr hdr;
+	struct asm_data_cmd_media_fmt_update_v2 fmtblk;
+	u32     sample_rate;
+/* Number of samples per second.
+ * Supported values: 44100 and 48000 Hz
+ */
+} __packed;
+
 /* LSM Specific */
 #define VW_FEAT_DIM					(39)
 
@@ -8968,6 +9067,7 @@ struct asm_dts_eagle_param_get {
 #define LSM_SESSION_EVENT_DETECTION_STATUS_V2		(0x00012B01)
 #define LSM_DATA_EVENT_READ_DONE			(0x00012B02)
 #define LSM_DATA_EVENT_STATUS				(0x00012B03)
+#define LSM_SESSION_EVENT_DETECTION_STATUS_V3		(0x00012B04)
 
 #define LSM_MODULE_ID_VOICE_WAKEUP			(0x00012C00)
 #define LSM_PARAM_ID_ENDPOINT_DETECT_THRESHOLD		(0x00012C01)
@@ -8980,6 +9080,12 @@ struct asm_dts_eagle_param_get {
 #define LSM_PARAM_ID_LAB_ENABLE				(0x00012C09)
 #define LSM_PARAM_ID_LAB_CONFIG				(0x00012C0A)
 #define LSM_MODULE_ID_FRAMEWORK				(0x00012C0E)
+#define LSM_PARAM_ID_SWMAD_CFG				(0x00012C18)
+#define LSM_PARAM_ID_SWMAD_MODEL			(0x00012C19)
+#define LSM_PARAM_ID_SWMAD_ENABLE			(0x00012C1A)
+#define LSM_PARAM_ID_POLLING_ENABLE			(0x00012C1B)
+#define LSM_PARAM_ID_MEDIA_FMT				(0x00012C1E)
+#define LSM_PARAM_ID_FWK_MODE_CONFIG			(0x00012C27)
 
 /* HW MAD specific */
 #define AFE_MODULE_HW_MAD				(0x00010230)
@@ -10096,6 +10202,7 @@ enum {
 	COMPRESSED_PASSTHROUGH,
 	COMPRESSED_PASSTHROUGH_CONVERT,
 	COMPRESSED_PASSTHROUGH_DSD,
+	LISTEN,
 };
 
 #define AUDPROC_MODULE_ID_COMPRESSED_MUTE                0x00010770

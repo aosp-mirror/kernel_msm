@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,9 +15,27 @@
 
 #include "sde_hw_catalog.h"
 #include "sde_hw_mdss.h"
-#include "sde_hw_mdp_util.h"
+#include "sde_hw_util.h"
 
 struct sde_hw_intf;
+
+/* Batch size of frames for collecting MISR data */
+#define SDE_CRC_BATCH_SIZE 16
+
+/**
+ * struct sde_misr_params : Interface for getting and setting MISR data
+ *  Assumption is these functions will be called after clocks are enabled
+ * @ enable : enables/disables MISR
+ * @ frame_count : represents number of frames for which MISR is enabled
+ * @ last_idx: number of frames for which MISR data is collected
+ * @ crc_value: stores the collected MISR data
+ */
+struct sde_misr_params {
+	bool enable;
+	u32 frame_count;
+	u32 last_idx;
+	u32 crc_value[SDE_CRC_BATCH_SIZE];
+};
 
 /* intf timing settings */
 struct intf_timing_params {
@@ -57,25 +75,29 @@ struct intf_status {
  * @ setup_timing_gen : programs the timing engine
  * @ setup_prog_fetch : enables/disables the programmable fetch logic
  * @ enable_timing: enable/disable timing engine
- * @ get_timing_gen: get timing generator programmed configuration
  * @ get_status: returns if timing engine is enabled or not
+ * @ setup_misr: enables/disables MISR in HW register
+ * @ collect_misr: reads and stores MISR data from HW register
  */
 struct sde_hw_intf_ops {
 	void (*setup_timing_gen)(struct sde_hw_intf *intf,
-			struct intf_timing_params *p,
-			struct sde_mdp_format_params *fmt);
+			const struct intf_timing_params *p,
+			const struct sde_format *fmt);
 
 	void (*setup_prg_fetch)(struct sde_hw_intf *intf,
-			struct intf_prog_fetch *fetch);
+			const struct intf_prog_fetch *fetch);
 
 	void (*enable_timing)(struct sde_hw_intf *intf,
 			u8 enable);
 
-	void (*get_timing_gen)(struct sde_hw_intf *intf,
-			struct intf_timing_params *cfg);
-
 	void (*get_status)(struct sde_hw_intf *intf,
 			struct intf_status *status);
+
+	void (*setup_misr)(struct sde_hw_intf *intf,
+			struct sde_misr_params *misr_map);
+
+	void (*collect_misr)(struct sde_hw_intf *intf,
+			struct sde_misr_params *misr_map);
 };
 
 struct sde_hw_intf {
@@ -102,6 +124,10 @@ struct sde_hw_intf *sde_hw_intf_init(enum sde_intf idx,
 		void __iomem *addr,
 		struct sde_mdss_cfg *m);
 
-void sde_hw_intf_deinit(struct sde_hw_intf *intf);
+/**
+ * sde_hw_intf_destroy(): Destroys INTF driver context
+ * @intf:   Pointer to INTF driver context
+ */
+void sde_hw_intf_destroy(struct sde_hw_intf *intf);
 
 #endif /*_SDE_HW_INTF_H */
