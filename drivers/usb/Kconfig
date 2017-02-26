@@ -156,6 +156,7 @@ source "drivers/usb/gadget/Kconfig"
 source "drivers/usb/typec/Kconfig"
 
 source "drivers/usb/tusb1044/Kconfig"
+source "drivers/usb/ptn36241g/Kconfig"
 
 config USB_LED_TRIG
 	bool "USB LED Triggers"
