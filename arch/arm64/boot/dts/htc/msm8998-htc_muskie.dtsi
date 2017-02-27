@@ -23,6 +23,9 @@
 	/delete-property/ qcom,msi-gicm-addr;
 	/delete-property/ qcom,msi-gicm-base;
 
+	/* reduce endpoint reset latency */
+	qcom,ep-latency = <1>;
+
 	/* WAKE# optional sideband signal not connected */
 	/delete-property/ wake-gpio;
 	/* Remove pcie0_wake_default from pin muxing */
