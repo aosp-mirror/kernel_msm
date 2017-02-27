@@ -1,0 +1,224 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	aliases {
+		serial1 = &esl_console;
+	};
+};
+
+&spi_10 {
+	status = "disabled";
+};
+
+&pcie0 {
+	/* move and resize conf, io, and bars (mem) allocations */
+	reg = <0x1c00000 0x2000>,
+	      <0x1c06000 0x1000>,
+	      <0x1b000000 0xf1d>,
+	      <0x1b000f20 0xa8>,
+	      <0x1b010000 0x20000>,  /* 128KB conf space */
+	      <0x1b030000 0x20000>,  /* 128KB io space */
+	      <0x1b100000 0xf00000>; /* 15M bars space */
+	ranges = <0x01000000 0x0 0x1b030000 0x1b030000 0x0 0x20000>, /* io */
+		 <0x02000000 0x0 0x1b100000 0x1b100000 0x0 0xf00000>; /* bars */
+
+	/* QCOM's GICM implementation is not compatible with Easel */
+	/delete-property/ qcom,msi-gicm-addr;
+	/delete-property/ qcom,msi-gicm-base;
+
+	/* reduce endpoint reset latency */
+	qcom,ep-latency = <1>;
+
+	/* WAKE# optional sideband signal not connected */
+	/delete-property/ wake-gpio;
+	/* Remove pcie0_wake_default from pin muxing */
+	pinctrl-0 = <&pcie0_clkreq_default &pcie0_perst_default>;
+};
+
+&tlmm {
+	bcm15602_pins {
+		bcm15602_pon_default: bcm15602_pon_default {
+			mux {
+				pins = "gpio25";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio25";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		bcm15602_intb_default: bcm15602_intb_default {
+			mux {
+				pins = "gpio26";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio26";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		bcm15602_resetb_default: bcm15602_resetb_default {
+			mux {
+				pins = "gpio91";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio91";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+
+	easel_pins {
+		easel_ready_default: easel_ready_default {
+			mux {
+				pins = "gpio27";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio27";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		easel_boot_mode_default: easel_boot_mode_default {
+			mux {
+				pins = "gpio28";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio28";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		/* these pins are unused, but we don't want them floating */
+		easel_spi_default: easel_spi_default {
+			mux {
+				pins = "gpio65", "gpio66", "gpio67", "gpio68";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio65", "gpio66", "gpio67", "gpio68";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		esl_console_active: esl_console_active {
+			mux {
+				pins = "gpio8", "gpio9";
+				function = "blsp_uart1_b";
+			};
+
+			config {
+				pins = "gpio8", "gpio9";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		esl_console_sleep: esl_console_sleep {
+			mux {
+				pins = "gpio8", "gpio9";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio8", "gpio9";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+};
+
+&i2c_9 {
+	status = "okay";
+	bcm15602@8 {
+		compatible = "brcm,bcm15602";
+		reg = <0x8>;
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <26 IRQ_TYPE_EDGE_FALLING>;
+		interrupt-names = "bcm15602_intb";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&bcm15602_pon_default &bcm15602_intb_default
+			&bcm15602_resetb_default>;
+
+		bcm,pon-gpio = <&tlmm 25 0x00>;
+		bcm,intb-gpio = <&tlmm 26 0x00>;
+		bcm,resetb-gpio = <&tlmm 91 0x00>;
+
+		bcm15602_gpio: gpio {
+			compatible = "brcm,bcm15602-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+		};
+
+		bcm15602_thermal: sensor {
+			compatible = "brcm,bcm15602-thermal";
+			#thermal-sensor-cells = <0>;
+		};
+	};
+};
+
+&soc {
+	esl_console: serial@0c16f000 {
+		compatible = "qcom,msm-uartdm-v1.4", "qcom,msm-uartdm";
+		reg = <0xc16f000 0x1000>;
+
+		interrupts = <0 107 0>;
+
+		clocks = <&clock_gcc clk_gcc_blsp1_uart1_apps_clk>,
+			 <&clock_gcc clk_gcc_blsp1_ahb_clk>;
+		clock-names = "core", "iface";
+
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&esl_console_active>;
+		pinctrl-1 = <&esl_console_sleep>;
+	};
+
+	mnh-sm {
+		compatible = "intel,mnh-sm";
+
+		clocks = <&clock_gcc clk_ln_bb_clk2>,
+			 <&clock_gcc clk_div_clk3>;
+		clock-names = "ref_clk", "sleep_clk";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&easel_ready_default &easel_boot_mode_default
+			&easel_spi_default>;
+
+		soc-pwr-good-gpio = <&bcm15602_gpio 0 0x00>;
+		ddr-pad-iso-n-gpio = <&bcm15602_gpio 1 0x00>;
+		ready-gpio = <&tlmm 27 0x00>;
+		boot-mode-gpio = <&tlmm 28 0x00>;
+	};
+};

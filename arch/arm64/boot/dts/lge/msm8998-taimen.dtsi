@@ -22,6 +22,7 @@
 #include "msm8998-taimen-touch.dtsi"
 #include "msm8998-taimen-fingerprint.dtsi"
 #include "msm8998-taimen-camera.dtsi"
+#include "msm8998-taimen-easel.dtsi"
 
 / {
 	reserved-memory {
@@ -182,10 +183,6 @@
 	qcom,aux-en-gpio = <&tlmm 100 0>;
 	qcom,aux-sel-gpio = <&tlmm 80 0>;
 	qcom,usbplug-cc-gpio = <&tlmm 38 0>;
-};
-
-&pcie0 {
-	status = "disabled";
 };
 
 &wil6210 {
