@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -56,9 +56,58 @@ struct mdss_dp_attention_node {
 
 static int mdss_dp_off_irq(struct mdss_dp_drv_pdata *dp_drv);
 static void mdss_dp_mainlink_push_idle(struct mdss_panel_data *pdata);
-static inline void mdss_dp_link_retraining(struct mdss_dp_drv_pdata *dp);
+static inline void mdss_dp_link_maintenance(struct mdss_dp_drv_pdata *dp,
+		bool lt_needed);
 static void mdss_dp_handle_attention(struct mdss_dp_drv_pdata *dp_drv);
 static void dp_send_events(struct mdss_dp_drv_pdata *dp, u32 events);
+static int mdss_dp_notify_clients(struct mdss_dp_drv_pdata *dp,
+	enum notification_status status);
+static int mdss_dp_process_phy_test_pattern_request(
+		struct mdss_dp_drv_pdata *dp);
+
+static inline void mdss_dp_reset_test_data(struct mdss_dp_drv_pdata *dp)
+{
+	dp->test_data = (const struct dpcd_test_request){ 0 };
+	dp->test_data.test_bit_depth = DP_TEST_BIT_DEPTH_UNKNOWN;
+	hdmi_edid_config_override(dp->panel_data.panel_info.edid_data,
+				false, 0);
+}
+
+static inline bool mdss_dp_is_link_status_updated(struct mdss_dp_drv_pdata *dp)
+{
+	return dp->link_status.link_status_updated;
+}
+
+static inline bool mdss_dp_is_downstream_port_status_changed(
+		struct mdss_dp_drv_pdata *dp)
+{
+	return dp->link_status.downstream_port_status_changed;
+}
+
+static inline bool mdss_dp_is_audio_pattern_requested(
+		struct mdss_dp_drv_pdata *dp)
+{
+	return (dp->test_data.test_requested & TEST_AUDIO_PATTERN);
+}
+
+static inline bool mdss_dp_is_link_training_requested(
+		struct mdss_dp_drv_pdata *dp)
+{
+	return (dp->test_data.test_requested == TEST_LINK_TRAINING);
+}
+
+static inline bool mdss_dp_is_video_pattern_requested(
+		struct mdss_dp_drv_pdata *dp)
+{
+	return (dp->test_data.test_requested & TEST_VIDEO_PATTERN)
+		&& !(dp->test_data.test_requested & TEST_AUDIO_DISABLED_VIDEO);
+}
+
+static inline bool mdss_dp_is_phy_test_pattern_requested(
+		struct mdss_dp_drv_pdata *dp)
+{
+	return (dp->test_data.test_requested == PHY_TEST_PATTERN);
+}
 
 static void mdss_dp_put_dt_clk_data(struct device *dev,
 	struct dss_module_power *module_power)
@@ -78,6 +127,40 @@ static void mdss_dp_put_dt_clk_data(struct device *dev,
 static int mdss_dp_is_clk_prefix(const char *clk_prefix, const char *clk_name)
 {
 	return !strncmp(clk_name, clk_prefix, strlen(clk_prefix));
+}
+
+static int mdss_dp_parse_prop(struct platform_device *pdev,
+			struct mdss_dp_drv_pdata *dp_drv)
+{
+	int len = 0, i = 0;
+	const char *data;
+
+	data = of_get_property(pdev->dev.of_node,
+		"qcom,aux-cfg-settings", &len);
+	if ((!data) || (len != AUX_CFG_LEN)) {
+		pr_err("%s:%d, Unable to read DP AUX CFG settings",
+			__func__, __LINE__);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < len; i++)
+		dp_drv->aux_cfg[i] = data[i];
+
+	data = of_get_property(pdev->dev.of_node,
+		"qcom,logical2physical-lane-map", &len);
+	if ((!data) || (len != DP_MAX_PHY_LN)) {
+		pr_debug("%s:%d, lane mapping not defined, use default",
+			__func__, __LINE__);
+		dp_drv->l_map[DP_PHY_LN0] = DP_ML0;
+		dp_drv->l_map[DP_PHY_LN1] = DP_ML1;
+		dp_drv->l_map[DP_PHY_LN2] = DP_ML2;
+		dp_drv->l_map[DP_PHY_LN3] = DP_ML3;
+	} else {
+		for (i = 0; i < len; i++)
+			dp_drv->l_map[i] = data[i];
+	}
+
+	return 0;
 }
 
 static int mdss_dp_init_clk_power_data(struct device *dev,
@@ -255,7 +338,25 @@ static int mdss_dp_clk_init(struct mdss_dp_drv_pdata *dp_drv,
 			goto ctrl_get_error;
 		}
 
+		dp_drv->pixel_clk_rcg = devm_clk_get(dev, "pixel_clk_rcg");
+		if (IS_ERR(dp_drv->pixel_clk_rcg)) {
+			pr_debug("%s: Unable to get DP pixel clk RCG\n",
+				__func__);
+			dp_drv->pixel_clk_rcg = NULL;
+		}
+
+		dp_drv->pixel_parent = devm_clk_get(dev,
+			"pixel_parent");
+		if (IS_ERR(dp_drv->pixel_parent)) {
+			pr_debug("%s: Unable to get DP pixel RCG parent\n",
+				__func__);
+			dp_drv->pixel_parent = NULL;
+		}
 	} else {
+		if (dp_drv->pixel_parent)
+			devm_clk_put(dev, dp_drv->pixel_parent);
+		if (dp_drv->pixel_clk_rcg)
+			devm_clk_put(dev, dp_drv->pixel_clk_rcg);
 		msm_dss_put_clk(ctrl_power_data->clk_config,
 					ctrl_power_data->num_clk);
 		msm_dss_put_clk(core_power_data->clk_config,
@@ -798,9 +899,11 @@ void mdss_dp_config_ctrl(struct mdss_dp_drv_pdata *dp)
 {
 	struct dpcd_cap *cap;
 	struct display_timing_desc *timing;
+	struct mdss_panel_info *pinfo;
 	u32 data = 0;
 
 	timing = &dp->edid.timing[0];
+	pinfo = &dp->panel_data.panel_info;
 
 	cap = &dp->dpcd;
 
@@ -823,8 +926,8 @@ void mdss_dp_config_ctrl(struct mdss_dp_drv_pdata *dp)
 	if (cap->scrambler_reset)
 		data |= (1 << 10);
 
-	if (dp->edid.color_depth != 6)
-		data |= 0x100;	/* Default: 8 bits */
+	/* Bits per components */
+	data |= (mdss_dp_bpp_to_test_bit_depth(pinfo->bpp) << 8);
 
 	/* Num of Lanes */
 	data |= ((dp->lane_cnt - 1) << 4);
@@ -840,7 +943,7 @@ void mdss_dp_config_ctrl(struct mdss_dp_drv_pdata *dp)
 	mdss_dp_configuration_ctrl(&dp->ctrl_io, data);
 }
 
-int mdss_dp_wait4train(struct mdss_dp_drv_pdata *dp_drv)
+static int mdss_dp_wait4video_ready(struct mdss_dp_drv_pdata *dp_drv)
 {
 	int ret = 0;
 
@@ -882,9 +985,7 @@ static int dp_get_cable_status(struct platform_device *pdev, u32 vote)
 		return -ENODEV;
 	}
 
-	mutex_lock(&dp_ctrl->pd_msg_mutex);
 	hpd = dp_ctrl->cable_connected;
-	mutex_unlock(&dp_ctrl->pd_msg_mutex);
 
 	return hpd;
 }
@@ -905,7 +1006,7 @@ static int dp_audio_info_setup(struct platform_device *pdev,
 		return -ENODEV;
 	}
 
-	mdss_dp_audio_setup_sdps(&dp_ctrl->ctrl_io);
+	mdss_dp_audio_setup_sdps(&dp_ctrl->ctrl_io, params->num_of_channels);
 	mdss_dp_config_audio_acr_ctrl(&dp_ctrl->ctrl_io, dp_ctrl->link_rate);
 	mdss_dp_set_safe_to_exit_level(&dp_ctrl->ctrl_io, dp_ctrl->lane_cnt);
 	mdss_dp_audio_enable(&dp_ctrl->ctrl_io, true);
@@ -983,6 +1084,55 @@ end:
 	return ret;
 }
 
+static u32 mdss_dp_get_bpp(struct mdss_dp_drv_pdata *dp)
+{
+	u32 bpp;
+	u32 bit_depth;
+
+	/*
+	 * Set bpp value based on whether a test video pattern is requested.
+	 * For test pattern, the test data has the bit depth per color
+	 * component. Otherwise, set it based on EDID.
+	 */
+	if (dp->override_config || mdss_dp_is_video_pattern_requested(dp))
+		bit_depth = dp->test_data.test_bit_depth;
+	else
+		bit_depth = dp->edid.color_depth;
+
+	if (!mdss_dp_is_test_bit_depth_valid(bit_depth)) {
+		pr_debug("invalid bit_depth=%d. fall back to default\n",
+			bit_depth);
+		bit_depth = DP_TEST_BIT_DEPTH_8; /* default to 24bpp */
+	}
+
+	bpp = mdss_dp_test_bit_depth_to_bpp(bit_depth);
+	return bpp;
+}
+
+static u32 mdss_dp_get_colorimetry_config(struct mdss_dp_drv_pdata *dp)
+{
+	u32 cc;
+	enum dynamic_range dr;
+
+	/* unless a video pattern CTS test is ongoing, use CEA_VESA */
+	if (mdss_dp_is_video_pattern_requested(dp))
+		dr = dp->test_data.test_dyn_range;
+	else
+		dr = DP_DYNAMIC_RANGE_RGB_VESA;
+
+	/* Only RGB_VESA nd RGB_CEA supported for now */
+	switch (dr) {
+	case DP_DYNAMIC_RANGE_RGB_CEA:
+		cc = BIT(3);
+		break;
+	case DP_DYNAMIC_RANGE_RGB_VESA:
+	default:
+		cc = 0;
+	}
+
+	return cc;
+}
+
 static int dp_init_panel_info(struct mdss_dp_drv_pdata *dp_drv, u32 vic)
 {
 	struct mdss_panel_info *pinfo;
@@ -993,13 +1143,17 @@ static int dp_init_panel_info(struct mdss_dp_drv_pdata *dp_drv, u32 vic)
 		DEV_ERR("invalid input\n");
 		return -EINVAL;
 	}
-
-	ret = hdmi_get_supported_mode(&timing, 0, vic);
 	pinfo = &dp_drv->panel_data.panel_info;
 
-	if (ret || !timing.supported || !pinfo) {
-		DEV_ERR("%s: invalid timing data\n", __func__);
-		return -EINVAL;
+	if (vic != HDMI_VFRMT_UNKNOWN) {
+		ret = hdmi_get_supported_mode(&timing, 0, vic);
+
+		if (ret || !timing.supported || !pinfo) {
+			DEV_ERR("%s: invalid timing data\n", __func__);
+			return -EINVAL;
+		}
+	} else {
+		pr_debug("reset panel info to zeroes\n");
 	}
 
 	dp_drv->vic = vic;
@@ -1010,14 +1164,15 @@ static int dp_init_panel_info(struct mdss_dp_drv_pdata *dp_drv, u32 vic)
 	pinfo->lcdc.h_back_porch = timing.back_porch_h;
 	pinfo->lcdc.h_front_porch = timing.front_porch_h;
 	pinfo->lcdc.h_pulse_width = timing.pulse_width_h;
+	pinfo->lcdc.h_active_low = timing.active_low_h;
 	pinfo->lcdc.v_back_porch = timing.back_porch_v;
 	pinfo->lcdc.v_front_porch = timing.front_porch_v;
 	pinfo->lcdc.v_pulse_width = timing.pulse_width_v;
+	pinfo->lcdc.v_active_low = timing.active_low_v;
 
 	pinfo->type = DP_PANEL;
 	pinfo->pdest = DISPLAY_4;
 	pinfo->wait_cycle = 0;
-	pinfo->bpp = 24;
 	pinfo->fb_num = 1;
 
 	pinfo->lcdc.border_clr = 0; /* blk */
@@ -1025,8 +1180,8 @@ static int dp_init_panel_info(struct mdss_dp_drv_pdata *dp_drv, u32 vic)
 	pinfo->lcdc.hsync_skew = 0;
 	pinfo->is_pluggable = true;
 
-	dp_drv->bpp = pinfo->bpp;
-
+	pinfo->bpp = mdss_dp_get_bpp(dp_drv);
+	pr_debug("bpp=%d\n", pinfo->bpp);
 	pr_debug("update res. vic= %d, pclk_rate = %llu\n",
 				dp_drv->vic, pinfo->clk_rate);
 
@@ -1048,10 +1203,9 @@ static inline void mdss_dp_ack_state(struct mdss_dp_drv_pdata *dp, int val)
  * given usb plug orientation.
  */
 static int mdss_dp_get_lane_mapping(struct mdss_dp_drv_pdata *dp,
-		enum plug_orientation orientation,
-		struct lane_mapping *lane_map)
+		enum plug_orientation orientation, char *lane_map)
 {
-	int ret = 0;
+	int ret = 0, i = 0, j = 0;
 
 	pr_debug("enter: orientation = %d\n", orientation);
 
@@ -1061,22 +1215,35 @@ static int mdss_dp_get_lane_mapping(struct mdss_dp_drv_pdata *dp,
 		goto exit;
 	}
 
-	/* Set the default lane mapping */
-	lane_map->lane0 = 2;
-	lane_map->lane1 = 3;
-	lane_map->lane2 = 1;
-	lane_map->lane3 = 0;
-
+	/* For flip case, swap phy lanes with ML0 and ML3, ML1 and ML2 */
 	if (orientation == ORIENTATION_CC2) {
-		lane_map->lane0 = 1;
-		lane_map->lane1 = 0;
-		lane_map->lane2 = 2;
-		lane_map->lane3 = 3;
+		for (i = 0; i < DP_MAX_PHY_LN; i++) {
+			if (dp->l_map[i] == DP_ML0) {
+				for (j = 0; j < DP_MAX_PHY_LN; j++) {
+					if (dp->l_map[j] == DP_ML3) {
+						lane_map[i] = DP_ML3;
+						lane_map[j] = DP_ML0;
+						break;
+					}
+				}
+			} else if (dp->l_map[i] == DP_ML1) {
+				for (j = 0; j < DP_MAX_PHY_LN; j++) {
+					if (dp->l_map[j] == DP_ML2) {
+						lane_map[i] = DP_ML2;
+						lane_map[j] = DP_ML1;
+						break;
+					}
+				}
+			}
+		}
+	} else {
+		/* Normal orientation */
+		for (i = 0; i < DP_MAX_PHY_LN; i++)
+			lane_map[i] = dp->l_map[i];
 	}
 
 	pr_debug("lane0 = %d, lane1 = %d, lane2 =%d, lane3 =%d\n",
-			lane_map->lane0, lane_map->lane1, lane_map->lane2,
-			lane_map->lane3);
+		lane_map[0], lane_map[1], lane_map[2], lane_map[3]);
 
 exit:
 	return ret;
@@ -1108,6 +1275,9 @@ static void mdss_dp_set_clock_rate(struct mdss_dp_drv_pdata *dp,
 static int mdss_dp_enable_mainlink_clocks(struct mdss_dp_drv_pdata *dp)
 {
 	int ret = 0;
+
+	if (dp->pixel_clk_rcg && dp->pixel_parent)
+		clk_set_parent(dp->pixel_clk_rcg, dp->pixel_parent);
 
 	mdss_dp_set_clock_rate(dp, "ctrl_link_clk",
 		(dp->link_rate * DP_LINK_RATE_MULTIPLIER) / DP_KHZ_TO_HZ);
@@ -1145,19 +1315,23 @@ static void mdss_dp_disable_mainlink_clocks(struct mdss_dp_drv_pdata *dp_drv)
  * configuration, output format and sink/panel timing information.
  */
 static void mdss_dp_configure_source_params(struct mdss_dp_drv_pdata *dp,
-		struct lane_mapping *lane_map)
+		char *lane_map)
 {
-	mdss_dp_ctrl_lane_mapping(&dp->ctrl_io, *lane_map);
+	mdss_dp_ctrl_lane_mapping(&dp->ctrl_io, lane_map);
 	mdss_dp_fill_link_cfg(dp);
 	mdss_dp_mainlink_ctrl(&dp->ctrl_io, true);
 	mdss_dp_config_ctrl(dp);
+	mdss_dp_config_misc(dp,
+		mdss_dp_bpp_to_test_bit_depth(mdss_dp_get_bpp(dp)),
+		mdss_dp_get_colorimetry_config(dp));
 	mdss_dp_sw_config_msa(&dp->ctrl_io, dp->link_rate, &dp->dp_cc_io);
 	mdss_dp_timing_cfg(&dp->ctrl_io, &dp->panel_data.panel_info);
 }
 
 /**
- * mdss_dp_train_main_link() - initiates training of DP main link
+ * mdss_dp_setup_main_link() - initiates training of DP main link
  * @dp: Display Port Driver data
+ * @train: specify if link training should be done or not
  *
  * Initiates training of the DP main link and checks the state of the main
  * link after the training is complete.
@@ -1165,63 +1339,90 @@ static void mdss_dp_configure_source_params(struct mdss_dp_drv_pdata *dp,
  * Return: error code. -EINVAL if any invalid data or -EAGAIN if retraining
  * is required.
  */
-static int mdss_dp_train_main_link(struct mdss_dp_drv_pdata *dp)
+static int mdss_dp_setup_main_link(struct mdss_dp_drv_pdata *dp, bool train)
 {
 	int ret = 0;
 	int ready = 0;
 
 	pr_debug("enter\n");
+	mdss_dp_mainlink_ctrl(&dp->ctrl_io, true);
+	mdss_dp_aux_set_sink_power_state(dp, SINK_POWER_ON);
+	reinit_completion(&dp->video_comp);
+
+	if (mdss_dp_is_phy_test_pattern_requested(dp))
+		goto end;
+
+	if (!train)
+		goto send_video;
+
+	/*
+	 * As part of previous calls, DP controller state might have
+	 * transitioned to PUSH_IDLE. In order to start transmitting a link
+	 * training pattern, we have to first to a DP software reset.
+	 */
+	mdss_dp_ctrl_reset(&dp->ctrl_io);
 	ret = mdss_dp_link_train(dp);
 	if (ret)
 		goto end;
 
-	mdss_dp_wait4train(dp);
+send_video:
+	/*
+	 * Set up transfer unit values and set controller state to send
+	 * video.
+	 */
+	mdss_dp_setup_tr_unit(&dp->ctrl_io, dp->link_rate, dp->lane_cnt,
+		dp->vic, &dp->panel_data.panel_info);
+	mdss_dp_state_ctrl(&dp->ctrl_io, ST_SEND_VIDEO);
 
+	mdss_dp_wait4video_ready(dp);
 	ready = mdss_dp_mainlink_ready(dp, BIT(0));
-
 	pr_debug("main link %s\n", ready ? "READY" : "NOT READY");
+
 end:
 	return ret;
 }
 
-static int mdss_dp_on_irq(struct mdss_dp_drv_pdata *dp_drv)
+static int mdss_dp_on_irq(struct mdss_dp_drv_pdata *dp_drv, bool lt_needed)
 {
 	int ret = 0;
-	struct lane_mapping ln_map;
+	char ln_map[4];
 
 	/* wait until link training is completed */
-	pr_debug("enter\n");
+	pr_debug("enter, lt_needed=%s\n", lt_needed ? "true" : "false");
 
 	do {
-		if (ret == -EAGAIN) {
-			mdss_dp_mainlink_push_idle(&dp_drv->panel_data);
-			mdss_dp_off_irq(dp_drv);
-		}
+		if (ret == -EAGAIN)
+			mdss_dp_mainlink_ctrl(&dp_drv->ctrl_io, false);
 
 		mutex_lock(&dp_drv->train_mutex);
 
+		dp_init_panel_info(dp_drv, dp_drv->vic);
 		ret = mdss_dp_get_lane_mapping(dp_drv, dp_drv->orientation,
-				&ln_map);
-		if (ret) {
-			mutex_unlock(&dp_drv->train_mutex);
-			goto exit;
-		}
+				ln_map);
+		if (ret)
+			goto exit_loop;
 
 		mdss_dp_phy_share_lane_config(&dp_drv->phy_io,
 				dp_drv->orientation,
-				dp_drv->dpcd.max_lane_count);
+				dp_drv->dpcd.max_lane_count,
+				dp_drv->phy_reg_offset);
 
-		ret = mdss_dp_enable_mainlink_clocks(dp_drv);
-		if (ret) {
-			mutex_unlock(&dp_drv->train_mutex);
-			goto exit;
+		if (lt_needed) {
+			/*
+			 * Diasable and re-enable the mainlink clock since the
+			 * link clock might have been adjusted as part of the
+			 * link maintenance.
+			 */
+			if (!mdss_dp_is_phy_test_pattern_requested(dp_drv))
+				mdss_dp_disable_mainlink_clocks(dp_drv);
+			ret = mdss_dp_enable_mainlink_clocks(dp_drv);
+			if (ret)
+				goto exit_loop;
 		}
 
-		mdss_dp_mainlink_reset(&dp_drv->ctrl_io);
+		mdss_dp_configure_source_params(dp_drv, ln_map);
 
 		reinit_completion(&dp_drv->idle_comp);
-
-		mdss_dp_configure_source_params(dp_drv, &ln_map);
 
 		dp_drv->power_on = true;
 
@@ -1230,25 +1431,29 @@ static int mdss_dp_on_irq(struct mdss_dp_drv_pdata *dp_drv)
 			if (ret) {
 				pr_err("Failed to exit low power mode, rc=%d\n",
 					ret);
-				goto exit;
+				goto exit_loop;
 			}
 		}
 
-		ret = mdss_dp_train_main_link(dp_drv);
+		ret = mdss_dp_setup_main_link(dp_drv, lt_needed);
 
+exit_loop:
 		mutex_unlock(&dp_drv->train_mutex);
 	} while (ret == -EAGAIN);
 
 	pr_debug("end\n");
 
-exit:
+	/* Send a connect notification */
+	if (!mdss_dp_is_phy_test_pattern_requested(dp_drv))
+		mdss_dp_notify_clients(dp_drv, NOTIFY_CONNECT_IRQ_HPD);
+
 	return ret;
 }
 
 int mdss_dp_on_hpd(struct mdss_dp_drv_pdata *dp_drv)
 {
 	int ret = 0;
-	struct lane_mapping ln_map;
+	char ln_map[4];
 
 	/* wait until link training is completed */
 	mutex_lock(&dp_drv->train_mutex);
@@ -1267,19 +1472,14 @@ int mdss_dp_on_hpd(struct mdss_dp_drv_pdata *dp_drv)
 	}
 	mdss_dp_hpd_configure(&dp_drv->ctrl_io, true);
 
-	ret = mdss_dp_get_lane_mapping(dp_drv, dp_drv->orientation, &ln_map);
+	ret = mdss_dp_get_lane_mapping(dp_drv, dp_drv->orientation, ln_map);
 	if (ret)
 		goto exit;
 
 	if (dp_drv->new_vic && (dp_drv->new_vic != dp_drv->vic))
 		dp_init_panel_info(dp_drv, dp_drv->new_vic);
 
-	dp_drv->link_rate =
-		mdss_dp_gen_link_clk(&dp_drv->panel_data.panel_info,
-				dp_drv->dpcd.max_lane_count);
-
-	pr_debug("link_rate=0x%x, Max rate supported by sink=0x%x\n",
-			dp_drv->link_rate, dp_drv->dpcd.max_link_rate);
+	dp_drv->link_rate = mdss_dp_gen_link_clk(dp_drv);
 	if (!dp_drv->link_rate) {
 		pr_err("Unable to configure required link rate\n");
 		ret = -EINVAL;
@@ -1287,19 +1487,15 @@ int mdss_dp_on_hpd(struct mdss_dp_drv_pdata *dp_drv)
 	}
 
 	mdss_dp_phy_share_lane_config(&dp_drv->phy_io, dp_drv->orientation,
-			dp_drv->dpcd.max_lane_count);
-
-	pr_debug("link_rate = 0x%x\n", dp_drv->link_rate);
+			dp_drv->dpcd.max_lane_count, dp_drv->phy_reg_offset);
 
 	ret = mdss_dp_enable_mainlink_clocks(dp_drv);
 	if (ret)
 		goto exit;
 
-	mdss_dp_mainlink_reset(&dp_drv->ctrl_io);
-
 	reinit_completion(&dp_drv->idle_comp);
 
-	mdss_dp_configure_source_params(dp_drv, &ln_map);
+	mdss_dp_configure_source_params(dp_drv, ln_map);
 
 	if (dp_drv->psm_enabled) {
 		ret = mdss_dp_aux_send_psm_request(dp_drv, false);
@@ -1313,7 +1509,7 @@ int mdss_dp_on_hpd(struct mdss_dp_drv_pdata *dp_drv)
 link_training:
 	dp_drv->power_on = true;
 
-	while (-EAGAIN == mdss_dp_train_main_link(dp_drv))
+	while (-EAGAIN == mdss_dp_setup_main_link(dp_drv, true))
 		pr_debug("MAIN LINK TRAINING RETRY\n");
 
 	dp_drv->cont_splash = 0;
@@ -1338,42 +1534,12 @@ int mdss_dp_on(struct mdss_panel_data *pdata)
 	dp_drv = container_of(pdata, struct mdss_dp_drv_pdata,
 			panel_data);
 
+	if (dp_drv->power_on) {
+		pr_debug("Link already setup, return\n");
+		return 0;
+	}
+
 	return mdss_dp_on_hpd(dp_drv);
-}
-
-static inline void mdss_dp_reset_test_data(struct mdss_dp_drv_pdata *dp)
-{
-	dp->test_data = (const struct dpcd_test_request){ 0 };
-}
-
-static inline bool mdss_dp_is_link_status_updated(struct mdss_dp_drv_pdata *dp)
-{
-	return dp->link_status.link_status_updated;
-}
-
-static inline bool mdss_dp_is_downstream_port_status_changed(
-		struct mdss_dp_drv_pdata *dp)
-{
-	return dp->link_status.downstream_port_status_changed;
-}
-
-static inline bool mdss_dp_is_link_training_requested(
-		struct mdss_dp_drv_pdata *dp)
-{
-	return (dp->test_data.test_requested == TEST_LINK_TRAINING);
-}
-
-static inline bool mdss_dp_is_phy_test_pattern_requested(
-		struct mdss_dp_drv_pdata *dp)
-{
-	return (dp->test_data.test_requested == PHY_TEST_PATTERN);
-}
-
-static inline bool mdss_dp_soft_hpd_reset(struct mdss_dp_drv_pdata *dp)
-{
-	return (mdss_dp_is_link_training_requested(dp) ||
-			mdss_dp_is_phy_test_pattern_requested(dp)) &&
-		dp->alt_mode.dp_status.hpd_irq;
 }
 
 static int mdss_dp_off_irq(struct mdss_dp_drv_pdata *dp_drv)
@@ -1389,16 +1555,13 @@ static int mdss_dp_off_irq(struct mdss_dp_drv_pdata *dp_drv)
 	pr_debug("start\n");
 
 	mdss_dp_mainlink_ctrl(&dp_drv->ctrl_io, false);
-
 	mdss_dp_audio_enable(&dp_drv->ctrl_io, false);
-
-	/* Make sure the DP main link is disabled before clk disable */
+	/* Make sure DP mainlink and audio engines are disabled */
 	wmb();
-	mdss_dp_disable_mainlink_clocks(dp_drv);
-	dp_drv->power_on = false;
-	dp_drv->sink_info_read = false;
 
+	mdss_dp_ack_state(dp_drv, false);
 	mutex_unlock(&dp_drv->train_mutex);
+
 	complete_all(&dp_drv->irq_comp);
 	pr_debug("end\n");
 
@@ -1445,8 +1608,10 @@ static int mdss_dp_off_hpd(struct mdss_dp_drv_pdata *dp_drv)
 
 	dp_drv->power_on = false;
 	dp_drv->sink_info_read = false;
+	dp_init_panel_info(dp_drv, HDMI_VFRMT_UNKNOWN);
 
 	mdss_dp_ack_state(dp_drv, false);
+	mdss_dp_reset_test_data(dp_drv);
 	mutex_unlock(&dp_drv->train_mutex);
 	pr_debug("DP off done\n");
 
@@ -1464,7 +1629,7 @@ int mdss_dp_off(struct mdss_panel_data *pdata)
 		return -EINVAL;
 	}
 
-	if (mdss_dp_soft_hpd_reset(dp))
+	if (dp->hpd_irq_on)
 		return mdss_dp_off_irq(dp);
 	else
 		return mdss_dp_off_hpd(dp);
@@ -1482,8 +1647,13 @@ static int mdss_dp_send_cable_notification(
 		goto end;
 	}
 
-	if (mdss_dp_is_dvi_mode(dp))
-		flags |= MSM_EXT_DISP_HPD_NO_AUDIO;
+	flags |= MSM_EXT_DISP_HPD_VIDEO;
+
+	if (!mdss_dp_is_dvi_mode(dp) || dp->audio_test_req) {
+		dp->audio_test_req = false;
+
+		flags |= MSM_EXT_DISP_HPD_AUDIO;
+	}
 
 	if (dp->ext_audio_data.intf_ops.hpd)
 		ret = dp->ext_audio_data.intf_ops.hpd(dp->ext_pdev,
@@ -1491,11 +1661,6 @@ static int mdss_dp_send_cable_notification(
 
 end:
 	return ret;
-}
-
-static int mdss_dp_notify_clients(struct mdss_dp_drv_pdata *dp, bool enable)
-{
-	return mdss_dp_send_cable_notification(dp, enable);
 }
 
 static void mdss_dp_set_default_resolution(struct mdss_dp_drv_pdata *dp)
@@ -1592,7 +1757,8 @@ static int mdss_dp_host_init(struct mdss_panel_data *pdata)
 	       mdss_dp_get_ctrl_hw_version(&dp_drv->ctrl_io),
 	       mdss_dp_get_phy_hw_version(&dp_drv->phy_io));
 
-	mdss_dp_phy_aux_setup(&dp_drv->phy_io);
+	mdss_dp_phy_aux_setup(&dp_drv->phy_io, dp_drv->aux_cfg,
+			dp_drv->phy_reg_offset);
 
 	mdss_dp_irq_enable(dp_drv);
 	dp_drv->dp_initialized = true;
@@ -1606,12 +1772,101 @@ vreg_error:
 	return ret;
 }
 
+/**
+ * mdss_dp_notify_clients() - notifies DP clients of cable connection
+ * @dp: Display Port Driver data
+ * @status: HPD notification status requested
+ *
+ * This function will send a notification to display/audio clients of change
+ * in DP connection status.
+ */
+static int mdss_dp_notify_clients(struct mdss_dp_drv_pdata *dp,
+	enum notification_status status)
+{
+	const int irq_comp_timeout = HZ * 2;
+	int ret = 0;
+
+	mutex_lock(&dp->pd_msg_mutex);
+	if (status == dp->hpd_notification_status) {
+		pr_debug("No change in status %s --> %s\n",
+			mdss_dp_notification_status_to_string(status),
+			mdss_dp_notification_status_to_string(
+				dp->hpd_notification_status));
+		goto end;
+	}
+
+	switch (status) {
+	case NOTIFY_CONNECT_IRQ_HPD:
+		if (dp->hpd_notification_status != NOTIFY_DISCONNECT_IRQ_HPD)
+			goto invalid_request;
+		/* Follow the same programming as for NOTIFY_CONNECT */
+		mdss_dp_host_init(&dp->panel_data);
+		mdss_dp_send_cable_notification(dp, true);
+		break;
+	case NOTIFY_CONNECT:
+		if ((dp->hpd_notification_status == NOTIFY_CONNECT_IRQ_HPD) ||
+			(dp->hpd_notification_status ==
+			 NOTIFY_DISCONNECT_IRQ_HPD))
+			goto invalid_request;
+		mdss_dp_host_init(&dp->panel_data);
+		mdss_dp_send_cable_notification(dp, true);
+		break;
+	case NOTIFY_DISCONNECT:
+		mdss_dp_send_cable_notification(dp, false);
+		break;
+	case NOTIFY_DISCONNECT_IRQ_HPD:
+		if (dp->hpd_notification_status == NOTIFY_DISCONNECT)
+			goto invalid_request;
+
+		mdss_dp_send_cable_notification(dp, false);
+		if (!IS_ERR_VALUE(ret) && ret) {
+			reinit_completion(&dp->irq_comp);
+			ret = wait_for_completion_timeout(&dp->irq_comp,
+					irq_comp_timeout);
+			if (ret <= 0) {
+				pr_warn("irq_comp timed out\n");
+				ret = -EINVAL;
+			} else {
+				ret = 0;
+			}
+		}
+		break;
+	default:
+		pr_err("Invalid notification status = %d\n", status);
+		ret = -EINVAL;
+		break;
+	}
+
+	goto end;
+
+invalid_request:
+	pr_err("Invalid request %s --> %s\n",
+		mdss_dp_notification_status_to_string(
+			dp->hpd_notification_status),
+		mdss_dp_notification_status_to_string(status));
+	ret = -EINVAL;
+
+end:
+	if (!ret) {
+		pr_debug("Successfully sent notification %s --> %s\n",
+			mdss_dp_notification_status_to_string(
+				dp->hpd_notification_status),
+			mdss_dp_notification_status_to_string(status));
+		dp->hpd_notification_status = status;
+	}
+
+	mutex_unlock(&dp->pd_msg_mutex);
+	return ret;
+}
+
 static int mdss_dp_process_hpd_high(struct mdss_dp_drv_pdata *dp)
 {
 	int ret;
 
 	if (dp->sink_info_read)
 		return 0;
+
+	pr_debug("start\n");
 
 	mdss_dp_dpcd_cap_read(dp);
 
@@ -1620,20 +1875,35 @@ static int mdss_dp_process_hpd_high(struct mdss_dp_drv_pdata *dp)
 		pr_debug("edid read error, setting default resolution\n");
 
 		mdss_dp_set_default_resolution(dp);
-		goto end;
+		goto notify;
 	}
 
 	ret = hdmi_edid_parser(dp->panel_data.panel_info.edid_data);
 	if (ret) {
 		pr_err("edid parse failed\n");
-		goto end;
+		goto notify;
 	}
 
 	dp->sink_info_read = true;
-end:
-	mdss_dp_update_cable_status(dp, true);
-	mdss_dp_notify_clients(dp, true);
 
+notify:
+	/* Check if there is a PHY_TEST_PATTERN request when we get HPD high.
+	 * Update the DP driver with the test parameters including link rate,
+	 * lane count, voltage level, and pre-emphasis level. Do not notify
+	 * the userspace of the connection, just power on the DP controller
+	 * and mainlink with the new settings.
+	 */
+	if (mdss_dp_is_phy_test_pattern_requested(dp)) {
+		pr_info("PHY_TEST_PATTERN requested by sink\n");
+		mdss_dp_process_phy_test_pattern_request(dp);
+		pr_info("skip client notification\n");
+		goto end;
+	}
+
+	mdss_dp_notify_clients(dp, NOTIFY_CONNECT);
+
+end:
+	pr_debug("end\n");
 	return ret;
 
 }
@@ -1676,6 +1946,13 @@ end:
 	return rc;
 }
 
+static inline bool dp_is_hdcp_enabled(struct mdss_dp_drv_pdata *dp_drv)
+{
+	return dp_drv->hdcp.feature_enabled &&
+		(dp_drv->hdcp.hdcp1_present || dp_drv->hdcp.hdcp2_present) &&
+		dp_drv->hdcp.ops;
+}
+
 static void mdss_dp_hdcp_cb_work(struct work_struct *work)
 {
 	struct mdss_dp_drv_pdata *dp;
@@ -1687,6 +1964,13 @@ static void mdss_dp_hdcp_cb_work(struct work_struct *work)
 
 	dp = container_of(dw, struct mdss_dp_drv_pdata, hdcp_cb_work);
 	base = dp->base;
+
+
+	if (dp->hdcp_status == HDCP_STATE_AUTHENTICATING &&
+	    mdss_dp_is_audio_pattern_requested(dp)) {
+		pr_debug("no hdcp for audio tests\n");
+		return;
+	}
 
 	hdcp_auth_state = (dp_read(base + DP_HDCP_STATUS) >> 20) & 0x3;
 
@@ -1874,7 +2158,7 @@ static ssize_t mdss_dp_sysfs_rda_s3d_mode(struct device *dev,
 
 static bool mdss_dp_is_test_ongoing(struct mdss_dp_drv_pdata *dp)
 {
-	return dp->hpd_irq_clients_notified;
+	return (dp->hpd_notification_status == NOTIFY_DISCONNECT_IRQ_HPD);
 }
 
 /**
@@ -1916,7 +2200,7 @@ static int mdss_dp_psm_config(struct mdss_dp_drv_pdata *dp, bool enable)
 			mdss_dp_mainlink_push_idle(&dp->panel_data);
 			mdss_dp_off_irq(dp);
 		} else {
-			mdss_dp_notify_clients(dp, false);
+			mdss_dp_notify_clients(dp, NOTIFY_DISCONNECT);
 		}
 	} else {
 		/*
@@ -1928,10 +2212,10 @@ static int mdss_dp_psm_config(struct mdss_dp_drv_pdata *dp, bool enable)
 		 * to user modules.
 		 */
 		if (mdss_dp_is_test_ongoing(dp)) {
-			mdss_dp_link_retraining(dp);
+			mdss_dp_link_maintenance(dp, true);
 		} else {
 			mdss_dp_host_init(&dp->panel_data);
-			mdss_dp_notify_clients(dp, true);
+			mdss_dp_notify_clients(dp, NOTIFY_CONNECT);
 		}
 	}
 
@@ -2021,7 +2305,7 @@ static ssize_t mdss_dp_wta_hpd(struct device *dev,
 			dp_send_events(dp, EV_USBPD_DISCOVER_MODES);
 		}
 	} else if (!dp->hpd && dp->power_on) {
-		mdss_dp_notify_clients(dp, false);
+		mdss_dp_notify_clients(dp, NOTIFY_DISCONNECT);
 	}
 end:
 	return ret;
@@ -2044,6 +2328,233 @@ static ssize_t mdss_dp_rda_hpd(struct device *dev,
 	return ret;
 }
 
+static int mdss_dp_parse_config_value(char const *buf, char const *name,
+	u32 *val)
+{
+	int ret = 0;
+	char *buf1;
+	char *token;
+
+	buf1 = strnstr(buf, name, PAGE_SIZE);
+	if (buf1) {
+		buf1 = buf1 + strlen(name);
+		token = strsep(&buf1, " ");
+		ret = kstrtou32(token, 10, val);
+		if (ret) {
+			pr_err("kstrtoint failed. ret=%d\n", (int)ret);
+			goto end;
+		}
+		pr_debug("parsed %s(%d)\n", name, *val);
+	} else {
+		ret = -EINVAL;
+	}
+
+end:
+	return ret;
+}
+
+static ssize_t mdss_dp_wta_config(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	u32 val;
+	u32 bit_depth;
+	int ret;
+	char const *bpp_key = "bpp=";
+	char const *pattern_type_key = "pattern_type=";
+	struct mdss_dp_drv_pdata *dp = mdss_dp_get_drvdata(dev);
+
+	if (!dp) {
+		pr_err("invalid data\n");
+		ret = -EINVAL;
+		goto end;
+	}
+
+	ret = mdss_dp_parse_config_value(buf, bpp_key, &val);
+	if (ret) {
+		pr_debug("%s config not found\n", bpp_key);
+		goto pattern_type;
+	}
+
+	bit_depth = mdss_dp_bpp_to_test_bit_depth(val);
+	if (!mdss_dp_is_test_bit_depth_valid(bit_depth)) {
+		pr_err("invalid bpp = %d\n", val);
+	} else {
+		dp->test_data.test_bit_depth = bit_depth;
+		if (val != 0)
+			dp->override_config = true;
+		else
+			dp->override_config = false;
+		pr_debug("bpp=%d, test_bit_depth=%d\n", val,
+			dp->test_data.test_bit_depth);
+	}
+
+pattern_type:
+	ret = mdss_dp_parse_config_value(buf, pattern_type_key, &val);
+	if (ret) {
+		pr_debug("%s config not found\n", pattern_type_key);
+		goto end;
+	}
+
+	if (!mdss_dp_is_test_video_pattern_valid(val)) {
+		pr_err("invalid test video pattern = %d\n", val);
+	} else {
+		dp->test_data.test_video_pattern = val;
+		pr_debug("test_video_pattern=%d (%s)\n",
+			dp->test_data.test_video_pattern,
+			mdss_dp_test_video_pattern_to_string(
+				dp->test_data.test_video_pattern));
+	}
+
+end:
+	return count;
+}
+
+static ssize_t mdss_dp_rda_config(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+	u32 bpp;
+	struct mdss_dp_drv_pdata *dp = mdss_dp_get_drvdata(dev);
+
+	if (!dp) {
+		pr_err("invalid input\n");
+		return -EINVAL;
+	}
+
+	bpp = mdss_dp_get_bpp(dp);
+	ret = snprintf(buf, PAGE_SIZE, "bpp=%d\npattern_type=%d\n",
+		bpp, dp->test_data.test_video_pattern);
+
+	pr_debug("bpp: %d pattern_type=%d (%s)\n",
+		bpp, dp->test_data.test_video_pattern,
+		mdss_dp_test_video_pattern_to_string(
+			dp->test_data.test_video_pattern));
+
+	return ret;
+}
+
+static ssize_t mdss_dp_wta_frame_crc(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+	u32 val;
+	struct mdss_dp_drv_pdata *dp = mdss_dp_get_drvdata(dev);
+	char const *ctl_crc_key = "ctl_crc_en=";
+	char const *sink_crc_key = "sink_crc_en=";
+	bool ctl_crc_en, sink_crc_en;
+
+	if (!dp) {
+		pr_err("invalid data\n");
+		goto end;
+	}
+
+	if (!dp->power_on) {
+		pr_err("DP controller not powered on\n");
+		goto end;
+	}
+
+	ret = mdss_dp_parse_config_value(buf, ctl_crc_key, &val);
+	if (ret) {
+		pr_debug("%s config not found\n", ctl_crc_key);
+		goto sink_crc;
+	}
+	ctl_crc_en = val ? true : false;
+	mdss_dp_config_ctl_frame_crc(dp, ctl_crc_en);
+
+sink_crc:
+	ret = mdss_dp_parse_config_value(buf, sink_crc_key, &val);
+	if (ret) {
+		pr_debug("%s config not found\n", sink_crc_key);
+		goto end;
+	}
+	sink_crc_en = val ? true : false;
+	mdss_dp_aux_config_sink_frame_crc(dp, sink_crc_en);
+
+end:
+	return count;
+}
+
+static ssize_t mdss_dp_print_crc_values(struct mdss_dp_drv_pdata *dp,
+	char *buf, ssize_t len)
+{
+	char line[] = "------------------------------";
+
+	mdss_dp_read_ctl_frame_crc(dp);
+	mdss_dp_aux_read_sink_frame_crc(dp);
+
+	return snprintf(buf, PAGE_SIZE,
+		"\t\t|R_Cr\t\t|G_y\t\t|B_Cb\n%s%s\nctl(%s)\t|0x%08x\t|0x%08x\t|0x%08x\nsink(%s)\t|0x%08x\t|0x%08x\t|0x%08x\n",
+		line, line, dp->ctl_crc.en ? "enabled" : "disabled",
+		dp->ctl_crc.r_cr, dp->ctl_crc.g_y, dp->ctl_crc.b_cb,
+		dp->sink_crc.en ? "enabled" : "disabled",
+		dp->sink_crc.r_cr, dp->sink_crc.g_y, dp->sink_crc.b_cb);
+}
+
+static ssize_t mdss_dp_rda_frame_crc(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+	struct mdss_dp_drv_pdata *dp = mdss_dp_get_drvdata(dev);
+
+	if (!dp) {
+		pr_err("invalid input\n");
+		return -EINVAL;
+	}
+
+	if (!dp->power_on) {
+		pr_err("DP controller not powered on\n");
+		return 0;
+	}
+
+	ret = mdss_dp_print_crc_values(dp, buf, PAGE_SIZE);
+
+	return ret;
+}
+
+static ssize_t mdss_dp_wta_hdcp_feature(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	u32 hdcp;
+	int rc;
+	ssize_t ret = strnlen(buf, PAGE_SIZE);
+	struct mdss_dp_drv_pdata *dp = mdss_dp_get_drvdata(dev);
+
+	if (!dp) {
+		pr_err("invalid data\n");
+		ret = -EINVAL;
+		goto end;
+	}
+
+	rc = kstrtoint(buf, 10, &hdcp);
+	if (rc) {
+		pr_err("kstrtoint failed. ret=%d\n", rc);
+		ret = rc;
+		goto end;
+	}
+
+	dp->hdcp.feature_enabled = !!hdcp;
+	pr_debug("hdcp=%d\n", dp->hdcp.feature_enabled);
+end:
+	return ret;
+}
+
+static ssize_t mdss_dp_rda_hdcp_feature(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+	struct mdss_dp_drv_pdata *dp = mdss_dp_get_drvdata(dev);
+
+	if (!dp) {
+		pr_err("invalid input\n");
+		return -EINVAL;
+	}
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", dp->hdcp.feature_enabled);
+	pr_debug("hdcp: %d\n", dp->hdcp.feature_enabled);
+
+	return ret;
+}
+
 static DEVICE_ATTR(connected, S_IRUGO, mdss_dp_rda_connected, NULL);
 static DEVICE_ATTR(s3d_mode, S_IRUGO | S_IWUSR, mdss_dp_sysfs_rda_s3d_mode,
 	mdss_dp_sysfs_wta_s3d_mode);
@@ -2051,13 +2562,21 @@ static DEVICE_ATTR(hpd, S_IRUGO | S_IWUSR, mdss_dp_rda_hpd,
 	mdss_dp_wta_hpd);
 static DEVICE_ATTR(psm, S_IRUGO | S_IWUSR, mdss_dp_rda_psm,
 	mdss_dp_wta_psm);
-
+static DEVICE_ATTR(config, S_IRUGO | S_IWUSR, mdss_dp_rda_config,
+	mdss_dp_wta_config);
+static DEVICE_ATTR(frame_crc, S_IRUGO | S_IWUSR, mdss_dp_rda_frame_crc,
+	mdss_dp_wta_frame_crc);
+static DEVICE_ATTR(hdcp_feature, S_IRUGO | S_IWUSR, mdss_dp_rda_hdcp_feature,
+	mdss_dp_wta_hdcp_feature);
 
 static struct attribute *mdss_dp_fs_attrs[] = {
 	&dev_attr_connected.attr,
 	&dev_attr_s3d_mode.attr,
 	&dev_attr_hpd.attr,
 	&dev_attr_psm.attr,
+	&dev_attr_config.attr,
+	&dev_attr_frame_crc.attr,
+	&dev_attr_hdcp_feature.attr,
 	NULL,
 };
 
@@ -2125,6 +2644,11 @@ static void mdss_dp_update_hdcp_info(struct mdss_dp_drv_pdata *dp)
 		return;
 	}
 
+	if (!dp->hdcp.feature_enabled) {
+		pr_debug("feature not enabled\n");
+		return;
+	}
+
 	/* check first if hdcp2p2 is supported */
 	fd = dp->hdcp.hdcp2;
 	if (fd)
@@ -2152,13 +2676,6 @@ static void mdss_dp_update_hdcp_info(struct mdss_dp_drv_pdata *dp)
 		dp->hdcp.data = NULL;
 		dp->hdcp.ops = NULL;
 	}
-}
-
-static inline bool dp_is_hdcp_enabled(struct mdss_dp_drv_pdata *dp_drv)
-{
-	return dp_drv->hdcp.feature_enabled &&
-		(dp_drv->hdcp.hdcp1_present || dp_drv->hdcp.hdcp2_present) &&
-		dp_drv->hdcp.ops;
 }
 
 static int mdss_dp_event_handler(struct mdss_panel_data *pdata,
@@ -2236,21 +2753,6 @@ static int mdss_dp_event_handler(struct mdss_panel_data *pdata,
 	return rc;
 }
 
-static int mdss_dp_remove(struct platform_device *pdev)
-{
-	struct mdss_dp_drv_pdata *dp_drv = NULL;
-
-	dp_drv = platform_get_drvdata(pdev);
-	dp_hdcp2p2_deinit(dp_drv->hdcp.data);
-
-	iounmap(dp_drv->ctrl_io.base);
-	dp_drv->ctrl_io.base = NULL;
-	iounmap(dp_drv->phy_io.base);
-	dp_drv->phy_io.base = NULL;
-
-	return 0;
-}
-
 static int mdss_dp_device_register(struct mdss_dp_drv_pdata *dp_drv)
 {
 	int ret;
@@ -2310,6 +2812,11 @@ static int mdss_retrieve_dp_ctrl_resources(struct platform_device *pdev,
 		return rc;
 	}
 
+	rc = of_property_read_u32(pdev->dev.of_node,
+		"qcom,phy-register-offset", &dp_drv->phy_reg_offset);
+	if (rc)
+		dp_drv->phy_reg_offset = 0;
+
 	rc = msm_dss_ioremap_byname(pdev, &dp_drv->tcsr_reg_io,
 					"tcsr_regs");
 	if (rc) {
@@ -2361,81 +2868,105 @@ static void mdss_dp_do_link_train(struct mdss_dp_drv_pdata *dp)
 	mdss_dp_link_train(dp);
 }
 
-static void mdss_dp_event_work(struct work_struct *work)
+static int mdss_dp_event_thread(void *data)
 {
-	struct mdss_dp_drv_pdata *dp = NULL;
 	unsigned long flag;
 	u32 todo = 0, config;
 
-	if (!work) {
-		pr_err("invalid work structure\n");
-		return;
+	struct mdss_dp_event_data *ev_data;
+	struct mdss_dp_event *ev;
+	struct mdss_dp_drv_pdata *dp = NULL;
+
+	if (!data)
+		return -EINVAL;
+
+	ev_data = (struct mdss_dp_event_data *)data;
+	init_waitqueue_head(&ev_data->event_q);
+	spin_lock_init(&ev_data->event_lock);
+
+	while (!kthread_should_stop()) {
+		wait_event(ev_data->event_q,
+			(ev_data->pndx != ev_data->gndx) ||
+			kthread_should_stop());
+		spin_lock_irqsave(&ev_data->event_lock, flag);
+		ev = &(ev_data->event_list[ev_data->gndx++]);
+		todo = ev->id;
+		dp = ev->dp;
+		ev->id = 0;
+		ev_data->gndx %= MDSS_DP_EVENT_Q_MAX;
+		spin_unlock_irqrestore(&ev_data->event_lock, flag);
+
+		pr_debug("todo=%s\n", mdss_dp_ev_event_to_string(todo));
+
+		switch (todo) {
+		case EV_EDID_READ:
+			mdss_dp_edid_read(dp);
+			break;
+		case EV_DPCD_CAP_READ:
+			mdss_dp_dpcd_cap_read(dp);
+			break;
+		case EV_DPCD_STATUS_READ:
+			mdss_dp_dpcd_status_read(dp);
+			break;
+		case EV_LINK_TRAIN:
+			mdss_dp_do_link_train(dp);
+			break;
+		case EV_VIDEO_READY:
+			mdss_dp_video_ready(dp);
+			break;
+		case EV_IDLE_PATTERNS_SENT:
+			mdss_dp_idle_patterns_sent(dp);
+			break;
+		case EV_USBPD_ATTENTION:
+			mdss_dp_handle_attention(dp);
+			break;
+		case EV_USBPD_DISCOVER_MODES:
+			usbpd_send_svdm(dp->pd, USB_C_DP_SID,
+				USBPD_SVDM_DISCOVER_MODES,
+				SVDM_CMD_TYPE_INITIATOR, 0x0, 0x0, 0x0);
+			break;
+		case EV_USBPD_ENTER_MODE:
+			usbpd_send_svdm(dp->pd, USB_C_DP_SID,
+				USBPD_SVDM_ENTER_MODE,
+				SVDM_CMD_TYPE_INITIATOR, 0x1, 0x0, 0x0);
+			break;
+		case EV_USBPD_EXIT_MODE:
+			usbpd_send_svdm(dp->pd, USB_C_DP_SID,
+				USBPD_SVDM_EXIT_MODE,
+				SVDM_CMD_TYPE_INITIATOR, 0x1, 0x0, 0x0);
+			break;
+		case EV_USBPD_DP_STATUS:
+			config = 0x1; /* DFP_D connected */
+			usbpd_send_svdm(dp->pd, USB_C_DP_SID, DP_VDM_STATUS,
+				SVDM_CMD_TYPE_INITIATOR, 0x1, &config, 0x1);
+			break;
+		case EV_USBPD_DP_CONFIGURE:
+			config = mdss_dp_usbpd_gen_config_pkt(dp);
+			usbpd_send_svdm(dp->pd, USB_C_DP_SID, DP_VDM_CONFIGURE,
+				SVDM_CMD_TYPE_INITIATOR, 0x1, &config, 0x1);
+			break;
+		default:
+			pr_err("Unknown event:%d\n", todo);
+		}
 	}
 
-	dp = container_of(work, struct mdss_dp_drv_pdata, work);
-
-	spin_lock_irqsave(&dp->event_lock, flag);
-	todo = dp->current_event;
-	dp->current_event = 0;
-	spin_unlock_irqrestore(&dp->event_lock, flag);
-
-	pr_debug("todo=%s\n", mdss_dp_ev_event_to_string(todo));
-
-	switch (todo) {
-	case EV_EDID_READ:
-		mdss_dp_edid_read(dp);
-		break;
-	case EV_DPCD_CAP_READ:
-		mdss_dp_dpcd_cap_read(dp);
-		break;
-	case EV_DPCD_STATUS_READ:
-		mdss_dp_dpcd_status_read(dp);
-		break;
-	case EV_LINK_TRAIN:
-		mdss_dp_do_link_train(dp);
-		break;
-	case EV_VIDEO_READY:
-		mdss_dp_video_ready(dp);
-		break;
-	case EV_IDLE_PATTERNS_SENT:
-		mdss_dp_idle_patterns_sent(dp);
-		break;
-	case EV_USBPD_ATTENTION:
-		mdss_dp_handle_attention(dp);
-		break;
-	case EV_USBPD_DISCOVER_MODES:
-		usbpd_send_svdm(dp->pd, USB_C_DP_SID, USBPD_SVDM_DISCOVER_MODES,
-			SVDM_CMD_TYPE_INITIATOR, 0x0, 0x0, 0x0);
-		break;
-	case EV_USBPD_ENTER_MODE:
-		usbpd_send_svdm(dp->pd, USB_C_DP_SID, USBPD_SVDM_ENTER_MODE,
-			SVDM_CMD_TYPE_INITIATOR, 0x1, 0x0, 0x0);
-		break;
-	case EV_USBPD_EXIT_MODE:
-		usbpd_send_svdm(dp->pd, USB_C_DP_SID, USBPD_SVDM_EXIT_MODE,
-			SVDM_CMD_TYPE_INITIATOR, 0x1, 0x0, 0x0);
-		break;
-	case EV_USBPD_DP_STATUS:
-		config = 0x1; /* DFP_D connected */
-		usbpd_send_svdm(dp->pd, USB_C_DP_SID, DP_VDM_STATUS,
-			SVDM_CMD_TYPE_INITIATOR, 0x1, &config, 0x1);
-		break;
-	case EV_USBPD_DP_CONFIGURE:
-		config = mdss_dp_usbpd_gen_config_pkt(dp);
-		usbpd_send_svdm(dp->pd, USB_C_DP_SID, DP_VDM_CONFIGURE,
-			SVDM_CMD_TYPE_INITIATOR, 0x1, &config, 0x1);
-		break;
-	default:
-		pr_err("Unknown event:%d\n", todo);
-	}
+	return 0;
 }
 
-static void dp_send_events(struct mdss_dp_drv_pdata *dp, u32 events)
+static void dp_send_events(struct mdss_dp_drv_pdata *dp, u32 event)
 {
-	spin_lock(&dp->event_lock);
-	dp->current_event = events;
-	queue_work(dp->workq, &dp->work);
-	spin_unlock(&dp->event_lock);
+	struct mdss_dp_event *ev;
+	struct mdss_dp_event_data *ev_data = &dp->dp_event;
+
+	pr_debug("event=%s\n", mdss_dp_ev_event_to_string(event));
+
+	spin_lock(&ev_data->event_lock);
+	ev = &ev_data->event_list[ev_data->pndx++];
+	ev->id = event;
+	ev->dp = dp;
+	ev_data->pndx %= MDSS_DP_EVENT_Q_MAX;
+	wake_up(&ev_data->event_q);
+	spin_unlock(&ev_data->event_lock);
 }
 
 irqreturn_t dp_isr(int irq, void *ptr)
@@ -2471,10 +3002,10 @@ irqreturn_t dp_isr(int irq, void *ptr)
 	}
 
 	if (isr2 & EDP_INTR_READY_FOR_VIDEO)
-		dp_send_events(dp, EV_VIDEO_READY);
+		mdss_dp_video_ready(dp);
 
 	if (isr2 & EDP_INTR_IDLE_PATTERNs_SENT)
-		dp_send_events(dp, EV_IDLE_PATTERNS_SENT);
+		mdss_dp_idle_patterns_sent(dp);
 
 	if (isr1 && dp->aux_cmd_busy) {
 		/* clear DP_AUX_TRANS_CTRL */
@@ -2489,7 +3020,7 @@ irqreturn_t dp_isr(int irq, void *ptr)
 			dp_aux_native_handler(dp, isr1);
 	}
 
-	if (dp->hdcp.ops && dp->hdcp.ops->isr) {
+	if (dp_is_hdcp_enabled(dp) && dp->hdcp.ops->isr) {
 		if (dp->hdcp.ops->isr(dp->hdcp.data))
 			pr_err("dp_hdcp_isr failed\n");
 	}
@@ -2497,17 +3028,32 @@ irqreturn_t dp_isr(int irq, void *ptr)
 	return IRQ_HANDLED;
 }
 
+static void mdss_dp_event_cleanup(struct mdss_dp_drv_pdata *dp)
+{
+	destroy_workqueue(dp->workq);
+
+	if (dp->ev_thread == current)
+		return;
+
+	kthread_stop(dp->ev_thread);
+}
+
 static int mdss_dp_event_setup(struct mdss_dp_drv_pdata *dp)
 {
 
-	spin_lock_init(&dp->event_lock);
+	dp->ev_thread = kthread_run(mdss_dp_event_thread,
+		(void *)&dp->dp_event, "mdss_dp_event");
+	if (IS_ERR(dp->ev_thread)) {
+		pr_err("unable to start event thread\n");
+		return PTR_ERR(dp->ev_thread);
+	}
+
 	dp->workq = create_workqueue("mdss_dp_hpd");
 	if (!dp->workq) {
 		pr_err("%s: Error creating workqueue\n", __func__);
 		return -EPERM;
 	}
 
-	INIT_WORK(&dp->work, mdss_dp_event_work);
 	INIT_DELAYED_WORK(&dp->hdcp_cb_work, mdss_dp_hdcp_cb_work);
 	INIT_LIST_HEAD(&dp->attention_head);
 	return 0;
@@ -2542,7 +3088,18 @@ static void usbpd_disconnect_callback(struct usbpd_svid_handler *hdlr)
 	pr_debug("cable disconnected\n");
 	mdss_dp_update_cable_status(dp_drv, false);
 	dp_drv->alt_mode.current_state = UNKNOWN_STATE;
-	mdss_dp_notify_clients(dp_drv, false);
+
+	/**
+	 * Manually turn off the DP controller if we are in PHY
+	 * testing mode.
+	 */
+	if (mdss_dp_is_phy_test_pattern_requested(dp_drv)) {
+		pr_info("turning off DP controller for PHY testing\n");
+		mdss_dp_mainlink_push_idle(&dp_drv->panel_data);
+		mdss_dp_off_hpd(dp_drv);
+	} else {
+		mdss_dp_notify_clients(dp_drv, NOTIFY_DISCONNECT);
+	}
 }
 
 static int mdss_dp_validate_callback(u8 cmd,
@@ -2599,54 +3156,22 @@ static inline void mdss_dp_send_test_response(struct mdss_dp_drv_pdata *dp)
 }
 
 /**
- * mdss_dp_hpd_irq_notify_clients() - notifies DP clients of HPD IRQ tear down
+ * mdss_dp_link_maintenance() - initiates link maintenanace
  * @dp: Display Port Driver data
+ * @lt_needed: link retraining needed
  *
- * This function will send a notification to display/audio clients of DP tear
- * down during an HPD IRQ. This happens only if HPD IRQ is toggled,
- * in which case the user space proceeds with shutdown of DP driver, including
- * mainlink disable, and pushing the controller into idle state.
- */
-static int mdss_dp_hpd_irq_notify_clients(struct mdss_dp_drv_pdata *dp)
-{
-	const int irq_comp_timeout = HZ * 2;
-	int ret = 0;
-
-	if (dp->hpd_irq_toggled) {
-		dp->hpd_irq_clients_notified = true;
-
-		ret = mdss_dp_notify_clients(dp, false);
-
-		if (!IS_ERR_VALUE(ret) && ret) {
-			reinit_completion(&dp->irq_comp);
-			ret = wait_for_completion_timeout(&dp->irq_comp,
-					irq_comp_timeout);
-			if (ret <= 0) {
-				pr_warn("irq_comp timed out\n");
-				ret = -EINVAL;
-			} else {
-				ret = 0;
-			}
-		}
-	}
-
-	return 0;
-}
-
-/**
- * mdss_dp_link_retraining() - initiates link retraining
- * @dp: Display Port Driver data
- *
- * This function will initiate link retraining by first notifying
+ * This function will perform link maintenance by first notifying
  * DP clients and triggering DP shutdown, and then enabling DP after
- * notification is done successfully.
+ * notification is done successfully. It will perform link retraining
+ * if specified.
  */
-static inline void mdss_dp_link_retraining(struct mdss_dp_drv_pdata *dp)
+static inline void mdss_dp_link_maintenance(struct mdss_dp_drv_pdata *dp,
+		bool lt_needed)
 {
-	if (mdss_dp_hpd_irq_notify_clients(dp))
+	if (mdss_dp_notify_clients(dp, NOTIFY_DISCONNECT_IRQ_HPD))
 		return;
 
-	mdss_dp_on_irq(dp);
+	mdss_dp_on_irq(dp, lt_needed);
 }
 
 /**
@@ -2671,7 +3196,7 @@ static int mdss_dp_process_link_status_update(struct mdss_dp_drv_pdata *dp)
 			mdss_dp_aux_channel_eq_done(dp),
 			mdss_dp_aux_clock_recovery_done(dp));
 
-	mdss_dp_link_retraining(dp);
+	mdss_dp_link_maintenance(dp, true);
 
 	return 0;
 }
@@ -2702,7 +3227,7 @@ static int mdss_dp_process_link_training_request(struct mdss_dp_drv_pdata *dp)
 		dp->test_data.test_lane_count;
 	dp->link_rate = dp->test_data.test_link_rate;
 
-	mdss_dp_link_retraining(dp);
+	mdss_dp_link_maintenance(dp, true);
 
 	return 0;
 }
@@ -2723,37 +3248,108 @@ static int mdss_dp_process_phy_test_pattern_request(
 	if (!mdss_dp_is_phy_test_pattern_requested(dp))
 		return -EINVAL;
 
-	mdss_dp_send_test_response(dp);
-
 	test_link_rate = dp->test_data.test_link_rate;
 	test_lane_count = dp->test_data.test_lane_count;
 
-	pr_info("%s link rate = 0x%x, lane count = 0x%x\n",
-			mdss_dp_get_test_name(TEST_LINK_TRAINING),
-			test_link_rate, test_lane_count);
-
-	/**
-	 * Retrain the mainlink if there is a change in link rate or lane
-	 * count.
-	 */
-	if (mdss_dp_aux_is_link_rate_valid(test_link_rate) &&
-			mdss_dp_aux_is_lane_count_valid(test_lane_count) &&
-			((dp->dpcd.max_lane_count != test_lane_count) ||
-			(dp->link_rate != test_link_rate))) {
-
-		pr_info("updated link rate or lane count, retraining.\n");
-
-		dp->dpcd.max_lane_count = dp->test_data.test_lane_count;
-		dp->link_rate = dp->test_data.test_link_rate;
-
-		mdss_dp_link_retraining(dp);
+	if (!mdss_dp_aux_is_link_rate_valid(test_link_rate) ||
+		!mdss_dp_aux_is_lane_count_valid(test_lane_count)) {
+		pr_info("Invalid params: link rate = 0x%x, lane count = 0x%x\n",
+				test_link_rate, test_lane_count);
+		return -EINVAL;
 	}
 
-	mdss_dp_config_ctrl(dp);
+	pr_debug("start\n");
 
+	if (dp->power_on) {
+		pr_info("turning off DP controller for PHY testing\n");
+		mdss_dp_mainlink_push_idle(&dp->panel_data);
+		/*
+		 * The global reset will need DP link ralated clocks to be
+		 * running. Add the global reset just before disabling the
+		 * link clocks and core clocks.
+		 */
+		mdss_dp_ctrl_reset(&dp->ctrl_io);
+		mdss_dp_off_irq(dp);
+	}
+
+	/**
+	 * Set the timing information to 1920x1080p60. This resolution will be
+	 * used when enabling the pixel clock.
+	 */
+	dp_init_panel_info(dp, HDMI_VFRMT_1920x1080p60_16_9);
+
+	pr_info("Current: link rate = 0x%x, lane count = 0x%x\n",
+			dp->dpcd.max_lane_count,
+			dp->link_rate);
+
+	pr_info("Requested: link rate = 0x%x, lane count = 0x%x\n",
+			dp->test_data.test_link_rate,
+			dp->test_data.test_lane_count);
+
+	dp->dpcd.max_lane_count = dp->test_data.test_lane_count;
+	dp->link_rate = dp->test_data.test_link_rate;
+
+	mdss_dp_on_irq(dp, true);
+
+	/**
+	 * Read the updated values for voltage and pre-emphasis levels and
+	 * then program the DP controller PHY accordingly.
+	 */
+	mdss_dp_aux_parse_vx_px(dp);
 	mdss_dp_aux_update_voltage_and_pre_emphasis_lvl(dp);
 
 	mdss_dp_phy_send_test_pattern(dp);
+
+	mdss_dp_send_test_response(dp);
+
+	pr_debug("end\n");
+
+	return 0;
+}
+
+/**
+ * mdss_dp_process_audio_pattern_request() - process new audio pattern request
+ * @dp: Display Port Driver data
+ *
+ * This function will handle a new audio pattern request that is initiated by
+ * the sink. This is acheieved by sending the necessary secondary data packets
+ * to the sink. It is expected that any simulatenous requests for video
+ * patterns will be handled before the audio pattern is sent to the sink.
+ */
+static int mdss_dp_process_audio_pattern_request(struct mdss_dp_drv_pdata *dp)
+{
+	if (!mdss_dp_is_audio_pattern_requested(dp))
+		return -EINVAL;
+
+	if (dp_is_hdcp_enabled(dp) && dp->hdcp.ops->off) {
+		cancel_delayed_work(&dp->hdcp_cb_work);
+		dp->hdcp.ops->off(dp->hdcp.data);
+	}
+
+	pr_debug("sampling_rate=%s, channel_count=%d, pattern_type=%s\n",
+		mdss_dp_get_audio_sample_rate(
+			dp->test_data.test_audio_sampling_rate),
+		dp->test_data.test_audio_channel_count,
+		mdss_dp_get_audio_test_pattern(
+			dp->test_data.test_audio_pattern_type));
+
+	pr_debug("audio_period: ch1=0x%x, ch2=0x%x, ch3=0x%x, ch4=0x%x\n",
+		dp->test_data.test_audio_period_ch_1,
+		dp->test_data.test_audio_period_ch_2,
+		dp->test_data.test_audio_period_ch_3,
+		dp->test_data.test_audio_period_ch_4);
+
+	pr_debug("audio_period: ch5=0x%x, ch6=0x%x, ch7=0x%x, ch8=0x%x\n",
+		dp->test_data.test_audio_period_ch_5,
+		dp->test_data.test_audio_period_ch_6,
+		dp->test_data.test_audio_period_ch_7,
+		dp->test_data.test_audio_period_ch_8);
+
+	if (dp->ext_audio_data.intf_ops.hpd)
+		dp->ext_audio_data.intf_ops.hpd(dp->ext_pdev,
+			dp->ext_audio_data.type, 1, MSM_EXT_DISP_HPD_AUDIO);
+
+	dp->audio_test_req = true;
 
 	return 0;
 }
@@ -2778,6 +3374,81 @@ static int mdss_dp_process_downstream_port_status_change(
 	return mdss_dp_edid_read(dp);
 }
 
+static bool mdss_dp_video_pattern_test_lt_needed(struct mdss_dp_drv_pdata *dp)
+{
+	char new_link_rate;
+
+	/*
+	 * Link re-training for video format change is only needed if:
+	 *    1. Link rate changes
+	 *    2. Lane count changes
+	 * For now, assume that lane count is not going to change
+	 */
+	new_link_rate = mdss_dp_gen_link_clk(dp);
+	pr_debug("new link rate = 0x%x, current link rate = 0x%x\n",
+		new_link_rate, dp->link_rate);
+	if (new_link_rate != dp->link_rate) {
+		dp->link_rate = new_link_rate;
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * mdss_dp_process_video_pattern_request() - process new video pattern request
+ * @dp: Display Port Driver data
+ *
+ * This function will handle a new video pattern request that are initiated by
+ * the sink. This is acheieved by first sending a disconnect notification to
+ * the sink followed by a subsequent connect notification to the user modules,
+ * where it is expected that the user modules would draw the required test
+ * pattern.
+ */
+static int mdss_dp_process_video_pattern_request(struct mdss_dp_drv_pdata *dp)
+{
+	bool lt_needed;
+	struct hdmi_edid_override_data ov_data = {0, 0, 1,
+		HDMI_VFRMT_640x480p59_4_3};
+	bool ov_res = false;
+
+	if (!mdss_dp_is_video_pattern_requested(dp))
+		goto end;
+
+	pr_info("%s: bit depth=%d(%d bpp) pattern=%s\n",
+		mdss_dp_get_test_name(TEST_VIDEO_PATTERN),
+		dp->test_data.test_bit_depth,
+		mdss_dp_test_bit_depth_to_bpp(dp->test_data.test_bit_depth),
+		mdss_dp_test_video_pattern_to_string(
+			dp->test_data.test_video_pattern));
+
+	if (dp->test_data.test_h_width == 640) {
+		pr_debug("Set resolution to 640x480p59");
+		if (dp->vic != HDMI_VFRMT_640x480p59_4_3) {
+			ov_res = true;
+			dp->vic = HDMI_VFRMT_640x480p59_4_3;
+		}
+		hdmi_edid_config_override(dp->panel_data.panel_info.edid_data,
+			true, &ov_data);
+	}
+
+	dp_init_panel_info(dp, dp->vic);
+	lt_needed = ov_res | mdss_dp_video_pattern_test_lt_needed(dp);
+
+	pr_debug("Link training needed: %s", lt_needed ? "yes" : "no");
+
+	mdss_dp_link_maintenance(dp, lt_needed);
+
+	if (mdss_dp_is_audio_pattern_requested(dp))
+		goto end;
+
+	mdss_dp_send_test_response(dp);
+
+	return 0;
+end:
+	return -EINVAL;
+}
+
 /**
  * mdss_dp_process_hpd_irq_high() - handle HPD IRQ transition to HIGH
  * @dp: Display Port Driver data
@@ -2790,11 +3461,19 @@ static int mdss_dp_process_hpd_irq_high(struct mdss_dp_drv_pdata *dp)
 {
 	int ret = 0;
 
+	pr_debug("start\n");
+
 	dp->hpd_irq_on = true;
+
+	mdss_dp_reset_test_data(dp);
 
 	mdss_dp_aux_parse_sink_status_field(dp);
 
 	ret = mdss_dp_process_link_training_request(dp);
+	if (!ret)
+		goto exit;
+
+	ret = mdss_dp_process_phy_test_pattern_request(dp);
 	if (!ret)
 		goto exit;
 
@@ -2806,41 +3485,19 @@ static int mdss_dp_process_hpd_irq_high(struct mdss_dp_drv_pdata *dp)
 	if (!ret)
 		goto exit;
 
-	ret = mdss_dp_process_phy_test_pattern_request(dp);
+	ret = mdss_dp_process_video_pattern_request(dp);
 	if (!ret)
 		goto exit;
+
+	ret = mdss_dp_process_audio_pattern_request(dp);
+	if (!ret)
+		goto exit;
+
 	pr_debug("done\n");
+
 exit:
-	mdss_dp_reset_test_data(dp);
-
-	return ret;
-}
-
-/**
- * mdss_dp_process_hpd_irq_low() - handle HPD IRQ transition to LOW
- * @dp: Display Port Driver data
- *
- * This function will handle the HPD IRQ state transitions from HIGH to LOW,
- * indicating the end of a test request.
- */
-static int mdss_dp_process_hpd_irq_low(struct mdss_dp_drv_pdata *dp)
-{
-	if (!dp->hpd_irq_clients_notified)
-		return -EINVAL;
-
-	pr_debug("enter: HPD IRQ low\n");
-
 	dp->hpd_irq_on = false;
-	dp->hpd_irq_clients_notified = false;
-
-	mdss_dp_update_cable_status(dp, false);
-	mdss_dp_mainlink_push_idle(&dp->panel_data);
-	mdss_dp_off_hpd(dp);
-
-	mdss_dp_reset_test_data(dp);
-
-	pr_debug("done\n");
-	return 0;
+	return ret;
 }
 
 static void usbpd_response_callback(struct usbpd_svid_handler *hdlr, u8 cmd,
@@ -2901,6 +3558,7 @@ static void usbpd_response_callback(struct usbpd_svid_handler *hdlr, u8 cmd,
 	case DP_VDM_CONFIGURE:
 		dp_drv->alt_mode.current_state |= DP_CONFIGURE_DONE;
 		pr_debug("Configure: config USBPD to DP done\n");
+		mdss_dp_usbpd_ext_dp_status(&dp_drv->alt_mode.dp_status);
 
 		mdss_dp_host_init(&dp_drv->panel_data);
 
@@ -2915,21 +3573,15 @@ static void usbpd_response_callback(struct usbpd_svid_handler *hdlr, u8 cmd,
 
 static void mdss_dp_process_attention(struct mdss_dp_drv_pdata *dp_drv)
 {
-	dp_drv->hpd_irq_toggled = dp_drv->hpd_irq_on !=
-		dp_drv->alt_mode.dp_status.hpd_irq;
-
 	if (dp_drv->alt_mode.dp_status.hpd_irq) {
 		pr_debug("Attention: hpd_irq high\n");
 
-		if (dp_drv->hdcp.ops && dp_drv->hdcp.ops->cp_irq) {
+		if (dp_is_hdcp_enabled(dp_drv) && dp_drv->hdcp.ops->cp_irq) {
 			if (!dp_drv->hdcp.ops->cp_irq(dp_drv->hdcp.data))
 				return;
 		}
 
 		if (!mdss_dp_process_hpd_irq_high(dp_drv))
-			return;
-	} else if (dp_drv->hpd_irq_toggled) {
-		if (!mdss_dp_process_hpd_irq_low(dp_drv))
 			return;
 	}
 
@@ -2941,15 +3593,22 @@ static void mdss_dp_process_attention(struct mdss_dp_drv_pdata *dp_drv)
 			dp_drv->hdcp.ops->off(dp_drv->hdcp.data);
 		}
 
-		mdss_dp_update_cable_status(dp_drv, false);
-		mdss_dp_notify_clients(dp_drv, false);
+		mdss_dp_notify_clients(dp_drv, NOTIFY_DISCONNECT);
 		pr_debug("Attention: Notified clients\n");
+
+		/**
+		 * Manually turn off the DP controller if we are in PHY
+		 * testing mode.
+		 */
+		if (mdss_dp_is_phy_test_pattern_requested(dp_drv)) {
+			pr_info("turning off DP controller for PHY testing\n");
+			mdss_dp_mainlink_push_idle(&dp_drv->panel_data);
+			mdss_dp_off_hpd(dp_drv);
+		}
 		return;
 	}
 
 	pr_debug("Attention: HPD high\n");
-
-	mdss_dp_update_cable_status(dp_drv, true);
 
 	dp_drv->alt_mode.current_state |= DP_STATUS_DONE;
 
@@ -2964,6 +3623,7 @@ static void mdss_dp_process_attention(struct mdss_dp_drv_pdata *dp_drv)
 static void mdss_dp_handle_attention(struct mdss_dp_drv_pdata *dp)
 {
 	int i = 0;
+	pr_debug("start\n");
 
 	while (!list_empty_careful(&dp->attention_head)) {
 		struct mdss_dp_attention_node *node;
@@ -2984,8 +3644,11 @@ static void mdss_dp_handle_attention(struct mdss_dp_drv_pdata *dp)
 		dp->alt_mode.dp_status.response = vdo;
 		mdss_dp_usbpd_ext_dp_status(&dp->alt_mode.dp_status);
 		mdss_dp_process_attention(dp);
+
+		pr_debug("done processing item %d in the list\n", i);
 	};
 
+	pr_debug("exit\n");
 }
 
 static int mdss_dp_usbpd_setup(struct mdss_dp_drv_pdata *dp_drv)
@@ -3064,6 +3727,11 @@ static int mdss_dp_probe(struct platform_device *pdev)
 	mutex_init(&dp_drv->attention_lock);
 	mutex_init(&dp_drv->hdcp_mutex);
 	spin_lock_init(&dp_drv->lock);
+	mutex_init(&dp_drv->aux_mutex);
+	mutex_init(&dp_drv->train_mutex);
+	init_completion(&dp_drv->aux_comp);
+	init_completion(&dp_drv->idle_comp);
+	init_completion(&dp_drv->video_comp);
 
 	if (mdss_dp_usbpd_setup(dp_drv)) {
 		pr_err("Error usbpd setup!\n");
@@ -3106,6 +3774,13 @@ static int mdss_dp_probe(struct platform_device *pdev)
 				&pdev->dev, true);
 	if (ret) {
 		DEV_ERR("clk_init failed.ret=%d\n",
+				ret);
+		goto probe_err;
+	}
+
+	ret = mdss_dp_parse_prop(pdev, dp_drv);
+	if (ret) {
+		DEV_ERR("DP properties parsing failed.ret=%d\n",
 				ret);
 		goto probe_err;
 	}
@@ -3165,18 +3840,33 @@ probe_err:
 
 void *mdss_dp_get_hdcp_data(struct device *dev)
 {
-	struct mdss_dp_drv_pdata *dp_drv = NULL;
+	struct mdss_dp_drv_pdata *dp;
+	struct msm_fb_data_type *mfd;
+	struct mdss_panel_data *pd;
+	struct fb_info *fbi = dev_get_drvdata(dev);
 
-	if (!dev) {
-		pr_err("%s:Invalid input\n", __func__);
-		return NULL;
+	if (!fbi) {
+		pr_err("invalid fbi\n");
+		goto error;
 	}
-	dp_drv = dev_get_drvdata(dev);
-	if (!dp_drv) {
-		pr_err("%s:Invalid dp driver\n", __func__);
-		return NULL;
+
+	mfd = (struct msm_fb_data_type *)fbi->par;
+	if (!mfd) {
+		pr_err("invalid mfd\n");
+		goto error;
 	}
-	return dp_drv->hdcp.data;
+
+	pd = dev_get_platdata(&mfd->pdev->dev);
+	if (!pd) {
+		pr_err("invalid panel_data\n");
+		goto error;
+	}
+
+	dp = container_of(pd, struct mdss_dp_drv_pdata, panel_data);
+
+	return dp->hdcp.data;
+error:
+	return NULL;
 }
 
 static inline bool dp_is_stream_shareable(struct mdss_dp_drv_pdata *dp_drv)
@@ -3201,6 +3891,22 @@ static inline bool dp_is_stream_shareable(struct mdss_dp_drv_pdata *dp_drv)
 	}
 
 	return ret;
+}
+
+static int mdss_dp_remove(struct platform_device *pdev)
+{
+	struct mdss_dp_drv_pdata *dp_drv = NULL;
+
+	dp_drv = platform_get_drvdata(pdev);
+	dp_hdcp2p2_deinit(dp_drv->hdcp.data);
+
+	mdss_dp_event_cleanup(dp_drv);
+	iounmap(dp_drv->ctrl_io.base);
+	dp_drv->ctrl_io.base = NULL;
+	iounmap(dp_drv->phy_io.base);
+	dp_drv->phy_io.base = NULL;
+
+	return 0;
 }
 
 static const struct of_device_id msm_mdss_dp_dt_match[] = {

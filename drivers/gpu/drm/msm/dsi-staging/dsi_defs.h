@@ -58,6 +58,18 @@ enum dsi_op_mode {
 };
 
 /**
+ * enum dsi_mode_flags - flags to signal other drm components via private flags
+ * @DSI_MODE_FLAG_SEAMLESS:	Seamless transition requested by user
+ * @DSI_MODE_FLAG_DFPS:		Seamless transition is DynamicFPS
+ * @DSI_MODE_FLAG_VBLANK_PRE_MODESET:	Transition needs VBLANK before Modeset
+ */
+enum dsi_mode_flags {
+	DSI_MODE_FLAG_SEAMLESS			= BIT(0),
+	DSI_MODE_FLAG_DFPS			= BIT(1),
+	DSI_MODE_FLAG_VBLANK_PRE_MODESET	= BIT(2)
+};
+
+/**
  * enum dsi_data_lanes - dsi physical lanes
  * @DSI_DATA_LANE_0: Physical lane 0
  * @DSI_DATA_LANE_1: Physical lane 1
@@ -306,12 +318,15 @@ struct dsi_video_engine_cfg {
  * @wr_mem_continue:               DCS command for write_memory_continue.
  * @insert_dcs_command:            Insert DCS command as first byte of payload
  *                                 of the pixel data.
+ * @mdp_transfer_time_us   Specifies the mdp transfer time for command mode
+ *                         panels in microseconds
  */
 struct dsi_cmd_engine_cfg {
 	u32 max_cmd_packets_interleave;
 	u32 wr_mem_start;
 	u32 wr_mem_continue;
 	bool insert_dcs_command;
+	u32 mdp_transfer_time_us;
 };
 
 /**

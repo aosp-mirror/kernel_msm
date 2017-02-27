@@ -226,6 +226,8 @@ static struct sde_rot_regdump sde_rot_r3_regdump[] = {
 		SDE_ROT_REGDUMP_WRITE },
 	{ "SDEROT_REGDMA_RAM", SDE_ROT_REGDMA_RAM_OFFSET, 0x2000,
 		SDE_ROT_REGDUMP_READ },
+	{ "SDEROT_VBIF_NRT", SDE_ROT_VBIF_NRT_OFFSET, 0x590,
+		SDE_ROT_REGDUMP_VBIF },
 };
 
 /* Invalid software timestamp value for initialization */
@@ -337,6 +339,8 @@ static void sde_hw_rotator_disable_irq(struct sde_hw_rotator *rot)
  */
 static void sde_hw_rotator_dump_status(struct sde_hw_rotator *rot)
 {
+	struct sde_rot_data_type *mdata = sde_rot_get_mdata();
+
 	SDEROT_ERR(
 		"op_mode = %x, int_en = %x, int_status = %x\n",
 		SDE_ROTREG_READ(rot->mdss_base,
@@ -363,6 +367,15 @@ static void sde_hw_rotator_dump_status(struct sde_hw_rotator *rot)
 			REGDMA_CSR_REGDMA_INVALID_CMD_RAM_OFFSET),
 		SDE_ROTREG_READ(rot->mdss_base,
 			REGDMA_CSR_REGDMA_FSM_STATE));
+
+	SDEROT_ERR(
+		"UBWC decode status = %x, UBWC encode status = %x\n",
+		SDE_ROTREG_READ(rot->mdss_base, ROT_SSPP_UBWC_ERROR_STATUS),
+		SDE_ROTREG_READ(rot->mdss_base, ROT_WB_UBWC_ERROR_STATUS));
+
+	SDEROT_ERR("VBIF XIN HALT status = %x VBIF AXI HALT status = %x\n",
+		SDE_VBIF_READ(mdata, MMSS_VBIF_XIN_HALT_CTRL1),
+		SDE_VBIF_READ(mdata, MMSS_VBIF_AXI_HALT_CTRL1));
 }
 
 /**
@@ -1681,7 +1694,9 @@ static int sde_hw_rotator_config(struct sde_rot_hw_resource *hw,
 	SDEROT_EVTLOG(ctx->timestamp, flags,
 			item->input.width, item->input.height,
 			item->output.width, item->output.height,
-			entry->src_buf.p[0].addr, entry->dst_buf.p[0].addr);
+			entry->src_buf.p[0].addr, entry->dst_buf.p[0].addr,
+			item->input.format, item->output.format,
+			entry->perf->config.frame_rate);
 
 	if (mdata->default_ot_rd_limit) {
 		struct sde_mdp_set_ot_params ot_params;
@@ -1700,6 +1715,8 @@ static int sde_hw_rotator_config(struct sde_rot_hw_resource *hw,
 		ot_params.fmt = ctx->is_traffic_shaping ?
 			SDE_PIX_FMT_ABGR_8888 :
 			entry->perf->config.input.format;
+		ot_params.rotsts_base = rot->mdss_base + ROTTOP_STATUS;
+		ot_params.rotsts_busy_mask = ROT_BUSY_BIT;
 		sde_mdp_set_ot_limit(&ot_params);
 	}
 
@@ -1720,6 +1737,8 @@ static int sde_hw_rotator_config(struct sde_rot_hw_resource *hw,
 		ot_params.fmt = ctx->is_traffic_shaping ?
 			SDE_PIX_FMT_ABGR_8888 :
 			entry->perf->config.input.format;
+		ot_params.rotsts_base = rot->mdss_base + ROTTOP_STATUS;
+		ot_params.rotsts_busy_mask = ROT_BUSY_BIT;
 		sde_mdp_set_ot_limit(&ot_params);
 	}
 
@@ -2077,7 +2096,7 @@ static int sde_hw_rotator_validate_entry(struct sde_rot_mgr *mgr,
 		}
 	}
 
-	fmt = sde_get_format_params(item->input.format);
+	fmt = sde_get_format_params(item->output.format);
 	/*
 	 * Rotator downscale support max 4 times for UBWC format and
 	 * max 2 times for TP10/TP10_UBWC format

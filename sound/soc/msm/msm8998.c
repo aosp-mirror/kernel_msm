@@ -3383,12 +3383,12 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "HPHR");
 	snd_soc_dapm_ignore_suspend(dapm, "AIF4 VI");
 	snd_soc_dapm_ignore_suspend(dapm, "VIINPUT");
+	snd_soc_dapm_ignore_suspend(dapm, "ANC HPHL");
+	snd_soc_dapm_ignore_suspend(dapm, "ANC HPHR");
 
 	if (!strcmp(dev_name(codec_dai->dev), "tasha_codec")) {
 		snd_soc_dapm_ignore_suspend(dapm, "LINEOUT3");
 		snd_soc_dapm_ignore_suspend(dapm, "LINEOUT4");
-		snd_soc_dapm_ignore_suspend(dapm, "ANC HPHL");
-		snd_soc_dapm_ignore_suspend(dapm, "ANC HPHR");
 		snd_soc_dapm_ignore_suspend(dapm, "ANC LINEOUT1");
 		snd_soc_dapm_ignore_suspend(dapm, "ANC LINEOUT2");
 	}
@@ -4983,6 +4983,22 @@ static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
 		.ignore_pmdown_time = 1,
 		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA6,
+	},
+	{
+		.name = "USB Audio Hostless",
+		.stream_name = "USB Audio Hostless",
+		.cpu_dai_name = "USBAUDIO_HOSTLESS",
+		.platform_name = "msm-pcm-hostless",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
 	},
 };
 

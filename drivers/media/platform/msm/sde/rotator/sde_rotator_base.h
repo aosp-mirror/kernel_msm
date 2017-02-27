@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -39,6 +39,8 @@ struct sde_mdp_set_ot_params {
 	u32 reg_off_vbif_lim_conf;
 	u32 reg_off_mdp_clk_ctrl;
 	u32 bit_off_mdp_clk_ctrl;
+	char __iomem *rotsts_base;
+	u32 rotsts_busy_mask;
 };
 
 enum sde_bus_vote_type {
@@ -96,6 +98,7 @@ enum sde_bus_clients {
 enum sde_rot_regdump_access {
 	SDE_ROT_REGDUMP_READ,
 	SDE_ROT_REGDUMP_WRITE,
+	SDE_ROT_REGDUMP_VBIF,
 	SDE_ROT_REGDUMP_MAX
 };
 

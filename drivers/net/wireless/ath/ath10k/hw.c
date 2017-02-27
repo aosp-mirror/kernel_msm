@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 Qualcomm Atheros, Inc.
+ * Copyright (c) 2014-2015, 2017 Qualcomm Atheros, Inc.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -138,6 +138,32 @@ const struct ath10k_hw_regs qca4019_regs = {
 	.pcie_intr_clr_address                  = 0x00000010,
 };
 
+const struct ath10k_hw_regs wcn3990_regs = {
+	.rtc_soc_base_address			= 0x00000000,
+	.rtc_wmac_base_address			= 0x00000000,
+	.soc_core_base_address			= 0x00000000,
+	.ce_wrapper_base_address		= 0x0024C000,
+	.soc_global_reset_address		= 0x00000008,
+	.ce0_base_address			= 0x00240000,
+	.ce1_base_address			= 0x00241000,
+	.ce2_base_address			= 0x00242000,
+	.ce3_base_address			= 0x00243000,
+	.ce4_base_address			= 0x00244000,
+	.ce5_base_address			= 0x00245000,
+	.ce6_base_address			= 0x00246000,
+	.ce7_base_address			= 0x00247000,
+	.ce8_base_address			= 0x00248000,
+	.ce9_base_address			= 0x00249000,
+	.ce10_base_address			= 0x0024A000,
+	.ce11_base_address			= 0x0024B000,
+	.soc_chip_id_address			= 0x000000f0,
+	.soc_reset_control_si0_rst_mask		= 0x00000001,
+	.soc_reset_control_ce_rst_mask		= 0x00000100,
+	.ce_wrap_intr_sum_host_msi_lsb		= 0x0000000c,
+	.ce_wrap_intr_sum_host_msi_mask		= 0x00fff000,
+	.pcie_intr_fw_mask			= 0x00100000,
+};
+
 const struct ath10k_hw_values qca988x_values = {
 	.rtc_state_val_on		= 3,
 	.ce_count			= 8,
@@ -179,6 +205,19 @@ const struct ath10k_hw_values qca4019_values = {
 	.num_target_ce_config_wlan      = 10,
 	.ce_desc_meta_data_mask         = 0xFFF0,
 	.ce_desc_meta_data_lsb          = 4,
+};
+
+const struct ath10k_hw_values wcn3990_values = {
+	.rtc_state_val_on		= 5,
+	.ce_count			= 12,
+	.msi_assign_ce_max		= 12,
+	.num_target_ce_config_wlan	= 12,
+	.ce_desc_meta_data_mask		= 0xFFF0,
+	.ce_desc_meta_data_lsb		= 4,
+};
+
+struct fw_flag wcn3990_fw_flags = {
+	.flags = 0x82E,
 };
 
 void ath10k_hw_fill_survey_time(struct ath10k *ar, struct survey_info *survey,
@@ -232,3 +271,5 @@ static int ath10k_qca99x0_rx_desc_get_l3_pad_bytes(struct htt_rx_desc *rxd)
 const struct ath10k_hw_ops qca99x0_ops = {
 	.rx_desc_get_l3_pad_bytes = ath10k_qca99x0_rx_desc_get_l3_pad_bytes,
 };
+
+const struct ath10k_hw_ops wcn3990_ops = {0};

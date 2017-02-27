@@ -1,4 +1,4 @@
-/*  Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/*  Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3990,6 +3990,10 @@ static int voice_send_cvp_media_fmt_info_cmd(struct voice_data *v)
 {
 	int ret;
 
+	ret = voice_send_cvp_device_channels_cmd(v);
+	if (ret < 0)
+		goto done;
+
 	if (voice_get_cvd_int_version(common.cvd_version) >=
 	    CVD_INT_VERSION_2_3) {
 		ret = voice_send_cvp_media_format_cmd(v, RX_PATH);
@@ -4002,8 +4006,6 @@ static int voice_send_cvp_media_fmt_info_cmd(struct voice_data *v)
 
 		if (common.ec_ref_ext)
 			ret = voice_send_cvp_media_format_cmd(v, EC_REF_PATH);
-	} else {
-		ret = voice_send_cvp_device_channels_cmd(v);
 	}
 
 done:
@@ -5844,6 +5846,48 @@ int voc_set_hd_enable(uint32_t session_id, uint32_t enable)
 		}
 	}
 
+	return ret;
+}
+
+int voc_set_afe_sidetone(uint32_t session_id, bool sidetone_enable)
+{
+	struct voice_data *v = NULL;
+	int ret = -EINVAL;
+	struct voice_session_itr itr;
+	u16 rx_port, tx_port;
+
+	common.sidetone_enable = sidetone_enable;
+	voice_itr_init(&itr, session_id);
+	while (voice_itr_get_next_session(&itr, &v)) {
+		if (v == NULL) {
+			pr_err("%s: invalid session_id 0x%x\n", __func__,
+				  session_id);
+			ret = -EINVAL;
+			break;
+		}
+		mutex_lock(&v->lock);
+		if (v->voc_state != VOC_RUN) {
+			mutex_unlock(&v->lock);
+			continue;
+		}
+		rx_port = v->dev_rx.port_id;
+		tx_port = v->dev_tx.port_id;
+		ret = afe_sidetone_enable(tx_port, rx_port,
+					  sidetone_enable);
+		if (!ret) {
+			mutex_unlock(&v->lock);
+			break;
+		}
+		mutex_unlock(&v->lock);
+	}
+	return ret;
+}
+
+bool voc_get_afe_sidetone(void)
+{
+	bool ret;
+
+	ret = common.sidetone_enable;
 	return ret;
 }
 
@@ -8558,6 +8602,9 @@ static int __init voice_init(void)
 	common.ec_media_fmt_info.sample_rate = 8000;
 	memset(&common.ec_media_fmt_info.channel_mapping, 0,
 	       VSS_CHANNEL_MAPPING_SIZE);
+
+	/* Initialize AFE Sidetone Enable */
+	common.sidetone_enable = false;
 
 	/* Initialize MVS info. */
 	common.mvs_info.network_type = VSS_NETWORK_ID_DEFAULT;

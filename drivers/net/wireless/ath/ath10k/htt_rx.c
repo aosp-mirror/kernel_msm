@@ -27,6 +27,7 @@
 
 #define HTT_RX_RING_SIZE HTT_RX_RING_SIZE_MAX
 #define HTT_RX_RING_FILL_LEVEL (((HTT_RX_RING_SIZE) / 2) - 1)
+#define HTT_RX_RING_FILL_LEVEL_DUAL_MAC (HTT_RX_RING_SIZE - 1)
 
 /* when under memory pressure rx ring refill may fail and needs a retry */
 #define HTT_RX_RING_REFILL_RETRY_MS 50
@@ -36,7 +37,7 @@
 static int ath10k_htt_rx_get_csum_state(struct sk_buff *skb);
 
 static struct sk_buff *
-ath10k_htt_rx_find_skb_paddr(struct ath10k *ar, u32 paddr)
+ath10k_htt_rx_find_skb_paddr(struct ath10k *ar, u64 paddr)
 {
 	struct ath10k_skb_rxcb *rxcb;
 
@@ -129,13 +130,16 @@ static int __ath10k_htt_rx_ring_fill_n(struct ath10k_htt *htt, int num)
 		rxcb = ATH10K_SKB_RXCB(skb);
 		rxcb->paddr = paddr;
 		htt->rx_ring.netbufs_ring[idx] = skb;
-		htt->rx_ring.paddrs_ring[idx] = __cpu_to_le32(paddr);
+		if (QCA_REV_WCN3990(htt->ar))
+			htt->rx_ring.paddrs_ring[idx] = __cpu_to_le64(paddr);
+		else
+			htt->rx_ring.paddrs_ring[idx] = __cpu_to_le32(paddr);
 		htt->rx_ring.fill_cnt++;
 
 		if (htt->rx_ring.in_ord_rx) {
 			hash_add(htt->rx_ring.skb_table,
 				 &ATH10K_SKB_RXCB(skb)->hlist,
-				 (u32)paddr);
+				 paddr);
 		}
 
 		num--;
@@ -381,7 +385,7 @@ static int ath10k_htt_rx_amsdu_pop(struct ath10k_htt *htt,
 }
 
 static struct sk_buff *ath10k_htt_rx_pop_paddr(struct ath10k_htt *htt,
-					       u32 paddr)
+					       u64 paddr)
 {
 	struct ath10k *ar = htt->ar;
 	struct ath10k_skb_rxcb *rxcb;
@@ -416,7 +420,7 @@ static int ath10k_htt_rx_pop_paddr_list(struct ath10k_htt *htt,
 	struct sk_buff *msdu;
 	int msdu_count;
 	bool is_offload;
-	u32 paddr;
+	u64 paddr;
 
 	lockdep_assert_held(&htt->rx_ring.lock);
 
@@ -424,8 +428,13 @@ static int ath10k_htt_rx_pop_paddr_list(struct ath10k_htt *htt,
 	is_offload = !!(ev->info & HTT_RX_IN_ORD_IND_INFO_OFFLOAD_MASK);
 
 	while (msdu_count--) {
+#ifdef CONFIG_ATH10K_SNOC
+		paddr = __le32_to_cpu(msdu_desc->msdu_paddr_lo);
+		paddr |= ((u64)(msdu_desc->msdu_paddr_hi &
+				HTT_WCN3990_PADDR_MASK) << 32);
+#else
 		paddr = __le32_to_cpu(msdu_desc->msdu_paddr);
-
+#endif
 		msdu = ath10k_htt_rx_pop_paddr(htt, paddr);
 		if (!msdu) {
 			__skb_queue_purge(list);
@@ -471,7 +480,15 @@ int ath10k_htt_rx_alloc(struct ath10k_htt *htt)
 	 */
 	htt->rx_ring.size = HTT_RX_RING_SIZE;
 	htt->rx_ring.size_mask = htt->rx_ring.size - 1;
-	htt->rx_ring.fill_level = HTT_RX_RING_FILL_LEVEL;
+
+	switch (ar->hw_rev) {
+	case ATH10K_HW_WCN3990:
+		htt->rx_ring.fill_level = HTT_RX_RING_FILL_LEVEL_DUAL_MAC;
+		break;
+	default:
+		htt->rx_ring.fill_level = HTT_RX_RING_FILL_LEVEL;
+		break;
+	}
 
 	if (!is_power_of_2(htt->rx_ring.size)) {
 		ath10k_warn(ar, "htt rx ring size is not power of 2\n");
@@ -926,7 +943,7 @@ static void ath10k_process_rx(struct ath10k *ar,
 	*status = *rx_status;
 
 	ath10k_dbg(ar, ATH10K_DBG_DATA,
-		   "rx skb %pK len %u peer %pM %s %s sn %u %s%s%s%s%s %srate_idx %u vht_nss %u freq %u band %u flag 0x%llx fcs-err %i mic-err %i amsdu-more %i\n",
+		   "rx skb %pK len %u peer %pM %s %s sn %u %s%s%s%s%s %srate_idx %u vht_nss %u freq %u band %u flag 0x%x fcs-err %i mic-err %i amsdu-more %i\n",
 		   skb,
 		   skb->len,
 		   ieee80211_get_SA(hdr),
@@ -1554,7 +1571,7 @@ static int ath10k_htt_rx_handle_amsdu(struct ath10k_htt *htt)
 	}
 
 	num_msdus = skb_queue_len(&amsdu);
-	ath10k_htt_rx_h_ppdu(ar, &amsdu, &rx_status, 0xffff);
+	ath10k_htt_rx_h_ppdu(ar, &amsdu, rx_status, 0xffff);
 	ath10k_htt_rx_h_unchain(ar, &amsdu, ret > 0);
 	ath10k_htt_rx_h_filter(ar, &amsdu, rx_status);
 	ath10k_htt_rx_h_mpdu(ar, &amsdu, rx_status);
