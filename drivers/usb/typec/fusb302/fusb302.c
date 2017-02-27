@@ -784,6 +784,7 @@ static int tcpm_set_vbus(struct tcpc_dev *dev, bool on, bool charge)
 	int ret = 0;
 
 	mutex_lock(&chip->lock);
+
 	if (chip->vbus_on == on) {
 		fusb302_log("vbus is already %s\n", on ? "On" : "Off");
 	} else {
@@ -843,6 +844,8 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 	struct htc_pd_data pd_data;
 	enum usb_typec_current sink_current;
 
+	mutex_lock(&chip->lock);
+
 	fusb302_log("current limit: %d ma, %d mv\n",
 		    max_ma, mv);
 
@@ -883,6 +886,8 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 	pd_data.pd_list[0][1] = max_ma;
 
 	htc_battery_pd_charger_support(1, pd_data, &dummy_val);
+
+	mutex_unlock(&chip->lock);
 
 	return 0;
 }
@@ -934,8 +939,11 @@ static int fusb302_pd_set_interrupts(struct fusb302_chip *chip, bool on)
 	return ret;
 }
 
-static int fusb302_notify_uc_data_role(struct fusb302_chip *chip,
-				       enum typec_data_role value)
+/*
+ * requires chip lock: chip->lock;
+ */
+static int fusb302_notify_uc_data_role_locked(struct fusb302_chip *chip,
+					      enum typec_data_role value)
 {
 	fusb302_log("notify_uc_data_role of %d\n", value);
 
@@ -1007,11 +1015,12 @@ static int tcpm_set_roles(struct tcpc_dev *dev, bool attached,
 	if (!attached)
 		data = TYPEC_DEVICE;
 
-	ret = fusb302_notify_uc_data_role(chip, data);
-	if (ret < 0)
-		return ret;
-
 	mutex_lock(&chip->lock);
+
+	ret = fusb302_notify_uc_data_role_locked(chip, data);
+	if (ret < 0)
+		goto done;
+
 	if (pwr == TYPEC_SOURCE)
 		switches1_data |= FUSB_REG_SWITCHES1_POWERROLE;
 	if (data == TYPEC_HOST)
@@ -1950,7 +1959,10 @@ int usb_controller_register(struct device *parent, struct usb_controller *uc)
 
 	if (chip == NULL)
 		return -ENODEV;
+
+	mutex_lock(&chip->lock);
 	chip->uc = uc;
+	mutex_unlock(&chip->lock);
 
 	return 0;
 }
@@ -1962,7 +1974,10 @@ int usb_typec_ctrl_register(struct device *parent, struct usb_typec_ctrl *utc)
 
 	if (chip == NULL)
 		return -ENODEV;
+
+	mutex_lock(&chip->lock);
 	chip->utc = utc;
+	mutex_unlock(&chip->lock);
 
 	return 0;
 }
