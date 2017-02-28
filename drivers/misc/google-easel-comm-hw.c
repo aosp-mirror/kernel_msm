@@ -377,36 +377,55 @@ int easelcomm_hw_remote_write(
 EXPORT_SYMBOL(easelcomm_hw_remote_write);
 
 /* Build an MNH scatter-gather list */
-void *easelcomm_hw_build_scatterlist(
-	void __user *buf, uint32_t buf_size, uint32_t *scatterlist_size,
+void *easelcomm_hw_build_scatterlist(struct easelcomm_kbuf_desc *buf_desc,
+	uint32_t *scatterlist_size,
 	void **sglocaldata, enum easelcomm_dma_direction dma_dir)
 {
-	/*
-	 * Allocate enough for one entry per page, perhaps needing 1 more due
-	 * to crossing a page boundary, plus end of list.
-	 */
-	int n_ents = (buf_size / PAGE_SIZE) + 3;
 	int n_ents_used = 0;
-	struct mnh_sg_entry *sg_ents =
-	       kcalloc(n_ents, sizeof(struct mnh_sg_entry), GFP_KERNEL);
+	struct mnh_sg_entry *sg_ents;
 	struct mnh_sg_list *local_sg_info;
 	int ret;
-
-	if (!sg_ents) {
-		*scatterlist_size = 0;
-		return NULL;
-	}
+	bool to_easel = (dma_dir == EASELCOMM_DMA_DIR_TO_SERVER);
 
 	local_sg_info = kmalloc(sizeof(struct mnh_sg_list), GFP_KERNEL);
 	*sglocaldata = local_sg_info;
 	if (!local_sg_info) {
-		kfree(sg_ents);
 		*scatterlist_size = 0;
 		return NULL;
 	}
-	ret = mnh_sg_build(buf, buf_size, sg_ents, local_sg_info, n_ents);
+	/*
+	 * Initialize dma_buf related pointers to NULL; if dma_buf is used,
+	 * they will become non-zero by mnh_sg_retrieve_from_dma_buf().
+	 * easelcomm_hw_destroy_scatterlist() will use this information
+	 * to decide how to release the scatterlist.
+	 */
+	local_sg_info->dma_buf = NULL;
+	local_sg_info->attach = NULL;
+	local_sg_info->sg_table = NULL;
+
+	local_sg_info->dir = to_easel ? DMA_AP2EP : DMA_EP2AP;
+
+	switch (buf_desc->buf_type) {
+	case EASELCOMM_DMA_BUFFER_UNUSED:
+		pr_err("%s: DMA buffer not used.\n", __func__);
+		ret = -EINVAL;
+		break;
+	case EASELCOMM_DMA_BUFFER_USER:
+		ret = mnh_sg_build(buf_desc->buf, buf_desc->buf_size,
+					&sg_ents, local_sg_info);
+		break;
+	case EASELCOMM_DMA_BUFFER_DMA_BUF:
+		ret = mnh_sg_retrieve_from_dma_buf(buf_desc->dma_buf_fd,
+					&sg_ents, local_sg_info);
+		break;
+	default:
+		pr_err("%s: Unknown DMA buffer type %d.\n",
+					__func__, buf_desc->buf_type);
+		ret = -EINVAL;
+		break;
+	}
+
 	if (ret < 0) {
-		kfree(sg_ents);
 		kfree(local_sg_info);
 		*sglocaldata = NULL;
 		*scatterlist_size = 0;
@@ -446,8 +465,17 @@ EXPORT_SYMBOL(easelcomm_hw_scatterlist_sblk_addr);
 /* Destroy the MNH SG local mapping data */
 void easelcomm_hw_destroy_scatterlist(void *sglocaldata)
 {
-	if (sglocaldata)
-		mnh_sg_destroy((struct mnh_sg_list *)sglocaldata);
+	struct mnh_sg_list *sg_local_data = (struct mnh_sg_list *)sglocaldata;
+
+	if (sglocaldata) {
+		if (sg_local_data->dma_buf == NULL) {
+			/* Destroy sgl created by mnh_sg_build() */
+			mnh_sg_destroy(sg_local_data);
+		} else {
+			/* Release sgl retrieved from dma_buf framework */
+			mnh_sg_release_from_dma_buf(sg_local_data);
+		}
+	}
 }
 EXPORT_SYMBOL(easelcomm_hw_destroy_scatterlist);
 

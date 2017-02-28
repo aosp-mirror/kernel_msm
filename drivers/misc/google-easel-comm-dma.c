@@ -207,8 +207,7 @@ static void *easelcomm_create_dma_scatterlist(
 	struct easelcomm_kbuf_desc *buf_desc, uint32_t *scatterlist_size,
 	void **sglocaldata, enum easelcomm_dma_direction dma_dir)
 {
-	return easelcomm_hw_build_scatterlist(
-		buf_desc->buf, buf_desc->buf_size, scatterlist_size,
+	return easelcomm_hw_build_scatterlist(buf_desc, scatterlist_size,
 		sglocaldata, dma_dir);
 }
 
@@ -560,8 +559,9 @@ int easelcomm_receive_dma(
 	int ret = 0;
 
 	dev_dbg(easelcomm_miscdev.this_device,
-		"RECVDMA msg %u:r%llu dma_buf=%p\n",
-		service->service_id, buf_desc->message_id, buf_desc->buf);
+			"RECVDMA msg %u:r%llu buf_type=%d dma_buf_fd=%d\n",
+			service->service_id, buf_desc->message_id,
+			buf_desc->buf_type, buf_desc->dma_buf_fd);
 
 	msg_metadata =
 		easelcomm_find_remote_message(service, buf_desc->message_id);
@@ -586,11 +586,13 @@ int easelcomm_receive_dma(
 	if (!msg_metadata->msg->desc.dma_buf_size)
 		goto out;
 
-	if (!access_ok(VERIFY_WRITE, buf_desc->buf, buf_desc->buf_size)) {
-		ret = -EFAULT;
-		goto out;
+	/* If it's a user buffer, check valid range and writable. */
+	if (buf_desc->buf_type == EASELCOMM_DMA_BUFFER_USER) {
+		if (!access_ok(VERIFY_WRITE, buf_desc->buf, buf_desc->buf_size)) {
+			ret = -EFAULT;
+			goto out;
+		}
 	}
-
 	dma_dir = easelcomm_is_client() ?
 		EASELCOMM_DMA_DIR_TO_CLIENT : EASELCOMM_DMA_DIR_TO_SERVER;
 
@@ -622,6 +624,7 @@ int easelcomm_receive_dma(
 		ret = easelcomm_server_handle_dma_request(
 			service, msg_metadata, dma_dir);
 
+	/* Free contents of struct mnh_sg_list */
 	if (msg_metadata->dma_xfer.sg_local_localdata)
 		easelcomm_hw_destroy_scatterlist(
 			msg_metadata->dma_xfer.sg_local_localdata);
@@ -644,8 +647,9 @@ int easelcomm_send_dma(
 	int ret = 0;
 
 	dev_dbg(easelcomm_miscdev.this_device,
-		"SENDDMA msg %u:l%llu dma_buf=%p\n",
-		service->service_id, buf_desc->message_id, buf_desc->buf);
+			"SENDDMA msg %u:l%llu buf_type=%d dma_buf_fd=%d\n",
+			service->service_id, buf_desc->message_id,
+			buf_desc->buf_type, buf_desc->dma_buf_fd);
 
 	msg_metadata =
 		easelcomm_find_local_message(service, buf_desc->message_id);
@@ -665,9 +669,12 @@ int easelcomm_send_dma(
 		goto out;
 	}
 
-	if (!access_ok(VERIFY_READ, buf_desc->buf, buf_desc->buf_size)) {
-		ret = -EFAULT;
-		goto out;
+	/* If it's a user buffer, check valid range and readable. */
+	if (buf_desc->buf_type == EASELCOMM_DMA_BUFFER_USER) {
+		if (!access_ok(VERIFY_READ, buf_desc->buf, buf_desc->buf_size)) {
+			ret = -EFAULT;
+			goto out;
+		}
 	}
 
 	dma_dir = easelcomm_is_client() ?
@@ -701,6 +708,7 @@ int easelcomm_send_dma(
 				service, msg_metadata, dma_dir);
 	}
 
+	/* Free contents of struct mnh_sg_list */
 	if (msg_metadata->dma_xfer.sg_local_localdata)
 		easelcomm_hw_destroy_scatterlist(
 			msg_metadata->dma_xfer.sg_local_localdata);

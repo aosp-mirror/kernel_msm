@@ -84,8 +84,10 @@ static long easelcomm_ioctl(
 /* 32-bit userspace on 64-bit OS conversion defines */
 struct easelcomm_compat_kbuf_desc {
 	easelcomm_msgid_t message_id;  /* ID of message for this transfer */
-	compat_uptr_t __user buf;      /* local userspace buffer ptr */
-	uint32_t buf_size;	       /* size of the local buffer */
+	compat_uptr_t __user buf;      /* local buffer source or dest */
+	int dma_buf_fd;                /* fd of local dma_buf */
+	int buf_type;                  /* e.g. EASELCOMM_DMA_BUFFER_DMA_BUF */
+	uint32_t buf_size;             /* size of the local buffer */
 };
 
 static long easelcomm_compat_ioctl(
@@ -1601,6 +1603,8 @@ static int easelcomm_ioctl_kbuf_desc(
 		kbuf_desc.message_id = compat_kbuf_desc.message_id;
 		kbuf_desc.buf = compat_ptr(compat_kbuf_desc.buf);
 		kbuf_desc.buf_size = compat_kbuf_desc.buf_size;
+		kbuf_desc.buf_type = compat_kbuf_desc.buf_type;
+		kbuf_desc.dma_buf_fd = compat_kbuf_desc.dma_buf_fd;
 #else
 		return -EINVAL;
 #endif

@@ -264,7 +264,8 @@ extern int easelcomm_hw_remote_write(
 
 /* build an MNH DMA scatter-gather list */
 extern void *easelcomm_hw_build_scatterlist(
-	void __user *buf, uint32_t buf_size, uint32_t *scatterlist_size,
+	struct easelcomm_kbuf_desc *buf_desc,
+	uint32_t *scatterlist_size,
 	void **sglocaldata, enum easelcomm_dma_direction dma_dir);
 /* get block count from SG list, for determing if multi- or single-block */
 extern int easelcomm_hw_scatterlist_block_count(uint32_t scatterlist_size);
