@@ -74,7 +74,6 @@ typedef struct sAniSirGlobal *tpAniSirGlobal;
 #include "smeInternal.h"
 #include "sapApi.h"
 #include "ccmApi.h"
-#include "btcApi.h"
 #include "csrInternal.h"
 
 #ifdef FEATURE_OEM_DATA_SUPPORT
@@ -1215,7 +1214,6 @@ typedef struct sAniSirGlobal
     tOemDataStruct oemData;
 #endif
     tPmcInfo     pmc;
-    tSmeBtcInfo  btc;
 
     tCcm ccm;
 

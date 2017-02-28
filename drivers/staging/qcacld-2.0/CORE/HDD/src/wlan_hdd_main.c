@@ -69,7 +69,6 @@
 #include <wlan_hdd_tx_rx.h>
 #include <wniApi.h>
 #include <wlan_nlink_srv.h>
-#include <wlan_btc_svc.h>
 #include <wlan_hdd_cfg.h>
 #include <wlan_ptt_sock_svc.h>
 #include <dbglog_host.h>
@@ -13141,9 +13140,6 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
    if (pConfig && pConfig->fIsLogpEnabled)
       vos_watchdog_close(pVosContext);
 
-   //Clean up HDD Nlink Service
-   send_btc_nlink_msg(WLAN_MODULE_DOWN_IND, 0);
-
    if (VOS_FTM_MODE != hdd_get_conparam())
        wlan_hdd_logging_sock_deactivate_svc(pHddCtx);
 
@@ -15263,13 +15259,6 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
 #ifdef WLAN_KD_READY_NOTIFIER
    pHddCtx->kd_nl_init = 1;
 #endif /* WLAN_KD_READY_NOTIFIER */
-
-   //Initialize the BTC service
-   if(btc_activate_service(pHddCtx) != 0)
-   {
-      hddLog(VOS_TRACE_LEVEL_FATAL,"%s: btc_activate_service failed",__func__);
-      goto err_reg_netdev;
-   }
 
 #ifdef FEATURE_OEM_DATA_SUPPORT
    //Initialize the OEM service

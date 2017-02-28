@@ -873,20 +873,6 @@ REG_TABLE_ENTRY g_registry_table[] =
                  CFG_ACTIVE_MIN_CHANNEL_TIME_MIN,
                  CFG_ACTIVE_MIN_CHANNEL_TIME_MAX ),
 
-   REG_VARIABLE( CFG_ACTIVE_MAX_CHANNEL_TIME_BTC_NAME, WLAN_PARAM_Integer,
-                 hdd_config_t, nActiveMaxChnTimeBtc,
-                 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
-                 CFG_ACTIVE_MAX_CHANNEL_TIME_BTC_DEFAULT,
-                 CFG_ACTIVE_MAX_CHANNEL_TIME_BTC_MIN,
-                 CFG_ACTIVE_MAX_CHANNEL_TIME_BTC_MAX ),
-
-   REG_VARIABLE( CFG_ACTIVE_MIN_CHANNEL_TIME_BTC_NAME, WLAN_PARAM_Integer,
-                 hdd_config_t, nActiveMinChnTimeBtc,
-                 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
-                 CFG_ACTIVE_MIN_CHANNEL_TIME_BTC_DEFAULT,
-                 CFG_ACTIVE_MIN_CHANNEL_TIME_BTC_MIN,
-                 CFG_ACTIVE_MIN_CHANNEL_TIME_BTC_MAX ),
-
    REG_VARIABLE( CFG_RETRY_LIMIT_ZERO_NAME, WLAN_PARAM_Integer,
                  hdd_config_t, retryLimitZero,
                  VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
@@ -6173,23 +6159,6 @@ eCsrPhyMode hdd_cfg_xlate_to_csr_phy_mode( eHddDot11Mode dot11Mode )
 
 }
 
-static void hdd_set_btc_config(hdd_context_t *pHddCtx)
-{
-   hdd_config_t *pConfig = pHddCtx->cfg_ini;
-   tSmeBtcConfig btcParams;
-   int i;
-
-   sme_BtcGetConfig(pHddCtx->hHal, &btcParams);
-
-   btcParams.btcExecutionMode = pConfig->btcExecutionMode;
-
-   for (i = 0; i < 6; i++) {
-      btcParams.mwsCoexConfig[i] = pConfig->mwsCoexConfig[i];
-   }
-
-   sme_BtcSetConfig(pHddCtx->hHal, &btcParams);
-}
-
 static void hdd_set_power_save_config(hdd_context_t *pHddCtx, tSmeConfigParams *smeConfig)
 {
    hdd_config_t *pConfig = pHddCtx->cfg_ini;
@@ -7258,8 +7227,6 @@ VOS_STATUS hdd_set_sme_config( hdd_context_t *pHddCtx )
    smeConfig->csrConfig.nActiveMinChnTime        = pConfig->nActiveMinChnTime;
    smeConfig->csrConfig.nPassiveMaxChnTime       = pConfig->nPassiveMaxChnTime;
    smeConfig->csrConfig.nPassiveMinChnTime       = pConfig->nPassiveMinChnTime;
-   smeConfig->csrConfig.nActiveMaxChnTimeBtc     = pConfig->nActiveMaxChnTimeBtc;
-   smeConfig->csrConfig.nActiveMinChnTimeBtc     = pConfig->nActiveMinChnTimeBtc;
    smeConfig->csrConfig.disableAggWithBtc        = pConfig->disableAggWithBtc;
 #ifdef WLAN_AP_STA_CONCURRENCY
    smeConfig->csrConfig.nActiveMaxChnTimeConc    = pConfig->nActiveMaxChnTimeConc;
@@ -7371,8 +7338,6 @@ VOS_STATUS hdd_set_sme_config( hdd_context_t *pHddCtx )
    {
        hdd_set_power_save_offload_config(pHddCtx);
    }
-
-   hdd_set_btc_config(pHddCtx);
 
 #ifdef WLAN_FEATURE_VOWIFI_11R
    smeConfig->csrConfig.csr11rConfig.IsFTResourceReqSupported = pConfig->fFTResourceReqSupported;
