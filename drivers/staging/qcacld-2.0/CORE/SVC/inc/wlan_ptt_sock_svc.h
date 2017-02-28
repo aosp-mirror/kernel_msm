@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -97,7 +97,7 @@
  * Length      : 4 bytes [LEN_PAYLOAD]
  * Payload     : LEN_PAYLOAD bytes
 */
-int ptt_sock_activate_svc(void *pAdapter);
+int ptt_sock_activate_svc(void *hdd_ctx);
 int ptt_sock_send_msg_to_app(tAniHdr *wmsg, int radio, int src_mod, int pid);
 
 /*
@@ -114,6 +114,19 @@ typedef struct sAniAppRegReq {
     tAniNlModTypes type;              // module id
     int pid;                          // process id
 } tAniNlAppRegReq;
+
+/**
+ * struct sptt_app_reg_req - PTT register request structure
+ * @radio: Radio ID
+ * @wmsg: ANI header
+ *
+ * payload structure received as nl data from PTT app/user space
+ */
+typedef struct sptt_app_reg_req {
+	int radio;
+	tAniHdr wmsg;
+} ptt_app_reg_req;
+
 typedef struct sAniNlAppRegRsp {
     tAniHdr wniHdr;                   // Generic WNI msg header
     tAniNlAppRegReq regReq;           // The original request msg
