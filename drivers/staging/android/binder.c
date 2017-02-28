@@ -3194,6 +3194,12 @@ static void binder_release_work(struct binder_worklist *wlist)
 			binder_debug(BINDER_DEBUG_DEAD_TRANSACTION,
 				"undelivered death notification, %016llx\n",
 				(u64)death->cookie);
+			/*
+			 * For the non-CLEAR cases, kfree ref->death freeing
+			 * done in zombie cleanup path so avoid doing it here
+			 */
+			if (w->type == BINDER_WORK_DEAD_BINDER)
+				break;
 			kfree(death);
 			binder_stats_deleted(BINDER_STAT_DEATH);
 		} break;
