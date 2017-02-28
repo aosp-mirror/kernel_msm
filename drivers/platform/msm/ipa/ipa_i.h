@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -123,7 +123,7 @@
 
 #define IPA_HW_TABLE_ALIGNMENT(start_ofst) \
 	(((start_ofst) + 127) & ~127)
-#define IPA_RT_FLT_HW_RULE_BUF_SIZE	(128)
+#define IPA_RT_FLT_HW_RULE_BUF_SIZE	(256)
 
 #define MAX_RESOURCE_TO_CLIENTS (5)
 struct ipa_client_names {
