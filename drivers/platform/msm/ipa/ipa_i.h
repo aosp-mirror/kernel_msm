@@ -205,6 +205,7 @@ struct ipa_rt_tbl {
  * @ref_cnt: reference counter of raouting table
  * @is_eth2_ofst_valid: is eth2_ofst field valid?
  * @eth2_ofst: offset to start of Ethernet-II/802.3 header
+ * @user_deleted: is the header deleted by the user?
  */
 struct ipa_hdr_entry {
 	struct list_head link;
@@ -218,6 +219,7 @@ struct ipa_hdr_entry {
 	int id;
 	u8 is_eth2_ofst_valid;
 	u16 eth2_ofst;
+	bool user_deleted;
 };
 
 /**
@@ -937,8 +939,11 @@ void ipa_inc_client_enable_clks(void);
 int ipa_inc_client_enable_clks_no_block(void);
 void ipa_dec_client_disable_clks(void);
 int ipa_interrupts_init(u32 ipa_irq, u32 ee, struct device *ipa_dev);
+int ipa_del_hdr_by_user(struct ipa_ioc_del_hdr *hdls, bool by_user);
+int ipa_del_hdr_proc_ctx_by_user(struct ipa_ioc_del_hdr_proc_ctx *hdls,
+	bool by_user);
 int __ipa_del_rt_rule(u32 rule_hdl);
-int __ipa_del_hdr(u32 hdr_hdl);
+int __ipa_del_hdr(u32 hdr_hdl, bool by_user);
 int __ipa_release_hdr(u32 hdr_hdl);
 int _ipa_read_gen_reg_v1_0(char *buff, int max_len);
 int _ipa_read_gen_reg_v1_1(char *buff, int max_len);
