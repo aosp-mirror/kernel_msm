@@ -6,7 +6,7 @@ function update_kasan_config() {
          -e CONFIG_KCOV \
          -e CONFIG_SLUB \
          -e CONFIG_SLUB_DEBUG \
-         -e CONFIG_SLUB_DEBUG_ON \
+         -d CONFIG_SLUB_DEBUG_ON \
          -e CONFIG_CC_OPTIMIZE_FOR_SIZE \
          -d CONFIG_SLUB_DEBUG_PANIC_ON \
          -d CONFIG_KASAN_OUTLINE \
