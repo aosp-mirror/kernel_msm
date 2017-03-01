@@ -357,18 +357,18 @@
 	pmx_mdss {
 		mdss_dsi_active: mdss_dsi_active {
 			mux {
-				pins = "gpio25", "gpio37";
+				pins = "gpio25";
 			};
 			config {
-				pins = "gpio25", "gpio37";
+				pins = "gpio25";
 			};
 		};
 		mdss_dsi_suspend: mdss_dsi_suspend {
 			mux {
-				pins = "gpio25", "gpio37";
+				pins = "gpio25";
 			};
 			config {
-				pins = "gpio25", "gpio37";
+				pins = "gpio25";
 			};
 		};
 	};
@@ -401,7 +401,6 @@
 
         qcom,platform-te-gpio = <&msm_gpio 24 0>;
 	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
-	/* qcom,platform-bklight-en-gpio = <&msm_gpio 37 0>; */
 };
 
 /* CoreSight */
