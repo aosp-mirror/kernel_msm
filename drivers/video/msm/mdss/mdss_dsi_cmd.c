@@ -25,6 +25,8 @@
 #include "mdss_dsi.h"
 #include "mdss_smmu.h"
 
+#define Enable_low_bit_ambient 0
+
 /*
  * mipi dsi buf mechanism
  */
@@ -684,7 +686,7 @@ static struct dsi_cmd_desc dsi_tear_on_cmd = {
 static char set_tear_off[2] = {0x34, 0x00};
 static struct dsi_cmd_desc dsi_tear_off_cmd = {
 	{DTYPE_DCS_WRITE, 1, 0, 0, 0, sizeof(set_tear_off)}, set_tear_off};
-
+#if Enable_low_bit_ambient
 static char set_ucs[2] = {0xfe, 0x00};
 static struct dsi_cmd_desc dsi_ucs_cmd = {
           {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_ucs)}, set_ucs};
@@ -700,7 +702,7 @@ static struct dsi_cmd_desc dsi_3bit_on_cmd = {
 static char set_3bit_off[2] = {0x2a, 0x03};
 static struct dsi_cmd_desc dsi_3bit_off_cmd = {
        {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_3bit_off)}, set_3bit_off};
-
+#endif
 static char set_idle_mode[2] = {0x39, 0x00};
 static struct dsi_cmd_desc dsi_into_idle_cmd = {
           {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_idle_mode)}, set_idle_mode};
@@ -796,10 +798,11 @@ void mdss_dsi_3bit_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 		is_3bit_mode = true;
 
 		pr_debug("[Debug] set 3-bit color mode enable\n");
-
+                #if Enable_low_bit_ambient
 		mdss_dsi_send_cmd(ctrl, &dsi_3bit_pre_cmd);
 		mdss_dsi_send_cmd(ctrl, &dsi_3bit_on_cmd);
 		mdss_dsi_send_cmd(ctrl, &dsi_ucs_cmd);
+                #endif
 		mdss_dsi_send_cmd(ctrl, &dsi_into_idle_cmd);
 	}
 	else if((!enable) && (is_3bit_mode == true))
@@ -807,10 +810,11 @@ void mdss_dsi_3bit_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 		is_3bit_mode = false;
 
 		pr_debug("[Debug] set 3-bit color mode disable\n");
-
+                #if Enable_low_bit_ambient
 		mdss_dsi_send_cmd(ctrl, &dsi_3bit_pre_cmd);
 		mdss_dsi_send_cmd(ctrl, &dsi_3bit_off_cmd);
 		mdss_dsi_send_cmd(ctrl, &dsi_ucs_cmd);
+                #endif
 		mdss_dsi_send_cmd(ctrl, &dsi_exit_idle_cmd);
 	}
 	else
