@@ -4575,7 +4575,7 @@ eHalStatus sme_set_random_mac(tHalHandle hal,
  * @session_id: interface id
  * @random_mac: random mac address to be cleared
  *
- * This function is used to clear the randmom mac address filters
+ * This function is used to clear the random mac address filters
  * which are set with sme_set_random_mac
  *
  * Return: eHalStatus enumeration.
