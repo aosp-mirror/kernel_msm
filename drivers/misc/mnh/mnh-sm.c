@@ -236,7 +236,7 @@ static ssize_t mnh_sm_state_show(struct device *dev,
 {
 	dev_info(dev, "Entering mnh_sm_state_show...\n");
 
-	return scnprintf(buf, MAX_STR_COPY, "0x%x\n", mnh_state);
+	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_state);
 }
 
 static ssize_t mnh_sm_state_store(struct device *dev,
@@ -725,30 +725,31 @@ static int mnh_sm_config_ddr(void)
 static int mnh_sm_download(void)
 {
 	uint32_t  magic;
+	int ret;
 
-	if (mnh_download_firmware() == 0) {
-		/*
-		 * Magic number setting to notify MNH that PCIE initialization
-		 * is done on Host side
-		 */
-		if (mnh_config_read(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
-				    HW_MNH_PCIE_GP_0,
-				    sizeof(uint32_t), &magic) == SUCCESS &&
-				    magic == 0) {
-			mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
-					 HW_MNH_PCIE_GP_0,
-					 sizeof(uint32_t), INIT_DONE);
+	ret = mnh_download_firmware();
 
-			/* Set the state to configured */
-			mnh_state = MNH_STATE_ACTIVE;
-		} else {
-			dev_err(mnh_sm_dev->dev,
-				"Read GP0 register fail or GP0 is not 0:%d",
-				magic);
-		}
-	} else {
+	if (ret) {
 		dev_err(mnh_sm_dev->dev,
 			"%s: firmware download failed\n", __func__);
+		return ret;
+	}
+
+	/*
+	 * Magic number setting to notify MNH that PCIE initialization
+	 * is done on Host side
+	 */
+	if (mnh_config_read(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
+			    HW_MNH_PCIE_GP_0,
+			    sizeof(uint32_t), &magic) == SUCCESS &&
+			    magic == 0) {
+		mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
+				 HW_MNH_PCIE_GP_0,
+				 sizeof(uint32_t), INIT_DONE);
+	} else {
+		dev_err(mnh_sm_dev->dev,
+			"Read GP0 register fail or GP0 is not 0:%d",
+			magic);
 	}
 
 	return 0;
@@ -794,44 +795,61 @@ EXPORT_SYMBOL(mnh_sm_get_state);
 
 static int mnh_sm_set_state_locked(int state)
 {
+	int ret = 0;
+
 	switch (state) {
 	case MNH_STATE_OFF:
-		mnh_sm_poweroff();
+		ret = mnh_sm_poweroff();
 		break;
 	case MNH_STATE_INIT:
-		mnh_sm_set_state_locked(MNH_STATE_OFF);
-		mnh_sm_poweron();
+		ret = mnh_sm_set_state_locked(MNH_STATE_OFF);
+		if (!ret)
+			ret = mnh_sm_poweron();
 		break;
 	case MNH_STATE_CONFIG_MIPI:
-		if (mnh_state != MNH_STATE_CONFIG_DDR)
-			mnh_sm_set_state_locked(MNH_STATE_INIT);
-		mnh_sm_config_mipi();
+		if (mnh_state != MNH_STATE_CONFIG_DDR) {
+			ret = mnh_sm_set_state_locked(MNH_STATE_INIT);
+			if (!ret)
+				ret = mnh_sm_config_mipi();
+		}
 		break;
 	case MNH_STATE_CONFIG_DDR:
-		if (mnh_state != MNH_STATE_CONFIG_MIPI)
-			mnh_sm_set_state_locked(MNH_STATE_INIT);
-		mnh_sm_config_ddr();
+		if (mnh_state != MNH_STATE_CONFIG_MIPI) {
+			ret = mnh_sm_set_state_locked(MNH_STATE_INIT);
+			if (!ret)
+				ret = mnh_sm_config_ddr();
+		}
 		break;
 	case MNH_STATE_ACTIVE:
 		if (mnh_state == MNH_STATE_SUSPEND_SELF_REFRESH) {
-			mnh_sm_resume();
+			ret = mnh_sm_resume();
 		} else {
-			mnh_sm_set_state_locked(MNH_STATE_CONFIG_DDR);
-			mnh_sm_download();
+			ret = mnh_sm_set_state_locked(MNH_STATE_CONFIG_DDR);
+			if (!ret)
+				ret = mnh_sm_download();
 		}
 		break;
 	case MNH_STATE_SUSPEND_SELF_REFRESH:
-		mnh_sm_set_state_locked(MNH_STATE_ACTIVE);
-		mnh_sm_suspend();
+		ret = mnh_sm_set_state_locked(MNH_STATE_ACTIVE);
+		if (!ret)
+			ret = mnh_sm_suspend();
 		break;
 	case MNH_STATE_SUSPEND_HIBERNATE:
 		dev_err(mnh_sm_dev->dev,
 			 "%s: TODO unsupported state %d\n", __func__, state);
-		break;
+		ret = -EINVAL;
 	default:
 		dev_err(mnh_sm_dev->dev,
 			 "%s: invalid state %d\n", __func__, state);
-		return -EINVAL;
+		ret = -EINVAL;
+	}
+
+	if (ret) {
+		dev_err(mnh_sm_dev->dev,
+			 "%s: failed to transition to state %d (%d)\n",
+			 __func__, state, ret);
+
+		return ret;
 	}
 
 	mnh_state = state;
