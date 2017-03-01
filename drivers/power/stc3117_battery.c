@@ -193,7 +193,7 @@ static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 static const char *charger_name = "battery";
 //static int g_low_battery_counter;
 static bool g_debug, g_standby_mode, g_boot_phase;
-static int g_ui_soc, g_last_status, g_ocv;
+static int g_ui_soc, g_last_status, g_ocv, g_reg_soc;
 static const char * const charge_status[] = {
 	"unknown",
 	"charging",
@@ -324,8 +324,10 @@ int Capacity_Adjust;
 #define STC311x_BATTERY_FULL 100
 #define STC311x_DELAY_BOOTUP	 12000 //120 sec
 #define STC311x_DELAY	 3000 //30 sec
-#define STC311x_DELAY_LOW_BATT 500 //5 sec
-#define STC311x_SOC_THRESHOLD 5
+#define STC311x_DELAY_LOW_BATT 2000 //20 sec
+#define STC311x_DELAY_CRITICAL_BATT 500 //5 sec
+#define STC311x_SOC_LOW_THRESHOLD 7
+#define STC311x_SOC_CRITICAL_THRESHOLD 3
 
 /* ************************************************************************ */
 
@@ -998,6 +1000,7 @@ static int STC311x_ReadBatteryData(struct STC311x_BattDataTypeDef *BattData)
 	value = (value<<8) + data[2];
 
 	BattData->HRSOC = value;     /* result in 1/512% */
+	g_reg_soc = (int)(value/512);
 
 	/* conversion counter */
 	value = data[5];
@@ -2567,12 +2570,14 @@ static void stc311x_work(struct work_struct *work)
 
 	stc311x_updata();
 	if (g_debug)
-		pr_err("*** ST_SOC = %d, UI_SOC = %d, voltage = %d mv, OCV = %d mv, current = %d mA, Temperature = %d, charging_status = %d *** \n", chip->batt_soc, g_ui_soc, chip->batt_voltage, g_ocv, chip->batt_current, chip->Temperature, chip->status);
+		pr_err("*** ST_SOC = %d, UI_SOC = %d, reg_soc = %d, voltage = %d mv, OCV = %d mv, current = %d mA, Temperature = %d, charging_status = %d *** \n", chip->batt_soc, g_ui_soc, g_reg_soc, chip->batt_voltage, g_ocv, chip->batt_current, chip->Temperature, chip->status);
 
-	if (chip->batt_soc > STC311x_SOC_THRESHOLD)
+	if (chip->batt_soc > STC311x_SOC_LOW_THRESHOLD)
 		schedule_delayed_work(&chip->work, STC311x_DELAY);
-	else
+	else if ((STC311x_SOC_CRITICAL_THRESHOLD <= chip->batt_soc) && (chip->batt_soc <= STC311x_SOC_LOW_THRESHOLD))
 		schedule_delayed_work(&chip->work, STC311x_DELAY_LOW_BATT);
+	else
+		schedule_delayed_work(&chip->work, STC311x_DELAY_CRITICAL_BATT);
 
 	if (wake_lock_active(&chip->wlock)) {
 		wake_unlock(&chip->wlock);
@@ -2709,6 +2714,7 @@ static int stc311x_probe(struct i2c_client *client,
 	reg_mode = 0;
 	reg_ctrl = 0;
 	g_standby_mode = 0;
+	g_reg_soc = 0;
 	reg_mode = STC31xx_ReadByte(STC311x_REG_MODE);
 	reg_ctrl = STC31xx_ReadByte(STC311x_REG_CTRL);
 	pr_info("mode = 0x%x, (reg_mode & GG_RUN_BIT) = %d  \n", reg_mode, (int)(reg_mode & GG_RUN_BIT));
@@ -2773,7 +2779,7 @@ static int stc311x_probe(struct i2c_client *client,
 	schedule_delayed_work(&chip->boot_up_work, STC311x_DELAY_BOOTUP);
 
 	if (g_debug)
-		pr_err("SOC = %d, voltage = %d, OCV = %d, temp = %d \n", chip->batt_soc, chip->batt_voltage, g_ocv, chip->Temperature);
+		pr_err("SOC = %d, reg_soc = %d, voltage = %d, OCV = %d, temp = %d \n", chip->batt_soc, g_reg_soc, chip->batt_voltage, g_ocv, chip->Temperature);
 	pr_info("stc311x FG successfully probed\n");
 	return 0;
 }
