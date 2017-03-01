@@ -240,6 +240,7 @@ static void kasan_report_error(struct kasan_access_info *info)
 		"=================================\n");
 	add_taint(TAINT_BAD_PAGE, LOCKDEP_NOW_UNRELIABLE);
 	spin_unlock_irqrestore(&report_lock, flags);
+	BUG_ON(info->is_write);
 	kasan_enable_current();
 }
 
