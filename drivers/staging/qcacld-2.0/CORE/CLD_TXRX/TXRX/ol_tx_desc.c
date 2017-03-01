@@ -68,6 +68,7 @@ ol_tx_desc_alloc(struct ol_txrx_pdev_t *pdev, struct ol_txrx_vdev_t *vdev)
         pdev->tx_desc.num_free--;
         tx_desc = pdev->tx_desc.freelist->tx_desc;
         pdev->tx_desc.freelist = pdev->tx_desc.freelist->next;
+        ol_tx_desc_dup_detect_set(pdev, tx_desc);
 #ifdef QCA_SUPPORT_TXDESC_SANITY_CHECKS
         if (tx_desc->pkt_type != 0xff
 #ifdef QCA_COMPUTE_TX_DELAY
@@ -131,6 +132,7 @@ void
 ol_tx_desc_free(struct ol_txrx_pdev_t *pdev, struct ol_tx_desc_t *tx_desc)
 {
     adf_os_spin_lock_bh(&pdev->tx_mutex);
+    ol_tx_desc_dup_detect_reset(pdev, tx_desc);
 #ifdef QCA_SUPPORT_TXDESC_SANITY_CHECKS
     tx_desc->pkt_type = 0xff;
 #ifdef QCA_COMPUTE_TX_DELAY

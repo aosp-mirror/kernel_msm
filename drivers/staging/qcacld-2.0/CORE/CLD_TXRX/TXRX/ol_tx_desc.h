@@ -37,6 +37,11 @@
 #include <ol_txrx_types.h> /* ol_tx_desc_t */
 #include <ol_txrx_internal.h> /*TXRX_ASSERT2 */
 
+#define DIV_BY_8	3
+#define DIV_BY_32	5
+#define MOD_BY_8	0x7
+#define MOD_BY_32	0x1F
+
 /**
  * @brief Allocate and initialize a tx descriptor for a LL system.
  * @details
@@ -173,5 +178,131 @@ ol_ath_get_bcn_header(ol_pdev_handle pdev, A_UINT32 vdev_id);
  */
 void
 ol_tx_desc_free(struct ol_txrx_pdev_t *pdev, struct ol_tx_desc_t *tx_desc);
+
+#ifdef DESC_DUP_DETECT_DEBUG
+/**
+ * ol_tx_desc_dup_detect_init() - initialize descriptor duplication logic
+ * @pdev: pdev handle
+ * @pool_size: global pool size
+ *
+ * Return: none
+ */
+static inline
+void ol_tx_desc_dup_detect_init(struct ol_txrx_pdev_t *pdev, uint16_t pool_size)
+{
+	uint16_t size = (pool_size >> DIV_BY_8) +
+		sizeof(*pdev->tx_desc.free_list_bitmap);
+	pdev->tx_desc.free_list_bitmap = vos_mem_malloc(size);
+	if (!pdev->tx_desc.free_list_bitmap)
+		adf_os_print("%s: malloc failed", __func__);
+	vos_mem_set(pdev->tx_desc.free_list_bitmap, size, 0);
+}
+
+/**
+ * ol_tx_desc_dup_detect_deinit() - deinit descriptor duplication logic
+ * @pdev: pdev handle
+ *
+ * Return: none
+ */
+static inline
+void ol_tx_desc_dup_detect_deinit(struct ol_txrx_pdev_t *pdev)
+{
+	adf_os_print("%s: pool_size %d num_free %d\n", __func__,
+		pdev->tx_desc.pool_size, pdev->tx_desc.num_free);
+	if (pdev->tx_desc.free_list_bitmap)
+		vos_mem_free(pdev->tx_desc.free_list_bitmap);
+}
+
+/**
+ * ol_tx_desc_dup_detect_set() - set bit for msdu_id
+ * @pdev: pdev handle
+ * @tx_desc: tx descriptor
+ *
+ * Return: none
+ */
+static inline
+void ol_tx_desc_dup_detect_set(struct ol_txrx_pdev_t *pdev,
+				struct ol_tx_desc_t *tx_desc)
+{
+	uint16_t msdu_id = ol_tx_desc_id(pdev, tx_desc);
+	bool test;
+
+	if (!pdev->tx_desc.free_list_bitmap)
+		return;
+
+	if (adf_os_unlikely(msdu_id > pdev->tx_desc.pool_size)) {
+		adf_os_print("%s: msdu_id %d > pool_size %d",
+			  __func__, msdu_id, pdev->tx_desc.pool_size);
+		VOS_BUG(0);
+	}
+
+	test = test_and_set_bit(msdu_id, pdev->tx_desc.free_list_bitmap);
+	if (adf_os_unlikely(test)) {
+		uint16_t size = (pdev->tx_desc.pool_size >> DIV_BY_8) +
+			((pdev->tx_desc.pool_size & MOD_BY_8) ? 1 : 0);
+		adf_os_print("duplicate msdu_id %d detected !!\n", msdu_id);
+		vos_trace_hex_dump(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_ERROR,
+		(void *)pdev->tx_desc.free_list_bitmap, size);
+		VOS_BUG(0);
+	}
+}
+
+/**
+ * ol_tx_desc_dup_detect_reset() - reset bit for msdu_id
+ * @pdev: pdev handle
+ * @tx_desc: tx descriptor
+ *
+ * Return: none
+ */
+static inline
+void ol_tx_desc_dup_detect_reset(struct ol_txrx_pdev_t *pdev,
+				 struct ol_tx_desc_t *tx_desc)
+{
+	uint16_t msdu_id = ol_tx_desc_id(pdev, tx_desc);
+	bool test;
+
+	if (!pdev->tx_desc.free_list_bitmap)
+		return;
+
+	if (adf_os_unlikely(msdu_id > pdev->tx_desc.pool_size)) {
+		adf_os_print("%s: msdu_id %d > pool_size %d",
+			  __func__, msdu_id, pdev->tx_desc.pool_size);
+		VOS_BUG(0);
+	}
+
+	test = !test_and_clear_bit(msdu_id, pdev->tx_desc.free_list_bitmap);
+	if (adf_os_unlikely(test)) {
+		uint16_t size = (pdev->tx_desc.pool_size >> DIV_BY_8) +
+			((pdev->tx_desc.pool_size & MOD_BY_8) ? 1 : 0);
+		adf_os_print("duplicate free msg received for msdu_id %d!!\n",
+								 msdu_id);
+		vos_trace_hex_dump(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_ERROR,
+		(void *)pdev->tx_desc.free_list_bitmap, size);
+		VOS_BUG(0);
+	}
+}
+#else
+static inline
+void ol_tx_desc_dup_detect_init(struct ol_txrx_pdev_t *pdev, uint16_t size)
+{
+}
+
+static inline
+void ol_tx_desc_dup_detect_deinit(struct ol_txrx_pdev_t *pdev)
+{
+}
+
+static inline
+void ol_tx_desc_dup_detect_set(struct ol_txrx_pdev_t *pdev,
+				struct ol_tx_desc_t *tx_desc)
+{
+}
+
+static inline
+void ol_tx_desc_dup_detect_reset(struct ol_txrx_pdev_t *pdev,
+				 struct ol_tx_desc_t *tx_desc)
+{
+}
+#endif
 
 #endif /* _OL_TX_DESC__H_ */

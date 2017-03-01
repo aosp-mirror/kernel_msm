@@ -779,6 +779,8 @@ A_STATUS
 ol_txrx_get_queue_status(
 	ol_txrx_pdev_handle pdev);
 
+void ol_txrx_dump_tx_queue_stats(ol_txrx_pdev_handle pdev_handle);
+
 void ol_txrx_dump_tx_desc(ol_txrx_pdev_handle pdev);
 
 /**

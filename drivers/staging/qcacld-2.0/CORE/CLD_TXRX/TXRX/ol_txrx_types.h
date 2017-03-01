@@ -598,6 +598,9 @@ struct ol_txrx_pdev_t {
 		u_int16_t num_free;
 		struct ol_tx_desc_list_elem_t *array;
 		struct ol_tx_desc_list_elem_t *freelist;
+#ifdef DESC_DUP_DETECT_DEBUG
+                unsigned long *free_list_bitmap;
+#endif
 	} tx_desc;
 
 	struct {
