@@ -2824,10 +2824,12 @@ limProcessMlmDisassocReqNtf(tpAniSirGlobal pMac, eHalStatus suspendStatus, tANI_
         mlmDisassocCnf.resultCode = eSIR_SME_INVALID_PARAMETERS;
         goto end;
     }
-    limLog(pMac, LOG1,FL("Process DisAssoc Req on sessionID %d Systemrole %d "
-    "mlmstate %d from: "MAC_ADDRESS_STR), pMlmDisassocReq->sessionId,
-    GET_LIM_SYSTEM_ROLE(psessionEntry), psessionEntry->limMlmState,
-    MAC_ADDR_ARRAY(pMlmDisassocReq->peerMacAddr));
+    limLog(pMac, LOGE, FL("Process DisAssoc Req on sessionID %d Systemrole %d "
+    "reason code: %d mlmstate %d from: "MAC_ADDRESS_STR),
+        pMlmDisassocReq->sessionId,
+        GET_LIM_SYSTEM_ROLE(psessionEntry), pMlmDisassocReq->reasonCode,
+        psessionEntry->limMlmState,
+        MAC_ADDR_ARRAY(pMlmDisassocReq->peerMacAddr));
 
     sirCopyMacAddr(currentBssId,psessionEntry->bssId);
 
