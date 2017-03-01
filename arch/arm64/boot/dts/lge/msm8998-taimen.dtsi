@@ -13,8 +13,8 @@
 #include <dt-bindings/interrupt-controller/irq.h>
 #include "msm8998-taimen-pinctrl.dtsi"
 #include "msm8998-taimen-misc.dtsi"
-#include "msm8998-taimen-panel.dtsi"
 #include "msm8998-taimen-pm.dtsi"
+#include "msm8998-taimen-panel.dtsi"
 #include "msm8998-taimen-sound.dtsi"
 #include "msm8998-taimen-connectivity.dtsi"
 #include "msm8998-taimen-nfc.dtsi"

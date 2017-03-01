@@ -218,31 +218,20 @@
 };
 
 /* Start to override parameters in msm-pmi8998.dtsi */
-&spmi_bus {
-	qcom,pmi8998@3 {
-		labibb: qpnp-labibb-regulator {
-			status = "ok";
-			qcom,qpnp-labibb-mode = "lcd";
+&labibb {
+	status = "okay";
+	qcom,qpnp-labibb-mode = "lcd";
 
-			ibb_regulator: qcom,ibb@dc00 {
-				qcom,qpnp-ibb-init-voltage = <5500000>;
-				qcom,qpnp-ibb-init-lcd-voltage = <5500000>;
-				qcom,qpnp-ibb-discharge-resistor = <300>;
-				qcom,qpnp-ibb-lab-pwrup-delay = <1000>;
-				qcom,qpnp-ibb-lab-pwrdn-delay = <2000>;
-			};
-			lab_regulator: qcom,lab@de00 {
-				qcom,qpnp-lab-init-voltage = <5400000>;
-				qcom,qpnp-lab-init-lcd-voltage = <5400000>;
-			};
-		};
-
-		pmi8998_wled: qcom,leds@d800 {
-			qcom,fs-curr-ua = <20000>;
-			qcom,led-strings-list = [00 01 02];
-			/* qcom,en-cabc; */
-			qcom,switch-freq-khz = <600>;
-		};
+	ibb_regulator: qcom,ibb@dc00 {
+		qcom,qpnp-ibb-init-voltage = <5500000>;
+		qcom,qpnp-ibb-init-lcd-voltage = <5500000>;
+		qcom,qpnp-ibb-discharge-resistor = <300>;
+		qcom,qpnp-ibb-lab-pwrup-delay = <1000>;
+		qcom,qpnp-ibb-lab-pwrdn-delay = <2000>;
+	};
+	lab_regulator: qcom,lab@de00 {
+		qcom,qpnp-lab-init-voltage = <5400000>;
+		qcom,qpnp-lab-init-lcd-voltage = <5400000>;
 	};
 };
 

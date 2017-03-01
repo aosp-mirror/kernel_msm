@@ -45,3 +45,11 @@
 	qcom,platform-extra-ldo-lcd-vcl-gpio = <&tlmm 100 0>;
 	qcom,platform-extra-ldo-vddio-always-on;
 };
+
+&pmi8998_wled {
+	status = "okay";
+	qcom,fs-curr-ua = <20000>;
+	qcom,led-strings-list = [00 01 02];
+	/* qcom,en-cabc; */
+	qcom,switch-freq-khz = <600>;
+};
