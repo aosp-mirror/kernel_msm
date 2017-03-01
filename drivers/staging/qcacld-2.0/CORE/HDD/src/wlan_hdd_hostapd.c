@@ -569,10 +569,9 @@ static int __hdd_hostapd_ioctl(struct net_device *dev,
       goto exit;
    }
 
-   if ((!ifr) || (!ifr->ifr_data))
-   {
-      VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                FL("ifr or ifr->ifr_data is NULL"));
+   if ((!ifr) || (!ifr->ifr_data)) {
+      hddLog(LOGE,
+             FL("ifr or ifr->ifr_data is NULL cmd: %d"), cmd);
       ret = -EINVAL;
       goto exit;
    }
