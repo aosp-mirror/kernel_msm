@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -754,7 +754,6 @@ static int __ipa_del_hdr_proc_ctx(u32 proc_ctx_hdl,
 	if (by_user)
 		entry->user_deleted = true;
 
-
 	if (--entry->ref_cnt) {
 		IPADBG("proc_ctx_hdl %x ref_cnt %d\n",
 			proc_ctx_hdl, entry->ref_cnt);
@@ -885,7 +884,7 @@ bail:
 /**
  * ipa2_del_hdr_by_user() - Remove the specified headers
  * from SW and optionally commit them to IPA HW
- * @hdls:	[inout] set of headers to deletea
+ * @hdls:	[inout] set of headers to delete
  * @by_user:	Operation requested by user?
  *
  * Returns:	0 on success, negative on failure
