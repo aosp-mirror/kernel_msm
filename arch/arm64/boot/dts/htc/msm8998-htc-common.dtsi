@@ -91,3 +91,21 @@
 	/* qct original reg = <0 0x8cc00000 0 0x7000000>; */
 	reg = <0 0x8cc00000 0 0x7800000>;
 };
+
+/ {
+	reserved-memory {
+		ramoops_mem: ramoops_region {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x83100000 0 0x00200000>;
+		};
+	};
+
+	ramoops {
+		compatible = "ramoops";
+		memory-region = <&ramoops_mem>;
+		record-size = <0 0x20000>; /* 128 KB */
+		console-size = <0 0x100000>; /* 1024 KB */
+		pmsg-size = <0 0x80000>; /* 512 KB */
+	};
+};
