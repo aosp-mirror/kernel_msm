@@ -2786,6 +2786,9 @@ static int smb23x_probe(struct i2c_client *client,
 	/* enable the USB_SUSPEND always */
 	chip->workaround_flags |= WRKRND_USB_SUSPEND;
 
+	/* enable the USB_SUSPEND always */
+	chip->workaround_flags |= WRKRND_USB_SUSPEND;
+
 	rc = smb23x_parse_dt(chip);
 	if (rc < 0) {
 		pr_err("Parse DT nodes failed!\n");
