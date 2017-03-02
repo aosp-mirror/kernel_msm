@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -347,5 +347,9 @@ struct ipa_imm_cmd_hw_dma_task_32b_addr {
 	u64 addr1:32;
 	u64 packet_size:16;
 };
+
+/* IPA HW DPS/HPS image memory sizes */
+#define IPA_HW_DPS_IMG_MEM_SIZE_V3_0 128
+#define IPA_HW_HPS_IMG_MEM_SIZE_V3_0 320
 
 #endif /* _IPAHAL_I_H_ */
