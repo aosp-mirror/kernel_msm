@@ -1068,7 +1068,7 @@ static irqreturn_t qpnp_wled_ovp_irq_handler(int irq, void *_wled)
 		return IRQ_HANDLED;
 	}
 
-	pr_err("WLED OVP fault detected, fault_status= %x\n", val);
+	pr_err_ratelimited("WLED OVP fault detected, fault_status= %x\n", val);
 	return IRQ_HANDLED;
 }
 
