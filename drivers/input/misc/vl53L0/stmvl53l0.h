@@ -228,6 +228,7 @@ struct stmvl53l0_data {
     bool laser_power;
     FixPoint1616_t cali_distance;
     u8 cali_status;
+    u8 int_status;
 #endif
 };
 

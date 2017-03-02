@@ -910,8 +910,10 @@ static void stmvl53l0_schedule_handler(struct stmvl53l0_data *data)
 #ifdef USE_INT
 static irqreturn_t stmvl53l0_interrupt_handler(int vec, void *info)
 {
-
     struct stmvl53l0_data *data = (struct stmvl53l0_data *)info;
+#ifdef HTC
+    data->int_status = 1;
+#endif
     if (data->enableDebug)
         vl53l0_dbgmsg("enter\n");
     if (data->irq == vec) {
@@ -2505,6 +2507,12 @@ static int stmvl53l0_ioctl_handler(struct file *file,
                     }
                 }
 
+                if(!data->int_status)
+                {
+                    vl53l0_errmsg("interrupt failed\n");
+                    return -1;
+                }
+
                 // Return avg, data
                 vl53l0_dbgmsg("Sum of measurement data = (0x%X , 0x%X)", RangeSum, RateSum);
                 RangingMeasurementData.RangeMilliMeter = RangeSum / RANGE_MEASUREMENT_TIMES;
@@ -3035,6 +3043,7 @@ static int stmvl53l0_start(struct stmvl53l0_data *data,
     data->enable_ps_sensor = 1;
 #ifdef HTC
     enable_irq(data->irq);
+    data->int_status = 0;
 #endif
 #ifndef USE_INT
     /* Unblock the thread execution */
@@ -3064,6 +3073,7 @@ static int stmvl53l0_stop(struct stmvl53l0_data *data)
 
 #ifdef HTC
     disable_irq(data->irq);
+    data->int_status = 0;
 #endif
     /* stop - if continuous mode */
     if (data->deviceMode == VL53L0_DEVICEMODE_CONTINUOUS_RANGING ||
