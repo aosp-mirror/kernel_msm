@@ -10,8 +10,72 @@
  * GNU General Public License for more details.
  */
 
-/{
-	aliases {
-		spi9 = &spi_9;
+&soc {
+	fpc1020 {
+		status = "ok";
+		compatible = "fpc,fpc1020";
+		interrupt-parent = <&tlmm>;
+		interrupts = <86 0x0>;
+		fpc,gpio_rst    = <&tlmm 128 0x0>;
+		fpc,gpio_irq    = <&tlmm 86 0x0>;
+		/* vcc_spi-supply  = <&pm8994_s4>; */
+		vdd_io-supply   = <&pm8998_s4>;
+		/* vdd_ana-supply  = <&pm8996_l18>; */
+		/* fpc,enable-on-boot; */
+		/* fpc,enable-wakeup; */
+
+		pinctrl-names = "fpc1020_reset_reset",
+			"fpc1020_reset_active",
+			"fpc1020_irq_active";
+
+		pinctrl-0 = <&msm_gpio_128>;
+		pinctrl-1 = <&msm_gpio_128_output_high>;
+		pinctrl-2 = <&msm_gpio_86>;
+	};
+};
+
+&tlmm {
+	/* GPIO_128 : FP_RESET_N */
+	msm_gpio_128: msm_gpio_128 {
+		mux {
+			 pins = "gpio128";
+			 function = "gpio";
+		};
+
+		config {
+			pins = "gpio128";
+			drive-strength = <2>;
+			bias-disable;
+			output-low;
+		};
+	};
+
+	/* GPIO_128 : FP_RESET_N, state device active*/
+	msm_gpio_128_output_high: msm_gpio_128_output_high {
+		mux {
+			pins = "gpio128";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio128";
+			drive-strength = <2>;
+			bias-disable;
+			output-high;
+		};
+	};
+
+	/* GPIO_86 : FP_INT_N */
+	msm_gpio_86: msm_gpio_86 {
+		mux {
+			pins = "gpio86";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio86";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
 	};
 };

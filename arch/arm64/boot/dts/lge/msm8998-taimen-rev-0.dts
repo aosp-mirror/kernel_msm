@@ -48,3 +48,9 @@
 	/* qcom,en-cabc; */
 	qcom,switch-freq-khz = <600>;
 };
+
+&soc {
+	fpc1020 {
+		status = "disabled";
+	};
+};
