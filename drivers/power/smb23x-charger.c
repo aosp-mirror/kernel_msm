@@ -2399,6 +2399,7 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 		del_timer(&chip->timer_init_register);
 		del_timer(&chip->timer_print_register);
 		if (chip->charger_plugin) {
+			chip->index_soft_temp_comp_mv = NORMAL;
 			chip->timer_init_register.expires = jiffies + HZ;
 			add_timer(&chip->timer_init_register); 
 		}
