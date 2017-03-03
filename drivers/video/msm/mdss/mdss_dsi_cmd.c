@@ -693,14 +693,6 @@ static char set_3bit_pre[2] = {0xfe, 0x01};
 static struct dsi_cmd_desc dsi_3bit_pre_cmd = {
           {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_3bit_pre)}, set_3bit_pre};
 
-static char set_3bit_on[2] = {0x2a, 0x22};
-static struct dsi_cmd_desc dsi_3bit_on_cmd = {
-          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_3bit_on)}, set_3bit_on};
-
-static char set_3bit_off[2] = {0x2a, 0x02};
-static struct dsi_cmd_desc dsi_3bit_off_cmd = {
-       {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_3bit_off)}, set_3bit_off};
-
 static char set_pre_idle_mode1[2] = {0x36, 0x00};
 static struct dsi_cmd_desc dsi_pre_idle_cmd1 = {
           {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_pre_idle_mode1)}, set_pre_idle_mode1};
@@ -826,7 +818,6 @@ void mdss_dsi_3bit_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 		pr_debug("[Debug] set 3-bit color mode enable\n");
 	
 		mdss_dsi_send_cmd(ctrl, &dsi_3bit_pre_cmd);
-		mdss_dsi_send_cmd(ctrl, &dsi_3bit_on_cmd);
 		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd1);
 		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd2);
 		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd3);
@@ -841,7 +832,6 @@ void mdss_dsi_3bit_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 		pr_debug("[Debug] set 3-bit color mode disable\n");
 	
 		mdss_dsi_send_cmd(ctrl, &dsi_3bit_pre_cmd);
-		mdss_dsi_send_cmd(ctrl, &dsi_3bit_off_cmd);
 		mdss_dsi_send_cmd(ctrl, &dsi_pre_exit_idle_cmd1);
 		mdss_dsi_send_cmd(ctrl, &dsi_pre_exit_idle_cmd2);
 		mdss_dsi_send_cmd(ctrl, &dsi_pre_exit_idle_cmd3);
