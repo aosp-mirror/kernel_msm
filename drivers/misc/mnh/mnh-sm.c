@@ -909,13 +909,12 @@ static int mnh_sm_close(struct inode *inode, struct file *filp)
 	struct mnh_sm_device *data = container_of(inode->i_cdev,
 						  struct mnh_sm_device, cdev);
 
-	dev_dbg(data->dev, "%s: closing mnh_sm\n", __func__);
-
 	filp->private_data = data; /* for other methods */
 
 	data->open--;
 
-	dev_dbg(data->dev, "%s: open count %d\n", __func__, data->open);
+	dev_dbg(data->dev, "%s: closing mnh_sm, count %d\n", __func__,
+		data->open);
 
 	return 0;
 }
@@ -962,18 +961,14 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 
 	switch (cmd) {
 	case MNH_SM_IOC_POWERON:
-		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_POWERON\n", __func__);
 		mnh_sm_dev->next_mnh_state = MNH_STATE_INIT;
 		schedule_work(&mnh_sm_dev->set_state_work);
 		break;
 	case MNH_SM_IOC_POWEROFF:
-		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_POWEROFF\n", __func__);
 		mnh_sm_dev->next_mnh_state = MNH_STATE_OFF;
 		schedule_work(&mnh_sm_dev->set_state_work);
 		break;
 	case MNH_SM_IOC_CONFIG_MIPI:
-		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_CONFIG_MIPI\n",
-			__func__);
 		err = copy_from_user(&mipi_config, (void __user *)arg,
 				     sizeof(struct mnh_mipi_config));
 		if (err) {
@@ -987,14 +982,10 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 		mnh_state = MNH_STATE_CONFIG_MIPI;
 		break;
 	case MNH_SM_IOC_CONFIG_DDR:
-		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_CONFIG_DDR\n",
-			__func__);
 		mnh_sm_dev->next_mnh_state = MNH_STATE_CONFIG_DDR;
 		schedule_work(&mnh_sm_dev->set_state_work);
 		break;
 	case MNH_SM_IOC_GET_STATE:
-		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_GET_STATE\n",
-			__func__);
 		err = copy_to_user((void __user *)arg, &mnh_state,
 				   sizeof(mnh_state));
 		if (err) {
@@ -1005,23 +996,18 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 		}
 		break;
 	case MNH_SM_IOC_SET_STATE:
-		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_SET_STATE\n",
-			__func__);
 		mnh_sm_dev->next_mnh_state = (int)arg;
 		schedule_work(&mnh_sm_dev->set_state_work);
 		break;
 	case MNH_SM_IOC_DOWNLOAD:
-		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_DOWNLOAD\n", __func__);
 		mnh_sm_dev->next_mnh_state = MNH_STATE_ACTIVE;
 		schedule_work(&mnh_sm_dev->set_state_work);
 		break;
 	case MNH_SM_IOC_SUSPEND:
-		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_SUSPEND\n", __func__);
 		mnh_sm_dev->next_mnh_state = MNH_STATE_SUSPEND_SELF_REFRESH;
 		schedule_work(&mnh_sm_dev->set_state_work);
 		break;
 	case MNH_SM_IOC_RESUME:
-		dev_dbg(mnh_sm_dev->dev, "%s: MNH_SM_IOC_RESUME\n", __func__);
 		mnh_sm_dev->next_mnh_state = MNH_STATE_ACTIVE;
 		schedule_work(&mnh_sm_dev->set_state_work);
 		break;
