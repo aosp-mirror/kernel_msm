@@ -421,23 +421,10 @@
 			"Playback", "Secondary MI2S Playback",
 			"MIC", "DA7219 Headset Mic",
 			"Secondary MI2S Capture", "Capture",
-			"AMIC5", "MIC BIAS3",
-			"AMIC6", "MIC BIAS3",
-			"MIC BIAS3", "Loopback Input",
 			"DMIC0", "MIC BIAS1",
 			"MIC BIAS1", "Digital Mic0",
 			"DMIC1", "MIC BIAS1",
 			"MIC BIAS1", "Digital Mic1",
-			"DMIC2", "MIC BIAS4",
-			"MIC BIAS4", "Digital Mic2",
-			"DMIC3", "MIC BIAS4",
-			"MIC BIAS4", "Digital Mic3",
-			"DMIC4", "MIC BIAS4",
-			"MIC BIAS4", "Digital Mic4",
-			"DMIC5", "MIC BIAS4",
-			"MIC BIAS4", "Digital Mic5",
-			"Loopback Output", "LINEOUT1",
-			"Loopback Output", "LINEOUT2",
 			"SpkrLeft IN", "SPK1 OUT",
 			"SpkrRight IN", "SPK2 OUT";
 
@@ -500,6 +487,24 @@
 };
 
 &rpm_bus {
+	rpm-regulator-ldoa16 {
+		status = "okay";
+		pm8998_l16: regulator-l16 {
+			regulator-min-microvolt = <3312000>;
+			regulator-max-microvolt = <3312000>;
+			status = "okay";
+		};
+	};
+
+	rpm-regulator-ldoa22 {
+		status = "okay";
+		pm8998_l22: regulator-l22 {
+			regulator-min-microvolt = <3312000>;
+			regulator-max-microvolt = <3312000>;
+			status = "okay";
+		};
+	};
+
 	rpm-regulator-ldoa28 {
 		status = "okay";
 		pm8998_l28: regulator-l28 {
