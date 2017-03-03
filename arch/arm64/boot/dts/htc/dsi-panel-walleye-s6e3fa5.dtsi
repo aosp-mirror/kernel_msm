@@ -71,7 +71,7 @@
 		];
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-off-command = [
-			05 01 00 00 23 00 02 28 00
+			05 01 00 00 0A 00 02 28 00
 			05 01 00 00 96 00 02 10 00
 		];
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
@@ -92,8 +92,8 @@
 			qcom,supply-enable-load = <62000>;
 			qcom,supply-disable-load = <80>;
 			qcom,supply-pre-on-sleep = <0>;
-			qcom,supply-post-on-sleep = <0>;
-			qcom,supply-pre-off-sleep = <0>;
+			qcom,supply-post-on-sleep = <10>;
+			qcom,supply-pre-off-sleep = <10>;
 			qcom,supply-post-off-sleep = <1>;
 		};
 		qcom,panel-supply-entry@1 {
@@ -103,9 +103,9 @@
 			qcom,supply-max-voltage = <3000000>;
 			qcom,supply-enable-load = <100000>;
 			qcom,supply-disable-load = <100>;
-			qcom,supply-pre-on-sleep = <1>;
+			qcom,supply-pre-on-sleep = <0>;
 			qcom,supply-post-on-sleep = <10>;
-			qcom,supply-pre-off-sleep = <10>;
+			qcom,supply-pre-off-sleep = <0>;
 			qcom,supply-post-off-sleep = <0>;
 		 };
 	};

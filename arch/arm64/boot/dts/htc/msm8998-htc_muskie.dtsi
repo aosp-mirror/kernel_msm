@@ -83,7 +83,7 @@
 			};
 				config {
 				pins = "gpio94";
-				drive-strength = <8>; /* 8 mA */
+				drive-strength = <2>; /* 2 mA */
 				bias-disable = <0>; /* no pull */
 			};
 		};
