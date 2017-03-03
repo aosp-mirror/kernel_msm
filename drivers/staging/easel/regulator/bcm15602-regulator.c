@@ -1061,11 +1061,19 @@ static int bcm15602_chip_fixup(struct bcm15602_chip *ddata)
 	/* enable bandgap curvature correction for improved accuracy */
 	bcm15602_write_byte(ddata, BCM15602_REG_ADC_BGCTRL, 0x7B);
 
-	/* disable ASR differential sense */
-	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL0, 0x40, 0x00);
+	/* unlock register, then set ASR switching frequency trim */
+	bcm15602_write_byte(ddata, BCM15602_REG_SYS_WRLOCKEY, 0x38);
+	bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL2, 0x04);
 
-	/* increase ASR over-I threshold to 4.5A and 12.8 microseconds */
-	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL7, 0xFC, 0xEC);
+	/* set ASR undervoltage threshold */
+	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL5, 0x0C, 0x04);
+
+	/* set ASR comparator input filter select */
+	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL11, 0x03, 0x03);
+
+	/* set ASR feedback network R2 adjustment */
+	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2, 0x03,
+			     0x02);
 
 	return 0;
 }
