@@ -24,6 +24,7 @@
 
 #include <linux/regmap.h>
 #include <linux/workqueue.h>
+#include <linux/timer.h>
 
 /* Page Control Register */
 #define TAS2557_PAGECTL_REG			0
@@ -72,16 +73,18 @@
 #define TAS2557_NONAME18_REG			TAS2557_REG(0, 0, 18)
 #define TAS2557_SAR_SAMPLING_TIME_REG		TAS2557_REG(0, 0, 19)
 #define TAS2557_SAR_ADC1_REG			TAS2557_REG(0, 0, 20)
-#define TAS2557_SAR_ADC2_REG			TAS2557_REG(0, 0, 21)
+#define TAS2557_SAR_ADC2_REG			TAS2557_REG(0, 0, 21)	/* B0_P0_R0x15*/
 #define TAS2557_CRC_CHECKSUM_REG		TAS2557_REG(0, 0, 32)
 #define TAS2557_CRC_RESET_REG			TAS2557_REG(0, 0, 33)
 #define TAS2557_DSP_MODE_SELECT_REG		TAS2557_REG(0, 0, 34)
-#define TAS2557_NONAME42_REG			TAS2557_REG(0, 0, 42)
+#define TAS2557_SAFE_GUARD_REG			TAS2557_REG(0, 0, 37)
+#define TAS2557_ASI_CTL1_REG			TAS2557_REG(0, 0, 42)
 #define TAS2557_CLK_ERR_CTRL			TAS2557_REG(0, 0, 44)
 #define TAS2557_DBOOST_CFG_REG			TAS2557_REG(0, 0, 52)
 #define TAS2557_POWER_UP_FLAG_REG		TAS2557_REG(0, 0, 100)
 #define TAS2557_FLAGS_1				TAS2557_REG(0, 0, 104)	/* B0_P0_R0x68*/
 #define TAS2557_FLAGS_2				TAS2557_REG(0, 0, 108)	/* B0_P0_R0x6c*/
+
 /* Book0, Page1 registers */
 #define TAS2557_ASI1_DAC_FORMAT_REG		TAS2557_REG(0, 1, 1)
 #define TAS2557_ASI1_ADC_FORMAT_REG		TAS2557_REG(0, 1, 2)
@@ -113,8 +116,8 @@
 #define TAS2557_ASI2_DAC_CLKOUT_REG		TAS2557_REG(0, 1, 36)
 #define TAS2557_ASI2_ADC_CLKOUT_REG		TAS2557_REG(0, 1, 37)
 
-#define TAS2557_GPIO1_PIN_REG			TAS2557_REG(0, 1, 61)
-#define TAS2557_GPIO2_PIN_REG			TAS2557_REG(0, 1, 62)
+#define TAS2557_GPIO1_PIN_REG			TAS2557_REG(0, 1, 61)	/*B0_P1_R0x3d */
+#define TAS2557_GPIO2_PIN_REG			TAS2557_REG(0, 1, 62)	/*B0_P1_R0x3e */
 #define TAS2557_GPIO3_PIN_REG			TAS2557_REG(0, 1, 63)	/*B0_P1_R0x3f */
 #define TAS2557_GPIO4_PIN_REG			TAS2557_REG(0, 1, 64)	/*B0_P1_R0x40 */
 #define TAS2557_GPIO5_PIN_REG			TAS2557_REG(0, 1, 65)
@@ -124,7 +127,7 @@
 #define TAS2557_GPIO9_PIN_REG			TAS2557_REG(0, 1, 69)
 #define TAS2557_GPIO10_PIN_REG			TAS2557_REG(0, 1, 70)
 
-#define TAS2557_GPI_PIN_REG			TAS2557_REG(0, 1, 77)
+#define TAS2557_GPI_PIN_REG				TAS2557_REG(0, 1, 77)	/*B0_P1_R0x4d */
 #define TAS2557_GPIO_HIZ_CTRL1_REG		TAS2557_REG(0, 1, 79)
 #define TAS2557_GPIO_HIZ_CTRL2_REG		TAS2557_REG(0, 1, 80)
 #define TAS2557_GPIO_HIZ_CTRL3_REG		TAS2557_REG(0, 1, 81)
@@ -171,10 +174,12 @@
 #define TAS2557_BOOSTOFF_EFFICIENCY		TAS2557_REG(0, 51, 20)
 #define TAS2557_BOOST_HEADROOM			TAS2557_REG(0, 51, 24)
 #define TAS2557_THERMAL_FOLDBACK_REG	TAS2557_REG(0, 51, 100)
-#define TAS2557_VPRED_COMP_REG			TAS2557_REG(0, 53, 24)
 
-#define TAS2557_SA_COEFF_SWAP_REG		TAS2557_REG(0, 53, 44)
-#define TAS2557_SA_CHL_CTRL_REG		TAS2557_REG(0, 58, 120)
+#define TAS2557_SA_PG2P1_CHL_CTRL_REG	TAS2557_REG(0, 53, 20)	/* B0_P0x35_R0x14 */
+#define TAS2557_SA_COEFF_SWAP_REG		TAS2557_REG(0, 53, 44)	/* B0_P0x35_R0x2c */
+
+#define TAS2557_SA_PG1P0_CHL_CTRL_REG	TAS2557_REG(0, 58, 120)	/* B0_P0x3a_R0x78 */
+
 
 #define TAS2557_TEST_MODE_REG			TAS2557_REG(0, 253, 13)
 #define TAS2557_BROADCAST_REG			TAS2557_REG(0, 253, 54)
@@ -194,6 +199,7 @@
 #define TAS2557_RAMP_CLK_DIV_LSB_REG		TAS2557_REG(100, 0, 44)
 
 #define TAS2557_XMEM_44_REG				TAS2557_REG(130, 2, 64)	/* B0x82_P0x02_R0x40 */
+#define TAS2557_DIE_TEMP_REG			TAS2557_REG(130, 2, 124)	/* B0x82_P0x02_R0x7C */
 
 /* Bits */
 /* B0P0R4 - TAS2557_POWER_CTRL1_REG */
@@ -291,6 +297,10 @@
 #define TAS2557_FW_PG21_NAME     "tas2557s_PG21_uCDSP.bin"
 
 #define TAS2557_BROADCAST_ADDR	0x4c
+
+#define TAS2557_APP_ROM1MODE	0
+#define TAS2557_APP_ROM2MODE	1
+#define TAS2557_APP_TUNINGMODE	2
 
 struct TBlock {
 	unsigned int mnType;
@@ -435,6 +445,7 @@ struct tas2557_priv {
 	int (*set_calibration)(struct tas2557_priv *pTAS2557,
 		int calibration);
 	int (*enableIRQ)(struct tas2557_priv *pTAS2557, bool enable, bool clear);
+	void (*hw_reset)(struct tas2557_priv *pTAS2557);
 
 	int mnLeftChlGpioINT;
 	int mnRightChlGpioINT;
@@ -446,7 +457,14 @@ struct tas2557_priv {
 	unsigned char mnI2SBits;
 
 	bool mnChannelSwap;	/* 0, default; 1, swapped */
+	enum channel mnROMChlDev;
+	unsigned int mnROMChlCtrl;
 
+	/* for low temperature check */
+	unsigned int mnDevGain;
+	unsigned int mnDevCurrentGain;
+	struct hrtimer mtimer;
+	struct work_struct mtimerwork;
 #ifdef CONFIG_TAS2557_MISC_STEREO
 	int mnDBGCmd;
 	int mnCurrentReg;

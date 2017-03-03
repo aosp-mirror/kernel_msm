@@ -50,6 +50,9 @@
 #define TAS2557_YRAM5_START_REG			8
 #define TAS2557_YRAM5_END_REG			27
 
+#define TAS2557_SAFE_GUARD_PATTERN		0x5a
+#define LOW_TEMPERATURE_CHECK_PERIOD 5000	/* 5 second */
+
 struct TYCRC {
 	unsigned char mnOffset;
 	unsigned char mnLen;
@@ -57,7 +60,9 @@ struct TYCRC {
 
 int tas2557_enable(struct tas2557_priv *pTAS2557, bool bEnable);
 int tas2557_SA_SwapChannel(struct tas2557_priv *pTAS2557, bool swap);
+int tas2557_ROMMode_Chl_Ctrl(struct tas2557_priv *pTAS2557, enum channel chl, unsigned char ctrl);
 int tas2557_SA_ctl_echoRef(struct tas2557_priv *pTAS2557);
+int tas2557_get_die_temperature(struct tas2557_priv *pTAS2557, int *pTemperature);
 int tas2557_set_sampling_rate(struct tas2557_priv *pTAS2557, unsigned int nSamplingRate);
 int tas2557_set_bit_rate(struct tas2557_priv *pTAS2557, enum channel chn, unsigned int nBitRate);
 int tas2557_get_bit_rate(struct tas2557_priv *pTAS2557, enum channel chn, unsigned char *pBitRate);

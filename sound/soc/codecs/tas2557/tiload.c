@@ -223,14 +223,6 @@ static ssize_t tiload_write(struct file *filp, const char __user *buf,
 		dev_err(pTAS2557->dev, "%s, %d, ret=%d, count=%zu, ERROR Happen\n", __func__,
 			__LINE__, ret, count);
 
-/*
-*	for (n = 1; n < count; n++) {
-*		nCompositeRegister = BPR_REG(gBook, gPage, nRegister + n - 1);
-*		g_codec->driver->write(g_codec, 0x80000000 | nCompositeRegister,
-*			pData[n]);
-*	}
-*/
-
 	return size;
 }
 
