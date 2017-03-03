@@ -328,6 +328,7 @@ int Capacity_Adjust;
 #define STC311x_DELAY_CRITICAL_BATT 500 //5 sec
 #define STC311x_SOC_LOW_THRESHOLD 7
 #define STC311x_SOC_CRITICAL_THRESHOLD 3
+#define BATTERY_NTC_ERROR_TEMP -40
 
 /* ************************************************************************ */
 
@@ -365,7 +366,35 @@ int null_fn(void)
 
 int Temperature_fn(void)
 {
-	return 25;
+	struct stc311x_chip *chip = i2c_get_clientdata(sav_client);
+	struct qpnp_vadc_result result;
+	int res;
+
+	//Use pm8916 mpp3 to read battery NTC to get the battery temperature
+	if (NULL == chip->vadc_dev) {
+		chip->vadc_dev = qpnp_get_vadc(chip->dev, "pm8916");
+		if (IS_ERR(chip->vadc_dev)) {
+			res = PTR_ERR(chip->vadc_dev);
+			if (res == -EPROBE_DEFER)
+				pr_err("stc311x - pm8916 vadc not found - defer rc \n");
+			else
+				pr_err("stc311x - fail to get the pm8916 vadc \n");
+			chip->vadc_dev = NULL;
+			goto Error;
+		}
+	}
+
+	res=qpnp_vadc_read(chip->vadc_dev, P_MUX3_1_1, &result);//get channel 0x12	
+	if (res < 0) {
+		pr_err("stc311x - Error reading pm8916 mpp3: %d\n", res);
+		goto Error; 
+	} else {
+		pr_debug("stc311x - pm8916 mpp3,  temperature = %lld \n", result.physical);
+		return (int)(result.physical * 10);
+	}
+
+	Error:
+		return BATTERY_NTC_ERROR_TEMP;
 }
 
 static struct stc311x_platform_data stc3117_data = {
@@ -442,7 +471,7 @@ static struct stc311x_platform_data stc3117_data = {
 	/*External temperature fonction, return degC*/
 	.ExternalTemperature = Temperature_fn,
 	/* 1=External temperature, 0=STC3117 temperature */
-	.ForceExternalTemperature = 0,
+	.ForceExternalTemperature = 1,
 };
 
 static int stc311x_set_property(struct power_supply *psy,
@@ -1849,7 +1878,7 @@ static void STC311x_Rewrite_OCV(void)
  *****************************************************************************/
 int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 {
-	int res, value, ret;
+	int res, value, ret, batt_temp;
 
 	BattData.Cnom = GG->Cnom;
 	BattData.Rsense = GG->Rsense;
@@ -1924,8 +1953,14 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 		pr_err(" 1st BattData.SOC = %d (0.1)\n", BattData.SOC);
 
 	/*Force an external temperature*/
-	if (GG->ForceExternalTemperature == 1)
-		BattData.Temperature = GG->ExternalTemperature;
+	if (GG->ForceExternalTemperature == 1) {
+		batt_temp = GG->ExternalTemperature;
+		if (g_debug)
+			pr_err("stc3117 temp= %d, battery NTC temp = %d \n", BattData.Temperature, batt_temp);
+		//If read PMIC NTC success, update the temperature. Else, use stc3117 temperature
+		if (batt_temp != BATTERY_NTC_ERROR_TEMP)
+			BattData.Temperature = batt_temp;
+	}
 
 	/* check INIT state */
 	if (GG_Ram.reg.GG_Status == GG_INIT) {
@@ -2314,39 +2349,6 @@ int STC31xx_ForceCC(void)
 	return OK;
 }
 
-
-static int stc311x_read_pmic_adc_temperature(struct stc311x_chip *chip, int *batt_temp)
-{
-	struct qpnp_vadc_result result;
-	int res;
-	
-	// get pm8916 mpp3 adc
-	if(NULL == chip->vadc_dev) {
-		chip->vadc_dev = qpnp_get_vadc(chip->dev, "pm8916");
-			if (IS_ERR(chip->vadc_dev)) {
-				res = PTR_ERR(chip->vadc_dev);
-				if (res == -EPROBE_DEFER)
-					pr_err("stc311x - pm8916 vadc not found - defer rc \n");
-				else
-					pr_err("stc311x - fail to get the pm8916 vadc \n");
-				chip->vadc_dev = NULL;
-
-				return -1; 
-	          }
-	}
-	
-	res=qpnp_vadc_read(chip->vadc_dev, P_MUX3_1_1, &result);//get channel 0x12
-	if (res < 0) {
-		pr_err("stc311x - Error reading VADC chennal_12: %d\n", res);
-		return res;
-	} else {
-		// update the tempetature from pmic adc
-		pr_debug("stc311x - read pmic mpp3,  temperature = %lld \n", result.physical);
-		*batt_temp = (int)(result.physical * 10);
-	}
-	return 0;
-}
-
 	
 /* -------------------------------------------------------------- */
 
@@ -2412,7 +2414,8 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 */
 void UI_soc_adjustment(struct stc311x_chip *chip)
 {
-	pr_err("charging status = %d, UI soc = %d,  ST soc = %d \n", chip->status,  g_ui_soc, chip->batt_soc);
+	if (g_debug)
+		pr_err("charging status = %d, UI soc = %d,  ST soc = %d \n", chip->status,  g_ui_soc, chip->batt_soc);
 	if ((g_ui_soc == STC311x_BATTERY_FULL) && (chip->status != POWER_SUPPLY_STATUS_DISCHARGING))
 		return;
 
@@ -2462,7 +2465,7 @@ static void stc311x_work(struct work_struct *work)
 {
 	struct stc311x_chip *chip;
 	struct GasGauge_DataTypeDef GasGaugeData;
-	int res, Loop, rc, temp;
+	int res, Loop;
 
 	chip = container_of(work, struct stc311x_chip, work.work);
 
@@ -2540,19 +2543,7 @@ static void stc311x_work(struct work_struct *work)
 		pr_err("GasGauge_Task return (-1) \n");
 	}
 
-	//get temperature by pmic ADC. 
-	rc = stc311x_read_pmic_adc_temperature(chip, &temp);
-	if (rc) {
-		//If fail, use stc3117 data
-		if (res >0)
-			chip->Temperature = GasGaugeData.Temperature;
-		else
-			chip->Temperature = 250; //default
-	} else
-		chip->Temperature = temp;
-
 	if (g_debug) {
-		pr_err("ST temperature= %d, pmic mpp_3 temperature = %d \n", GasGaugeData.Temperature, temp);
 		pr_err(" ===  After GasGauge_Task() === \n");
 		stc311x_debug_info();
 	}
