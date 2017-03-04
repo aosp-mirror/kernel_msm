@@ -51,6 +51,8 @@
 	_IO(MNH_SM_IOC_MAGIC, 8)
 #define MNH_SM_IOC_RESUME \
 	_IO(MNH_SM_IOC_MAGIC, 9)
+#define MNH_SM_IOC_STOP_MIPI \
+	_IOW(MNH_SM_IOC_MAGIC, 10, struct mnh_mipi_config *)
 
 enum mnh_sm_state {
 	MNH_STATE_OFF, /* powered off */

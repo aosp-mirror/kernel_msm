@@ -145,16 +145,23 @@ static struct mnh_mipi_vco_range_cntrl vco_range_cntrls[] = {
 static struct mipi_dev_ovr_cfg mipi_dev_ovr_cfgs[] = {
 	/* rate 0x05A 0x05B 0x05C 0x05D 0x05E 0x05F 0x061 0x062 0x063 0x064 0x065 wait_time */
 	{  340, 0x57, 0x43, 0xC2, 0x44, 0x42, 0x8A, 0x43, 0xC3, 0x44, 0x43, 0x83, 0x13, true},
+	{  360, 0x57, 0x43, 0xC2, 0x44, 0x42, 0x8A, 0x43, 0xC3, 0x44, 0x43, 0x83, 0x13, false},
 	{  446, 0x57, 0x45, 0xC3, 0x9D, 0x43, 0x8E, 0x45, 0xC3, 0x9D, 0x44, 0x84, 0x17, true},
 	{  488, 0x58, 0x45, 0xC3, 0xBC, 0x43, 0x90, 0x45, 0xC3, 0xBC, 0x44, 0x85, 0x17, true},
-	{  648, 0x4C, 0x48, 0xC5, 0x03, 0x44, 0x91, 0x47, 0xC6, 0x03, 0x43, 0x85, 0xE,  true},
-	{  675, 0x4C, 0x48, 0xC5, 0x03, 0x44, 0x91, 0x47, 0xC6, 0x03, 0x43, 0x85, 0xE,  true},
-	{  720, 0x4E, 0x48, 0xC5, 0x03, 0x46, 0x95, 0x48, 0xC6, 0x03, 0x47, 0x86, 0x1D, true},
+	{  540, 0x4C, 0x48, 0xC5, 0x03, 0x44, 0x91, 0x47, 0xC6, 0x03, 0x43, 0x85, 0xE,  false},/* works for 488 */
+	{  648, 0x4E, 0x48, 0xC5, 0x05, 0x47, 0x94, 0x48, 0xC5, 0x05, 0x47, 0x85, 0xE,  true},
+	{  685, 0x4C, 0x48, 0xC5, 0x03, 0x44, 0x91, 0x47, 0xC6, 0x03, 0x43, 0x85, 0xE,  true},/* working */
+	{  720, 0x4E, 0x49, 0xC5, 0x05, 0x48, 0x96, 0x49, 0xC6, 0x05, 0x48, 0x86, 0x1F, true},/* working */
 	{  984, 0x50, 0x4D, 0xC7, 0x05, 0x4A, 0xA0, 0x4D, 0xC8, 0x05, 0x4A, 0x8A, 0x13, true},
-	{ 1104, 0x5D, 0x4F, 0xC6, 0xB5, 0x49, 0xA7, 0x4F, 0xC7, 0xB5, 0x49, 0x8E, 0x27, true},
-	{ 1296, 0x53, 0x51, 0xCA, 0x09, 0x4A, 0xA7, 0x50, 0xCC, 0x07, 0x46, 0x8D, 0x2E, true},
-	{ 1350, 0x53, 0x51, 0xCA, 0x09, 0x4A, 0xA7, 0x50, 0xCC, 0x07, 0x46, 0x8D, 0x2E, true},
-	{ 1776, 0x58, 0x59, 0xCC, 0x0B, 0x54, 0xC0, 0x59, 0xCE, 0x0B, 0x51, 0x97, 0x17, true},
+	{ 1104, 0x5D, 0x4F, 0xC6, 0xB5, 0x49, 0xA7, 0x4F, 0xC7, 0xB5, 0x4B, 0x8E, 0x27, true},
+	{ 1200, 0x53, 0x51, 0xCA, 0x09, 0x4E, 0xA7, 0x50, 0xCC, 0x07, 0x4B, 0x8D, 0x2E, true},
+	{ 1296, 0x53, 0x51, 0xCA, 0x09, 0x4E, 0xA7, 0x50, 0xCC, 0x07, 0x4C, 0x8D, 0x2E, true},
+	{ 1300, 0x53, 0x51, 0xCA, 0x09, 0x4E, 0xA7, 0x50, 0xCC, 0x07, 0x4C, 0x8D, 0x2E, true},
+	{ 1350, 0x53, 0x51, 0xCA, 0x09, 0x4E, 0xA7, 0x50, 0xCC, 0x07, 0x4C, 0x8D, 0x2E, true},/* working */
+	{ 1776, 0x58, 0x59, 0x4D, 0x00, 0x55, 0xC0, 0x59, 0x4E, 0x00, 0x52, 0x98, 0x1B, false},
+	{ 1850, 0x58, 0x59, 0xCD, 0x0B, 0x55, 0xC0, 0x59, 0xCE, 0x0B, 0x52, 0x98, 0x1B, true},
+	{ 1900, 0x58, 0x59, 0xCD, 0x0B, 0x55, 0xC0, 0x59, 0xCE, 0x0B, 0x52, 0x98, 0x1B, true},/* working with ct. clock */
+	{ 2000, 0x58, 0x59, 0xCD, 0x0B, 0x55, 0xC0, 0x59, 0xCE, 0x0B, 0x52, 0x98, 0x1B, true},
 	{ 2100, 0x9A, 0x9B, 0xD0, 0x0E, 0x50, 0xC0, 0x39, 0xD3, 0x0C, 0x4A, 0xA7, 0x1E, true},
 };
 
@@ -282,6 +289,8 @@ static void mnh_mipi_gen3_host(struct device *dev, uint32_t device,
 			       uint32_t rate)
 {
 	uint32_t code_index, freq_range_code, osc_freq_code;
+	uint32_t i = 0;
+	unsigned long data;
 
 	/* only support devices 0-2 */
 	if (device > 2)
@@ -361,6 +370,18 @@ static void mnh_mipi_gen3_host(struct device *dev, uint32_t device,
 		0x1);
 	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, CSI2_RESETN,
 		CSI2_RESETN, 0x1);
+
+	dev_dbg(dev, "%s: waiting for host controller %d\n", __func__, device);
+	do {
+		data = HW_IN(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX,
+			PHY_STOPSTATE);
+		udelay(10);
+		i++;
+	} while ((i < 40) && ((data & 0x1000F) != 0x1000F));
+
+	if ((i >= 40) && ((data & 0x1000F) != 0x1000F))
+		dev_err(dev, "%d status check failed for gen3 host data: 0x%lx\n",
+			device, data);
 }
 
 static uint8_t mnh_mipi_get_vco_cntrl(uint32_t rate)
@@ -440,20 +461,35 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 
 	dev_dbg(dev, "%s: dev %d, rate %d\n", __func__, device, rate);
 
-	/* Functional configurations are currently 1350, 720, 675 */
 	if (!mipi_debug) {
-		if (rate <= 675) {
-			dev_dbg(dev, "%s: %d config. default 675\n", __func__,
-				rate);
-			rate = 675;
+		if (rate <= 360) {
+			dev_dbg(dev, "%s: %d config. default 360\n",
+				 __func__, rate);
+			rate = 360;
+		} else if (rate <= 540) { /* debug */
+			dev_dbg(dev, "%s: %d config. default 540\n",
+				 __func__, rate);
+			rate = 540;
+		} else if (rate <= 685) {
+			dev_dbg(dev, "%s: %d config. default 685\n",
+				 __func__, rate);
+			rate = 685;
 		} else if (rate <= 720) {
-			dev_dbg(dev, "%s: %d config. default 720\n", __func__,
-				rate);
+			dev_dbg(dev, "%s: %d config. default 720\n",
+				 __func__, rate);
 			rate = 720;
+		} else if (rate <= 1200) {
+			dev_dbg(dev, "%s: %d config. default 1200\n",
+				 __func__, rate);
+			rate = 1200;
 		} else if (rate <= 1350) {
-			dev_dbg(dev, "%s: %d config. default 1350\n", __func__,
-				rate);
+			dev_dbg(dev, "%s: %d config. default 1350\n",
+				 __func__, rate);
 			rate = 1350;
+		} else if (rate <= 1850) {
+			dev_dbg(dev, "%s: %d config. default 1850\n",
+				 __func__, rate);
+			rate = 1850;
 		}
 	}
 
@@ -471,7 +507,6 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 	/* mipicsi_device_hw_init */
 	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_RSTZ,
 		PHY_SHUTDOWNZ, 0x1);
-
 	/* mipicsi_device_dphy_reset */
 	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_RSTZ, PHY_RSTZ,
 		0x1);
@@ -578,12 +613,19 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 	if (rate <= 450)
 		mnh_sm_mipi_tx_dphy_write_gen3(0x1AC, 1 << 4, device);
 
+	/* Use continuous clock for 240fps */
+	if (rate >= 1776) {
+		dev_dbg(dev, "%s: Enabling continuous clock for rate>=1776\n",
+			 __func__);
+		HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX,
+			LPCLK_CTRL, PHY_TXREQCLKHS_CON, 1);
+	} else {
+		HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX,
+			LPCLK_CTRL, PHY_TXREQCLKHS_CON, 0);
+	}
+
 	/* Wait for 15ns */
 	udelay(1);
-
-	/* Enable lanes */
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_IF_CFG,
-		LANE_EN_NUM, 3);
 
 	/* Timing register overrides */
 	if (!mipi_debug && dev_ovr_cfg->use_ovrd) {
@@ -595,8 +637,10 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 					       device);
 		mnh_sm_mipi_tx_dphy_write_gen3(0x5D, dev_ovr_cfg->reg_0x5D,
 					       device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x5E, dev_ovr_cfg->reg_0x5E,
-					       device);
+		/*
+		 * mnh_sm_mipi_tx_dphy_write_gen3(0x5E, dev_ovr_cfg->reg_0x5E,
+		 * device);
+		 */
 		mnh_sm_mipi_tx_dphy_write_gen3(0x5F, dev_ovr_cfg->reg_0x5F,
 					       device);
 		mnh_sm_mipi_tx_dphy_write_gen3(0x61, dev_ovr_cfg->reg_0x61,
@@ -605,17 +649,23 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 					       device);
 		mnh_sm_mipi_tx_dphy_write_gen3(0x63, dev_ovr_cfg->reg_0x63,
 					       device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x64, dev_ovr_cfg->reg_0x64,
-					       device);
+		/*
+		 * mnh_sm_mipi_tx_dphy_write_gen3(0x64, dev_ovr_cfg->reg_0x64,
+		 * device);
+		 */
 		mnh_sm_mipi_tx_dphy_write_gen3(0x65, dev_ovr_cfg->reg_0x65,
 					       device);
 	}
+
+	/* Enable lanes */
+	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_IF_CFG,
+		LANE_EN_NUM, 3);
 
 	/* TODO: Double-check these wait times */
 #if 0
 	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_IF_CFG,
 		PHY_STOP_WAIT_TIME, dev_ovr_cfg->wait_time);
-#else
+/* #else */
 	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_IF_CFG,
 		    PHY_STOP_WAIT_TIME, ((rate / 100) - 1));
 #endif
@@ -757,6 +807,24 @@ int mnh_mipi_config(struct device *dev, struct mnh_mipi_config config)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mnh_mipi_config);
+
+int mnh_mipi_stop(struct device *dev, struct mnh_mipi_config config)
+{
+	uint32_t txdev = config.txdev;
+	uint32_t rxdev = config.rxdev;
+
+	dev_info(dev, "%s: stopping rxdev %d, txdev %d\n", __func__, rxdev,
+		 txdev);
+
+	/* Shutdown host */
+	mnh_mipi_stop_host(dev, rxdev);
+
+	/* Shutdown device */
+	mnh_mipi_stop_device(dev, txdev);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mnh_mipi_stop);
 
 void mnh_mipi_stop_device(struct device *dev, int txdev)
 {

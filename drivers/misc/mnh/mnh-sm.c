@@ -716,6 +716,38 @@ static ssize_t mnh_sm_freeze_state_store(struct device *dev,
 static DEVICE_ATTR(freeze_state, S_IWUSR | S_IRUGO,
 		mnh_sm_freeze_state_show, mnh_sm_freeze_state_store);
 
+/* temporary sysfs hook to test mipi shutdown of the available channels */
+static ssize_t mnh_sm_mipi_stop_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf,
+				  size_t count)
+{
+	unsigned long val = 0;
+	int ret;
+
+	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_mipi_store...\n");
+
+	ret = mnh_sm_get_val_from_buf(buf, &val);
+	if (!ret) {
+		if (val < ARRAY_SIZE(mnh_mipi_configs)) {
+			dev_dbg(mnh_sm_dev->dev,
+				"Shutting down mipi tx dev %d, rx dev %d\n",
+				mnh_mipi_configs[val].txdev,
+				mnh_mipi_configs[val].rxdev);
+			mnh_mipi_stop(mnh_sm_dev->dev, mnh_mipi_configs[val]);
+		} else {
+			dev_dbg(mnh_sm_dev->dev, "Invalid MIPI channel\n");
+		}
+		return count;
+	}
+	dev_err(mnh_sm_dev->dev, "Usage: echo\"<channel>\">mipi_stop\n");
+	return -EINVAL;
+}
+
+static DEVICE_ATTR(mipi_stop, S_IWUSR,
+		   NULL, mnh_sm_mipi_stop_store);
+
+
 static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_poweron.attr,
 	&dev_attr_poweroff.attr,
@@ -731,6 +763,7 @@ static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_cpu_clk.attr,
 	&dev_attr_debug_mipi.attr,
 	&dev_attr_freeze_state.attr,
+	&dev_attr_mipi_stop.attr,
 	NULL
 };
 
@@ -1298,6 +1331,17 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 		mnh_sm_dev->next_mnh_state = MNH_STATE_OFF;
 		schedule_work(&mnh_sm_dev->set_state_work);
 		break;
+	case MNH_SM_IOC_STOP_MIPI:
+		err = copy_from_user(&mipi_config, (void __user *)arg,
+				     sizeof(struct mnh_mipi_config));
+		if (err) {
+			dev_err(mnh_sm_dev->dev,
+				"%s: failed to copy mipi stop config from userspace (%d)\n",
+				__func__, err);
+			return err;
+		}
+		mnh_mipi_stop(mnh_sm_dev->dev, mipi_config);
+		break;
 	case MNH_SM_IOC_CONFIG_MIPI:
 		err = copy_from_user(&mipi_config, (void __user *)arg,
 				     sizeof(struct mnh_mipi_config));
@@ -1373,6 +1417,7 @@ static long mnh_sm_compat_ioctl(struct file *file, unsigned int cmd,
 	int ret;
 
 	switch (_IOC_NR(cmd)) {
+	case _IOC_NR(MNH_SM_IOC_STOP_MIPI):
 	case _IOC_NR(MNH_SM_IOC_CONFIG_MIPI):
 	case _IOC_NR(MNH_SM_IOC_GET_STATE):
 		cmd &= ~(_IOC_SIZEMASK << _IOC_SIZESHIFT);
