@@ -911,6 +911,8 @@ static int mnh_sm_close(struct inode *inode, struct file *filp)
 
 	filp->private_data = data; /* for other methods */
 
+	mnh_sm_set_state(MNH_STATE_OFF);
+
 	data->open--;
 
 	dev_dbg(data->dev, "%s: closing mnh_sm, count %d\n", __func__,
