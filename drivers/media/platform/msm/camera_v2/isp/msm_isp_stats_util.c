@@ -472,6 +472,12 @@ static int msm_isp_start_stats_stream(struct vfe_device *vfe_dev,
 		return -EINVAL;
 	}
 
+	if (stream_cfg_cmd->num_streams > MSM_ISP_STATS_MAX) {
+		pr_err("%s invalid num_streams %d\n", __func__,
+			stream_cfg_cmd->num_streams);
+		return -EINVAL;
+	}
+
 	num_stats_comp_mask =
 		vfe_dev->hw_info->stats_hw_info->num_stats_comp_mask;
 	rc = vfe_dev->hw_info->vfe_ops.stats_ops.check_streams(
