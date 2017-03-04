@@ -1,0 +1,173 @@
+/*
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "msm8909-mtp.dtsi"
+#include "msm8909w-gpu.dtsi"
+#include "msm8909-pm8916.dtsi"
+#include "msm8909-pm8916-mtp.dtsi"
+#include "msm8909w.dtsi"
+#include "dsi-panel-boe6d00-454p-cmd.dtsi"
+#include "apq8009w-memory.dtsi"
+
+
+&soc {
+	i2c@78b9000 { /* BLSP1 QUP5 */
+		/delete-node/ synaptics@20;
+
+		it7260@46 {
+			compatible = "ite,it7259_ts";
+			reg = <0x46>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <13 0x2008>;
+			avdd-supply = <&pm8916_l17>;
+			vdd-supply = <&pm8916_l6>;
+			/* pins used by touchscreen */
+			pinctrl-names = "pmx_ts_active","pmx_ts_suspend",
+							"pmx_ts_release";
+			pinctrl-0 = <&ts_int_active &ts_ite_reset_active>;
+			pinctrl-1 = <&ts_int_suspend &ts_ite_reset_suspend>;
+			pinctrl-2 = <&ts_release>;
+			ite,reset-gpio = <&msm_gpio 12 0x00>;
+			ite,irq-gpio = <&msm_gpio 13 0x2008>;
+			ite,panel-coords = <0 0 494 494>;
+			ite,display-coords = <20 20 474 474>;
+			ite,reset-delay = <20>;
+			ite,num-fingers = <2>;
+			ite,wakeup;
+			ite,palm-detect-en;
+			ite,palm-detect-keycode = <142>;
+			ite,fw-name = "it7260_fw_050D0014.bin";
+			ite,cfg-name = "it7260_cfg_62011E01.bin";
+			ite,avdd-lpm-cur = <3000>;
+		};
+	};
+
+	i2c@78b6000 { /* BLSP1 QUP2 */
+		nq@28 {
+			compatible = "qcom,nq-nci";
+			reg = <0x28>;
+			qcom,nq-irq = <&msm_gpio 21 0x00>;
+			qcom,nq-ven = <&msm_gpio 20 0x00>;
+			qcom,nq-firm = <&msm_gpio 34 0x00>;
+			qcom,nq-clkreq = <&pm8916_gpios 2 0>;
+			qcom,nq-esepwr = <&msm_gpio 31 0x00>;
+			qcom,clk-src = "BBCLK2";
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <21 0>;
+			interrupt-names = "nfc_irq";
+			pinctrl-names = "nfc_active","nfc_suspend";
+			pinctrl-0 = <&nfc_int_active &nfc_enable_active>;
+			pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend>;
+			clocks = <&clock_rpm clk_bb_clk2_pin>;
+			clock-names = "ref_clk";
+		};
+	};
+
+        qcom,msm-ssc-sensors {
+                compatible = "qcom,msm-ssc-sensors";
+        };
+};
+
+
+&blsp1_uart1 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_sleep>;
+};
+
+&i2c_1 {
+	status = "disabled";
+};
+
+&spi_0 {
+	status = "disabled";
+};
+
+&i2c_3 {
+	status = "disabled";
+};
+
+&i2c_2 {
+	status = "disabled";
+};
+
+&pm8916_chg {
+        status = "ok";
+        qcom,btc-disabled;
+//      qcom,charging-disabled;
+};
+
+
+&pm8916_bms {
+        status = "ok";
+        qcom,battery-data = <&mtp_batterydata>;
+};
+
+&msm_gpio {
+	/* Delete gpio58 configuration */
+	/delete-node/ tpiu_seta_14;
+	/delete-node/ smb_int_pin;
+	smb_int_default: smb_int_default {
+		mux {
+			pins = "gpio49";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio49";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+		};
+	};
+
+	smb_susp_default: smb_susp_default {
+		mux {
+			pins = "gpio58";
+			function ="gpio";
+		};
+		config {
+			pins = "gpio58";
+			drive-strength = <2>;   /* 2 MA */
+			bias-pull-up;           /* PULL UP*/
+			output-high;
+		};
+	};
+};
+
+&i2c_4 {
+	status = "disabled";
+};
+
+
+&dsi_boe6d00_454p_cmd {
+	qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 4 0>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_boe6d00_454p_cmd>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+
+	qcom,platform-te-gpio = <&msm_gpio 24 0>;
+	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
+	qcom,platform-bklight-en-gpio = <&msm_gpio 37 0>;
+	qcom,product-id = <3>;     /* 0 = INWATCH, 1 = DWATCH, 2 = W1AMOLED, 3 = DEACON */
+};
+
+
+&sdhc_2 {
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
+};
