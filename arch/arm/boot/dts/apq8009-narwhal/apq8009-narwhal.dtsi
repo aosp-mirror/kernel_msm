@@ -1,0 +1,128 @@
+/* Copyright (c) 2017, LGE Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "../qcom/msm8909.dtsi"
+#include "../qcom/msm8909w-gpu.dtsi"
+#include "../qcom/msm8909-pm8916.dtsi"
+#include "../qcom/msm8909w.dtsi"
+#include "apq8009-narwhal-pinctrl.dtsi"
+#include "apq8009-pm8916-narwhal.dtsi"
+#include "apq8009-narwhal-panel.dtsi"
+
+/{
+	aliases {
+		/delete-property/i2c1;
+		/delete-property/i2c2;
+		/delete-property/i2c3;
+		/delete-property/i2c4;
+		/delete-property/i2c5;
+		/delete-property/spi0;
+	};
+};
+
+&external_image_mem {
+	reg = <0x0 0x87a00000 0x0 0x0600000>;
+};
+
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x01700000>;
+};
+
+&peripheral_mem {
+	reg = <0x0 0x89700000 0x0 0x0500000>;
+};
+
+&soc {
+	/delete-node/ i2c@78b5000; /* i2c_1 */
+	/delete-node/ i2c@78b6000; /* i2c_2 */
+	/delete-node/ i2c@78b7000; /* i2c_3 */
+	/delete-node/ i2c@78b8000; /* i2c_4 */
+	/delete-node/ i2c@78b9000; /* i2c_5 */
+	/delete-node/ spi@78ba000; /* spi_0 */
+
+	qcom,venus@1de0000 {
+		status = "disabled";
+	};
+
+	qcom,msm-ssc-sensors {
+		compatible = "qcom,msm-ssc-sensors";
+	};
+};
+
+&apc_vreg_corner {
+	qcom,cpr-voltage-floor = <1050000 1125000 1155000>;
+};
+
+&blsp1_uart1 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_sleep>;
+};
+
+&qcom_rng {
+	status = "okay";
+};
+
+&qcom_crypto {
+	status = "okay";
+};
+
+&qcom_cedev {
+	status = "okay";
+};
+
+&qcom_seecom {
+	status = "okay";
+};
+
+&qcom_tzlog {
+	status = "okay";
+};
+
+&sdhc_1 {
+	vdd-supply = <&pm8916_l8>;
+	qcom,vdd-always-on;
+	qcom,vdd-lpm-sup;
+	qcom,vdd-voltage-level = <2900000 2900000>;
+	qcom,vdd-current-level = <800 400000>;
+
+	vdd-io-supply = <&pm8916_l5>;
+	qcom,vdd-io-always-on;
+	qcom,vdd-io-lpm-sup;
+	qcom,vdd-io-voltage-level = <1800000 1800000>;
+	qcom,vdd-io-current-level = <200 60000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on>;
+	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off>;
+
+	qcom,bus-speed-mode = "HS200_1p8v", "DDR_1p8v";
+	qcom,nonremovable;
+
+	status = "ok";
+};
+
+&venus_qseecom_mem {
+	status = "disabled";
+};
+
+&gdsc_venus {
+	status = "disabled";
+};
+
+&gdsc_venus_core0 {
+	status = "disabled";
+};
+
+&usb_otg {
+	qcom,no-set-vbus-power;
+};

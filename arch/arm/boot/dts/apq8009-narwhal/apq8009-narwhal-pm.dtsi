@@ -1,0 +1,132 @@
+/* Copyright (c) 2017, LGE Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&spmi_bus {
+	qcom,pm8916@0 {
+		/*
+		 * Since negative numbers are not allowed in device trees,
+		 * the first two digits here specify if the last two are
+		 * negative: 0 == positive, 1 == negative.
+		 */
+		adcmap_table {
+			compatible = "qcom,adcmap_table";
+			status = "okay";
+			qcom,adcmap_btm_threshold = <
+				(-300) 1627
+				(-200) 1507
+				(-100) 1345
+				0 1159
+				10 1139
+				20 1120
+				30 1101
+				40 1082
+				50 1064
+				60 1045
+				70 1026
+				80 1008
+				90 989
+				100 972
+				110 954
+				120 936
+				130 919
+				140 902
+				150 885
+				160 869
+				170 853
+				180 837
+				190 822
+				200 807
+				210 792
+				220 777
+				230 763
+				240 750
+				250 737
+				260 724
+				270 711
+				280 699
+				290 687
+				300 675
+				310 664
+				320 653
+				330 643
+				340 633
+				350 623
+				360 613
+				370 604
+				380 595
+				390 586
+				400 578
+				410 570
+				420 562
+				430 555
+				440 547
+				450 540
+				460 533
+				470 527
+				480 521
+				490 515
+				500 509
+				510 503
+				520 498
+				530 492
+				540 487
+				550 482
+				560 478
+				570 473
+				580 469
+				590 465
+				600 461
+				610 457
+				620 453
+				630 449
+				640 446
+				650 442
+				660 439
+				670 436
+				680 433
+				690 430
+				700 427
+				710 425
+				720 422
+				730 420
+				740 417
+				750 415
+				760 413
+				770 411
+				780 409
+				790 407>;
+		};
+	};
+};
+
+&pm8916_vadc {
+	chan@13 {
+		label = "usb_id";
+		qcom,calibration-type = "absolute";
+		qcom,decimation = <0x0>;
+		qcom,fast-avg-setup = <0x0>;
+		qcom,hw-settle-time = <0x0>;
+		qcom,pre-div-channel-scaling = <0x0>;
+		qcom,scale-function = <0x0>;
+		reg = <0x13>;
+	};
+};
+
+&pm8916_mpps {
+	mpp@a300 { // MPP 4 For PM_USB_ID ADC
+		qcom,mode = <4>;      // MODE_CTL: ANALOG_INPUT
+		qcom,invert = <1>;    // MODE_CTL: ANALOG Enable
+		qcom,master-en = <1>; // EN_CTL: MPP Enabled
+		qcom,ain-route = <3>; // ANA_IN_CTL: HKADC8
+		qcom,src-sel = <0>;   // MODE_CTL: Source 0
+	};
+};
