@@ -12,6 +12,11 @@ config MACH_ANGELFISH
 	help
 	  Support for the LGE APQ8009W SWORDFISH device.
 
+config MACH_NARWHAL
+	bool "APQ8009W NARWHAL"
+	depends on ARCH_MSM8909
+	help
+	  Support for the LGE APQ8009W NARWHAL device.
 endmenu
 
 menu "LGE Specific Patches"
