@@ -575,7 +575,8 @@ config SND_SOC_MAX98926
 	tristate
 
 config SND_SOC_MAX98927
-	tristate
+	tristate "Maxim Integrated MAX98927 Speaker Amplifier"
+	depends on I2C
 
 config SND_SOC_MAX9850
 	tristate
