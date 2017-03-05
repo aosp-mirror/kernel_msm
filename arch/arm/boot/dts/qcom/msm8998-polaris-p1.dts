@@ -13,7 +13,6 @@
 /dts-v1/;
 
 #include "msm8998-v2.1.dtsi"
-#include "msm8998-camera-sensor-cdp.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. Polaris P1.1";
