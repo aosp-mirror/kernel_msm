@@ -159,6 +159,7 @@
 #define MAX98927_PCM_MODE_CFG_PCM_BCLKEDGE (0x1 << 2)
 #define MAX98927_PCM_MODE_CFG_FORMAT_MASK (0x7 << 3)
 
+#define MAX98927_PCM_MODE_CFG_CHANSZ_MASK (0x3 << 6)
 #define MAX98927_PCM_MODE_CFG_CHANSZ_16 (0x1 << 6)
 #define MAX98927_PCM_MODE_CFG_CHANSZ_24 (0x2 << 6)
 #define MAX98927_PCM_MODE_CFG_CHANSZ_32 (0x3 << 6)
@@ -198,10 +199,12 @@
 #define MAX98927_PCM_TO_SPK_MONOMIX_CFG_SHIFT (6)
 
 /* MAX98927_R0036_AMP_VOL_CTRL */
-#define MAX98927_AMP_VOL_MASK (0x7f << 0)
 #define MAX98927_AMP_VOL_SEL (0x1 << 7)
-#define MAX98927_AMP_VOL_WIDTH (3)
-#define MAX98927_AMP_VOL_SHIFT (7)
+#define MAX98927_AMP_VOL_SEL_WIDTH (1)
+#define MAX98927_AMP_VOL_SEL_SHIFT (7)
+#define MAX98927_AMP_VOL_MASK (0x7f << 0)
+#define MAX98927_AMP_VOL_WIDTH (7)
+#define MAX98927_AMP_VOL_SHIFT (0)
 
 /* MAX98927_R0037_AMP_DSP_CFG */
 #define MAX98927_AMP_DSP_CFG_DCBLK_EN (0x1 << 0)
@@ -246,42 +249,19 @@
 /* MAX98927_R00FF_GLOBAL_SHDN */
 #define MAX98927_GLOBAL_EN_MASK (0x1 << 0)
 
-struct max98927_reg_default {
-	unsigned int ch;
-	unsigned int reg;
-	unsigned int def;
-};
-
 struct max98927_priv {
-	/* Regmap for primary amplifier */
 	struct regmap *regmap;
-	/* Regmap for secondary amplifier */
-	struct regmap *sub_regmap;
 	struct snd_soc_codec *codec;
 	struct max98927_pdata *pdata;
-	const uint32_t *regcfg;
-	uint32_t regcfg_sz;
 	unsigned int spk_gain;
 	unsigned int sysclk;
 	unsigned int v_l_slot;
 	unsigned int i_l_slot;
-	unsigned int v_r_slot;
-	unsigned int i_r_slot;
 	bool interleave_mode;
 	unsigned int ch_size;
 	unsigned int rate;
 	unsigned int iface;
 	unsigned int master;
 	unsigned int digital_gain;
-	struct i2c_client *sub_i2c;
-	int sub_reg;
-	int sub_bus;
 };
-
-enum {
-	PRI_MAX98927 = 0,
-	SEC_MAX98927 = 1,
-	MAX_DEV_ID_MAX98927,
-} MAX98927deviceID;
-
 #endif
