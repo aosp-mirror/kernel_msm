@@ -17,6 +17,7 @@
 #include <linux/mfd/wcd9xxx/core.h>
 #include <linux/mfd/wcd9335/registers.h>
 #include <linux/mfd/wcd934x/registers.h>
+#include <linux/mfd/wcd9xxx/pdata.h>
 #include <sound/soc.h>
 #include "wcd9xxx-resmgr-v2.h"
 
@@ -248,8 +249,13 @@ static int wcd_resmgr_enable_clk_mclk(struct wcd9xxx_resmgr_v2 *resmgr)
 			 */
 			wcd_resmgr_codec_reg_update_bits(resmgr,
 					WCD934X_CLK_SYS_MCLK_PRG, 0x80, 0x80);
-			wcd_resmgr_codec_reg_update_bits(resmgr,
-					WCD934X_CLK_SYS_MCLK_PRG, 0x30, 0x00);
+			if (resmgr->mclk_rate == WCD9XXX_MCLK_CLK_9P6HZ) {
+				wcd_resmgr_codec_reg_update_bits(resmgr,
+						WCD934X_CLK_SYS_MCLK_PRG, 0x30, 0x00);
+			} else {
+				wcd_resmgr_codec_reg_update_bits(resmgr,
+						WCD934X_CLK_SYS_MCLK_PRG, 0x30, 0x10);
+			}
 			wcd_resmgr_codec_reg_update_bits(resmgr,
 					WCD934X_CLK_SYS_MCLK_PRG, 0x02, 0x00);
 			wcd_resmgr_codec_reg_update_bits(resmgr,
@@ -640,6 +646,7 @@ struct wcd9xxx_resmgr_v2 *wcd_resmgr_init(
 	resmgr->core_res = core_res;
 	resmgr->sido_input_src = SIDO_SOURCE_INTERNAL;
 	resmgr->codec_type = wcd9xxx->type;
+	resmgr->mclk_rate = wcd9xxx->mclk_rate;
 
 	return resmgr;
 }

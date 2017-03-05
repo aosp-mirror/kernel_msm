@@ -47,6 +47,7 @@ struct wcd9xxx_resmgr_v2 {
 
 	const struct wcd_resmgr_cb *resmgr_cb;
 	int sido_input_src;
+	u32 mclk_rate;
 };
 
 #define WCD9XXX_V2_BG_CLK_LOCK(resmgr)			\
