@@ -50,6 +50,17 @@
 			ite,cfg-name = "it7260_cfg_62011E01.bin";
 			ite,avdd-lpm-cur = <3000>;
 		};
+		taos_tsl2584: tsl2584@39 {
+			compatible = "taos,tsl2584";
+			reg = <0x39>;
+			interrupts = <61>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			control: control_reg@0 {
+				reg = <0 0x100>;
+			};
+		};
+
 	};
 
 	i2c@78b6000 { /* BLSP1 QUP2 */
