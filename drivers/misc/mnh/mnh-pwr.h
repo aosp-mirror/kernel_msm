@@ -23,9 +23,10 @@
 #include <linux/gpio.h>
 
 enum mnh_pwr_state {
-	MNH_PWR_S0 = 0,
-	MNH_PWR_S3 = 3,
-	MNH_PWR_S4 = 4
+	MNH_PWR_S0 = 0, /* active mode */
+	MNH_PWR_S1 = 1, /* bypass mode */
+	MNH_PWR_S3 = 3, /* suspend mode */
+	MNH_PWR_S4 = 4, /* power off */
 };
 
 int mnh_pwr_set_state(enum mnh_pwr_state system_state);

@@ -86,6 +86,13 @@ int mnh_ipu_freq_change(int index);
  */
 int mnh_lpddr_freq_change(int index);
 
+/**
+ * LPDDR clock control driver
+ * Return: 0 on success, an error code otherwise.
+ *
+ * LPDDR clock is derived from sys200 clk instead of separate lpddr clk
+ */
+int mnh_lpddr_sys200_mode(void);
 
 /**
  * Setup interface for controlling clocks

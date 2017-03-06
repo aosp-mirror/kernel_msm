@@ -137,7 +137,7 @@ void mnh_ddr_init_clocks(struct device *dev)
 	MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FOUTPOSTDIVPD, 0);
 	MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FRZ_PLL_IN, 0);
 
-	dev_info(dev, "%s waiting for lpddr4 pll lock", __func__);
+	dev_dbg(dev, "%s waiting for lpddr4 pll lock", __func__);
 	while ((timeout < 20) && (!MNH_SCU_INf(LPDDR4_REFCLK_PLL_STS, LOCK))) {
 		udelay(1);
 		timeout++;
@@ -146,7 +146,7 @@ void mnh_ddr_init_clocks(struct device *dev)
 	if (timeout == 20)
 		dev_err(dev, "%s lpddr4 pll lock failed", __func__);
 	else
-		dev_info(dev, "%s lpddr4 pll locked after %d iterations",
+		dev_dbg(dev, "%s lpddr4 pll locked after %d iterations",
 			 __func__, timeout);
 
 	MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG, LP4_FSP_SW_OVERRIDE, 0);
@@ -191,21 +191,21 @@ int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n)
 	MNH_SCU_OUTf(MEM_PWR_MGMNT, HALT_LP4CMEM_PD_EN, 1);
 
 	MNH_DDR_CTL_OUTf(112, LP_CMD, 0xFE);
-	dev_info(dev, "%s waiting for LP complete.", __func__);
+	dev_dbg(dev, "%s waiting for LP complete.", __func__);
 	while ((timeout < 10) && !(MNH_DDR_CTL_IN(227) & 0x00000020)) {
 		udelay(1);
 		timeout++;
 	}
 	if (timeout == 10)
-		dev_info(dev, "%s: failed to get LP complete\n", __func__);
+		dev_dbg(dev, "%s: failed to get LP complete\n", __func__);
 	else
-		dev_info(dev, "%s got it after %d iterations. 121 is 0x%x",
+		dev_dbg(dev, "%s got it after %d iterations. 121 is 0x%x",
 			 __func__, timeout, MNH_DDR_CTL_INf(121, LP_STATE));
 
 	gpiod_set_value_cansleep(iso_n, 0);
 	udelay(1000);
 
-	dev_info(dev, "%s done.", __func__);
+	dev_dbg(dev, "%s done.", __func__);
 
 	return 0;
 }
@@ -251,7 +251,7 @@ int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n)
 	if (timeout == 10)
 		dev_err(dev, "%s: failed to see reset valid\n", __func__);
 	else
-		dev_info(dev, "%s: observed reset valid after %d iterations\n",
+		dev_dbg(dev, "%s: observed reset valid after %d iterations\n",
 			 __func__, timeout);
 
 	/*MNH_DDR_PHY_OUTf(1051, PHY_SET_DFI_INPUT_RST_PAD, 1);*/
@@ -260,17 +260,17 @@ int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n)
 	/*MNH_DDR_PI_OUTf(00, PI_START, 1);*/
 	MNH_DDR_CTL_OUTf(00, START, 1);
 
-	dev_info(dev, "%s waiting for init done.", __func__);
+	dev_dbg(dev, "%s waiting for init done.", __func__);
 
 	/*
 	* INT_STATUS: bit 4 init done
 	*/
 	timeout = 0;
-	while ((timeout < 10) && !(MNH_DDR_CTL_IN(227) & 0x00000010)) {
+	while ((timeout < 1000) && !(MNH_DDR_CTL_IN(227) & 0x00000010)) {
 		udelay(1);
 		timeout++;
 	}
-	if (timeout == 10)
+	if (timeout == 1000)
 		dev_err(dev, "%s: init failed", __func__);
 	else
 		dev_info(dev, "%s: init done after %d iterations.",
@@ -289,7 +289,7 @@ int mnh_ddr_po_init(struct device *dev)
 
 	mnh_ddr_init_internal_state(state);
 
-	dev_info(dev, "%s start.", __func__);
+	dev_dbg(dev, "%s start.", __func__);
 
 	mnh_ddr_init_clocks(dev);
 
@@ -364,7 +364,7 @@ int mnh_ddr_po_init(struct device *dev)
 	MNH_DDR_PHY_OUTf(1045, PHY_PLL_CTRL, 0x1102);
 	MNH_DDR_PHY_OUTf(1046, PHY_PLL_CTRL_CA, 0x0122);
 
-	dev_info(dev, "%s begin training,", __func__);
+	dev_dbg(dev, "%s begin training,", __func__);
 	MNH_DDR_PI_OUTf(00, PI_START, 1);
 	MNH_DDR_CTL_OUTf(00, START, 1);
 
@@ -376,7 +376,7 @@ int mnh_ddr_po_init(struct device *dev)
 	if (timeout == 1000)
 		dev_err(dev, "%s: ddr training failed\n", __func__);
 	else
-		dev_info(dev, "%s done after %d iterations.",
+		dev_dbg(dev, "%s done after %d iterations.",
 			 __func__, timeout);
 
 	MNH_DDR_CTL_OUTf(165, MR_FSP_DATA_VALID_F0_0, 1);

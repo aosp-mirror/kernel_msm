@@ -419,6 +419,33 @@ int mnh_lpddr_freq_change(int index)
 }
 EXPORT_SYMBOL(mnh_lpddr_freq_change);
 
+/**
+ * LPDDR clock control driver
+ * Return: 0 on success, an error code otherwise.
+ *
+ * LPDDR clock is derived from sys200 clk instead of separate lpddr clk
+ */
+int mnh_lpddr_sys200_mode(void)
+{
+	/* Switch lpddr to SYS200 mode */
+	HW_OUTf(mnh_dev->regs, SCU, CCU_CLK_CTL, LP4_AXI_SYS200_MODE, 0x1);
+
+	/* Unlock PLL access */
+	HW_OUTf(mnh_dev->regs, SCU, PLL_PASSCODE, PASSCODE, PLL_UNLOCK);
+
+	/* Power down LPDDR PLL */
+	HW_OUTf(mnh_dev->regs, SCU, LPDDR4_REFCLK_PLL_CTRL, FRZ_PLL_IN, 1);
+	HW_OUTf(mnh_dev->regs, SCU, LPDDR4_REFCLK_PLL_CTRL, PD, 1);
+	HW_OUTf(mnh_dev->regs, SCU, LPDDR4_REFCLK_PLL_CTRL, FOUTPOSTDIVPD, 1);
+	HW_OUTf(mnh_dev->regs, SCU, LPDDR4_REFCLK_PLL_CTRL, BYPASS, 1);
+	HW_OUTf(mnh_dev->regs, SCU, LPDDR4_REFCLK_PLL_CTRL, FRZ_PLL_IN, 0);
+
+	HW_OUTf(mnh_dev->regs, SCU, PLL_PASSCODE, PASSCODE, 0);
+
+	return 0;
+}
+EXPORT_SYMBOL(mnh_lpddr_sys200_mode);
+
 /* Frequency calculation by PLL configuration
  * @cfg: struct freq_reg_table with pll config information.
  * Return: freq MHz.

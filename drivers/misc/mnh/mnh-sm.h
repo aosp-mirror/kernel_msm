@@ -19,17 +19,6 @@
 
 #include "mnh-pcie.h"
 
-enum mnh_sm_state {
-	MNH_STATE_OFF, /* powered off */
-	MNH_STATE_INIT, /* powered on, unconfigured */
-	MNH_STATE_CONFIG_MIPI, /* powered on, mipi configured */
-	MNH_STATE_CONFIG_DDR, /* powered on, ddr configured */
-	MNH_STATE_ACTIVE, /* powered on and booted */
-	MNH_STATE_SUSPEND_SELF_REFRESH, /* suspended, ddr in self-refresh */
-	MNH_STATE_SUSPEND_HIBERNATE, /* suspended, kernel image in AP DRAM */
-	MNH_STATE_MAX,
-};
-
 /** API to register hotplug callback to receive MNH up/down notifications
  * @param[in] hotplug_cb  handler for hotplug in/out events
  * @return 0
