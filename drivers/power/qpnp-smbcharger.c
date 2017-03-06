@@ -1320,6 +1320,20 @@ static int get_prop_batt_voltage_max_design(struct smbchg_chip *chip)
 	return uv;
 }
 
+#define DEFAULT_BATT_CHARGE_FULL	0
+static int get_prop_batt_charge_full(struct smbchg_chip *chip)
+{
+	int uah, rc;
+
+	rc = get_property_from_fg(chip,
+			POWER_SUPPLY_PROP_CHARGE_FULL, &uah);
+	if (rc) {
+		pr_smb(PR_STATUS, "Couldn't get charge full rc = %d\n", rc);
+		uah = DEFAULT_BATT_CHARGE_FULL;
+	}
+	return uah;
+}
+
 #define DEFAULT_CHARGE_COUNTER	0
 static int get_prop_batt_charge_counter(struct smbchg_chip *chip)
 {
@@ -6777,6 +6791,7 @@ static enum power_supply_property smbchg_battery_properties[] = {
 	POWER_SUPPLY_PROP_RESTRICTED_CHARGING,
 	POWER_SUPPLY_PROP_ALLOW_HVDCP3,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
+	POWER_SUPPLY_PROP_CHARGE_FULL,
 };
 
 static int smbchg_battery_set_property(struct power_supply *psy,
@@ -6982,6 +6997,9 @@ static int smbchg_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
 		val->intval = get_prop_batt_voltage_max_design(chip);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		val->intval = get_prop_batt_charge_full(chip);
 		break;
 	case POWER_SUPPLY_PROP_SAFETY_TIMER_ENABLE:
 		val->intval = chip->safety_timer_en;
