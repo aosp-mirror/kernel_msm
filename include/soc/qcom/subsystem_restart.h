@@ -59,6 +59,8 @@ struct module;
  * @sysmon_shutdown_ret: Return value for the call to sysmon_send_shutdown
  * @system_debug: If "set", triggers a device restart when the
  * subsystem's wdog bite handler is invoked.
+ * @ignore_ssr_failure: SSR failures are usually fatal and results in panic. If
+ * set will ignore failure.
  * @edge: GLINK logical name of the subsystem
  */
 struct subsys_desc {
@@ -94,6 +96,7 @@ struct subsys_desc {
 	u32 sysmon_pid;
 	int sysmon_shutdown_ret;
 	bool system_debug;
+	bool ignore_ssr_failure;
 	const char *edge;
 	char last_crash_reason[MAX_SSR_REASON_LEN];
 	char last_crash_timestamp[MAX_CRASH_TIMESTAMP_LEN];
