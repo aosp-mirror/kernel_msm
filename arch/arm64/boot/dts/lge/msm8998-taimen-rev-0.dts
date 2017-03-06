@@ -21,11 +21,6 @@
 	qcom,board-id = <0x190 0>;
 };
 
-
-&pmi8998_charger {
-	qcom,fcc-max-ua = <1600000>;
-};
-
 &pm8998_vadc {
 	chan@83 {
 		label = "vph_pwr";
