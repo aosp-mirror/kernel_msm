@@ -100,4 +100,13 @@ config QPNP_QNOVO
 	  module. It also allows userspace code to read diagnostics of voltage
 	  and current measured during certain phases of the pulses.
 
+config FG_DC_BATT_ID
+	bool "FG DC battery ID"
+	depends on QPNP_FG_GEN3
+	help
+	  Say Y here to enable the logic to handle DC battery ID.  For bring up
+	  with DC power supply, user should populate goog,dc-batt-id to desired
+	  value in dts. FG will compare it with batt_id read back at runtime.
+	  If they're same, FG will notify charger device and disable itself.
+
 endmenu

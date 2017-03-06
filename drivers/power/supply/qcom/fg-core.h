@@ -361,6 +361,9 @@ struct fg_chip {
 	struct delayed_work	sram_dump_work;
 	struct fg_circ_buf	ibatt_circ_buf;
 	struct fg_circ_buf	vbatt_circ_buf;
+#ifdef CONFIG_FG_DC_BATT_ID
+	u32    dc_batt_id;
+#endif
 };
 
 /* Debugfs data structures are below */

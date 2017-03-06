@@ -14,6 +14,8 @@ qcom,battery-data node optional properties:
 			for which a given battery ID resistance is valid. This
 			value is expressed as a percentage of the specified kohm
 			resistance provided by qcom,batt-id-kohm.
+- goog,dc-batt-id: The batt_id resistor's resistance value in kOhms when using
+			DC power supply to power the device for board bring up.
 
 qcom,battery-data can also include any number of children nodes. These children
 nodes will be treated as battery profile data nodes.

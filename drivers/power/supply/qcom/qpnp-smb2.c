@@ -288,6 +288,13 @@ static int smb2_parse_dt(struct smb2 *chip)
 	chip->dt.no_battery = of_property_read_bool(node,
 						"qcom,batteryless-platform");
 
+#ifdef CONFIG_FG_DC_BATT_ID
+	if (!chg->bms_psy) {
+		pr_info("No bms_psy, forcing no_battery!\n");
+		chip->dt.no_battery = true;
+	}
+#endif
+
 	chg->external_vconn = of_property_read_bool(node,
 						"qcom,external-vconn");
 

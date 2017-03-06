@@ -895,6 +895,15 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 		return -ENXIO;
 	}
 
+#ifdef CONFIG_FG_DC_BATT_ID
+	rc = of_property_read_u32(batt_node,
+				  "goog,dc-batt-id", &chip->dc_batt_id);
+	if (rc < 0) {
+		dev_info(chip->dev, "dc_batt_id is missing.\n");
+		chip->dc_batt_id = 0;
+	}
+#endif
+
 	profile_node = of_batterydata_get_best_profile(batt_node, batt_id,
 				NULL);
 	if (IS_ERR(profile_node))
@@ -1048,6 +1057,32 @@ static void fg_notify_charger(struct fg_chip *chip)
 
 	fg_dbg(chip, FG_STATUS, "Notified charger on float voltage and FCC\n");
 }
+
+#ifdef CONFIG_FG_DC_BATT_ID
+static void fg_notify_charger_fake_battery(struct fg_chip *chip)
+{
+	union power_supply_propval prop = {0, };
+	int rc;
+
+	prop.intval = 1;
+	rc = power_supply_set_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_INPUT_SUSPEND, &prop);
+	if (rc < 0) {
+		dev_err(chip->dev, "Error in setting input_suspend, rc=%d\n", rc);
+		return;
+	}
+
+	prop.intval = 50;
+	rc = power_supply_set_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_CAPACITY, &prop);
+	if (rc < 0) {
+		dev_err(chip->dev, "Error in setting capacity, rc=%d\n", rc);
+		return;
+	}
+
+	dev_info(chip->dev, "Notified charger on DC power supply.\n");
+}
+#endif
 
 static int fg_awake_cb(struct votable *votable, void *data, int awake,
 			const char *client)
@@ -3873,6 +3908,16 @@ static int fg_gen3_probe(struct platform_device *pdev)
 			rc);
 		return rc;
 	}
+
+#ifdef CONFIG_FG_DC_BATT_ID
+	if ((chip->batt_id_ohms/1000+5)/10 == chip->dc_batt_id/10) {
+		/* DC power supply, disable FG and notify charger */
+		if (batt_psy_initialized(chip))
+			fg_notify_charger_fake_battery(chip);
+		dev_info(chip->dev, "Disable FG for DC power supply\n");
+		return -ENXIO;
+	}
+#endif
 
 	chip->awake_votable = create_votable("FG_WS", VOTE_SET_ANY, fg_awake_cb,
 					chip);

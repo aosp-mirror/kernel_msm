@@ -481,8 +481,9 @@
 /{
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
-		#include "../qcom/fg-gen3-batterydata-itech-3000mah.dtsi"
-		#include "../qcom/fg-gen3-batterydata-ascent-3450mah.dtsi"
+		goog,dc-batt-id = <200>;
+		#include "fg-gen3-batterydata-itech-3000mah.dtsi"
+		#include "fg-gen3-batterydata-ascent-3450mah.dtsi"
 	};
 };
 
