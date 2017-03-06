@@ -1706,6 +1706,19 @@ int smblib_get_prop_batt_temp(struct smb_charger *chg,
 	return rc;
 }
 
+int smblib_get_prop_batt_charge_full(struct smb_charger *chg,
+				union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->bms_psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(chg->bms_psy,
+				       POWER_SUPPLY_PROP_CHARGE_FULL, val);
+	return rc;
+}
+
 int smblib_get_prop_step_chg_step(struct smb_charger *chg,
 				union power_supply_propval *val)
 {
