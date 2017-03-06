@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -16,14 +16,68 @@
 #include <linux/kernel.h>
 #include <linux/err.h>
 
-#define SDE_NONE                        0
-#define SDE_CSC_MATRIX_COEFF_SIZE	9
-#define SDE_CSC_CLAMP_SIZE		6
-#define SDE_CSC_BIAS_SIZE		3
+#include "msm_drv.h"
 
+#define SDE_NONE                        0
+
+#ifndef SDE_CSC_MATRIX_COEFF_SIZE
+#define SDE_CSC_MATRIX_COEFF_SIZE	9
+#endif
+
+#ifndef SDE_CSC_CLAMP_SIZE
+#define SDE_CSC_CLAMP_SIZE		6
+#endif
+
+#ifndef SDE_CSC_BIAS_SIZE
+#define SDE_CSC_BIAS_SIZE		3
+#endif
+
+#ifndef SDE_MAX_PLANES
 #define SDE_MAX_PLANES			4
+#endif
+
 #define PIPES_PER_STAGE			2
-#define VALID_ROT_WB_FORMAT		BIT(0)
+#ifndef SDE_MAX_DE_CURVES
+#define SDE_MAX_DE_CURVES		3
+#endif
+
+#define SDE_FORMAT_FLAG_YUV		(1 << 0)
+#define SDE_FORMAT_FLAG_DX		(1 << 1)
+
+#define SDE_FORMAT_IS_YUV(X)		((X)->flag & SDE_FORMAT_FLAG_YUV)
+#define SDE_FORMAT_IS_DX(X)		((X)->flag & SDE_FORMAT_FLAG_DX)
+#define SDE_FORMAT_IS_LINEAR(X)		((X)->fetch_mode == SDE_FETCH_LINEAR)
+#define SDE_FORMAT_IS_UBWC(X)		((X)->fetch_mode == SDE_FETCH_UBWC)
+
+#define SDE_BLEND_FG_ALPHA_FG_CONST	(0 << 0)
+#define SDE_BLEND_FG_ALPHA_BG_CONST	(1 << 0)
+#define SDE_BLEND_FG_ALPHA_FG_PIXEL	(2 << 0)
+#define SDE_BLEND_FG_ALPHA_BG_PIXEL	(3 << 0)
+#define SDE_BLEND_FG_INV_ALPHA		(1 << 2)
+#define SDE_BLEND_FG_MOD_ALPHA		(1 << 3)
+#define SDE_BLEND_FG_INV_MOD_ALPHA	(1 << 4)
+#define SDE_BLEND_FG_TRANSP_EN		(1 << 5)
+#define SDE_BLEND_BG_ALPHA_FG_CONST	(0 << 8)
+#define SDE_BLEND_BG_ALPHA_BG_CONST	(1 << 8)
+#define SDE_BLEND_BG_ALPHA_FG_PIXEL	(2 << 8)
+#define SDE_BLEND_BG_ALPHA_BG_PIXEL	(3 << 8)
+#define SDE_BLEND_BG_INV_ALPHA		(1 << 10)
+#define SDE_BLEND_BG_MOD_ALPHA		(1 << 11)
+#define SDE_BLEND_BG_INV_MOD_ALPHA	(1 << 12)
+#define SDE_BLEND_BG_TRANSP_EN		(1 << 13)
+
+enum sde_hw_blk_type {
+	SDE_HW_BLK_TOP = 0,
+	SDE_HW_BLK_SSPP,
+	SDE_HW_BLK_LM,
+	SDE_HW_BLK_DSPP,
+	SDE_HW_BLK_CTL,
+	SDE_HW_BLK_CDM,
+	SDE_HW_BLK_PINGPONG,
+	SDE_HW_BLK_INTF,
+	SDE_HW_BLK_WB,
+	SDE_HW_BLK_MAX,
+};
 
 enum sde_mdp {
 	MDP_TOP = 0x1,
@@ -129,7 +183,11 @@ enum sde_intf_type {
 	INTF_HDMI = 0x3,
 	INTF_LCDC = 0x5,
 	INTF_EDP = 0x9,
-	INTF_TYPE_MAX
+	INTF_DP = 0xa,
+	INTF_TYPE_MAX,
+
+	/* virtual interfaces */
+	INTF_WB = 0x100,
 };
 
 enum sde_intf_mode {
@@ -173,8 +231,22 @@ enum sde_wd_timer {
 	WD_TIMER_MAX
 };
 
+enum sde_vbif {
+	VBIF_0,
+	VBIF_1,
+	VBIF_MAX,
+	VBIF_RT = VBIF_0,
+	VBIF_NRT = VBIF_1
+};
+
+enum sde_iommu_domain {
+	SDE_IOMMU_DOMAIN_UNSECURE,
+	SDE_IOMMU_DOMAIN_SECURE,
+	SDE_IOMMU_DOMAIN_MAX
+};
+
 /**
- * MDP HW,Component order color map
+ * SDE HW,Component order color map
  */
 enum {
 	C0_G_Y = 0,
@@ -184,43 +256,41 @@ enum {
 };
 
 /**
- * enum sde_mdp_plane_type - defines how the color component pixel packing
- * @SDE_MDP_PLANE_INTERLEAVED   : Color components in single plane
- * @SDE_MDP_PLANE_PLANAR        : Color component in separate planes
- * @SDE_MDP_PLANE_PSEUDO_PLANAR : Chroma components interleaved in separate
- *                                plane
+ * enum sde_plane_type - defines how the color component pixel packing
+ * @SDE_PLANE_INTERLEAVED   : Color components in single plane
+ * @SDE_PLANE_PLANAR        : Color component in separate planes
+ * @SDE_PLANE_PSEUDO_PLANAR : Chroma components interleaved in separate plane
  */
-enum sde_mdp_plane_type {
-	SDE_MDP_PLANE_INTERLEAVED,
-	SDE_MDP_PLANE_PLANAR,
-	SDE_MDP_PLANE_PSEUDO_PLANAR,
+enum sde_plane_type {
+	SDE_PLANE_INTERLEAVED,
+	SDE_PLANE_PLANAR,
+	SDE_PLANE_PSEUDO_PLANAR,
 };
 
 /**
- * enum sde_mdp_chroma_samp_type - chroma sub-samplng type
- * @SDE_MDP_CHROMA_RGB   : no chroma subsampling
- * @SDE_MDP_CHROMA_H2V1  : chroma pixels are horizontally subsampled
- * @SDE_MDP_CHROMA_H1V2  : chroma pixels are vertically subsampled
- * @SDE_MDP_CHROMA_420   : 420 subsampling
+ * enum sde_chroma_samp_type - chroma sub-samplng type
+ * @SDE_CHROMA_RGB   : No chroma subsampling
+ * @SDE_CHROMA_H2V1  : Chroma pixels are horizontally subsampled
+ * @SDE_CHROMA_H1V2  : Chroma pixels are vertically subsampled
+ * @SDE_CHROMA_420   : 420 subsampling
  */
-enum sde_mdp_chroma_samp_type {
-	SDE_MDP_CHROMA_RGB,
-	SDE_MDP_CHROMA_H2V1,
-	SDE_MDP_CHROMA_H1V2,
-	SDE_MDP_CHROMA_420
+enum sde_chroma_samp_type {
+	SDE_CHROMA_RGB,
+	SDE_CHROMA_H2V1,
+	SDE_CHROMA_H1V2,
+	SDE_CHROMA_420
 };
 
 /**
- * enum sde_mdp_fetch_type - format id, used by drm-driver only to map drm forcc
- * Defines How MDP HW fetches data
- * @SDE_MDP_FETCH_LINEAR   : fetch is line by line
- * @SDE_MDP_FETCH_TILE     : fetches data in Z order from a tile
- * @SDE_MDP_FETCH_UBWC     : fetch and decompress data
+ * sde_fetch_type - Defines How SDE HW fetches data
+ * @SDE_FETCH_LINEAR   : fetch is line by line
+ * @SDE_FETCH_TILE     : fetches data in Z order from a tile
+ * @SDE_FETCH_UBWC     : fetch and decompress data
  */
-enum sde_mdp_fetch_type {
-	SDE_MDP_FETCH_LINEAR,
-	SDE_MDP_FETCH_TILE,
-	SDE_MDP_FETCH_UBWC
+enum sde_fetch_type {
+	SDE_FETCH_LINEAR,
+	SDE_FETCH_TILE,
+	SDE_FETCH_UBWC
 };
 
 /**
@@ -228,20 +298,13 @@ enum sde_mdp_fetch_type {
  * expected by the HW programming.
  */
 enum {
-	COLOR_1BIT = 0,
-	COLOR_5BIT = 1,
-	COLOR_6BIT = 2,
-	COLOR_8BIT = 3,
+	COLOR_ALPHA_1BIT = 0,
+	COLOR_ALPHA_4BIT = 1,
+	COLOR_4BIT = 0,
+	COLOR_5BIT = 1, /* No 5-bit Alpha */
+	COLOR_6BIT = 2, /* 6-Bit Alpha also = 2 */
+	COLOR_8BIT = 3, /* 8-Bit Alpha also = 3 */
 };
-
-enum sde_alpha_blend_type {
-	ALPHA_FG_CONST = 0,
-	ALPHA_BG_CONST,
-	ALPHA_FG_PIXEL,
-	ALPHA_BG_PIXEL,
-	ALPHA_MAX
-};
-
 
 /**
  * enum sde_3d_blend_mode
@@ -262,55 +325,64 @@ enum sde_3d_blend_mode {
 	BLEND_3D_MAX
 };
 
-struct addr_info {
-	u32 plane[SDE_MAX_PLANES];
-};
-
-/**
- * struct sde_mdp_format_params - defines the format configuration which
- * allows MDP HW to correctly fetch and decode the format
- * @format : format id, used by drm-driver only to map drm forcc
- * @flag
- * @chroma_sample
- * @fetch_planes
- * @unpack_align_msb
- * @unpack_tight
- * @unpack_count
- * @bpp
- * @alpha_enable
- * @fetch_mode
- * @bits
- * @element
+/** struct sde_format - defines the format configuration which
+ * allows SDE HW to correctly fetch and decode the format
+ * @base: base msm_format struture containing fourcc code
+ * @fetch_planes: how the color components are packed in pixel format
+ * @element: element color ordering
+ * @bits: element bit widths
+ * @chroma_sample: chroma sub-samplng type
+ * @unpack_align_msb: unpack aligned, 0 to LSB, 1 to MSB
+ * @unpack_tight: 0 for loose, 1 for tight
+ * @unpack_count: 0 = 1 component, 1 = 2 component
+ * @bpp: bytes per pixel
+ * @alpha_enable: whether the format has an alpha channel
+ * @num_planes: number of planes (including meta data planes)
+ * @fetch_mode: linear, tiled, or ubwc hw fetch behavior
+ * @is_yuv: is format a yuv variant
+ * @flag: usage bit flags
+ * @tile_width: format tile width
+ * @tile_height: format tile height
  */
-struct sde_mdp_format_params {
-	u32 format;
-	enum sde_mdp_plane_type fetch_planes;
+struct sde_format {
+	struct msm_format base;
+	enum sde_plane_type fetch_planes;
 	u8 element[SDE_MAX_PLANES];
 	u8 bits[SDE_MAX_PLANES];
-	enum sde_mdp_chroma_samp_type chroma_sample;
-	u8 unpack_align_msb;	/* 0 to LSB, 1 to MSB */
-	u8 unpack_tight;	/* 0 for loose, 1 for tight */
-	u8 unpack_count;	/* 0 = 1 component, 1 = 2 component ... */
-	u8 bpp;                 /* Bytes per pixel */
-	u8 alpha_enable;	/*  source has alpha */
-	enum sde_mdp_fetch_type fetch_mode;
-	u8 is_yuv;
+	enum sde_chroma_samp_type chroma_sample;
+	u8 unpack_align_msb;
+	u8 unpack_tight;
+	u8 unpack_count;
+	u8 bpp;
+	u8 alpha_enable;
+	u8 num_planes;
+	enum sde_fetch_type fetch_mode;
 	u32 flag;
+	u16 tile_width;
+	u16 tile_height;
 };
+#define to_sde_format(x) container_of(x, struct sde_format, base)
 
 /**
- * struct sde_hw_source_info - format information of the source pixel data
- * @format : pixel format parameters
- * @width : image width @height: image height
- * @num_planes : number of planes including the meta data planes for the
- * compressed formats @plane: per plane information
+ * struct sde_hw_fmt_layout - format information of the source pixel data
+ * @format: pixel format parameters
+ * @num_planes: number of planes (including meta data planes)
+ * @width: image width
+ * @height: image height
+ * @total_size: total size in bytes
+ * @plane_addr: address of each plane
+ * @plane_size: length of each plane
+ * @plane_pitch: pitch of each plane
  */
-struct sde_hw_source_info {
-	struct sde_mdp_format_params *format;
-	u32 width;
-	u32 height;
-	u32 num_planes;
-	u32 ystride[SDE_MAX_PLANES];
+struct sde_hw_fmt_layout {
+	const struct sde_format *format;
+	uint32_t num_planes;
+	uint32_t width;
+	uint32_t height;
+	uint32_t total_size;
+	uint32_t plane_addr[SDE_MAX_PLANES];
+	uint32_t plane_size[SDE_MAX_PLANES];
+	uint32_t plane_pitch[SDE_MAX_PLANES];
 };
 
 struct sde_rect {
@@ -320,20 +392,8 @@ struct sde_rect {
 	u16 h;
 };
 
-struct sde_hw_alpha_cfg {
-	u32 const_alpha;
-	enum sde_alpha_blend_type alpha_sel;
-	u8 inv_alpha_sel;
-	u8 mod_alpha;
-	u8 inv_mode_alpha;
-};
-
-struct sde_hw_blend_cfg {
-	struct sde_hw_alpha_cfg fg;
-	struct sde_hw_alpha_cfg bg;
-};
-
 struct sde_csc_cfg {
+	/* matrix coefficients in S15.16 format */
 	uint32_t csc_mv[SDE_CSC_MATRIX_COEFF_SIZE];
 	uint32_t csc_pre_bv[SDE_CSC_BIAS_SIZE];
 	uint32_t csc_post_bv[SDE_CSC_BIAS_SIZE];
@@ -353,6 +413,31 @@ struct sde_mdss_color {
 	u32 color_1;
 	u32 color_2;
 	u32 color_3;
+};
+
+/*
+ * Define bit masks for h/w logging.
+ */
+#define SDE_DBG_MASK_NONE     (1 << 0)
+#define SDE_DBG_MASK_CDM      (1 << 1)
+#define SDE_DBG_MASK_DSPP     (1 << 2)
+#define SDE_DBG_MASK_INTF     (1 << 3)
+#define SDE_DBG_MASK_LM       (1 << 4)
+#define SDE_DBG_MASK_CTL      (1 << 5)
+#define SDE_DBG_MASK_PINGPONG (1 << 6)
+#define SDE_DBG_MASK_SSPP     (1 << 7)
+#define SDE_DBG_MASK_WB       (1 << 8)
+#define SDE_DBG_MASK_TOP      (1 << 9)
+#define SDE_DBG_MASK_VBIF     (1 << 10)
+
+/**
+ * struct sde_hw_cp_cfg: hardware dspp/lm feature payload.
+ * @payload: Feature specific payload.
+ * @len: Length of the payload.
+ */
+struct sde_hw_cp_cfg {
+	void *payload;
+	u32 len;
 };
 
 #endif  /* _SDE_HW_MDSS_H */

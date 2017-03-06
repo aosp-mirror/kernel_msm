@@ -669,14 +669,14 @@ static u32 ath10k_bus_pci_read32(struct ath10k *ar, u32 offset)
 	return val;
 }
 
-inline void ath10k_pci_write32(struct ath10k *ar, u32 offset, u32 value)
+inline void ath10k_pci_write32(void *ar, u32 offset, u32 value)
 {
 	struct ath10k_pci *ar_pci = ath10k_pci_priv(ar);
 
 	ar_pci->bus_ops->write32(ar, offset, value);
 }
 
-inline u32 ath10k_pci_read32(struct ath10k *ar, u32 offset)
+inline u32 ath10k_pci_read32(void *ar, u32 offset)
 {
 	struct ath10k_pci *ar_pci = ath10k_pci_priv(ar);
 
@@ -858,6 +858,8 @@ static u32 ath10k_pci_targ_cpu_to_ce_addr(struct ath10k *ar, u32 addr)
 	case ATH10K_HW_QCA9984:
 	case ATH10K_HW_QCA4019:
 		val = ath10k_pci_read32(ar, PCIE_BAR_REG_ADDRESS);
+		break;
+	default:
 		break;
 	}
 
@@ -1363,8 +1365,8 @@ int ath10k_pci_hif_tx_sg(struct ath10k *ar, u8 pipe_id,
 
 	for (i = 0; i < n_items - 1; i++) {
 		ath10k_dbg(ar, ATH10K_DBG_PCI,
-			   "pci tx item %d paddr 0x%08x len %d n_items %d\n",
-			   i, items[i].paddr, items[i].len, n_items);
+			   "pci tx item %d paddr %pad len %d n_items %d\n",
+			   i, &items[i].paddr, items[i].len, n_items);
 		ath10k_dbg_dump(ar, ATH10K_DBG_PCI_DUMP, NULL, "pci tx data: ",
 				items[i].vaddr, items[i].len);
 
@@ -1381,8 +1383,8 @@ int ath10k_pci_hif_tx_sg(struct ath10k *ar, u8 pipe_id,
 	/* `i` is equal to `n_items -1` after for() */
 
 	ath10k_dbg(ar, ATH10K_DBG_PCI,
-		   "pci tx item %d paddr 0x%08x len %d n_items %d\n",
-		   i, items[i].paddr, items[i].len, n_items);
+		   "pci tx item %d paddr %pad len %d n_items %d\n",
+		   i, &items[i].paddr, items[i].len, n_items);
 	ath10k_dbg_dump(ar, ATH10K_DBG_PCI_DUMP, NULL, "pci tx data: ",
 			items[i].vaddr, items[i].len);
 
@@ -1591,6 +1593,8 @@ void ath10k_pci_irq_msi_fw_mask(struct ath10k *ar)
 		 *  to mask irq/MSI.
 		 */
 		 break;
+	default:
+		 break;
 	}
 }
 
@@ -1616,6 +1620,8 @@ static void ath10k_pci_irq_msi_fw_unmask(struct ath10k *ar)
 		/* TODO: Find appropriate register configuration for QCA99X0
 		 *  to unmask irq/MSI.
 		 */
+		break;
+	default:
 		break;
 	}
 }
@@ -3246,6 +3252,16 @@ static int ath10k_pci_probe(struct pci_dev *pdev,
 	ar->id.subsystem_vendor = pdev->subsystem_vendor;
 	ar->id.subsystem_device = pdev->subsystem_device;
 
+	spin_lock_init(&ar_pci->ce_lock);
+	spin_lock_init(&ar_pci->ps_lock);
+
+	ar->bus_write32 = ath10k_pci_write32;
+	ar->bus_read32 = ath10k_pci_read32;
+	ar->ce_lock = ar_pci->ce_lock;
+	ar->ce_states = ar_pci->ce_states;
+
+	setup_timer(&ar_pci->rx_post_retry, ath10k_pci_rx_replenish_retry,
+		    (unsigned long)ar);
 	setup_timer(&ar_pci->ps_timer, ath10k_pci_ps_timer,
 		    (unsigned long)ar);
 

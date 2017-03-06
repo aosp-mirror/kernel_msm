@@ -85,9 +85,6 @@ void dsi_ctrl_hw_14_host_setup(struct dsi_ctrl_hw *ctrl,
 
 	DSI_W32(ctrl, DSI_CTRL, reg_value);
 
-	/* Enable Timing double buffering */
-	DSI_W32(ctrl, DSI_DSI_TIMING_DB_MODE, 0x1);
-
 	pr_debug("[DSI_%d]Host configuration complete\n", ctrl->index);
 }
 
@@ -198,6 +195,35 @@ void dsi_ctrl_hw_14_set_video_timing(struct dsi_ctrl_hw *ctrl,
 }
 
 /**
+ * setup_cmd_stream() - set up parameters for command pixel streams
+ * @ctrl:          Pointer to controller host hardware.
+ * @width_in_pixels:   Width of the stream in pixels.
+ * @h_stride:          Horizontal stride in bytes.
+ * @height_inLines:    Number of lines in the stream.
+ * @vc_id:             stream_id
+ *
+ * Setup parameters for command mode pixel stream size.
+ */
+void dsi_ctrl_hw_14_setup_cmd_stream(struct dsi_ctrl_hw *ctrl,
+				     u32 width_in_pixels,
+				     u32 h_stride,
+				     u32 height_in_lines,
+				     u32 vc_id)
+{
+	u32 reg = 0;
+
+	reg = (h_stride + 1) << 16;
+	reg |= (vc_id & 0x3) << 8;
+	reg |= 0x39; /* packet data type */
+	DSI_W32(ctrl, DSI_COMMAND_MODE_MDP_STREAM0_CTRL, reg);
+	DSI_W32(ctrl, DSI_COMMAND_MODE_MDP_STREAM1_CTRL, reg);
+
+	reg = (height_in_lines << 16) | width_in_pixels;
+	DSI_W32(ctrl, DSI_COMMAND_MODE_MDP_STREAM0_TOTAL, reg);
+	DSI_W32(ctrl, DSI_COMMAND_MODE_MDP_STREAM1_TOTAL, reg);
+}
+
+/**
  * video_engine_setup() - Setup dsi host controller for video mode
  * @ctrl:          Pointer to controller host hardware.
  * @common_cfg:    Common configuration parameters.
@@ -229,6 +255,9 @@ void dsi_ctrl_hw_14_video_engine_setup(struct dsi_ctrl_hw *ctrl,
 	reg |= (common_cfg->bit_swap_green ? BIT(4) : 0);
 	reg |= (common_cfg->bit_swap_blue ? BIT(8) : 0);
 	DSI_W32(ctrl, DSI_VIDEO_MODE_DATA_CTRL, reg);
+	/* Enable Timing double buffering */
+	DSI_W32(ctrl, DSI_DSI_TIMING_DB_MODE, 0x1);
+
 
 	pr_debug("[DSI_%d] Video engine setup done\n", ctrl->index);
 }
@@ -254,6 +283,10 @@ void dsi_ctrl_hw_14_cmd_engine_setup(struct dsi_ctrl_hw *ctrl,
 	reg |= (common_cfg->bit_swap_blue ? BIT(12) : 0);
 	reg |= cmd_mode_format_map[common_cfg->dst_format];
 	DSI_W32(ctrl, DSI_COMMAND_MODE_MDP_CTRL, reg);
+
+	reg = DSI_R32(ctrl, DSI_COMMAND_MODE_MDP_CTRL2);
+	reg |= BIT(16);
+	DSI_W32(ctrl, DSI_COMMAND_MODE_MDP_CTRL2, reg);
 
 	reg = cfg->wr_mem_start & 0xFF;
 	reg |= (cfg->wr_mem_continue & 0xFF) << 8;
@@ -1319,3 +1352,161 @@ void dsi_ctrl_hw_14_trigger_cmd_test_pattern(struct dsi_ctrl_hw *ctrl,
 
 	pr_debug("[DSI_%d] Cmd Test pattern trigger\n", ctrl->index);
 }
+
+#define DUMP_REG_VALUE(off) "\t%-30s: 0x%08x\n", #off, DSI_R32(ctrl, off)
+ssize_t dsi_ctrl_hw_14_reg_dump_to_buffer(struct dsi_ctrl_hw *ctrl,
+					  char *buf,
+					  u32 size)
+{
+	u32 len = 0;
+
+	len += snprintf((buf + len), (size - len), "CONFIGURATION REGS:\n");
+
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_HW_VERSION));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_STATUS));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_FIFO_STATUS));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_VIDEO_MODE_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_VIDEO_MODE_SYNC_DATATYPE));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_VIDEO_MODE_PIXEL_DATATYPE));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_VIDEO_MODE_BLANKING_DATATYPE));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_VIDEO_MODE_DATA_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_VIDEO_MODE_ACTIVE_H));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_VIDEO_MODE_ACTIVE_V));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_VIDEO_MODE_TOTAL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_VIDEO_MODE_HSYNC));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_VIDEO_MODE_VSYNC));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_VIDEO_MODE_VSYNC_VPOS));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_COMMAND_MODE_DMA_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_COMMAND_MODE_MDP_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_COMMAND_MODE_MDP_DCS_CMD_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_DMA_CMD_OFFSET));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_DMA_CMD_LENGTH));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_DMA_FIFO_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_DMA_NULL_PACKET_DATA));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_COMMAND_MODE_MDP_STREAM0_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_COMMAND_MODE_MDP_STREAM0_TOTAL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_COMMAND_MODE_MDP_STREAM1_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_COMMAND_MODE_MDP_STREAM1_TOTAL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_ACK_ERR_STATUS));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_RDBK_DATA0));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_RDBK_DATA1));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_RDBK_DATA2));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_RDBK_DATA3));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_RDBK_DATATYPE0));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_RDBK_DATATYPE1));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_TRIG_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_EXT_MUX));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_EXT_MUX_TE_PULSE_DETECT_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_CMD_MODE_DMA_SW_TRIGGER));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_CMD_MODE_MDP_SW_TRIGGER));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_CMD_MODE_BTA_SW_TRIGGER));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_RESET_SW_TRIGGER));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_LANE_STATUS));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_LANE_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_LANE_SWAP_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_DLN0_PHY_ERR));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_LP_TIMER_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_HS_TIMER_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_TIMEOUT_STATUS));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_CLKOUT_TIMING_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_EOT_PACKET));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_EOT_PACKET_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_GENERIC_ESC_TX_TRIGGER));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_ERR_INT_MASK0));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_INT_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_SOFT_RESET));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_CLK_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_CLK_STATUS));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_PHY_SW_RESET));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_AXI2AHB_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_COMMAND_MODE_MDP_CTRL2));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_COMMAND_MODE_MDP_STREAM2_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_COMMAND_MODE_MDP_STREAM2_TOTAL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_VBIF_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_AES_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_RDBK_DATA_CTRL));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_TEST_PATTERN_GEN_CMD_DMA_INIT_VAL2));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_TPG_DMA_FIFO_STATUS));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_TPG_DMA_FIFO_WRITE_TRIGGER));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_DSI_TIMING_FLUSH));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_DSI_TIMING_DB_MODE));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_TPG_DMA_FIFO_RESET));
+	len += snprintf((buf + len), (size - len),
+			DUMP_REG_VALUE(DSI_VERSION));
+
+	pr_err("LLENGTH = %d\n", len);
+	return len;
+}
+
+

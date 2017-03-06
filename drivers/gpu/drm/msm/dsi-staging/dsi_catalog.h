@@ -75,6 +75,11 @@ void dsi_ctrl_hw_14_cmd_engine_setup(struct dsi_ctrl_hw *ctrl,
 void dsi_ctrl_hw_14_ctrl_en(struct dsi_ctrl_hw *ctrl, bool on);
 void dsi_ctrl_hw_14_cmd_engine_en(struct dsi_ctrl_hw *ctrl, bool on);
 
+void dsi_ctrl_hw_14_setup_cmd_stream(struct dsi_ctrl_hw *ctrl,
+				     u32 width_in_pixels,
+				     u32 h_stride,
+				     u32 height_in_lines,
+				     u32 vc_id);
 void dsi_ctrl_hw_14_phy_sw_reset(struct dsi_ctrl_hw *ctrl);
 void dsi_ctrl_hw_14_soft_reset(struct dsi_ctrl_hw *ctrl);
 
@@ -122,4 +127,7 @@ void dsi_ctrl_hw_14_cmd_test_pattern_setup(struct dsi_ctrl_hw *ctrl,
 void dsi_ctrl_hw_14_test_pattern_enable(struct dsi_ctrl_hw *ctrl, bool enable);
 void dsi_ctrl_hw_14_trigger_cmd_test_pattern(struct dsi_ctrl_hw *ctrl,
 				 u32 stream_id);
+ssize_t dsi_ctrl_hw_14_reg_dump_to_buffer(struct dsi_ctrl_hw *ctrl,
+					  char *buf,
+					  u32 size);
 #endif /* _DSI_CATALOG_H_ */

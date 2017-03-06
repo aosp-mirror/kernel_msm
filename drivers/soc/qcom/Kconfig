@@ -178,6 +178,16 @@ config MSM_QMI_INTERFACE
 	  to perform QMI message marshaling and transport them over IPC
 	  Router.
 
+config MSM_L2_IA_DEBUG
+       bool "Enable MSM L2 Indirect Access Debug"
+       depends on DEBUG_FS
+       default n
+       help
+         This option enables L2 indirect access debug
+         capability. It exposes L2 indirect access
+         debugfs interface to get/set data, address,
+         and target cpus.
+
 config MSM_RPM_SMD
 	bool "RPM driver using SMD protocol"
 	help
@@ -623,6 +633,14 @@ config MSM_ADSP_LOADER
 	  Enable ADSP image loader.
 	  The ADSP loader brings ADSP out of reset
 	  for the platforms that use APRv2.
+	  Say M if you want to enable this module.
+
+config MSM_CDSP_LOADER
+	tristate "CDSP loader support"
+	help
+	  Enable CDSP image loader.
+	  The CDSP loader brings CDSP out of reset
+	  during boot.
 	  Say M if you want to enable this module.
 
 config MSM_PERFORMANCE

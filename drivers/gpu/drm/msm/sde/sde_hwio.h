@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,7 +13,7 @@
 #ifndef _SDE_HWIO_H
 #define _SDE_HWIO_H
 
-#include "sde_hw_mdp_util.h"
+#include "sde_hw_util.h"
 
 /**
  * MDP TOP block Register and bit fields and defines
