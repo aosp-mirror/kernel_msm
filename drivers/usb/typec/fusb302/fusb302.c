@@ -32,6 +32,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <linux/time.h>
 #include <linux/types.h>
 #include <linux/usb/pd.h>
 #include <linux/usb/typec.h>
@@ -942,10 +943,25 @@ static int fusb302_pd_set_interrupts(struct fusb302_chip *chip, bool on)
 /*
  * requires chip lock: chip->lock;
  */
+#define NOTIFY_SOURCE_WAR_DELAY_TIMESTAMP_MS	6000
 static int fusb302_notify_uc_data_role_locked(struct fusb302_chip *chip,
 					      enum typec_data_role value)
 {
+	u64 ts_msec = local_clock()/1000000;
+
 	fusb302_log("notify_uc_data_role of %d\n", value);
+
+	/*
+	 * workaround: for some reason, calling notify_attached_source
+	 * at an early boot stage (kernel time < ~3 secs) will leads to
+	 * the usb to fail to reattach. As a workaround, fail the call
+	 * until NOTIFY_SOURCE_WAR_DELAY_TIMESTAMP_MS after kernel start
+	 * booting.
+	 */
+	if (ts_msec < NOTIFY_SOURCE_WAR_DELAY_TIMESTAMP_MS) {
+		fusb302_log("WAR: do not notify_attached_source too soon\n");
+		return -EAGAIN;
+	}
 
 	if (chip->uc != NULL && chip->uc->notify_attached_source != NULL) {
 		chip->uc->notify_attached_source(chip->uc, value);
