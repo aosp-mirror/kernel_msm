@@ -328,7 +328,7 @@ int Capacity_Adjust;
 #define STC311x_DELAY_CRITICAL_BATT 500 //5 sec
 #define STC311x_SOC_LOW_THRESHOLD 7
 #define STC311x_SOC_CRITICAL_THRESHOLD 3
-#define BATTERY_NTC_ERROR_TEMP -40
+#define BATTERY_NTC_ERROR_TEMP -400 //-40degC
 
 /* ************************************************************************ */
 
