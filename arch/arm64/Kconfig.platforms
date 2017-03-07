@@ -87,6 +87,11 @@ config BOARD_MUSKIE
 	depends on ARCH_QCOM
 	select ARCH_MSMCOBALT
 
+config BOARD_TAIMEN
+        bool "Enable Support for Taimen boards"
+	depends on ARCH_QCOM
+	select ARCH_MSMCOBALT
+
 config ARCH_MSMHAMSTER
 	bool "Enable Support for Qualcomm Technologies Inc MSMHAMSTER"
 	depends on ARCH_QCOM
