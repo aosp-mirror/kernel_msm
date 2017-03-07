@@ -14,9 +14,9 @@ function update_kasan_config() {
 }
 
 ARCH=arm64
-BRANCH=android-msm-muskie-4.4
+BRANCH=android-msm-wahoo-4.4
 CROSS_COMPILE=aarch64-linux-android-
-DEFCONFIG=muskie_defconfig
+DEFCONFIG=wahoo_defconfig
 EXTRA_CMDS=''
 KERNEL_DIR=private/msm-google
 POST_DEFCONFIG_CMDS="update_kasan_config"
