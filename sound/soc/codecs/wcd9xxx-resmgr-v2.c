@@ -247,9 +247,9 @@ static int wcd_resmgr_enable_clk_mclk(struct wcd9xxx_resmgr_v2 *resmgr)
 			 * to CLK_SYS_MCLK_PRG
 			 */
 			wcd_resmgr_codec_reg_update_bits(resmgr,
-					WCD934X_CLK_SYS_MCLK_PRG, 0x91, 0x81);
+					WCD934X_CLK_SYS_MCLK_PRG, 0x80, 0x80);
 			wcd_resmgr_codec_reg_update_bits(resmgr,
-					WCD934X_CLK_SYS_MCLK_PRG, 0x30, 0x10);
+					WCD934X_CLK_SYS_MCLK_PRG, 0x30, 0x00);
 			wcd_resmgr_codec_reg_update_bits(resmgr,
 					WCD934X_CLK_SYS_MCLK_PRG, 0x02, 0x00);
 			wcd_resmgr_codec_reg_update_bits(resmgr,
