@@ -35,6 +35,8 @@ struct nqx_platform_data {
 	unsigned int clkreq_gpio;
 	unsigned int firm_gpio;
 	unsigned int ese_gpio;
+	int i2c_postinit_cmd_len;
+	u8 *i2c_postinit_cmd;
 	const char *clk_src_name;
 };
 
@@ -349,17 +351,24 @@ static int nqx_ese_pwr(struct nqx_dev *nqx_dev, unsigned long int arg)
 			nqx_dev->nfc_ven_enabled =
 					gpio_get_value(nqx_dev->en_gpio);
 			if (!nqx_dev->nfc_ven_enabled) {
+				dev_dbg(&nqx_dev->client->dev, "setting NFC VEN high\n");
 				gpio_set_value(nqx_dev->en_gpio, 1);
 				/* hardware dependent delay */
 				usleep_range(1000, 1100);
+				if (gpio_get_value(nqx_dev->en_gpio) == 0)
+					dev_dbg(&nqx_dev->client->dev, "NFC VEN still low\n");
 			}
+			dev_dbg(&nqx_dev->client->dev, "setting ese_gpio high\n");
 			gpio_set_value(nqx_dev->ese_gpio, 1);
+			/* hardware dependent delay */
+			usleep_range(5000, 5100);
 			if (gpio_get_value(nqx_dev->ese_gpio)) {
 				dev_dbg(&nqx_dev->client->dev, "ese_gpio is enabled\n");
 				r = 0;
 			}
 		}
 	} else if (arg == 1) {
+		r = 0;
 		if (nqx_dev->nfc_ven_enabled &&
 			((nqx_dev->nqx_info.info.chip_type == NFCC_NQ_220) ||
 			(nqx_dev->nqx_info.info.chip_type == NFCC_PN66T))) {
@@ -739,6 +748,34 @@ static int nfcc_hw_check(struct i2c_client *client, struct nqx_dev *nqx_dev)
 		break;
 	}
 
+	/* If specified in the DT, send an additional i2c command. */
+	if (nqx_dev->pdata->i2c_postinit_cmd) {
+		u8 resp[256];
+		u8 len = nqx_dev->pdata->i2c_postinit_cmd[0];
+
+		ret = i2c_master_send(client,
+			nqx_dev->pdata->i2c_postinit_cmd + 1,
+			nqx_dev->pdata->i2c_postinit_cmd_len - 1);
+		if (ret < 0) {
+			dev_err(&client->dev,
+			"%s: - i2c_master_send Error\n", __func__);
+			goto err_nfcc_hw_check;
+		}
+		/* A reasonable hardware dependent delay */
+		msleep(100);
+		/* Read the response */
+		ret = i2c_master_recv(client, resp, len);
+		if (ret < 0) {
+			dev_err(&client->dev,
+				"%s: - i2c_master_recv Error\n", __func__);
+			goto err_nfcc_hw_check;
+		}
+		print_hex_dump(KERN_INFO,
+			"nq-nci: post-init cmd response: ",
+			DUMP_PREFIX_NONE,
+			16, 1, resp, len, false);
+	}
+
 	/*Disable NFC by default to save power on boot*/
 	gpio_set_value(enable_gpio, 0);/* ULPM: Disable */
 	ret = 0;
@@ -824,6 +861,31 @@ static int nfc_parse_dt(struct device *dev, struct nqx_platform_data *pdata)
 		dev_warn(dev,
 			"ese GPIO <OPTIONAL> error getting from OF node\n");
 		pdata->ese_gpio = -EINVAL;
+	}
+
+	/* First byte is the expected response length. */
+	/* E.g., to send a swp_svdd_cfg command to a pn5xx:
+	 * qcom,nq-postinit-cmd = /bits/ 8
+	 *   <0x5 0x20 0x02 0x05 0x01 0xA0 0xF2 0x01 0x01>;
+	 */
+	pdata->i2c_postinit_cmd_len = of_property_count_elems_of_size(np,
+						"qcom,nq-postinit-cmd",
+						sizeof(u8));
+	if (pdata->i2c_postinit_cmd_len > 1) {
+		pdata->i2c_postinit_cmd = devm_kzalloc(dev,
+				pdata->i2c_postinit_cmd_len, GFP_KERNEL);
+		if (!pdata->i2c_postinit_cmd)
+			pdata->i2c_postinit_cmd_len = 0;
+	}
+
+	if (pdata->i2c_postinit_cmd) {
+		r = of_property_read_u8_array(np, "qcom,nq-postinit-cmd",
+			pdata->i2c_postinit_cmd, pdata->i2c_postinit_cmd_len);
+		if (r) {
+			dev_warn(dev, "nq-postinit-cmd <OPTIONAL> error ");
+			dev_warn(dev, " getting from OF node\n");
+			devm_kfree(dev, pdata->i2c_postinit_cmd);
+		}
 	}
 
 	r = of_property_read_string(np, "qcom,clk-src", &pdata->clk_src_name);
@@ -1128,8 +1190,12 @@ err_mem:
 err_free_dev:
 	kfree(nqx_dev);
 err_free_data:
-	if (client->dev.of_node)
+	if (client->dev.of_node) {
+		if (platform_data->i2c_postinit_cmd)
+			devm_kfree(&client->dev,
+				platform_data->i2c_postinit_cmd);
 		devm_kfree(&client->dev, platform_data);
+	}
 err_platform_data:
 	dev_err(&client->dev,
 	"%s: probing nqxx failed, check hardware\n",
@@ -1162,6 +1228,9 @@ static int nqx_remove(struct i2c_client *client)
 	gpio_free(nqx_dev->irq_gpio);
 	gpio_free(nqx_dev->en_gpio);
 	kfree(nqx_dev->kbuf);
+	if (nqx_dev->pdata->i2c_postinit_cmd)
+		devm_kfree(&client->dev,
+			nqx_dev->pdata->i2c_postinit_cmd);
 	if (client->dev.of_node)
 		devm_kfree(&client->dev, nqx_dev->pdata);
 
