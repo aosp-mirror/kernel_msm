@@ -41,12 +41,12 @@
 #include <linux/mm.h>
 #include <asm/uaccess.h>
 
+#include <linux/notifier.h>
+#include <linux/reboot.h>
 
 static int pat9127_init_input_data(void);
 
-#define pat9127_name "pixart_pat9127"
-
-#define PAT9127_DEV_NAME	pat9127_name
+#define PAT9127_DEV_NAME	"pixart_pat9127"
 #define PINCTRL_STATE_IDSEL	"pmx_rot_switch_idsel"
 #define PINCTRL_STATE_ACTIVE	"pmx_rot_switch_active"
 #define PINCTRL_STATE_SUSPEND	"pmx_rot_switch_suspend"
@@ -93,6 +93,27 @@ uint8_t shutter_c = 0, shutter_f = 0;
 int16_t Calib_res_x = 0;
 
 struct mutex irq_mutex;
+
+static void pat9127_stop(void);
+
+/*notify_sys: for solving current leaking problem during devices power off*/
+static int pat9127_notify_sys(struct notifier_block *this,
+	unsigned long code, void *unused)
+{
+	uint8_t sensor_pid = 0;
+
+	sensor_pid = OTS_Read_Reg(PIXART_PAT9127_PRODUCT_ID1_REG);
+	if (sensor_pid == PIXART_PAT9127_SENSOR_ID) {
+		/* Disable irq */
+		pat9127_stop();
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block pat9127_notifier = {
+	.notifier_call  = pat9127_notify_sys,
+};
 
 static int pat9127_i2c_write(u8 reg, u8 *data, int len);
 static int pat9127_i2c_read(u8 reg, u8 *data);
@@ -204,23 +225,17 @@ void pixart_pat9127_ist(void)
 
 	if (OutOtsState == OTS_ROT_UP) {
 		/* Right Key */
-		input_event(pat9127data.pat9127_input_dev,EV_KEY,
-			KEY_RIGHT, 1);
+		input_report_rel(pat9127data.pat9127_input_dev,
+			REL_WHEEL, (int)(deltaX*(-1)) );
 		input_sync(pat9127data.pat9127_input_dev);
-		input_event(pat9127data.pat9127_input_dev, EV_KEY,
-			KEY_RIGHT, 0);
-		input_sync(pat9127data.pat9127_input_dev);
-		pr_debug("[PAT9127]: Right\n");
+		pr_debug("[PAT9127]: Roll Up, delta(%d, %d)\n", -deltaX, deltaY);
 	}
 	else if (OutOtsState == OTS_ROT_DOWN) {
 		/* Left Key */
-		input_event(pat9127data.pat9127_input_dev, EV_KEY,
-			KEY_LEFT, 1);
+		input_report_rel(pat9127data.pat9127_input_dev,
+			REL_WHEEL, (int)(deltaX*(-1)) );
 		input_sync(pat9127data.pat9127_input_dev);
-		input_event(pat9127data.pat9127_input_dev, EV_KEY,
-			KEY_LEFT, 0);
-		input_sync(pat9127data.pat9127_input_dev);
-		pr_debug("[PAT9127]: Left\n");
+		pr_debug("[PAT9127]: Roll Down, delta(%d, %d)\n", -deltaX, deltaY);
 	}
 
 	if (OutBtnState == OTS_BTN_RELEASE)	{
@@ -246,7 +261,23 @@ static irqreturn_t pixart_pat9127_irq(int irq, void *handle)
 
 static void pat9127_stop(void)
 {
+	int err = 0;
+	uint8_t tmp_1 = 0;
 	pr_debug(">>> %s (%d)\n", __func__, __LINE__);
+	disable_irq(pat9127data.client->irq);
+
+	OTS_WriteRead_Reg(PIXART_PAT9127_SENSOR_MODE_SELECT_REG,
+		PIXART_PAT9127_SENSOR_DEFAULT_MODE); // Set btn, motion to non-open drain
+	tmp_1 = OTS_Read_Reg(PIXART_PAT9127_SENSOR_MODE_SELECT_REG);
+	pr_debug("[PAT9127]: pat9127 open drain mode motion: 0x%2x. \n", tmp_1);
+
+	/*Setting Motion Interrupt to pull down*/
+
+	err = pinctrl_select_state(pat9127data.pinctrl,
+		pat9127data.pinctrl_state_idsel);
+	if (err < 0)
+		pr_err("[PAT9127]: Could not set pin to idsel state %d\n", err);
+
 	free_irq(pat9127data.irq, &pat9127data);
 }
 
@@ -294,7 +325,7 @@ static const struct file_operations pat9127_fops = {
 
 struct miscdevice pat9127_device = {
 	.minor = MISC_DYNAMIC_MINOR,
-	.name = pat9127_name,
+	.name = PAT9127_DEV_NAME,
 	.fops = &pat9127_fops,
 };
 
@@ -600,6 +631,9 @@ static int pat9127_i2c_probe(struct i2c_client *client,
 	if (err < 0)
 		goto error_return;
 
+	err = register_reboot_notifier(&pat9127_notifier);
+	if (err != 0)
+		pr_err("cannot register reboot notifier (err=%d)\n", err);
 	err = misc_register(&pat9127_device);
 	if (err) {
 		pr_err("[pat9127]: device register failed\n");
@@ -749,9 +783,10 @@ static int pat9127_init_input_data(void)
 	__set_bit(KEY_LEFT, pat9127data.pat9127_input_dev->keybit);
 	__set_bit(KEY_RIGHT, pat9127data.pat9127_input_dev->keybit);
 	__set_bit(KEY_ENTER, pat9127data.pat9127_input_dev->keybit);
+	input_set_capability(pat9127data.pat9127_input_dev, EV_REL, REL_WHEEL);
 
 	input_set_drvdata(pat9127data.pat9127_input_dev, &pat9127data);
-	pat9127data.pat9127_input_dev->name = "Pixart pat9127";
+	pat9127data.pat9127_input_dev->name = PAT9127_DEV_NAME;
 
 	pat9127data.pat9127_input_dev->open = pat9127_open;
 	pat9127data.pat9127_input_dev->close = pat9127_close;
