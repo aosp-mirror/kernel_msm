@@ -182,8 +182,6 @@
 #define CC_MODE 0
 
 #define SMB231_REG0_DEFAULT 			0x54
-#define SOC_CHANGE_COUNT_NORMAL			3
-#define SOC_CHANGE_COUNT_LOW_BATTERY	2
 /* gas gauge structure definition ------------------------------------*/
 
 /* Private constants -------------------------------------------------------*/
@@ -194,7 +192,7 @@ static const int TempTable[NTEMP] = {60, 40, 25, 10, 0, -10, -20};
 static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 static const char *charger_name = "battery";
 //static int g_low_battery_counter;
-static bool g_debug, g_standby_mode;
+static bool g_debug, g_standby_mode, g_boot_phase;
 static int g_ui_soc, g_last_status, g_ocv;
 static const char * const charge_status[] = {
 	"unknown",
@@ -324,6 +322,7 @@ int Capacity_Adjust;
 /* ------------------------------------------------------------------------ */
 
 #define STC311x_BATTERY_FULL 100
+#define STC311x_DELAY_BOOTUP	 12000 //120 sec
 #define STC311x_DELAY	 3000 //30 sec
 #define STC311x_DELAY_LOW_BATT 500 //5 sec
 #define STC311x_SOC_THRESHOLD 5
@@ -335,6 +334,7 @@ static struct i2c_client *sav_client;
 struct stc311x_chip {
 	struct i2c_client		*client;
 	struct delayed_work		work;
+	struct delayed_work		boot_up_work;
 	struct power_supply		battery;
 	struct stc311x_platform_data	*pdata;
 	struct wake_lock wlock;
@@ -1984,7 +1984,8 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 		value = BattData.AvgVoltage;
 		if (BattData.Voltage < value)
 			value = BattData.Voltage;
-		if (value < (APP_MIN_VOLTAGE+50) &&
+		//In the boot up phase, skip early empty compensation to avoid soc drop
+		if ((g_boot_phase == 0) && value < (APP_MIN_VOLTAGE+50) &&
 		    value > (APP_MIN_VOLTAGE-500)) {
 			if ((value < APP_MIN_VOLTAGE) && ((BattData.AvgCurrent > -100) && (BattData.AvgCurrent < 0)))
 				BattData.SOC = 0;
@@ -2580,6 +2581,10 @@ static void stc311x_work(struct work_struct *work)
 
 }
 
+static void stc311x_boot_up_work(struct work_struct *work)
+{
+	g_boot_phase = 0;
+}
 
 static enum power_supply_property stc311x_battery_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
@@ -2615,6 +2620,7 @@ static int stc311x_probe(struct i2c_client *client,
 
 	pr_err("\n\nstc311x probe started\n\n");
 	g_debug = 0;
+	g_boot_phase = 1;
 
 	/* The common I2C client data is placed right specific data. */
 	chip->client = client;
@@ -2761,6 +2767,10 @@ static int stc311x_probe(struct i2c_client *client,
 	 * to be checked physically during the driver integration*/
 	/*a delay of about 5 seconds is correct but 30 seconds is enough compare
 	 * to the battery SOC evolution speed*/
+
+	//Init a 120 seconds timer for device boot up
+	INIT_DEFERRABLE_WORK(&chip->boot_up_work, stc311x_boot_up_work);
+	schedule_delayed_work(&chip->boot_up_work, STC311x_DELAY_BOOTUP);
 
 	if (g_debug)
 		pr_err("SOC = %d, voltage = %d, OCV = %d, temp = %d \n", chip->batt_soc, chip->batt_voltage, g_ocv, chip->Temperature);
