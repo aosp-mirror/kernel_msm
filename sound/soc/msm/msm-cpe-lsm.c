@@ -1659,7 +1659,7 @@ static int msm_cpe_lsm_ioctl_compat(struct snd_pcm_substream *substream,
 					event_status->payload_size;
 				memcpy(udata_32->payload,
 				       event_status->payload,
-				       u_pld_size);
+				       udata_32->payload_size);
 			}
 		}
 
