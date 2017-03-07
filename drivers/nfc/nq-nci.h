@@ -51,4 +51,7 @@ enum nfcc_chip_variant {
 	NFCC_PN66T			= 0x18,	/**< NFCC PN66T */
 	NFCC_NOT_SUPPORTED	        = 0xFF	/**< NFCC is not supported */
 };
+
+struct nqx_dev;
+int nqx_ese_pwr(struct nqx_dev *nqx_dev, unsigned long int arg);
 #endif

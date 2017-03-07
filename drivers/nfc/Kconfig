@@ -85,3 +85,13 @@ config NFC_NQ
 	  This enables the NFC driver for NQx based devices.
 	  This is for i2c connected version. NCI protocol logic
 	  resides in the usermode and it has no other NFC dependencies.
+
+config NFC_NQ_PN81A
+	tristate "NFC eSE driver for NXP PN81A using NFC_NQ"
+	depends on I2C
+	depends on SPI
+	depends on NFC_NQ
+	help
+	  This enables the SPI driver for the NXP PN81A-based embedded
+	  secure element using the NFC_NQ driver to control the power.
+

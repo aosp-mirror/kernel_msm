@@ -1,0 +1,23 @@
+* NXP PN81A Embedded Secure Element
+
+PN81A is part of an NXP NFC controller and depends on
+access to eSE power via the controller.
+
+Required properties:
+- compatible: Should be "nxp,pn81a"
+- reg: SPI chip select.
+- spi-max-frequency: SPI maximum speed.
+- nxp,nfcc: Name of the i2c device where an nq-nci device is mapped.
+- nxp,clear-n: Optional GPIO for clearing a inbound application GPIO.
+
+Examples:
+
+&spi_bus {
+	pn81a@0 {
+		compatible = "nxp,pn81a";
+		reg = <0>
+		spi-max-frequency = <8000000>;
+		nxp,nfcc = "8-0028";
+		nxp,clear-n = <&tlmm 29 0x00>;
+	};
+};
