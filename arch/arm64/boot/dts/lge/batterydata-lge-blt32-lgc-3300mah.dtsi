@@ -14,7 +14,7 @@ qcom,lge_blt32_lgc_3300mah {
 	qcom, = <22>;
 	/* #2728791_LGE_BLT32lgc2_3300mAh_averaged_MasterSlave_Dec9th2016*/
 	qcom,max-voltage-uv = <4350000>;
-	qcom,nom-batt-capacity-mah = <3300>;
+	qcom,fastchg-current-ma = <3300>;
 	qcom,batt-id-kohm = <20>;
 	qcom,battery-beta = <4150>;
 	qcom,battery-type = "lge_blt32_lgc_3300mah";

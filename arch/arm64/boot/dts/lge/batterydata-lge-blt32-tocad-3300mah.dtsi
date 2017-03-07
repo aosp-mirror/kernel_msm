@@ -14,7 +14,7 @@ qcom,lge_blt32_tocad_3300mah {
 	qcom, = <22>;
 	/* #2728810_LGE_BLT32tocad_3300mAh_averaged_MasterSlave_Dec12th2016*/
 	qcom,max-voltage-uv = <4350000>;
-	qcom,nom-batt-capacity-mah = <3300>;
+	qcom,fastchg-current-ma = <3300>;
 	qcom,batt-id-kohm = <56>;
 	qcom,battery-beta = <4250>;
 	qcom,battery-type = "lge_blt32_tocad_3300mah";
