@@ -54,7 +54,6 @@
 #include "u_ctrl_hsic.c"
 #include "u_data_hsic.c"
 #include "f_ccid.c"
-#include "f_mtp.c"
 #include "f_accessory.c"
 #include "f_charger.c"
 #define USB_ETH_RNDIS y
@@ -2021,78 +2020,6 @@ static struct android_usb_function charger_function = {
 	.bind_config	= charger_function_bind_config,
 };
 
-
-static int
-mtp_function_init(struct android_usb_function *f,
-		struct usb_composite_dev *cdev)
-{
-	return mtp_setup();
-}
-
-static void mtp_function_cleanup(struct android_usb_function *f)
-{
-	mtp_cleanup();
-}
-
-static int
-mtp_function_bind_config(struct android_usb_function *f,
-		struct usb_configuration *c)
-{
-	return mtp_bind_config(c, false);
-}
-
-static int
-ptp_function_init(struct android_usb_function *f,
-		struct usb_composite_dev *cdev)
-{
-	/* nothing to do - initialization is handled by mtp_function_init */
-	return 0;
-}
-
-static void ptp_function_cleanup(struct android_usb_function *f)
-{
-	/* nothing to do - cleanup is handled by mtp_function_cleanup */
-}
-
-static int
-ptp_function_bind_config(struct android_usb_function *f,
-		struct usb_configuration *c)
-{
-	return mtp_bind_config(c, true);
-}
-
-static int mtp_function_ctrlrequest(struct android_usb_function *f,
-					struct usb_composite_dev *cdev,
-					const struct usb_ctrlrequest *c)
-{
-	return mtp_ctrlrequest(cdev, c);
-}
-
-static int ptp_function_ctrlrequest(struct android_usb_function *f,
-					struct usb_composite_dev *cdev,
-					const struct usb_ctrlrequest *c)
-{
-	return mtp_ctrlrequest(cdev, c);
-}
-
-
-static struct android_usb_function mtp_function = {
-	.name		= "mtp",
-	.init		= mtp_function_init,
-	.cleanup	= mtp_function_cleanup,
-	.bind_config	= mtp_function_bind_config,
-	.ctrlrequest	= mtp_function_ctrlrequest,
-};
-
-/* PTP function is same as MTP with slightly different interface descriptor */
-static struct android_usb_function ptp_function = {
-	.name		= "ptp",
-	.init		= ptp_function_init,
-	.cleanup	= ptp_function_cleanup,
-	.bind_config	= ptp_function_bind_config,
-	.ctrlrequest	= ptp_function_ctrlrequest,
-};
-
 /* rndis transport string */
 static char rndis_transports[MAX_XPORT_STR_LEN];
 
@@ -3062,8 +2989,6 @@ static struct android_usb_function *supported_functions[] = {
 	[ANDROID_SERIAL] = &serial_function,
 	[ANDROID_CCID] = &ccid_function,
 	[ANDROID_ACM] = &acm_function,
-	[ANDROID_MTP] = &mtp_function,
-	[ANDROID_PTP] = &ptp_function,
 	[ANDROID_RNDIS] = &rndis_function,
 	[ANDROID_RNDIS_BAM] = &rndis_qc_function,
 	[ANDROID_ECM] = &ecm_function,
@@ -3097,8 +3022,6 @@ static struct android_usb_function *default_functions[] = {
 	&serial_function,
 	&ccid_function,
 	&acm_function,
-	&mtp_function,
-	&ptp_function,
 	&rndis_function,
 	&rndis_qc_function,
 	&ecm_function,
