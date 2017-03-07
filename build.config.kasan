@@ -9,7 +9,8 @@ function update_kasan_config() {
          -e CONFIG_SLUB_DEBUG_ON \
          -e CONFIG_CC_OPTIMIZE_FOR_SIZE \
          -d CONFIG_SLUB_DEBUG_PANIC_ON \
-         -d CONFIG_KASAN_OUTLINE
+         -d CONFIG_KASAN_OUTLINE \
+         -d CONFIG_KERNEL_LZ4
     (cd ${OUT_DIR} && \
      make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
 }
@@ -21,10 +22,8 @@ DEFCONFIG=marlin_defconfig
 KERNEL_DIR=private/msm-google
 POST_DEFCONFIG_CMDS="update_kasan_config"
 LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts-master/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin
-LZ4_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/lz4
 FILES="
 arch/arm64/boot/Image.gz-dtb
-arch/arm64/boot/Image.lz4-dtb
 vmlinux
 System.map
 "
