@@ -159,6 +159,7 @@ static struct mnh_mipi_config mnh_mipi_configs[] = {
 static struct mnh_sm_device *mnh_sm_dev;
 static int mnh_state;
 static int mnh_sm_uboot = MNH_UBOOT_DISABLE;
+static int mnh_mipi_debug;
 static uint32_t mnh_resume_addr = HW_MNH_KERNEL_DOWNLOAD;
 
 /* callback when easel enters and leaves the active state */
@@ -741,6 +742,38 @@ static ssize_t mnh_sm_uboot_store(struct device *dev,
 static DEVICE_ATTR(uboot, S_IWUSR | S_IRUGO,
 		mnh_sm_uboot_show, mnh_sm_uboot_store);
 
+static ssize_t mnh_sm_debug_mipi_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
+{
+	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_debug_mipi_show...\n");
+
+	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_mipi_debug);
+}
+
+static ssize_t mnh_sm_debug_mipi_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf,
+				  size_t count)
+{
+	unsigned long val = 0;
+	int ret;
+
+	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_debug_mipi_show...\n");
+
+	ret = mnh_sm_get_val_from_buf(buf, &val);
+	if (!ret) {
+		mnh_mipi_debug = val;
+		mnh_mipi_set_debug(val);
+		return mnh_mipi_debug;
+	}
+
+	return -EINVAL;
+}
+
+static DEVICE_ATTR(debug_mipi, S_IWUSR | S_IRUGO,
+		mnh_sm_debug_mipi_show, mnh_sm_debug_mipi_store);
+
 static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_poweron.attr,
 	&dev_attr_poweroff.attr,
@@ -755,6 +788,7 @@ static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_reset.attr,
 	&dev_attr_cpu_clk.attr,
 	&dev_attr_uboot.attr,
+	&dev_attr_debug_mipi.attr,
 	NULL
 };
 

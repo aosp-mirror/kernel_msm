@@ -22,5 +22,6 @@
 int mnh_mipi_config(struct device *dev, struct mnh_mipi_config cfg);
 void mnh_mipi_stop_device(struct device *dev, int txdev);
 void mnh_mipi_stop_host(struct device *dev, int rxdev);
+void mnh_mipi_set_debug(int val);
 
 #endif /* __MNH_MIPI */

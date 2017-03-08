@@ -158,6 +158,8 @@ static struct mipi_dev_ovr_cfg mipi_dev_ovr_cfgs[] = {
 	{ 2100, 0x9A, 0x9B, 0xD0, 0x0E, 0x50, 0xC0, 0x39, 0xD3, 0x0C, 0x4A, 0xA7, 0x1E, true},
 };
 
+static int mipi_debug;
+
 static void mnh_sm_mipi_rx_dphy_write_gen3(int command, int data,
 					   uint32_t device)
 {
@@ -439,15 +441,20 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 	dev_dbg(dev, "%s: dev %d, rate %d\n", __func__, device, rate);
 
 	/* Functional configurations are currently 1350, 720, 675 */
-	if (rate <= 675) {
-		dev_dbg(dev, "%s: %d config. default 675\n", __func__, rate);
-		rate = 675;
-	} else if (rate <= 720) {
-		dev_dbg(dev, "%s: %d config. default 720\n", __func__, rate);
-		rate = 720;
-	} else if (rate <= 1350) {
-		dev_dbg(dev, "%s: %d config. default 1350\n", __func__, rate);
-		rate = 1350;
+	if (!mipi_debug) {
+		if (rate <= 675) {
+			dev_dbg(dev, "%s: %d config. default 675\n", __func__,
+				rate);
+			rate = 675;
+		} else if (rate <= 720) {
+			dev_dbg(dev, "%s: %d config. default 720\n", __func__,
+				rate);
+			rate = 720;
+		} else if (rate <= 1350) {
+			dev_dbg(dev, "%s: %d config. default 1350\n", __func__,
+				rate);
+			rate = 1350;
+		}
 	}
 
 	/* only support devices 0-1 */
@@ -579,7 +586,7 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 		LANE_EN_NUM, 3);
 
 	/* Timing register overrides */
-	if (dev_ovr_cfg->use_ovrd) {
+	if (!mipi_debug && dev_ovr_cfg->use_ovrd) {
 		mnh_sm_mipi_tx_dphy_write_gen3(0x5A, dev_ovr_cfg->reg_0x5A,
 					       device);
 		mnh_sm_mipi_tx_dphy_write_gen3(0x5B, dev_ovr_cfg->reg_0x5B,
@@ -794,3 +801,9 @@ void mnh_mipi_stop_host(struct device *dev, int rxdev)
 	}
 }
 EXPORT_SYMBOL_GPL(mnh_mipi_stop_host);
+
+void mnh_mipi_set_debug(int val)
+{
+	mipi_debug = val;
+}
+EXPORT_SYMBOL(mnh_mipi_set_debug);
