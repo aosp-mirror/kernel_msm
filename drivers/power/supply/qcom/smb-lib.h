@@ -232,7 +232,6 @@ struct smb_charger {
 	bool			is_hdc;
 	bool			chg_done;
 	bool			micro_usb_mode;
-	bool			otg_en;
 	bool			vconn_en;
 	bool			suspend_input_on_debug_batt;
 	int			otg_attempts;

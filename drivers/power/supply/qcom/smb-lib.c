@@ -1171,14 +1171,9 @@ static int smblib_otg_enable(struct smb_charger *chg)
 	int rc = 0;
 
 	mutex_lock(&chg->otg_overcurrent_lock);
-	if (chg->otg_en)
-		goto unlock;
 
 	rc = _smblib_otg_enable(chg);
-	if (rc >= 0)
-		chg->otg_en = true;
 
-unlock:
 	mutex_unlock(&chg->otg_overcurrent_lock);
 	return rc;
 }
@@ -1237,27 +1232,31 @@ static int smblib_otg_disable(struct smb_charger *chg)
 	int rc = 0;
 
 	mutex_lock(&chg->otg_overcurrent_lock);
-	if (!chg->otg_en)
-		goto unlock;
 
 	rc = _smblib_otg_disable(chg);
-	if (rc >= 0)
-		chg->otg_en = false;
 
-unlock:
 	mutex_unlock(&chg->otg_overcurrent_lock);
 	return rc;
 }
 
 static int smblib_otg_is_enabled(struct smb_charger *chg)
 {
-	int ret;
+	int rc = 0;
+	u8 cmd;
 
 	mutex_lock(&chg->otg_overcurrent_lock);
-	ret = chg->otg_en;
-	mutex_unlock(&chg->otg_overcurrent_lock);
 
-	return ret;
+	rc = smblib_read(chg, CMD_OTG_REG, &cmd);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read CMD_OTG rc=%d", rc);
+		goto unlock;
+	}
+
+	rc = (cmd & OTG_EN_BIT) ? 1 : 0;
+
+unlock:
+	mutex_unlock(&chg->otg_overcurrent_lock);
+	return rc;
 }
 
 int smblib_vbus_regulator_enable(struct regulator_dev *rdev)
@@ -2809,8 +2808,15 @@ int smblib_set_prop_use_external_vbus_output(struct smb_charger *chg,
 	} else {
 		smblib_dbg(chg, PR_MISC,
 			   "VBUS output source: external -> internal\n");
+
 		rc = smblib_otg_enable(chg);
-		if (rc < 0)
+		/*
+		 * The PMIC booster will not turn on until the external booster
+		 * removes the voltage on VBUS, and smblib_otg_enable() will
+		 * return -ETIMEDOUT in this case. Therefore, consider
+		 * -ETIMEDOUT as known issue and proceed.
+		 */
+		if (rc < 0 && rc != -ETIMEDOUT)
 			goto unlock;
 
 		rc = regulator_disable(chg->external_vbus_reg);
