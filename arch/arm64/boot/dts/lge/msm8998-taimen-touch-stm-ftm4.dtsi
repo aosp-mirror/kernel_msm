@@ -28,9 +28,9 @@
 	status = "disabled";
 	qcom,clk-freq-out = <400000>;
 
-	fts_touch@49 {
+	ftm4_fts@49 {
 		status = "ok";
-		compatible = "stm,fts_touch";
+		compatible = "stm,ftm4_fts";
 		reg = <0x49>;
 
 		pinctrl-names = "on_state","off_state";
@@ -49,7 +49,7 @@
 		//stm,vdd-gpio = <&tlmm 85 0x0>;
 		//stm,vio-gpio = <&tlmm 86 0x0>;
 
-		stm,firmware_name = "touch/taimen/stm/v30_v0.01.ftb";
+		stm,firmware_name = "touch/taimen/ftm4/v30_v0.01.ftb";
 	};
 };
 
