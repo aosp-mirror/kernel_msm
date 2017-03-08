@@ -454,6 +454,7 @@ static void easelcomm_stop_local(void)
 
 	for (i = 0; i < EASELCOMM_SERVICE_COUNT; i++) {
 		struct easelcomm_service *service = &easelcomm_service[i];
+
 		easelcomm_flush_local_service(service);
 	}
 }

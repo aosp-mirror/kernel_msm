@@ -588,7 +588,8 @@ int easelcomm_receive_dma(
 
 	/* If it's a user buffer, check valid range and writable. */
 	if (buf_desc->buf_type == EASELCOMM_DMA_BUFFER_USER) {
-		if (!access_ok(VERIFY_WRITE, buf_desc->buf, buf_desc->buf_size)) {
+		if (!access_ok(VERIFY_WRITE, buf_desc->buf,
+			       buf_desc->buf_size)) {
 			ret = -EFAULT;
 			goto out;
 		}
@@ -671,7 +672,8 @@ int easelcomm_send_dma(
 
 	/* If it's a user buffer, check valid range and readable. */
 	if (buf_desc->buf_type == EASELCOMM_DMA_BUFFER_USER) {
-		if (!access_ok(VERIFY_READ, buf_desc->buf, buf_desc->buf_size)) {
+		if (!access_ok(VERIFY_READ, buf_desc->buf,
+			       buf_desc->buf_size)) {
 			ret = -EFAULT;
 			goto out;
 		}
