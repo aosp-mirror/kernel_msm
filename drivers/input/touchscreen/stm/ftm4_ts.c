@@ -1444,6 +1444,8 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	fts_production_init(info);
 #endif /* FEATURE_FTS_PRODUCTION_CODE */
 	device_init_wakeup(&client->dev, true);
+	if (device_may_wakeup(&info->client->dev))
+		enable_irq_wake(info->irq);
 
 	return 0;
 
