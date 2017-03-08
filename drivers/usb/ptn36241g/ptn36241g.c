@@ -263,6 +263,25 @@ static int ptn36241g_probe(struct platform_device *pdev)
 			"%s - failed to power on ptn36241g, ret=%d\n",
 			__func__,
 			ret);
+		return ret;
+	}
+
+	/* Initial configuration for cc1/cc2 pin state */
+	ret = pinctrl_select_state(chip->nxp_pinctrl,
+				   chip->nxp_cc1_sleep_state);
+	if (ret < 0) {
+		dev_err(chip->dev,
+			"%s - failed to config cc1 sleep, ret=%d\n",
+			__func__, ret);
+		return ret;
+	}
+	ret = pinctrl_select_state(chip->nxp_pinctrl,
+				   chip->nxp_cc2_sleep_state);
+	if (ret < 0) {
+		dev_err(chip->dev,
+			"%s - failed to config cc2 sleep, ret=%d\n",
+			__func__, ret);
+		return ret;
 	}
 
 	/* Initial Redriver state */
