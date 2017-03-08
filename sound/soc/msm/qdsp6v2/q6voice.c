@@ -7624,7 +7624,12 @@ static int voice_set_cal(int32_t cal_type,
 {
 	int ret = 0;
 	int cal_index;
+	int cal_version = cal_utils_get_cal_type_version(data);
+
 	pr_debug("%s\n", __func__);
+
+	common.is_per_vocoder_cal_enabled =
+		(cal_version & PER_VOCODER_CAL_BIT_MASK) ? true : false;
 
 	cal_index = get_cal_type_index(cal_type);
 	if (cal_index < 0) {
