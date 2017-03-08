@@ -22,7 +22,7 @@
 #include <linux/of_gpio.h>
 #include <linux/device.h>
 #include <linux/list.h>
-#include "fts_ts.h"
+#include "ftm4_ts.h"
 
 #define TSP_FACTEST_RESULT_PASS		2
 #define TSP_FACTEST_RESULT_FAIL		1
@@ -2067,7 +2067,7 @@ void fts_production_init(void *device_info)
 		mutex_init(&info->cmd_lock);
 		info->cmd_is_running = false;
 
-		sprintf(pdc_dir_name, "lge_touch");
+		sprintf(pdc_dir_name, "ftm4_touch");
 
 		info->pdc_dev_ts = device_create(info->input_dev->dev.class, NULL, 0,  NULL, pdc_dir_name);
 		if (IS_ERR(info->pdc_dev_ts)) {

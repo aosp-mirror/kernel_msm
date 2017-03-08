@@ -66,7 +66,7 @@
 #include <linux/earlysuspend.h>
 #endif
 #include <linux/input/mt.h>
-#include "fts_ts.h"
+#include "ftm4_ts.h"
 
 static struct i2c_driver fts_i2c_driver;
 
@@ -193,81 +193,6 @@ static void fts_delay(unsigned int ms)
 		usleep_range(ms * 1000, ms * 1000);
 	else
 		msleep(ms);
-}
-
-static int fts_tci_init(struct fts_ts_info *info)
-{
-	unsigned char regAdd[4] = { 0xD0, 0x00, 0x4E };
-	unsigned char buf[4] = {0,};
-	int base_addr = 0;
-	int ret = 0;
-	ret = fts_read_reg(info, &regAdd[0], 3, &buf[0], 4);
-	base_addr = buf[1] + (buf[2] << 8);
-	tsp_debug_info(true, &info->client->dev, "%s : base addr = %x \n", __func__, base_addr);
-	info->tci_base_addr = base_addr;
-	return ret;
-}
-/*
-static int fts_tci_read(struct fts_ts_info *info, int cmd, int data, int len)
-{
-	unsigned char regAdd[5] = { 0xD0, 0x00, 0x00, 0x00, 0x00 };
-	unsigned char buf[12] = {0,};
-	int base_addr = 0;
-	int ret = 0;
-	base_addr = info->tci_base_addr + cmd;
-	regAdd[1] = (base_addr >> 8) & 0xFF;
-	regAdd[2] = base_addr & 0xFF;
-	ret = fts_read_reg(info, &regAdd[0], 3, &buf[0], 4);
-	data = (buf[1] & 0xFF);
-	if(len > 1)
-		data = data + (((buf[2] & 0xFF) << 8) + buf[1]);
-	return ret;
-}
-
-static int fts_tci_write(struct fts_ts_info *info, int cmd, int data, int len)
-{
-	unsigned char regAdd[5] = { 0xD0, 0x00, 0x00, 0x000, 0x00 };
-	unsigned char buf[12] = {0,};
-	int base_addr = 0;
-	int ret = 0;
-	memset(&buf, 0x00, sizeof(buf));
-	buf[0] = (data & 0xFF);
-	if(len > 1)
-		buf[1] = (data >> 8) & 0xFF;
-	base_addr = info->tci_base_addr + cmd;
-	regAdd[1] = (base_addr >> 8) & 0xFF;
-	regAdd[2] = base_addr & 0xFF;
-	regAdd[3] = buf[0];
-	regAdd[4] = buf[1];
-	ret = fts_write_reg(info, &regAdd[0], (3 + len));
-	return ret;
-}
-
-static int fts_get_area_coor_xy(struct fts_ts_info *info,enum fts_tci_reg_address cmd, int x, int y)
-{
-	int ret = 0;
-	ret = fts_tci_read(info, cmd, y, 2);
-	ret = fts_tci_read(info, (cmd + 0x02), x , 2);
-	return ret;
-}
-static int fts_set_area_coor_xy(struct fts_ts_info *info,enum fts_tci_reg_address cmd, int x, int y)
-{
-	int ret = 0;
-	ret = fts_tci_write(info, cmd, y, 2);
-	ret = fts_tci_write(info, (cmd + 0x02), x, 2);
-	return ret;
-}*/
-static int fts_gesture_set(struct fts_ts_info *info, int enable )
-{
-	unsigned char regAdd[7] = {0xC3, 0x01, 0x00, 0x00, 0x00, 0x02};
-	int ret = 0;
-
-	if(enable == 0)
-		regAdd[1] = 0x02; //disable
-
-	ret = fts_write_reg(info, &regAdd[0], 6);
-
-	return ret;
 }
 
 void fts_command(struct fts_ts_info *info, unsigned char cmd)
@@ -647,9 +572,7 @@ static int fts_init(struct fts_ts_info *info)
 	fts_command(info, FLUSHBUFFER);
 
 	fts_interrupt_set(info, INT_ENABLE);
-#ifdef FEATURE_FTS_TCI
-	fts_tci_init(info);
-#endif /* FEATURE_FTS_TCI */
+
 	memset(val, 0x0, 4);
 	regAdd[0] = READ_STATUS;
 	fts_read_reg(info, regAdd, 1, (unsigned char *)val, 4);
@@ -678,11 +601,7 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 	unsigned char TouchID = 0, EventID = 0, status = 0;
 	unsigned char LastLeftEvent = 0;
 	int x = 0, y = 0, z = 0;
-	int bw = 0, bh = 0, palm = 0, sumsize = 0;
-	unsigned char ges_type = 0, tci_num = 0;
-	int press_x = 0;
-	int press_y = 0; /* pressed X / Y coordinate */
-	int press_time = 0; /* press time ms */
+	int bw = 0, bh = 0, palm = 0;
 	int orient = 0;
 
 #if defined (CONFIG_INPUT_BOOSTER)
@@ -898,38 +817,6 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			break;
 #endif /* FEATURE_FTS_PRODUCTION_CODE */
 
-		case EVENTID_KNOCK_GESTURE :
-			ges_type = (data[1] & 0x0F);
-			tci_num = ((data[1] & 0xF0)>>4);
-
-			tsp_debug_info(true, &info->client->dev, "%s: enter knock gesture (ges type %d ), tci ( %d )\n", __func__, ges_type, tci_num);
-			if(ges_type == 0x0){ // knock on
-				x = ((data[2 + EventNum * FTS_EVENT_SIZE] & 0xFF) << 4) +
-					((data[4 + EventNum * FTS_EVENT_SIZE] & 0xF0) >> 4);
-				y = ((data[3 + EventNum * FTS_EVENT_SIZE] & 0xFF) << 4 )+
-					(data[4 + EventNum * FTS_EVENT_SIZE] & 0xF );
-			} else if(ges_type == 0x1) { // swipe up
-				if(((data[1] >> 4) & 0x0F) == 0x00){ //first evnet
-					memset(info->gesture, 0x00, FTS_EVENT_SIZE);
-					memcpy(info->gesture, data, FTS_EVENT_SIZE);
-				}  else if(((data[1] >> 4) & 0x0F) == 0x01){ //sencond event
-						x = ((info->gesture[2 + EventNum * FTS_EVENT_SIZE] & 0xFF) << 4) +
-							((info->gesture[4 + EventNum * FTS_EVENT_SIZE] & 0xF0) >> 4);
-						y = ((info->gesture[3 + EventNum * FTS_EVENT_SIZE] & 0xFF) << 4 )+
-							(info->gesture[4 + EventNum * FTS_EVENT_SIZE] & 0xF );
-						press_x = ((info->gesture[5 + EventNum * FTS_EVENT_SIZE] & 0xFF) << 4) +
-							((info->gesture[7 + EventNum * FTS_EVENT_SIZE] & 0xF0) >> 4);
-						press_y = ((info->gesture[6 + EventNum * FTS_EVENT_SIZE] & 0xFF) << 4 )+
-							(info->gesture[7 + EventNum * FTS_EVENT_SIZE] & 0xF );
-						press_time = ((data[2]&0xFF) << 8) + (data[3]&0xFF);
-						memset(info->gesture, 0x00, FTS_EVENT_SIZE);
-				} else {
-					tsp_debug_info(true, &info->client->dev, "%s: Not matching with event id", __func__ );
-				}
-			} else
-				tsp_debug_info(true, &info->client->dev, "%s: Not matching with gesture id", __func__ );
-		break;
-
 		default:
 			fts_debug_msg_event_handler(info,
 						  &data[EventNum *
@@ -939,8 +826,8 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 
 		if (EventID == EVENTID_ENTER_POINTER)
 			tsp_debug_info(true, &info->client->dev,
-				"[P] tID:%d x:%d y:%d w:%d h:%d z:%d s:%d p:%d tc:%d tm:%d\n",
-				TouchID, x, y, bw, bh, z, sumsize, palm, info->touch_count, info->touch_mode);
+				"[P] tID:%d x:%d y:%d w:%d h:%d z:%d p:%d tc:%d tm:%d\n",
+				TouchID, x, y, bw, bh, z, palm, info->touch_count, info->touch_mode);
 		else if (EventID == EVENTID_HOVER_ENTER_POINTER)
 			tsp_debug_dbg(true, &info->client->dev,
 				"[HP] tID:%d x:%d y:%d z:%d\n",
@@ -1807,10 +1694,7 @@ static int fts_stop_device(struct fts_ts_info *info)
 		fts_command(info, FLUSHBUFFER);
 
 		fts_command(info, FTS_CMD_LOWPOWER_MODE);
-#ifdef FEATURE_FTS_TCI
-		fts_delay(50);
-		fts_gesture_set(info, 1);
-#endif
+
 		if (device_may_wakeup(&info->client->dev))
 			enable_irq_wake(info->irq);
 
@@ -2056,7 +1940,7 @@ static const struct dev_pm_ops fts_dev_pm_ops = {
 
 #ifdef CONFIG_OF
 static struct of_device_id fts_match_table[] = {
-	{ .compatible = "stm,fts_touch",},
+	{ .compatible = "stm,ftm4_fts",},
 	{ },
 };
 #else
@@ -2086,12 +1970,6 @@ static struct i2c_driver fts_i2c_driver = {
 
 static int __init fts_driver_init(void)
 {
-	int lcd_maker_id = 0;
-	lcd_maker_id = gpio_get_value(16);
-	printk("fts_touch lcd_maker_id = %d\n", lcd_maker_id);
-	if(!gpio_get_value(16)){
-		return 0;
-	}
 	return i2c_add_driver(&fts_i2c_driver);
 }
 

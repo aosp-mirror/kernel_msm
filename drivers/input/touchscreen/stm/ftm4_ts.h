@@ -1,5 +1,5 @@
-#ifndef _LINUX_FTS_TS_H_
-#define _LINUX_FTS_TS_H_
+#ifndef _LINUX_FTM4_TS_H_
+#define _LINUX_FTM4_TS_H_
 
 #include <linux/device.h>
 #include <linux/hrtimer.h>
@@ -40,7 +40,6 @@
 
 #define USE_OPEN_CLOSE
 #define FEATURE_FTS_PRODUCTION_CODE	1
-#define FEATURE_FTS_TCI				0
 
 #ifdef USE_OPEN_DWORK
 #define TOUCH_OPEN_DWORK_TIME 10
@@ -95,7 +94,6 @@
 
 #define EVENTID_FROM_STRING					0x80
 #define EVENTID_GESTURE						0x20
-#define EVENTID_KNOCK_GESTURE				0x22
 
 #define EVENTID_SIDE_SCROLL				0x40
 #define EVENTID_SIDE_TOUCH_DEBUG			0xDB	/* side touch event-id for debug, remove after f/w fixed */
@@ -407,9 +405,6 @@ struct fts_ts_info {
 	char test_fwpath[256];
 	int force_update;
 
-	int 	tci_base_addr; // Tap common interface
-	unsigned char gesture[FTS_EVENT_SIZE];
-
 	int (*stop_device) (struct fts_ts_info * info);
 	int (*start_device) (struct fts_ts_info * info);
 
@@ -525,46 +520,6 @@ enum fts_system_information_address {
 };
 #endif
 
-#ifdef FEATURE_FTS_TCI
-#define FTS_TAP_ON				     (1 << 0)
-#define FTS_SWIPE_ON				 (1 << 1)
-
-#define FTS_TCI1_ON				     (1 << 0)
-#define FTS_TCI2_ON					 (1 << 1)
-
-enum fts_tci_reg_address{
-	FTS_TCI_SERVICE_EN				= 0x00,
-	FTS_TCI_FRM_RATE				= 0x01,
-	FTS_TCI_SENSITIVITY				= 0x02,
-	FTS_TCI_ACT_A1_Y				= 0x03,
-	FTS_TCI_ACT_A1_X				= 0x05,
-	FTS_TCI_ACT_A2_Y				= 0x07,
-	FTS_TCI_ACT_A2_X				= 0x09,
-	FTS_TCI_EN						= 0x0B,
-	FTS_TCI_1_SLP					= 0x0C,
-	FTS_TCI_1_DIST					= 0x0E,
-	FTS_TCI_1_TIME_GAP				= 0x10,
-	FTS_TCI_1_CNT					= 0x12,
-	FTS_TCI_1_DLY_TIME				= 0x13,
-	FTS_TCI_2_SLP					= 0x15,
-	FTS_TCI_2_DIST					= 0x17,
-	FTS_TCI_2_TIME_GAP				= 0x19,
-	FTS_TCI_2_CNT					= 0x1B,
-	FTS_TCI_2_DLY_TIME				= 0x1C,
-	FTS_SWIPE_UP_DIST			= 0x1E,
-	FTS_SWIPE_UP_RATIO			= 0x1F,
-	FTS_SWIPE_UP_MIN_TIME		= 0x20,
-	FTS_SWIPE_UP_MAX_TIME		= 0x21,
-	FTS_SWIPE_UP_ACT_A1_Y		= 0x23,
-	FTS_SWIPE_UP_ACT_A1_X		= 0x25,
-	FTS_SWIPE_UP_ACT_A2_Y		= 0x27,
-	FTS_SWIPE_UP_ACT_A2_X		= 0x29,
-	FTS_SWIPE_UP_WR_DIR_THRES	= 0x2B,
-	FTS_SWIPE_UP_INIT_RATIO_DIST = 0x2C,
-	FTS_SWIPE_UP_INIT_RATIO_THRES = 0x2D
-};
-#endif /* FEATURE_FTS_TCI */
-
 int fts_fw_update(struct fts_ts_info *info);
 void fts_execute_autotune(struct fts_ts_info *info);
 int fts_fw_wait_for_event(struct fts_ts_info *info, unsigned char eid);
@@ -573,4 +528,4 @@ int fts_fw_wait_for_specific_event(struct fts_ts_info *info, unsigned char eid0,
 void procedure_cmd_event(struct fts_ts_info *info, unsigned char *data);
 void fts_production_init(void *device_info);
 #endif
-#endif				//_LINUX_FTS_TS_H_
+#endif				//_LINUX_FTM4_TS_H_

@@ -3375,22 +3375,12 @@ static struct touch_hwif hwif = {
 
 static int __init touch_device_init(void)
 {
-#ifdef CONFIG_LGE_TOUCH_DUAL
-	int lcd_maker_id = 0;
-#endif
 	TOUCH_TRACE();
-#ifdef CONFIG_LGE_TOUCH_DUAL
-	lcd_maker_id = gpio_get_value(16);
-	TOUCH_I("lcd_maker_id = %d\n", lcd_maker_id);
-	if(gpio_get_value(16)){
-		return 0;
-	}
-#else
+
 	if (touch_get_device_type() != TYPE_SW49408 ) {
 		TOUCH_I("%s, sw49408 returned\n", __func__);
 		return 0;
 	}
-#endif
 
 	TOUCH_I("%s, sw49408 start\n", __func__);
 

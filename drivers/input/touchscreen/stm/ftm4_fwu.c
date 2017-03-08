@@ -9,7 +9,7 @@
 #include <linux/interrupt.h>
 #include <linux/gpio.h>
 
-#include "fts_ts.h"
+#include "ftm4_ts.h"
 
 #define FTS_DEFAULT_FW "/sdcard/stm.fw"
 #define FTS64FILE_SIGNATURE 0xaaaa5555
