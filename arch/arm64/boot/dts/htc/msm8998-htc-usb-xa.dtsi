@@ -83,7 +83,7 @@
 		/*nxp_cc2_active-HH*/
 		pinctrl-3 = <&nxp_cc2_c1_High &nxp_cc2_c2_High>;
 		/*nxp_cc2_sleep-LL*/
-		pinctrl-4 = <&nxp_cc2_c2_Low &nxp_cc2_c2_Low>;
+		pinctrl-4 = <&nxp_cc2_c1_Low &nxp_cc2_c2_Low>;
 	};
 };
 
