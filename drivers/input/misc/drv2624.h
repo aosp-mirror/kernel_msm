@@ -26,12 +26,12 @@
 #include <linux/regmap.h>
 #include <linux/timer.h>
 #include <linux/workqueue.h>
-#include <../../../drivers/staging/android/timed_output.h>
 #include <linux/hrtimer.h>
 #include <linux/wakelock.h>
 #include <linux/mutex.h>
 #include <linux/cdev.h>
 #include <linux/firmware.h>
+#include <linux/leds.h>
 
 #define HAPTICS_DEVICE_NAME			"drv2624"
 
@@ -271,10 +271,10 @@ struct drv2624_data {
 	char work_mode;
 	unsigned char current_reg;
 	struct wake_lock wklock;
-	struct hrtimer timer;
 	struct mutex lock;	/* protect mode switching */
 	struct work_struct vibrator_work;
-	struct timed_output_dev to_dev;
+	struct work_struct work;
+	struct led_classdev led_dev;
 
 	struct drv2624_autocal_result auto_cal_result;
 	struct drv2624_diag_result diag_result;

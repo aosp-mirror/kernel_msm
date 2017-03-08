@@ -221,39 +221,25 @@ static void drv2624_change_mode(struct drv2624_data *drv2624,
 	drv2624_set_bits(drv2624, DRV2624_REG_MODE, WORKMODE_MASK, work_mode);
 }
 
-static int vibrator_get_time(struct timed_output_dev *dev)
-{
-	struct drv2624_data *drv2624 =
-	    container_of(dev, struct drv2624_data, to_dev);
-
-	if (hrtimer_active(&drv2624->timer)) {
-		ktime_t r = hrtimer_get_remaining(&drv2624->timer);
-
-		return ktime_to_ms(r);
-	}
-
-	return 0;
-}
-
 static void drv2624_stop(struct drv2624_data *drv2624)
 {
 	if (drv2624->vibrator_playing) {
 		dev_dbg(drv2624->dev, "%s\n", __func__);
 		drv2624_disable_irq(drv2624);
-		hrtimer_cancel(&drv2624->timer);
 		drv2624_set_go_bit(drv2624, STOP);
 		drv2624->vibrator_playing = false;
 		wake_unlock(&drv2624->wklock);
 	}
 }
 
-static void vibrator_enable(struct timed_output_dev *dev, int value)
+static void drv2624_haptics_work(struct work_struct *work)
 {
-	int ret = 0;
 	struct drv2624_data *drv2624 =
-	    container_of(dev, struct drv2624_data, to_dev);
+		container_of(work, struct drv2624_data, work);
+	int ret = 0;
+	const int state = drv2624->led_dev.brightness;
 
-	dev_dbg(drv2624->dev, "%s, value=%d\n", __func__, value);
+	dev_dbg(drv2624->dev, "%s, state=%d\n", __func__, state);
 
 	mutex_lock(&drv2624->lock);
 
@@ -263,12 +249,12 @@ static void vibrator_enable(struct timed_output_dev *dev, int value)
 
 	drv2624_stop(drv2624);
 
-	if (value > 0) {
+	if (state != LED_OFF) {
 		wake_lock(&drv2624->wklock);
-
 		drv2624_change_mode(drv2624, MODE_RTP);
 		drv2624->vibrator_playing = true;
 		drv2624_enable_irq(drv2624, true);
+
 		ret = drv2624_set_go_bit(drv2624, GO);
 		if (ret < 0) {
 			dev_warn(drv2624->dev, "Start RTP failed\n");
@@ -276,25 +262,21 @@ static void vibrator_enable(struct timed_output_dev *dev, int value)
 			drv2624->vibrator_playing = false;
 			drv2624_disable_irq(drv2624);
 		} else {
-			value = (value > MAX_TIMEOUT) ? MAX_TIMEOUT : value;
-			hrtimer_start(&drv2624->timer,
-				      ns_to_ktime((u64)value * NSEC_PER_MSEC),
-				      HRTIMER_MODE_REL);
+			drv2624->work_mode |= WORK_VIBRATOR;
 		}
 	}
 
 	mutex_unlock(&drv2624->lock);
 }
 
-static enum hrtimer_restart vibrator_timer_func(struct hrtimer *timer)
+static void vibrator_enable(struct led_classdev *led_cdev,
+			    enum led_brightness value)
 {
 	struct drv2624_data *drv2624 =
-	    container_of(timer, struct drv2624_data, timer);
+			container_of(led_cdev, struct drv2624_data, led_dev);
 
-	dev_dbg(drv2624->dev, "%s\n", __func__);
-	drv2624->work_mode |= WORK_VIBRATOR;
-	schedule_work(&drv2624->vibrator_work);
-	return HRTIMER_NORESTART;
+	led_cdev->brightness = value;
+	schedule_work(&drv2624->work);
 }
 
 static void vibrator_work_routine(struct work_struct *work)
@@ -1081,32 +1063,35 @@ static int haptics_init(struct drv2624_data *drv2624)
 {
 	int ret;
 
-	drv2624->to_dev.name = "vibrator";
-	drv2624->to_dev.get_time = vibrator_get_time;
-	drv2624->to_dev.enable = vibrator_enable;
 	drv2624->vibrator_playing = false;
+	drv2624->led_dev.name = "vibrator";
+	drv2624->led_dev.max_brightness = LED_FULL;
+	drv2624->led_dev.brightness_set = vibrator_enable;
 
-	ret = timed_output_dev_register(&drv2624->to_dev);
-	if (ret < 0) {
+	ret = led_classdev_register(drv2624->dev, &drv2624->led_dev);
+	if (ret) {
 		dev_err(drv2624->dev,
-			"drv2624: fail to create timed output dev\n");
+			"drv2624: fail to create led classdev\n");
 		return ret;
 	}
 
 	ret = misc_register(&drv2624_misc);
 	if (ret) {
 		dev_err(drv2624->dev, "drv2624 misc fail: %d\n", ret);
-		return ret;
+		goto haptics_init_err;
 	}
-
-	hrtimer_init(&drv2624->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	drv2624->timer.function = vibrator_timer_func;
-	INIT_WORK(&drv2624->vibrator_work, vibrator_work_routine);
 
 	wake_lock_init(&drv2624->wklock, WAKE_LOCK_SUSPEND, "vibrator");
 	mutex_init(&drv2624->lock);
+	INIT_WORK(&drv2624->vibrator_work, vibrator_work_routine);
+	INIT_WORK(&drv2624->work, drv2624_haptics_work);
 
 	return 0;
+
+haptics_init_err:
+	led_classdev_unregister(&drv2624->led_dev);
+
+	return ret;
 }
 
 static void dev_init_platform_data(struct drv2624_data *drv2624)
@@ -1435,7 +1420,9 @@ static int drv2624_i2c_probe(struct i2c_client *client,
 
 	drv2624_plat_data = drv2624;
 
-	haptics_init(drv2624);
+	err = haptics_init(drv2624);
+	if (err)
+		goto exit_gpio_request_failed2;
 
 	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, "drv2624.bin",
 				&client->dev, GFP_KERNEL, drv2624,
@@ -1463,6 +1450,9 @@ static int drv2624_i2c_remove(struct i2c_client *client)
 {
 	struct drv2624_data *drv2624 = i2c_get_clientdata(client);
 
+	cancel_work_sync(&drv2624->vibrator_work);
+	cancel_work_sync(&drv2624->work);
+
 	if (drv2624->plat_data.gpio_nrst)
 		gpio_free(drv2624->plat_data.gpio_nrst);
 
@@ -1470,7 +1460,9 @@ static int drv2624_i2c_remove(struct i2c_client *client)
 		gpio_free(drv2624->plat_data.gpio_int);
 
 	misc_deregister(&drv2624_misc);
+	led_classdev_unregister(&drv2624->led_dev);
 
+	wake_lock_destroy(&drv2624->wklock);
 	mutex_destroy(&drv2624->lock);
 	mutex_destroy(&drv2624->dev_lock);
 
@@ -1493,14 +1485,36 @@ static const struct of_device_id drv2624_of_match[] = {
 MODULE_DEVICE_TABLE(of, drv2624_of_match);
 #endif
 
+#ifdef CONFIG_PM
+static int drv2624_suspend(struct device *dev)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+
+	cancel_work_sync(&drv2624->vibrator_work);
+	cancel_work_sync(&drv2624->work);
+	drv2624_stop(drv2624);
+
+	return 0;
+}
+
+static int drv2624_resume(struct device *dev)
+{
+	return 0;
+}
+
+#endif
+
+static SIMPLE_DEV_PM_OPS(drv2624_pm_ops, drv2624_suspend, drv2624_resume);
+
 static struct i2c_driver drv2624_i2c_driver = {
 	.driver = {
-		   .name = "drv2624",
-		   .owner = THIS_MODULE,
+			.name = "drv2624",
+			.owner = THIS_MODULE,
 #if defined(CONFIG_OF)
-		   .of_match_table = of_match_ptr(drv2624_of_match),
+			.of_match_table = of_match_ptr(drv2624_of_match),
 #endif
-		   },
+			.pm	= &drv2624_pm_ops,
+			},
 	.probe = drv2624_i2c_probe,
 	.remove = drv2624_i2c_remove,
 	.id_table = drv2624_i2c_id,
