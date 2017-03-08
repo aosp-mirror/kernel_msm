@@ -17,6 +17,7 @@
 #ifndef __MNH_SM_HOST
 #define __MNH_SM_HOST
 
+#include <uapi/linux/mnh-sm.h>
 #include "mnh-pcie.h"
 
 /** API to register hotplug callback to receive MNH up/down notifications
