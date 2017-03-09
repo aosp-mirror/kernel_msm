@@ -21,7 +21,7 @@
 		qcom,mdss-dsi-panel-controller = <&mdss_dsi0>;
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-panel-destination = "display_1";
-		qcom,mdss-dsi-panel-framerate = <60>;
+		qcom,mdss-dsi-panel-framerate = <45>;
 		qcom,mdss-dsi-virtual-channel-id = <0>;
 		qcom,mdss-dsi-stream = <0>;
 		qcom,mdss-dsi-panel-width = <390>;
@@ -75,9 +75,9 @@
 		qcom,mdss-dsi-te-dcs-command = <1>;
 		qcom,mdss-dsi-te-check-enable;
 		qcom,mdss-dsi-te-using-te-pin;
-		qcom,mdss-dsi-panel-timings = [40 0e 08 00 2c 30 0e 12 0b 03 04 00];
+		qcom,mdss-dsi-panel-timings = [5c 10 06 00 28 2a 0a 12 06 03 04 00];
 		qcom,mdss-dsi-t-clk-post = <0x05>;
-		qcom,mdss-dsi-t-clk-pre = <0x12>;
+		qcom,mdss-dsi-t-clk-pre = <0x19>;
 		qcom,mdss-dsi-bl-min-level = <1>;
 		qcom,mdss-dsi-bl-max-level = <255>;
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
