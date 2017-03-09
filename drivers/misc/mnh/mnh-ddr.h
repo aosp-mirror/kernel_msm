@@ -51,5 +51,6 @@ struct mnh_ddr_internal_state {
 int mnh_ddr_po_init(struct device *dev);
 int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n);
 int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n);
+void mnh_ddr_disable_lp(void);
 
 #endif /* __MNH_DDR_H__ */

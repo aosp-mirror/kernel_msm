@@ -80,6 +80,8 @@
 
 #define CLR_START(ddrblock) (_state.ddrblock[0] &= (0xFFFFFFFE))
 
+#define USE_LP 0
+
 static struct mnh_ddr_state mnh_ddr_po_config = {
 	.bases = {
 		HWIO_DDR_CTL_BASE_ADDR,
@@ -159,6 +161,22 @@ void mnh_ddr_init_clocks(struct device *dev)
 	/* MNH_PLL_PASSCODE_CLR */
 	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x0);
 }
+
+static void mnh_ddr_enable_lp(void)
+{
+	MNH_DDR_CTL_OUTf(124, LP_AUTO_SR_MC_GATE_IDLE, 0xFF);
+	MNH_DDR_CTL_OUTf(122, LP_AUTO_MEM_GATE_EN, 0x4);
+	MNH_DDR_CTL_OUTf(122, LP_AUTO_ENTRY_EN, 0x4);
+	MNH_DDR_CTL_OUTf(122, LP_AUTO_EXIT_EN, 0xF);
+}
+
+void mnh_ddr_disable_lp(void)
+{
+	MNH_DDR_CTL_OUTf(124, LP_AUTO_SR_MC_GATE_IDLE, 0x00);
+	MNH_DDR_CTL_OUTf(122, LP_AUTO_MEM_GATE_EN, 0x0);
+	MNH_DDR_CTL_OUTf(122, LP_AUTO_ENTRY_EN, 0x0);
+}
+EXPORT_SYMBOL(mnh_ddr_disable_lp);
 
 int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n)
 {
@@ -276,6 +294,10 @@ int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n)
 		dev_info(dev, "%s: init done after %d iterations.",
 			 __func__, timeout);
 
+#if USE_LP
+	mnh_ddr_enable_lp();
+#endif
+
 	return 0;
 }
 EXPORT_SYMBOL(mnh_ddr_resume);
@@ -383,6 +405,10 @@ int mnh_ddr_po_init(struct device *dev)
 	MNH_DDR_CTL_OUTf(165, MR_FSP_DATA_VALID_F1_0, 1);
 	MNH_DDR_CTL_OUTf(165, MR_FSP_DATA_VALID_F2_0, 1);
 	MNH_DDR_CTL_OUTf(166, MR_FSP_DATA_VALID_F3_0, 1);
+
+#if USE_LP
+	mnh_ddr_enable_lp();
+#endif
 
 	return 0;
 }
