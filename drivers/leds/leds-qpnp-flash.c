@@ -3242,9 +3242,9 @@ error_led_register:
 err_create_pmi8994_work_queue:
 	if(gpio_is_valid(led->flash_strobe))
 		gpio_free(led->flash_strobe);
-	kfree(led);
 	mutex_destroy(&led->flash_led_lock);
 	destroy_workqueue(led->ordered_workq);
+	kfree(led);
 
 	return rc;
 }
