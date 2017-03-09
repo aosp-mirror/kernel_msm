@@ -310,8 +310,7 @@ int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n)
 }
 EXPORT_SYMBOL(mnh_ddr_resume);
 
-
-int mnh_ddr_po_init(struct device *dev)
+int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n)
 {
 	int index;
 	int timeout = 0;
@@ -320,6 +319,9 @@ int mnh_ddr_po_init(struct device *dev)
 	mnh_ddr_init_internal_state(state);
 
 	dev_dbg(dev, "%s start.", __func__);
+
+	/* deassert iso_n */
+	gpiod_set_value_cansleep(iso_n, 1);
 
 	mnh_ddr_init_clocks(dev);
 
