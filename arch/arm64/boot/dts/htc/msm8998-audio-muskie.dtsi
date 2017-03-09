@@ -151,6 +151,7 @@
 
 	wcd934x_cdc: tavil_codec {
 		clocks = <&clock_audio clk_audio_pmi_clk>;
+		qcom,cdc-dmic-clk-drv-strength = <4>; /* 4mA */
 		wcd_spi_0: wcd_spi {
 			qcom,master-bus-num = <2>;
 		};
