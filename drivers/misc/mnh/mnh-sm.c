@@ -110,6 +110,12 @@ enum fw_image_state {
 	FW_IMAGE_DOWNLOAD_FAIL
 };
 
+enum mnh_ddr_status {
+	MNH_DDR_OFF = 0, /* powered off */
+	MNH_DDR_ACTIVE, /* powered on, active */
+	MNH_DDR_SELF_REFRESH, /* powered on, in self-refresh */
+};
+
 struct mnh_sm_device {
 	struct platform_device *pdev;
 	struct device *dev;
@@ -135,25 +141,15 @@ struct mnh_sm_device {
 
 	/* completion used for synchronizing with secondary bootloader */
 	struct completion suspend_complete;
-};
 
-static struct mnh_mipi_config mnh_mipi_configs[] = {
-	{
-		.txdev = MNH_MUX_DEVICE_TX0,
-		.rxdev = MNH_MUX_DEVICE_RX0,
-		.rx_rate = 1296,
-		.tx_rate = 1296,
-		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
-		.is_gen3 = 1,
-	},
-	{
-		.txdev = MNH_MUX_DEVICE_TX1,
-		.rxdev = MNH_MUX_DEVICE_RX1,
-		.rx_rate = 648,
-		.tx_rate = 648,
-		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
-		.is_gen3 = 1,
-	},
+	/* state of the ddr channel */
+	enum mnh_ddr_status ddr_status;
+
+	/* pin used for ddr pad isolation */
+	struct gpio_desc *ddr_pad_iso_n_pin;
+
+	/* flag to know if firmware has already been downloaded */
+	bool firmware_downloaded;
 };
 
 static struct mnh_sm_device *mnh_sm_dev;
@@ -185,7 +181,7 @@ static ssize_t mnh_sm_poweron_show(struct device *dev,
 	ssize_t strlen = 0;
 
 	dev_dbg(dev, "Entering mnh_sm_poweron_show...\n");
-	mnh_sm_set_state(MNH_STATE_INIT);
+	mnh_sm_set_state(MNH_STATE_PENDING);
 	return strlen;
 }
 
@@ -225,52 +221,6 @@ static ssize_t mnh_sm_poweroff_store(struct device *dev,
 
 static DEVICE_ATTR(poweroff, S_IWUSR | S_IRUSR | S_IRGRP,
 		mnh_sm_poweroff_show, mnh_sm_poweroff_store);
-
-
-static ssize_t mnh_sm_config_mipi_show(struct device *dev,
-			     struct device_attribute *attr,
-			     char *buf)
-{
-	ssize_t strlen = 0;
-
-	dev_dbg(dev, "Entering mnh_sm_config_mipi_show...\n");
-	mnh_sm_set_state(MNH_STATE_CONFIG_MIPI);
-	return strlen;
-}
-
-static DEVICE_ATTR(config_mipi, S_IRUGO,
-		mnh_sm_config_mipi_show, NULL);
-
-static ssize_t mnh_sm_config_ddr_show(struct device *dev,
-			     struct device_attribute *attr,
-			     char *buf)
-{
-	ssize_t strlen = 0;
-
-	dev_dbg(dev, "Entering mnh_sm_config_ddr_show...\n");
-	mnh_sm_set_state(MNH_STATE_CONFIG_DDR);
-	return strlen;
-}
-
-static DEVICE_ATTR(config_ddr, S_IRUGO,
-		mnh_sm_config_ddr_show, NULL);
-
-
-static ssize_t mnh_sm_config_show(struct device *dev,
-			     struct device_attribute *attr,
-			     char *buf)
-{
-	ssize_t strlen = 0;
-
-	dev_dbg(dev, "Entering mnh_sm_config_show...\n");
-	mnh_sm_set_state(MNH_STATE_CONFIG_MIPI);
-	mnh_sm_set_state(MNH_STATE_CONFIG_DDR);
-	return strlen;
-}
-
-static DEVICE_ATTR(config, S_IRUGO,
-		mnh_sm_config_show, NULL);
-
 
 static ssize_t mnh_sm_state_show(struct device *dev,
 			     struct device_attribute *attr,
@@ -510,6 +460,8 @@ int mnh_download_firmware(void)
 	/* Unregister DMA callback */
 	mnh_reg_irq_callback(NULL, NULL, NULL);
 
+	mnh_sm_dev->firmware_downloaded = true;
+
 	return 0;
 
 fail_downloading:
@@ -551,7 +503,7 @@ static ssize_t mnh_sm_suspend_show(struct device *dev,
 {
 	ssize_t strlen = 0;
 
-	mnh_sm_set_state(MNH_STATE_SUSPEND_SELF_REFRESH);
+	mnh_sm_set_state(MNH_STATE_SUSPEND);
 
 	return strlen;
 }
@@ -657,17 +609,6 @@ static ssize_t mnh_sm_resume_store(struct device *dev,
 
 static DEVICE_ATTR(resume, S_IRUGO | S_IWUSR | S_IWGRP,
 		mnh_sm_resume_show, mnh_sm_resume_store);
-
-static ssize_t mnh_sm_bypass_show(struct device *dev,
-			     struct device_attribute *attr,
-			     char *buf)
-{
-	mnh_sm_set_state(MNH_STATE_BYPASS);
-	return 0;
-}
-
-static DEVICE_ATTR(bypass, S_IWUSR | S_IRUGO,
-		mnh_sm_bypass_show, NULL);
 
 static ssize_t mnh_sm_reset_show(struct device *dev,
 			     struct device_attribute *attr,
@@ -810,14 +751,10 @@ static DEVICE_ATTR(freeze_state, S_IWUSR | S_IRUGO,
 static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_poweron.attr,
 	&dev_attr_poweroff.attr,
-	&dev_attr_config_mipi.attr,
-	&dev_attr_config_ddr.attr,
-	&dev_attr_config.attr,
 	&dev_attr_state.attr,
 	&dev_attr_download.attr,
 	&dev_attr_suspend.attr,
 	&dev_attr_resume.attr,
-	&dev_attr_bypass.attr,
 	&dev_attr_reset.attr,
 	&dev_attr_cpu_clk.attr,
 	&dev_attr_uboot.attr,
@@ -876,33 +813,34 @@ static int mnh_sm_poweron(void)
  */
 static int mnh_sm_poweroff(void)
 {
-	/* Power down MNH */
 	mnh_pwr_set_state(MNH_PWR_S4);
-	return 0;
-}
-
-/**
- * API to initialize MIPI, DDR, DDR training,
- * and PCIE.
- * @param[in] Structure argument to configure each boot component.
- *            This structure will be populated within the kernel module.
- * @return 0 if success or -EINVAL or -EFATAL on failure
- */
-static int mnh_sm_config_mipi(void)
-{
-	/* Initialze MIPI bypass */
-	/* TODO hardcode the to use the first config */
-	mnh_mipi_config(mnh_sm_dev->dev, mnh_mipi_configs[0]);
-	mnh_mipi_config(mnh_sm_dev->dev, mnh_mipi_configs[1]);
-
+	mnh_sm_dev->ddr_status = MNH_DDR_OFF;
+	mnh_sm_dev->firmware_downloaded = false;
 	return 0;
 }
 
 static int mnh_sm_config_ddr(void)
 {
 	/* Initialize DDR */
-	mnh_ddr_po_init(mnh_sm_dev->dev);
+	mnh_ddr_po_init(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
+	mnh_sm_dev->ddr_status = MNH_DDR_ACTIVE;
 
+	return 0;
+}
+
+static int mnh_sm_resume_ddr(void)
+{
+	/* deassert pad isolation, take ddr out of self-refresh mode */
+	mnh_ddr_resume(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
+	mnh_sm_dev->ddr_status = MNH_DDR_ACTIVE;
+	return 0;
+}
+
+static int mnh_sm_suspend_ddr(void)
+{
+	/* put ddr into self-refresh mode, assert pad isolation */
+	mnh_ddr_suspend(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
+	mnh_sm_dev->ddr_status = MNH_DDR_SELF_REFRESH;
 	return 0;
 }
 
@@ -980,6 +918,8 @@ static int mnh_sm_suspend(void)
 	dev_dbg(mnh_sm_dev->dev, "%s: resume entry: 0x%x\n", __func__,
 		mnh_resume_addr);
 
+	mnh_sm_suspend_ddr();
+
 	/* Suspend MNH power */
 	mnh_pwr_set_state(MNH_PWR_S3);
 	return 0;
@@ -995,11 +935,7 @@ static int mnh_sm_suspend(void)
  */
 static int mnh_sm_resume(void)
 {
-	/* Initialize MNH Power */
-	mnh_pwr_set_state(MNH_PWR_S0);
-
 	mnh_resume_firmware();
-
 	return 0;
 }
 
@@ -1029,160 +965,6 @@ static int mnh_sm_enable_clock_gating(void)
 	return 0;
 }
 
-static int mnh_sm_disable_gpio(void)
-{
-	/* disable GPIO */
-	MNH_SCU_OUTf(RSTC, UART0_RST, 1);
-	MNH_SCU_OUTf(PERIPH_CLK_CTRL, UART0_CLKEN_SW, 0);
-	MNH_SCU_OUTf(PERIPH_CLK_CTRL, GPIO_CLKEN_SW, 0);
-	MNH_SCU_OUTf(SOC_GLOBAL_CONTROL, GLOBAL_PAD_OUTPUT_DISABLE, 0x1);
-	MNH_SCU_OUT(PIN00_CFG, 0x0);
-	MNH_SCU_OUT(PIN01_CFG, 0x0);
-	MNH_SCU_OUT(PIN02_CFG, 0x0);
-	MNH_SCU_OUT(PIN03_CFG, 0x0);
-	MNH_SCU_OUT(PIN04_CFG, 0x0);
-	MNH_SCU_OUT(PIN05_CFG, 0x0);
-	MNH_SCU_OUT(PIN06_CFG, 0x0);
-	MNH_SCU_OUT(PIN07_CFG, 0x0);
-	MNH_SCU_OUT(PIN08_CFG, 0x0);
-	MNH_SCU_OUT(PIN09_CFG, 0x0);
-	MNH_SCU_OUT(PIN10_CFG, 0x0);
-	MNH_SCU_OUT(PIN11_CFG, 0x0);
-	MNH_SCU_OUT(PIN12_CFG, 0x0);
-	MNH_SCU_OUT(PIN13_CFG, 0x0);
-	MNH_SCU_OUT(PIN14_CFG, 0x0);
-	MNH_SCU_OUT(PIN15_CFG, 0x0);
-	MNH_SCU_OUT(PIN16_CFG, 0x0);
-	MNH_SCU_OUT(PIN17_CFG, 0x0);
-	MNH_SCU_OUT(PIN18_CFG, 0x0);
-	MNH_SCU_OUT(PIN19_CFG, 0x0);
-	MNH_SCU_OUT(PIN20_CFG, 0x0);
-	MNH_SCU_OUT(PIN21_CFG, 0x0);
-	MNH_SCU_OUT(PIN22_CFG, 0x0);
-	MNH_SCU_OUT(PIN23_CFG, 0x0);
-	MNH_SCU_OUT(PIN24_CFG, 0x0);
-	MNH_SCU_OUT(PIN25_CFG, 0x0);
-	MNH_SCU_OUT(PIN26_CFG, 0x0);
-	MNH_SCU_OUT(PIN27_CFG, 0x0);
-	MNH_SCU_OUT(PIN28_CFG, 0x0);
-	MNH_SCU_OUT(PIN29_CFG, 0x0);
-	MNH_SCU_OUT(PIN30_CFG, 0x0);
-	MNH_SCU_OUT(PIN31_CFG, 0x0);
-	MNH_SCU_OUT(PIN32_CFG, 0x0);
-	MNH_SCU_OUT(PIN33_CFG, 0x0);
-	MNH_SCU_OUT(PIN34_CFG, 0x0);
-	MNH_SCU_OUT(PIN35_CFG, 0x0);
-	MNH_SCU_OUT(PIN36_CFG, 0x0);
-	MNH_SCU_OUT(PIN37_CFG, 0x0);
-	MNH_SCU_OUT(PIN38_CFG, 0x0);
-	MNH_SCU_OUT(PIN39_CFG, 0x0);
-	MNH_SCU_OUT(PIN40_CFG, 0x0);
-	MNH_SCU_OUT(PIN41_CFG, 0x0);
-	MNH_SCU_OUT(PIN42_CFG, 0x0);
-	MNH_SCU_OUT(PIN43_CFG, 0x0);
-	MNH_SCU_OUT(PIN44_CFG, 0x0);
-	MNH_SCU_OUT(PIN45_CFG, 0x0);
-	MNH_SCU_OUT(PIN46_CFG, 0x0);
-	MNH_SCU_OUT(PIN47_CFG, 0x0);
-	MNH_SCU_OUT(PIN48_CFG, 0x0);
-	MNH_SCU_OUT(PIN49_CFG, 0x0);
-	MNH_SCU_OUT(PIN50_CFG, 0x0);
-	MNH_SCU_OUT(PIN51_CFG, 0x0);
-	MNH_SCU_OUT(PIN52_CFG, 0x0);
-	MNH_SCU_OUT(PIN53_CFG, 0x0);
-	MNH_SCU_OUT(PIN54_CFG, 0x0);
-
-	return 0;
-}
-
-/*
- * Force clock gating and reset on all devices that are not needed
- * for mipi bypass.
- */
-static int mnh_sm_force_low_power(void)
-{
-	/* set cpy freq down */
-	/* set SYS200 clk */
-	mnh_ipu_freq_change(0);
-	mnh_cpu_freq_change(0);
-	mnh_lpddr_freq_change(0);
-	/* perfmon reset and disable clock */
-	dev_dbg(mnh_sm_dev->dev, "Force peripherals off!!!\n");
-	MNH_SCU_OUTf(RSTC, PMON_RST, 1);
-	MNH_SCU_OUTf(CCU_CLK_CTL, PMON_CLKEN, 0);
-	/** ipu sub system reset */
-	MNH_SCU_OUTf(RSTC, IPU_RST, 1);
-	MNH_SCU_OUTf(RSTC, MIPITXPHY_RST, 1);
-	MNH_SCU_OUTf(RSTC, MIPIRXPHY_RST, 1);
-	MNH_SCU_OUTf(CCU_CLK_CTL, IPU_CLKEN, 0);
-	MNH_SCU_OUTf(MEM_PWR_MGMNT, IPU_MEM_SD, 1);
-	/* All i2c masters */
-	MNH_SCU_OUTf(RSTC, I2C0_RST, 1);
-	MNH_SCU_OUTf(RSTC, I2C1_RST, 1);
-	MNH_SCU_OUTf(RSTC, I2C2_RST, 1);
-	MNH_SCU_OUTf(RSTC, I2C3_RST, 1);
-	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C0_CLKEN_SW, 0);
-	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C1_CLKEN_SW, 0);
-	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C2_CLKEN_SW, 0);
-	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C3_CLKEN_SW, 0);
-	/* Enable hw control of pcie clk */
-	MNH_SCU_OUTf(PERIPH_CLK_CTRL, PCIE_CLK_MODE, 1);
-
-	/* do we want to set this? */
-	MNH_SCU_OUTf(RSTC, UART1_RST, 1);
-	MNH_SCU_OUTf(PERIPH_CLK_CTRL, UART1_CLKEN_SW, 0);
-	/* spi slave and spi master */
-	MNH_SCU_OUTf(RSTC, SPIS_RST, 1);
-	MNH_SCU_OUTf(RSTC, SPIM_RST, 1);
-	MNH_SCU_OUTf(PERIPH_CLK_CTRL, SPIS_CLKEN_SW, 1);
-	MNH_SCU_OUTf(PERIPH_CLK_CTRL, SPIM_CLKEN_SW, 1);
-	/* peripheral dma */
-	MNH_SCU_OUTf(RSTC, PERI_DMA_RST, 1);
-	MNH_SCU_OUTf(PERIPH_CLK_CTRL, PERI_DMA_CLKEN_SW, 0);
-	/* timer */
-	MNH_SCU_OUTf(RSTC, TIMER_RST, 1);
-	MNH_SCU_OUTf(PERIPH_CLK_CTRL, TIMER_CLKEN_SW, 0);
-	/* WDT */
-	MNH_SCU_OUTf(PERIPH_CLK_CTRL, WDT_CLKEN_SW, 0);
-	/* pvt */
-	/* MNH_SCU_OUTf(PERIPH_CLK_CTRL, PVT_CLKEN, 0); */
-	/* set mipi */
-	MNH_SCU_OUTf(CCU_CLK_CTL, MIPI_TESTCLKEN, 0);
-	/* for now, stop other mipi devices */
-	mnh_mipi_stop_device(mnh_sm_dev->dev, 0);
-	mnh_mipi_stop_device(mnh_sm_dev->dev, 1);
-	mnh_mipi_stop_host(mnh_sm_dev->dev, 0);
-	mnh_mipi_stop_host(mnh_sm_dev->dev, 1);
-	mnh_mipi_stop_host(mnh_sm_dev->dev, 2);
-
-	mnh_sm_enable_clock_gating();
-	return 0;
-}
-
-/**
- * Put MNH in bypass state.  In bypass mode the DDR will be isolated
- * and put in self refresh while the CPU is powered.
- * @return 0 if success or -EINVAL or -EFATAL on failure
- */
-static int mnh_sm_bypass(void)
-{
-	dev_dbg(mnh_sm_dev->dev, "%s: Entering bypass mode\n", __func__);
-
-	mnh_sm_force_low_power();
-
-	mnh_sm_disable_gpio();
-
-	mnh_pwr_set_state(MNH_PWR_S1);
-
-	MNH_SCU_OUTf(CCU_CLK_CTL, HALT_LP4CG_EN, 1);
-	MNH_SCU_OUTf(CCU_CLK_CTL, HALT_LP4_PLL_BYPCLK_CG_EN, 1);
-	MNH_SCU_OUTf(MEM_PWR_MGMNT, HALT_LP4CMEM_PD_EN, 1);
-
-	mnh_lpddr_sys200_mode();
-
-	return 0;
-}
-
 /**
  * API to obtain the state of monette hill.
  * @return the power states of mnh
@@ -1207,47 +989,43 @@ static int mnh_sm_set_state_locked(int state)
 	case MNH_STATE_OFF:
 		ret = mnh_sm_poweroff();
 		break;
-	case MNH_STATE_INIT:
-		ret = mnh_sm_set_state_locked(MNH_STATE_OFF);
-		if (!ret)
+	case MNH_STATE_PENDING:
+		if (mnh_state == MNH_STATE_ACTIVE) {
+			dev_err(mnh_sm_dev->dev,
+				"%s: cannot transition to MNH_STATE_PENDING from state %d\n",
+				__func__, mnh_state);
+			ret = -EINVAL;
+		} else {
 			ret = mnh_sm_poweron();
-		break;
-	case MNH_STATE_CONFIG_MIPI:
-		if (mnh_state != MNH_STATE_CONFIG_DDR) {
-			ret = mnh_sm_set_state_locked(MNH_STATE_INIT);
-			if (!ret)
-				ret = mnh_sm_config_mipi();
 		}
-		break;
-	case MNH_STATE_CONFIG_DDR:
-		if (mnh_state != MNH_STATE_CONFIG_MIPI) {
-			ret = mnh_sm_set_state_locked(MNH_STATE_INIT);
-			if (!ret)
-				ret = mnh_sm_config_ddr();
-		}
-		break;
-	case MNH_STATE_BYPASS:
-		mnh_sm_set_state_locked(MNH_STATE_ACTIVE);
-		mnh_sm_bypass();
 		break;
 	case MNH_STATE_ACTIVE:
-		if (mnh_state == MNH_STATE_SUSPEND_SELF_REFRESH) {
+		/* make sure we are powered */
+		if ((mnh_state == MNH_STATE_OFF) ||
+		    (mnh_state == MNH_STATE_SUSPEND))
+			ret = mnh_sm_poweron();
+		if (ret)
+			break;
+
+		/* make sure ddr is configured */
+		if (mnh_sm_dev->ddr_status == MNH_DDR_OFF)
+			ret = mnh_sm_config_ddr();
+		else if (mnh_sm_dev->ddr_status == MNH_DDR_SELF_REFRESH)
+			ret = mnh_sm_resume_ddr();
+		if (ret)
+			break;
+
+		/* have we downloaded firmware already? */
+		if (mnh_sm_dev->firmware_downloaded)
 			ret = mnh_sm_resume();
-		} else {
-			ret = mnh_sm_set_state_locked(MNH_STATE_CONFIG_DDR);
-			if (!ret)
-				ret = mnh_sm_download();
-		}
+		else
+			ret = mnh_sm_download();
 		break;
-	case MNH_STATE_SUSPEND_SELF_REFRESH:
+	case MNH_STATE_SUSPEND:
 		ret = mnh_sm_set_state_locked(MNH_STATE_ACTIVE);
 		if (!ret)
 			ret = mnh_sm_suspend();
 		break;
-	case MNH_STATE_SUSPEND_HIBERNATE:
-		dev_err(mnh_sm_dev->dev,
-			 "%s: TODO unsupported state %d\n", __func__, state);
-		ret = -EINVAL;
 	default:
 		dev_err(mnh_sm_dev->dev,
 			 "%s: invalid state %d\n", __func__, state);
@@ -1393,31 +1171,6 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 	}
 
 	switch (cmd) {
-	case MNH_SM_IOC_POWERON:
-		mnh_sm_dev->next_mnh_state = MNH_STATE_INIT;
-		schedule_work(&mnh_sm_dev->set_state_work);
-		break;
-	case MNH_SM_IOC_POWEROFF:
-		mnh_sm_dev->next_mnh_state = MNH_STATE_OFF;
-		schedule_work(&mnh_sm_dev->set_state_work);
-		break;
-	case MNH_SM_IOC_CONFIG_MIPI:
-		err = copy_from_user(&mipi_config, (void __user *)arg,
-				     sizeof(struct mnh_mipi_config));
-		if (err) {
-			dev_err(mnh_sm_dev->dev,
-				"%s: failed to copy mipi config from userspace (%d)\n",
-				__func__, err);
-			return err;
-		}
-		mnh_mipi_config(mnh_sm_dev->dev, mipi_config);
-		/* TODO */
-		mnh_state = MNH_STATE_CONFIG_MIPI;
-		break;
-	case MNH_SM_IOC_CONFIG_DDR:
-		mnh_sm_dev->next_mnh_state = MNH_STATE_CONFIG_DDR;
-		schedule_work(&mnh_sm_dev->set_state_work);
-		break;
 	case MNH_SM_IOC_GET_STATE:
 		err = copy_to_user((void __user *)arg, &mnh_state,
 				   sizeof(mnh_state));
@@ -1432,17 +1185,16 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 		mnh_sm_dev->next_mnh_state = (int)arg;
 		schedule_work(&mnh_sm_dev->set_state_work);
 		break;
-	case MNH_SM_IOC_DOWNLOAD:
-		mnh_sm_dev->next_mnh_state = MNH_STATE_ACTIVE;
-		schedule_work(&mnh_sm_dev->set_state_work);
-		break;
-	case MNH_SM_IOC_SUSPEND:
-		mnh_sm_dev->next_mnh_state = MNH_STATE_SUSPEND_SELF_REFRESH;
-		schedule_work(&mnh_sm_dev->set_state_work);
-		break;
-	case MNH_SM_IOC_RESUME:
-		mnh_sm_dev->next_mnh_state = MNH_STATE_ACTIVE;
-		schedule_work(&mnh_sm_dev->set_state_work);
+	case MNH_SM_IOC_CONFIG_MIPI:
+		err = copy_from_user(&mipi_config, (void __user *)arg,
+				     sizeof(struct mnh_mipi_config));
+		if (err) {
+			dev_err(mnh_sm_dev->dev,
+				"%s: failed to copy mipi config from userspace (%d)\n",
+				__func__, err);
+			return err;
+		}
+		mnh_mipi_config(mnh_sm_dev->dev, mipi_config);
 		break;
 	default:
 		dev_err(mnh_sm_dev->dev,
@@ -1587,6 +1339,16 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	if (error) {
 		dev_err(dev, "%s: could not get ready irq (%d)\n", __func__,
 			error);
+		goto fail_mnh_pwr_init;
+	}
+
+	/* request ddr pad isolation pin */
+	mnh_sm_dev->ddr_pad_iso_n_pin = devm_gpiod_get(dev, "ddr-pad-iso-n",
+						       GPIOD_OUT_HIGH);
+	if (IS_ERR(mnh_sm_dev->ddr_pad_iso_n_pin)) {
+		dev_err(dev, "%s: could not get ddr_pad_iso_n gpio (%ld)\n",
+			__func__, PTR_ERR(mnh_sm_dev->ddr_pad_iso_n_pin));
+		error = PTR_ERR(mnh_sm_dev->ddr_pad_iso_n_pin);
 		goto fail_mnh_pwr_init;
 	}
 
