@@ -5501,6 +5501,18 @@ static irqreturn_t handle_global_irq(int irq, void *data)
 					dev->rc_idx);
 				handle_aer_irq(irq, data);
 				break;
+			case MSM_PCIE_INT_EVT_MSI_0:
+			case MSM_PCIE_INT_EVT_MSI_1:
+			case MSM_PCIE_INT_EVT_MSI_2:
+			case MSM_PCIE_INT_EVT_MSI_3:
+			case MSM_PCIE_INT_EVT_MSI_4:
+			case MSM_PCIE_INT_EVT_MSI_5:
+			case MSM_PCIE_INT_EVT_MSI_6:
+			case MSM_PCIE_INT_EVT_MSI_7:
+				PCIE_DBG2(dev,
+					  "RC%d: Ignoring MSI %d received in global irq handler\n",
+					  dev->rc_idx, i - MSM_PCIE_INT_EVT_MSI_0);
+				break;
 			default:
 				PCIE_ERR(dev,
 					"PCIe: RC%d: Unexpected event %d is caught!\n",
