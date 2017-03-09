@@ -230,12 +230,6 @@
 
 
 &pm8998_gpios {
-	/* qcom,spkr-sd-n-gpio */
-	gpio@c100 {
-		qcom,master-en = <1>;   /* ENABLE GPIO */
-		status = "okay";
-	};
-
         /* dac,power-gpio */
 	gpio@c900 {
 		qcom,master-en = <1>;   	/* ENABLE GPIO */
@@ -249,19 +243,6 @@
 
         /* dac,switch-gpio */
 	gpio@cb00 {
-		qcom,master-en = <1>;		/* Enable GPIO */
-		qcom,mode = <1>;		/* Digital output */
-		qcom,pull = <4>;		/* Pull down */
-		qcom,src-sel = <0>;		/* Constant */
-		qcom,invert = <0>;		/* Invert */
-		qcom,out-strength = <1>;	/* Low */
-		status = "okay";
-	};
-};
-
-&pmi8998_gpios {
-        /* dac,reset-gpio */
-	gpio@c100 {
 		qcom,master-en = <1>;		/* Enable GPIO */
 		qcom,mode = <1>;		/* Digital output */
 		qcom,pull = <4>;		/* Pull down */
