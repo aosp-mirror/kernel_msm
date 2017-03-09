@@ -66,12 +66,6 @@
 	};
 };
 
-&soc {
-	htc_radio_smem {
-	    compatible = "htc,htc_radio_smem";
-	};
-};
-
 &pil_slpi_mem {
 	/* qct original reg = <0 0x94100000 0 0xf00000>; */
 	reg = <0 0x94900000 0 0xf00000>;
@@ -94,10 +88,21 @@
 
 / {
 	reserved-memory {
+		htc_reserve_region: htc_reserve_region@0 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0xa1300000 0 0x00500000>;
+		};
+
 		ramoops_mem: ramoops_region {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0 0x83100000 0 0x00200000>;
+			reg = <0 0xa1100000 0 0x00200000>;
+		};
+		htc_rtel_mem: htc_rtel_region@0 {
+			compatible = "shared-dma-pool";
+			reusable;
+			reg = <0 0xa1800000 0 0x2000000>; /* 32 MB */
 		};
 	};
 
@@ -109,3 +114,18 @@
 		pmsg-size = <0 0x80000>; /* 512 KB */
 	};
 };
+
+&soc {
+	htc_radio_smem {
+		compatible = "htc,htc_radio_smem";
+	};
+
+	qcom,rmtfs_rtel_sharedmem@0 {
+		compatible = "htc,rtel-uio";
+		reg = <0xa1800000 0x02000000>;
+		memory-region = <&htc_rtel_mem>;
+		reg-names = "rtel";
+		qcom,client-id = <0x00000001>;
+	};
+};
+
