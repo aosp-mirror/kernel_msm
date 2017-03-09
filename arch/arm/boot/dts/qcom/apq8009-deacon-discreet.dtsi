@@ -63,6 +63,26 @@
 
 	};
 
+	i2c@78b8000 { /* BLSP1 QUP4 */
+		/delete-node/ smb1357-charger@57;
+		/delete-node/ smb358-charger@57;
+		haptics@5a {
+			compatible = "ti,drv2605";
+			reg = <0x5a>;
+			/*qcom,vib-irq = <&msm_gpio 21 0x00>;*/
+			qcom,vib-ven = <&msm_gpio 22 0x00>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <21 0>;
+			vbat-supply = <&pm8916_l17>;
+			/*interrupt-names = "vib_irq";*/
+			enable-gpio = <&msm_gpio 22 0x00>;
+			mode = <0x00>;
+			library-sel = <0x06>;
+			vib-rated-mv = <3000>;
+			vib-overdrive-mv = <3000>;
+		};
+	};
+
 	i2c@78b6000 { /* BLSP1 QUP2 */
 		nq@28 {
 			compatible = "qcom,nq-nci";
@@ -152,10 +172,6 @@
 			output-high;
 		};
 	};
-};
-
-&i2c_4 {
-	status = "disabled";
 };
 
 
