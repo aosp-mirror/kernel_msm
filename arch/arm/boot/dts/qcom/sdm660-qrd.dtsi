@@ -107,19 +107,12 @@
 };
 
 &soc {
+	qcom,msm-ssc-sensors {
+		compatible = "qcom,msm-ssc-sensors";
+	};
 };
 
 &pm660_gpios {
-	/* GPIO 11 for home key */
-	gpio@ca00 {
-		status = "ok";
-		qcom,mode = <0>;
-		qcom,pull = <0>;
-		qcom,vin-sel = <0>;
-		qcom,src-sel = <0>;
-		qcom,out-strength = <1>;
-	};
-
 	/* GPIO 4 (NFC_CLK_REQ) */
 	gpio@c300 {
 		qcom,mode = <0>;
@@ -210,16 +203,6 @@
 			gpio-key,wakeup;
 			debounce-interval = <15>;
 		};
-
-		home {
-			label = "home";
-			gpios = <&pm660_gpios 11 0x1>;
-			linux,input-type = <1>;
-			linux,code = <102>;
-			gpio-key,wakeup;
-			debounce-interval = <15>;
-		};
-
 	};
 
 	hbtp {
@@ -252,7 +235,18 @@
 &pm660_fg {
 	qcom,battery-data = <&qrd_batterydata>;
 	qcom,fg-jeita-thresholds = <0 5 55 55>;
-	qcom,fg-cutoff-voltage = <3700>;
+};
+
+&i2c_2 {
+	status = "ok";
+	smb1351-charger@1d {
+		compatible = "qcom,smb1351-charger";
+		reg = <0x1d>;
+		qcom,parallel-charger;
+		qcom,float-voltage-mv = <4400>;
+		qcom,recharge-mv = <100>;
+		qcom,parallel-en-pin-polarity = <0>;
+	};
 };
 
 &tasha_snd {
@@ -265,10 +259,10 @@
 		"MIC BIAS2", "Headset Mic",
 		"DMIC0", "MIC BIAS1",
 		"MIC BIAS1", "Digital Mic0",
-		"DMIC2", "MIC BIAS3",
-		"MIC BIAS3", "Digital Mic2",
-		"DMIC4", "MIC BIAS3",
-		"MIC BIAS3", "Digital Mic4",
+		"DMIC3", "MIC BIAS3",
+		"MIC BIAS3", "Digital Mic3",
+		"DMIC5", "MIC BIAS3",
+		"MIC BIAS3", "Digital Mic5",
 		"SpkrLeft IN", "SPK1 OUT";
 	qcom,msm-mbhc-hphl-swh = <1>;
 	/delete-property/ qcom,us-euro-gpios;

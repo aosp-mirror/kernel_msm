@@ -136,7 +136,7 @@ static struct dev_config int_mi2s_cfg[] = {
 	[INT2_MI2S]  = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
 	[INT3_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
 	[INT4_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
-	[INT5_MI2S] = {SAMPLING_RATE_8KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
+	[INT5_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
 	[INT6_MI2S] = {SAMPLING_RATE_8KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
 };
 
@@ -1256,6 +1256,7 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dapm_context *dapm = snd_soc_codec_get_dapm(ana_cdc);
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	struct snd_soc_pcm_runtime *rtd_aux = rtd->card->rtd_aux;
+	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(rtd->card);
 	struct snd_card *card;
 	int ret = -ENOMEM;
 
@@ -1330,6 +1331,7 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			 __func__);
 		goto done;
 	}
+	pdata->codec_root = codec_root;
 	msm_dig_codec_info_create_codec_entry(codec_root, dig_cdc);
 	msm_anlg_codec_info_create_codec_entry(codec_root, ana_cdc);
 done:
@@ -1341,6 +1343,7 @@ static int msm_sdw_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_codec *codec = rtd->codec;
 	struct snd_soc_dapm_context *dapm =
 			snd_soc_codec_get_dapm(codec);
+	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(rtd->card);
 	struct snd_card *card;
 
 	snd_soc_add_codec_controls(codec, msm_sdw_controls,
@@ -1363,6 +1366,7 @@ static int msm_sdw_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			 __func__);
 		goto done;
 	}
+	pdata->codec_root = codec_root;
 	msm_sdw_codec_info_create_codec_entry(codec_root, codec);
 done:
 	return 0;
@@ -2261,11 +2265,28 @@ static struct snd_soc_dai_link msm_int_dai[] = {
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.codec_name = "snd-soc-dummy",
 	},
+	{/* hw:x,39 */
+		.name = "SDM660 HFP TX",
+		.stream_name = "MultiMedia6",
+		.cpu_dai_name = "MultiMedia6",
+		.platform_name  = "msm-pcm-loopback",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.dpcm_capture = 1,
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_suspend = 1,
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_pmdown_time = 1,
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA6,
+	},
 };
 
 
 static struct snd_soc_dai_link msm_int_wsa_dai[] = {
-	{/* hw:x,39 */
+	{/* hw:x,40 */
 		.name = LPASS_BE_INT5_MI2S_TX,
 		.stream_name = "INT5_mi2s Capture",
 		.cpu_dai_name = "msm-dai-q6-mi2s.12",
@@ -2875,6 +2896,24 @@ static struct snd_soc_dai_link msm_wsa_be_dai_links[] = {
 	},
 };
 
+static struct snd_soc_dai_link ext_disp_be_dai_link[] = {
+	/* DISP PORT BACK END DAI Link */
+	{
+		.name = LPASS_BE_DISPLAY_PORT,
+		.stream_name = "Display Port Playback",
+		.cpu_dai_name = "msm-dai-q6-dp.24608",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-ext-disp-audio-codec-rx",
+		.codec_dai_name = "msm_dp_audio_codec_rx_dai",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_DISPLAY_PORT_RX,
+		.be_hw_params_fixup = msm_common_be_hw_params_fixup,
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+	},
+};
+
 static struct snd_soc_dai_link msm_int_dai_links[
 ARRAY_SIZE(msm_int_dai) +
 ARRAY_SIZE(msm_int_wsa_dai) +
@@ -2882,7 +2921,8 @@ ARRAY_SIZE(msm_int_be_dai) +
 ARRAY_SIZE(msm_mi2s_be_dai_links) +
 ARRAY_SIZE(msm_auxpcm_be_dai_links)+
 ARRAY_SIZE(msm_wcn_be_dai_links) +
-ARRAY_SIZE(msm_wsa_be_dai_links)];
+ARRAY_SIZE(msm_wsa_be_dai_links) +
+ARRAY_SIZE(ext_disp_be_dai_link)];
 
 static struct snd_soc_card sdm660_card = {
 	/* snd_soc_card_sdm660 */
@@ -2982,6 +3022,14 @@ static struct snd_soc_card *msm_int_populate_sndcard_dailinks(
 		       msm_wsa_be_dai_links,
 		       sizeof(msm_wsa_be_dai_links));
 		len1 += ARRAY_SIZE(msm_wsa_be_dai_links);
+	}
+	if (of_property_read_bool(dev->of_node, "qcom,ext-disp-audio-rx")) {
+		dev_dbg(dev, "%s(): ext disp audio support present\n",
+				__func__);
+		memcpy(dailink + len1,
+			ext_disp_be_dai_link,
+			sizeof(ext_disp_be_dai_link));
+		len1 += ARRAY_SIZE(ext_disp_be_dai_link);
 	}
 	card->dai_link = dailink;
 	card->num_links = len1;

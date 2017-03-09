@@ -609,6 +609,7 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 	bool is_vig_needed = false;
 	u32 left_lm_w = left_lm_w_from_mfd(mfd);
 	u32 flags = 0;
+	u32 off = 0;
 
 	if (mdp5_data->ctl == NULL)
 		return -ENODEV;
@@ -692,18 +693,29 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 			break;
 		case PIPE_TYPE_AUTO:
 		default:
-			if (req->flags & MDP_OV_PIPE_FORCE_DMA)
+			if (req->flags & MDP_OV_PIPE_FORCE_DMA) {
 				pipe_type = MDSS_MDP_PIPE_TYPE_DMA;
-			else if (fmt->is_yuv ||
+				/*
+				 * For paths using legacy API's for pipe
+				 * allocation, use offset of 2 for allocating
+				 * right pipe for pipe type DMA. This is
+				 * because from SDM 3.x.x. onwards one DMA
+				 * pipe has two instances for multirect.
+				 */
+				off = (mixer_mux == MDSS_MDP_MIXER_MUX_RIGHT)
+						? 2 : 0;
+			} else if (fmt->is_yuv ||
 				(req->flags & MDP_OV_PIPE_SHARE) ||
-				is_vig_needed)
+				is_vig_needed) {
 				pipe_type = MDSS_MDP_PIPE_TYPE_VIG;
-			else
+			} else {
 				pipe_type = MDSS_MDP_PIPE_TYPE_RGB;
+			}
 			break;
 		}
 
-		pipe = mdss_mdp_pipe_alloc(mixer, pipe_type, left_blend_pipe);
+		pipe = mdss_mdp_pipe_alloc(mixer, off,
+				pipe_type, left_blend_pipe);
 
 		/* RGB pipes can be used instead of DMA */
 		if (IS_ERR_OR_NULL(pipe) &&
@@ -712,7 +724,7 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 			pr_debug("giving RGB pipe for fb%d. flags:0x%x\n",
 				mfd->index, req->flags);
 			pipe_type = MDSS_MDP_PIPE_TYPE_RGB;
-			pipe = mdss_mdp_pipe_alloc(mixer, pipe_type,
+			pipe = mdss_mdp_pipe_alloc(mixer, off, pipe_type,
 				left_blend_pipe);
 		}
 
@@ -723,7 +735,7 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 			pr_debug("giving ViG pipe for fb%d. flags:0x%x\n",
 				mfd->index, req->flags);
 			pipe_type = MDSS_MDP_PIPE_TYPE_VIG;
-			pipe = mdss_mdp_pipe_alloc(mixer, pipe_type,
+			pipe = mdss_mdp_pipe_alloc(mixer, off, pipe_type,
 				left_blend_pipe);
 		}
 
@@ -1469,6 +1481,23 @@ static void __unstage_pipe_and_clean_buf(struct msm_fb_data_type *mfd,
 
 	if (buf)
 		__pipe_buf_mark_cleanup(mfd, buf);
+}
+
+static int __dest_scaler_setup(struct msm_fb_data_type *mfd)
+{
+	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
+
+	mutex_lock(&ctl->ds_lock);
+
+	if (ctl->mixer_left)
+		mdss_mdp_dest_scaler_setup_locked(ctl->mixer_left);
+
+	if (ctl->mixer_right)
+		mdss_mdp_dest_scaler_setup_locked(ctl->mixer_right);
+
+	mutex_unlock(&ctl->ds_lock);
+
+	return 0;
 }
 
 static int __overlay_queue_pipes(struct msm_fb_data_type *mfd)
@@ -2394,6 +2423,9 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 	mutex_unlock(&mdp5_data->list_lock);
 
 	mdp5_data->kickoff_released = false;
+	ATRACE_BEGIN("dest_scaler_programming");
+	ret = __dest_scaler_setup(mfd);
+	ATRACE_END("dest_scaler_programming");
 
 	if (mfd->panel.type == WRITEBACK_PANEL) {
 		ATRACE_BEGIN("wb_kickoff");
@@ -2745,6 +2777,7 @@ static int mdss_mdp_overlay_get_fb_pipe(struct msm_fb_data_type *mfd,
 
 		bpp = fbi->var.bits_per_pixel / 8;
 		req->id = MSMFB_NEW_REQUEST;
+		req->flags |= MDP_OV_PIPE_FORCE_DMA;
 		req->src.format = mfd->fb_imgType;
 		req->src.height = fbi->var.yres;
 		req->src.width = fbi->fix.line_length / bpp;
@@ -2858,7 +2891,7 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd)
 		MDSS_MDP_MIXER_MUX_LEFT, &l_pipe_allocated);
 	if (ret) {
 		pr_err("unable to allocate base pipe\n");
-		goto iommu_disable;
+		goto pipe_release;
 	}
 
 	if (mdss_mdp_pipe_map(l_pipe)) {
@@ -2869,20 +2902,20 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd)
 	ret = mdss_mdp_overlay_start(mfd);
 	if (ret) {
 		pr_err("unable to start overlay %d (%d)\n", mfd->index, ret);
-		goto clk_disable;
+		goto pipe_release;
 	}
 
 	ret = mdss_iommu_ctrl(1);
 	if (IS_ERR_VALUE(ret)) {
 		pr_err("IOMMU attach failed\n");
-		goto clk_disable;
+		goto iommu_disable;
 	}
 
 	buf_l = __mdp_overlay_buf_alloc(mfd, l_pipe);
 	if (!buf_l) {
 		pr_err("unable to allocate memory for fb buffer\n");
 		mdss_mdp_pipe_unmap(l_pipe);
-		goto pipe_release;
+		goto iommu_disable;
 	}
 
 	buf_l->p[0].srcp_table = mfd->fb_table;
@@ -2905,19 +2938,19 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd)
 			MDSS_MDP_MIXER_MUX_RIGHT, &r_pipe_allocated);
 		if (ret) {
 			pr_err("unable to allocate right base pipe\n");
-			goto pipe_release;
+			goto iommu_disable;
 		}
 
 		if (mdss_mdp_pipe_map(r_pipe)) {
 			pr_err("unable to map right base pipe\n");
-			goto pipe_release;
+			goto iommu_disable;
 		}
 
 		buf_r = __mdp_overlay_buf_alloc(mfd, r_pipe);
 		if (!buf_r) {
 			pr_err("unable to allocate memory for fb buffer\n");
 			mdss_mdp_pipe_unmap(r_pipe);
-			goto pipe_release;
+			goto iommu_disable;
 		}
 
 		buf_r->p[0] = buf_l->p[0];
@@ -2935,6 +2968,9 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd)
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 	return;
 
+iommu_disable:
+	mdss_iommu_ctrl(0);
+
 pipe_release:
 	if (r_pipe_allocated)
 		mdss_mdp_overlay_release(mfd, r_pipe->ndx);
@@ -2942,8 +2978,6 @@ pipe_release:
 		__mdp_overlay_buf_free(mfd, buf_l);
 	if (l_pipe_allocated)
 		mdss_mdp_overlay_release(mfd, l_pipe->ndx);
-iommu_disable:
-	mdss_iommu_ctrl(0);
 clk_disable:
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 	mutex_unlock(&mdp5_data->ov_lock);

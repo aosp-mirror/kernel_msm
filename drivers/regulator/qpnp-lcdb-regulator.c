@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -189,6 +189,9 @@ struct qpnp_lcdb {
 	/* TTW params */
 	bool				ttw_enable;
 	bool				ttw_mode_sw;
+
+	/* top level DT params */
+	bool				force_module_reenable;
 
 	/* status parameters */
 	bool				lcdb_enabled;
@@ -588,6 +591,23 @@ static int qpnp_lcdb_enable(struct qpnp_lcdb *lcdb)
 		goto fail_enable;
 	}
 
+	if (lcdb->force_module_reenable) {
+		val = 0;
+		rc = qpnp_lcdb_write(lcdb, lcdb->base + LCDB_ENABLE_CTL1_REG,
+								&val, 1);
+		if (rc < 0) {
+			pr_err("Failed to enable lcdb rc= %d\n", rc);
+			goto fail_enable;
+		}
+		val = MODULE_EN_BIT;
+		rc = qpnp_lcdb_write(lcdb, lcdb->base + LCDB_ENABLE_CTL1_REG,
+								&val, 1);
+		if (rc < 0) {
+			pr_err("Failed to disable lcdb rc= %d\n", rc);
+			goto fail_enable;
+		}
+	}
+
 	/* poll for vreg_ok */
 	timeout = 10;
 	delay = lcdb->bst.soft_start_us + lcdb->ldo.soft_start_us +
@@ -863,7 +883,7 @@ static int qpnp_lcdb_ldo_regulator_is_enabled(struct regulator_dev *rdev)
 }
 
 static int qpnp_lcdb_ldo_regulator_set_voltage(struct regulator_dev *rdev,
-				int min_uV, int max_uV, unsigned *selector)
+				int min_uV, int max_uV, unsigned int *selector)
 {
 	int rc = 0;
 	struct qpnp_lcdb *lcdb  = rdev_get_drvdata(rdev);
@@ -934,7 +954,7 @@ static int qpnp_lcdb_ncp_regulator_is_enabled(struct regulator_dev *rdev)
 }
 
 static int qpnp_lcdb_ncp_regulator_set_voltage(struct regulator_dev *rdev,
-				int min_uV, int max_uV, unsigned *selector)
+				int min_uV, int max_uV, unsigned int *selector)
 {
 	int rc = 0;
 	struct qpnp_lcdb *lcdb  = rdev_get_drvdata(rdev);
@@ -1589,6 +1609,9 @@ static int qpnp_lcdb_parse_dt(struct qpnp_lcdb *lcdb)
 			return rc;
 		}
 	}
+
+	lcdb->force_module_reenable = of_property_read_bool(node,
+					"qcom,force-module-reenable");
 
 	if (of_property_read_bool(node, "qcom,ttw-enable")) {
 		rc = qpnp_lcdb_parse_ttw(lcdb);

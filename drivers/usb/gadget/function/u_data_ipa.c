@@ -95,6 +95,7 @@ static void ipa_data_start_endless_xfer(struct ipa_data_ch_info *port, bool in)
 {
 	unsigned long flags;
 	int status;
+	struct usb_ep *ep;
 
 	spin_lock_irqsave(&port->port_lock, flags);
 	if (!port->port_usb || (in && !port->tx_req)
@@ -103,18 +104,22 @@ static void ipa_data_start_endless_xfer(struct ipa_data_ch_info *port, bool in)
 		pr_err("%s(): port_usb/req is NULL.\n", __func__);
 		return;
 	}
+
+	if (in)
+		ep = port->port_usb->in;
+	else
+		ep = port->port_usb->out;
+
 	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	if (in) {
 		pr_debug("%s: enqueue endless TX_REQ(IN)\n", __func__);
-		status = usb_ep_queue(port->port_usb->in,
-					port->tx_req, GFP_ATOMIC);
+		status = usb_ep_queue(ep, port->tx_req, GFP_ATOMIC);
 		if (status)
 			pr_err("error enqueuing endless TX_REQ, %d\n", status);
 	} else {
 		pr_debug("%s: enqueue endless RX_REQ(OUT)\n", __func__);
-		status = usb_ep_queue(port->port_usb->out,
-					port->rx_req, GFP_ATOMIC);
+		status = usb_ep_queue(ep, port->rx_req, GFP_ATOMIC);
 		if (status)
 			pr_err("error enqueuing endless RX_REQ, %d\n", status);
 	}
@@ -132,6 +137,7 @@ static void ipa_data_stop_endless_xfer(struct ipa_data_ch_info *port, bool in)
 {
 	unsigned long flags;
 	int status;
+	struct usb_ep *ep;
 
 	spin_lock_irqsave(&port->port_lock, flags);
 	if (!port->port_usb || (in && !port->tx_req)
@@ -140,16 +146,22 @@ static void ipa_data_stop_endless_xfer(struct ipa_data_ch_info *port, bool in)
 		pr_err("%s(): port_usb/req is NULL.\n", __func__);
 		return;
 	}
+
+	if (in)
+		ep = port->port_usb->in;
+	else
+		ep = port->port_usb->out;
+
 	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	if (in) {
 		pr_debug("%s: dequeue endless TX_REQ(IN)\n", __func__);
-		status = usb_ep_dequeue(port->port_usb->in, port->tx_req);
+		status = usb_ep_dequeue(ep, port->tx_req);
 		if (status)
 			pr_err("error dequeueing endless TX_REQ, %d\n", status);
 	} else {
 		pr_debug("%s: dequeue endless RX_REQ(OUT)\n", __func__);
-		status = usb_ep_dequeue(port->port_usb->out, port->rx_req);
+		status = usb_ep_dequeue(ep, port->rx_req);
 		if (status)
 			pr_err("error dequeueing endless RX_REQ, %d\n", status);
 	}
@@ -164,6 +176,7 @@ void ipa_data_start_rx_tx(enum ipa_func_type func)
 {
 	struct ipa_data_ch_info	*port;
 	unsigned long flags;
+	struct usb_ep *epin, *epout;
 
 	pr_debug("%s: Triggered: starting tx, rx", __func__);
 	/* queue in & out requests */
@@ -194,15 +207,17 @@ void ipa_data_start_rx_tx(enum ipa_func_type func)
 		return;
 	}
 
+	epout = port->port_usb->out;
+	epin = port->port_usb->in;
 	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	/* queue in & out requests */
 	pr_debug("%s: Starting rx", __func__);
-	if (port->port_usb->out)
+	if (epout)
 		ipa_data_start_endless_xfer(port, false);
 
 	pr_debug("%s: Starting tx", __func__);
-	if (port->port_usb->in)
+	if (epin)
 		ipa_data_start_endless_xfer(port, true);
 }
 /**
@@ -402,6 +417,7 @@ static void ipa_data_connect_work(struct work_struct *w)
 
 	if (!port->port_usb) {
 		spin_unlock_irqrestore(&port->port_lock, flags);
+		usb_gadget_autopm_put_async(port->gadget);
 		pr_err("%s(): port_usb is NULL.\n", __func__);
 		return;
 	}
@@ -412,6 +428,7 @@ static void ipa_data_connect_work(struct work_struct *w)
 
 	if (!gadget) {
 		spin_unlock_irqrestore(&port->port_lock, flags);
+		usb_gadget_autopm_put_async(port->gadget);
 		pr_err("%s: gport is NULL.\n", __func__);
 		return;
 	}
@@ -675,6 +692,8 @@ disconnect_usb_bam_ipa_out:
 		usb_bam_disconnect_ipa(port->usb_bam_type, &port->ipa_params);
 		is_ipa_disconnected = true;
 	}
+	if (port->func_type == USB_IPA_FUNC_RMNET)
+		teth_bridge_disconnect(port->ipa_params.src_client);
 unconfig_msm_ep_in:
 	spin_lock_irqsave(&port->port_lock, flags);
 	/* check if USB cable is disconnected or not */
@@ -697,6 +716,7 @@ out:
 	spin_lock_irqsave(&port->port_lock, flags);
 	port->is_connected = false;
 	spin_unlock_irqrestore(&port->port_lock, flags);
+	usb_gadget_autopm_put_async(port->gadget);
 }
 
 /**

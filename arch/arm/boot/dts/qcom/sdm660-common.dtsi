@@ -25,12 +25,58 @@
 		status = "disabled";
 	};
 
+	ufs_ice: ufsice@1db0000 {
+		compatible = "qcom,ice";
+		reg = <0x1db0000 0x8000>;
+		qcom,enable-ice-clk;
+		clock-names = "ufs_core_clk", "bus_clk",
+				"iface_clk", "ice_core_clk";
+		clocks = <&clock_gcc GCC_UFS_AXI_CLK>,
+			 <&clock_gcc GCC_UFS_CLKREF_CLK>,
+			 <&clock_gcc GCC_UFS_AHB_CLK>,
+			 <&clock_gcc GCC_UFS_ICE_CORE_CLK>;
+		qcom,op-freq-hz = <0>, <0>, <0>, <300000000>;
+		vdd-hba-supply = <&gdsc_ufs>;
+		qcom,msm-bus,name = "ufs_ice_noc";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<1 650 0 0>,    /* No vote */
+				<1 650 1000 0>; /* Max. bandwidth */
+		qcom,bus-vector-names = "MIN",
+					"MAX";
+		qcom,instance-type = "ufs";
+	};
+
+	sdcc1_ice: sdcc1ice@c0c8000 {
+		compatible = "qcom,ice";
+		reg = <0xc0c8000 0x8000>;
+		qcom,enable-ice-clk;
+		clock-names = "ice_core_clk_src", "ice_core_clk",
+				"bus_clk", "iface_clk";
+		clocks = <&clock_gcc SDCC1_ICE_CORE_CLK_SRC>,
+			 <&clock_gcc GCC_SDCC1_ICE_CORE_CLK>,
+			 <&clock_gcc GCC_SDCC1_APPS_CLK>,
+			 <&clock_gcc GCC_SDCC1_AHB_CLK>;
+		qcom,op-freq-hz = <300000000>, <0>, <0>, <0>;
+		qcom,msm-bus,name = "sdcc_ice_noc";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+			<78 512 0 0>,    /* No vote */
+			<78 512 1000 0>; /* Max. bandwidth */
+		qcom,bus-vector-names = "MIN",
+					"MAX";
+		qcom,instance-type = "sdcc";
+	};
+
 	ufs1: ufshc@1da4000 {
 		compatible = "qcom,ufshc";
 		reg = <0x1da4000 0x3000>;
 		interrupts = <0 265 0>;
 		phys = <&ufsphy1>;
 		phy-names = "ufsphy";
+		ufs-qcom-crypto = <&ufs_ice>;
 
 		clock-names =
 			"core_clk",
@@ -148,6 +194,7 @@
 			tx-fifo-resize;
 			snps,nominal-elastic-buffer;
 			snps,disable-clk-gating;
+			snps,has-lpm-erratum;
 			snps,is-utmi-l1-suspend;
 			snps,hird-threshold = /bits/ 8 <0x0>;
 		};
@@ -415,27 +462,46 @@
 
 		qcom,bus-width = <8>;
 		qcom,large-address-bus;
+		sdhc-msm-crypto = <&sdcc1_ice>;
 
 		qcom,devfreq,freq-table = <50000000 200000000>;
 
 		qcom,pm-qos-irq-type = "affine_irq";
-		qcom,pm-qos-irq-latency = <26 81>;
+		qcom,pm-qos-irq-latency = <43 377>;
 		qcom,pm-qos-cpu-groups = <0x0f 0xf0>;
-		qcom,pm-qos-cmdq-latency-us = <26 81>, <26 81>;
-		qcom,pm-qos-legacy-latency-us = <26 81>, <26 81>;
+		qcom,pm-qos-cmdq-latency-us = <43 377>, <40 325>;
+		qcom,pm-qos-legacy-latency-us = <43 377>, <40 325>;
 
 		qcom,msm-bus,name = "sdhc1";
 		qcom,msm-bus,num-cases = <9>;
-		qcom,msm-bus,num-paths = <1>;
-		qcom,msm-bus,vectors-KBps = <78 512 0 0>, /* No vote */
-			<78 512 1046 3200>,    /* 400 KB/s*/
-			<78 512 52286 160000>, /* 20 MB/s */
-			<78 512 65360 200000>, /* 25 MB/s */
-			<78 512 130718 400000>, /* 50 MB/s */
-			<78 512 130718 400000>, /* 100 MB/s */
-			<78 512 261438 800000>, /* 200 MB/s */
-			<78 512 261438 800000>, /* 400 MB/s */
-			<78 512 1338562 4096000>; /* Max. bandwidth */
+		qcom,msm-bus,num-paths = <2>;
+		qcom,msm-bus,vectors-KBps =
+			/* No vote */
+			<78 512 0 0>, <1 606 0 0>,
+			/* 400 KB/s*/
+			<78 512 1046 3200>,
+			<1 606 1046 3200>,
+			/* 20 MB/s */
+			<78 512 52286 160000>,
+			<1 606 52286 160000>,
+			/* 25 MB/s */
+			<78 512 65360 200000>,
+			<1 606 65360 200000>,
+			/* 50 MB/s */
+			<78 512 130718 400000>,
+			<1 606 130718 400000>,
+			/* 100 MB/s */
+			<78 512 130718 400000>,
+			<1 606 130718 400000>,
+			/* 200 MB/s */
+			<78 512 261438 800000>,
+			<1 606 261438 800000>,
+			/* 400 MB/s */
+			<78 512 261438 800000>,
+			<1 606 261438 800000>,
+			/* Max. bandwidth */
+			<78 512 1338562 4096000>,
+			<1 606 1338562 4096000>;
 		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
 			100000000 200000000 400000000 4294967295>;
 
@@ -468,24 +534,40 @@
 
 		qcom,msm-bus,name = "sdhc2";
 		qcom,msm-bus,num-cases = <8>;
-		qcom,msm-bus,num-paths = <1>;
-		qcom,msm-bus,vectors-KBps = <81 512 0 0>, /* No vote */
-			<81 512 1046 3200>,    /* 400 KB/s */
-			<81 512 52286 160000>, /* 20 MB/s */
-			<81 512 65360 200000>, /* 25 MB/s */
-			<81 512 130718 400000>, /* 50 MB/s */
-			<81 512 261438 800000>, /* 100 MB/s */
-			<81 512 261438 800000>, /* 200 MB/s */
-			<81 512 1338562 4096000>; /* Max. bandwidth */
+		qcom,msm-bus,num-paths = <2>;
+		qcom,msm-bus,vectors-KBps =
+			/* No vote */
+			<81 512 0 0>, <1 608 0 0>,
+			/* 400 KB/s */
+			<81 512 1046 3200>,
+			<1 608 1046 3200>,
+			/* 20 MB/s */
+			<81 512 52286 160000>,
+			<1 608 52286 160000>,
+			/* 25 MB/s */
+			<81 512 65360 200000>,
+			<1 608 65360 200000>,
+			/* 50 MB/s */
+			<81 512 130718 400000>,
+			<1 608 130718 400000>,
+			/* 100 MB/s */
+			<81 512 261438 800000>,
+			<1 608 261438 800000>,
+			/* 200 MB/s */
+			<81 512 261438 800000>,
+			<1 608 261438 800000>,
+			/* Max. bandwidth */
+			<81 512 1338562 4096000>,
+			<1 608 1338562 4096000>;
 		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
 			100000000 200000000 4294967295>;
 
 		qcom,devfreq,freq-table = <50000000 200000000>;
 
 		qcom,pm-qos-irq-type = "affine_irq";
-		qcom,pm-qos-irq-latency = <26 81>;
+		qcom,pm-qos-irq-latency = <43 377>;
 		qcom,pm-qos-cpu-groups = <0x0f 0xf0>;
-		qcom,pm-qos-legacy-latency-us = <26 81>, <26 81>;
+		qcom,pm-qos-legacy-latency-us = <43 377>, <40 325>;
 
 		clocks = <&clock_gcc GCC_SDCC2_AHB_CLK>,
 			<&clock_gcc GCC_SDCC2_APPS_CLK>;

@@ -898,12 +898,12 @@ static int wait_for_sess_signal_receipt(struct msm_vidc_inst *inst,
 	if (!rc) {
 		dprintk(VIDC_ERR, "Wait interrupted or timed out: %d\n",
 				SESSION_MSG_INDEX(cmd));
-		msm_comm_kill_session(inst);
 		call_hfi_op(hdev, flush_debug_queue, hdev->hfi_device_data);
 		dprintk(VIDC_ERR,
 			"sess resp timeout can potentially crash the system\n");
 		msm_comm_print_debug_info(inst);
 		BUG_ON(inst->core->resources.debug_timeout);
+		msm_comm_kill_session(inst);
 		rc = -EIO;
 	} else {
 		rc = 0;
@@ -957,6 +957,48 @@ static void print_cap(const char *type,
 	dprintk(VIDC_DBG,
 		"%-24s: %-8d %-8d %-8d\n",
 		type, cap->min, cap->max, cap->step_size);
+}
+
+
+static void msm_vidc_comm_update_ctrl_limits(struct msm_vidc_inst *inst)
+{
+	struct v4l2_ctrl *ctrl = NULL;
+
+	ctrl = v4l2_ctrl_find(&inst->ctrl_handler,
+		V4L2_CID_MPEG_VIDC_VIDEO_HYBRID_HIERP_MODE);
+	if (ctrl) {
+		v4l2_ctrl_modify_range(ctrl, inst->capability.hier_p_hybrid.min,
+			inst->capability.hier_p_hybrid.max, ctrl->step,
+			inst->capability.hier_p_hybrid.min);
+		dprintk(VIDC_DBG,
+			"%s: Updated Range = %lld --> %lld Def value = %lld\n",
+			ctrl->name, ctrl->minimum, ctrl->maximum,
+			ctrl->default_value);
+	}
+
+	ctrl = v4l2_ctrl_find(&inst->ctrl_handler,
+		V4L2_CID_MPEG_VIDC_VIDEO_HIER_B_NUM_LAYERS);
+	if (ctrl) {
+		v4l2_ctrl_modify_range(ctrl, inst->capability.hier_b.min,
+			inst->capability.hier_b.max, ctrl->step,
+			inst->capability.hier_b.min);
+		dprintk(VIDC_DBG,
+			"%s: Updated Range = %lld --> %lld Def value = %lld\n",
+			ctrl->name, ctrl->minimum, ctrl->maximum,
+			ctrl->default_value);
+	}
+
+	ctrl = v4l2_ctrl_find(&inst->ctrl_handler,
+		V4L2_CID_MPEG_VIDC_VIDEO_HIER_P_NUM_LAYERS);
+	if (ctrl) {
+		v4l2_ctrl_modify_range(ctrl, inst->capability.hier_p.min,
+			inst->capability.hier_p.max, ctrl->step,
+			inst->capability.hier_p.min);
+		dprintk(VIDC_DBG,
+			"%s: Updated Range = %lld --> %lld Def value = %lld\n",
+			ctrl->name, ctrl->minimum, ctrl->maximum,
+			ctrl->default_value);
+	}
 }
 
 static void handle_session_init_done(enum hal_command_response cmd, void *data)
@@ -1052,8 +1094,16 @@ static void handle_session_init_done(enum hal_command_response cmd, void *data)
 	print_cap("ltr_count", &inst->capability.ltr_count);
 	print_cap("mbs_per_sec_low_power",
 		&inst->capability.mbs_per_sec_power_save);
+	print_cap("hybrid-hp", &inst->capability.hier_p_hybrid);
 
 	signal_session_msg_receipt(cmd, inst);
+
+	/*
+	 * Update controls after informing session_init_done to avoid
+	 * timeouts.
+	 */
+
+	msm_vidc_comm_update_ctrl_limits(inst);
 	put_inst(inst);
 }
 
@@ -1216,7 +1266,8 @@ static void handle_event_change(enum hal_command_response cmd, void *data)
 				"V4L2_EVENT_SEQ_CHANGED_INSUFFICIENT due to bit-depth change\n");
 		}
 
-		if (inst->pic_struct != event_notify->pic_struct) {
+		if (inst->fmts[CAPTURE_PORT].fourcc == V4L2_PIX_FMT_NV12 &&
+			inst->pic_struct != event_notify->pic_struct) {
 			inst->pic_struct = event_notify->pic_struct;
 			event = V4L2_EVENT_SEQ_CHANGED_INSUFFICIENT;
 			ptr[2] |= V4L2_EVENT_PICSTRUCT_FLAG;
@@ -1692,18 +1743,10 @@ static void handle_sys_error(enum hal_command_response cmd, void *data)
 	dprintk(VIDC_ERR,
 		"SYS_ERROR can potentially crash the system\n");
 
-	/*
-	 * For SYS_ERROR, there will not be any inst pointer.
-	 * Just grab one of the inst from instances list and
-	 * use it.
-	 */
-
 	mutex_lock(&core->lock);
-	inst = list_first_entry_or_null(&core->instances,
-		struct msm_vidc_inst, list);
+	list_for_each_entry(inst, &core->instances, list)
+		msm_comm_print_inst_info(inst);
 	mutex_unlock(&core->lock);
-
-	msm_comm_print_debug_info(inst);
 
 	BUG_ON(core->resources.debug_timeout);
 }
@@ -2078,7 +2121,7 @@ static void handle_fbd(enum hal_command_response cmd, void *data)
 			ns_to_timeval(time_usec * NSEC_PER_USEC);
 		vbuf->flags = 0;
 		extra_idx =
-			EXTRADATA_IDX(inst->fmts[CAPTURE_PORT].num_planes);
+			EXTRADATA_IDX(inst->prop.num_planes[CAPTURE_PORT]);
 		if (extra_idx && extra_idx < VIDEO_MAX_PLANES) {
 			vb->planes[extra_idx].m.userptr =
 				(unsigned long)fill_buf_done->extra_data_buffer;
@@ -3638,7 +3681,7 @@ static void populate_frame_data(struct vidc_frame_data *data,
 		data->buffer_type = msm_comm_get_hal_output_buffer(inst);
 	}
 
-	extra_idx = EXTRADATA_IDX(inst->fmts[port].num_planes);
+	extra_idx = EXTRADATA_IDX(inst->prop.num_planes[port]);
 	if (extra_idx && extra_idx < VIDEO_MAX_PLANES &&
 			vb->planes[extra_idx].m.userptr) {
 		data->extradata_addr = vb->planes[extra_idx].m.userptr;
@@ -4064,7 +4107,6 @@ int msm_comm_try_get_prop(struct msm_vidc_inst *inst, enum hal_property ptype,
 			__func__, inst,
 			SESSION_MSG_INDEX(HAL_SESSION_PROPERTY_INFO));
 		inst->state = MSM_VIDC_CORE_INVALID;
-		msm_comm_kill_session(inst);
 		call_hfi_op(hdev, flush_debug_queue, hdev->hfi_device_data);
 		dprintk(VIDC_ERR,
 			"SESS_PROP timeout can potentially crash the system\n");
@@ -4072,6 +4114,7 @@ int msm_comm_try_get_prop(struct msm_vidc_inst *inst, enum hal_property ptype,
 			msm_comm_print_debug_info(inst);
 
 		BUG_ON(inst->core->resources.debug_timeout);
+		msm_comm_kill_session(inst);
 		rc = -ETIMEDOUT;
 		goto exit;
 	} else {

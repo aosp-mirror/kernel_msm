@@ -21,16 +21,17 @@
 	qcom,board-id = <8 1>;
 };
 
-&pil_modem {
-	status = "disabled";
-};
-
 &msm_ath10k_wlan {
-	status = "enabled";
+	status = "ok";
 };
 
 &mdss_mdp {
+	status = "disabled";
 	qcom,mdss-pref-prim-intf = "hdmi";
+};
+
+&sde_hdmi {
+	qcom,display-type = "primary";
 };
 
 &slim_aud {
@@ -77,4 +78,8 @@
 	cd-gpios = <&tlmm 86 0x1>;
 
 	status = "ok";
+};
+
+&tspp {
+	qcom,lpass-timer-tts = <1>;
 };

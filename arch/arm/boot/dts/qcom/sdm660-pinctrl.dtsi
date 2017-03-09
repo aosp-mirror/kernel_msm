@@ -49,16 +49,17 @@
 			};
 		};
 
-		trigout_b: trigout_b {
+		trigout_a: trigout_a {
 			mux {
-				pins = "gpio12";
-				function = "qdss_cti1_b";
+				pins = "gpio49";
+				function = "qdss_cti_trig_out_a";
 			};
 
 			config {
-				pins = "gpio12";
-				drive-strength = <16>;
+				pins = "gpio49";
+				drive-strength = <2>;
 				bias-disable;
+				output-low;
 			};
 		};
 
@@ -403,13 +404,14 @@
 			nfc_enable_active: nfc_enable_active {
 				/* active state */
 				mux {
-					/* 29: NFC ENABLE 31:ESE Enable */
-					pins = "gpio29", "gpio31";
+					/* 29: NFC ENABLE 30:FW DNLD */
+					/* 31:ESE Enable */
+					pins = "gpio29", "gpio30", "gpio31";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio29", "gpio31";
+					pins = "gpio29", "gpio30", "gpio31";
 					drive-strength = <2>; /* 2 MA */
 					bias-pull-up;
 				};
@@ -418,13 +420,14 @@
 			nfc_enable_suspend: nfc_enable_suspend {
 				/* sleep state */
 				mux {
-					/* 29: NFC ENABLE 31:ESE Enable */
-					pins = "gpio29", "gpio31";
+					/* 29: NFC ENABLE 30:FW DNLD */
+					/* 31:ESE Enable */
+					pins = "gpio29", "gpio30", "gpio31";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio29", "gpio31";
+					pins = "gpio29", "gpio30", "gpio31";
 					drive-strength = <2>; /* 2 MA */
 					bias-disable;
 				};
@@ -740,6 +743,66 @@
 							"gpio30", "gpio31";
 					drive-strength = <6>;
 					bias-disable;
+				};
+			};
+		};
+		/* USB C analog configuration */
+		wcd_usbc_analog_en1 {
+			wcd_usbc_analog_en1_idle: wcd_usbc_ana_en1_idle {
+				mux {
+					pins = "gpio80";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio80";
+					drive-strength = <2>;
+					bias-pull-down;
+					output-low;
+				};
+			};
+
+			wcd_usbc_analog_en1_active: wcd_usbc_ana_en1_active {
+				mux {
+					pins = "gpio80";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio80";
+					drive-strength = <2>;
+					bias-disable;
+					output-high;
+				};
+			};
+		};
+
+		wcd_usbc_analog_en2n {
+			wcd_usbc_analog_en2n_idle: wcd_usbc_ana_en2n_idle {
+				mux {
+					pins = "gpio77";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio77";
+					drive-strength = <2>;
+					bias-disable;
+					output-high;
+				};
+			};
+
+			wcd_usbc_analog_en2n_active: wcd_usbc_ana_en2n_active {
+				mux {
+					pins = "gpio77";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio77";
+					drive-strength = <2>;
+					bias-pull-down;
+					output-low;
 				};
 			};
 		};
@@ -1436,6 +1499,58 @@
 					drive-strength = <2>; /* 2 mA */
 					bias-pull-down; /* pull down */
 				};
+			};
+		};
+
+		mdss_dp_aux_active: mdss_dp_aux_active {
+			mux {
+				pins = "gpio55", "gpio56";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio55", "gpio56";
+				bias-disable = <0>; /* no pull */
+				drive-strength = <8>;
+			};
+		};
+
+		mdss_dp_aux_suspend: mdss_dp_aux_suspend {
+			mux {
+				pins = "gpio55", "gpio56";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio55", "gpio56";
+				bias-pull-down;
+				drive-strength = <2>;
+			};
+		};
+
+		mdss_dp_usbplug_cc_active: mdss_dp_usbplug_cc_active {
+			mux {
+				pins = "gpio58";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio58";
+				bias-disable;
+				drive-strength = <16>;
+			};
+		};
+
+		mdss_dp_usbplug_cc_suspend: mdss_dp_usbplug_cc_suspend {
+			mux {
+				pins = "gpio58";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio58";
+				bias-pull-down;
+				drive-strength = <2>;
 			};
 		};
 

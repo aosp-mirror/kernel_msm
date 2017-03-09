@@ -1018,15 +1018,20 @@ static ssize_t oom_adj_read(struct file *file, char __user *buf, size_t count,
 	int oom_adj = OOM_ADJUST_MIN;
 	size_t len;
 	unsigned long flags;
+	int mult = 1;
 
 	if (!task)
 		return -ESRCH;
 	if (lock_task_sighand(task, &flags)) {
-		if (task->signal->oom_score_adj == OOM_SCORE_ADJ_MAX)
+		if (task->signal->oom_score_adj == OOM_SCORE_ADJ_MAX) {
 			oom_adj = OOM_ADJUST_MAX;
-		else
-			oom_adj = (task->signal->oom_score_adj * -OOM_DISABLE) /
-				  OOM_SCORE_ADJ_MAX;
+		} else {
+			if (task->signal->oom_score_adj < 0)
+				mult = -1;
+			oom_adj = roundup(mult * task->signal->oom_score_adj *
+				-OOM_DISABLE, OOM_SCORE_ADJ_MAX) /
+				OOM_SCORE_ADJ_MAX * mult;
+		}
 		unlock_task_sighand(task, &flags);
 	}
 	put_task_struct(task);
@@ -1743,18 +1748,13 @@ static const struct file_operations proc_pid_set_comm_operations = {
 static int proc_exe_link(struct dentry *dentry, struct path *exe_path)
 {
 	struct task_struct *task;
-	struct mm_struct *mm;
 	struct file *exe_file;
 
 	task = get_proc_task(d_inode(dentry));
 	if (!task)
 		return -ENOENT;
-	mm = get_task_mm(task);
+	exe_file = get_task_exe_file(task);
 	put_task_struct(task);
-	if (!mm)
-		return -ENOENT;
-	exe_file = get_mm_exe_file(mm);
-	mmput(mm);
 	if (exe_file) {
 		*exe_path = exe_file->f_path;
 		path_get(&exe_file->f_path);

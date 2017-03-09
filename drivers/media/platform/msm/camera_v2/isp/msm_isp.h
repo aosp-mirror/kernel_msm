@@ -29,6 +29,7 @@
 
 #include "msm_buf_mgr.h"
 #include "cam_hw_ops.h"
+#include <soc/qcom/cx_ipeak.h>
 
 #define VFE40_8974V1_VERSION 0x10000018
 #define VFE40_8974V2_VERSION 0x1001001A
@@ -762,7 +763,13 @@ struct vfe_device {
 	uint32_t **vfe_clk_rates;
 	size_t num_clk;
 	size_t num_rates;
+	struct clk **hvx_clk;
+	struct msm_cam_clk_info *hvx_clk_info;
+	size_t num_hvx_clk;
+	size_t num_norm_clk;
 	enum cam_ahb_clk_vote ahb_vote;
+	bool turbo_vote;
+	struct cx_ipeak_client *vfe_cx_ipeak;
 
 	/* Sync variables*/
 	struct completion reset_complete;

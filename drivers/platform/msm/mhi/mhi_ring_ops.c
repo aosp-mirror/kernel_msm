@@ -19,7 +19,7 @@ static int add_element(struct mhi_ring *ring, void **rp,
 	uintptr_t d_wp = 0, d_rp = 0, ring_size = 0;
 	int r;
 
-	if (0 == ring->el_size || NULL == ring
+	if (NULL == ring || 0 == ring->el_size
 		|| NULL == ring->base || 0 == ring->len) {
 		mhi_log(MHI_MSG_ERROR, "Bad input parameters, quitting.\n");
 		return -EINVAL;
@@ -48,6 +48,9 @@ static int add_element(struct mhi_ring *ring, void **rp,
 		*assigned_addr = (char *)ring->wp;
 	*wp = (void *)(((d_wp + 1) % ring_size) * ring->el_size +
 						(uintptr_t)ring->base);
+
+	/* force update visible to other cores */
+	smp_wmb();
 	return 0;
 }
 
@@ -77,7 +80,7 @@ int delete_element(struct mhi_ring *ring, void **rp,
 	uintptr_t d_wp = 0, d_rp = 0, ring_size = 0;
 	int r;
 
-	if (0 == ring->el_size || NULL == ring ||
+	if (NULL == ring || 0 == ring->el_size ||
 		NULL == ring->base || 0 == ring->len)
 		return -EINVAL;
 
@@ -101,6 +104,9 @@ int delete_element(struct mhi_ring *ring, void **rp,
 
 	*rp = (void *)(((d_rp + 1) % ring_size) * ring->el_size +
 						(uintptr_t)ring->base);
+
+	/* force update visible to other cores */
+	smp_wmb();
 	return 0;
 }
 
@@ -108,6 +114,7 @@ int mhi_get_free_desc(struct mhi_client_handle *client_handle)
 {
 	u32 chan;
 	struct mhi_device_ctxt *ctxt;
+	int bb_ring, ch_ring;
 
 	if (!client_handle || MHI_HANDLE_MAGIC != client_handle->magic ||
 	    !client_handle->mhi_dev_ctxt)
@@ -115,7 +122,10 @@ int mhi_get_free_desc(struct mhi_client_handle *client_handle)
 	ctxt = client_handle->mhi_dev_ctxt;
 	chan = client_handle->chan_info.chan_nr;
 
-	return get_nr_avail_ring_elements(&ctxt->mhi_local_chan_ctxt[chan]);
+	bb_ring = get_nr_avail_ring_elements(&ctxt->chan_bb_list[chan]);
+	ch_ring = get_nr_avail_ring_elements(&ctxt->mhi_local_chan_ctxt[chan]);
+
+	return min(bb_ring, ch_ring);
 }
 EXPORT_SYMBOL(mhi_get_free_desc);
 
@@ -143,7 +153,7 @@ int get_nr_enclosed_el(struct mhi_ring *ring, void *rp,
 	uintptr_t ring_size = 0;
 	int r = 0;
 
-	if (0 == ring->el_size || NULL == ring ||
+	if (NULL == ring || 0 == ring->el_size ||
 		NULL == ring->base || 0 == ring->len) {
 		mhi_log(MHI_MSG_ERROR, "Bad input parameters, quitting.\n");
 		return -EINVAL;

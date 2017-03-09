@@ -110,6 +110,34 @@ int msm_vidc_enum_fmt(void *instance, struct v4l2_fmtdesc *f)
 }
 EXPORT_SYMBOL(msm_vidc_enum_fmt);
 
+int msm_vidc_query_ctrl(void *instance, struct v4l2_queryctrl *ctrl)
+{
+	struct msm_vidc_inst *inst = instance;
+	int rc = 0;
+
+	if (!inst || !ctrl)
+		return -EINVAL;
+
+	switch (ctrl->id) {
+	case V4L2_CID_MPEG_VIDC_VIDEO_HYBRID_HIERP_MODE:
+		ctrl->maximum = inst->capability.hier_p_hybrid.max;
+		ctrl->minimum = inst->capability.hier_p_hybrid.min;
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_HIER_B_NUM_LAYERS:
+		ctrl->maximum = inst->capability.hier_b.max;
+		ctrl->minimum = inst->capability.hier_b.min;
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_HIER_P_NUM_LAYERS:
+		ctrl->maximum = inst->capability.hier_p.max;
+		ctrl->minimum = inst->capability.hier_p.min;
+		break;
+	default:
+		rc = -EINVAL;
+	}
+	return rc;
+}
+EXPORT_SYMBOL(msm_vidc_query_ctrl);
+
 int msm_vidc_s_fmt(void *instance, struct v4l2_format *f)
 {
 	struct msm_vidc_inst *inst = instance;
@@ -364,7 +392,7 @@ static struct msm_smem *map_buffer(struct msm_vidc_inst *inst,
 	struct msm_smem *handle = NULL;
 	handle = msm_comm_smem_user_to_kernel(inst,
 				p->reserved[0],
-				p->reserved[1],
+				p->length,
 				buffer_type);
 	if (!handle) {
 		dprintk(VIDC_ERR,
@@ -433,8 +461,10 @@ int map_and_register_buf(struct msm_vidc_inst *inst, struct v4l2_buffer *b)
 		goto exit;
 	}
 
-	dprintk(VIDC_DBG, "[MAP] Create binfo = %pK fd = %d type = %d\n",
-			binfo, b->m.planes[0].reserved[0], b->type);
+	dprintk(VIDC_DBG,
+		"[MAP] Create binfo = %pK fd = %d size = %d type = %d\n",
+		binfo, b->m.planes[0].reserved[0],
+		b->m.planes[0].length, b->type);
 
 	for (i = 0; i < b->length; ++i) {
 		rc = 0;
@@ -686,7 +716,7 @@ static bool valid_v4l2_buffer(struct v4l2_buffer *b,
 								MAX_PORT_NUM;
 
 	return port != MAX_PORT_NUM &&
-		inst->fmts[port].num_planes == b->length;
+		inst->prop.num_planes[port] == b->length;
 }
 
 int msm_vidc_prepare_buf(void *instance, struct v4l2_buffer *b)
@@ -1316,9 +1346,6 @@ static void cleanup_instance(struct msm_vidc_inst *inst)
 			dprintk(VIDC_ERR,
 				"Failed to release output buffers\n");
 		}
-
-		if (inst->extradata_handle)
-			msm_comm_smem_free(inst, inst->extradata_handle);
 
 		debugfs_remove_recursive(inst->debugfs_root);
 
