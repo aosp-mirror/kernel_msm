@@ -160,6 +160,7 @@ static struct mnh_sm_device *mnh_sm_dev;
 static int mnh_state;
 static int mnh_sm_uboot = MNH_UBOOT_DISABLE;
 static int mnh_mipi_debug;
+static int mnh_freeze_state;
 static uint32_t mnh_resume_addr = HW_MNH_KERNEL_DOWNLOAD;
 
 /* callback when easel enters and leaves the active state */
@@ -291,7 +292,8 @@ static ssize_t mnh_sm_state_store(struct device *dev,
 	dev_dbg(dev, "Entering mnh_sm_state_store...\n");
 
 	ret = mnh_sm_get_val_from_buf(buf, &val);
-	return mnh_sm_set_state((int)val);
+	mnh_sm_set_state((int)val);
+	return count;
 }
 
 static DEVICE_ATTR(state, S_IWUSR | S_IRUGO,
@@ -702,7 +704,7 @@ static ssize_t mnh_sm_cpu_clk_store(struct device *dev,
 	ret = mnh_sm_get_val_from_buf(buf, &val);
 	if (!ret && (val >= CPU_FREQ_MIN) && (val <= CPU_FREQ_MAX)) {
 		mnh_cpu_freq_change(val);
-		return val;
+		return count;
 	}
 
 	return -EINVAL;
@@ -728,12 +730,12 @@ static ssize_t mnh_sm_uboot_store(struct device *dev,
 	unsigned long val = 0;
 	int ret;
 
-	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_uboot_show...\n");
+	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_uboot_store...\n");
 
 	ret = mnh_sm_get_val_from_buf(buf, &val);
 	if (!ret) {
 		mnh_sm_uboot = val;
-		return mnh_sm_uboot;
+		return count;
 	}
 
 	return -EINVAL;
@@ -759,13 +761,13 @@ static ssize_t mnh_sm_debug_mipi_store(struct device *dev,
 	unsigned long val = 0;
 	int ret;
 
-	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_debug_mipi_show...\n");
+	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_debug_mipi_store...\n");
 
 	ret = mnh_sm_get_val_from_buf(buf, &val);
 	if (!ret) {
 		mnh_mipi_debug = val;
 		mnh_mipi_set_debug(val);
-		return mnh_mipi_debug;
+		return count;
 	}
 
 	return -EINVAL;
@@ -773,6 +775,37 @@ static ssize_t mnh_sm_debug_mipi_store(struct device *dev,
 
 static DEVICE_ATTR(debug_mipi, S_IWUSR | S_IRUGO,
 		mnh_sm_debug_mipi_show, mnh_sm_debug_mipi_store);
+
+static ssize_t mnh_sm_freeze_state_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
+{
+	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_freeze_state_show...\n");
+
+	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_freeze_state);
+}
+
+static ssize_t mnh_sm_freeze_state_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf,
+				  size_t count)
+{
+	unsigned long val = 0;
+	int ret;
+
+	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_freeze_state_store...\n");
+
+	ret = mnh_sm_get_val_from_buf(buf, &val);
+	if (!ret) {
+		mnh_freeze_state = val;
+		return count;
+	}
+
+	return -EINVAL;
+}
+
+static DEVICE_ATTR(freeze_state, S_IWUSR | S_IRUGO,
+		mnh_sm_freeze_state_show, mnh_sm_freeze_state_store);
 
 static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_poweron.attr,
@@ -789,6 +822,7 @@ static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_cpu_clk.attr,
 	&dev_attr_uboot.attr,
 	&dev_attr_debug_mipi.attr,
+	&dev_attr_freeze_state.attr,
 	NULL
 };
 
@@ -1247,6 +1281,13 @@ int mnh_sm_set_state(int state)
 
 	dev_info(mnh_sm_dev->dev,
 		 "%s: request state %d\n", __func__, state);
+
+	if (mnh_freeze_state) {
+		dev_info(mnh_sm_dev->dev,
+			"%s: ignoring requested state %d because freeze_state is set\n",
+			__func__, mnh_sm_dev->next_mnh_state);
+		return -EBUSY;
+	}
 
 	mutex_lock(&mnh_sm_dev->lock);
 
