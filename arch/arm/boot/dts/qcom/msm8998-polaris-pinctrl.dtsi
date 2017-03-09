@@ -288,4 +288,52 @@
 			};
 		};
 	};
+
+	cam_sensor_6dofr_active: cam_sensor_6dofr_active {
+		mux {
+			pins = "gpio149";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio149";
+			bias-disable;
+			drive-strength = <2>;
+		};
+	};
+
+	cam_sensor_6dofr_suspend: cam_sensor_6dofr_suspend {
+		mux {
+			pins = "gpio149";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio149";
+			bias-disable;
+			drive-strength = <2>;
+		};
+	};
+
+	cam_sensor_6dofl_active: cam_sensor_6dofl_active {
+		mux {
+			pins = "gpio148";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio148";
+			bias-disable;
+			drive-strength = <2>;
+		};
+	};
+
+	cam_sensor_6dofl_suspend: cam_sensor_6dofl_suspend {
+		mux {
+			pins = "gpio148";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio148";
+			bias-disable;
+			drive-strength = <2>;
+		};
+	};
 };
