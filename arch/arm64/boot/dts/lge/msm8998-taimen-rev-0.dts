@@ -50,7 +50,7 @@
 };
 
 &soc {
-	fpc1020 {
+	fp_fpc1020 {
 		status = "disabled";
 	};
 };
