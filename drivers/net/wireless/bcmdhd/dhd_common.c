@@ -2068,7 +2068,7 @@ dhd_arp_offload_enable(dhd_pub_t * dhd, int arp_enable)
 		DHD_TRACE(("%s: successfully enabed ARP offload to %d\n",
 			__FUNCTION__, arp_enable));
 	if (arp_enable) {
-		ret = dhd_iovar(dhd, 0, "apr_version", NULL, 0, (char *)&iovbuf,
+		ret = dhd_iovar(dhd, 0, "arp_version", NULL, 0, (char *)&iovbuf,
 				sizeof(iovbuf), FALSE);
 		if (ret) {
 			DHD_INFO(("%s: fail to arp_version (maybe 1:ret = %d\n",
