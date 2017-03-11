@@ -800,17 +800,20 @@ int dhd_update_flow_prio_map(dhd_pub_t *dhdp, uint8 map)
 int dhd_flow_prio_map(dhd_pub_t *dhd, uint8 *map, bool set)
 {
 	uint8 iovbuf[24];
+	int ret;
 	if (!set) {
-		bcm_mkiovar("bus:fl_prio_map", NULL, 0, (char*)iovbuf, sizeof(iovbuf));
-		if (dhd_wl_ioctl_cmd(dhd, WLC_GET_VAR, iovbuf, sizeof(iovbuf), FALSE, 0) < 0) {
+		ret = dhd_iovar(dhd, 0, "bus:fl_prio_map", NULL, 0,
+				(char *)iovbuf, sizeof(iovbuf), FALSE);
+		if (ret) {
 			DHD_ERROR(("%s: failed to get fl_prio_map\n", __FUNCTION__));
 			return BCME_ERROR;
 		}
 		*map = iovbuf[0];
 		return BCME_OK;
 	}
-	bcm_mkiovar("bus:fl_prio_map", (char *)map, 4, (char*)iovbuf, sizeof(iovbuf));
-	if (dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0) < 0) {
+	ret = dhd_iovar(dhd, 0, "bus:fl_prio_map", (char *)map, sizeof(uint8),
+			NULL, 0, TRUE);
+	if (ret < 0) {
 		DHD_ERROR(("%s: failed to set fl_prio_map \n",
 			__FUNCTION__));
 		return BCME_ERROR;
