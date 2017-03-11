@@ -896,11 +896,19 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 	}
 
 #ifdef CONFIG_FG_DC_BATT_ID
-	rc = of_property_read_u32(batt_node,
-				  "goog,dc-batt-id", &chip->dc_batt_id);
+	rc = of_property_read_u32(batt_node, "goog,dc-batt-id",
+				  &chip->dc_batt_id);
 	if (rc < 0) {
 		dev_info(chip->dev, "dc_batt_id is missing.\n");
 		chip->dc_batt_id = 0;
+	}
+	chip->dc_batt_id *= 1000;
+
+	rc = of_property_read_u32(batt_node, "qcom,batt-id-range-pct",
+				  &chip->id_range_pct);
+	if (rc < 0) {
+		dev_info(chip->dev, "id_range_pct is missing.\n");
+		chip->id_range_pct = 5;  /* default: 5% */
 	}
 #endif
 
@@ -1081,6 +1089,16 @@ static void fg_notify_charger_fake_battery(struct fg_chip *chip)
 	}
 
 	dev_info(chip->dev, "Notified charger on DC power supply.\n");
+}
+
+static int is_dc_batt_id(struct fg_chip *chip)
+{
+	u32 delta, limit;
+
+	delta = abs(chip->batt_id_ohms - chip->dc_batt_id);
+	limit = (chip->dc_batt_id * chip->id_range_pct) / 100;
+
+	return (delta < limit);
 }
 #endif
 
@@ -3910,7 +3928,7 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	}
 
 #ifdef CONFIG_FG_DC_BATT_ID
-	if ((chip->batt_id_ohms/1000+5)/10 == chip->dc_batt_id/10) {
+	if (is_dc_batt_id(chip)) {
 		/* DC power supply, disable FG and notify charger */
 		if (batt_psy_initialized(chip))
 			fg_notify_charger_fake_battery(chip);
