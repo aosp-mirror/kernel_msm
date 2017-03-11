@@ -1544,12 +1544,8 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 
 #ifndef ENABLE_FW_ROAM_SUSPEND
 				/* Disable firmware roaming during suspend */
-				ret = dhd_iovar(dhd, 0, "roam_off",
-						(char *)&roamvar,
+				dhd_iovar(dhd, 0, "roam_off", (char *)&roamvar,
 						sizeof(roamvar), NULL, 0, TRUE);
-				if (ret)
-					DHD_ERROR(("failed set roam_off (%d)\n",
-						   ret));
 #endif /* ENABLE_FW_ROAM_SUSPEND */
 #ifdef NDO_CONFIG_SUPPORT
 				if (dhd->ndo_enable) {
@@ -2125,9 +2121,8 @@ dhd_ifadd_event_handler(void *handle, void *event_info, u8 event)
 	/* Turn on AP isolation in the firmware for interfaces operating in AP mode */
 	if (FW_SUPPORTED((&dhd->pub), ap) && !(DHD_IF_ROLE_STA(if_event->event.role))) {
 		uint32 var_int =  1;
-		ret = dhd_iovar(&dhd->pub, ifidx, "ap_isolate",
-				(char *)&var_int, sizeof(var_int), NULL, 0,
-				TRUE);
+		dhd_iovar(&dhd->pub, ifidx, "ap_isolate", (char *)&var_int,
+				sizeof(var_int), NULL, 0, TRUE);
 	}
 #endif /* PCIE_FULL_DONGLE */
 done:

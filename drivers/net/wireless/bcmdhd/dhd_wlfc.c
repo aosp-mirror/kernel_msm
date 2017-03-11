@@ -2610,7 +2610,7 @@ dhd_wlfc_resume(dhd_pub_t *dhd)
 	if (!dhd->wlfc_enabled)
 		return -1;
 
-	ret = dhd_iovar(dhd, "tlv", NULL, 0, (char *)iovbuf, sizeof(iovbuf),
+	ret = dhd_iovar(dhd, 0, "tlv", NULL, 0, (char *)iovbuf, sizeof(iovbuf),
 			FALSE);
 	if (ret < 0) {
 		DHD_ERROR(("%s: failed to get bdcv2 tlv signaling\n", __FUNCTION__));
@@ -3135,7 +3135,8 @@ dhd_wlfc_init(dhd_pub_t *dhd)
 	*/
 
 	/* enable proptxtstatus signaling by default */
-	ret = dhd_iovar(dhd, "tlv", (char *)&tlv, sizeof(tlv), NULL, 0, TRUE);
+	ret = dhd_iovar(dhd, 0, "tlv", (char *)&tlv, sizeof(tlv), NULL, 0,
+			TRUE);
 	if (ret < 0) {
 		DHD_ERROR(("dhd_wlfc_init(): failed to enable/disable bdcv2 tlv signaling\n"));
 	}
@@ -3149,7 +3150,7 @@ dhd_wlfc_init(dhd_pub_t *dhd)
 	}
 
 	/* query caps */
-	ret = dhd_iovar(dhd, "wlfc_mode", NULL, 0, iovbuf, sizeof(iovbuf),
+	ret = dhd_iovar(dhd, 0, "wlfc_mode", NULL, 0, iovbuf, sizeof(iovbuf),
 			FALSE);
 	if (ret >= 0) {
 		fw_caps = *((uint32 *)iovbuf);
@@ -3164,8 +3165,8 @@ dhd_wlfc_init(dhd_pub_t *dhd)
 			WLFC_SET_REUSESEQ(mode, WLFC_GET_REUSESEQ(fw_caps));
 			WLFC_SET_REORDERSUPP(mode, WLFC_GET_REORDERSUPP(fw_caps));
 		}
-		ret = dhd_iovar(dhd, "wlfc_mode", (char *)&mode, sizeof(mode),
-				NULL, 0, TRUE);
+		ret = dhd_iovar(dhd, 0, "wlfc_mode", (char *)&mode,
+				sizeof(mode), NULL, 0, TRUE);
 	}
 
 	dhd_os_wlfc_block(dhd);
