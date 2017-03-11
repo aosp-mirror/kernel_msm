@@ -51,9 +51,6 @@ int
 dhd_bta_docmd(dhd_pub_t *pub, void *cmd_buf, uint cmd_len)
 {
 	amp_hci_cmd_t *cmd = (amp_hci_cmd_t *)cmd_buf;
-	uint8 buf[BTA_HCI_CMD_MAX_LEN + 16];
-	uint len = sizeof(buf);
-	wl_ioctl_t ioc;
 
 	if (cmd_len < HCI_CMD_PREAMBLE_SIZE)
 		return BCME_BADLEN;
@@ -61,18 +58,9 @@ dhd_bta_docmd(dhd_pub_t *pub, void *cmd_buf, uint cmd_len)
 	if ((uint)cmd->plen + HCI_CMD_PREAMBLE_SIZE > cmd_len)
 		return BCME_BADLEN;
 
-	len = bcm_mkiovar("HCI_cmd",
-		(char *)cmd, (uint)cmd->plen + HCI_CMD_PREAMBLE_SIZE, (char *)buf, len);
-
-
-	memset(&ioc, 0, sizeof(ioc));
-
-	ioc.cmd = WLC_SET_VAR;
-	ioc.buf = buf;
-	ioc.len = len;
-	ioc.set = TRUE;
-
-	return dhd_wl_ioctl(pub, &ioc, ioc.buf, ioc.len);
+	return dhd_iovar(pub, 0, "HCI_cmd", (char *)cmd_buf,
+		(uint)cmd->plen + HCI_CMD_PREAMBLE_SIZE,
+		NULL, 0, TRUE);
 }
 #else /* !SEND_HCI_CMD_VIA_IOCTL */
 
