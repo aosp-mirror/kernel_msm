@@ -43,6 +43,8 @@
 #include "fusb302_reg.h"
 #include "../tcpm.h"
 
+#define PM_WAKE_DELAY_MS 2000
+
 bool IsPRSwap;
 bool PolicyIsDFP;
 bool PolicyIsSource;
@@ -1667,6 +1669,8 @@ static irqreturn_t fusb302_irq_intn(int irq, void *dev_id)
 	bool intr_comp_chng;
 	struct pd_message pd_msg;
 
+	pm_wakeup_event(chip->dev, PM_WAKE_DELAY_MS);
+
 	mutex_lock(&chip->lock);
 	/* grab a snapshot of intr flags */
 	intr_togdone = chip->intr_togdone;
@@ -1819,7 +1823,7 @@ static int init_gpio(struct fusb302_chip *chip)
 		fusb302_log("cannot get named GPIO Int_N, ret=%d\n", ret);
 		return ret;
 	}
-	ret = gpio_request(chip->gpio_int_n, "fairchild,int_n");
+	ret = devm_gpio_request(chip->dev, chip->gpio_int_n, "fairchild,int_n");
 	if (ret < 0) {
 		fusb302_log("cannot request GPIO Int_N, ret=%d\n", ret);
 		return ret;
@@ -1827,13 +1831,11 @@ static int init_gpio(struct fusb302_chip *chip)
 	ret = gpio_direction_input(chip->gpio_int_n);
 	if (ret < 0) {
 		fusb302_log("cannot set GPIO Int_N to input, ret=%d\n", ret);
-		gpio_free(chip->gpio_int_n);
 		return ret;
 	}
 	ret = gpio_to_irq(chip->gpio_int_n);
 	if (ret < 0) {
 		fusb302_log("cannot request IRQ for GPIO Int_N, ret=%d\n", ret);
-		gpio_free(chip->gpio_int_n);
 		return ret;
 	}
 	chip->gpio_int_n_irq = ret;
@@ -1895,10 +1897,17 @@ static int fusb302_probe(struct i2c_client *client,
 					"fsc_interrupt_int_n", chip);
 	if (ret < 0) {
 		fusb302_log("cannot request IRQ for GPIO Int_N, ret=%d\n", ret);
-		gpio_free(chip->gpio_int_n);
-		return ret;
+		goto disable_regulators;
 	}
 	__fusb302_chip = chip;
+
+	ret = device_init_wakeup(chip->dev, true);
+
+	if (unlikely(ret < 0)) {
+		fusb302_log("wakeup init failed, ret=%d\n", ret);
+		goto disable_regulators;
+	}
+
 	enable_irq_wake(chip->gpio_int_n_irq);
 	return ret;
 
