@@ -363,6 +363,7 @@ struct fg_chip {
 	struct fg_circ_buf	vbatt_circ_buf;
 #ifdef CONFIG_FG_DC_BATT_ID
 	u32    dc_batt_id;
+	u32    id_range_pct;
 #endif
 };
 
