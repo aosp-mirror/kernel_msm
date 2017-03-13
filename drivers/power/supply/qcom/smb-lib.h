@@ -51,6 +51,8 @@ enum print_reason {
 #define HVDCP_INDIRECT_VOTER		"HVDCP_INDIRECT_VOTER"
 #define MICRO_USB_VOTER			"MICRO_USB_VOTER"
 #define DEBUG_BOARD_VOTER		"DEBUG_BOARD_VOTER"
+/* voter identity held to suspend VBUS when the external booster is enabled. */
+#define EXTERNAL_BOOSTER_VOTER	"EXTERNAL_BOOSTER_VOTER"
 
 #define VCONN_MAX_ATTEMPTS	3
 #define OTG_MAX_ATTEMPTS	3

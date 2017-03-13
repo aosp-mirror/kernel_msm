@@ -1275,7 +1275,8 @@ int smblib_vbus_regulator_enable(struct regulator_dev *rdev)
 			goto unlock;
 		}
 
-		rc = smblib_set_usb_suspend(chg, true);
+		rc = vote(chg->usb_suspend_votable, EXTERNAL_BOOSTER_VOTER,
+			  true, 0);
 		if (rc < 0)
 			goto unlock;
 
@@ -1333,7 +1334,8 @@ int smblib_vbus_regulator_disable(struct regulator_dev *rdev)
 			goto unlock;
 	}
 
-	rc = smblib_set_usb_suspend(chg, false);
+	rc = vote(chg->usb_suspend_votable, EXTERNAL_BOOSTER_VOTER,
+		  false, 0);
 
 unlock:
 	mutex_unlock(&chg->vbus_output_lock);
@@ -2789,7 +2791,8 @@ int smblib_set_prop_use_external_vbus_output(struct smb_charger *chg,
 			goto unlock;
 		}
 
-		rc = smblib_set_usb_suspend(chg, true);
+		rc = vote(chg->usb_suspend_votable, EXTERNAL_BOOSTER_VOTER,
+			  true, 0);
 		if (rc < 0)
 			goto unlock;
 
@@ -2827,7 +2830,8 @@ int smblib_set_prop_use_external_vbus_output(struct smb_charger *chg,
 			goto unlock;
 		}
 
-		rc = smblib_set_usb_suspend(chg, false);
+		rc = vote(chg->usb_suspend_votable, EXTERNAL_BOOSTER_VOTER,
+			  false, 0);
 		if (rc < 0)
 			goto unlock;
 	}
