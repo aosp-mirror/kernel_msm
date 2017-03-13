@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -88,6 +88,24 @@ typedef void (*ol_txrx_vdev_delete_cb)(void *context);
  */
 struct ol_osif_vdev_t;
 typedef struct ol_osif_vdev_t *ol_osif_vdev_handle;
+
+/**
+ * External Device physical address types
+ *
+ * Currently, both MAC and IPA uController use the same size addresses
+ * and descriptors are exchanged between these two depending on the mode.
+ *
+ * Rationale: qdf_dma_addr_t is the type used internally on the host for DMA
+ *            operations. However, external device physical address sizes
+ *            may be different from host-specific physical address sizes.
+ *            This calls for the following definitions for target devices
+ *            (MAC, IPA uc).
+ */
+#if HTT_PADDR64
+typedef uint64_t target_paddr_t;
+#else
+typedef uint32_t target_paddr_t;
+#endif /*HTT_PADDR64 */
 
 /**
  * wlan_op_mode - Virtual device operation mode
@@ -286,8 +304,8 @@ ol_txrx_pdev_attach(
 	HTC_HANDLE htc_pdev,
 	qdf_device_t osdev);
 
-void
-ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev, int force);
+void ol_txrx_pdev_pre_detach(ol_txrx_pdev_handle pdev, int force);
+void ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev);
 
 ol_txrx_peer_handle
 ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr);

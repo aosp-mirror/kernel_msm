@@ -1851,7 +1851,7 @@ QDF_STATUS send_mgmt_cmd_tlv(wmi_unified_t wmi_handle,
 	qdf_nbuf_map_single(qdf_ctx, param->tx_frame, QDF_DMA_TO_DEVICE);
 	dma_addr = qdf_nbuf_get_frag_paddr(param->tx_frame, 0);
 	cmd->paddr_lo = (uint32_t)(dma_addr & 0xffffffff);
-#if defined(HELIUMPLUS_PADDR64)
+#if defined(HTT_PADDR64)
 	cmd->paddr_hi = (uint32_t)((dma_addr >> 32) & 0x1F);
 #endif
 	cmd->frame_len = param->frm_len;
@@ -4567,15 +4567,26 @@ QDF_STATUS send_roam_scan_offload_mode_cmd_tlv(wmi_unified_t wmi_handle,
 				buf_ptr += WMI_TLV_HDR_SIZE;
 				roam_offload_11i =
 				     (wmi_roam_11i_offload_tlv_param *) buf_ptr;
+
 				if (roam_req->roam_key_mgmt_offload_enabled &&
-				    roam_req->okc_enabled) {
+				    roam_req->fw_okc) {
 					WMI_SET_ROAM_OFFLOAD_OKC_ENABLED
 						(roam_offload_11i->flags);
-					WMI_LOGE("LFR3:OKC Enabled");
+					WMI_LOGE("LFR3:OKC enabled");
 				} else {
 					WMI_SET_ROAM_OFFLOAD_OKC_DISABLED
 						(roam_offload_11i->flags);
-					WMI_LOGE("LFR3:OKC Disabled");
+					WMI_LOGE("LFR3:OKC disabled");
+				}
+				if (roam_req->roam_key_mgmt_offload_enabled &&
+				    roam_req->fw_pmksa_cache) {
+					WMI_SET_ROAM_OFFLOAD_PMK_CACHE_ENABLED
+						(roam_offload_11i->flags);
+					WMI_LOGE("LFR3:PMKSA caching enabled");
+				} else {
+					WMI_SET_ROAM_OFFLOAD_PMK_CACHE_DISABLED
+						(roam_offload_11i->flags);
+					WMI_LOGE("LFR3:PMKSA caching disabled");
 				}
 
 				qdf_mem_copy(roam_offload_11i->pmk,
@@ -11167,6 +11178,9 @@ QDF_STATUS send_per_roam_config_cmd_tlv(wmi_unified_t wmi_handle,
 		(req_buf->per_config.tx_rate_thresh_percnt << 16) |
 		(req_buf->per_config.rx_rate_thresh_percnt & 0x0000ffff);
 	wmi_per_config->per_rest_time = req_buf->per_config.per_rest_time;
+	wmi_per_config->pkt_err_rate_mon_time =
+			(req_buf->per_config.tx_per_mon_time << 16) |
+			(req_buf->per_config.rx_per_mon_time & 0x0000ffff);
 
 	/* Send per roam config parameters */
 	status = wmi_unified_cmd_send(wmi_handle, buf,

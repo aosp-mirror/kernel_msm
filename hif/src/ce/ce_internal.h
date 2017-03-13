@@ -111,6 +111,7 @@ struct CE_state {
 	fastpath_msg_handler fastpath_handler;
 	void *context;
 #endif /* WLAN_FEATURE_FASTPATH */
+	qdf_work_t oom_allocation_work;
 
 	ce_send_cb send_cb;
 	void *send_context;
@@ -359,6 +360,10 @@ enum hif_ce_event_type {
 	NAPI_POLL_ENTER,
 	NAPI_COMPLETE,
 	NAPI_POLL_EXIT,
+
+	HIF_RX_NBUF_ALLOC_FAILURE = 0x20,
+	HIF_RX_NBUF_MAP_FAILURE,
+	HIF_RX_NBUF_ENQUEUE_FAILURE,
 };
 
 void ce_init_ce_desc_event_log(int ce_id, int size);
