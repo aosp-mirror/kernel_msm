@@ -345,6 +345,9 @@ lim_send_probe_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 		populate_dot11f_ext_cap(mac_ctx, is_vht_enabled, &pr.ExtCap,
 			pesession);
 
+	if (mac_ctx->roam.configParam.qcn_ie_support)
+		populate_dot11f_qcn_ie(&pr.QCN_IE);
+
 	if (addn_ielen) {
 		qdf_mem_zero((uint8_t *)&extracted_ext_cap,
 			sizeof(tDot11fIEExtCap));
@@ -1872,6 +1875,10 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	    pe_session->vhtCapabilityPresentInBeacon) {
 		lim_log(mac_ctx, LOG1, FL("Populate VHT IEs in Assoc Request"));
 		populate_dot11f_vht_caps(mac_ctx, pe_session, &frm->VHTCaps);
+		/* Enable 160/80+80 MHz channel width support for STA mode */
+		if (pe_session->pePersona == QDF_STA_MODE)
+			frm->VHTCaps.supportedChannelWidthSet =
+				VHT_CAP_160_AND_80P80_SUPP;
 		QDF_TRACE_HEX_DUMP(QDF_MODULE_ID_PE, QDF_TRACE_LEVEL_DEBUG,
 				   &frm->VHTCaps, sizeof(frm->VHTCaps));
 		vht_enabled = true;
@@ -1902,6 +1909,9 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	if (pe_session->is_ext_caps_present)
 		populate_dot11f_ext_cap(mac_ctx, vht_enabled,
 				&frm->ExtCap, pe_session);
+
+	if (mac_ctx->roam.configParam.qcn_ie_support)
+		populate_dot11f_qcn_ie(&frm->QCN_IE);
 
 	if (pe_session->pLimJoinReq->is11Rconnection) {
 		tSirBssDescription *bssdescr;

@@ -78,7 +78,9 @@ ifeq ($(KERNEL_BUILD), 0)
 	#Flag to enable Legacy Fast Roaming2(LFR2)
 	CONFIG_QCACLD_WLAN_LFR2 := y
 	#Flag to enable Legacy Fast Roaming3(LFR3)
+	ifneq ($(CONFIG_ARCH_SDXHEDGEHOG), y)
 	CONFIG_QCACLD_WLAN_LFR3 := y
+	endif
 
 	#Enable Power debugfs feature only if debug_fs is enabled
 	ifeq ($(CONFIG_DEBUG_FS), y)
@@ -403,7 +405,8 @@ HDD_OBJS := 	$(HDD_SRC_DIR)/wlan_hdd_assoc.o \
 		$(HDD_SRC_DIR)/wlan_hdd_trace.o \
 		$(HDD_SRC_DIR)/wlan_hdd_wext.o \
 		$(HDD_SRC_DIR)/wlan_hdd_wmm.o \
-		$(HDD_SRC_DIR)/wlan_hdd_wowl.o
+		$(HDD_SRC_DIR)/wlan_hdd_wowl.o \
+		$(HDD_SRC_DIR)/wlan_hdd_packet_filter.o
 
 ifeq ($(CONFIG_WLAN_DEBUGFS), y)
 HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_debugfs.o
@@ -986,7 +989,7 @@ WMA_OBJS :=	$(WMA_SRC_DIR)/wma_main.o \
 		$(WMA_NDP_OBJS)
 
 ifeq ($(CONFIG_WLAN_FEATURE_DSRC), y)
-WMA_OBJS+=	$(WMA_DIR)/wma_ocb.o
+WMA_OBJS+=	$(WMA_SRC_DIR)/wma_ocb.o
 endif
 ifeq ($(CONFIG_MPC_UT_FRAMEWORK),y)
 WMA_OBJS +=	$(WMA_SRC_DIR)/wma_utils_ut.o
@@ -1239,6 +1242,10 @@ endif
 
 ifeq ($(CONFIG_QCACLD_WLAN_LFR3),y)
 CDEFINES += -DWLAN_FEATURE_ROAM_OFFLOAD
+endif
+
+ifeq ($(CONFIG_CNSS_GENL), y)
+CDEFINES += -DCNSS_GENL
 endif
 
 ifeq ($(CONFIG_QCACLD_WLAN_LFR2),y)
@@ -1504,6 +1511,10 @@ CDEFINES += -DWLAN_FEATURE_RX_FULL_REORDER_OL
 endif
 endif
 
+ifeq ($(CONFIG_ARCH_MDM9607), y)
+CDEFINES += -DCONFIG_TUFELLO_DUAL_FW_SUPPORT
+endif
+
 #Enable Signed firmware support for split binary format
 ifeq ($(CONFIG_QCA_SIGNED_SPLIT_BINARY_SUPPORT), 1)
 CDEFINES += -DQCA_SIGNED_SPLIT_BINARY_SUPPORT
@@ -1559,16 +1570,26 @@ CONFIG_HELIUMPLUS := y
 CONFIG_64BIT_PADDR := y
 CONFIG_FEATURE_TSO := y
 CONFIG_FEATURE_TSO_DEBUG := y
+ifeq ($(CONFIG_ARCH_MSM8998), y)
+CONFIG_ENABLE_DEBUG_ADDRESS_MARKING := y
+endif
 ifeq ($(CONFIG_HELIUMPLUS),y)
-CDEFINES += -DHELIUMPLUS_PADDR64
 CDEFINES += -DHELIUMPLUS
 CDEFINES += -DAR900B
 ifeq ($(CONFIG_64BIT_PADDR),y)
 CDEFINES += -DHTT_PADDR64
 endif
+
+ifeq ($(CONFIG_SLUB_DEBUG_ON),y)
+CDEFINES += -DOL_RX_INDICATION_RECORD
+endif
+
 endif
 endif
 
+ifeq ($(CONFIG_ENABLE_DEBUG_ADDRESS_MARKING),y)
+CDEFINES += -DENABLE_DEBUG_ADDRESS_MARKING
+endif
 ifeq ($(CONFIG_FEATURE_TSO),y)
 CDEFINES += -DFEATURE_TSO
 endif
@@ -1632,13 +1653,14 @@ EXTRA_CFLAGS += -Wheader-guard
 endif
 
 # If the module name is not "wlan", then the define MULTI_IF_NAME to be the
-# same a the module name. The host driver will then append MULTI_IF_NAME to
+# same a the QCA CHIP name. The host driver will then append MULTI_IF_NAME to
 # any string that must be unique for all instances of the driver on the system.
 # This allows multiple instances of the driver with different module names.
 # If the module name is wlan, leave MULTI_IF_NAME undefined and the code will
 # treat the driver as the primary driver.
 ifneq ($(MODNAME), wlan)
-CDEFINES += -DMULTI_IF_NAME=\"$(MODNAME)\"
+CHIP_NAME ?= $(MODNAME)
+CDEFINES += -DMULTI_IF_NAME=\"$(CHIP_NAME)\"
 endif
 
 # WLAN_HDD_ADAPTER_MAGIC must be unique for all instances of the driver on the

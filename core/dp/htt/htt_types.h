@@ -48,10 +48,11 @@
 #endif
 #endif /* QCA_TX_HTT2_SUPPORT */
 
+#define HTT_HTC_PKT_MISCLIST_SIZE           32
 
 struct htt_htc_pkt {
 	void *pdev_ctxt;
-	dma_addr_t nbuf_paddr;
+	target_paddr_t nbuf_paddr;
 	HTC_PACKET htc_pkt;
 	uint16_t msdu_id;
 };
@@ -167,7 +168,7 @@ struct htt_ipa_uc_rx_resource_t {
  * @rx_packet_leng: packet length
  */
 struct ipa_uc_rx_ring_elem_t {
-	qdf_dma_addr_t rx_packet_paddr;
+	target_paddr_t rx_packet_paddr;
 	uint32_t vdev_id;
 	uint32_t rx_packet_leng;
 };
@@ -177,7 +178,7 @@ struct htt_tx_credit_t {
 	qdf_atomic_t target_delta;
 };
 
-#if defined(HELIUMPLUS_PADDR64)
+#if defined(HELIUMPLUS)
 /**
  * msdu_ext_frag_desc:
  * semantically, this is an array of 6 of 2-tuples of
@@ -216,7 +217,7 @@ struct msdu_ext_desc_t {
 	u_int32_t frag_len5;
 */
 };
-#endif  /* defined(HELIUMPLUS_PADDR64) */
+#endif  /* defined(HELIUMPLUS) */
 
 /**
  * struct mon_channel
@@ -259,12 +260,12 @@ struct htt_pdev_t {
 		uint8_t major;
 		uint8_t minor;
 	} tgt_ver;
-#if defined(HELIUMPLUS_PADDR64)
+#if defined(HELIUMPLUS)
 	struct {
 		u_int8_t major;
 		u_int8_t minor;
 	} wifi_ip_ver;
-#endif /* defined(HELIUMPLUS_PADDR64) */
+#endif /* defined(HELIUMPLUS) */
 	struct {
 		struct {
 			/*
@@ -381,14 +382,14 @@ struct htt_pdev_t {
 		uint32_t *freelist;
 		qdf_dma_mem_context(memctx);
 	} tx_descs;
-#if defined(HELIUMPLUS_PADDR64)
+#if defined(HELIUMPLUS)
 	struct {
 		int size; /* of each Fragment/MSDU-Ext descriptor */
 		int pool_elems;
 		struct qdf_mem_multi_page_t desc_pages;
 		qdf_dma_mem_context(memctx);
 	} frag_descs;
-#endif /* defined(HELIUMPLUS_PADDR64) */
+#endif /* defined(HELIUMPLUS) */
 
 	int download_len;
 	void (*tx_send_complete_part2)(void *pdev, A_STATUS status,
@@ -438,12 +439,12 @@ struct htt_pdev_t {
 #define HTT_EPID_GET(_htt_pdev_hdl)  \
 	(((struct htt_pdev_t *)(_htt_pdev_hdl))->htc_tx_endpoint)
 
-#if defined(HELIUMPLUS_PADDR64)
+#if defined(HELIUMPLUS)
 #define HTT_WIFI_IP(pdev, x, y) (((pdev)->wifi_ip_ver.major == (x)) &&	\
 				 ((pdev)->wifi_ip_ver.minor == (y)))
 
 #define HTT_SET_WIFI_IP(pdev, x, y) (((pdev)->wifi_ip_ver.major = (x)) && \
 				     ((pdev)->wifi_ip_ver.minor = (y)))
-#endif /* defined(HELIUMPLUS_PADDR64) */
+#endif /* defined(HELIUMPLUS) */
 
 #endif /* _HTT_TYPES__H_ */

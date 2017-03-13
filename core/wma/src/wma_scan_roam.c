@@ -369,8 +369,14 @@ QDF_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 			}
 			if (wma_is_sta_active(wma_handle) ||
 			    wma_is_p2p_cli_active(wma_handle)) {
-				/* Typical background scan. Disable burst scan for now. */
-				cmd->burst_duration = 0;
+				if (scan_req->burst_scan_duration)
+					cmd->burst_duration =
+						scan_req->burst_scan_duration;
+				else
+					/* Typical background scan.
+					 * Disable burst scan for now.
+					 */
+					cmd->burst_duration = 0;
 				break;
 			}
 		} while (0);
@@ -815,7 +821,8 @@ QDF_STATUS wma_roam_scan_offload_mode(tp_wma_handle wma_handle,
 				roam_req->RoamKeyMgmtOffloadEnabled;
 		wma_roam_scan_fill_self_caps(wma_handle,
 			&params->roam_offload_params, roam_req);
-		params->okc_enabled = roam_req->okc_enabled;
+		params->fw_okc = roam_req->pmkid_modes.fw_okc;
+		params->fw_pmksa_cache = roam_req->pmkid_modes.fw_pmksa_cache;
 #endif
 		params->is_ese_assoc = roam_req->IsESEAssoc;
 		params->mdid.mdie_present = roam_req->MDID.mdiePresent;
@@ -2972,6 +2979,7 @@ void wma_set_channel(tp_wma_handle wma, tpSwitchChannelParams params)
 				 status);
 
 		ol_htt_mon_note_chan(pdev, req.chan);
+		goto send_resp;
 	} else {
 
 		msg = wma_fill_vdev_req(wma, req.vdev_id, WMA_CHNL_SWITCH_REQ,
@@ -3569,8 +3577,9 @@ int wma_nlo_scan_cmp_evt_handler(void *handle, uint8_t *event,
 
 	qdf_wake_lock_release(&wma->pno_wake_lock,
 		WIFI_POWER_EVENT_WAKELOCK_PNO);
-	scan_event =
-		(tSirScanOffloadEvent *)
+	node->wow_stats.pno_complete++;
+
+	scan_event = (tSirScanOffloadEvent *)
 		qdf_mem_malloc(sizeof(tSirScanOffloadEvent));
 	if (scan_event) {
 		/* Posting scan completion msg would take scan cache result
@@ -5778,10 +5787,6 @@ int wma_roam_event_callback(WMA_HANDLE handle, uint8_t *event_buf,
 
 	DPTRACE(qdf_dp_trace_record_event(QDF_DP_TRACE_EVENT_RECORD,
 		wmi_event->vdev_id, QDF_PROTO_TYPE_EVENT, QDF_ROAM_EVENTID));
-
-	wma_peer_debug_log(wmi_event->vdev_id, DEBUG_ROAM_EVENT,
-			   DEBUG_INVALID_PEER_ID, NULL, NULL,
-			   wmi_event->reason, wmi_event->rssi);
 
 	switch (wmi_event->reason) {
 	case WMI_ROAM_REASON_BMISS:

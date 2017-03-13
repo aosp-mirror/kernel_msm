@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -625,7 +625,7 @@ void htt_tx_desc_frags_table_set(htt_pdev_handle pdev,
 		((uint32_t *) htt_tx_desc) +
 		HTT_TX_DESC_FRAGS_DESC_PADDR_OFFSET_DWORD;
 	if (reset) {
-#if defined(HELIUMPLUS_PADDR64)
+#if defined(HELIUMPLUS)
 		*fragmentation_descr_field_ptr = frag_desc_paddr;
 #else
 		*fragmentation_descr_field_ptr =
@@ -1282,7 +1282,7 @@ int htt_tx_ipa_uc_attach(struct htt_pdev_t *pdev,
 	}
 
 	/* Allocate TX COMP Ring */
-	tx_comp_ring_size = uc_tx_buf_cnt * sizeof(qdf_dma_addr_t);
+	tx_comp_ring_size = uc_tx_buf_cnt * sizeof(target_paddr_t);
 	pdev->ipa_uc_tx_rsc.tx_comp_base.vaddr =
 		qdf_mem_alloc_consistent(
 			pdev->osdev, pdev->osdev->dev,

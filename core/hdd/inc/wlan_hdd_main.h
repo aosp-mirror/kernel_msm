@@ -409,10 +409,10 @@ typedef struct hdd_tx_rx_stats_s {
 	/* start_xmit stats */
 	__u32    txXmitCalled;
 	__u32    txXmitDropped;
+	__u32    txXmitOrphaned;
 	__u32    txXmitClassifiedAC[NUM_TX_QUEUES];
 	__u32    txXmitDroppedAC[NUM_TX_QUEUES];
-	/* complete_cbk_stats */
-	__u32    txCompleted;
+
 	/* rx stats */
 	__u32 rxPackets[NUM_CPUS];
 	__u32 rxDropped[NUM_CPUS];
@@ -1711,6 +1711,7 @@ struct hdd_context_s {
 
 	uint32_t no_of_probe_req_ouis;
 	struct vendor_oui *probe_req_voui;
+	int user_configured_pkt_filter_rules;
 };
 
 /*---------------------------------------------------------------------------
@@ -2172,7 +2173,8 @@ void hdd_connect_result(struct net_device *dev, const u8 *bssid,
 			tCsrRoamInfo *roam_info, const u8 *req_ie,
 			size_t req_ie_len, const u8 *resp_ie,
 			size_t resp_ie_len, u16 status, gfp_t gfp,
-			bool connect_timeout);
+			bool connect_timeout,
+			tSirResultCodes timeout_reason);
 
 #ifdef WLAN_FEATURE_FASTPATH
 void hdd_enable_fastpath(struct hdd_config *hdd_cfg,

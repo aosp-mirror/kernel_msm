@@ -1488,25 +1488,29 @@ typedef enum {
 
 /*
  * <ini>
- * OkcEnabled - Enable OKC(Oppurtunistic Key Caching)
+ * pmkidModes - Enable PMKID modes
  * @Min: 0
- * @Max: 1
- * @Default: 1
+ * @Max: 3
+ * @Default: 3
  *
- * This INI is used to enable OKC feature
+ * This INI is used to enable PMKID feature options
+ * Bit 0 = Enable Opportunistic key caching
+ * Bit 1 = Enable PMKSA caching
  *
  * Related: None
  *
- * Supported Feature: Roaming
+ * Supported Feature: Firmware based roaming
  *
- * Usage: External
+ * Usage: Internal
  *
  * </ini>
  */
-#define CFG_OKC_FEATURE_ENABLED_NAME                       "OkcEnabled"
-#define CFG_OKC_FEATURE_ENABLED_MIN                        (0)
-#define CFG_OKC_FEATURE_ENABLED_MAX                        (1)
-#define CFG_OKC_FEATURE_ENABLED_DEFAULT                    (1)
+#define CFG_PMKID_MODES_NAME                       "pmkidModes"
+#define CFG_PMKID_MODES_MIN                        (0x0)
+#define CFG_PMKID_MODES_MAX                        (0x3)
+#define CFG_PMKID_MODES_DEFAULT                    (0x3)
+#define CFG_PMKID_MODES_OKC                        (0x1)
+#define CFG_PMKID_MODES_PMKSA_CACHING              (0x2)
 
 /*
  * <ini>
@@ -2137,7 +2141,7 @@ typedef enum {
 
 /*
  * <ini>
- * gIbssPsWarmupTime - IBSS Power Save Enable/Disable 1 RX
+ * gIbssPs1RxChainInAtim - IBSS Power Save Enable/Disable 1 RX
  * chain usage during the ATIM window
  *
  * @Min: 0
@@ -3021,6 +3025,43 @@ typedef enum {
 #define CFG_INFRA_STA_KEEP_ALIVE_PERIOD_MAX           (65535)
 #define CFG_INFRA_STA_KEEP_ALIVE_PERIOD_DEFAULT       (90)
 
+/**
+ * enum station_keepalive_method - available keepalive methods for stations
+ * @HDD_STA_KEEPALIVE_NULL_DATA: null data packet
+ * @HDD_STA_KEEPALIVE_GRAT_ARP: gratuitous ARP packet
+ * @HDD_STA_KEEPALIVE_COUNT: number of method options available
+ */
+enum station_keepalive_method {
+	HDD_STA_KEEPALIVE_NULL_DATA,
+	HDD_STA_KEEPALIVE_GRAT_ARP,
+	/* keep at the end */
+	HDD_STA_KEEPALIVE_COUNT
+};
+
+/*
+ * <ini>
+ * gStaKeepAliveMethod - Which keepalive method to use
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini determines which keepalive method to use for station interfaces
+ *       1) Use null data packets
+ *       2) Use gratuitous ARP packets
+ *
+ * Related: gStaKeepAlivePeriod, gApKeepAlivePeriod, gGoKeepAlivePeriod
+ *
+ * Supported Feature: STA, Keepalive
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_STA_KEEPALIVE_METHOD_NAME              "gStaKeepAliveMethod"
+#define CFG_STA_KEEPALIVE_METHOD_MIN               (HDD_STA_KEEPALIVE_NULL_DATA)
+#define CFG_STA_KEEPALIVE_METHOD_MAX               (HDD_STA_KEEPALIVE_COUNT - 1)
+#define CFG_STA_KEEPALIVE_METHOD_DEFAULT           (HDD_STA_KEEPALIVE_GRAT_ARP)
+
 /* WMM configuration */
 /*
  * <ini>
@@ -3847,24 +3888,73 @@ typedef enum {
 #define CFG_TL_DELAYED_TRGR_FRM_INT_MAX                     (4294967295UL)
 #define CFG_TL_DELAYED_TRGR_FRM_INT_DEFAULT                 3000
 
+/*
+ * <ini>
+ * gRrmEnable - Enable/Disable RRM
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to controls the capabilities (11 k) included
+ * in the capabilities field.
+ *
+ * Related: None.
+ *
+ * Supported Feature: 11k
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_RRM_ENABLE_NAME                              "gRrmEnable"
 #define CFG_RRM_ENABLE_MIN                               (0)
 #define CFG_RRM_ENABLE_MAX                               (1)
 #define CFG_RRM_ENABLE_DEFAULT                           (0)
 
+/*
+ * <ini>
+ * gRrmRandnIntvl - Randomization interval
+ * @Min: 10
+ * @Max: 100
+ * @Default: 100
+ *
+ * This ini is used to set randomization interval which is used to start a timer
+ * of a random value within randomization interval. Next RRM Scan request
+ * will be issued after the expiry of this random interval.
+ *
+ * Related: None.
+ *
+ * Supported Feature: 11k
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_RRM_MEAS_RANDOMIZATION_INTVL_NAME            "gRrmRandnIntvl"
 #define CFG_RRM_MEAS_RANDOMIZATION_INTVL_MIN             (10)
 #define CFG_RRM_MEAS_RANDOMIZATION_INTVL_MAX             (100)
 #define CFG_RRM_MEAS_RANDOMIZATION_INTVL_DEFAULT         (100)
 
-/**
- * This INI is used to configure RM enabled capabilities IE.
+/*
+ * <ini>
+ * rm_capability - Configure RM enabled capabilities IE
+ * @Default: 73,10,91,00,04
+ *
+ * This ini is used to configure RM enabled capabilities IE.
  * Using this INI, we can set/unset any of the bits in 5 bytes
  * (last 4bytes are reserved). Bit details are updated as per
  * Draft version of 11mc spec. (Draft P802.11REVmc_D4.2)
  *
  * Bitwise details are defined as bit mask in rrm_global.h
  * Comma is used as a separator for each byte.
+ *
+ * Related: None.
+ *
+ * Supported Feature: 11k
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
  */
 #define CFG_RM_CAPABILITY_NAME            "rm_capability"
 #define CFG_RM_CAPABILITY_DEFAULT         "73,10,91,00,04"
@@ -4890,13 +4980,13 @@ typedef enum {
 #define CFG_ENABLE_FW_DEBUG_LOG_LEVEL          "gFwDebugLogLevel"
 #define CFG_ENABLE_FW_DEBUG_LOG_LEVEL_MIN      (0)
 #define CFG_ENABLE_FW_DEBUG_LOG_LEVEL_MAX      (255)
-#define CFG_ENABLE_FW_DEBUG_LOG_LEVEL_DEFAULT  (4)
+#define CFG_ENABLE_FW_DEBUG_LOG_LEVEL_DEFAULT  (3)
 
 /* For valid values of log levels check enum DBGLOG_LOG_LVL and
  * for valid values of module ids check enum WLAN_MODULE_ID.
  */
 #define CFG_ENABLE_FW_MODULE_LOG_LEVEL    "gFwDebugModuleLoglevel"
-#define CFG_ENABLE_FW_MODULE_LOG_DEFAULT  ""
+#define CFG_ENABLE_FW_MODULE_LOG_DEFAULT  "2,1,3,1,5,1,9,1,13,1,14,1,18,1,19,1,26,1,28,1,29,1,31,1,36,1,38,1,46,1,47,1,50,1,52,1,53,1,56,1,60,1,61,1"
 
 /*
  * <ini>
@@ -5614,6 +5704,68 @@ typedef enum {
 #define CFG_TDLS_TX_STATS_PERIOD_MIN                (1000)
 #define CFG_TDLS_TX_STATS_PERIOD_MAX                (4294967295UL)
 #define CFG_TDLS_TX_STATS_PERIOD_DEFAULT            (2000)
+
+/*
+ * <ini>
+ * gMaxHTMCSForTxData - max HT mcs for TX
+ * @Min: 0
+ * @Max: 383
+ * @Default: 0
+ *
+ * This ini is used to configure the max HT mcs
+ * for tx data.
+ *
+ * Usage: External
+ *
+ * bits 0-15:  max HT mcs
+ * bits 16-31: zero to disable, otherwise enable.
+ *
+ * </ini>
+ */
+#define CFG_MAX_HT_MCS_FOR_TX_DATA          "gMaxHTMCSForTxData"
+#define CFG_MAX_HT_MCS_FOR_TX_DATA_MIN      (WNI_CFG_MAX_HT_MCS_TX_DATA_STAMIN)
+#define CFG_MAX_HT_MCS_FOR_TX_DATA_MAX      (WNI_CFG_MAX_HT_MCS_TX_DATA_STAMAX)
+#define CFG_MAX_HT_MCS_FOR_TX_DATA_DEFAULT  (WNI_CFG_MAX_HT_MCS_TX_DATA_STADEF)
+
+/*
+ * <ini>
+ * gDisableABGRateForTxData - disable abg rate for tx data
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to disable abg rate for tx data.
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_DISABLE_ABG_RATE_FOR_TX_DATA        "gDisableABGRateForTxData"
+#define CFG_DISABLE_ABG_RATE_FOR_TX_DATA_MIN \
+	(WNI_CFG_DISABLE_ABG_RATE_FOR_TX_DATA_STAMIN)
+#define CFG_DISABLE_ABG_RATE_FOR_TX_DATA_MAX \
+	(WNI_CFG_DISABLE_ABG_RATE_FOR_TX_DATA_STAMAX)
+#define CFG_DISABLE_ABG_RATE_FOR_TX_DATA_DEFAULT \
+	(WNI_CFG_DISABLE_ABG_RATE_FOR_TX_DATA_STADEF)
+
+/*
+ * <ini>
+ * gRateForTxMgmt - rate for tx mgmt frame
+ * @Min: 0x0
+ * @Max: 0xFF
+ * @Default: 0xFF
+ *
+ * This ini is used to configure the rate for tx
+ * mgmt frame. Default 0xFF means disable.
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_RATE_FOR_TX_MGMT                  "gRateForTxMgmt"
+#define CFG_RATE_FOR_TX_MGMT_MIN              (WNI_CFG_RATE_FOR_TX_MGMT_STAMIN)
+#define CFG_RATE_FOR_TX_MGMT_MAX              (WNI_CFG_RATE_FOR_TX_MGMT_STAMAX)
+#define CFG_RATE_FOR_TX_MGMT_DEFAULT          (WNI_CFG_RATE_FOR_TX_MGMT_STADEF)
 
 /*
  * <ini>
@@ -7280,11 +7432,11 @@ typedef enum {
 #define CFG_WLAN_LOGGING_SUPPORT_DISABLE            (0)
 #define CFG_WLAN_LOGGING_SUPPORT_DEFAULT            (1)
 
-/* Enable FATAL and ERROR logs for kmsg console */
-#define CFG_WLAN_LOGGING_FE_CONSOLE_SUPPORT_NAME    "wlanLoggingFEToConsole"
-#define CFG_WLAN_LOGGING_FE_CONSOLE_SUPPORT_ENABLE  (1)
-#define CFG_WLAN_LOGGING_FE_CONSOLE_SUPPORT_DISABLE (0)
-#define CFG_WLAN_LOGGING_FE_CONSOLE_SUPPORT_DEFAULT (1)
+/* Enable forwarding the driver logs to kmsg console */
+#define CFG_WLAN_LOGGING_CONSOLE_SUPPORT_NAME    "wlanLoggingToConsole"
+#define CFG_WLAN_LOGGING_CONSOLE_SUPPORT_ENABLE  (1)
+#define CFG_WLAN_LOGGING_CONSOLE_SUPPORT_DISABLE (0)
+#define CFG_WLAN_LOGGING_CONSOLE_SUPPORT_DEFAULT (1)
 
 /* Number of buffers to be used for WLAN logging */
 #define CFG_WLAN_LOGGING_NUM_BUF_NAME               "wlanLoggingNumBuf"
@@ -7724,6 +7876,53 @@ typedef enum {
 #define CFG_TX_CHAIN_MASK_1SS_MIN      (0)
 #define CFG_TX_CHAIN_MASK_1SS_MAX      (3)
 #define CFG_TX_CHAIN_MASK_1SS_DEFAULT  (1)
+
+/*
+ * <ini>
+ * gEnableSmartChainmask - Enable Smart Chainmask
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable the Smart Chainmask feature via
+ * the WMI_PDEV_PARAM_SMART_CHAINMASK_SCHEME firmware parameter.
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_SMART_CHAINMASK_NAME    "gEnableSmartChainmask"
+#define CFG_ENABLE_SMART_CHAINMASK_MIN     (0)
+#define CFG_ENABLE_SMART_CHAINMASK_MAX     (1)
+#define CFG_ENABLE_SMART_CHAINMASK_DEFAULT (0)
+
+/*
+ * <ini>
+ * gEnableAlternativeChainmask - Enable Co-Ex Alternative Chainmask
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable the Co-ex Alternative Chainmask
+ * feature via the WMI_PDEV_PARAM_ALTERNATIVE_CHAINMASK_SCHEME
+ * firmware parameter.
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_COEX_ALT_CHAINMASK_NAME    "gEnableAlternativeChainmask"
+#define CFG_ENABLE_COEX_ALT_CHAINMASK_MIN     (0)
+#define CFG_ENABLE_COEX_ALT_CHAINMASK_MAX     (1)
+#define CFG_ENABLE_COEX_ALT_CHAINMASK_DEFAULT (0)
 
 /*
  * set the self gen power value from
@@ -8389,8 +8588,8 @@ enum dot11p_mode {
  */
 #define CFG_ADAPT_DWELL_PASMON_INTVAL_NAME     "adapt_dwell_passive_mon_intval"
 #define CFG_ADAPT_DWELL_PASMON_INTVAL_MIN      (0)
-#define CFG_ADAPT_DWELL_PASMON_INTVAL_MAX      (10)
-#define CFG_ADAPT_DWELL_PASMON_INTVAL_DEFAULT  (25)
+#define CFG_ADAPT_DWELL_PASMON_INTVAL_MAX      (25)
+#define CFG_ADAPT_DWELL_PASMON_INTVAL_DEFAULT  (10)
 
 /*
  * This parameter will set % of wifi activity used in passive scan 0-100.
@@ -8677,6 +8876,162 @@ enum dot11p_mode {
 #define CFG_RX_WAKELOCK_TIMEOUT_MIN      (0)
 #define CFG_RX_WAKELOCK_TIMEOUT_MAX      (100)
 
+/*
+ * <ini>
+ * enable_5g_band_pref - Enable preference for 5G from INI.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ * This ini is used to enable 5G preference parameters.
+ *
+ * Related: 5g_rssi_boost_threshold, 5g_rssi_boost_factor, 5g_max_rssi_boost
+ * 5g_rssi_penalize_threshold, 5g_rssi_penalize_factor, 5g_max_rssi_penalize
+ *
+ * Supported Feature: 5G band preference
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+
+#define CFG_ENABLE_5G_BAND_PREF_NAME             "enable_5g_band_pref"
+#define CFG_ENABLE_5G_BAND_PREF_MIN              (0)
+#define CFG_ENABLE_5G_BAND_PREF_MAX              (1)
+#define CFG_ENABLE_5G_BAND_PREF_DEFAULT          (0)
+
+/*
+ * <ini>
+ * 5g_rssi_boost_threshold - A_band_boost_threshold above which 5 GHz is favored.
+ * @Min: -55
+ * @Max: -70
+ * @Default: -60
+ * This ini is used to set threshold for 5GHz band preference.
+ *
+ * Related: 5g_rssi_boost_factor, 5g_max_rssi_boost
+ * 5g_rssi_penalize_threshold, 5g_rssi_penalize_factor, 5g_max_rssi_penalize
+ *
+ * Supported Feature: 5G band preference
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_5G_RSSI_BOOST_THRESHOLD_NAME         "5g_rssi_boost_threshold"
+#define CFG_5G_RSSI_BOOST_THRESHOLD_MIN          (-55)
+#define CFG_5G_RSSI_BOOST_THRESHOLD_MAX          (-70)
+#define CFG_5G_RSSI_BOOST_THRESHOLD_DEFAULT      (-60)
+
+/*
+ * <ini>
+ * 5g_rssi_boost_factor - Factor by which 5GHz RSSI is boosted.
+ * @Min: 0
+ * @Max: 2
+ * @Default: 1
+ * This ini is used to set the 5Ghz boost factor.
+ *
+ * Related: 5g_rssi_boost_threshold, 5g_max_rssi_boost
+ * 5g_rssi_penalize_threshold, 5g_rssi_penalize_factor, 5g_max_rssi_penalize
+ *
+ * Supported Feature: 5G band preference
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_5G_RSSI_BOOST_FACTOR_NAME            "5g_rssi_boost_factor"
+#define CFG_5G_RSSI_BOOST_FACTOR_MIN             (0)
+#define CFG_5G_RSSI_BOOST_FACTOR_MAX             (2)
+#define CFG_5G_RSSI_BOOST_FACTOR_DEFAULT         (1)
+
+/*
+ * <ini>
+ * 5g_max_rssi_boost - Maximum boost that can be applied to 5GHz RSSI.
+ * @Min: 0
+ * @Max: 20
+ * @Default: 10
+ * This ini is used to set maximum boost which can be given to a 5Ghz network.
+ *
+ * Related: 5g_rssi_boost_threshold, 5g_rssi_boost_factor
+ * 5g_rssi_penalize_threshold, 5g_rssi_penalize_factor, 5g_max_rssi_penalize
+ *
+ * Supported Feature: 5G band preference
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_5G_MAX_RSSI_BOOST_NAME               "5g_max_rssi_boost"
+#define CFG_5G_MAX_RSSI_BOOST_MIN                (0)
+#define CFG_5G_MAX_RSSI_BOOST_MAX                (20)
+#define CFG_5G_MAX_RSSI_BOOST_DEFAULT            (10)
+
+/*
+ * <ini>
+ * 5g_rssi_penalize_threshold - A_band_penalize_threshold above which
+ * 5 GHz is not favored.
+ * @Min: -65
+ * @Max: -80
+ * @Default: -70
+ * This ini is used to set threshold for 5GHz band preference.
+ *
+ * Related: 5g_rssi_penalize_factor, 5g_max_rssi_penalize
+ * 5g_rssi_boost_threshold, 5g_rssi_boost_factor, 5g_max_rssi_boost
+ *
+ * Supported Feature: 5G band preference
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_5G_RSSI_PENALIZE_THRESHOLD_NAME      "5g_rssi_penalize_threshold"
+#define CFG_5G_RSSI_PENALIZE_THRESHOLD_MIN       (-65)
+#define CFG_5G_RSSI_PENALIZE_THRESHOLD_MAX       (-80)
+#define CFG_5G_RSSI_PENALIZE_THRESHOLD_DEFAULT   (-70)
+
+/*
+ * <ini>
+ * 5g_rssi_penalize_factor - Factor by which 5GHz RSSI is penalizeed.
+ * @Min: 0
+ * @Max: 2
+ * @Default: 1
+ * This ini is used to set the 5Ghz penalize factor.
+ *
+ * Related: 5g_rssi_penalize_threshold, 5g_max_rssi_penalize
+ * 5g_rssi_boost_threshold, 5g_rssi_boost_factor, 5g_max_rssi_boost
+ *
+ * Supported Feature: 5G band preference
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_5G_RSSI_PENALIZE_FACTOR_NAME         "5g_rssi_penalize_factor"
+#define CFG_5G_RSSI_PENALIZE_FACTOR_MIN          (0)
+#define CFG_5G_RSSI_PENALIZE_FACTOR_MAX          (2)
+#define CFG_5G_RSSI_PENALIZE_FACTOR_DEFAULT      (1)
+
+/*
+ * <ini>
+ * 5g_max_rssi_penalize - Maximum penalty that can be applied to 5GHz RSSI.
+ * @Min: 0
+ * @Max: 20
+ * @Default: 10
+ * This ini is used to set maximum penalty which can be given to a 5Ghz network.
+ *
+ * Related: 5g_rssi_penalize_threshold, 5g_rssi_penalize_factor
+ * 5g_rssi_boost_threshold, 5g_rssi_boost_factor, 5g_max_rssi_boost
+ *
+ * Supported Feature: 5G band preference
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_5G_MAX_RSSI_PENALIZE_NAME            "5g_max_rssi_penalize"
+#define CFG_5G_MAX_RSSI_PENALIZE_MIN             (0)
+#define CFG_5G_MAX_RSSI_PENALIZE_MAX             (20)
+#define CFG_5G_MAX_RSSI_PENALIZE_DEFAULT         (10)
+
 #ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
 /*
  * Enable/Disable  UDP response offload feature
@@ -8884,6 +9239,37 @@ enum dot11p_mode {
 #define CFG_PER_ROAM_REST_TIME_MIN      (10)
 #define CFG_PER_ROAM_REST_TIME_MAX      (3600)
 #define CFG_PER_ROAM_REST_TIME_DEFAULT  (300)
+
+/*
+ * <ini>
+ * gper_roam_mon_time - Minimum time required in seconds to
+ * be considered as valid scenario for PER based roam
+ * @Min: 5
+ * @Max: 25
+ * @Default: 25
+ *
+ * This ini is used to define minimum time in seconds for which DUT has
+ * collected the PER stats before it can consider the stats hysteresis to be
+ * valid for PER based scan.
+ * DUT collects following information during this period:
+ *     1. % of packets below gper_roam_low_rate_th
+ *     2. # packets above gper_roam_high_rate_th
+ * if DUT gets (1) greater than gper_roam_th_percent and (2) is zero during
+ * this period, it triggers PER based roam scan.
+ *
+ * Related: gper_roam_enabled, gper_roam_high_rate_th, gper_roam_low_rate_th,
+ *          gper_roam_th_percent, gper_roam_rest_time
+ *
+ * Supported Feature: LFR-3.0
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_PER_ROAM_MONITOR_TIME                "gper_roam_mon_time"
+#define CFG_PER_ROAM_MONITOR_TIME_MIN            (5)
+#define CFG_PER_ROAM_MONITOR_TIME_MAX            (25)
+#define CFG_PER_ROAM_MONTIOR_TIME_DEFAULT        (25)
 
 /*
  * <ini>
@@ -9429,6 +9815,7 @@ enum dot11p_mode {
 #define CFG_EXTWOW_TCP_RX_TIMEOUT_DEFAULT          (200)
 #endif
 
+
 /*
  * <ini>
  * gEnableFastPwrTransition - Configuration for fast power transition
@@ -9739,13 +10126,118 @@ enum dot11p_mode {
  *
  * Supported Feature: Probe request ie whitelisting
  *
- * Usage: Internal/External
+ * Usage: External
  *
  * </ini>
  */
 #define CFG_PROBE_REQ_OUI_NAME    "gProbeReqOUIs"
 #define CFG_PROBE_REQ_OUI_DEFAULT ""
 
+/*
+ * <ini>
+ * g_enable_bcast_probe_rsp - Enable Broadcast probe response.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable broadcast probe response
+ *
+ * Related: None
+ *
+ * Supported Feature: FILS
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_BCAST_PROBE_RESP_NAME    "g_enable_bcast_probe_rsp"
+#define CFG_ENABLE_BCAST_PROBE_RESP_MIN     (0)
+#define CFG_ENABLE_BCAST_PROBE_RESP_MAX     (1)
+#define CFG_ENABLE_BCAST_PROBE_RESP_DEFAULT (1)
+
+
+/*
+ * <ini>
+ * g_qcn_ie_support - QCN IE Support
+ * @Min: 0 (disabled)
+ * @Max: 1 (enabled)
+ * @Default: 1 (enabled)
+ *
+ * This config item is used to support QCN IE in probe/assoc/reassoc request
+ * for STA mode. QCN IE support is not added for SAP mode.
+ *
+ * Related: N/A
+ *
+ * Supported Feature: N/A
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_QCN_IE_SUPPORT_NAME     "g_qcn_ie_support"
+#define CFG_QCN_IE_SUPPORT_MIN      0
+#define CFG_QCN_IE_SUPPORT_MAX      1
+#define CFG_QCN_IE_SUPPORT_DEFAULT  1
+
+/*
+ * <ini>
+ * g_fils_max_chan_guard_time - Set maximum channel guard time(ms)
+ * @Min: 0
+ * @Max: 10
+ * @Default: 0
+ *
+ * This ini is used to set maximum channel guard time in milli seconds
+ *
+ * Related: None
+ *
+ * Supported Feature: FILS
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_FILS_MAX_CHAN_GUARD_TIME_NAME    "g_fils_max_chan_guard_time"
+#define CFG_FILS_MAX_CHAN_GUARD_TIME_MIN     (0)
+#define CFG_FILS_MAX_CHAN_GUARD_TIME_MAX     (10)
+#define CFG_FILS_MAX_CHAN_GUARD_TIME_DEFAULT (0)
+
+/*
+ * <ini>
+ * g_enable_packet_filter_bitmap - Enable Packet filters before going into
+ * suspend mode
+ * @Min: 0
+ * @Max: 63
+ * @Default: 0
+ * Below is the Detailed bit map of the Filters
+ * bit-0 : IPv6 multicast
+ * bit-1 : IPv4 multicast
+ * bit-2 : IPv4 broadcast
+ * bit-3 : XID - Exchange station Identification packet, solicits the
+ * identification of the receiving station
+ * bit-4 : STP - Spanning Tree Protocol, builds logical loop free topology
+ * bit-5 : DTP/LLC/CDP
+ * DTP - Dynamic Trunking Protocol is used by Ciscoswitches to negotiate
+ * whether an interconnection between two switches should be put into access or
+ * trunk mode
+ * LLC - Logical link control, used for multiplexing, flow & error control
+ * CDP - Cisco Discovery Protocol packet contains information about the cisco
+ * devices in the network
+ *
+ * This ini support to enable above mentioned packet filters
+ * when target goes to suspend mode, clear those when resume
+ *
+ * Related: None
+ *
+ * Supported Feature: PACKET FILTERING
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_PACKET_FILTERS_NAME     "g_enable_packet_filter_bitmap"
+#define CFG_ENABLE_PACKET_FILTERS_DEFAULT  (0)
+#define CFG_ENABLE_PACKET_FILTERS_MIN      (0)
+#define CFG_ENABLE_PACKET_FILTERS_MAX      (63)
 
 /*---------------------------------------------------------------------------
    Type declarations
@@ -9796,6 +10288,7 @@ struct hdd_config {
 	uint8_t enableLTECoex;
 	uint32_t apKeepAlivePeriod;
 	uint32_t goKeepAlivePeriod;
+	enum station_keepalive_method sta_keepalive_method;
 	uint32_t apLinkMonitorPeriod;
 	uint32_t goLinkMonitorPeriod;
 	uint32_t nBeaconInterval;
@@ -9892,7 +10385,7 @@ struct hdd_config {
 	bool isFastTransitionEnabled;
 	uint8_t RoamRssiDiff;
 	bool isWESModeEnabled;
-	bool isOkcIniFeatureEnabled;
+	uint32_t pmkid_modes;
 	bool isRoamOffloadScanEnabled;
 	bool bImplicitQosEnabled;
 
@@ -10177,6 +10670,9 @@ struct hdd_config {
 	uint8_t gDisableDfsJapanW53;
 	bool gEnableOverLapCh;
 	bool fRegChangeDefCountry;
+	uint16_t max_ht_mcs_txdata;
+	bool disable_abg_rate_txdata;
+	uint8_t rate_for_tx_mgmt;
 #ifdef QCA_LL_LEGACY_TX_FLOW_CONTROL
 	uint32_t TxFlowLowWaterMark;
 	uint32_t TxFlowHighWaterMarkOffset;
@@ -10264,7 +10760,7 @@ struct hdd_config {
 #ifdef WLAN_LOGGING_SOCK_SVC_ENABLE
 	/* WLAN Logging */
 	uint32_t wlanLoggingEnable;
-	uint32_t wlanLoggingFEToConsole;
+	uint32_t wlanLoggingToConsole;
 	uint32_t wlanLoggingNumBuf;
 #endif /* WLAN_LOGGING_SOCK_SVC_ENABLE */
 
@@ -10345,6 +10841,8 @@ struct hdd_config {
 	uint32_t dual_mac_feature_disable;
 	bool     tx_chain_mask_cck;
 	uint8_t  tx_chain_mask_1ss;
+	bool smart_chainmask_enabled;
+	bool alternative_chainmask_enabled;
 	uint16_t  self_gen_frm_pwr;
 #ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
 	bool udp_resp_offload_support;
@@ -10448,6 +10946,7 @@ struct hdd_config {
 	uint32_t per_roam_low_rate_threshold;
 	uint32_t per_roam_th_percent;
 	uint32_t per_roam_rest_time;
+	uint32_t per_roam_mon_time;
 	uint32_t max_sched_scan_plan_interval;
 	uint32_t max_sched_scan_plan_iterations;
 	uint8_t enable_phy_reg_retention;
@@ -10468,6 +10967,21 @@ struct hdd_config {
 
 	/* Probe Request multiple vendor OUIs */
 	uint8_t probe_req_ouis[MAX_PRB_REQ_VENDOR_OUI_INI_LEN];
+
+	bool enable_bcast_probe_rsp;
+	bool qcn_ie_support;
+	uint8_t fils_max_chan_guard_time;
+	/* 5G preference parameters for boosting RSSI */
+	bool                        enable_5g_band_pref;
+	int8_t                      rssi_boost_threshold_5g;
+	uint8_t                     rssi_boost_factor_5g;
+	uint8_t                     max_rssi_boost_5g;
+	/* 5G preference parameters for dropping RSSI*/
+	int8_t                      rssi_penalize_threshold_5g;
+	uint8_t                     rssi_penalize_factor_5g;
+	uint8_t                     max_rssi_penalize_5g;
+
+	uint8_t packet_filters_bitmap;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))
@@ -10633,8 +11147,9 @@ eCsrPhyMode hdd_cfg_xlate_to_csr_phy_mode(eHddDot11Mode dot11Mode);
 QDF_STATUS hdd_execute_global_config_command(hdd_context_t *pHddCtx,
 					     char *command);
 
-bool hdd_is_okc_mode_enabled(hdd_context_t *pHddCtx);
 QDF_STATUS hdd_set_idle_ps_config(hdd_context_t *pHddCtx, bool val);
+void hdd_get_pmkid_modes(hdd_context_t *pHddCtx,
+			 struct pmkid_mode_bits *pmkid_modes);
 
 void hdd_update_tgt_cfg(void *context, void *param);
 bool hdd_dfs_indicate_radar(void *context, void *param);

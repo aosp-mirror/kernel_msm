@@ -663,6 +663,9 @@ typedef struct tagCsrConfig {
 	uint32_t tx_aggregation_size;
 	uint32_t rx_aggregation_size;
 	struct wmi_per_roam_config per_roam_config;
+	bool enable_bcast_probe_rsp;
+	bool qcn_ie_support;
+	uint8_t fils_max_chan_guard_time;
 } tCsrConfig;
 
 typedef struct tagCsrChannelPowerInfo {
@@ -983,7 +986,7 @@ typedef struct tagCsrRoamSession {
 	size_t pmk_len;
 	uint8_t RoamKeyMgmtOffloadEnabled;
 	roam_offload_synch_ind *roam_synch_data;
-	bool okc_enabled;
+	struct pmkid_mode_bits pmkid_modes;
 #endif
 	tftSMEContext ftSmeContext;
 	/* This count represents the number of bssid's we try to join. */
@@ -1369,6 +1372,7 @@ QDF_STATUS csr_scan_save_roam_offload_ap_to_scan_cache(tpAniSirGlobal pMac,
 		struct sSirSmeRoamOffloadSynchInd *roam_synch_ind_ptr,
 		tpSirBssDescription  bss_desc_ptr);
 void csr_process_ho_fail_ind(tpAniSirGlobal pMac, void *pMsgBuf);
+#endif
 #ifdef FEATURE_WLAN_DIAG_SUPPORT_CSR
 void csr_roaming_report_diag_event(tpAniSirGlobal mac_ctx,
 		roam_offload_synch_ind *roam_synch_ind_ptr,
@@ -1379,7 +1383,7 @@ static inline void csr_roaming_report_diag_event(tpAniSirGlobal mac_ctx,
 		eCsrDiagWlanStatusEventReason reason)
 {}
 #endif
-#endif
+
 bool csr_store_joinreq_param(tpAniSirGlobal mac_ctx,
 		tCsrRoamProfile *profile,
 		tScanResultHandle scan_cache,
