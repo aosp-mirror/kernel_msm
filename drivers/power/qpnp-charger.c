@@ -1632,7 +1632,7 @@ qpnp_chg_regulator_batfet_set(struct qpnp_chg_chip *chip, bool enable)
 {
 	int rc = 0;
 
-	if (chip->charging_disabled || !chip->bat_if_base)
+	if (!chip->bat_if_base)
 		return rc;
 
 	if (chip->type == SMBB)
