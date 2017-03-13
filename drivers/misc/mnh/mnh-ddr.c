@@ -164,6 +164,7 @@ void mnh_ddr_init_clocks(struct device *dev)
 	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x0);
 }
 
+#if USE_LP
 static void mnh_ddr_enable_lp(void)
 {
 	MNH_DDR_CTL_OUTf(124, LP_AUTO_SR_MC_GATE_IDLE, 0xFF);
@@ -171,6 +172,7 @@ static void mnh_ddr_enable_lp(void)
 	MNH_DDR_CTL_OUTf(122, LP_AUTO_ENTRY_EN, 0x4);
 	MNH_DDR_CTL_OUTf(122, LP_AUTO_EXIT_EN, 0xF);
 }
+#endif
 
 void mnh_ddr_disable_lp(void)
 {

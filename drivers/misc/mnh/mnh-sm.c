@@ -939,32 +939,6 @@ static int mnh_sm_resume(void)
 	return 0;
 }
 
-/*
- * Enable clock gating for CPU and LPDDR, etc, when system is in
- * STANDBYWFIL2
- */
-static int mnh_sm_enable_clock_gating(void)
-{
-	/* enable cpu and lpddr clock gating */
-	dev_dbg(mnh_sm_dev->dev, "Enable clock gating!\n");
-	MNH_SCU_OUTf(CCU_CLK_CTL, HALT_CPUCG_EN, 1);
-	MNH_SCU_OUTf(MEM_PWR_MGMNT, HALT_CPUMEM_PD_EN, 1);
-	/* enable wakeup */
-	MNH_SCU_OUT(GLOBAL_WAKE_EN_SET0, 0x0FFE2000);
-	MNH_SCU_OUT(GLOBAL_WAKE_EN_SET1, 0x00020000);
-	/* enable bootrom deepsleep */
-	MNH_SCU_OUTf(MEM_PWR_MGMNT, HALT_BTSRAM_PD_EN, 1);
-	MNH_SCU_OUTf(MEM_PWR_MGMNT, HALT_BTROM_PD_EN, 1);
-	/* force CPU cache deepsleep */
-	MNH_SCU_OUTf(MEM_PWR_MGMNT, CPU_L1MEM_DS, 1);
-	MNH_SCU_OUTf(MEM_PWR_MGMNT, CPU_L2MEM_DS, 1);
-	MNH_SCU_OUTf(MEM_PWR_MGMNT, BTSRAM_SD, 1);
-	MNH_SCU_OUTf(MEM_PWR_MGMNT, LP4C_MEM_DS, 1);
-	MNH_SCU_OUTf(MEM_PWR_MGMNT, BTROM_SLP, 1);
-
-	return 0;
-}
-
 /**
  * API to obtain the state of monette hill.
  * @return the power states of mnh
