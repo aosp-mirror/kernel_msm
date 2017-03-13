@@ -314,7 +314,7 @@ static int mnh_thermal_get_temp(void *data, int *temp_out)
 	int temp_raw = 0;
 
 	mnh_state = mnh_sm_get_state();
-	if ((mnh_state == MNH_STATE_OFF) || (mnh_state == MNH_STATE_SUSPEND))
+	if ((mnh_state < MNH_STATE_INIT) || (mnh_state > MNH_STATE_BYPASS))
 		return -EIO;
 
 	/* Apply 5 bit trim and 2 bit precision to PVT sensor register */

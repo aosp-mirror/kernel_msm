@@ -33,18 +33,34 @@
 #define MNH_SM_IOC_MAGIC 'T'
 #define MNH_SM_MAX 8
 
-#define MNH_SM_IOC_GET_STATE \
-	_IOR(MNH_SM_IOC_MAGIC, 1, int *)
-#define MNH_SM_IOC_SET_STATE \
-	_IOW(MNH_SM_IOC_MAGIC, 2, int)
+#define MNH_SM_IOC_POWERON \
+	_IO(MNH_SM_IOC_MAGIC, 1)
+#define MNH_SM_IOC_POWEROFF \
+	_IO(MNH_SM_IOC_MAGIC, 2)
 #define MNH_SM_IOC_CONFIG_MIPI \
 	_IOW(MNH_SM_IOC_MAGIC, 3, struct mnh_mipi_config *)
+#define MNH_SM_IOC_CONFIG_DDR \
+	_IO(MNH_SM_IOC_MAGIC, 4)
+#define MNH_SM_IOC_GET_STATE \
+	_IOR(MNH_SM_IOC_MAGIC, 5, int *)
+#define MNH_SM_IOC_SET_STATE \
+	_IOW(MNH_SM_IOC_MAGIC, 6, int)
+#define MNH_SM_IOC_DOWNLOAD \
+	_IO(MNH_SM_IOC_MAGIC, 7)
+#define MNH_SM_IOC_SUSPEND \
+	_IO(MNH_SM_IOC_MAGIC, 8)
+#define MNH_SM_IOC_RESUME \
+	_IO(MNH_SM_IOC_MAGIC, 9)
 
 enum mnh_sm_state {
 	MNH_STATE_OFF, /* powered off */
-	MNH_STATE_PENDING, /* powered on, pcie ready, CPU in PBL */
+	MNH_STATE_INIT, /* powered on, unconfigured */
+	MNH_STATE_CONFIG_MIPI, /* powered on, mipi configured */
+	MNH_STATE_CONFIG_DDR, /* powered on, ddr configured */
 	MNH_STATE_ACTIVE, /* powered on and booted */
-	MNH_STATE_SUSPEND, /* suspended, ddr in self-refresh */
+	MNH_STATE_SUSPEND_SELF_REFRESH, /* suspended, ddr in self-refresh */
+	MNH_STATE_SUSPEND_HIBERNATE, /* suspended, kernel image in AP DRAM */
+	MNH_STATE_BYPASS, /* CPU and DDR powered on, DDR in self-refresh */
 	MNH_STATE_MAX,
 };
 

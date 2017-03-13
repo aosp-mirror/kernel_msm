@@ -14,8 +14,6 @@
 *
 */
 
-/* #define DEBUG */
-
 #include "mnh-hwio.h"
 #include "mnh-hwio-bases.h"
 #include "mnh-hwio-ddr-ctl.h"
@@ -219,7 +217,7 @@ int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n)
 		timeout++;
 	}
 	if (timeout == 10)
-		dev_err(dev, "%s: failed to get LP complete\n", __func__);
+		dev_dbg(dev, "%s: failed to get LP complete\n", __func__);
 	else
 		dev_dbg(dev, "%s got it after %d iterations. 121 is 0x%x",
 			 __func__, timeout, MNH_DDR_CTL_INf(121, LP_STATE));
@@ -306,7 +304,8 @@ int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n)
 }
 EXPORT_SYMBOL(mnh_ddr_resume);
 
-int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n)
+
+int mnh_ddr_po_init(struct device *dev)
 {
 	int index;
 	int timeout = 0;
@@ -315,9 +314,6 @@ int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n)
 	mnh_ddr_init_internal_state(state);
 
 	dev_dbg(dev, "%s start.", __func__);
-
-	/* deassert iso_n */
-	gpiod_set_value_cansleep(iso_n, 1);
 
 	mnh_ddr_init_clocks(dev);
 

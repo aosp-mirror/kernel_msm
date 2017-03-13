@@ -14,7 +14,7 @@
  *
  */
 
-/* #define DEBUG */
+#define DEBUG
 
 #include <linux/clk.h>
 #include <linux/device.h>
@@ -24,6 +24,7 @@
 #include <linux/msm_pcie.h>
 #include <linux/regulator/consumer.h>
 
+#include "mnh-ddr.h"
 #include "mnh-pcie.h"
 #include "mnh-pwr.h"
 
@@ -58,6 +59,7 @@ struct mnh_pwr_data {
 	/* pins */
 	struct gpio_desc *boot_mode_pin;
 	struct gpio_desc *soc_pwr_good_pin;
+	struct gpio_desc *ddr_pad_iso_n_pin;
 
 	/* pcie device */
 	struct pci_dev *pcidev;
@@ -342,6 +344,9 @@ static int mnh_pwr_down(void)
 {
 	int ret;
 
+	/* assert ddr_pad_iso_n */
+	gpiod_set_value_cansleep(mnh_pwr->ddr_pad_iso_n_pin, 1);
+
 	/* suspend pcie link */
 	ret = mnh_pwr_pcie_suspend();
 	if (ret) {
@@ -371,7 +376,7 @@ static int mnh_pwr_down(void)
 		goto fail_pwr_down_sdsr;
 	}
 
-	if (mnh_pwr->state == MNH_PWR_S0) {
+	if ((mnh_pwr->state == MNH_PWR_S0) || (mnh_pwr->state == MNH_PWR_S1)) {
 		ret = regulator_disable(mnh_pwr->asr_supply);
 		if (ret) {
 			dev_err(mnh_pwr->dev,
@@ -431,9 +436,22 @@ fail_pwr_down_sdldo:
 	return ret;
 }
 
+static int mnh_pwr_bypass(void)
+{
+	/* put ddr into self-refresh mode, assert pad isolation */
+	mnh_ddr_suspend(mnh_pwr->dev, mnh_pwr->ddr_pad_iso_n_pin);
+
+	mnh_pwr->state = MNH_PWR_S1;
+
+	return 0;
+}
+
 static int mnh_pwr_suspend(void)
 {
 	int ret;
+
+	/* put ddr into self-refresh mode, assert pad isolation */
+	mnh_ddr_suspend(mnh_pwr->dev, mnh_pwr->ddr_pad_iso_n_pin);
 
 	/* suspend pcie link */
 	ret = mnh_pwr_pcie_suspend();
@@ -476,6 +494,7 @@ static int mnh_pwr_suspend(void)
 	return 0;
 
 fail_pwr_suspend_pcie:
+	gpiod_set_value_cansleep(mnh_pwr->ddr_pad_iso_n_pin, 1);
 	gpiod_set_value_cansleep(mnh_pwr->soc_pwr_good_pin, 0);
 	if (mnh_pwr->sleep_clk_enabled) {
 		clk_disable_unprepare(mnh_pwr->sleep_clk);
@@ -507,6 +526,10 @@ fail_pwr_suspend_regulators:
 static int mnh_pwr_up(enum mnh_pwr_state next_state)
 {
 	int ret;
+
+	/* if we are in bypass mode, just skip to resume DDR */
+	if (mnh_pwr->state == MNH_PWR_S1)
+		goto pwr_up_resume_ddr;
 
 	/* enable supplies */
 	/* sdldo -> ioldo -> asr -> sdsr */
@@ -580,6 +603,11 @@ static int mnh_pwr_up(enum mnh_pwr_state next_state)
 			__func__, ret);
 		goto fail_pwr_up_pcie;
 	}
+
+pwr_up_resume_ddr:
+	/* if ddr is in self-refresh and we are going to S0 state, resume ddr */
+	if ((mnh_pwr->state != MNH_PWR_S4) && (next_state == MNH_PWR_S0))
+		mnh_ddr_resume(mnh_pwr->dev, mnh_pwr->ddr_pad_iso_n_pin);
 
 	mnh_pwr->state = next_state;
 
@@ -708,6 +736,14 @@ static int mnh_pwr_get_resources(void)
 		return PTR_ERR(mnh_pwr->soc_pwr_good_pin);
 	}
 
+	mnh_pwr->ddr_pad_iso_n_pin = devm_gpiod_get(dev, "ddr-pad-iso-n",
+						   GPIOD_OUT_HIGH);
+	if (IS_ERR(mnh_pwr->ddr_pad_iso_n_pin)) {
+		dev_err(dev, "%s: could not get ddr_pad_iso_n gpio (%ld)\n",
+			__func__, PTR_ERR(mnh_pwr->ddr_pad_iso_n_pin));
+		return PTR_ERR(mnh_pwr->ddr_pad_iso_n_pin);
+	}
+
 	/* request clocks */
 	mnh_pwr->ref_clk = devm_clk_get(dev, "ref_clk");
 	if (IS_ERR(mnh_pwr->ref_clk)) {
@@ -738,6 +774,9 @@ int mnh_pwr_set_state(enum mnh_pwr_state system_state)
 		case MNH_PWR_S0:
 			ret = mnh_pwr_up(system_state);
 			break;
+		case MNH_PWR_S1:
+			ret = mnh_pwr_bypass();
+			break;
 		case MNH_PWR_S3:
 			ret = mnh_pwr_suspend();
 			break;
@@ -752,9 +791,9 @@ int mnh_pwr_set_state(enum mnh_pwr_state system_state)
 		}
 
 		if (ret)
-			dev_err(mnh_pwr->dev,
-				"%s: state transition failed (%d)\n",
-				__func__, ret);
+			dev_info(mnh_pwr->dev,
+				 "%s: state transition failed (%d)\n",
+				 __func__, ret);
 		else
 			dev_info(mnh_pwr->dev, "%s done with state: %d\n",
 				 __func__, mnh_pwr_get_state());
