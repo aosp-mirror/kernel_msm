@@ -248,22 +248,19 @@
 &spmi_bus {
 	qcom,pm8998@0 {
 		qcom,power-on@800 {
-			qcom,s3-debounce = <8>;
-			qcom,s3-src = "kpdpwr-and-resin";
+			qcom,s3-debounce = <16>;
+			qcom,s3-src = "kpdpwr";
 			qcom,pon_1 {  /* KPD_PWR_N */
-				status = "ok";
-				qcom,support-reset = <0>;
+				qcom,support-reset = <1>;
+				qcom,s1-timer = <6720>;
+				qcom,s2-timer = <1000>;
+				qcom,s2-type = <8>;
 			};
 			qcom,pon_2 {  /* RESIN_N */
-				status = "ok";
 				qcom,support-reset = <0>;
 			};
 			qcom,pon_3 {  /* KPD_PWR_N AND RESIN_N */
-				status = "ok";
 				qcom,support-reset = <0>;
-				qcom,s1-timer = <6720>;
-				qcom,s2-timer = <2000>;
-				qcom,s2-type = <7>;
 			};
 		};
 	};
