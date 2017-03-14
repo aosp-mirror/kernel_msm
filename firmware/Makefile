@@ -27,15 +27,6 @@ else
 acenic-objs := acenic/tg1.bin acenic/tg2.bin
 endif
 
-ifneq ($(filter y, $(CONFIG_LGE_TOUCH_CORE_BASE) $(CONFIG_TOUCHSCREEN_FTM4)),)
-# protect these rules here so that clean rules do not remove the original files
-fw-shipped-$(CONFIG_LGE_TOUCH_CORE_BASE) += \
-	touch/taimen/sw49408/taimen_limit.txt \
-	touch/taimen/sw49408/L1L57P2_1_02.img \
-	touch/taimen/sw49408/taimen_limit_mfts.txt
-fw-shipped-$(CONFIG_TOUCHSCREEN_FTM4) += touch/taimen/ftm4/v30_v0.01.ftb
-endif
-
 fw-shipped-$(CONFIG_ACENIC) += $(acenic-objs)
 fw-shipped-$(CONFIG_ADAPTEC_STARFIRE) += adaptec/starfire_rx.bin \
 					 adaptec/starfire_tx.bin
