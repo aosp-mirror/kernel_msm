@@ -85,23 +85,17 @@ HW_OUTx(HWIO_PCIE_SS_BASE_ADDR, PCIE_SS, reg, inst, val)
 /* #define HW_MNH_SBL_DOWNLOAD		0x40000000 */
 #define HW_MNH_SBL_DOWNLOAD		0x00101000 /* push directly to sram */
 #define HW_MNH_SBL_DOWNLOAD_EXE		0x00101000
-#define HW_MNH_UBOOT_DOWNLOAD		0x40020000
 #define HW_MNH_KERNEL_DOWNLOAD		0x40080000
 #define HW_MNH_DT_DOWNLOAD		0x40880000
 #define HW_MNH_RAMDISK_DOWNLOAD		0x40890000
 #define IMG_DOWNLOAD_MAX_SIZE		(2000 * 1024)
 #define FIP_IMG_SBL_SIZE_OFFSET		0x28
 #define FIP_IMG_SBL_ADDR_OFFSET		0x20
-#define FIP_IMG_UBOOT_SIZE_OFFSET	0x50
-#define FIP_IMG_UBOOT_ADDR_OFFSET	0x48
 
 /* PCIe */
 #define MNH_PCIE_CHAN_0 0
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
-
-#define MNH_UBOOT_ENABLE 1
-#define MNH_UBOOT_DISABLE 0
 
 enum fw_image_state {
 	FW_IMAGE_NONE = 0,
@@ -158,7 +152,6 @@ static struct mnh_mipi_config mnh_mipi_configs[] = {
 
 static struct mnh_sm_device *mnh_sm_dev;
 static int mnh_state;
-static int mnh_sm_uboot = MNH_UBOOT_DISABLE;
 static int mnh_mipi_debug;
 static int mnh_freeze_state;
 static uint32_t mnh_resume_addr = HW_MNH_KERNEL_DOWNLOAD;
@@ -422,7 +415,7 @@ int mnh_download_firmware(void)
 	err = request_firmware(&kernel_img, "easel/Image", mnh_sm_dev->dev);
 	if (err) {
 		dev_err(mnh_sm_dev->dev, "request kernel failed - %d\n", err);
-		goto free_uboot;
+		goto free_fip;
 	}
 
 	err = request_firmware(&dt_img, "easel/mnh.dtb", mnh_sm_dev->dev);
@@ -454,20 +447,6 @@ int mnh_download_firmware(void)
 	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_6, 4,
 		size);
 
-	/* DMA transfer for UBOOT */
-	memcpy(&size,
-		(uint8_t *)(fip_img->data + FIP_IMG_UBOOT_SIZE_OFFSET), 4);
-	memcpy(&addr,
-		(uint8_t *)(fip_img->data + FIP_IMG_UBOOT_ADDR_OFFSET), 4);
-	dev_dbg(mnh_sm_dev->dev, "uboot size :0x%x", size);
-	dev_dbg(mnh_sm_dev->dev, "uboot data addr:0x%x", addr);
-
-	/* DMA transfer for UBOOT */
-	dev_dbg(mnh_sm_dev->dev, "DOWNLOADING UBOOT...size:0x%x\n", size);
-	if (mnh_transfer_firmware(size, fip_img->data + addr,
-			HW_MNH_UBOOT_DOWNLOAD))
-		goto fail_downloading;
-
 	/* DMA transfer for device tree */
 	dev_dbg(mnh_sm_dev->dev, "DOWNLOADING DT...size:%zd\n", dt_img->size);
 	if (mnh_transfer_firmware(dt_img->size, dt_img->data,
@@ -488,15 +467,10 @@ int mnh_download_firmware(void)
 			HW_MNH_KERNEL_DOWNLOAD))
 		goto fail_downloading;
 
-	/* PC */
-	if (mnh_sm_uboot)
-		mnh_config_write(
-			HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_7, 4,
-			HW_MNH_UBOOT_DOWNLOAD);
-	else
-		mnh_config_write(
-			HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_7, 4,
-			HW_MNH_KERNEL_DOWNLOAD);
+	/* Set PC */
+	mnh_config_write(
+		HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_7, 4,
+		HW_MNH_KERNEL_DOWNLOAD);
 
 	/* sbl needs this for its own operation and arg0 for kernel */
 	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_3, 4,
@@ -520,7 +494,7 @@ free_dt:
 	release_firmware(dt_img);
 free_kernel:
 	release_firmware(kernel_img);
-free_uboot:
+free_fip:
 	release_firmware(fip_img);
 
 	/* Unregister DMA callback */
@@ -713,37 +687,6 @@ static ssize_t mnh_sm_cpu_clk_store(struct device *dev,
 static DEVICE_ATTR(cpu_clk, S_IWUSR,
 		NULL, mnh_sm_cpu_clk_store);
 
-static ssize_t mnh_sm_uboot_show(struct device *dev,
-				 struct device_attribute *attr,
-				 char *buf)
-{
-	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_uboot_show...\n");
-
-	return scnprintf(buf, MAX_STR_COPY, "uboot flag: 0x%x\n", mnh_sm_uboot);
-}
-
-static ssize_t mnh_sm_uboot_store(struct device *dev,
-				  struct device_attribute *attr,
-				  const char *buf,
-				  size_t count)
-{
-	unsigned long val = 0;
-	int ret;
-
-	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_uboot_store...\n");
-
-	ret = mnh_sm_get_val_from_buf(buf, &val);
-	if (!ret) {
-		mnh_sm_uboot = val;
-		return count;
-	}
-
-	return -EINVAL;
-}
-
-static DEVICE_ATTR(uboot, S_IWUSR | S_IRUGO,
-		mnh_sm_uboot_show, mnh_sm_uboot_store);
-
 static ssize_t mnh_sm_debug_mipi_show(struct device *dev,
 				 struct device_attribute *attr,
 				 char *buf)
@@ -820,7 +763,6 @@ static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_bypass.attr,
 	&dev_attr_reset.attr,
 	&dev_attr_cpu_clk.attr,
-	&dev_attr_uboot.attr,
 	&dev_attr_debug_mipi.attr,
 	&dev_attr_freeze_state.attr,
 	NULL
