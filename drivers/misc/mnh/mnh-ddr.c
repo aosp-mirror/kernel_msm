@@ -83,7 +83,7 @@
 
 #define CLR_START(ddrblock) (_state.ddrblock[0] &= (0xFFFFFFFE))
 
-#define USE_LP 0
+#define USE_LP 1
 
 static struct mnh_ddr_state mnh_ddr_po_config = {
 	.bases = {
