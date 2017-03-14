@@ -174,7 +174,7 @@ static struct regulator_ops bcm15602_regulator_ops = {
 
 /* No support for DVS so just a single voltage level */
 static const unsigned int bcm15602_ldo_vtbl[] = { 1800000 };
-static const unsigned int bcm15602_asr_vtbl[] = { 950000 };
+static const unsigned int bcm15602_asr_vtbl[] = { 900000 };
 static const unsigned int bcm15602_sdsr_vtbl[] = { 1100000 };
 
 static struct regulator_desc
@@ -239,8 +239,8 @@ static struct regulator_init_data
 		.constraints = {
 			.name = "bcm15602_asr",
 			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-			.min_uV = 950000,
-			.max_uV = 950000,
+			.min_uV = 900000,
+			.max_uV = 900000,
 		},
 	},
 	[BCM15602_ID_SDSR] = {
@@ -1074,6 +1074,9 @@ static int bcm15602_chip_fixup(struct bcm15602_chip *ddata)
 	/* set ASR feedback network R2 adjustment */
 	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2, 0x03,
 			     0x02);
+
+	/* set ASR rail to 0.9V */
+	bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL, 0x43);
 
 	return 0;
 }
