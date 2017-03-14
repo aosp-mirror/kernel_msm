@@ -525,11 +525,6 @@ static int fts_init(struct fts_ts_info *info)
 	if (rc < 0)
 		return 1;
 
-	rc  = fts_fw_update(info);
-	if (rc  < 0)
-		tsp_debug_err(true, &info->client->dev, "%s: Failed to firmware update\n",
-				__func__);
-
 	fts_command(info, SLEEPOUT);
 #ifdef FEATURE_FTS_PRODUCTION_CODE
 		info->digital_rev = FTS_DIGITAL_REV_2;

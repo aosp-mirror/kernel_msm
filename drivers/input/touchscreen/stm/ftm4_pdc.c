@@ -104,6 +104,7 @@ static ssize_t cmd_list_show(struct device *dev,
 				struct device_attribute *attr, char *buf);
 static ssize_t store_upgrade(struct device *dev, struct device_attribute *devattr, const char *buf, size_t count);
 static ssize_t show_upgrade(struct device *dev, struct device_attribute *devattr, char *buf);
+static ssize_t store_check_fw(struct device *dev, struct device_attribute *devattr, const char *buf, size_t count);
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 static void tui_mode_cmd(struct fts_ts_info *info);
@@ -142,6 +143,7 @@ static DEVICE_ATTR(cmd_status, S_IRUGO, show_cmd_status, NULL);
 static DEVICE_ATTR(cmd_result, S_IRUGO, show_cmd_result, NULL);
 static DEVICE_ATTR(cmd_list, S_IRUGO, cmd_list_show, NULL);
 static DEVICE_ATTR(fw_upgrade, S_IRUGO | S_IWUSR, show_upgrade, store_upgrade);
+static DEVICE_ATTR(check_fw, S_IWUSR | S_IWGRP, NULL, store_check_fw);
 
 static struct attribute *touch_pdc_attributes[] = {
 	&dev_attr_cmd.attr,
@@ -149,12 +151,33 @@ static struct attribute *touch_pdc_attributes[] = {
 	&dev_attr_cmd_result.attr,
 	&dev_attr_cmd_list.attr,
 	&dev_attr_fw_upgrade.attr,
+	&dev_attr_check_fw.attr,
 	NULL,
 };
 
 static struct attribute_group touch_pdc_attr_group = {
 	.attrs = touch_pdc_attributes,
 };
+
+static ssize_t store_check_fw(struct device *dev, struct device_attribute *devattr, const char *buf, size_t count)
+{
+	struct	fts_ts_info 	*info = dev_get_drvdata(dev);
+	unsigned int input = 0;
+
+	if (sscanf(buf, "%u", &input) != 1){
+		return -EINVAL;
+	}
+
+	if (info->fts_power_state == FTS_POWER_STATE_LOWPOWER){
+		printk("Cannot trigger fw check while device is in suspend\n");
+		return -EBUSY;
+	}
+
+	if(input)
+		fts_fw_update(info);
+
+	return count;
+}
 
 static ssize_t store_upgrade(struct device *dev, struct device_attribute *devattr, const char *buf, size_t count)
 {
