@@ -135,7 +135,7 @@
 &pm8916_chg {
         status = "ok";
         qcom,btc-disabled;
-//      qcom,charging-disabled;
+	/delete-property/ qcom,charging-disabled;
 };
 
 
