@@ -27,6 +27,7 @@
 #include "sd_ops.h"
 #include "mmc_config.h"		//ASUS_BSP eMMC porting
 #include <linux/asusdebug.h>//ASUS_BSP
+
 static int mmc_can_poweroff_notify(const struct mmc_card *card);	//ASUS_BSP Deeo : eMMC porting
 static int mmc_can_sleepawake(struct mmc_host *host);//ASUS_BSP
 
@@ -68,6 +69,7 @@ static struct {
 	char *vendor_name;
 } emmc_mid_tbl[] = {
      { 0x90, "Hynix-"}
+    ,{ 0x70, "Kingston-"}
     ,{ 0x45, "Sandisk-"}
     ,{ 0x15, "Samsung-"}
     ,{ 0x11, "Toshiba-"}
@@ -1760,6 +1762,9 @@ static void mmc_get_manf(unsigned int id, char *manf)
 	switch (id) {
 		case 0x90:
 			strcpy(manf, "HYNIX");
+			break;
+		case 0x70:
+			strcpy(manf, "KINGSTON");
 			break;
 		case 0x45:
 			strcpy(manf, "SANDISK");
