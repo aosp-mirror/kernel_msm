@@ -66,7 +66,6 @@
 #define TEMP_FORCE_WA
 /* #define USE_DATA_SERVER */
 
-
 #define F12_DATA_15_WORKAROUND
 
 #define IGNORE_FN_INIT_FAILURE
@@ -135,6 +134,10 @@ static DECLARE_WAIT_QUEUE_HEAD(syn_data_ready_wq);
 struct timespec time_start, time_end, time_delta;
 static uint32_t debug_mask = 0x0000000;
 #endif
+
+extern int msm_gpio_install_direct_irq(unsigned int gpio,
+		unsigned int irq,
+		unsigned int input_polarity);
 
 static int synaptics_rmi4_check_status(struct synaptics_rmi4_data *rmi4_data,
 		bool *was_in_bl_mode);
@@ -205,6 +208,12 @@ static ssize_t synaptics_rmi4_synad_pid_store(struct device *dev,
 
 static ssize_t synaptics_rmi4_virtual_key_map_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf);
+
+static ssize_t synaptics_rmi4_i2c_switch_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t synaptics_rmi4_i2c_switch_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count);
 
 struct synaptics_rmi4_f01_device_status {
 	union {
@@ -915,6 +924,9 @@ static struct device_attribute attrs[] = {
 			synaptics_rmi4_show_error,
 			synaptics_rmi4_synad_pid_store),
 #endif
+	__ATTR(i2c_switch, (S_IRUGO | S_IWUSR | S_IWGRP),
+			synaptics_rmi4_i2c_switch_show,
+			synaptics_rmi4_i2c_switch_store),
 };
 
 static struct kobj_attribute virtual_key_map_attr = {
@@ -1104,6 +1116,30 @@ static ssize_t synaptics_rmi4_wake_event_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "0\n");
 }
 #endif
+
+static ssize_t synaptics_rmi4_i2c_switch_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
+	int gpio = rmi4_data->hw_if->board_data->switch_gpio;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", gpio_get_value(gpio));
+}
+
+static ssize_t synaptics_rmi4_i2c_switch_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int input;
+	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
+	int gpio = rmi4_data->hw_if->board_data->switch_gpio;
+
+	if (kstrtoint(buf, 10, &input))
+		return -EINVAL;
+
+	gpio_set_value(gpio, input ? 1 : 0);
+
+	return count;
+}
 
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 static ssize_t synaptics_reset_store(struct device *dev,
@@ -5511,16 +5547,29 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 		exp_data.initialized = true;
 	}
 
-	rmi4_data->irq = gpio_to_irq(bdata->irq_gpio);
+	/* installing GPIO125 as direct connect in SLPI */
+	retval = msm_gpio_install_direct_irq(bdata->irq_gpio, 0, 0);
+	if (retval) {
+		dev_err(rmi4_data->pdev->dev.parent,
+			"%sfailed to install direct irq, ret = %d\n",
+			__func__, retval);
+		goto err_request_irq;
+	}
+
+	rmi4_data->irq =
+		platform_get_irq_byname(to_platform_device(pdev->dev.parent),
+					"tp_direct_interrupt");
 
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	retval = request_threaded_irq(rmi4_data->irq, NULL,
-			synaptics_rmi4_irq, bdata->irq_flags,
-			PLATFORM_DRIVER_NAME, rmi4_data);
+			synaptics_rmi4_irq,
+			IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
+			PLATFORM_DRIVER_NAME,
+			rmi4_data);
 	if (retval < 0) {
 		dev_err(rmi4_data->pdev->dev.parent,
-				"%s: Failed to create irq thread\n",
-				__func__);
+				"%s: Failed to create irq thread, err = %d\n",
+				__func__, retval);
 		goto err_request_irq;
 	}
 
@@ -6048,7 +6097,6 @@ static int synaptics_rmi4_suspend(struct device *dev)
 
 	if (!rmi4_data->suspend) {
 		synaptics_rmi4_irq_enable(rmi4_data, false, false);
-		synaptics_rmi4_sleep_enable(rmi4_data, true);
 	}
 
 exit:
@@ -6059,6 +6107,10 @@ exit:
 				exp_fhandler->exp_fn->suspend(rmi4_data);
 	}
 	mutex_unlock(&exp_data.mutex);
+
+	gpio_set_value(rmi4_data->hw_if->board_data->switch_gpio, 1);
+	dev_dbg(rmi4_data->pdev->dev.parent, "%s: Switch I2C mux to SLPI\n",
+			__func__);
 
 	rmi4_data->suspend = true;
 
@@ -6076,6 +6128,10 @@ static int synaptics_rmi4_resume(struct device *dev)
 	if (rmi4_data->stay_awake)
 		return 0;
 
+	gpio_set_value(rmi4_data->hw_if->board_data->switch_gpio, 0);
+	dev_dbg(rmi4_data->pdev->dev.parent, "%s: Switch I2C mux to AP\n",
+			__func__);
+
 	synaptics_rmi4_free_fingers(rmi4_data);
 
 	if (rmi4_data->enable_wakeup_gesture) {
@@ -6087,7 +6143,8 @@ static int synaptics_rmi4_resume(struct device *dev)
 
 	rmi4_data->current_page = MASK_8BIT;
 
-	synaptics_rmi4_sleep_enable(rmi4_data, false);
+	synaptics_rmi4_wakeup_gesture(rmi4_data, false);
+	synaptics_rmi4_force_cal(rmi4_data);
 	synaptics_rmi4_irq_enable(rmi4_data, true, false);
 
 exit:
