@@ -82,6 +82,17 @@ enum dev_cmd_type {
 	DEV_CMD_TYPE_QUERY		= 0x1,
 };
 
+enum field_width {
+	BYTE	= 1,
+	WORD	= 2,
+};
+
+struct desc_field_offset {
+	char *name;
+	int offset;
+	enum field_width width_byte;
+};
+
 /**
  * struct uic_command - UIC command structure
  * @command: UIC command
@@ -714,6 +725,7 @@ struct ufs_hba {
 	int spm_lvl;
 	struct device_attribute rpm_lvl_attr;
 	struct device_attribute spm_lvl_attr;
+	struct device_attribute health_attr;
 	int pm_op_in_progress;
 
 	struct ufshcd_lrb *lrb;
@@ -1043,6 +1055,7 @@ static inline int ufshcd_dme_peer_get(struct ufs_hba *hba,
 }
 
 int ufshcd_read_device_desc(struct ufs_hba *hba, u8 *buf, u32 size);
+int ufshcd_read_health_desc(struct ufs_hba *hba, u8 *buf, u32 size);
 
 static inline bool ufshcd_is_hs_mode(struct ufs_pa_layer_attr *pwr_info)
 {

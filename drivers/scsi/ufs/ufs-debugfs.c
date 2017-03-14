@@ -22,17 +22,6 @@
 #include "unipro.h"
 #include "ufshci.h"
 
-enum field_width {
-	BYTE	= 1,
-	WORD	= 2,
-};
-
-struct desc_field_offset {
-	char *name;
-	int offset;
-	enum field_width width_byte;
-};
-
 #define UFS_ERR_STATS_PRINT(file, error_index, string, error_seen)	\
 	do {								\
 		if (err_stats[error_index]) {				\
