@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -477,7 +477,7 @@ static void nl_srv_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	if (nl_srv_msg_handler[type] != NULL) {
 		(nl_srv_msg_handler[type])(skb);
 	} else {
-		QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_WARN,
+		QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_INFO,
 			  "NLINK: No handler for Netlink Msg [0x%X]", type);
 	}
 }
@@ -503,12 +503,12 @@ int nl_srv_is_initialized(void)
 
 #include <wlan_nlink_srv.h>
 
-int nl_srv_init(void)
+int nl_srv_init(void *wiphy)
 {
 	return 0;
 }
 
-void nl_srv_exit(int dst_pid)
+void nl_srv_exit(void)
 {
 }
 

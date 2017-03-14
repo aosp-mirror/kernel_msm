@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1257,6 +1257,10 @@ populate_dot11f_ext_cap(tpAniSirGlobal pMac,
 		p_ext_cap->bss_coexist_mgmt_support = 1;
 #endif
 	p_ext_cap->ext_chan_switch = 1;
+
+	/* Need to calulate the num_bytes based on bits set */
+	if (pDot11f->present)
+		pDot11f->num_bytes = lim_compute_ext_cap_ie_length(pDot11f);
 
 	return eSIR_SUCCESS;
 }
@@ -2949,7 +2953,7 @@ sir_convert_assoc_resp_frame2_struct(tpAniSirGlobal pMac,
 			     sizeof(tDot11fIEFTInfo));
 	}
 
-	if (ar.num_RICDataDesc) {
+	if (ar.num_RICDataDesc <= 2) {
 		for (cnt = 0; cnt < ar.num_RICDataDesc; cnt++) {
 			if (ar.RICDataDesc[cnt].present) {
 				qdf_mem_copy(&pAssocRsp->RICData[cnt],
@@ -3244,6 +3248,7 @@ sir_beacon_ie_ese_bcn_report(tpAniSirGlobal pMac,
 		lim_log(pMac, LOGE, FL("Failed to allocate memory"));
 		return eSIR_MEM_ALLOC_FAILED;
 	}
+	qdf_mem_zero(pBies, sizeof(tDot11fBeaconIEs));
 	/* delegate to the framesc-generated code, */
 	status = dot11f_unpack_beacon_i_es(pMac, pPayload, nPayload, pBies);
 
@@ -3538,6 +3543,7 @@ sir_parse_beacon_ie(tpAniSirGlobal pMac,
 		lim_log(pMac, LOGE, FL("Failed to allocate memory"));
 		return eSIR_MEM_ALLOC_FAILED;
 	}
+	qdf_mem_zero(pBies, sizeof(tDot11fBeaconIEs));
 	/* delegate to the framesc-generated code, */
 	status = dot11f_unpack_beacon_i_es(pMac, pPayload, nPayload, pBies);
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -45,6 +45,19 @@
 enum scan_source {
 	NL_SCAN,
 	VENDOR_SCAN,
+};
+
+/**
+ * enum wlan_hdd_scan_type - type of scan
+ * @WLAN_HDD_HOST_SCAN: refers to scan request from cfg80211_ops "scan"
+ * @WLAN_HDD_PNO_SCAN: refers to scan request is from "sched_scan_start"
+ *
+ * driver uses this enum to identify source of scan
+ *
+ */
+enum wlan_hdd_scan_type {
+	WLAN_HDD_HOST_SCAN,
+	WLAN_HDD_PNO_SCAN,
 };
 
 int iw_get_scan(struct net_device *dev, struct iw_request_info *info,
@@ -93,6 +106,22 @@ int wlan_hdd_cfg80211_vendor_scan(struct wiphy *wiphy,
 		struct wireless_dev *wdev, const void *data,
 		int data_len);
 
+/**
+ * wlan_hdd_vendor_abort_scan() - API to process vendor command for
+ * abort scan
+ * @wiphy: Pointer to wiphy
+ * @wdev: Pointer to net device
+ * @data : Pointer to the data
+ * @data_len : length of the data
+ *
+ * This is called from supplicant to abort scan
+ *
+ * Return: zero for success and non zero for failure.
+ */
+int wlan_hdd_vendor_abort_scan(
+	struct wiphy *wiphy, struct wireless_dev *wdev,
+	const void *data, int data_len);
+
 void hdd_cleanup_scan_queue(hdd_context_t *hdd_ctx);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)) || \
@@ -100,5 +129,24 @@ void hdd_cleanup_scan_queue(hdd_context_t *hdd_ctx);
 void wlan_hdd_cfg80211_abort_scan(struct wiphy *wiphy,
 				  struct wireless_dev *wdev);
 #endif
-#endif /* end #if !defined(WLAN_HDD_SCAN_H) */
 
+/**
+ * wlan_hdd_fill_whitelist_ie_attrs - fill the white list members
+ * @ie_whitelist: enables whitelist
+ * @probe_req_ie_bitmap: bitmap to be filled
+ * @num_vendor_oui: pointer to no of ouis
+ * @voui: pointer to ouis to be filled
+ * @hdd_ctx: pointer to hdd ctx
+ *
+ * This function fills the ie bitmap and vendor oui fields with the
+ * corresponding values present in config and hdd_ctx
+ *
+ * Return: None
+ */
+void wlan_hdd_fill_whitelist_ie_attrs(bool *ie_whitelist,
+				      uint32_t *probe_req_ie_bitmap,
+				      uint32_t *num_vendor_oui,
+				      struct vendor_oui *voui,
+				      hdd_context_t *hdd_ctx);
+
+#endif /* end #if !defined(WLAN_HDD_SCAN_H) */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -838,9 +838,12 @@ static int hdd_parse_reassoc_command_v1_data(const uint8_t *pValue,
 }
 
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
-void hdd_wma_send_fastreassoc_cmd(int sessionId, const tSirMacAddr bssid,
-				  int channel)
+void hdd_wma_send_fastreassoc_cmd(hdd_adapter_t *adapter,
+				const tSirMacAddr bssid, int channel)
 {
+	QDF_STATUS status;
+	hdd_wext_state_t *wext_state = WLAN_HDD_GET_WEXT_STATE_PTR(adapter);
+	tCsrRoamProfile *profile = &wext_state->roamProfile;
 	struct wma_roam_invoke_cmd *fastreassoc;
 	cds_msg_t msg = {0};
 
@@ -849,7 +852,7 @@ void hdd_wma_send_fastreassoc_cmd(int sessionId, const tSirMacAddr bssid,
 		hdd_err("qdf_mem_malloc failed for fastreassoc");
 		return;
 	}
-	fastreassoc->vdev_id = sessionId;
+	fastreassoc->vdev_id = adapter->sessionId;
 	fastreassoc->channel = channel;
 	fastreassoc->bssid[0] = bssid[0];
 	fastreassoc->bssid[1] = bssid[1];
@@ -858,13 +861,23 @@ void hdd_wma_send_fastreassoc_cmd(int sessionId, const tSirMacAddr bssid,
 	fastreassoc->bssid[4] = bssid[4];
 	fastreassoc->bssid[5] = bssid[5];
 
+	status = sme_get_beacon_frm(WLAN_HDD_GET_HAL_CTX(adapter), profile,
+						bssid, &fastreassoc->frame_buf,
+						&fastreassoc->frame_len);
+
+	if (QDF_STATUS_SUCCESS != status) {
+		hdd_err("sme_get_beacon_frm failed");
+		fastreassoc->frame_buf = NULL;
+		fastreassoc->frame_len = 0;
+	}
+
 	msg.type = SIR_HAL_ROAM_INVOKE;
 	msg.reserved = 0;
 	msg.bodyptr = fastreassoc;
-	if (QDF_STATUS_SUCCESS != cds_mq_post_message(QDF_MODULE_ID_WMA,
-								&msg)) {
-		qdf_mem_free(fastreassoc);
+	status = cds_mq_post_message(QDF_MODULE_ID_WMA, &msg);
+	if (QDF_STATUS_SUCCESS != status) {
 		hdd_err("Not able to post ROAM_INVOKE_CMD message to WMA");
+		qdf_mem_free(fastreassoc);
 	}
 }
 #endif
@@ -928,7 +941,7 @@ int hdd_reassoc(hdd_adapter_t *adapter, const uint8_t *bssid,
 
 	/* Proceed with reassoc */
 	if (roaming_offload_enabled(hdd_ctx)) {
-		hdd_wma_send_fastreassoc_cmd((int)adapter->sessionId,
+		hdd_wma_send_fastreassoc_cmd(adapter,
 					bssid, (int)channel);
 	} else {
 		tCsrHandoffRequest handoffInfo;
@@ -4458,7 +4471,7 @@ static int drv_cmd_fast_reassoc(hdd_adapter_t *adapter,
 				    QDF_MAC_ADDR_SIZE)) {
 		hdd_info("Reassoc BSSID is same as currently associated AP bssid");
 		if (roaming_offload_enabled(hdd_ctx)) {
-			hdd_wma_send_fastreassoc_cmd((int)adapter->sessionId,
+			hdd_wma_send_fastreassoc_cmd(adapter,
 				targetApBssid,
 				pHddStaCtx->conn_info.operationChannel);
 		} else {
@@ -4479,7 +4492,7 @@ static int drv_cmd_fast_reassoc(hdd_adapter_t *adapter,
 	}
 
 	if (roaming_offload_enabled(hdd_ctx)) {
-		hdd_wma_send_fastreassoc_cmd((int)adapter->sessionId,
+		hdd_wma_send_fastreassoc_cmd(adapter,
 					targetApBssid, (int)channel);
 		goto exit;
 	}
@@ -5055,11 +5068,11 @@ static int drv_cmd_get_ibss_peer_info_all(hdd_adapter_t *adapter,
 		 * exceeds the size of 1024 bytes of default stack size. On
 		 * 64 bit devices, the default max stack size of 2048 bytes
 		 */
-		extra = kmalloc(WLAN_MAX_BUF_SIZE, GFP_KERNEL);
+		extra = qdf_mem_malloc(WLAN_MAX_BUF_SIZE);
 
 		if (NULL == extra) {
-			hdd_err("kmalloc failed");
-			ret = -EINVAL;
+			hdd_err("memory allocation failed");
+			ret = -ENOMEM;
 			goto exit;
 		}
 
@@ -5131,7 +5144,7 @@ static int drv_cmd_get_ibss_peer_info_all(hdd_adapter_t *adapter,
 		}
 
 		/* Free temporary buffer */
-		kfree(extra);
+		qdf_mem_free(extra);
 	} else {
 		/* Command failed, log error */
 		hdd_err("GETIBSSPEERINFOALL command failed with status code %d",
@@ -6179,6 +6192,11 @@ static int hdd_set_rx_filter(hdd_adapter_t *adapter, bool action,
 		return -EINVAL;
 	}
 
+	if (!hdd_ctx->config->fEnableMCAddrList) {
+		hdd_notice("mc addr ini is disabled");
+		return -EINVAL;
+	}
+
 	/*
 	 * If action is false it means start dropping packets
 	 * Set addr_filter_pattern which will be used when sending
@@ -6214,6 +6232,8 @@ static int hdd_set_rx_filter(hdd_adapter_t *adapter, bool action,
 				    MAC_ADDR_ARRAY(filter->multicastAddr[j].bytes));
 				j++;
 			}
+			if (j == SIR_MAX_NUM_MULTICAST_ADDRESS)
+				break;
 		}
 		filter->ulMulticastAddrCnt = j;
 		/* Set rx filter */
@@ -6915,6 +6935,7 @@ static const hdd_drv_cmd_t hdd_drv_cmds[] = {
 	{"CHANNEL_SWITCH",            drv_cmd_set_channel_switch},
 	{"SETANTENNAMODE",            drv_cmd_set_antenna_mode},
 	{"GETANTENNAMODE",            drv_cmd_get_antenna_mode},
+	{"STOP",                      drv_cmd_dummy},
 };
 
 /**
@@ -7003,7 +7024,7 @@ static int hdd_driver_command(hdd_adapter_t *adapter,
 	}
 
 	/* Allocate +1 for '\0' */
-	command = kmalloc(priv_data->total_len + 1, GFP_KERNEL);
+	command = qdf_mem_malloc(priv_data->total_len + 1);
 	if (!command) {
 		hdd_err("failed to allocate memory");
 		ret = -ENOMEM;
@@ -7023,7 +7044,7 @@ static int hdd_driver_command(hdd_adapter_t *adapter,
 
 exit:
 	if (command)
-		kfree(command);
+		qdf_mem_free(command);
 	EXIT();
 	return ret;
 }

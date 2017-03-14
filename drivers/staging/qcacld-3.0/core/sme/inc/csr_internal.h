@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -514,14 +514,6 @@ typedef struct tagCsrConfig {
 	uint8_t fAllowMCCGODiffBI;
 	uint8_t AdHocChannel24;
 	uint8_t AdHocChannel5G;
-	/* scan res agingtime threshold when Not-Connect-No-Power-Save,in sec */
-	uint32_t scanAgeTimeNCNPS;
-	/* scan res aging time threshold when Not-Connect-Power-Save, in sec*/
-	uint32_t scanAgeTimeNCPS;
-	/* scan res aging time threshold when Connect-No-Power-Save, in sec*/
-	uint32_t scanAgeTimeCNPS;
-	/* scan res aging time threshold when Connect-Power-Savein sec */
-	uint32_t scanAgeTimeCPS;
 	/* each RSSI category has one value */
 	uint32_t BssPreferValue[CSR_NUM_RSSI_CAT];
 	int RSSICat[CSR_NUM_RSSI_CAT];
@@ -619,7 +611,7 @@ typedef struct tagCsrConfig {
 	 * Enable/Disable heartbeat offload
 	 */
 	bool enableHeartBeatOffload;
-	uint8_t isAmsduSupportInAMPDU;
+	uint8_t max_amsdu_num;
 	uint8_t nSelect5GHzMargin;
 	uint8_t isCoalesingInIBSSAllowed;
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
@@ -670,6 +662,7 @@ typedef struct tagCsrConfig {
 	struct csr_sta_roam_policy_params sta_roam_policy;
 	uint32_t tx_aggregation_size;
 	uint32_t rx_aggregation_size;
+	struct wmi_per_roam_config per_roam_config;
 } tCsrConfig;
 
 typedef struct tagCsrChannelPowerInfo {
@@ -1003,7 +996,6 @@ typedef struct tagCsrRoamSession {
 	bool dhcp_done;
 	uint8_t disconnect_reason;
 	uint8_t uapsd_mask;
-	bool fast_roam_enabled;
 } tCsrRoamSession;
 
 typedef struct tagCsrRoamStruct {

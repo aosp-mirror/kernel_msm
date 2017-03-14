@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -347,7 +347,9 @@ struct htt_pdev_t {
 		 * variable is used to guarantee that only one thread tries
 		 * to replenish Rx ring.
 		 */
-		qdf_atomic_t refill_ref_cnt;
+		qdf_atomic_t   refill_ref_cnt;
+		qdf_spinlock_t refill_lock;
+		qdf_atomic_t   refill_debt;
 #ifdef DEBUG_DMA_DONE
 		uint32_t dbg_initial_msdu_payld;
 		uint32_t dbg_mpdu_range;
@@ -413,7 +415,19 @@ struct htt_pdev_t {
 	struct rx_buf_debug *rx_buff_list;
 	qdf_spinlock_t       rx_buff_list_lock;
 	int rx_buff_index;
+	int rx_buff_posted_cum;
+	int rx_buff_recvd_cum;
+	int rx_buff_recvd_err;
 #endif
+	/*
+	 * Counters below are being invoked from functions defined outside of
+	 * DEBUG_RX_RING_BUFFER
+	 */
+	int rx_buff_debt_invoked;
+	int rx_buff_fill_n_invoked;
+	int refill_retry_timer_starts;
+	int refill_retry_timer_calls;
+	int refill_retry_timer_doubles;
 
 	/* callback function for packetdump */
 	tp_rx_pkt_dump_cb rx_pkt_dump_cb;

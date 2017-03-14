@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -464,7 +464,7 @@ tSirRetStatus lim_send_probe_req_mgmt_frame(tpAniSirGlobal, tSirMacSSid *,
 void lim_send_probe_rsp_mgmt_frame(tpAniSirGlobal, tSirMacAddr, tpAniSSID, short,
 				   uint8_t, tpPESession, uint8_t);
 void lim_send_auth_mgmt_frame(tpAniSirGlobal, tSirMacAuthFrameBody *, tSirMacAddr,
-			      uint8_t, tpPESession, bool wait_for_ack);
+			      uint8_t, tpPESession);
 void lim_send_assoc_req_mgmt_frame(tpAniSirGlobal, tLimMlmAssocReq *, tpPESession);
 #ifdef WLAN_FEATURE_HOST_ROAM
 void lim_send_reassoc_req_with_ft_ies_mgmt_frame(tpAniSirGlobal pMac,
@@ -540,8 +540,10 @@ tSirRetStatus lim_process_sme_tdls_del_sta_req(tpAniSirGlobal pMac,
 					       uint32_t *pMsgBuf);
 void lim_send_sme_tdls_delete_all_peer_ind(tpAniSirGlobal pMac,
 					   tpPESession psessionEntry);
-void lim_send_sme_mgmt_tx_completion(tpAniSirGlobal pMac, tpPESession psessionEntry,
-				     uint32_t txCompleteStatus);
+void lim_send_sme_mgmt_tx_completion(
+		tpAniSirGlobal pMac,
+		uint32_t sme_session_id,
+		uint32_t txCompleteStatus);
 tSirRetStatus lim_delete_tdls_peers(tpAniSirGlobal mac_ctx,
 				    tpPESession session_entry);
 QDF_STATUS lim_process_tdls_add_sta_rsp(tpAniSirGlobal pMac, void *msg, tpPESession);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -149,6 +149,8 @@ struct wma_dfs_radar_ind {
  * @egap_support: enhanced green ap support
  * @nan_datapath_enabled: nan data path support
  * @bool is_ra_rate_limit_enabled: RA filter support
+ * @fw_mem_dump_enabled: Fw memory dump support
+ * @rcpi_enabled: for checking rcpi support
  */
 struct wma_tgt_cfg {
 	uint32_t target_fw_version;
@@ -178,5 +180,7 @@ struct wma_tgt_cfg {
 #endif
 	bool sub_20_support;
 	uint16_t wmi_max_len;
+	bool fw_mem_dump_enabled;
+	bool rcpi_enabled;
 };
 #endif /* WMA_TGT_CFG_H */

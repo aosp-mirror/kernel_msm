@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -131,7 +131,7 @@ int hdd_napi_create(void)
 			hdd_info("napi instances were created. Map=0x%x", rc);
 			hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 			if (unlikely(NULL == hdd_ctx)) {
-				QDF_ASSERT( 0 );
+				QDF_ASSERT(0);
 				rc = -EFAULT;
 			} else {
 				rc = hdd_napi_event(NAPI_EVT_INI_FILE,
@@ -178,7 +178,7 @@ int hdd_napi_destroy(int force)
 						rc++;
 						hdd_napi_map &= ~(0x01 << i);
 					} else
-						hdd_err("cannot destroy napi %d: (pipe:%d), f=%d\n",
+						hdd_warn("cannot destroy napi %d: (pipe:%d), f=%d\n",
 							i,
 							NAPI_PIPE2ID(i), force);
 				}
@@ -251,6 +251,69 @@ int hdd_napi_event(enum qca_napi_event event, void *data)
 
 #ifdef HELIUMPLUS
 /**
+ * hdd_napi_perfd_cpufreq() - set/reset min CPU freq for cores
+ * @req_state:  high/low
+ *
+ * Send a message to cnss-daemon through netlink. cnss-daemon,
+ * in turn, sends a message to perf-daemon.
+ * If freq > 0, this is a set request. It sets the min frequency of the
+ * cores of the specified cluster to provided freq value (in KHz).
+ * If freq == 0, then the freq lock is removed (and frequency returns to
+ * system default).
+ *
+ * Semantical Alert:
+ * There can be at most one lock active at a time. Each "set" request must
+ * be followed by a "reset" request. Perfd behaviour is undefined otherwise.
+ *
+ * Return: == 0: netlink message sent to cnss-daemon
+ *         <  0: failure to send the message
+ */
+static int hdd_napi_perfd_cpufreq(enum qca_napi_tput_state req_state)
+{
+	int rc = 0;
+	struct wlan_core_minfreq req;
+	struct hdd_context_s *hdd_ctx;
+
+	NAPI_DEBUG("-> (%d)", req_state);
+
+	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
+	if (unlikely(hdd_ctx == NULL)) {
+		hdd_err("cannot get hdd_context");
+		rc = -EFAULT;
+		goto hnpc_ret;
+	}
+
+	switch (req_state) {
+	case QCA_NAPI_TPUT_LO:
+		req.magic    = WLAN_CORE_MINFREQ_MAGIC;
+		req.reserved = 0; /* unused */
+		req.coremask = 0; /* not valid */
+		req.freq     = 0; /* reset */
+		break;
+	case QCA_NAPI_TPUT_HI:
+		req.magic    = WLAN_CORE_MINFREQ_MAGIC;
+		req.reserved = 0; /* unused */
+		req.coremask = 0x0f0; /* perf cluster */
+		req.freq     = 700;   /* KHz */
+		break;
+	default:
+		hdd_err("invalid req_state (%d)", req_state);
+		rc = -EINVAL;
+		goto hnpc_ret;
+	} /* switch */
+
+	NAPI_DEBUG("CPU min freq to %d",
+		   (req.freq == 0)?"Resetting":"Setting", req.freq);
+	/* the following service function returns void */
+	wlan_hdd_send_svc_nlink_msg(hdd_ctx->radio_index,
+				WLAN_SVC_CORE_MINFREQ,
+				&req, sizeof(struct wlan_core_minfreq));
+hnpc_ret:
+	NAPI_DEBUG("<--[rc=%d]", rc);
+	return rc;
+}
+
+/**
  * hdd_napi_apply_throughput_policy() - implement the throughput action policy
  * @hddctx:     HDD context
  * @tx_packets: number of tx packets in the last interval
@@ -283,7 +346,7 @@ int hdd_napi_apply_throughput_policy(struct hdd_context_s *hddctx,
 	uint64_t packets = tx_packets + rx_packets;
 	enum qca_napi_tput_state req_state;
 	struct qca_napi_data *napid = hdd_napi_get_all();
-	int enabled = 0;
+	int enabled;
 
 	NAPI_DEBUG("-->%s(tx=%lld, rx=%lld)", __func__, tx_packets, rx_packets);
 
@@ -300,20 +363,27 @@ int hdd_napi_apply_throughput_policy(struct hdd_context_s *hddctx,
 		return rc;
 	}
 
-	if ((napid != NULL) &&
-	    (enabled = hdd_napi_enabled(HDD_NAPI_ANY))) {
-		if (packets > hddctx->config->busBandwidthHighThreshold)
-			req_state = QCA_NAPI_TPUT_HI;
-		else
-			req_state = QCA_NAPI_TPUT_LO;
-
-		if (req_state != napid->napi_mode)
-			rc = hdd_napi_event(NAPI_EVT_TPUT_STATE,
-					    (void *)req_state);
-	} else {
-		hdd_err("ERR: napid (%p) NULL or napi_enabled (%d) FALSE",
-			napid, enabled);
+	if (!napid) {
+		hdd_err("ERR: napid NULL");
+		return rc;
 	}
+
+	enabled = hdd_napi_enabled(HDD_NAPI_ANY);
+	if (!enabled) {
+		hdd_err("ERR: napi not enabled");
+		return rc;
+	}
+
+	if (packets > hddctx->config->busBandwidthHighThreshold)
+		req_state = QCA_NAPI_TPUT_HI;
+	else
+		req_state = QCA_NAPI_TPUT_LO;
+
+	if (req_state != napid->napi_mode)
+		/* [re]set the floor frequency of high cluster */
+		rc = hdd_napi_perfd_cpufreq(req_state);
+		/* blacklist/boost_mode on/off */
+		rc = hdd_napi_event(NAPI_EVT_TPUT_STATE, (void *)req_state);
 	return rc;
 }
 
@@ -404,7 +474,7 @@ int hdd_display_napi_stats(void)
 	}
 	qdf_print("[NAPI %u][BL %d]:  scheds   polls   comps    done t-lim p-lim  corr napi-buckets(%d)",
 		  napid->napi_mode,
-		  hif_napi_cpu_blacklist(napid->flags, BLACKLIST_QUERY),
+		  hif_napi_cpu_blacklist(napid, BLACKLIST_QUERY),
 		  QCA_NAPI_NUM_BUCKETS);
 
 	for (i = 0; i < CE_COUNT_MAX; i++)
