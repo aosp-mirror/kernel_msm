@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -585,6 +585,68 @@ static void ce_ring_test_initial_indexes(int ce_id, struct CE_ring_state *ring,
 		QDF_BUG(0);
 }
 
+int hif_ce_bus_early_suspend(struct hif_softc *scn)
+{
+	uint8_t ul_pipe, dl_pipe;
+	int ce_id, status, ul_is_polled, dl_is_polled;
+	struct CE_state *ce_state;
+	status = hif_map_service_to_pipe(&scn->osc, WMI_CONTROL_SVC,
+					 &ul_pipe, &dl_pipe,
+					 &ul_is_polled, &dl_is_polled);
+	if (status) {
+		HIF_ERROR("%s: pipe_mapping failure", __func__);
+		return status;
+	}
+
+	for (ce_id = 0; ce_id < scn->ce_count; ce_id++) {
+		if (ce_id == ul_pipe)
+			continue;
+		if (ce_id == dl_pipe)
+			continue;
+
+		ce_state = scn->ce_id_to_state[ce_id];
+		qdf_spin_lock_bh(&ce_state->ce_index_lock);
+		if (ce_state->state == CE_RUNNING)
+			ce_state->state = CE_PAUSED;
+		qdf_spin_unlock_bh(&ce_state->ce_index_lock);
+	}
+
+	return status;
+}
+
+int hif_ce_bus_late_resume(struct hif_softc *scn)
+{
+	int ce_id;
+	struct CE_state *ce_state;
+	int write_index;
+	bool index_updated;
+
+	for (ce_id = 0; ce_id < scn->ce_count; ce_id++) {
+		ce_state = scn->ce_id_to_state[ce_id];
+		qdf_spin_lock_bh(&ce_state->ce_index_lock);
+		if (ce_state->state == CE_PENDING) {
+			write_index = ce_state->src_ring->write_index;
+			CE_SRC_RING_WRITE_IDX_SET(scn, ce_state->ctrl_addr,
+					write_index);
+			ce_state->state = CE_RUNNING;
+			index_updated = true;
+		} else {
+			index_updated = false;
+		}
+
+		if (ce_state->state == CE_PAUSED)
+			ce_state->state = CE_RUNNING;
+		qdf_spin_unlock_bh(&ce_state->ce_index_lock);
+
+		if (index_updated)
+			hif_record_ce_desc_event(scn, ce_id,
+				RESUME_WRITE_INDEX_UPDATE,
+				NULL, NULL, write_index);
+	}
+
+	return 0;
+}
+
 /*
  * Initialize a Copy Engine based on caller-supplied attributes.
  * This may be called once to initialize both source and destination
@@ -617,7 +679,6 @@ struct CE_handle *ce_init(struct hif_softc *scn,
 			return NULL;
 		}
 		malloc_CE_state = true;
-		qdf_mem_zero(CE_state, sizeof(*CE_state));
 		scn->ce_id_to_state[CE_id] = CE_state;
 		qdf_spinlock_create(&CE_state->ce_index_lock);
 
@@ -677,7 +738,6 @@ struct CE_handle *ce_init(struct hif_softc *scn,
 				 */
 				malloc_src_ring = true;
 			}
-			qdf_mem_zero(ptr, CE_nbytes);
 
 			src_ring = CE_state->src_ring =
 					   (struct CE_ring_state *)ptr;
@@ -825,7 +885,6 @@ struct CE_handle *ce_init(struct hif_softc *scn,
 				}
 				return NULL;
 			}
-			qdf_mem_zero(ptr, CE_nbytes);
 
 			dest_ring = CE_state->dest_ring =
 					    (struct CE_ring_state *)ptr;
@@ -1146,6 +1205,9 @@ void ce_fini(struct CE_handle *copyeng)
 
 	CE_state->state = CE_UNUSED;
 	scn->ce_id_to_state[CE_id] = NULL;
+
+	qdf_spinlock_destroy(&CE_state->lro_unloading_lock);
+
 	if (CE_state->src_ring) {
 		/* Cleanup the datapath Tx ring */
 		ce_h2t_tx_ce_cleanup(copyeng);
@@ -1186,6 +1248,8 @@ void ce_fini(struct CE_handle *copyeng)
 			qdf_timer_free(&CE_state->poll_timer);
 		}
 	}
+
+	qdf_spinlock_destroy(&CE_state->ce_index_lock);
 	qdf_mem_free(CE_state);
 }
 
@@ -2090,6 +2154,7 @@ void hif_unconfig_ce(struct hif_softc *hif_sc)
 			ce_fini(pipe_info->ce_hdl);
 			pipe_info->ce_hdl = NULL;
 			pipe_info->buf_sz = 0;
+			qdf_spinlock_destroy(&pipe_info->recv_bufs_needed_lock);
 		}
 	}
 	if (hif_sc->athdiag_procfs_inited) {
@@ -2181,6 +2246,7 @@ int hif_config_ce(struct hif_softc *scn)
 		attr = &host_ce_config[pipe_num];
 		pipe_info->ce_hdl = ce_init(scn, pipe_num, attr);
 		ce_state = scn->ce_id_to_state[pipe_num];
+		qdf_spinlock_create(&pipe_info->recv_bufs_needed_lock);
 		QDF_ASSERT(pipe_info->ce_hdl != NULL);
 		if (pipe_info->ce_hdl == NULL) {
 			rv = QDF_STATUS_E_FAILURE;
@@ -2200,7 +2266,6 @@ int hif_config_ce(struct hif_softc *scn)
 			continue;
 
 		pipe_info->buf_sz = (qdf_size_t) (attr->src_sz_max);
-		qdf_spinlock_create(&pipe_info->recv_bufs_needed_lock);
 		if (attr->dest_nentries > 0) {
 			atomic_set(&pipe_info->recv_bufs_needed,
 				   init_buffer_count(attr->dest_nentries - 1));
@@ -2457,8 +2522,6 @@ void *hif_ce_get_lro_ctx(struct hif_opaque_softc *hif_hdl, int ctx_id)
 {
 	struct CE_state *ce_state;
 	struct hif_softc *scn = HIF_GET_SOFTC(hif_hdl);
-
-	QDF_ASSERT(scn != NULL);
 
 	ce_state = scn->ce_id_to_state[ctx_id];
 
