@@ -151,8 +151,8 @@
 	synaptics_dsx@20 {
 		compatible = "synaptics,dsx-i2c";
 		reg = <0x20>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <125 0x2008>;
+		interrupt-names = "tp_direct_interrupt";
+		interrupts = <0 216 0>;
 		synaptics,irq-gpio = <&tlmm 125 0x2008>;  /* IRQF_ONESHOT | IRQF_TRIGGER_LOW */
 		synaptics,reset-gpio = <&tlmm 89 0x00>;
 		synaptics,reset-on-state = <0>;
@@ -160,7 +160,7 @@
 		synaptics,reset-delay-ms = <20>;
 		synaptics,switch-gpio = <&tlmm 75 0x00>;
 		synaptics,update-feature = <0>;
-        synaptics,display-coords = <0 1440 0 2560>;
+		synaptics,display-coords = <0 1440 0 2560>;
 		synaptics,tw-pin-mask = <0x3>;
 		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
 		pinctrl-0 = <&ts_rst_active &ts_intr_active>;
