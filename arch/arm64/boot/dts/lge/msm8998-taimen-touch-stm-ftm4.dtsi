@@ -49,7 +49,7 @@
 		//stm,vdd-gpio = <&tlmm 85 0x0>;
 		//stm,vio-gpio = <&tlmm 86 0x0>;
 
-		stm,firmware_name = "touch/taimen/ftm4/v30_v0.01.ftb";
+		stm,firmware_name = "ftm4_fw.ftb";
 	};
 };
 
