@@ -139,7 +139,7 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 	struct device_node *np = dev->of_node;
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	uint32_t coords[4] = {0};
-	int coords_size;
+	int coords_size, i;
 #endif
 
 	bdata->irq_gpio = of_get_named_gpio_flags(np,
@@ -374,7 +374,34 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 		/*pr_info("DT-%s:display-coords = (%d, %d)", __func__, bdata->display_width,bdata->display_height);*/
 	}
 
-	parse_config(dev, bdata);
+	if (bdata->update_feature & SYNAPTICS_RMI4_UPDATE_IMAGE) {
+		/* TP SOURCE */
+		for (i = 0; i < TP_SRC_NUM; i++) {
+			retval = of_property_read_string_index(np,
+							"synaptics,tp-src-img",
+							i, &name);
+			if (retval < 0)
+				bdata->tp_src[i] = NULL;
+			else
+				bdata->tp_src[i] = name;
+		}
+
+		prop = of_find_property(np, "synaptics,tp-src-id", NULL);
+		if (prop && prop->length &&
+			(prop->length <= TP_SRC_NUM * sizeof(u32))) {
+			retval = of_property_read_u32_array(np,
+							"synaptics,tp-src-id",
+							bdata->tp_src_id,
+							prop->length /
+								sizeof(u32));
+			if (retval < 0)
+				memset(bdata->tp_src_id, 0,
+					TP_SRC_NUM * sizeof(uint32_t));
+		} else
+			memset(bdata->tp_src_id, 0,
+				TP_SRC_NUM * sizeof(uint32_t));
+	} else if (bdata->update_feature & SYNAPTICS_RMI4_UPDATE_CONFIG)
+		parse_config(dev, bdata);
 #endif
 	return 0;
 }

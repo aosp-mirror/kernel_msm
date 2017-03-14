@@ -46,8 +46,6 @@
 #endif
 
 #define FW_IMAGE_NAME "synaptics.img"
-#define FW_IMAGE_NAME_BL71 "synaptics_bl71.img"
-#define FW_IMAGE_NAME_BL77 "synaptics_bl77.img"
 
 #define DO_STARTUP_FW_UPDATE
 #define SYNA_SIMPLE_UPDATE
@@ -4288,12 +4286,54 @@ exit:
 	return retval;
 }
 
+static const char *fwu_get_tp_img(struct synaptics_rmi4_data *rmi4_data)
+{
+	int retval = 0;
+	uint32_t i;
+	const struct synaptics_dsx_board_data *bdata =
+			rmi4_data->hw_if->board_data;
+
+	retval = fwu_enter_flash_prog();
+	if (retval < 0)
+		goto exit;
+
+	if (bdata->tw_pin_mask) {
+		retval = fwu_get_tw_vendor();
+		if (retval < 0)
+			goto exit;
+	}
+
+	for (i = 0; i < TP_SRC_NUM; i++) {
+		if (rmi4_data->tw_vendor == bdata->tp_src_id[i]) {
+			dev_info(rmi4_data->pdev->dev.parent,
+					"TP FW: %s, id %#x\n", bdata->tp_src[i],
+					rmi4_data->tw_vendor);
+			rmi4_data->reset_device(rmi4_data, false);
+			return bdata->tp_src[i];
+		}
+	}
+
+	dev_err(rmi4_data->pdev->dev.parent,
+			"TP FW: no matching FW for id %#x\n",
+			rmi4_data->tw_vendor);
+	for (i = 0; i < TP_SRC_NUM; i++) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"id: %#x, src: %s:\n", bdata->tp_src_id[i],
+				bdata->tp_src[i]);
+	}
+
+exit:
+	rmi4_data->reset_device(rmi4_data, false);
+	return NULL;
+}
+
 static int fwu_start_reflash(void)
 {
 	int retval = 0;
 	enum flash_area flash_area;
 	const struct firmware *fw_entry = NULL;
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+	const char *fw_image_name = NULL;
 
 	if (rmi4_data->sensor_sleep) {
 		dev_err(rmi4_data->pdev->dev.parent,
@@ -4309,14 +4349,16 @@ static int fwu_start_reflash(void)
 	pr_notice("%s: Start of reflash process\n", __func__);
 
 	if (fwu->image == NULL) {
-		if(fwu->bootloader_id[1] == 7 && fwu->bootloader_id[0] == 7)
+		fw_image_name = fwu_get_tp_img(rmi4_data);
+
+		if (fw_image_name)
 			retval = secure_memcpy(fwu->image_name, MAX_IMAGE_NAME_LEN,
-					FW_IMAGE_NAME_BL77, sizeof(FW_IMAGE_NAME_BL77),
-					sizeof(FW_IMAGE_NAME_BL77));
+					fw_image_name, strlen(fw_image_name),
+					strlen(fw_image_name));
 		else
 			retval = secure_memcpy(fwu->image_name, MAX_IMAGE_NAME_LEN,
-					FW_IMAGE_NAME_BL71, sizeof(FW_IMAGE_NAME_BL71),
-					sizeof(FW_IMAGE_NAME_BL71));
+					FW_IMAGE_NAME, sizeof(FW_IMAGE_NAME),
+					sizeof(FW_IMAGE_NAME));
 
 		if (retval < 0) {
 			dev_err(rmi4_data->pdev->dev.parent,

@@ -56,6 +56,8 @@ struct synaptics_dsx_button_map {
 #define SYN_CFG_BLK_UNIT        (16)
 #define SYN_CONFIG_SIZE         (128 * SYN_CFG_BLK_UNIT)
 
+#define TP_SRC_NUM  4
+
 struct synaptics_rmi4_config {
 	uint32_t sensor_id;
 	uint32_t pr_number;
@@ -131,6 +133,8 @@ struct synaptics_dsx_board_data {
 	struct synaptics_rmi4_config *config_table;
 	uint32_t display_width;
 	uint32_t display_height;
+	const char *tp_src[TP_SRC_NUM];
+	uint32_t tp_src_id[TP_SRC_NUM];
 #endif
 };
 
