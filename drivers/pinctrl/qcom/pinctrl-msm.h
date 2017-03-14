@@ -95,6 +95,8 @@ struct msm_pingroup {
 	unsigned intr_polarity_bit:5;
 	unsigned intr_detection_bit:5;
 	unsigned intr_detection_width:5;
+
+	unsigned dir_conn_en_bit:5;
 };
 
 /**
@@ -115,6 +117,8 @@ struct msm_pinctrl_soc_data {
 	const struct msm_pingroup *groups;
 	unsigned ngroups;
 	unsigned ngpios;
+	unsigned dir_connect_offset;
+	unsigned dir_connect_num_irqs;
 };
 
 int msm_pinctrl_probe(struct platform_device *pdev,
