@@ -1666,6 +1666,9 @@ send_fw_diag_nl_data(const u_int8_t *buffer,
     struct sk_buff *skb_out;
     struct nlmsghdr *nlh;
     int res = 0;
+    tAniNlHdr *wnl;
+    int radio = 0;
+    int msg_len = 0;
 
     if (WARN_ON(len > ATH6KL_FWLOG_PAYLOAD_SIZE))
         return -ENODEV;
@@ -1675,14 +1678,17 @@ send_fw_diag_nl_data(const u_int8_t *buffer,
 
     if (vos_is_multicast_logging())
     {
-        skb_out = nlmsg_new(len, 0);
+        msg_len = len + sizeof(radio);
+        skb_out = nlmsg_new(msg_len, 0);
         if (!skb_out)
         {
             AR_DEBUG_PRINTF(ATH_DEBUG_ERR, ("Failed to allocate new skb\n"));
             return -1;
         }
-        nlh = nlmsg_put(skb_out, 0, 0, WLAN_NL_MSG_CNSS_DIAG, len, 0);
-        memcpy(nlmsg_data(nlh), buffer, len);
+        nlh = nlmsg_put(skb_out, 0, 0, WLAN_NL_MSG_CNSS_DIAG, msg_len, 0);
+        wnl = (tAniNlHdr *)nlh;
+        wnl->radio = 0;
+        memcpy(nlmsg_data(nlh) + sizeof(radio), buffer, len);
 
         res = nl_srv_bcast_fw_logs(skb_out);
         if (res < 0)
@@ -1704,6 +1710,8 @@ send_diag_netlink_data(const u_int8_t *buffer,
     int res = 0;
     struct dbglog_slot *slot;
     size_t slot_len;
+    tAniNlHdr *wnl;
+    int radio = 0;
 
     if (WARN_ON(len > ATH6KL_FWLOG_PAYLOAD_SIZE))
         return -ENODEV;
@@ -1712,7 +1720,7 @@ send_diag_netlink_data(const u_int8_t *buffer,
 	return -EIO;
 
     if (vos_is_multicast_logging()) {
-        slot_len = sizeof(*slot) + ATH6KL_FWLOG_PAYLOAD_SIZE;
+        slot_len = sizeof(*slot) + ATH6KL_FWLOG_PAYLOAD_SIZE + sizeof(radio);
 
         skb_out = nlmsg_new(slot_len, 0);
         if (!skb_out) {
@@ -1722,7 +1730,9 @@ send_diag_netlink_data(const u_int8_t *buffer,
         }
 
         nlh = nlmsg_put(skb_out, 0, 0, WLAN_NL_MSG_CNSS_DIAG, slot_len, 0);
-        slot = (struct dbglog_slot *) nlmsg_data(nlh);
+        wnl = (tAniNlHdr *)nlh;
+        wnl->radio = 0;
+        slot = (struct dbglog_slot *) (nlmsg_data(nlh) + sizeof(radio));
         slot->diag_type = cmd;
         slot->timestamp = cpu_to_le32(jiffies);
         slot->length = cpu_to_le32(len);
