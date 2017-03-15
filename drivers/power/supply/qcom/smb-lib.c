@@ -3598,9 +3598,6 @@ irqreturn_t smblib_handle_usb_typec_change(int irq, void *data)
 	if (stat4 & TYPEC_VCONN_OVERCURR_STATUS_BIT)
 		smblib_handle_vconn_overcurrent(chg);
 
-	if (stat4 & TYPEC_VCONN_OVERCURR_STATUS_BIT)
-		smblib_handle_vconn_overcurrent(chg);
-
 	power_supply_changed(chg->usb_psy);
 	smblib_dbg(chg, PR_REGISTER, "TYPE_C_STATUS_4 = 0x%02x\n", stat4);
 	smblib_dbg(chg, PR_REGISTER, "TYPE_C_STATUS_5 = 0x%02x\n", stat5);

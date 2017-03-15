@@ -55,9 +55,6 @@ enum print_reason {
 #define VCONN_MAX_ATTEMPTS	3
 #define OTG_MAX_ATTEMPTS	3
 
-#define VCONN_MAX_ATTEMPTS		3
-#define OTG_MAX_ATTEMPTS			3
-
 enum smb_mode {
 	PARALLEL_MASTER = 0,
 	PARALLEL_SLAVE,
