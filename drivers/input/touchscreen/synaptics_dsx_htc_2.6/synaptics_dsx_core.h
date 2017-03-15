@@ -561,7 +561,8 @@ static inline int synaptics_rmi4_reg_write(
 static inline ssize_t synaptics_rmi4_show_error(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	dev_warn(dev, "%s Attempted to read from write-only attribute %s\n",
+	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
+	dev_warn(rmi4_data->pdev->dev.parent, "%s Attempted to read from write-only attribute %s\n",
 			__func__, attr->attr.name);
 	return -EPERM;
 }
@@ -569,7 +570,8 @@ static inline ssize_t synaptics_rmi4_show_error(struct device *dev,
 static inline ssize_t synaptics_rmi4_store_error(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	dev_warn(dev, "%s Attempted to write to read-only attribute %s\n",
+	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
+	dev_warn(rmi4_data->pdev->dev.parent, "%s Attempted to write to read-only attribute %s\n",
 			__func__, attr->attr.name);
 	return -EPERM;
 }
