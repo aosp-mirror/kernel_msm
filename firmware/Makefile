@@ -28,7 +28,7 @@ acenic-objs := acenic/tg1.bin acenic/tg2.bin
 endif
 
 ifdef CONFIG_TOUCH_FW_PATH
-fwpath := $(subst ",,$(CONFIG_TOUCH_FW_PATH))
+fwpath := $(subst $\",,$(CONFIG_TOUCH_FW_PATH))
 touch_image_files := $(wildcard $(srctree)/firmware/$(fwpath)/*/*)
 touch_firmware := $(subst $(srctree)/firmware/,,$(touch_image_files))
 fw-shipped-$(CONFIG_LGE_TOUCH_CORE_BASE) += $(touch_firmware)
