@@ -376,7 +376,7 @@ static int mnh_pwr_down(void)
 		goto fail_pwr_down_sdsr;
 	}
 
-	if (mnh_pwr->state == MNH_PWR_S0) {
+	if ((mnh_pwr->state == MNH_PWR_S0) || (mnh_pwr->state == MNH_PWR_S1)) {
 		ret = regulator_disable(mnh_pwr->asr_supply);
 		if (ret) {
 			dev_err(mnh_pwr->dev,
@@ -427,8 +427,6 @@ fail_pwr_down_ioldo:
 		regulator_disable(mnh_pwr->sdldo_supply);
 fail_pwr_down_sdldo:
 
-	mnh_pwr->state = MNH_PWR_S4;
-
 	dev_err(mnh_pwr->dev,
 		"%s: force shutdown because of powerdown failure (%d)\n",
 		__func__, ret);
@@ -436,6 +434,16 @@ fail_pwr_down_sdldo:
 	mnh_pwr->state = MNH_PWR_S4;
 
 	return ret;
+}
+
+static int mnh_pwr_bypass(void)
+{
+	/* put ddr into self-refresh mode, assert pad isolation */
+	mnh_ddr_suspend(mnh_pwr->dev, mnh_pwr->ddr_pad_iso_n_pin);
+
+	mnh_pwr->state = MNH_PWR_S1;
+
+	return 0;
 }
 
 static int mnh_pwr_suspend(void)
@@ -515,9 +523,13 @@ fail_pwr_suspend_regulators:
 	return ret;
 }
 
-static int mnh_pwr_up(void)
+static int mnh_pwr_up(enum mnh_pwr_state next_state)
 {
 	int ret;
+
+	/* if we are in bypass mode, just skip to resume DDR */
+	if (mnh_pwr->state == MNH_PWR_S1)
+		goto pwr_up_resume_ddr;
 
 	/* enable supplies */
 	/* sdldo -> ioldo -> asr -> sdsr */
@@ -592,11 +604,12 @@ static int mnh_pwr_up(void)
 		goto fail_pwr_up_pcie;
 	}
 
-	/* if this is a resume from self-refresh, resume ddr */
-	if (mnh_pwr->state == MNH_PWR_S3)
+pwr_up_resume_ddr:
+	/* if ddr is in self-refresh and we are going to S0 state, resume ddr */
+	if ((mnh_pwr->state != MNH_PWR_S4) && (next_state == MNH_PWR_S0))
 		mnh_ddr_resume(mnh_pwr->dev, mnh_pwr->ddr_pad_iso_n_pin);
 
-	mnh_pwr->state = MNH_PWR_S0;
+	mnh_pwr->state = next_state;
 
 	return 0;
 
@@ -759,7 +772,10 @@ int mnh_pwr_set_state(enum mnh_pwr_state system_state)
 	if (system_state != mnh_pwr->state) {
 		switch (system_state) {
 		case MNH_PWR_S0:
-			ret = mnh_pwr_up();
+			ret = mnh_pwr_up(system_state);
+			break;
+		case MNH_PWR_S1:
+			ret = mnh_pwr_bypass();
 			break;
 		case MNH_PWR_S3:
 			ret = mnh_pwr_suspend();
@@ -823,7 +839,7 @@ int mnh_pwr_init(struct device *dev)
 	INIT_WORK(&mnh_pwr->shutdown_work, mnh_pwr_shutdown_work);
 
 	/* power on the device to enumerate PCIe */
-	ret = mnh_pwr_up();
+	ret = mnh_pwr_up(MNH_PWR_S0);
 	if (ret) {
 		dev_err(dev, "%s: failed initial power up (%d)", __func__, ret);
 		return ret;

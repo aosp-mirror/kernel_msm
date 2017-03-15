@@ -52,6 +52,18 @@
 #define MNH_SM_IOC_RESUME \
 	_IO(MNH_SM_IOC_MAGIC, 9)
 
+enum mnh_sm_state {
+	MNH_STATE_OFF, /* powered off */
+	MNH_STATE_INIT, /* powered on, unconfigured */
+	MNH_STATE_CONFIG_MIPI, /* powered on, mipi configured */
+	MNH_STATE_CONFIG_DDR, /* powered on, ddr configured */
+	MNH_STATE_ACTIVE, /* powered on and booted */
+	MNH_STATE_SUSPEND_SELF_REFRESH, /* suspended, ddr in self-refresh */
+	MNH_STATE_SUSPEND_HIBERNATE, /* suspended, kernel image in AP DRAM */
+	MNH_STATE_BYPASS, /* CPU and DDR powered on, DDR in self-refresh */
+	MNH_STATE_MAX,
+};
+
 struct mnh_mipi_config {
 	/* Tx dev MNH_MUX_DEVICE_TX* */
 	int		txdev;

@@ -47,7 +47,8 @@
 		qcom,mdss-dsi-lane-1-state;
 		qcom,mdss-dsi-lane-2-state;
 		qcom,mdss-dsi-lane-3-state;
-		qcom,mdss-dsi-panel-timings = [D6 38 26 00 68 6E 2A 3C 2C 03 04 00];
+		qcom,mdss-dsi-panel-timings = [
+			00 16 05 05 08 0C 06 05 04 03 04 00];
 		qcom,mdss-dsi-reset-sequence =  <1 2>, <0 1>, <1 10>;
 		qcom,mdss-dsi-t-clk-post = <0x0E>;
 		qcom,mdss-dsi-t-clk-pre = <0x36>;

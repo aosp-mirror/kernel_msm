@@ -1,0 +1,16 @@
+htc rtel (HTC modem runtime embedded logging) driver
+
+The htc rtel-uio driver is used to allocate memory for saving
+modem runtime embedded log
+
+Required properties:
+
+- compatible: name of the component used for driver matching, should be
+              "htc,rtel-uio"
+
+Example:
+        htc,rtel_sharedmem@0 {
+                compatible = "htc,rtel-uio";
+                reg = <0xa1800000 0x02000000>;
+                memory-region = <&htc_rtel_mem>;
+        };

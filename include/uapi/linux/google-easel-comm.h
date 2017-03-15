@@ -51,6 +51,12 @@ struct easelcomm_kmsg_desc {
 	uint32_t replycode;            /* replycode if in_reply_to != 0 */
 };
 
+enum easelcomm_dma_buffer_type {
+	EASELCOMM_DMA_BUFFER_UNUSED = 0,
+	EASELCOMM_DMA_BUFFER_USER,
+	EASELCOMM_DMA_BUFFER_DMA_BUF
+};
+
 /*
  * Local buffer descriptor argument for ioctls that read and write message
  * or DMA buffers.  The message_id describes an in-progress local outgoing
@@ -61,6 +67,8 @@ struct easelcomm_kmsg_desc {
 struct easelcomm_kbuf_desc {
 	easelcomm_msgid_t message_id;  /* ID of message for this transfer */
 	void __user *buf;              /* local buffer source or dest */
+	int dma_buf_fd;                /* fd of local dma_buf */
+	int buf_type;                  /* use enum easelcomm_dma_buffer_type */
 	uint32_t buf_size;             /* size of the local buffer */
 };
 

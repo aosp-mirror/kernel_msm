@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -488,6 +488,7 @@ ol_tx_delay_compute(struct ol_txrx_pdev_t *pdev,
 #endif /* !QCA_TX_STD_PATH_ONLY */
 #endif /* QCA_TX_SINGLE_COMPLETIONS */
 
+#if !defined(CONFIG_HL_SUPPORT)
 void ol_tx_discard_target_frms(ol_txrx_pdev_handle pdev)
 {
 	int i = 0;
@@ -511,6 +512,7 @@ void ol_tx_discard_target_frms(ol_txrx_pdev_handle pdev)
 		}
 	}
 }
+#endif
 
 void ol_tx_credit_completion_handler(ol_txrx_pdev_handle pdev, int credits)
 {
@@ -539,6 +541,7 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 	struct ol_tx_desc_t *tx_desc;
 	uint32_t byte_cnt = 0;
 	qdf_nbuf_t netbuf;
+	tp_ol_packetdump_cb packetdump_cb;
 
 	union ol_tx_desc_list_elem_t *lcl_freelist = NULL;
 	union ol_tx_desc_list_elem_t *tx_desc_last = NULL;
@@ -555,8 +558,9 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 		QDF_NBUF_UPDATE_TX_PKT_COUNT(netbuf, QDF_NBUF_TX_PKT_FREE);
 
 		if (tx_desc->pkt_type != OL_TX_FRM_TSO) {
-			if (pdev->ol_tx_packetdump_cb)
-				pdev->ol_tx_packetdump_cb(netbuf, status,
+			packetdump_cb = pdev->ol_tx_packetdump_cb;
+			if (packetdump_cb)
+				packetdump_cb(netbuf, status,
 					tx_desc->vdev->vdev_id, TX_DATA_PKT);
 		}
 
@@ -765,6 +769,7 @@ ol_tx_single_completion_handler(ol_txrx_pdev_handle pdev,
 {
 	struct ol_tx_desc_t *tx_desc;
 	qdf_nbuf_t netbuf;
+	tp_ol_packetdump_cb packetdump_cb;
 
 	tx_desc = ol_tx_desc_find_check(pdev, tx_desc_id);
 	if (tx_desc == NULL) {
@@ -782,8 +787,9 @@ ol_tx_single_completion_handler(ol_txrx_pdev_handle pdev,
 	/* Do one shot statistics */
 	TXRX_STATS_UPDATE_TX_STATS(pdev, status, 1, qdf_nbuf_len(netbuf));
 
-	if (pdev->ol_tx_packetdump_cb)
-		pdev->ol_tx_packetdump_cb(netbuf, status,
+	packetdump_cb = pdev->ol_tx_packetdump_cb;
+	if (packetdump_cb)
+		packetdump_cb(netbuf, status,
 			tx_desc->vdev->vdev_id, TX_MGMT_PKT);
 
 	if (OL_TX_DESC_NO_REFS(tx_desc)) {

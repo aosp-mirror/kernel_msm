@@ -14,6 +14,8 @@
 *
 */
 
+/* #define DEBUG */
+
 #include <linux/delay.h>
 
 #include "mnh-hwio.h"
@@ -156,6 +158,8 @@ static struct mipi_dev_ovr_cfg mipi_dev_ovr_cfgs[] = {
 	{ 2100, 0x9A, 0x9B, 0xD0, 0x0E, 0x50, 0xC0, 0x39, 0xD3, 0x0C, 0x4A, 0xA7, 0x1E, true},
 };
 
+static int mipi_debug;
+
 static void mnh_sm_mipi_rx_dphy_write_gen3(int command, int data,
 					   uint32_t device)
 {
@@ -283,7 +287,7 @@ static void mnh_mipi_gen3_host(struct device *dev, uint32_t device,
 	if (device > 2)
 		return;
 
-	dev_info(dev, "%s: dev %d, rate %d\n", __func__, device, rate);
+	dev_dbg(dev, "%s: dev %d, rate %d\n", __func__, device, rate);
 
 	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, N_LANES, N_LANES, 0x0);
 
@@ -434,18 +438,23 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 	uint8_t pll_n;
 	int i = 0;
 
-	dev_info(dev, "%s: dev %d, rate %d\n", __func__, device, rate);
+	dev_dbg(dev, "%s: dev %d, rate %d\n", __func__, device, rate);
 
 	/* Functional configurations are currently 1350, 720, 675 */
-	if (rate <= 675) {
-		dev_info(dev, "%s: %d config. default 675\n", __func__, rate);
-		rate = 675;
-	} else if (rate <= 720) {
-		dev_info(dev, "%s: %d config. default 720\n", __func__, rate);
-		rate = 720;
-	} else if (rate <= 1350) {
-		dev_info(dev, "%s: %d config. default 1350\n", __func__, rate);
-		rate = 1350;
+	if (!mipi_debug) {
+		if (rate <= 675) {
+			dev_dbg(dev, "%s: %d config. default 675\n", __func__,
+				rate);
+			rate = 675;
+		} else if (rate <= 720) {
+			dev_dbg(dev, "%s: %d config. default 720\n", __func__,
+				rate);
+			rate = 720;
+		} else if (rate <= 1350) {
+			dev_dbg(dev, "%s: %d config. default 1350\n", __func__,
+				rate);
+			rate = 1350;
+		}
 	}
 
 	/* only support devices 0-1 */
@@ -541,8 +550,8 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 	/* mipi device configuration settings from lookup table */
 	mipi_dev_cfg_index = mnh_mipi_gen3_lookup_device_cfg_idx(rate);
 	dev_ovr_cfg = &mipi_dev_ovr_cfgs[mipi_dev_cfg_index];
-	dev_info(dev, "%s: Device configuration index: %d\n", __func__,
-		 mipi_dev_cfg_index);
+	dev_dbg(dev, "%s: Device configuration index: %d\n", __func__,
+		mipi_dev_cfg_index);
 
 	/* adjust the values to meet the register definition */
 	pll_m -= 2;
@@ -577,7 +586,7 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 		LANE_EN_NUM, 3);
 
 	/* Timing register overrides */
-	if (dev_ovr_cfg->use_ovrd) {
+	if (!mipi_debug && dev_ovr_cfg->use_ovrd) {
 		mnh_sm_mipi_tx_dphy_write_gen3(0x5A, dev_ovr_cfg->reg_0x5A,
 					       device);
 		mnh_sm_mipi_tx_dphy_write_gen3(0x5B, dev_ovr_cfg->reg_0x5B,
@@ -748,3 +757,53 @@ int mnh_mipi_config(struct device *dev, struct mnh_mipi_config config)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mnh_mipi_config);
+
+void mnh_mipi_stop_device(struct device *dev, int txdev)
+{
+	/* setup clocks and frequency */
+	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(txdev), MIPI_TX, CSI2_RESETN,
+		CSI2_RESETN_RW, 0);
+	switch (txdev) {
+	case MNH_MUX_DEVICE_TX0:
+		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
+			CSI2_TX0_CG, 0x1);
+		break;
+	case MNH_MUX_DEVICE_TX1:
+		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
+			CSI2_TX1_CG, 0x1);
+		break;
+	default:
+		dev_err(dev, "%s invalid mipi device!\n", __func__);
+	}
+}
+EXPORT_SYMBOL_GPL(mnh_mipi_stop_device);
+
+void mnh_mipi_stop_host(struct device *dev, int rxdev)
+{
+	/* setup clocks and frequency */
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(rxdev), MIPI_RX, CSI2_RESETN,
+		CSI2_RESETN, 0x0);
+	switch (rxdev) {
+	case MNH_MUX_DEVICE_RX0:
+		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
+			CSI2_RX0_CG, 0x1);
+		break;
+	case MNH_MUX_DEVICE_RX1:
+		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
+			CSI2_RX1_CG, 0x1);
+		break;
+	case MNH_MUX_DEVICE_RX2:
+		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
+			CSI2_RX2_CG, 0x1);
+		break;
+	default:
+		dev_err(dev, "%s invalid mipi host!\n", __func__);
+	}
+}
+EXPORT_SYMBOL_GPL(mnh_mipi_stop_host);
+
+void mnh_mipi_set_debug(int val)
+{
+	mipi_debug = val;
+}
+EXPORT_SYMBOL(mnh_mipi_set_debug);

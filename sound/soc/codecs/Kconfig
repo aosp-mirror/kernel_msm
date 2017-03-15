@@ -734,8 +734,7 @@ config SND_SOC_WCD934X
 	select AUDIO_EXT_CLK
 	select SND_SOC_WCD_DSP_MGR
 	select SND_SOC_WCD_SPI
-	select SND_SOC_WCD934X_MBHC
-        select SND_SOC_WCD934X_DSD
+	select SND_SOC_WCD934X_DSD
 
 config SND_SOC_WCD934X_MBHC
         tristate

@@ -204,6 +204,10 @@ struct mnh_sg_list {
 	struct scatterlist *sc_list;
 	int n_num;
 	int length;
+	enum mnh_dma_chan_dir_t dir;
+	struct dma_buf *dma_buf;
+	struct dma_buf_attachment *attach;
+	struct sg_table *sg_table;
 };
 
 typedef int (*irq_cb_t)(uint32_t irq);
@@ -355,27 +359,49 @@ int mnh_dma_sblk_start(uint8_t chan, enum mnh_dma_chan_dir_t dir,
 		struct mnh_dma_element_t *blk);
 
 /**
- * API to build Scatter Gather list to do Multi-block DMA transfer
+ * API to build Scatter Gather list to do Multi-block DMA transfer for a user
+ * buffer
  * @param[in] dmadest  Starting virtual addr of the DMA destination
  * @param[in] size Totalsize of the transfer in bytes
  * @param[out] sg  Array of maxsg pointers to struct mnh_sg_entry, allocated
- *			by caller and filled out by routine.
+ *			and filled out by this routine.
  * @param[out] sgl pointer of Scatter gather list which has information of
- *			page list and scatter gather list.
- * @param[in] maxsg  Allocated max array number of the sg
+ *			page list, scatter gather list and num of its entries.
  * @return The number of sg[] entries filled out by the routine, negative if
- *		   overflow.
+ *		   overflow or sg[] not allocated.
  */
-int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry *sg,
-		struct mnh_sg_list *sgl, uint32_t maxsg);
+int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry **sg,
+		struct mnh_sg_list *sgl);
 
 /**
- * API to release scatter gather list
+ * API to release scatter gather list for a user buffer
  * @param[in] *sgl pointer to the scatter gather list that was built during
  *		mnh_sg_build
  * @return 0 for SUCCESS
  */
 int mnh_sg_destroy(struct mnh_sg_list *sgl);
+
+/**
+ * API to build a scatter-gather list for multi-block DMA transfer for a
+ * dma_buf
+ * @param[in] fd   Handle of dma_buf passed from user
+ * @param[out] sg  Array of maxsg pointers to struct mnh_sg_entry, allocated
+ *			and filled out by this routine.
+ * @param[out] sgl pointer of Scatter gather list which has information of
+ *			scatter gather list and num of its entries.
+ * @return 0        on SUCCESS
+ *         negative on failure
+ */
+int mnh_sg_retrieve_from_dma_buf(int fd, struct mnh_sg_entry **sg,
+		struct mnh_sg_list *sgl);
+
+/**
+ * API to release a scatter-gather list for a dma_buf
+ * @param[in] *sgl pointer to the scatter gather list that was built during
+ *		mnh_sg_retrieve_from_dma_buf
+ * @return 0 for SUCCESS
+ */
+int mnh_sg_release_from_dma_buf(struct mnh_sg_list *sgl);
 
 /**
  * API to read/write multi blocks on specific channel.

@@ -14,7 +14,7 @@
  *
  */
 
-#define DEBUG
+/* #define DEBUG */
 
 #include <linux/delay.h>
 #include <linux/device.h>
@@ -1006,11 +1006,11 @@ static void bcm15602_config_adc(struct bcm15602_chip *ddata)
 				    BCM15602_REG_ADC_SLOTTHL0 + (i * 2) + 1,
 				    (adc_ctrls[i].th_ctrl >> 8) & 0xFF);
 
-		if (adc_ctrls[i].th_en)
+		if (!adc_ctrls[i].th_en)
 			slot_mask |= 1 << i;
 	};
 
-	for (i = 0; i < (BCM15602_HK_NUM_SLOTS / 8); i++) {
+	for (i = 0; i < ((BCM15602_HK_NUM_SLOTS + 7) / 8); i++) {
 		bcm15602_write_byte(ddata,
 				    BCM15602_REG_ADC_SLOTMSKL + i,
 				    (slot_mask >> (i * 8)) & 0xFF);

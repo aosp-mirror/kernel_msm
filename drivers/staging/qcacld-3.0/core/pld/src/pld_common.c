@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -388,24 +388,25 @@ int pld_wlan_disable(struct device *dev, enum pld_driver_mode mode)
 }
 
 /**
- * pld_set_fw_debug_mode() - Set FW debug mode
+ * pld_set_fw_log_mode() - Set FW debug log mode
  * @dev: device
- * @enablefwlog: 0 for QXDM, 1 for WMI
+ * @fw_log_mode: 0 for No log, 1 for WMI, 2 for DIAG
  *
- * Switch Fw debug mode between DIAG logging and WMI logging.
+ * Switch Fw debug log mode between DIAG logging and WMI logging.
  *
  * Return: 0 for success
  *         Non zero failure code for errors
  */
-int pld_set_fw_debug_mode(struct device *dev, bool enablefwlog)
+int pld_set_fw_log_mode(struct device *dev, u8 fw_log_mode)
 {
 	int ret = 0;
 
 	switch (pld_get_bus_type(dev)) {
 	case PLD_BUS_TYPE_PCIE:
-		ret = pld_pcie_set_fw_debug_mode(enablefwlog);
+		ret = pld_pcie_set_fw_log_mode(fw_log_mode);
 		break;
 	case PLD_BUS_TYPE_SNOC:
+		ret = pld_snoc_set_fw_log_mode(fw_log_mode);
 		break;
 	case PLD_BUS_TYPE_SDIO:
 		break;
@@ -1574,5 +1575,36 @@ int pld_is_qmi_disable(struct device *dev)
 		break;
 	}
 
+	return ret;
+}
+
+/**
+ * pld_force_assert_target() - Send a force assert to FW.
+ * This can use various sideband requests available at platform to
+ * initiate a FW assert.
+ * @dev: device
+ *
+ *  Return: 0 if force assert of target was triggered successfully
+ *          Non zero failure code for errors
+ */
+int pld_force_assert_target(struct device *dev)
+{
+	int ret = 0;
+	enum pld_bus_type type = pld_get_bus_type(dev);
+
+	switch (type) {
+	case PLD_BUS_TYPE_SNOC:
+		ret = pld_snoc_force_assert_target(dev);
+		break;
+
+	case PLD_BUS_TYPE_PCIE:
+	case PLD_BUS_TYPE_SDIO:
+		ret = -EINVAL;
+		break;
+	default:
+		pr_err("Invalid device type %d\n", type);
+		ret = -EINVAL;
+		break;
+	}
 	return ret;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -328,6 +328,7 @@ struct qdf_nbuf_cb {
  */
 
 typedef void (*qdf_nbuf_trace_update_t)(char *);
+typedef void (*qdf_nbuf_free_t)(__qdf_nbuf_t);
 
 #define __qdf_nbuf_mapped_paddr_get(skb) QDF_NBUF_CB_PADDR(skb)
 
@@ -480,6 +481,7 @@ QDF_STATUS __qdf_nbuf_map_single(__qdf_device_t osdev,
 void __qdf_nbuf_unmap_single(__qdf_device_t osdev,
 			struct sk_buff *skb, qdf_dma_dir_t dir);
 void __qdf_nbuf_reg_trace_cb(qdf_nbuf_trace_update_t cb_func_ptr);
+void __qdf_nbuf_reg_free_cb(qdf_nbuf_free_t cb_func_ptr);
 
 QDF_STATUS __qdf_nbuf_dmamap_create(qdf_device_t osdev, __qdf_dma_map_t *dmap);
 void __qdf_nbuf_dmamap_destroy(qdf_device_t osdev, __qdf_dma_map_t dmap);
@@ -1040,6 +1042,10 @@ void __qdf_dmaaddr_to_32s(qdf_dma_addr_t dmaaddr,
 
 uint32_t __qdf_nbuf_get_tso_info(qdf_device_t osdev, struct sk_buff *skb,
 	struct qdf_tso_info_t *tso_info);
+
+void __qdf_nbuf_unmap_tso_segment(qdf_device_t osdev,
+			  struct qdf_tso_seg_elem_t *tso_seg,
+			  bool is_last_seg);
 
 uint32_t __qdf_nbuf_get_tso_num_seg(struct sk_buff *skb);
 

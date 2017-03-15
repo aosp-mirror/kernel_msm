@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -104,6 +104,7 @@
 #define DEVICE_IFACE_OPENED    (5)
 #define TDLS_INIT_DONE         (6)
 #define ACS_PENDING            (7)
+#define SOFTAP_INIT_DONE       (8)
 
 /* HDD global event flags */
 #define ACS_IN_PROGRESS        (0)
@@ -151,12 +152,16 @@
 
 #define WLAN_WAIT_TIME_BPF     1000
 
+/* rcpi request timeout in milli seconds */
+#define WLAN_WAIT_TIME_RCPI 500
+/* Maximum time(ms) to wait for RSO CMD status event */
+#define WAIT_TIME_RSO_CMD_STATUS 2000
+
+#define WLAN_WAIT_TIME_SET_RND 100
+
 #define MAX_NUMBER_OF_ADAPTERS 4
 
 #define MAX_CFG_STRING_LEN  255
-
-/* SSR Retry Count */
-#define HDD_MOD_EXIT_SSR_MAX_RETRIES 75
 
 #define MAC_ADDR_ARRAY(a) (a)[0], (a)[1], (a)[2], (a)[3], (a)[4], (a)[5]
 /** Mac Address string **/
@@ -265,6 +270,31 @@
 /* session ID invalid */
 #define HDD_SESSION_ID_INVALID    0xFF
 
+#define SCAN_REJECT_THRESHOLD_TIME 300000 /* Time is in msec, equal to 5 mins */
+
+/*
+ * @eHDD_SCAN_REJECT_DEFAULT: default value
+ * @eHDD_CONNECTION_IN_PROGRESS: connection is in progress
+ * @eHDD_REASSOC_IN_PROGRESS: reassociation is in progress
+ * @eHDD_EAPOL_IN_PROGRESS: STA/P2P-CLI is in middle of EAPOL/WPS exchange
+ * @eHDD_SAP_EAPOL_IN_PROGRESS: SAP/P2P-GO is in middle of EAPOL/WPS exchange
+ */
+typedef enum {
+	eHDD_SCAN_REJECT_DEFAULT = 0,
+	eHDD_CONNECTION_IN_PROGRESS,
+	eHDD_REASSOC_IN_PROGRESS,
+	eHDD_EAPOL_IN_PROGRESS,
+	eHDD_SAP_EAPOL_IN_PROGRESS,
+} scan_reject_states;
+
+#define MAX_PROBE_REQ_OUIS 16
+
+/*
+ * Maximum no.of random mac addresses supported by firmware
+ * for transmitting management action frames
+ */
+#define MAX_RANDOM_MAC_ADDRS 16
+
 /*
  * Generic asynchronous request/response support
  *
@@ -309,6 +339,20 @@ struct linkspeedContext {
 	unsigned int magic;
 };
 
+/**
+ * struct random_mac_context - Context used with hdd_random_mac_callback
+ * @random_mac_completion: Event on which hdd_set_random_mac will wait
+ * @adapter: Pointer to adapter
+ * @magic: For valid context this is set to ACTION_FRAME_RANDOM_CONTEXT_MAGIC
+ * @set_random_addr: Status of random filter set
+ */
+struct random_mac_context {
+	struct completion random_mac_completion;
+	hdd_adapter_t *adapter;
+	unsigned int magic;
+	bool set_random_addr;
+};
+
 extern spinlock_t hdd_context_lock;
 
 #define STATS_CONTEXT_MAGIC 0x53544154  /* STAT */
@@ -320,6 +364,8 @@ extern spinlock_t hdd_context_lock;
 #define TEMP_CONTEXT_MAGIC  0x74656d70   /* TEMP (temperature) */
 #define BPF_CONTEXT_MAGIC 0x4575354    /* BPF */
 #define POWER_STATS_MAGIC 0x14111990
+#define RCPI_CONTEXT_MAGIC  0x7778888  /* RCPI */
+#define ACTION_FRAME_RANDOM_CONTEXT_MAGIC 0x87878787
 
 /* MAX OS Q block time value in msec
  * Prevent from permanent stall, resume OS Q if timer expired */
@@ -646,6 +692,29 @@ struct hdd_mon_set_ch_info {
 	eCsrPhyMode phy_mode;
 };
 
+/**
+ * struct action_frame_cookie - Action frame cookie item in cookie list
+ * @cookie_node: List item
+ * @cookie: Cookie value
+ */
+struct action_frame_cookie {
+	struct list_head cookie_node;
+	uint64_t cookie;
+};
+
+/**
+ * struct action_frame_random_mac - Action Frame random mac addr &
+ * related attrs
+ * @in_use: Checks whether random mac is in use
+ * @addr: Contains random mac addr
+ * @cookie_list: List of cookies tied with random mac
+ */
+struct action_frame_random_mac {
+	bool in_use;
+	uint8_t addr[QDF_MAC_ADDR_SIZE];
+	struct list_head cookie_list;
+};
+
 struct hdd_station_ctx {
 	/** Handle to the Wireless Extension State */
 	hdd_wext_state_t WextState;
@@ -698,6 +767,20 @@ typedef struct hdd_hostapd_state_s {
 	bool bCommit;
 
 } hdd_hostapd_state_t;
+
+/**
+ * enum bss_stop_reason - reasons why a BSS is stopped.
+ * @BSS_STOP_REASON_INVALID: no reason specified explicitly.
+ * @BSS_STOP_DUE_TO_MCC_SCC_SWITCH: BSS stopped due to host
+ *  driver is trying to switch AP role to a different channel
+ *  to maintain SCC mode with the STA role on the same card.
+ *  this usually happens when STA is connected to an external
+ *  AP that runs on a different channel
+ */
+enum bss_stop_reason {
+	BSS_STOP_REASON_INVALID = 0,
+	BSS_STOP_DUE_TO_MCC_SCC_SWITCH = 1,
+};
 
 /*
  * Per station structure kept in HDD for multiple station support for SoftAP
@@ -778,6 +861,8 @@ struct hdd_ap_ctx_s {
 	void *sapContext;
 
 	bool dfs_cac_block_tx;
+
+	enum bss_stop_reason bss_stop_reason;
 };
 
 typedef struct hdd_scaninfo_s {
@@ -892,6 +977,16 @@ struct hdd_connect_pm_context {
 #define WLAN_HDD_ADAPTER_MAGIC 0x574c414e       /* ASCII "WLAN" */
 #endif
 #endif
+
+/**
+ * struct rcpi_info - rcpi info
+ * @rcpi: computed value in dB
+ * @mac_addr: peer mac addr for which rcpi is computed
+ */
+struct rcpi_info {
+	int32_t rcpi;
+	struct qdf_mac_addr mac_addr;
+};
 
 struct hdd_adapter_s {
 	/* Magic cookie for adapter sanity verification.  Note that this
@@ -1126,7 +1221,35 @@ struct hdd_adapter_s {
 	struct power_stats_response *chip_power_stats;
 
 	bool fast_roaming_allowed;
+
+	/* rcpi information */
+	struct rcpi_info rcpi;
+	/*
+	 * defer disconnect is used as a flag by roaming to check
+	 * if any disconnect has been deferred because of roaming
+	 * and handle it. It stores the source of the disconnect.
+	 * Based on the source, it will appropriately handle the
+	 * disconnect.
+	 */
+	uint8_t defer_disconnect;
+	/*
+	 * cfg80211 issues a reason for disconnect. Store this reason if the
+	 * disconnect is being deferred.
+	 */
+	uint8_t cfg80211_disconnect_reason;
+	struct lfr_firmware_status lfr_fw_status;
+	/* random address management for management action frames */
+	spinlock_t random_mac_lock;
+	struct action_frame_random_mac random_mac[MAX_RANDOM_MAC_ADDRS];
 };
+
+/*
+ * Below two definitions are useful to distinguish the
+ * source of the disconnect when a disconnect is
+ * deferred.
+ */
+#define DEFER_DISCONNECT_TRY_DISCONNECT      1
+#define DEFER_DISCONNECT_CFG80211_DISCONNECT 2
 
 #define WLAN_HDD_GET_STATION_CTX_PTR(pAdapter) (&(pAdapter)->sessionCtx.station)
 #define WLAN_HDD_GET_AP_CTX_PTR(pAdapter) (&(pAdapter)->sessionCtx.ap)
@@ -1293,6 +1416,18 @@ enum suspend_fail_reason {
 	SUSPEND_FAIL_MAX_COUNT
 };
 
+/**
+ * suspend_resume_stats - Collection of counters for suspend/resume events
+ * @suspends: number of suspends completed
+ * @resumes: number of resumes completed
+ * @suspend_fail: counters for failed suspend reasons
+ */
+struct suspend_resume_stats {
+	uint32_t suspends;
+	uint32_t resumes;
+	uint32_t suspend_fail[SUSPEND_FAIL_MAX_COUNT];
+};
+
 /** Adapter structure definition */
 struct hdd_context_s {
 	/** Global CDS context  */
@@ -1333,9 +1468,6 @@ struct hdd_context_s {
 	bool is_ol_rx_thread_suspended;
 #endif
 
-	/* Track whether Mcast/Bcast Filter is enabled. */
-	bool hdd_mcastbcast_filter_set;
-
 	bool hdd_wlan_suspended;
 	bool suspended;
 
@@ -1374,6 +1506,10 @@ struct hdd_context_s {
 	tdls_scan_context_t tdls_scan_ctxt;
 	/* Lock to avoid race condition during TDLS operations */
 	qdf_spinlock_t tdls_ct_spinlock;
+	/*linear mac address table for counting the packets*/
+	struct tdls_ct_mac_table ct_peer_mac_table[TDLS_CT_MAC_MAX_TABLE_SIZE];
+	/*number of valid mac entry in @ct_peer_mac_table*/
+	uint8_t valid_mac_entries;
 	struct mutex tdls_lock;
 	uint8_t tdls_off_channel;
 	uint16_t tdls_channel_offset;
@@ -1389,16 +1525,6 @@ struct hdd_context_s {
 
 	void *hdd_ipa;
 
-	/* MC/BC Filter state variable
-	 * This always contains the value that is currently
-	 * configured
-	 * */
-	uint8_t configuredMcastBcastFilter;
-
-	uint8_t sus_res_mcastbcast_filter;
-
-	bool sus_res_mcastbcast_filter_valid;
-
 	/* Use below lock to protect access to isSchedScanUpdatePending
 	 * since it will be accessed in two different contexts.
 	 */
@@ -1413,7 +1539,10 @@ struct hdd_context_s {
 #ifdef MSM_PLATFORM
 	/* DDR bus bandwidth compute timer
 	 */
-	qdf_mc_timer_t bus_bw_timer;
+	qdf_timer_t bus_bw_timer;
+	bool bus_bw_timer_running;
+	qdf_spinlock_t bus_bw_timer_lock;
+	struct work_struct bus_bw_work;
 	int cur_vote_level;
 	spinlock_t bus_bw_lock;
 	int cur_rx_level;
@@ -1564,8 +1693,7 @@ struct hdd_context_s {
 	bool update_mac_addr_to_fw;
 	struct acs_dfs_policy acs_policy;
 	uint16_t wmi_max_len;
-	/* counters for failed suspend reasons */
-	uint32_t suspend_fail_stats[SUSPEND_FAIL_MAX_COUNT];
+	struct suspend_resume_stats suspend_resume_stats;
 	struct hdd_runtime_pm_context runtime_context;
 	bool roaming_in_progress;
 	/* bit map to set/reset TDLS by different sources */
@@ -1573,6 +1701,16 @@ struct hdd_context_s {
 	/* tdls source timer to enable/disable TDLS on p2p listen */
 	qdf_mc_timer_t tdls_source_timer;
 	qdf_atomic_t disable_lro_in_concurrency;
+	bool fw_mem_dump_enabled;
+	uint8_t last_scan_reject_session_id;
+	scan_reject_states last_scan_reject_reason;
+	unsigned long last_scan_reject_timestamp;
+	uint8_t beacon_probe_rsp_cnt_per_scan;
+	bool rcpi_enabled;
+	bool imps_enabled;
+
+	uint32_t no_of_probe_req_ouis;
+	struct vendor_oui *probe_req_voui;
 };
 
 /*---------------------------------------------------------------------------
@@ -1621,6 +1759,20 @@ hdd_adapter_t *hdd_get_adapter_by_vdev(hdd_context_t *pHddCtx,
 				       uint32_t vdev_id);
 hdd_adapter_t *hdd_get_adapter_by_macaddr(hdd_context_t *pHddCtx,
 					  tSirMacAddr macAddr);
+/**
+ * hdd_get_adapter_by_rand_macaddr() - Get adapter using random DA of MA frms
+ * @hdd_ctx: Pointer to hdd context
+ * @mac_addr: random mac address
+ *
+ * This function is used to get adapter from randomized destination mac
+ * address present in management action frames
+ *
+ * Return: If randomized addr is present then return pointer to adapter
+ *         else NULL
+ */
+hdd_adapter_t *hdd_get_adapter_by_rand_macaddr(hdd_context_t *hdd_ctx,
+						tSirMacAddr mac_addr);
+
 QDF_STATUS hdd_init_station_mode(hdd_adapter_t *pAdapter);
 hdd_adapter_t *hdd_get_adapter(hdd_context_t *pHddCtx,
 			enum tQDF_ADAPTER_MODE mode);
@@ -1638,7 +1790,7 @@ void hdd_set_conparam(uint32_t con_param);
 enum tQDF_GLOBAL_CON_MODE hdd_get_conparam(void);
 
 void hdd_abort_mac_scan(hdd_context_t *pHddCtx, uint8_t sessionId,
-			eCsrAbortReason reason);
+			uint32_t scan_id, eCsrAbortReason reason);
 void hdd_cleanup_actionframe(hdd_context_t *pHddCtx, hdd_adapter_t *pAdapter);
 
 void crda_regulatory_entry_default(uint8_t *countryCode, int domain_id);
@@ -1727,6 +1879,52 @@ bool hdd_is_5g_supported(hdd_context_t *pHddCtx);
 
 int wlan_hdd_scan_abort(hdd_adapter_t *pAdapter);
 
+#ifdef FEATURE_WLAN_LFR
+static inline bool hdd_driver_roaming_supported(hdd_context_t *hdd_ctx)
+{
+	return hdd_ctx->cfg_ini->isFastRoamIniFeatureEnabled;
+}
+#else
+static inline bool hdd_driver_roaming_supported(hdd_context_t *hdd_ctx)
+{
+	return false;
+}
+#endif
+
+#ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
+static inline bool hdd_firmware_roaming_supported(hdd_context_t *hdd_ctx)
+{
+	return hdd_ctx->cfg_ini->isRoamOffloadScanEnabled;
+}
+#else
+static inline bool hdd_firmware_roaming_supported(hdd_context_t *hdd_ctx)
+{
+	return false;
+}
+#endif
+
+static inline bool hdd_roaming_supported(hdd_context_t *hdd_ctx)
+{
+	bool val;
+
+	val = hdd_driver_roaming_supported(hdd_ctx) ||
+		hdd_firmware_roaming_supported(hdd_ctx);
+
+	return val;
+}
+
+#ifdef CFG80211_SCAN_RANDOM_MAC_ADDR
+static inline bool hdd_scan_random_mac_addr_supported(void)
+{
+	return true;
+}
+#else
+static inline bool hdd_scan_random_mac_addr_supported(void)
+{
+	return false;
+}
+#endif
+
 void hdd_get_fw_version(hdd_context_t *hdd_ctx,
 			uint32_t *major_spid, uint32_t *minor_spid,
 			uint32_t *siid, uint32_t *crmid);
@@ -1766,7 +1964,7 @@ QDF_STATUS wlan_hdd_check_custom_con_channel_rules(hdd_adapter_t *sta_adapter,
 						  tScanResultHandle *scan_cache,
 						  bool *concurrent_chnl_same);
 void wlan_hdd_stop_sap(hdd_adapter_t *ap_adapter);
-void wlan_hdd_start_sap(hdd_adapter_t *ap_adapter);
+void wlan_hdd_start_sap(hdd_adapter_t *ap_adapter, bool reinit);
 
 void wlan_hdd_soc_set_antenna_mode_cb(enum set_antenna_mode_status status);
 
@@ -1951,6 +2149,25 @@ int hdd_wlan_start_modules(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 			   bool reinit);
 int hdd_wlan_stop_modules(hdd_context_t *hdd_ctx);
 int hdd_start_adapter(hdd_adapter_t *adapter);
+
+/**
+ * hdd_get_bss_entry() - Get the bss entry matching the chan, bssid and ssid
+ * @wiphy: wiphy
+ * @channel: channel of the BSS to find
+ * @bssid: bssid of the BSS to find
+ * @ssid: ssid of the BSS to find
+ * @ssid_len: ssid len of of the BSS to find
+ *
+ * The API is a wrapper to get bss from kernel matching the chan,
+ * bssid and ssid
+ *
+ * Return: bss structure if found else NULL
+ */
+struct cfg80211_bss *hdd_cfg80211_get_bss(struct wiphy *wiphy,
+	struct ieee80211_channel *channel,
+	const u8 *bssid,
+	const u8 *ssid, size_t ssid_len);
+
 void hdd_connect_result(struct net_device *dev, const u8 *bssid,
 			tCsrRoamInfo *roam_info, const u8 *req_ie,
 			size_t req_ie_len, const u8 *resp_ie,
@@ -1996,7 +2213,18 @@ static inline int wlan_hdd_validate_session_id(u8 session_id)
 	return -EINVAL;
 }
 
-bool hdd_is_roaming_in_progress(void);
+bool hdd_is_roaming_in_progress(hdd_adapter_t *adapter);
 void hdd_set_roaming_in_progress(bool value);
-
+/**
+ * hdd_check_for_opened_interfaces()- Check for interface up
+ * @hdd_ctx: HDD context
+ *
+ * check  if there are any wlan interfaces before starting the timer
+ * to close the modules
+ *
+ * Return: 0 if interface was opened else false
+ */
+bool hdd_check_for_opened_interfaces(hdd_context_t *hdd_ctx);
+void wlan_hdd_start_sap(hdd_adapter_t *ap_adapter, bool reinit);
+void hdd_set_rx_mode_rps(hdd_context_t *hdd_ctx, void *padapter, bool enable);
 #endif /* end #if !defined(WLAN_HDD_MAIN_H) */
