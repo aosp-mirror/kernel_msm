@@ -2811,7 +2811,11 @@ static void
 _dhd_wlfc_reorderinfo_indicate(uint8 *val, uint8 len, uchar *info_buf, uint *info_len)
 {
 	if (info_len) {
-		if (info_buf) {
+		/* Check copy length to avoid buffer overrun. In case of length exceeding
+		*  WLHOST_REORDERDATA_TOTLEN, return failure instead sending incomplete result
+		*  of length WLHOST_REORDERDATA_TOTLEN
+		*/
+		if ((info_buf) && (len <= WLHOST_REORDERDATA_TOTLEN)) {
 			bcopy(val, info_buf, len);
 			*info_len = len;
 		} else {
