@@ -669,6 +669,14 @@ config LEDS_VERSATILE
 	  This option enabled support for the LEDs on the ARM Versatile
 	  and RealView boards. Say Y to enabled these.
 
+config LEDS_IR
+       bool "Support for IR LEDs"
+       default y
+       help
+         This driver supports ir leds functionality.
+
+
+
 comment "LED Triggers"
 source "drivers/leds/trigger/Kconfig"
 
