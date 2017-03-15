@@ -777,8 +777,6 @@ void
 dhd_dbg_set_event_log_tag(dhd_pub_t *dhdp, uint16 tag, uint8 set)
 {
 	wl_el_tag_params_t pars;
-	char *cmd = "event_log_tag_control";
-	char iovbuf[WLC_IOCTL_SMLEN] = { 0 };
 	int ret;
 
 	memset(&pars, 0, sizeof(pars));
@@ -786,12 +784,8 @@ dhd_dbg_set_event_log_tag(dhd_pub_t *dhdp, uint16 tag, uint8 set)
 	pars.set = set;
 	pars.flags = EVENT_LOG_TAG_FLAG_LOG;
 
-	if (!bcm_mkiovar(cmd, (char *)&pars, sizeof(pars), iovbuf, sizeof(iovbuf))) {
-		DHD_ERROR(("%s mkiovar failed\n", __FUNCTION__));
-		return;
-	}
-
-	ret = dhd_wl_ioctl_cmd(dhdp, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
+	ret = dhd_iovar(dhdp, 0, "event_log_tag_control", (char *)&pars,
+			sizeof(pars), NULL, 0, TRUE);
 	if (ret) {
 		DHD_ERROR(("%s set log tag iovar failed %d\n", __FUNCTION__, ret));
 	}
