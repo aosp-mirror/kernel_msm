@@ -217,7 +217,7 @@ int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n)
 		timeout++;
 	}
 	if (timeout == 10)
-		dev_dbg(dev, "%s: failed to get LP complete\n", __func__);
+		dev_err(dev, "%s: failed to get LP complete\n", __func__);
 	else
 		dev_dbg(dev, "%s got it after %d iterations. 121 is 0x%x",
 			 __func__, timeout, MNH_DDR_CTL_INf(121, LP_STATE));

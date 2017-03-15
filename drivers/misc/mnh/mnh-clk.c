@@ -753,11 +753,6 @@ int mnh_clk_init(struct device *dev, uint32_t baseadress)
 	mnh_dev->regs = baseadress;
 	mnh_dev->dev = dev;
 
-	/* Check IPU_CLK src */
-	mnh_dev->ipu_clk_src =
-		HW_INf(mnh_dev->regs, SCU, CCU_CLK_CTL, IPU_CLK_SRC);
-
-
 	/* TBD - Acquire current frequency */
 
 	init_sysfs(dev, &dev->kobj);

@@ -82,12 +82,12 @@ HW_OUTx(HWIO_PCIE_SS_BASE_ADDR, PCIE_SS, reg, inst, val)
 #define SUSPEND_COMPLETE_TIMEOUT msecs_to_jiffies(5000)
 
 /* Firmware download address */
-/* #define HW_MNH_SBL_DOWNLOAD		0x40000000 */
-#define HW_MNH_SBL_DOWNLOAD		0x00101000 /* push directly to sram */
+#define HW_MNH_SBL_DOWNLOAD		0x40000000
 #define HW_MNH_SBL_DOWNLOAD_EXE		0x00101000
 #define HW_MNH_KERNEL_DOWNLOAD		0x40080000
 #define HW_MNH_DT_DOWNLOAD		0x40880000
 #define HW_MNH_RAMDISK_DOWNLOAD		0x40890000
+/* Firmware download related definitions */
 #define IMG_DOWNLOAD_MAX_SIZE		(2000 * 1024)
 #define FIP_IMG_SBL_SIZE_OFFSET		0x28
 #define FIP_IMG_SBL_ADDR_OFFSET		0x20
@@ -128,6 +128,12 @@ struct mnh_sm_device {
 
 	/* completion used for synchronizing with secondary bootloader */
 	struct completion suspend_complete;
+
+	/* size of the SBL, PBL copies it from DDR to SRAM */
+	uint32_t sbl_size;
+
+	/* resume address of kernel, updated before suspending */
+	uint32_t resume_addr;
 };
 
 static struct mnh_mipi_config mnh_mipi_configs[] = {
@@ -153,7 +159,6 @@ static struct mnh_sm_device *mnh_sm_dev;
 static int mnh_state;
 static int mnh_mipi_debug;
 static int mnh_freeze_state;
-static uint32_t mnh_resume_addr = HW_MNH_KERNEL_DOWNLOAD;
 
 /* callback when easel enters and leaves the active state */
 static hotplug_cb_t mnh_hotplug_cb;
@@ -298,7 +303,6 @@ static int dma_callback(uint8_t chan, enum mnh_dma_chan_dir_t dir,
 		 chan, (dir == DMA_AP2EP)?"READ(AP2EP)":"WRITE(EP2AP)",
 		 (status == DMA_DONE)?"DONE":"ABORT");
 
-
 	if (chan == MNH_PCIE_CHAN_0 && dir == DMA_AP2EP) {
 		if (mnh_sm_dev->image_loaded == FW_IMAGE_DOWNLOADING) {
 			if (status == DMA_DONE)
@@ -432,19 +436,13 @@ int mnh_download_firmware(void)
 	/* DMA transfer for SBL */
 	memcpy(&size, (uint8_t *)(fip_img->data + FIP_IMG_SBL_SIZE_OFFSET), 4);
 	memcpy(&addr, (uint8_t *)(fip_img->data + FIP_IMG_SBL_ADDR_OFFSET), 4);
-	dev_dbg(mnh_sm_dev->dev, "sbl size :0x%x", size);
-	dev_dbg(mnh_sm_dev->dev, "sbl data addr :0x%x", addr);
+	mnh_sm_dev->sbl_size = size;
 
+	dev_dbg(mnh_sm_dev->dev, "sbl data addr :0x%x", addr);
 	dev_dbg(mnh_sm_dev->dev, "DOWNLOADING SBL...size:0x%x\n", size);
 	if (mnh_transfer_firmware(size, fip_img->data + addr,
 			HW_MNH_SBL_DOWNLOAD))
 		goto fail_downloading;
-	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_4, 4,
-		HW_MNH_SBL_DOWNLOAD);
-	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_5, 4,
-		HW_MNH_SBL_DOWNLOAD_EXE);
-	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_6, 4,
-		size);
 
 	/* DMA transfer for device tree */
 	dev_dbg(mnh_sm_dev->dev, "DOWNLOADING DT...size:%zd\n", dt_img->size);
@@ -466,10 +464,17 @@ int mnh_download_firmware(void)
 			HW_MNH_KERNEL_DOWNLOAD))
 		goto fail_downloading;
 
-	/* Set PC */
-	mnh_config_write(
-		HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_7, 4,
-		HW_MNH_KERNEL_DOWNLOAD);
+	/* Configure sbl addresses and size */
+	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_4, 4,
+		HW_MNH_SBL_DOWNLOAD);
+	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_5, 4,
+		HW_MNH_SBL_DOWNLOAD_EXE);
+	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_6, 4,
+		size);
+
+	/* Configure post sbl entry address */
+	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_7, 4,
+			 HW_MNH_KERNEL_DOWNLOAD);
 
 	/* sbl needs this for its own operation and arg0 for kernel */
 	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_3, 4,
@@ -542,71 +547,33 @@ static DEVICE_ATTR(suspend, S_IWUSR | S_IRUGO,
 
 int mnh_resume_firmware(void)
 {
-	const struct firmware *fip_img;
-	int err;
-	uint32_t size, addr, magic;
+	dev_info(mnh_sm_dev->dev, "%s sbl dl:0x%x ex:0x%x size:0x%x\n",
+		 __func__, HW_MNH_SBL_DOWNLOAD, HW_MNH_SBL_DOWNLOAD_EXE,
+		 mnh_sm_dev->sbl_size);
+	dev_info(mnh_sm_dev->dev, "%s resume:0x%x dt:0x%x\n", __func__,
+		mnh_sm_dev->resume_addr, HW_MNH_DT_DOWNLOAD);
 
-	mnh_sm_dev->image_loaded = FW_IMAGE_NONE;
-
-	/* Register DMA callback */
-	mnh_reg_irq_callback(0, 0, dma_callback);
-
-	err = request_firmware(&fip_img, "easel/fip.bin", mnh_sm_dev->dev);
-	if (err) {
-		dev_err(mnh_sm_dev->dev, "%s: request fip_image failed - %d\n",
-			__func__, err);
-		return -EIO;
-	}
-
-	/* DMA transfer for SBL */
-	memcpy(&size, (uint8_t *)(fip_img->data + FIP_IMG_SBL_SIZE_OFFSET), 4);
-	memcpy(&addr, (uint8_t *)(fip_img->data + FIP_IMG_SBL_ADDR_OFFSET), 4);
-	dev_dbg(mnh_sm_dev->dev, "%s: sbl size :0x%x", __func__, size);
-	dev_dbg(mnh_sm_dev->dev, "%s: sbl data addr :0x%x", __func__, addr);
-
-	dev_dbg(mnh_sm_dev->dev, "%s: DOWNLOADING SBL...size:0x%x\n", __func__,
-		size);
-	if (mnh_transfer_firmware(size, fip_img->data + addr,
-			HW_MNH_SBL_DOWNLOAD))
-		goto fail_downloading;
+	/* Configure sbl addresses and size */
 	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_4, 4,
 		HW_MNH_SBL_DOWNLOAD);
 	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_5, 4,
 		HW_MNH_SBL_DOWNLOAD_EXE);
 	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_6, 4,
-		size);
+		mnh_sm_dev->sbl_size);
 
 	/* Configure resume entry address */
 	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_7, 4,
-		mnh_resume_addr);
+		mnh_sm_dev->resume_addr);
 
 	/* sbl needs this for its own operation and arg0 for kernel */
 	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_3, 4,
 			 HW_MNH_DT_DOWNLOAD);
 
-	release_firmware(fip_img);
-
-	/* Unregister DMA callback */
-	mnh_reg_irq_callback(NULL, NULL, NULL);
-
-	if (mnh_config_read(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
-			HW_MNH_PCIE_GP_0,
-			sizeof(uint32_t), &magic) == SUCCESS && magic == 0) {
-		mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
-		HW_MNH_PCIE_GP_0,
+	/* Configure boot command to resume */
+	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_0,
 		sizeof(uint32_t), INIT_RESUME);
-	}
 
 	return 0;
-
-fail_downloading:
-	dev_err(mnh_sm_dev->dev, "%s: FW downloading fails\n", __func__);
-	mnh_sm_dev->image_loaded = FW_IMAGE_DOWNLOAD_FAIL;
-	release_firmware(fip_img);
-
-	/* Unregister DMA callback */
-	mnh_reg_irq_callback(NULL, NULL, NULL);
-	return -EIO;
 }
 
 static ssize_t mnh_sm_resume_show(struct device *dev,
@@ -912,14 +879,14 @@ static int mnh_sm_suspend(void)
 	/* Read resume entry address */
 	ret = mnh_config_read(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET +
 			      HW_MNH_PCIE_GP_7, sizeof(uint32_t),
-			      &mnh_resume_addr);
+			      &mnh_sm_dev->resume_addr);
 	if (ret != SUCCESS) {
 		dev_err(mnh_sm_dev->dev, "%s: resume entry addr read failed\n",
 			__func__);
 		return -EIO;
 	}
 	dev_dbg(mnh_sm_dev->dev, "%s: resume entry: 0x%x\n", __func__,
-		mnh_resume_addr);
+		mnh_sm_dev->resume_addr);
 
 	/* Suspend MNH power */
 	mnh_pwr_set_state(MNH_PWR_S3);
