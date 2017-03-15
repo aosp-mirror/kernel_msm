@@ -22,7 +22,8 @@ static void invalidate_vbmeta_endio(struct bio *bio)
 
 static int invalidate_vbmeta_submit(struct bio *bio,
 				    struct block_device *bdev,
-				    int rw, struct page *page)
+				    int rw, int access_last_sector,
+				    struct page *page)
 {
 	DECLARE_COMPLETION_ONSTACK(wait);
 
@@ -31,6 +32,9 @@ static int invalidate_vbmeta_submit(struct bio *bio,
 	bio->bi_bdev = bdev;
 
 	bio->bi_iter.bi_sector = 0;
+	if (access_last_sector) {
+		bio->bi_iter.bi_sector = (i_size_read(bdev->bd_inode)>>SECTOR_SHIFT) - 1;
+	}
 	bio->bi_vcnt = 1;
 	bio->bi_iter.bi_idx = 0;
 	bio->bi_iter.bi_size = 512;
@@ -58,6 +62,7 @@ static int invalidate_vbmeta(dev_t vbmeta_devt)
 	 * sync_bdev() on completion, but it really shouldn't.
 	 */
 	int rw = REQ_SYNC | REQ_SOFTBARRIER | REQ_NOIDLE;
+	int access_last_sector = 0;
 
 	/* First we open the device for reading. */
 	dev_mode = FMODE_READ | FMODE_EXCL;
@@ -82,25 +87,45 @@ static int invalidate_vbmeta(dev_t vbmeta_devt)
 		goto failed_to_alloc_page;
 	}
 
-	ret = invalidate_vbmeta_submit(bio, bdev, rw, page);
+	access_last_sector = 0;
+	ret = invalidate_vbmeta_submit(bio, bdev, rw, access_last_sector, page);
 	if (ret) {
 		DMERR("invalidate_vbmeta: error reading");
 		goto failed_to_submit_read;
 	}
 
 	/* We have a page. Let's make sure it looks right. */
-	if (memcmp("AVB0", page_address(page), 4)) {
-		DMERR("invalidate_vbmeta called on non-vbmeta partition");
-		ret = -EINVAL;
-		goto invalid_header;
+	if (memcmp("AVB0", page_address(page), 4) == 0) {
+		/* Stamp it. */
+		memcpy(page_address(page), "AVE0", 4);
+		DMERR("invalidate_vbmeta: found vbmeta partition");
 	} else {
-		DMERR("invalidate_vbmeta: found AVB0 vbmeta partition");
+		/* Could be this is on a AVB footer, check. Also, since the
+		 * AVB footer is in the last 64 bytes, adjust for the fact that
+		 * we're dealing with 512-byte sectors.
+		 */
+		size_t offset = (1<<SECTOR_SHIFT) - 64;
+		access_last_sector = 1;
+		ret = invalidate_vbmeta_submit(bio, bdev, rw,
+					       access_last_sector, page);
+		if (ret) {
+			DMERR("invalidate_vbmeta: error reading");
+			goto failed_to_submit_read;
+		}
+		if (memcmp("AVBf", page_address(page) + offset, 4) != 0) {
+			DMERR("invalidate_vbmeta called on non-vbmeta "
+			      "partition");
+			ret = -EINVAL;
+			goto invalid_header;
+		}
+		/* Stamp it. */
+		memcpy(page_address(page) + offset, "AVE0", 4);
+		DMERR("invalidate_vbmeta: found vbmeta footer partition");
 	}
 
-	/* Stamp it and rewrite */
-	memcpy(page_address(page), "AVE0", 4);
-
-	/* The block dev was being changed on read. Let's reopen here. */
+	/* Now rewrite the changed page - the block dev was being
+	 * changed on read. Let's reopen here.
+	 */
 	blkdev_put(bdev, dev_mode);
 	dev_mode = FMODE_WRITE | FMODE_EXCL;
 	bdev = blkdev_get_by_dev(vbmeta_devt, dev_mode,
@@ -118,7 +143,7 @@ static int invalidate_vbmeta(dev_t vbmeta_devt)
 	bio_reset(bio);
 
 	rw |= REQ_WRITE;
-	ret = invalidate_vbmeta_submit(bio, bdev, rw, page);
+	ret = invalidate_vbmeta_submit(bio, bdev, rw, access_last_sector, page);
 	if (ret) {
 		DMERR("invalidate_vbmeta: error writing");
 		goto failed_to_submit_write;
