@@ -111,7 +111,6 @@ struct mnh_sm_device {
 	dev_t dev_num;
 	struct device *chardev;
 	struct class *dev_class;
-	int open;
 	enum fw_image_state image_loaded;
 
 	/* mutex to synchronize state transitions */
@@ -1268,12 +1267,6 @@ static int mnh_sm_open(struct inode *inode, struct file *filp)
 
 	filp->private_data = data; /* for other methods */
 
-	if (data->open)
-		return -EBUSY;
-	data->open++;
-
-	dev_dbg(data->dev, "%s: open count %d\n", __func__, data->open);
-
 	return 0;
 }
 
@@ -1284,12 +1277,7 @@ static int mnh_sm_close(struct inode *inode, struct file *filp)
 
 	filp->private_data = data; /* for other methods */
 
-	mnh_sm_set_state(MNH_STATE_OFF);
-
-	data->open--;
-
-	dev_dbg(data->dev, "%s: closing mnh_sm, count %d\n", __func__,
-		data->open);
+	dev_dbg(data->dev, "%s: closing mnh_sm\n", __func__);
 
 	return 0;
 }
