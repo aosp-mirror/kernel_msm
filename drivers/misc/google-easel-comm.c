@@ -1798,6 +1798,26 @@ int easelcomm_init_pcie_ready(void *local_cmdchan_buffer)
 }
 EXPORT_SYMBOL(easelcomm_init_pcie_ready);
 
+/*
+ * Callback for AP/client from h/w layer when PCIe EP is off.
+ */
+int easelcomm_pcie_hotplug_out(void)
+{
+	struct easelcomm_cmd_channel_remote *channel = &cmd_channel_remote;
+
+	/*
+	 * PCIe link is already down, so no need to call easelcomm_stop() to
+	 * notify remote, but only call easelcomm_stop_local().
+	 */
+	easelcomm_stop_local();
+
+	mutex_lock(&channel->mutex);
+	channel->initialized = false;
+	mutex_unlock(&channel->mutex);
+	return 0;
+}
+EXPORT_SYMBOL(easelcomm_pcie_hotplug_out);
+
 static int easelcomm_notify_sys(
 	struct notifier_block *this, unsigned long code, void *unused)
 {

@@ -295,6 +295,8 @@ extern int easelcomm_hw_ap_dma_mblk_transfer(uint64_t ll_paddr, bool to_easel);
 
 /* PCIe ready, local cmdchan buffer alloc'ed, init upper layer */
 int easelcomm_init_pcie_ready(void *local_cmdchan_buffer);
+/* Called when PCIe EP has been hotplug out */
+int easelcomm_pcie_hotplug_out(void);
 /* Handle command channel data received interrupt (MSG_SENT) */
 extern void easelcomm_cmd_channel_data_handler(void);
 /* Handle command channel wrapround interrupt (APPDEFINED_1) */
