@@ -2395,17 +2395,17 @@ void UI_soc_adjustment(struct stc311x_chip *chip)
 	//normal SOC calculate
 	switch (chip->status) {
 	case POWER_SUPPLY_STATUS_CHARGING:
+	case POWER_SUPPLY_STATUS_NOT_CHARGING:
 	case POWER_SUPPLY_STATUS_FULL:
 		if (chip->batt_soc > g_ui_soc)
 			g_ui_soc++;
 		//charger exist but current not enough
 		else if (chip->batt_current <= 0) {
-			if ((g_ui_soc - chip->batt_soc > 5 ) || (chip->batt_voltage < APP_MIN_VOLTAGE))
+			if ((g_ui_soc - chip->batt_soc > 2 ) || (chip->batt_voltage < APP_MIN_VOLTAGE))
 				g_ui_soc--;
 		}
 		break;
 	case POWER_SUPPLY_STATUS_DISCHARGING:
-	case POWER_SUPPLY_STATUS_NOT_CHARGING:
 		if ((chip->batt_soc < g_ui_soc ) || (chip->batt_voltage < APP_MIN_VOLTAGE))
 			g_ui_soc--;
 		break;
