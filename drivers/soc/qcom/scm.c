@@ -46,9 +46,6 @@ static DEFINE_MUTEX(scm_lock);
 #define SMC_ATOMIC_MASK 0x80000000
 #define IS_CALL_AVAIL_CMD 1
 
-#define SCM_BUF_LEN(__cmd_size, __resp_size)	\
-	(sizeof(struct scm_command) + sizeof(struct scm_response) + \
-		__cmd_size + __resp_size)
 /**
  * struct scm_command - one SCM command buffer
  * @len: total available memory for command and response
@@ -119,6 +116,21 @@ struct scm_response {
 #define R5_STR "r5"
 
 #endif
+
+/* Calculate size for buffer given cmd_size and resp_size.
+ * Returns 0 in case the result would overflow size_t.
+ */
+static size_t scm_get_buf_len(size_t cmd_size, size_t resp_size)
+{
+	size_t contents =  cmd_size + resp_size;
+	size_t structs = sizeof(struct scm_command) +
+				sizeof(struct scm_response);
+	size_t buf_len = contents + structs;
+
+	if (contents < cmd_size || buf_len < contents)
+		buf_len = 0;
+	return buf_len;
+}
 
 /**
  * scm_command_to_response() - Get a pointer to a scm_response
@@ -342,10 +354,9 @@ int scm_call_noalloc(u32 svc_id, u32 cmd_id, const void *cmd_buf,
 		void *scm_buf, size_t scm_buf_len)
 {
 	int ret;
-	size_t len = SCM_BUF_LEN(cmd_len, resp_len);
+	size_t len = scm_get_buf_len(cmd_len, resp_len);
 
-	if (cmd_len > scm_buf_len || resp_len > scm_buf_len ||
-	    len > scm_buf_len)
+	if (len == 0 || len > scm_buf_len)
 		return -EINVAL;
 
 	if (!IS_ALIGNED((unsigned long)scm_buf, PAGE_SIZE))
@@ -741,9 +752,9 @@ int scm_call(u32 svc_id, u32 cmd_id, const void *cmd_buf, size_t cmd_len,
 {
 	struct scm_command *cmd;
 	int ret;
-	size_t len = SCM_BUF_LEN(cmd_len, resp_len);
+	size_t len = scm_get_buf_len(cmd_len, resp_len);
 
-	if (cmd_len > len || resp_len > len)
+	if (len == 0 || PAGE_ALIGN(len) < len)
 		return -EINVAL;
 
 	cmd = kzalloc(PAGE_ALIGN(len), GFP_KERNEL);

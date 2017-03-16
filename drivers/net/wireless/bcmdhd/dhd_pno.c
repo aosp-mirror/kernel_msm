@@ -121,14 +121,15 @@ dhd_pno_clean(dhd_pub_t *dhd)
 	_pno_state = PNO_GET_PNOSTATE(dhd);
 	DHD_PNO(("%s enter\n", __FUNCTION__));
 	/* Disable PNO */
-	err = dhd_iovar(dhd, 0, "pfn", (char *)&pfn, sizeof(pfn), 1);
+	err = dhd_iovar(dhd, 0, "pfn", (char *)&pfn, sizeof(pfn), NULL, 0,
+			TRUE);
 	if (err < 0) {
 		DHD_ERROR(("%s : failed to execute pfn(error : %d)\n",
 			__FUNCTION__, err));
 		goto exit;
 	}
 	_pno_state->pno_status = DHD_PNO_DISABLED;
-	err = dhd_iovar(dhd, 0, "pfnclear", NULL, 0, 1);
+	err = dhd_iovar(dhd, 0, "pfnclear", NULL, 0, NULL, 0, TRUE);
 	if (err < 0) {
 		DHD_ERROR(("%s : failed to execute pfnclear(error : %d)\n",
 			__FUNCTION__, err));
@@ -274,7 +275,8 @@ _dhd_pno_gscan_cfg(dhd_pub_t *dhd, wl_pfn_gscan_cfg_t *pfncfg_gscan_param, int s
 
 	DHD_PNO(("%s enter\n", __FUNCTION__));
 
-	err = dhd_iovar(dhd, 0, "pfn_gscan_cfg", (char *)pfncfg_gscan_param, size, 1);
+	err = dhd_iovar(dhd, 0, "pfn_gscan_cfg", (char *)pfncfg_gscan_param,
+			size, NULL, 0, TRUE);
 	if (err < 0) {
 		DHD_ERROR(("%s : failed to execute pfncfg_gscan_param\n", __FUNCTION__));
 		goto exit;
@@ -302,7 +304,8 @@ _dhd_pno_suspend(dhd_pub_t *dhd)
 
 	DHD_PNO(("%s enter\n", __FUNCTION__));
 	_pno_state = PNO_GET_PNOSTATE(dhd);
-	err = dhd_iovar(dhd, 0, "pfn_suspend", (char *)&suspend, sizeof(suspend), 1);
+	err = dhd_iovar(dhd, 0, "pfn_suspend", (char *)&suspend,
+			sizeof(suspend), NULL, 0, TRUE);
 	if (err < 0) {
 		DHD_ERROR(("%s : failed to suspend pfn(error :%d)\n", __FUNCTION__, err));
 		goto exit;
@@ -342,7 +345,8 @@ _dhd_pno_enable(dhd_pub_t *dhd, int enable)
 		}
 	}
 	/* Enable/Disable PNO */
-	err = dhd_iovar(dhd, 0, "pfn", (char *)&enable, sizeof(enable), 1);
+	err = dhd_iovar(dhd, 0, "pfn", (char *)&enable, sizeof(enable), NULL,
+			0, TRUE);
 	if (err < 0) {
 		DHD_ERROR(("%s : failed to execute pfn_set - %d\n", __FUNCTION__, err));
 		goto exit;
@@ -536,13 +540,15 @@ _dhd_pno_set(dhd_pub_t *dhd, const dhd_pno_params_t *pno_params, dhd_pno_mode_t 
 #endif /* GSCAN_SUPPORT */
 		int _tmp = pfn_param.bestn;
 		/* set bestn to calculate the max mscan which firmware supports */
-		err = dhd_iovar(dhd, 0, "pfnmem", (char *)&_tmp, sizeof(_tmp), 1);
+		err = dhd_iovar(dhd, 0, "pfnmem", (char *)&_tmp, sizeof(_tmp),
+				NULL, 0, TRUE);
 		if (err < 0) {
 			DHD_ERROR(("%s : failed to set pfnmem\n", __FUNCTION__));
 			goto exit;
 		}
 		/* get max mscan which the firmware supports */
-		err = dhd_iovar(dhd, 0, "pfnmem", (char *)&_tmp, sizeof(_tmp), 0);
+		err = dhd_iovar(dhd, 0, "pfnmem", NULL, 0, (char *)&_tmp,
+				sizeof(_tmp), FALSE);
 		if (err < 0) {
 			DHD_ERROR(("%s : failed to get pfnmem\n", __FUNCTION__));
 			goto exit;
@@ -551,7 +557,8 @@ _dhd_pno_set(dhd_pub_t *dhd, const dhd_pno_params_t *pno_params, dhd_pno_mode_t 
 		DHD_PNO((" returned mscan : %d, set bestn : %d mscan %d\n", _tmp, pfn_param.bestn,
 		        pfn_param.mscan));
 	}
-	err = dhd_iovar(dhd, 0, "pfn_set", (char *)&pfn_param, sizeof(pfn_param), 1);
+	err = dhd_iovar(dhd, 0, "pfn_set", (char *)&pfn_param,
+			sizeof(pfn_param), NULL, 0, TRUE);
 	if (err < 0) {
 		DHD_ERROR(("%s : failed to execute pfn_set %d\n", __FUNCTION__, err));
 		goto exit;
@@ -571,8 +578,8 @@ _dhd_pno_flush_ssid(dhd_pub_t *dhd)
 
 	memset(&pfn_elem, 0, sizeof(wl_pfn_t));
 	pfn_elem.flags = htod32(WL_PFN_FLUSH_ALL_SSIDS);
-	err = dhd_iovar(dhd, 0, "pfn_add", (char *)&pfn_elem,
-		sizeof(wl_pfn_t), 1);
+	err = dhd_iovar(dhd, 0, "pfn_add", (char *)&pfn_elem, sizeof(wl_pfn_t),
+			NULL, 0, TRUE);
 	if (err < 0) {
 		DHD_ERROR(("%s : failed to execute pfn_add\n", __FUNCTION__));
 	}
@@ -623,8 +630,8 @@ _dhd_pno_add_ssid(dhd_pub_t *dhd, struct list_head *ssid_list, int nssid)
 			break;
 		}
 	}
-	err = dhd_iovar(dhd, 0, "pfn_add", (char *)pfn_elem_buf,
-		mem_needed, 1);
+	err = dhd_iovar(dhd, 0, "pfn_add", (char *)pfn_elem_buf, mem_needed,
+			NULL, 0, TRUE);
 	if (err < 0) {
 		DHD_ERROR(("%s : failed to execute pfn_add\n", __FUNCTION__));
 	}
@@ -684,6 +691,7 @@ _dhd_pno_get_channels(dhd_pub_t *dhd, uint16 *d_chan_list,
 	if (*nchan) {
 		NULL_CHECK(d_chan_list, "d_chan_list is NULL", err);
 	}
+	memset(&chan_buf, 0, sizeof(chan_buf));
 	list = (wl_uint32_list_t *) (void *)chan_buf;
 	list->count = htod32(WL_NUMCHANNELS);
 	err = dhd_wl_ioctl_cmd(dhd, WLC_GET_VALID_CHANNELS, chan_buf, sizeof(chan_buf), FALSE, 0);
@@ -914,7 +922,8 @@ _dhd_pno_cfg(dhd_pub_t *dhd, uint16 *channel_list, int nchan)
 		pfncfg_param.channel_list[i] = channel_list[i];
 
 	pfncfg_param.channel_num = htod32(nchan);
-	err = dhd_iovar(dhd, 0, "pfn_cfg", (char *)&pfncfg_param, sizeof(pfncfg_param), 1);
+	err = dhd_iovar(dhd, 0, "pfn_cfg", (char *)&pfncfg_param,
+			sizeof(pfncfg_param), NULL, 0, TRUE);
 	if (err < 0) {
 		DHD_ERROR(("%s : failed to execute pfn_cfg\n", __FUNCTION__));
 		goto exit;
@@ -1009,7 +1018,7 @@ _dhd_pno_add_bssid(dhd_pub_t *dhd, wl_pfn_bssid_t *p_pfn_bssid, int nbssid)
 		NULL_CHECK(p_pfn_bssid, "bssid list is NULL", err);
 	}
 	err = dhd_iovar(dhd, 0, "pfn_add_bssid", (char *)p_pfn_bssid,
-		sizeof(wl_pfn_bssid_t) * nbssid, 1);
+			sizeof(wl_pfn_bssid_t) * nbssid, NULL, 0, TRUE);
 	if (err < 0) {
 		DHD_ERROR(("%s : failed to execute pfn_cfg\n", __FUNCTION__));
 		goto exit;
@@ -1033,8 +1042,10 @@ _dhd_pno_add_significant_bssid(dhd_pub_t *dhd,
 
 	NULL_CHECK(p_pfn_significant_bssid, "bssid list is NULL", err);
 
-	err = dhd_iovar(dhd, 0, "pfn_add_swc_bssid", (char *)p_pfn_significant_bssid,
-		sizeof(wl_pfn_significant_bssid_t) * nbssid, 1);
+	err = dhd_iovar(dhd, 0, "pfn_add_swc_bssid",
+			(char *)p_pfn_significant_bssid,
+			sizeof(wl_pfn_significant_bssid_t) * nbssid, NULL, 0,
+			TRUE);
 	if (err < 0) {
 		DHD_ERROR(("%s : failed to execute pfn_significant_bssid %d\n", __FUNCTION__, err));
 		goto exit;
@@ -1561,7 +1572,7 @@ dhd_set_epno_params(dhd_pub_t *dhd, wl_pfn_ssid_params_t *params, bool set)
 	else if (params)
 		memcpy(&cfg.params, params, sizeof(wl_pfn_ssid_params_t));
 	err = dhd_iovar(dhd, 0, "pfn_ssid_cfg", (char *)&cfg,
-	       sizeof(wl_pfn_ssid_cfg_t), 1);
+			sizeof(wl_pfn_ssid_cfg_t), NULL, 0, TRUE);
 	if (err != BCME_OK) {
 		DHD_ERROR(("%s : Failed to execute pfn_ssid_cfg %d\n", __FUNCTION__, err));
 	}
@@ -2733,7 +2744,8 @@ static int _dhd_pno_get_gscan_batch_from_fw(dhd_pub_t *dhd)
 	tail = gscan_params->gscan_batch_cache;
 	while (plbestnet->status != PFN_COMPLETE) {
 		memset(plbestnet, 0, PNO_BESTNET_LEN);
-		err = dhd_iovar(dhd, 0, "pfnlbest", (char *)plbestnet, PNO_BESTNET_LEN, 0);
+		err = dhd_iovar(dhd, 0, "pfnlbest", NULL, 0,
+				(char *)plbestnet, PNO_BESTNET_LEN, FALSE);
 		if (err < 0) {
 			DHD_ERROR(("%s : Cannot get all the batch results, err :%d\n",
 				__FUNCTION__, err));
@@ -2967,7 +2979,8 @@ _dhd_pno_get_for_batch(dhd_pub_t *dhd, char *buf, int bufsize, int reason)
 	memset(plbestnet, 0, PNO_BESTNET_LEN);
 	while (plbestnet->status != PFN_COMPLETE) {
 		memset(plbestnet, 0, PNO_BESTNET_LEN);
-		err = dhd_iovar(dhd, 0, "pfnlbest", (char *)plbestnet, PNO_BESTNET_LEN, 0);
+		err = dhd_iovar(dhd, 0, "pfnlbest", NULL, 0,
+				(char *)plbestnet, PNO_BESTNET_LEN, FALSE);
 		if (err < 0) {
 			if (err == BCME_EPERM) {
 				DHD_ERROR(("we cannot get the batching data "
@@ -4006,6 +4019,7 @@ int dhd_pno_init(dhd_pub_t *dhd)
 {
 	int err = BCME_OK;
 	dhd_pno_status_info_t *_pno_state;
+	char *buf = NULL;
 	NULL_CHECK(dhd, "dhd is NULL", err);
 	DHD_PNO(("%s enter\n", __FUNCTION__));
 	UNUSED_PARAMETER(_dhd_pno_suspend);
@@ -4024,13 +4038,20 @@ int dhd_pno_init(dhd_pub_t *dhd)
 #ifdef GSCAN_SUPPORT
 	init_waitqueue_head(&_pno_state->batch_get_wait);
 #endif /* GSCAN_SUPPORT */
-	err = dhd_iovar(dhd, 0, "pfnlbest", NULL, 0, 0);
+	buf = kzalloc(WLC_IOCTL_SMLEN, GFP_KERNEL);
+	if (!buf) {
+		DHD_ERROR((":%s buf alloc err.\n", __FUNCTION__));
+		return BCME_NOMEM;
+	}
+	err = dhd_iovar(dhd, 0, "pfnlbest", NULL, 0, buf, WLC_IOCTL_SMLEN,
+			FALSE);
 	if (err == BCME_UNSUPPORTED) {
 		_pno_state->wls_supported = FALSE;
 		DHD_INFO(("Current firmware doesn't support"
 			" Android Location Service\n"));
 	}
 exit:
+	kfree(buf);
 	return err;
 }
 int dhd_pno_deinit(dhd_pub_t *dhd)
