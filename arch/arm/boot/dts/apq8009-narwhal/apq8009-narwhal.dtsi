@@ -21,7 +21,6 @@
 /{
 	aliases {
 		/delete-property/i2c1;
-		/delete-property/i2c2;
 		/delete-property/i2c3;
 		/delete-property/i2c4;
 		/delete-property/i2c5;
@@ -43,7 +42,6 @@
 
 &soc {
 	/delete-node/ i2c@78b5000; /* i2c_1 */
-	/delete-node/ i2c@78b6000; /* i2c_2 */
 	/delete-node/ i2c@78b7000; /* i2c_3 */
 	/delete-node/ i2c@78b8000; /* i2c_4 */
 	/delete-node/ i2c@78b9000; /* i2c_5 */

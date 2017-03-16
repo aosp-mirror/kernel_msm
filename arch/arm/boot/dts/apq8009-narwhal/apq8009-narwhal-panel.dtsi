@@ -10,11 +10,15 @@
  * GNU General Public License for more details.
  */
 
+#include "dsi-panel-sharp-nt35350-360p-cmd.dtsi"
+#include "apq8009-narwhal-panel-backlight.dtsi"
+
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
 };
 
 &mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_sharp_nt35350_cmd>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_reset_active &mdss_enable_active>;
 	pinctrl-1 = <&mdss_reset_suspend &mdss_enable_suspend>;
@@ -23,6 +27,14 @@
 	qcom,platform-enable-gpio = <&msm_gpio 38 0>;
 
 	vddio-supply = <&pm8916_l6>;
+};
+
+&dsi_sharp_nt35350_cmd {
+	qcom,use-dsv;
+	qcom,mdss-dsi-bl-min-level = <0>;
+	qcom,mdss-dsi-bl-max-level = <255>;
+	qcom,cont-splash-enabled;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
 &soc {
@@ -38,9 +50,10 @@
 			qcom,supply-enable-load = <100000>;
 			qcom,supply-disable-load = <100>;
 			qcom,supply-pre-on-sleep = <0>;
-			qcom,supply-post-on-sleep = <0>;
-			qcom,supply-pre-off-sleep = <0>;
+			qcom,supply-post-on-sleep = <10>;
+			qcom,supply-pre-off-sleep = <10>;
 			qcom,supply-post-off-sleep = <0>;
 		};
+		/delete-node/ qcom,panel-supply-entry@1;
 	};
 };
