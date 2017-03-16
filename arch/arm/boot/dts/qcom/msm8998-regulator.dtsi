@@ -413,6 +413,7 @@
 		pm8998_l24: regulator-l24 {
 			regulator-min-microvolt = <3088000>;
 			regulator-max-microvolt = <3088000>;
+			parent-supply = <&pm8998_l12>;
 			status = "okay";
 		};
 	};
