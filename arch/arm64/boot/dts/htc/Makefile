@@ -1,4 +1,6 @@
 dtb-$(CONFIG_BOARD_MUSKIE) += \
+	msm8998-v2.1-htc_muskie-xd.dtb \
+	msm8998-v2.1-htc_muskie-xc.dtb \
 	msm8998-v2.1-htc_muskie-xb.dtb \
 	msm8998-v2.1-htc_muskie-xa.dtb \
 	msm8998-v2.1-htc_muskie-evm.dtb \
