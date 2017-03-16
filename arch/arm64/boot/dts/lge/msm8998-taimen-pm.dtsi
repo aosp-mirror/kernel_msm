@@ -64,7 +64,7 @@
 
 		qcom,sensor-information-31 {
 			qcom,sensor-type = "adc";
-			qcom,sensor-name = "amux5_quiet_therm";
+			qcom,sensor-name = "bd_therm";
 		};
 
 		qcom,sensor-information-32 {
@@ -122,7 +122,7 @@
 	};
 
 	chan@4f {
-		label = "pa_therm0";
+		label = "pa_therm1";
 		reg = <0x4f>;
 		qcom,decimation = <2>;
 		qcom,pre-div-channel-scaling = <0>;
@@ -133,7 +133,7 @@
 	};
 
 	chan@50 {
-		label = "pa_therm1";
+		label = "pa_therm2";
 		reg = <0x50>;
 		qcom,decimation = <2>;
 		qcom,pre-div-channel-scaling = <0>;
@@ -144,7 +144,7 @@
 	};
 
 	chan@51 {
-		label = "amux5_quiet_therm";
+		label = "bd_therm";
 		reg = <0x51>;
 		qcom,decimation = <2>;
 		qcom,pre-div-channel-scaling = <0>;
@@ -178,7 +178,7 @@
 	};
 
 	chan@4f {
-		label = "pa_therm0";
+		label = "pa_therm1";
 		reg = <0x4f>;
 		qcom,decimation = <2>;
 		qcom,pre-div-channel-scaling = <0>;
@@ -191,7 +191,7 @@
 	};
 
 	chan@50 {
-		label = "pa_therm1";
+		label = "pa_therm2";
 		reg = <0x50>;
 		qcom,decimation = <2>;
 		qcom,pre-div-channel-scaling = <0>;
@@ -215,7 +215,7 @@
 	};
 
 	chan@51 {
-		label = "amux5_quiet_therm";
+		label = "bd_therm";
 		reg = <0x51>;
 		qcom,pre-div-channel-scaling = <0>;
 		qcom,calibration-type = "ratiometric";

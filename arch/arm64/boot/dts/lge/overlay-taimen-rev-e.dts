@@ -47,3 +47,23 @@
 		status = "disabled";
 	};
 };
+
+&soc {
+	qcom,sensor-information {
+		qcom,sensor-information-31 {
+			qcom,sensor-name = "quiet_therm";
+		};
+	};
+};
+
+&pm8998_vadc {
+	chan@51 {
+		label = "quite_therm";
+	};
+};
+
+&pm8998_adc_tm {
+	chan@51 {
+		label = "quite_therm";
+	};
+};
