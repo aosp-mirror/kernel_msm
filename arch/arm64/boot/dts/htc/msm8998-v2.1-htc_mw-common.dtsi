@@ -21,6 +21,7 @@
 #include "msm8998-htc-fingerprint-muskie-xa.dtsi"
 #include "msm8998-htc-haptics-xa.dtsi"
 #include "msm8998-htc-led-xa.dtsi"
+#include "msm8998-htc-edge.dtsi"
 
 / {
 	compatible = "qcom,msm8998-mtp", "qcom,msm8998", "qcom,mtp";
