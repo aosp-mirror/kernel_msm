@@ -1,4 +1,10 @@
 dtb-$(CONFIG_BOARD_MUSKIE) += \
+	msm8998-v2.1-htc_walleye-xe.dtb \
+	msm8998-v2.1-htc_walleye-xd.dtb \
+	msm8998-v2.1-htc_walleye-xc.dtb \
+	msm8998-v2.1-htc_walleye-xb.dtb \
+	msm8998-v2.1-htc_walleye-xa.dtb \
+	msm8998-v2.1-htc_muskie-xe.dtb \
 	msm8998-v2.1-htc_muskie-xd.dtb \
 	msm8998-v2.1-htc_muskie-xc.dtb \
 	msm8998-v2.1-htc_muskie-xb.dtb \
