@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -131,9 +131,8 @@ static QDF_STATUS lim_handle_ndp_indication_event(tpAniSirGlobal mac_ctx,
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 
 	lim_log(mac_ctx, LOG1,
-		FL("role: %d, vdev: %d, csid: %d, peer_mac_addr "
-			MAC_ADDRESS_STR),
-		ndp_ind->role, ndp_ind->vdev_id, ndp_ind->ncs_sk_type,
+		FL("role: %d, vdev: %d, peer_mac_addr "MAC_ADDRESS_STR),
+		ndp_ind->role, ndp_ind->vdev_id,
 		MAC_ADDR_ARRAY(ndp_ind->peer_mac_addr.bytes));
 
 	if ((ndp_ind->role == NDP_ROLE_INITIATOR) ||
@@ -197,8 +196,7 @@ static QDF_STATUS lim_ndp_responder_rsp_handler(tpAniSirGlobal mac_ctx,
 		goto responder_rsp;
 	}
 
-	if (QDF_STATUS_SUCCESS == rsp_ind->status &&
-		rsp_ind->create_peer == true) {
+	if (QDF_STATUS_SUCCESS == rsp_ind->status) {
 		ret_val = lim_add_ndi_peer(mac_ctx, rsp_ind->vdev_id,
 				rsp_ind->peer_mac_addr);
 		if (QDF_STATUS_SUCCESS != ret_val) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -88,10 +88,8 @@ void cds_sys_probe_thread_cback(void *pUserData);
  */
 v_CONTEXT_t cds_init(void)
 {
-	qdf_debugfs_init();
-	qdf_lock_stats_init();
-	qdf_mem_init();
 	qdf_mc_timer_manager_init();
+	qdf_mem_init();
 
 	gp_cds_context = &g_cds_context;
 
@@ -122,8 +120,6 @@ void cds_deinit(void)
 
 	qdf_mc_timer_manager_exit();
 	qdf_mem_exit();
-	qdf_lock_stats_deinit();
-	qdf_debugfs_exit();
 
 	gp_cds_context->qdf_ctx = NULL;
 	gp_cds_context = NULL;
@@ -809,10 +805,11 @@ static inline void cds_suspend_target(tp_wma_handle wma_handle)
 
 /**
  * cds_post_disable() - post disable cds module
+ * @cds_context: CDS context
  *
  * Return: QDF status
  */
-QDF_STATUS cds_post_disable(void)
+QDF_STATUS cds_post_disable(v_CONTEXT_t cds_context)
 {
 	tp_wma_handle wma_handle;
 	struct hif_opaque_softc *hif_ctx;
@@ -941,6 +938,26 @@ QDF_STATUS cds_close(v_CONTEXT_t cds_context)
 
 	return QDF_STATUS_SUCCESS;
 }
+
+void cds_flush_cache_rx_queue(void)
+{
+	uint8_t sta_id;
+	struct ol_txrx_peer_t *peer;
+	struct ol_txrx_pdev_t *pdev;
+
+	pdev = cds_get_context(QDF_MODULE_ID_TXRX);
+	if (!pdev)
+		return;
+
+	for (sta_id = 0; sta_id < WLAN_MAX_STA_COUNT; sta_id++) {
+		peer = ol_txrx_peer_find_by_local_id(pdev, sta_id);
+		if (!peer)
+			continue;
+		ol_txrx_flush_rx_frames(peer, 1);
+	}
+	return;
+}
+
 
 /**
  * cds_get_context() - get context data area
@@ -1672,34 +1689,15 @@ void cds_trigger_recovery(bool skip_crash_inject)
 			  "WMA context is invalid!");
 		return;
 	}
-	if (!qdf_ctx) {
+
+	recovery_lock = qdf_runtime_lock_init("cds_recovery");
+	if (!recovery_lock) {
 		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
-			  "QDF context is invalid!");
+			"Could not acquire runtime pm lock!");
 		return;
 	}
 
-	status = qdf_runtime_lock_init(&recovery_lock);
-	if (QDF_STATUS_SUCCESS != status) {
-		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
-			"Could not acquire runtime pm lock: %d!", status);
-		return;
-	}
-
-	qdf_runtime_pm_prevent_suspend(&recovery_lock);
-
-	/*
-	 * If force assert thru platform is available, trigger that interface.
-	 * That should generate recovery by going thru the normal FW
-	 * assert recovery model.
-	 */
-	if (!pld_force_assert_target(qdf_ctx->dev)) {
-		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_INFO_HIGH,
-			"Force assert triggered");
-		goto out;
-	}
-
-	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_INFO_HIGH,
-			"Force assert not available at platform");
+	qdf_runtime_pm_prevent_suspend(recovery_lock);
 
 	if (!skip_crash_inject) {
 
@@ -1716,9 +1714,8 @@ void cds_trigger_recovery(bool skip_crash_inject)
 		cds_config_recovery_work(qdf_ctx);
 	}
 
-out:
-	qdf_runtime_pm_allow_suspend(&recovery_lock);
-	qdf_runtime_lock_deinit(&recovery_lock);
+	qdf_runtime_pm_allow_suspend(recovery_lock);
+	qdf_runtime_lock_deinit(recovery_lock);
 }
 
 /**
@@ -2084,6 +2081,9 @@ uint32_t cds_get_log_indicator(void)
 
 	if (cds_is_load_or_unload_in_progress() ||
 	    cds_is_driver_recovering()) {
+		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
+				"%s: vos context initialization is in progress"
+				, __func__);
 		return WLAN_LOG_INDICATOR_UNUSED;
 	}
 
@@ -2460,7 +2460,6 @@ QDF_STATUS cds_register_dp_cb(struct cds_dp_cbacks *dp_cbs)
 	cds_ctx->ol_txrx_update_mac_id_cb = dp_cbs->ol_txrx_update_mac_id_cb;
 	cds_ctx->hdd_en_lro_in_cc_cb = dp_cbs->hdd_en_lro_in_cc_cb;
 	cds_ctx->hdd_disable_lro_in_cc_cb = dp_cbs->hdd_disble_lro_in_cc_cb;
-	cds_ctx->hdd_set_rx_mode_rps_cb = dp_cbs->hdd_set_rx_mode_rps_cb;
 	return QDF_STATUS_SUCCESS;
 }
 
@@ -2484,7 +2483,6 @@ QDF_STATUS cds_deregister_dp_cb(void)
 	cds_ctx->ol_txrx_update_mac_id_cb = NULL;
 	cds_ctx->hdd_en_lro_in_cc_cb = NULL;
 	cds_ctx->hdd_disable_lro_in_cc_cb = NULL;
-	cds_ctx->hdd_set_rx_mode_rps_cb = NULL;
 
 	return QDF_STATUS_SUCCESS;
 }

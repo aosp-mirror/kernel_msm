@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -88,9 +88,6 @@ typedef enum {
 
 #define TDLS_CT_MAC_MAX_TABLE_SIZE 8
 
-/* Define the interval for 5 minutes */
-#define TDLS_ENABLE_CDS_FLUSH_INTERVAL      300000000
-
 /**
  * enum tdls_disable_source - TDLS disable sources
  * @HDD_SET_TDLS_MODE_SOURCE_USER: disable from user
@@ -141,16 +138,14 @@ typedef struct {
  * @magic: magic
  * @attempt: attempt
  * @reject: reject
- * @source: scan request source(NL/Vendor scan)
  * @tdls_scan_work: delayed tdls scan work
  */
 typedef struct {
 	struct wiphy *wiphy;
 	struct cfg80211_scan_request *scan_request;
-	uint32_t magic;
+	int magic;
 	int attempt;
 	int reject;
-	uint8_t source;
 	struct delayed_work tdls_scan_work;
 } tdls_scan_context_t;
 
@@ -370,8 +365,9 @@ struct tdls_set_state_info {
  * @discovery_sent_cnt: discovery sent count
  * @ap_rssi: ap rssi
  * @curr_candidate: current candidate
+ * @ct_peer_mac_table: linear mac address table for counting the packets
+ * @valid_mac_entries: number of valid mac entry in @ct_peer_mac_table
  * @magic: magic
- * @last_flush_ts: last timestamp when flush logs was displayed.
  *
  */
 typedef struct {
@@ -384,8 +380,9 @@ typedef struct {
 	uint32_t discovery_sent_cnt;
 	int8_t ap_rssi;
 	struct _hddTdlsPeer_t *curr_candidate;
+	struct tdls_ct_mac_table ct_peer_mac_table[TDLS_CT_MAC_MAX_TABLE_SIZE];
+	uint8_t valid_mac_entries;
 	uint32_t magic;
-	uint64_t last_flush_ts;
 } tdlsCtx_t;
 
 /**
@@ -512,7 +509,12 @@ int wlan_hdd_tdls_init(hdd_adapter_t *pAdapter);
 
 void wlan_hdd_tdls_exit(hdd_adapter_t *pAdapter);
 
+void wlan_hdd_tdls_extract_da(struct sk_buff *skb, uint8_t *mac);
+
 void wlan_hdd_tdls_extract_sa(struct sk_buff *skb, uint8_t *mac);
+
+int wlan_hdd_tdls_increment_pkt_count(hdd_adapter_t *pAdapter,
+				      const uint8_t *mac, uint8_t tx);
 
 int wlan_hdd_tdls_set_sta_id(hdd_adapter_t *pAdapter, const uint8_t *mac,
 			     uint8_t staId);
@@ -591,8 +593,7 @@ int wlan_hdd_tdls_copy_scan_context(hdd_context_t *pHddCtx,
 				    struct cfg80211_scan_request *request);
 
 int wlan_hdd_tdls_scan_callback(hdd_adapter_t *pAdapter, struct wiphy *wiphy,
-				struct cfg80211_scan_request *request,
-				uint8_t source);
+				struct cfg80211_scan_request *request);
 
 void wlan_hdd_tdls_scan_done_callback(hdd_adapter_t *pAdapter);
 
@@ -716,7 +717,7 @@ void wlan_hdd_tdls_update_tx_pkt_cnt(hdd_adapter_t *adapter,
 void wlan_hdd_tdls_update_rx_pkt_cnt(hdd_adapter_t *adapter,
 				     struct sk_buff *skb);
 int hdd_set_tdls_scan_type(hdd_context_t *hdd_ctx, int val);
-void hdd_tdls_context_init(hdd_context_t *hdd_ctx, bool ssr);
+void hdd_tdls_context_init(hdd_context_t *hdd_ctx);
 void hdd_tdls_context_destroy(hdd_context_t *hdd_ctx);
 int wlan_hdd_tdls_antenna_switch(hdd_context_t *hdd_ctx,
 				 hdd_adapter_t *adapter,
@@ -740,7 +741,6 @@ void wlan_hdd_tdls_notify_connect(hdd_adapter_t *adapter,
  * wlan_hdd_tdls_notify_disconnect() - Update tdls state for every
  * disconnect event.
  * @adapter: hdd adapter
- * @lfr_roam: roaming case
  *
  * After every disconnect event in the system, check whether TDLS
  * can be disabled/enabled in the system and update the
@@ -748,7 +748,7 @@ void wlan_hdd_tdls_notify_connect(hdd_adapter_t *adapter,
  *
  * Return: None
  */
-void wlan_hdd_tdls_notify_disconnect(hdd_adapter_t *adapter, bool lfr_roam);
+void wlan_hdd_tdls_notify_disconnect(hdd_adapter_t *adapter);
 void wlan_hdd_change_tdls_mode(void *hdd_ctx);
 void hdd_restart_tdls_source_timer(hdd_context_t *pHddCtx,
 				      eTDLSSupportMode tdls_mode);
@@ -787,7 +787,7 @@ static inline void wlan_hdd_tdls_update_rx_pkt_cnt(hdd_adapter_t *adapter,
 						   struct sk_buff *skb)
 {
 }
-static inline void hdd_tdls_context_init(hdd_context_t *hdd_ctx, bool ssr) { }
+static inline void hdd_tdls_context_init(hdd_context_t *hdd_ctx) { }
 static inline void hdd_tdls_context_destroy(hdd_context_t *hdd_ctx) { }
 
 static inline int wlan_hdd_tdls_antenna_switch(hdd_context_t *hdd_ctx,
@@ -805,8 +805,7 @@ static inline void wlan_hdd_tdls_notify_connect(hdd_adapter_t *adapter,
 				  tCsrRoamInfo *csr_roam_info)
 {
 }
-static inline void wlan_hdd_tdls_notify_disconnect(hdd_adapter_t *adapter,
-						   bool lfr_roam)
+static inline void wlan_hdd_tdls_notify_disconnect(hdd_adapter_t *adapter)
 {
 }
 

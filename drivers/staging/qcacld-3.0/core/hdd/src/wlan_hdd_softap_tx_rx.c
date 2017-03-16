@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -61,25 +61,25 @@
  */
 static void hdd_softap_dump_sk_buff(struct sk_buff *skb)
 {
-	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_ERROR,
 		  "%s: head = %p ", __func__, skb->head);
 	/* QDF_TRACE( QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_ERROR,"%s: data = %p ", __func__, skb->data); */
-	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_ERROR,
 		  "%s: tail = %p ", __func__, skb->tail);
-	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_ERROR,
 		  "%s: end = %p ", __func__, skb->end);
-	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_ERROR,
 		  "%s: len = %d ", __func__, skb->len);
-	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_ERROR,
 		  "%s: data_len = %d ", __func__, skb->data_len);
-	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_ERROR,
 		  "%s: mac_len = %d", __func__, skb->mac_len);
 
-	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_ERROR,
 		  "0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x ", skb->data[0],
 		  skb->data[1], skb->data[2], skb->data[3], skb->data[4],
 		  skb->data[5], skb->data[6], skb->data[7]);
-	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_ERROR,
 		  "0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x", skb->data[8],
 		  skb->data[9], skb->data[10], skb->data[11], skb->data[12],
 		  skb->data[13], skb->data[14], skb->data[15]);
@@ -362,12 +362,7 @@ static int __hdd_softap_hard_start_xmit(struct sk_buff *skb,
 #endif
 
 	pAdapter->stats.tx_bytes += skb->len;
-
-	if (qdf_nbuf_is_tso(skb))
-		pAdapter->stats.tx_packets += qdf_nbuf_get_tso_num_seg(skb);
-	else {
-		++pAdapter->stats.tx_packets;
-	}
+	++pAdapter->stats.tx_packets;
 
 	hdd_event_eapol_log(skb, QDF_TX);
 	qdf_dp_trace_log_pkt(pAdapter->sessionId, skb, QDF_TX);
@@ -376,8 +371,7 @@ static int __hdd_softap_hard_start_xmit(struct sk_buff *skb,
 
 	qdf_dp_trace_set_track(skb, QDF_TX);
 	DPTRACE(qdf_dp_trace(skb, QDF_DP_TRACE_HDD_TX_PACKET_PTR_RECORD,
-			qdf_nbuf_data_addr(skb), sizeof(qdf_nbuf_data(skb)),
-			QDF_TX));
+			(uint8_t *)&skb->data, sizeof(skb->data), QDF_TX));
 	DPTRACE(qdf_dp_trace(skb, QDF_DP_TRACE_HDD_TX_PACKET_RECORD,
 			(uint8_t *)skb->data, qdf_nbuf_len(skb), QDF_TX));
 	if (qdf_nbuf_len(skb) > QDF_DP_TRACE_RECORD_SIZE)
@@ -435,30 +429,6 @@ int hdd_softap_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	return ret;
 }
 
-#ifdef FEATURE_WLAN_DIAG_SUPPORT
-/**
- * hdd_wlan_datastall_sap_event()- Send SAP datastall information
- *
- * This Function send send SAP datastall diag event
- *
- * Return: void.
- */
-static void hdd_wlan_datastall_sap_event(void)
-{
-	WLAN_HOST_DIAG_EVENT_DEF(sap_data_stall,
-					struct host_event_wlan_datastall);
-	qdf_mem_zero(&sap_data_stall, sizeof(sap_data_stall));
-	sap_data_stall.reason = SOFTAP_TX_TIMEOUT;
-	WLAN_HOST_DIAG_EVENT_REPORT(&sap_data_stall,
-						EVENT_WLAN_SOFTAP_DATASTALL);
-}
-#else
-static inline void hdd_wlan_datastall_sap_event(void)
-{
-
-}
-#endif
-
 /**
  * __hdd_softap_tx_timeout() - TX timeout handler
  * @dev: pointer to network device
@@ -486,7 +456,7 @@ static void __hdd_softap_tx_timeout(struct net_device *dev)
 	 */
 	hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 	if (cds_is_driver_recovering()) {
-		QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_WARN,
+		QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_ERROR,
 			 "%s: Recovery in Progress. Ignore!!!", __func__);
 		return;
 	}
@@ -496,16 +466,15 @@ static void __hdd_softap_tx_timeout(struct net_device *dev)
 	for (i = 0; i < NUM_TX_QUEUES; i++) {
 		txq = netdev_get_tx_queue(dev, i);
 		QDF_TRACE(QDF_MODULE_ID_HDD_DATA,
-			  QDF_TRACE_LEVEL_INFO,
+			  QDF_TRACE_LEVEL_ERROR,
 			  "Queue%d status: %d txq->trans_start %lu",
 			  i, netif_tx_queue_stopped(txq), txq->trans_start);
 	}
 
 	wlan_hdd_display_netif_queue_history(hdd_ctx);
 	ol_tx_dump_flow_pool_info();
-	QDF_TRACE(QDF_MODULE_ID_HDD_DATA, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_HDD_DATA, QDF_TRACE_LEVEL_ERROR,
 			"carrier state: %d", netif_carrier_ok(dev));
-	hdd_wlan_datastall_sap_event();
 }
 
 /**
@@ -680,16 +649,10 @@ QDF_STATUS hdd_softap_rx_packet_cbk(void *context, qdf_nbuf_t rxBuf)
 	pAdapter->stats.rx_bytes += skb->len;
 
 	hdd_event_eapol_log(skb, QDF_RX);
-	DPTRACE(qdf_dp_trace(skb,
+	DPTRACE(qdf_dp_trace(rxBuf,
 		QDF_DP_TRACE_RX_HDD_PACKET_PTR_RECORD,
-		qdf_nbuf_data_addr(skb),
-		sizeof(qdf_nbuf_data(skb)), QDF_RX));
-	DPTRACE(qdf_dp_trace(skb, QDF_DP_TRACE_HDD_RX_PACKET_RECORD,
-		(uint8_t *)skb->data, qdf_nbuf_len(skb), QDF_RX));
-	if (qdf_nbuf_len(skb) > QDF_DP_TRACE_RECORD_SIZE)
-		DPTRACE(qdf_dp_trace(skb, QDF_DP_TRACE_HDD_RX_PACKET_RECORD,
-			(uint8_t *)&skb->data[QDF_DP_TRACE_RECORD_SIZE],
-			(qdf_nbuf_len(skb)-QDF_DP_TRACE_RECORD_SIZE), QDF_RX));
+		qdf_nbuf_data_addr(rxBuf),
+		sizeof(qdf_nbuf_data(rxBuf)), QDF_RX));
 
 	skb->protocol = eth_type_trans(skb, skb->dev);
 
@@ -934,7 +897,7 @@ QDF_STATUS hdd_softap_stop_bss(hdd_adapter_t *pAdapter)
 	 * unloading
 	 */
 	if (cds_is_load_or_unload_in_progress()) {
-		hdd_warn("Loading_unloading in Progress, state: 0x%x. Ignore!!!",
+		hdd_err("Loading_unloading in Progress, state: 0x%x. Ignore!!!",
 			cds_get_driver_state());
 		return QDF_STATUS_E_PERM;
 	}

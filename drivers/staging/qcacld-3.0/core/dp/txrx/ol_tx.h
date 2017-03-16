@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -109,8 +109,6 @@ void ol_txrx_mgmt_tx_complete(void *ctxt, qdf_nbuf_t netbuf, int err);
 #if defined(FEATURE_TSO)
 void ol_tso_seg_list_init(struct ol_txrx_pdev_t *pdev, uint32_t num_seg);
 void ol_tso_seg_list_deinit(struct ol_txrx_pdev_t *pdev);
-void ol_tso_num_seg_list_init(struct ol_txrx_pdev_t *pdev, uint32_t num_seg);
-void ol_tso_num_seg_list_deinit(struct ol_txrx_pdev_t *pdev);
 #else
 static inline void ol_tso_seg_list_init(struct ol_txrx_pdev_t *pdev,
 	uint32_t num_seg)
@@ -120,13 +118,6 @@ static inline void ol_tso_seg_list_init(struct ol_txrx_pdev_t *pdev,
 static inline void ol_tso_seg_list_deinit(struct ol_txrx_pdev_t *pdev)
 {
 	return;
-}
-static inline void ol_tso_num_seg_list_init(struct ol_txrx_pdev_t *pdev,
-	uint32_t num_seg)
-{
-}
-static inline void ol_tso_num_seg_list_deinit(struct ol_txrx_pdev_t *pdev)
-{
 }
 #endif
 

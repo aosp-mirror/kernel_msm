@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -268,21 +268,6 @@ int wma_beacon_swba_handler(void *handle, uint8_t *event, uint32_t len)
 	return 0;
 }
 
-#ifdef FEATURE_WLAN_DIAG_SUPPORT
-void wma_sta_kickout_event(uint32_t kickout_reason, uint8_t vdev_id,
-							uint8_t *macaddr)
-{
-	WLAN_HOST_DIAG_EVENT_DEF(sta_kickout, struct host_event_wlan_kickout);
-	qdf_mem_zero(&sta_kickout, sizeof(sta_kickout));
-	sta_kickout.reasoncode = kickout_reason;
-	sta_kickout.vdev_id = vdev_id;
-	if (macaddr)
-		qdf_mem_copy(sta_kickout.peer_mac, macaddr,
-							IEEE80211_ADDR_LEN);
-	WLAN_HOST_DIAG_EVENT_REPORT(&sta_kickout, EVENT_WLAN_STA_KICKOUT);
-}
-#endif
-
 /**
  * wma_peer_sta_kickout_event_handler() - kickout event handler
  * @handle: wma handle
@@ -381,8 +366,6 @@ int wma_peer_sta_kickout_event_handler(void *handle, u8 *event, u32 len)
 		     WMI_UNIFIED_VDEV_SUBTYPE_P2P_CLIENT) &&
 		    !qdf_mem_cmp(wma->interfaces[vdev_id].bssid,
 				    macaddr, IEEE80211_ADDR_LEN)) {
-			wma_sta_kickout_event(HOST_STA_KICKOUT_REASON_XRETRY,
-							vdev_id, macaddr);
 			/*
 			 * KICKOUT event is for current station-AP connection.
 			 * Treat it like final beacon miss. Station may not have
@@ -410,8 +393,6 @@ int wma_peer_sta_kickout_event_handler(void *handle, u8 *event, u32 len)
 		     WMI_UNIFIED_VDEV_SUBTYPE_P2P_CLIENT) &&
 		    !qdf_mem_cmp(wma->interfaces[vdev_id].bssid,
 				    macaddr, IEEE80211_ADDR_LEN)) {
-			wma_sta_kickout_event(
-			HOST_STA_KICKOUT_REASON_UNSPECIFIED, vdev_id, macaddr);
 			/*
 			 * KICKOUT event is for current station-AP connection.
 			 * Treat it like final beacon miss. Station may not have
@@ -457,8 +438,6 @@ int wma_peer_sta_kickout_event_handler(void *handle, u8 *event, u32 len)
 		     IEEE80211_ADDR_LEN);
 	del_sta_ctx->reasonCode = HAL_DEL_STA_REASON_CODE_KEEP_ALIVE;
 	del_sta_ctx->rssi = kickout_event->rssi + WMA_TGT_NOISE_FLOOR_DBM;
-	wma_sta_kickout_event(HOST_STA_KICKOUT_REASON_KEEP_ALIVE,
-							vdev_id, macaddr);
 	wma_send_msg(wma, SIR_LIM_DELETE_STA_CONTEXT_IND, (void *)del_sta_ctx,
 		     0);
 	wma_lost_link_info_handler(wma, vdev_id, kickout_event->rssi +
@@ -2504,7 +2483,6 @@ static int wma_process_mgmt_tx_completion(tp_wma_handle wma_handle,
 {
 	struct wmi_desc_t *wmi_desc;
 	ol_txrx_pdev_handle pdev = cds_get_context(QDF_MODULE_ID_TXRX);
-	tp_wma_packetdump_cb packetdump_cb;
 
 	if (pdev == NULL) {
 		WMA_LOGE("%s: NULL pdev pointer", __func__);
@@ -2525,10 +2503,9 @@ static int wma_process_mgmt_tx_completion(tp_wma_handle wma_handle,
 		qdf_nbuf_unmap_single(pdev->osdev, wmi_desc->nbuf,
 					  QDF_DMA_TO_DEVICE);
 
-	packetdump_cb = wma_handle->wma_mgmt_tx_packetdump_cb;
-	if (packetdump_cb)
-		packetdump_cb(wmi_desc->nbuf, QDF_STATUS_SUCCESS,
-			wmi_desc->vdev_id, TX_MGMT_PKT);
+	if (wma_handle->wma_mgmt_tx_packetdump_cb)
+		wma_handle->wma_mgmt_tx_packetdump_cb(wmi_desc->nbuf,
+			QDF_STATUS_SUCCESS, wmi_desc->vdev_id, TX_MGMT_PKT);
 
 	if (wmi_desc->tx_cmpl_cb)
 		wmi_desc->tx_cmpl_cb(wma_handle->mac_context,
@@ -2537,7 +2514,7 @@ static int wma_process_mgmt_tx_completion(tp_wma_handle wma_handle,
 	if (wmi_desc->ota_post_proc_cb)
 		wmi_desc->ota_post_proc_cb((tpAniSirGlobal)
 						 wma_handle->mac_context,
-						 (status ? 0 : 1));
+						 status);
 
 	wmi_desc_put(wma_handle, wmi_desc);
 	return 0;
@@ -2618,32 +2595,11 @@ int wma_mgmt_tx_bundle_completion_handler(void *handle, uint8_t *buf,
 void wma_process_update_opmode(tp_wma_handle wma_handle,
 			       tUpdateVHTOpMode *update_vht_opmode)
 {
-	struct wma_txrx_node *iface;
-	uint16_t chan_mode;
-
-
-	iface = &wma_handle->interfaces[update_vht_opmode->smesessionId];
-	if (iface == NULL)
-		return;
-
-	chan_mode = wma_chan_phy_mode(cds_freq_to_chan(iface->mhz),
-				update_vht_opmode->opMode,
-				update_vht_opmode->dot11_mode);
-	if (MODE_UNKNOWN == chan_mode)
-		return;
-
-	WMA_LOGD("%s: opMode = %d, chanMode = %d, dot11mode = %d ",
-			__func__,
-			update_vht_opmode->opMode, chan_mode,
-			update_vht_opmode->dot11_mode);
+	WMA_LOGD("%s: opMode = %d", __func__, update_vht_opmode->opMode);
 
 	wma_set_peer_param(wma_handle, update_vht_opmode->peer_mac,
-			WMI_PEER_PHYMODE, chan_mode,
-			update_vht_opmode->smesessionId);
-
-	wma_set_peer_param(wma_handle, update_vht_opmode->peer_mac,
-			WMI_PEER_CHWIDTH, update_vht_opmode->opMode,
-			update_vht_opmode->smesessionId);
+			   WMI_PEER_CHWIDTH, update_vht_opmode->opMode,
+			   update_vht_opmode->smesessionId);
 }
 
 /**
@@ -3189,7 +3145,6 @@ static int wma_mgmt_rx_process(void *handle, uint8_t *data,
 	struct ieee80211_frame *wh;
 	uint8_t mgt_type, mgt_subtype;
 	int status;
-	tp_wma_packetdump_cb packetdump_cb;
 
 	if (!wma_handle) {
 		WMA_LOGE("%s: Failed to get WMA  context", __func__);
@@ -3213,6 +3168,12 @@ static int wma_mgmt_rx_process(void *handle, uint8_t *data,
 		return -EINVAL;
 	}
 
+	rx_pkt = qdf_mem_malloc(sizeof(*rx_pkt));
+	if (!rx_pkt) {
+		WMA_LOGE("Failed to allocate rx packet");
+		return -ENOMEM;
+	}
+
 	if (cds_is_load_or_unload_in_progress()) {
 		WMA_LOGW(FL("Load/Unload in progress"));
 		return -EINVAL;
@@ -3221,12 +3182,6 @@ static int wma_mgmt_rx_process(void *handle, uint8_t *data,
 	if (cds_is_driver_recovering()) {
 		WMA_LOGW(FL("Recovery in progress"));
 		return -EINVAL;
-	}
-
-	rx_pkt = qdf_mem_malloc(sizeof(*rx_pkt));
-	if (!rx_pkt) {
-		WMA_LOGE("Failed to allocate rx packet");
-		return -ENOMEM;
 	}
 
 	qdf_mem_zero(rx_pkt, sizeof(*rx_pkt));
@@ -3354,12 +3309,12 @@ static int wma_mgmt_rx_process(void *handle, uint8_t *data,
 		return -EINVAL;
 	}
 
-	packetdump_cb = wma_handle->wma_mgmt_rx_packetdump_cb;
 	if ((mgt_type == IEEE80211_FC0_TYPE_MGT &&
 			mgt_subtype != IEEE80211_FC0_SUBTYPE_BEACON) &&
-			packetdump_cb)
-		packetdump_cb(rx_pkt->pkt_buf, QDF_STATUS_SUCCESS,
-			rx_pkt->pkt_meta.sessionId, RX_MGMT_PKT);
+			wma_handle->wma_mgmt_rx_packetdump_cb)
+		wma_handle->wma_mgmt_rx_packetdump_cb(rx_pkt->pkt_buf,
+			QDF_STATUS_SUCCESS, rx_pkt->pkt_meta.sessionId,
+			RX_MGMT_PKT);
 
 	wma_handle->mgmt_rx(wma_handle, rx_pkt);
 	return 0;

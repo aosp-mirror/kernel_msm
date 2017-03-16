@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -522,7 +522,7 @@ static QDF_STATUS sme_rrm_send_scan_result(tpAniSirGlobal mac_ctx,
 
 	roam_info = qdf_mem_malloc(sizeof(*roam_info));
 	if (NULL == roam_info) {
-		sms_log(mac_ctx, LOGP, FL("qdf_mem_malloc failed"));
+		sms_log(mac_ctx, LOGP, FL("vos_mem_malloc failed"));
 		status = QDF_STATUS_E_NOMEM;
 		goto rrm_send_scan_results_done;
 	}
@@ -915,11 +915,6 @@ QDF_STATUS sme_rrm_process_beacon_report_req_ind(tpAniSirGlobal pMac, void *pMsg
 	qdf_mem_copy((uint8_t *) &pSmeRrmContext->duration,
 		     (uint8_t *) &pBeaconReq->measurementDuration,
 		     SIR_ESE_MAX_MEAS_IE_REQS);
-
-	sms_log(pMac, LOG1,
-		FL("token %d regClass %d randnIntvl %d msgSource %d"),
-		pSmeRrmContext->token, pSmeRrmContext->regClass,
-		pSmeRrmContext->randnIntvl, pSmeRrmContext->msgSource);
 
 	status = sme_rrm_issue_scan_req(pMac);
 

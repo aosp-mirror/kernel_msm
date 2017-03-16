@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -2938,10 +2938,6 @@ uint8_t lim_get_ht_capability(tpAniSirGlobal pMac,
 		retVal = (uint8_t) macHTCapabilityInfo.maximalAMSDUsize;
 		break;
 
-	case eHT_MAX_AMSDU_NUM:
-		retVal = (uint8_t) psessionEntry->max_amsdu_num;
-		break;
-
 	case eHT_RX_STBC:
 		retVal = (uint8_t) psessionEntry->htConfig.ht_rx_stbc;
 		break;
@@ -4517,7 +4513,7 @@ void lim_update_sta_run_time_ht_switch_chnl_params(tpAniSirGlobal pMac,
 	 * end...
 	 */
 	if (pMac->lim.gpLimRemainOnChanReq) {
-		lim_log(pMac, LOG1, FL("RoC is in progress"));
+		lim_log(pMac, LOGE, FL("RoC is in progress"));
 		return;
 	}
 
@@ -6082,13 +6078,12 @@ void lim_pmf_sa_query_timer_handler(void *pMacGlobal, uint32_t param)
 #endif
 
 bool lim_check_vht_op_mode_change(tpAniSirGlobal pMac, tpPESession psessionEntry,
-				uint8_t chanWidth, uint8_t dot11_mode,
-				uint8_t staId, uint8_t *peerMac)
+				  uint8_t chanWidth, uint8_t staId,
+				  uint8_t *peerMac)
 {
 	tUpdateVHTOpMode tempParam;
 
 	tempParam.opMode = chanWidth;
-	tempParam.dot11_mode = dot11_mode;
 	tempParam.staId = staId;
 	tempParam.smesessionId = psessionEntry->smeSessionId;
 	qdf_mem_copy(tempParam.peer_mac, peerMac, sizeof(tSirMacAddr));
@@ -6646,7 +6641,7 @@ QDF_STATUS lim_send_ext_cap_ie(tpAniSirGlobal mac_ctx,
 	if (merge && NULL != extra_extcap && extra_extcap->num_bytes > 0) {
 		if (extra_extcap->num_bytes > ext_cap_data.num_bytes)
 			num_bytes = extra_extcap->num_bytes;
-		lim_merge_extcap_struct(&ext_cap_data, extra_extcap, true);
+		lim_merge_extcap_struct(&ext_cap_data, extra_extcap);
 	}
 
 	/* Allocate memory for the WMI request, and copy the parameter */
@@ -6704,8 +6699,7 @@ QDF_STATUS lim_send_ext_cap_ie(tpAniSirGlobal mac_ctx,
 tSirRetStatus lim_strip_ie(tpAniSirGlobal mac_ctx,
 		uint8_t *addn_ie, uint16_t *addn_ielen,
 		uint8_t eid, eSizeOfLenField size_of_len_field,
-		uint8_t *oui, uint8_t oui_length, uint8_t *extracted_ie,
-		uint32_t eid_max_len)
+		uint8_t *oui, uint8_t oui_length, uint8_t *extracted_ie)
 {
 	uint8_t *tempbuf = NULL;
 	uint16_t templen = 0;
@@ -6757,11 +6751,12 @@ tSirRetStatus lim_strip_ie(tpAniSirGlobal mac_ctx,
 			 */
 			if (NULL != extracted_ie) {
 				qdf_mem_set(extracted_ie,
-					    eid_max_len + size_of_len_field + 1,
-					    0);
-				if (elem_len <= eid_max_len)
+					DOT11F_IE_EXTCAP_MAX_LEN +
+						size_of_len_field + 1, 0);
+				if (elem_len <= DOT11F_IE_EXTCAP_MAX_LEN)
 					qdf_mem_copy(extracted_ie, &ptr[0],
-					elem_len + size_of_len_field + 1);
+						elem_len +
+						size_of_len_field + 1);
 			}
 		}
 		left -= elem_len;
@@ -6771,44 +6766,6 @@ tSirRetStatus lim_strip_ie(tpAniSirGlobal mac_ctx,
 
 	*addn_ielen = templen;
 	qdf_mem_free(tempbuf);
-
-	return eSIR_SUCCESS;
-}
-
-tSirRetStatus lim_strip_supp_op_class_update_struct(tpAniSirGlobal mac_ctx,
-		uint8_t *addn_ie, uint16_t *addn_ielen,
-		tDot11fIESuppOperatingClasses *dst)
-{
-	uint8_t extracted_buff[DOT11F_IE_SUPPOPERATINGCLASSES_MAX_LEN + 2];
-	tSirRetStatus status;
-
-	qdf_mem_set((uint8_t *)&extracted_buff[0],
-		    DOT11F_IE_SUPPOPERATINGCLASSES_MAX_LEN + 2,
-		    0);
-	status = lim_strip_ie(mac_ctx, addn_ie, addn_ielen,
-			      DOT11F_EID_SUPPOPERATINGCLASSES, ONE_BYTE,
-			      NULL, 0, extracted_buff,
-			      DOT11F_IE_SUPPOPERATINGCLASSES_MAX_LEN);
-	if (eSIR_SUCCESS != status) {
-		lim_log(mac_ctx, LOG1,
-		       FL("Failed to strip supp_op_mode IE status = (%d)."),
-		       status);
-		return status;
-	}
-
-	if (DOT11F_EID_SUPPOPERATINGCLASSES != extracted_buff[0] ||
-	    extracted_buff[1] > DOT11F_IE_SUPPOPERATINGCLASSES_MAX_LEN) {
-		lim_log(mac_ctx, LOG1, FL("Invalid IEs eid = %d elem_len=%d "),
-			extracted_buff[0], extracted_buff[1]);
-		return eSIR_FAILURE;
-	}
-
-	/* update the extracted supp op class to struct*/
-	if (DOT11F_PARSE_SUCCESS != dot11f_unpack_ie_supp_operating_classes(
-	    mac_ctx, &extracted_buff[2], extracted_buff[1], dst)) {
-		lim_log(mac_ctx, LOGE, FL("dot11f_unpack Parse Error "));
-		return eSIR_FAILURE;
-	}
 
 	return eSIR_SUCCESS;
 }
@@ -6846,10 +6803,10 @@ void lim_update_extcap_struct(tpAniSirGlobal mac_ctx,
 	}
 
 	qdf_mem_set((uint8_t *)&out[0], DOT11F_IE_EXTCAP_MAX_LEN, 0);
-	qdf_mem_copy(&out[0], &buf[2], buf[1]);
+	qdf_mem_copy(&out[0], &buf[2], DOT11F_IE_EXTCAP_MAX_LEN);
 
 	if (DOT11F_PARSE_SUCCESS != dot11f_unpack_ie_ext_cap(mac_ctx, &out[0],
-					buf[1], dst))
+					DOT11F_IE_EXTCAP_MAX_LEN, dst))
 		lim_log(mac_ctx, LOGE, FL("dot11f_unpack Parse Error "));
 }
 
@@ -6876,8 +6833,7 @@ tSirRetStatus lim_strip_extcap_update_struct(tpAniSirGlobal mac_ctx,
 		     0);
 	status = lim_strip_ie(mac_ctx, addn_ie, addn_ielen,
 			      DOT11F_EID_EXTCAP, ONE_BYTE,
-			      NULL, 0, extracted_buff,
-			      DOT11F_IE_EXTCAP_MAX_LEN);
+			      NULL, 0, extracted_buff);
 	if (eSIR_SUCCESS != status) {
 		lim_log(mac_ctx, LOG1,
 		       FL("Failed to strip extcap IE status = (%d)."), status);
@@ -6893,43 +6849,24 @@ tSirRetStatus lim_strip_extcap_update_struct(tpAniSirGlobal mac_ctx,
  * lim_merge_extcap_struct() - merge extended capabilities info
  * @dst: destination extended capabilities
  * @src: source extended capabilities
- * @add: true if add the capabilites, false if strip the capabilites.
  *
- * This function is used to take @src info and add/strip it to/from
- * @dst extended capabilities info.
+ * This function is used to take @src info and merge it with @dst
+ * extended capabilities info.
  *
  * Return: None
  */
 void lim_merge_extcap_struct(tDot11fIEExtCap *dst,
-			     tDot11fIEExtCap *src,
-			     bool add)
+			     tDot11fIEExtCap *src)
 {
 	uint8_t *tempdst = (uint8_t *)dst->bytes;
 	uint8_t *tempsrc = (uint8_t *)src->bytes;
 	uint8_t structlen = member_size(tDot11fIEExtCap, bytes);
 
-	/* Return if @src not present */
-	if (!src->present)
-		return;
-
-	/* Return if strip the capabilites from @dst which not present */
-	if (!dst->present && !add)
-		return;
-
-	/* Merge the capabilites info in other cases */
 	while (tempdst && tempsrc && structlen--) {
-		if (add)
-			*tempdst |= *tempsrc;
-		else
-			*tempdst &= *tempsrc;
+		*tempdst |= *tempsrc;
 		tempdst++;
 		tempsrc++;
 	}
-	dst->num_bytes = lim_compute_ext_cap_ie_length(dst);
-	if (dst->num_bytes == 0)
-		dst->present = 0;
-	else
-		dst->present = 1;
 }
 
 /**
@@ -7186,23 +7123,24 @@ bool lim_is_robust_mgmt_action_frame(uint8_t action_category)
 }
 
 /**
- * lim_compute_ext_cap_ie_length - compute the length of ext cap ie
- * based on the bits set
+ * lim_is_ext_cap_ie_present - checks if ext ie is present
  * @ext_cap: extended IEs structure
  *
- * Return: length of the ext cap ie, 0 means should not present
+ * Return: true if ext IEs are present else false
  */
-uint8_t lim_compute_ext_cap_ie_length(tDot11fIEExtCap *ext_cap)
+bool lim_is_ext_cap_ie_present (struct s_ext_cap *ext_cap)
 {
-	uint8_t i = DOT11F_IE_EXTCAP_MAX_LEN;
+	int i, size;
+	uint8_t *tmp_buf;
 
-	while (i) {
-		if (ext_cap->bytes[i-1])
-			break;
-		i--;
-	}
+	tmp_buf = (uint8_t *) ext_cap;
+	size = sizeof(*ext_cap);
 
-	return i;
+	for (i = 0; i < size; i++)
+		if (tmp_buf[i])
+			return true;
+
+	return false;
 }
 
 /**
@@ -7346,35 +7284,4 @@ void lim_update_last_processed_frame(last_processed_msg *last_processed_frm,
 
 	qdf_mem_copy(last_processed_frm->sa, pHdr->sa, ETH_ALEN);
 	last_processed_frm->seq_num = seq_num;
-}
-
-tCsrRoamSession *lim_get_session_by_macaddr(tpAniSirGlobal mac_ctx,
-		tSirMacAddr self_mac)
-{
-	int i = 0;
-	tCsrRoamSession *session;
-
-	if (!mac_ctx || !self_mac) {
-		QDF_TRACE(QDF_MODULE_ID_PE, QDF_TRACE_LEVEL_ERROR,
-			  FL("Invalid arguments"));
-		return NULL;
-	}
-
-	for (i = 0; i < mac_ctx->sme.max_intf_count; i++) {
-		session = CSR_GET_SESSION(mac_ctx, i);
-		if (!session)
-			continue;
-		else if (!qdf_mem_cmp(&session->selfMacAddr,
-			 self_mac, sizeof(tSirMacAddr))) {
-
-			QDF_TRACE(QDF_MODULE_ID_PE, QDF_TRACE_LEVEL_INFO,
-				  FL("session %d exists with mac address "
-				  MAC_ADDRESS_STR), session->sessionId,
-				  MAC_ADDR_ARRAY(self_mac));
-
-			return session;
-		}
-	}
-
-	return NULL;
 }

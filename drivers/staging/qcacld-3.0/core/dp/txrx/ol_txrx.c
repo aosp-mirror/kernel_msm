@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -85,11 +85,8 @@
 #include <cds_concurrency.h>
 #include "epping_main.h"
 #include <a_types.h>
-#include "wma_api.h"
 
-#include <htt_internal.h>
-
-#if defined(CONFIG_HL_SUPPORT) && defined(FEATURE_WLAN_TDLS)
+#ifdef CONFIG_HL_SUPPORT
 
 /**
  * ol_txrx_copy_mac_addr_raw() - copy raw mac addr
@@ -284,7 +281,10 @@ ol_txrx_find_peer_by_addr_and_vdev(ol_txrx_pdev_handle pdev,
 	if (!peer)
 		return NULL;
 	*peer_id = peer->local_id;
-	OL_TXRX_PEER_DEC_REF_CNT(peer);
+	qdf_atomic_dec(&peer->ref_cnt);
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_HIGH,
+		 "%s: peer %p peer->ref_cnt %d", __func__, peer,
+		 qdf_atomic_read(&peer->ref_cnt));
 	return peer;
 }
 
@@ -338,7 +338,10 @@ ol_txrx_peer_handle ol_txrx_find_peer_by_addr(ol_txrx_pdev_handle pdev,
 	if (!peer)
 		return NULL;
 	*peer_id = peer->local_id;
-	OL_TXRX_PEER_DEC_REF_CNT(peer);
+	qdf_atomic_dec(&peer->ref_cnt);
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_HIGH,
+		 "%s: peer %p peer->ref_cnt %d", __func__, peer,
+		 qdf_atomic_read(&peer->ref_cnt));
 	return peer;
 }
 
@@ -957,111 +960,6 @@ ol_txrx_peer_tx_queue_free(struct ol_txrx_pdev_t *pdev,
 }
 #endif
 
-#if defined(FEATURE_TSO) && defined(FEATURE_TSO_DEBUG)
-static void ol_txrx_tso_stats_init(ol_txrx_pdev_handle pdev)
-{
-	qdf_spinlock_create(&pdev->stats.pub.tx.tso.tso_stats_lock);
-}
-
-static void ol_txrx_tso_stats_deinit(ol_txrx_pdev_handle pdev)
-{
-	qdf_spinlock_destroy(&pdev->stats.pub.tx.tso.tso_stats_lock);
-}
-
-static void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
-{
-	int msdu_idx;
-	int seg_idx;
-
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-		"TSO Statistics:");
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-		"TSO pkts %lld, bytes %lld\n",
-		pdev->stats.pub.tx.tso.tso_pkts.pkts,
-		pdev->stats.pub.tx.tso.tso_pkts.bytes);
-
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-			"TSO Histogram for numbers of segments:\n"
-			"Single segment	%d\n"
-			"  2-5 segments	%d\n"
-			" 6-10 segments	%d\n"
-			"11-15 segments	%d\n"
-			"16-20 segments	%d\n"
-			"  20+ segments	%d\n",
-			pdev->stats.pub.tx.tso.tso_hist.pkts_1,
-			pdev->stats.pub.tx.tso.tso_hist.pkts_2_5,
-			pdev->stats.pub.tx.tso.tso_hist.pkts_6_10,
-			pdev->stats.pub.tx.tso.tso_hist.pkts_11_15,
-			pdev->stats.pub.tx.tso.tso_hist.pkts_16_20,
-			pdev->stats.pub.tx.tso.tso_hist.pkts_20_plus);
-
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-			"TSO History Buffer: Total size %d, current_index %d",
-			NUM_MAX_TSO_MSDUS,
-			TXRX_STATS_TSO_MSDU_IDX(pdev));
-
-	for (msdu_idx = 0; msdu_idx < NUM_MAX_TSO_MSDUS; msdu_idx++) {
-		if (TXRX_STATS_TSO_MSDU_TOTAL_LEN(pdev, msdu_idx) == 0)
-			continue;
-		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-			"jumbo pkt idx: %d num segs %d gso_len %d total_len %d nr_frags %d",
-			msdu_idx,
-			TXRX_STATS_TSO_MSDU_NUM_SEG(pdev, msdu_idx),
-			TXRX_STATS_TSO_MSDU_GSO_SIZE(pdev, msdu_idx),
-			TXRX_STATS_TSO_MSDU_TOTAL_LEN(pdev, msdu_idx),
-			TXRX_STATS_TSO_MSDU_NR_FRAGS(pdev, msdu_idx));
-
-		for (seg_idx = 0;
-			 ((seg_idx < TXRX_STATS_TSO_MSDU_NUM_SEG(pdev, msdu_idx)) &&
-			  (seg_idx < NUM_MAX_TSO_SEGS));
-			 seg_idx++) {
-			struct qdf_tso_seg_t tso_seg =
-				 TXRX_STATS_TSO_SEG(pdev, msdu_idx, seg_idx);
-
-			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				 "seg idx: %d", seg_idx);
-			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				 "tso_enable: %d",
-				 tso_seg.tso_flags.tso_enable);
-			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				 "fin %d syn %d rst %d psh %d ack %d urg %d ece %d cwr %d ns %d",
-				 tso_seg.tso_flags.fin, tso_seg.tso_flags.syn,
-				 tso_seg.tso_flags.rst, tso_seg.tso_flags.psh,
-				 tso_seg.tso_flags.ack, tso_seg.tso_flags.urg,
-				 tso_seg.tso_flags.ece, tso_seg.tso_flags.cwr,
-				 tso_seg.tso_flags.ns);
-			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				 "tcp_seq_num: 0x%x ip_id: %d",
-				 tso_seg.tso_flags.tcp_seq_num,
-				 tso_seg.tso_flags.ip_id);
-		}
-	}
-}
-#else
-static void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
-{
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-	 "TSO is not supported\n");
-}
-
-static void ol_txrx_tso_stats_init(ol_txrx_pdev_handle pdev)
-{
-	/*
-	 * keeping the body empty and not keeping an error print as print will
-	 * will show up everytime during driver load if TSO is not enabled.
-	 */
-}
-
-static void ol_txrx_tso_stats_deinit(ol_txrx_pdev_handle pdev)
-{
-	/*
-	 * keeping the body empty and not keeping an error print as print will
-	 * will show up everytime during driver unload if TSO is not enabled.
-	 */
-}
-
-#endif /* defined(FEATURE_TSO) && defined(FEATURE_TSO_DEBUG) */
-
 /**
  * ol_txrx_pdev_attach() - allocate txrx pdev
  * @ctrl_pdev: cfg pdev
@@ -1094,7 +992,6 @@ ol_txrx_pdev_attach(ol_pdev_handle ctrl_pdev,
 		pdev->sec_types[i] = (enum ol_sec_type)i;
 
 	TXRX_STATS_INIT(pdev);
-	ol_txrx_tso_stats_init(pdev);
 
 	TAILQ_INIT(&pdev->vdev_list);
 
@@ -1132,7 +1029,6 @@ fail2:
 		qdf_spinlock_destroy(&pdev->tx_queue_spinlock);
 
 fail1:
-	ol_txrx_tso_stats_deinit(pdev);
 	qdf_mem_free(pdev);
 
 fail0:
@@ -1253,11 +1149,9 @@ ol_txrx_pdev_post_attach(ol_txrx_pdev_handle pdev)
 		goto ol_attach_fail;
 
 	/* Attach micro controller data path offload resource */
-	if (ol_cfg_ipa_uc_offload_enabled(pdev->ctrl_pdev)) {
-		ret = htt_ipa_uc_attach(pdev->htt_pdev);
-		if (ret)
+	if (ol_cfg_ipa_uc_offload_enabled(pdev->ctrl_pdev))
+		if (htt_ipa_uc_attach(pdev->htt_pdev))
 			goto uc_attach_fail;
-	}
 
 	/* Calculate single element reserved size power of 2 */
 	pdev->tx_desc.desc_reserved_size = qdf_get_pwr2(desc_element_size);
@@ -1267,7 +1161,6 @@ ol_txrx_pdev_post_attach(ol_txrx_pdev_handle pdev)
 		(NULL == pdev->tx_desc.desc_pages.cacheable_pages)) {
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
 			"Page alloc fail");
-		ret = -ENOMEM;
 		goto page_alloc_fail;
 	}
 	desc_per_page = pdev->tx_desc.desc_pages.num_element_per_page;
@@ -1314,7 +1207,6 @@ ol_txrx_pdev_post_attach(ol_txrx_pdev_handle pdev)
 				  "%s: failed to alloc HTT tx desc (%d of %d)",
 				__func__, i, desc_pool_size);
 			fail_idx = i;
-			ret = -ENOMEM;
 			goto desc_alloc_fail;
 		}
 
@@ -1370,7 +1262,6 @@ ol_txrx_pdev_post_attach(ol_txrx_pdev_handle pdev)
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
 			  "%s Invalid standard frame type: %d",
 			  __func__, pdev->frame_format);
-		ret = -EINVAL;
 		goto control_init_fail;
 	}
 
@@ -1439,7 +1330,6 @@ ol_txrx_pdev_post_attach(ol_txrx_pdev_handle pdev)
 			  "Invalid std frame type; [en/de]cap: f:%x t:%x r:%x",
 			  pdev->frame_format,
 			  pdev->target_tx_tran_caps, pdev->target_rx_tran_caps);
-		ret = -EINVAL;
 		goto control_init_fail;
 	}
 #endif
@@ -1490,7 +1380,6 @@ ol_txrx_pdev_post_attach(ol_txrx_pdev_handle pdev)
 					  QDF_TRACE_LEVEL_ERROR,
 					  "%s: %s", __func__, TRACESTR01);
 #undef TRACESTR01
-				ret = -EINVAL;
 				goto control_init_fail;
 			}
 		} else {
@@ -1519,15 +1408,11 @@ ol_txrx_pdev_post_attach(ol_txrx_pdev_handle pdev)
 	qdf_spinlock_create(&pdev->peer_map_unmap_lock);
 	OL_TXRX_PEER_STATS_MUTEX_INIT(pdev);
 
-	if (OL_RX_REORDER_TRACE_ATTACH(pdev) != A_OK) {
-		ret = -ENOMEM;
+	if (OL_RX_REORDER_TRACE_ATTACH(pdev) != A_OK)
 		goto reorder_trace_attach_fail;
-	}
 
-	if (OL_RX_PN_TRACE_ATTACH(pdev) != A_OK) {
-		ret = -ENOMEM;
+	if (OL_RX_PN_TRACE_ATTACH(pdev) != A_OK)
 		goto pn_trace_attach_fail;
-	}
 
 #ifdef PERE_IP_HDR_ALIGNMENT_WAR
 	pdev->host_80211_enable = ol_scn_host_80211_enable_get(pdev->ctrl_pdev);
@@ -1637,8 +1522,6 @@ ol_txrx_pdev_post_attach(ol_txrx_pdev_handle pdev)
 
 	ol_tso_seg_list_init(pdev, desc_pool_size);
 
-	ol_tso_num_seg_list_init(pdev, desc_pool_size);
-
 	ol_tx_register_flow_control(pdev);
 
 	return 0;            /* success */
@@ -1735,7 +1618,6 @@ void ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev, int force)
 #endif
 #endif
 	ol_tso_seg_list_deinit(pdev);
-	ol_tso_num_seg_list_deinit(pdev);
 
 	if (force) {
 		/*
@@ -1799,8 +1681,6 @@ void ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev, int force)
 	ol_tx_desc_dup_detect_deinit(pdev);
 
 	ol_txrx_peer_find_detach(pdev);
-
-	ol_txrx_tso_stats_deinit(pdev);
 
 	qdf_spinlock_destroy(&pdev->tx_mutex);
 	qdf_spinlock_destroy(&pdev->peer_ref_mutex);
@@ -2184,25 +2064,6 @@ void ol_txrx_flush_rx_frames(struct ol_txrx_peer_t *peer,
 	qdf_atomic_dec(&peer->flush_in_progress);
 }
 
-void ol_txrx_flush_cache_rx_queue(void)
-{
-	uint8_t sta_id;
-	struct ol_txrx_peer_t *peer;
-	struct ol_txrx_pdev_t *pdev;
-
-	pdev = cds_get_context(QDF_MODULE_ID_TXRX);
-	if (!pdev)
-		return;
-
-	for (sta_id = 0; sta_id < WLAN_MAX_STA_COUNT; sta_id++) {
-		peer = ol_txrx_peer_find_by_local_id(pdev, sta_id);
-		if (!peer)
-			continue;
-		ol_txrx_flush_rx_frames(peer, 1);
-	}
-}
-
-
 /**
  * ol_txrx_peer_attach - Allocate and set up references for a
  * data peer object.
@@ -2275,8 +2136,7 @@ ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr)
 				"error waiting for peer(%d) deletion, status %d\n",
 				vdev->wait_on_peer_id, (int) rc);
 			/* Added for debugging only */
-			wma_peer_debug_dump();
-			QDF_ASSERT(0);
+			QDF_BUG(0);
 			vdev->wait_on_peer_id = OL_TXRX_INVALID_LOCAL_PEER_ID;
 			return NULL;
 		}
@@ -2319,7 +2179,7 @@ ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr)
 	qdf_atomic_init(&peer->ref_cnt);
 
 	/* keep one reference for attach */
-	OL_TXRX_PEER_INC_REF_CNT(peer);
+	qdf_atomic_inc(&peer->ref_cnt);
 
 	/*
 	 * Set a flag to indicate peer create is pending in firmware and
@@ -2330,7 +2190,8 @@ ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr)
 	 */
 	qdf_atomic_init(&peer->fw_create_pending);
 	qdf_atomic_set(&peer->fw_create_pending, 1);
-	OL_TXRX_PEER_INC_REF_CNT(peer);
+	qdf_atomic_inc(&peer->ref_cnt);
+
 
 	peer->valid = 1;
 
@@ -2729,7 +2590,11 @@ QDF_STATUS ol_txrx_peer_state_update(struct ol_txrx_pdev_t *pdev,
 			   "%s: no state change, returns directly\n",
 			   __func__);
 #endif
-		peer_ref_cnt = OL_TXRX_PEER_UNREF_DELETE(peer);
+		peer_ref_cnt = ol_txrx_peer_unref_delete(peer);
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_HIGH,
+			  "%s: peer %p peer->ref_cnt %d",
+			  __func__, peer, peer_ref_cnt);
+
 		return QDF_STATUS_SUCCESS;
 	}
 
@@ -2759,12 +2624,15 @@ QDF_STATUS ol_txrx_peer_state_update(struct ol_txrx_pdev_t *pdev,
 				ol_txrx_peer_tid_unpause(peer, tid);
 		}
 	}
-	peer_ref_cnt = OL_TXRX_PEER_UNREF_DELETE(peer);
+	peer_ref_cnt = ol_txrx_peer_unref_delete(peer);
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_HIGH,
+		 "%s: peer %p peer->ref_cnt %d",
+		 __func__, peer, peer_ref_cnt);
 	/*
-	 * after OL_TXRX_PEER_UNREF_DELETE, peer object cannot be accessed
+	 * after ol_txrx_peer_unref_delete, peer object cannot be accessed
 	 * if the return code was 0
 	 */
-	if (peer_ref_cnt > 0)
+	if (peer_ref_cnt)
 		/*
 		 * Set the state after the Pause to avoid the race condiction
 		 * with ADDBA check in tx path
@@ -2869,7 +2737,10 @@ ol_txrx_peer_update(ol_txrx_vdev_handle vdev,
 		break;
 	}
 	} /* switch */
-	peer_ref_cnt = OL_TXRX_PEER_UNREF_DELETE(peer);
+	peer_ref_cnt = ol_txrx_peer_unref_delete(peer);
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_HIGH,
+		 "%s: peer %p peer->ref_cnt %d",
+		 __func__, peer, peer_ref_cnt);
 }
 
 uint8_t
@@ -2894,9 +2765,7 @@ ol_txrx_peer_qoscapable_get(struct ol_txrx_pdev_t *txrx_pdev, uint16_t peer_id)
 	return 0;
 }
 
-int ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer,
-					const char *fname,
-					int line)
+int ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer)
 {
 	int    rc;
 	struct ol_txrx_vdev_t *vdev;
@@ -2920,9 +2789,6 @@ int ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer,
 		return -EINVAL;
 	}
 
-	wma_peer_debug_log(vdev->vdev_id, DEBUG_PEER_UNREF_DELETE,
-			   DEBUG_INVALID_PEER_ID, &peer->mac_addr.raw, peer, 0,
-			   qdf_atomic_read(&peer->ref_cnt));
 
 	/*
 	 * Hold the lock all the way from checking if the peer ref count
@@ -2962,17 +2828,11 @@ int ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer,
 	if (qdf_atomic_dec_and_test(&peer->ref_cnt)) {
 		u_int16_t peer_id;
 
-		TXRX_PRINT(TXRX_PRINT_LEVEL_INFO1,
-			   "(%s) Deleting peer %p (%pM) ref_cnt %d\n",
-			   fname,
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			   "Deleting peer %p (%pM) ref_cnt %d\n",
 			   peer,
 			   peer->mac_addr.raw,
 			   qdf_atomic_read(&peer->ref_cnt));
-
-		wma_peer_debug_log(vdev->vdev_id, DEBUG_DELETING_PEER_OBJ,
-				   DEBUG_INVALID_PEER_ID,
-				   &peer->mac_addr.raw, peer, 0,
-				   qdf_atomic_read(&peer->ref_cnt));
 
 		peer_id = peer->local_id;
 		/* remove the reference to the peer from the hash table */
@@ -2996,10 +2856,6 @@ int ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer,
 			vdev->wait_on_peer_id = OL_TXRX_INVALID_LOCAL_PEER_ID;
 		}
 
-		if (vdev->opmode == wlan_op_mode_sta) {
-			qdf_mc_timer_stop(&peer->peer_unmap_timer);
-			qdf_mc_timer_destroy(&peer->peer_unmap_timer);
-		}
 		/* check whether the parent vdev has no peers left */
 		if (TAILQ_EMPTY(&vdev->peer_list)) {
 			/*
@@ -3018,7 +2874,7 @@ int ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer,
 				 */
 				qdf_spin_unlock_bh(&pdev->peer_ref_mutex);
 
-				TXRX_PRINT(TXRX_PRINT_LEVEL_INFO1,
+				TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
 					   "%s: deleting vdev object %p "
 					   "(%02x:%02x:%02x:%02x:%02x:%02x)"
 					   " - its last peer is done",
@@ -3066,8 +2922,8 @@ int ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer,
 	} else {
 		qdf_spin_unlock_bh(&pdev->peer_ref_mutex);
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_HIGH,
-			  "ref delete(%s): peer %p peer->ref_cnt = %d",
-			  fname, peer, rc);
+			  "%s: peer %p peer->ref_cnt = %d",
+			  __func__, peer, rc);
 	}
 
 	return rc;
@@ -3129,28 +2985,6 @@ QDF_STATUS ol_txrx_clear_peer(uint8_t sta_id)
 }
 
 /**
- * peer_unmap_timer() - peer unmap timer function
- * @data: peer object pointer
- *
- * Return: none
- */
-void peer_unmap_timer_handler(void *data)
-{
-	ol_txrx_peer_handle peer = (ol_txrx_peer_handle)data;
-
-	WMA_LOGE("%s: all unmap events not received for peer %p, ref_cnt %d",
-		 __func__, peer, qdf_atomic_read(&peer->ref_cnt));
-	WMA_LOGE("%s: peer %p (%02x:%02x:%02x:%02x:%02x:%02x)",
-		 __func__, peer,
-		 peer->mac_addr.raw[0], peer->mac_addr.raw[1],
-		 peer->mac_addr.raw[2], peer->mac_addr.raw[3],
-		 peer->mac_addr.raw[4], peer->mac_addr.raw[5]);
-	wma_peer_debug_dump();
-	QDF_BUG(0);
-}
-
-
-/**
  * ol_txrx_peer_detach() - Delete a peer's data object.
  * @peer - the object to detach
  *
@@ -3177,7 +3011,7 @@ void ol_txrx_peer_detach(ol_txrx_peer_handle peer)
 	/* debug print to dump rx reorder state */
 	/* htt_rx_reorder_log_print(vdev->pdev->htt_pdev); */
 
-	TXRX_PRINT(TXRX_PRINT_LEVEL_INFO1,
+	TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
 		   "%s:peer %p (%02x:%02x:%02x:%02x:%02x:%02x)",
 		   __func__, peer,
 		   peer->mac_addr.raw[0], peer->mac_addr.raw[1],
@@ -3202,25 +3036,12 @@ void ol_txrx_peer_detach(ol_txrx_peer_handle peer)
 	qdf_atomic_set(&peer->delete_in_progress, 1);
 
 	/*
-	 * Create a timer to track unmap events when the sta peer gets deleted.
-	 */
-	if (vdev->opmode == wlan_op_mode_sta) {
-		qdf_mc_timer_init(&peer->peer_unmap_timer, QDF_TIMER_TYPE_SW,
-				  peer_unmap_timer_handler, peer);
-		qdf_mc_timer_start(&peer->peer_unmap_timer,
-				   OL_TXRX_PEER_UNMAP_TIMEOUT);
-		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
-			   "%s: started peer_unmap_timer for peer %p",
-			   __func__, peer);
-	}
-
-	/*
 	 * Remove the reference added during peer_attach.
 	 * The peer will still be left allocated until the
 	 * PEER_UNMAP message arrives to remove the other
 	 * reference, added by the PEER_MAP message.
 	 */
-	OL_TXRX_PEER_UNREF_DELETE(peer);
+	ol_txrx_peer_unref_delete(peer);
 }
 
 /**
@@ -3247,7 +3068,7 @@ void ol_txrx_peer_detach_force_delete(ol_txrx_peer_handle peer)
 	qdf_spin_unlock_bh(&pdev->peer_map_unmap_lock);
 
 	/*
-	 * Set ref_cnt = 1 so that OL_TXRX_PEER_UNREF_DELETE() called by
+	 * Set ref_cnt = 1 so that ol_txrx_peer_unref_delete() called by
 	 * ol_txrx_peer_detach() will actually delete this peer entry properly.
 	 */
 	qdf_spin_lock_bh(&pdev->peer_ref_mutex);
@@ -3263,8 +3084,10 @@ ol_txrx_peer_find_by_addr(struct ol_txrx_pdev_t *pdev, uint8_t *peer_mac_addr)
 	struct ol_txrx_peer_t *peer;
 	peer = ol_txrx_peer_find_hash_find(pdev, peer_mac_addr, 0, 0);
 	if (peer) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			   "%s: Delete extra reference %p", __func__, peer);
 		/* release the extra reference */
-		OL_TXRX_PEER_UNREF_DELETE(peer);
+		ol_txrx_peer_unref_delete(peer);
 	}
 	return peer;
 }
@@ -3278,18 +3101,16 @@ ol_txrx_peer_find_by_addr(struct ol_txrx_pdev_t *pdev, uint8_t *peer_mac_addr)
 static void ol_txrx_dump_tx_desc(ol_txrx_pdev_handle pdev_handle)
 {
 	struct ol_txrx_pdev_t *pdev = (ol_txrx_pdev_handle) pdev_handle;
-	uint32_t total, num_free;
+	uint32_t total;
 
 	if (ol_cfg_is_high_latency(pdev->ctrl_pdev))
 		total = qdf_atomic_read(&pdev->orig_target_tx_credit);
 	else
 		total = ol_tx_get_desc_global_pool_size(pdev);
 
-	num_free = ol_tx_get_total_free_desc(pdev);
-
 	TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
 		   "total tx credit %d num_free %d",
-		   total, num_free);
+		   total, pdev->tx_desc.num_free);
 
 	return;
 }
@@ -3815,6 +3636,84 @@ void ol_txrx_peer_display(ol_txrx_peer_handle peer, int indent)
 }
 #endif /* TXRX_DEBUG_LEVEL */
 
+#if defined(FEATURE_TSO) && defined(FEATURE_TSO_DEBUG)
+static void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
+{
+	int msdu_idx;
+	int seg_idx;
+
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+		"TSO Statistics:");
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+		"TSO pkts %lld, bytes %lld\n",
+		pdev->stats.pub.tx.tso.tso_pkts.pkts,
+		pdev->stats.pub.tx.tso.tso_pkts.bytes);
+
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+			"TSO Histogram for numbers of segments:\n"
+			"Single segment	%d\n"
+			"  2-5 segments	%d\n"
+			" 6-10 segments	%d\n"
+			"11-15 segments	%d\n"
+			"16-20 segments	%d\n"
+			"  20+ segments	%d\n",
+			pdev->stats.pub.tx.tso.tso_hist.pkts_1,
+			pdev->stats.pub.tx.tso.tso_hist.pkts_2_5,
+			pdev->stats.pub.tx.tso.tso_hist.pkts_6_10,
+			pdev->stats.pub.tx.tso.tso_hist.pkts_11_15,
+			pdev->stats.pub.tx.tso.tso_hist.pkts_16_20,
+			pdev->stats.pub.tx.tso.tso_hist.pkts_20_plus);
+
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+			"TSO History Buffer: Total size %d, current_index %d",
+			NUM_MAX_TSO_MSDUS,
+			TXRX_STATS_TSO_MSDU_IDX(pdev));
+
+	for (msdu_idx = 0; msdu_idx < NUM_MAX_TSO_MSDUS; msdu_idx++) {
+		if (TXRX_STATS_TSO_MSDU_TOTAL_LEN(pdev, msdu_idx) == 0)
+			continue;
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+			"jumbo pkt idx: %d num segs %d gso_len %d total_len %d nr_frags %d",
+			msdu_idx,
+			TXRX_STATS_TSO_MSDU_NUM_SEG(pdev, msdu_idx),
+			TXRX_STATS_TSO_MSDU_GSO_SIZE(pdev, msdu_idx),
+			TXRX_STATS_TSO_MSDU_TOTAL_LEN(pdev, msdu_idx),
+			TXRX_STATS_TSO_MSDU_NR_FRAGS(pdev, msdu_idx));
+
+		for (seg_idx = 0;
+			 ((seg_idx < TXRX_STATS_TSO_MSDU_NUM_SEG(pdev, msdu_idx)) &&
+			  (seg_idx < NUM_MAX_TSO_SEGS));
+			 seg_idx++) {
+			struct qdf_tso_seg_t tso_seg =
+				 TXRX_STATS_TSO_SEG(pdev, msdu_idx, seg_idx);
+
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+				 "seg idx: %d", seg_idx);
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+				 "tso_enable: %d",
+				 tso_seg.tso_flags.tso_enable);
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+				 "fin %d syn %d rst %d psh %d ack %d urg %d ece %d cwr %d ns %d",
+				 tso_seg.tso_flags.fin, tso_seg.tso_flags.syn,
+				 tso_seg.tso_flags.rst, tso_seg.tso_flags.psh,
+				 tso_seg.tso_flags.ack, tso_seg.tso_flags.urg,
+				 tso_seg.tso_flags.ece, tso_seg.tso_flags.cwr,
+				 tso_seg.tso_flags.ns);
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+				 "tcp_seq_num: 0x%x ip_id: %d",
+				 tso_seg.tso_flags.tcp_seq_num,
+				 tso_seg.tso_flags.ip_id);
+		}
+	}
+}
+#else
+static void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
+{
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+	 "TSO is not supported\n");
+}
+#endif
+
 /**
  * ol_txrx_stats() - update ol layer stats
  * @vdev_id: vdev_id
@@ -4303,17 +4202,6 @@ void ol_txrx_ipa_uc_get_stat(ol_txrx_pdev_handle pdev)
 {
 	htt_h2t_ipa_uc_get_stats(pdev->htt_pdev);
 }
-
-void ol_txrx_ipa_uc_get_share_stats(ol_txrx_pdev_handle pdev,
-				   uint8_t reset_stats)
-{
-	htt_h2t_ipa_uc_get_share_stats(pdev->htt_pdev, reset_stats);
-}
-
-void ol_txrx_ipa_uc_set_quota(ol_txrx_pdev_handle pdev, uint64_t quota_bytes)
-{
-	htt_h2t_ipa_uc_set_quota(pdev->htt_pdev, quota_bytes);
-}
 #endif /* IPA_UC_OFFLOAD */
 
 /**
@@ -4346,9 +4234,6 @@ QDF_STATUS ol_txrx_display_stats(uint16_t value)
 		break;
 	case WLAN_TXRX_DESC_STATS:
 		qdf_nbuf_tx_desc_count_display();
-		break;
-	case WLAN_RX_BUF_DEBUG_STATS:
-		htt_display_rx_buf_debug(pdev->htt_pdev);
 		break;
 #ifdef CONFIG_HL_SUPPORT
 	case WLAN_SCHEDULER_STATS:
@@ -4901,12 +4786,6 @@ static void ol_txrx_lro_flush(void *data)
 	if (qdf_unlikely(!sched_ctx))
 		return;
 
-	if (qdf_unlikely(!pdev)) {
-		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-			  "Pdev is NULL");
-		return;
-	}
-
 	if (!ol_cfg_is_rx_thread_enabled(pdev->ctrl_pdev)) {
 		ol_txrx_lro_flush_handler(data, NULL, 0);
 	} else {
@@ -5033,12 +4912,9 @@ ol_txrx_fwd_desc_thresh_check(struct ol_txrx_vdev_t *vdev)
 	bool enough_desc_flag;
 
 	if (!vdev)
-		return false;
+		return true;
 
 	pool = vdev->pool;
-
-	if (!pool)
-		return false;
 
 	qdf_spin_lock_bh(&pool->flow_pool_lock);
 	enough_desc_flag = (pool->avail_desc < (pool->stop_th +

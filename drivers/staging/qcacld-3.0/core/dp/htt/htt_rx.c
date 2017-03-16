@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -124,21 +124,17 @@ static void htt_rx_hash_deinit(struct htt_pdev_t *pdev)
 
 	uint32_t i;
 	struct htt_rx_hash_entry *hash_entry;
-	struct htt_rx_hash_bucket **hash_table;
 	struct htt_list_node *list_iter = NULL;
 
 	if (NULL == pdev->rx_ring.hash_table)
 		return;
 
 	qdf_spin_lock_bh(&(pdev->rx_ring.rx_hash_lock));
-	hash_table = pdev->rx_ring.hash_table;
-	pdev->rx_ring.hash_table = NULL;
-	qdf_spin_unlock_bh(&(pdev->rx_ring.rx_hash_lock));
 
 	for (i = 0; i < RX_NUM_HASH_BUCKETS; i++) {
 		/* Free the hash entries in hash bucket i */
-		list_iter = hash_table[i]->listhead.next;
-		while (list_iter != &hash_table[i]->listhead) {
+		list_iter = pdev->rx_ring.hash_table[i]->listhead.next;
+		while (list_iter != &pdev->rx_ring.hash_table[i]->listhead) {
 			hash_entry =
 				(struct htt_rx_hash_entry *)((char *)list_iter -
 							     pdev->rx_ring.
@@ -160,11 +156,13 @@ static void htt_rx_hash_deinit(struct htt_pdev_t *pdev)
 				qdf_mem_free(hash_entry);
 		}
 
-		qdf_mem_free(hash_table[i]);
+		qdf_mem_free(pdev->rx_ring.hash_table[i]);
 
 	}
-	qdf_mem_free(hash_table);
+	qdf_mem_free(pdev->rx_ring.hash_table);
+	pdev->rx_ring.hash_table = NULL;
 
+	qdf_spin_unlock_bh(&(pdev->rx_ring.rx_hash_lock));
 	qdf_spinlock_destroy(&(pdev->rx_ring.rx_hash_lock));
 
 }
@@ -344,86 +342,77 @@ htt_rx_msdu_first_msdu_flag_ll(htt_pdev_handle pdev, void *msdu_desc)
 }
 
 #ifndef CONFIG_HL_SUPPORT
-#define RX_PADDR_MAGIC_PATTERN 0xDEAD0000
-static qdf_dma_addr_t
-htt_rx_paddr_mark_high_bits(qdf_dma_addr_t paddr)
+
+static int htt_rx_ring_size(struct htt_pdev_t *pdev)
 {
-#ifdef HELIUMPLUS_PADDR64
-	if (sizeof(qdf_dma_addr_t) > 4) {
-		/* clear high bits, leave lower 37 bits (paddr) */
-		paddr &= 0x01FFFFFFFFF;
-		/* mark upper 16 bits of paddr */
-		paddr |= (((uint64_t)RX_PADDR_MAGIC_PATTERN) << 32);
-	}
+	int size;
+
+	/*
+	 * It is expected that the host CPU will typically be able to service
+	 * the rx indication from one A-MPDU before the rx indication from
+	 * the subsequent A-MPDU happens, roughly 1-2 ms later.
+	 * However, the rx ring should be sized very conservatively, to
+	 * accomodate the worst reasonable delay before the host CPU services
+	 * a rx indication interrupt.
+	 * The rx ring need not be kept full of empty buffers.  In theory,
+	 * the htt host SW can dynamically track the low-water mark in the
+	 * rx ring, and dynamically adjust the level to which the rx ring
+	 * is filled with empty buffers, to dynamically meet the desired
+	 * low-water mark.
+	 * In contrast, it's difficult to resize the rx ring itself, once
+	 * it's in use.
+	 * Thus, the ring itself should be sized very conservatively, while
+	 * the degree to which the ring is filled with empty buffers should
+	 * be sized moderately conservatively.
+	 */
+	size =
+		ol_cfg_max_thruput_mbps(pdev->ctrl_pdev) *
+		1000 /* 1e6 bps/mbps / 1e3 ms per sec = 1000 */  /
+		(8 * HTT_RX_AVG_FRM_BYTES) * HTT_RX_HOST_LATENCY_MAX_MS;
+
+	if (size < HTT_RX_RING_SIZE_MIN)
+		size = HTT_RX_RING_SIZE_MIN;
+	else if (size > HTT_RX_RING_SIZE_MAX)
+		size = HTT_RX_RING_SIZE_MAX;
+
+	size = qdf_get_pwr2(size);
+	return size;
+}
+
+static int htt_rx_ring_fill_level(struct htt_pdev_t *pdev)
+{
+	int size;
+
+	size = ol_cfg_max_thruput_mbps(pdev->ctrl_pdev) *
+		1000 /* 1e6 bps/mbps / 1e3 ms per sec = 1000 */  /
+		(8 * HTT_RX_AVG_FRM_BYTES) * HTT_RX_HOST_LATENCY_WORST_LIKELY_MS;
+
+	size = qdf_get_pwr2(size);
+	/*
+	 * Make sure the fill level is at least 1 less than the ring size.
+	 * Leaving 1 element empty allows the SW to easily distinguish
+	 * between a full ring vs. an empty ring.
+	 */
+	if (size >= pdev->rx_ring.size)
+		size = pdev->rx_ring.size - 1;
+
+	return size;
+}
+
+static void htt_rx_ring_refill_retry(void *arg)
+{
+	htt_pdev_handle pdev = (htt_pdev_handle) arg;
+	htt_rx_msdu_buff_replenish(pdev);
+}
 #endif
-	return paddr;
-}
 
-#ifdef HELIUMPLUS_PADDR64
-static qdf_dma_addr_t
-htt_rx_paddr_unmark_high_bits(qdf_dma_addr_t paddr)
-{
-	uint32_t markings;
-
-	if (sizeof(qdf_dma_addr_t) > 4) {
-		markings = (uint32_t)((paddr >> 16) >> 16);
-		/*
-		 * check if it is marked correctly:
-		 * See the mark_high_bits function above for the expected
-		 * pattern.
-		 * the LS 5 bits are the high bits of physical address
-		 * padded (with 0b0) to 8 bits
-		 */
-		if ((markings & 0xFFFF0000) != RX_PADDR_MAGIC_PATTERN) {
-			qdf_print("%s: paddr not marked correctly: 0x%p!\n",
-				  __func__, (void *)paddr);
-			HTT_ASSERT_ALWAYS(0);
-		}
-
-		/* clear markings  for further use */
-		paddr &= (uint64_t)0x1ffffffff; /* LS 37 bits */
-	}
-	return paddr;
-}
-
-static qdf_dma_addr_t
-htt_rx_in_ord_paddr_get(uint32_t *u32p)
-{
-	qdf_dma_addr_t paddr = 0;
-
-	paddr = (qdf_dma_addr_t)HTT_RX_IN_ORD_PADDR_IND_PADDR_GET(*u32p);
-	if (sizeof(qdf_dma_addr_t) > 4) {
-		u32p++;
-		/* 32 bit architectures dont like <<32 */
-		paddr |= (((qdf_dma_addr_t)
-			  HTT_RX_IN_ORD_PADDR_IND_PADDR_GET(*u32p))
-			  << 16 << 16);
-	}
-	paddr = htt_rx_paddr_unmark_high_bits(paddr);
-
-	return paddr;
-}
-#else
-static inline qdf_dma_addr_t
-htt_rx_in_ord_paddr_get(uint32_t *u32p)
-{
-	return HTT_RX_IN_ORD_PADDR_IND_PADDR_GET(*u32p);
-}
-#endif /* HELIUMPLUS_PADDR64 */
-#endif /* CONFIG_HL_SUPPORT*/
-
-/* full_reorder_offload case: this function is called with lock held */
-static int htt_rx_ring_fill_n(struct htt_pdev_t *pdev, int num)
+static void htt_rx_ring_fill_n(struct htt_pdev_t *pdev, int num)
 {
 	int idx;
 	QDF_STATUS status;
 	struct htt_host_rx_desc_base *rx_desc;
-	int filled = 0;
-	int debt_served = 0;
 
 	idx = *(pdev->rx_ring.alloc_idx.vaddr);
-
-moretofill:
 	while (num > 0) {
 		qdf_dma_addr_t paddr;
 		qdf_nbuf_t rx_netbuf;
@@ -444,7 +433,6 @@ moretofill:
 #ifdef DEBUG_DMA_DONE
 			pdev->rx_ring.dbg_refill_cnt++;
 #endif
-			pdev->refill_retry_timer_starts++;
 			qdf_timer_start(
 				&pdev->rx_ring.refill_retry_timer,
 				HTT_RX_RING_REFILL_RETRY_TIME_MS);
@@ -486,10 +474,10 @@ moretofill:
 			goto fail;
 		}
 		paddr = qdf_nbuf_get_frag_paddr(rx_netbuf, 0);
-		paddr = htt_rx_paddr_mark_high_bits(paddr);
 		if (pdev->cfg.is_full_reorder_offload) {
-			if (qdf_unlikely(htt_rx_hash_list_insert(
-					pdev, (uint32_t)paddr, rx_netbuf))) {
+			if (qdf_unlikely
+				    (htt_rx_hash_list_insert(pdev, paddr,
+							     rx_netbuf))) {
 				qdf_print("%s: hash insert failed!\n",
 					  __func__);
 #ifdef DEBUG_DMA_DONE
@@ -506,114 +494,21 @@ moretofill:
 		} else {
 			pdev->rx_ring.buf.netbufs_ring[idx] = rx_netbuf;
 		}
+#if HTT_PADDR64
+		paddr &= 0x1fffffffff; /* trim out higher than 37 bits */
+#endif /* HTT_PADDR64 */
 		pdev->rx_ring.buf.paddrs_ring[idx] = paddr;
 		pdev->rx_ring.fill_cnt++;
 
 		num--;
 		idx++;
-		filled++;
 		idx &= pdev->rx_ring.size_mask;
-	}
-	if (debt_served <  qdf_atomic_read(&pdev->rx_ring.refill_debt)) {
-		num = qdf_atomic_read(&pdev->rx_ring.refill_debt);
-		debt_served += num;
-		goto moretofill;
 	}
 
 fail:
 	*(pdev->rx_ring.alloc_idx.vaddr) = idx;
-	htt_rx_dbg_rxbuf_indupd(pdev, idx);
-
-	return filled;
+	return;
 }
-
-
-#ifndef CONFIG_HL_SUPPORT
-
-static int htt_rx_ring_size(struct htt_pdev_t *pdev)
-{
-	int size;
-
-	/*
-	 * It is expected that the host CPU will typically be able to service
-	 * the rx indication from one A-MPDU before the rx indication from
-	 * the subsequent A-MPDU happens, roughly 1-2 ms later.
-	 * However, the rx ring should be sized very conservatively, to
-	 * accommodate the worst reasonable delay before the host CPU services
-	 * a rx indication interrupt.
-	 * The rx ring need not be kept full of empty buffers.  In theory,
-	 * the htt host SW can dynamically track the low-water mark in the
-	 * rx ring, and dynamically adjust the level to which the rx ring
-	 * is filled with empty buffers, to dynamically meet the desired
-	 * low-water mark.
-	 * In contrast, it's difficult to resize the rx ring itself, once
-	 * it's in use.
-	 * Thus, the ring itself should be sized very conservatively, while
-	 * the degree to which the ring is filled with empty buffers should
-	 * be sized moderately conservatively.
-	 */
-	size =
-		ol_cfg_max_thruput_mbps(pdev->ctrl_pdev) *
-		1000 /* 1e6 bps/mbps / 1e3 ms per sec = 1000 */  /
-		(8 * HTT_RX_AVG_FRM_BYTES) * HTT_RX_HOST_LATENCY_MAX_MS;
-
-	if (size < HTT_RX_RING_SIZE_MIN)
-		size = HTT_RX_RING_SIZE_MIN;
-	else if (size > HTT_RX_RING_SIZE_MAX)
-		size = HTT_RX_RING_SIZE_MAX;
-
-	size = qdf_get_pwr2(size);
-	return size;
-}
-
-static int htt_rx_ring_fill_level(struct htt_pdev_t *pdev)
-{
-	int size;
-
-	size = ol_cfg_max_thruput_mbps(pdev->ctrl_pdev) *
-		1000 /* 1e6 bps/mbps / 1e3 ms per sec = 1000 */  /
-		(8 * HTT_RX_AVG_FRM_BYTES) *
-		HTT_RX_HOST_LATENCY_WORST_LIKELY_MS;
-
-	size = qdf_get_pwr2(size);
-	/*
-	 * Make sure the fill level is at least 1 less than the ring size.
-	 * Leaving 1 element empty allows the SW to easily distinguish
-	 * between a full ring vs. an empty ring.
-	 */
-	if (size >= pdev->rx_ring.size)
-		size = pdev->rx_ring.size - 1;
-
-	return size;
-}
-
-static void htt_rx_ring_refill_retry(void *arg)
-{
-	htt_pdev_handle pdev = (htt_pdev_handle) arg;
-	int             filled = 0;
-	int             num;
-
-	pdev->refill_retry_timer_calls++;
-	qdf_spin_lock_bh(&(pdev->rx_ring.refill_lock));
-
-	num = qdf_atomic_read(&pdev->rx_ring.refill_debt);
-	qdf_atomic_sub(num, &pdev->rx_ring.refill_debt);
-	filled = htt_rx_ring_fill_n(pdev, num);
-
-	qdf_spin_unlock_bh(&(pdev->rx_ring.refill_lock));
-
-	if (filled > num) {
-		/* we served ourselves and some other debt */
-		/* sub is safer than  = 0 */
-		qdf_atomic_sub(filled - num, &pdev->rx_ring.refill_debt);
-	} else if (num == filled) { /* nothing to be done */
-	} else {
-		/* we could not fill all, timer must have been started */
-		pdev->refill_retry_timer_doubles++;
-	}
-
-}
-#endif
 
 static inline unsigned htt_rx_ring_elems(struct htt_pdev_t *pdev)
 {
@@ -684,9 +579,6 @@ void htt_rx_detach(struct htt_pdev_t *pdev)
 				   pdev->rx_ring.base_paddr,
 				   qdf_get_dma_mem_context((&pdev->rx_ring.buf),
 							   memctx));
-
-	/* destroy the rx-parallelization refill spinlock */
-	qdf_spinlock_destroy(&(pdev->rx_ring.refill_lock));
 }
 #endif
 
@@ -944,11 +836,11 @@ static inline qdf_nbuf_t htt_rx_netbuf_pop(htt_pdev_handle pdev)
 }
 
 static inline qdf_nbuf_t
-htt_rx_in_order_netbuf_pop(htt_pdev_handle pdev, qdf_dma_addr_t paddr)
+htt_rx_in_order_netbuf_pop(htt_pdev_handle pdev, uint32_t paddr)
 {
 	HTT_ASSERT1(htt_rx_in_order_ring_elems(pdev) != 0);
 	pdev->rx_ring.fill_cnt--;
-	return htt_rx_hash_list_lookup(pdev, (uint32_t)(paddr & 0xffffffff));
+	return htt_rx_hash_list_lookup(pdev, paddr);
 }
 
 /* FIX ME: this function applies only to LL rx descs.
@@ -1410,12 +1302,12 @@ htt_rx_offload_msdu_pop_hl(htt_pdev_handle pdev,
 			   qdf_nbuf_t *head_buf,
 			   qdf_nbuf_t *tail_buf)
 {
-	qdf_nbuf_t buf;
+	adf_nbuf_t buf;
 	u_int32_t *msdu_hdr, msdu_len;
 	int ret = 0;
 
 	*head_buf = *tail_buf = buf = offload_deliver_msg;
-	msdu_hdr = (u_int32_t *)qdf_nbuf_data(buf);
+	msdu_hdr = (u_int32_t *)adf_nbuf_data(buf);
 	/* First dword */
 
 	/* Second dword */
@@ -1429,15 +1321,15 @@ htt_rx_offload_msdu_pop_hl(htt_pdev_handle pdev,
 	*tid = HTT_RX_OFFLOAD_DELIVER_IND_MSDU_TID_GET(*msdu_hdr);
 	*fw_desc = HTT_RX_OFFLOAD_DELIVER_IND_MSDU_DESC_GET(*msdu_hdr);
 
-	qdf_nbuf_pull_head(buf, HTT_RX_OFFLOAD_DELIVER_IND_MSDU_HDR_BYTES \
+	adf_nbuf_pull_head(buf, HTT_RX_OFFLOAD_DELIVER_IND_MSDU_HDR_BYTES \
 			+ HTT_RX_OFFLOAD_DELIVER_IND_HDR_BYTES);
 
-	if (msdu_len <= qdf_nbuf_len(buf)) {
-		qdf_nbuf_set_pktlen(buf, msdu_len);
+	if (msdu_len <= adf_nbuf_len(buf)) {
+		adf_nbuf_set_pktlen(buf, msdu_len);
 	} else {
-		qdf_print("%s: drop frame with invalid msdu len %d %d\n",
-				__FUNCTION__, msdu_len, (int)qdf_nbuf_len(buf));
-		qdf_nbuf_free(offload_deliver_msg);
+		adf_os_print("%s: drop frame with invalid msdu len %d %d\n",
+				__FUNCTION__, msdu_len, (int)adf_nbuf_len(buf));
+		adf_nbuf_free(offload_deliver_msg);
 		ret = -1;
 	}
 
@@ -1496,11 +1388,11 @@ htt_rx_offload_paddr_msdu_pop_ll(htt_pdev_handle pdev,
 	qdf_nbuf_t buf;
 	uint32_t *msdu_hdr, msdu_len;
 	uint32_t *curr_msdu;
-	qdf_dma_addr_t paddr;
+	uint32_t paddr;
 
 	curr_msdu =
 		msg_word + (msdu_iter * HTT_RX_IN_ORD_PADDR_IND_MSDU_DWORDS);
-	paddr = htt_rx_in_ord_paddr_get(curr_msdu);
+	paddr = HTT_RX_IN_ORD_PADDR_IND_PADDR_GET(*curr_msdu);
 	*head_buf = *tail_buf = buf = htt_rx_in_order_netbuf_pop(pdev, paddr);
 
 	if (qdf_unlikely(NULL == buf)) {
@@ -1569,11 +1461,10 @@ int htt_mon_rx_handle_amsdu_packet(qdf_nbuf_t msdu, htt_pdev_handle pdev,
 	qdf_nbuf_t prev_frag_nbuf;
 	uint32_t len;
 	uint32_t last_frag;
-	qdf_dma_addr_t paddr;
 
 	*msg_word += HTT_RX_IN_ORD_PADDR_IND_MSDU_DWORDS;
-	paddr = htt_rx_in_ord_paddr_get(*msg_word);
-	frag_nbuf = htt_rx_in_order_netbuf_pop(pdev, paddr);
+	frag_nbuf = htt_rx_in_order_netbuf_pop(pdev,
+				HTT_RX_IN_ORD_PADDR_IND_PADDR_GET(**msg_word));
 	if (qdf_unlikely(NULL == frag_nbuf)) {
 		qdf_print("%s: netbuf pop failed!\n", __func__);
 		return 0;
@@ -1595,8 +1486,8 @@ int htt_mon_rx_handle_amsdu_packet(qdf_nbuf_t msdu, htt_pdev_handle pdev,
 	prev_frag_nbuf = frag_nbuf;
 	while (!last_frag) {
 		*msg_word += HTT_RX_IN_ORD_PADDR_IND_MSDU_DWORDS;
-		paddr = htt_rx_in_ord_paddr_get(*msg_word);
-		frag_nbuf = htt_rx_in_order_netbuf_pop(pdev, paddr);
+		frag_nbuf = htt_rx_in_order_netbuf_pop(pdev,
+				HTT_RX_IN_ORD_PADDR_IND_PADDR_GET(**msg_word));
 		last_frag = ((struct htt_rx_in_ord_paddr_ind_msdu_t *)
 			     *msg_word)->msdu_info;
 
@@ -1883,7 +1774,6 @@ static int htt_rx_mon_amsdu_rx_in_order_pop_ll(htt_pdev_handle pdev,
 	uint32_t amsdu_len;
 	uint32_t len;
 	uint32_t last_frag;
-	qdf_dma_addr_t paddr;
 
 	HTT_ASSERT1(htt_rx_in_order_ring_elems(pdev) != 0);
 
@@ -1901,8 +1791,9 @@ static int htt_rx_mon_amsdu_rx_in_order_pop_ll(htt_pdev_handle pdev,
 
 	msg_word = (uint32_t *)(rx_ind_data +
 				 HTT_RX_IN_ORD_PADDR_IND_HDR_BYTES);
-	paddr = htt_rx_in_ord_paddr_get(msg_word);
-	(*head_msdu) = msdu = htt_rx_in_order_netbuf_pop(pdev, paddr);
+
+	(*head_msdu) = msdu = htt_rx_in_order_netbuf_pop(pdev,
+				HTT_RX_IN_ORD_PADDR_IND_PADDR_GET(*msg_word));
 
 	if (qdf_unlikely(NULL == msdu)) {
 		qdf_print("%s: netbuf pop failed!\n", __func__);
@@ -1976,8 +1867,8 @@ static int htt_rx_mon_amsdu_rx_in_order_pop_ll(htt_pdev_handle pdev,
 		/* check if this is the last msdu */
 		if (msdu_count) {
 			msg_word += HTT_RX_IN_ORD_PADDR_IND_MSDU_DWORDS;
-			paddr = htt_rx_in_ord_paddr_get(msg_word);
-			next = htt_rx_in_order_netbuf_pop(pdev, paddr);
+			next = htt_rx_in_order_netbuf_pop(pdev,
+				HTT_RX_IN_ORD_PADDR_IND_PADDR_GET(*msg_word));
 			if (qdf_unlikely(NULL == next)) {
 				qdf_print("%s: netbuf pop failed!\n",
 					     __func__);
@@ -2034,7 +1925,6 @@ htt_rx_amsdu_rx_in_order_pop_ll(htt_pdev_handle pdev,
 	uint8_t peer_id;
 	struct htt_host_rx_desc_base *rx_desc;
 	enum rx_pkt_fate status = RX_PKT_FATE_SUCCESS;
-	qdf_dma_addr_t paddr;
 
 	HTT_ASSERT1(htt_rx_in_order_ring_elems(pdev) != 0);
 
@@ -2051,8 +1941,6 @@ htt_rx_amsdu_rx_in_order_pop_ll(htt_pdev_handle pdev,
 	msdu_count = HTT_RX_IN_ORD_PADDR_IND_MSDU_CNT_GET(*(msg_word + 1));
 	HTT_RX_CHECK_MSDU_COUNT(msdu_count);
 	ol_rx_update_histogram_stats(msdu_count, frag_ind, offload_ind);
-	htt_rx_dbg_rxbuf_httrxind(pdev, msdu_count);
-
 
 	msg_word =
 		(uint32_t *) (rx_ind_data + HTT_RX_IN_ORD_PADDR_IND_HDR_BYTES);
@@ -2063,8 +1951,9 @@ htt_rx_amsdu_rx_in_order_pop_ll(htt_pdev_handle pdev,
 		return 0;
 	}
 
-	paddr = htt_rx_in_ord_paddr_get(msg_word);
-	(*head_msdu) = msdu = htt_rx_in_order_netbuf_pop(pdev, paddr);
+	(*head_msdu) = msdu = htt_rx_in_order_netbuf_pop(
+		pdev,
+		HTT_RX_IN_ORD_PADDR_IND_PADDR_GET(*msg_word));
 
 	if (qdf_unlikely(NULL == msdu)) {
 		qdf_print("%s: netbuf pop failed!\n", __func__);
@@ -2156,8 +2045,10 @@ htt_rx_amsdu_rx_in_order_pop_ll(htt_pdev_handle pdev,
 			} else { /* if this is not the last msdu */
 				/* get the next msdu */
 				msg_word += HTT_RX_IN_ORD_PADDR_IND_MSDU_DWORDS;
-				paddr = htt_rx_in_ord_paddr_get(msg_word);
-				next = htt_rx_in_order_netbuf_pop(pdev, paddr);
+				next = htt_rx_in_order_netbuf_pop(
+					pdev,
+					HTT_RX_IN_ORD_PADDR_IND_PADDR_GET(
+						*msg_word));
 				if (qdf_unlikely(NULL == next)) {
 					qdf_print("%s: netbuf pop failed!\n",
 								 __func__);
@@ -2187,8 +2078,9 @@ htt_rx_amsdu_rx_in_order_pop_ll(htt_pdev_handle pdev,
 		/* check if this is the last msdu */
 		if (msdu_count) {
 			msg_word += HTT_RX_IN_ORD_PADDR_IND_MSDU_DWORDS;
-			paddr = htt_rx_in_ord_paddr_get(msg_word);
-			next = htt_rx_in_order_netbuf_pop(pdev, paddr);
+			next = htt_rx_in_order_netbuf_pop(
+				pdev,
+				HTT_RX_IN_ORD_PADDR_IND_PADDR_GET(*msg_word));
 			if (qdf_unlikely(NULL == next)) {
 				qdf_print("%s: netbuf pop failed!\n",
 					  __func__);
@@ -2285,6 +2177,7 @@ htt_rx_restitch_mpdu_from_msdus(htt_pdev_handle pdev,
 {
 
 	qdf_nbuf_t msdu, mpdu_buf, prev_buf, msdu_orig, head_frag_list_cloned;
+	qdf_nbuf_t (*clone_nbuf_fn)(qdf_nbuf_t buf);
 	unsigned decap_format, wifi_hdr_len, sec_hdr_len, msdu_llc_len,
 		 mpdu_buf_len, decap_hdr_pull_bytes, frag_list_sum_len, dir,
 		 is_amsdu, is_first_frag, amsdu_pad, msdu_len;
@@ -2293,6 +2186,12 @@ htt_rx_restitch_mpdu_from_msdus(htt_pdev_handle pdev,
 	unsigned char *dest;
 	struct ieee80211_frame *wh;
 	struct ieee80211_qoscntl *qos;
+
+	/* If this packet does not go up the normal stack path we dont need to
+	 * waste cycles cloning the packets
+	 */
+	clone_nbuf_fn =
+		clone_not_reqd ? htt_rx_qdf_noclone_buf : qdf_nbuf_clone;
 
 	/* The nbuf has been pulled just beyond the status and points to the
 	 * payload
@@ -2323,10 +2222,7 @@ htt_rx_restitch_mpdu_from_msdus(htt_pdev_handle pdev,
 		/* Note that this path might suffer from headroom unavailabilty,
 		 * but the RX status is usually enough
 		 */
-		if (clone_not_reqd)
-			mpdu_buf = htt_rx_qdf_noclone_buf(head_msdu);
-		else
-			mpdu_buf = qdf_nbuf_clone(head_msdu);
+		mpdu_buf = clone_nbuf_fn(head_msdu);
 
 		prev_buf = mpdu_buf;
 
@@ -2343,11 +2239,7 @@ htt_rx_restitch_mpdu_from_msdus(htt_pdev_handle pdev,
 		while (msdu_orig) {
 
 			/* TODO: intra AMSDU padding - do we need it ??? */
-			if (clone_not_reqd)
-				msdu = htt_rx_qdf_noclone_buf(msdu_orig);
-			else
-				msdu = qdf_nbuf_clone(msdu_orig);
-
+			msdu = clone_nbuf_fn(msdu_orig);
 			if (!msdu)
 				goto mpdu_stitch_fail;
 
@@ -2465,11 +2357,7 @@ htt_rx_restitch_mpdu_from_msdus(htt_pdev_handle pdev,
 
 		/* TODO: intra AMSDU padding - do we need it ??? */
 
-		if (clone_not_reqd)
-			msdu = htt_rx_qdf_noclone_buf(msdu_orig);
-		else
-			msdu = qdf_nbuf_clone(msdu_orig);
-
+		msdu = clone_nbuf_fn(msdu_orig);
 		if (!msdu)
 			goto mpdu_stitch_fail;
 
@@ -2916,40 +2804,6 @@ void htt_rx_msdu_buff_replenish(htt_pdev_handle pdev)
 	qdf_atomic_inc(&pdev->rx_ring.refill_ref_cnt);
 }
 
-#define RX_RING_REFILL_DEBT_MAX 128
-int htt_rx_msdu_buff_in_order_replenish(htt_pdev_handle pdev, uint32_t num)
-{
-	int filled = 0;
-
-	if (!qdf_spin_trylock_bh(&(pdev->rx_ring.refill_lock))) {
-		if (qdf_atomic_read(&pdev->rx_ring.refill_debt)
-			 < RX_RING_REFILL_DEBT_MAX) {
-			qdf_atomic_add(num, &pdev->rx_ring.refill_debt);
-			pdev->rx_buff_debt_invoked++;
-			return filled; /* 0 */
-		}
-		/*
-		 * else:
-		 * If we have quite a debt, then it is better for the lock
-		 * holder to finish its work and then acquire the lock and
-		 * fill our own part.
-		 */
-		qdf_spin_lock_bh(&(pdev->rx_ring.refill_lock));
-	}
-	pdev->rx_buff_fill_n_invoked++;
-	filled = htt_rx_ring_fill_n(pdev, num);
-
-	qdf_spin_unlock_bh(&(pdev->rx_ring.refill_lock));
-
-	if (filled > num) {
-		/* we served ourselves and some other debt */
-		/* sub is safer than  = 0 */
-		qdf_atomic_sub(filled - num, &pdev->rx_ring.refill_debt);
-	}
-
-	return filled;
-}
-
 #define AR600P_ASSEMBLE_HW_RATECODE(_rate, _nss, _pream)     \
 	(((_pream) << 6) | ((_nss) << 4) | (_rate))
 
@@ -3149,7 +3003,6 @@ static int htt_rx_hash_init(struct htt_pdev_t *pdev)
 {
 	int i, j;
 	int rc = 0;
-	void *allocation;
 
 	HTT_ASSERT2(QDF_IS_PWR2(RX_NUM_HASH_BUCKETS));
 
@@ -3168,13 +3021,10 @@ static int htt_rx_hash_init(struct htt_pdev_t *pdev)
 
 	for (i = 0; i < RX_NUM_HASH_BUCKETS; i++) {
 
-		qdf_spin_unlock_bh(&(pdev->rx_ring.rx_hash_lock));
 		/* pre-allocate bucket and pool of entries for this bucket */
-		allocation = qdf_mem_malloc((sizeof(struct htt_rx_hash_bucket) +
+		pdev->rx_ring.hash_table[i] = qdf_mem_malloc(
+			(sizeof(struct htt_rx_hash_bucket) +
 			(RX_ENTRIES_SIZE * sizeof(struct htt_rx_hash_entry))));
-		qdf_spin_lock_bh(&(pdev->rx_ring.rx_hash_lock));
-		pdev->rx_ring.hash_table[i] = allocation;
-
 
 		HTT_RX_HASH_COUNT_RESET(pdev->rx_ring.hash_table[i]);
 
@@ -3340,11 +3190,6 @@ int htt_rx_attach(struct htt_pdev_t *pdev)
 	*/
 	qdf_atomic_init(&pdev->rx_ring.refill_ref_cnt);
 	qdf_atomic_inc(&pdev->rx_ring.refill_ref_cnt);
-
-	/* Initialize the refill_lock and debt (for rx-parallelization) */
-	qdf_spinlock_create(&(pdev->rx_ring.refill_lock));
-	qdf_atomic_init(&pdev->rx_ring.refill_debt);
-
 
 	/* Initialize the Rx refill retry timer */
 	qdf_timer_init(pdev->osdev,

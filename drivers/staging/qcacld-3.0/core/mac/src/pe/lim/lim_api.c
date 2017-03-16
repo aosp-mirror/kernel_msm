@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -625,7 +625,6 @@ void lim_cleanup(tpAniSirGlobal pMac)
 		}
 		qdf_mutex_release(&pMac->lim.lim_frame_register_lock);
 		qdf_list_destroy(&pMac->lim.gLimMgmtFrameRegistratinQueue);
-		qdf_mutex_destroy(&pMac->lim.lim_frame_register_lock);
 	}
 
 	lim_cleanup_mlm(pMac);
@@ -2026,15 +2025,8 @@ QDF_STATUS pe_roam_synch_callback(tpAniSirGlobal mac_ctx,
 	curr_sta_ds->nss = local_nss;
 	ft_session_ptr->limMlmState = eLIM_MLM_LINK_ESTABLISHED_STATE;
 	lim_init_tdls_data(mac_ctx, ft_session_ptr);
-	join_rsp_len = ft_session_ptr->RICDataLen +
-			sizeof(tSirSmeJoinRsp) - sizeof(uint8_t);
-
-#ifdef FEATURE_WLAN_ESE
-	join_rsp_len += ft_session_ptr->tspecLen;
-	lim_log(mac_ctx, LOG1, FL("tspecLen = %d"),
-			ft_session_ptr->tspecLen);
-#endif
-
+	join_rsp_len = ft_session_ptr->RICDataLen + sizeof(tSirSmeJoinRsp) -
+			sizeof(uint8_t);
 	roam_sync_ind_ptr->join_rsp = qdf_mem_malloc(join_rsp_len);
 	if (NULL == roam_sync_ind_ptr->join_rsp) {
 		lim_log(mac_ctx, LOGE, FL("LFR3:mem alloc failed"));
@@ -2057,21 +2049,6 @@ QDF_STATUS pe_roam_synch_callback(tpAniSirGlobal mac_ctx,
 		ft_session_ptr->ricData = NULL;
 		ft_session_ptr->RICDataLen = 0;
 	}
-
-#ifdef FEATURE_WLAN_ESE
-	if (ft_session_ptr->tspecIes != NULL) {
-		roam_sync_ind_ptr->join_rsp->tspecIeLen =
-			ft_session_ptr->tspecLen;
-		qdf_mem_copy(roam_sync_ind_ptr->join_rsp->frames +
-				roam_sync_ind_ptr->join_rsp->parsedRicRspLen,
-				ft_session_ptr->tspecIes,
-				roam_sync_ind_ptr->join_rsp->tspecIeLen);
-		qdf_mem_free(ft_session_ptr->tspecIes);
-		ft_session_ptr->tspecIes = NULL;
-		ft_session_ptr->tspecLen = 0;
-	}
-#endif
-
 	roam_sync_ind_ptr->join_rsp->vht_channel_width =
 		ft_session_ptr->ch_width;
 	roam_sync_ind_ptr->join_rsp->staId = curr_sta_ds->staIndex;
@@ -2090,10 +2067,6 @@ QDF_STATUS pe_roam_synch_callback(tpAniSirGlobal mac_ctx,
 	if (mac_ctx->roam.pReassocResp)
 		qdf_mem_free(mac_ctx->roam.pReassocResp);
 	mac_ctx->roam.pReassocResp = NULL;
-
-	if (roam_sync_ind_ptr->authStatus == CSR_ROAM_AUTH_STATUS_AUTHENTICATED)
-		ft_session_ptr->is_key_installed = true;
-
 	return QDF_STATUS_SUCCESS;
 }
 #endif
@@ -2212,8 +2185,7 @@ void lim_update_lost_link_info(tpAniSirGlobal mac, tpPESession session,
 	tSirMsgQ mmh_msg;
 
 	if ((NULL == mac) || (NULL == session)) {
-		QDF_TRACE(QDF_MODULE_ID_PE, QDF_TRACE_LEVEL_ERROR,
-			FL("parameter NULL"));
+		lim_log(mac, LOGE, FL("parameter NULL"));
 		return;
 	}
 	if (!LIM_IS_STA_ROLE(session)) {
@@ -2338,7 +2310,7 @@ QDF_STATUS lim_update_ext_cap_ie(tpAniSirGlobal mac_ctx,
 		(*local_ie_len) += DOT11F_IE_EXTCAP_MAX_LEN;
 		return QDF_STATUS_SUCCESS;
 	}
-	lim_merge_extcap_struct(&driver_ext_cap, &default_scan_ext_cap, true);
+	lim_merge_extcap_struct(&driver_ext_cap, &default_scan_ext_cap);
 
 	qdf_mem_copy(local_ie_buf + (*local_ie_len),
 			driver_ext_cap.bytes, DOT11F_IE_EXTCAP_MAX_LEN);

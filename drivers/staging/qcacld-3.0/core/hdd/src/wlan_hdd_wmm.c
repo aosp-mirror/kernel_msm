@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -61,7 +61,6 @@
 #include <wlan_hdd_hostapd.h>
 #include <wlan_hdd_softap_tx_rx.h>
 #include <cds_sched.h>
-#include "sme_api.h"
 
 #define WLAN_HDD_MAX_DSCP 0x3f
 
@@ -276,7 +275,7 @@ static void hdd_wmm_free_context(hdd_wmm_qos_context_t *pQosContext)
 	mutex_unlock(&pAdapter->hddWmmStatus.wmmLock);
 
 	/* reclaim memory */
-	qdf_mem_free(pQosContext);
+	kfree(pQosContext);
 
 }
 
@@ -1042,7 +1041,7 @@ static void __hdd_wmm_do_implicit_qos(struct work_struct *work)
 	if (!pAc->wmmAcAccessNeeded) {
 		hdd_err("AC %d doesn't need service", acType);
 		pQosContext->magic = 0;
-		qdf_mem_free(pQosContext);
+		kfree(pQosContext);
 		return;
 	}
 
@@ -1752,7 +1751,7 @@ QDF_STATUS hdd_wmm_acquire_access(hdd_adapter_t *pAdapter,
 
 	pAdapter->hddWmmStatus.wmmAcStatus[acType].wmmAcAccessNeeded = true;
 
-	pQosContext = qdf_mem_malloc(sizeof(*pQosContext));
+	pQosContext = kmalloc(sizeof(*pQosContext), GFP_ATOMIC);
 	if (NULL == pQosContext) {
 		/* no memory for QoS context.  Nothing we can do but
 		 * let data flow
@@ -1971,17 +1970,6 @@ QDF_STATUS hdd_wmm_connect(hdd_adapter_t *pAdapter,
 				pAdapter->hddWmmStatus.wmmAcStatus[ac].
 				wmmAcAccessAllowed = true;
 			}
-			if (!pRoamInfo->fReassocReq &&
-			    !sme_neighbor_roam_is11r_assoc(
-			    WLAN_HDD_GET_HAL_CTX(pAdapter),
-			    pAdapter->sessionId) &&
-			    !sme_roam_is_ese_assoc(pRoamInfo)
-			   ) {
-				pAdapter->hddWmmStatus.wmmAcStatus[ac].
-					wmmAcTspecValid = false;
-				pAdapter->hddWmmStatus.wmmAcStatus[ac].
-					wmmAcAccessAllowed = false;
-			}
 		} else {
 			hdd_info("ac %d off", ac);
 			/* admission is not required so access is allowed */
@@ -2149,7 +2137,7 @@ hdd_wlan_wmm_status_e hdd_wmm_addts(hdd_adapter_t *pAdapter,
 		return status;
 	}
 
-	pQosContext = qdf_mem_malloc(sizeof(*pQosContext));
+	pQosContext = kmalloc(sizeof(*pQosContext), GFP_KERNEL);
 	if (NULL == pQosContext) {
 		/* no memory for QoS context.  Nothing we can do */
 		hdd_err("Unable to allocate QoS context");

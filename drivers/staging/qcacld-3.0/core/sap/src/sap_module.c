@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -507,8 +507,7 @@ QDF_STATUS wlansap_clean_cb(ptSapContext pSapCtx, uint32_t freeFlag      /* 0 / 
 	if (eSAP_TRUE == pSapCtx->isSapSessionOpen && hal) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
 				"close existing SAP session");
-		sap_close_session(hal, pSapCtx, sap_roam_session_close_callback,
-					pSapCtx);
+		sap_close_session(hal, pSapCtx, NULL, false);
 	}
 
 	qdf_mem_zero(pSapCtx, sizeof(tSapContext));
@@ -1193,19 +1192,23 @@ QDF_STATUS wlansap_clear_acl(void *pCtx)
 		return QDF_STATUS_E_RESOURCES;
 	}
 
-	for (i = 0; i < (pSapCtx->nDenyMac - 1); i++) {
-		qdf_mem_zero((pSapCtx->denyMacList + i)->bytes,
-			     QDF_MAC_ADDR_SIZE);
-	}
+	if (pSapCtx->denyMacList != NULL) {
+		for (i = 0; i < (pSapCtx->nDenyMac - 1); i++) {
+			qdf_mem_zero((pSapCtx->denyMacList + i)->bytes,
+				     QDF_MAC_ADDR_SIZE);
 
+		}
+	}
 	sap_print_acl(pSapCtx->denyMacList, pSapCtx->nDenyMac);
 	pSapCtx->nDenyMac = 0;
 
-	for (i = 0; i < (pSapCtx->nAcceptMac - 1); i++) {
-		qdf_mem_zero((pSapCtx->acceptMacList + i)->bytes,
-			     QDF_MAC_ADDR_SIZE);
-	}
+	if (pSapCtx->acceptMacList != NULL) {
+		for (i = 0; i < (pSapCtx->nAcceptMac - 1); i++) {
+			qdf_mem_zero((pSapCtx->acceptMacList + i)->bytes,
+				     QDF_MAC_ADDR_SIZE);
 
+		}
+	}
 	sap_print_acl(pSapCtx->acceptMacList, pSapCtx->nAcceptMac);
 	pSapCtx->nAcceptMac = 0;
 
@@ -2639,8 +2642,6 @@ wlansap_channel_change_request(void *pSapCtx, uint8_t target_channel)
 						ch_params->center_freq_seg0;
 	sapContext->csr_roamProfile.ch_params.center_freq_seg1 =
 						ch_params->center_freq_seg1;
-	sapContext->csr_roamProfile.supported_rates.numRates = 0;
-	sapContext->csr_roamProfile.extended_rates.numRates = 0;
 
 	qdf_ret_status = sme_roam_channel_change_req(hHal, sapContext->bssid,
 				ch_params, &sapContext->csr_roamProfile);
@@ -2917,18 +2918,6 @@ wlansap_set_dfs_restrict_japan_w53(tHalHandle hHal, uint8_t disable_Dfs_W53)
 	}
 
 	return status;
-}
-
-bool sap_is_auto_channel_select(void *pvos_gctx)
-{
-	ptSapContext sapcontext = CDS_GET_SAP_CB(pvos_gctx);
-
-	if (NULL == sapcontext) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
-			"%s: Invalid SAP pointer", __func__);
-		return 0;
-	}
-	return sapcontext->channel == AUTO_CHANNEL_SELECT;
 }
 
 #ifdef FEATURE_AP_MCC_CH_AVOIDANCE
