@@ -465,6 +465,11 @@ static int context_build_overlap(struct smq_invoke_ctx *ctx)
 	for (i = 0; i < nbufs; ++i) {
 		ctx->overs[i].start = (uintptr_t)pra[i].buf.pv;
 		ctx->overs[i].end = ctx->overs[i].start + pra[i].buf.len;
+		if (pra[i].buf.len) {
+			VERIFY(err, ctx->overs[i].end > ctx->overs[i].start);
+			if (err)
+				goto bail;
+		}
 		ctx->overs[i].raix = i;
 		ctx->overps[i] = &ctx->overs[i];
 	}
@@ -548,7 +553,7 @@ static int context_alloc(struct fastrpc_apps *me, uint32_t kernel,
 		}
 	}
 	ctx->sc = invoke->sc;
-	if (REMOTE_SCALARS_INBUFS(ctx->sc) + REMOTE_SCALARS_OUTBUFS(ctx->sc)) {
+	if (bufs) {
 		VERIFY(err, 0 == context_build_overlap(ctx));
 		if (err)
 			goto bail;

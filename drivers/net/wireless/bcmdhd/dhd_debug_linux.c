@@ -272,7 +272,8 @@ dhd_os_suppress_logging(dhd_pub_t *dhdp, bool suppress)
 	max_log_level = MAX(os_priv[FW_VERBOSE_RING_ID].log_level, os_priv[FW_EVENT_RING_ID].log_level);
 	if (max_log_level == SUPPRESS_LOG_LEVEL) {
 		/* suppress the logging in FW not to wake up host while device in suspend mode */
-		ret = dhd_iovar(dhdp, 0, "logtrace", (char *)&enable, sizeof(enable), 1);
+		ret = dhd_iovar(dhdp, 0, "logtrace", (char *)&enable,
+				sizeof(enable), NULL, 0, TRUE);
 		if (ret < 0 && (ret != BCME_UNSUPPORTED)) {
 			DHD_ERROR(("logtrace is failed : %d\n", ret));
 		}
