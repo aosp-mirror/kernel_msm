@@ -12,7 +12,7 @@
 
 / {
 	chosen {
-		bootargs="boot_cpus=0,1 sched_enable_hmp=0";
+		bootargs="sched_enable_hmp=0";
 	};
 };
 
