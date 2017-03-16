@@ -40,6 +40,9 @@
 #endif
 
 #ifdef CONFIG_MCL
+/* Include Files */
+#include <cds_packet.h>
+
 /* QDF_TRACE is the macro invoked to add trace messages to code.  See the
  * documenation for qdf_trace_msg() for the parameters etc. for this function.
  *

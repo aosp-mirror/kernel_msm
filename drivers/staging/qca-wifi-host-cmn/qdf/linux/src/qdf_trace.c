@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -998,8 +998,6 @@ const char *qdf_dp_code_to_string(enum QDF_DP_TRACE_ID code)
 		return "HTT: RX: OF: PTR:";
 	case QDF_DP_TRACE_RX_HDD_PACKET_PTR_RECORD:
 		return "HDD: RX: PTR:";
-	case QDF_DP_TRACE_HDD_RX_PACKET_RECORD:
-		return "HDD: RX: DATA:";
 	case QDF_DP_TRACE_TXRX_QUEUE_PACKET_PTR_RECORD:
 		return "TXRX: TX: Q: PTR:";
 	case QDF_DP_TRACE_TXRX_PACKET_PTR_RECORD:
@@ -1203,8 +1201,7 @@ static void qdf_dp_add_record(enum QDF_DP_TRACE_ID code,
 	rec->pid = (in_interrupt() ? 0 : current->pid);
 	spin_unlock_bh(&l_dp_trace_lock);
 
-	if ((g_qdf_dp_trace_data.live_mode || (print == true)) &&
-	    (rec->code < QDF_DP_TRACE_MAX))
+	if (g_qdf_dp_trace_data.live_mode || (print == true))
 		qdf_dp_trace_cb_table[rec->code] (rec, index);
 }
 
@@ -1572,7 +1569,6 @@ void qdf_dp_display_record(struct qdf_dp_trace_record_s *pRecord,
 		DPTRACE_PRINT("DPT: HDD SoftAP TX Timeout\n");
 		break;
 	case QDF_DP_TRACE_HDD_TX_PACKET_RECORD:
-	case QDF_DP_TRACE_HDD_RX_PACKET_RECORD:
 		dump_hex_trace("DATA", pRecord->data, pRecord->size);
 		break;
 	default:
