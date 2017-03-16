@@ -170,6 +170,8 @@ static ssize_t panel_debug_base_reg_write(struct file *file,
 		p[2] = 0;
 		pr_debug("p[%d] = %pK:%s\n", i, p, p);
 		cnt = sscanf(p, "%x", &tmp);
+		if (cnt != 1)
+			return -EFAULT;
 		reg[i] = tmp;
 		pr_debug("reg[%d] = %x\n", i, (int)reg[i]);
 	}
