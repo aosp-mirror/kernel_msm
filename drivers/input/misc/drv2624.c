@@ -44,6 +44,8 @@
 #include <linux/err.h>
 #include <linux/clk.h>
 #include <linux/miscdevice.h>
+#include <linux/sysfs.h>
+
 #include "drv2624.h"
 
 static struct drv2624_data *drv2624_plat_data;
@@ -226,6 +228,11 @@ static void drv2624_change_mode(struct drv2624_data *drv2624,
 	drv2624_set_bits(drv2624, DRV2624_REG_MODE, WORKMODE_MASK, work_mode);
 }
 
+static int drv2624_get_mode(struct drv2624_data *drv2624)
+{
+	return drv2624_reg_read(drv2624, DRV2624_REG_MODE) & WORKMODE_MASK;
+}
+
 static void drv2624_stop(struct drv2624_data *drv2624)
 {
 	if (drv2624->vibrator_playing) {
@@ -268,13 +275,12 @@ static void drv2624_haptics_work(struct work_struct *work)
 
 	if (state != LED_OFF) {
 		wake_lock(&drv2624->wklock);
-		drv2624_change_mode(drv2624, MODE_RTP);
 		drv2624->vibrator_playing = true;
 		drv2624_enable_irq(drv2624, true);
 
 		ret = drv2624_set_go_bit(drv2624, GO);
 		if (ret < 0) {
-			dev_warn(drv2624->dev, "Start RTP failed\n");
+			dev_warn(drv2624->dev, "Start playback failed\n");
 			wake_unlock(&drv2624->wklock);
 			drv2624->vibrator_playing = false;
 			drv2624_disable_irq(drv2624);
@@ -1335,6 +1341,336 @@ static struct regmap_config drv2624_i2c_regmap = {
 	.cache_type = REGCACHE_NONE,
 };
 
+static ssize_t rtp_input_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int rtp_input;
+
+	rtp_input = drv2624_reg_read(drv2624, DRV2624_REG_RTP_INPUT);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", rtp_input);
+}
+
+static ssize_t rtp_input_store(struct device *dev,
+			       struct device_attribute *attr, const char *buf,
+			       size_t count)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int ret;
+	char rtp_input;
+
+	ret = kstrtos8(buf, 10, &rtp_input);
+	if (ret) {
+		pr_err("Invalid input for rtp_input: ret = %d\n", ret);
+		return ret;
+	}
+
+	drv2624_reg_write(drv2624, DRV2624_REG_RTP_INPUT, rtp_input);
+
+	return count;
+}
+
+static ssize_t mode_show(struct device *dev,
+			 struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int mode;
+
+	mutex_lock(&drv2624->lock);
+	mode = drv2624_get_mode(drv2624);
+	mutex_unlock(&drv2624->lock);
+
+	if (mode >= ARRAY_SIZE(drv2624_modes) || mode < 0) {
+		pr_err("Invalid mode: mode = %d\n", mode);
+		return snprintf(buf, PAGE_SIZE, "%d\n", mode);
+	}
+
+	return snprintf(buf, sizeof(drv2624_modes[mode]) + 1, "%s\n",
+			drv2624_modes[mode]);
+}
+
+static ssize_t mode_store(struct device *dev,
+			  struct device_attribute *attr, const char *buf,
+			  size_t count)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	char mode_name[25];
+	size_t len;
+	unsigned char new_mode;
+
+	mode_name[sizeof(mode_name) - 1] = '\0';
+	strlcpy(mode_name, buf, sizeof(mode_name) - 1);
+	len = strlen(mode_name);
+
+	if (len && mode_name[len - 1] == '\n')
+		mode_name[len - 1] = '\0';
+
+	for (new_mode = 0; new_mode < ARRAY_SIZE(drv2624_modes); new_mode++) {
+		if (!strcmp(mode_name, drv2624_modes[new_mode])) {
+			mutex_lock(&drv2624->lock);
+			drv2624_change_mode(drv2624, new_mode);
+			mutex_unlock(&drv2624->lock);
+		}
+	}
+
+	return count;
+}
+
+static ssize_t loop_show(struct device *dev,
+			 struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int loop;
+
+	loop = drv2624_reg_read(drv2624, DRV2624_REG_MAIN_LOOP) &
+		MAIN_LOOP_MASK;
+
+	if (loop == MAIN_LOOP_MASK)
+		loop = -1; /* infinite */
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", loop);
+}
+
+static ssize_t loop_store(struct device *dev,
+			  struct device_attribute *attr, const char *buf,
+			  size_t count)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int ret;
+	int loop;
+
+	ret = kstrtoint(buf, 10, &loop);
+	if (ret) {
+		pr_err("Invalid input for loop: ret = %d\n", ret);
+		return ret;
+	}
+
+	loop = max(min(loop, MAIN_LOOP_MASK), -1);
+
+	if (loop == -1)
+		loop = MAIN_LOOP_MASK; /*infinite */
+
+	drv2624_reg_write(drv2624, DRV2624_REG_MAIN_LOOP, loop);
+
+	return count;
+}
+
+static ssize_t interval_show(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int interval;
+
+	interval = drv2624_reg_read(drv2624, DRV2624_REG_CONTROL2);
+	interval = ((interval & INTERVAL_MASK) >> INTERVAL_SHIFT);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", interval);
+}
+
+static ssize_t interval_store(struct device *dev,
+			      struct device_attribute *attr, const char *buf,
+			      size_t count)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int ret;
+	int interval;
+
+	ret = kstrtoint(buf, 10, &interval);
+	if (ret) {
+		pr_err("Invalid input for loop: ret = %d\n", ret);
+		return ret;
+	}
+
+	interval = max(min(interval, 1), 0);
+
+	drv2624_set_bits(drv2624, DRV2624_REG_CONTROL2, INTERVAL_MASK,
+			 interval << INTERVAL_SHIFT);
+
+	return count;
+}
+
+static ssize_t scale_show(struct device *dev,
+			  struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int interval;
+
+	interval = drv2624_reg_read(drv2624, DRV2624_REG_CONTROL2);
+	interval = interval & SCALE_MASK;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", interval);
+}
+
+static ssize_t scale_store(struct device *dev,
+			   struct device_attribute *attr, const char *buf,
+			   size_t count)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int ret;
+	int interval;
+
+	ret = kstrtoint(buf, 10, &interval);
+	if (ret) {
+		pr_err("Invalid input for loop: ret = %d\n", ret);
+		return ret;
+	}
+
+	interval = max(min(interval, 3), 0);
+
+	drv2624_set_bits(drv2624, DRV2624_REG_CONTROL2, SCALE_MASK, interval);
+
+	return count;
+}
+
+static ssize_t ctrl_loop_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int ctrl_loop;
+
+	ctrl_loop = drv2624_reg_read(drv2624, DRV2624_REG_CONTROL1);
+	ctrl_loop = (ctrl_loop & LOOP_MASK) >> LOOP_SHIFT;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", ctrl_loop);
+}
+
+static ssize_t ctrl_loop_store(struct device *dev,
+			       struct device_attribute *attr, const char *buf,
+			       size_t count)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int ret;
+	int ctrl_loop;
+
+	ret = kstrtoint(buf, 10, &ctrl_loop);
+	if (ret) {
+		pr_err("Invalid input for loop: ret = %d\n", ret);
+		return ret;
+	}
+
+	ctrl_loop = max(min(ctrl_loop, 1), 0);
+
+	drv2624_set_bits(drv2624, DRV2624_REG_CONTROL1, LOOP_MASK,
+			 ctrl_loop << LOOP_SHIFT);
+
+	return count;
+}
+
+static ssize_t set_sequencer_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	struct drv2624_waveform_sequencer sequencer;
+	int n;
+
+	memset(&sequencer, 0, sizeof(sequencer));
+
+	n = sscanf(buf, "%hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu",
+		   &sequencer.waveform[0].effect, &sequencer.waveform[0].loop,
+		   &sequencer.waveform[1].effect, &sequencer.waveform[1].loop,
+		   &sequencer.waveform[2].effect, &sequencer.waveform[2].loop,
+		   &sequencer.waveform[3].effect, &sequencer.waveform[3].loop,
+		   &sequencer.waveform[4].effect, &sequencer.waveform[4].loop,
+		   &sequencer.waveform[5].effect, &sequencer.waveform[5].loop,
+		   &sequencer.waveform[6].effect, &sequencer.waveform[6].loop,
+		   &sequencer.waveform[7].effect, &sequencer.waveform[7].loop);
+	if (n > DRV2624_SEQUENCER_SIZE * 2)
+		return -EINVAL;
+
+	drv2624_set_waveform(drv2624, &sequencer);
+
+	return count;
+}
+
+static ssize_t od_clamp_show(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int od_clamp;
+
+	od_clamp = drv2624_reg_read(drv2624, DRV2624_REG_OVERDRIVE_CLAMP);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", od_clamp);
+}
+
+static ssize_t od_clamp_store(struct device *dev,
+			      struct device_attribute *attr, const char *buf,
+			      size_t count)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int ret;
+	unsigned char od_clamp;
+
+	ret = kstrtou8(buf, 10, &od_clamp);
+	if (ret) {
+		pr_err("Invalid input for rtp_input: ret = %d\n", ret);
+		return ret;
+	}
+
+	drv2624_reg_write(drv2624, DRV2624_REG_OVERDRIVE_CLAMP, od_clamp);
+
+	return count;
+}
+
+static ssize_t diag_result_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int diag_z, diag_k;
+
+	diag_z = drv2624_reg_read(drv2624, DRV2624_REG_DIAG_Z);
+	diag_k = drv2624_reg_read(drv2624, DRV2624_REG_DIAG_K);
+
+	return snprintf(buf, PAGE_SIZE, "z=%d k=%d\n", diag_z, diag_k);
+}
+
+static ssize_t autocal_result_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int autocal_comp, autocal_bemf, autocal_gain;
+
+	autocal_comp = drv2624_reg_read(drv2624, DRV2624_REG_CAL_COMP);
+	autocal_bemf = drv2624_reg_read(drv2624, DRV2624_REG_CAL_BEMF);
+	autocal_gain =
+		drv2624_reg_read(drv2624, DRV2624_REG_LOOP_CONTROL) &
+		BEMFGAIN_MASK;
+
+	return snprintf(buf, PAGE_SIZE, "comp=%d bemf=%d gain=%d\n",
+			autocal_comp, autocal_bemf, autocal_gain);
+}
+
+static DEVICE_ATTR(rtp_input, 0660, rtp_input_show, rtp_input_store);
+static DEVICE_ATTR(mode, 0660, mode_show, mode_store);
+static DEVICE_ATTR(loop, 0660, loop_show, loop_store);
+static DEVICE_ATTR(interval, 0660, interval_show, interval_store);
+static DEVICE_ATTR(scale, 0660, scale_show, scale_store);
+static DEVICE_ATTR(ctrl_loop, 0660, ctrl_loop_show, ctrl_loop_store);
+static DEVICE_ATTR(set_sequencer, 0660, NULL, set_sequencer_store);
+static DEVICE_ATTR(od_clamp, 0660, od_clamp_show, od_clamp_store);
+static DEVICE_ATTR(diag_result, 0600, diag_result_show, NULL);
+static DEVICE_ATTR(autocal_result, 0600, autocal_result_show, NULL);
+
+static struct attribute *drv2624_fs_attrs[] = {
+	&dev_attr_rtp_input.attr,
+	&dev_attr_mode.attr,
+	&dev_attr_loop.attr,
+	&dev_attr_interval.attr,
+	&dev_attr_scale.attr,
+	&dev_attr_ctrl_loop.attr,
+	&dev_attr_set_sequencer.attr,
+	&dev_attr_od_clamp.attr,
+	&dev_attr_diag_result.attr,
+	&dev_attr_autocal_result.attr,
+	NULL,
+};
+
+static struct attribute_group drv2624_fs_attr_group = {
+	.attrs = drv2624_fs_attrs,
+};
+
 static int drv2624_i2c_probe(struct i2c_client *client,
 			     const struct i2c_device_id *id)
 {
@@ -1449,6 +1785,10 @@ static int drv2624_i2c_probe(struct i2c_client *client,
 	drv2624_plat_data = drv2624;
 
 	err = haptics_init(drv2624);
+	if (err)
+		goto exit_gpio_request_failed2;
+
+	err = sysfs_create_group(&drv2624->dev->kobj, &drv2624_fs_attr_group);
 	if (err)
 		goto exit_gpio_request_failed2;
 

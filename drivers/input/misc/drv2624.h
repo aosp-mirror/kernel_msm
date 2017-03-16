@@ -94,6 +94,7 @@
 #define	DRV2624_REG_SEQ_LOOP_2			0x18
 
 #define	DRV2624_REG_MAIN_LOOP			0x19
+#define	MAIN_LOOP_MASK				0x07
 
 #define	DRV2624_REG_RATED_VOLTAGE		0x1f
 
@@ -253,6 +254,13 @@ struct drv2624_fw_header {
 	int fw_date;
 	int fw_chksum;
 	int fw_effcount;
+};
+
+static const char * const drv2624_modes[] = {
+	"rtp",
+	"waveform",
+	"diag",
+	"autocal",
 };
 
 #define DRV2624_MAGIC	0x2624
