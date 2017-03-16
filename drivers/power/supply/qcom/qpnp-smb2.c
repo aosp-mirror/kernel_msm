@@ -1224,10 +1224,12 @@ static int smb2_configure_typec(struct smb_charger *chg)
 
 	/*
 	 * trigger the usb-typec-change interrupt only when the CC state
-	 * changes
+	 * changes, vbus asserts or vbus deasserts.
 	 */
 	rc = smblib_write(chg, TYPE_C_INTRPT_ENB_REG,
-			  TYPEC_CCSTATE_CHANGE_INT_EN_BIT);
+			  TYPEC_CCSTATE_CHANGE_INT_EN_BIT |
+			  TYPEC_VBUS_ASSERT_INT_EN_BIT |
+			  TYPEC_VBUS_DEASSERT_INT_EN_BIT);
 	if (rc < 0) {
 		dev_err(chg->dev,
 			"Couldn't configure Type-C interrupts rc=%d\n", rc);
@@ -1399,15 +1401,6 @@ static int smb2_init_hw(struct smb2 *chip)
 		dev_err(chg->dev, "Couldn't enable charging rc=%d\n", rc);
 		return rc;
 	}
-
-	/*
-	 * trigger the usb-typec-change interrupt only when the CC state
-	 * changes, vbus asserts or vbus deasserts.
-	 */
-	rc = smblib_write(chg, TYPE_C_INTRPT_ENB_REG,
-			  TYPEC_CCSTATE_CHANGE_INT_EN_BIT |
-			  TYPEC_VBUS_ASSERT_INT_EN_BIT |
-			  TYPEC_VBUS_DEASSERT_INT_EN_BIT);
 
 	if (chg->micro_usb_mode)
 		rc = smb2_disable_typec(chg);
