@@ -27,12 +27,13 @@ else
 acenic-objs := acenic/tg1.bin acenic/tg2.bin
 endif
 
-ifdef CONFIG_TOUCH_FW_PATH
-fwpath := $(subst $\",,$(CONFIG_TOUCH_FW_PATH))
-touch_image_files := $(wildcard $(srctree)/firmware/$(fwpath)/*/*)
-touch_firmware := $(subst $(srctree)/firmware/,,$(touch_image_files))
-fw-shipped-$(CONFIG_LGE_TOUCH_CORE_BASE) += $(touch_firmware)
-fw-shipped-$(CONFIG_TOUCHSCREEN_FTM4) += $(touch_firmware)
+ifneq ($(filter y, $(CONFIG_LGE_TOUCH_CORE_BASE) $(CONFIG_TOUCHSCREEN_FTM4)),)
+# protect these rules here so that clean rules do not remove the original files
+fw-shipped-$(CONFIG_LGE_TOUCH_CORE_BASE) += \
+	touch/taimen/sw49408/taimen_limit.txt \
+	touch/taimen/sw49408/L1L57P2_1_02.img \
+	touch/taimen/sw49408/taimen_limit_mfts.txt
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTM4) += touch/taimen/ftm4/v30_v0.01.ftb
 endif
 
 fw-shipped-$(CONFIG_ACENIC) += $(acenic-objs)

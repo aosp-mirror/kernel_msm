@@ -10,8 +10,3 @@ config TOUCHSCREEN_FTM4
 		If unsure, say N.
 		To compile this driver as a module, choose M here: the
 		module will be called STM_ts.
-
-config TOUCH_FW_PATH
-	string "TOUCH Firmware Path"
-	help
-	TOUCH_FW_PATH is set to path of touch firmware
