@@ -1469,6 +1469,47 @@ static ssize_t laser_cali_status_show(struct device *dev,
     return scnprintf(buf, PAGE_SIZE, "MFG calibration status = 0x%x API version = %s\n",
                                                         data->cali_status, API_VERSION);
 }
+
+static ssize_t laser_threshold_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	unsigned long value = 0;
+	int err = 0;
+	struct stmvl53l0_data *data = dev_get_drvdata(dev);
+
+	err = kstrtoul(buf, 10, &value);
+	if (err) {
+		vl53l0_errmsg("%s: kstrtoul fails, error = %d\n", __func__, err);
+		return err;
+	}
+
+	if(value) {
+		data->sigmaLimit 			= HIGH_SPEED_SIGMA_LIMIT;
+		data->signalRateLimit 		= (value * 65536 / 100);
+		data->preRangePulsePeriod 	= HIGH_SPEED_PRE_RANGE_PULSE_PERIOD;
+		data->finalRangePulsePeriod = HIGH_SPEED_FINAL_RANGE_PULSE_PERIOD;
+		data->timingBudget 			= HIGH_SPEED_TIMING_BUDGET;
+		vl53l0_dbgmsg("Sigma=%u,Signal=%u,Pre=%u,Final=%u,timingBudget=%u\n",
+				data->sigmaLimit, data->signalRateLimit,
+				data->preRangePulsePeriod, data->finalRangePulsePeriod,
+				data->timingBudget);
+
+		/* record the use case */
+		data->useCase = USE_CASE_CUSTOM;
+	} else {
+		data->useCase = USE_CASE_HIGH_SPEED;
+		vl53l0_dbgmsg("value = %lu, use case high speed mode\n", value);
+	}
+
+	/* If ranging is in progress, let the work handler update the use case */
+	if (data->enable_ps_sensor) {
+		data->updateUseCase = 1;
+	}
+
+	return count;
+}
+
 #endif
 
 /*
@@ -2010,6 +2051,7 @@ static struct device_attribute attributes[] = {
     __ATTR(laser_offset_calibrate, 0440, laser_offset_calibrate_show, NULL),
     __ATTR(laser_xtalk_calibrate, 0660, laser_xtalk_calibrate_show, laser_xtalk_calibrate_store),
     __ATTR(laser_cali_status, 0440, laser_cali_status_show, NULL),
+	__ATTR(laser_threshold, 0220, NULL, laser_threshold_store),
 #ifdef HTC_MODIFY
     __ATTR(enable_ps_sensor, 0664, stmvl53l0_show_enable_ps_sensor, stmvl53l0_store_enable_ps_sensor),
     __ATTR(enable_debug, 0660, stmvl53l0_show_enable_debug, stmvl53l0_store_enable_debug),
@@ -2996,7 +3038,7 @@ static int stmvl53l0_start(struct stmvl53l0_data *data,
 
     if (mode == OFFSETCALIB_MODE) {
         //VL53L0_SetOffsetCalibrationDataMicroMeter(vl53l0_dev, 0);
-        FixPoint1616_t OffsetMicroMeter;
+		int OffsetMicroMeter;
         papi_func_tbl->PerformOffsetCalibration(vl53l0_dev,
                 (data->offsetCalDistance<<16),
                 &OffsetMicroMeter);
