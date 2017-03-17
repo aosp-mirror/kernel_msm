@@ -392,10 +392,12 @@
 			<106 512 0 0>,
 			<106 512 0 0>;
 		qcom,msm-bus-vector-dyn-vote;
+		qcom,cpp-cx-ipeak = <&cx_ipeak_lm 2>;
 		resets = <&clock_mmss CAMSS_MICRO_BCR>;
 		reset-names = "micro_iface_reset";
 		qcom,src-clock-rates = <120000000 256000000 384000000
 					480000000 540000000 576000000>;
+		qcom,micro-reset;
 		qcom,cpp-fw-payload-info {
 			qcom,stripe-base = <790>;
 			qcom,plane-base = <715>;
@@ -576,6 +578,7 @@
 			<29 512 0 0>,
 			<29 512 100000000 100000000>;
 		qcom,msm-bus-vector-dyn-vote;
+		qcom,vfe-cx-ipeak = <&cx_ipeak_lm 2>;
 	};
 
 	vfe1: qcom,vfe1@ca14000 {
@@ -656,6 +659,7 @@
 			<29 512 0 0>,
 			<29 512 100000000 100000000>;
 		qcom,msm-bus-vector-dyn-vote;
+		qcom,vfe-cx-ipeak = <&cx_ipeak_lm 2>;
 	};
 
 	qcom,vfe {

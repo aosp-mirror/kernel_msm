@@ -110,13 +110,7 @@ module_param(qmi_timeout, ulong, 0600);
 		}							\
 	} while (0)
 #else
-#define ICNSS_ASSERT(_condition) do {					\
-		if (!(_condition)) {					\
-			icnss_pr_err("ASSERT at line %d\n",		\
-				     __LINE__);				\
-			WARN_ON(1);					\
-		}							\
-	} while (0)
+#define ICNSS_ASSERT(_condition) do { } while (0)
 #endif
 
 enum icnss_debug_quirks {
@@ -213,7 +207,7 @@ struct icnss_clk_info {
 };
 
 static struct icnss_vreg_info icnss_vreg_info[] = {
-	{NULL, "vdd-0.8-cx-mx", 800000, 800000, 0, 0, true},
+	{NULL, "vdd-0.8-cx-mx", 800000, 800000, 0, 0, false},
 	{NULL, "vdd-1.8-xo", 1800000, 1800000, 0, 0, false},
 	{NULL, "vdd-1.3-rfa", 1304000, 1304000, 0, 0, false},
 	{NULL, "vdd-3.3-ch0", 3312000, 3312000, 0, 0, false},

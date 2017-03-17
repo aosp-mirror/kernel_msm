@@ -449,7 +449,7 @@ static void mdss_mdp_video_avr_vtotal_setup(struct mdss_mdp_ctl *ctl,
 		if (sctl)
 			sctx = (struct mdss_mdp_video_ctx *)
 				sctl->intf_ctx[MASTER_CTX];
-		mdss_mdp_video_timegen_flush(ctl, ctx);
+		mdss_mdp_video_timegen_flush(ctl, sctx);
 
 		MDSS_XLOG(pinfo->min_fps, pinfo->default_fps, avr_vtotal);
 	}
@@ -1416,6 +1416,8 @@ static int mdss_mdp_video_config_fps(struct mdss_mdp_ctl *ctl, int new_fps)
 		}
 	}
 
+	/* add HW recommended delay to handle panel_vsync */
+	udelay(2000);
 	mutex_lock(&ctl->offlock);
 	pdata = ctl->panel_data;
 	if (pdata == NULL) {
@@ -1545,7 +1547,8 @@ exit_dfps:
 				if (rc < 0)
 					pr_err("Error in dfps_wait: %d\n", rc);
 			}
-
+			/* add HW recommended delay to handle panel_vsync */
+			udelay(2000);
 			/* Disable interface timing double buffer */
 			rc = mdss_mdp_ctl_intf_event(ctl,
 				MDSS_EVENT_DSI_TIMING_DB_CTRL,
@@ -1671,7 +1674,7 @@ int mdss_mdp_video_reconfigure_splash_done(struct mdss_mdp_ctl *ctl,
 	struct mdss_panel_data *pdata;
 	int i, ret = 0, off;
 	u32 data, flush;
-	struct mdss_mdp_video_ctx *ctx;
+	struct mdss_mdp_video_ctx *ctx, *sctx = NULL;
 	struct mdss_mdp_ctl *sctl;
 
 	if (!ctl) {
@@ -1695,10 +1698,13 @@ int mdss_mdp_video_reconfigure_splash_done(struct mdss_mdp_ctl *ctl,
 	pdata->panel_info.cont_splash_enabled = 0;
 	sctl = mdss_mdp_get_split_ctl(ctl);
 
-	if (sctl)
+	if (sctl) {
 		sctl->panel_data->panel_info.cont_splash_enabled = 0;
-	else if (ctl->panel_data->next && is_pingpong_split(ctl->mfd))
+		sctx = (struct mdss_mdp_video_ctx *) sctl->intf_ctx[MASTER_CTX];
+	} else if (ctl->panel_data->next && is_pingpong_split(ctl->mfd)) {
 		ctl->panel_data->next->panel_info.cont_splash_enabled = 0;
+		sctx = (struct mdss_mdp_video_ctx *) ctl->intf_ctx[SLAVE_CTX];
+	}
 
 	if (!handoff) {
 		ret = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_CONT_SPLASH_BEGIN,
@@ -1724,6 +1730,8 @@ int mdss_mdp_video_reconfigure_splash_done(struct mdss_mdp_ctl *ctl,
 		mdss_mdp_ctl_write(ctl, MDSS_MDP_REG_CTL_FLUSH, flush);
 
 		mdp_video_write(ctx, MDSS_MDP_REG_INTF_TIMING_ENGINE_EN, 0);
+		mdss_mdp_video_timegen_flush(ctl, sctx);
+
 		/* wait for 1 VSYNC for the pipe to be unstaged */
 		msleep(20);
 

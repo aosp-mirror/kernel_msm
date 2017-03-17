@@ -250,8 +250,8 @@
 				<0xd900 0x100>;
 			reg-names = "qpnp-wled-ctrl-base",
 					"qpnp-wled-sink-base";
-			interrupts = <0x3 0xd8 0x1 IRQ_TYPE_EDGE_BOTH>,
-					<0x3 0xd8 0x2 IRQ_TYPE_EDGE_BOTH>;
+			interrupts = <0x3 0xd8 0x1 IRQ_TYPE_EDGE_RISING>,
+					<0x3 0xd8 0x2 IRQ_TYPE_EDGE_RISING>;
 			interrupt-names = "ovp-irq", "sc-irq";
 			linux,name = "wled";
 			linux,default-trigger = "bkl-trigger";
@@ -394,6 +394,9 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			reg = <0xec00 0x100>;
+			interrupts = <0x3 0xec 0x1 IRQ_TYPE_EDGE_RISING>;
+			interrupt-names = "sc-irq";
+
 			qcom,force-module-reenable;
 
 			lcdb_ldo_vreg: ldo {
