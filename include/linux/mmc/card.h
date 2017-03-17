@@ -134,6 +134,9 @@ struct mmc_ext_csd {
 	u8			barrier_en;
 
 	u8			fw_version;		/* 254 */
+	u8			pre_eol_info;		/* 267 */
+	u8			lifetime_est_a;		/* 268 */
+	u8			lifetime_est_b;		/* 269 */
 	unsigned int            feature_support;
 #define MMC_DISCARD_FEATURE	BIT(0)                  /* CMD38 feature */
 };
