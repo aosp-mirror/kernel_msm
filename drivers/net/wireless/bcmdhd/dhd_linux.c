@@ -6917,6 +6917,8 @@ dhd_wl_host_event(dhd_info_t *dhd, int *ifidx, void *pktdata,
 	if (bcmerror != BCME_OK)
 		return (bcmerror);
 
+	if ((dhd->iflist[*ifidx] == NULL) || (dhd->iflist[*ifidx]->net == NULL))
+		return BCME_ERROR;
 #ifdef WL_CFG80211
 	ASSERT(dhd->iflist[*ifidx] != NULL);
 	ASSERT(dhd->iflist[*ifidx]->net != NULL);
