@@ -6041,7 +6041,7 @@ struct snd_soc_card snd_soc_card_tavil_msm = {
 	.late_probe	= msm_snd_card_tavil_late_probe,
 };
 
-static int htc_populate_external_amp(struct snd_soc_card *card)
+static int wahoo_populate_external_amp(struct snd_soc_card *card)
 {
 	int i, j, count, ret = 0;
 	struct device *cdev = card->dev;
@@ -6056,10 +6056,10 @@ static int htc_populate_external_amp(struct snd_soc_card *card)
 	}
 
 	if (of_property_read_bool(cdev->of_node,
-				"htc,use-external-amp")) {
+				"wahoo,use-external-amp")) {
 
 		count = of_property_count_strings(cdev->of_node,
-					"htc,external-amp-be-sname");
+					"wahoo,external-amp-be-sname");
 		if (count > 0) {
 			for (i = 0; i < count; i++) {
 				codec_dai_str = NULL;
@@ -6067,7 +6067,7 @@ static int htc_populate_external_amp(struct snd_soc_card *card)
 
 
 				ret = of_property_read_string_index(cdev->of_node,
-							"htc,external-amp-be-sname",
+							"wahoo,external-amp-be-sname",
 							i, &be_sname_str);
 
 				if (ret) {
@@ -6076,7 +6076,7 @@ static int htc_populate_external_amp(struct snd_soc_card *card)
 				}
 
 				np = of_parse_phandle(cdev->of_node,
-							"htc,external-amp-be-codec-phandle",
+							"wahoo,external-amp-be-codec-phandle",
 							i);
 
 				if (!np) {
@@ -6085,7 +6085,7 @@ static int htc_populate_external_amp(struct snd_soc_card *card)
 				}
 
 				ret = of_property_read_string_index(cdev->of_node,
-							"htc,external-amp-be-codec-dai-name",
+							"wahoo,external-amp-be-codec-dai-name",
 							i, &codec_dai_str);
 
 				if (ret) {
@@ -6882,7 +6882,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	if (ret)
 		goto err;
 
-	htc_populate_external_amp(card);
+	wahoo_populate_external_amp(card);
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret == -EPROBE_DEFER) {

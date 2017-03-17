@@ -55,13 +55,13 @@
 		qcom,wsa-max-devs = <0>; /* No wsa device */
 		/delete-property/ qcom,wsa-devs;
 
-		htc,use-external-amp;
-		htc,external-amp-be-sname = "Quaternary MI2S Playback",
-					    "Tertiary MI2S Playback";
-		htc,external-amp-be-codec-phandle = <&nxp_tfa98xx_34>,
-						    <&nxp_tfa98xx_35>;
-		htc,external-amp-be-codec-dai-name = "tfa98xx-aif-7-34",
-						     "tfa98xx-aif-7-35";
+		wahoo,use-external-amp;
+		wahoo,external-amp-be-sname = "Quaternary MI2S Playback",
+					      "Tertiary MI2S Playback";
+		wahoo,external-amp-be-codec-phandle = <&nxp_tfa98xx_34>,
+						      <&nxp_tfa98xx_35>;
+		wahoo,external-amp-be-codec-dai-name = "tfa98xx-aif-7-34",
+						       "tfa98xx-aif-7-35";
 	};
 
 	sound-tavil {
@@ -80,12 +80,12 @@
 		/delete-property/ qcom,usbc-analog-en1_gpio;
 		/delete-property/ qcom,usbc-analog-en2_n_gpio;
 
-		htc,use-external-amp;
-		htc,external-amp-be-sname = "Quaternary MI2S Playback";
+		wahoo,use-external-amp;
+		wahoo,external-amp-be-sname = "Quaternary MI2S Playback";
 
-		htc,external-amp-be-codec-phandle = <&ti_tas2557_4d>;
+		wahoo,external-amp-be-codec-phandle = <&ti_tas2557_4d>;
 
-		htc,external-amp-be-codec-dai-name = "tas2557 Stereo ASI1";
+		wahoo,external-amp-be-codec-dai-name = "tas2557 Stereo ASI1";
 	};
 
 	i2c@c1b5000 { /* i2c_7 */
