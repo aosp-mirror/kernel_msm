@@ -501,10 +501,12 @@ int ext4_bio_write_page(struct ext4_io_submit *io,
 		gfp_t gfp_flags = GFP_NOFS;
 
 	retry_encrypt:
-		if (ext4_using_hardware_encryption(inode))
+		if (ext4_using_hardware_encryption(inode)) {
 			io->io_crypt_inode = inode;
-		else
+		} else {
+			io->io_crypt_inode = NULL;
 			data_page = ext4_encrypt(inode, page, gfp_flags);
+		}
 
 		if (IS_ERR(data_page)) {
 			ret = PTR_ERR(data_page);
