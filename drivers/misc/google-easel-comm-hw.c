@@ -317,9 +317,11 @@ static int easelcomm_hw_ap_hotplug_callback(enum mnh_hotplug_event_t event)
 	 break;
 	case MNH_HOTPLUG_OUT:
 		pr_debug("easelcomm: mnh hotplug out\n");
-		easelcomm_pcie_hotplug_out();
+		/* Unregister IRQ callbacks first */
 		ret = mnh_reg_irq_callback(NULL, NULL, NULL);
 		WARN_ON(ret);
+		/* Call hotplug out callback implemented by easelcomm layer */
+		easelcomm_pcie_hotplug_out();
 		break;
 	default:
 		break;
