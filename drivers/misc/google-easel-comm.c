@@ -578,9 +578,10 @@ static void easelcomm_handle_cmd_send_msg(
 }
 
 /*
- * Remote side of link indicates command channel ready.	 Client calls this when
- * the EP bootstrap procedure is complete.  Server calls this when a LINK_INIT
- * command is received from the client.
+ * Remote side of link indicates command channel ready.  Both server and
+ * client call this when handling any command.
+ * In addition, server calls this when a LINK_INIT command is received from
+ * the client.
  *
  * Init stuff and wakeup anybody waiting for the channel to be ready (to send
  * a command).
@@ -591,6 +592,11 @@ static void easelcomm_cmd_channel_remote_set_ready(void)
 		&cmd_channel_remote;
 
 	mutex_lock(&channel->mutex);
+	/* Return right away if channel is already initialized */
+	if (channel->initialized) {
+		mutex_unlock(&channel->mutex);
+		return;
+	}
 	/* Next write offset starts at top after header, cmd seq# zero */
 	channel->write_offset =
 		(sizeof(struct easelcomm_cmd_channel_header) + 7) & ~0x7;
@@ -711,6 +717,9 @@ static void easelcomm_handle_command(struct easelcomm_cmd_header *cmdhdr)
 {
 	struct easelcomm_service *service;
 	char *cmdargs = (char *)cmdhdr + sizeof(struct easelcomm_cmd_header);
+
+	/* Any command can inform the remote is open for business, not just LINK_INIT. */
+	easelcomm_cmd_channel_remote_set_ready();
 
 	if (cmdhdr->service_id >= EASELCOMM_SERVICE_COUNT) {
 		dev_err(easelcomm_miscdev.this_device,
