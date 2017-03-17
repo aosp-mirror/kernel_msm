@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -577,6 +577,24 @@ enum cds_band {
 };
 
 /**
+ * enum cds_hw_mode_change - identify the HW mode switching to.
+ *
+ * @CDS_HW_MODE_NOT_IN_PROGRESS: HW mode change not in progress
+ * @CDS_SMM_IN_PROGRESS: switching to SMM mode
+ * @CDS_DBS_IN_PROGRESS: switching to DBS mode
+ * @CDS_SBS_IN_PROGRESS: switching to SBS mode
+ *
+ * These are generic IDs that identify the various roles
+ * in the software system
+ */
+enum cds_hw_mode_change {
+	CDS_HW_MODE_NOT_IN_PROGRESS = 0,
+	CDS_SMM_IN_PROGRESS,
+	CDS_DBS_IN_PROGRESS,
+	CDS_SBS_IN_PROGRESS
+};
+
+/**
  * struct cds_conc_connection_info - information of all existing
  * connections in the wlan system
  *
@@ -600,7 +618,8 @@ struct cds_conc_connection_info {
 	bool          in_use;
 };
 
-bool cds_is_connection_in_progress(void);
+bool cds_is_connection_in_progress(uint8_t *session_id,
+				scan_reject_states *reason);
 void cds_dump_concurrency_info(void);
 
 #ifdef FEATURE_WLAN_TDLS
@@ -723,6 +742,7 @@ void cds_update_with_safe_channel_list(uint8_t *pcl_channels, uint32_t *len,
 uint8_t cds_get_nondfs_preferred_channel(enum cds_con_mode mode,
 					bool for_existing_conn);
 bool cds_is_any_nondfs_chnl_present(uint8_t *channel);
+bool cds_is_any_dfs_beaconing_session_present(uint8_t *channel);
 bool cds_allow_concurrency(enum cds_con_mode mode,
 				uint8_t channel, enum hw_mode_bandwidth bw);
 enum cds_conc_priority_mode cds_get_first_connection_pcl_table_index(void);
@@ -735,6 +755,7 @@ QDF_STATUS cds_current_connections_update(uint32_t session_id,
 				uint8_t channel,
 				enum sir_conn_update_reason);
 bool cds_is_ibss_conn_exist(uint8_t *ibss_channel);
+struct cds_conc_connection_info *cds_get_conn_info(uint32_t *len);
 #ifdef MPC_UT_FRAMEWORK
 QDF_STATUS cds_incr_connection_count_utfw(
 		uint32_t vdev_id, uint32_t tx_streams, uint32_t rx_streams,
@@ -746,7 +767,6 @@ QDF_STATUS cds_update_connection_info_utfw(
 		uint32_t channelid, uint32_t mac_id);
 QDF_STATUS cds_decr_connection_count_utfw(
 		uint32_t del_all, uint32_t vdev_id);
-struct cds_conc_connection_info *cds_get_conn_info(uint32_t *len);
 enum cds_pcl_type get_pcl_from_first_conn_table(enum cds_con_mode type,
 		enum cds_conc_priority_mode sys_pref);
 enum cds_pcl_type get_pcl_from_second_conn_table(
@@ -774,10 +794,6 @@ static inline QDF_STATUS cds_decr_connection_count_utfw(uint32_t del_all,
 		uint32_t vdev_id)
 {
 	return QDF_STATUS_SUCCESS;
-}
-static inline struct cds_conc_connection_info *cds_get_conn_info(uint32_t *len)
-{
-	return NULL;
 }
 #endif
 
@@ -860,4 +876,6 @@ void cds_hw_mode_transition_cb(uint32_t old_hw_mode_index,
 			uint32_t new_hw_mode_index,
 			uint32_t num_vdev_mac_entries,
 			 struct sir_vdev_mac_map *vdev_mac_map);
+void cds_set_hw_mode_change_in_progress(enum cds_hw_mode_change value);
+enum cds_hw_mode_change cds_is_hw_mode_change_in_progress(void);
 #endif /* __CDS_CONCURRENCY_H */

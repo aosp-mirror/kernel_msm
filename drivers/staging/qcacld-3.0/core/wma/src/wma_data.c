@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1177,6 +1177,7 @@ void wma_set_linkstate(tp_wma_handle wma, tpLinkStateParams params)
 	    (params->state != eSIR_LINK_DOWN_STATE)) {
 		WMA_LOGD("%s: unsupported link state %d",
 			 __func__, params->state);
+		params->status = false;
 		goto out;
 	}
 
@@ -1184,6 +1185,7 @@ void wma_set_linkstate(tp_wma_handle wma, tpLinkStateParams params)
 
 	if (NULL == pdev) {
 		WMA_LOGE("%s: Unable to get TXRX context", __func__);
+		params->status = false;
 		goto out;
 	}
 
@@ -1191,11 +1193,13 @@ void wma_set_linkstate(tp_wma_handle wma, tpLinkStateParams params)
 	if (!vdev) {
 		WMA_LOGP("%s: vdev not found for addr: %pM",
 			 __func__, params->selfMacAddr);
+		params->status = false;
 		goto out;
 	}
 
 	if (wma_is_vdev_in_ap_mode(wma, vdev_id)) {
 		WMA_LOGD("%s: Ignoring set link req in ap mode", __func__);
+		params->status = false;
 		goto out;
 	}
 
@@ -1205,8 +1209,10 @@ void wma_set_linkstate(tp_wma_handle wma, tpLinkStateParams params)
 		status = wma_create_peer(wma, pdev, vdev, params->bssid,
 				WMI_PEER_TYPE_DEFAULT, vdev_id,
 				roam_synch_in_progress);
-		if (status != QDF_STATUS_SUCCESS)
+		if (status != QDF_STATUS_SUCCESS) {
 			WMA_LOGE("%s: Unable to create peer", __func__);
+			params->status = false;
+		}
 		if (roam_synch_in_progress)
 			return;
 	} else {
@@ -1223,11 +1229,13 @@ void wma_set_linkstate(tp_wma_handle wma, tpLinkStateParams params)
 		if (!msg) {
 			WMA_LOGP(FL("Failed to fill vdev request for vdev_id %d"),
 				 vdev_id);
+			params->status = false;
 			status = QDF_STATUS_E_NOMEM;
 		}
 		if (wmi_unified_vdev_stop_send(wma->wmi_handle, vdev_id)) {
 			WMA_LOGP("%s: %d Failed to send vdev stop vdev %d",
 				 __func__, __LINE__, vdev_id);
+			params->status = false;
 		} else {
 			WMA_LOGP("%s: %d vdev stop sent vdev %d",
 				 __func__, __LINE__, vdev_id);
@@ -2546,7 +2554,6 @@ QDF_STATUS wma_tx_packet(void *wma_context, void *tx_frame, uint16_t frmLen,
 		WMA_LOGE("No Support to send other frames except 802.11 Mgmt/Data");
 		return QDF_STATUS_E_FAILURE;
 	}
-	mHdr = (tpSirMacMgmtHdr)qdf_nbuf_data(tx_frame);
 #ifdef WLAN_FEATURE_11W
 	if ((iface && iface->rmfEnabled) &&
 	    (frmType == TXRX_FRM_802_11_MGMT) &&
@@ -2589,7 +2596,10 @@ QDF_STATUS wma_tx_packet(void *wma_context, void *tx_frame, uint16_t frmLen,
 
 				cds_packet_free((void *)tx_frame);
 				tx_frame = pPacket;
+				pData = pFrame;
 				frmLen = newFrmLen;
+				pFc = (tpSirMacFrameCtl)
+						(qdf_nbuf_data(tx_frame));
 			}
 		} else {
 			/* Allocate extra bytes for MMIE */
@@ -2628,11 +2638,13 @@ QDF_STATUS wma_tx_packet(void *wma_context, void *tx_frame, uint16_t frmLen,
 			}
 			cds_packet_free((void *)tx_frame);
 			tx_frame = pPacket;
+			pData = pFrame;
 			frmLen = newFrmLen;
+			pFc = (tpSirMacFrameCtl) (qdf_nbuf_data(tx_frame));
 		}
 	}
 #endif /* WLAN_FEATURE_11W */
-
+	mHdr = (tpSirMacMgmtHdr)qdf_nbuf_data(tx_frame);
 	if ((frmType == TXRX_FRM_802_11_MGMT) &&
 	    (pFc->subType == SIR_MAC_MGMT_PROBE_RSP)) {
 		uint64_t adjusted_tsf_le;
@@ -3041,7 +3053,7 @@ void wma_tx_abort(uint8_t vdev_id)
 			 __func__, iface->handle);
 		return;
 	}
-	WMA_LOGA("%s: vdevid %d bssid %pM", __func__, vdev_id, iface->bssid);
+	WMA_LOGI("%s: vdevid %d bssid %pM", __func__, vdev_id, iface->bssid);
 	iface->pause_bitmap |= (1 << PAUSE_TYPE_HOST);
 	ol_txrx_vdev_pause(iface->handle, OL_TXQ_PAUSE_REASON_TX_ABORT);
 

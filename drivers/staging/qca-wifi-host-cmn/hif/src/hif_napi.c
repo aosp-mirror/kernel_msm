@@ -42,7 +42,9 @@
 #include <linux/irq.h>
 #ifdef HELIUMPLUS
 #include <soc/qcom/irq-helper.h>
+#ifdef CONFIG_SCHED_CORE_CTL
 #include <linux/sched/core_ctl.h>
+#endif
 #include <pld_snoc.h>
 #endif
 #include <linux/pm.h>

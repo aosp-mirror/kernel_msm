@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -184,7 +184,7 @@ static int wlan_send_sock_msg_to_app(tAniHdr *wmsg, int radio,
 	tAniNlHdr *wnl = NULL;
 	struct sk_buff *skb;
 	struct nlmsghdr *nlh;
-	int wmsg_length = wmsg->length;
+	int wmsg_length = ntohs(wmsg->length);
 	static int nlmsg_seq;
 
 	if (radio < 0 || radio > ANI_MAX_RADIOS) {
@@ -341,7 +341,7 @@ static int wlan_add_user_log_radio_time_stamp(char *tbuf, size_t tbuf_sz,
 
 	qdf_get_time_of_the_day_in_hr_min_sec_usec(time_buf, sizeof(time_buf));
 
-	tlen = scnprintf(tbuf, tbuf_sz, "R%d: [%.6s][%llu] %s ", radio,
+	tlen = scnprintf(tbuf, tbuf_sz, "R%d: [%.16s][%llu] %s ", radio,
 			((in_irq() ? "irq" : in_softirq() ?  "soft_irq" :
 			current->comm)),
 			ts, time_buf);
@@ -378,7 +378,7 @@ static int wlan_add_user_log_radio_time_stamp(char *tbuf, size_t tbuf_sz,
 	qdf_get_time_of_the_day_in_hr_min_sec_usec(time_buf, sizeof(time_buf));
 
 	rem = do_div(ts, QDF_MC_TIMER_TO_SEC_UNIT);
-	tlen = scnprintf(tbuf, tbuf_sz, "R%d: [%.6s][%lu.%06lu] %s ", radio,
+	tlen = scnprintf(tbuf, tbuf_sz, "R%d: [%.16s][%lu.%06lu] %s ", radio,
 			((in_irq() ? "irq" : in_softirq() ?  "soft_irq" :
 			current->comm)),
 			(unsigned long) ts,
@@ -866,7 +866,7 @@ static int wlan_logging_proc_sock_rx_msg(struct sk_buff *skb)
 	tAniNlHdr *wnl;
 	int radio;
 	int type;
-	int ret;
+	int ret, len;
 
 	wnl = (tAniNlHdr *) skb->data;
 	radio = wnl->radio;
@@ -875,6 +875,22 @@ static int wlan_logging_proc_sock_rx_msg(struct sk_buff *skb)
 	if (radio < 0 || radio > ANI_MAX_RADIOS) {
 		LOGGING_TRACE(QDF_TRACE_LEVEL_ERROR,
 			      "%s: invalid radio id [%d]\n", __func__, radio);
+		return -EINVAL;
+	}
+
+	len = ntohs(wnl->wmsg.length) + sizeof(tAniNlHdr);
+	if (len > skb_headlen(skb)) {
+		LOGGING_TRACE(QDF_TRACE_LEVEL_ERROR,
+			"%s: invalid length, msgLen:%x skb len:%x headLen: %d data_len: %d",
+			__func__, len, skb->len, skb_headlen(skb),
+			skb->data_len);
+		return -EINVAL;
+	}
+
+	if (wnl->wmsg.length > skb->data_len) {
+		LOGGING_TRACE(QDF_TRACE_LEVEL_ERROR,
+			"%s: invalid length msgLen:%x skb data_len:%x\n",
+			__func__, wnl->wmsg.length, skb->data_len);
 		return -EINVAL;
 	}
 
