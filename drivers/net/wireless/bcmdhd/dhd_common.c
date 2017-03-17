@@ -101,8 +101,6 @@ int dhd_msg_level = DHD_ERROR_VAL | DHD_MSGTRACE_VAL | DHD_FWLOG_VAL;
 #else
 #endif /* WL_WLC_SHIM */
 
-#include <wl_iw.h>
-
 #ifdef SOFTAP
 char fw_path2[MOD_PARAM_PATHLEN];
 extern bool softap_enabled;
@@ -148,7 +146,17 @@ char fw_version[FW_VER_STR_LEN] = "\0";
 
 void dhd_set_timer(void *bus, uint wdtick);
 
-
+#define CSCAN_COMMAND                "CSCAN "
+#define CSCAN_TLV_PREFIX             'S'
+#define CSCAN_TLV_VERSION             1
+#define CSCAN_TLV_SUBVERSION          0
+#define CSCAN_TLV_TYPE_SSID_IE       'S'
+#define CSCAN_TLV_TYPE_CHANNEL_IE    'C'
+#define CSCAN_TLV_TYPE_NPROBE_IE     'N'
+#define CSCAN_TLV_TYPE_ACTIVE_IE     'A'
+#define CSCAN_TLV_TYPE_PASSIVE_IE    'P'
+#define CSCAN_TLV_TYPE_HOME_IE       'H'
+#define CSCAN_TLV_TYPE_STYPE_IE      'T'
 
 /* IOVar table */
 enum {
@@ -3236,54 +3244,6 @@ wl_iw_parse_data_tlv(char** list_str, void *dst, int dst_size, const char token,
 }
 
 /*
- *  channel list parsing from cscan tlv list
-*/
-int
-wl_iw_parse_channel_list_tlv(char** list_str, uint16* channel_list,
-                             int channel_num, int *bytes_left)
-{
-	char* str;
-	int idx = 0;
-
-	if ((list_str == NULL) || (*list_str == NULL) ||(bytes_left == NULL) || (*bytes_left < 0)) {
-		DHD_ERROR(("%s error paramters\n", __FUNCTION__));
-		return -1;
-	}
-	str = *list_str;
-
-	while (*bytes_left > 0) {
-
-		if (str[0] != CSCAN_TLV_TYPE_CHANNEL_IE) {
-			*list_str = str;
-			DHD_TRACE(("End channel=%d left_parse=%d %d\n", idx, *bytes_left, str[0]));
-			return idx;
-		}
-		/* Get proper CSCAN_TLV_TYPE_CHANNEL_IE */
-		*bytes_left -= 1;
-		str += 1;
-
-		if (str[0] == 0) {
-			/* All channels */
-			channel_list[idx] = 0x0;
-		}
-		else {
-			channel_list[idx] = (uint16)str[0];
-			DHD_TRACE(("%s channel=%d \n", __FUNCTION__,  channel_list[idx]));
-		}
-		*bytes_left -= 1;
-		str += 1;
-
-		if (idx++ > 255) {
-			DHD_ERROR(("%s Too many channels \n", __FUNCTION__));
-			return -1;
-		}
-	}
-
-	*list_str = str;
-	return idx;
-}
-
-/*
  *  SSIDs list parsing from cscan tlv list
  */
 int
@@ -3353,87 +3313,6 @@ wl_iw_parse_ssid_list_tlv(char** list_str, wlc_ssid_ext_t* ssid, int max, int *b
 
 	*list_str = str;
 	return idx;
-}
-
-/* Parse a comma-separated list from list_str into ssid array, starting
- * at index idx.  Max specifies size of the ssid array.  Parses ssids
- * and returns updated idx; if idx >= max not all fit, the excess have
- * not been copied.  Returns -1 on empty string, or on ssid too long.
- */
-int
-wl_iw_parse_ssid_list(char** list_str, wlc_ssid_t* ssid, int idx, int max)
-{
-	char* str, *ptr;
-
-	if ((list_str == NULL) || (*list_str == NULL))
-		return -1;
-
-	for (str = *list_str; str != NULL; str = ptr) {
-
-		/* check for next TAG */
-		if (!strncmp(str, GET_CHANNEL, strlen(GET_CHANNEL))) {
-			*list_str	 = str + strlen(GET_CHANNEL);
-			return idx;
-		}
-
-		if ((ptr = strchr(str, ',')) != NULL) {
-			*ptr++ = '\0';
-		}
-
-		if (strlen(str) > DOT11_MAX_SSID_LEN) {
-			DHD_ERROR(("ssid <%s> exceeds %d\n", str, DOT11_MAX_SSID_LEN));
-			return -1;
-		}
-
-		if (strlen(str) == 0)
-			ssid[idx].SSID_len = 0;
-
-		if (idx < max) {
-			bzero(ssid[idx].SSID, sizeof(ssid[idx].SSID));
-			strncpy((char*)ssid[idx].SSID, str, sizeof(ssid[idx].SSID) - 1);
-			ssid[idx].SSID_len = strlen(str);
-		}
-		idx++;
-	}
-	return idx;
-}
-
-/*
- * Parse channel list from iwpriv CSCAN
- */
-int
-wl_iw_parse_channel_list(char** list_str, uint16* channel_list, int channel_num)
-{
-	int num;
-	int val;
-	char* str;
-	char* endptr = NULL;
-
-	if ((list_str == NULL)||(*list_str == NULL))
-		return -1;
-
-	str = *list_str;
-	num = 0;
-	while (strncmp(str, GET_NPROBE, strlen(GET_NPROBE))) {
-		val = (int)strtoul(str, &endptr, 0);
-		if (endptr == str) {
-			printf("could not parse channel number starting at"
-				" substring \"%s\" in list:\n%s\n",
-				str, *list_str);
-			return -1;
-		}
-		str = endptr + strspn(endptr, " ,");
-
-		if (num == channel_num) {
-			DHD_ERROR(("too many channels (more than %d) in channel list:\n%s\n",
-				channel_num, *list_str));
-			return -1;
-		}
-
-		channel_list[num++] = (uint16)val;
-	}
-	*list_str = str;
-	return num;
 }
 
 

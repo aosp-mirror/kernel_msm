@@ -36,9 +36,6 @@
 #include <dhd_linux.h>
 
 #include <wlioctl.h>
-#if defined(WL_WIRELESS_EXT)
-#include <wl_iw.h>
-#endif
 
 #define WL_ERROR(x) printf x
 #define WL_TRACE(x)
@@ -132,13 +129,11 @@ dhd_custom_get_mac_address(void *adapter, unsigned char *buf)
 }
 #endif /* GET_CUSTOM_MAC_ENABLE */
 
-#if !defined(WL_WIRELESS_EXT)
 struct cntry_locales_custom {
 	char iso_abbrev[WLC_CNTRY_BUF_SZ];	/* ISO 3166-1 country abbreviation */
 	char custom_locale[WLC_CNTRY_BUF_SZ];	/* Custom firmware locale */
 	int32 custom_locale_rev;		/* Custom local revisin default -1 */
 };
-#endif /* WL_WIRELESS_EXT */
 
 /* Customized Locale table : OPTIONAL feature */
 const struct cntry_locales_custom translate_custom_table[] = {
