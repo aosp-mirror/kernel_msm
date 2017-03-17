@@ -10,10 +10,15 @@
  * GNU General Public License for more details.
  */
 
+&spi_2 {
+	status = "ok";
+};
+
 &soc {
 	/delete-node/ sound-9335;
+	/delete-node/ msm_cdc_pinctrl@59;
+	/delete-node/ msm_cdc_pinctrl@60;
 	/delete-node/ msm_cdc_pinctrl@75;
-	/delete-node/ qcom,wcd-dsp-mgr;
 
 	sound-tavil {
 		compatible = "qcom,msm8998-asoc-snd-tavil";
@@ -118,23 +123,37 @@
 				"msm-dai-q6-tdm.36896", "msm-dai-q6-tdm.36897",
 				"msm-dai-q6-tdm.36912", "msm-dai-q6-tdm.36913";
 		asoc-codec = <&stub_codec>, <&ext_disp_audio_codec>;
-		qcom,wsa-max-devs = <0>;
 		asoc-codec-names = "msm-stub-codec.1",
 				   "msm-ext-disp-audio-codec-rx";
 		qcom,wsa-max-devs = <0>;
+		/delete-property/ qcom,wsa-devs;
+		/delete-property/ qcom,usbc-analog-en1_gpio;
+		/delete-property/ qcom,usbc-analog-en2_n_gpio;
+
+		wahoo,use-external-amp;
+		wahoo,external-amp-be-sname = "Quaternary MI2S Playback";
+
+		wahoo,external-amp-be-codec-phandle = <&ti_tas2557_4d>;
+
+		wahoo,external-amp-be-codec-dai-name = "tas2557 Stereo ASI1";
 	};
 
 	qcom,msm-dai-mi2s {
-		compatible = "qcom,msm-dai-mi2s";
 		dai_mi2s3: qcom,msm-dai-q6-mi2s-quat {
-			compatible = "qcom,msm-dai-q6-mi2s";
-			qcom,msm-dai-q6-mi2s-dev-id = <3>;
 			qcom,msm-mi2s-rx-lines = <2>; /* SD1 used as output */
 			qcom,msm-mi2s-tx-lines = <1>; /* SD0 used as input */
 			pinctrl-names = "default", "idle";
-			pinctrl-0 = <&quat_mi2s_active &quat_mi2s_sd1_active>;
-			pinctrl-1 = <&quat_mi2s_sleep &quat_mi2s_sd1_sleep>;
+			pinctrl-0 = <&quat_mi2s_active
+				     &quat_mi2s_sd0_active
+				     &quat_mi2s_sd1_active>;
+			pinctrl-1 = <&quat_mi2s_sleep
+				     &quat_mi2s_sd0_sleep
+				     &quat_mi2s_sd1_sleep>;
 		};
+	};
+
+	audio_ext_clk_lnbb {
+		status = "disabled";
 	};
 
 	cpe: qcom,msm-cpe-lsm {
@@ -154,77 +173,54 @@
 			reg = <0x34>;
 		};
 	};
+
+	i2c@c1b5000 { /* i2c_7 */
+		nxp_tfa98xx_34: nxp_tfa98xx_amp@34 {
+				compatible = "nxp,tfa98xx";
+				reg = <0x34>;
+				reset-gpio = <&pm8998_gpios 6 0x1>;
+				upper-spk; /* left */
+				status = "disabled";
+		};
+
+		nxp_tfa98xx_35: nxp_tfa98xx_amp@35 {
+				compatible = "nxp,tfa98xx";
+				reg = <0x35>;
+				reset-gpio = <&pm8998_gpios 7 0x1>;
+				status = "disabled";
+		};
+
+		ti_tas2557_4d: tas2557s@4d {
+				#sound-dai-cells = <1>;
+				compatible = "ti,tas2557s";
+				reg = <0x4d>;
+				ti,cdc-reset-gpio = <&pm8998_gpios 6 0>;
+				ti,irq-gpio-left = <&pm8998_gpios 7 0>;
+				ti,irq-gpio-right = <&pm8998_gpios 8 0>;
+				ti,left-channel = <0x4c>;
+				ti,right-channel = <0x4d>;
+				ti,echo-ref = <0>;   /* 0, left channel; 1, right channel; 2, both */
+				ti,i2s-bits = <16>;   /* support 16, 24, 32 */
+				ti,load = <0>;   /* 0, 8Ohm; 1, 6Ohm; 2, 4Ohm */
+				status = "ok";
+		};
+	};
+
 };
 
 &slim_aud {
 	/delete-node/ tasha_codec;
 	/delete-node/ swr_master;
 
-	tavil_codec {
-		wcd: wcd_pinctrl@5 {
-			compatible = "qcom,wcd-pinctrl";
-			qcom,num-gpios = <5>;
-			gpio-controller;
-			#gpio-cells = <2>;
-
-			spkr_1_wcd_en_active: spkr_1_wcd_en_active {
-				mux {
-					pins = "gpio2";
-				};
-
-				config {
-					pins = "gpio2";
-					output-high;
-				};
-			};
-
-			spkr_1_wcd_en_sleep: spkr_1_wcd_en_sleep {
-				mux {
-					pins = "gpio2";
-				};
-
-				config {
-					pins = "gpio2";
-					input-enable;
-				};
-			};
-
-			spkr_2_wcd_en_active: spkr_2_sd_n_active {
-				mux {
-					pins = "gpio3";
-				};
-
-				config {
-					pins = "gpio3";
-					output-high;
-				};
-			};
-
-			spkr_2_wcd_en_sleep: spkr_2_sd_n_sleep {
-				mux {
-					pins = "gpio3";
-				};
-
-				config {
-					pins = "gpio3";
-					input-enable;
-				};
-			};
+	wcd934x_cdc: tavil_codec {
+		clocks = <&clock_audio clk_audio_pmi_clk>;
+	/*
+	 * b/35391122: Disable SPI since it is not working yet.
+		wcd_spi_0: wcd_spi {
+			qcom,master-bus-num = <2>;
 		};
-
-		wsa_spkr_wcd_sd1: msm_cdc_pinctrll {
-			compatible = "qcom,msm-cdc-pinctrl";
-			pinctrl-names = "aud_active", "aud_sleep";
-			pinctrl-0 = <&spkr_1_wcd_en_active>;
-			pinctrl-1 = <&spkr_1_wcd_en_sleep>;
-		};
-
-		wsa_spkr_wcd_sd2: msm_cdc_pinctrlr {
-			compatible = "qcom,msm-cdc-pinctrl";
-			pinctrl-names = "aud_active", "aud_sleep";
-			pinctrl-0 = <&spkr_2_wcd_en_active>;
-			pinctrl-1 = <&spkr_2_wcd_en_sleep>;
-		};
+	 */
+		/delete-node/ swr_master;
 	};
 };
 
@@ -251,6 +247,43 @@
 		qcom,out-strength = <1>;	/* Low */
 		status = "okay";
 	};
+
+	/* tas2557, cdc-reset-gpio */
+	gpio@c500 { /* GPIO 6 */
+		qcom,mode = <1>;       		/* Output */
+		qcom,pull = <5>;		/* No Pull */
+		qcom,vin-sel = <0>;		/* VIN1 GPIO_LV */
+		qcom,src-sel = <0>;		/* GPIO */
+		qcom,invert = <0>;		/* Invert */
+		qcom,master-en = <1>;		/* Enable GPIO */
+		qcom,out-strength = <1>;	/* Low */
+		status = "ok";
+	};
+
+	/* tas2557, irq-gpio-right */
+	gpio@c600 { /* GPIO 7 */
+		qcom,mode = <1>;       		/* Output */
+		qcom,pull = <5>;		/* No Pull */
+		qcom,vin-sel = <0>;		/* VIN1 GPIO_LV */
+		qcom,src-sel = <0>;		/* GPIO */
+		qcom,invert = <0>;		/* Invert */
+		qcom,master-en = <1>;		/* Enable GPIO */
+		qcom,out-strength = <1>;	/* Low */
+		status = "ok";
+	};
+
+	/* tas2557, irq-gpio-left */
+	gpio@c700 { /* GPIO 8 */
+		qcom,mode = <1>;                /* Output */
+		qcom,pull = <5>;                /* No Pull */
+		qcom,vin-sel = <0>;		/* VIN1 GPIO_LV */
+		qcom,src-sel = <0>;		/* GPIO */
+		qcom,invert = <0>;		/* Invert */
+		qcom,master-en = <1>;		/* Enable GPIO */
+		qcom,out-strength = <1>;	/* Low */
+		status = "ok";
+	};
+
 };
 
 &rpm_bus {
