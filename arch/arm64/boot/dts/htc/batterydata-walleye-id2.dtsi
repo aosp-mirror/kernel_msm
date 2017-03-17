@@ -1,0 +1,72 @@
+qcom,walleye-id2-batterydata {
+	qcom, = <24>;
+	qcom,max-voltage-uv = <4400000>;
+	qcom,nom-batt-capacity-mah = <2700>;
+	qcom,batt-id-kohm = <47>;
+	qcom,battery-beta = <4360>;
+	qcom,battery-type = "walleye 2";
+	qcom,checksum = <0xF35A>;
+	qcom,gui-version = "PMI8998GUI - 2.0.0.55";
+	qcom,fastchg-current-ma = <2700>;
+	qcom,fg-cc-cv-threshold-mv = <4400>;
+	qcom,fcc-mah = <2700>;
+	qcom,batt-thermal-limit-vol = <4200>;
+	qcom,fg-profile-data = [
+		 61 1F C8 05
+		 56 0A 72 06
+		 73 1D 72 F5
+		 34 12 35 14
+		 0F 19 60 22
+		 8E 3C 5E 4B
+		 52 00 00 00
+		 13 00 00 00
+		 00 00 A6 C4
+		 2C CD 1C D2
+		 23 00 08 00
+		 39 E2 47 E4
+		 0A 06 48 01
+		 A5 FD AC 12
+		 FC EA 8A 33
+		 22 06 09 20
+		 27 00 14 00
+		 90 1F EA 05
+		 19 0A 93 FD
+		 52 1D B1 F2
+		 93 03 B8 15
+		 4F 19 CD 22
+		 8B 45 E9 52
+		 54 00 00 00
+		 0E 00 00 00
+		 00 00 40 CD
+		 6F C2 EE C5
+		 1A 00 00 00
+		 9E EA 47 E4
+		 87 FD EB F2
+		 FB FD 36 02
+		 0E F3 34 22
+		 B9 33 CC FF
+		 07 10 00 00
+		 DB 0A 66 46
+		 1A 00 40 00
+		 C8 01 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};

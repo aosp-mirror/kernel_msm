@@ -1,0 +1,12 @@
+/ {
+	/delete-node/ qcom,battery-data;
+	muskie_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <20>;
+		#include "batterydata-muskie-id1.dtsi"
+		#include "batterydata-muskie-id2.dtsi"
+	};
+};
+
+&pmi8998_fg {
+	qcom,battery-data = <&muskie_batterydata>;
+};

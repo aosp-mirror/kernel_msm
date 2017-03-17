@@ -1,0 +1,72 @@
+qcom,evm-xa-batterydata {
+	qcom, = <24>;
+	qcom,max-voltage-uv = <4400000>;
+	qcom,nom-batt-capacity-mah = <3000>;
+	qcom,batt-id-kohm = <22>;
+	qcom,battery-beta = <4360>;
+	qcom,battery-type = "4";
+	qcom,checksum = <0x454D>;
+	qcom,gui-version = "PMI8998GUI - 2.0.0.55";
+	qcom,fastchg-current-ma = <3000>;
+	qcom,fg-cc-cv-threshold-mv = <4400>;
+	qcom,fcc-mah = <3000>;
+	qcom,batt-thermal-limit-vol = <4200>;
+	qcom,fg-profile-data = [
+		 6E 1F B0 05
+		 74 0A 9B FC
+		 88 1D 1E F4
+		 93 12 DB 1D
+		 92 18 D8 22
+		 C4 45 61 52
+		 56 00 00 00
+		 10 00 00 00
+		 00 00 16 C4
+		 FB BC D1 BA
+		 1F 00 08 00
+		 0A DA 49 E5
+		 62 F5 D2 E2
+		 9B F3 8A 0A
+		 AE ED 14 32
+		 18 06 09 20
+		 27 00 14 00
+		 E7 1F 4F 05
+		 B2 0A 19 06
+		 21 1D 19 FB
+		 92 06 81 F4
+		 46 19 C5 22
+		 9C 45 CA 52
+		 58 00 00 00
+		 0D 00 00 00
+		 00 00 BD CC
+		 A4 C2 85 AC
+		 19 00 00 00
+		 36 EA 49 E5
+		 F5 F5 E7 DB
+		 C8 00 1C 0A
+		 73 01 38 1A
+		 99 33 CC FF
+		 07 10 00 00
+		 F5 0A 66 46
+		 19 00 40 00
+		 D1 01 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};

@@ -1,0 +1,72 @@
+qcom,muskie-id1-batterydata {
+	qcom, = <24>;
+	qcom,max-voltage-uv = <4400000>;
+	qcom,nom-batt-capacity-mah = <3830>;
+	qcom,batt-id-kohm = <22>;
+	qcom,battery-beta = <4360>;
+	qcom,battery-type = "muskie 1";
+	qcom,checksum = <0xBD93>;
+	qcom,gui-version = "PMI8998GUI - 2.0.0.55";
+	qcom,fastchg-current-ma = <3825>;
+	qcom,fg-cc-cv-threshold-mv = <4400>;
+	qcom,fcc-mah = <3830>;
+	qcom,batt-thermal-limit-vol = <4200>;
+	qcom,fg-profile-data = [
+		 65 1F B6 05
+		 77 0A 46 06
+		 7B 1D 15 F5
+		 48 12 24 14
+		 F4 18 F5 22
+		 5B 45 38 53
+		 56 00 00 00
+		 0E 00 00 00
+		 00 00 E4 CD
+		 C7 BC 3A BB
+		 1C 00 08 00
+		 44 CB 55 DC
+		 55 07 28 E3
+		 23 FA 33 0B
+		 6D D2 A7 22
+		 19 06 09 20
+		 27 00 14 00
+		 D5 1F 64 05
+		 A9 0A 3F FC
+		 1F 1D 93 01
+		 77 06 3E F5
+		 58 19 BC 22
+		 A0 45 C9 52
+		 58 00 00 00
+		 0C 00 00 00
+		 00 00 4E CC
+		 A4 C2 51 A4
+		 19 00 00 00
+		 44 E3 55 DC
+		 CD F5 AA E2
+		 49 F3 51 0A
+		 46 E4 3F 1A
+		 99 33 CC FF
+		 07 10 00 00
+		 83 0F 66 46
+		 19 00 40 00
+		 86 01 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};
