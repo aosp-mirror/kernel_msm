@@ -17,12 +17,17 @@
 #ifndef _UAPI__MNH_SM_H
 #define _UAPI__MNH_SM_H
 
-#define MNH_MUX_DEVICE_TX_MAX	2
-#define MNH_MUX_DEVICE_TX0	0
-#define MNH_MUX_DEVICE_TX1	1
-#define MNH_MUX_DEVICE_RX0	0
-#define MNH_MUX_DEVICE_RX1	1
-#define MNH_MUX_DEVICE_RX2	2
+#define MIPI_TX0    0
+#define MIPI_TX1    1
+#define MIPI_TX_IPU 2
+#define MIPI_RX0    0
+#define MIPI_RX1    1
+#define MIPI_RX2    2
+#define MIPI_RX_IPU 3
+
+#define MIPI_MODE_BYPASS       0
+#define MIPI_MODE_BYPASS_W_IPU 1
+#define MIPI_MODE_FUNCTIONAL   2
 
 #define MNH_MIPI_VC0_EN_MASK	0x1
 #define MNH_MIPI_VC1_EN_MASK	0x2
@@ -53,18 +58,18 @@ enum mnh_sm_state {
 };
 
 struct mnh_mipi_config {
-	/* Tx dev MNH_MUX_DEVICE_TX* */
-	int		txdev;
-	/* Rx dev MNH_MUX_DEVICE_RX* */
-	int		rxdev;
+	/* Tx dev (MIPI sink) MNH_MUX_DEVICE_TX* */
+	int txdev;
+	/* Rx dev (MIPI source) MNH_MUX_DEVICE_RX* */
+	int rxdev;
 	/* RX MIPI transfer rate */
-	int		rx_rate;
+	int rx_rate;
 	/* TX MIPI transfer rate */
-	int		tx_rate;
+	int tx_rate;
+	/* Mux mode */
+	int mode;
 	/* virtual channel enable mask */
-	int		vc_en_mask;
-	/* MIPI gen3 ports? */
-	int		is_gen3;
+	int vc_en_mask;
 };
 
 #endif /* _UAPI__MNH_SM_H */

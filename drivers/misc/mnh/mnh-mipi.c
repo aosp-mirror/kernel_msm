@@ -14,8 +14,6 @@
 *
 */
 
-/* #define DEBUG */
-
 #include <linux/delay.h>
 
 #include "mnh-hwio.h"
@@ -688,10 +686,33 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 		       device, data);
 }
 
-static void mnh_mipi_config_mux_sel(struct device *dev, uint32_t rxdev,
-				    uint32_t txdev, uint32_t vc_en_mask)
+static int mnh_mipi_config_mux_sel(struct device *dev,
+				    struct mnh_mipi_config *config)
 {
-	uint32_t rx_mode, tx_en_mode;
+
+	uint32_t rxdev, txdev, mode;
+	uint32_t vc_en_mask, byp_tx_en_mask, ipu_en_mask;
+	uint32_t tx_func_mask, tx_byp_sel_mask;
+	uint32_t rx_mode, tx_mode;
+
+	rxdev = config->rxdev;
+	txdev = config->txdev;
+	vc_en_mask = config->vc_en_mask;
+	mode = config->mode;
+
+	dev_dbg(dev, "%s: MUX rxdev %d, txdev %d, vc_en_mask 0x%1x, mode %d\n",
+		 __func__, rxdev, txdev, vc_en_mask, mode);
+
+	/*
+	 * 0. Upper layers should issue a MUX reset prior to configuring
+	 *    the MUX
+	 * 1. Configure RX section of the MUX unless rxdev is MIPI_RX_IPU
+	 *    in that case we are in functional mode IPU -> Tx[n] and only
+	 *    the tx_mode register must be changed
+	 * 2. Configure TX section of the MUX unless txdev is MIPI_TX_IPU
+	 *    in that case we are in functional mode Rx[n] -> IPU and only
+	 *    the rx_mode register must be changed
+	 */
 
 	/*
 	 * construct the rx mode register. This register is synchronized with
@@ -700,15 +721,16 @@ static void mnh_mipi_config_mux_sel(struct device *dev, uint32_t rxdev,
 	 * Therefore, use read-modify-write to construct register so we only
 	 * need to write once.
 	 */
-	if (rxdev == 0)
+	if (rxdev == MIPI_RX0)
 		rx_mode = HW_IN(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, RX0_MODE);
-	else if (rxdev == 1)
+	else if (rxdev == MIPI_RX1)
 		rx_mode = HW_IN(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, RX1_MODE);
-	else
+	else if (rxdev == MIPI_RX2)
 		rx_mode = HW_IN(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, RX2_MODE);
-
+	else
+		rx_mode = 0; /* rx_mode register not required for IPU source */
 	/*
-	 * it doesn't actually matter which RX# I use since this is just to
+	 * it doesn't actually matter which RX# is used since this is just to
 	 * create the mask. The actual register write occurs below.
 	 */
 	rx_mode &= ~HWIO_MIPI_TOP_RX0_MODE_RX0_VC_EN_FLDMASK;
@@ -719,64 +741,124 @@ static void mnh_mipi_config_mux_sel(struct device *dev, uint32_t rxdev,
 	vc_en_mask <<= HWIO_MIPI_TOP_RX0_MODE_RX0_VC_EN_FLDSHFT;
 	vc_en_mask &= HWIO_MIPI_TOP_RX0_MODE_RX0_VC_EN_FLDMASK;
 
-	tx_en_mode = HWIO_MIPI_TOP_RX0_MODE_RX0_BYP_TX0_EN_FLDMASK << txdev;
+	/* Bypass mode to one of the two Tx channels */
+	if (mode == MIPI_MODE_BYPASS) { /* no IPU, TXn_EN */
+		byp_tx_en_mask =
+			HWIO_MIPI_TOP_RX0_MODE_RX0_BYP_TX0_EN_FLDMASK << txdev;
+		ipu_en_mask = 0;
+		tx_func_mask = 0;
+		tx_byp_sel_mask = (1 + rxdev)
+			<< HWIO_MIPI_TOP_TX0_MODE_TX0_BYP_SEL_FLDSHFT;
+	/* Bypass mode with IPU sink enabled */
+	} else if (mode == MIPI_MODE_BYPASS_W_IPU) {
+		byp_tx_en_mask =
+			HWIO_MIPI_TOP_RX0_MODE_RX0_BYP_TX0_EN_FLDMASK << txdev;
+		ipu_en_mask = 1 << HWIO_MIPI_TOP_RX0_MODE_RX0_IPU_EN_FLDSHFT;
+		tx_func_mask = 0;
+		tx_byp_sel_mask = (1 + rxdev)
+			<< HWIO_MIPI_TOP_TX0_MODE_TX0_BYP_SEL_FLDSHFT;
+	/* Functional mode, direct bypass between Rx & TX disabled */
+	} else if (mode == MIPI_MODE_FUNCTIONAL) {
+		byp_tx_en_mask = 0;
+		ipu_en_mask = 1 << HWIO_MIPI_TOP_RX0_MODE_RX0_IPU_EN_FLDSHFT;
+		tx_func_mask = 1 << HWIO_MIPI_TOP_TX0_MODE_TX0_FUNC_FLDSHFT;
+		tx_byp_sel_mask = 0; /* do not care */
+	} else {
+		return -EINVAL;
+	}
 
-	rx_mode = (rx_mode | vc_en_mask | tx_en_mode);
+	rx_mode = (rx_mode | vc_en_mask | byp_tx_en_mask | ipu_en_mask);
+	tx_mode = (tx_func_mask | tx_byp_sel_mask);
+	dev_dbg(dev, "%s: rx_mode=%d | tx_mode=%d\n", __func__,
+		rx_mode, tx_mode);
 
-	switch (txdev) {
-	case 0:
-		switch (rxdev) {
-		case 0:
+	switch (txdev) { /* Sink */
+	case MIPI_TX0:
+		switch (rxdev) { /* Source */
+		case MIPI_RX0: /* RX0 -> TX0 */
 			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
 			       MIPI_TOP, RX0_MODE, rx_mode);
-			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
-				MIPI_TOP, TX0_MODE, TX0_BYP_SEL, 0x1);
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, TX0_MODE, tx_mode);
 			break;
-		case 1:
+		case MIPI_RX1: /* RX1 -> TX0 */
 			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
 			       MIPI_TOP, RX1_MODE, rx_mode);
-			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
-				MIPI_TOP, TX0_MODE, TX0_BYP_SEL, 0x2);
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, TX0_MODE, tx_mode);
 			break;
-		case 2:
+		case MIPI_RX2: /* RX2 -> TX0 */
 			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
 			       MIPI_TOP, RX2_MODE, rx_mode);
-			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
-				MIPI_TOP, TX0_MODE, TX0_BYP_SEL, 0x3);
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, TX0_MODE, tx_mode);
+			break;
+		case MIPI_RX_IPU: /* IPU -> TX0 */
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, TX0_MODE, tx_mode);
 			break;
 		default:
 			dev_err(dev, "%s: invalid rx device %d!\n", __func__,
 				rxdev);
+			return -EINVAL;
 		}
 		break;
-	case 1:
+	case MIPI_TX1:
 		switch (rxdev) {
-		case 0:
+		case MIPI_RX0: /* RX0 -> TX1 */
 			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
 			       MIPI_TOP, RX0_MODE, rx_mode);
-			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
-				MIPI_TOP, TX1_MODE, TX1_BYP_SEL, 0x1);
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, TX1_MODE, tx_mode);
 			break;
-		case 1:
+		case MIPI_RX1: /* RX1 -> TX1 */
 			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
 			       MIPI_TOP, RX1_MODE, rx_mode);
-			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
-				MIPI_TOP, TX1_MODE, TX1_BYP_SEL, 0x2);
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, TX1_MODE, tx_mode);
 			break;
-		case 2:
+		case MIPI_RX2: /* RX2 -> TX1 */
 			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
 			       MIPI_TOP, RX2_MODE, rx_mode);
-			HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR,
-				MIPI_TOP, TX1_MODE, TX1_BYP_SEL, 0x3);
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, TX1_MODE, tx_mode);
+			break;
+		case MIPI_RX_IPU:
+			/* Configure IPU -> Tx1 */
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, TX1_MODE, tx_mode);
 			break;
 		default:
 			dev_err(dev, "%s: invalid rx device %d!\n", __func__,
 				rxdev);
+			return -EINVAL;
+		}
+		break;
+	case MIPI_TX_IPU:
+		switch (rxdev) {
+		case MIPI_RX0: /* Rx0 -> IPU */
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, RX0_MODE, rx_mode);
+			break;
+		case MIPI_RX1:
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, RX1_MODE, rx_mode);
+			break;
+		case MIPI_RX2:
+			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
+			       MIPI_TOP, RX2_MODE, rx_mode);
+			break;
+		default:
+			dev_err(dev, "%s: invalid rx device %d!\n", __func__,
+				rxdev);
+			return -EINVAL;
 		}
 		break;
 	default:
 		dev_err(dev, "%s: invalid tx device %d!\n", __func__, txdev);
+		return -EINVAL;
 	}
+	return 0;
 }
 
 int mnh_mipi_config(struct device *dev, struct mnh_mipi_config config)
@@ -787,17 +869,46 @@ int mnh_mipi_config(struct device *dev, struct mnh_mipi_config config)
 	uint32_t tx_rate = config.tx_rate;
 	uint32_t vc_en_mask = config.vc_en_mask;
 
-	dev_info(dev, "%s: init rxdev %d, txdev %d, rx_rate %d, tx_rate %d, vc_en_mask 0x%1x\n",
+	dev_dbg(dev, "%s: init rxdev %d, txdev %d, rx_rate %d, tx_rate %d, vc_en_mask 0x%1x\n",
 		__func__, rxdev, txdev, rx_rate, tx_rate, vc_en_mask);
 
-	/* configure rx */
-	mnh_mipi_gen3_host(dev, rxdev, rx_rate);
+	/* configure rx / MIPI-source */
+	switch (rxdev) {
+	case MIPI_RX0:
+	case MIPI_RX1:
+	case MIPI_RX2:
+		dev_dbg(dev, "%s: configuring host controller Rx%d\n",
+			 __func__, rxdev);
+		mnh_mipi_gen3_host(dev, rxdev, rx_rate);
+		break;
+	case MIPI_RX_IPU:
+		dev_dbg(dev, "%s: configuring IPU IDI Tx%d as MIPI source\n",
+			 __func__, txdev);
+		break;
+	default:
+		dev_dbg(dev, "%s: Invalid MIPI input device\n", __func__);
+		break;
+	}
 
-	/* configure tx */
-	mnh_mipi_gen3_device(dev, txdev, tx_rate);
+	/* configure tx / MIPI-sink */
+	switch (txdev) {
+	case MIPI_TX0:
+	case MIPI_TX1:
+		dev_dbg(dev, "%s: configuring device controller Tx%d\n",
+			 __func__, txdev);
+		mnh_mipi_gen3_device(dev, txdev, tx_rate);
+		break;
+	case MIPI_TX_IPU:
+		dev_dbg(dev, "%s: configuring IPU IDI Rx%d as MIPI sink\n",
+			 __func__, rxdev);
+		break;
+	default:
+		dev_dbg(dev, "%s: Invalid MIPI output device\n", __func__);
+		break;
+	}
 
 	/* configure mux select */
-	mnh_mipi_config_mux_sel(dev, rxdev, txdev, vc_en_mask);
+	mnh_mipi_config_mux_sel(dev, &config);
 
 	return 0;
 }
@@ -808,7 +919,7 @@ int mnh_mipi_stop(struct device *dev, struct mnh_mipi_config config)
 	uint32_t txdev = config.txdev;
 	uint32_t rxdev = config.rxdev;
 
-	dev_info(dev, "%s: stopping rxdev %d, txdev %d\n", __func__, rxdev,
+	dev_dbg(dev, "%s: stopping rxdev %d, txdev %d\n", __func__, rxdev,
 		 txdev);
 
 	/* Shutdown host */
@@ -827,16 +938,17 @@ void mnh_mipi_stop_device(struct device *dev, int txdev)
 	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(txdev), MIPI_TX, CSI2_RESETN,
 		CSI2_RESETN_RW, 0);
 	switch (txdev) {
-	case MNH_MUX_DEVICE_TX0:
+	case MIPI_TX0:
 		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
 			CSI2_TX0_CG, 0x1);
 		break;
-	case MNH_MUX_DEVICE_TX1:
+	case MIPI_TX1:
 		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
 			CSI2_TX1_CG, 0x1);
 		break;
 	default:
 		dev_err(dev, "%s invalid mipi device!\n", __func__);
+		break;
 	}
 }
 EXPORT_SYMBOL_GPL(mnh_mipi_stop_device);
@@ -847,20 +959,21 @@ void mnh_mipi_stop_host(struct device *dev, int rxdev)
 	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(rxdev), MIPI_RX, CSI2_RESETN,
 		CSI2_RESETN, 0x0);
 	switch (rxdev) {
-	case MNH_MUX_DEVICE_RX0:
+	case MIPI_RX0:
 		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
 			CSI2_RX0_CG, 0x1);
 		break;
-	case MNH_MUX_DEVICE_RX1:
+	case MIPI_RX1:
 		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
 			CSI2_RX1_CG, 0x1);
 		break;
-	case MNH_MUX_DEVICE_RX2:
+	case MIPI_RX2:
 		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
 			CSI2_RX2_CG, 0x1);
 		break;
 	default:
 		dev_err(dev, "%s invalid mipi host!\n", __func__);
+		break;
 	}
 }
 EXPORT_SYMBOL_GPL(mnh_mipi_stop_host);
