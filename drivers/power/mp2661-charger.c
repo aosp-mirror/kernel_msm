@@ -124,6 +124,7 @@
 #define FAULT_FLAG                                     1
 
 #define RECHARGE_CAPACITY_THRESHOLD                    95
+#define CLEAR_RECHARGE_CAPACITY_THRESHOLD              90
 extern bool get_global_max17055_intialized_flag(void);
 
 enum {
@@ -1472,7 +1473,7 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
                 /* set fullcap to repcap when charger is not present and auto recharge is true */
                 const union power_supply_propval ret = {capacity,};
 
-                pr_info("update fullcap when remove charger!\n");
+                pr_info("real capacity = %d, update fullcap when remove charger!\n", capacity);
                 if ((chip->bms_psy) && (chip->bms_psy->set_property))
                 {
                     chip->bms_psy->set_property(chip->bms_psy, POWER_SUPPLY_PROP_CAPACITY,
@@ -2412,16 +2413,30 @@ static __ref int mp2661_monitor_kthread(void *arg)
         pr_debug("gauge real capacity is %d\n", capacity);
         if ((capacity <= RECHARGE_CAPACITY_THRESHOLD)
            && chip->repeat_charging_detect_flag
-           && chip->usb_present
-           && (chip->batt_temp_status != BAT_TEMP_STATUS_HOT)
-           && (chip->batt_temp_status != BAT_TEMP_STATUS_COLD))
+           && chip->usb_present)
         {
-            pr_info("capacity is %d not above %d, recharge\n",
-                        capacity, RECHARGE_CAPACITY_THRESHOLD);
-            rc = mp2661_set_charging_enable(chip, true);
-            if (rc)
+            if((chip->batt_temp_status != BAT_TEMP_STATUS_HOT)
+                && (chip->batt_temp_status != BAT_TEMP_STATUS_COLD))
             {
-                pr_err("Couldn't set charging enable rc=%d\n", rc);
+                pr_info("capacity is %d not above %d, recharge\n",
+                            capacity, RECHARGE_CAPACITY_THRESHOLD);
+                rc = mp2661_set_charging_enable(chip, true);
+                if (rc)
+                {
+                    pr_err("Couldn't set charging enable in recharging, rc=%d\n", rc);
+                }
+                else if(capacity <= CLEAR_RECHARGE_CAPACITY_THRESHOLD)/* normal status */
+                {
+                    /* This avoid that report soc keeps 100% when real capacity is low and usb is online */
+                    pr_info("capacity = %d, clear recharging flag when usb is online\n", capacity);
+                    chip->repeat_charging_detect_flag = false;
+                }
+            }
+            else if(capacity <= CLEAR_RECHARGE_CAPACITY_THRESHOLD)/* cold/hot status */
+            {
+                /* This avoid that report soc keeps 100% when real capacity is low and usb is online */
+                pr_info("capacity = %d, clear recharging flag when usb is online in cold/hot status\n", capacity);
+                chip->repeat_charging_detect_flag = false;
             }
         }
 
