@@ -14,6 +14,9 @@
 *
 */
 
+/* #define DEBUG */
+
+#include "mnh-clk.h"
 #include "mnh-hwio.h"
 #include "mnh-hwio-bases.h"
 #include "mnh-hwio-ddr-ctl.h"
@@ -300,6 +303,9 @@ int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n)
 	mnh_ddr_enable_lp();
 #endif
 
+	/* Enable FSP2 => 2400 */
+	mnh_lpddr_freq_change(LPDDR_FREQ_FSP2);
+
 	return 0;
 }
 EXPORT_SYMBOL(mnh_ddr_resume);
@@ -411,6 +417,9 @@ int mnh_ddr_po_init(struct device *dev)
 #if USE_LP
 	mnh_ddr_enable_lp();
 #endif
+
+	/* Enable FSP2 => 2400 */
+	mnh_lpddr_freq_change(LPDDR_FREQ_FSP2);
 
 	return 0;
 }

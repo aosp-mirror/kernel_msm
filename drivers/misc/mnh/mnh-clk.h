@@ -17,6 +17,8 @@
 #ifndef __MNH_CLK
 #define __MNH_CLK
 
+#include <linux/device.h>
+
 enum mnh_cpu_freq_type {
 	CPU_FREQ_MIN = 0,
 	CPU_FREQ_200 = CPU_FREQ_MIN,
