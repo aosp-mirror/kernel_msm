@@ -25,3 +25,21 @@
 / {
 	compatible = "qcom,msm8998-mtp", "qcom,msm8998", "qcom,mtp";
 };
+
+/ {
+	firmware {
+		android {
+			compatible = "android,firmware";
+			fstab {
+				compatible = "android,fstab";
+				vendor {
+					compatible = "android,vendor";
+					dev = "/dev/block/platform/soc/1da4000.ufshc/by-name/vendor";
+					type = "ext4";
+					mnt_flags = "ro,barrier=1";
+					fsmgr_flags = "wait,slotselect";
+				};
+			};
+		};
+	};
+};
