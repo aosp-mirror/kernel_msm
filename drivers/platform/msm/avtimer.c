@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
 
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License version 2 and
@@ -310,7 +310,13 @@ static long avtimer_ioctl(struct file *file, unsigned int ioctl_num,
 	{
 		uint32_t avtimer_msw_1st = 0, avtimer_lsw = 0;
 		uint32_t avtimer_msw_2nd = 0;
-		uint64_t avtimer_tick;
+		uint64_t avtimer_tick = 0;
+
+		if (!atomic_read(&avtimer.adsp_ready)) {
+			pr_err("%s: Error: Invalid AV Timer tick, rc = %d\n",
+				__func__, rc);
+			return -ENETRESET;
+		}
 		do {
 			avtimer_msw_1st = ioread32(avtimer.p_avtimer_msw);
 			avtimer_lsw = ioread32(avtimer.p_avtimer_lsw);
