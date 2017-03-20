@@ -329,3 +329,40 @@
 		status = "ok";
 	};
 };
+
+/* LDAF */
+&tlmm {
+	laser_sensor {
+		laser_pwdn:laser_pwdn {
+			config {
+				pins = "gpio39";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+		laser_int:laser_int {
+			config {
+				pins = "gpio62";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+	};
+};
+
+&i2c_9 {
+	wahoo_laser@29 {
+		compatible = "wahoo_laser";
+		reg = <0x29>;
+		pinctrl-names = "laser_gpio_init";
+		pinctrl-0 = <&laser_pwdn &laser_int>;
+		power_2v8-supply = <&pm8998_l19>;
+		CAMIO_1v8-supply = <&pm8998_lvs1>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <62 0x0>;
+		laser,intr-gpio = <&tlmm 62 0>;
+		laser,pwdn-gpio = <&tlmm 39 0>;
+	};
+};
+
+
