@@ -1,0 +1,28 @@
+To proetect the usb hardware by usb temperature
+
+The hardware must be have a thermistor to monitor the temperature of usb side.
+We can to enable/disable charging by HW with this temperature.
+
+- qcom,open_mosfet_temp:		If the diff of (Tusb - Tbatt) is bigger
+					than this value, it would be to disable
+					charging.
+- qcom,close_mosfet_temp:		If the diff of (Tusb - Tbatt) is less
+					than this value, it would be to enable
+					charging again.
+- qcom,interval_switch_temp:	If the diff of (Tusb - Tbatt) is bigger
+					than this value, it would be to set the
+					the montor to fast check mode.
+
+Example:
+	usb_temp {
+		compatible = "qcom,usb_temp_protect";
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb_temp_default>;
+		qcom,gpio_usb_temp_protect = <&msm_gpio 131 0x00>;
+		qcom,open_mosfet_temp = <15>;
+		qcom,close_mosfet_temp = <10>;
+		qcom,interval_switch_temp = <7>;
+		vdd-supply = <&pm8950_l16>;
+		qcom,usb_temp-vadc = <&pm8950_vadc>;
+		status = "okay";
+	};

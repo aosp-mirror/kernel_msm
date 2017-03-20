@@ -564,6 +564,11 @@ config MSM_BCL_PERIPHERAL_CTL
 	  provides routines to configure and monitor the BCL
 	  PMIC peripheral.
 
+config USB_TEMP_PROTECT
+	bool "To switch charging by usb temperature"
+	help
+	 Say Y here if we want to use this function
+
 source "drivers/power/reset/Kconfig"
 
 endif # POWER_SUPPLY

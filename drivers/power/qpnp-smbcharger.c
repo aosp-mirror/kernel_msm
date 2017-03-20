@@ -38,6 +38,8 @@
 #include <linux/of_batterydata.h>
 #include <linux/msm_bcl.h>
 #include <linux/ktime.h>
+#include <linux/notifier.h>
+
 #include "pmic-voter.h"
 #include <soc/qcom/socinfo.h>
 
@@ -453,6 +455,39 @@ module_param_named(
 		else							\
 			pr_debug_ratelimited(fmt, ##__VA_ARGS__);	\
 	} while (0)
+
+
+static BLOCKING_NOTIFIER_HEAD(charger_notifier_list);
+
+/**
+ * charger_register_notifier(- register a notifier callback whenever (un)plug
+ * @nb: pointer to the notifier block for the callback events.
+ *
+ * These changes are either USB inserted or removed.
+ */
+int charger_register_notifier(struct notifier_block *nb)
+{
+	if (!nb)
+		return -EINVAL;
+
+	return blocking_notifier_chain_register(&charger_notifier_list, nb);
+}
+EXPORT_SYMBOL_GPL(charger_register_notifier);
+
+int charger_unregister_notifier(struct notifier_block *nb)
+{
+	if (!nb)
+		return -EINVAL;
+
+	return blocking_notifier_chain_unregister(&charger_notifier_list, nb);
+}
+EXPORT_SYMBOL_GPL(charger_unregister_notifier);
+
+void charger_notify_charger_type(enum power_supply_type type)
+{
+	pr_err("to notifier charger_type\n");
+	blocking_notifier_call_chain(&charger_notifier_list, type, NULL);
+}
 
 static int smbchg_read(struct smbchg_chip *chip, u8 *val,
 			u16 addr, int count)
@@ -4428,6 +4463,7 @@ static void handle_usb_removal(struct smbchg_chip *chip)
 	if (chip->usb_ov_det)
 		chip->usb_ov_det = false;
 	smbchg_change_usb_supply_type(chip, POWER_SUPPLY_TYPE_UNKNOWN);
+	charger_notify_charger_type(POWER_SUPPLY_TYPE_UNKNOWN);
 	if (!chip->skip_usb_notification) {
 		pr_smb(PR_MISC, "setting usb psy present = %d\n",
 				chip->usb_present);
@@ -4507,6 +4543,7 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 
 	smbchg_aicl_deglitch_wa_check(chip);
 	smbchg_change_usb_supply_type(chip, usb_supply_type);
+	charger_notify_charger_type(usb_supply_type);
 	if (!chip->skip_usb_notification) {
 		pr_smb(PR_MISC, "setting usb psy present = %d\n",
 				chip->usb_present);
