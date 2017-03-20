@@ -298,6 +298,7 @@ MODULE_DEVICE_TABLE(i2c, stmvl53l0_id);
 static const struct of_device_id st_stmvl53l0_dt_match[] = {
     //	{ .compatible = "st,stmvl53l0", },
     { .compatible = "htc_laser"},
+    { .compatible = "wahoo_laser"},
     { },
 };
 
