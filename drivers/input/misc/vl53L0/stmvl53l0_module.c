@@ -3416,7 +3416,8 @@ int stmvl53l0_setup(struct stmvl53l0_data *data)
     if (misc_register(&data->miscdev) != 0)
         vl53l0_errmsg("Could not register misc. dev for stmvl53l0 ranging\n");
 #ifdef HTC
-    data->laser_class = class_create(THIS_MODULE, "htc_laser");
+    data->laser_class = class_create(THIS_MODULE,
+                                     data->sensor_dev->of_node->name);
     if (IS_ERR(data->laser_class)) {
         goto exit_unregister_dev_ps_1;
     }
