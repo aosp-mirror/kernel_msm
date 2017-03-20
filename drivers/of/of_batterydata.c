@@ -372,6 +372,16 @@ struct device_node *of_batterydata_get_best_profile(
 	}
 
 	if (best_node == NULL) {
+		pr_err("No match battery data found, look for backup data\n");
+		for_each_child_of_node(batterydata_container_node, node) {
+			rc = of_property_read_string(node, "qcom,battery-type",
+						     &battery_type);
+			if (!rc && strcmp(battery_type, "backup") == 0) {
+				pr_err("Loading backup battery data\n");
+				best_node = node;
+				break;
+			}
+		}
 		pr_err("No battery data found\n");
 		return best_node;
 	}
