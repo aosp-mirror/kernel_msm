@@ -4,6 +4,7 @@
 		qcom,batt-id-range-pct = <20>;
 		#include "batterydata-muskie-id1.dtsi"
 		#include "batterydata-muskie-id2.dtsi"
+		#include "batterydata-muskie-unknown.dtsi"
 	};
 };
 
