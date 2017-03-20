@@ -380,7 +380,11 @@ int scm_call_noalloc(u32 svc_id, u32 cmd_id, const void *cmd_buf,
 
 #ifdef CONFIG_ARM64
 
-static int __scm_call_armv8_64(u64 x0, u64 x1, u64 x2, u64 x3, u64 x4, u64 x5,
+static
+#ifdef __clang__
+noinline
+#endif
+int __scm_call_armv8_64(u64 x0, u64 x1, u64 x2, u64 x3, u64 x4, u64 x5,
 				u64 *ret1, u64 *ret2, u64 *ret3)
 {
 	register u64 r0 asm("x0") = x0;
