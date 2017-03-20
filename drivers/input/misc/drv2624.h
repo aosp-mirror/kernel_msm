@@ -158,6 +158,7 @@
 #define	WORK_IDLE				0
 #define	WORK_VIBRATOR				0x01
 #define	WORK_IRQ				0x02
+#define	WORK_ERROR				0x04
 
 #define	GO					1
 #define STOP					0

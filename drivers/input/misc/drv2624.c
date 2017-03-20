@@ -173,9 +173,12 @@ static void drv2624_disable_irq(struct drv2624_data *drv2624)
 static int drv2624_set_go_bit(struct drv2624_data *drv2624, unsigned char val)
 {
 	int ret = 0, value = 0;
-	int retry = 10; /* to finish auto-brake */
+	int poll_ready = 10; /* to finish auto-brake */
+	int retry = 15;
 
 	val &= 0x01;
+
+set_go_bit_write:
 	ret = drv2624_reg_write(drv2624, DRV2624_REG_GO, val);
 	if (ret >= 0) {
 		if (val == 1) {
@@ -190,7 +193,7 @@ static int drv2624_set_go_bit(struct drv2624_data *drv2624, unsigned char val)
 					 __func__);
 			}
 		} else {
-			while (retry > 0) {
+			while (poll_ready > 0) {
 				value =
 				    drv2624_reg_read(drv2624, DRV2624_REG_GO);
 				if (value < 0) {
@@ -201,15 +204,17 @@ static int drv2624_set_go_bit(struct drv2624_data *drv2624, unsigned char val)
 				if (value == 0)
 					break;
 				usleep_range(10000, 20000);
-				retry--;
+				poll_ready--;
 			}
 
-			if (retry == 0) {
+			if (poll_ready == 0) {
 				dev_err(drv2624->dev,
 					"%s, ERROR: clear GO fail\n",
 					__func__);
 			}
 		}
+	} else if (retry-- > 0) {
+		goto set_go_bit_write;
 	}
 
 	return ret;
@@ -224,9 +229,15 @@ static void drv2624_change_mode(struct drv2624_data *drv2624,
 static void drv2624_stop(struct drv2624_data *drv2624)
 {
 	if (drv2624->vibrator_playing) {
+		int ret;
 		dev_dbg(drv2624->dev, "%s\n", __func__);
 		drv2624_disable_irq(drv2624);
-		drv2624_set_go_bit(drv2624, STOP);
+		ret = drv2624_set_go_bit(drv2624, STOP);
+		if (ret < 0) {
+			dev_warn(drv2624->dev, "Stop failed\n");
+			drv2624->work_mode |= WORK_ERROR;
+			gpio_direction_output(drv2624->plat_data.gpio_nrst, 0);
+		}
 		drv2624->vibrator_playing = false;
 		wake_unlock(&drv2624->wklock);
 	}
@@ -261,6 +272,8 @@ static void drv2624_haptics_work(struct work_struct *work)
 			wake_unlock(&drv2624->wklock);
 			drv2624->vibrator_playing = false;
 			drv2624_disable_irq(drv2624);
+			drv2624->work_mode |= WORK_ERROR;
+			gpio_direction_output(drv2624->plat_data.gpio_nrst, 0);
 		} else {
 			drv2624->work_mode |= WORK_VIBRATOR;
 		}
@@ -276,7 +289,9 @@ static void vibrator_enable(struct led_classdev *led_cdev,
 			container_of(led_cdev, struct drv2624_data, led_dev);
 
 	led_cdev->brightness = value;
-	schedule_work(&drv2624->work);
+
+	if (likely(!(drv2624->work_mode & WORK_ERROR)))
+		schedule_work(&drv2624->work);
 }
 
 static void vibrator_work_routine(struct work_struct *work)
@@ -1181,7 +1196,10 @@ static irqreturn_t drv2624_irq_handler(int irq, void *dev_id)
 	struct drv2624_data *drv2624 = (struct drv2624_data *)dev_id;
 
 	drv2624->work_mode |= WORK_IRQ;
-	schedule_work(&drv2624->vibrator_work);
+
+	if (likely(!(drv2624->work_mode & WORK_ERROR)))
+		schedule_work(&drv2624->vibrator_work);
+
 	return IRQ_HANDLED;
 }
 
@@ -1437,8 +1455,10 @@ exit_gpio_request_failed2:
 		gpio_free(drv2624->plat_data.gpio_int);
 
 exit_gpio_request_failed1:
-	if (drv2624->plat_data.gpio_nrst > 0)
+	if (drv2624->plat_data.gpio_nrst > 0) {
+		gpio_direction_output(drv2624->plat_data.gpio_nrst, 0);
 		gpio_free(drv2624->plat_data.gpio_nrst);
+	}
 
 	mutex_destroy(&drv2624->dev_lock);
 
@@ -1453,8 +1473,10 @@ static int drv2624_i2c_remove(struct i2c_client *client)
 	cancel_work_sync(&drv2624->vibrator_work);
 	cancel_work_sync(&drv2624->work);
 
-	if (drv2624->plat_data.gpio_nrst)
+	if (drv2624->plat_data.gpio_nrst) {
+		gpio_direction_output(drv2624->plat_data.gpio_nrst, 0);
 		gpio_free(drv2624->plat_data.gpio_nrst);
+	}
 
 	if (drv2624->plat_data.gpio_int)
 		gpio_free(drv2624->plat_data.gpio_int);
