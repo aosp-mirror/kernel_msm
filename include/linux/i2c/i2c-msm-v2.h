@@ -19,6 +19,7 @@
 
 #include <linux/bitops.h>
 #include <linux/dmaengine.h>
+#include <linux/regulator/consumer.h>
 
 enum msm_i2_debug_level {
 	MSM_ERR,	/* Error messages only. Always on */
@@ -465,6 +466,7 @@ struct i2c_msm_resources {
 	struct pinctrl              *pinctrl;
 	struct pinctrl_state        *gpio_state_active;
 	struct pinctrl_state        *gpio_state_suspend;
+	struct regulator            *bus_supply;
 };
 
 #define I2C_MSM_PINCTRL_ACTIVE       "i2c_active"

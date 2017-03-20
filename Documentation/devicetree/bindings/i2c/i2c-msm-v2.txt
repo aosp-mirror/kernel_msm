@@ -32,6 +32,8 @@ Optional property:
 	register. When missing, default to the value given in driver.
  - qcom,fs-clk-div: fs divider value to configure clk-ctl register. When
 	missing, default to the value given in driver.
+ - qcom,bus-supply: a regulator that must be enabled for the I2C bus to
+        function.
 
 Example:
 	aliases {
