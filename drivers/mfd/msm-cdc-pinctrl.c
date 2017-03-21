@@ -17,6 +17,7 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
+#include <linux/regulator/consumer.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <linux/mfd/msm-cdc-pinctrl.h>
@@ -25,6 +26,7 @@ struct msm_cdc_pinctrl_info {
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pinctrl_active;
 	struct pinctrl_state *pinctrl_sleep;
+	struct regulator *pinctrl_supply;
 	int gpio;
 	bool state;
 };
@@ -155,6 +157,35 @@ static int msm_cdc_pinctrl_probe(struct platform_device *pdev)
 	if (!gpio_data)
 		return -ENOMEM;
 
+	gpio_data->pinctrl_supply = devm_regulator_get_optional(&pdev->dev,
+								"pinctrl");
+	ret = PTR_ERR(gpio_data->pinctrl_supply);
+	if (ret == -ENODEV) {
+		gpio_data->pinctrl_supply = NULL;
+	} else if (ret == -EPROBE_DEFER) {
+		dev_dbg(&pdev->dev, "Defer due to pinctrl-supply.");
+		goto err_pctrl_get;
+	} else if (ret == -ENOENT) {
+		dev_err(&pdev->dev,
+			"Could not find regulator for pinctrl-supply.");
+		goto err_pctrl_get;
+	} else if (IS_ERR(gpio_data->pinctrl_supply)) {
+		dev_err(&pdev->dev,
+			"Unhandled error %d getting pinctrl-supply.",
+			ret);
+		goto err_pctrl_get;
+	}
+
+	if (gpio_data->pinctrl_supply) {
+		ret = regulator_enable(gpio_data->pinctrl_supply);
+		if (ret) {
+			dev_err(&pdev->dev,
+				"Failed to enable pinctrl-supply regulator: %d",
+				ret);
+			goto err_pctrl_get;
+		}
+	}
+
 	gpio_data->pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR_OR_NULL(gpio_data->pinctrl)) {
 		dev_err(&pdev->dev, "%s: Cannot get cdc gpio pinctrl:%ld\n",
@@ -206,6 +237,8 @@ static int msm_cdc_pinctrl_probe(struct platform_device *pdev)
 
 err_lookup_state:
 	devm_pinctrl_put(gpio_data->pinctrl);
+	if (gpio_data->pinctrl_supply)
+		regulator_disable(gpio_data->pinctrl_supply);
 err_pctrl_get:
 	devm_kfree(&pdev->dev, gpio_data);
 	return ret;
@@ -220,10 +253,46 @@ static int msm_cdc_pinctrl_remove(struct platform_device *pdev)
 	if (gpio_data && gpio_data->pinctrl)
 		devm_pinctrl_put(gpio_data->pinctrl);
 
+	if (gpio_data && gpio_data->pinctrl_supply &&
+	    regulator_is_enabled(gpio_data->pinctrl_supply))
+		regulator_disable(gpio_data->pinctrl_supply);
+
 	devm_kfree(&pdev->dev, gpio_data);
 
 	return 0;
 }
+
+#ifdef CONFIG_PM
+static int msm_cdc_pinctrl_suspend_late(struct device *dev)
+{
+	struct msm_cdc_pinctrl_info *gpio_data = dev_get_drvdata(dev);
+	int ret = 0;
+
+	if (gpio_data->pinctrl_supply)
+		ret = regulator_disable(gpio_data->pinctrl_supply);
+	return ret;
+}
+
+static int msm_cdc_pinctrl_resume_early(struct device *dev)
+{
+	struct msm_cdc_pinctrl_info *gpio_data = dev_get_drvdata(dev);
+	int ret = 0;
+
+	if (gpio_data->pinctrl_supply) {
+		ret = regulator_enable(gpio_data->pinctrl_supply);
+		if (ret)
+			dev_err(dev, "failed to enable pinctrl-supply: %d", ret);
+	}
+	return ret;
+}
+#endif
+
+static const struct dev_pm_ops msm_cdc_pinctrl_pm_ops = {
+#ifdef CONFIG_PM
+	.suspend_late = msm_cdc_pinctrl_suspend_late,
+	.resume_early = msm_cdc_pinctrl_resume_early,
+#endif
+};
 
 static const struct of_device_id msm_cdc_pinctrl_match[] = {
 	{.compatible = "qcom,msm-cdc-pinctrl"},
@@ -234,6 +303,7 @@ static struct platform_driver msm_cdc_pinctrl_driver = {
 	.driver = {
 		.name = "msm-cdc-pinctrl",
 		.owner = THIS_MODULE,
+		.pm = &msm_cdc_pinctrl_pm_ops,
 		.of_match_table = msm_cdc_pinctrl_match,
 	},
 	.probe = msm_cdc_pinctrl_probe,
