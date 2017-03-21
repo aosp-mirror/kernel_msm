@@ -591,13 +591,22 @@ struct mdss_dsi_ctrl_pdata {
 
 	int disp_err_fg_gpio;
 	struct delayed_work err_fg_handler;
-	bool err_fg_flag;
+};
+
+struct te_data {
+	bool irq_enabled;
+	bool err_fg;
+	int irq;
+	unsigned long ts_vsync;
+	unsigned long ts_last_check;
+	spinlock_t spinlock;
 };
 
 struct dsi_status_data {
 	struct notifier_block fb_notifier;
 	struct delayed_work check_status;
 	struct msm_fb_data_type *mfd;
+	struct te_data te;
 };
 
 void mdss_dsi_read_hw_revision(struct mdss_dsi_ctrl_pdata *ctrl);
@@ -710,6 +719,8 @@ void mdss_dsi_set_burst_mode(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_set_reg(struct mdss_dsi_ctrl_pdata *ctrl, int off,
 	u32 mask, u32 val);
 int mdss_dsi_phy_pll_reset_status(struct mdss_dsi_ctrl_pdata *ctrl);
+
+void check_dsi_ctrl_status_ext(void);
 
 static inline const char *__mdss_dsi_pm_name(enum dsi_pm_type module)
 {
