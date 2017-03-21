@@ -2156,6 +2156,7 @@ static int parse_qos_dt_params(struct device_node *node,
 	for (i = 0; i < num_states; i++)
 		einfo->ramp_time_us[i] = arr32[i];
 
+	kfree(arr32);
 	rc = 0;
 	return rc;
 
