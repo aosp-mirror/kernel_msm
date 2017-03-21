@@ -15,6 +15,7 @@
 #include "../qcom/msm8909-pm8916.dtsi"
 #include "../qcom/msm8909w.dtsi"
 #include "apq8009-narwhal-pinctrl.dtsi"
+#include "apq8009-narwhal-input.dtsi"
 #include "apq8009-pm8916-narwhal.dtsi"
 #include "apq8009-narwhal-panel.dtsi"
 
@@ -23,7 +24,6 @@
 		/delete-property/i2c1;
 		/delete-property/i2c3;
 		/delete-property/i2c4;
-		/delete-property/i2c5;
 		/delete-property/spi0;
 	};
 };
@@ -44,7 +44,6 @@
 	/delete-node/ i2c@78b5000; /* i2c_1 */
 	/delete-node/ i2c@78b7000; /* i2c_3 */
 	/delete-node/ i2c@78b8000; /* i2c_4 */
-	/delete-node/ i2c@78b9000; /* i2c_5 */
 	/delete-node/ spi@78ba000; /* spi_0 */
 
 	qcom,venus@1de0000 {
