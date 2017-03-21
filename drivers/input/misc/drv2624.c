@@ -254,6 +254,12 @@ static void drv2624_haptics_work(struct work_struct *work)
 
 	mutex_lock(&drv2624->lock);
 
+	if (unlikely(drv2624->work_mode & WORK_ERROR)) {
+		dev_err(drv2624->dev, "Device is in error mode: work_mode=0x%x\n",
+			drv2624->work_mode);
+		goto drv2624_haptics_work_unlock;
+	}
+
 	drv2624->work_mode = WORK_IDLE;
 	dev_dbg(drv2624->dev, "%s, afer mnWorkMode=0x%x\n",
 		__func__, drv2624->work_mode);
@@ -279,6 +285,7 @@ static void drv2624_haptics_work(struct work_struct *work)
 		}
 	}
 
+drv2624_haptics_work_unlock:
 	mutex_unlock(&drv2624->lock);
 }
 
@@ -289,9 +296,7 @@ static void vibrator_enable(struct led_classdev *led_cdev,
 			container_of(led_cdev, struct drv2624_data, led_dev);
 
 	led_cdev->brightness = value;
-
-	if (likely(!(drv2624->work_mode & WORK_ERROR)))
-		schedule_work(&drv2624->work);
+	schedule_work(&drv2624->work);
 }
 
 static void vibrator_work_routine(struct work_struct *work)
@@ -306,6 +311,12 @@ static void vibrator_work_routine(struct work_struct *work)
 
 	dev_dbg(drv2624->dev, "%s, afer mnWorkMode=0x%x\n",
 		__func__, drv2624->work_mode);
+
+	if (unlikely(drv2624->work_mode & WORK_ERROR)) {
+		dev_err(drv2624->dev, "Device is in error mode: work_mode=0x%x\n",
+			drv2624->work_mode);
+		goto err;
+	}
 
 	if (drv2624->work_mode & WORK_IRQ) {
 		ret = drv2624_reg_read(drv2624, DRV2624_REG_STATUS);
@@ -1197,8 +1208,7 @@ static irqreturn_t drv2624_irq_handler(int irq, void *dev_id)
 
 	drv2624->work_mode |= WORK_IRQ;
 
-	if (likely(!(drv2624->work_mode & WORK_ERROR)))
-		schedule_work(&drv2624->vibrator_work);
+	schedule_work(&drv2624->vibrator_work);
 
 	return IRQ_HANDLED;
 }
