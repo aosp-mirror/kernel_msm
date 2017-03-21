@@ -63,3 +63,5 @@ obj-$(CONFIG_USB_COMMON)	+= common/
 obj-$(CONFIG_USBIP_CORE)	+= usbip/
 
 obj-$(CONFIG_USB_PD)            += pd/
+
+obj-$(CONFIG_TYPEC)		+= typec/
