@@ -88,6 +88,12 @@ irqreturn_t hw_vsync_handler(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
+	if (ctrl_pdata->err_fg_flag == true) {
+		pr_err("%s: Detect ERR_FG_FLAG set, lock hw_vsync_handler to trigger error handler\n",
+		       __func__);
+		return IRQ_HANDLED;
+	}
+
 	if (pstatus_data)
 		mod_delayed_work(system_wq, &pstatus_data->check_status,
 			msecs_to_jiffies(interval));
@@ -96,6 +102,24 @@ irqreturn_t hw_vsync_handler(int irq, void *data)
 
 	if (!atomic_read(&ctrl_pdata->te_irq_ready))
 		atomic_inc(&ctrl_pdata->te_irq_ready);
+
+	return IRQ_HANDLED;
+}
+/*
+ * err_fg_handler() - Interrupt handler for ERR_FG signal.
+ * @irq                : irq line number
+ * @data       : Pointer to the device structure.
+ *
+ * This function is called whenever a ERR_FG signal is received from the
+ * panel. Must trigger ESD workaround.
+*/
+irqreturn_t err_fg_handler(int irq, void *data)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata =
+		(struct mdss_dsi_ctrl_pdata *)data;
+
+	pr_info("%s: Handle ERR_FG\n", __func__);
+	ctrl_pdata->err_fg_flag = true;
 
 	return IRQ_HANDLED;
 }

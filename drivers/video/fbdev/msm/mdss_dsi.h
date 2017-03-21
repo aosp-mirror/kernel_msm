@@ -588,6 +588,10 @@ struct mdss_dsi_ctrl_pdata {
 	bool phy_power_off;
 
 	bool dsi_cmd_hs;
+
+	int disp_err_fg_gpio;
+	struct delayed_work err_fg_handler;
+	bool err_fg_flag;
 };
 
 struct dsi_status_data {
@@ -626,6 +630,7 @@ int mdss_dsi_wait_for_lane_idle(struct mdss_dsi_ctrl_pdata *ctrl);
 
 irqreturn_t mdss_dsi_isr(int irq, void *ptr);
 irqreturn_t hw_vsync_handler(int irq, void *data);
+irqreturn_t err_fg_handler(int irq, void *data);
 void disable_esd_thread(void);
 void mdss_dsi_irq_handler_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata);
 

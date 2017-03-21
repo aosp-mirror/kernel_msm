@@ -1918,6 +1918,9 @@ static void mdss_dsi_parse_esd_params(struct device_node *np,
 	if (!pinfo->esd_check_enabled)
 		return;
 
+	pinfo->err_flag_enabled = of_property_read_bool(np,
+		"qcom,err-flag-check-enabled");
+
 	ctrl->status_mode = ESD_MAX;
 	rc = of_property_read_string(np,
 			"qcom,mdss-dsi-panel-status-check-mode", &string);
