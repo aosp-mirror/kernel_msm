@@ -40,7 +40,7 @@
 			mux {
 				/* CLK, DATA */
 				pins = "gpio17","gpio18";
-				function = "cci_i2c";
+				function = "gpio";
 			};
 
 			config {
@@ -69,7 +69,7 @@
 			mux {
 				/* CLK, DATA */
 				pins = "gpio19","gpio20";
-				function = "cci_i2c";
+				function = "gpio";
 			};
 
 			config {
@@ -159,7 +159,7 @@
 			mux {
 				/* CLK, DATA */
 				pins = "gpio13";
-				function = "cam_mclk";
+				function = "gpio";
 			};
 
 			config {
@@ -190,7 +190,7 @@
 			mux {
 				/* CLK, DATA */
 				pins = "gpio14";
-				function = "cam_mclk";
+				function = "gpio";
 			};
 
 			config {
