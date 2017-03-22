@@ -48,7 +48,6 @@ static int bcm15602_regulator_get_voltage(struct regulator_dev *rdev);
 static int bcm15602_regulator_enable(struct regulator_dev *rdev);
 static int bcm15602_regulator_disable(struct regulator_dev *rdev);
 static int bcm15602_regulator_is_enabled(struct regulator_dev *rdev);
-static int bcm15602_regulator_enable_time(struct regulator_dev *rdev);
 static void bcm15602_enable_wdt(struct bcm15602_chip *ddata);
 static void bcm15602_disable_wdt(struct bcm15602_chip *ddata);
 
@@ -169,7 +168,6 @@ static struct regulator_ops bcm15602_regulator_ops = {
 	.enable = bcm15602_regulator_enable,
 	.disable = bcm15602_regulator_disable,
 	.is_enabled = bcm15602_regulator_is_enabled,
-	.enable_time = bcm15602_regulator_enable_time,
 };
 
 /* No support for DVS so just a single voltage level */
@@ -185,6 +183,7 @@ static struct regulator_desc
 		.ops = &bcm15602_regulator_ops,
 		.n_voltages = ARRAY_SIZE(bcm15602_ldo_vtbl),
 		.volt_table = bcm15602_ldo_vtbl,
+		.enable_time = 200,
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
 	},
@@ -194,6 +193,7 @@ static struct regulator_desc
 		.ops = &bcm15602_regulator_ops,
 		.n_voltages = ARRAY_SIZE(bcm15602_ldo_vtbl),
 		.volt_table = bcm15602_ldo_vtbl,
+		.enable_time = 200,
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
 	},
@@ -203,6 +203,7 @@ static struct regulator_desc
 		.ops = &bcm15602_regulator_ops,
 		.n_voltages = ARRAY_SIZE(bcm15602_asr_vtbl),
 		.volt_table = bcm15602_asr_vtbl,
+		.enable_time = 200,
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
 	},
@@ -212,6 +213,7 @@ static struct regulator_desc
 		.ops = &bcm15602_regulator_ops,
 		.n_voltages = ARRAY_SIZE(bcm15602_sdsr_vtbl),
 		.volt_table = bcm15602_sdsr_vtbl,
+		.enable_time = 200,
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
 	},
@@ -735,19 +737,19 @@ static int bcm15602_regulator_get_voltage(struct regulator_dev *rdev)
 	case BCM15602_ID_SDLDO:
 		bcm15602_read_byte(ddata, BCM15602_REG_LDO_SDLDO_VOCTRL,
 				   &reg_data);
-		vbase = (reg_data & 0x80) ? 1725000 : 11700000;
+		vbase = (reg_data & 0x80) ? 1725000 : 1380000;
 		vstep = (reg_data & 0x80) ? 25000 : 10000;
 		vsel = reg_data & 0x3F;
 		break;
 	case BCM15602_ID_IOLDO:
 		bcm15602_read_byte(ddata, BCM15602_REG_LDO_IOLDO_VOCTRL,
 				   &reg_data);
-		vbase = (reg_data & 0x80) ? 1725000 : 1170000;
+		vbase = (reg_data & 0x80) ? 1725000 : 1380000;
 		vstep = (reg_data & 0x80) ? 25000 : 10000;
 		vsel = reg_data & 0x3F;
 		break;
 	case BCM15602_ID_ASR:
-		bcm15602_read_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL1,
+		bcm15602_read_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL,
 				   &reg_data);
 		vbase = 565000;
 		vstep = 5000;
@@ -776,7 +778,7 @@ static int bcm15602_regulator_get_voltage(struct regulator_dev *rdev)
 		default: // make compiler happy
 			return -EINVAL;
 		}
-		bcm15602_read_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL,
+		bcm15602_read_byte(ddata, BCM15602_REG_BUCK_SDSR_VOCTRL,
 				   &reg_data);
 		vsel = reg_data & 0x7F;
 		break;
@@ -785,27 +787,6 @@ static int bcm15602_regulator_get_voltage(struct regulator_dev *rdev)
 	}
 
 	return vbase + vsel * vstep;
-}
-
-/* get the minimum ramp rate in terms of uV/us */
-static int bcm15602_regulator_get_ramp_rate(struct regulator_dev *rdev)
-{
-	struct bcm15602_chip *ddata = rdev_get_drvdata(rdev);
-	enum bcm15602_regulator_ids rid = rdev_get_id(rdev);
-	u8 reg_data;
-
-	switch (rid) {
-	case BCM15602_ID_SDLDO:
-	case BCM15602_ID_IOLDO:
-		return 5000;
-	case BCM15602_ID_ASR:
-	case BCM15602_ID_SDSR:
-		bcm15602_read_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL6,
-				   &reg_data);
-		return 5000 + (5000 * ((reg_data & 0xC0) >> 6));
-	default:
-		return -EINVAL;
-	}
 }
 
 /* enable the regulator */
@@ -927,13 +908,6 @@ static int bcm15602_regulator_is_enabled(struct regulator_dev *rdev)
 		return ret;
 	else
 		return (byte & 0x1);
-}
-
-/* return the regulator enable latency */
-static int bcm15602_regulator_enable_time(struct regulator_dev *rdev)
-{
-	return bcm15602_regulator_get_voltage(rdev) /
-		bcm15602_regulator_get_ramp_rate(rdev);
 }
 
 /* get platform data from the device tree */
