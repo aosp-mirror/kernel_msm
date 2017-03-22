@@ -73,6 +73,10 @@
 	status = "disabled";
 };
 
+&i2c_3 {
+	status = "disabled";
+};
+
 &spi_0 {
 	status = "disabled";
 };
