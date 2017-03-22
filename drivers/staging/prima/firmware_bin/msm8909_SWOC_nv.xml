@@ -1,0 +1,205 @@
+﻿<!-- Copyright (c) 2016, The Linux Foundation. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above
+      copyright notice, this list of conditions and the following
+      disclaimer in the documentation and/or other materials provided
+      with the distribution.
+    * Neither the name of The Linux Foundation nor the names of its
+      contributors may be used to endorse or promote products derived
+      from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
+WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT
+ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
+BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-->
+
+<?xml version="1.0" encoding="UTF-8"?>
+<WCN_nv3>
+  <plutCharacterized>
+    <plutCharacterized_value Enum="RF_CHAN_BOND_214">
+      <tTpcPowerTable>
+        <tTpcPowerTable Enum="PHY_TX_CHAIN_0">
+          <tTpcPowerTable_innerVal Index="0">199</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="1">199</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="2">193</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="3">186</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="4">181</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="5">178</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="6">182</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="7">190</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="8">198</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="9">203</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="10">204</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="11">199</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="12">195</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="13">186</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="14">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="15">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="16">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="17">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="18">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="19">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="20">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="21">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="22">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="23">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="24">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="25">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="26">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="27">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="28">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="29">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="30">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="31">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="32">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="33">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="34">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="35">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="36">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="37">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="38">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="39">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="40">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="41">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="42">199</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="43">198</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="44">202</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="45">228</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="46">193</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="47">186</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="48">181</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="49">178</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="50">182</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="51">190</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="52">198</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="53">203</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="54">204</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="55">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="56">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="57">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="58">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="59">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="60">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="61">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="62">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="63">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="64">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="65">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="66">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="67">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="68">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="69">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="70">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="71">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="72">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="73">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="74">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="75">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="76">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="77">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="78">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="79">198</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="80">200</tTpcPowerTable_innerVal>
+          <tTpcPowerTable_innerVal Index="81">215</tTpcPowerTable_innerVal>
+        </tTpcPowerTable>
+      </tTpcPowerTable>
+    </plutCharacterized_value>
+  </plutCharacterized>
+  <PSATTable>
+    <PSATValue freq="2412">199</PSATValue>
+    <PSATValue freq="2417">199</PSATValue>
+    <PSATValue freq="2422">193</PSATValue>
+    <PSATValue freq="2427">186</PSATValue>
+    <PSATValue freq="2432">181</PSATValue>
+    <PSATValue freq="2437">178</PSATValue>
+    <PSATValue freq="2442">182</PSATValue>
+    <PSATValue freq="2447">190</PSATValue>
+    <PSATValue freq="2452">198</PSATValue>
+    <PSATValue freq="2457">203</PSATValue>
+    <PSATValue freq="2462">204</PSATValue>
+    <PSATValue freq="2467">199</PSATValue>
+    <PSATValue freq="2472">195</PSATValue>
+    <PSATValue freq="2484">186</PSATValue>
+    <PSATValue freq="4920">200</PSATValue>
+    <PSATValue freq="4940">200</PSATValue>
+    <PSATValue freq="4960">200</PSATValue>
+    <PSATValue freq="4980">200</PSATValue>
+    <PSATValue freq="5040">200</PSATValue>
+    <PSATValue freq="5060">200</PSATValue>
+    <PSATValue freq="5080">200</PSATValue>
+    <PSATValue freq="5180">200</PSATValue>
+    <PSATValue freq="5200">200</PSATValue>
+    <PSATValue freq="5220">200</PSATValue>
+    <PSATValue freq="5240">200</PSATValue>
+    <PSATValue freq="5260">200</PSATValue>
+    <PSATValue freq="5280">200</PSATValue>
+    <PSATValue freq="5300">200</PSATValue>
+    <PSATValue freq="5320">200</PSATValue>
+    <PSATValue freq="5500">200</PSATValue>
+    <PSATValue freq="5520">200</PSATValue>
+    <PSATValue freq="5540">200</PSATValue>
+    <PSATValue freq="5560">200</PSATValue>
+    <PSATValue freq="5580">200</PSATValue>
+    <PSATValue freq="5600">200</PSATValue>
+    <PSATValue freq="5620">200</PSATValue>
+    <PSATValue freq="5640">200</PSATValue>
+    <PSATValue freq="5660">200</PSATValue>
+    <PSATValue freq="5680">200</PSATValue>
+    <PSATValue freq="5700">200</PSATValue>
+    <PSATValue freq="5720">200</PSATValue>
+    <PSATValue freq="5745">200</PSATValue>
+    <PSATValue freq="5765">199</PSATValue>
+    <PSATValue freq="5785">198</PSATValue>
+    <PSATValue freq="5805">202</PSATValue>
+    <PSATValue freq="5825">228</PSATValue>
+    <PSATValue freq="2422">193</PSATValue>
+    <PSATValue freq="2427">186</PSATValue>
+    <PSATValue freq="2432">181</PSATValue>
+    <PSATValue freq="2437">178</PSATValue>
+    <PSATValue freq="2442">182</PSATValue>
+    <PSATValue freq="2447">190</PSATValue>
+    <PSATValue freq="2452">198</PSATValue>
+    <PSATValue freq="2457">203</PSATValue>
+    <PSATValue freq="2462">204</PSATValue>
+    <PSATValue freq="4930">200</PSATValue>
+    <PSATValue freq="4950">200</PSATValue>
+    <PSATValue freq="4970">200</PSATValue>
+    <PSATValue freq="5050">200</PSATValue>
+    <PSATValue freq="5070">200</PSATValue>
+    <PSATValue freq="5190">200</PSATValue>
+    <PSATValue freq="5210">200</PSATValue>
+    <PSATValue freq="5230">200</PSATValue>
+    <PSATValue freq="5250">200</PSATValue>
+    <PSATValue freq="5270">200</PSATValue>
+    <PSATValue freq="5290">200</PSATValue>
+    <PSATValue freq="5310">200</PSATValue>
+    <PSATValue freq="5510">200</PSATValue>
+    <PSATValue freq="5530">200</PSATValue>
+    <PSATValue freq="5550">200</PSATValue>
+    <PSATValue freq="5570">200</PSATValue>
+    <PSATValue freq="5590">200</PSATValue>
+    <PSATValue freq="5610">200</PSATValue>
+    <PSATValue freq="5630">200</PSATValue>
+    <PSATValue freq="5650">200</PSATValue>
+    <PSATValue freq="5670">200</PSATValue>
+    <PSATValue freq="5690">200</PSATValue>
+    <PSATValue freq="5710">200</PSATValue>
+    <PSATValue freq="5755">200</PSATValue>
+    <PSATValue freq="5775">198</PSATValue>
+    <PSATValue freq="5795">200</PSATValue>
+    <PSATValue freq="5815">215</PSATValue>
+  </PSATTable>
+</WCN_nv3>
