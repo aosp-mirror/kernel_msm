@@ -326,6 +326,9 @@ static int cpufreq_sched_policy_exit(struct cpufreq_policy *policy)
 {
 	struct gov_data *gd = policy->governor_data;
 
+	if (!gd)
+		return -EBUSY;
+
 	clear_sched_freq();
 	if (cpufreq_driver_slow) {
 		kthread_stop(gd->task);

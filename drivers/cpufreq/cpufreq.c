@@ -2065,6 +2065,8 @@ static int __cpufreq_governor(struct cpufreq_policy *policy,
 		else if (event == CPUFREQ_GOV_POLICY_EXIT)
 			policy->governor->initialized--;
 	} else {
+		if (event == CPUFREQ_GOV_POLICY_EXIT && ret == -EBUSY)
+			return ret;
 		/* Restore original values */
 		mutex_lock(&cpufreq_governor_lock);
 		if (event == CPUFREQ_GOV_STOP)
