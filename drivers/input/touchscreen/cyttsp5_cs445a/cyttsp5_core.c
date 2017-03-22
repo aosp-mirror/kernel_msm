@@ -51,6 +51,8 @@ extern struct dsm_client *tp_cyp_dclient;
 extern ssize_t cyttsp5_dsm_record_basic_err_info(struct device *dev);
 extern int cyttsp5_tp_report_dsm_err(struct device *dev, int type, int err_numb);
 #endif/*CONFIG_HUAWEI_DSM*/
+static int _fast_startup(struct cyttsp5_core_data *cd);
+
 struct device *gdev = NULL;
 struct device *cyttsp5_core_dev = NULL;
 struct cyttsp5_hid_field {
@@ -4309,7 +4311,13 @@ static int cyttsp5_core_wake_device_from_easy_wakeup_(
 			cd->easy_wakeup_gesture, &status);
 	if (rc || status == 1){
 		tp_log_err("%s: failed, rc=%d, status=%d\n", __func__, rc, status);
-		return -EBUSY;
+		rc = cyttsp5_reset_and_wait(cd);
+		if (rc < 0) {
+			dev_err(cd->dev, "%s: Error on h/w reset r=%d\n",__func__, rc);
+			return rc;
+		}
+		_fast_startup(cd);
+		return 0;
 	}
 
 	if (device_may_wakeup(cd->dev)) {
