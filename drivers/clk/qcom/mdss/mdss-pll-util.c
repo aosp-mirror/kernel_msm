@@ -39,6 +39,7 @@ int mdss_pll_util_resource_init(struct platform_device *pdev,
 		goto clk_err;
 	}
 
+	mutex_init(&pll_res->res_lock);
 	return rc;
 
 clk_err:
@@ -55,6 +56,8 @@ void mdss_pll_util_resource_deinit(struct platform_device *pdev,
 	msm_dss_put_clk(mp->clk_config, mp->num_clk);
 
 	msm_dss_config_vreg(&pdev->dev, mp->vreg_config, mp->num_vreg, 0);
+
+	mutex_destroy(&pll_res->res_lock);
 }
 
 void mdss_pll_util_resource_release(struct platform_device *pdev,
@@ -74,6 +77,7 @@ int mdss_pll_util_resource_enable(struct mdss_pll_resources *pll_res,
 	int rc = 0;
 	struct dss_module_power *mp = &pll_res->mp;
 
+	mutex_lock(&pll_res->res_lock);
 	if (enable) {
 		rc = msm_dss_enable_vreg(mp->vreg_config, mp->num_vreg, enable);
 		if (rc) {
@@ -98,11 +102,13 @@ int mdss_pll_util_resource_enable(struct mdss_pll_resources *pll_res,
 		msm_dss_enable_vreg(mp->vreg_config, mp->num_vreg, enable);
 	}
 
+	mutex_unlock(&pll_res->res_lock);
 	return rc;
 
 clk_err:
 	msm_dss_enable_vreg(mp->vreg_config, mp->num_vreg, 0);
 vreg_err:
+	mutex_unlock(&pll_res->res_lock);
 	return rc;
 }
 

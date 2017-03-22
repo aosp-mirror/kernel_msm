@@ -86,6 +86,12 @@ struct mdss_pll_resources {
 	 * feature is disabled.
 	 */
 	bool		handoff_resources;
+
+	/*
+	 * Mutex to handle pll resource access
+	 */
+	struct mutex 	res_lock;
+
 };
 
 int mdss_pll_resource_enable(struct mdss_pll_resources *pll_res, bool enable);
