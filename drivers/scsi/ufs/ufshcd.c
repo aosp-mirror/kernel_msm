@@ -8437,6 +8437,8 @@ static ssize_t ufshcd_health_show(struct device *dev,
 	if (err)
 		return err;
 
+	curr_len = snprintf(buf, PAGE_SIZE, "ufs version: 0x%x\n",
+			    hba->ufs_version);
 	for (i = 0; i < ARRAY_SIZE(health_desc_field_name); ++i) {
 		tmp = &health_desc_field_name[i];
 		curr_len += snprintf(buf + curr_len, PAGE_SIZE - curr_len,
