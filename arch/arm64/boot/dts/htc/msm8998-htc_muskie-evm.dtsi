@@ -72,7 +72,7 @@
 };
 
 &i2c_9 {
-	/delete-node/ htc_laser@29;
+	/delete-node/ wahoo_laser@29;
 };
 
 #include "msm8998-htc-usb-evm.dtsi"

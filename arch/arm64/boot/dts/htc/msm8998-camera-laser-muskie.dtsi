@@ -31,8 +31,8 @@
 };
 
 &i2c_9 {
-	htc_laser@29 {
-		compatible = "htc_laser";
+	wahoo_laser@29 {
+		compatible = "wahoo_laser";
 		reg = <0x29>;
 		pinctrl-names = "laser_gpio_init";
 		pinctrl-0 = <&laser_pwdn &laser_int>;
