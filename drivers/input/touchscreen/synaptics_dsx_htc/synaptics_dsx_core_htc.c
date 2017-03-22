@@ -6097,6 +6097,7 @@ static int synaptics_rmi4_suspend(struct device *dev)
 
 	if (!rmi4_data->suspend) {
 		synaptics_rmi4_irq_enable(rmi4_data, false, false);
+		synaptics_rmi4_sleep_enable(rmi4_data, true);
 	}
 
 exit:
@@ -6145,6 +6146,7 @@ static int synaptics_rmi4_resume(struct device *dev)
 
 	synaptics_rmi4_wakeup_gesture(rmi4_data, false);
 	synaptics_rmi4_force_cal(rmi4_data);
+	synaptics_rmi4_sleep_enable(rmi4_data, false);
 	synaptics_rmi4_irq_enable(rmi4_data, true, false);
 
 exit:
