@@ -33,6 +33,7 @@ struct ptn36241g {
 
 	struct pinctrl		*nxp_pinctrl;
 	struct pinctrl_state    *nxp_vdd_active;
+	struct pinctrl_state    *nxp_vdd_sleep;
 	struct pinctrl_state	*nxp_cc1_active_state;
 	struct pinctrl_state	*nxp_cc1_sleep_state;
 	struct pinctrl_state	*nxp_cc2_active_state;
@@ -106,6 +107,17 @@ static void psy_changed_handler(struct work_struct *work)
 		chip->ptn_active = ptn_enable;
 
 	if (chip->ptn_active) {
+		/* Power on redriver ic */
+		ret = pinctrl_select_state(chip->nxp_pinctrl,
+					   chip->nxp_vdd_active);
+		if (ret) {
+			dev_err(chip->dev,
+				"%s - failed to power on ptn36241g, ret=%d\n",
+				__func__,
+				ret);
+			goto done;
+		}
+
 		switch (cc_orientation) {
 		case CC_ORIENTATION_CC1:
 			ret = pinctrl_select_state(chip->nxp_pinctrl,
@@ -132,23 +144,38 @@ static void psy_changed_handler(struct work_struct *work)
 			ret = -EINVAL;
 			break;
 		}
+
+		if (ret < 0)
+			goto done;
 	} else {
 		ret = pinctrl_select_state(chip->nxp_pinctrl,
 					   chip->nxp_cc1_sleep_state);
-		if (ret < 0)
+		if (ret < 0) {
 			dev_err(chip->dev,
 				"%s - failed to config cc1 sleep, ret=%d\n",
 				__func__, ret);
+			goto done;
+		}
+
 		ret = pinctrl_select_state(chip->nxp_pinctrl,
 					   chip->nxp_cc2_sleep_state);
-		if (ret < 0)
+		if (ret < 0) {
 			dev_err(chip->dev,
 				"%s - failed to config cc2 sleep, ret=%d\n",
 				__func__, ret);
-	}
+			goto done;
+		}
 
-	if (ret < 0)
-		goto done;
+		/* Power off redriver ic */
+		ret = pinctrl_select_state(chip->nxp_pinctrl,
+					   chip->nxp_vdd_sleep);
+		if (ret < 0) {
+			dev_err(chip->dev,
+				"%s - failed to power off ptn36241g, ret=%d\n",
+				__func__, ret);
+			goto done;
+		}
+	}
 
 	dev_info(chip->dev, "%s - state := %s, orientation := %s\n",
 		 __func__, chip->ptn_active ? "active" : "sleep",
@@ -177,6 +204,7 @@ static int ptn36241g_probe(struct platform_device *pdev)
 	struct ptn36241g *chip;
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *nxp_vdd_active;
+	struct pinctrl_state *nxp_vdd_sleep;
 	struct pinctrl_state *nxp_cc1_active_state;
 	struct pinctrl_state *nxp_cc1_sleep_state;
 	struct pinctrl_state *nxp_cc2_active_state;
@@ -189,11 +217,19 @@ static int ptn36241g_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	nxp_vdd_active = pinctrl_lookup_state(pinctrl, "nxp_vdd");
+	nxp_vdd_active = pinctrl_lookup_state(pinctrl, "nxp_vdd_active");
 	if (IS_ERR(nxp_vdd_active)) {
 		ret = PTR_ERR(nxp_vdd_active);
 		dev_err(&pdev->dev,
 			"failed to get nxp_vdd_active, ret=%d\n", ret);
+		return ret;
+	}
+
+	nxp_vdd_sleep = pinctrl_lookup_state(pinctrl, "nxp_vdd_sleep");
+	if (IS_ERR(nxp_vdd_sleep)) {
+		ret = PTR_ERR(nxp_vdd_sleep);
+		dev_err(&pdev->dev,
+			"failed to get nxp_vdd_sleep, ret=%d\n", ret);
 		return ret;
 	}
 
@@ -239,6 +275,8 @@ static int ptn36241g_probe(struct platform_device *pdev)
 
 	chip->dev = &pdev->dev;
 	chip->nxp_pinctrl = pinctrl;
+	chip->nxp_vdd_active = nxp_vdd_active;
+	chip->nxp_vdd_sleep = nxp_vdd_sleep;
 	chip->nxp_cc1_active_state = nxp_cc1_active_state;
 	chip->nxp_cc1_sleep_state = nxp_cc1_sleep_state;
 	chip->nxp_cc2_active_state = nxp_cc2_active_state;
@@ -256,11 +294,11 @@ static int ptn36241g_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 
-	/* Power on redriver ic */
-	ret = pinctrl_select_state(pinctrl, nxp_vdd_active);
+	/* Initial power off redriver ic */
+	ret = pinctrl_select_state(pinctrl, nxp_vdd_sleep);
 	if (ret) {
 		dev_err(&pdev->dev,
-			"%s - failed to power on ptn36241g, ret=%d\n",
+			"%s - failed to power off ptn36241g, ret=%d\n",
 			__func__,
 			ret);
 		return ret;
