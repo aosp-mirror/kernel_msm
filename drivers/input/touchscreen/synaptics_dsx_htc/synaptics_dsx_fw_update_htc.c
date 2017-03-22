@@ -2606,12 +2606,6 @@ static enum flash_area fwu_go_nogo(void)
 	if (image_fw_id != device_fw_id) {
 		flash_area = UI_FIRMWARE;
 		goto exit;
-	} else if (image_fw_id == device_fw_id) {
-		dev_info(rmi4_data->pdev->dev.parent,
-				"%s: Image firmware ID is the same as device firmware ID\n",
-				__func__);
-		flash_area = NONE;
-		goto exit;
 	}
 
 	/* Get device config ID */
@@ -2631,7 +2625,11 @@ static enum flash_area fwu_go_nogo(void)
 
 	for (ii = 0; ii < config_id_size; ii++) {
 		if (fwu->img.ui_config.data[ii] > fwu->config_id[ii]) {
-			flash_area = UI_CONFIG;
+			/* Reflash the entire firmware to fix improperly flashed
+			   devices. These devices have the same firmware ID, but
+			   the config within the firmware is incorrect.
+			   TODO(spfetsch): remove in the future. */
+			flash_area = UI_FIRMWARE;
 			goto exit;
 		} else if (fwu->img.ui_config.data[ii] < fwu->config_id[ii]) {
 			flash_area = NONE;
