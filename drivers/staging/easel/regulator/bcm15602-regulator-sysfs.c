@@ -37,6 +37,11 @@ static ssize_t bcm15602_attr_show_total_power
 	(struct device *dev, struct device_attribute *mattr, char *data);
 static ssize_t bcm15602_attr_show_hk_status
 	(struct device *dev, struct device_attribute *mattr, char *data);
+static ssize_t bcm15602_attr_show_asr_vsel
+	(struct device *dev, struct device_attribute *mattr, char *data);
+static ssize_t bcm15602_attr_store_asr_vsel
+	(struct device *dev, struct device_attribute *mattr, const char *data,
+	 size_t count);
 
 DEVICE_ATTR(asr_curr, 0440, bcm15602_attr_show_asr_curr, NULL);
 DEVICE_ATTR(sdsr_curr, 0440, bcm15602_attr_show_sdsr_curr, NULL);
@@ -46,6 +51,8 @@ DEVICE_ATTR(vbat, 0440, bcm15602_attr_show_vbat, NULL);
 DEVICE_ATTR(temperature, 0440, bcm15602_attr_show_temperature, NULL);
 DEVICE_ATTR(total_power, 0440, bcm15602_attr_show_total_power, NULL);
 DEVICE_ATTR(hk_status, 0440, bcm15602_attr_show_hk_status, NULL);
+DEVICE_ATTR(asr_vsel, S_IWUSR | S_IRUGO, bcm15602_attr_show_asr_vsel,
+	    bcm15602_attr_store_asr_vsel);
 
 static struct attribute *bcm15602_attrs[] = {
 	&dev_attr_asr_curr.attr,
@@ -56,6 +63,7 @@ static struct attribute *bcm15602_attrs[] = {
 	&dev_attr_temperature.attr,
 	&dev_attr_total_power.attr,
 	&dev_attr_hk_status.attr,
+	&dev_attr_asr_vsel.attr,
 	NULL
 };
 
@@ -221,6 +229,48 @@ static ssize_t bcm15602_attr_show_hk_status(struct device *dev,
 	ddata->hk_status &= ~status;
 
 	return snprintf(data, PAGE_SIZE, "0x%04x\n", status);
+}
+
+static ssize_t bcm15602_attr_show_asr_vsel(struct device *dev,
+					   struct device_attribute *mattr,
+					   char *data)
+{
+	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
+	u8 reg_data;
+	int voctrl;
+
+	bcm15602_read_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL, &reg_data);
+	voctrl = reg_data & 0x7F;
+
+	return snprintf(data, PAGE_SIZE, "%d\n", 565 + voctrl * 5);
+}
+
+static ssize_t bcm15602_attr_store_asr_vsel(struct device *dev,
+					    struct device_attribute *mattr,
+					    const char *data, size_t count)
+{
+	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
+	int vsel, voctrl;
+
+	if (kstrtoint(data, 0, &vsel)) {
+		dev_err(dev, "%s: Not a valid int\n", __func__);
+		return -EINVAL;
+	}
+
+	if (vsel == 0) {
+		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL0, 0x1,
+				     0x0);
+	} else if ((vsel < 565) || (vsel > 1200)) {
+		dev_err(dev, "%s: Not a valid voltage level, must be 0 or 565-1200\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	voctrl = ((vsel - 565) + 4) / 5;
+	bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL, voctrl & 0x7F);
+	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL0, 0x1, 0x1);
+
+	return count;
 }
 
 void bcm15602_config_sysfs(struct device *dev)
