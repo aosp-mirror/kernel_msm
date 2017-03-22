@@ -10,29 +10,85 @@
  * GNU General Public License for more details.
  */
 
-/ {
-	aliases {
-		i2c6 = &i2c_6;
-	};
-};
-
-&i2c_6 { /* BLSP1 QUP6 (NFC) */
-	qcom,clk-freq-out = <400000>;
+/* NFC SPI (eSE) */
+&spi_1 {
 	status = "ok";
-	pn547@28 {
-		compatible = "nxp,pn547";
-		reg = <0x28>;
-		status = "ok";
-		nxp,gpio_sda = <&tlmm 43 0x00>;
-		nxp,gpio_scl = <&tlmm 44 0x00>;
-		nxp,gpio_ven = <&tlmm 12 0x00>;
-		nxp,gpio_mode = <&tlmm 129 0x00>;
-		nxp,gpio_irq = <&tlmm 116 0x00>;
-		nxp,i2c-pull-up = <1>;
-		qcom,clk-src = "BBCLK2";
-		interrupt-parent = <&tlmm>;
-		interrupts = <116 0>;
-		interrupt-names = "nfc_irq";
+	/* DMA is only working intermittently - disable. */
+	/delete-property/qcom,use-bam;
+
+	ese@0 {
+		compatible = "nxp,pn81a";
+		reg = <0>;
+		spi-max-frequency = <8000000>;
+		/* i2c NFC device handles eSE power:
+		 * i2c_8, reg 0x28
+		 */
+		nxp,nfcc = "8-0028";
+		nxp,clear-n = <&tlmm 29 0x00>;
 	};
 };
 
+&i2c_6 {
+	/delete-node/ nq@28;
+};
+
+&i2c_8 { /* BLSP1 QUP8 (NFC) */
+	status = "okay";
+	qcom,nack-as-normal = <0x28>;
+	nq@28 {
+	compatible = "qcom,nq-nci";
+	reg = <0x28>;
+	interrupts = <92 0x4>;
+	interrupt-parent = <&tlmm>;
+	interrupt-names = "nfc_irq";
+	clock-names = "ref_clk";
+	qcom,clk-src = "BBCLK3";
+	clocks = <&clock_gcc clk_ln_bb_clk3_pin>;
+	qcom,nq-irq = <&tlmm 92 0x00>;
+	qcom,nq-ven = <&tlmm 12 0x00>;
+	qcom,nq-firm = <&tlmm 93 0x00>;
+	qcom,nq-clkreq = <&pm8998_gpios 21 0x00>;
+	qcom,nq-esepwr = <&tlmm 30 0x00>;
+	qcom,nq-clear_n = <&tlmm 29 0x00>;
+	qcom,nq-spi_cs = <&tlmm 2 0x00>;
+	qcom,nq-postinit-cmd = /bits/ 8
+		<0x5 0x20 0x02 0x05 0x01 0xA0 0xF2 0x01 0x01>;
+	pinctrl-names = "nfc_active", "nfc_suspend";
+	pinctrl-0 = <&nfc_int_active &nfc_enable_active>;
+	pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend>;
+	};
+};
+
+&pm8998_gpios {
+	/* GPIO 21 (NFC_CLK_REQ) */
+	gpio@d400 {
+		qcom,mode = <0>; /* Input */
+		qcom,vin-sel = <1>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+};
+
+
+&pmi8998_gpios {
+	gpio@c700 {  /*GPIO_8 NFC_WAKEUP Not configured in driver yet nq-nci.c*/
+		qcom,mode = <1>;                /* Output */
+		qcom,pull = <4>;                /* Pulldown 10uA */
+		qcom,vin-sel = <0>;             /* VIN1 GPIO_LV */
+		qcom,src-sel = <0>;             /* GPIO */
+		qcom,invert = <0>;              /* Invert 0 INVERT_DISABLE */
+		qcom,master-en = <1>;           /* Enable GPIO */
+		status = "ok";
+	};
+};
+
+
+&pmi8998_gpios {
+	/* 1v8_nfc_vdd */
+	gpio@c100 {
+		qcom,master-en = <1>;           /* Enable GPIO */
+		qcom,out-strength = <3>;        /* High */
+		status = "okay";
+	};
+};
