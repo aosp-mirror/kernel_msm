@@ -86,19 +86,21 @@
 		compatible = "nxp,ptn36241g";
 		extcon = <&pmi8998_pdphy>;
 
-		pinctrl-names = "nxp_vdd",
+		pinctrl-names = "nxp_vdd_active", "nxp_vdd_sleep",
 				"nxp_cc1_active-HH", "nxp_cc1_sleep-LL",
 				"nxp_cc2_active-HH", "nxp_cc2_sleep-LL";
-		/*USBSS_SW_1V8_EN*/
+		/*USBSS_SW_1V8_EN - on*/
 		pinctrl-0 = <&nxp_vdd_active>;
+		/*USBSS_SW_1V8_EN - off*/
+		pinctrl-1 = <&nxp_vdd_sleep>;
 		/*nxp_cc1_active-HH*/
-		pinctrl-1 = <&nxp_cc1_c1_High &nxp_cc1_c2_High>;
+		pinctrl-2 = <&nxp_cc1_c1_High &nxp_cc1_c2_High>;
 		/*nxp_cc1_sleep-LL*/
-		pinctrl-2 = <&nxp_cc1_c1_Low &nxp_cc1_c2_Low>;
+		pinctrl-3 = <&nxp_cc1_c1_Low &nxp_cc1_c2_Low>;
 		/*nxp_cc2_active-HH*/
-		pinctrl-3 = <&nxp_cc2_c1_High &nxp_cc2_c2_High>;
+		pinctrl-4 = <&nxp_cc2_c1_High &nxp_cc2_c2_High>;
 		/*nxp_cc2_sleep-LL*/
-		pinctrl-4 = <&nxp_cc2_c1_Low &nxp_cc2_c2_Low>;
+		pinctrl-5 = <&nxp_cc2_c1_Low &nxp_cc2_c2_Low>;
 	};
 };
 
@@ -108,6 +110,14 @@
 			pins = "gpio49";
 			bias-disable;
 			output-high;
+		};
+	};
+
+	nxp_vdd_sleep: nxp_vdd_sleep {
+		config {
+			pins = "gpio49";
+			bias-disable;
+			output-low;
 		};
 	};
 
