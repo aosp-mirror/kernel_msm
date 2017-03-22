@@ -53,7 +53,6 @@
 		qcom,msm-mbhc-hphl-swh = <1>; /* for NO Audio Jack */
 		qcom,msm-mbhc-gnd-swh = <1>; /* for NO Audio Jack */
 		qcom,wsa-max-devs = <0>; /* No wsa device */
-		/delete-property/ qcom,wsa-devs;
 
 		wahoo,use-external-amp;
 		wahoo,external-amp-be-sname = "Quaternary MI2S Playback",
@@ -76,9 +75,6 @@
 			"MIC BIAS3", "Handset Mic";
 
 		qcom,wsa-max-devs = <0>; /* No wsa device */
-		/delete-property/ qcom,wsa-devs;
-		/delete-property/ qcom,usbc-analog-en1_gpio;
-		/delete-property/ qcom,usbc-analog-en2_n_gpio;
 
 		wahoo,use-external-amp;
 		wahoo,external-amp-be-sname = "Quaternary MI2S Playback";
