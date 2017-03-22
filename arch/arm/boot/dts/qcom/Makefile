@@ -131,6 +131,7 @@ dtb-$(CONFIG_ARCH_MSM8998) += msm8998-sim.dtb \
 	apq8998-v2.1-mtp.dtb \
 	apq8998-v2.1-cdp.dtb \
 	apq8998-v2.1-qrd.dtb \
+	apq8998-v2.1-svr21.dtb \
 	apq8998-v2.1-mediabox.dtb \
 	msm8998-v2.1-interposer-sdm660-cdp.dtb \
 	msm8998-v2.1-interposer-sdm660-mtp.dtb \

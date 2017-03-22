@@ -561,6 +561,14 @@ config MEMORY_STATE_TIME
 	help
 	  Memory time statistics exported to /sys/kernel/memory_state_time
 
+config TI_BACKLIGHT_DRIVER
+       bool "TI Backlight driver"
+       depends on I2C
+       help
+         Say Y here if you have a TI Backlight driver enabled.
+
+         If unsure, say N.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
