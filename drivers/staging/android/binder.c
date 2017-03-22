@@ -110,7 +110,8 @@ enum {
 	BINDER_DEBUG_SPINLOCKS              = 1U << 16,
 	BINDER_DEBUG_TODO_LISTS             = 1U << 17,
 };
-static uint32_t binder_debug_mask;
+static uint32_t binder_debug_mask = BINDER_DEBUG_USER_ERROR |
+	BINDER_DEBUG_FAILED_TRANSACTION | BINDER_DEBUG_DEAD_TRANSACTION;
 module_param_named(debug_mask, binder_debug_mask, uint, S_IWUSR | S_IRUGO);
 
 static char *binder_devices_param = CONFIG_ANDROID_BINDER_DEVICES;
