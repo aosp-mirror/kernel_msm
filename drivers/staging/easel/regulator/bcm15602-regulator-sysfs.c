@@ -202,7 +202,7 @@ static ssize_t bcm15602_attr_show_total_power(struct device *dev,
 	bcm15602_get_sdldo_curr(ddata, &sdldo_curr);
 	bcm15602_get_ioldo_curr(ddata, &ioldo_curr);
 
-	total_power = (((long int)asr_curr) * 950 / 1000) +
+	total_power = (((long int)asr_curr) * 900 / 1000) +
 		(((long int)sdsr_curr) * 1100 / 1000) +
 		(((long int)sdldo_curr) * 1800 / 1000) +
 		(((long int)ioldo_curr) * 1800 / 1000);
