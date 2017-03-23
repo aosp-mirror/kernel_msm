@@ -401,6 +401,11 @@ Required properties:
  - pinctrl-x:                              Defines pinctrl state for each pin
                                            group.
 
+Optional properties:
+
+ - pinctrl-supply:                         Regulator that supplies current to
+                                           the pins.
+
 * wcd_dsp_glink
 
 Required properties:

@@ -2453,8 +2453,41 @@ static int i2c_msm_rsrcs_process_dt(struct i2c_msm_ctrl *ctrl,
 		return ret;
 
 	/* set divider and noise reject values */
-	return i2c_msm_set_mstr_clk_ctl(ctrl, fs_clk_div, ht_clk_div,
+	ret = i2c_msm_set_mstr_clk_ctl(ctrl, fs_clk_div, ht_clk_div,
 						noise_rjct_scl, noise_rjct_sda);
+	if (ret)
+		return ret;
+
+	ctrl->rsrcs.bus_supply = devm_regulator_get_optional(
+						&pdev->dev, "qcom,bus");
+	ret = PTR_ERR(ctrl->rsrcs.bus_supply);
+	if (ret == -ENODEV) {
+		ctrl->rsrcs.bus_supply = NULL;
+	} else if (ret == -EPROBE_DEFER) {
+		dev_dbg(&pdev->dev, "Defer due to qcom,bus-supply.");
+		return ret;
+	} else if (ret == -ENOENT) {
+		dev_err(&pdev->dev,
+			"Could not find regulator for qcom,bus-supply.");
+		return ret;
+	} else if (IS_ERR(ctrl->rsrcs.bus_supply)) {
+		dev_err(&pdev->dev,
+			"Unhandled error %d getting qcom,bus-supply.",
+			ret);
+		return ret;
+	}
+
+	if (ctrl->rsrcs.bus_supply) {
+		ret = regulator_enable(ctrl->rsrcs.bus_supply);
+		if (ret) {
+			dev_err(&pdev->dev,
+				"Failed to enable bus supply regulator: %d",
+				ret);
+			return ret;
+		}
+	}
+
+	return 0;
 }
 
 /*
@@ -2742,6 +2775,29 @@ static int i2c_msm_pm_sys_resume_noirq(struct device *dev)
 	mutex_unlock(&ctrl->xfer.mtx);
 	return  0;
 }
+
+static int i2c_msm_pm_sys_suspend_late(struct device *dev)
+{
+	struct i2c_msm_ctrl *ctrl = dev_get_drvdata(dev);
+	int ret = 0;
+
+	if (ctrl->rsrcs.bus_supply)
+		ret = regulator_disable(ctrl->rsrcs.bus_supply);
+	return ret;
+}
+
+static int i2c_msm_pm_sys_resume_early(struct device *dev)
+{
+	struct i2c_msm_ctrl *ctrl = dev_get_drvdata(dev);
+	int ret;
+
+	if (ctrl->rsrcs.bus_supply) {
+		ret = regulator_enable(ctrl->rsrcs.bus_supply);
+		if (ret)
+			dev_err(dev, "failed to enable bus_supply: %d", ret);
+	}
+	return ret;
+}
 #endif
 
 #ifdef CONFIG_PM
@@ -2786,6 +2842,8 @@ static const struct dev_pm_ops i2c_msm_pm_ops = {
 #ifdef CONFIG_PM_SLEEP
 	.suspend_noirq		= i2c_msm_pm_sys_suspend_noirq,
 	.resume_noirq		= i2c_msm_pm_sys_resume_noirq,
+	.suspend_late		= i2c_msm_pm_sys_suspend_late,
+	.resume_early		= i2c_msm_pm_sys_resume_early,
 #endif
 	SET_RUNTIME_PM_OPS(i2c_msm_pm_rt_suspend,
 			   i2c_msm_pm_rt_resume,
@@ -2916,6 +2974,8 @@ err_no_pinctrl:
 clk_err:
 	i2c_msm_rsrcs_mem_teardown(ctrl);
 mem_err:
+	if (ctrl->rsrcs.bus_supply)
+		regulator_disable(ctrl->rsrcs.bus_supply);
 	dev_err(ctrl->dev, "error probe() failed with err:%d\n", ret);
 	devm_kfree(&pdev->dev, ctrl);
 	return ret;
@@ -2940,6 +3000,10 @@ static int i2c_msm_remove(struct platform_device *pdev)
 	i2c_msm_rsrcs_clk_teardown(ctrl);
 	i2c_msm_rsrcs_mem_teardown(ctrl);
 	i2x_msm_blk_free_cache(ctrl);
+	if (ctrl->rsrcs.bus_supply &&
+	    regulator_is_enabled(ctrl->rsrcs.bus_supply))
+		regulator_disable(ctrl->rsrcs.bus_supply);
+
 	return 0;
 }
 
